@@ -145,6 +145,7 @@ Core 媒体服务固定为 BeginUpload/WriteChunk/CommitUpload/Read/Grant：Read
 - `ForwardSource` 的结构（display_name、external_user_id）由 T-01 补定；新增 `SendRequest{to, chain}` 作为 Core Send 服务的请求。
 - Core→目标插件的 Service 调用载荷是 `ServiceInvocation{route_id, context, encoding, schema_id, schema_version, payload}`：可信上下文与业务载荷分开传输，服务响应直接使用 output schema 的业务载荷（REVIEW-1 补充）。
 - 控制帧与 Core 固定载荷的 `schema_id` 为 `alonabot.<snake_case 消息名>.v1`（例如 `alonabot.hello_ack.v1`），控制帧一律使用 PROTOBUF 编码。是否携带载荷以 `schema_id` 是否为空来判断，而不看 payload 长度，因为空消息序列化后是 0 字节。校验入口为 `contracts/validate`（G1-04）。
+- Core 启动插件进程时通过环境变量传递会话参数（常量定义在 `internal/wire/env.go`）：`ALONABOT_PLUGIN_ID`、`ALONABOT_SESSION_SECRET`（32 字节十六进制）、`ALONABOT_TRANSPORT`（`tcp`/`stdio`）、`ALONABOT_CORE_ADDR`（TCP loopback 地址）、`ALONABOT_BUILD_DIGEST`（归档 SHA256 十六进制）、`ALONABOT_RUNTIME_LOCK`（runtime.lock 的绝对路径）。其余环境变量只从白名单继承（PATH、HOME、临时目录、SystemRoot、LANG、TZ），Core 管理凭证不会进入插件环境（G1-15）。
 - 协议能力项使用 `ProtocolCapability{name, version}`，与 Adapter 平台能力 `Capability{name, version, supported}` 分开。
 
 ## 6. 实施验证与依据

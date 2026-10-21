@@ -221,11 +221,16 @@
   - 剩余风险：没有写超时的底层连接，只能依靠「优先通道写满时关闭」这一条来脱困：对端停止读取但通道还没写满时，业务调用会一直等到各自的期限；单个对端停止读取时会让 Session 内的所有调用超时，这符合规格中「关闭 Session」的处理边界。准入以 payload 字节计量，不含 Envelope 其余字段。业务 Request 与阶段门禁（Preparing 阶段拒绝业务）在 G1-17 接入。
   - 下一步：G1-15（Native 进程启动、runtime.lock 与进程树）。
 
-### [ ] G1-15 Native 进程启动、runtime.lock 与进程树
+### [x] G1-15 Native 进程启动、runtime.lock 与进程树
 - 依据：PLAN T-02 第 2 步；CONTRACTS §7.1、§12.2；V-06、V-36（分项）。
 - 内容：`internal/core/process`：根据安装记录取得入口程序，生成 256-bit Session Secret，构造精简环境（不传 Core 管理凭证），Unix 下使用 Setpgid 并对进程组发信号，Windows 下用 Job Object（build tag）；收集 stdout/stderr 日志并标记 plugin_id；取得退出状态。`sdk` 在任何用户回调之前获取 `<plugins>/<id>/runtime.lock`，锁文件不删除；Core 可以在旧进程退出后临时持有该锁，再释放。
 - 完成条件：测试用重入的辅助进程验证：日志带插件 ID、环境中没有管理凭证、杀进程组后子进程也被回收（darwin 实测）、runtime.lock 被占用时第二个 SDK 实例启动失败、Windows 代码交叉编译通过（运行状态标为「未运行」）。
 - 回写：
+  - 实际做了什么：`internal/wire/env.go` 定义 Core 与 SDK 之间的启动环境约定（ALONABOT_PLUGIN_ID/SESSION_SECRET/TRANSPORT/CORE_ADDR/BUILD_DIGEST/RUNTIME_LOCK、tcp/stdio、runtime.lock 文件名），并写入 WIRE §5A。新增 `internal/core/process`：`NewSecret`（crypto/rand 生成 32 字节，十六进制）；`Entrypoint`（经 manifest.ValidateRelPath 校验后拼接安装目录，要求是普通文件，Unix 下还要求可执行）；`Start`：环境变量**只从白名单**继承（PATH/HOME/TMPDIR/TEMP/TMP/SystemRoot/LANG/TZ），再叠加会话变量；stdout/stderr 由**自建的 os.Pipe** 接管，写端以 *os.File 交给子进程，父进程在 Start 之后关闭自己手里的写端，因此 cmd.Wait 不会被仍持有管道的孙进程卡住；日志按行转发并标记 plugin_id 与来源流，超过 64 KiB 的行分块完整转发；stdio 模式下 stdin/stdout 作为协议管道交给调用方，只有 stderr 进入日志；`Exited`/`ExitState`/`WaitLogs`；进程树：Unix 使用 `Setpgid` 后对整个进程组发 SIGKILL（组内已无进程时 ESRCH 视为成功），Windows 使用 Job Object（KILL_ON_JOB_CLOSE；Start 之后再 AssignProcessToJobObject，kill 时 TerminateJobObject，Release 时关闭句柄）；`LockRuntime(pluginDir)` 供 Core 临时持有 runtime.lock。`sdk/runtime.go`：`acquireRuntimeLock` 从 ALONABOT_RUNTIME_LOCK 读取路径（必须提供且必须是绝对路径），取不到锁时拒绝启动，供 G1-16 的 Run 在任何用户回调之前调用。
+  - V-06 / V-36（T-02 分项）证据（darwin/arm64，go1.27.1，本 task 的 commit）：`go test -race -count=3 ./internal/core/process/` 与 `go test ./sdk/` 都 ok：在父进程中设置 ALONABOT_ADMIN_TOKEN 和 OTHER_PLUGIN_SECRET 之后，子进程环境中都没有这两个变量，且只有白名单变量与会话变量；日志行形如 `demo|stdout|…`、`demo|stderr|…`，100 KiB 的长行被分块完整收到；退出码 3 能正确取得；stdio 管道往返正常，stdout 内容不进入日志、stderr 进入日志；**Unix 下杀掉进程组后，孙进程（另一个 pid）也被回收**；对已经为空的进程组再次 KillTree 没有副作用；Entrypoint 拒绝 `../`、绝对路径、目录、不存在的文件、不可执行的文件；Core 持有 runtime.lock 时其他持有者失败，释放后锁文件仍然保留；SDK 侧第二个实例因 ErrLocked 拒绝启动，前一个释放后可以取得锁，缺少环境变量或路径为相对路径时都失败。`GOOS=windows/linux go vet ./...` 通过（Windows 的 Job Object 路径只验证了编译，**未运行**）；全仓库 `go test -race ./...` 的 12 个包都 ok。
+  - **过程中发现并修复的问题：** 第一次变异检查（把 KillTree 改成只杀领头进程）时测试没有失败——辅助进程用 `select{}` 挂起，而进程里没有其他 goroutine，Go 运行时判定死锁后立即退出，孙进程本来就会自己消失，**测试是空转的**。改为 `time.Sleep(time.Hour)` 之后，同样的变异让测试失败（「孙进程 55283 在进程组被杀后仍存活」），恢复后通过；变异运行遗留的孙进程已用 pkill 清理，`pgrep` 检查无残留。另外 Unix 专用的进程组测试拆到 `process_unix_test.go`（`//go:build unix`），修复了 Windows 交叉 vet 时报出的 `syscall.Kill` 未定义。
+  - 剩余风险：Windows 下进程是在 Start 之后才加入 Job 的，加入之前创建的孙进程不受管理（代码中已用 `shortcut:` 注释标明，需要时改为挂起创建再加入）；合作型进程树无法阻止恶意 detach（setsid）；runtime.lock 只在 sdk 内实现了获取，Run 调用它的路径在 G1-16 才接上。
+  - 下一步：G1-16（握手、Bootstrap、REGISTER 与 PREPARED）。
 
 ### [ ] G1-16 握手、Bootstrap、REGISTER 与 PREPARED
 - 依据：PLAN T-02 第 5 步；CONTRACTS §1.1、§4.2；WIRE §3；V-04、V-37（分项）。
