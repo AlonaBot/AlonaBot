@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
 // Conn 是一条帧连接：唯一的 reader 与唯一的串行 writer。TCP 与 stdio 共用同一实现。

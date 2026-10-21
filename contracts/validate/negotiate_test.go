@@ -3,7 +3,7 @@ package validate
 import (
 	"testing"
 
-	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
 func caps(pairs ...any) []*pb.ProtocolCapability {

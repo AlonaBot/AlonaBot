@@ -3,7 +3,7 @@ syntax = "proto3";
 
 package alonabot.v1;
 
-option go_package = "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1";
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 
 enum ErrorCode {
   ERROR_CODE_UNSPECIFIED = 0;

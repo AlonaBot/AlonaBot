@@ -16,9 +16,9 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/AlonaBot/alonabot/contracts/manifest"
-	"github.com/AlonaBot/alonabot/internal/oslock"
-	"github.com/AlonaBot/alonabot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/contracts/manifest"
+	"github.com/AlonaBot/AlonaBot/internal/oslock"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
 // inheritedEnv 是从 Core 环境继承到插件的变量白名单；其余变量（含管理凭证）一律不传。

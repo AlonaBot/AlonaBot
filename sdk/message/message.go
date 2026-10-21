@@ -2,7 +2,7 @@
 package message
 
 import (
-	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
 // Segment 是 Chain 中的一个片段。

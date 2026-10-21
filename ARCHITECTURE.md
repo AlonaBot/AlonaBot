@@ -7,7 +7,7 @@
 
 ## 模块与职责
 
-单 Go module `github.com/AlonaBot/alonabot`；内部按职责分包，不拆 module。
+单 Go module `github.com/AlonaBot/AlonaBot`；内部按职责分包，不拆 module。
 
 | 模块（路径） | 负责 | 不负责 | 首次交付 | 状态 |
 | --- | --- | --- | --- | --- |

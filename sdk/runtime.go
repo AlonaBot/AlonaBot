@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/AlonaBot/alonabot/internal/oslock"
-	"github.com/AlonaBot/alonabot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/internal/oslock"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
 // acquireRuntimeLock 在任何用户回调或受管 DB 打开之前取得 <plugins>/<id>/runtime.lock（CONTRACTS §12.2），

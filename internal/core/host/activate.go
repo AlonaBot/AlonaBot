@@ -9,9 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
-	"github.com/AlonaBot/alonabot/contracts/validate"
-	"github.com/AlonaBot/alonabot/internal/wire"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
 // State 是 Core 侧插件实例的可见状态（CONTRACTS §12.1，本文件覆盖 Activating 之后的部分）。

@@ -980,7 +980,7 @@ const file_alonabot_v1_invocation_proto_rawDesc = "" +
 	"\vPropagation\x12\x1b\n" +
 	"\x17PROPAGATION_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14PROPAGATION_CONTINUE\x10\x01\x12\x14\n" +
-	"\x10PROPAGATION_STOP\x10\x02B6Z4github.com/AlonaBot/alonabot/contracts/pb/alonabotv1b\x06proto3"
+	"\x10PROPAGATION_STOP\x10\x02B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
 
 var (
 	file_alonabot_v1_invocation_proto_rawDescOnce sync.Once

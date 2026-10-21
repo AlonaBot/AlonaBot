@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/AlonaBot/alonabot/internal/oslock"
-	"github.com/AlonaBot/alonabot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/internal/oslock"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
 func TestRuntimeLockSecondInstanceFails(t *testing.T) {

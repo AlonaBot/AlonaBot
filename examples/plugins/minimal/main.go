@@ -10,9 +10,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/AlonaBot/alonabot/sdk"
-	"github.com/AlonaBot/alonabot/sdk/message"
-	"github.com/AlonaBot/alonabot/sdk/plugin"
+	"github.com/AlonaBot/AlonaBot/sdk"
+	"github.com/AlonaBot/AlonaBot/sdk/message"
+	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
 
 // Config 是本插件唯一的配置类型。

@@ -7,7 +7,7 @@ import "alonabot/v1/errors.proto";
 import "alonabot/v1/identity.proto";
 import "alonabot/v1/media.proto";
 
-option go_package = "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1";
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 
 // ---------- Event ----------
 

@@ -1,4 +1,4 @@
-module github.com/AlonaBot/alonabot
+module github.com/AlonaBot/AlonaBot
 
 go 1.27.1
 

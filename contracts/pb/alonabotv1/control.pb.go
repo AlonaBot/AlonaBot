@@ -1568,7 +1568,7 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"\x16SESSION_PHASE_ACTIVATE\x10\x06\x12\x1a\n" +
 	"\x16SESSION_PHASE_ON_READY\x10\a\x12\x18\n" +
 	"\x14SESSION_PHASE_ACTIVE\x10\b\x12\x1a\n" +
-	"\x16SESSION_PHASE_STOPPING\x10\tB6Z4github.com/AlonaBot/alonabot/contracts/pb/alonabotv1b\x06proto3"
+	"\x16SESSION_PHASE_STOPPING\x10\tB6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
 
 var (
 	file_alonabot_v1_control_proto_rawDescOnce sync.Once

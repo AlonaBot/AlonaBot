@@ -2,7 +2,7 @@
 
 轻量级、跨平台的 Go 聊天机器人框架。
 
-Module：`github.com/AlonaBot/alonabot`。
+Module：`github.com/AlonaBot/AlonaBot`。
 
 **当前进度：** 已完成 T-01（协议契约、生成工具链、manifest/release 校验、SDK 公共类型、SQLite/PostgreSQL 验证）与 T-02（Core 状态库与锁、Native 插件进程、TCP/stdio 双 IPC、握手/激活/停止生命周期、有限重启）。业务能力（Telegram、命令、事件、服务、调度、HTTP、配置、管理）从 T-03 起实施；目前只有开发用入口 `alonabot run`，用法见 [docs/development.md](docs/development.md)。
 

@@ -5,7 +5,7 @@ package alonabot.v1;
 
 import "alonabot/v1/envelope.proto";
 
-option go_package = "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1";
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 
 // 发布者只能使用自己的 plugin_id/event_name 命名空间。
 message PublishRequest {

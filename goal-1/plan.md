@@ -12,7 +12,7 @@
 
 | 项 | 决定 |
 | --- | --- |
-| Module path | `github.com/AlonaBot/alonabot`（组织需由用户在网页上注册；GitHub 没有创建组织的 API，已验证返回 404） |
+| Module path | `github.com/AlonaBot/AlonaBot`（组织需由用户在网页上注册；GitHub 没有创建组织的 API，已验证返回 404） |
 | Go 依赖 | 只使用已批准清单：protobuf（protoc-gen-go 通过 `tool` 指令固定）、gorm、libtnb/sqlite、modernc.org/sqlite、gorm postgres 驱动、golang.org/x/sys、go.yaml.in/yaml/v3 |
 | 前端 | Vite + TypeScript + React 19 + vitest（B1 不涉及） |
 | Git | 工作树 `.worktrees/goal-1`、分支 `goal-1`，每个 task 一个 commit；不 push，不合并到 main |
@@ -28,7 +28,7 @@
 
 ## 4. 默认假设（goal 期间不能提问，以下由我决定并记录）
 
-1. **Proto 布局：** `contracts/proto/alonabot/v1/*.proto`，go_package 为 `github.com/AlonaBot/alonabot/contracts/pb/alonabotv1`；生成入口是 `contracts/generate.go` 中的 `//go:generate`，调用 `protoc` 和 `go tool protoc-gen-go`，使用 `paths=source_relative` 输出到 `contracts/pb/alonabotv1/`。生成脚本会核对 `protoc --version` 等于 36.0，不一致时失败（这是规格要求的生成可复现性检查）。
+1. **Proto 布局：** `contracts/proto/alonabot/v1/*.proto`，go_package 为 `github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1`；生成入口是 `contracts/generate.go` 中的 `//go:generate`，调用 `protoc` 和 `go tool protoc-gen-go`，使用 `paths=source_relative` 输出到 `contracts/pb/alonabotv1/`。生成脚本会核对 `protoc --version` 等于 36.0，不一致时失败（这是规格要求的生成可复现性检查）。
 2. **WIRE 中没有给出字段号的消息**（控制帧 payload、Bootstrap、RouteDescriptor、Invocation、HandlerOutcome、SendResult、媒体、BusEvent、Event/Segment）由 T-01 在 .proto 中固定，字段号按规格表格中的字段顺序从 1 开始编号。冻结后的编号写回 WIRE-FORMAT 的「T-01 已固定」小节，并在 ADR 变更记录中加一行。
 3. **SDK 最小类型（T-01 第 4 步）只证明签名能组合**：放在 `sdk`（Base、Context、Handler 适配类型、注册器、生命周期接口）、`sdk/message`（Chain/Segment 构造），以及 `sdk/config` 和 `sdk/gormdb` 的接口；尚未实现运行行为的方法返回明确的 `UNSUPPORTED` 类错误，不 panic，不伪造成功。
 4. **数据库验证代码放在 `sdk/gormdb` 的包测试里**，后续由 T-08 扩展。Core 状态库直接使用 modernc 驱动（`database/sql`），放在 `internal/core/state`。

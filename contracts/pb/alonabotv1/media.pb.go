@@ -888,7 +888,7 @@ const file_alonabot_v1_media_proto_rawDesc = "" +
 	"\x10MediaReadability\x12!\n" +
 	"\x1dMEDIA_READABILITY_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aMEDIA_READABILITY_READABLE\x10\x01\x12!\n" +
-	"\x1dMEDIA_READABILITY_UNSUPPORTED\x10\x02B6Z4github.com/AlonaBot/alonabot/contracts/pb/alonabotv1b\x06proto3"
+	"\x1dMEDIA_READABILITY_UNSUPPORTED\x10\x02B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
 
 var (
 	file_alonabot_v1_media_proto_rawDescOnce sync.Once

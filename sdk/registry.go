@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
-	"github.com/AlonaBot/alonabot/sdk/message"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
 // Command 是一条已收集的命令注册。

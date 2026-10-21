@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
 // StopTiming 是停止预算（CONTRACTS §4.2）；测试注入更短的值。

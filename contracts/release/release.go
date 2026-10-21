@@ -15,7 +15,7 @@ import (
 	"net/url"
 	"regexp"
 
-	"github.com/AlonaBot/alonabot/contracts/manifest"
+	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 )
 
 // Release 对应 release.json。

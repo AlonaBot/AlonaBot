@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/AlonaBot/alonabot/sdk"
-	"github.com/AlonaBot/alonabot/sdk/message"
-	"github.com/AlonaBot/alonabot/sdk/plugin"
+	"github.com/AlonaBot/AlonaBot/sdk"
+	"github.com/AlonaBot/AlonaBot/sdk/message"
+	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
 
 type Lifecycle struct{ plugin.Base }

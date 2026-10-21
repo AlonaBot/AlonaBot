@@ -15,10 +15,10 @@ import (
 	"syscall"
 	"time"
 
-	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
-	"github.com/AlonaBot/alonabot/internal/core/host"
-	"github.com/AlonaBot/alonabot/internal/core/state"
-	"github.com/AlonaBot/alonabot/internal/core/supervisor"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/internal/core/host"
+	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
 )
 
 func main() {

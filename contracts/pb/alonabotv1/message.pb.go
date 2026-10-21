@@ -2594,7 +2594,7 @@ const file_alonabot_v1_message_proto_rawDesc = "" +
 	"\x14PART_STATUS_ACCEPTED\x10\x01\x12\x18\n" +
 	"\x14PART_STATUS_REJECTED\x10\x02\x12\x17\n" +
 	"\x13PART_STATUS_UNKNOWN\x10\x03\x12\x1d\n" +
-	"\x19PART_STATUS_NOT_ATTEMPTED\x10\x04B6Z4github.com/AlonaBot/alonabot/contracts/pb/alonabotv1b\x06proto3"
+	"\x19PART_STATUS_NOT_ATTEMPTED\x10\x04B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
 
 var (
 	file_alonabot_v1_message_proto_rawDescOnce sync.Once

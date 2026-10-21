@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"net"
 
-	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
 // specKind 给出 RouteDescriptor 的 spec 分支对应的 kind。

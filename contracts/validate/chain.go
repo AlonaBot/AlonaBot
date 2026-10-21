@@ -8,7 +8,7 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
-	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
 // Chain 检查 MessageChain 的结构（MESSAGE-MODEL §2）。只做与平台无关的结构检查；

@@ -19,7 +19,7 @@ const wantProtoc = "libprotoc 36.0"
 const (
 	protoDir = "proto"
 	outDir   = "pb"
-	module   = "github.com/AlonaBot/alonabot/contracts"
+	module   = "github.com/AlonaBot/AlonaBot/contracts"
 )
 
 func main() {

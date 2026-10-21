@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AlonaBot/alonabot/internal/oslock"
-	"github.com/AlonaBot/alonabot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/internal/oslock"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
 const helperEnv = "PROCESS_TEST_HELPER"

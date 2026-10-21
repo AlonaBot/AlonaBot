@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AlonaBot/alonabot/internal/oslock"
+	"github.com/AlonaBot/AlonaBot/internal/oslock"
 	_ "modernc.org/sqlite" // 注册 "sqlite" 驱动
 )
 

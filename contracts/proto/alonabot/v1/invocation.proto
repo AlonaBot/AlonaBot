@@ -8,7 +8,7 @@ import "alonabot/v1/errors.proto";
 import "alonabot/v1/identity.proto";
 import "alonabot/v1/message.proto";
 
-option go_package = "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1";
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 
 // Core 记录并下发的可信上下文；插件回传的同名值不能覆盖 Core 记录。trace 取 Envelope.trace_id。
 message InvocationContext {

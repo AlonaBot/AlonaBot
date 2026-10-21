@@ -1,7 +1,7 @@
 package validate
 
 import (
-	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
 // Offer 是一端在握手中声明的协议版本与能力。

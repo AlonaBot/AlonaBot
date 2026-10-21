@@ -315,7 +315,7 @@ const file_alonabot_v1_identity_proto_rawDesc = "" +
 	"\x18TRUSTED_ROLE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11TRUSTED_ROLE_USER\x10\x01\x12\x16\n" +
 	"\x12TRUSTED_ROLE_ADMIN\x10\x02\x12\x1b\n" +
-	"\x17TRUSTED_ROLE_CHAT_ADMIN\x10\x03B6Z4github.com/AlonaBot/alonabot/contracts/pb/alonabotv1b\x06proto3"
+	"\x17TRUSTED_ROLE_CHAT_ADMIN\x10\x03B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
 
 var (
 	file_alonabot_v1_identity_proto_rawDescOnce sync.Once

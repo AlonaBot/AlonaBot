@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
-	"github.com/AlonaBot/alonabot/sdk/message"
-	"github.com/AlonaBot/alonabot/sdk/plugin"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/sdk/message"
+	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
 
 type root struct {

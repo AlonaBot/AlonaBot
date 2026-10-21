@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
-	"github.com/AlonaBot/alonabot/contracts/validate"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"google.golang.org/protobuf/proto"
 )
 

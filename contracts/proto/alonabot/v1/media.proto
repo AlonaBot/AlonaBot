@@ -5,7 +5,7 @@ package alonabot.v1;
 
 import "alonabot/v1/identity.proto";
 
-option go_package = "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1";
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 
 // 已提交上传对象的能力引用；绑定 owner Session 与消费范围。
 message MediaRef {

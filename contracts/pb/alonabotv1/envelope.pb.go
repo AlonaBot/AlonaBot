@@ -423,7 +423,7 @@ const file_alonabot_v1_envelope_proto_rawDesc = "" +
 	"\x0fPayloadEncoding\x12 \n" +
 	"\x1cPAYLOAD_ENCODING_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19PAYLOAD_ENCODING_PROTOBUF\x10\x01\x12\x19\n" +
-	"\x15PAYLOAD_ENCODING_JSON\x10\x02B6Z4github.com/AlonaBot/alonabot/contracts/pb/alonabotv1b\x06proto3"
+	"\x15PAYLOAD_ENCODING_JSON\x10\x02B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
 
 var (
 	file_alonabot_v1_envelope_proto_rawDescOnce sync.Once

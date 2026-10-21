@@ -6,7 +6,7 @@ package alonabot.v1;
 
 import "alonabot/v1/envelope.proto";
 
-option go_package = "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1";
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 
 // 协议能力项。supported 为可用集合，required 必须包含于双方交集。
 message ProtocolCapability {

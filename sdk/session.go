@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
-	"github.com/AlonaBot/alonabot/contracts/validate"
-	"github.com/AlonaBot/alonabot/internal/wire"
-	"github.com/AlonaBot/alonabot/sdk/plugin"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
 
 // handshakeTimeout 与 CONTRACTS §4.2 的 Hello/HelloAck 预算一致。

@@ -1769,7 +1769,7 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x1bHTTP_AUTH_MODE_CORE_SESSION\x10\x01\x12!\n" +
 	"\x1dHTTP_AUTH_MODE_CALLBACK_STATE\x10\x02\x12%\n" +
 	"!HTTP_AUTH_MODE_CALLBACK_SIGNATURE\x10\x03\x12!\n" +
-	"\x1dHTTP_AUTH_MODE_CALLBACK_NONCE\x10\x04B6Z4github.com/AlonaBot/alonabot/contracts/pb/alonabotv1b\x06proto3"
+	"\x1dHTTP_AUTH_MODE_CALLBACK_NONCE\x10\x04B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
 
 var (
 	file_alonabot_v1_route_proto_rawDescOnce sync.Once

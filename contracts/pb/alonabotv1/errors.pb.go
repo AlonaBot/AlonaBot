@@ -208,7 +208,7 @@ const file_alonabot_v1_errors_proto_rawDesc = "" +
 	"\x15ERROR_CODE_CALL_CYCLE\x10\x0e\x12\x1f\n" +
 	"\x1bERROR_CODE_PLUGIN_NOT_READY\x10\x0f\x12 \n" +
 	"\x1cERROR_CODE_NO_DEFAULT_TARGET\x10\x10\x12%\n" +
-	"!ERROR_CODE_NEEDS_MANUAL_MIGRATION\x10\x11B6Z4github.com/AlonaBot/alonabot/contracts/pb/alonabotv1b\x06proto3"
+	"!ERROR_CODE_NEEDS_MANUAL_MIGRATION\x10\x11B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
 
 var (
 	file_alonabot_v1_errors_proto_rawDescOnce sync.Once

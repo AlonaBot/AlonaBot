@@ -5,7 +5,7 @@ package alonabot.v1;
 
 import "alonabot/v1/errors.proto";
 
-option go_package = "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1";
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 
 enum InitiatorSide {
   INITIATOR_SIDE_UNSPECIFIED = 0;

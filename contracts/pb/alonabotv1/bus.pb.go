@@ -270,7 +270,7 @@ const file_alonabot_v1_bus_proto_rawDesc = "" +
 	"\tschema_id\x18\x05 \x01(\tR\bschemaId\x12%\n" +
 	"\x0eschema_version\x18\x06 \x01(\rR\rschemaVersion\x128\n" +
 	"\bencoding\x18\a \x01(\x0e2\x1c.alonabot.v1.PayloadEncodingR\bencoding\x12\x18\n" +
-	"\apayload\x18\b \x01(\fR\apayloadB6Z4github.com/AlonaBot/alonabot/contracts/pb/alonabotv1b\x06proto3"
+	"\apayload\x18\b \x01(\fR\apayloadB6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
 
 var (
 	file_alonabot_v1_bus_proto_rawDescOnce sync.Once

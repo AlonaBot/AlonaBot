@@ -26,7 +26,7 @@ go build ./...
 go vet ./...
 ```
 
-生成器会先删除 `contracts/pb/` 下的 `*.pb.go` 再重新生成；新增 `.proto` 放在 `contracts/proto/alonabot/v1/`，`go_package` 统一为 `github.com/AlonaBot/alonabot/contracts/pb/alonabotv1`。
+生成器会先删除 `contracts/pb/` 下的 `*.pb.go` 再重新生成；新增 `.proto` 放在 `contracts/proto/alonabot/v1/`，`go_package` 统一为 `github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1`。
 
 交叉编译矩阵（只证明能构建，不能代替目标平台的运行证据）：
 

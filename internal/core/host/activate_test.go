@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
-	"github.com/AlonaBot/alonabot/internal/core/state"
-	"github.com/AlonaBot/alonabot/internal/wire"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
 // prepared 完成握手与准备，返回假插件、Core 侧连接与 Prepared。

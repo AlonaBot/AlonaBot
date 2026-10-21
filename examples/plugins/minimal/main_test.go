@@ -6,10 +6,10 @@ import (
 	"errors"
 	"testing"
 
-	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
-	"github.com/AlonaBot/alonabot/sdk"
-	"github.com/AlonaBot/alonabot/sdk/config"
-	"github.com/AlonaBot/alonabot/sdk/gormdb"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/sdk"
+	"github.com/AlonaBot/AlonaBot/sdk/config"
+	"github.com/AlonaBot/AlonaBot/sdk/gormdb"
 )
 
 // 示例的各个声明能被 SDK 组合与收集，证明 T-01 的公共签名成立。
