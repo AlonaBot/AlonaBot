@@ -243,9 +243,21 @@
   - 剩余风险：SDK 中配置准备只是透传（OnLoad、默认值、Validate 在 T-08 实现）；route_id 是临时规则；Windows 管道是否支持 SetWriteDeadline 不确定，不支持时会退化为普通写，失败路径依赖 Core 随后终止进程树来解除阻塞；`sdk.Run` 中「OnStart 超时后退出进程」与激活流程留给 G1-17/G1-18；**真正的跨进程端到端**（Core host 与 SDK 在不同进程中）留给 G1-19。
   - 下一步：REVIEW-5。
 
-### [ ] REVIEW-5 集中检查（G1-14～G1-16）
+### [x] REVIEW-5 集中检查（G1-14～G1-16）
 - 检查清单同上；重点检查并发与竞态（`-race` 跑 10 次：`go test -race -count=10` 覆盖 wire 和 session 相关包）、错误路径上的资源泄漏（goroutine、fd、Listener），并用 code-review-expert 审查。
 - 回写：
+  - 流程说明：code-review-expert 的 SKILL.md 第 7 步要求先确认再修改；按 goal-mode 的 SKILL.md「红线」（禁止提问），审查发现直接登记为 FIX task。
+  - 检查过程与结论（审查范围 `c769f5a..e81ace6`，即 G1-14～G1-16 与 FIX-4）：
+    1. 是否偏离 input.md：没有；没有新增依赖。
+    2. **并发**：`go test -race -count=10 ./internal/wire/ ./internal/core/host/ ./internal/core/process/ ./sdk/` 4 个包全部 ok，没有数据竞争，也没有偶发失败。
+    3. **资源泄漏（临时探针，已删除）**：Session 建立/调用/关闭 200 对，加上 TCP 上的 50 个 Session：goroutine 2→2，fd 5→5；host.Prepare 认证失败 200 次：goroutine 2→2（watchdog 都已退出）；process 启动并回收 50 次（TCP 模式）：goroutine 2→2，fd 5→5；stdio 模式 20 次：fd 5→5，但这依赖于 `os.File` 的 finalizer 在 GC 时关闭管道端，见 P3-2。
+    4. code-review-expert 审查（COMMENT，没有 P0/P1）：
+       - **P3-1 控制帧 Envelope 的构造重复了三份**：`wire.Session.SendControl`、`host.controlEnvelope`、`sdk.controlEnv` 内容几乎一致，日后字段改动时容易出现分歧。修复：在 `internal/wire` 中提供 `ControlEnvelope(sid, minor, sourcePluginID, kind, msg)`，三处复用（archtest 允许 host 和 sdk 都 import wire）。
+       - **P3-2 `process.Release` 没有关闭 stdio 模式下 Core 持有的 Stdin/Stdout**：目前靠 GC 时的 finalizer 关闭，而 Core 长期持有 Process 时会推迟关闭。修复：Release 时显式关闭它们（重复关闭不报错）。
+       - **P3-3 SDK 在 Bootstrap 缺少 PhaseLimits 时把 OnStart 预算视为 0**，会报出一个误导性的「超时」。修复：PhaseLimits 缺失、OnStart 预算为 0 或 preparation_deadline 缺失时，以 PROTOCOL_ERROR 报告 SESSION_ERROR(CONFIG)。
+       - 记录但不修：`host.Prepare` 函数较长（约 150 行），按步骤顺序书写、可读性尚可，G1-17 加入激活后再评估是否拆分；SDK 在 REGISTER 中固定写 `MigrationState{NONE}`，属于 B1 已知限制，T-08 接入迁移后修正（不在 SDK 主包 import gormdb，以免所有插件都被迫依赖 gorm）。
+    5. 安全：Secret 恒时比较、认证失败时不回复细节、失败路径的安全消息不含用户错误原文与配置内容，都已有测试覆盖；没有发现注入或越权的路径。
+  - 下一步：FIX-5（优先于 G1-17）。
 
 ### [ ] G1-17 提交与激活门禁
 - 依据：PLAN T-02 第 6 步；CONTRACTS §4.1、§12.1；V-21、V-37（分项）。
@@ -320,3 +332,9 @@
   - 验证证据（darwin/arm64，go1.27.1，本 task 的 commit）：**修复前**新测试失败：「第 2 次以相对路径打开失败: 状态库无法读取（可能已损坏，不会重建）: unable to open database file (14)」，与 REVIEW-4 的实测一致；**修复后**通过。全仓库 `go test -race -count=1 ./...` 的 11 个包都 ok；`GOOS=windows go vet ./internal/...` 通过；`gofmt -l internal` 为空。
   - 剩余风险：Windows 的绝对路径转成 URI（`file:///C:/...`）只经过 vet，没有实际运行。
   - 下一步：G1-14（Session 调用引擎）。
+
+### [ ] FIX-5 合并控制帧构造、Release 关闭 stdio 管道、缺少阶段预算时报协议错误（来自 REVIEW-5，排在 G1-17 之前）
+- 依据：REVIEW-5 中的 P3-1/P3-2/P3-3。
+- 内容：`internal/wire` 新增 `ControlEnvelope`，`Session.SendControl`、`host`、`sdk` 统一改用它，删除各自的副本；`process.Release` 显式关闭 Stdin/Stdout（stdio 模式）；`sdk.prepare` 在 PhaseLimits 或 preparation_deadline 缺失、OnStart 预算为 0 时发送 SESSION_ERROR(CONFIG, PROTOCOL_ERROR)，并补一个测试。
+- 完成条件：全仓库 `go test -race ./...` 通过；新测试覆盖缺少预算的情况；三平台 vet 通过；archtest 通过。
+- 回写：
