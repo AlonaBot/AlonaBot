@@ -182,9 +182,12 @@
 
 （复查中发现的问题追加在这里）
 
-### [ ] FIX-1 补 ServiceInvocation 载荷并同步文档（来自 REVIEW-1，排在 G1-04 之前）
+### [x] FIX-1 补 ServiceInvocation 载荷并同步文档（来自 REVIEW-1，排在 G1-04 之前）
 - 依据：WIRE §4（可信上下文随 Core→Plugin Invocation 载荷下发）、CONTRACTS §3。
 - 内容：在 `invocation.proto` 中新增 `ServiceInvocation{route_id, context InvocationContext, encoding PayloadEncoding, schema_id, schema_version, payload}`，作为 Core→目标插件的服务调用载荷（服务响应仍直接把业务载荷放在 Envelope 中，使用 output schema）；在 WIRE §5A 中补充说明；更新 ARCHITECTURE.md 的「当前状态」和 contracts 行（含 `contracts/internal/protocgen` 生成工具）；把 docs/development.md 规则表中字段号测试一行的状态改为「已观测」。
 - 完成条件：生成、build、vet、test 通过，生成稳定；测试断言 ServiceInvocation 包含 context 和 payload 字段。
 - 回写：
-
+  - 实际做了什么：`invocation.proto` 新增 `ServiceInvocation`（route_id=1、context=2 InvocationContext、encoding=3、schema_id=4、schema_version=5、payload=6），为此新增对 envelope.proto 的 import；`wirespec_test.go` 新增 `TestServiceInvocationCarriesContext`；WIRE §5A 补充这条说明；ARCHITECTURE.md 的当前状态与 contracts 行改为「部分实现（proto 与生成）」，并写明 protocgen 工具；docs/development.md 中字段号测试一行改为「已观测」，并写明测试位置。
+  - 验证证据（darwin/arm64，go1.27.1，本 task 的 commit）：`go generate ./... && go vet ./... && go build ./... && go test -race -count=1 ./contracts/` → ok；stage 之后再执行 `go generate ./...`，`git diff --stat` 为空。
+  - 剩余风险：ServiceInvocation 的使用方（T-06 Broker）尚未实现，字段是否足够要到 T-06 才能验证。
+  - 下一步：G1-04。

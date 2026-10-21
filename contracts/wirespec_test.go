@@ -121,6 +121,20 @@ func checkEnum(t *testing.T, e protoreflect.EnumDescriptor) {
 	}
 }
 
+// Service 调用必须同时携带可信上下文与业务载荷（WIRE §4）。
+func TestServiceInvocationCarriesContext(t *testing.T) {
+	fields := (&pb.ServiceInvocation{}).ProtoReflect().Descriptor().Fields()
+	ctx := fields.ByName("context")
+	if ctx == nil || ctx.Message().FullName() != "alonabot.v1.InvocationContext" {
+		t.Errorf("ServiceInvocation.context 应为 InvocationContext，实际 %v", ctx)
+	}
+	for _, name := range []protoreflect.Name{"payload", "encoding", "schema_id", "schema_version"} {
+		if fields.ByName(name) == nil {
+			t.Errorf("ServiceInvocation 缺少 %s", name)
+		}
+	}
+}
+
 // HandlerOutcome 的字段与 MESSAGE-MODEL §3 对应；error 放在 Envelope，不在此消息内。
 func TestHandlerOutcomeFields(t *testing.T) {
 	fields := (&pb.HandlerOutcome{}).ProtoReflect().Descriptor().Fields()

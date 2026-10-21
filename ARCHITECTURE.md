@@ -3,7 +3,7 @@
 负责范围：模块职责、允许的 import 方向、状态归属。行为细节以 `spec/` 为准（见 [spec/README.md](spec/README.md)）。
 更新时机：新增顶层包、改变包之间的依赖或状态归属时，同步修改本文件和 [docs/development.md](docs/development.md) 的检查表。
 
-**当前状态（2026-10-21）：** 只有 `go.mod` 和规格；下表是 PLAN §2 的拟建结构，标「拟建」的包尚未实现。
+**当前状态（2026-10-21，goal-1 进行中）：** `contracts/` 已有 proto 源、生成类型和字段号测试；其余包仍是 PLAN §2 的拟建结构，标「拟建」的尚未实现。
 
 ## 模块与职责
 
@@ -11,7 +11,7 @@
 
 | 模块（路径） | 负责 | 不负责 | 首次交付 | 状态 |
 | --- | --- | --- | --- | --- |
-| `contracts/` | `.proto` 源与生成类型、manifest/release/消息结构校验、兼容 fixture | 任何运行时 I/O、会话状态、平台/GORM 依赖 | T-01 | 拟建 |
+| `contracts/` | `.proto` 源（`proto/`）与生成类型（`pb/alonabotv1`）、manifest/release/消息结构校验、兼容 fixture；生成工具 `contracts/internal/protocgen`（只由 go:generate 运行） | 任何运行时 I/O、会话状态、平台/GORM 依赖 | T-01 | 部分实现（proto 与生成） |
 | `internal/wire/` | 帧编解码（4 MiB 上限）、TCP/stdio 传输、Session 调用表、准入预算、优先通道、取消 | 业务路由、权限、插件生命周期决策 | T-02 | 拟建 |
 | `sdk/`（含 `sdk/message`、`sdk/gormdb` 等子包） | 插件侧 API：根插件、Context/Send、注册、生命周期 Hook、runtime.lock、按需 GORM | Core 状态库、管理凭证、其他插件 | T-01 类型，T-02 起实现 | 拟建 |
 | `internal/core/` | 状态库与 core.lock、进程、RPC 编排、路由、权限、媒体、服务、调度、HTTP、配置、管理 | 平台协议细节（交 adapters）、插件进程内逻辑 | T-02 起 | 拟建 |

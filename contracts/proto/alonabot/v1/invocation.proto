@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package alonabot.v1;
 
+import "alonabot/v1/envelope.proto";
 import "alonabot/v1/errors.proto";
 import "alonabot/v1/identity.proto";
 import "alonabot/v1/message.proto";
@@ -50,6 +51,17 @@ message ArgValue {
     double float_value = 4;
     bool bool_value = 5;
   }
+}
+
+// Core→目标插件的 Service 调用载荷：可信上下文与业务载荷分开，业务载荷按服务声明的编码与
+// input schema 解释。服务响应直接把业务载荷放进 Envelope（output schema）。
+message ServiceInvocation {
+  string route_id = 1;
+  InvocationContext context = 2;
+  PayloadEncoding encoding = 3;
+  string schema_id = 4;
+  uint32 schema_version = 5;
+  bytes payload = 6;
 }
 
 enum Propagation {

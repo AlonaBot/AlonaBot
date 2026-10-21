@@ -46,7 +46,7 @@ go vet ./...
 | --- | --- | --- | --- |
 | 模块 import 方向符合架构表 | [ARCHITECTURE.md](../ARCHITECTURE.md) | 架构守卫测试（goal-1 任务） | 已定义，未实现 |
 | 生成代码可重复生成，结果稳定 | PLAN T-01 | 执行 `go generate ./...` 后检查 `git diff --exit-code` | 已观测（G1-01，手动执行） |
-| Envelope 字段号/枚举值与 WIRE-FORMAT 一致 | spec/WIRE-FORMAT.md | contracts 字段号 fixture 测试 | 已定义，未实现 |
+| Envelope 字段号/枚举值与 WIRE-FORMAT 一致 | spec/WIRE-FORMAT.md §1/§2/§5A | `contracts/wirespec_test.go`（`go test ./contracts/`） | 已观测 |
 | 五目标平台 `CGO_ENABLED=0` 可构建 | CONTRACTS §6.1/§7.1 | 交叉编译矩阵命令 | 已定义，未实现 |
 | V-01～V-47 证据 | spec/TEST-MATRIX.md | 按编号记录测试位置、命令、平台和结果 | 全部未运行 |
 
