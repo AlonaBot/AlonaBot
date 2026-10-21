@@ -70,8 +70,35 @@ func (c *Context) Send(chain message.Chain, opts ...SendOption) (*pb.SendResult,
 }
 
 // Run 是插件 main 的入口：连接 Core、完成握手并处理请求，直到停止。
+// 顺序：收集注册项 → 取得 runtime.lock（任何用户回调之前）→ 握手 → 准备阶段 → （G1-17 起）激活与服务。
 func Run(root plugin.Root) error {
-	if _, err := Collect(root); err != nil {
+	reg, err := Collect(root)
+	if err != nil {
+		return err
+	}
+	if len(reg.HTTP) > 0 || len(reg.Schedules) > 0 {
+		// HTTP 需要真实 Listener、调度需要 Core Scheduler（T-07）；不静默丢弃这些声明。
+		return &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "本版 SDK 尚不支持 HTTP 路由与定时任务（T-07）"}
+	}
+	lock, err := acquireRuntimeLock()
+	if err != nil {
+		return err
+	}
+	defer lock.Unlock()
+	l, err := readLaunch()
+	if err != nil {
+		return err
+	}
+	conn, err := dial(l)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	ack, err := clientHandshake(conn, l)
+	if err != nil {
+		return err
+	}
+	if _, err := prepare(conn, l, ack, root, reg); err != nil {
 		return err
 	}
 	return ErrNotImplemented

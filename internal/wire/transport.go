@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"time"
 
 	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
 )
@@ -30,6 +31,17 @@ func (c *Conn) ReadFrame() (*pb.Envelope, error) { return ReadFrame(c.r) }
 
 // WriteFrame 串行写出一帧，可被多个 goroutine 并发调用。
 func (c *Conn) WriteFrame(env *pb.Envelope) error { return c.w.WriteFrame(env) }
+
+// WriteFrameTimeout 在底层连接支持写截止时间时（net.Conn、Unix 管道）限时写出一帧，用于失败路径上
+// 尽力通知对端（例如 SESSION_ERROR），避免对端不读时永久阻塞；不支持截止时间时退化为普通写。
+func (c *Conn) WriteFrameTimeout(env *pb.Envelope, d time.Duration) error {
+	if dl, ok := c.w.w.(interface{ SetWriteDeadline(time.Time) error }); ok {
+		if err := dl.SetWriteDeadline(time.Now().Add(d)); err == nil {
+			defer dl.SetWriteDeadline(time.Time{})
+		}
+	}
+	return c.w.WriteFrame(env)
+}
 
 // Close 关闭底层连接。
 func (c *Conn) Close() error {
