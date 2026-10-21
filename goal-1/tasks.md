@@ -1,6 +1,6 @@
 # goal-1 任务清单（B1：T-01 + T-02）
 
-规则：一轮只做第一个未完成的 task。状态取值：`[ ]` 未开始 / `[x]` 完成 / `[!]` 阻塞（写明原因和需要的输入）。每完成 3 个普通 task 后安排一次 REVIEW。
+规则：一轮只做第一个未完成的 task。状态取值：`[ ]` 未开始 / `[x]` 完成 / `[!]` 阻塞（写明原因和需要的输入）。每完成 3 个普通 task 后安排一次 REVIEW。复查追加的修复 task（FIX-n）一经登记，就优先于排在它后面的普通 task 执行。
 回写区每项都要填：**实际做了什么 / 验证证据（命令 + 结果 + commit）/ 剩余风险 / 下一步**。
 
 ---
@@ -38,10 +38,20 @@
   - 剩余风险：规格未定义而由我补定的结构（ForwardSource、RuleDescriptor 只有 has_custom_rule/require_chat_admin 两项、HttpAuthMode 的三种回调验证方式、Button.value 用 JSON 文本）在 T-03～T-07 实际使用时可能需要调整，所以 REVIEW-1 要逐字段对照规格。Core 固定服务名（例如 send、media.*、bus.publish 对应的 Envelope.target 与 schema_id）尚未定义，留给 G1-04（schema_id 映射）和 T-02/T-03。
   - 下一步：REVIEW-1。
 
-### [ ] REVIEW-1 集中检查（G1-01～G1-03）
+### [x] REVIEW-1 集中检查（G1-01～G1-03）
 - 检查清单：是否偏离 input.md；proto 与 WIRE/MESSAGE 逐字段对照（不能漏字段，也不能多出没有依据的字段）；生成是否稳定；`go vet`、`go build`；有无调试残留；文档是否同步。
 - 发现问题就在本文件末尾追加修复 task。
 - 回写：
+  - 检查过程与结论（commit e9954e8 之上）：
+    1. 是否偏离 input.md：没有偏离（只在 goal-1 分支内改动，依赖仍只有 protobuf v1.36.12，没有 push）。
+    2. proto 与规格逐字段对照：WIRE §1/§2 的编号由测试锁定；§3.1 控制帧、§3.2 Bootstrap、§3.3 各 kind 的描述、MESSAGE-MODEL §1 Event/Actor/Target、§2 的 8 类 Segment、§3 HandlerOutcome、§4 SendResult/PartResult、§5 Hook 载荷、CONTRACTS §1.3/§1.4 的媒体请求逐项都能找到对应字段。规格表格之外新增的字段都有依据：EventSpec.action_id（MESSAGE §2：按钮 action_id 指向 button.clicked 路由）、ServiceSpec.encoding（CONTRACTS §3：描述包含编码）、IncomingMedia.expires_at（CONTRACTS §1.4：token 15 分钟有效）、BusEvent.encoding（服务与广播都支持 JSON/Protobuf 两种编码）。**发现缺口：** Service 调用（Core→目标插件）时，Envelope.payload 装的是服务的业务载荷，可信上下文（actor、scope、plugin_chain、send_forbidden）没有地方承载，违反 WIRE §4「可信调用上下文随 Invocation 载荷下发」→ 登记 FIX-1。
+    3. 生成稳定：`go generate ./...` 没有 protoc 告警（无未使用的 import），之后 `git status` 为空。
+    4. `go vet ./... && go build ./... && go test -race -count=1 ./...` 通过；`gofmt -l` 只列出 experiments/ 下的文件（独立 module，不属于本 goal）。
+    5. 调试残留：没有 TODO/FIXME/println；protocgen 中的 `fmt.Fprintln(os.Stderr, ...)` 是有意的错误输出。
+    6. 文档同步：ARCHITECTURE.md 的「当前状态」仍写着「只有 go.mod 和规格」，contracts 的状态还是「拟建」；docs/development.md 规则表中「Envelope 字段号/枚举值与 WIRE-FORMAT 一致」仍为「已定义，未实现」→ 一并放进 FIX-1。
+    7. 安全与数据一致性：本阶段只有类型定义，不涉及；回滚方案不变。
+  - 剩余风险：同 G1-03（补定的结构可能需要调整）。
+  - 下一步：FIX-1（优先于 G1-04）。
 
 ### [ ] G1-04 Envelope 校验、版本协商与兼容 fixture
 - 依据：PLAN T-01 第 2、6 步；WIRE §1/§2/§3.1；V-02。
@@ -171,3 +181,10 @@
 ## 追加的修复 task
 
 （复查中发现的问题追加在这里）
+
+### [ ] FIX-1 补 ServiceInvocation 载荷并同步文档（来自 REVIEW-1，排在 G1-04 之前）
+- 依据：WIRE §4（可信上下文随 Core→Plugin Invocation 载荷下发）、CONTRACTS §3。
+- 内容：在 `invocation.proto` 中新增 `ServiceInvocation{route_id, context InvocationContext, encoding PayloadEncoding, schema_id, schema_version, payload}`，作为 Core→目标插件的服务调用载荷（服务响应仍直接把业务载荷放在 Envelope 中，使用 output schema）；在 WIRE §5A 中补充说明；更新 ARCHITECTURE.md 的「当前状态」和 contracts 行（含 `contracts/internal/protocgen` 生成工具）；把 docs/development.md 规则表中字段号测试一行的状态改为「已观测」。
+- 完成条件：生成、build、vet、test 通过，生成稳定；测试断言 ServiceInvocation 包含 context 和 payload 字段。
+- 回写：
+
