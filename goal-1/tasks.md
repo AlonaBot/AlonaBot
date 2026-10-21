@@ -107,11 +107,15 @@
   - 剩余风险：Collect 只是 T-01 的组合证明，没有生成 RouteDescriptor/route_id，也没有覆盖 aliases、Regex/Raw、可选参数、Rule、事件 Handler；这些属于 T-04（生成器与注册索引）。`Send` 的返回类型暂时直接使用 `*pb.SendResult`，T-03 可能改为 SDK 自己的类型。Config 通过 `Config() any` 声明，T-08 可能调整。
   - 下一步：G1-08。
 
-### [ ] G1-08 SQLite/GORM 组合验证
+### [x] G1-08 SQLite/GORM 组合验证
 - 依据：PLAN T-01 第 5 步；CONTRACTS §6.1/§6.2；V-26、V-39（T-01 分项）。
 - 内容：引入 gorm、libtnb/sqlite、modernc.org/sqlite。在 `sdk/gormdb` 中实现打开受管 SQLite 的函数：单连接，每个物理连接都设置 WAL、synchronous=FULL、foreign_keys=ON、busy_timeout=5000，并回读核对；测试覆盖 CRUD、Tx 提交与回滚、通过 modernc Backup API 把运行中的 WAL 库备份到候选文件并从副本读出、Up 与 `_alonabot_migrations` 账本在同一事务内提交（Up 失败时账本也没有记录）。
 - 完成条件：`go test -race ./sdk/gormdb/...` 通过；实际 PRAGMA 回读值写进测试断言；go.mod 锁定通过验证的版本。
 - 回写：
+  - 实际做了什么：引入已批准的 `github.com/libtnb/sqlite v1.2.2` 和 `modernc.org/sqlite v1.61.0`（libtnb 的 go.mod 写的是 modernc v1.56.0，MVS 选择了更高的 v1.61.0；x/sys v0.49.0 作为间接依赖一起进入）。`sdk/gormdb/sqlite.go`：`OpenSQLite(ctx, path)` 在 DSN 中通过 `_pragma` 设置 WAL、synchronous(FULL)、foreign_keys(1)、busy_timeout(5000)（modernc 会对每个新物理连接执行这些设置），连接池固定为 1，打开后用 `ReadPragmas` 回读核对，不一致就关闭并报错；拒绝含 ?/# 的路径；**GORM 日志写到 stderr**（stdio 传输时 stdout 只能传协议帧）。`sdk/gormdb/versioned.go`：`RunVersioned` 先校验迁移列表，再建好账本表 `_alonabot_migrations`，然后对每个尚未完成的 ID 执行一次 `Transaction{Up(tx); 写账本}`，失败时整步回滚并停止执行后续迁移；`AppliedMigrations` 读取账本。备份验证只放在测试里，直接调用 modernc 的 `conn.NewBackup/Step/Finish`（Core 侧的正式实现属于 T-08 的 internal/core/storage）。
+  - V-26 / V-39（T-01 分项）证据（darwin/arm64，go1.27.1，本 task 的 commit）：`go test -race -count=1 -v ./sdk/gormdb/` 共 6 个测试 PASS：PRAGMA 回读的实际值为 `{JournalMode:wal Synchronous:2 ForeignKeys:1 BusyTimeout:5000}`，MaxOpenConnections=1；CRUD（Create/Update/First/Delete）；Tx 回滚后数据不可见，提交后可见；外键约束确实生效；**WAL Backup**：确认 `-wal` 文件非空（数据尚未 checkpoint）后备份到候选文件，候选中正好有 3 行，备份之后旧库的写入不出现在候选里，候选的写入也不出现在旧库里；**Up 与账本同事务**：迁移 2 在 DDL 之后返回错误时账本只有 [1]、表 b 不存在（DDL 已回滚），修复后重跑只执行 2，再跑不执行任何迁移，非递增的列表被拒绝。变异检查：去掉 foreign_keys(1) 后 `TestOpenSQLitePragmas` 报「设置未生效 … ForeignKeys:0」，`TestForeignKeysEnforced` 也失败，恢复后通过（去掉 synchronous(FULL) 不会让测试失败，因为 SQLite 默认值本来就是 FULL=2，这一项无法用变异法区分）。`CGO_ENABLED=0 go test ./sdk/gormdb/` ok（纯 Go）。`go mod tidy` 第一次执行时 goproxy.cn 出现一次瞬时的 "protocol error: received DATA after END_STREAM"，重跑 exit 0，`go mod verify` 显示 all modules verified；全仓库 `go test -race ./...` 的 7 个包都 ok。
+  - 剩余风险：synchronous=FULL 依赖显式 DSN 设置加回读核对，变异法无法证明 DSN 设置本身在起作用（默认值相同）；回读核对只在打开时对第一个物理连接执行，后续重连依赖驱动按 DSN 重新设置（单连接池且 ConnMaxLifetime 为 0，正常情况下不会重连）；在事务里误用外层 db 会让单连接池自锁，这一点只在文档注释中说明，没有运行时防护。
+  - 下一步：G1-09（PostgreSQL）。
 
 ### [ ] G1-09 PostgreSQL 分支验证
 - 依据：PLAN T-01 第 5 步；CONTRACTS §6.3；V-26。

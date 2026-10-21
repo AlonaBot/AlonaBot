@@ -13,6 +13,8 @@
 | Docker | 用于临时 PostgreSQL | 只在 PG 测试中使用 |
 | Node（前端） | 26.5.1（asdf） | web/admin 从 T-08 开始使用 |
 
+已锁定并经测试验证的版本（goal-1）：protobuf v1.36.12、go.yaml.in/yaml/v3 v3.0.5、gorm v1.31.2、libtnb/sqlite v1.2.2、modernc.org/sqlite v1.61.0（G1-08 验证了 CRUD/Tx/WAL Backup/迁移账本；golang.org/x/sys 目前是间接依赖）。
+
 已批准的 Go 依赖（2026-10-21）：`google.golang.org/protobuf`、`gorm.io/gorm`、`github.com/libtnb/sqlite`、`modernc.org/sqlite`、`gorm.io/driver/postgres`、`golang.org/x/sys`、`go.yaml.in/yaml/v3`。前端已批准：Vite、TypeScript、React 19、vitest。新增清单外依赖需要先征得维护者同意。
 
 ## 日常命令（仓库根目录）
