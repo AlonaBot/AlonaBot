@@ -17,6 +17,7 @@
 | `internal/core/` | 状态库与 core.lock、进程、RPC 编排、路由、权限、媒体、服务、调度、HTTP、配置、管理 | 平台协议细节（交 adapters）、插件进程内逻辑 | T-02 起 | 拟建 |
 | `internal/adapters/telegram/` | Telegram 接收、发送计划、能力与平台映射 | Core 策略、命令路由 | T-03 | 拟建 |
 | `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） | T-02 起 | 拟建 |
+| `internal/archtest/` | 本文件依赖规则的机械检查（仅测试） | 产品代码 | goal-1 G1-10 | 已实现 |
 | `examples/plugins/` | 随 SDK 编译的示例与集成样例 | 生产代码依赖 | T-01 起 | 部分实现：`minimal`（签名组合示例） |
 | `web/admin/` | Vite + TypeScript + React 19 管理界面 | 管理逻辑本身（调用 Core 管理 API） | T-08/T-09 | 拟建 |
 | `experiments/ogre-dna/` | 历史实验，独立嵌套 module | 不参与产品构建与验收 | 已存在 | 隔离 |
@@ -24,19 +25,19 @@
 
 ## 依赖方向
 
-`A -> B` 表示 **A 的 Go 源码 import B**（静态依赖），不表示运行时调用或数据流。下表未列出的模块内 import 边一律禁止；标准库和已批准的第三方依赖不受此表限制。
+`A -> B` 表示 **A 的 Go 源码 import B**（静态依赖，含测试代码），不表示运行时调用或数据流。「模块」指上表每一行的路径前缀；同一模块内部的 import（如 `contracts/release -> contracts/manifest`、`sdk -> sdk/message`）不受限制。跨模块的边只允许下表列出的；标准库和已批准的第三方依赖不受此表限制。
 
 | 允许的边 | 理由 |
 | --- | --- |
 | `internal/wire -> contracts` | 帧内承载生成的 Envelope 类型 |
 | `sdk/... -> contracts`、`sdk/... -> internal/wire` | 插件侧复用同一协议实现（Go 允许本 module 的 `sdk` import `internal`） |
 | `internal/core/... -> contracts`、`internal/core/... -> internal/wire` | Core 侧协议 |
-| `internal/adapters/... -> internal/core/<adapter 接口包>`、`-> contracts` | 实现 Core 定义的 Adapter 接口；具体接口包名在 T-03 确定后写入此处 |
+| `internal/adapters/... -> internal/core/adapter`、`-> contracts` | 实现 Core 定义的 Adapter 接口（接口包固定为 `internal/core/adapter`，T-03 创建） |
 | `cmd/alonabot -> internal/core/...`、`-> internal/adapters/...`、`-> contracts` | 装配 |
 | `cmd/alonabot -> sdk/generate` | T-04 构建检查复用同一生成器 |
 | `examples/plugins/... -> sdk/...`、`-> contracts` | 示例只走公共 SDK |
 
-明确禁止（重点）：`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | internal/adapters | cmd`；`internal/core -> sdk | internal/adapters | cmd`；任何包 `-> examples | experiments`。依赖图不允许环。
+明确禁止（重点）：`internal/archtest` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | internal/adapters | cmd`；`internal/core -> sdk | internal/adapters | cmd`；任何包 `-> examples | experiments`。依赖图不允许环。
 
 ## 状态归属
 
@@ -48,4 +49,4 @@
 
 ## 检查
 
-import 边规则由 goal-1 中的架构守卫测试执行（见 [docs/development.md](docs/development.md)「规则与检查」）；守卫落地之前，这些规则只是审查规则。
+`internal/archtest`（`go test ./internal/archtest/`）对 `go list -json ./...` 的 Imports/TestImports/XTestImports 逐条执行上表；新增顶层包或跨模块边时，同时修改本文件与 `internal/archtest/arch_test.go` 的 `modules`/`allowed`。import 环由 Go 编译器拒绝。负例 fixture 位于 `internal/archtest/testdata/fixture`。

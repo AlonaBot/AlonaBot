@@ -142,11 +142,15 @@
   - 其他检查结论：plugin.Root 用未导出方法确保只有嵌入 Base 的类型才能满足它；Collect 的重复检测覆盖了嵌套组；OpenPostgres 的错误不含密码（G1-09 实测）；没有 SQL 拼接注入面（测试中的 DDL 拼接只出现在测试预置代码里，使用的是经过清洗的标识符）；没有发现并发共享状态。
   - 下一步：FIX-3（优先于 G1-10）。
 
-### [ ] G1-10 架构 import 守卫
+### [x] G1-10 架构 import 守卫
 - 依据：ARCHITECTURE.md「依赖方向」；docs/development.md 规则表。
 - 内容：新增测试（例如 `internal/archtest`），调用 `go list -json ./...` 读取每个包的 Imports，按 ARCHITECTURE 的允许边逐条检查，未列出的模块内边视为失败，错误信息包含源包、目标包和违反的规则。负例：testdata 中放一个小型 fixture module，包含一条禁止边（例如 contracts → sdk），断言守卫会报告它。
 - 完成条件：当前代码通过；负例确实被拒绝；docs/development.md 规则表的状态改为「已实现 / 已观测」。
 - 回写：
+  - 实际做了什么：新增 `internal/archtest/arch_test.go`（只有测试文件，不进入 `go build ./...`）：在指定目录运行 `go list -json ./...`，按包的 Module.Path 去掉模块前缀，按最长前缀把包归入 ARCHITECTURE 中登记的模块；对 Imports、TestImports、XTestImports 逐条检查：同模块内部的 import 放行，跨模块的边必须出现在 `allowed` 中，不属于任何已登记模块的包报违规；违规信息包含源包、目标包、违反的规则和修复途径。负例 fixture `internal/archtest/testdata/fixture`（独立 module example.com/fixture）：`contracts/bad -> sdk`（禁止）、`sdk -> contracts/ok`（允许）、`tools/x`（未登记）。ARCHITECTURE.md 同步：说明「模块」指的是路径前缀，同模块内部不受限，规则也覆盖测试代码；登记 internal/archtest 一行；Adapter 接口包名固定为 `internal/core/adapter`；检查一节写上守卫的用法与维护方式。docs/development.md 规则表中该项改为「已观测」。
+  - 验证证据（darwin/arm64，go1.27.1，本 task 的 commit）：`go test -count=1 -v ./internal/archtest/`：`TestModuleImportsFollowArchitecture` PASS（当前代码没有违规），`TestGuardRejectsForbiddenEdges` PASS（正好报出 2 条违规：`contracts/bad -> sdk：…` 和 `tools/x：不属于…`，合法的 sdk→contracts 没有被误报）。真实仓库中的负例：临时添加 `contracts/validate/zz_bad.go`（import sdk）之后，守卫报出「contracts/validate -> sdk：模块 contracts 不允许 import sdk（见 ARCHITECTURE.md…）」并 FAIL；删除后恢复 PASS，工作区干净。`go list ./... | grep -c fixture` = 0（fixture 不进入主 module）。`go vet ./...` 通过，`gofmt -l internal` 为空。
+  - 剩余风险：守卫依赖 PATH 中的 go 命令（与 go test 使用的是同一套工具链）；`allowed` 与 ARCHITECTURE 表格要靠人工保持一致（两处都写明了修改时必须同步）；目前只有测试，尚未接入 CI（仓库还没有 CI）。
+  - 下一步：G1-11（五平台交叉编译与 T-01 收尾）。
 
 ### [ ] G1-11 五平台交叉编译与 T-01 收尾
 - 依据：PLAN T-01 第 7 步与「可审查交付」；V-01/V-02/V-26/V-32/V-37/V-39/V-41 的 T-01 分项。
