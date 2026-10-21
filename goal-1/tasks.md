@@ -307,9 +307,21 @@
   - 剩余风险：业务分发未实现（SDK 对业务请求一律回 UNSUPPORTED）；Degraded 与失败窗口只在内存中；cmd 只是开发入口（安装记录的来源为 dev-local，不校验签名）；Windows Job Object 与 Windows 传输**未运行**。
   - 下一步：REVIEW-6。
 
-### [ ] REVIEW-6 集中检查（G1-17～G1-19）
+### [x] REVIEW-6 集中检查（G1-17～G1-19）
 - 检查清单同上；另外核对 T-02「停止和失败条件」逐条满足，并用 code-review-expert 审查整个分支。
 - 回写：
+  - 流程说明：code-review-expert 的 SKILL.md 第 7 步要求先确认再修改；按 goal-mode 的 SKILL.md「红线」，审查发现直接登记为 FIX task。
+  - 检查过程与结论（审查范围 `c55e4c8..47682ef`：G1-17～G1-19，共 15 个文件，约 2340 行）：
+    1. 是否偏离 input.md：没有；直接依赖正好是已批准的 7 项（x/sys 自 G1-12 起为直接依赖），`go mod tidy` 前后没有差异，`gofmt -l` 为空。
+    2. 五平台 `CGO_ENABLED=0 go build` 与 `go vet` 全部 OK；全仓库 `go test -race -count=3 ./...` 没有失败的包，结束后 `pgrep` 确认没有残留进程。
+    3. **T-02「停止和失败条件」逐条核对**：结论与 G1-19 回写一致（协议、身份、门禁、锁、取消、停止用例都通过；最小进程切片可以重复运行；没有出现双代次接单、旧写入者未退出就启动替代者、控制帧永久阻塞、丢失有效错误结果、状态库损坏后静默初始化）。
+    4. code-review-expert（COMMENT，没有 P0/P1）：
+       - **P2-1 `supervisor.Running.Stop` 没有持有逐插件管理锁**：只有 `Launch` 在 `store.LockPlugin` 内执行，停用（disable）可能与同一插件的另一次启动交错，违反 CONTRACTS §12.2「每插件的 install/enable/disable/… 操作串行化」。修复：Running 保存 store 与 pluginID，Stop 时获取同一把锁。
+       - **P3-1 `supervisor.StopAll` 没有调用方，也没有测试**（并行停止已由经过测试的 `host.StopAll` 提供）→ 删除。
+       - **P3-2 README.md 的状态过时**（仍写着「尚未创建正式 Core、SDK 或插件实现」）→ 更新为 B1 完成后的实际状态与入口。
+       - 记录但不修：`Instance.Stop` 会把 Degraded 状态覆盖为 Draining，`WaitExit` 不把异常退出标记为 Degraded/Crashed——只影响内存中的诊断状态，T-09 的恢复编排会一起重做状态持久化；本机其他进程可以抢先连上 Core 的 loopback Listener，后果只是认证失败、启动失败（拒绝服务，不会越权），属于 CONTRACTS §7.1 已声明的同主机信任边界。
+    5. 安全：认证、Secret 不进入日志、失败路径安全消息、精简环境、锁文件权限都由测试覆盖；cmd 的开发安装记录来源为 dev-local，不校验签名（预期内，由 T-09 实现）。
+  - 下一步：FIX-6，然后终审。
 
 ---
 
@@ -372,3 +384,9 @@
   - 验证证据（darwin/arm64，go1.27.1，本 task 的 commit）：新增 `TestPrepareRejectsMissingPhaseLimits`（收到 CONFIG/PROTOCOL_ERROR，OnStart 没有被调用）；`TestStdioTransportPipes` 新增断言：Release 之后向 Stdin 写入失败，重复 Release 不报错。全仓库 `go test -race -count=1 ./...` 的 13 个包都 ok（其中 golden 帧与 host/sdk 握手测试不受影响）；`GOOS=windows/linux go vet ./...` 通过；`grep` 确认 `controlEnv`/`controlEnvelope(sid` 的副本已经删除；archtest 通过。
   - 剩余风险：无新增风险。
   - 下一步：G1-17（提交与激活门禁）。
+
+### [ ] FIX-6 停用持有逐插件锁、删除未用的 StopAll、README 状态（来自 REVIEW-6，排在终审之前）
+- 依据：REVIEW-6 中的 P2-1/P3-1/P3-2；CONTRACTS §12.2。
+- 内容：`supervisor.Running` 记录 store 与 pluginID，`Stop` 在 `store.LockPlugin(pluginID)` 内执行；新增测试：插件 Stop 正在进行时，同一插件的 Launch 要等 Stop 完成后才开始（用会挂起 STOPPING 的辅助进程拉长 Stop）；删除 `supervisor.StopAll`；README.md 更新为 B1 的实际状态（T-01/T-02 已完成、开发入口、文档链接）。
+- 完成条件：新测试通过（并验证在去掉锁之后会失败）；全仓库 `go test -race ./...` 与 cmd e2e 通过；三平台 vet 通过。
+- 回写：
