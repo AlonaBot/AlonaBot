@@ -28,6 +28,15 @@ go vet ./...
 
 生成器会先删除 `contracts/pb/` 下的 `*.pb.go` 再重新生成；新增 `.proto` 放在 `contracts/proto/alonabot/v1/`，`go_package` 统一为 `github.com/AlonaBot/alonabot/contracts/pb/alonabotv1`。
 
+交叉编译矩阵（只证明能构建，不能代替目标平台的运行证据）：
+
+```sh
+for p in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64; do
+  GOOS=${p%/*} GOARCH=${p#*/} CGO_ENABLED=0 go build ./... && echo "OK $p" || echo "FAIL $p"
+done
+GOARCH=amd64 CGO_ENABLED=0 go test ./...   # Apple Silicon 上经 Rosetta 运行 darwin/amd64 测试
+```
+
 ## 外部测试环境
 
 - **PostgreSQL：** 测试读取环境变量 `ALONABOT_TEST_PG_DSN`；未设置时跳过，在证据中记为「未运行」。临时容器：
@@ -51,7 +60,7 @@ go vet ./...
 | 模块 import 方向符合架构表 | [ARCHITECTURE.md](../ARCHITECTURE.md) | `internal/archtest`（`go test ./internal/archtest/`，含负例 fixture） | 已观测 |
 | 生成代码可重复生成，结果稳定 | PLAN T-01 | 执行 `go generate ./...` 后检查 `git diff --exit-code` | 已观测（G1-01，手动执行） |
 | Envelope 字段号/枚举值与 WIRE-FORMAT 一致 | spec/WIRE-FORMAT.md §1/§2/§5A | `contracts/wirespec_test.go`（`go test ./contracts/`） | 已观测 |
-| 五目标平台 `CGO_ENABLED=0` 可构建 | CONTRACTS §6.1/§7.1 | 交叉编译矩阵命令 | 已定义，未实现 |
+| 五目标平台 `CGO_ENABLED=0` 可构建 | CONTRACTS §6.1/§7.1 | 下方交叉编译命令（手动执行） | 已观测（G1-11，只验证了构建；运行见 V-32） |
 | V-01～V-47 证据 | spec/TEST-MATRIX.md | 按编号记录测试位置、命令、平台和结果 | 全部未运行 |
 
 状态说明：**已定义** 表示规则和检查方式已写下；**已实现** 表示检查代码已存在；**已观测** 表示检查真实运行过并有结果。目前还没有接入 CI。

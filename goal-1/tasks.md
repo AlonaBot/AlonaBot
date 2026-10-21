@@ -152,11 +152,26 @@
   - 剩余风险：守卫依赖 PATH 中的 go 命令（与 go test 使用的是同一套工具链）；`allowed` 与 ARCHITECTURE 表格要靠人工保持一致（两处都写明了修改时必须同步）；目前只有测试，尚未接入 CI（仓库还没有 CI）。
   - 下一步：G1-11（五平台交叉编译与 T-01 收尾）。
 
-### [ ] G1-11 五平台交叉编译与 T-01 收尾
+### [x] G1-11 五平台交叉编译与 T-01 收尾
 - 依据：PLAN T-01 第 7 步与「可审查交付」；V-01/V-02/V-26/V-32/V-37/V-39/V-41 的 T-01 分项。
 - 内容：执行 plan.md §6 中的五平台命令，记录每个组合的结果；整理 T-01 交付清单与证据表（写进本 task 的回写区，并在 docs/development.md 中更新版本与规则表）；确认 T-01 的停止条件全部满足。
 - 完成条件：五个组合全部构建成功（失败则定位修复或标为阻塞）；T-01 证据表完整，未运行的项写明「未运行」。
 - 回写：
+  - 实际做了什么：按 plan.md §6 执行五平台交叉编译，并补充了构建测试二进制的检查；在 Apple Silicon 上用 `GOARCH=amd64` 通过 Rosetta 实际运行全部测试。运行中发现 `internal/archtest` 内部调用的 `go list` 在该环境下取 VCS 状态失败（"error obtaining VCS status … Use -buildvcs=false"），改为 `go list -buildvcs=false`：import 分析用不到 VCS 信息，修改后在没有 git 或取不到 VCS 状态的环境中也能运行。这是本 task 验证时发现的 G1-10 缺陷，修复只有一行。docs/development.md 补上了交叉编译命令，规则表中这一项改为「已观测（只验证了构建）」。
+  - 五平台结果（go1.27.1，CGO_ENABLED=0，本 task 的 commit）：linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64 上的 `go build ./...` 与 `go vet ./...` 全部 OK；linux/amd64、linux/arm64、windows/amd64、darwin/amd64 的 `go test -c ./sdk/gormdb/` 都能编译出测试二进制。运行情况：darwin/arm64 原生 `go test -race ./...` 的 8 个包都 ok；darwin/amd64 经 Rosetta 运行 `GOARCH=amd64 CGO_ENABLED=0 go test ./...`，修复后 8 个包都 ok（生成的测试二进制为 Mach-O x86_64，属于转译运行，不等同于原生 Intel Mac）；linux/*、windows/amd64 **未运行**。
+  - **T-01 证据表**（按 TEST-MATRIX §3；commit 以 goal-1 分支为准；平台为 darwin/arm64、go1.27.1，另有说明的除外）：
+    | V | T-01 分项内容 | 测试位置 / 命令 | 结果 | 留待 |
+    | --- | --- | --- | --- | --- |
+    | V-01 | 市场与本地 ID、缺失/路径穿越/保留名/大写、os/arch 不匹配 | `contracts/manifest`（`go test ./contracts/manifest/`） | 通过 | T-04 注册冲突；T-09 安装来源、first-wins |
+    | V-02 | Major/Minor、未知必需能力、UNSPECIFIED/未知 kind、字段存在性、payload+error、JSON/Protobuf 编码区分 | `contracts/validate`、`contracts/wirespec_test.go` | 通过 | T-02 握手拒绝；T-04 注册原子性 |
+    | V-26 | GORM SQLite/PG 的 CRUD/Tx，Migrate 与 Migrations 互斥 | `sdk/gormdb`（PG 使用 `ALONABOT_TEST_PG_DSN`，postgres:17 容器） | 通过（PG 实测一次，容器已删除） | T-08 SDK 实际连接与凭证边界 |
+    | V-32 | 五平台 CGO_ENABLED=0 构建 | 上方交叉编译命令 | 构建 5/5 通过；运行：darwin/arm64 原生通过，darwin/amd64 经 Rosetta 通过，linux/windows 未运行 | T-10 五平台真实运行 |
+    | V-37 | Bootstrap/REGISTER 类型与 4 MiB 上限的承载结构 | `control.proto`、`route.proto` 及字段号测试 | 部分：类型已固定；**4 MiB 上限尚未实施**（帧编解码在 G1-13，Bootstrap/REGISTER 超限在 G1-16） | G1-13/G1-16、T-08、T-09 |
+    | V-39 | Up 与 `_alonabot_migrations` 同一事务；失败不记录成功 | `sdk/gormdb` 中的 SQLite 与 PG 测试 | 通过（两个后端） | T-08/T-09 首装、resume 与维护许可 |
+    | V-41 | 外部 release.json 对确切字节验签，没有自包含摘要循环 | `contracts/release` | 通过 | T-09 真实验签与更新预检 |
+  - **T-01 停止条件逐条核对**（PLAN T-01「停止和失败条件」）：契约能编译 ✓（9 个 proto，五平台构建通过）；示例签名成立 ✓（`examples/plugins/minimal` + `sdk.Collect` 测试）；生成稳定 ✓（重复 `go generate` 无 diff，golden fixture 重新生成无 diff）；默认数据库组合的关键事务与备份路径通过 ✓（G1-08）；PG 分支已在容器上实测，没有阻塞 ✓（G1-09）；依赖版本已写入 go.mod/go.sum 并经验证 ✓。**结论：T-01 完成，可以交付给 T-02。**
+  - 剩余风险：Rosetta 转译运行只能作为 darwin/amd64 的近似证据；linux/windows 没有任何运行证据；V-37 的上限要在 G1-13/G1-16 才实施；没有 CI，以上检查都是手动执行的。
+  - 下一步：G1-12（Core 状态库、core.lock 与提交原语）。
 
 ## T-02 Core 状态、Native 进程、双 IPC 与基础生命周期
 

@@ -64,7 +64,8 @@ func moduleOf(rel string) string {
 
 // check 在 dir 下运行 go list，返回所有违规描述（已排序）。
 func check(dir string) ([]string, error) {
-	cmd := exec.Command("go", "list", "-json", "./...")
+	// import 分析不需要 VCS 信息；关闭后在无 git 或取不到 VCS 状态的环境（例如 Rosetta 下的 darwin/amd64）也能运行。
+	cmd := exec.Command("go", "list", "-buildvcs=false", "-json", "./...")
 	cmd.Dir = dir
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
