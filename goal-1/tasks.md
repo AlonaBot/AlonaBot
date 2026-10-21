@@ -196,9 +196,19 @@
   - 剩余风险：认证、Session 状态、优先通道、写超时还没有实现（G1-14/G1-16）；没有测试 Windows 上 stdio 管道的实际行为（只验证了交叉编译）。
   - 下一步：REVIEW-4。
 
-### [ ] REVIEW-4 集中检查（G1-10～G1-13）
+### [x] REVIEW-4 集中检查（G1-10～G1-13）
 - 检查清单同上；另外核对 T-01 停止条件、锁实现的平台 build tag，以及交叉编译是否仍然通过。
 - 回写：
+  - 检查过程与结论（commit d14cf01 之上）：
+    1. 是否偏离 input.md：没有。新增依赖只是把已批准的 x/sys 从间接依赖改为直接依赖；新增模块 internal/oslock 已登记在 ARCHITECTURE 与 archtest 中。
+    2. T-01 停止条件复核：G1-11 的结论仍然成立（契约能编译、生成稳定、示例成立、SQLite/PG 路径通过、版本已锁定）。
+    3. 锁实现的平台 build tag：五平台 `go build` 与 `go vet` 全部 OK（windows 下编译的是 lock_windows.go，linux/darwin 下编译的是 `//go:build unix` 的 lock_unix.go）。
+    4. `gofmt -l` 为空；`go mod tidy` 前后没有差异；`go test -race -count=3 ./internal/...` 的 4 个包都稳定 ok（没有偶发失败）。
+    5. **发现缺陷（P1）**：`internal/core/state.preflight` 在拼 file URI 时给不以 / 开头的路径前面加了 /，用来处理 Windows 盘符路径，结果在 Unix 上把**相对路径**错误地变成了从根目录开始的绝对路径。实测：在临时目录下以相对路径 `reldata` 连续 Open 两次，第一次 `<nil>`，第二次报「状态库无法读取（可能已损坏，不会重建）: unable to open database file (14)」。影响：Core 用相对路径的 data_dir 首次启动之后就无法再启动（不会丢数据，但等于不可用）→ 登记 FIX-4。
+    6. 设计提醒（不是缺陷，交给 G1-14）：`wire.Writer` 没有写超时，对端不读时 WriteFrame 会一直阻塞并持有锁；G1-14 的优先通道和「控制通道也无法推进时关闭 Session」必须在这一层之上实现写截止时间。
+    7. 文档同步：docs/development.md 中仍写着「golang.org/x/sys 目前是间接依赖」，已过时 → 放进 FIX-4。
+    8. 安全：oslock 锁文件权限为 0600，data_dir 为 0700；ReadRaw 在认证之前最多按协议上限分配 4 MiB（符合 CONTRACTS §1.1「先验证长度再分配受限缓冲」）。
+  - 下一步：FIX-4（优先于 G1-14）。
 
 ### [ ] G1-14 Session 调用引擎：配对、取消、准入与优先通道
 - 依据：PLAN T-02 第 4 步；CONTRACTS §1.2；WIRE §4；V-05、V-42（T-02 分项）。
@@ -285,3 +295,9 @@
   - 验证证据（darwin/arm64，go1.27.1，本 task 的 commit）：`go vet ./... && go test -race -count=1 ./...` 的 7 个包都 ok；`gofmt -l sdk` 为空。变异检查：把设置改成 `ParameterizedQueries: false` 后，测试失败，日志原文为 `INSERT INTO child(id, parent_id, note) VALUES (1, 99, 'SECRET-VALUE-42')`，证实修复前确实会泄漏参数值；恢复设置后通过。
   - 剩余风险：只覆盖 GORM 自己的日志；插件自行打印的日志里有没有业务数据，属于可信插件作者的责任（CONTRACTS §7.1）。
   - 下一步：G1-10（架构 import 守卫）。
+
+### [ ] FIX-4 状态库相对路径 data_dir 无法重开，以及 x/sys 文档（来自 REVIEW-4，排在 G1-14 之前）
+- 依据：REVIEW-4 第 5、7 条；CONTRACTS §6.1（状态库错误不得变成不可启动的误报）。
+- 内容：`state.Open` 一开始就把 dataDir 转成绝对路径（`filepath.Abs`），后续的锁文件、状态库与预检 URI 都使用这个绝对路径；新增测试：用 `t.Chdir` 切换到临时目录，以相对路径连续 Open/Close 两次都成功，且第二次读到第一次写入的记录。修正 docs/development.md 中关于 x/sys 的描述。
+- 完成条件：新测试在修复前失败、修复后通过（先用旧实现验证一次失败）；全仓库 `go test -race ./...` 通过；Windows 交叉 vet 通过。
+- 回写：
