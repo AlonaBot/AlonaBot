@@ -13,8 +13,9 @@
 | --- | --- | --- | --- | --- |
 | `contracts/` | `.proto` 源（`proto/`）与生成类型（`pb/alonabotv1`）、manifest/release/消息结构校验、兼容 fixture；生成工具 `contracts/internal/protocgen`（只由 go:generate 运行） | 任何运行时 I/O、会话状态、平台/GORM 依赖 | T-01 | 已实现：proto/生成、`validate`（Envelope/协商/Chain）、`manifest`、`release` |
 | `internal/wire/` | 帧编解码（4 MiB 上限）、TCP/stdio 传输、Session 调用表、准入预算、优先通道、取消 | 业务路由、权限、插件生命周期决策 | T-02 | 拟建 |
+| `internal/oslock/` | 跨进程 OS 独占文件锁（flock / LockFileEx），供 core.lock 与 runtime.lock 共用 | 锁的业务语义（何时加锁由调用方决定） | T-02（G1-12） | 已实现 |
 | `sdk/`（含 `sdk/message`、`sdk/gormdb` 等子包） | 插件侧 API：根插件、Context/Send、注册、生命周期 Hook、runtime.lock、按需 GORM | Core 状态库、管理凭证、其他插件 | T-01 类型，T-02 起实现 | 部分实现：`sdk`（Context、注册器、Collect）、`sdk/plugin`、`sdk/message`、`sdk/config`、`sdk/gormdb`（OpenSQLite/OpenPostgres、RunVersioned、迁移接口互斥检查）；Run/Send 返回 UNSUPPORTED |
-| `internal/core/` | 状态库与 core.lock、进程、RPC 编排、路由、权限、媒体、服务、调度、HTTP、配置、管理 | 平台协议细节（交 adapters）、插件进程内逻辑 | T-02 起 | 拟建 |
+| `internal/core/` | 状态库与 core.lock、进程、RPC 编排、路由、权限、媒体、服务、调度、HTTP、配置、管理 | 平台协议细节（交 adapters）、插件进程内逻辑 | T-02 起 | 部分实现：`internal/core/state`（core.lock、state.sqlite、提交原语） |
 | `internal/adapters/telegram/` | Telegram 接收、发送计划、能力与平台映射 | Core 策略、命令路由 | T-03 | 拟建 |
 | `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） | T-02 起 | 拟建 |
 | `internal/archtest/` | 本文件依赖规则的机械检查（仅测试） | 产品代码 | goal-1 G1-10 | 已实现 |
@@ -30,14 +31,14 @@
 | 允许的边 | 理由 |
 | --- | --- |
 | `internal/wire -> contracts` | 帧内承载生成的 Envelope 类型 |
-| `sdk/... -> contracts`、`sdk/... -> internal/wire` | 插件侧复用同一协议实现（Go 允许本 module 的 `sdk` import `internal`） |
-| `internal/core/... -> contracts`、`internal/core/... -> internal/wire` | Core 侧协议 |
+| `sdk/... -> contracts`、`sdk/... -> internal/wire`、`sdk/... -> internal/oslock` | 插件侧复用同一协议实现与 runtime.lock（Go 允许本 module 的 `sdk` import `internal`） |
+| `internal/core/... -> contracts`、`internal/core/... -> internal/wire`、`internal/core/... -> internal/oslock` | Core 侧协议、core.lock 与停机复制时临时持有 runtime.lock |
 | `internal/adapters/... -> internal/core/adapter`、`-> contracts` | 实现 Core 定义的 Adapter 接口（接口包固定为 `internal/core/adapter`，T-03 创建） |
 | `cmd/alonabot -> internal/core/...`、`-> internal/adapters/...`、`-> contracts` | 装配 |
 | `cmd/alonabot -> sdk/generate` | T-04 构建检查复用同一生成器 |
 | `examples/plugins/... -> sdk/...`、`-> contracts` | 示例只走公共 SDK |
 
-明确禁止（重点）：`internal/archtest` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | internal/adapters | cmd`；`internal/core -> sdk | internal/adapters | cmd`；任何包 `-> examples | experiments`。依赖图不允许环。
+明确禁止（重点）：`internal/archtest`、`internal/oslock` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | internal/adapters | cmd`；`internal/core -> sdk | internal/adapters | cmd`；任何包 `-> examples | experiments`。依赖图不允许环。
 
 ## 状态归属
 

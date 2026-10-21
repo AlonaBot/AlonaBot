@@ -22,6 +22,7 @@ var modules = []string{
 	"internal/core",
 	"internal/adapters",
 	"internal/archtest",
+	"internal/oslock",
 	"sdk",
 	"cmd/alonabot",
 	"examples",
@@ -31,10 +32,11 @@ var modules = []string{
 var allowed = map[string][]string{
 	"contracts":         {},
 	"internal/wire":     {"contracts"},
-	"sdk":               {"contracts", "internal/wire"},
-	"internal/core":     {"contracts", "internal/wire"},
+	"sdk":               {"contracts", "internal/wire", "internal/oslock"},
+	"internal/core":     {"contracts", "internal/wire", "internal/oslock"},
 	"internal/adapters": {"internal/core/adapter", "contracts"},
 	"internal/archtest": {},
+	"internal/oslock":   {},
 	"cmd/alonabot":      {"internal/core", "internal/adapters", "contracts", "sdk/generate"},
 	"examples":          {"sdk", "contracts"},
 }

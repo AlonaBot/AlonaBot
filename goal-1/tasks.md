@@ -175,11 +175,16 @@
 
 ## T-02 Core 状态、Native 进程、双 IPC 与基础生命周期
 
-### [ ] G1-12 Core 状态库、core.lock 与提交原语
+### [x] G1-12 Core 状态库、core.lock 与提交原语
 - 依据：PLAN T-02 第 1 步；CONTRACTS §6.1、§12.2；V-36（T-02 分项）。
 - 内容：`internal/core/state`：用 x/sys 的 flock/LockFileEx 获取 `<data_dir>/core.lock`；打开 state.sqlite（modernc，单连接，设置并核对 PRAGMA）；内建版本号 schema 迁移；最小表结构（plan.md 假设 6）；在一个事务内提交 ActiveGeneration+COMMITTED，并核对预期的旧代次；按插件串行化管理操作。状态库损坏或打不开时报错退出，不能重建空库。
 - 完成条件：测试覆盖：同一 data_dir 启动第二个 Core 被拒绝（用子进程或两个独立句柄验证）、预期旧代次不一致时提交失败、损坏的状态库不会被重建、PRAGMA 回读核对、同插件并发操作被串行化。
 - 回写：
+  - 实际做了什么：**新增模块 `internal/oslock`**（ARCHITECTURE 与 archtest 同步更新，新增允许边 sdk→internal/oslock、internal/core→internal/oslock；oslock 本身不 import 本 module 的任何包）。新增理由：core.lock 与 runtime.lock 必须共用同一份锁实现，而 sdk 和 internal/core 之间不能互相 import。`TryLock` 以 0600 打开或创建锁文件，然后非阻塞加独占锁：unix 使用 `unix.Flock(LOCK_EX|LOCK_NB)`（EINTR 时重试，EWOULDBLOCK 视为已被占用，返回 ErrLocked），windows 使用 `LockFileEx(EXCLUSIVE|FAIL_IMMEDIATELY)`（ERROR_LOCK_VIOLATION 返回 ErrLocked）；`Unlock` 重复调用不会出错，锁文件保留不删除。`golang.org/x/sys` 由此变为直接依赖（已批准）。新增 `internal/core/state`：`Open` 先取得 core.lock（被占用时返回 ErrDataDirLocked），再打开 state.sqlite（modernc，单连接，DSN 中设置 WAL/FULL/外键/busy_timeout 后回读核对）；**已有文件先以只读、不带 PRAGMA 的 URI 做预检**（必须存在 schema_version 表，quick_check 必须为 ok），通过后才以可写方式打开，不满足就报错且不改动文件；任何失败都会释放 core.lock；内建按版本号顺序执行的迁移（v1：schema_version/installs/generations/plugin_state），遇到比本程序更高的版本时拒绝打开；`AddInstall`（install_seq 递增）、`GetInstall`、`AddGeneration`、`CommitActive(plugin, expectedOld, new)`（同一事务内核对旧值、写入 committed_at 并切换 active_generation；旧值不一致返回 ErrStaleGeneration；代次必须属于该插件且未提交过）、`Active`、`SetEnabled`/`Enabled`、`LockPlugin`（按插件分别加互斥锁）。**与假设 6 的偏差：** 没有建 policy 占位表（目前没有使用方），由 T-03/T-04 通过迁移追加。
+  - **过程中发现并修复的问题：** 第一版用可写 DSN 直接打开已有文件，测试 `TestCorruptStateNotRebuilt` 的「空文件」和「其他 SQLite 库」两个用例失败，报「状态库文件被改写」——驱动在连接时执行 `journal_mode(WAL)`，在 schema 检查之前就改写了文件头。改为先只读预检之后通过。Windows 下的盘符路径会被拼成 `file:///C:/...` 格式的 URI。
+  - V-36（T-02 分项）证据（darwin/arm64，go1.27.1，本 task 的 commit）：`go test -race -count=1 -v ./internal/oslock/ ./internal/core/state/` 全部 PASS：同一进程内第二个句柄得到 ErrLocked，解锁后锁文件仍存在且可以重新加锁；**跨进程**：子进程（重入测试二进制）持锁时父进程得到 ErrLocked，子进程退出（以 `cmd.Wait` 确认，没有用 sleep）后父进程可以加锁；**双 Core**：同一进程内第二个 Open 和另一进程中的 Core 都返回 ErrDataDirLocked，持有者退出后可以打开；PRAGMA 回读值为 `{wal 2 1 5000}`；关闭后重新打开，记录与 schema 版本都还在；**陈旧候选**：两个候选都以「无 Active」为前提时，后提交的那个得到 ErrStaleGeneration，Active 不变；已提交过的代次不能再次提交；不能提交其他插件的代次或不存在的代次；**损坏的状态库**：垃圾内容、空文件、其他 SQLite 库三种情况都拒绝打开，文件字节不变，且 core.lock 已释放；更高的 schema 版本被拒绝；32 个 goroutine 争用同一插件时并发度最大为 1，不同插件互不阻塞。全仓库 `go test -race ./...` 的 10 个包都 ok；`GOOS=windows/linux go vet ./internal/...` 通过；archtest 通过（新的允许边已生效）。
+  - 剩余风险：windows 的 LockFileEx 与只读 URI 打开只经过交叉 vet，**没有运行**；Core 在首次初始化中途崩溃时会留下一个没有 schema 的文件，下次启动会拒绝并要求管理员处理（为了不把截断损坏的文件误当成新库，有意这样设计）；V-36 的「同插件并发 enable/update」「Core 被 kill 而子进程仍在写」留待 G1-15/G1-19 与 T-09。
+  - 下一步：G1-13（帧编解码与 TCP/stdio 传输）。
 
 ### [ ] G1-13 帧编解码与 TCP/stdio 传输
 - 依据：PLAN T-02 第 3 步；CONTRACTS §1.1；WIRE §1；V-03。
