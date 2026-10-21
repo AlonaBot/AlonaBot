@@ -127,9 +127,20 @@
   - 剩余风险：没有在 PG 上测试「首次安装到空 schema、resume 只核对、维护许可」等分支，这些属于 T-08/T-09（V-31/V-39）；超级用户只在测试中用于预置，生产环境由管理员预置；`sslmode=disable` 只用于本机容器；GORM 的 Error 级日志会输出失败的 SQL 文本，日后 SQL 中若带有业务数据，需要在 T-08 评估日志级别。
   - 下一步：REVIEW-3（含 code-review-expert 审查当前分支的 diff）。
 
-### [ ] REVIEW-3 集中检查（G1-07～G1-09）
+### [x] REVIEW-3 集中检查（G1-07～G1-09）
 - 检查清单同上；另外核对依赖都在已批准清单内（`go list -m all` 中的直接依赖）、`go mod tidy` 后没有差异，并用 code-review-expert 审查到目前为止的分支 diff。
 - 回写：
+  - 流程说明：code-review-expert 的 SKILL.md 第 7 步「Next steps confirmation」要求列出审查发现后先询问用户如何处理；goal-mode 的 SKILL.md「红线」禁止在 goal 中向用户提问。按 goal-mode 的规则，审查发现直接登记为修复 task，不暂停等待确认。
+  - 审查范围：`main..goal-1`（commit 243b4a3），不含 contracts/pb 生成代码、testdata、goal 文件和 go.sum；共 42 个文件、约 4460 行。contracts 部分已经过 REVIEW-1/2，本次重点是 G1-07～G1-09（sdk、sdk/gormdb、examples）以及跨模块的约束。
+  - 机械检查：直接依赖正好是 6 个（libtnb/sqlite v1.2.2、yaml v3.0.5、protobuf v1.36.12、driver/postgres v1.6.3、gorm v1.31.2、modernc v1.61.0），全部在已批准清单内；`go mod tidy` 前后没有差异；`gofmt -l` 为空；`go vet ./...` 和 `go test -race -count=1 ./...` 的 7 个包都 ok。
+  - Code Review Summary：COMMENT（没有 P0/P1）。
+    - **P2-1 sdk/gormdb/sqlite.go:18 gormLogger 会把绑定参数插进日志**：通过阅读 gorm v1.31.2 的 callbacks.go:142-145 确认，在 `ParameterizedQueries=false`（默认值）时，Trace 用 `Dialector.Explain(sql, vars...)` 把参数值拼进 SQL 文本；Warn 级别会记录慢查询，Error 级别会记录失败的 SQL，业务数据或 PII（插件甚至可能把 secret 写进 DB）就会进入 stderr，再被 Core 采集到普通日志，违反 CONTRACTS §5.3「secret 原文不进入普通日志」。可利用条件：任何慢查询或错误 SQL 都会触发。修复：在 logger.Config 中设置 `ParameterizedQueries: true`，并加一个测试捕获日志输出，断言其中不含参数值。
+    - **P2-2 sdk/registry.go:142 HTTP 路径没有做规范化检查**：`/a/../admin`、`//x`、`/a/` 这类非规范路径也能注册，同一资源可能对应多个写法，代理在匹配路由时会产生歧义（CONTRACTS §7.2：Core 按 route 匹配后剥离前缀）。修复：要求 `path.Clean(p) == p`（`/` 本身允许），并拒绝 `..` 段。
+    - **P3-1 sdk/gormdb/versioned.go 账本一致性**：没有检测账本中存在但声明里没有的 ID，也没有检测「后面的 ID 已完成、前面的 ID 未完成」这种空洞。CONTRACTS §6.3 的 resume 核对属于 T-08，**推迟**，作为 T-08 的输入记录在这里。
+    - **P3-2 ARCHITECTURE.md 中 sdk 行的描述已过时**：gormdb 现在已有 OpenSQLite/OpenPostgres/RunVersioned，描述仍写着「迁移接口与互斥检查」→ 放进 FIX-3 一起同步。
+    - **P3-3 sdk.ErrNotImplemented 是可变的共享指针**：调用方可能修改它。影响很小，T-02 实现 Run/Send 后会删除这个错误，**不修**。
+  - 其他检查结论：plugin.Root 用未导出方法确保只有嵌入 Base 的类型才能满足它；Collect 的重复检测覆盖了嵌套组；OpenPostgres 的错误不含密码（G1-09 实测）；没有 SQL 拼接注入面（测试中的 DDL 拼接只出现在测试预置代码里，使用的是经过清洗的标识符）；没有发现并发共享状态。
+  - 下一步：FIX-3（优先于 G1-10）。
 
 ### [ ] G1-10 架构 import 守卫
 - 依据：ARCHITECTURE.md「依赖方向」；docs/development.md 规则表。
@@ -236,3 +247,9 @@
   - 过程中的失误（已纠正）：shell 里的 `cp` 是交互式别名，第一次把新实现拷回来时没有生效，`git checkout` 又让测试改动丢失；随后从 scratchpad 备份恢复了新实现，并重新加上了回归测试。最终 diff 只包含 chain.go 与 chain_test.go 的预期改动。
   - 剩余风险：TotalAlloc 断言会受 GC 时机与运行时版本影响，但 1 MiB 的阈值与实测约 2.5 KB 相差三个数量级，误报的可能性很低。
   - 下一步：G1-07。
+
+### [ ] FIX-3 GORM 日志不得包含参数值、HTTP 路径规范化、ARCHITECTURE 同步（来自 REVIEW-3，排在 G1-10 之前）
+- 依据：CONTRACTS §5.3、§7.2；REVIEW-3 中的 P2-1、P2-2、P3-2。
+- 内容：`sdk/gormdb/sqlite.go` 的 gormLogger 设置 `ParameterizedQueries: true`，并新增测试：把 logger 输出重定向到 buffer，执行一条带参数的失败 SQL，断言日志中有 SQL 文本、但没有参数值；`sdk/registry.go` 的 `HTTPRegistry.Handle` 要求路径以 / 开头且 `path.Clean(p)==p`，并在 sdk_test 中补上 `/a/../b`、`//x`、`/a/` 这几个被拒绝的用例；更新 ARCHITECTURE.md 中 sdk 行的描述。
+- 完成条件：新测试通过；先撤掉 ParameterizedQueries 验证新测试会失败，再恢复；全仓库 `go test -race ./...` 通过。
+- 回写：
