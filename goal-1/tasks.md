@@ -73,11 +73,15 @@
   - 剩余风险：`source` 只检查非空，格式（例如 github.com/owner/repo）以及与已绑定来源是否一致留给 T-09；V-01 中「重复 ID 的先后顺序稳定 / first-wins」属于安装记录，交给 T-09；ID 大小写冲突检测（不能靠大小写形成两个安装）在 manifest 层面已经通过拒绝大写来保证，安装层仍需按规范小写比较。
   - 下一步：G1-06。
 
-### [ ] G1-06 MessageChain 结构校验
+### [x] G1-06 MessageChain 结构校验
 - 依据：MESSAGE-MODEL §2；CONTRACTS §8；PLAN T-01 第 3 步（「为首发消息建立实际 Schema 与验证入口」）。
 - 内容：`contracts/validate` 中加入纯函数 `ValidateChain`：媒体来源三选一、reference/buttons 每条最多一个、只含元数据的 Chain 被拒绝、空 Chain 被拒绝、text 的 format 与 entities 互斥、entity 的 UTF-16 偏移落在完整字符边界且不越界、按钮 action_id 非空、filename 不含路径。只做结构检查，平台能力检查属于 T-03。
 - 完成条件：每条规则至少有一个合法用例和一个非法用例；错误统一返回 INVALID_ARGUMENT 并说明是哪个 segment 的问题。
 - 回写：
+  - 实际做了什么：新增 `contracts/validate/chain.go`，入口命名为 `validate.Chain`（与 `validate.Envelope` 保持一致，而不是任务描述里的 ValidateChain）。检查项包括：空 Chain 或 nil；片段未设置类型；reference 和 buttons 各自最多一个；只有元数据、没有可发送内容（text/image/video/file/mention/forward 才算内容）；text 不能为空且必须是合法 UTF-8；format 显式设置时不能是 UNSPECIFIED 或未知值，并且与 entities 互斥；entity 的类型必须合法、长度大于 0、不越界（以 UTF-16 码元计），起止都要落在字符边界上（不能截断代理对）；url 只能且必须用于 text_link（必须是 http(s) 绝对地址），external_user_id 只能且必须用于 text_mention，language 只能用于 pre；媒体来源恰好一个，media_ref/incoming token 不能为空，https_url 必须是 https 绝对地址；filename 不能包含路径分隔符、NUL 或 ./..；mention 必须有用户；reference 必须有消息 ID，带 target 时字段要齐全；buttons 至少一行，每行至少一个按钮，action_id 与 label 不能为空，value 必须是合法 JSON；forward 至少一个条目，嵌套 Chain 递归校验，报错带完整位置（例如 `segment[0].forward.items[1].segment[0]`）。错误码统一为 INVALID_ARGUMENT。**由我补定的规则：** 空文本片段视为非法；entity 禁止携带与类型不符的附加字段；按钮 value 按 JSON 文本校验（与 G1-03 的约定一致）。
+  - 验证证据（darwin/arm64，go1.27.1，本 task 的 commit）：`go test -race -count=1 ./...` 中 4 个包都 ok；TestChain 的子测试加上 TestChainErrorNamesSegment 共 43 个 PASS（8 个合法用例、34 个非法用例，每条规则至少各有一个），每个非法用例都同时断言错误文本和 INVALID_ARGUMENT；`gofmt -l contracts` 为空（测试文件格式化过一次）。
+  - 剩余风险：平台相关的限制（文本或 caption 长度、markdown 方言、相册数量、按钮数量上限、mention 能否渲染）属于 T-03 的发送计划；value 是否符合 action Schema、media_ref 是否有效以及租约、Target 授权，都属于 Core 运行时检查。
+  - 下一步：REVIEW-2。
 
 ### [ ] REVIEW-2 集中检查（G1-04～G1-06）
 - 检查清单同 REVIEW-1；另外核对校验函数是否只依赖 contracts，以及 fixture 能否重复生成。
