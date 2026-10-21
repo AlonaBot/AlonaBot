@@ -1,0 +1,63 @@
+// 帧外层 Envelope，见 spec/WIRE-FORMAT.md §1。字段 1～16 固定；删除时 reserved，不复用编号。
+syntax = "proto3";
+
+package alonabot.v1;
+
+import "alonabot/v1/errors.proto";
+
+option go_package = "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1";
+
+enum InitiatorSide {
+  INITIATOR_SIDE_UNSPECIFIED = 0;
+  INITIATOR_SIDE_CORE = 1;
+  INITIATOR_SIDE_PLUGIN = 2;
+}
+
+enum FrameKind {
+  FRAME_KIND_UNSPECIFIED = 0;
+  FRAME_KIND_HELLO = 1;
+  FRAME_KIND_HELLO_ACK = 2;
+  FRAME_KIND_REGISTER = 3;
+  FRAME_KIND_PREPARED = 4;
+  FRAME_KIND_ACTIVATE = 5;
+  FRAME_KIND_ACTIVATED = 6;
+  FRAME_KIND_REQUEST = 7;
+  FRAME_KIND_RESPONSE = 8;
+  FRAME_KIND_CANCEL = 9;
+  FRAME_KIND_EVENT = 10;
+  FRAME_KIND_STOPPING = 11;
+  FRAME_KIND_HEARTBEAT = 12;
+  FRAME_KIND_SESSION_ERROR = 13;
+}
+
+enum PayloadEncoding {
+  PAYLOAD_ENCODING_UNSPECIFIED = 0;
+  PAYLOAD_ENCODING_PROTOBUF = 1;
+  PAYLOAD_ENCODING_JSON = 2;
+}
+
+// 各字段在不同帧种类下的必需性由 contracts/validate 检查，不靠 oneof 表达；
+// payload 与 error 可以同时出现（例如部分发送成功）。
+message Envelope {
+  uint32 protocol_major = 1;
+  uint32 protocol_minor = 2;
+  // HELLO 为空；HELLO_ACK 起为 Core 分配的 16 字节随机 ID。
+  bytes session_id = 3;
+  InitiatorSide initiator_side = 4;
+  // REQUEST/RESPONSE/CANCEL 非零；其他帧为 0。
+  uint64 call_id = 5;
+  // 仅 PLUGIN 发起的 REQUEST 可设置，引用同 Session 中仍在途的 CORE 发起 REQUEST。
+  optional uint64 parent_call_id = 6;
+  // REQUEST 必需，UTC 毫秒。
+  optional int64 deadline_unix_ms = 7;
+  FrameKind kind = 8;
+  // 插件发出的帧等于其认证 ID；Core 发出的帧为空。
+  string source_plugin_id = 9;
+  string target = 10;
+  bytes trace_id = 11;
+  PayloadEncoding payload_encoding = 12;
+  string schema_id = 13;
+  uint32 schema_version = 14;
+  bytes payload = 15;
+  ErrorInfo error = 16;
+}

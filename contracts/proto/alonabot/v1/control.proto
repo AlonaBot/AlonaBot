@@ -1,0 +1,195 @@
+// 控制帧载荷，见 spec/WIRE-FORMAT.md §3、spec/CONTRACTS-v0.1.md §1.1/§4/§6.3。
+// REGISTER 载荷依赖 RouteDescriptor，定义在 route.proto。
+syntax = "proto3";
+
+package alonabot.v1;
+
+import "alonabot/v1/envelope.proto";
+
+option go_package = "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1";
+
+// 协议能力项。supported 为可用集合，required 必须包含于双方交集。
+message ProtocolCapability {
+  string name = 1;
+  uint32 version = 2;
+}
+
+// HELLO（Plugin→Core），首帧且仅一次。
+message Hello {
+  string plugin_id = 1;
+  // Core 启动时下发的 32 字节 Session Secret。
+  bytes secret = 2;
+  uint32 supported_major = 3;
+  uint32 supported_minor = 4;
+  // 安装时已验证的归档 SHA256，由 Core 经启动上下文提供，SDK 原样回显。
+  bytes build_digest = 5;
+  repeated ProtocolCapability supported_capabilities = 6;
+  repeated ProtocolCapability required_capabilities = 7;
+}
+
+// HELLO_ACK（Core→Plugin）。
+message HelloAck {
+  bytes session_id = 1;
+  uint32 chosen_minor = 2;
+  repeated ProtocolCapability capability_intersection = 3;
+  Bootstrap bootstrap = 4;
+}
+
+// 准备阶段一次下发的私有输入，不得进入日志或管理 API 响应。
+message Bootstrap {
+  string generation_id = 1;
+  // UTF-8 JSON 对象；Core 只检查是对象且未超限，不先用新 Schema 否决旧配置。
+  string candidate_config_json = 2;
+  bytes config_schema_hash = 3;
+  // 首次安装没有旧版本。
+  optional uint32 previous_config_version = 4;
+  uint32 target_config_version = 5;
+  DatabaseDescriptor database_descriptor = 6;
+  // 仅在插件声明 HTTP 能力时设置。
+  HttpProxyAuth http_proxy_auth = 7;
+  PhaseLimits phase_limits = 8;
+  int64 preparation_deadline_unix_ms = 9;
+}
+
+enum DatabaseBackend {
+  DATABASE_BACKEND_UNSPECIFIED = 0;
+  // 无受管业务 DB。
+  DATABASE_BACKEND_NONE = 1;
+  DATABASE_BACKEND_SQLITE = 2;
+  DATABASE_BACKEND_POSTGRES = 3;
+}
+
+enum MigrationMode {
+  MIGRATION_MODE_UNSPECIFIED = 0;
+  MIGRATION_MODE_NONE = 1;
+  MIGRATION_MODE_SELF = 2;
+  MIGRATION_MODE_VERSIONED = 3;
+}
+
+enum ActivationReason {
+  ACTIVATION_REASON_UNSPECIFIED = 0;
+  ACTIVATION_REASON_FIRST_INSTALL = 1;
+  ACTIVATION_REASON_RESUME = 2;
+  ACTIVATION_REASON_RELOAD = 3;
+  ACTIVATION_REASON_UPDATE = 4;
+  ACTIVATION_REASON_ROLLBACK = 5;
+}
+
+message DatabaseDescriptor {
+  DatabaseBackend backend = 1;
+  // SQLITE：受管候选（或 resume 时 Active）文件路径。
+  string sqlite_path = 2;
+  // POSTGRES：该插件专属 role/schema 的连接参数；不含 Core 管理凭证。
+  PostgresConnection postgres = 3;
+  MigrationMode migration_mode = 4;
+  // versioned 模式下已完成的迁移 ID（升序）。
+  repeated uint32 applied_migration_ids = 5;
+  ActivationReason activation_reason = 6;
+  // 仅当管理员对本次 Session/Generation/DB 显式给出维护许可时为 true。
+  bool manual_migration_approved = 7;
+}
+
+message PostgresConnection {
+  string host = 1;
+  uint32 port = 2;
+  string database = 3;
+  string user = 4;
+  string password = 5;
+  // 插件专属 schema；search_path 限于它与系统目录。
+  string schema = 6;
+  string ssl_mode = 7;
+}
+
+// 本 Session 独立的内部 HTTP 代理认证材料，不复用 Admin 凭证。
+message HttpProxyAuth {
+  bytes token = 1;
+}
+
+// 主契约固定的阶段预算（毫秒），见 CONTRACTS §4.2。
+message PhaseLimits {
+  uint32 handshake_ms = 1;
+  uint32 config_ms = 2;
+  uint32 migration_ms = 3;
+  uint32 on_start_ms = 4;
+  uint32 on_ready_ms = 5;
+  uint32 stop_total_ms = 6;
+}
+
+// SDK 已实际绑定的 loopback Listener；只接受 127.0.0.1 或 ::1 与非零端口。
+message HttpListener {
+  string host = 1;
+  uint32 port = 2;
+}
+
+// PREPARED（Core→Plugin）。digest 由 Core 对持久化快照计算，SDK 只作不透明确认值。
+message Prepared {
+  bytes route_descriptor_hash = 1;
+  bytes candidate_config_digest = 2;
+}
+
+// ACTIVATE（Core→Plugin），在 Core 状态库提交唯一 ActiveGeneration 之后发送。
+message Activate {
+  string generation_id = 1;
+  bytes commit_marker = 2;
+  int64 on_ready_deadline_unix_ms = 3;
+}
+
+// ACTIVATED（Plugin→Core），OnReady 成功后由唯一 writer 完整写出。
+message Activated {
+  string generation_id = 1;
+  bool ready = 2;
+}
+
+enum CancelReason {
+  CANCEL_REASON_UNSPECIFIED = 0;
+  CANCEL_REASON_CALLER_CANCELLED = 1;
+  CANCEL_REASON_DEADLINE_EXCEEDED = 2;
+  CANCEL_REASON_PARENT_FINISHED = 3;
+  CANCEL_REASON_SESSION_STOPPING = 4;
+}
+
+// CANCEL（原发起方→被调用方）；initiator_side/call_id 取自 Envelope。
+message Cancel {
+  CancelReason reason = 1;
+}
+
+enum StopReason {
+  STOP_REASON_UNSPECIFIED = 0;
+  STOP_REASON_DISABLE = 1;
+  STOP_REASON_RESTART = 2;
+  STOP_REASON_RELOAD = 3;
+  STOP_REASON_UPDATE = 4;
+  STOP_REASON_CORE_SHUTDOWN = 5;
+}
+
+// STOPPING（Core→Plugin），deadline = min(t0+10s, 发送时刻+4s)。
+message Stopping {
+  int64 deadline_unix_ms = 1;
+  StopReason reason = 2;
+}
+
+// HEARTBEAT（双向），仅用于诊断；monotonic_ns 只与同一端的值比较。
+message Heartbeat {
+  uint64 seq = 1;
+  uint64 monotonic_ns = 2;
+}
+
+enum SessionPhase {
+  SESSION_PHASE_UNSPECIFIED = 0;
+  SESSION_PHASE_HANDSHAKE = 1;
+  SESSION_PHASE_CONFIG = 2;
+  SESSION_PHASE_MIGRATION = 3;
+  SESSION_PHASE_ON_START = 4;
+  SESSION_PHASE_REGISTER = 5;
+  SESSION_PHASE_ACTIVATE = 6;
+  SESSION_PHASE_ON_READY = 7;
+  SESSION_PHASE_ACTIVE = 8;
+  SESSION_PHASE_STOPPING = 9;
+}
+
+// SESSION_ERROR（双向）；ErrorInfo 放在 Envelope.error。
+message SessionError {
+  SessionPhase failed_phase = 1;
+  // 触发失败的帧种类；与具体帧无关时为 UNSPECIFIED。
+  FrameKind failed_kind = 2;
+}

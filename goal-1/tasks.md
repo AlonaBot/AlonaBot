@@ -17,15 +17,20 @@
   - 剩余风险：版本核对用的是完整字符串比较，protoc 升级时必须同时修改 `wantProtoc` 并重新生成；生成器依赖 PATH 中的 protoc（homebrew），没有纳入 go.mod。目前还没有 go test（没有测试文件），自动化的生成稳定性检查在 REVIEW/CI 阶段处理。
   - 下一步：G1-02，写 envelope.proto 和 control.proto，并为 errors/envelope/control 编写字段号断言测试。
 
-### [ ] G1-02 Envelope、ErrorInfo 与控制帧 proto
+### [x] G1-02 Envelope、ErrorInfo 与控制帧 proto
 - 依据：WIRE-FORMAT §1～§3、CONTRACTS §1.1。
 - 内容：`envelope.proto`（Envelope 字段 1～16；InitiatorSide、FrameKind（含 SESSION_ERROR=13）、PayloadEncoding；字段 6/7 使用 optional）；`errors.proto` 已在 G1-01 完成，这里只补字段号测试；`control.proto`（Hello、HelloAck、Bootstrap（含 DatabaseDescriptor/ActivationReason、PhaseLimits、HttpProxyAuth）、Register、HttpListener、Prepared、Activate、Activated、Cancel、Stopping、Heartbeat、SessionError（failed_phase/failed_kind）、Capability）。payload 和 error 不放进 oneof。
 - 完成条件：用 protoreflect 编写测试，逐项断言 Envelope 字段号、每个枚举的数值和名称前缀与 WIRE 表一致，optional 字段具备 presence；生成稳定。
 - 回写：
+  - 实际做了什么：新增 `envelope.proto`（Envelope 1～16，字段 6/7 为 optional，payload 和 error 不放进 oneof；InitiatorSide、FrameKind 0～13、PayloadEncoding）和 `control.proto`（ProtocolCapability、Hello、HelloAck、Bootstrap、DatabaseDescriptor、PostgresConnection、HttpProxyAuth、PhaseLimits、HttpListener、Prepared、Activate、Activated、Cancel、Stopping、Heartbeat、SessionError，以及枚举 DatabaseBackend（含显式 NONE）、MigrationMode、ActivationReason、CancelReason、StopReason、SessionPhase）。新增 `contracts/wirespec_test.go`：逐项断言 Envelope/ErrorInfo 的字段号与名称、presence（只有 6/7/16 有）、不放进 oneof；InitiatorSide/FrameKind/PayloadEncoding/ErrorCode 的数值和名称与 WIRE 表一致；三个文件中的所有枚举零值都是 `*_UNSPECIFIED` 且带类型前缀。
+  - **规格之外由 T-01 决定的部分**（WIRE 只描述了语义，没有给出字段号或取值）：控制帧载荷的字段号按 WIRE §3.1/§3.2 表格中的字段顺序编号；CancelReason、StopReason、SessionPhase 的取值依据 CONTRACTS §4.2 中列出的阶段和停止原因；DatabaseBackend 增加了 NONE（对应无业务 DB 的插件，因为零值 UNSPECIFIED 必须被拒绝）。G1-03 会把这些写回 WIRE「T-01 已固定」小节。**REGISTER 载荷挪到 G1-03 的 route.proto**，因为它依赖 RouteDescriptor。
+  - 验证证据（darwin/arm64，go1.27.1，libprotoc 36.0，本 task 的 commit）：`go generate ./... && go build ./... && go vet ./... && go test -race ./...` → `ok github.com/AlonaBot/alonabot/contracts`；stage 之后再执行 `go generate ./...`，`git diff --stat` 为空。变异检查：把 trace_id 的字段号临时改成 17 → `TestEnvelopeFieldNumbers` 失败（"Envelope 字段 11 应为 trace_id，实际 <nil>"），还原后通过。
+  - 剩余风险：控制帧载荷由我自行编号，规格评审之前仍可能调整，但一旦冻结就只能 reserved，不能复用编号；`SessionError.failed_kind` 允许 UNSPECIFIED（表示与具体帧无关），G1-04 的校验需要对它单独处理。
+  - 下一步：G1-03（route/Register、invocation、message、media、bus），并在 WIRE 中写「T-01 已固定」小节。
 
 ### [ ] G1-03 业务载荷 proto：路由、调用、消息、回执、媒体、广播
 - 依据：WIRE §3.3/§4/§5，MESSAGE-MODEL §1～§5，CONTRACTS §1.3/§1.4/§2。
-- 内容：`route.proto`（RouteDescriptor 公共字段，加 command/event/hook/service/schedule/http/bus_subscription 各自的描述，以及参数描述）、`invocation.proto`（可信 Invocation 上下文、HandlerOutcome、PreEventResult、BeforeSend/AfterSend 载荷）、`message.proto`（Event、Actor、Target、Capability、Segment 的各类型与 entities、MessageChain、SendResult、PartResult 及状态枚举）、`media.proto`（BeginUpload/WriteChunk/CommitUpload/Read/Grant 请求与响应、MediaRef、IncomingMedia）、`bus.proto`（BusEvent、Publish）。冻结字段号，把编号表写回 WIRE-FORMAT 新增的「T-01 已固定」小节，并在 adr/DECISIONS.md 的变更记录中加一行。
+- 内容：`route.proto`（REGISTER 载荷 Register：routes、config_schema_hash、candidate_config_json、candidate_config_version、可选 HttpListener、迁移完成信息；RouteDescriptor 公共字段，加 command/event/hook/service/schedule/http/bus_subscription 各自的描述，以及参数描述）、`invocation.proto`（可信 Invocation 上下文、HandlerOutcome、PreEventResult、BeforeSend/AfterSend 载荷）、`message.proto`（Event、Actor、Target、Capability、Segment 的各类型与 entities、MessageChain、SendResult、PartResult 及状态枚举）、`media.proto`（BeginUpload/WriteChunk/CommitUpload/Read/Grant 请求与响应、MediaRef、IncomingMedia）、`bus.proto`（BusEvent、Publish）。冻结字段号，把编号表写回 WIRE-FORMAT 新增的「T-01 已固定」小节，并在 adr/DECISIONS.md 的变更记录中加一行。
 - 完成条件：全部 .proto 生成并编译通过；测试断言关键枚举的零值为 UNSPECIFIED，SendResult/PartResult 状态与 MESSAGE-MODEL 一致；规格文档同步更新。
 - 回写：
 
