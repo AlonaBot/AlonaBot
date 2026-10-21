@@ -47,6 +47,8 @@ type Spec struct {
 type Running struct {
 	Instance *host.Instance
 	Process  *process.Process
+	store    *state.Store
+	pluginID string
 	listener net.Listener
 	timing   host.StopTiming
 	stopping atomic.Bool // Stop 与 WaitExit 在不同 goroutine 中访问
@@ -116,7 +118,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	if err != nil {
 		return fail(err)
 	}
-	return &Running{Instance: in, Process: proc, listener: ln, timing: spec.Stop}, nil
+	return &Running{Instance: in, Process: proc, store: store, pluginID: spec.PluginID, listener: ln, timing: spec.Stop}, nil
 }
 
 // connect 在握手期限内建立与插件的连接：TCP 等待插件拨入（进程提前退出则放弃），stdio 直接使用管道。
@@ -164,23 +166,15 @@ func closeListener(ln net.Listener) {
 }
 
 // Stop 停用插件（CONTRACTS §4.2），确认进程退出后关闭 Listener、释放进程资源。
+// 与 Launch 共用逐插件管理锁（CONTRACTS §12.2）：停止完成前，同一插件的下一次启动不会开始。
 func (r *Running) Stop(t0 time.Time, reason pb.StopReason) host.StopResult {
+	unlock := r.store.LockPlugin(r.pluginID)
+	defer unlock()
 	r.stopping.Store(true)
 	res := r.Instance.Stop(t0, reason, r.Process, r.timing)
 	closeListener(r.listener)
 	_ = r.Process.Release()
 	return res
-}
-
-// StopAll 并行停止多个插件，共享同一个 t0（Core Shutdown）。
-func StopAll(t0 time.Time, reason pb.StopReason, runs []*Running) {
-	done := make(chan struct{}, len(runs))
-	for _, r := range runs {
-		go func(r *Running) { r.Stop(t0, reason); done <- struct{}{} }(r)
-	}
-	for range runs {
-		<-done
-	}
 }
 
 // WaitExit 等待插件进程退出，报告是否为异常退出（未经 Stop 的退出都视为异常）。

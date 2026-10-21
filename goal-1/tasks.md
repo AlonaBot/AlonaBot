@@ -385,8 +385,12 @@
   - 剩余风险：无新增风险。
   - 下一步：G1-17（提交与激活门禁）。
 
-### [ ] FIX-6 停用持有逐插件锁、删除未用的 StopAll、README 状态（来自 REVIEW-6，排在终审之前）
+### [x] FIX-6 停用持有逐插件锁、删除未用的 StopAll、README 状态（来自 REVIEW-6，排在终审之前）
 - 依据：REVIEW-6 中的 P2-1/P3-1/P3-2；CONTRACTS §12.2。
 - 内容：`supervisor.Running` 记录 store 与 pluginID，`Stop` 在 `store.LockPlugin(pluginID)` 内执行；新增测试：插件 Stop 正在进行时，同一插件的 Launch 要等 Stop 完成后才开始（用会挂起 STOPPING 的辅助进程拉长 Stop）；删除 `supervisor.StopAll`；README.md 更新为 B1 的实际状态（T-01/T-02 已完成、开发入口、文档链接）。
 - 完成条件：新测试通过（并验证在去掉锁之后会失败）；全仓库 `go test -race ./...` 与 cmd e2e 通过；三平台 vet 通过。
 - 回写：
+  - 实际做了什么：`supervisor.Running` 增加 `store`、`pluginID` 两个字段，`Stop` 在 `store.LockPlugin(pluginID)` 内执行，与 `Launch` 共用逐插件管理锁；删除没有调用方的 `supervisor.StopAll`（并行停止由经过测试的 `host.StopAll` 提供）；新增 `TestStopAndLaunchSerializedPerPlugin`：用不响应 STOPPING 的辅助进程把 Stop 拉长到总截止 800ms，在 Stop 进行中对同一插件发起 Launch，断言 Launch 在 Stop 完成之后才返回。README.md 改为 B1 之后的实际状态（T-01/T-02 已完成，只有开发入口 `alonabot run`，并给出文档链接）。
+  - 验证证据（darwin/arm64，go1.27.1，本 task 的 commit）：新测试 PASS（0.85s）；**变异检查**：去掉 Stop 中的锁之后，测试报「同一插件的 Launch 在 Stop 完成（13:53:32.252）之前就返回（13:53:31.453），管理操作未串行」，恢复后通过；全仓库 `go test -race -count=1 ./...` 没有失败的包；`go test -count=2 ./cmd/alonabot/` ok；三平台 vet 通过；`pgrep` 确认没有残留进程。
+  - 剩余风险：没有新增风险。
+  - 下一步：终审。

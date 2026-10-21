@@ -2,9 +2,11 @@
 
 轻量级、跨平台的 Go 聊天机器人框架。
 
-当前处于规格完成、待实施阶段；尚未创建正式 Core、SDK 或插件实现。Module：`github.com/AlonaBot/alonabot`。
+Module：`github.com/AlonaBot/alonabot`。
 
-从 [spec/PLAN.md](spec/PLAN.md) 的 T-01 开始实施；规格索引见 [spec/README.md](spec/README.md)，决策与历史依据见 [spec/adr/README.md](spec/adr/README.md)。开发环境与命令见 [docs/development.md](docs/development.md)，模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)，代理工作约定见 [AGENTS.md](AGENTS.md)。
+**当前进度：** 已完成 T-01（协议契约、生成工具链、manifest/release 校验、SDK 公共类型、SQLite/PostgreSQL 验证）与 T-02（Core 状态库与锁、Native 插件进程、TCP/stdio 双 IPC、握手/激活/停止生命周期、有限重启）。业务能力（Telegram、命令、事件、服务、调度、HTTP、配置、管理）从 T-03 起实施；目前只有开发用入口 `alonabot run`，用法见 [docs/development.md](docs/development.md)。
+
+按 [spec/PLAN.md](spec/PLAN.md) 的工作包继续实施；规格索引见 [spec/README.md](spec/README.md)，决策与历史依据见 [spec/adr/README.md](spec/adr/README.md)。开发环境与命令见 [docs/development.md](docs/development.md)，模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)，代理工作约定见 [AGENTS.md](AGENTS.md)。
 
 - 首发：Native Go 插件独立子进程、Telegram、命令/事件、Service/广播、调度、配置/数据库、HTTP、管理 CLI/WebUI 和插件安装更新。
 - 后续：更多正式 Adapter、动态命令 Router、Agent 与额外客户端等，按规格范围推进。

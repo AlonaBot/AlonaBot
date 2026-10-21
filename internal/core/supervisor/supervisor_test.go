@@ -297,3 +297,34 @@ func TestConcurrentLaunchSamePluginOnlyOneRuns(t *testing.T) {
 		t.Fatal("第一个实例不应受影响")
 	}
 }
+
+// 停止与启动共用逐插件管理锁：Stop 进行中发起的同一插件 Launch，要等 Stop 完成后才开始。
+func TestStopAndLaunchSerializedPerPlugin(t *testing.T) {
+	s, spec, _ := rawSpec(t, "nostop", false) // 不响应 STOPPING，Stop 会持续到总截止
+	r, err := Launch(context.Background(), s, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stopDone := make(chan time.Time, 1)
+	go func() { r.Stop(time.Now(), pb.StopReason_STOP_REASON_RESTART); stopDone <- time.Now() }()
+	deadline := time.Now().Add(2 * time.Second)
+	for r.Instance.State() == host.StateActivated {
+		if time.Now().After(deadline) {
+			t.Fatal("Stop 没有开始")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	next := spec
+	next.NewCandidate = false
+	next.ExtraEnv = map[string]string{faultEnv: "none", "GORACE": "atexit_sleep_ms=0"}
+	r2, err := Launch(context.Background(), s, next)
+	launched := time.Now()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r2.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
+	stopped := <-stopDone
+	if launched.Before(stopped) {
+		t.Fatalf("同一插件的 Launch 在 Stop 完成（%v）之前就返回（%v），管理操作未串行", stopped.Format("15:04:05.000"), launched.Format("15:04:05.000"))
+	}
+}
