@@ -15,11 +15,11 @@
 | `internal/wire/` | 帧编解码（4 MiB 上限）、TCP/stdio 传输、Session 调用表、准入预算、优先通道、取消 | 业务路由、权限、插件生命周期决策 | T-02 | 部分实现：帧编解码、Conn、ListenLoopback、Session 调用引擎（配对/取消/准入/优先通道）；握手与生命周期在 G1-16 起 |
 | `internal/oslock/` | 跨进程 OS 独占文件锁（flock / LockFileEx），供 core.lock 与 runtime.lock 共用 | 锁的业务语义（何时加锁由调用方决定） | T-02（G1-12） | 已实现 |
 | `sdk/`（含 `sdk/message`、`sdk/gormdb` 等子包） | 插件侧 API：根插件、Context/Send、注册、生命周期 Hook、runtime.lock、按需 GORM | Core 状态库、管理凭证、其他插件 | T-01 类型，T-02 起实现 | 部分实现：`sdk`（Context、注册器、Collect）、`sdk/plugin`、`sdk/message`、`sdk/config`、`sdk/gormdb`（OpenSQLite/OpenPostgres、RunVersioned、迁移接口互斥检查）；Run/Send 返回 UNSUPPORTED |
-| `internal/core/` | 状态库与 core.lock、进程、RPC 编排、路由、权限、媒体、服务、调度、HTTP、配置、管理 | 平台协议细节（交 adapters）、插件进程内逻辑 | T-02 起 | 部分实现：`internal/core/state`（core.lock、state.sqlite、提交原语）、`internal/core/process`（精简环境、日志、进程组/Job Object、runtime.lock 临时持有）、`internal/core/host`（握手认证、Bootstrap、REGISTER 原子校验、PREPARED、提交与激活门禁、Degraded、停止/排空/并行 Shutdown、有限重启策略） |
+| `internal/core/` | 状态库与 core.lock、进程、RPC 编排、路由、权限、媒体、服务、调度、HTTP、配置、管理 | 平台协议细节（交 adapters）、插件进程内逻辑 | T-02 起 | 部分实现：`internal/core/state`（core.lock、state.sqlite、提交原语）、`internal/core/process`（精简环境、日志、进程组/Job Object、runtime.lock 临时持有）、`internal/core/host`（握手认证、Bootstrap、REGISTER 原子校验、PREPARED、提交与激活门禁、Degraded、停止/排空/并行 Shutdown、有限重启策略）、`internal/core/supervisor`（启动/停止一个插件的完整装配） |
 | `internal/adapters/telegram/` | Telegram 接收、发送计划、能力与平台映射 | Core 策略、命令路由 | T-03 | 拟建 |
-| `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） | T-02 起 | 拟建 |
+| `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） | T-02 起 | 部分实现：开发用 `alonabot run`（单插件启停、有限重启）；正式 CLI 在 T-09 |
 | `internal/archtest/` | 本文件依赖规则的机械检查（仅测试） | 产品代码 | goal-1 G1-10 | 已实现 |
-| `examples/plugins/` | 随 SDK 编译的示例与集成样例 | 生产代码依赖 | T-01 起 | 部分实现：`minimal`（签名组合示例） |
+| `examples/plugins/` | 随 SDK 编译的示例与集成样例 | 生产代码依赖 | T-01 起 | 部分实现：`minimal`（签名组合示例）、`lifecycle`（可真实运行的生命周期示例） |
 | `web/admin/` | Vite + TypeScript + React 19 管理界面 | 管理逻辑本身（调用 Core 管理 API） | T-08/T-09 | 拟建 |
 | `experiments/ogre-dna/` | 历史实验，独立嵌套 module | 不参与产品构建与验收 | 已存在 | 隔离 |
 | `spec/` | 现行规格与 ADR | — | 已存在 | 现行 |

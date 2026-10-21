@@ -1,0 +1,43 @@
+// lifecycle 是 T-02 可以真实运行的最小插件：由 Core 启动，走完 Hello → Bootstrap → REGISTER →
+// PREPARED → ACTIVATE/OnReady → ACTIVATED → STOPPING/OnStop → 退出。日志只写 stderr
+// （stdio 传输时 stdout 专用于协议帧）。
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/AlonaBot/alonabot/sdk"
+	"github.com/AlonaBot/alonabot/sdk/message"
+	"github.com/AlonaBot/alonabot/sdk/plugin"
+)
+
+type Lifecycle struct{ plugin.Base }
+
+func (*Lifecycle) OnStart(context.Context) error {
+	fmt.Fprintln(os.Stderr, "lifecycle: OnStart")
+	return nil
+}
+func (*Lifecycle) OnReady(context.Context) error {
+	fmt.Fprintln(os.Stderr, "lifecycle: OnReady")
+	return nil
+}
+func (*Lifecycle) OnStop(context.Context) error {
+	fmt.Fprintln(os.Stderr, "lifecycle: OnStop")
+	return nil
+}
+
+func (*Lifecycle) Commands(r *sdk.CommandRegistry) {
+	r.Command("ping", func(*sdk.Context) (message.Chain, error) {
+		return message.Chain{message.Text("pong")}, nil
+	})
+}
+
+func main() {
+	if err := sdk.Run(&Lifecycle{}); err != nil {
+		fmt.Fprintln(os.Stderr, "lifecycle:", err)
+		os.Exit(1)
+	}
+	fmt.Fprintln(os.Stderr, "lifecycle: 正常退出")
+}

@@ -1,0 +1,149 @@
+// alonabot 是 Core 的命令行入口。B1 只提供开发用的 run：在给定 data_dir 中启动单个本地插件，
+// 收到 SIGINT/SIGTERM 时停止；正式的安装与管理 CLI 由 T-09 提供。
+package main
+
+import (
+	"context"
+	"crypto/sha256"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+	"time"
+
+	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/alonabot/internal/core/host"
+	"github.com/AlonaBot/alonabot/internal/core/state"
+	"github.com/AlonaBot/alonabot/internal/core/supervisor"
+)
+
+func main() {
+	if len(os.Args) < 2 || os.Args[1] != "run" {
+		fmt.Fprintln(os.Stderr, "用法: alonabot run --data-dir DIR --plugin-id ID --entry PATH [--stdio]")
+		os.Exit(2)
+	}
+	fs := flag.NewFlagSet("run", flag.ExitOnError)
+	dataDir := fs.String("data-dir", "", "Core 数据目录（同一目录只能有一个 Core）")
+	pluginID := fs.String("plugin-id", "", "插件 ID")
+	entry := fs.String("entry", "", "插件可执行文件路径（开发模式：本地构建产物）")
+	stdio := fs.Bool("stdio", false, "使用 stdio 传输（默认 TCP loopback）")
+	_ = fs.Parse(os.Args[2:])
+	if *dataDir == "" || *pluginID == "" || *entry == "" {
+		fs.Usage()
+		os.Exit(2)
+	}
+	if err := run(*dataDir, *pluginID, *entry, *stdio); err != nil {
+		fmt.Fprintln(os.Stderr, "alonabot:", err)
+		os.Exit(1)
+	}
+}
+
+func run(dataDir, pluginID, entry string, stdio bool) error {
+	ctx := context.Background()
+	store, err := state.Open(ctx, dataDir)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	exe, err := filepath.Abs(entry)
+	if err != nil {
+		return err
+	}
+	digest, err := fileDigest(exe)
+	if err != nil {
+		return err
+	}
+	pluginDir := filepath.Join(dataDir, "plugins", pluginID)
+	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
+		return err
+	}
+	// 开发模式：首次运行时登记安装记录（正式安装与来源校验见 T-09）。
+	if _, err := store.GetInstall(ctx, pluginID); errors.Is(err, state.ErrNotFound) {
+		if err := store.AddInstall(ctx, state.Install{PluginID: pluginID, Source: "dev-local", Entrypoint: exe, BuildDigest: digest}); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+
+	policy := host.NewRestartPolicy()
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
+	for {
+		r, err := launch(ctx, store, pluginID, pluginDir, exe, digest, stdio)
+		if err != nil {
+			return err
+		}
+		exitc := make(chan bool, 1)
+		go func() {
+			abnormal, st := r.WaitExit()
+			fmt.Fprintf(os.Stderr, "alonabot: 插件 %s 退出（%s）\n", pluginID, st)
+			exitc <- abnormal
+		}()
+		select {
+		case <-sigc:
+			res := r.Stop(time.Now(), pb.StopReason_STOP_REASON_CORE_SHUTDOWN)
+			fmt.Fprintf(os.Stderr, "alonabot: 已停止插件 %s（排空=%v 强杀=%v）\n", pluginID, res.Drained, res.Killed)
+			return nil
+		case abnormal := <-exitc:
+			switch policy.OnExit(pluginID, abnormal, time.Now()) {
+			case host.DecisionRestart:
+				fmt.Fprintf(os.Stderr, "alonabot: 插件 %s 异常退出，重启\n", pluginID)
+				continue
+			case host.DecisionDisable:
+				_ = store.SetEnabled(ctx, pluginID, false)
+				return fmt.Errorf("插件 %s 在 5 分钟内第 3 次异常退出，已自动禁用", pluginID)
+			default:
+				return nil
+			}
+		}
+	}
+}
+
+// launch 首次运行时提交新代次；之后复用已提交的 Active 代次（普通 restart，不产生新 Generation）。
+func launch(ctx context.Context, store *state.Store, pluginID, pluginDir, exe string, digest []byte, stdio bool) (*supervisor.Running, error) {
+	active, err := store.Active(ctx, pluginID)
+	if err != nil {
+		return nil, err
+	}
+	gen, isNew := active, active == ""
+	if isNew {
+		gen = fmt.Sprintf("gen-%d", time.Now().UnixNano())
+		if err := store.AddGeneration(ctx, pluginID, gen, "{}", 1); err != nil {
+			return nil, err
+		}
+	}
+	r, err := supervisor.Launch(ctx, store, supervisor.Spec{
+		PluginID: pluginID, PluginDir: pluginDir, Executable: exe, BuildDigest: digest, GenerationID: gen,
+		Bootstrap: &pb.Bootstrap{GenerationId: gen, CandidateConfigJson: "{}", TargetConfigVersion: 1,
+			DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE}},
+		NewCandidate: isNew, Stdio: stdio, Limits: host.DefaultLimits, Stop: host.DefaultStopTiming,
+	})
+	if err != nil {
+		return nil, err
+	}
+	mode := "restart"
+	if isNew {
+		mode = "new"
+	}
+	fmt.Fprintf(os.Stderr, "alonabot: 插件 %s 已激活 generation=%s mode=%s pid=%d\n", pluginID, gen, mode, r.Process.Pid())
+	return r, nil
+}
+
+func fileDigest(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return nil, err
+	}
+	return h.Sum(nil), nil
+}

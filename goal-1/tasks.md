@@ -281,11 +281,31 @@
   - 剩余风险：失败窗口与 Degraded 只在内存中，Core 重启后不保留（T-09 恢复编排需要考虑）；异常/正常退出的判定（abnormal）由调用方依据「是否已发 STOPPING、退出码」给出，G1-19 在装配中实现；真实进程上的 STOPPING→退出、强杀与 runtime.lock 释放在 G1-19 验证。
   - 下一步：G1-19（cmd/alonabot 装配与真实进程验收切片）。
 
-### [ ] G1-19 cmd/alonabot 装配与真实进程验收切片
+### [x] G1-19 cmd/alonabot 装配与真实进程验收切片
 - 依据：PLAN T-02 第 8 步与「对照现有验收」。
 - 内容：`cmd/alonabot` 提供开发用的启停入口；`examples/plugins/minimal` 以真实子进程分别在 TCP 和 stdio 上跑完整生命周期；故障辅助进程覆盖挂起、错帧、stdout 日志污染、迟到响应、突然退出；场景包括双 Core、同插件并发操作、Core 被 kill 后 SDK 断链退出；检查进程和 Listener 都已关闭。把实际命令写入 docs/development.md。
 - 完成条件：所有场景测试通过并可以重复运行（`-count=3`）；整理 V-03/V-04/V-05/V-06/V-21/V-36/V-37/V-42 的 T-02 分项证据表，明确哪些留待 T-07/T-08/T-09/T-10 接入；Linux/Windows 的运行状态记为「未运行」。
 - 回写：
+  - 实际做了什么：**internal/core/supervisor**：`Launch(ctx, store, Spec)` 在逐插件锁内依次完成：生成 Secret → 设置环境变量（插件 ID、Secret、build digest、runtime.lock 绝对路径、传输方式）→ TCP 时 `ListenLoopback`（Core 持有到停止）或使用 stdio 管道 → `process.Start`（工作目录为插件目录）→ 握手期限内 Accept（插件进程提前退出时立即放弃）→ `host.Prepare` → `host.Activate`（新候选的 Commit 为 `store.CommitActive`）；任何一步失败都会 KillTree，并**等待 Exited 确认退出**后再释放资源。`Running.Stop`（`Instance.Stop` → 关闭 Listener → 释放进程）、`StopAll`、`WaitExit`（返回是否为异常退出；异常退出时立即关闭旧 Session）。**cmd/alonabot**：`alonabot run --data-dir --plugin-id --entry [--stdio]`：`state.Open`（同时取得 core.lock）→ 开发模式下登记安装记录（来源 dev-local，摘要为可执行文件的 SHA256）→ 首次运行新建并提交代次（mode=new），之后复用 Active 代次（mode=restart）→ SIGINT/SIGTERM 时执行 Stop，异常退出时交给 `RestartPolicy` 决定重启或禁用（禁用会经 SetEnabled 持久化）。**examples/plugins/lifecycle**：可以真实运行的 SDK 插件（OnStart/OnReady/OnStop 以及一个命令，日志只写 stderr）；`minimal` 保留为签名组合示例（它声明了 HTTP/调度，按设计返回 UNSUPPORTED）。**故障辅助进程**（supervisor 测试中重入测试二进制，直接收发原始协议帧）：none/nostop/crash/hang/badframe/pollute/exit-early。docs/development.md 补上了 run 用法与验收命令，ARCHITECTURE 中 cmd/supervisor/examples 的状态已同步。
+  - **过程中发现的问题：** (a) 第一次冒烟用 shell 后台进程加轮询，脚本写错导致卡住；残留的 alonabot/lifecycle/zsh 进程已全部清理，改用 Go 端到端测试。(b) `-race` 下「合作插件被判为强杀」：调试输出显示插件在收到 STOPPING 的同一毫秒就调用了 `os.Exit(0)`，但 -race 编译的辅助进程默认会在退出前 sleep 1s（GORACE `atexit_sleep_ms` 默认为 1000），超过了测试注入的 800ms 总截止。这不是产品缺陷，测试中为辅助进程设置 `GORACE=atexit_sleep_ms=0`。(c) Windows 交叉 vet 时报 `syscall.Kill` 未定义：两个依赖 Unix 信号与进程组的测试文件加上 `//go:build unix`。
+  - **T-02 真实进程验收**（darwin/arm64，go1.27.1，本 task 的 commit；命令 `go test -count=3 ./cmd/alonabot/ ./internal/core/supervisor/` 与 `go test -race -count=3 ./internal/core/supervisor/` 都 ok，结束后 `pgrep` 确认没有残留进程）：
+    - 端到端（真实 alonabot 进程 + 真实 SDK 插件进程）：**TCP 与 stdio** 都走完 OnStart → OnReady → 已激活(mode=new) → SIGTERM → OnStop → 「lifecycle: 正常退出」，「强杀=false」，alonabot 退出码 0，插件 pid 消失；**restart** 复用原代次（mode=restart，generation 相同）；**同一 data_dir 的第二个 Core** 以非零退出码退出，并报告「已被另一个 Core 锁定」；**Core 被 SIGKILL** 之后，插件 pid 在断链预算内退出，随后新的 Core 能取得锁，并以 restart 复用原代次恢复运行（证明 core.lock 与 runtime.lock 都已释放）。
+    - supervisor（故障辅助进程）：TCP/stdio 正常停止时退出码为 0、没有强杀、**停止后 Listener 不再接受连接**、状态库提交了 gen-1；不响应 STOPPING 的插件在总截止（800ms）被终止；激活后崩溃（退出码 3）被报告为异常退出，有限重启的决定依次为 Restart、Restart、Disable；**连上后挂起**→DEADLINE_EXCEEDED、**错帧**→PROTOCOL_ERROR、**stdout 日志污染（stdio）**→失败、**连接前退出**→「连接前退出」，四种情况都被终止，且不提交候选（Active 为空）；**同一插件并发启动（真实 SDK）**：第二个实例因 runtime.lock 拒绝启动（日志中可以看到），第一个实例不受影响。
+  - **T-02 证据表（V 分项；Linux/Windows 全部「未运行」，darwin/amd64 只经 Rosetta 跑过单元测试，没有跑端到端）：**
+    | V | T-02 已取得的证据 | 留待 |
+    | --- | --- | --- |
+    | V-03 | 帧 1～4 MiB 边界、零长度/超限/截断/错帧（G1-13）；同一 fixture 在 TCP 与 stdio 上往返一致；真实进程在两种传输上的完整生命周期（G1-19） | T-10 五平台 |
+    | V-04 | 伪造 Secret、跨插件 Secret、插件 ID 或 digest 不符时不回复并关闭（G1-16）；其他 Session 的帧、代次不符的 ACTIVATED 被拒绝（G1-14/G1-17） | — |
+    | V-05 | 两个方向使用相同 call_id、乱序、迟到/重复 Response 只计数、父调用结束后子调用被拒绝或取消（G1-14） | T-07 Scheduler 的迟到响应释放运行槽 |
+    | V-06 | 日志带插件 ID（G1-15）；stdio stdout 污染使会话失败（G1-13/G1-19）；5 分钟内第 3 次异常退出时禁用，正常退出不重启（G1-18/G1-19） | T-10 |
+    | V-21 | OnStart/OnReady 失败与挂起、准备期硬截止、提交后进入 Degraded、ACTIVATED 之前不开放业务、10s 共享停止预算并行生效（G1-16/G1-17/G1-18） | T-07 停止集成；T-08 配置/DB 回调；T-09 正式候选的提交前后恢复 |
+    | V-36 | 双 Core（同进程/跨进程/真实二进制）、按插件串行、旧实例持有 runtime.lock 时不能启动第二个写入者、Core 被 kill 后 SDK 断链退出（G1-12/G1-15/G1-19） | T-08 DB 锁与候选资源；T-09 正式 enable/update 与仍在写 DB 的子进程 |
+    | V-37 | Bootstrap 与 REGISTER 超过 4 MiB 时拒绝、SESSION_ERROR 带失败阶段、没有半注册、ACTIVATED 严格先于业务帧（G1-16/G1-17） | T-08 旧配置先经 OnLoad 再验证；T-09 |
+    | V-42 | 每方向 256 个/16 MiB 与全局 64 MiB 满额时立即拒绝，Response/Cancel 仍能推进，发送前取消的请求被撤回，Cancel 不越过其 Request（G1-14） | T-06 Service 嵌套与 Event Bus 双预算 |
+    | V-32/V-34 | 可复用的真实进程夹具（cmd e2e、supervisor 辅助进程）；五平台构建通过（G1-11） | T-10 五平台运行与 100 次启停 |
+  - **T-02「停止和失败条件」核对**：协议、身份、门禁、锁、取消、停止的用例都通过；最小进程切片可以重复运行（-count=3）；配置/DB/安装模块的接入位置清楚（Bootstrap.database_descriptor、`supervisor.Spec`、`host.ActivateOptions.Commit`、`state` 的迁移表）。没有出现以下情况：双代次同时接单、旧写入者未退出就启动替代者（并发启动测试证明了这一点）、满额时控制帧永久阻塞、丢失有效错误结果、状态库损坏后静默初始化。**结论：T-02 在 B1 范围内完成**；尚未运行的目标平台保持「未运行」。
+  - 剩余风险：业务分发未实现（SDK 对业务请求一律回 UNSUPPORTED）；Degraded 与失败窗口只在内存中；cmd 只是开发入口（安装记录的来源为 dev-local，不校验签名）；Windows Job Object 与 Windows 传输**未运行**。
+  - 下一步：REVIEW-6。
 
 ### [ ] REVIEW-6 集中检查（G1-17～G1-19）
 - 检查清单同上；另外核对 T-02「停止和失败条件」逐条满足，并用 code-review-expert 审查整个分支。

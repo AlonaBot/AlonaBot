@@ -37,6 +37,25 @@ done
 GOARCH=amd64 CGO_ENABLED=0 go test ./...   # Apple Silicon 上经 Rosetta 运行 darwin/amd64 测试
 ```
 
+## 本地运行一个插件（B1 开发入口）
+
+```sh
+go build -o bin/alonabot ./cmd/alonabot
+go build -o bin/lifecycle ./examples/plugins/lifecycle
+bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle          # TCP loopback（默认）
+bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle --stdio  # stdio 传输
+# Ctrl-C / SIGTERM：排空 → STOPPING/OnStop → 退出；同一 data_dir 只能运行一个 Core
+```
+
+首次运行会登记开发用安装记录并提交新代次（`mode=new`），之后复用已提交代次（`mode=restart`）。正式的安装、来源校验与管理 CLI 由 T-09 提供。
+
+真实进程验收（Unix；会在测试中构建上述两个二进制）：
+
+```sh
+go test -count=3 ./cmd/alonabot/ ./internal/core/supervisor/
+go test -race -count=3 ./internal/core/supervisor/
+```
+
 ## 外部测试环境
 
 - **PostgreSQL：** 测试读取环境变量 `ALONABOT_TEST_PG_DSN`；未设置时跳过，在证据中记为「未运行」。临时容器：
