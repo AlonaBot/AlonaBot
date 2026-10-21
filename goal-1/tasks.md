@@ -333,8 +333,12 @@
   - 剩余风险：Windows 的绝对路径转成 URI（`file:///C:/...`）只经过 vet，没有实际运行。
   - 下一步：G1-14（Session 调用引擎）。
 
-### [ ] FIX-5 合并控制帧构造、Release 关闭 stdio 管道、缺少阶段预算时报协议错误（来自 REVIEW-5，排在 G1-17 之前）
+### [x] FIX-5 合并控制帧构造、Release 关闭 stdio 管道、缺少阶段预算时报协议错误（来自 REVIEW-5，排在 G1-17 之前）
 - 依据：REVIEW-5 中的 P3-1/P3-2/P3-3。
 - 内容：`internal/wire` 新增 `ControlEnvelope`，`Session.SendControl`、`host`、`sdk` 统一改用它，删除各自的副本；`process.Release` 显式关闭 Stdin/Stdout（stdio 模式）；`sdk.prepare` 在 PhaseLimits 或 preparation_deadline 缺失、OnStart 预算为 0 时发送 SESSION_ERROR(CONFIG, PROTOCOL_ERROR)，并补一个测试。
 - 完成条件：全仓库 `go test -race ./...` 通过；新测试覆盖缺少预算的情况；三平台 vet 通过；archtest 通过。
 - 回写：
+  - 实际做了什么：`internal/wire` 新增 `ControlEnvelope(sid, minor, sourcePluginID, kind, msg)`（PROTOBUF 编码、确定性序列化、schema_id 为 `alonabot.<snake>.v1`）。共有五处改用它：`Session.SendControl`、`Session.sendCancel`（新增私有方法 `Session.controlEnvelope` 填入本端的 session/minor/source）、`host` 的 HELLO_ACK/PREPARED/SESSION_ERROR（删除 `host.controlEnvelope`）、`sdk` 的 HELLO/REGISTER/SESSION_ERROR（删除 `sdk.controlEnv`）。顺带修正：SDK 握手之后发出的帧，minor 改用协商得到的 `ack.ChosenMinor`，原来固定为 0。`process.Release` 现在会显式关闭 stdio 模式下 Core 持有的 Stdin/Stdout，重复调用不报错，并把 os.ErrClosed 视为已经关闭。`sdk.prepare` 在 PhaseLimits 缺失、OnStart 预算为 0 或 preparation_deadline 缺失时，发送 SESSION_ERROR(CONFIG, PROTOCOL_ERROR)，并且不执行 OnStart。
+  - 验证证据（darwin/arm64，go1.27.1，本 task 的 commit）：新增 `TestPrepareRejectsMissingPhaseLimits`（收到 CONFIG/PROTOCOL_ERROR，OnStart 没有被调用）；`TestStdioTransportPipes` 新增断言：Release 之后向 Stdin 写入失败，重复 Release 不报错。全仓库 `go test -race -count=1 ./...` 的 13 个包都 ok（其中 golden 帧与 host/sdk 握手测试不受影响）；`GOOS=windows/linux go vet ./...` 通过；`grep` 确认 `controlEnv`/`controlEnvelope(sid` 的副本已经删除；archtest 通过。
+  - 剩余风险：无新增风险。
+  - 下一步：G1-17（提交与激活门禁）。

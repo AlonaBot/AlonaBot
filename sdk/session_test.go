@@ -236,3 +236,19 @@ func TestReadLaunchValidation(t *testing.T) {
 		t.Fatal("非 loopback 的 Core 地址应被拒绝")
 	}
 }
+
+// Bootstrap 缺少阶段预算时报协议错误，而不是把预算当作 0 误报 OnStart 超时。
+func TestPrepareRejectsMissingPhaseLimits(t *testing.T) {
+	core, conn := newFakeCore(t)
+	a := ack(1000)
+	a.Bootstrap.PhaseLimits = nil
+	called := false
+	errc := prepareAsync(t, conn, a, &lifecycleRoot{onStart: func(context.Context) error { called = true; return nil }})
+	env, msg := core.recv()
+	if msg.(*pb.SessionError).GetFailedPhase() != pb.SessionPhase_SESSION_PHASE_CONFIG || env.GetError().GetCode() != pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR {
+		t.Fatalf("应报告 SESSION_ERROR(CONFIG, PROTOCOL_ERROR): %v", env)
+	}
+	if err := <-errc; err == nil || called {
+		t.Fatalf("缺少预算时不应执行 OnStart：err=%v called=%v", err, called)
+	}
+}

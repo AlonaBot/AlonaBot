@@ -138,11 +138,10 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		return nil, err
 	}
 	sendErr := func(phase pb.SessionPhase, kind pb.FrameKind, code pb.ErrorCode, safe string) {
-		e := &pb.Envelope{ProtocolMajor: validate.ProtocolMajor, SessionId: sid, Kind: pb.FrameKind_FRAME_KIND_SESSION_ERROR,
-			Error: &pb.ErrorInfo{Code: code, SafeMessage: safe}}
-		data, _ := proto.Marshal(&pb.SessionError{FailedPhase: phase, FailedKind: kind})
-		e.PayloadEncoding, e.SchemaId, e.SchemaVersion, e.Payload = pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, validate.SchemaID(&pb.SessionError{}), validate.SchemaVersion, data
-		_ = conn.WriteFrameTimeout(e, failNotifyTimeout) // 尽力通知；对端不读时不阻塞失败路径
+		if e, err := wire.ControlEnvelope(sid, 0, "", pb.FrameKind_FRAME_KIND_SESSION_ERROR, &pb.SessionError{FailedPhase: phase, FailedKind: kind}); err == nil {
+			e.Error = &pb.ErrorInfo{Code: code, SafeMessage: safe}
+			_ = conn.WriteFrameTimeout(e, failNotifyTimeout) // 尽力通知；对端不读时不阻塞失败路径
+		}
 		_ = conn.Close()
 	}
 
@@ -164,7 +163,7 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 	boot.PhaseLimits = lim.proto()
 	boot.PreparationDeadlineUnixMs = time.Now().Add(prepBudget).UnixMilli()
 	ack := &pb.HelloAck{SessionId: sid, ChosenMinor: agree.Minor, CapabilityIntersection: agree.Intersection, Bootstrap: boot}
-	ackEnv, err := controlEnvelope(sid, agree.Minor, pb.FrameKind_FRAME_KIND_HELLO_ACK, ack)
+	ackEnv, err := wire.ControlEnvelope(sid, agree.Minor, "", pb.FrameKind_FRAME_KIND_HELLO_ACK, ack)
 	if err == nil {
 		err = conn.WriteFrame(ackEnv)
 	}
@@ -212,7 +211,7 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		}
 		p := &Prepared{SessionID: sid, Minor: agree.Minor, Capabilities: agree.Intersection, Register: m,
 			RouteHash: routeHash(m), ConfigDigest: digest([]byte(m.GetCandidateConfigJson()))}
-		prep, err := controlEnvelope(sid, agree.Minor, pb.FrameKind_FRAME_KIND_PREPARED, &pb.Prepared{RouteDescriptorHash: p.RouteHash, CandidateConfigDigest: p.ConfigDigest})
+		prep, err := wire.ControlEnvelope(sid, agree.Minor, "", pb.FrameKind_FRAME_KIND_PREPARED, &pb.Prepared{RouteDescriptorHash: p.RouteHash, CandidateConfigDigest: p.ConfigDigest})
 		if err == nil {
 			err = conn.WriteFrame(prep)
 		}
@@ -233,16 +232,6 @@ func authentic(env *pb.Envelope, h *pb.Hello, exp Expect) bool {
 	idOK := h.GetPluginId() == exp.PluginID && env.GetSourcePluginId() == exp.PluginID
 	digestOK := subtle.ConstantTimeCompare(h.GetBuildDigest(), exp.BuildDigest) == 1
 	return secretOK && idOK && digestOK
-}
-
-func controlEnvelope(sid []byte, minor uint32, kind pb.FrameKind, msg proto.Message) (*pb.Envelope, error) {
-	data, err := proto.MarshalOptions{Deterministic: true}.Marshal(msg)
-	if err != nil {
-		return nil, err
-	}
-	return &pb.Envelope{ProtocolMajor: validate.ProtocolMajor, ProtocolMinor: minor, SessionId: sid, Kind: kind,
-		PayloadEncoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaId: validate.SchemaID(msg),
-		SchemaVersion: validate.SchemaVersion, Payload: data}, nil
 }
 
 func routeHash(r *pb.Register) []byte {

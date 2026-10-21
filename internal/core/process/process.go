@@ -232,8 +232,19 @@ func (p *Process) WaitLogs() { p.logs.Wait() }
 // KillTree 立即终止整个进程树（总停止截止时间到达时使用）。领头进程已退出后仍会终止组内剩余进程。
 func (p *Process) KillTree() error { return p.tree.kill() }
 
-// Release 释放进程树句柄（Windows 关闭 Job Object 句柄时会终止仍在其中的进程）。
-func (p *Process) Release() error { return p.tree.release() }
+// Release 释放进程树句柄（Windows 关闭 Job Object 句柄时会终止仍在其中的进程），
+// 并关闭 stdio 模式下 Core 持有的协议管道端；重复调用不报错。
+func (p *Process) Release() error {
+	var errs []error
+	for _, c := range []io.Closer{p.Stdin, p.Stdout} {
+		if c != nil {
+			if err := c.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+				errs = append(errs, err)
+			}
+		}
+	}
+	return errors.Join(append(errs, p.tree.release())...)
+}
 
 // LockRuntime 供 Core 在旧进程树确认退出后临时持有 <pluginDir>/runtime.lock（例如复制受管 SQLite）；
 // 完成后必须先释放，再启动新的 SDK 进程，不能持锁等待 SDK 启动。

@@ -182,6 +182,15 @@ func TestStdioTransportPipes(t *testing.T) {
 	if !strings.Contains(strings.Join(logs.all(), "\n"), "demo|stderr|stdio log") {
 		t.Fatal("stdio 模式下 stderr 应进入日志")
 	}
+	if err := p.Release(); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	if _, err := p.Stdin.Write([]byte("x")); err == nil {
+		t.Fatal("Release 应关闭 Core 持有的 stdio 管道端")
+	}
+	if err := p.Release(); err != nil {
+		t.Fatalf("重复 Release 不应报错: %v", err)
+	}
 }
 
 func TestEntrypoint(t *testing.T) {

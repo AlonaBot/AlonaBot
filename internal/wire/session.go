@@ -273,15 +273,31 @@ func setPayload(env *pb.Envelope, p Payload) {
 	env.PayloadEncoding, env.SchemaId, env.SchemaVersion, env.Payload = p.Encoding, p.SchemaID, p.SchemaVersion, p.Data
 }
 
-// SendControl 经优先通道发出控制帧（kind 与载荷由调用方填好，Session 字段由本函数补齐）。
+// ControlEnvelope 构造控制帧（以及 Core 固定载荷）的 Envelope：PROTOBUF 编码、确定性序列化、
+// schema_id 为 alonabot.<snake>.v1。sourcePluginID 只在插件发出的帧上设置。Core、SDK 与 Session 共用。
+func ControlEnvelope(sid []byte, minor uint32, sourcePluginID string, kind pb.FrameKind, msg proto.Message) (*pb.Envelope, error) {
+	data, err := proto.MarshalOptions{Deterministic: true}.Marshal(msg)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.Envelope{ProtocolMajor: validate.ProtocolMajor, ProtocolMinor: minor, SessionId: sid, Kind: kind,
+		SourcePluginId: sourcePluginID, PayloadEncoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF,
+		SchemaId: validate.SchemaID(msg), SchemaVersion: validate.SchemaVersion, Payload: data}, nil
+}
+
+func (s *Session) controlEnvelope(kind pb.FrameKind, msg proto.Message) (*pb.Envelope, error) {
+	src := ""
+	if s.opt.Local == pb.InitiatorSide_INITIATOR_SIDE_PLUGIN {
+		src = s.opt.SourcePluginID
+	}
+	return ControlEnvelope(s.opt.SessionID, s.opt.ProtocolMinor, src, kind, msg)
+}
+
+// SendControl 经优先通道发出控制帧。
 func (s *Session) SendControl(kind pb.FrameKind, msg proto.Message) error {
-	env := s.envelope(kind)
-	if msg != nil {
-		data, err := proto.Marshal(msg)
-		if err != nil {
-			return err
-		}
-		setPayload(env, Payload{pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, validate.SchemaID(msg), validate.SchemaVersion, data})
+	env, err := s.controlEnvelope(kind, msg)
+	if err != nil {
+		return err
 	}
 	return s.enqueuePrio(env)
 }
@@ -410,10 +426,11 @@ func (s *Session) abandon(c *outCall, code pb.ErrorCode, reason pb.CancelReason,
 }
 
 func (s *Session) sendCancel(id uint64, reason pb.CancelReason) {
-	env := s.envelope(pb.FrameKind_FRAME_KIND_CANCEL)
+	env, err := s.controlEnvelope(pb.FrameKind_FRAME_KIND_CANCEL, &pb.Cancel{Reason: reason})
+	if err != nil {
+		return
+	}
 	env.InitiatorSide, env.CallId = s.opt.Local, id
-	data, _ := proto.Marshal(&pb.Cancel{Reason: reason})
-	setPayload(env, Payload{pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, validate.SchemaID(&pb.Cancel{}), validate.SchemaVersion, data})
 	_ = s.enqueuePrio(env)
 }
 

@@ -15,7 +15,6 @@ import (
 	"github.com/AlonaBot/alonabot/contracts/validate"
 	"github.com/AlonaBot/alonabot/internal/wire"
 	"github.com/AlonaBot/alonabot/sdk/plugin"
-	"google.golang.org/protobuf/proto"
 )
 
 // handshakeTimeout 与 CONTRACTS §4.2 的 Hello/HelloAck 预算一致。
@@ -74,16 +73,6 @@ func (cs closers) Close() error {
 // sdkOffer 是 SDK 一侧的协议版本与能力。
 var sdkOffer = validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}
 
-func controlEnv(sid []byte, pluginID string, kind pb.FrameKind, msg proto.Message) (*pb.Envelope, error) {
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		return nil, err
-	}
-	return &pb.Envelope{ProtocolMajor: validate.ProtocolMajor, SessionId: sid, Kind: kind, SourcePluginId: pluginID,
-		PayloadEncoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaId: validate.SchemaID(msg),
-		SchemaVersion: validate.SchemaVersion, Payload: data}, nil
-}
-
 // withWatchdog 在 d 内未完成时关闭连接，使阻塞的读写返回。返回的 stop 必须调用。
 func withWatchdog(conn *wire.Conn, d time.Duration) (stop func()) {
 	t := time.AfterFunc(d, func() { _ = conn.Close() })
@@ -94,7 +83,7 @@ func withWatchdog(conn *wire.Conn, d time.Duration) (stop func()) {
 func clientHandshake(conn *wire.Conn, l launch) (*pb.HelloAck, error) {
 	stop := withWatchdog(conn, handshakeTimeout)
 	defer stop()
-	hello, err := controlEnv(nil, l.pluginID, pb.FrameKind_FRAME_KIND_HELLO, &pb.Hello{
+	hello, err := wire.ControlEnvelope(nil, 0, l.pluginID, pb.FrameKind_FRAME_KIND_HELLO, &pb.Hello{
 		PluginId: l.pluginID, Secret: l.secret, SupportedMajor: sdkOffer.Major, SupportedMinor: sdkOffer.Minor,
 		BuildDigest: l.digest, SupportedCapabilities: sdkOffer.Supported, RequiredCapabilities: sdkOffer.Required})
 	if err != nil {
@@ -124,8 +113,8 @@ func clientHandshake(conn *wire.Conn, l launch) (*pb.HelloAck, error) {
 }
 
 // sessionFailure 报告准备阶段失败：发送 SESSION_ERROR（只含安全消息），返回给调用方的错误保留原因。
-func sessionFailure(conn *wire.Conn, sid []byte, pluginID string, phase pb.SessionPhase, kind pb.FrameKind, code pb.ErrorCode, safe string, cause error) error {
-	env, err := controlEnv(sid, pluginID, pb.FrameKind_FRAME_KIND_SESSION_ERROR, &pb.SessionError{FailedPhase: phase, FailedKind: kind})
+func sessionFailure(conn *wire.Conn, sid []byte, minor uint32, pluginID string, phase pb.SessionPhase, kind pb.FrameKind, code pb.ErrorCode, safe string, cause error) error {
+	env, err := wire.ControlEnvelope(sid, minor, pluginID, pb.FrameKind_FRAME_KIND_SESSION_ERROR, &pb.SessionError{FailedPhase: phase, FailedKind: kind})
 	if err == nil {
 		env.Error = &pb.ErrorInfo{Code: code, SafeMessage: safe}
 		_ = conn.WriteFrameTimeout(env, time.Second)
@@ -156,8 +145,13 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32) *
 // prepare 执行准备阶段：配置准备（B1 为原样透传）→ OnStart（独立 watchdog）→ REGISTER → 等待 PREPARED。
 // 准备期不能发起业务 RPC。失败时已向 Core 报告 SESSION_ERROR 并关闭连接。
 func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg *Registration) (*pb.Prepared, error) {
-	sid, boot := ack.GetSessionId(), ack.GetBootstrap()
+	sid, boot, minor := ack.GetSessionId(), ack.GetBootstrap(), ack.GetChosenMinor()
 	limits := boot.GetPhaseLimits()
+	// Core 必须下发阶段预算与准备截止时间；缺失时报协议错误，而不是把预算当作 0 误报超时。
+	if limits == nil || limits.GetOnStartMs() == 0 || boot.GetPreparationDeadlineUnixMs() == 0 {
+		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_HELLO_ACK,
+			pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "Bootstrap 缺少阶段预算或准备截止时间", nil)
+	}
 
 	// OnStart：用户函数不响应 context 时，由 watchdog 判定失败（Run 随后退出进程）。
 	if s, ok := root.(Starter); ok {
@@ -180,24 +174,24 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg 
 			if err != nil {
 				// 用户错误原文可能含敏感信息：只写 stderr，SESSION_ERROR 中只放安全消息。
 				fmt.Fprintf(os.Stderr, "OnStart 失败: %v\n", err)
-				return nil, sessionFailure(conn, sid, l.pluginID, pb.SessionPhase_SESSION_PHASE_ON_START, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
+				return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_ON_START, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
 					pb.ErrorCode_ERROR_CODE_INTERNAL, "OnStart 返回错误", err)
 			}
 		case <-timer.C:
 			cancel()
-			return nil, sessionFailure(conn, sid, l.pluginID, pb.SessionPhase_SESSION_PHASE_ON_START, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
+			return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_ON_START, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
 				pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnStart 超过预算", nil)
 		}
 	}
 
-	regEnv, err := controlEnv(sid, l.pluginID, pb.FrameKind_FRAME_KIND_REGISTER,
+	regEnv, err := wire.ControlEnvelope(sid, minor, l.pluginID, pb.FrameKind_FRAME_KIND_REGISTER,
 		buildRegister(reg, boot.GetCandidateConfigJson(), boot.GetTargetConfigVersion()))
 	if err != nil {
 		return nil, err
 	}
 	err = conn.WriteFrame(regEnv)
 	if errors.Is(err, wire.ErrFrameTooLarge) {
-		return nil, sessionFailure(conn, sid, l.pluginID, pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER,
+		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER,
 			pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "注册描述超过 4 MiB", err)
 	} else if err != nil {
 		return nil, fmt.Errorf("发送 REGISTER 失败: %w", err)
