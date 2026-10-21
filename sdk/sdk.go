@@ -70,7 +70,7 @@ func (c *Context) Send(chain message.Chain, opts ...SendOption) (*pb.SendResult,
 }
 
 // Run 是插件 main 的入口：连接 Core、完成握手并处理请求，直到停止。
-// 顺序：收集注册项 → 取得 runtime.lock（任何用户回调之前）→ 握手 → 准备阶段 → （G1-17 起）激活与服务。
+// 顺序：收集注册项 → 取得 runtime.lock（任何用户回调之前）→ 握手 → 准备阶段 → 激活（OnReady/ACTIVATED）→ 服务。
 func Run(root plugin.Root) error {
 	reg, err := Collect(root)
 	if err != nil {
@@ -101,7 +101,13 @@ func Run(root plugin.Root) error {
 	if _, err := prepare(conn, l, ack, root, reg); err != nil {
 		return err
 	}
-	return ErrNotImplemented
+	sess, err := activate(conn, l, ack, root)
+	if err != nil {
+		return err
+	}
+	// 服务直到 Session 结束；STOPPING/OnStop 与断链退出语义见 G1-18。
+	<-sess.Done()
+	return sess.Err()
 }
 
 // Registration 是从根插件收集到的静态注册项。

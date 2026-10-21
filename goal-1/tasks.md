@@ -259,11 +259,16 @@
     5. 安全：Secret 恒时比较、认证失败时不回复细节、失败路径的安全消息不含用户错误原文与配置内容，都已有测试覆盖；没有发现注入或越权的路径。
   - 下一步：FIX-5（优先于 G1-17）。
 
-### [ ] G1-17 提交与激活门禁
+### [x] G1-17 提交与激活门禁
 - 依据：PLAN T-02 第 6 步；CONTRACTS §4.1、§12.1；V-21、V-37（分项）。
 - 内容：PREPARED 之后，Core 在状态库事务中提交 ActiveGeneration+COMMITTED（事务内不等待 RPC），然后发送 ACTIVATE；SDK 执行 OnReady（30s 预算），由唯一 writer 写出 ACTIVATED 后打开 ready gate；Core reader 在应用 Activated 状态之后才处理后续 REQUEST；Preparing/Prepared/Activating 阶段收到业务 REQUEST 一律拒绝；提交后 OnReady 失败进入 Degraded，不回到旧代次；普通 restart 复用原有提交记录和 Generation。
 - 完成条件：测试覆盖：激活前的业务 REQUEST 被拒绝；ACTIVATED 与紧随其后的 REQUEST 在同一连接上按顺序处理；OnReady 失败后状态为 Degraded 且状态库中仍是新代次；restart 不产生新 Generation。
 - 回写：
+  - 实际做了什么：**internal/wire**：`Options.Admit`——读循环在执行 Handler 之前**同步**调用的业务门禁，不持锁；`SendControlSync`/`SendEnvelopeSync`——优先通道中的帧带写出通知，等唯一 writer 写完后才返回；把 `NewSession` 拆成 `New` + `Start`（原 `NewSession` 仍等于两者组合）。**internal/core/host/activate.go**：`Activate(ctx, conn, prep, ActivateOptions)`。新候选先调用 `Commit`（由调用方传入 `state.CommitActive`，事务内只有元数据，不等待 RPC）；提交失败时发送 SESSION_ERROR(ACTIVATE)、关闭连接、**不发送 ACTIVATE**，旧代次保持权威；`Commit=nil` 表示普通 restart，复用原有提交记录与 Generation。之后创建 Session，`admit` 在 Activated 之前一律回 FAILED_PRECONDITION；`control` 在读循环中同步处理 ACTIVATED（核对代次与 ready 之后切换为 Activated）与 SESSION_ERROR；发送 ACTIVATE（generation_id、commit_marker 为代次+route hash+config digest 的 SHA256、OnReady 截止时间）；等待 ACTIVATED、OnReady 超时、断链或 ctx 取消。失败时用 CAS 从 Activating 转为 **Degraded**（ACTIVATED 与超时同时到达时以 Activated 为准），状态库中仍是新代次。**sdk/activate.go**：PREPARED 之后用 `wire.New` 创建 Session，**赋值完成后再 Start**；`admit` 在 ready gate 打开之前拒绝业务；收到 ACTIVATE 时核对代次与 Bootstrap 一致，然后在独立 goroutine 中执行 OnReady（期限取 ACTIVATE 给出的 deadline，由 watchdog 兜底，panic 被 recover），失败时发送 SESSION_ERROR(ON_READY, PLUGIN_NOT_READY/DEADLINE_EXCEEDED)（安全消息不含用户错误原文）；成功后用 `SendControlSync` 写出 ACTIVATED，**写完才**设置 ready 并关闭 readyCh；ready 之后的业务 Handler 暂时一律回 UNSUPPORTED（代码中有 `shortcut:` 注释，T-03/T-04 接入分发）。`sdk.Run` 在 prepare 之后调用 activate，然后服务到 Session 结束（STOPPING 留给 G1-18）。
+  - V-21 / V-37（T-02 分项）证据（darwin/arm64，go1.27.1，本 task 的 commit）：host 新增 6 个测试、sdk 新增 4 个测试，都 PASS：**ACTIVATE 之前状态库已提交 gen-1**；**Activating 阶段的业务 REQUEST 被拒绝**（FAILED_PRECONDITION）；**ACTIVATED 与紧随其后的 REQUEST 在同一次 Write 中送达时，REQUEST 被接受**（Core 先应用 Activated）；**OnReady 失败（SESSION_ERROR(ON_READY)）与 OnReady 超时（150ms）都进入 Degraded，状态库中仍为 gen-1**；**restart（Commit=nil）使用原代次 gen-1，不再提交**（随后再次提交 gen-1 失败，证明 restart 路径没有提交）；陈旧候选提交失败时收到 SESSION_ERROR 而不是 ACTIVATE，返回 ErrStaleGeneration，Active 保持 gen-0；SDK 侧 ready 之前的请求被拒绝；**同步 net.Pipe 下 Core 读走 ACTIVATED 之前 activate 不返回（ready gate 未打开）**，读走之后才返回，之后的请求能通过门禁；OnReady 错误与挂起分别报告 PLUGIN_NOT_READY 与 DEADLINE_EXCEEDED；代次不符的 ACTIVATE 使激活失败。变异检查：(1) Core 侧把 Activated 的切换改为异步之后，「紧随 ACTIVATED 的 REQUEST」被拒绝，测试失败；(2) SDK 侧把 ready gate 移到 ACTIVATED 写出之前打开，测试报「ACTIVATED 尚未写出时 activate 不应返回」；恢复后都通过。`go test -race -count=5 ./sdk/ ./internal/core/host/ ./internal/wire/` ok；全仓库 13 个包都 ok；三平台 vet 通过。
+  - **过程中发现并修复的问题：** `-race` 报出数据竞争——SDK 在 `NewSession` 返回之后才给 `a.sess` 赋值，而读循环已经启动，ACTIVATE 先到时 `runOnReady` 会读到尚未赋值（最坏为 nil）的 Session。修复办法是把 Session 拆成 New/Start，先赋值再启动；Core 侧的 admit/control 不访问 Session 指针，不受影响。
+  - 剩余风险：Degraded 只记录在内存中（Instance 状态），没有持久化，Core 重启后需要依据状态库与进程情况重新判断（T-09 恢复编排）；STOPPING/OnStop/断链退出与崩溃计数在 G1-18；SDK 业务分发未实现。
+  - 下一步：G1-18（停止、阶段超时与有限恢复）。
 
 ### [ ] G1-18 停止、阶段超时与有限恢复
 - 依据：PLAN T-02 第 7 步；CONTRACTS §4.2；V-06、V-21（分项）。

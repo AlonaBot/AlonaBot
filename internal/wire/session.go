@@ -135,7 +135,10 @@ type Options struct {
 	Handler        Handler
 	// Control 在读循环中同步处理非调用帧（控制帧与 EVENT），保证状态变化按帧顺序生效；返回错误关闭 Session。
 	Control func(*pb.Envelope) error
-	Global  *Budget
+	// Admit 在读循环中同步决定是否接受对端的业务 REQUEST（阶段门禁）；返回非 nil 时直接回该错误，不执行 Handler。
+	// 必须在读循环中同步判断：状态变化（如 ACTIVATED）也在读循环中同步生效，帧顺序因此得到保证。
+	Admit  func(*Inbound) *pb.ErrorInfo
+	Global *Budget
 
 	// 以下为零时使用首发常量，只供测试缩小。
 	MaxInflight     int
@@ -176,6 +179,12 @@ type outCall struct {
 	doneComplete bool
 }
 
+// prioFrame 是优先通道中的一帧；written 非 nil 时在写出完成后收到写结果。
+type prioFrame struct {
+	env     *pb.Envelope
+	written chan error
+}
+
 type inCall struct {
 	bytes    int64
 	deadline time.Time
@@ -188,7 +197,7 @@ type Session struct {
 	opt  Options
 	peer pb.InitiatorSide
 
-	prio   chan *pb.Envelope
+	prio   chan prioFrame
 	bizSig chan struct{}
 	done   chan struct{}
 
@@ -206,8 +215,16 @@ type Session struct {
 	closeOnce           sync.Once
 }
 
-// NewSession 在已认证的连接上启动读循环与写循环。
+// NewSession 在已认证的连接上创建 Session 并立即启动读写循环。
 func NewSession(conn *Conn, opt Options) *Session {
+	s := New(conn, opt)
+	s.Start()
+	return s
+}
+
+// New 创建 Session 但不启动读写循环；回调需要引用该 Session 时，先保存指针再调用 Start，
+// 避免第一帧在赋值之前就被处理。
+func New(conn *Conn, opt Options) *Session {
 	if opt.MaxInflight == 0 {
 		opt.MaxInflight = MaxInflightPerDir
 	}
@@ -226,15 +243,19 @@ func NewSession(conn *Conn, opt Options) *Session {
 	}
 	s := &Session{
 		conn: conn, opt: opt, peer: peer,
-		prio:    make(chan *pb.Envelope, opt.PriorityFrames),
+		prio:    make(chan prioFrame, opt.PriorityFrames),
 		bizSig:  make(chan struct{}, 1),
 		done:    make(chan struct{}),
 		pending: map[uint64]*outCall{},
 		inbound: map[uint64]*inCall{},
 	}
+	return s
+}
+
+// Start 启动读循环与写循环；只能调用一次。
+func (s *Session) Start() {
 	go s.readLoop()
 	go s.writeLoop()
-	return s
 }
 
 // Done 在 Session 关闭后关闭。
@@ -302,15 +323,40 @@ func (s *Session) SendControl(kind pb.FrameKind, msg proto.Message) error {
 	return s.enqueuePrio(env)
 }
 
+// SendControlSync 发出控制帧并等待唯一 writer 把它完整写出（例如 ACTIVATED 写完后才打开 ready gate）。
+func (s *Session) SendControlSync(kind pb.FrameKind, msg proto.Message) error {
+	env, err := s.controlEnvelope(kind, msg)
+	if err != nil {
+		return err
+	}
+	return s.SendEnvelopeSync(env)
+}
+
+// SendEnvelopeSync 经优先通道发出调用方构造好的控制帧（例如带 ErrorInfo 的 SESSION_ERROR）并等待写出。
+func (s *Session) SendEnvelopeSync(env *pb.Envelope) error {
+	written := make(chan error, 1)
+	if err := s.enqueuePrioFrame(prioFrame{env: env, written: written}); err != nil {
+		return err
+	}
+	select {
+	case err := <-written:
+		return err
+	case <-s.done:
+		return callErr(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "Session 已关闭，控制帧可能未写出")
+	}
+}
+
 // enqueuePrio 把帧放入有界优先通道；放不进说明连控制通道都无法推进，关闭 Session（CONTRACTS §1.2）。
-func (s *Session) enqueuePrio(env *pb.Envelope) error {
+func (s *Session) enqueuePrio(env *pb.Envelope) error { return s.enqueuePrioFrame(prioFrame{env: env}) }
+
+func (s *Session) enqueuePrioFrame(f prioFrame) error {
 	select {
 	case <-s.done:
 		return callErr(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "Session 已关闭")
 	default:
 	}
 	select {
-	case s.prio <- env:
+	case s.prio <- f:
 		return nil
 	default:
 		err := errors.New("优先通道已满，控制/响应无法推进")
@@ -473,8 +519,8 @@ func (s *Session) popBiz() *outCall {
 func (s *Session) writeLoop() {
 	for {
 		select {
-		case env := <-s.prio:
-			s.write(env)
+		case f := <-s.prio:
+			s.writePrio(f)
 			continue
 		case <-s.done:
 			return
@@ -485,8 +531,8 @@ func (s *Session) writeLoop() {
 			continue
 		}
 		select {
-		case env := <-s.prio:
-			s.write(env)
+		case f := <-s.prio:
+			s.writePrio(f)
 		case <-s.bizSig:
 		case <-s.done:
 			return
@@ -494,9 +540,18 @@ func (s *Session) writeLoop() {
 	}
 }
 
-func (s *Session) write(env *pb.Envelope) {
-	if err := s.conn.WriteFrame(env); err != nil {
+func (s *Session) write(env *pb.Envelope) error {
+	err := s.conn.WriteFrame(env)
+	if err != nil {
 		s.fail(fmt.Errorf("写帧失败: %w", err))
+	}
+	return err
+}
+
+func (s *Session) writePrio(f prioFrame) {
+	err := s.write(f.env)
+	if f.written != nil {
+		f.written <- err
 	}
 }
 
@@ -573,6 +628,14 @@ func (s *Session) onRequest(env *pb.Envelope) error {
 		return fmt.Errorf("对端 call_id %d 未单调递增（上一个为 %d）", id, s.lastIn)
 	}
 	s.lastIn = id
+	s.mu.Unlock()
+	// 不持锁调用 Admit：回调可以安全地读取调用方自己的状态。
+	if s.opt.Admit != nil {
+		if e := s.opt.Admit(in); e != nil {
+			return s.respondErr(id, e.GetCode(), e.GetSafeMessage())
+		}
+	}
+	s.mu.Lock()
 	parentCtx := context.Background()
 	if pid := env.GetParentCallId(); env.ParentCallId != nil {
 		parent := s.pending[pid]
