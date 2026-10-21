@@ -85,6 +85,9 @@ func TestCollectRejects(t *testing.T) {
 			r.Handle("GET", "/s", http.NotFoundHandler())
 		}},
 		"HTTP 路径不以 / 开头": {http: func(r *HTTPRegistry) { r.Handle("GET", "s", http.NotFoundHandler()) }},
+		"HTTP 路径含 ..":    {http: func(r *HTTPRegistry) { r.Handle("GET", "/a/../b", http.NotFoundHandler()) }},
+		"HTTP 路径含 //":    {http: func(r *HTTPRegistry) { r.Handle("GET", "//x", http.NotFoundHandler()) }},
+		"HTTP 路径尾部 /":    {http: func(r *HTTPRegistry) { r.Handle("GET", "/a/", http.NotFoundHandler()) }},
 		"公开路由未声明验证": {http: func(r *HTTPRegistry) {
 			r.Handle("POST", "/cb", http.NotFoundHandler(), Public(pb.HttpAuthMode_HTTP_AUTH_MODE_CORE_SESSION))
 		}},
@@ -104,6 +107,12 @@ func TestCollectRejects(t *testing.T) {
 	_, err := Collect(&root{commands: func(r *CommandRegistry) { r.Command("a", 1); r.Command("b", 2) }})
 	if err == nil || !strings.Contains(err.Error(), "/a") || !strings.Contains(err.Error(), "/b") {
 		t.Fatalf("应同时报告两个错误，实际 %v", err)
+	}
+}
+
+func TestHTTPRootPathAllowed(t *testing.T) {
+	if _, err := Collect(&root{http: func(r *HTTPRegistry) { r.Handle("GET", "/", http.NotFoundHandler()) }}); err != nil {
+		t.Fatalf("根路径 / 应允许: %v", err)
 	}
 }
 

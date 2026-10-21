@@ -248,8 +248,12 @@
   - 剩余风险：TotalAlloc 断言会受 GC 时机与运行时版本影响，但 1 MiB 的阈值与实测约 2.5 KB 相差三个数量级，误报的可能性很低。
   - 下一步：G1-07。
 
-### [ ] FIX-3 GORM 日志不得包含参数值、HTTP 路径规范化、ARCHITECTURE 同步（来自 REVIEW-3，排在 G1-10 之前）
+### [x] FIX-3 GORM 日志不得包含参数值、HTTP 路径规范化、ARCHITECTURE 同步（来自 REVIEW-3，排在 G1-10 之前）
 - 依据：CONTRACTS §5.3、§7.2；REVIEW-3 中的 P2-1、P2-2、P3-2。
 - 内容：`sdk/gormdb/sqlite.go` 的 gormLogger 设置 `ParameterizedQueries: true`，并新增测试：把 logger 输出重定向到 buffer，执行一条带参数的失败 SQL，断言日志中有 SQL 文本、但没有参数值；`sdk/registry.go` 的 `HTTPRegistry.Handle` 要求路径以 / 开头且 `path.Clean(p)==p`，并在 sdk_test 中补上 `/a/../b`、`//x`、`/a/` 这几个被拒绝的用例；更新 ARCHITECTURE.md 中 sdk 行的描述。
 - 完成条件：新测试通过；先撤掉 ParameterizedQueries 验证新测试会失败，再恢复；全仓库 `go test -race ./...` 通过。
 - 回写：
+  - 实际做了什么：`sdk/gormdb/sqlite.go` 改为通过 `newGormLogger(io.Writer)` 构造 logger，生产环境写 stderr，并设置 `ParameterizedQueries: true`；SQLite 与 PG 共用这个 logger。新增 `TestGormLogOmitsParameters`：用带 buffer 的 logger 执行一条带参数、因违反外键而失败的 INSERT，断言日志里有 `INSERT INTO child`，但没有参数值 `SECRET-VALUE-42`。`sdk/registry.go` 的 `HTTPRegistry.Handle` 要求路径以 / 开头且满足 `path.Clean(p)==p`。sdk_test 新增 `/a/../b`、`//x`、`/a/` 三个应被拒绝的用例，以及 `TestHTTPRootPathAllowed`（`/` 允许注册）。ARCHITECTURE.md 中 sdk 行补上了 OpenSQLite/OpenPostgres/RunVersioned。
+  - 验证证据（darwin/arm64，go1.27.1，本 task 的 commit）：`go vet ./... && go test -race -count=1 ./...` 的 7 个包都 ok；`gofmt -l sdk` 为空。变异检查：把设置改成 `ParameterizedQueries: false` 后，测试失败，日志原文为 `INSERT INTO child(id, parent_id, note) VALUES (1, 99, 'SECRET-VALUE-42')`，证实修复前确实会泄漏参数值；恢复设置后通过。
+  - 剩余风险：只覆盖 GORM 自己的日志；插件自行打印的日志里有没有业务数据，属于可信插件作者的责任（CONTRACTS §7.1）。
+  - 下一步：G1-10（架构 import 守卫）。

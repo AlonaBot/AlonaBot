@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -18,10 +19,17 @@ import (
 const sqlitePragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
 
 // stdio 传输时 stdout 专用于协议帧，GORM 日志只能写 stderr。
-var gormLogger = logger.New(log.New(os.Stderr, "gorm ", log.LstdFlags), logger.Config{
-	SlowThreshold: 200 * time.Millisecond,
-	LogLevel:      logger.Warn,
-})
+var gormLogger = newGormLogger(os.Stderr)
+
+// newGormLogger 记录慢查询与错误 SQL。ParameterizedQueries 使日志只含占位符 SQL，
+// 绑定参数（可能是业务数据或 secret）不进入日志（CONTRACTS §5.3）。
+func newGormLogger(w io.Writer) logger.Interface {
+	return logger.New(log.New(w, "gorm ", log.LstdFlags), logger.Config{
+		SlowThreshold:        200 * time.Millisecond,
+		LogLevel:             logger.Warn,
+		ParameterizedQueries: true,
+	})
+}
 
 // OpenSQLite 以受管默认值打开 path 处的 SQLite：单连接、WAL、synchronous=FULL、外键开启、
 // busy_timeout=5000，并回读核对实际生效值；连接或核对失败时返回错误，不会改用空库或其他后端。

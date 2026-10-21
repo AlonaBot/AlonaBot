@@ -1,11 +1,13 @@
 package gormdb
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gorm.io/gorm"
@@ -227,5 +229,26 @@ func TestRunVersionedLedgerInSameTx(t *testing.T) {
 	}
 	if _, err := RunVersioned(ctx, db, []Migration{{2, createB}, {1, createA}}); err == nil {
 		t.Fatal("非递增的迁移列表应被拒绝")
+	}
+}
+
+// 失败 SQL 的日志只能含占位符，不能含绑定参数的值。
+func TestGormLogOmitsParameters(t *testing.T) {
+	db, _ := openTemp(t, "log.sqlite")
+	if err := db.Exec(`CREATE TABLE parent(id INTEGER PRIMARY KEY); CREATE TABLE child(id INTEGER PRIMARY KEY, parent_id INTEGER NOT NULL REFERENCES parent(id), note TEXT)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	quiet := db.Session(&gorm.Session{Logger: newGormLogger(&buf)})
+	const secret = "SECRET-VALUE-42"
+	if err := quiet.Exec("INSERT INTO child(id, parent_id, note) VALUES (?, ?, ?)", 1, 99, secret).Error; err == nil {
+		t.Fatal("外键约束应使插入失败")
+	}
+	out := buf.String()
+	if !strings.Contains(out, "INSERT INTO child") {
+		t.Fatalf("错误 SQL 应被记录，实际日志: %q", out)
+	}
+	if strings.Contains(out, secret) {
+		t.Fatalf("日志泄漏了参数值: %q", out)
 	}
 }

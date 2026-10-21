@@ -3,6 +3,7 @@ package sdk
 import (
 	"fmt"
 	"net/http"
+	pathpkg "path"
 	"reflect"
 	"strings"
 	"time"
@@ -146,8 +147,9 @@ func (r *HTTPRegistry) Handle(method, path string, h http.Handler, opts ...HTTPO
 	switch {
 	case h == nil:
 		r.errs = append(r.errs, fmt.Errorf("HTTP %s %s 的 Handler 为 nil", method, path))
-	case !strings.HasPrefix(path, "/"):
-		r.errs = append(r.errs, fmt.Errorf("HTTP 路径 %q 必须以 / 开头", path))
+	case !strings.HasPrefix(path, "/") || pathpkg.Clean(path) != path:
+		// 非规范写法（//、..、尾部 /）会让同一资源有多个路径，代理匹配时产生歧义。
+		r.errs = append(r.errs, fmt.Errorf("HTTP 路径 %q 必须以 / 开头且是规范形式", path))
 	case route.Public && route.AuthMode == pb.HttpAuthMode_HTTP_AUTH_MODE_CORE_SESSION:
 		r.errs = append(r.errs, fmt.Errorf("公开路由 %s %s 必须声明回调验证方式", method, path))
 	default:
