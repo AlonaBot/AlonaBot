@@ -63,11 +63,15 @@
   - 剩余风险：golden 依赖 protobuf-go 的 Deterministic 编码，升级 protobuf 版本时可能需要用 `-update` 重新生成，并人工确认差异；V-02 中的「无注册残留」属于 REGISTER 原子性，交给 G1-16（T-02）和 T-04；依赖 Session 状态的检查（source_plugin_id 与认证 ID 一致、父调用是否在途）交给 G1-14/G1-16。
   - 下一步：G1-05。
 
-### [ ] G1-05 manifest、插件 ID 与外部 release 清单
+### [x] G1-05 manifest、插件 ID 与外部 release 清单
 - 依据：CONTRACTS §9.1/§9.2、§7.1；V-01、V-41（T-01 分项）。
 - 内容：`contracts/manifest`：解析 plugin.yaml（go.yaml.in/yaml/v3，禁止未知字段），manifest_version=1，市场/本地 ID 正则，长度 64，Windows 保留设备名，统一小写，SemVer，protocol_min/max_major，os/arch 限定为五个目标组合，相对 entrypoint 不得包含 `..` 或绝对路径，migration_mode/prepare_effects 枚举；本地 ID 缺市场前缀只给警告。`contracts/release`：release.json 结构，Ed25519 对文件原始字节验签（先验签后解析），资产 URL/长度/SHA256 字段。fixture 放在 `contracts/testdata/manifest/`、`release/`。
 - 完成条件：测试覆盖：合法市场 ID、本地 ID 产生警告、路径穿越被拒绝、缺失 ID、保留名、大写、不支持的 os/arch、未知 migration_mode、签名正确、签名错误、重新序列化后验签失败（证明验的是原始字节）。
 - 回写：
+  - 实际做了什么：引入已批准的依赖 `go.yaml.in/yaml/v3 v3.0.5`。`contracts/manifest`：`Platforms`/`SupportedPlatform`（五个目标组合）；`ValidateID`（市场正则、64 字符上限、带市场前缀但格式错误、大写字母、本地安全 slug、Windows 保留设备名，本地 ID 返回缺前缀警告）；`ValidVersion`（SemVer 2.0 官方正则）；`Parse`（`KnownFields(true)` 拒绝未知字段，只允许一个 YAML 文档；必填项用指针区分缺失与零值；manifest_version=1、协议主版本范围、required_capabilities 必须出现（允许空列表）、os/arch、entrypoint、config_version、source；migration_mode/prepare_effects 只接受规定的枚举值，未知值报错，未声明时给出「不允许自动升级」警告）；`ValidateRelPath`（必须是 / 分隔的规范相对路径，不允许 .. 或 .、反斜杠、盘符、NUL）。`contracts/release`：`KeyID`（`ed25519:` + 公钥 SHA256 十六进制）；`DecodeSignature`（sig 文件为标准 base64 编码的 64 字节，允许末尾换行）；`Verify` **先对原始字节执行 ed25519.Verify，再严格解析**（DisallowUnknownFields，对象之后不得有多余内容），然后核对 publisher_key_id 与验签公钥一致，以及插件 ID、SemVer、资产（平台属于五个目标且不重复、size>0、sha256 为 64 位小写十六进制、https 绝对 URL）。fixture：`contracts/testdata/manifest/{market,local_no_prefix}.yaml`、`contracts/testdata/release/release.json`（公钥标识是占位值，测试时替换成固定测试密钥的 KeyID 后再签名）。
+  - V-01 / V-41（T-01 分项）证据（darwin/arm64，go1.27.1，本 task 的 commit）：`go test -race -count=1 ./...` 中 4 个包都 ok；manifest 与 release 共执行 36 个用例并全部 PASS，覆盖：合法市场 ID、本地 ID 只给警告、路径穿越 ID 与 entrypoint、缺失 ID、Windows 保留名、大写 ID、不支持的 os/arch、未知 migration_mode/prepare_effects、未知字段、多文档；签名正确、内容改动后验签失败、非信任公钥、损坏的 sig 文件；**重新序列化后的 JSON 无法通过原签名**（证明验签对象是原始字节）；签名有效但内容非法（非 https、大写摘要、重复平台、非法 ID/版本、公钥标识不符）也会被拒绝。每个变异用例都先断言确实改动了 fixture，避免出现空转的测试。`gofmt -l contracts` 为空。
+  - 剩余风险：`source` 只检查非空，格式（例如 github.com/owner/repo）以及与已绑定来源是否一致留给 T-09；V-01 中「重复 ID 的先后顺序稳定 / first-wins」属于安装记录，交给 T-09；ID 大小写冲突检测（不能靠大小写形成两个安装）在 manifest 层面已经通过拒绝大写来保证，安装层仍需按规范小写比较。
+  - 下一步：G1-06。
 
 ### [ ] G1-06 MessageChain 结构校验
 - 依据：MESSAGE-MODEL §2；CONTRACTS §8；PLAN T-01 第 3 步（「为首发消息建立实际 Schema 与验证入口」）。

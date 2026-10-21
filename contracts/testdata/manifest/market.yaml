@@ -1,0 +1,15 @@
+manifest_version: 1
+id: alonabot_plugin_rss_feed
+version: 1.2.0-rc.1+build.5
+protocol_min_major: 1
+protocol_max_major: 1
+required_capabilities:
+  - name: core.send
+    version: 1
+os: linux
+arch: amd64
+entrypoint: bin/rss
+config_version: 2
+source: github.com/AlonaBot/rss
+migration_mode: versioned
+prepare_effects: managed_db
