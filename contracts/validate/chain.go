@@ -100,11 +100,22 @@ func text(t *pb.TextSegment) error {
 	if len(t.GetEntities()) == 0 {
 		return nil
 	}
-	// boundary[u] 为 true 表示 UTF-16 偏移 u 落在完整字符边界上。
-	boundary := map[int]bool{0: true}
+	// 只登记实体实际用到的起止偏移，扫描一遍文本判断它们是否落在字符边界上；
+	// 额外内存与实体数成正比，与文本长度无关（文本最长可达帧上限 4 MiB）。
+	boundary := make(map[int]bool, 2*len(t.GetEntities()))
+	for _, e := range t.GetEntities() {
+		start := int(e.GetOffsetUtf16())
+		boundary[start] = false
+		boundary[start+int(e.GetLengthUtf16())] = false
+	}
 	n := 0
 	for _, r := range s {
-		n += len(utf16.Encode([]rune{r}))
+		if _, ok := boundary[n]; ok {
+			boundary[n] = true
+		}
+		n += utf16.RuneLen(r) // 已校验 UTF-8，不会返回 -1
+	}
+	if _, ok := boundary[n]; ok {
 		boundary[n] = true
 	}
 	for i, e := range t.GetEntities() {

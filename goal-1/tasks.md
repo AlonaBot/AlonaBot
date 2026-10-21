@@ -214,8 +214,13 @@
   - 剩余风险：ServiceInvocation 的使用方（T-06 Broker）尚未实现，字段是否足够要到 T-06 才能验证。
   - 下一步：G1-04。
 
-### [ ] FIX-2 Chain 实体边界检查的内存放大，以及 contracts 文档状态（来自 REVIEW-2，排在 G1-07 之前）
+### [x] FIX-2 Chain 实体边界检查的内存放大，以及 contracts 文档状态（来自 REVIEW-2，排在 G1-07 之前）
 - 依据：CONTRACTS §1.2（Core 合计 64 MiB 的 payload 预算）；REVIEW-2 第 5、6 条。
 - 内容：`validate/chain.go` 中把每个字符边界的 map 改为按 entity 的偏移检查：先算出每个 rune 的 UTF-16 长度，只在需要的偏移上判断是否落在边界（例如用 `[]bool` 或排序后的偏移做一次线性扫描），保证分配量与文本长度同阶且常数很小，避免使用 `utf16.Encode` 为每个 rune 分配；在测试中加入内存回归断言（4 MiB 文本加 1 个 entity，`testing.AllocsPerRun` 或 MemStats 显示分配量明显低于 64 MiB，例如低于 16 MiB）。更新 ARCHITECTURE.md 中 contracts 行的状态（proto、生成、validate、manifest、release 已实现，SDK 相关仍是拟建）。
 - 完成条件：原有 43 个 Chain 用例仍然通过；新增的内存回归测试通过；修改前后各测一次大文本的分配量并记录到这里。
 - 回写：
+  - 实际做了什么：`validate/chain.go` 中的边界检查改为只把实体用到的起止偏移放进 map（大小为 2×实体数），扫描一遍文本，用 `utf16.RuneLen` 累加 UTF-16 位置，并标记这些偏移是否落在边界上；不再给每个字符建 map 项，也不再为每个 rune 调用 `utf16.Encode`。`chain_test.go` 新增 `TestChainLargeTextAllocation`（约 4 MiB 的中文文本加 1 个 entity，要求 TotalAlloc 增量不超过 1 MiB）。ARCHITECTURE.md 中 contracts 的状态改为「已实现：proto/生成、validate、manifest、release」。
+  - 验证证据（darwin/arm64，go1.27.1，本 task 的 commit）：分配量对比（用 MemStats 的 TotalAlloc 测量）：旧实现在 4 MiB ASCII 文本上为 296 MiB（REVIEW-2 探针），在本用例的中文文本上为 78,464,976 字节；新实现在同一中文文本上为 2,520 字节。把旧实现临时放回来时，`TestChainLargeTextAllocation` 失败（"分配了 78464976 字节"）；换回新实现后通过。`go test -race -count=1 ./contracts/...` 的 4 个包都 ok；TestChain 系列共 44 个 PASS（原有 43 个加新增的 1 个）；`gofmt -l contracts` 为空。
+  - 过程中的失误（已纠正）：shell 里的 `cp` 是交互式别名，第一次把新实现拷回来时没有生效，`git checkout` 又让测试改动丢失；随后从 scratchpad 备份恢复了新实现，并重新加上了回归测试。最终 diff 只包含 chain.go 与 chain_test.go 的预期改动。
+  - 剩余风险：TotalAlloc 断言会受 GC 时机与运行时版本影响，但 1 MiB 的阈值与实测约 2.5 KB 相差三个数量级，误报的可能性很低。
+  - 下一步：G1-07。

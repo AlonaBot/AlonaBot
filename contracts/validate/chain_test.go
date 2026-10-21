@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 
@@ -149,5 +150,21 @@ func TestChainErrorNamesSegment(t *testing.T) {
 	err := Chain(chainOf(txt("ok"), txt("ok"), img(nil)))
 	if err == nil || !strings.Contains(err.Error(), "segment[2]") {
 		t.Fatalf("错误应定位到 segment[2]，实际 %v", err)
+	}
+}
+
+// 回归：边界检查的分配量不能随文本长度放大。REVIEW-2 实测旧实现在 4 MiB ASCII 文本上分配 296 MiB，
+// 在本用例的中文文本上分配约 78 MB；新实现约 2.5 KB。
+func TestChainLargeTextAllocation(t *testing.T) {
+	c := chainOf(txt(strings.Repeat("字", 4<<20/3), ent(pb.EntityType_ENTITY_TYPE_BOLD, 0, 1)))
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	if err := Chain(c); err != nil {
+		t.Fatal(err)
+	}
+	runtime.ReadMemStats(&after)
+	if got := after.TotalAlloc - before.TotalAlloc; got > 1<<20 {
+		t.Fatalf("4 MiB 文本校验分配了 %d 字节，应与文本长度无关（上限 1 MiB）", got)
 	}
 }
