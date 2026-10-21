@@ -1,0 +1,214 @@
+# AlonaBot 技术设计
+
+**版本：** v0.6-review · 2026-10-21  
+**状态：** 现行实施基线，待实施验证。实现模块与职责按下文执行；具体工作包见根目录 PLAN。精确行为以 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md)、[WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 为准，执行顺序见 [PLAN.md](PLAN.md)。
+
+## A. Core 与插件职责
+
+Core 负责 Adapter、标准事件与命令路由、权限、消息发送、Service Broker、Event Bus、Scheduler、插件进程、公共 HTTP、配置/Secret 与安装代次。每个已安装插件包运行一个独立 Native Go 子进程，插件使用普通 Go Modules、goroutine、net/http 和 GORM；跨插件通过 Core 调用。
+
+独立进程隔离崩溃，不构成同一 OS 用户下的恶意代码沙箱。只有使用 SDK 的受管资源与生命周期遵守框架恢复契约；插件自行管理的外部文件、HTTP 或数据库不受 Core 事务回滚。
+
+### 生命周期
+
+```mermaid
+stateDiagram-v2
+  [*] --> Stopped
+  Stopped --> Preparing: spawn / HelloAck bootstrap
+  Preparing --> Prepared: 配置 / 迁移 / OnStart / 注册校验
+  Preparing --> Stopped: 提交前失败
+  Prepared --> Activating: 原子提交 ActiveGeneration
+  Activating --> Activated: OnReady / ACTIVATED
+  Activating --> Degraded: 提交后失败
+  Activated --> Stopping: 停用 / 更新 / 配置重载
+  Stopping --> Stopped: drain / OnStop / 退出
+  Activated --> Degraded: 崩溃 / 失联
+  Degraded --> Preparing: 有限重启当前权威代次
+```
+
+SDK 公开三个可选进程 Hook：`OnStart(context.Context) error`、`OnReady(context.Context) error`、`OnStop(context.Context) error`。OnStart/OnReady 不得等待自己的公开路由或发起业务 Send/Service；后台工作等待 SDK 就绪门并服从 lifetime context。SDK 串行写完 ACTIVATED 后打开就绪门，Core 按帧顺序先激活再接受业务。
+
+同一 data_dir 只有一个 Core，同一插件管理操作串行，SDK 持有跨代次 runtime.lock；旧进程未释放受管资源时不能再启动第二个写入者。主 RPC 断开即取消 lifetime、关内部 HTTP 并限时退出。普通异常退出采用既有 5 分钟内 3 次自动禁用规则；正常停用不自动重启。
+
+## B. 安装包、平台与来源
+
+首发目标为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64。市场预构建优先，本地源码构建可选；Native 进程只要求协议兼容，不要求 Core 与插件使用相同 Go patch。
+
+`plugin.yaml` 是插件 ID/版本真源，生成产物包含静态描述、Schema、i18/ 和可执行程序。市场 ID 使用 `alonabot_plugin_` 规范；本地允许安全 slug 并警告缺前缀。ID 不直接当作 PostgreSQL 标识符或主机名。
+
+不同包 ID 冲突保留持久化安装记录中的首个，拒绝后来的冲突来源；同一插件内部重复 route ID、命令路径/别名或 HTTP method+path 报错。已有插件更新必须校验原来源/发布者，不能借 first-wins 绕过更新身份校验。
+
+归档为 tar.gz；外部 release 清单记归档 SHA256，归档内 manifest 只记录程序/资源摘要，避免自包含摘要循环。签名验证清单确切字节，安装器受控解压、检查大小/链接/路径，再原子移入候选目录。完整命令及信任策略见 CONTRACTS §9。
+
+## C. Protobuf RPC 与两种传输
+
+TCP 为默认，Core 持有 loopback 端口 0 分配的 Listener；stdio 可选，stdout 只传协议，stderr 为日志。统一 `4-byte big-endian length + Protobuf Envelope`，单帧最大 4 MiB，协议首发 1.0。每个进程有独立随机凭证与 Session，完整首帧鉴权后才下发 Bootstrap。
+
+匹配键为 `(session_id, initiator_side, call_id)`，支持并发与乱序 Response。读帧/响应配对独立于 Handler；唯一 writer 保证帧不交错；控制/响应/取消不能被业务排队堵住。计数与字节预算都受限，超额立即拒绝，不能因嵌套调用等待自己的额度。
+
+业务副作用不自动重试。取消只是合作式终止；迟到响应不会重新完成请求。Service/Send 的父调用关联由 Core 记录，不能信任插件提交的 Actor/权限。Bootstrap、控制错误、注册描述与媒体 RPC 详见 WIRE-FORMAT。
+
+## D. Go SDK 与 Handler 注册
+
+一个插件包恰好一个根类，嵌入 `plugin.Base`，最多一个 Config 类型。元数据 ID 只来自 plugin.yaml；辅助 Handler 可以显式接收根类指针，不引入自动 DI。包级函数可用 `//alonabot:command`、`//alonabot:event` 构建期标记发现；实例方法必须提供实例显式注册。
+
+生成器只扫描当前模块的目标构建包，遵守 Go build tags/GOOS/GOARCH，排除外部依赖、vendor 和测试文件；用生成 Go 代码让编译器检查签名。路由、配置 Schema 和 i18/ 的构建检查在 T-01/T-04 落地；不在运行时从磁盘扫描任意包。单次 Session 注册描述固定，Core 动态修改权限/开关，不重建插件对象。
+
+以下是接口用法示意，需随 SDK 实现编译验证：
+
+```go
+type RSS struct { plugin.Base }
+
+func (p *RSS) Commands(r *sdk.CommandRegistry) {
+    r.Group("rss", func(g *sdk.CommandGroup) {
+        g.Command("list", p.List)
+        g.Command("add", p.Add)
+    })
+}
+
+func (p *RSS) List(c *sdk.Context) (message.Chain, error) {
+    c.StopPropagation()
+    return message.Chain{message.Text("订阅列表")}, nil
+}
+
+func (p *RSS) Add(c *sdk.Context, url string) error {
+    _, err := c.Send(message.Chain{message.Text("已收到订阅请求")})
+    return err
+}
+```
+
+两类 Handler 保留：返回 `(Chain,error)` 的自动回复型成功时由 Core 发一次非空 Chain；返回 `error` 的主动发送型可多次 Send。自动回复型内部调用 Send 返回 FAILED_PRECONDITION。`c.StopPropagation()` 锁存传播结果，由 SDK 统一编码到 HandlerOutcome；不会给开发者增加第三套 Handler 签名。
+
+## E. 消息、命令和权限
+
+MessageChain 表示一次逻辑 Send；多条独立推送应多次 Send。一个逻辑 Send 可产生多个平台消息 ID，并用 ACCEPTED/PARTIAL/REJECTED/UNKNOWN 和逐部分结果描述；错误返回不得丢掉已经确认的 ID。整条 Chain 在第一次平台调用前预检，失败后不继续发送剩余部分。
+
+Target 明确 Adapter、实例、账号、聊天和可选话题；没有真实入站默认目标时必须显式 To。原事件 Target 的回复范围与主动/跨实例的 allowed_adapter_instances 按 CONTRACTS §8 准入，不以 User/Admin 代替发信许可。平台 ID 在公共 JSON 中用字符串。系统任务没有虚构的账号/Actor。Text/Image/Video/File/Mention/Reference/Buttons/Forward 的可表达组合和 Telegram 映射见 MESSAGE-MODEL。
+
+普通命令按完整 token 路径最长匹配，再以 priority/plugin_id/route_id 选稳定胜出者；已识别的禁用、无权限、参数错误命令不回落 Regex/Raw/短路径。没有普通命令才按 Regex→Raw 处理，支持停止传播。跨插件同名命令在诊断中显示遮蔽关系，不由启动顺序决定。
+
+Core 命令 Admin 是按 Adapter 实例与外部用户 ID 配置的机器人管理员；平台群管理员只形成 chat_admin Rule，不自动取得 Core 管理权限。命令树取最近显式权限策略，允许子命令放宽或收紧，但所有层的禁用和 Core 全局禁止始终生效。每次派发前读取当前策略，已开始调用不宣称可撤销。
+
+## F. 事件管道：Hook、Rule 和传播
+
+同一 Event 只有一条按固定顺序推进的普通 Handler 链，不同事件并发。入站 `Normalize → PreEvent → Match/Permission → Rule/Handler`；SDK 可在一次 Handler RPC 内先执行自定义 Go Rule，False 返回 matched=false。
+
+priority 数字小的先执行，同值按稳定 plugin_id/route_id 排序。业务错误记录并继续普通事件分发；显式 Stop 优先，命令被识别后的拒绝不进入其他匹配类别。PreEvent 仅可修改允许的业务 payload/停止普通传播，不能改 Core 保存的身份、Target、按钮/任务绑定或来源。
+
+每次 Send 独立执行 `BeforeSend → Adapter.Send → AfterSend`。BeforeSend 只改 Chain 或拒绝；AfterSend 只观察已经发生的发送结果，其自身错误不能把平台成功改写成发送失败。出站 Hook 及其派生子调用禁止再次 Send，避免递归。Hook 类型、阶段及最小结果字段按 Wire/消息专章生成。
+
+## G. Event Bus、Service Call 与后续动态 Router
+
+Event Bus 使用 `plugin_id/event_name`，非持久化尽力广播，离线不补、满队列丢最新并计数。每订阅者同时限制条数和字节，慢订阅者不阻塞其他插件。发布者只能发布自己命名空间；订阅由描述声明，事件内容不能赋予用户权限。
+
+Service 以 `plugin_id/service_name` 注册，使用显式 schema/version 的 JSON 或 Protobuf 请求/响应。Core 检查目标状态和授权，继承父请求的 Actor/scope/deadline，A→B→C 可用；同调用链出现重复插件或超过深度上限明确拒绝。父请求结束后其未完成子调用取消，后台独立请求仅有插件身份。
+
+通过 Core 动态调用其他插件命令/事件 Router 保留为 v0.2；v0.1 不暴露该执行 API，只保留稳定 route ID。Go Modules 用于编译期复用，不能当作跨进程 Go 对象调用。
+
+## H. Core Scheduler
+
+调度器固定支持 interval 与 cron，规范含语法、IANA 时区、起点和夏令时处理，见 CONTRACTS §4。Core 唯一拥有触发权，`scheduled` 使用有 CallID/完成响应的 Request；不同 job 可并发，同 job 未结束时跳过本次，离线不追补。
+
+每次执行有独立 run_id、job deadline 与 lifetime context，不被 30s 普通 RPC 默认值截断。任务超时后若插件未确认协作结束，不释放同 job 的运行槽并再次重叠启动；恢复策略见运行时契约。定时身份是显式 job/plugin scope，不获得默认 Admin。
+
+## I. HTTP、SQLite 与 PostgreSQL
+
+### HTTP
+
+遵守 D-25：插件只注册 `http.Handler`，SDK 仅在有 HTTP 路由时持有 `127.0.0.1:0` Listener，不先找端口再重新绑定。REGISTER 报告实际端口与路由；Core 只代理已认证、Activated 的 Session，并在停止/断链时撤销。
+
+外部统一 `/plugins/{id}/...`，SDK Handler 接收去掉插件前缀的路径。Core 校验路由/权限，清理外部内部认证头、Core Cookie/Authorization，再注入 Session 认证；用标准库 ReverseProxy.Rewrite，不能由请求指定代理目标。
+
+Admin 与插件内容采用两个全局主机名，使用同一公开 Listener/端口。插件内容 host 不提供 Admin API，采用独立受控会话；Admin 不允许插件 Origin 访问管理 API。所有插件页面共享插件 Origin 信任域，不声称插件页面彼此隔离。未配置内容 host 时 API/Webhook 可用，但不得在 Admin Origin 直接执行插件 HTML/JS/SVG。
+
+### 数据库
+
+Core 管理状态库与插件业务库分开；`gormdb.Open(ctx) (*gorm.DB,error)` 按 Session 固定 backend 与连接池，插件得到原生 `*gorm.DB`。默认 pure-Go SQLite 组合与 PG 驱动在 CONTRACTS §6 指定，实际版本由 T-01 验证锁定。
+
+受管 SQLite 每插件、每候选代次独立文件。配置重载与版本更新统一先停止旧进程、备份候选副本，再迁移/初始化；不能复用旧可写 DB 来承诺提交前回退。PG 由管理员预置 role/schema，不复用 Core 管理凭证；有生产数据变更的升级按维护模式处理。
+
+`Migrate(ctx, db)` 与 `Migrations() []Migration` 可选且互斥，回调在插件 SDK 内执行，Core 负责调度与代次门槛。辅助迁移的 Up 与成功记录在插件 DB 的同一事务；没有迁移接口就不主动迁移。PG 普通 resume 只核对已提交代次/迁移账本，不重跑 Migrate/Up；维护许可和启动原因在 Bootstrap 明确下发。后端切换不自动搬迁数据。
+
+## J. Config、Schema 与 i18/
+
+运行配置为普通 JSON 对象，无外层 config；i18/ 翻译才以 config 为顶层。Go Config 的 json/form/description/secret/hidden tag 生成 Schema 与表单，字段按声明顺序，保留未知键、显式 false/0/空串与隐藏字段。
+
+`OnLoad` 与 `Validate` 是可选配置回调，区别于三个进程 Hook。流程为原始对象→配置版本迁移→仅补缺键默认→typed decode→Validate→Candidate；不能先用新 Schema 拒绝仍需迁移的旧字段。持久化保留原始完整对象，不能用 typed marshal 丢掉未知键。
+
+Core 状态库的 ActiveGeneration 是权威，`config.json` 是用户编辑快照。直接编辑不热生效，`plugin reload` 导入 Pending 后走候选流程。新 secret 产生新不可变引用，候选失败不修改旧凭证；普通配置 API 不返回明文。表单 PATCH 采用明确操作，掩码不当作真实值。
+
+```json
+{
+  "config": {
+    "interval": {
+      "label": "Refresh interval",
+      "description": "Polling interval"
+    }
+  }
+}
+```
+
+以上是 i18/en-US.json 示例；语言仅影响文案，查找为当前 locale→en-US→默认 tag。选项显示名可翻译，值和配置 JSON 路径保持不变。
+
+## K. WebUI、安装与运行安全
+
+最小 WebUI 提供状态/日志、安装启停、更新/恢复、配置表单与命令权限。管理 API 采用 Core 的管理员认证、CSRF 与独立 Session；首次本机 admin-token init/reset、浏览器登录与 CLI Bearer 按 CONTRACTS §7.4 实现；插件页面不会收到管理 Cookie。没有可信来源/合法归档就不执行程序，首次信任与后续更新绑定持久化。
+
+环境变量只传该插件所需信息，SDK 将日志标记 plugin/session/route/call；secret 原文不进入普通日志。工作目录与进程隔离不是 OS 权限隔离，首发只支持可信 Native 插件。进程树按 Linux/macOS/Windows 的合作型子进程机制回收，验证不涵盖恶意 detach。
+
+## L. 接口实现与验收入口
+
+| 议题 | 实施依据 | 实证任务 |
+| --- | --- | --- |
+| Handler/Rule/Hook/权限 | CONTRACTS §2/§3、MESSAGE-MODEL | T-04/T-05/T-06，WebUI 在 T-09 |
+| 帧/Bootstrap/Session/错误/取消 | WIRE-FORMAT、CONTRACTS §1/§12 | T-01/T-02 |
+| 消息/媒体/按钮/回执 | MESSAGE-MODEL、CONTRACTS §1.3 | T-03 |
+| 调度/HTTP/生命周期 | CONTRACTS §4/§7/§12 | T-02/T-07/T-08，正式认证/更新在 T-09 |
+| 配置/secret/DB/Journal | CONTRACTS §5/§6/§12 | T-08/T-09 |
+| 构建/来源/安装/恢复 | CONTRACTS §9、TEST-MATRIX | T-01/T-09/T-10 |
+
+各接口随对应工作包实现并取得测试证据；跨任务用例按 TEST-MATRIX 的最终闭合点完成。
+
+## M. Adapter Interface 与平台能力
+
+官方 Telegram 静态链接 Core，实例可启停；第三方 Adapter 类型装载后置。Adapter 最小形状：
+
+```go
+type Adapter interface {
+    ID() string
+    Start(context.Context, EventSink) error
+    Stop(context.Context) error
+    Send(context.Context, Target, MessageChain) (SendResult, error)
+    Capabilities() CapabilitySet
+}
+```
+
+接口示意需在 T-01/T-03 形成真实可编译类型。Start 完成凭证/实例检查并启动受控接收循环后返回；Stop 停止接收并等待受控任务，异步致命错误通过 Core 的 Adapter 状态渠道报告，不静默消失。同一 bot 账号首发只允许一个入站所有者，凭证轮换先停止旧实例。
+
+v0.1 默认 Telegram long polling，先确定实际 bot 身份并校验 account_id。接收游标与非持久化事件入站的确认语义见 MESSAGE-MODEL；不承诺 exactly-once。平台特有能力按版本声明，不支持的片段组合先拒绝；其他正式 Adapter 后续增加。
+
+## N. 更新 Journal、快照与恢复
+
+受管 SQLite 候选流程：**下载/验证 → 冻结新根请求 → drain/停旧进程 → 确认 runtime.lock 可取 → Backup 候选 DB → 配置/DB 迁移与 OnStart → Prepared → Core 单事务提交 ActiveGeneration+COMMITTED → OnReady/Activated → 服务**。
+
+提交前失败重启旧程序的新 Session；提交后新代次权威，失败进入 Degraded，不能悄悄切回旧 DB 丢弃已发生的新写入。管理员 rollback 以选定快照为输入创建新的恢复 Generation/SQLite 副本，保留原快照不变，并说明会丢弃该点之后的受管写入。PG 或插件自行管理的外部数据走维护流程。
+
+包、配置、secret 引用与候选 DB 先持久化，再提交 Core 指针。Core 崩溃恢复还必须确认旧进程退出，Journal 不能替代进程锁。首发采用允许短暂停顿的切换，不实现双实例零停机。
+
+## O. SDK 分层、CLI 与可观测性
+
+最小逻辑分层为 contracts、plugin SDK、Core 和 plugin CLI；contracts 不依赖具体平台 SDK/GORM，数据库作为按需 SDK 包。使用标准 Go 编译、Protocol Buffers、标准 HTTP 代理及选定驱动，不引入额外容器运行时、服务发现或迁移平台。
+
+CLI/API 的完整管理动作与包协议见 CONTRACTS §9。Core 状态库记录安装序号/来源、ActiveGeneration、Journal、权限、回调与配置引用；业务库由插件负责。所有状态变更通过同一个 Core 管理服务串行化，离线 CLI 不能绕过仍运行的 Core 直接改状态库。
+
+日志/指标关联 plugin_id、route_id、call_id、session/generation、adapter_instance；记录状态变化、拒绝/丢弃、发送回执、更新/恢复和配置权限审计。资源测试包含 Core+不同插件+附属进程，总 RSS/私有内存、Linux PSS、CPU、P50/P95/P99；测试环境和平台差异随结果记录。
+
+## P. 长期扩展方向（不进入 v0.1）
+
+动态命令 Router、多轮会话/暂停 DSL、更多 Adapter、LLM 多 Provider/任务与子代理、TUI/桌面/移动端、多语言 SDK 均保留为后续方向。WASM、实例池、蓝绿零停机和复杂表单不进入首发，不为它们预建运行时抽象。
+
+## Q. 多实例与实施维护
+
+Target 与凭证按 Adapter 实例/账号区分，不把特定 X/Twitter 多账号需求硬编码进 Core。实例管理、权限和凭证切换分别在 T-03/T-04/T-09 实施并验收。
+
+修订时同步根目录契约、详细计划与测试；选择原因和历史审阅见 [adr/README.md](adr/README.md)。技术基线维持 v0.6-review。

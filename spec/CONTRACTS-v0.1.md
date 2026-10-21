@@ -1,0 +1,340 @@
+# AlonaBot v0.1 技术契约
+
+版本：v0.6-review · 2026-10-21  
+状态：**现行实施基线，待实施验证**。本轮按用户“自动完善剩余细节、审阅可行性并修复缺陷”的授权收敛，不提升版本编号。
+
+本文件与 [WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 共同定义首发行为；[PLAN.md](PLAN.md) 是唯一执行入口。保留 D-01～D-25，历史 PDF/讨论对照中的待定描述不覆盖当前规则。规格审阅不是运行时测试报告。
+
+## 0. 范围和明确取舍
+
+v0.1 交付 Core、Telegram Adapter、Native Go SDK/子进程、双传输 RPC、命令/事件/权限、Event Bus、Service Call、调度、插件 HTTP、SQLite/PostgreSQL、配置/WebUI、预构建安装/更新与有明确边界的回退。保留 D-01～D-25；其他 Adapter、Agent、TUI、WASM、插件实例池、蓝绿零停机、多轮会话 DSL 与复杂表单后置。
+
+运行时容量和阶段超时采用固定内部常量，不增加逐插件调参 UI。它们是初始实现边界，须通过 TEST-MATRIX 实测后调整；不是性能保证。现行技术细节按本轮用户授权完成，保留 v0.6-review 编号。
+
+## 1. RPC、握手、错误、媒体
+
+### 1.1 连接、Bootstrap 与帧
+
+- 每次 Native 进程启动创建新 Session。TCP 为默认传输：Core 使用 `net.Listen("tcp4", "127.0.0.1:0")` 或明确选定的 IPv6 loopback 地址直接绑定临时端口，持有 Listener 至会话结束；不采用先探测空闲端口、关闭后再绑定的流程。Core 为本次启动生成至少 256-bit 随机 Secret，经最小子进程环境或专用继承句柄传递。Hello 的插件 ID、包摘要、协议版本和 Secret 必须与 Core 启动记录一致；build_digest 为安装时已验证的归档 SHA256，由 Core 从安装记录随本次启动上下文下发供 SDK 回显，不在程序中内嵌自身整包摘要；Core 负责安装与启动前的实际文件完整性检查。Secret 用恒时比较，不接受跨插件凭证。该机制不构成对同宿主同权限恶意程序的沙箱。
+- stdio 为可选传输：stdin/stdout 专用协议，stderr 专用普通日志；首帧同样认证。stdio stdout 出现非协议字节时关闭该 Session 并记录插件故障，不能把混入的日志当合法帧。TCP 模式下 Core 可同时捕获插件 stdout/stderr，并标记 plugin ID。
+- 两种传输均为 `uint32 big-endian payload length + Protobuf Envelope`；长度不含 4-byte 前缀，合法范围为 **1～4,194,304 bytes**。先验证长度再分配受限缓冲；完整读取前缀和载荷，不能假设一次 Read 得到一帧。长度 0、超限、截断或不可解码的 Envelope 终止当前连接。每方向只有一个帧写入器，多个 goroutine 的帧不能交错。
+- Hello 前不得发送其他帧。Protocol Major 不相等，或任一 required capability 不在双方能力交集中，拒绝握手；Minor 选双方支持范围内的较低版本。所有枚举保留零值 UNSPECIFIED，业务要求的枚举和身份字段解码后验证。Envelope 字段编号、控制帧方向及 schema 见 [WIRE-FORMAT.md](WIRE-FORMAT.md)，不另定义平行的 JSON 字节流协议。
+- HelloAck 的 `bootstrap` 一次性下发本 Session 的 `generation_id`、原始候选配置 JSON、配置版本、DB descriptor、内部 HTTP 认证凭证和阶段预算。Core 此时只检查配置是合法 JSON 对象并符合大小限额，**不在 OnLoad 迁移之前按新版 typed schema 拒绝旧配置**。运行所需 Secret 仅在该插件私有 IPC 中解引用，不继承其他插件或 Core 管理凭证；不得写入日志。Bootstrap 同样受 4 MiB 帧上限限制，超限明确拒绝启动。
+- SDK 在 Preparing 中执行配置 `OnLoad → 仅缺键补默认值 → typed decode / Validate → DB 迁移门槛核对及许可的迁移 → OnStart`；PG resume 只核对，见 §6.3。不存在的可选回调直接跳过。随后 REGISTER 一次性提交完整 RouteDescriptor、规范化配置及其版本、schema hash；声明 HTTP 路由时还提交实际已监听的 loopback endpoint。对新候选，Core 再次验证 Candidate，提取 Secret 为不可变引用后持久化；对已提交代次的普通重启，验证配置与原快照一致并复用原 Secret 引用，不创建新代次或改写快照。Core 校验所有路由和 endpoint 后才返回 PREPARED。明文配置只能经过私有 IPC 和必要的运行内存，不能进入 Journal 或普通配置快照。配置与 DB 细节分别以 §5、§6 为准。
+- Preparing/Prepared/Activating 不开放业务 REQUEST；配置、DB 位置和内部 HTTP 凭证由 Bootstrap 提供，不需要准备期通用 Core RPC。认证后的 OnLoad/迁移/OnStart/REGISTER/OnReady 失败使用 `SESSION_ERROR` 携带失败阶段和 ErrorInfo，然后关闭 Session；认证失败直接关闭，不暴露凭证信息或注册残留。
+
+### 1.2 调用、取消与资源边界
+
+- 业务调用的 `call_id` 非零，在同一 Session 的同一发起方向单调递增且不得复用。Request/Response/Cancel 按 `(session_id, initiator_side, call_id)` 配对；控制帧可使用 0。迟到、重复或未知 Response 不第二次完成调用；通常只计数丢弃，scheduled 的已知执行记录按 §4.3 仅据实际结束响应释放运行槽。Response 可同时携带业务结果和 ErrorInfo，例如发送部分成功时保留已确认的回执。
+- 插件子请求的 `parent_call_id` 只引用同一 Session 中仍在途的 Core→该插件 Request；Core 从自身记录继承 actor、scope、trace、调用链及父截止时间，不采信插件自报管理员身份。无父 Request 的后台调用只有插件身份；父调用结束/取消后，不得继续使用其用户权限。跨插件转发是两段独立 Session 请求，Core 保存关联，不要求两段 CallID 相同。
+- 普通业务请求默认 **30s**，子请求 deadline 为父截止时间与自身操作截止时间的较早值。SDK 到本地截止时间先完成失败返回，再尽力发 Cancel；对端协作取消 context。取消、超时和断链都不表示撤销已发出的消息或 SQL，Core 不自动重试业务请求。Scheduler callback 使用独立 **15 分钟** job deadline，不受 30s 默认值截断。
+- 每 Session 每方向最多 **256 个在途业务 Request**；请求和事件的在途及排队 payload 合计最多 **16 MiB**，Core 全部 Session 的此类 payload 合计最多 **64 MiB**。任一准入预算不足立即返回 RESOURCE_EXHAUSTED，不等待普通业务槽位。Event Bus 另按每订阅者 **256 条且 4 MiB** 的较先到达限额执行 drop-newest，见 §3。这里是受管 payload 预算，不是对 Native 进程或 Core 总 RSS 的承诺。
+- 读帧、Response 配对、Cancel 和生命周期控制独立于 Handler 执行，不能因某个 Handler 阻塞而停止读取。Response/Cancel/控制使用有界优先通道，不占新业务 Request 的准入槽位，避免满队列时无法返回结果或取消。收发的独立协议缓冲仍受帧上限约束，不允许无限积压；优先通道仍保持同一调用的因果顺序：尚未写出的 Request 被取消则从队列撤出且不再发送；Request 完整写出后才可随后发送其 Cancel。若连有界控制/响应通道或阶段写入 deadline 都无法满足，关闭 Session，并以 UNAVAILABLE 结束未完成调用，不能等待业务 Handler 释放形成死锁。
+- 错误包含稳定 `code`、不含敏感信息的 `safe_message`、Core 关联的 `trace_id`。固定错误码和整数值以 WIRE-FORMAT 的 ErrorInfo 为准；未知码按 INTERNAL 暴露，原数字仅保留诊断。跨插件错误不返回 Secret、堆栈或宿主任意路径。
+
+### 1.3 媒体上传与租约
+
+- 普通 RPC 不内嵌大媒体；插件通过 Core 的分块上传 API 得到 `MediaRef`。Begin 声明总大小、MIME 和 SHA-256，Core 检查配额并签发不可预测 `upload_id`；Chunk 必须带当前期望 offset，按顺序追加，每块最多 **1 MiB**。重复、越界、错序的 offset 明确拒绝并终止该上传，不提供同 upload_id 的自动重传或断点续传。
+- Commit 核对实际字节数、声明大小、SHA-256 和 MIME 后才签发引用。MediaRef 绑定 owner Session、允许的消费方/目标范围、size、mime、sha256 和 expires_at；不能用任意本地路径代替。转给其他插件时由 Core 签发新的范围受限 token，不直接放宽原 token。
+- 内部首发限额：单对象 **100 MiB**；每 Session 最多 **4 个未完成上传**，其所有未回收的上传和引用对象合计最多 **256 MiB**；Core 临时媒体磁盘总预算 **2 GiB**。配额在接收字节前预留，释放时扣回；磁盘写入失败明确中止，不能产生可用 MediaRef。限额是实现常量，不增加 WebUI 调参。
+- 未完成上传自 Begin 起 **15 分钟**到期，分块请求不延长期限；已提交引用自 Commit 起 **15 分钟**到期。失败、取消、过期或 owner Session 失效时回收无消费者租约的临时对象；正在发送且已被 Adapter 接管的对象由有截止时间的消费租约保护，直到发送结束或操作 deadline 到达。租约仍计入磁盘预算，不能无限延长引用。
+- Core 不提供任意 HTTPS URL 下载代理。Native 插件可自行获取媒体再上传；Adapter 仅在其公布的平台能力和 URL 策略内使用平台支持的 URL 发送方式。若 Adapter 自己执行下载，必须明确允许的协议、重定向和目标范围，不能默认允许访问宿主私网。此约束不扩展为对 Native 插件网络访问的沙箱。
+
+### 1.4 入站媒体与读取
+
+- 入站图片/文件先使用 `IncomingMedia` 描述符：Core opaque token、声明 size/MIME、readability；Core 私下保存对应 Adapter 实例的 file_id。未知 MIME/大小为 absent，不能伪造已计算的 SHA256。首发不为每个入站媒体预先下载，也不把未取件对象当已提交 MediaRef。
+- SDK `media.Read(ctx, token, offset, length)` 返回 bytes、next_offset、eof，单次 length 为 1～1 MiB，offset 为非负字节偏移；offset 等于实际大小时返回空 bytes、原 offset、eof=true，大于实际大小时返回 INVALID_ARGUMENT，不产生空成功。错误返回明确 code。首次 Read 由 Core 内置 Adapter 使用受信平台文件 API 按需取件，写入 §1.3 的同一暂存区并校验实际大小/计算摘要后才返回内容；随后按 offset 读取。首次取件截止取调用者/父链与 15 分钟预算的较早者，不能绕过上游 deadline。
+- 同一入站对象由 Core 持有，向接收它的各 Handler Session 签独立的目标受限 token，缓存仅保存一份。token 自签发 15 分钟有效，发送/读取期间用有截止时间的租约保护；一个 Session 失效只撤销其授权，不能删除其他有效消费者仍使用的对象。取件前预留实际可接受的容量，计入 Core 2 GiB 总预算与每个消费 Session 256 MiB 引用预算；未知长度最多按单对象 100 MiB 接收，超限立即失败。
+- 超平台下载能力返回 UNSUPPORTED，超配额返回 RESOURCE_EXHAUSTED，事件仍保留不可读取的元数据。Token 仅映射可信 Adapter 已提供的文件标识，不接受用户指定的任意下载地址，不下发 Bot Token/宿主路径。
+- Segment 可用 `incoming_ref` 作为与 media_ref/https_url 互斥的来源；Send 重新验证目标授权，必要时按需取件为已校验 MediaRef，再执行发送计划。取件失败发生在平台发送前，不自动重试业务发送；共享对象到期且无租约后回收。
+
+## 2. 事件、命令、Rule、Hook 和传播
+
+### 2.1 分发与结果
+
+- 一个入站 Event 对应一条 Core 普通分发链，不同事件可并发。`Normalize → PreEvent → 命令/类型匹配与Core权限 → SDK Rule/Handler`；同类候选按 priority 升序，再按 plugin_id/route_id 字典序，顺序不依赖安装或启动时间。
+- 保留 Handler 的 `error` 和 `(message.Chain,error)` 两种签名。`c.StopPropagation()` 锁存本次调用的停止标记，SDK 统一返回 `HandlerOutcome{matched,propagation,chain?}`；没有 Stop 默认为 Continue。Context 返回后失效，不允许后台改变结果；显式 Stop 优先于业务错误默认继续。完整编码见 MESSAGE-MODEL。
+- 自定义 Go Rule 与 Handler 在同一 RPC 内执行，不另建 Rule RPC 框架。多个 Rule 默认 AND，显式 OR 使用 SDK 组合；False 返回 matched=false，error 标记本 Handler 失败，均不执行目标函数。普通事件的错误记录并继续；panic 由 SDK 在调用边界转 INTERNAL 并记录堆栈，不把失败返回为空成功。
+- Core 普通入站事件最多同时执行 64 条分发链，等待队列最多 256 条且 8 MiB，先达到任一限额即拒绝/丢弃并计数；这些 payload 也计入 Core 总预算。不同 Adapter 实例共用此限额，Handler 不能占住读帧循环。已经发生的外部效果不回滚、不自动重放；Telegram 游标语义见 MESSAGE-MODEL。Event Bus 使用独立的非持久队列规则，见 §1/§3。
+
+### 2.2 命令选择、参数与冲突
+
+1. `message.created` 的文本命令首发使用 `/` 前缀，路径 token 大小写敏感、按完整 token 匹配；不以字符串前缀把 `/rssx` 当 `/rss`。Telegram `/cmd@BotUsername` 仅接受当前实例用户名（用户名比较不区分大小写）。空白后的子命令按最长完整路径选择。
+2. 普通命令/别名优先于 Regex/Raw。跨插件同路径以 priority/plugin_id/route_id 稳定选出**一个**胜出路由，并在管理诊断中显示被遮蔽者；同插件重复 route ID 或规范化路径/别名属于注册错误。禁用的已注册命令仍占有其路径，不能使同名低优先级路由接管。
+3. 一旦识别命令路径，权限拒绝、禁用、Rule false/error 或参数错误都消费该命令，不退到短路径或 Regex/Raw。没有识别到任何普通命令时才处理 Regex，再处理 Raw；每类内部按固定顺序，可 Continue/Stop。其他 event_type 只进入对应事件路由。
+4. 参数只做分词与类型转换，不执行 shell 展开。空白分隔；单引号内容原样，双引号/未引号中的反斜杠仅转义下一字符；未闭合引号/尾部转义报 INVALID_ARGUMENT。string 保留解码文本；int 为有符号十进制 int64；float 为有限 float64（拒绝 NaN/Inf）；bool 只接受 true/false。显式空字符串不等于缺失。
+5. 注册描述包含每个参数 name/type/required/default，必需参数在可选参数前，default 只用于缺失位置。raw args 只能是最后一个 string 参数，与该尾部的再次分词互斥，保留最后一个已消费参数后的原始尾部，去掉尾部起始分隔空白；raw 为唯一参数时，从命令路径后的首个非分隔空白开始。多余参数、溢出或非法格式均失败；Go 函数类型与描述由生成器/显式适配器校验。
+6. Regex 采用 Go regexp 语法，由静态描述声明，在启动时编译；非法表达式拒绝注册，捕获结果传专用 match 字段，不推测普通命令参数。命令解析失败默认发该命令 usage 一次，描述可声明 silent 或自定义 usage；权限拒绝及系统故障仅保留管理日志，不自动向群组广播错误。
+
+### 2.3 权限与 Hook
+
+- User 表示具有可信 Actor 的普通用户；Admin 表示 Core 管理员列表中按 adapter_instance_id/external_user_id 绑定的机器人管理员。平台群管理员只形成 `chat_admin` Rule，不自动取得 Core 安装、配置或跨会话权限。没有 Actor 的 job/后台调用不能满足 User/Admin。
+- 命令策略以稳定 plugin_id/route_id 持久化，权限使用最近显式子项覆盖，否则继承父项；插件/父组/当前项任一 disabled 均拒绝，再与 Core 全局安全限制 AND。运行时修改在下一次派发检查时生效，不承诺撤销已开始的调用。
+- Hook 注册为独立 route kind，phase 仅 PreEvent/BeforeSend/AfterSend，沿用 priority 与稳定排序。PreEvent 只可改变业务 payload 或 Stop，Core 保留的 Actor、Target、来源与 trace 不可改；button.clicked 的 action_id/action_schema_version/value、scheduled 的 job_id/run_id 及平台原消息 ID 也属于不可修改的路由/来源字段，后续匹配使用 Core 保留的原绑定；Hook error 终止本次入站链并记录，不在失去预处理条件时继续。
+- 每次显式 Send 或自动返回非空 Chain 都执行 `BeforeSend → Adapter.Send → AfterSend`。BeforeSend 只修改 Chain 或拒绝，禁止修改 Target；变更后重新校验完整 Chain。BeforeSend 错误视为拒绝发送。AfterSend 只观察最终回执，错误记日志，不能改变已确认的发送事实。
+- 所有出站 Hook 及其派生的 Service 子调用都继承 Core 的 `send_forbidden` 执行标记；再次 Send 返回 FAILED_PRECONDITION。不能只拦截 Hook 本地函数而允许 A-Hook→B-Service→Send 绕过递归保护。
+
+## 3. 跨插件调用、动态 Router 与权限
+
+- v0.1 交付显式 Service Call 与非持久 Event Bus；通过 Core 动态调用其他插件的命令/事件 Router 保留为 v0.2，v0.1 只固定稳定 route ID。
+- Service 名为 `plugin_id/service_name`，描述包含输入/输出 schema_id/version、编码与调用规则。默认允许 Core 与本插件，其他插件必须位于发布者声明的 allowlist，或服务明确声明 public；public 仍仅表示已启用插件可调用，不赋予用户 Admin。目标须 Activated，权限/输入检查失败不运行函数。
+- JSON 服务只使用 UTF-8 JSON + 明确 schema/version，Protobuf 服务使用对应类型与二进制编码；不得把任意 JSON 冒充 Any。Core 检查已注册 schema 标识/版本、编码、大小与 JSON 语法，SDK 用生成类型/校验器验证业务字段；Schema 资源随包固定，不允许运行时访问网络 `$ref`。空响应也用声明的空对象/消息，不能把编解码失败吞成空结果。
+- 每一跳由 Core 关联可信 Actor、权限 scope、trace、祖先插件链和执行限制。插件发起 Request 的 parent_call_id 只能引用**同一 Session 中仍在途的 Core→该插件 Request**；Core 从此记录派生上下文，不采信插件自报角色。父请求完成/超时/取消会取消未完成子调用；无父调用的后台/主动 Service 只有插件身份，不能沿用已结束用户权限。
+- 同一调用链重复插件 ID 返回 CALL_CYCLE，最大插件链深 16，独立并发链互不影响。子调用截止取父 deadline 与自身操作预算的较早者；取消/中断不自动重试。read loop、response 与 admission 规则必须使 Handler 内 Send、A→B→C 及出站 Hook 能完成或明确失败，不能等待自己占据的槽位。
+- Event Bus 发布使用带 CallID 的 Core Publish RPC，只确认 Core 已处理发布请求，不确认订阅者执行业务；实际分发使用无业务回执 EVENT。发布者只能使用自己的 `plugin_id/event_name`，订阅者明确注册事件名及 schema/version；离线或满队列丢弃并统计，慢订阅者不阻塞其他插件。payload 不能携带可信 Actor 权限，广播处理发起的业务默认使用订阅插件自身身份。
+
+## 4. 生命周期、Config Reload、调度
+
+### 4.1 生命周期与就绪门
+
+- v0.1 的可选生命周期方法为 `OnStart(ctx)`、`OnReady(ctx)`、`OnStop(ctx)`；没有实现时无需空方法。配置的 OnLoad/Validate 是配置处理接口，不是额外的进程生命周期 Hook。`OnConfigChange`/在线热应用后置；配置应用与包更新均由新 Session 执行。
+- 新候选的标准顺序为：创建 Session → Hello/Bootstrap → 配置准备 → DB 迁移 → OnStart → REGISTER/Prepared → Core 原子提交唯一 ActiveGeneration → Activate → OnReady → Activated → 公开业务。首次启用、配置更新和包更新适用此提交路径。普通崩溃重启或 Core 恢复使用新 Session，复用原已 COMMITTED 的 Generation/Config/DB；准备验证通过后依据原提交记录发送 Activate，不新增 Generation 或重复提交 Journal。资源选择、同版本配置一致性检查和回退分支见 §5、§6、§12。
+- OnStart 可以使用本 Session 的候选配置/受管 DB，并初始化本地资源；通过 Core 的 Send、Service、公开 HTTP、Scheduler 业务仍关闭。OnReady 是提交后的有限本地准备检查，不能等待自己尚未开放的业务路由或 SDK ready gate，不能同步执行需要 Activated 的业务 RPC；错误明确返回 PLUGIN_NOT_READY，不隐式排队等激活。
+- SDK 完整写出 ACTIVATED 后才打开本地 ready gate；OnReady 创建的业务 goroutine 必须等待该 gate，同时响应 lifetime context。Core 在读循环中同步验证并应用 Activated 转换后再处理下一帧 REQUEST；两种传输共享该顺序，**不增加 ACTIVATED_ACK**。本地 gate 只表示允许发起业务 RPC，不等于 Core 已确认外部副作用，断链仍返回 UNAVAILABLE。
+- OnStart/OnReady 每次新的 Session 都会执行，插件必须按重启语义编写；不提供一次性通知、只运行一次的迁移或外部发送保证。版本化迁移是否需要运行由 §6 的迁移记录决定。
+
+### 4.2 阶段预算、停止与恢复
+
+| 阶段 | 内部首发预算 | 超时后的处理 |
+| --- | --- | --- |
+| Hello / HelloAck | 10s | 关闭未认证或未完成握手的 Session，无公开路由 |
+| 配置 OnLoad / defaults / typed decode / Validate | 60s | 候选失败，不覆盖 Active |
+| DB 迁移 | 15 分钟 | 取消并中止候选；按受管/自管边界恢复或要求人工处理 |
+| OnStart | 60s | 候选失败；已提交代次恢复失败则 Degraded |
+| OnReady | 30s | 已提交代次 Degraded，禁止新业务派发 |
+| 一次停用或整个 Core Shutdown | 总计 10s | 到总截止时间终止普通合作型进程树 |
+
+SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 context 传进去便假定用户函数会退出；阶段超时报告 SESSION_ERROR 并结束该进程运行。Core 对 Preparing 另设上述适用阶段预算之和的硬截止，迁移的 15 分钟不被 OnStart 的 60s 默认值截断。这些值是可测试的首发常量，不是已测性能基线或用户调参。
+
+- 停止从 t0 起冻结新入站派发、Scheduler tick 和该插件的新根业务调用；最多 **6s** 排空。已接纳 Request 的响应和合法子调用仍可在原 deadline 与停止 deadline 内完成，避免一冻结就破坏整个在途调用链。
+- 排空完成或 6s 到期后，Core Cancel 剩余请求并发送唯一 STOPPING，携带 `min(t0+10s, STOPPING发送时刻+4s)` 的绝对截止时间；Core 终止进程树的总截止仍为 `t0+10s`。SDK 取消 lifetime、使 Session 调用门禁失效并停止 HTTP 接单，再用独立的剩余停止 context 执行 OnStop、关闭 DB/连接并退出；OnStop 及其资源关闭合计最多 **4s**，不复用已经取消的 lifetime context。Core Shutdown 中各插件并行停止，共享同一个总截止时间，不能逐插件串行累加 10s。
+- 主 RPC EOF、协议不可恢复错误或 Core 消失时，SDK 立即使 Session 失效、停止新工作并取消 lifetime，按同一总停止预算退出；不把旧 Session 重新接回新 Core。Core 先撤销 Session 的所有路由/HTTP 映射，再处理恢复；在途业务 UNAVAILABLE，不重放。
+- 正常服务中的异常退出按已确认规则有限恢复：5 分钟窗口内第三次非正常退出自动禁用并保留诊断；前两次在确认旧进程退出后启动新 Session。用户主动停用、正常退出不自动重启；手动启用重置失败窗口。候选配置/升级失败按 §6 回退，不把坏候选当作普通崩溃无限重启；已提交代次的 OnReady 失败为 Degraded，不自动选择旧数据继续服务。
+
+### 4.3 Scheduler
+
+- Core 维护稳定 `plugin_id/job_id`、触发规则和当前运行状态；触发经 REQUEST/RESPONSE 执行 `scheduled` callback，不使用无响应的 Event Bus EVENT。job context 无用户 Actor、无默认 Admin，仅有明确 job scope。
+- 任务声明 interval 或 cron，两者互斥；cron 首发固定五字段（分、时、日、月、星期），timezone 为有效 IANA 名称，省略时 UTC。无效表达式在 REGISTER 时拒绝。interval 是至少 1s 的正时长，首个 tick 为激活时刻加间隔，按固定起点计算；睡眠或落后时跳过已错过 tick，只取下一未来触发。cron 的日与星期都受限时按 OR 匹配，其他字段按 AND；cron 求下一个真实时间点，夏令时不存在的本地时刻跳过，重复本地时刻对应的不同 UTC tick 可以分别触发。
+- **不同 job 默认并发，同一 job 上一轮未结束时跳过本轮**，不排队补跑。Core 或插件离线期间的 tick 不保存、不补执行；恢复后从未来的下一次触发开始。一个任务超时/失败不串行阻塞其他任务，失败有日志/计数而不自动重试有副作用的 callback。
+- job 的调用结果与实际执行结束分开：deadline 到达先返回 DEADLINE_EXCEEDED/Cancel，但 Scheduler 仍保留 running 槽与原调用键；SDK 等用户 callback 实际返回后才发唯一 Response。迟到 Response 只释放任务槽，不恢复业务成功；未收到结束响应时直到确认旧进程退出才释放。仅 RPC 断链不能证明 goroutine 已停止。下一轮只运行未来 tick，不补跑跳过项。
+
+## 5. 配置、Schema、i18、Secrets
+
+### 5.1 配置真源、缺失值与编辑
+
+- 每插件使用独立 JSON 对象，不加外层 `config`；`config` 只用于 `i18/*.json` 的翻译根节点。`<data_dir>/plugins/<id>/config.json` 是可编辑快照，运行值以 Core 状态库的 Active Generation 为准。直接编辑后执行 `alonabot plugin reload <id>` 才导入 Pending；`restart` 只重启已激活配置。已有状态库无法读取时必须报错，不能把编辑快照或空对象当成新的 Active。
+- 每包至多一个 Config 类型，以 `json` tag 为字段真源。v0.1 生成器支持 string、bool、整数、有限浮点数、struct、这些类型的 slice、`map[string]T` 与可空指针；不支持的自定义 JSON 编解码/递归类型在 `check` 时明确报错。Go 声明顺序决定结构字段顺序，map 的动态键不参与手工排序。`form` 承载 label/widget/options/min/max/default/required，required 显式声明必需字段；其他缺失字段按 Go 零值解码但不伪造持久化键。`description`、`secret:"true"`、`hidden:"true"` 独立表达对应属性。
+- 未知键默认保留；SDK 以完整原始 JSON 对象维护配置，只把已声明字段解码供插件使用，不能用 typed Config 重新 marshal 后覆盖整个文档。默认值只补**缺失键**，显式 `false`、`0`、`""`、空数组/对象均保留；完整 JSON 中的 `null` 是已提供的值，只允许可空类型且不触发默认值。缺少必需字段且没有默认值，或数字超出 Go 字段范围，返回 INVALID_ARGUMENT。
+- WebUI 的字段 PATCH 使用 JSON Merge Patch：对象递归合并、数组整体替换、未提交键保持、`null` 表示删除键；删除后仍须经过默认值与必需字段校验。需要把可空字段设为 JSON `null` 时使用完整 JSON 编辑/替换入口，避免把 Merge Patch 的删除误当成空值。提交携带所基于的 `base_generation`；旧代次提交返回 FAILED_PRECONDITION，不能覆盖另一项已完成的配置修改。`hidden` 字段不出现在表单中，PATCH 不能因未显示就删除它。
+
+### 5.2 配置回调与激活次序
+
+Config 可以实现以下可选接口；它们是配置数据处理接口，与 `OnStart/OnReady/OnStop` 生命周期钩子分开，不要求空实现：
+
+```go
+type ConfigLoader interface {
+    OnLoad(ctx context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)
+}
+type ConfigValidator interface {
+    Validate(ctx context.Context) error
+}
+```
+
+- `config_version` 是 manifest 中的配置格式版本，旧版本保存在 Core 代次元数据中，不塞入用户配置对象。OnLoad 在零值 `*Config` 上运行，输入完整旧 JSON，只根据 raw/fromVersion 转换为本版本 JSON；SDK 随后将结果解码到该 Config 实例，再执行 Validate。未实现 OnLoad 时仍保留原始键并执行默认值与校验；不能转换的结构必须明确失败。回调应为可重复的纯配置变换，不执行数据库、文件、网络或发信副作用。
+- 顺序固定为：Pending JSON 语法/对象检查 → 停止旧代次并准备候选资源 → HelloAck.bootstrap 下发候选运行 JSON → SDK OnLoad → 仅缺键默认值 → typed decode/Schema 校验 → Validate → DB 迁移 → OnStart → REGISTER 回传规范候选 JSON及注册描述 → Core 复核并形成含 secret 引用的不可变快照 → PREPARED → Active Generation 提交 → Activate/OnReady/Activated。不能在 OnLoad 之前用新 Schema 否定仍需迁移的旧配置。
+- Bootstrap 和 REGISTER 中的完整 JSON 只在所属插件的认证 IPC 内传输；持久化前由 Core 处理 secret，见 §5.3。PREPARED 的配置摘要由 Core 针对持久化快照计算，SDK 将其作为不透明确认值，不自行重建引用后计算摘要。提交前失败保留旧 Active；提交后失败按 §12 进入 Degraded，不把 OnReady 失败写成“任意阶段都能无损回退”。普通 restart/异常恢复只重验当前版本配置并复用原引用/代次；若 OnLoad 在相同格式版本上产生不同配置，返回 FAILED_PRECONDITION，不能借 restart 隐式修改 Active。
+
+### 5.3 Secret 与翻译
+
+- **配置快照存引用，Secret Store 存不可变 secret 版本**。持久化 secret 字段使用 `{"$secret_ref":"opaque-id"}`；v0.1 的 secret 字段为 string 或可空 string 指针。新值生成新引用，旧代次的引用不可原地改值；普通配置 API 只返回引用/是否已设置，表单据此显示掩码，不能把掩码当成保存或“保持不变”的协议值。省略字段保持原值，显式删除走 §5.1 的校验。
+- Core 在构造本 Session 的 bootstrap 前解析其有权访问的引用，SDK 接收正常运行值完成 OnLoad/Validate；REGISTER 回传后 Core 按新 Schema **以及此前保留的 secret 路径标记**重新抽取秘密值。旧 secret 字段从 Schema 移除但仍作为未知键保留时继续保密；只有迁移明确删除该键才移除对应路径标记。不能把其他插件的引用解析给当前插件，也不能把含明文的 bootstrap/REGISTER、DSN、配置差异写入日志或普通管理响应。
+- 首发 Secret Store 与 Core 状态一起持久化，使用仅运行账号可读写的文件权限/Windows ACL；这保护普通管理访问，不承诺隔离同账号 Native 代码。管理员明文查看须再次认证并审计。失败候选的 secret 仅在未被 Active、Pending 或保留代次引用时回收；保留旧程序/DB 却提前删旧密钥不算可恢复快照。
+- `i18/en-US.json` 采用 `config.<field>.label/description`，按当前 locale → en-US → Go tag/字段名回退。嵌套结构按 JSON 路径查找；options 只翻译显示文案，不改变存储值。缺少翻译不改变配置内容；`hidden` 不是权限控制，不另建字段排序或并发调参页面。
+
+PATCH 语义依据：[RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)。
+
+## 6. 数据库、更新、事务与回退
+
+### 6.1 数据所有权、连接与默认依赖
+
+- Core 元数据固定使用独立 `<data_dir>/state.sqlite`，记录安装/来源、代次、Journal、动态权限和 secret 引用关系，插件不复用其 DB 或凭证。Core 连接池固定为 1，采用 WAL、`synchronous=FULL`、`foreign_keys=ON`、`busy_timeout=5000`；每个物理连接都应用连接级设置，初始化核对实际生效值，失败停止启动。Core 的元数据事务只包含必要数据库操作，不在持锁事务中等待插件 RPC。状态库错误/损坏不能触发重建空库。
+- `gormdb.Open(ctx) (*gorm.DB, error)` 根据当前 Session 的数据库描述返回原生 GORM 对象；重复调用复用该 Session 连接池，SDK 停止时关闭。事务回调须使用传入的 tx，不能在事务里等待同一单连接池的另一条独立查询。受管 SQLite 也默认单连接、WAL、FULL、外键开启和 5s busy timeout；这不串行化整个插件的 goroutine/任务。PG 使用独立连接池和插件专属凭证。连接错误直接返回，不回退为空数据库，不自动切换后端。
+- SQLite 文件按 generation 分开：`plugins/<id>/generations/<g>/db.sqlite`。首次安装创建候选文件；配置 reload 和版本 update **一律创建独立 SQLite 候选副本**，不因“只改配置”而复用旧 DB，因为 OnStart 也能写入。普通 restart/异常恢复启动现有 Active，不创建新配置代次。框架外文件、任意外部数据库和出站副作用不纳入受管回退。
+- 默认实现组合为插件 `gorm.io/gorm` + `github.com/libtnb/sqlite`，底层 `modernc.org/sqlite`；Core 元数据与 Backup API 直接使用同一 modernc 驱动。PG 使用 `gorm.io/driver/postgres`。T-01 必须验证该组合的 CRUD/Tx/迁移、WAL Backup/恢复和五目标 `CGO_ENABLED=0` 构建，再在 `go.mod/go.sum` 固定实际通过的版本及 Go 工具链；这里不虚构 patch 号或声称已编译。若此组合未通过该门槛，重新处理具体驱动缺口，不新增通用驱动兼容框架。
+
+### 6.2 可选迁移接口
+
+迁移回调在插件 SDK 进程内执行；Core 管理启动阶段、候选目录和维护准入，不跨进程直接调用 Go 函数。以下两种接口互斥，两者都没有即不自动迁移：
+
+```go
+type SelfMigrator interface {
+    Migrate(ctx context.Context, db *gorm.DB) error
+}
+type Migration struct {
+    ID uint32
+    Up func(context.Context, *gorm.DB) error
+}
+type VersionedMigrator interface {
+    Migrations() []Migration
+}
+```
+
+- 自管 Migrate 在 SDK 准备阶段调用，由作者处理版本记录和重复启动的幂等性。辅助 Migrations 的 ID 必须非零、唯一、递增；发布后不能把旧 ID 改成另一项操作。SDK 只执行尚未完成的 ID，每一步 Up 与完成 ID 一起写入**当前插件 DB 的同一事务**，失败不记录成功；完成表固定为框架保留名 `_alonabot_migrations`，业务代码不得挪作他用。不得把迁移成功记录只写入 Core 状态库而假称两库原子提交。
+- 迁移门槛核对及本次启动原因允许的迁移均在 OnStart 之前完成，PG resume 只核对而不重跑回调，见 §6.3；同一插件的启停、配置、迁移、更新和恢复按 §12 的管理锁串行。事务内不支持的 SQL 直接失败，不能偷偷转为事务外执行；需要这种操作的作者选自管迁移并进入相应维护流程。Native 仍能自行调用 GORM/SQL，自动回退只覆盖契约允许的受管路径。
+
+### 6.3 SQLite 候选与 PG 维护
+
+- 受管 SQLite：下载/校验候选 → 冻结旧版新派发并排空 → 停止旧进程及合作型后台资源，确认连接释放 → 使用 SQLite Backup API 将旧 Active DB 备份到独立候选文件 → SDK 配置校验/迁移/OnStart → PREPARED → 同一 Core 事务更新 ActiveGeneration 与 COMMITTED → Activate/OnReady/Activated 后开放路由。副本、程序和不可变配置先持久化再提交引用；备份/空间/校验失败不提交。不能只拷贝运行中 WAL 数据库的主文件。
+- 提交前失败：保留旧 DB/程序/配置，重新启动旧版的**新 Session**。COMMITTED 后失败：新代次仍为权威，标记 Degraded 并关闭新派发；不自动切回已过时的旧数据。Core 崩溃恢复按 Journal 和 Active 指针判定，任意时刻只有一个代次可公开接单；完整时序见 §12。
+- PG：管理员预置每插件独立 role/schema，Core 仅使用和校验指定凭证及 schema，不常驻保存建角色的超级用户凭证。`search_path` 限于该插件 schema 与系统目录，不含其他插件可写 schema；schema/role 名必须满足服务器标识符限制，不能原样拼接可能过长或含 `-` 的插件 ID。跨后端搬迁由开发者处理，不能自动创建空库替代旧数据。
+- Bootstrap 的 database_descriptor 由 Core 下发 `activation_reason`（first_install/resume/reload/update/rollback）与 `manual_migration_approved`；后者只对经管理员显式维护许可的本次 Session/Generation/DB 为 true，不由插件请求自行设置。SDK 不需要在 Preparing 发起通用业务 RPC 获取许可。
+- PG 的 `activation_reason=resume` 只恢复原 ActiveGeneration 的同一程序、配置及 DB 描述，**不重新执行 Migrate 或 Up**。Core 必须有该代次已完成准备/迁移的提交记录；versioned 模式另查插件 DB 的 `_alonabot_migrations`，核对声明迁移已完成，缺项/不一致返回 FAILED_PRECONDITION 并保持停机等待维护。self 模式只核对已提交完成标记及程序/DB 身份，不假设能读取作者私有版本表；业务一致性检查仍可使 OnStart 失败。核对通过后正常 OnStart，不要求普通恢复声明 prepare_effects=none。其他 PG 候选才适用下条的首装、自动更新或维护分支。
+- 首次安装到专属、已确认为空的 PG schema，允许初始化迁移；失败保持未激活，记录待维护状态，不能自动删除已有对象。已有 PG/自管数据的更新，只有无待执行迁移、无自管 Migrate、声明配置兼容且 `prepare_effects=none` 时允许普通停机更新。其余返回 NEEDS_MANUAL_MIGRATION。`prepare_effects=none` 必须同时覆盖实际 DB 访问与 OnStart；SDK 先读取迁移账本判断待执行项，未取得维护许可不得执行 Up/Migrate。管理员显式进入维护、停止插件、完成并核对备份后才允许候选迁移；失败保留停机状态，按该插件恢复步骤处理，不自动重跑未知副作用。成功后重新核对迁移记录/配置并完成 Prepared/激活。Native 声明是可信代码契约，不是 Core 能静态证明任意 SQL 没有副作用。
+- 人工整机备份须在 Core 与插件停止后覆盖完整 data_dir 及外部 PG 备份；单独备份 state.sqlite 不包含插件业务数据。受管 SQLite 的在线副本仍使用 Backup API。不能删除 Active、恢复中 Journal 或保留回退代次引用的程序/DB/配置/secret；候选失败清理只作用于无引用资源。
+
+依据：[GORM 连接文档](https://gorm.io/docs/connecting_to_the_database.html)、[libtnb SQLite 驱动](https://github.com/libtnb/sqlite)、[modernc Backup API](https://pkg.go.dev/modernc.org/sqlite#Backup)、[SQLite Backup](https://sqlite.org/backup.html)、[SQLite PRAGMA](https://www.sqlite.org/pragma.html)、[PG schema](https://www.postgresql.org/docs/current/ddl-schemas.html)、[PG 标识符](https://www.postgresql.org/docs/current/sql-syntax-lexical.html)、[PG 事务外索引操作](https://www.postgresql.org/docs/current/sql-createindex.html)。这些主源支持选型与约束，AlonaBot 集成测试仍待实施。
+
+## 7. Native 信任、HTTP 与来源边界
+
+### 7.1 Native 进程与安装边界
+
+- v0.1 Native 插件是**可信本地代码**。独立进程用于生命周期和故障隔离，不提供跨平台文件/网络/exec 沙箱；Secret Store、loopback、精简环境和工作目录都不能阻止同 OS 用户权限的恶意插件。安装界面展示实际来源和该权限边界，签名只证明发布来源。
+- 子进程只接收本插件运行需要的配置/Secret、Session 凭证及必要环境，移除 Core 管理 token 和其他插件凭证。工作目录选在该插件目录；不得将工作目录描述为文件访问权限限制。
+- 所有插件 ID 必須通过安全 slug 校验并限制路径长度，市场 ID 使用 `alonabot_plugin_` 前缀；精确 manifest 字段及长度约束见 §9。本地 ID 可不带市场前缀但不可包含路径分隔符、`..` 或其他非法路径字符。跨插件 ID 冲突按 Core 持久化安装顺序 first-wins；同插件重复 Handler/HTTP route 报错。更新同时核对 ID、绑定来源和发布者身份，不能用相同 ID 接管已安装包。
+- 首发平台为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64。CGO_ENABLED=0 优先；CGO 插件由发布者提供真实可运行的平台二进制。Core 与插件通过版本化 RPC 协作，不要求相同 Go patch 版本；不使用不能卸载且跨平台受限的 Go `plugin.Open`。
+- 普通子进程树由 Windows Job Object（由 Core 独占持有、关闭时终止所管理进程）、Linux/macOS 进程组管理，必要的平台能力以真实测试为准。不能宣称可阻止恶意 detach；受管 SQLite 插件须关闭所有受管写入者，私自脱离管理的外部 DB 写入不属于自动回退保证。
+
+### 7.2 统一端口的 HTTP 代理
+
+- D-25 保持不变：只有 Core 公开 HTTP(S) Listener；插件作者注册 Go `http.Handler`，不选择、配置或向部署用户开放内部端口。SDK 仅在存在 HTTP route 时创建 `127.0.0.1:0` Listener，并向 REGISTER 报告实际 endpoint；无 HTTP route 不创建 Listener。SDK 持续持有该 Listener，不能释放端口后另起服务。
+- Core 只接受当前 Session 注册的 loopback endpoint，使用标准 `httputil.ReverseProxy` 和 `Rewrite` 构造转发；不接受外部请求指定代理目标。外部路径固定 `/plugins/{id}/...`，Core 完成 ID、method、route 和权限匹配后去掉 `/plugins/{id}` 前缀，插件收到以 `/` 开头的相对应用路径。Core 保留 Admin/API/healthz 和内部认证路径，不让插件覆盖。
+- Bootstrap 中的 HTTP 凭证与 Session/Generation 绑定。Core 删除外部可伪造的内部身份/认证头，并在 Rewrite 阶段注入受信凭证；SDK 在进入用户 Handler 前校验。Core 不向插件转发 admin Cookie、admin Authorization 或未验证的 Forwarded/X-Forwarded 身份信息；路由停止、Session 失效或代次变化时撤销代理映射，SDK 关闭 Listener。
+- 框架托管 HTTP 默认要求 Core 授权。公开 OAuth/Webhook 在描述中显式声明；插件必须验证对应 state、签名或 nonce，不能把“public”理解为免除业务来源验证。回调地址由已配置 Base URL 生成，不以任意 Host 或 Forwarded 请求头拼接；允许的 Host 与可信反代来源由 Core 全局设置验证。
+- HTTP 代理与普通命令/事件/Service 的 Protobuf RPC 分工不变；Native 插件自行建立的框架外 Listener 不享受统一入口和生命周期托管承诺。
+
+### 7.3 Admin 与插件页面的浏览器边界
+
+- 同一 scheme/host/port 下的不同路径仍然同 Origin。v0.1 使用 **一个 Core Listener、一个公开端口、两个全局主机名**：`admin_base_url` 提供 Admin UI/管理 API，`plugin_base_url` 提供插件页面和其 `/plugins/{id}/...` 路由。两者 scheme/有效端口相同、host 必须不同；主机名和 TLS/DNS 只在 Core 部署时设置一次，不新增每插件端口配置。
+- Admin 路由只在 admin host 提供；plugin host 上不能访问管理 API。Core 验证 Host，不把客户端提供的 Host 当信任依据；远程反代须保留受控 Host 并按全局可信反代配置处理转发信息。
+- 管理会话 Cookie 使用 host-only、HttpOnly、SameSite，并在 HTTPS 下使用 Secure 与 `__Host-` 前缀；管理状态变更验证 CSRF。Admin API 不向 plugin Origin 开启凭证 CORS，插件页面不获 admin 会话 token。公开安装/管理接口不能绕过管理员认证。
+- 私有插件页面通过 Core 在 admin host 验证现有管理员会话后签发一次性、**60s** 到期的兑换票据，绑定目标插件和授权会话；plugin host 的 Core 内部兑换端点消费后建立独立 Cookie，会话不超出原管理会话有效期。票据不转发给插件，不记日志，兑换后重定向清理 URL并使用 `Referrer-Policy: no-referrer`。插件请求仍受当前授权范围检查，不能用插件侧会话访问 Admin API。
+- 所有插件页面在 plugin host **共享一个浏览器信任域**；不宣称 Cookie Path、插件 ID 或 URL 前缀能隔离已打开的两个插件页面。插件之间需要独立浏览器 Origin 的能力后续再设计；当前边界只承诺插件页面与 Admin 隔离。
+- 未配置第二主机名时，插件 JSON API/Webhook 仍可在统一入口使用；Core 对这些响应施加 `nosniff` 和禁主动内容的 CSP，禁止插件设置管理 Cookie或绕过响应策略。HTML/JS/SVG 等主动页面请求返回明确的配置缺失错误，不假称仅靠路径已有 UI 隔离。配置 plugin_base_url 后由该 host 提供主动内容；来自插件的 Set-Cookie 不得带父域 Domain，不得占用 Core 保留 Cookie 名称。
+
+### 7.4 首次管理认证与恢复
+
+- 首发使用一个 Core 管理凭证，不引入多用户账号体系。`alonabot admin-token init` 是本机离线初始化：先取得同一 data_dir 的 core.lock，确认尚无管理凭证，生成 32-byte 随机 token，仅向调用者的本机终端显示一次，状态库只存 SHA256。`alonabot admin-token reset` 仅在 Core 停止并持锁后替换该凭证、递增认证代次，撤销旧管理会话、插件兑换票据与派生插件会话。命令不走公开 HTTP；无交互终端时明确失败，不能把凭证写入普通日志。首次初始化不满足时管理服务不开放。
+- 浏览器在 admin host 通过 POST `/api/auth/login` 提交 token，Core 验证 Origin/登录 CSRF 后恒时比较摘要，成功签发随机的、固定 **8h** 到期的管理会话。登出撤销该会话及其派生授权；会话检查同时校验认证代次。修改管理状态继续采用 §7.3 的 Cookie/CSRF 规则，明文查看 secret 使用当前 token 再认证。
+- 管理 CLI 仅使用用户显式配置的 Bearer token 访问 admin host，不从插件环境继承凭证；该认证不依赖浏览器 Cookie。非 loopback 的管理入口必须 HTTPS，可由已配置可信反代终止 TLS；纯本机 loopback 开发允许 HTTP。Core 管理 token 与聊天事件中的 Core Admin 列表是不同入口，平台角色不能兑换管理会话。
+
+## 8. Adapter、Target 与消息
+
+- 唯一正式 Adapter 为静态链接 Core 的 Telegram；允许多个已配置实例启停，不在首发加载第三方 Adapter 代码。同一 bot 账号只能有一个有效入站所有者，getMe 验证真实账号与实例配置；long polling 为默认，已有 webhook 冲突明确报错，不自行删除。
+- Target 为 adapter_id/adapter_instance_id/account_id/chat_id/thread_id?。默认目标仅来自入站真实事件；无默认目标且未指定 To 返回 NO_DEFAULT_TARGET，不能由回执 message ID 猜测凭证。
+- Core 为每个 plugin_id 持久化 `allowed_adapter_instances`，默认空集，由管理员通过既有插件权限配置修改；协议 required_capabilities 不等于发信许可。持有仍在途的可信平台事件调用链时，插件及其合法 Service 子调用可向 Core 保留的原始完整 Target 回复，无需额外实例许可。独立后台、scheduled 或不同 Target 的 Send 必须显式 To，且目标实例在该插件许可集合中；再检查实例启用、account 绑定和 Core 全局禁止。许可覆盖该实例显式 chat/thread 目标，不赋予 User/Admin 或其他实例权限；无许可返回 PERMISSION_DENIED，动态撤销在下一次 Send 准入时生效。
+- 上传、读取自己拥有的媒体不要求发信许可；Core 对真实事件签发的 IncomingMedia token 本身授予该 Session 的对象读取权。Read 只认有效 token/read 范围，Send 另行检查上述目标授权。Grant 不扩大对象、操作、Target 或有效期，只向当前已激活且满足原对象消费范围的 Session 签发受限 read token；入站对象及其派生对象的接收者还须与该事件有合法在途调用关联，或已获源实例许可；插件自己上传的对象可由 owner 显式委托当前 Activated 接收 Session 只读使用，Core 记录委托且保持原对象/有效期/Target 限制。上述关联由 Core 验证，接收者再次 Send 仍须通过自己的发信准入。
+- MessageChain 为一次逻辑 Send 的有序片段。平台可能调用多次 API，必须保留所有确认 ID。接受、部分成功、明确拒绝、结果未知与未尝试部分按 MESSAGE-MODEL 处理；RPC 可同时返回 SendResult 和 ErrorInfo，错误不丢失已经发生的结果。
+- 自动回复 Handler `(Chain,error)` 在成功、非空时发一次；主动型 Handler `error` 可显式多次 Send。自动型调用 Send 明确拒绝，StopPropagation 通过 Context/HandlerOutcome 表达。返回空 Chain 是无自动回复，显式 Send 空 Chain 是参数错误。
+- 整条 Chain 先验证并生成有序物理操作计划，再开始平台调用；无法表达的组合在首个副作用前返回 UNSUPPORTED。Reference、按钮、相册和文本不能静默丢弃/重排。Telegram 按钮使用 Core token 关联真实点击 Actor、当前权限、路由代次与目标，协议确认不等于业务成功。
+- 平台能力、事件类型化 payload、Telegram 发送/接收边界及回执详见 MESSAGE-MODEL。Wire 字段号/错误/控制流详见 WIRE-FORMAT；这些是实施契约，尚未生成并编译 SDK。
+
+## 9. 版本、SDK、打包 CLI 与构建
+
+### 9.1 Manifest 与构建产物
+
+所有 ID 最长 64 个 ASCII 字符。市场使用 `^alonabot_plugin_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`，同时应用长度上限；本地使用 `^[a-z][a-z0-9_-]{0,63}$`，缺市场前缀只警告。为保证五平台路径有效，本地 ID 还拒绝 Windows 保留设备名 con/prn/aux/nul/com1～com9/lpt1～lpt9；大小写以规范小写保存，不能靠大小写形成两个安装。
+
+- `plugin.yaml` 的 `manifest_version=1`；必填 `id`、SemVer `version`、`protocol_min_major/protocol_max_major`、`required_capabilities`、`os/arch`、相对可执行文件路径 `entrypoint`、`config_version`、`source`。包校验同时核对 Schema、注册描述、i18 与 build-info；SDK 是编译依赖，不要求 Core 和插件 Go patch 相同，运行兼容以协议和能力协商为准。
+- `migration_mode` 固定 `none/self/versioned`，与实际注册的迁移接口一致；`prepare_effects` 固定 `none/managed_db/external`，描述配置回调以外的迁移/OnStart 在准备期的副作用。`managed_db` 仅表示写所属 DB：SQLite 候选可隔离，PG 仍须 §6 的维护门槛；`external` 不具备自动回退承诺。缺失声明或不一致拒绝自动升级，不能把未知值解释成安全。它们是插件包静态声明，不是 WebUI 调参开关。
+- 生成器只扫描当前插件模块的受标记包级函数，实例方法显式注册；只允许一个 root 和至多一个 Config，重复 Handler/HTTP 路由失败。Schema/注册描述与 binary 来自同一构建，安装期检查能静态取得的 Schema/能力与自动注册项；实例方法显式注册的完整集合在本次启动 REGISTER 时校验，不要求静态推导任意 Go 控制流或重复手写整张路由表。最终路由在该 Session 固定，Schema/能力必须与包资源一致；生成器与 Go/protoc 具体版本在 T-01 实际验证后锁定。
+- `pack` 输出 `<id>-<version>-<os>-<arch>.tar.gz`，Windows 同格式。归档内包括 manifest、binary、生成的 Schema/描述文件、i18 静态资源和 build-info，不包含运行配置/DB/secret/签名私钥。只接受普通文件与目录，拒绝绝对路径、`..`、symlink/hardlink、设备文件、重复归档路径及跨平台大小写冲突；解压到新临时目录、验证后再移动为不可变包目录，不能覆盖正在使用的程序。
+
+### 9.2 来源、摘要与签名
+
+- GitHub Releases 作为首发分发入口，不建设中心商店。**归档外**的 `release.json` 包含发布者公钥标识、绑定仓库来源、插件 ID/版本、各 OS/arch 资产 URL、字节长度和整个归档的 SHA256；归档内 manifest 不保存自身归档摘要，避免自包含循环。若记录单文件摘要，其对象必须明确是 binary 或资源，不与归档摘要混用。
+- 发布者用 Ed25519 对 `release.json` 的**确切 UTF-8 文件字节**签名，输出外部 `release.json.sig`；验证先签名后解析，不能重新序列化 JSON 后验签。Core 使用已信任公钥校验签名，再验证下载长度/SHA256、平台和内层 manifest 一致性。实现使用 Go 标准库 `crypto/ed25519`，不引入通用 PKI 系统。
+- 首次来源信任由管理员明确接受并持久化仓库/发布者公钥指纹。市场自动更新要求匹配该绑定且签名有效；来源或公钥变化停止更新，重新信任是独立管理动作。只有离线本地包允许管理员首次明确接受无签名来源；不能在验签失败后自动降级为本地信任。已签名来源永远不能静默降级无签名，也不能仅凭同 ID 接管已有安装。
+- 下载/签名/平台/静态检查都在停止旧版前完成；损坏或不可信候选直接拒绝。签名证明发布来源，不证明 Native 程序行为安全。新版本包只是安装候选，仍须 §6/§12 的准备与唯一提交流程。
+
+### 9.3 CLI 的最小完整动作
+
+Core 首次管理凭证与离线恢复使用 §7.4 的 `alonabot admin-token init/reset`。开发者命令为 `alonabot plugin init|check|build|test|pack`；`build` 使用已锁定 Go Modules 与目标 OS/arch，源码安装显式选择本地构建，预编译安装不要求服务器编译。`check` 验证本节静态契约；`test` 在临时数据和离线测试会话检查加载/注册，不能调用生产凭证或宣称已测试平台发信。`pack` 可以生成待离线签名的外部发布清单，私钥不进入包。
+
+管理命令如下；修改均经 Core 管理接口，CLI 不直接写状态库，离线时只允许只读检查或明确的维护恢复流程：
+
+| 命令 | 明确语义 |
+| --- | --- |
+| `install` / `list` | 校验包、首次来源与 ID 后登记；仍处于已安装状态的同 ID 不覆盖。已卸载的保留记录只允许匹配原来源的显式重装并复用数据，来源不符拒绝。list 返回实际安装/激活状态。 |
+| `enable` / `disable` | 已有 Active 时启动该代次；首次安装尚无 Active 时走首个候选 Prepared/提交。disable 停止并保留安装及数据。 |
+| `restart` | 以当前 Active 程序/配置/DB 启动新 Session，不导入编辑中的 config.json。 |
+| `reload` | 把编辑快照导入 Pending，走配置校验及候选激活；SQLite 同样复制 DB。 |
+| `update` | 仅从绑定来源选择符合 pin 的候选版本并执行受控更新；不把 install 同 ID 当更新。 |
+| `uninstall` | 停止、解除运行注册并删除未引用程序包；默认保留数据、secret 与来源绑定，以便同来源重装。`--purge` 为显式删除框架受管数据/绑定的动作，须展示并确认准确对象；不擅自删除外部 PG schema 或任意插件自管目录。 |
+| `pin` | 固定允许的更新版本；解除固定须显式操作，不能被自动更新忽略。 |
+| `rollback` | 明确选择保留代次为输入，停机建立新的恢复候选 Generation；SQLite 从所选快照复制独立 DB，复用对应程序/配置/secret，走同一 Prepared/提交流程，不复用历史 Generation ID 或直接写保留快照；在执行前列明将舍弃该快照之后的本地写入，要求显式确认。无法恢复的 PG/外部数据返回 NEEDS_MANUAL_MIGRATION，外部已发送消息不会撤回。 |
+
+管理动作按插件串行；安装顺序、来源、pin、卸载保留与恢复目标均持久化，Core 重启不能靠无序目录遍历重新决定。安装器初始固定上限为压缩包 256 MiB、展开总量 1 GiB、10,000 个条目，超限在写入/激活前报 RESOURCE_EXHAUSTED；T-01 验证计数覆盖流式解压，不新增用户调参页面。发布验收至少覆盖当前五个目标平台，CGO 插件由发布者提供对应产物，不自动假称能跨编译。
+
+签名实现依据：[Go crypto/ed25519](https://pkg.go.dev/crypto/ed25519)。
+
+## 10. 实施验收与停止条件
+
+沿用 T-01～T-10，不新建平行实施计划；全部 V 编号和通过条件集中维护在 [TEST-MATRIX.md](TEST-MATRIX.md)。每个任务同时完成对应实现与最小验证，不要求先跑尚不存在的应用测试。
+
+详细步骤、拟目录、交付物和失败停止条件见 [PLAN.md](PLAN.md)。SDK/Proto 编译、数据库恢复、跨平台进程清理、Telegram 集成及真实性能在相应任务中取得证据；跨阶段用例的分工与最终闭合点按 TEST-MATRIX 执行。
+
+可开始实施的条件是关键行为已有确定契约与验收；发布条件是相关阻塞测试实际通过。测试失败必须修实现或回写有依据的规格修订，不用静默异常、伪默认值或新增兼容层掩盖问题。
+
+## 11. 契约交付与集成位置
+
+各任务的具体动作由 [PLAN.md](PLAN.md) 维护，本节将契约实现定位到对应工作包。历史决策及 P/Q 处置集中保存于 [adr/DECISIONS.md](adr/DECISIONS.md)。
+
+| 契约范围 | 实现与集成位置 |
+| --- | --- |
+| §1、WIRE 字段/控制帧/会话 | T-01 生成类型，T-02 实现双 IPC；媒体交 T-03 |
+| §2、MESSAGE 分发/权限/Hook | T-03 发送，T-04 命令/策略，T-05 事件链；间接 Hook 约束在 T-06 闭合 |
+| §3 服务/广播 | T-06 接入真实父调用链、编码校验与有界广播 |
+| §4 生命周期/调度 | T-02 生命周期原语，T-07 调度/HTTP，T-08 准备回调，T-09 正式更新集成 |
+| §5～§6 配置/Secret/数据库 | T-01 先验驱动路径，T-08 候选准备，T-09 提交与恢复 |
+| §7 信任/HTTP/认证 | T-02 进程，T-07 代理与授权检查，T-09 首次登录及管理入口 |
+| §8 Adapter/消息 | T-03 Telegram、Target、媒体、按钮与回执 |
+| §9 构建/分发/管理 CLI | T-01 契约，T-04 生成器，T-09 完整工具和来源检查 |
+| §12 状态/锁/恢复 | T-02 建立共同原语，T-08 准备资源，T-09 复用原语完成正式 Journal 和恢复 |
+| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-47 和五目标运行结果 |
+
+## 12. 跨层状态机与恢复不变量
+
+### 12.1 状态与可见性
+
+| Core 中的状态 | 允许的动作 | 业务可见性 |
+| --- | --- | --- |
+| Installed / Stopped | 下载、静态验证、管理元数据、等待启用 | 无插件路由 |
+| Starting / Handshaking | 新进程身份认证、Bootstrap | 无插件路由 |
+| Preparing | 配置准备、受管 DB 迁移、OnStart、完整注册验证 | 禁止业务 REQUEST 和公开 HTTP |
+| Prepared | 新候选资源/配置已验证持久化，或原提交代次已重验 | 路由不公开 |
+| Activating | 新候选提交 ActiveGeneration / COMMITTED，或采用原提交记录；Activate / OnReady | 仍不派发公开业务 |
+| Activated | 合法命令、事件、服务、调度、HTTP | 仅唯一 ActiveGeneration 接单 |
+| Draining | 最多 6s 完成已接纳调用及其合法子调用 | 拒绝新根调用和新调度 |
+| Stopping | Cancel 余留调用、STOPPING / OnStop、资源关闭 | 无新业务，至总 10s 截止退出 |
+| Degraded / Crashed | 记录故障、隔离路由、按既定恢复策略处理 | 不擅自用旧数据继续服务 |
+
+同一插件 ID 在任一时刻最多一个可接单 Generation。REGISTER 验证成功、Prepared、持久化提交、Activated 是不同节点，不能用一个含糊 Ready 替代；具体控制帧及失败回包见 WIRE-FORMAT，SDK 的本地 ready gate 见 §4。
+
+### 12.2 进程和变更所有权
+
+- Core 在启动 Adapter/插件或修改状态库之前取得 `<data_dir>/core.lock` 的 OS 独占锁，持有至退出。同一 data_dir 第二个 Core 明确拒绝启动，不依赖 SQLite 写事务锁充当运行实例锁；v0.1 的 data_dir 要求本机文件系统，不支持多主机共享数据目录运行。
+- 每插件的 install/enable/disable/reload/update/rollback/uninstall 操作串行化。一次候选操作记录预期旧 ActiveGeneration；提交事务再次校验该值，已变化则失败，不能让陈旧候选覆盖新状态。全局锁不串行化不同插件的普通 Handler。
+- 每插件使用跨代次稳定的 `<plugins>/<id>/runtime.lock`。SDK 在打开受管 DB 或运行任何初始化回调之前取得 OS 独占锁并持有至退出；锁句柄不传给无关子进程。Linux/macOS 使用 flock，Windows 使用 LockFileEx。锁文件不在解锁后删除或替换，防止并发进程锁住不同文件。
+- 停机复制受管 SQLite 时，Core 在旧进程树退出后暂持同一 runtime.lock，完成副本操作再释放，由随后唯一启动的 SDK 取得；Core 不能持锁等待候选 SDK 启动造成自锁。Core 崩溃恢复时，旧 SDK 按断链规则退出，新实例必须在取锁成功后才打开 DB。拿不到锁时保持明确失败/Degraded，不能通过固定 sleep、删除锁文件或猜测 PID 证明旧写入者已停止。
+- 锁和 Session 门禁约束遵循 SDK 的普通插件，不构成 Native 恶意代码沙箱；系统级信任边界见 §7。确认旧进程退出、资源关闭和唯一取锁是恢复前提，Journal 指针本身不停止仍活着的原生代码。
+
+### 12.3 提交、恢复与回退边界
+
+- 包、候选 Config、受管 DB 副本必须先持久化，Core 状态库再在同一事务提交 ActiveGeneration 与 COMMITTED。该事务仅控制 Core 元数据和已准备的引用，不是跨文件系统、PostgreSQL或外部 HTTP 的分布式事务。完整流程、迁移账本与备份要求以 §6 为唯一规范。
+- 未提交候选失败：关闭候选并确认退出，使用旧包、旧配置和旧受管 DB 启动旧版本的**新 Session**。不是恢复已失效的旧 Session，也不重放在途业务。
+- 事务已 COMMITTED：恢复时只启动新代次；OnStart/OnReady/资源打开失败则 Degraded并禁止接单，保留可恢复材料。不能直接把旧快照当最新业务数据，也不能承诺已发送消息、SQL或原生文件变更可自动撤销。
+- 配置更新与版本升级在承诺受管 SQLite 候选回退时都使用独立副本；“没有 DDL”不能据此复用旧代次可写 DB。无业务 DB 的插件无需复制。PostgreSQL、插件自管文件/SQL和框架外副作用按 §6 的人工维护边界处理，不纳入无损自动恢复承诺。
+
+### 12.4 实证门槛
+
+协议编译、五 OS/arch 的进程锁/树回收、Core 被 kill 后的 SDK 断链退出、配置 OnStart 写 DB 后失败、SQLite 提交各节点崩溃恢复、Bootstrap/REGISTER 超限、满准入下 Response/Cancel 可完成、HTTP 端口与两个 Origin、真实平台媒体和资源基准，都需要实施时的测试证据；本次规格修订不把它们记为已运行。对应场景合入现有 TEST-MATRIX，不另建平行验收体系。
