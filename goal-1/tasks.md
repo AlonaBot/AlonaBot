@@ -83,9 +83,19 @@
   - 剩余风险：平台相关的限制（文本或 caption 长度、markdown 方言、相册数量、按钮数量上限、mention 能否渲染）属于 T-03 的发送计划；value 是否符合 action Schema、media_ref 是否有效以及租约、Target 授权，都属于 Core 运行时检查。
   - 下一步：REVIEW-2。
 
-### [ ] REVIEW-2 集中检查（G1-04～G1-06）
+### [x] REVIEW-2 集中检查（G1-04～G1-06）
 - 检查清单同 REVIEW-1；另外核对校验函数是否只依赖 contracts，以及 fixture 能否重复生成。
 - 回写：
+  - 检查过程与结论（commit 853ea10 之上）：
+    1. 是否偏离 input.md：没有偏离；新增依赖只有已批准的 go.yaml.in/yaml/v3。
+    2. 依赖边界：`go list` 显示 validate 只 import contracts/pb、protobuf 和标准库；manifest 只 import yaml 和标准库；release 只 import contracts/manifest 和标准库，都符合 ARCHITECTURE（contracts 不 import 本 module 中 contracts 以外的包）。
+    3. fixture 可重复生成：`go test ./contracts/validate/ -update` 之后 `git status` 为空。
+    4. `go vet ./...`、`gofmt -l contracts`（为空）、`go test -race -count=1 ./...` 的 4 个包都通过；只剩 protocgen 中有意保留的 Fprintln 错误输出，没有其他残留。
+    5. 逐个检查行为：Envelope/Negotiate/manifest/release 的边界情况（空 YAML、重复 key、数字形式的 ID、JSON 尾随内容、大写的市场前缀）都按预期拒绝。**发现问题：** `validate.Chain` 为 entity 边界检查建立了 `map[int]bool`，包含文本里每一个字符的边界；用临时探针测试（已删除）测得 4 MiB 文本加 1 个 entity 时 TotalAlloc 增加 **296 MiB**，超过 Core 64 MiB 的 payload 总预算，恶意或有缺陷的插件可以借此放大 Core 内存。→ 登记 FIX-2。
+    6. 文档同步：ARCHITECTURE.md 中 contracts 的状态仍是「部分实现（proto 与生成）」，没有写上 validate/manifest/release → 放进 FIX-2。
+    7. 安全：release 先验签再解析、manifest 拒绝路径穿越、filename 拒绝路径，都已有测试；没有发现泄漏敏感信息的错误信息（错误只回显 ID 或路径本身，不涉及 secret）。
+  - 剩余风险：Chain 的内存问题修复前不能把它接入 Core 的发送路径（最早在 T-03 才会接入，不会影响 T-02）。
+  - 下一步：FIX-2（优先于 G1-07）。
 
 ### [ ] G1-07 SDK 最小公共类型与可编译示例
 - 依据：PLAN T-01 第 4 步；DESIGN §D/§J；CONTRACTS §4.1/§5.2/§6.2；plan.md 假设 3。
@@ -203,3 +213,9 @@
   - 验证证据（darwin/arm64，go1.27.1，本 task 的 commit）：`go generate ./... && go vet ./... && go build ./... && go test -race -count=1 ./contracts/` → ok；stage 之后再执行 `go generate ./...`，`git diff --stat` 为空。
   - 剩余风险：ServiceInvocation 的使用方（T-06 Broker）尚未实现，字段是否足够要到 T-06 才能验证。
   - 下一步：G1-04。
+
+### [ ] FIX-2 Chain 实体边界检查的内存放大，以及 contracts 文档状态（来自 REVIEW-2，排在 G1-07 之前）
+- 依据：CONTRACTS §1.2（Core 合计 64 MiB 的 payload 预算）；REVIEW-2 第 5、6 条。
+- 内容：`validate/chain.go` 中把每个字符边界的 map 改为按 entity 的偏移检查：先算出每个 rune 的 UTF-16 长度，只在需要的偏移上判断是否落在边界（例如用 `[]bool` 或排序后的偏移做一次线性扫描），保证分配量与文本长度同阶且常数很小，避免使用 `utf16.Encode` 为每个 rune 分配；在测试中加入内存回归断言（4 MiB 文本加 1 个 entity，`testing.AllocsPerRun` 或 MemStats 显示分配量明显低于 64 MiB，例如低于 16 MiB）。更新 ARCHITECTURE.md 中 contracts 行的状态（proto、生成、validate、manifest、release 已实现，SDK 相关仍是拟建）。
+- 完成条件：原有 43 个 Chain 用例仍然通过；新增的内存回归测试通过；修改前后各测一次大文本的分配量并记录到这里。
+- 回写：
