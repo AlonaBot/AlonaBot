@@ -186,11 +186,15 @@
   - 剩余风险：windows 的 LockFileEx 与只读 URI 打开只经过交叉 vet，**没有运行**；Core 在首次初始化中途崩溃时会留下一个没有 schema 的文件，下次启动会拒绝并要求管理员处理（为了不把截断损坏的文件误当成新库，有意这样设计）；V-36 的「同插件并发 enable/update」「Core 被 kill 而子进程仍在写」留待 G1-15/G1-19 与 T-09。
   - 下一步：G1-13（帧编解码与 TCP/stdio 传输）。
 
-### [ ] G1-13 帧编解码与 TCP/stdio 传输
+### [x] G1-13 帧编解码与 TCP/stdio 传输
 - 依据：PLAN T-02 第 3 步；CONTRACTS §1.1；WIRE §1；V-03。
 - 内容：`internal/wire`：完整读取长度前缀和载荷，先校验长度再分配缓冲（1～4,194,304 字节），零长度、超限、截断、无法解码都返回明确错误；每个连接只有一个串行 writer；TCP 用 `net.Listen("tcp4","127.0.0.1:0")` 并持有 Listener；stdio 传输（stdout 只传帧，出现非协议字节就让会话失败）。
 - 完成条件：同一份 fixture 在 TCP 和 stdio（用 `io.Pipe`/`os.Pipe` 模拟）上的往返结果一致；边界用例（0、4 MiB、4 MiB+1、截断、分多次 Read 才凑齐一帧）全部覆盖；并发写入的帧不交错（`-race`）。
 - 回写：
+  - 实际做了什么：`internal/wire/frame.go`：`MaxFrame=4<<20`；`ReadRaw` 先用 `io.ReadFull` 读满 4 字节前缀，**校验 1～MaxFrame 之后才分配缓冲**并读满载荷；流恰好在帧边界结束时返回 io.EOF，前缀或载荷中途结束返回 ErrTruncated，长度 0 返回 ErrEmptyFrame，超限返回 ErrFrameTooLarge；`ReadFrame` 解码失败返回 ErrDecode；`EncodeFrame` 在编码阶段拒绝空帧和超限帧（超限时不会写出任何字节）；`Writer` 先完整编码，再在锁内一次 Write，保证帧不交错。`internal/wire/transport.go`：`Conn`（唯一 reader：64 KiB 的 bufio，可在多个 goroutine 中安全调用的串行 writer，closer），`NewConn(r,w,closer)` 供 stdio 使用，`NewStreamConn` 供 TCP 使用，`ListenLoopback` 直接监听 `tcp4 127.0.0.1:0`，并核对确实是 loopback 且端口非零。stdout 混入日志时，日志字节会被当作长度前缀解析，读取失败（Envelope 的结构问题由 contracts/validate 继续拦截）。ARCHITECTURE 中 internal/wire 的状态已更新。
+  - V-03（T-02 分项）证据（darwin/arm64，go1.27.1，本 task 的 commit）：`go test -race -count=1 -v ./internal/wire/` 中 7 个测试（含 7 个子用例）全部 PASS：长度为 1 字节、恰好 4 MiB 的帧都能读出；0 → ErrEmptyFrame；**4 MiB+1 只提供前缀时就返回 ErrFrameTooLarge**（证明是在读取载荷之前拒绝的）；载荷截断和前缀截断都返回 ErrTruncated；空流返回 io.EOF；`iotest.OneByteReader` 逐字节读取时也能完整读出两帧；无法解码的载荷返回 ErrDecode；stdout 混入日志时读取失败；超限 Envelope 在编码时被拒绝，且写出 0 字节；**同一组 contracts golden 帧（4 个）分别经 TCP loopback 和 os.Pipe（stdio）往返，结果一致，重新编码后的字节也一致**；16 个 goroutine 各写 50 帧（总共 800 帧，载荷大小不同），读端每帧都能完整解码。变异检查：把 Writer 改为不加锁、分两次写前缀和载荷之后，测试报「读到损坏的帧（帧交错）」并失败；恢复后在 `-race -count=3` 下通过。archtest 通过（internal/wire 只 import contracts）。
+  - 剩余风险：认证、Session 状态、优先通道、写超时还没有实现（G1-14/G1-16）；没有测试 Windows 上 stdio 管道的实际行为（只验证了交叉编译）。
+  - 下一步：REVIEW-4。
 
 ### [ ] REVIEW-4 集中检查（G1-10～G1-13）
 - 检查清单同上；另外核对 T-01 停止条件、锁实现的平台 build tag，以及交叉编译是否仍然通过。
