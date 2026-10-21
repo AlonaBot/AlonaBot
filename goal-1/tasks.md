@@ -296,8 +296,12 @@
   - 剩余风险：只覆盖 GORM 自己的日志；插件自行打印的日志里有没有业务数据，属于可信插件作者的责任（CONTRACTS §7.1）。
   - 下一步：G1-10（架构 import 守卫）。
 
-### [ ] FIX-4 状态库相对路径 data_dir 无法重开，以及 x/sys 文档（来自 REVIEW-4，排在 G1-14 之前）
+### [x] FIX-4 状态库相对路径 data_dir 无法重开，以及 x/sys 文档（来自 REVIEW-4，排在 G1-14 之前）
 - 依据：REVIEW-4 第 5、7 条；CONTRACTS §6.1（状态库错误不得变成不可启动的误报）。
 - 内容：`state.Open` 一开始就把 dataDir 转成绝对路径（`filepath.Abs`），后续的锁文件、状态库与预检 URI 都使用这个绝对路径；新增测试：用 `t.Chdir` 切换到临时目录，以相对路径连续 Open/Close 两次都成功，且第二次读到第一次写入的记录。修正 docs/development.md 中关于 x/sys 的描述。
 - 完成条件：新测试在修复前失败、修复后通过（先用旧实现验证一次失败）；全仓库 `go test -race ./...` 通过；Windows 交叉 vet 通过。
 - 回写：
+  - 实际做了什么：`state.Open` 一开始就执行 `dataDir, err := filepath.Abs(dataDir)`，之后的锁文件、state.sqlite 与预检 URI 都基于这个绝对路径；preflight 的注释写明路径必须已经是绝对路径，「前面补 /」只用于 Windows 盘符。新增 `TestRelativeDataDirReopens`：用 `t.Chdir(t.TempDir())` 切换目录后，以相对路径 `reldata` 连续 Open/Close 两次，第一次写入的安装记录在第二次能读到。docs/development.md 改为「x/sys v0.49.0 为直接依赖，用于 internal/oslock」。
+  - 验证证据（darwin/arm64，go1.27.1，本 task 的 commit）：**修复前**新测试失败：「第 2 次以相对路径打开失败: 状态库无法读取（可能已损坏，不会重建）: unable to open database file (14)」，与 REVIEW-4 的实测一致；**修复后**通过。全仓库 `go test -race -count=1 ./...` 的 11 个包都 ok；`GOOS=windows go vet ./internal/...` 通过；`gofmt -l internal` 为空。
+  - 剩余风险：Windows 的绝对路径转成 URI（`file:///C:/...`）只经过 vet，没有实际运行。
+  - 下一步：G1-14（Session 调用引擎）。

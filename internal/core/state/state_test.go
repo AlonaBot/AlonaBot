@@ -239,3 +239,25 @@ func TestLockPluginSerializesSamePlugin(t *testing.T) {
 	ub()
 	ua()
 }
+
+// 回归（REVIEW-4）：相对路径的 data_dir 必须能反复打开，且读到之前写入的数据。
+func TestRelativeDataDirReopens(t *testing.T) {
+	ctx := context.Background()
+	t.Chdir(t.TempDir())
+	for i := 0; i < 2; i++ {
+		s, err := Open(ctx, "reldata")
+		if err != nil {
+			t.Fatalf("第 %d 次以相对路径打开失败: %v", i+1, err)
+		}
+		if i == 0 {
+			if err := s.AddInstall(ctx, Install{PluginID: "demo", Source: "local", Entrypoint: "x", BuildDigest: []byte{1}}); err != nil {
+				t.Fatal(err)
+			}
+		} else if _, err := s.GetInstall(ctx, "demo"); err != nil {
+			t.Fatalf("重新打开后读不到之前的记录: %v", err)
+		}
+		if err := s.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

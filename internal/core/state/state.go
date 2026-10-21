@@ -47,6 +47,11 @@ type Store struct {
 // Open 先取得 core.lock，再打开（首次启动时创建）state.sqlite 并核对连接设置与 schema。
 // 已存在但无法读取、不是 SQLite 或缺少 schema 的状态库一律报错，不会重建成空库。
 func Open(ctx context.Context, dataDir string) (*Store, error) {
+	// 统一为绝对路径：预检使用的 file URI 只能表达绝对路径。
+	dataDir, err := filepath.Abs(dataDir)
+	if err != nil {
+		return nil, fmt.Errorf("解析 data_dir 失败: %w", err)
+	}
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("创建 data_dir 失败: %w", err)
 	}
@@ -134,9 +139,9 @@ func (s *Store) verify(ctx context.Context, fresh bool) error {
 
 // preflight 以只读、无 PRAGMA 的方式打开已有状态库，确认含 schema_version 表且完整性检查通过。
 func preflight(ctx context.Context, path string) error {
-	p := filepath.ToSlash(path)
+	p := filepath.ToSlash(path) // path 已由 Open 转为绝对路径
 	if !strings.HasPrefix(p, "/") {
-		p = "/" + p // Windows 盘符路径需写成 file:///C:/...
+		p = "/" + p // Windows 盘符路径 C:/... 需写成 file:///C:/...
 	}
 	uri := (&url.URL{Scheme: "file", Path: p, RawQuery: "mode=ro"}).String()
 	db, err := sql.Open("sqlite", uri)
