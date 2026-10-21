@@ -8,8 +8,8 @@
 | 工具 | 版本与来源 | 备注 |
 | --- | --- | --- |
 | Go | 1.27.1（asdf，`~/.tool-versions`） | `go.mod` 的 go 指令固定为该版本 |
-| protoc | 36.0（libprotoc） | 生成入口会核对版本，由 T-01 落地 |
-| protoc-gen-go | 由 `go.mod` 的 `tool` 指令固定 | 通过 `go tool` 调用，不全局安装；T-01 落地 |
+| protoc | 36.0（`protoc --version` 输出 `libprotoc 36.0`；生成文件头记为 v7.36.0） | 版本不符时 `contracts/internal/protocgen` 拒绝生成 |
+| protoc-gen-go | v1.36.12（`go.mod` 的 `tool` 指令，与 `google.golang.org/protobuf` 同版本） | 通过 `go tool -n protoc-gen-go` 定位，不全局安装 |
 | Docker | 用于临时 PostgreSQL | 只在 PG 测试中使用 |
 | Node（前端） | 26.5.1（asdf） | web/admin 从 T-08 开始使用 |
 
@@ -18,13 +18,13 @@
 ## 日常命令（仓库根目录）
 
 ```sh
-go generate ./...   # 重新生成 contracts（T-01 建立入口）
+go generate ./...   # 重新生成 contracts/pb（入口：contracts/doc.go → contracts/internal/protocgen）
 go test ./...
 go build ./...
 go vet ./...
 ```
 
-在 T-01 落地之前，`./...` 下还没有包；`go build` 只会给出 "matched no packages" 警告，`go vet/test` 会以非零退出。
+生成器会先删除 `contracts/pb/` 下的 `*.pb.go` 再重新生成；新增 `.proto` 放在 `contracts/proto/alonabot/v1/`，`go_package` 统一为 `github.com/AlonaBot/alonabot/contracts/pb/alonabotv1`。
 
 ## 外部测试环境
 
@@ -45,7 +45,7 @@ go vet ./...
 | 规则 | 依据 | 检查 | 状态 |
 | --- | --- | --- | --- |
 | 模块 import 方向符合架构表 | [ARCHITECTURE.md](../ARCHITECTURE.md) | 架构守卫测试（goal-1 任务） | 已定义，未实现 |
-| 生成代码可重复生成，结果稳定 | PLAN T-01 | 执行 `go generate ./...` 后检查 `git diff --exit-code` | 已定义，未实现 |
+| 生成代码可重复生成，结果稳定 | PLAN T-01 | 执行 `go generate ./...` 后检查 `git diff --exit-code` | 已观测（G1-01，手动执行） |
 | Envelope 字段号/枚举值与 WIRE-FORMAT 一致 | spec/WIRE-FORMAT.md | contracts 字段号 fixture 测试 | 已定义，未实现 |
 | 五目标平台 `CGO_ENABLED=0` 可构建 | CONTRACTS §6.1/§7.1 | 交叉编译矩阵命令 | 已定义，未实现 |
 | V-01～V-47 证据 | spec/TEST-MATRIX.md | 按编号记录测试位置、命令、平台和结果 | 全部未运行 |

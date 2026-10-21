@@ -7,15 +7,19 @@
 
 ## T-01 契约、工具链与构建基线
 
-### [ ] G1-01 工具链锁定与生成入口
+### [x] G1-01 工具链锁定与生成入口
 - 依据：PLAN T-01 第 1 步；plan.md 假设 1、9。
 - 内容：通过 `go get -tool google.golang.org/protobuf/cmd/protoc-gen-go` 固定生成器版本；新增 `contracts/generate.go`（`//go:generate`，核对 protoc 版本为 36.0）和一个占位 `.proto`（`contracts/proto/alonabot/v1/version.proto`，声明协议版本常量所在的包），能够生成并编译。把实际版本写入 docs/development.md 的环境表。
 - 完成条件：`go generate ./...` 连续执行两次后 `git status` 不出现变化；`go build ./... && go vet ./...` 退出码为 0；protoc 版本不一致时生成明确失败（临时修改期望版本手工验证一次，再改回）。
 - 回写：
+  - 实际做了什么：`go get -tool` 固定 protoc-gen-go v1.36.12（go.mod 中 `tool` 指令 + `require google.golang.org/protobuf v1.36.12`）；新增 `contracts/doc.go`（`//go:generate go run ./internal/protocgen`）和 `contracts/internal/protocgen/main.go`（核对 `protoc --version` == `libprotoc 36.0` → 删除旧的 `pb/*.pb.go` → 用 `go tool -n protoc-gen-go` 得到的插件路径执行 protoc，参数为 `--go_opt=module=github.com/AlonaBot/alonabot/contracts`）。**与原计划不同：** 没有写占位的 version.proto，而是直接用 WIRE §2 已完整定义的 `errors.proto`（ErrorCode 0～17、ErrorInfo 1～3）验证整条流水线，避免留下无用文件；G1-02 不再需要写 errors.proto，只需补它的字段号测试。docs/development.md 的环境表已写入实际版本。
+  - 验证证据（darwin/arm64，go1.27.1，libprotoc 36.0，本 task 的 commit）：`go generate ./...` 生成 `contracts/pb/alonabotv1/errors.pb.go`；`go mod tidy && go build ./... && go vet ./...` 退出码为 0；`git add -A` 后再连续执行两次 `go generate ./...`，`git diff --stat` 为空（结果稳定）；把期望版本临时改成 99.0 后，`go generate ./...` 以 exit 1 失败，报错为「protoc 版本为 "libprotoc 36.0"，需要 "libprotoc 99.0"」，且原有生成文件保留，随后已还原。
+  - 剩余风险：版本核对用的是完整字符串比较，protoc 升级时必须同时修改 `wantProtoc` 并重新生成；生成器依赖 PATH 中的 protoc（homebrew），没有纳入 go.mod。目前还没有 go test（没有测试文件），自动化的生成稳定性检查在 REVIEW/CI 阶段处理。
+  - 下一步：G1-02，写 envelope.proto 和 control.proto，并为 errors/envelope/control 编写字段号断言测试。
 
 ### [ ] G1-02 Envelope、ErrorInfo 与控制帧 proto
 - 依据：WIRE-FORMAT §1～§3、CONTRACTS §1.1。
-- 内容：`envelope.proto`（Envelope 字段 1～16；InitiatorSide、FrameKind（含 SESSION_ERROR=13）、PayloadEncoding；字段 6/7 使用 optional）、`errors.proto`（ErrorCode 1～17、ErrorInfo 1～3）、`control.proto`（Hello、HelloAck、Bootstrap（含 DatabaseDescriptor/ActivationReason、PhaseLimits、HttpProxyAuth）、Register、HttpListener、Prepared、Activate、Activated、Cancel、Stopping、Heartbeat、SessionError（failed_phase/failed_kind）、Capability）。payload 和 error 不放进 oneof。
+- 内容：`envelope.proto`（Envelope 字段 1～16；InitiatorSide、FrameKind（含 SESSION_ERROR=13）、PayloadEncoding；字段 6/7 使用 optional）；`errors.proto` 已在 G1-01 完成，这里只补字段号测试；`control.proto`（Hello、HelloAck、Bootstrap（含 DatabaseDescriptor/ActivationReason、PhaseLimits、HttpProxyAuth）、Register、HttpListener、Prepared、Activate、Activated、Cancel、Stopping、Heartbeat、SessionError（failed_phase/failed_kind）、Capability）。payload 和 error 不放进 oneof。
 - 完成条件：用 protoreflect 编写测试，逐项断言 Envelope 字段号、每个枚举的数值和名称前缀与 WIRE 表一致，optional 字段具备 presence；生成稳定。
 - 回写：
 
