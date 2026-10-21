@@ -97,11 +97,15 @@
   - 剩余风险：Chain 的内存问题修复前不能把它接入 Core 的发送路径（最早在 T-03 才会接入，不会影响 T-02）。
   - 下一步：FIX-2（优先于 G1-07）。
 
-### [ ] G1-07 SDK 最小公共类型与可编译示例
+### [x] G1-07 SDK 最小公共类型与可编译示例
 - 依据：PLAN T-01 第 4 步；DESIGN §D/§J；CONTRACTS §4.1/§5.2/§6.2；plan.md 假设 3。
 - 内容：`sdk`：`plugin.Base`（或 `sdk.Base`，以 DESIGN 示例的可编译形式为准）、`Context`（StopPropagation、Send 签名）、两类 Handler 的类型约束、CommandRegistry/Group 的显式注册、OnStart/OnReady/OnStop 接口、HTTP Handler 注册、调度声明；`sdk/message`（Chain、Text 等构造函数）；`sdk/config`（ConfigLoader/ConfigValidator）；`sdk/gormdb`（SelfMigrator、Migration、VersionedMigrator 接口，以及互斥检查函数）。`examples/plugins/minimal` 包含一个根插件、两类 Handler、StopPropagation、Config 的 OnLoad/Validate、HTTP Handler 和一个调度声明。
 - 完成条件：`go build ./...` 通过；有测试证明同时实现 Migrate 和 Migrations 会被互斥检查拒绝；没有运行行为的入口返回明确错误，不 panic。
 - 回写：
+  - 实际做了什么：引入已批准的 `gorm.io/gorm v1.31.2`（它带进来的间接依赖为 jinzhu/inflection、jinzhu/now、golang.org/x/text）。新增 `sdk/plugin`（Base 加 `Root` 接口；Root 带一个未导出方法，只有嵌入 Base 的类型才能满足）、`sdk/message`（Segment 接口、`Chain []Segment`、`Text()`、`Chain.Proto()`）、`sdk/config`（Provider、Loader.OnLoad、Validator，签名与 CONTRACTS §5.2 一致）、`sdk/gormdb`（SelfMigrator、Migration、VersionedMigrator、`CheckMigrators`：两种接口互斥，ID 非零、递增，Up 不能为空）、`sdk`（Error/ErrNotImplemented；Starter/Readier/Stopper；Command/HTTP/ScheduleProvider；Context 提供 Context()、锁存式 StopPropagation、`Send(chain, To(...))`；`Run`；`Collect` 收集注册项并用反射检查两种 Handler 签名——第一个参数必须是 *Context，参数类型只能是 string/int64/float64/bool，返回 error 或 (message.Chain, error)——同时检查同一插件内的重复项：命令路径、HTTP 的 method+path、job_id，以及 HTTP 路径必须以 / 开头、公开路由必须声明验证方式、间隔至少 1s、cron 必须五字段；多个错误合并在一次报告里）。`examples/plugins/minimal`：根插件 Demo，含一个自动回复 Handler（带 StopPropagation）、一个主动发送 Handler（参数为 string+int64）、实现 OnLoad/Validate 的 Config、HTTP GET /status、Every 定时任务，以及 OnStart。Run/Send 在 T-02 前返回 UNSUPPORTED。ARCHITECTURE.md 中 sdk/examples 的状态已同步。
+  - 验证证据（darwin/arm64，go1.27.1，本 task 的 commit）：`go build ./... && go vet ./... && go test -race -count=1 ./...` 中 7 个包都 ok。`sdk` 测试：3 种合法签名、11 种非法签名、10 类非法注册、错误合并、组路径、StopPropagation 锁存、Send 返回 UNSUPPORTED、Chain.Proto。`gormdb` 测试：4 种合法情况，加上 5 种非法情况（**同时实现 Migrate 与 Migrations 时被拒绝**、ID 为 0、重复、递减、缺少 Up）。示例测试：Collect 识别出 2 个命令、1 个 HTTP 路由、1 个任务，Handler 模式与参数类型正确，Config 实现了 Loader 与 Validator，OnLoad 迁移结果正确；`sdk.Run` 返回 UNSUPPORTED。`go run ./examples/plugins/minimal` 输出「ERROR_CODE_UNSUPPORTED: SDK 运行时尚未实现」，exit 1，没有 panic。`gofmt -l` 为空。
+  - 剩余风险：Collect 只是 T-01 的组合证明，没有生成 RouteDescriptor/route_id，也没有覆盖 aliases、Regex/Raw、可选参数、Rule、事件 Handler；这些属于 T-04（生成器与注册索引）。`Send` 的返回类型暂时直接使用 `*pb.SendResult`，T-03 可能改为 SDK 自己的类型。Config 通过 `Config() any` 声明，T-08 可能调整。
+  - 下一步：G1-08。
 
 ### [ ] G1-08 SQLite/GORM 组合验证
 - 依据：PLAN T-01 第 5 步；CONTRACTS §6.1/§6.2；V-26、V-39（T-01 分项）。
