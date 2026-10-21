@@ -210,6 +210,7 @@ type Session struct {
 	outBytes int64
 	inBytes  int64
 	err      error
+	changed  chan struct{} // 在途调用数变化时关闭并替换
 
 	late, unknownCancel atomic.Int64
 	closeOnce           sync.Once
@@ -248,6 +249,7 @@ func New(conn *Conn, opt Options) *Session {
 		done:    make(chan struct{}),
 		pending: map[uint64]*outCall{},
 		inbound: map[uint64]*inCall{},
+		changed: make(chan struct{}),
 	}
 	return s
 }
@@ -447,18 +449,21 @@ func errorOf(r Response) error {
 
 // abandon 在本地先结束调用，再按写出状态撤回请求或随后发送 Cancel。
 func (s *Session) abandon(c *outCall, code pb.ErrorCode, reason pb.CancelReason, msg string) (Response, error) {
-	r := Response{Err: &pb.ErrorInfo{Code: code, SafeMessage: msg}}
-	if !s.complete(c, r) {
-		// 结果已经先一步到达。
-		r = <-c.result
-		return r, errorOf(r)
+	if s.complete(c, Response{Err: &pb.ErrorInfo{Code: code, SafeMessage: msg}}) {
+		s.withdrawOrCancel(c, reason)
 	}
-	<-c.result
+	r := <-c.result // 本地结束的结果，或先一步到达的真实结果
+	return r, errorOf(r)
+}
+
+// withdrawOrCancel 在调用已于本地结束后处理线上状态：尚未写出则撤回（永不上线），
+// 正在写出则写完后再发 Cancel，已写出则立即发 Cancel（Cancel 不会越过自己的 Request）。
+func (s *Session) withdrawOrCancel(c *outCall, reason pb.CancelReason) {
 	c.mu.Lock()
 	sendCancel := false
 	switch c.state {
 	case queued:
-		c.state = withdrawn // 写循环会跳过它，请求从未上线
+		c.state = withdrawn
 	case writing:
 		c.cancelLater = true
 	case written:
@@ -468,7 +473,54 @@ func (s *Session) abandon(c *outCall, code pb.ErrorCode, reason pb.CancelReason,
 	if sendCancel {
 		s.sendCancel(c.id, reason)
 	}
-	return r, &CallError{Info: r.Err}
+}
+
+// CancelOutbound 结束本端所有在途请求（停止时 drain 到期后使用）：调用者得到 CANCELLED，对端按写出状态收到 Cancel。
+func (s *Session) CancelOutbound(reason pb.CancelReason) {
+	s.mu.Lock()
+	calls := make([]*outCall, 0, len(s.pending))
+	for _, c := range s.pending {
+		calls = append(calls, c)
+	}
+	s.mu.Unlock()
+	for _, c := range calls {
+		if s.complete(c, Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_CANCELLED, SafeMessage: "插件正在停止"}}) {
+			s.withdrawOrCancel(c, reason)
+		}
+	}
+}
+
+// Inflight 返回在途的本端请求数与对端请求数。
+func (s *Session) Inflight() (outbound, inbound int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.pending), len(s.inbound)
+}
+
+// WaitIdle 等待两个方向都没有在途调用；ctx 结束时返回其错误，Session 关闭时返回 nil。
+func (s *Session) WaitIdle(ctx context.Context) error {
+	for {
+		s.mu.Lock()
+		if len(s.pending) == 0 && len(s.inbound) == 0 {
+			s.mu.Unlock()
+			return nil
+		}
+		ch := s.changed
+		s.mu.Unlock()
+		select {
+		case <-ch:
+		case <-s.done:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+// notifyChange 唤醒 WaitIdle；调用方必须持有 s.mu。
+func (s *Session) notifyChange() {
+	close(s.changed)
+	s.changed = make(chan struct{})
 }
 
 func (s *Session) sendCancel(id uint64, reason pb.CancelReason) {
@@ -489,6 +541,7 @@ func (s *Session) complete(c *outCall, r Response) bool {
 	}
 	delete(s.pending, c.id)
 	s.outBytes -= c.bytes
+	s.notifyChange()
 	s.mu.Unlock()
 	s.opt.Global.release(c.bytes)
 	c.cancel()
@@ -620,7 +673,9 @@ func (s *Session) onRequest(env *pb.Envelope) error {
 	id := env.GetCallId()
 	n := int64(len(env.GetPayload()))
 	deadline := time.UnixMilli(env.GetDeadlineUnixMs())
-	in := &Inbound{CallID: id, Target: env.GetTarget(), Payload: payloadOf(env), TraceID: env.GetTraceId(), Deadline: deadline}
+	// ParentCallID 先填入帧中声明的值，供 Admit 判断；父调用是否真在途由下面的查找校验。
+	in := &Inbound{CallID: id, Target: env.GetTarget(), Payload: payloadOf(env), TraceID: env.GetTraceId(), Deadline: deadline,
+		ParentCallID: env.GetParentCallId()}
 
 	s.mu.Lock()
 	if id <= s.lastIn {
@@ -671,6 +726,7 @@ func (s *Session) serve(ctx context.Context, cancel context.CancelFunc, in *Inbo
 	s.mu.Lock()
 	delete(s.inbound, in.CallID)
 	s.inBytes -= n
+	s.notifyChange()
 	s.mu.Unlock()
 	s.opt.Global.release(n)
 	env := s.envelope(pb.FrameKind_FRAME_KIND_RESPONSE)

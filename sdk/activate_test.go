@@ -22,7 +22,7 @@ func (r *readyRoot) OnReady(ctx context.Context) error { return r.onReady(ctx) }
 func activateAsync(conn *wire.Conn, a *pb.HelloAck, root plugin.Root) <-chan error {
 	errc := make(chan error, 1)
 	go func() {
-		s, err := activate(conn, testLaunch, a, root)
+		s, _, err := activate(conn, testLaunch, a, root)
 		if s != nil {
 			defer s.Close()
 		}
@@ -113,5 +113,134 @@ func TestActivateWrongGenerationClosesSession(t *testing.T) {
 	core.send(pb.FrameKind_FRAME_KIND_ACTIVATE, &pb.Activate{GenerationId: "other", OnReadyDeadlineUnixMs: time.Now().Add(time.Second).UnixMilli()}, nil)
 	if err := <-errc; err == nil {
 		t.Fatal("代次不符的 ACTIVATE 应使激活失败")
+	}
+}
+
+type stopRoot struct {
+	plugin.Base
+	onStop func(context.Context) error
+}
+
+func (r *stopRoot) OnStop(ctx context.Context) error { return r.onStop(ctx) }
+
+// activated 让 SDK 完成激活，返回假 Core、Session 与 activation。
+func activatedSDK(t *testing.T, root plugin.Root) (*fakeCore, *wire.Session, *activation) {
+	t.Helper()
+	core, conn := newFakeCore(t)
+	type res struct {
+		s   *wire.Session
+		a   *activation
+		err error
+	}
+	out := make(chan res, 1)
+	go func() { s, a, err := activate(conn, testLaunch, ack(1000), root); out <- res{s, a, err} }()
+	core.send(pb.FrameKind_FRAME_KIND_ACTIVATE, &pb.Activate{GenerationId: "g1", OnReadyDeadlineUnixMs: time.Now().Add(time.Second).UnixMilli()}, nil)
+	core.recv() // ACTIVATED
+	r := <-out
+	if r.err != nil {
+		t.Fatal(r.err)
+	}
+	return core, r.s, r.a
+}
+
+// STOPPING：关闭 ready gate、取消 lifetime，用独立 context 按 STOPPING 截止执行 OnStop，然后正常返回。
+func TestStoppingRunsOnStopWithIndependentContext(t *testing.T) {
+	type seen struct {
+		alreadyDone bool
+		deadline    time.Time
+	}
+	got := make(chan seen, 1)
+	release := make(chan struct{})
+	core, sess, a := activatedSDK(t, &stopRoot{onStop: func(ctx context.Context) error {
+		d, _ := ctx.Deadline()
+		got <- seen{ctx.Err() != nil, d}
+		<-release
+		return nil
+	}})
+	served := make(chan error, 1)
+	go func() { served <- serve(sess, a) }()
+
+	stopAt := time.Now().Add(2 * time.Second)
+	core.send(pb.FrameKind_FRAME_KIND_STOPPING, &pb.Stopping{DeadlineUnixMs: stopAt.UnixMilli(), Reason: pb.StopReason_STOP_REASON_DISABLE}, nil)
+	s := <-got
+	if s.alreadyDone {
+		t.Fatal("OnStop 不得复用已取消的 lifetime context")
+	}
+	if s.deadline.Sub(stopAt).Abs() > time.Millisecond {
+		t.Fatalf("OnStop 截止应为 STOPPING 截止 %v，实际 %v", stopAt, s.deadline)
+	}
+	if a.lifetime.Err() == nil {
+		t.Fatal("STOPPING 后 lifetime 应已取消")
+	}
+	// STOPPING 之后到达的业务请求被拒绝。
+	_ = core.conn.WriteFrame(coreRequest(9))
+	resp, err := core.conn.ReadFrame()
+	if err != nil || resp.GetError().GetCode() != pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION {
+		t.Fatalf("停止中的请求应被拒绝: %v %v", resp, err)
+	}
+	close(release)
+	if err := <-served; err != nil {
+		t.Fatalf("收到 STOPPING 后应正常返回: %v", err)
+	}
+}
+
+// OnStop 不响应 ctx：watchdog 在 STOPPING 截止放弃等待，serve 照常返回。
+func TestStoppingOnStopHangs(t *testing.T) {
+	block := make(chan struct{})
+	defer close(block)
+	core, sess, a := activatedSDK(t, &stopRoot{onStop: func(context.Context) error { <-block; return nil }})
+	served := make(chan error, 1)
+	go func() { served <- serve(sess, a) }()
+	start := time.Now()
+	core.send(pb.FrameKind_FRAME_KIND_STOPPING, &pb.Stopping{DeadlineUnixMs: time.Now().Add(150 * time.Millisecond).UnixMilli()}, nil)
+	select {
+	case err := <-served:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("OnStop 挂起时 serve 应在截止后返回")
+	}
+	if el := time.Since(start); el > time.Second {
+		t.Fatalf("返回耗时 %v，远超 150ms 截止", el)
+	}
+}
+
+// 断链（未收到 STOPPING）：立即停止新工作，执行 OnStop 后返回错误，不重连。
+func TestEOFRunsOnStopAndReturnsError(t *testing.T) {
+	stopped := make(chan struct{})
+	core, sess, a := activatedSDK(t, &stopRoot{onStop: func(context.Context) error { close(stopped); return nil }})
+	served := make(chan error, 1)
+	go func() { served <- serve(sess, a) }()
+	_ = core.conn.Close()
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("断链后应执行 OnStop")
+	}
+	if err := <-served; err == nil {
+		t.Fatal("断链应返回错误")
+	}
+	if a.lifetime.Err() == nil {
+		t.Fatal("断链后 lifetime 应已取消")
+	}
+}
+
+func TestDuplicateStoppingIsProtocolError(t *testing.T) {
+	core, sess, a := activatedSDK(t, &stopRoot{onStop: func(context.Context) error { time.Sleep(200 * time.Millisecond); return nil }})
+	served := make(chan error, 1)
+	go func() { served <- serve(sess, a) }()
+	st := &pb.Stopping{DeadlineUnixMs: time.Now().Add(time.Second).UnixMilli()}
+	core.send(pb.FrameKind_FRAME_KIND_STOPPING, st, nil)
+	core.send(pb.FrameKind_FRAME_KIND_STOPPING, st, nil)
+	<-served
+	if sess.Err() == nil {
+		t.Fatal("重复 STOPPING 应关闭 Session")
+	}
+}
+
+func TestOnStopBudgetMatchesContract(t *testing.T) {
+	if onStopBudget != 4*time.Second || handshakeTimeout != 10*time.Second {
+		t.Fatalf("SDK 预算应为 OnStop 4s、握手 10s：%v %v", onStopBudget, handshakeTimeout)
 	}
 }

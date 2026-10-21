@@ -21,10 +21,13 @@ const (
 	StateActivating State = iota // 已提交（或复用已提交记录），等待 ACTIVATED；不派发业务
 	StateActivated               // 唯一可以接单的状态
 	StateDegraded                // 提交后失败：新代次仍是权威，不自动回到旧数据
+	StateDraining                // 停止中：拒绝新根调用，已接纳调用的合法子调用仍可完成
+	StateStopping                // 已发送 STOPPING，等待进程退出
+	StateStopped                 // 进程已退出
 )
 
 func (s State) String() string {
-	return [...]string{"Activating", "Activated", "Degraded"}[s]
+	return [...]string{"Activating", "Activated", "Degraded", "Draining", "Stopping", "Stopped"}[s]
 }
 
 // ActivateOptions 配置一次激活。
@@ -70,11 +73,18 @@ func (in *Instance) degrade(err error) {
 }
 
 // admit 是读循环中的同步门禁：Activated 之前（Preparing/Prepared/Activating）拒绝一切业务 REQUEST。
-func (in *Instance) admit(*wire.Inbound) *pb.ErrorInfo {
-	if in.State() != StateActivated {
-		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "插件尚未激活，拒绝业务请求"}
+// Draining 时只放行引用 Core 在途请求的子调用（parent_call_id），让已接纳的调用链能够完成。
+func (in *Instance) admit(req *wire.Inbound) *pb.ErrorInfo {
+	switch in.State() {
+	case StateActivated:
+		return nil
+	case StateDraining:
+		if req.ParentCallID != 0 {
+			return nil
+		}
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "插件正在停止，拒绝新的根调用"}
 	}
-	return nil
+	return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "插件尚未激活，拒绝业务请求"}
 }
 
 // control 在读循环中同步处理控制帧：ACTIVATED 在这里生效，因此紧随其后的 REQUEST 一定看到 Activated。

@@ -101,13 +101,11 @@ func Run(root plugin.Root) error {
 	if _, err := prepare(conn, l, ack, root, reg); err != nil {
 		return err
 	}
-	sess, err := activate(conn, l, ack, root)
+	sess, a, err := activate(conn, l, ack, root)
 	if err != nil {
 		return err
 	}
-	// 服务直到 Session 结束；STOPPING/OnStop 与断链退出语义见 G1-18。
-	<-sess.Done()
-	return sess.Err()
+	return serve(sess, a) // 收到 STOPPING 正常返回；断链时执行 OnStop 后返回错误，随后进程退出
 }
 
 // Registration 是从根插件收集到的静态注册项。

@@ -27,6 +27,13 @@ type activation struct {
 	started  atomic.Bool   // 已收到 ACTIVATE
 	failOnce sync.Once
 	failErr  chan error
+
+	// lifetime 在 STOPPING、断链或进程停止时取消；后台工作应监听它。
+	lifetime     context.Context
+	stopLifetime context.CancelFunc
+	stopping     atomic.Bool // 已收到 STOPPING
+	shutdownOnce sync.Once
+	finished     chan struct{} // OnStop 结束（或超时）、Session 关闭后关闭
 }
 
 // admit 是读循环中的同步门禁：ready gate 打开之前拒绝 Core 的业务请求。
@@ -56,6 +63,14 @@ func (a *activation) control(env *pb.Envelope) error {
 			return fmt.Errorf("ACTIVATE 的代次 %q 与 Bootstrap 不符", m.GetGenerationId())
 		}
 		go a.runOnReady(m)
+		return nil
+	case *pb.Stopping:
+		if a.stopping.Swap(true) {
+			return errors.New("重复的 STOPPING")
+		}
+		// 在读循环中同步关闭 ready gate：此后到达的业务请求一律被拒绝。
+		a.ready.Store(false)
+		go a.shutdown(time.UnixMilli(m.GetDeadlineUnixMs()))
 		return nil
 	case *pb.Heartbeat:
 		return nil
@@ -117,6 +132,59 @@ func (a *activation) reportFailure(code pb.ErrorCode, safe string, cause error) 
 	}
 }
 
+// onStopBudget 是断链（未收到 STOPPING）时留给 OnStop 与资源关闭的时间（CONTRACTS §4.2）。
+var onStopBudget = 4 * time.Second
+
+// shutdown 取消 lifetime、关闭 ready gate，然后用独立 context 在 deadline 前执行 OnStop（不复用已取消的
+// lifetime）；用户函数不响应 ctx 时 watchdog 到期即放弃等待。最后关闭 Session。只执行一次。
+func (a *activation) shutdown(deadline time.Time) {
+	a.shutdownOnce.Do(func() {
+		a.ready.Store(false)
+		a.stopLifetime()
+		if s, ok := a.root.(Stopper); ok {
+			ctx, cancel := context.WithDeadline(context.Background(), deadline)
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				defer func() {
+					if p := recover(); p != nil {
+						fmt.Fprintf(os.Stderr, "OnStop panic: %v\n", p)
+					}
+				}()
+				if err := s.OnStop(ctx); err != nil {
+					fmt.Fprintf(os.Stderr, "OnStop 失败: %v\n", err)
+				}
+			}()
+			timer := time.NewTimer(time.Until(deadline))
+			select {
+			case <-done:
+			case <-timer.C:
+				fmt.Fprintln(os.Stderr, "OnStop 超过停止截止时间，放弃等待")
+			}
+			timer.Stop()
+			cancel()
+		}
+		_ = a.sess.Close()
+		close(a.finished)
+	})
+}
+
+// serve 在激活之后等待停止：收到 STOPPING 时按其截止执行 OnStop 后正常返回；
+// 断链或 Core 消失时立即停止新工作，在 onStopBudget 内执行 OnStop 后返回错误（不重连）。
+func serve(sess *wire.Session, a *activation) error {
+	select {
+	case <-a.finished:
+		return nil
+	case <-sess.Done():
+	}
+	if a.stopping.Load() {
+		<-a.finished
+		return nil
+	}
+	a.shutdown(time.Now().Add(onStopBudget))
+	return fmt.Errorf("与 Core 的连接已断开: %w", sess.Err())
+}
+
 // businessHandler 处理 ready 之后的 Core 请求。
 // shortcut: B1 尚无消息分发（T-03/T-04 接入），一律回 UNSUPPORTED。
 func businessHandler(context.Context, *wire.Inbound) wire.Response {
@@ -124,9 +192,10 @@ func businessHandler(context.Context, *wire.Inbound) wire.Response {
 }
 
 // activate 在 PREPARED 之后启动 Session，等待 ACTIVATE、执行 OnReady 并写出 ACTIVATED。
-// 返回时 ready gate 已打开；失败时已向 Core 报告并关闭 Session。
-func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root) (*wire.Session, error) {
-	a := &activation{l: l, ack: ack, root: root, readyCh: make(chan struct{}), failErr: make(chan error, 1)}
+// 返回时 ready gate 已打开；失败时已向 Core 报告并关闭 Session。之后用 serve 等待停止。
+func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root) (*wire.Session, *activation, error) {
+	a := &activation{l: l, ack: ack, root: root, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
+	a.lifetime, a.stopLifetime = context.WithCancel(context.Background())
 	a.sess = wire.New(conn, wire.Options{
 		Local: pb.InitiatorSide_INITIATOR_SIDE_PLUGIN, SessionID: ack.GetSessionId(), ProtocolMinor: ack.GetChosenMinor(),
 		SourcePluginID: l.pluginID, Handler: businessHandler, Admit: a.admit, Control: a.control,
@@ -134,15 +203,17 @@ func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root) (*w
 	a.sess.Start() // a.sess 赋值之后再启动，回调中使用的指针一定有效
 	select {
 	case <-a.readyCh:
-		return a.sess, nil
+		return a.sess, a, nil
 	case err := <-a.failErr:
-		return nil, err
+		a.stopLifetime()
+		return nil, nil, err
 	case <-a.sess.Done():
+		a.stopLifetime()
 		select {
 		case err := <-a.failErr:
-			return nil, err
+			return nil, nil, err
 		default:
 		}
-		return nil, fmt.Errorf("激活前 Session 关闭: %w", a.sess.Err())
+		return nil, nil, fmt.Errorf("激活前 Session 关闭: %w", a.sess.Err())
 	}
 }

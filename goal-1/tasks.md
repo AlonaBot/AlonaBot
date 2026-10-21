@@ -270,11 +270,16 @@
   - 剩余风险：Degraded 只记录在内存中（Instance 状态），没有持久化，Core 重启后需要依据状态库与进程情况重新判断（T-09 恢复编排）；STOPPING/OnStop/断链退出与崩溃计数在 G1-18；SDK 业务分发未实现。
   - 下一步：G1-18（停止、阶段超时与有限恢复）。
 
-### [ ] G1-18 停止、阶段超时与有限恢复
+### [x] G1-18 停止、阶段超时与有限恢复
 - 依据：PLAN T-02 第 7 步；CONTRACTS §4.2；V-06、V-21（分项）。
 - 内容：停用时冻结新的根调用，最多排空 6s（父链内合法的子调用仍可完成）→ Cancel 剩余调用 → 发送 STOPPING，deadline 为 `min(t0+10s, 发送时刻+4s)` → SDK 用独立 context 执行 OnStop → 到 t0+10s 时终止进程树；Core Shutdown 并行停止所有插件，共享同一个截止时间；EOF 时旧 Session 立即失效，SDK 收到 EOF 后退出；5 分钟内第三次异常退出时自动禁用，正常退出不重启，手动启用会重置失败窗口；用户函数不响应 context 时由 watchdog 结束进程。
 - 完成条件：测试（注入缩短的时间常量，另有测试核对生产常量等于契约数值）覆盖：drain 期间子调用完成、STOPPING deadline 公式、OnStop 挂起时进程在总截止时间被杀、多个插件并行停止的总耗时不超过一份预算、崩溃计数与自动禁用、正常退出不重启。
 - 回写：
+  - 实际做了什么：**internal/wire**：抽出 `withdrawOrCancel`（abandon 复用）；新增 `CancelOutbound(reason)`（外部结束全部本端在途请求：调用者得到 CANCELLED，对端按写出状态收到 Cancel 或请求被撤回）、`Inflight()`、`WaitIdle(ctx)`（在途数变化时关闭并替换 changed 通道来通知，不轮询）。**修复**：`Admit` 原来在父调用查找之前执行，看到的 `Inbound.ParentCallID` 恒为 0，Draining 时无法放行合法子调用；改为先填入帧中声明的 parent_call_id，有效性仍由随后的查找校验。**internal/core/host**：新增 Draining/Stopping/Stopped 状态，Draining 时 admit 只放行带 parent 的子调用，新根调用回 UNAVAILABLE；`Instance.Stop(t0, reason, tree, StopTiming)`：冻结 → `WaitIdle` 最多 Drain → `CancelOutbound` → 发送唯一 STOPPING，截止为 `min(t0+Total, 发送时刻+OnStopAt)` → 等待 `tree.Exited()`，到 t0+Total 时 `KillTree()`，并且**以 Exited 确认退出**（不用 sleep）→ 关闭 Session → Stopped；`StopAll` 让所有实例用同一个 t0 并行停止；`RestartPolicy`（窗口 5 分钟、限 3 次、正常退出返回 DecisionNone、窗口内第 3 次异常退出返回 DecisionDisable、`Reset` 用于手动启用，窗口滑动，不同插件之间隔离；失败窗口只在内存中，禁用由调用方经 state.SetEnabled 持久化）；`DefaultStopTiming` = 6s/10s/4s。**sdk**：activation 增加 lifetime 上下文；收到 STOPPING 时在读循环中同步关闭 ready gate，之后 `shutdown(STOPPING 截止)`：取消 lifetime → 在**全新的** context（期限即 STOPPING 截止）中执行 OnStop，watchdog 到期即放弃等待（panic/错误只写 stderr）→ 关闭 Session；重复的 STOPPING 视为协议错误；`serve`：收到 STOPPING 后正常返回；**断链/EOF** 时在 `onStopBudget`=4s 内执行 OnStop，然后返回错误（不重连）；`Run` 改为 `activate` + `serve`，返回即意味着进程退出（用户函数挂起不会阻止退出）。
+  - V-06 / V-21（T-02 分项）证据（darwin/arm64，go1.27.1，本 task 的 commit）：host 新增 6 个测试、sdk 新增 5 个测试，全部 PASS（时间常量注入为 Drain 200ms/Total 600ms/OnStop 300ms）：**排空期间父链内的子调用（parent=在途请求）完成，新根调用被拒绝（UNAVAILABLE）**，在途调用正常完成后提前结束排空（Drained=true），无需强杀；**STOPPING 截止 = min(t0+Total, 发送时刻+OnStop)**，两个分支都有覆盖（排空完成时取 发送时刻+300ms，排空超时、Total=300ms 时取 t0+Total，误差 ≤1ms）；排空超时后对端收到在途请求的 CANCEL，调用者得到 CANCELLED；**插件不退出时在 t0+Total（600ms，实测略多于 600ms）KillTree**；**3 个插件并行停止的总耗时不超过一份 Total（另加 300ms 余量）**；重启策略：正常退出不重启，前两次异常退出重启，5 分钟内第三次异常退出时禁用，超出窗口的失败不计入，Reset 后重新计数，插件之间互不影响；生产常量等于 6s/10s/4s 与 5 分钟内 3 次；SDK：OnStop 的 ctx 一开始未取消，截止等于 STOPPING 截止，lifetime 已取消，STOPPING 之后的请求被拒绝（FAILED_PRECONDITION），之后 serve 正常返回；OnStop 挂起时在截止（150ms）附近返回；**断链后执行 OnStop，serve 返回错误，lifetime 已取消**；重复 STOPPING 会关闭 Session；SDK 预算为 OnStop 4s、握手 10s。变异检查：(1) 把 StopAll 改为串行后耗时 1.80s，超过 600ms 预算，测试失败；(2) STOPPING 截止不再受 t0+Total 约束时，截止落在 t0+Total 之后，测试失败；恢复后通过。`go test -race -count=3 ./internal/core/host/ ./sdk/ ./internal/wire/` ok，全仓库通过，三平台 vet 通过。
+  - **过程中的失误（已纠正）：** 写 stop_test 时第一次误用了**主仓库路径**（`alonabot/internal/core/host/stop_test.go.tmp`，不在 worktree 中），发现后立即删除该文件及其产生的空目录，主仓库 `git status` 恢复原状（仍只有一个原本就存在的未跟踪 `.claude/`，我没有动它），之后改在 worktree 路径下写入。
+  - 剩余风险：失败窗口与 Degraded 只在内存中，Core 重启后不保留（T-09 恢复编排需要考虑）；异常/正常退出的判定（abnormal）由调用方依据「是否已发 STOPPING、退出码」给出，G1-19 在装配中实现；真实进程上的 STOPPING→退出、强杀与 runtime.lock 释放在 G1-19 验证。
+  - 下一步：G1-19（cmd/alonabot 装配与真实进程验收切片）。
 
 ### [ ] G1-19 cmd/alonabot 装配与真实进程验收切片
 - 依据：PLAN T-02 第 8 步与「对照现有验收」。
