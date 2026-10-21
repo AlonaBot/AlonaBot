@@ -328,7 +328,15 @@
 ## 终审（全部 task 完成后）
 
 - 对照 input.md 与 plan.md §1 检查完成定义；最大范围复查（代码质量、并发、安全、错误处理、测试覆盖、交叉编译、文档、回滚方案）；汇总所有阻塞项与「未运行」项；在本节写出结论。
-- 结论：
+- 结论（2026-10-21，goal-1 分支，终审时的 HEAD 为 9c9f753 之上的本次提交）：**goal-1（B1 = T-01 + T-02）完成，没有阻塞项。**
+  - **对照 input.md**：按要求先用 init-project 初始化（main 分支 5f9e903），再用 goal-mode 持续推进；只做 B1；依赖只使用已批准清单（直接依赖 7 项）；PG 使用临时容器、用完即删；Git 只在 goal-1 分支（worktree `.worktrees/goal-1`）上逐 task 提交（共 32 个 commit），**没有 push，也没有合并到 main**。组织名 `AlonaBot` 无法通过 API 注册（REST 返回 404），需要用户在网页上注册。
+  - **对照 plan.md §1 完成定义**：T-01 —— proto 可以编译且生成稳定（本次终审重新执行 `go generate` 与 golden `-update` 后均无 diff）、Envelope 字段号与枚举值由测试锁定、manifest/release/消息结构都有校验与 fixture、SDK 公共类型与示例可以编译、SQLite（CRUD/Tx/WAL Backup/账本同事务）与 PG（临时容器）都通过、五平台 `CGO_ENABLED=0` 构建通过、版本写入 go.mod/go.sum（`go mod verify` 显示 all modules verified）✓。T-02 —— 真实 SDK 插件在 TCP 与 stdio 上都走完 Hello→…→STOPPING→退出；core.lock、runtime.lock、调用表、准入、取消顺序、阶段预算、停止预算、有限重启都有测试；V 分项证据表见 G1-11（T-01）与 G1-19（T-02）✓。B1 之外的能力没有实现，只预留了接入点 ✓。
+  - **最大范围复查**：全仓库 `go test -race -count=1 ./...` 的 15 个包都 ok；`go test -v ./...` 统计为 **272 PASS / 0 FAIL / 2 SKIP**（SKIP 是两个 PG 测试，未设置 `ALONABOT_TEST_PG_DSN`，已在 G1-09 的容器上实测通过）；cmd e2e 与 supervisor `-count=2` ok；五平台 build+vet OK；archtest 通过；文档相对链接全部有效；没有 TODO/FIXME/DEBUG 残留；`pgrep` 显示没有残留测试进程。代码规模：非测试 Go 代码约 5.1k 行（不含生成代码），测试约 5.0k 行。
+  - **质量视角**：并发（Session/激活/停止经过多轮 `-race -count=10` 与变异检查）；安全（恒时比较 Secret、认证失败时不回复、安全消息与日志中不含 Secret/配置/GORM 参数值、精简环境、锁文件 0600、路径与 ID 校验）；数据一致性（CommitActive 核对预期旧代次、提交失败不激活、提交后失败进入 Degraded 而不回滚、状态库损坏不重建且只读预检不改写文件）；错误处理（失败路径限时通知并强杀后确认进程退出）；回滚方案（plan.md §7 仍然有效：整个分支未合并到 main，可以整体丢弃；PG 容器已清理）。
+  - **复查中发现并修复的问题汇总**（FIX-1～FIX-6 以及各 task 内发现的问题）：服务调用缺少可信上下文载荷；Chain 校验的内存放大（296 MiB→2.5 KB）；GORM 日志泄漏参数值；HTTP 路径未规范化；相对路径 data_dir 无法重新打开；控制帧构造重复与 stdio 管道关闭；停用未持有插件锁；失败路径的写操作在对端不读时卡死；Session 回调引用未赋值的指针（数据竞争）；Admit 看不到 parent_call_id；archtest 在取不到 VCS 状态的环境下失败；测试本身的问题（空转的进程组测试、偶发的满额测试、race atexit sleep）。
+  - **「未运行」与已知限制（交给后续批次）**：Linux/Windows **运行**都未进行（只有交叉构建与 vet；darwin/amd64 只经 Rosetta 跑过单元测试）——T-10；Windows Job Object、LockFileEx、只读 URI 打开、stdio 写截止都未运行；PG 只在 G1-09 实测过一次；没有 CI；Degraded 与失败窗口只在内存中——T-09；三处 `shortcut:`（临时 route_id → T-04；SDK 业务分发返回 UNSUPPORTED → T-03/T-04；Windows 进程在 Start 之后才加入 Job）；cmd 只是开发入口（来源 dev-local，不验签）——T-09；配置迁移/Secret/候选 DB（T-08）、Telegram（T-03）、Scheduler/HTTP（T-07）尚未开始。
+  - **规格改动**：WIRE-FORMAT 新增 §5A「T-01 已固定」（proto 是编号的权威来源、T-01 的实现选择、schema_id 约定、握手失败语义、启动环境变量、PREPARED 摘要）；adr/DECISIONS.md 加了一行变更记录。没有修改既有的 Envelope 1～16 与错误码 1～17。
+  - **需要用户处理**：(1) 在 GitHub 网页上注册组织 `AlonaBot`；(2) 审阅 `goal-1` 分支后自行决定是否合并到 main（本 goal 不合并、不 push）；(3) 确认后可以用 goal-2 开始 B2（T-03 + T-04）。
 
 ## 追加的修复 task
 
