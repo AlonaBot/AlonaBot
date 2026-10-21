@@ -117,11 +117,15 @@
   - 剩余风险：synchronous=FULL 依赖显式 DSN 设置加回读核对，变异法无法证明 DSN 设置本身在起作用（默认值相同）；回读核对只在打开时对第一个物理连接执行，后续重连依赖驱动按 DSN 重新设置（单连接池且 ConnMaxLifetime 为 0，正常情况下不会重连）；在事务里误用外层 db 会让单连接池自锁，这一点只在文档注释中说明，没有运行时防护。
   - 下一步：G1-09（PostgreSQL）。
 
-### [ ] G1-09 PostgreSQL 分支验证
+### [x] G1-09 PostgreSQL 分支验证
 - 依据：PLAN T-01 第 5 步；CONTRACTS §6.3；V-26。
 - 内容：引入 gorm.io/driver/postgres。测试通过 `ALONABOT_TEST_PG_DSN` 启用：以超级用户 DSN 创建专属 role/schema（名称经过标识符清洗，不直接使用插件 ID），再用插件 role 连接，核对 search_path 只包含该 schema，执行 CRUD；事务失败后数据保持不变；插件 role 不能访问其他 schema。按 docs/development.md 的命令启动临时容器跑一次，然后删除容器。
 - 完成条件：未设置环境变量时测试 Skip；在容器上实际运行通过并记录命令与输出；容器已清理（`docker ps -a` 中没有 alonabot-test-pg）。
 - 回写：
+  - 实际做了什么：引入已批准的 `gorm.io/driver/postgres v1.6.3`（依赖 pgx/v5 v5.10.0、puddle、pgpassfile、pgservicefile）。`contracts/manifest.PostgresIdentifier(prefix, id)` 生成规则为 prefix + 清洗后的 ID + "_" + SHA256 前 8 位十六进制，最长 63 字节，结果确定，且 `my-tool` 与 `my_tool` 不会映射成同一个名字。`sdk/gormdb.OpenPostgres(ctx, *pb.PostgresConnection)`：schema 必须是小写标识符，search_path 只包含插件 schema；连接之后核对 current_user 和 `current_schemas(false)` 必须正好是 [schema]，否则关闭连接并报错；连接失败的错误信息不包含 DSN 和密码；GORM 日志写到 stderr。测试 `postgres_test.go` 由 `ALONABOT_TEST_PG_DSN` 启用：用超级用户按管理员预置流程创建专属 role 和 schema（插件 ID 带 '-'，所以必须先清洗），插件连接只使用专属 role，测试结束后 DROP SCHEMA/OWNED/ROLE。docs/development.md 补充了就绪检查与测试命令。
+  - V-26（T-01 分项）证据（darwin/arm64，go1.27.1，Docker 29.4.2，镜像 postgres:17 a63c1ea3f6a3，本 task 的 commit）：未设置环境变量时，两个测试都 SKIP，并输出「PostgreSQL 测试未运行」。容器命令：`docker run -d --rm --name alonabot-test-pg -e POSTGRES_PASSWORD=alonabot -p 127.0.0.1::5432 postgres:17`（映射到 127.0.0.1:53496），`pg_isready` 返回 accepting connections 之后执行 `ALONABOT_TEST_PG_DSN=postgres://postgres:alonabot@127.0.0.1:53496/postgres?sslmode=disable go test -race -count=1 -v -run Postgres ./sdk/gormdb/`：`TestPostgresPluginRole` PASS（search_path 等于 `ab_test_plugin_ebb10852_775b20fd`；items 表落在插件 schema 中；Create/Update/First 正常；事务回滚后值保持为 b；迁移 2 失败时账本只有 [1] 且 t2 表不存在；读取 `…_other.secret` 返回 `permission denied for schema … (SQLSTATE 42501)`），`TestOpenPostgresRejects` PASS（不存在的 schema 在核对阶段失败；错误密码返回 SASL 认证失败，错误信息中没有密码；非法 schema 名被拒绝）。启用 PG 后全仓库 `go test -race ./...` 的 7 个包都 ok。之后用 psql 查询 `pg_roles` 和 `pg_namespace` 中的 `ab_%`，结果为空（没有残留）。最后 `docker stop alonabot-test-pg`，`docker ps -a` 中残留容器数为 0。
+  - 剩余风险：没有在 PG 上测试「首次安装到空 schema、resume 只核对、维护许可」等分支，这些属于 T-08/T-09（V-31/V-39）；超级用户只在测试中用于预置，生产环境由管理员预置；`sslmode=disable` 只用于本机容器；GORM 的 Error 级日志会输出失败的 SQL 文本，日后 SQL 中若带有业务数据，需要在 T-08 评估日志级别。
+  - 下一步：REVIEW-3（含 code-review-expert 审查当前分支的 diff）。
 
 ### [ ] REVIEW-3 集中检查（G1-07～G1-09）
 - 检查清单同上；另外核对依赖都在已批准清单内（`go list -m all` 中的直接依赖）、`go mod tidy` 后没有差异，并用 code-review-expert 审查到目前为止的分支 diff。

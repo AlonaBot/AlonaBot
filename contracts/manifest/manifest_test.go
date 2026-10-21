@@ -3,6 +3,7 @@ package manifest
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -93,5 +94,25 @@ func TestValidateRelPath(t *testing.T) {
 		if err := ValidateRelPath(bad); err == nil {
 			t.Errorf("%q 应被拒绝", bad)
 		}
+	}
+}
+
+func TestPostgresIdentifier(t *testing.T) {
+	a, b := PostgresIdentifier("ab_", "my-tool"), PostgresIdentifier("ab_", "my_tool")
+	if a == b {
+		t.Fatalf("my-tool 与 my_tool 不应撞名: %s", a)
+	}
+	long := PostgresIdentifier("ab_", "alonabot_plugin_"+strings.Repeat("x", 48))
+	if len(long) > 63 {
+		t.Fatalf("标识符长度 %d 超过 63", len(long))
+	}
+	ok := regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
+	for _, id := range []string{"my-tool", "alonabot_plugin_rss", long} {
+		if got := PostgresIdentifier("ab_", id); !ok.MatchString(got) {
+			t.Errorf("%q 映射为非法标识符 %q", id, got)
+		}
+	}
+	if PostgresIdentifier("ab_", "x") != PostgresIdentifier("ab_", "x") {
+		t.Fatal("映射必须是确定性的")
 	}
 }

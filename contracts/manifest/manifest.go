@@ -3,6 +3,8 @@ package manifest
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -208,4 +210,25 @@ func ValidateRelPath(p string) error {
 		}
 	}
 	return nil
+}
+
+// PostgresIdentifier 把插件 ID 映射为合法的 PostgreSQL 标识符（role/schema 名，CONTRACTS §6.3）：
+// prefix + 清洗后的 ID（非 [a-z0-9_] 字符替换为 _）+ "_" + 原 ID 的 SHA256 前 8 位十六进制。
+// 哈希后缀避免 "my-tool" 与 "my_tool" 撞名；总长度不超过 PostgreSQL 的 63 字节上限。
+func PostgresIdentifier(prefix, id string) string {
+	sum := sha256.Sum256([]byte(id))
+	suffix := "_" + hex.EncodeToString(sum[:4])
+	var b strings.Builder
+	for _, r := range strings.ToLower(id) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	body := b.String()
+	if max := 63 - len(prefix) - len(suffix); len(body) > max {
+		body = body[:max]
+	}
+	return prefix + body + suffix
 }

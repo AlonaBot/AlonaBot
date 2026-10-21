@@ -13,7 +13,7 @@
 | Docker | 用于临时 PostgreSQL | 只在 PG 测试中使用 |
 | Node（前端） | 26.5.1（asdf） | web/admin 从 T-08 开始使用 |
 
-已锁定并经测试验证的版本（goal-1）：protobuf v1.36.12、go.yaml.in/yaml/v3 v3.0.5、gorm v1.31.2、libtnb/sqlite v1.2.2、modernc.org/sqlite v1.61.0（G1-08 验证了 CRUD/Tx/WAL Backup/迁移账本；golang.org/x/sys 目前是间接依赖）。
+已锁定并经测试验证的版本（goal-1）：protobuf v1.36.12、go.yaml.in/yaml/v3 v3.0.5、gorm v1.31.2、libtnb/sqlite v1.2.2、modernc.org/sqlite v1.61.0（G1-08 验证了 CRUD/Tx/WAL Backup/迁移账本）、gorm.io/driver/postgres v1.6.3（pgx v5.10.0；G1-09 在 postgres:17 容器上验证；golang.org/x/sys 目前是间接依赖）。
 
 已批准的 Go 依赖（2026-10-21）：`google.golang.org/protobuf`、`gorm.io/gorm`、`github.com/libtnb/sqlite`、`modernc.org/sqlite`、`gorm.io/driver/postgres`、`golang.org/x/sys`、`go.yaml.in/yaml/v3`。前端已批准：Vite、TypeScript、React 19、vitest。新增清单外依赖需要先征得维护者同意。
 
@@ -35,6 +35,8 @@ go vet ./...
   ```sh
   docker run -d --rm --name alonabot-test-pg -e POSTGRES_PASSWORD=alonabot -p 127.0.0.1::5432 postgres:17
   docker port alonabot-test-pg 5432   # 查看实际映射到的端口
+  docker exec alonabot-test-pg pg_isready -U postgres   # 就绪后再跑测试
+  ALONABOT_TEST_PG_DSN='postgres://postgres:alonabot@127.0.0.1:<端口>/postgres?sslmode=disable' go test -run Postgres ./sdk/gormdb/
   # 测试结束后
   docker stop alonabot-test-pg
   ```
