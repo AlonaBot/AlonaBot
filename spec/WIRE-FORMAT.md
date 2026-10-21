@@ -124,6 +124,27 @@ Scheduler 到 deadline 后保留实际执行槽；SDK 只在 callback 实际返�
 
 Core 媒体服务固定为 BeginUpload/WriteChunk/CommitUpload/Read/Grant：Read 输入 token、offset、length（1～1 MiB），返回 bytes、next_offset、eof；Grant 只对已有授权签发等同或更窄范围的新 token，不允许调用者自行扩大 Target/接收插件。IncomingMedia 首次取件由内置 Adapter 解析，按 CONTRACTS §1.4 校验和配额处理。各请求/响应的 Protobuf 字段号在 T-01 固定，媒体块始终计入帧与字节预算。
 
+## 5A. T-01 已固定（2026-10-21）
+
+字段号与枚举值的权威来源是 `contracts/proto/alonabot/v1/*.proto`（package `alonabot.v1`）；本节不再重复抄录编号。`contracts/wirespec_test.go` 逐项断言 §1/§2 表格中的编号，以及 SendStatus、PartStatus、Propagation、RouteKind、HookPhase 的取值，并检查所有枚举的零值都是 `*_UNSPECIFIED`。冻结之后，删除字段或枚举值时必须 reserved，不能复用编号。
+
+| 文件 | 内容 |
+| --- | --- |
+| `envelope.proto`、`errors.proto` | §1 Envelope 1～16、§2 ErrorCode 1～17 与 ErrorInfo（编号照抄规格） |
+| `control.proto` | §3.1/§3.2 的控制帧载荷与 Bootstrap |
+| `route.proto` | REGISTER 载荷 `Register`、§3.3 RouteDescriptor 及各 kind 的描述 |
+| `identity.proto`、`message.proto`、`media.proto` | MESSAGE-MODEL 的 Target/Actor/Capability、Event 与按类型区分的载荷、Segment、SendRequest/SendResult/PartResult，以及 §5 的媒体请求 |
+| `invocation.proto`、`bus.proto` | §4 可信调用上下文、HandlerOutcome、Hook 载荷，以及 §5 的 Event Bus |
+
+规格只给出语义、由 T-01 确定的实现选择：
+
+- 没有编号表的消息，字段号按规格表格中的字段顺序从 1 开始编排。
+- 新增枚举 CancelReason、StopReason、SessionPhase、DatabaseBackend（显式 `NONE` 表示没有业务 DB）、MigrationMode、ActivationReason、TrustedRole（USER/ADMIN/CHAT_ADMIN）、Permission（ANY/USER/ADMIN）、HandlerMode、CommandMatch（PATH/REGEX/RAW）、UsageMode、ParamType、ServiceAccess（PRIVATE/ALLOWLIST/PUBLIC）、HttpAuthMode、TextFormat、EntityType、MediaReadability。
+- 为避免 import 循环，Target/Actor/Capability 单独放在 `identity.proto`；Segment 的 `incoming_ref` 直接携带 IncomingMedia 描述符，`media_ref` 是 MediaRef 的 token。
+- Event 按类型区分的载荷放在 `EventPayload` oneof 中，PreEventResult 只能回传这一部分；按钮 `value` 与服务载荷之外的 JSON 一律以 UTF-8 文本表示。
+- `ForwardSource` 的结构（display_name、external_user_id）由 T-01 补定；新增 `SendRequest{to, chain}` 作为 Core Send 服务的请求。
+- 协议能力项使用 `ProtocolCapability{name, version}`，与 Adapter 平台能力 `Capability{name, version, supported}` 分开。
+
 ## 6. 实施验证与依据
 
 T-01 将字段表转换为 `.proto`，冻结控制 Payload/RouteDescriptor 的字段号和 fixture；T-02 验证双向编号、乱序响应、失败阶段、帧上限、父调用关联、读循环进度和 ready gate。T-03/T-05/T-06 验证 payload+error、HandlerOutcome、Hook 约束和 Event Bus；对应 [TEST-MATRIX.md](TEST-MATRIX.md)。目前这些运行时测试均未执行。

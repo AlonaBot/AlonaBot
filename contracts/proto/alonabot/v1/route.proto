@@ -1,0 +1,220 @@
+// REGISTER 载荷与 RouteDescriptor，见 WIRE §3.3、CONTRACTS §2.2/§3/§4.3/§7.2。
+syntax = "proto3";
+
+package alonabot.v1;
+
+import "alonabot/v1/control.proto";
+import "alonabot/v1/envelope.proto";
+
+option go_package = "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1";
+
+// REGISTER（Plugin→Core），配置准备与 OnStart 完成后仅发送一次；Core 原子校验整份注册集。
+message Register {
+  repeated RouteDescriptor routes = 1;
+  bytes config_schema_hash = 2;
+  // 规范化后的完整候选 JSON（含已解析 secret，仅经私有 IPC 传输）。
+  string candidate_config_json = 3;
+  uint32 candidate_config_version = 4;
+  // 仅在声明 HTTP 路由时设置。
+  HttpListener http_listener = 5;
+  MigrationState migration = 6;
+}
+
+// 本次准备阶段的迁移完成信息。
+message MigrationState {
+  MigrationMode mode = 1;
+  // versioned：本次准备结束时账本中已完成的全部 ID（升序）。
+  repeated uint32 completed_migration_ids = 2;
+  // self：Migrate 已成功返回。
+  bool self_migrate_completed = 3;
+}
+
+enum RouteKind {
+  ROUTE_KIND_UNSPECIFIED = 0;
+  ROUTE_KIND_COMMAND = 1;
+  ROUTE_KIND_EVENT = 2;
+  ROUTE_KIND_HOOK = 3;
+  ROUTE_KIND_SERVICE = 4;
+  ROUTE_KIND_SCHEDULE = 5;
+  ROUTE_KIND_HTTP = 6;
+  ROUTE_KIND_BUS_SUBSCRIPTION = 7;
+}
+
+enum Permission {
+  PERMISSION_UNSPECIFIED = 0;
+  // 不要求 Actor（例如非用户触发的事件）。
+  PERMISSION_ANY = 1;
+  // 具有可信 Actor 的普通用户。
+  PERMISSION_USER = 2;
+  // Core 配置的机器人管理员。
+  PERMISSION_ADMIN = 3;
+}
+
+// 公共字段；target 为 plugin_id/route_id。kind 必须与 spec 分支一致。
+message RouteDescriptor {
+  string route_id = 1;
+  RouteKind kind = 2;
+  // 数字小的先执行，同值按 plugin_id/route_id 字典序。
+  int32 priority = 3;
+  bool default_enabled = 4;
+  Permission required_permission = 5;
+  string input_schema_id = 6;
+  uint32 input_schema_version = 7;
+  string output_schema_id = 8;
+  uint32 output_schema_version = 9;
+  oneof spec {
+    CommandSpec command = 10;
+    EventSpec event = 11;
+    HookSpec hook = 12;
+    ServiceSpec service = 13;
+    ScheduleSpec schedule = 14;
+    HttpRouteSpec http = 15;
+    BusSubscriptionSpec bus_subscription = 16;
+  }
+}
+
+enum HandlerMode {
+  HANDLER_MODE_UNSPECIFIED = 0;
+  // func(c, ...) (Chain, error)
+  HANDLER_MODE_AUTO_REPLY = 1;
+  // func(c, ...) error
+  HANDLER_MODE_MANUAL = 2;
+}
+
+// Core 可表达的条件先执行；自定义 Go Rule 在同一 Handler REQUEST 内由 SDK 执行。
+message RuleDescriptor {
+  bool has_custom_rule = 1;
+  bool require_chat_admin = 2;
+}
+
+enum CommandMatch {
+  COMMAND_MATCH_UNSPECIFIED = 0;
+  // `/` 前缀完整 token 路径。
+  COMMAND_MATCH_PATH = 1;
+  COMMAND_MATCH_REGEX = 2;
+  COMMAND_MATCH_RAW = 3;
+}
+
+enum UsageMode {
+  USAGE_MODE_UNSPECIFIED = 0;
+  // 参数错误时发送一次自动生成的 usage。
+  USAGE_MODE_DEFAULT = 1;
+  USAGE_MODE_SILENT = 2;
+  USAGE_MODE_CUSTOM = 3;
+}
+
+message CommandSpec {
+  CommandMatch match = 1;
+  // PATH：规范命令路径 token，大小写敏感。
+  repeated string path = 2;
+  repeated CommandAlias aliases = 3;
+  repeated CommandParam params = 4;
+  HandlerMode handler_mode = 5;
+  RuleDescriptor rule = 6;
+  // REGEX：Go regexp 语法，启动时编译。
+  string regex = 7;
+  UsageMode usage_mode = 8;
+  string custom_usage = 9;
+}
+
+message CommandAlias {
+  repeated string path = 1;
+}
+
+enum ParamType {
+  PARAM_TYPE_UNSPECIFIED = 0;
+  PARAM_TYPE_STRING = 1;
+  // 有符号十进制 int64。
+  PARAM_TYPE_INT = 2;
+  // 有限 float64。
+  PARAM_TYPE_FLOAT = 3;
+  // 只接受 true/false。
+  PARAM_TYPE_BOOL = 4;
+}
+
+// 必需参数在可选参数之前；raw 只能是最后一个 string 参数。
+message CommandParam {
+  string name = 1;
+  ParamType type = 2;
+  bool required = 3;
+  // 缺失位置使用的默认值文本，按 type 解析。
+  optional string default_value = 4;
+  bool raw = 5;
+}
+
+message EventSpec {
+  repeated string event_type_filter = 1;
+  HandlerMode handler_mode = 2;
+  RuleDescriptor rule = 3;
+  // button.clicked 路由：按钮引用的 action 标识与 Schema 版本。
+  string action_id = 4;
+  uint32 action_schema_version = 5;
+}
+
+enum HookPhase {
+  HOOK_PHASE_UNSPECIFIED = 0;
+  HOOK_PHASE_PRE_EVENT = 1;
+  HOOK_PHASE_BEFORE_SEND = 2;
+  HOOK_PHASE_AFTER_SEND = 3;
+}
+
+message HookSpec {
+  HookPhase phase = 1;
+}
+
+enum ServiceAccess {
+  SERVICE_ACCESS_UNSPECIFIED = 0;
+  // 只允许 Core 与本插件。
+  SERVICE_ACCESS_PRIVATE = 1;
+  SERVICE_ACCESS_ALLOWLIST = 2;
+  // 所有已启用插件可调用，不赋予用户 Admin。
+  SERVICE_ACCESS_PUBLIC = 3;
+}
+
+// 请求/响应 Schema 使用公共字段 input_*/output_*。
+message ServiceSpec {
+  string service_name = 1;
+  ServiceAccess access = 2;
+  repeated string allowlist_plugin_ids = 3;
+  PayloadEncoding encoding = 4;
+}
+
+// interval 与 cron 互斥；cron 固定五字段，timezone 为 IANA 名称，省略为 UTC。
+message ScheduleSpec {
+  string job_id = 1;
+  oneof trigger {
+    string cron = 2;
+    // 至少 1000。
+    uint64 interval_ms = 3;
+  }
+  string timezone = 4;
+  uint32 job_deadline_ms = 5;
+}
+
+enum HttpAuthMode {
+  HTTP_AUTH_MODE_UNSPECIFIED = 0;
+  // 私有：要求 Core 授权会话。
+  HTTP_AUTH_MODE_CORE_SESSION = 1;
+  // 公开回调，由插件验证 OAuth state。
+  HTTP_AUTH_MODE_CALLBACK_STATE = 2;
+  // 公开回调，由插件验证签名。
+  HTTP_AUTH_MODE_CALLBACK_SIGNATURE = 3;
+  // 公开回调，由插件验证 nonce。
+  HTTP_AUTH_MODE_CALLBACK_NONCE = 4;
+}
+
+message HttpRouteSpec {
+  string method = 1;
+  // 插件相对路径，以 / 开头，不含 /plugins/{id} 前缀。
+  string path = 2;
+  bool is_public = 3;
+  HttpAuthMode auth_mode = 4;
+}
+
+message BusSubscriptionSpec {
+  // plugin_id/event_name。
+  string event_name = 1;
+  string schema_id = 2;
+  uint32 schema_version = 3;
+  string callback_route_id = 4;
+}

@@ -6,6 +6,7 @@ import (
 
 	pb "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 // 以下期望值逐字取自 spec/WIRE-FORMAT.md §1/§2；改动这里等于改动线上协议。
@@ -66,6 +67,15 @@ func TestEnumValues(t *testing.T) {
 			"ALREADY_EXISTS", "FAILED_PRECONDITION", "UNSUPPORTED", "RESOURCE_EXHAUSTED",
 			"DEADLINE_EXCEEDED", "CANCELLED", "UNAVAILABLE", "INTERNAL", "PROTOCOL_ERROR",
 			"CALL_CYCLE", "PLUGIN_NOT_READY", "NO_DEFAULT_TARGET", "NEEDS_MANUAL_MIGRATION"}},
+		// MESSAGE-MODEL §4。
+		{pb.SendStatus(0).Descriptor(), "SEND_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "PARTIAL", "REJECTED", "UNKNOWN"}},
+		{pb.PartStatus(0).Descriptor(), "PART_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "REJECTED", "UNKNOWN", "NOT_ATTEMPTED"}},
+		// MESSAGE-MODEL §3。
+		{pb.Propagation(0).Descriptor(), "PROPAGATION_", []string{"UNSPECIFIED", "CONTINUE", "STOP"}},
+		// WIRE §3.3 的 kind 与 CONTRACTS §2.3 的 Hook phase。
+		{pb.RouteKind(0).Descriptor(), "ROUTE_KIND_", []string{
+			"UNSPECIFIED", "COMMAND", "EVENT", "HOOK", "SERVICE", "SCHEDULE", "HTTP", "BUS_SUBSCRIPTION"}},
+		{pb.HookPhase(0).Descriptor(), "HOOK_PHASE_", []string{"UNSPECIFIED", "PRE_EVENT", "BEFORE_SEND", "AFTER_SEND"}},
 	}
 	for _, c := range cases {
 		vals := c.enum.Values()
@@ -81,25 +91,46 @@ func TestEnumValues(t *testing.T) {
 	}
 }
 
-// 本包所有枚举的零值必须是 *_UNSPECIFIED，且每个值都带枚举类型前缀。
+// 本包所有枚举的零值必须是 *_UNSPECIFIED，且每个值都带枚举类型前缀（含嵌套在消息内的枚举）。
 func TestAllEnumsHaveUnspecifiedZero(t *testing.T) {
-	file := pb.File_alonabot_v1_control_proto
-	files := []protoreflect.FileDescriptor{file, pb.File_alonabot_v1_envelope_proto, pb.File_alonabot_v1_errors_proto}
-	for _, fd := range files {
-		enums := fd.Enums()
-		for i := 0; i < enums.Len(); i++ {
-			e := enums.Get(i)
-			prefix := screamingSnake(string(e.Name())) + "_"
-			zero := e.Values().ByNumber(0)
-			if zero == nil || string(zero.Name()) != prefix+"UNSPECIFIED" {
-				t.Errorf("%s 零值应为 %sUNSPECIFIED，实际 %v", e.Name(), prefix, zero)
-			}
-			for j := 0; j < e.Values().Len(); j++ {
-				if n := string(e.Values().Get(j).Name()); !strings.HasPrefix(n, prefix) {
-					t.Errorf("%s 的值 %s 缺少前缀 %s", e.Name(), n, prefix)
-				}
-			}
+	_ = pb.File_alonabot_v1_envelope_proto // 确保本包已注册
+	n := 0
+	protoregistry.GlobalFiles.RangeFilesByPackage("alonabot.v1", func(fd protoreflect.FileDescriptor) bool {
+		for i := 0; i < fd.Enums().Len(); i++ {
+			checkEnum(t, fd.Enums().Get(i))
+			n++
 		}
+		return true
+	})
+	if n < 20 {
+		t.Fatalf("只检查了 %d 个枚举，注册表扫描可能失效", n)
+	}
+}
+
+func checkEnum(t *testing.T, e protoreflect.EnumDescriptor) {
+	t.Helper()
+	prefix := screamingSnake(string(e.Name())) + "_"
+	zero := e.Values().ByNumber(0)
+	if zero == nil || string(zero.Name()) != prefix+"UNSPECIFIED" {
+		t.Errorf("%s 零值应为 %sUNSPECIFIED，实际 %v", e.FullName(), prefix, zero)
+	}
+	for j := 0; j < e.Values().Len(); j++ {
+		if n := string(e.Values().Get(j).Name()); !strings.HasPrefix(n, prefix) {
+			t.Errorf("%s 的值 %s 缺少前缀 %s", e.FullName(), n, prefix)
+		}
+	}
+}
+
+// HandlerOutcome 的字段与 MESSAGE-MODEL §3 对应；error 放在 Envelope，不在此消息内。
+func TestHandlerOutcomeFields(t *testing.T) {
+	fields := (&pb.HandlerOutcome{}).ProtoReflect().Descriptor().Fields()
+	for _, name := range []protoreflect.Name{"matched", "propagation", "chain"} {
+		if fields.ByName(name) == nil {
+			t.Errorf("HandlerOutcome 缺少 %s", name)
+		}
+	}
+	if fields.Len() != 3 {
+		t.Errorf("HandlerOutcome 字段数 = %d，应为 3", fields.Len())
 	}
 }
 

@@ -28,11 +28,15 @@
   - 剩余风险：控制帧载荷由我自行编号，规格评审之前仍可能调整，但一旦冻结就只能 reserved，不能复用编号；`SessionError.failed_kind` 允许 UNSPECIFIED（表示与具体帧无关），G1-04 的校验需要对它单独处理。
   - 下一步：G1-03（route/Register、invocation、message、media、bus），并在 WIRE 中写「T-01 已固定」小节。
 
-### [ ] G1-03 业务载荷 proto：路由、调用、消息、回执、媒体、广播
+### [x] G1-03 业务载荷 proto：路由、调用、消息、回执、媒体、广播
 - 依据：WIRE §3.3/§4/§5，MESSAGE-MODEL §1～§5，CONTRACTS §1.3/§1.4/§2。
 - 内容：`route.proto`（REGISTER 载荷 Register：routes、config_schema_hash、candidate_config_json、candidate_config_version、可选 HttpListener、迁移完成信息；RouteDescriptor 公共字段，加 command/event/hook/service/schedule/http/bus_subscription 各自的描述，以及参数描述）、`invocation.proto`（可信 Invocation 上下文、HandlerOutcome、PreEventResult、BeforeSend/AfterSend 载荷）、`message.proto`（Event、Actor、Target、Capability、Segment 的各类型与 entities、MessageChain、SendResult、PartResult 及状态枚举）、`media.proto`（BeginUpload/WriteChunk/CommitUpload/Read/Grant 请求与响应、MediaRef、IncomingMedia）、`bus.proto`（BusEvent、Publish）。冻结字段号，把编号表写回 WIRE-FORMAT 新增的「T-01 已固定」小节，并在 adr/DECISIONS.md 的变更记录中加一行。
 - 完成条件：全部 .proto 生成并编译通过；测试断言关键枚举的零值为 UNSPECIFIED，SendResult/PartResult 状态与 MESSAGE-MODEL 一致；规格文档同步更新。
 - 回写：
+  - 实际做了什么：新增 `identity.proto`（Target、Actor/TrustedRole、Capability；拆成单独文件是为了避免 message↔media 互相 import）、`message.proto`（Event + EventPayload oneof，含 8 类事件载荷；PlatformMessage；MessageChain/Segment 的 8 类片段，MediaSource 三选一，TextEntity 的 UTF-16 偏移；SendRequest、SendResult、PartResult、SendStatus、PartStatus）、`media.proto`（MediaRef/MediaScope、IncomingMedia/MediaReadability，以及 Begin/WriteChunk/Commit/Read/Grant 的请求与响应）、`route.proto`（Register + MigrationState；RouteDescriptor 公共字段加 7 类 spec oneof；Command/Event/Hook/Service/Schedule/Http/BusSubscription 描述与相关枚举）、`invocation.proto`（InvocationContext 含 send_forbidden 与 plugin_chain；HandlerRequest/CommandInvocation/ArgValue；HandlerOutcome；PreEvent/BeforeSend/AfterSend 的请求与结果）、`bus.proto`（PublishRequest/Response、BusEvent）。测试新增 SendStatus/PartStatus/Propagation/RouteKind/HookPhase 取值对照、HandlerOutcome 字段检查；枚举零值检查改为遍历 protoregistry 中 `alonabot.v1` 包的全部文件（至少 20 个枚举，否则直接判定失败）。spec 同步：WIRE-FORMAT 新增 §5A「T-01 已固定」，说明 proto 是编号的权威来源，并列出 T-01 做出的实现选择；adr/DECISIONS.md 变更记录加一行。
+  - 验证证据（darwin/arm64，go1.27.1，libprotoc 36.0，本 task 的 commit）：`go generate ./...` 生成 9 个 `.pb.go`；`go build ./... && go vet ./...` 通过；`go test -race -v ./contracts/` 中 5 个测试全部 PASS；stage 之后再执行 `go generate ./...`，`git diff --stat` 为空。
+  - 剩余风险：规格未定义而由我补定的结构（ForwardSource、RuleDescriptor 只有 has_custom_rule/require_chat_admin 两项、HttpAuthMode 的三种回调验证方式、Button.value 用 JSON 文本）在 T-03～T-07 实际使用时可能需要调整，所以 REVIEW-1 要逐字段对照规格。Core 固定服务名（例如 send、media.*、bus.publish 对应的 Envelope.target 与 schema_id）尚未定义，留给 G1-04（schema_id 映射）和 T-02/T-03。
+  - 下一步：REVIEW-1。
 
 ### [ ] REVIEW-1 集中检查（G1-01～G1-03）
 - 检查清单：是否偏离 input.md；proto 与 WIRE/MESSAGE 逐字段对照（不能漏字段，也不能多出没有依据的字段）；生成是否稳定；`go vet`、`go build`；有无调试残留；文档是否同步。

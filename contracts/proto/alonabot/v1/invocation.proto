@@ -1,0 +1,104 @@
+// Core→Plugin 的可信调用上下文、HandlerOutcome 与 Hook 载荷，见 WIRE §4、MESSAGE-MODEL §3/§5。
+syntax = "proto3";
+
+package alonabot.v1;
+
+import "alonabot/v1/errors.proto";
+import "alonabot/v1/identity.proto";
+import "alonabot/v1/message.proto";
+
+option go_package = "github.com/AlonaBot/alonabot/contracts/pb/alonabotv1";
+
+// Core 记录并下发的可信上下文；插件回传的同名值不能覆盖 Core 记录。trace 取 Envelope.trace_id。
+message InvocationContext {
+  // 无可信个人身份时 absent。
+  Actor actor = 1;
+  // 原事件 Target；无真实入站事件时 absent，Send 必须显式 To。
+  Target default_target = 2;
+  repeated string scopes = 3;
+  // 祖先插件链（不含当前插件），用于循环与深度检查。
+  repeated string plugin_chain = 4;
+  // 出站 Hook 及其派生子调用为 true，再次 Send 返回 FAILED_PRECONDITION。
+  bool send_forbidden = 5;
+}
+
+// 命令、事件、scheduled 与按钮 Handler 的请求。
+message HandlerRequest {
+  string route_id = 1;
+  InvocationContext context = 2;
+  Event event = 3;
+  // 仅命令路由。
+  CommandInvocation command = 4;
+}
+
+message CommandInvocation {
+  // 实际匹配到的规范路径。
+  repeated string path = 1;
+  repeated ArgValue args = 2;
+  // raw 参数保留的原始尾部。
+  optional string raw_tail = 3;
+  // Regex 路由的捕获组（下标 0 为整体匹配），与普通参数独立。
+  repeated string regex_groups = 4;
+}
+
+// 缺失的可选参数没有 value。
+message ArgValue {
+  string name = 1;
+  oneof value {
+    string string_value = 2;
+    int64 int_value = 3;
+    double float_value = 4;
+    bool bool_value = 5;
+  }
+}
+
+enum Propagation {
+  PROPAGATION_UNSPECIFIED = 0;
+  PROPAGATION_CONTINUE = 1;
+  PROPAGATION_STOP = 2;
+}
+
+// 错误放在 Envelope.error，可与本结果并存以保留传播标记。
+message HandlerOutcome {
+  // 自定义 Rule 的结果；false 时未执行 Handler。
+  bool matched = 1;
+  Propagation propagation = 2;
+  // 仅自动回复模式成功返回的非空 Chain。
+  MessageChain chain = 3;
+}
+
+message PreEventRequest {
+  string route_id = 1;
+  InvocationContext context = 2;
+  Event event = 3;
+}
+
+// 只回传可改写的 event_payload 与传播标记，不回传可覆写身份的完整 Event。
+message PreEventResult {
+  EventPayload event_payload = 1;
+  Propagation propagation = 2;
+}
+
+message BeforeSendRequest {
+  string route_id = 1;
+  InvocationContext context = 2;
+  Target target = 3;
+  MessageChain chain = 4;
+}
+
+// 只能修改 Chain；拒绝通过 Envelope.error。修改后的 Chain 重新完整预检。
+message BeforeSendResult {
+  MessageChain chain = 1;
+}
+
+message AfterSendRequest {
+  string route_id = 1;
+  InvocationContext context = 2;
+  Target target = 3;
+  MessageChain chain = 4;
+  SendResult result = 5;
+  ErrorInfo error = 6;
+}
+
+// AfterSend 只返回成功或 Envelope.error，不能修改 SendResult。
+message AfterSendResult {}
