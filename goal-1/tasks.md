@@ -53,11 +53,15 @@
   - 剩余风险：同 G1-03（补定的结构可能需要调整）。
   - 下一步：FIX-1（优先于 G1-04）。
 
-### [ ] G1-04 Envelope 校验、版本协商与兼容 fixture
+### [x] G1-04 Envelope 校验、版本协商与兼容 fixture
 - 依据：PLAN T-01 第 2、6 步；WIRE §1/§2/§3.1；V-02。
 - 内容：纯函数校验放在 `contracts/validate`（运行时帧编解码属于 `internal/wire`，不放这里）：按帧种类检查必需字段、拒绝 UNSPECIFIED、拒绝未知 kind、RESPONSE 允许同时带 payload 与 error、ErrorInfo 的 code 必须非零、未知错误码映射为 INTERNAL）；`Negotiate(local, peer)`（Major 必须相等，Minor 取较小值，required 能力必须属于交集）。`contracts/testdata/` 存放二进制 golden fixture 和生成它的测试（加 `-update` 标志）。
 - 完成条件：表驱动测试覆盖 V-02 的全部分项（Major 不一致、Minor 取交集、未知必需能力、UNSPECIFIED、未知 kind、payload+error 同时存在、字段存在性、JSON 与 Protobuf 编码区分）；golden 往返测试字节完全一致。
 - 回写：
+  - 实际做了什么：新增 `contracts/validate`。`envelope.go`：常量 ProtocolMajor=1/Minor=0/SchemaVersion=1；`Envelope()` 按帧种类校验 kind（拒绝 UNSPECIFIED 和未知值）、major、session_id（HELLO 必须为空，其余必须 16 字节）、trace_id 长度、call_id 与 initiator_side（REQUEST/RESPONSE/CANCEL 必须非零且合法，其余帧 call_id 必须为 0）、parent_call_id（只允许插件发起的 REQUEST 设置，且不能显式为 0）、REQUEST 必须有 deadline、error 只能出现在 RESPONSE/SESSION_ERROR 且 code 不能为 0、载荷规则（以 schema_id 判断是否有载荷；控制帧必须用 PROTOBUF 并匹配固定 schema_id；JSON 载荷必须语法合法，否则返回 INVALID_ARGUMENT；RESPONSE 必须有结果或 error）；`DecodeControl()` 在校验之后解码控制帧载荷；`SchemaID()` 生成 `alonabot.<snake>.v1`；`PublicCode()` 把未知错误码映射为 INTERNAL。`negotiate.go`：`Negotiate(local, peer)` 要求 Major 相等，Minor 取较小值，能力按 name+version 精确求交集，双方的 required 都必须在交集中，失败返回 FAILED_PRECONDITION。golden fixture 共 4 个：`contracts/testdata/frames/{hello,request_with_parent,response_partial_with_error,session_error}.bin`（使用 Deterministic marshal，`go test ./contracts/validate/ -update` 重新生成）。WIRE §5A 补充了 schema_id 约定。
+  - V-02（T-01 分项）证据（darwin/arm64，go1.27.1，本 task 的 commit）：`go test -race -count=1 ./...` → contracts 与 contracts/validate 都 ok，共 39 个子测试通过，覆盖：Major 不一致（Envelope 与 Negotiate 两处）、Minor 取较小值（两个方向）、未知必需能力、能力版本不同不算匹配、kind 为 UNSPECIFIED 或未知值、initiator_side 为 UNSPECIFIED 或未知值、parent_call_id 显式为 0（字段存在性）、payload 与 error 同时存在（部分发送）、JSON 与 Protobuf 编码区分（控制帧使用 JSON 被拒；JSON 编码却装着 Protobuf 字节返回 INVALID_ARGUMENT）。golden：再次执行 `-update` 后 `git diff` 为空（稳定）；把 fixture 的 target 改掉之后 `TestGoldenFrames/request_with_parent.bin` 失败（"编码与 golden 不一致"），说明能检测到编码漂移。
+  - 剩余风险：golden 依赖 protobuf-go 的 Deterministic 编码，升级 protobuf 版本时可能需要用 `-update` 重新生成，并人工确认差异；V-02 中的「无注册残留」属于 REGISTER 原子性，交给 G1-16（T-02）和 T-04；依赖 Session 状态的检查（source_plugin_id 与认证 ID 一致、父调用是否在途）交给 G1-14/G1-16。
+  - 下一步：G1-05。
 
 ### [ ] G1-05 manifest、插件 ID 与外部 release 清单
 - 依据：CONTRACTS §9.1/§9.2、§7.1；V-01、V-41（T-01 分项）。
