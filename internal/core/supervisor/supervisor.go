@@ -253,7 +253,12 @@ func (r *Running) WaitExit() (abnormal bool, state string, err error) {
 		return false, fmt.Sprint(st), nil // Stop 负责清理与结果
 	}
 	_ = r.Instance.Session.Close() // 旧 Session 立即失效
-	r.cleanupErr = r.Process.KillTree()
+	// 组内已没有进程时不再发信号，避免进程组号被复用后误杀无关进程。
+	if empty, err := r.Process.WaitTree(time.Now()); err != nil {
+		r.cleanupErr = err
+	} else if !empty {
+		r.cleanupErr = r.Process.KillTree()
+	}
 	r.release()
 	return !st.Success(), fmt.Sprint(st), r.cleanupErr
 }

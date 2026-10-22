@@ -268,6 +268,14 @@ func (p *Process) KillTree() error {
 // 到期时仍有进程返回 false；查询失败返回错误，调用方不能把它当作已清空。
 func (p *Process) WaitTree(deadline time.Time) (bool, error) {
 	for {
+		// Core 是 PID 1 或 subreaper 时，组内孙进程会过继给 Core，死后成为只能由 Core 回收的僵尸；
+		// 僵尸仍算组内进程，不回收就永远等不到清空。只在领头进程已被 cmd.Wait 回收后才回收，
+		// 避免抢走领头进程的退出状态。
+		select {
+		case <-p.exited:
+			p.tree.reap()
+		default:
+		}
 		empty, err := p.tree.empty()
 		if err != nil || empty {
 			return empty, err

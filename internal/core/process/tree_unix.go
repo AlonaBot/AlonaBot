@@ -44,4 +44,14 @@ func (t *tree) empty() (bool, error) {
 }
 
 // release 无需释放资源：进程组不占用句柄。
+// reap 非阻塞地回收组内已过继给本进程的僵尸；没有可回收的子进程时立即返回。
+func (t *tree) reap() {
+	for {
+		pid, err := syscall.Wait4(-t.pgid, nil, syscall.WNOHANG, nil)
+		if pid <= 0 || err != nil {
+			return
+		}
+	}
+}
+
 func (t *tree) release() error { return nil }

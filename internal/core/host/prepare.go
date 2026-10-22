@@ -165,9 +165,11 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		_ = conn.Close()
 		return nil, err
 	}
+	// minor 在协商成功后更新为协商值，之后的 SESSION_ERROR 都使用它（WIRE §1）。
+	var minor uint32
 	// sendErr 认证之后的失败路径：限时尽力发出 SESSION_ERROR 后关闭连接。
 	sendErr := func(phase pb.SessionPhase, kind pb.FrameKind, code pb.ErrorCode, safe string) {
-		if e, err := wire.ControlEnvelope(sid, 0, "", pb.FrameKind_FRAME_KIND_SESSION_ERROR, &pb.SessionError{FailedPhase: phase, FailedKind: kind}); err == nil {
+		if e, err := wire.ControlEnvelope(sid, minor, "", pb.FrameKind_FRAME_KIND_SESSION_ERROR, &pb.SessionError{FailedPhase: phase, FailedKind: kind}); err == nil {
 			e.Error = &pb.ErrorInfo{Code: code, SafeMessage: safe}
 			_ = conn.WriteFrameTimeout(e, failNotifyTimeout) // 尽力通知；对端不读时不阻塞失败路径
 		}
@@ -181,6 +183,7 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		sendErr(pb.SessionPhase_SESSION_PHASE_HANDSHAKE, pb.FrameKind_FRAME_KIND_HELLO, pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "协议版本或必需能力不兼容")
 		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_HANDSHAKE, pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "%v", err)
 	}
+	minor = agree.Minor
 
 	// 2. HELLO_ACK + Bootstrap：Core 只检查配置是 JSON 对象，不先用新 Schema 否决旧配置。
 	if !validate.IsJSONObject([]byte(boot.GetCandidateConfigJson())) {

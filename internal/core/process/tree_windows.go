@@ -79,5 +79,15 @@ func (t *tree) empty() (bool, error) {
 	return info.ActiveProcesses == 0, nil
 }
 
-// release 关闭 Job 句柄；KILL_ON_JOB_CLOSE 使仍在 Job 中的进程随之终止。
-func (t *tree) release() error { return windows.CloseHandle(t.job) }
+// reap 无需回收：Windows 没有僵尸进程，退出的进程不再计入 ActiveProcesses。
+func (t *tree) reap() {}
+
+// release 关闭 Job 句柄；KILL_ON_JOB_CLOSE 使仍在 Job 中的进程随之终止。重复调用无副作用。
+func (t *tree) release() error {
+	if t.job == 0 {
+		return nil
+	}
+	err := windows.CloseHandle(t.job)
+	t.job = 0
+	return err
+}
