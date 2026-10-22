@@ -1,3 +1,4 @@
+// 本文件负责插件侧的连接建立、握手（HELLO/HELLO_ACK）与准备阶段（配置、OnStart、REGISTER/PREPARED）。
 package sdk
 
 import (
@@ -22,10 +23,19 @@ var handshakeTimeout = 10 * time.Second
 
 // launch 是 Core 通过环境变量下发的启动参数（见 internal/wire/env.go）。
 type launch struct {
-	pluginID, transport, addr string
-	secret, digest            []byte
+	// pluginID 是插件 ID。
+	pluginID string
+	// transport 是 tcp 或 stdio。
+	transport string
+	// addr 是 TCP 传输时 Core 的 loopback 地址。
+	addr string
+	// secret 是 32 字节 Session Secret。
+	secret []byte
+	// digest 是安装时已验证的归档摘要，在 HELLO 中原样回显。
+	digest []byte
 }
 
+// readLaunch 读取并校验 Core 下发的启动环境变量。
 func readLaunch() (launch, error) {
 	l := launch{pluginID: os.Getenv(wire.EnvPluginID), transport: os.Getenv(wire.EnvTransport), addr: os.Getenv(wire.EnvCoreAddr)}
 	var err1, err2 error
@@ -60,8 +70,10 @@ func dial(l launch) (*wire.Conn, error) {
 	return wire.NewStreamConn(c), nil
 }
 
+// closers 把多个 Closer 合成一个，用于 stdio 传输同时关闭 stdin 与 stdout。
 type closers []io.Closer
 
+// Close 依次关闭全部成员并合并错误。
 func (cs closers) Close() error {
 	var errs []error
 	for _, c := range cs {
@@ -150,13 +162,13 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32) *
 func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg *Registration) (*pb.Prepared, error) {
 	sid, boot, minor := ack.GetSessionId(), ack.GetBootstrap(), ack.GetChosenMinor()
 	limits := boot.GetPhaseLimits()
-	// Core 必须下发阶段预算与准备截止时间；缺失时报协议错误，而不是把预算当作 0 误报超时。
+	// 1. Core 必须下发阶段预算与准备截止时间；缺失时报协议错误，而不是把预算当作 0 误报超时。
 	if limits == nil || limits.GetOnStartMs() == 0 || boot.GetPreparationDeadlineUnixMs() == 0 {
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_HELLO_ACK,
 			pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "Bootstrap 缺少阶段预算或准备截止时间", nil)
 	}
 
-	// OnStart：用户函数不响应 context 时，由 watchdog 判定失败（Run 随后退出进程）。
+	// 2. OnStart：用户函数不响应 context 时，由 watchdog 判定失败（Run 随后退出进程）。
 	if s, ok := root.(Starter); ok {
 		budget := time.Duration(limits.GetOnStartMs()) * time.Millisecond
 		ctx, cancel := context.WithTimeout(context.Background(), budget)
@@ -187,6 +199,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg 
 		}
 	}
 
+	// 3. 发送完整 REGISTER；超过 4 MiB 时报告 RESOURCE_EXHAUSTED。
 	regEnv, err := wire.ControlEnvelope(sid, minor, l.pluginID, pb.FrameKind_FRAME_KIND_REGISTER,
 		buildRegister(reg, boot.GetCandidateConfigJson(), boot.GetTargetConfigVersion()))
 	if err != nil {
@@ -200,6 +213,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg 
 		return nil, fmt.Errorf("发送 REGISTER 失败: %w", err)
 	}
 
+	// 4. 在准备截止前等待 PREPARED 或 Core 的 SESSION_ERROR。
 	deadline := time.UnixMilli(boot.GetPreparationDeadlineUnixMs())
 	stop := withWatchdog(conn, time.Until(deadline))
 	defer stop()

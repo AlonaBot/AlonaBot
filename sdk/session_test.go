@@ -1,3 +1,4 @@
+// 本文件用假 Core 测试插件侧握手与准备阶段：HELLO 内容、认证失败、OnStart 失败、REGISTER 超限与被拒，以及启动参数校验。
 package sdk
 
 import (
@@ -19,6 +20,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// 测试使用的固定 Secret、归档摘要、Session ID 与启动参数。
 var (
 	testSecret = bytes.Repeat([]byte{0x5A}, 32)
 	testDigest = bytes.Repeat([]byte{0x3C}, 32)
@@ -28,10 +30,13 @@ var (
 
 // fakeCore 用原始帧扮演 Core 一端。
 type fakeCore struct {
-	t    *testing.T
+	// t 是所属测试。
+	t *testing.T
+	// conn 是 Core 一端的帧连接。
 	conn *wire.Conn
 }
 
+// recv 读取插件发来的下一帧并解码控制载荷，失败即终止测试。
 func (c *fakeCore) recv() (*pb.Envelope, proto.Message) {
 	c.t.Helper()
 	env, err := c.conn.ReadFrame()
@@ -45,6 +50,7 @@ func (c *fakeCore) recv() (*pb.Envelope, proto.Message) {
 	return env, msg
 }
 
+// send 以 Core 的身份发出控制帧；mutate 可在发送前改动帧。
 func (c *fakeCore) send(kind pb.FrameKind, msg proto.Message, mutate func(*pb.Envelope)) {
 	data, _ := proto.Marshal(msg)
 	env := &pb.Envelope{ProtocolMajor: 1, SessionId: testSID, Kind: kind, PayloadEncoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF,
@@ -55,28 +61,37 @@ func (c *fakeCore) send(kind pb.FrameKind, msg proto.Message, mutate func(*pb.En
 	_ = c.conn.WriteFrame(env)
 }
 
+// newFakeCore 返回假 Core 与插件一端的连接。
 func newFakeCore(t *testing.T) (*fakeCore, *wire.Conn) {
 	a, b := net.Pipe()
 	t.Cleanup(func() { _ = a.Close(); _ = b.Close() })
 	return &fakeCore{t: t, conn: wire.NewStreamConn(a)}, wire.NewStreamConn(b)
 }
 
+// ack 返回带指定 OnStart 预算、准备截止为 5 秒后的 HELLO_ACK。
 func ack(onStartMs uint32) *pb.HelloAck {
 	return &pb.HelloAck{SessionId: testSID, Bootstrap: &pb.Bootstrap{GenerationId: "g1", CandidateConfigJson: `{"k":1}`,
 		TargetConfigVersion: 1, PhaseLimits: &pb.PhaseLimits{OnStartMs: onStartMs},
 		PreparationDeadlineUnixMs: time.Now().Add(5 * time.Second).UnixMilli()}}
 }
 
+// lifecycleRoot 是 OnStart 行为可注入、注册一条 ping 命令的根插件。
 type lifecycleRoot struct {
+	// Base 提供根插件的默认实现。
 	plugin.Base
+	// onStart 是 OnStart 的实际行为。
 	onStart func(context.Context) error
 }
 
+// OnStart 调用注入的 onStart。
 func (r *lifecycleRoot) OnStart(ctx context.Context) error { return r.onStart(ctx) }
+
+// Commands 注册 ping 命令。
 func (r *lifecycleRoot) Commands(c *CommandRegistry) {
 	c.Command("ping", func(*Context) (message.Chain, error) { return nil, nil })
 }
 
+// HELLO 带插件 ID、Secret、构建摘要与协议版本且不带 session_id；HELLO_ACK 被正确解析。
 func TestClientHandshakeSendsIdentity(t *testing.T) {
 	core, conn := newFakeCore(t)
 	got := make(chan *pb.HelloAck, 1)
@@ -99,6 +114,7 @@ func TestClientHandshakeSendsIdentity(t *testing.T) {
 	}
 }
 
+// Core 认证失败直接关闭连接时，握手返回错误。
 func TestClientHandshakeRejectedByCore(t *testing.T) {
 	core, conn := newFakeCore(t)
 	errc := make(chan error, 1)
@@ -110,6 +126,7 @@ func TestClientHandshakeRejectedByCore(t *testing.T) {
 	}
 }
 
+// prepareAsync 收集 root 的注册项后在后台执行 prepare，返回其错误。
 func prepareAsync(t *testing.T, conn *wire.Conn, a *pb.HelloAck, root plugin.Root) <-chan error {
 	reg, err := Collect(root)
 	if err != nil {
@@ -120,6 +137,7 @@ func prepareAsync(t *testing.T, conn *wire.Conn, a *pb.HelloAck, root plugin.Roo
 	return errc
 }
 
+// 正常准备：OnStart 执行后发送 REGISTER，收到 PREPARED 后返回。
 func TestPrepareHappyPath(t *testing.T) {
 	core, conn := newFakeCore(t)
 	started := false
@@ -137,6 +155,7 @@ func TestPrepareHappyPath(t *testing.T) {
 	}
 }
 
+// OnStart 失败时报告 SESSION_ERROR(ON_START)，安全消息不含用户错误原文。
 func TestPrepareOnStartErrorReportsSafeMessage(t *testing.T) {
 	core, conn := newFakeCore(t)
 	root := &lifecycleRoot{onStart: func(context.Context) error { return errors.New("db password=SECRET-XYZ rejected") }}
@@ -173,8 +192,13 @@ func TestPrepareOnStartHangsBeyondBudget(t *testing.T) {
 	}
 }
 
-type manyCommands struct{ plugin.Base }
+// manyCommands 注册大量长命令，使 REGISTER 超过 4 MiB。
+type manyCommands struct {
+	// Base 提供根插件的默认实现。
+	plugin.Base
+}
 
+// Commands 注册 5000 条约 1 KB 长的命令。
 func (manyCommands) Commands(r *CommandRegistry) {
 	long := strings.Repeat("c", 1000)
 	for i := 0; i < 5000; i++ {
@@ -182,6 +206,7 @@ func (manyCommands) Commands(r *CommandRegistry) {
 	}
 }
 
+// REGISTER 超过 4 MiB 时报告 SESSION_ERROR(REGISTER, RESOURCE_EXHAUSTED) 并返回帧超限错误。
 func TestPrepareRegisterTooLarge(t *testing.T) {
 	core, conn := newFakeCore(t)
 	errc := prepareAsync(t, conn, ack(1000), &manyCommands{})
@@ -194,6 +219,7 @@ func TestPrepareRegisterTooLarge(t *testing.T) {
 	}
 }
 
+// Core 以 SESSION_ERROR 拒绝 REGISTER 时，返回 Core 给出的错误码。
 func TestPrepareRegisterRejectedByCore(t *testing.T) {
 	core, conn := newFakeCore(t)
 	errc := prepareAsync(t, conn, ack(1000), &lifecycleRoot{onStart: func(context.Context) error { return nil }})
@@ -218,6 +244,7 @@ func TestRunRejectsUnsupportedDeclarations(t *testing.T) {
 	}
 }
 
+// 启动环境变量不合法（Secret 过短等）时 readLaunch 报错。
 func TestReadLaunchValidation(t *testing.T) {
 	t.Setenv(wire.EnvPluginID, "demo")
 	t.Setenv(wire.EnvSecret, "abcd")

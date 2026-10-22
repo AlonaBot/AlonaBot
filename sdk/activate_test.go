@@ -1,3 +1,4 @@
+// 本文件测试插件侧激活与停止：ready gate、OnReady 失败与超时、代次不符、STOPPING 与断链后的 OnStop。
 package sdk
 
 import (
@@ -12,13 +13,18 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
 
+// readyRoot 是 OnReady 行为可注入的根插件。
 type readyRoot struct {
+	// Base 提供根插件的默认实现。
 	plugin.Base
+	// onReady 是 OnReady 的实际行为。
 	onReady func(context.Context) error
 }
 
+// OnReady 调用注入的 onReady。
 func (r *readyRoot) OnReady(ctx context.Context) error { return r.onReady(ctx) }
 
+// activateAsync 在后台执行 activate，返回其错误；成功时等到 Session 关闭再结束。
 func activateAsync(conn *wire.Conn, a *pb.HelloAck, root plugin.Root) <-chan error {
 	errc := make(chan error, 1)
 	go func() {
@@ -34,6 +40,7 @@ func activateAsync(conn *wire.Conn, a *pb.HelloAck, root plugin.Root) <-chan err
 	return errc
 }
 
+// coreRequest 构造 Core 发出的合法业务 REQUEST。
 func coreRequest(id uint64) *pb.Envelope {
 	ms := time.Now().Add(time.Minute).UnixMilli()
 	return &pb.Envelope{ProtocolMajor: 1, SessionId: testSID, Kind: pb.FrameKind_FRAME_KIND_REQUEST,
@@ -76,6 +83,7 @@ func TestActivateGateOpensAfterActivatedWritten(t *testing.T) {
 	}
 }
 
+// OnReady 返回错误时报告 SESSION_ERROR(ON_READY, PLUGIN_NOT_READY)，安全消息不含用户错误原文。
 func TestActivateOnReadyErrorReported(t *testing.T) {
 	core, conn := newFakeCore(t)
 	errc := activateAsync(conn, ack(1000), &readyRoot{onReady: func(context.Context) error { return errors.New("token=SECRET-R") }})
@@ -92,6 +100,7 @@ func TestActivateOnReadyErrorReported(t *testing.T) {
 	}
 }
 
+// OnReady 超过 ACTIVATE 给出的截止时间时报告 DEADLINE_EXCEEDED。
 func TestActivateOnReadyHangsBeyondDeadline(t *testing.T) {
 	core, conn := newFakeCore(t)
 	block := make(chan struct{})
@@ -107,6 +116,7 @@ func TestActivateOnReadyHangsBeyondDeadline(t *testing.T) {
 	}
 }
 
+// ACTIVATE 的代次与 Bootstrap 不符时激活失败。
 func TestActivateWrongGenerationClosesSession(t *testing.T) {
 	core, conn := newFakeCore(t)
 	errc := activateAsync(conn, ack(1000), &readyRoot{onReady: func(context.Context) error { return nil }})
@@ -116,20 +126,28 @@ func TestActivateWrongGenerationClosesSession(t *testing.T) {
 	}
 }
 
+// stopRoot 是 OnStop 行为可注入的根插件。
 type stopRoot struct {
+	// Base 提供根插件的默认实现。
 	plugin.Base
+	// onStop 是 OnStop 的实际行为。
 	onStop func(context.Context) error
 }
 
+// OnStop 调用注入的 onStop。
 func (r *stopRoot) OnStop(ctx context.Context) error { return r.onStop(ctx) }
 
-// activated 让 SDK 完成激活，返回假 Core、Session 与 activation。
+// activatedSDK 让 SDK 完成激活，返回假 Core、Session 与 activation。
 func activatedSDK(t *testing.T, root plugin.Root) (*fakeCore, *wire.Session, *activation) {
 	t.Helper()
 	core, conn := newFakeCore(t)
+	// res 是一次 activate 的返回值。
 	type res struct {
-		s   *wire.Session
-		a   *activation
+		// s 是激活后的 Session。
+		s *wire.Session
+		// a 是激活状态。
+		a *activation
+		// err 是 activate 的错误。
 		err error
 	}
 	out := make(chan res, 1)
@@ -145,9 +163,12 @@ func activatedSDK(t *testing.T, root plugin.Root) (*fakeCore, *wire.Session, *ac
 
 // STOPPING：关闭 ready gate、取消 lifetime，用独立 context 按 STOPPING 截止执行 OnStop，然后正常返回。
 func TestStoppingRunsOnStopWithIndependentContext(t *testing.T) {
+	// seen 是 OnStop 观察到的 context 状态。
 	type seen struct {
+		// alreadyDone 为 true 表示传入的 context 一开始就已取消。
 		alreadyDone bool
-		deadline    time.Time
+		// deadline 是传入 context 的截止时间。
+		deadline time.Time
 	}
 	got := make(chan seen, 1)
 	release := make(chan struct{})
@@ -226,6 +247,7 @@ func TestEOFRunsOnStopAndReturnsError(t *testing.T) {
 	}
 }
 
+// 重复的 STOPPING 是协议错误，关闭 Session。
 func TestDuplicateStoppingIsProtocolError(t *testing.T) {
 	core, sess, a := activatedSDK(t, &stopRoot{onStop: func(context.Context) error { time.Sleep(200 * time.Millisecond); return nil }})
 	served := make(chan error, 1)
@@ -239,6 +261,7 @@ func TestDuplicateStoppingIsProtocolError(t *testing.T) {
 	}
 }
 
+// SDK 的 OnStop 与握手预算和 CONTRACTS §4.2 一致。
 func TestOnStopBudgetMatchesContract(t *testing.T) {
 	if onStopBudget != 4*time.Second || handshakeTimeout != 10*time.Second {
 		t.Fatalf("SDK 预算应为 OnStop 4s、握手 10s：%v %v", onStopBudget, handshakeTimeout)

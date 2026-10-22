@@ -1,3 +1,4 @@
+// 本文件负责插件侧的激活与停止：ACTIVATE → OnReady → ACTIVATED、本地 ready gate、STOPPING/断链后的 OnStop。
 package sdk
 
 import (
@@ -17,21 +18,29 @@ import (
 
 // activation 跟踪 ACTIVATE → OnReady → ACTIVATED 与本地 ready gate（CONTRACTS §4.1）。
 type activation struct {
-	l    launch
-	ack  *pb.HelloAck
+	// l 是启动参数。
+	l launch
+	// ack 是握手结果，提供 Session ID、协商版本与 Bootstrap。
+	ack *pb.HelloAck
+	// root 是用户的根插件。
 	root plugin.Root
+	// sess 是激活后使用的 Session。
 	sess *wire.Session
 
-	ready    atomic.Bool   // ready gate：ACTIVATED 完整写出后才为 true
-	readyCh  chan struct{} // ready gate 打开时关闭
-	started  atomic.Bool   // 已收到 ACTIVATE
+	ready   atomic.Bool   // ready gate：ACTIVATED 完整写出后才为 true
+	readyCh chan struct{} // ready gate 打开时关闭
+	started atomic.Bool   // 已收到 ACTIVATE
+	// failOnce 保证只报告第一个激活失败。
 	failOnce sync.Once
-	failErr  chan error
+	// failErr 容量 1，接收激活失败的原因。
+	failErr chan error
 
 	// lifetime 在 STOPPING、断链或进程停止时取消；后台工作应监听它。
-	lifetime     context.Context
+	lifetime context.Context
+	// stopLifetime 取消 lifetime。
 	stopLifetime context.CancelFunc
 	stopping     atomic.Bool // 已收到 STOPPING
+	// shutdownOnce 保证 OnStop 与关闭流程只执行一次。
 	shutdownOnce sync.Once
 	finished     chan struct{} // OnStop 结束（或超时）、Session 关闭后关闭
 }
@@ -44,6 +53,7 @@ func (a *activation) admit(*wire.Inbound) *pb.ErrorInfo {
 	return nil
 }
 
+// fail 报告第一个激活失败，之后的调用被忽略。
 func (a *activation) fail(err error) {
 	a.failOnce.Do(func() { a.failErr <- err })
 }
@@ -80,6 +90,7 @@ func (a *activation) control(env *pb.Envelope) error {
 
 // runOnReady 在 ACTIVATE 给出的期限内执行 OnReady；用户函数不响应 ctx 时由 watchdog 判定失败。
 func (a *activation) runOnReady(m *pb.Activate) {
+	// 1. 在 ACTIVATE 给出的截止前执行 OnReady（如有）；失败或超时报告 SESSION_ERROR。
 	deadline := time.UnixMilli(m.GetOnReadyDeadlineUnixMs())
 	if r, ok := a.root.(Readier); ok {
 		ctx, cancel := context.WithDeadline(context.Background(), deadline)
@@ -107,7 +118,7 @@ func (a *activation) runOnReady(m *pb.Activate) {
 			return
 		}
 	}
-	// 唯一 writer 完整写出 ACTIVATED 之后才打开 ready gate。
+	// 2. 唯一 writer 完整写出 ACTIVATED 之后才打开 ready gate。
 	if err := a.sess.SendControlSync(pb.FrameKind_FRAME_KIND_ACTIVATED, &pb.Activated{GenerationId: m.GetGenerationId(), Ready: true}); err != nil {
 		a.fail(fmt.Errorf("写出 ACTIVATED 失败: %w", err))
 		return
@@ -139,8 +150,10 @@ var onStopBudget = 4 * time.Second
 // lifetime）；用户函数不响应 ctx 时 watchdog 到期即放弃等待。最后关闭 Session。只执行一次。
 func (a *activation) shutdown(deadline time.Time) {
 	a.shutdownOnce.Do(func() {
+		// 1. 关闭 ready gate 并取消 lifetime，不再接受新业务。
 		a.ready.Store(false)
 		a.stopLifetime()
+		// 2. 用独立的截止 context 执行 OnStop，最多等到 deadline。
 		if s, ok := a.root.(Stopper); ok {
 			ctx, cancel := context.WithDeadline(context.Background(), deadline)
 			done := make(chan struct{})
@@ -164,6 +177,7 @@ func (a *activation) shutdown(deadline time.Time) {
 			timer.Stop()
 			cancel()
 		}
+		// 3. 关闭 Session 并通知 serve 返回。
 		_ = a.sess.Close()
 		close(a.finished)
 	})

@@ -1,3 +1,4 @@
+// 本文件负责插件侧取得 runtime.lock。
 package sdk
 
 import (

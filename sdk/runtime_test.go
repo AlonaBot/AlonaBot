@@ -1,3 +1,4 @@
+// 本文件测试 runtime.lock：第二实例拒绝启动、锁文件保留、路径必须由 Core 以绝对路径给出，以及 Run 先取锁再执行用户代码。
 package sdk
 
 import (
@@ -10,6 +11,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
+// 锁被占用时第二个实例失败；释放后锁文件仍在，可以再次取锁。
 func TestRuntimeLockSecondInstanceFails(t *testing.T) {
 	path := filepath.Join(t.TempDir(), wire.RuntimeLockFile)
 	t.Setenv(wire.EnvRuntimeLock, path)
@@ -31,6 +33,7 @@ func TestRuntimeLockSecondInstanceFails(t *testing.T) {
 	_ = again.Unlock()
 }
 
+// 缺少环境变量或给出相对路径时拒绝取锁。
 func TestRuntimeLockRequiresAbsolutePathFromCore(t *testing.T) {
 	t.Setenv(wire.EnvRuntimeLock, "")
 	if _, err := acquireRuntimeLock(); err == nil {

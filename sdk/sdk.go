@@ -16,10 +16,13 @@ import (
 
 // Error 是带协议错误码的 SDK 错误。
 type Error struct {
-	Code    pb.ErrorCode
+	// Code 是协议错误码。
+	Code pb.ErrorCode
+	// Message 是说明。
 	Message string
 }
 
+// Error 返回「错误码: 说明」。
 func (e *Error) Error() string { return e.Code.String() + ": " + e.Message }
 
 // ErrNotImplemented 表示该入口的运行行为尚未实现。
@@ -27,21 +30,47 @@ var ErrNotImplemented = &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Messag
 
 // 可选的进程生命周期 Hook（CONTRACTS §4.1）；没有实现时无需空方法。
 type (
-	Starter interface{ OnStart(context.Context) error }
-	Readier interface{ OnReady(context.Context) error }
-	Stopper interface{ OnStop(context.Context) error }
+	// Starter 的 OnStart 在准备阶段、REGISTER 之前执行；失败时本次启动失败。
+	Starter interface {
+		// OnStart 在配置准备之后运行，不能发起业务调用。
+		OnStart(context.Context) error
+	}
+	// Readier 的 OnReady 在收到 ACTIVATE 之后执行；成功后才写出 ACTIVATED。
+	Readier interface {
+		// OnReady 在 OnReady 预算内完成就绪工作。
+		OnReady(context.Context) error
+	}
+	// Stopper 的 OnStop 在 STOPPING 或断链后执行，使用独立的剩余停止期限。
+	Stopper interface {
+		// OnStop 关闭资源，最多使用 STOPPING 给出的期限。
+		OnStop(context.Context) error
+	}
 )
 
 // 根插件可选实现的注册入口；实例方法通过这些入口显式绑定。
 type (
-	CommandProvider  interface{ Commands(*CommandRegistry) }
-	HTTPProvider     interface{ HTTP(*HTTPRegistry) }
-	ScheduleProvider interface{ Schedules(*ScheduleRegistry) }
+	// CommandProvider 注册命令。
+	CommandProvider interface {
+		// Commands 在 Collect 时调用一次。
+		Commands(*CommandRegistry)
+	}
+	// HTTPProvider 注册 HTTP 路由。
+	HTTPProvider interface {
+		// HTTP 在 Collect 时调用一次。
+		HTTP(*HTTPRegistry)
+	}
+	// ScheduleProvider 注册定时任务。
+	ScheduleProvider interface {
+		// Schedules 在 Collect 时调用一次。
+		Schedules(*ScheduleRegistry)
+	}
 )
 
 // Context 只在一次 Handler 调用期间有效。
 type Context struct {
-	ctx     context.Context
+	// ctx 是本次调用的 context；为 nil 时 Context() 返回 Background。
+	ctx context.Context
+	// stopped 是锁存的停止传播标记，一经设置不能清除。
 	stopped bool
 }
 
@@ -59,7 +88,11 @@ func (c *Context) StopPropagation() { c.stopped = true }
 // SendOption 调整一次 Send。
 type SendOption func(*sendOptions)
 
-type sendOptions struct{ to *pb.Target }
+// sendOptions 是 SendOption 累积的发送参数。
+type sendOptions struct {
+	// to 是显式目标；为 nil 时使用默认 Target。
+	to *pb.Target
+}
 
 // To 指定显式目标；没有真实入站默认目标时必须使用。
 func To(t *pb.Target) SendOption { return func(o *sendOptions) { o.to = t } }
@@ -114,8 +147,11 @@ func Run(root plugin.Root) error {
 
 // Registration 是从根插件收集到的静态注册项。
 type Registration struct {
-	Commands  []Command
-	HTTP      []HTTPRoute
+	// Commands 是已收集的命令。
+	Commands []Command
+	// HTTP 是已收集的 HTTP 路由。
+	HTTP []HTTPRoute
+	// Schedules 是已收集的定时任务。
 	Schedules []Schedule
 }
 

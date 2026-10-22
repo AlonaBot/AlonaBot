@@ -1,3 +1,4 @@
+// 本文件测试 SDK 公共类型：Handler 签名检查、注册收集与拒绝、分组路径、StopPropagation、Send 与 Chain 转换。
 package sdk
 
 import (
@@ -12,29 +13,40 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
 
+// root 是注册入口可注入的根插件。
 type root struct {
+	// Base 提供根插件的默认实现。
 	plugin.Base
-	commands  func(*CommandRegistry)
-	http      func(*HTTPRegistry)
+	// commands 是 Commands 的行为；为 nil 时不注册命令。
+	commands func(*CommandRegistry)
+	// http 是 HTTP 的行为；为 nil 时不注册路由。
+	http func(*HTTPRegistry)
+	// schedules 是 Schedules 的行为；为 nil 时不注册任务。
 	schedules func(*ScheduleRegistry)
 }
 
+// Commands 调用注入的 commands。
 func (r *root) Commands(c *CommandRegistry) {
 	if r.commands != nil {
 		r.commands(c)
 	}
 }
+
+// HTTP 调用注入的 http。
 func (r *root) HTTP(h *HTTPRegistry) {
 	if r.http != nil {
 		r.http(h)
 	}
 }
+
+// Schedules 调用注入的 schedules。
 func (r *root) Schedules(s *ScheduleRegistry) {
 	if r.schedules != nil {
 		r.schedules(s)
 	}
 }
 
+// 两种合法签名通过；nil、非函数、缺 Context、可变参数、不支持的参数或返回类型被拒绝。
 func TestCheckHandler(t *testing.T) {
 	ok := []any{
 		func(*Context) error { return nil },
@@ -66,6 +78,7 @@ func TestCheckHandler(t *testing.T) {
 	}
 }
 
+// 重复命令、非法路径、重复或非规范的 HTTP 路由、公开路由缺验证方式、非法定时任务都使 Collect 失败。
 func TestCollectRejects(t *testing.T) {
 	h := func(*Context) error { return nil }
 	cases := map[string]*root{
@@ -110,12 +123,14 @@ func TestCollectRejects(t *testing.T) {
 	}
 }
 
+// HTTP 根路径 / 是规范路径，允许注册。
 func TestHTTPRootPathAllowed(t *testing.T) {
 	if _, err := Collect(&root{http: func(r *HTTPRegistry) { r.Handle("GET", "/", http.NotFoundHandler()) }}); err != nil {
 		t.Fatalf("根路径 / 应允许: %v", err)
 	}
 }
 
+// 嵌套分组的前缀逐层并入命令路径，顺序与注册顺序一致。
 func TestCollectGroupPath(t *testing.T) {
 	reg, err := Collect(&root{commands: func(r *CommandRegistry) {
 		r.Group("rss", func(g *CommandGroup) {
@@ -135,6 +150,7 @@ func TestCollectGroupPath(t *testing.T) {
 	}
 }
 
+// StopPropagation 一经设置保持锁存。
 func TestStopPropagationLatches(t *testing.T) {
 	c := &Context{}
 	c.StopPropagation()
@@ -144,6 +160,7 @@ func TestStopPropagationLatches(t *testing.T) {
 	}
 }
 
+// Send 尚未实现时返回 UNSUPPORTED。
 func TestSendNotImplemented(t *testing.T) {
 	var e *Error
 	if _, err := (&Context{}).Send(message.Chain{message.Text("x")}); !errors.As(err, &e) || e.Code != pb.ErrorCode_ERROR_CODE_UNSUPPORTED {
@@ -151,6 +168,7 @@ func TestSendNotImplemented(t *testing.T) {
 	}
 }
 
+// message.Chain 按顺序转换为 MessageChain。
 func TestChainProto(t *testing.T) {
 	c := message.Chain{message.Text("a"), message.Text("b")}.Proto()
 	if len(c.Segments) != 2 || c.Segments[1].GetText().GetText() != "b" {
