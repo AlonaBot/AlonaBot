@@ -329,6 +329,7 @@
 
 - 对照 input.md 与 plan.md §1 检查完成定义；最大范围复查（代码质量、并发、安全、错误处理、测试覆盖、交叉编译、文档、回滚方案）；汇总所有阻塞项与「未运行」项；在本节写出结论。
 - 结论（2026-10-21，goal-1 分支，终审时的 HEAD 为 9c9f753 之上的本次提交）：**goal-1（B1 = T-01 + T-02）完成，没有阻塞项。**
+  - 后续说明：终审之后的独立复查用临时探针复现了七项行为缺陷，这个结论因此不再成立；缺陷与修复见文末「B1 修复与规范落地」。本条作为历史记录保留。
   - **对照 input.md**：按要求先用 init-project 初始化（main 分支 5f9e903），再用 goal-mode 持续推进；只做 B1；依赖只使用已批准清单（直接依赖 7 项）；PG 使用临时容器、用完即删；Git 只在 goal-1 分支（worktree `.worktrees/goal-1`）上逐 task 提交（共 32 个 commit），**没有 push，也没有合并到 main**。组织名 `AlonaBot` 无法通过 API 注册（REST 返回 404），需要用户在网页上注册。
   - **对照 plan.md §1 完成定义**：T-01 —— proto 可以编译且生成稳定（本次终审重新执行 `go generate` 与 golden `-update` 后均无 diff）、Envelope 字段号与枚举值由测试锁定、manifest/release/消息结构都有校验与 fixture、SDK 公共类型与示例可以编译、SQLite（CRUD/Tx/WAL Backup/账本同事务）与 PG（临时容器）都通过、五平台 `CGO_ENABLED=0` 构建通过、版本写入 go.mod/go.sum（`go mod verify` 显示 all modules verified）✓。T-02 —— 真实 SDK 插件在 TCP 与 stdio 上都走完 Hello→…→STOPPING→退出；core.lock、runtime.lock、调用表、准入、取消顺序、阶段预算、停止预算、有限重启都有测试；V 分项证据表见 G1-11（T-01）与 G1-19（T-02）✓。B1 之外的能力没有实现，只预留了接入点 ✓。
   - **最大范围复查**：全仓库 `go test -race -count=1 ./...` 的 15 个包都 ok；`go test -v ./...` 统计为 **272 PASS / 0 FAIL / 2 SKIP**（SKIP 是两个 PG 测试，未设置 `ALONABOT_TEST_PG_DSN`，已在 G1-09 的容器上实测通过）；cmd e2e 与 supervisor `-count=2` ok；五平台 build+vet OK；archtest 通过；文档相对链接全部有效；没有 TODO/FIXME/DEBUG 残留；`pgrep` 显示没有残留测试进程。代码规模：非测试 Go 代码约 5.1k 行（不含生成代码），测试约 5.0k 行。
@@ -402,3 +403,70 @@
   - 验证证据（darwin/arm64，go1.27.1，本 task 的 commit）：新测试 PASS（0.85s）；**变异检查**：去掉 Stop 中的锁之后，测试报「同一插件的 Launch 在 Stop 完成（13:53:32.252）之前就返回（13:53:31.453），管理操作未串行」，恢复后通过；全仓库 `go test -race -count=1 ./...` 没有失败的包；`go test -count=2 ./cmd/alonabot/` ok；三平台 vet 通过；`pgrep` 确认没有残留进程。
   - 剩余风险：没有新增风险。
   - 下一步：终审。
+
+## B1 修复与规范落地（codex/b1-repair）
+
+终审之后的复查发现七项缺陷：原有测试全部通过，但临时探针（`tmp/test/_probe/b1-review`，不提交）能稳定复现。修复在 `codex/b1-repair` 分支上进行（从 goal-1 的 49fcb29 分出，R-00 合并了 main 的 b1559cb：项目规范、仓库技能与 CI），goal-1 的历史保持不变。行为修复、纯移动和注释调整分开提交。
+
+### [x] R-00 建立整合基线
+- 内容：建立 worktree `.worktrees/b1-repair`，合并 main。唯一的冲突在 docs/development.md「规则与检查」表，处理时保留 B1 已观测的四项状态，再追加 main 新增的两行（3514f43）。七项缺陷在整合后的分支上用原探针全部复现。
+
+### [x] R-01 取锁顺序与相对 data_dir（d72a8f2）
+- 缺陷 1：`sdk.Run` 先调用 `Collect`（会执行用户的 Commands 等注册入口），后取 runtime.lock。旧实例仍在时，用户代码已经执行。
+- 缺陷 2：相对 `--data-dir` 下，`ALONABOT_RUNTIME_LOCK` 是相对路径，SDK 以「必须是绝对路径」拒绝，插件无法启动。
+- 修复：`Run` 先取锁再 `Collect`，`Collect` 本身不加锁前置条件；`supervisor.Launch` 把 PluginDir 绝对化一次，工作目录与锁路径共用这个结果。
+- 回归：`TestRunTakesLockBeforeRegistration`，`TestRelativeDataDir`（TCP/stdio，各跑 new + restart，锁文件保留）。
+
+### [x] R-02 进程树回收与退出分类（edc88a0、9e37561）
+- 缺陷 3：领头进程退出后，留在进程组里的子进程不会被清理，Stop 和崩溃恢复都直接放行。
+- 缺陷 4：退出码 0 被判为异常退出，进入重启计数，可能导致插件被禁用。
+- 修复：
+  - `process.KillTree` 终止后，确认整棵树都已消失才返回；新增 `WaitTree`。Unix 用 `kill(-pgid, 0)` 判断，Windows 查询 Job 的 ActiveProcesses。
+  - `host.Stop` 在领头进程退出后，用同一个总截止等待剩余进程，到期后终止，错误放进 `StopResult.Err`。
+  - `supervisor` 用 mutex 决定 Stop 与 WaitExit 由谁清理，资源只释放一次。未经 Stop 的退出由 WaitExit 清理剩余进程树，失败时返回错误。只有「未经 Stop 且退出码非 0」才算异常。
+  - `Launch` 失败路径保留 KillTree 的错误（9e37561）。
+  - cmd 在进程树未确认清空时报错退出，不启动替代实例。
+- 回归：`TestNormalExitIsNotAbnormal`，`TestLeftoverChildReapedBeforeReturn`（stop 与 crash 两条路径）。变异验证：分别去掉 WaitTree、WaitExit 中的 KillTree、Success 判断，对应测试都会失败。
+- 未运行：Windows 的 Job 清空确认只做了交叉 vet。
+
+### [x] R-03 取消请求后的队列与预算（02c8d1a）
+- 缺陷 5：取消排队中的请求时，预算立即归还，但 `s.biz` 仍持有载荷。writer 阻塞时反复排队再取消，就能越过字节上限（探针：队列保留 3000 字节，上限 1000）。
+- 修复：调用状态统一由 Session.mu 保护，`complete` 按写出状态分别处理：
+  - 排队中：移出队列、丢弃帧并归还预算，对端既收不到 Request 也收不到 Cancel。
+  - 写出中：写完再归还预算，然后按放弃原因发 Cancel。
+  - 已写出：立即归还预算并发 Cancel。
+  - 预算只归还一次；写完后补发的 Cancel 使用实际原因，原来固定写 CALLER_CANCELLED。
+- 回归：`TestCancelledRequestsReleaseQueueAndBudget`，用旧实现跑会失败。
+
+### [x] R-04 认证后帧校验与错误码映射（bc66e83）
+- 缺陷 6：握手后没有持续核对帧的 source_plugin_id 和协商 minor，插件可以冒用其他 ID，Core 帧也可以伪带插件来源。
+- 缺陷 7：RESPONSE 中的未知错误码原样交给调用者。
+- 修复：
+  - 新增 `wire.CheckPeer`，由 Session 读循环、Core 准备阶段（REGISTER/SESSION_ERROR）、SDK 的 HELLO_ACK/PREPARED 共用；Core 侧 Session 传入插件 ID。
+  - `responseOf` 用 `validate.PublicCode` 公开错误码，保留载荷、safe_message 和 trace_id，原始码放进 `Response.RawErrorCode`；SDK 收到的 SESSION_ERROR 同样做映射。
+  - 修正了两个不合 WIRE 规定的测试夹具。
+- 回归：`TestSessionRejectsForeignIdentityOrMinor`、`TestPrepareRejectsForeignSourceOrMinor`、`TestUnknownErrorCodeMappedToInternal`，均做了变异验证。
+
+### [x] R-05 注释补齐与最小结构整理（7400c0f～e802828）
+- 结构：只把 `Budget` 及其方法原样移到 `internal/wire/budget.go`；`activate_test` 中重复三次的匿名结果结构改为具名类型 `activation`，没有其他搬迁。
+- 注释：
+  - 所有手写 Go 文件（含测试、示例）、9 份 .proto 和 YAML fixture 都有职责头。
+  - 类型、字段（含私有、嵌入、局部和匿名结构体字段）、接口方法和具名函数都有说明，合并声明的字段已拆开。
+  - 多阶段函数写了按真实阶段编号的 step comment。
+  - proto 的说明写在源 Schema 中，重新生成后已核对，生成文件只有注释和空白差异。
+  - frames/*.bin 与 release.json 不能写注释，用途在 contracts/doc.go 中说明。
+- 检查：临时 AST 检查器（`tmp/test/_probe/commentcheck`，不提交）最终报告 0 处缺口；它只检查是否存在说明，说明是否准确靠人工核对。
+
+### [x] R-06 文档与验收记录
+- 更新内容：
+  - spec/TEST-MATRIX.md 新增 §3.1，按 V 编号记录 T-01/T-02 分项的测试位置、命令、平台、结果和承接任务，没有关闭任何整项 V。
+  - spec/PLAN.md 与 spec/README.md 更新实施状态。
+  - WIRE-FORMAT §6 和 PLAN §2 中「尚未执行」的陈述已更正。
+  - ARCHITECTURE.md 的当前状态、wire 与 sdk 两行已更正。
+  - docs/development.md 的 V 证据状态已更新。
+  - README.md 写明只在 darwin/arm64 运行过。
+
+### R-07 门禁证据（候选 e802828，darwin/arm64，Go 1.27.1）
+- gofmt 无输出；`go generate ./...` 后无差异；`go vet ./...` 通过，linux/amd64 与 windows/amd64 的 vet 也通过；五目标 `CGO_ENABLED=0 go build ./...` 都通过；`go mod verify` 显示 all modules verified；`node --test scripts/check-repository.test.mjs`（2 pass）、`node scripts/check-repository.mjs` 和 `git diff --check` 都通过。
+- 全仓库测试：设置 `ALONABOT_TEST_PG_DSN` 后执行 `go test -race -count=1 ./...`，15 个包、291 个测试（含子测试）全部 PASS，0 FAIL，0 SKIP。PG 用一次性 postgres:17 容器（a63c1ea3f6a3），跑完确认没有残留 `ab_%` role/schema，随后删除容器。另跑 `go test -race -count=3 ./cmd/alonabot/ ./internal/core/supervisor/`，通过。
+- 未运行：Linux 与 Windows 的真实运行（T-10）；Windows Job 清空确认与 LockFileEx；PR head 的 CI 结果在 PR 中记录。

@@ -1,7 +1,7 @@
 # AlonaBot v0.1 验收与故障注入矩阵
 
 版本：v0.6-review · 2026-10-21
-状态：**计划中的验收用例；目前全部未执行**。用于实施交接与风险门槛，并非自动化测试报告。
+状态：**T-01/T-02 的分项已有运行证据（见 §3.1），其余分项与全部跨任务闭合点未执行**。用于实施交接与风险门槛，并非自动化测试报告。
 规范来源：[PLAN.md](PLAN.md)（T-01～T-10 详细工作包）、[CONTRACTS-v0.1.md](CONTRACTS-v0.1.md)、[WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md)。决策依据见 [adr/DECISIONS.md](adr/DECISIONS.md)。阶段归属更新：2026-10-22。
 
 ## 1. 逐任务验收条目
@@ -81,7 +81,33 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 
 ## 3. 证据和失败门槛
 
-每项 V-xx 在实施后才填写：测试代码位置、运行命令、实际平台与版本、运行日志/报告路径、通过或失败、所对应的变更。**V-01～V-47 当前全部为「未运行」**，且 V-35 明确纳入多物理消息的部分成功场景。不能把“规格写明如何测”描述成测试通过。
+每项 V-xx 在实施后才填写：测试代码位置、运行命令、实际平台与版本、运行日志/报告路径、通过或失败、所对应的变更。V-35 明确纳入多物理消息的部分成功场景。不能把“规格写明如何测”描述成测试通过。
+
+### 3.1 已运行的分项证据（T-01、T-02）
+
+下表只记录 T-01/T-02 范围内实际运行过的分项；没有任何一项 V 因此整体通过，「未完成」列由后续任务承接。表中未列出的 V 编号以及各行的未完成部分均为「未运行」。
+
+- **运行环境：** darwin/arm64（macOS，Darwin 27.0.0），Go 1.27.1，protoc 36.0；PostgreSQL 分项使用一次性 `postgres:17` 容器（镜像 a63c1ea3f6a3，Docker 29.4.2），用完删除，未残留测试 role/schema。
+- **候选提交与命令：** 在 B1 修复分支的提交 e802828 上执行 `go test -race -count=1 ./...`（设置 `ALONABOT_TEST_PG_DSN`）：15 个包、291 个测试（含子测试）全部通过，无跳过；`go test -race -count=3 ./cmd/alonabot/ ./internal/core/supervisor/` 通过；`go generate ./...` 后无差异；五目标 `CGO_ENABLED=0 go build ./...` 通过。
+- **未运行：** linux/amd64、linux/arm64、windows/amd64 只做了交叉构建与 vet，**没有运行**；darwin/amd64 只构建。Windows Job Object、LockFileEx 与 Job 清空确认的代码因此没有运行证据。上述 fixture、辅助进程与本机运行都不代表真实平台结果。
+
+| V | 已运行的分项 | 测试位置 | 结果 | 未完成（承接任务） |
+| --- | --- | --- | --- | --- |
+| V-01 | 市场/本地 ID、缺失/路径穿越/保留名/大写 ID、os/arch 不支持 | `contracts/manifest` | 通过 | 重复 ID 先后顺序、安装来源（T-04、T-09） |
+| V-02 | Major 不一致、Minor 取较小值、未知必需能力、UNSPECIFIED/未知 kind、字段存在性、未知错误码对调用者为 INTERNAL | `contracts/validate`、`contracts/wirespec_test.go`、`internal/wire`（`TestUnknownErrorCodeMappedToInternal`） | 通过 | 注册冲突与原子性的完整矩阵（T-04） |
+| V-03 | 帧 1 字节～4 MiB 边界、零长/超限/截断/错帧、同一 golden fixture 经 TCP 与 stdio 一致、真实进程在两种传输上的完整生命周期 | `internal/wire`、`cmd/alonabot`（e2e） | 通过（darwin/arm64） | 五平台运行（T-10） |
+| V-04 | 伪造/跨插件 Secret、插件 ID 或 digest 不符不回复；认证后帧的 session_id、source_plugin_id、protocol_minor 不符使当前 Session 失败（含准备期 REGISTER 与 Core 帧伪带插件来源）；代次不符的 ACTIVATED 被拒绝 | `internal/core/host`、`internal/wire`、`sdk` | 通过 | — |
+| V-05 | 双向相同 call_id、乱序、迟到/重复 Response 只计数、父调用结束后子调用被拒或取消 | `internal/wire` | 通过 | Scheduler 迟到响应释放运行槽（T-07） |
+| V-06 | 日志带插件 ID、stdio stdout 污染使会话失败、5 分钟内第 3 次异常退出禁用、退出码 0 不进入崩溃计数 | `internal/core/process`、`internal/core/host`、`internal/core/supervisor`、`cmd/alonabot` | 通过 | 五平台运行（T-10） |
+| V-21 | OnStart/OnReady 失败与挂起、准备期硬截止、提交后 Degraded、ACTIVATED 前不开放业务、多实例共享停止预算 | `internal/core/host`、`sdk` | 通过 | 真实配置/DB 回调（T-08）、正式候选恢复（T-09）、Scheduler 停止集成（T-07） |
+| V-26 | GORM SQLite/PostgreSQL 的 CRUD/Tx、Migrate 与 Migrations 互斥 | `sdk/gormdb` | 通过（PG 在临时容器上实测） | SDK 实际连接与凭证边界（T-08） |
+| V-32 | 五目标 `CGO_ENABLED=0` 构建 | 交叉编译命令（docs/development.md） | 构建 5/5 通过；运行只有 darwin/arm64 | 五平台运行（T-10） |
+| V-34 | 可复用的真实进程夹具；领头进程退出后，留在进程组内的子进程在停止与崩溃恢复两条路径上都被终止并确认消失后才放行 | `internal/core/process`、`internal/core/supervisor`（`TestLeftoverChildReapedBeforeReturn`） | 通过（Unix 进程组） | Windows Job 运行、100 次启停（T-10） |
+| V-36 | 双 Core（同进程/跨进程/真实二进制）、按插件串行（含 Stop 与 Launch）、旧实例持有 runtime.lock 时第二个实例在任何用户回调之前失败、Core 被 kill 后 SDK 断链退出并可恢复、相对 data_dir 在两种传输下可启动与重开 | `internal/core/state`、`internal/core/supervisor`、`sdk`、`cmd/alonabot` | 通过 | DB 锁与候选资源（T-08）、正式 enable/update 与仍写 DB 的子进程（T-09） |
+| V-37 | Bootstrap 与 REGISTER 超 4 MiB 拒绝、SESSION_ERROR 带失败阶段、无半注册、ACTIVATED 严格先于业务帧 | `internal/core/host`、`sdk` | 通过 | 旧配置先经 OnLoad 再验证（T-08）、T-09 组合 |
+| V-39 | Up 与 `_alonabot_migrations` 同一事务、失败不记录成功（SQLite 与 PG） | `sdk/gormdb` | 通过 | 首装/resume/维护许可（T-08、T-09） |
+| V-41 | release.json 对确切字节验签、重新序列化无法通过、签名有效但内容非法仍拒绝 | `contracts/release` | 通过 | 真实包验签与更新预检（T-09） |
+| V-42 | 每方向 256 个/16 MiB 与全局 64 MiB 满额立即拒绝；Response/Cancel 仍可推进；发送前取消的请求移出队列并归还预算、不能借取消越过字节上限；写出中被取消的请求写完才归还预算，Cancel 不越过其 Request | `internal/wire`（含 `TestCancelledRequestsReleaseQueueAndBudget`） | 通过 | Service 嵌套与 Event Bus 双预算（T-06） |
 
 发布阻塞：协议/Session 鉴权、Core 全局权限、数据代次唯一性、回滚/维护的真实性、安装包越界/来源安全及目标五平台构建失败，均不能通过文案豁免。非阻塞项的阈值（例如内存量与吞吐目标）须等基线测量之后再由产品方批准；**不杜撰 100 MB 等硬性能指标**。
 

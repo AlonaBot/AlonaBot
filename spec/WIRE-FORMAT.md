@@ -151,6 +151,6 @@ Core 媒体服务固定为 BeginUpload/WriteChunk/CommitUpload/Read/Grant：Read
 
 ## 6. 实施验证与依据
 
-T-01 将字段表转换为 `.proto`，冻结控制 Payload/RouteDescriptor 的字段号和 fixture；T-02 验证双向编号、乱序响应、失败阶段、帧上限、父调用关联、读循环进度和 ready gate。T-03/T-05/T-06 验证 payload+error、HandlerOutcome、Hook 约束和 Event Bus；对应 [TEST-MATRIX.md](TEST-MATRIX.md)。目前这些运行时测试均未执行。
+T-01 将字段表转换为 `.proto`，冻结控制 Payload/RouteDescriptor 的字段号和 fixture；T-02 验证双向编号、乱序响应、失败阶段、帧上限、父调用关联、读循环进度和 ready gate。T-03/T-05/T-06 验证 payload+error、HandlerOutcome、Hook 约束和 Event Bus；对应 [TEST-MATRIX.md](TEST-MATRIX.md)。T-01/T-02 的运行结果见 TEST-MATRIX §3.1；T-03/T-05/T-06 的部分尚未执行。
 
 Protobuf 枚举零值与字段存在性依据：[官方 proto3 指南](https://protobuf.dev/programming-guides/proto3/)。权限和准备期限制是 AlonaBot 的协议选择，不代表对同宿主恶意 Native 代码提供 OS 沙箱。
