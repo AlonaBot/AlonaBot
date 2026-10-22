@@ -13,27 +13,38 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
 
-type Lifecycle struct{ plugin.Base }
+// Lifecycle 是根插件，在每个生命周期 Hook 里向 stderr 打印一行。
+type Lifecycle struct {
+	// Base 提供根插件的默认实现。
+	plugin.Base
+}
 
+// OnStart 打印 lifecycle: OnStart。
 func (*Lifecycle) OnStart(context.Context) error {
 	fmt.Fprintln(os.Stderr, "lifecycle: OnStart")
 	return nil
 }
+
+// OnReady 打印 lifecycle: OnReady。
 func (*Lifecycle) OnReady(context.Context) error {
 	fmt.Fprintln(os.Stderr, "lifecycle: OnReady")
 	return nil
 }
+
+// OnStop 打印 lifecycle: OnStop。
 func (*Lifecycle) OnStop(context.Context) error {
 	fmt.Fprintln(os.Stderr, "lifecycle: OnStop")
 	return nil
 }
 
+// Commands 注册回复 pong 的 ping 命令。
 func (*Lifecycle) Commands(r *sdk.CommandRegistry) {
 	r.Command("ping", func(*sdk.Context) (message.Chain, error) {
 		return message.Chain{message.Text("pong")}, nil
 	})
 }
 
+// main 运行插件；正常结束时打印 lifecycle: 正常退出，失败时以 1 退出。
 func main() {
 	if err := sdk.Run(&Lifecycle{}); err != nil {
 		fmt.Fprintln(os.Stderr, "lifecycle:", err)

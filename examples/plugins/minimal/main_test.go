@@ -1,3 +1,4 @@
+// 本文件验证 minimal 示例的声明能被 SDK 收集，配置回调与迁移签名成立，Run 对未支持的声明返回 UNSUPPORTED。
 package main
 
 import (
