@@ -1,3 +1,4 @@
+// 本文件测试帧编解码边界、stdout 污染、超限编码，以及同一组 golden 帧在 TCP 与 stdio 上的一致性。
 package wire
 
 import (
@@ -16,18 +17,24 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// header 返回长度为 n 的 4 字节大端前缀。
 func header(n uint32) []byte {
 	var h [4]byte
 	binary.BigEndian.PutUint32(h[:], n)
 	return h[:]
 }
 
+// 长度 1 与恰好 4 MiB 可读；长度 0、超限与截断都报对应错误，帧边界处结束为 io.EOF。
 func TestReadRawBoundaries(t *testing.T) {
 	max := bytes.Repeat([]byte{0xAB}, MaxFrame)
 	cases := []struct {
-		name    string
-		stream  []byte
+		// name 是子测试名。
+		name string
+		// stream 是输入字节流。
+		stream []byte
+		// wantErr 是期望的错误；nil 表示应成功。
 		wantErr error
+		// wantLen 是成功时期望的载荷长度。
 		wantLen int
 	}{
 		{"1 字节", append(header(1), 0x08), nil, 1},
@@ -71,6 +78,7 @@ func TestReadFrameOneByteReads(t *testing.T) {
 	}
 }
 
+// 长度合法但无法解码的载荷返回 ErrDecode。
 func TestReadFrameDecodeError(t *testing.T) {
 	if _, err := ReadFrame(bytes.NewReader(append(header(3), 0xFF, 0xFF, 0xFF))); !errors.Is(err, ErrDecode) {
 		t.Fatalf("无法解码的载荷应返回 ErrDecode，实际 %v", err)
@@ -86,6 +94,7 @@ func TestStdoutPollutionFailsSession(t *testing.T) {
 	}
 }
 
+// 超限 Envelope 在编码时拒绝，Writer 不写出任何字节。
 func TestEncodeFrameTooLarge(t *testing.T) {
 	env := &pb.Envelope{ProtocolMajor: 1, Payload: make([]byte, MaxFrame)}
 	if _, err := EncodeFrame(env); !errors.Is(err, ErrFrameTooLarge) {
@@ -150,6 +159,7 @@ func roundTrip(t *testing.T, writer, reader *Conn, frames map[string]*pb.Envelop
 	return got
 }
 
+// 同一组 golden 帧经 TCP loopback 与 stdio 管道传输后逐字节一致。
 func TestSameFixtureOverTCPAndStdio(t *testing.T) {
 	frames := goldenFrames(t)
 

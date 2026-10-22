@@ -1,3 +1,4 @@
+// 本文件测试 Session：双向编号与配对、payload+error、准入与预算、取消因果、父子调用、关闭与身份校验。
 package wire
 
 import (
@@ -16,15 +17,20 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// sid16 是测试 Session 使用的固定 session_id。
 var sid16 = bytes.Repeat([]byte{7}, 16)
 
 // gatedConn 可以让写出阻塞，用来观察「尚未写出」的请求。
 type gatedConn struct {
+	// Conn 是 net.Pipe 的一端。
 	net.Conn
+	// gated 为 true 时 Write 阻塞，直到 gate 关闭。
 	gated atomic.Bool
-	gate  chan struct{}
+	// gate 关闭后放行被阻塞的写。
+	gate chan struct{}
 }
 
+// Write 在 gated 时等待 gate 关闭，然后写入底层连接。
 func (g *gatedConn) Write(b []byte) (int, error) {
 	if g.gated.Load() {
 		<-g.gate
@@ -32,21 +38,31 @@ func (g *gatedConn) Write(b []byte) (int, error) {
 	return g.Conn.Write(b)
 }
 
+// jsonPayload 构造内容为字符串 s 的 JSON 载荷。
 func jsonPayload(s string) Payload {
 	return Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: "test.echo.v1", SchemaVersion: 1, Data: []byte(`"` + s + `"`)}
 }
 
+// echo 返回把请求字符串加上 prefix 回显的 Handler。
 func echo(prefix string) Handler {
 	return func(_ context.Context, in *Inbound) Response {
 		return Response{Payload: jsonPayload(prefix + strings.Trim(string(in.Payload.Data), `"`))}
 	}
 }
 
+// pair 是经 net.Pipe 相连的一对 Session。
 type pair struct {
-	core, plugin         *Session
-	coreConn, pluginConn *gatedConn
+	// core 是 Core 侧 Session。
+	core *Session
+	// plugin 是插件侧 Session，认证 ID 为 demo。
+	plugin *Session
+	// coreConn 是 Core 侧连接，可阻塞其写出。
+	coreConn *gatedConn
+	// pluginConn 是插件侧连接，可阻塞其写出。
+	pluginConn *gatedConn
 }
 
+// newPair 建立一对已启动的 Session；测试结束时关闭两端。
 func newPair(t *testing.T, coreOpt, pluginOpt Options) *pair {
 	t.Helper()
 	a, b := net.Pipe()
@@ -60,6 +76,7 @@ func newPair(t *testing.T, coreOpt, pluginOpt Options) *pair {
 	return p
 }
 
+// call 发起一次回显调用，失败即终止测试。
 func call(t *testing.T, s *Session, data string) Response {
 	t.Helper()
 	r, err := s.Call(context.Background(), Request{Target: "demo/echo", Payload: jsonPayload(data)})
@@ -69,6 +86,7 @@ func call(t *testing.T, s *Session, data string) Response {
 	return r
 }
 
+// 首发常量与 CONTRACTS §1.2 一致。
 func TestProductionConstants(t *testing.T) {
 	if DefaultDeadline != 30*time.Second || MaxInflightPerDir != 256 || MaxBytesPerDir != 16<<20 || GlobalPayloadBytes != 64<<20 {
 		t.Fatal("首发常量与 CONTRACTS §1.2 不一致")
@@ -108,6 +126,7 @@ func TestOutOfOrderResponses(t *testing.T) {
 	}
 }
 
+// RESPONSE 同时带结果与错误时，调用者两者都拿到。
 func TestPayloadAndErrorBothKept(t *testing.T) {
 	p := newPair(t, Options{}, Options{Handler: func(context.Context, *Inbound) Response {
 		return Response{Payload: jsonPayload("partial"), Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, SafeMessage: "第二部分超时"}}
@@ -118,6 +137,7 @@ func TestPayloadAndErrorBothKept(t *testing.T) {
 	}
 }
 
+// Handler panic 转为 INTERNAL，不当作空成功。
 func TestHandlerPanicBecomesInternal(t *testing.T) {
 	p := newPair(t, Options{}, Options{Handler: func(context.Context, *Inbound) Response { panic("boom") }})
 	if _, err := p.core.Call(context.Background(), Request{Payload: jsonPayload("x")}); CodeOf(err) != pb.ErrorCode_ERROR_CODE_INTERNAL {
@@ -180,6 +200,7 @@ func TestAdmissionFullButResponsesAndCancelsProgress(t *testing.T) {
 	call(t, p.core, "again") // 槽位释放后可再次准入
 }
 
+// 对端入站在途数满额时，新请求以 RESOURCE_EXHAUSTED 拒绝。
 func TestInboundAdmission(t *testing.T) {
 	block := make(chan struct{})
 	defer close(block)
@@ -193,6 +214,7 @@ func TestInboundAdmission(t *testing.T) {
 	}
 }
 
+// 每方向字节预算与跨 Session 的全局预算都会拒绝超额请求，调用结束后全局预算归零。
 func TestByteBudgets(t *testing.T) {
 	big := Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: "test.bytes.v1", SchemaVersion: 1, Data: make([]byte, 600)}
 	block := make(chan struct{})
@@ -260,6 +282,7 @@ func TestCancelBeforeSendIsWithdrawn(t *testing.T) {
 	}
 }
 
+// pendingState 返回本端在途调用 id 的写出状态；不在途时返回 -1。
 func pendingState(s *Session, id uint64) callState {
 	s.mu.Lock()
 	c := s.pending[id]
@@ -291,10 +314,14 @@ func TestLateResponseCountedNotCompleted(t *testing.T) {
 	waitFor(t, func() bool { return p.core.Stats().LateResponses == 1 })
 }
 
+// 插件以在途 Core 请求为父发起子请求：Handler 拿到父调用的 Attach，期限不超过父期限，父调用结束时子调用被取消。
 func TestParentChildLinkage(t *testing.T) {
 	parentDeadline := time.Now().Add(2 * time.Second)
+	// seen 是子请求 Handler 观察到的父调用信息。
 	type seen struct {
-		attach   any
+		// attach 是父调用的 Attach。
+		attach any
+		// deadline 是子请求的有效期限。
 		deadline time.Time
 	}
 	childSeen := make(chan seen, 1)
@@ -390,6 +417,7 @@ func TestCoreRejectsChildOfFinishedParent(t *testing.T) {
 	}
 }
 
+// 对端关闭后，在途调用以 UNAVAILABLE 结束，新调用也被拒绝。
 func TestSessionCloseFailsPending(t *testing.T) {
 	block := make(chan struct{})
 	defer close(block)
@@ -406,6 +434,7 @@ func TestSessionCloseFailsPending(t *testing.T) {
 	}
 }
 
+// 对端重复使用 call_id 时关闭 Session。
 func TestNonMonotonicCallIDClosesSession(t *testing.T) {
 	a, b := net.Pipe()
 	core := NewSession(NewStreamConn(a), Options{Local: pb.InitiatorSide_INITIATOR_SIDE_CORE, SessionID: sid16, SourcePluginID: "demo",
@@ -436,6 +465,7 @@ func TestNonMonotonicCallIDClosesSession(t *testing.T) {
 	}
 }
 
+// 收到其他 Session 的帧时关闭当前 Session。
 func TestWrongSessionIDClosesSession(t *testing.T) {
 	a, b := net.Pipe()
 	core := NewSession(NewStreamConn(a), Options{Local: pb.InitiatorSide_INITIATOR_SIDE_CORE, SessionID: sid16})
@@ -470,6 +500,7 @@ func TestPriorityFullClosesSession(t *testing.T) {
 	}
 }
 
+// waitFor 轮询直到 cond 成立，5 秒内不成立即终止测试。
 func waitFor(t *testing.T, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -562,9 +593,12 @@ func probePayload(n int) Payload {
 func TestSessionRejectsForeignIdentityOrMinor(t *testing.T) {
 	deadline := proto.Int64(time.Now().Add(time.Minute).UnixMilli())
 	cases := []struct {
+		// name 是子测试名。
 		name string
-		side pb.InitiatorSide // 收帧的一端
-		env  *pb.Envelope
+		// side 是收帧的一端。
+		side pb.InitiatorSide
+		// env 是不合法的帧，公共字段在循环中补齐。
+		env *pb.Envelope
 	}{
 		{"plugin-claims-other-id", pb.InitiatorSide_INITIATOR_SIDE_CORE, &pb.Envelope{SourcePluginId: "other-plugin",
 			Kind: pb.FrameKind_FRAME_KIND_REQUEST, InitiatorSide: pb.InitiatorSide_INITIATOR_SIDE_PLUGIN}},

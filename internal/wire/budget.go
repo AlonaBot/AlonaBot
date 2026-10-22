@@ -4,14 +4,20 @@ package wire
 import "sync"
 
 // Budget 是跨 Session 共享的 payload 字节预算（Core 合计 64 MiB）。
+// nil *Budget 表示不限额（插件侧没有全局预算）。
 type Budget struct {
-	mu          sync.Mutex
-	used, limit int64
+	// mu 保护 used。
+	mu sync.Mutex
+	// used 是当前已占用的字节数。
+	used int64
+	// limit 是上限字节数，创建后不变。
+	limit int64
 }
 
 // NewBudget 创建上限为 limit 字节的预算。
 func NewBudget(limit int64) *Budget { return &Budget{limit: limit} }
 
+// acquire 尝试占用 n 字节，超过上限时不占用并返回 false；不等待。
 func (b *Budget) acquire(n int64) bool {
 	if b == nil {
 		return true
@@ -25,6 +31,7 @@ func (b *Budget) acquire(n int64) bool {
 	return true
 }
 
+// release 归还 n 字节；调用方保证每次占用只归还一次。
 func (b *Budget) release(n int64) {
 	if b == nil {
 		return

@@ -86,8 +86,10 @@ func EncodeFrame(env *pb.Envelope) ([]byte, error) {
 
 // Writer 串行写帧：每帧完整编码后在锁内一次写出，多个 goroutine 的帧不会交错。
 type Writer struct {
+	// mu 在整帧写出期间独占写端。
 	mu sync.Mutex
-	w  io.Writer
+	// w 是底层连接的写端。
+	w io.Writer
 }
 
 // NewWriter 包装底层连接的写端；每个连接只应有一个 Writer。
@@ -95,10 +97,12 @@ func NewWriter(w io.Writer) *Writer { return &Writer{w: w} }
 
 // WriteFrame 编码并写出一帧。写出失败后连接状态未知，调用方应关闭连接。
 func (w *Writer) WriteFrame(env *pb.Envelope) error {
+	// 1. 在取得写锁前完成编码与长度校验。
 	frame, err := EncodeFrame(env)
 	if err != nil {
 		return err
 	}
+	// 2. 整帧写出期间独占写端，避免并发帧交错。
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	_, err = w.w.Write(frame)
