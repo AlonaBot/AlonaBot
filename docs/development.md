@@ -26,6 +26,16 @@ go vet ./...
 
 在 T-01 落地之前，`./...` 下还没有包；`go build` 只会给出 "matched no packages" 警告，`go vet/test` 会以非零退出。
 
+仓库文档与技能检查使用已安装的 Node（只用标准库，无 npm 依赖）：
+
+```sh
+node --test scripts/check-repository.test.mjs
+node scripts/check-repository.mjs
+git diff --check
+```
+
+检查器验证维护入口的内联本地文件链接、技能名称/描述及可选 UI 提示，不联网，不验证全部历史规格、页内锚点或注释语义。文件职责、逐字段说明和 step comment 由 [编码规范](coding-standards.md) 与 [注释技能](../.agents/skills/alonabot-code-commenting/SKILL.md) 指导审查。
+
 ## 外部测试环境
 
 - **PostgreSQL：** 测试读取环境变量 `ALONABOT_TEST_PG_DSN`；未设置时跳过，在证据中记为「未运行」。临时容器：
@@ -48,6 +58,18 @@ go vet ./...
 | 生成代码可重复生成，结果稳定 | PLAN T-01 | 执行 `go generate ./...` 后检查 `git diff --exit-code` | 已定义，未实现 |
 | Envelope 字段号/枚举值与 WIRE-FORMAT 一致 | spec/WIRE-FORMAT.md | contracts 字段号 fixture 测试 | 已定义，未实现 |
 | 五目标平台 `CGO_ENABLED=0` 可构建 | CONTRACTS §6.1/§7.1 | 交叉编译矩阵命令 | 已定义，未实现 |
+| 维护文档与技能入口可从干净 checkout 读取 | AGENTS、CONTRIBUTING | `node scripts/check-repository.mjs`，CI 的 Repository contract | 已实现；运行结果见对应 PR |
+| 文件职责头、逐字段说明和按逻辑段的 step comment | coding-standards.md | 代码审查与 PR 清单 | 人工/agent 审查规则，不由 CI 自动证明 |
 | V-01～V-47 证据 | spec/TEST-MATRIX.md | 按编号记录测试位置、命令、平台和结果 | 全部未运行 |
 
-状态说明：**已定义** 表示规则和检查方式已写下；**已实现** 表示检查代码已存在；**已观测** 表示检查真实运行过并有结果。目前还没有接入 CI。
+状态说明：**已定义** 表示规则和检查方式已写下；**已实现** 表示检查代码已存在；**已观测** 表示检查真实运行过并有结果。工作流本身不代表目标提交已经验证。
+
+## GitHub Actions
+
+[Quality gate](../.github/workflows/ci.yml) 在 PR 到 main、main push 和手动触发时运行维护入口检查。存在非 `experiments/` 的产品 Go 文件时，才运行 Go 格式、Protobuf 生成一致性、vet、race 测试和五目标平台 `CGO_ENABLED=0` 构建；无产品代码时明确标注 Go 检查未运行。
+
+Go job 使用一次性 `postgres:17` service，测试 DSN 只指向 job 内的本地测试库。生成检查从官方 Protobuf release 下载当前约定的 protoc 36.0；工具链变更时同时更新生成器、开发指南和工作流。代码 job 使用只读 token，不使用生产凭据。
+
+[PR metadata](../.github/workflows/pr-metadata.yml) 校验非草稿 PR 的实际说明和清单；[triage](../.github/workflows/pr-triage.yml) 同步标签与 assignee，[auto-assign](../.github/workflows/auto-assign.yml) 请求非作者维护者审阅。这些 `pull_request_target` 流程不 checkout/执行 PR 代码，新工作流合入默认分支后才开始处理后续事件。Issue 表单自带 assignee，不依赖工作流执行。
+
+远端合并保护由维护者单独管理，不能因存在这些 YAML 就声称检查不可绕过。本次建设不添加发布、真实 Telegram 调用或自动关闭 PR 的流程。

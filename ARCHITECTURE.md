@@ -46,6 +46,10 @@
 | `<plugins>/<id>/runtime.lock`、插件受管 DB 连接 | 插件进程内的 `sdk` |
 | 插件业务数据（SQLite 候选文件 / PG schema） | 插件；Core 只负责候选复制与准入 |
 
+## 文件组织
+
+模块内部按职责分文件，类型、方法和专属常量就近；独立共享数据契约按主题组织，实现状态仍归自己的所有者。不要求统一 DTO/常量文件或一个类型一个文件。文件内容、注释和拆分标准以 [编码规范](docs/coding-standards.md) 为准；这不改变上面的依赖表。
+
 ## 检查
 
 import 边规则由 goal-1 中的架构守卫测试执行（见 [docs/development.md](docs/development.md)「规则与检查」）；守卫落地之前，这些规则只是审查规则。

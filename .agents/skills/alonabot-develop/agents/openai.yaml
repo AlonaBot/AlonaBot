@@ -1,0 +1,5 @@
+# 本文件提供技能选择界面的名称、简述及入口提示。
+interface:
+  display_name: "AlonaBot 开发"
+  short_description: "依据项目工作包、模块归属与代码规范完成最小而完整的 Go 实现和修复。"
+  default_prompt: "使用 $alonabot-develop 完成本次 AlonaBot 项目任务。"
