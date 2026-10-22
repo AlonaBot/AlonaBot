@@ -20,7 +20,11 @@ var DefaultStopTiming = StopTiming{Drain: 6 * time.Second, Total: 10 * time.Seco
 
 // Tree 是被停止插件的进程树（process.Process 满足此接口）。
 type Tree interface {
+	// Exited 在领头进程退出并被回收后关闭；树内其他进程可能仍在运行。
 	Exited() <-chan struct{}
+	// WaitTree 等待树内全部进程退出直到 deadline，到期仍有进程时返回 false。
+	WaitTree(deadline time.Time) (bool, error)
+	// KillTree 终止整棵树，确认全部进程消失后才返回 nil。
 	KillTree() error
 }
 
@@ -29,12 +33,14 @@ type StopResult struct {
 	Drained        bool      // 在排空期限内完成了所有在途调用
 	StoppingSentAt time.Time // 发出 STOPPING 的时刻（零值表示 Session 已关闭、未发送）
 	StopDeadline   time.Time // STOPPING 携带的绝对截止
-	Killed         bool      // 到总截止仍未退出，终止了进程树
+	Killed         bool      // 到总截止进程树仍未清空，终止了进程树
+	// Err 是终止或确认进程树时的错误；非 nil 表示旧进程树未确认清空，不能启动替代实例。
+	Err error
 }
 
 // Stop 停用一个插件实例：从 t0 起冻结新根调用 → 最多排空 Drain → 取消剩余调用并发送唯一 STOPPING
-// （截止为 min(t0+Total, 发送时刻+OnStopAt)）→ 等待进程退出，到 t0+Total 仍未退出则终止进程树。
-// 只在确认进程退出（tree.Exited）之后返回。
+// （截止为 min(t0+Total, 发送时刻+OnStopAt)）→ 等待整棵进程树退出，到 t0+Total 仍未清空则终止进程树。
+// 只在确认进程树清空之后返回；无法确认时 StopResult.Err 非 nil。
 func (in *Instance) Stop(t0 time.Time, reason pb.StopReason, tree Tree, timing StopTiming) StopResult {
 	var res StopResult
 	if !in.state.CompareAndSwap(int32(StateActivated), int32(StateDraining)) {
@@ -58,14 +64,21 @@ func (in *Instance) Stop(t0 time.Time, reason pb.StopReason, tree Tree, timing S
 		res.StoppingSentAt, res.StopDeadline = now, deadline
 	}
 
+	// 领头进程与它留在树内的其他进程共用同一个总截止；到期仍未清空则终止整棵树并确认消失，
+	// 不能用 sleep 或猜测代替（CONTRACTS §4.2、§12.2）。
 	timer := time.NewTimer(time.Until(total))
 	defer timer.Stop()
 	select {
 	case <-tree.Exited():
+		var empty bool
+		if empty, res.Err = tree.WaitTree(total); res.Err == nil && !empty {
+			res.Killed, res.Err = true, tree.KillTree()
+		}
 	case <-timer.C:
 		res.Killed = true
-		_ = tree.KillTree()
-		<-tree.Exited() // 必须确认旧进程退出，不能用 sleep 或猜测代替
+		if res.Err = tree.KillTree(); res.Err == nil {
+			<-tree.Exited()
+		}
 	}
 	_ = in.Session.Close() // 旧 Session 立即失效
 	in.state.Store(int32(StateStopped))

@@ -79,19 +79,29 @@ func run(dataDir, pluginID, entry string, stdio bool) error {
 		if err != nil {
 			return err
 		}
-		exitc := make(chan bool, 1)
+		type exit struct {
+			abnormal bool
+			err      error // 剩余进程树未确认清空
+		}
+		exitc := make(chan exit, 1)
 		go func() {
-			abnormal, st := r.WaitExit()
+			abnormal, st, err := r.WaitExit()
 			fmt.Fprintf(os.Stderr, "alonabot: 插件 %s 退出（%s）\n", pluginID, st)
-			exitc <- abnormal
+			exitc <- exit{abnormal, err}
 		}()
 		select {
 		case <-sigc:
 			res := r.Stop(time.Now(), pb.StopReason_STOP_REASON_CORE_SHUTDOWN)
 			fmt.Fprintf(os.Stderr, "alonabot: 已停止插件 %s（排空=%v 强杀=%v）\n", pluginID, res.Drained, res.Killed)
+			if res.Err != nil {
+				return fmt.Errorf("插件 %s 的进程树未确认清空: %w", pluginID, res.Err)
+			}
 			return nil
-		case abnormal := <-exitc:
-			switch policy.OnExit(pluginID, abnormal, time.Now()) {
+		case e := <-exitc:
+			if e.err != nil {
+				return fmt.Errorf("插件 %s 的进程树未确认清空，不启动替代实例: %w", pluginID, e.err)
+			}
+			switch policy.OnExit(pluginID, e.abnormal, time.Now()) {
 			case host.DecisionRestart:
 				fmt.Fprintf(os.Stderr, "alonabot: 插件 %s 异常退出，重启\n", pluginID)
 				continue

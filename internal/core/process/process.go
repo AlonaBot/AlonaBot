@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/internal/oslock"
@@ -229,8 +230,33 @@ func (p *Process) ExitState() *os.ProcessState {
 // WaitLogs 等待日志管道读完（所有持有写端的进程都已退出或关闭了输出）。
 func (p *Process) WaitLogs() { p.logs.Wait() }
 
-// KillTree 立即终止整个进程树（总停止截止时间到达时使用）。领头进程已退出后仍会终止组内剩余进程。
-func (p *Process) KillTree() error { return p.tree.kill() }
+// treePoll 是确认进程树清空的轮询间隔：Unix 无法等待非子进程退出，Windows Job 也只提供进程计数查询。
+const treePoll = 10 * time.Millisecond
+
+// KillTree 立即终止整个进程树，并在树内（含领头进程）全部消失后才返回；领头进程已退出时同样
+// 终止组内剩余进程。返回 nil 才表示旧进程树已确认清空，可以启动替代实例。
+func (p *Process) KillTree() error {
+	if err := p.tree.kill(); err != nil {
+		return err
+	}
+	_, err := p.WaitTree(time.Time{})
+	return err
+}
+
+// WaitTree 等待进程树内的全部进程退出，不发送信号；deadline 为零值时一直等待。
+// 到期时仍有进程返回 false；查询失败返回错误，调用方不能把它当作已清空。
+func (p *Process) WaitTree(deadline time.Time) (bool, error) {
+	for {
+		empty, err := p.tree.empty()
+		if err != nil || empty {
+			return empty, err
+		}
+		if !deadline.IsZero() && !time.Now().Before(deadline) {
+			return false, nil
+		}
+		time.Sleep(treePoll)
+	}
+}
 
 // Release 释放进程树句柄（Windows 关闭 Job Object 句柄时会终止仍在其中的进程），
 // 并关闭 stdio 模式下 Core 持有的协议管道端；重复调用不报错。

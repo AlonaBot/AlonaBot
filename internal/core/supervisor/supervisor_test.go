@@ -86,7 +86,15 @@ func rawPlugin(fault string) int {
 	act := msg.(*pb.Activate)
 	done, _ := wire.ControlEnvelope(sid, 0, id, pb.FrameKind_FRAME_KIND_ACTIVATED, &pb.Activated{GenerationId: act.GetGenerationId(), Ready: true})
 	_ = conn.WriteFrame(done)
-	if fault == "crash" {
+	// orphan-*：先启动一个留在进程组内的子进程（pid 写到 stderr），再崩溃或在 STOPPING 后正常退出。
+	if strings.HasPrefix(fault, "orphan-") {
+		child := exec.Command("/bin/sleep", "600")
+		if err := child.Start(); err != nil {
+			return 7
+		}
+		fmt.Fprintf(os.Stderr, "orphan %d\n", child.Process.Pid)
+	}
+	if fault == "crash" || fault == "orphan-crash" {
 		return 3
 	}
 	for {
@@ -230,7 +238,10 @@ func TestCrashAfterActivationAndRestartPolicy(t *testing.T) {
 			t.Fatal(err)
 		}
 		spec.NewCandidate = false // 之后的启动复用已提交代次
-		abnormal, st := r.WaitExit()
+		abnormal, st, err := r.WaitExit()
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !abnormal || !strings.Contains(st, "exit status 3") {
 			t.Fatalf("应报告异常退出（退出码 3）: %v %s", abnormal, st)
 		}
@@ -327,4 +338,74 @@ func TestStopAndLaunchSerializedPerPlugin(t *testing.T) {
 	if launched.Before(stopped) {
 		t.Fatalf("同一插件的 Launch 在 Stop 完成（%v）之前就返回（%v），管理操作未串行", stopped.Format("15:04:05.000"), launched.Format("15:04:05.000"))
 	}
+}
+
+// Core 断开连接后插件以退出码 0 自行退出：正常退出，不进入崩溃计数。
+func TestNormalExitIsNotAbnormal(t *testing.T) {
+	s, spec, _ := rawSpec(t, "none", false)
+	r, err := Launch(context.Background(), s, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = r.Instance.Session.Close() // rawPlugin 读到 EOF 后 return 0
+	abnormal, st, err := r.WaitExit()
+	if err != nil || abnormal {
+		t.Fatalf("退出码 0 应为正常退出: abnormal=%v state=%s err=%v", abnormal, st, err)
+	}
+}
+
+// orphanPid 从插件日志中取出 orphan-* 辅助进程启动的子进程 pid。
+func orphanPid(t *testing.T, logs *logBuf) int {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		for _, line := range strings.Split(logs.String(), "\n") {
+			var pid int
+			if _, err := fmt.Sscanf(line, "demo|stderr|orphan %d", &pid); err == nil {
+				t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) }) // 断言失败时不遗留进程
+				return pid
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("没有拿到子进程 pid，日志:\n%s", logs.String())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// 领头进程先退出、子进程仍留在进程组内：停止与崩溃恢复两条路径都必须在子进程消失后才返回。
+func TestLeftoverChildReapedBeforeReturn(t *testing.T) {
+	t.Run("stop", func(t *testing.T) {
+		s, spec, logs := rawSpec(t, "orphan-stop", false)
+		r, err := Launch(context.Background(), s, spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pid := orphanPid(t, logs)
+		res := r.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
+		if res.Err != nil || !res.Killed {
+			t.Fatalf("领头进程正常退出但子进程到总截止仍在，应终止进程树: %+v", res)
+		}
+		if alive(pid) {
+			t.Fatalf("Stop 返回时子进程 %d 仍存活", pid)
+		}
+	})
+	t.Run("crash", func(t *testing.T) {
+		s, spec, logs := rawSpec(t, "orphan-crash", false)
+		r, err := Launch(context.Background(), s, spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pid := orphanPid(t, logs)
+		abnormal, _, err := r.WaitExit()
+		if err != nil || !abnormal {
+			t.Fatalf("崩溃应报告异常退出且清理成功: abnormal=%v err=%v", abnormal, err)
+		}
+		if alive(pid) {
+			t.Fatalf("WaitExit 返回时子进程 %d 仍存活，不能启动替代实例", pid)
+		}
+		if res := r.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE); res.Err != nil {
+			t.Fatalf("清理后的 Stop 不应再触碰进程树: %+v", res)
+		}
+	})
 }

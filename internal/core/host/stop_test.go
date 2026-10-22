@@ -31,6 +31,16 @@ func (f *fakeTree) exit() {
 }
 func (f *fakeTree) KillTree() error { f.killed.Store(true); f.exit(); return nil }
 
+// WaitTree 视领头进程为树内唯一进程：已退出即清空，否则等到 deadline。
+func (f *fakeTree) WaitTree(deadline time.Time) (bool, error) {
+	select {
+	case <-f.exited:
+		return true, nil
+	case <-time.After(time.Until(deadline)):
+		return false, nil
+	}
+}
+
 // activated 返回已进入 Activated 的实例与假插件；frames 持续接收假插件读到的帧。
 func activated(t *testing.T, handler wire.Handler) (*fake, *Instance, <-chan *pb.Envelope) {
 	t.Helper()

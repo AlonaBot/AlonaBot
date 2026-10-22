@@ -10,7 +10,7 @@ import (
 	"io"
 	"net"
 	"path/filepath"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -51,7 +51,15 @@ type Running struct {
 	pluginID string
 	listener net.Listener
 	timing   host.StopTiming
-	stopping atomic.Bool // Stop 与 WaitExit 在不同 goroutine 中访问
+
+	// mu 串行化 Stop 与 WaitExit 的清理，保护 stopping 与 released。
+	mu sync.Mutex
+	// stopping 为 true 表示 Stop 已接管清理；此后的进程退出不算异常，也不由 WaitExit 清理。
+	stopping bool
+	// released 为 true 表示进程树已处理完、Listener 与进程资源已释放；只设置一次。
+	released bool
+	// cleanupErr 是 WaitExit 终止剩余进程树时的错误，供随后的 Stop 返回。
+	cleanupErr error
 }
 
 // Launch 启动插件进程并完成握手、准备、提交与激活。任何一步失败都会终止进程树并确认其退出后返回。
@@ -170,26 +178,56 @@ func closeListener(ln net.Listener) {
 	}
 }
 
-// Stop 停用插件（CONTRACTS §4.2），确认进程退出后关闭 Listener、释放进程资源。
+// Stop 停用插件（CONTRACTS §4.2），确认进程树清空后关闭 Listener、释放进程资源。
 // 与 Launch 共用逐插件管理锁（CONTRACTS §12.2）：停止完成前，同一插件的下一次启动不会开始。
+// 进程已先行退出并由 WaitExit 清理时，只返回该次清理的错误。
 func (r *Running) Stop(t0 time.Time, reason pb.StopReason) host.StopResult {
 	unlock := r.store.LockPlugin(r.pluginID)
 	defer unlock()
-	r.stopping.Store(true)
+
+	// 1. 接管清理；WaitExit 已经清理过时不再触碰已释放的进程树句柄。
+	r.mu.Lock()
+	if r.released {
+		r.mu.Unlock()
+		return host.StopResult{Err: r.cleanupErr}
+	}
+	r.stopping = true
+	r.mu.Unlock()
+
+	// 2. 冻结、排空、STOPPING，并等待整棵进程树清空或在总截止终止它。
 	res := r.Instance.Stop(t0, reason, r.Process, r.timing)
-	closeListener(r.listener)
-	_ = r.Process.Release()
+
+	// 3. 进程树处理完后才释放 Listener 与进程资源。
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.release()
 	return res
 }
 
-// WaitExit 等待插件进程退出，报告是否为异常退出（未经 Stop 的退出都视为异常）。
-func (r *Running) WaitExit() (abnormal bool, state string) {
+// WaitExit 等待领头进程退出，报告退出状态与是否异常：未经 Stop 且退出码非 0 才算异常。
+// 未经 Stop 的退出由这里终止树内剩余进程并释放资源；err 非 nil 表示旧进程树未确认清空，
+// 调用方不能启动替代实例。
+func (r *Running) WaitExit() (abnormal bool, state string, err error) {
 	<-r.Process.Exited()
 	st := r.Process.ExitState()
-	if !r.stopping.Load() {
-		_ = r.Instance.Session.Close() // 旧 Session 立即失效
-		closeListener(r.listener)
-		_ = r.Process.Release()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.stopping || r.released {
+		return false, fmt.Sprint(st), nil // Stop 负责清理与结果
 	}
-	return !r.stopping.Load(), fmt.Sprint(st)
+	_ = r.Instance.Session.Close() // 旧 Session 立即失效
+	r.cleanupErr = r.Process.KillTree()
+	r.release()
+	return !st.Success(), fmt.Sprint(st), r.cleanupErr
+}
+
+// release 关闭 Listener 并释放进程资源；调用方持有 r.mu，重复调用无副作用。
+func (r *Running) release() {
+	if r.released {
+		return
+	}
+	r.released = true
+	closeListener(r.listener)
+	_ = r.Process.Release()
 }

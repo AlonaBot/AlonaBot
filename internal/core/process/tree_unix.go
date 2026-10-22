@@ -27,4 +27,13 @@ func (t *tree) kill() error {
 	return err
 }
 
+// empty 报告进程组内是否已没有任何进程（尚未被回收的僵尸也算组内进程）。
+func (t *tree) empty() (bool, error) {
+	err := syscall.Kill(-t.pgid, 0)
+	if errors.Is(err, syscall.ESRCH) {
+		return true, nil
+	}
+	return false, err
+}
+
 func (t *tree) release() error { return nil }

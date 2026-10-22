@@ -42,4 +42,28 @@ func attachTree(cmd *exec.Cmd) (*tree, error) {
 
 func (t *tree) kill() error { return windows.TerminateJobObject(t.job, 1) }
 
+// basicAccounting 对应 Win32 JOBOBJECT_BASIC_ACCOUNTING_INFORMATION（x/sys/windows 未提供该结构）。
+type basicAccounting struct {
+	// TotalUserTime 等四项是 Job 的 CPU 时间统计（100ns 单位），此处只为保持内存布局。
+	TotalUserTime, TotalKernelTime, ThisPeriodTotalUserTime, ThisPeriodTotalKernelTime int64
+	// TotalPageFaultCount 是 Job 内进程的累计缺页数，此处不用。
+	TotalPageFaultCount uint32
+	// TotalProcesses 是曾加入 Job 的进程总数，此处不用。
+	TotalProcesses uint32
+	// ActiveProcesses 是 Job 内仍在运行的进程数；为 0 表示进程树已全部退出。
+	ActiveProcesses uint32
+	// TotalTerminatedProcesses 是因违反 Job 限制而被终止的进程数，此处不用。
+	TotalTerminatedProcesses uint32
+}
+
+// empty 报告 Job 内是否已没有仍在运行的进程。
+func (t *tree) empty() (bool, error) {
+	var info basicAccounting
+	if err := windows.QueryInformationJobObject(t.job, windows.JobObjectBasicAccountingInformation,
+		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), nil); err != nil {
+		return false, err
+	}
+	return info.ActiveProcesses == 0, nil
+}
+
 func (t *tree) release() error { return windows.CloseHandle(t.job) }
