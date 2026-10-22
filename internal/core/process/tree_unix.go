@@ -43,7 +43,6 @@ func (t *tree) empty() (bool, error) {
 	return false, err
 }
 
-// release 无需释放资源：进程组不占用句柄。
 // reap 非阻塞地回收组内已过继给本进程的僵尸；没有可回收的子进程时立即返回。
 func (t *tree) reap() {
 	for {
@@ -54,4 +53,5 @@ func (t *tree) reap() {
 	}
 }
 
+// release 无需释放资源：进程组不占用句柄。
 func (t *tree) release() error { return nil }
