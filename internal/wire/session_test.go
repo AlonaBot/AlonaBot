@@ -264,8 +264,8 @@ func pendingState(s *Session, id uint64) callState {
 	if c == nil {
 		return -1
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return c.state
 }
 
@@ -476,4 +476,81 @@ func waitFor(t *testing.T, cond func() bool) {
 		}
 		time.Sleep(time.Millisecond)
 	}
+}
+
+// writer 卡住时反复排队再取消：被取消的请求立即移出队列并归还预算，不能借此越过字节上限；
+// 正在写出的请求被取消时，写完才归还预算，对端先收到 Request 再收到 Cancel。
+func TestCancelledRequestsReleaseQueueAndBudget(t *testing.T) {
+	budget := NewBudget(1000)
+	var mu sync.Mutex
+	var seen []uint64
+	handlerCancelled := make(chan uint64, 8)
+	p := newPair(t, Options{Global: budget, MaxBytes: 1000}, Options{Handler: func(ctx context.Context, in *Inbound) Response {
+		mu.Lock()
+		seen = append(seen, in.CallID)
+		mu.Unlock()
+		<-ctx.Done()
+		handlerCancelled <- in.CallID
+		return Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_CANCELLED}}
+	}})
+	p.coreConn.gated.Store(true)
+
+	// 1. call_id 1 卡在写出中。
+	firstCtx, cancelFirst := context.WithCancel(context.Background())
+	first := make(chan error, 1)
+	go func() { _, err := p.core.Call(firstCtx, Request{Payload: probePayload(1)}); first <- err }()
+	waitFor(t, func() bool { return pendingState(p.core, 1) == writing })
+
+	// 2. 反复排队 600 字节的请求再取消：每次都应完整归还，队列不残留载荷。
+	for id := uint64(2); id <= 6; id++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		res := make(chan error, 1)
+		go func() { _, err := p.core.Call(ctx, Request{Payload: probePayload(600)}); res <- err }()
+		waitFor(t, func() bool { return pendingState(p.core, id) == queued })
+		cancel()
+		if err := <-res; CodeOf(err) != pb.ErrorCode_ERROR_CODE_CANCELLED {
+			t.Fatalf("call_id %d 取消结果: %v", id, err)
+		}
+		p.core.mu.Lock()
+		queuedLen, accounted := len(p.core.biz), p.core.outBytes
+		p.core.mu.Unlock()
+		if queuedLen != 0 || accounted != 1 || budget.Used() != 1 {
+			t.Fatalf("取消 call_id %d 后：队列 %d、本方向 %d 字节、全局 %d 字节，应为 0/1/1", id, queuedLen, accounted, budget.Used())
+		}
+	}
+
+	// 3. 取消正在写出的 call_id 1：调用者立即得到结果，但载荷写完前仍计入预算。
+	cancelFirst()
+	if err := <-first; CodeOf(err) != pb.ErrorCode_ERROR_CODE_CANCELLED {
+		t.Fatalf("写出中的请求取消结果: %v", err)
+	}
+	if budget.Used() != 1 {
+		t.Fatalf("写出中的载荷应仍计入全局预算，实际 %d", budget.Used())
+	}
+
+	// 4. 放开写出：对端只收到 call_id 1，随后收到它的 Cancel；预算全部归还。
+	p.coreConn.gated.Store(false)
+	close(p.coreConn.gate)
+	select {
+	case id := <-handlerCancelled:
+		if id != 1 {
+			t.Fatalf("对端取消的是 call_id %d", id)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("对端没有收到 call_id 1 的 Cancel")
+	}
+	waitFor(t, func() bool { return budget.Used() == 0 })
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) != 1 || seen[0] != 1 {
+		t.Fatalf("对端收到的 call_id = %v，被取消的排队请求不应上线", seen)
+	}
+	if got := p.plugin.Stats().UnknownCancels; got != 0 {
+		t.Fatalf("未上线请求不应发送 Cancel，对端收到 %d 个未知 Cancel", got)
+	}
+}
+
+// probePayload 返回 n 字节的合法 PROTOBUF 载荷，用于按字节核对预算。
+func probePayload(n int) Payload {
+	return Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: "probe", SchemaVersion: 1, Data: make([]byte, n)}
 }

@@ -164,8 +164,7 @@ const (
 
 type outCall struct {
 	id       uint64
-	env      *pb.Envelope
-	bytes    int64
+	env      *pb.Envelope // 待写出的 REQUEST；移出队列或写出后置 nil，不再持有载荷
 	deadline time.Time
 	attach   any
 	result   chan Response // 容量 1，只写一次
@@ -173,10 +172,11 @@ type outCall struct {
 	ctx    context.Context // 调用存续期间有效，结束时取消（子调用以此派生）
 	cancel context.CancelFunc
 
-	mu           sync.Mutex
+	// 以下字段由 Session.mu 保护。
+	bytes        int64 // 仍计入本方向与全局预算的载荷字节；归还后为 0，保证只归还一次
 	state        callState
-	cancelLater  bool // 写出过程中被取消：写完后再发 Cancel
-	doneComplete bool
+	finished     bool            // 调用方已得到结果（已移出 pending）
+	cancelReason pb.CancelReason // 写出过程中被本端放弃：写完后以此原因发 Cancel；UNSPECIFIED 表示不发
 }
 
 // prioFrame 是优先通道中的一帧；written 非 nil 时在写出完成后收到写结果。
@@ -447,32 +447,11 @@ func errorOf(r Response) error {
 	return nil
 }
 
-// abandon 在本地先结束调用，再按写出状态撤回请求或随后发送 Cancel。
+// abandon 在本地先结束调用，再按写出状态撤回请求或随后发送 Cancel（见 complete）。
 func (s *Session) abandon(c *outCall, code pb.ErrorCode, reason pb.CancelReason, msg string) (Response, error) {
-	if s.complete(c, Response{Err: &pb.ErrorInfo{Code: code, SafeMessage: msg}}) {
-		s.withdrawOrCancel(c, reason)
-	}
+	s.complete(c, Response{Err: &pb.ErrorInfo{Code: code, SafeMessage: msg}}, reason)
 	r := <-c.result // 本地结束的结果，或先一步到达的真实结果
 	return r, errorOf(r)
-}
-
-// withdrawOrCancel 在调用已于本地结束后处理线上状态：尚未写出则撤回（永不上线），
-// 正在写出则写完后再发 Cancel，已写出则立即发 Cancel（Cancel 不会越过自己的 Request）。
-func (s *Session) withdrawOrCancel(c *outCall, reason pb.CancelReason) {
-	c.mu.Lock()
-	sendCancel := false
-	switch c.state {
-	case queued:
-		c.state = withdrawn
-	case writing:
-		c.cancelLater = true
-	case written:
-		sendCancel = true
-	}
-	c.mu.Unlock()
-	if sendCancel {
-		s.sendCancel(c.id, reason)
-	}
 }
 
 // CancelOutbound 结束本端所有在途请求（停止时 drain 到期后使用）：调用者得到 CANCELLED，对端按写出状态收到 Cancel。
@@ -484,9 +463,7 @@ func (s *Session) CancelOutbound(reason pb.CancelReason) {
 	}
 	s.mu.Unlock()
 	for _, c := range calls {
-		if s.complete(c, Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_CANCELLED, SafeMessage: "插件正在停止"}}) {
-			s.withdrawOrCancel(c, reason)
-		}
+		s.complete(c, Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_CANCELLED, SafeMessage: "插件正在停止"}}, reason)
 	}
 }
 
@@ -532,21 +509,61 @@ func (s *Session) sendCancel(id uint64, reason pb.CancelReason) {
 	_ = s.enqueuePrio(env)
 }
 
-// complete 只完成一次调用：移出在途表、释放预算、取消其 ctx（连带取消以它为父的子调用）。
-func (s *Session) complete(c *outCall, r Response) bool {
+// complete 只完成一次调用：移出在途表、取消其 ctx（连带取消以它为父的子调用）并交付结果。
+// reason 非 UNSPECIFIED 表示本端放弃调用，按写出状态处理线上请求：尚未写出则移出队列、永不上线，
+// 正在写出则写完后再发 Cancel，已写出则立即发 Cancel（Cancel 不会越过自己的 Request）。
+// 预算在调用结束且 writer 不再持有载荷时归还：正在写出的载荷由 writeRequest 写完后归还。
+func (s *Session) complete(c *outCall, r Response, reason pb.CancelReason) bool {
+	// 1. 在 s.mu 下结束调用，并按写出状态决定载荷与预算的去向。
 	s.mu.Lock()
-	if _, ok := s.pending[c.id]; !ok {
+	if c.finished {
 		s.mu.Unlock()
 		return false
 	}
+	c.finished = true
 	delete(s.pending, c.id)
-	s.outBytes -= c.bytes
 	s.notifyChange()
+	sendCancel := false
+	switch c.state {
+	case queued:
+		s.unqueueLocked(c)
+		c.state = withdrawn
+		s.releaseLocked(c)
+	case writing:
+		c.cancelReason = reason
+	case written:
+		s.releaseLocked(c)
+		sendCancel = reason != pb.CancelReason_CANCEL_REASON_UNSPECIFIED
+	}
 	s.mu.Unlock()
-	s.opt.Global.release(c.bytes)
+
+	// 2. 交付结果后再通知对端，调用者不等待 Cancel 入队。
 	c.cancel()
 	c.result <- r
+	if sendCancel {
+		s.sendCancel(c.id, reason)
+	}
 	return true
+}
+
+// unqueueLocked 把尚未写出的调用移出业务队列并丢弃其帧；调用方持有 s.mu。
+func (s *Session) unqueueLocked(c *outCall) {
+	for i, q := range s.biz {
+		if q == c {
+			copy(s.biz[i:], s.biz[i+1:])
+			s.biz[len(s.biz)-1] = nil
+			s.biz = s.biz[:len(s.biz)-1]
+			break
+		}
+	}
+	c.env = nil
+}
+
+// releaseLocked 归还调用占用的本方向与全局预算，重复调用无副作用；调用方持有 s.mu。
+func (s *Session) releaseLocked(c *outCall) {
+	s.outBytes -= c.bytes
+	s.opt.Global.release(c.bytes)
+	c.bytes = 0
 }
 
 func (s *Session) signalBiz() {
@@ -556,16 +573,18 @@ func (s *Session) signalBiz() {
 	}
 }
 
-func (s *Session) popBiz() *outCall {
+// popBiz 取出队首请求并标记为正在写出；队列中只有尚未结束的调用。
+func (s *Session) popBiz() (*outCall, *pb.Envelope) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.biz) == 0 {
-		return nil
+		return nil, nil
 	}
 	c := s.biz[0]
 	s.biz[0] = nil
 	s.biz = s.biz[1:]
-	return c
+	c.state = writing
+	return c, c.env
 }
 
 // writeLoop 是唯一的写者：优先通道（Response/Cancel/控制）总是先于业务 Request。
@@ -579,8 +598,8 @@ func (s *Session) writeLoop() {
 			return
 		default:
 		}
-		if c := s.popBiz(); c != nil {
-			s.writeRequest(c)
+		if c, env := s.popBiz(); c != nil {
+			s.writeRequest(c, env)
 			continue
 		}
 		select {
@@ -608,21 +627,19 @@ func (s *Session) writePrio(f prioFrame) {
 	}
 }
 
-func (s *Session) writeRequest(c *outCall) {
-	c.mu.Lock()
-	if c.state == withdrawn {
-		c.mu.Unlock()
-		return
+// writeRequest 写出一个 REQUEST；写出期间调用已结束时，写完才归还预算并按需发送 Cancel。
+func (s *Session) writeRequest(c *outCall, env *pb.Envelope) {
+	_ = s.write(env) // 写失败会关闭 Session，由 fail 结束调用
+	s.mu.Lock()
+	c.state, c.env = written, nil
+	reason := pb.CancelReason_CANCEL_REASON_UNSPECIFIED
+	if c.finished {
+		s.releaseLocked(c)
+		reason = c.cancelReason
 	}
-	c.state = writing
-	c.mu.Unlock()
-	s.write(c.env)
-	c.mu.Lock()
-	c.state = written
-	later := c.cancelLater
-	c.mu.Unlock()
-	if later {
-		s.sendCancel(c.id, pb.CancelReason_CANCEL_REASON_CALLER_CANCELLED)
+	s.mu.Unlock()
+	if reason != pb.CancelReason_CANCEL_REASON_UNSPECIFIED {
+		s.sendCancel(c.id, reason)
 	}
 }
 
@@ -762,7 +779,7 @@ func (s *Session) onResponse(env *pb.Envelope) error {
 	s.mu.Lock()
 	c := s.pending[env.GetCallId()]
 	s.mu.Unlock()
-	if c == nil || !s.complete(c, Response{Payload: payloadOf(env), Err: env.GetError()}) {
+	if c == nil || !s.complete(c, Response{Payload: payloadOf(env), Err: env.GetError()}, pb.CancelReason_CANCEL_REASON_UNSPECIFIED) {
 		s.late.Add(1) // 迟到、重复或未知：不第二次完成调用
 	}
 	return nil
@@ -800,7 +817,7 @@ func (s *Session) fail(err error) {
 		close(s.done)
 		_ = s.conn.Close()
 		for _, c := range pending {
-			s.complete(c, Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "Session 已断开"}})
+			s.complete(c, Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "Session 已断开"}}, pb.CancelReason_CANCEL_REASON_UNSPECIFIED) // 排队中的请求随之移出队列
 		}
 		for _, in := range inbound {
 			in.cancel()
