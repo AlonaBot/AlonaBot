@@ -24,6 +24,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// DatabaseBackend 是插件业务数据库的后端类型。
 type DatabaseBackend int32
 
 const (
@@ -77,13 +78,17 @@ func (DatabaseBackend) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{0}
 }
 
+// MigrationMode 是插件声明的数据库迁移方式（CONTRACTS §6.3）。
 type MigrationMode int32
 
 const (
 	MigrationMode_MIGRATION_MODE_UNSPECIFIED MigrationMode = 0
-	MigrationMode_MIGRATION_MODE_NONE        MigrationMode = 1
-	MigrationMode_MIGRATION_MODE_SELF        MigrationMode = 2
-	MigrationMode_MIGRATION_MODE_VERSIONED   MigrationMode = 3
+	// 不做迁移。
+	MigrationMode_MIGRATION_MODE_NONE MigrationMode = 1
+	// 插件自行迁移。
+	MigrationMode_MIGRATION_MODE_SELF MigrationMode = 2
+	// SDK 按版本号逐个执行迁移。
+	MigrationMode_MIGRATION_MODE_VERSIONED MigrationMode = 3
 )
 
 // Enum value maps for MigrationMode.
@@ -129,6 +134,7 @@ func (MigrationMode) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{1}
 }
 
+// ActivationReason 是本次激活的原因，决定数据库准备方式。
 type ActivationReason int32
 
 const (
@@ -187,6 +193,7 @@ func (ActivationReason) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{2}
 }
 
+// CancelReason 是 CANCEL 的原因。
 type CancelReason int32
 
 const (
@@ -242,6 +249,7 @@ func (CancelReason) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{3}
 }
 
+// StopReason 是 STOPPING 的原因。
 type StopReason int32
 
 const (
@@ -300,6 +308,7 @@ func (StopReason) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{4}
 }
 
+// SessionPhase 是 Session 生命周期的阶段，用于报告失败发生在哪一步。
 type SessionPhase int32
 
 const (
@@ -370,11 +379,13 @@ func (SessionPhase) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{5}
 }
 
-// 协议能力项。supported 为可用集合，required 必须包含于双方交集。
+// ProtocolCapability 是一项协议能力。supported 为可用集合，required 必须包含于双方交集。
 type ProtocolCapability struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Version       uint32                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 能力名。
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// 能力版本。
+	Version       uint32 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -423,20 +434,25 @@ func (x *ProtocolCapability) GetVersion() uint32 {
 	return 0
 }
 
-// HELLO（Plugin→Core），首帧且仅一次。
+// Hello 是 HELLO（Plugin→Core）的载荷，首帧且仅一次。
 type Hello struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	PluginId string                 `protobuf:"bytes,1,opt,name=plugin_id,json=pluginId,proto3" json:"plugin_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 插件声明的 ID，必须与 Core 启动它时的 ID 一致。
+	PluginId string `protobuf:"bytes,1,opt,name=plugin_id,json=pluginId,proto3" json:"plugin_id,omitempty"`
 	// Core 启动时下发的 32 字节 Session Secret。
-	Secret         []byte `protobuf:"bytes,2,opt,name=secret,proto3" json:"secret,omitempty"`
+	Secret []byte `protobuf:"bytes,2,opt,name=secret,proto3" json:"secret,omitempty"`
+	// SDK 支持的协议主版本。
 	SupportedMajor uint32 `protobuf:"varint,3,opt,name=supported_major,json=supportedMajor,proto3" json:"supported_major,omitempty"`
+	// SDK 支持的最高协议次版本。
 	SupportedMinor uint32 `protobuf:"varint,4,opt,name=supported_minor,json=supportedMinor,proto3" json:"supported_minor,omitempty"`
 	// 安装时已验证的归档 SHA256，由 Core 经启动上下文提供，SDK 原样回显。
-	BuildDigest           []byte                `protobuf:"bytes,5,opt,name=build_digest,json=buildDigest,proto3" json:"build_digest,omitempty"`
+	BuildDigest []byte `protobuf:"bytes,5,opt,name=build_digest,json=buildDigest,proto3" json:"build_digest,omitempty"`
+	// SDK 可用的协议能力。
 	SupportedCapabilities []*ProtocolCapability `protobuf:"bytes,6,rep,name=supported_capabilities,json=supportedCapabilities,proto3" json:"supported_capabilities,omitempty"`
-	RequiredCapabilities  []*ProtocolCapability `protobuf:"bytes,7,rep,name=required_capabilities,json=requiredCapabilities,proto3" json:"required_capabilities,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// SDK 必需的协议能力；不在双方交集内时握手失败。
+	RequiredCapabilities []*ProtocolCapability `protobuf:"bytes,7,rep,name=required_capabilities,json=requiredCapabilities,proto3" json:"required_capabilities,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *Hello) Reset() {
@@ -518,15 +534,19 @@ func (x *Hello) GetRequiredCapabilities() []*ProtocolCapability {
 	return nil
 }
 
-// HELLO_ACK（Core→Plugin）。
+// HelloAck 是 HELLO_ACK（Core→Plugin）的载荷，认证通过后发送。
 type HelloAck struct {
-	state                  protoimpl.MessageState `protogen:"open.v1"`
-	SessionId              []byte                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	ChosenMinor            uint32                 `protobuf:"varint,2,opt,name=chosen_minor,json=chosenMinor,proto3" json:"chosen_minor,omitempty"`
-	CapabilityIntersection []*ProtocolCapability  `protobuf:"bytes,3,rep,name=capability_intersection,json=capabilityIntersection,proto3" json:"capability_intersection,omitempty"`
-	Bootstrap              *Bootstrap             `protobuf:"bytes,4,opt,name=bootstrap,proto3" json:"bootstrap,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Core 分配的 16 字节随机 Session ID，之后每一帧都携带它。
+	SessionId []byte `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// 协商出的协议次版本 min(Core, 插件)。
+	ChosenMinor uint32 `protobuf:"varint,2,opt,name=chosen_minor,json=chosenMinor,proto3" json:"chosen_minor,omitempty"`
+	// 双方都支持的协议能力。
+	CapabilityIntersection []*ProtocolCapability `protobuf:"bytes,3,rep,name=capability_intersection,json=capabilityIntersection,proto3" json:"capability_intersection,omitempty"`
+	// 准备阶段所需的全部输入。
+	Bootstrap     *Bootstrap `protobuf:"bytes,4,opt,name=bootstrap,proto3" json:"bootstrap,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HelloAck) Reset() {
@@ -587,21 +607,27 @@ func (x *HelloAck) GetBootstrap() *Bootstrap {
 	return nil
 }
 
-// 准备阶段一次下发的私有输入，不得进入日志或管理 API 响应。
+// Bootstrap 是准备阶段一次下发的私有输入，不得进入日志或管理 API 响应。
 type Bootstrap struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	GenerationId string                 `protobuf:"bytes,1,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Core 分配的不可变代次 ID，插件只回显。
+	GenerationId string `protobuf:"bytes,1,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
 	// UTF-8 JSON 对象；Core 只检查是对象且未超限，不先用新 Schema 否决旧配置。
 	CandidateConfigJson string `protobuf:"bytes,2,opt,name=candidate_config_json,json=candidateConfigJson,proto3" json:"candidate_config_json,omitempty"`
-	ConfigSchemaHash    []byte `protobuf:"bytes,3,opt,name=config_schema_hash,json=configSchemaHash,proto3" json:"config_schema_hash,omitempty"`
-	// 首次安装没有旧版本。
-	PreviousConfigVersion *uint32             `protobuf:"varint,4,opt,name=previous_config_version,json=previousConfigVersion,proto3,oneof" json:"previous_config_version,omitempty"`
-	TargetConfigVersion   uint32              `protobuf:"varint,5,opt,name=target_config_version,json=targetConfigVersion,proto3" json:"target_config_version,omitempty"`
-	DatabaseDescriptor    *DatabaseDescriptor `protobuf:"bytes,6,opt,name=database_descriptor,json=databaseDescriptor,proto3" json:"database_descriptor,omitempty"`
-	// 仅在插件声明 HTTP 能力时设置。
-	HttpProxyAuth             *HttpProxyAuth `protobuf:"bytes,7,opt,name=http_proxy_auth,json=httpProxyAuth,proto3" json:"http_proxy_auth,omitempty"`
-	PhaseLimits               *PhaseLimits   `protobuf:"bytes,8,opt,name=phase_limits,json=phaseLimits,proto3" json:"phase_limits,omitempty"`
-	PreparationDeadlineUnixMs int64          `protobuf:"varint,9,opt,name=preparation_deadline_unix_ms,json=preparationDeadlineUnixMs,proto3" json:"preparation_deadline_unix_ms,omitempty"`
+	// 可信安装包中配置 Schema 的摘要。
+	ConfigSchemaHash []byte `protobuf:"bytes,3,opt,name=config_schema_hash,json=configSchemaHash,proto3" json:"config_schema_hash,omitempty"`
+	// 现有配置的版本；首次安装没有旧版本。
+	PreviousConfigVersion *uint32 `protobuf:"varint,4,opt,name=previous_config_version,json=previousConfigVersion,proto3,oneof" json:"previous_config_version,omitempty"`
+	// 配置迁移的目标版本。
+	TargetConfigVersion uint32 `protobuf:"varint,5,opt,name=target_config_version,json=targetConfigVersion,proto3" json:"target_config_version,omitempty"`
+	// 插件业务数据库的准备视图。
+	DatabaseDescriptor *DatabaseDescriptor `protobuf:"bytes,6,opt,name=database_descriptor,json=databaseDescriptor,proto3" json:"database_descriptor,omitempty"`
+	// 本 Session 的内部 HTTP 代理认证材料；仅在插件声明 HTTP 能力时设置。
+	HttpProxyAuth *HttpProxyAuth `protobuf:"bytes,7,opt,name=http_proxy_auth,json=httpProxyAuth,proto3" json:"http_proxy_auth,omitempty"`
+	// 各阶段预算，由 Core 填写。
+	PhaseLimits *PhaseLimits `protobuf:"bytes,8,opt,name=phase_limits,json=phaseLimits,proto3" json:"phase_limits,omitempty"`
+	// 准备阶段（配置、迁移、OnStart）的绝对截止，UTC 毫秒。
+	PreparationDeadlineUnixMs int64 `protobuf:"varint,9,opt,name=preparation_deadline_unix_ms,json=preparationDeadlineUnixMs,proto3" json:"preparation_deadline_unix_ms,omitempty"`
 	unknownFields             protoimpl.UnknownFields
 	sizeCache                 protoimpl.SizeCache
 }
@@ -699,17 +725,21 @@ func (x *Bootstrap) GetPreparationDeadlineUnixMs() int64 {
 	return 0
 }
 
+// DatabaseDescriptor 描述本次准备使用的插件业务数据库；不下发 Core 管理数据库凭证。
 type DatabaseDescriptor struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Backend DatabaseBackend        `protobuf:"varint,1,opt,name=backend,proto3,enum=alonabot.v1.DatabaseBackend" json:"backend,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 后端类型；NONE 表示没有业务 DB。
+	Backend DatabaseBackend `protobuf:"varint,1,opt,name=backend,proto3,enum=alonabot.v1.DatabaseBackend" json:"backend,omitempty"`
 	// SQLITE：受管候选（或 resume 时 Active）文件路径。
 	SqlitePath string `protobuf:"bytes,2,opt,name=sqlite_path,json=sqlitePath,proto3" json:"sqlite_path,omitempty"`
 	// POSTGRES：该插件专属 role/schema 的连接参数；不含 Core 管理凭证。
-	Postgres      *PostgresConnection `protobuf:"bytes,3,opt,name=postgres,proto3" json:"postgres,omitempty"`
-	MigrationMode MigrationMode       `protobuf:"varint,4,opt,name=migration_mode,json=migrationMode,proto3,enum=alonabot.v1.MigrationMode" json:"migration_mode,omitempty"`
+	Postgres *PostgresConnection `protobuf:"bytes,3,opt,name=postgres,proto3" json:"postgres,omitempty"`
+	// 插件声明的迁移方式。
+	MigrationMode MigrationMode `protobuf:"varint,4,opt,name=migration_mode,json=migrationMode,proto3,enum=alonabot.v1.MigrationMode" json:"migration_mode,omitempty"`
 	// versioned 模式下已完成的迁移 ID（升序）。
-	AppliedMigrationIds []uint32         `protobuf:"varint,5,rep,packed,name=applied_migration_ids,json=appliedMigrationIds,proto3" json:"applied_migration_ids,omitempty"`
-	ActivationReason    ActivationReason `protobuf:"varint,6,opt,name=activation_reason,json=activationReason,proto3,enum=alonabot.v1.ActivationReason" json:"activation_reason,omitempty"`
+	AppliedMigrationIds []uint32 `protobuf:"varint,5,rep,packed,name=applied_migration_ids,json=appliedMigrationIds,proto3" json:"applied_migration_ids,omitempty"`
+	// 本次激活的原因。
+	ActivationReason ActivationReason `protobuf:"varint,6,opt,name=activation_reason,json=activationReason,proto3,enum=alonabot.v1.ActivationReason" json:"activation_reason,omitempty"`
 	// 仅当管理员对本次 Session/Generation/DB 显式给出维护许可时为 true。
 	ManualMigrationApproved bool `protobuf:"varint,7,opt,name=manual_migration_approved,json=manualMigrationApproved,proto3" json:"manual_migration_approved,omitempty"`
 	unknownFields           protoimpl.UnknownFields
@@ -795,15 +825,22 @@ func (x *DatabaseDescriptor) GetManualMigrationApproved() bool {
 	return false
 }
 
+// PostgresConnection 是插件专属 PostgreSQL role/schema 的连接参数。
 type PostgresConnection struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Host     string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
-	Port     uint32                 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
-	Database string                 `protobuf:"bytes,3,opt,name=database,proto3" json:"database,omitempty"`
-	User     string                 `protobuf:"bytes,4,opt,name=user,proto3" json:"user,omitempty"`
-	Password string                 `protobuf:"bytes,5,opt,name=password,proto3" json:"password,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 服务器主机名或地址。
+	Host string `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	// 服务器端口。
+	Port uint32 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	// 数据库名。
+	Database string `protobuf:"bytes,3,opt,name=database,proto3" json:"database,omitempty"`
+	// 插件专属 role。
+	User string `protobuf:"bytes,4,opt,name=user,proto3" json:"user,omitempty"`
+	// 该 role 的口令，属于敏感数据。
+	Password string `protobuf:"bytes,5,opt,name=password,proto3" json:"password,omitempty"`
 	// 插件专属 schema；search_path 限于它与系统目录。
-	Schema        string `protobuf:"bytes,6,opt,name=schema,proto3" json:"schema,omitempty"`
+	Schema string `protobuf:"bytes,6,opt,name=schema,proto3" json:"schema,omitempty"`
+	// libpq 的 sslmode 取值。
 	SslMode       string `protobuf:"bytes,7,opt,name=ssl_mode,json=sslMode,proto3" json:"ssl_mode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -888,10 +925,11 @@ func (x *PostgresConnection) GetSslMode() string {
 	return ""
 }
 
-// 本 Session 独立的内部 HTTP 代理认证材料，不复用 Admin 凭证。
+// HttpProxyAuth 是本 Session 独立的内部 HTTP 代理认证材料，不复用 Admin 凭证。
 type HttpProxyAuth struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Token         []byte                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 内部代理请求携带的认证令牌，属于敏感数据。
+	Token         []byte `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -933,15 +971,21 @@ func (x *HttpProxyAuth) GetToken() []byte {
 	return nil
 }
 
-// 主契约固定的阶段预算（毫秒），见 CONTRACTS §4.2。
+// PhaseLimits 是主契约固定的阶段预算（毫秒），见 CONTRACTS §4.2。
 type PhaseLimits struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	HandshakeMs   uint32                 `protobuf:"varint,1,opt,name=handshake_ms,json=handshakeMs,proto3" json:"handshake_ms,omitempty"`
-	ConfigMs      uint32                 `protobuf:"varint,2,opt,name=config_ms,json=configMs,proto3" json:"config_ms,omitempty"`
-	MigrationMs   uint32                 `protobuf:"varint,3,opt,name=migration_ms,json=migrationMs,proto3" json:"migration_ms,omitempty"`
-	OnStartMs     uint32                 `protobuf:"varint,4,opt,name=on_start_ms,json=onStartMs,proto3" json:"on_start_ms,omitempty"`
-	OnReadyMs     uint32                 `protobuf:"varint,5,opt,name=on_ready_ms,json=onReadyMs,proto3" json:"on_ready_ms,omitempty"`
-	StopTotalMs   uint32                 `protobuf:"varint,6,opt,name=stop_total_ms,json=stopTotalMs,proto3" json:"stop_total_ms,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 握手预算。
+	HandshakeMs uint32 `protobuf:"varint,1,opt,name=handshake_ms,json=handshakeMs,proto3" json:"handshake_ms,omitempty"`
+	// 配置转换与校验预算。
+	ConfigMs uint32 `protobuf:"varint,2,opt,name=config_ms,json=configMs,proto3" json:"config_ms,omitempty"`
+	// 数据库迁移预算，独立于普通业务期限。
+	MigrationMs uint32 `protobuf:"varint,3,opt,name=migration_ms,json=migrationMs,proto3" json:"migration_ms,omitempty"`
+	// OnStart 预算。
+	OnStartMs uint32 `protobuf:"varint,4,opt,name=on_start_ms,json=onStartMs,proto3" json:"on_start_ms,omitempty"`
+	// OnReady 预算。
+	OnReadyMs uint32 `protobuf:"varint,5,opt,name=on_ready_ms,json=onReadyMs,proto3" json:"on_ready_ms,omitempty"`
+	// 一次停用的总预算。
+	StopTotalMs   uint32 `protobuf:"varint,6,opt,name=stop_total_ms,json=stopTotalMs,proto3" json:"stop_total_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1018,11 +1062,13 @@ func (x *PhaseLimits) GetStopTotalMs() uint32 {
 	return 0
 }
 
-// SDK 已实际绑定的 loopback Listener；只接受 127.0.0.1 或 ::1 与非零端口。
+// HttpListener 是 SDK 已实际绑定的 loopback Listener；只接受 127.0.0.1 或 ::1 与非零端口。
 type HttpListener struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Host          string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
-	Port          uint32                 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 监听地址，127.0.0.1 或 ::1。
+	Host string `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	// 监听端口，非零。
+	Port          uint32 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1071,11 +1117,13 @@ func (x *HttpListener) GetPort() uint32 {
 	return 0
 }
 
-// PREPARED（Core→Plugin）。digest 由 Core 对持久化快照计算，SDK 只作不透明确认值。
+// Prepared 是 PREPARED（Core→Plugin）的载荷。digest 由 Core 对持久化快照计算，SDK 只作不透明确认值。
 type Prepared struct {
-	state                 protoimpl.MessageState `protogen:"open.v1"`
-	RouteDescriptorHash   []byte                 `protobuf:"bytes,1,opt,name=route_descriptor_hash,json=routeDescriptorHash,proto3" json:"route_descriptor_hash,omitempty"`
-	CandidateConfigDigest []byte                 `protobuf:"bytes,2,opt,name=candidate_config_digest,json=candidateConfigDigest,proto3" json:"candidate_config_digest,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 按顺序拼接各 RouteDescriptor 确定性编码后的 SHA256。
+	RouteDescriptorHash []byte `protobuf:"bytes,1,opt,name=route_descriptor_hash,json=routeDescriptorHash,proto3" json:"route_descriptor_hash,omitempty"`
+	// 候选配置快照的 SHA256。
+	CandidateConfigDigest []byte `protobuf:"bytes,2,opt,name=candidate_config_digest,json=candidateConfigDigest,proto3" json:"candidate_config_digest,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -1124,12 +1172,15 @@ func (x *Prepared) GetCandidateConfigDigest() []byte {
 	return nil
 }
 
-// ACTIVATE（Core→Plugin），在 Core 状态库提交唯一 ActiveGeneration 之后发送。
+// Activate 是 ACTIVATE（Core→Plugin）的载荷，在 Core 状态库提交唯一 ActiveGeneration 之后发送。
 type Activate struct {
-	state                 protoimpl.MessageState `protogen:"open.v1"`
-	GenerationId          string                 `protobuf:"bytes,1,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
-	CommitMarker          []byte                 `protobuf:"bytes,2,opt,name=commit_marker,json=commitMarker,proto3" json:"commit_marker,omitempty"`
-	OnReadyDeadlineUnixMs int64                  `protobuf:"varint,3,opt,name=on_ready_deadline_unix_ms,json=onReadyDeadlineUnixMs,proto3" json:"on_ready_deadline_unix_ms,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 已提交的代次 ID。
+	GenerationId string `protobuf:"bytes,1,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
+	// 代次、注册描述与候选配置的绑定摘要，SDK 只作不透明确认值。
+	CommitMarker []byte `protobuf:"bytes,2,opt,name=commit_marker,json=commitMarker,proto3" json:"commit_marker,omitempty"`
+	// OnReady 的绝对截止，UTC 毫秒。
+	OnReadyDeadlineUnixMs int64 `protobuf:"varint,3,opt,name=on_ready_deadline_unix_ms,json=onReadyDeadlineUnixMs,proto3" json:"on_ready_deadline_unix_ms,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -1185,11 +1236,13 @@ func (x *Activate) GetOnReadyDeadlineUnixMs() int64 {
 	return 0
 }
 
-// ACTIVATED（Plugin→Core），OnReady 成功后由唯一 writer 完整写出。
+// Activated 是 ACTIVATED（Plugin→Core）的载荷，OnReady 成功后由唯一 writer 完整写出。
 type Activated struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	GenerationId  string                 `protobuf:"bytes,1,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
-	Ready         bool                   `protobuf:"varint,2,opt,name=ready,proto3" json:"ready,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 回显 ACTIVATE 中的代次 ID。
+	GenerationId string `protobuf:"bytes,1,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
+	// OnReady 成功时为 true。
+	Ready         bool `protobuf:"varint,2,opt,name=ready,proto3" json:"ready,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1238,10 +1291,11 @@ func (x *Activated) GetReady() bool {
 	return false
 }
 
-// CANCEL（原发起方→被调用方）；initiator_side/call_id 取自 Envelope。
+// Cancel 是 CANCEL（原发起方→被调用方）的载荷；initiator_side/call_id 取自 Envelope。
 type Cancel struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Reason        CancelReason           `protobuf:"varint,1,opt,name=reason,proto3,enum=alonabot.v1.CancelReason" json:"reason,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 取消原因。
+	Reason        CancelReason `protobuf:"varint,1,opt,name=reason,proto3,enum=alonabot.v1.CancelReason" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1283,13 +1337,15 @@ func (x *Cancel) GetReason() CancelReason {
 	return CancelReason_CANCEL_REASON_UNSPECIFIED
 }
 
-// STOPPING（Core→Plugin），deadline = min(t0+10s, 发送时刻+4s)。
+// Stopping 是 STOPPING（Core→Plugin）的载荷，deadline = min(t0+10s, 发送时刻+4s)。
 type Stopping struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	DeadlineUnixMs int64                  `protobuf:"varint,1,opt,name=deadline_unix_ms,json=deadlineUnixMs,proto3" json:"deadline_unix_ms,omitempty"`
-	Reason         StopReason             `protobuf:"varint,2,opt,name=reason,proto3,enum=alonabot.v1.StopReason" json:"reason,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// OnStop 与资源关闭的绝对截止，UTC 毫秒。
+	DeadlineUnixMs int64 `protobuf:"varint,1,opt,name=deadline_unix_ms,json=deadlineUnixMs,proto3" json:"deadline_unix_ms,omitempty"`
+	// 停止原因。
+	Reason        StopReason `protobuf:"varint,2,opt,name=reason,proto3,enum=alonabot.v1.StopReason" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Stopping) Reset() {
@@ -1336,11 +1392,13 @@ func (x *Stopping) GetReason() StopReason {
 	return StopReason_STOP_REASON_UNSPECIFIED
 }
 
-// HEARTBEAT（双向），仅用于诊断；monotonic_ns 只与同一端的值比较。
+// Heartbeat 是 HEARTBEAT（双向）的载荷，仅用于诊断；monotonic_ns 只与同一端的值比较。
 type Heartbeat struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Seq           uint64                 `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`
-	MonotonicNs   uint64                 `protobuf:"varint,2,opt,name=monotonic_ns,json=monotonicNs,proto3" json:"monotonic_ns,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 发送端递增的序号。
+	Seq uint64 `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`
+	// 发送端的单调时钟读数（纳秒）。
+	MonotonicNs   uint64 `protobuf:"varint,2,opt,name=monotonic_ns,json=monotonicNs,proto3" json:"monotonic_ns,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1389,10 +1447,11 @@ func (x *Heartbeat) GetMonotonicNs() uint64 {
 	return 0
 }
 
-// SESSION_ERROR（双向）；ErrorInfo 放在 Envelope.error。
+// SessionError 是 SESSION_ERROR（双向）的载荷；ErrorInfo 放在 Envelope.error。
 type SessionError struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	FailedPhase SessionPhase           `protobuf:"varint,1,opt,name=failed_phase,json=failedPhase,proto3,enum=alonabot.v1.SessionPhase" json:"failed_phase,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 失败的阶段。
+	FailedPhase SessionPhase `protobuf:"varint,1,opt,name=failed_phase,json=failedPhase,proto3,enum=alonabot.v1.SessionPhase" json:"failed_phase,omitempty"`
 	// 触发失败的帧种类；与具体帧无关时为 UNSPECIFIED。
 	FailedKind    FrameKind `protobuf:"varint,2,opt,name=failed_kind,json=failedKind,proto3,enum=alonabot.v1.FrameKind" json:"failed_kind,omitempty"`
 	unknownFields protoimpl.UnknownFields

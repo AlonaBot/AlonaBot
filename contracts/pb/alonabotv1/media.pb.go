@@ -23,6 +23,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// MediaReadability 表示入站媒体能否被读取。
 type MediaReadability int32
 
 const (
@@ -73,17 +74,23 @@ func (MediaReadability) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_media_proto_rawDescGZIP(), []int{0}
 }
 
-// 已提交上传对象的能力引用；绑定 owner Session 与消费范围。
+// MediaRef 是已提交上传对象的能力引用；绑定 owner Session 与消费范围。
 type MediaRef struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Token           string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	Size            uint64                 `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
-	Mime            string                 `protobuf:"bytes,3,opt,name=mime,proto3" json:"mime,omitempty"`
-	Sha256          []byte                 `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
-	ExpiresAtUnixMs int64                  `protobuf:"varint,5,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
-	Scope           *MediaScope            `protobuf:"bytes,6,opt,name=scope,proto3" json:"scope,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Core 分配的不透明能力令牌。
+	Token string `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	// 对象字节数。
+	Size uint64 `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
+	// 对象的 MIME 类型。
+	Mime string `protobuf:"bytes,3,opt,name=mime,proto3" json:"mime,omitempty"`
+	// 对象内容的 SHA256，提交时已校验。
+	Sha256 []byte `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	// 引用的过期时刻，UTC 毫秒。
+	ExpiresAtUnixMs int64 `protobuf:"varint,5,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
+	// 允许使用该引用的范围。
+	Scope         *MediaScope `protobuf:"bytes,6,opt,name=scope,proto3" json:"scope,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MediaRef) Reset() {
@@ -158,13 +165,15 @@ func (x *MediaRef) GetScope() *MediaScope {
 	return nil
 }
 
-// 允许的消费方/目标范围；空列表表示仅 owner 自身。
+// MediaScope 是允许的消费方/目标范围；空列表表示仅 owner 自身。
 type MediaScope struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	ConsumerPluginIds []string               `protobuf:"bytes,1,rep,name=consumer_plugin_ids,json=consumerPluginIds,proto3" json:"consumer_plugin_ids,omitempty"`
-	Targets           []*Target              `protobuf:"bytes,2,rep,name=targets,proto3" json:"targets,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 允许读取的其他插件。
+	ConsumerPluginIds []string `protobuf:"bytes,1,rep,name=consumer_plugin_ids,json=consumerPluginIds,proto3" json:"consumer_plugin_ids,omitempty"`
+	// 允许发送到的目标。
+	Targets       []*Target `protobuf:"bytes,2,rep,name=targets,proto3" json:"targets,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MediaScope) Reset() {
@@ -211,14 +220,19 @@ func (x *MediaScope) GetTargets() []*Target {
 	return nil
 }
 
-// 入站媒体描述符：尚未取件，不等于已校验 MediaRef；未知 size/MIME 保持 absent。
+// IncomingMedia 是入站媒体描述符：尚未取件，不等于已校验 MediaRef；未知 size/MIME 保持 absent。
 type IncomingMedia struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Token           string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	Size            *uint64                `protobuf:"varint,2,opt,name=size,proto3,oneof" json:"size,omitempty"`
-	Mime            *string                `protobuf:"bytes,3,opt,name=mime,proto3,oneof" json:"mime,omitempty"`
-	Readability     MediaReadability       `protobuf:"varint,4,opt,name=readability,proto3,enum=alonabot.v1.MediaReadability" json:"readability,omitempty"`
-	ExpiresAtUnixMs int64                  `protobuf:"varint,5,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Core 分配的取件令牌。
+	Token string `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	// 平台报告的字节数；未知时 absent。
+	Size *uint64 `protobuf:"varint,2,opt,name=size,proto3,oneof" json:"size,omitempty"`
+	// 平台报告的 MIME 类型；未知时 absent。
+	Mime *string `protobuf:"bytes,3,opt,name=mime,proto3,oneof" json:"mime,omitempty"`
+	// 能否读取。
+	Readability MediaReadability `protobuf:"varint,4,opt,name=readability,proto3,enum=alonabot.v1.MediaReadability" json:"readability,omitempty"`
+	// 令牌的过期时刻，UTC 毫秒。
+	ExpiresAtUnixMs int64 `protobuf:"varint,5,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -288,11 +302,15 @@ func (x *IncomingMedia) GetExpiresAtUnixMs() int64 {
 	return 0
 }
 
+// BeginUploadRequest 声明一次上传的总量与摘要。
 type BeginUploadRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Size          uint64                 `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
-	Mime          string                 `protobuf:"bytes,2,opt,name=mime,proto3" json:"mime,omitempty"`
-	Sha256        []byte                 `protobuf:"bytes,3,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 声明的总字节数。
+	Size uint64 `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
+	// 声明的 MIME 类型。
+	Mime string `protobuf:"bytes,2,opt,name=mime,proto3" json:"mime,omitempty"`
+	// 声明的内容 SHA256，提交时校验。
+	Sha256        []byte `protobuf:"bytes,3,opt,name=sha256,proto3" json:"sha256,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -348,10 +366,13 @@ func (x *BeginUploadRequest) GetSha256() []byte {
 	return nil
 }
 
+// BeginUploadResponse 返回新建上传的 ID。
 type BeginUploadResponse struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	UploadId        string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
-	ExpiresAtUnixMs int64                  `protobuf:"varint,2,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 本次上传的 ID。
+	UploadId string `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	// 未提交上传的过期时刻，UTC 毫秒。
+	ExpiresAtUnixMs int64 `protobuf:"varint,2,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -400,12 +421,15 @@ func (x *BeginUploadResponse) GetExpiresAtUnixMs() int64 {
 	return 0
 }
 
-// 顺序分块：offset 必须等于当前已确认长度，每块最多 1 MiB。
+// WriteChunkRequest 写入一个顺序分块：offset 必须等于当前已确认长度，每块最多 1 MiB。
 type WriteChunkRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UploadId      string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
-	Offset        uint64                 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
-	Data          []byte                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 上传 ID。
+	UploadId string `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	// 本块的起始偏移。
+	Offset uint64 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	// 块内容。
+	Data          []byte `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -461,9 +485,11 @@ func (x *WriteChunkRequest) GetData() []byte {
 	return nil
 }
 
+// WriteChunkResponse 返回写入后的确认长度。
 type WriteChunkResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NextOffset    uint64                 `protobuf:"varint,1,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 下一块应使用的偏移。
+	NextOffset    uint64 `protobuf:"varint,1,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -505,9 +531,11 @@ func (x *WriteChunkResponse) GetNextOffset() uint64 {
 	return 0
 }
 
+// CommitUploadRequest 提交一次上传，校验总量与 SHA256。
 type CommitUploadRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UploadId      string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 上传 ID。
+	UploadId      string `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -549,9 +577,11 @@ func (x *CommitUploadRequest) GetUploadId() string {
 	return ""
 }
 
+// CommitUploadResponse 返回提交后产生的 MediaRef。
 type CommitUploadResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ref           *MediaRef              `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 新的媒体引用。
+	Ref           *MediaRef `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -593,12 +623,15 @@ func (x *CommitUploadResponse) GetRef() *MediaRef {
 	return nil
 }
 
-// token 可以是 MediaRef 或 IncomingMedia 的 token；length 为 1～1 MiB。
+// ReadRequest 读取一段媒体；token 可以是 MediaRef 或 IncomingMedia 的 token；length 为 1～1 MiB。
 type ReadRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	Offset        uint64                 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
-	Length        uint32                 `protobuf:"varint,3,opt,name=length,proto3" json:"length,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 媒体令牌。
+	Token string `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	// 读取起点。
+	Offset uint64 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	// 最多读取的字节数。
+	Length        uint32 `protobuf:"varint,3,opt,name=length,proto3" json:"length,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -654,11 +687,15 @@ func (x *ReadRequest) GetLength() uint32 {
 	return 0
 }
 
+// ReadResponse 是一次读取的结果。
 type ReadResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	NextOffset    uint64                 `protobuf:"varint,2,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
-	Eof           bool                   `protobuf:"varint,3,opt,name=eof,proto3" json:"eof,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 读到的内容。
+	Data []byte `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	// 下一次读取的偏移。
+	NextOffset uint64 `protobuf:"varint,2,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
+	// 已读到末尾时为 true。
+	Eof           bool `protobuf:"varint,3,opt,name=eof,proto3" json:"eof,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -714,14 +751,17 @@ func (x *ReadResponse) GetEof() bool {
 	return false
 }
 
-// 只签发等同或更窄范围的新 token，不能扩大对象、Target 或有效期。
+// GrantRequest 为已有授权签发新 token：只能等同或更窄，不能扩大对象、Target 或有效期。
 type GrantRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Token           string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	GranteePluginId string                 `protobuf:"bytes,2,opt,name=grantee_plugin_id,json=granteePluginId,proto3" json:"grantee_plugin_id,omitempty"`
-	Targets         []*Target              `protobuf:"bytes,3,rep,name=targets,proto3" json:"targets,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 已持有的媒体令牌。
+	Token string `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	// 被授权的插件。
+	GranteePluginId string `protobuf:"bytes,2,opt,name=grantee_plugin_id,json=granteePluginId,proto3" json:"grantee_plugin_id,omitempty"`
+	// 被授权可发送到的目标，必须在原范围之内。
+	Targets       []*Target `protobuf:"bytes,3,rep,name=targets,proto3" json:"targets,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GrantRequest) Reset() {
@@ -775,10 +815,13 @@ func (x *GrantRequest) GetTargets() []*Target {
 	return nil
 }
 
+// GrantResponse 返回新签发的令牌。
 type GrantResponse struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Token           string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	ExpiresAtUnixMs int64                  `protobuf:"varint,2,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 新令牌。
+	Token string `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	// 新令牌的过期时刻，UTC 毫秒，不晚于原令牌。
+	ExpiresAtUnixMs int64 `protobuf:"varint,2,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }

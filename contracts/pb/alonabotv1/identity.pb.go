@@ -24,6 +24,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// TrustedRole 是 Core 认定的可信角色。
 type TrustedRole int32
 
 const (
@@ -79,15 +80,21 @@ func (TrustedRole) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_identity_proto_rawDescGZIP(), []int{0}
 }
 
+// Target 是一次发送的平台目标，唯一定位到某个 Adapter 实例下的会话或话题。
 type Target struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	AdapterId         string                 `protobuf:"bytes,1,opt,name=adapter_id,json=adapterId,proto3" json:"adapter_id,omitempty"`
-	AdapterInstanceId string                 `protobuf:"bytes,2,opt,name=adapter_instance_id,json=adapterInstanceId,proto3" json:"adapter_instance_id,omitempty"`
-	AccountId         string                 `protobuf:"bytes,3,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
-	ChatId            string                 `protobuf:"bytes,4,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
-	ThreadId          *string                `protobuf:"bytes,5,opt,name=thread_id,json=threadId,proto3,oneof" json:"thread_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Adapter 类型，例如 telegram。
+	AdapterId string `protobuf:"bytes,1,opt,name=adapter_id,json=adapterId,proto3" json:"adapter_id,omitempty"`
+	// 该 Adapter 的已配置实例。
+	AdapterInstanceId string `protobuf:"bytes,2,opt,name=adapter_instance_id,json=adapterInstanceId,proto3" json:"adapter_instance_id,omitempty"`
+	// 实例下用于发送的平台账号。
+	AccountId string `protobuf:"bytes,3,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	// 平台会话 ID。
+	ChatId string `protobuf:"bytes,4,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	// 话题 ID；缺省表示会话本身，不用空串代替。
+	ThreadId      *string `protobuf:"bytes,5,opt,name=thread_id,json=threadId,proto3,oneof" json:"thread_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Target) Reset() {
@@ -155,15 +162,19 @@ func (x *Target) GetThreadId() string {
 	return ""
 }
 
-// 只由可信 Adapter 元数据与 Core policy 生成；插件自报的身份不是依据。
+// Actor 是事件的触发者，只由可信 Adapter 元数据与 Core policy 生成；插件自报的身份不是依据。
 type Actor struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	ExternalUserId    string                 `protobuf:"bytes,1,opt,name=external_user_id,json=externalUserId,proto3" json:"external_user_id,omitempty"`
-	AdapterInstanceId string                 `protobuf:"bytes,2,opt,name=adapter_instance_id,json=adapterInstanceId,proto3" json:"adapter_instance_id,omitempty"`
-	DisplayName       *string                `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
-	TrustedRoles      []TrustedRole          `protobuf:"varint,4,rep,packed,name=trusted_roles,json=trustedRoles,proto3,enum=alonabot.v1.TrustedRole" json:"trusted_roles,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 平台上的用户 ID。
+	ExternalUserId string `protobuf:"bytes,1,opt,name=external_user_id,json=externalUserId,proto3" json:"external_user_id,omitempty"`
+	// 用户 ID 所属的 Adapter 实例。
+	AdapterInstanceId string `protobuf:"bytes,2,opt,name=adapter_instance_id,json=adapterInstanceId,proto3" json:"adapter_instance_id,omitempty"`
+	// 展示名；平台没有提供时缺省。
+	DisplayName *string `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
+	// Core 认定的角色集合。
+	TrustedRoles  []TrustedRole `protobuf:"varint,4,rep,packed,name=trusted_roles,json=trustedRoles,proto3,enum=alonabot.v1.TrustedRole" json:"trusted_roles,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Actor) Reset() {
@@ -224,12 +235,15 @@ func (x *Actor) GetTrustedRoles() []TrustedRole {
 	return nil
 }
 
-// Adapter 公布的平台能力；未知能力不推定支持。
+// Capability 是 Adapter 公布的一项平台能力；未知能力不推定支持。
 type Capability struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Version       uint32                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	Supported     bool                   `protobuf:"varint,3,opt,name=supported,proto3" json:"supported,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 能力名。
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// 能力版本。
+	Version uint32 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	// 该实例当前是否支持。
+	Supported     bool `protobuf:"varint,3,opt,name=supported,proto3" json:"supported,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

@@ -7,22 +7,31 @@ import "alonabot/v1/identity.proto";
 
 option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 
-// 已提交上传对象的能力引用；绑定 owner Session 与消费范围。
+// MediaRef 是已提交上传对象的能力引用；绑定 owner Session 与消费范围。
 message MediaRef {
+  // Core 分配的不透明能力令牌。
   string token = 1;
+  // 对象字节数。
   uint64 size = 2;
+  // 对象的 MIME 类型。
   string mime = 3;
+  // 对象内容的 SHA256，提交时已校验。
   bytes sha256 = 4;
+  // 引用的过期时刻，UTC 毫秒。
   int64 expires_at_unix_ms = 5;
+  // 允许使用该引用的范围。
   MediaScope scope = 6;
 }
 
-// 允许的消费方/目标范围；空列表表示仅 owner 自身。
+// MediaScope 是允许的消费方/目标范围；空列表表示仅 owner 自身。
 message MediaScope {
+  // 允许读取的其他插件。
   repeated string consumer_plugin_ids = 1;
+  // 允许发送到的目标。
   repeated Target targets = 2;
 }
 
+// MediaReadability 表示入站媒体能否被读取。
 enum MediaReadability {
   MEDIA_READABILITY_UNSPECIFIED = 0;
   MEDIA_READABILITY_READABLE = 1;
@@ -30,66 +39,100 @@ enum MediaReadability {
   MEDIA_READABILITY_UNSUPPORTED = 2;
 }
 
-// 入站媒体描述符：尚未取件，不等于已校验 MediaRef；未知 size/MIME 保持 absent。
+// IncomingMedia 是入站媒体描述符：尚未取件，不等于已校验 MediaRef；未知 size/MIME 保持 absent。
 message IncomingMedia {
+  // Core 分配的取件令牌。
   string token = 1;
+  // 平台报告的字节数；未知时 absent。
   optional uint64 size = 2;
+  // 平台报告的 MIME 类型；未知时 absent。
   optional string mime = 3;
+  // 能否读取。
   MediaReadability readability = 4;
+  // 令牌的过期时刻，UTC 毫秒。
   int64 expires_at_unix_ms = 5;
 }
 
+// BeginUploadRequest 声明一次上传的总量与摘要。
 message BeginUploadRequest {
+  // 声明的总字节数。
   uint64 size = 1;
+  // 声明的 MIME 类型。
   string mime = 2;
+  // 声明的内容 SHA256，提交时校验。
   bytes sha256 = 3;
 }
 
+// BeginUploadResponse 返回新建上传的 ID。
 message BeginUploadResponse {
+  // 本次上传的 ID。
   string upload_id = 1;
+  // 未提交上传的过期时刻，UTC 毫秒。
   int64 expires_at_unix_ms = 2;
 }
 
-// 顺序分块：offset 必须等于当前已确认长度，每块最多 1 MiB。
+// WriteChunkRequest 写入一个顺序分块：offset 必须等于当前已确认长度，每块最多 1 MiB。
 message WriteChunkRequest {
+  // 上传 ID。
   string upload_id = 1;
+  // 本块的起始偏移。
   uint64 offset = 2;
+  // 块内容。
   bytes data = 3;
 }
 
+// WriteChunkResponse 返回写入后的确认长度。
 message WriteChunkResponse {
+  // 下一块应使用的偏移。
   uint64 next_offset = 1;
 }
 
+// CommitUploadRequest 提交一次上传，校验总量与 SHA256。
 message CommitUploadRequest {
+  // 上传 ID。
   string upload_id = 1;
 }
 
+// CommitUploadResponse 返回提交后产生的 MediaRef。
 message CommitUploadResponse {
+  // 新的媒体引用。
   MediaRef ref = 1;
 }
 
-// token 可以是 MediaRef 或 IncomingMedia 的 token；length 为 1～1 MiB。
+// ReadRequest 读取一段媒体；token 可以是 MediaRef 或 IncomingMedia 的 token；length 为 1～1 MiB。
 message ReadRequest {
+  // 媒体令牌。
   string token = 1;
+  // 读取起点。
   uint64 offset = 2;
+  // 最多读取的字节数。
   uint32 length = 3;
 }
 
+// ReadResponse 是一次读取的结果。
 message ReadResponse {
+  // 读到的内容。
   bytes data = 1;
+  // 下一次读取的偏移。
   uint64 next_offset = 2;
+  // 已读到末尾时为 true。
   bool eof = 3;
 }
 
-// 只签发等同或更窄范围的新 token，不能扩大对象、Target 或有效期。
+// GrantRequest 为已有授权签发新 token：只能等同或更窄，不能扩大对象、Target 或有效期。
 message GrantRequest {
+  // 已持有的媒体令牌。
   string token = 1;
+  // 被授权的插件。
   string grantee_plugin_id = 2;
+  // 被授权可发送到的目标，必须在原范围之内。
   repeated Target targets = 3;
 }
 
+// GrantResponse 返回新签发的令牌。
 message GrantResponse {
+  // 新令牌。
   string token = 1;
+  // 新令牌的过期时刻，UTC 毫秒，不晚于原令牌。
   int64 expires_at_unix_ms = 2;
 }

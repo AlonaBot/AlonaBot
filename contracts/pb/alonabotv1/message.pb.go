@@ -23,6 +23,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// EventSourceKind 是事件的来源类别。
 type EventSourceKind int32
 
 const (
@@ -72,6 +73,7 @@ func (EventSourceKind) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{0}
 }
 
+// TextFormat 是文本的标记格式。
 type TextFormat int32
 
 const (
@@ -121,6 +123,7 @@ func (TextFormat) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{1}
 }
 
+// EntityType 是富文本实体的类型。
 type EntityType int32
 
 const (
@@ -191,6 +194,7 @@ func (EntityType) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{2}
 }
 
+// SendStatus 是一次逻辑发送的整体状态。
 type SendStatus int32
 
 const (
@@ -246,13 +250,15 @@ func (SendStatus) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{3}
 }
 
+// PartStatus 是一次物理平台操作的状态。
 type PartStatus int32
 
 const (
-	PartStatus_PART_STATUS_UNSPECIFIED   PartStatus = 0
-	PartStatus_PART_STATUS_ACCEPTED      PartStatus = 1
-	PartStatus_PART_STATUS_REJECTED      PartStatus = 2
-	PartStatus_PART_STATUS_UNKNOWN       PartStatus = 3
+	PartStatus_PART_STATUS_UNSPECIFIED PartStatus = 0
+	PartStatus_PART_STATUS_ACCEPTED    PartStatus = 1
+	PartStatus_PART_STATUS_REJECTED    PartStatus = 2
+	PartStatus_PART_STATUS_UNKNOWN     PartStatus = 3
+	// 前序操作失败后没有调用。
 	PartStatus_PART_STATUS_NOT_ATTEMPTED PartStatus = 4
 )
 
@@ -301,24 +307,35 @@ func (PartStatus) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{4}
 }
 
+// Event 是 Core 标准化后的入站事件。
 // event_type 取值：message.created、message.edited、message.deleted、button.clicked、
 // member.joined、member.left、reaction.added、scheduled；与 event_payload 的分支一一对应。
 type Event struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Core 入站标准化时产生。
-	EventId           string          `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	EventType         string          `protobuf:"bytes,2,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
-	SourceKind        EventSourceKind `protobuf:"varint,3,opt,name=source_kind,json=sourceKind,proto3,enum=alonabot.v1.EventSourceKind" json:"source_kind,omitempty"`
-	OccurredAtUnixMs  int64           `protobuf:"varint,4,opt,name=occurred_at_unix_ms,json=occurredAtUnixMs,proto3" json:"occurred_at_unix_ms,omitempty"`
-	AdapterId         *string         `protobuf:"bytes,5,opt,name=adapter_id,json=adapterId,proto3,oneof" json:"adapter_id,omitempty"`
-	AdapterInstanceId *string         `protobuf:"bytes,6,opt,name=adapter_instance_id,json=adapterInstanceId,proto3,oneof" json:"adapter_instance_id,omitempty"`
-	AccountId         *string         `protobuf:"bytes,7,opt,name=account_id,json=accountId,proto3,oneof" json:"account_id,omitempty"`
-	Target            *Target         `protobuf:"bytes,8,opt,name=target,proto3" json:"target,omitempty"`
-	Actor             *Actor          `protobuf:"bytes,9,opt,name=actor,proto3" json:"actor,omitempty"`
+	EventId string `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	// 事件类型，取值见上。
+	EventType string `protobuf:"bytes,2,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
+	// 事件来源类别。
+	SourceKind EventSourceKind `protobuf:"varint,3,opt,name=source_kind,json=sourceKind,proto3,enum=alonabot.v1.EventSourceKind" json:"source_kind,omitempty"`
+	// 事件发生时刻，UTC 毫秒。
+	OccurredAtUnixMs int64 `protobuf:"varint,4,opt,name=occurred_at_unix_ms,json=occurredAtUnixMs,proto3" json:"occurred_at_unix_ms,omitempty"`
+	// 来源 Adapter 类型；非 Adapter 来源时 absent。
+	AdapterId *string `protobuf:"bytes,5,opt,name=adapter_id,json=adapterId,proto3,oneof" json:"adapter_id,omitempty"`
+	// 来源 Adapter 实例；非 Adapter 来源时 absent。
+	AdapterInstanceId *string `protobuf:"bytes,6,opt,name=adapter_instance_id,json=adapterInstanceId,proto3,oneof" json:"adapter_instance_id,omitempty"`
+	// 收到事件的平台账号；非 Adapter 来源时 absent。
+	AccountId *string `protobuf:"bytes,7,opt,name=account_id,json=accountId,proto3,oneof" json:"account_id,omitempty"`
+	// 事件所在的会话；不存在时 absent。
+	Target *Target `protobuf:"bytes,8,opt,name=target,proto3" json:"target,omitempty"`
+	// 可信的触发者；平台未给出个人身份时 absent。
+	Actor *Actor `protobuf:"bytes,9,opt,name=actor,proto3" json:"actor,omitempty"`
 	// 事件关联的平台消息（例如带按钮的原消息）；不存在时 absent。
-	Message      *PlatformMessage `protobuf:"bytes,10,opt,name=message,proto3" json:"message,omitempty"`
-	EventPayload *EventPayload    `protobuf:"bytes,11,opt,name=event_payload,json=eventPayload,proto3" json:"event_payload,omitempty"`
-	Capabilities []*Capability    `protobuf:"bytes,12,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	Message *PlatformMessage `protobuf:"bytes,10,opt,name=message,proto3" json:"message,omitempty"`
+	// 按事件类型区分的载荷。
+	EventPayload *EventPayload `protobuf:"bytes,11,opt,name=event_payload,json=eventPayload,proto3" json:"event_payload,omitempty"`
+	// 来源实例公布的平台能力。
+	Capabilities []*Capability `protobuf:"bytes,12,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
 	// 平台原始载荷（JSON），只供诊断与平台特有用途。
 	PlatformPayload []byte `protobuf:"bytes,13,opt,name=platform_payload,json=platformPayload,proto3" json:"platform_payload,omitempty"`
 	// 原平台事件标识。
@@ -455,10 +472,13 @@ func (x *Event) GetSourceEventId() string {
 	return ""
 }
 
+// PlatformMessage 是一条已存在的平台消息。
 type PlatformMessage struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	PlatformMessageId string                 `protobuf:"bytes,1,opt,name=platform_message_id,json=platformMessageId,proto3" json:"platform_message_id,omitempty"`
-	Chain             *MessageChain          `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 平台消息 ID。
+	PlatformMessageId string `protobuf:"bytes,1,opt,name=platform_message_id,json=platformMessageId,proto3" json:"platform_message_id,omitempty"`
+	// 消息内容。
+	Chain *MessageChain `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`
 	// Telegram media_group_id；首发不聚合媒体组。
 	MediaGroupId  *string `protobuf:"bytes,3,opt,name=media_group_id,json=mediaGroupId,proto3,oneof" json:"media_group_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -516,9 +536,11 @@ func (x *PlatformMessage) GetMediaGroupId() string {
 	return ""
 }
 
-// 按事件类型区分的载荷；PreEventResult 只能改写它，不能改写 Event 的其余字段。
+// EventPayload 是按事件类型区分的载荷；PreEventResult 只能改写它，不能改写 Event 的其余字段。
 type EventPayload struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
+	// 与 Event.event_type 对应的分支。
+	//
 	// Types that are valid to be assigned to Kind:
 	//
 	//	*EventPayload_MessageCreated
@@ -648,34 +670,42 @@ type isEventPayload_Kind interface {
 }
 
 type EventPayload_MessageCreated struct {
+	// message.created。
 	MessageCreated *MessageCreatedPayload `protobuf:"bytes,1,opt,name=message_created,json=messageCreated,proto3,oneof"`
 }
 
 type EventPayload_MessageEdited struct {
+	// message.edited。
 	MessageEdited *MessageEditedPayload `protobuf:"bytes,2,opt,name=message_edited,json=messageEdited,proto3,oneof"`
 }
 
 type EventPayload_MessageDeleted struct {
+	// message.deleted。
 	MessageDeleted *MessageDeletedPayload `protobuf:"bytes,3,opt,name=message_deleted,json=messageDeleted,proto3,oneof"`
 }
 
 type EventPayload_ButtonClicked struct {
+	// button.clicked。
 	ButtonClicked *ButtonClickedPayload `protobuf:"bytes,4,opt,name=button_clicked,json=buttonClicked,proto3,oneof"`
 }
 
 type EventPayload_MemberJoined struct {
+	// member.joined。
 	MemberJoined *MemberPayload `protobuf:"bytes,5,opt,name=member_joined,json=memberJoined,proto3,oneof"`
 }
 
 type EventPayload_MemberLeft struct {
+	// member.left。
 	MemberLeft *MemberPayload `protobuf:"bytes,6,opt,name=member_left,json=memberLeft,proto3,oneof"`
 }
 
 type EventPayload_ReactionAdded struct {
+	// reaction.added。
 	ReactionAdded *ReactionAddedPayload `protobuf:"bytes,7,opt,name=reaction_added,json=reactionAdded,proto3,oneof"`
 }
 
 type EventPayload_Scheduled struct {
+	// scheduled。
 	Scheduled *ScheduledPayload `protobuf:"bytes,8,opt,name=scheduled,proto3,oneof"`
 }
 
@@ -695,12 +725,15 @@ func (*EventPayload_ReactionAdded) isEventPayload_Kind() {}
 
 func (*EventPayload_Scheduled) isEventPayload_Kind() {}
 
+// MessageCreatedPayload 是新消息事件的载荷。
 type MessageCreatedPayload struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	PlatformMessageId string                 `protobuf:"bytes,1,opt,name=platform_message_id,json=platformMessageId,proto3" json:"platform_message_id,omitempty"`
-	Chain             *MessageChain          `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 新消息的平台 ID。
+	PlatformMessageId string `protobuf:"bytes,1,opt,name=platform_message_id,json=platformMessageId,proto3" json:"platform_message_id,omitempty"`
+	// 新消息的内容。
+	Chain         *MessageChain `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MessageCreatedPayload) Reset() {
@@ -747,10 +780,13 @@ func (x *MessageCreatedPayload) GetChain() *MessageChain {
 	return nil
 }
 
+// MessageEditedPayload 是消息被编辑事件的载荷。
 type MessageEditedPayload struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	PlatformMessageId string                 `protobuf:"bytes,1,opt,name=platform_message_id,json=platformMessageId,proto3" json:"platform_message_id,omitempty"`
-	Chain             *MessageChain          `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 被编辑消息的平台 ID。
+	PlatformMessageId string `protobuf:"bytes,1,opt,name=platform_message_id,json=platformMessageId,proto3" json:"platform_message_id,omitempty"`
+	// 编辑后的内容。
+	Chain *MessageChain `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`
 	// 平台未给出旧内容时 absent，不伪造原消息。
 	OldChain      *MessageChain `protobuf:"bytes,3,opt,name=old_chain,json=oldChain,proto3" json:"old_chain,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -808,9 +844,11 @@ func (x *MessageEditedPayload) GetOldChain() *MessageChain {
 	return nil
 }
 
+// MessageDeletedPayload 是消息被删除事件的载荷。
 type MessageDeletedPayload struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	PlatformMessageIds []string               `protobuf:"bytes,1,rep,name=platform_message_ids,json=platformMessageIds,proto3" json:"platform_message_ids,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 被删除的平台消息 ID。
+	PlatformMessageIds []string `protobuf:"bytes,1,rep,name=platform_message_ids,json=platformMessageIds,proto3" json:"platform_message_ids,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -852,14 +890,18 @@ func (x *MessageDeletedPayload) GetPlatformMessageIds() []string {
 	return nil
 }
 
-// action_id/action_schema_version/value 属于 Core 验证的路由绑定，Hook 不可修改。
+// ButtonClickedPayload 是按钮点击事件的载荷；action_id/action_schema_version/value 属于 Core 验证的路由绑定，Hook 不可修改。
 type ButtonClickedPayload struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	ActionId            string                 `protobuf:"bytes,1,opt,name=action_id,json=actionId,proto3" json:"action_id,omitempty"`
-	ActionSchemaVersion uint32                 `protobuf:"varint,2,opt,name=action_schema_version,json=actionSchemaVersion,proto3" json:"action_schema_version,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 按钮绑定的 action，指向插件注册的 button.clicked 路由。
+	ActionId string `protobuf:"bytes,1,opt,name=action_id,json=actionId,proto3" json:"action_id,omitempty"`
+	// action 载荷的 Schema 版本。
+	ActionSchemaVersion uint32 `protobuf:"varint,2,opt,name=action_schema_version,json=actionSchemaVersion,proto3" json:"action_schema_version,omitempty"`
 	// 按 action Schema 校验的 JSON 文本。
-	Value                   string  `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
-	CallbackQueryId         string  `protobuf:"bytes,4,opt,name=callback_query_id,json=callbackQueryId,proto3" json:"callback_query_id,omitempty"`
+	Value string `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	// 平台的回调 ID，用于确认与诊断。
+	CallbackQueryId string `protobuf:"bytes,4,opt,name=callback_query_id,json=callbackQueryId,proto3" json:"callback_query_id,omitempty"`
+	// 带按钮的原消息 ID；平台未给出时 absent。
 	OriginPlatformMessageId *string `protobuf:"bytes,5,opt,name=origin_platform_message_id,json=originPlatformMessageId,proto3,oneof" json:"origin_platform_message_id,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
@@ -930,9 +972,11 @@ func (x *ButtonClickedPayload) GetOriginPlatformMessageId() string {
 	return ""
 }
 
+// MemberPayload 是成员加入或离开事件的载荷。
 type MemberPayload struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	MemberExternalUserId string                 `protobuf:"bytes,1,opt,name=member_external_user_id,json=memberExternalUserId,proto3" json:"member_external_user_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 加入或离开的成员的平台用户 ID。
+	MemberExternalUserId string `protobuf:"bytes,1,opt,name=member_external_user_id,json=memberExternalUserId,proto3" json:"member_external_user_id,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -974,12 +1018,15 @@ func (x *MemberPayload) GetMemberExternalUserId() string {
 	return ""
 }
 
+// ReactionAddedPayload 是添加回应事件的载荷。
 type ReactionAddedPayload struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	PlatformMessageId string                 `protobuf:"bytes,1,opt,name=platform_message_id,json=platformMessageId,proto3" json:"platform_message_id,omitempty"`
-	Reaction          string                 `protobuf:"bytes,2,opt,name=reaction,proto3" json:"reaction,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 被回应消息的平台 ID。
+	PlatformMessageId string `protobuf:"bytes,1,opt,name=platform_message_id,json=platformMessageId,proto3" json:"platform_message_id,omitempty"`
+	// 回应内容（例如 emoji）。
+	Reaction      string `protobuf:"bytes,2,opt,name=reaction,proto3" json:"reaction,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ReactionAddedPayload) Reset() {
@@ -1026,12 +1073,15 @@ func (x *ReactionAddedPayload) GetReaction() string {
 	return ""
 }
 
-// job_id/run_id 属于 Core 验证的来源绑定，Hook 不可修改。
+// ScheduledPayload 是定时任务事件的载荷；job_id/run_id 属于 Core 验证的来源绑定，Hook 不可修改。
 type ScheduledPayload struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	JobId             string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	RunId             string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	ScheduledAtUnixMs int64                  `protobuf:"varint,3,opt,name=scheduled_at_unix_ms,json=scheduledAtUnixMs,proto3" json:"scheduled_at_unix_ms,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 插件声明的稳定任务 ID。
+	JobId string `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	// 本次运行的 ID。
+	RunId string `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// 计划触发时刻，UTC 毫秒。
+	ScheduledAtUnixMs int64 `protobuf:"varint,3,opt,name=scheduled_at_unix_ms,json=scheduledAtUnixMs,proto3" json:"scheduled_at_unix_ms,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -1087,10 +1137,11 @@ func (x *ScheduledPayload) GetScheduledAtUnixMs() int64 {
 	return 0
 }
 
-// 一次逻辑 Send 的有序片段。
+// MessageChain 是一次逻辑 Send 的有序片段。
 type MessageChain struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Segments      []*Segment             `protobuf:"bytes,1,rep,name=segments,proto3" json:"segments,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 按顺序排列的片段。
+	Segments      []*Segment `protobuf:"bytes,1,rep,name=segments,proto3" json:"segments,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1132,8 +1183,11 @@ func (x *MessageChain) GetSegments() []*Segment {
 	return nil
 }
 
+// Segment 是消息链中的一个片段。
 type Segment struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
+	// 片段内容，恰有一个分支。
+	//
 	// Types that are valid to be assigned to Data:
 	//
 	//	*Segment_Text
@@ -1263,34 +1317,42 @@ type isSegment_Data interface {
 }
 
 type Segment_Text struct {
+	// 文本。
 	Text *TextSegment `protobuf:"bytes,1,opt,name=text,proto3,oneof"`
 }
 
 type Segment_Image struct {
+	// 图片。
 	Image *ImageSegment `protobuf:"bytes,2,opt,name=image,proto3,oneof"`
 }
 
 type Segment_Video struct {
+	// 视频。
 	Video *VideoSegment `protobuf:"bytes,3,opt,name=video,proto3,oneof"`
 }
 
 type Segment_File struct {
+	// 文件。
 	File *FileSegment `protobuf:"bytes,4,opt,name=file,proto3,oneof"`
 }
 
 type Segment_Mention struct {
+	// 提及用户。
 	Mention *MentionSegment `protobuf:"bytes,5,opt,name=mention,proto3,oneof"`
 }
 
 type Segment_Reference struct {
+	// 回复引用。
 	Reference *ReferenceSegment `protobuf:"bytes,6,opt,name=reference,proto3,oneof"`
 }
 
 type Segment_Buttons struct {
+	// 按钮键盘。
 	Buttons *ButtonsSegment `protobuf:"bytes,7,opt,name=buttons,proto3,oneof"`
 }
 
 type Segment_Forward struct {
+	// 合并转发。
 	Forward *ForwardSegment `protobuf:"bytes,8,opt,name=forward,proto3,oneof"`
 }
 
@@ -1310,11 +1372,14 @@ func (*Segment_Buttons) isSegment_Data() {}
 
 func (*Segment_Forward) isSegment_Data() {}
 
+// TextSegment 是一段文本。
 type TextSegment struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Text  string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	// 文本内容。
+	Text string `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
 	// absent 表示 plain；与 entities 不同时指定。
-	Format        *TextFormat   `protobuf:"varint,2,opt,name=format,proto3,enum=alonabot.v1.TextFormat,oneof" json:"format,omitempty"`
+	Format *TextFormat `protobuf:"varint,2,opt,name=format,proto3,enum=alonabot.v1.TextFormat,oneof" json:"format,omitempty"`
+	// 富文本实体。
 	Entities      []*TextEntity `protobuf:"bytes,3,rep,name=entities,proto3" json:"entities,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1371,15 +1436,21 @@ func (x *TextSegment) GetEntities() []*TextEntity {
 	return nil
 }
 
-// 偏移以 UTF-16 码元计，相对本 text，必须落在完整字符边界。
+// TextEntity 是一个富文本实体；偏移以 UTF-16 码元计，相对本 text，必须落在完整字符边界。
 type TextEntity struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Type           EntityType             `protobuf:"varint,1,opt,name=type,proto3,enum=alonabot.v1.EntityType" json:"type,omitempty"`
-	OffsetUtf16    uint32                 `protobuf:"varint,2,opt,name=offset_utf16,json=offsetUtf16,proto3" json:"offset_utf16,omitempty"`
-	LengthUtf16    uint32                 `protobuf:"varint,3,opt,name=length_utf16,json=lengthUtf16,proto3" json:"length_utf16,omitempty"`
-	Url            *string                `protobuf:"bytes,4,opt,name=url,proto3,oneof" json:"url,omitempty"`
-	Language       *string                `protobuf:"bytes,5,opt,name=language,proto3,oneof" json:"language,omitempty"`
-	ExternalUserId *string                `protobuf:"bytes,6,opt,name=external_user_id,json=externalUserId,proto3,oneof" json:"external_user_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 实体类型。
+	Type EntityType `protobuf:"varint,1,opt,name=type,proto3,enum=alonabot.v1.EntityType" json:"type,omitempty"`
+	// 起始偏移（UTF-16 码元）。
+	OffsetUtf16 uint32 `protobuf:"varint,2,opt,name=offset_utf16,json=offsetUtf16,proto3" json:"offset_utf16,omitempty"`
+	// 长度（UTF-16 码元）。
+	LengthUtf16 uint32 `protobuf:"varint,3,opt,name=length_utf16,json=lengthUtf16,proto3" json:"length_utf16,omitempty"`
+	// TEXT_LINK 的链接地址。
+	Url *string `protobuf:"bytes,4,opt,name=url,proto3,oneof" json:"url,omitempty"`
+	// PRE 的代码语言。
+	Language *string `protobuf:"bytes,5,opt,name=language,proto3,oneof" json:"language,omitempty"`
+	// TEXT_MENTION 提及的平台用户 ID。
+	ExternalUserId *string `protobuf:"bytes,6,opt,name=external_user_id,json=externalUserId,proto3,oneof" json:"external_user_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1456,9 +1527,11 @@ func (x *TextEntity) GetExternalUserId() string {
 	return ""
 }
 
-// 媒体来源三选一。
+// MediaSource 是媒体来源，三选一。
 type MediaSource struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
+	// 媒体来源，恰有一个分支。
+	//
 	// Types that are valid to be assigned to Source:
 	//
 	//	*MediaSource_MediaRef
@@ -1543,10 +1616,12 @@ type MediaSource_MediaRef struct {
 }
 
 type MediaSource_IncomingRef struct {
+	// 入站媒体描述符，发送时由 Core 取件。
 	IncomingRef *IncomingMedia `protobuf:"bytes,2,opt,name=incoming_ref,json=incomingRef,proto3,oneof"`
 }
 
 type MediaSource_HttpsUrl struct {
+	// 公网 HTTPS 地址，发送前验证。
 	HttpsUrl string `protobuf:"bytes,3,opt,name=https_url,json=httpsUrl,proto3,oneof"`
 }
 
@@ -1556,11 +1631,15 @@ func (*MediaSource_IncomingRef) isMediaSource_Source() {}
 
 func (*MediaSource_HttpsUrl) isMediaSource_Source() {}
 
+// ImageSegment 是一张图片。
 type ImageSegment struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Source        *MediaSource           `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
-	Alt           *string                `protobuf:"bytes,2,opt,name=alt,proto3,oneof" json:"alt,omitempty"`
-	Caption       *string                `protobuf:"bytes,3,opt,name=caption,proto3,oneof" json:"caption,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 图片来源。
+	Source *MediaSource `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	// 替代文本。
+	Alt *string `protobuf:"bytes,2,opt,name=alt,proto3,oneof" json:"alt,omitempty"`
+	// 附带说明。
+	Caption       *string `protobuf:"bytes,3,opt,name=caption,proto3,oneof" json:"caption,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1616,11 +1695,15 @@ func (x *ImageSegment) GetCaption() string {
 	return ""
 }
 
+// VideoSegment 是一段视频。
 type VideoSegment struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Source        *MediaSource           `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
-	DurationMs    *uint64                `protobuf:"varint,2,opt,name=duration_ms,json=durationMs,proto3,oneof" json:"duration_ms,omitempty"`
-	Caption       *string                `protobuf:"bytes,3,opt,name=caption,proto3,oneof" json:"caption,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 视频来源。
+	Source *MediaSource `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	// 时长（毫秒）；未知时 absent。
+	DurationMs *uint64 `protobuf:"varint,2,opt,name=duration_ms,json=durationMs,proto3,oneof" json:"duration_ms,omitempty"`
+	// 附带说明。
+	Caption       *string `protobuf:"bytes,3,opt,name=caption,proto3,oneof" json:"caption,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1676,12 +1759,16 @@ func (x *VideoSegment) GetCaption() string {
 	return ""
 }
 
+// FileSegment 是一个文件。
 type FileSegment struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Source *MediaSource           `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 文件来源。
+	Source *MediaSource `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
 	// 无路径的展示名称，不作为宿主文件路径。
-	Filename      *string `protobuf:"bytes,2,opt,name=filename,proto3,oneof" json:"filename,omitempty"`
-	Mime          *string `protobuf:"bytes,3,opt,name=mime,proto3,oneof" json:"mime,omitempty"`
+	Filename *string `protobuf:"bytes,2,opt,name=filename,proto3,oneof" json:"filename,omitempty"`
+	// MIME 类型；未知时 absent。
+	Mime *string `protobuf:"bytes,3,opt,name=mime,proto3,oneof" json:"mime,omitempty"`
+	// 附带说明。
 	Caption       *string `protobuf:"bytes,4,opt,name=caption,proto3,oneof" json:"caption,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1745,12 +1832,15 @@ func (x *FileSegment) GetCaption() string {
 	return ""
 }
 
+// MentionSegment 是对一个用户的提及，按目标平台实例解释。
 type MentionSegment struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	ExternalUserId string                 `protobuf:"bytes,1,opt,name=external_user_id,json=externalUserId,proto3" json:"external_user_id,omitempty"`
-	Display        *string                `protobuf:"bytes,2,opt,name=display,proto3,oneof" json:"display,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 被提及用户的平台 ID。
+	ExternalUserId string `protobuf:"bytes,1,opt,name=external_user_id,json=externalUserId,proto3" json:"external_user_id,omitempty"`
+	// 展示文本；缺省时由 Adapter 决定。
+	Display       *string `protobuf:"bytes,2,opt,name=display,proto3,oneof" json:"display,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MentionSegment) Reset() {
@@ -1797,13 +1887,15 @@ func (x *MentionSegment) GetDisplay() string {
 	return ""
 }
 
-// 一条 Chain 最多一个。
+// ReferenceSegment 表示回复某条消息；一条 Chain 最多一个。
 type ReferenceSegment struct {
-	state                     protoimpl.MessageState `protogen:"open.v1"`
-	OriginalPlatformMessageId string                 `protobuf:"bytes,1,opt,name=original_platform_message_id,json=originalPlatformMessageId,proto3" json:"original_platform_message_id,omitempty"`
-	Target                    *Target                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 被回复消息的平台 ID。
+	OriginalPlatformMessageId string `protobuf:"bytes,1,opt,name=original_platform_message_id,json=originalPlatformMessageId,proto3" json:"original_platform_message_id,omitempty"`
+	// 被回复消息所在的目标。
+	Target        *Target `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ReferenceSegment) Reset() {
@@ -1850,10 +1942,11 @@ func (x *ReferenceSegment) GetTarget() *Target {
 	return nil
 }
 
-// 一条 Chain 最多一个。
+// ButtonsSegment 是按钮键盘；一条 Chain 最多一个。
 type ButtonsSegment struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Rows          []*ButtonRow           `protobuf:"bytes,1,rep,name=rows,proto3" json:"rows,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 按行排列的按钮。
+	Rows          []*ButtonRow `protobuf:"bytes,1,rep,name=rows,proto3" json:"rows,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1895,9 +1988,11 @@ func (x *ButtonsSegment) GetRows() []*ButtonRow {
 	return nil
 }
 
+// ButtonRow 是键盘中的一行按钮。
 type ButtonRow struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Buttons       []*Button              `protobuf:"bytes,1,rep,name=buttons,proto3" json:"buttons,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 本行的按钮。
+	Buttons       []*Button `protobuf:"bytes,1,rep,name=buttons,proto3" json:"buttons,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1939,11 +2034,13 @@ func (x *ButtonRow) GetButtons() []*Button {
 	return nil
 }
 
+// Button 是一个回调按钮。
 type Button struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 指向当前插件已注册的 button.clicked 路由。
 	ActionId string `protobuf:"bytes,1,opt,name=action_id,json=actionId,proto3" json:"action_id,omitempty"`
-	Label    string `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	// 按钮上显示的文字。
+	Label string `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
 	// 按该 action Schema 校验的 JSON 文本。
 	Value         *string `protobuf:"bytes,3,opt,name=value,proto3,oneof" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -2001,10 +2098,11 @@ func (x *Button) GetValue() string {
 	return ""
 }
 
-// 仅平台明确支持合并转发时发送。
+// ForwardSegment 是合并转发；仅平台明确支持合并转发时发送。
 type ForwardSegment struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Items         []*ForwardItem         `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 被转发的条目。
+	Items         []*ForwardItem `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2046,10 +2144,13 @@ func (x *ForwardSegment) GetItems() []*ForwardItem {
 	return nil
 }
 
+// ForwardItem 是合并转发中的一条。
 type ForwardItem struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Source        *ForwardSource         `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
-	Chain         *MessageChain          `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 来源展示信息。
+	Source *ForwardSource `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	// 条目内容。
+	Chain         *MessageChain `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2098,11 +2199,13 @@ func (x *ForwardItem) GetChain() *MessageChain {
 	return nil
 }
 
-// 转发条目的来源展示信息；规格只写了 source?，结构由 T-01 确定。
+// ForwardSource 是转发条目的来源展示信息；规格只写了 source?，结构由 T-01 确定。
 type ForwardSource struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	DisplayName    *string                `protobuf:"bytes,1,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
-	ExternalUserId *string                `protobuf:"bytes,2,opt,name=external_user_id,json=externalUserId,proto3,oneof" json:"external_user_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 来源展示名。
+	DisplayName *string `protobuf:"bytes,1,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
+	// 来源用户的平台 ID。
+	ExternalUserId *string `protobuf:"bytes,2,opt,name=external_user_id,json=externalUserId,proto3,oneof" json:"external_user_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -2151,11 +2254,13 @@ func (x *ForwardSource) GetExternalUserId() string {
 	return ""
 }
 
-// Core 的 Send 服务请求；to 缺省时使用调用链的默认 Target，没有则 NO_DEFAULT_TARGET。
+// SendRequest 是 Core 的 Send 服务请求；to 缺省时使用调用链的默认 Target，没有则 NO_DEFAULT_TARGET。
 type SendRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	To            *Target                `protobuf:"bytes,1,opt,name=to,proto3" json:"to,omitempty"`
-	Chain         *MessageChain          `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 显式目标；缺省使用默认 Target。
+	To *Target `protobuf:"bytes,1,opt,name=to,proto3" json:"to,omitempty"`
+	// 要发送的消息链。
+	Chain         *MessageChain `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2204,19 +2309,25 @@ func (x *SendRequest) GetChain() *MessageChain {
 	return nil
 }
 
+// SendResult 是一次逻辑发送的结果；出错时仍保留已确认的部分。
 type SendResult struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Status SendStatus             `protobuf:"varint,1,opt,name=status,proto3,enum=alonabot.v1.SendStatus" json:"status,omitempty"`
-	Target *Target                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 整体状态。
+	Status SendStatus `protobuf:"varint,1,opt,name=status,proto3,enum=alonabot.v1.SendStatus" json:"status,omitempty"`
+	// 实际已校验的目标；不跨实例猜测。
+	Target *Target `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
 	// 按物理发送与平台返回顺序保留所有已确认 ID；markup 更新不重复添加。
-	PlatformMessageIds       []string `protobuf:"bytes,3,rep,name=platform_message_ids,json=platformMessageIds,proto3" json:"platform_message_ids,omitempty"`
-	PrimaryPlatformMessageId *string  `protobuf:"bytes,4,opt,name=primary_platform_message_id,json=primaryPlatformMessageId,proto3,oneof" json:"primary_platform_message_id,omitempty"`
+	PlatformMessageIds []string `protobuf:"bytes,3,rep,name=platform_message_ids,json=platformMessageIds,proto3" json:"platform_message_ids,omitempty"`
+	// 首个已确认的物理消息 ID；没有已确认消息时 absent。
+	PrimaryPlatformMessageId *string `protobuf:"bytes,4,opt,name=primary_platform_message_id,json=primaryPlatformMessageId,proto3,oneof" json:"primary_platform_message_id,omitempty"`
 	// 平台确实返回接受时间时才设置。
-	ProviderAcceptedTimeUnixMs *int64        `protobuf:"varint,5,opt,name=provider_accepted_time_unix_ms,json=providerAcceptedTimeUnixMs,proto3,oneof" json:"provider_accepted_time_unix_ms,omitempty"`
-	CapabilitiesUsed           []*Capability `protobuf:"bytes,6,rep,name=capabilities_used,json=capabilitiesUsed,proto3" json:"capabilities_used,omitempty"`
-	PartResults                []*PartResult `protobuf:"bytes,7,rep,name=part_results,json=partResults,proto3" json:"part_results,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	ProviderAcceptedTimeUnixMs *int64 `protobuf:"varint,5,opt,name=provider_accepted_time_unix_ms,json=providerAcceptedTimeUnixMs,proto3,oneof" json:"provider_accepted_time_unix_ms,omitempty"`
+	// 本次实际采用的已声明能力。
+	CapabilitiesUsed []*Capability `protobuf:"bytes,6,rep,name=capabilities_used,json=capabilitiesUsed,proto3" json:"capabilities_used,omitempty"`
+	// 各计划物理操作的明细，包含未尝试的部分。
+	PartResults   []*PartResult `protobuf:"bytes,7,rep,name=part_results,json=partResults,proto3" json:"part_results,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SendResult) Reset() {
@@ -2298,17 +2409,23 @@ func (x *SendResult) GetPartResults() []*PartResult {
 	return nil
 }
 
+// PartResult 是一次计划物理操作的结果。
 type PartResult struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	PartIndex          uint32                 `protobuf:"varint,1,opt,name=part_index,json=partIndex,proto3" json:"part_index,omitempty"`
-	SegmentIndexes     []uint32               `protobuf:"varint,2,rep,packed,name=segment_indexes,json=segmentIndexes,proto3" json:"segment_indexes,omitempty"`
-	Status             PartStatus             `protobuf:"varint,3,opt,name=status,proto3,enum=alonabot.v1.PartStatus" json:"status,omitempty"`
-	PlatformMessageIds []string               `protobuf:"bytes,4,rep,name=platform_message_ids,json=platformMessageIds,proto3" json:"platform_message_ids,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 操作序号，从 0 开始。
+	PartIndex uint32 `protobuf:"varint,1,opt,name=part_index,json=partIndex,proto3" json:"part_index,omitempty"`
+	// 本操作对应的原 Chain 片段下标。
+	SegmentIndexes []uint32 `protobuf:"varint,2,rep,packed,name=segment_indexes,json=segmentIndexes,proto3" json:"segment_indexes,omitempty"`
+	// 本操作的状态。
+	Status PartStatus `protobuf:"varint,3,opt,name=status,proto3,enum=alonabot.v1.PartStatus" json:"status,omitempty"`
+	// 本操作得到的已确认消息 ID；一次相册操作可有多个。
+	PlatformMessageIds []string `protobuf:"bytes,4,rep,name=platform_message_ids,json=platformMessageIds,proto3" json:"platform_message_ids,omitempty"`
 	// 平台确认接受但没有可用 ID（例如 message_id=0）。
-	MessageIdsUnavailable bool       `protobuf:"varint,5,opt,name=message_ids_unavailable,json=messageIdsUnavailable,proto3" json:"message_ids_unavailable,omitempty"`
-	Error                 *ErrorInfo `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	MessageIdsUnavailable bool `protobuf:"varint,5,opt,name=message_ids_unavailable,json=messageIdsUnavailable,proto3" json:"message_ids_unavailable,omitempty"`
+	// 本操作失败时的安全错误。
+	Error         *ErrorInfo `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PartResult) Reset() {

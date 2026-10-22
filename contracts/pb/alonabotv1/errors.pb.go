@@ -23,6 +23,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// ErrorCode 是固定的协议错误码；未知码对调用者映射为 INTERNAL。
 type ErrorCode int32
 
 const (
@@ -117,6 +118,7 @@ func (ErrorCode) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_errors_proto_rawDescGZIP(), []int{0}
 }
 
+// ErrorInfo 是 RESPONSE 或 SESSION_ERROR 携带的错误。
 type ErrorInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 有 ErrorInfo 时必须非零。

@@ -23,6 +23,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// InitiatorSide 是一次调用的发起方向；REQUEST/RESPONSE/CANCEL 都使用原请求的方向。
 type InitiatorSide int32
 
 const (
@@ -72,6 +73,7 @@ func (InitiatorSide) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_envelope_proto_rawDescGZIP(), []int{0}
 }
 
+// FrameKind 是帧种类；未知种类不能当作成功忽略。
 type FrameKind int32
 
 const (
@@ -154,6 +156,7 @@ func (FrameKind) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_envelope_proto_rawDescGZIP(), []int{1}
 }
 
+// PayloadEncoding 是 payload 的编码；控制帧固定使用 PROTOBUF。
 type PayloadEncoding int32
 
 const (
@@ -203,33 +206,45 @@ func (PayloadEncoding) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_envelope_proto_rawDescGZIP(), []int{2}
 }
 
+// Envelope 是每一帧的外层结构。
 // 各字段在不同帧种类下的必需性由 contracts/validate 检查，不靠 oneof 表达；
 // payload 与 error 可以同时出现（例如部分发送成功）。
 type Envelope struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProtocolMajor uint32                 `protobuf:"varint,1,opt,name=protocol_major,json=protocolMajor,proto3" json:"protocol_major,omitempty"`
-	ProtocolMinor uint32                 `protobuf:"varint,2,opt,name=protocol_minor,json=protocolMinor,proto3" json:"protocol_minor,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 传输协议主版本，首发为 1；与本端不一致时拒绝。
+	ProtocolMajor uint32 `protobuf:"varint,1,opt,name=protocol_major,json=protocolMajor,proto3" json:"protocol_major,omitempty"`
+	// 传输协议次版本，首发为 0；握手取双方较小值，之后每一帧都保持协商值。
+	ProtocolMinor uint32 `protobuf:"varint,2,opt,name=protocol_minor,json=protocolMinor,proto3" json:"protocol_minor,omitempty"`
 	// HELLO 为空；HELLO_ACK 起为 Core 分配的 16 字节随机 ID。
-	SessionId     []byte        `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	SessionId []byte `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// REQUEST/RESPONSE/CANCEL 为原请求的发起方向；其他帧为 UNSPECIFIED。
 	InitiatorSide InitiatorSide `protobuf:"varint,4,opt,name=initiator_side,json=initiatorSide,proto3,enum=alonabot.v1.InitiatorSide" json:"initiator_side,omitempty"`
 	// REQUEST/RESPONSE/CANCEL 非零；其他帧为 0。
 	CallId uint64 `protobuf:"varint,5,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
 	// 仅 PLUGIN 发起的 REQUEST 可设置，引用同 Session 中仍在途的 CORE 发起 REQUEST。
 	ParentCallId *uint64 `protobuf:"varint,6,opt,name=parent_call_id,json=parentCallId,proto3,oneof" json:"parent_call_id,omitempty"`
 	// REQUEST 必需，UTC 毫秒。
-	DeadlineUnixMs *int64    `protobuf:"varint,7,opt,name=deadline_unix_ms,json=deadlineUnixMs,proto3,oneof" json:"deadline_unix_ms,omitempty"`
-	Kind           FrameKind `protobuf:"varint,8,opt,name=kind,proto3,enum=alonabot.v1.FrameKind" json:"kind,omitempty"`
+	DeadlineUnixMs *int64 `protobuf:"varint,7,opt,name=deadline_unix_ms,json=deadlineUnixMs,proto3,oneof" json:"deadline_unix_ms,omitempty"`
+	// 帧种类，不接受 UNSPECIFIED。
+	Kind FrameKind `protobuf:"varint,8,opt,name=kind,proto3,enum=alonabot.v1.FrameKind" json:"kind,omitempty"`
 	// 插件发出的帧等于其认证 ID；Core 发出的帧为空。
-	SourcePluginId  string          `protobuf:"bytes,9,opt,name=source_plugin_id,json=sourcePluginId,proto3" json:"source_plugin_id,omitempty"`
-	Target          string          `protobuf:"bytes,10,opt,name=target,proto3" json:"target,omitempty"`
-	TraceId         []byte          `protobuf:"bytes,11,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	SourcePluginId string `protobuf:"bytes,9,opt,name=source_plugin_id,json=sourcePluginId,proto3" json:"source_plugin_id,omitempty"`
+	// 已注册的 route/service 或固定的 Core 服务名；无目标的控制帧为空，不使用文件路径。
+	Target string `protobuf:"bytes,10,opt,name=target,proto3" json:"target,omitempty"`
+	// 有业务上下文时为 Core 关联的 16 字节 ID；不是权限凭证。
+	TraceId []byte `protobuf:"bytes,11,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	// payload 的编码；有 payload 时不接受 UNSPECIFIED。
 	PayloadEncoding PayloadEncoding `protobuf:"varint,12,opt,name=payload_encoding,json=payloadEncoding,proto3,enum=alonabot.v1.PayloadEncoding" json:"payload_encoding,omitempty"`
-	SchemaId        string          `protobuf:"bytes,13,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`
-	SchemaVersion   uint32          `protobuf:"varint,14,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
-	Payload         []byte          `protobuf:"bytes,15,opt,name=payload,proto3" json:"payload,omitempty"`
-	Error           *ErrorInfo      `protobuf:"bytes,16,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// payload 的契约 ID（alonabot.*.v1 或服务声明的 ID）；有 payload 时必需。
+	SchemaId string `protobuf:"bytes,13,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`
+	// payload 契约版本，有 payload 时必需且首发为 1；与传输协议版本无关。
+	SchemaVersion uint32 `protobuf:"varint,14,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	// 按 payload_encoding/schema_id 解释的载荷，连同其余字段一起计入 4 MiB 帧上限。
+	Payload []byte `protobuf:"bytes,15,opt,name=payload,proto3" json:"payload,omitempty"`
+	// RESPONSE 或 SESSION_ERROR 的失败信息；RESPONSE 可同时带有效 payload。
+	Error         *ErrorInfo `protobuf:"bytes,16,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Envelope) Reset() {

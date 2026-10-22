@@ -10,12 +10,13 @@ import "alonabot/v1/message.proto";
 
 option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 
-// Core 记录并下发的可信上下文；插件回传的同名值不能覆盖 Core 记录。trace 取 Envelope.trace_id。
+// InvocationContext 是 Core 记录并下发的可信上下文；插件回传的同名值不能覆盖 Core 记录。trace 取 Envelope.trace_id。
 message InvocationContext {
   // 无可信个人身份时 absent。
   Actor actor = 1;
   // 原事件 Target；无真实入站事件时 absent，Send 必须显式 To。
   Target default_target = 2;
+  // 本次调用被授予的权限范围。
   repeated string scopes = 3;
   // 祖先插件链（不含当前插件），用于循环与深度检查。
   repeated string plugin_chain = 4;
@@ -23,18 +24,23 @@ message InvocationContext {
   bool send_forbidden = 5;
 }
 
-// 命令、事件、scheduled 与按钮 Handler 的请求。
+// HandlerRequest 是命令、事件、scheduled 与按钮 Handler 的请求。
 message HandlerRequest {
+  // 被调用的路由 ID。
   string route_id = 1;
+  // 可信调用上下文。
   InvocationContext context = 2;
+  // 触发本次调用的事件。
   Event event = 3;
   // 仅命令路由。
   CommandInvocation command = 4;
 }
 
+// CommandInvocation 是命令匹配与参数解析的结果。
 message CommandInvocation {
   // 实际匹配到的规范路径。
   repeated string path = 1;
+  // 按声明顺序解析出的参数。
   repeated ArgValue args = 2;
   // raw 参数保留的原始尾部。
   optional string raw_tail = 3;
@@ -42,75 +48,108 @@ message CommandInvocation {
   repeated string regex_groups = 4;
 }
 
-// 缺失的可选参数没有 value。
+// ArgValue 是一个已解析的命令参数；缺失的可选参数没有 value。
 message ArgValue {
+  // 参数名。
   string name = 1;
+  // 按参数类型解析出的值。
   oneof value {
+    // STRING 参数。
     string string_value = 2;
+    // INT 参数。
     int64 int_value = 3;
+    // FLOAT 参数。
     double float_value = 4;
+    // BOOL 参数。
     bool bool_value = 5;
   }
 }
 
-// Core→目标插件的 Service 调用载荷：可信上下文与业务载荷分开，业务载荷按服务声明的编码与
+// ServiceInvocation 是 Core→目标插件的 Service 调用载荷：可信上下文与业务载荷分开，业务载荷按服务声明的编码与
 // input schema 解释。服务响应直接把业务载荷放进 Envelope（output schema）。
 message ServiceInvocation {
+  // 被调用的服务路由 ID。
   string route_id = 1;
+  // 可信调用上下文。
   InvocationContext context = 2;
+  // 业务载荷的编码。
   PayloadEncoding encoding = 3;
+  // 业务载荷的契约 ID（服务的 input schema）。
   string schema_id = 4;
+  // 业务载荷的契约版本。
   uint32 schema_version = 5;
+  // 业务载荷。
   bytes payload = 6;
 }
 
+// Propagation 决定事件是否继续传给后续 Handler。
 enum Propagation {
   PROPAGATION_UNSPECIFIED = 0;
   PROPAGATION_CONTINUE = 1;
   PROPAGATION_STOP = 2;
 }
 
-// 错误放在 Envelope.error，可与本结果并存以保留传播标记。
+// HandlerOutcome 是 Handler 的结果；错误放在 Envelope.error，可与本结果并存以保留传播标记。
 message HandlerOutcome {
   // 自定义 Rule 的结果；false 时未执行 Handler。
   bool matched = 1;
+  // Handler 设置的传播标记。
   Propagation propagation = 2;
   // 仅自动回复模式成功返回的非空 Chain。
   MessageChain chain = 3;
 }
 
+// PreEventRequest 是 PreEvent Hook 的请求。
 message PreEventRequest {
+  // 被调用的 Hook 路由 ID。
   string route_id = 1;
+  // 可信调用上下文。
   InvocationContext context = 2;
+  // 待处理的事件。
   Event event = 3;
 }
 
-// 只回传可改写的 event_payload 与传播标记，不回传可覆写身份的完整 Event。
+// PreEventResult 只回传可改写的 event_payload 与传播标记，不回传可覆写身份的完整 Event。
 message PreEventResult {
+  // 改写后的事件载荷。
   EventPayload event_payload = 1;
+  // Hook 设置的传播标记。
   Propagation propagation = 2;
 }
 
+// BeforeSendRequest 是 BeforeSend Hook 的请求。
 message BeforeSendRequest {
+  // 被调用的 Hook 路由 ID。
   string route_id = 1;
+  // 可信调用上下文。
   InvocationContext context = 2;
+  // 本次发送的目标。
   Target target = 3;
+  // 待发送的消息链。
   MessageChain chain = 4;
 }
 
-// 只能修改 Chain；拒绝通过 Envelope.error。修改后的 Chain 重新完整预检。
+// BeforeSendResult 只能修改 Chain；拒绝通过 Envelope.error。修改后的 Chain 重新完整预检。
 message BeforeSendResult {
+  // 修改后的消息链。
   MessageChain chain = 1;
 }
 
+// AfterSendRequest 是 AfterSend Hook 的请求，携带发送结果与可能的错误。
 message AfterSendRequest {
+  // 被调用的 Hook 路由 ID。
   string route_id = 1;
+  // 可信调用上下文。
   InvocationContext context = 2;
+  // 本次发送的目标。
   Target target = 3;
+  // 实际发送的消息链。
   MessageChain chain = 4;
+  // 已确认的发送结果，可能是部分成功。
   SendResult result = 5;
+  // 发送失败时的错误；与 result 可以并存。
   ErrorInfo error = 6;
 }
 
-// AfterSend 只返回成功或 Envelope.error，不能修改 SendResult。
+// AfterSendResult 是 AfterSend 的结果：只返回成功或 Envelope.error，不能修改 SendResult。
 message AfterSendResult {}

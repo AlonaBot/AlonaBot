@@ -8,49 +8,67 @@ import "alonabot/v1/envelope.proto";
 
 option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 
-// 协议能力项。supported 为可用集合，required 必须包含于双方交集。
+// ProtocolCapability 是一项协议能力。supported 为可用集合，required 必须包含于双方交集。
 message ProtocolCapability {
+  // 能力名。
   string name = 1;
+  // 能力版本。
   uint32 version = 2;
 }
 
-// HELLO（Plugin→Core），首帧且仅一次。
+// Hello 是 HELLO（Plugin→Core）的载荷，首帧且仅一次。
 message Hello {
+  // 插件声明的 ID，必须与 Core 启动它时的 ID 一致。
   string plugin_id = 1;
   // Core 启动时下发的 32 字节 Session Secret。
   bytes secret = 2;
+  // SDK 支持的协议主版本。
   uint32 supported_major = 3;
+  // SDK 支持的最高协议次版本。
   uint32 supported_minor = 4;
   // 安装时已验证的归档 SHA256，由 Core 经启动上下文提供，SDK 原样回显。
   bytes build_digest = 5;
+  // SDK 可用的协议能力。
   repeated ProtocolCapability supported_capabilities = 6;
+  // SDK 必需的协议能力；不在双方交集内时握手失败。
   repeated ProtocolCapability required_capabilities = 7;
 }
 
-// HELLO_ACK（Core→Plugin）。
+// HelloAck 是 HELLO_ACK（Core→Plugin）的载荷，认证通过后发送。
 message HelloAck {
+  // Core 分配的 16 字节随机 Session ID，之后每一帧都携带它。
   bytes session_id = 1;
+  // 协商出的协议次版本 min(Core, 插件)。
   uint32 chosen_minor = 2;
+  // 双方都支持的协议能力。
   repeated ProtocolCapability capability_intersection = 3;
+  // 准备阶段所需的全部输入。
   Bootstrap bootstrap = 4;
 }
 
-// 准备阶段一次下发的私有输入，不得进入日志或管理 API 响应。
+// Bootstrap 是准备阶段一次下发的私有输入，不得进入日志或管理 API 响应。
 message Bootstrap {
+  // Core 分配的不可变代次 ID，插件只回显。
   string generation_id = 1;
   // UTF-8 JSON 对象；Core 只检查是对象且未超限，不先用新 Schema 否决旧配置。
   string candidate_config_json = 2;
+  // 可信安装包中配置 Schema 的摘要。
   bytes config_schema_hash = 3;
-  // 首次安装没有旧版本。
+  // 现有配置的版本；首次安装没有旧版本。
   optional uint32 previous_config_version = 4;
+  // 配置迁移的目标版本。
   uint32 target_config_version = 5;
+  // 插件业务数据库的准备视图。
   DatabaseDescriptor database_descriptor = 6;
-  // 仅在插件声明 HTTP 能力时设置。
+  // 本 Session 的内部 HTTP 代理认证材料；仅在插件声明 HTTP 能力时设置。
   HttpProxyAuth http_proxy_auth = 7;
+  // 各阶段预算，由 Core 填写。
   PhaseLimits phase_limits = 8;
+  // 准备阶段（配置、迁移、OnStart）的绝对截止，UTC 毫秒。
   int64 preparation_deadline_unix_ms = 9;
 }
 
+// DatabaseBackend 是插件业务数据库的后端类型。
 enum DatabaseBackend {
   DATABASE_BACKEND_UNSPECIFIED = 0;
   // 无受管业务 DB。
@@ -59,13 +77,18 @@ enum DatabaseBackend {
   DATABASE_BACKEND_POSTGRES = 3;
 }
 
+// MigrationMode 是插件声明的数据库迁移方式（CONTRACTS §6.3）。
 enum MigrationMode {
   MIGRATION_MODE_UNSPECIFIED = 0;
+  // 不做迁移。
   MIGRATION_MODE_NONE = 1;
+  // 插件自行迁移。
   MIGRATION_MODE_SELF = 2;
+  // SDK 按版本号逐个执行迁移。
   MIGRATION_MODE_VERSIONED = 3;
 }
 
+// ActivationReason 是本次激活的原因，决定数据库准备方式。
 enum ActivationReason {
   ACTIVATION_REASON_UNSPECIFIED = 0;
   ACTIVATION_REASON_FIRST_INSTALL = 1;
@@ -75,71 +98,99 @@ enum ActivationReason {
   ACTIVATION_REASON_ROLLBACK = 5;
 }
 
+// DatabaseDescriptor 描述本次准备使用的插件业务数据库；不下发 Core 管理数据库凭证。
 message DatabaseDescriptor {
+  // 后端类型；NONE 表示没有业务 DB。
   DatabaseBackend backend = 1;
   // SQLITE：受管候选（或 resume 时 Active）文件路径。
   string sqlite_path = 2;
   // POSTGRES：该插件专属 role/schema 的连接参数；不含 Core 管理凭证。
   PostgresConnection postgres = 3;
+  // 插件声明的迁移方式。
   MigrationMode migration_mode = 4;
   // versioned 模式下已完成的迁移 ID（升序）。
   repeated uint32 applied_migration_ids = 5;
+  // 本次激活的原因。
   ActivationReason activation_reason = 6;
   // 仅当管理员对本次 Session/Generation/DB 显式给出维护许可时为 true。
   bool manual_migration_approved = 7;
 }
 
+// PostgresConnection 是插件专属 PostgreSQL role/schema 的连接参数。
 message PostgresConnection {
+  // 服务器主机名或地址。
   string host = 1;
+  // 服务器端口。
   uint32 port = 2;
+  // 数据库名。
   string database = 3;
+  // 插件专属 role。
   string user = 4;
+  // 该 role 的口令，属于敏感数据。
   string password = 5;
   // 插件专属 schema；search_path 限于它与系统目录。
   string schema = 6;
+  // libpq 的 sslmode 取值。
   string ssl_mode = 7;
 }
 
-// 本 Session 独立的内部 HTTP 代理认证材料，不复用 Admin 凭证。
+// HttpProxyAuth 是本 Session 独立的内部 HTTP 代理认证材料，不复用 Admin 凭证。
 message HttpProxyAuth {
+  // 内部代理请求携带的认证令牌，属于敏感数据。
   bytes token = 1;
 }
 
-// 主契约固定的阶段预算（毫秒），见 CONTRACTS §4.2。
+// PhaseLimits 是主契约固定的阶段预算（毫秒），见 CONTRACTS §4.2。
 message PhaseLimits {
+  // 握手预算。
   uint32 handshake_ms = 1;
+  // 配置转换与校验预算。
   uint32 config_ms = 2;
+  // 数据库迁移预算，独立于普通业务期限。
   uint32 migration_ms = 3;
+  // OnStart 预算。
   uint32 on_start_ms = 4;
+  // OnReady 预算。
   uint32 on_ready_ms = 5;
+  // 一次停用的总预算。
   uint32 stop_total_ms = 6;
 }
 
-// SDK 已实际绑定的 loopback Listener；只接受 127.0.0.1 或 ::1 与非零端口。
+// HttpListener 是 SDK 已实际绑定的 loopback Listener；只接受 127.0.0.1 或 ::1 与非零端口。
 message HttpListener {
+  // 监听地址，127.0.0.1 或 ::1。
   string host = 1;
+  // 监听端口，非零。
   uint32 port = 2;
 }
 
-// PREPARED（Core→Plugin）。digest 由 Core 对持久化快照计算，SDK 只作不透明确认值。
+// Prepared 是 PREPARED（Core→Plugin）的载荷。digest 由 Core 对持久化快照计算，SDK 只作不透明确认值。
 message Prepared {
+  // 按顺序拼接各 RouteDescriptor 确定性编码后的 SHA256。
   bytes route_descriptor_hash = 1;
+  // 候选配置快照的 SHA256。
   bytes candidate_config_digest = 2;
 }
 
-// ACTIVATE（Core→Plugin），在 Core 状态库提交唯一 ActiveGeneration 之后发送。
+// Activate 是 ACTIVATE（Core→Plugin）的载荷，在 Core 状态库提交唯一 ActiveGeneration 之后发送。
 message Activate {
+  // 已提交的代次 ID。
   string generation_id = 1;
+  // 代次、注册描述与候选配置的绑定摘要，SDK 只作不透明确认值。
   bytes commit_marker = 2;
+  // OnReady 的绝对截止，UTC 毫秒。
   int64 on_ready_deadline_unix_ms = 3;
 }
 
-// ACTIVATED（Plugin→Core），OnReady 成功后由唯一 writer 完整写出。
+// Activated 是 ACTIVATED（Plugin→Core）的载荷，OnReady 成功后由唯一 writer 完整写出。
 message Activated {
+  // 回显 ACTIVATE 中的代次 ID。
   string generation_id = 1;
+  // OnReady 成功时为 true。
   bool ready = 2;
 }
 
+// CancelReason 是 CANCEL 的原因。
 enum CancelReason {
   CANCEL_REASON_UNSPECIFIED = 0;
   CANCEL_REASON_CALLER_CANCELLED = 1;
@@ -148,11 +199,13 @@ enum CancelReason {
   CANCEL_REASON_SESSION_STOPPING = 4;
 }
 
-// CANCEL（原发起方→被调用方）；initiator_side/call_id 取自 Envelope。
+// Cancel 是 CANCEL（原发起方→被调用方）的载荷；initiator_side/call_id 取自 Envelope。
 message Cancel {
+  // 取消原因。
   CancelReason reason = 1;
 }
 
+// StopReason 是 STOPPING 的原因。
 enum StopReason {
   STOP_REASON_UNSPECIFIED = 0;
   STOP_REASON_DISABLE = 1;
@@ -162,18 +215,23 @@ enum StopReason {
   STOP_REASON_CORE_SHUTDOWN = 5;
 }
 
-// STOPPING（Core→Plugin），deadline = min(t0+10s, 发送时刻+4s)。
+// Stopping 是 STOPPING（Core→Plugin）的载荷，deadline = min(t0+10s, 发送时刻+4s)。
 message Stopping {
+  // OnStop 与资源关闭的绝对截止，UTC 毫秒。
   int64 deadline_unix_ms = 1;
+  // 停止原因。
   StopReason reason = 2;
 }
 
-// HEARTBEAT（双向），仅用于诊断；monotonic_ns 只与同一端的值比较。
+// Heartbeat 是 HEARTBEAT（双向）的载荷，仅用于诊断；monotonic_ns 只与同一端的值比较。
 message Heartbeat {
+  // 发送端递增的序号。
   uint64 seq = 1;
+  // 发送端的单调时钟读数（纳秒）。
   uint64 monotonic_ns = 2;
 }
 
+// SessionPhase 是 Session 生命周期的阶段，用于报告失败发生在哪一步。
 enum SessionPhase {
   SESSION_PHASE_UNSPECIFIED = 0;
   SESSION_PHASE_HANDSHAKE = 1;
@@ -187,8 +245,9 @@ enum SessionPhase {
   SESSION_PHASE_STOPPING = 9;
 }
 
-// SESSION_ERROR（双向）；ErrorInfo 放在 Envelope.error。
+// SessionError 是 SESSION_ERROR（双向）的载荷；ErrorInfo 放在 Envelope.error。
 message SessionError {
+  // 失败的阶段。
   SessionPhase failed_phase = 1;
   // 触发失败的帧种类；与具体帧无关时为 UNSPECIFIED。
   FrameKind failed_kind = 2;

@@ -23,15 +23,19 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// 发布者只能使用自己的 plugin_id/event_name 命名空间。
+// PublishRequest 是向 Event Bus 发布一个事件的请求；发布者只能使用自己的 plugin_id/event_name 命名空间。
 type PublishRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 本插件命名空间内的 event_name（不含 plugin_id 前缀）。
-	EventName     string          `protobuf:"bytes,1,opt,name=event_name,json=eventName,proto3" json:"event_name,omitempty"`
-	SchemaId      string          `protobuf:"bytes,2,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`
-	SchemaVersion uint32          `protobuf:"varint,3,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
-	Encoding      PayloadEncoding `protobuf:"varint,4,opt,name=encoding,proto3,enum=alonabot.v1.PayloadEncoding" json:"encoding,omitempty"`
-	Payload       []byte          `protobuf:"bytes,5,opt,name=payload,proto3" json:"payload,omitempty"`
+	EventName string `protobuf:"bytes,1,opt,name=event_name,json=eventName,proto3" json:"event_name,omitempty"`
+	// 事件载荷的契约 ID。
+	SchemaId string `protobuf:"bytes,2,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`
+	// 事件载荷的契约版本。
+	SchemaVersion uint32 `protobuf:"varint,3,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	// 事件载荷的编码。
+	Encoding PayloadEncoding `protobuf:"varint,4,opt,name=encoding,proto3,enum=alonabot.v1.PayloadEncoding" json:"encoding,omitempty"`
+	// 事件载荷。
+	Payload       []byte `protobuf:"bytes,5,opt,name=payload,proto3" json:"payload,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -101,9 +105,11 @@ func (x *PublishRequest) GetPayload() []byte {
 	return nil
 }
 
+// PublishResponse 表示 Core 已接纳该事件；不表示订阅者已处理。
 type PublishResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Core 分配的事件 ID。
+	EventId       string `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -149,16 +155,23 @@ func (x *PublishResponse) GetEventId() string {
 type BusEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// plugin_id/event_name。
-	EventName        string          `protobuf:"bytes,1,opt,name=event_name,json=eventName,proto3" json:"event_name,omitempty"`
-	EventId          string          `protobuf:"bytes,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	SourcePluginId   string          `protobuf:"bytes,3,opt,name=source_plugin_id,json=sourcePluginId,proto3" json:"source_plugin_id,omitempty"`
-	OccurredAtUnixMs int64           `protobuf:"varint,4,opt,name=occurred_at_unix_ms,json=occurredAtUnixMs,proto3" json:"occurred_at_unix_ms,omitempty"`
-	SchemaId         string          `protobuf:"bytes,5,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`
-	SchemaVersion    uint32          `protobuf:"varint,6,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
-	Encoding         PayloadEncoding `protobuf:"varint,7,opt,name=encoding,proto3,enum=alonabot.v1.PayloadEncoding" json:"encoding,omitempty"`
-	Payload          []byte          `protobuf:"bytes,8,opt,name=payload,proto3" json:"payload,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	EventName string `protobuf:"bytes,1,opt,name=event_name,json=eventName,proto3" json:"event_name,omitempty"`
+	// Core 分配的事件 ID。
+	EventId string `protobuf:"bytes,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	// 发布者插件 ID，由 Core 根据发布 Session 填写。
+	SourcePluginId string `protobuf:"bytes,3,opt,name=source_plugin_id,json=sourcePluginId,proto3" json:"source_plugin_id,omitempty"`
+	// Core 接纳事件的时刻，UTC 毫秒。
+	OccurredAtUnixMs int64 `protobuf:"varint,4,opt,name=occurred_at_unix_ms,json=occurredAtUnixMs,proto3" json:"occurred_at_unix_ms,omitempty"`
+	// 事件载荷的契约 ID。
+	SchemaId string `protobuf:"bytes,5,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`
+	// 事件载荷的契约版本。
+	SchemaVersion uint32 `protobuf:"varint,6,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	// 事件载荷的编码。
+	Encoding PayloadEncoding `protobuf:"varint,7,opt,name=encoding,proto3,enum=alonabot.v1.PayloadEncoding" json:"encoding,omitempty"`
+	// 事件载荷。
+	Payload       []byte `protobuf:"bytes,8,opt,name=payload,proto3" json:"payload,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BusEvent) Reset() {

@@ -23,6 +23,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// RouteKind 是路由的类别，与 RouteDescriptor.spec 的分支一一对应。
 type RouteKind int32
 
 const (
@@ -87,6 +88,7 @@ func (RouteKind) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{0}
 }
 
+// Permission 是调用路由所需的最低权限。
 type Permission int32
 
 const (
@@ -142,6 +144,7 @@ func (Permission) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{1}
 }
 
+// HandlerMode 是 Handler 的签名形态。
 type HandlerMode int32
 
 const (
@@ -193,14 +196,17 @@ func (HandlerMode) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{2}
 }
 
+// CommandMatch 是命令的匹配方式。
 type CommandMatch int32
 
 const (
 	CommandMatch_COMMAND_MATCH_UNSPECIFIED CommandMatch = 0
 	// `/` 前缀完整 token 路径。
-	CommandMatch_COMMAND_MATCH_PATH  CommandMatch = 1
+	CommandMatch_COMMAND_MATCH_PATH CommandMatch = 1
+	// 按正则匹配整条消息。
 	CommandMatch_COMMAND_MATCH_REGEX CommandMatch = 2
-	CommandMatch_COMMAND_MATCH_RAW   CommandMatch = 3
+	// 交给 Handler 自行解析。
+	CommandMatch_COMMAND_MATCH_RAW CommandMatch = 3
 )
 
 // Enum value maps for CommandMatch.
@@ -246,14 +252,17 @@ func (CommandMatch) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{3}
 }
 
+// UsageMode 决定参数错误时如何提示用法。
 type UsageMode int32
 
 const (
 	UsageMode_USAGE_MODE_UNSPECIFIED UsageMode = 0
 	// 参数错误时发送一次自动生成的 usage。
 	UsageMode_USAGE_MODE_DEFAULT UsageMode = 1
-	UsageMode_USAGE_MODE_SILENT  UsageMode = 2
-	UsageMode_USAGE_MODE_CUSTOM  UsageMode = 3
+	// 不提示。
+	UsageMode_USAGE_MODE_SILENT UsageMode = 2
+	// 发送 custom_usage。
+	UsageMode_USAGE_MODE_CUSTOM UsageMode = 3
 )
 
 // Enum value maps for UsageMode.
@@ -299,6 +308,7 @@ func (UsageMode) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{4}
 }
 
+// ParamType 是命令参数的类型。
 type ParamType int32
 
 const (
@@ -357,6 +367,7 @@ func (ParamType) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{5}
 }
 
+// HookPhase 是 Hook 的执行阶段。
 type HookPhase int32
 
 const (
@@ -409,12 +420,14 @@ func (HookPhase) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{6}
 }
 
+// ServiceAccess 是服务的访问范围。
 type ServiceAccess int32
 
 const (
 	ServiceAccess_SERVICE_ACCESS_UNSPECIFIED ServiceAccess = 0
 	// 只允许 Core 与本插件。
-	ServiceAccess_SERVICE_ACCESS_PRIVATE   ServiceAccess = 1
+	ServiceAccess_SERVICE_ACCESS_PRIVATE ServiceAccess = 1
+	// 只允许 allowlist_plugin_ids 中的插件。
 	ServiceAccess_SERVICE_ACCESS_ALLOWLIST ServiceAccess = 2
 	// 所有已启用插件可调用，不赋予用户 Admin。
 	ServiceAccess_SERVICE_ACCESS_PUBLIC ServiceAccess = 3
@@ -463,6 +476,7 @@ func (ServiceAccess) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{7}
 }
 
+// HttpAuthMode 是 HTTP 路由的认证方式。
 type HttpAuthMode int32
 
 const (
@@ -522,16 +536,20 @@ func (HttpAuthMode) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{8}
 }
 
-// REGISTER（Plugin→Core），配置准备与 OnStart 完成后仅发送一次；Core 原子校验整份注册集。
+// Register 是 REGISTER（Plugin→Core）的载荷，配置准备与 OnStart 完成后仅发送一次；Core 原子校验整份注册集。
 type Register struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Routes           []*RouteDescriptor     `protobuf:"bytes,1,rep,name=routes,proto3" json:"routes,omitempty"`
-	ConfigSchemaHash []byte                 `protobuf:"bytes,2,opt,name=config_schema_hash,json=configSchemaHash,proto3" json:"config_schema_hash,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 插件的全部路由描述。
+	Routes []*RouteDescriptor `protobuf:"bytes,1,rep,name=routes,proto3" json:"routes,omitempty"`
+	// 插件使用的配置 Schema 摘要，必须与可信安装包一致。
+	ConfigSchemaHash []byte `protobuf:"bytes,2,opt,name=config_schema_hash,json=configSchemaHash,proto3" json:"config_schema_hash,omitempty"`
 	// 规范化后的完整候选 JSON（含已解析 secret，仅经私有 IPC 传输）。
-	CandidateConfigJson    string `protobuf:"bytes,3,opt,name=candidate_config_json,json=candidateConfigJson,proto3" json:"candidate_config_json,omitempty"`
+	CandidateConfigJson string `protobuf:"bytes,3,opt,name=candidate_config_json,json=candidateConfigJson,proto3" json:"candidate_config_json,omitempty"`
+	// 候选配置的版本。
 	CandidateConfigVersion uint32 `protobuf:"varint,4,opt,name=candidate_config_version,json=candidateConfigVersion,proto3" json:"candidate_config_version,omitempty"`
 	// 仅在声明 HTTP 路由时设置。
-	HttpListener  *HttpListener   `protobuf:"bytes,5,opt,name=http_listener,json=httpListener,proto3" json:"http_listener,omitempty"`
+	HttpListener *HttpListener `protobuf:"bytes,5,opt,name=http_listener,json=httpListener,proto3" json:"http_listener,omitempty"`
+	// 本次准备阶段的迁移结果。
 	Migration     *MigrationState `protobuf:"bytes,6,opt,name=migration,proto3" json:"migration,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -609,10 +627,11 @@ func (x *Register) GetMigration() *MigrationState {
 	return nil
 }
 
-// 本次准备阶段的迁移完成信息。
+// MigrationState 是本次准备阶段的迁移完成信息。
 type MigrationState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Mode  MigrationMode          `protobuf:"varint,1,opt,name=mode,proto3,enum=alonabot.v1.MigrationMode" json:"mode,omitempty"`
+	// 插件采用的迁移方式。
+	Mode MigrationMode `protobuf:"varint,1,opt,name=mode,proto3,enum=alonabot.v1.MigrationMode" json:"mode,omitempty"`
 	// versioned：本次准备结束时账本中已完成的全部 ID（升序）。
 	CompletedMigrationIds []uint32 `protobuf:"varint,2,rep,packed,name=completed_migration_ids,json=completedMigrationIds,proto3" json:"completed_migration_ids,omitempty"`
 	// self：Migrate 已成功返回。
@@ -672,19 +691,29 @@ func (x *MigrationState) GetSelfMigrateCompleted() bool {
 	return false
 }
 
-// 公共字段；target 为 plugin_id/route_id。kind 必须与 spec 分支一致。
+// RouteDescriptor 是一条路由的公共描述；target 为 plugin_id/route_id，kind 必须与 spec 分支一致。
 type RouteDescriptor struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	RouteId string                 `protobuf:"bytes,1,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
-	Kind    RouteKind              `protobuf:"varint,2,opt,name=kind,proto3,enum=alonabot.v1.RouteKind" json:"kind,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 插件内唯一、跨版本保持业务含义稳定的路由 ID。
+	RouteId string `protobuf:"bytes,1,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
+	// 路由类别。
+	Kind RouteKind `protobuf:"varint,2,opt,name=kind,proto3,enum=alonabot.v1.RouteKind" json:"kind,omitempty"`
 	// 数字小的先执行，同值按 plugin_id/route_id 字典序。
-	Priority            int32      `protobuf:"varint,3,opt,name=priority,proto3" json:"priority,omitempty"`
-	DefaultEnabled      bool       `protobuf:"varint,4,opt,name=default_enabled,json=defaultEnabled,proto3" json:"default_enabled,omitempty"`
-	RequiredPermission  Permission `protobuf:"varint,5,opt,name=required_permission,json=requiredPermission,proto3,enum=alonabot.v1.Permission" json:"required_permission,omitempty"`
-	InputSchemaId       string     `protobuf:"bytes,6,opt,name=input_schema_id,json=inputSchemaId,proto3" json:"input_schema_id,omitempty"`
-	InputSchemaVersion  uint32     `protobuf:"varint,7,opt,name=input_schema_version,json=inputSchemaVersion,proto3" json:"input_schema_version,omitempty"`
-	OutputSchemaId      string     `protobuf:"bytes,8,opt,name=output_schema_id,json=outputSchemaId,proto3" json:"output_schema_id,omitempty"`
-	OutputSchemaVersion uint32     `protobuf:"varint,9,opt,name=output_schema_version,json=outputSchemaVersion,proto3" json:"output_schema_version,omitempty"`
+	Priority int32 `protobuf:"varint,3,opt,name=priority,proto3" json:"priority,omitempty"`
+	// 安装后默认是否启用。
+	DefaultEnabled bool `protobuf:"varint,4,opt,name=default_enabled,json=defaultEnabled,proto3" json:"default_enabled,omitempty"`
+	// 调用所需的最低权限。
+	RequiredPermission Permission `protobuf:"varint,5,opt,name=required_permission,json=requiredPermission,proto3,enum=alonabot.v1.Permission" json:"required_permission,omitempty"`
+	// 请求载荷的契约 ID。
+	InputSchemaId string `protobuf:"bytes,6,opt,name=input_schema_id,json=inputSchemaId,proto3" json:"input_schema_id,omitempty"`
+	// 请求载荷的契约版本。
+	InputSchemaVersion uint32 `protobuf:"varint,7,opt,name=input_schema_version,json=inputSchemaVersion,proto3" json:"input_schema_version,omitempty"`
+	// 响应载荷的契约 ID。
+	OutputSchemaId string `protobuf:"bytes,8,opt,name=output_schema_id,json=outputSchemaId,proto3" json:"output_schema_id,omitempty"`
+	// 响应载荷的契约版本。
+	OutputSchemaVersion uint32 `protobuf:"varint,9,opt,name=output_schema_version,json=outputSchemaVersion,proto3" json:"output_schema_version,omitempty"`
+	// 按 kind 区分的专属描述。
+	//
 	// Types that are valid to be assigned to Spec:
 	//
 	//	*RouteDescriptor_Command
@@ -867,30 +896,37 @@ type isRouteDescriptor_Spec interface {
 }
 
 type RouteDescriptor_Command struct {
+	// COMMAND。
 	Command *CommandSpec `protobuf:"bytes,10,opt,name=command,proto3,oneof"`
 }
 
 type RouteDescriptor_Event struct {
+	// EVENT。
 	Event *EventSpec `protobuf:"bytes,11,opt,name=event,proto3,oneof"`
 }
 
 type RouteDescriptor_Hook struct {
+	// HOOK。
 	Hook *HookSpec `protobuf:"bytes,12,opt,name=hook,proto3,oneof"`
 }
 
 type RouteDescriptor_Service struct {
+	// SERVICE。
 	Service *ServiceSpec `protobuf:"bytes,13,opt,name=service,proto3,oneof"`
 }
 
 type RouteDescriptor_Schedule struct {
+	// SCHEDULE。
 	Schedule *ScheduleSpec `protobuf:"bytes,14,opt,name=schedule,proto3,oneof"`
 }
 
 type RouteDescriptor_Http struct {
+	// HTTP。
 	Http *HttpRouteSpec `protobuf:"bytes,15,opt,name=http,proto3,oneof"`
 }
 
 type RouteDescriptor_BusSubscription struct {
+	// BUS_SUBSCRIPTION。
 	BusSubscription *BusSubscriptionSpec `protobuf:"bytes,16,opt,name=bus_subscription,json=busSubscription,proto3,oneof"`
 }
 
@@ -908,11 +944,13 @@ func (*RouteDescriptor_Http) isRouteDescriptor_Spec() {}
 
 func (*RouteDescriptor_BusSubscription) isRouteDescriptor_Spec() {}
 
-// Core 可表达的条件先执行；自定义 Go Rule 在同一 Handler REQUEST 内由 SDK 执行。
+// RuleDescriptor 描述路由的匹配条件：Core 可表达的条件先执行，自定义 Go Rule 在同一 Handler REQUEST 内由 SDK 执行。
 type RuleDescriptor struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	HasCustomRule    bool                   `protobuf:"varint,1,opt,name=has_custom_rule,json=hasCustomRule,proto3" json:"has_custom_rule,omitempty"`
-	RequireChatAdmin bool                   `protobuf:"varint,2,opt,name=require_chat_admin,json=requireChatAdmin,proto3" json:"require_chat_admin,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 是否有需要 SDK 执行的自定义 Rule。
+	HasCustomRule bool `protobuf:"varint,1,opt,name=has_custom_rule,json=hasCustomRule,proto3" json:"has_custom_rule,omitempty"`
+	// 是否要求触发者是平台群管理员。
+	RequireChatAdmin bool `protobuf:"varint,2,opt,name=require_chat_admin,json=requireChatAdmin,proto3" json:"require_chat_admin,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -961,19 +999,27 @@ func (x *RuleDescriptor) GetRequireChatAdmin() bool {
 	return false
 }
 
+// CommandSpec 是命令路由的专属描述。
 type CommandSpec struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Match CommandMatch           `protobuf:"varint,1,opt,name=match,proto3,enum=alonabot.v1.CommandMatch" json:"match,omitempty"`
+	// 匹配方式。
+	Match CommandMatch `protobuf:"varint,1,opt,name=match,proto3,enum=alonabot.v1.CommandMatch" json:"match,omitempty"`
 	// PATH：规范命令路径 token，大小写敏感。
-	Path        []string        `protobuf:"bytes,2,rep,name=path,proto3" json:"path,omitempty"`
-	Aliases     []*CommandAlias `protobuf:"bytes,3,rep,name=aliases,proto3" json:"aliases,omitempty"`
-	Params      []*CommandParam `protobuf:"bytes,4,rep,name=params,proto3" json:"params,omitempty"`
-	HandlerMode HandlerMode     `protobuf:"varint,5,opt,name=handler_mode,json=handlerMode,proto3,enum=alonabot.v1.HandlerMode" json:"handler_mode,omitempty"`
-	Rule        *RuleDescriptor `protobuf:"bytes,6,opt,name=rule,proto3" json:"rule,omitempty"`
+	Path []string `protobuf:"bytes,2,rep,name=path,proto3" json:"path,omitempty"`
+	// 等价的别名路径。
+	Aliases []*CommandAlias `protobuf:"bytes,3,rep,name=aliases,proto3" json:"aliases,omitempty"`
+	// 按顺序声明的参数。
+	Params []*CommandParam `protobuf:"bytes,4,rep,name=params,proto3" json:"params,omitempty"`
+	// Handler 的签名形态。
+	HandlerMode HandlerMode `protobuf:"varint,5,opt,name=handler_mode,json=handlerMode,proto3,enum=alonabot.v1.HandlerMode" json:"handler_mode,omitempty"`
+	// 匹配条件。
+	Rule *RuleDescriptor `protobuf:"bytes,6,opt,name=rule,proto3" json:"rule,omitempty"`
 	// REGEX：Go regexp 语法，启动时编译。
-	Regex         string    `protobuf:"bytes,7,opt,name=regex,proto3" json:"regex,omitempty"`
-	UsageMode     UsageMode `protobuf:"varint,8,opt,name=usage_mode,json=usageMode,proto3,enum=alonabot.v1.UsageMode" json:"usage_mode,omitempty"`
-	CustomUsage   string    `protobuf:"bytes,9,opt,name=custom_usage,json=customUsage,proto3" json:"custom_usage,omitempty"`
+	Regex string `protobuf:"bytes,7,opt,name=regex,proto3" json:"regex,omitempty"`
+	// 参数错误时的用法提示方式。
+	UsageMode UsageMode `protobuf:"varint,8,opt,name=usage_mode,json=usageMode,proto3,enum=alonabot.v1.UsageMode" json:"usage_mode,omitempty"`
+	// USAGE_MODE_CUSTOM 时发送的文本。
+	CustomUsage   string `protobuf:"bytes,9,opt,name=custom_usage,json=customUsage,proto3" json:"custom_usage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1071,9 +1117,11 @@ func (x *CommandSpec) GetCustomUsage() string {
 	return ""
 }
 
+// CommandAlias 是命令的一条别名路径。
 type CommandAlias struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          []string               `protobuf:"bytes,1,rep,name=path,proto3" json:"path,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 别名的 token 路径。
+	Path          []string `protobuf:"bytes,1,rep,name=path,proto3" json:"path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1115,15 +1163,19 @@ func (x *CommandAlias) GetPath() []string {
 	return nil
 }
 
-// 必需参数在可选参数之前；raw 只能是最后一个 string 参数。
+// CommandParam 是一个命令参数；必需参数在可选参数之前，raw 只能是最后一个 string 参数。
 type CommandParam struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Name     string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Type     ParamType              `protobuf:"varint,2,opt,name=type,proto3,enum=alonabot.v1.ParamType" json:"type,omitempty"`
-	Required bool                   `protobuf:"varint,3,opt,name=required,proto3" json:"required,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 参数名。
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// 参数类型。
+	Type ParamType `protobuf:"varint,2,opt,name=type,proto3,enum=alonabot.v1.ParamType" json:"type,omitempty"`
+	// 是否必需。
+	Required bool `protobuf:"varint,3,opt,name=required,proto3" json:"required,omitempty"`
 	// 缺失位置使用的默认值文本，按 type 解析。
-	DefaultValue  *string `protobuf:"bytes,4,opt,name=default_value,json=defaultValue,proto3,oneof" json:"default_value,omitempty"`
-	Raw           bool    `protobuf:"varint,5,opt,name=raw,proto3" json:"raw,omitempty"`
+	DefaultValue *string `protobuf:"bytes,4,opt,name=default_value,json=defaultValue,proto3,oneof" json:"default_value,omitempty"`
+	// 为 true 时吞下命令剩余的原始文本。
+	Raw           bool `protobuf:"varint,5,opt,name=raw,proto3" json:"raw,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1193,13 +1245,18 @@ func (x *CommandParam) GetRaw() bool {
 	return false
 }
 
+// EventSpec 是事件路由的专属描述。
 type EventSpec struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	EventTypeFilter []string               `protobuf:"bytes,1,rep,name=event_type_filter,json=eventTypeFilter,proto3" json:"event_type_filter,omitempty"`
-	HandlerMode     HandlerMode            `protobuf:"varint,2,opt,name=handler_mode,json=handlerMode,proto3,enum=alonabot.v1.HandlerMode" json:"handler_mode,omitempty"`
-	Rule            *RuleDescriptor        `protobuf:"bytes,3,opt,name=rule,proto3" json:"rule,omitempty"`
-	// button.clicked 路由：按钮引用的 action 标识与 Schema 版本。
-	ActionId            string `protobuf:"bytes,4,opt,name=action_id,json=actionId,proto3" json:"action_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 接收的事件类型。
+	EventTypeFilter []string `protobuf:"bytes,1,rep,name=event_type_filter,json=eventTypeFilter,proto3" json:"event_type_filter,omitempty"`
+	// Handler 的签名形态。
+	HandlerMode HandlerMode `protobuf:"varint,2,opt,name=handler_mode,json=handlerMode,proto3,enum=alonabot.v1.HandlerMode" json:"handler_mode,omitempty"`
+	// 匹配条件。
+	Rule *RuleDescriptor `protobuf:"bytes,3,opt,name=rule,proto3" json:"rule,omitempty"`
+	// button.clicked 路由：按钮引用的 action 标识。
+	ActionId string `protobuf:"bytes,4,opt,name=action_id,json=actionId,proto3" json:"action_id,omitempty"`
+	// button.clicked 路由：action 载荷的 Schema 版本。
 	ActionSchemaVersion uint32 `protobuf:"varint,5,opt,name=action_schema_version,json=actionSchemaVersion,proto3" json:"action_schema_version,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
@@ -1270,9 +1327,11 @@ func (x *EventSpec) GetActionSchemaVersion() uint32 {
 	return 0
 }
 
+// HookSpec 是 Hook 路由的专属描述。
 type HookSpec struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Phase         HookPhase              `protobuf:"varint,1,opt,name=phase,proto3,enum=alonabot.v1.HookPhase" json:"phase,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 执行阶段。
+	Phase         HookPhase `protobuf:"varint,1,opt,name=phase,proto3,enum=alonabot.v1.HookPhase" json:"phase,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1314,15 +1373,19 @@ func (x *HookSpec) GetPhase() HookPhase {
 	return HookPhase_HOOK_PHASE_UNSPECIFIED
 }
 
-// 请求/响应 Schema 使用公共字段 input_*/output_*。
+// ServiceSpec 是服务路由的专属描述；请求/响应 Schema 使用公共字段 input_*/output_*。
 type ServiceSpec struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	ServiceName        string                 `protobuf:"bytes,1,opt,name=service_name,json=serviceName,proto3" json:"service_name,omitempty"`
-	Access             ServiceAccess          `protobuf:"varint,2,opt,name=access,proto3,enum=alonabot.v1.ServiceAccess" json:"access,omitempty"`
-	AllowlistPluginIds []string               `protobuf:"bytes,3,rep,name=allowlist_plugin_ids,json=allowlistPluginIds,proto3" json:"allowlist_plugin_ids,omitempty"`
-	Encoding           PayloadEncoding        `protobuf:"varint,4,opt,name=encoding,proto3,enum=alonabot.v1.PayloadEncoding" json:"encoding,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 对外公布的服务名。
+	ServiceName string `protobuf:"bytes,1,opt,name=service_name,json=serviceName,proto3" json:"service_name,omitempty"`
+	// 访问范围。
+	Access ServiceAccess `protobuf:"varint,2,opt,name=access,proto3,enum=alonabot.v1.ServiceAccess" json:"access,omitempty"`
+	// ALLOWLIST 时允许调用的插件。
+	AllowlistPluginIds []string `protobuf:"bytes,3,rep,name=allowlist_plugin_ids,json=allowlistPluginIds,proto3" json:"allowlist_plugin_ids,omitempty"`
+	// 请求与响应载荷的编码。
+	Encoding      PayloadEncoding `protobuf:"varint,4,opt,name=encoding,proto3,enum=alonabot.v1.PayloadEncoding" json:"encoding,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ServiceSpec) Reset() {
@@ -1383,17 +1446,22 @@ func (x *ServiceSpec) GetEncoding() PayloadEncoding {
 	return PayloadEncoding_PAYLOAD_ENCODING_UNSPECIFIED
 }
 
-// interval 与 cron 互斥；cron 固定五字段，timezone 为 IANA 名称，省略为 UTC。
+// ScheduleSpec 是定时任务的专属描述；interval 与 cron 互斥，cron 固定五字段，timezone 为 IANA 名称，省略为 UTC。
 type ScheduleSpec struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	JobId string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	// 插件内稳定的任务 ID。
+	JobId string `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	// 触发方式，恰有一个分支。
+	//
 	// Types that are valid to be assigned to Trigger:
 	//
 	//	*ScheduleSpec_Cron
 	//	*ScheduleSpec_IntervalMs
-	Trigger       isScheduleSpec_Trigger `protobuf_oneof:"trigger"`
-	Timezone      string                 `protobuf:"bytes,4,opt,name=timezone,proto3" json:"timezone,omitempty"`
-	JobDeadlineMs uint32                 `protobuf:"varint,5,opt,name=job_deadline_ms,json=jobDeadlineMs,proto3" json:"job_deadline_ms,omitempty"`
+	Trigger isScheduleSpec_Trigger `protobuf_oneof:"trigger"`
+	// cron 使用的 IANA 时区。
+	Timezone string `protobuf:"bytes,4,opt,name=timezone,proto3" json:"timezone,omitempty"`
+	// 单次运行的期限（毫秒）。
+	JobDeadlineMs uint32 `protobuf:"varint,5,opt,name=job_deadline_ms,json=jobDeadlineMs,proto3" json:"job_deadline_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1479,11 +1547,12 @@ type isScheduleSpec_Trigger interface {
 }
 
 type ScheduleSpec_Cron struct {
+	// 五字段 cron 表达式。
 	Cron string `protobuf:"bytes,2,opt,name=cron,proto3,oneof"`
 }
 
 type ScheduleSpec_IntervalMs struct {
-	// 至少 1000。
+	// 固定间隔（毫秒），至少 1000。
 	IntervalMs uint64 `protobuf:"varint,3,opt,name=interval_ms,json=intervalMs,proto3,oneof"`
 }
 
@@ -1491,12 +1560,16 @@ func (*ScheduleSpec_Cron) isScheduleSpec_Trigger() {}
 
 func (*ScheduleSpec_IntervalMs) isScheduleSpec_Trigger() {}
 
+// HttpRouteSpec 是 HTTP 路由的专属描述。
 type HttpRouteSpec struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Method string                 `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// HTTP 方法。
+	Method string `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
 	// 插件相对路径，以 / 开头，不含 /plugins/{id} 前缀。
-	Path          string       `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
-	IsPublic      bool         `protobuf:"varint,3,opt,name=is_public,json=isPublic,proto3" json:"is_public,omitempty"`
+	Path string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// 是否无需 Core 会话即可访问。
+	IsPublic bool `protobuf:"varint,3,opt,name=is_public,json=isPublic,proto3" json:"is_public,omitempty"`
+	// 认证方式。
 	AuthMode      HttpAuthMode `protobuf:"varint,4,opt,name=auth_mode,json=authMode,proto3,enum=alonabot.v1.HttpAuthMode" json:"auth_mode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1560,12 +1633,16 @@ func (x *HttpRouteSpec) GetAuthMode() HttpAuthMode {
 	return HttpAuthMode_HTTP_AUTH_MODE_UNSPECIFIED
 }
 
+// BusSubscriptionSpec 是 Event Bus 订阅的专属描述。
 type BusSubscriptionSpec struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// plugin_id/event_name。
-	EventName       string `protobuf:"bytes,1,opt,name=event_name,json=eventName,proto3" json:"event_name,omitempty"`
-	SchemaId        string `protobuf:"bytes,2,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`
-	SchemaVersion   uint32 `protobuf:"varint,3,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	EventName string `protobuf:"bytes,1,opt,name=event_name,json=eventName,proto3" json:"event_name,omitempty"`
+	// 可接受的事件载荷契约 ID。
+	SchemaId string `protobuf:"bytes,2,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`
+	// 可接受的事件载荷契约版本。
+	SchemaVersion uint32 `protobuf:"varint,3,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	// 收到事件时调用的本插件路由。
 	CallbackRouteId string `protobuf:"bytes,4,opt,name=callback_route_id,json=callbackRouteId,proto3" json:"callback_route_id,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache

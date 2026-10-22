@@ -23,6 +23,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Propagation 决定事件是否继续传给后续 Handler。
 type Propagation int32
 
 const (
@@ -72,14 +73,15 @@ func (Propagation) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_invocation_proto_rawDescGZIP(), []int{0}
 }
 
-// Core 记录并下发的可信上下文；插件回传的同名值不能覆盖 Core 记录。trace 取 Envelope.trace_id。
+// InvocationContext 是 Core 记录并下发的可信上下文；插件回传的同名值不能覆盖 Core 记录。trace 取 Envelope.trace_id。
 type InvocationContext struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 无可信个人身份时 absent。
 	Actor *Actor `protobuf:"bytes,1,opt,name=actor,proto3" json:"actor,omitempty"`
 	// 原事件 Target；无真实入站事件时 absent，Send 必须显式 To。
-	DefaultTarget *Target  `protobuf:"bytes,2,opt,name=default_target,json=defaultTarget,proto3" json:"default_target,omitempty"`
-	Scopes        []string `protobuf:"bytes,3,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	DefaultTarget *Target `protobuf:"bytes,2,opt,name=default_target,json=defaultTarget,proto3" json:"default_target,omitempty"`
+	// 本次调用被授予的权限范围。
+	Scopes []string `protobuf:"bytes,3,rep,name=scopes,proto3" json:"scopes,omitempty"`
 	// 祖先插件链（不含当前插件），用于循环与深度检查。
 	PluginChain []string `protobuf:"bytes,4,rep,name=plugin_chain,json=pluginChain,proto3" json:"plugin_chain,omitempty"`
 	// 出站 Hook 及其派生子调用为 true，再次 Send 返回 FAILED_PRECONDITION。
@@ -153,12 +155,15 @@ func (x *InvocationContext) GetSendForbidden() bool {
 	return false
 }
 
-// 命令、事件、scheduled 与按钮 Handler 的请求。
+// HandlerRequest 是命令、事件、scheduled 与按钮 Handler 的请求。
 type HandlerRequest struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	RouteId string                 `protobuf:"bytes,1,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
-	Context *InvocationContext     `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`
-	Event   *Event                 `protobuf:"bytes,3,opt,name=event,proto3" json:"event,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 被调用的路由 ID。
+	RouteId string `protobuf:"bytes,1,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
+	// 可信调用上下文。
+	Context *InvocationContext `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`
+	// 触发本次调用的事件。
+	Event *Event `protobuf:"bytes,3,opt,name=event,proto3" json:"event,omitempty"`
 	// 仅命令路由。
 	Command       *CommandInvocation `protobuf:"bytes,4,opt,name=command,proto3" json:"command,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -223,10 +228,12 @@ func (x *HandlerRequest) GetCommand() *CommandInvocation {
 	return nil
 }
 
+// CommandInvocation 是命令匹配与参数解析的结果。
 type CommandInvocation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 实际匹配到的规范路径。
-	Path []string    `protobuf:"bytes,1,rep,name=path,proto3" json:"path,omitempty"`
+	Path []string `protobuf:"bytes,1,rep,name=path,proto3" json:"path,omitempty"`
+	// 按声明顺序解析出的参数。
 	Args []*ArgValue `protobuf:"bytes,2,rep,name=args,proto3" json:"args,omitempty"`
 	// raw 参数保留的原始尾部。
 	RawTail *string `protobuf:"bytes,3,opt,name=raw_tail,json=rawTail,proto3,oneof" json:"raw_tail,omitempty"`
@@ -294,10 +301,13 @@ func (x *CommandInvocation) GetRegexGroups() []string {
 	return nil
 }
 
-// 缺失的可选参数没有 value。
+// ArgValue 是一个已解析的命令参数；缺失的可选参数没有 value。
 type ArgValue struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// 参数名。
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// 按参数类型解析出的值。
+	//
 	// Types that are valid to be assigned to Value:
 	//
 	//	*ArgValue_StringValue
@@ -394,18 +404,22 @@ type isArgValue_Value interface {
 }
 
 type ArgValue_StringValue struct {
+	// STRING 参数。
 	StringValue string `protobuf:"bytes,2,opt,name=string_value,json=stringValue,proto3,oneof"`
 }
 
 type ArgValue_IntValue struct {
+	// INT 参数。
 	IntValue int64 `protobuf:"varint,3,opt,name=int_value,json=intValue,proto3,oneof"`
 }
 
 type ArgValue_FloatValue struct {
+	// FLOAT 参数。
 	FloatValue float64 `protobuf:"fixed64,4,opt,name=float_value,json=floatValue,proto3,oneof"`
 }
 
 type ArgValue_BoolValue struct {
+	// BOOL 参数。
 	BoolValue bool `protobuf:"varint,5,opt,name=bool_value,json=boolValue,proto3,oneof"`
 }
 
@@ -417,16 +431,22 @@ func (*ArgValue_FloatValue) isArgValue_Value() {}
 
 func (*ArgValue_BoolValue) isArgValue_Value() {}
 
-// Core→目标插件的 Service 调用载荷：可信上下文与业务载荷分开，业务载荷按服务声明的编码与
+// ServiceInvocation 是 Core→目标插件的 Service 调用载荷：可信上下文与业务载荷分开，业务载荷按服务声明的编码与
 // input schema 解释。服务响应直接把业务载荷放进 Envelope（output schema）。
 type ServiceInvocation struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RouteId       string                 `protobuf:"bytes,1,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
-	Context       *InvocationContext     `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`
-	Encoding      PayloadEncoding        `protobuf:"varint,3,opt,name=encoding,proto3,enum=alonabot.v1.PayloadEncoding" json:"encoding,omitempty"`
-	SchemaId      string                 `protobuf:"bytes,4,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`
-	SchemaVersion uint32                 `protobuf:"varint,5,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
-	Payload       []byte                 `protobuf:"bytes,6,opt,name=payload,proto3" json:"payload,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 被调用的服务路由 ID。
+	RouteId string `protobuf:"bytes,1,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
+	// 可信调用上下文。
+	Context *InvocationContext `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`
+	// 业务载荷的编码。
+	Encoding PayloadEncoding `protobuf:"varint,3,opt,name=encoding,proto3,enum=alonabot.v1.PayloadEncoding" json:"encoding,omitempty"`
+	// 业务载荷的契约 ID（服务的 input schema）。
+	SchemaId string `protobuf:"bytes,4,opt,name=schema_id,json=schemaId,proto3" json:"schema_id,omitempty"`
+	// 业务载荷的契约版本。
+	SchemaVersion uint32 `protobuf:"varint,5,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	// 业务载荷。
+	Payload       []byte `protobuf:"bytes,6,opt,name=payload,proto3" json:"payload,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -503,11 +523,12 @@ func (x *ServiceInvocation) GetPayload() []byte {
 	return nil
 }
 
-// 错误放在 Envelope.error，可与本结果并存以保留传播标记。
+// HandlerOutcome 是 Handler 的结果；错误放在 Envelope.error，可与本结果并存以保留传播标记。
 type HandlerOutcome struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 自定义 Rule 的结果；false 时未执行 Handler。
-	Matched     bool        `protobuf:"varint,1,opt,name=matched,proto3" json:"matched,omitempty"`
+	Matched bool `protobuf:"varint,1,opt,name=matched,proto3" json:"matched,omitempty"`
+	// Handler 设置的传播标记。
 	Propagation Propagation `protobuf:"varint,2,opt,name=propagation,proto3,enum=alonabot.v1.Propagation" json:"propagation,omitempty"`
 	// 仅自动回复模式成功返回的非空 Chain。
 	Chain         *MessageChain `protobuf:"bytes,3,opt,name=chain,proto3" json:"chain,omitempty"`
@@ -566,11 +587,15 @@ func (x *HandlerOutcome) GetChain() *MessageChain {
 	return nil
 }
 
+// PreEventRequest 是 PreEvent Hook 的请求。
 type PreEventRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RouteId       string                 `protobuf:"bytes,1,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
-	Context       *InvocationContext     `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`
-	Event         *Event                 `protobuf:"bytes,3,opt,name=event,proto3" json:"event,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 被调用的 Hook 路由 ID。
+	RouteId string `protobuf:"bytes,1,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
+	// 可信调用上下文。
+	Context *InvocationContext `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`
+	// 待处理的事件。
+	Event         *Event `protobuf:"bytes,3,opt,name=event,proto3" json:"event,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -626,11 +651,13 @@ func (x *PreEventRequest) GetEvent() *Event {
 	return nil
 }
 
-// 只回传可改写的 event_payload 与传播标记，不回传可覆写身份的完整 Event。
+// PreEventResult 只回传可改写的 event_payload 与传播标记，不回传可覆写身份的完整 Event。
 type PreEventResult struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EventPayload  *EventPayload          `protobuf:"bytes,1,opt,name=event_payload,json=eventPayload,proto3" json:"event_payload,omitempty"`
-	Propagation   Propagation            `protobuf:"varint,2,opt,name=propagation,proto3,enum=alonabot.v1.Propagation" json:"propagation,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 改写后的事件载荷。
+	EventPayload *EventPayload `protobuf:"bytes,1,opt,name=event_payload,json=eventPayload,proto3" json:"event_payload,omitempty"`
+	// Hook 设置的传播标记。
+	Propagation   Propagation `protobuf:"varint,2,opt,name=propagation,proto3,enum=alonabot.v1.Propagation" json:"propagation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -679,12 +706,17 @@ func (x *PreEventResult) GetPropagation() Propagation {
 	return Propagation_PROPAGATION_UNSPECIFIED
 }
 
+// BeforeSendRequest 是 BeforeSend Hook 的请求。
 type BeforeSendRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RouteId       string                 `protobuf:"bytes,1,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
-	Context       *InvocationContext     `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`
-	Target        *Target                `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
-	Chain         *MessageChain          `protobuf:"bytes,4,opt,name=chain,proto3" json:"chain,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 被调用的 Hook 路由 ID。
+	RouteId string `protobuf:"bytes,1,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
+	// 可信调用上下文。
+	Context *InvocationContext `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`
+	// 本次发送的目标。
+	Target *Target `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
+	// 待发送的消息链。
+	Chain         *MessageChain `protobuf:"bytes,4,opt,name=chain,proto3" json:"chain,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -747,10 +779,11 @@ func (x *BeforeSendRequest) GetChain() *MessageChain {
 	return nil
 }
 
-// 只能修改 Chain；拒绝通过 Envelope.error。修改后的 Chain 重新完整预检。
+// BeforeSendResult 只能修改 Chain；拒绝通过 Envelope.error。修改后的 Chain 重新完整预检。
 type BeforeSendResult struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chain         *MessageChain          `protobuf:"bytes,1,opt,name=chain,proto3" json:"chain,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 修改后的消息链。
+	Chain         *MessageChain `protobuf:"bytes,1,opt,name=chain,proto3" json:"chain,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -792,14 +825,21 @@ func (x *BeforeSendResult) GetChain() *MessageChain {
 	return nil
 }
 
+// AfterSendRequest 是 AfterSend Hook 的请求，携带发送结果与可能的错误。
 type AfterSendRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RouteId       string                 `protobuf:"bytes,1,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
-	Context       *InvocationContext     `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`
-	Target        *Target                `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
-	Chain         *MessageChain          `protobuf:"bytes,4,opt,name=chain,proto3" json:"chain,omitempty"`
-	Result        *SendResult            `protobuf:"bytes,5,opt,name=result,proto3" json:"result,omitempty"`
-	Error         *ErrorInfo             `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 被调用的 Hook 路由 ID。
+	RouteId string `protobuf:"bytes,1,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
+	// 可信调用上下文。
+	Context *InvocationContext `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`
+	// 本次发送的目标。
+	Target *Target `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
+	// 实际发送的消息链。
+	Chain *MessageChain `protobuf:"bytes,4,opt,name=chain,proto3" json:"chain,omitempty"`
+	// 已确认的发送结果，可能是部分成功。
+	Result *SendResult `protobuf:"bytes,5,opt,name=result,proto3" json:"result,omitempty"`
+	// 发送失败时的错误；与 result 可以并存。
+	Error         *ErrorInfo `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -876,7 +916,7 @@ func (x *AfterSendRequest) GetError() *ErrorInfo {
 	return nil
 }
 
-// AfterSend 只返回成功或 Envelope.error，不能修改 SendResult。
+// AfterSendResult 是 AfterSend 的结果：只返回成功或 Envelope.error，不能修改 SendResult。
 type AfterSendResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
