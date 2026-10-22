@@ -1,0 +1,44 @@
+# 收集可复现缺陷及实际运行环境，并指派维护者跟进。
+name: Bug 报告
+description: 报告可以复现的行为、协议或运行故障。
+title: "[Bug] "
+labels: [bug]
+assignees: [FlanChanXwO]
+body:
+  - type: markdown
+    attributes:
+      value: 请先移除 Bot Token、Session Secret、数据库凭证和真实用户数据。
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 预期行为与实际结果
+      description: 如涉及规格，请附对应 T/V 编号或章节。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 最小复现步骤
+      description: 提供可脱敏复现的命令、插件示例或输入，不上传真实 data_dir。
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本或 commit
+      description: 填写正在运行的 commit SHA、分支或发布版本；当前没有正式版本时使用 SHA。
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: OS/arch
+      options: [linux/amd64, linux/arm64, windows/amd64, darwin/amd64, darwin/arm64, 其他]
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 脱敏日志与补充信息
+      description: 保留相关错误原文，并注明 TCP/stdio、数据库后端及复现频率。
+      render: text
