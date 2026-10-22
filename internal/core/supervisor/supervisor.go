@@ -1,5 +1,5 @@
-// Package supervisor 把状态库、进程、传输与 Session 生命周期装配成「启动 / 停止一个插件」的完整流程
-// （PLAN T-02 第 8 步）。正式的安装、Journal 与恢复编排由 T-09 在此基础上扩展。
+// Package supervisor 把状态库、进程、传输与 Session 生命周期装配成「启动 / 停止一个插件」的完整流程。
+// 尚不含正式的安装、Journal 与恢复编排。
 package supervisor
 
 import (

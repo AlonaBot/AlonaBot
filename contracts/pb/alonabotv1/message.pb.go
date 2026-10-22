@@ -2199,7 +2199,7 @@ func (x *ForwardItem) GetChain() *MessageChain {
 	return nil
 }
 
-// ForwardSource 是转发条目的来源展示信息；规格只写了 source?，结构由 T-01 确定。
+// ForwardSource 是转发条目的来源展示信息。
 type ForwardSource struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 来源展示名。

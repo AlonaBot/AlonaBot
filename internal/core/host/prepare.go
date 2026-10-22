@@ -1,5 +1,5 @@
 // Package host 是 Core 侧单个插件 Session 的生命周期编排（CONTRACTS §1.1、§4、§12.1）：
-// 握手与认证、Bootstrap 下发、REGISTER 原子校验、PREPARED；提交与激活见 activate.go（G1-17）。
+// 握手与认证、Bootstrap 下发、REGISTER 原子校验、PREPARED；提交与激活见 activate.go。
 package host
 
 import (
@@ -97,7 +97,7 @@ type Prepared struct {
 
 // Prepare 在一条刚建立的连接上完成 HELLO → HELLO_ACK(Bootstrap) → REGISTER → PREPARED。
 // 认证失败直接关闭且不回复细节；认证之后的失败发送 SESSION_ERROR 再关闭。任何失败都不留下注册结果。
-// 成功返回后连接交给 wire.Session 继续（ACTIVATE 见 G1-17）。
+// 成功返回后连接交给 wire.Session 继续（ACTIVATE 见 activate.go）。
 func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstrap, lim Limits) (*Prepared, error) {
 	// watchdog：阶段超时即关闭连接，阻塞中的读写随之返回；stage 每次送入新阶段的预算。
 	stage := make(chan time.Duration, 1)

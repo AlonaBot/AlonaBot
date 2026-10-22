@@ -125,7 +125,7 @@ func TestForeignKeysEnforced(t *testing.T) {
 	}
 }
 
-// backupTo 用 modernc 的在线 Backup API 把 src 复制到 dst（T-08 在 Core 侧复用同一做法）。
+// backupTo 用 modernc 的在线 Backup API 把 src 复制到 dst。
 func backupTo(ctx context.Context, src *sql.DB, dst string) error {
 	conn, err := src.Conn(ctx)
 	if err != nil {

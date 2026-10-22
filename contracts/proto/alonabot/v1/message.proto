@@ -322,7 +322,7 @@ message ForwardItem {
   MessageChain chain = 2;
 }
 
-// ForwardSource 是转发条目的来源展示信息；规格只写了 source?，结构由 T-01 确定。
+// ForwardSource 是转发条目的来源展示信息。
 message ForwardSource {
   // 来源展示名。
   optional string display_name = 1;

@@ -1,6 +1,6 @@
 // Package state 管理 Core 元数据库 <data_dir>/state.sqlite 与 <data_dir>/core.lock
-// （CONTRACTS §6.1、§12.2）。T-02 只交付共同原语：实例锁、状态库、最小表与提交事务；
-// 候选资源引用、完整 Journal 与恢复编排由 T-08/T-09 在同一实现上扩展。
+// （CONTRACTS §6.1、§12.2）：实例锁、状态库、最小表与提交事务。
+// 尚不含候选资源引用、完整 Journal 与恢复编排。
 package state
 
 import (
@@ -258,7 +258,7 @@ func (s *Store) LockPlugin(pluginID string) (unlock func()) {
 	return m.Unlock
 }
 
-// Install 是最小安装记录；来源绑定、pin、卸载保留等由 T-09 扩展。
+// Install 是最小安装记录；尚不含来源绑定、pin、卸载保留等信息。
 type Install struct {
 	// PluginID 是插件 ID，主键。
 	PluginID string
@@ -295,7 +295,7 @@ func (s *Store) GetInstall(ctx context.Context, pluginID string) (Install, error
 	return in, err
 }
 
-// AddGeneration 持久化一个候选代次（尚未提交）。配置快照只能含 secret 引用，不含明文（T-08）。
+// AddGeneration 持久化一个候选代次（尚未提交）。配置快照只能含 secret 引用，不含明文。
 func (s *Store) AddGeneration(ctx context.Context, pluginID, generationID, configSnapshot string, configVersion uint32) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO generations (generation_id, plugin_id, config_snapshot, config_version, created_at) VALUES (?, ?, ?, ?, ?)`,

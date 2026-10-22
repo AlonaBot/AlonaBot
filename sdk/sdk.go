@@ -1,7 +1,7 @@
 // Package sdk 是 AlonaBot Native Go 插件的公共入口：Context、注册器与生命周期接口。
 //
-// T-01 只固定可编译的公共类型与注册收集（Collect）；与 Core 通信的运行行为（Run、Send）
-// 从 T-02 起实现，在此之前返回 UNSUPPORTED 错误，不 panic，也不假装成功。
+// Run 完成取锁、握手、准备、激活与停止；业务分发、Send、HTTP 路由与定时任务尚未实现，
+// 返回 UNSUPPORTED 错误，不 panic，也不假装成功。
 package sdk
 
 import (
@@ -112,13 +112,13 @@ func Run(root plugin.Root) error {
 	}
 	defer lock.Unlock()
 
-	// 2. 收集静态注册项；HTTP 需要真实 Listener、调度需要 Core Scheduler（T-07），不静默丢弃这些声明。
+	// 2. 收集静态注册项；HTTP 需要真实 Listener、调度需要 Core Scheduler，不静默丢弃这些声明。
 	reg, err := Collect(root)
 	if err != nil {
 		return err
 	}
 	if len(reg.HTTP) > 0 || len(reg.Schedules) > 0 {
-		return &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "本版 SDK 尚不支持 HTTP 路由与定时任务（T-07）"}
+		return &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "本版 SDK 尚不支持 HTTP 路由与定时任务"}
 	}
 
 	// 3. 连接 Core 并依次完成握手、准备与激活，然后进入服务循环。

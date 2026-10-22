@@ -1,7 +1,7 @@
 //go:build unix
 
 // 本文件以真实的 alonabot 与 SDK 插件进程做端到端验收：两种传输的生命周期、restart、双 Core 互斥、
-// Core 被杀后的恢复与相对 data_dir。依赖 Unix 信号与进程组语义；Windows 上的运行证据由 T-10 补齐。
+// Core 被杀后的恢复与相对 data_dir。依赖 Unix 信号与进程组语义。
 
 package main
 

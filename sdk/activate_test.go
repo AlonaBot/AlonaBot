@@ -75,7 +75,7 @@ func TestActivateGateOpensAfterActivatedWritten(t *testing.T) {
 	if err := <-errc; err != nil {
 		t.Fatal(err)
 	}
-	// 就绪之后的请求通过门禁（B1 业务分发尚未实现，回 UNSUPPORTED 而不是 FAILED_PRECONDITION）。
+	// 就绪之后的请求通过门禁（业务分发尚未实现，回 UNSUPPORTED 而不是 FAILED_PRECONDITION）。
 	_ = core.conn.WriteFrame(coreRequest(2))
 	resp, err = core.conn.ReadFrame()
 	if err != nil || resp.GetError().GetCode() != pb.ErrorCode_ERROR_CODE_UNSUPPORTED {

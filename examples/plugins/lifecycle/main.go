@@ -1,4 +1,4 @@
-// lifecycle 是 T-02 可以真实运行的最小插件：由 Core 启动，走完 Hello → Bootstrap → REGISTER →
+// lifecycle 是可以真实运行的最小插件：由 Core 启动，走完 Hello → Bootstrap → REGISTER →
 // PREPARED → ACTIVATE/OnReady → ACTIVATED → STOPPING/OnStop → 退出。日志只写 stderr
 // （stdio 传输时 stdout 专用于协议帧）。
 package main

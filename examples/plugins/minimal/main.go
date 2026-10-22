@@ -1,5 +1,5 @@
-// minimal 是 T-01 的签名组合示例：一个根插件、两类 Handler、StopPropagation、
-// 配置回调、HTTP Handler 与一个定时任务。运行行为从 T-02 起由 SDK 提供。
+// minimal 是 SDK 公共签名的组合示例：一个根插件、两类 Handler、StopPropagation、
+// 配置回调、HTTP Handler 与一个定时任务。SDK 尚不支持 HTTP 路由与定时任务，直接运行时 Run 返回 UNSUPPORTED。
 package main
 
 import (
