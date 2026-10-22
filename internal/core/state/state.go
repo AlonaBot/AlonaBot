@@ -20,7 +20,9 @@ import (
 )
 
 const (
-	lockFile  = "core.lock"
+	// lockFile 是 data_dir 下的 Core 实例锁。
+	lockFile = "core.lock"
+	// stateFile 是 data_dir 下的状态库。
 	stateFile = "state.sqlite"
 	// 连接级设置，驱动对每个物理连接执行；单连接，见 CONTRACTS §6.1。
 	pragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
@@ -37,17 +39,21 @@ var (
 
 // Store 是持有 core.lock 的状态库；同一进程内只应有一个。
 type Store struct {
-	db   *sql.DB
+	// db 是单连接的状态库句柄。
+	db *sql.DB
+	// lock 是 core.lock，Close 时释放。
 	lock *oslock.Lock
 
-	mu      sync.Mutex
+	// mu 保护 pluginM。
+	mu sync.Mutex
+	// pluginM 是逐插件管理锁，按插件 ID 惰性创建，不回收。
 	pluginM map[string]*sync.Mutex
 }
 
 // Open 先取得 core.lock，再打开（首次启动时创建）state.sqlite 并核对连接设置与 schema。
 // 已存在但无法读取、不是 SQLite 或缺少 schema 的状态库一律报错，不会重建成空库。
 func Open(ctx context.Context, dataDir string) (*Store, error) {
-	// 统一为绝对路径：预检使用的 file URI 只能表达绝对路径。
+	// 1. 统一为绝对路径：预检使用的 file URI 只能表达绝对路径。
 	dataDir, err := filepath.Abs(dataDir)
 	if err != nil {
 		return nil, fmt.Errorf("解析 data_dir 失败: %w", err)
@@ -55,12 +61,14 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("创建 data_dir 失败: %w", err)
 	}
+	// 2. 先取 core.lock，确保同一 data_dir 只有一个 Core 打开状态库。
 	lock, err := oslock.TryLock(filepath.Join(dataDir, lockFile))
 	if errors.Is(err, oslock.ErrLocked) {
 		return nil, fmt.Errorf("%w（%s）", ErrDataDirLocked, dataDir)
 	} else if err != nil {
 		return nil, err
 	}
+	// 3. 打开并核对状态库；失败时释放锁。
 	s, err := open(ctx, filepath.Join(dataDir, stateFile))
 	if err != nil {
 		_ = lock.Unlock()
@@ -70,6 +78,7 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	return s, nil
 }
 
+// open 打开 path 处的状态库：已有文件先只读预检，再以单连接、固定 PRAGMA 打开并核对设置与 schema。
 func open(ctx context.Context, path string) (*Store, error) {
 	if strings.ContainsAny(path, "?#") {
 		return nil, fmt.Errorf("状态库路径 %q 含 ?/#", path)
@@ -108,9 +117,13 @@ func (s *Store) Close() error {
 
 // Pragmas 是状态库连接上实际生效的设置。
 type Pragmas struct {
+	// JournalMode 应为 wal。
 	JournalMode string
-	Synchronous int // FULL = 2
+	// Synchronous 应为 2（FULL）。
+	Synchronous int
+	// ForeignKeys 应为 1（开启）。
 	ForeignKeys int
+	// BusyTimeout 是忙等待毫秒数，应为 5000。
 	BusyTimeout int
 }
 
@@ -126,6 +139,7 @@ func (s *Store) ReadPragmas(ctx context.Context) (Pragmas, error) {
 	return p, err
 }
 
+// verify 核对连接设置确实生效，然后执行 schema 迁移；fresh 表示文件是本次新建的。
 func (s *Store) verify(ctx context.Context, fresh bool) error {
 	p, err := s.ReadPragmas(ctx)
 	if err != nil {
@@ -217,6 +231,7 @@ func (s *Store) migrate(ctx context.Context, fresh bool) error {
 	return nil
 }
 
+// tx 在一个事务中执行 fn：fn 返回错误时回滚，否则提交。
 func (s *Store) tx(ctx context.Context, fn func(*sql.Tx) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -245,9 +260,13 @@ func (s *Store) LockPlugin(pluginID string) (unlock func()) {
 
 // Install 是最小安装记录；来源绑定、pin、卸载保留等由 T-09 扩展。
 type Install struct {
-	PluginID    string
-	Source      string
-	Entrypoint  string
+	// PluginID 是插件 ID，主键。
+	PluginID string
+	// Source 是安装来源（开发模式为 dev-local）。
+	Source string
+	// Entrypoint 是入口可执行文件的路径。
+	Entrypoint string
+	// BuildDigest 是安装时已验证的归档摘要，经启动上下文交给 SDK 回显。
 	BuildDigest []byte
 }
 
@@ -288,6 +307,7 @@ func (s *Store) AddGeneration(ctx context.Context, pluginID, generationID, confi
 // expectedOld 为空表示首次激活。实际旧值不同返回 ErrStaleGeneration；事务内只操作元数据，不等待插件 RPC。
 func (s *Store) CommitActive(ctx context.Context, pluginID, expectedOld, newGen string) error {
 	return s.tx(ctx, func(tx *sql.Tx) error {
+		// 1. 核对当前 Active 等于调用方预期的旧值。
 		var current sql.NullString
 		err := tx.QueryRowContext(ctx, "SELECT active_generation FROM plugin_state WHERE plugin_id = ?", pluginID).Scan(&current)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -298,6 +318,7 @@ func (s *Store) CommitActive(ctx context.Context, pluginID, expectedOld, newGen 
 		if current.String != expectedOld {
 			return fmt.Errorf("%w：预期 %q，实际 %q", ErrStaleGeneration, expectedOld, current.String)
 		}
+		// 2. 给新代次写入 COMMITTED 标记；它必须存在、属于该插件且从未提交过。
 		res, err := tx.ExecContext(ctx,
 			"UPDATE generations SET committed_at = ? WHERE generation_id = ? AND plugin_id = ? AND committed_at IS NULL",
 			time.Now().UnixMilli(), newGen, pluginID)
@@ -307,6 +328,7 @@ func (s *Store) CommitActive(ctx context.Context, pluginID, expectedOld, newGen 
 		if n, _ := res.RowsAffected(); n != 1 {
 			return fmt.Errorf("代次 %s 不存在、不属于插件 %s 或已提交过", newGen, pluginID)
 		}
+		// 3. 切换 Active。
 		_, err = tx.ExecContext(ctx, "UPDATE plugin_state SET active_generation = ? WHERE plugin_id = ?", newGen, pluginID)
 		return err
 	})

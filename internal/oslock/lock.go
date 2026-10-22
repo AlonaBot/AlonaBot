@@ -16,6 +16,7 @@ var ErrLocked = errors.New("锁已被占用")
 
 // Lock 是一把已持有的独占锁。
 type Lock struct {
+	// f 是持有锁的文件句柄；Unlock 后为 nil。
 	f *os.File
 }
 

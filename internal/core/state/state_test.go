@@ -1,3 +1,4 @@
+// 本文件测试状态库：PRAGMA 与重开、core.lock 互斥、提交事务的预期旧值、损坏库不重建、schema 版本与逐插件锁。
 package state
 
 import (
@@ -16,7 +17,7 @@ import (
 	"testing"
 )
 
-// 子进程模式：以另一个 Core 的身份打开 data_dir 并持有，直到 stdin 关闭。
+// TestMain 在设置 STATE_HOLD_DIR 时作为子进程运行：以另一个 Core 的身份打开 data_dir 并持有，直到 stdin 关闭。
 func TestMain(m *testing.M) {
 	if dir := os.Getenv("STATE_HOLD_DIR"); dir != "" {
 		s, err := Open(context.Background(), dir)
@@ -32,6 +33,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// mustOpen 打开 dir 的状态库，测试结束时关闭。
 func mustOpen(t *testing.T, dir string) *Store {
 	t.Helper()
 	s, err := Open(context.Background(), dir)
@@ -42,6 +44,7 @@ func mustOpen(t *testing.T, dir string) *Store {
 	return s
 }
 
+// 连接设置实际生效；关闭重开后记录保留，schema 为最新版本。
 func TestOpenPragmasAndReopen(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -69,6 +72,7 @@ func TestOpenPragmasAndReopen(t *testing.T) {
 	}
 }
 
+// 同一进程内再次打开同一 data_dir 被拒绝。
 func TestSecondCoreRejectedInProcess(t *testing.T) {
 	dir := t.TempDir()
 	mustOpen(t, dir)
@@ -77,6 +81,7 @@ func TestSecondCoreRejectedInProcess(t *testing.T) {
 	}
 }
 
+// 另一进程持有 data_dir 时打开被拒绝；持有者退出后可以打开。
 func TestSecondCoreRejectedAcrossProcesses(t *testing.T) {
 	dir := t.TempDir()
 	cmd := exec.Command(os.Args[0], "-test.run=^$")
@@ -99,6 +104,7 @@ func TestSecondCoreRejectedAcrossProcesses(t *testing.T) {
 	mustOpen(t, dir) // 持有者确认退出后可以启动
 }
 
+// CommitActive 核对预期旧代次，拒绝陈旧候选、重复提交、他人或不存在的代次；启用状态可持久化。
 func TestCommitActiveChecksExpectedOld(t *testing.T) {
 	ctx := context.Background()
 	s := mustOpen(t, t.TempDir())
@@ -107,7 +113,12 @@ func TestCommitActiveChecksExpectedOld(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, g := range []struct{ plugin, gen string }{{"a", "a-g1"}, {"a", "a-g2"}, {"a", "a-g3"}, {"b", "b-g1"}} {
+	for _, g := range []struct {
+		// plugin 是代次所属插件。
+		plugin string
+		// gen 是代次 ID。
+		gen string
+	}{{"a", "a-g1"}, {"a", "a-g2"}, {"a", "a-g3"}, {"b", "b-g1"}} {
 		if err := s.AddGeneration(ctx, g.plugin, g.gen, `{}`, 1); err != nil {
 			t.Fatal(err)
 		}
@@ -151,6 +162,7 @@ func TestCommitActiveChecksExpectedOld(t *testing.T) {
 	}
 }
 
+// 垃圾内容、空文件或其他 SQLite 库都拒绝打开，文件不被改写，且失败后释放 core.lock。
 func TestCorruptStateNotRebuilt(t *testing.T) {
 	foreign := func(t *testing.T, path string) {
 		db, err := sql.Open("sqlite", path)
@@ -194,6 +206,7 @@ func TestCorruptStateNotRebuilt(t *testing.T) {
 	}
 }
 
+// schema 版本高于本程序支持的版本时拒绝打开。
 func TestNewerSchemaRejected(t *testing.T) {
 	dir := t.TempDir()
 	s, err := Open(context.Background(), dir)
@@ -209,6 +222,7 @@ func TestNewerSchemaRejected(t *testing.T) {
 	}
 }
 
+// 同一插件的管理锁互斥，不同插件互不阻塞。
 func TestLockPluginSerializesSamePlugin(t *testing.T) {
 	s := mustOpen(t, t.TempDir())
 	var inside, maxInside atomic.Int32

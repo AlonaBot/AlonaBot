@@ -1,3 +1,4 @@
+// 本文件测试独占文件锁：同进程与跨进程的互斥、重复解锁、锁文件保留，以及持有进程退出后锁被释放。
 package oslock
 
 import (
@@ -10,7 +11,7 @@ import (
 	"testing"
 )
 
-// 子进程模式：持有锁，输出一行 "locked"，直到 stdin 关闭后退出（父进程不用 sleep 判断状态）。
+// TestMain 在设置 OSLOCK_HOLD 时作为子进程运行：持有锁，输出一行 "locked"，直到 stdin 关闭后退出（父进程不用 sleep 判断状态）。
 func TestMain(m *testing.M) {
 	if path := os.Getenv("OSLOCK_HOLD"); path != "" {
 		l, err := TryLock(path)
@@ -26,6 +27,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// 同一进程再次加锁失败；重复 Unlock 无副作用；解锁后锁文件保留且可以再次加锁。
 func TestSameProcessSecondLockFails(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "x.lock")
 	l, err := TryLock(path)
@@ -51,6 +53,7 @@ func TestSameProcessSecondLockFails(t *testing.T) {
 	_ = l2.Unlock()
 }
 
+// 另一进程持锁时加锁失败；持有进程确认退出后可以加锁。
 func TestCrossProcessLock(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "x.lock")
 	cmd := exec.Command(os.Args[0], "-test.run=^$")
