@@ -1,5 +1,6 @@
 //go:build unix
 
+// 本文件用 Unix 进程组实现插件进程树的终止与清空确认。
 package process
 
 import (
@@ -9,16 +10,22 @@ import (
 )
 
 // tree 是 Unix 进程组：子进程在 Start 时成为新进程组的组长，孙进程默认留在组内。
-type tree struct{ pgid int }
+type tree struct {
+	// pgid 是进程组 ID，等于领头进程的 pid。
+	pgid int
+}
 
+// prepareTree 让子进程在启动时成为新进程组的组长。
 func prepareTree(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
 
+// attachTree 记录已启动子进程的进程组。
 func attachTree(cmd *exec.Cmd) (*tree, error) {
 	return &tree{pgid: cmd.Process.Pid}, nil
 }
 
+// kill 向整个进程组发送 SIGKILL；组内已没有进程时视为成功。
 func (t *tree) kill() error {
 	err := syscall.Kill(-t.pgid, syscall.SIGKILL)
 	if errors.Is(err, syscall.ESRCH) {
@@ -36,4 +43,5 @@ func (t *tree) empty() (bool, error) {
 	return false, err
 }
 
+// release 无需释放资源：进程组不占用句柄。
 func (t *tree) release() error { return nil }

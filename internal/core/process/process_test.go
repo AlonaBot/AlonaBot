@@ -1,3 +1,4 @@
+// 本文件测试插件进程的启动：精简环境、带插件 ID 的日志、退出状态、stdio 管道、入口路径与 runtime.lock。
 package process
 
 import (
@@ -17,9 +18,10 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
+// helperEnv 选择测试二进制作为辅助进程时的行为。
 const helperEnv = "PROCESS_TEST_HELPER"
 
-// 辅助进程模式：由测试二进制重入执行，模拟插件进程。
+// TestMain 在设置 helperEnv 时作为辅助进程运行：由测试二进制重入执行，模拟插件进程。
 func TestMain(m *testing.M) {
 	switch os.Getenv(helperEnv) {
 	case "":
@@ -55,23 +57,29 @@ func TestMain(m *testing.M) {
 	os.Exit(0)
 }
 
+// logSink 收集 LogFunc 输出的日志行。
 type logSink struct {
-	mu    sync.Mutex
+	// mu 保护 lines。
+	mu sync.Mutex
+	// lines 是「插件ID|流|内容」形式的日志行。
 	lines []string
 }
 
+// log 是 LogFunc，记录一行日志。
 func (l *logSink) log(pluginID, stream string, line []byte) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.lines = append(l.lines, pluginID+"|"+stream+"|"+string(line))
 }
 
+// all 返回已收集日志的副本。
 func (l *logSink) all() []string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return append([]string(nil), l.lines...)
 }
 
+// spec 构造以 mode 运行辅助进程的启动描述，extra 叠加到会话变量中。
 func spec(mode string, extra map[string]string) Spec {
 	env := map[string]string{helperEnv: mode}
 	for k, v := range extra {
@@ -80,6 +88,7 @@ func spec(mode string, extra map[string]string) Spec {
 	return Spec{PluginID: "demo", Path: os.Args[0], Args: []string{"-test.run=^$"}, Env: env}
 }
 
+// 插件只收到白名单变量与会话变量，Core 的管理凭证与其他插件的凭证不会泄漏。
 func TestMinimalEnvWithoutAdminCredentials(t *testing.T) {
 	t.Setenv("ALONABOT_ADMIN_TOKEN", "must-not-leak")
 	t.Setenv("OTHER_PLUGIN_SECRET", "must-not-leak")
@@ -122,6 +131,7 @@ func TestMinimalEnvWithoutAdminCredentials(t *testing.T) {
 	}
 }
 
+// stdout/stderr 日志带插件 ID 前缀，超过 64 KiB 的行分块完整转发。
 func TestLogsTaggedWithPluginID(t *testing.T) {
 	logs := &logSink{}
 	p, err := Start(spec("log", nil), logs.log)
@@ -146,6 +156,7 @@ func TestLogsTaggedWithPluginID(t *testing.T) {
 	}
 }
 
+// 退出码如实记录在 ExitState 中。
 func TestExitStatus(t *testing.T) {
 	p, err := Start(spec("exit3", nil), (&logSink{}).log)
 	if err != nil {
@@ -157,6 +168,7 @@ func TestExitStatus(t *testing.T) {
 	}
 }
 
+// stdio 模式下 stdin/stdout 是协议管道、不进入日志，stderr 进入日志；Release 关闭管道端且可重复调用。
 func TestStdioTransportPipes(t *testing.T) {
 	s := spec("stdio-echo", nil)
 	s.Stdio = true
@@ -193,6 +205,7 @@ func TestStdioTransportPipes(t *testing.T) {
 	}
 }
 
+// 入口必须是包内存在的可执行普通文件，越界或绝对路径被拒绝。
 func TestEntrypoint(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "bin", "demo")

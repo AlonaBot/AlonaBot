@@ -1,5 +1,6 @@
 //go:build unix
 
+// 本文件测试 Unix 进程组的终止：组内孙进程随 KillTree 一并消失。
 package process
 
 import (

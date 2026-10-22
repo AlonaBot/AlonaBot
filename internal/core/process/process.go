@@ -63,29 +63,44 @@ func StderrLog(pluginID, stream string, line []byte) {
 
 // Spec 描述一次插件进程启动。
 type Spec struct {
+	// PluginID 是插件 ID，用于日志前缀与错误信息。
 	PluginID string
-	Path     string            // 可执行文件绝对路径
-	Dir      string            // 工作目录（插件目录）；不构成文件访问限制
-	Args     []string          // 不含 argv[0]
-	Env      map[string]string // 会话变量（wire.Env*），叠加在白名单继承变量之上
-	Stdio    bool              // true：stdin/stdout 作为协议传输，只有 stderr 是日志
+	// Path 是可执行文件绝对路径。
+	Path string
+	// Dir 是工作目录（插件目录）；不构成文件访问限制。
+	Dir string
+	// Args 是命令行参数，不含 argv[0]。
+	Args []string
+	// Env 是会话变量（wire.Env*），叠加在白名单继承变量之上。
+	Env map[string]string
+	// Stdio 为 true 时 stdin/stdout 作为协议传输，只有 stderr 是日志。
+	Stdio bool
 }
 
 // Process 是一个受管的插件进程及其进程树。
 type Process struct {
+	// PluginID 是插件 ID。
 	PluginID string
-	// Stdio 模式下的协议管道（Core 写 Stdin、读 Stdout）；TCP 模式为 nil。
-	Stdin  io.WriteCloser
+	// Stdin 是 stdio 模式下 Core 写协议帧的管道；TCP 模式为 nil。
+	Stdin io.WriteCloser
+	// Stdout 是 stdio 模式下 Core 读协议帧的管道；TCP 模式为 nil。
 	Stdout io.ReadCloser
 
-	cmd    *exec.Cmd
-	tree   *tree
+	// cmd 是领头进程。
+	cmd *exec.Cmd
+	// tree 是进程组或 Job Object。
+	tree *tree
+	// exited 在领头进程被 Wait 回收后关闭。
 	exited chan struct{}
-	logs   sync.WaitGroup
+	// logs 等待各日志转发 goroutine 结束。
+	logs sync.WaitGroup
 
-	mu    sync.Mutex
+	// mu 保护 state 与 err。
+	mu sync.Mutex
+	// state 是领头进程的退出状态；退出前为 nil。
 	state *os.ProcessState
-	err   error
+	// err 是 cmd.Wait 的返回值。
+	err error
 }
 
 // Start 以精简环境启动插件进程，并把它放进新的进程组/Job Object。
@@ -93,6 +108,7 @@ func Start(spec Spec, logf LogFunc) (*Process, error) {
 	if logf == nil {
 		logf = StderrLog
 	}
+	// 1. 准备命令：精简环境，并让子进程进入新的进程组（Windows 在启动后加入 Job）。
 	cmd := exec.Command(spec.Path, spec.Args...)
 	cmd.Dir = spec.Dir
 	cmd.Env = buildEnv(spec.Env)
@@ -100,17 +116,19 @@ func Start(spec Spec, logf LogFunc) (*Process, error) {
 
 	p := &Process{PluginID: spec.PluginID, cmd: cmd, exited: make(chan struct{})}
 	var parentEnds, childEnds []*os.File
+	// closeAll 关闭一组管道端，用于失败路径的清理。
 	closeAll := func(fs []*os.File) {
 		for _, f := range fs {
 			_ = f.Close()
 		}
 	}
+	// pipe 创建一对 *os.File 管道端。
 	pipe := func() (r, w *os.File, err error) {
 		r, w, err = os.Pipe()
 		return
 	}
 
-	// 自行创建管道并把写端以 *os.File 交给子进程：exec 不会额外启动复制 goroutine，
+	// 2. 自行创建管道并把写端以 *os.File 交给子进程：exec 不会额外启动复制 goroutine，
 	// cmd.Wait 只等待进程本身退出，不会被仍持有管道的孙进程拖住。
 	errR, errW, err := pipe()
 	if err != nil {
@@ -149,6 +167,7 @@ func Start(spec Spec, logf LogFunc) (*Process, error) {
 		childEnds = append(childEnds, w)
 	}
 
+	// 3. 启动并建立进程树管理；失败时终止已启动的进程并关闭全部管道端。
 	if err := cmd.Start(); err != nil {
 		closeAll(parentEnds)
 		closeAll(childEnds)
@@ -164,6 +183,7 @@ func Start(spec Spec, logf LogFunc) (*Process, error) {
 	}
 	p.tree = t
 
+	// 4. 转发日志，并在后台回收领头进程、记录退出状态。
 	p.pump("stderr", errR, logf)
 	if outR != nil {
 		p.pump("stdout", outR, logf)
@@ -178,6 +198,7 @@ func Start(spec Spec, logf LogFunc) (*Process, error) {
 	return p, nil
 }
 
+// buildEnv 从 Core 环境中只继承白名单变量，再叠加会话变量。
 func buildEnv(extra map[string]string) []string {
 	var env []string
 	for _, k := range inheritedEnv {
