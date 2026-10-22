@@ -1,3 +1,4 @@
+// 本文件测试 release.json 的签名校验与内容校验。
 package release
 
 import (
@@ -11,12 +12,13 @@ import (
 	"testing"
 )
 
-// 仅用于测试的固定密钥；不用于任何真实发布。
+// testKey 返回仅用于测试的固定密钥；不用于任何真实发布。
 func testKey() (ed25519.PublicKey, ed25519.PrivateKey) {
 	priv := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{7}, ed25519.SeedSize))
 	return priv.Public().(ed25519.PublicKey), priv
 }
 
+// placeholderKeyID 是 fixture 中待替换为测试公钥标识的占位值。
 const placeholderKeyID = "ed25519:0000000000000000000000000000000000000000000000000000000000000000"
 
 // signedFixture 返回带测试公钥标识的 release.json 原始字节及其签名文件内容。
@@ -35,6 +37,7 @@ func signedFixture(t *testing.T, edit func(string) string) (raw, sigFile []byte)
 	return raw, []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(priv, raw)) + "\n")
 }
 
+// 用信任公钥签名的 fixture 通过，资产可按平台取出。
 func TestVerifyOK(t *testing.T) {
 	pub, _ := testKey()
 	raw, sig := signedFixture(t, nil)
@@ -47,6 +50,7 @@ func TestVerifyOK(t *testing.T) {
 	}
 }
 
+// 内容被改、公钥不受信任或签名文件损坏时验签失败。
 func TestVerifyRejectsBadSignature(t *testing.T) {
 	pub, _ := testKey()
 	raw, sig := signedFixture(t, nil)
@@ -85,9 +89,19 @@ func TestVerifyUsesExactBytes(t *testing.T) {
 	}
 }
 
+// 签名有效但内容不合法时，由内容校验拒绝。
 func TestVerifyRejectsContent(t *testing.T) {
 	pub, _ := testKey()
-	cases := []struct{ name, old, new, wantErr string }{
+	cases := []struct {
+		// name 是子测试名。
+		name string
+		// old 是 fixture 中被替换的原文。
+		old string
+		// new 是替换后的文本。
+		new string
+		// wantErr 是错误信息中应包含的片段。
+		wantErr string
+	}{
 		{"未知字段", `"source"`, `"extra": 1, "source"`, "unknown field"},
 		{"非 https", "https://github.com/AlonaBot/rss/releases/download/v1.2.0/alonabot_plugin_rss_feed-1.2.0-linux", "http://github.com/AlonaBot/rss/releases/download/v1.2.0/alonabot_plugin_rss_feed-1.2.0-linux", "https"},
 		{"大写摘要", "9f86d081884c7d659a2feaa0c55ad015", "9F86D081884C7D659A2FEAA0C55AD015", "sha256"},

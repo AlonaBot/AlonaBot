@@ -20,24 +20,33 @@ import (
 
 // Release 对应 release.json。
 type Release struct {
-	// KeyID(发布者公钥)。
+	// PublisherKeyID 是发布者公钥的 KeyID，必须与验签公钥一致。
 	PublisherKeyID string `json:"publisher_key_id"`
-	// 绑定的仓库来源，例如 github.com/owner/repo。
-	Source   string  `json:"source"`
-	PluginID string  `json:"plugin_id"`
-	Version  string  `json:"version"`
-	Assets   []Asset `json:"assets"`
+	// Source 是绑定的仓库来源，例如 github.com/owner/repo。
+	Source string `json:"source"`
+	// PluginID 是插件 ID，规则同 manifest。
+	PluginID string `json:"plugin_id"`
+	// Version 是发布版本，SemVer 2.0。
+	Version string `json:"version"`
+	// Assets 是各平台的归档，每个平台最多一个。
+	Assets []Asset `json:"assets"`
 }
 
 // Asset 是某个 OS/arch 的归档；SHA256 是整个 tar.gz 的摘要（小写十六进制）。
 type Asset struct {
-	OS     string `json:"os"`
-	Arch   string `json:"arch"`
-	URL    string `json:"url"`
-	Size   int64  `json:"size"`
+	// OS 是目标 GOOS。
+	OS string `json:"os"`
+	// Arch 是目标 GOARCH。
+	Arch string `json:"arch"`
+	// URL 是归档的 https 绝对地址。
+	URL string `json:"url"`
+	// Size 是归档字节数，必须为正。
+	Size int64 `json:"size"`
+	// SHA256 是整个归档的摘要，64 位小写十六进制。
 	SHA256 string `json:"sha256"`
 }
 
+// sha256Hex 匹配 64 位小写十六进制的 SHA256。
 var sha256Hex = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // KeyID 返回公钥标识：ed25519: 加公钥 SHA256 的小写十六进制。
@@ -60,6 +69,7 @@ func DecodeSignature(sigFile []byte) ([]byte, error) {
 
 // Verify 用已信任的公钥对 release.json 的原始字节验签，通过后才解析并校验内容。
 func Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*Release, error) {
+	// 1. 对原始字节验签，签名不对时不解析内容。
 	if len(pub) != ed25519.PublicKeySize {
 		return nil, errors.New("公钥长度错误")
 	}
@@ -71,6 +81,7 @@ func Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*Release, error) {
 		return nil, errors.New("release.json 签名校验失败")
 	}
 
+	// 2. 严格解析：未知字段或对象之后的多余内容都拒绝。
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	var r Release
@@ -80,6 +91,7 @@ func Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*Release, error) {
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 		return nil, errors.New("release.json 在 JSON 对象之后还有多余内容")
 	}
+	// 3. 声明的发布者必须就是验签公钥，再校验各字段。
 	if r.PublisherKeyID != KeyID(pub) {
 		return nil, fmt.Errorf("publisher_key_id %q 与验签公钥 %s 不符", r.PublisherKeyID, KeyID(pub))
 	}
@@ -89,6 +101,7 @@ func Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*Release, error) {
 	return &r, nil
 }
 
+// validate 校验插件 ID、来源、版本，以及每个资产的平台、大小、摘要和 URL。
 func (r *Release) validate() error {
 	if _, err := manifest.ValidateID(r.PluginID); err != nil {
 		return err

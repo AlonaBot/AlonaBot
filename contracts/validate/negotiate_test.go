@@ -1,3 +1,4 @@
+// 本文件测试协议版本与能力协商。
 package validate
 
 import (
@@ -6,6 +7,7 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
+// caps 把 name, version 成对参数转为能力列表。
 func caps(pairs ...any) []*pb.ProtocolCapability {
 	var out []*pb.ProtocolCapability
 	for i := 0; i < len(pairs); i += 2 {
@@ -14,13 +16,19 @@ func caps(pairs ...any) []*pb.ProtocolCapability {
 	return out
 }
 
+// Minor 取较小值、Major 必须一致、能力按 name+version 精确匹配，双方必需能力都要在交集中。
 func TestNegotiate(t *testing.T) {
 	core := Offer{Major: 1, Minor: 2, Supported: caps("send", 1, "media", 1, "bus", 1)}
 	cases := []struct {
-		name      string
-		peer      Offer
-		wantErr   bool
+		// name 是子测试名。
+		name string
+		// peer 是对端的声明。
+		peer Offer
+		// wantErr 为 true 表示协商应失败。
+		wantErr bool
+		// wantMinor 是期望的协商次版本。
 		wantMinor uint32
+		// wantInter 是期望的交集大小。
 		wantInter int
 	}{
 		{"Minor 取较小值", Offer{Major: 1, Minor: 0, Supported: caps("send", 1)}, false, 0, 1},

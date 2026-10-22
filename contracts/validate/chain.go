@@ -1,3 +1,4 @@
+// 本文件负责 MessageChain 与各类 Segment 的平台无关结构校验。
 package validate
 
 import (
@@ -21,7 +22,9 @@ func Chain(c *pb.MessageChain) error {
 	return nil
 }
 
+// chain 校验一条 Chain；at 是嵌套位置前缀（顶层为空），用于组成错误中的 segment 位置。
 func chain(c *pb.MessageChain, at string) error {
+	// 1. 逐个校验片段，并统计 reference/buttons 与可发送内容的数量。
 	segs := c.GetSegments()
 	if len(segs) == 0 {
 		return fmt.Errorf("%sChain 为空", at)
@@ -69,6 +72,7 @@ func chain(c *pb.MessageChain, at string) error {
 			return fmt.Errorf("%s: %w", pos, err)
 		}
 	}
+	// 2. 检查整条 Chain 的组合约束。
 	switch {
 	case refs > 1:
 		return fmt.Errorf("%s一条 Chain 最多一个 reference，实际 %d 个", at, refs)
@@ -80,7 +84,9 @@ func chain(c *pb.MessageChain, at string) error {
 	return nil
 }
 
+// text 校验文本片段：非空 UTF-8、format 与 entities 互斥，以及每个实体的范围与类型约束。
 func text(t *pb.TextSegment) error {
+	// 1. 文本本身与 format。
 	s := t.GetText()
 	if s == "" {
 		return fmt.Errorf("text 为空")
@@ -100,7 +106,7 @@ func text(t *pb.TextSegment) error {
 	if len(t.GetEntities()) == 0 {
 		return nil
 	}
-	// 只登记实体实际用到的起止偏移，扫描一遍文本判断它们是否落在字符边界上；
+	// 2. 只登记实体实际用到的起止偏移，扫描一遍文本判断它们是否落在字符边界上；
 	// 额外内存与实体数成正比，与文本长度无关（文本最长可达帧上限 4 MiB）。
 	boundary := make(map[int]bool, 2*len(t.GetEntities()))
 	for _, e := range t.GetEntities() {
@@ -118,6 +124,7 @@ func text(t *pb.TextSegment) error {
 	if _, ok := boundary[n]; ok {
 		boundary[n] = true
 	}
+	// 3. 逐个校验实体。
 	for i, e := range t.GetEntities() {
 		if err := entity(e, n, boundary); err != nil {
 			return fmt.Errorf("entities[%d]: %w", i, err)
@@ -126,6 +133,8 @@ func text(t *pb.TextSegment) error {
 	return nil
 }
 
+// entity 校验单个实体：类型已知、范围不越界且落在字符边界（boundary 由 text 计算），
+// url/external_user_id/language 只出现在对应类型上。
 func entity(e *pb.TextEntity, utf16Len int, boundary map[int]bool) error {
 	typ := e.GetType()
 	if typ == pb.EntityType_ENTITY_TYPE_UNSPECIFIED || !knownEnum(typ) {
@@ -157,6 +166,7 @@ func entity(e *pb.TextEntity, utf16Len int, boundary map[int]bool) error {
 	return nil
 }
 
+// media 校验媒体来源恰好设置一种且内容非空，https_url 必须是 https 绝对地址。
 func media(src *pb.MediaSource) error {
 	switch s := src.GetSource().(type) {
 	case *pb.MediaSource_MediaRef:
@@ -177,6 +187,7 @@ func media(src *pb.MediaSource) error {
 	return nil
 }
 
+// absoluteURL 报告 raw 是否为带主机名、协议属于 schemes 之一的绝对 URL。
 func absoluteURL(raw string, schemes ...string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
@@ -198,6 +209,7 @@ func filename(name string) error {
 	return nil
 }
 
+// reference 校验回复引用：必须有原消息 ID，给出 target 时四项标识齐全。
 func reference(r *pb.ReferenceSegment) error {
 	if r.GetOriginalPlatformMessageId() == "" {
 		return fmt.Errorf("reference 缺少 original_platform_message_id")
@@ -210,6 +222,7 @@ func reference(r *pb.ReferenceSegment) error {
 	return nil
 }
 
+// buttonRows 校验按钮键盘：至少一行，每行非空，每个按钮有 action_id 与 label，value 是合法 JSON。
 func buttonRows(b *pb.ButtonsSegment) error {
 	if len(b.GetRows()) == 0 {
 		return fmt.Errorf("buttons 没有任何行")
@@ -232,6 +245,7 @@ func buttonRows(b *pb.ButtonsSegment) error {
 	return nil
 }
 
+// forward 校验合并转发：至少一个条目，每个条目的 Chain 按嵌套位置递归校验。
 func forward(f *pb.ForwardSegment, pos string) error {
 	if len(f.GetItems()) == 0 {
 		return fmt.Errorf("forward 没有任何条目")

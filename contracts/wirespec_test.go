@@ -1,3 +1,4 @@
+// 本文件把生成类型的字段号与枚举值逐项对照 spec/WIRE-FORMAT.md，防止协议编号被悄悄改变。
 package contracts_test
 
 import (
@@ -11,6 +12,7 @@ import (
 
 // 以下期望值逐字取自 spec/WIRE-FORMAT.md §1/§2；改动这里等于改动线上协议。
 
+// Envelope 字段 1～16 的编号与名称和 WIRE §1 一致，且没有多余字段。
 func TestEnvelopeFieldNumbers(t *testing.T) {
 	want := []string{
 		1: "protocol_major", 2: "protocol_minor", 3: "session_id", 4: "initiator_side",
@@ -39,6 +41,7 @@ func TestEnvelopeFieldNumbers(t *testing.T) {
 	}
 }
 
+// ErrorInfo 字段 1～3 的编号与名称和 WIRE §2 一致。
 func TestErrorInfoFieldNumbers(t *testing.T) {
 	fields := (&pb.ErrorInfo{}).ProtoReflect().Descriptor().Fields()
 	for num, name := range map[int]string{1: "code", 2: "safe_message", 3: "trace_id"} {
@@ -51,11 +54,15 @@ func TestErrorInfoFieldNumbers(t *testing.T) {
 	}
 }
 
+// 规格列出取值的枚举逐项一致；全部已注册枚举的零值都是 *_UNSPECIFIED。
 func TestEnumValues(t *testing.T) {
 	cases := []struct {
-		enum   protoreflect.EnumDescriptor
+		// enum 是被检查的枚举。
+		enum protoreflect.EnumDescriptor
+		// prefix 是枚举值名称的类型前缀。
 		prefix string
-		values []string // 下标即枚举数值
+		// values 按数值顺序列出不含前缀的名称，下标即枚举数值。
+		values []string
 	}{
 		{pb.InitiatorSide(0).Descriptor(), "INITIATOR_SIDE_", []string{"UNSPECIFIED", "CORE", "PLUGIN"}},
 		{pb.FrameKind(0).Descriptor(), "FRAME_KIND_", []string{
@@ -107,6 +114,7 @@ func TestAllEnumsHaveUnspecifiedZero(t *testing.T) {
 	}
 }
 
+// checkEnum 检查枚举零值名为 <类型前缀>_UNSPECIFIED。
 func checkEnum(t *testing.T, e protoreflect.EnumDescriptor) {
 	t.Helper()
 	prefix := screamingSnake(string(e.Name())) + "_"

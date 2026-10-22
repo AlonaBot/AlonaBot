@@ -1,3 +1,4 @@
+// 本文件测试 MessageChain 的结构校验，包括错误定位与大文本的分配量。
 package validate
 
 import (
@@ -9,30 +10,37 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// txt 构造带可选实体的文本片段。
 func txt(s string, ents ...*pb.TextEntity) *pb.Segment {
 	return &pb.Segment{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: s, Entities: ents}}}
 }
 
+// ent 构造指定类型与 UTF-16 范围的实体。
 func ent(typ pb.EntityType, off, n uint32) *pb.TextEntity {
 	return &pb.TextEntity{Type: typ, OffsetUtf16: off, LengthUtf16: n}
 }
 
+// img 构造图片片段。
 func img(src *pb.MediaSource) *pb.Segment {
 	return &pb.Segment{Data: &pb.Segment_Image{Image: &pb.ImageSegment{Source: src}}}
 }
 
+// ref 构造 MediaRef 来源。
 func ref(id string) *pb.MediaSource {
 	return &pb.MediaSource{Source: &pb.MediaSource_MediaRef{MediaRef: id}}
 }
 
+// file 构造带文件名的文件片段。
 func file(name string) *pb.Segment {
 	return &pb.Segment{Data: &pb.Segment_File{File: &pb.FileSegment{Source: ref("m1"), Filename: proto.String(name)}}}
 }
 
+// reply 构造回复引用片段。
 func reply(id string) *pb.Segment {
 	return &pb.Segment{Data: &pb.Segment_Reference{Reference: &pb.ReferenceSegment{OriginalPlatformMessageId: id}}}
 }
 
+// buttons 用若干行按钮构造按钮键盘片段。
 func buttons(rows ...[]*pb.Button) *pb.Segment {
 	b := &pb.ButtonsSegment{}
 	for _, r := range rows {
@@ -41,10 +49,12 @@ func buttons(rows ...[]*pb.Button) *pb.Segment {
 	return &pb.Segment{Data: &pb.Segment_Buttons{Buttons: b}}
 }
 
+// btn 构造一个按钮。
 func btn(action, label string, value *string) *pb.Button {
 	return &pb.Button{ActionId: action, Label: label, Value: value}
 }
 
+// fwd 用若干条 Chain 构造合并转发片段。
 func fwd(items ...*pb.MessageChain) *pb.Segment {
 	f := &pb.ForwardSegment{}
 	for _, c := range items {
@@ -53,8 +63,10 @@ func fwd(items ...*pb.MessageChain) *pb.Segment {
 	return &pb.Segment{Data: &pb.Segment_Forward{Forward: f}}
 }
 
+// chainOf 把片段组成 Chain。
 func chainOf(segs ...*pb.Segment) *pb.MessageChain { return &pb.MessageChain{Segments: segs} }
 
+// 合法 Chain 通过；每种结构错误都以 INVALID_ARGUMENT 拒绝，错误信息含指定片段。
 func TestChain(t *testing.T) {
 	link := ent(pb.EntityType_ENTITY_TYPE_TEXT_LINK, 0, 2)
 	link.Url = proto.String("https://example.com")
@@ -65,9 +77,12 @@ func TestChain(t *testing.T) {
 	markdown := &pb.Segment{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: "*hi*", Format: pb.TextFormat_TEXT_FORMAT_MARKDOWN.Enum()}}}
 
 	cases := []struct {
-		name    string
-		chain   *pb.MessageChain
-		wantErr string // 空串表示应通过
+		// name 是子测试名。
+		name string
+		// chain 是被校验的消息链。
+		chain *pb.MessageChain
+		// wantErr 是错误信息中应包含的片段；空串表示应通过。
+		wantErr string
 	}{
 		// 合法
 		{"纯文本", chainOf(txt("你好")), ""},

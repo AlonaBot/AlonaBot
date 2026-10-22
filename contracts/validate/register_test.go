@@ -1,3 +1,4 @@
+// 本文件测试 REGISTER 载荷的整体校验。
 package validate
 
 import (
@@ -6,11 +7,13 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
+// cmdRoute 构造路径为 id 的合法命令路由。
 func cmdRoute(id string) *pb.RouteDescriptor {
 	return &pb.RouteDescriptor{RouteId: id, Kind: pb.RouteKind_ROUTE_KIND_COMMAND,
 		Spec: &pb.RouteDescriptor_Command{Command: &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_PATH, Path: []string{id}}}}
 }
 
+// 合法注册通过；重复或缺失 route_id、kind 不符、配置不是对象、Listener 非 loopback 等都被拒绝。
 func TestRegister(t *testing.T) {
 	ok := &pb.Register{Routes: []*pb.RouteDescriptor{cmdRoute("a"), cmdRoute("b")}, CandidateConfigJson: `{"x":1}`,
 		HttpListener: &pb.HttpListener{Host: "127.0.0.1", Port: 8080}}
@@ -18,7 +21,9 @@ func TestRegister(t *testing.T) {
 		t.Fatalf("合法注册应通过: %v", err)
 	}
 	cases := map[string]struct {
-		r    *pb.Register
+		// r 是被校验的注册载荷。
+		r *pb.Register
+		// code 是期望的错误码。
 		code pb.ErrorCode
 	}{
 		"重复 route_id": {&pb.Register{Routes: []*pb.RouteDescriptor{cmdRoute("a"), cmdRoute("a")}, CandidateConfigJson: "{}"}, pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS},

@@ -16,7 +16,12 @@ import (
 )
 
 // Platform 是首发支持的 OS/arch 组合。
-type Platform struct{ OS, Arch string }
+type Platform struct {
+	// OS 是 GOOS 取值。
+	OS string
+	// Arch 是 GOARCH 取值。
+	Arch string
+}
 
 // Platforms 是首发的五个目标组合（CONTRACTS §7.1）。
 var Platforms = []Platform{
@@ -33,8 +38,11 @@ func SupportedPlatform(os, arch string) bool {
 	return false
 }
 
+// 插件 ID 规则（CONTRACTS §7.1）。
 const (
-	MaxIDLen     = 64
+	// MaxIDLen 是插件 ID 的最大字节数。
+	MaxIDLen = 64
+	// MarketPrefix 是市场插件 ID 的固定前缀。
 	MarketPrefix = "alonabot_plugin_"
 )
 
@@ -45,7 +53,7 @@ var (
 	semver = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
 )
 
-// Windows 保留设备名，作为路径组件在 Windows 上不可用。
+// reservedNames 是 Windows 保留设备名，作为路径组件在 Windows 上不可用。
 var reservedNames = func() map[string]bool {
 	m := map[string]bool{"con": true, "prn": true, "aux": true, "nul": true}
 	for i := 1; i <= 9; i++ {
@@ -82,7 +90,9 @@ func ValidVersion(v string) bool { return semver.MatchString(v) }
 
 // Capability 是 manifest 声明的协议必需能力。
 type Capability struct {
-	Name    string `yaml:"name"`
+	// Name 是能力名，不能为空。
+	Name string `yaml:"name"`
+	// Version 是能力版本，不能为 0。
 	Version uint32 `yaml:"version"`
 }
 
@@ -99,24 +109,39 @@ const (
 
 // Manifest 对应 plugin.yaml。必填字段使用指针以区分「缺失」与零值。
 type Manifest struct {
-	ManifestVersion      *int          `yaml:"manifest_version"`
-	ID                   string        `yaml:"id"`
-	Version              string        `yaml:"version"`
-	ProtocolMinMajor     *uint32       `yaml:"protocol_min_major"`
-	ProtocolMaxMajor     *uint32       `yaml:"protocol_max_major"`
+	// ManifestVersion 是 manifest 格式版本，目前必须为 1。
+	ManifestVersion *int `yaml:"manifest_version"`
+	// ID 是插件 ID，规则见 ValidateID。
+	ID string `yaml:"id"`
+	// Version 是插件版本，SemVer 2.0。
+	Version string `yaml:"version"`
+	// ProtocolMinMajor 是支持的最低协议主版本，不能为 0。
+	ProtocolMinMajor *uint32 `yaml:"protocol_min_major"`
+	// ProtocolMaxMajor 是支持的最高协议主版本，不小于 ProtocolMinMajor。
+	ProtocolMaxMajor *uint32 `yaml:"protocol_max_major"`
+	// RequiredCapabilities 是必需的协议能力；没有时必须写空列表。
 	RequiredCapabilities *[]Capability `yaml:"required_capabilities"`
-	OS                   string        `yaml:"os"`
-	Arch                 string        `yaml:"arch"`
-	Entrypoint           string        `yaml:"entrypoint"`
-	ConfigVersion        *uint32       `yaml:"config_version"`
-	Source               string        `yaml:"source"`
-	MigrationMode        string        `yaml:"migration_mode"`
-	PrepareEffects       string        `yaml:"prepare_effects"`
+	// OS 是包的目标 GOOS。
+	OS string `yaml:"os"`
+	// Arch 是包的目标 GOARCH。
+	Arch string `yaml:"arch"`
+	// Entrypoint 是包内可执行文件的相对路径，规则见 ValidateRelPath。
+	Entrypoint string `yaml:"entrypoint"`
+	// ConfigVersion 是包内配置 Schema 的版本。
+	ConfigVersion *uint32 `yaml:"config_version"`
+	// Source 是包的来源（例如 github.com/owner/repo），不能为空。
+	Source string `yaml:"source"`
+	// MigrationMode 是数据库迁移方式（Migration*）；空串表示未声明。
+	MigrationMode string `yaml:"migration_mode"`
+	// PrepareEffects 是准备期副作用声明（Effects*）；空串表示未声明。
+	PrepareEffects string `yaml:"prepare_effects"`
 }
 
 // Result 是解析成功的 manifest 及其非致命警告。
 type Result struct {
+	// Manifest 是已通过校验的 manifest。
 	Manifest *Manifest
+	// Warnings 是不阻止安装、但需要告知用户的问题。
 	Warnings []string
 }
 
@@ -139,6 +164,7 @@ func Parse(data []byte) (*Result, error) {
 	return &Result{Manifest: &m, Warnings: warnings}, nil
 }
 
+// validate 逐项校验字段，返回非致命警告；任一项不合法即返回错误。
 func (m *Manifest) validate() ([]string, error) {
 	if m.ManifestVersion == nil || *m.ManifestVersion != 1 {
 		return nil, errors.New("manifest_version 必须为 1")

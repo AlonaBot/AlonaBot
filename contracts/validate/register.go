@@ -1,3 +1,4 @@
+// 本文件负责 REGISTER 载荷的整体校验：路由描述、候选配置与 HTTP Listener。
 package validate
 
 import (

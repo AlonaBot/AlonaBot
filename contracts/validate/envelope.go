@@ -14,22 +14,32 @@ import (
 
 // 本实现支持的传输协议版本（WIRE §1）。
 const (
+	// ProtocolMajor 是传输协议主版本。
 	ProtocolMajor uint32 = 1
+	// ProtocolMinor 是本实现支持的最高次版本。
 	ProtocolMinor uint32 = 0
 	// 有 payload 时 schema_version 首发固定为 1。
 	SchemaVersion uint32 = 1
 )
 
-const sessionIDLen, traceIDLen = 16, 16
+// session_id 与 trace_id 的固定字节长度。
+const (
+	sessionIDLen = 16
+	traceIDLen   = 16
+)
 
 // Error 是携带协议错误码的校验错误。
 type Error struct {
+	// Code 是对端或调用者应看到的协议错误码。
 	Code pb.ErrorCode
-	Msg  string
+	// Msg 是不含敏感信息的说明。
+	Msg string
 }
 
+// Error 返回「错误码: 说明」。
 func (e *Error) Error() string { return e.Code.String() + ": " + e.Msg }
 
+// errf 用格式化说明构造 *Error。
 func errf(code pb.ErrorCode, format string, args ...any) *Error {
 	return &Error{Code: code, Msg: fmt.Sprintf(format, args...)}
 }
@@ -42,6 +52,7 @@ func PublicCode(c pb.ErrorCode) pb.ErrorCode {
 	return c
 }
 
+// knownEnum 报告枚举值是否在当前 Schema 中定义。
 func knownEnum(e protoreflect.Enum) bool {
 	return e.Descriptor().Values().ByNumber(e.Number()) != nil
 }
@@ -51,6 +62,7 @@ func SchemaID(m proto.Message) string {
 	return "alonabot." + snake(string(m.ProtoReflect().Descriptor().Name())) + ".v1"
 }
 
+// snake 把 CamelCase 消息名转为 snake_case。
 func snake(s string) string {
 	var b strings.Builder
 	for i, r := range s {
@@ -80,6 +92,7 @@ var controlPayload = map[pb.FrameKind]func() proto.Message{
 	pb.FrameKind_FRAME_KIND_SESSION_ERROR: func() proto.Message { return &pb.SessionError{} },
 }
 
+// isCall 报告帧种类是否属于调用帧（REQUEST/RESPONSE/CANCEL）。
 func isCall(k pb.FrameKind) bool {
 	return k == pb.FrameKind_FRAME_KIND_REQUEST || k == pb.FrameKind_FRAME_KIND_RESPONSE || k == pb.FrameKind_FRAME_KIND_CANCEL
 }
@@ -87,6 +100,7 @@ func isCall(k pb.FrameKind) bool {
 // Envelope 按帧种类检查结构合法性（WIRE §1～§3.1）。失败返回 *Error，code 为 PROTOCOL_ERROR，
 // 只有 JSON 载荷语法错误返回 INVALID_ARGUMENT。
 func Envelope(env *pb.Envelope) error {
+	// 1. 帧种类与主版本。
 	k := env.GetKind()
 	if k == pb.FrameKind_FRAME_KIND_UNSPECIFIED || !knownEnum(k) {
 		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "未知或未设置的帧种类 %d", int32(k))
@@ -95,6 +109,7 @@ func Envelope(env *pb.Envelope) error {
 		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "protocol_major=%d，只支持 %d", env.GetProtocolMajor(), ProtocolMajor)
 	}
 
+	// 2. session_id 与 trace_id 的长度。
 	sid := len(env.GetSessionId())
 	if k == pb.FrameKind_FRAME_KIND_HELLO && sid != 0 {
 		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "HELLO 不得携带 session_id")
@@ -106,6 +121,7 @@ func Envelope(env *pb.Envelope) error {
 		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "trace_id 长度为 %d，应为 %d", n, traceIDLen)
 	}
 
+	// 3. 调用帧的 call_id、initiator_side、parent_call_id 与 deadline。
 	side := env.GetInitiatorSide()
 	if isCall(k) {
 		if env.GetCallId() == 0 {
@@ -130,12 +146,14 @@ func Envelope(env *pb.Envelope) error {
 		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "REQUEST 必须设置 deadline_unix_ms")
 	}
 
+	// 4. error 与载荷。
 	if err := checkError(k, env.GetError()); err != nil {
 		return err
 	}
 	return checkPayload(env)
 }
 
+// checkError 校验 error 只出现在 RESPONSE/SESSION_ERROR 上（SESSION_ERROR 必须有），且错误码非零、trace_id 长度合法。
 func checkError(k pb.FrameKind, e *pb.ErrorInfo) error {
 	switch {
 	case e == nil:
@@ -153,6 +171,7 @@ func checkError(k pb.FrameKind, e *pb.ErrorInfo) error {
 	return nil
 }
 
+// checkPayload 校验载荷相关字段的一致性，以及控制帧载荷的编码与 schema_id。
 // 空 proto 消息序列化为 0 字节，所以「是否有载荷」以 schema_id 判断，不以 payload 长度判断。
 func checkPayload(env *pb.Envelope) error {
 	k := env.GetKind()

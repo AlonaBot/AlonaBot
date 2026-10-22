@@ -1,3 +1,4 @@
+// 本文件测试 Envelope 结构校验、控制帧解码、schema_id、错误码映射与 golden 帧编码。
 package validate
 
 import (
@@ -12,13 +13,16 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// update 为 true 时重写 golden 文件，而不是与之比较。
 var update = flag.Bool("update", false, "重写 contracts/testdata/frames 下的 golden 文件")
 
+// 测试帧使用的固定 session_id 与 trace_id。
 var (
 	sid   = bytes.Repeat([]byte{0xA1}, 16)
 	trace = bytes.Repeat([]byte{0xB2}, 16)
 )
 
+// mustMarshal 确定性地序列化 m，失败即终止测试。
 func mustMarshal(t testing.TB, m proto.Message) []byte {
 	t.Helper()
 	b, err := proto.MarshalOptions{Deterministic: true}.Marshal(m)
@@ -28,6 +32,7 @@ func mustMarshal(t testing.TB, m proto.Message) []byte {
 	return b
 }
 
+// control 构造载荷为 m 的合法控制帧；HELLO 不带 session_id 并带插件来源。
 func control(t testing.TB, k pb.FrameKind, m proto.Message) *pb.Envelope {
 	env := &pb.Envelope{
 		ProtocolMajor: 1, Kind: k, SessionId: sid,
@@ -41,6 +46,7 @@ func control(t testing.TB, k pb.FrameKind, m proto.Message) *pb.Envelope {
 	return env
 }
 
+// request 构造指定发起方向的合法 JSON REQUEST。
 func request(side pb.InitiatorSide) *pb.Envelope {
 	return &pb.Envelope{
 		ProtocolMajor: 1, Kind: pb.FrameKind_FRAME_KIND_REQUEST, SessionId: sid,
@@ -51,6 +57,7 @@ func request(side pb.InitiatorSide) *pb.Envelope {
 	}
 }
 
+// partialResponse 构造同时带部分成功 SendResult 与 error 的 RESPONSE。
 func partialResponse(t testing.TB) *pb.Envelope {
 	result := &pb.SendResult{
 		Status:             pb.SendStatus_SEND_STATUS_PARTIAL,
@@ -69,6 +76,7 @@ func partialResponse(t testing.TB) *pb.Envelope {
 	}
 }
 
+// code 取出 *Error 的错误码；不是 *Error 时返回 UNSPECIFIED。
 func code(err error) pb.ErrorCode {
 	var e *Error
 	if errors.As(err, &e) {
@@ -77,13 +85,17 @@ func code(err error) pb.ErrorCode {
 	return pb.ErrorCode_ERROR_CODE_UNSPECIFIED
 }
 
+// 各帧种类的合法与非法结构，按期望错误码区分。
 func TestEnvelope(t *testing.T) {
 	hello := &pb.Hello{PluginId: "alonabot_plugin_demo", Secret: bytes.Repeat([]byte{1}, 32), SupportedMajor: 1}
 	const proto_, invalid = pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT
 	cases := []struct {
+		// name 是子测试名。
 		name string
-		env  func() *pb.Envelope
-		want pb.ErrorCode // UNSPECIFIED 表示应当通过
+		// env 构造被校验的帧。
+		env func() *pb.Envelope
+		// want 是期望的错误码；UNSPECIFIED 表示应当通过。
+		want pb.ErrorCode
 	}{
 		{"合法 HELLO", func() *pb.Envelope { return control(t, pb.FrameKind_FRAME_KIND_HELLO, hello) }, 0},
 		{"合法插件 REQUEST（带父调用）", func() *pb.Envelope {
@@ -181,6 +193,7 @@ func TestEnvelope(t *testing.T) {
 	}
 }
 
+// 合法控制帧解码为对应消息；无法解码的载荷和非控制帧返回 PROTOCOL_ERROR。
 func TestDecodeControl(t *testing.T) {
 	want := &pb.Stopping{DeadlineUnixMs: 42, Reason: pb.StopReason_STOP_REASON_DISABLE}
 	got, err := DecodeControl(control(t, pb.FrameKind_FRAME_KIND_STOPPING, want))
@@ -197,6 +210,7 @@ func TestDecodeControl(t *testing.T) {
 	}
 }
 
+// schema_id 由消息名转为 alonabot.<snake_case>.v1。
 func TestSchemaID(t *testing.T) {
 	for m, want := range map[proto.Message]string{
 		&pb.Hello{}: "alonabot.hello.v1", &pb.HelloAck{}: "alonabot.hello_ack.v1",
@@ -208,6 +222,7 @@ func TestSchemaID(t *testing.T) {
 	}
 }
 
+// 未知错误码映射为 INTERNAL，已知错误码保持不变。
 func TestPublicCode(t *testing.T) {
 	if got := PublicCode(pb.ErrorCode(250)); got != pb.ErrorCode_ERROR_CODE_INTERNAL {
 		t.Errorf("未知错误码应映射为 INTERNAL，实际 %v", got)

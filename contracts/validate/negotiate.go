@@ -1,3 +1,4 @@
+// 本文件负责握手时的协议版本与能力协商（WIRE §3.1）。
 package validate
 
 import (
@@ -6,19 +7,29 @@ import (
 
 // Offer 是一端在握手中声明的协议版本与能力。
 type Offer struct {
-	Major, Minor uint32
-	Supported    []*pb.ProtocolCapability
-	Required     []*pb.ProtocolCapability
+	// Major 是协议主版本，双方必须相等。
+	Major uint32
+	// Minor 是支持的最高次版本。
+	Minor uint32
+	// Supported 是可用的能力集合。
+	Supported []*pb.ProtocolCapability
+	// Required 是必需能力，必须包含于双方交集。
+	Required []*pb.ProtocolCapability
 }
 
 // Agreement 是协商结果。
 type Agreement struct {
-	Minor        uint32
+	// Minor 是双方次版本的较小值，之后每一帧都使用它。
+	Minor uint32
+	// Intersection 是双方都支持的能力，按本端 Supported 的顺序排列。
 	Intersection []*pb.ProtocolCapability
 }
 
+// capKey 是能力的精确匹配键。
 type capKey struct {
-	name    string
+	// name 是能力名。
+	name string
+	// version 是能力版本。
 	version uint32
 }
 

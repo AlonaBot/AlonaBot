@@ -1,3 +1,4 @@
+// 本文件测试 plugin.yaml 解析、插件 ID、包内相对路径与 PostgreSQL 标识符映射。
 package manifest
 
 import (
@@ -8,6 +9,7 @@ import (
 	"testing"
 )
 
+// fixture 读取 contracts/testdata/manifest 下的样例文件。
 func fixture(t *testing.T, name string) string {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("..", "testdata", "manifest", name))
@@ -17,6 +19,7 @@ func fixture(t *testing.T, name string) string {
 	return string(b)
 }
 
+// 市场 ID 无警告通过；不带市场前缀的本地 ID 通过并只给出缺前缀警告。
 func TestParseFixtures(t *testing.T) {
 	r, err := Parse([]byte(fixture(t, "market.yaml")))
 	if err != nil {
@@ -35,9 +38,19 @@ func TestParseFixtures(t *testing.T) {
 	}
 }
 
+// 对合法 fixture 做单处改动，每种非法输入都以对应的错误拒绝。
 func TestParseRejects(t *testing.T) {
 	base := fixture(t, "market.yaml")
-	cases := []struct{ name, old, new, wantErr string }{
+	cases := []struct {
+		// name 是子测试名。
+		name string
+		// old 是 fixture 中被替换的原文。
+		old string
+		// new 是替换后的文本。
+		new string
+		// wantErr 是错误信息中应包含的片段。
+		wantErr string
+	}{
 		{"缺失 ID", "id: alonabot_plugin_rss_feed\n", "", "缺少插件 ID"},
 		{"大写 ID", "id: alonabot_plugin_rss_feed", "id: My-Tool", "大写"},
 		{"路径穿越 ID", "id: alonabot_plugin_rss_feed", "id: ../etc", "安全 slug"},
@@ -73,6 +86,7 @@ func TestParseRejects(t *testing.T) {
 	}
 }
 
+// 缺少 prepare_effects 时仍可解析，但警告该包不允许自动升级。
 func TestMissingDeclarationsWarn(t *testing.T) {
 	src := strings.Replace(fixture(t, "market.yaml"), "prepare_effects: managed_db\n", "", 1)
 	r, err := Parse([]byte(src))
@@ -84,6 +98,7 @@ func TestMissingDeclarationsWarn(t *testing.T) {
 	}
 }
 
+// 规范的包内相对路径通过；绝对路径、..、非规范形式、盘符与反斜杠被拒绝。
 func TestValidateRelPath(t *testing.T) {
 	for _, ok := range []string{"bin/rss", "rss.exe", "a/b/c"} {
 		if err := ValidateRelPath(ok); err != nil {
@@ -97,6 +112,7 @@ func TestValidateRelPath(t *testing.T) {
 	}
 }
 
+// 映射结果不撞名、不超过 63 字节、只含合法字符且是确定性的。
 func TestPostgresIdentifier(t *testing.T) {
 	a, b := PostgresIdentifier("ab_", "my-tool"), PostgresIdentifier("ab_", "my_tool")
 	if a == b {
