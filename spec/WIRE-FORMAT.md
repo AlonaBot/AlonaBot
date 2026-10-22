@@ -124,8 +124,33 @@ Scheduler 到 deadline 后保留实际执行槽；SDK 只在 callback 实际返�
 
 Core 媒体服务固定为 BeginUpload/WriteChunk/CommitUpload/Read/Grant：Read 输入 token、offset、length（1～1 MiB），返回 bytes、next_offset、eof；Grant 只对已有授权签发等同或更窄范围的新 token，不允许调用者自行扩大 Target/接收插件。IncomingMedia 首次取件由内置 Adapter 解析，按 CONTRACTS §1.4 校验和配额处理。各请求/响应的 Protobuf 字段号在 T-01 固定，媒体块始终计入帧与字节预算。
 
+## 5A. T-01 已固定（2026-10-21）
+
+字段号与枚举值的权威来源是 `contracts/proto/alonabot/v1/*.proto`（package `alonabot.v1`）；本节不再重复抄录编号。`contracts/wirespec_test.go` 逐项断言 §1/§2 表格中的编号，以及 SendStatus、PartStatus、Propagation、RouteKind、HookPhase 的取值，并检查所有枚举的零值都是 `*_UNSPECIFIED`。冻结之后，删除字段或枚举值时必须 reserved，不能复用编号。
+
+| 文件 | 内容 |
+| --- | --- |
+| `envelope.proto`、`errors.proto` | §1 Envelope 1～16、§2 ErrorCode 1～17 与 ErrorInfo（编号照抄规格） |
+| `control.proto` | §3.1/§3.2 的控制帧载荷与 Bootstrap |
+| `route.proto` | REGISTER 载荷 `Register`、§3.3 RouteDescriptor 及各 kind 的描述 |
+| `identity.proto`、`message.proto`、`media.proto` | MESSAGE-MODEL 的 Target/Actor/Capability、Event 与按类型区分的载荷、Segment、SendRequest/SendResult/PartResult，以及 §5 的媒体请求 |
+| `invocation.proto`、`bus.proto` | §4 可信调用上下文、HandlerOutcome、Hook 载荷，以及 §5 的 Event Bus |
+
+规格只给出语义、由 T-01 确定的实现选择：
+
+- 没有编号表的消息，字段号按规格表格中的字段顺序从 1 开始编排。
+- 新增枚举 CancelReason、StopReason、SessionPhase、DatabaseBackend（显式 `NONE` 表示没有业务 DB）、MigrationMode、ActivationReason、TrustedRole（USER/ADMIN/CHAT_ADMIN）、Permission（ANY/USER/ADMIN）、HandlerMode、CommandMatch（PATH/REGEX/RAW）、UsageMode、ParamType、ServiceAccess（PRIVATE/ALLOWLIST/PUBLIC）、HttpAuthMode、TextFormat、EntityType、MediaReadability。
+- 为避免 import 循环，Target/Actor/Capability 单独放在 `identity.proto`；Segment 的 `incoming_ref` 直接携带 IncomingMedia 描述符，`media_ref` 是 MediaRef 的 token。
+- Event 按类型区分的载荷放在 `EventPayload` oneof 中，PreEventResult 只能回传这一部分；按钮 `value` 与服务载荷之外的 JSON 一律以 UTF-8 文本表示。
+- `ForwardSource` 的结构（display_name、external_user_id）由 T-01 补定；新增 `SendRequest{to, chain}` 作为 Core Send 服务的请求。
+- Core→目标插件的 Service 调用载荷是 `ServiceInvocation{route_id, context, encoding, schema_id, schema_version, payload}`：可信上下文与业务载荷分开传输，服务响应直接使用 output schema 的业务载荷（REVIEW-1 补充）。
+- 控制帧与 Core 固定载荷的 `schema_id` 为 `alonabot.<snake_case 消息名>.v1`（例如 `alonabot.hello_ack.v1`），控制帧一律使用 PROTOBUF 编码。是否携带载荷以 `schema_id` 是否为空来判断，而不看 payload 长度，因为空消息序列化后是 0 字节。校验入口为 `contracts/validate`（G1-04）。
+- Core 启动插件进程时通过环境变量传递会话参数（常量定义在 `internal/wire/env.go`）：`ALONABOT_PLUGIN_ID`、`ALONABOT_SESSION_SECRET`（32 字节十六进制）、`ALONABOT_TRANSPORT`（`tcp`/`stdio`）、`ALONABOT_CORE_ADDR`（TCP loopback 地址）、`ALONABOT_BUILD_DIGEST`（归档 SHA256 十六进制）、`ALONABOT_RUNTIME_LOCK`（runtime.lock 的绝对路径）。其余环境变量只从白名单继承（PATH、HOME、临时目录、SystemRoot、LANG、TZ），Core 管理凭证不会进入插件环境（G1-15）。
+- 握手与准备（G1-16）：认证失败（Secret 恒时比较、插件 ID、build_digest 任一不符）时 Core 直接关闭连接，不回复任何帧；认证之后的失败（协议协商、Bootstrap 超限、REGISTER 不合法、准备期出现非控制帧）先发 SESSION_ERROR 再关闭，发送 SESSION_ERROR 限时 1s，对端不读时不会卡住失败路径。Preparing 的硬截止为配置、迁移、OnStart 三个阶段预算之和，写入 Bootstrap.preparation_deadline_unix_ms。PREPARED 中 route_descriptor_hash 为按顺序拼接各 RouteDescriptor 确定性编码后的 SHA256，candidate_config_digest 为候选配置 JSON 的 SHA256（T-08 引入 secret 引用后改为对持久化快照计算）。
+- 协议能力项使用 `ProtocolCapability{name, version}`，与 Adapter 平台能力 `Capability{name, version, supported}` 分开。
+
 ## 6. 实施验证与依据
 
-T-01 将字段表转换为 `.proto`，冻结控制 Payload/RouteDescriptor 的字段号和 fixture；T-02 验证双向编号、乱序响应、失败阶段、帧上限、父调用关联、读循环进度和 ready gate。T-03/T-05/T-06 验证 payload+error、HandlerOutcome、Hook 约束和 Event Bus；对应 [TEST-MATRIX.md](TEST-MATRIX.md)。目前这些运行时测试均未执行。
+T-01 将字段表转换为 `.proto`，冻结控制 Payload/RouteDescriptor 的字段号和 fixture；T-02 验证双向编号、乱序响应、失败阶段、帧上限、父调用关联、读循环进度和 ready gate。T-03/T-05/T-06 验证 payload+error、HandlerOutcome、Hook 约束和 Event Bus；对应 [TEST-MATRIX.md](TEST-MATRIX.md)。T-01/T-02 的运行结果见 TEST-MATRIX §3.1；T-03/T-05/T-06 的部分尚未执行。
 
 Protobuf 枚举零值与字段存在性依据：[官方 proto3 指南](https://protobuf.dev/programming-guides/proto3/)。权限和准备期限制是 AlonaBot 的协议选择，不代表对同宿主恶意 Native 代码提供 OS 沙箱。

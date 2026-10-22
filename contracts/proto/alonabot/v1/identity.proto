@@ -1,0 +1,54 @@
+// Target、Actor 与平台能力，见 MESSAGE-MODEL §1。单独成文件以避免 message/media 互相 import。
+// 公共标识符一律用字符串；absent 表示不存在，不用空串或零 ID 填补。
+syntax = "proto3";
+
+package alonabot.v1;
+
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
+
+// Target 是一次发送的平台目标，唯一定位到某个 Adapter 实例下的会话或话题。
+message Target {
+  // Adapter 类型，例如 telegram。
+  string adapter_id = 1;
+  // 该 Adapter 的已配置实例。
+  string adapter_instance_id = 2;
+  // 实例下用于发送的平台账号。
+  string account_id = 3;
+  // 平台会话 ID。
+  string chat_id = 4;
+  // 话题 ID；缺省表示会话本身，不用空串代替。
+  optional string thread_id = 5;
+}
+
+// TrustedRole 是 Core 认定的可信角色。
+enum TrustedRole {
+  TRUSTED_ROLE_UNSPECIFIED = 0;
+  // 具有可信个人身份的普通用户。
+  TRUSTED_ROLE_USER = 1;
+  // Core 按 adapter_instance_id/external_user_id 配置的机器人管理员。
+  TRUSTED_ROLE_ADMIN = 2;
+  // 平台群管理员，只用于 chat_admin Rule，不赋予 Core 管理权。
+  TRUSTED_ROLE_CHAT_ADMIN = 3;
+}
+
+// Actor 是事件的触发者，只由可信 Adapter 元数据与 Core policy 生成；插件自报的身份不是依据。
+message Actor {
+  // 平台上的用户 ID。
+  string external_user_id = 1;
+  // 用户 ID 所属的 Adapter 实例。
+  string adapter_instance_id = 2;
+  // 展示名；平台没有提供时缺省。
+  optional string display_name = 3;
+  // Core 认定的角色集合。
+  repeated TrustedRole trusted_roles = 4;
+}
+
+// Capability 是 Adapter 公布的一项平台能力；未知能力不推定支持。
+message Capability {
+  // 能力名。
+  string name = 1;
+  // 能力版本。
+  uint32 version = 2;
+  // 该实例当前是否支持。
+  bool supported = 3;
+}

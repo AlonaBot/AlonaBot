@@ -1,0 +1,78 @@
+// 帧外层 Envelope，见 spec/WIRE-FORMAT.md §1。字段 1～16 固定；删除时 reserved，不复用编号。
+syntax = "proto3";
+
+package alonabot.v1;
+
+import "alonabot/v1/errors.proto";
+
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
+
+// InitiatorSide 是一次调用的发起方向；REQUEST/RESPONSE/CANCEL 都使用原请求的方向。
+enum InitiatorSide {
+  INITIATOR_SIDE_UNSPECIFIED = 0;
+  INITIATOR_SIDE_CORE = 1;
+  INITIATOR_SIDE_PLUGIN = 2;
+}
+
+// FrameKind 是帧种类；未知种类不能当作成功忽略。
+enum FrameKind {
+  FRAME_KIND_UNSPECIFIED = 0;
+  FRAME_KIND_HELLO = 1;
+  FRAME_KIND_HELLO_ACK = 2;
+  FRAME_KIND_REGISTER = 3;
+  FRAME_KIND_PREPARED = 4;
+  FRAME_KIND_ACTIVATE = 5;
+  FRAME_KIND_ACTIVATED = 6;
+  FRAME_KIND_REQUEST = 7;
+  FRAME_KIND_RESPONSE = 8;
+  FRAME_KIND_CANCEL = 9;
+  FRAME_KIND_EVENT = 10;
+  FRAME_KIND_STOPPING = 11;
+  FRAME_KIND_HEARTBEAT = 12;
+  FRAME_KIND_SESSION_ERROR = 13;
+}
+
+// PayloadEncoding 是 payload 的编码；控制帧固定使用 PROTOBUF。
+enum PayloadEncoding {
+  PAYLOAD_ENCODING_UNSPECIFIED = 0;
+  PAYLOAD_ENCODING_PROTOBUF = 1;
+  PAYLOAD_ENCODING_JSON = 2;
+}
+
+// Envelope 是每一帧的外层结构。
+// 各字段在不同帧种类下的必需性由 contracts/validate 检查，不靠 oneof 表达；
+// payload 与 error 可以同时出现（例如部分发送成功）。
+message Envelope {
+  // 传输协议主版本，首发为 1；与本端不一致时拒绝。
+  uint32 protocol_major = 1;
+  // 传输协议次版本，首发为 0；握手取双方较小值，之后每一帧都保持协商值。
+  uint32 protocol_minor = 2;
+  // HELLO 为空；HELLO_ACK 起为 Core 分配的 16 字节随机 ID。
+  bytes session_id = 3;
+  // REQUEST/RESPONSE/CANCEL 为原请求的发起方向；其他帧为 UNSPECIFIED。
+  InitiatorSide initiator_side = 4;
+  // REQUEST/RESPONSE/CANCEL 非零；其他帧为 0。
+  uint64 call_id = 5;
+  // 仅 PLUGIN 发起的 REQUEST 可设置，引用同 Session 中仍在途的 CORE 发起 REQUEST。
+  optional uint64 parent_call_id = 6;
+  // REQUEST 必需，UTC 毫秒。
+  optional int64 deadline_unix_ms = 7;
+  // 帧种类，不接受 UNSPECIFIED。
+  FrameKind kind = 8;
+  // 插件发出的帧等于其认证 ID；Core 发出的帧为空。
+  string source_plugin_id = 9;
+  // 已注册的 route/service 或固定的 Core 服务名；无目标的控制帧为空，不使用文件路径。
+  string target = 10;
+  // 有业务上下文时为 Core 关联的 16 字节 ID；不是权限凭证。
+  bytes trace_id = 11;
+  // payload 的编码；有 payload 时不接受 UNSPECIFIED。
+  PayloadEncoding payload_encoding = 12;
+  // payload 的契约 ID（alonabot.*.v1 或服务声明的 ID）；有 payload 时必需。
+  string schema_id = 13;
+  // payload 契约版本，有 payload 时必需且首发为 1；与传输协议版本无关。
+  uint32 schema_version = 14;
+  // 按 payload_encoding/schema_id 解释的载荷，连同其余字段一起计入 4 MiB 帧上限。
+  bytes payload = 15;
+  // RESPONSE 或 SESSION_ERROR 的失败信息；RESPONSE 可同时带有效 payload。
+  ErrorInfo error = 16;
+}

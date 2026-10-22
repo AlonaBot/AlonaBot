@@ -1,0 +1,105 @@
+// minimal 是 T-01 的签名组合示例：一个根插件、两类 Handler、StopPropagation、
+// 配置回调、HTTP Handler 与一个定时任务。运行行为从 T-02 起由 SDK 提供。
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log"
+	"net/http"
+	"time"
+
+	"github.com/AlonaBot/AlonaBot/sdk"
+	"github.com/AlonaBot/AlonaBot/sdk/message"
+	"github.com/AlonaBot/AlonaBot/sdk/plugin"
+)
+
+// Config 是本插件唯一的配置类型。
+type Config struct {
+	// Greeting 是 /demo hello 回复的文本。
+	Greeting string `json:"greeting"`
+	// Interval 是间隔秒数，不能为负。
+	Interval int64 `json:"interval_seconds"`
+}
+
+// OnLoad 把版本 1 的 {"hello": "..."} 迁移为当前格式；其他版本原样返回。
+func (c *Config) OnLoad(_ context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error) {
+	if fromVersion != 1 {
+		return raw, nil
+	}
+	var old map[string]any
+	if err := json.Unmarshal(raw, &old); err != nil {
+		return nil, err
+	}
+	if v, ok := old["hello"]; ok {
+		old["greeting"] = v
+		delete(old, "hello")
+	}
+	return json.Marshal(old)
+}
+
+// Validate 校验配置取值。
+func (c *Config) Validate(context.Context) error {
+	if c.Interval < 0 {
+		return errors.New("interval_seconds 不能为负数")
+	}
+	return nil
+}
+
+// Demo 是根插件；插件 ID 来自 plugin.yaml。
+type Demo struct {
+	// Base 提供根插件的默认实现。
+	plugin.Base
+	// cfg 是 SDK 解码并校验后的配置。
+	cfg Config
+}
+
+// Config 返回供 SDK 解码配置的目标。
+func (p *Demo) Config() any { return &p.cfg }
+
+// Commands 在 demo 分组下注册 hello 与 echo 两个命令。
+func (p *Demo) Commands(r *sdk.CommandRegistry) {
+	r.Group("demo", func(g *sdk.CommandGroup) {
+		g.Command("hello", p.Hello)
+		g.Command("echo", p.Echo)
+	})
+}
+
+// Hello 是自动回复型 Handler：成功返回非空 Chain 时由 Core 发送一次。
+func (p *Demo) Hello(c *sdk.Context) (message.Chain, error) {
+	c.StopPropagation()
+	return message.Chain{message.Text(p.cfg.Greeting)}, nil
+}
+
+// Echo 是主动发送型 Handler：可以多次 Send。
+func (p *Demo) Echo(c *sdk.Context, text string, times int64) error {
+	for i := int64(0); i < times; i++ {
+		if _, err := c.Send(message.Chain{message.Text(text)}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// HTTP 注册一个返回 ok 的 GET /status。
+func (p *Demo) HTTP(r *sdk.HTTPRegistry) {
+	r.Handle(http.MethodGet, "/status", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+}
+
+// Schedules 注册每分钟运行一次的 tick 任务。
+func (p *Demo) Schedules(r *sdk.ScheduleRegistry) {
+	r.Every("tick", time.Minute, func(*sdk.Context) error { return nil })
+}
+
+// OnStart 演示生命周期 Hook 的签名，不做任何事。
+func (p *Demo) OnStart(context.Context) error { return nil }
+
+// main 把根插件交给 SDK 运行，失败时打印原因并退出。
+func main() {
+	if err := sdk.Run(&Demo{}); err != nil {
+		log.Fatal(err)
+	}
+}

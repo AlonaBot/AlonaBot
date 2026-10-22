@@ -1,0 +1,38 @@
+// 错误码与 ErrorInfo，见 spec/WIRE-FORMAT.md §2。编号 1～17 固定，删除时 reserved，不复用。
+syntax = "proto3";
+
+package alonabot.v1;
+
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
+
+// ErrorCode 是固定的协议错误码；未知码对调用者映射为 INTERNAL。
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+  ERROR_CODE_INVALID_ARGUMENT = 1;
+  ERROR_CODE_UNAUTHENTICATED = 2;
+  ERROR_CODE_PERMISSION_DENIED = 3;
+  ERROR_CODE_NOT_FOUND = 4;
+  ERROR_CODE_ALREADY_EXISTS = 5;
+  ERROR_CODE_FAILED_PRECONDITION = 6;
+  ERROR_CODE_UNSUPPORTED = 7;
+  ERROR_CODE_RESOURCE_EXHAUSTED = 8;
+  ERROR_CODE_DEADLINE_EXCEEDED = 9;
+  ERROR_CODE_CANCELLED = 10;
+  ERROR_CODE_UNAVAILABLE = 11;
+  ERROR_CODE_INTERNAL = 12;
+  ERROR_CODE_PROTOCOL_ERROR = 13;
+  ERROR_CODE_CALL_CYCLE = 14;
+  ERROR_CODE_PLUGIN_NOT_READY = 15;
+  ERROR_CODE_NO_DEFAULT_TARGET = 16;
+  ERROR_CODE_NEEDS_MANUAL_MIGRATION = 17;
+}
+
+// ErrorInfo 是 RESPONSE 或 SESSION_ERROR 携带的错误。
+message ErrorInfo {
+  // 有 ErrorInfo 时必须非零。
+  ErrorCode code = 1;
+  // 对外诊断，不含 secret、堆栈或本地绝对路径。
+  string safe_message = 2;
+  // 与 Envelope 的业务追踪 ID 一致（16 字节）。
+  bytes trace_id = 3;
+}

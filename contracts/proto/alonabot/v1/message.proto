@@ -1,0 +1,394 @@
+// Event、MessageChain/Segment、Send 与回执，见 MESSAGE-MODEL §1/§2/§4、CONTRACTS §8。
+syntax = "proto3";
+
+package alonabot.v1;
+
+import "alonabot/v1/errors.proto";
+import "alonabot/v1/identity.proto";
+import "alonabot/v1/media.proto";
+
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
+
+// ---------- Event ----------
+
+// EventSourceKind 是事件的来源类别。
+enum EventSourceKind {
+  EVENT_SOURCE_KIND_UNSPECIFIED = 0;
+  EVENT_SOURCE_KIND_ADAPTER = 1;
+  EVENT_SOURCE_KIND_SCHEDULER = 2;
+}
+
+// Event 是 Core 标准化后的入站事件。
+// event_type 取值：message.created、message.edited、message.deleted、button.clicked、
+// member.joined、member.left、reaction.added、scheduled；与 event_payload 的分支一一对应。
+message Event {
+  // Core 入站标准化时产生。
+  string event_id = 1;
+  // 事件类型，取值见上。
+  string event_type = 2;
+  // 事件来源类别。
+  EventSourceKind source_kind = 3;
+  // 事件发生时刻，UTC 毫秒。
+  int64 occurred_at_unix_ms = 4;
+  // 来源 Adapter 类型；非 Adapter 来源时 absent。
+  optional string adapter_id = 5;
+  // 来源 Adapter 实例；非 Adapter 来源时 absent。
+  optional string adapter_instance_id = 6;
+  // 收到事件的平台账号；非 Adapter 来源时 absent。
+  optional string account_id = 7;
+  // 事件所在的会话；不存在时 absent。
+  Target target = 8;
+  // 可信的触发者；平台未给出个人身份时 absent。
+  Actor actor = 9;
+  // 事件关联的平台消息（例如带按钮的原消息）；不存在时 absent。
+  PlatformMessage message = 10;
+  // 按事件类型区分的载荷。
+  EventPayload event_payload = 11;
+  // 来源实例公布的平台能力。
+  repeated Capability capabilities = 12;
+  // 平台原始载荷（JSON），只供诊断与平台特有用途。
+  bytes platform_payload = 13;
+  // 原平台事件标识。
+  optional string source_event_id = 14;
+}
+
+// PlatformMessage 是一条已存在的平台消息。
+message PlatformMessage {
+  // 平台消息 ID。
+  string platform_message_id = 1;
+  // 消息内容。
+  MessageChain chain = 2;
+  // Telegram media_group_id；首发不聚合媒体组。
+  optional string media_group_id = 3;
+}
+
+// EventPayload 是按事件类型区分的载荷；PreEventResult 只能改写它，不能改写 Event 的其余字段。
+message EventPayload {
+  // 与 Event.event_type 对应的分支。
+  oneof kind {
+    // message.created。
+    MessageCreatedPayload message_created = 1;
+    // message.edited。
+    MessageEditedPayload message_edited = 2;
+    // message.deleted。
+    MessageDeletedPayload message_deleted = 3;
+    // button.clicked。
+    ButtonClickedPayload button_clicked = 4;
+    // member.joined。
+    MemberPayload member_joined = 5;
+    // member.left。
+    MemberPayload member_left = 6;
+    // reaction.added。
+    ReactionAddedPayload reaction_added = 7;
+    // scheduled。
+    ScheduledPayload scheduled = 8;
+  }
+}
+
+// MessageCreatedPayload 是新消息事件的载荷。
+message MessageCreatedPayload {
+  // 新消息的平台 ID。
+  string platform_message_id = 1;
+  // 新消息的内容。
+  MessageChain chain = 2;
+}
+
+// MessageEditedPayload 是消息被编辑事件的载荷。
+message MessageEditedPayload {
+  // 被编辑消息的平台 ID。
+  string platform_message_id = 1;
+  // 编辑后的内容。
+  MessageChain chain = 2;
+  // 平台未给出旧内容时 absent，不伪造原消息。
+  MessageChain old_chain = 3;
+}
+
+// MessageDeletedPayload 是消息被删除事件的载荷。
+message MessageDeletedPayload {
+  // 被删除的平台消息 ID。
+  repeated string platform_message_ids = 1;
+}
+
+// ButtonClickedPayload 是按钮点击事件的载荷；action_id/action_schema_version/value 属于 Core 验证的路由绑定，Hook 不可修改。
+message ButtonClickedPayload {
+  // 按钮绑定的 action，指向插件注册的 button.clicked 路由。
+  string action_id = 1;
+  // action 载荷的 Schema 版本。
+  uint32 action_schema_version = 2;
+  // 按 action Schema 校验的 JSON 文本。
+  string value = 3;
+  // 平台的回调 ID，用于确认与诊断。
+  string callback_query_id = 4;
+  // 带按钮的原消息 ID；平台未给出时 absent。
+  optional string origin_platform_message_id = 5;
+}
+
+// MemberPayload 是成员加入或离开事件的载荷。
+message MemberPayload {
+  // 加入或离开的成员的平台用户 ID。
+  string member_external_user_id = 1;
+}
+
+// ReactionAddedPayload 是添加回应事件的载荷。
+message ReactionAddedPayload {
+  // 被回应消息的平台 ID。
+  string platform_message_id = 1;
+  // 回应内容（例如 emoji）。
+  string reaction = 2;
+}
+
+// ScheduledPayload 是定时任务事件的载荷；job_id/run_id 属于 Core 验证的来源绑定，Hook 不可修改。
+message ScheduledPayload {
+  // 插件声明的稳定任务 ID。
+  string job_id = 1;
+  // 本次运行的 ID。
+  string run_id = 2;
+  // 计划触发时刻，UTC 毫秒。
+  int64 scheduled_at_unix_ms = 3;
+}
+
+// ---------- MessageChain ----------
+
+// MessageChain 是一次逻辑 Send 的有序片段。
+message MessageChain {
+  // 按顺序排列的片段。
+  repeated Segment segments = 1;
+}
+
+// Segment 是消息链中的一个片段。
+message Segment {
+  // 片段内容，恰有一个分支。
+  oneof data {
+    // 文本。
+    TextSegment text = 1;
+    // 图片。
+    ImageSegment image = 2;
+    // 视频。
+    VideoSegment video = 3;
+    // 文件。
+    FileSegment file = 4;
+    // 提及用户。
+    MentionSegment mention = 5;
+    // 回复引用。
+    ReferenceSegment reference = 6;
+    // 按钮键盘。
+    ButtonsSegment buttons = 7;
+    // 合并转发。
+    ForwardSegment forward = 8;
+  }
+}
+
+// TextFormat 是文本的标记格式。
+enum TextFormat {
+  TEXT_FORMAT_UNSPECIFIED = 0;
+  TEXT_FORMAT_PLAIN = 1;
+  TEXT_FORMAT_MARKDOWN = 2;
+}
+
+// TextSegment 是一段文本。
+message TextSegment {
+  // 文本内容。
+  string text = 1;
+  // absent 表示 plain；与 entities 不同时指定。
+  optional TextFormat format = 2;
+  // 富文本实体。
+  repeated TextEntity entities = 3;
+}
+
+// EntityType 是富文本实体的类型。
+enum EntityType {
+  ENTITY_TYPE_UNSPECIFIED = 0;
+  ENTITY_TYPE_BOLD = 1;
+  ENTITY_TYPE_ITALIC = 2;
+  ENTITY_TYPE_UNDERLINE = 3;
+  ENTITY_TYPE_STRIKETHROUGH = 4;
+  ENTITY_TYPE_SPOILER = 5;
+  ENTITY_TYPE_CODE = 6;
+  ENTITY_TYPE_PRE = 7;
+  ENTITY_TYPE_TEXT_LINK = 8;
+  ENTITY_TYPE_TEXT_MENTION = 9;
+}
+
+// TextEntity 是一个富文本实体；偏移以 UTF-16 码元计，相对本 text，必须落在完整字符边界。
+message TextEntity {
+  // 实体类型。
+  EntityType type = 1;
+  // 起始偏移（UTF-16 码元）。
+  uint32 offset_utf16 = 2;
+  // 长度（UTF-16 码元）。
+  uint32 length_utf16 = 3;
+  // TEXT_LINK 的链接地址。
+  optional string url = 4;
+  // PRE 的代码语言。
+  optional string language = 5;
+  // TEXT_MENTION 提及的平台用户 ID。
+  optional string external_user_id = 6;
+}
+
+// MediaSource 是媒体来源，三选一。
+message MediaSource {
+  // 媒体来源，恰有一个分支。
+  oneof source {
+    // 已提交 MediaRef 的 token。
+    string media_ref = 1;
+    // 入站媒体描述符，发送时由 Core 取件。
+    IncomingMedia incoming_ref = 2;
+    // 公网 HTTPS 地址，发送前验证。
+    string https_url = 3;
+  }
+}
+
+// ImageSegment 是一张图片。
+message ImageSegment {
+  // 图片来源。
+  MediaSource source = 1;
+  // 替代文本。
+  optional string alt = 2;
+  // 附带说明。
+  optional string caption = 3;
+}
+
+// VideoSegment 是一段视频。
+message VideoSegment {
+  // 视频来源。
+  MediaSource source = 1;
+  // 时长（毫秒）；未知时 absent。
+  optional uint64 duration_ms = 2;
+  // 附带说明。
+  optional string caption = 3;
+}
+
+// FileSegment 是一个文件。
+message FileSegment {
+  // 文件来源。
+  MediaSource source = 1;
+  // 无路径的展示名称，不作为宿主文件路径。
+  optional string filename = 2;
+  // MIME 类型；未知时 absent。
+  optional string mime = 3;
+  // 附带说明。
+  optional string caption = 4;
+}
+
+// MentionSegment 是对一个用户的提及，按目标平台实例解释。
+message MentionSegment {
+  // 被提及用户的平台 ID。
+  string external_user_id = 1;
+  // 展示文本；缺省时由 Adapter 决定。
+  optional string display = 2;
+}
+
+// ReferenceSegment 表示回复某条消息；一条 Chain 最多一个。
+message ReferenceSegment {
+  // 被回复消息的平台 ID。
+  string original_platform_message_id = 1;
+  // 被回复消息所在的目标。
+  Target target = 2;
+}
+
+// ButtonsSegment 是按钮键盘；一条 Chain 最多一个。
+message ButtonsSegment {
+  // 按行排列的按钮。
+  repeated ButtonRow rows = 1;
+}
+
+// ButtonRow 是键盘中的一行按钮。
+message ButtonRow {
+  // 本行的按钮。
+  repeated Button buttons = 1;
+}
+
+// Button 是一个回调按钮。
+message Button {
+  // 指向当前插件已注册的 button.clicked 路由。
+  string action_id = 1;
+  // 按钮上显示的文字。
+  string label = 2;
+  // 按该 action Schema 校验的 JSON 文本。
+  optional string value = 3;
+}
+
+// ForwardSegment 是合并转发；仅平台明确支持合并转发时发送。
+message ForwardSegment {
+  // 被转发的条目。
+  repeated ForwardItem items = 1;
+}
+
+// ForwardItem 是合并转发中的一条。
+message ForwardItem {
+  // 来源展示信息。
+  ForwardSource source = 1;
+  // 条目内容。
+  MessageChain chain = 2;
+}
+
+// ForwardSource 是转发条目的来源展示信息；规格只写了 source?，结构由 T-01 确定。
+message ForwardSource {
+  // 来源展示名。
+  optional string display_name = 1;
+  // 来源用户的平台 ID。
+  optional string external_user_id = 2;
+}
+
+// ---------- Send 与回执 ----------
+
+// SendRequest 是 Core 的 Send 服务请求；to 缺省时使用调用链的默认 Target，没有则 NO_DEFAULT_TARGET。
+message SendRequest {
+  // 显式目标；缺省使用默认 Target。
+  Target to = 1;
+  // 要发送的消息链。
+  MessageChain chain = 2;
+}
+
+// SendStatus 是一次逻辑发送的整体状态。
+enum SendStatus {
+  SEND_STATUS_UNSPECIFIED = 0;
+  SEND_STATUS_ACCEPTED = 1;
+  SEND_STATUS_PARTIAL = 2;
+  SEND_STATUS_REJECTED = 3;
+  SEND_STATUS_UNKNOWN = 4;
+}
+
+// PartStatus 是一次物理平台操作的状态。
+enum PartStatus {
+  PART_STATUS_UNSPECIFIED = 0;
+  PART_STATUS_ACCEPTED = 1;
+  PART_STATUS_REJECTED = 2;
+  PART_STATUS_UNKNOWN = 3;
+  // 前序操作失败后没有调用。
+  PART_STATUS_NOT_ATTEMPTED = 4;
+}
+
+// SendResult 是一次逻辑发送的结果；出错时仍保留已确认的部分。
+message SendResult {
+  // 整体状态。
+  SendStatus status = 1;
+  // 实际已校验的目标；不跨实例猜测。
+  Target target = 2;
+  // 按物理发送与平台返回顺序保留所有已确认 ID；markup 更新不重复添加。
+  repeated string platform_message_ids = 3;
+  // 首个已确认的物理消息 ID；没有已确认消息时 absent。
+  optional string primary_platform_message_id = 4;
+  // 平台确实返回接受时间时才设置。
+  optional int64 provider_accepted_time_unix_ms = 5;
+  // 本次实际采用的已声明能力。
+  repeated Capability capabilities_used = 6;
+  // 各计划物理操作的明细，包含未尝试的部分。
+  repeated PartResult part_results = 7;
+}
+
+// PartResult 是一次计划物理操作的结果。
+message PartResult {
+  // 操作序号，从 0 开始。
+  uint32 part_index = 1;
+  // 本操作对应的原 Chain 片段下标。
+  repeated uint32 segment_indexes = 2;
+  // 本操作的状态。
+  PartStatus status = 3;
+  // 本操作得到的已确认消息 ID；一次相册操作可有多个。
+  repeated string platform_message_ids = 4;
+  // 平台确认接受但没有可用 ID（例如 message_id=0）。
+  bool message_ids_unavailable = 5;
+  // 本操作失败时的安全错误。
+  ErrorInfo error = 6;
+}

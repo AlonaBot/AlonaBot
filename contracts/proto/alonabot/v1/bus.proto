@@ -1,0 +1,48 @@
+// Event Bus 载荷，见 CONTRACTS §3、WIRE §5。发布只确认 Core 接纳，不确认订阅者处理。
+syntax = "proto3";
+
+package alonabot.v1;
+
+import "alonabot/v1/envelope.proto";
+
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
+
+// PublishRequest 是向 Event Bus 发布一个事件的请求；发布者只能使用自己的 plugin_id/event_name 命名空间。
+message PublishRequest {
+  // 本插件命名空间内的 event_name（不含 plugin_id 前缀）。
+  string event_name = 1;
+  // 事件载荷的契约 ID。
+  string schema_id = 2;
+  // 事件载荷的契约版本。
+  uint32 schema_version = 3;
+  // 事件载荷的编码。
+  PayloadEncoding encoding = 4;
+  // 事件载荷。
+  bytes payload = 5;
+}
+
+// PublishResponse 表示 Core 已接纳该事件；不表示订阅者已处理。
+message PublishResponse {
+  // Core 分配的事件 ID。
+  string event_id = 1;
+}
+
+// EVENT 帧（Core→订阅者，call_id=0）的载荷；无业务 ACK、重放或补发。
+message BusEvent {
+  // plugin_id/event_name。
+  string event_name = 1;
+  // Core 分配的事件 ID。
+  string event_id = 2;
+  // 发布者插件 ID，由 Core 根据发布 Session 填写。
+  string source_plugin_id = 3;
+  // Core 接纳事件的时刻，UTC 毫秒。
+  int64 occurred_at_unix_ms = 4;
+  // 事件载荷的契约 ID。
+  string schema_id = 5;
+  // 事件载荷的契约版本。
+  uint32 schema_version = 6;
+  // 事件载荷的编码。
+  PayloadEncoding encoding = 7;
+  // 事件载荷。
+  bytes payload = 8;
+}

@@ -1,0 +1,295 @@
+// REGISTER 载荷与 RouteDescriptor，见 WIRE §3.3、CONTRACTS §2.2/§3/§4.3/§7.2。
+syntax = "proto3";
+
+package alonabot.v1;
+
+import "alonabot/v1/control.proto";
+import "alonabot/v1/envelope.proto";
+
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
+
+// Register 是 REGISTER（Plugin→Core）的载荷，配置准备与 OnStart 完成后仅发送一次；Core 原子校验整份注册集。
+message Register {
+  // 插件的全部路由描述。
+  repeated RouteDescriptor routes = 1;
+  // 插件使用的配置 Schema 摘要，必须与可信安装包一致。
+  bytes config_schema_hash = 2;
+  // 规范化后的完整候选 JSON（含已解析 secret，仅经私有 IPC 传输）。
+  string candidate_config_json = 3;
+  // 候选配置的版本。
+  uint32 candidate_config_version = 4;
+  // 仅在声明 HTTP 路由时设置。
+  HttpListener http_listener = 5;
+  // 本次准备阶段的迁移结果。
+  MigrationState migration = 6;
+}
+
+// MigrationState 是本次准备阶段的迁移完成信息。
+message MigrationState {
+  // 插件采用的迁移方式。
+  MigrationMode mode = 1;
+  // versioned：本次准备结束时账本中已完成的全部 ID（升序）。
+  repeated uint32 completed_migration_ids = 2;
+  // self：Migrate 已成功返回。
+  bool self_migrate_completed = 3;
+}
+
+// RouteKind 是路由的类别，与 RouteDescriptor.spec 的分支一一对应。
+enum RouteKind {
+  ROUTE_KIND_UNSPECIFIED = 0;
+  ROUTE_KIND_COMMAND = 1;
+  ROUTE_KIND_EVENT = 2;
+  ROUTE_KIND_HOOK = 3;
+  ROUTE_KIND_SERVICE = 4;
+  ROUTE_KIND_SCHEDULE = 5;
+  ROUTE_KIND_HTTP = 6;
+  ROUTE_KIND_BUS_SUBSCRIPTION = 7;
+}
+
+// Permission 是调用路由所需的最低权限。
+enum Permission {
+  PERMISSION_UNSPECIFIED = 0;
+  // 不要求 Actor（例如非用户触发的事件）。
+  PERMISSION_ANY = 1;
+  // 具有可信 Actor 的普通用户。
+  PERMISSION_USER = 2;
+  // Core 配置的机器人管理员。
+  PERMISSION_ADMIN = 3;
+}
+
+// RouteDescriptor 是一条路由的公共描述；target 为 plugin_id/route_id，kind 必须与 spec 分支一致。
+message RouteDescriptor {
+  // 插件内唯一、跨版本保持业务含义稳定的路由 ID。
+  string route_id = 1;
+  // 路由类别。
+  RouteKind kind = 2;
+  // 数字小的先执行，同值按 plugin_id/route_id 字典序。
+  int32 priority = 3;
+  // 安装后默认是否启用。
+  bool default_enabled = 4;
+  // 调用所需的最低权限。
+  Permission required_permission = 5;
+  // 请求载荷的契约 ID。
+  string input_schema_id = 6;
+  // 请求载荷的契约版本。
+  uint32 input_schema_version = 7;
+  // 响应载荷的契约 ID。
+  string output_schema_id = 8;
+  // 响应载荷的契约版本。
+  uint32 output_schema_version = 9;
+  // 按 kind 区分的专属描述。
+  oneof spec {
+    // COMMAND。
+    CommandSpec command = 10;
+    // EVENT。
+    EventSpec event = 11;
+    // HOOK。
+    HookSpec hook = 12;
+    // SERVICE。
+    ServiceSpec service = 13;
+    // SCHEDULE。
+    ScheduleSpec schedule = 14;
+    // HTTP。
+    HttpRouteSpec http = 15;
+    // BUS_SUBSCRIPTION。
+    BusSubscriptionSpec bus_subscription = 16;
+  }
+}
+
+// HandlerMode 是 Handler 的签名形态。
+enum HandlerMode {
+  HANDLER_MODE_UNSPECIFIED = 0;
+  // func(c, ...) (Chain, error)
+  HANDLER_MODE_AUTO_REPLY = 1;
+  // func(c, ...) error
+  HANDLER_MODE_MANUAL = 2;
+}
+
+// RuleDescriptor 描述路由的匹配条件：Core 可表达的条件先执行，自定义 Go Rule 在同一 Handler REQUEST 内由 SDK 执行。
+message RuleDescriptor {
+  // 是否有需要 SDK 执行的自定义 Rule。
+  bool has_custom_rule = 1;
+  // 是否要求触发者是平台群管理员。
+  bool require_chat_admin = 2;
+}
+
+// CommandMatch 是命令的匹配方式。
+enum CommandMatch {
+  COMMAND_MATCH_UNSPECIFIED = 0;
+  // `/` 前缀完整 token 路径。
+  COMMAND_MATCH_PATH = 1;
+  // 按正则匹配整条消息。
+  COMMAND_MATCH_REGEX = 2;
+  // 交给 Handler 自行解析。
+  COMMAND_MATCH_RAW = 3;
+}
+
+// UsageMode 决定参数错误时如何提示用法。
+enum UsageMode {
+  USAGE_MODE_UNSPECIFIED = 0;
+  // 参数错误时发送一次自动生成的 usage。
+  USAGE_MODE_DEFAULT = 1;
+  // 不提示。
+  USAGE_MODE_SILENT = 2;
+  // 发送 custom_usage。
+  USAGE_MODE_CUSTOM = 3;
+}
+
+// CommandSpec 是命令路由的专属描述。
+message CommandSpec {
+  // 匹配方式。
+  CommandMatch match = 1;
+  // PATH：规范命令路径 token，大小写敏感。
+  repeated string path = 2;
+  // 等价的别名路径。
+  repeated CommandAlias aliases = 3;
+  // 按顺序声明的参数。
+  repeated CommandParam params = 4;
+  // Handler 的签名形态。
+  HandlerMode handler_mode = 5;
+  // 匹配条件。
+  RuleDescriptor rule = 6;
+  // REGEX：Go regexp 语法，启动时编译。
+  string regex = 7;
+  // 参数错误时的用法提示方式。
+  UsageMode usage_mode = 8;
+  // USAGE_MODE_CUSTOM 时发送的文本。
+  string custom_usage = 9;
+}
+
+// CommandAlias 是命令的一条别名路径。
+message CommandAlias {
+  // 别名的 token 路径。
+  repeated string path = 1;
+}
+
+// ParamType 是命令参数的类型。
+enum ParamType {
+  PARAM_TYPE_UNSPECIFIED = 0;
+  PARAM_TYPE_STRING = 1;
+  // 有符号十进制 int64。
+  PARAM_TYPE_INT = 2;
+  // 有限 float64。
+  PARAM_TYPE_FLOAT = 3;
+  // 只接受 true/false。
+  PARAM_TYPE_BOOL = 4;
+}
+
+// CommandParam 是一个命令参数；必需参数在可选参数之前，raw 只能是最后一个 string 参数。
+message CommandParam {
+  // 参数名。
+  string name = 1;
+  // 参数类型。
+  ParamType type = 2;
+  // 是否必需。
+  bool required = 3;
+  // 缺失位置使用的默认值文本，按 type 解析。
+  optional string default_value = 4;
+  // 为 true 时吞下命令剩余的原始文本。
+  bool raw = 5;
+}
+
+// EventSpec 是事件路由的专属描述。
+message EventSpec {
+  // 接收的事件类型。
+  repeated string event_type_filter = 1;
+  // Handler 的签名形态。
+  HandlerMode handler_mode = 2;
+  // 匹配条件。
+  RuleDescriptor rule = 3;
+  // button.clicked 路由：按钮引用的 action 标识。
+  string action_id = 4;
+  // button.clicked 路由：action 载荷的 Schema 版本。
+  uint32 action_schema_version = 5;
+}
+
+// HookPhase 是 Hook 的执行阶段。
+enum HookPhase {
+  HOOK_PHASE_UNSPECIFIED = 0;
+  HOOK_PHASE_PRE_EVENT = 1;
+  HOOK_PHASE_BEFORE_SEND = 2;
+  HOOK_PHASE_AFTER_SEND = 3;
+}
+
+// HookSpec 是 Hook 路由的专属描述。
+message HookSpec {
+  // 执行阶段。
+  HookPhase phase = 1;
+}
+
+// ServiceAccess 是服务的访问范围。
+enum ServiceAccess {
+  SERVICE_ACCESS_UNSPECIFIED = 0;
+  // 只允许 Core 与本插件。
+  SERVICE_ACCESS_PRIVATE = 1;
+  // 只允许 allowlist_plugin_ids 中的插件。
+  SERVICE_ACCESS_ALLOWLIST = 2;
+  // 所有已启用插件可调用，不赋予用户 Admin。
+  SERVICE_ACCESS_PUBLIC = 3;
+}
+
+// ServiceSpec 是服务路由的专属描述；请求/响应 Schema 使用公共字段 input_*/output_*。
+message ServiceSpec {
+  // 对外公布的服务名。
+  string service_name = 1;
+  // 访问范围。
+  ServiceAccess access = 2;
+  // ALLOWLIST 时允许调用的插件。
+  repeated string allowlist_plugin_ids = 3;
+  // 请求与响应载荷的编码。
+  PayloadEncoding encoding = 4;
+}
+
+// ScheduleSpec 是定时任务的专属描述；interval 与 cron 互斥，cron 固定五字段，timezone 为 IANA 名称，省略为 UTC。
+message ScheduleSpec {
+  // 插件内稳定的任务 ID。
+  string job_id = 1;
+  // 触发方式，恰有一个分支。
+  oneof trigger {
+    // 五字段 cron 表达式。
+    string cron = 2;
+    // 固定间隔（毫秒），至少 1000。
+    uint64 interval_ms = 3;
+  }
+  // cron 使用的 IANA 时区。
+  string timezone = 4;
+  // 单次运行的期限（毫秒）。
+  uint32 job_deadline_ms = 5;
+}
+
+// HttpAuthMode 是 HTTP 路由的认证方式。
+enum HttpAuthMode {
+  HTTP_AUTH_MODE_UNSPECIFIED = 0;
+  // 私有：要求 Core 授权会话。
+  HTTP_AUTH_MODE_CORE_SESSION = 1;
+  // 公开回调，由插件验证 OAuth state。
+  HTTP_AUTH_MODE_CALLBACK_STATE = 2;
+  // 公开回调，由插件验证签名。
+  HTTP_AUTH_MODE_CALLBACK_SIGNATURE = 3;
+  // 公开回调，由插件验证 nonce。
+  HTTP_AUTH_MODE_CALLBACK_NONCE = 4;
+}
+
+// HttpRouteSpec 是 HTTP 路由的专属描述。
+message HttpRouteSpec {
+  // HTTP 方法。
+  string method = 1;
+  // 插件相对路径，以 / 开头，不含 /plugins/{id} 前缀。
+  string path = 2;
+  // 是否无需 Core 会话即可访问。
+  bool is_public = 3;
+  // 认证方式。
+  HttpAuthMode auth_mode = 4;
+}
+
+// BusSubscriptionSpec 是 Event Bus 订阅的专属描述。
+message BusSubscriptionSpec {
+  // plugin_id/event_name。
+  string event_name = 1;
+  // 可接受的事件载荷契约 ID。
+  string schema_id = 2;
+  // 可接受的事件载荷契约版本。
+  uint32 schema_version = 3;
+  // 收到事件时调用的本插件路由。
+  string callback_route_id = 4;
+}
