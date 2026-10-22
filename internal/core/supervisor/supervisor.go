@@ -125,12 +125,17 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		closeListener(ln)
 		return nil, err
 	}
-	// fail 终止进程树、释放资源后返回 err，不能在旧进程仍在时另起写入者。
+	// fail 终止并确认进程树清空、释放资源后返回 err；无法确认清空时把原因并入错误，调用方不能另起写入者。
 	fail := func(err error) (*Running, error) {
-		_ = proc.KillTree()
-		<-proc.Exited() // 确认旧进程退出后才返回，不能另起写入者
+		kerr := proc.KillTree()
+		if kerr == nil {
+			<-proc.Exited()
+		}
 		_ = proc.Release()
 		closeListener(ln)
+		if kerr != nil {
+			err = errors.Join(err, fmt.Errorf("插件 %s 的进程树未确认清空: %w", spec.PluginID, kerr))
+		}
 		return nil, err
 	}
 
