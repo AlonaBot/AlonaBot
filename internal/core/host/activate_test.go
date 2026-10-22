@@ -1,3 +1,4 @@
+// 本文件测试提交与激活：门禁与帧顺序、提交失败不发 ACTIVATE、OnReady 失败或超时进入 Degraded。
 package host
 
 import (
@@ -55,34 +56,37 @@ func store(t *testing.T) *state.Store {
 	return s
 }
 
+// commitGen1 返回把 plugin-a 的 Active 从空提交为 gen-1 的 Commit 回调。
 func commitGen1(s *state.Store) func(context.Context) error {
 	return func(ctx context.Context) error { return s.CommitActive(ctx, "plugin-a", "", "gen-1") }
 }
 
-func activateAsync(conn *wire.Conn, p *Prepared, opt ActivateOptions) <-chan struct {
-	in  *Instance
+// activation 是一次 Activate 的返回值。
+type activation struct {
+	// in 是返回的实例；Degraded 时也非 nil。
+	in *Instance
+	// err 是 Activate 的错误。
 	err error
-} {
-	out := make(chan struct {
-		in  *Instance
-		err error
-	}, 1)
+}
+
+// activateAsync 在后台执行 Activate，结果从返回的通道取出。
+func activateAsync(conn *wire.Conn, p *Prepared, opt ActivateOptions) <-chan activation {
+	out := make(chan activation, 1)
 	go func() {
 		in, err := Activate(context.Background(), conn, p, opt)
-		out <- struct {
-			in  *Instance
-			err error
-		}{in, err}
+		out <- activation{in, err}
 	}()
 	return out
 }
 
+// req 构造插件发出的合法根 REQUEST。
 func req(f *fake, id uint64) *pb.Envelope {
 	ms := time.Now().Add(time.Minute).UnixMilli()
 	return &pb.Envelope{ProtocolMajor: 1, SessionId: f.sid, Kind: pb.FrameKind_FRAME_KIND_REQUEST, SourcePluginId: "plugin-a",
 		InitiatorSide: pb.InitiatorSide_INITIATOR_SIDE_PLUGIN, CallId: id, DeadlineUnixMs: &ms}
 }
 
+// echoHandler 是返回固定 JSON 结果的 Core 侧 Handler。
 func echoHandler(_ context.Context, in *wire.Inbound) wire.Response {
 	return wire.Response{Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: "t.v1", SchemaVersion: 1, Data: []byte(`"ok"`)}}
 }
@@ -125,6 +129,7 @@ func TestActivateGateAndOrdering(t *testing.T) {
 	}
 }
 
+// 插件报告 OnReady 失败时进入 Degraded，状态库中仍是新提交的代次。
 func TestActivateOnReadyFailureIsDegradedAndKeepsNewGeneration(t *testing.T) {
 	f, conn, p := prepared(t)
 	s := store(t)
@@ -144,6 +149,7 @@ func TestActivateOnReadyFailureIsDegradedAndKeepsNewGeneration(t *testing.T) {
 	}
 }
 
+// OnReady 超过预算时进入 Degraded。
 func TestActivateOnReadyTimeoutIsDegraded(t *testing.T) {
 	f, conn, p := prepared(t)
 	s := store(t)

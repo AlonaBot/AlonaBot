@@ -1,3 +1,4 @@
+// 本文件负责插件实例的提交与激活门禁：提交 ActiveGeneration、ACTIVATE/ACTIVATED，以及读循环中的业务准入。
 package host
 
 import (
@@ -17,6 +18,7 @@ import (
 // State 是 Core 侧插件实例的可见状态（CONTRACTS §12.1，本文件覆盖 Activating 之后的部分）。
 type State int32
 
+// 实例状态，按生命周期顺序排列。
 const (
 	StateActivating State = iota // 已提交（或复用已提交记录），等待 ACTIVATED；不派发业务
 	StateActivated               // 唯一可以接单的状态
@@ -26,32 +28,46 @@ const (
 	StateStopped                 // 进程已退出
 )
 
+// String 返回状态名。
 func (s State) String() string {
 	return [...]string{"Activating", "Activated", "Degraded", "Draining", "Stopping", "Stopped"}[s]
 }
 
 // ActivateOptions 配置一次激活。
 type ActivateOptions struct {
-	PluginID     string
+	// PluginID 是插件 ID，Session 用它核对对端帧的来源。
+	PluginID string
+	// GenerationID 是要激活的代次，ACTIVATED 必须回显它。
 	GenerationID string
 	// Commit 在发送 ACTIVATE 之前于 Core 状态库提交唯一 ActiveGeneration+COMMITTED（新候选）。
 	// 为 nil 表示普通 restart / 恢复：复用原有提交记录与 Generation，不再提交、不产生新代次。
 	// 事务内只操作元数据，不得等待插件 RPC。
-	Commit  func(ctx context.Context) error
-	Handler wire.Handler // Activated 之后插件发起的业务调用
-	Global  *wire.Budget
-	Limits  Limits
+	Commit func(ctx context.Context) error
+	// Handler 处理 Activated 之后插件发起的业务调用。
+	Handler wire.Handler
+	// Global 是 Core 全局载荷预算。
+	Global *wire.Budget
+	// Limits 提供 OnReady 预算。
+	Limits Limits
 }
 
 // Instance 是一个已进入激活流程的插件 Session。
 type Instance struct {
-	PluginID, GenerationID string
-	Session                *wire.Session
+	// PluginID 是插件 ID。
+	PluginID string
+	// GenerationID 是本实例服务的代次。
+	GenerationID string
+	// Session 是本实例的调用引擎；进入激活流程时创建。
+	Session *wire.Session
 
-	state     atomic.Int32
+	// state 是 State，读循环与停止流程并发访问。
+	state atomic.Int32
+	// activated 在读循环应用 ACTIVATED 时关闭。
 	activated chan struct{}
-	failOnce  sync.Once
-	failErr   error
+	// failOnce 保证只记录第一个失败原因。
+	failOnce sync.Once
+	// failErr 是进入 Degraded 的原因，由 failOnce 写入一次。
+	failErr error
 }
 
 // State 返回当前状态。
@@ -65,6 +81,7 @@ func (in *Instance) Err() error {
 	return in.failErr
 }
 
+// degrade 记录第一个失败原因并进入 Degraded。
 func (in *Instance) degrade(err error) {
 	in.failOnce.Do(func() {
 		in.failErr = err
@@ -114,6 +131,7 @@ func (in *Instance) control(env *pb.Envelope) error {
 // 提交之后 OnReady 失败、超时或断链进入 Degraded，状态库中仍是新代次（CONTRACTS §4.1、§12.3）。
 // 返回的 Instance 在 Degraded 时也非 nil，便于调用方记录与清理。
 func Activate(ctx context.Context, conn *wire.Conn, prep *Prepared, opt ActivateOptions) (*Instance, error) {
+	// 1. 新候选先提交；失败时通知插件并关闭，不发送 ACTIVATE。
 	if opt.Commit != nil {
 		if err := opt.Commit(ctx); err != nil {
 			if e, eerr := wire.ControlEnvelope(prep.SessionID, prep.Minor, "", pb.FrameKind_FRAME_KIND_SESSION_ERROR,
@@ -126,6 +144,7 @@ func Activate(ctx context.Context, conn *wire.Conn, prep *Prepared, opt Activate
 		}
 	}
 
+	// 2. 在 Activating 状态下启动 Session，并发出带 OnReady 截止时间的 ACTIVATE。
 	in := &Instance{PluginID: opt.PluginID, GenerationID: opt.GenerationID, activated: make(chan struct{})}
 	in.state.Store(int32(StateActivating))
 	in.Session = wire.NewSession(conn, wire.Options{
@@ -142,6 +161,7 @@ func Activate(ctx context.Context, conn *wire.Conn, prep *Prepared, opt Activate
 		return in, err
 	}
 
+	// 3. 等待读循环应用 ACTIVATED；超时、断链或取消则进入 Degraded。
 	timer := time.NewTimer(time.Until(deadline))
 	defer timer.Stop()
 	var failure error

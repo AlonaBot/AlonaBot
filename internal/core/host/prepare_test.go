@@ -1,3 +1,4 @@
+// 本文件测试 Core 侧准备阶段：认证、Bootstrap、REGISTER 原子校验、阶段超时、准备期业务帧与敏感信息不外泄。
 package host
 
 import (
@@ -18,33 +19,42 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// 测试插件 plugin-a 的 Secret、另一把错误的 Secret 与归档摘要。
 var (
 	secretA = bytes.Repeat([]byte{0xA1}, 32)
 	secretB = bytes.Repeat([]byte{0xB2}, 32)
 	digestA = bytes.Repeat([]byte{0xD1}, 32)
 )
 
+// expectA 返回 Core 对 plugin-a 的期望身份与协议声明。
 func expectA() Expect {
 	return Expect{PluginID: "plugin-a", Secret: secretA, BuildDigest: digestA,
 		Offer: validate.Offer{Major: 1, Minor: 0, Supported: []*pb.ProtocolCapability{{Name: "core.send", Version: 1}}}}
 }
 
+// bootA 返回含一个敏感配置值的 Bootstrap，用于检查它不进入错误信息。
 func bootA() *pb.Bootstrap {
 	return &pb.Bootstrap{GenerationId: "gen-1", CandidateConfigJson: `{"token":"CFG-SECRET-VALUE"}`,
 		DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE}}
 }
 
+// fastLimits 是缩短的阶段预算，用于超时用例。
 var fastLimits = Limits{Handshake: 500 * time.Millisecond, Config: 200 * time.Millisecond, Migration: 200 * time.Millisecond,
 	OnStart: 200 * time.Millisecond, OnReady: 200 * time.Millisecond, StopTotal: time.Second}
 
 // fake 是用原始帧扮演插件的一端。
 type fake struct {
-	t    *testing.T
+	// t 是所属测试。
+	t *testing.T
+	// conn 是插件一端的帧连接。
 	conn *wire.Conn
-	raw  net.Conn
-	sid  []byte
+	// raw 是插件一端的原始连接。
+	raw net.Conn
+	// sid 是握手后得到的 session_id；握手前为空。
+	sid []byte
 }
 
+// send 以 plugin-a 的身份发出控制帧；mutate 可在发送前改动帧。
 func (f *fake) send(kind pb.FrameKind, msg proto.Message, mutate func(*pb.Envelope)) {
 	f.t.Helper()
 	data, _ := proto.Marshal(msg)
@@ -58,6 +68,7 @@ func (f *fake) send(kind pb.FrameKind, msg proto.Message, mutate func(*pb.Envelo
 	}
 }
 
+// recv 读取 Core 发来的下一帧并解码控制载荷。
 func (f *fake) recv() (*pb.Envelope, proto.Message, error) {
 	env, err := f.conn.ReadFrame()
 	if err != nil {
@@ -67,11 +78,13 @@ func (f *fake) recv() (*pb.Envelope, proto.Message, error) {
 	return env, msg, err
 }
 
+// hello 构造 plugin-a 的 HELLO；required 是必需能力。
 func hello(secret []byte, major uint32, required ...*pb.ProtocolCapability) *pb.Hello {
 	return &pb.Hello{PluginId: "plugin-a", Secret: secret, SupportedMajor: major, BuildDigest: digestA,
 		SupportedCapabilities: []*pb.ProtocolCapability{{Name: "core.send", Version: 1}}, RequiredCapabilities: required}
 }
 
+// cmd 构造路径为 id 的命令路由。
 func cmd(id string) *pb.RouteDescriptor {
 	return &pb.RouteDescriptor{RouteId: id, Kind: pb.RouteKind_ROUTE_KIND_COMMAND,
 		Spec: &pb.RouteDescriptor_Command{Command: &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_PATH, Path: []string{id}}}}
@@ -90,11 +103,15 @@ func run(t *testing.T, exp Expect, boot *pb.Bootstrap, lim Limits) (*fake, <-cha
 	return &fake{t: t, conn: wire.NewStreamConn(b), raw: b}, out
 }
 
+// result 是一次 Prepare 的返回值。
 type result struct {
-	p   *Prepared
+	// p 是准备结果，失败时为 nil。
+	p *Prepared
+	// err 是 Prepare 的错误。
 	err error
 }
 
+// phaseOf 断言 err 是 *PhaseError 并返回它。
 func phaseOf(t *testing.T, err error) *PhaseError {
 	t.Helper()
 	var pe *PhaseError
@@ -104,6 +121,7 @@ func phaseOf(t *testing.T, err error) *PhaseError {
 	return pe
 }
 
+// 正常流程：HELLO_ACK 带完整 Bootstrap 与阶段预算，REGISTER 之后收到 PREPARED。
 func TestPrepareHappyPath(t *testing.T) {
 	f, out := run(t, expectA(), bootA(), DefaultLimits)
 	f.send(pb.FrameKind_FRAME_KIND_HELLO, hello(secretA, 1), nil)
@@ -193,6 +211,7 @@ func handshake(t *testing.T, f *fake) {
 	f.sid = msg.(*pb.HelloAck).GetSessionId()
 }
 
+// REGISTER 中有重复 route_id 时整份拒绝并发送 SESSION_ERROR，不留下任何注册结果。
 func TestPrepareRegisterRejectedAtomically(t *testing.T) {
 	f, out := run(t, expectA(), bootA(), DefaultLimits)
 	handshake(t, f)
@@ -219,6 +238,7 @@ func TestPrepareRegisterTooLarge(t *testing.T) {
 	}
 }
 
+// Bootstrap 超过 4 MiB 时以 RESOURCE_EXHAUSTED 拒绝启动。
 func TestPrepareBootstrapTooLarge(t *testing.T) {
 	boot := bootA()
 	boot.CandidateConfigJson = `{"x":"` + strings.Repeat("a", wire.MaxFrame) + `"}`
@@ -247,6 +267,7 @@ func TestPreparePluginReportsOnStartError(t *testing.T) {
 	}
 }
 
+// 握手与准备阶段各自按预算超时。
 func TestPrepareTimeouts(t *testing.T) {
 	t.Run("握手超时", func(t *testing.T) {
 		start := time.Now()
@@ -269,6 +290,7 @@ func TestPrepareTimeouts(t *testing.T) {
 	})
 }
 
+// 准备期收到业务 REQUEST 时以 PROTOCOL_ERROR 失败。
 func TestPrepareRejectsBusinessFrameDuringPreparing(t *testing.T) {
 	f, out := run(t, expectA(), bootA(), DefaultLimits)
 	handshake(t, f)
@@ -293,6 +315,7 @@ func TestErrorsDoNotLeakSecrets(t *testing.T) {
 	}
 }
 
+// 默认阶段预算与 CONTRACTS §4.2 一致。
 func TestDefaultLimitsMatchContract(t *testing.T) {
 	want := Limits{10 * time.Second, 60 * time.Second, 15 * time.Minute, 60 * time.Second, 30 * time.Second, 10 * time.Second}
 	if DefaultLimits != want {

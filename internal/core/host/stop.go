@@ -1,3 +1,4 @@
+// 本文件负责停止插件实例（冻结、排空、STOPPING、按总预算回收进程树）与有限重启策略。
 package host
 
 import (
@@ -43,15 +44,18 @@ type StopResult struct {
 // 只在确认进程树清空之后返回；无法确认时 StopResult.Err 非 nil。
 func (in *Instance) Stop(t0 time.Time, reason pb.StopReason, tree Tree, timing StopTiming) StopResult {
 	var res StopResult
+	// 1. 冻结：从 t0 起拒绝新根调用，已接纳调用链的子调用仍可完成。
 	if !in.state.CompareAndSwap(int32(StateActivated), int32(StateDraining)) {
 		in.state.Store(int32(StateDraining)) // Activating/Degraded 等状态同样不再接单
 	}
 
+	// 2. 最多排空 Drain，等待两个方向的在途调用完成。
 	total := t0.Add(timing.Total)
 	drainCtx, cancel := context.WithDeadline(context.Background(), t0.Add(timing.Drain))
 	res.Drained = in.Session.WaitIdle(drainCtx) == nil
 	cancel()
 
+	// 3. 取消剩余调用，发送唯一 STOPPING，截止为 min(t0+Total, 发送时刻+OnStopAt)。
 	in.Session.CancelOutbound(pb.CancelReason_CANCEL_REASON_SESSION_STOPPING)
 	in.state.Store(int32(StateStopping))
 	now := time.Now()
@@ -64,7 +68,7 @@ func (in *Instance) Stop(t0 time.Time, reason pb.StopReason, tree Tree, timing S
 		res.StoppingSentAt, res.StopDeadline = now, deadline
 	}
 
-	// 领头进程与它留在树内的其他进程共用同一个总截止；到期仍未清空则终止整棵树并确认消失，
+	// 4. 领头进程与它留在树内的其他进程共用同一个总截止；到期仍未清空则终止整棵树并确认消失，
 	// 不能用 sleep 或猜测代替（CONTRACTS §4.2、§12.2）。
 	timer := time.NewTimer(time.Until(total))
 	defer timer.Stop()
@@ -107,10 +111,14 @@ func StopAll(t0 time.Time, reason pb.StopReason, targets map[*Instance]Tree, tim
 // RestartPolicy 实现有限恢复（CONTRACTS §4.2）：窗口内第 Limit 次异常退出自动禁用；
 // 正常退出与用户主动停用不重启；手动启用重置窗口。失败窗口只保存在内存中，禁用状态由调用方持久化。
 type RestartPolicy struct {
+	// Window 是计数异常退出的滑动窗口。
 	Window time.Duration
-	Limit  int
+	// Limit 是窗口内触发禁用的异常退出次数。
+	Limit int
 
-	mu       sync.Mutex
+	// mu 保护 failures。
+	mu sync.Mutex
+	// failures 记录每个插件窗口内异常退出的时刻。
 	failures map[string][]time.Time
 }
 

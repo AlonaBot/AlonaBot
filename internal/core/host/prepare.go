@@ -19,7 +19,18 @@ import (
 
 // Limits 是阶段预算（CONTRACTS §4.2 的首发常量）；测试可注入更短的值。
 type Limits struct {
-	Handshake, Config, Migration, OnStart, OnReady, StopTotal time.Duration
+	// Handshake 是从连接建立到 HELLO 认证完成的预算。
+	Handshake time.Duration
+	// Config 是配置转换与校验的预算。
+	Config time.Duration
+	// Migration 是数据库迁移的预算。
+	Migration time.Duration
+	// OnStart 是 OnStart 的预算。
+	OnStart time.Duration
+	// OnReady 是 OnReady 的预算。
+	OnReady time.Duration
+	// StopTotal 是一次停用的总预算。
+	StopTotal time.Duration
 }
 
 // DefaultLimits 与 CONTRACTS §4.2 一致。
@@ -28,6 +39,7 @@ var DefaultLimits = Limits{
 	OnStart: 60 * time.Second, OnReady: 30 * time.Second, StopTotal: 10 * time.Second,
 }
 
+// proto 把预算转为 Bootstrap 中的毫秒值。
 func (l Limits) proto() *pb.PhaseLimits {
 	ms := func(d time.Duration) uint32 { return uint32(d / time.Millisecond) }
 	return &pb.PhaseLimits{HandshakeMs: ms(l.Handshake), ConfigMs: ms(l.Config), MigrationMs: ms(l.Migration),
@@ -39,32 +51,47 @@ const failNotifyTimeout = time.Second
 
 // Expect 是 Core 启动记录中与本次进程绑定的身份信息。
 type Expect struct {
-	PluginID    string
-	Secret      []byte // 32 字节
+	// PluginID 是 Core 启动该进程时的插件 ID。
+	PluginID string
+	// Secret 是本次启动的 32 字节 Session Secret。
+	Secret []byte
+	// BuildDigest 是安装时已验证的归档摘要。
 	BuildDigest []byte
-	Offer       validate.Offer // Core 一侧支持/要求的协议版本与能力
+	// Offer 是 Core 一侧支持/要求的协议版本与能力。
+	Offer validate.Offer
 }
 
 // PhaseError 是准备阶段的失败：哪个阶段、什么错误码。消息不含 Secret 或配置内容。
 type PhaseError struct {
+	// Phase 是失败的阶段。
 	Phase pb.SessionPhase
-	Code  pb.ErrorCode
-	Msg   string
+	// Code 是公开的错误码。
+	Code pb.ErrorCode
+	// Msg 是不含敏感信息的说明。
+	Msg string
 }
 
+// Error 返回「阶段: 错误码: 说明」。
 func (e *PhaseError) Error() string { return fmt.Sprintf("%s: %s: %s", e.Phase, e.Code, e.Msg) }
 
+// phaseErr 用格式化说明构造 *PhaseError。
 func phaseErr(phase pb.SessionPhase, code pb.ErrorCode, format string, args ...any) *PhaseError {
 	return &PhaseError{Phase: phase, Code: code, Msg: fmt.Sprintf(format, args...)}
 }
 
 // Prepared 是 REGISTER 校验通过后的结果；在 Core 提交 ActiveGeneration 之前不对外公开任何路由。
 type Prepared struct {
-	SessionID    []byte
-	Minor        uint32
+	// SessionID 是本 Session 的 ID。
+	SessionID []byte
+	// Minor 是协商出的协议次版本。
+	Minor uint32
+	// Capabilities 是双方都支持的协议能力。
 	Capabilities []*pb.ProtocolCapability
-	Register     *pb.Register
-	RouteHash    []byte
+	// Register 是已通过校验的注册载荷。
+	Register *pb.Register
+	// RouteHash 是 PREPARED 中的 route_descriptor_hash。
+	RouteHash []byte
+	// ConfigDigest 是 PREPARED 中的 candidate_config_digest。
 	ConfigDigest []byte
 }
 
@@ -72,7 +99,7 @@ type Prepared struct {
 // 认证失败直接关闭且不回复细节；认证之后的失败发送 SESSION_ERROR 再关闭。任何失败都不留下注册结果。
 // 成功返回后连接交给 wire.Session 继续（ACTIVATE 见 G1-17）。
 func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstrap, lim Limits) (*Prepared, error) {
-	// watchdog：阶段超时即关闭连接，阻塞中的读写随之返回。
+	// watchdog：阶段超时即关闭连接，阻塞中的读写随之返回；stage 每次送入新阶段的预算。
 	stage := make(chan time.Duration, 1)
 	done := make(chan struct{})
 	defer close(done)
@@ -99,6 +126,7 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 	}()
 	stage <- lim.Handshake
 
+	// fail 把读写失败转为该阶段的 PhaseError：已超时报 DEADLINE_EXCEEDED，帧超限报 RESOURCE_EXHAUSTED。
 	fail := func(phase pb.SessionPhase, err error) error {
 		select {
 		case <-timedOut:
@@ -137,6 +165,7 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		_ = conn.Close()
 		return nil, err
 	}
+	// sendErr 认证之后的失败路径：限时尽力发出 SESSION_ERROR 后关闭连接。
 	sendErr := func(phase pb.SessionPhase, kind pb.FrameKind, code pb.ErrorCode, safe string) {
 		if e, err := wire.ControlEnvelope(sid, 0, "", pb.FrameKind_FRAME_KIND_SESSION_ERROR, &pb.SessionError{FailedPhase: phase, FailedKind: kind}); err == nil {
 			e.Error = &pb.ErrorInfo{Code: code, SafeMessage: safe}
@@ -234,6 +263,7 @@ func authentic(env *pb.Envelope, h *pb.Hello, exp Expect) bool {
 	return secretOK && idOK && digestOK
 }
 
+// routeHash 按顺序拼接各 RouteDescriptor 的确定性编码并计算 SHA256。
 func routeHash(r *pb.Register) []byte {
 	h := sha256.New()
 	for _, rd := range r.GetRoutes() {
@@ -243,6 +273,7 @@ func routeHash(r *pb.Register) []byte {
 	return h.Sum(nil)
 }
 
+// digest 返回 b 的 SHA256。
 func digest(b []byte) []byte {
 	s := sha256.Sum256(b)
 	return s[:]

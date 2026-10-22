@@ -1,3 +1,4 @@
+// 本文件测试停止流程（排空、STOPPING 截止、总截止强杀、共享预算）与有限重启策略。
 package host
 
 import (
@@ -12,23 +13,33 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// fastStop 是缩短的停止预算。
 var fastStop = StopTiming{Drain: 200 * time.Millisecond, Total: 600 * time.Millisecond, OnStopAt: 300 * time.Millisecond}
 
 // fakeTree 模拟进程树：exit() 表示进程自行退出，KillTree 立即令其退出。
 type fakeTree struct {
+	// exited 在模拟进程退出时关闭。
 	exited chan struct{}
-	once   atomic.Bool
+	// once 保证 exited 只关闭一次。
+	once atomic.Bool
+	// killed 记录是否调用过 KillTree。
 	killed atomic.Bool
 }
 
+// newTree 返回一棵尚未退出的模拟进程树。
 func newTree() *fakeTree { return &fakeTree{exited: make(chan struct{})} }
 
+// Exited 返回模拟进程退出的通知通道。
 func (f *fakeTree) Exited() <-chan struct{} { return f.exited }
+
+// exit 模拟进程自行退出。
 func (f *fakeTree) exit() {
 	if f.once.CompareAndSwap(false, true) {
 		close(f.exited)
 	}
 }
+
+// KillTree 记录被强杀并令进程立即退出。
 func (f *fakeTree) KillTree() error { f.killed.Store(true); f.exit(); return nil }
 
 // WaitTree 视领头进程为树内唯一进程：已退出即清空，否则等到 deadline。
@@ -67,6 +78,7 @@ func activated(t *testing.T, handler wire.Handler) (*fake, *Instance, <-chan *pb
 	return f, r.in, frames
 }
 
+// next 从 frames 中取出下一个指定种类的帧，跳过其他帧；3 秒内没有即终止测试。
 func next(t *testing.T, frames <-chan *pb.Envelope, kind pb.FrameKind) *pb.Envelope {
 	t.Helper()
 	timeout := time.After(3 * time.Second)
@@ -85,6 +97,7 @@ func next(t *testing.T, frames <-chan *pb.Envelope, kind pb.FrameKind) *pb.Envel
 	}
 }
 
+// childReq 构造插件发出的 REQUEST；parent 非零时设置为父调用。
 func childReq(f *fake, id, parent uint64) *pb.Envelope {
 	e := req(f, id)
 	if parent != 0 {
@@ -93,6 +106,7 @@ func childReq(f *fake, id, parent uint64) *pb.Envelope {
 	return e
 }
 
+// stopAsync 在后台从当前时刻起停止实例，返回 t0 与结果通道。
 func stopAsync(in *Instance, tree Tree, timing StopTiming) (time.Time, <-chan StopResult) {
 	t0 := time.Now()
 	out := make(chan StopResult, 1)
@@ -100,6 +114,7 @@ func stopAsync(in *Instance, tree Tree, timing StopTiming) (time.Time, <-chan St
 	return t0, out
 }
 
+// waitState 轮询直到实例进入状态 s，2 秒内没有即终止测试。
 func waitState(t *testing.T, in *Instance, s State) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -235,6 +250,7 @@ func TestStopAllSharesOneBudget(t *testing.T) {
 	}
 }
 
+// 5 分钟窗口内前两次异常退出重启、第三次禁用；正常退出不重启；窗口滑动、Reset 与插件之间互不影响。
 func TestRestartPolicy(t *testing.T) {
 	p := NewRestartPolicy()
 	base := time.Unix(1_000_000, 0)
@@ -264,6 +280,7 @@ func TestRestartPolicy(t *testing.T) {
 	}
 }
 
+// 默认停止预算与重启策略和 CONTRACTS §4.2 一致。
 func TestStopDefaultsMatchContract(t *testing.T) {
 	if DefaultStopTiming != (StopTiming{6 * time.Second, 10 * time.Second, 4 * time.Second}) {
 		t.Fatalf("DefaultStopTiming = %+v，应为排空 6s、总计 10s、OnStop 4s", DefaultStopTiming)
