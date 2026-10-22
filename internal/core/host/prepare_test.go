@@ -299,3 +299,28 @@ func TestDefaultLimitsMatchContract(t *testing.T) {
 		t.Fatalf("DefaultLimits = %+v，应与 CONTRACTS §4.2 一致", DefaultLimits)
 	}
 }
+
+// 准备期的 REGISTER 同样核对认证身份与协商版本：冒用其他插件 ID 或错误的 minor 都使本次 Session 失败。
+func TestPrepareRejectsForeignSourceOrMinor(t *testing.T) {
+	for name, mutate := range map[string]func(*pb.Envelope){
+		"wrong-source": func(e *pb.Envelope) { e.SourcePluginId = "plugin-b" },
+		"wrong-minor":  func(e *pb.Envelope) { e.ProtocolMinor = 9 },
+	} {
+		t.Run(name, func(t *testing.T) {
+			f, out := run(t, expectA(), bootA(), DefaultLimits)
+			f.send(pb.FrameKind_FRAME_KIND_HELLO, hello(secretA, 1), nil)
+			_, msg, err := f.recv()
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.sid = msg.(*pb.HelloAck).GetSessionId()
+			f.send(pb.FrameKind_FRAME_KIND_REGISTER, &pb.Register{CandidateConfigJson: "{}"}, mutate)
+			if env, _, _ := f.recv(); env.GetKind() != pb.FrameKind_FRAME_KIND_SESSION_ERROR {
+				t.Fatalf("应收到 SESSION_ERROR，实际 %v", env.GetKind())
+			}
+			if pe := phaseOf(t, (<-out).err); pe.Code != pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR {
+				t.Fatalf("应以 PROTOCOL_ERROR 拒绝，实际 %v", pe)
+			}
+		})
+	}
+}

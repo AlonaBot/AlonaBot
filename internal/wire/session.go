@@ -83,8 +83,12 @@ type Request struct {
 
 // Response 是一次调用的结果；Payload 与 Err 可以同时存在（例如部分发送成功）。
 type Response struct {
+	// Payload 是对端返回的业务结果；出错时也可能携带有效的部分结果。
 	Payload Payload
-	Err     *pb.ErrorInfo
+	// Err 是对调用者公开的错误；对端发来的未知错误码已映射为 INTERNAL。
+	Err *pb.ErrorInfo
+	// RawErrorCode 是对端发来的原始错误码，只供内部诊断；与 Err.Code 不同说明发生了映射。
+	RawErrorCode pb.ErrorCode
 }
 
 // Inbound 是对端发来的一次调用。
@@ -128,10 +132,11 @@ func CodeOf(err error) pb.ErrorCode {
 
 // Options 配置一个 Session。
 type Options struct {
-	Local          pb.InitiatorSide
-	SessionID      []byte
-	ProtocolMinor  uint32
-	SourcePluginID string // Local 为 PLUGIN 时写入发出的帧
+	Local         pb.InitiatorSide
+	SessionID     []byte
+	ProtocolMinor uint32
+	// SourcePluginID 是插件的认证 ID：Local 为 PLUGIN 时写入发出的帧，Local 为 CORE 时用来核对对端帧。
+	SourcePluginID string
 	Handler        Handler
 	// Control 在读循环中同步处理非调用帧（控制帧与 EVENT），保证状态变化按帧顺序生效；返回错误关闭 Session。
 	Control func(*pb.Envelope) error
@@ -662,8 +667,12 @@ func (s *Session) dispatch(env *pb.Envelope) error {
 	if err := validate.Envelope(env); err != nil {
 		return err
 	}
-	if string(env.GetSessionId()) != string(s.opt.SessionID) {
-		return errors.New("帧的 session_id 与本 Session 不符")
+	peerID := "" // 对端为 Core 时帧上不带插件来源
+	if s.opt.Local == pb.InitiatorSide_INITIATOR_SIDE_CORE {
+		peerID = s.opt.SourcePluginID
+	}
+	if err := CheckPeer(env, s.opt.SessionID, s.opt.ProtocolMinor, peerID); err != nil {
+		return err
 	}
 	switch env.GetKind() {
 	case pb.FrameKind_FRAME_KIND_REQUEST:
@@ -779,10 +788,20 @@ func (s *Session) onResponse(env *pb.Envelope) error {
 	s.mu.Lock()
 	c := s.pending[env.GetCallId()]
 	s.mu.Unlock()
-	if c == nil || !s.complete(c, Response{Payload: payloadOf(env), Err: env.GetError()}, pb.CancelReason_CANCEL_REASON_UNSPECIFIED) {
+	if c == nil || !s.complete(c, responseOf(env), pb.CancelReason_CANCEL_REASON_UNSPECIFIED) {
 		s.late.Add(1) // 迟到、重复或未知：不第二次完成调用
 	}
 	return nil
+}
+
+// responseOf 把 RESPONSE 帧转为调用结果：保留载荷、安全消息与 trace_id，错误码按 PublicCode 公开，原值留作诊断。
+func responseOf(env *pb.Envelope) Response {
+	r := Response{Payload: payloadOf(env)}
+	if e := env.GetError(); e != nil {
+		r.RawErrorCode = e.GetCode()
+		r.Err = &pb.ErrorInfo{Code: validate.PublicCode(e.GetCode()), SafeMessage: e.GetSafeMessage(), TraceId: e.GetTraceId()}
+	}
+	return r
 }
 
 func (s *Session) onCancel(env *pb.Envelope) error {

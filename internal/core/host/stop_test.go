@@ -136,7 +136,7 @@ func TestStopDrainAllowsChildCallsAndRejectsNewRoots(t *testing.T) {
 		t.Fatalf("父链内的子调用应能完成: %v", r)
 	}
 	// 插件回应父请求 → 排空完成。
-	_ = f.conn.WriteFrame(&pb.Envelope{ProtocolMajor: 1, SessionId: f.sid, Kind: pb.FrameKind_FRAME_KIND_RESPONSE,
+	_ = f.conn.WriteFrame(&pb.Envelope{ProtocolMajor: 1, SessionId: f.sid, Kind: pb.FrameKind_FRAME_KIND_RESPONSE, SourcePluginId: "plugin-a",
 		InitiatorSide: pb.InitiatorSide_INITIATOR_SIDE_CORE, CallId: parent.GetCallId(),
 		PayloadEncoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaId: "t.v1", SchemaVersion: 1, Payload: []byte(`2`)})
 	if err := <-callDone; err != nil {

@@ -102,12 +102,15 @@ func clientHandshake(conn *wire.Conn, l launch) (*pb.HelloAck, error) {
 	}
 	switch m := msg.(type) {
 	case *pb.HelloAck:
-		if len(m.GetSessionId()) != 16 || string(env.GetSessionId()) != string(m.GetSessionId()) {
+		if len(m.GetSessionId()) != 16 {
 			return nil, errors.New("HELLO_ACK 的 session_id 不合法")
+		}
+		if err := wire.CheckPeer(env, m.GetSessionId(), m.GetChosenMinor(), ""); err != nil {
+			return nil, fmt.Errorf("HELLO_ACK 不合法: %w", err)
 		}
 		return m, nil
 	case *pb.SessionError:
-		return nil, &Error{Code: env.GetError().GetCode(), Message: "Core 拒绝握手: " + env.GetError().GetSafeMessage()}
+		return nil, &Error{Code: validate.PublicCode(env.GetError().GetCode()), Message: "Core 拒绝握手: " + env.GetError().GetSafeMessage()}
 	}
 	return nil, fmt.Errorf("握手阶段收到意外的 %s", env.GetKind())
 }
@@ -204,6 +207,10 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg 
 	if err != nil {
 		return nil, fmt.Errorf("等待 PREPARED 失败: %w", err)
 	}
+	if err := wire.CheckPeer(env, sid, minor, ""); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("准备阶段收到不合法的帧: %w", err)
+	}
 	msg, err := validate.DecodeControl(env)
 	if err != nil {
 		return nil, err
@@ -213,7 +220,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg 
 		return m, nil
 	case *pb.SessionError:
 		_ = conn.Close()
-		return nil, &Error{Code: env.GetError().GetCode(), Message: "Core 拒绝注册: " + env.GetError().GetSafeMessage()}
+		return nil, &Error{Code: validate.PublicCode(env.GetError().GetCode()), Message: "Core 拒绝注册: " + env.GetError().GetSafeMessage()}
 	}
 	return nil, fmt.Errorf("准备阶段收到意外的 %s", env.GetKind())
 }

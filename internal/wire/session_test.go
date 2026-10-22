@@ -3,6 +3,7 @@ package wire
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
 	"strings"
 	"sync"
@@ -11,6 +12,8 @@ import (
 	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"google.golang.org/protobuf/proto"
 )
 
 var sid16 = bytes.Repeat([]byte{7}, 16)
@@ -51,7 +54,7 @@ func newPair(t *testing.T, coreOpt, pluginOpt Options) *pair {
 	cb := &gatedConn{Conn: b, gate: make(chan struct{})}
 	coreOpt.Local, coreOpt.SessionID = pb.InitiatorSide_INITIATOR_SIDE_CORE, sid16
 	pluginOpt.Local, pluginOpt.SessionID = pb.InitiatorSide_INITIATOR_SIDE_PLUGIN, sid16
-	pluginOpt.SourcePluginID = "demo"
+	coreOpt.SourcePluginID, pluginOpt.SourcePluginID = "demo", "demo"
 	p := &pair{core: NewSession(NewStreamConn(ca), coreOpt), plugin: NewSession(NewStreamConn(cb), pluginOpt), coreConn: ca, pluginConn: cb}
 	t.Cleanup(func() { _ = p.core.Close(); _ = p.plugin.Close() })
 	return p
@@ -405,7 +408,7 @@ func TestSessionCloseFailsPending(t *testing.T) {
 
 func TestNonMonotonicCallIDClosesSession(t *testing.T) {
 	a, b := net.Pipe()
-	core := NewSession(NewStreamConn(a), Options{Local: pb.InitiatorSide_INITIATOR_SIDE_CORE, SessionID: sid16,
+	core := NewSession(NewStreamConn(a), Options{Local: pb.InitiatorSide_INITIATOR_SIDE_CORE, SessionID: sid16, SourcePluginID: "demo",
 		Handler: func(_ context.Context, in *Inbound) Response { return Response{Payload: in.Payload} }})
 	defer core.Close()
 	raw := NewStreamConn(b)
@@ -553,4 +556,51 @@ func TestCancelledRequestsReleaseQueueAndBudget(t *testing.T) {
 // probePayload 返回 n 字节的合法 PROTOBUF 载荷，用于按字节核对预算。
 func probePayload(n int) Payload {
 	return Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: "probe", SchemaVersion: 1, Data: make([]byte, n)}
+}
+
+// 认证后每一帧都核对身份与版本：插件冒用其他 ID、Core 帧伪带插件来源、protocol_minor 不符都使当前 Session 失败。
+func TestSessionRejectsForeignIdentityOrMinor(t *testing.T) {
+	deadline := proto.Int64(time.Now().Add(time.Minute).UnixMilli())
+	cases := []struct {
+		name string
+		side pb.InitiatorSide // 收帧的一端
+		env  *pb.Envelope
+	}{
+		{"plugin-claims-other-id", pb.InitiatorSide_INITIATOR_SIDE_CORE, &pb.Envelope{SourcePluginId: "other-plugin",
+			Kind: pb.FrameKind_FRAME_KIND_REQUEST, InitiatorSide: pb.InitiatorSide_INITIATOR_SIDE_PLUGIN}},
+		{"plugin-wrong-minor", pb.InitiatorSide_INITIATOR_SIDE_CORE, &pb.Envelope{SourcePluginId: "demo", ProtocolMinor: 9,
+			Kind: pb.FrameKind_FRAME_KIND_REQUEST, InitiatorSide: pb.InitiatorSide_INITIATOR_SIDE_PLUGIN}},
+		{"core-frame-with-plugin-source", pb.InitiatorSide_INITIATOR_SIDE_PLUGIN, &pb.Envelope{SourcePluginId: "demo",
+			Kind: pb.FrameKind_FRAME_KIND_REQUEST, InitiatorSide: pb.InitiatorSide_INITIATOR_SIDE_CORE}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newPair(t, Options{}, Options{})
+			recv := p.core
+			if tc.side == pb.InitiatorSide_INITIATOR_SIDE_PLUGIN {
+				recv = p.plugin
+			}
+			tc.env.ProtocolMajor, tc.env.SessionId, tc.env.CallId, tc.env.DeadlineUnixMs = 1, sid16, 1, deadline
+			// dispatch 的错误由 readLoop 交给 fail，使当前 Session 关闭。
+			var ve *validate.Error
+			if err := recv.dispatch(tc.env); !errors.As(err, &ve) || ve.Code != pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR {
+				t.Fatalf("应以 PROTOCOL_ERROR 拒绝身份或协商版本不符的帧，实际 %v", err)
+			}
+		})
+	}
+}
+
+// 对端返回未知错误码：调用者看到 INTERNAL，部分结果、安全消息与 trace_id 保留，原始码留作诊断。
+func TestUnknownErrorCodeMappedToInternal(t *testing.T) {
+	trace := bytes.Repeat([]byte{3}, 16)
+	p := newPair(t, Options{}, Options{Handler: func(context.Context, *Inbound) Response {
+		return Response{Payload: jsonPayload("kept"), Err: &pb.ErrorInfo{Code: pb.ErrorCode(250), SafeMessage: "future error", TraceId: trace}}
+	}})
+	r, err := p.core.Call(context.Background(), Request{Payload: jsonPayload("probe")})
+	if CodeOf(err) != pb.ErrorCode_ERROR_CODE_INTERNAL || r.Err.GetSafeMessage() != "future error" || !bytes.Equal(r.Err.GetTraceId(), trace) {
+		t.Fatalf("未知错误码应以 INTERNAL 公开并保留消息与 trace_id: %v %v", err, r.Err)
+	}
+	if string(r.Payload.Data) != `"kept"` || r.RawErrorCode != pb.ErrorCode(250) {
+		t.Fatalf("部分结果或原始错误码丢失: payload=%s raw=%v", r.Payload.Data, r.RawErrorCode)
+	}
 }

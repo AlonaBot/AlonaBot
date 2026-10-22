@@ -130,7 +130,7 @@ func Activate(ctx context.Context, conn *wire.Conn, prep *Prepared, opt Activate
 	in.state.Store(int32(StateActivating))
 	in.Session = wire.NewSession(conn, wire.Options{
 		Local: pb.InitiatorSide_INITIATOR_SIDE_CORE, SessionID: prep.SessionID, ProtocolMinor: prep.Minor,
-		Handler: opt.Handler, Admit: in.admit, Control: in.control, Global: opt.Global,
+		SourcePluginID: opt.PluginID, Handler: opt.Handler, Admit: in.admit, Control: in.control, Global: opt.Global,
 	})
 
 	deadline := time.Now().Add(opt.Limits.OnReady)

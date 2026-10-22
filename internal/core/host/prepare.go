@@ -182,9 +182,9 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		_ = conn.Close()
 		return nil, fail(pb.SessionPhase_SESSION_PHASE_REGISTER, err)
 	}
-	if string(env.GetSessionId()) != string(sid) {
-		sendErr(pb.SessionPhase_SESSION_PHASE_REGISTER, env.GetKind(), pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "session_id 不符")
-		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "session_id 不符")
+	if err := wire.CheckPeer(env, sid, agree.Minor, exp.PluginID); err != nil {
+		sendErr(pb.SessionPhase_SESSION_PHASE_REGISTER, env.GetKind(), pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "帧的会话身份或协商版本不符")
+		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%v", err)
 	}
 	msg, err = validate.DecodeControl(env)
 	if err != nil {
