@@ -1,5 +1,6 @@
 //go:build unix
 
+// 本文件用真实子进程测试插件的启动、停止、崩溃恢复、启动故障、runtime.lock 与管理锁串行化。
 // 依赖 Unix 信号与进程组语义；Windows 上的运行证据由 T-10 补齐。
 
 package supervisor
@@ -27,6 +28,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
+// faultEnv 选择辅助进程注入的故障。
 const faultEnv = "SUPERVISOR_TEST_FAULT"
 
 // 辅助进程：用原始协议帧扮演插件，按 SUPERVISOR_TEST_FAULT 注入故障。
@@ -38,6 +40,7 @@ func TestMain(m *testing.M) {
 	os.Exit(rawPlugin(fault))
 }
 
+// rawPlugin 用原始协议帧扮演插件走完握手、注册与激活，按 fault 在相应位置注入故障，返回进程退出码。
 func rawPlugin(fault string) int {
 	if fault == "exit-early" {
 		return 4
@@ -111,25 +114,32 @@ func rawPlugin(fault string) int {
 	}
 }
 
+// 缩短的阶段预算与停止预算。
 var (
 	fastLimits = host.Limits{Handshake: 2 * time.Second, Config: 2 * time.Second, Migration: 2 * time.Second,
 		OnStart: 2 * time.Second, OnReady: 2 * time.Second, StopTotal: time.Second}
 	fastStop = host.StopTiming{Drain: 200 * time.Millisecond, Total: 800 * time.Millisecond, OnStopAt: 400 * time.Millisecond}
 )
 
+// logBuf 收集插件日志，供断言与失败时打印。
 type logBuf struct {
+	// mu 保护 b。
 	mu sync.Mutex
-	b  bytes.Buffer
+	// b 是「插件ID|流|内容」形式的日志。
+	b bytes.Buffer
 }
 
+// log 是 process.LogFunc，记录一行日志。
 func (l *logBuf) log(id, stream string, line []byte) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	fmt.Fprintf(&l.b, "%s|%s|%s\n", id, stream, line)
 }
 
+// String 返回已收集的全部日志。
 func (l *logBuf) String() string { l.mu.Lock(); defer l.mu.Unlock(); return l.b.String() }
 
+// setup 准备已安装 demo、含候选代次 gen-1 的状态库，并返回以 exe 为入口的启动描述。
 func setup(t *testing.T, exe string) (*state.Store, Spec) {
 	t.Helper()
 	ctx := context.Background()
@@ -154,6 +164,7 @@ func setup(t *testing.T, exe string) (*state.Store, Spec) {
 		NewCandidate: true, Limits: fastLimits, Stop: fastStop}
 }
 
+// rawSpec 返回以测试二进制作为 rawPlugin 辅助进程、注入 fault 故障的启动描述与日志收集器。
 func rawSpec(t *testing.T, fault string, stdio bool) (*state.Store, Spec, *logBuf) {
 	s, spec := setup(t, os.Args[0])
 	spec.Args = []string{"-test.run=^$"}
@@ -165,6 +176,7 @@ func rawSpec(t *testing.T, fault string, stdio bool) (*state.Store, Spec, *logBu
 	return s, spec, logs
 }
 
+// alive 报告 pid 对应的进程是否仍存在。
 func alive(pid int) bool { return syscall.Kill(pid, 0) == nil }
 
 // 正常生命周期：两种传输都能激活，停止后进程退出、Listener 关闭、状态库提交新代次。
@@ -211,6 +223,7 @@ func TestLaunchAndStopBothTransports(t *testing.T) {
 	}
 }
 
+// 不响应 STOPPING 的插件在总截止被终止。
 func TestNonCooperativePluginKilledAtDeadline(t *testing.T) {
 	s, spec, _ := rawSpec(t, "nostop", false)
 	r, err := Launch(context.Background(), s, spec)
@@ -252,10 +265,15 @@ func TestCrashAfterActivationAndRestartPolicy(t *testing.T) {
 	}
 }
 
+// 握手挂起、非法帧、stdout 污染、连接前退出都不激活：报告对应错误，候选不提交。
 func TestStartupFaultsAreKilledAndReported(t *testing.T) {
 	cases := []struct {
-		fault, want string
-		stdio       bool
+		// fault 是注入的故障。
+		fault string
+		// want 是错误中应包含的片段；空串表示不检查。
+		want string
+		// stdio 为 true 时使用 stdio 传输。
+		stdio bool
 	}{
 		{"hang", "DEADLINE_EXCEEDED", false},
 		{"badframe", "PROTOCOL_ERROR", false},

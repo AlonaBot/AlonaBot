@@ -23,36 +23,57 @@ import (
 
 // Spec 描述一次插件启动。
 type Spec struct {
-	PluginID     string
-	PluginDir    string // <plugins>/<id>：工作目录与 runtime.lock 所在
-	Executable   string // 已校验的入口可执行文件
-	BuildDigest  []byte // 安装时已验证的归档摘要
+	// PluginID 是插件 ID。
+	PluginID string
+	// PluginDir 是 <plugins>/<id>：工作目录与 runtime.lock 所在；可以是相对路径，Launch 会转为绝对路径。
+	PluginDir string
+	// Executable 是已校验的入口可执行文件。
+	Executable string
+	// BuildDigest 是安装时已验证的归档摘要。
+	BuildDigest []byte
+	// GenerationID 是要激活的代次。
 	GenerationID string
-	Bootstrap    *pb.Bootstrap // generation_id 与候选配置等；阶段预算由 host 填写
+	// Bootstrap 携带 generation_id 与候选配置等；阶段预算由 host 填写。
+	Bootstrap *pb.Bootstrap
 	// NewCandidate 为 true 时在 ACTIVATE 前提交 ActiveGeneration（期望旧值 ExpectedOld）；
 	// false 表示普通 restart，复用已提交的代次。
 	NewCandidate bool
-	ExpectedOld  string
-	Stdio        bool
-	Args         []string          // 传给插件进程的额外参数（测试辅助进程使用）
-	ExtraEnv     map[string]string // 额外环境变量（测试辅助进程使用）
-	Limits       host.Limits
-	Stop         host.StopTiming
-	Log          process.LogFunc
-	Handler      wire.Handler
-	Global       *wire.Budget
+	// ExpectedOld 是提交新候选时预期的旧 ActiveGeneration；首次激活为空。
+	ExpectedOld string
+	// Stdio 为 true 时使用 stdio 传输，否则使用 TCP loopback。
+	Stdio bool
+	// Args 是传给插件进程的额外参数（测试辅助进程使用）。
+	Args []string
+	// ExtraEnv 是额外环境变量（测试辅助进程使用）。
+	ExtraEnv map[string]string
+	// Limits 是各阶段预算。
+	Limits host.Limits
+	// Stop 是停止预算。
+	Stop host.StopTiming
+	// Log 接收插件日志；为 nil 时写 Core 的 stderr。
+	Log process.LogFunc
+	// Handler 处理插件激活后发起的业务调用。
+	Handler wire.Handler
+	// Global 是 Core 全局载荷预算。
+	Global *wire.Budget
 }
 
 // Running 是一个已激活的插件。
 type Running struct {
+	// Instance 是已激活的 Core 侧实例。
 	Instance *host.Instance
-	Process  *process.Process
-	store    *state.Store
+	// Process 是插件进程及其进程树。
+	Process *process.Process
+	// store 提供逐插件管理锁。
+	store *state.Store
+	// pluginID 是插件 ID。
 	pluginID string
+	// listener 是 TCP 传输的 loopback Listener；stdio 时为 nil。
 	listener net.Listener
-	timing   host.StopTiming
+	// timing 是停止预算。
+	timing host.StopTiming
 
-	// mu 串行化 Stop 与 WaitExit 的清理，保护 stopping 与 released。
+	// mu 串行化 Stop 与 WaitExit 的清理，保护 stopping、released 与 cleanupErr。
 	mu sync.Mutex
 	// stopping 为 true 表示 Stop 已接管清理；此后的进程退出不算异常，也不由 WaitExit 清理。
 	stopping bool
@@ -68,7 +89,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	unlock := store.LockPlugin(spec.PluginID)
 	defer unlock()
 
-	// 工作目录与 runtime.lock 路径用同一个绝对路径：SDK 只接受绝对锁路径，相对路径也会随子进程 cwd 改变含义。
+	// 1. 准备启动参数：工作目录与 runtime.lock 路径用同一个绝对路径：SDK 只接受绝对锁路径，相对路径也会随子进程 cwd 改变含义。
 	pluginDir, err := filepath.Abs(spec.PluginDir)
 	if err != nil {
 		return nil, err
@@ -86,6 +107,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	for k, v := range spec.ExtraEnv {
 		env[k] = v
 	}
+	// 2. TCP 传输先持有 loopback Listener，再把地址交给插件。
 	var ln net.Listener
 	if spec.Stdio {
 		env[wire.EnvTransport] = wire.TransportStdio
@@ -96,12 +118,14 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		env[wire.EnvCoreAddr] = ln.Addr().String()
 	}
 
+	// 3. 启动进程；之后任何失败都先终止并确认进程树清空，再返回。
 	proc, err := process.Start(process.Spec{PluginID: spec.PluginID, Path: spec.Executable, Dir: pluginDir,
 		Args: spec.Args, Env: env, Stdio: spec.Stdio}, spec.Log)
 	if err != nil {
 		closeListener(ln)
 		return nil, err
 	}
+	// fail 终止进程树、释放资源后返回 err，不能在旧进程仍在时另起写入者。
 	fail := func(err error) (*Running, error) {
 		_ = proc.KillTree()
 		<-proc.Exited() // 确认旧进程退出后才返回，不能另起写入者
@@ -110,6 +134,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		return nil, err
 	}
 
+	// 4. 建立连接，完成握手与准备，再提交（新候选）并激活。
 	conn, err := connect(ln, proc, spec)
 	if err != nil {
 		return fail(err)
@@ -139,8 +164,11 @@ func connect(ln net.Listener, proc *process.Process, spec Spec) (*wire.Conn, err
 	if spec.Stdio {
 		return wire.NewConn(proc.Stdout, proc.Stdin, closers{proc.Stdin, proc.Stdout}), nil
 	}
+	// accepted 是一次 Accept 的结果。
 	type accepted struct {
-		c   net.Conn
+		// c 是插件拨入的连接。
+		c net.Conn
+		// err 是 Accept 的错误（含握手期限到期）。
 		err error
 	}
 	ch := make(chan accepted, 1)
@@ -162,8 +190,10 @@ func connect(ln net.Listener, proc *process.Process, spec Spec) (*wire.Conn, err
 	}
 }
 
+// closers 把多个 Closer 合成一个，用于 stdio 传输同时关闭两条管道。
 type closers []io.Closer
 
+// Close 依次关闭全部成员并合并错误。
 func (cs closers) Close() error {
 	var errs []error
 	for _, c := range cs {
@@ -172,6 +202,7 @@ func (cs closers) Close() error {
 	return errors.Join(errs...)
 }
 
+// closeListener 关闭 Listener；ln 为 nil 时什么也不做。
 func closeListener(ln net.Listener) {
 	if ln != nil {
 		_ = ln.Close()
