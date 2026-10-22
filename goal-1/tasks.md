@@ -470,3 +470,15 @@
 - gofmt 无输出；`go generate ./...` 后无差异；`go vet ./...` 通过，linux/amd64 与 windows/amd64 的 vet 也通过；五目标 `CGO_ENABLED=0 go build ./...` 都通过；`go mod verify` 显示 all modules verified；`node --test scripts/check-repository.test.mjs`（2 pass）、`node scripts/check-repository.mjs` 和 `git diff --check` 都通过。
 - 全仓库测试：设置 `ALONABOT_TEST_PG_DSN` 后执行 `go test -race -count=1 ./...`，15 个包、291 个测试（含子测试）全部 PASS，0 FAIL，0 SKIP。PG 用一次性 postgres:17 容器（a63c1ea3f6a3），跑完确认没有残留 `ab_%` role/schema，随后删除容器。另跑 `go test -race -count=3 ./cmd/alonabot/ ./internal/core/supervisor/`，通过。
 - 未运行：Linux 与 Windows 的真实运行（T-10）；Windows Job 清空确认与 LockFileEx；PR head 的 CI 结果在 PR 中记录。
+
+### [x] R-07 独立审查与修复（21b8e00、a970df1）
+- 方式：两个只读审阅者分别审行为契约与编码规范（参照 code-review-expert 检查清单与 alonabot-review 的两轴要求），只读代码，不运行测试。
+- 行为轴：
+  - P1：Core 作为 PID 1 或 subreaper 时，被杀插件的孙进程会过继给 Core，成为 Go 不会回收的僵尸；僵尸仍算组内进程，KillTree/WaitTree 永远等不到清空（R-02 引入的回归）。修复：领头进程被回收之后，WaitTree 用 `Wait4(-pgid, WNOHANG)` 回收组内僵尸。新增 Linux 回归测试 `TestKillTreeReapsAdoptedZombies`，未在本机运行，由 CI 运行。
+  - P3：WaitExit 先确认进程组已空再决定是否发信号；Core 准备阶段的 SESSION_ERROR 改用协商 minor；Windows `tree.release` 改为可重复调用。
+  - 确认无误：R-01、R-04 的修复；R-03 的预算在各路径只归还一次，Cancel 不越过自己的 Request；Stop 与 WaitExit 交错时的结果；`basicAccounting` 的内存布局。
+- 规范轴：
+  - 去掉注释后逐文件对比，R-05 没有夹带行为改动；proto 与生成的 pb 文件去掉注释后零差异；拆字段后的按位置字面量都与新的字段顺序一致。
+  - 修正 4 处与代码不符的注释（a970df1）。
+  - 未处理：规则歧义「测试函数的文档注释是否须以函数名开头」，留给维护者在 coding-standards.md 中明确。
+- 复跑：21b8e00 之后执行 `go test -race -count=2 ./internal/core/... ./cmd/...`，通过；三平台 vet 通过；commentcheck 结果为 0。
