@@ -213,3 +213,29 @@ func TestCoreKilledPluginExitsAndRecovers(t *testing.T) {
 	_ = c2.cmd.Process.Signal(syscall.SIGTERM)
 	c2.wait(15 * time.Second)
 }
+
+// 相对 --data-dir：两种传输下都能启动、停止，并以 restart 再次打开同一目录；runtime.lock 文件保留。
+func TestRelativeDataDir(t *testing.T) {
+	for _, transport := range []string{"tcp", "stdio"} {
+		t.Run(transport, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			var extra []string
+			if transport == "stdio" {
+				extra = []string{"--stdio"}
+			}
+			for i, mode := range []string{"new", "restart"} {
+				c := startCore(t, "data", extra...)
+				if m := c.waitFor(activatedRe); m[2] != mode {
+					t.Fatalf("第 %d 次运行应为 mode=%s，实际 %s", i+1, mode, m[2])
+				}
+				_ = c.cmd.Process.Signal(syscall.SIGTERM)
+				if code := c.wait(15 * time.Second); code != 0 {
+					t.Fatalf("alonabot 退出码 %d；日志:\n%s", code, c.log())
+				}
+			}
+			if _, err := os.Stat(filepath.Join("data", "plugins", "demo", "runtime.lock")); err != nil {
+				t.Fatalf("runtime.lock 应保留: %v", err)
+			}
+		})
+	}
+}

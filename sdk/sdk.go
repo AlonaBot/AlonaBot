@@ -70,21 +70,25 @@ func (c *Context) Send(chain message.Chain, opts ...SendOption) (*pb.SendResult,
 }
 
 // Run 是插件 main 的入口：连接 Core、完成握手并处理请求，直到停止。
-// 顺序：收集注册项 → 取得 runtime.lock（任何用户回调之前）→ 握手 → 准备阶段 → 激活（OnReady/ACTIVATED）→ 服务。
+// 顺序：取得 runtime.lock → 收集注册项 → 握手 → 准备阶段 → 激活（OnReady/ACTIVATED）→ 服务。
 func Run(root plugin.Root) error {
-	reg, err := Collect(root)
-	if err != nil {
-		return err
-	}
-	if len(reg.HTTP) > 0 || len(reg.Schedules) > 0 {
-		// HTTP 需要真实 Listener、调度需要 Core Scheduler（T-07）；不静默丢弃这些声明。
-		return &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "本版 SDK 尚不支持 HTTP 路由与定时任务（T-07）"}
-	}
+	// 1. 先取 runtime.lock：注册入口（Commands 等）也是用户代码，旧实例仍在时不能执行（CONTRACTS §12.2）。
 	lock, err := acquireRuntimeLock()
 	if err != nil {
 		return err
 	}
 	defer lock.Unlock()
+
+	// 2. 收集静态注册项；HTTP 需要真实 Listener、调度需要 Core Scheduler（T-07），不静默丢弃这些声明。
+	reg, err := Collect(root)
+	if err != nil {
+		return err
+	}
+	if len(reg.HTTP) > 0 || len(reg.Schedules) > 0 {
+		return &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "本版 SDK 尚不支持 HTTP 路由与定时任务（T-07）"}
+	}
+
+	// 3. 连接 Core 并依次完成握手、准备与激活，然后进入服务循环。
 	l, err := readLaunch()
 	if err != nil {
 		return err

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"testing"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -54,6 +55,8 @@ func TestDemoComposes(t *testing.T) {
 
 // 运行时尚未实现：Run 返回明确的 UNSUPPORTED，而不是 panic 或假装成功。
 func TestRunNotImplemented(t *testing.T) {
+	// Core 启动插件时注入 runtime.lock 的绝对路径；示例只依赖 SDK，故直接写环境变量名。
+	t.Setenv("ALONABOT_RUNTIME_LOCK", filepath.Join(t.TempDir(), "runtime.lock"))
 	var e *sdk.Error
 	if err := sdk.Run(&Demo{}); !errors.As(err, &e) || e.Code != pb.ErrorCode_ERROR_CODE_UNSUPPORTED {
 		t.Fatalf("Run 应返回 UNSUPPORTED，实际 %v", err)

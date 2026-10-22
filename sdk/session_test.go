@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -209,6 +210,7 @@ func TestPrepareRegisterRejectedByCore(t *testing.T) {
 
 // 声明了尚未支持的 HTTP/定时任务时，Run 在连接 Core 之前就明确失败，不静默丢弃声明。
 func TestRunRejectsUnsupportedDeclarations(t *testing.T) {
+	t.Setenv(wire.EnvRuntimeLock, filepath.Join(t.TempDir(), wire.RuntimeLockFile))
 	withSchedule := &root{schedules: func(s *ScheduleRegistry) { s.Every("t", time.Minute, func(*Context) error { return nil }) }}
 	var e *Error
 	if err := Run(withSchedule); !errors.As(err, &e) || e.Code != pb.ErrorCode_ERROR_CODE_UNSUPPORTED {

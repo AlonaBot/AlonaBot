@@ -41,3 +41,21 @@ func TestRuntimeLockRequiresAbsolutePathFromCore(t *testing.T) {
 		t.Fatal("相对路径应被拒绝")
 	}
 }
+
+// 旧实例仍持有 runtime.lock 时，Run 在调用任何用户代码（包括注册入口 Commands）之前就失败。
+func TestRunTakesLockBeforeRegistration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), wire.RuntimeLockFile)
+	t.Setenv(wire.EnvRuntimeLock, path)
+	held, err := oslock.TryLock(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Unlock()
+	called := false
+	if err := Run(&root{commands: func(*CommandRegistry) { called = true }}); !errors.Is(err, oslock.ErrLocked) {
+		t.Fatalf("锁被占用时应返回 ErrLocked，实际 %v", err)
+	}
+	if called {
+		t.Fatal("取锁失败后仍调用了用户的 Commands 注册入口")
+	}
+}

@@ -60,6 +60,11 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	unlock := store.LockPlugin(spec.PluginID)
 	defer unlock()
 
+	// 工作目录与 runtime.lock 路径用同一个绝对路径：SDK 只接受绝对锁路径，相对路径也会随子进程 cwd 改变含义。
+	pluginDir, err := filepath.Abs(spec.PluginDir)
+	if err != nil {
+		return nil, err
+	}
 	secret, err := process.NewSecret()
 	if err != nil {
 		return nil, err
@@ -67,7 +72,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	env := map[string]string{
 		wire.EnvPluginID: spec.PluginID, wire.EnvSecret: secret,
 		wire.EnvBuildDigest: hex.EncodeToString(spec.BuildDigest),
-		wire.EnvRuntimeLock: filepath.Join(spec.PluginDir, wire.RuntimeLockFile),
+		wire.EnvRuntimeLock: filepath.Join(pluginDir, wire.RuntimeLockFile),
 		wire.EnvTransport:   wire.TransportTCP,
 	}
 	for k, v := range spec.ExtraEnv {
@@ -83,7 +88,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		env[wire.EnvCoreAddr] = ln.Addr().String()
 	}
 
-	proc, err := process.Start(process.Spec{PluginID: spec.PluginID, Path: spec.Executable, Dir: spec.PluginDir,
+	proc, err := process.Start(process.Spec{PluginID: spec.PluginID, Path: spec.Executable, Dir: pluginDir,
 		Args: spec.Args, Env: env, Stdio: spec.Stdio}, spec.Log)
 	if err != nil {
 		closeListener(ln)
