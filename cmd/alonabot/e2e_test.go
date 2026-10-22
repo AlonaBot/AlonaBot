@@ -1,6 +1,7 @@
 //go:build unix
 
-// 依赖 Unix 信号与进程组语义；Windows 上的运行证据由 T-10 补齐。
+// 本文件以真实的 alonabot 与 SDK 插件进程做端到端验收：两种传输的生命周期、restart、双 Core 互斥、
+// Core 被杀后的恢复与相对 data_dir。依赖 Unix 信号与进程组语义；Windows 上的运行证据由 T-10 补齐。
 
 package main
 
@@ -19,9 +20,10 @@ import (
 	"time"
 )
 
-// 端到端：真实的 alonabot 进程启动真实的 SDK 插件进程（examples/plugins/lifecycle）。
+// binDir 存放 TestMain 构建的 alonabot 与 lifecycle 二进制。
 var binDir string
 
+// TestMain 先构建 alonabot 与 examples/plugins/lifecycle，再运行测试，结束后删除构建目录。
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "alonabot-e2e-")
 	if err != nil {
@@ -41,14 +43,21 @@ func TestMain(m *testing.M) {
 
 // core 是一个运行中的 alonabot run 进程。
 type core struct {
-	t     *testing.T
-	cmd   *exec.Cmd
-	mu    sync.Mutex
+	// t 是所属测试。
+	t *testing.T
+	// cmd 是 alonabot 进程。
+	cmd *exec.Cmd
+	// mu 保护 lines。
+	mu sync.Mutex
+	// lines 是已读到的 stderr 行。
 	lines []string
+	// added 容量 1，有新行时通知等待者。
 	added chan struct{}
-	done  chan struct{}
+	// done 在 stderr 读完且进程被回收后关闭。
+	done chan struct{}
 }
 
+// startCore 以 dataDir 运行 alonabot run 并收集 stderr；测试结束时杀掉进程并等待回收。
 func startCore(t *testing.T, dataDir string, extra ...string) *core {
 	t.Helper()
 	args := append([]string{"run", "--data-dir", dataDir, "--plugin-id", "demo", "--entry", filepath.Join(binDir, "lifecycle")}, extra...)
@@ -81,6 +90,7 @@ func startCore(t *testing.T, dataDir string, extra ...string) *core {
 	return c
 }
 
+// log 返回已收集的全部 stderr。
 func (c *core) log() string { c.mu.Lock(); defer c.mu.Unlock(); return strings.Join(c.lines, "\n") }
 
 // waitFor 等待日志出现匹配 re 的行，返回第一组子匹配。
@@ -105,6 +115,7 @@ func (c *core) waitFor(re string) []string {
 	}
 }
 
+// wait 等待 alonabot 退出并返回退出码，超时即终止测试。
 func (c *core) wait(timeout time.Duration) int {
 	c.t.Helper()
 	select {
@@ -116,6 +127,7 @@ func (c *core) wait(timeout time.Duration) int {
 	}
 }
 
+// pluginExited 报告插件进程是否在 within 内消失。
 func pluginExited(pid int, within time.Duration) bool {
 	deadline := time.Now().Add(within)
 	for syscall.Kill(pid, 0) == nil {
@@ -127,6 +139,7 @@ func pluginExited(pid int, within time.Duration) bool {
 	return true
 }
 
+// activatedRe 匹配激活日志，子匹配依次为代次、mode（new/restart）与插件 pid。
 const activatedRe = `已激活 generation=(\S+) mode=(\w+) pid=(\d+)`
 
 // 完整生命周期：两种传输都能走完 OnStart → OnReady → 激活 → SIGTERM → STOPPING/OnStop → 正常退出。
@@ -177,6 +190,7 @@ func TestRestartReusesGeneration(t *testing.T) {
 	c2.wait(15 * time.Second)
 }
 
+// 同一 data_dir 上第二个 Core 报告已锁定并以非零退出，第一个 Core 不受影响。
 func TestSecondCoreSameDataDirRejected(t *testing.T) {
 	dir := t.TempDir()
 	c1 := startCore(t, dir)

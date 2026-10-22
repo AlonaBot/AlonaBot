@@ -41,12 +41,21 @@ var allowed = map[string][]string{
 	"examples":          {"sdk", "contracts"},
 }
 
+// pkg 是 go list -json 输出中本检查用到的字段。
 type pkg struct {
-	ImportPath   string
-	Imports      []string
-	TestImports  []string
+	// ImportPath 是包的 import 路径。
+	ImportPath string
+	// Imports 是生产代码的 import。
+	Imports []string
+	// TestImports 是同包测试的 import。
+	TestImports []string
+	// XTestImports 是外部测试包（_test 包）的 import。
 	XTestImports []string
-	Module       *struct{ Path string }
+	// Module 是包所属的 Go module；标准库包为 nil。
+	Module *struct {
+		// Path 是 module 路径。
+		Path string
+	}
 }
 
 // hasPrefix 按路径段判断前缀，避免 "sdkx" 被当成 "sdk"。
@@ -54,6 +63,7 @@ func hasPrefix(p, prefix string) bool {
 	return p == prefix || strings.HasPrefix(p, prefix+"/")
 }
 
+// moduleOf 返回相对路径 rel 所属的已登记模块（最长前缀）；不属于任何模块时返回空串。
 func moduleOf(rel string) string {
 	best := ""
 	for _, m := range modules {
@@ -122,6 +132,7 @@ func check(dir string) ([]string, error) {
 	return violations, nil
 }
 
+// 本仓库全部包（含测试 import）都遵守 ARCHITECTURE.md 的依赖方向。
 func TestModuleImportsFollowArchitecture(t *testing.T) {
 	violations, err := check("../..")
 	if err != nil {

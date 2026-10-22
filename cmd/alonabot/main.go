@@ -21,6 +21,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
 )
 
+// main 解析 run 子命令的参数并运行；参数错误以 2 退出，运行失败以 1 退出。
 func main() {
 	if len(os.Args) < 2 || os.Args[1] != "run" {
 		fmt.Fprintln(os.Stderr, "用法: alonabot run --data-dir DIR --plugin-id ID --entry PATH [--stdio]")
@@ -42,7 +43,10 @@ func main() {
 	}
 }
 
+// run 打开 data_dir、登记开发安装记录，然后启动插件；收到 SIGINT/SIGTERM 时停止它，
+// 异常退出按有限重启策略重启或禁用。
 func run(dataDir, pluginID, entry string, stdio bool) error {
+	// 1. 打开状态库（取得 core.lock），定位入口并计算摘要。
 	ctx := context.Background()
 	store, err := state.Open(ctx, dataDir)
 	if err != nil {
@@ -62,7 +66,7 @@ func run(dataDir, pluginID, entry string, stdio bool) error {
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		return err
 	}
-	// 开发模式：首次运行时登记安装记录（正式安装与来源校验见 T-09）。
+	// 2. 开发模式：首次运行时登记安装记录（正式安装与来源校验见 T-09）。
 	if _, err := store.GetInstall(ctx, pluginID); errors.Is(err, state.ErrNotFound) {
 		if err := store.AddInstall(ctx, state.Install{PluginID: pluginID, Source: "dev-local", Entrypoint: exe, BuildDigest: digest}); err != nil {
 			return err
@@ -71,6 +75,7 @@ func run(dataDir, pluginID, entry string, stdio bool) error {
 		return err
 	}
 
+	// 3. 启动插件并等待信号或进程退出；只有旧进程树确认清空后才重启。
 	policy := host.NewRestartPolicy()
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
@@ -79,9 +84,12 @@ func run(dataDir, pluginID, entry string, stdio bool) error {
 		if err != nil {
 			return err
 		}
+		// exit 是一次 WaitExit 的结果。
 		type exit struct {
+			// abnormal 为 true 表示未经 Stop 且退出码非 0。
 			abnormal bool
-			err      error // 剩余进程树未确认清空
+			// err 非 nil 表示剩余进程树未确认清空。
+			err error
 		}
 		exitc := make(chan exit, 1)
 		go func() {
@@ -145,6 +153,7 @@ func launch(ctx context.Context, store *state.Store, pluginID, pluginDir, exe st
 	return r, nil
 }
 
+// fileDigest 返回文件内容的 SHA256。
 func fileDigest(path string) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
