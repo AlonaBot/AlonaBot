@@ -319,8 +319,13 @@ func TestConcurrentLaunchSamePluginOnlyOneRuns(t *testing.T) {
 		second.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
 		t.Fatal("旧实例仍在运行时，第二个实例不应启动")
 	}
-	if !strings.Contains(logs.String(), "runtime.lock") {
-		t.Fatalf("第二个实例应因 runtime.lock 拒绝启动，日志: %s", logs.String())
+	// 插件 stderr 由后台 goroutine 异步转发，Launch 返回时最后几行可能还没送达。
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.Contains(logs.String(), "runtime.lock") {
+		if time.Now().After(deadline) {
+			t.Fatalf("第二个实例应因 runtime.lock 拒绝启动；Launch 错误: %v；日志: %s", err, logs.String())
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	if first.Instance.State() != host.StateActivated {
 		t.Fatal("第一个实例不应受影响")
