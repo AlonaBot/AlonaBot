@@ -1,3 +1,4 @@
+// 本文件在真实 PostgreSQL 上测试插件专属 role/schema 的隔离与 OpenPostgres 的拒绝路径；未设置 DSN 时跳过。
 package gormdb
 
 import (
@@ -67,6 +68,7 @@ func provision(t *testing.T, admin *gorm.DB, u *url.URL) *pb.PostgresConnection 
 	}
 }
 
+// 插件 role 的 search_path 只有专属 schema，表落在其中；事务回滚与 versioned 账本同事务在 PG 上成立；读取其他 schema 被拒绝。
 func TestPostgresPluginRole(t *testing.T) {
 	ctx := context.Background()
 	admin, u := pgAdmin(t)
@@ -150,10 +152,12 @@ func TestPostgresPluginRole(t *testing.T) {
 	}
 }
 
+// clone 深拷贝连接参数。
 func clone(c *pb.PostgresConnection) *pb.PostgresConnection {
 	return proto.Clone(c).(*pb.PostgresConnection)
 }
 
+// schema 不存在、密码错误（错误信息不含密码）或 schema 名非法时打开失败。
 func TestOpenPostgresRejects(t *testing.T) {
 	ctx := context.Background()
 	admin, u := pgAdmin(t)

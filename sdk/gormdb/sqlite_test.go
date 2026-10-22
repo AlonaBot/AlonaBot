@@ -1,3 +1,4 @@
+// 本文件测试受管 SQLite：PRAGMA、CRUD 与事务、外键、WAL 在线备份、versioned 账本同事务，以及 SQL 日志不含参数值。
 package gormdb
 
 import (
@@ -14,12 +15,17 @@ import (
 	moderncsqlite "modernc.org/sqlite"
 )
 
+// item 是测试用的 GORM 模型。
 type item struct {
-	ID    uint `gorm:"primaryKey"`
-	Name  string
+	// ID 是主键。
+	ID uint `gorm:"primaryKey"`
+	// Name 是名称。
+	Name string
+	// Owner 是可空的所有者 ID。
 	Owner *uint
 }
 
+// openTemp 在临时目录打开名为 name 的受管 SQLite，测试结束时关闭。
 func openTemp(t *testing.T, name string) (*gorm.DB, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), name)
@@ -35,6 +41,7 @@ func openTemp(t *testing.T, name string) (*gorm.DB, string) {
 	return db, path
 }
 
+// 打开后 WAL、FULL、外键与 busy timeout 实际生效。
 func TestOpenSQLitePragmas(t *testing.T) {
 	db, _ := openTemp(t, "p.sqlite")
 	v, err := ReadPragmas(context.Background(), db)
@@ -54,6 +61,7 @@ func TestOpenSQLitePragmas(t *testing.T) {
 	}
 }
 
+// 基本 CRUD 可用；事务回调返回错误时写入不可见，正常返回时提交。
 func TestCRUDAndTx(t *testing.T) {
 	ctx := context.Background()
 	db, _ := openTemp(t, "crud.sqlite")
@@ -106,6 +114,7 @@ func TestCRUDAndTx(t *testing.T) {
 	}
 }
 
+// 违反外键约束的写入被拒绝。
 func TestForeignKeysEnforced(t *testing.T) {
 	db, _ := openTemp(t, "fk.sqlite")
 	if err := db.Exec(`CREATE TABLE parent(id INTEGER PRIMARY KEY); CREATE TABLE child(id INTEGER PRIMARY KEY, parent_id INTEGER NOT NULL REFERENCES parent(id))`).Error; err != nil {
@@ -125,6 +134,7 @@ func backupTo(ctx context.Context, src *sql.DB, dst string) error {
 	defer conn.Close()
 	return conn.Raw(func(dc any) error {
 		b, ok := dc.(interface {
+			// NewBackup 创建到 dst 的在线备份。
 			NewBackup(string) (*moderncsqlite.Backup, error)
 		})
 		if !ok {
@@ -142,6 +152,7 @@ func backupTo(ctx context.Context, src *sql.DB, dst string) error {
 	})
 }
 
+// WAL 模式下在线备份得到的候选包含尚未 checkpoint 的写入；备份后旧库与候选的写入互不影响。
 func TestWALBackupToCandidate(t *testing.T) {
 	ctx := context.Background()
 	db, path := openTemp(t, "active.sqlite")
@@ -191,6 +202,7 @@ func TestWALBackupToCandidate(t *testing.T) {
 	}
 }
 
+// 迁移失败时整步回滚、不记账并停止；再次执行只跑未完成的迁移。
 func TestRunVersionedLedgerInSameTx(t *testing.T) {
 	ctx := context.Background()
 	db, _ := openTemp(t, "mig.sqlite")

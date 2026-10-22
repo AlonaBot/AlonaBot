@@ -8,19 +8,23 @@ import (
 	"gorm.io/gorm"
 )
 
-// SelfMigrator：作者自行管理迁移版本与幂等性。
+// SelfMigrator 由自行管理迁移的插件实现：作者自行管理迁移版本与幂等性。
 type SelfMigrator interface {
+	// Migrate 把 db 迁移到本版本需要的结构；必须可重复执行。
 	Migrate(ctx context.Context, db *gorm.DB) error
 }
 
 // Migration 是辅助迁移的一步；ID 非零、唯一、递增，发布后不得改作他用。
 type Migration struct {
+	// ID 是迁移编号，非零、唯一、递增。
 	ID uint32
+	// Up 在事务中执行这一步迁移。
 	Up func(context.Context, *gorm.DB) error
 }
 
-// VersionedMigrator：SDK 只执行尚未完成的 ID，每步 Up 与完成记录在同一事务提交。
+// VersionedMigrator 由按版本迁移的插件实现：SDK 只执行尚未完成的 ID，每步 Up 与完成记录在同一事务提交。
 type VersionedMigrator interface {
+	// Migrations 返回全部迁移步骤，按 ID 递增排列。
 	Migrations() []Migration
 }
 

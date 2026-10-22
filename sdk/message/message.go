@@ -7,6 +7,7 @@ import (
 
 // Segment 是 Chain 中的一个片段。
 type Segment interface {
+	// toProto 转换为线上的 Segment；未导出以限定片段类型只由本包提供。
 	toProto() *pb.Segment
 }
 
@@ -16,8 +17,10 @@ type Chain []Segment
 // Text 构造纯文本片段。
 func Text(s string) Segment { return text(s) }
 
+// text 是纯文本片段。
 type text string
 
+// toProto 转换为 TextSegment。
 func (t text) toProto() *pb.Segment {
 	return &pb.Segment{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: string(t)}}}
 }

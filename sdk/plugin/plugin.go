@@ -12,7 +12,9 @@ type Base struct {
 
 // Root 是嵌入了 Base 的根插件；未导出的方法保证只有嵌入 Base 的类型才能满足它。
 type Root interface {
+	// alonabotRoot 是标记方法，只由 Base 实现。
 	alonabotRoot()
 }
 
+// alonabotRoot 使嵌入 Base 的类型满足 Root。
 func (*Base) alonabotRoot() {}

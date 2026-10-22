@@ -1,3 +1,4 @@
+// 本文件负责打开插件专属的 PostgreSQL role/schema，并核对会话身份与 search_path。
 package gormdb
 
 import (
@@ -60,6 +61,7 @@ func OpenPostgres(ctx context.Context, c *pb.PostgresConnection) (*gorm.DB, erro
 	return db, nil
 }
 
+// closeWith 关闭 db 的底层连接池并原样返回 err，用于打开失败后的清理。
 func closeWith(db *gorm.DB, err error) error {
 	if sqlDB, e := db.DB(); e == nil {
 		_ = sqlDB.Close()

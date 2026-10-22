@@ -1,3 +1,4 @@
+// 本文件负责打开受管 SQLite 文件，并核对 WAL、FULL、外键与 busy timeout 实际生效。
 package gormdb
 
 import (
@@ -57,9 +58,13 @@ func OpenSQLite(ctx context.Context, path string) (*gorm.DB, error) {
 
 // PragmaValues 是受管 SQLite 连接上实际生效的设置。
 type PragmaValues struct {
+	// JournalMode 应为 wal。
 	JournalMode string
-	Synchronous int // FULL = 2
+	// Synchronous 应为 2（FULL）。
+	Synchronous int
+	// ForeignKeys 应为 1（开启）。
 	ForeignKeys int
+	// BusyTimeout 是忙等待毫秒数，应为 5000。
 	BusyTimeout int
 }
 
@@ -76,6 +81,7 @@ func ReadPragmas(ctx context.Context, db *gorm.DB) (PragmaValues, error) {
 	return v, err
 }
 
+// checkPragmas 核对 PRAGMA 实际值与要求一致。
 func checkPragmas(ctx context.Context, db *gorm.DB) error {
 	v, err := ReadPragmas(ctx, db)
 	if err != nil {
