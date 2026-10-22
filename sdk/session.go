@@ -142,7 +142,7 @@ func sessionFailure(conn *wire.Conn, sid []byte, minor uint32, pluginID string, 
 }
 
 // buildRegister 把收集到的注册项转成 REGISTER。
-// shortcut: route_id 暂用 "cmd.<路径以 . 连接>"，T-04 的生成器给出稳定 route_id 后替换。
+// shortcut: route_id 暂用 "cmd.<路径以 . 连接>"，有稳定 route_id 生成器后替换。
 func buildRegister(reg *Registration, configJSON string, configVersion uint32) *pb.Register {
 	r := &pb.Register{CandidateConfigJson: configJSON, CandidateConfigVersion: configVersion,
 		Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
@@ -157,7 +157,7 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32) *
 	return r
 }
 
-// prepare 执行准备阶段：配置准备（B1 为原样透传）→ OnStart（独立 watchdog）→ REGISTER → 等待 PREPARED。
+// prepare 执行准备阶段：配置准备（目前原样透传）→ OnStart（独立 watchdog）→ REGISTER → 等待 PREPARED。
 // 准备期不能发起业务 RPC。失败时已向 Core 报告 SESSION_ERROR 并关闭连接。
 func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg *Registration) (*pb.Prepared, error) {
 	sid, boot, minor := ack.GetSessionId(), ack.GetBootstrap(), ack.GetChosenMinor()

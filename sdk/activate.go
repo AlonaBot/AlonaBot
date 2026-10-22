@@ -200,7 +200,7 @@ func serve(sess *wire.Session, a *activation) error {
 }
 
 // businessHandler 处理 ready 之后的 Core 请求。
-// shortcut: B1 尚无消息分发（T-03/T-04 接入），一律回 UNSUPPORTED。
+// shortcut: 尚无业务消息分发，一律回 UNSUPPORTED；接入命令与事件分发时替换。
 func businessHandler(context.Context, *wire.Inbound) wire.Response {
 	return wire.Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, SafeMessage: "插件尚未实现业务分发"}}
 }

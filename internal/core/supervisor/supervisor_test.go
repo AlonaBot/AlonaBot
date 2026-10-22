@@ -1,7 +1,7 @@
 //go:build unix
 
 // 本文件用真实子进程测试插件的启动、停止、崩溃恢复、启动故障、runtime.lock 与管理锁串行化。
-// 依赖 Unix 信号与进程组语义；Windows 上的运行证据由 T-10 补齐。
+// 依赖 Unix 信号与进程组语义。
 
 package supervisor
 

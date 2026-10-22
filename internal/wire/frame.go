@@ -1,4 +1,4 @@
-// Package wire 是 Core 与 SDK 共用的协议运行时：帧编解码、传输与（G1-14 起）Session 调用引擎。
+// Package wire 是 Core 与 SDK 共用的协议运行时：帧编解码、传输与 Session 调用引擎。
 // 帧格式见 spec/WIRE-FORMAT.md §1：uint32 big-endian 载荷长度（不含前缀）+ Protobuf Envelope，
 // 长度合法范围 1～4,194,304 字节；TCP 与 stdio 使用完全相同的编码。
 package wire

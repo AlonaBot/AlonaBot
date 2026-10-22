@@ -80,8 +80,12 @@ func (w *Writer) WriteFrame(env *pb.Envelope) error {
 
 样式参考 [AstrBot exporter.py](https://github.com/AstrBotDevs/AstrBot/blob/master/astrbot/core/backup/exporter.py) 的文件职责说明和导出阶段划分；本项目的逐字段说明、简体中文和 Go 注释语法以本文件为准。
 
+## 注释写现状，不写进度
+
+注释和面向用户的文本只描述代码当前的行为、限制和原因，不写 PLAN 工作包、批次或 goal 编号，也不写「某阶段实现」「由 T-xx 补齐」这类进度；进度与归属记录在 spec/PLAN.md 和 goal 文件中。尚未支持的能力直接写「尚不支持 X」；`shortcut` 注释的替换时机写成条件（如「有稳定 route_id 生成器后替换」）。CONTRACTS、WIRE-FORMAT 等规格小节引用是契约出处，可以保留。
+
 ## 如何应用和审查
 
 新增手写文件完整遵守以上规则；修改已有文件时补齐文件头以及本次触及的类型、字段、函数和逻辑阶段。整库注释补齐是独立任务，不夹带在产品修复中；已知缺口不能被称为已满足规范。
 
-`gofmt`、编译、生成一致性及架构守卫检查机械规则。职责划分、字段解释和 step comment 的准确性由人工或 agent 按 [注释技能](../.agents/skills/alonabot-code-commenting/SKILL.md) 审查；CI 通过不代表这些语义规则自动通过。普通注释修改只检查内容、格式和相关引用；涉及 `go:generate`、build tag 等可执行指令时验证实际消费者。
+`gofmt`、编译与生成一致性检查机械规则。职责划分、字段解释和 step comment 的准确性由人工或 agent 按 [注释技能](../.agents/skills/alonabot-code-commenting/SKILL.md) 审查；CI 通过不代表这些语义规则自动通过。普通注释修改只检查内容、格式和相关引用；涉及 `go:generate`、build tag 等可执行指令时验证实际消费者。

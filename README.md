@@ -4,7 +4,7 @@
 
 Module：`github.com/AlonaBot/AlonaBot`。
 
-**当前进度：** T-01（协议契约、生成工具链、manifest/release 校验、SDK 公共类型、SQLite/PostgreSQL 验证）与 T-02（Core 状态库与锁、Native 插件进程、TCP/stdio 双 IPC、握手/激活/停止生命周期、有限重启）已实现，验收证据与未运行项见 [spec/TEST-MATRIX.md §3.1](spec/TEST-MATRIX.md#31-已运行的分项证据t-01t-02)：只在 darwin/arm64 上运行过，Linux/Windows 只做了交叉构建。业务能力（Telegram、命令、事件、服务、调度、HTTP、配置、管理）从 T-03 起实施；目前只有开发用入口 `alonabot run`，用法见 [docs/development.md](docs/development.md)。
+**当前进度：** 已实现协议契约、生成工具链、manifest/release 校验、SDK 公共类型、SQLite/PostgreSQL 验证，以及 Core 状态库与锁、Native 插件进程、TCP/stdio 双 IPC、握手/激活/停止生命周期、有限重启；验收证据与未运行项见 [spec/TEST-MATRIX.md §3.1](spec/TEST-MATRIX.md#31-已运行的分项证据t-01t-02)：只在 darwin/arm64 上运行过，Linux/Windows 只做了交叉构建。业务能力（Telegram、命令、事件、服务、调度、HTTP、配置、管理）尚未实现；目前只有开发用入口 `alonabot run`，用法见 [docs/development.md](docs/development.md)。
 
 按 [spec/PLAN.md](spec/PLAN.md) 的工作包继续实施；规格索引见 [spec/README.md](spec/README.md)，决策与历史依据见 [spec/adr/README.md](spec/adr/README.md)。开发环境与命令见 [docs/development.md](docs/development.md)，模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)，代理工作约定见 [AGENTS.md](AGENTS.md)。
 

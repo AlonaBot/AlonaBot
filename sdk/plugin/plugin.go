@@ -5,7 +5,7 @@ package plugin
 //
 //	type RSS struct{ plugin.Base }
 //
-// 运行时状态（日志、Session 信息等）由 SDK 在启动时注入，T-02 起实现。
+// 字段保留给 SDK 将来注入的运行时状态（日志、Session 信息等），目前为空。
 type Base struct {
 	_ struct{} // 保留给 SDK 注入的运行时状态，禁止插件依赖其字段
 }

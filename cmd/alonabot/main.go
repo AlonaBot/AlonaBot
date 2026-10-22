@@ -1,5 +1,5 @@
-// alonabot 是 Core 的命令行入口。B1 只提供开发用的 run：在给定 data_dir 中启动单个本地插件，
-// 收到 SIGINT/SIGTERM 时停止；正式的安装与管理 CLI 由 T-09 提供。
+// alonabot 是 Core 的命令行入口。目前只提供开发用的 run：在给定 data_dir 中启动单个本地插件，
+// 收到 SIGINT/SIGTERM 时停止；尚无正式的安装与管理 CLI。
 package main
 
 import (
@@ -66,7 +66,7 @@ func run(dataDir, pluginID, entry string, stdio bool) error {
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		return err
 	}
-	// 2. 开发模式：首次运行时登记安装记录（正式安装与来源校验见 T-09）。
+	// 2. 开发模式：首次运行时登记安装记录（不做正式安装与来源校验）。
 	if _, err := store.GetInstall(ctx, pluginID); errors.Is(err, state.ErrNotFound) {
 		if err := store.AddInstall(ctx, state.Install{PluginID: pluginID, Source: "dev-local", Entrypoint: exe, BuildDigest: digest}); err != nil {
 			return err

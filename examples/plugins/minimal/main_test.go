@@ -14,7 +14,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/gormdb"
 )
 
-// 示例的各个声明能被 SDK 组合与收集，证明 T-01 的公共签名成立。
+// 示例的各个声明能被 SDK 组合与收集，证明 SDK 的公共签名成立。
 func TestDemoComposes(t *testing.T) {
 	root := &Demo{}
 	reg, err := sdk.Collect(root)
