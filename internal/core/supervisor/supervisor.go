@@ -83,7 +83,7 @@ type Running struct {
 	cleanupErr error
 }
 
-// Launch 启动插件进程并完成握手、准备、提交与激活。任何一步失败都会终止进程树并确认其退出后返回。
+// Launch 启动插件进程并完成握手、准备、提交与激活。任何一步失败都会终止进程树、确认清空后返回；无法确认清空时把原因并入返回的错误。
 // 同一插件的管理操作由状态库的逐插件锁串行化。
 func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error) {
 	unlock := store.LockPlugin(spec.PluginID)
@@ -118,7 +118,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		env[wire.EnvCoreAddr] = ln.Addr().String()
 	}
 
-	// 3. 启动进程；之后任何失败都先终止并确认进程树清空，再返回。
+	// 3. 启动进程；之后任何失败都由 fail 终止并确认进程树清空再返回，无法确认时错误中带上原因。
 	proc, err := process.Start(process.Spec{PluginID: spec.PluginID, Path: spec.Executable, Dir: pluginDir,
 		Args: spec.Args, Env: env, Stdio: spec.Stdio}, spec.Log)
 	if err != nil {

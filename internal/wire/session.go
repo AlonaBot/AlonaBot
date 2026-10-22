@@ -171,7 +171,7 @@ const (
 type outCall struct {
 	// id 是本端分配的调用编号。
 	id uint64
-	// env 是待写出的 REQUEST；移出队列或写出后置 nil，不再持有载荷。
+	// env 是待写出的 REQUEST，由 Session.mu 保护；移出队列或写出后置 nil，不再持有载荷。
 	env *pb.Envelope
 	// deadline 是有效期限，子调用不能超过它。
 	deadline time.Time

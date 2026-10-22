@@ -19,7 +19,7 @@ import (
 
 // Limits 是阶段预算（CONTRACTS §4.2 的首发常量）；测试可注入更短的值。
 type Limits struct {
-	// Handshake 是从连接建立到 HELLO 认证完成的预算。
+	// Handshake 是从连接建立到 HELLO_ACK 发出的预算（CONTRACTS §4.2 的 Hello/HelloAck）。
 	Handshake time.Duration
 	// Config 是配置转换与校验的预算。
 	Config time.Duration

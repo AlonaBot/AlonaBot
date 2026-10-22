@@ -4,7 +4,7 @@ package wire
 import "sync"
 
 // Budget 是跨 Session 共享的 payload 字节预算（Core 合计 64 MiB）。
-// nil *Budget 表示不限额（插件侧没有全局预算）。
+// acquire/release 接受 nil *Budget，表示不限额（插件侧没有全局预算）；Used 需要非 nil。
 type Budget struct {
 	// mu 保护 used。
 	mu sync.Mutex
