@@ -1,0 +1,6 @@
+# 通过结构化表单收集缺陷与需求，使用问题先查阅项目文档。
+blank_issues_enabled: false
+contact_links:
+  - name: 文档与开发指南
+    url: https://github.com/AlonaBot/AlonaBot/blob/main/docs/index.md
+    about: 先阅读项目规格、开发入口和已有约束；不要公开凭据或真实用户数据。

@@ -1,0 +1,111 @@
+# 验证仓库入口及产品 Go 代码；编译矩阵不替代目标平台运行验收。
+name: Quality gate
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository:
+    name: Repository contract
+    runs-on: ubuntu-24.04
+    outputs:
+      has_go: ${{ steps.sources.outputs.has_go }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: 检查文档路由、技能和验证脚本
+        run: |
+          node --test scripts/check-repository.test.mjs
+          node scripts/check-repository.mjs
+          git diff --check
+      - name: 检查是否已有产品 Go 源码
+        id: sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          sources=$(git ls-files -- '*.go' ':!:experiments/**')
+          if [ -n "$sources" ]; then
+            echo 'has_go=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'has_go=false' >> "$GITHUB_OUTPUT"
+            echo '当前提交没有产品 Go 源码，Go 检查未运行。' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  go:
+    name: Go quality
+    needs: repository
+    if: needs.repository.outputs.has_go == 'true'
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: alonabot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # 仅连接本 job 的一次性测试数据库，不使用仓库 secret。
+      ALONABOT_TEST_PG_DSN: postgres://postgres:alonabot@127.0.0.1:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: 检查产品 Go 格式
+        shell: bash
+        run: |
+          set -euo pipefail
+          unformatted=$(git ls-files -z -- '*.go' ':!:experiments/**' | xargs -0 gofmt -l)
+          if [ -n "$unformatted" ]; then
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
+      - name: 检查 Protobuf 生成一致性
+        if: hashFiles('contracts/doc.go') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 与生成器约定一致，固定 protoc；只从官方发布下载。
+          gh release download v36.0 --repo protocolbuffers/protobuf \
+            --pattern protoc-36.0-linux-x86_64.zip --dir "$RUNNER_TEMP/protoc"
+          unzip -q "$RUNNER_TEMP/protoc/protoc-36.0-linux-x86_64.zip" -d "$RUNNER_TEMP/protoc"
+          export PATH="$RUNNER_TEMP/protoc/bin:$PATH"
+          go generate ./...
+          git diff --exit-code -- contracts
+          test -z "$(git ls-files --others --exclude-standard -- contracts)"
+      - name: 静态检查
+        run: go vet ./...
+      - name: 测试并检查数据竞争（含临时 PostgreSQL）
+        env:
+          CGO_ENABLED: '1'
+        run: go test -race ./...
+      - name: 五目标平台 pure-Go 构建
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64; do
+            echo "构建 $target"
+            GOOS=${target%/*} GOARCH=${target#*/} CGO_ENABLED=0 go build ./...
+          done

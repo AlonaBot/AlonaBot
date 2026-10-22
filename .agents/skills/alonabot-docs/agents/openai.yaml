@@ -1,0 +1,5 @@
+# 本文件提供技能选择界面的名称、简述及入口提示。
+interface:
+  display_name: "AlonaBot 文档"
+  short_description: "维护项目文档、代理入口与技能，保留单一权威、准确状态及可移植路由。"
+  default_prompt: "使用 $alonabot-docs 完成本次 AlonaBot 项目任务。"
