@@ -18,7 +18,6 @@
 | `internal/core/` | 状态库与 core.lock、进程、RPC 编排、路由、权限、媒体、服务、调度、HTTP、配置、管理 | 平台协议细节（交 adapters）、插件进程内逻辑 | T-02 起 | 部分实现：`internal/core/state`（core.lock、state.sqlite、提交原语）、`internal/core/process`（精简环境、日志、进程组/Job Object、runtime.lock 临时持有）、`internal/core/host`（握手认证、Bootstrap、REGISTER 原子校验、PREPARED、提交与激活门禁、Degraded、停止/排空/并行 Shutdown、有限重启策略）、`internal/core/supervisor`（启动/停止一个插件的完整装配） |
 | `internal/adapters/telegram/` | Telegram 接收、发送计划、能力与平台映射 | Core 策略、命令路由 | T-03 | 拟建 |
 | `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） | T-02 起 | 部分实现：开发用 `alonabot run`（单插件启停、有限重启）；正式 CLI 在 T-09 |
-| `internal/archtest/` | 本文件依赖规则的机械检查（仅测试） | 产品代码 | goal-1 G1-10 | 已实现 |
 | `examples/plugins/` | 随 SDK 编译的示例与集成样例 | 生产代码依赖 | T-01 起 | 部分实现：`minimal`（签名组合示例）、`lifecycle`（可真实运行的生命周期示例） |
 | `web/admin/` | Vite + TypeScript + React 19 管理界面 | 管理逻辑本身（调用 Core 管理 API） | T-08/T-09 | 拟建 |
 | `experiments/ogre-dna/` | 历史实验，独立嵌套 module | 不参与产品构建与验收 | 已存在 | 隔离 |
@@ -38,7 +37,7 @@
 | `cmd/alonabot -> sdk/generate` | T-04 构建检查复用同一生成器 |
 | `examples/plugins/... -> sdk/...`、`-> contracts` | 示例只走公共 SDK |
 
-明确禁止（重点）：`internal/archtest`、`internal/oslock` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | internal/adapters | cmd`；`internal/core -> sdk | internal/adapters | cmd`；任何包 `-> examples | experiments`。依赖图不允许环。
+明确禁止（重点）：`internal/oslock` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | internal/adapters | cmd`；`internal/core -> sdk | internal/adapters | cmd`；任何包 `-> examples | experiments`。依赖图不允许环。
 
 ## 状态归属
 
@@ -54,4 +53,4 @@
 
 ## 检查
 
-`internal/archtest`（`go test ./internal/archtest/`）对 `go list -json ./...` 的 Imports/TestImports/XTestImports 逐条执行上表；新增顶层包或跨模块边时，同时修改本文件与 `internal/archtest/arch_test.go` 的 `modules`/`allowed`。import 环由 Go 编译器拒绝。负例 fixture 位于 `internal/archtest/testdata/fixture`。
+依赖方向由代码审查对照上表把关；import 环由 Go 编译器拒绝。

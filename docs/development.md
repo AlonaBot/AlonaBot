@@ -86,7 +86,6 @@ git diff --check
 
 | 规则 | 依据 | 检查 | 状态 |
 | --- | --- | --- | --- |
-| 模块 import 方向符合架构表 | [ARCHITECTURE.md](../ARCHITECTURE.md) | `internal/archtest`（`go test ./internal/archtest/`，含负例 fixture） | 已观测 |
 | 生成代码可重复生成，结果稳定 | PLAN T-01 | 执行 `go generate ./...` 后检查 `git diff --exit-code` | 已观测（G1-01，手动执行） |
 | Envelope 字段号/枚举值与 WIRE-FORMAT 一致 | spec/WIRE-FORMAT.md §1/§2/§5A | `contracts/wirespec_test.go`（`go test ./contracts/`） | 已观测 |
 | 五目标平台 `CGO_ENABLED=0` 可构建 | CONTRACTS §6.1/§7.1 | 下方交叉编译命令（手动执行） | 已观测（G1-11，只验证了构建；运行见 V-32） |

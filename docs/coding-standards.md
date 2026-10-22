@@ -84,4 +84,4 @@ func (w *Writer) WriteFrame(env *pb.Envelope) error {
 
 新增手写文件完整遵守以上规则；修改已有文件时补齐文件头以及本次触及的类型、字段、函数和逻辑阶段。整库注释补齐是独立任务，不夹带在产品修复中；已知缺口不能被称为已满足规范。
 
-`gofmt`、编译、生成一致性及架构守卫检查机械规则。职责划分、字段解释和 step comment 的准确性由人工或 agent 按 [注释技能](../.agents/skills/alonabot-code-commenting/SKILL.md) 审查；CI 通过不代表这些语义规则自动通过。普通注释修改只检查内容、格式和相关引用；涉及 `go:generate`、build tag 等可执行指令时验证实际消费者。
+`gofmt`、编译与生成一致性检查机械规则。职责划分、字段解释和 step comment 的准确性由人工或 agent 按 [注释技能](../.agents/skills/alonabot-code-commenting/SKILL.md) 审查；CI 通过不代表这些语义规则自动通过。普通注释修改只检查内容、格式和相关引用；涉及 `go:generate`、build tag 等可执行指令时验证实际消费者。

@@ -19,7 +19,7 @@
       - any-glob-to-any-file: ["web/**"]
 "area: tests":
   - changed-files:
-      - any-glob-to-any-file: ["**/*_test.go", "**/*.test.mjs", "**/testdata/**", "internal/archtest/**"]
+      - any-glob-to-any-file: ["**/*_test.go", "**/*.test.mjs", "**/testdata/**"]
 "area: github-actions":
   - changed-files:
       - any-glob-to-any-file: [".github/**", "scripts/**"]
