@@ -4,7 +4,7 @@
 
 ## 用法
 
-1. 在「总览」中找到状态为**可派发**的 goal。
+1. 在「总览」中找到状态为**可派发**的 goal。整理 PR（清理已有单元测试、统一已有文件的文件头与命名）合并之前，只派发 goal-23 和 goal-37：它们只新建包，不碰已有文件。goal-2 和 goal-29 要修改已有文件，需要等整理 PR 合并，否则两边会在同一批文件上冲突。
 2. 把该 goal 的整段语句（代码块内的全部文字）原样发给一个执行者。一个 goal 同时只交给一个执行者。
 3. 执行者开出 PR 后，把 PR 链接交给审查者审查。
 4. 审查者合并后，会更新依赖它的 goal 的状态和接口段。
@@ -35,9 +35,9 @@
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
-| goal-2 | T-03.1 | 首个可用 SDK 切片 | — | 可派发 |
+| goal-2 | T-03.1 | 首个可用 SDK 切片 | 整理 PR | 可派发（整理 PR 合并后） |
 | goal-23 | T-07.1 | 调度触发计算 | — | 可派发 |
-| goal-29 | T-08.2 | 配置 JSON 语义与 Pending | — | 可派发 |
+| goal-29 | T-08.2 | 配置 JSON 语义与 Pending | 整理 PR | 可派发（整理 PR 合并后） |
 | goal-37 | T-09.2 | 安装包预检与安全解压 | — | 可派发 |
 | goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 等待前置 |
 | goal-5 | T-03.4 | Telegram 实例与接收 | T-03.1 | 等待前置 |
@@ -149,16 +149,16 @@
    func NewMux() *Mux
    func (m *Mux) Handle(name string, fn ServiceFunc) // 同名重复注册时 panic
    func (m *Mux) For(c Caller) wire.Handler          // 作为 supervisor.Spec.Handler；未注册的 Target 返回 NOT_FOUND
-   type Target interface { // 一个可以接收派发的插件实例
+   type Plugin interface { // 一个可以接收派发的插件实例（Target 一词专指发送目标，这里不用）
        PluginID() string
        Activated() bool
        Routes() []*pb.RouteDescriptor
        Call(ctx context.Context, req wire.Request) (wire.Response, error)
    }
-   func FromInstance(in *host.Instance) Target
+   func FromInstance(in *host.Instance) Plugin
    type Router struct{ ... }
    func New() *Router
-   func (r *Router) Attach(t Target)
+   func (r *Router) Attach(p Plugin)
    func (r *Router) Detach(pluginID string)
    func (r *Router) Start() // 启动单个派发 worker
    func (r *Router) Close() // 停止 worker；之后 Deliver 返回错误
@@ -175,17 +175,18 @@
    Registration 增加 Events []EventRoute；Collect 收集 EventProvider。
    func (c *Context) Event() *pb.Event
    Context.Send 由返回 UNSUPPORTED 改为真实实现，签名不变。
+   func currentSession() (*wire.Session, error) // 未导出：返回已激活的 Session；未就绪或已停止时返回 Code=FAILED_PRECONDITION 的 *sdk.Error。后续的后台 Send、媒体客户端都通过它取 Session，不再改 activate.go
 
 行为：
 - Router.Deliver 放入容量 256 的队列，满时立即返回 adapter.ErrQueueFull。容量和单 worker 是临时实现，用一行 shortcut 注释写明：有界并发派发接入后替换。
 - worker 逐条处理事件：
-  - 候选是 Activated()==true、kind=EVENT 且 event_type_filter 包含该事件类型的路由，按 (priority, plugin_id, route_id) 升序依次调用。
+  - 候选是 Activated()==true 的 Plugin 上 kind=EVENT 且 event_type_filter 包含该事件类型的路由，按 (priority, plugin_id, route_id) 升序依次调用。
   - 每次调用发送 Request{Target: route_id, Payload: PROTOBUF 编码的 HandlerRequest（schema_id 用 validate.SchemaID，version 1）, TraceID: 16 字节随机值, Attach: &Invocation{PluginID, Event, DefaultTarget: ev.Target}}。HandlerRequest.context 只设置 actor 与 default_target。
   - 响应解码为 HandlerOutcome：propagation=STOP 时停止后续候选；调用错误或带 Err 的响应记日志后继续下一个候选。不重试。
 - Mux.For 返回的 Handler 按 Inbound.Target 查找服务；Caller 由 For 的参数固定，不信任载荷里的任何身份。
 - message.Service.Send 按顺序检查，1～5 的拒绝都同时返回 status=REJECTED 的 SendResult（已知 target 时填上）和 ErrorInfo：
   1) 载荷必须是 PROTOBUF、schema alonabot.send_request.v1、version 1，否则 INVALID_ARGUMENT。
-  2) 默认目标取 in.ParentAttach 中的 *router.Invocation；其 PluginID 必须等于 c.PluginID，否则 PERMISSION_DENIED。
+  2) 默认目标取 in.ParentAttach 中的 *router.Invocation（没有父调用时为空）。wire 已保证父调用属于同一 Session，这里不再重复核对插件身份。
   3) 没有 To 也没有默认目标 → NO_DEFAULT_TARGET。有 To 但与默认目标不相等（proto.Equal）→ PERMISSION_DENIED，并用 shortcut 注释写明：显式目标的许可检查接入后替换。
   4) Chain 为空或只有元数据 → INVALID_ARGUMENT；validate.Chain 失败 → INVALID_ARGUMENT。
   5) 实例不存在 → UNAVAILABLE；target.adapter_id 或 account_id 与实例不符 → INVALID_ARGUMENT。
@@ -205,7 +206,7 @@
   - Inject 一条 message.created：memory 收到一条 Chain，文本与原文相同，Target 等于原 Target。
   - Inject 一条没有匹配路由的事件类型：memory 没有收到任何发送。
   - TCP 与 stdio 各跑一次。
-- 本地自测：message.Service 的各条拒绝路径（无目标、非原目标、空 Chain、未知实例）和「结果与错误同时返回」；Router 的排序与 STOP、跳过未激活实例、第 257 条返回 ErrQueueFull、Mux 未知服务；SDK 的 EventRegistry 拒绝情况、buildRegister 输出、Handler 返回后 Send 失败、STOP 与错误并存、panic 转 INTERNAL。
+- 本地自测：message.Service 的各条拒绝路径（无目标、非原目标、空 Chain、未知实例）和「结果与错误同时返回」；Router 的排序与 STOP、跳过未激活的 Plugin、第 257 条返回 ErrQueueFull、Mux 未知服务；SDK 的 EventRegistry 拒绝情况、buildRegister 输出、Handler 返回后 Send 失败、STOP 与错误并存、panic 转 INTERNAL。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./internal/wire/... ./sdk/... ./examples/...；go build ./...。
 
@@ -344,8 +345,8 @@ func (s *Store) GenerationConfig(ctx context.Context, generationID string) (stri
 允许的新跨模块边：internal/core/packages → contracts（已允许）。
 
 接口：
-type Limits struct { Archive int64; Expanded int64; Entries int }
-var DefaultLimits = Limits{Archive: 256 << 20, Expanded: 1 << 30, Entries: 10000}
+type Limits struct { MaxArchiveBytes int64; MaxExpandedBytes int64; MaxEntries int }
+var DefaultLimits = Limits{MaxArchiveBytes: 256 << 20, MaxExpandedBytes: 1 << 30, MaxEntries: 10000}
 type Input struct {
     ReleaseJSON []byte          // release.json 原始字节
     Signature   []byte          // release.json.sig 原始字节
@@ -357,7 +358,7 @@ type Input struct {
 type Candidate struct { Dir string; Manifest *manifest.Manifest; Release *release.Release; Asset release.Asset }
 func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error)
 func Extract(archivePath, dest string, lim Limits) error
-func Commit(c *Candidate, packagesRoot string) (string, error) // 返回最终目录
+func (c *Candidate) MoveTo(packagesRoot string) (string, error) // 移入不可变包目录，返回最终目录；「Commit」专指代次提交，这里不用
 func (c *Candidate) Discard() error                            // 删除暂存目录
 
 行为：
@@ -365,22 +366,22 @@ func (c *Candidate) Discard() error                            // 删除暂存�
   1) release.Verify(ReleaseJSON, Signature, PublicKey) 失败 → PERMISSION_DENIED。
   2) Release.Source 不等于 Input.Source → PERMISSION_DENIED。
   3) Release.Asset(OS, Arch) 不存在 → UNSUPPORTED。
-  4) 归档超过 lim.Archive → RESOURCE_EXHAUSTED；大小不等于 Asset.Size，或整个文件的 SHA256 不等于 Asset.SHA256 → INVALID_ARGUMENT。
+  4) 归档超过 lim.MaxArchiveBytes → RESOURCE_EXHAUSTED；大小不等于 Asset.Size，或整个文件的 SHA256 不等于 Asset.SHA256 → INVALID_ARGUMENT。
   5) 在 stagingRoot 下用 os.MkdirTemp 新建唯一临时目录，并 Extract 到其中。
   6) 用 manifest.Parse 解析解压后的 plugin.yaml。以下情况 → INVALID_ARGUMENT：id、version 或 source 与 Release 不一致；os/arch 不等于本机平台；entrypoint 不是解压树中的普通文件。
 - Extract：
   - 只接受 gzip 压缩的 tar，只接受普通文件和目录条目。
   - 以下情况 → INVALID_ARGUMENT：绝对路径；含 .. 组件；含反斜杠；空名字；symlink、hardlink、字符或块设备、FIFO；重复路径；按 strings.ToLower 比较相同的两个路径。
-  - 条目数超过 lim.Entries，或实际写出的字节总数超过 lim.Expanded → RESOURCE_EXHAUSTED。字节数在写入过程中累计。
+  - 条目数超过 lim.MaxEntries，或实际写出的字节总数超过 lim.MaxExpandedBytes → RESOURCE_EXHAUSTED。字节数在写入过程中累计。
   - 目录权限 0o700；普通文件 0o600，归档中带任一执行位的文件 0o700；不保留 setuid、setgid、sticky。
   - 失败时不保证 dest 为空，由 Preflight 删除整个暂存目录。
-- Commit：
+- MoveTo：
   - 最终目录为 <packagesRoot>/<plugin_id>/<version>-<归档 SHA256 前 12 位>。已存在 → ALREADY_EXISTS，绝不覆盖。
   - 用 os.Rename 从暂存目录移动（同一文件系统由调用方保证），失败时原样返回错误。
 
 测试（按编码规范「测试提交规则」；fixture 在测试中用 archive/tar + compress/gzip 生成，签名用测试内生成的 ed25519 密钥）：
-- 提交：internal/core/packages/preflight_test.go。在临时目录生成真实的 tar.gz、release.json 和签名，经 Preflight 与 Commit 做表驱动测试：
-  - 合法包通过，Commit 后最终目录内容正确；对同一目标再次 Commit 返回 ALREADY_EXISTS。
+- 提交：internal/core/packages/preflight_test.go。在临时目录生成真实的 tar.gz、release.json 和签名，经 Preflight 与 MoveTo 做表驱动测试：
+  - 合法包通过，MoveTo 后最终目录内容正确；对同一目标再次 MoveTo 返回 ALREADY_EXISTS。
   - 每种拒绝各一个子测试：签名错误、来源不符、缺少本平台资产、大小不符、摘要不符、manifest 的 id/version/source/平台/entrypoint 不符、../x、/abs、a/../../x、a\b、symlink、hardlink、设备文件、FIFO、A.txt 与 a.txt、重复路径、条目数和展开字节超过（用很小的 Limits）。每个子测试都断言 stagingRoot 下没有残留目录。
   - 文件权限（//go:build unix 的单独测试）：带执行位的文件为 0o700，其余为 0o600，setuid 被去掉。
 - 本地自测（*_local_test.go，不提交）：Extract 的单项边界，按需编写。
@@ -410,7 +411,7 @@ func (c *Candidate) Discard() error                            // 删除暂存�
 - 新增 internal/core/state/permissions.go
 - 新增 internal/core/policy/
 - 修改 internal/core/message/：用 policy 替换「只允许默认目标」的临时规则，删除对应 shortcut 注释；同步更新 message.New 的全部调用者（包括 internal/core/supervisor/echo_test.go）
-- 新增 sdk/send.go；按需修改 sdk/activate.go 中保存当前 Session 的代码
+- 新增 sdk/send.go（通过 currentSession 取 Session，不修改 sdk/activate.go）
 - 上述包的测试文件
 允许的新跨模块边：无。
 
@@ -577,29 +578,29 @@ const ServiceMediaBeginUpload = "core.media.begin_upload"
 const ServiceMediaWriteChunk  = "core.media.write_chunk"
 const ServiceMediaCommitUpload = "core.media.commit_upload"
 // internal/core/media
-type Limits struct { Object, Session, Core int64; Uploads int; Chunk int; TTL time.Duration }
-var DefaultLimits = Limits{Object: 100 << 20, Session: 256 << 20, Core: 2 << 30, Uploads: 4, Chunk: 1 << 20, TTL: 15 * time.Minute}
+type Limits struct { MaxFileBytes, MaxSessionBytes, MaxCoreBytes int64; MaxUploads int; MaxChunkBytes int; TTL time.Duration }
+var DefaultLimits = Limits{MaxFileBytes: 100 << 20, MaxSessionBytes: 256 << 20, MaxCoreBytes: 2 << 30, MaxUploads: 4, MaxChunkBytes: 1 << 20, TTL: 15 * time.Minute}
 type Store struct{ ... }
 func Open(dir string, lim Limits, now func() time.Time) (*Store, error) // dir 是 <data_dir>/media；打开时清空上次遗留的临时文件
-func (s *Store) Register(m *router.Mux)                // 注册上面 3 个服务
+func (s *Store) AddServices(m *router.Mux)             // 把上面 3 个服务加到 Mux；「Register」专指协议的 REGISTER，这里不用
 func (s *Store) ReleaseSession(sessionKey string)      // Session 结束时调用：回收该 Session 的未完成上传与引用
 func (s *Store) Sweep()                                // 回收所有过期对象；由调用方定期调用
-func (s *Store) Lookup(token string, c router.Caller) (Object, error) // 供后续发送与 Read 使用：校验 token 属于该 Session 且未过期
-type Object struct { Path string; Size uint64; MIME string; SHA256 []byte; ExpiresAt time.Time }
+func (s *Store) Lookup(token string, c router.Caller) (File, error) // 供后续发送与 Read 使用：校验 token 属于该 Session 且未过期
+type File struct { Path string; Size uint64; MIME string; SHA256 []byte; ExpiresAt time.Time } // 已提交的媒体文件
 // sdk
 func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []byte) (*pb.MediaRef, error)
-// 按 1 MiB 分块调用三个服务；需要已激活的 Session，否则返回 FAILED_PRECONDITION
+// 按 1 MiB 分块调用三个服务；通过 currentSession 取 Session，未就绪时返回 FAILED_PRECONDITION
 
 行为：
 - Begin：
-  - size 为 0 或超过 Object、mime 为空、sha256 不是 32 字节 → INVALID_ARGUMENT。
-  - 本 Session 已有 4 个未完成上传 → RESOURCE_EXHAUSTED。
+  - size 为 0 或超过 MaxFileBytes、mime 为空、sha256 不是 32 字节 → INVALID_ARGUMENT。
+  - 本 Session 已有 MaxUploads 个未完成上传 → RESOURCE_EXHAUSTED。
   - 预留 size 字节：Session 合计（未完成上传加未过期引用）超过 Session 上限，或全 Core 合计超过 Core 上限 → RESOURCE_EXHAUSTED，不预留。
   - upload_id 为 16 字节随机值的十六进制；期限为 Begin 时刻起 TTL，分块请求不延长期限。
 - WriteChunk：
   - upload_id 必须属于调用的 Session，否则 NOT_FOUND。
   - offset 必须等于当前已确认的长度，否则 INVALID_ARGUMENT，并终止该上传、释放预留。
-  - 单块超过 Chunk，或写入后超过声明的 size → INVALID_ARGUMENT，并终止。
+  - 单块超过 MaxChunkBytes，或写入后超过声明的 size → INVALID_ARGUMENT，并终止。
   - 磁盘写入失败 → INTERNAL，并终止。
   - 成功时返回 next_offset。
 - Commit：
@@ -611,8 +612,8 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - 预留与占用的计数在并发请求下必须正确，用锁保护，不能出现负数或超额。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/media/upload_test.go。用临时目录打开真实 Store，经 Mux 注册的 3 个服务（直接构造 wire.Inbound 调用）做表驱动测试：
-  - 分 3 块上传后 Commit，Lookup 返回正确的 Object。
+- 提交：internal/core/media/upload_test.go。用临时目录打开真实 Store，经 AddServices 加到 Mux 的 3 个服务（直接构造 wire.Inbound 调用）做表驱动测试：
+  - 分 3 块上传后 CommitUpload，Lookup 返回正确的 File。
   - 错序 offset 终止上传并释放预留；大小或摘要不符时被拒。
   - 第 5 个未完成上传被拒；Session 和 Core 总量超限被拒（用很小的 Limits）。
   - 注入 now：超过 TTL 后 WriteChunk 返回 NOT_FOUND，预留被释放。
