@@ -8,9 +8,9 @@
 
 | 任务 | 先读 | 完成前检查 |
 | --- | --- | --- |
-| 实现、诊断、重构或设计 Go 代码 | [alonabot-develop](.agents/skills/alonabot-develop/SKILL.md)、[编码规范](docs/coding-standards.md) | 所有者、调用者、兼容性及必要相邻修改完整 |
-| 新增或修改代码注释、结构字段、函数步骤 | [alonabot-code-commenting](.agents/skills/alonabot-code-commenting/SKILL.md) | 文件职责头、逐字段说明、函数作用及真实阶段 step comment |
-| 选择测试、复现失败或记录验证 | [alonabot-test](.agents/skills/alonabot-test/SKILL.md) | 实际风险有证据，临时探针不进入提交 |
+| 实现、诊断、重构或设计 Go 代码 | [alonabot-develop](.agents/skills/alonabot-develop/SKILL.md)、[编码规范](docs/coding-standards.md)（Google Go Style 与项目术语） | 所有者、调用者、兼容性及必要相邻修改完整 |
+| 新增或修改代码注释、结构字段、函数步骤 | [alonabot-code-commenting](.agents/skills/alonabot-code-commenting/SKILL.md) | 文件头（维护者、创建日期、职责）、文档注释、必要的字段注释与 step 注释 |
+| 选择测试、复现失败或记录验证 | [alonabot-test](.agents/skills/alonabot-test/SKILL.md) | 只提交集成测试与协议编号检查；本地测试写在 `*_local_test.go` |
 | 审查分支、commit 或 PR | [alonabot-review](.agents/skills/alonabot-review/SKILL.md) | 契约与规范两轴，问题有位置、影响和修复方案 |
 | 准备或更新 PR、诊断 GitHub Actions | [alonabot-pr](.agents/skills/alonabot-pr/SKILL.md)、[贡献流程](CONTRIBUTING.md) | 授权、模板、当前 head 的检查及真实未运行项 |
 | 修改文档、AGENTS/CLAUDE 或仓库技能 | [alonabot-docs](.agents/skills/alonabot-docs/SKILL.md) | 权威单一、路由有效、状态有依据 |
@@ -20,7 +20,7 @@
 | 记录验收 | [spec/TEST-MATRIX.md](spec/TEST-MATRIX.md) §3 | 写明测试位置、命令、平台和结果；没运行的写「未运行」 |
 | 契约有缺口或冲突 | [spec/README.md](spec/README.md)「执行与维护」 | 先修契约、PLAN 和 TEST-MATRIX，再在 spec/adr/DECISIONS.md 记录原因 |
 | 执行切片 goal（执行者） | [goals.md](goals.md) 中该 goal 的语句、[alonabot-execute](.agents/skills/alonabot-execute/SKILL.md)、[执行顺序](docs/execution-order.md)、当前分支上的 `goal-N/` | 每个 task 的回写区填写完整；完成后推送并开 PR，不合并 |
-| 编写 goal 语句、审查并合并执行者 PR（审查者） | [goals.md](goals.md)、[执行顺序](docs/execution-order.md)、[alonabot-review](.agents/skills/alonabot-review/SKILL.md)「审查执行者的切片 PR」 | 语句的接口与测试足够具体；合并前核对 head SHA、CI 与探针结果；合并后更新后继 goal |
+| 编写 goal 语句、审查并合并执行者 PR（审查者） | [goals.md](goals.md)、[执行顺序](docs/execution-order.md)、[alonabot-review](.agents/skills/alonabot-review/SKILL.md)「审查执行者的切片 PR」 | 语句的接口与测试足够具体；合并前核对 head SHA、CI 与自己的复现结果；合并后更新后继 goal |
 
 ## 项目约定
 

@@ -21,7 +21,7 @@ description: 修改 AlonaBot 文档、AGENTS/CLAUDE 或仓库技能时使用；�
 
 文档、注释、commit message 和仓库技能用简体中文，标识符/命令/报错保留原文。技能有与目录一致的 `name` 和明确触发条件的 `description`；元数据提示引用 `$技能名`，不依赖维护者机器路径、全局技能或个人代理配置。
 
-技能使用必需的 YAML frontmatter，其后正文说明用途；普通文档标题后的导语说明权威范围与更新时机。新增重复规则前先寻找现有所有者，AGENTS 只放路由与必要红线。文件职责、逐字段和 step comment 的详细写法读取 [注释技能](../alonabot-code-commenting/SKILL.md)。
+技能使用必需的 YAML frontmatter，其后正文说明用途；普通文档标题后的导语说明权威范围与更新时机。新增重复规则前先寻找现有所有者，AGENTS 只放路由与必要红线。代码文件头、注释与 step 注释的写法读取 [注释技能](../alonabot-code-commenting/SKILL.md)。
 
 状态来自当前分支与实际证据，不能把未合入分支的实现写成 main 已实现，也不能把写好的 workflow 写成已经执行的检查。公开声明保留事实、版本、平台与单位；不为了文案整齐弱化契约或丢失已知失败。
 

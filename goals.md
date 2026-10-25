@@ -26,7 +26,9 @@
 3. 实现前读取 [AGENTS.md](AGENTS.md)、[编码规范](docs/coding-standards.md)、[执行顺序](docs/execution-order.md) 和语句「依据」列出的规格小节。
 4. 只修改语句「范围」中列出的文件。公开接口照语句给出的签名实现；语句没写的内部辅助函数可以自定，但不新增公开符号。
 5. 遇到执行技能列出的阻塞情况时标 `[!]`，不要自行决定。特别是：需要改 `.proto`、加依赖、改范围外文件、发现契约冲突。
-6. 代码注释、错误消息和文档用简体中文，只写现状和原因，不写 T、goal 或 task 编号。临时探针放在 `tmp/test/_probe/`，不提交。
+6. 文件头、命名、注释和测试按 [编码规范](docs/coding-standards.md) 执行：每个 Go 文件写维护者（FlanChanXwO）、创建日期和职责；名字用规格术语，不用含糊词和缩写；注释用简体中文，只写现状和原因，不写 T、goal 或 task 编号。
+   - 只提交集成测试。单元测试和临时测试写在 `*_local_test.go`，它们被 git 忽略，不提交。
+   - 只在信任边界做校验，不写防御性的重复检查和兜底分支。
 7. 每个 task 都运行语句中的完成条件命令。最后一个 task 在 goal 分支上重跑全部完成条件，然后推送分支，开 PR 到 `main`：标题为「切片 ID + 标题」，正文按 PR 模板填写，并加一节「文档同步」，列出需要审查者同步到 ARCHITECTURE、README 或 spec 的内容。不合并 PR。
 
 ## 总览
@@ -198,11 +200,12 @@
 - buildRegister 为每个事件生成 RouteDescriptor{route_id, kind=EVENT, default_enabled=true, required_permission=ANY, event: EventSpec{event_type_filter: [eventType], handler_mode=MANUAL}}，排在命令路由之后。
 - examples/plugins/echo：根插件注册 On("echo", "message.created", ...)，把收到消息中的 text 片段原样回复；没有 text 片段时不回复。
 
-测试（必须写出并通过；标 ★ 的做变异检查）：
-- message：TestSendRepliesToDefaultTarget；★TestSendWithoutTargetIsNoDefaultTarget（删去第 3 步应失败）；TestSendOtherTargetDenied；TestSendEmptyChainRejected；TestSendKeepsResultWithError（memory 返回 PARTIAL + UNAVAILABLE，两者都到达调用方）；TestSendUnknownInstance。
-- router：★TestDeliverOrderAndStop（三个假 Target 按 priority/plugin_id/route_id 排序，STOP 之后不再调用；去掉 STOP 判断应失败）；TestDeliverSkipsNotActivated；TestDeliverQueueFull（worker 阻塞时第 257 条返回 ErrQueueFull）；TestMuxUnknownTarget。
-- sdk：TestEventRegistryRejects；TestBuildRegisterEventRoute；★TestSendAfterHandlerReturnFails（不让 Context 失效应失败）；TestDispatchKeepsStopWithError；TestDispatchPanicIsInternal。需要 Session 时沿用 sdk/session_test.go 的成对连接写法。
-- 集成：internal/core/supervisor/echo_test.go（//go:build unix）。按 supervisor_test.go 构建示例的方式构建 examples/plugins/echo，用 memory Adapter + adapter.Registry + message.Service + Mux + Router 装配；Launch 后 Attach 实例，Inject 一条 message.created。断言 memory 收到一条 Chain，文本与原文相同、Target 等于原 Target。TCP 与 stdio 各跑一次。
+测试（按编码规范「测试提交规则」：只提交集成测试；本地自测写在 *_local_test.go，不提交，PR 中写明结果）：
+- 提交：internal/core/supervisor/echo_test.go（//go:build unix）。按 supervisor_test.go 构建示例的方式构建 examples/plugins/echo，用 memory Adapter + adapter.Registry + message.Service + Mux + Router 装配，Launch 后 Attach 实例。
+  - Inject 一条 message.created：memory 收到一条 Chain，文本与原文相同，Target 等于原 Target。
+  - Inject 一条没有匹配路由的事件类型：memory 没有收到任何发送。
+  - TCP 与 stdio 各跑一次。
+- 本地自测：message.Service 的各条拒绝路径（无目标、非原目标、空 Chain、未知实例）和「结果与错误同时返回」；Router 的排序与 STOP、跳过未激活实例、第 257 条返回 ErrQueueFull、Mux 未知服务；SDK 的 EventRegistry 拒绝情况、buildRegister 输出、Handler 返回后 Send 失败、STOP 与错误并存、panic 转 INTERNAL。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./internal/wire/... ./sdk/... ./examples/...；go build ./...。
 
@@ -241,17 +244,9 @@ func (t Trigger) Next(anchor, now time.Time) time.Time // 严格晚于 now 的�
 - 永远不会触发的表达式（例如 2 月 30 日）在 Cron 中报错：从 2000-01-01 起 8 年内找不到触发时刻，即视为无效。
 - Next 对同样的输入总是返回同样的结果：不读当前时间，不持有状态。
 
-测试（标 ★ 的做变异检查）：
-- TestIntervalSkipsMissedTicks：anchor=10:00:00、d=1m、now=10:05:30 → 10:06:00；now 恰好等于某个 tick 时返回下一个 tick。
-- TestIntervalRejectsBelowOneSecond。
-- TestCronParseErrors：表格覆盖上面列出的每种错误。
-- TestCronBasic：*/15 * * * *、0 9 * * 1-5、30 2 1 * * 等，在固定 now 下的期望值。
-- ★TestCronDayOrWeekday：0 0 13 * 5 在 2026 年内既命中 13 日也命中周五（改成 AND 应失败）。
-- ★TestCronDSTGap：America/New_York 下 30 2 * * *，2026-03-08 当天没有触发，下一次是 2026-03-09 02:30 EDT（06:30Z）。不跳过不存在的时刻应失败。
-- ★TestCronDSTOverlap：America/New_York 下 30 1 * * *，2026-11-01 触发两次（05:30Z 与 06:30Z）。
-- TestCronTimezone：无效的 IANA 名称报错；空字符串等于 UTC。
-- TestCronNeverFires：0 0 30 2 * 报错。
-- TestFromSpec：两个分支各一例；两个都设置、或都不设置时报错。
+测试（按编码规范「测试提交规则」）：
+- 提交：无。这是没有外部协作方的纯计算包，集成测试在调度接入时补上。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：错过的 tick 被跳过；interval 小于 1s 被拒；每种 cron 语法错误；常见表达式的期望值；日与星期同时受限时按 OR 匹配；America/New_York 下 30 2 * * * 在 2026-03-08 不触发、下一次为 2026-03-09 06:30Z；30 1 * * * 在 2026-11-01 触发两次（05:30Z 与 06:30Z）；无效时区被拒、空时区等于 UTC；0 0 30 2 * 被拒；FromSpec 的两个分支与非法组合。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/schedule/；go build ./...。
 
@@ -316,16 +311,14 @@ func (s *Store) GenerationConfig(ctx context.Context, generationID string) (stri
   - 超过 2^53 的整数（例如 9007199254740993）原样保留，不经过 float64。
 - 错误一律返回带 Code 的 *validate.Error。
 
-测试（标 ★ 的做变异检查）：
-- ★TestCanonicalKeepsNumbersAndUnknownKeys（改用 float64 解码应失败）。
-- TestCanonicalRejectsNonObject：数组、字符串、语法错误。
-- ★TestMergePatchRFC7396：RFC 7396 附录 A 的全部示例。
-- TestMergePatchKeepsExplicitEmptyValues。
-- ★TestStaleBaseRejected：base 不等于 Active 时返回 FAILED_PRECONDITION（去掉检查应失败）。
-- TestPendingInvalidAfterActiveChanges：CommitActive 新代次后，旧 Pending 不再返回。
-- TestPatchBuildsOnPendingThenActive。
-- TestImportSnapshotDoesNotChangeActive；TestImportSnapshotRejectsNonObject（已有 Pending 不变）。
-- state：TestPendingConfigRoundTrip。现有 state 测试全部通过；若有断言 schema 版本的测试，更新为新版本号。
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/config/service_test.go。用 state.Open 打开临时 data_dir 的真实状态库，经 Service 的公开方法做表驱动测试：
+  - base 不等于 Active 时返回 FAILED_PRECONDITION。
+  - CommitActive 新代次后，旧 Pending 不再返回。
+  - Patch 有 Pending 时叠加在 Pending 上，没有时叠加在 Active 的配置上；结果保留未知键、显式空值和 9007199254740993 这样的大整数。
+  - ImportSnapshot 不改变 Active；config.json 不是对象时被拒，已有 Pending 不变。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Canonical 的数字与键处理、非对象输入；MergePatch 跑通 RFC 7396 附录 A 的全部示例；state 新方法的读写往返。
+- 现有 state 测试必须继续通过；如有断言 schema 版本的测试，更新为新版本号。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/config/ ./internal/core/state/；go build ./...。
 
@@ -385,17 +378,12 @@ func (c *Candidate) Discard() error                            // 删除暂存�
   - 最终目录为 <packagesRoot>/<plugin_id>/<version>-<归档 SHA256 前 12 位>。已存在 → ALREADY_EXISTS，绝不覆盖。
   - 用 os.Rename 从暂存目录移动（同一文件系统由调用方保证），失败时原样返回错误。
 
-测试（fixture 用 archive/tar + compress/gzip 在测试中生成；签名用测试内生成的 ed25519 密钥；标 ★ 的做变异检查）：
-- TestPreflightAccepts：完整的合法包通过，Candidate 各字段正确。
-- TestPreflightRejects：子测试覆盖错误签名、来源不符、缺少本平台资产、大小不符、摘要不符、manifest 的 id/version/source/平台/entrypoint 不符。
-- ★TestExtractRejectsTraversal：../x、/abs、a/../../x、a\b（去掉 .. 检查应失败）。
-- TestExtractRejectsLinksAndDevices：symlink、hardlink、字符设备、FIFO。
-- ★TestExtractRejectsCaseCollision：A.txt 与 a.txt。
-- TestExtractRejectsDuplicate。
-- ★TestExtractLimits：用很小的 Limits 分别验证条目数和展开字节上限（把比较放宽一位应失败）。
-- TestExtractModes（//go:build unix）：带执行位的文件为 0o700，其余为 0o600，setuid 被去掉。
-- TestCommitNeverOverwrites：对同一目标第二次 Commit 返回 ALREADY_EXISTS。
-- TestPreflightCleansUpOnFailure：失败后 stagingRoot 下没有残留目录。
+测试（按编码规范「测试提交规则」；fixture 在测试中用 archive/tar + compress/gzip 生成，签名用测试内生成的 ed25519 密钥）：
+- 提交：internal/core/packages/preflight_test.go。在临时目录生成真实的 tar.gz、release.json 和签名，经 Preflight 与 Commit 做表驱动测试：
+  - 合法包通过，Commit 后最终目录内容正确；对同一目标再次 Commit 返回 ALREADY_EXISTS。
+  - 每种拒绝各一个子测试：签名错误、来源不符、缺少本平台资产、大小不符、摘要不符、manifest 的 id/version/source/平台/entrypoint 不符、../x、/abs、a/../../x、a\b、symlink、hardlink、设备文件、FIFO、A.txt 与 a.txt、重复路径、条目数和展开字节超过（用很小的 Limits）。每个子测试都断言 stagingRoot 下没有残留目录。
+  - 文件权限（//go:build unix 的单独测试）：带执行位的文件为 0o700，其余为 0o600，setuid 被去掉。
+- 本地自测（*_local_test.go，不提交）：Extract 的单项边界，按需编写。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/packages/；go build ./...。
 
@@ -453,15 +441,14 @@ func Send(ctx context.Context, to *pb.Target, chain message.Chain) (*pb.SendResu
   - to 为 nil 时照样发出，由 Core 返回 NO_DEFAULT_TARGET。
   - Context.Send 保持原样。
 
-测试（标 ★ 的做变异检查）：
-- TestReplyToOriginalTargetNeedsNoPermission。
-- ★TestExplicitTargetNeedsPermission（去掉许可检查应失败）。
-- TestGrantThenRevokeTakesEffectNextSend。
-- TestPermissionIsPerInstance：实例 A 的许可不放行实例 B；同一实例下不同 chat/thread 都放行。
-- ★TestDefaultTargetMustMatchExactly：thread_id 不同即不是原 Target，需要许可。
-- TestBackgroundSendWithoutTarget：返回 NO_DEFAULT_TARGET。
-- state：TestAdapterPermissionsRoundTrip。
-- sdk：TestBackgroundSendBeforeReadyFails。
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/message/permissions_test.go。用临时 data_dir 的真实状态库、真实 policy 与 message.Service，加上 memory Adapter，做表驱动测试：
+  - 回复原 Target 不需要许可。
+  - 显式发往其他目标：无许可被拒；授权后放行；撤销后下一次 Send 被拒。
+  - 许可按实例生效：实例 A 的许可不放行实例 B；同一实例下不同 chat/thread 都放行。
+  - thread_id 不同就不是原 Target，需要许可。
+  - 没有默认目标也没有 To 时返回 NO_DEFAULT_TARGET。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：state 许可方法的读写往返；sdk.Send 在就绪前返回 FAILED_PRECONDITION。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./sdk/...；go build ./...。
 
@@ -550,18 +537,16 @@ func (s *Server) PushUpdates(updates ...json.RawMessage) // getUpdates 的默认
   - PlatformMessage 保留 media_group_id；每条 Telegram Message 一个事件，不聚合。
 - Send 返回 UNSUPPORTED，并用 shortcut 注释写明：发送计划接入后替换。Capabilities 返回 nil。
 
-测试（使用 telegramtest；标 ★ 的做变异检查）：
-- TestStartBindsAccount；TestStartRejectsDuplicateOwner；TestStartRejectsWebhook（并断言没有 deleteWebhook 请求）。
-- TestAllowedUpdatesEveryCall：逐个断言每次 getUpdates 的 allowed_updates 与 timeout。
-- ★TestCursorSavedBeforeDeliver：Deliver 时读取 CursorStore，必须已是该条的 update_id+1（调换顺序应失败）。
-- ★TestCursorAdvancesPerUpdate：一批 3 条，第 2 条之后 SaveCursor 失败，游标停在第 2 条（只保存批末 ID 应失败）。
-- TestQueueFullDropsAndContinues：Dropped 计数，后续 update 继续交付。
-- TestRestartResumesFromCursor：停止后重启，从已保存的 offset 拉取，不重放。
-- TestUnauthorizedStopsInstance（401）；TestConflictStopsInstance（409）；TestTransientErrorBacksOff（5xx 两次后恢复）。
-- ★TestIdleRoundReset：注入 Now，满 7 天后下一次请求不带 offset，并保存新的 RoundStartedAt；未满 7 天不重置。
-- TestSenderChatHasNoActor；TestMediaGroupIDKept；TestUnsupportedUpdateAdvancesCursor。
-- TestStopIsIdempotentAndSingleLoop。
-- state：TestCursorRoundTrip。
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/adapters/telegram/receive_test.go。用 telegramtest 模拟服务，以临时 data_dir 的真实状态库作为 CursorStore：
+  - Start 绑定账号；同账号第二个实例被拒；已有 webhook 时被拒，且没有 deleteWebhook 请求。
+  - 每次 getUpdates 的 allowed_updates 与 timeout 都正确。
+  - Sink 收到事件时，状态库里的游标已经是该条的 update_id+1；停止后重启从已保存的 offset 拉取，不重放。
+  - 队列满时 Dropped 计数，后续 update 继续交付；不支持的 update 被忽略，游标照常推进。
+  - 401 与 409 停止实例并进入 failed；5xx 两次后恢复接收。
+  - 注入 Now：满 7 天后下一次请求不带 offset，并保存新的 RoundStartedAt；未满 7 天不重置。
+  - 带 sender_chat 的消息没有 Actor；media_group_id 被保留。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：SaveCursor 失败时停在该条、不交付；Stop 重复调用无副作用且只有一个接收循环；state 游标方法的读写往返。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/adapters/... ./internal/core/...；go build ./...。
 
@@ -625,17 +610,15 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - 所有拒绝都不产生可用 MediaRef。
 - 预留与占用的计数在并发请求下必须正确，用锁保护，不能出现负数或超额。
 
-测试（标 ★ 的做变异检查）：
-- TestUploadRoundTrip：分 3 块上传，Lookup 返回正确的 Object。
-- ★TestOutOfOrderChunkAborts（允许错序 offset 应失败）。
-- TestOversizeAndBadDigest。
-- ★TestSessionQuota：第 5 个未完成上传被拒；总量超过 Session 上限被拒（用很小的 Limits）。
-- TestCoreQuota。
-- TestUploadExpires：注入 now，Begin 后超过 TTL，WriteChunk 返回 NOT_FOUND，预留被释放。
-- TestReleaseSessionFreesQuota。
-- TestForeignSessionCannotUseUpload。
-- TestConcurrentQuotaAccounting（-race）。
-- sdk：TestUploadBeforeReadyFails。
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/media/upload_test.go。用临时目录打开真实 Store，经 Mux 注册的 3 个服务（直接构造 wire.Inbound 调用）做表驱动测试：
+  - 分 3 块上传后 Commit，Lookup 返回正确的 Object。
+  - 错序 offset 终止上传并释放预留；大小或摘要不符时被拒。
+  - 第 5 个未完成上传被拒；Session 和 Core 总量超限被拒（用很小的 Limits）。
+  - 注入 now：超过 TTL 后 WriteChunk 返回 NOT_FOUND，预留被释放。
+  - ReleaseSession 释放该 Session 的全部占用；其他 Session 用不了这个 upload_id 或 token。
+  - 并发上传时配额计数正确（-race）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：sdk.Upload 在就绪前返回 FAILED_PRECONDITION；单块超过 1 MiB 被拒。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./internal/wire/... ./sdk/...；go build ./...。
 
