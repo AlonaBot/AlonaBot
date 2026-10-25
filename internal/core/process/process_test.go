@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：测试插件进程的启动：精简环境、带插件 ID 的日志、退出状态、stdio 管道、入口路径与 runtime.lock。
-
 package process
 
 import (

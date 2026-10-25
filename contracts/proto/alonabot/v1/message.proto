@@ -1,7 +1,4 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：Event、MessageChain/Segment、Send 与回执（MESSAGE-MODEL §1/§2/§4、CONTRACTS §8）。
-
+// Event、MessageChain/Segment、Send 与回执（MESSAGE-MODEL §1/§2/§4、CONTRACTS §8）。
 syntax = "proto3";
 
 package alonabot.v1;

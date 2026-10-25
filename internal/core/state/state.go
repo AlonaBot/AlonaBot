@@ -1,9 +1,10 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：打开状态库与 core.lock，执行 schema 迁移，读写安装记录、代次与启用状态，提交 ActiveGeneration。
-
-// Package state 管理 Core 元数据库 <data_dir>/state.sqlite 与实例锁 <data_dir>/core.lock
-// （CONTRACTS §6.1、§12.2）。尚不含候选资源引用、完整 Journal 与恢复编排。
+// Package state 管理 Core 的元数据库与实例锁。
+//
+// 状态库位于 <data_dir>/state.sqlite，实例锁位于 <data_dir>/core.lock。Open 先取得实例锁，
+// 保证同一个 data_dir 只有一个 Core；已有但无法读取的状态库会报错，不会被重建成空库。
+// 提交 ActiveGeneration 时核对预期的旧值，拒绝陈旧候选。规则见 spec/CONTRACTS-v0.1.md §6.1 与 §12.2。
+//
+// 尚不含候选资源引用、完整的 Journal 与恢复编排。
 package state
 
 import (

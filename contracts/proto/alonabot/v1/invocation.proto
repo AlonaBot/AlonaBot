@@ -1,7 +1,4 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：Core→Plugin 的可信调用上下文、HandlerOutcome 与 Hook 载荷（WIRE §4、MESSAGE-MODEL §3/§5）。
-
+// Core→Plugin 的可信调用上下文、HandlerOutcome 与 Hook 载荷（WIRE §4、MESSAGE-MODEL §3/§5）。
 syntax = "proto3";
 
 package alonabot.v1;

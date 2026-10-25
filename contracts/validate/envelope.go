@@ -1,9 +1,9 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：校验 Envelope 结构与控制帧载荷，提供 schema_id 和对外错误码的映射。
-
-// Package validate 提供协议 1.0 的纯函数校验：Envelope 结构、控制帧载荷、版本与能力协商。
-// 依赖当前 Session 状态的检查（Secret、source_plugin_id、父调用是否在途等）不在这里做。
+// Package validate 提供协议 1.0 的纯函数校验。
+//
+// 它检查 Envelope 结构、控制帧载荷、REGISTER 载荷、MessageChain 结构，以及握手时的版本与能力协商。
+//
+// 依赖 Session 状态的检查不在这里做，例如 Session Secret、source_plugin_id 是否匹配、
+// 父调用是否仍在途；这些由 internal/wire 与 internal/core/host 负责。
 package validate
 
 import (

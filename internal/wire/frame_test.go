@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：测试帧编解码的边界、stdout 污染、超限编码，以及同一组 golden 帧在 TCP 与 stdio 上读出的结果一致。
-
 package wire
 
 import (

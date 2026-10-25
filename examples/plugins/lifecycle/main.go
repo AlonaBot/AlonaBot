@@ -1,7 +1,7 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：可以真实运行的最小插件：由 Core 启动后走完 HELLO、REGISTER、ACTIVATE、STOPPING 的完整生命周期。日志只写 stderr，stdio 传输时 stdout 专用于协议帧。
-
+// lifecycle 是可以真实运行的最小插件示例。
+//
+// 它由 Core 启动，走完 HELLO、REGISTER、ACTIVATE、STOPPING 的完整生命周期，
+// 在每个生命周期 Hook 中向 stderr 打印一行。stdio 传输时 stdout 专用于协议帧，日志只写 stderr。
 package main
 
 import (

@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：在真实 SQLite 上测试 PRAGMA、CRUD 与事务、外键、WAL 在线备份、versioned 账本同事务，以及 SQL 日志不含参数值。
-
 package gormdb
 
 import (

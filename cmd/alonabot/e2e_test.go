@@ -1,9 +1,5 @@
 //go:build unix
 
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：用真实的 alonabot 与 SDK 插件进程做端到端测试：两种传输的生命周期、restart、双 Core 互斥、Core 被杀后的恢复和相对 data_dir。依赖 Unix 信号与进程组语义。
-
 package main
 
 import (

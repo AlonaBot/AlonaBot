@@ -1,9 +1,5 @@
 //go:build unix
 
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：用真实子进程测试插件的启动、停止、崩溃恢复、启动故障、runtime.lock 与管理锁的串行化。依赖 Unix 信号与进程组语义。
-
 package supervisor
 
 import (

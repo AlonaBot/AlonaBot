@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：测试 runtime.lock：第二个实例拒绝启动、锁文件保留、路径必须是 Core 给出的绝对路径，以及 Run 先取锁再执行用户代码。
-
 package sdk
 
 import (

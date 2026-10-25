@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：测试状态库：PRAGMA 与重开、core.lock 互斥、提交时的预期旧值、损坏的库不会被重建、schema 版本与逐插件锁。
-
 package state
 
 import (

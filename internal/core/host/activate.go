@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：提交 ActiveGeneration、完成 ACTIVATE/ACTIVATED，并在读循环中按实例状态放行或拒绝业务请求。
-
 package host
 
 import (

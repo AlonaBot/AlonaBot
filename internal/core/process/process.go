@@ -1,9 +1,11 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：启动插件进程：精简环境变量、带插件 ID 的日志、退出状态，以及进程树的终止与等待。
-
-// Package process 启动与回收插件的 Native 子进程（CONTRACTS §7.1、§12.2）。
-// 它管理合作型子进程（Unix 进程组、Windows Job Object），不能阻止恶意 detach，也不是安全沙箱。
+// Package process 启动与回收插件的 Native 子进程。
+//
+// 子进程只继承一小组白名单环境变量，标准输出与标准错误按行转成带插件 ID 的日志。
+// 进程树在 Unix 上用进程组管理，在 Windows 上用 Job Object 管理，停止时整棵树一起结束，
+// 并确认已经清空后才返回。
+//
+// 这是对合作型子进程的管理：它不能阻止恶意进程脱离进程组，也不是安全沙箱。
+// 规则见 spec/CONTRACTS-v0.1.md §7.1 与 §12.2。
 package process
 
 import (

@@ -1,9 +1,11 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：握手与认证、下发 Bootstrap、原子校验 REGISTER 并回复 PREPARED。
-
-// Package host 编排 Core 侧单个插件 Session 的生命周期（CONTRACTS §1.1、§4、§12.1）：
-// 握手与准备、提交与激活、停止与有限重启。
+// Package host 编排 Core 侧单个插件 Session 的生命周期。
+//
+// 一个插件进程连上 Core 后，依次经过握手认证、Bootstrap 下发、REGISTER 校验与 PREPARED（Prepare），
+// 提交 ActiveGeneration、ACTIVATE 与 ACTIVATED（Activate），以及冻结、排空、STOPPING 与结束进程树（Stop）。
+// 有限重启策略也在这里。状态与可见性规则见 spec/CONTRACTS-v0.1.md §4 与 §12.1。
+//
+// 本包不启动进程，也不持久化状态；这些由 internal/core/process、internal/core/state 和
+// internal/core/supervisor 负责。
 package host
 
 import (

@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：锁句柄类型，以及 TryLock、Lock、Unlock 的跨平台入口。
-
 // Package oslock 提供跨进程的 OS 独占文件锁（CONTRACTS §12.2）：Linux/macOS 用 flock，
 // Windows 用 LockFileEx。Core 的 core.lock 与 SDK 的 runtime.lock 共用本实现。
 //

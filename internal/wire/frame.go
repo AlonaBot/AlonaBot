@@ -1,10 +1,11 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：帧的编码与读取，检查 1～4 MiB 的长度范围。
-
 // Package wire 实现 Core 与 SDK 共用的协议运行时：帧编解码、传输与 Session 调用引擎。
-// 帧格式见 WIRE-FORMAT §1：4 字节 big-endian 载荷长度（不含前缀）加 Protobuf Envelope，
-// 长度范围 1～4,194,304 字节；TCP 与 stdio 使用相同的编码。
+//
+// 每帧由 4 字节 big-endian 载荷长度（不含前缀）和 Protobuf Envelope 组成，长度范围为
+// 1～4,194,304 字节；TCP 与 stdio 使用相同的编码。帧格式见 spec/WIRE-FORMAT.md §1。
+//
+// Session 在一条已认证的连接上同时收发双向调用：按调用编号配对请求与响应，
+// 执行每方向与全局的准入预算，并让响应、取消和控制帧走优先通道，不被普通请求阻塞。
+// 调用与取消的规则见 spec/WIRE-FORMAT.md §4。
 package wire
 
 import (

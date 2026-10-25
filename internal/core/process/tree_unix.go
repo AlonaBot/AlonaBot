@@ -1,9 +1,5 @@
 //go:build unix
 
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：用 Unix 进程组终止插件进程树并确认它已清空。
-
 package process
 
 import (

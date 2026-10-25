@@ -1,9 +1,7 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：校验 release.json 的 Ed25519 签名与内容，并按平台查找资产。
-
-// Package release 校验归档外的 release.json 及其 Ed25519 签名（CONTRACTS §9.2）。
-// 先对文件原始字节验签，再解析；不重新序列化 JSON 后验签。
+// Package release 校验发布在归档之外的 release.json 及其 Ed25519 签名。
+//
+// 验签针对 release.json 文件的原始字节，先验签后解析，不会重新序列化 JSON 再验签。
+// 签名只证明发布来源，不证明插件行为安全。规则见 spec/CONTRACTS-v0.1.md §9.2。
 package release
 
 import (

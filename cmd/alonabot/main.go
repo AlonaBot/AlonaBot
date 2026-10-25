@@ -1,7 +1,8 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：alonabot 命令行入口。目前只有开发用的 run：在给定 data_dir 中启动一个本地插件，收到 SIGINT/SIGTERM 时停止，异常退出按有限重启策略处理。
-
+// alonabot 命令启动 AlonaBot Core。
+//
+// 目前只提供开发用的 run 子命令：在给定的 data_dir 中登记并启动一个本地插件，
+// 收到 SIGINT 或 SIGTERM 时停止它；插件异常退出时按有限重启策略重启或禁用。
+// 正式的安装与管理命令尚未提供。
 package main
 
 import (

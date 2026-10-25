@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：校验 MessageChain 与各类 Segment 的平台无关结构。
-
 package validate
 
 import (

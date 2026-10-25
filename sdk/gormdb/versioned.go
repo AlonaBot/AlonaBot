@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：执行 versioned 迁移并维护完成账本。
-
 package gormdb
 
 import (

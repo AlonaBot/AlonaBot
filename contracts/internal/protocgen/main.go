@@ -1,7 +1,7 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：生成 contracts/pb：核对 protoc 版本，删除旧的生成文件，再用 go.mod 固定的 protoc-gen-go 重新生成。由 contracts/doc.go 的 go:generate 调用。
-
+// protocgen 命令生成 contracts/pb 下的 Go 代码。
+//
+// 它先核对 protoc 版本，删除旧的生成文件，再用 go.mod 固定的 protoc-gen-go 重新生成。
+// 由 contracts/doc.go 中的 go:generate 指令调用，不单独运行。
 package main
 
 import (

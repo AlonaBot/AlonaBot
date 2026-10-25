@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：插件侧的连接建立、握手（HELLO/HELLO_ACK）与准备阶段（配置、OnStart、REGISTER/PREPARED）。
-
 package sdk
 
 import (

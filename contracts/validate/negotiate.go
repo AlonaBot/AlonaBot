@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：握手时协商协议版本与能力（WIRE §3.1）。
-
 package validate
 
 import (

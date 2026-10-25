@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：TCP 与 stdio 共用的帧连接，以及 Core 侧的 loopback 监听。
-
 package wire
 
 import (

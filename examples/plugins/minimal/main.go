@@ -1,7 +1,7 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：SDK 公共签名的组合示例：一个根插件、两类 Handler、StopPropagation、配置回调、HTTP Handler 与一个定时任务。SDK 尚不支持 HTTP 路由与定时任务，直接运行时 Run 返回 UNSUPPORTED。
-
+// minimal 演示 SDK 公共签名的组合方式。
+//
+// 示例包括一个根插件、两类 Handler、StopPropagation、配置回调、HTTP Handler 与一个定时任务。
+// SDK 尚不支持 HTTP 路由与定时任务，直接运行时 Run 返回 UNSUPPORTED。
 package main
 
 import (

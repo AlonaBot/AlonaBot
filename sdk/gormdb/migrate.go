@@ -1,8 +1,8 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：两种迁移方式的接口，以及它们不能同时实现的检查。
-
-// Package gormdb 提供插件受管数据库的 GORM 入口与迁移接口（CONTRACTS §6）。
+// Package gormdb 为插件打开受管数据库，并提供迁移接口。
+//
+// OpenSQLite 与 OpenPostgres 返回原生的 *gorm.DB，并核对连接上的关键设置确实生效。
+// 插件可以自己实现 Migrate，也可以交出按编号排列的 Migrations 由 SDK 执行，两者只能选一种。
+// 数据库的所有权、连接与迁移规则见 spec/CONTRACTS-v0.1.md §6。
 package gormdb
 
 import (

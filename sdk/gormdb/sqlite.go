@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：打开受管 SQLite 文件，并核对 WAL、FULL、外键与 busy timeout 实际生效。
-
 package gormdb
 
 import (

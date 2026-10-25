@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：所有 Session 共享的 Core 全局载荷字节预算（CONTRACTS §1.2）。
-
 package wire
 
 import "sync"

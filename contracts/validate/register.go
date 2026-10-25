@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：整体校验 REGISTER 载荷：路由描述、候选配置与 HTTP Listener。
-
 package validate
 
 import (

@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：插件侧的激活与停止：ACTIVATE → OnReady → ACTIVATED、本地 ready gate，以及 STOPPING 或断链后的 OnStop。
-
 package sdk
 
 import (

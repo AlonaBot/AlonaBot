@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：逐项对照生成类型的字段号、枚举值与 WIRE-FORMAT，防止协议编号被悄悄改动。
-
 package contracts_test
 
 import (

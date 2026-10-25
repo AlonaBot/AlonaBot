@@ -1,8 +1,7 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：根插件需要嵌入的 Base 类型。
-
-// Package plugin 提供根插件类型必须嵌入的 Base。插件 ID 只来自 plugin.yaml，根类型不需要实现 ID()。
+// Package plugin 提供根插件必须嵌入的 Base 类型。
+//
+// 插件 ID 只来自 plugin.yaml，根插件不需要实现 ID 方法。Base 的未导出方法保证
+// 只有嵌入了它的类型才能作为根插件传给 sdk.Run。
 package plugin
 
 // Base 由根插件以值的形式嵌入：

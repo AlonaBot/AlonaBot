@@ -1,7 +1,4 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：控制帧载荷（WIRE-FORMAT §3、CONTRACTS §1.1/§4/§6.3）。REGISTER 载荷依赖 RouteDescriptor，定义在 route.proto。
-
+// 控制帧载荷（WIRE-FORMAT §3、CONTRACTS §1.1/§4/§6.3）。REGISTER 载荷依赖 RouteDescriptor，定义在 route.proto。
 syntax = "proto3";
 
 package alonabot.v1;

@@ -1,8 +1,7 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：构造 MessageChain 的片段类型，以及到协议类型的转换。
-
-// Package message 提供构造 MessageChain 的类型（MESSAGE-MODEL §2）；一条 Chain 对应一次逻辑 Send。
+// Package message 提供构造消息链的类型。
+//
+// 一条 Chain 对应一次逻辑发送，按顺序由片段组成，平台可能需要把它拆成多条物理消息。
+// 片段的语义见 spec/MESSAGE-MODEL.md §2。
 package message
 
 import (

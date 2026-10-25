@@ -1,11 +1,10 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：SDK 的公共入口：生命周期接口、Context、Send、Run 与注册项收集。
-
-// Package sdk 提供 AlonaBot Native Go 插件的公共入口：Context、注册器与生命周期接口。
+// Package sdk 提供 AlonaBot Native Go 插件的公共入口。
 //
-// Run 完成取锁、握手、准备、激活与停止；业务分发、Send、HTTP 路由与定时任务尚未实现，
-// 返回 UNSUPPORTED 错误，不 panic，也不假装成功。
+// 插件的 main 调用 Run，传入嵌入了 plugin.Base 的根插件。Run 取得 runtime.lock，
+// 收集根插件的注册项，与 Core 完成握手、准备和激活，然后一直运行到 Core 要求停止。
+// 根插件可以按需实现 Starter、Readier、Stopper 等生命周期接口。
+//
+// 业务分发、Send、HTTP 路由与定时任务尚未实现；它们返回 UNSUPPORTED 错误，不会 panic，也不会假装成功。
 package sdk
 
 import (

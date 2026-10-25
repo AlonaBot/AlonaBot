@@ -1,7 +1,4 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：REGISTER 载荷与 RouteDescriptor（WIRE §3.3、CONTRACTS §2.2/§3/§4.3/§7.2）。
-
+// REGISTER 载荷与 RouteDescriptor（WIRE §3.3、CONTRACTS §2.2/§3/§4.3/§7.2）。
 syntax = "proto3";
 
 package alonabot.v1;

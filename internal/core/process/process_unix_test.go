@@ -1,9 +1,5 @@
 //go:build unix
 
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：测试 KillTree 会让 Unix 进程组内的孙进程一并结束。
-
 package process
 
 import (

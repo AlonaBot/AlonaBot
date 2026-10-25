@@ -1,7 +1,3 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：握手认证之后，核对对端每一帧的会话身份与协商版本；Core 准备阶段、SDK 与 Session 共用。
-
 package wire
 
 import (

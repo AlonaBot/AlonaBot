@@ -1,8 +1,8 @@
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：解析并校验 plugin.yaml、插件 ID 与包内相对路径。
-
-// Package manifest 解析并校验插件包内的 plugin.yaml（CONTRACTS §9.1）与插件 ID 规则（§7.1）。
+// Package manifest 解析并校验插件包内的 plugin.yaml。
+//
+// 解析是严格的：未知字段、多个 YAML 文档、缺失必填项或非法取值都会失败。
+// 插件 ID、版本号与包内相对路径的规则见 spec/CONTRACTS-v0.1.md §7.1 与 §9.1。
+// 本包只检查 manifest 本身，不读取归档，也不判断来源是否可信。
 package manifest
 
 import (
