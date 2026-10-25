@@ -5,7 +5,7 @@
 ## 风格基线
 
 - Go 代码遵循 [Google Go Style Guide](https://google.github.io/styleguide/go/)，包括 [Style Decisions](https://google.github.io/styleguide/go/decisions) 和 [Best Practices](https://google.github.io/styleguide/go/best-practices)。可用时加载 `go-google-style-guide`、`go-google-style-decisions` 和 `go-google-best-practices` 技能。
-- 注释遵循 `code-commenting` 技能的原则：只写名字和结构表达不出来的东西，多阶段流程写 step 注释。本文件与上述资料冲突时，以本文件为准，主要差异是注释用简体中文和统一的文件头。
+- 注释遵循 `code-commenting` 技能的原则：只写名字和结构表达不出来的东西，多阶段流程写 step 注释。本文件与上述资料冲突时，以本文件为准，主要差异是注释用简体中文。
 - 代码要让只有 Go 基础的工程师也能读懂：清楚优先于简短，不炫技，不为将来可能的需求预留抽象。
 - 使用 `go.mod` 指定的 Go 版本和 `gofmt`。
 
@@ -28,7 +28,7 @@
 
 - 新概念先在 spec 中确定名字，再进入代码。同一个概念在全项目只用一个名字，不混用同义词。
 - 不用含糊的通用词做名字或后缀：`Kind`、`Type`（作为万能区分字段时）、`Info`、`Data`、`Item`、`Object`、`Manager`、`Helper`、`Util`、`Common`、`Misc`、`Impl`。改用说明具体角色的词，例如 `Phase`、`Mode`、`Source`、`Status`、`Registry`、`Store`。
-- 不用缩写，`Deps`、`Cfg`、`Mgr`、`Svc`、`Msg`、`Req`、`Resp`、`Tmp`、`Val` 都写完整单词。Go 惯例的短名不受此限：局部的 `ctx`、`err`、`ok`、`i`，以及一两个字母的方法接收者。`ID`、`URL`、`HTTP` 等首字母缩写词保持全大写。
+- 不用缩写，`Deps`、`Cfg`、`Mgr`、`Svc`、`Msg`、`Req`、`Resp`、`Tmp`、`Val` 都写完整单词。Go 惯例的短名不受此限：只在几行内使用的局部变量（如 `ctx`、`err`、`ok`、`i`、`n`、`msg`、`req`、`env`），以及一两个字母的方法接收者。字段、导出符号和作用域较大的变量仍写完整单词。`ID`、`URL`、`HTTP` 等首字母缩写词保持全大写。
 - 包名用简短的小写名词，不用 `util`、`common`、`base`、`types` 这类包名。
 - 协议生成的名字（如 `pb.FrameKind`、`pb.RouteKind`）以 WIRE-FORMAT 为准，不在 Go 代码里另起别名；新写的 Go 类型不再沿用这种 `Kind` 后缀。
 
@@ -48,25 +48,25 @@
 - 限额、超时、重试、截断和降级必须有契约要求或可复现的故障依据。新依赖要先说明必要性和替代方案，取得维护者同意后才加。
 - `cmd/alonabot` 只负责解析参数和装配；协议、数据库和进程逻辑留在各自的包里。
 
-## 文件头
+## 包文档
 
-每个手写的 Go 文件和 `.proto` 文件开头写维护者、创建日期和职责，再空一行，然后才是包文档或 `package`。空行让文件头不被 godoc 当成包文档。
+每个包只在一个文件里写包文档：通常是 `doc.go` 或包的主文件，紧贴 `package` 那一行。写法参照 Go 标准库：第一句以 `Package x` 开头说清这个包做什么；再空一行（`//`）分段写使用范围、不负责什么，以及对应的规格条款。不写维护者、创建日期这类元信息，它们由 Git 记录。
 
 ```go
-// 维护者：FlanChanXwO
-// 创建日期：2026-10-21
-// 职责：停止单个插件。先冻结新调用，等已有调用结束；超过停止预算后结束整个进程树。
-
-package host
+// Package wire 实现 Core 与 SDK 共用的协议运行时：帧编解码、传输与 Session 调用引擎。
+//
+// 每帧由 4 字节 big-endian 载荷长度和 Protobuf Envelope 组成，长度范围为 1～4,194,304 字节；
+// TCP 与 stdio 使用相同的编码。帧格式见 spec/WIRE-FORMAT.md §1。
+package wire
 ```
 
-- **维护者**：负责这个文件的 GitHub 账号，多人用顿号分隔。接手维护时更新。
-- **创建日期**：文件第一次提交的日期，格式 `YYYY-MM-DD`，之后不改。
-- **职责**：一两句话写清这个文件处理什么问题，必要时另起一行「不负责：……」。像人一样直接描述，不写「本文件负责……」「该文件用于……」「提供……相关功能」这类套话。
-- 有 `//go:build` 时，build tag 仍放在第一行，空一行后再写文件头。cgo 注释和 `//go:generate` 等指令保留原来的位置。
-- 每个包只在一个文件里写包文档（`// Package x ...`，紧贴 `package` 那一行），通常是 `doc.go` 或包的主文件。
+- 其他文件开头不写注释：紧贴 `package` 的注释会被 Go 并进包文档，单独的文件说明也容易随重构过期。文件名要让人一眼看出内容；一个文件需要靠注释才说得清，通常说明它该改名或调整拆分。
+- 有多个文件或多个主要类型的包，在包文档里加一段「包的组成」，用文档链接（如 `[Session]`、`[Conn]`）列出主要类型和入口，读者可以在 godoc 中直接跳转，改名时 gopls 也会提示链接失效。
+- `main` 包的包文档以命令名开头，例如「alonabot 命令启动 AlonaBot Core。」
+- 有 `//go:build` 时，build tag 放在第一行，空一行后再写包文档或 `package`。cgo 注释和 `//go:generate` 等指令保留原来的位置。
+- `.proto` 文件在 `syntax` 之前用一段注释说明这个文件定义了哪些载荷，以及对应的规格条款。
 - 生成的文件保留生成器写的头部，不手工补写；要补充说明就改 `.proto` 或生成器。
-- 其他可以写注释的文件（工作流、脚本、配置）在顶部用一行注释说明用途，不要求维护者和日期。
+- 其他可以写注释的文件（工作流、脚本、配置）在顶部用一行注释说明用途。
 
 ## 注释
 
@@ -128,7 +128,7 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 ### 让基础工程师读得懂
 
 - 用到 `select`、channel 关闭、`sync/atomic`、锁的先后顺序、goroutine 交接等写法时，在旁边用一行注释说明为什么这样写。
-- 状态机、调用引擎、恢复流程这类特别复杂的模块，在类型或文件开头（文件头之后）用一段多行注释讲清整体模型：有哪些状态、谁拥有什么、按什么顺序发生。之后的局部注释就不必重复。
+- 状态机、调用引擎、恢复流程这类特别复杂的模块，在包文档或类型注释里用一段多行注释讲清整体模型：有哪些状态、谁拥有什么、按什么顺序发生。之后的局部注释就不必重复。
 - 不逐行复述代码，不给每个赋值、`if err != nil` 或 return 加注释。
 - 不承诺代码没有提供的保证，例如线程安全、原子性、幂等或可重试。
 
@@ -148,6 +148,6 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 
 ## 如何应用和审查
 
-- 新增文件完整遵守以上规则。修改已有文件时，补齐文件头和本次触及部分的注释；全库补齐是独立任务，不夹带在功能改动里。
+- 新增文件完整遵守以上规则。修改已有文件时，补齐本次触及部分的注释；全库补齐是独立任务，不夹带在功能改动里。
 - `gofmt`、编译和生成一致性由工具检查；命名、注释和测试范围由审查者按本文件与 [注释技能](../.agents/skills/alonabot-code-commenting/SKILL.md) 检查。CI 通过不代表这些规则自动满足。
 - 只改注释时，检查内容、格式和引用即可。涉及 `go:generate`、build tag 等会被工具读取的注释时，验证实际的使用方。

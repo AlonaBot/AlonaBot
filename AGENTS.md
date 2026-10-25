@@ -9,7 +9,7 @@
 | 任务 | 先读 | 完成前检查 |
 | --- | --- | --- |
 | 实现、诊断、重构或设计 Go 代码 | [alonabot-develop](.agents/skills/alonabot-develop/SKILL.md)、[编码规范](docs/coding-standards.md)（Google Go Style 与项目术语） | 所有者、调用者、兼容性及必要相邻修改完整 |
-| 新增或修改代码注释、结构字段、函数步骤 | [alonabot-code-commenting](.agents/skills/alonabot-code-commenting/SKILL.md) | 文件头（维护者、创建日期、职责）、文档注释、必要的字段注释与 step 注释 |
+| 新增或修改代码注释、结构字段、函数步骤 | [alonabot-code-commenting](.agents/skills/alonabot-code-commenting/SKILL.md) | 标准库风格的包文档、文档注释、必要的字段注释与 step 注释 |
 | 选择测试、复现失败或记录验证 | [alonabot-test](.agents/skills/alonabot-test/SKILL.md) | 只提交集成测试与协议编号检查；本地测试写在 `*_local_test.go` |
 | 审查分支、commit 或 PR | [alonabot-review](.agents/skills/alonabot-review/SKILL.md) | 契约与规范两轴，问题有位置、影响和修复方案 |
 | 准备或更新 PR、诊断 GitHub Actions | [alonabot-pr](.agents/skills/alonabot-pr/SKILL.md)、[贡献流程](CONTRIBUTING.md) | 授权、模板、当前 head 的检查及真实未运行项 |

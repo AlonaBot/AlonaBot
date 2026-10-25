@@ -6,7 +6,7 @@
 | [spec/adr/README.md](../spec/adr/README.md) | D/P/Q 决策与历史审阅 | 解释「为什么」，不覆盖现行契约 |
 | [ARCHITECTURE.md](../ARCHITECTURE.md) | 模块职责、import 方向、状态归属 | 结构规则 |
 | [development.md](development.md) | 环境、命令、外部测试环境、规则与检查 | 验证入口 |
-| [coding-standards.md](coding-standards.md) | 按职责组织文件、Go 约定、文件头/字段/步骤注释 | 编码审查规则 |
+| [coding-standards.md](coding-standards.md) | 命名与术语、按职责组织文件、包文档与注释、测试提交规则 | 编码审查规则 |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | Issue、PR、Git 授权和 GitHub 自动化 | 贡献流程 |
 | [AGENTS.md](../AGENTS.md) | 项目维护技能与规格的按任务路由 | Agent 工作入口 |
 | [goals.md](../goals.md) | 可派发的切片 goal 语句与状态 | 派发入口 |

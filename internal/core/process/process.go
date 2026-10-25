@@ -1,6 +1,16 @@
-// Package process 启动与回收插件 Native 子进程（CONTRACTS §7.1、§12.2）：精简环境、
-// 带插件 ID 的日志、进程树管理（Unix 进程组 / Windows Job Object）与退出状态。
-// 这是合作型子进程管理，不能阻止恶意 detach，也不是安全沙箱。
+// Package process 启动与回收插件的 Native 子进程。
+//
+// 子进程只继承一小组白名单环境变量，标准输出与标准错误按行转成带插件 ID 的日志。
+// 进程树在 Unix 上用进程组管理，在 Windows 上用 Job Object 管理，停止时整棵树一起结束，
+// 并确认已经清空后才返回。
+//
+// 这是对合作型子进程的管理：它不能阻止恶意进程脱离进程组，也不是安全沙箱。
+// 规则见 spec/CONTRACTS-v0.1.md §7.1 与 §12.2。
+//
+// 包的组成：
+//   - [Start] 按 [Spec] 启动进程，返回 [Process]；[Process.KillTree] 与 [Process.WaitTree] 结束并确认整棵进程树。
+//   - [NewSecret] 生成 Session Secret，[Entrypoint] 解析包内的入口路径，[LockRuntime] 临时持有插件的 runtime.lock。
+//   - 进程树在 Unix 与 Windows 上的实现分别在 tree_unix.go 与 tree_windows.go。
 package process
 
 import (
@@ -22,7 +32,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
-// inheritedEnv 是从 Core 环境继承到插件的变量白名单；其余变量（含管理凭证）一律不传。
+// inheritedEnv 列出从 Core 环境继承到插件的变量；其余变量（含管理凭证）一律不传。
 var inheritedEnv = []string{"PATH", "HOME", "TMPDIR", "TEMP", "TMP", "SystemRoot", "LANG", "TZ"}
 
 // NewSecret 生成本次启动的 256-bit Session Secret（十六进制）。
@@ -63,44 +73,32 @@ func StderrLog(pluginID, stream string, line []byte) {
 
 // Spec 描述一次插件进程启动。
 type Spec struct {
-	// PluginID 是插件 ID，用于日志前缀与错误信息。
-	PluginID string
-	// Path 是可执行文件绝对路径。
-	Path string
-	// Dir 是工作目录（插件目录）；不构成文件访问限制。
-	Dir string
-	// Args 是命令行参数，不含 argv[0]。
-	Args []string
-	// Env 是会话变量（wire.Env*），叠加在白名单继承变量之上。
-	Env map[string]string
+	PluginID string            // 插件 ID，用于日志前缀与错误信息
+	Path     string            // 可执行文件绝对路径
+	Dir      string            // 工作目录（插件目录）；不构成文件访问限制
+	Args     []string          // 命令行参数，不含 argv[0]
+	Env      map[string]string // 会话变量（wire.Env*），叠加在白名单继承变量之上
 	// Stdio 为 true 时 stdin/stdout 作为协议传输，只有 stderr 是日志。
 	Stdio bool
 }
 
-// Process 是一个受管的插件进程及其进程树。
+// Process 管理一个插件进程及其进程树。
 type Process struct {
-	// PluginID 是插件 ID。
 	PluginID string
-	// Stdin 是 stdio 模式下 Core 写协议帧的管道；TCP 模式为 nil。
-	Stdin io.WriteCloser
-	// Stdout 是 stdio 模式下 Core 读协议帧的管道；TCP 模式为 nil。
-	Stdout io.ReadCloser
+	Stdin    io.WriteCloser // stdio 模式下 Core 写协议帧的管道；TCP 模式为 nil
+	Stdout   io.ReadCloser  // stdio 模式下 Core 读协议帧的管道；TCP 模式为 nil
 
-	// cmd 是领头进程。
-	cmd *exec.Cmd
-	// tree 是进程组或 Job Object。
-	tree *tree
+	cmd  *exec.Cmd // 领头进程
+	tree *tree     // 进程组或 Job Object
 	// exited 在领头进程被 Wait 回收后关闭。
 	exited chan struct{}
 	// logs 等待各日志转发 goroutine 结束。
 	logs sync.WaitGroup
 
 	// mu 保护 state 与 err。
-	mu sync.Mutex
-	// state 是领头进程的退出状态；退出前为 nil。
-	state *os.ProcessState
-	// err 是 cmd.Wait 的返回值。
-	err error
+	mu    sync.Mutex
+	state *os.ProcessState // 领头进程的退出状态；退出前为 nil
+	err   error            // cmd.Wait 的返回值
 }
 
 // Start 以精简环境启动插件进程，并把它放进新的进程组/Job Object。
@@ -251,7 +249,7 @@ func (p *Process) ExitState() *os.ProcessState {
 // WaitLogs 等待日志管道读完（所有持有写端的进程都已退出或关闭了输出）。
 func (p *Process) WaitLogs() { p.logs.Wait() }
 
-// treePoll 是确认进程树清空的轮询间隔：Unix 无法等待非子进程退出，Windows Job 也只提供进程计数查询。
+// treePoll 控制确认进程树清空时的轮询间隔：Unix 无法等待非子进程退出，Windows Job 也只提供进程计数查询。
 const treePoll = 10 * time.Millisecond
 
 // KillTree 立即终止整个进程树，并在树内（含领头进程）全部消失后才返回；领头进程已退出时同样

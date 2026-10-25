@@ -1,4 +1,3 @@
-// 本文件负责插件实例的提交与激活门禁：提交 ActiveGeneration、ACTIVATE/ACTIVATED，以及读循环中的业务准入。
 package host
 
 import (
@@ -15,7 +14,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
-// State 是 Core 侧插件实例的可见状态（CONTRACTS §12.1，本文件覆盖 Activating 之后的部分）。
+// State 表示 Core 侧插件实例的可见状态（CONTRACTS §12.1），这里覆盖 Activating 之后的部分。
 type State int32
 
 // 实例状态，按生命周期顺序排列。
@@ -35,39 +34,31 @@ func (s State) String() string {
 
 // ActivateOptions 配置一次激活。
 type ActivateOptions struct {
-	// PluginID 是插件 ID，Session 用它核对对端帧的来源。
-	PluginID string
-	// GenerationID 是要激活的代次，ACTIVATED 必须回显它。
-	GenerationID string
+	PluginID     string // 插件 ID，Session 用它核对对端帧的来源
+	GenerationID string // 要激活的代次，ACTIVATED 必须回显它
 	// Commit 在发送 ACTIVATE 之前于 Core 状态库提交唯一 ActiveGeneration+COMMITTED（新候选）。
 	// 为 nil 表示普通 restart / 恢复：复用原有提交记录与 Generation，不再提交、不产生新代次。
 	// 事务内只操作元数据，不得等待插件 RPC。
 	Commit func(ctx context.Context) error
 	// Handler 处理 Activated 之后插件发起的业务调用。
 	Handler wire.Handler
-	// Global 是 Core 全局载荷预算。
-	Global *wire.Budget
+	Global  *wire.Budget // Core 全局载荷预算
 	// Limits 提供 OnReady 预算。
 	Limits Limits
 }
 
-// Instance 是一个已进入激活流程的插件 Session。
+// Instance 跟踪一个已进入激活流程的插件 Session 及其状态。
 type Instance struct {
-	// PluginID 是插件 ID。
-	PluginID string
-	// GenerationID 是本实例服务的代次。
-	GenerationID string
-	// Session 是本实例的调用引擎；进入激活流程时创建。
-	Session *wire.Session
+	PluginID     string
+	GenerationID string        // 本实例服务的代次
+	Session      *wire.Session // 本实例的调用引擎；进入激活流程时创建
 
-	// state 是 State，读循环与停止流程并发访问。
-	state atomic.Int32
+	state atomic.Int32 // State，读循环与停止流程并发访问
 	// activated 在读循环应用 ACTIVATED 时关闭。
 	activated chan struct{}
 	// failOnce 保证只记录第一个失败原因。
 	failOnce sync.Once
-	// failErr 是进入 Degraded 的原因，由 failOnce 写入一次。
-	failErr error
+	failErr  error // 进入 Degraded 的原因，由 failOnce 写入一次
 }
 
 // State 返回当前状态。
@@ -89,7 +80,7 @@ func (in *Instance) degrade(err error) {
 	})
 }
 
-// admit 是读循环中的同步门禁：Activated 之前（Preparing/Prepared/Activating）拒绝一切业务 REQUEST。
+// admit 在读循环中同步检查业务 REQUEST：Activated 之前（Preparing/Prepared/Activating）一律拒绝。
 // Draining 时只放行引用 Core 在途请求的子调用（parent_call_id），让已接纳的调用链能够完成。
 func (in *Instance) admit(req *wire.Inbound) *pb.ErrorInfo {
 	switch in.State() {
@@ -119,7 +110,7 @@ func (in *Instance) control(env *pb.Envelope) error {
 		close(in.activated)
 		return nil
 	case *pb.SessionError:
-		in.degrade(&PhaseError{Phase: m.GetFailedPhase(), Code: validate.PublicCode(env.GetError().GetCode()), Msg: env.GetError().GetSafeMessage()})
+		in.degrade(&PhaseError{Phase: m.GetFailedPhase(), Code: validate.PublicCode(env.GetError().GetCode()), Message: env.GetError().GetSafeMessage()})
 		return errors.New("插件报告 SESSION_ERROR")
 	case *pb.Heartbeat:
 		return nil

@@ -1,35 +1,26 @@
-// 本文件负责握手时的协议版本与能力协商（WIRE §3.1）。
 package validate
 
 import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
-// Offer 是一端在握手中声明的协议版本与能力。
+// Offer 描述一端在握手中声明的协议版本与能力。
 type Offer struct {
-	// Major 是协议主版本，双方必须相等。
-	Major uint32
-	// Minor 是支持的最高次版本。
-	Minor uint32
-	// Supported 是可用的能力集合。
-	Supported []*pb.ProtocolCapability
-	// Required 是必需能力，必须包含于双方交集。
-	Required []*pb.ProtocolCapability
+	Major     uint32                   // 协议主版本，双方必须相等
+	Minor     uint32                   // 支持的最高次版本
+	Supported []*pb.ProtocolCapability // 可用的能力集合
+	Required  []*pb.ProtocolCapability // 必需能力，必须包含于双方交集
 }
 
-// Agreement 是协商结果。
+// Agreement 保存握手协商出的版本与能力交集。
 type Agreement struct {
-	// Minor 是双方次版本的较小值，之后每一帧都使用它。
-	Minor uint32
-	// Intersection 是双方都支持的能力，按本端 Supported 的顺序排列。
-	Intersection []*pb.ProtocolCapability
+	Minor        uint32                   // 双方次版本的较小值，之后每一帧都使用它
+	Intersection []*pb.ProtocolCapability // 双方都支持的能力，按本端 Supported 的顺序排列
 }
 
-// capKey 是能力的精确匹配键。
+// capKey 按名字和版本精确匹配一项能力。
 type capKey struct {
-	// name 是能力名。
-	name string
-	// version 是能力版本。
+	name    string
 	version uint32
 }
 

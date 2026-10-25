@@ -1,7 +1,16 @@
-// Package sdk 是 AlonaBot Native Go 插件的公共入口：Context、注册器与生命周期接口。
+// Package sdk 提供 AlonaBot Native Go 插件的公共入口。
 //
-// Run 完成取锁、握手、准备、激活与停止；业务分发、Send、HTTP 路由与定时任务尚未实现，
-// 返回 UNSUPPORTED 错误，不 panic，也不假装成功。
+// 插件的 main 调用 Run，传入嵌入了 plugin.Base 的根插件。Run 取得 runtime.lock，
+// 收集根插件的注册项，与 Core 完成握手、准备和激活，然后一直运行到 Core 要求停止。
+// 根插件可以按需实现 Starter、Readier、Stopper 等生命周期接口。
+//
+// 业务分发、Send、HTTP 路由与定时任务尚未实现；它们返回 UNSUPPORTED 错误，不会 panic，也不会假装成功。
+//
+// 包的组成：
+//   - 插件的 main 调用 [Run]；[Collect] 单独收集注册项，供检查与测试使用。
+//   - [CommandRegistry]、[HTTPRegistry] 与 [ScheduleRegistry] 收集命令、HTTP 路由和定时任务。
+//   - [Context] 只在一次 Handler 调用期间有效，提供 [Context.Send] 与 [Context.StopPropagation]。
+//   - 根插件可以按需实现 [Starter]、[Readier]、[Stopper] 这几个生命周期接口。
 package sdk
 
 import (
@@ -14,11 +23,9 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
 
-// Error 是带协议错误码的 SDK 错误。
+// Error 携带协议错误码，供插件判断失败原因。
 type Error struct {
-	// Code 是协议错误码。
-	Code pb.ErrorCode
-	// Message 是说明。
+	Code    pb.ErrorCode
 	Message string
 }
 
@@ -68,19 +75,12 @@ type (
 
 // Context 只在一次 Handler 调用期间有效。
 type Context struct {
-	// ctx 是本次调用的 context；为 nil 时 Context() 返回 Background。
-	ctx context.Context
-	// stopped 是锁存的停止传播标记，一经设置不能清除。
-	stopped bool
+	ctx     context.Context // 本次调用的 context
+	stopped bool            // 锁存的停止传播标记，一经设置不能清除
 }
 
 // Context 返回本次调用的 context（含 deadline 与取消）。
-func (c *Context) Context() context.Context {
-	if c.ctx == nil {
-		return context.Background()
-	}
-	return c.ctx
-}
+func (c *Context) Context() context.Context { return c.ctx }
 
 // StopPropagation 锁存停止传播标记；一经设置不能重新打开传播，并且不受业务错误影响。
 func (c *Context) StopPropagation() { c.stopped = true }
@@ -88,10 +88,9 @@ func (c *Context) StopPropagation() { c.stopped = true }
 // SendOption 调整一次 Send。
 type SendOption func(*sendOptions)
 
-// sendOptions 是 SendOption 累积的发送参数。
+// sendOptions 汇总 SendOption 设置的发送参数。
 type sendOptions struct {
-	// to 是显式目标；为 nil 时使用默认 Target。
-	to *pb.Target
+	to *pb.Target // 显式目标；为 nil 时使用默认 Target
 }
 
 // To 指定显式目标；没有真实入站默认目标时必须使用。
@@ -102,7 +101,7 @@ func (c *Context) Send(chain message.Chain, opts ...SendOption) (*pb.SendResult,
 	return nil, ErrNotImplemented
 }
 
-// Run 是插件 main 的入口：连接 Core、完成握手并处理请求，直到停止。
+// Run 作为插件 main 的入口：连接 Core、完成握手并处理请求，直到停止。
 // 顺序：取得 runtime.lock → 收集注册项 → 握手 → 准备阶段 → 激活（OnReady/ACTIVATED）→ 服务。
 func Run(root plugin.Root) error {
 	// 1. 先取 runtime.lock：注册入口（Commands 等）也是用户代码，旧实例仍在时不能执行（CONTRACTS §12.2）。
@@ -145,13 +144,10 @@ func Run(root plugin.Root) error {
 	return serve(sess, a) // 收到 STOPPING 正常返回；断链时执行 OnStop 后返回错误，随后进程退出
 }
 
-// Registration 是从根插件收集到的静态注册项。
+// Registration 汇总从根插件收集到的静态注册项。
 type Registration struct {
-	// Commands 是已收集的命令。
-	Commands []Command
-	// HTTP 是已收集的 HTTP 路由。
-	HTTP []HTTPRoute
-	// Schedules 是已收集的定时任务。
+	Commands  []Command
+	HTTP      []HTTPRoute
 	Schedules []Schedule
 }
 

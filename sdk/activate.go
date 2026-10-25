@@ -1,4 +1,3 @@
-// 本文件负责插件侧的激活与停止：ACTIVATE → OnReady → ACTIVATED、本地 ready gate、STOPPING/断链后的 OnStop。
 package sdk
 
 import (
@@ -18,14 +17,10 @@ import (
 
 // activation 跟踪 ACTIVATE → OnReady → ACTIVATED 与本地 ready gate（CONTRACTS §4.1）。
 type activation struct {
-	// l 是启动参数。
-	l launch
-	// ack 是握手结果，提供 Session ID、协商版本与 Bootstrap。
-	ack *pb.HelloAck
-	// root 是用户的根插件。
-	root plugin.Root
-	// sess 是激活后使用的 Session。
-	sess *wire.Session
+	l    launch
+	ack  *pb.HelloAck  // 握手结果，提供 Session ID、协商版本与 Bootstrap
+	root plugin.Root   // 用户的根插件
+	sess *wire.Session // 激活后使用的 Session
 
 	ready   atomic.Bool   // ready gate：ACTIVATED 完整写出后才为 true
 	readyCh chan struct{} // ready gate 打开时关闭
@@ -45,7 +40,7 @@ type activation struct {
 	finished     chan struct{} // OnStop 结束（或超时）、Session 关闭后关闭
 }
 
-// admit 是读循环中的同步门禁：ready gate 打开之前拒绝 Core 的业务请求。
+// admit 在读循环中同步检查 Core 的业务请求：ready gate 打开之前一律拒绝。
 func (a *activation) admit(*wire.Inbound) *pb.ErrorInfo {
 	if !a.ready.Load() {
 		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "插件尚未就绪"}
@@ -143,7 +138,7 @@ func (a *activation) reportFailure(code pb.ErrorCode, safe string, cause error) 
 	}
 }
 
-// onStopBudget 是断链（未收到 STOPPING）时留给 OnStop 与资源关闭的时间（CONTRACTS §4.2）。
+// onStopBudget 限制断链（未收到 STOPPING）时留给 OnStop 与资源关闭的时间（CONTRACTS §4.2）。
 var onStopBudget = 4 * time.Second
 
 // shutdown 取消 lifetime、关闭 ready gate，然后用独立 context 在 deadline 前执行 OnStop（不复用已取消的

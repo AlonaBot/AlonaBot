@@ -1,5 +1,8 @@
-// Package config 定义可选的配置处理接口（CONTRACTS §5.2）。它们是配置数据回调，
-// 与 OnStart/OnReady/OnStop 生命周期 Hook 分开，不需要空实现。
+// Package config 定义插件配置的可选处理接口。
+//
+// 配置类型可以实现 ConfigLoader，把旧版本的配置 JSON 转换为当前版本；也可以实现
+// ConfigValidator，在解码之后检查业务约束。它们处理配置数据，与 OnStart、OnReady、OnStop
+// 这些生命周期 Hook 分开，不需要时不必实现。执行顺序见 spec/CONTRACTS-v0.1.md §5.2。
 package config
 
 import (

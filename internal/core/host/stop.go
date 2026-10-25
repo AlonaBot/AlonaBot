@@ -1,4 +1,3 @@
-// 本文件负责停止插件实例（冻结、排空、STOPPING、按总预算回收进程树）与有限重启策略。
 package host
 
 import (
@@ -9,7 +8,7 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
-// StopTiming 是停止预算（CONTRACTS §4.2）；测试注入更短的值。
+// StopTiming 规定停止的时间预算（CONTRACTS §4.2）；测试可注入更短的值。
 type StopTiming struct {
 	Drain    time.Duration // 冻结后最多排空的时间
 	Total    time.Duration // 从 t0 起到终止进程树的总截止
@@ -19,7 +18,7 @@ type StopTiming struct {
 // DefaultStopTiming 与 CONTRACTS §4.2 一致：排空 6s、总计 10s、OnStop 4s。
 var DefaultStopTiming = StopTiming{Drain: 6 * time.Second, Total: 10 * time.Second, OnStopAt: 4 * time.Second}
 
-// Tree 是被停止插件的进程树（process.Process 满足此接口）。
+// Tree 抽象被停止插件的进程树，process.Process 满足此接口。
 type Tree interface {
 	// Exited 在领头进程退出并被回收后关闭；树内其他进程可能仍在运行。
 	Exited() <-chan struct{}
@@ -35,7 +34,7 @@ type StopResult struct {
 	StoppingSentAt time.Time // 发出 STOPPING 的时刻（零值表示 Session 已关闭、未发送）
 	StopDeadline   time.Time // STOPPING 携带的绝对截止
 	Killed         bool      // 到总截止进程树仍未清空，终止了进程树
-	// Err 是终止或确认进程树时的错误；非 nil 表示旧进程树未确认清空，不能启动替代实例。
+	// 终止或确认进程树时的错误；非 nil 表示旧进程树未确认清空，不能启动替代实例。
 	Err error
 }
 
@@ -111,10 +110,8 @@ func StopAll(t0 time.Time, reason pb.StopReason, targets map[*Instance]Tree, tim
 // RestartPolicy 实现有限恢复（CONTRACTS §4.2）：窗口内第 Limit 次异常退出自动禁用；
 // 正常退出与用户主动停用不重启；手动启用重置窗口。失败窗口只保存在内存中，禁用状态由调用方持久化。
 type RestartPolicy struct {
-	// Window 是计数异常退出的滑动窗口。
-	Window time.Duration
-	// Limit 是窗口内触发禁用的异常退出次数。
-	Limit int
+	Window time.Duration // 计数异常退出的滑动窗口
+	Limit  int           // 窗口内触发禁用的异常退出次数
 
 	// mu 保护 failures。
 	mu sync.Mutex
@@ -127,7 +124,7 @@ func NewRestartPolicy() *RestartPolicy {
 	return &RestartPolicy{Window: 5 * time.Minute, Limit: 3, failures: map[string][]time.Time{}}
 }
 
-// Decision 是一次进程退出后的处理决定。
+// Decision 表示一次进程退出后的处理决定。
 type Decision int
 
 const (

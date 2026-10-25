@@ -1,8 +1,5 @@
 //go:build unix
 
-// 本文件以真实的 alonabot 与 SDK 插件进程做端到端验收：两种传输的生命周期、restart、双 Core 互斥、
-// Core 被杀后的恢复与相对 data_dir。依赖 Unix 信号与进程组语义。
-
 package main
 
 import (
@@ -41,16 +38,13 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// core 是一个运行中的 alonabot run 进程。
+// core 包装一个运行中的 alonabot run 进程，供测试读取日志和发送信号。
 type core struct {
-	// t 是所属测试。
-	t *testing.T
-	// cmd 是 alonabot 进程。
+	t   *testing.T
 	cmd *exec.Cmd
 	// mu 保护 lines。
-	mu sync.Mutex
-	// lines 是已读到的 stderr 行。
-	lines []string
+	mu    sync.Mutex
+	lines []string // 已读到的 stderr 行
 	// added 容量 1，有新行时通知等待者。
 	added chan struct{}
 	// done 在 stderr 读完且进程被回收后关闭。

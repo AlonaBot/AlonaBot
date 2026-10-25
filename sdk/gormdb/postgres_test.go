@@ -1,4 +1,3 @@
-// 本文件在真实 PostgreSQL 上测试插件专属 role/schema 的隔离与 OpenPostgres 的拒绝路径；未设置 DSN 时跳过。
 package gormdb
 
 import (

@@ -1,4 +1,4 @@
-// Event Bus 载荷，见 CONTRACTS §3、WIRE §5。发布只确认 Core 接纳，不确认订阅者处理。
+// Event Bus 载荷（CONTRACTS §3、WIRE §5）。发布只确认 Core 已接纳，不确认订阅者已处理。
 syntax = "proto3";
 
 package alonabot.v1;
@@ -7,7 +7,7 @@ import "alonabot/v1/envelope.proto";
 
 option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 
-// PublishRequest 是向 Event Bus 发布一个事件的请求；发布者只能使用自己的 plugin_id/event_name 命名空间。
+// PublishRequest 描述向 Event Bus 发布一个事件的请求；发布者只能使用自己的 plugin_id/event_name 命名空间。
 message PublishRequest {
   // 本插件命名空间内的 event_name（不含 plugin_id 前缀）。
   string event_name = 1;

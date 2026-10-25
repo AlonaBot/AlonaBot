@@ -1,6 +1,5 @@
 //go:build windows
 
-// 本文件用 LockFileEx 实现 Windows 上的独占文件锁。
 package oslock
 
 import (

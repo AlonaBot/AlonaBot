@@ -1,4 +1,8 @@
-// Package gormdb 提供插件受管数据库的 GORM 入口与迁移接口（CONTRACTS §6）。
+// Package gormdb 为插件打开受管数据库，并提供迁移接口。
+//
+// OpenSQLite 与 OpenPostgres 返回原生的 *gorm.DB，并核对连接上的关键设置确实生效。
+// 插件可以自己实现 Migrate，也可以交出按编号排列的 Migrations 由 SDK 执行，两者只能选一种。
+// 数据库的所有权、连接与迁移规则见 spec/CONTRACTS-v0.1.md §6。
 package gormdb
 
 import (
@@ -14,10 +18,9 @@ type SelfMigrator interface {
 	Migrate(ctx context.Context, db *gorm.DB) error
 }
 
-// Migration 是辅助迁移的一步；ID 非零、唯一、递增，发布后不得改作他用。
+// Migration 描述辅助迁移的一步；ID 非零、唯一、递增，发布后不得改作他用。
 type Migration struct {
-	// ID 是迁移编号，非零、唯一、递增。
-	ID uint32
+	ID uint32 // 迁移编号，非零、唯一、递增
 	// Up 在事务中执行这一步迁移。
 	Up func(context.Context, *gorm.DB) error
 }

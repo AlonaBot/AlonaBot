@@ -1,4 +1,3 @@
-// 本文件负责打开插件专属的 PostgreSQL role/schema，并核对会话身份与 search_path。
 package gormdb
 
 import (

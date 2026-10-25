@@ -1,11 +1,11 @@
-// 错误码与 ErrorInfo，见 spec/WIRE-FORMAT.md §2。编号 1～17 固定，删除时 reserved，不复用。
+// 错误码与 ErrorInfo（WIRE-FORMAT §2）。编号 1～17 固定，删除时 reserved，不复用编号。
 syntax = "proto3";
 
 package alonabot.v1;
 
 option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 
-// ErrorCode 是固定的协议错误码；未知码对调用者映射为 INTERNAL。
+// ErrorCode 列出固定的协议错误码；未知码对调用者映射为 INTERNAL。
 enum ErrorCode {
   ERROR_CODE_UNSPECIFIED = 0;
   ERROR_CODE_INVALID_ARGUMENT = 1;
@@ -27,7 +27,7 @@ enum ErrorCode {
   ERROR_CODE_NEEDS_MANUAL_MIGRATION = 17;
 }
 
-// ErrorInfo 是 RESPONSE 或 SESSION_ERROR 携带的错误。
+// ErrorInfo 描述 RESPONSE 或 SESSION_ERROR 携带的错误。
 message ErrorInfo {
   // 有 ErrorInfo 时必须非零。
   ErrorCode code = 1;

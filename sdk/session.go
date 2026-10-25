@@ -1,4 +1,3 @@
-// 本文件负责插件侧的连接建立、握手（HELLO/HELLO_ACK）与准备阶段（配置、OnStart、REGISTER/PREPARED）。
 package sdk
 
 import (
@@ -21,18 +20,13 @@ import (
 // handshakeTimeout 与 CONTRACTS §4.2 的 Hello/HelloAck 预算一致。
 var handshakeTimeout = 10 * time.Second
 
-// launch 是 Core 通过环境变量下发的启动参数（见 internal/wire/env.go）。
+// launch 保存 Core 通过环境变量下发的启动参数（见 internal/wire/env.go）。
 type launch struct {
-	// pluginID 是插件 ID。
-	pluginID string
-	// transport 是 tcp 或 stdio。
-	transport string
-	// addr 是 TCP 传输时 Core 的 loopback 地址。
-	addr string
-	// secret 是 32 字节 Session Secret。
-	secret []byte
-	// digest 是安装时已验证的归档摘要，在 HELLO 中原样回显。
-	digest []byte
+	pluginID  string
+	transport string // tcp 或 stdio
+	addr      string // TCP 传输时 Core 的 loopback 地址
+	secret    []byte // 32 字节 Session Secret
+	digest    []byte // 安装时已验证的归档摘要，在 HELLO 中原样回显
 }
 
 // readLaunch 读取并校验 Core 下发的启动环境变量。
@@ -82,7 +76,7 @@ func (cs closers) Close() error {
 	return errors.Join(errs...)
 }
 
-// sdkOffer 是 SDK 一侧的协议版本与能力。
+// sdkOffer 声明 SDK 一侧的协议版本与能力。
 var sdkOffer = validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}
 
 // withWatchdog 在 d 内未完成时关闭连接，使阻塞的读写返回。返回的 stop 必须调用。

@@ -1,6 +1,10 @@
-// Package state 管理 Core 元数据库 <data_dir>/state.sqlite 与 <data_dir>/core.lock
-// （CONTRACTS §6.1、§12.2）：实例锁、状态库、最小表与提交事务。
-// 尚不含候选资源引用、完整 Journal 与恢复编排。
+// Package state 管理 Core 的元数据库与实例锁。
+//
+// 状态库位于 <data_dir>/state.sqlite，实例锁位于 <data_dir>/core.lock。Open 先取得实例锁，
+// 保证同一个 data_dir 只有一个 Core；已有但无法读取的状态库会报错，不会被重建成空库。
+// 提交 ActiveGeneration 时核对预期的旧值，拒绝陈旧候选。规则见 spec/CONTRACTS-v0.1.md §6.1 与 §12.2。
+//
+// 尚不含候选资源引用、完整的 Journal 与恢复编排。
 package state
 
 import (
@@ -20,10 +24,8 @@ import (
 )
 
 const (
-	// lockFile 是 data_dir 下的 Core 实例锁。
-	lockFile = "core.lock"
-	// stateFile 是 data_dir 下的状态库。
-	stateFile = "state.sqlite"
+	lockFile  = "core.lock"    // data_dir 下的 Core 实例锁
+	stateFile = "state.sqlite" // data_dir 下的状态库
 	// 连接级设置，驱动对每个物理连接执行；单连接，见 CONTRACTS §6.1。
 	pragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
 )
@@ -37,17 +39,14 @@ var (
 	ErrNotFound = errors.New("记录不存在")
 )
 
-// Store 是持有 core.lock 的状态库；同一进程内只应有一个。
+// Store 持有 core.lock 并访问状态库；同一进程内只应有一个。
 type Store struct {
-	// db 是单连接的状态库句柄。
-	db *sql.DB
-	// lock 是 core.lock，Close 时释放。
-	lock *oslock.Lock
+	db   *sql.DB      // 单连接的状态库句柄
+	lock *oslock.Lock // core.lock，Close 时释放
 
 	// mu 保护 pluginM。
-	mu sync.Mutex
-	// pluginM 是逐插件管理锁，按插件 ID 惰性创建，不回收。
-	pluginM map[string]*sync.Mutex
+	mu      sync.Mutex
+	pluginM map[string]*sync.Mutex // 逐插件管理锁，按插件 ID 惰性创建，不回收
 }
 
 // Open 先取得 core.lock，再打开（首次启动时创建）state.sqlite 并核对连接设置与 schema。
@@ -115,7 +114,7 @@ func (s *Store) Close() error {
 	return errors.Join(s.db.Close(), s.lock.Unlock())
 }
 
-// Pragmas 是状态库连接上实际生效的设置。
+// Pragmas 记录状态库连接上实际生效的设置。
 type Pragmas struct {
 	// JournalMode 应为 wal。
 	JournalMode string
@@ -123,8 +122,7 @@ type Pragmas struct {
 	Synchronous int
 	// ForeignKeys 应为 1（开启）。
 	ForeignKeys int
-	// BusyTimeout 是忙等待毫秒数，应为 5000。
-	BusyTimeout int
+	BusyTimeout int // 忙等待毫秒数，应为 5000
 }
 
 // ReadPragmas 回读实际生效的连接设置。
@@ -258,16 +256,12 @@ func (s *Store) LockPlugin(pluginID string) (unlock func()) {
 	return m.Unlock
 }
 
-// Install 是最小安装记录；尚不含来源绑定、pin、卸载保留等信息。
+// Install 记录插件的最小安装信息；尚不含来源绑定、pin、卸载保留等内容。
 type Install struct {
-	// PluginID 是插件 ID，主键。
-	PluginID string
-	// Source 是安装来源（开发模式为 dev-local）。
-	Source string
-	// Entrypoint 是入口可执行文件的路径。
-	Entrypoint string
-	// BuildDigest 是安装时已验证的归档摘要，经启动上下文交给 SDK 回显。
-	BuildDigest []byte
+	PluginID    string // 插件 ID，主键
+	Source      string // 安装来源（开发模式为 dev-local）
+	Entrypoint  string // 入口可执行文件的路径
+	BuildDigest []byte // 安装时已验证的归档摘要，经启动上下文交给 SDK 回显
 }
 
 // AddInstall 登记安装记录，install_seq 按登记顺序递增（first-wins 的依据）。

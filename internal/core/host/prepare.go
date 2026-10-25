@@ -1,5 +1,16 @@
-// Package host 是 Core 侧单个插件 Session 的生命周期编排（CONTRACTS §1.1、§4、§12.1）：
-// 握手与认证、Bootstrap 下发、REGISTER 原子校验、PREPARED；提交与激活见 activate.go。
+// Package host 编排 Core 侧单个插件 Session 的生命周期。
+//
+// 一个插件进程连上 Core 后，依次经过握手认证、Bootstrap 下发、REGISTER 校验与 PREPARED（Prepare），
+// 提交 ActiveGeneration、ACTIVATE 与 ACTIVATED（Activate），以及冻结、排空、STOPPING 与结束进程树（Stop）。
+// 有限重启策略也在这里。状态与可见性规则见 spec/CONTRACTS-v0.1.md §4 与 §12.1。
+//
+// 本包不启动进程，也不持久化状态；这些由 internal/core/process、internal/core/state 和
+// internal/core/supervisor 负责。
+//
+// 包的组成：
+//   - [Prepare] 完成握手与准备阶段，返回 [Prepared]；阶段预算由 [Limits] 给出，失败时返回 [PhaseError]。
+//   - [Activate] 提交代次并完成激活，返回跟踪实例状态的 [Instance]。
+//   - [Instance.Stop] 与 [StopAll] 按 [StopTiming] 停止实例；[RestartPolicy] 决定进程退出后是否重启。
 package host
 
 import (
@@ -17,20 +28,15 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Limits 是阶段预算（CONTRACTS §4.2 的首发常量）；测试可注入更短的值。
+// Limits 规定各阶段的时间预算（CONTRACTS §4.2 的首发常量）；测试可注入更短的值。
 type Limits struct {
-	// Handshake 是从连接建立到 HELLO_ACK 发出的预算（CONTRACTS §4.2 的 Hello/HelloAck）。
+	// 从连接建立到 HELLO_ACK 发出的预算（CONTRACTS §4.2 的 Hello/HelloAck）。
 	Handshake time.Duration
-	// Config 是配置转换与校验的预算。
-	Config time.Duration
-	// Migration 是数据库迁移的预算。
-	Migration time.Duration
-	// OnStart 是 OnStart 的预算。
-	OnStart time.Duration
-	// OnReady 是 OnReady 的预算。
-	OnReady time.Duration
-	// StopTotal 是一次停用的总预算。
-	StopTotal time.Duration
+	Config    time.Duration // 配置转换与校验的预算
+	Migration time.Duration // 数据库迁移的预算
+	OnStart   time.Duration
+	OnReady   time.Duration
+	StopTotal time.Duration // 一次停用的总预算
 }
 
 // DefaultLimits 与 CONTRACTS §4.2 一致。
@@ -49,49 +55,37 @@ func (l Limits) proto() *pb.PhaseLimits {
 // failNotifyTimeout 限制失败路径上发送 SESSION_ERROR 的时间：会话已经判定失败，只是尽力通知。
 const failNotifyTimeout = time.Second
 
-// Expect 是 Core 启动记录中与本次进程绑定的身份信息。
+// Expect 携带 Core 启动记录中与本次进程绑定的身份信息，用于核对 HELLO。
 type Expect struct {
-	// PluginID 是 Core 启动该进程时的插件 ID。
-	PluginID string
-	// Secret 是本次启动的 32 字节 Session Secret。
-	Secret []byte
-	// BuildDigest 是安装时已验证的归档摘要。
-	BuildDigest []byte
-	// Offer 是 Core 一侧支持/要求的协议版本与能力。
-	Offer validate.Offer
+	PluginID    string         // Core 启动该进程时的插件 ID
+	Secret      []byte         // 本次启动的 32 字节 Session Secret
+	BuildDigest []byte         // 安装时已验证的归档摘要
+	Offer       validate.Offer // Core 一侧支持/要求的协议版本与能力
 }
 
-// PhaseError 是准备阶段的失败：哪个阶段、什么错误码。消息不含 Secret 或配置内容。
+// PhaseError 记录准备阶段在哪个阶段、以什么错误码失败；消息不含 Secret 或配置内容。
 type PhaseError struct {
-	// Phase 是失败的阶段。
-	Phase pb.SessionPhase
-	// Code 是公开的错误码。
-	Code pb.ErrorCode
-	// Msg 是不含敏感信息的说明。
-	Msg string
+	Phase   pb.SessionPhase // 失败的阶段
+	Code    pb.ErrorCode    // 公开的错误码
+	Message string          // 不含敏感信息的说明
 }
 
 // Error 返回「阶段: 错误码: 说明」。
-func (e *PhaseError) Error() string { return fmt.Sprintf("%s: %s: %s", e.Phase, e.Code, e.Msg) }
+func (e *PhaseError) Error() string { return fmt.Sprintf("%s: %s: %s", e.Phase, e.Code, e.Message) }
 
 // phaseErr 用格式化说明构造 *PhaseError。
 func phaseErr(phase pb.SessionPhase, code pb.ErrorCode, format string, args ...any) *PhaseError {
-	return &PhaseError{Phase: phase, Code: code, Msg: fmt.Sprintf(format, args...)}
+	return &PhaseError{Phase: phase, Code: code, Message: fmt.Sprintf(format, args...)}
 }
 
-// Prepared 是 REGISTER 校验通过后的结果；在 Core 提交 ActiveGeneration 之前不对外公开任何路由。
+// Prepared 保存 REGISTER 校验通过后的结果；Core 提交 ActiveGeneration 之前不对外公开任何路由。
 type Prepared struct {
-	// SessionID 是本 Session 的 ID。
-	SessionID []byte
-	// Minor 是协商出的协议次版本。
-	Minor uint32
-	// Capabilities 是双方都支持的协议能力。
-	Capabilities []*pb.ProtocolCapability
-	// Register 是已通过校验的注册载荷。
-	Register *pb.Register
-	// RouteHash 是 PREPARED 中的 route_descriptor_hash。
-	RouteHash []byte
-	// ConfigDigest 是 PREPARED 中的 candidate_config_digest。
+	SessionID    []byte
+	Minor        uint32                   // 协商出的协议次版本
+	Capabilities []*pb.ProtocolCapability // 双方都支持的协议能力
+	Register     *pb.Register             // 已通过校验的注册载荷
+	RouteHash    []byte                   // PREPARED 中的 route_descriptor_hash
+	// PREPARED 中的 candidate_config_digest。
 	ConfigDigest []byte
 }
 
@@ -226,7 +220,7 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 	switch m := msg.(type) {
 	case *pb.SessionError:
 		_ = conn.Close()
-		return nil, &PhaseError{Phase: m.GetFailedPhase(), Code: validate.PublicCode(env.GetError().GetCode()), Msg: env.GetError().GetSafeMessage()}
+		return nil, &PhaseError{Phase: m.GetFailedPhase(), Code: validate.PublicCode(env.GetError().GetCode()), Message: env.GetError().GetSafeMessage()}
 	case *pb.Register:
 		if err := validate.Register(m); err != nil {
 			var ve *validate.Error

@@ -1,4 +1,3 @@
-// 本文件把生成类型的字段号与枚举值逐项对照 spec/WIRE-FORMAT.md，防止协议编号被悄悄改变。
 package contracts_test
 
 import (
@@ -57,10 +56,8 @@ func TestErrorInfoFieldNumbers(t *testing.T) {
 // 规格列出取值的枚举逐项一致；全部已注册枚举的零值都是 *_UNSPECIFIED。
 func TestEnumValues(t *testing.T) {
 	cases := []struct {
-		// enum 是被检查的枚举。
-		enum protoreflect.EnumDescriptor
-		// prefix 是枚举值名称的类型前缀。
-		prefix string
+		enum   protoreflect.EnumDescriptor
+		prefix string // 枚举值名称的类型前缀
 		// values 按数值顺序列出不含前缀的名称，下标即枚举数值。
 		values []string
 	}{

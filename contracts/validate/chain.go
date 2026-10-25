@@ -1,4 +1,3 @@
-// 本文件负责 MessageChain 与各类 Segment 的平台无关结构校验。
 package validate
 
 import (
@@ -17,7 +16,7 @@ import (
 // 失败返回 INVALID_ARGUMENT，消息指明出错的 segment 位置。
 func Chain(c *pb.MessageChain) error {
 	if err := chain(c, ""); err != nil {
-		return &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Msg: err.Error()}
+		return &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: err.Error()}
 	}
 	return nil
 }

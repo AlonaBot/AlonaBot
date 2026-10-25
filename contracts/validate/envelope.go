@@ -1,5 +1,9 @@
-// Package validate 提供协议 1.0 的纯函数校验：Envelope 结构、控制帧载荷、版本与能力协商。
-// 依赖当前 Session 状态的检查（Secret、source_plugin_id、父调用是否在途等）不在这里做。
+// Package validate 提供协议 1.0 的纯函数校验。
+//
+// 它检查 Envelope 结构、控制帧载荷、REGISTER 载荷、MessageChain 结构，以及握手时的版本与能力协商。
+//
+// 依赖 Session 状态的检查不在这里做，例如 Session Secret、source_plugin_id 是否匹配、
+// 父调用是否仍在途；这些由 internal/wire 与 internal/core/host 负责。
 package validate
 
 import (
@@ -14,10 +18,8 @@ import (
 
 // 本实现支持的传输协议版本（WIRE §1）。
 const (
-	// ProtocolMajor 是传输协议主版本。
-	ProtocolMajor uint32 = 1
-	// ProtocolMinor 是本实现支持的最高次版本。
-	ProtocolMinor uint32 = 0
+	ProtocolMajor uint32 = 1 // 传输协议主版本
+	ProtocolMinor uint32 = 0 // 本实现支持的最高次版本
 	// 有 payload 时 schema_version 首发固定为 1。
 	SchemaVersion uint32 = 1
 )
@@ -28,20 +30,18 @@ const (
 	traceIDLen   = 16
 )
 
-// Error 是携带协议错误码的校验错误。
+// Error 携带协议错误码，供调用方直接映射为对端可见的 ErrorInfo。
 type Error struct {
-	// Code 是对端或调用者应看到的协议错误码。
-	Code pb.ErrorCode
-	// Msg 是不含敏感信息的说明。
-	Msg string
+	Code    pb.ErrorCode // 对端或调用者应看到的协议错误码
+	Message string       // 不含敏感信息的说明
 }
 
 // Error 返回「错误码: 说明」。
-func (e *Error) Error() string { return e.Code.String() + ": " + e.Msg }
+func (e *Error) Error() string { return e.Code.String() + ": " + e.Message }
 
 // errf 用格式化说明构造 *Error。
 func errf(code pb.ErrorCode, format string, args ...any) *Error {
-	return &Error{Code: code, Msg: fmt.Sprintf(format, args...)}
+	return &Error{Code: code, Message: fmt.Sprintf(format, args...)}
 }
 
 // PublicCode 把未知错误码映射为 INTERNAL（原数字只应保留在内部诊断中）。
@@ -198,11 +198,11 @@ func checkPayload(env *pb.Envelope) error {
 	if env.GetSchemaVersion() != SchemaVersion {
 		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "schema_version=%d，首发只支持 %d", env.GetSchemaVersion(), SchemaVersion)
 	}
-	if newMsg, control := controlPayload[k]; control {
+	if newMessage, control := controlPayload[k]; control {
 		if enc != pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF {
 			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%s 的载荷必须使用 PROTOBUF 编码", k)
 		}
-		if want := SchemaID(newMsg()); env.GetSchemaId() != want {
+		if want := SchemaID(newMessage()); env.GetSchemaId() != want {
 			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%s 的 schema_id 应为 %s，实际 %s", k, want, env.GetSchemaId())
 		}
 	}

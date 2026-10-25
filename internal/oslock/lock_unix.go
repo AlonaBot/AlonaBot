@@ -1,6 +1,5 @@
 //go:build unix
 
-// 本文件用 flock 实现 Linux/macOS 上的独占文件锁。
 package oslock
 
 import (

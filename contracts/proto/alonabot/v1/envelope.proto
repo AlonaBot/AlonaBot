@@ -1,4 +1,4 @@
-// 帧外层 Envelope，见 spec/WIRE-FORMAT.md §1。字段 1～16 固定；删除时 reserved，不复用编号。
+// 帧外层 Envelope（WIRE-FORMAT §1）。字段 1～16 固定，删除时 reserved，不复用编号。
 syntax = "proto3";
 
 package alonabot.v1;
@@ -7,14 +7,14 @@ import "alonabot/v1/errors.proto";
 
 option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 
-// InitiatorSide 是一次调用的发起方向；REQUEST/RESPONSE/CANCEL 都使用原请求的方向。
+// InitiatorSide 列出一次调用的发起方向；REQUEST/RESPONSE/CANCEL 都使用原请求的方向。
 enum InitiatorSide {
   INITIATOR_SIDE_UNSPECIFIED = 0;
   INITIATOR_SIDE_CORE = 1;
   INITIATOR_SIDE_PLUGIN = 2;
 }
 
-// FrameKind 是帧种类；未知种类不能当作成功忽略。
+// FrameKind 列出帧种类；未知种类不能当作成功忽略。
 enum FrameKind {
   FRAME_KIND_UNSPECIFIED = 0;
   FRAME_KIND_HELLO = 1;
@@ -32,14 +32,14 @@ enum FrameKind {
   FRAME_KIND_SESSION_ERROR = 13;
 }
 
-// PayloadEncoding 是 payload 的编码；控制帧固定使用 PROTOBUF。
+// PayloadEncoding 列出 payload 的编码；控制帧固定使用 PROTOBUF。
 enum PayloadEncoding {
   PAYLOAD_ENCODING_UNSPECIFIED = 0;
   PAYLOAD_ENCODING_PROTOBUF = 1;
   PAYLOAD_ENCODING_JSON = 2;
 }
 
-// Envelope 是每一帧的外层结构。
+// Envelope 描述每一帧的外层结构。
 // 各字段在不同帧种类下的必需性由 contracts/validate 检查，不靠 oneof 表达；
 // payload 与 error 可以同时出现（例如部分发送成功）。
 message Envelope {

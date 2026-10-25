@@ -1,4 +1,8 @@
-// Package supervisor 把状态库、进程、传输与 Session 生命周期装配成「启动 / 停止一个插件」的完整流程。
+// Package supervisor 把状态库、进程、传输与 Session 生命周期组装成启动和停止一个插件的完整流程。
+//
+// Launch 启动进程并完成握手、准备、提交与激活，任何一步失败都会结束整个进程树后再返回；
+// Stop 停用插件，WaitExit 处理进程的意外退出。同一插件的这些操作由状态库的逐插件锁串行执行。
+//
 // 尚不含正式的安装、Journal 与恢复编排。
 package supervisor
 
@@ -23,64 +27,49 @@ import (
 
 // Spec 描述一次插件启动。
 type Spec struct {
-	// PluginID 是插件 ID。
 	PluginID string
-	// PluginDir 是 <plugins>/<id>：工作目录与 runtime.lock 所在；可以是相对路径，Launch 会转为绝对路径。
-	PluginDir string
-	// Executable 是已校验的入口可执行文件。
-	Executable string
-	// BuildDigest 是安装时已验证的归档摘要。
-	BuildDigest []byte
-	// GenerationID 是要激活的代次。
-	GenerationID string
+	// <plugins>/<id>：工作目录与 runtime.lock 所在；可以是相对路径，Launch 会转为绝对路径。
+	PluginDir    string
+	Executable   string // 已校验的入口可执行文件
+	BuildDigest  []byte // 安装时已验证的归档摘要
+	GenerationID string // 要激活的代次
 	// Bootstrap 携带 generation_id 与候选配置等；阶段预算由 host 填写。
 	Bootstrap *pb.Bootstrap
 	// NewCandidate 为 true 时在 ACTIVATE 前提交 ActiveGeneration（期望旧值 ExpectedOld）；
 	// false 表示普通 restart，复用已提交的代次。
 	NewCandidate bool
-	// ExpectedOld 是提交新候选时预期的旧 ActiveGeneration；首次激活为空。
-	ExpectedOld string
+	ExpectedOld  string // 提交新候选时预期的旧 ActiveGeneration；首次激活为空
 	// Stdio 为 true 时使用 stdio 传输，否则使用 TCP loopback。
-	Stdio bool
-	// Args 是传给插件进程的额外参数（测试辅助进程使用）。
-	Args []string
-	// ExtraEnv 是额外环境变量（测试辅助进程使用）。
-	ExtraEnv map[string]string
-	// Limits 是各阶段预算。
-	Limits host.Limits
-	// Stop 是停止预算。
-	Stop host.StopTiming
+	Stdio    bool
+	Args     []string          // 传给插件进程的额外参数（测试辅助进程使用）
+	ExtraEnv map[string]string // 额外环境变量（测试辅助进程使用）
+	Limits   host.Limits
+	Stop     host.StopTiming
 	// Log 接收插件日志；为 nil 时写 Core 的 stderr。
 	Log process.LogFunc
 	// Handler 处理插件激活后发起的业务调用。
 	Handler wire.Handler
-	// Global 是 Core 全局载荷预算。
-	Global *wire.Budget
+	Global  *wire.Budget // Core 全局载荷预算
 }
 
-// Running 是一个已激活的插件。
+// Running 持有一个已激活插件的实例与进程，负责它的停止与清理。
 type Running struct {
-	// Instance 是已激活的 Core 侧实例。
-	Instance *host.Instance
-	// Process 是插件进程及其进程树。
-	Process *process.Process
+	Instance *host.Instance   // 已激活的 Core 侧实例
+	Process  *process.Process // 插件进程及其进程树
 	// store 提供逐插件管理锁。
-	store *state.Store
-	// pluginID 是插件 ID。
+	store    *state.Store
 	pluginID string
-	// listener 是 TCP 传输的 loopback Listener；stdio 时为 nil。
+	// TCP 传输的 loopback Listener；stdio 时为 nil。
 	listener net.Listener
-	// timing 是停止预算。
-	timing host.StopTiming
+	timing   host.StopTiming
 
 	// mu 串行化 Stop 与 WaitExit 的清理，保护 stopping、released 与 cleanupErr。
 	mu sync.Mutex
 	// stopping 为 true 表示 Stop 已接管清理；此后的进程退出不算异常，也不由 WaitExit 清理。
 	stopping bool
 	// released 为 true 表示进程树已处理完、Listener 与进程资源已释放；只设置一次。
-	released bool
-	// cleanupErr 是 WaitExit 终止剩余进程树时的错误，供随后的 Stop 返回。
-	cleanupErr error
+	released   bool
+	cleanupErr error // WaitExit 终止剩余进程树时的错误，供随后的 Stop 返回
 }
 
 // Launch 启动插件进程并完成握手、准备、提交与激活。任何一步失败都会终止进程树、确认清空后返回；无法确认清空时把原因并入返回的错误。
@@ -169,12 +158,10 @@ func connect(ln net.Listener, proc *process.Process, spec Spec) (*wire.Conn, err
 	if spec.Stdio {
 		return wire.NewConn(proc.Stdout, proc.Stdin, closers{proc.Stdin, proc.Stdout}), nil
 	}
-	// accepted 是一次 Accept 的结果。
+	// accepted 记录一次 Accept 的结果。
 	type accepted struct {
-		// c 是插件拨入的连接。
-		c net.Conn
-		// err 是 Accept 的错误（含握手期限到期）。
-		err error
+		c   net.Conn // 插件拨入的连接
+		err error    // Accept 的错误（含握手期限到期）
 	}
 	ch := make(chan accepted, 1)
 	if tl, ok := ln.(*net.TCPListener); ok {

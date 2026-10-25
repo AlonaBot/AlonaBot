@@ -1,11 +1,13 @@
-// Package contracts 存放 AlonaBot 协议 1.0 的 Protobuf 源文件（proto/）、生成类型（pb/）
-// 与纯函数校验。本包及其子包不依赖本 module 的其他包，也不做运行时 I/O。
+// Package contracts 存放 AlonaBot 协议 1.0 的 Protobuf 源文件、生成类型和纯函数校验。
 //
-// 生成：在仓库根执行 go generate ./...；不要手改 pb/ 下的文件。
+// proto/ 下是协议源文件，pb/ 下是生成的 Go 类型，子包 validate、manifest、release 提供
+// 不依赖运行时状态的校验。本包及其子包不依赖本 module 的其他包，也不做运行时 I/O。
 //
-// testdata 中不能写注释的机器格式：frames/*.bin 是 validate 测试的 golden 帧，由
-// go test ./contracts/validate -run TestGoldenFrames -update 重写；release/release.json 是 release
-// 验签样例，其中 publisher_key_id 为占位值，测试时替换为测试公钥的 KeyID 后再签名。
+// 修改协议时只改 proto/ 下的源文件，然后在仓库根执行 go generate ./... 重新生成；不要手改 pb/。
+// 字段号与枚举值只能追加，删除时必须 reserved，规则见 spec/WIRE-FORMAT.md §5A。
+//
+// testdata/frames/*.bin 是 golden 帧，internal/wire 的集成测试读取它们；
+// testdata/manifest 与 testdata/release 供本地测试使用，release.json 中的 publisher_key_id 是占位值。
 package contracts
 
 //go:generate go run ./internal/protocgen
