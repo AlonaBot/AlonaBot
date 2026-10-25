@@ -3,6 +3,8 @@
 /bin/
 /dist/
 *.test
+# 本地单元测试与临时测试（见 docs/coding-standards.md「测试提交规则」）
+*_local_test.go
 *.out
 coverage.*
 # 本地运行数据（data_dir）与临时目录
