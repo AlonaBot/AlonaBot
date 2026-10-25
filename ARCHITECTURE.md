@@ -20,7 +20,6 @@
 | `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） | 部分实现：开发用 `alonabot run`（单插件启停、有限重启）；尚无正式管理 CLI |
 | `examples/plugins/` | 随 SDK 编译的示例与集成样例 | 生产代码依赖 | 部分实现：`minimal`（签名组合示例）、`lifecycle`（可真实运行的生命周期示例） |
 | `web/admin/` | Vite + TypeScript + React 19 管理界面 | 管理逻辑本身（调用 Core 管理 API） | 拟建 |
-| `experiments/ogre-dna/` | 历史实验，独立嵌套 module | 不参与产品构建与验收 | 隔离 |
 | `spec/` | 现行规格与 ADR | — | 现行 |
 
 ## 依赖方向
@@ -37,7 +36,7 @@
 | `cmd/alonabot -> sdk/generate` | 构建检查复用 SDK 的路由生成器（拟建） |
 | `examples/plugins/... -> sdk/...`、`-> contracts` | 示例只走公共 SDK |
 
-明确禁止（重点）：`internal/oslock` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | internal/adapters | cmd`；`internal/core -> sdk | internal/adapters | cmd`；任何包 `-> examples | experiments`。依赖图不允许环。
+明确禁止（重点）：`internal/oslock` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | internal/adapters | cmd`；`internal/core -> sdk | internal/adapters | cmd`；任何包 `-> examples`。依赖图不允许环。
 
 ## 状态归属
 

@@ -29,7 +29,7 @@ Bug Issue 写清发生了什么和复现步骤，能提供版本、系统和日�
 审查者合并切片 PR 前，必须同时满足以下条件：
 
 - 按 [审查技能](.agents/skills/alonabot-review/SKILL.md) 完成契约与规范两条轴的审查，并按 goal 语句和 PLAN 失败停止条件自己写临时测试实际运行过，没有未解决的 P0/P1。
-- tasks.md 中每个 task 都已回写；阻塞项要么已解决，要么经维护者同意延后。
+- PR 正文列全了每个 task 的结果与证据；阻塞项要么已解决，要么经维护者同意延后。
 - PLAN §3.1 中该切片的状态已在本 PR 内更新为「已完成」，PR 正文「文档同步」列出的内容已补上。
 - `Quality gate` 与 `PR metadata` 在当前 head 上通过，合并时用 `gh pr merge --squash --match-head-commit <完整 SHA>` 锁定审查过的 commit。
 

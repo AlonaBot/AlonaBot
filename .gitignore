@@ -13,6 +13,8 @@ coverage.*
 # 外部仓库缓存与 goal 工作树
 /.repo/
 /.worktrees/
+# goal 切片工作目录，只留在本地，不入库
+goal-*/
 # 前端
 node_modules/
 web/admin/dist/

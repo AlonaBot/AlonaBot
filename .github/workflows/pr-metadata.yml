@@ -27,9 +27,9 @@ jobs:
             .replace(/<!--[\s\S]*?-->/g, '')
             .replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1\s*$/gm, '[代码块]');
 
-          // 2. 每个约定段落都必须有实际内容。
+          // 2. 每个约定段落都必须有实际内容；标题可以只写中文，也可以加「 / English」后缀。
           for (const heading of ['变更与原因', '验证', '兼容性与风险']) {
-            const section = body.match(new RegExp(`^## ${heading}\\s*\\n([\\s\\S]*?)(?=^## |$(?![\\s\\S]))`, 'm'));
+            const section = body.match(new RegExp(`^## ${heading}(?: / [^\\n]*)?\\s*\\n([\\s\\S]*?)(?=^## |$(?![\\s\\S]))`, 'm'));
             assert.ok(section && section[1].trim(), `缺少实际说明：${heading}`);
           }
 
@@ -40,7 +40,11 @@ jobs:
             '已按编码规范检查包文档、命名、注释与测试提交范围，或本次不涉及代码',
             '相关契约、文档和生成源已同步，或本次不需要同步',
           ];
+          // 双语清单项允许在中文后追「 / English」；只按中文前缀比对，避免因为翻译改动就失效。
+          const lines = body.split('\n').map(line => line.trim());
           for (const item of checklist) {
-            assert.ok(body.split('\n').some(line => line.trim() === `- [x] ${item}` || line.trim() === `- [X] ${item}`), `尚未确认：${item}`);
+            assert.ok(
+              lines.some(line => (line.startsWith('- [x] ') || line.startsWith('- [X] ')) && line.slice(6).startsWith(item)),
+              `尚未确认：${item}`);
           }
           JS

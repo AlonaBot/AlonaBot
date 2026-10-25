@@ -97,7 +97,7 @@ git diff --check
 
 ## GitHub Actions
 
-[Quality gate](../.github/workflows/ci.yml) 在 PR 到 main、main push 和手动触发时运行维护入口检查。存在非 `experiments/` 的产品 Go 文件时，才运行 Go 格式、Protobuf 生成一致性、vet、race 测试和五目标平台 `CGO_ENABLED=0` 构建；无产品代码时明确标注 Go 检查未运行。
+[Quality gate](../.github/workflows/ci.yml) 在 PR 到 main、main push 和手动触发时运行维护入口检查。存在产品 Go 文件时，才运行 Go 格式、Protobuf 生成一致性、vet、race 测试和五目标平台 `CGO_ENABLED=0` 构建；无产品代码时明确标注 Go 检查未运行。
 
 Go job 使用一次性 `postgres:17` service，测试 DSN 只指向 job 内的本地测试库。生成检查从官方 Protobuf release 下载当前约定的 protoc 36.0；工具链变更时同时更新生成器、开发指南和工作流。代码 job 使用只读 token，不使用生产凭据。
 

@@ -19,7 +19,7 @@
 | 构建、测试、依赖、外部环境 | [docs/development.md](docs/development.md) | 按需运行 `go generate ./...`、`go test ./...`、`go build ./...` |
 | 记录验收 | [spec/TEST-MATRIX.md](spec/TEST-MATRIX.md) §3 | 写明测试位置、命令、平台和结果；没运行的写「未运行」 |
 | 契约有缺口或冲突 | [spec/README.md](spec/README.md)「执行与维护」 | 先修契约、PLAN 和 TEST-MATRIX，再在 spec/adr/DECISIONS.md 记录原因 |
-| 执行切片 goal（执行者） | [goals.md](goals.md) 中该 goal 的语句、[alonabot-execute](.agents/skills/alonabot-execute/SKILL.md)、[执行顺序](docs/execution-order.md)、当前分支上的 `goal-N/` | 每个 task 的回写区填写完整；完成后推送并开 PR，不合并 |
+| 执行切片 goal（执行者） | [goals.md](goals.md) 中该 goal 的语句、[alonabot-execute](.agents/skills/alonabot-execute/SKILL.md)、[执行顺序](docs/execution-order.md)、本地 `goal-N/`（被 git 忽略） | 每个 task 的回写区填写完整；完成后推送并开 PR，不合并 |
 | 编写 goal 语句、审查并合并执行者 PR（审查者） | [goals.md](goals.md)、[执行顺序](docs/execution-order.md)、[alonabot-review](.agents/skills/alonabot-review/SKILL.md)「审查执行者的切片 PR」 | 语句的接口与测试足够具体；合并前核对 head SHA、CI 与自己的复现结果；合并后更新后继 goal |
 
 ## 项目约定
@@ -30,7 +30,6 @@
 - 生成代码只改源文件（`.proto`、生成器），然后重新运行 `go generate ./...`，不手改生成产物。
 - 不把 fixture、模拟服务或交叉编译结果记成真实平台/环境的验证结果。
 - 业务副作用不加自动重试；限额、超时等常量以 CONTRACTS 为准，不擅自增减。
-- `experiments/` 是独立的历史实验，不 import，也不作为验收依据。
 
 ## Git
 
