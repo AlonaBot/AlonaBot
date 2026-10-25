@@ -1,44 +1,39 @@
-# 收集可复现缺陷及实际运行环境，并指派维护者跟进。
-name: Bug 报告
-description: 报告可以复现的行为、协议或运行故障。
+# Bug 报告表单：只收集定位问题所需的最少信息，并指派维护者跟进。
+name: Bug 报告 / Bug report
+description: 报告可以复现的问题。Report a problem you can reproduce.
 title: "[Bug] "
 labels: [bug]
 assignees: [FlanChanXwO]
 body:
   - type: markdown
     attributes:
-      value: 请先移除 Bot Token、Session Secret、数据库凭证和真实用户数据。
+      value: |
+        请先删除 Bot Token、密码和真实用户数据。
+        Please remove bot tokens, passwords and real user data before posting.
   - type: textarea
-    id: behavior
+    id: problem
     attributes:
-      label: 预期行为与实际结果
-      description: 如涉及规格，请附对应 T/V 编号或章节。
+      label: 发生了什么 / What happened
+      description: 期望的结果和实际的结果。What you expected and what actually happened.
     validations:
       required: true
   - type: textarea
-    id: reproduction
+    id: steps
     attributes:
-      label: 最小复现步骤
-      description: 提供可脱敏复现的命令、插件示例或输入，不上传真实 data_dir。
+      label: 复现步骤 / Steps to reproduce
+      placeholder: |
+        1.
+        2.
     validations:
       required: true
   - type: input
     id: version
     attributes:
-      label: 版本或 commit
-      description: 填写正在运行的 commit SHA、分支或发布版本；当前没有正式版本时使用 SHA。
-    validations:
-      required: true
-  - type: dropdown
-    id: platform
-    attributes:
-      label: OS/arch
-      options: [linux/amd64, linux/arm64, windows/amd64, darwin/amd64, darwin/arm64, 其他]
-    validations:
-      required: true
+      label: 版本与系统 / Version and OS
+      placeholder: v0.1.0 或 commit SHA，linux/amd64
   - type: textarea
-    id: evidence
+    id: logs
     attributes:
-      label: 脱敏日志与补充信息
-      description: 保留相关错误原文，并注明 TCP/stdio、数据库后端及复现频率。
+      label: 日志 / Logs
+      description: 可选，粘贴相关的错误信息。Optional. Paste the relevant error output.
       render: text

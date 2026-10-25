@@ -4,7 +4,7 @@
 
 ## 从一个明确的问题开始
 
-Bug Issue 提供版本或 commit、OS/arch、最小复现、预期与实际结果。功能 Issue 说明要解决的问题、期望行为和兼容性影响。日志与配置先脱敏，不提交 Bot Token、Session Secret、数据库凭证或真实用户数据。
+Bug Issue 写清发生了什么和复现步骤，能提供版本、系统和日志更好。功能 Issue 说明要解决的问题，期望的效果可选。日志与配置先脱敏，不提交 Bot Token、Session Secret、数据库凭证或真实用户数据。
 
 行为以 [spec](spec/README.md) 为准，结构以 [ARCHITECTURE.md](ARCHITECTURE.md) 为准。实现前读取对应 T 工作包及失败停止条件；契约有冲突时先按 spec 的维护流程解决，再实现。
 
