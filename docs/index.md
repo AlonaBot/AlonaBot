@@ -9,7 +9,9 @@
 | [coding-standards.md](coding-standards.md) | 按职责组织文件、Go 约定、文件头/字段/步骤注释 | 编码审查规则 |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | Issue、PR、Git 授权和 GitHub 自动化 | 贡献流程 |
 | [AGENTS.md](../AGENTS.md) | 项目维护技能与规格的按任务路由 | Agent 工作入口 |
-| `goal-N/`（在 `goal-N` 分支上） | 批次执行计划：input/plan/tasks 和每个 task 的证据 | 执行进度 |
+| [goals.md](../goals.md) | 可派发的切片 goal 语句与状态 | 派发入口 |
+| [execution-order.md](execution-order.md) | 并行派发、共享文件与合并顺序 | 并行约束 |
+| `goal-N/` | 切片执行记录：切片卡（input/plan/tasks）和每个 task 的证据；切片 PR 合并后进入 main | 执行进度 |
 
 按任务找文档：
 
