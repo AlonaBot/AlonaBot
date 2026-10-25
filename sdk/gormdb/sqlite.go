@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,8 +16,19 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// 受管 SQLite 的连接级设置（CONTRACTS §6.1）。写在 DSN 的 _pragma 中，驱动对每个新物理连接都会执行。
-const sqlitePragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
+// 受管 SQLite 的连接设置（CONTRACTS §6.1），以回读 PRAGMA 时得到的值表示。
+const (
+	journalModeWAL    = "wal"
+	synchronousFull   = 2
+	foreignKeysOn     = 1
+	busyTimeoutMillis = 5000
+)
+
+// sqlitePragmas 写在 DSN 中，驱动对每个新物理连接都会执行（CONTRACTS §6.1）。
+var sqlitePragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(" + strconv.Itoa(busyTimeoutMillis) + ")"
+
+// slowQueryThreshold 超过它的 SQL 会以慢查询记录。
+const slowQueryThreshold = 200 * time.Millisecond
 
 // stdio 传输时 stdout 专用于协议帧，GORM 日志只能写 stderr。
 var gormLogger = newGormLogger(os.Stderr)
@@ -25,7 +37,7 @@ var gormLogger = newGormLogger(os.Stderr)
 // 绑定参数（可能是业务数据或 secret）不进入日志（CONTRACTS §5.3）。
 func newGormLogger(w io.Writer) logger.Interface {
 	return logger.New(log.New(w, "gorm ", log.LstdFlags), logger.Config{
-		SlowThreshold:        200 * time.Millisecond,
+		SlowThreshold:        slowQueryThreshold,
 		LogLevel:             logger.Warn,
 		ParameterizedQueries: true,
 	})
@@ -85,7 +97,7 @@ func checkPragmas(ctx context.Context, db *gorm.DB) error {
 	if err != nil {
 		return fmt.Errorf("读取 PRAGMA 失败: %w", err)
 	}
-	want := PragmaValues{JournalMode: "wal", Synchronous: 2, ForeignKeys: 1, BusyTimeout: 5000}
+	want := PragmaValues{JournalMode: journalModeWAL, Synchronous: synchronousFull, ForeignKeys: foreignKeysOn, BusyTimeout: busyTimeoutMillis}
 	if v != want {
 		return fmt.Errorf("SQLite 设置未生效：实际 %+v，期望 %+v", v, want)
 	}

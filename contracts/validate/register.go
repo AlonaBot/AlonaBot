@@ -9,6 +9,13 @@ import (
 )
 
 // routeKindOf 给出 RouteDescriptor 的 spec 分支对应的 kind。
+
+// HTTP Listener 只接受这两个 loopback 地址（WIRE-FORMAT §3.3）。
+const (
+	LoopbackIPv4 = "127.0.0.1"
+	LoopbackIPv6 = "::1"
+)
+
 func routeKindOf(r *pb.RouteDescriptor) pb.RouteKind {
 	switch r.GetSpec().(type) {
 	case *pb.RouteDescriptor_Command:
@@ -58,7 +65,7 @@ func Register(r *pb.Register) error {
 	}
 	if l := r.GetHttpListener(); l != nil {
 		ip := net.ParseIP(l.GetHost())
-		if (l.GetHost() != "127.0.0.1" && l.GetHost() != "::1") || ip == nil || l.GetPort() == 0 || l.GetPort() > 65535 {
+		if (l.GetHost() != LoopbackIPv4 && l.GetHost() != LoopbackIPv6) || ip == nil || l.GetPort() == 0 || l.GetPort() > 65535 {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "HTTP Listener 只能是 127.0.0.1 或 ::1 的非零端口")
 		}
 	}

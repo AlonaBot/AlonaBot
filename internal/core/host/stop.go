@@ -119,9 +119,15 @@ type RestartPolicy struct {
 	failures map[string][]time.Time
 }
 
+// 首发的有限重启规则（D-06）：窗口内第 restartLimit 次异常退出时禁用。
+const (
+	restartWindow = 5 * time.Minute
+	restartLimit  = 3
+)
+
 // NewRestartPolicy 使用首发规则：5 分钟内第 3 次异常退出时禁用。
 func NewRestartPolicy() *RestartPolicy {
-	return &RestartPolicy{Window: 5 * time.Minute, Limit: 3, failures: map[string][]time.Time{}}
+	return &RestartPolicy{Window: restartWindow, Limit: restartLimit, failures: map[string][]time.Time{}}
 }
 
 // Decision 表示一次进程退出后的处理决定。

@@ -35,9 +35,15 @@ import (
 // inheritedEnv 列出从 Core 环境继承到插件的变量；其余变量（含管理凭证）一律不传。
 var inheritedEnv = []string{"PATH", "HOME", "TMPDIR", "TEMP", "TMP", "SystemRoot", "LANG", "TZ"}
 
+// secretBytes 是 Session Secret 的字节数（WIRE-FORMAT §3.1）。
+const secretBytes = 32
+
+// logBufferSize 限制单次从插件输出中读取一行日志的缓冲大小；更长的行分段记录。
+const logBufferSize = 64 << 10
+
 // NewSecret 生成本次启动的 256-bit Session Secret（十六进制）。
 func NewSecret() (string, error) {
-	b := make([]byte, 32)
+	b := make([]byte, secretBytes)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
@@ -216,7 +222,7 @@ func (p *Process) pump(stream string, r *os.File, logf LogFunc) {
 	go func() {
 		defer p.logs.Done()
 		defer r.Close()
-		br := bufio.NewReaderSize(r, 64<<10)
+		br := bufio.NewReaderSize(r, logBufferSize)
 		for {
 			line, err := br.ReadSlice('\n')
 			if len(line) > 0 {

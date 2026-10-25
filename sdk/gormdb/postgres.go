@@ -13,7 +13,10 @@ import (
 	"gorm.io/gorm"
 )
 
-var pgIdent = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
+// maxIdentLen 是 PostgreSQL 标识符的最大字节数（NAMEDATALEN - 1）。
+const maxIdentLen = 63
+
+var pgIdent = regexp.MustCompile(fmt.Sprintf(`^[a-z_][a-z0-9_]{0,%d}$`, maxIdentLen-1))
 
 // OpenPostgres 用 Bootstrap 下发的插件专属 role/schema 连接 PostgreSQL（CONTRACTS §6.3）。
 // search_path 只设为该插件 schema（pg_catalog 始终隐式可见），连接后核对 current_user 与

@@ -154,7 +154,7 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_HANDSHAKE, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED, "插件身份认证失败")
 	}
 
-	sid := make([]byte, 16)
+	sid := make([]byte, validate.SessionIDLen)
 	if _, err := rand.Read(sid); err != nil {
 		_ = conn.Close()
 		return nil, err

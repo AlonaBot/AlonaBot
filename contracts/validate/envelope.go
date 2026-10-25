@@ -26,8 +26,8 @@ const (
 
 // session_id 与 trace_id 的固定字节长度。
 const (
-	sessionIDLen = 16
-	traceIDLen   = 16
+	SessionIDLen = 16
+	TraceIDLen   = 16
 )
 
 // Error 携带协议错误码，供调用方直接映射为对端可见的 ErrorInfo。
@@ -114,11 +114,11 @@ func Envelope(env *pb.Envelope) error {
 	if k == pb.FrameKind_FRAME_KIND_HELLO && sid != 0 {
 		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "HELLO 不得携带 session_id")
 	}
-	if k != pb.FrameKind_FRAME_KIND_HELLO && sid != sessionIDLen {
-		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "session_id 长度为 %d，应为 %d", sid, sessionIDLen)
+	if k != pb.FrameKind_FRAME_KIND_HELLO && sid != SessionIDLen {
+		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "session_id 长度为 %d，应为 %d", sid, SessionIDLen)
 	}
-	if n := len(env.GetTraceId()); n != 0 && n != traceIDLen {
-		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "trace_id 长度为 %d，应为 %d", n, traceIDLen)
+	if n := len(env.GetTraceId()); n != 0 && n != TraceIDLen {
+		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "trace_id 长度为 %d，应为 %d", n, TraceIDLen)
 	}
 
 	// 3. 调用帧的 call_id、initiator_side、parent_call_id 与 deadline。
@@ -165,7 +165,7 @@ func checkError(k pb.FrameKind, e *pb.ErrorInfo) error {
 		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%s 不得携带 error", k)
 	case e.GetCode() == pb.ErrorCode_ERROR_CODE_UNSPECIFIED:
 		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "ErrorInfo.code 不能为 UNSPECIFIED")
-	case len(e.GetTraceId()) != 0 && len(e.GetTraceId()) != traceIDLen:
+	case len(e.GetTraceId()) != 0 && len(e.GetTraceId()) != TraceIDLen:
 		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "ErrorInfo.trace_id 长度错误")
 	}
 	return nil

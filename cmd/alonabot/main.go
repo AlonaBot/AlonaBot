@@ -24,11 +24,17 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
 )
 
-// main 解析 run 子命令的参数并运行；参数错误以 2 退出，运行失败以 1 退出。
+// 进程退出码。
+const (
+	exitFailure = 1 // 运行失败
+	exitUsage   = 2 // 参数错误
+)
+
+// main 解析 run 子命令的参数并运行；参数错误以 exitUsage 退出，运行失败以 exitFailure 退出。
 func main() {
 	if len(os.Args) < 2 || os.Args[1] != "run" {
 		fmt.Fprintln(os.Stderr, "用法: alonabot run --data-dir DIR --plugin-id ID --entry PATH [--stdio]")
-		os.Exit(2)
+		os.Exit(exitUsage)
 	}
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	dataDir := fs.String("data-dir", "", "Core 数据目录（同一目录只能有一个 Core）")
@@ -38,11 +44,11 @@ func main() {
 	_ = fs.Parse(os.Args[2:])
 	if *dataDir == "" || *pluginID == "" || *entry == "" {
 		fs.Usage()
-		os.Exit(2)
+		os.Exit(exitUsage)
 	}
 	if err := run(*dataDir, *pluginID, *entry, *stdio); err != nil {
 		fmt.Fprintln(os.Stderr, "alonabot:", err)
-		os.Exit(1)
+		os.Exit(exitFailure)
 	}
 }
 

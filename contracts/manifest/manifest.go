@@ -48,7 +48,7 @@ const (
 
 var (
 	marketID = regexp.MustCompile(`^alonabot_plugin_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`)
-	localID  = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
+	localID  = regexp.MustCompile(fmt.Sprintf(`^[a-z][a-z0-9_-]{0,%d}$`, MaxIDLen-1))
 	// SemVer 2.0 官方正则。
 	semver = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
 )

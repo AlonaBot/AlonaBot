@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -26,9 +27,18 @@ import (
 const (
 	lockFile  = "core.lock"    // data_dir 下的 Core 实例锁
 	stateFile = "state.sqlite" // data_dir 下的状态库
-	// 连接级设置，驱动对每个物理连接执行；单连接，见 CONTRACTS §6.1。
-	pragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
 )
+
+// 状态库连接设置（CONTRACTS §6.1），以回读 PRAGMA 时得到的值表示。
+const (
+	journalModeWAL    = "wal"
+	synchronousFull   = 2
+	foreignKeysOn     = 1
+	busyTimeoutMillis = 5000
+)
+
+// pragmas 写在 DSN 中，驱动对每个新物理连接都会执行（CONTRACTS §6.1）。
+var pragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(" + strconv.Itoa(busyTimeoutMillis) + ")"
 
 var (
 	// ErrDataDirLocked 表示同一 data_dir 已有另一个 Core 在运行。
@@ -143,7 +153,7 @@ func (s *Store) verify(ctx context.Context, fresh bool) error {
 	if err != nil {
 		return fmt.Errorf("状态库无法读取（可能已损坏，不会重建）: %w", err)
 	}
-	if want := (Pragmas{"wal", 2, 1, 5000}); p != want {
+	if want := (Pragmas{journalModeWAL, synchronousFull, foreignKeysOn, busyTimeoutMillis}); p != want {
 		return fmt.Errorf("状态库连接设置未生效：实际 %+v，期望 %+v", p, want)
 	}
 	return s.migrate(ctx, fresh)
