@@ -1,6 +1,9 @@
 //go:build unix
 
-// 本文件用 Unix 进程组实现插件进程树的终止与清空确认。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：用 Unix 进程组终止插件进程树并确认它已清空。
+
 package process
 
 import (
@@ -9,10 +12,9 @@ import (
 	"syscall"
 )
 
-// tree 是 Unix 进程组：子进程在 Start 时成为新进程组的组长，孙进程默认留在组内。
+// tree 对应一个 Unix 进程组：子进程在 Start 时成为新进程组的组长，孙进程默认留在组内。
 type tree struct {
-	// pgid 是进程组 ID，等于领头进程的 pid。
-	pgid int
+	pgid int // 进程组 ID，等于领头进程的 pid
 }
 
 // prepareTree 让子进程在启动时成为新进程组的组长。

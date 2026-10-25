@@ -1,4 +1,8 @@
-// Package config 定义可选的配置处理接口（CONTRACTS §5.2）。它们是配置数据回调，
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：可选的配置回调接口 ConfigLoader 与 ConfigValidator。
+
+// Package config 定义可选的配置处理接口（CONTRACTS §5.2）。它们处理配置数据，
 // 与 OnStart/OnReady/OnStop 生命周期 Hook 分开，不需要空实现。
 package config
 

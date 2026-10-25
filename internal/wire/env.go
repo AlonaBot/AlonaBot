@@ -1,4 +1,7 @@
-// 本文件定义 Core 启动插件进程时传递的环境变量名与 runtime.lock 文件名。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：Core 启动插件进程时传递的环境变量名，以及 runtime.lock 的文件名。
+
 package wire
 
 // Core 启动插件进程时传递的环境变量（CONTRACTS §1.1、§12.2）。子进程只收到这些变量与少量

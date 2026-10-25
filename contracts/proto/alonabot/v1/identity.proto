@@ -1,12 +1,14 @@
-// Target、Actor 与平台能力，见 MESSAGE-MODEL §1。单独成文件以避免 message/media 互相 import。
-// 公共标识符一律用字符串；absent 表示不存在，不用空串或零 ID 填补。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：Target、Actor 与平台能力（MESSAGE-MODEL §1）。单独成文件，避免 message 与 media 互相 import。公共标识符一律用字符串，缺省表示不存在，不用空串或零 ID 填补。
+
 syntax = "proto3";
 
 package alonabot.v1;
 
 option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 
-// Target 是一次发送的平台目标，唯一定位到某个 Adapter 实例下的会话或话题。
+// Target 描述一次发送的平台目标，唯一定位到某个 Adapter 实例下的会话或话题。
 message Target {
   // Adapter 类型，例如 telegram。
   string adapter_id = 1;
@@ -20,7 +22,7 @@ message Target {
   optional string thread_id = 5;
 }
 
-// TrustedRole 是 Core 认定的可信角色。
+// TrustedRole 列出 Core 认定的可信角色。
 enum TrustedRole {
   TRUSTED_ROLE_UNSPECIFIED = 0;
   // 具有可信个人身份的普通用户。
@@ -31,7 +33,7 @@ enum TrustedRole {
   TRUSTED_ROLE_CHAT_ADMIN = 3;
 }
 
-// Actor 是事件的触发者，只由可信 Adapter 元数据与 Core policy 生成；插件自报的身份不是依据。
+// Actor 描述事件的触发者，只由可信 Adapter 元数据与 Core policy 生成；插件自报的身份不是依据。
 message Actor {
   // 平台上的用户 ID。
   string external_user_id = 1;
@@ -43,7 +45,7 @@ message Actor {
   repeated TrustedRole trusted_roles = 4;
 }
 
-// Capability 是 Adapter 公布的一项平台能力；未知能力不推定支持。
+// Capability 描述 Adapter 公布的一项平台能力；未知能力不推定支持。
 message Capability {
   // 能力名。
   string name = 1;

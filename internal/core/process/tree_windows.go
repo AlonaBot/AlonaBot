@@ -1,6 +1,9 @@
 //go:build windows
 
-// 本文件用 Job Object 实现 Windows 上插件进程树的终止与清空确认。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：用 Job Object 终止 Windows 上的插件进程树并确认它已清空。
+
 package process
 
 import (
@@ -10,10 +13,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// tree 是由 Core 独占持有的 Job Object；设置 KILL_ON_JOB_CLOSE，句柄关闭时终止其中所有进程。
+// tree 持有一个由 Core 独占的 Job Object；设置了 KILL_ON_JOB_CLOSE，句柄关闭时终止其中所有进程。
 // shortcut: 进程在 Start 之后才加入 Job，加入前创建的孙进程不在管理范围；需要时改为挂起创建再加入。
 type tree struct {
-	// job 是 Core 独占持有的 Job Object 句柄，release 时关闭。
+	// Core 独占持有的 Job Object 句柄，release 时关闭。
 	job windows.Handle
 }
 
@@ -51,22 +54,14 @@ func (t *tree) kill() error { return windows.TerminateJobObject(t.job, 1) }
 
 // basicAccounting 对应 Win32 JOBOBJECT_BASIC_ACCOUNTING_INFORMATION（x/sys/windows 未提供该结构）。
 type basicAccounting struct {
-	// TotalUserTime 是累计用户态 CPU 时间（100ns 单位），此处只为保持内存布局。
-	TotalUserTime int64
-	// TotalKernelTime 是累计内核态 CPU 时间（100ns 单位），此处不用。
-	TotalKernelTime int64
-	// ThisPeriodTotalUserTime 是本计费周期的用户态 CPU 时间，此处不用。
-	ThisPeriodTotalUserTime int64
-	// ThisPeriodTotalKernelTime 是本计费周期的内核态 CPU 时间，此处不用。
-	ThisPeriodTotalKernelTime int64
-	// TotalPageFaultCount 是 Job 内进程的累计缺页数，此处不用。
-	TotalPageFaultCount uint32
-	// TotalProcesses 是曾加入 Job 的进程总数，此处不用。
-	TotalProcesses uint32
-	// ActiveProcesses 是 Job 内仍在运行的进程数；为 0 表示进程树已全部退出。
-	ActiveProcesses uint32
-	// TotalTerminatedProcesses 是因违反 Job 限制而被终止的进程数，此处不用。
-	TotalTerminatedProcesses uint32
+	TotalUserTime             int64  // 累计用户态 CPU 时间（100ns 单位），此处只为保持内存布局
+	TotalKernelTime           int64  // 累计内核态 CPU 时间（100ns 单位），此处不用
+	ThisPeriodTotalUserTime   int64  // 本计费周期的用户态 CPU 时间，此处不用
+	ThisPeriodTotalKernelTime int64  // 本计费周期的内核态 CPU 时间，此处不用
+	TotalPageFaultCount       uint32 // Job 内进程的累计缺页数，此处不用
+	TotalProcesses            uint32 // 曾加入 Job 的进程总数，此处不用
+	ActiveProcesses           uint32 // Job 内仍在运行的进程数；为 0 表示进程树已全部退出
+	TotalTerminatedProcesses  uint32 // 因违反 Job 限制而被终止的进程数，此处不用
 }
 
 // empty 报告 Job 内是否已没有仍在运行的进程。

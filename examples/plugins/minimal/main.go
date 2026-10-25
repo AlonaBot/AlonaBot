@@ -1,5 +1,7 @@
-// minimal 是 SDK 公共签名的组合示例：一个根插件、两类 Handler、StopPropagation、
-// 配置回调、HTTP Handler 与一个定时任务。SDK 尚不支持 HTTP 路由与定时任务，直接运行时 Run 返回 UNSUPPORTED。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：SDK 公共签名的组合示例：一个根插件、两类 Handler、StopPropagation、配置回调、HTTP Handler 与一个定时任务。SDK 尚不支持 HTTP 路由与定时任务，直接运行时 Run 返回 UNSUPPORTED。
+
 package main
 
 import (
@@ -15,12 +17,10 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
 
-// Config 是本插件唯一的配置类型。
+// Config 声明本插件唯一的配置类型。
 type Config struct {
-	// Greeting 是 /demo hello 回复的文本。
-	Greeting string `json:"greeting"`
-	// Interval 是间隔秒数，不能为负。
-	Interval int64 `json:"interval_seconds"`
+	Greeting string `json:"greeting"`         // /demo hello 回复的文本
+	Interval int64  `json:"interval_seconds"` // 间隔秒数，不能为负
 }
 
 // OnLoad 把版本 1 的 {"hello": "..."} 迁移为当前格式；其他版本原样返回。
@@ -47,16 +47,15 @@ func (c *Config) Validate(context.Context) error {
 	return nil
 }
 
-// Demo 是根插件；插件 ID 来自 plugin.yaml。
+// Demo 作为根插件注册命令、HTTP 路由与定时任务；插件 ID 来自 plugin.yaml。
 type Demo struct {
 	// Base 提供根插件的默认实现。
 	plugin.Base
-	// cfg 是 SDK 解码并校验后的配置。
-	cfg Config
+	config Config // SDK 解码并校验后的配置
 }
 
 // Config 返回供 SDK 解码配置的目标。
-func (p *Demo) Config() any { return &p.cfg }
+func (p *Demo) Config() any { return &p.config }
 
 // Commands 在 demo 分组下注册 hello 与 echo 两个命令。
 func (p *Demo) Commands(r *sdk.CommandRegistry) {
@@ -66,13 +65,13 @@ func (p *Demo) Commands(r *sdk.CommandRegistry) {
 	})
 }
 
-// Hello 是自动回复型 Handler：成功返回非空 Chain 时由 Core 发送一次。
+// Hello 返回要自动回复的 Chain；成功且非空时由 Core 发送一次。
 func (p *Demo) Hello(c *sdk.Context) (message.Chain, error) {
 	c.StopPropagation()
-	return message.Chain{message.Text(p.cfg.Greeting)}, nil
+	return message.Chain{message.Text(p.config.Greeting)}, nil
 }
 
-// Echo 是主动发送型 Handler：可以多次 Send。
+// Echo 在 Handler 内主动发送，可以多次 Send。
 func (p *Demo) Echo(c *sdk.Context, text string, times int64) error {
 	for i := int64(0); i < times; i++ {
 		if _, err := c.Send(message.Chain{message.Text(text)}); err != nil {

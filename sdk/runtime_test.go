@@ -1,4 +1,7 @@
-// 本文件测试 runtime.lock：第二实例拒绝启动、锁文件保留、路径必须由 Core 以绝对路径给出，以及 Run 先取锁再执行用户代码。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：测试 runtime.lock：第二个实例拒绝启动、锁文件保留、路径必须是 Core 给出的绝对路径，以及 Run 先取锁再执行用户代码。
+
 package sdk
 
 import (
@@ -9,7 +12,17 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/internal/oslock"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
+
+// lockProbe 在注册入口被调用时留下记录，用来确认取锁失败后没有执行任何用户代码。
+type lockProbe struct {
+	plugin.Base
+	called bool
+}
+
+// Commands 记录自己被调用过。
+func (p *lockProbe) Commands(*CommandRegistry) { p.called = true }
 
 // 锁被占用时第二个实例失败；释放后锁文件仍在，可以再次取锁。
 func TestRuntimeLockSecondInstanceFails(t *testing.T) {
@@ -54,11 +67,11 @@ func TestRunTakesLockBeforeRegistration(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer held.Unlock()
-	called := false
-	if err := Run(&root{commands: func(*CommandRegistry) { called = true }}); !errors.Is(err, oslock.ErrLocked) {
+	probe := &lockProbe{}
+	if err := Run(probe); !errors.Is(err, oslock.ErrLocked) {
 		t.Fatalf("锁被占用时应返回 ErrLocked，实际 %v", err)
 	}
-	if called {
+	if probe.called {
 		t.Fatal("取锁失败后仍调用了用户的 Commands 注册入口")
 	}
 }

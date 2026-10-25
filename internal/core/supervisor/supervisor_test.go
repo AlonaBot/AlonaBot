@@ -1,7 +1,8 @@
 //go:build unix
 
-// 本文件用真实子进程测试插件的启动、停止、崩溃恢复、启动故障、runtime.lock 与管理锁串行化。
-// 依赖 Unix 信号与进程组语义。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：用真实子进程测试插件的启动、停止、崩溃恢复、启动故障、runtime.lock 与管理锁的串行化。依赖 Unix 信号与进程组语义。
 
 package supervisor
 
@@ -125,11 +126,10 @@ var (
 type logBuf struct {
 	// mu 保护 b。
 	mu sync.Mutex
-	// b 是「插件ID|流|内容」形式的日志。
-	b bytes.Buffer
+	b  bytes.Buffer // 「插件ID|流|内容」形式的日志
 }
 
-// log 是 process.LogFunc，记录一行日志。
+// log 记录一行日志，签名与 process.LogFunc 相同。
 func (l *logBuf) log(id, stream string, line []byte) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -268,10 +268,8 @@ func TestCrashAfterActivationAndRestartPolicy(t *testing.T) {
 // 握手挂起、非法帧、stdout 污染、连接前退出都不激活：报告对应错误，候选不提交。
 func TestStartupFaultsAreKilledAndReported(t *testing.T) {
 	cases := []struct {
-		// fault 是注入的故障。
-		fault string
-		// want 是错误中应包含的片段；空串表示不检查。
-		want string
+		fault string // 注入的故障
+		want  string // 错误中应包含的片段；空串表示不检查
 		// stdio 为 true 时使用 stdio 传输。
 		stdio bool
 	}{

@@ -1,4 +1,7 @@
-// 本文件测试插件进程的启动：精简环境、带插件 ID 的日志、退出状态、stdio 管道、入口路径与 runtime.lock。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：测试插件进程的启动：精简环境、带插件 ID 的日志、退出状态、stdio 管道、入口路径与 runtime.lock。
+
 package process
 
 import (
@@ -60,12 +63,11 @@ func TestMain(m *testing.M) {
 // logSink 收集 LogFunc 输出的日志行。
 type logSink struct {
 	// mu 保护 lines。
-	mu sync.Mutex
-	// lines 是「插件ID|流|内容」形式的日志行。
-	lines []string
+	mu    sync.Mutex
+	lines []string // 「插件ID|流|内容」形式的日志行
 }
 
-// log 是 LogFunc，记录一行日志。
+// log 记录一行日志，签名与 LogFunc 相同。
 func (l *logSink) log(pluginID, stream string, line []byte) {
 	l.mu.Lock()
 	defer l.mu.Unlock()

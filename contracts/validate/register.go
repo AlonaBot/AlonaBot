@@ -1,4 +1,7 @@
-// 本文件负责 REGISTER 载荷的整体校验：路由描述、候选配置与 HTTP Listener。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：整体校验 REGISTER 载荷：路由描述、候选配置与 HTTP Listener。
+
 package validate
 
 import (
@@ -9,8 +12,8 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
-// specKind 给出 RouteDescriptor 的 spec 分支对应的 kind。
-func specKind(r *pb.RouteDescriptor) pb.RouteKind {
+// routeKindOf 给出 RouteDescriptor 的 spec 分支对应的 kind。
+func routeKindOf(r *pb.RouteDescriptor) pb.RouteKind {
 	switch r.GetSpec().(type) {
 	case *pb.RouteDescriptor_Command:
 		return pb.RouteKind_ROUTE_KIND_COMMAND
@@ -49,7 +52,7 @@ func Register(r *pb.Register) error {
 			return errf(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "route_id %q 重复", id)
 		case rd.GetKind() == pb.RouteKind_ROUTE_KIND_UNSPECIFIED || !knownEnum(rd.GetKind()):
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q 的 kind 非法", id)
-		case specKind(rd) != rd.GetKind():
+		case routeKindOf(rd) != rd.GetKind():
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q 的 kind %s 与描述类型不符", id, rd.GetKind())
 		}
 		seen[id] = true

@@ -1,4 +1,7 @@
-// Core→Plugin 的可信调用上下文、HandlerOutcome 与 Hook 载荷，见 WIRE §4、MESSAGE-MODEL §3/§5。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：Core→Plugin 的可信调用上下文、HandlerOutcome 与 Hook 载荷（WIRE §4、MESSAGE-MODEL §3/§5）。
+
 syntax = "proto3";
 
 package alonabot.v1;
@@ -10,7 +13,7 @@ import "alonabot/v1/message.proto";
 
 option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 
-// InvocationContext 是 Core 记录并下发的可信上下文；插件回传的同名值不能覆盖 Core 记录。trace 取 Envelope.trace_id。
+// InvocationContext 描述 Core 记录并下发的可信上下文；插件回传的同名值不能覆盖 Core 记录。trace 取 Envelope.trace_id。
 message InvocationContext {
   // 无可信个人身份时 absent。
   Actor actor = 1;
@@ -24,7 +27,7 @@ message InvocationContext {
   bool send_forbidden = 5;
 }
 
-// HandlerRequest 是命令、事件、scheduled 与按钮 Handler 的请求。
+// HandlerRequest 描述命令、事件、scheduled 与按钮 Handler 的请求。
 message HandlerRequest {
   // 被调用的路由 ID。
   string route_id = 1;
@@ -36,7 +39,7 @@ message HandlerRequest {
   CommandInvocation command = 4;
 }
 
-// CommandInvocation 是命令匹配与参数解析的结果。
+// CommandInvocation 描述命令匹配与参数解析的结果。
 message CommandInvocation {
   // 实际匹配到的规范路径。
   repeated string path = 1;
@@ -48,7 +51,7 @@ message CommandInvocation {
   repeated string regex_groups = 4;
 }
 
-// ArgValue 是一个已解析的命令参数；缺失的可选参数没有 value。
+// ArgValue 描述一个已解析的命令参数；缺失的可选参数没有 value。
 message ArgValue {
   // 参数名。
   string name = 1;
@@ -65,7 +68,7 @@ message ArgValue {
   }
 }
 
-// ServiceInvocation 是 Core→目标插件的 Service 调用载荷：可信上下文与业务载荷分开，业务载荷按服务声明的编码与
+// ServiceInvocation 描述 Core→目标插件的 Service 调用载荷：可信上下文与业务载荷分开，业务载荷按服务声明的编码与
 // input schema 解释。服务响应直接把业务载荷放进 Envelope（output schema）。
 message ServiceInvocation {
   // 被调用的服务路由 ID。
@@ -89,7 +92,7 @@ enum Propagation {
   PROPAGATION_STOP = 2;
 }
 
-// HandlerOutcome 是 Handler 的结果；错误放在 Envelope.error，可与本结果并存以保留传播标记。
+// HandlerOutcome 描述 Handler 的结果；错误放在 Envelope.error，可与本结果并存以保留传播标记。
 message HandlerOutcome {
   // 自定义 Rule 的结果；false 时未执行 Handler。
   bool matched = 1;
@@ -99,7 +102,7 @@ message HandlerOutcome {
   MessageChain chain = 3;
 }
 
-// PreEventRequest 是 PreEvent Hook 的请求。
+// PreEventRequest 描述 PreEvent Hook 的请求。
 message PreEventRequest {
   // 被调用的 Hook 路由 ID。
   string route_id = 1;
@@ -117,7 +120,7 @@ message PreEventResult {
   Propagation propagation = 2;
 }
 
-// BeforeSendRequest 是 BeforeSend Hook 的请求。
+// BeforeSendRequest 描述 BeforeSend Hook 的请求。
 message BeforeSendRequest {
   // 被调用的 Hook 路由 ID。
   string route_id = 1;
@@ -135,7 +138,7 @@ message BeforeSendResult {
   MessageChain chain = 1;
 }
 
-// AfterSendRequest 是 AfterSend Hook 的请求，携带发送结果与可能的错误。
+// AfterSendRequest 描述 AfterSend Hook 的请求，携带发送结果与可能的错误。
 message AfterSendRequest {
   // 被调用的 Hook 路由 ID。
   string route_id = 1;
@@ -151,5 +154,5 @@ message AfterSendRequest {
   ErrorInfo error = 6;
 }
 
-// AfterSendResult 是 AfterSend 的结果：只返回成功或 Envelope.error，不能修改 SendResult。
+// AfterSendResult 描述 AfterSend 的结果：只返回成功或 Envelope.error，不能修改 SendResult。
 message AfterSendResult {}

@@ -1,4 +1,7 @@
-// 本文件在真实 PostgreSQL 上测试插件专属 role/schema 的隔离与 OpenPostgres 的拒绝路径；未设置 DSN 时跳过。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：在真实 PostgreSQL 上测试插件 role/schema 的隔离和 OpenPostgres 的拒绝路径；未设置 DSN 时跳过。
+
 package gormdb
 
 import (

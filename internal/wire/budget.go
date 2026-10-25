@@ -1,17 +1,18 @@
-// 本文件负责跨 Session 共享的 Core 全局 payload 字节预算（CONTRACTS §1.2）。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：所有 Session 共享的 Core 全局载荷字节预算（CONTRACTS §1.2）。
+
 package wire
 
 import "sync"
 
-// Budget 是跨 Session 共享的 payload 字节预算（Core 合计 64 MiB）。
+// Budget 限制所有 Session 合计的在途载荷字节数（Core 合计 64 MiB）。
 // acquire/release 接受 nil *Budget，表示不限额（插件侧没有全局预算）；Used 需要非 nil。
 type Budget struct {
 	// mu 保护 used。
-	mu sync.Mutex
-	// used 是当前已占用的字节数。
-	used int64
-	// limit 是上限字节数，创建后不变。
-	limit int64
+	mu    sync.Mutex
+	used  int64 // 当前已占用的字节数
+	limit int64 // 上限字节数，创建后不变
 }
 
 // NewBudget 创建上限为 limit 字节的预算。

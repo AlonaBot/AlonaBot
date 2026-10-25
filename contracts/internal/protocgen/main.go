@@ -1,5 +1,7 @@
-// protocgen 是 contracts 的生成入口：核对 protoc 版本，清除旧生成文件，再用 go.mod 固定的
-// protoc-gen-go 重新生成 pb/。由 contracts/doc.go 的 go:generate 在 contracts 目录下调用。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：生成 contracts/pb：核对 protoc 版本，删除旧的生成文件，再用 go.mod 固定的 protoc-gen-go 重新生成。由 contracts/doc.go 的 go:generate 调用。
+
 package main
 
 import (
@@ -13,7 +15,7 @@ import (
 	"strings"
 )
 
-// wantProtoc 是生成结果所对应的 protoc 版本；生成文件头会记录它，版本不同会产生无关 diff。
+// wantProtoc 固定生成所用的 protoc 版本；生成文件头会记录它，版本不同会产生无关 diff。
 const wantProtoc = "libprotoc 36.0"
 
 const (

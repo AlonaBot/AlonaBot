@@ -1,4 +1,7 @@
-// 本文件负责插件侧取得 runtime.lock。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：插件进程启动时取得 runtime.lock。
+
 package sdk
 
 import (

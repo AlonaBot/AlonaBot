@@ -1,4 +1,7 @@
-// 本文件负责 versioned 迁移的执行与完成账本。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：执行 versioned 迁移并维护完成账本。
+
 package gormdb
 
 import (
@@ -9,15 +12,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// LedgerTable 是框架保留的迁移完成表名，业务代码不得挪作他用。
+// LedgerTable 指定框架保留的迁移完成表名，业务代码不得挪作他用。
 const LedgerTable = "_alonabot_migrations"
 
-// ledgerRow 是迁移账本中的一行。
+// ledgerRow 对应迁移账本中的一行。
 type ledgerRow struct {
-	// ID 是已完成的迁移 ID。
-	ID uint32 `gorm:"primaryKey;autoIncrement:false"`
-	// AppliedAt 是完成时刻，UTC 毫秒。
-	AppliedAt int64 `gorm:"not null"`
+	ID        uint32 `gorm:"primaryKey;autoIncrement:false"` // 已完成的迁移 ID
+	AppliedAt int64  `gorm:"not null"`                       // 完成时刻，UTC 毫秒
 }
 
 // TableName 返回固定的账本表名。

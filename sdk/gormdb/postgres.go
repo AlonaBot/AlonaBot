@@ -1,4 +1,7 @@
-// 本文件负责打开插件专属的 PostgreSQL role/schema，并核对会话身份与 search_path。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：打开插件专属的 PostgreSQL role/schema，并核对会话身份与 search_path。
+
 package gormdb
 
 import (

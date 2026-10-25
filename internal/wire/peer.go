@@ -1,4 +1,7 @@
-// 本文件负责核对握手认证之后对端帧的会话身份与协商版本；Core 准备阶段、SDK 与 Session 共用。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：握手认证之后，核对对端每一帧的会话身份与协商版本；Core 准备阶段、SDK 与 Session 共用。
+
 package wire
 
 import (
@@ -14,13 +17,13 @@ import (
 func CheckPeer(env *pb.Envelope, sid []byte, minor uint32, peerPluginID string) error {
 	switch {
 	case string(env.GetSessionId()) != string(sid):
-		return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, Msg: "帧的 session_id 与本 Session 不符"}
+		return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, Message: "帧的 session_id 与本 Session 不符"}
 	case env.GetProtocolMinor() != minor:
 		return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR,
-			Msg: fmt.Sprintf("帧的 protocol_minor=%d，与协商值 %d 不符", env.GetProtocolMinor(), minor)}
+			Message: fmt.Sprintf("帧的 protocol_minor=%d，与协商值 %d 不符", env.GetProtocolMinor(), minor)}
 	case env.GetSourcePluginId() != peerPluginID:
 		return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR,
-			Msg: fmt.Sprintf("帧的 source_plugin_id=%q，对端认证身份为 %q", env.GetSourcePluginId(), peerPluginID)}
+			Message: fmt.Sprintf("帧的 source_plugin_id=%q，对端认证身份为 %q", env.GetSourcePluginId(), peerPluginID)}
 	}
 	return nil
 }

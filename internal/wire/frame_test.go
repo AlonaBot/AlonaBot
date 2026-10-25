@@ -1,4 +1,7 @@
-// 本文件测试帧编解码边界、stdout 污染、超限编码，以及同一组 golden 帧在 TCP 与 stdio 上的一致性。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：测试帧编解码的边界、stdout 污染、超限编码，以及同一组 golden 帧在 TCP 与 stdio 上读出的结果一致。
+
 package wire
 
 import (
@@ -28,14 +31,10 @@ func header(n uint32) []byte {
 func TestReadRawBoundaries(t *testing.T) {
 	max := bytes.Repeat([]byte{0xAB}, MaxFrame)
 	cases := []struct {
-		// name 是子测试名。
-		name string
-		// stream 是输入字节流。
-		stream []byte
-		// wantErr 是期望的错误；nil 表示应成功。
-		wantErr error
-		// wantLen 是成功时期望的载荷长度。
-		wantLen int
+		name    string
+		stream  []byte // 输入字节流
+		wantErr error  // 期望的错误；nil 表示应成功
+		wantLen int    // 成功时期望的载荷长度
 	}{
 		{"1 字节", append(header(1), 0x08), nil, 1},
 		{"恰好 4 MiB", append(header(MaxFrame), max...), nil, MaxFrame},

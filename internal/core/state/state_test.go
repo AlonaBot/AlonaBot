@@ -1,4 +1,7 @@
-// 本文件测试状态库：PRAGMA 与重开、core.lock 互斥、提交事务的预期旧值、损坏库不重建、schema 版本与逐插件锁。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：测试状态库：PRAGMA 与重开、core.lock 互斥、提交时的预期旧值、损坏的库不会被重建、schema 版本与逐插件锁。
+
 package state
 
 import (
@@ -114,10 +117,8 @@ func TestCommitActiveChecksExpectedOld(t *testing.T) {
 		}
 	}
 	for _, g := range []struct {
-		// plugin 是代次所属插件。
-		plugin string
-		// gen 是代次 ID。
-		gen string
+		plugin string // 代次所属插件
+		gen    string // 代次 ID
 	}{{"a", "a-g1"}, {"a", "a-g2"}, {"a", "a-g3"}, {"b", "b-g1"}} {
 		if err := s.AddGeneration(ctx, g.plugin, g.gen, `{}`, 1); err != nil {
 			t.Fatal(err)

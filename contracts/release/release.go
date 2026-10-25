@@ -1,3 +1,7 @@
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：校验 release.json 的 Ed25519 签名与内容，并按平台查找资产。
+
 // Package release 校验归档外的 release.json 及其 Ed25519 签名（CONTRACTS §9.2）。
 // 先对文件原始字节验签，再解析；不重新序列化 JSON 后验签。
 package release
@@ -20,30 +24,20 @@ import (
 
 // Release 对应 release.json。
 type Release struct {
-	// PublisherKeyID 是发布者公钥的 KeyID，必须与验签公钥一致。
-	PublisherKeyID string `json:"publisher_key_id"`
-	// Source 是绑定的仓库来源，例如 github.com/owner/repo。
-	Source string `json:"source"`
-	// PluginID 是插件 ID，规则同 manifest。
-	PluginID string `json:"plugin_id"`
-	// Version 是发布版本，SemVer 2.0。
-	Version string `json:"version"`
-	// Assets 是各平台的归档，每个平台最多一个。
-	Assets []Asset `json:"assets"`
+	PublisherKeyID string  `json:"publisher_key_id"` // 发布者公钥的 KeyID，必须与验签公钥一致
+	Source         string  `json:"source"`           // 绑定的仓库来源，例如 github.com/owner/repo
+	PluginID       string  `json:"plugin_id"`        // 插件 ID，规则同 manifest
+	Version        string  `json:"version"`          // 发布版本，SemVer 2.0
+	Assets         []Asset `json:"assets"`           // 各平台的归档，每个平台最多一个
 }
 
-// Asset 是某个 OS/arch 的归档；SHA256 是整个 tar.gz 的摘要（小写十六进制）。
+// Asset 描述某个 OS/arch 的归档；SHA256 为整个 tar.gz 的摘要（小写十六进制）。
 type Asset struct {
-	// OS 是目标 GOOS。
-	OS string `json:"os"`
-	// Arch 是目标 GOARCH。
-	Arch string `json:"arch"`
-	// URL 是归档的 https 绝对地址。
-	URL string `json:"url"`
-	// Size 是归档字节数，必须为正。
-	Size int64 `json:"size"`
-	// SHA256 是整个归档的摘要，64 位小写十六进制。
-	SHA256 string `json:"sha256"`
+	OS     string `json:"os"`     // 目标 GOOS
+	Arch   string `json:"arch"`   // 目标 GOARCH
+	URL    string `json:"url"`    // 归档的 https 绝对地址
+	Size   int64  `json:"size"`   // 归档字节数，必须为正
+	SHA256 string `json:"sha256"` // 整个归档的摘要，64 位小写十六进制
 }
 
 // sha256Hex 匹配 64 位小写十六进制的 SHA256。

@@ -1,4 +1,7 @@
-// 本文件测试受管 SQLite：PRAGMA、CRUD 与事务、外键、WAL 在线备份、versioned 账本同事务，以及 SQL 日志不含参数值。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：在真实 SQLite 上测试 PRAGMA、CRUD 与事务、外键、WAL 在线备份、versioned 账本同事务，以及 SQL 日志不含参数值。
+
 package gormdb
 
 import (
@@ -15,14 +18,11 @@ import (
 	moderncsqlite "modernc.org/sqlite"
 )
 
-// item 是测试用的 GORM 模型。
+// item 用作测试的 GORM 模型。
 type item struct {
-	// ID 是主键。
-	ID uint `gorm:"primaryKey"`
-	// Name 是名称。
-	Name string
-	// Owner 是可空的所有者 ID。
-	Owner *uint
+	ID    uint `gorm:"primaryKey"`
+	Name  string
+	Owner *uint // 可空的所有者 ID
 }
 
 // openTemp 在临时目录打开名为 name 的受管 SQLite，测试结束时关闭。

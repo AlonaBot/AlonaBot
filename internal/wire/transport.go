@@ -1,4 +1,7 @@
-// 本文件负责帧连接（TCP 与 stdio 共用）以及 Core 侧的 loopback 监听。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：TCP 与 stdio 共用的帧连接，以及 Core 侧的 loopback 监听。
+
 package wire
 
 import (
@@ -11,12 +14,10 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
-// Conn 是一条帧连接：唯一的 reader 与唯一的串行 writer。TCP 与 stdio 共用同一实现。
+// Conn 在一条连接上读写帧：只有一个 reader 和一个串行 writer，TCP 与 stdio 共用同一实现。
 type Conn struct {
-	// r 是带缓冲的读端，只由唯一的读循环使用。
-	r *bufio.Reader
-	// w 是串行写帧器，可被并发调用。
-	w *Writer
+	r *bufio.Reader // 带缓冲的读端，只由唯一的读循环使用
+	w *Writer       // 串行写帧器，可被并发调用
 	// closer 关闭底层连接；为 nil 时 Close 不做任何事。
 	closer io.Closer
 }

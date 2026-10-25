@@ -1,3 +1,7 @@
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：两种迁移方式的接口，以及它们不能同时实现的检查。
+
 // Package gormdb 提供插件受管数据库的 GORM 入口与迁移接口（CONTRACTS §6）。
 package gormdb
 
@@ -14,10 +18,9 @@ type SelfMigrator interface {
 	Migrate(ctx context.Context, db *gorm.DB) error
 }
 
-// Migration 是辅助迁移的一步；ID 非零、唯一、递增，发布后不得改作他用。
+// Migration 描述辅助迁移的一步；ID 非零、唯一、递增，发布后不得改作他用。
 type Migration struct {
-	// ID 是迁移编号，非零、唯一、递增。
-	ID uint32
+	ID uint32 // 迁移编号，非零、唯一、递增
 	// Up 在事务中执行这一步迁移。
 	Up func(context.Context, *gorm.DB) error
 }

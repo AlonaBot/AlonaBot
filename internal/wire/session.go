@@ -1,4 +1,7 @@
-// 本文件负责一条已认证连接上的双向调用引擎：调用表、准入预算、优先通道、取消因果与读写生命周期（WIRE §4）。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：已认证连接上的双向调用引擎：调用表、准入预算、优先通道、取消顺序与读写循环（WIRE §4）。
+
 package wire
 
 import (
@@ -16,38 +19,26 @@ import (
 
 // 首发固定常量（CONTRACTS §1.2）。Options 中的同名字段只供测试缩小。
 const (
-	// DefaultDeadline 是请求未指定期限时的默认期限。
-	DefaultDeadline = 30 * time.Second
-	// MaxInflightPerDir 是每 Session 每方向最多的在途业务请求数。
-	MaxInflightPerDir = 256
-	// MaxBytesPerDir 是每 Session 每方向在途与排队载荷的字节上限。
-	MaxBytesPerDir = 16 << 20
-	// GlobalPayloadBytes 是 Core 所有 Session 合计的载荷字节上限。
-	GlobalPayloadBytes = 64 << 20
-	// defaultPriorityFrames 是优先通道（Response/Cancel/控制帧）的容量。
-	defaultPriorityFrames = 1024
+	DefaultDeadline         = 30 * time.Second // 请求未指定期限时的默认期限
+	MaxInflightPerDirection = 256              // 每 Session 每方向最多的在途业务请求数
+	MaxBytesPerDirection    = 16 << 20         // 每 Session 每方向在途与排队载荷的字节上限
+	GlobalPayloadBytes      = 64 << 20         // Core 所有 Session 合计的载荷字节上限
+	defaultPriorityFrames   = 1024             // 优先通道（Response/Cancel/控制帧）的容量
 )
 
-// Payload 是一次调用或响应的业务载荷。
+// Payload 携带一次调用或响应的业务载荷。
 type Payload struct {
-	// Encoding 是 Data 的编码。
-	Encoding pb.PayloadEncoding
-	// SchemaID 是载荷契约 ID；为空表示没有载荷。
-	SchemaID string
-	// SchemaVersion 是载荷契约版本。
-	SchemaVersion uint32
-	// Data 是编码后的载荷，其长度计入准入预算。
-	Data []byte
+	Encoding      pb.PayloadEncoding // Bytes 的编码
+	SchemaID      string             // 载荷契约 ID；为空表示没有载荷
+	SchemaVersion uint32             // 载荷契约版本
+	Bytes         []byte             // 编码后的载荷，其长度计入准入预算
 }
 
-// Request 是本端发起的一次调用。
+// Request 描述本端发起的一次调用。
 type Request struct {
-	// Target 是被调用的 route/service 或 Core 服务名。
-	Target string
-	// Payload 是请求载荷。
+	Target  string // 被调用的 route/service 或 Core 服务名
 	Payload Payload
-	// TraceID 是 16 字节业务追踪 ID；没有业务上下文时为空。
-	TraceID []byte
+	TraceID []byte // 16 字节业务追踪 ID；没有业务上下文时为空
 	// Deadline 为零时使用 DefaultDeadline；最终期限还会受 ctx 与父调用约束。
 	Deadline time.Time
 	// ParentCallID 只能由插件侧设置，引用同 Session 中仍在途的 Core→插件 请求。
@@ -56,31 +47,24 @@ type Request struct {
 	Attach any
 }
 
-// Response 是一次调用的结果；Payload 与 Err 可以同时存在（例如部分发送成功）。
+// Response 携带一次调用的结果；Payload 与 Err 可以同时存在（例如部分发送成功）。
 type Response struct {
-	// Payload 是对端返回的业务结果；出错时也可能携带有效的部分结果。
-	Payload Payload
-	// Err 是对调用者公开的错误；对端发来的未知错误码已映射为 INTERNAL。
-	Err *pb.ErrorInfo
-	// RawErrorCode 是对端发来的原始错误码，只供内部诊断；与 Err.Code 不同说明发生了映射。
+	Payload Payload       // 对端返回的业务结果；出错时也可能携带有效的部分结果
+	Err     *pb.ErrorInfo // 对调用者公开的错误；对端发来的未知错误码已映射为 INTERNAL
+	// 对端发来的原始错误码，只供内部诊断；与 Err.Code 不同说明发生了映射。
 	RawErrorCode pb.ErrorCode
 }
 
-// Inbound 是对端发来的一次调用。
+// Inbound 描述对端发来的一次调用。
 type Inbound struct {
-	// CallID 是对端分配的调用编号。
-	CallID uint64
-	// Target 是被调用的 route/service 名。
-	Target string
-	// Payload 是请求载荷。
-	Payload Payload
-	// TraceID 是对端帧上的追踪 ID。
-	TraceID []byte
-	// Deadline 是有效期限，已按父调用期限收紧。
-	Deadline time.Time
-	// ParentCallID 是父调用编号；Admit 看到的是帧上声明的值，Handler 看到的是已校验在途的值，0 表示没有。
+	CallID   uint64 // 对端分配的调用编号
+	Target   string // 被调用的 route/service 名
+	Payload  Payload
+	TraceID  []byte    // 对端帧上的追踪 ID
+	Deadline time.Time // 有效期限，已按父调用期限收紧
+	// 父调用编号；Admit 看到的是帧上声明的值，Handler 看到的是已校验在途的值，0 表示没有。
 	ParentCallID uint64
-	// ParentAttach 是父调用（本端发起）的 Request.Attach；无父调用时为 nil。
+	// 父调用（本端发起）的 Request.Attach；无父调用时为 nil。
 	ParentAttach any
 }
 
@@ -88,23 +72,22 @@ type Inbound struct {
 // 返回值即响应：没有业务结果时必须返回 Err。
 type Handler func(ctx context.Context, in *Inbound) Response
 
-// CallError 是携带 ErrorInfo 的调用错误。
+// CallError 把对端或本端的 ErrorInfo 包装成 error。
 type CallError struct {
-	// Info 是调用者可见的错误。
-	Info *pb.ErrorInfo
+	ErrorInfo *pb.ErrorInfo // 调用者可见的错误
 }
 
 // Error 返回「错误码: 安全消息」。
 func (e *CallError) Error() string {
-	return fmt.Sprintf("%s: %s", e.Info.GetCode(), e.Info.GetSafeMessage())
+	return fmt.Sprintf("%s: %s", e.ErrorInfo.GetCode(), e.ErrorInfo.GetSafeMessage())
 }
 
 // Code 返回错误码。
-func (e *CallError) Code() pb.ErrorCode { return e.Info.GetCode() }
+func (e *CallError) Code() pb.ErrorCode { return e.ErrorInfo.GetCode() }
 
 // callErr 构造本地产生的调用错误。
 func callErr(code pb.ErrorCode, msg string) *CallError {
-	return &CallError{Info: &pb.ErrorInfo{Code: code, SafeMessage: msg}}
+	return &CallError{ErrorInfo: &pb.ErrorInfo{Code: code, SafeMessage: msg}}
 }
 
 // CodeOf 返回 err 中的协议错误码；不是 *CallError 时返回 UNSPECIFIED。
@@ -118,13 +101,10 @@ func CodeOf(err error) pb.ErrorCode {
 
 // Options 配置一个 Session。
 type Options struct {
-	// Local 是本端身份（CORE 或 PLUGIN）。
-	Local pb.InitiatorSide
-	// SessionID 是握手分配的 16 字节 Session ID。
-	SessionID []byte
-	// ProtocolMinor 是协商出的协议次版本，写入发出的帧并核对收到的帧。
-	ProtocolMinor uint32
-	// SourcePluginID 是插件的认证 ID：Local 为 PLUGIN 时写入发出的帧，Local 为 CORE 时用来核对对端帧。
+	Local         pb.InitiatorSide // 本端身份（CORE 或 PLUGIN）
+	SessionID     []byte           // 握手分配的 16 字节 Session ID
+	ProtocolMinor uint32           // 协商出的协议次版本，写入发出的帧并核对收到的帧
+	// 插件的认证 ID：Local 为 PLUGIN 时写入发出的帧，Local 为 CORE 时用来核对对端帧。
 	SourcePluginID string
 	// Handler 处理对端的业务 REQUEST；为 nil 时回复 UNSUPPORTED。
 	Handler Handler
@@ -132,9 +112,8 @@ type Options struct {
 	Control func(*pb.Envelope) error
 	// Admit 在读循环中同步决定是否接受对端的业务 REQUEST（阶段门禁）；返回非 nil 时直接回该错误，不执行 Handler。
 	// 必须在读循环中同步判断：状态变化（如 ACTIVATED）也在读循环中同步生效，帧顺序因此得到保证。
-	Admit func(*Inbound) *pb.ErrorInfo
-	// Global 是跨 Session 共享的全局预算；为 nil 时不限额（插件侧）。
-	Global *Budget
+	Admit  func(*Inbound) *pb.ErrorInfo
+	Global *Budget // 跨 Session 共享的全局预算；为 nil 时不限额（插件侧）
 
 	// 以下为零时使用首发常量，只供测试缩小。
 
@@ -148,15 +127,13 @@ type Options struct {
 	DefaultDeadline time.Duration
 }
 
-// Stats 是可观测的计数。
+// Stats 汇总 Session 的可观测计数。
 type Stats struct {
-	// LateResponses 是迟到、重复或未知的 Response 数。
-	LateResponses int64
-	// UnknownCancels 是找不到对应在途调用的 Cancel 数。
-	UnknownCancels int64
+	LateResponses  int64 // 迟到、重复或未知的 Response 数
+	UnknownCancels int64 // 找不到对应在途调用的 Cancel 数
 }
 
-// callState 是本端请求在写出方向上的状态，只前进不回退。
+// callState 表示本端请求在写出方向上的进度，只前进不回退。
 type callState int
 
 // 请求的写出状态。
@@ -167,15 +144,13 @@ const (
 	withdrawn                  // 写出前被结束，已移出队列，永不上线
 )
 
-// outCall 是本端发起、尚未完成的一次调用。
+// outCall 跟踪本端发起、尚未完成的一次调用。
 type outCall struct {
-	// id 是本端分配的调用编号。
-	id uint64
-	// env 是待写出的 REQUEST，由 Session.mu 保护；移出队列或写出后置 nil，不再持有载荷。
-	env *pb.Envelope
-	// deadline 是有效期限，子调用不能超过它。
-	deadline time.Time
-	// attach 是 Request.Attach，交给以本调用为父的子请求的 Handler。
+	id uint64 // 本端分配的调用编号
+	// 待写出的 REQUEST，由 Session.mu 保护；移出队列或写出后置 nil，不再持有载荷。
+	env      *pb.Envelope
+	deadline time.Time // 有效期限，子调用不能超过它
+	// Request.Attach，交给以本调用为父的子请求的 Handler。
 	attach any
 	// result 容量 1，只写一次。
 	result chan Response
@@ -187,68 +162,53 @@ type outCall struct {
 
 	// 以下字段由 Session.mu 保护。
 
-	// bytes 是仍计入本方向与全局预算的载荷字节；归还后为 0，保证只归还一次。
-	bytes int64
-	// state 是写出状态。
+	bytes int64 // 仍计入本方向与全局预算的载荷字节；归还后为 0，保证只归还一次
 	state callState
 	// finished 为 true 表示调用方已得到结果（已移出 pending）。
 	finished bool
-	// cancelReason 是写出过程中被本端放弃时，写完后发送 Cancel 的原因；UNSPECIFIED 表示不发。
+	// 写出过程中被本端放弃时，写完后发送 Cancel 的原因；UNSPECIFIED 表示不发。
 	cancelReason pb.CancelReason
 }
 
-// prioFrame 是优先通道中的一帧；written 非 nil 时在写出完成后收到写结果。
-type prioFrame struct {
-	// env 是要写出的帧。
+// priorityFrame 承载优先通道中的一帧；written 非 nil 时在写出完成后收到写结果。
+type priorityFrame struct {
 	env *pb.Envelope
 	// written 为 nil 时不通知写结果；否则容量 1，收到一次写结果。
 	written chan error
 }
 
-// inCall 是对端发起、尚未响应的一次调用。
+// inCall 跟踪对端发起、尚未响应的一次调用。
 type inCall struct {
-	// bytes 是请求载荷字节数，响应时归还。
-	bytes int64
-	// deadline 是有效期限，用于约束本端发起的子请求。
-	deadline time.Time
+	bytes    int64     // 请求载荷字节数，响应时归还
+	deadline time.Time // 有效期限，用于约束本端发起的子请求
 	// cancel 取消 Handler 的 ctx（对端 Cancel 或 Session 关闭时）。
 	cancel context.CancelFunc
 }
 
-// Session 是一条已认证连接上的双向调用引擎。
+// Session 在一条已认证连接上收发双向调用。
 type Session struct {
-	// conn 是底层帧连接。
 	conn *Conn
-	// opt 是已补齐默认值的配置，创建后不变。
-	opt Options
-	// peer 是对端身份，由 opt.Local 推出。
-	peer pb.InitiatorSide
+	opt  Options          // 已补齐默认值的配置，创建后不变
+	peer pb.InitiatorSide // 对端身份，由 opt.Local 推出
 
-	// prio 是优先通道：Response、Cancel 与控制帧，总是先于业务 Request 写出。
-	prio chan prioFrame
+	// 优先通道：Response、Cancel 与控制帧，总是先于业务 Request 写出。
+	priority chan priorityFrame
 	// bizSig 容量 1，有新业务 Request 入队时唤醒 writer。
 	bizSig chan struct{}
 	// done 在 Session 关闭时关闭。
 	done chan struct{}
 
 	// mu 保护以下字段以及各 outCall 中标明由它保护的字段。
-	mu sync.Mutex
-	// nextID 是本端最近分配的调用编号。
-	nextID uint64
-	// lastIn 是对端最近的调用编号，用于检查单调递增。
-	lastIn uint64
-	// biz 是等待写出的业务 Request，按入队顺序排列，只含 queued 状态的调用。
-	biz []*outCall
-	// pending 是本端发起、尚未完成的调用。
-	pending map[uint64]*outCall
-	// inbound 是对端发起、尚未响应的调用。
-	inbound map[uint64]*inCall
-	// outBytes 是本方向仍计入预算的载荷字节。
-	outBytes int64
-	// inBytes 是对端方向在途的载荷字节。
-	inBytes int64
-	// err 是关闭原因；非 nil 表示 Session 已关闭。
-	err error
+	mu     sync.Mutex
+	nextID uint64 // 本端最近分配的调用编号
+	lastIn uint64 // 对端最近的调用编号，用于检查单调递增
+	// 等待写出的业务 Request，按入队顺序排列，只含 queued 状态的调用。
+	biz      []*outCall
+	pending  map[uint64]*outCall // 本端发起、尚未完成的调用
+	inbound  map[uint64]*inCall  // 对端发起、尚未响应的调用
+	outBytes int64               // 本方向仍计入预算的载荷字节
+	inBytes  int64               // 对端方向在途的载荷字节
+	err      error               // 关闭原因；非 nil 表示 Session 已关闭
 	// changed 在在途调用数变化时关闭并替换，唤醒 WaitIdle。
 	changed chan struct{}
 
@@ -271,10 +231,10 @@ func NewSession(conn *Conn, opt Options) *Session {
 // 避免第一帧在赋值之前就被处理。
 func New(conn *Conn, opt Options) *Session {
 	if opt.MaxInflight == 0 {
-		opt.MaxInflight = MaxInflightPerDir
+		opt.MaxInflight = MaxInflightPerDirection
 	}
 	if opt.MaxBytes == 0 {
-		opt.MaxBytes = MaxBytesPerDir
+		opt.MaxBytes = MaxBytesPerDirection
 	}
 	if opt.PriorityFrames == 0 {
 		opt.PriorityFrames = defaultPriorityFrames
@@ -288,12 +248,12 @@ func New(conn *Conn, opt Options) *Session {
 	}
 	s := &Session{
 		conn: conn, opt: opt, peer: peer,
-		prio:    make(chan prioFrame, opt.PriorityFrames),
-		bizSig:  make(chan struct{}, 1),
-		done:    make(chan struct{}),
-		pending: map[uint64]*outCall{},
-		inbound: map[uint64]*inCall{},
-		changed: make(chan struct{}),
+		priority: make(chan priorityFrame, opt.PriorityFrames),
+		bizSig:   make(chan struct{}, 1),
+		done:     make(chan struct{}),
+		pending:  map[uint64]*outCall{},
+		inbound:  map[uint64]*inCall{},
+		changed:  make(chan struct{}),
 	}
 	return s
 }
@@ -339,7 +299,7 @@ func (s *Session) envelope(kind pb.FrameKind) *pb.Envelope {
 
 // setPayload 把业务载荷写入帧。
 func setPayload(env *pb.Envelope, p Payload) {
-	env.PayloadEncoding, env.SchemaId, env.SchemaVersion, env.Payload = p.Encoding, p.SchemaID, p.SchemaVersion, p.Data
+	env.PayloadEncoding, env.SchemaId, env.SchemaVersion, env.Payload = p.Encoding, p.SchemaID, p.SchemaVersion, p.Bytes
 }
 
 // ControlEnvelope 构造控制帧（以及 Core 固定载荷）的 Envelope：PROTOBUF 编码、确定性序列化、
@@ -369,7 +329,7 @@ func (s *Session) SendControl(kind pb.FrameKind, msg proto.Message) error {
 	if err != nil {
 		return err
 	}
-	return s.enqueuePrio(env)
+	return s.enqueuePriority(env)
 }
 
 // SendControlSync 发出控制帧并等待唯一 writer 把它完整写出（例如 ACTIVATED 写完后才打开 ready gate）。
@@ -384,7 +344,7 @@ func (s *Session) SendControlSync(kind pb.FrameKind, msg proto.Message) error {
 // SendEnvelopeSync 经优先通道发出调用方构造好的控制帧（例如带 ErrorInfo 的 SESSION_ERROR）并等待写出。
 func (s *Session) SendEnvelopeSync(env *pb.Envelope) error {
 	written := make(chan error, 1)
-	if err := s.enqueuePrioFrame(prioFrame{env: env, written: written}); err != nil {
+	if err := s.enqueuePriorityFrame(priorityFrame{env: env, written: written}); err != nil {
 		return err
 	}
 	select {
@@ -395,18 +355,20 @@ func (s *Session) SendEnvelopeSync(env *pb.Envelope) error {
 	}
 }
 
-// enqueuePrio 把帧放入有界优先通道；放不进说明连控制通道都无法推进，关闭 Session（CONTRACTS §1.2）。
-func (s *Session) enqueuePrio(env *pb.Envelope) error { return s.enqueuePrioFrame(prioFrame{env: env}) }
+// enqueuePriority 把帧放入有界优先通道；放不进说明连控制通道都无法推进，关闭 Session（CONTRACTS §1.2）。
+func (s *Session) enqueuePriority(env *pb.Envelope) error {
+	return s.enqueuePriorityFrame(priorityFrame{env: env})
+}
 
-// enqueuePrioFrame 是 enqueuePrio 的实现，可携带写结果通知。
-func (s *Session) enqueuePrioFrame(f prioFrame) error {
+// enqueuePriorityFrame 把一帧放入优先通道，可携带写结果通知。
+func (s *Session) enqueuePriorityFrame(f priorityFrame) error {
 	select {
 	case <-s.done:
 		return callErr(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "Session 已关闭")
 	default:
 	}
 	select {
-	case s.prio <- f:
+	case s.priority <- f:
 		return nil
 	default:
 		err := errors.New("优先通道已满，控制/响应无法推进")
@@ -419,7 +381,7 @@ func (s *Session) enqueuePrioFrame(f prioFrame) error {
 // 本地期限或取消先结束调用并返回，再尽力通知对端；已发出的副作用不会撤销，也不自动重试。
 func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 	// 1. 有效期限取请求期限（或默认期限）与 ctx 期限中较早者。
-	n := int64(len(req.Payload.Data))
+	n := int64(len(req.Payload.Bytes))
 	deadline := req.Deadline
 	if deadline.IsZero() {
 		deadline = time.Now().Add(s.opt.DefaultDeadline)
@@ -495,7 +457,7 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 // errorOf 把结果中的错误转为 *CallError；没有错误时返回 nil。
 func errorOf(r Response) error {
 	if r.Err != nil {
-		return &CallError{Info: r.Err}
+		return &CallError{ErrorInfo: r.Err}
 	}
 	return nil
 }
@@ -560,7 +522,7 @@ func (s *Session) sendCancel(id uint64, reason pb.CancelReason) {
 		return
 	}
 	env.InitiatorSide, env.CallId = s.opt.Local, id
-	_ = s.enqueuePrio(env)
+	_ = s.enqueuePriority(env)
 }
 
 // complete 只完成一次调用：移出在途表、取消其 ctx（连带取消以它为父的子调用）并交付结果。
@@ -642,12 +604,12 @@ func (s *Session) popBiz() (*outCall, *pb.Envelope) {
 	return c, c.env
 }
 
-// writeLoop 是唯一的写者：优先通道（Response/Cancel/控制）总是先于业务 Request。
+// writeLoop 作为唯一的写者运行：优先通道（Response/Cancel/控制）总是先于业务 Request 写出。
 func (s *Session) writeLoop() {
 	for {
 		select {
-		case f := <-s.prio:
-			s.writePrio(f)
+		case f := <-s.priority:
+			s.writePriority(f)
 			continue
 		case <-s.done:
 			return
@@ -658,8 +620,8 @@ func (s *Session) writeLoop() {
 			continue
 		}
 		select {
-		case f := <-s.prio:
-			s.writePrio(f)
+		case f := <-s.priority:
+			s.writePriority(f)
 		case <-s.bizSig:
 		case <-s.done:
 			return
@@ -676,8 +638,8 @@ func (s *Session) write(env *pb.Envelope) error {
 	return err
 }
 
-// writePrio 写出优先通道的一帧，并按需通知写结果。
-func (s *Session) writePrio(f prioFrame) {
+// writePriority 写出优先通道的一帧，并按需通知写结果。
+func (s *Session) writePriority(f priorityFrame) {
 	err := s.write(f.env)
 	if f.written != nil {
 		f.written <- err
@@ -700,7 +662,7 @@ func (s *Session) writeRequest(c *outCall, env *pb.Envelope) {
 	}
 }
 
-// readLoop 是唯一的读者：调用帧与 Handler 执行分离，控制帧同步交给 Options.Control。
+// readLoop 作为唯一的读者运行：调用帧与 Handler 执行分离，控制帧同步交给 Options.Control。
 func (s *Session) readLoop() {
 	for {
 		env, err := s.conn.ReadFrame()
@@ -820,7 +782,7 @@ func (s *Session) serve(ctx context.Context, cancel context.CancelFunc, in *Inbo
 	env := s.envelope(pb.FrameKind_FRAME_KIND_RESPONSE)
 	env.InitiatorSide, env.CallId, env.Error = s.peer, in.CallID, r.Err
 	setPayload(env, r.Payload)
-	_ = s.enqueuePrio(env)
+	_ = s.enqueuePriority(env)
 }
 
 // handle 调用 Handler；panic 转为 INTERNAL，不当作空成功（CONTRACTS §2.1）。
@@ -841,7 +803,7 @@ func (s *Session) respondErr(id uint64, code pb.ErrorCode, msg string) error {
 	env := s.envelope(pb.FrameKind_FRAME_KIND_RESPONSE)
 	env.InitiatorSide, env.CallId = s.peer, id
 	env.Error = &pb.ErrorInfo{Code: code, SafeMessage: msg}
-	return s.enqueuePrio(env)
+	return s.enqueuePriority(env)
 }
 
 // onResponse 用 RESPONSE 完成对应的本端调用；迟到、重复或未知的响应只计数。

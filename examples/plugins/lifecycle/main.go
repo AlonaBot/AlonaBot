@@ -1,6 +1,7 @@
-// lifecycle 是可以真实运行的最小插件：由 Core 启动，走完 Hello → Bootstrap → REGISTER →
-// PREPARED → ACTIVATE/OnReady → ACTIVATED → STOPPING/OnStop → 退出。日志只写 stderr
-// （stdio 传输时 stdout 专用于协议帧）。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：可以真实运行的最小插件：由 Core 启动后走完 HELLO、REGISTER、ACTIVATE、STOPPING 的完整生命周期。日志只写 stderr，stdio 传输时 stdout 专用于协议帧。
+
 package main
 
 import (
@@ -13,7 +14,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
 
-// Lifecycle 是根插件，在每个生命周期 Hook 里向 stderr 打印一行。
+// Lifecycle 在每个生命周期 Hook 里向 stderr 打印一行。
 type Lifecycle struct {
 	// Base 提供根插件的默认实现。
 	plugin.Base

@@ -1,6 +1,9 @@
 //go:build linux
 
-// 本文件测试 Core 作为 subreaper（容器中作为 PID 1 时同理）时，KillTree 会回收过继来的孙进程僵尸，不会无限等待。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：测试 Core 作为 subreaper（或容器里的 PID 1）时，KillTree 会回收过继来的孙进程僵尸，不会无限等待。
+
 package process
 
 import (

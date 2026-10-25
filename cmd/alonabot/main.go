@@ -1,5 +1,7 @@
-// alonabot 是 Core 的命令行入口。目前只提供开发用的 run：在给定 data_dir 中启动单个本地插件，
-// 收到 SIGINT/SIGTERM 时停止；尚无正式的安装与管理 CLI。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：alonabot 命令行入口。目前只有开发用的 run：在给定 data_dir 中启动一个本地插件，收到 SIGINT/SIGTERM 时停止，异常退出按有限重启策略处理。
+
 package main
 
 import (
@@ -84,7 +86,7 @@ func run(dataDir, pluginID, entry string, stdio bool) error {
 		if err != nil {
 			return err
 		}
-		// exit 是一次 WaitExit 的结果。
+		// exit 记录一次 WaitExit 的结果。
 		type exit struct {
 			// abnormal 为 true 表示未经 Stop 且退出码非 0。
 			abnormal bool

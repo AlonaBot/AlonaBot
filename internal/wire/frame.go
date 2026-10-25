@@ -1,6 +1,10 @@
-// Package wire 是 Core 与 SDK 共用的协议运行时：帧编解码、传输与 Session 调用引擎。
-// 帧格式见 spec/WIRE-FORMAT.md §1：uint32 big-endian 载荷长度（不含前缀）+ Protobuf Envelope，
-// 长度合法范围 1～4,194,304 字节；TCP 与 stdio 使用完全相同的编码。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：帧的编码与读取，检查 1～4 MiB 的长度范围。
+
+// Package wire 实现 Core 与 SDK 共用的协议运行时：帧编解码、传输与 Session 调用引擎。
+// 帧格式见 WIRE-FORMAT §1：4 字节 big-endian 载荷长度（不含前缀）加 Protobuf Envelope，
+// 长度范围 1～4,194,304 字节；TCP 与 stdio 使用相同的编码。
 package wire
 
 import (
@@ -14,7 +18,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// MaxFrame 是单帧载荷（Envelope 编码后）的最大字节数。
+// MaxFrame 限制单帧载荷（Envelope 编码后）的字节数。
 const MaxFrame = 4 << 20
 
 var (
@@ -88,8 +92,7 @@ func EncodeFrame(env *pb.Envelope) ([]byte, error) {
 type Writer struct {
 	// mu 在整帧写出期间独占写端。
 	mu sync.Mutex
-	// w 是底层连接的写端。
-	w io.Writer
+	w  io.Writer // 底层连接的写端
 }
 
 // NewWriter 包装底层连接的写端；每个连接只应有一个 Writer。

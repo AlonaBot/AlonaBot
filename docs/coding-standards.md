@@ -28,7 +28,7 @@
 
 - 新概念先在 spec 中确定名字，再进入代码。同一个概念在全项目只用一个名字，不混用同义词。
 - 不用含糊的通用词做名字或后缀：`Kind`、`Type`（作为万能区分字段时）、`Info`、`Data`、`Item`、`Object`、`Manager`、`Helper`、`Util`、`Common`、`Misc`、`Impl`。改用说明具体角色的词，例如 `Phase`、`Mode`、`Source`、`Status`、`Registry`、`Store`。
-- 不用缩写，`Deps`、`Cfg`、`Mgr`、`Svc`、`Msg`、`Req`、`Resp`、`Tmp`、`Val` 都写完整单词。Go 惯例的短名不受此限：局部的 `ctx`、`err`、`ok`、`i`，以及一两个字母的方法接收者。`ID`、`URL`、`HTTP` 等首字母缩写词保持全大写。
+- 不用缩写，`Deps`、`Cfg`、`Mgr`、`Svc`、`Msg`、`Req`、`Resp`、`Tmp`、`Val` 都写完整单词。Go 惯例的短名不受此限：只在几行内使用的局部变量（如 `ctx`、`err`、`ok`、`i`、`n`、`msg`、`req`、`env`），以及一两个字母的方法接收者。字段、导出符号和作用域较大的变量仍写完整单词。`ID`、`URL`、`HTTP` 等首字母缩写词保持全大写。
 - 包名用简短的小写名词，不用 `util`、`common`、`base`、`types` 这类包名。
 - 协议生成的名字（如 `pb.FrameKind`、`pb.RouteKind`）以 WIRE-FORMAT 为准，不在 Go 代码里另起别名；新写的 Go 类型不再沿用这种 `Kind` 后缀。
 

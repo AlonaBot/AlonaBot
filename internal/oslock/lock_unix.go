@@ -1,6 +1,9 @@
 //go:build unix
 
-// 本文件用 flock 实现 Linux/macOS 上的独占文件锁。
+// 维护者：FlanChanXwO
+// 创建日期：2026-10-21
+// 职责：用 flock 实现 Linux/macOS 上的独占文件锁。
+
 package oslock
 
 import (
