@@ -11,10 +11,9 @@
 | [AGENTS.md](../AGENTS.md) | 项目维护技能与规格的按任务路由 | Agent 工作入口 |
 | [goals.md](../goals.md) | 可派发的切片 goal 语句与状态 | 派发入口 |
 | [execution-order.md](execution-order.md) | 并行派发、共享文件与合并顺序 | 并行约束 |
-| `goal-N/` | 切片执行记录：切片卡（input/plan/tasks）和每个 task 的证据；切片 PR 合并后进入 main | 执行进度 |
 
 按任务找文档：
 
 - 修改协议、消息或生命周期行为：先读对应的 spec 文件；改动契约时同步 PLAN、TEST-MATRIX，并在 ADR 中记录原因。
 - 新增包或新的跨包 import：读 ARCHITECTURE.md，必要时先更新依赖表。
-- 记录验收证据：按 TEST-MATRIX §3 的字段，写进当前 goal 的 tasks.md。
+- 记录验收证据：按 TEST-MATRIX §3 的字段，写进当前 goal 本地的 tasks.md；`goal-*/` 不入库，最终证据落在 PR 正文。

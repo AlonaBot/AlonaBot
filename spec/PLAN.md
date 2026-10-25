@@ -12,7 +12,7 @@
 
 首发目标为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64。每插件一个 Native 子进程，TCP 默认、stdio 可选；框架托管 HTTP 只开放 Core 的一个公开端口。动态跨插件命令 Router、其他正式 Adapter、Agent、多语言 SDK、多轮会话 DSL 和额外客户端沿既定范围后置。
 
-当前项目已有 `spec/` 和独立的 `experiments/ogre-dna/`，尚无正式 Core/SDK。实验不作为下述任务的实现或验收依据。
+当前项目已有 `spec/`，尚无正式 Core/SDK。
 
 ## 2. 实施目录和工作流
 
@@ -584,7 +584,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 
 #### 拟涉及目录
 
-复用各包测试、`examples/plugins/` 和构建/发布脚本；结果按 [TEST-MATRIX.md](TEST-MATRIX.md) 的证据字段记录，链接到实际测试位置与报告。发布资产目录和 CI 配置在实施时建立，`experiments/ogre-dna/` 不参与产品通过判定。
+复用各包测试、`examples/plugins/` 和构建/发布脚本；结果按 [TEST-MATRIX.md](TEST-MATRIX.md) 的证据字段记录，链接到实际测试位置与报告。发布资产目录和 CI 配置在实施时建立。
 
 #### 按顺序实施
 

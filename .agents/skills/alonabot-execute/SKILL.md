@@ -9,10 +9,10 @@ description: 执行者按 goals.md 中的 goal 语句推进 AlonaBot 切片时�
 
 ## 开始前
 
-1. 从最新的 `origin/main` 创建 `.worktrees/goal-N` 和分支 `goal-N`，N 用 goal 语句指定的编号，不按 goal-mode 的默认规则自选。
+1. 从最新的 `origin/main` 创建 `.worktrees/goal-N` 和分支 `goal-N`，N 用 goal 语句指定的编号，不按 goal-mode 的默认规则自选。切片卡写在 worktree 的 `goal-N/`，该目录已被 `.gitignore` 忽略。
 2. 完整读取 goals.md「所有 goal 的共同约束」、根 [AGENTS.md](../../../AGENTS.md)、[编码规范](../../../docs/coding-standards.md)、执行顺序，以及 goal 语句「依据」列出的规格小节。实现时按 [开发技能](../alonabot-develop/SKILL.md)、[测试技能](../alonabot-test/SKILL.md) 和 [注释技能](../alonabot-code-commenting/SKILL.md) 执行。
 3. goal-mode 第一轮只做初始化：
-   - `goal-N/input.md` 原样保存整段 goal 语句。
+   - `goal-N/input.md` 原样保存整段 goal 语句。`goal-*/` 已被 git 忽略，切片卡和回写区只留在本地，不要提交。
    - `plan.md` 和 `tasks.md` 按下文「切片卡格式」编写。语句中的每个接口、行为要点和测试都要落到某个 task 上，不增加也不删减范围。
 
 ## 每一轮只做一个 task
@@ -22,7 +22,7 @@ description: 执行者按 goals.md 中的 goal 语句推进 AlonaBot 切片时�
 3. 「测试」中列为「提交」的集成测试必须写出并通过；列为「本地自测」的写在 `*_local_test.go`，跑通后不提交，在回写区记下名字和结果。
 4. 运行「完成条件」中的命令，结果必须与预期一致。改了 `.proto` 时运行 `go generate ./...`，并确认没有额外 diff。
 5. 每个 task 一个 commit，message 用简体中文写明做了什么，并带上 task 编号。代码注释和错误消息里不写 task、goal 或 T 编号。
-6. 回写 tasks.md：实际做了什么、验证证据（命令、结果、commit）、剩余风险、下一步。把它和代码放在同一个 commit 里。
+6. 回写 tasks.md：实际做了什么、验证证据（命令、结果、commit）、剩余风险、下一步。该文件被 git 忽略，只改本地，不放进 commit。
 
 REVIEW task 要按 goal-mode 的集中检查清单复查前面几个 task，发现的问题登记为 FIX-n。
 
@@ -47,8 +47,8 @@ REVIEW task 要按 goal-mode 的集中检查清单复查前面几个 task，发�
 ## 交付和处理审查意见
 
 1. 所有 task 都已完成（`[x]`）或已标阻塞（`[!]`）后，在 goal 分支上运行 plan.md「验证方式」中的全部命令。
-2. 推送 `goal-N`，按 [PR 模板](../../../.github/PULL_REQUEST_TEMPLATE.md) 开 PR 到 `main`。标题写成「切片 ID + 中文标题」，正文列出每个 task 的结果、验证证据、未运行的项和阻塞项，并加一节「文档同步」，写明需要审查者同步到 ARCHITECTURE、README 或 spec 的内容。有阻塞时开草稿 PR。无法创建 PR 时，只推送分支，并在 tasks.md 末尾说明原因。
-3. 审查者通过 PR review 提出修改要求。每条意见在 tasks.md 末尾登记一个 FIX-n，一轮处理一个，之后推送普通 commit，并在 PR 中回复对应的 commit SHA。不同意某条意见时，在 PR 中附上证据回复，留给审查者决定。
+2. 推送 `goal-N`，按 [PR 模板](../../../.github/PULL_REQUEST_TEMPLATE.md) 开 PR 到 `main`。标题写成「切片 ID + 中文标题」，正文列出每个 task 的结果、验证证据、未运行的项和阻塞项，并加一节「文档同步」，写明需要审查者同步到 ARCHITECTURE、README 或 spec 的内容。有阻塞时开草稿 PR。无法创建 PR 时，只推送分支，并在 PR 描述里说明原因；`goal-N/` 的切片卡不进仓库，PR 正文就是唯一的执行记录。
+3. 审查者通过 PR review 提出修改要求。每条意见在本地 tasks.md 末尾登记一个 FIX-n，一轮处理一个，之后推送普通 commit，并在 PR 中回复对应的 commit SHA。不同意某条意见时，在 PR 中附上证据回复，留给审查者决定。
 
 维护者把 goals.md 中该 goal 的整段语句原样发给执行者，以此启动切片。
 
