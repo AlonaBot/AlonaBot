@@ -24,6 +24,7 @@
 
 ## 项目约定
 
+- Go 代码遵循 [Google Go Style Guide](https://google.github.io/styleguide/go/)（Guide、Decisions、Best Practices；可用时加载 `go-google-style-guide`、`go-google-style-decisions`、`go-google-best-practices` 技能），项目自己的命名、文件头、注释和测试提交规则见 [编码规范](docs/coding-standards.md)，两者冲突时以编码规范为准。
 - 代码注释、commit message、文档一律用简体中文；标识符和协议名保留英文。
 - 依赖只用 docs/development.md 中列出的已批准清单；需要新依赖时先停下来征求维护者同意。
 - 生成代码只改源文件（`.proto`、生成器），然后重新运行 `go generate ./...`，不手改生成产物。
