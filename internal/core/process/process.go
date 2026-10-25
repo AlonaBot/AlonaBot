@@ -6,6 +6,11 @@
 //
 // 这是对合作型子进程的管理：它不能阻止恶意进程脱离进程组，也不是安全沙箱。
 // 规则见 spec/CONTRACTS-v0.1.md §7.1 与 §12.2。
+//
+// 包的组成：
+//   - [Start] 按 [Spec] 启动进程，返回 [Process]；[Process.KillTree] 与 [Process.WaitTree] 结束并确认整棵进程树。
+//   - [NewSecret] 生成 Session Secret，[Entrypoint] 解析包内的入口路径，[LockRuntime] 临时持有插件的 runtime.lock。
+//   - 进程树在 Unix 与 Windows 上的实现分别在 tree_unix.go 与 tree_windows.go。
 package process
 
 import (

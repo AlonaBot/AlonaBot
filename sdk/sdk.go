@@ -5,6 +5,12 @@
 // 根插件可以按需实现 Starter、Readier、Stopper 等生命周期接口。
 //
 // 业务分发、Send、HTTP 路由与定时任务尚未实现；它们返回 UNSUPPORTED 错误，不会 panic，也不会假装成功。
+//
+// 包的组成：
+//   - [Run] 是插件 main 的入口；[Collect] 单独收集注册项，供检查与测试使用。
+//   - [CommandRegistry]、[HTTPRegistry] 与 [ScheduleRegistry] 收集命令、HTTP 路由和定时任务。
+//   - [Context] 只在一次 Handler 调用期间有效，提供 [Context.Send] 与 [Context.StopPropagation]。
+//   - [Starter]、[Readier]、[Stopper] 是根插件可选实现的生命周期接口。
 package sdk
 
 import (

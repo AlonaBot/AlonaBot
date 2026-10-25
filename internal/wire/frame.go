@@ -6,6 +6,14 @@
 // Session 在一条已认证的连接上同时收发双向调用：按调用编号配对请求与响应，
 // 执行每方向与全局的准入预算，并让响应、取消和控制帧走优先通道，不被普通请求阻塞。
 // 调用与取消的规则见 spec/WIRE-FORMAT.md §4。
+//
+// 包的组成：
+//   - [EncodeFrame]、[ReadFrame] 与 [Writer] 负责单帧的编码、读取和串行写出。
+//   - [Conn] 把读写两端组合成一条帧连接，TCP 与 stdio 共用；[ListenLoopback] 为 Core 创建 TCP 监听。
+//   - [Session] 在 [Conn] 上收发调用，使用 [Request]、[Response]、[Inbound] 与 [Handler] 描述调用两端。
+//   - [Budget] 限制所有 Session 合计的在途载荷字节。
+//   - [CheckPeer] 核对认证之后每一帧的会话身份与协商版本。
+//   - Env 开头的常量是 Core 启动插件时传递的环境变量名。
 package wire
 
 import (

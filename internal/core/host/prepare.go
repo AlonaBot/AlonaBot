@@ -6,6 +6,11 @@
 //
 // 本包不启动进程，也不持久化状态；这些由 internal/core/process、internal/core/state 和
 // internal/core/supervisor 负责。
+//
+// 包的组成：
+//   - [Prepare] 完成握手与准备阶段，返回 [Prepared]；阶段预算由 [Limits] 给出，失败时返回 [PhaseError]。
+//   - [Activate] 提交代次并完成激活，返回跟踪实例状态的 [Instance]。
+//   - [Instance.Stop] 与 [StopAll] 按 [StopTiming] 停止实例；[RestartPolicy] 决定进程退出后是否重启。
 package host
 
 import (
