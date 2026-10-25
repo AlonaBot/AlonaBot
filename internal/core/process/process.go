@@ -61,10 +61,10 @@ func Entrypoint(installDir, rel string) (string, error) {
 		return "", err
 	}
 	if !fi.Mode().IsRegular() {
-		return "", fmt.Errorf("entrypoint %s 不是普通文件", p)
+		return "", fmt.Errorf("entrypoint %s is not a regular file", p)
 	}
 	if runtime.GOOS != "windows" && fi.Mode().Perm()&0o111 == 0 {
-		return "", fmt.Errorf("entrypoint %s 不可执行", p)
+		return "", fmt.Errorf("entrypoint %s is not executable", p)
 	}
 	return p, nil
 }
@@ -175,7 +175,7 @@ func Start(spec Spec, logf LogFunc) (*Process, error) {
 	if err := cmd.Start(); err != nil {
 		closeAll(parentEnds)
 		closeAll(childEnds)
-		return nil, fmt.Errorf("启动插件 %s 失败: %w", spec.PluginID, err)
+		return nil, fmt.Errorf("start plugin %s: %w", spec.PluginID, err)
 	}
 	closeAll(childEnds) // 子进程已持有各自的副本
 	t, err := attachTree(cmd)
@@ -183,7 +183,7 @@ func Start(spec Spec, logf LogFunc) (*Process, error) {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 		closeAll(parentEnds)
-		return nil, fmt.Errorf("建立插件 %s 的进程树管理失败: %w", spec.PluginID, err)
+		return nil, fmt.Errorf("set up process tree management for plugin %s: %w", spec.PluginID, err)
 	}
 	p.tree = t
 

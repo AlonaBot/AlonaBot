@@ -70,7 +70,7 @@ func ListenLoopback() (net.Listener, error) {
 	}
 	if a, ok := ln.Addr().(*net.TCPAddr); !ok || !a.IP.IsLoopback() || a.Port == 0 {
 		_ = ln.Close()
-		return nil, errors.New("Listener 未绑定到 loopback 的非零端口")
+		return nil, errors.New("listener is not bound to a non-zero loopback port")
 	}
 	return ln, nil
 }

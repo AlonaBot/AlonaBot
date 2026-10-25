@@ -33,14 +33,14 @@ const (
 // main 解析 run 子命令的参数并运行；参数错误以 exitUsage 退出，运行失败以 exitFailure 退出。
 func main() {
 	if len(os.Args) < 2 || os.Args[1] != "run" {
-		fmt.Fprintln(os.Stderr, "用法: alonabot run --data-dir DIR --plugin-id ID --entry PATH [--stdio]")
+		fmt.Fprintln(os.Stderr, "usage: alonabot run --data-dir DIR --plugin-id ID --entry PATH [--stdio]")
 		os.Exit(exitUsage)
 	}
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
-	dataDir := fs.String("data-dir", "", "Core 数据目录（同一目录只能有一个 Core）")
-	pluginID := fs.String("plugin-id", "", "插件 ID")
-	entry := fs.String("entry", "", "插件可执行文件路径（开发模式：本地构建产物）")
-	stdio := fs.Bool("stdio", false, "使用 stdio 传输（默认 TCP loopback）")
+	dataDir := fs.String("data-dir", "", "Core data directory (only one Core per directory)")
+	pluginID := fs.String("plugin-id", "", "plugin ID")
+	entry := fs.String("entry", "", "plugin executable path (development mode: a local build)")
+	stdio := fs.Bool("stdio", false, "use stdio transport (default: TCP loopback)")
 	_ = fs.Parse(os.Args[2:])
 	if *dataDir == "" || *pluginID == "" || *entry == "" {
 		fs.Usage()
@@ -103,28 +103,28 @@ func run(dataDir, pluginID, entry string, stdio bool) error {
 		exitc := make(chan exit, 1)
 		go func() {
 			abnormal, st, err := r.WaitExit()
-			fmt.Fprintf(os.Stderr, "alonabot: 插件 %s 退出（%s）\n", pluginID, st)
+			fmt.Fprintf(os.Stderr, "alonabot: plugin %s exited (%s)\n", pluginID, st)
 			exitc <- exit{abnormal, err}
 		}()
 		select {
 		case <-sigc:
 			res := r.Stop(time.Now(), pb.StopReason_STOP_REASON_CORE_SHUTDOWN)
-			fmt.Fprintf(os.Stderr, "alonabot: 已停止插件 %s（排空=%v 强杀=%v）\n", pluginID, res.Drained, res.Killed)
+			fmt.Fprintf(os.Stderr, "alonabot: stopped plugin %s (drained=%v killed=%v)\n", pluginID, res.Drained, res.Killed)
 			if res.Err != nil {
-				return fmt.Errorf("插件 %s 的进程树未确认清空: %w", pluginID, res.Err)
+				return fmt.Errorf("process tree of plugin %s not confirmed empty: %w", pluginID, res.Err)
 			}
 			return nil
 		case e := <-exitc:
 			if e.err != nil {
-				return fmt.Errorf("插件 %s 的进程树未确认清空，不启动替代实例: %w", pluginID, e.err)
+				return fmt.Errorf("process tree of plugin %s not confirmed empty, not starting a replacement: %w", pluginID, e.err)
 			}
 			switch policy.OnExit(pluginID, e.abnormal, time.Now()) {
 			case host.DecisionRestart:
-				fmt.Fprintf(os.Stderr, "alonabot: 插件 %s 异常退出，重启\n", pluginID)
+				fmt.Fprintf(os.Stderr, "alonabot: plugin %s exited abnormally, restarting\n", pluginID)
 				continue
 			case host.DecisionDisable:
 				_ = store.SetEnabled(ctx, pluginID, false)
-				return fmt.Errorf("插件 %s 在 5 分钟内第 3 次异常退出，已自动禁用", pluginID)
+				return fmt.Errorf("plugin %s exited abnormally for the 3rd time within 5 minutes and has been disabled", pluginID)
 			default:
 				return nil
 			}
@@ -158,7 +158,7 @@ func launch(ctx context.Context, store *state.Store, pluginID, pluginDir, exe st
 	if isNew {
 		mode = "new"
 	}
-	fmt.Fprintf(os.Stderr, "alonabot: 插件 %s 已激活 generation=%s mode=%s pid=%d\n", pluginID, gen, mode, r.Process.Pid())
+	fmt.Fprintf(os.Stderr, "alonabot: plugin %s activated generation=%s mode=%s pid=%d\n", pluginID, gen, mode, r.Process.Pid())
 	return r, nil
 }
 

@@ -12,7 +12,7 @@ import (
 )
 
 // ErrLocked 表示锁已被其他持有者占用。
-var ErrLocked = errors.New("锁已被占用")
+var ErrLocked = errors.New("lock is already held")
 
 // Lock 代表一把已持有的独占锁。
 type Lock struct {
@@ -23,14 +23,14 @@ type Lock struct {
 func TryLock(path string) (*Lock, error) {
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
-		return nil, fmt.Errorf("打开锁文件 %s 失败: %w", path, err)
+		return nil, fmt.Errorf("open lock file %s: %w", path, err)
 	}
 	if err := tryLock(f); err != nil {
 		_ = f.Close()
 		if errors.Is(err, ErrLocked) {
 			return nil, fmt.Errorf("%s: %w", path, ErrLocked)
 		}
-		return nil, fmt.Errorf("锁定 %s 失败: %w", path, err)
+		return nil, fmt.Errorf("lock %s: %w", path, err)
 	}
 	return &Lock{f: f}, nil
 }

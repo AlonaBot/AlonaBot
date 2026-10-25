@@ -40,7 +40,7 @@ func RunVersioned(ctx context.Context, db *gorm.DB, migrations []Migration) ([]u
 	}
 	q := db.WithContext(ctx)
 	if err := q.AutoMigrate(&ledgerRow{}); err != nil {
-		return nil, fmt.Errorf("创建迁移账本失败: %w", err)
+		return nil, fmt.Errorf("create migration ledger: %w", err)
 	}
 	applied, err := AppliedMigrations(ctx, db)
 	if err != nil {
@@ -63,7 +63,7 @@ func RunVersioned(ctx context.Context, db *gorm.DB, migrations []Migration) ([]u
 			return tx.Create(&ledgerRow{ID: m.ID, AppliedAt: time.Now().UnixMilli()}).Error
 		})
 		if err != nil {
-			return ran, fmt.Errorf("迁移 %d 失败: %w", m.ID, err)
+			return ran, fmt.Errorf("migration %d failed: %w", m.ID, err)
 		}
 		ran = append(ran, m.ID)
 	}

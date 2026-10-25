@@ -92,7 +92,7 @@ func TestMinimalEnvWithoutAdminCredentials(t *testing.T) {
 	t.Setenv("OTHER_PLUGIN_SECRET", "must-not-leak")
 	secret, err := NewSecret()
 	if err != nil || len(secret) != 64 {
-		t.Fatalf("Secret 应为 32 字节十六进制: %q %v", secret, err)
+		t.Fatalf("secret should be 32 bytes of hex: %q %v", secret, err)
 	}
 	logs := &logSink{}
 	p, err := Start(spec("env", map[string]string{wire.EnvPluginID: "demo", wire.EnvSecret: secret}), logs.log)
@@ -109,13 +109,13 @@ func TestMinimalEnvWithoutAdminCredentials(t *testing.T) {
 		}
 	}
 	if _, ok := env["ALONABOT_ADMIN_TOKEN"]; ok {
-		t.Fatal("Core 管理凭证进入了插件环境")
+		t.Fatal("Core admin credentials leaked into the plugin environment")
 	}
 	if _, ok := env["OTHER_PLUGIN_SECRET"]; ok {
-		t.Fatal("白名单之外的变量进入了插件环境")
+		t.Fatal("variables outside the allowlist leaked into the plugin environment")
 	}
 	if env[wire.EnvPluginID] != "demo" || env[wire.EnvSecret] != secret {
-		t.Fatalf("会话变量缺失: %v", env)
+		t.Fatalf("session variables missing: %v", env)
 	}
 	for k := range env {
 		allowed := k == helperEnv || strings.HasPrefix(k, "ALONABOT_")
@@ -124,7 +124,7 @@ func TestMinimalEnvWithoutAdminCredentials(t *testing.T) {
 		}
 		// 部分平台的运行时会自动补充极少数变量（如 Windows 的 SYSTEMROOT），这里只在 Unix 上严格检查。
 		if !allowed && runtime.GOOS != "windows" {
-			t.Errorf("意外的环境变量 %s", k)
+			t.Errorf("unexpected environment variable %s", k)
 		}
 	}
 }
@@ -141,7 +141,7 @@ func TestLogsTaggedWithPluginID(t *testing.T) {
 	got := logs.all()
 	joined := strings.Join(got, "\n")
 	if !strings.Contains(joined, "demo|stdout|hello from stdout") || !strings.Contains(joined, "demo|stderr|hello from stderr") {
-		t.Fatalf("日志应带插件 ID 与来源流: %q", got)
+		t.Fatalf("log should carry plugin ID and stream: %q", got)
 	}
 	total := 0
 	for _, l := range got {
@@ -150,7 +150,7 @@ func TestLogsTaggedWithPluginID(t *testing.T) {
 		}
 	}
 	if total != 100<<10 {
-		t.Fatalf("超长行应分块完整转发，收到 %d 字节", total)
+		t.Fatalf("long lines should be forwarded completely in chunks, got %d bytes", total)
 	}
 }
 
@@ -162,7 +162,7 @@ func TestExitStatus(t *testing.T) {
 	}
 	<-p.Exited()
 	if st := p.ExitState(); st == nil || st.ExitCode() != 3 {
-		t.Fatalf("退出码应为 3，实际 %v", st)
+		t.Fatalf("exit code should be 3, got %v", st)
 	}
 }
 
@@ -180,26 +180,26 @@ func TestStdioTransportPipes(t *testing.T) {
 	}
 	line, err := bufio.NewReader(p.Stdout).ReadString('\n')
 	if err != nil || line != "echo:ping\n" {
-		t.Fatalf("stdio 管道往返: %q %v", line, err)
+		t.Fatalf("stdio pipe round trip: %q %v", line, err)
 	}
 	<-p.Exited()
 	p.WaitLogs()
 	for _, l := range logs.all() {
 		if strings.Contains(l, "echo:") {
-			t.Fatal("stdio 模式下 stdout 是协议通道，不应进入日志")
+			t.Fatal("in stdio mode stdout is the protocol channel and must not be logged")
 		}
 	}
 	if !strings.Contains(strings.Join(logs.all(), "\n"), "demo|stderr|stdio log") {
-		t.Fatal("stdio 模式下 stderr 应进入日志")
+		t.Fatal("in stdio mode stderr should be logged")
 	}
 	if err := p.Release(); err != nil {
 		t.Fatalf("Release: %v", err)
 	}
 	if _, err := p.Stdin.Write([]byte("x")); err == nil {
-		t.Fatal("Release 应关闭 Core 持有的 stdio 管道端")
+		t.Fatal("Release should close the stdio pipe ends held by Core")
 	}
 	if err := p.Release(); err != nil {
-		t.Fatalf("重复 Release 不应报错: %v", err)
+		t.Fatalf("repeated Release should not fail: %v", err)
 	}
 }
 
@@ -214,13 +214,13 @@ func TestEntrypoint(t *testing.T) {
 	}
 	for _, bad := range []string{"../demo", "/bin/demo", "bin", "missing"} {
 		if _, err := Entrypoint(dir, bad); err == nil {
-			t.Errorf("%q 应被拒绝", bad)
+			t.Errorf("%q should be rejected", bad)
 		}
 	}
 	if runtime.GOOS != "windows" {
 		_ = os.Chmod(bin, 0o644)
 		if _, err := Entrypoint(dir, "bin/demo"); err == nil {
-			t.Error("不可执行的文件应被拒绝")
+			t.Error("non-executable file should be rejected")
 		}
 	}
 }
@@ -233,10 +233,10 @@ func TestLockRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := oslock.TryLock(filepath.Join(dir, wire.RuntimeLockFile)); !errors.Is(err, oslock.ErrLocked) {
-		t.Fatalf("Core 持锁期间其他持有者应失败，实际 %v", err)
+		t.Fatalf("other holders should fail while Core holds the lock, got %v", err)
 	}
 	_ = l.Unlock()
 	if _, err := os.Stat(filepath.Join(dir, wire.RuntimeLockFile)); err != nil {
-		t.Fatal("锁文件必须保留")
+		t.Fatal("lock file must be kept")
 	}
 }

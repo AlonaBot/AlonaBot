@@ -103,47 +103,47 @@ func Envelope(env *pb.Envelope) error {
 	// 1. 帧种类与主版本。
 	k := env.GetKind()
 	if k == pb.FrameKind_FRAME_KIND_UNSPECIFIED || !knownEnum(k) {
-		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "未知或未设置的帧种类 %d", int32(k))
+		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "unknown or unset frame kind %d", int32(k))
 	}
 	if env.GetProtocolMajor() != ProtocolMajor {
-		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "protocol_major=%d，只支持 %d", env.GetProtocolMajor(), ProtocolMajor)
+		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "protocol_major=%d, only %d is supported", env.GetProtocolMajor(), ProtocolMajor)
 	}
 
 	// 2. session_id 与 trace_id 的长度。
 	sid := len(env.GetSessionId())
 	if k == pb.FrameKind_FRAME_KIND_HELLO && sid != 0 {
-		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "HELLO 不得携带 session_id")
+		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "HELLO must not carry session_id")
 	}
 	if k != pb.FrameKind_FRAME_KIND_HELLO && sid != SessionIDLen {
-		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "session_id 长度为 %d，应为 %d", sid, SessionIDLen)
+		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "session_id length is %d, want %d", sid, SessionIDLen)
 	}
 	if n := len(env.GetTraceId()); n != 0 && n != TraceIDLen {
-		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "trace_id 长度为 %d，应为 %d", n, TraceIDLen)
+		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "trace_id length is %d, want %d", n, TraceIDLen)
 	}
 
 	// 3. 调用帧的 call_id、initiator_side、parent_call_id 与 deadline。
 	side := env.GetInitiatorSide()
 	if isCall(k) {
 		if env.GetCallId() == 0 {
-			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%s 的 call_id 不能为 0", k)
+			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "call_id of %s must not be 0", k)
 		}
 		if side == pb.InitiatorSide_INITIATOR_SIDE_UNSPECIFIED || !knownEnum(side) {
-			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%s 缺少合法的 initiator_side", k)
+			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%s is missing a valid initiator_side", k)
 		}
 	} else if env.GetCallId() != 0 {
-		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%s 的 call_id 必须为 0", k)
+		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "call_id of %s must be 0", k)
 	}
 
 	if env.ParentCallId != nil {
 		if k != pb.FrameKind_FRAME_KIND_REQUEST || side != pb.InitiatorSide_INITIATOR_SIDE_PLUGIN {
-			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "只有插件发起的 REQUEST 可以设置 parent_call_id")
+			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "only plugin-initiated REQUEST may set parent_call_id")
 		}
 		if env.GetParentCallId() == 0 {
-			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "parent_call_id 不能为 0")
+			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "parent_call_id must not be 0")
 		}
 	}
 	if k == pb.FrameKind_FRAME_KIND_REQUEST && env.GetDeadlineUnixMs() <= 0 {
-		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "REQUEST 必须设置 deadline_unix_ms")
+		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "REQUEST must set deadline_unix_ms")
 	}
 
 	// 4. error 与载荷。
@@ -158,15 +158,15 @@ func checkError(k pb.FrameKind, e *pb.ErrorInfo) error {
 	switch {
 	case e == nil:
 		if k == pb.FrameKind_FRAME_KIND_SESSION_ERROR {
-			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "SESSION_ERROR 必须携带 error")
+			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "SESSION_ERROR must carry error")
 		}
 		return nil
 	case k != pb.FrameKind_FRAME_KIND_RESPONSE && k != pb.FrameKind_FRAME_KIND_SESSION_ERROR:
-		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%s 不得携带 error", k)
+		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%s must not carry error", k)
 	case e.GetCode() == pb.ErrorCode_ERROR_CODE_UNSPECIFIED:
-		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "ErrorInfo.code 不能为 UNSPECIFIED")
+		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "ErrorInfo.code must not be UNSPECIFIED")
 	case len(e.GetTraceId()) != 0 && len(e.GetTraceId()) != TraceIDLen:
-		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "ErrorInfo.trace_id 长度错误")
+		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "ErrorInfo.trace_id has invalid length")
 	}
 	return nil
 }
@@ -177,37 +177,37 @@ func checkPayload(env *pb.Envelope) error {
 	k := env.GetKind()
 	if env.GetSchemaId() == "" {
 		if len(env.GetPayload()) != 0 {
-			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "payload 非空但缺少 schema_id")
+			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "payload is non-empty but schema_id is missing")
 		}
 		if env.GetPayloadEncoding() != pb.PayloadEncoding_PAYLOAD_ENCODING_UNSPECIFIED || env.GetSchemaVersion() != 0 {
-			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "没有 schema_id 时不得设置编码或 schema_version")
+			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "encoding and schema_version must not be set without schema_id")
 		}
 		if _, control := controlPayload[k]; control {
-			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%s 缺少载荷", k)
+			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%s is missing its payload", k)
 		}
 		if k == pb.FrameKind_FRAME_KIND_RESPONSE && env.GetError() == nil {
-			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "RESPONSE 既没有结果也没有 error")
+			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "RESPONSE has neither a result nor an error")
 		}
 		return nil
 	}
 
 	enc := env.GetPayloadEncoding()
 	if enc == pb.PayloadEncoding_PAYLOAD_ENCODING_UNSPECIFIED || !knownEnum(enc) {
-		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "有载荷时必须设置合法的 payload_encoding")
+		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "a payload requires a valid payload_encoding")
 	}
 	if env.GetSchemaVersion() != SchemaVersion {
-		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "schema_version=%d，首发只支持 %d", env.GetSchemaVersion(), SchemaVersion)
+		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "schema_version=%d, only %d is supported", env.GetSchemaVersion(), SchemaVersion)
 	}
 	if newMessage, control := controlPayload[k]; control {
 		if enc != pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF {
-			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%s 的载荷必须使用 PROTOBUF 编码", k)
+			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "payload of %s must use PROTOBUF encoding", k)
 		}
 		if want := SchemaID(newMessage()); env.GetSchemaId() != want {
-			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%s 的 schema_id 应为 %s，实际 %s", k, want, env.GetSchemaId())
+			return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "schema_id of %s should be %s, got %s", k, want, env.GetSchemaId())
 		}
 	}
 	if enc == pb.PayloadEncoding_PAYLOAD_ENCODING_JSON && !json.Valid(env.GetPayload()) {
-		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "JSON 载荷不是合法的 UTF-8 JSON")
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "JSON payload is not valid UTF-8 JSON")
 	}
 	return nil
 }
@@ -219,11 +219,11 @@ func DecodeControl(env *pb.Envelope) (proto.Message, error) {
 	}
 	newMsg, ok := controlPayload[env.GetKind()]
 	if !ok {
-		return nil, errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%s 不是控制帧", env.GetKind())
+		return nil, errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%s is not a control frame", env.GetKind())
 	}
 	m := newMsg()
 	if err := proto.Unmarshal(env.GetPayload(), m); err != nil {
-		return nil, errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%s 载荷无法解码: %v", env.GetKind(), err)
+		return nil, errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "cannot decode %s payload: %v", env.GetKind(), err)
 	}
 	return m, nil
 }

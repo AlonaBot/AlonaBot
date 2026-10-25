@@ -124,11 +124,11 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 	fail := func(phase pb.SessionPhase, err error) error {
 		select {
 		case <-timedOut:
-			return phaseErr(phase, pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "阶段超过预算")
+			return phaseErr(phase, pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "phase exceeded its budget")
 		default:
 		}
 		if errors.Is(err, wire.ErrFrameTooLarge) {
-			return phaseErr(phase, pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "帧超过 4 MiB")
+			return phaseErr(phase, pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "frame exceeds 4 MiB")
 		}
 		var pe *PhaseError
 		if errors.As(err, &pe) {
@@ -147,11 +147,11 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 	hello, isHello := msg.(*pb.Hello)
 	if err != nil || !isHello {
 		_ = conn.Close()
-		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_HANDSHAKE, pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "首帧不是合法的 HELLO")
+		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_HANDSHAKE, pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "first frame is not a valid HELLO")
 	}
 	if !authentic(env, hello, exp) {
 		_ = conn.Close() // 认证失败：不回复，不暴露哪一项不符
-		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_HANDSHAKE, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED, "插件身份认证失败")
+		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_HANDSHAKE, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED, "plugin authentication failed")
 	}
 
 	sid := make([]byte, validate.SessionIDLen)
@@ -174,15 +174,15 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		Major: hello.GetSupportedMajor(), Minor: hello.GetSupportedMinor(),
 		Supported: hello.GetSupportedCapabilities(), Required: hello.GetRequiredCapabilities()})
 	if err != nil {
-		sendErr(pb.SessionPhase_SESSION_PHASE_HANDSHAKE, pb.FrameKind_FRAME_KIND_HELLO, pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "协议版本或必需能力不兼容")
+		sendErr(pb.SessionPhase_SESSION_PHASE_HANDSHAKE, pb.FrameKind_FRAME_KIND_HELLO, pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "incompatible protocol version or required capabilities")
 		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_HANDSHAKE, pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "%v", err)
 	}
 	minor = agree.Minor
 
 	// 2. HELLO_ACK + Bootstrap：Core 只检查配置是 JSON 对象，不先用新 Schema 否决旧配置。
 	if !validate.IsJSONObject([]byte(boot.GetCandidateConfigJson())) {
-		sendErr(pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_HELLO_ACK, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "候选配置不是 JSON 对象")
-		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_CONFIG, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "候选配置不是 JSON 对象")
+		sendErr(pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_HELLO_ACK, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "candidate config is not a JSON object")
+		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_CONFIG, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "candidate config is not a JSON object")
 	}
 	prepBudget := lim.Config + lim.Migration + lim.OnStart // Preparing 的硬截止为各适用阶段预算之和
 	boot = proto.Clone(boot).(*pb.Bootstrap)
@@ -194,8 +194,8 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		err = conn.WriteFrame(ackEnv)
 	}
 	if errors.Is(err, wire.ErrFrameTooLarge) {
-		sendErr(pb.SessionPhase_SESSION_PHASE_HANDSHAKE, pb.FrameKind_FRAME_KIND_HELLO_ACK, pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "Bootstrap 超过 4 MiB")
-		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_HANDSHAKE, pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "Bootstrap 超过 4 MiB，拒绝启动")
+		sendErr(pb.SessionPhase_SESSION_PHASE_HANDSHAKE, pb.FrameKind_FRAME_KIND_HELLO_ACK, pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "Bootstrap exceeds 4 MiB")
+		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_HANDSHAKE, pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "Bootstrap exceeds 4 MiB, refusing to start")
 	} else if err != nil {
 		_ = conn.Close()
 		return nil, fail(pb.SessionPhase_SESSION_PHASE_HANDSHAKE, err)
@@ -209,13 +209,13 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		return nil, fail(pb.SessionPhase_SESSION_PHASE_REGISTER, err)
 	}
 	if err := wire.CheckPeer(env, sid, agree.Minor, exp.PluginID); err != nil {
-		sendErr(pb.SessionPhase_SESSION_PHASE_REGISTER, env.GetKind(), pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "帧的会话身份或协商版本不符")
+		sendErr(pb.SessionPhase_SESSION_PHASE_REGISTER, env.GetKind(), pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "frame session identity or negotiated version mismatch")
 		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "%v", err)
 	}
 	msg, err = validate.DecodeControl(env)
 	if err != nil {
-		sendErr(pb.SessionPhase_SESSION_PHASE_REGISTER, env.GetKind(), pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "准备阶段收到非法帧")
-		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "准备阶段收到非法帧: %v", err)
+		sendErr(pb.SessionPhase_SESSION_PHASE_REGISTER, env.GetKind(), pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "invalid frame during preparation")
+		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "invalid frame during preparation: %v", err)
 	}
 	switch m := msg.(type) {
 	case *pb.SessionError:
@@ -228,12 +228,12 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 			if errors.As(err, &ve) {
 				code = ve.Code
 			}
-			sendErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER, code, "注册描述不合法")
+			sendErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER, code, "invalid registration")
 			return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_REGISTER, code, "%v", err)
 		}
 		if l := m.GetHttpListener(); l != nil && boot.GetHttpProxyAuth() == nil {
-			sendErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "未声明 HTTP 能力却上报了 Listener")
-			return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "未声明 HTTP 能力却上报了 Listener")
+			sendErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "listener reported without declaring HTTP capability")
+			return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "listener reported without declaring HTTP capability")
 		}
 		p := &Prepared{SessionID: sid, Minor: agree.Minor, Capabilities: agree.Intersection, Register: m,
 			RouteHash: routeHash(m), ConfigDigest: digest([]byte(m.GetCandidateConfigJson()))}
@@ -247,8 +247,8 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		}
 		return p, nil
 	default:
-		sendErr(pb.SessionPhase_SESSION_PHASE_REGISTER, env.GetKind(), pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "准备阶段只接受 REGISTER 或 SESSION_ERROR")
-		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "准备阶段收到 %s", env.GetKind())
+		sendErr(pb.SessionPhase_SESSION_PHASE_REGISTER, env.GetKind(), pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "only REGISTER or SESSION_ERROR is accepted during preparation")
+		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "received %s during preparation", env.GetKind())
 	}
 }
 

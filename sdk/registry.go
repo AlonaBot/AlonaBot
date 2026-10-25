@@ -46,7 +46,7 @@ func (r *CommandRegistry) Command(name string, handler any) {
 	path := append(append([]string{}, r.prefix...), name)
 	mode, params, err := checkHandler(handler)
 	if err != nil {
-		r.errs = append(r.errs, fmt.Errorf("命令 /%s: %w", strings.Join(path, " "), err))
+		r.errs = append(r.errs, fmt.Errorf("command /%s: %w", strings.Join(path, " "), err))
 		return
 	}
 	r.add(Command{Path: path, Handler: handler, Mode: mode, Params: params})
@@ -57,7 +57,7 @@ func (r *CommandRegistry) add(c Command) {
 	key := strings.Join(c.Path, " ")
 	for _, tok := range c.Path {
 		if tok == "" || strings.ContainsAny(tok, " \t\n") {
-			r.errs = append(r.errs, fmt.Errorf("命令路径 %q 含空 token 或空白", key))
+			r.errs = append(r.errs, fmt.Errorf("command path %q contains an empty token or whitespace", key))
 			return
 		}
 	}
@@ -65,7 +65,7 @@ func (r *CommandRegistry) add(c Command) {
 		r.seen = map[string]bool{}
 	}
 	if r.seen[key] {
-		r.errs = append(r.errs, fmt.Errorf("命令 /%s 重复注册", key))
+		r.errs = append(r.errs, fmt.Errorf("command /%s registered twice", key))
 		return
 	}
 	r.seen[key] = true
@@ -97,16 +97,16 @@ var (
 func checkHandler(h any) (pb.HandlerMode, []pb.ParamType, error) {
 	t := reflect.TypeOf(h)
 	if t == nil || t.Kind() != reflect.Func || reflect.ValueOf(h).IsNil() {
-		return 0, nil, fmt.Errorf("Handler 必须是非 nil 函数，实际 %T", h)
+		return 0, nil, fmt.Errorf("handler must be a non-nil function, got %T", h)
 	}
 	if t.IsVariadic() || t.NumIn() == 0 || t.In(0) != contextType {
-		return 0, nil, fmt.Errorf("Handler 的第一个参数必须是 *sdk.Context，且不能是可变参数函数：%s", t)
+		return 0, nil, fmt.Errorf("handler's first parameter must be *sdk.Context and it must not be variadic: %s", t)
 	}
 	var params []pb.ParamType
 	for i := 1; i < t.NumIn(); i++ {
 		p, ok := paramTypes[t.In(i)]
 		if !ok {
-			return 0, nil, fmt.Errorf("参数 %d 的类型 %s 不受支持（只支持 string/int64/float64/bool）", i, t.In(i))
+			return 0, nil, fmt.Errorf("type %[2]s of parameter %[1]d is not supported (only string/int64/float64/bool)", i, t.In(i))
 		}
 		params = append(params, p)
 	}
@@ -116,7 +116,7 @@ func checkHandler(h any) (pb.HandlerMode, []pb.ParamType, error) {
 	case t.NumOut() == 2 && t.Out(0) == chainType && t.Out(1) == errorType:
 		return pb.HandlerMode_HANDLER_MODE_AUTO_REPLY, params, nil
 	}
-	return 0, nil, fmt.Errorf("Handler 只能返回 error 或 (message.Chain, error)：%s", t)
+	return 0, nil, fmt.Errorf("handler may only return error or (message.Chain, error): %s", t)
 }
 
 // HTTPRoute 记录一条插件 HTTP 路由；path 相对于 /plugins/{id}，端口由 SDK 托管（D-25）。
@@ -152,16 +152,16 @@ func (r *HTTPRegistry) Handle(method, path string, h http.Handler, opts ...HTTPO
 	}
 	switch {
 	case h == nil:
-		r.errs = append(r.errs, fmt.Errorf("HTTP %s %s 的 Handler 为 nil", method, path))
+		r.errs = append(r.errs, fmt.Errorf("handler for HTTP %s %s is nil", method, path))
 	case !strings.HasPrefix(path, "/") || pathpkg.Clean(path) != path:
 		// 非规范写法（//、..、尾部 /）会让同一资源有多个路径，代理匹配时产生歧义。
-		r.errs = append(r.errs, fmt.Errorf("HTTP 路径 %q 必须以 / 开头且是规范形式", path))
+		r.errs = append(r.errs, fmt.Errorf("HTTP path %q must start with / and be canonical", path))
 	case route.Public && route.AuthMode == pb.HttpAuthMode_HTTP_AUTH_MODE_CORE_SESSION:
-		r.errs = append(r.errs, fmt.Errorf("公开路由 %s %s 必须声明回调验证方式", method, path))
+		r.errs = append(r.errs, fmt.Errorf("public route %s %s must declare a callback verification mode", method, path))
 	default:
 		for _, e := range r.routes {
 			if e.Method == route.Method && e.Path == route.Path {
-				r.errs = append(r.errs, fmt.Errorf("HTTP %s %s 重复注册", route.Method, path))
+				r.errs = append(r.errs, fmt.Errorf("HTTP %s %s registered twice", route.Method, path))
 				return
 			}
 		}
@@ -187,7 +187,7 @@ type ScheduleRegistry struct {
 // Every 声明固定间隔任务（至少 1s）。
 func (r *ScheduleRegistry) Every(jobID string, d time.Duration, fn func(*Context) error) {
 	if d < time.Second {
-		r.errs = append(r.errs, fmt.Errorf("任务 %s 的间隔 %s 小于 1s", jobID, d))
+		r.errs = append(r.errs, fmt.Errorf("interval %[2]s of job %[1]s is less than 1s", jobID, d))
 		return
 	}
 	r.add(Schedule{JobID: jobID, Interval: d, Handler: fn})
@@ -196,7 +196,7 @@ func (r *ScheduleRegistry) Every(jobID string, d time.Duration, fn func(*Context
 // Cron 声明五字段 cron 任务；timezone 为 IANA 名称，空串表示 UTC。表达式在 REGISTER 时由 Core 校验。
 func (r *ScheduleRegistry) Cron(jobID, expr, timezone string, fn func(*Context) error) {
 	if len(strings.Fields(expr)) != 5 {
-		r.errs = append(r.errs, fmt.Errorf("任务 %s 的 cron 表达式 %q 不是五字段", jobID, expr))
+		r.errs = append(r.errs, fmt.Errorf("cron expression %[2]q of job %[1]s does not have five fields", jobID, expr))
 		return
 	}
 	r.add(Schedule{JobID: jobID, Cron: expr, Timezone: timezone, Handler: fn})
@@ -206,15 +206,15 @@ func (r *ScheduleRegistry) Cron(jobID, expr, timezone string, fn func(*Context) 
 func (r *ScheduleRegistry) add(s Schedule) {
 	switch {
 	case s.JobID == "":
-		r.errs = append(r.errs, fmt.Errorf("定时任务缺少 job_id"))
+		r.errs = append(r.errs, fmt.Errorf("scheduled job is missing job_id"))
 		return
 	case s.Handler == nil:
-		r.errs = append(r.errs, fmt.Errorf("任务 %s 的 Handler 为 nil", s.JobID))
+		r.errs = append(r.errs, fmt.Errorf("handler for job %s is nil", s.JobID))
 		return
 	}
 	for _, j := range r.jobs {
 		if j.JobID == s.JobID {
-			r.errs = append(r.errs, fmt.Errorf("任务 %s 重复注册", s.JobID))
+			r.errs = append(r.errs, fmt.Errorf("job %s registered twice", s.JobID))
 			return
 		}
 	}

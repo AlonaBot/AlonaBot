@@ -32,23 +32,23 @@ func TestReadRawBoundaries(t *testing.T) {
 		wantErr error  // 期望的错误；nil 表示应成功
 		wantLen int    // 成功时期望的载荷长度
 	}{
-		{"1 字节", append(header(1), 0x08), nil, 1},
-		{"恰好 4 MiB", append(header(MaxFrame), max...), nil, MaxFrame},
-		{"长度 0", header(0), ErrEmptyFrame, 0},
+		{"1 byte", append(header(1), 0x08), nil, 1},
+		{"exactly 4 MiB", append(header(MaxFrame), max...), nil, MaxFrame},
+		{"length 0", header(0), ErrEmptyFrame, 0},
 		// 只给出前缀：超限必须在读取载荷之前就被拒绝，不能先分配 4 MiB+1 的缓冲再报截断。
 		{"4 MiB+1", header(MaxFrame + 1), ErrFrameTooLarge, 0},
-		{"载荷截断", append(header(100), make([]byte, 50)...), ErrTruncated, 0},
-		{"前缀截断", []byte{0, 0}, ErrTruncated, 0},
-		{"空流", nil, io.EOF, 0},
+		{"truncated payload", append(header(100), make([]byte, 50)...), ErrTruncated, 0},
+		{"truncated prefix", []byte{0, 0}, ErrTruncated, 0},
+		{"empty stream", nil, io.EOF, 0},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got, err := ReadRaw(bytes.NewReader(c.stream))
 			if !errors.Is(err, c.wantErr) {
-				t.Fatalf("err = %v，期望 %v", err, c.wantErr)
+				t.Fatalf("err = %v, want %v", err, c.wantErr)
 			}
 			if len(got) != c.wantLen {
-				t.Fatalf("长度 = %d，期望 %d", len(got), c.wantLen)
+				t.Fatalf("length = %d, want %d", len(got), c.wantLen)
 			}
 		})
 	}
@@ -65,18 +65,18 @@ func TestReadFrameOneByteReads(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		got, err := ReadFrame(r)
 		if err != nil || !proto.Equal(got, env) {
-			t.Fatalf("第 %d 帧: %v %v", i, got, err)
+			t.Fatalf("frame %d: %v %v", i, got, err)
 		}
 	}
 	if _, err := ReadFrame(r); !errors.Is(err, io.EOF) {
-		t.Fatalf("帧边界处结束应为 io.EOF，实际 %v", err)
+		t.Fatalf("ending at a frame boundary should return io.EOF, got %v", err)
 	}
 }
 
 // 长度合法但无法解码的载荷返回 ErrDecode。
 func TestReadFrameDecodeError(t *testing.T) {
 	if _, err := ReadFrame(bytes.NewReader(append(header(3), 0xFF, 0xFF, 0xFF))); !errors.Is(err, ErrDecode) {
-		t.Fatalf("无法解码的载荷应返回 ErrDecode，实际 %v", err)
+		t.Fatalf("undecodable payload should return ErrDecode, got %v", err)
 	}
 }
 
@@ -85,7 +85,7 @@ func TestStdoutPollutionFailsSession(t *testing.T) {
 	frame, _ := EncodeFrame(&pb.Envelope{ProtocolMajor: 1, Kind: pb.FrameKind_FRAME_KIND_HEARTBEAT})
 	polluted := append([]byte("plugin started\n"), frame...)
 	if _, err := ReadFrame(bytes.NewReader(polluted)); err == nil {
-		t.Fatal("混入日志的 stdout 应使读取失败")
+		t.Fatal("stdout mixed with log output should make reading fail")
 	}
 }
 
@@ -93,11 +93,11 @@ func TestStdoutPollutionFailsSession(t *testing.T) {
 func TestEncodeFrameTooLarge(t *testing.T) {
 	env := &pb.Envelope{ProtocolMajor: 1, Payload: make([]byte, MaxFrame)}
 	if _, err := EncodeFrame(env); !errors.Is(err, ErrFrameTooLarge) {
-		t.Fatalf("超限 Envelope 应在编码时被拒绝，实际 %v", err)
+		t.Fatalf("oversized Envelope should be rejected at encoding, got %v", err)
 	}
 	var buf bytes.Buffer
 	if err := NewWriter(&buf).WriteFrame(env); !errors.Is(err, ErrFrameTooLarge) || buf.Len() != 0 {
-		t.Fatalf("超限帧不得写出任何字节：err=%v len=%d", err, buf.Len())
+		t.Fatalf("an oversized frame must not write any bytes: err=%v len=%d", err, buf.Len())
 	}
 }
 
@@ -106,7 +106,7 @@ func goldenFrames(t *testing.T) map[string]*pb.Envelope {
 	t.Helper()
 	paths, err := filepath.Glob(filepath.Join("..", "..", "contracts", "testdata", "frames", "*.bin"))
 	if err != nil || len(paths) == 0 {
-		t.Fatalf("找不到 golden 帧: %v", err)
+		t.Fatalf("golden frames not found: %v", err)
 	}
 	out := map[string]*pb.Envelope{}
 	for _, p := range paths {
@@ -144,7 +144,7 @@ func roundTrip(t *testing.T, writer, reader *Conn, frames map[string]*pb.Envelop
 	for _, n := range names {
 		env, err := reader.ReadFrame()
 		if err != nil {
-			t.Fatalf("读取 %s: %v", n, err)
+			t.Fatalf("read %s: %v", n, err)
 		}
 		got[n] = env
 	}
@@ -165,7 +165,7 @@ func TestSameFixtureOverTCPAndStdio(t *testing.T) {
 	}
 	defer ln.Close()
 	if a := ln.Addr().(*net.TCPAddr); !a.IP.Equal(net.IPv4(127, 0, 0, 1)) || a.Port == 0 {
-		t.Fatalf("Listener 地址 %v", a)
+		t.Fatalf("listener address %v", a)
 	}
 	accepted := make(chan net.Conn, 1)
 	go func() {
@@ -192,12 +192,12 @@ func TestSameFixtureOverTCPAndStdio(t *testing.T) {
 
 	for name, want := range frames {
 		if !proto.Equal(viaTCP[name], want) || !proto.Equal(viaStdio[name], want) {
-			t.Fatalf("%s 在两种传输上的往返结果不一致", name)
+			t.Fatalf("round trip of %s differs between the two transports", name)
 		}
 		a, _ := EncodeFrame(viaTCP[name])
 		b, _ := EncodeFrame(viaStdio[name])
 		if !bytes.Equal(a, b) {
-			t.Fatalf("%s 的重新编码字节在两种传输间不同", name)
+			t.Fatalf("re-encoded bytes of %s differ between the two transports", name)
 		}
 	}
 }
@@ -236,15 +236,15 @@ func TestConcurrentWritesDoNotInterleave(t *testing.T) {
 			break
 		}
 		if err != nil {
-			t.Fatalf("读到损坏的帧（帧交错）: %v", err)
+			t.Fatalf("read a corrupted frame (interleaved frames): %v", err)
 		}
 		g := int(env.GetCallId()-1) / perWriter
 		if len(env.GetPayload()) != 1000+g*37 || env.GetPayload()[0] != byte(g) {
-			t.Fatalf("call %d 的载荷不完整", env.GetCallId())
+			t.Fatalf("payload of call %d is incomplete", env.GetCallId())
 		}
 		seen[env.GetCallId()] = true
 	}
 	if len(seen) != writers*perWriter {
-		t.Fatalf("收到 %d 帧，期望 %d", len(seen), writers*perWriter)
+		t.Fatalf("got %d frames, want %d", len(seen), writers*perWriter)
 	}
 }

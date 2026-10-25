@@ -48,11 +48,11 @@ func newGormLogger(w io.Writer) logger.Interface {
 // 事务回调必须使用传入的 tx：单连接池下在事务里等待另一条独立查询会自锁。
 func OpenSQLite(ctx context.Context, path string) (*gorm.DB, error) {
 	if path == "" || strings.ContainsAny(path, "?#") {
-		return nil, fmt.Errorf("SQLite 路径 %q 为空或含 ?/#", path)
+		return nil, fmt.Errorf("SQLite path %q is empty or contains ? or #", path)
 	}
 	db, err := gorm.Open(sqlite.Open(path+"?"+sqlitePragmas), &gorm.Config{Logger: gormLogger})
 	if err != nil {
-		return nil, fmt.Errorf("打开 SQLite 失败: %w", err)
+		return nil, fmt.Errorf("open SQLite: %w", err)
 	}
 	sqlDB, err := db.DB()
 	if err != nil {
@@ -95,11 +95,11 @@ func ReadPragmas(ctx context.Context, db *gorm.DB) (PragmaValues, error) {
 func checkPragmas(ctx context.Context, db *gorm.DB) error {
 	v, err := ReadPragmas(ctx, db)
 	if err != nil {
-		return fmt.Errorf("读取 PRAGMA 失败: %w", err)
+		return fmt.Errorf("read PRAGMA: %w", err)
 	}
 	want := PragmaValues{JournalMode: journalModeWAL, Synchronous: synchronousFull, ForeignKeys: foreignKeysOn, BusyTimeout: busyTimeoutMillis}
 	if v != want {
-		return fmt.Errorf("SQLite 设置未生效：实际 %+v，期望 %+v", v, want)
+		return fmt.Errorf("SQLite settings not applied: got %+v, want %+v", v, want)
 	}
 	return nil
 }

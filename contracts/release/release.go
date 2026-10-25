@@ -51,10 +51,10 @@ func KeyID(pub ed25519.PublicKey) string {
 func DecodeSignature(sigFile []byte) ([]byte, error) {
 	sig, err := base64.StdEncoding.DecodeString(string(bytes.TrimSpace(sigFile)))
 	if err != nil {
-		return nil, fmt.Errorf("签名文件不是合法的 base64: %w", err)
+		return nil, fmt.Errorf("signature file is not valid base64: %w", err)
 	}
 	if len(sig) != ed25519.SignatureSize {
-		return nil, fmt.Errorf("签名长度 %d，应为 %d", len(sig), ed25519.SignatureSize)
+		return nil, fmt.Errorf("signature length %d, want %d", len(sig), ed25519.SignatureSize)
 	}
 	return sig, nil
 }
@@ -63,14 +63,14 @@ func DecodeSignature(sigFile []byte) ([]byte, error) {
 func Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*Release, error) {
 	// 1. 对原始字节验签，签名不对时不解析内容。
 	if len(pub) != ed25519.PublicKeySize {
-		return nil, errors.New("公钥长度错误")
+		return nil, errors.New("invalid public key length")
 	}
 	sig, err := DecodeSignature(sigFile)
 	if err != nil {
 		return nil, err
 	}
 	if !ed25519.Verify(pub, raw, sig) {
-		return nil, errors.New("release.json 签名校验失败")
+		return nil, errors.New("release.json signature verification failed")
 	}
 
 	// 2. 严格解析：未知字段或对象之后的多余内容都拒绝。
@@ -78,14 +78,14 @@ func Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*Release, error) {
 	dec.DisallowUnknownFields()
 	var r Release
 	if err := dec.Decode(&r); err != nil {
-		return nil, fmt.Errorf("release.json 解析失败: %w", err)
+		return nil, fmt.Errorf("parse release.json: %w", err)
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return nil, errors.New("release.json 在 JSON 对象之后还有多余内容")
+		return nil, errors.New("release.json has trailing content after the JSON object")
 	}
 	// 3. 声明的发布者必须就是验签公钥，再校验各字段。
 	if r.PublisherKeyID != KeyID(pub) {
-		return nil, fmt.Errorf("publisher_key_id %q 与验签公钥 %s 不符", r.PublisherKeyID, KeyID(pub))
+		return nil, fmt.Errorf("publisher_key_id %q does not match verification key %s", r.PublisherKeyID, KeyID(pub))
 	}
 	if err := r.validate(); err != nil {
 		return nil, err
@@ -99,30 +99,30 @@ func (r *Release) validate() error {
 		return err
 	}
 	if r.Source == "" {
-		return errors.New("缺少 source")
+		return errors.New("missing source")
 	}
 	if !manifest.ValidVersion(r.Version) {
-		return fmt.Errorf("version %q 不是合法的 SemVer", r.Version)
+		return fmt.Errorf("version %q is not valid SemVer", r.Version)
 	}
 	if len(r.Assets) == 0 {
-		return errors.New("assets 为空")
+		return errors.New("assets is empty")
 	}
 	seen := map[manifest.Platform]bool{}
 	for _, a := range r.Assets {
 		p := manifest.Platform{OS: a.OS, Arch: a.Arch}
 		switch {
 		case !manifest.SupportedPlatform(a.OS, a.Arch):
-			return fmt.Errorf("不支持的平台 %s/%s", a.OS, a.Arch)
+			return fmt.Errorf("unsupported platform %s/%s", a.OS, a.Arch)
 		case seen[p]:
-			return fmt.Errorf("平台 %s/%s 重复", a.OS, a.Arch)
+			return fmt.Errorf("duplicate platform %s/%s", a.OS, a.Arch)
 		case a.Size <= 0:
-			return fmt.Errorf("%s/%s 的 size 必须为正", a.OS, a.Arch)
+			return fmt.Errorf("size of %s/%s must be positive", a.OS, a.Arch)
 		case !sha256Hex.MatchString(a.SHA256):
-			return fmt.Errorf("%s/%s 的 sha256 不是 64 位小写十六进制", a.OS, a.Arch)
+			return fmt.Errorf("sha256 of %s/%s is not 64 lowercase hex characters", a.OS, a.Arch)
 		}
 		u, err := url.Parse(a.URL)
 		if err != nil || u.Scheme != "https" || u.Host == "" {
-			return fmt.Errorf("%s/%s 的 url 必须是 https 绝对地址", a.OS, a.Arch)
+			return fmt.Errorf("url of %s/%s must be an absolute https URL", a.OS, a.Arch)
 		}
 		seen[p] = true
 	}

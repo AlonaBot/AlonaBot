@@ -46,14 +46,14 @@ func TestOpenSQLitePragmas(t *testing.T) {
 	}
 	// 回读的实际值（CONTRACTS §6.1）。
 	if v.JournalMode != "wal" || v.Synchronous != 2 || v.ForeignKeys != 1 || v.BusyTimeout != 5000 {
-		t.Fatalf("PRAGMA 实际值 %+v", v)
+		t.Fatalf("PRAGMA values %+v", v)
 	}
 	sqlDB, _ := db.DB()
 	if got := sqlDB.Stats().MaxOpenConnections; got != 1 {
-		t.Fatalf("连接池上限 = %d，应为 1", got)
+		t.Fatalf("connection pool limit = %d, want 1", got)
 	}
 	if _, err := OpenSQLite(context.Background(), "a?b"); err == nil {
-		t.Fatal("含 ? 的路径应被拒绝")
+		t.Fatal("path with ? should be rejected")
 	}
 }
 
@@ -73,7 +73,7 @@ func TestCRUDAndTx(t *testing.T) {
 	}
 	var got item
 	if err := db.First(&got, it.ID).Error; err != nil || got.Name != "b" {
-		t.Fatalf("读取 %+v, %v", got, err)
+		t.Fatalf("read %+v, %v", got, err)
 	}
 
 	// 事务回滚：回调返回错误后写入不可见。
@@ -85,12 +85,12 @@ func TestCRUDAndTx(t *testing.T) {
 		return errBoom
 	})
 	if !errors.Is(err, errBoom) {
-		t.Fatalf("事务应返回回调错误，实际 %v", err)
+		t.Fatalf("transaction should return the callback error, got %v", err)
 	}
 	var n int64
 	db.Model(&item{}).Where("name = ?", "rolled-back").Count(&n)
 	if n != 0 {
-		t.Fatal("回滚后的行仍然存在")
+		t.Fatal("rolled-back row still exists")
 	}
 
 	// 事务提交。
@@ -99,14 +99,14 @@ func TestCRUDAndTx(t *testing.T) {
 	}
 	db.Model(&item{}).Where("name = ?", "committed").Count(&n)
 	if n != 1 {
-		t.Fatal("提交后的行不存在")
+		t.Fatal("committed row does not exist")
 	}
 
 	if err := db.Delete(&item{}, it.ID).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.First(&got, it.ID).Error; !errors.Is(err, gorm.ErrRecordNotFound) {
-		t.Fatalf("删除后应找不到记录，实际 %v", err)
+		t.Fatalf("record should be gone after delete, got %v", err)
 	}
 }
 
@@ -117,7 +117,7 @@ func TestForeignKeysEnforced(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := db.Exec(`INSERT INTO child(id, parent_id) VALUES (1, 99)`).Error; err == nil {
-		t.Fatal("foreign_keys=ON 时插入不存在的父行应失败")
+		t.Fatal("inserting a missing parent should fail with foreign_keys=ON")
 	}
 }
 
@@ -134,7 +134,7 @@ func backupTo(ctx context.Context, src *sql.DB, dst string) error {
 			NewBackup(string) (*moderncsqlite.Backup, error)
 		})
 		if !ok {
-			return errors.New("底层连接不支持 Backup")
+			return errors.New("underlying connection does not support Backup")
 		}
 		bk, err := b.NewBackup(dst)
 		if err != nil {
@@ -162,13 +162,13 @@ func TestWALBackupToCandidate(t *testing.T) {
 	}
 	// 数据仍在 WAL 中（尚未 checkpoint）：证明备份读的是运行中 WAL 库的一致视图，而不是主文件。
 	if fi, err := os.Stat(path + "-wal"); err != nil || fi.Size() == 0 {
-		t.Fatalf("预期存在非空 WAL 文件: %v", err)
+		t.Fatalf("expected a non-empty WAL file: %v", err)
 	}
 
 	sqlDB, _ := db.DB()
 	candidate := filepath.Join(t.TempDir(), "candidate.sqlite")
 	if err := backupTo(ctx, sqlDB, candidate); err != nil {
-		t.Fatalf("Backup 失败: %v", err)
+		t.Fatalf("Backup failed: %v", err)
 	}
 	// 备份之后旧库的写入不影响候选副本。
 	if err := db.Create(&item{Name: "after-backup"}).Error; err != nil {
@@ -185,7 +185,7 @@ func TestWALBackupToCandidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(names) != 3 || names[0] != "x" || names[2] != "z" {
-		t.Fatalf("候选副本内容 = %v", names)
+		t.Fatalf("candidate copy content = %v", names)
 	}
 	// 候选可写，且写入不影响旧库。
 	if err := cand.Create(&item{Name: "candidate-only"}).Error; err != nil {
@@ -194,7 +194,7 @@ func TestWALBackupToCandidate(t *testing.T) {
 	var n int64
 	db.Model(&item{}).Where("name = ?", "candidate-only").Count(&n)
 	if n != 0 {
-		t.Fatal("候选写入出现在旧库中")
+		t.Fatal("candidate write appeared in the old database")
 	}
 }
 
@@ -214,29 +214,29 @@ func TestRunVersionedLedgerInSameTx(t *testing.T) {
 
 	ran, err := RunVersioned(ctx, db, []Migration{{1, createA}, {2, failingB}, {3, createA}})
 	if !errors.Is(err, errUp) || len(ran) != 1 || ran[0] != 1 {
-		t.Fatalf("ran=%v err=%v，期望只完成 1 并返回 Up 错误", ran, err)
+		t.Fatalf("ran=%v err=%v, want only 1 completed and the Up error returned", ran, err)
 	}
 	applied, _ := AppliedMigrations(ctx, db)
 	if len(applied) != 1 || applied[0] != 1 {
-		t.Fatalf("账本 = %v，失败的迁移不得记录成功", applied)
+		t.Fatalf("ledger = %v, a failed migration must not be recorded as done", applied)
 	}
 	if db.Migrator().HasTable("b") {
-		t.Fatal("失败迁移中的 DDL 没有回滚")
+		t.Fatal("DDL in the failed migration was not rolled back")
 	}
 
 	// 修复后重跑：只执行未完成的 ID。
 	ran, err = RunVersioned(ctx, db, []Migration{{1, createA}, {2, createB}})
 	if err != nil || len(ran) != 1 || ran[0] != 2 {
-		t.Fatalf("重跑 ran=%v err=%v，期望只执行 2", ran, err)
+		t.Fatalf("rerun ran=%v err=%v, want only 2 executed", ran, err)
 	}
 	if !db.Migrator().HasTable("b") {
-		t.Fatal("迁移 2 未生效")
+		t.Fatal("migration 2 did not take effect")
 	}
 	if ran, err = RunVersioned(ctx, db, []Migration{{1, createA}, {2, createB}}); err != nil || len(ran) != 0 {
-		t.Fatalf("全部完成后再跑不应执行任何迁移: %v %v", ran, err)
+		t.Fatalf("no migration should run once all are done: %v %v", ran, err)
 	}
 	if _, err := RunVersioned(ctx, db, []Migration{{2, createB}, {1, createA}}); err == nil {
-		t.Fatal("非递增的迁移列表应被拒绝")
+		t.Fatal("a non-increasing migration list should be rejected")
 	}
 }
 
@@ -250,13 +250,13 @@ func TestGormLogOmitsParameters(t *testing.T) {
 	quiet := db.Session(&gorm.Session{Logger: newGormLogger(&buf)})
 	const secret = "SECRET-VALUE-42"
 	if err := quiet.Exec("INSERT INTO child(id, parent_id, note) VALUES (?, ?, ?)", 1, 99, secret).Error; err == nil {
-		t.Fatal("外键约束应使插入失败")
+		t.Fatal("foreign key constraint should make the insert fail")
 	}
 	out := buf.String()
 	if !strings.Contains(out, "INSERT INTO child") {
-		t.Fatalf("错误 SQL 应被记录，实际日志: %q", out)
+		t.Fatalf("failing SQL should be logged, got log: %q", out)
 	}
 	if strings.Contains(out, secret) {
-		t.Fatalf("日志泄漏了参数值: %q", out)
+		t.Fatalf("log leaked a parameter value: %q", out)
 	}
 }

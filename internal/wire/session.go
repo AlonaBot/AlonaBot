@@ -272,7 +272,7 @@ func (s *Session) Err() error {
 
 // Close 主动关闭 Session；未完成的调用以 UNAVAILABLE 结束。
 func (s *Session) Close() error {
-	s.fail(errors.New("Session 已关闭"))
+	s.fail(errors.New("session is closed"))
 	return nil
 }
 
@@ -347,7 +347,7 @@ func (s *Session) SendEnvelopeSync(env *pb.Envelope) error {
 	case err := <-written:
 		return err
 	case <-s.done:
-		return callErr(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "Session 已关闭，控制帧可能未写出")
+		return callErr(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "session is closed; the control frame may not have been written")
 	}
 }
 
@@ -360,14 +360,14 @@ func (s *Session) enqueuePriority(env *pb.Envelope) error {
 func (s *Session) enqueuePriorityFrame(f priorityFrame) error {
 	select {
 	case <-s.done:
-		return callErr(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "Session 已关闭")
+		return callErr(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "session is closed")
 	default:
 	}
 	select {
 	case s.priority <- f:
 		return nil
 	default:
-		err := errors.New("优先通道已满，控制/响应无法推进")
+		err := errors.New("priority channel is full; control frames and responses cannot proceed")
 		s.fail(err)
 		return callErr(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, err.Error())
 	}
@@ -390,18 +390,18 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 	s.mu.Lock()
 	if s.err != nil {
 		s.mu.Unlock()
-		return Response{}, callErr(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "Session 已关闭")
+		return Response{}, callErr(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "session is closed")
 	}
 	if len(s.pending) >= s.opt.MaxInflight || s.outBytes+n > s.opt.MaxBytes {
 		s.mu.Unlock()
-		return Response{}, callErr(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "本方向在途请求数或字节预算已满")
+		return Response{}, callErr(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "in-flight request count or byte budget for this direction is full")
 	}
 	var parent *inCall
 	if req.ParentCallID != 0 {
 		parent = s.inbound[req.ParentCallID]
 		if s.opt.Local != pb.InitiatorSide_INITIATOR_SIDE_PLUGIN || parent == nil {
 			s.mu.Unlock()
-			return Response{}, callErr(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "父调用不存在或已结束")
+			return Response{}, callErr(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "parent call does not exist or has finished")
 		}
 		if parent.deadline.Before(deadline) {
 			deadline = parent.deadline // 子请求不得延长父期限
@@ -409,11 +409,11 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 	}
 	if !deadline.After(time.Now()) {
 		s.mu.Unlock()
-		return Response{}, callErr(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "期限已过，请求未发送")
+		return Response{}, callErr(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "deadline already passed; request not sent")
 	}
 	if !s.opt.Global.acquire(n) {
 		s.mu.Unlock()
-		return Response{}, callErr(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "Core 全局 payload 预算已满")
+		return Response{}, callErr(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "Core global payload budget is full")
 	}
 	// 3. 分配编号、构造 REQUEST，登记为在途并放入业务队列。
 	s.nextID++
@@ -440,13 +440,13 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 	case r := <-c.result:
 		return r, errorOf(r)
 	case <-timer.C:
-		return s.abandon(c, pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, pb.CancelReason_CANCEL_REASON_DEADLINE_EXCEEDED, "调用超过期限")
+		return s.abandon(c, pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, pb.CancelReason_CANCEL_REASON_DEADLINE_EXCEEDED, "call exceeded its deadline")
 	case <-ctx.Done():
 		code := pb.ErrorCode_ERROR_CODE_CANCELLED
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			code = pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED
 		}
-		return s.abandon(c, code, pb.CancelReason_CANCEL_REASON_CALLER_CANCELLED, "调用方已取消")
+		return s.abandon(c, code, pb.CancelReason_CANCEL_REASON_CALLER_CANCELLED, "caller cancelled")
 	}
 }
 
@@ -474,7 +474,7 @@ func (s *Session) CancelOutbound(reason pb.CancelReason) {
 	}
 	s.mu.Unlock()
 	for _, c := range calls {
-		s.complete(c, Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_CANCELLED, SafeMessage: "插件正在停止"}}, reason)
+		s.complete(c, Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_CANCELLED, SafeMessage: "plugin is stopping"}}, reason)
 	}
 }
 
@@ -629,7 +629,7 @@ func (s *Session) writeLoop() {
 func (s *Session) write(env *pb.Envelope) error {
 	err := s.conn.WriteFrame(env)
 	if err != nil {
-		s.fail(fmt.Errorf("写帧失败: %w", err))
+		s.fail(fmt.Errorf("write frame: %w", err))
 	}
 	return err
 }
@@ -663,7 +663,7 @@ func (s *Session) readLoop() {
 	for {
 		env, err := s.conn.ReadFrame()
 		if err != nil {
-			s.fail(fmt.Errorf("读帧失败: %w", err))
+			s.fail(fmt.Errorf("read frame: %w", err))
 			return
 		}
 		if err := s.dispatch(env); err != nil {
@@ -694,7 +694,7 @@ func (s *Session) dispatch(env *pb.Envelope) error {
 		return s.onCancel(env)
 	}
 	if s.opt.Control == nil {
-		return fmt.Errorf("未处理的帧种类 %s", env.GetKind())
+		return fmt.Errorf("unhandled frame kind %s", env.GetKind())
 	}
 	return s.opt.Control(env)
 }
@@ -708,7 +708,7 @@ func payloadOf(env *pb.Envelope) Payload {
 // 拒绝时经优先通道回复错误。
 func (s *Session) onRequest(env *pb.Envelope) error {
 	if env.GetInitiatorSide() != s.peer {
-		return errors.New("REQUEST 的 initiator_side 不是对端")
+		return errors.New("REQUEST initiator_side is not the peer")
 	}
 	id := env.GetCallId()
 	n := int64(len(env.GetPayload()))
@@ -721,7 +721,7 @@ func (s *Session) onRequest(env *pb.Envelope) error {
 	s.mu.Lock()
 	if id <= s.lastIn {
 		s.mu.Unlock()
-		return fmt.Errorf("对端 call_id %d 未单调递增（上一个为 %d）", id, s.lastIn)
+		return fmt.Errorf("peer call_id %d is not increasing (previous %d)", id, s.lastIn)
 	}
 	s.lastIn = id
 	s.mu.Unlock()
@@ -738,7 +738,7 @@ func (s *Session) onRequest(env *pb.Envelope) error {
 		parent := s.pending[pid]
 		if parent == nil {
 			s.mu.Unlock()
-			return s.respondErr(id, pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "父调用不存在或已结束")
+			return s.respondErr(id, pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "parent call does not exist or has finished")
 		}
 		in.ParentCallID, in.ParentAttach, parentCtx = pid, parent.attach, parent.ctx
 		if parent.deadline.Before(deadline) {
@@ -749,7 +749,7 @@ func (s *Session) onRequest(env *pb.Envelope) error {
 	// 4. 对端方向的准入预算；通过后登记在途，另起 goroutine 执行 Handler，读循环不等待它。
 	if len(s.inbound) >= s.opt.MaxInflight || s.inBytes+n > s.opt.MaxBytes || !s.opt.Global.acquire(n) {
 		s.mu.Unlock()
-		return s.respondErr(id, pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "本方向在途请求数或字节预算已满")
+		return s.respondErr(id, pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "in-flight request count or byte budget for this direction is full")
 	}
 	ctx, cancel := context.WithDeadline(parentCtx, deadline)
 	s.inbound[id] = &inCall{bytes: n, deadline: deadline, cancel: cancel}
@@ -766,7 +766,7 @@ func (s *Session) serve(ctx context.Context, cancel context.CancelFunc, in *Inbo
 	// 1. 执行 Handler；没有结果也没有错误时按 INTERNAL 回复。
 	r := s.handle(ctx, in)
 	if r.Payload.SchemaID == "" && r.Err == nil {
-		r.Err = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "处理函数既没有结果也没有错误"}
+		r.Err = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "handler returned neither a result nor an error"}
 	}
 	// 2. 先结束在途登记并归还预算，再回复，避免对端收到响应后立即发起的请求被已完成的调用占额。
 	s.mu.Lock()
@@ -784,11 +784,11 @@ func (s *Session) serve(ctx context.Context, cancel context.CancelFunc, in *Inbo
 // handle 调用 Handler；panic 转为 INTERNAL，不当作空成功（CONTRACTS §2.1）。
 func (s *Session) handle(ctx context.Context, in *Inbound) (r Response) {
 	if s.opt.Handler == nil {
-		return Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, SafeMessage: "本端不接受调用"}}
+		return Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, SafeMessage: "this side does not accept calls"}}
 	}
 	defer func() {
 		if p := recover(); p != nil {
-			r = Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "处理函数 panic"}}
+			r = Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "handler panicked"}}
 		}
 	}()
 	return s.opt.Handler(ctx, in)
@@ -805,7 +805,7 @@ func (s *Session) respondErr(id uint64, code pb.ErrorCode, msg string) error {
 // onResponse 用 RESPONSE 完成对应的本端调用；迟到、重复或未知的响应只计数。
 func (s *Session) onResponse(env *pb.Envelope) error {
 	if env.GetInitiatorSide() != s.opt.Local {
-		return errors.New("RESPONSE 的 initiator_side 不是本端")
+		return errors.New("RESPONSE initiator_side is not this side")
 	}
 	s.mu.Lock()
 	c := s.pending[env.GetCallId()]
@@ -829,7 +829,7 @@ func responseOf(env *pb.Envelope) Response {
 // onCancel 取消对端调用的 Handler ctx；找不到在途调用时只计数。
 func (s *Session) onCancel(env *pb.Envelope) error {
 	if env.GetInitiatorSide() != s.peer {
-		return errors.New("CANCEL 的 initiator_side 不是对端")
+		return errors.New("CANCEL initiator_side is not the peer")
 	}
 	s.mu.Lock()
 	in := s.inbound[env.GetCallId()]
@@ -862,7 +862,7 @@ func (s *Session) fail(err error) {
 		_ = s.conn.Close()
 		// 3. 结束本端调用（排队中的请求随之移出队列），取消对端调用的 Handler。
 		for _, c := range pending {
-			s.complete(c, Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "Session 已断开"}}, pb.CancelReason_CANCEL_REASON_UNSPECIFIED)
+			s.complete(c, Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "session disconnected"}}, pb.CancelReason_CANCEL_REASON_UNSPECIFIED)
 		}
 		for _, in := range inbound {
 			in.cancel()

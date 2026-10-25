@@ -42,7 +42,7 @@ func (c *Config) OnLoad(_ context.Context, fromVersion uint32, raw json.RawMessa
 // Validate 校验配置取值。
 func (c *Config) Validate(context.Context) error {
 	if c.Interval < 0 {
-		return errors.New("interval_seconds 不能为负数")
+		return errors.New("interval_seconds must not be negative")
 	}
 	return nil
 }

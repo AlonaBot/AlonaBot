@@ -21,21 +21,21 @@ func TestEnvelopeFieldNumbers(t *testing.T) {
 	}
 	fields := (&pb.Envelope{}).ProtoReflect().Descriptor().Fields()
 	if got := fields.Len(); got != len(want)-1 {
-		t.Fatalf("Envelope 字段数 = %d，WIRE 规定 %d", got, len(want)-1)
+		t.Fatalf("Envelope has %d fields, WIRE specifies %d", got, len(want)-1)
 	}
 	for num := 1; num < len(want); num++ {
 		f := fields.ByNumber(protoreflect.FieldNumber(num))
 		if f == nil || string(f.Name()) != want[num] {
-			t.Errorf("Envelope 字段 %d 应为 %s，实际 %v", num, want[num], f)
+			t.Errorf("Envelope field %d should be %s, got %v", num, want[num], f)
 			continue
 		}
 		// 6/7 用 optional 区分缺失与零值；16 是消息字段，天然有 presence。
 		wantPresence := num == 6 || num == 7 || num == 16
 		if f.HasPresence() != wantPresence {
-			t.Errorf("Envelope.%s presence = %v，应为 %v", f.Name(), f.HasPresence(), wantPresence)
+			t.Errorf("Envelope.%s presence = %v, want %v", f.Name(), f.HasPresence(), wantPresence)
 		}
 		if f.ContainingOneof() != nil && !f.ContainingOneof().IsSynthetic() {
-			t.Errorf("Envelope.%s 不得放进 oneof", f.Name())
+			t.Errorf("Envelope.%s must not be in a oneof", f.Name())
 		}
 	}
 }
@@ -45,11 +45,11 @@ func TestErrorInfoFieldNumbers(t *testing.T) {
 	fields := (&pb.ErrorInfo{}).ProtoReflect().Descriptor().Fields()
 	for num, name := range map[int]string{1: "code", 2: "safe_message", 3: "trace_id"} {
 		if f := fields.ByNumber(protoreflect.FieldNumber(num)); f == nil || string(f.Name()) != name {
-			t.Errorf("ErrorInfo 字段 %d 应为 %s，实际 %v", num, name, f)
+			t.Errorf("ErrorInfo field %d should be %s, got %v", num, name, f)
 		}
 	}
 	if fields.Len() != 3 {
-		t.Errorf("ErrorInfo 字段数 = %d，应为 3", fields.Len())
+		t.Errorf("ErrorInfo has %d fields, want 3", fields.Len())
 	}
 }
 
@@ -84,12 +84,12 @@ func TestEnumValues(t *testing.T) {
 	for _, c := range cases {
 		vals := c.enum.Values()
 		if vals.Len() != len(c.values) {
-			t.Errorf("%s 取值数 = %d，WIRE 规定 %d", c.enum.Name(), vals.Len(), len(c.values))
+			t.Errorf("%s has %d values, WIRE specifies %d", c.enum.Name(), vals.Len(), len(c.values))
 		}
 		for num, name := range c.values {
 			v := vals.ByNumber(protoreflect.EnumNumber(num))
 			if v == nil || string(v.Name()) != c.prefix+name {
-				t.Errorf("%s 值 %d 应为 %s%s，实际 %v", c.enum.Name(), num, c.prefix, name, v)
+				t.Errorf("%s value %d should be %s%s, got %v", c.enum.Name(), num, c.prefix, name, v)
 			}
 		}
 	}
@@ -107,7 +107,7 @@ func TestAllEnumsHaveUnspecifiedZero(t *testing.T) {
 		return true
 	})
 	if n < 20 {
-		t.Fatalf("只检查了 %d 个枚举，注册表扫描可能失效", n)
+		t.Fatalf("only %d enums were checked; the registry scan may be broken", n)
 	}
 }
 
@@ -117,11 +117,11 @@ func checkEnum(t *testing.T, e protoreflect.EnumDescriptor) {
 	prefix := screamingSnake(string(e.Name())) + "_"
 	zero := e.Values().ByNumber(0)
 	if zero == nil || string(zero.Name()) != prefix+"UNSPECIFIED" {
-		t.Errorf("%s 零值应为 %sUNSPECIFIED，实际 %v", e.FullName(), prefix, zero)
+		t.Errorf("zero value of %s should be %sUNSPECIFIED, got %v", e.FullName(), prefix, zero)
 	}
 	for j := 0; j < e.Values().Len(); j++ {
 		if n := string(e.Values().Get(j).Name()); !strings.HasPrefix(n, prefix) {
-			t.Errorf("%s 的值 %s 缺少前缀 %s", e.FullName(), n, prefix)
+			t.Errorf("%s value %s is missing prefix %s", e.FullName(), n, prefix)
 		}
 	}
 }
@@ -131,11 +131,11 @@ func TestServiceInvocationCarriesContext(t *testing.T) {
 	fields := (&pb.ServiceInvocation{}).ProtoReflect().Descriptor().Fields()
 	ctx := fields.ByName("context")
 	if ctx == nil || ctx.Message().FullName() != "alonabot.v1.InvocationContext" {
-		t.Errorf("ServiceInvocation.context 应为 InvocationContext，实际 %v", ctx)
+		t.Errorf("ServiceInvocation.context should be InvocationContext, got %v", ctx)
 	}
 	for _, name := range []protoreflect.Name{"payload", "encoding", "schema_id", "schema_version"} {
 		if fields.ByName(name) == nil {
-			t.Errorf("ServiceInvocation 缺少 %s", name)
+			t.Errorf("ServiceInvocation is missing %s", name)
 		}
 	}
 }
@@ -145,11 +145,11 @@ func TestHandlerOutcomeFields(t *testing.T) {
 	fields := (&pb.HandlerOutcome{}).ProtoReflect().Descriptor().Fields()
 	for _, name := range []protoreflect.Name{"matched", "propagation", "chain"} {
 		if fields.ByName(name) == nil {
-			t.Errorf("HandlerOutcome 缺少 %s", name)
+			t.Errorf("HandlerOutcome is missing %s", name)
 		}
 	}
 	if fields.Len() != 3 {
-		t.Errorf("HandlerOutcome 字段数 = %d，应为 3", fields.Len())
+		t.Errorf("HandlerOutcome has %d fields, want 3", fields.Len())
 	}
 }
 

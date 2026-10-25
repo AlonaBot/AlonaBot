@@ -50,23 +50,23 @@ func Register(r *pb.Register) error {
 		id := rd.GetRouteId()
 		switch {
 		case id == "":
-			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "routes[%d] 缺少 route_id", i)
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "routes[%d] is missing route_id", i)
 		case seen[id]:
-			return errf(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "route_id %q 重复", id)
+			return errf(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "duplicate route_id %q", id)
 		case rd.GetKind() == pb.RouteKind_ROUTE_KIND_UNSPECIFIED || !knownEnum(rd.GetKind()):
-			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q 的 kind 非法", id)
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q has an invalid kind", id)
 		case routeKindOf(rd) != rd.GetKind():
-			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q 的 kind %s 与描述类型不符", id, rd.GetKind())
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q has kind %s, which does not match its spec", id, rd.GetKind())
 		}
 		seen[id] = true
 	}
 	if !IsJSONObject([]byte(r.GetCandidateConfigJson())) {
-		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "candidate_config_json 不是 JSON 对象")
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "candidate_config_json is not a JSON object")
 	}
 	if l := r.GetHttpListener(); l != nil {
 		ip := net.ParseIP(l.GetHost())
 		if (l.GetHost() != LoopbackIPv4 && l.GetHost() != LoopbackIPv6) || ip == nil || l.GetPort() == 0 || l.GetPort() > 65535 {
-			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "HTTP Listener 只能是 127.0.0.1 或 ::1 的非零端口")
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "HTTP listener must be 127.0.0.1 or ::1 with a non-zero port")
 		}
 	}
 	return nil

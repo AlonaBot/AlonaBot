@@ -13,13 +13,13 @@ import (
 func CheckPeer(env *pb.Envelope, sid []byte, minor uint32, peerPluginID string) error {
 	switch {
 	case string(env.GetSessionId()) != string(sid):
-		return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, Message: "帧的 session_id 与本 Session 不符"}
+		return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, Message: "frame session_id does not match this session"}
 	case env.GetProtocolMinor() != minor:
 		return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR,
-			Message: fmt.Sprintf("帧的 protocol_minor=%d，与协商值 %d 不符", env.GetProtocolMinor(), minor)}
+			Message: fmt.Sprintf("frame protocol_minor=%d does not match the negotiated %d", env.GetProtocolMinor(), minor)}
 	case env.GetSourcePluginId() != peerPluginID:
 		return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR,
-			Message: fmt.Sprintf("帧的 source_plugin_id=%q，对端认证身份为 %q", env.GetSourcePluginId(), peerPluginID)}
+			Message: fmt.Sprintf("frame source_plugin_id=%q, peer authenticated as %q", env.GetSourcePluginId(), peerPluginID)}
 	}
 	return nil
 }

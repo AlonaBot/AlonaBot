@@ -43,7 +43,7 @@ type activation struct {
 // admit 在读循环中同步检查 Core 的业务请求：ready gate 打开之前一律拒绝。
 func (a *activation) admit(*wire.Inbound) *pb.ErrorInfo {
 	if !a.ready.Load() {
-		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "插件尚未就绪"}
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "plugin is not ready yet"}
 	}
 	return nil
 }
@@ -62,16 +62,16 @@ func (a *activation) control(env *pb.Envelope) error {
 	switch m := msg.(type) {
 	case *pb.Activate:
 		if a.started.Swap(true) {
-			return errors.New("重复的 ACTIVATE")
+			return errors.New("duplicate ACTIVATE")
 		}
 		if m.GetGenerationId() != a.ack.GetBootstrap().GetGenerationId() {
-			return fmt.Errorf("ACTIVATE 的代次 %q 与 Bootstrap 不符", m.GetGenerationId())
+			return fmt.Errorf("ACTIVATE generation %q does not match Bootstrap", m.GetGenerationId())
 		}
 		go a.runOnReady(m)
 		return nil
 	case *pb.Stopping:
 		if a.stopping.Swap(true) {
-			return errors.New("重复的 STOPPING")
+			return errors.New("duplicate STOPPING")
 		}
 		// 在读循环中同步关闭 ready gate：此后到达的业务请求一律被拒绝。
 		a.ready.Store(false)
@@ -80,7 +80,7 @@ func (a *activation) control(env *pb.Envelope) error {
 	case *pb.Heartbeat:
 		return nil
 	}
-	return fmt.Errorf("激活阶段不应收到 %s", env.GetKind())
+	return fmt.Errorf("unexpected %s during activation", env.GetKind())
 }
 
 // runOnReady 在 ACTIVATE 给出的期限内执行 OnReady；用户函数不响应 ctx 时由 watchdog 判定失败。
@@ -104,18 +104,18 @@ func (a *activation) runOnReady(m *pb.Activate) {
 		select {
 		case err := <-errc:
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "OnReady 失败: %v\n", err)
-				a.reportFailure(pb.ErrorCode_ERROR_CODE_PLUGIN_NOT_READY, "OnReady 返回错误", err)
+				fmt.Fprintf(os.Stderr, "OnReady failed: %v\n", err)
+				a.reportFailure(pb.ErrorCode_ERROR_CODE_PLUGIN_NOT_READY, "OnReady returned an error", err)
 				return
 			}
 		case <-timer.C:
-			a.reportFailure(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnReady 超过预算", nil)
+			a.reportFailure(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnReady exceeded its budget", nil)
 			return
 		}
 	}
 	// 2. 唯一 writer 完整写出 ACTIVATED 之后才打开 ready gate。
 	if err := a.sess.SendControlSync(pb.FrameKind_FRAME_KIND_ACTIVATED, &pb.Activated{GenerationId: m.GetGenerationId(), Ready: true}); err != nil {
-		a.fail(fmt.Errorf("写出 ACTIVATED 失败: %w", err))
+		a.fail(fmt.Errorf("write ACTIVATED: %w", err))
 		return
 	}
 	a.ready.Store(true)
@@ -160,14 +160,14 @@ func (a *activation) shutdown(deadline time.Time) {
 					}
 				}()
 				if err := s.OnStop(ctx); err != nil {
-					fmt.Fprintf(os.Stderr, "OnStop 失败: %v\n", err)
+					fmt.Fprintf(os.Stderr, "OnStop failed: %v\n", err)
 				}
 			}()
 			timer := time.NewTimer(time.Until(deadline))
 			select {
 			case <-done:
 			case <-timer.C:
-				fmt.Fprintln(os.Stderr, "OnStop 超过停止截止时间，放弃等待")
+				fmt.Fprintln(os.Stderr, "OnStop exceeded the stop deadline; giving up waiting")
 			}
 			timer.Stop()
 			cancel()
@@ -191,13 +191,13 @@ func serve(sess *wire.Session, a *activation) error {
 		return nil
 	}
 	a.shutdown(time.Now().Add(onStopBudget))
-	return fmt.Errorf("与 Core 的连接已断开: %w", sess.Err())
+	return fmt.Errorf("connection to Core lost: %w", sess.Err())
 }
 
 // businessHandler 处理 ready 之后的 Core 请求。
 // shortcut: 尚无业务消息分发，一律回 UNSUPPORTED；接入命令与事件分发时替换。
 func businessHandler(context.Context, *wire.Inbound) wire.Response {
-	return wire.Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, SafeMessage: "插件尚未实现业务分发"}}
+	return wire.Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, SafeMessage: "plugin has not implemented business dispatch"}}
 }
 
 // activate 在 PREPARED 之后启动 Session，等待 ACTIVATE、执行 OnReady 并写出 ACTIVATED。
@@ -223,6 +223,6 @@ func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root) (*w
 			return nil, nil, err
 		default:
 		}
-		return nil, nil, fmt.Errorf("激活前 Session 关闭: %w", a.sess.Err())
+		return nil, nil, fmt.Errorf("session closed before activation: %w", a.sess.Err())
 	}
 }
