@@ -123,7 +123,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		_ = proc.Release()
 		closeListener(ln)
 		if kerr != nil {
-			err = errors.Join(err, fmt.Errorf("插件 %s 的进程树未确认清空: %w", spec.PluginID, kerr))
+			err = errors.Join(err, fmt.Errorf("process tree of plugin %s not confirmed empty: %w", spec.PluginID, kerr))
 		}
 		return nil, err
 	}
@@ -171,14 +171,14 @@ func connect(ln net.Listener, proc *process.Process, spec Spec) (*wire.Conn, err
 	select {
 	case a := <-ch:
 		if a.err != nil {
-			return nil, fmt.Errorf("等待插件连接失败（握手期限 %v）: %w", spec.Limits.Handshake, a.err)
+			return nil, fmt.Errorf("wait for plugin connection (handshake deadline %v): %w", spec.Limits.Handshake, a.err)
 		}
 		if tl, ok := ln.(*net.TCPListener); ok {
 			_ = tl.SetDeadline(time.Time{})
 		}
 		return wire.NewStreamConn(a.c), nil
 	case <-proc.Exited():
-		return nil, fmt.Errorf("插件进程在连接前退出: %v", proc.ExitState())
+		return nil, fmt.Errorf("plugin process exited before connecting: %v", proc.ExitState())
 	}
 }
 

@@ -35,9 +35,15 @@ import (
 // inheritedEnv 列出从 Core 环境继承到插件的变量；其余变量（含管理凭证）一律不传。
 var inheritedEnv = []string{"PATH", "HOME", "TMPDIR", "TEMP", "TMP", "SystemRoot", "LANG", "TZ"}
 
+// secretBytes 是 Session Secret 的字节数（WIRE-FORMAT §3.1）。
+const secretBytes = 32
+
+// logBufferSize 限制单次从插件输出中读取一行日志的缓冲大小；更长的行分段记录。
+const logBufferSize = 64 << 10
+
 // NewSecret 生成本次启动的 256-bit Session Secret（十六进制）。
 func NewSecret() (string, error) {
-	b := make([]byte, 32)
+	b := make([]byte, secretBytes)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
@@ -55,10 +61,10 @@ func Entrypoint(installDir, rel string) (string, error) {
 		return "", err
 	}
 	if !fi.Mode().IsRegular() {
-		return "", fmt.Errorf("entrypoint %s 不是普通文件", p)
+		return "", fmt.Errorf("entrypoint %s is not a regular file", p)
 	}
 	if runtime.GOOS != "windows" && fi.Mode().Perm()&0o111 == 0 {
-		return "", fmt.Errorf("entrypoint %s 不可执行", p)
+		return "", fmt.Errorf("entrypoint %s is not executable", p)
 	}
 	return p, nil
 }
@@ -169,7 +175,7 @@ func Start(spec Spec, logf LogFunc) (*Process, error) {
 	if err := cmd.Start(); err != nil {
 		closeAll(parentEnds)
 		closeAll(childEnds)
-		return nil, fmt.Errorf("启动插件 %s 失败: %w", spec.PluginID, err)
+		return nil, fmt.Errorf("start plugin %s: %w", spec.PluginID, err)
 	}
 	closeAll(childEnds) // 子进程已持有各自的副本
 	t, err := attachTree(cmd)
@@ -177,7 +183,7 @@ func Start(spec Spec, logf LogFunc) (*Process, error) {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 		closeAll(parentEnds)
-		return nil, fmt.Errorf("建立插件 %s 的进程树管理失败: %w", spec.PluginID, err)
+		return nil, fmt.Errorf("set up process tree management for plugin %s: %w", spec.PluginID, err)
 	}
 	p.tree = t
 
@@ -216,7 +222,7 @@ func (p *Process) pump(stream string, r *os.File, logf LogFunc) {
 	go func() {
 		defer p.logs.Done()
 		defer r.Close()
-		br := bufio.NewReaderSize(r, 64<<10)
+		br := bufio.NewReaderSize(r, logBufferSize)
 		for {
 			line, err := br.ReadSlice('\n')
 			if len(line) > 0 {

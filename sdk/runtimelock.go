@@ -17,13 +17,13 @@ func acquireRuntimeLock() (*oslock.Lock, error) {
 	path := os.Getenv(wire.EnvRuntimeLock)
 	switch {
 	case path == "":
-		return nil, fmt.Errorf("缺少环境变量 %s（插件必须由 Core 启动）", wire.EnvRuntimeLock)
+		return nil, fmt.Errorf("missing environment variable %s (the plugin must be started by Core)", wire.EnvRuntimeLock)
 	case !filepath.IsAbs(path):
-		return nil, fmt.Errorf("%s 必须是绝对路径，实际 %q", wire.EnvRuntimeLock, path)
+		return nil, fmt.Errorf("%s must be an absolute path, got %q", wire.EnvRuntimeLock, path)
 	}
 	l, err := oslock.TryLock(path)
 	if errors.Is(err, oslock.ErrLocked) {
-		return nil, fmt.Errorf("另一个实例或 Core 仍持有 runtime.lock，拒绝启动: %w", err)
+		return nil, fmt.Errorf("another instance or Core still holds runtime.lock, refusing to start: %w", err)
 	}
 	return l, err
 }

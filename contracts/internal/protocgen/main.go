@@ -37,14 +37,14 @@ func run() error {
 	// 1. 核对 protoc 版本并定位 go.mod 固定的 protoc-gen-go。
 	ver, err := output("protoc", "--version")
 	if err != nil {
-		return fmt.Errorf("执行 protoc --version 失败: %w", err)
+		return fmt.Errorf("run protoc --version: %w", err)
 	}
 	if ver != wantProtoc {
-		return fmt.Errorf("protoc 版本为 %q，需要 %q", ver, wantProtoc)
+		return fmt.Errorf("protoc version is %q, want %q", ver, wantProtoc)
 	}
 	plugin, err := output("go", "tool", "-n", "protoc-gen-go")
 	if err != nil {
-		return fmt.Errorf("定位 protoc-gen-go 失败: %w", err)
+		return fmt.Errorf("locate protoc-gen-go: %w", err)
 	}
 
 	// 2. 按路径排序收集全部 .proto，保证生成顺序稳定。
@@ -60,7 +60,7 @@ func run() error {
 		return err
 	}
 	if len(protos) == 0 {
-		return fmt.Errorf("%s 下没有 .proto 文件", protoDir)
+		return fmt.Errorf("no .proto files under %s", protoDir)
 	}
 	sort.Strings(protos)
 

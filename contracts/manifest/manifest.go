@@ -48,7 +48,7 @@ const (
 
 var (
 	marketID = regexp.MustCompile(`^alonabot_plugin_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`)
-	localID  = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
+	localID  = regexp.MustCompile(fmt.Sprintf(`^[a-z][a-z0-9_-]{0,%d}$`, MaxIDLen-1))
 	// SemVer 2.0 官方正则。
 	semver = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
 )
@@ -68,21 +68,21 @@ var reservedNames = func() map[string]bool {
 func ValidateID(id string) (warnings []string, err error) {
 	switch {
 	case id == "":
-		return nil, errors.New("缺少插件 ID")
+		return nil, errors.New("missing plugin ID")
 	case len(id) > MaxIDLen:
-		return nil, fmt.Errorf("插件 ID 长度 %d 超过 %d", len(id), MaxIDLen)
+		return nil, fmt.Errorf("plugin ID length %d exceeds %d", len(id), MaxIDLen)
 	case marketID.MatchString(id):
 		return nil, nil
 	case strings.HasPrefix(id, MarketPrefix):
-		return nil, fmt.Errorf("插件 ID %q 带市场前缀但不符合市场 ID 规则", id)
+		return nil, fmt.Errorf("plugin ID %q has the market prefix but does not match the market ID rule", id)
 	case strings.ToLower(id) != id:
-		return nil, fmt.Errorf("插件 ID %q 含大写字母，必须使用规范小写", id)
+		return nil, fmt.Errorf("plugin ID %q contains uppercase letters; use lowercase", id)
 	case !localID.MatchString(id):
-		return nil, fmt.Errorf("插件 ID %q 不是安全 slug（只允许小写字母开头，后跟小写字母、数字、_ 或 -）", id)
+		return nil, fmt.Errorf("plugin ID %q is not a safe slug (must start with a lowercase letter, followed by lowercase letters, digits, _ or -)", id)
 	case reservedNames[id]:
-		return nil, fmt.Errorf("插件 ID %q 是 Windows 保留设备名", id)
+		return nil, fmt.Errorf("plugin ID %q is a Windows reserved device name", id)
 	}
-	return []string{fmt.Sprintf("插件 ID %q 不带市场前缀 %s，只能作为本地插件安装", id, MarketPrefix)}, nil
+	return []string{fmt.Sprintf("plugin ID %q lacks the market prefix %s and can only be installed as a local plugin", id, MarketPrefix)}, nil
 }
 
 // ValidVersion 报告 v 是否为合法 SemVer 2.0。
@@ -135,11 +135,11 @@ func Parse(data []byte) (*Result, error) {
 	dec.KnownFields(true)
 	var m Manifest
 	if err := dec.Decode(&m); err != nil {
-		return nil, fmt.Errorf("plugin.yaml 解析失败: %w", err)
+		return nil, fmt.Errorf("parse plugin.yaml: %w", err)
 	}
 	var extra any
 	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
-		return nil, errors.New("plugin.yaml 只能包含一个 YAML 文档")
+		return nil, errors.New("plugin.yaml must contain exactly one YAML document")
 	}
 	warnings, err := m.validate()
 	if err != nil {
@@ -151,53 +151,53 @@ func Parse(data []byte) (*Result, error) {
 // validate 逐项校验字段，返回非致命警告；任一项不合法即返回错误。
 func (m *Manifest) validate() ([]string, error) {
 	if m.ManifestVersion == nil || *m.ManifestVersion != 1 {
-		return nil, errors.New("manifest_version 必须为 1")
+		return nil, errors.New("manifest_version must be 1")
 	}
 	warnings, err := ValidateID(m.ID)
 	if err != nil {
 		return nil, err
 	}
 	if !ValidVersion(m.Version) {
-		return nil, fmt.Errorf("version %q 不是合法的 SemVer", m.Version)
+		return nil, fmt.Errorf("version %q is not valid SemVer", m.Version)
 	}
 	if m.ProtocolMinMajor == nil || m.ProtocolMaxMajor == nil {
-		return nil, errors.New("缺少 protocol_min_major 或 protocol_max_major")
+		return nil, errors.New("missing protocol_min_major or protocol_max_major")
 	}
 	if *m.ProtocolMinMajor == 0 || *m.ProtocolMinMajor > *m.ProtocolMaxMajor {
-		return nil, fmt.Errorf("协议主版本范围 [%d, %d] 不合法", *m.ProtocolMinMajor, *m.ProtocolMaxMajor)
+		return nil, fmt.Errorf("invalid protocol major version range [%d, %d]", *m.ProtocolMinMajor, *m.ProtocolMaxMajor)
 	}
 	if m.RequiredCapabilities == nil {
-		return nil, errors.New("缺少 required_capabilities（没有必需能力时写空列表）")
+		return nil, errors.New("missing required_capabilities (use an empty list when there are none)")
 	}
 	for _, c := range *m.RequiredCapabilities {
 		if c.Name == "" || c.Version == 0 {
-			return nil, fmt.Errorf("必需能力 %+v 缺少 name 或 version", c)
+			return nil, fmt.Errorf("required capability %+v is missing name or version", c)
 		}
 	}
 	if !SupportedPlatform(m.OS, m.Arch) {
-		return nil, fmt.Errorf("不支持的平台 %s/%s", m.OS, m.Arch)
+		return nil, fmt.Errorf("unsupported platform %s/%s", m.OS, m.Arch)
 	}
 	if err := ValidateRelPath(m.Entrypoint); err != nil {
 		return nil, fmt.Errorf("entrypoint: %w", err)
 	}
 	if m.ConfigVersion == nil {
-		return nil, errors.New("缺少 config_version")
+		return nil, errors.New("missing config_version")
 	}
 	if m.Source == "" {
-		return nil, errors.New("缺少 source")
+		return nil, errors.New("missing source")
 	}
 	switch m.MigrationMode {
 	case "", MigrationNone, MigrationSelf, MigrationVersioned:
 	default:
-		return nil, fmt.Errorf("未知的 migration_mode %q", m.MigrationMode)
+		return nil, fmt.Errorf("unknown migration_mode %q", m.MigrationMode)
 	}
 	switch m.PrepareEffects {
 	case "", EffectsNone, EffectsManagedDB, EffectsExternal:
 	default:
-		return nil, fmt.Errorf("未知的 prepare_effects %q", m.PrepareEffects)
+		return nil, fmt.Errorf("unknown prepare_effects %q", m.PrepareEffects)
 	}
 	if m.MigrationMode == "" || m.PrepareEffects == "" {
-		warnings = append(warnings, "未声明 migration_mode 或 prepare_effects，该包不允许自动升级")
+		warnings = append(warnings, "migration_mode or prepare_effects not declared; automatic upgrades are not allowed for this package")
 	}
 	return warnings, nil
 }
@@ -206,17 +206,17 @@ func (m *Manifest) validate() ([]string, error) {
 func ValidateRelPath(p string) error {
 	switch {
 	case p == "":
-		return errors.New("路径为空")
+		return errors.New("empty path")
 	case strings.ContainsAny(p, "\\:\x00"):
-		return fmt.Errorf("路径 %q 含反斜杠、盘符或 NUL", p)
+		return fmt.Errorf("path %q contains a backslash, drive letter or NUL", p)
 	case path.IsAbs(p):
-		return fmt.Errorf("路径 %q 是绝对路径", p)
+		return fmt.Errorf("path %q is absolute", p)
 	case path.Clean(p) != p:
-		return fmt.Errorf("路径 %q 不是规范形式", p)
+		return fmt.Errorf("path %q is not in canonical form", p)
 	}
 	for _, seg := range strings.Split(p, "/") {
 		if seg == ".." || seg == "." {
-			return fmt.Errorf("路径 %q 含 %s", p, seg)
+			return fmt.Errorf("path %q contains %s", p, seg)
 		}
 	}
 	return nil

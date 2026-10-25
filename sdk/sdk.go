@@ -33,7 +33,7 @@ type Error struct {
 func (e *Error) Error() string { return e.Code.String() + ": " + e.Message }
 
 // ErrNotImplemented 表示该入口的运行行为尚未实现。
-var ErrNotImplemented = &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "SDK 运行时尚未实现"}
+var ErrNotImplemented = &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "SDK runtime is not implemented yet"}
 
 // 可选的进程生命周期 Hook（CONTRACTS §4.1）；没有实现时无需空方法。
 type (
@@ -117,7 +117,7 @@ func Run(root plugin.Root) error {
 		return err
 	}
 	if len(reg.HTTP) > 0 || len(reg.Schedules) > 0 {
-		return &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "本版 SDK 尚不支持 HTTP 路由与定时任务"}
+		return &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "this SDK version does not support HTTP routes or scheduled jobs yet"}
 	}
 
 	// 3. 连接 Core 并依次完成握手、准备与激活，然后进入服务循环。
@@ -154,7 +154,7 @@ type Registration struct {
 // Collect 调用根插件的注册入口，检查 Handler 签名与同插件内的重复项（D-20：同插件重复即报错）。
 func Collect(root plugin.Root) (*Registration, error) {
 	if root == nil {
-		return nil, errors.New("根插件为 nil")
+		return nil, errors.New("root plugin is nil")
 	}
 	reg := &Registration{}
 	var errs []error
@@ -174,7 +174,7 @@ func Collect(root plugin.Root) (*Registration, error) {
 		reg.Schedules, errs = r.jobs, append(errs, r.errs...)
 	}
 	if err := errors.Join(errs...); err != nil {
-		return nil, fmt.Errorf("%T 的注册无效: %w", root, err)
+		return nil, fmt.Errorf("invalid registration of %T: %w", root, err)
 	}
 	return reg, nil
 }

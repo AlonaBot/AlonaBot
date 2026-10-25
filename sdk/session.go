@@ -37,13 +37,13 @@ func readLaunch() (launch, error) {
 	l.digest, err2 = hex.DecodeString(os.Getenv(wire.EnvBuildDigest))
 	switch {
 	case l.pluginID == "":
-		return l, fmt.Errorf("缺少 %s（插件必须由 Core 启动）", wire.EnvPluginID)
+		return l, fmt.Errorf("missing %s (the plugin must be started by Core)", wire.EnvPluginID)
 	case err1 != nil || len(l.secret) != 32:
-		return l, fmt.Errorf("%s 不是 32 字节十六进制", wire.EnvSecret)
+		return l, fmt.Errorf("%s is not 32 bytes of hex", wire.EnvSecret)
 	case err2 != nil:
-		return l, fmt.Errorf("%s 不是十六进制", wire.EnvBuildDigest)
+		return l, fmt.Errorf("%s is not hex", wire.EnvBuildDigest)
 	case l.transport != wire.TransportTCP && l.transport != wire.TransportStdio:
-		return l, fmt.Errorf("%s 只能是 tcp 或 stdio", wire.EnvTransport)
+		return l, fmt.Errorf("%s must be tcp or stdio", wire.EnvTransport)
 	}
 	return l, nil
 }
@@ -55,7 +55,7 @@ func dial(l launch) (*wire.Conn, error) {
 	}
 	host, _, err := net.SplitHostPort(l.addr)
 	if ip := net.ParseIP(host); err != nil || ip == nil || !ip.IsLoopback() {
-		return nil, fmt.Errorf("%s 必须是 loopback 地址，实际 %q", wire.EnvCoreAddr, l.addr)
+		return nil, fmt.Errorf("%s must be a loopback address, got %q", wire.EnvCoreAddr, l.addr)
 	}
 	c, err := net.Dial("tcp", l.addr)
 	if err != nil {
@@ -96,11 +96,11 @@ func clientHandshake(conn *wire.Conn, l launch) (*pb.HelloAck, error) {
 		return nil, err
 	}
 	if err := conn.WriteFrame(hello); err != nil {
-		return nil, fmt.Errorf("发送 HELLO 失败: %w", err)
+		return nil, fmt.Errorf("send HELLO: %w", err)
 	}
 	env, err := conn.ReadFrame()
 	if err != nil {
-		return nil, fmt.Errorf("等待 HELLO_ACK 失败（认证被拒或超时）: %w", err)
+		return nil, fmt.Errorf("wait for HELLO_ACK (authentication rejected or timed out): %w", err)
 	}
 	msg, err := validate.DecodeControl(env)
 	if err != nil {
@@ -109,16 +109,16 @@ func clientHandshake(conn *wire.Conn, l launch) (*pb.HelloAck, error) {
 	switch m := msg.(type) {
 	case *pb.HelloAck:
 		if len(m.GetSessionId()) != 16 {
-			return nil, errors.New("HELLO_ACK 的 session_id 不合法")
+			return nil, errors.New("HELLO_ACK has an invalid session_id")
 		}
 		if err := wire.CheckPeer(env, m.GetSessionId(), m.GetChosenMinor(), ""); err != nil {
-			return nil, fmt.Errorf("HELLO_ACK 不合法: %w", err)
+			return nil, fmt.Errorf("invalid HELLO_ACK: %w", err)
 		}
 		return m, nil
 	case *pb.SessionError:
-		return nil, &Error{Code: validate.PublicCode(env.GetError().GetCode()), Message: "Core 拒绝握手: " + env.GetError().GetSafeMessage()}
+		return nil, &Error{Code: validate.PublicCode(env.GetError().GetCode()), Message: "Core rejected the handshake: " + env.GetError().GetSafeMessage()}
 	}
-	return nil, fmt.Errorf("握手阶段收到意外的 %s", env.GetKind())
+	return nil, fmt.Errorf("unexpected %s during handshake", env.GetKind())
 }
 
 // sessionFailure 报告准备阶段失败：发送 SESSION_ERROR（只含安全消息），返回给调用方的错误保留原因。
@@ -159,7 +159,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg 
 	// 1. Core 必须下发阶段预算与准备截止时间；缺失时报协议错误，而不是把预算当作 0 误报超时。
 	if limits == nil || limits.GetOnStartMs() == 0 || boot.GetPreparationDeadlineUnixMs() == 0 {
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_HELLO_ACK,
-			pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "Bootstrap 缺少阶段预算或准备截止时间", nil)
+			pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "Bootstrap is missing phase limits or the preparation deadline", nil)
 	}
 
 	// 2. OnStart：用户函数不响应 context 时，由 watchdog 判定失败（Run 随后退出进程）。
@@ -182,14 +182,14 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg 
 			cancel()
 			if err != nil {
 				// 用户错误原文可能含敏感信息：只写 stderr，SESSION_ERROR 中只放安全消息。
-				fmt.Fprintf(os.Stderr, "OnStart 失败: %v\n", err)
+				fmt.Fprintf(os.Stderr, "OnStart failed: %v\n", err)
 				return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_ON_START, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
-					pb.ErrorCode_ERROR_CODE_INTERNAL, "OnStart 返回错误", err)
+					pb.ErrorCode_ERROR_CODE_INTERNAL, "OnStart returned an error", err)
 			}
 		case <-timer.C:
 			cancel()
 			return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_ON_START, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
-				pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnStart 超过预算", nil)
+				pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnStart exceeded its budget", nil)
 		}
 	}
 
@@ -202,9 +202,9 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg 
 	err = conn.WriteFrame(regEnv)
 	if errors.Is(err, wire.ErrFrameTooLarge) {
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER,
-			pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "注册描述超过 4 MiB", err)
+			pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "registration exceeds 4 MiB", err)
 	} else if err != nil {
-		return nil, fmt.Errorf("发送 REGISTER 失败: %w", err)
+		return nil, fmt.Errorf("send REGISTER: %w", err)
 	}
 
 	// 4. 在准备截止前等待 PREPARED 或 Core 的 SESSION_ERROR。
@@ -213,11 +213,11 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg 
 	defer stop()
 	env, err := conn.ReadFrame()
 	if err != nil {
-		return nil, fmt.Errorf("等待 PREPARED 失败: %w", err)
+		return nil, fmt.Errorf("wait for PREPARED: %w", err)
 	}
 	if err := wire.CheckPeer(env, sid, minor, ""); err != nil {
 		_ = conn.Close()
-		return nil, fmt.Errorf("准备阶段收到不合法的帧: %w", err)
+		return nil, fmt.Errorf("invalid frame during preparation: %w", err)
 	}
 	msg, err := validate.DecodeControl(env)
 	if err != nil {
@@ -228,7 +228,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg 
 		return m, nil
 	case *pb.SessionError:
 		_ = conn.Close()
-		return nil, &Error{Code: validate.PublicCode(env.GetError().GetCode()), Message: "Core 拒绝注册: " + env.GetError().GetSafeMessage()}
+		return nil, &Error{Code: validate.PublicCode(env.GetError().GetCode()), Message: "Core rejected the registration: " + env.GetError().GetSafeMessage()}
 	}
-	return nil, fmt.Errorf("准备阶段收到意外的 %s", env.GetKind())
+	return nil, fmt.Errorf("unexpected %s during preparation", env.GetKind())
 }

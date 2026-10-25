@@ -90,9 +90,9 @@ func (in *Instance) admit(req *wire.Inbound) *pb.ErrorInfo {
 		if req.ParentCallID != 0 {
 			return nil
 		}
-		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "插件正在停止，拒绝新的根调用"}
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "plugin is stopping; new root calls are rejected"}
 	}
-	return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "插件尚未激活，拒绝业务请求"}
+	return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "plugin is not activated; business requests are rejected"}
 }
 
 // control 在读循环中同步处理控制帧：ACTIVATED 在这里生效，因此紧随其后的 REQUEST 一定看到 Activated。
@@ -104,18 +104,18 @@ func (in *Instance) control(env *pb.Envelope) error {
 	switch m := msg.(type) {
 	case *pb.Activated:
 		if in.State() != StateActivating || m.GetGenerationId() != in.GenerationID || !m.GetReady() {
-			return fmt.Errorf("意外的 ACTIVATED（状态 %s，代次 %q）", in.State(), m.GetGenerationId())
+			return fmt.Errorf("unexpected ACTIVATED (state %s, generation %q)", in.State(), m.GetGenerationId())
 		}
 		in.state.Store(int32(StateActivated))
 		close(in.activated)
 		return nil
 	case *pb.SessionError:
 		in.degrade(&PhaseError{Phase: m.GetFailedPhase(), Code: validate.PublicCode(env.GetError().GetCode()), Message: env.GetError().GetSafeMessage()})
-		return errors.New("插件报告 SESSION_ERROR")
+		return errors.New("plugin reported SESSION_ERROR")
 	case *pb.Heartbeat:
 		return nil
 	}
-	return fmt.Errorf("激活后不应收到 %s", env.GetKind())
+	return fmt.Errorf("unexpected %s after activation", env.GetKind())
 }
 
 // Activate 完成「提交 → ACTIVATE → OnReady → ACTIVATED」。提交失败时不发送 ACTIVATE，旧代次保持权威；
@@ -127,11 +127,11 @@ func Activate(ctx context.Context, conn *wire.Conn, prep *Prepared, opt Activate
 		if err := opt.Commit(ctx); err != nil {
 			if e, eerr := wire.ControlEnvelope(prep.SessionID, prep.Minor, "", pb.FrameKind_FRAME_KIND_SESSION_ERROR,
 				&pb.SessionError{FailedPhase: pb.SessionPhase_SESSION_PHASE_ACTIVATE}); eerr == nil {
-				e.Error = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "Core 提交候选代次失败"}
+				e.Error = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "Core failed to commit the candidate generation"}
 				_ = conn.WriteFrameTimeout(e, failNotifyTimeout)
 			}
 			_ = conn.Close()
-			return nil, fmt.Errorf("提交代次 %s 失败（未发送 ACTIVATE，旧代次保持权威）: %w", opt.GenerationID, err)
+			return nil, fmt.Errorf("commit generation %s failed (ACTIVATE not sent, previous generation stays authoritative): %w", opt.GenerationID, err)
 		}
 	}
 
@@ -160,11 +160,11 @@ func Activate(ctx context.Context, conn *wire.Conn, prep *Prepared, opt Activate
 	case <-in.activated:
 		return in, nil
 	case <-timer.C:
-		failure = phaseErr(pb.SessionPhase_SESSION_PHASE_ON_READY, pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnReady 超过预算")
+		failure = phaseErr(pb.SessionPhase_SESSION_PHASE_ON_READY, pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnReady exceeded its budget")
 	case <-in.Session.Done():
-		failure = phaseErr(pb.SessionPhase_SESSION_PHASE_ACTIVATE, pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "激活期间 Session 断开: %v", in.Session.Err())
+		failure = phaseErr(pb.SessionPhase_SESSION_PHASE_ACTIVATE, pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "session disconnected during activation: %v", in.Session.Err())
 	case <-ctx.Done():
-		failure = phaseErr(pb.SessionPhase_SESSION_PHASE_ACTIVATE, pb.ErrorCode_ERROR_CODE_CANCELLED, "激活被取消")
+		failure = phaseErr(pb.SessionPhase_SESSION_PHASE_ACTIVATE, pb.ErrorCode_ERROR_CODE_CANCELLED, "activation cancelled")
 	}
 	// ACTIVATED 可能与超时同时到达：只有仍处于 Activating 时才判定失败。
 	if !in.state.CompareAndSwap(int32(StateActivating), int32(StateDegraded)) {

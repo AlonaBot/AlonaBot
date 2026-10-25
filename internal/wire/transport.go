@@ -10,6 +10,12 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
+// readBufferSize 是帧连接读端的缓冲大小。
+const readBufferSize = 64 << 10
+
+// loopbackListenAddr 让 Core 在 IPv4 loopback 上监听随机端口。
+const loopbackListenAddr = "127.0.0.1:0"
+
 // Conn 在一条连接上读写帧：只有一个 reader 和一个串行 writer，TCP 与 stdio 共用同一实现。
 type Conn struct {
 	r *bufio.Reader // 带缓冲的读端，只由唯一的读循环使用
@@ -21,7 +27,7 @@ type Conn struct {
 // NewConn 由读端、写端与关闭函数组成连接。stdio 时 Core 侧为子进程的 stdout/stdin 管道，
 // 插件侧为 os.Stdin/os.Stdout（stdout 只传帧，普通日志必须写 stderr）。
 func NewConn(r io.Reader, w io.Writer, closer io.Closer) *Conn {
-	return &Conn{r: bufio.NewReaderSize(r, 64<<10), w: NewWriter(w), closer: closer}
+	return &Conn{r: bufio.NewReaderSize(r, readBufferSize), w: NewWriter(w), closer: closer}
 }
 
 // NewStreamConn 用同一个双向流（例如 net.Conn）构造连接。
@@ -58,13 +64,13 @@ func (c *Conn) Close() error {
 // ListenLoopback 直接在 IPv4 loopback 的临时端口上监听（CONTRACTS §1.1）。调用方持有 Listener
 // 直到会话结束，不采用先探测空闲端口、关闭后再绑定的做法。
 func ListenLoopback() (net.Listener, error) {
-	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	ln, err := net.Listen("tcp4", loopbackListenAddr)
 	if err != nil {
 		return nil, err
 	}
 	if a, ok := ln.Addr().(*net.TCPAddr); !ok || !a.IP.IsLoopback() || a.Port == 0 {
 		_ = ln.Close()
-		return nil, errors.New("Listener 未绑定到 loopback 的非零端口")
+		return nil, errors.New("listener is not bound to a non-zero loopback port")
 	}
 	return ln, nil
 }

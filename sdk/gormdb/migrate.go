@@ -44,7 +44,7 @@ func CheckMigrators(root any) (string, error) {
 	versioned, isVersioned := root.(VersionedMigrator)
 	switch {
 	case isSelf && isVersioned:
-		return "", fmt.Errorf("%T 同时实现了 Migrate 和 Migrations，两者互斥", root)
+		return "", fmt.Errorf("%T implements both Migrate and Migrations, which are mutually exclusive", root)
 	case isSelf:
 		return ModeSelf, nil
 	case !isVersioned:
@@ -54,11 +54,11 @@ func CheckMigrators(root any) (string, error) {
 	for i, m := range versioned.Migrations() {
 		switch {
 		case m.ID == 0:
-			return "", fmt.Errorf("第 %d 个迁移的 ID 为 0", i)
+			return "", fmt.Errorf("migration %d has ID 0", i)
 		case m.ID <= last:
-			return "", fmt.Errorf("迁移 ID %d 不大于前一个 ID %d（必须唯一且递增）", m.ID, last)
+			return "", fmt.Errorf("migration ID %d is not greater than the previous ID %d (must be unique and increasing)", m.ID, last)
 		case m.Up == nil:
-			return "", fmt.Errorf("迁移 %d 缺少 Up", m.ID)
+			return "", fmt.Errorf("migration %d has no Up", m.ID)
 		}
 		last = m.ID
 	}

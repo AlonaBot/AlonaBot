@@ -28,7 +28,7 @@ type capKey struct {
 // 交集按 local.Supported 的顺序给出，双方的 required 都必须包含于交集。失败返回 FAILED_PRECONDITION。
 func Negotiate(local, peer Offer) (Agreement, error) {
 	if local.Major != peer.Major {
-		return Agreement{}, errf(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "协议主版本不一致：本端 %d，对端 %d", local.Major, peer.Major)
+		return Agreement{}, errf(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "protocol major version mismatch: local %d, peer %d", local.Major, peer.Major)
 	}
 	peerSet := make(map[capKey]bool, len(peer.Supported))
 	for _, c := range peer.Supported {
@@ -46,7 +46,7 @@ func Negotiate(local, peer Offer) (Agreement, error) {
 	for _, req := range [][]*pb.ProtocolCapability{local.Required, peer.Required} {
 		for _, c := range req {
 			if !interSet[capKey{c.GetName(), c.GetVersion()}] {
-				return Agreement{}, errf(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "必需能力 %s@%d 不在双方交集中", c.GetName(), c.GetVersion())
+				return Agreement{}, errf(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "required capability %s@%d is not in the shared set", c.GetName(), c.GetVersion())
 			}
 		}
 	}

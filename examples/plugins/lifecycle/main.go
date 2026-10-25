@@ -51,5 +51,5 @@ func main() {
 		fmt.Fprintln(os.Stderr, "lifecycle:", err)
 		os.Exit(1)
 	}
-	fmt.Fprintln(os.Stderr, "lifecycle: 正常退出")
+	fmt.Fprintln(os.Stderr, "lifecycle: exiting normally")
 }

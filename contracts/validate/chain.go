@@ -26,7 +26,7 @@ func chain(c *pb.MessageChain, at string) error {
 	// 1. 逐个校验片段，并统计 reference/buttons 与可发送内容的数量。
 	segs := c.GetSegments()
 	if len(segs) == 0 {
-		return fmt.Errorf("%sChain 为空", at)
+		return fmt.Errorf("%schain is empty", at)
 	}
 	var refs, buttons, content int
 	for i, s := range segs {
@@ -50,7 +50,7 @@ func chain(c *pb.MessageChain, at string) error {
 		case *pb.Segment_Mention:
 			content++
 			if d.Mention.GetExternalUserId() == "" {
-				err = fmt.Errorf("mention 缺少 external_user_id")
+				err = fmt.Errorf("mention is missing external_user_id")
 			}
 		case *pb.Segment_Reference:
 			refs++
@@ -62,7 +62,7 @@ func chain(c *pb.MessageChain, at string) error {
 			content++
 			err = forward(d.Forward, pos)
 		default:
-			err = fmt.Errorf("片段没有设置类型")
+			err = fmt.Errorf("segment has no type set")
 		}
 		if err != nil {
 			if strings.HasPrefix(err.Error(), pos) {
@@ -74,11 +74,11 @@ func chain(c *pb.MessageChain, at string) error {
 	// 2. 检查整条 Chain 的组合约束。
 	switch {
 	case refs > 1:
-		return fmt.Errorf("%s一条 Chain 最多一个 reference，实际 %d 个", at, refs)
+		return fmt.Errorf("%sa chain allows at most one reference, got %d", at, refs)
 	case buttons > 1:
-		return fmt.Errorf("%s一条 Chain 最多一个 buttons，实际 %d 个", at, buttons)
+		return fmt.Errorf("%sa chain allows at most one buttons segment, got %d", at, buttons)
 	case content == 0:
-		return fmt.Errorf("%sChain 只有 reference/buttons 等元数据，没有可发送内容", at)
+		return fmt.Errorf("%schain has only metadata such as reference/buttons and nothing to send", at)
 	}
 	return nil
 }
@@ -88,18 +88,18 @@ func text(t *pb.TextSegment) error {
 	// 1. 文本本身与 format。
 	s := t.GetText()
 	if s == "" {
-		return fmt.Errorf("text 为空")
+		return fmt.Errorf("text is empty")
 	}
 	if !utf8.ValidString(s) {
-		return fmt.Errorf("text 不是合法 UTF-8")
+		return fmt.Errorf("text is not valid UTF-8")
 	}
 	if t.Format != nil {
 		f := t.GetFormat()
 		if f == pb.TextFormat_TEXT_FORMAT_UNSPECIFIED || !knownEnum(f) {
-			return fmt.Errorf("format 取值非法: %d", int32(f))
+			return fmt.Errorf("invalid format value: %d", int32(f))
 		}
 		if len(t.GetEntities()) > 0 {
-			return fmt.Errorf("format 与 entities 不能同时指定")
+			return fmt.Errorf("format and entities cannot both be set")
 		}
 	}
 	if len(t.GetEntities()) == 0 {
@@ -137,30 +137,30 @@ func text(t *pb.TextSegment) error {
 func entity(e *pb.TextEntity, utf16Len int, boundary map[int]bool) error {
 	typ := e.GetType()
 	if typ == pb.EntityType_ENTITY_TYPE_UNSPECIFIED || !knownEnum(typ) {
-		return fmt.Errorf("不支持的实体类型 %d", int32(typ))
+		return fmt.Errorf("unsupported entity type %d", int32(typ))
 	}
 	start, length := int(e.GetOffsetUtf16()), int(e.GetLengthUtf16())
 	end := start + length
 	switch {
 	case length == 0:
-		return fmt.Errorf("length_utf16 不能为 0")
+		return fmt.Errorf("length_utf16 must not be 0")
 	case end > utf16Len:
-		return fmt.Errorf("范围 [%d,%d) 超出文本长度 %d（UTF-16）", start, end, utf16Len)
+		return fmt.Errorf("range [%d,%d) exceeds text length %d (UTF-16)", start, end, utf16Len)
 	case !boundary[start] || !boundary[end]:
-		return fmt.Errorf("范围 [%d,%d) 截断了字符（代理对）", start, end)
+		return fmt.Errorf("range [%d,%d) splits a character (surrogate pair)", start, end)
 	}
 	isLink := typ == pb.EntityType_ENTITY_TYPE_TEXT_LINK
 	isMention := typ == pb.EntityType_ENTITY_TYPE_TEXT_MENTION
 	isPre := typ == pb.EntityType_ENTITY_TYPE_PRE
 	switch {
 	case isLink != (e.Url != nil):
-		return fmt.Errorf("url 只能且必须用于 text_link")
+		return fmt.Errorf("url is allowed and required only for text_link")
 	case isLink && !absoluteURL(e.GetUrl(), "https", "http"):
-		return fmt.Errorf("text_link 的 url 不是 http(s) 绝对地址")
+		return fmt.Errorf("text_link url is not an absolute http(s) URL")
 	case isMention != (e.ExternalUserId != nil) || (isMention && e.GetExternalUserId() == ""):
-		return fmt.Errorf("external_user_id 只能且必须用于 text_mention")
+		return fmt.Errorf("external_user_id is allowed and required only for text_mention")
 	case e.Language != nil && !isPre:
-		return fmt.Errorf("language 只能用于 pre")
+		return fmt.Errorf("language is allowed only for pre")
 	}
 	return nil
 }
@@ -170,18 +170,18 @@ func media(src *pb.MediaSource) error {
 	switch s := src.GetSource().(type) {
 	case *pb.MediaSource_MediaRef:
 		if s.MediaRef == "" {
-			return fmt.Errorf("media_ref 为空")
+			return fmt.Errorf("media_ref is empty")
 		}
 	case *pb.MediaSource_IncomingRef:
 		if s.IncomingRef.GetToken() == "" {
-			return fmt.Errorf("incoming_ref 缺少 token")
+			return fmt.Errorf("incoming_ref is missing token")
 		}
 	case *pb.MediaSource_HttpsUrl:
 		if !absoluteURL(s.HttpsUrl, "https") {
-			return fmt.Errorf("https_url 不是 https 绝对地址")
+			return fmt.Errorf("https_url is not an absolute https URL")
 		}
 	default:
-		return fmt.Errorf("媒体必须恰好有一个来源（media_ref、incoming_ref 或 https_url）")
+		return fmt.Errorf("media must have exactly one source (media_ref, incoming_ref or https_url)")
 	}
 	return nil
 }
@@ -203,7 +203,7 @@ func absoluteURL(raw string, schemes ...string) bool {
 // filename 只是展示名称，不能带路径。
 func filename(name string) error {
 	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\\x00") {
-		return fmt.Errorf("filename %q 不是无路径的文件名", name)
+		return fmt.Errorf("filename %q is not a bare file name", name)
 	}
 	return nil
 }
@@ -211,11 +211,11 @@ func filename(name string) error {
 // reference 校验回复引用：必须有原消息 ID，给出 target 时四项标识齐全。
 func reference(r *pb.ReferenceSegment) error {
 	if r.GetOriginalPlatformMessageId() == "" {
-		return fmt.Errorf("reference 缺少 original_platform_message_id")
+		return fmt.Errorf("reference is missing original_platform_message_id")
 	}
 	if t := r.GetTarget(); t != nil {
 		if t.GetAdapterId() == "" || t.GetAdapterInstanceId() == "" || t.GetAccountId() == "" || t.GetChatId() == "" {
-			return fmt.Errorf("reference.target 缺少 adapter/instance/account/chat 标识")
+			return fmt.Errorf("reference.target is missing adapter/instance/account/chat identifiers")
 		}
 	}
 	return nil
@@ -224,20 +224,20 @@ func reference(r *pb.ReferenceSegment) error {
 // buttonRows 校验按钮键盘：至少一行，每行非空，每个按钮有 action_id 与 label，value 是合法 JSON。
 func buttonRows(b *pb.ButtonsSegment) error {
 	if len(b.GetRows()) == 0 {
-		return fmt.Errorf("buttons 没有任何行")
+		return fmt.Errorf("buttons has no rows")
 	}
 	for i, row := range b.GetRows() {
 		if len(row.GetButtons()) == 0 {
-			return fmt.Errorf("buttons 第 %d 行为空", i)
+			return fmt.Errorf("buttons row %d is empty", i)
 		}
 		for j, btn := range row.GetButtons() {
 			switch {
 			case btn.GetActionId() == "":
-				return fmt.Errorf("按钮 [%d][%d] 缺少 action_id", i, j)
+				return fmt.Errorf("button [%d][%d] is missing action_id", i, j)
 			case btn.GetLabel() == "":
-				return fmt.Errorf("按钮 [%d][%d] 缺少 label", i, j)
+				return fmt.Errorf("button [%d][%d] is missing label", i, j)
 			case btn.Value != nil && !json.Valid([]byte(btn.GetValue())):
-				return fmt.Errorf("按钮 [%d][%d] 的 value 不是合法 JSON", i, j)
+				return fmt.Errorf("value of button [%d][%d] is not valid JSON", i, j)
 			}
 		}
 	}
@@ -247,7 +247,7 @@ func buttonRows(b *pb.ButtonsSegment) error {
 // forward 校验合并转发：至少一个条目，每个条目的 Chain 按嵌套位置递归校验。
 func forward(f *pb.ForwardSegment, pos string) error {
 	if len(f.GetItems()) == 0 {
-		return fmt.Errorf("forward 没有任何条目")
+		return fmt.Errorf("forward has no items")
 	}
 	for i, item := range f.GetItems() {
 		if err := chain(item.GetChain(), fmt.Sprintf("%s.forward.items[%d].", pos, i)); err != nil {

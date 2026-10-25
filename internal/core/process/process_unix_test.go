@@ -25,13 +25,13 @@ func TestKillTreeReapsGrandchild(t *testing.T) {
 	select {
 	case l := <-lines:
 		if _, err := fmt.Sscanf(l, "grandchild %d", &gpid); err != nil {
-			t.Fatalf("辅助进程输出 %q", l)
+			t.Fatalf("helper process output %q", l)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("没有收到孙进程 pid")
+		t.Fatal("did not receive the grandchild pid")
 	}
 	if err := syscall.Kill(gpid, 0); err != nil {
-		t.Fatalf("孙进程应在运行: %v", err)
+		t.Fatalf("grandchild should be running: %v", err)
 	}
 	if err := p.KillTree(); err != nil {
 		t.Fatal(err)
@@ -41,12 +41,12 @@ func TestKillTreeReapsGrandchild(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	for syscall.Kill(gpid, 0) == nil {
 		if time.Now().After(deadline) {
-			t.Fatalf("孙进程 %d 在进程组被杀后仍存活", gpid)
+			t.Fatalf("grandchild %d still alive after the process group was killed", gpid)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	p.WaitLogs() // 孙进程退出后日志管道的最后一个写端关闭
 	if err := p.KillTree(); err != nil {
-		t.Fatalf("对已空的进程组再次 KillTree 应无副作用: %v", err)
+		t.Fatalf("KillTree on an empty process group should have no effect: %v", err)
 	}
 }

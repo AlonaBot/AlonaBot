@@ -29,7 +29,7 @@ func TestMain(m *testing.M) {
 	binDir = dir
 	for name, pkg := range map[string]string{"alonabot": ".", "lifecycle": "../../examples/plugins/lifecycle"} {
 		if out, err := exec.Command("go", "build", "-o", filepath.Join(dir, name), pkg).CombinedOutput(); err != nil {
-			fmt.Fprintf(os.Stderr, "构建 %s 失败: %v\n%s", name, err, out)
+			fmt.Fprintf(os.Stderr, "build %s failed: %v\n%s", name, err, out)
 			os.Exit(1)
 		}
 	}
@@ -102,9 +102,9 @@ func (c *core) waitFor(re string) []string {
 			if m := rx.FindStringSubmatch(c.log()); m != nil {
 				return m
 			}
-			c.t.Fatalf("进程已退出，未出现 %q；日志:\n%s", re, c.log())
+			c.t.Fatalf("process exited before %q appeared; log:\n%s", re, c.log())
 		case <-deadline:
-			c.t.Fatalf("等待 %q 超时；日志:\n%s", re, c.log())
+			c.t.Fatalf("timed out waiting for %q; log:\n%s", re, c.log())
 		}
 	}
 }
@@ -116,7 +116,7 @@ func (c *core) wait(timeout time.Duration) int {
 	case <-c.done:
 		return c.cmd.ProcessState.ExitCode()
 	case <-time.After(timeout):
-		c.t.Fatalf("alonabot 未在 %v 内退出；日志:\n%s", timeout, c.log())
+		c.t.Fatalf("alonabot did not exit within %v; log:\n%s", timeout, c.log())
 		return -1
 	}
 }
@@ -134,7 +134,7 @@ func pluginExited(pid int, within time.Duration) bool {
 }
 
 // activatedRe 匹配激活日志，子匹配依次为代次、mode（new/restart）与插件 pid。
-const activatedRe = `已激活 generation=(\S+) mode=(\w+) pid=(\d+)`
+const activatedRe = `activated generation=(\S+) mode=(\w+) pid=(\d+)`
 
 // 完整生命周期：两种传输都能走完 OnStart → OnReady → 激活 → SIGTERM → STOPPING/OnStop → 正常退出。
 func TestLifecycleOverTCPAndStdio(t *testing.T) {
@@ -148,20 +148,20 @@ func TestLifecycleOverTCPAndStdio(t *testing.T) {
 			m := c.waitFor(activatedRe)
 			pid, _ := strconv.Atoi(m[3])
 			if m[2] != "new" {
-				t.Fatalf("首次运行应提交新代次，实际 mode=%s", m[2])
+				t.Fatalf("first run should commit a new generation, got mode=%s", m[2])
 			}
 			_ = c.cmd.Process.Signal(syscall.SIGTERM)
 			if code := c.wait(15 * time.Second); code != 0 {
-				t.Fatalf("alonabot 退出码 %d；日志:\n%s", code, c.log())
+				t.Fatalf("alonabot exit code %d; log:\n%s", code, c.log())
 			}
 			log := c.log()
-			for _, want := range []string{"lifecycle: OnStart", "lifecycle: OnReady", "lifecycle: OnStop", "lifecycle: 正常退出", "强杀=false"} {
+			for _, want := range []string{"lifecycle: OnStart", "lifecycle: OnReady", "lifecycle: OnStop", "lifecycle: exiting normally", "killed=false"} {
 				if !strings.Contains(log, want) {
-					t.Fatalf("日志缺少 %q:\n%s", want, log)
+					t.Fatalf("log is missing %q:\n%s", want, log)
 				}
 			}
 			if !pluginExited(pid, 2*time.Second) {
-				t.Fatalf("插件进程 %d 未退出", pid)
+				t.Fatalf("plugin process %d did not exit", pid)
 			}
 		})
 	}
@@ -178,7 +178,7 @@ func TestRestartReusesGeneration(t *testing.T) {
 	c2 := startCore(t, dir)
 	m := c2.waitFor(activatedRe)
 	if m[1] != gen || m[2] != "restart" {
-		t.Fatalf("应以 restart 复用 %s，实际 generation=%s mode=%s", gen, m[1], m[2])
+		t.Fatalf("restart should reuse %s, got generation=%s mode=%s", gen, m[1], m[2])
 	}
 	_ = c2.cmd.Process.Signal(syscall.SIGTERM)
 	c2.wait(15 * time.Second)
@@ -191,14 +191,14 @@ func TestSecondCoreSameDataDirRejected(t *testing.T) {
 	c1.waitFor(activatedRe)
 	c2 := startCore(t, dir)
 	if code := c2.wait(10 * time.Second); code == 0 {
-		t.Fatal("第二个 Core 不应启动")
+		t.Fatal("second Core should not start")
 	}
-	if !strings.Contains(c2.log(), "已被另一个 Core 锁定") {
-		t.Fatalf("应报告 data_dir 已锁定:\n%s", c2.log())
+	if !strings.Contains(c2.log(), "locked by another Core") {
+		t.Fatalf("expected a data_dir locked report:\n%s", c2.log())
 	}
 	_ = c1.cmd.Process.Signal(syscall.SIGTERM)
 	if code := c1.wait(15 * time.Second); code != 0 {
-		t.Fatalf("第一个 Core 应正常停止: %d", code)
+		t.Fatalf("first Core should stop normally: %d", code)
 	}
 }
 
@@ -211,12 +211,12 @@ func TestCoreKilledPluginExitsAndRecovers(t *testing.T) {
 	_ = c1.cmd.Process.Signal(syscall.SIGKILL)
 	c1.wait(5 * time.Second)
 	if !pluginExited(pid, 6*time.Second) {
-		t.Fatalf("Core 被 kill 后插件 %d 未在断链预算内退出", pid)
+		t.Fatalf("plugin %d did not exit within the disconnect budget after Core was killed", pid)
 	}
 	c2 := startCore(t, dir)
 	m2 := c2.waitFor(activatedRe)
 	if m2[2] != "restart" || m2[1] != m[1] {
-		t.Fatalf("恢复后应复用原代次: %v", m2)
+		t.Fatalf("recovery should reuse the original generation: %v", m2)
 	}
 	_ = c2.cmd.Process.Signal(syscall.SIGTERM)
 	c2.wait(15 * time.Second)
@@ -234,15 +234,15 @@ func TestRelativeDataDir(t *testing.T) {
 			for i, mode := range []string{"new", "restart"} {
 				c := startCore(t, "data", extra...)
 				if m := c.waitFor(activatedRe); m[2] != mode {
-					t.Fatalf("第 %d 次运行应为 mode=%s，实际 %s", i+1, mode, m[2])
+					t.Fatalf("run %d should be mode=%s, got %s", i+1, mode, m[2])
 				}
 				_ = c.cmd.Process.Signal(syscall.SIGTERM)
 				if code := c.wait(15 * time.Second); code != 0 {
-					t.Fatalf("alonabot 退出码 %d；日志:\n%s", code, c.log())
+					t.Fatalf("alonabot exit code %d; log:\n%s", code, c.log())
 				}
 			}
 			if _, err := os.Stat(filepath.Join("data", "plugins", "demo", "runtime.lock")); err != nil {
-				t.Fatalf("runtime.lock 应保留: %v", err)
+				t.Fatalf("runtime.lock should be kept: %v", err)
 			}
 		})
 	}

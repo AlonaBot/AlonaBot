@@ -32,13 +32,13 @@ const MaxFrame = 4 << 20
 
 var (
 	// ErrEmptyFrame 表示长度前缀为 0。
-	ErrEmptyFrame = errors.New("帧长度为 0")
+	ErrEmptyFrame = errors.New("frame length is 0")
 	// ErrFrameTooLarge 表示帧长度超过 MaxFrame。
-	ErrFrameTooLarge = errors.New("帧长度超过 4 MiB")
+	ErrFrameTooLarge = errors.New("frame length exceeds 4 MiB")
 	// ErrTruncated 表示流在一帧中途结束。
-	ErrTruncated = errors.New("帧被截断")
+	ErrTruncated = errors.New("frame truncated")
 	// ErrDecode 表示载荷不是可解码的 Envelope。
-	ErrDecode = errors.New("Envelope 无法解码")
+	ErrDecode = errors.New("cannot decode Envelope")
 )
 
 // 以上错误都使当前连接失败，不再猜测后续帧边界（WIRE §1）。
@@ -50,18 +50,18 @@ func ReadRaw(r io.Reader) ([]byte, error) {
 		if errors.Is(err, io.EOF) {
 			return nil, io.EOF
 		}
-		return nil, fmt.Errorf("%w：读取长度前缀: %v", ErrTruncated, err)
+		return nil, fmt.Errorf("%w: read length prefix: %v", ErrTruncated, err)
 	}
 	n := binary.BigEndian.Uint32(hdr[:])
 	switch {
 	case n == 0:
 		return nil, ErrEmptyFrame
 	case n > MaxFrame:
-		return nil, fmt.Errorf("%w：%d 字节", ErrFrameTooLarge, n)
+		return nil, fmt.Errorf("%w: %d bytes", ErrFrameTooLarge, n)
 	}
 	buf := make([]byte, n)
 	if _, err := io.ReadFull(r, buf); err != nil {
-		return nil, fmt.Errorf("%w：期望 %d 字节: %v", ErrTruncated, n, err)
+		return nil, fmt.Errorf("%w: want %d bytes: %v", ErrTruncated, n, err)
 	}
 	return buf, nil
 }
@@ -89,7 +89,7 @@ func EncodeFrame(env *pb.Envelope) ([]byte, error) {
 	case len(body) == 0:
 		return nil, ErrEmptyFrame
 	case len(body) > MaxFrame:
-		return nil, fmt.Errorf("%w：%d 字节", ErrFrameTooLarge, len(body))
+		return nil, fmt.Errorf("%w: %d bytes", ErrFrameTooLarge, len(body))
 	}
 	frame := make([]byte, 4+len(body))
 	binary.BigEndian.PutUint32(frame, uint32(len(body)))

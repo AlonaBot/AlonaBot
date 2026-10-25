@@ -53,7 +53,7 @@ func TestOpenPragmasAndReopen(t *testing.T) {
 	}
 	p, err := s.ReadPragmas(ctx)
 	if err != nil || p != (Pragmas{"wal", 2, 1, 5000}) {
-		t.Fatalf("PRAGMA 实际值 %+v, %v", p, err)
+		t.Fatalf("PRAGMA values %+v, %v", p, err)
 	}
 	if err := s.AddInstall(ctx, Install{PluginID: "demo", Source: "local", Entrypoint: "bin/demo", BuildDigest: []byte{1}}); err != nil {
 		t.Fatal(err)
@@ -63,11 +63,11 @@ func TestOpenPragmasAndReopen(t *testing.T) {
 	}
 	s2 := mustOpen(t, dir)
 	if in, err := s2.GetInstall(ctx, "demo"); err != nil || in.Entrypoint != "bin/demo" {
-		t.Fatalf("重开后记录丢失: %+v %v", in, err)
+		t.Fatalf("records lost after reopening: %+v %v", in, err)
 	}
 	var v int
 	if err := s2.db.QueryRow("SELECT version FROM schema_version").Scan(&v); err != nil || v != len(migrations) {
-		t.Fatalf("schema 版本 = %d, %v", v, err)
+		t.Fatalf("schema version = %d, %v", v, err)
 	}
 }
 
@@ -76,7 +76,7 @@ func TestSecondCoreRejectedInProcess(t *testing.T) {
 	dir := t.TempDir()
 	mustOpen(t, dir)
 	if _, err := Open(context.Background(), dir); !errors.Is(err, ErrDataDirLocked) {
-		t.Fatalf("同一 data_dir 的第二个 Core 应被拒绝，实际 %v", err)
+		t.Fatalf("second Core on the same data_dir should be rejected, got %v", err)
 	}
 }
 
@@ -91,10 +91,10 @@ func TestSecondCoreRejectedAcrossProcesses(t *testing.T) {
 		t.Fatal(err)
 	}
 	if line, err := bufio.NewReader(stdout).ReadString('\n'); err != nil || line != "opened\n" {
-		t.Fatalf("子进程 Core 未能打开: %q %v", line, err)
+		t.Fatalf("child Core failed to open: %q %v", line, err)
 	}
 	if _, err := Open(context.Background(), dir); !errors.Is(err, ErrDataDirLocked) {
-		t.Fatalf("另一进程持有 data_dir 时应被拒绝，实际 %v", err)
+		t.Fatalf("should be rejected while another process holds data_dir, got %v", err)
 	}
 	_ = stdin.Close()
 	if err := cmd.Wait(); err != nil {
@@ -121,41 +121,41 @@ func TestCommitActiveChecksExpectedOld(t *testing.T) {
 		}
 	}
 	if g, _ := s.Active(ctx, "a"); g != "" {
-		t.Fatalf("未提交前 Active 应为空，实际 %q", g)
+		t.Fatalf("Active should be empty before commit, got %q", g)
 	}
 	if err := s.CommitActive(ctx, "a", "", "a-g1"); err != nil {
 		t.Fatal(err)
 	}
 	// 两个候选都以「无 Active」为前提：后到的那个是陈旧候选。
 	if err := s.CommitActive(ctx, "a", "", "a-g2"); !errors.Is(err, ErrStaleGeneration) {
-		t.Fatalf("陈旧的预期旧代次应被拒绝，实际 %v", err)
+		t.Fatalf("stale expected generation should be rejected, got %v", err)
 	}
 	if g, _ := s.Active(ctx, "a"); g != "a-g1" {
-		t.Fatalf("陈旧提交失败后 Active 应保持 a-g1，实际 %q", g)
+		t.Fatalf("Active should stay a-g1 after a stale commit fails, got %q", g)
 	}
 	if err := s.CommitActive(ctx, "a", "a-g1", "a-g2"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.CommitActive(ctx, "a", "a-g2", "a-g1"); err == nil {
-		t.Fatal("已提交过的代次不能再次提交（恢复必须使用新代次）")
+		t.Fatal("a committed generation cannot be committed again (recovery must use a new generation)")
 	}
 	if err := s.CommitActive(ctx, "a", "a-g2", "b-g1"); err == nil {
-		t.Fatal("不能把其他插件的代次提交为 Active")
+		t.Fatal("another plugin's generation cannot be committed as Active")
 	}
 	if err := s.CommitActive(ctx, "a", "a-g2", "missing"); err == nil {
-		t.Fatal("不存在的代次不能提交")
+		t.Fatal("a nonexistent generation cannot be committed")
 	}
 	if g, _ := s.Active(ctx, "a"); g != "a-g2" {
-		t.Fatalf("失败的提交不应改变 Active，实际 %q", g)
+		t.Fatalf("a failed commit should not change Active, got %q", g)
 	}
 	if err := s.CommitActive(ctx, "nope", "", "a-g3"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("未安装的插件应返回 ErrNotFound，实际 %v", err)
+		t.Fatalf("an uninstalled plugin should return ErrNotFound, got %v", err)
 	}
 	if err := s.SetEnabled(ctx, "a", true); err != nil {
 		t.Fatal(err)
 	}
 	if e, _ := s.Enabled(ctx, "a"); !e {
-		t.Fatal("启用状态未持久化")
+		t.Fatal("enabled state was not persisted")
 	}
 }
 
@@ -172,11 +172,11 @@ func TestCorruptStateNotRebuilt(t *testing.T) {
 		_ = db.Close()
 	}
 	cases := map[string]func(t *testing.T, path string){
-		"垃圾内容": func(t *testing.T, path string) {
+		"garbage": func(t *testing.T, path string) {
 			_ = os.WriteFile(path, bytes.Repeat([]byte("not sqlite "), 500), 0o600)
 		},
-		"空文件":         func(t *testing.T, path string) { _ = os.WriteFile(path, nil, 0o600) },
-		"其他 SQLite 库": foreign,
+		"empty file":              func(t *testing.T, path string) { _ = os.WriteFile(path, nil, 0o600) },
+		"another SQLite database": foreign,
 	}
 	for name, prepare := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -186,18 +186,18 @@ func TestCorruptStateNotRebuilt(t *testing.T) {
 			before, _ := os.ReadFile(path)
 			_, err := Open(context.Background(), dir)
 			if err == nil {
-				t.Fatal("损坏或陌生的状态库不应打开成功")
+				t.Fatal("a corrupted or foreign state database should not open")
 			}
 			if errors.Is(err, ErrDataDirLocked) {
-				t.Fatalf("失败原因不应是锁: %v", err)
+				t.Fatalf("failure should not be caused by the lock: %v", err)
 			}
 			after, _ := os.ReadFile(path)
 			if !bytes.Equal(before, after) {
-				t.Fatal("状态库文件被改写（不允许重建为空库）")
+				t.Fatal("state database file was rewritten (recreating as empty is not allowed)")
 			}
 			// 打开失败必须释放 core.lock，否则管理员无法修复后重试。
 			if _, err2 := Open(context.Background(), dir); errors.Is(err2, ErrDataDirLocked) {
-				t.Fatal("打开失败后 core.lock 没有释放")
+				t.Fatal("core.lock was not released after a failed open")
 			}
 		})
 	}
@@ -214,8 +214,8 @@ func TestNewerSchemaRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = s.Close()
-	if _, err := Open(context.Background(), dir); err == nil || !strings.Contains(err.Error(), "高于") {
-		t.Fatalf("更高的 schema 版本应被拒绝，实际 %v", err)
+	if _, err := Open(context.Background(), dir); err == nil || !strings.Contains(err.Error(), "newer than") {
+		t.Fatalf("a newer schema version should be rejected, got %v", err)
 	}
 }
 
@@ -242,7 +242,7 @@ func TestLockPluginSerializesSamePlugin(t *testing.T) {
 	}
 	wg.Wait()
 	if maxInside.Load() != 1 {
-		t.Fatalf("同一插件的管理操作并发度 = %d，应为 1", maxInside.Load())
+		t.Fatalf("concurrency of management operations for one plugin = %d, want 1", maxInside.Load())
 	}
 	// 不同插件互不阻塞：持有 a 的同时可以取得 b。
 	ua := s.LockPlugin("a")
@@ -258,14 +258,14 @@ func TestRelativeDataDirReopens(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		s, err := Open(ctx, "reldata")
 		if err != nil {
-			t.Fatalf("第 %d 次以相对路径打开失败: %v", i+1, err)
+			t.Fatalf("open with a relative path failed on attempt %d: %v", i+1, err)
 		}
 		if i == 0 {
 			if err := s.AddInstall(ctx, Install{PluginID: "demo", Source: "local", Entrypoint: "x", BuildDigest: []byte{1}}); err != nil {
 				t.Fatal(err)
 			}
 		} else if _, err := s.GetInstall(ctx, "demo"); err != nil {
-			t.Fatalf("重新打开后读不到之前的记录: %v", err)
+			t.Fatalf("previous records not readable after reopening: %v", err)
 		}
 		if err := s.Close(); err != nil {
 			t.Fatal(err)

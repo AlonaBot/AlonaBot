@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -26,17 +27,26 @@ import (
 const (
 	lockFile  = "core.lock"    // data_dir 下的 Core 实例锁
 	stateFile = "state.sqlite" // data_dir 下的状态库
-	// 连接级设置，驱动对每个物理连接执行；单连接，见 CONTRACTS §6.1。
-	pragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
 )
+
+// 状态库连接设置（CONTRACTS §6.1），以回读 PRAGMA 时得到的值表示。
+const (
+	journalModeWAL    = "wal"
+	synchronousFull   = 2
+	foreignKeysOn     = 1
+	busyTimeoutMillis = 5000
+)
+
+// pragmas 写在 DSN 中，驱动对每个新物理连接都会执行（CONTRACTS §6.1）。
+var pragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(" + strconv.Itoa(busyTimeoutMillis) + ")"
 
 var (
 	// ErrDataDirLocked 表示同一 data_dir 已有另一个 Core 在运行。
-	ErrDataDirLocked = errors.New("data_dir 已被另一个 Core 锁定")
+	ErrDataDirLocked = errors.New("data_dir is locked by another Core")
 	// ErrStaleGeneration 表示提交时 ActiveGeneration 已不是调用方预期的旧值。
-	ErrStaleGeneration = errors.New("ActiveGeneration 已变化，拒绝陈旧候选")
+	ErrStaleGeneration = errors.New("ActiveGeneration changed; stale candidate rejected")
 	// ErrNotFound 表示记录不存在。
-	ErrNotFound = errors.New("记录不存在")
+	ErrNotFound = errors.New("record not found")
 )
 
 // Store 持有 core.lock 并访问状态库；同一进程内只应有一个。
@@ -55,10 +65,10 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	// 1. 统一为绝对路径：预检使用的 file URI 只能表达绝对路径。
 	dataDir, err := filepath.Abs(dataDir)
 	if err != nil {
-		return nil, fmt.Errorf("解析 data_dir 失败: %w", err)
+		return nil, fmt.Errorf("resolve data_dir: %w", err)
 	}
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
-		return nil, fmt.Errorf("创建 data_dir 失败: %w", err)
+		return nil, fmt.Errorf("create data_dir: %w", err)
 	}
 	// 2. 先取 core.lock，确保同一 data_dir 只有一个 Core 打开状态库。
 	lock, err := oslock.TryLock(filepath.Join(dataDir, lockFile))
@@ -80,12 +90,12 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 // open 打开 path 处的状态库：已有文件先只读预检，再以单连接、固定 PRAGMA 打开并核对设置与 schema。
 func open(ctx context.Context, path string) (*Store, error) {
 	if strings.ContainsAny(path, "?#") {
-		return nil, fmt.Errorf("状态库路径 %q 含 ?/#", path)
+		return nil, fmt.Errorf("state database path %q contains ? or #", path)
 	}
 	_, statErr := os.Stat(path)
 	fresh := errors.Is(statErr, os.ErrNotExist)
 	if statErr != nil && !fresh {
-		return nil, fmt.Errorf("检查状态库失败: %w", statErr)
+		return nil, fmt.Errorf("inspect state database: %w", statErr)
 	}
 
 	if !fresh {
@@ -141,10 +151,10 @@ func (s *Store) ReadPragmas(ctx context.Context) (Pragmas, error) {
 func (s *Store) verify(ctx context.Context, fresh bool) error {
 	p, err := s.ReadPragmas(ctx)
 	if err != nil {
-		return fmt.Errorf("状态库无法读取（可能已损坏，不会重建）: %w", err)
+		return fmt.Errorf("state database is unreadable (possibly corrupted, will not be recreated): %w", err)
 	}
-	if want := (Pragmas{"wal", 2, 1, 5000}); p != want {
-		return fmt.Errorf("状态库连接设置未生效：实际 %+v，期望 %+v", p, want)
+	if want := (Pragmas{journalModeWAL, synchronousFull, foreignKeysOn, busyTimeoutMillis}); p != want {
+		return fmt.Errorf("state database connection settings not applied: got %+v, want %+v", p, want)
 	}
 	return s.migrate(ctx, fresh)
 }
@@ -164,14 +174,14 @@ func preflight(ctx context.Context, path string) error {
 	var n int
 	err = db.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='schema_version'").Scan(&n)
 	if err != nil {
-		return fmt.Errorf("状态库无法读取（可能已损坏，不会重建）: %w", err)
+		return fmt.Errorf("state database is unreadable (possibly corrupted, will not be recreated): %w", err)
 	}
 	if n == 0 {
-		return errors.New("state.sqlite 已存在但不含 AlonaBot schema（空文件或其他数据库），拒绝初始化为空库")
+		return errors.New("state.sqlite exists but has no AlonaBot schema (empty file or another database); refusing to initialize it as empty")
 	}
 	var check string
 	if err := db.QueryRowContext(ctx, "PRAGMA quick_check").Scan(&check); err != nil || check != "ok" {
-		return fmt.Errorf("状态库完整性检查失败（%q, %v），不会重建", check, err)
+		return fmt.Errorf("state database integrity check failed (%q, %v); will not be recreated", check, err)
 	}
 	return nil
 }
@@ -208,11 +218,11 @@ func (s *Store) migrate(ctx context.Context, fresh bool) error {
 	current := 0
 	if !fresh {
 		if err := s.db.QueryRowContext(ctx, "SELECT version FROM schema_version").Scan(&current); err != nil {
-			return fmt.Errorf("读取 schema 版本失败: %w", err)
+			return fmt.Errorf("read schema version: %w", err)
 		}
 	}
 	if current > len(migrations) {
-		return fmt.Errorf("状态库 schema 版本 %d 高于本程序支持的 %d", current, len(migrations))
+		return fmt.Errorf("state database schema version %d is newer than supported version %d", current, len(migrations))
 	}
 	for v := current; v < len(migrations); v++ {
 		err := s.tx(ctx, func(tx *sql.Tx) error {
@@ -223,7 +233,7 @@ func (s *Store) migrate(ctx context.Context, fresh bool) error {
 			return err
 		})
 		if err != nil {
-			return fmt.Errorf("状态库迁移到版本 %d 失败: %w", v+1, err)
+			return fmt.Errorf("migrate state database to version %d: %w", v+1, err)
 		}
 	}
 	return nil
@@ -284,7 +294,7 @@ func (s *Store) GetInstall(ctx context.Context, pluginID string) (Install, error
 	err := s.db.QueryRowContext(ctx, "SELECT source, entrypoint, build_digest FROM installs WHERE plugin_id = ?", pluginID).
 		Scan(&in.Source, &in.Entrypoint, &in.BuildDigest)
 	if errors.Is(err, sql.ErrNoRows) {
-		return in, fmt.Errorf("插件 %s: %w", pluginID, ErrNotFound)
+		return in, fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 	}
 	return in, err
 }
@@ -305,12 +315,12 @@ func (s *Store) CommitActive(ctx context.Context, pluginID, expectedOld, newGen 
 		var current sql.NullString
 		err := tx.QueryRowContext(ctx, "SELECT active_generation FROM plugin_state WHERE plugin_id = ?", pluginID).Scan(&current)
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("插件 %s: %w", pluginID, ErrNotFound)
+			return fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 		} else if err != nil {
 			return err
 		}
 		if current.String != expectedOld {
-			return fmt.Errorf("%w：预期 %q，实际 %q", ErrStaleGeneration, expectedOld, current.String)
+			return fmt.Errorf("%w: expected %q, got %q", ErrStaleGeneration, expectedOld, current.String)
 		}
 		// 2. 给新代次写入 COMMITTED 标记；它必须存在、属于该插件且从未提交过。
 		res, err := tx.ExecContext(ctx,
@@ -320,7 +330,7 @@ func (s *Store) CommitActive(ctx context.Context, pluginID, expectedOld, newGen 
 			return err
 		}
 		if n, _ := res.RowsAffected(); n != 1 {
-			return fmt.Errorf("代次 %s 不存在、不属于插件 %s 或已提交过", newGen, pluginID)
+			return fmt.Errorf("generation %s does not exist, does not belong to plugin %s, or was already committed", newGen, pluginID)
 		}
 		// 3. 切换 Active。
 		_, err = tx.ExecContext(ctx, "UPDATE plugin_state SET active_generation = ? WHERE plugin_id = ?", newGen, pluginID)
@@ -333,7 +343,7 @@ func (s *Store) Active(ctx context.Context, pluginID string) (string, error) {
 	var g sql.NullString
 	err := s.db.QueryRowContext(ctx, "SELECT active_generation FROM plugin_state WHERE plugin_id = ?", pluginID).Scan(&g)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", fmt.Errorf("插件 %s: %w", pluginID, ErrNotFound)
+		return "", fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 	}
 	return g.String, err
 }
@@ -345,7 +355,7 @@ func (s *Store) SetEnabled(ctx context.Context, pluginID string, enabled bool) e
 		return err
 	}
 	if n, _ := res.RowsAffected(); n != 1 {
-		return fmt.Errorf("插件 %s: %w", pluginID, ErrNotFound)
+		return fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 	}
 	return nil
 }
@@ -355,7 +365,7 @@ func (s *Store) Enabled(ctx context.Context, pluginID string) (bool, error) {
 	var e bool
 	err := s.db.QueryRowContext(ctx, "SELECT enabled FROM plugin_state WHERE plugin_id = ?", pluginID).Scan(&e)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, fmt.Errorf("插件 %s: %w", pluginID, ErrNotFound)
+		return false, fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 	}
 	return e, err
 }

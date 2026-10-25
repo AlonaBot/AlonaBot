@@ -29,15 +29,15 @@ func TestRuntimeLockSecondInstanceFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := acquireRuntimeLock(); !errors.Is(err, oslock.ErrLocked) {
-		t.Fatalf("runtime.lock 被占用时第二个实例应拒绝启动，实际 %v", err)
+		t.Fatalf("second instance should be rejected while runtime.lock is held, got %v", err)
 	}
 	_ = first.Unlock()
 	if _, err := os.Stat(path); err != nil {
-		t.Fatal("锁文件必须保留")
+		t.Fatal("lock file must be kept")
 	}
 	again, err := acquireRuntimeLock()
 	if err != nil {
-		t.Fatalf("前一个实例释放后应能取锁: %v", err)
+		t.Fatalf("should be able to lock after the previous instance releases it: %v", err)
 	}
 	_ = again.Unlock()
 }
@@ -46,11 +46,11 @@ func TestRuntimeLockSecondInstanceFails(t *testing.T) {
 func TestRuntimeLockRequiresAbsolutePathFromCore(t *testing.T) {
 	t.Setenv(wire.EnvRuntimeLock, "")
 	if _, err := acquireRuntimeLock(); err == nil {
-		t.Fatal("缺少环境变量时应失败")
+		t.Fatal("should fail when the environment variable is missing")
 	}
 	t.Setenv(wire.EnvRuntimeLock, "relative/runtime.lock")
 	if _, err := acquireRuntimeLock(); err == nil {
-		t.Fatal("相对路径应被拒绝")
+		t.Fatal("relative path should be rejected")
 	}
 }
 
@@ -65,9 +65,9 @@ func TestRunTakesLockBeforeRegistration(t *testing.T) {
 	defer held.Unlock()
 	probe := &lockProbe{}
 	if err := Run(probe); !errors.Is(err, oslock.ErrLocked) {
-		t.Fatalf("锁被占用时应返回 ErrLocked，实际 %v", err)
+		t.Fatalf("should return ErrLocked while the lock is held, got %v", err)
 	}
 	if probe.called {
-		t.Fatal("取锁失败后仍调用了用户的 Commands 注册入口")
+		t.Fatal("user Commands registration ran after the lock failed")
 	}
 }
