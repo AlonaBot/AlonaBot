@@ -38,7 +38,7 @@
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
-| goal-23 | T-07.1 | 调度触发计算 | — | 可派发 |
+| goal-23 | T-07.1 | 调度触发计算 | — | 已实现 |
 | goal-29 | T-08.2 | 配置 JSON 语义与 Pending | — | 可派发 |
 | goal-37 | T-09.2 | 安装包预检与安全解压 | — | 可派发 |
 | goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 等待前置 |
@@ -97,7 +97,7 @@
 | goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 待编写 |
 | goal-56 | T-11.3 | Agent 会话存储 | T-03.1 | 待编写 |
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 待编写 |
-| goal-58 | T-12.1 | Provider 客户端 | — | 可派发 |
+| goal-58 | T-12.1 | Provider 客户端 | — | 已实现 |
 | goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.3、T-08.4、T-11.3、T-12.1 | 待编写 |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 待编写 |
 | goal-61 | T-12.4 | 记忆插件 | T-08.5、T-11.2、T-12.2 | 待编写 |
@@ -119,7 +119,7 @@
 
 ### goal-23 · T-07.1 调度触发计算
 
-状态：可派发。
+状态：已实现（PR 已合并，Quality gate 通过）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-23（切片 T-07.1：调度触发计算）。goal 目录 goal-23，分支 goal-23，worktree .worktrees/goal-23，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1708,7 +1708,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 ```
 ### goal-58 · T-12.1 Provider 客户端
 
-状态：可派发。
+状态：已实现（PR 已合并，Quality gate 通过）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-58（切片 T-12.1：Provider 客户端）。goal 目录 goal-58，分支 goal-58，worktree .worktrees/goal-58，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
