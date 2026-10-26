@@ -16,7 +16,8 @@
 | `internal/oslock/` | 跨进程 OS 独占文件锁（flock / LockFileEx），供 core.lock 与 runtime.lock 共用 | 锁的业务语义（何时加锁由调用方决定） | 已实现 |
 | `sdk/`（含 `sdk/message`、`sdk/gormdb` 等子包） | 插件侧 API：根插件、Context/Send、注册、生命周期 Hook、runtime.lock、按需 GORM | Core 状态库、管理凭证、其他插件 | 部分实现：`sdk`（Context、注册器、Collect）、`sdk/plugin`、`sdk/message`、`sdk/config`、`sdk/gormdb`（OpenSQLite/OpenPostgres、RunVersioned、迁移接口互斥检查）；`Run` 完成取锁、握手、准备、激活与停止，业务分发与 `Send` 仍返回 UNSUPPORTED |
 | `internal/core/` | 状态库与 core.lock、进程、RPC 编排、路由、权限、媒体、服务、调度、HTTP、配置、管理 | 平台协议细节（交 adapters）、插件进程内逻辑 | 部分实现：`internal/core/state`（core.lock、state.sqlite、提交原语）、`internal/core/process`（精简环境、日志、进程组/Job Object、runtime.lock 临时持有）、`internal/core/host`（握手认证、Bootstrap、REGISTER 原子校验、PREPARED、提交与激活门禁、Degraded、停止/排空/并行 Shutdown、有限重启策略）、`internal/core/supervisor`（启动/停止一个插件的完整装配） |
-| `plugins/agent/`、`plugins/memory/` | 官方 Agent 插件与官方记忆插件（D-27、D-28），与第三方插件一样只经 SDK 与 Core 通信 | Core 的工具策略、确认与会话存储（归 Core） | 拟建 |
+| 根包 `alonabot`（模块根目录的 Go 文件） | 库模式入口 `alonabot.Run`（D-32）与 `alonabot serve` 共用的 Core 装配 | 业务逻辑（只组装 `internal/core` 与 SDK） | 拟建 |
+| `plugins/agent/`、`plugins/memory/`、`plugins/help/`、`plugins/welcome/`、`plugins/rss/` | 官方 Agent 插件、官方记忆插件与预装插件（D-27、D-28、D-32），与第三方插件一样只经 SDK 与 Core 通信 | Core 的工具策略、确认与会话存储（归 Core） | 拟建 |
 | `adapters/telegram/` | 官方 Telegram Adapter 程序：接收、标准化、发送计划、能力与平台映射（D-26） | Core 策略、命令路由、游标持久化与按钮 token（归 Core） | 拟建 |
 | `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） | 部分实现：开发用 `alonabot run`（单插件启停、有限重启）；尚无正式管理 CLI |
 | `examples/plugins/` | 随 SDK 编译的示例与集成样例 | 生产代码依赖 | 部分实现：`minimal`（签名组合示例）、`lifecycle`（可真实运行的生命周期示例） |
@@ -33,12 +34,14 @@
 | `sdk/... -> contracts`、`sdk/... -> internal/wire`、`sdk/... -> internal/oslock` | 插件侧复用同一协议实现与 runtime.lock（Go 允许本 module 的 `sdk` import `internal`） |
 | `internal/core/... -> contracts`、`internal/core/... -> internal/wire`、`internal/core/... -> internal/oslock` | Core 侧协议、core.lock 与停机复制时临时持有 runtime.lock |
 | `adapters/... -> sdk/...`、`-> contracts` | Adapter 程序与插件示例一样，只经公共 SDK（`sdk/adapter`）与 Core 通信 |
-| `cmd/alonabot -> internal/core/...`、`-> contracts` | 装配 |
+| `cmd/alonabot -> internal/core/...`、`-> contracts`、`-> 根包` | 装配；`serve` 复用根包的 Core 装配 |
+| `根包 -> internal/core/...`、`-> sdk/...`、`-> contracts` | 库模式在同一进程中装配 Core 与开发中的组件 |
 | `cmd/alonabot -> sdk/generate` | 构建检查复用 SDK 的路由生成器（拟建） |
 | `examples/plugins/... -> sdk/...`、`-> contracts` | 示例只走公共 SDK |
+| `examples/devbot -> 根包`、`-> sdk/...` | 库模式示例 |
 | `plugins/... -> sdk/...`、`-> contracts` | 官方插件只走公共 SDK；Agent 插件另用已批准的 MCP go-sdk |
 
-明确禁止（重点）：`internal/oslock` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | adapters | plugins | cmd`；`internal/core -> sdk | adapters | plugins | cmd`；`adapters -> internal/core`；`plugins -> internal/core | adapters | cmd`；任何包 `-> examples`。依赖图不允许环。
+明确禁止（重点）：`internal/oslock` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | adapters | plugins | cmd`；`internal/core -> sdk | adapters | plugins | cmd`；`adapters -> internal/core`；`plugins -> internal/core | adapters | cmd`；`internal/core | sdk | adapters | plugins -> 根包`；任何包 `-> examples`。依赖图不允许环。
 
 ## 状态归属
 

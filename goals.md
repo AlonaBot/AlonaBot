@@ -30,18 +30,20 @@
    - 只提交集成测试。单元测试和临时测试写在 `*_local_test.go`，它们被 git 忽略，不提交。
    - 只在信任边界做校验，不写防御性的重复检查和兜底分支。
    - 日志、错误字符串、CLI 输出和协议 safe_message 一律用英文；有含义的数值和字符串写成命名常量。
+   - 日志按 CONTRACTS §14 使用注入的 `*slog.Logger`，不用 fmt 直接输出。
 7. 每个 task 都运行语句中的完成条件命令。最后一个 task 在 goal 分支上重跑全部完成条件，然后推送分支，开 PR 到 `main`：标题为「切片 ID + 标题」，正文按 PR 模板填写，并加一节「文档同步」，列出需要审查者同步到 ARCHITECTURE、README 或 spec 的内容。不合并 PR。
 
 ## 总览
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
-| goal-2 | T-03.1 | 首个可用 SDK 切片 | — | 可派发 |
 | goal-23 | T-07.1 | 调度触发计算 | — | 可派发 |
 | goal-29 | T-08.2 | 配置 JSON 语义与 Pending | — | 可派发 |
 | goal-37 | T-09.2 | 安装包预检与安全解压 | — | 可派发 |
+| goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1 | 等待前置 |
 | goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 等待前置 |
 | goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 等待前置 |
+| goal-65 | T-02.1 | 日志基线 | — | 待细化 |
 | goal-4 | T-03.3 | Adapter 进程、sdk/adapter 与上下线事件 | T-03.1 | 待细化 |
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 待细化 |
 | goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 待细化 |
@@ -76,15 +78,16 @@
 | goal-53 | T-08.8 | 用户可见文案目录 | T-04.1、T-04.3、T-08.1 | 待细化 |
 | goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8 | 待细化 |
 | goal-36 | T-09.1 | 首次管理认证 | T-07.4 | 待细化 |
-| goal-38 | T-09.3 | 开发 CLI | T-04.5、T-08.1、T-08.8、T-09.2 | 待细化 |
-| goal-39 | T-09.4 | 管理服务与安装记录 | T-03.8、T-08.4、T-09.1、T-09.2 | 待细化 |
+| goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.1、T-08.8、T-09.2、T-13.1 | 待细化 |
+| goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-08.4、T-09.1、T-09.2、T-13.1 | 待细化 |
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 待细化 |
 | goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 待细化 |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 待细化 |
 | goal-43 | T-09.8 | Admin 管理页 | T-09.6、T-08.7 | 待细化 |
 | goal-44 | T-09.9 | Admin 配置、权限、工具策略与插件页 | T-09.8、T-11.1、T-11.3 | 待细化 |
-| goal-45 | T-09.10 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9 | 待细化 |
-| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-05.5、T-08.9、T-09.10、T-11.4、T-12.7 | 待细化 |
+| goal-66 | T-09.10 | 日志管理与日志页 | T-02.1、T-03.1、T-09.8 | 待细化 |
+| goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10 | 待细化 |
+| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.5 | 待细化 |
 | goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 待细化 |
 | goal-48 | T-10.3 | 资源比较报告 | T-10.1 | 待细化 |
 | goal-49 | T-10.4 | 发布资产与说明 | T-10.2、T-10.3 | 待细化 |
@@ -99,135 +102,17 @@
 | goal-62 | T-12.5 | 技能 | T-12.3 | 待细化 |
 | goal-63 | T-12.6 | 定时 Agent 任务 | T-07.2、T-08.5、T-12.3 | 待细化 |
 | goal-64 | T-12.7 | 官方插件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6 | 待细化 |
+| goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2 | 待细化 |
+| goal-68 | T-13.2 | 开发组件的配置与数据库 | T-08.3、T-08.5、T-13.1 | 待细化 |
+| goal-69 | T-13.3 | 热部署 | T-13.1 | 待细化 |
+| goal-70 | T-13.4 | 库模式示例与验收 | T-03.10、T-13.2、T-13.3 | 待细化 |
+| goal-71 | T-14.1 | help 插件与命令列表 | T-04.4、T-05.2、T-08.8 | 待细化 |
+| goal-72 | T-14.2 | welcome 与 rss 插件 | T-05.2、T-07.2、T-08.3、T-08.5、T-08.8 | 待细化 |
+| goal-73 | T-14.3 | 发行归档 | T-03.10、T-09.3、T-12.7、T-14.1、T-14.2 | 待细化 |
+| goal-74 | T-14.4 | 首次运行与预装 | T-09.6、T-14.3 | 待细化 |
+| goal-75 | T-14.5 | 发行包端到端验收 | T-09.11、T-14.4 | 待细化 |
 
 ## 第 1 批：可派发
-
-### goal-2 · T-03.1 首个可用 SDK 切片
-
-状态：可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-2（切片 T-03.1：首个可用 SDK 切片）。goal 目录 goal-2，分支 goal-2，worktree .worktrees/goal-2，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：插件能注册 message.created 事件路由；Core 把标准事件经真实 Session 派发给已 Activated 的插件；插件在 Handler 里用 Context.Send 回复原事件 Target；Core 经 Adapter 接口发出，并把 SendResult（以及可能同时存在的错误）返回给插件。
-
-依据：PLAN T-03 步骤 1；CONTRACTS §1.2、§8；MESSAGE-MODEL §1、§2、§3（本切片只做手动发送签名）、§4；WIRE-FORMAT §1、§4、§5A。
-
-范围（只新增或修改这些；.proto、internal/core/state、cmd/alonabot 和所有文档都不改）：
-- 新增 internal/wire/services.go
-- 新增 internal/core/adapter/ 和 internal/core/adapter/memory/
-- 新增 internal/core/router/ 和 internal/core/message/
-- 修改 internal/core/host/activate.go：Instance 增加 Routes 字段，在 Activate 中从 prep.Register 赋值
-- sdk/：新增 events.go、dispatch.go；修改 sdk.go（Context、Send、Registration、Collect）、activate.go（业务 Handler 与当前 Session）、session.go（buildRegister 输出事件路由）
-- 新增 examples/plugins/echo/
-- 新增 internal/core/supervisor/echo_test.go
-- 上述包的测试文件
-允许的新跨模块边：无（新包都在 internal/core 或 sdk 模块内部；examples → sdk 已允许）。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. internal/wire/services.go
-   const ServiceSend = "core.send"
-   // Core 固定服务名不含 "/"，不会与 plugin_id/route_id 形式的目标冲突。
-2. internal/core/adapter
-   var ErrQueueFull = errors.New("Core event queue is full")
-   type Sink interface {
-       Deliver(ctx context.Context, ev *pb.Event) error // 只做接纳，不等待 Handler；满时返回 ErrQueueFull
-   }
-   type Instance interface {
-       AdapterID() string
-       InstanceID() string
-       AccountID() string
-       Capabilities() []*pb.Capability
-       Start(ctx context.Context, sink Sink) error // 完成凭证与冲突检查、启动接收后返回
-       Stop(ctx context.Context) error
-       Send(ctx context.Context, target *pb.Target, chain *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo) // 两者可以同时非 nil
-   }
-   type Registry struct{ ... }
-   func NewRegistry() *Registry
-   func (r *Registry) Add(in Instance) error // instance_id 重复返回错误
-   func (r *Registry) Get(instanceID string) (Instance, bool)
-3. internal/core/adapter/memory（测试与示例用，不进入生产装配；并发安全）
-   type Sent struct { Target *pb.Target; Chain *pb.MessageChain }
-   type Adapter struct{ ... } // 实现 adapter.Instance
-   func New(adapterID, instanceID, accountID string) *Adapter
-   func (a *Adapter) Inject(ctx context.Context, ev *pb.Event) error // 经 Start 收到的 Sink 投递；未 Start 时返回错误
-   func (a *Adapter) Sent() []Sent
-   func (a *Adapter) SetSendFunc(fn func(*pb.Target, *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo))
-   默认 Send：先记录，再返回 ACCEPTED；每个 Segment 一个 ACCEPTED PartResult，platform_message_ids 依次为 "m1"、"m2"……
-4. internal/core/router
-   type Caller struct { PluginID string; GenerationID string; SessionKey string }
-   // SessionKey 每次启动唯一，标识这一次 Session；之后的媒体所有权等按它绑定。
-   func NewCaller(pluginID, generationID string) Caller // SessionKey 为 16 字节随机值的十六进制
-   type Invocation struct { PluginID string; Event *pb.Event; DefaultTarget *pb.Target }
-   // Core 记录的可信调用上下文：派发时放进 wire.Request.Attach，插件的子请求经 Inbound.ParentAttach 取回。
-   type ServiceFunc func(ctx context.Context, c Caller, in *wire.Inbound) wire.Response
-   type Mux struct{ ... }
-   func NewMux() *Mux
-   func (m *Mux) Handle(name string, fn ServiceFunc) // 同名重复注册时 panic
-   func (m *Mux) For(c Caller) wire.Handler          // 作为 supervisor.Spec.Handler；未注册的 Target 返回 NOT_FOUND
-   type Plugin interface { // 一个可以接收派发的插件实例（Target 一词专指发送目标，这里不用）
-       PluginID() string
-       Activated() bool
-       Routes() []*pb.RouteDescriptor
-       Call(ctx context.Context, req wire.Request) (wire.Response, error)
-   }
-   func FromInstance(in *host.Instance) Plugin
-   type Router struct{ ... }
-   func New() *Router
-   func (r *Router) Attach(p Plugin)
-   func (r *Router) Detach(pluginID string)
-   func (r *Router) Start() // 启动单个派发 worker
-   func (r *Router) Close() // 停止 worker；之后 Deliver 返回错误
-   func (r *Router) Deliver(ctx context.Context, ev *pb.Event) error // 实现 adapter.Sink
-5. internal/core/message
-   type Service struct{ ... }
-   func New(adapters *adapter.Registry) *Service
-   func (s *Service) Send(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response // 注册为 Mux 的 wire.ServiceSend
-6. sdk
-   type EventProvider interface { Events(*EventRegistry) }
-   type EventRegistry struct{ ... }
-   func (r *EventRegistry) On(routeID, eventType string, handler func(*Context) error)
-   type EventRoute struct { RouteID string; EventType string; Handler func(*Context) error }
-   Registration 增加 Events []EventRoute；Collect 收集 EventProvider。
-   func (c *Context) Event() *pb.Event
-   Context.Send 由返回 UNSUPPORTED 改为真实实现，签名不变。
-   func currentSession() (*wire.Session, error) // 未导出：返回已激活的 Session；未就绪或已停止时返回 Code=FAILED_PRECONDITION 的 *sdk.Error。后续的后台 Send、媒体客户端都通过它取 Session，不再改 activate.go
-
-行为：
-- Router.Deliver 放入容量 256 的队列，满时立即返回 adapter.ErrQueueFull。容量和单 worker 是临时实现，用一行 shortcut 注释写明：有界并发派发接入后替换。
-- worker 逐条处理事件：
-  - 候选是 Activated()==true 的 Plugin 上 kind=EVENT 且 event_type_filter 包含该事件类型的路由，按 (priority, plugin_id, route_id) 升序依次调用。
-  - 每次调用发送 Request{Target: route_id, Payload: PROTOBUF 编码的 HandlerRequest（schema_id 用 validate.SchemaID，version 1）, TraceID: 16 字节随机值, Attach: &Invocation{PluginID, Event, DefaultTarget: ev.Target}}。HandlerRequest.context 只设置 actor 与 default_target。
-  - 响应解码为 HandlerOutcome：propagation=STOP 时停止后续候选；调用错误或带 Err 的响应记日志后继续下一个候选。不重试。
-- Mux.For 返回的 Handler 按 Inbound.Target 查找服务；Caller 由 For 的参数固定，不信任载荷里的任何身份。
-- message.Service.Send 按顺序检查，1～5 的拒绝都同时返回 status=REJECTED 的 SendResult（已知 target 时填上）和 ErrorInfo：
-  1) 载荷必须是 PROTOBUF、schema alonabot.send_request.v1、version 1，否则 INVALID_ARGUMENT。
-  2) 默认目标取 in.ParentAttach 中的 *router.Invocation（没有父调用时为空）。wire 已保证父调用属于同一 Session，这里不再重复核对插件身份。
-  3) 没有 To 也没有默认目标 → NO_DEFAULT_TARGET。有 To 但与默认目标不相等（proto.Equal）→ PERMISSION_DENIED，并用 shortcut 注释写明：显式目标的许可检查接入后替换。
-  4) Chain 为空或只有元数据 → INVALID_ARGUMENT；validate.Chain 失败 → INVALID_ARGUMENT。
-  5) 实例不存在 → UNAVAILABLE；target.adapter_id 或 account_id 与实例不符 → INVALID_ARGUMENT。
-  6) 调用 Instance.Send，把 SendResult 作为 PROTOBUF 载荷（schema alonabot.send_result.v1）连同 ErrorInfo 一起返回，两者可以同时存在。不自动重试。
-- SDK 业务分发（替换 businessHandler）：
-  - 按 Inbound.Target 查找事件路由：找不到返回 NOT_FOUND；载荷不是 HandlerRequest、或 route_id 与 Target 不一致返回 INVALID_ARGUMENT；命令路由仍返回 UNSUPPORTED。
-  - 执行 Handler 时 recover panic，转为 INTERNAL。Handler 返回后 Context 失效，之后再调用 Send 返回 FAILED_PRECONDITION。
-  - 成功时返回 HandlerOutcome{matched: true, propagation: 调用过 StopPropagation 为 STOP，否则 CONTINUE}。
-  - Handler 返回 *sdk.Error 时，Err 使用它的 Code 与 Message；其他错误为 INTERNAL，safe_message 为 "handler returned an error"，原文只写 stderr。出错时仍返回 HandlerOutcome，保留 STOP。
-- Context.Send：构造 SendRequest{to: To 选项, chain: chain.Proto()}，以本次 Inbound.CallID 为 ParentCallID 调用 wire.ServiceSend。有载荷就解码成 SendResult；有 Err 时返回 *sdk.Error（Code 经 validate.PublicCode）。结果与错误可以同时返回。
-- EventRegistry.On 的以下情况都记为 Collect 错误：routeID 为空；与已注册的事件或命令 route_id 重复；eventType 不是 message.proto 中列出的 8 种之一；handler 为 nil。
-- buildRegister 为每个事件生成 RouteDescriptor{route_id, kind=EVENT, default_enabled=true, required_permission=ANY, event: EventSpec{event_type_filter: [eventType], handler_mode=MANUAL}}，排在命令路由之后。
-- examples/plugins/echo：根插件注册 On("echo", "message.created", ...)，把收到消息中的 text 片段原样回复；没有 text 片段时不回复。
-
-测试（按编码规范「测试提交规则」：只提交集成测试；本地自测写在 *_local_test.go，不提交，PR 中写明结果）：
-- 提交：internal/core/supervisor/echo_test.go（//go:build unix）。按 supervisor_test.go 构建示例的方式构建 examples/plugins/echo，用 memory Adapter + adapter.Registry + message.Service + Mux + Router 装配，Launch 后 Attach 实例。
-  - Inject 一条 message.created：memory 收到一条 Chain，文本与原文相同，Target 等于原 Target。
-  - Inject 一条没有匹配路由的事件类型：memory 没有收到任何发送。
-  - TCP 与 stdio 各跑一次。
-- 本地自测：message.Service 的各条拒绝路径（无目标、非原目标、空 Chain、未知实例）和「结果与错误同时返回」；Router 的排序与 STOP、跳过未激活的 Plugin、第 257 条返回 ErrQueueFull、Mux 未知服务；SDK 的 EventRegistry 拒绝情况、buildRegister 输出、Handler 返回后 Send 失败、STOP 与错误并存、panic 转 INTERNAL。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./internal/wire/... ./sdk/... ./examples/...；go build ./...。
-
-不做：Telegram、显式目标许可、后台 Send、媒体、按钮、命令分发、Rule、Hook、并发派发、cmd/alonabot 装配。
-```
 
 ### goal-23 · T-07.1 调度触发计算
 
@@ -409,7 +294,134 @@ func (c *Candidate) Discard() error                            // 删除暂存�
 
 ## 第 2 批：等待前置
 
-以下语句按 T-03.1 的接口编写。T-03.1 合并后，审查者核对实际代码，必要时修订，再改为可派发。
+goal-2 等待日志基线（T-02.1）；其余语句按 T-03.1 的接口编写。前置合并后，审查者核对实际代码，必要时修订，再改为可派发。
+
+### goal-2 · T-03.1 首个可用 SDK 切片
+
+状态：等待前置（T-02.1）。日志基线合并后，审查者按实际的 Logger 接口补充本语句，再改为可派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-2（切片 T-03.1：首个可用 SDK 切片）。goal 目录 goal-2，分支 goal-2，worktree .worktrees/goal-2，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：插件能注册 message.created 事件路由；Core 把标准事件经真实 Session 派发给已 Activated 的插件；插件在 Handler 里用 Context.Send 回复原事件 Target；Core 经 Adapter 接口发出，并把 SendResult（以及可能同时存在的错误）返回给插件。
+
+依据：PLAN T-03 步骤 1；CONTRACTS §1.2、§8；MESSAGE-MODEL §1、§2、§3（本切片只做手动发送签名）、§4；WIRE-FORMAT §1、§4、§5A。
+
+范围（只新增或修改这些；.proto、internal/core/state、cmd/alonabot 和所有文档都不改）：
+- 新增 internal/wire/services.go
+- 新增 internal/core/adapter/ 和 internal/core/adapter/memory/
+- 新增 internal/core/router/ 和 internal/core/message/
+- 修改 internal/core/host/activate.go：Instance 增加 Routes 字段，在 Activate 中从 prep.Register 赋值
+- sdk/：新增 events.go、dispatch.go；修改 sdk.go（Context、Send、Registration、Collect）、activate.go（业务 Handler 与当前 Session）、session.go（buildRegister 输出事件路由）
+- 新增 examples/plugins/echo/
+- 新增 internal/core/supervisor/echo_test.go
+- 上述包的测试文件
+允许的新跨模块边：无（新包都在 internal/core 或 sdk 模块内部；examples → sdk 已允许）。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. internal/wire/services.go
+   const ServiceSend = "core.send"
+   // Core 固定服务名不含 "/"，不会与 plugin_id/route_id 形式的目标冲突。
+2. internal/core/adapter
+   var ErrQueueFull = errors.New("Core event queue is full")
+   type Sink interface {
+       Deliver(ctx context.Context, ev *pb.Event) error // 只做接纳，不等待 Handler；满时返回 ErrQueueFull
+   }
+   type Instance interface {
+       AdapterID() string
+       InstanceID() string
+       AccountID() string
+       Capabilities() []*pb.Capability
+       Start(ctx context.Context, sink Sink) error // 完成凭证与冲突检查、启动接收后返回
+       Stop(ctx context.Context) error
+       Send(ctx context.Context, target *pb.Target, chain *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo) // 两者可以同时非 nil
+   }
+   type Registry struct{ ... }
+   func NewRegistry() *Registry
+   func (r *Registry) Add(in Instance) error // instance_id 重复返回错误
+   func (r *Registry) Get(instanceID string) (Instance, bool)
+3. internal/core/adapter/memory（测试与示例用，不进入生产装配；并发安全）
+   type Sent struct { Target *pb.Target; Chain *pb.MessageChain }
+   type Adapter struct{ ... } // 实现 adapter.Instance
+   func New(adapterID, instanceID, accountID string) *Adapter
+   func (a *Adapter) Inject(ctx context.Context, ev *pb.Event) error // 经 Start 收到的 Sink 投递；未 Start 时返回错误
+   func (a *Adapter) Sent() []Sent
+   func (a *Adapter) SetSendFunc(fn func(*pb.Target, *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo))
+   默认 Send：先记录，再返回 ACCEPTED；每个 Segment 一个 ACCEPTED PartResult，platform_message_ids 依次为 "m1"、"m2"……
+4. internal/core/router
+   type Caller struct { PluginID string; GenerationID string; SessionKey string }
+   // SessionKey 每次启动唯一，标识这一次 Session；之后的媒体所有权等按它绑定。
+   func NewCaller(pluginID, generationID string) Caller // SessionKey 为 16 字节随机值的十六进制
+   type Invocation struct { PluginID string; Event *pb.Event; DefaultTarget *pb.Target }
+   // Core 记录的可信调用上下文：派发时放进 wire.Request.Attach，插件的子请求经 Inbound.ParentAttach 取回。
+   type ServiceFunc func(ctx context.Context, c Caller, in *wire.Inbound) wire.Response
+   type Mux struct{ ... }
+   func NewMux() *Mux
+   func (m *Mux) Handle(name string, fn ServiceFunc) // 同名重复注册时 panic
+   func (m *Mux) For(c Caller) wire.Handler          // 作为 supervisor.Spec.Handler；未注册的 Target 返回 NOT_FOUND
+   type Plugin interface { // 一个可以接收派发的插件实例（Target 一词专指发送目标，这里不用）
+       PluginID() string
+       Activated() bool
+       Routes() []*pb.RouteDescriptor
+       Call(ctx context.Context, req wire.Request) (wire.Response, error)
+   }
+   func FromInstance(in *host.Instance) Plugin
+   type Router struct{ ... }
+   func New() *Router
+   func (r *Router) Attach(p Plugin)
+   func (r *Router) Detach(pluginID string)
+   func (r *Router) Start() // 启动单个派发 worker
+   func (r *Router) Close() // 停止 worker；之后 Deliver 返回错误
+   func (r *Router) Deliver(ctx context.Context, ev *pb.Event) error // 实现 adapter.Sink
+5. internal/core/message
+   type Service struct{ ... }
+   func New(adapters *adapter.Registry) *Service
+   func (s *Service) Send(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response // 注册为 Mux 的 wire.ServiceSend
+6. sdk
+   type EventProvider interface { Events(*EventRegistry) }
+   type EventRegistry struct{ ... }
+   func (r *EventRegistry) On(routeID, eventType string, handler func(*Context) error)
+   type EventRoute struct { RouteID string; EventType string; Handler func(*Context) error }
+   Registration 增加 Events []EventRoute；Collect 收集 EventProvider。
+   func (c *Context) Event() *pb.Event
+   Context.Send 由返回 UNSUPPORTED 改为真实实现，签名不变。
+   func currentSession() (*wire.Session, error) // 未导出：返回已激活的 Session；未就绪或已停止时返回 Code=FAILED_PRECONDITION 的 *sdk.Error。后续的后台 Send、媒体客户端都通过它取 Session，不再改 activate.go
+
+行为：
+- Router.Deliver 放入容量 256 的队列，满时立即返回 adapter.ErrQueueFull。容量和单 worker 是临时实现，用一行 shortcut 注释写明：有界并发派发接入后替换。
+- worker 逐条处理事件：
+  - 候选是 Activated()==true 的 Plugin 上 kind=EVENT 且 event_type_filter 包含该事件类型的路由，按 (priority, plugin_id, route_id) 升序依次调用。
+  - 每次调用发送 Request{Target: route_id, Payload: PROTOBUF 编码的 HandlerRequest（schema_id 用 validate.SchemaID，version 1）, TraceID: 16 字节随机值, Attach: &Invocation{PluginID, Event, DefaultTarget: ev.Target}}。HandlerRequest.context 只设置 actor 与 default_target。
+  - 响应解码为 HandlerOutcome：propagation=STOP 时停止后续候选；调用错误或带 Err 的响应记日志后继续下一个候选。不重试。
+- Mux.For 返回的 Handler 按 Inbound.Target 查找服务；Caller 由 For 的参数固定，不信任载荷里的任何身份。
+- message.Service.Send 按顺序检查，1～5 的拒绝都同时返回 status=REJECTED 的 SendResult（已知 target 时填上）和 ErrorInfo：
+  1) 载荷必须是 PROTOBUF、schema alonabot.send_request.v1、version 1，否则 INVALID_ARGUMENT。
+  2) 默认目标取 in.ParentAttach 中的 *router.Invocation（没有父调用时为空）。wire 已保证父调用属于同一 Session，这里不再重复核对插件身份。
+  3) 没有 To 也没有默认目标 → NO_DEFAULT_TARGET。有 To 但与默认目标不相等（proto.Equal）→ PERMISSION_DENIED，并用 shortcut 注释写明：显式目标的许可检查接入后替换。
+  4) Chain 为空或只有元数据 → INVALID_ARGUMENT；validate.Chain 失败 → INVALID_ARGUMENT。
+  5) 实例不存在 → UNAVAILABLE；target.adapter_id 或 account_id 与实例不符 → INVALID_ARGUMENT。
+  6) 调用 Instance.Send，把 SendResult 作为 PROTOBUF 载荷（schema alonabot.send_result.v1）连同 ErrorInfo 一起返回，两者可以同时存在。不自动重试。
+- SDK 业务分发（替换 businessHandler）：
+  - 按 Inbound.Target 查找事件路由：找不到返回 NOT_FOUND；载荷不是 HandlerRequest、或 route_id 与 Target 不一致返回 INVALID_ARGUMENT；命令路由仍返回 UNSUPPORTED。
+  - 执行 Handler 时 recover panic，转为 INTERNAL。Handler 返回后 Context 失效，之后再调用 Send 返回 FAILED_PRECONDITION。
+  - 成功时返回 HandlerOutcome{matched: true, propagation: 调用过 StopPropagation 为 STOP，否则 CONTINUE}。
+  - Handler 返回 *sdk.Error 时，Err 使用它的 Code 与 Message；其他错误为 INTERNAL，safe_message 为 "handler returned an error"，原文只写 stderr。出错时仍返回 HandlerOutcome，保留 STOP。
+- Context.Send：构造 SendRequest{to: To 选项, chain: chain.Proto()}，以本次 Inbound.CallID 为 ParentCallID 调用 wire.ServiceSend。有载荷就解码成 SendResult；有 Err 时返回 *sdk.Error（Code 经 validate.PublicCode）。结果与错误可以同时返回。
+- EventRegistry.On 的以下情况都记为 Collect 错误：routeID 为空；与已注册的事件或命令 route_id 重复；eventType 不是 message.proto 中列出的 8 种之一；handler 为 nil。
+- buildRegister 为每个事件生成 RouteDescriptor{route_id, kind=EVENT, default_enabled=true, required_permission=ANY, event: EventSpec{event_type_filter: [eventType], handler_mode=MANUAL}}，排在命令路由之后。
+- examples/plugins/echo：根插件注册 On("echo", "message.created", ...)，把收到消息中的 text 片段原样回复；没有 text 片段时不回复。
+
+测试（按编码规范「测试提交规则」：只提交集成测试；本地自测写在 *_local_test.go，不提交，PR 中写明结果）：
+- 提交：internal/core/supervisor/echo_test.go（//go:build unix）。按 supervisor_test.go 构建示例的方式构建 examples/plugins/echo，用 memory Adapter + adapter.Registry + message.Service + Mux + Router 装配，Launch 后 Attach 实例。
+  - Inject 一条 message.created：memory 收到一条 Chain，文本与原文相同，Target 等于原 Target。
+  - Inject 一条没有匹配路由的事件类型：memory 没有收到任何发送。
+  - TCP 与 stdio 各跑一次。
+- 本地自测：message.Service 的各条拒绝路径（无目标、非原目标、空 Chain、未知实例）和「结果与错误同时返回」；Router 的排序与 STOP、跳过未激活的 Plugin、第 257 条返回 ErrQueueFull、Mux 未知服务；SDK 的 EventRegistry 拒绝情况、buildRegister 输出、Handler 返回后 Send 失败、STOP 与错误并存、panic 转 INTERNAL。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./internal/wire/... ./sdk/... ./examples/...；go build ./...。
+
+不做：Telegram、显式目标许可、后台 Send、媒体、按钮、命令分发、Rule、Hook、并发派发、cmd/alonabot 装配。
+```
 
 ### goal-3 · T-03.2 Target 与发信许可
 
@@ -548,6 +560,16 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 以下 goal 只写了范围和要点。前置合并后，审查者按实际代码补全「接口」「行为」「测试」三段并改为可派发；在此之前不要派发。每条的完整语义以 PLAN §4 对应步骤及其失败停止条件为准。
 
+### goal-65 · T-02.1 日志基线
+
+状态：待细化。由审查者实现，维护者批准后开始。范围：Core 与 SDK 现有的直接输出、`control.proto` 的 Bootstrap（追加 `log_level`）、`cmd/alonabot` 的 `--log-level` 与 `--log-format`。要点：
+- 控制台格式按 CONTRACTS §14.2：`[时:分:秒.毫秒] [Core|Plug:<id>|Adpt:<id>/<实例>] [DBUG|INFO|WARN|ERRO] [目录/文件:行号]: 消息 key=value`，trace 显示前 8 位，多行值缩进 4 个空格，只在终端且未设置 `NO_COLOR` 时着色；另有 JSON 输出。
+- SDK 以 JSON 行写 stderr，Handler 的 Logger 附带 trace_id、route_id、call_id；调用边界捕获的 panic 记为带 `stack` 的 ERROR。
+- Core 逐行解析插件 stderr，补上并保护来源字段；非 JSON 行作为 WARN 原样保留。
+- SDK 与 Core 都按来源的生效级别过滤；持久化与运行时修改留给 T-09.10。
+- 只用标准库 `log/slog`，不加依赖；日志不含 Secret、Bootstrap 与配置明文。
+- 验收：V-62、V-63 的级别过滤分项。
+
 ### goal-4 · T-03.3 Adapter 进程、sdk/adapter 与上下线事件
 
 状态：待细化（T-03.1）。范围：`contracts/proto` 的 `adapter.proto` 与生成代码（本切片获准修改 `.proto`）、manifest 的 `role`/`adapter_id` 解析、`internal/core/adapterhost/`（以 Adapter 进程为后端实现 T-03.1 的 `adapter.Instance`）、`internal/core/state` 的游标表、`sdk/adapter/`、`examples/adapters/loopback/`。要点：
@@ -568,6 +590,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - 距上次接纳或轮次开始满 7 天时，先经 `core.adapter.cursor` 保存不带 offset 的新轮次，再拉取。
 - 401/409 经 `core.adapter.status` 报告并停止该实例；网络错误与 5xx 只对接收退避重试，不用于发送。
 - 标准化规则沿用 MESSAGE-MODEL §1、§6：带 sender_chat 的消息不构造 Actor，保留 media_group_id，每条 Telegram Message 一个事件；Actor.locale 取 from.language_code，按 BCP 47 规范化大小写。
+- Adapter 实现放在可导入的包中（`telegram.New()`），`main` 只调用 `sdk/adapter` 的运行函数，供库模式直接引用（CONTRACTS §15.3）。
 - 验收：V-45、V-54 的 locale 分项。
 
 ### goal-50 · T-03.7 官方 Telegram Adapter 的发送计划与回执
@@ -656,7 +679,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - 前端只使用已批准的 Vite、TypeScript、React 19、vitest；界面文案提供 en-US 与 zh-CN 两份目录。
 - goal-53（T-08.8）：`i18/*.json` 的 `messages` 检查（en-US 必须包含全部键，其他语言无多余键，占位符集合一致）；SDK 的 `T` 按 Actor locale → Core 默认 locale → en-US 选择，主语言回落按 CONTRACTS §5.4；Core 的 en-US/zh-CN 用户可见文案目录，usage 改为经目录生成。
 
-### goal-36、goal-38 至 goal-45 · T-09.1、T-09.3～T-09.10
+### goal-36、goal-38 至 goal-45、goal-66 · T-09.1、T-09.3～T-09.11
 
 状态：待细化。要点按 PLAN T-09 各步骤：
 - 管理 token 只保存 SHA256；login 带 CSRF 校验。
@@ -665,6 +688,9 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - 旧进程退出未确认时不启动新的写入者。
 - 启用、停用、卸载与更新时检查插件依赖；影响依赖方的操作列出受影响插件并要求确认。
 - Admin 页面包含工具调用策略、Agent 会话的列出与清除，以及界面语言切换。
+- goal-38（T-09.3）的 `plugin init` 生成插件包与库模式调试用的 `main.go`，`plugin build` 生成调用 `sdk.Run` 的正式入口。
+- goal-39（T-09.4）的 `alonabot serve` 复用 T-13 的 Core 装配，按安装记录启动全部已启用的包。
+- goal-66（T-09.10）：按来源的日志级别持久化，经 `sdk.log.set_level` 立即生效；每个来源保留最近 1000 条记录，提供读取与 SSE；`alonabot logs`、`log-level` 与 WebUI 日志页使用同一 API，页面筛选只在浏览器中进行。
 
 ### goal-54 至 goal-57 · T-11.1～T-11.4
 
@@ -682,6 +708,21 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - Provider 失败不自动重发；流式显示先发送再按间隔编辑，最后一次编辑为完整内容。
 - 工具与 MCP 操作都经策略与确认；单轮工具步数上限与编辑间隔是命名常量。
 - 记忆的字符上限为命名常量（2,200 与 1,375 码点），超限返回错误不丢已有条目；后台定时任务不注入记忆，confirm 工具一律拒绝。
+
+### goal-67 至 goal-70 · T-13.1～T-13.4
+
+状态：待细化。要点按 PLAN T-13 各步骤：
+- 根包 `alonabot` 的 `Run` 与 `alonabot serve` 共用同一份 Core 装配；`internal/core`、`sdk`、`adapters/`、`plugins/` 都不能 import 根包。
+- 开发中的组件在 goroutine 中经 loopback TCP 走完整协议，不另建协议路径；组件身份取自生成代码嵌入的 manifest。
+- dev 来源使用固定代次 `dev`，配置直接读取 `config.json`，数据库为 `dev.sqlite`，不能 update 或 rollback。
+- 热部署用 `Reload` 选项或 `ALONABOT_RELOAD=1` 启用，不解析程序的命令行参数；500ms 轮询，编译失败时旧组件继续运行，其他 module 的组件不重启。
+
+### goal-71 至 goal-75 · T-14.1～T-14.5
+
+状态：待细化。要点按 PLAN T-14 各步骤：
+- `core.command.list` 只返回调用者可用的命令，说明按 Actor locale 翻译。
+- rss 抓取只允许 http/https，解析出的地址与每次重定向后的地址都不能是 loopback、私网、链路本地、组播或未指定地址；响应大小与超时为命名常量。
+- 预装包照常验签；只在数据目录首次初始化时安装，默认启用 Agent、记忆与 help；签名私钥不进入仓库与日志。
 
 ### goal-46 至 goal-49 · T-10.1～T-10.4
 

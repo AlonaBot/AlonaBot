@@ -228,7 +228,7 @@ v0.1 默认 Telegram long polling，先确定实际 bot 身份并校验 account_
 
 CLI/API 的完整管理动作与包协议见 CONTRACTS §9。Core 状态库记录安装序号/来源、ActiveGeneration、Journal、权限、回调与配置引用；业务库由插件负责。所有状态变更通过同一个 Core 管理服务串行化，离线 CLI 不能绕过仍运行的 Core 直接改状态库。
 
-日志/指标关联 plugin_id、route_id、call_id、session/generation、adapter_instance；记录状态变化、拒绝/丢弃、发送回执、更新/恢复和配置权限审计。资源测试包含 Core+不同插件+附属进程，总 RSS/私有内存、Linux PSS、CPU、P50/P95/P99；测试环境和平台差异随结果记录。
+日志使用标准库 `log/slog`（D-31）：每条记录关联来源（Core、插件或 Adapter）、plugin_id 或 adapter_id、instance、route_id、call_id、trace_id、session/generation，记录状态变化、拒绝/丢弃、发送回执、更新/恢复和配置权限审计。控制台格式仿照 AstrBot，例如 `[14:05:42.118] [Plug:weather] [ERRO] [weather/weather.go:57]: ... trace=7c2e91d0`；同一条消息引起的记录共用 trace_id，可以串起跨插件的整条链路。每个插件与 Adapter 可单独设置级别或设为 off，WebUI 的显示筛选只在浏览器中进行（CONTRACTS §14）。资源测试包含 Core+不同插件+附属进程，总 RSS/私有内存、Linux PSS、CPU、P50/P95/P99；测试环境和平台差异随结果记录。
 
 ## P. 长期扩展方向（不进入 v0.1）
 
@@ -256,3 +256,19 @@ Agent 分为 Core 基础与官方插件两层（D-27）。Core 负责必须可�
 - Agent 在会话开始时调用一次 `memory.context`，把结果写进会话存储，作为冻结的快照；会话内写入的记忆到下一个会话才进入系统提示。
 - `memory.prefetch` 返回当前说话用户的档案，附在本轮用户消息之前，因此群聊中每位用户使用自己的档案。
 - `memory` 工具支持 add、patch、remove；超过上限返回错误，不丢弃已有条目。
+
+## S. 两种运行方式
+
+AlonaBot 同时面向直接使用机器人的用户和写插件的开发者（D-32），两者运行的是同一个 Core 和同一套协议，区别只在组件由谁启动：
+
+| | 发行包（用户） | 库模式（开发者） |
+| --- | --- | --- |
+| 入口 | 从本仓库的 Release 下载发行归档，运行 `alonabot`，在 WebUI 中配置 | 在自己的 `main.go` 中调用 `alonabot.Run`，执行 `go run .` |
+| 包含 | Core、官方 Telegram Adapter、Agent、记忆插件与预装插件；首次运行自动安装，默认只启用 Agent、记忆与 help | 内嵌完整的 Core；开发中的插件、Adapter 或记忆插件由本进程运行 |
+| 组件进程 | 每个已启用的包一个独立进程 | 开发中的组件与 Core 同进程，可直接打断点；已安装的其他包仍是独立进程 |
+
+库模式下开发者只写插件包和一个调试用的 `main.go`，发布时 `alonabot plugin build` 自动生成正式入口。开发时与生产时的行为只差进程隔离与崩溃重启。启用热部署后 Core 常驻，开发中的组件改为子进程：源码改动后重新编译，只重启这些组件，Adapter 连接、其他插件与按钮都不受影响；编译失败时旧版本继续运行（CONTRACTS §15）。
+
+Go 不能在进程内替换已加载的代码，所以热部署通过重启子进程实现，断点调试与热部署不能同时使用。
+
+官方 Adapter 与官方插件只经 SDK 与 Core 通信，`adapters/` 与 `plugins/` 不被本仓库其他包 import；v0.1 协议冻结后迁到独立仓库。
