@@ -37,7 +37,7 @@ func (*Lifecycle) OnStop(context.Context) error {
 	return nil
 }
 
-// Commands 注册回复 pong 的 ping 命令。
+// Commands 注册 /ping 命令，回复 pong。
 func (*Lifecycle) Commands(r *sdk.CommandRegistry) {
 	r.Command("ping", func(*sdk.Context) (message.Chain, error) {
 		return message.Chain{message.Text("pong")}, nil

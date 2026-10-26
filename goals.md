@@ -930,12 +930,12 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 状态：待编写。
 
-目标：SDK 配置准备顺序：OnLoad→补缺键默认→typed decode/Schema→Validate
+目标：SDK 配置准备顺序：OnLoad→补缺键默认→typed decode/Schema
 前置：T-08.1、T-08.2。
 
 依据：PLAN §3.1 的 T-08.3 行、§4 的 T-08 步骤 3。
 
-关键边界：严格按 OnLoad→仅补缺失键的默认值→typed decode/Schema→Validate 顺序准备配置；显式 false、0、空串、空数组、空对象与 null 均保留。
+关键边界：严格按 OnLoad→仅补缺失键的默认值→typed decode/Schema 顺序准备配置；显式 false、0、空串、空数组、空对象与 null 均保留。
 
 验收：V-37、V-21 的配置分项。
 

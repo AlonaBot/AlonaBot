@@ -1,6 +1,10 @@
 package sdk
 
-import "context"
+import (
+	"context"
+
+	"github.com/AlonaBot/AlonaBot/sdk/config"
+)
 
 // Base 由根插件以值的形式嵌入：
 //
@@ -14,7 +18,7 @@ type Base struct {
 }
 
 // Root 是传给 [Run] 的根插件，列出 SDK 会调用的全部 Hook；嵌入 [Base] 即满足它。
-// 进程生命周期 Hook 见 CONTRACTS §4.1，配置回调 OnLoad/Validate 由 Config 类型实现（见 sdk/config）。
+// 进程生命周期 Hook 见 CONTRACTS §4.1，配置回调 OnLoad 由配置类型实现（见 sdk/config）。
 type Root interface {
 	// OnStart 在配置准备之后、REGISTER 之前执行，不能发起业务调用；失败时本次启动失败。
 	OnStart(context.Context) error
@@ -22,8 +26,8 @@ type Root interface {
 	OnReady(context.Context) error
 	// OnStop 在 STOPPING 或断链后执行，最多使用 STOPPING 给出的期限关闭资源。
 	OnStop(context.Context) error
-	// Config 返回供 SDK 解码配置的结构体指针；没有配置时返回 nil。每个插件包至多一个 Config。
-	Config() any
+	// Config 返回供 SDK 解码配置的结构体指针（嵌入 config.Base）；没有配置时返回 nil。每个插件包至多一个 Config。
+	Config() config.Config
 	// Commands 在 Collect 时调用一次，注册命令。
 	Commands(*CommandRegistry)
 	// HTTP 在 Collect 时调用一次，注册 HTTP 路由。
@@ -44,7 +48,7 @@ func (*Base) OnReady(context.Context) error { return nil }
 func (*Base) OnStop(context.Context) error { return nil }
 
 // Config 默认返回 nil，表示插件没有配置。
-func (*Base) Config() any { return nil }
+func (*Base) Config() config.Config { return nil }
 
 // Commands 默认不注册命令。
 func (*Base) Commands(*CommandRegistry) {}
