@@ -49,6 +49,7 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | D-37 | Bootstrap 增量字段编号 | **规格完善时选定（2026-10-26）**：保留现有 Bootstrap 字段 1～9；追加 `LogLevel log_level = 10`（枚举 UNSPECIFIED、DEBUG、INFO、WARN、ERROR、OFF，UNSPECIFIED 按 INFO 处理）与 `SessionLimits session_limits = 11`。SessionLimits 字段固定为 `max_inflight = 1`、`max_payload_bytes = 2`、`request_timeout_ms = 3`；Core 先解析 `inherit`，跨 Session 的 Core 总 payload 预算不下发 SDK。T-02.2 必须在 T-02.1 合并后修改同一 proto/生成文件，避免字段分配与合并冲突 | WIRE §3.2、CONTRACTS §14/§16、PLAN T-02 |
 | D-38 | Provider 统一流接口 | **规格完善时选定（2026-10-26）**：Agent Provider 以注入的 `http.Client` 和回调式 `Client.Stream(ctx, req, emit) error` 统一 OpenAI 兼容 Chat Completions 与 Anthropic Messages。文本增量按序发出，工具调用完整组装且参数必须是 JSON 对象；只有收到协议终止标记才算成功，提前 EOF、Provider 错误或回调错误均返回错误，不自动重试。回调式接口用于自然传播背压与调用方错误，避免额外通道隐藏流错误 | PLAN T-12 步骤 1、TEST-MATRIX V-57 |
 | D-39 | 根插件 Hook 的默认实现 | **用户确认（2026-10-26）**：`plugin.Base` 移入 `sdk` 包改称 `sdk.Base`（`sdk` 已 import `sdk/plugin`，留在原包无法引用注册器类型），并为 `OnStart`/`OnReady`/`OnStop`、`Config`、`Commands`/`HTTP`/`Schedules` 提供空的默认实现，便于编辑器补全；SDK 原样调用，不区分是否覆盖。`sdk.Root` 列出全部 Hook，根插件覆盖时签名不符即编译失败；Config 的 `OnLoad`/`Validate` 签名不符时 Collect 报错。不强制插件实现任何方法，也不改用选项式注册，回调仍是根插件结构体上的方法 | DESIGN §D、CONTRACTS §4.1、PLAN T-04 步骤 1 |
+| D-40 | 配置类型的默认实现，删除 Validate | **用户确认（2026-10-26）**：新增 `config.Base`，配置类型嵌入它即得到原样返回 raw 的默认 `OnLoad`，编辑器可补全；根插件的 `Config()` 改为返回 `config.Config`，覆盖 `OnLoad` 时签名不符在编译期失败，取代 D-39 中 Collect 的运行时检查。删除 `Validate` 回调：多数插件不需要自行校验，需要时在 `OnLoad` 中返回错误即可，失败路径相同（候选失败，不覆盖 Active）。保留 `Config()`，它是根插件上发现配置能力的补全入口，且不需要反射 | CONTRACTS §1.1/§4.1/§4.2/§5.2/§5.3、WIRE §3.2、DESIGN §D/§J、PLAN T-01/T-08.3、TEST-MATRIX V-38 |
 
 ## P 类历史议题与当前处置
 
@@ -66,7 +67,7 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | P-10 | Adapter 动态装载 | 已有 Adapter 实例开关首发；新类型热加载后置。 | §8 | 已收敛 |
 | P-11 | JSON 包装层 | 运行配置为普通 JSON，无 config 包装；i18 翻译使用 config 包装。 | §5 | 已收敛 |
 | P-12 | 事件与 Actor | 最低事件清单采用类型化 payload；scheduled 等系统任务没有用户角色或默认 Admin。 | §2/§4 | 已收敛 |
-| P-13 | 生命周期 | OnStart/OnReady/OnStop 首发，配置回调独立 OnLoad/Validate；OnConfigChange 后置。 | §4/§5 | 已收敛 |
+| P-13 | 生命周期 | OnStart/OnReady/OnStop 首发，配置回调独立 OnLoad（D-40 删除 Validate）；OnConfigChange 后置。 | §4/§5 | 已收敛 |
 | P-14 | 多账号 | Target 明确 adapter/instance/account/chat/thread，凭证按实例隔离；不内置 X/Twitter 动态凭证。 | §8 | 已收敛 |
 
 ## Q 类历史问题与当前处置
@@ -98,7 +99,7 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 
 - WASM-only、WASI Reactor、Host ABI/SQL Proxy、单实例串行：由 D-01/D-03/D-04/D-09 取代。
 - 同包多个根插件类、方法注解必需：由 D-13 的单根类/独立函数注解/显式方法注册取代。
-- 旧版默认 PruneUnknown=true：被 D-14 **默认保留未知键**取代，OnLoad/Validate 保留。
+- 旧版默认 PruneUnknown=true：被 D-14 **默认保留未知键**取代，OnLoad 保留（Validate 由 D-40 删除）。
 - 强制 Host FS/HTTP/Exec 权限拦截：Native 可绕开普通 SDK，无 OS 级隔离时不得宣称安全隔离。
 - 通用事件自动补发/Outbox：Event Bus 按 D-11 尽力投递，业务 Service Call 不自动重试；可靠发信应单独定义。
 - 同一个 .wasm 跨平台：改为同版本下按 OS/arch 分发不同 Native 可执行文件。
@@ -129,3 +130,4 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-10-25：**D-35**：规格完整性审查，删除全部「后续再设计、届时、待定」类说法并补齐 D-35 所列内容；D-24 的描述改为已处置的结论；goals.md 的「待细化」状态改称「待编写」。同步修改 CONTRACTS §0/§2.2/§6.1/§7.3/§8/§9.1/§9.3/§15、MESSAGE-MODEL §1.1/§6.1、WIRE、DESIGN、PLAN T-02/T-03/T-05/T-09/T-10/T-12/T-13/T-14、TEST-MATRIX。
 - 2026-10-26：**D-36 已确认**：v0.1 提供官方容器镜像，Telegram 实例支持单独的代理配置。同步修改 CONTRACTS §0/§8/§15（新增 §15.3，原 §15.3、§15.4 顺延为 §15.4、§15.5）、PLAN T-03/T-10/T-14、TEST-MATRIX V-45 与新增的 V-70。
 - 2026-10-26：**D-39 已确认**：`plugin.Base` 改为 `sdk.Base` 并提供全部根插件 Hook 的空默认实现，签名不符的 Hook 在编译期或 Collect 时报错。同步修改 DESIGN §D、CONTRACTS §4.1、PLAN T-04 步骤 1。
+- 2026-10-26：**D-40 已确认**：新增 `config.Base`，`Config()` 返回 `config.Config`；删除 Validate 回调，校验并入 OnLoad。同步修改 CONTRACTS §1.1/§4.1/§4.2/§5.2/§5.3、WIRE §3.2、DESIGN §D/§J、PLAN T-01/T-08.3、goals.md goal-30、TEST-MATRIX V-38。

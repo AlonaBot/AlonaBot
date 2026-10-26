@@ -20,7 +20,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、N
 - 两种传输均为 `uint32 big-endian payload length + Protobuf Envelope`；长度不含 4-byte 前缀，合法范围为 **1～4,194,304 bytes**。先验证长度再分配受限缓冲；完整读取前缀和载荷，不能假设一次 Read 得到一帧。长度 0、超限、截断或不可解码的 Envelope 终止当前连接。每方向只有一个帧写入器，多个 goroutine 的帧不能交错。
 - Hello 前不得发送其他帧。Protocol Major 不相等，或任一 required capability 不在双方能力交集中，拒绝握手；Minor 选双方支持范围内的较低版本。所有枚举保留零值 UNSPECIFIED，业务要求的枚举和身份字段解码后验证。Envelope 字段编号、控制帧方向及 schema 见 [WIRE-FORMAT.md](WIRE-FORMAT.md)，不另定义平行的 JSON 字节流协议。
 - HelloAck 的 `bootstrap` 一次性下发本 Session 的 `generation_id`、原始候选配置 JSON、配置版本、DB descriptor、内部 HTTP 认证凭证和阶段预算。Core 此时只检查配置是合法 JSON 对象并符合大小限额，**不在 OnLoad 迁移之前按新版 typed schema 拒绝旧配置**。运行所需 Secret 仅在该插件私有 IPC 中解引用，不继承其他插件或 Core 管理凭证；不得写入日志。Bootstrap 同样受 4 MiB 帧上限限制，超限明确拒绝启动。
-- SDK 在 Preparing 中执行配置 `OnLoad → 仅缺键补默认值 → typed decode / Validate → DB 迁移门槛核对及许可的迁移 → OnStart`；PG resume 只核对，见 §6.3。不存在的可选回调直接跳过。随后 REGISTER 一次性提交完整 RouteDescriptor、规范化配置及其版本、schema hash；声明 HTTP 路由时还提交实际已监听的 loopback endpoint。对新候选，Core 再次验证 Candidate，提取 Secret 为不可变引用后持久化；对已提交代次的普通重启，验证配置与原快照一致并复用原 Secret 引用，不创建新代次或改写快照。Core 校验所有路由和 endpoint 后才返回 PREPARED。明文配置只能经过私有 IPC 和必要的运行内存，不能进入 Journal 或普通配置快照。配置与 DB 细节分别以 §5、§6 为准。
+- SDK 在 Preparing 中执行配置 `OnLoad → 仅缺键补默认值 → typed decode/Schema 校验 → DB 迁移门槛核对及许可的迁移 → OnStart`；PG resume 只核对，见 §6.3。不存在的可选回调直接跳过。随后 REGISTER 一次性提交完整 RouteDescriptor、规范化配置及其版本、schema hash；声明 HTTP 路由时还提交实际已监听的 loopback endpoint。对新候选，Core 再次验证 Candidate，提取 Secret 为不可变引用后持久化；对已提交代次的普通重启，验证配置与原快照一致并复用原 Secret 引用，不创建新代次或改写快照。Core 校验所有路由和 endpoint 后才返回 PREPARED。明文配置只能经过私有 IPC 和必要的运行内存，不能进入 Journal 或普通配置快照。配置与 DB 细节分别以 §5、§6 为准。
 - Preparing/Prepared/Activating 不开放业务 REQUEST；配置、DB 位置和内部 HTTP 凭证由 Bootstrap 提供，不需要准备期通用 Core RPC。认证后的 OnLoad/迁移/OnStart/REGISTER/OnReady 失败使用 `SESSION_ERROR` 携带失败阶段和 ErrorInfo，然后关闭 Session；认证失败直接关闭，不暴露凭证信息或注册残留。
 
 ### 1.2 调用、取消与资源边界
@@ -97,7 +97,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、N
 
 ### 4.1 生命周期与就绪门
 
-- v0.1 的可选生命周期方法为 `OnStart(ctx)`、`OnReady(ctx)`、`OnStop(ctx)`；没有实现时无需空方法，空的默认实现由 `sdk.Base` 提供（DESIGN §D）。配置的 OnLoad/Validate 是配置处理接口，不是额外的进程生命周期 Hook。`OnConfigChange`/在线热应用后置；配置应用与包更新均由新 Session 执行。
+- v0.1 的可选生命周期方法为 `OnStart(ctx)`、`OnReady(ctx)`、`OnStop(ctx)`；没有实现时无需空方法，空的默认实现由 `sdk.Base` 提供（DESIGN §D）。配置的 OnLoad 是配置处理回调，不是额外的进程生命周期 Hook。`OnConfigChange`/在线热应用后置；配置应用与包更新均由新 Session 执行。
 - 新候选的标准顺序为：创建 Session → Hello/Bootstrap → 配置准备 → DB 迁移 → OnStart → REGISTER/Prepared → Core 原子提交唯一 ActiveGeneration → Activate → OnReady → Activated → 公开业务。首次启用、配置更新和包更新适用此提交路径。普通崩溃重启或 Core 恢复使用新 Session，复用原已 COMMITTED 的 Generation/Config/DB；准备验证通过后依据原提交记录发送 Activate，不新增 Generation 或重复提交 Journal。资源选择、同版本配置一致性检查和回退分支见 §5、§6、§12。
 - OnStart 可以使用本 Session 的候选配置/受管 DB，并初始化本地资源；通过 Core 的 Send、Service、公开 HTTP、Scheduler 业务仍关闭。OnReady 是提交后的有限本地准备检查，不能等待自己尚未开放的业务路由或 SDK ready gate，不能同步执行需要 Activated 的业务 RPC；错误明确返回 PLUGIN_NOT_READY，不隐式排队等激活。
 - SDK 完整写出 ACTIVATED 后才打开本地 ready gate；OnReady 创建的业务 goroutine 必须等待该 gate，同时响应 lifetime context。Core 在读循环中同步验证并应用 Activated 转换后再处理下一帧 REQUEST；两种传输共享该顺序，**不增加 ACTIVATED_ACK**。本地 gate 只表示允许发起业务 RPC，不等于 Core 已确认外部副作用，断链仍返回 UNAVAILABLE。
@@ -108,7 +108,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、N
 | 阶段 | 内部首发预算 | 超时后的处理 |
 | --- | --- | --- |
 | Hello / HelloAck | 10s | 关闭未认证或未完成握手的 Session，无公开路由 |
-| 配置 OnLoad / defaults / typed decode / Validate | 60s | 候选失败，不覆盖 Active |
+| 配置 OnLoad / defaults / typed decode | 60s | 候选失败，不覆盖 Active |
 | DB 迁移 | 15 分钟 | 取消并中止候选；按受管/自管边界恢复或要求人工处理 |
 | OnStart | 60s | 候选失败；已提交代次恢复失败则 Degraded |
 | OnReady | 30s | 已提交代次 Degraded，禁止新业务派发 |
@@ -139,25 +139,22 @@ SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 contex
 
 ### 5.2 配置回调与激活次序
 
-Config 可以实现以下可选接口；它们是配置数据处理接口，与 `OnStart/OnReady/OnStop` 生命周期钩子分开，不要求空实现：
+根插件的 `Config()` 返回 `config.Config`；配置类型嵌入 `config.Base`，后者提供原样返回 raw 的默认 `OnLoad`，需要时覆盖。OnLoad 是配置数据处理回调，与 `OnStart/OnReady/OnStop` 生命周期钩子分开：
 
 ```go
-type ConfigLoader interface {
+type Config interface {
     OnLoad(ctx context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)
-}
-type ConfigValidator interface {
-    Validate(ctx context.Context) error
 }
 ```
 
-- `config_version` 是 manifest 中的配置格式版本，旧版本保存在 Core 代次元数据中，不塞入用户配置对象。OnLoad 在零值 `*Config` 上运行，输入完整旧 JSON，只根据 raw/fromVersion 转换为本版本 JSON；SDK 随后将结果解码到该 Config 实例，再执行 Validate。未实现 OnLoad 时仍保留原始键并执行默认值与校验；不能转换的结构必须明确失败。回调应为可重复的纯配置变换，不执行数据库、文件、网络或发信副作用。
-- 顺序固定为：Pending JSON 语法/对象检查 → 停止旧代次并准备候选资源 → HelloAck.bootstrap 下发候选运行 JSON → SDK OnLoad → 仅缺键默认值 → typed decode/Schema 校验 → Validate → DB 迁移 → OnStart → REGISTER 回传规范候选 JSON及注册描述 → Core 复核并形成含 secret 引用的不可变快照 → PREPARED → Active Generation 提交 → Activate/OnReady/Activated。不能在 OnLoad 之前用新 Schema 否定仍需迁移的旧配置。
+- `config_version` 是 manifest 中的配置格式版本，旧版本保存在 Core 代次元数据中，不塞入用户配置对象。OnLoad 在零值 `*Config` 上运行，输入完整旧 JSON，只根据 raw/fromVersion 转换为本版本 JSON；SDK 随后将结果解码到该 Config 实例。插件需要检查业务取值时在 OnLoad 中返回错误，SDK 不另设校验回调。未覆盖 OnLoad 时仍保留原始键并执行默认值与 Schema 校验；不能转换的结构必须明确失败。回调应为可重复的纯配置变换，不执行数据库、文件、网络或发信副作用。
+- 顺序固定为：Pending JSON 语法/对象检查 → 停止旧代次并准备候选资源 → HelloAck.bootstrap 下发候选运行 JSON → SDK OnLoad → 仅缺键默认值 → typed decode/Schema 校验 → DB 迁移 → OnStart → REGISTER 回传规范候选 JSON及注册描述 → Core 复核并形成含 secret 引用的不可变快照 → PREPARED → Active Generation 提交 → Activate/OnReady/Activated。不能在 OnLoad 之前用新 Schema 否定仍需迁移的旧配置。
 - Bootstrap 和 REGISTER 中的完整 JSON 只在所属插件的认证 IPC 内传输；持久化前由 Core 处理 secret，见 §5.3。PREPARED 的配置摘要由 Core 针对持久化快照计算，SDK 将其作为不透明确认值，不自行重建引用后计算摘要。提交前失败保留旧 Active；提交后失败按 §12 进入 Degraded，不把 OnReady 失败写成“任意阶段都能无损回退”。普通 restart/异常恢复只重验当前版本配置并复用原引用/代次；若 OnLoad 在相同格式版本上产生不同配置，返回 FAILED_PRECONDITION，不能借 restart 隐式修改 Active。
 
 ### 5.3 Secret 与翻译
 
 - **配置快照存引用，Secret Store 存不可变 secret 版本**。持久化 secret 字段使用 `{"$secret_ref":"opaque-id"}`；v0.1 的 secret 字段为 string 或可空 string 指针。新值生成新引用，旧代次的引用不可原地改值；普通配置 API 只返回引用/是否已设置，表单据此显示掩码，不能把掩码当成保存或“保持不变”的协议值。省略字段保持原值，显式删除走 §5.1 的校验。
-- Core 在构造本 Session 的 bootstrap 前解析其有权访问的引用，SDK 接收正常运行值完成 OnLoad/Validate；REGISTER 回传后 Core 按新 Schema **以及此前保留的 secret 路径标记**重新抽取秘密值。旧 secret 字段从 Schema 移除但仍作为未知键保留时继续保密；只有迁移明确删除该键才移除对应路径标记。不能把其他插件的引用解析给当前插件，也不能把含明文的 bootstrap/REGISTER、DSN、配置差异写入日志或普通管理响应。
+- Core 在构造本 Session 的 bootstrap 前解析其有权访问的引用，SDK 接收正常运行值完成 OnLoad；REGISTER 回传后 Core 按新 Schema **以及此前保留的 secret 路径标记**重新抽取秘密值。旧 secret 字段从 Schema 移除但仍作为未知键保留时继续保密；只有迁移明确删除该键才移除对应路径标记。不能把其他插件的引用解析给当前插件，也不能把含明文的 bootstrap/REGISTER、DSN、配置差异写入日志或普通管理响应。
 - 首发 Secret Store 与 Core 状态一起持久化，使用仅运行账号可读写的文件权限/Windows ACL；这保护普通管理访问，不承诺隔离同账号 Native 代码。管理员明文查看须再次认证并审计。失败候选的 secret 仅在未被 Active、Pending 或保留代次引用时回收；保留旧程序/DB 却提前删旧密钥不算可恢复快照。
 - `i18/en-US.json` 采用 `config.<field>.label/description`，按当前 locale → en-US → Go tag/字段名回退。嵌套结构按 JSON 路径查找；options 只翻译显示文案，不改变存储值。缺少翻译不改变配置内容；`hidden` 不是权限控制，不另建字段排序或并发调参页面。
 

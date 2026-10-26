@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -18,67 +19,66 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
-// Config 声明本插件唯一的配置类型。
+// Config 声明本插件唯一的配置类型；config.Base 提供默认的 OnLoad。
 type Config struct {
+	config.Base
 	Greeting string `json:"greeting"`         // /demo hello 回复的文本
 	Interval int64  `json:"interval_seconds"` // 间隔秒数，不能为负
 }
 
-// Config 的回调不经 sdk.Base，用接口断言让签名错误在编译期暴露。
-var (
-	_ config.Loader    = (*Config)(nil)
-	_ config.Validator = (*Config)(nil)
-)
-
-// OnLoad 把版本 1 的 {"hello": "..."} 迁移为当前格式；其他版本原样返回。
-func (c *Config) OnLoad(_ context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error) {
-	if fromVersion != 1 {
-		return raw, nil
+// OnLoad 把版本 1 的 {"hello": "..."} 迁移为当前格式，并拒绝负数的 interval_seconds。
+func (*Config) OnLoad(_ context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error) {
+	// 1. 版本 1 的 hello 改名为 greeting；值保持原始 JSON，不经 float64 转换。
+	if fromVersion == 1 {
+		var doc map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			return nil, fmt.Errorf("decode config: %w", err)
+		}
+		if v, ok := doc["hello"]; ok {
+			doc["greeting"] = v
+			delete(doc, "hello")
+		}
+		var err error
+		if raw, err = json.Marshal(doc); err != nil {
+			return nil, fmt.Errorf("encode config: %w", err)
+		}
 	}
-	var old map[string]any
-	if err := json.Unmarshal(raw, &old); err != nil {
-		return nil, err
+	// 2. 解码到局部变量检查取值，raw 原样返回，保留未知键。
+	var c Config
+	if err := json.Unmarshal(raw, &c); err != nil {
+		return nil, fmt.Errorf("decode config: %w", err)
 	}
-	if v, ok := old["hello"]; ok {
-		old["greeting"] = v
-		delete(old, "hello")
-	}
-	return json.Marshal(old)
-}
-
-// Validate 校验配置取值。
-func (c *Config) Validate(context.Context) error {
 	if c.Interval < 0 {
-		return errors.New("interval_seconds must not be negative")
+		return nil, errors.New("interval_seconds must not be negative")
 	}
-	return nil
+	return raw, nil
 }
 
 // Demo 作为根插件注册命令、HTTP 路由与定时任务；插件 ID 来自 plugin.yaml。
 type Demo struct {
 	// Base 提供根插件的默认实现。
 	sdk.Base
-	config Config // SDK 解码并校验后的配置
+	config Config // SDK 解码后的配置
 }
 
 // Config 返回供 SDK 解码配置的目标。
-func (p *Demo) Config() any { return &p.config }
+func (p *Demo) Config() config.Config { return &p.config }
 
-// Commands 在 demo 分组下注册 hello 与 echo 两个命令。
+// Commands 在 demo 分组下注册两个命令，行尾注释是各自的触发路径。
 func (p *Demo) Commands(r *sdk.CommandRegistry) {
 	r.Group("demo", func(g *sdk.CommandGroup) {
-		g.Command("hello", p.Hello)
-		g.Command("echo", p.Echo)
+		g.Command("hello", p.Hello) // /demo hello
+		g.Command("echo", p.Echo)   // /demo echo <text> <times>，例如 /demo echo hi 3
 	})
 }
 
-// Hello 返回要自动回复的 Chain；成功且非空时由 Core 发送一次。
+// Hello 响应 /demo hello，返回要自动回复的 Chain；成功且非空时由 Core 发送一次。
 func (p *Demo) Hello(c *sdk.Context) (message.Chain, error) {
 	c.StopPropagation()
 	return message.Chain{message.Text(p.config.Greeting)}, nil
 }
 
-// Echo 在 Handler 内主动发送，可以多次 Send。
+// Echo 响应 /demo echo <text> <times>，在 Handler 内主动发送 times 次 text。
 func (p *Demo) Echo(c *sdk.Context, text string, times int64) error {
 	for i := int64(0); i < times; i++ {
 		if _, err := c.Send(message.Chain{message.Text(text)}); err != nil {

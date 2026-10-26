@@ -18,11 +18,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
-	"github.com/AlonaBot/AlonaBot/sdk/config"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
@@ -118,8 +116,7 @@ type Registration struct {
 	Schedules []Schedule
 }
 
-// Collect 调用根插件的注册入口，检查 Handler 签名与同插件内的重复项（D-20：同插件重复即报错），
-// 并拒绝 Config 上与配置回调同名但签名不符的方法。
+// Collect 调用根插件的注册入口，检查 Handler 签名与同插件内的重复项（D-20：同插件重复即报错）。
 func Collect(root Root) (*Registration, error) {
 	if root == nil {
 		return nil, errors.New("root plugin is nil")
@@ -129,26 +126,9 @@ func Collect(root Root) (*Registration, error) {
 	root.HTTP(routes)
 	root.Schedules(jobs)
 	reg := &Registration{Commands: cmds.commands, HTTP: routes.routes, Schedules: jobs.jobs}
-	errs := slices.Concat(cmds.errs, routes.errs, jobs.errs, []error{checkConfigHooks(root.Config())})
+	errs := slices.Concat(cmds.errs, routes.errs, jobs.errs)
 	if err := errors.Join(errs...); err != nil {
 		return nil, fmt.Errorf("invalid registration of %T: %w", root, err)
 	}
 	return reg, nil
-}
-
-// checkConfigHooks 拒绝 Config 上与 [config.Loader]、[config.Validator] 方法同名但签名不符的方法：
-// 这类方法不满足接口，会被静默跳过。cfg 为 nil 表示插件没有配置。
-func checkConfigHooks(cfg any) error {
-	if cfg == nil {
-		return nil
-	}
-	t, v := reflect.TypeOf(cfg), reflect.ValueOf(cfg)
-	var errs []error
-	for _, want := range []reflect.Type{reflect.TypeFor[config.Loader](), reflect.TypeFor[config.Validator]()} {
-		hook := want.Method(0)
-		if m := v.MethodByName(hook.Name); m.IsValid() && !t.Implements(want) {
-			errs = append(errs, fmt.Errorf("config hook %v.%s has signature %v, want %v", t, hook.Name, m.Type(), hook.Type))
-		}
-	}
-	return errors.Join(errs...)
 }
