@@ -3,13 +3,13 @@
 版本：v0.6-review · 2026-10-21  
 状态：**现行实施基线，待实施验证**。本轮按用户“自动完善剩余细节、审阅可行性并修复缺陷”的授权收敛，不提升版本编号。
 
-本文件与 [WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 共同定义首发行为；[PLAN.md](PLAN.md) 是唯一执行入口。保留 D-01～D-32，历史 PDF/讨论对照中的待定描述不覆盖当前规则。规格审阅不是运行时测试报告。
+本文件与 [WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 共同定义首发行为；[PLAN.md](PLAN.md) 是唯一执行入口。保留 D-01～D-34，历史 PDF/讨论对照中的待定描述不覆盖当前规则。规格审阅不是运行时测试报告。
 
 ## 0. 范围和明确取舍
 
-v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、Native Go 插件与 Adapter SDK/子进程、双传输 RPC、命令/文本匹配/事件/权限、延续调用与基础多轮等待、Event Bus、Service Call、调度、插件 HTTP、SQLite/PostgreSQL、配置/WebUI、用户可见文案的 i18n、预构建安装/更新与有明确边界的回退，Agent 基础（§13）、官方 Agent 插件与官方记忆插件，统一日志（§14），以及发行包、预装插件与库模式（§15）。保留 D-01～D-32；其他官方 Adapter、TUI、WASM、插件实例池、蓝绿零停机、持久化的多轮会话状态与暂停 DSL、动态跨插件命令 Router 与复杂表单后置。
+v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、Native Go 插件与 Adapter SDK/子进程、双传输 RPC、命令/文本匹配/事件/权限、延续调用与基础多轮等待、Event Bus、Service Call、调度、插件 HTTP、SQLite/PostgreSQL、配置/WebUI、用户可见文案的 i18n、预构建安装/更新与有明确边界的回退，Agent 基础（§13）、官方 Agent 插件与官方记忆插件，统一日志（§14），发行包、预装插件与库模式（§15），以及调优参数（§16）。保留 D-01～D-34；其他官方 Adapter、TUI、WASM、插件实例池、蓝绿零停机、持久化的多轮会话状态与暂停 DSL、动态跨插件命令 Router 与复杂表单后置。
 
-运行时容量和阶段超时采用固定内部常量，不增加逐插件调参 UI。它们是初始实现边界，须通过 TEST-MATRIX 实测后调整；不是性能保证。现行技术细节按本轮用户授权完成，保留 v0.6-review 编号。
+运行时容量、期限和配额有固定的缺省值，统一登记为调优参数（§16）。缺省值是初始实现边界，须通过 TEST-MATRIX 实测后调整，不是性能保证；运维与测试可以在启动时覆盖，不提供 WebUI 或逐插件的调参。现行技术细节按本轮用户授权完成，保留 v0.6-review 编号。
 
 ## 1. RPC、握手、错误、媒体
 
@@ -36,7 +36,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、N
 
 - 普通 RPC 不内嵌大媒体；插件通过 Core 的分块上传 API 得到 `MediaRef`。Begin 声明总大小、MIME 和 SHA-256，Core 检查配额并签发不可预测 `upload_id`；Chunk 必须带当前期望 offset，按顺序追加，每块最多 **1 MiB**。重复、越界、错序的 offset 明确拒绝并终止该上传，不提供同 upload_id 的自动重传或断点续传。
 - Commit 核对实际字节数、声明大小、SHA-256 和 MIME 后才签发引用。MediaRef 绑定 owner Session、允许的消费方/目标范围、size、mime、sha256 和 expires_at；不能用任意本地路径代替。转给其他插件时由 Core 签发新的范围受限 token，不直接放宽原 token。
-- 内部首发限额：单对象 **100 MiB**；每 Session 最多 **4 个未完成上传**，其所有未回收的上传和引用对象合计最多 **256 MiB**；Core 临时媒体磁盘总预算 **2 GiB**。配额在接收字节前预留，释放时扣回；磁盘写入失败明确中止，不能产生可用 MediaRef。限额是实现常量，不增加 WebUI 调参。
+- 内部首发限额：单对象 **100 MiB**；每 Session 最多 **4 个未完成上传**，其所有未回收的上传和引用对象合计最多 **256 MiB**；Core 临时媒体磁盘总预算 **2 GiB**。配额在接收字节前预留，释放时扣回；磁盘写入失败明确中止，不能产生可用 MediaRef。限额的缺省值登记为调优参数（§16），不增加 WebUI 调参。
 - 未完成上传自 Begin 起 **15 分钟**到期，分块请求不延长期限；已提交引用自 Commit 起 **15 分钟**到期。失败、取消、过期或 owner Session 失效时回收无消费者租约的临时对象；正在发送且已被 Adapter 接管的对象由有截止时间的消费租约保护，直到发送结束或操作 deadline 到达。租约仍计入磁盘预算，不能无限延长引用。
 - Core 不提供任意 HTTPS URL 下载代理。Native 插件可自行获取媒体再上传；Adapter 仅在其公布的平台能力和 URL 策略内使用平台支持的 URL 发送方式。若 Adapter 自己执行下载，必须明确允许的协议、重定向和目标范围，不能默认允许访问宿主私网。此约束不扩展为对 Native 插件网络访问的沙箱。
 
@@ -113,7 +113,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、N
 | OnReady | 30s | 已提交代次 Degraded，禁止新业务派发 |
 | 一次停用或整个 Core Shutdown | 总计 10s | 到总截止时间终止普通合作型进程树 |
 
-SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 context 传进去便假定用户函数会退出；阶段超时报告 SESSION_ERROR 并结束该进程运行。Core 对 Preparing 另设上述适用阶段预算之和的硬截止，迁移的 15 分钟不被 OnStart 的 60s 默认值截断。这些值是可测试的首发常量，不是已测性能基线或用户调参。
+SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 context 传进去便假定用户函数会退出；阶段超时报告 SESSION_ERROR 并结束该进程运行。Core 对 Preparing 另设上述适用阶段预算之和的硬截止，迁移的 15 分钟不被 OnStart 的 60s 默认值截断。这些值是可测试的首发缺省值（调优参数见 §16），不是已测性能基线。
 
 - 停止从 t0 起冻结新入站派发、Scheduler tick 和该插件的新根业务调用；最多 **6s** 排空。已接纳 Request 的响应和合法子调用仍可在原 deadline 与停止 deadline 内完成，避免一冻结就破坏整个在途调用链。
 - 排空完成或 6s 到期后，Core Cancel 剩余请求并发送唯一 STOPPING，携带 `min(t0+10s, STOPPING发送时刻+4s)` 的绝对截止时间；Core 终止进程树的总截止仍为 `t0+10s`。SDK 取消 lifetime、使 Session 调用门禁失效并停止 HTTP 接单，再用独立的剩余停止 context 执行 OnStop、关闭 DB/连接并退出；OnStop 及其资源关闭合计最多 **4s**，不复用已经取消的 lifetime context。Core Shutdown 中各插件并行停止，共享同一个总截止时间，不能逐插件串行累加 10s。
@@ -331,9 +331,10 @@ Core 由 `alonabot serve` 启动（§15.1）。Core 首次管理凭证与离线�
 | §9 构建/分发/管理 CLI | T-01 契约，T-04 生成器，T-09 完整工具和来源检查 |
 | §12 状态/锁/恢复 | T-02 建立共同原语，T-08 准备资源，T-09 复用原语完成正式 Journal 和恢复 |
 | §13 Agent 基础 | T-11 工具目录、策略、确认与会话存储；T-12 官方 Agent 插件与官方记忆插件；T-09 工具策略与会话清除的管理页 |
-| §14 日志 | T-02.1 日志基线；T-09.10 按来源级别的持久化、最近记录、管理 API、CLI 与日志页；各切片按 §14 记录 |
+| §14 日志 | T-02.1 日志基线与日志文件；T-09.10 按来源级别的持久化、最近记录、按日期查询、管理 API、CLI 与日志页；各切片按 §14 记录 |
 | §15 运行方式 | T-07.3 设置文件；T-09.4 `alonabot serve`；T-13 库模式与热部署；T-14 发行包与预装插件 |
-| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-67 和五目标运行结果 |
+| §16 调优参数 | T-02.2 参数表、`--args` 与 Bootstrap 下发；之后的切片把新增的可调值登记到同一参数表 |
+| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-69 和五目标运行结果 |
 
 ## 12. 跨层状态机与恢复不变量
 
@@ -424,7 +425,7 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
 
 ### 14.2 输出格式
 
-- Core 把全部记录写到自己的 stderr。`--log-format text`（缺省）为下面的控制台格式；`json` 为每行一个 JSON 对象，包含全部字段与完整的 trace_id。长期保存由运行环境负责，例如 journald 或容器日志。
+- Core 把全部记录写到自己的 stderr。`--log-format text`（缺省）为下面的控制台格式；`json` 为每行一个 JSON 对象，包含全部字段与完整的 trace_id。记录同时按 §14.6 写入日志文件。
 - 控制台格式仿照 AstrBot：
 
   ```text
@@ -449,12 +450,20 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
 
 - Core 为 Core 自己、每个插件与每个 Adapter 包各保留最近 **1000** 条已输出的记录。这些记录只在内存中，Core 重启后清空。
 - 管理 API 提供按来源、级别与 trace_id 读取这些记录，以及经 SSE 实时订阅，都要求管理员会话或 CLI 的 Bearer token；`alonabot logs` 使用同一 API。
+- 过去日期的记录从日志文件读取：管理 API 与 `alonabot logs --date` 按日期、来源、级别与 trace 查询，WebUI 日志页可以选择日期。
 - WebUI 日志页先读取最近记录再订阅。按来源、级别与 trace 的筛选只在浏览器中进行，不改变输出，筛选条件保存在浏览器本地；修改输出级别使用 §14.3 的管理服务。
 
 ### 14.5 脱敏
 
 - 日志不包含 Secret 明文、Bootstrap、完整配置 JSON、DSN、管理 token 与会话凭证。含凭证的 URL（例如 Telegram Bot API 路径中的 `bot<token>`）在记录前脱敏；HTTP 客户端的错误先去掉 URL 中的凭证再记录。
 - DEBUG 记录可以包含消息文本，不包含媒体内容。
+
+### 14.6 日志文件
+
+- `log.file.enabled` 为 true（缺省）时，Core 把全部记录以 §14.2 的控制台格式（不着色）写入 `<data_dir>/logs/alonabot-<YYYY-MM-DD>.log`，日期取本地时区。跨过零点时换到新日期的文件；当天的文件达到 `log.file.max_size`（缺省 **100 MiB**）时，依次续写 `alonabot-<日期>.1.log`、`alonabot-<日期>.2.log`。
+- 全部日志文件合计超过 `log.file.max_total`（缺省 **1 GiB**），或文件日期早于 `log.file.max_age_days`（缺省 **30** 天）时，从最旧的文件开始删除，两个条件先达到的生效；正在写入的文件不删除。Core 启动时与每次换文件时检查。`max_size` 大于 `max_total` 时拒绝启动。
+- 写入失败（例如磁盘已满）时 Core 继续运行，在 stderr 报告一次，到下一次换文件时重新打开。
+- 这些是普通设置（§15.1），不属于调优参数。库模式的日志文件在 `.alonabot/logs/`。
 
 ## 15. 运行方式
 
@@ -469,9 +478,10 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
 | `admin_base_url` | `http://127.0.0.1:7650` | Admin 主机名（§7.3） |
 | `plugin_base_url` | `http://localhost:7650` | 插件页面主机名，端口与 Admin 相同、主机名不同 |
 | `trusted_proxies` | 空 | 可信反向代理的地址范围 |
-| `log.level`、`log.format` | `info`、`text` | §14 |
+| `log.level`、`log.format` | `info`、`text` | §14.2、§14.3 |
+| `log.file.enabled`、`log.file.max_size`、`log.file.max_total`、`log.file.max_age_days` | `true`、`100MiB`、`1GiB`、`30` | §14.6 |
 
-- 命令行参数覆盖设置文件中的同名项，只对本次运行有效；设置文件修改后重启 Core 生效。Core Admin 列表、默认 locale、按来源的日志级别等运行时设置保存在状态库，经管理服务修改。缺省只监听本机地址；改为非本机地址时须满足 §7.3、§7.4 的 Host、HTTPS 与可信反代要求。
+- 调优参数用 `--args` 覆盖（§16）。命令行参数覆盖设置文件中的同名项，只对本次运行有效；设置文件修改后重启 Core 生效。Core Admin 列表、默认 locale、按来源的日志级别等运行时设置保存在状态库，经管理服务修改。缺省只监听本机地址；改为非本机地址时须满足 §7.3、§7.4 的 Host、HTTPS 与可信反代要求。
 - 首次启动且尚无管理凭证时：stdin 与 stderr 都是终端，Core 就按 §7.4 的 `admin-token init` 规则生成管理 token，只在该终端显示一次，然后继续启动；不是终端时拒绝启动，并提示先运行 `alonabot admin-token init`。
 
 ### 15.2 发行包与预装插件
@@ -503,6 +513,7 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
 - Core 按正常启动流程为每个开发组件创建 Session，SDK 在本进程的 goroutine 中经 loopback TCP 连接，握手、Bootstrap、注册、激活、调用与停止都与独立进程相同；已安装的其他包照常以独立进程运行。与独立进程的区别只有两点：
   - 没有进程隔离：SDK 未捕获的 panic 会使整个进程退出，也不执行有限重启；
   - Core 无法强制结束 goroutine：停止预算到期后组件仍未退出时记 ERROR，`Run` 返回错误。
+- 库模式用 `alonabot.Args(...)` 选项或环境变量 `ALONABOT_ARGS` 覆盖调优参数，语法与 `--args` 相同（§16）。
 - 官方 Adapter 与官方插件以可导入的 Go 包提供组件（例如 `telegram.New()`），程序入口只调用 SDK 的运行函数，库模式可以直接引用它们。
 - 库模式也可以用于小规模部署，但不提供上述隔离与崩溃恢复；正式分发插件与 Adapter 仍使用安装包。
 
@@ -515,3 +526,56 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
   - 编译成功后依次停止并重启全部开发中的组件；Core、留在 Core 进程中的组件、已安装的其他包以及按钮 token 都不受影响。
 - `go.mod` 或 `go.sum` 变化时，留在 Core 进程中的依赖可能已改变，`Run` 输出 WARN，提示手动重启。
 - 热部署时开发中的组件在子进程中，断点调试需要附加到子进程；不启用热部署时，组件与 Core 同进程。
+
+## 16. 调优参数
+
+- 契约中可调的容量、期限与配额集中登记在 `internal/tune/params.go`：每项有名称、缺省值、单位与约束，缺省值就是本契约各节给出的数值。新增可调的值时，同时修改该文件与下表。
+- 以下不属于调优参数：协议双方必须一致的常量（帧上限、分块大小）；安全相关的值（Secret 与 token 长度、管理会话与插件票据的期限）；平台规定的限制；插件与 Adapter 自己的常量；日志级别与日志文件设置（§14、§15.1）。
+- 调优参数只在启动时覆盖，运行中不能修改，也不出现在 WebUI。`alonabot serve` 用 `--args` 覆盖，可以重复使用：
+  - 值中含 `=` 时是直接参数，多个参数用逗号分隔，例如 `--args DISPATCH_CONCURRENCY=1,REQUEST_TIMEOUT=2s`；
+  - 否则是文本文件的路径，文件名任意，每行一个 `KEY=VALUE`，空行和以 `#` 开头的行忽略；
+  - 后出现的覆盖先出现的。库模式的 `alonabot.Args(...)` 与 `ALONABOT_ARGS` 语法相同。
+- 值的格式：整数用十进制；时长用 Go 的时长写法，例如 `2s`、`15m`；大小用 `B`、`KiB`、`MiB`、`GiB`，写成 `MB` 等十进制单位时报错并提示改用二进制单位。
+- 未知的键、格式错误、违反约束或彼此矛盾的值使 Core 拒绝启动，错误指明出处（参数，或文件及行号）。存在任何覆盖时，Core 启动时输出一条 WARN，列出全部覆盖项及出处。`alonabot tune list` 列出全部参数的缺省值与约束。
+- SDK 也要遵守的值（在途请求数、payload 预算、普通请求期限、各阶段预算）由 Core 经 Bootstrap 下发，双方使用同一组值。
+- 设置 `PLUGIN_MEMORY_SOFT_LIMIT` 时，Core 为每个插件与 Adapter 进程传入环境变量 `GOMEMLIMIT`；`CORE_MEMORY_SOFT_LIMIT` 对 Core 自己生效。这是 Go 运行时的软上限：超过后 GC 更积极地回收，不会终止进程。v0.1 不提供硬上限。
+
+| 参数 | 缺省值 | 约束 | 契约位置 |
+| --- | --- | --- | --- |
+| `SESSION_MAX_INFLIGHT` | 256 | ≥ 1 | §1.2 |
+| `SESSION_MAX_PAYLOAD` | 16MiB | ≥ 帧上限 4MiB | §1.2 |
+| `CORE_MAX_PAYLOAD` | 64MiB | ≥ `SESSION_MAX_PAYLOAD` | §1.2 |
+| `REQUEST_TIMEOUT` | 30s | > 0 | §1.2 |
+| `CALL_CHAIN_MAX_DEPTH` | 16 | ≥ 1 | §3 |
+| `DISPATCH_CONCURRENCY` | 64 | ≥ 1 | §2.1 |
+| `DISPATCH_QUEUE_EVENTS` | 256 | ≥ 1 | §2.1 |
+| `DISPATCH_QUEUE_BYTES` | 8MiB | ≥ 帧上限 4MiB | §2.1 |
+| `CONTINUATION_MAX` | 128 | ≥ 1 且 < `SESSION_MAX_INFLIGHT` | §2.4 |
+| `CONTINUATION_TIMEOUT` | 15m | > 0 | §2.4 |
+| `BUS_QUEUE_EVENTS` | 256 | ≥ 1 | §1.2、§3 |
+| `BUS_QUEUE_BYTES` | 4MiB | ≥ 帧上限 4MiB | §1.2、§3 |
+| `MEDIA_MAX_OBJECT` | 100MiB | ≤ `MEDIA_SESSION_BUDGET` | §1.3 |
+| `MEDIA_MAX_UPLOADS` | 4 | ≥ 1 | §1.3 |
+| `MEDIA_SESSION_BUDGET` | 256MiB | ≤ `MEDIA_DISK_BUDGET` | §1.3 |
+| `MEDIA_DISK_BUDGET` | 2GiB | > 0 | §1.3 |
+| `MEDIA_TTL` | 15m | > 0 | §1.3、§1.4 |
+| `PHASE_HELLO` | 10s | > 0 | §4.2 |
+| `PHASE_CONFIG` | 60s | > 0 | §4.2 |
+| `PHASE_MIGRATION` | 15m | > 0 | §4.2 |
+| `PHASE_ONSTART` | 60s | > 0 | §4.2 |
+| `PHASE_ONREADY` | 30s | > 0 | §4.2 |
+| `STOP_TOTAL` | 10s | ≥ `STOP_DRAIN` + `STOP_ONSTOP` | §4.2 |
+| `STOP_DRAIN` | 6s | > 0 | §4.2 |
+| `STOP_ONSTOP` | 4s | > 0 | §4.2 |
+| `RESTART_WINDOW` | 5m | > 0 | §4.2 |
+| `RESTART_MAX_CRASHES` | 3 | ≥ 1 | §4.2 |
+| `JOB_TIMEOUT` | 15m | > 0 | §4.3 |
+| `BUTTON_TOKEN_TTL` | 24h | > 0 | MESSAGE-MODEL §6.3 |
+| `TOOL_CONFIRM_TIMEOUT` | 5m | > 0 | §13.2 |
+| `LOG_BUFFER_RECORDS` | 1000 | ≥ 1 | §14.4 |
+| `INSTALL_MAX_ARCHIVE` | 256MiB | > 0 | §9.3 |
+| `INSTALL_MAX_EXPANDED` | 1GiB | ≥ `INSTALL_MAX_ARCHIVE` | §9.3 |
+| `INSTALL_MAX_ENTRIES` | 10000 | ≥ 1 | §9.3 |
+| `DEV_RELOAD_POLL` | 500ms | > 0 | §15.4 |
+| `PLUGIN_MEMORY_SOFT_LIMIT` | 不设置 | > 0 | §16 |
+| `CORE_MEMORY_SOFT_LIMIT` | 不设置 | > 0 | §16 |

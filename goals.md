@@ -31,6 +31,7 @@
    - 只在信任边界做校验，不写防御性的重复检查和兜底分支。
    - 日志、错误字符串、CLI 输出和协议 safe_message 一律用英文；有含义的数值和字符串写成命名常量。
    - 日志按 CONTRACTS §14 使用注入的 `*slog.Logger`，不用 fmt 直接输出。
+   - 契约中可调的限额与期限从 `internal/tune` 读取，新增的可调值登记到 `internal/tune/params.go`（CONTRACTS §16）。
 7. 每个 task 都运行语句中的完成条件命令。最后一个 task 在 goal 分支上重跑全部完成条件，然后推送分支，开 PR 到 `main`：标题为「切片 ID + 标题」，正文按 PR 模板填写，并加一节「文档同步」，列出需要审查者同步到 ARCHITECTURE、README 或 spec 的内容。不合并 PR。
 
 ## 总览
@@ -40,10 +41,11 @@
 | goal-23 | T-07.1 | 调度触发计算 | — | 可派发 |
 | goal-29 | T-08.2 | 配置 JSON 语义与 Pending | — | 可派发 |
 | goal-37 | T-09.2 | 安装包预检与安全解压 | — | 可派发 |
-| goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1 | 等待前置 |
+| goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 等待前置 |
 | goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 等待前置 |
 | goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 等待前置 |
-| goal-65 | T-02.1 | 日志基线 | — | 待细化 |
+| goal-65 | T-02.1 | 日志基线与日志文件 | — | 待细化 |
+| goal-76 | T-02.2 | 调优参数 | — | 待细化 |
 | goal-4 | T-03.3 | Adapter 进程、sdk/adapter 与上下线事件 | T-03.1 | 待细化 |
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 待细化 |
 | goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 待细化 |
@@ -294,11 +296,11 @@ func (c *Candidate) Discard() error                            // 删除暂存�
 
 ## 第 2 批：等待前置
 
-goal-2 等待日志基线（T-02.1）；其余语句按 T-03.1 的接口编写。前置合并后，审查者核对实际代码，必要时修订，再改为可派发。
+goal-2 等待日志基线与调优参数（T-02.1、T-02.2）；其余语句按 T-03.1 的接口编写。前置合并后，审查者核对实际代码，必要时修订，再改为可派发。
 
 ### goal-2 · T-03.1 首个可用 SDK 切片
 
-状态：等待前置（T-02.1）。日志基线合并后，审查者按实际的 Logger 接口补充本语句，再改为可派发。
+状态：等待前置（T-02.1、T-02.2）。日志基线与调优参数合并后，审查者按实际的 Logger 与参数接口补充本语句，再改为可派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-2（切片 T-03.1：首个可用 SDK 切片）。goal 目录 goal-2，分支 goal-2，worktree .worktrees/goal-2，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -560,15 +562,25 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 以下 goal 只写了范围和要点。前置合并后，审查者按实际代码补全「接口」「行为」「测试」三段并改为可派发；在此之前不要派发。每条的完整语义以 PLAN §4 对应步骤及其失败停止条件为准。
 
-### goal-65 · T-02.1 日志基线
+### goal-65 · T-02.1 日志基线与日志文件
 
 状态：待细化。由审查者实现，维护者批准后开始。范围：Core 与 SDK 现有的直接输出、`control.proto` 的 Bootstrap（追加 `log_level`）、`cmd/alonabot` 的 `--log-level` 与 `--log-format`。要点：
 - 控制台格式按 CONTRACTS §14.2：`[时:分:秒.毫秒] [Core|Plug:<id>|Adpt:<id>/<实例>] [DBUG|INFO|WARN|ERRO] [目录/文件:行号]: 消息 key=value`，trace 显示前 8 位，多行值缩进 4 个空格，只在终端且未设置 `NO_COLOR` 时着色；另有 JSON 输出。
 - SDK 以 JSON 行写 stderr，Handler 的 Logger 附带 trace_id、route_id、call_id；调用边界捕获的 panic 记为带 `stack` 的 ERROR。
 - Core 逐行解析插件 stderr，补上并保护来源字段；非 JSON 行作为 WARN 原样保留。
 - SDK 与 Core 都按来源的生效级别过滤；持久化与运行时修改留给 T-09.10。
+- 日志文件按 CONTRACTS §14.6：本地日期轮转，单文件 100 MiB 后同日续写编号文件，合计 1 GiB、保留 30 天，写入失败时继续运行并报告一次。
 - 只用标准库 `log/slog`，不加依赖；日志不含 Secret、Bootstrap 与配置明文。
-- 验收：V-62、V-63 的级别过滤分项。
+- 验收：V-62、V-63 的级别过滤分项、V-68 的写入与轮转分项。
+
+### goal-76 · T-02.2 调优参数
+
+状态：待细化。由审查者实现，维护者批准后开始。范围：新建 `internal/tune`，迁入 `internal/wire` 与 `internal/core` 中对应的现有常量；`cmd/alonabot` 的 `--args` 与 `tune list`；`control.proto` 的 Bootstrap（追加 `session_limits`）。要点：
+- 参数表与缺省值按 CONTRACTS §16；不可调的协议、安全与平台常量留在原处。
+- `--args` 可重复：值含 `=` 时是逗号分隔的直接参数，否则是文本文件路径；后出现的覆盖先出现的；大小只接受二进制单位。
+- 未知键、格式错误、违反约束或相互矛盾时拒绝启动并指明出处；有覆盖时启动 WARN 列出全部覆盖项。
+- SDK 使用 Bootstrap 下发的 `session_limits`；设置 `PLUGIN_MEMORY_SOFT_LIMIT` 时为子进程传入 `GOMEMLIMIT`。
+- 验收：V-69。
 
 ### goal-4 · T-03.3 Adapter 进程、sdk/adapter 与上下线事件
 
@@ -690,7 +702,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - Admin 页面包含工具调用策略、Agent 会话的列出与清除，以及界面语言切换。
 - goal-38（T-09.3）的 `plugin init` 生成插件包与库模式调试用的 `main.go`，`plugin build` 生成调用 `sdk.Run` 的正式入口。
 - goal-39（T-09.4）的 `alonabot serve` 复用 T-13 的 Core 装配，按安装记录启动全部已启用的包。
-- goal-66（T-09.10）：按来源的日志级别持久化，经 `sdk.log.set_level` 立即生效；每个来源保留最近 1000 条记录，提供读取与 SSE；`alonabot logs`、`log-level` 与 WebUI 日志页使用同一 API，页面筛选只在浏览器中进行。
+- goal-66（T-09.10）：按来源的日志级别持久化，经 `sdk.log.set_level` 立即生效；每个来源保留最近 1000 条记录，提供读取与 SSE，过去日期从日志文件按日期查询；`alonabot logs`、`log-level` 与 WebUI 日志页使用同一 API，页面筛选只在浏览器中进行。
 
 ### goal-54 至 goal-57 · T-11.1～T-11.4
 
