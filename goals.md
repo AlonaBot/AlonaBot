@@ -13,6 +13,7 @@
 
 - **可派发**：前置都已合并，语句已写到接口签名，可以直接派发。
 - **等待前置**：语句已写完整，等前置合并、审查者核对接口后转为可派发。
+- **已完成**：切片 PR 已由审查者合并，验证证据见 TEST-MATRIX §3.2。条目保留供后继切片查阅接口。
 - **待编写**：范围与要点已由 PLAN 确定，没有待决的设计问题；前置合并后，审查者按实际代码写出接口、行为和测试段，然后才能派发。
 
 ## 所有 goal 的共同约束
@@ -38,9 +39,9 @@
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
-| goal-23 | T-07.1 | 调度触发计算 | — | 已实现 |
+| goal-23 | T-07.1 | 调度触发计算 | — | 已完成 |
 | goal-29 | T-08.2 | 配置 JSON 语义与 Pending | — | 可派发 |
-| goal-37 | T-09.2 | 安装包预检与安全解压 | — | 可派发 |
+| goal-37 | T-09.2 | 安装包预检与安全解压 | — | 已完成 |
 | goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 等待前置 |
 | goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 等待前置 |
 | goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 等待前置 |
@@ -96,7 +97,7 @@
 | goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 待编写 |
 | goal-56 | T-11.3 | Agent 会话存储 | T-03.1 | 待编写 |
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 待编写 |
-| goal-58 | T-12.1 | Provider 客户端 | — | 已实现 |
+| goal-58 | T-12.1 | Provider 客户端 | — | 已完成 |
 | goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.3、T-08.4、T-11.3、T-12.1 | 待编写 |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 待编写 |
 | goal-61 | T-12.4 | 记忆插件 | T-08.5、T-11.2、T-12.2 | 待编写 |
@@ -118,7 +119,7 @@
 
 ### goal-23 · T-07.1 调度触发计算
 
-状态：已实现（PR 已合并，Quality gate 通过）。
+状态：已完成（PR 已合并）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-23（切片 T-07.1：调度触发计算）。goal 目录 goal-23，分支 goal-23，worktree .worktrees/goal-23，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -231,7 +232,7 @@ func (s *Store) GenerationConfig(ctx context.Context, generationID string) (stri
 
 ### goal-37 · T-09.2 安装包预检与安全解压
 
-状态：可派发。
+状态：已完成（PR 已合并）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-37（切片 T-09.2：安装包预检与安全解压）。goal 目录 goal-37，分支 goal-37，worktree .worktrees/goal-37，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1252,7 +1253,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-58 · T-12.1 Provider 客户端
 
-状态：已实现（PR 已合并）。
+状态：已完成（PR 已合并）。
 
 目标：Provider 客户端：OpenAI 兼容与 Anthropic Messages 的流式请求、SSE 解析、工具调用解析、本地模拟服务
 前置：T-02。

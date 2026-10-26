@@ -106,7 +106,7 @@ flowchart TD
 
 | 切片 | goal | 内容 | §4 步骤 | 前置 | 主要验收 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
-| T-02.1 | goal-65 | 日志基线：Core 与 SDK 改用注入的 slog Logger，控制台与 JSON 格式、来源标签、插件 stderr 的 JSON 解析与非结构化行、panic 堆栈、Bootstrap 下发级别与进程内过滤、`--log-level`/`--log-format`、不输出 Bootstrap 与配置明文；按日期轮转的日志文件与保留上限 | T-02 步骤 9 | T-02 | V-62、V-63 的级别过滤分项、V-68 的写入与轮转分项 | 已实现，darwin/arm64 运行通过（TEST-MATRIX §3.1） |
+| T-02.1 | goal-65 | 日志基线：Core 与 SDK 改用注入的 slog Logger，控制台与 JSON 格式、来源标签、插件 stderr 的 JSON 解析与非结构化行、panic 堆栈、Bootstrap 下发级别与进程内过滤、`--log-level`/`--log-format`、不输出 Bootstrap 与配置明文；按日期轮转的日志文件与保留上限 | T-02 步骤 9 | T-02 | V-62、V-63 的级别过滤分项、V-68 的写入与轮转分项 | 已完成，darwin/arm64 运行通过（TEST-MATRIX §3.1） |
 | T-02.2 | goal-76 | 调优参数：`internal/tune` 参数表，把现有常量迁入；`--args` 的直接参数与文件输入、校验与相互约束、启动 WARN、`alonabot tune list`；`SessionLimits session_limits = 11`（max_inflight、max_payload_bytes、request_timeout_ms）；`GOMEMLIMIT` 软上限 | T-02 步骤 10 | T-02.1 | V-69 | 未开始 |
 | T-03.1 | goal-2 | 首个可用 SDK 切片：事件路由注册、Context/Send、业务分发；Core 的 Adapter 实例接口、内存 Adapter、固定服务 mux、事件派发与 `core.send`；echo 插件经真实 REGISTER/ACTIVATED 后收发 | T-03 步骤 1 | T-02.1、T-02.2 | V-07、V-08 的 SDK 分项，V-62 的 Handler 分项 | 未开始 |
 | T-03.2 | goal-3 | Target 与最小授权：`allowed_adapter_instances` 持久化、显式 To、后台 Send、逐次发送准入、NO_DEFAULT_TARGET、Core 内部许可读写入口 | T-03 步骤 3 | T-03.1 | V-07 | 未开始 |
@@ -132,7 +132,7 @@ flowchart TD
 | T-06.2 | goal-20 | 父调用链上下文传播、循环与深度检查、跨段取消与背压 | T-06 步骤 3、4 | T-03.6、T-05.3、T-06.1 | V-18、V-42 的嵌套分项 | 未开始 |
 | T-06.3 | goal-21 | 非持久 Event Bus：发布准入、逐订阅者 256 条/4 MiB 队列、drop-newest 计数 | T-06 步骤 5 | T-06.1 | V-17 | 未开始 |
 | T-06.4 | goal-22 | Session 变更时的清理与计数，A/B/C 端到端验收（含 Hook→Service→Send），汇总证据 | T-06 步骤 6、7 | T-06.2、T-06.3 | V-15、V-17、V-18、V-19、V-42 | 未开始 |
-| T-07.1 | goal-23 | interval/五字段 cron/IANA 时区/夏令时的表达式校验与下一次触发计算（纯计算包 `contracts/schedule`，Core 与官方 Agent 插件共用） | T-07 步骤 2 | T-02 | V-20 的计算分项 | 已实现（TEST-MATRIX §3.2） |
+| T-07.1 | goal-23 | interval/五字段 cron/IANA 时区/夏令时的表达式校验与下一次触发计算（纯计算包 `contracts/schedule`，Core 与官方 Agent 插件共用） | T-07 步骤 2 | T-02 | V-20 的计算分项 | 已完成（TEST-MATRIX §3.2） |
 | T-07.2 | goal-24 | schedule 注册校验，运行槽与调度调用：独立 run_id、15 分钟期限、同 job 跳过重叠、迟到响应与断链 | T-07 步骤 1（schedule）、3 | T-05.1、T-07.1 | V-20、V-46、V-16 和 V-05 的 scheduled 分项 | 未开始 |
 | T-07.3 | goal-25 | HTTP 注册校验，SDK 托管 HTTP Listener 与 Core Session 代理映射；Core 设置文件 `alonabot.yaml` 的读取、缺省值与命令行覆盖 | T-07 步骤 1（HTTP）、4、5 | T-04.1 | V-22 的组件分项 | 未开始 |
 | T-07.4 | goal-26 | 两个 Host 的边界、插件兑换票据与插件会话 | T-07 步骤 6 | T-07.3 | V-47 的组件分项 | 未开始 |
@@ -147,7 +147,7 @@ flowchart TD
 | T-08.8 | goal-53 | 用户可见文案目录：插件 `i18/` 的 `messages`、SDK 的 `T`、Core 的 en-US/zh-CN 文案目录（usage 等）、check 的键与占位符检查 | T-08 步骤 8 | T-04.1、T-04.3、T-08.1 | V-54 的 SDK 与 Core 分项 | 未开始 |
 | T-08.9 | goal-35 | configdb 示例与分层验证，汇总证据 | T-08 步骤 9 | T-08.6、T-08.7、T-08.8 | V-23～V-26、V-38、V-39、V-54 的 T-08 分项 | 未开始 |
 | T-09.1 | goal-36 | 首次管理认证：admin-token init/reset、login、会话、CSRF、CLI Bearer | T-09 步骤 1 | T-07.4 | V-47 的认证分项 | 未开始 |
-| T-09.2 | goal-37 | 安装包预检与安全解压：验签、来源、平台、长度/摘要、受控解压与上限、不可变包目录 | T-09 步骤 2（预检） | T-02 | V-27、V-28、V-41 的预检分项 | 未开始 |
+| T-09.2 | goal-37 | 安装包预检与安全解压：验签、来源、平台、长度/摘要、受控解压与上限、不可变包目录 | T-09 步骤 2（预检） | T-02 | V-27、V-28、V-41 的预检分项 | 已完成（TEST-MATRIX §3.2） |
 | T-09.3 | goal-38 | 开发 CLI：`plugin init/check/build/test/pack`；init 生成插件包与库模式调试用的 `main.go`，build 生成调用 `sdk.Run` 的正式入口 | T-09 步骤 2（CLI） | T-04.5、T-08.1、T-08.8、T-09.2、T-13.1 | V-01、V-41、V-54 的打包分项 | 未开始 |
 | T-09.4 | goal-39 | 唯一管理服务与安装记录：逐包串行、来源/pin/卸载保留、各管理动作的区分；Adapter 包与实例的管理（凭证经 Secret 引用）；启用、停用、卸载与更新时的 Adapter 依赖和插件依赖检查；`alonabot serve` 按安装记录启动全部已启用的包 | T-09 步骤 3 | T-03.8、T-08.4、T-09.1、T-09.2、T-13.1 | V-40、V-48、V-52、V-01 的安装分项 | 未开始 |
 | T-09.5 | goal-40 | 正式候选 Journal 与准备编排 | T-09 步骤 4 | T-09.4、T-08.6、T-06.4 | V-29 | 未开始 |
@@ -165,7 +165,7 @@ flowchart TD
 | T-11.2 | goal-55 | 工具调用与用户确认：`core.tool.invoke`、`core.tool.confirm`、Core 内部的确认记录与按钮、同一 Actor 与 5 分钟限时、确认文案 | T-11 步骤 3、4 | T-03.8、T-06.2、T-08.8、T-11.1 | V-55 | 未开始 |
 | T-11.3 | goal-56 | Agent 会话存储：状态库表、`core.conversation.*`、管理服务层的列出与清除、purge | T-11 步骤 5 | T-03.1 | V-56 | 未开始 |
 | T-11.4 | goal-57 | 工具与会话的多进程验收，汇总证据 | T-11 步骤 6 | T-11.2、T-11.3 | V-55、V-56 的 T-11 分项 | 未开始 |
-| T-12.1 | goal-58 | Provider 客户端：OpenAI 兼容与 Anthropic Messages 的流式请求、SSE 解析、工具调用解析、本地模拟服务 | T-12 步骤 1 | T-02 | V-57 的 Provider 分项 | 已实现（TEST-MATRIX §3.2） |
+| T-12.1 | goal-58 | Provider 客户端：OpenAI 兼容与 Anthropic Messages 的流式请求、SSE 解析、工具调用解析、本地模拟服务 | T-12 步骤 1 | T-02 | V-57 的 Provider 分项 | 已完成（TEST-MATRIX §3.2） |
 | T-12.2 | goal-59 | 对话：`plugins/agent/` 骨架与配置、人格、历史、延续调用内的一轮对话、流式编辑显示、`/persona` 与 `/reset` | T-12 步骤 2、3 | T-03.9、T-04.3、T-05.4、T-08.3、T-08.4、T-11.3、T-12.1 | V-57 | 未开始 |
 | T-12.3 | goal-60 | 工具循环与 MCP：Core 工具、MCP 客户端（stdio、streamable HTTP）、确认、单轮步数上限 | T-12 步骤 4 | T-11.2、T-12.2 | V-58 | 未开始 |
 | T-12.4 | goal-61 | 记忆：`sdk/memory` 服务契约、`plugins/memory/` 官方记忆插件、Agent 的记忆接入 | T-12 步骤 5 | T-08.5、T-11.2、T-12.2 | V-59 | 未开始 |
