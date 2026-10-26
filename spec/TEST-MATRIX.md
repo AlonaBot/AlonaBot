@@ -139,6 +139,15 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 | V-41 | release.json 对确切字节验签、重新序列化无法通过、签名有效但内容非法仍拒绝 | `contracts/release` | 通过 | 真实包验签与更新预检（T-09） |
 | V-42 | 每方向 256 个/16 MiB 与全局 64 MiB 满额立即拒绝；Response/Cancel 仍可推进；发送前取消的请求移出队列并归还预算、不能借取消越过字节上限；写出中被取消的请求写完才归还预算，Cancel 不越过其 Request | `internal/wire`（含 `TestCancelledRequestsReleaseQueueAndBudget`） | 通过 | Service 嵌套与 Event Bus 双预算（T-06） |
 
+### 3.2 已合并独立切片的验证证据
+
+下列结果仅记录已实际运行的检查。PR 的质量门槛通过不代表整个 V 编号已闭合。
+
+| 切片 | 实现与证据 | 结果 | 尚未闭合 |
+| --- | --- | --- | --- |
+| T-07.1 / V-20 计算分项 | `contracts/schedule/`；PR #17（合并提交 `02713770288be5c477e0451947684dcbad9ace1d`）；GitHub Actions Quality gate run 40294045649 | 通过：格式检查、静态检查、测试与五目标构建质量门槛均通过 | Core Scheduler 注册/运行槽、迟到响应与停止集成仍归 T-07.2～T-07.5；V-20 整体未闭合 |
+| T-12.1 / V-57 Provider 分项 | `plugins/agent/provider/`；PR #16（合并提交 `354c5b6f5cd123c0ef05fc09054d52fc16561083`）；GitHub Actions Quality gate run 40293852858 | 通过：格式检查、静态检查、测试与五目标构建质量门槛均通过；本地 `go test provider.go provider_test.go` 通过 | Agent 对话、流式显示、真实 Provider 验收归 T-12.2 与 T-10；V-57 整体未闭合 |
+
 发布阻塞：协议/Session 鉴权、Core 全局权限、数据代次唯一性、回滚/维护的真实性、安装包越界/来源安全及目标五平台构建失败，均不能通过文案豁免。v0.1 不设内存与吞吐的通过阈值，T-10 只报告 V-33 的实测结果；**不杜撰 100 MB 等硬性能指标**。
 
 ## 4. 实施交接
