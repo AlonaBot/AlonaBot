@@ -11,11 +11,12 @@
 
 | 模块（路径） | 负责 | 不负责 | 状态 |
 | --- | --- | --- | --- |
-| `contracts/` | `.proto` 源（`proto/`）与生成类型（`pb/alonabotv1`）、manifest/release/消息结构校验、兼容 fixture；生成工具 `contracts/internal/protocgen`（只由 go:generate 运行） | 任何运行时 I/O、会话状态、平台/GORM 依赖 | 已实现：proto/生成、`validate`（Envelope/协商/Chain）、`manifest`、`release` |
+| `contracts/` | `.proto` 源（`proto/`）与生成类型（`pb/alonabotv1`）、manifest/release/消息结构校验、调度触发计算（`schedule`，拟建）、兼容 fixture；生成工具 `contracts/internal/protocgen`（只由 go:generate 运行） | 任何运行时 I/O、会话状态、平台/GORM 依赖 | 已实现：proto/生成、`validate`（Envelope/协商/Chain）、`manifest`、`release` |
 | `internal/wire/` | 帧编解码（4 MiB 上限）、TCP/stdio 传输、Session 调用表、准入预算、优先通道、取消 | 业务路由、权限、插件生命周期决策 | 部分实现：帧编解码、Conn、ListenLoopback、全局预算（`budget.go`）、Session 调用引擎（配对/取消/准入/优先通道、认证后身份与版本核对 `CheckPeer`）；握手与生命周期编排在 `internal/core/host` 与 `sdk` |
 | `internal/oslock/` | 跨进程 OS 独占文件锁（flock / LockFileEx），供 core.lock 与 runtime.lock 共用 | 锁的业务语义（何时加锁由调用方决定） | 已实现 |
 | `sdk/`（含 `sdk/message`、`sdk/gormdb` 等子包） | 插件侧 API：根插件、Context/Send、注册、生命周期 Hook、runtime.lock、按需 GORM | Core 状态库、管理凭证、其他插件 | 部分实现：`sdk`（Context、注册器、Collect）、`sdk/plugin`、`sdk/message`、`sdk/config`、`sdk/gormdb`（OpenSQLite/OpenPostgres、RunVersioned、迁移接口互斥检查）；`Run` 完成取锁、握手、准备、激活与停止，业务分发与 `Send` 仍返回 UNSUPPORTED |
 | `internal/core/` | 状态库与 core.lock、进程、RPC 编排、路由、权限、媒体、服务、调度、HTTP、配置、管理 | 平台协议细节（交 adapters）、插件进程内逻辑 | 部分实现：`internal/core/state`（core.lock、state.sqlite、提交原语）、`internal/core/process`（精简环境、日志、进程组/Job Object、runtime.lock 临时持有）、`internal/core/host`（握手认证、Bootstrap、REGISTER 原子校验、PREPARED、提交与激活门禁、Degraded、停止/排空/并行 Shutdown、有限重启策略）、`internal/core/supervisor`（启动/停止一个插件的完整装配） |
+| `plugins/agent/`、`plugins/memory/` | 官方 Agent 插件与官方记忆插件（D-27、D-28），与第三方插件一样只经 SDK 与 Core 通信 | Core 的工具策略、确认与会话存储（归 Core） | 拟建 |
 | `adapters/telegram/` | 官方 Telegram Adapter 程序：接收、标准化、发送计划、能力与平台映射（D-26） | Core 策略、命令路由、游标持久化与按钮 token（归 Core） | 拟建 |
 | `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） | 部分实现：开发用 `alonabot run`（单插件启停、有限重启）；尚无正式管理 CLI |
 | `examples/plugins/` | 随 SDK 编译的示例与集成样例 | 生产代码依赖 | 部分实现：`minimal`（签名组合示例）、`lifecycle`（可真实运行的生命周期示例） |
@@ -35,14 +36,15 @@
 | `cmd/alonabot -> internal/core/...`、`-> contracts` | 装配 |
 | `cmd/alonabot -> sdk/generate` | 构建检查复用 SDK 的路由生成器（拟建） |
 | `examples/plugins/... -> sdk/...`、`-> contracts` | 示例只走公共 SDK |
+| `plugins/... -> sdk/...`、`-> contracts` | 官方插件只走公共 SDK；Agent 插件另用已批准的 MCP go-sdk |
 
-明确禁止（重点）：`internal/oslock` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | adapters | cmd`；`internal/core -> sdk | adapters | cmd`；`adapters -> internal/core`；任何包 `-> examples`。依赖图不允许环。
+明确禁止（重点）：`internal/oslock` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | adapters | plugins | cmd`；`internal/core -> sdk | adapters | plugins | cmd`；`adapters -> internal/core`；`plugins -> internal/core | adapters | cmd`；任何包 `-> examples`。依赖图不允许环。
 
 ## 状态归属
 
 | 状态 | 唯一所有者 |
 | --- | --- |
-| `<data_dir>/core.lock`、`state.sqlite`（安装、代次、Journal、策略、secret 引用） | `internal/core` |
+| `<data_dir>/core.lock`、`state.sqlite`（安装、代次、Journal、策略、secret 引用、工具策略、Agent 会话） | `internal/core` |
 | `<plugins>/<id>/runtime.lock`、插件受管 DB 连接 | 插件进程内的 `sdk` |
 | 插件业务数据（SQLite 候选文件 / PG schema） | 插件；Core 只负责候选复制与准入 |
 

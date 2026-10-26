@@ -2,7 +2,7 @@
 
 版本：v0.6-review · 2026-10-21
 状态：**T-01/T-02 的分项已有运行证据（见 §3.1），其余分项与全部跨任务闭合点未执行**。用于实施交接与风险门槛，并非自动化测试报告。
-规范来源：[PLAN.md](PLAN.md)（T-01～T-10 详细工作包）、[CONTRACTS-v0.1.md](CONTRACTS-v0.1.md)、[WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md)。决策依据见 [adr/DECISIONS.md](adr/DECISIONS.md)。阶段归属更新：2026-10-22。
+规范来源：[PLAN.md](PLAN.md)（T-01～T-12 详细工作包）、[CONTRACTS-v0.1.md](CONTRACTS-v0.1.md)、[WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md)。决策依据见 [adr/DECISIONS.md](adr/DECISIONS.md)。阶段归属更新：2026-10-22。
 
 ## 1. 逐任务验收条目
 
@@ -56,6 +56,19 @@
 | V-46 | T-07 | job超时后callback继续执行、迟到Response、RPC断链但进程未退出 | 超时结果先返回但running不释放；无重叠/补跑；实际callback返回或进程确认退出才释放；迟到成功不改超时 |
 | V-47 | T-07、T-09 | 首次管理token/离线reset、登录/CLI、同端口两个Host、代理身份头伪造、单Host主动内容 | 插件host不可访问Admin API；admin Cookie/Authorization不传入插件；Host/CSRF/内部认证检查生效；首次能登录，reset撤销旧会话/票据；单Host不执行插件主动内容 |
 | V-48 | T-03、T-09 | 安装/卸载 Adapter 包、同包多个实例单独启停、Adapter 进程崩溃后恢复、Adapter 为非自身实例交付事件、插件依赖 Adapter 的 extension 片段 | 启停一个实例不影响同包其他实例且不重启进程；崩溃后只恢复启用的实例并从已保存游标继续；伪造实例的事件被拒；凭证不进入插件；必需依赖缺失时拒绝启用插件；extension 发往其他 Adapter 返回 UNSUPPORTED |
+| V-49 | T-04、T-05 | keyword/startswith/endswith/fullmatch 与 Regex 混合声明、ignore_case、空模式、命令与文本匹配同时可命中 | 已识别普通命令时文本匹配不运行；文本匹配层按 priority/plugin_id/route_id 统一排序；ignore_case 按 Unicode 简单折叠；空模式与非法 Regex 拒绝注册 |
+| V-50 | T-05 | Handler 请求延续调用后立即返回、延续调用内多轮等待、两个用户在同一群同时等待、等待超时、等待期间插件停用、延续调用内再请求延续调用、第 129 个进行中的延续调用 | 延续调用保留原 Actor/Target 且不占分发链；原事件传播只看原 HandlerOutcome；等待只命中同一 Actor 同一 Target（含 thread）的下一条消息且该消息不进入普通分发；同键第二个等待 ALREADY_EXISTS；超时 DEADLINE_EXCEEDED；Session 失效后不补发；嵌套请求 FAILED_PRECONDITION；超过 128 个时 RESOURCE_EXHAUSTED，普通派发不受影响 |
+| V-51 | T-03 | 实例启动、管理员停用实例、Adapter 进程崩溃、401/409 使实例停止、Core 重启 | 每次进入运行状态有一条 bot.online，离开运行状态有一条带正确 reason 的 bot.offline；事件无 Actor/Target；Core 重启不补发 |
+| V-52 | T-03、T-09 | 必需/可选插件依赖缺失、版本低于 min_version、停用或卸载被依赖插件、依赖成环 | 必需依赖不满足时拒绝启用并列出缺失项；可选依赖缺失只记诊断；停用/卸载/降级被依赖插件须显式确认，确认后依赖方继续运行且调用返回 UNAVAILABLE；成环在安装时拒绝 |
+| V-53 | T-03 | 编辑文本消息、编辑带按钮、内容未变化、编辑不可编辑的消息、目标不支持 message.edit、Edit Chain 含媒体 | 成功时 SendResult 只有一项且 ID 为原消息；平台拒绝为 REJECTED 且不发新消息；不支持时 UNSUPPORTED；Chain 不合规时 INVALID_ARGUMENT；每次 Edit 执行一组出站 Hook |
+| V-54 | T-03、T-08、T-09 | Actor.locale 为 zh-CN/zh-TW/未知/absent、插件缺少翻译键、占位符不一致、Core usage 与确认消息、WebUI 切换语言 | 选择顺序为 Actor locale→Core 默认→en-US，主语言回落确定；check/pack 拒绝缺少 en-US 与占位符不一致；未知键返回错误不输出键名；日志与错误始终为英文 |
+| V-55 | T-11、T-09 | 工具 allow/confirm/deny、确认允许/拒绝/超时/他人点击、确认消息展示的参数、无 Actor 的后台调用、目标不支持按钮、core.tool.confirm 的 MCP 操作、运行时改策略 | deny 与拒绝返回 PERMISSION_DENIED 且不执行工具；超时 DEADLINE_EXCEEDED；invoke 的确认消息展示实际 JSON 参数；只接受同一 Actor 的第一次点击；无 Actor 时 confirm 直接拒绝；不支持按钮时 UNSUPPORTED；策略下一次调用生效；工具仍按继承 Actor 检查 required_permission |
+| V-56 | T-11、T-09 | 多条原子追加、跨帧上限分页、跨插件读取、清除、Core 重启、卸载与 purge | 序号连续且顺序稳定；分页不丢不重；插件只能访问自己的会话；重启后保留；卸载默认保留，purge 删除；不截断 |
+| V-57 | T-12 | OpenAI 兼容与 Anthropic 的流式文本与工具调用（本地模拟服务）、/ask 与自由对话开关、人格切换、/reset、超过单条长度的回复、Provider 返回错误或中途断开 | 消息先发送再按间隔编辑，最后一次编辑为完整内容；超长回复在段落边界分成多条；自由对话默认关闭，只有 Admin 能开启；工具调用正确解析；断开或错误时保留已显示内容并报告错误，不自动重发请求；历史写入会话存储 |
+| V-58 | T-12 | 模型连续调用 Core 工具与 MCP 工具（stdio、streamable HTTP 模拟服务）、确认拒绝、工具出错、超过单轮步数上限 | 每个工具经策略与确认；拒绝与错误作为工具结果交回模型；达到上限后结束本轮并告知用户；MCP 进程随插件停止 |
+| V-59 | T-12 | 记忆 add/patch/remove、超过字符上限、重复条目、不可见字符、群聊多用户、会话中写入与 /reset、记忆插件不可用 | 超限与非法内容返回错误且不丢已有条目；快照在会话内不变、下一会话生效；每位用户只看到自己的档案；配置的记忆插件不可用时本轮报错 |
+| V-60 | T-12 | 技能目录含合法与缺少 frontmatter 的 SKILL.md、load_skill 不存在的技能 | 系统提示只含合法技能的描述；不合法文件记诊断并跳过；load_skill 返回正文或明确错误 |
+| V-61 | T-12 | 创建 interval/cron 定时 Agent 任务、到期运行、无发信许可、需要确认的工具、插件离线错过 | 任务按 CONTRACTS §4.3 的触发规则运行且不补跑；无许可时 PERMISSION_DENIED；confirm 工具一律拒绝；后台运行不注入记忆 |
 
 ## 2. 跨任务验收的最终闭合点
 
@@ -78,6 +91,10 @@
 | V-42 | T-02 传输额度、控制进展与取消顺序 | T-06 真实 Service 嵌套与 Bus 双预算 |
 | V-32～V-34 | 各任务提供真实示例、构建与故障夹具 | T-10 五目标运行、100 次启停及等价资源比较 |
 | V-48 | T-03 Adapter 进程、实例启停、事件归属、extension 校验与依赖解析 | T-09 真实安装/卸载、实例管理与启用插件时的依赖检查 |
+| V-49 | T-04 文本匹配与注册校验 | T-05 与真实 Rule、传播组合 |
+| V-52 | T-03 manifest 解析与开发入口的依赖检查 | T-09 正式启用、停用、卸载与更新时的检查和确认 |
+| V-54 | T-03 locale 映射，T-08 SDK 与 Core 文案目录及 check/pack 检查 | T-09 WebUI 语言切换与真实页面 |
+| V-55、V-56 | T-11 Core 服务、策略与确认、会话存储 | T-09 工具策略与会话清除的管理页 |
 
 T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前者可支持后续开发，真实平台部分仍由 T-10 查证。测试会话、无配置/无 DB 最小插件和 payload fixture 的范围必须写明，不可据此关闭生产认证或数据恢复用例。
 
@@ -118,6 +135,6 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 
 1. 采用 v0.6-review 技术基线，按 PLAN 的 T-01 开始；任务完成条件及部分验收的后续承接以详细工作包为准。
 2. 执行方确认 Go 编译器与目标 OS/arch CI 可用；源码、数据库、Telegram 凭证以及真实测试环境由授权范围决定。
-3. T-01→T-02→T-03→T-04→T-05 完成主链路，T-08可在T-04后并行，T-06/T-07在T-05后并行，T-09待相关依赖完成再集成。
+3. T-01→T-02→T-03→T-04→T-05 完成主链路，T-08 可在 T-04 后并行，T-06/T-07 在 T-05 后并行，T-11 在 T-06、T-08 后推进，T-12 在 T-11 后推进，T-09 待相关依赖完成再集成。切片级的前置以 PLAN §3.1 为准。
 4. 执行中发现契约缺口，先修对应契约、工作包和用例，在 adr/DECISIONS.md 记录原因；不能在代码中默默更改已接受的协议。
 

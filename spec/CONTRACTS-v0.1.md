@@ -3,11 +3,11 @@
 版本：v0.6-review · 2026-10-21  
 状态：**现行实施基线，待实施验证**。本轮按用户“自动完善剩余细节、审阅可行性并修复缺陷”的授权收敛，不提升版本编号。
 
-本文件与 [WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 共同定义首发行为；[PLAN.md](PLAN.md) 是唯一执行入口。保留 D-01～D-25，历史 PDF/讨论对照中的待定描述不覆盖当前规则。规格审阅不是运行时测试报告。
+本文件与 [WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 共同定义首发行为；[PLAN.md](PLAN.md) 是唯一执行入口。保留 D-01～D-30，历史 PDF/讨论对照中的待定描述不覆盖当前规则。规格审阅不是运行时测试报告。
 
 ## 0. 范围和明确取舍
 
-v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、Native Go 插件与 Adapter SDK/子进程、双传输 RPC、命令/事件/权限、Event Bus、Service Call、调度、插件 HTTP、SQLite/PostgreSQL、配置/WebUI、预构建安装/更新与有明确边界的回退。保留 D-01～D-26；其他官方 Adapter、Agent、TUI、WASM、插件实例池、蓝绿零停机、多轮会话 DSL 与复杂表单后置。
+v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、Native Go 插件与 Adapter SDK/子进程、双传输 RPC、命令/文本匹配/事件/权限、延续调用与基础多轮等待、Event Bus、Service Call、调度、插件 HTTP、SQLite/PostgreSQL、配置/WebUI、用户可见文案的 i18n、预构建安装/更新与有明确边界的回退，以及 Agent 基础（§13）、官方 Agent 插件与官方记忆插件。保留 D-01～D-30；其他官方 Adapter、TUI、WASM、插件实例池、蓝绿零停机、持久化的多轮会话状态与暂停 DSL、动态跨插件命令 Router 与复杂表单后置。
 
 运行时容量和阶段超时采用固定内部常量，不增加逐插件调参 UI。它们是初始实现边界，须通过 TEST-MATRIX 实测后调整；不是性能保证。现行技术细节按本轮用户授权完成，保留 v0.6-review 编号。
 
@@ -26,8 +26,8 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、N
 ### 1.2 调用、取消与资源边界
 
 - 业务调用的 `call_id` 非零，在同一 Session 的同一发起方向单调递增且不得复用。Request/Response/Cancel 按 `(session_id, initiator_side, call_id)` 配对；控制帧可使用 0。迟到、重复或未知 Response 不第二次完成调用；通常只计数丢弃，scheduled 的已知执行记录按 §4.3 仅据实际结束响应释放运行槽。Response 可同时携带业务结果和 ErrorInfo，例如发送部分成功时保留已确认的回执。
-- 插件子请求的 `parent_call_id` 只引用同一 Session 中仍在途的 Core→该插件 Request；Core 从自身记录继承 actor、scope、trace、调用链及父截止时间，不采信插件自报管理员身份。无父 Request 的后台调用只有插件身份；父调用结束/取消后，不得继续使用其用户权限。跨插件转发是两段独立 Session 请求，Core 保存关联，不要求两段 CallID 相同。
-- 普通业务请求默认 **30s**，子请求 deadline 为父截止时间与自身操作截止时间的较早值。SDK 到本地截止时间先完成失败返回，再尽力发 Cancel；对端协作取消 context。取消、超时和断链都不表示撤销已发出的消息或 SQL，Core 不自动重试业务请求。Scheduler callback 使用独立 **15 分钟** job deadline，不受 30s 默认值截断。
+- 插件子请求的 `parent_call_id` 只引用同一 Session 中仍在途的 Core→该插件 Request；Core 从自身记录继承 actor、scope、trace、调用链及父截止时间，不采信插件自报管理员身份。无父 Request 的后台调用只有插件身份；父调用结束/取消后，不得继续使用其用户权限。§2.4 的延续调用由 Core 重新签发，不属于沿用已结束的父调用。跨插件转发是两段独立 Session 请求，Core 保存关联，不要求两段 CallID 相同。
+- 普通业务请求默认 **30s**，子请求 deadline 为父截止时间与自身操作截止时间的较早值。SDK 到本地截止时间先完成失败返回，再尽力发 Cancel；对端协作取消 context。取消、超时和断链都不表示撤销已发出的消息或 SQL，Core 不自动重试业务请求。Scheduler callback 使用独立 **15 分钟** job deadline，不受 30s 默认值截断；延续调用同样使用独立的 **15 分钟** 期限（§2.4）。
 - 每 Session 每方向最多 **256 个在途业务 Request**；请求和事件的在途及排队 payload 合计最多 **16 MiB**，Core 全部 Session 的此类 payload 合计最多 **64 MiB**。任一准入预算不足立即返回 RESOURCE_EXHAUSTED，不等待普通业务槽位。Event Bus 另按每订阅者 **256 条且 4 MiB** 的较先到达限额执行 drop-newest，见 §3。这里是受管 payload 预算，不是对 Native 进程或 Core 总 RSS 的承诺。
 - 读帧、Response 配对、Cancel 和生命周期控制独立于 Handler 执行，不能因某个 Handler 阻塞而停止读取。Response/Cancel/控制使用有界优先通道，不占新业务 Request 的准入槽位，避免满队列时无法返回结果或取消。收发的独立协议缓冲仍受帧上限约束，不允许无限积压；优先通道仍保持同一调用的因果顺序：尚未写出的 Request 被取消则从队列撤出且不再发送；Request 完整写出后才可随后发送其 Cancel。若连有界控制/响应通道或阶段写入 deadline 都无法满足，关闭 Session，并以 UNAVAILABLE 结束未完成调用，不能等待业务 Handler 释放形成死锁。
 - 错误包含稳定 `code`、不含敏感信息的 `safe_message`、Core 关联的 `trace_id`。固定错误码和整数值以 WIRE-FORMAT 的 ErrorInfo 为准；未知码按 INTERNAL 暴露，原数字仅保留诊断。跨插件错误不返回 Secret、堆栈或宿主任意路径。
@@ -52,7 +52,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、N
 
 ### 2.1 分发与结果
 
-- 一个入站 Event 对应一条 Core 普通分发链，不同事件可并发。`Normalize → PreEvent → 命令/类型匹配与Core权限 → SDK Rule/Handler`；同类候选按 priority 升序，再按 plugin_id/route_id 字典序，顺序不依赖安装或启动时间。
+- 一个入站 Event 对应一条 Core 普通分发链，不同事件可并发。`Normalize → PreEvent → 多轮等待（§2.4）→ 命令/类型匹配与Core权限 → SDK Rule/Handler`；同类候选按 priority 升序，再按 plugin_id/route_id 字典序，顺序不依赖安装或启动时间。
 - 保留 Handler 的 `error` 和 `(message.Chain,error)` 两种签名。`c.StopPropagation()` 锁存本次调用的停止标记，SDK 统一返回 `HandlerOutcome{matched,propagation,chain?}`；没有 Stop 默认为 Continue。Context 返回后失效，不允许后台改变结果；显式 Stop 优先于业务错误默认继续。完整编码见 MESSAGE-MODEL。
 - 自定义 Go Rule 与 Handler 在同一 RPC 内执行，不另建 Rule RPC 框架。多个 Rule 默认 AND，显式 OR 使用 SDK 组合；False 返回 matched=false，error 标记本 Handler 失败，均不执行目标函数。普通事件的错误记录并继续；panic 由 SDK 在调用边界转 INTERNAL 并记录堆栈，不把失败返回为空成功。
 - Core 普通入站事件最多同时执行 64 条分发链，等待队列最多 256 条且 8 MiB，先达到任一限额即拒绝/丢弃并计数；这些 payload 也计入 Core 总预算。不同 Adapter 实例共用此限额，Handler 不能占住读帧循环。已经发生的外部效果不回滚、不自动重放；Telegram 游标语义见 MESSAGE-MODEL。Event Bus 使用独立的非持久队列规则，见 §1/§3。
@@ -60,11 +60,12 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、N
 ### 2.2 命令选择、参数与冲突
 
 1. `message.created` 的文本命令首发使用 `/` 前缀，路径 token 大小写敏感、按完整 token 匹配；不以字符串前缀把 `/rssx` 当 `/rss`。Telegram `/cmd@BotUsername` 仅接受当前实例用户名（用户名比较不区分大小写）。空白后的子命令按最长完整路径选择。
-2. 普通命令/别名优先于 Regex/Raw。跨插件同路径以 priority/plugin_id/route_id 稳定选出**一个**胜出路由，并在管理诊断中显示被遮蔽者；同插件重复 route ID 或规范化路径/别名属于注册错误。禁用的已注册命令仍占有其路径，不能使同名低优先级路由接管。
-3. 一旦识别命令路径，权限拒绝、禁用、Rule false/error 或参数错误都消费该命令，不退到短路径或 Regex/Raw。没有识别到任何普通命令时才处理 Regex，再处理 Raw；每类内部按固定顺序，可 Continue/Stop。其他 event_type 只进入对应事件路由。
+2. 普通命令/别名优先于文本匹配与 Raw。跨插件同路径以 priority/plugin_id/route_id 稳定选出**一个**胜出路由，并在管理诊断中显示被遮蔽者；同插件重复 route ID 或规范化路径/别名属于注册错误。禁用的已注册命令仍占有其路径，不能使同名低优先级路由接管。
+3. 一旦识别命令路径，权限拒绝、禁用、Rule false/error 或参数错误都消费该命令，不退到短路径、文本匹配或 Raw。没有识别到任何普通命令时才处理文本匹配，再处理 Raw；每类内部按固定顺序，可 Continue/Stop。其他 event_type 只进入对应事件路由。
 4. 参数只做分词与类型转换，不执行 shell 展开。空白分隔；单引号内容原样，双引号/未引号中的反斜杠仅转义下一字符；未闭合引号/尾部转义报 INVALID_ARGUMENT。string 保留解码文本；int 为有符号十进制 int64；float 为有限 float64（拒绝 NaN/Inf）；bool 只接受 true/false。显式空字符串不等于缺失。
 5. 注册描述包含每个参数 name/type/required/default，必需参数在可选参数前，default 只用于缺失位置。raw args 只能是最后一个 string 参数，与该尾部的再次分词互斥，保留最后一个已消费参数后的原始尾部，去掉尾部起始分隔空白；raw 为唯一参数时，从命令路径后的首个非分隔空白开始。多余参数、溢出或非法格式均失败；Go 函数类型与描述由生成器/显式适配器校验。
-6. Regex 采用 Go regexp 语法，由静态描述声明，在启动时编译；非法表达式拒绝注册，捕获结果传专用 match 字段，不推测普通命令参数。命令解析失败默认发该命令 usage 一次，描述可声明 silent 或自定义 usage；权限拒绝及系统故障仅保留管理日志，不自动向群组广播错误。
+6. 文本匹配包括 Regex 与 keyword、startswith、endswith、fullmatch，均由静态描述声明，作用于 message.created 中各 text 片段按顺序连接的文本。Regex 采用 Go regexp 语法，在启动时编译；非法表达式拒绝注册，捕获结果传专用 match 字段，不推测普通命令参数。keyword 在文本包含任一关键词时匹配；startswith、endswith、fullmatch 分别在文本以任一模式开头、结尾或与之完全相同时匹配。这四种方式可声明 ignore_case，按 Unicode 简单大小写折叠比较；空模式拒绝注册。文本匹配层内的路由统一按 priority/plugin_id/route_id 排序，不按匹配方式分组。
+7. 命令解析失败默认发该命令 usage 一次，描述可声明 silent 或自定义 usage；权限拒绝及系统故障仅保留管理日志，不自动向群组广播错误。
 
 ### 2.3 权限与 Hook
 
@@ -73,6 +74,14 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、N
 - Hook 注册为独立 route kind，phase 仅 PreEvent/BeforeSend/AfterSend，沿用 priority 与稳定排序。PreEvent 只可改变业务 payload 或 Stop，Core 保留的 Actor、Target、来源与 trace 不可改；button.clicked 的 action_id/action_schema_version/value、scheduled 的 job_id/run_id 及平台原消息 ID 也属于不可修改的路由/来源字段，后续匹配使用 Core 保留的原绑定；Hook error 终止本次入站链并记录，不在失去预处理条件时继续。
 - 每次显式 Send 或自动返回非空 Chain 都执行 `BeforeSend → Adapter.Send → AfterSend`。BeforeSend 只修改 Chain 或拒绝，禁止修改 Target；变更后重新校验完整 Chain。BeforeSend 错误视为拒绝发送。AfterSend 只观察最终回执，错误记日志，不能改变已确认的发送事实。
 - 所有出站 Hook 及其派生的 Service 子调用都继承 Core 的 `send_forbidden` 执行标记；再次 Send 返回 FAILED_PRECONDITION。不能只拦截 Hook 本地函数而允许 A-Hook→B-Service→Send 绕过递归保护。
+
+### 2.4 延续调用与多轮等待
+
+- 由真实入站事件触发、具有可信 Actor 与默认 Target 的 Handler 调用，可以在返回前经 `core.continuation.start` 请求一次延续调用。原调用成功结束后，Core 以同一插件、同一 route_id 向本 Session 发出新的 Handler REQUEST；原调用返回错误时不发出。新请求携带原调用的可信上下文（Actor、默认 Target、scope、trace 与插件链）和原事件。延续调用的期限为独立的 **15 分钟**，不占用 §2.1 的 64 条分发链与等待队列，也不影响原事件的传播：传播仍由原调用的 HandlerOutcome 决定，延续调用的返回值不再参与传播。
+- 每个 Session 同时进行中的延续调用最多 **128** 个，超出时 `core.continuation.start` 返回 RESOURCE_EXHAUSTED，为普通派发保留 Core→插件方向 256 个在途请求中的其余名额。
+- 延续调用内不能再请求延续调用；出站 Hook、send_forbidden 的调用链与没有 Actor 的调用也不能请求，均返回 FAILED_PRECONDITION。Session 失效、插件停用或代次变化时，尚未发出的延续调用丢弃，进行中的按 §4.2 取消；延续调用不持久化，不在新 Session 补发。
+- 延续调用内可以调用 `core.wait`，等待同一 Actor 在默认 Target（含 thread）中的下一条 message.created。等待键为（adapter_instance_id、chat_id、thread_id、external_user_id），同一键已有等待时返回 ALREADY_EXISTS。命中的事件先经过 PreEvent：PreEvent Stop 时不交给等待，等待继续；否则作为 `core.wait` 的结果返回，不再进入普通分发，包括命令匹配。
+- 等待的超时由调用方给出，不超过所在延续调用的剩余期限；超时返回 DEADLINE_EXCEEDED。等待也在调用取消或 Session 失效时结束。等待只保存在 Core 内存中，不持久化。
 
 ## 3. 跨插件调用、动态 Router 与权限
 
@@ -152,6 +161,14 @@ type ConfigValidator interface {
 - `i18/en-US.json` 采用 `config.<field>.label/description`，按当前 locale → en-US → Go tag/字段名回退。嵌套结构按 JSON 路径查找；options 只翻译显示文案，不改变存储值。缺少翻译不改变配置内容；`hidden` 不是权限控制，不另建字段排序或并发调参页面。
 
 PATCH 语义依据：[RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)。
+
+### 5.4 用户可见文案
+
+- 日志、错误字符串、CLI 输出与 safe_message 只用英文，不经 i18n。发给聊天用户的文案与 WebUI 文案经 i18n 提供，英文为源语言。
+- 插件的用户可见文案放在 `i18/<locale>.json` 的顶层 `messages` 对象中：键为点分隔的 ASCII 标识，值为文案字符串，`{name}` 是命名占位符，`{{` 与 `}}` 表示字面花括号。`config`（§5.3）与 `messages` 是该文件仅有的两个顶层键。
+- 文件名是规范化的 BCP 47 标签，例如 `en-US.json`、`zh-CN.json`。`en-US.json` 是源语言，必须包含全部键；其他语言缺少的键回落到 en-US。`plugin check` 与 `pack` 拒绝以下情况：缺少 en-US、其他语言含 en-US 没有的键、同一键的占位符集合与 en-US 不同、JSON 不合法。
+- SDK 的 `T(key, args)` 按以下顺序选择语言：当前 Actor 的 locale（MESSAGE-MODEL §1）→ Core 全局默认 locale（缺省 en-US）→ en-US。每一级先精确匹配，再按主语言子标签匹配；同一主语言有多个文件时取字典序最小者。没有 Actor 的调用从 Core 默认 locale 开始。未知键或缺少参数返回错误，不用键名充当文案。
+- Core 自己发给聊天用户的文案（命令 usage、§13.2 的确认消息）使用 Core 内置的 en-US 与 zh-CN 目录，选择规则相同。WebUI 提供 en-US 与 zh-CN，按浏览器语言或用户在界面中的选择显示，与机器人回复的语言选择无关。
 
 ## 6. 数据库、更新、事务与回退
 
@@ -239,10 +256,13 @@ type VersionedMigrator interface {
 - Core 为每个 plugin_id 持久化 `allowed_adapter_instances`，默认空集，由管理员通过既有插件权限配置修改；协议 required_capabilities 不等于发信许可。持有仍在途的可信平台事件调用链时，插件及其合法 Service 子调用可向 Core 保留的原始完整 Target 回复，无需额外实例许可。独立后台、scheduled 或不同 Target 的 Send 必须显式 To，且目标实例在该插件许可集合中；再检查实例启用、account 绑定和 Core 全局禁止。许可覆盖该实例显式 chat/thread 目标，不赋予 User/Admin 或其他实例权限；无许可返回 PERMISSION_DENIED，动态撤销在下一次 Send 准入时生效。
 - 上传、读取自己拥有的媒体不要求发信许可；Core 对真实事件签发的 IncomingMedia token 本身授予该 Session 的对象读取权。Read 只认有效 token/read 范围，Send 另行检查上述目标授权。Grant 不扩大对象、操作、Target 或有效期，只向当前已激活且满足原对象消费范围的 Session 签发受限 read token；入站对象及其派生对象的接收者还须与该事件有合法在途调用关联，或已获源实例许可；插件自己上传的对象可由 owner 显式委托当前 Activated 接收 Session 只读使用，Core 记录委托且保持原对象/有效期/Target 限制。上述关联由 Core 验证，接收者再次 Send 仍须通过自己的发信准入。
 - MessageChain 为一次逻辑 Send 的有序片段。平台可能调用多次 API，必须保留所有确认 ID。接受、部分成功、明确拒绝、结果未知与未尝试部分按 MESSAGE-MODEL 处理；RPC 可同时返回 SendResult 和 ErrorInfo，错误不丢失已经发生的结果。
+- Edit 修改一条已发送的平台消息，输入为 Target、platform_message_id 和新的 Chain，Target 准入与 Send 相同。v0.1 的 Edit Chain 只能包含一个 text 片段和至多一个 buttons 片段。每次 Edit 同样执行 BeforeSend → Adapter.Edit → AfterSend，Hook 输入标明本次操作为 edit。目标 Adapter 未声明 `message.edit` 能力时返回 UNSUPPORTED；平台拒绝（例如消息不可编辑或内容未变化）按 MESSAGE-MODEL §4 报告，不改为发送新消息。
 - 自动回复 Handler `(Chain,error)` 在成功、非空时发一次；主动型 Handler `error` 可显式多次 Send。自动型调用 Send 明确拒绝，StopPropagation 通过 Context/HandlerOutcome 表达。返回空 Chain 是无自动回复，显式 Send 空 Chain 是参数错误。
 - 整条 Chain 先验证并生成有序物理操作计划，再开始平台调用；无法表达的组合在首个副作用前返回 UNSUPPORTED。Reference、按钮、相册和文本不能静默丢弃/重排。Telegram 按钮使用 Core token 关联真实点击 Actor、当前权限、路由代次与目标，协议确认不等于业务成功。
 - 通用 Segment 在所有 Adapter 上语义一致，是否支持按 Adapter 公布的 Capability 判定。平台专有能力使用 `extension` 片段（adapter_id、name、version、JSON payload），其 Schema 由 Adapter 在注册时声明；Core 在发送前按目标实例所属 Adapter 的声明校验，目标不属于该 Adapter 或版本未声明时返回 UNSUPPORTED，不降级为其他片段。Adapter 包可以另行发布只含数据构造函数的 Go 模块供插件编译时使用，插件不链接 Adapter 的运行时代码。
 - 插件在 manifest 的 `adapter_dependencies` 中声明依赖的 `adapter_id`、所需 extension 及版本、是否必需。启用插件时，必需依赖的 Adapter 必须已安装且已声明所需 extension，否则拒绝启用并列出缺失项。Adapter 停用或卸载后，依赖它的插件继续运行，发往该 Adapter 的 Send 返回 UNAVAILABLE；卸载被必需依赖的 Adapter 时，须列出受影响的插件并要求显式确认。
+- 插件在 manifest 的 `plugin_dependencies` 中声明依赖的插件：plugin_id、可选的最低版本 `min_version`（SemVer，含该版本）和是否必需。启用插件时，必需依赖必须已安装、已启用且版本满足，否则拒绝启用并列出缺失项；可选依赖缺失只记诊断。Core 不规定启动顺序，依赖暂时不可用时对它的 Service 调用返回 UNAVAILABLE。停用、卸载被必需依赖的插件，或把它更新、回退到低于 `min_version` 的版本时，须列出受影响的插件并要求显式确认，确认后依赖方继续运行。必需依赖不能成环，安装时发现环则拒绝。
+- 实例经 `adapter.instance.start` 成功启动后，Core 生成 `bot.online` 事件；实例因停用、Adapter 进程退出或 `core.adapter.status` 报告的致命错误离开运行状态时，Core 生成 `bot.offline` 事件（payload 见 MESSAGE-MODEL §1.1）。这两类事件由 Core 生成而非 Adapter 交付，不带 Actor 与 Target，只进入声明了对应 event_type 的事件路由；Core 重启时不为重启前的状态变化补发。
 - 平台能力、事件类型化 payload、Telegram 发送/接收边界及回执详见 MESSAGE-MODEL。Wire 字段号/错误/控制流详见 WIRE-FORMAT；这些是实施契约，尚未生成并编译 SDK。
 
 ## 9. 版本、SDK、打包 CLI 与构建
@@ -252,7 +272,7 @@ type VersionedMigrator interface {
 所有 ID 最长 64 个 ASCII 字符。市场使用 `^alonabot_plugin_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`，同时应用长度上限；本地使用 `^[a-z][a-z0-9_-]{0,63}$`，缺市场前缀只警告。为保证五平台路径有效，本地 ID 还拒绝 Windows 保留设备名 con/prn/aux/nul/com1～com9/lpt1～lpt9；大小写以规范小写保存，不能靠大小写形成两个安装。
 
 - `plugin.yaml` 的 `manifest_version=1`；必填 `id`、SemVer `version`、`protocol_min_major/protocol_max_major`、`required_capabilities`、`os/arch`、相对可执行文件路径 `entrypoint`、`config_version`、`source`。包校验同时核对 Schema、注册描述、i18 与 build-info；SDK 是编译依赖，不要求 Core 和插件 Go patch 相同，运行兼容以协议和能力协商为准。
-- Adapter 包使用同一份 manifest：`role` 取 `plugin`（缺省）或 `adapter`。Adapter 包另需 `adapter_id`（小写平台类型，规则同本地 ID），不得声明插件路由、HTTP、数据库或迁移。市场 ID 使用 `^alonabot_adapter_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`。插件可声明 `adapter_dependencies`，语义见 §8。
+- Adapter 包使用同一份 manifest：`role` 取 `plugin`（缺省）或 `adapter`。Adapter 包另需 `adapter_id`（小写平台类型，规则同本地 ID），不得声明插件路由、HTTP、数据库或迁移。市场 ID 使用 `^alonabot_adapter_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`。插件可声明 `adapter_dependencies` 与 `plugin_dependencies`，语义见 §8。
 - `migration_mode` 固定 `none/self/versioned`，与实际注册的迁移接口一致；`prepare_effects` 固定 `none/managed_db/external`，描述配置回调以外的迁移/OnStart 在准备期的副作用。`managed_db` 仅表示写所属 DB：SQLite 候选可隔离，PG 仍须 §6 的维护门槛；`external` 不具备自动回退承诺。缺失声明或不一致拒绝自动升级，不能把未知值解释成安全。它们是插件包静态声明，不是 WebUI 调参开关。
 - 生成器只扫描当前插件模块的受标记包级函数，实例方法显式注册；只允许一个 root 和至多一个 Config，重复 Handler/HTTP 路由失败。Schema/注册描述与 binary 来自同一构建，安装期检查能静态取得的 Schema/能力与自动注册项；实例方法显式注册的完整集合在本次启动 REGISTER 时校验，不要求静态推导任意 Go 控制流或重复手写整张路由表。最终路由在该 Session 固定，Schema/能力必须与包资源一致；生成器与 Go/protoc 具体版本在 T-01 实际验证后锁定。
 - `pack` 输出 `<id>-<version>-<os>-<arch>.tar.gz`，Windows 同格式。归档内包括 manifest、binary、生成的 Schema/描述文件、i18 静态资源和 build-info，不包含运行配置/DB/secret/签名私钥。只接受普通文件与目录，拒绝绝对路径、`..`、symlink/hardlink、设备文件、重复归档路径及跨平台大小写冲突；解压到新临时目录、验证后再移动为不可变包目录，不能覆盖正在使用的程序。
@@ -287,7 +307,7 @@ Core 首次管理凭证与离线恢复使用 §7.4 的 `alonabot admin-token ini
 
 ## 10. 实施验收与停止条件
 
-沿用 T-01～T-10，不新建平行实施计划；全部 V 编号和通过条件集中维护在 [TEST-MATRIX.md](TEST-MATRIX.md)。每个任务同时完成对应实现与最小验证，不要求先跑尚不存在的应用测试。
+沿用 T-01～T-12，不新建平行实施计划；全部 V 编号和通过条件集中维护在 [TEST-MATRIX.md](TEST-MATRIX.md)。每个任务同时完成对应实现与最小验证，不要求先跑尚不存在的应用测试。
 
 详细步骤、拟目录、交付物和失败停止条件见 [PLAN.md](PLAN.md)。SDK/Proto 编译、数据库恢复、跨平台进程清理、Telegram 集成及真实性能在相应任务中取得证据；跨阶段用例的分工与最终闭合点按 TEST-MATRIX 执行。
 
@@ -300,15 +320,16 @@ Core 首次管理凭证与离线恢复使用 §7.4 的 `alonabot admin-token ini
 | 契约范围 | 实现与集成位置 |
 | --- | --- |
 | §1、WIRE 字段/控制帧/会话 | T-01 生成类型，T-02 实现双 IPC；媒体交 T-03 |
-| §2、MESSAGE 分发/权限/Hook | T-03 发送，T-04 命令/策略，T-05 事件链；间接 Hook 约束在 T-06 闭合 |
+| §2、MESSAGE 分发/权限/Hook | T-03 发送，T-04 命令/文本匹配/策略，T-05 事件链、延续调用与多轮等待；间接 Hook 约束在 T-06 闭合 |
 | §3 服务/广播 | T-06 接入真实父调用链、编码校验与有界广播 |
 | §4 生命周期/调度 | T-02 生命周期原语，T-07 调度/HTTP，T-08 准备回调，T-09 正式更新集成 |
-| §5～§6 配置/Secret/数据库 | T-01 先验驱动路径，T-08 候选准备，T-09 提交与恢复 |
+| §5～§6 配置/Secret/数据库/文案 | T-01 先验驱动路径，T-08 候选准备与文案目录，T-09 提交与恢复；Telegram locale 映射在 T-03 |
 | §7 信任/HTTP/认证 | T-02 进程，T-07 代理与授权检查，T-09 首次登录及管理入口 |
-| §8 Adapter/消息 | T-03 Adapter 进程与 SDK、官方 Telegram Adapter 包、Target、媒体、按钮、extension 片段与回执；T-09 Adapter 包与实例的正式管理 |
+| §8 Adapter/消息 | T-03 Adapter 进程与 SDK、官方 Telegram Adapter 包、Target、媒体、按钮、extension 片段、回执、消息编辑、bot 上下线事件与依赖解析；T-09 Adapter 包与实例的正式管理及启用时的依赖检查 |
 | §9 构建/分发/管理 CLI | T-01 契约，T-04 生成器，T-09 完整工具和来源检查 |
 | §12 状态/锁/恢复 | T-02 建立共同原语，T-08 准备资源，T-09 复用原语完成正式 Journal 和恢复 |
-| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-47 和五目标运行结果 |
+| §13 Agent 基础 | T-11 工具目录、策略、确认与会话存储；T-12 官方 Agent 插件与官方记忆插件；T-09 工具策略与会话清除的管理页 |
+| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-61 和五目标运行结果 |
 
 ## 12. 跨层状态机与恢复不变量
 
@@ -346,3 +367,36 @@ Core 首次管理凭证与离线恢复使用 §7.4 的 `alonabot admin-token ini
 ### 12.4 实证门槛
 
 协议编译、五 OS/arch 的进程锁/树回收、Core 被 kill 后的 SDK 断链退出、配置 OnStart 写 DB 后失败、SQLite 提交各节点崩溃恢复、Bootstrap/REGISTER 超限、满准入下 Response/Cancel 可完成、HTTP 端口与两个 Origin、真实平台媒体和资源基准，都需要实施时的测试证据；本次规格修订不把它们记为已运行。对应场景合入现有 TEST-MATRIX，不另建平行验收体系。
+
+## 13. Agent 基础
+
+Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技能与定时任务由官方 Agent 插件实现（D-27），记忆由记忆插件实现（D-28）。
+
+### 13.1 工具与调用策略
+
+- 工具是带 `tool` 描述的 JSON Service：description 是给模型的说明，输入 Schema 即该 Service 的输入 Schema，输出是该 Service 的 JSON 输出；default_policy 取 allow 或 confirm。工具沿用 Service 的命名 `plugin_id/service_name`、访问规则、Broker 定位、调用链、深度、取消与准入（§3），不新增 route kind；Protobuf 编码的 Service 不能声明为工具。
+- 调用策略按工具持久化，取值 allow、confirm 或 deny，未设置时使用工具声明的 default_policy。管理员经管理服务修改，下一次调用生效，不撤销已开始的调用。策略不替代 Service 自身的 required_permission：工具执行时仍按继承的 Actor 判定 User/Admin。
+- `core.tool.list` 返回调用插件可以调用、且生效策略不为 deny 的工具：名称、description、输入 Schema 与生效策略。
+- `core.tool.invoke` 输入工具名与 JSON 参数，必须带 parent_call_id（§1.2）。策略为 deny 时返回 PERMISSION_DENIED；为 confirm 时先按 §13.2 取得确认，用户拒绝返回 PERMISSION_DENIED，超时返回 DEADLINE_EXCEEDED；为 allow 或确认通过后，Broker 以父调用链调用该 Service 并原样返回结果。确认的等待计入父调用期限。
+- `core.tool.confirm` 供插件在自己执行的操作（例如 MCP 工具）之前取得确认，输入操作名（调用插件内稳定的名称）与给用户看的参数摘要。Core 按「调用插件 ID + 操作名」查找策略，未设置时为 confirm，返回规则与 invoke 相同。Core 不检查插件随后是否执行了该操作；它记录出现过的操作名，供管理页列出并设置策略。
+
+### 13.2 用户确认
+
+- 确认要求调用链具有可信 Actor 与默认 Target。没有 Actor 的调用（后台、scheduled）遇到 confirm 策略时直接返回 PERMISSION_DENIED。
+- Core 直接经 Adapter 向默认 Target 发送一条确认消息，内容为工具或操作名、要执行的参数以及「允许」「拒绝」两个按钮，语言按 §5.4 选择。`core.tool.invoke` 的参数由 Core 按实际 JSON 参数展示，不使用插件提供的摘要；`core.tool.confirm` 展示插件提供的参数摘要。这条消息不是插件的 Send，不执行插件出站 Hook。目标 Adapter 不支持 buttons 时返回 UNSUPPORTED，不改为文字确认；确认消息发送失败时返回该错误，不执行工具。
+- 按钮 token 沿用 MESSAGE-MODEL §6.3 的格式与存储，但绑定 Core 内部的确认记录而非插件路由。只接受同一 Actor 在 **5 分钟** 内的第一次点击；其他用户的点击被拒绝，不影响结果。token 只能使用一次，超时、父调用结束或 Session 失效后作废。确认只对本次调用有效，不记住「总是允许」。
+
+### 13.3 会话存储
+
+- Core 状态库按插件保存 Agent 会话。会话键由插件给出，为 1～256 字节的 UTF-8 字符串；条目是插件定义的 JSON 对象，按追加顺序编号，Core 只校验它是合法的 JSON 对象。
+- `core.conversation.append` 追加一条或多条条目，同一请求的条目原子写入，返回最后一条的序号。`core.conversation.list` 从给定序号起按顺序返回条目；响应受帧上限约束，Core 在超限前停止并返回下一个序号。`core.conversation.clear` 删除该会话的全部条目。插件只能访问自己的会话，这些服务不需要父调用链。
+- Core 不截断、不过期、不压缩会话。管理服务可以列出插件的会话并清除指定会话；卸载插件默认保留会话，`--purge` 时一并删除（§9.3）。
+
+### 13.4 记忆服务
+
+- 记忆插件是注册以下三个 JSON Service 的普通插件，服务名固定，Schema 由 `sdk/memory` 提供：
+  - `memory.context`：无输入，返回本会话要放进系统提示的记忆文本；
+  - `memory.prefetch`：输入本轮用户消息文本，返回附在本轮用户消息前的记忆文本；
+  - `memory.sync`：输入本轮用户消息与最终回复文本，无输出。
+- 记忆范围由调用链的可信上下文决定：会话按默认 Target（adapter_instance_id、chat_id、thread_id），用户按 Actor。缺少所需的 Actor 或默认 Target 时返回 FAILED_PRECONDITION。三个服务的访问规则由记忆插件声明；官方记忆插件只允许官方 Agent 插件调用。
+- 记忆插件写入记忆的工具按 §13.1 注册，Agent 不直接写记忆存储。

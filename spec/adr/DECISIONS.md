@@ -1,10 +1,10 @@
 # 设计决策记录
 
-版本：v0.6-review（2026-10-21；保留已确认 D-01～D-25，2026-10-25 新增 D-26，不升版本）
+版本：v0.6-review（2026-10-21；保留已确认 D-01～D-25，2026-10-25 新增 D-26～D-30，不升版本）
 
 D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置及当前状态。2026-10-21 的规格完善任务将剩余技术默认值收敛为实施基线，不追加虚构的历史确认记录；2026-10-22 将决策和历史记录归入 adr/。
 
-**实施入口**：[PLAN.md](../PLAN.md) 给出 T-01～T-10 详细工作包；[CONTRACTS-v0.1.md](../CONTRACTS-v0.1.md) 固定行为，表内 § 编号均指该契约；验收见 [TEST-MATRIX.md](../TEST-MATRIX.md)。P/Q 处置表已从根目录 CONTRACTS 合并到本文件。D-07/D-18 的历史“Ready”统一解释为新状态机中完成 OnReady 并被 Core 接受的 `Activated`，不是 `Prepared`。
+**实施入口**：[PLAN.md](../PLAN.md) 给出 T-01～T-12 详细工作包；[CONTRACTS-v0.1.md](../CONTRACTS-v0.1.md) 固定行为，表内 § 编号均指该契约；验收见 [TEST-MATRIX.md](../TEST-MATRIX.md)。P/Q 处置表已从根目录 CONTRACTS 合并到本文件。D-07/D-18 的历史“Ready”统一解释为新状态机中完成 OnReady 并被 Core 接受的 `Activated`，不是 `Prepared`。
 
 ## 已确认
 
@@ -33,9 +33,13 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | D-21 | GORM 和迁移 | 提供统一 `gormdb.Open(...)` SDK 入口；可选择不迁移、自行实现 `Migrate()`、或由 Core 协助的 `Migrations()`，后两种互斥；跨数据库搬迁由开发者负责 |
 | D-22 | 配置与翻译细节 | 每包最多一个 Config，多 Config 构建失败；`i18/` 下翻译 JSON 采用顶层 `config` 嵌套字段，不增加额外 i18n tag；secret/hidden、固定排序遵守最小配置原则 |
 | D-23 | SDK 开发体验 | plugin.yaml 元数据 ID 是真源，根类无需重复写 `ID()`；独立函数可自动注册，实例方法显式注册；辅助 Handler 可显式拿到根类指针；优先原生 Go Modules 与少反射 |
-| D-24 | 保留两条跨插件协作途径 | 公共接口注册到 Core → Service Call（推荐）；同时**保留**通过 Core 动态调用另一插件已注册命令/事件路由的需求，具体权限语义和是否进入 V0.1 尚待定，不能直接持有另一进程 Go 对象 |
+| D-24 | 保留两条跨插件协作途径 | 公共接口注册到 Core → Service Call（推荐）；同时**保留**通过 Core 动态调用另一插件已注册命令/事件路由的需求，具体权限语义和是否进入 V0.1 尚待定，不能直接持有另一进程 Go 对象（处置见 Q-15：动态命令 Router 后置 v0.2） |
 | D-25 | 统一 HTTP 入口、插件端口由 SDK 托管 | **用户确认**：所有框架托管的插件 HTTP 路由只由 Core 的统一 HTTP(S) 入口对外提供；插件开发者只注册 Go `http.Handler`/路由，**不需要设置、管理或告知用户开放端口**。SDK 只在有 HTTP 路由时自动启动 loopback 随机端口的内部 Listener；Core 维护 Session 绑定的内部反向代理、路由/权限及启停清理。部署用户只需开放 Core 对外端口，插件内部 Listener 不映射公网；命令/事件/Service Call 仍使用 Protobuf RPC。此确认不代表 Native 插件绝不能自行创建框架外 Listener，也不改变插件 HTML/JS 与 Admin UI 不同浏览器 Origin 的既有安全要求。 |
 | D-26 | 可安装的 Adapter | **用户确认（2026-10-25）**：Adapter 与插件一样是安装包和独立 Native 进程，官方 Telegram 也是可卸载的安装包，Core 不静态链接平台实现。同一 Adapter 包只运行一个进程，承载它的全部账号实例；实例由 Core 单独启停，停用 Adapter 即停止该进程，以节省内存。插件可声明对 Adapter 的依赖并使用 Adapter 声明的 extension 片段（例如 Telegram 专有的按钮组件） |
+| D-27 | Agent 的分工与范围 | **用户确认（2026-10-25）**：v0.1 包含 Agent。Core 只提供基础：工具目录（工具是带描述与输入 Schema 的 Service）、按工具的调用策略（allow/confirm/deny）与用户确认、Agent 会话存储。官方 Agent 插件运行对话循环：多个 Provider（OpenAI 兼容与 Anthropic Messages，用标准库实现 SSE 流式）、人格、历史、工具调用、MCP 客户端（使用 `github.com/modelcontextprotocol/go-sdk`）、技能与定时 Agent 任务；流式输出通过编辑同一条消息逐步显示 |
+| D-28 | 记忆插件 | **用户确认（2026-10-25）**：记忆是一种特殊插件，即实现 `sdk/memory` 标准记忆服务的普通插件，不新增 manifest role；Agent 同时只使用一个记忆插件。官方内置的记忆插件仿照 Hermes 的内置记忆：按会话的笔记与按用户的档案各有字符上限，会话开始时冻结快照，`memory` 工具支持 add/patch/remove。跨会话全文检索与同时启用多个记忆插件后置 |
+| D-29 | NoneBot2 基础对齐 | **用户确认（2026-10-25）**：v0.1 补齐 keyword/startswith/endswith/fullmatch 文本匹配、基础多轮等待（非持久）、bot 上下线事件与插件依赖声明。为了让多轮等待与 Agent 的一轮对话不受普通请求 30s 期限和 64 条分发链的限制，规格完善时增加延续调用：Handler 可请求 Core 在本次调用结束后，以原可信上下文另发一次独立期限的调用 |
+| D-30 | 用户可见文案的 i18n | **用户确认（2026-10-25）**：日志、错误、CLI 输出与 safe_message 只用英文；机器人回复与 WebUI 经 i18n 提供，英文为源语言，附简体中文。插件文案放在 `i18/` 的 `messages`，按 Actor locale → Core 默认 locale → en-US 选择 |
 
 ## P 类历史议题与当前处置
 
@@ -44,7 +48,7 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | P-01 | 调度重叠/漏触发 | 同任务跳过重叠，离线漏触发不补。 | §4 | 已收敛 |
 | P-02 | 资源/超时常量 | Core 固定 Session、队列的数量/字节预算与分阶段时限，无逐插件调参 UI。 | §1/§2/§4 | 已收敛，数值需测试 |
 | P-03 | 代次与恢复 | 独占锁与 Journal 唯一提交点约束恢复；旧 Session 失效，不自动重放业务调用。 | §1/§4/§6/§12 | 已收敛 |
-| P-04 | 多轮会话 | v0.1 仅调用上下文；持久会话状态与暂停 DSL 后置 v0.2。 | §0/§9 | 明确后置 |
+| P-04 | 多轮会话 | 由 D-29 取代：v0.1 提供延续调用内的基础多轮等待（非持久）；持久会话状态与暂停 DSL 仍后置。 | §2.4 | 已收敛 |
 | P-05 | Handler 双形式 | 两种 Handler 签名共用 HandlerOutcome；自动回复与主动 Send 分明，一次 Chain 可产生多物理消息，手动模式可多次 Send。 | §8 | 已收敛 |
 | P-06 | Adapter 形态 | 由 D-26 取代：Adapter 为安装包和独立进程，能力版本化，实例可单独启停。 | §8 | 已收敛 |
 | P-07 | 更新恢复 | Generation/Journal 管理受管 SQLite 候选副本；提交后显式恢复，PG/不可隔离迁移进入维护。 | §6 | 已收敛 |
@@ -110,3 +114,4 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-10-22：按用户要求迁入 adr/；合并原 CONTRACTS §11 的 P/Q 处置表，根目录改为直接实施工作包与契约。D-01～D-25 原文和既有编号保持。
 - 2026-10-21：T-01 冻结 `alonabot.v1` 的 Protobuf 字段号；对规格未给出编号或取值的消息与枚举做出实现选择，记录于 WIRE-FORMAT §5A。不改变既有 Envelope 1～16 与错误码 1～17。
 - 2026-10-25：**D-26 已确认**：Adapter 改为可安装包与独立进程（同包一个进程、实例单独启停），插件可依赖 Adapter 的 extension 片段。同步修改 CONTRACTS §0/§8/§9.1/§11、WIRE §3.4、MESSAGE-MODEL §2/§6、DESIGN §M、PLAN T-03/T-09 与 TEST-MATRIX V-48；P-06、Q-10 改为已收敛。
+- 2026-10-25：**D-27～D-30 已确认**：v0.1 加入 Agent 基础与官方 Agent 插件、记忆插件、NoneBot2 基础对齐（文本匹配、延续调用与多轮等待、bot 上下线事件、插件依赖）和用户可见文案的 i18n。同步修改 CONTRACTS §0/§1.2/§2/§5.4/§8/§9.1/§11/§13、MESSAGE-MODEL、WIRE §3.4/§3.5、DESIGN、PLAN（新增 T-11、T-12 与相关切片）及 TEST-MATRIX V-49～V-61；P-04 改为已收敛。

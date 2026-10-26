@@ -106,13 +106,14 @@ REGISTER 的完整描述必须装入一帧；超限 RESOURCE_EXHAUSTED，不部�
 Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流程（CONTRACTS §8、D-26），区别如下：
 
 - 启动的是插件还是 Adapter 由 Core 依据安装记录决定，不采信进程自报。Adapter 的 REGISTER 必须携带 Adapter 描述（adapter_id、平台 Capability、extension 声明及其 Schema），且不得携带插件路由、HTTP Listener 或迁移信息；插件的 REGISTER 不得携带 Adapter 描述。不一致按注册失败处理。
-- Core 与 Adapter 之间的固定服务如下，服务名不含 `/`：
+- Core 与 Adapter 之间的固定服务如下（共八个），服务名不含 `/`：
 
 | 服务 | 方向 | 请求 → 响应 |
 | --- | --- | --- |
 | `adapter.instance.start` | Core→Adapter | instance_id、实例配置 JSON（含已解析凭证）、已保存的游标 → account_id、账号展示名、该实例的 Capability |
 | `adapter.instance.stop` | Core→Adapter | instance_id → 空结果；实例停止接收，不再交付事件 |
 | `adapter.send` | Core→Adapter | instance_id、Target、MessageChain → SendResult 与/或 ErrorInfo，语义同 MESSAGE-MODEL §4 |
+| `adapter.edit` | Core→Adapter | instance_id、Target、platform_message_id、MessageChain → SendResult 与/或 ErrorInfo，语义同 MESSAGE-MODEL §4 的 Edit |
 | `adapter.media.read` | Core→Adapter | instance_id、平台文件标识、offset、length（1～1 MiB）→ bytes、next_offset、eof |
 | `core.adapter.deliver` | Adapter→Core | instance_id、Event、交付后的游标 → 是否接纳；Core 队列满时为未接纳并计数 |
 | `core.adapter.cursor` | Adapter→Core | instance_id、游标 → 空结果；用于没有事件时的游标变化 |
@@ -120,6 +121,24 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 
 - 出站媒体沿用 `core.media.read`；Core 在 `adapter.send` 之前为本次发送签发只读 token。
 - 这些载荷的 Protobuf 定义放在 `adapter.proto`，编号遵循 §5A 的只追加规则。
+
+### 3.5 插件可调用的 Core 固定服务
+
+以下服务与 `core.send`、`core.media.*` 一样服务名不含 `/`，载荷为 Protobuf，按 §5A 的只追加规则编号：
+
+| 服务 | 请求 → 响应 | 契约 |
+| --- | --- | --- |
+| `core.edit` | Target、platform_message_id、MessageChain → SendResult 与/或 ErrorInfo | CONTRACTS §8、MESSAGE-MODEL §4 |
+| `core.continuation.start` | 必须带 parent_call_id → 空结果，超过每 Session 128 个进行中的延续调用时 RESOURCE_EXHAUSTED；原调用成功结束后 Core 发出 Handler REQUEST，HandlerRequest 的 `continuation_of` 为原调用的 call_id，SDK 据此找到登记的延续函数 | CONTRACTS §2.4 |
+| `core.wait` | 必须带 parent_call_id（延续调用）、超时 → 命中的 Event | CONTRACTS §2.4 |
+| `core.tool.list` | 空 → 工具列表（名称、description、输入 Schema、生效策略） | CONTRACTS §13.1 |
+| `core.tool.invoke` | 必须带 parent_call_id；工具名、JSON 参数 → 工具的 JSON 输出与/或 ErrorInfo | CONTRACTS §13.1、§13.2 |
+| `core.tool.confirm` | 必须带 parent_call_id；操作名、参数摘要 → 空结果（允许）或 ErrorInfo | CONTRACTS §13.1、§13.2 |
+| `core.conversation.append` | 会话键、一条或多条 JSON 条目 → 最后一条的序号 | CONTRACTS §13.3 |
+| `core.conversation.list` | 会话键、起始序号 → 条目及序号、下一个序号 | CONTRACTS §13.3 |
+| `core.conversation.clear` | 会话键 → 空结果 | CONTRACTS §13.3 |
+
+注册描述的追加字段：Service 描述增加可选的 `tool`（description、default_policy）；CommandMatch 追加 KEYWORD、STARTSWITH、ENDSWITH、FULLMATCH，CommandSpec 增加模式列表与 `ignore_case`；Actor 增加可选 `locale`；BeforeSend/AfterSend 的输入增加操作类型与被编辑的 platform_message_id。这些都是追加，不改变 `contracts/wirespec_test.go` 固定的枚举。
 
 ## 4. 调用上下文、读写与取消
 
