@@ -169,23 +169,25 @@ Core 状态库的 ActiveGeneration 是权威，`config.json` 是用户编辑快�
 
 各接口随对应工作包实现并取得测试证据；跨任务用例按 TEST-MATRIX 的最终闭合点完成。
 
-## M. Adapter Interface 与平台能力
+## M. Adapter：可安装的平台适配器
 
-官方 Telegram 静态链接 Core，实例可启停；第三方 Adapter 类型装载后置。Adapter 最小形状：
+Adapter 与插件一样以安装包分发、在独立进程中运行（D-26）；官方 Telegram 是第一个 Adapter 包，可以卸载。同一 Adapter 包只运行一个进程，承载它的全部账号实例；实例由 Core 单独启停，停用 Adapter 即停止该进程。Core 内部用同一个接口表示每个账号实例，正式实现把调用转发给 Adapter 进程，测试中可以使用内存实现：
 
 ```go
-type Adapter interface {
-    ID() string
-    Start(context.Context, EventSink) error
-    Stop(context.Context) error
-    Send(context.Context, Target, MessageChain) (SendResult, error)
-    Capabilities() CapabilitySet
+type Instance interface {
+    AdapterID() string
+    InstanceID() string
+    AccountID() string
+    Capabilities() []*pb.Capability
+    Start(ctx context.Context, sink Sink) error
+    Stop(ctx context.Context) error
+    Send(ctx context.Context, target *pb.Target, chain *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo)
 }
 ```
 
-接口示意需在 T-01/T-03 形成真实可编译类型。Start 完成凭证/实例检查并启动受控接收循环后返回；Stop 停止接收并等待受控任务，异步致命错误通过 Core 的 Adapter 状态渠道报告，不静默消失。同一 bot 账号首发只允许一个入站所有者，凭证轮换先停止旧实例。
+Adapter 作者使用 `sdk/adapter` 实现平台接收、标准化与发送；派发、权限、Target 授权、按钮 token、媒体缓存和游标持久化留在 Core。插件可以声明对某个 Adapter 的依赖，并使用它声明的 extension 片段，见 CONTRACTS §8。Start 完成凭证/实例检查并启动接收后返回；Stop 停止接收；实例的致命错误经 `core.adapter.status` 报告，不静默消失。同一平台账号只允许一个入站所有者，凭证轮换先停止旧实例。
 
-v0.1 默认 Telegram long polling，先确定实际 bot 身份并校验 account_id。接收游标与非持久化事件入站的确认语义见 MESSAGE-MODEL；不承诺 exactly-once。平台特有能力按版本声明，不支持的片段组合先拒绝；其他正式 Adapter 后续增加。
+v0.1 默认 Telegram long polling，先确定实际 bot 身份并校验 account_id。接收游标与非持久化事件入站的确认语义见 MESSAGE-MODEL；不承诺 exactly-once。平台特有能力按版本声明，不支持的片段组合先拒绝；其他官方 Adapter 后续增加，第三方 Adapter 按同一机制安装。
 
 ## N. 更新 Journal、快照与恢复
 

@@ -13,7 +13,7 @@
       - any-glob-to-any-file: ["internal/core/**", "internal/wire/**", "internal/oslock/**", "cmd/**", "go.mod", "go.sum"]
 "area: adapters":
   - changed-files:
-      - any-glob-to-any-file: ["internal/adapters/**"]
+      - any-glob-to-any-file: ["adapters/**"]
 "area: frontend":
   - changed-files:
       - any-glob-to-any-file: ["web/**"]
