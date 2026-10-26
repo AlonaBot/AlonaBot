@@ -75,7 +75,7 @@ Bootstrap 属于私有、已认证 IPC，和整个 HELLO_ACK 一起受 **4 MiB**
 | `config_schema_hash`、`previous_config_version`、`target_config_version` | 与可信安装包对应的 Schema 和配置迁移输入；无配置插件仍以空对象表示 |
 | `database_descriptor` | 后端类型、受管 SQLite 当前准备视图路径或该插件 PostgreSQL 连接参数、迁移模式、已应用版本、activation_reason（first_install/resume/reload/update/rollback）、manual_migration_approved（仅Core显式维护许可且绑定当前Session/Generation/DB时true）；不下发 Core 管理数据库凭证 |
 | `http_proxy_auth` | 本 Session 独立的内部代理认证材料；只在插件声明 HTTP 能力时需要，不复用 Admin 凭证 |
-| `log_level` | 该来源当前生效的日志级别（CONTRACTS §14.3），SDK 据此在进程内过滤 |
+| `log_level` | 该来源当前生效的日志级别（CONTRACTS §14.3），SDK 据此在进程内过滤；枚举 `LogLevel` 依次为 UNSPECIFIED、DEBUG、INFO、WARN、ERROR、OFF，UNSPECIFIED 按 INFO 处理 |
 | `session_limits` | 本次运行生效的在途请求数、payload 预算与普通请求期限（CONTRACTS §16），SDK 与 Core 使用同一组值 |
 | `phase_limits`、`preparation_deadline_unix_ms` | 主契约固定的准备、迁移和 Ready 预算及本轮绝对期限；迁移使用独立预算，不被普通业务 30s 截断 |
 

@@ -2,7 +2,7 @@
 
 **技术基线：** v0.6-review  
 **编排更新：** 2026-10-22  
-**实施状态：** T-01、T-02 已实现，分项证据见 [TEST-MATRIX §3.1](TEST-MATRIX.md#31-已运行的分项证据t-01t-02)，Linux/Windows 的真实运行由 T-10 补齐。T-02.1、T-02.2 与 T-03～T-14 未开始，按 §3.1 的执行切片推进。
+**实施状态：** T-01、T-02 已实现，分项证据见 [TEST-MATRIX §3.1](TEST-MATRIX.md#31-已运行的分项证据t-01t-02)，Linux/Windows 的真实运行由 T-10 补齐。T-02.1 已实现，分项证据同样见 TEST-MATRIX §3.1。T-02.2 与 T-03～T-14 未开始，按 §3.1 的执行切片推进。
 
 从 T-01 开始，按前置任务推进。每项任务交付可编译、可验证的增量；跨任务验收在对应集成点闭合。协议和行为以 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md)、[WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 为准，验收编号统一使用 [TEST-MATRIX.md](TEST-MATRIX.md)。
 
@@ -48,7 +48,7 @@ Telegram、PG、LLM Provider、浏览器和目标平台的测试单独记录环�
 | 任务 | 前置任务 | 本项完成时的可用能力 | 当前状态 |
 | --- | --- | --- | --- |
 | T-01 | 无 | 可编译契约、固定生成方式、驱动/备份验证基线 | 已实现；分项证据见 TEST-MATRIX §3.1 |
-| T-02 | T-01 | 最小真实 Native 进程的状态、双 IPC、启动和停止；统一日志与调优参数 | 步骤 1～8 已实现，darwin/arm64 运行通过，Linux/Windows 运行未执行（T-10）；日志基线（T-02.1）与调优参数（T-02.2）未开始 |
+| T-02 | T-01 | 最小真实 Native 进程的状态、双 IPC、启动和停止；统一日志与调优参数 | 步骤 1～8 已实现，darwin/arm64 运行通过，Linux/Windows 运行未执行（T-10）；日志基线（T-02.1）已实现；调优参数（T-02.2）未开始 |
 | T-03 | T-02 | 可安装 Adapter 的进程与 SDK；官方 Telegram Adapter 的入站与显式 Send、媒体、按钮、extension 片段、真实回执 | 未开始 |
 | T-04 | T-03 | 根插件 SDK、自动/显式注册、命令树与动态权限 | 未开始 |
 | T-05 | T-04 | 完整事件链、Rule、Hook、传播、可信身份、延续调用与多轮等待 | 未开始 |
@@ -106,12 +106,12 @@ flowchart TD
 
 | 切片 | goal | 内容 | §4 步骤 | 前置 | 主要验收 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
-| T-02.1 | goal-65 | 日志基线：Core 与 SDK 改用注入的 slog Logger，控制台与 JSON 格式、来源标签、插件 stderr 的 JSON 解析与非结构化行、panic 堆栈、Bootstrap 下发级别与进程内过滤、`--log-level`/`--log-format`、凭证脱敏；按日期轮转的日志文件与保留上限 | T-02 步骤 9 | T-02 | V-62、V-63 的级别过滤分项、V-68 的写入与轮转分项 | 未开始 |
+| T-02.1 | goal-65 | 日志基线：Core 与 SDK 改用注入的 slog Logger，控制台与 JSON 格式、来源标签、插件 stderr 的 JSON 解析与非结构化行、panic 堆栈、Bootstrap 下发级别与进程内过滤、`--log-level`/`--log-format`、不输出 Bootstrap 与配置明文；按日期轮转的日志文件与保留上限 | T-02 步骤 9 | T-02 | V-62、V-63 的级别过滤分项、V-68 的写入与轮转分项 | 已实现，darwin/arm64 运行通过（TEST-MATRIX §3.1） |
 | T-02.2 | goal-76 | 调优参数：`internal/tune` 参数表，把现有常量迁入；`--args` 的直接参数与文件输入、校验与相互约束、启动 WARN、`alonabot tune list`；Bootstrap 下发 `session_limits`；`GOMEMLIMIT` 软上限 | T-02 步骤 10 | T-02 | V-69 | 未开始 |
-| T-03.1 | goal-2 | 首个可用 SDK 切片：事件路由注册、Context/Send、业务分发；Core 的 Adapter 实例接口、内存 Adapter、固定服务 mux、事件派发与 `core.send`；echo 插件经真实 REGISTER/ACTIVATED 后收发 | T-03 步骤 1 | T-02.1、T-02.2 | V-07、V-08 的 SDK 分项 | 未开始 |
+| T-03.1 | goal-2 | 首个可用 SDK 切片：事件路由注册、Context/Send、业务分发；Core 的 Adapter 实例接口、内存 Adapter、固定服务 mux、事件派发与 `core.send`；echo 插件经真实 REGISTER/ACTIVATED 后收发 | T-03 步骤 1 | T-02.1、T-02.2 | V-07、V-08 的 SDK 分项，V-62 的 Handler 分项 | 未开始 |
 | T-03.2 | goal-3 | Target 与最小授权：`allowed_adapter_instances` 持久化、显式 To、后台 Send、逐次发送准入、NO_DEFAULT_TARGET、Core 内部许可读写入口 | T-03 步骤 3 | T-03.1 | V-07 | 未开始 |
 | T-03.3 | goal-4 | Adapter 进程与 `sdk/adapter`：Adapter 角色的注册校验、实例启停、`adapter.send`、事件交付与游标持久化、事件归属校验、账号唯一；实例上下线时生成 `bot.online`/`bot.offline`；回环测试 Adapter | T-03 步骤 2 | T-03.1 | V-48 的进程与实例分项、V-51 | 未开始 |
-| T-03.4 | goal-5 | 官方 Telegram Adapter 的接收：Bot API 客户端、本地 Bot API 模拟服务、getMe、webhook 冲突、long polling、逐条交付与游标、7 天轮次重建、401/409、媒体组、Actor.locale、`to_me`、实例代理 | T-03 步骤 4 | T-03.3 | V-45、V-54 的 locale 分项 | 未开始 |
+| T-03.4 | goal-5 | 官方 Telegram Adapter 的接收：Bot API 客户端、本地 Bot API 模拟服务、getMe、webhook 冲突、long polling、逐条交付与游标、7 天轮次重建、401/409、媒体组、Actor.locale、`to_me`、实例代理 | T-03 步骤 4 | T-03.3 | V-45、V-54 的 locale 分项，V-62 的 Bot Token URL 分项 | 未开始 |
 | T-03.5 | goal-6 | 媒体上传与配额：BeginUpload/Chunk/Commit、大小/MIME/SHA256 校验、全部固定配额与期限、owner 退出释放 | T-03 步骤 5（上传） | T-03.1 | V-09 | 未开始 |
 | T-03.6 | goal-7 | 入站媒体与 Grant：IncomingMedia token、经 `adapter.media.read` 首次取件并校验缓存、多 Session 共享、Grant 范围、租约；出站媒体经 `core.media.read` 交给 Adapter | T-03 步骤 5（入站与授权） | T-03.2、T-03.4、T-03.5 | V-44、V-09 | 未开始 |
 | T-03.7 | goal-50 | 官方 Telegram Adapter 的发送计划与回执：Chain 完整预检、物理操作计划、UTF-16 实体、相册/引用/按钮渲染、PartResult 汇总 | T-03 步骤 6（发送） | T-03.4 | V-08、V-35 | 未开始 |
@@ -238,7 +238,7 @@ flowchart TD
 6. **实现提交与激活门禁。** Prepared 仅表示准备完成。新候选只有在 Core 状态事务提交 ActiveGeneration/COMMITTED 后才能收到 ACTIVATE；普通 restart 复用既有提交记录、Generation 和配置引用。SDK 执行 OnReady，唯一 writer 完整写出 ACTIVATED 后才打开本地 ready gate；Core reader 同步应用状态后再读后续业务帧。Preparing、Prepared、Activating 均拒绝业务；提交后启动失败进入 Degraded，不自动选旧数据。以无业务 DB 的候选完成本项集成，受管 DB 副本的真实提交/恢复由 T-08、T-09 验证。
 7. **完成阶段超时、停止和有限恢复。** 按主契约落实握手 10s、配置 60s、迁移 15 分钟、OnStart 60s、OnReady 30s 的独立预算；用户函数不响应 context 时仍须由 watchdog 结束失败进程。停用先冻结新根调用并最多排空 6s，允许既有父链内合法子调用完成；随后 Cancel 并发送 STOPPING，其期限为 `min(t0+10s, 发送时刻+4s)`。OnStop 使用独立 context，Core 在总 10s 截止处理进程树；Core Shutdown 并行停止所有插件。EOF 使旧 Session 立即失效，确认旧进程退出后才允许重启；5 分钟内第三次异常退出自动禁用，正常退出不自动重启。
 8. **建立真实进程的验收切片。** 最小示例覆盖正常启动/退出，测试辅助进程覆盖挂起、错帧、日志污染、迟到响应和突退。对同一 fixture 分别运行 TCP 与 stdio，检查进程和 Listener 已关闭；注入满额度、双 Core、并发管理操作和 Core 被终止场景。记录实际运行平台、命令、测试位置及结果，并把由 T-08、T-09 集成的配置/DB/更新场景明确标出。
-9. **建立统一日志。** 按 CONTRACTS §14 把 Core 与 SDK 现有的直接输出改为注入的 `*slog.Logger`：实现 §14.2 的控制台 Handler（来源标签、级别缩写、源码位置、`key=value`、多行缩进、按终端与 `NO_COLOR` 着色）与 JSON 输出，`--log-level`、`--log-format` 启动参数。SDK 把记录以 JSON 行写到 stderr，在调用边界捕获的 panic 记为带 `stack` 的 ERROR，并在 Handler 的 Logger 上附带 trace_id、route_id、call_id。Core 逐行解析插件 stderr，补上并保护来源字段，非 JSON 行作为 WARN 原样保留。Bootstrap 追加 `log_level`，SDK 与 Core 都按来源的生效级别过滤；按来源级别暂存在内存中，持久化与运行时修改由 T-09.10 接入。日志不输出 Secret、Bootstrap 与配置明文。按 CONTRACTS §14.6 写入按本地日期轮转的日志文件：同日达到单文件上限时续写编号文件，超过合计上限或保留天数时从最旧的删除，写入失败时继续运行并报告一次。
+9. **建立统一日志。** 按 CONTRACTS §14 把 Core 与 SDK 现有的直接输出改为注入的 `*slog.Logger`：实现 §14.2 的控制台 Handler（来源标签、级别缩写、源码位置、`key=value`、多行缩进、按终端与 `NO_COLOR` 着色）与 JSON 输出，`--log-level`、`--log-format` 启动参数。SDK 把记录以 JSON 行写到 stderr，在调用边界（生命周期 Hook）捕获的 panic 记为带 `stack` 的 ERROR；Handler 的 Logger 附带 trace_id、route_id、call_id 与 Handler panic 的记录由 T-03.1 的业务分发实现，Bot API URL 中凭证的脱敏由 T-03.4 的 Bot API 客户端实现。Core 逐行解析插件 stderr，补上并保护来源字段，非 JSON 行作为 WARN 原样保留。Bootstrap 追加 `log_level`，SDK 与 Core 都按来源的生效级别过滤；按来源级别暂存在内存中，持久化与运行时修改由 T-09.10 接入。日志不输出 Secret、Bootstrap 与配置明文。按 CONTRACTS §14.6 写入按本地日期轮转的日志文件：同日达到单文件上限时续写编号文件，超过合计上限或保留天数时从最旧的删除，写入失败时继续运行并报告一次。
 10. **建立调优参数。** 新建 `internal/tune`，按 CONTRACTS §16 的表登记全部可调参数，把 `internal/wire` 与 `internal/core` 中对应的现有常量迁入，调用方改为读取生效值。实现 `--args` 的直接参数与文件输入、值的格式、约束与相互约束检查（出错时指明参数或文件行号）、存在覆盖时的启动 WARN 与 `alonabot tune list`。Bootstrap 追加 `session_limits`，SDK 使用下发的值；设置 `PLUGIN_MEMORY_SOFT_LIMIT` 时为子进程传入 `GOMEMLIMIT`。
 
 #### 可审查交付

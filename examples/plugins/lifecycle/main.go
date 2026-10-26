@@ -1,12 +1,12 @@
 // lifecycle 是可以真实运行的最小插件示例。
 //
 // 它由 Core 启动，走完 HELLO、REGISTER、ACTIVATE、STOPPING 的完整生命周期，
-// 在每个生命周期 Hook 中向 stderr 打印一行。stdio 传输时 stdout 专用于协议帧，日志只写 stderr。
+// 在每个生命周期 Hook 中用 log/slog 记录一条 INFO。SDK 把记录以 JSON 行写到 stderr，由 Core 输出。
 package main
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/AlonaBot/AlonaBot/sdk"
@@ -14,27 +14,27 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
 
-// Lifecycle 在每个生命周期 Hook 里向 stderr 打印一行。
+// Lifecycle 在每个生命周期 Hook 里记录一条日志。
 type Lifecycle struct {
 	// Base 提供根插件的默认实现。
 	plugin.Base
 }
 
-// OnStart 打印 lifecycle: OnStart。
+// OnStart 记录 OnStart。
 func (*Lifecycle) OnStart(context.Context) error {
-	fmt.Fprintln(os.Stderr, "lifecycle: OnStart")
+	slog.Info("OnStart")
 	return nil
 }
 
-// OnReady 打印 lifecycle: OnReady。
+// OnReady 记录 OnReady。
 func (*Lifecycle) OnReady(context.Context) error {
-	fmt.Fprintln(os.Stderr, "lifecycle: OnReady")
+	slog.Info("OnReady")
 	return nil
 }
 
-// OnStop 打印 lifecycle: OnStop。
+// OnStop 记录 OnStop。
 func (*Lifecycle) OnStop(context.Context) error {
-	fmt.Fprintln(os.Stderr, "lifecycle: OnStop")
+	slog.Info("OnStop")
 	return nil
 }
 
@@ -45,11 +45,11 @@ func (*Lifecycle) Commands(r *sdk.CommandRegistry) {
 	})
 }
 
-// main 运行插件；正常结束时打印 lifecycle: 正常退出，失败时以 1 退出。
+// main 运行插件；正常结束时记录 exiting normally，失败时记录错误并以 1 退出。
 func main() {
 	if err := sdk.Run(&Lifecycle{}); err != nil {
-		fmt.Fprintln(os.Stderr, "lifecycle:", err)
+		slog.Error("plugin stopped with an error", "err", err)
 		os.Exit(1)
 	}
-	fmt.Fprintln(os.Stderr, "lifecycle: exiting normally")
+	slog.Info("exiting normally")
 }

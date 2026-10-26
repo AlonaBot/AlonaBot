@@ -65,6 +65,19 @@ message Bootstrap {
   PhaseLimits phase_limits = 8;
   // 准备阶段（配置、迁移、OnStart）的绝对截止，UTC 毫秒。
   int64 preparation_deadline_unix_ms = 9;
+  // 该来源当前生效的日志级别（CONTRACTS §14.3）；UNSPECIFIED 按 INFO 处理。
+  LogLevel log_level = 10;
+}
+
+// LogLevel 列出 Core 下发给 SDK 的日志级别（CONTRACTS §14.3）。
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  LOG_LEVEL_DEBUG = 1;
+  LOG_LEVEL_INFO = 2;
+  LOG_LEVEL_WARN = 3;
+  LOG_LEVEL_ERROR = 4;
+  // 不输出任何记录。
+  LOG_LEVEL_OFF = 5;
 }
 
 // DatabaseBackend 列出插件业务数据库的后端类型。

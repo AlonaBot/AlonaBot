@@ -125,12 +125,15 @@ type logBuf struct {
 	b  bytes.Buffer // 「插件ID|流|内容」形式的日志
 }
 
-// log 记录一行日志，签名与 process.LogFunc 相同。
-func (l *logBuf) log(id, stream string, line []byte) {
+// Line 记录一行日志，签名与 process.LogFunc 相同。
+func (l *logBuf) Line(id, stream string, line []byte) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	fmt.Fprintf(&l.b, "%s|%s|%s\n", id, stream, line)
 }
+
+// SetSession 满足 PluginLog；测试不记录 session_id。
+func (l *logBuf) SetSession([]byte) {}
 
 // String 返回已收集的全部日志。
 func (l *logBuf) String() string { l.mu.Lock(); defer l.mu.Unlock(); return l.b.String() }
@@ -157,7 +160,7 @@ func setup(t *testing.T, exe string) (*state.Store, Spec) {
 	return s, Spec{PluginID: "demo", PluginDir: pluginDir, Executable: exe, BuildDigest: digest[:], GenerationID: "gen-1",
 		Bootstrap: &pb.Bootstrap{GenerationId: "gen-1", CandidateConfigJson: "{}", TargetConfigVersion: 1,
 			DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE}},
-		NewCandidate: true, Limits: fastLimits, Stop: fastStop}
+		NewCandidate: true, Limits: fastLimits, Stop: fastStop, Log: &logBuf{}}
 }
 
 // rawSpec 返回以测试二进制作为 rawPlugin 辅助进程、注入 fault 故障的启动描述与日志收集器。
@@ -168,7 +171,7 @@ func rawSpec(t *testing.T, fault string, stdio bool) (*state.Store, Spec, *logBu
 	spec.ExtraEnv = map[string]string{faultEnv: fault, "GORACE": "atexit_sleep_ms=0"}
 	spec.Stdio = stdio
 	logs := &logBuf{}
-	spec.Log = logs.log
+	spec.Log = logs
 	return s, spec, logs
 }
 
@@ -307,7 +310,7 @@ func TestConcurrentLaunchSamePluginOnlyOneRuns(t *testing.T) {
 	defer first.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
 	spec.NewCandidate = false
 	logs := &logBuf{}
-	spec.Log = logs.log
+	spec.Log = logs
 	second, err := Launch(context.Background(), s, spec)
 	if err == nil {
 		second.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)

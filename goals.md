@@ -44,7 +44,6 @@
 | goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 等待前置 |
 | goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 等待前置 |
 | goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 等待前置 |
-| goal-65 | T-02.1 | 日志基线与日志文件 | — | 待编写 |
 | goal-76 | T-02.2 | 调优参数 | — | 待编写 |
 | goal-4 | T-03.3 | Adapter 进程、sdk/adapter 与上下线事件 | T-03.1 | 待编写 |
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 待编写 |
@@ -297,18 +296,18 @@ func (c *Candidate) Discard() error                            // 删除暂存�
 
 ## 第 2 批：等待前置
 
-goal-2 等待日志基线与调优参数（T-02.1、T-02.2）；其余语句按 T-03.1 的接口编写。前置合并后，审查者核对实际代码，必要时修订，再改为可派发。
+goal-2 等待调优参数（T-02.2），日志接口已按 T-02.1 的实现写入；其余语句按 T-03.1 的接口编写。前置合并后，审查者核对实际代码，必要时修订，再改为可派发。
 
 ### goal-2 · T-03.1 首个可用 SDK 切片
 
-状态：等待前置（T-02.1、T-02.2）。日志基线与调优参数合并后，审查者按实际的 Logger 与参数接口补充本语句，再改为可派发。
+状态：等待前置（T-02.2）。日志接口已按 T-02.1 的实现写入；调优参数合并后，审查者按实际的参数接口补充本语句，再改为可派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-2（切片 T-03.1：首个可用 SDK 切片）。goal 目录 goal-2，分支 goal-2，worktree .worktrees/goal-2，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
 目标：插件能注册 message.created 事件路由；Core 把标准事件经真实 Session 派发给已 Activated 的插件；插件在 Handler 里用 Context.Send 回复原事件 Target；Core 经 Adapter 接口发出，并把 SendResult（以及可能同时存在的错误）返回给插件。
 
-依据：PLAN T-03 步骤 1；CONTRACTS §1.2、§8；MESSAGE-MODEL §1、§2、§3（本切片只做手动发送签名）、§4；WIRE-FORMAT §1、§4、§5A。
+依据：PLAN T-03 步骤 1；CONTRACTS §1.2、§8、§14.1；MESSAGE-MODEL §1、§2、§3（本切片只做手动发送签名）、§4；WIRE-FORMAT §1、§4、§5A。
 
 范围（只新增或修改这些；.proto、internal/core/state、cmd/alonabot 和所有文档都不改）：
 - 新增 internal/wire/services.go
@@ -370,7 +369,7 @@ goal-2 等待日志基线与调优参数（T-02.1、T-02.2）；其余语句按 
    }
    func FromInstance(in *host.Instance) Plugin
    type Router struct{ ... }
-   func New() *Router
+   func New(log *slog.Logger) *Router // log 为 Core 的 Logger（logging.Output.Logger）
    func (r *Router) Attach(p Plugin)
    func (r *Router) Detach(pluginID string)
    func (r *Router) Start() // 启动单个派发 worker
@@ -387,6 +386,7 @@ goal-2 等待日志基线与调优参数（T-02.1、T-02.2）；其余语句按 
    type EventRoute struct { RouteID string; EventType string; Handler func(*Context) error }
    Registration 增加 Events []EventRoute；Collect 收集 EventProvider。
    func (c *Context) Event() *pb.Event
+   func (c *Context) Logger() *slog.Logger // slog.Default() 附带本次调用的 trace_id（十六进制）、route_id 与 call_id
    Context.Send 由返回 UNSUPPORTED 改为真实实现，签名不变。
    func currentSession() (*wire.Session, error) // 未导出：返回已激活的 Session；未就绪或已停止时返回 Code=FAILED_PRECONDITION 的 *sdk.Error。后续的后台 Send、媒体客户端都通过它取 Session，不再改 activate.go
 
@@ -395,7 +395,7 @@ goal-2 等待日志基线与调优参数（T-02.1、T-02.2）；其余语句按 
 - worker 逐条处理事件：
   - 候选是 Activated()==true 的 Plugin 上 kind=EVENT 且 event_type_filter 包含该事件类型的路由，按 (priority, plugin_id, route_id) 升序依次调用。
   - 每次调用发送 Request{Target: route_id, Payload: PROTOBUF 编码的 HandlerRequest（schema_id 用 validate.SchemaID，version 1）, TraceID: 16 字节随机值, Attach: &Invocation{PluginID, Event, DefaultTarget: ev.Target}}。HandlerRequest.context 只设置 actor 与 default_target。
-  - 响应解码为 HandlerOutcome：propagation=STOP 时停止后续候选；调用错误或带 Err 的响应记日志后继续下一个候选。不重试。
+  - 响应解码为 HandlerOutcome：propagation=STOP 时停止后续候选；调用错误或带 Err 的响应以 WARN 记录（带 plugin_id、route_id、trace_id）后继续下一个候选。不重试。
 - Mux.For 返回的 Handler 按 Inbound.Target 查找服务；Caller 由 For 的参数固定，不信任载荷里的任何身份。
 - message.Service.Send 按顺序检查，1～5 的拒绝都同时返回 status=REJECTED 的 SendResult（已知 target 时填上）和 ErrorInfo：
   1) 载荷必须是 PROTOBUF、schema alonabot.send_request.v1、version 1，否则 INVALID_ARGUMENT。
@@ -406,16 +406,16 @@ goal-2 等待日志基线与调优参数（T-02.1、T-02.2）；其余语句按 
   6) 调用 Instance.Send，把 SendResult 作为 PROTOBUF 载荷（schema alonabot.send_result.v1）连同 ErrorInfo 一起返回，两者可以同时存在。不自动重试。
 - SDK 业务分发（替换 businessHandler）：
   - 按 Inbound.Target 查找事件路由：找不到返回 NOT_FOUND；载荷不是 HandlerRequest、或 route_id 与 Target 不一致返回 INVALID_ARGUMENT；命令路由仍返回 UNSUPPORTED。
-  - 执行 Handler 时 recover panic，转为 INTERNAL。Handler 返回后 Context 失效，之后再调用 Send 返回 FAILED_PRECONDITION。
+  - 执行 Handler 时 recover panic，经 logPanic 记为带 stack 的 ERROR，转为 INTERNAL。Handler 返回后 Context 失效，之后再调用 Send 返回 FAILED_PRECONDITION。
   - 成功时返回 HandlerOutcome{matched: true, propagation: 调用过 StopPropagation 为 STOP，否则 CONTINUE}。
-  - Handler 返回 *sdk.Error 时，Err 使用它的 Code 与 Message；其他错误为 INTERNAL，safe_message 为 "handler returned an error"，原文只写 stderr。出错时仍返回 HandlerOutcome，保留 STOP。
+  - Handler 返回 *sdk.Error 时，Err 使用它的 Code 与 Message；其他错误为 INTERNAL，safe_message 为 "handler returned an error"，原文经 Context.Logger 以 ERROR 记录。出错时仍返回 HandlerOutcome，保留 STOP。
 - Context.Send：构造 SendRequest{to: To 选项, chain: chain.Proto()}，以本次 Inbound.CallID 为 ParentCallID 调用 wire.ServiceSend。有载荷就解码成 SendResult；有 Err 时返回 *sdk.Error（Code 经 validate.PublicCode）。结果与错误可以同时返回。
 - EventRegistry.On 的以下情况都记为 Collect 错误：routeID 为空；与已注册的事件或命令 route_id 重复；eventType 不是 message.proto 中列出的 8 种之一；handler 为 nil。
 - buildRegister 为每个事件生成 RouteDescriptor{route_id, kind=EVENT, default_enabled=true, required_permission=ANY, event: EventSpec{event_type_filter: [eventType], handler_mode=MANUAL}}，排在命令路由之后。
 - examples/plugins/echo：根插件注册 On("echo", "message.created", ...)，把收到消息中的 text 片段原样回复；没有 text 片段时不回复。
 
 测试（按编码规范「测试提交规则」：只提交集成测试；本地自测写在 *_local_test.go，不提交，PR 中写明结果）：
-- 提交：internal/core/supervisor/echo_test.go（//go:build unix）。按 supervisor_test.go 构建示例的方式构建 examples/plugins/echo，用 memory Adapter + adapter.Registry + message.Service + Mux + Router 装配，Launch 后 Attach 实例。
+- 提交：internal/core/supervisor/echo_test.go（//go:build unix）。按 supervisor_test.go 构建示例的方式构建 examples/plugins/echo，用 memory Adapter + adapter.Registry + message.Service + Mux + Router 装配；Spec.Log 与 Router 的 Logger 取自写到测试缓冲区的 logging.Output。Launch 后 Attach 实例。
   - Inject 一条 message.created：memory 收到一条 Chain，文本与原文相同，Target 等于原 Target。
   - Inject 一条没有匹配路由的事件类型：memory 没有收到任何发送。
   - TCP 与 stdio 各跑一次。
@@ -563,17 +563,6 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 以下 goal 只写了范围和要点。前置合并后，审查者按实际代码补全「接口」「行为」「测试」三段并改为可派发；在此之前不要派发。每条的完整语义以 PLAN §4 对应步骤及其失败停止条件为准，不另作设计。
 
-### goal-65 · T-02.1 日志基线与日志文件
-
-状态：待编写。由审查者实现，维护者批准后开始。范围：Core 与 SDK 现有的直接输出、`control.proto` 的 Bootstrap（追加 `log_level`）、`cmd/alonabot` 的 `--log-level` 与 `--log-format`。要点：
-- 控制台格式按 CONTRACTS §14.2：`[时:分:秒.毫秒] [Core|Plug:<id>|Adpt:<id>/<实例>] [DBUG|INFO|WARN|ERRO] [目录/文件:行号]: 消息 key=value`，trace 显示前 8 位，多行值缩进 4 个空格，只在终端且未设置 `NO_COLOR` 时着色；另有 JSON 输出。
-- SDK 以 JSON 行写 stderr，Handler 的 Logger 附带 trace_id、route_id、call_id；调用边界捕获的 panic 记为带 `stack` 的 ERROR。
-- Core 逐行解析插件 stderr，补上并保护来源字段；非 JSON 行作为 WARN 原样保留。
-- SDK 与 Core 都按来源的生效级别过滤；持久化与运行时修改留给 T-09.10。
-- 日志文件按 CONTRACTS §14.6：本地日期轮转，单文件 100 MiB 后同日续写编号文件，合计 1 GiB、保留 30 天，写入失败时继续运行并报告一次。
-- 只用标准库 `log/slog`，不加依赖；日志不含 Secret、Bootstrap 与配置明文。
-- 验收：V-62、V-63 的级别过滤分项、V-68 的写入与轮转分项。
-
 ### goal-76 · T-02.2 调优参数
 
 状态：待编写。由审查者实现，维护者批准后开始。范围：新建 `internal/tune`，迁入 `internal/wire` 与 `internal/core` 中对应的现有常量；`cmd/alonabot` 的 `--args` 与 `tune list`；`control.proto` 的 Bootstrap（追加 `session_limits`）。要点：
@@ -605,7 +594,8 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - 标准化规则沿用 MESSAGE-MODEL §1、§6：带 sender_chat 的消息不构造 Actor，保留 media_group_id，每条 Telegram Message 一个事件；Actor.locale 取 from.language_code，按 BCP 47 规范化大小写；`to_me` 按 MESSAGE-MODEL §6.1 计算。
 - 实例配置的 `proxy`（Secret，http/https/socks5）优先于全局代理，作用于全部 Bot API 请求与文件下载；代理失败按网络错误退避，不改为直连。
 - Adapter 实现放在可导入的包中（`telegram.New()`），`main` 只调用 `sdk/adapter` 的运行函数，供库模式直接引用（CONTRACTS §15.4）。
-- 验收：V-45、V-54 的 locale 分项。
+- Bot API 请求的错误先去掉 URL 中的 `bot<token>` 再记录（CONTRACTS §14.5）。
+- 验收：V-45、V-54 的 locale 分项，V-62 的 Bot Token URL 分项。
 
 ### goal-50 · T-03.7 官方 Telegram Adapter 的发送计划与回执
 

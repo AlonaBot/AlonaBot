@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"strings"
@@ -170,6 +171,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg 
 		go func() {
 			defer func() {
 				if p := recover(); p != nil {
+					logPanic("OnStart", p)
 					errc <- fmt.Errorf("OnStart panic: %v", p)
 				}
 			}()
@@ -181,8 +183,8 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg 
 			timer.Stop()
 			cancel()
 			if err != nil {
-				// 用户错误原文可能含敏感信息：只写 stderr，SESSION_ERROR 中只放安全消息。
-				fmt.Fprintf(os.Stderr, "OnStart failed: %v\n", err)
+				// 用户错误原文可能含敏感信息：只写日志，SESSION_ERROR 中只放安全消息。
+				slog.Error("OnStart failed", "err", err)
 				return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_ON_START, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
 					pb.ErrorCode_ERROR_CODE_INTERNAL, "OnStart returned an error", err)
 			}

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"net/url"
 	"os"
 	"strconv"
@@ -30,7 +31,7 @@ func pgAdmin(t *testing.T) (*gorm.DB, *url.URL) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: gormLogger})
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: newGormLogger(slog.Default())})
 	if err != nil {
 		t.Fatal(err)
 	}
