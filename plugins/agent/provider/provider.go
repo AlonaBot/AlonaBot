@@ -116,7 +116,7 @@ func streamAnthropic(r io.Reader,emit func(Event)error) error {
 	type block struct{id,name string;args strings.Builder}
 	blocks:=map[int]*block{};terminal:=false
 	err:=readSSE(r,func(event,data string)error{
-		var p struct { Type string `json:"type"`; Index int `json:"index"`; ContentBlock struct{Type,ID,Name string `json:"type"`} `json:"content_block"`; Delta struct{Type string `json:"type"`;Text string `json:"text"`;PartialJSON string `json:"partial_json"`} `json:"delta"`; Error json.RawMessage `json:"error"` }
+		var p struct { Type string `json:"type"`; Index int `json:"index"`; ContentBlock struct{ Type string `json:"type"`; ID string `json:"id"`; Name string `json:"name"` } `json:"content_block"`; Delta struct{Type string `json:"type"`;Text string `json:"text"`;PartialJSON string `json:"partial_json"`} `json:"delta"`; Error json.RawMessage `json:"error"` }
 		if json.Unmarshal([]byte(data),&p)!=nil{return errors.New("invalid Anthropic stream event")};if event=="error"||p.Type=="error"||len(p.Error)>0{return errors.New("Anthropic provider stream reported an error")}
 		switch p.Type {
 		case "content_block_start": if p.ContentBlock.Type=="tool_use"{blocks[p.Index]=&block{id:p.ContentBlock.ID,name:p.ContentBlock.Name}}
