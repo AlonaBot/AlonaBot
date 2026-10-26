@@ -1,6 +1,7 @@
-// minimal 演示 SDK 公共签名的组合方式。
+// showcase 演示 SDK 全部公共签名的组合方式；可以真实运行的最小插件见 examples/plugins/lifecycle。
 //
 // 示例包括一个根插件、两类 Handler、StopPropagation、配置回调、HTTP Handler 与一个定时任务。
+// 根插件的 Hook 都由 sdk.Base 提供默认实现，这里只覆盖用到的。
 // SDK 尚不支持 HTTP 路由与定时任务，直接运行时 Run 返回 UNSUPPORTED。
 package main
 
@@ -13,8 +14,8 @@ import (
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/sdk"
+	"github.com/AlonaBot/AlonaBot/sdk/config"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
-	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
 
 // Config 声明本插件唯一的配置类型。
@@ -22,6 +23,12 @@ type Config struct {
 	Greeting string `json:"greeting"`         // /demo hello 回复的文本
 	Interval int64  `json:"interval_seconds"` // 间隔秒数，不能为负
 }
+
+// Config 的回调不经 sdk.Base，用接口断言让签名错误在编译期暴露。
+var (
+	_ config.Loader    = (*Config)(nil)
+	_ config.Validator = (*Config)(nil)
+)
 
 // OnLoad 把版本 1 的 {"hello": "..."} 迁移为当前格式；其他版本原样返回。
 func (c *Config) OnLoad(_ context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error) {
@@ -50,7 +57,7 @@ func (c *Config) Validate(context.Context) error {
 // Demo 作为根插件注册命令、HTTP 路由与定时任务；插件 ID 来自 plugin.yaml。
 type Demo struct {
 	// Base 提供根插件的默认实现。
-	plugin.Base
+	sdk.Base
 	config Config // SDK 解码并校验后的配置
 }
 

@@ -97,7 +97,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、N
 
 ### 4.1 生命周期与就绪门
 
-- v0.1 的可选生命周期方法为 `OnStart(ctx)`、`OnReady(ctx)`、`OnStop(ctx)`；没有实现时无需空方法。配置的 OnLoad/Validate 是配置处理接口，不是额外的进程生命周期 Hook。`OnConfigChange`/在线热应用后置；配置应用与包更新均由新 Session 执行。
+- v0.1 的可选生命周期方法为 `OnStart(ctx)`、`OnReady(ctx)`、`OnStop(ctx)`；没有实现时无需空方法，空的默认实现由 `sdk.Base` 提供（DESIGN §D）。配置的 OnLoad/Validate 是配置处理接口，不是额外的进程生命周期 Hook。`OnConfigChange`/在线热应用后置；配置应用与包更新均由新 Session 执行。
 - 新候选的标准顺序为：创建 Session → Hello/Bootstrap → 配置准备 → DB 迁移 → OnStart → REGISTER/Prepared → Core 原子提交唯一 ActiveGeneration → Activate → OnReady → Activated → 公开业务。首次启用、配置更新和包更新适用此提交路径。普通崩溃重启或 Core 恢复使用新 Session，复用原已 COMMITTED 的 Generation/Config/DB；准备验证通过后依据原提交记录发送 Activate，不新增 Generation 或重复提交 Journal。资源选择、同版本配置一致性检查和回退分支见 §5、§6、§12。
 - OnStart 可以使用本 Session 的候选配置/受管 DB，并初始化本地资源；通过 Core 的 Send、Service、公开 HTTP、Scheduler 业务仍关闭。OnReady 是提交后的有限本地准备检查，不能等待自己尚未开放的业务路由或 SDK ready gate，不能同步执行需要 Activated 的业务 RPC；错误明确返回 PLUGIN_NOT_READY，不隐式排队等激活。
 - SDK 完整写出 ACTIVATED 后才打开本地 ready gate；OnReady 创建的业务 goroutine 必须等待该 gate，同时响应 lifetime context。Core 在读循环中同步验证并应用 Activated 转换后再处理下一帧 REQUEST；两种传输共享该顺序，**不增加 ACTIVATED_ACK**。本地 gate 只表示允许发起业务 RPC，不等于 Core 已确认外部副作用，断链仍返回 UNAVAILABLE。

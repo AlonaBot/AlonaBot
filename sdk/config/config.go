@@ -2,19 +2,14 @@
 //
 // 配置类型可以实现 ConfigLoader，把旧版本的配置 JSON 转换为当前版本；也可以实现
 // ConfigValidator，在解码之后检查业务约束。它们处理配置数据，与 OnStart、OnReady、OnStop
-// 这些生命周期 Hook 分开，不需要时不必实现。执行顺序见 spec/CONTRACTS-v0.1.md §5.2。
+// 这些生命周期 Hook 分开，不需要时不必实现。方法名相同但签名不符时 sdk.Collect 报错，不会静默跳过。
+// 执行顺序见 spec/CONTRACTS-v0.1.md §5.2。
 package config
 
 import (
 	"context"
 	"encoding/json"
 )
-
-// Provider 由根插件实现，返回唯一 Config 结构体的指针；每个插件包至多一个 Config。
-type Provider interface {
-	// Config 返回供 SDK 解码配置的结构体指针。
-	Config() any
-}
 
 // Loader 在零值 *Config 上运行：只依据 raw 与 fromVersion 把旧 JSON 转成本版本 JSON，
 // 必须是可重复的纯变换，不做数据库、文件、网络或发信副作用。

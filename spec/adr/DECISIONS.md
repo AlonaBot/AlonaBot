@@ -22,7 +22,7 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | D-10 | 统一事件处理模型 | 融合 AstrBot 的 Hook/优先级和 NoneBot2 的 Rule/Permission/停止传播；不引入额外复杂 Matcher 系统 |
 | D-11 | Event Bus | 跨插件异步事件，非持久化尽力投递，离线不补发；不同于有结果的调用 |
 | D-12 | Service Call | 由 Core 路由，允许 A→B→C 嵌套，避免同步环；支持超时/取消，不自动重试有副作用的调用 |
-| D-13 | Go SDK 注册风格 | 一个插件包一个根插件类（plugin.Base），最多一个 Config 类；独立函数可经注解自动发现，实例方法显式注册；命令组/子命令 |
+| D-13 | Go SDK 注册风格 | 一个插件包一个根插件类（`sdk.Base`，D-39 前为 `plugin.Base`），最多一个 Config 类；独立函数可经注解自动发现，实例方法显式注册；命令组/子命令 |
 | D-14 | 数据库与配置 | 首发 SQLite/PostgreSQL；原生 GORM；插件 JSON 配置、WebUI schema、secret/hidden/description、i18/；未知配置键默认保留 |
 | D-15 | HTTP 路由 | Core 统一公共 HTTP 服务，插件路由按 ID 前缀；不可信插件 UI 不能与 Admin UI 共用浏览器 Origin |
 | D-16 | 插件身份与更新来源 | `plugin.yaml` 的 ID 必须有且是 HTTP 路由前缀；市场发布需 `alonabot_plugin_` 前缀，本地命名不规范只警告；更新同时检查 ID + 原可信来源，避免同 ID 不同仓库混淆 |
@@ -48,6 +48,7 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | D-36 | 容器镜像与 Telegram 代理 | **用户确认（2026-10-26）**：v0.1 提供官方容器镜像（linux/amd64、linux/arm64，发布到 GHCR），内容与发行归档相同；系统服务安装脚本不在 v0.1 范围内。官方 Telegram Adapter 的每个实例可以单独配置代理，优先于全局代理 |
 | D-37 | Bootstrap 增量字段编号 | **规格完善时选定（2026-10-26）**：保留现有 Bootstrap 字段 1～9；追加 `LogLevel log_level = 10`（枚举 UNSPECIFIED、DEBUG、INFO、WARN、ERROR、OFF，UNSPECIFIED 按 INFO 处理）与 `SessionLimits session_limits = 11`。SessionLimits 字段固定为 `max_inflight = 1`、`max_payload_bytes = 2`、`request_timeout_ms = 3`；Core 先解析 `inherit`，跨 Session 的 Core 总 payload 预算不下发 SDK。T-02.2 必须在 T-02.1 合并后修改同一 proto/生成文件，避免字段分配与合并冲突 | WIRE §3.2、CONTRACTS §14/§16、PLAN T-02 |
 | D-38 | Provider 统一流接口 | **规格完善时选定（2026-10-26）**：Agent Provider 以注入的 `http.Client` 和回调式 `Client.Stream(ctx, req, emit) error` 统一 OpenAI 兼容 Chat Completions 与 Anthropic Messages。文本增量按序发出，工具调用完整组装且参数必须是 JSON 对象；只有收到协议终止标记才算成功，提前 EOF、Provider 错误或回调错误均返回错误，不自动重试。回调式接口用于自然传播背压与调用方错误，避免额外通道隐藏流错误 | PLAN T-12 步骤 1、TEST-MATRIX V-57 |
+| D-39 | 根插件 Hook 的默认实现 | **用户确认（2026-10-26）**：`plugin.Base` 移入 `sdk` 包改称 `sdk.Base`（`sdk` 已 import `sdk/plugin`，留在原包无法引用注册器类型），并为 `OnStart`/`OnReady`/`OnStop`、`Config`、`Commands`/`HTTP`/`Schedules` 提供空的默认实现，便于编辑器补全；SDK 原样调用，不区分是否覆盖。`sdk.Root` 列出全部 Hook，根插件覆盖时签名不符即编译失败；Config 的 `OnLoad`/`Validate` 签名不符时 Collect 报错。不强制插件实现任何方法，也不改用选项式注册，回调仍是根插件结构体上的方法 | DESIGN §D、CONTRACTS §4.1、PLAN T-04 步骤 1 |
 
 ## P 类历史议题与当前处置
 
@@ -127,3 +128,4 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-10-25：**D-33、D-34 已确认**：日志文件按日期轮转并设默认上限；可调的容量、期限与配额集中登记为调优参数，经 `--args` 在启动时覆盖。同步修改 CONTRACTS §0/§11/§14/§15/§16、WIRE §3.2、PLAN（T-02.1 扩展、新增 T-02.2）、TEST-MATRIX V-68、V-69；P-02 改为由 D-34 修订。
 - 2026-10-25：**D-35**：规格完整性审查，删除全部「后续再设计、届时、待定」类说法并补齐 D-35 所列内容；D-24 的描述改为已处置的结论；goals.md 的「待细化」状态改称「待编写」。同步修改 CONTRACTS §0/§2.2/§6.1/§7.3/§8/§9.1/§9.3/§15、MESSAGE-MODEL §1.1/§6.1、WIRE、DESIGN、PLAN T-02/T-03/T-05/T-09/T-10/T-12/T-13/T-14、TEST-MATRIX。
 - 2026-10-26：**D-36 已确认**：v0.1 提供官方容器镜像，Telegram 实例支持单独的代理配置。同步修改 CONTRACTS §0/§8/§15（新增 §15.3，原 §15.3、§15.4 顺延为 §15.4、§15.5）、PLAN T-03/T-10/T-14、TEST-MATRIX V-45 与新增的 V-70。
+- 2026-10-26：**D-39 已确认**：`plugin.Base` 改为 `sdk.Base` 并提供全部根插件 Hook 的空默认实现，签名不符的 Hook 在编译期或 Collect 时报错。同步修改 DESIGN §D、CONTRACTS §4.1、PLAN T-04 步骤 1。

@@ -11,13 +11,12 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
-	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
 
 // Lifecycle 在每个生命周期 Hook 里记录一条日志。
 type Lifecycle struct {
 	// Base 提供根插件的默认实现。
-	plugin.Base
+	sdk.Base
 }
 
 // OnStart 记录 OnStart。
