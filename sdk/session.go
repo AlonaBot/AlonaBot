@@ -15,7 +15,6 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
-	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
 
 // handshakeTimeout 与 CONTRACTS §4.2 的 Hello/HelloAck 预算一致。
@@ -154,7 +153,7 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32) *
 
 // prepare 执行准备阶段：配置准备（目前原样透传）→ OnStart（独立 watchdog）→ REGISTER → 等待 PREPARED。
 // 准备期不能发起业务 RPC。失败时已向 Core 报告 SESSION_ERROR 并关闭连接。
-func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg *Registration) (*pb.Prepared, error) {
+func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Registration) (*pb.Prepared, error) {
 	sid, boot, minor := ack.GetSessionId(), ack.GetBootstrap(), ack.GetChosenMinor()
 	limits := boot.GetPhaseLimits()
 	// 1. Core 必须下发阶段预算与准备截止时间；缺失时报协议错误，而不是把预算当作 0 误报超时。
@@ -164,35 +163,33 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root, reg 
 	}
 
 	// 2. OnStart：用户函数不响应 context 时，由 watchdog 判定失败（Run 随后退出进程）。
-	if s, ok := root.(Starter); ok {
-		budget := time.Duration(limits.GetOnStartMs()) * time.Millisecond
-		ctx, cancel := context.WithTimeout(context.Background(), budget)
-		errc := make(chan error, 1)
-		go func() {
-			defer func() {
-				if p := recover(); p != nil {
-					logPanic("OnStart", p)
-					errc <- fmt.Errorf("OnStart panic: %v", p)
-				}
-			}()
-			errc <- s.OnStart(ctx)
-		}()
-		timer := time.NewTimer(budget)
-		select {
-		case err := <-errc:
-			timer.Stop()
-			cancel()
-			if err != nil {
-				// 用户错误原文可能含敏感信息：只写日志，SESSION_ERROR 中只放安全消息。
-				slog.Error("OnStart failed", "err", err)
-				return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_ON_START, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
-					pb.ErrorCode_ERROR_CODE_INTERNAL, "OnStart returned an error", err)
+	budget := time.Duration(limits.GetOnStartMs()) * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	errc := make(chan error, 1)
+	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				logPanic("OnStart", p)
+				errc <- fmt.Errorf("OnStart panic: %v", p)
 			}
-		case <-timer.C:
-			cancel()
+		}()
+		errc <- root.OnStart(ctx)
+	}()
+	timer := time.NewTimer(budget)
+	select {
+	case err := <-errc:
+		timer.Stop()
+		cancel()
+		if err != nil {
+			// 用户错误原文可能含敏感信息：只写日志，SESSION_ERROR 中只放安全消息。
+			slog.Error("OnStart failed", "err", err)
 			return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_ON_START, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
-				pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnStart exceeded its budget", nil)
+				pb.ErrorCode_ERROR_CODE_INTERNAL, "OnStart returned an error", err)
 		}
+	case <-timer.C:
+		cancel()
+		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_ON_START, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
+			pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnStart exceeded its budget", nil)
 	}
 
 	// 3. 发送完整 REGISTER；超过 4 MiB 时报告 RESOURCE_EXHAUSTED。

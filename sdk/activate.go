@@ -12,14 +12,13 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
-	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
 
 // activation 跟踪 ACTIVATE → OnReady → ACTIVATED 与本地 ready gate（CONTRACTS §4.1）。
 type activation struct {
 	l    launch
 	ack  *pb.HelloAck  // 握手结果，提供 Session ID、协商版本与 Bootstrap
-	root plugin.Root   // 用户的根插件
+	root Root          // 用户的根插件
 	sess *wire.Session // 激活后使用的 Session
 
 	ready   atomic.Bool   // ready gate：ACTIVATED 完整写出后才为 true
@@ -87,32 +86,30 @@ func (a *activation) control(env *pb.Envelope) error {
 func (a *activation) runOnReady(m *pb.Activate) {
 	// 1. 在 ACTIVATE 给出的截止前执行 OnReady（如有）；失败或超时报告 SESSION_ERROR。
 	deadline := time.UnixMilli(m.GetOnReadyDeadlineUnixMs())
-	if r, ok := a.root.(Readier); ok {
-		ctx, cancel := context.WithDeadline(context.Background(), deadline)
-		defer cancel()
-		errc := make(chan error, 1)
-		go func() {
-			defer func() {
-				if p := recover(); p != nil {
-					logPanic("OnReady", p)
-					errc <- fmt.Errorf("OnReady panic: %v", p)
-				}
-			}()
-			errc <- r.OnReady(ctx)
-		}()
-		timer := time.NewTimer(time.Until(deadline))
-		defer timer.Stop()
-		select {
-		case err := <-errc:
-			if err != nil {
-				slog.Error("OnReady failed", "err", err)
-				a.reportFailure(pb.ErrorCode_ERROR_CODE_PLUGIN_NOT_READY, "OnReady returned an error", err)
-				return
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
+	errc := make(chan error, 1)
+	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				logPanic("OnReady", p)
+				errc <- fmt.Errorf("OnReady panic: %v", p)
 			}
-		case <-timer.C:
-			a.reportFailure(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnReady exceeded its budget", nil)
+		}()
+		errc <- a.root.OnReady(ctx)
+	}()
+	timer := time.NewTimer(time.Until(deadline))
+	defer timer.Stop()
+	select {
+	case err := <-errc:
+		if err != nil {
+			slog.Error("OnReady failed", "err", err)
+			a.reportFailure(pb.ErrorCode_ERROR_CODE_PLUGIN_NOT_READY, "OnReady returned an error", err)
 			return
 		}
+	case <-timer.C:
+		a.reportFailure(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnReady exceeded its budget", nil)
+		return
 	}
 	// 2. 唯一 writer 完整写出 ACTIVATED 之后才打开 ready gate。
 	if err := a.sess.SendControlSync(pb.FrameKind_FRAME_KIND_ACTIVATED, &pb.Activated{GenerationId: m.GetGenerationId(), Ready: true}); err != nil {
@@ -150,29 +147,27 @@ func (a *activation) shutdown(deadline time.Time) {
 		a.ready.Store(false)
 		a.stopLifetime()
 		// 2. 用独立的截止 context 执行 OnStop，最多等到 deadline。
-		if s, ok := a.root.(Stopper); ok {
-			ctx, cancel := context.WithDeadline(context.Background(), deadline)
-			done := make(chan struct{})
-			go func() {
-				defer close(done)
-				defer func() {
-					if p := recover(); p != nil {
-						logPanic("OnStop", p)
-					}
-				}()
-				if err := s.OnStop(ctx); err != nil {
-					slog.Error("OnStop failed", "err", err)
+		ctx, cancel := context.WithDeadline(context.Background(), deadline)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			defer func() {
+				if p := recover(); p != nil {
+					logPanic("OnStop", p)
 				}
 			}()
-			timer := time.NewTimer(time.Until(deadline))
-			select {
-			case <-done:
-			case <-timer.C:
-				slog.Warn("OnStop exceeded the stop deadline; giving up waiting")
+			if err := a.root.OnStop(ctx); err != nil {
+				slog.Error("OnStop failed", "err", err)
 			}
-			timer.Stop()
-			cancel()
+		}()
+		timer := time.NewTimer(time.Until(deadline))
+		select {
+		case <-done:
+		case <-timer.C:
+			slog.Warn("OnStop exceeded the stop deadline; giving up waiting")
 		}
+		timer.Stop()
+		cancel()
 		// 3. 关闭 Session 并通知 serve 返回。
 		_ = a.sess.Close()
 		close(a.finished)
@@ -203,7 +198,7 @@ func businessHandler(context.Context, *wire.Inbound) wire.Response {
 
 // activate 在 PREPARED 之后启动 Session，等待 ACTIVATE、执行 OnReady 并写出 ACTIVATED。
 // 返回时 ready gate 已打开；失败时已向 Core 报告并关闭 Session。之后用 serve 等待停止。
-func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root plugin.Root) (*wire.Session, *activation, error) {
+func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root) (*wire.Session, *activation, error) {
 	a := &activation{l: l, ack: ack, root: root, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
 	a.lifetime, a.stopLifetime = context.WithCancel(context.Background())
 	a.sess = wire.New(conn, wire.Options{

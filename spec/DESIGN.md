@@ -50,14 +50,14 @@ TCP 为默认，Core 持有 loopback 端口 0 分配的 Listener；stdio 可选�
 
 ## D. Go SDK 与 Handler 注册
 
-一个插件包恰好一个根类，嵌入 `plugin.Base`，最多一个 Config 类型。元数据 ID 只来自 plugin.yaml；辅助 Handler 可以显式接收根类指针，不引入自动 DI。包级函数可用 `//alonabot:command`、`//alonabot:event` 构建期标记发现；实例方法必须提供实例显式注册。
+一个插件包恰好一个根类，嵌入 `sdk.Base`，最多一个 Config 类型。`sdk.Base` 为根插件的全部 Hook（`OnStart`/`OnReady`/`OnStop`、`Config`、`Commands`/`HTTP`/`Schedules`）提供空的默认实现，根插件只覆盖需要的方法，SDK 原样调用，不区分是否覆盖；这样编辑器能补全出全部 Hook。`sdk.Root` 接口列出全部 Hook，覆盖时签名不符（或根插件有与 Hook 同名的字段）会使根插件不再满足 `sdk.Root`，在调用 `sdk.Run` 处编译失败；Config 的 `OnLoad`/`Validate` 签名不符时 SDK 在收集注册项时拒绝启动。两种情况都不会静默跳过。元数据 ID 只来自 plugin.yaml；辅助 Handler 可以显式接收根类指针，不引入自动 DI。包级函数可用 `//alonabot:command`、`//alonabot:event` 构建期标记发现；实例方法必须提供实例显式注册。
 
 生成器只扫描当前模块的目标构建包，遵守 Go build tags/GOOS/GOARCH，排除外部依赖、vendor 和测试文件；用生成 Go 代码让编译器检查签名。路由、配置 Schema 和 i18/ 的构建检查在 T-01/T-04 落地；不在运行时从磁盘扫描任意包。单次 Session 注册描述固定，Core 动态修改权限/开关，不重建插件对象。
 
 以下是接口用法示意，需随 SDK 实现编译验证：
 
 ```go
-type RSS struct { plugin.Base }
+type RSS struct { sdk.Base }
 
 func (p *RSS) Commands(r *sdk.CommandRegistry) {
     r.Group("rss", func(g *sdk.CommandGroup) {

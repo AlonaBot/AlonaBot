@@ -8,12 +8,11 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/internal/oslock"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
-	"github.com/AlonaBot/AlonaBot/sdk/plugin"
 )
 
 // lockProbe 在注册入口被调用时留下记录，用来确认取锁失败后没有执行任何用户代码。
 type lockProbe struct {
-	plugin.Base
+	Base
 	called bool
 }
 
