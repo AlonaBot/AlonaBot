@@ -45,11 +45,17 @@ type Spec struct {
 	ExtraEnv map[string]string // 额外环境变量（测试辅助进程使用）
 	Limits   host.Limits
 	Stop     host.StopTiming
-	// Log 接收插件日志；为 nil 时写 Core 的 stderr。
-	Log process.LogFunc
+	Log      PluginLog // 接收插件进程的输出，必须设置
 	// Handler 处理插件激活后发起的业务调用。
 	Handler wire.Handler
 	Global  *wire.Budget // Core 全局载荷预算
+}
+
+// PluginLog 接收一个插件进程的输出行；Launch 在 Session 建立后调用 SetSession，之后的行带上 session_id。
+type PluginLog interface {
+	// Line 的签名与 process.LogFunc 相同。
+	Line(pluginID, stream string, line []byte)
+	SetSession(sessionID []byte)
 }
 
 // Running 持有一个已激活插件的实例与进程，负责它的停止与清理。
@@ -109,7 +115,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 
 	// 3. 启动进程；之后任何失败都由 fail 终止并确认进程树清空再返回，无法确认时错误中带上原因。
 	proc, err := process.Start(process.Spec{PluginID: spec.PluginID, Path: spec.Executable, Dir: pluginDir,
-		Args: spec.Args, Env: env, Stdio: spec.Stdio}, spec.Log)
+		Args: spec.Args, Env: env, Stdio: spec.Stdio}, spec.Log.Line)
 	if err != nil {
 		closeListener(ln)
 		return nil, err
@@ -140,6 +146,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	if err != nil {
 		return fail(err)
 	}
+	spec.Log.SetSession(prep.SessionID)
 	opt := host.ActivateOptions{PluginID: spec.PluginID, GenerationID: spec.GenerationID, Handler: spec.Handler, Global: spec.Global, Limits: spec.Limits}
 	if spec.NewCandidate {
 		opt.Commit = func(ctx context.Context) error {

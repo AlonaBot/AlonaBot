@@ -119,6 +119,7 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 - **运行环境：** darwin/arm64（macOS，Darwin 27.0.0），Go 1.27.1，protoc 36.0；PostgreSQL 分项使用一次性 `postgres:17` 容器（镜像 a63c1ea3f6a3，Docker 29.4.2），用完删除，未残留测试 role/schema。
 - **候选提交与命令：** 在 B1 修复分支的提交 e802828 上执行 `go test -race -count=1 ./...`（设置 `ALONABOT_TEST_PG_DSN`）：15 个包、291 个测试（含子测试）全部通过，无跳过；`go test -race -count=3 ./cmd/alonabot/ ./internal/core/supervisor/` 通过；`go generate ./...` 后无差异；五目标 `CGO_ENABLED=0 go build ./...` 通过。
 - **未运行：** linux/amd64、linux/arm64、windows/amd64 只做了交叉构建与 vet，**没有运行**；darwin/amd64 只构建。Windows Job Object、LockFileEx 与 Job 清空确认的代码因此没有运行证据。上述 fixture、辅助进程与本机运行都不代表真实平台结果。
+- **T-02.1（日志基线）：** 在 goal-65 分支上执行 `go test -race ./...` 全部通过（PostgreSQL 测试未设置 DSN，未运行）；`go generate ./...` 后无差异；五目标 `CGO_ENABLED=0 go build ./...` 通过。只在 darwin/arm64 运行。
 - **测试的去留：** 2026-10-25 起仓库只提交集成测试与协议编号检查（编码规范「测试提交规则」）。下表中 `contracts/validate`、`contracts/manifest`、`contracts/release`、`internal/core/host`、`internal/wire` 的 Session 测试（含 `TestUnknownErrorCodeMappedToInternal`、`TestCancelledRequestsReleaseQueueAndBudget`）以及 `sdk` 的单元测试已移出仓库；对应结果是它们在 e802828 上运行时的记录，之后不再由 CI 重跑。仍在仓库中的是 `cmd/alonabot`、`internal/core/supervisor`、`internal/core/process`、`internal/core/state`、`internal/oslock`、`internal/wire` 的帧测试、`sdk/gormdb` 与 `sdk` 的 runtime.lock 测试，以及 `contracts/wirespec_test.go`。
 
 | V | 已运行的分项 | 测试位置 | 结果 | 未完成（承接任务） |
@@ -138,6 +139,9 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 | V-39 | Up 与 `_alonabot_migrations` 同一事务、失败不记录成功（SQLite 与 PG） | `sdk/gormdb` | 通过 | 首装/resume/维护许可（T-08、T-09） |
 | V-41 | release.json 对确切字节验签、重新序列化无法通过、签名有效但内容非法仍拒绝 | `contracts/release` | 通过 | 真实包验签与更新预检（T-09） |
 | V-42 | 每方向 256 个/16 MiB 与全局 64 MiB 满额立即拒绝；Response/Cancel 仍可推进；发送前取消的请求移出队列并归还预算、不能借取消越过字节上限；写出中被取消的请求写完才归还预算，Cancel 不越过其 Request | `internal/wire`（含 `TestCancelledRequestsReleaseQueueAndBudget`） | 通过 | Service 嵌套与 Event Bus 双预算（T-06） |
+| V-62 | Core 与插件两类来源标签（插件 ID 去掉市场前缀）、text 与 json 格式、终端着色（`script` 伪终端）、非终端与 NO_COLOR 不着色、插件合法 JSON 行（时间、级别、源码位置、字段顺序、嵌套值）、非 JSON 行与 stdout 行记为 `unstructured output` 的 WARN、伪造来源字段被丢弃、消息与键中的换行和控制字符被转义、多行值缩进、生命周期 Hook 的 panic 为一条带 stack 的 ERROR | `cmd/alonabot`（e2e：`TestLifecycleOverTCPAndStdio`、`TestJSONLogFormat`）；本地测试 `internal/core/logging`、`sdk`（`*_local_test.go`，未提交）；着色用 `script -q /dev/null alonabot run ...` 手动核对 | 通过（darwin/arm64） | Adapter 来源（T-03.3）、Handler 的调用字段与 panic（T-03.1）、Bot Token URL 脱敏（T-03.4） |
+| V-63 | 全局级别过滤、按来源 debug 与 off（内存中）、Bootstrap 下发级别后 SDK 在进程内过滤（含 OFF 与 UNSPECIFIED） | 本地测试 `internal/core/logging`、`sdk`（未提交） | 通过 | 持久化、运行时修改、最近记录、SSE、CLI 与 WebUI（T-09.10） |
+| V-68 | 跨过零点换文件、同日写满后续写编号文件、重启后接着写序号最大的文件、合计上限从最旧删除且不删当前文件、超过 30 天删除、max_size 大于 max_total 拒绝、目录不可写时只报告一次并在换日期时恢复 | `cmd/alonabot`（e2e 读取当天日志文件）；本地测试 `internal/core/logging`（未提交） | 通过（darwin/arm64） | 真实磁盘写满、按日期查询（T-09.10） |
 
 ### 3.2 已合并独立切片的验证证据
 

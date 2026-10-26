@@ -80,6 +80,8 @@ func TestEnumValues(t *testing.T) {
 		{pb.RouteKind(0).Descriptor(), "ROUTE_KIND_", []string{
 			"UNSPECIFIED", "COMMAND", "EVENT", "HOOK", "SERVICE", "SCHEDULE", "HTTP", "BUS_SUBSCRIPTION"}},
 		{pb.HookPhase(0).Descriptor(), "HOOK_PHASE_", []string{"UNSPECIFIED", "PRE_EVENT", "BEFORE_SEND", "AFTER_SEND"}},
+		// WIRE §3.2 的 log_level。
+		{pb.LogLevel(0).Descriptor(), "LOG_LEVEL_", []string{"UNSPECIFIED", "DEBUG", "INFO", "WARN", "ERROR", "OFF"}},
 	}
 	for _, c := range cases {
 		vals := c.enum.Values()

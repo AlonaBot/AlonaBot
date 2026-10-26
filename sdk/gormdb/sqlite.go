@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"log"
-	"os"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -30,13 +28,10 @@ var sqlitePragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma
 // slowQueryThreshold 超过它的 SQL 会以慢查询记录。
 const slowQueryThreshold = 200 * time.Millisecond
 
-// stdio 传输时 stdout 专用于协议帧，GORM 日志只能写 stderr。
-var gormLogger = newGormLogger(os.Stderr)
-
-// newGormLogger 记录慢查询与错误 SQL。ParameterizedQueries 使日志只含占位符 SQL，
-// 绑定参数（可能是业务数据或 secret）不进入日志（CONTRACTS §5.3）。
-func newGormLogger(w io.Writer) logger.Interface {
-	return logger.New(log.New(w, "gorm ", log.LstdFlags), logger.Config{
+// newGormLogger 经 l 记录慢查询与错误 SQL；插件进程中传入 slog.Default()，由 SDK 交给 Core（CONTRACTS §14.1）。
+// ParameterizedQueries 使日志只含占位符 SQL，绑定参数（可能是业务数据或 secret）不进入日志（CONTRACTS §5.3）。
+func newGormLogger(l *slog.Logger) logger.Interface {
+	return logger.NewSlogLogger(l, logger.Config{
 		SlowThreshold:        slowQueryThreshold,
 		LogLevel:             logger.Warn,
 		ParameterizedQueries: true,
@@ -50,7 +45,7 @@ func OpenSQLite(ctx context.Context, path string) (*gorm.DB, error) {
 	if path == "" || strings.ContainsAny(path, "?#") {
 		return nil, fmt.Errorf("SQLite path %q is empty or contains ? or #", path)
 	}
-	db, err := gorm.Open(sqlite.Open(path+"?"+sqlitePragmas), &gorm.Config{Logger: gormLogger})
+	db, err := gorm.Open(sqlite.Open(path+"?"+sqlitePragmas), &gorm.Config{Logger: newGormLogger(slog.Default())})
 	if err != nil {
 		return nil, fmt.Errorf("open SQLite: %w", err)
 	}

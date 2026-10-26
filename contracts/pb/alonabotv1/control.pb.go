@@ -23,6 +23,66 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// LogLevel 列出 Core 下发给 SDK 的日志级别（CONTRACTS §14.3）。
+type LogLevel int32
+
+const (
+	LogLevel_LOG_LEVEL_UNSPECIFIED LogLevel = 0
+	LogLevel_LOG_LEVEL_DEBUG       LogLevel = 1
+	LogLevel_LOG_LEVEL_INFO        LogLevel = 2
+	LogLevel_LOG_LEVEL_WARN        LogLevel = 3
+	LogLevel_LOG_LEVEL_ERROR       LogLevel = 4
+	// 不输出任何记录。
+	LogLevel_LOG_LEVEL_OFF LogLevel = 5
+)
+
+// Enum value maps for LogLevel.
+var (
+	LogLevel_name = map[int32]string{
+		0: "LOG_LEVEL_UNSPECIFIED",
+		1: "LOG_LEVEL_DEBUG",
+		2: "LOG_LEVEL_INFO",
+		3: "LOG_LEVEL_WARN",
+		4: "LOG_LEVEL_ERROR",
+		5: "LOG_LEVEL_OFF",
+	}
+	LogLevel_value = map[string]int32{
+		"LOG_LEVEL_UNSPECIFIED": 0,
+		"LOG_LEVEL_DEBUG":       1,
+		"LOG_LEVEL_INFO":        2,
+		"LOG_LEVEL_WARN":        3,
+		"LOG_LEVEL_ERROR":       4,
+		"LOG_LEVEL_OFF":         5,
+	}
+)
+
+func (x LogLevel) Enum() *LogLevel {
+	p := new(LogLevel)
+	*p = x
+	return p
+}
+
+func (x LogLevel) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (LogLevel) Descriptor() protoreflect.EnumDescriptor {
+	return file_alonabot_v1_control_proto_enumTypes[0].Descriptor()
+}
+
+func (LogLevel) Type() protoreflect.EnumType {
+	return &file_alonabot_v1_control_proto_enumTypes[0]
+}
+
+func (x LogLevel) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use LogLevel.Descriptor instead.
+func (LogLevel) EnumDescriptor() ([]byte, []int) {
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{0}
+}
+
 // DatabaseBackend 列出插件业务数据库的后端类型。
 type DatabaseBackend int32
 
@@ -61,11 +121,11 @@ func (x DatabaseBackend) String() string {
 }
 
 func (DatabaseBackend) Descriptor() protoreflect.EnumDescriptor {
-	return file_alonabot_v1_control_proto_enumTypes[0].Descriptor()
+	return file_alonabot_v1_control_proto_enumTypes[1].Descriptor()
 }
 
 func (DatabaseBackend) Type() protoreflect.EnumType {
-	return &file_alonabot_v1_control_proto_enumTypes[0]
+	return &file_alonabot_v1_control_proto_enumTypes[1]
 }
 
 func (x DatabaseBackend) Number() protoreflect.EnumNumber {
@@ -74,7 +134,7 @@ func (x DatabaseBackend) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DatabaseBackend.Descriptor instead.
 func (DatabaseBackend) EnumDescriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{0}
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{1}
 }
 
 // MigrationMode 列出插件声明的数据库迁移方式（CONTRACTS §6.3）。
@@ -117,11 +177,11 @@ func (x MigrationMode) String() string {
 }
 
 func (MigrationMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_alonabot_v1_control_proto_enumTypes[1].Descriptor()
+	return file_alonabot_v1_control_proto_enumTypes[2].Descriptor()
 }
 
 func (MigrationMode) Type() protoreflect.EnumType {
-	return &file_alonabot_v1_control_proto_enumTypes[1]
+	return &file_alonabot_v1_control_proto_enumTypes[2]
 }
 
 func (x MigrationMode) Number() protoreflect.EnumNumber {
@@ -130,7 +190,7 @@ func (x MigrationMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MigrationMode.Descriptor instead.
 func (MigrationMode) EnumDescriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{1}
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{2}
 }
 
 // ActivationReason 列出本次激活的原因，决定数据库准备方式。
@@ -176,11 +236,11 @@ func (x ActivationReason) String() string {
 }
 
 func (ActivationReason) Descriptor() protoreflect.EnumDescriptor {
-	return file_alonabot_v1_control_proto_enumTypes[2].Descriptor()
+	return file_alonabot_v1_control_proto_enumTypes[3].Descriptor()
 }
 
 func (ActivationReason) Type() protoreflect.EnumType {
-	return &file_alonabot_v1_control_proto_enumTypes[2]
+	return &file_alonabot_v1_control_proto_enumTypes[3]
 }
 
 func (x ActivationReason) Number() protoreflect.EnumNumber {
@@ -189,7 +249,7 @@ func (x ActivationReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ActivationReason.Descriptor instead.
 func (ActivationReason) EnumDescriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{2}
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{3}
 }
 
 // CancelReason 列出 CANCEL 的原因。
@@ -232,11 +292,11 @@ func (x CancelReason) String() string {
 }
 
 func (CancelReason) Descriptor() protoreflect.EnumDescriptor {
-	return file_alonabot_v1_control_proto_enumTypes[3].Descriptor()
+	return file_alonabot_v1_control_proto_enumTypes[4].Descriptor()
 }
 
 func (CancelReason) Type() protoreflect.EnumType {
-	return &file_alonabot_v1_control_proto_enumTypes[3]
+	return &file_alonabot_v1_control_proto_enumTypes[4]
 }
 
 func (x CancelReason) Number() protoreflect.EnumNumber {
@@ -245,7 +305,7 @@ func (x CancelReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CancelReason.Descriptor instead.
 func (CancelReason) EnumDescriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{3}
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{4}
 }
 
 // StopReason 列出 STOPPING 的原因。
@@ -291,11 +351,11 @@ func (x StopReason) String() string {
 }
 
 func (StopReason) Descriptor() protoreflect.EnumDescriptor {
-	return file_alonabot_v1_control_proto_enumTypes[4].Descriptor()
+	return file_alonabot_v1_control_proto_enumTypes[5].Descriptor()
 }
 
 func (StopReason) Type() protoreflect.EnumType {
-	return &file_alonabot_v1_control_proto_enumTypes[4]
+	return &file_alonabot_v1_control_proto_enumTypes[5]
 }
 
 func (x StopReason) Number() protoreflect.EnumNumber {
@@ -304,7 +364,7 @@ func (x StopReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use StopReason.Descriptor instead.
 func (StopReason) EnumDescriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{4}
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{5}
 }
 
 // SessionPhase 列出 Session 生命周期的阶段，用于报告失败发生在哪一步。
@@ -362,11 +422,11 @@ func (x SessionPhase) String() string {
 }
 
 func (SessionPhase) Descriptor() protoreflect.EnumDescriptor {
-	return file_alonabot_v1_control_proto_enumTypes[5].Descriptor()
+	return file_alonabot_v1_control_proto_enumTypes[6].Descriptor()
 }
 
 func (SessionPhase) Type() protoreflect.EnumType {
-	return &file_alonabot_v1_control_proto_enumTypes[5]
+	return &file_alonabot_v1_control_proto_enumTypes[6]
 }
 
 func (x SessionPhase) Number() protoreflect.EnumNumber {
@@ -375,7 +435,7 @@ func (x SessionPhase) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SessionPhase.Descriptor instead.
 func (SessionPhase) EnumDescriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{5}
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{6}
 }
 
 // ProtocolCapability 描述一项协议能力。supported 为可用集合，required 必须包含于双方交集。
@@ -627,8 +687,10 @@ type Bootstrap struct {
 	PhaseLimits *PhaseLimits `protobuf:"bytes,8,opt,name=phase_limits,json=phaseLimits,proto3" json:"phase_limits,omitempty"`
 	// 准备阶段（配置、迁移、OnStart）的绝对截止，UTC 毫秒。
 	PreparationDeadlineUnixMs int64 `protobuf:"varint,9,opt,name=preparation_deadline_unix_ms,json=preparationDeadlineUnixMs,proto3" json:"preparation_deadline_unix_ms,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	// 该来源当前生效的日志级别（CONTRACTS §14.3）；UNSPECIFIED 按 INFO 处理。
+	LogLevel      LogLevel `protobuf:"varint,10,opt,name=log_level,json=logLevel,proto3,enum=alonabot.v1.LogLevel" json:"log_level,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Bootstrap) Reset() {
@@ -722,6 +784,13 @@ func (x *Bootstrap) GetPreparationDeadlineUnixMs() int64 {
 		return x.PreparationDeadlineUnixMs
 	}
 	return 0
+}
+
+func (x *Bootstrap) GetLogLevel() LogLevel {
+	if x != nil {
+		return x.LogLevel
+	}
+	return LogLevel_LOG_LEVEL_UNSPECIFIED
 }
 
 // DatabaseDescriptor 描述本次准备使用的插件业务数据库；不下发 Core 管理数据库凭证。
@@ -1522,7 +1591,7 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"session_id\x18\x01 \x01(\fR\tsessionId\x12!\n" +
 	"\fchosen_minor\x18\x02 \x01(\rR\vchosenMinor\x12X\n" +
 	"\x17capability_intersection\x18\x03 \x03(\v2\x1f.alonabot.v1.ProtocolCapabilityR\x16capabilityIntersection\x124\n" +
-	"\tbootstrap\x18\x04 \x01(\v2\x16.alonabot.v1.BootstrapR\tbootstrap\"\xb3\x04\n" +
+	"\tbootstrap\x18\x04 \x01(\v2\x16.alonabot.v1.BootstrapR\tbootstrap\"\xe7\x04\n" +
 	"\tBootstrap\x12#\n" +
 	"\rgeneration_id\x18\x01 \x01(\tR\fgenerationId\x122\n" +
 	"\x15candidate_config_json\x18\x02 \x01(\tR\x13candidateConfigJson\x12,\n" +
@@ -1532,7 +1601,9 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"\x13database_descriptor\x18\x06 \x01(\v2\x1f.alonabot.v1.DatabaseDescriptorR\x12databaseDescriptor\x12B\n" +
 	"\x0fhttp_proxy_auth\x18\a \x01(\v2\x1a.alonabot.v1.HttpProxyAuthR\rhttpProxyAuth\x12;\n" +
 	"\fphase_limits\x18\b \x01(\v2\x18.alonabot.v1.PhaseLimitsR\vphaseLimits\x12?\n" +
-	"\x1cpreparation_deadline_unix_ms\x18\t \x01(\x03R\x19preparationDeadlineUnixMsB\x1a\n" +
+	"\x1cpreparation_deadline_unix_ms\x18\t \x01(\x03R\x19preparationDeadlineUnixMs\x122\n" +
+	"\tlog_level\x18\n" +
+	" \x01(\x0e2\x15.alonabot.v1.LogLevelR\blogLevelB\x1a\n" +
 	"\x18_previous_config_version\"\xa9\x03\n" +
 	"\x12DatabaseDescriptor\x126\n" +
 	"\abackend\x18\x01 \x01(\x0e2\x1c.alonabot.v1.DatabaseBackendR\abackend\x12\x1f\n" +
@@ -1585,6 +1656,13 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"\ffailed_phase\x18\x01 \x01(\x0e2\x19.alonabot.v1.SessionPhaseR\vfailedPhase\x127\n" +
 	"\vfailed_kind\x18\x02 \x01(\x0e2\x16.alonabot.v1.FrameKindR\n" +
 	"failedKind*\x8a\x01\n" +
+	"\bLogLevel\x12\x19\n" +
+	"\x15LOG_LEVEL_UNSPECIFIED\x10\x00\x12\x13\n" +
+	"\x0fLOG_LEVEL_DEBUG\x10\x01\x12\x12\n" +
+	"\x0eLOG_LEVEL_INFO\x10\x02\x12\x12\n" +
+	"\x0eLOG_LEVEL_WARN\x10\x03\x12\x13\n" +
+	"\x0fLOG_LEVEL_ERROR\x10\x04\x12\x11\n" +
+	"\rLOG_LEVEL_OFF\x10\x05*\x8a\x01\n" +
 	"\x0fDatabaseBackend\x12 \n" +
 	"\x1cDATABASE_BACKEND_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15DATABASE_BACKEND_NONE\x10\x01\x12\x1b\n" +
@@ -1640,54 +1718,56 @@ func file_alonabot_v1_control_proto_rawDescGZIP() []byte {
 	return file_alonabot_v1_control_proto_rawDescData
 }
 
-var file_alonabot_v1_control_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_alonabot_v1_control_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
 var file_alonabot_v1_control_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_alonabot_v1_control_proto_goTypes = []any{
-	(DatabaseBackend)(0),       // 0: alonabot.v1.DatabaseBackend
-	(MigrationMode)(0),         // 1: alonabot.v1.MigrationMode
-	(ActivationReason)(0),      // 2: alonabot.v1.ActivationReason
-	(CancelReason)(0),          // 3: alonabot.v1.CancelReason
-	(StopReason)(0),            // 4: alonabot.v1.StopReason
-	(SessionPhase)(0),          // 5: alonabot.v1.SessionPhase
-	(*ProtocolCapability)(nil), // 6: alonabot.v1.ProtocolCapability
-	(*Hello)(nil),              // 7: alonabot.v1.Hello
-	(*HelloAck)(nil),           // 8: alonabot.v1.HelloAck
-	(*Bootstrap)(nil),          // 9: alonabot.v1.Bootstrap
-	(*DatabaseDescriptor)(nil), // 10: alonabot.v1.DatabaseDescriptor
-	(*PostgresConnection)(nil), // 11: alonabot.v1.PostgresConnection
-	(*HttpProxyAuth)(nil),      // 12: alonabot.v1.HttpProxyAuth
-	(*PhaseLimits)(nil),        // 13: alonabot.v1.PhaseLimits
-	(*HttpListener)(nil),       // 14: alonabot.v1.HttpListener
-	(*Prepared)(nil),           // 15: alonabot.v1.Prepared
-	(*Activate)(nil),           // 16: alonabot.v1.Activate
-	(*Activated)(nil),          // 17: alonabot.v1.Activated
-	(*Cancel)(nil),             // 18: alonabot.v1.Cancel
-	(*Stopping)(nil),           // 19: alonabot.v1.Stopping
-	(*Heartbeat)(nil),          // 20: alonabot.v1.Heartbeat
-	(*SessionError)(nil),       // 21: alonabot.v1.SessionError
-	(FrameKind)(0),             // 22: alonabot.v1.FrameKind
+	(LogLevel)(0),              // 0: alonabot.v1.LogLevel
+	(DatabaseBackend)(0),       // 1: alonabot.v1.DatabaseBackend
+	(MigrationMode)(0),         // 2: alonabot.v1.MigrationMode
+	(ActivationReason)(0),      // 3: alonabot.v1.ActivationReason
+	(CancelReason)(0),          // 4: alonabot.v1.CancelReason
+	(StopReason)(0),            // 5: alonabot.v1.StopReason
+	(SessionPhase)(0),          // 6: alonabot.v1.SessionPhase
+	(*ProtocolCapability)(nil), // 7: alonabot.v1.ProtocolCapability
+	(*Hello)(nil),              // 8: alonabot.v1.Hello
+	(*HelloAck)(nil),           // 9: alonabot.v1.HelloAck
+	(*Bootstrap)(nil),          // 10: alonabot.v1.Bootstrap
+	(*DatabaseDescriptor)(nil), // 11: alonabot.v1.DatabaseDescriptor
+	(*PostgresConnection)(nil), // 12: alonabot.v1.PostgresConnection
+	(*HttpProxyAuth)(nil),      // 13: alonabot.v1.HttpProxyAuth
+	(*PhaseLimits)(nil),        // 14: alonabot.v1.PhaseLimits
+	(*HttpListener)(nil),       // 15: alonabot.v1.HttpListener
+	(*Prepared)(nil),           // 16: alonabot.v1.Prepared
+	(*Activate)(nil),           // 17: alonabot.v1.Activate
+	(*Activated)(nil),          // 18: alonabot.v1.Activated
+	(*Cancel)(nil),             // 19: alonabot.v1.Cancel
+	(*Stopping)(nil),           // 20: alonabot.v1.Stopping
+	(*Heartbeat)(nil),          // 21: alonabot.v1.Heartbeat
+	(*SessionError)(nil),       // 22: alonabot.v1.SessionError
+	(FrameKind)(0),             // 23: alonabot.v1.FrameKind
 }
 var file_alonabot_v1_control_proto_depIdxs = []int32{
-	6,  // 0: alonabot.v1.Hello.supported_capabilities:type_name -> alonabot.v1.ProtocolCapability
-	6,  // 1: alonabot.v1.Hello.required_capabilities:type_name -> alonabot.v1.ProtocolCapability
-	6,  // 2: alonabot.v1.HelloAck.capability_intersection:type_name -> alonabot.v1.ProtocolCapability
-	9,  // 3: alonabot.v1.HelloAck.bootstrap:type_name -> alonabot.v1.Bootstrap
-	10, // 4: alonabot.v1.Bootstrap.database_descriptor:type_name -> alonabot.v1.DatabaseDescriptor
-	12, // 5: alonabot.v1.Bootstrap.http_proxy_auth:type_name -> alonabot.v1.HttpProxyAuth
-	13, // 6: alonabot.v1.Bootstrap.phase_limits:type_name -> alonabot.v1.PhaseLimits
-	0,  // 7: alonabot.v1.DatabaseDescriptor.backend:type_name -> alonabot.v1.DatabaseBackend
-	11, // 8: alonabot.v1.DatabaseDescriptor.postgres:type_name -> alonabot.v1.PostgresConnection
-	1,  // 9: alonabot.v1.DatabaseDescriptor.migration_mode:type_name -> alonabot.v1.MigrationMode
-	2,  // 10: alonabot.v1.DatabaseDescriptor.activation_reason:type_name -> alonabot.v1.ActivationReason
-	3,  // 11: alonabot.v1.Cancel.reason:type_name -> alonabot.v1.CancelReason
-	4,  // 12: alonabot.v1.Stopping.reason:type_name -> alonabot.v1.StopReason
-	5,  // 13: alonabot.v1.SessionError.failed_phase:type_name -> alonabot.v1.SessionPhase
-	22, // 14: alonabot.v1.SessionError.failed_kind:type_name -> alonabot.v1.FrameKind
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	7,  // 0: alonabot.v1.Hello.supported_capabilities:type_name -> alonabot.v1.ProtocolCapability
+	7,  // 1: alonabot.v1.Hello.required_capabilities:type_name -> alonabot.v1.ProtocolCapability
+	7,  // 2: alonabot.v1.HelloAck.capability_intersection:type_name -> alonabot.v1.ProtocolCapability
+	10, // 3: alonabot.v1.HelloAck.bootstrap:type_name -> alonabot.v1.Bootstrap
+	11, // 4: alonabot.v1.Bootstrap.database_descriptor:type_name -> alonabot.v1.DatabaseDescriptor
+	13, // 5: alonabot.v1.Bootstrap.http_proxy_auth:type_name -> alonabot.v1.HttpProxyAuth
+	14, // 6: alonabot.v1.Bootstrap.phase_limits:type_name -> alonabot.v1.PhaseLimits
+	0,  // 7: alonabot.v1.Bootstrap.log_level:type_name -> alonabot.v1.LogLevel
+	1,  // 8: alonabot.v1.DatabaseDescriptor.backend:type_name -> alonabot.v1.DatabaseBackend
+	12, // 9: alonabot.v1.DatabaseDescriptor.postgres:type_name -> alonabot.v1.PostgresConnection
+	2,  // 10: alonabot.v1.DatabaseDescriptor.migration_mode:type_name -> alonabot.v1.MigrationMode
+	3,  // 11: alonabot.v1.DatabaseDescriptor.activation_reason:type_name -> alonabot.v1.ActivationReason
+	4,  // 12: alonabot.v1.Cancel.reason:type_name -> alonabot.v1.CancelReason
+	5,  // 13: alonabot.v1.Stopping.reason:type_name -> alonabot.v1.StopReason
+	6,  // 14: alonabot.v1.SessionError.failed_phase:type_name -> alonabot.v1.SessionPhase
+	23, // 15: alonabot.v1.SessionError.failed_kind:type_name -> alonabot.v1.FrameKind
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_control_proto_init() }
@@ -1702,7 +1782,7 @@ func file_alonabot_v1_control_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_control_proto_rawDesc), len(file_alonabot_v1_control_proto_rawDesc)),
-			NumEnums:      6,
+			NumEnums:      7,
 			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,

@@ -76,7 +76,7 @@ Bootstrap 属于私有、已认证 IPC，和整个 HELLO_ACK 一起受 **4 MiB**
 | `database_descriptor` | 后端类型、受管 SQLite 当前准备视图路径或该插件 PostgreSQL 连接参数、迁移模式、已应用版本、activation_reason（first_install/resume/reload/update/rollback）、manual_migration_approved（仅Core显式维护许可且绑定当前Session/Generation/DB时true）；不下发 Core 管理数据库凭证 |
 | `http_proxy_auth` | 本 Session 独立的内部代理认证材料；只在插件声明 HTTP 能力时需要，不复用 Admin 凭证 |
 | `phase_limits`、`preparation_deadline_unix_ms`（字段号 8、9） | 准备、迁移和 Ready 的阶段预算及本轮绝对期限；迁移使用独立预算，不被普通业务 30s 截断 |
-| `string log_level`（字段号 10） | 生效级别：`debug`、`info`、`warn`、`error`、`off`；`inherit` 由 Core 先解析成全局级别后再下发 |
+| `LogLevel log_level`（字段号 10） | 该来源当前生效的日志级别（CONTRACTS §14.3），SDK 据此在进程内过滤；枚举 `LogLevel` 依次为 UNSPECIFIED、DEBUG、INFO、WARN、ERROR、OFF，UNSPECIFIED 按 INFO 处理；`inherit` 由 Core 先解析成全局级别后再下发 |
 | `SessionLimits session_limits`（字段号 11） | 本次运行生效的每方向在途请求数、每 Session payload 预算与普通请求期限；Core 全局 payload 预算只由 Core 使用 |
 
 `Bootstrap` 的字段号固定为 `log_level = 10`、`session_limits = 11`。新增消息结构如下，字段号不得重排或复用：
