@@ -40,7 +40,7 @@
 | V-30 | T-09 | Core崩溃于PREPARED、Active+COMMITTED提交前后、OnReady失败 | 未提交只恢复旧版；已提交只恢复新代次；旧进程退出未确认时不启动第二写入者；无双代次接单或静默回滚 |
 | V-31 | T-09 | PG 或插件自管 SQL 有不可隔离变更，尝试自动升级 | 返回 NEEDS_MANUAL_MIGRATION，提示维护/备份流程；无虚假无损回退承诺 |
 | V-32 | T-10 | Linux amd64/arm64、Windows amd64、macOS amd64/arm64 编译、启动/退出 | 五个组合都有真实记录；CGO 插件在不兼容平台标不支持而非虚假发布 |
-| V-33 | T-10 | 真实不同二进制、GORM/HTTP 下载、长时并发与 NoneBot2 等价工作负载 | 报告 RSS/私有内存、Linux PSS、CPU、P50/P95/P99 与版本/机器/负载；不借同 worker PoC 代替 |
+| V-33 | T-10 | 同一台固定机器、同一个本地 Bot API 模拟服务；NoneBot2 使用其 Telegram Adapter 与功能相同的插件。四种负载：空闲（Core 与 echo、configdb、HTTP 示例三个插件运行 10 分钟）；消息（每秒 20 条文本、持续 10 分钟，echo 逐条回复）；数据库（每秒 20 条命令，每条在 SQLite 中写入并读取一行，持续 10 分钟）；HTTP（每秒 50 个请求访问插件路由，持续 10 分钟） | 每种负载报告 RSS/私有内存、Linux PSS、CPU 与回复或响应延迟的 P50/P95/P99，并记录版本、机器与负载参数；不借同 worker PoC 代替 |
 | V-34 | T-10 | 100 次启停、多次异常退出、普通子进程树、外部副作用重试 | 无 Core 崩溃/会话泄漏，合作型子进程按平台能力清理，业务副作用默认不自动重试 |
 | V-35 | T-03 | 多物理消息、平台明确拒绝、先成功再超时、相册按钮失败、成功message_id=0 | ACCEPTED/PARTIAL/REJECTED/UNKNOWN与每part一致；已确认ID保留、0不当可编辑ID；未尝试列出；payload+error同时返回，不自动补发 |
 | V-36 | T-02、T-08、T-09 | 同data_dir双Core、同插件并发enable/update、Core被kill而子进程仍写DB | 独占锁/管理串行及预期代次检查生效；SDK断链退出；runtime.lock未释放不打开DB/启动替代实例 |
@@ -52,11 +52,11 @@
 | V-42 | T-02、T-06 | Request计数满、字节满、缓冲满、嵌套Send/Service与Cancel并发、Request发送前取消 | 超额明确失败；Response/控制仍有进展；无阻塞等待自己额度；Cancel不超越自己的Request；Event Bus 256条/4MiB双界限计数并drop-newest |
 | V-43 | T-04、T-05、T-09 | Core Admin与chat_admin、组禁用/子项启用、子权限放宽、运行时改策略 | 群管理员不取得Core管理权；父禁用优先；最近显式权限可覆盖但不能绕过全局限制；已开始请求不伪称撤销 |
 | V-44 | T-03 | 入站媒体惰性Read、多Session共享、越界offset/配额/过期、owner退出 | 不预下载所有图；不泄BotToken/路径；首次取件校验后读取；有效租约保护共享对象；错误不制造MediaRef/空成功 |
-| V-45 | T-03 | getMe账号重复、webhook/401/409、allowed_updates/匿名身份、游标提交崩溃及7天空闲ID重置 | 冲突报管理状态、不擅自删webhook；逐条持久游标后非持久派发；显式订阅成员/Reaction且核对权限；匿名sender_chat不伪造User；7天空闲重建轮次不沿用旧高offset；允许丢失边界明确 |
+| V-45 | T-03 | getMe账号重复、webhook/401/409、allowed_updates/匿名身份、私聊/回复机器人/提及机器人时的 to_me、游标提交崩溃及7天空闲ID重置 | 冲突报管理状态、不擅自删webhook；逐条持久游标后非持久派发；显式订阅成员/Reaction且核对权限；匿名sender_chat不伪造User；7天空闲重建轮次不沿用旧高offset；允许丢失边界明确 |
 | V-46 | T-07 | job超时后callback继续执行、迟到Response、RPC断链但进程未退出 | 超时结果先返回但running不释放；无重叠/补跑；实际callback返回或进程确认退出才释放；迟到成功不改超时 |
 | V-47 | T-07、T-09 | 首次管理token/离线reset、登录/CLI、同端口两个Host、代理身份头伪造、单Host主动内容 | 插件host不可访问Admin API；admin Cookie/Authorization不传入插件；Host/CSRF/内部认证检查生效；首次能登录，reset撤销旧会话/票据；单Host不执行插件主动内容 |
 | V-48 | T-03、T-09 | 安装/卸载 Adapter 包、同包多个实例单独启停、Adapter 进程崩溃后恢复、Adapter 为非自身实例交付事件、插件依赖 Adapter 的 extension 片段 | 启停一个实例不影响同包其他实例且不重启进程；崩溃后只恢复启用的实例并从已保存游标继续；伪造实例的事件被拒；凭证不进入插件；必需依赖缺失时拒绝启用插件；extension 发往其他 Adapter 返回 UNSUPPORTED |
-| V-49 | T-04、T-05 | keyword/startswith/endswith/fullmatch 与 Regex 混合声明、ignore_case、空模式、命令与文本匹配同时可命中 | 已识别普通命令时文本匹配不运行；文本匹配层按 priority/plugin_id/route_id 统一排序；ignore_case 按 Unicode 简单折叠；空模式与非法 Regex 拒绝注册 |
+| V-49 | T-04、T-05 | keyword/startswith/endswith/fullmatch 与 Regex 混合声明、ignore_case、空模式、命令与文本匹配同时可命中、`ToMe` Rule | 已识别普通命令时文本匹配不运行；文本匹配层按 priority/plugin_id/route_id 统一排序；ignore_case 按 Unicode 简单折叠；空模式与非法 Regex 拒绝注册 |
 | V-50 | T-05 | Handler 请求延续调用后立即返回、延续调用内多轮等待、两个用户在同一群同时等待、等待超时、等待期间插件停用、延续调用内再请求延续调用、第 129 个进行中的延续调用 | 延续调用保留原 Actor/Target 且不占分发链；原事件传播只看原 HandlerOutcome；等待只命中同一 Actor 同一 Target（含 thread）的下一条消息且该消息不进入普通分发；同键第二个等待 ALREADY_EXISTS；超时 DEADLINE_EXCEEDED；Session 失效后不补发；嵌套请求 FAILED_PRECONDITION；超过 128 个时 RESOURCE_EXHAUSTED，普通派发不受影响 |
 | V-51 | T-03 | 实例启动、管理员停用实例、Adapter 进程崩溃、401/409 使实例停止、Core 重启 | 每次进入运行状态有一条 bot.online，离开运行状态有一条带正确 reason 的 bot.offline；事件无 Actor/Target；Core 重启不补发 |
 | V-52 | T-03、T-09 | 必需/可选插件依赖缺失、版本低于 min_version、停用或卸载被依赖插件、依赖成环 | 必需依赖不满足时拒绝启用并列出缺失项；可选依赖缺失只记诊断；停用/卸载/降级被依赖插件须显式确认，确认后依赖方继续运行且调用返回 UNAVAILABLE；成环在安装时拒绝 |
@@ -64,17 +64,17 @@
 | V-54 | T-03、T-08、T-09 | Actor.locale 为 zh-CN/zh-TW/未知/absent、插件缺少翻译键、占位符不一致、Core usage 与确认消息、WebUI 切换语言 | 选择顺序为 Actor locale→Core 默认→en-US，主语言回落确定；check/pack 拒绝缺少 en-US 与占位符不一致；未知键返回错误不输出键名；日志与错误始终为英文 |
 | V-55 | T-11、T-09 | 工具 allow/confirm/deny、确认允许/拒绝/超时/他人点击、确认消息展示的参数、无 Actor 的后台调用、目标不支持按钮、core.tool.confirm 的 MCP 操作、运行时改策略 | deny 与拒绝返回 PERMISSION_DENIED 且不执行工具；超时 DEADLINE_EXCEEDED；invoke 的确认消息展示实际 JSON 参数；只接受同一 Actor 的第一次点击；无 Actor 时 confirm 直接拒绝；不支持按钮时 UNSUPPORTED；策略下一次调用生效；工具仍按继承 Actor 检查 required_permission |
 | V-56 | T-11、T-09 | 多条原子追加、跨帧上限分页、跨插件读取、清除、Core 重启、卸载与 purge | 序号连续且顺序稳定；分页不丢不重；插件只能访问自己的会话；重启后保留；卸载默认保留，purge 删除；不截断 |
-| V-57 | T-12 | OpenAI 兼容与 Anthropic 的流式文本与工具调用（本地模拟服务）、/ask 与自由对话开关、人格切换、/reset、超过单条长度的回复、Provider 返回错误或中途断开 | 消息先发送再按间隔编辑，最后一次编辑为完整内容；超长回复在段落边界分成多条；自由对话默认关闭，只有 Admin 能开启；工具调用正确解析；断开或错误时保留已显示内容并报告错误，不自动重发请求；历史写入会话存储 |
+| V-57 | T-12 | OpenAI 兼容与 Anthropic 的流式文本与工具调用（本地模拟服务）、/ask 与自由对话开关、群聊中非 to_me 的消息、`/provider` 切换、人格切换、/reset、超过单条长度的回复、Provider 返回错误或中途断开 | 消息先发送再按间隔编辑，最后一次编辑为完整内容；超长回复在段落边界分成多条；自由对话默认关闭，只有 Admin 能开启，群聊中只响应 to_me 的消息；工具调用正确解析；断开或错误时保留已显示内容并报告错误，不自动重发请求；历史写入会话存储 |
 | V-58 | T-12 | 模型连续调用 Core 工具与 MCP 工具（stdio、streamable HTTP 模拟服务）、确认拒绝、工具出错、超过单轮步数上限 | 每个工具经策略与确认；拒绝与错误作为工具结果交回模型；达到上限后结束本轮并告知用户；MCP 进程随插件停止 |
 | V-59 | T-12 | 记忆 add/patch/remove、超过字符上限、重复条目、不可见字符、群聊多用户、会话中写入与 /reset、记忆插件不可用 | 超限与非法内容返回错误且不丢已有条目；快照在会话内不变、下一会话生效；每位用户只看到自己的档案；配置的记忆插件不可用时本轮报错 |
 | V-60 | T-12 | 技能目录含合法与缺少 frontmatter 的 SKILL.md、load_skill 不存在的技能 | 系统提示只含合法技能的描述；不合法文件记诊断并跳过；load_skill 返回正文或明确错误 |
-| V-61 | T-12 | 创建 interval/cron 定时 Agent 任务、到期运行、无发信许可、需要确认的工具、插件离线错过 | 任务按 CONTRACTS §4.3 的触发规则运行且不补跑；无许可时 PERMISSION_DENIED；confirm 工具一律拒绝；后台运行不注入记忆 |
+| V-61 | T-12 | 非 Admin 尝试创建任务、创建 interval/cron 定时 Agent 任务、到期运行、无发信许可、需要确认的工具、插件离线错过 | 只有 Core Admin 能创建与取消任务；任务按 CONTRACTS §4.3 的触发规则运行且不补跑；无许可时 PERMISSION_DENIED；confirm 工具一律拒绝；后台运行不注入记忆 |
 | V-62 | T-02、T-09 | Core/插件/Adapter 三类来源、插件写合法 JSON 行与非 JSON 行、插件伪造来源字段、Handler panic、text 与 json 格式、终端与非终端输出、含 Bot Token 的 URL 错误 | 控制台格式与来源标签符合 CONTRACTS §14.2；非结构化行原样保留为 WARN；插件不能覆盖来源字段；panic 为一条带 stack 的 ERROR；非终端或设置 NO_COLOR 时不着色；日志中没有 token、Secret 与配置明文 |
 | V-63 | T-02、T-09 | 全局与按来源的级别、off、运行时修改、Core 重启、最近记录上限、SSE 订阅、`alonabot logs`、WebUI 筛选 | 修改立即生效；按来源的设置重启后保留，全局级别的运行时修改重启后恢复；off 时 SDK 不输出而 Core 关于它的记录仍在；每个来源最多保留 1000 条；未认证无法读取；WebUI 筛选不改变输出 |
-| V-64 | T-13 | 库模式下同进程插件与 Adapter 的完整生命周期、dev 来源尝试 update/rollback、未捕获的 panic、停止超时、已安装包与开发组件混合运行、两次启动之间的配置与 dev.sqlite | 握手、注册、权限与独立进程一致；dev 组件使用固定代次，重启后按钮仍有效；update/rollback 被拒绝；panic 使进程退出且不重启；停止超时时 Run 返回错误 |
+| V-64 | T-13 | 库模式下同进程插件与 Adapter 的完整生命周期、从 `instances/` 读取实例配置、dev 来源尝试 update/rollback、未捕获的 panic、停止超时、已安装包与开发组件混合运行、两次启动之间的配置与 dev.sqlite | 握手、注册、权限与独立进程一致；dev 组件使用固定代次，重启后按钮仍有效；update/rollback 被拒绝；panic 使进程退出且不重启；停止超时时 Run 返回错误 |
 | V-65 | T-13 | 热部署下改动插件源码、编译失败、改动 go.mod、来自其他 module 的 Adapter | 只重启开发中的组件，Adapter 连接与其他插件不中断；编译失败时旧组件继续运行；go.mod 变化输出 WARN；其他 module 的组件不重启 |
 | V-66 | T-14 | 干净数据目录首次运行、交互终端与非终端、预装包签名错误、卸载预装包后重启、新版本发行包 | 预装包全部安装，只启用 Agent、记忆与 help，Telegram Adapter 未启用；终端下 token 只显示一次，非终端拒绝启动；签名错误的包不安装并记 ERROR；已卸载的不重新安装；新版本只作为可用更新列出 |
-| V-67 | T-14 | help 的权限过滤与翻译、welcome 的入群欢迎、rss 的订阅/去重/推送与私网地址 | help 只列出调用者可用的命令；welcome 只响应 member.joined；rss 不重复推送同一条目，拒绝 loopback、私网与链路本地地址（含重定向之后），后台推送需要 allowed_adapter_instances |
+| V-67 | T-14 | help 的权限过滤与翻译、`/whoami`、welcome 的入群欢迎与开关权限、rss 的订阅权限/去重/推送/私网地址/超大响应 | help 只列出调用者可用的命令；`/whoami` 返回调用者的实例与用户 ID；welcome 只响应 member.joined，只有 chat_admin 或 Core Admin 能开关；rss 的增删只有 chat_admin 或 Core Admin 能执行，超过 5 MiB 或 30s 的抓取失败，不重复推送同一条目，拒绝 loopback、私网与链路本地地址（含重定向之后），后台推送需要 allowed_adapter_instances |
 | V-68 | T-02、T-09 | 跨过零点、同日写满单文件上限、合计超过 1 GiB、超过 30 天、max_size 大于 max_total、磁盘写满、按日期查询 | 跨日换到新日期的文件；同日续写编号文件；从最旧的文件开始删除且不删正在写入的文件；配置矛盾时拒绝启动；写入失败时 Core 继续运行并只报告一次；`alonabot logs --date` 与 WebUI 能查到前一天的记录 |
 | V-69 | T-02 | `--args` 直接参数与文件输入、重复出现的键、未知键、`100MB` 等十进制单位、违反约束与相互矛盾的值、`PLUGIN_MEMORY_SOFT_LIMIT` | 后出现的覆盖先出现的；错误使 Core 拒绝启动并指明参数或文件行号；有覆盖时启动 WARN 列出全部覆盖项；SDK 使用 Bootstrap 下发的值；子进程收到 GOMEMLIMIT |
 
@@ -138,7 +138,7 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 | V-41 | release.json 对确切字节验签、重新序列化无法通过、签名有效但内容非法仍拒绝 | `contracts/release` | 通过 | 真实包验签与更新预检（T-09） |
 | V-42 | 每方向 256 个/16 MiB 与全局 64 MiB 满额立即拒绝；Response/Cancel 仍可推进；发送前取消的请求移出队列并归还预算、不能借取消越过字节上限；写出中被取消的请求写完才归还预算，Cancel 不越过其 Request | `internal/wire`（含 `TestCancelledRequestsReleaseQueueAndBudget`） | 通过 | Service 嵌套与 Event Bus 双预算（T-06） |
 
-发布阻塞：协议/Session 鉴权、Core 全局权限、数据代次唯一性、回滚/维护的真实性、安装包越界/来源安全及目标五平台构建失败，均不能通过文案豁免。非阻塞项的阈值（例如内存量与吞吐目标）须等基线测量之后再由产品方批准；**不杜撰 100 MB 等硬性能指标**。
+发布阻塞：协议/Session 鉴权、Core 全局权限、数据代次唯一性、回滚/维护的真实性、安装包越界/来源安全及目标五平台构建失败，均不能通过文案豁免。v0.1 不设内存与吞吐的通过阈值，T-10 只报告 V-33 的实测结果；**不杜撰 100 MB 等硬性能指标**。
 
 ## 4. 实施交接
 

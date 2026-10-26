@@ -13,7 +13,7 @@
 
 - **可派发**：前置都已合并，语句已写到接口签名，可以直接派发。
 - **等待前置**：语句已写完整，等前置合并、审查者核对接口后转为可派发。
-- **待细化**：只写了范围和要点。前置合并后，审查者按实际代码补全接口、行为和测试，然后才能派发。
+- **待编写**：范围与要点已由 PLAN 确定，没有待决的设计问题；前置合并后，审查者按实际代码写出接口、行为和测试段，然后才能派发。
 
 ## 所有 goal 的共同约束
 
@@ -44,75 +44,75 @@
 | goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 等待前置 |
 | goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 等待前置 |
 | goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 等待前置 |
-| goal-65 | T-02.1 | 日志基线与日志文件 | — | 待细化 |
-| goal-76 | T-02.2 | 调优参数 | — | 待细化 |
-| goal-4 | T-03.3 | Adapter 进程、sdk/adapter 与上下线事件 | T-03.1 | 待细化 |
-| goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 待细化 |
-| goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 待细化 |
-| goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 待细化 |
-| goal-8 | T-03.8 | 按钮、extension 片段与依赖解析 | T-03.2、T-03.7 | 待细化 |
-| goal-51 | T-03.9 | 消息编辑 | T-03.7 | 待细化 |
-| goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9 | 待细化 |
-| goal-10 | T-04.1 | 根插件 API 与静态注册索引 | T-03.1 | 待细化 |
-| goal-11 | T-04.2 | 构建期生成器 | T-04.1 | 待细化 |
-| goal-12 | T-04.3 | 命令选择、文本匹配与参数绑定 | T-04.1 | 待细化 |
-| goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1 | 待细化 |
-| goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4 | 待细化 |
-| goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 待细化 |
-| goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1 | 待细化 |
-| goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 待细化 |
-| goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 待细化 |
-| goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 待细化 |
-| goal-19 | T-06.1 | Service/Bus 描述与 Broker 准入 | T-04.1 | 待细化 |
-| goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 待细化 |
-| goal-21 | T-06.3 | 非持久 Event Bus | T-06.1 | 待细化 |
-| goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 待细化 |
-| goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 待细化 |
-| goal-25 | T-07.3 | SDK HTTP Listener 与 Core 代理 | T-04.1 | 待细化 |
-| goal-26 | T-07.4 | 两个 Host 与插件票据 | T-07.3 | 待细化 |
-| goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 待细化 |
-| goal-28 | T-08.1 | 配置字段描述与构建检查 | T-04.2 | 待细化 |
-| goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 待细化 |
-| goal-31 | T-08.4 | 不可变 Secret Store | T-08.1、T-08.2 | 待细化 |
-| goal-32 | T-08.5 | GORM 连接与迁移 | T-08.3 | 待细化 |
-| goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 待细化 |
-| goal-34 | T-08.7 | web/admin 骨架、配置表单组件与界面文案 | T-08.1 | 待细化 |
-| goal-53 | T-08.8 | 用户可见文案目录 | T-04.1、T-04.3、T-08.1 | 待细化 |
-| goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8 | 待细化 |
-| goal-36 | T-09.1 | 首次管理认证 | T-07.4 | 待细化 |
-| goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.1、T-08.8、T-09.2、T-13.1 | 待细化 |
-| goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-08.4、T-09.1、T-09.2、T-13.1 | 待细化 |
-| goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 待细化 |
-| goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 待细化 |
-| goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 待细化 |
-| goal-43 | T-09.8 | Admin 管理页 | T-09.6、T-08.7 | 待细化 |
-| goal-44 | T-09.9 | Admin 配置、权限、工具策略与插件页 | T-09.8、T-11.1、T-11.3 | 待细化 |
-| goal-66 | T-09.10 | 日志管理与日志页 | T-02.1、T-03.1、T-09.8 | 待细化 |
-| goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10 | 待细化 |
-| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.5 | 待细化 |
-| goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 待细化 |
-| goal-48 | T-10.3 | 资源比较报告 | T-10.1 | 待细化 |
-| goal-49 | T-10.4 | 发布资产与说明 | T-10.2、T-10.3 | 待细化 |
-| goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-06.1 | 待细化 |
-| goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 待细化 |
-| goal-56 | T-11.3 | Agent 会话存储 | T-03.1 | 待细化 |
-| goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 待细化 |
-| goal-58 | T-12.1 | Provider 客户端 | — | 待细化 |
-| goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.3、T-08.4、T-11.3、T-12.1 | 待细化 |
-| goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 待细化 |
-| goal-61 | T-12.4 | 记忆插件 | T-08.5、T-11.2、T-12.2 | 待细化 |
-| goal-62 | T-12.5 | 技能 | T-12.3 | 待细化 |
-| goal-63 | T-12.6 | 定时 Agent 任务 | T-07.2、T-08.5、T-12.3 | 待细化 |
-| goal-64 | T-12.7 | 官方插件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6 | 待细化 |
-| goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2 | 待细化 |
-| goal-68 | T-13.2 | 开发组件的配置与数据库 | T-08.3、T-08.5、T-13.1 | 待细化 |
-| goal-69 | T-13.3 | 热部署 | T-13.1 | 待细化 |
-| goal-70 | T-13.4 | 库模式示例与验收 | T-03.10、T-13.2、T-13.3 | 待细化 |
-| goal-71 | T-14.1 | help 插件与命令列表 | T-04.4、T-05.2、T-08.8 | 待细化 |
-| goal-72 | T-14.2 | welcome 与 rss 插件 | T-05.2、T-07.2、T-08.3、T-08.5、T-08.8 | 待细化 |
-| goal-73 | T-14.3 | 发行归档 | T-03.10、T-09.3、T-12.7、T-14.1、T-14.2 | 待细化 |
-| goal-74 | T-14.4 | 首次运行与预装 | T-09.6、T-14.3 | 待细化 |
-| goal-75 | T-14.5 | 发行包端到端验收 | T-09.11、T-14.4 | 待细化 |
+| goal-65 | T-02.1 | 日志基线与日志文件 | — | 待编写 |
+| goal-76 | T-02.2 | 调优参数 | — | 待编写 |
+| goal-4 | T-03.3 | Adapter 进程、sdk/adapter 与上下线事件 | T-03.1 | 待编写 |
+| goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 待编写 |
+| goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 待编写 |
+| goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 待编写 |
+| goal-8 | T-03.8 | 按钮、extension 片段与依赖解析 | T-03.2、T-03.7 | 待编写 |
+| goal-51 | T-03.9 | 消息编辑 | T-03.7 | 待编写 |
+| goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9 | 待编写 |
+| goal-10 | T-04.1 | 根插件 API 与静态注册索引 | T-03.1 | 待编写 |
+| goal-11 | T-04.2 | 构建期生成器 | T-04.1 | 待编写 |
+| goal-12 | T-04.3 | 命令选择、文本匹配与参数绑定 | T-04.1 | 待编写 |
+| goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1 | 待编写 |
+| goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4 | 待编写 |
+| goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 待编写 |
+| goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1 | 待编写 |
+| goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 待编写 |
+| goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 待编写 |
+| goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 待编写 |
+| goal-19 | T-06.1 | Service/Bus 描述与 Broker 准入 | T-04.1 | 待编写 |
+| goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 待编写 |
+| goal-21 | T-06.3 | 非持久 Event Bus | T-06.1 | 待编写 |
+| goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 待编写 |
+| goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 待编写 |
+| goal-25 | T-07.3 | SDK HTTP Listener 与 Core 代理 | T-04.1 | 待编写 |
+| goal-26 | T-07.4 | 两个 Host 与插件票据 | T-07.3 | 待编写 |
+| goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 待编写 |
+| goal-28 | T-08.1 | 配置字段描述与构建检查 | T-04.2 | 待编写 |
+| goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 待编写 |
+| goal-31 | T-08.4 | 不可变 Secret Store | T-08.1、T-08.2 | 待编写 |
+| goal-32 | T-08.5 | GORM 连接与迁移 | T-08.3 | 待编写 |
+| goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 待编写 |
+| goal-34 | T-08.7 | web/admin 骨架、配置表单组件与界面文案 | T-08.1 | 待编写 |
+| goal-53 | T-08.8 | 用户可见文案目录 | T-04.1、T-04.3、T-08.1 | 待编写 |
+| goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8 | 待编写 |
+| goal-36 | T-09.1 | 首次管理认证 | T-07.4 | 待编写 |
+| goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.1、T-08.8、T-09.2、T-13.1 | 待编写 |
+| goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-08.4、T-09.1、T-09.2、T-13.1 | 待编写 |
+| goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 待编写 |
+| goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 待编写 |
+| goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 待编写 |
+| goal-43 | T-09.8 | Admin 管理页 | T-09.6、T-08.7 | 待编写 |
+| goal-44 | T-09.9 | Admin 配置、权限、工具策略与插件页 | T-09.8、T-11.1、T-11.3 | 待编写 |
+| goal-66 | T-09.10 | 日志管理与日志页 | T-02.1、T-03.1、T-09.8 | 待编写 |
+| goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10 | 待编写 |
+| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.5 | 待编写 |
+| goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 待编写 |
+| goal-48 | T-10.3 | 资源比较报告 | T-10.1 | 待编写 |
+| goal-49 | T-10.4 | 发布资产与说明 | T-10.2、T-10.3 | 待编写 |
+| goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-06.1 | 待编写 |
+| goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 待编写 |
+| goal-56 | T-11.3 | Agent 会话存储 | T-03.1 | 待编写 |
+| goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 待编写 |
+| goal-58 | T-12.1 | Provider 客户端 | — | 待编写 |
+| goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.3、T-08.4、T-11.3、T-12.1 | 待编写 |
+| goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 待编写 |
+| goal-61 | T-12.4 | 记忆插件 | T-08.5、T-11.2、T-12.2 | 待编写 |
+| goal-62 | T-12.5 | 技能 | T-12.3 | 待编写 |
+| goal-63 | T-12.6 | 定时 Agent 任务 | T-07.2、T-08.5、T-12.3 | 待编写 |
+| goal-64 | T-12.7 | 官方插件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6 | 待编写 |
+| goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2 | 待编写 |
+| goal-68 | T-13.2 | 开发组件的配置与数据库 | T-08.3、T-08.5、T-13.1 | 待编写 |
+| goal-69 | T-13.3 | 热部署 | T-13.1 | 待编写 |
+| goal-70 | T-13.4 | 库模式示例与验收 | T-03.10、T-13.2、T-13.3 | 待编写 |
+| goal-71 | T-14.1 | help 插件与命令列表 | T-04.4、T-05.2、T-08.8 | 待编写 |
+| goal-72 | T-14.2 | welcome 与 rss 插件 | T-05.2、T-07.2、T-08.3、T-08.5、T-08.8 | 待编写 |
+| goal-73 | T-14.3 | 发行归档 | T-03.10、T-09.3、T-12.7、T-14.1、T-14.2 | 待编写 |
+| goal-74 | T-14.4 | 首次运行与预装 | T-09.6、T-14.3 | 待编写 |
+| goal-75 | T-14.5 | 发行包端到端验收 | T-09.11、T-14.4 | 待编写 |
 
 ## 第 1 批：可派发
 
@@ -558,13 +558,13 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 不做：IncomingMedia、Read、Grant、发送时消费租约、cmd/alonabot 装配。
 ```
 
-## 第 3 批及以后：待细化
+## 第 3 批及以后：待编写
 
-以下 goal 只写了范围和要点。前置合并后，审查者按实际代码补全「接口」「行为」「测试」三段并改为可派发；在此之前不要派发。每条的完整语义以 PLAN §4 对应步骤及其失败停止条件为准。
+以下 goal 只写了范围和要点。前置合并后，审查者按实际代码补全「接口」「行为」「测试」三段并改为可派发；在此之前不要派发。每条的完整语义以 PLAN §4 对应步骤及其失败停止条件为准，不另作设计。
 
 ### goal-65 · T-02.1 日志基线与日志文件
 
-状态：待细化。由审查者实现，维护者批准后开始。范围：Core 与 SDK 现有的直接输出、`control.proto` 的 Bootstrap（追加 `log_level`）、`cmd/alonabot` 的 `--log-level` 与 `--log-format`。要点：
+状态：待编写。由审查者实现，维护者批准后开始。范围：Core 与 SDK 现有的直接输出、`control.proto` 的 Bootstrap（追加 `log_level`）、`cmd/alonabot` 的 `--log-level` 与 `--log-format`。要点：
 - 控制台格式按 CONTRACTS §14.2：`[时:分:秒.毫秒] [Core|Plug:<id>|Adpt:<id>/<实例>] [DBUG|INFO|WARN|ERRO] [目录/文件:行号]: 消息 key=value`，trace 显示前 8 位，多行值缩进 4 个空格，只在终端且未设置 `NO_COLOR` 时着色；另有 JSON 输出。
 - SDK 以 JSON 行写 stderr，Handler 的 Logger 附带 trace_id、route_id、call_id；调用边界捕获的 panic 记为带 `stack` 的 ERROR。
 - Core 逐行解析插件 stderr，补上并保护来源字段；非 JSON 行作为 WARN 原样保留。
@@ -575,7 +575,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-76 · T-02.2 调优参数
 
-状态：待细化。由审查者实现，维护者批准后开始。范围：新建 `internal/tune`，迁入 `internal/wire` 与 `internal/core` 中对应的现有常量；`cmd/alonabot` 的 `--args` 与 `tune list`；`control.proto` 的 Bootstrap（追加 `session_limits`）。要点：
+状态：待编写。由审查者实现，维护者批准后开始。范围：新建 `internal/tune`，迁入 `internal/wire` 与 `internal/core` 中对应的现有常量；`cmd/alonabot` 的 `--args` 与 `tune list`；`control.proto` 的 Bootstrap（追加 `session_limits`）。要点：
 - 参数表与缺省值按 CONTRACTS §16；不可调的协议、安全与平台常量留在原处。
 - `--args` 可重复：值含 `=` 时是逗号分隔的直接参数，否则是文本文件路径；后出现的覆盖先出现的；大小只接受二进制单位。
 - 未知键、格式错误、违反约束或相互矛盾时拒绝启动并指明出处；有覆盖时启动 WARN 列出全部覆盖项。
@@ -584,7 +584,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-4 · T-03.3 Adapter 进程、sdk/adapter 与上下线事件
 
-状态：待细化（T-03.1）。范围：`contracts/proto` 的 `adapter.proto` 与生成代码（本切片获准修改 `.proto`）、manifest 的 `role`/`adapter_id` 解析、`internal/core/adapterhost/`（以 Adapter 进程为后端实现 T-03.1 的 `adapter.Instance`）、`internal/core/state` 的游标表、`sdk/adapter/`、`examples/adapters/loopback/`。要点：
+状态：待编写（T-03.1）。范围：`contracts/proto` 的 `adapter.proto` 与生成代码（本切片获准修改 `.proto`）、manifest 的 `role`/`adapter_id` 解析、`internal/core/adapterhost/`（以 Adapter 进程为后端实现 T-03.1 的 `adapter.Instance`）、`internal/core/state` 的游标表、`sdk/adapter/`、`examples/adapters/loopback/`。要点：
 - WIRE §3.4 的七个固定服务全部打通；Adapter 与插件的 REGISTER 按安装记录的角色互斥校验，角色不采信进程自报。
 - 实例启停：`adapter.instance.start` 下发实例配置与已保存的游标，按返回的 account_id 检查同一 `adapter_id` 下的账号唯一；启停一个实例不重启进程，也不影响同包的其他实例。
 - 交付：Core 先校验事件归属（adapter_id、adapter_instance_id、account_id 与本 Session 已启动的实例一致），再写入游标、接纳事件，最后应答；伪造实例的事件被拒并记诊断。event_id 由 Core 生成。
@@ -595,19 +595,19 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-5 · T-03.4 官方 Telegram Adapter 的接收
 
-状态：待细化（T-03.3）。范围：`adapters/telegram/`（只经 `sdk/adapter` 与 Core 通信）与 `adapters/telegram/telegramtest/` 的本地 Bot API 模拟服务。要点：
+状态：待编写（T-03.3）。范围：`adapters/telegram/`（只经 `sdk/adapter` 与 Core 通信）与 `adapters/telegram/telegramtest/` 的本地 Bot API 模拟服务。要点：
 - `adapter.instance.start` 中依次执行 getMe（account_id 为 bot 用户 ID 的十进制字符串）、getWebhookInfo（url 非空则失败，不调用 deleteWebhook），然后启动接收循环。
 - long polling 的 allowed_updates 固定为 message、edited_message、channel_post、edited_channel_post、callback_query、my_chat_member、chat_member、message_reaction，timeout=30。
 - 一批 update 逐条经 `core.adapter.deliver` 交付，游标为 update_id+1；收到应答后才处理下一条，未接纳的事件只计数。不支持的 update 也推进游标。
 - 距上次接纳或轮次开始满 7 天时，先经 `core.adapter.cursor` 保存不带 offset 的新轮次，再拉取。
 - 401/409 经 `core.adapter.status` 报告并停止该实例；网络错误与 5xx 只对接收退避重试，不用于发送。
-- 标准化规则沿用 MESSAGE-MODEL §1、§6：带 sender_chat 的消息不构造 Actor，保留 media_group_id，每条 Telegram Message 一个事件；Actor.locale 取 from.language_code，按 BCP 47 规范化大小写。
+- 标准化规则沿用 MESSAGE-MODEL §1、§6：带 sender_chat 的消息不构造 Actor，保留 media_group_id，每条 Telegram Message 一个事件；Actor.locale 取 from.language_code，按 BCP 47 规范化大小写；`to_me` 按 MESSAGE-MODEL §6.1 计算。
 - Adapter 实现放在可导入的包中（`telegram.New()`），`main` 只调用 `sdk/adapter` 的运行函数，供库模式直接引用（CONTRACTS §15.3）。
 - 验收：V-45、V-54 的 locale 分项。
 
 ### goal-50 · T-03.7 官方 Telegram Adapter 的发送计划与回执
 
-状态：待细化（T-03.4）。范围：`adapters/telegram/` 的 `adapter.send` 实现与模拟服务的发送方法。要点：
+状态：待编写（T-03.4）。范围：`adapters/telegram/` 的 `adapter.send` 实现与模拟服务的发送方法。要点：
 - 发送前完成整条 Chain 的预检，生成有序的物理操作计划。文本、实体按 UTF-16 偏移；连续媒体按每组 2～10 项组成相册；Reference 只作用于首条，Buttons 作用于末条，相册后的按钮用 markup 更新补上。
 - 超长、超限或无法表达的组合在首个请求前返回 UNSUPPORTED 或 INVALID_ARGUMENT，不截断、不降级、不重排。
 - PartResult 区分 ACCEPTED、REJECTED、UNKNOWN、NOT_ATTEMPTED，逻辑状态按 MESSAGE-MODEL §4 汇总。遇到拒绝或结果未知即停止后续操作，保留已确认的 ID。message_id=0 不填入 ID，依赖它的步骤记为 NOT_ATTEMPTED。不自动重发。
@@ -615,7 +615,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-7 · T-03.6 入站媒体与 Grant
 
-状态：待细化（T-03.2、T-03.4、T-03.5）。范围：`internal/core/media`、`adapters/telegram/` 的 `adapter.media.read`、`sdk` 的 Read 客户端。要点：
+状态：待编写（T-03.2、T-03.4、T-03.5）。范围：`internal/core/media`、`adapters/telegram/` 的 `adapter.media.read`、`sdk` 的 Read 客户端。要点：
 - IncomingMedia token 只映射可信 Adapter 给出的平台文件标识。首次 Read 时经 `adapter.media.read` 按需取件，校验后缓存，多个 Session 共享同一份缓存。
 - 出站媒体：Core 在 `adapter.send` 之前为本次发送签发只读 token，Adapter 经 `core.media.read` 读取。
 - offset 与 length 的边界按 CONTRACTS §1.4。
@@ -625,7 +625,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-8 · T-03.8 按钮、extension 片段与依赖解析
 
-状态：待细化（T-03.2、T-03.7）。范围：Core 状态库的按钮 token 表、Telegram callback_query 处理、button.clicked 路由派发、extension 片段的声明与发送前校验、manifest 的 `adapter_dependencies` 与 `plugin_dependencies` 解析及开发入口的依赖检查。要点：
+状态：待编写（T-03.2、T-03.7）。范围：Core 状态库的按钮 token 表、Telegram callback_query 处理、button.clicked 路由派发、extension 片段的声明与发送前校验、manifest 的 `adapter_dependencies` 与 `plugin_dependencies` 解析及开发入口的依赖检查。要点：
 - 按钮 token 为 32 字节随机值的无 padding base64url，持久化绑定 plugin、route、generation、Target 和 24 小时期限。
 - 先尽力调用 answerCallbackQuery，再逐次鉴权，Actor 取本次点击的用户。拒绝时不回落到 Raw/Regex，不发群消息。代次切换后 token 永久失效。
 - extension 片段按目标实例所属 Adapter 在 REGISTER 中声明的 name/version/Schema 校验；目标不属于该 Adapter 或版本未声明时返回 UNSUPPORTED，不降级。
@@ -635,7 +635,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-51 · T-03.9 消息编辑
 
-状态：待细化（T-03.7）。范围：`core.edit` 固定服务、`internal/core/adapter` 的可选接口 `Editor`、`adapter.edit`（获准修改 `adapter.proto` 与出站 Hook 载荷，只追加字段）、`adapters/telegram/` 的 editMessageText、SDK 的 `Edit`。要点：
+状态：待编写（T-03.7）。范围：`core.edit` 固定服务、`internal/core/adapter` 的可选接口 `Editor`、`adapter.edit`（获准修改 `adapter.proto` 与出站 Hook 载荷，只追加字段）、`adapters/telegram/` 的 editMessageText、SDK 的 `Edit`。要点：
 - Target 准入与 Send 相同；Edit Chain 只能包含一个 text 片段和至多一个 buttons 片段，否则 INVALID_ARGUMENT。
 - 每次 Edit 执行一组 BeforeSend → Adapter.Edit → AfterSend，Hook 输入标明 edit 与被编辑的 platform_message_id。
 - 未声明 `message.edit` 的实例返回 UNSUPPORTED；平台拒绝（内容未变化、消息不可编辑）为 REJECTED，不改为发送新消息。
@@ -644,13 +644,13 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-9 · T-03.10 Telegram 接入开发入口与故障矩阵
 
-状态：待细化（T-03.6、T-03.8、T-03.9）。范围：`cmd/alonabot` 的开发装配（`alonabot run` 同时启动 Adapter 与插件；实例配置的来源由审查者在细化时决定）、`examples/plugins/echo` 与 media 示例、跨包故障矩阵测试、TEST-MATRIX 证据。要点：
+状态：待编写（T-03.6、T-03.8、T-03.9）。范围：`cmd/alonabot` 的开发装配（`alonabot run` 同时启动 Adapter 与插件；实例配置取自 `<data_dir>/adapters/<adapter_id>/instances/<instance_id>.json`，CONTRACTS §15.3）、`examples/plugins/echo` 与 media 示例、跨包故障矩阵测试、TEST-MATRIX 证据。要点：
 - 完成 PLAN T-03 步骤 8 的全部场景，包括实例上下线事件与消息编辑；用请求记录证明没有自动补发。
 - 真实 Telegram 没有测试账号时记为未运行。
 
 ### goal-10 至 goal-14 · T-04.1～T-04.5
 
-状态：待细化。要点按 PLAN T-04 各步骤：
+状态：待编写。要点按 PLAN T-04 各步骤：
 - 根插件与显式绑定；生成器只扫描当前模块的目标构建包。
 - 重复 route 一律拒绝；跨插件遮蔽稳定，与启动顺序无关。
 - 已识别的命令被拒绝后不回落，也不进入文本匹配。
@@ -659,7 +659,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-15 至 goal-18、goal-52 · T-05.1～T-05.5
 
-状态：待细化。要点按 PLAN T-05 各步骤：
+状态：待编写。要点按 PLAN T-05 各步骤：
 - 并发链与等待队列遵守 64 条、256 条/8 MiB 的上限。
 - Rule 返回 false 时不执行 Handler；Stop 不会被错误清除；自动回复恰好发送一次。
 - Hook 不能修改可信绑定，BeforeSend 修改后重新预检，Hook 中禁止 Send。
@@ -667,7 +667,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-19 至 goal-22 · T-06.1～T-06.4
 
-状态：待细化。要点按 PLAN T-06 各步骤：
+状态：待编写。要点按 PLAN T-06 各步骤：
 - 编码、版本与授权错误在执行目标函数之前拒绝。
 - 循环返回 CALL_CYCLE，深度超过 16 返回 FAILED_PRECONDITION。
 - Cancel 不越过它的 Request。
@@ -676,14 +676,14 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-24 至 goal-27 · T-07.2～T-07.5
 
-状态：待细化。要点按 PLAN T-07 各步骤：
+状态：待编写。要点按 PLAN T-07 各步骤：
 - 同一 job 不重叠，离线错过的 tick 不补跑；运行槽要等 callback 真正返回或进程确认退出才释放。
 - HTTP Listener 绑定 127.0.0.1:0，准备阶段不放行业务请求，旧 Session 不再代理。
 - 两个 Host 的凭证隔离；所有停止共享同一个停止预算。
 
 ### goal-28、goal-30 至 goal-35、goal-53 · T-08.1、T-08.3～T-08.9
 
-状态：待细化。要点按 PLAN T-08 各步骤：
+状态：待编写。要点按 PLAN T-08 各步骤：
 - OnLoad 先于 Schema 校验；默认值只补缺失的键。
 - secret 引用不可变，明文不进入日志和响应。
 - 迁移的 Up 与账本写在同一事务；PG 需要维护许可。
@@ -693,7 +693,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-36、goal-38 至 goal-45、goal-66 · T-09.1、T-09.3～T-09.11
 
-状态：待细化。要点按 PLAN T-09 各步骤：
+状态：待编写。要点按 PLAN T-09 各步骤：
 - 管理 token 只保存 SHA256；login 带 CSRF 校验。
 - 所有管理动作经唯一的管理服务，按插件串行。
 - 提交点是同一事务内的 ActiveGeneration+COMMITTED；崩溃后未提交恢复旧版、已提交恢复新版。
@@ -706,7 +706,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-54 至 goal-57 · T-11.1～T-11.4
 
-状态：待细化。要点按 PLAN T-11 各步骤：
+状态：待编写。要点按 PLAN T-11 各步骤：
 - 只有 JSON 编码的 Service 可以声明 `tool`；策略为 allow/confirm/deny，未设置时取 default_policy，修改在下一次调用生效。
 - `core.tool.invoke` 与 `core.tool.confirm` 必须带 parent_call_id；没有 Actor 时 confirm 直接 PERMISSION_DENIED。
 - 确认消息由 Core 直接经 Adapter 发送，不执行插件出站 Hook；只接受同一 Actor 在 5 分钟内的第一次点击；不支持按钮时 UNSUPPORTED。
@@ -714,7 +714,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-58 至 goal-64 · T-12.1～T-12.7
 
-状态：待细化。要点按 PLAN T-12 各步骤。goal-58（T-12.1）不依赖 Core 的新能力，是这一组里最早可以细化并派发的：
+状态：待编写。要点按 PLAN T-12 各步骤。goal-58（T-12.1）不依赖 Core 的新能力，是这一组里最早可以细化并派发的：
 - 范围在 `plugins/agent/` 与 `plugins/memory/`，只 import `sdk/...` 与 `contracts`；`sdk/memory` 提供记忆服务的类型与 Schema。
 - Provider 只用标准库实现 SSE；MCP 客户端用已批准的 `github.com/modelcontextprotocol/go-sdk`，goal-60 获准把它加入 `go.mod`。
 - Provider 失败不自动重发；流式显示先发送再按间隔编辑，最后一次编辑为完整内容。
@@ -723,7 +723,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-67 至 goal-70 · T-13.1～T-13.4
 
-状态：待细化。要点按 PLAN T-13 各步骤：
+状态：待编写。要点按 PLAN T-13 各步骤：
 - 根包 `alonabot` 的 `Run` 与 `alonabot serve` 共用同一份 Core 装配；`internal/core`、`sdk`、`adapters/`、`plugins/` 都不能 import 根包。
 - 开发中的组件在 goroutine 中经 loopback TCP 走完整协议，不另建协议路径；组件身份取自生成代码嵌入的 manifest。
 - dev 来源使用固定代次 `dev`，配置直接读取 `config.json`，数据库为 `dev.sqlite`，不能 update 或 rollback。
@@ -731,11 +731,11 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-71 至 goal-75 · T-14.1～T-14.5
 
-状态：待细化。要点按 PLAN T-14 各步骤：
+状态：待编写。要点按 PLAN T-14 各步骤：
 - `core.command.list` 只返回调用者可用的命令，说明按 Actor locale 翻译。
 - rss 抓取只允许 http/https，解析出的地址与每次重定向后的地址都不能是 loopback、私网、链路本地、组播或未指定地址；响应大小与超时为命名常量。
 - 预装包照常验签；只在数据目录首次初始化时安装，默认启用 Agent、记忆与 help；签名私钥不进入仓库与日志。
 
 ### goal-46 至 goal-49 · T-10.1～T-10.4
 
-状态：待细化。要点按 PLAN T-10 各步骤。需要真实的 Telegram、五个目标平台和固定的测量机器，缺少的部分记为未运行。
+状态：待编写。要点按 PLAN T-10 各步骤。需要真实的 Telegram、五个目标平台和固定的测量机器，缺少的部分记为未运行。

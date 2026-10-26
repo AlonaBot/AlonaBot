@@ -143,7 +143,7 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 
 Core→插件与 Core→Adapter 方向另有 `sdk.log.set_level`：新的生效级别 → 空结果，SDK 收到后立即按新级别过滤（CONTRACTS §14.3）。
 
-注册描述的追加字段：Service 描述增加可选的 `tool`（description、default_policy）；CommandMatch 追加 KEYWORD、STARTSWITH、ENDSWITH、FULLMATCH，CommandSpec 增加模式列表与 `ignore_case`；Actor 增加可选 `locale`；Bootstrap 增加 `log_level` 与 `session_limits`；CommandSpec 增加可选的说明键（插件 `messages` 中的键，供 `core.command.list` 翻译）；BeforeSend/AfterSend 的输入增加操作类型与被编辑的 platform_message_id。这些都是追加，不改变 `contracts/wirespec_test.go` 固定的枚举。
+注册描述的追加字段：Service 描述增加可选的 `tool`（description、default_policy）；CommandMatch 追加 KEYWORD、STARTSWITH、ENDSWITH、FULLMATCH，CommandSpec 增加模式列表与 `ignore_case`；Actor 增加可选 `locale`；message.created 的载荷增加 `to_me`；Bootstrap 增加 `log_level` 与 `session_limits`；CommandSpec 增加可选的说明键（插件 `messages` 中的键，供 `core.command.list` 翻译）；BeforeSend/AfterSend 的输入增加操作类型与被编辑的 platform_message_id。这些都是追加，不改变 `contracts/wirespec_test.go` 固定的枚举。
 
 ## 4. 调用上下文、读写与取消
 
@@ -189,7 +189,7 @@ Core 媒体服务固定为 BeginUpload/WriteChunk/CommitUpload/Read/Grant：Read
 - `ForwardSource` 的结构（display_name、external_user_id）由 T-01 补定；新增 `SendRequest{to, chain}` 作为 Core Send 服务的请求。
 - Core→目标插件的 Service 调用载荷是 `ServiceInvocation{route_id, context, encoding, schema_id, schema_version, payload}`：可信上下文与业务载荷分开传输，服务响应直接使用 output schema 的业务载荷（REVIEW-1 补充）。
 - 控制帧与 Core 固定载荷的 `schema_id` 为 `alonabot.<snake_case 消息名>.v1`（例如 `alonabot.hello_ack.v1`），控制帧一律使用 PROTOBUF 编码。是否携带载荷以 `schema_id` 是否为空来判断，而不看 payload 长度，因为空消息序列化后是 0 字节。校验入口为 `contracts/validate`。
-- Core 启动插件进程时通过环境变量传递会话参数（常量定义在 `internal/wire/env.go`）：`ALONABOT_PLUGIN_ID`、`ALONABOT_SESSION_SECRET`（32 字节十六进制）、`ALONABOT_TRANSPORT`（`tcp`/`stdio`）、`ALONABOT_CORE_ADDR`（TCP loopback 地址）、`ALONABOT_BUILD_DIGEST`（归档 SHA256 十六进制）、`ALONABOT_RUNTIME_LOCK`（runtime.lock 的绝对路径）。其余环境变量只从白名单继承（PATH、HOME、临时目录、SystemRoot、LANG、TZ），Core 管理凭证不会进入插件环境；设置了调优参数 `PLUGIN_MEMORY_SOFT_LIMIT` 时另传 `GOMEMLIMIT`（CONTRACTS §16）。
+- Core 启动插件进程时通过环境变量传递会话参数（常量定义在 `internal/wire/env.go`）：`ALONABOT_PLUGIN_ID`、`ALONABOT_SESSION_SECRET`（32 字节十六进制）、`ALONABOT_TRANSPORT`（`tcp`/`stdio`）、`ALONABOT_CORE_ADDR`（TCP loopback 地址）、`ALONABOT_BUILD_DIGEST`（归档 SHA256 十六进制）、`ALONABOT_RUNTIME_LOCK`（runtime.lock 的绝对路径）。其余环境变量只从白名单继承（PATH、HOME、临时目录、SystemRoot、LANG、TZ），Core 管理凭证不会进入插件环境；设置了调优参数 `PLUGIN_MEMORY_SOFT_LIMIT` 时另传 `GOMEMLIMIT`（CONTRACTS §16）；出站代理按 CONTRACTS §15.1 的 `proxy` 设置传递 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`。
 - 握手与准备：认证失败（Secret 恒时比较、插件 ID、build_digest 任一不符）时 Core 直接关闭连接，不回复任何帧；认证之后的失败（协议协商、Bootstrap 超限、REGISTER 不合法、准备期出现非控制帧）先发 SESSION_ERROR 再关闭，发送 SESSION_ERROR 限时 1s，对端不读时不会卡住失败路径。Preparing 的硬截止为配置、迁移、OnStart 三个阶段预算之和，写入 Bootstrap.preparation_deadline_unix_ms。PREPARED 中 route_descriptor_hash 为按顺序拼接各 RouteDescriptor 确定性编码后的 SHA256，candidate_config_digest 为候选配置 JSON 的 SHA256（T-08 引入 secret 引用后改为对持久化快照计算）。
 - 协议能力项使用 `ProtocolCapability{name, version}`，与 Adapter 平台能力 `Capability{name, version, supported}` 分开。
 

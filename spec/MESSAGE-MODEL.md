@@ -19,7 +19,7 @@
 
 | event_type | event_payload 必需内容 | 可缺失内容 |
 | --- | --- | --- |
-| message.created | platform_message_id、chain | actor 可缺省，例如平台未提供实际个人身份 |
+| message.created | platform_message_id、chain、to_me | actor 可缺省，例如平台未提供实际个人身份。to_me 为 true 表示消息发给本机器人：私聊、回复本机器人发出的消息或提及本机器人；平台无法判断时为 false |
 | message.edited | platform_message_id、当前可见 chain | old_chain 可缺省，不为缺少旧内容伪造原消息 |
 | message.deleted | platform_message_ids | 原消息内容和 actor 可缺省；平台没有删除通知就不发此事件 |
 | button.clicked | action_id、action_schema_version、value、callback_query_id、origin_platform_message_id? | message 内容可缺省；Actor 必须来自平台本次点击用户，不能取发送按钮时的用户 |
@@ -122,7 +122,7 @@ ACCEPTED 只表示平台 API 确认接受，不保证用户阅读。跨多条平
 
 - 首发使用 long polling；getMe 固定该实例 account_id/username，同一个 Bot 账号只允许一个 Core 入站 owner。启动发现已有 webhook 时返回 FAILED_PRECONDITION，由管理员处理冲突，不擅自调用 deleteWebhook。
 - 每次 getUpdates 显式传 `allowed_updates=["message","edited_message","channel_post","edited_channel_post","callback_query","my_chat_member","chat_member","message_reaction"]`，不依赖服务器旧设置或空列表默认值。成员/Reaction 事件还受 Bot 群管理员等平台权限限制，能力状态按实际权限呈现；遗留的未订阅 update 明确忽略并推进游标，不伪造支持。
-- Message 带 sender_chat 时，不用兼容性的 fake from 构造个人 User/Admin；保留发送聊天的原始信息，缺少真实个人身份就让 Actor absent。button Actor 始终取本次 CallbackQuery.from。Actor.locale 取 from.language_code（平台给出时），按 BCP 47 规范化大小写。
+- Message 带 sender_chat 时，不用兼容性的 fake from 构造个人 User/Admin；保留发送聊天的原始信息，缺少真实个人身份就让 Actor absent。button Actor 始终取本次 CallbackQuery.from。Actor.locale 取 from.language_code（平台给出时），按 BCP 47 规范化大小写。to_me 在以下情况为 true：chat.type 为 private；reply_to_message.from 是本机器人；文本实体中有指向本机器人用户名的 mention 或指向其用户 ID 的 text_mention。
 - Adapter.Start 完成凭证/冲突检查和接收循环初始化后返回；循环在后台运行。401/409 等凭证失效/并发 owner 冲突终止实例接收并上报管理状态，不伪装为正常空闲。短暂读网络错误可按 Core 固定、带上限的退避重连；此接收恢复不允许重试已提交的 Send。
 - getUpdates 每个 update 按返回顺序单独接纳：先在 Core 状态库持久化该实例的已接收游标，再交给非持久事件队列；重启从已持久化游标的下一个 offset 拉取，不重放已接纳业务。因此在持久化后、Handler 完成前崩溃，允许该事件丢失。首发交付的是尽力投递，不承诺 durable inbox 或完整补处理。
 - Telegram 在至少一周没有新 update 后可能随机选择后续 ID，不能假定 ID 永久递增。Core 记录最后接纳时间与当前接收轮次起点；从两者较晚者起连续 7 天没有接纳新 update 时，在当前 long-poll 结束且无接收请求在途的边界持久化新接收轮次/起点、清除 offset，再开始拉取，避免旧高游标永远屏蔽新序列，也避免空闲时每次轮询都重置。平台更新最长仅保存 24h，该重建不承诺恢复空闲期早已过期的事件。
