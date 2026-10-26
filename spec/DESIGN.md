@@ -79,13 +79,31 @@ func (p *RSS) Add(c *sdk.Context, url string) error {
 
 两类 Handler 保留：返回 `(Chain,error)` 的自动回复型成功时由 Core 发一次非空 Chain；返回 `error` 的主动发送型可多次 Send。自动回复型内部调用 Send 返回 FAILED_PRECONDITION。`c.StopPropagation()` 锁存传播结果，由 SDK 统一编码到 HandlerOutcome；不会给开发者增加第三套 Handler 签名。
 
+Handler 调用受普通请求期限约束，返回后不能再以原上下文工作。需要等待用户回复或较长时间生成时，Handler 请求一次延续调用：Core 在本次调用结束后，以原可信上下文另发一个独立期限的调用，它不占用分发链（CONTRACTS §2.4）。多轮等待只在延续调用内使用：
+
+```go
+func (p *Quiz) Start(c *sdk.Context) error {
+    return c.Continue(func(c *sdk.Context) error {
+        if _, err := c.Send(message.Chain{message.Text(c.T("quiz.ask"))}); err != nil {
+            return err
+        }
+        reply, err := c.Wait(2 * time.Minute) // 同一用户在同一会话的下一条消息
+        if err != nil {
+            return err
+        }
+        _, err = c.Send(message.Chain{message.Text(c.T("quiz.got", "answer", reply.Text()))})
+        return err
+    })
+}
+```
+
 ## E. 消息、命令和权限
 
 MessageChain 表示一次逻辑 Send；多条独立推送应多次 Send。一个逻辑 Send 可产生多个平台消息 ID，并用 ACCEPTED/PARTIAL/REJECTED/UNKNOWN 和逐部分结果描述；错误返回不得丢掉已经确认的 ID。整条 Chain 在第一次平台调用前预检，失败后不继续发送剩余部分。
 
 Target 明确 Adapter、实例、账号、聊天和可选话题；没有真实入站默认目标时必须显式 To。原事件 Target 的回复范围与主动/跨实例的 allowed_adapter_instances 按 CONTRACTS §8 准入，不以 User/Admin 代替发信许可。平台 ID 在公共 JSON 中用字符串。系统任务没有虚构的账号/Actor。Text/Image/Video/File/Mention/Reference/Buttons/Forward 的可表达组合和 Telegram 映射见 MESSAGE-MODEL。
 
-普通命令按完整 token 路径最长匹配，再以 priority/plugin_id/route_id 选稳定胜出者；已识别的禁用、无权限、参数错误命令不回落 Regex/Raw/短路径。没有普通命令才按 Regex→Raw 处理，支持停止传播。跨插件同名命令在诊断中显示遮蔽关系，不由启动顺序决定。
+普通命令按完整 token 路径最长匹配，再以 priority/plugin_id/route_id 选稳定胜出者；已识别的禁用、无权限、参数错误命令不回落 Regex/Raw/短路径。没有普通命令才按文本匹配（Regex、keyword、startswith、endswith、fullmatch）→Raw 处理，支持停止传播。跨插件同名命令在诊断中显示遮蔽关系，不由启动顺序决定。
 
 Core 命令 Admin 是按 Adapter 实例与外部用户 ID 配置的机器人管理员；平台群管理员只形成 chat_admin Rule，不自动取得 Core 管理权限。命令树取最近显式权限策略，允许子命令放宽或收紧，但所有层的禁用和 Core 全局禁止始终生效。每次派发前读取当前策略，已开始调用不宣称可撤销。
 
@@ -103,7 +121,7 @@ Event Bus 使用 `plugin_id/event_name`，非持久化尽力广播，离线不�
 
 Service 以 `plugin_id/service_name` 注册，使用显式 schema/version 的 JSON 或 Protobuf 请求/响应。Core 检查目标状态和授权，继承父请求的 Actor/scope/deadline，A→B→C 可用；同调用链出现重复插件或超过深度上限明确拒绝。父请求结束后其未完成子调用取消，后台独立请求仅有插件身份。
 
-通过 Core 动态调用其他插件命令/事件 Router 保留为 v0.2；v0.1 不暴露该执行 API，只保留稳定 route ID。Go Modules 用于编译期复用，不能当作跨进程 Go 对象调用。
+通过 Core 动态调用其他插件命令/事件 Router 不在 v0.1 范围内（Q-15）；v0.1 不暴露该执行 API，只保留稳定 route ID。Go Modules 用于编译期复用，不能当作跨进程 Go 对象调用。
 
 ## H. Core Scheduler
 
@@ -150,6 +168,8 @@ Core 状态库的 ActiveGeneration 是权威，`config.json` 是用户编辑快�
 
 以上是 i18/en-US.json 示例；语言仅影响文案，查找为当前 locale→en-US→默认 tag。选项显示名可翻译，值和配置 JSON 路径保持不变。
 
+同一文件的顶层 `messages` 存放机器人回复的文案，例如 `{"messages": {"quiz.got": "You answered {answer}."}}`。SDK 的 `c.T` 按用户的 locale、Core 默认 locale、en-US 的顺序选择语言；日志与错误只用英文，不进入文案目录（CONTRACTS §5.4）。
+
 ## K. WebUI、安装与运行安全
 
 最小 WebUI 提供状态/日志、安装启停、更新/恢复、配置表单与命令权限。管理 API 采用 Core 的管理员认证、CSRF 与独立 Session；首次本机 admin-token init/reset、浏览器登录与 CLI Bearer 按 CONTRACTS §7.4 实现；插件页面不会收到管理 Cookie。没有可信来源/合法归档就不执行程序，首次信任与后续更新绑定持久化。
@@ -183,11 +203,16 @@ type Instance interface {
     Stop(ctx context.Context) error
     Send(ctx context.Context, target *pb.Target, chain *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo)
 }
+
+// Editor 是支持 message.edit 的实例另外实现的可选接口，调用方用类型断言获取。
+type Editor interface {
+    Edit(ctx context.Context, target *pb.Target, messageID string, chain *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo)
+}
 ```
 
-Adapter 作者使用 `sdk/adapter` 实现平台接收、标准化与发送；派发、权限、Target 授权、按钮 token、媒体缓存和游标持久化留在 Core。插件可以声明对某个 Adapter 的依赖，并使用它声明的 extension 片段，见 CONTRACTS §8。Start 完成凭证/实例检查并启动接收后返回；Stop 停止接收；实例的致命错误经 `core.adapter.status` 报告，不静默消失。同一平台账号只允许一个入站所有者，凭证轮换先停止旧实例。
+Adapter 作者使用 `sdk/adapter` 实现平台接收、标准化与发送；派发、权限、Target 授权、按钮 token、媒体缓存和游标持久化留在 Core。插件可以声明对某个 Adapter 的依赖，并使用它声明的 extension 片段，见 CONTRACTS §8。Start 完成凭证/实例检查并启动接收后返回；Stop 停止接收；实例的致命错误经 `core.adapter.status` 报告，不静默消失。实例上线、下线时由 Core 生成 `bot.online`、`bot.offline` 事件。同一平台账号只允许一个入站所有者，凭证轮换先停止旧实例。
 
-v0.1 默认 Telegram long polling，先确定实际 bot 身份并校验 account_id。接收游标与非持久化事件入站的确认语义见 MESSAGE-MODEL；不承诺 exactly-once。平台特有能力按版本声明，不支持的片段组合先拒绝；其他官方 Adapter 后续增加，第三方 Adapter 按同一机制安装。
+v0.1 只支持 Telegram long polling，先确定实际 bot 身份并校验 account_id。接收游标与非持久化事件入站的确认语义见 MESSAGE-MODEL；不承诺 exactly-once。平台特有能力按版本声明，不支持的片段组合先拒绝；其他官方 Adapter 后续增加，第三方 Adapter 按同一机制安装。
 
 ## N. 更新 Journal、快照与恢复
 
@@ -203,14 +228,47 @@ v0.1 默认 Telegram long polling，先确定实际 bot 身份并校验 account_
 
 CLI/API 的完整管理动作与包协议见 CONTRACTS §9。Core 状态库记录安装序号/来源、ActiveGeneration、Journal、权限、回调与配置引用；业务库由插件负责。所有状态变更通过同一个 Core 管理服务串行化，离线 CLI 不能绕过仍运行的 Core 直接改状态库。
 
-日志/指标关联 plugin_id、route_id、call_id、session/generation、adapter_instance；记录状态变化、拒绝/丢弃、发送回执、更新/恢复和配置权限审计。资源测试包含 Core+不同插件+附属进程，总 RSS/私有内存、Linux PSS、CPU、P50/P95/P99；测试环境和平台差异随结果记录。
+日志使用标准库 `log/slog`（D-31）：每条记录关联来源（Core、插件或 Adapter）、plugin_id 或 adapter_id、instance、route_id、call_id、trace_id、session/generation，记录状态变化、拒绝/丢弃、发送回执、更新/恢复和配置权限审计。控制台格式仿照 AstrBot，例如 `[14:05:42.118] [Plug:weather] [ERRO] [weather/weather.go:57]: ... trace=7c2e91d0`；同一条消息引起的记录共用 trace_id，可以串起跨插件的整条链路。每个插件与 Adapter 可单独设置级别或设为 off，WebUI 的显示筛选只在浏览器中进行（CONTRACTS §14）。资源测试包含 Core+不同插件+附属进程，总 RSS/私有内存、Linux PSS、CPU、P50/P95/P99；测试环境和平台差异随结果记录。
 
 ## P. 长期扩展方向（不进入 v0.1）
 
-动态命令 Router、多轮会话/暂停 DSL、更多 Adapter、LLM 多 Provider/任务与子代理、TUI/桌面/移动端、多语言 SDK 均保留为后续方向。WASM、实例池、蓝绿零停机和复杂表单不进入首发，不为它们预建运行时抽象。
+动态命令 Router、持久化的多轮会话状态与暂停 DSL、更多 Adapter、子代理、跨会话的记忆检索、TUI/桌面/移动端、多语言 SDK 均保留为后续方向。WASM、实例池、蓝绿零停机和复杂表单不进入首发，不为它们预建运行时抽象。
 
 ## Q. 多实例与实施维护
 
 Target 与凭证按 Adapter 实例/账号区分，不把特定 X/Twitter 多账号需求硬编码进 Core。实例管理、权限和凭证切换分别在 T-03/T-04/T-09 实施并验收。
 
 修订时同步根目录契约、详细计划与测试；选择原因和历史审阅见 [adr/README.md](adr/README.md)。技术基线维持 v0.6-review。
+
+## R. Agent 与记忆插件
+
+Agent 分为 Core 基础与官方插件两层（D-27）。Core 负责必须可信的部分：工具目录与按工具的调用策略、调用前的用户确认、会话存储；它们复用 Service Broker、按钮 token 与 Target 准入的实现（CONTRACTS §13）。官方 Agent 插件 `plugins/agent/` 是普通插件，只经 SDK 访问 Core：
+
+- **一轮对话**：`/ask` 在任何聊天中触发；Admin 为某个聊天开启自由对话后，该聊天中 `to_me` 的非命令消息也触发（私聊的消息都是 `to_me`）。触发的 Handler 请求延续调用，在其中读取会话历史，按人格组装系统提示，调用 Provider 并流式接收。先发送一条消息，再按固定间隔编辑它，显示已生成的内容；生成结束后用完整内容做最后一次编辑。
+- **Provider**：OpenAI 兼容的 Chat Completions 与 Anthropic Messages，用标准库 net/http 与 SSE 实现；api_key 使用 Secret 引用。
+- **工具**：模型请求的 Core 工具经 `core.tool.invoke` 调用；MCP 工具（stdio、streamable HTTP，经 `github.com/modelcontextprotocol/go-sdk`）执行前先经 `core.tool.confirm`。单轮的工具步数有上限。
+- **技能**：管理员放进技能目录的 `SKILL.md`，包含名称、描述与正文。系统提示只列出描述，模型经 `load_skill` 按需读取正文。
+- **定时任务**：用户让 Agent 创建的任务保存在插件数据库，由一个固定的 schedule 触发，在该回调内运行；没有 Actor，因此需要确认的工具一律拒绝。
+
+记忆插件实现 CONTRACTS §13.4 的三个服务（D-28）。官方记忆插件 `plugins/memory/` 仿照 Hermes 的内置记忆：
+
+- 每个会话一份笔记、每个用户一份档案，各有字符上限。
+- Agent 在会话开始时调用一次 `memory.context`，把结果写进会话存储，作为冻结的快照；会话内写入的记忆到下一个会话才进入系统提示。
+- `memory.prefetch` 返回当前说话用户的档案，附在本轮用户消息之前，因此群聊中每位用户使用自己的档案。
+- `memory` 工具支持 add、patch、remove；超过上限返回错误，不丢弃已有条目。
+
+## S. 两种运行方式
+
+AlonaBot 同时面向直接使用机器人的用户和写插件的开发者（D-32），两者运行的是同一个 Core 和同一套协议，区别只在组件由谁启动：
+
+| | 发行包（用户） | 库模式（开发者） |
+| --- | --- | --- |
+| 入口 | 从本仓库的 Release 下载发行归档，运行 `alonabot`，在 WebUI 中配置 | 在自己的 `main.go` 中调用 `alonabot.Run`，执行 `go run .` |
+| 包含 | Core、官方 Telegram Adapter、Agent、记忆插件与预装插件；首次运行自动安装，默认只启用 Agent、记忆与 help | 内嵌完整的 Core；开发中的插件、Adapter 或记忆插件由本进程运行 |
+| 组件进程 | 每个已启用的包一个独立进程 | 开发中的组件与 Core 同进程，可直接打断点；已安装的其他包仍是独立进程 |
+
+库模式下开发者只写插件包和一个调试用的 `main.go`，发布时 `alonabot plugin build` 自动生成正式入口。开发时与生产时的行为只差进程隔离与崩溃重启。启用热部署后 Core 常驻，开发中的组件改为子进程：源码改动后重新编译，只重启这些组件，Adapter 连接、其他插件与按钮都不受影响；编译失败时旧版本继续运行（CONTRACTS §15）。
+
+Go 不能在进程内替换已加载的代码，所以热部署通过重启子进程实现，断点调试与热部署不能同时使用。
+
+官方 Adapter 与官方插件只经 SDK 与 Core 通信，`adapters/` 与 `plugins/` 不被本仓库其他包 import；v0.1 协议冻结后迁到独立仓库。

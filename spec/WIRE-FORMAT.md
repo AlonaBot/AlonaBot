@@ -75,6 +75,8 @@ Bootstrap 属于私有、已认证 IPC，和整个 HELLO_ACK 一起受 **4 MiB**
 | `config_schema_hash`、`previous_config_version`、`target_config_version` | 与可信安装包对应的 Schema 和配置迁移输入；无配置插件仍以空对象表示 |
 | `database_descriptor` | 后端类型、受管 SQLite 当前准备视图路径或该插件 PostgreSQL 连接参数、迁移模式、已应用版本、activation_reason（first_install/resume/reload/update/rollback）、manual_migration_approved（仅Core显式维护许可且绑定当前Session/Generation/DB时true）；不下发 Core 管理数据库凭证 |
 | `http_proxy_auth` | 本 Session 独立的内部代理认证材料；只在插件声明 HTTP 能力时需要，不复用 Admin 凭证 |
+| `log_level` | 该来源当前生效的日志级别（CONTRACTS §14.3），SDK 据此在进程内过滤 |
+| `session_limits` | 本次运行生效的在途请求数、payload 预算与普通请求期限（CONTRACTS §16），SDK 与 Core 使用同一组值 |
 | `phase_limits`、`preparation_deadline_unix_ms` | 主契约固定的准备、迁移和 Ready 预算及本轮绝对期限；迁移使用独立预算，不被普通业务 30s 截断 |
 
 SDK 按配置契约执行 `OnLoad → 补缺失默认值 → typed decode/Validate → DB 迁移门槛核对及许可的迁移 → OnStart`（PG resume 不重跑 Migrate/Up，见 CONTRACTS §6.3），并在 REGISTER 回传完整、规范化的候选 JSON；私有载荷可包含供插件使用的已解析 Secret。Core 只为新候选抽取 Secret 并持久化新的引用快照，再计算 PREPARED 的 candidate digest；普通 restart 仅验证原快照一致性，复用原 Generation、Secret 引用与 COMMITTED 记录。Bootstrap、候选完整 JSON、DB 凭证及 HTTP 认证材料不得进入普通日志或管理 API 响应。
@@ -106,13 +108,14 @@ REGISTER 的完整描述必须装入一帧；超限 RESOURCE_EXHAUSTED，不部�
 Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流程（CONTRACTS §8、D-26），区别如下：
 
 - 启动的是插件还是 Adapter 由 Core 依据安装记录决定，不采信进程自报。Adapter 的 REGISTER 必须携带 Adapter 描述（adapter_id、平台 Capability、extension 声明及其 Schema），且不得携带插件路由、HTTP Listener 或迁移信息；插件的 REGISTER 不得携带 Adapter 描述。不一致按注册失败处理。
-- Core 与 Adapter 之间的固定服务如下，服务名不含 `/`：
+- Core 与 Adapter 之间的固定服务如下（共八个），服务名不含 `/`：
 
 | 服务 | 方向 | 请求 → 响应 |
 | --- | --- | --- |
 | `adapter.instance.start` | Core→Adapter | instance_id、实例配置 JSON（含已解析凭证）、已保存的游标 → account_id、账号展示名、该实例的 Capability |
 | `adapter.instance.stop` | Core→Adapter | instance_id → 空结果；实例停止接收，不再交付事件 |
 | `adapter.send` | Core→Adapter | instance_id、Target、MessageChain → SendResult 与/或 ErrorInfo，语义同 MESSAGE-MODEL §4 |
+| `adapter.edit` | Core→Adapter | instance_id、Target、platform_message_id、MessageChain → SendResult 与/或 ErrorInfo，语义同 MESSAGE-MODEL §4 的 Edit |
 | `adapter.media.read` | Core→Adapter | instance_id、平台文件标识、offset、length（1～1 MiB）→ bytes、next_offset、eof |
 | `core.adapter.deliver` | Adapter→Core | instance_id、Event、交付后的游标 → 是否接纳；Core 队列满时为未接纳并计数 |
 | `core.adapter.cursor` | Adapter→Core | instance_id、游标 → 空结果；用于没有事件时的游标变化 |
@@ -120,6 +123,27 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 
 - 出站媒体沿用 `core.media.read`；Core 在 `adapter.send` 之前为本次发送签发只读 token。
 - 这些载荷的 Protobuf 定义放在 `adapter.proto`，编号遵循 §5A 的只追加规则。
+
+### 3.5 插件可调用的 Core 固定服务
+
+以下服务与 `core.send`、`core.media.*` 一样服务名不含 `/`，载荷为 Protobuf，按 §5A 的只追加规则编号：
+
+| 服务 | 请求 → 响应 | 契约 |
+| --- | --- | --- |
+| `core.edit` | Target、platform_message_id、MessageChain → SendResult 与/或 ErrorInfo | CONTRACTS §8、MESSAGE-MODEL §4 |
+| `core.continuation.start` | 必须带 parent_call_id → 空结果，超过每 Session 128 个进行中的延续调用时 RESOURCE_EXHAUSTED；原调用成功结束后 Core 发出 Handler REQUEST，HandlerRequest 的 `continuation_of` 为原调用的 call_id，SDK 据此找到登记的延续函数 | CONTRACTS §2.4 |
+| `core.wait` | 必须带 parent_call_id（延续调用）、超时 → 命中的 Event | CONTRACTS §2.4 |
+| `core.tool.list` | 空 → 工具列表（名称、description、输入 Schema、生效策略） | CONTRACTS §13.1 |
+| `core.tool.invoke` | 必须带 parent_call_id；工具名、JSON 参数 → 工具的 JSON 输出与/或 ErrorInfo | CONTRACTS §13.1、§13.2 |
+| `core.tool.confirm` | 必须带 parent_call_id；操作名、参数摘要 → 空结果（允许）或 ErrorInfo | CONTRACTS §13.1、§13.2 |
+| `core.conversation.append` | 会话键、一条或多条 JSON 条目 → 最后一条的序号 | CONTRACTS §13.3 |
+| `core.conversation.list` | 会话键、起始序号 → 条目及序号、下一个序号 | CONTRACTS §13.3 |
+| `core.conversation.clear` | 会话键 → 空结果 | CONTRACTS §13.3 |
+| `core.command.list` | 必须带 parent_call_id → 调用者 Actor 在默认 Target 中可用的命令：路径、别名、参数用法、按 Actor locale 翻译的说明、所属插件 | CONTRACTS §15.2（help 插件） |
+
+Core→插件与 Core→Adapter 方向另有 `sdk.log.set_level`：新的生效级别 → 空结果，SDK 收到后立即按新级别过滤（CONTRACTS §14.3）。
+
+注册描述的追加字段：Service 描述增加可选的 `tool`（description、default_policy）；CommandMatch 追加 KEYWORD、STARTSWITH、ENDSWITH、FULLMATCH，CommandSpec 增加模式列表与 `ignore_case`；Actor 增加可选 `locale`；message.created 的载荷增加 `to_me`；Bootstrap 增加 `log_level` 与 `session_limits`；CommandSpec 增加可选的说明键（插件 `messages` 中的键，供 `core.command.list` 翻译）；BeforeSend/AfterSend 的输入增加操作类型与被编辑的 platform_message_id。这些都是追加，不改变 `contracts/wirespec_test.go` 固定的枚举。
 
 ## 4. 调用上下文、读写与取消
 
@@ -165,7 +189,7 @@ Core 媒体服务固定为 BeginUpload/WriteChunk/CommitUpload/Read/Grant：Read
 - `ForwardSource` 的结构（display_name、external_user_id）由 T-01 补定；新增 `SendRequest{to, chain}` 作为 Core Send 服务的请求。
 - Core→目标插件的 Service 调用载荷是 `ServiceInvocation{route_id, context, encoding, schema_id, schema_version, payload}`：可信上下文与业务载荷分开传输，服务响应直接使用 output schema 的业务载荷（REVIEW-1 补充）。
 - 控制帧与 Core 固定载荷的 `schema_id` 为 `alonabot.<snake_case 消息名>.v1`（例如 `alonabot.hello_ack.v1`），控制帧一律使用 PROTOBUF 编码。是否携带载荷以 `schema_id` 是否为空来判断，而不看 payload 长度，因为空消息序列化后是 0 字节。校验入口为 `contracts/validate`。
-- Core 启动插件进程时通过环境变量传递会话参数（常量定义在 `internal/wire/env.go`）：`ALONABOT_PLUGIN_ID`、`ALONABOT_SESSION_SECRET`（32 字节十六进制）、`ALONABOT_TRANSPORT`（`tcp`/`stdio`）、`ALONABOT_CORE_ADDR`（TCP loopback 地址）、`ALONABOT_BUILD_DIGEST`（归档 SHA256 十六进制）、`ALONABOT_RUNTIME_LOCK`（runtime.lock 的绝对路径）。其余环境变量只从白名单继承（PATH、HOME、临时目录、SystemRoot、LANG、TZ），Core 管理凭证不会进入插件环境。
+- Core 启动插件进程时通过环境变量传递会话参数（常量定义在 `internal/wire/env.go`）：`ALONABOT_PLUGIN_ID`、`ALONABOT_SESSION_SECRET`（32 字节十六进制）、`ALONABOT_TRANSPORT`（`tcp`/`stdio`）、`ALONABOT_CORE_ADDR`（TCP loopback 地址）、`ALONABOT_BUILD_DIGEST`（归档 SHA256 十六进制）、`ALONABOT_RUNTIME_LOCK`（runtime.lock 的绝对路径）。其余环境变量只从白名单继承（PATH、HOME、临时目录、SystemRoot、LANG、TZ），Core 管理凭证不会进入插件环境；设置了调优参数 `PLUGIN_MEMORY_SOFT_LIMIT` 时另传 `GOMEMLIMIT`（CONTRACTS §16）；出站代理按 CONTRACTS §15.1 的 `proxy` 设置传递 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`。
 - 握手与准备：认证失败（Secret 恒时比较、插件 ID、build_digest 任一不符）时 Core 直接关闭连接，不回复任何帧；认证之后的失败（协议协商、Bootstrap 超限、REGISTER 不合法、准备期出现非控制帧）先发 SESSION_ERROR 再关闭，发送 SESSION_ERROR 限时 1s，对端不读时不会卡住失败路径。Preparing 的硬截止为配置、迁移、OnStart 三个阶段预算之和，写入 Bootstrap.preparation_deadline_unix_ms。PREPARED 中 route_descriptor_hash 为按顺序拼接各 RouteDescriptor 确定性编码后的 SHA256，candidate_config_digest 为候选配置 JSON 的 SHA256（T-08 引入 secret 引用后改为对持久化快照计算）。
 - 协议能力项使用 `ProtocolCapability{name, version}`，与 Adapter 平台能力 `Capability{name, version, supported}` 分开。
 
