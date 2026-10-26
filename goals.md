@@ -40,7 +40,7 @@
 | --- | --- | --- | --- | --- |
 | goal-23 | T-07.1 | 调度触发计算 | — | 已实现 |
 | goal-29 | T-08.2 | 配置 JSON 语义与 Pending | — | 可派发 |
-| goal-37 | T-09.2 | 安装包预检与安全解压 | — | 可派发 |
+| goal-37 | T-09.2 | 安装包预检与安全解压 | — | 已实现 |
 | goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 等待前置 |
 | goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 等待前置 |
 | goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 等待前置 |
@@ -231,7 +231,7 @@ func (s *Store) GenerationConfig(ctx context.Context, generationID string) (stri
 
 ### goal-37 · T-09.2 安装包预检与安全解压
 
-状态：可派发。
+状态：已实现（PR 已合并）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-37（切片 T-09.2：安装包预检与安全解压）。goal 目录 goal-37，分支 goal-37，worktree .worktrees/goal-37，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。

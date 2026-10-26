@@ -151,6 +151,7 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 | --- | --- | --- | --- |
 | T-07.1 / V-20 计算分项 | `contracts/schedule/`；PR #17（合并提交 `02713770288be5c477e0451947684dcbad9ace1d`）；GitHub Actions Quality gate run 40294045649 | 通过：格式检查、静态检查、测试与五目标构建质量门槛均通过 | Core Scheduler 注册/运行槽、迟到响应与停止集成仍归 T-07.2～T-07.5；V-20 整体未闭合 |
 | T-12.1 / V-57 Provider 分项 | `plugins/agent/provider/`；PR #16（合并提交 `354c5b6f5cd123c0ef05fc09054d52fc16561083`）；GitHub Actions Quality gate run 40293852858 | 通过：格式检查、静态检查、测试与五目标构建质量门槛均通过；本地 `go test provider.go provider_test.go` 通过 | Agent 对话、流式显示、真实 Provider 验收归 T-12.2 与 T-10；V-57 整体未闭合 |
+| T-09.2 / V-27、V-28、V-41 预检分项 | `internal/core/packages/`；集成测试 `TestPreflightAndMoveTo`、`TestPreflightRejects`、`TestPreflightFileModes`（unix）：在临时目录生成真实 tar.gz、release.json 与 Ed25519 签名，经 Preflight 与 MoveTo 驱动；覆盖合法包移入不可变目录、同一目标再次移动返回 ALREADY_EXISTS、签名/来源/平台/大小/摘要不符、manifest 的 id/version/source/平台/entrypoint 不符、`../x`、`/abs`、`a/../../x`、反斜杠、盘符、符号链接、硬链接、字符与块设备、FIFO、大小写冲突、重复路径、归档/条目数/展开字节超限，每项断言暂存目录无残留；权限 0600/0700 且去掉 setuid | `go test -race -count=1 ./internal/core/packages/` 通过（darwin/arm64）；Windows 未运行 | 下载、首次来源信任、安装记录与 CLI 归 T-09.3、T-09.4；V-27、V-28、V-41 整体未闭合 |
 
 发布阻塞：协议/Session 鉴权、Core 全局权限、数据代次唯一性、回滚/维护的真实性、安装包越界/来源安全及目标五平台构建失败，均不能通过文案豁免。v0.1 不设内存与吞吐的通过阈值，T-10 只报告 V-33 的实测结果；**不杜撰 100 MB 等硬性能指标**。
 
