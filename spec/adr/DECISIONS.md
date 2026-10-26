@@ -1,6 +1,6 @@
 # 设计决策记录
 
-版本：v0.6-review（2026-10-21；保留已确认 D-01～D-25，不升版本）
+版本：v0.6-review（2026-10-21；保留已确认 D-01～D-25，2026-10-25 新增 D-26，不升版本）
 
 D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置及当前状态。2026-10-21 的规格完善任务将剩余技术默认值收敛为实施基线，不追加虚构的历史确认记录；2026-10-22 将决策和历史记录归入 adr/。
 
@@ -35,6 +35,7 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | D-23 | SDK 开发体验 | plugin.yaml 元数据 ID 是真源，根类无需重复写 `ID()`；独立函数可自动注册，实例方法显式注册；辅助 Handler 可显式拿到根类指针；优先原生 Go Modules 与少反射 |
 | D-24 | 保留两条跨插件协作途径 | 公共接口注册到 Core → Service Call（推荐）；同时**保留**通过 Core 动态调用另一插件已注册命令/事件路由的需求，具体权限语义和是否进入 V0.1 尚待定，不能直接持有另一进程 Go 对象 |
 | D-25 | 统一 HTTP 入口、插件端口由 SDK 托管 | **用户确认**：所有框架托管的插件 HTTP 路由只由 Core 的统一 HTTP(S) 入口对外提供；插件开发者只注册 Go `http.Handler`/路由，**不需要设置、管理或告知用户开放端口**。SDK 只在有 HTTP 路由时自动启动 loopback 随机端口的内部 Listener；Core 维护 Session 绑定的内部反向代理、路由/权限及启停清理。部署用户只需开放 Core 对外端口，插件内部 Listener 不映射公网；命令/事件/Service Call 仍使用 Protobuf RPC。此确认不代表 Native 插件绝不能自行创建框架外 Listener，也不改变插件 HTML/JS 与 Admin UI 不同浏览器 Origin 的既有安全要求。 |
+| D-26 | 可安装的 Adapter | **用户确认（2026-10-25）**：Adapter 与插件一样是安装包和独立 Native 进程，官方 Telegram 也是可卸载的安装包，Core 不静态链接平台实现。同一 Adapter 包只运行一个进程，承载它的全部账号实例；实例由 Core 单独启停，停用 Adapter 即停止该进程，以节省内存。插件可声明对 Adapter 的依赖并使用 Adapter 声明的 extension 片段（例如 Telegram 专有的按钮组件） |
 
 ## P 类历史议题与当前处置
 
@@ -45,7 +46,7 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | P-03 | 代次与恢复 | 独占锁与 Journal 唯一提交点约束恢复；旧 Session 失效，不自动重放业务调用。 | §1/§4/§6/§12 | 已收敛 |
 | P-04 | 多轮会话 | v0.1 仅调用上下文；持久会话状态与暂停 DSL 后置 v0.2。 | §0/§9 | 明确后置 |
 | P-05 | Handler 双形式 | 两种 Handler 签名共用 HandlerOutcome；自动回复与主动 Send 分明，一次 Chain 可产生多物理消息，手动模式可多次 Send。 | §8 | 已收敛 |
-| P-06 | Adapter 形态 | Telegram 静态集成、能力版本化，实例可启停；类型热加载后置。 | §8 | 已收敛 |
+| P-06 | Adapter 形态 | 由 D-26 取代：Adapter 为安装包和独立进程，能力版本化，实例可单独启停。 | §8 | 已收敛 |
 | P-07 | 更新恢复 | Generation/Journal 管理受管 SQLite 候选副本；提交后显式恢复，PG/不可隔离迁移进入维护。 | §6 | 已收敛 |
 | P-08 | 配置激活 | Pending→Candidate→Prepared→ActiveGeneration+COMMITTED→OnReady/Activated；secret 引用不可变，提交前失败启动旧版的新 Session。 | §5/§12 | 已收敛 |
 | P-09 | 匹配/传播 | 普通命令最长路径优先，识别后拒绝不回落；同事件 priority 小先、同级稳定 ID 排序，Regex/Raw 与 Stop 语义固定。 | §2/§3 | 已收敛 |
@@ -68,7 +69,7 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | Q-07 | 版本/签名 | Core/protocol major.minor 与 SDK 编译版本区分；manifest、归档摘要、来源身份和外部 release 清单签名分别校验。 | §7/§9 | 已收敛 |
 | Q-08 | Config/i18 | Go Schema/JSON tag/i18 嵌套对应原始 JSON；固定类型、迁移、默认、PATCH、未知键保留与翻译规则。 | §5 | 已收敛 |
 | Q-09 | PostgreSQL | 管理员预置每插件专用 PG role/schema；SDK 执行迁移，遵守维护门槛，失败按人工恢复边界处理。 | §6 | 已收敛；需 PG 验证 |
-| Q-10 | 第三方 Adapter | 首发官方静态 Telegram；第三方 Adapter 类型及装载机制后置。 | §8 | 明确后置 |
+| Q-10 | 第三方 Adapter | 由 D-26 收敛：Adapter 以安装包和独立进程交付，官方 Telegram 与第三方使用同一机制。 | §8 | 已收敛 |
 | Q-11 | 回执/片段 | MESSAGE-MODEL 定义两种 Handler 输出、物理发送计划、部分成功回执与不支持片段的明确失败。 | §8 | 已收敛 |
 | Q-12 | CLI/分发 | 交付已承诺的开发/管理 CLI、tar.gz、manifest、外部 release 清单与 GitHub Release 来源规则。 | §9 | 已收敛 |
 | Q-13 | Journal/快照 | Journal/Generation、SQLite Backup 候选、进程锁和持久化次序共同保证提交恢复；PG 不可逆变更拦截，恢复需故障注入。 | §6/§12 | 已收敛；恢复需故障注入 |
@@ -108,3 +109,4 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-10-21：按用户本轮“自动完善剩余细节、审阅可行性并修复缺陷”的授权，同版收敛 P/Q 与执行契约；D-01～D-25 历史内容保持，新增技术细节的来源就是本轮规格完善任务。
 - 2026-10-22：按用户要求迁入 adr/；合并原 CONTRACTS §11 的 P/Q 处置表，根目录改为直接实施工作包与契约。D-01～D-25 原文和既有编号保持。
 - 2026-10-21：T-01 冻结 `alonabot.v1` 的 Protobuf 字段号；对规格未给出编号或取值的消息与枚举做出实现选择，记录于 WIRE-FORMAT §5A。不改变既有 Envelope 1～16 与错误码 1～17。
+- 2026-10-25：**D-26 已确认**：Adapter 改为可安装包与独立进程（同包一个进程、实例单独启停），插件可依赖 Adapter 的 extension 片段。同步修改 CONTRACTS §0/§8/§9.1/§11、WIRE §3.4、MESSAGE-MODEL §2/§6、DESIGN §M、PLAN T-03/T-09 与 TEST-MATRIX V-48；P-06、Q-10 改为已收敛。

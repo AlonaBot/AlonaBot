@@ -43,6 +43,7 @@ MessageChain 是一次**逻辑 Send** 的有序 Segment 列表。Segment JSON �
 | reference | original_platform_message_id、target? | 一条 Chain 最多一个；目标必须与本次发送兼容，否则 UNSUPPORTED |
 | buttons | rows[[{action_id,label,value?}]] | 一条 Chain 最多一个；action_id 指向当前插件已注册的 button.clicked 路由，value 通过该 action Schema 校验 |
 | forward | items[{source?,chain}] | 仅平台明确支持合并转发时发送；不支持返回 UNSUPPORTED，不默默转成多次 Send |
+| extension | adapter_id、name、version、payload（JSON 对象） | 平台专有能力，只能发往该 adapter_id 的实例；name/version 必须在 Adapter 注册的 extension 声明中，payload 按其 Schema 校验；不支持时 UNSUPPORTED，不降级为其他片段（CONTRACTS §8） |
 
 `entities` 使用 `type、offset_utf16、length_utf16` 及类型需要的 url/language/external_user_id；偏移相对于本 text，必须落在完整字符边界，不能截断代理对。首发公共类型为 bold/italic/underline/strikethrough/spoiler/code/pre/text_link/text_mention；不支持的类型明确拒绝。SDK 从 Go 字符串创建实体时须转换 UTF-8/rune 索引，不能直接把字节索引交给 Telegram。
 
@@ -109,9 +110,9 @@ ACCEPTED 只表示平台 API 确认接受，不保证用户阅读。跨多条平
 - AfterSendRequest 包含最终 SendResult/错误；Handler 只返回成功或 ErrorInfo，无修改 SendResult 的返回字段。其自身失败记日志，不改变已确认的平台发送结果，不触发重发。
 - **所有出站 Hook 中禁止 Send**，包含 BeforeSend 与 AfterSend。调用链标记由 Core 维护，沿该调用链间接经 Service 再调用 Send 也不能绕过；Hook 不得创建脱离该调用链的后台发送来规避此契约。Native 自行创建的任意代码副作用仍受其可信代码假设约束。
 
-## 6. Telegram 首发映射
+## 6. 官方 Telegram Adapter 映射
 
-Telegram Adapter 静态集成，可启停不同实例；每实例绑定一个 Bot 账号，使用 getMe 得到的身份校验目标账号，凭证不跨实例复用。chat_id 与 thread_id 精确映射到 chat_id/message_thread_id；首发普通私聊、群、频道及论坛话题之外的专属会话形式需显式能力支持，否则 UNSUPPORTED。
+官方 Telegram Adapter 是可安装的 Adapter 包（CONTRACTS §8），一个进程承载全部已配置实例，实例可单独启停；以下映射在 Adapter 进程内实现，游标持久化、按钮 token 与派发仍在 Core。每实例绑定一个 Bot 账号，使用 getMe 得到的身份校验目标账号，凭证不跨实例复用。chat_id 与 thread_id 精确映射到 chat_id/message_thread_id；首发普通私聊、群、频道及论坛话题之外的专属会话形式需显式能力支持，否则 UNSUPPORTED。
 
 ### 6.1 接收、游标和实例故障
 
