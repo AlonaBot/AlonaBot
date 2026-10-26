@@ -3,11 +3,11 @@
 版本：v0.6-review · 2026-10-21  
 状态：**现行实施基线，待实施验证**。本轮按用户“自动完善剩余细节、审阅可行性并修复缺陷”的授权收敛，不提升版本编号。
 
-本文件与 [WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 共同定义首发行为；[PLAN.md](PLAN.md) 是唯一执行入口。保留 D-01～D-30，历史 PDF/讨论对照中的待定描述不覆盖当前规则。规格审阅不是运行时测试报告。
+本文件与 [WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 共同定义首发行为；[PLAN.md](PLAN.md) 是唯一执行入口。保留 D-01～D-32，历史 PDF/讨论对照中的待定描述不覆盖当前规则。规格审阅不是运行时测试报告。
 
 ## 0. 范围和明确取舍
 
-v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、Native Go 插件与 Adapter SDK/子进程、双传输 RPC、命令/文本匹配/事件/权限、延续调用与基础多轮等待、Event Bus、Service Call、调度、插件 HTTP、SQLite/PostgreSQL、配置/WebUI、用户可见文案的 i18n、预构建安装/更新与有明确边界的回退，以及 Agent 基础（§13）、官方 Agent 插件与官方记忆插件。保留 D-01～D-30；其他官方 Adapter、TUI、WASM、插件实例池、蓝绿零停机、持久化的多轮会话状态与暂停 DSL、动态跨插件命令 Router 与复杂表单后置。
+v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、Native Go 插件与 Adapter SDK/子进程、双传输 RPC、命令/文本匹配/事件/权限、延续调用与基础多轮等待、Event Bus、Service Call、调度、插件 HTTP、SQLite/PostgreSQL、配置/WebUI、用户可见文案的 i18n、预构建安装/更新与有明确边界的回退，Agent 基础（§13）、官方 Agent 插件与官方记忆插件，统一日志（§14），以及发行包、预装插件与库模式（§15）。保留 D-01～D-32；其他官方 Adapter、TUI、WASM、插件实例池、蓝绿零停机、持久化的多轮会话状态与暂停 DSL、动态跨插件命令 Router 与复杂表单后置。
 
 运行时容量和阶段超时采用固定内部常量，不增加逐插件调参 UI。它们是初始实现边界，须通过 TEST-MATRIX 实测后调整；不是性能保证。现行技术细节按本轮用户授权完成，保留 v0.6-review 编号。
 
@@ -286,7 +286,7 @@ type VersionedMigrator interface {
 
 ### 9.3 CLI 的最小完整动作
 
-Core 首次管理凭证与离线恢复使用 §7.4 的 `alonabot admin-token init/reset`。开发者命令为 `alonabot plugin init|check|build|test|pack`；`build` 使用已锁定 Go Modules 与目标 OS/arch，源码安装显式选择本地构建，预编译安装不要求服务器编译。`check` 验证本节静态契约；`test` 在临时数据和离线测试会话检查加载/注册，不能调用生产凭证或宣称已测试平台发信。`pack` 可以生成待离线签名的外部发布清单，私钥不进入包。
+Core 由 `alonabot serve` 启动（§15.1）。Core 首次管理凭证与离线恢复使用 §7.4 的 `alonabot admin-token init/reset`。开发者命令为 `alonabot plugin init|check|build|test|pack`；`init` 生成插件包与库模式调试用的 `main.go`（§15.3），`build` 用 T-04 生成器为根插件生成调用 `sdk.Run` 的正式入口，使用已锁定 Go Modules 与目标 OS/arch，源码安装显式选择本地构建，预编译安装不要求服务器编译。`check` 验证本节静态契约；`test` 在临时数据和离线测试会话检查加载/注册，不能调用生产凭证或宣称已测试平台发信。`pack` 可以生成待离线签名的外部发布清单，私钥不进入包。
 
 管理命令如下；修改均经 Core 管理接口，CLI 不直接写状态库，离线时只允许只读检查或明确的维护恢复流程：
 
@@ -299,6 +299,8 @@ Core 首次管理凭证与离线恢复使用 §7.4 的 `alonabot admin-token ini
 | `update` | 仅从绑定来源选择符合 pin 的候选版本并执行受控更新；不把 install 同 ID 当更新。 |
 | `uninstall` | 停止、解除运行注册并删除未引用程序包；默认保留数据、secret 与来源绑定，以便同来源重装。`--purge` 为显式删除框架受管数据/绑定的动作，须展示并确认准确对象；不擅自删除外部 PG schema 或任意插件自管目录。 |
 | `pin` | 固定允许的更新版本；解除固定须显式操作，不能被自动更新忽略。 |
+| `logs` | 按来源、级别与 trace_id 读取最近记录，`--follow` 时持续输出（§14.4）。 |
+| `log-level` | 修改全局或某个插件、Adapter 的日志级别，立即生效（§14.3）。 |
 | `rollback` | 明确选择保留代次为输入，停机建立新的恢复候选 Generation；SQLite 从所选快照复制独立 DB，复用对应程序/配置/secret，走同一 Prepared/提交流程，不复用历史 Generation ID 或直接写保留快照；在执行前列明将舍弃该快照之后的本地写入，要求显式确认。无法恢复的 PG/外部数据返回 NEEDS_MANUAL_MIGRATION，外部已发送消息不会撤回。 |
 
 管理动作按插件串行；安装顺序、来源、pin、卸载保留与恢复目标均持久化，Core 重启不能靠无序目录遍历重新决定。安装器初始固定上限为压缩包 256 MiB、展开总量 1 GiB、10,000 个条目，超限在写入/激活前报 RESOURCE_EXHAUSTED；T-01 验证计数覆盖流式解压，不新增用户调参页面。发布验收至少覆盖当前五个目标平台，CGO 插件由发布者提供对应产物，不自动假称能跨编译。
@@ -307,7 +309,7 @@ Core 首次管理凭证与离线恢复使用 §7.4 的 `alonabot admin-token ini
 
 ## 10. 实施验收与停止条件
 
-沿用 T-01～T-12，不新建平行实施计划；全部 V 编号和通过条件集中维护在 [TEST-MATRIX.md](TEST-MATRIX.md)。每个任务同时完成对应实现与最小验证，不要求先跑尚不存在的应用测试。
+沿用 T-01～T-14，不新建平行实施计划；全部 V 编号和通过条件集中维护在 [TEST-MATRIX.md](TEST-MATRIX.md)。每个任务同时完成对应实现与最小验证，不要求先跑尚不存在的应用测试。
 
 详细步骤、拟目录、交付物和失败停止条件见 [PLAN.md](PLAN.md)。SDK/Proto 编译、数据库恢复、跨平台进程清理、Telegram 集成及真实性能在相应任务中取得证据；跨阶段用例的分工与最终闭合点按 TEST-MATRIX 执行。
 
@@ -329,7 +331,9 @@ Core 首次管理凭证与离线恢复使用 §7.4 的 `alonabot admin-token ini
 | §9 构建/分发/管理 CLI | T-01 契约，T-04 生成器，T-09 完整工具和来源检查 |
 | §12 状态/锁/恢复 | T-02 建立共同原语，T-08 准备资源，T-09 复用原语完成正式 Journal 和恢复 |
 | §13 Agent 基础 | T-11 工具目录、策略、确认与会话存储；T-12 官方 Agent 插件与官方记忆插件；T-09 工具策略与会话清除的管理页 |
-| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-61 和五目标运行结果 |
+| §14 日志 | T-02.1 日志基线；T-09.10 按来源级别的持久化、最近记录、管理 API、CLI 与日志页；各切片按 §14 记录 |
+| §15 运行方式 | T-07.3 设置文件；T-09.4 `alonabot serve`；T-13 库模式与热部署；T-14 发行包与预装插件 |
+| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-67 和五目标运行结果 |
 
 ## 12. 跨层状态机与恢复不变量
 
@@ -400,3 +404,114 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
   - `memory.sync`：输入本轮用户消息与最终回复文本，无输出。
 - 记忆范围由调用链的可信上下文决定：会话按默认 Target（adapter_instance_id、chat_id、thread_id），用户按 Actor。缺少所需的 Actor 或默认 Target 时返回 FAILED_PRECONDITION。三个服务的访问规则由记忆插件声明；官方记忆插件只允许官方 Agent 插件调用。
 - 记忆插件写入记忆的工具按 §13.1 注册，Agent 不直接写记忆存储。
+
+## 14. 日志
+
+### 14.1 记录与来源
+
+- Core、插件与 Adapter 都用 Go 标准库 `log/slog` 记录。一条记录包含时间、级别、消息、源码位置（文件与行号）、来源与键值字段。来源分为 core、plugin、adapter 三类：plugin 与 adapter 另带来源 ID（plugin_id 或 adapter_id），与某个 Adapter 实例相关时带 instance_id。处理某次调用时，记录带上该调用的 trace_id（Envelope.trace_id）、route_id 与 call_id。
+- 级别为 DEBUG、INFO、WARN、ERROR。逐条事件与逐次调用的记录只用 DEBUG：
+
+| 级别 | 用途 |
+| --- | --- |
+| ERROR | 需要人处理的故障：插件崩溃或被自动停用、状态库错误、提交失败、实例致命错误、Handler panic |
+| WARN | 被拒绝或丢弃，但系统继续运行：队列满丢弃、Handler 返回错误、确认超时、接收退避重连、非结构化输出 |
+| INFO | 状态变化：Core 启停、插件激活与停止、实例上下线、安装、更新与回退、配置重载、管理员登录 |
+| DEBUG | 单条事件与单次调用的过程：事件接收、匹配结果、调用耗时、发送回执、工具调用、Provider 请求 |
+
+- 插件与 Adapter 的 SDK 把记录以每行一个 JSON 对象写到 stderr，字段为 time、level、msg、source（file、line）与键值字段。Core 逐行解析，补上来源类别、来源 ID、session 与 generation 后输出；插件给出的同名字段不能覆盖 Core 补充的值。
+- 不是合法记录的行（直接写到 stderr 或 TCP 模式下 stdout 的文本、未被捕获的 panic 输出）作为 WARN 原样保留，消息为 `unstructured output` 并带 stream 字段，不丢弃。SDK 在调用边界捕获的 panic 记为一条 ERROR，堆栈放在 `stack` 字段。
+
+### 14.2 输出格式
+
+- Core 把全部记录写到自己的 stderr。`--log-format text`（缺省）为下面的控制台格式；`json` 为每行一个 JSON 对象，包含全部字段与完整的 trace_id。长期保存由运行环境负责，例如 journald 或容器日志。
+- 控制台格式仿照 AstrBot：
+
+  ```text
+  [14:05:42.118] [Plug:weather] [ERRO] [weather/weather.go:57]: fetch forecast failed: context deadline exceeded trace=7c2e91d0
+  ```
+
+  - 时间为本地时区的「时:分:秒.毫秒」。
+  - 来源标签：Core 为 `[Core]`；插件为 `[Plug:<id>]`；Adapter 为 `[Adpt:<adapter_id>]`，与实例相关时为 `[Adpt:<adapter_id>/<instance_id>]`。插件 ID 去掉 `alonabot_plugin_` 市场前缀显示。
+  - 级别缩写为 DBUG、INFO、WARN、ERRO。
+  - 源码位置为「所在目录名/文件名:行号」。
+  - 消息之后按记录顺序输出 `key=value`，值含空白或引号时按 Go 的带引号字符串输出；trace_id 显示为 `trace=` 加前 8 位十六进制。多行的值（例如 `stack`）在后续行缩进 4 个空格输出。
+  - 只有 stderr 是终端且未设置 `NO_COLOR` 时才着色：时间为绿色，DBUG 蓝色、INFO 青色、WARN 黄色、ERRO 红色。
+
+### 14.3 级别
+
+- 全局级别由 `--log-level` 或设置文件的 `log.level`（§15.1）在启动时设置，缺省 info。管理员可以在运行时修改，立即生效，Core 重启后恢复为启动时的设置。Core 自己的记录按全局级别输出。
+- 每个插件与每个 Adapter 包可以单独设置级别：debug、info、warn、error、off，或 inherit（缺省，跟随全局）。该设置持久化在 Core 状态库，经管理服务修改后立即生效，Core 重启后保留。
+- Core 在 Bootstrap 中下发该来源的生效级别，运行时的变化经 `sdk.log.set_level` 通知。SDK 在进程内按这个级别过滤，off 时不输出任何记录；Core 对收到的记录再按同一级别过滤。
+- 来源设为 off 只隐藏该进程自己的记录；Core 关于它的记录（例如崩溃、停用）仍以 `[Core]` 按全局级别输出。库模式中开发中的组件缺省为 debug（§15.3）。
+
+### 14.4 查看
+
+- Core 为 Core 自己、每个插件与每个 Adapter 包各保留最近 **1000** 条已输出的记录。这些记录只在内存中，Core 重启后清空。
+- 管理 API 提供按来源、级别与 trace_id 读取这些记录，以及经 SSE 实时订阅，都要求管理员会话或 CLI 的 Bearer token；`alonabot logs` 使用同一 API。
+- WebUI 日志页先读取最近记录再订阅。按来源、级别与 trace 的筛选只在浏览器中进行，不改变输出，筛选条件保存在浏览器本地；修改输出级别使用 §14.3 的管理服务。
+
+### 14.5 脱敏
+
+- 日志不包含 Secret 明文、Bootstrap、完整配置 JSON、DSN、管理 token 与会话凭证。含凭证的 URL（例如 Telegram Bot API 路径中的 `bot<token>`）在记录前脱敏；HTTP 客户端的错误先去掉 URL 中的凭证再记录。
+- DEBUG 记录可以包含消息文本，不包含媒体内容。
+
+## 15. 运行方式
+
+### 15.1 Core 的启动与设置
+
+- `alonabot serve` 启动 Core，不带子命令运行 `alonabot` 与它相同：取得 core.lock，打开状态库，按安装记录启动全部已启用的插件与 Adapter。`--data-dir` 缺省为工作目录下的 `data/`。
+- 启动所需的设置在 `<data_dir>/alonabot.yaml`，文件不存在时以缺省值创建：
+
+| 键 | 缺省值 | 含义 |
+| --- | --- | --- |
+| `listen` | `127.0.0.1:7650` | Core 唯一的公开 Listener（§7.2） |
+| `admin_base_url` | `http://127.0.0.1:7650` | Admin 主机名（§7.3） |
+| `plugin_base_url` | `http://localhost:7650` | 插件页面主机名，端口与 Admin 相同、主机名不同 |
+| `trusted_proxies` | 空 | 可信反向代理的地址范围 |
+| `log.level`、`log.format` | `info`、`text` | §14 |
+
+- 命令行参数覆盖设置文件中的同名项，只对本次运行有效；设置文件修改后重启 Core 生效。Core Admin 列表、默认 locale、按来源的日志级别等运行时设置保存在状态库，经管理服务修改。缺省只监听本机地址；改为非本机地址时须满足 §7.3、§7.4 的 Host、HTTPS 与可信反代要求。
+- 首次启动且尚无管理凭证时：stdin 与 stderr 都是终端，Core 就按 §7.4 的 `admin-token init` 规则生成管理 token，只在该终端显示一次，然后继续启动；不是终端时拒绝启动，并提示先运行 `alonabot admin-token init`。
+
+### 15.2 发行包与预装插件
+
+- 每个目标平台发布一个发行归档 `alonabot-<version>-<os>-<arch>`（Windows 为 zip，其他为 tar.gz），包含 `alonabot` 可执行文件和 `packages/` 目录。`packages/` 中是官方 Telegram Adapter、官方 Agent 插件、官方记忆插件与预装插件的安装包，以及各自归档外的 `release.json` 与 `.sig`（§9.2）。
+- 发行版 Core 内置官方发布者公钥作为已信任来源：运行官方发行包即视为接受该来源，预装包不再逐个确认。签名与摘要照常校验，校验失败的包不安装并记 ERROR。
+- 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，并启用 Agent、记忆与 help 插件；其余预装插件只安装不启用。官方 Telegram Adapter 只安装，管理员添加第一个实例并填写 Bot Token 时才启用。Agent 插件在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。
+- 之后不再自动安装，已卸载的预装包不会在下次启动时重新安装。新版本发行包中的包版本高于已安装版本时，作为可用更新列在管理界面与 `alonabot list` 中，由管理员确认后按 `update` 流程更新。Core 本身通过替换可执行文件升级。
+- 首批预装插件为 help（按调用者权限列出可用命令与用法）、welcome（新成员入群时发送欢迎语）与 rss（订阅 RSS/Atom 并推送到聊天）。它们与第三方插件一样以独立进程运行，只有启用的才运行。
+
+### 15.3 库模式
+
+- 根包 `github.com/AlonaBot/AlonaBot`（包名 `alonabot`）是库模式入口。开发者在自己的 `main.go` 中调用 `alonabot.Run`，在当前进程启动一个完整的 Core（§15.1 的启动与设置，数据目录缺省为工作目录下的 `.alonabot/`），并用选项登记开发中的组件：
+
+  ```go
+  func main() {
+      if err := alonabot.Run(
+          alonabot.Plugin(&weather.Weather{}),
+          alonabot.Adapter(telegram.New()),
+      ); err != nil {
+          log.Fatal(err)
+      }
+  }
+  ```
+
+- 组件的 manifest、Schema 与 i18 资源取自 T-04 生成器在构建期嵌入的副本。开发中的组件不经安装包：
+  - Core 为它们创建 dev 来源的安装记录，不做来源、签名与归档摘要校验，Hello 的 build_digest 使用 Core 为本次运行生成的值；dev 来源的组件只能在库模式中运行，不能 update 或 rollback。
+  - 它们使用固定代次 `dev`，不走候选与 Journal：每次启动以 `<data_dir>/plugins/<id>/config.json`（缺失时为空对象）为配置，经 SDK 准备与校验后直接生效。受管 SQLite 为 `<data_dir>/plugins/<id>/dev.sqlite`，不复制、不回退。按钮 token 因代次固定，重启后仍然有效。
+- Core 按正常启动流程为每个开发组件创建 Session，SDK 在本进程的 goroutine 中经 loopback TCP 连接，握手、Bootstrap、注册、激活、调用与停止都与独立进程相同；已安装的其他包照常以独立进程运行。与独立进程的区别只有两点：
+  - 没有进程隔离：SDK 未捕获的 panic 会使整个进程退出，也不执行有限重启；
+  - Core 无法强制结束 goroutine：停止预算到期后组件仍未退出时记 ERROR，`Run` 返回错误。
+- 官方 Adapter 与官方插件以可导入的 Go 包提供组件（例如 `telegram.New()`），程序入口只调用 SDK 的运行函数，库模式可以直接引用它们。
+- 库模式也可以用于小规模部署，但不提供上述隔离与崩溃恢复；正式分发插件与 Adapter 仍使用安装包。
+
+### 15.4 热部署
+
+- 用 `alonabot.Reload()` 选项或环境变量 `ALONABOT_RELOAD=1` 启用热部署；`alonabot.Run` 不解析程序自己的命令行参数。
+- 根类型所在的包属于 main 包所在 module 的组件是开发中的组件，热部署时以子进程运行：`Run` 先把当前 main 包编译到 `<data_dir>/dev/bin/`，再按正常启动流程启动该可执行文件，并在启动环境中指明要运行的组件；`alonabot.Run` 在这种启动环境下只运行指明的组件，不启动 Core。来自其他 module 的组件（例如经 go.mod 引用的官方 Telegram Adapter）留在 Core 进程中，不随改动重启。
+- Core 常驻。每 **500ms** 检查 main 包所在 module 内的 `.go` 文件与嵌入资源的修改时间（标准库轮询）。发现变化后重新编译：
+  - 编译失败时输出编译器信息，正在运行的组件不受影响；
+  - 编译成功后依次停止并重启全部开发中的组件；Core、留在 Core 进程中的组件、已安装的其他包以及按钮 token 都不受影响。
+- `go.mod` 或 `go.sum` 变化时，留在 Core 进程中的依赖可能已改变，`Run` 输出 WARN，提示手动重启。
+- 热部署时开发中的组件在子进程中，断点调试需要附加到子进程；不启用热部署时，组件与 Core 同进程。

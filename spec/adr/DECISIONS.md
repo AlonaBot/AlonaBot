@@ -1,10 +1,10 @@
 # 设计决策记录
 
-版本：v0.6-review（2026-10-21；保留已确认 D-01～D-25，2026-10-25 新增 D-26～D-30，不升版本）
+版本：v0.6-review（2026-10-21；保留已确认 D-01～D-25，2026-10-25 新增 D-26～D-32，不升版本）
 
 D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置及当前状态。2026-10-21 的规格完善任务将剩余技术默认值收敛为实施基线，不追加虚构的历史确认记录；2026-10-22 将决策和历史记录归入 adr/。
 
-**实施入口**：[PLAN.md](../PLAN.md) 给出 T-01～T-12 详细工作包；[CONTRACTS-v0.1.md](../CONTRACTS-v0.1.md) 固定行为，表内 § 编号均指该契约；验收见 [TEST-MATRIX.md](../TEST-MATRIX.md)。P/Q 处置表已从根目录 CONTRACTS 合并到本文件。D-07/D-18 的历史“Ready”统一解释为新状态机中完成 OnReady 并被 Core 接受的 `Activated`，不是 `Prepared`。
+**实施入口**：[PLAN.md](../PLAN.md) 给出 T-01～T-14 详细工作包；[CONTRACTS-v0.1.md](../CONTRACTS-v0.1.md) 固定行为，表内 § 编号均指该契约；验收见 [TEST-MATRIX.md](../TEST-MATRIX.md)。P/Q 处置表已从根目录 CONTRACTS 合并到本文件。D-07/D-18 的历史“Ready”统一解释为新状态机中完成 OnReady 并被 Core 接受的 `Activated`，不是 `Prepared`。
 
 ## 已确认
 
@@ -40,6 +40,8 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | D-28 | 记忆插件 | **用户确认（2026-10-25）**：记忆是一种特殊插件，即实现 `sdk/memory` 标准记忆服务的普通插件，不新增 manifest role；Agent 同时只使用一个记忆插件。官方内置的记忆插件仿照 Hermes 的内置记忆：按会话的笔记与按用户的档案各有字符上限，会话开始时冻结快照，`memory` 工具支持 add/patch/remove。跨会话全文检索与同时启用多个记忆插件后置 |
 | D-29 | NoneBot2 基础对齐 | **用户确认（2026-10-25）**：v0.1 补齐 keyword/startswith/endswith/fullmatch 文本匹配、基础多轮等待（非持久）、bot 上下线事件与插件依赖声明。为了让多轮等待与 Agent 的一轮对话不受普通请求 30s 期限和 64 条分发链的限制，规格完善时增加延续调用：Handler 可请求 Core 在本次调用结束后，以原可信上下文另发一次独立期限的调用 |
 | D-30 | 用户可见文案的 i18n | **用户确认（2026-10-25）**：日志、错误、CLI 输出与 safe_message 只用英文；机器人回复与 WebUI 经 i18n 提供，英文为源语言，附简体中文。插件文案放在 `i18/` 的 `messages`，按 Actor locale → Core 默认 locale → en-US 选择 |
+| D-31 | 统一日志 | **用户确认（2026-10-25）**：Core、插件与 Adapter 都使用标准库 `log/slog`。控制台格式仿照 AstrBot：`[时间] [来源] [级别] [文件:行号]: 消息`，来源标签为 `[Core]`、`[Plug:<id>]`、`[Adpt:<id>/<实例>]`，另可输出 JSON。默认 INFO；全局级别在启动时设置，也可在运行时修改。每个插件与 Adapter 可单独设置级别（含 off），持久化在 Core，修改立即生效。WebUI 的显示筛选与输出级别分开 |
+| D-32 | 两种运行方式 | **用户确认（2026-10-25）**：发行包开箱即用，包含 Core、官方 Telegram Adapter、Agent、记忆插件与预装插件，首次运行自动安装，默认只启用 Agent、记忆与 help；预装插件首批为 help、welcome、rss（规格完善时选定）。库模式供开发者把框架当作 Go 库使用：在自己的 `main.go` 中调用根包的 `alonabot.Run`，开发中的组件与 Core 同进程、走同一套协议；`-reload` 时 Core 常驻，只重新编译并重启开发中的组件。官方 Adapter 与官方插件在 v0.1 协议冻结后迁到独立仓库，`adapters/` 与 `plugins/` 不被本仓库其他包 import |
 
 ## P 类历史议题与当前处置
 
@@ -115,3 +117,4 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-10-21：T-01 冻结 `alonabot.v1` 的 Protobuf 字段号；对规格未给出编号或取值的消息与枚举做出实现选择，记录于 WIRE-FORMAT §5A。不改变既有 Envelope 1～16 与错误码 1～17。
 - 2026-10-25：**D-26 已确认**：Adapter 改为可安装包与独立进程（同包一个进程、实例单独启停），插件可依赖 Adapter 的 extension 片段。同步修改 CONTRACTS §0/§8/§9.1/§11、WIRE §3.4、MESSAGE-MODEL §2/§6、DESIGN §M、PLAN T-03/T-09 与 TEST-MATRIX V-48；P-06、Q-10 改为已收敛。
 - 2026-10-25：**D-27～D-30 已确认**：v0.1 加入 Agent 基础与官方 Agent 插件、记忆插件、NoneBot2 基础对齐（文本匹配、延续调用与多轮等待、bot 上下线事件、插件依赖）和用户可见文案的 i18n。同步修改 CONTRACTS §0/§1.2/§2/§5.4/§8/§9.1/§11/§13、MESSAGE-MODEL、WIRE §3.4/§3.5、DESIGN、PLAN（新增 T-11、T-12 与相关切片）及 TEST-MATRIX V-49～V-61；P-04 改为已收敛。
+- 2026-10-25：**D-31、D-32 已确认**：统一日志（slog、AstrBot 风格控制台格式、按来源的级别）与两种运行方式（发行包与预装插件、库模式与热部署），并补上 Core 的启动命令与设置文件。同步修改 CONTRACTS §0/§9.3/§11/§14/§15、WIRE §3.2/§3.5、DESIGN §O/§S、PLAN（新增 T-02.1、T-09.10、T-13、T-14）、TEST-MATRIX V-62～V-67。

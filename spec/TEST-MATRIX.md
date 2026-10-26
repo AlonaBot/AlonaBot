@@ -2,7 +2,7 @@
 
 版本：v0.6-review · 2026-10-21
 状态：**T-01/T-02 的分项已有运行证据（见 §3.1），其余分项与全部跨任务闭合点未执行**。用于实施交接与风险门槛，并非自动化测试报告。
-规范来源：[PLAN.md](PLAN.md)（T-01～T-12 详细工作包）、[CONTRACTS-v0.1.md](CONTRACTS-v0.1.md)、[WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md)。决策依据见 [adr/DECISIONS.md](adr/DECISIONS.md)。阶段归属更新：2026-10-22。
+规范来源：[PLAN.md](PLAN.md)（T-01～T-14 详细工作包）、[CONTRACTS-v0.1.md](CONTRACTS-v0.1.md)、[WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md)。决策依据见 [adr/DECISIONS.md](adr/DECISIONS.md)。阶段归属更新：2026-10-22。
 
 ## 1. 逐任务验收条目
 
@@ -69,6 +69,12 @@
 | V-59 | T-12 | 记忆 add/patch/remove、超过字符上限、重复条目、不可见字符、群聊多用户、会话中写入与 /reset、记忆插件不可用 | 超限与非法内容返回错误且不丢已有条目；快照在会话内不变、下一会话生效；每位用户只看到自己的档案；配置的记忆插件不可用时本轮报错 |
 | V-60 | T-12 | 技能目录含合法与缺少 frontmatter 的 SKILL.md、load_skill 不存在的技能 | 系统提示只含合法技能的描述；不合法文件记诊断并跳过；load_skill 返回正文或明确错误 |
 | V-61 | T-12 | 创建 interval/cron 定时 Agent 任务、到期运行、无发信许可、需要确认的工具、插件离线错过 | 任务按 CONTRACTS §4.3 的触发规则运行且不补跑；无许可时 PERMISSION_DENIED；confirm 工具一律拒绝；后台运行不注入记忆 |
+| V-62 | T-02、T-09 | Core/插件/Adapter 三类来源、插件写合法 JSON 行与非 JSON 行、插件伪造来源字段、Handler panic、text 与 json 格式、终端与非终端输出、含 Bot Token 的 URL 错误 | 控制台格式与来源标签符合 CONTRACTS §14.2；非结构化行原样保留为 WARN；插件不能覆盖来源字段；panic 为一条带 stack 的 ERROR；非终端或设置 NO_COLOR 时不着色；日志中没有 token、Secret 与配置明文 |
+| V-63 | T-02、T-09 | 全局与按来源的级别、off、运行时修改、Core 重启、最近记录上限、SSE 订阅、`alonabot logs`、WebUI 筛选 | 修改立即生效；按来源的设置重启后保留，全局级别的运行时修改重启后恢复；off 时 SDK 不输出而 Core 关于它的记录仍在；每个来源最多保留 1000 条；未认证无法读取；WebUI 筛选不改变输出 |
+| V-64 | T-13 | 库模式下同进程插件与 Adapter 的完整生命周期、dev 来源尝试 update/rollback、未捕获的 panic、停止超时、已安装包与开发组件混合运行、两次启动之间的配置与 dev.sqlite | 握手、注册、权限与独立进程一致；dev 组件使用固定代次，重启后按钮仍有效；update/rollback 被拒绝；panic 使进程退出且不重启；停止超时时 Run 返回错误 |
+| V-65 | T-13 | 热部署下改动插件源码、编译失败、改动 go.mod、来自其他 module 的 Adapter | 只重启开发中的组件，Adapter 连接与其他插件不中断；编译失败时旧组件继续运行；go.mod 变化输出 WARN；其他 module 的组件不重启 |
+| V-66 | T-14 | 干净数据目录首次运行、交互终端与非终端、预装包签名错误、卸载预装包后重启、新版本发行包 | 预装包全部安装，只启用 Agent、记忆与 help，Telegram Adapter 未启用；终端下 token 只显示一次，非终端拒绝启动；签名错误的包不安装并记 ERROR；已卸载的不重新安装；新版本只作为可用更新列出 |
+| V-67 | T-14 | help 的权限过滤与翻译、welcome 的入群欢迎、rss 的订阅/去重/推送与私网地址 | help 只列出调用者可用的命令；welcome 只响应 member.joined；rss 不重复推送同一条目，拒绝 loopback、私网与链路本地地址（含重定向之后），后台推送需要 allowed_adapter_instances |
 
 ## 2. 跨任务验收的最终闭合点
 
@@ -95,6 +101,7 @@
 | V-52 | T-03 manifest 解析与开发入口的依赖检查 | T-09 正式启用、停用、卸载与更新时的检查和确认 |
 | V-54 | T-03 locale 映射，T-08 SDK 与 Core 文案目录及 check/pack 检查 | T-09 WebUI 语言切换与真实页面 |
 | V-55、V-56 | T-11 Core 服务、策略与确认、会话存储 | T-09 工具策略与会话清除的管理页 |
+| V-62、V-63 | T-02.1 记录、格式、来源标签与进程内过滤 | T-09.10 按来源级别的持久化、最近记录、管理 API、CLI 与日志页 |
 
 T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前者可支持后续开发，真实平台部分仍由 T-10 查证。测试会话、无配置/无 DB 最小插件和 payload fixture 的范围必须写明，不可据此关闭生产认证或数据恢复用例。
 
@@ -135,6 +142,6 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 
 1. 采用 v0.6-review 技术基线，按 PLAN 的 T-01 开始；任务完成条件及部分验收的后续承接以详细工作包为准。
 2. 执行方确认 Go 编译器与目标 OS/arch CI 可用；源码、数据库、Telegram 凭证以及真实测试环境由授权范围决定。
-3. T-01→T-02→T-03→T-04→T-05 完成主链路，T-08 可在 T-04 后并行，T-06/T-07 在 T-05 后并行，T-11 在 T-06、T-08 后推进，T-12 在 T-11 后推进，T-09 待相关依赖完成再集成。切片级的前置以 PLAN §3.1 为准。
+3. T-01→T-02→T-03→T-04→T-05 完成主链路，T-08 可在 T-04 后并行，T-06/T-07 在 T-05 后并行，T-11 在 T-06、T-08 后推进，T-12 在 T-11 后推进，T-13 在 T-04、T-08 后推进，T-09 待相关依赖完成再集成，T-14 在 T-09、T-12 后推进。切片级的前置以 PLAN §3.1 为准。
 4. 执行中发现契约缺口，先修对应契约、工作包和用例，在 adr/DECISIONS.md 记录原因；不能在代码中默默更改已接受的协议。
 
