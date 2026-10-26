@@ -4,7 +4,7 @@
 
 ## 用法
 
-1. 在「总览」中找到状态为**可派发**的 goal。整理 PR（清理已有单元测试、统一已有代码的注释与命名）合并之前，只派发 goal-23 和 goal-37：它们只新建包，不碰已有文件。goal-2 和 goal-29 要修改已有文件，需要等整理 PR 合并，否则两边会在同一批文件上冲突。
+1. 在「总览」中找到状态为**可派发**的 goal。
 2. 把该 goal 的整段语句（代码块内的全部文字）原样发给一个执行者。一个 goal 同时只交给一个执行者。
 3. 执行者开出 PR 后，把 PR 链接交给审查者审查。
 4. 审查者合并后，会更新依赖它的 goal 的状态和接口段。
@@ -36,51 +36,52 @@
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
-| goal-2 | T-03.1 | 首个可用 SDK 切片 | 整理 PR | 可派发（整理 PR 合并后） |
+| goal-2 | T-03.1 | 首个可用 SDK 切片 | — | 可派发 |
 | goal-23 | T-07.1 | 调度触发计算 | — | 可派发 |
-| goal-29 | T-08.2 | 配置 JSON 语义与 Pending | 整理 PR | 可派发（整理 PR 合并后） |
+| goal-29 | T-08.2 | 配置 JSON 语义与 Pending | — | 可派发 |
 | goal-37 | T-09.2 | 安装包预检与安全解压 | — | 可派发 |
 | goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 等待前置 |
-| goal-5 | T-03.4 | Telegram 实例与接收 | T-03.1 | 等待前置 |
 | goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 等待前置 |
-| goal-4 | T-03.3 | Telegram 发送计划与回执 | T-03.4 | 待细化 |
+| goal-4 | T-03.3 | Adapter 进程与 sdk/adapter | T-03.1 | 待细化 |
+| goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 待细化 |
 | goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 待细化 |
-| goal-8 | T-03.7 | 按钮 token 与回调路由 | T-03.2、T-03.3 | 待细化 |
-| goal-9 | T-03.8 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.7 | 待细化 |
-| goal-10 | T-04.1 | 根插件 API 与静态注册索引 | T-03.8 | 待细化 |
+| goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 待细化 |
+| goal-8 | T-03.8 | 按钮、extension 片段与 Adapter 依赖 | T-03.2、T-03.7 | 待细化 |
+| goal-9 | T-03.9 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8 | 待细化 |
+| goal-10 | T-04.1 | 根插件 API 与静态注册索引 | T-03.1 | 待细化 |
 | goal-11 | T-04.2 | 构建期生成器 | T-04.1 | 待细化 |
 | goal-12 | T-04.3 | 命令选择与参数绑定 | T-04.1 | 待细化 |
-| goal-13 | T-04.4 | 持久化命令策略 | T-04.1 | 待细化 |
-| goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-04.2、T-04.3、T-04.4 | 待细化 |
-| goal-15 | T-05.1 | 可信上下文与有界分发 | T-04.5 | 待细化 |
+| goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1 | 待细化 |
+| goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.9、T-04.2、T-04.3、T-04.4 | 待细化 |
+| goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 待细化 |
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1 | 待细化 |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 待细化 |
-| goal-18 | T-05.4 | 多进程事件流水线验收 | T-05.3 | 待细化 |
-| goal-19 | T-06.1 | Service/Bus 描述与 Broker 准入 | T-05.4 | 待细化 |
-| goal-20 | T-06.2 | 父调用链、取消与背压 | T-06.1 | 待细化 |
+| goal-18 | T-05.4 | 多进程事件流水线验收 | T-03.8、T-05.3 | 待细化 |
+| goal-19 | T-06.1 | Service/Bus 描述与 Broker 准入 | T-04.1 | 待细化 |
+| goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 待细化 |
 | goal-21 | T-06.3 | 非持久 Event Bus | T-06.1 | 待细化 |
 | goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 待细化 |
-| goal-24 | T-07.2 | schedule 注册与运行槽 | T-07.1、T-05.4 | 待细化 |
-| goal-25 | T-07.3 | SDK HTTP Listener 与 Core 代理 | T-04.5 | 待细化 |
+| goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 待细化 |
+| goal-25 | T-07.3 | SDK HTTP Listener 与 Core 代理 | T-04.1 | 待细化 |
 | goal-26 | T-07.4 | 两个 Host 与插件票据 | T-07.3 | 待细化 |
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 待细化 |
-| goal-28 | T-08.1 | 配置字段描述与构建检查 | T-04.5 | 待细化 |
+| goal-28 | T-08.1 | 配置字段描述与构建检查 | T-04.2 | 待细化 |
 | goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 待细化 |
 | goal-31 | T-08.4 | 不可变 Secret Store | T-08.1、T-08.2 | 待细化 |
 | goal-32 | T-08.5 | GORM 连接与迁移 | T-08.3 | 待细化 |
 | goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 待细化 |
 | goal-34 | T-08.7 | web/admin 骨架与配置表单组件 | T-08.1 | 待细化 |
 | goal-35 | T-08.8 | configdb 示例与 T-08 验收 | T-08.6、T-08.7 | 待细化 |
-| goal-36 | T-09.1 | 首次管理认证 | T-07.5 | 待细化 |
+| goal-36 | T-09.1 | 首次管理认证 | T-07.4 | 待细化 |
 | goal-38 | T-09.3 | 开发 CLI | T-04.5、T-08.1、T-09.2 | 待细化 |
-| goal-39 | T-09.4 | 管理服务与安装记录 | T-09.1、T-09.2 | 待细化 |
+| goal-39 | T-09.4 | 管理服务与安装记录 | T-03.8、T-08.4、T-09.1、T-09.2 | 待细化 |
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 待细化 |
-| goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-09.5 | 待细化 |
+| goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 待细化 |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 待细化 |
 | goal-43 | T-09.8 | Admin 管理页 | T-09.6、T-08.7 | 待细化 |
 | goal-44 | T-09.9 | Admin 配置、权限与插件页 | T-09.8 | 待细化 |
 | goal-45 | T-09.10 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9 | 待细化 |
-| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-09.10 | 待细化 |
+| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-05.4、T-08.8、T-09.10 | 待细化 |
 | goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 待细化 |
 | goal-48 | T-10.3 | 资源比较报告 | T-10.1 | 待细化 |
 | goal-49 | T-10.4 | 发布资产与说明 | T-10.2、T-10.3 | 待细化 |
@@ -405,7 +406,7 @@ func (c *Candidate) Discard() error                            // 删除暂存�
 
 目标：插件可以向自己有许可的实例发送。显式 To 与后台 Send 都按 Core 持久化的 allowed_adapter_instances 逐次准入；回复原事件 Target 仍然不需要许可。提供 Core 内部的许可读写入口，供测试和后续管理服务调用，不开放外部接口。
 
-依据：PLAN T-03 步骤 2；CONTRACTS §8 第 2、3 条；MESSAGE-MODEL §1；TEST-MATRIX V-07。
+依据：PLAN T-03 步骤 3；CONTRACTS §8 第 7、8 条；MESSAGE-MODEL §1；TEST-MATRIX V-07。
 
 范围：
 - 修改 internal/core/state/state.go：只在 migrations 末尾追加一条
@@ -457,104 +458,6 @@ func Send(ctx context.Context, to *pb.Target, chain message.Chain) (*pb.SendResu
 不做：管理 API/CLI/WebUI、Core 全局禁止规则、Telegram、媒体。
 ```
 
-### goal-5 · T-03.4 Telegram 实例与接收
-
-状态：等待前置（T-03.1）。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-5（切片 T-03.4：Telegram 实例与接收）。goal 目录 goal-5，分支 goal-5，worktree .worktrees/goal-5，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：一个实现 adapter.Instance 的 Telegram 实例。它能完成 getMe 绑定、owner 唯一性与 webhook 冲突检查，然后以 long polling 接收、逐条持久化游标、把 update 标准化为 Event 交给 Sink。同时交付本地 Bot API 模拟服务，供本切片和后续切片的测试使用。发送在后续切片实现，本切片的 Send 返回 UNSUPPORTED。
-
-依据：PLAN T-03 步骤 3；CONTRACTS §8 第 1 条；MESSAGE-MODEL §1、§1.1、§6、§6.1；TEST-MATRIX V-45。
-
-范围：
-- 新增 internal/adapters/telegram/：Bot API 客户端、实例、接收循环、update 标准化
-- 新增 internal/adapters/telegram/telegramtest/：模拟服务
-- 在 internal/core/adapter/ 中新增文件 cursor.go（不改已有接口）
-- 修改 internal/core/state/state.go：只在 migrations 末尾追加一条
-- 新增 internal/core/state/cursors.go
-- 上述包的测试文件
-允许的新跨模块边：internal/adapters/telegram → internal/core/adapter、contracts（ARCHITECTURE 已允许）。telegram 不得 import internal/core/state，持久化只经 adapter.CursorStore。
-
-接口：
-// internal/core/adapter/cursor.go
-type Cursor struct { Offset int64; LastAcceptedAt time.Time; RoundStartedAt time.Time } // Offset 为 0 表示不带 offset 拉取
-type CursorStore interface {
-    LoadCursor(ctx context.Context, instanceID string) (Cursor, error) // 没有记录时返回零值和 nil
-    SaveCursor(ctx context.Context, instanceID string, c Cursor) error
-}
-// internal/core/state/cursors.go：*Store 实现 adapter.CursorStore
-迁移：CREATE TABLE adapter_cursors (instance_id TEXT PRIMARY KEY, update_offset INTEGER NOT NULL, last_accepted_at INTEGER NOT NULL, round_started_at INTEGER NOT NULL);
-// internal/adapters/telegram
-type Config struct {
-    InstanceID string
-    Token      string
-    APIBase    string // 为空时用 https://api.telegram.org；测试时指向模拟服务
-    Cursors    adapter.CursorStore
-    Owners     *Owners
-    Now        func() time.Time // 为 nil 时用 time.Now
-}
-type Owners struct{ ... } // 一个 Core 内已占用的 Bot 账号，并发安全
-func NewOwners() *Owners
-type Instance struct{ ... } // 实现 adapter.Instance
-func New(cfg Config) (*Instance, error)
-func (i *Instance) Status() Status
-type Status struct { State string; Err error; Dropped uint64 } // State 取 "stopped"、"running"、"failed"
-// internal/adapters/telegram/telegramtest
-type Server struct{ ... } // 基于 httptest.Server
-func New(t testing.TB, token string) *Server
-func (s *Server) URL() string
-func (s *Server) Handle(method string, fn func(params url.Values) (result any, errCode int, description string))
-// 按 Bot API 方法名注册处理函数；未注册的方法返回 404。后续切片在自己的测试中注册更多方法。
-func (s *Server) Requests(method string) []url.Values
-func (s *Server) PushUpdates(updates ...json.RawMessage) // getUpdates 的默认处理按 offset 返回已推送的 update
-
-行为：
-- Start：
-  1) 调用 getMe，account_id 为 bot 用户 ID 的十进制字符串。
-  2) 在 Owners 中占用该账号；已被占用 → FAILED_PRECONDITION。
-  3) 调用 getWebhookInfo；url 非空 → FAILED_PRECONDITION，并释放 owner。不调用 deleteWebhook。
-  4) 载入游标，启动后台接收循环后返回。
-  失败时不留下后台 goroutine。
-- 每次 getUpdates 都传 allowed_updates=["message","edited_message","channel_post","edited_channel_post","callback_query","my_chat_member","chat_member","message_reaction"]，timeout=30，并在 Offset>0 时传 offset。
-- 一批 update 按返回顺序逐条处理，每条都按以下顺序：
-  1) 把 Offset 设为 update_id+1，LastAcceptedAt 设为 Now()，SaveCursor；
-  2) 保存成功后标准化；
-  3) 有对应事件就交给 Sink.Deliver；返回 adapter.ErrQueueFull 时 Dropped 加一，继续下一条。
-  不得在处理第一条之前就保存整批的最大 ID。SaveCursor 失败时停止接收并进入 failed，不交付该条。
-- 空闲轮次：每次发起 getUpdates 前检查。若 Now() 距离 max(LastAcceptedAt, RoundStartedAt) 已满 7 天，先保存 {Offset: 0, RoundStartedAt: Now(), LastAcceptedAt 不变}，再拉取。
-- 错误处理：
-  - HTTP 401 或 409：停止接收，State="failed"，Err 写明原因，释放 owner。
-  - 网络错误和 5xx：按 1s 起、每次翻倍、上限 30s 的退避重试 getUpdates。退避常量放在包级变量中，测试可以缩短。
-  - 退避只用于接收，不用于 Send。
-- Stop：取消接收（包括在途的 long poll），等待循环退出，释放 owner，State="stopped"。重复调用无副作用。Start、Stop 与重连不得产生两个接收循环。
-- 标准化，只映射平台实际给出的 update：
-  - message/channel_post → message.created；edited_message/edited_channel_post → message.edited；my_chat_member/chat_member 按新旧状态 → member.joined 或 member.left；message_reaction 的新增 → reaction.added。
-  - callback_query 和其他类型暂时忽略，但游标照常推进。
-  - Event 字段：event_id 为 Core 生成的随机 ID；source_kind=ADAPTER；adapter_id="telegram"；adapter_instance_id、account_id 来自实例；occurred_at_unix_ms 取平台时间；source_event_id 为 update_id；platform_payload 为原始 update JSON。
-  - Target 中 chat_id 取 chat.id，thread_id 取 message_thread_id（只在 is_topic_message 时设置）。
-  - Actor 只取 from；带 sender_chat 时不构造 Actor。
-  - Chain 只放 text 或 caption（plain 文本，实体暂不转换）；媒体片段在后续切片接入，这里不构造。
-  - PlatformMessage 保留 media_group_id；每条 Telegram Message 一个事件，不聚合。
-- Send 返回 UNSUPPORTED，并用 shortcut 注释写明：发送计划接入后替换。Capabilities 返回 nil。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：internal/adapters/telegram/receive_test.go。用 telegramtest 模拟服务，以临时 data_dir 的真实状态库作为 CursorStore：
-  - Start 绑定账号；同账号第二个实例被拒；已有 webhook 时被拒，且没有 deleteWebhook 请求。
-  - 每次 getUpdates 的 allowed_updates 与 timeout 都正确。
-  - Sink 收到事件时，状态库里的游标已经是该条的 update_id+1；停止后重启从已保存的 offset 拉取，不重放。
-  - 队列满时 Dropped 计数，后续 update 继续交付；不支持的 update 被忽略，游标照常推进。
-  - 401 与 409 停止实例并进入 failed；5xx 两次后恢复接收。
-  - 注入 Now：满 7 天后下一次请求不带 offset，并保存新的 RoundStartedAt；未满 7 天不重置。
-  - 带 sender_chat 的消息没有 Actor；media_group_id 被保留。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：SaveCursor 失败时停在该条、不交付；Stop 重复调用无副作用且只有一个接收循环；state 游标方法的读写往返。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/adapters/... ./internal/core/...；go build ./...。
-
-不做：Send 与发送计划、按钮回调、入站媒体 token、实例配置的持久化与 CLI 装配、真实 Telegram 访问。
-```
-
 ### goal-6 · T-03.5 媒体上传与配额
 
 状态：等待前置（T-03.1）。
@@ -564,7 +467,7 @@ func (s *Server) PushUpdates(updates ...json.RawMessage) // getUpdates 的默认
 
 目标：插件可以经 Core 的固定服务分块上传媒体，得到绑定本次 Session 的 MediaRef。Core 执行全部固定配额和期限，在失败、过期或 Session 结束时回收。入站媒体、Read 与 Grant 在后续切片实现。
 
-依据：PLAN T-03 步骤 4（上传部分）；CONTRACTS §1.3；WIRE-FORMAT §5；TEST-MATRIX V-09。
+依据：PLAN T-03 步骤 5（上传部分）；CONTRACTS §1.3；WIRE-FORMAT §5；TEST-MATRIX V-09。
 
 范围：
 - 新增 internal/core/media/
@@ -631,9 +534,30 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 以下 goal 只写了范围和要点。前置合并后，审查者按实际代码补全「接口」「行为」「测试」三段并改为可派发；在此之前不要派发。每条的完整语义以 PLAN §4 对应步骤及其失败停止条件为准。
 
-### goal-4 · T-03.3 Telegram 发送计划与回执
+### goal-4 · T-03.3 Adapter 进程与 sdk/adapter
 
-状态：待细化（T-03.4）。范围：internal/adapters/telegram 的发送部分与模拟服务的发送方法。要点：
+状态：待细化（T-03.1）。范围：`contracts/proto` 的 `adapter.proto` 与生成代码（本切片获准修改 `.proto`）、manifest 的 `role`/`adapter_id` 解析、`internal/core/adapterhost/`（以 Adapter 进程为后端实现 T-03.1 的 `adapter.Instance`）、`internal/core/state` 的游标表、`sdk/adapter/`、`examples/adapters/loopback/`。要点：
+- WIRE §3.4 的七个固定服务全部打通；Adapter 与插件的 REGISTER 按安装记录的角色互斥校验，角色不采信进程自报。
+- 实例启停：`adapter.instance.start` 下发实例配置与已保存的游标，按返回的 account_id 检查同一 `adapter_id` 下的账号唯一；启停一个实例不重启进程，也不影响同包的其他实例。
+- 交付：Core 先校验事件归属（adapter_id、adapter_instance_id、account_id 与本 Session 已启动的实例一致），再写入游标、接纳事件，最后应答；伪造实例的事件被拒并记诊断。event_id 由 Core 生成。
+- 进程异常退出后按插件的有限重启策略恢复，只重新启动仍处于启用状态的实例，并从已保存的游标继续。
+- 回环测试 Adapter 用于本切片和 T-05 的测试，不依赖任何真实平台。
+- 验收：V-48 的进程与实例分项。
+
+### goal-5 · T-03.4 官方 Telegram Adapter 的接收
+
+状态：待细化（T-03.3）。范围：`adapters/telegram/`（只经 `sdk/adapter` 与 Core 通信）与 `adapters/telegram/telegramtest/` 的本地 Bot API 模拟服务。要点：
+- `adapter.instance.start` 中依次执行 getMe（account_id 为 bot 用户 ID 的十进制字符串）、getWebhookInfo（url 非空则失败，不调用 deleteWebhook），然后启动接收循环。
+- long polling 的 allowed_updates 固定为 message、edited_message、channel_post、edited_channel_post、callback_query、my_chat_member、chat_member、message_reaction，timeout=30。
+- 一批 update 逐条经 `core.adapter.deliver` 交付，游标为 update_id+1；收到应答后才处理下一条，未接纳的事件只计数。不支持的 update 也推进游标。
+- 距上次接纳或轮次开始满 7 天时，先经 `core.adapter.cursor` 保存不带 offset 的新轮次，再拉取。
+- 401/409 经 `core.adapter.status` 报告并停止该实例；网络错误与 5xx 只对接收退避重试，不用于发送。
+- 标准化规则沿用 MESSAGE-MODEL §1、§6：带 sender_chat 的消息不构造 Actor，保留 media_group_id，每条 Telegram Message 一个事件。
+- 验收：V-45。
+
+### goal-50 · T-03.7 官方 Telegram Adapter 的发送计划与回执
+
+状态：待细化（T-03.4）。范围：`adapters/telegram/` 的 `adapter.send` 实现与模拟服务的发送方法。要点：
 - 发送前完成整条 Chain 的预检，生成有序的物理操作计划。文本、实体按 UTF-16 偏移；连续媒体按每组 2～10 项组成相册；Reference 只作用于首条，Buttons 作用于末条，相册后的按钮用 markup 更新补上。
 - 超长、超限或无法表达的组合在首个请求前返回 UNSUPPORTED 或 INVALID_ARGUMENT，不截断、不降级、不重排。
 - PartResult 区分 ACCEPTED、REJECTED、UNKNOWN、NOT_ATTEMPTED，逻辑状态按 MESSAGE-MODEL §4 汇总。遇到拒绝或结果未知即停止后续操作，保留已确认的 ID。message_id=0 不填入 ID，依赖它的步骤记为 NOT_ATTEMPTED。不自动重发。
@@ -641,25 +565,27 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-7 · T-03.6 入站媒体与 Grant
 
-状态：待细化（T-03.2、T-03.4、T-03.5）。范围：internal/core/media、Telegram 取件的可选接口、sdk 的 Read 客户端。要点：
-- IncomingMedia token 只映射可信 Adapter 的 file_id。首次 Read 时按需取件，校验后缓存，多个 Session 共享同一份缓存。
+状态：待细化（T-03.2、T-03.4、T-03.5）。范围：`internal/core/media`、`adapters/telegram/` 的 `adapter.media.read`、`sdk` 的 Read 客户端。要点：
+- IncomingMedia token 只映射可信 Adapter 给出的平台文件标识。首次 Read 时经 `adapter.media.read` 按需取件，校验后缓存，多个 Session 共享同一份缓存。
+- 出站媒体：Core 在 `adapter.send` 之前为本次发送签发只读 token，Adapter 经 `core.media.read` 读取。
 - offset 与 length 的边界按 CONTRACTS §1.4。
 - Grant 不扩大对象、操作、Target 或有效期。消费租约保护正在使用的对象。
-- 不下发 Bot Token 或宿主路径。
+- Bot Token 和宿主路径不进入插件进程。
 - 验收：V-44、V-09。
 
-### goal-8 · T-03.7 按钮 token 与回调路由
+### goal-8 · T-03.8 按钮、extension 片段与 Adapter 依赖
 
-状态：待细化（T-03.2、T-03.3）。范围：Core 状态库的按钮 token 表、Telegram callback_query 处理、button.clicked 路由派发。要点：
-- token 为 32 字节随机值的无 padding base64url，持久化绑定 plugin、route、generation、Target 和 24 小时期限。
-- 先尽力调用 answerCallbackQuery，再逐次鉴权，Actor 取本次点击的用户。
-- 拒绝时不回落到 Raw/Regex，不发群消息。代次切换后 token 永久失效。
-- 验收：V-08 的按钮分项。
+状态：待细化（T-03.2、T-03.7）。范围：Core 状态库的按钮 token 表、Telegram callback_query 处理、button.clicked 路由派发、extension 片段的声明与发送前校验、manifest 的 `adapter_dependencies` 解析与依赖检查。要点：
+- 按钮 token 为 32 字节随机值的无 padding base64url，持久化绑定 plugin、route、generation、Target 和 24 小时期限。
+- 先尽力调用 answerCallbackQuery，再逐次鉴权，Actor 取本次点击的用户。拒绝时不回落到 Raw/Regex，不发群消息。代次切换后 token 永久失效。
+- extension 片段按目标实例所属 Adapter 在 REGISTER 中声明的 name/version/Schema 校验；目标不属于该 Adapter 或版本未声明时返回 UNSUPPORTED，不降级。
+- 必需的 Adapter 依赖缺失时拒绝激活插件并列出缺失项；Adapter 停用后，发往它的 Send 返回 UNAVAILABLE。
+- 验收：V-08 的按钮分项、V-48 的依赖分项。
 
-### goal-9 · T-03.8 Telegram 接入开发入口与故障矩阵
+### goal-9 · T-03.9 Telegram 接入开发入口与故障矩阵
 
-状态：待细化（T-03.6、T-03.7）。范围：cmd/alonabot 的开发装配（Telegram 实例配置的来源由审查者在细化时决定）、examples/plugins/echo 与 media 示例、跨包故障矩阵测试、TEST-MATRIX 证据。要点：
-- 完成 PLAN T-03 步骤 7 的全部场景；用请求记录证明没有自动补发。
+状态：待细化（T-03.6、T-03.8）。范围：`cmd/alonabot` 的开发装配（`alonabot run` 同时启动 Adapter 与插件；实例配置的来源由审查者在细化时决定）、`examples/plugins/echo` 与 media 示例、跨包故障矩阵测试、TEST-MATRIX 证据。要点：
+- 完成 PLAN T-03 步骤 8 的全部场景；用请求记录证明没有自动补发。
 - 真实 Telegram 没有测试账号时记为未运行。
 
 ### goal-10 至 goal-14 · T-04.1～T-04.5
