@@ -89,7 +89,7 @@
 | goal-44 | T-09.9 | Admin 配置、权限、工具策略与插件页 | T-09.8、T-11.1、T-11.3 | 待编写 |
 | goal-66 | T-09.10 | 日志管理与日志页 | T-02.1、T-03.1、T-09.8 | 待编写 |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10 | 待编写 |
-| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.5 | 待编写 |
+| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6 | 待编写 |
 | goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 待编写 |
 | goal-48 | T-10.3 | 资源比较报告 | T-10.1 | 待编写 |
 | goal-49 | T-10.4 | 发布资产与说明 | T-10.2、T-10.3 | 待编写 |
@@ -112,7 +112,8 @@
 | goal-72 | T-14.2 | welcome 与 rss 插件 | T-05.2、T-07.2、T-08.3、T-08.5、T-08.8 | 待编写 |
 | goal-73 | T-14.3 | 发行归档 | T-03.10、T-09.3、T-12.7、T-14.1、T-14.2 | 待编写 |
 | goal-74 | T-14.4 | 首次运行与预装 | T-09.6、T-14.3 | 待编写 |
-| goal-75 | T-14.5 | 发行包端到端验收 | T-09.11、T-14.4 | 待编写 |
+| goal-77 | T-14.5 | 容器镜像 | T-07.3、T-14.3 | 待编写 |
+| goal-75 | T-14.6 | 发行包与镜像端到端验收 | T-09.11、T-14.4、T-14.5 | 待编写 |
 
 ## 第 1 批：可派发
 
@@ -602,7 +603,8 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - 距上次接纳或轮次开始满 7 天时，先经 `core.adapter.cursor` 保存不带 offset 的新轮次，再拉取。
 - 401/409 经 `core.adapter.status` 报告并停止该实例；网络错误与 5xx 只对接收退避重试，不用于发送。
 - 标准化规则沿用 MESSAGE-MODEL §1、§6：带 sender_chat 的消息不构造 Actor，保留 media_group_id，每条 Telegram Message 一个事件；Actor.locale 取 from.language_code，按 BCP 47 规范化大小写；`to_me` 按 MESSAGE-MODEL §6.1 计算。
-- Adapter 实现放在可导入的包中（`telegram.New()`），`main` 只调用 `sdk/adapter` 的运行函数，供库模式直接引用（CONTRACTS §15.3）。
+- 实例配置的 `proxy`（Secret，http/https/socks5）优先于全局代理，作用于全部 Bot API 请求与文件下载；代理失败按网络错误退避，不改为直连。
+- Adapter 实现放在可导入的包中（`telegram.New()`），`main` 只调用 `sdk/adapter` 的运行函数，供库模式直接引用（CONTRACTS §15.4）。
 - 验收：V-45、V-54 的 locale 分项。
 
 ### goal-50 · T-03.7 官方 Telegram Adapter 的发送计划与回执
@@ -644,7 +646,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-9 · T-03.10 Telegram 接入开发入口与故障矩阵
 
-状态：待编写（T-03.6、T-03.8、T-03.9）。范围：`cmd/alonabot` 的开发装配（`alonabot run` 同时启动 Adapter 与插件；实例配置取自 `<data_dir>/adapters/<adapter_id>/instances/<instance_id>.json`，CONTRACTS §15.3）、`examples/plugins/echo` 与 media 示例、跨包故障矩阵测试、TEST-MATRIX 证据。要点：
+状态：待编写（T-03.6、T-03.8、T-03.9）。范围：`cmd/alonabot` 的开发装配（`alonabot run` 同时启动 Adapter 与插件；实例配置取自 `<data_dir>/adapters/<adapter_id>/instances/<instance_id>.json`，CONTRACTS §15.4）、`examples/plugins/echo` 与 media 示例、跨包故障矩阵测试、TEST-MATRIX 证据。要点：
 - 完成 PLAN T-03 步骤 8 的全部场景，包括实例上下线事件与消息编辑；用请求记录证明没有自动补发。
 - 真实 Telegram 没有测试账号时记为未运行。
 
@@ -729,12 +731,13 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - dev 来源使用固定代次 `dev`，配置直接读取 `config.json`，数据库为 `dev.sqlite`，不能 update 或 rollback。
 - 热部署用 `Reload` 选项或 `ALONABOT_RELOAD=1` 启用，不解析程序的命令行参数；500ms 轮询，编译失败时旧组件继续运行，其他 module 的组件不重启。
 
-### goal-71 至 goal-75 · T-14.1～T-14.5
+### goal-71 至 goal-75、goal-77 · T-14.1～T-14.6
 
 状态：待编写。要点按 PLAN T-14 各步骤：
 - `core.command.list` 只返回调用者可用的命令，说明按 Actor locale 翻译。
 - rss 抓取只允许 http/https，解析出的地址与每次重定向后的地址都不能是 loopback、私网、链路本地、组播或未指定地址；响应大小与超时为命名常量。
 - 预装包照常验签；只在数据目录首次初始化时安装，默认启用 Agent、记忆与 help；签名私钥不进入仓库与日志。
+- goal-77（T-14.5）：镜像只含 `alonabot`、`packages/` 与 CA 证书，UID 10001，`/data` 卷，`init: true`；只有 `ALONABOT_CONTAINER=1` 时允许 `0.0.0.0` 搭配本机 http Base URL，并在启动时输出 WARN。
 
 ### goal-46 至 goal-49 · T-10.1～T-10.4
 

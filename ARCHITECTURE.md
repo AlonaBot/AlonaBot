@@ -23,6 +23,7 @@
 | `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） | 部分实现：开发用 `alonabot run`（单插件启停、有限重启）；尚无正式管理 CLI |
 | `examples/plugins/` | 随 SDK 编译的示例与集成样例 | 生产代码依赖 | 部分实现：`minimal`（签名组合示例）、`lifecycle`（可真实运行的生命周期示例） |
 | `web/admin/` | Vite + TypeScript + React 19 管理界面 | 管理逻辑本身（调用 Core 管理 API） | 拟建 |
+| `Dockerfile`、`deploy/` | 官方容器镜像与 compose 示例（CONTRACTS §15.3） | Core 行为（镜像只打包发行归档的内容） | 拟建 |
 | `spec/` | 现行规格与 ADR | — | 现行 |
 
 ## 依赖方向

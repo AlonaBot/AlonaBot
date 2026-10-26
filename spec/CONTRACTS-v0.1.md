@@ -3,11 +3,11 @@
 版本：v0.6-review · 2026-10-21  
 状态：**现行实施基线，待实施验证**。本轮按用户“自动完善剩余细节、审阅可行性并修复缺陷”的授权收敛，不提升版本编号。
 
-本文件与 [WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 共同定义首发行为；[PLAN.md](PLAN.md) 是唯一执行入口。保留 D-01～D-34，历史 PDF 与讨论记录只作背景，不覆盖当前规则。规格审阅不是运行时测试报告。
+本文件与 [WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 共同定义首发行为；[PLAN.md](PLAN.md) 是唯一执行入口。保留 D-01～D-36，历史 PDF 与讨论记录只作背景，不覆盖当前规则。规格审阅不是运行时测试报告。
 
 ## 0. 范围和明确取舍
 
-v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、Native Go 插件与 Adapter SDK/子进程、双传输 RPC、命令/文本匹配/事件/权限、延续调用与基础多轮等待、Event Bus、Service Call、调度、插件 HTTP、SQLite/PostgreSQL、配置/WebUI、用户可见文案的 i18n、预构建安装/更新与有明确边界的回退，Agent 基础（§13）、官方 Agent 插件与官方记忆插件，统一日志（§14），发行包、预装插件与库模式（§15），以及调优参数（§16）。保留 D-01～D-34；其他官方 Adapter、TUI、WASM、插件实例池、蓝绿零停机、持久化的多轮会话状态与暂停 DSL、动态跨插件命令 Router、复杂表单、Telegram webhook 接收、容器镜像与系统服务安装脚本均不在 v0.1 范围内。
+v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、Native Go 插件与 Adapter SDK/子进程、双传输 RPC、命令/文本匹配/事件/权限、延续调用与基础多轮等待、Event Bus、Service Call、调度、插件 HTTP、SQLite/PostgreSQL、配置/WebUI、用户可见文案的 i18n、预构建安装/更新与有明确边界的回退，Agent 基础（§13）、官方 Agent 插件与官方记忆插件，统一日志（§14），发行包、预装插件与库模式（§15），以及调优参数（§16）。保留 D-01～D-36；其他官方 Adapter、TUI、WASM、插件实例池、蓝绿零停机、持久化的多轮会话状态与暂停 DSL、动态跨插件命令 Router、复杂表单、Telegram webhook 接收与系统服务安装脚本均不在 v0.1 范围内。
 
 运行时容量、期限和配额有固定的缺省值，统一登记为调优参数（§16）。缺省值是初始实现边界，须通过 TEST-MATRIX 实测后调整，不是性能保证；运维与测试可以在启动时覆盖，不提供 WebUI 或逐插件的调参。现行技术细节按本轮用户授权完成，保留 v0.6-review 编号。
 
@@ -252,7 +252,7 @@ type VersionedMigrator interface {
 - Core 只接受 Adapter 为它在本 Session 中已启动的实例交付的事件：Target 与事件中的 adapter_id、adapter_instance_id、account_id 必须与该实例一致，否则拒绝并记诊断。event_id 由 Core 生成；Actor 的 trusted_roles 由 Core policy 判定，Adapter 只提供平台给出的身份与 chat_admin 事实。同一 `adapter_id` 下的同一平台账号只能有一个已启动实例（唯一入站 owner），由 Core 依据 `adapter.instance.start` 返回的 account_id 检查。
 - 接收游标由 Core 持久化：Adapter 每交付一条事件都附带交付后的不透明游标，Core 先写状态库，再接纳事件并应答；Adapter 收到应答后才处理下一条。没有事件时的游标变化（例如空闲轮次重建）使用单独的游标保存调用。实例启动时，Core 把已保存的游标交给 Adapter。
 - 平台凭证只在 `adapter.instance.start` 中下发给所属 Adapter 进程，不进入插件进程、日志或普通响应。入站媒体的平台文件标识留在 Adapter，Core 以 IncomingMedia token 映射，首次 Read 时经 `adapter.media.read` 取件；出站媒体由 Core 为该次发送向 Adapter Session 签发只读 token，Adapter 经 `core.media.read` 读取。
-- 官方 Telegram Adapter 用 getMe 验证真实账号与实例配置。v0.1 只支持 long polling 接收，已有 webhook 时明确报错，不自行删除。实例配置为 `token`（Secret，必填）与 `api_base_url`（缺省 `https://api.telegram.org`，用于本地 Bot API 服务或模拟服务）。
+- 官方 Telegram Adapter 用 getMe 验证真实账号与实例配置。v0.1 只支持 long polling 接收，已有 webhook 时明确报错，不自行删除。实例配置为 `token`（Secret，必填）、`api_base_url`（缺省 `https://api.telegram.org`，用于本地 Bot API 服务或模拟服务）与 `proxy`（Secret，可选，http、https 或 socks5 URL，可含用户名与密码）。实例设置了 `proxy` 时，该实例的全部 Bot API 请求（含 getFile 与文件下载）经它发出，优先于 §15.1 的全局代理；未设置时使用全局代理。代理连接失败按网络错误处理，接收退避重连，不改为直连。
 - Target 为 adapter_id/adapter_instance_id/account_id/chat_id/thread_id?。默认目标仅来自入站真实事件；无默认目标且未指定 To 返回 NO_DEFAULT_TARGET，不能由回执 message ID 猜测凭证。
 - Core 为每个 plugin_id 持久化 `allowed_adapter_instances`，默认空集，由管理员通过既有插件权限配置修改；协议 required_capabilities 不等于发信许可。持有仍在途的可信平台事件调用链时，插件及其合法 Service 子调用可向 Core 保留的原始完整 Target 回复，无需额外实例许可。独立后台、scheduled 或不同 Target 的 Send 必须显式 To，且目标实例在该插件许可集合中；再检查实例启用、account 绑定和 Core 全局禁止。许可覆盖该实例显式 chat/thread 目标，不赋予 User/Admin 或其他实例权限；无许可返回 PERMISSION_DENIED，动态撤销在下一次 Send 准入时生效。
 - 上传、读取自己拥有的媒体不要求发信许可；Core 对真实事件签发的 IncomingMedia token 本身授予该 Session 的对象读取权。Read 只认有效 token/read 范围，Send 另行检查上述目标授权。Grant 不扩大对象、操作、Target 或有效期，只向当前已激活且满足原对象消费范围的 Session 签发受限 read token；入站对象及其派生对象的接收者还须与该事件有合法在途调用关联，或已获源实例许可；插件自己上传的对象可由 owner 显式委托当前 Activated 接收 Session 只读使用，Core 记录委托且保持原对象/有效期/Target 限制。上述关联由 Core 验证，接收者再次 Send 仍须通过自己的发信准入。
@@ -287,7 +287,7 @@ type VersionedMigrator interface {
 
 ### 9.3 CLI 的最小完整动作
 
-Core 由 `alonabot serve` 启动（§15.1）。Core 首次管理凭证与离线恢复使用 §7.4 的 `alonabot admin-token init/reset`。开发者命令为 `alonabot plugin init|check|build|test|pack`；`init` 生成插件包与库模式调试用的 `main.go`（§15.3），`build` 用 T-04 生成器为根插件生成调用 `sdk.Run` 的正式入口，使用已锁定 Go Modules 与目标 OS/arch，源码安装显式选择本地构建，预编译安装不要求服务器编译。`check` 验证本节静态契约；`test` 在临时数据和离线测试会话检查加载/注册，不能调用生产凭证或宣称已测试平台发信。`pack` 可以生成待离线签名的外部发布清单，私钥不进入包。
+Core 由 `alonabot serve` 启动（§15.1）。Core 首次管理凭证与离线恢复使用 §7.4 的 `alonabot admin-token init/reset`。开发者命令为 `alonabot plugin init|check|build|test|pack`；`init` 生成插件包与库模式调试用的 `main.go`（§15.4），`build` 用 T-04 生成器为根插件生成调用 `sdk.Run` 的正式入口，使用已锁定 Go Modules 与目标 OS/arch，源码安装显式选择本地构建，预编译安装不要求服务器编译。`check` 验证本节静态契约；`test` 在临时数据和离线测试会话检查加载/注册，不能调用生产凭证或宣称已测试平台发信。`pack` 可以生成待离线签名的外部发布清单，私钥不进入包。
 
 管理命令如下；修改均经 Core 管理接口，CLI 不直接写状态库，离线时只允许只读检查或明确的维护恢复流程：
 
@@ -334,9 +334,9 @@ Core 由 `alonabot serve` 启动（§15.1）。Core 首次管理凭证与离线�
 | §12 状态/锁/恢复 | T-02 建立共同原语，T-08 准备资源，T-09 复用原语完成正式 Journal 和恢复 |
 | §13 Agent 基础 | T-11 工具目录、策略、确认与会话存储；T-12 官方 Agent 插件与官方记忆插件；T-09 工具策略与会话清除的管理页 |
 | §14 日志 | T-02.1 日志基线与日志文件；T-09.10 按来源级别的持久化、最近记录、按日期查询、管理 API、CLI 与日志页；各切片按 §14 记录 |
-| §15 运行方式 | T-07.3 设置文件；T-09.4 `alonabot serve`；T-13 库模式与热部署；T-14 发行包与预装插件 |
+| §15 运行方式 | T-07.3 设置文件；T-09.4 `alonabot serve`；T-13 库模式与热部署；T-14 发行包、容器镜像与预装插件 |
 | §16 调优参数 | T-02.2 参数表、`--args` 与 Bootstrap 下发；之后的切片把新增的可调值登记到同一参数表 |
-| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-69 和五目标运行结果 |
+| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-70 和五目标运行结果 |
 
 ## 12. 跨层状态机与恢复不变量
 
@@ -446,7 +446,7 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
 - 全局级别由 `--log-level` 或设置文件的 `log.level`（§15.1）在启动时设置，缺省 info。管理员可以在运行时修改，立即生效，Core 重启后恢复为启动时的设置。Core 自己的记录按全局级别输出。
 - 每个插件与每个 Adapter 包可以单独设置级别：debug、info、warn、error、off，或 inherit（缺省，跟随全局）。该设置持久化在 Core 状态库，经管理服务修改后立即生效，Core 重启后保留。
 - Core 在 Bootstrap 中下发该来源的生效级别，运行时的变化经 `sdk.log.set_level` 通知。SDK 在进程内按这个级别过滤，off 时不输出任何记录；Core 对收到的记录再按同一级别过滤。
-- 来源设为 off 只隐藏该进程自己的记录；Core 关于它的记录（例如崩溃、停用）仍以 `[Core]` 按全局级别输出。库模式中开发中的组件缺省为 debug（§15.3）。
+- 来源设为 off 只隐藏该进程自己的记录；Core 关于它的记录（例如崩溃、停用）仍以 `[Core]` 按全局级别输出。库模式中开发中的组件缺省为 debug（§15.4）。
 
 ### 14.4 查看
 
@@ -482,9 +482,9 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
 | `trusted_proxies` | 空 | 可信反向代理的地址范围 |
 | `log.level`、`log.format` | `info`、`text` | §14.2、§14.3 |
 | `log.file.enabled`、`log.file.max_size`、`log.file.max_total`、`log.file.max_age_days` | `true`、`100MiB`、`1GiB`、`30` | §14.6 |
-| `proxy` | 空 | 出站代理 URL（http、https 或 socks5）；非空时 Core 为自身与所有子进程设置 `HTTP_PROXY`、`HTTPS_PROXY`。为空时，Core 把自身环境中的 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY` 原样传给子进程 |
+| `proxy` | 空 | 出站代理 URL（http、https 或 socks5），Telegram 实例自己的 `proxy` 优先（§8）；非空时 Core 为自身与所有子进程设置 `HTTP_PROXY`、`HTTPS_PROXY`。为空时，Core 把自身环境中的 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY` 原样传给子进程 |
 
-- 调优参数用 `--args` 覆盖（§16）。命令行参数覆盖设置文件中的同名项，只对本次运行有效；设置文件修改后重启 Core 生效。Core Admin 列表、默认 locale、按来源的日志级别等运行时设置保存在状态库，经管理服务修改。缺省只监听本机地址。远程管理有两种方式：经 SSH 隧道访问本机地址，或改为非本机地址并满足 §7.3、§7.4 的 Host、HTTPS 与可信反代要求。
+- 调优参数用 `--args` 覆盖（§16）。命令行参数覆盖设置文件中的同名项，只对本次运行有效；设置文件修改后重启 Core 生效。Core Admin 列表、默认 locale、按来源的日志级别等运行时设置保存在状态库，经管理服务修改。缺省只监听本机地址。远程管理有两种方式：经 SSH 隧道访问本机地址，或改为非本机地址并满足 §7.3、§7.4 的 Host、HTTPS 与可信反代要求；容器镜像的例外见 §15.3。
 - 首次启动且尚无管理凭证时：stdin 与 stderr 都是终端，Core 就按 §7.4 的 `admin-token init` 规则生成管理 token，只在该终端显示一次，然后继续启动；不是终端时拒绝启动，并提示先运行 `alonabot admin-token init`。
 
 ### 15.2 发行包与预装插件
@@ -496,7 +496,15 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
 - 首批预装插件为 help（按调用者权限列出可用命令与用法，`/whoami` 回复调用者的实例与用户 ID）、welcome（新成员入群时发送欢迎语）与 rss（订阅 RSS/Atom 并推送到聊天）。
 - 第一个 Core Admin 的产生：用户在聊天中发送 `/whoami` 取得自己的实例与用户 ID，管理员在 WebUI 的 Core 设置页（或 `alonabot admin add`）把它加入 Core Admin 列表。它们与第三方插件一样以独立进程运行，只有启用的才运行。
 
-### 15.3 库模式
+### 15.3 容器镜像
+
+- 每个版本发布官方容器镜像 `ghcr.io/alonabot/alonabot:<version>`（同时更新 `latest`），平台为 linux/amd64 与 linux/arm64。镜像内容与该平台的发行归档相同：`alonabot` 可执行文件与 `packages/`，另含 CA 证书；不含 shell、Node 或 Python，需要这些运行时的 MCP stdio 服务器须使用自行构建的镜像。
+- 镜像以非 root 用户（UID 10001）运行 `alonabot serve --data-dir /data`，数据目录 `/data` 是卷。容器须以 Docker 的 init 运行（`docker run --init` 或 compose 的 `init: true`），由它回收孤儿进程；Core 不承担 PID 1 的回收职责。
+- 镜像设置环境变量 `ALONABOT_CONTAINER=1`，设置文件的缺省 `listen` 改为 `0.0.0.0:7650`，两个 Base URL 的缺省值不变（`http://127.0.0.1:7650` 与 `http://localhost:7650`）。只有在这个环境变量下，Core 才允许非本机的 listen 搭配本机 http 的 Base URL；容器的端口只应发布到宿主的本机地址（`127.0.0.1:7650:7650`），Core 启动时为此输出一条 WARN 提示。远程访问按 §15.1 使用 SSH 隧道或 HTTPS 反向代理。
+- 容器没有交互终端时，首次启动按 §15.1 拒绝启动；先运行 `docker run --rm -it -v <卷>:/data ghcr.io/alonabot/alonabot:<version> admin-token init` 初始化管理 token，再正常启动。
+- 仓库根目录的 `Dockerfile` 用多阶段构建产生镜像，`deploy/compose.yaml` 是包含卷、`init: true` 与本机端口发布的示例。
+
+### 15.4 库模式
 
 - 根包 `github.com/AlonaBot/AlonaBot`（包名 `alonabot`）是库模式入口。开发者在自己的 `main.go` 中调用 `alonabot.Run`，在当前进程启动一个完整的 Core（§15.1 的启动与设置，数据目录缺省为工作目录下的 `.alonabot/`），并用选项登记开发中的组件：
 
@@ -522,7 +530,7 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
 - 官方 Adapter 与官方插件以可导入的 Go 包提供组件（例如 `telegram.New()`），程序入口只调用 SDK 的运行函数，库模式可以直接引用它们。
 - 库模式也可以用于小规模部署，但不提供上述隔离与崩溃恢复；正式分发插件与 Adapter 仍使用安装包。
 
-### 15.4 热部署
+### 15.5 热部署
 
 - 用 `alonabot.Reload()` 选项或环境变量 `ALONABOT_RELOAD=1` 启用热部署；`alonabot.Run` 不解析程序自己的命令行参数。
 - 根类型所在的包属于 main 包所在 module 的组件是开发中的组件，热部署时以子进程运行：`Run` 先把当前 main 包编译到 `<data_dir>/dev/bin/`，再按正常启动流程启动该可执行文件，并在启动环境中指明要运行的组件；`alonabot.Run` 在这种启动环境下只运行指明的组件，不启动 Core。来自其他 module 的组件（例如经 go.mod 引用的官方 Telegram Adapter）留在 Core 进程中，不随改动重启。
@@ -581,6 +589,6 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
 | `INSTALL_MAX_ARCHIVE` | 256MiB | > 0 | §9.3 |
 | `INSTALL_MAX_EXPANDED` | 1GiB | ≥ `INSTALL_MAX_ARCHIVE` | §9.3 |
 | `INSTALL_MAX_ENTRIES` | 10000 | ≥ 1 | §9.3 |
-| `DEV_RELOAD_POLL` | 500ms | > 0 | §15.4 |
+| `DEV_RELOAD_POLL` | 500ms | > 0 | §15.5 |
 | `PLUGIN_MEMORY_SOFT_LIMIT` | 不设置 | > 0 | §16 |
 | `CORE_MEMORY_SOFT_LIMIT` | 不设置 | > 0 | §16 |
