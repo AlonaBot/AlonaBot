@@ -2,7 +2,7 @@
 
 **技术基线：** v0.6-review  
 **编排更新：** 2026-10-22  
-**实施状态：** T-01、T-02 已实现，分项证据见 [TEST-MATRIX §3.1](TEST-MATRIX.md#31-已运行的分项证据t-01t-02)，Linux/Windows 的真实运行由 T-10 补齐。T-02.1 已实现，分项证据同样见 TEST-MATRIX §3.1。T-02.2 与 T-03～T-14 未开始，按 §3.1 的执行切片推进。
+**实施状态：** T-01、T-02、T-02.1 已实现，分项证据见 [TEST-MATRIX §3.1](TEST-MATRIX.md#31-已运行的分项证据t-01t-02)，Linux/Windows 的真实运行由 T-10 补齐。独立切片 T-07.1 与 T-12.1 已合并；T-02.2 与其余未开始的切片按 §3.1 推进。
 
 从 T-01 开始，按前置任务推进。每项任务交付可编译、可验证的增量；跨任务验收在对应集成点闭合。协议和行为以 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md)、[WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 为准，验收编号统一使用 [TEST-MATRIX.md](TEST-MATRIX.md)。
 
@@ -107,7 +107,7 @@ flowchart TD
 | 切片 | goal | 内容 | §4 步骤 | 前置 | 主要验收 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
 | T-02.1 | goal-65 | 日志基线：Core 与 SDK 改用注入的 slog Logger，控制台与 JSON 格式、来源标签、插件 stderr 的 JSON 解析与非结构化行、panic 堆栈、Bootstrap 下发级别与进程内过滤、`--log-level`/`--log-format`、不输出 Bootstrap 与配置明文；按日期轮转的日志文件与保留上限 | T-02 步骤 9 | T-02 | V-62、V-63 的级别过滤分项、V-68 的写入与轮转分项 | 已实现，darwin/arm64 运行通过（TEST-MATRIX §3.1） |
-| T-02.2 | goal-76 | 调优参数：`internal/tune` 参数表，把现有常量迁入；`--args` 的直接参数与文件输入、校验与相互约束、启动 WARN、`alonabot tune list`；Bootstrap 下发 `session_limits`；`GOMEMLIMIT` 软上限 | T-02 步骤 10 | T-02 | V-69 | 未开始 |
+| T-02.2 | goal-76 | 调优参数：`internal/tune` 参数表，把现有常量迁入；`--args` 的直接参数与文件输入、校验与相互约束、启动 WARN、`alonabot tune list`；`SessionLimits session_limits = 11`（max_inflight、max_payload_bytes、request_timeout_ms）；`GOMEMLIMIT` 软上限 | T-02 步骤 10 | T-02.1 | V-69 | 未开始 |
 | T-03.1 | goal-2 | 首个可用 SDK 切片：事件路由注册、Context/Send、业务分发；Core 的 Adapter 实例接口、内存 Adapter、固定服务 mux、事件派发与 `core.send`；echo 插件经真实 REGISTER/ACTIVATED 后收发 | T-03 步骤 1 | T-02.1、T-02.2 | V-07、V-08 的 SDK 分项，V-62 的 Handler 分项 | 未开始 |
 | T-03.2 | goal-3 | Target 与最小授权：`allowed_adapter_instances` 持久化、显式 To、后台 Send、逐次发送准入、NO_DEFAULT_TARGET、Core 内部许可读写入口 | T-03 步骤 3 | T-03.1 | V-07 | 未开始 |
 | T-03.3 | goal-4 | Adapter 进程与 `sdk/adapter`：Adapter 角色的注册校验、实例启停、`adapter.send`、事件交付与游标持久化、事件归属校验、账号唯一；实例上下线时生成 `bot.online`/`bot.offline`；回环测试 Adapter | T-03 步骤 2 | T-03.1 | V-48 的进程与实例分项、V-51 | 未开始 |
@@ -132,7 +132,7 @@ flowchart TD
 | T-06.2 | goal-20 | 父调用链上下文传播、循环与深度检查、跨段取消与背压 | T-06 步骤 3、4 | T-03.6、T-05.3、T-06.1 | V-18、V-42 的嵌套分项 | 未开始 |
 | T-06.3 | goal-21 | 非持久 Event Bus：发布准入、逐订阅者 256 条/4 MiB 队列、drop-newest 计数 | T-06 步骤 5 | T-06.1 | V-17 | 未开始 |
 | T-06.4 | goal-22 | Session 变更时的清理与计数，A/B/C 端到端验收（含 Hook→Service→Send），汇总证据 | T-06 步骤 6、7 | T-06.2、T-06.3 | V-15、V-17、V-18、V-19、V-42 | 未开始 |
-| T-07.1 | goal-23 | interval/五字段 cron/IANA 时区/夏令时的表达式校验与下一次触发计算（纯计算包 `contracts/schedule`，Core 与官方 Agent 插件共用） | T-07 步骤 2 | T-02 | V-20 的计算分项 | 未开始 |
+| T-07.1 | goal-23 | interval/五字段 cron/IANA 时区/夏令时的表达式校验与下一次触发计算（纯计算包 `contracts/schedule`，Core 与官方 Agent 插件共用） | T-07 步骤 2 | T-02 | V-20 的计算分项 | 已实现；PR #17 合并，Quality gate 通过 |
 | T-07.2 | goal-24 | schedule 注册校验，运行槽与调度调用：独立 run_id、15 分钟期限、同 job 跳过重叠、迟到响应与断链 | T-07 步骤 1（schedule）、3 | T-05.1、T-07.1 | V-20、V-46、V-16 和 V-05 的 scheduled 分项 | 未开始 |
 | T-07.3 | goal-25 | HTTP 注册校验，SDK 托管 HTTP Listener 与 Core Session 代理映射；Core 设置文件 `alonabot.yaml` 的读取、缺省值与命令行覆盖 | T-07 步骤 1（HTTP）、4、5 | T-04.1 | V-22 的组件分项 | 未开始 |
 | T-07.4 | goal-26 | 两个 Host 的边界、插件兑换票据与插件会话 | T-07 步骤 6 | T-07.3 | V-47 的组件分项 | 未开始 |
@@ -165,7 +165,7 @@ flowchart TD
 | T-11.2 | goal-55 | 工具调用与用户确认：`core.tool.invoke`、`core.tool.confirm`、Core 内部的确认记录与按钮、同一 Actor 与 5 分钟限时、确认文案 | T-11 步骤 3、4 | T-03.8、T-06.2、T-08.8、T-11.1 | V-55 | 未开始 |
 | T-11.3 | goal-56 | Agent 会话存储：状态库表、`core.conversation.*`、管理服务层的列出与清除、purge | T-11 步骤 5 | T-03.1 | V-56 | 未开始 |
 | T-11.4 | goal-57 | 工具与会话的多进程验收，汇总证据 | T-11 步骤 6 | T-11.2、T-11.3 | V-55、V-56 的 T-11 分项 | 未开始 |
-| T-12.1 | goal-58 | Provider 客户端：OpenAI 兼容与 Anthropic Messages 的流式请求、SSE 解析、工具调用解析、本地模拟服务 | T-12 步骤 1 | T-02 | V-57 的 Provider 分项 | 未开始 |
+| T-12.1 | goal-58 | Provider 客户端：OpenAI 兼容与 Anthropic Messages 的流式请求、SSE 解析、工具调用解析、本地模拟服务 | T-12 步骤 1 | T-02 | V-57 的 Provider 分项 | 已实现；PR #16 合并，Quality gate 通过 |
 | T-12.2 | goal-59 | 对话：`plugins/agent/` 骨架与配置、人格、历史、延续调用内的一轮对话、流式编辑显示、`/persona` 与 `/reset` | T-12 步骤 2、3 | T-03.9、T-04.3、T-05.4、T-08.3、T-08.4、T-11.3、T-12.1 | V-57 | 未开始 |
 | T-12.3 | goal-60 | 工具循环与 MCP：Core 工具、MCP 客户端（stdio、streamable HTTP）、确认、单轮步数上限 | T-12 步骤 4 | T-11.2、T-12.2 | V-58 | 未开始 |
 | T-12.4 | goal-61 | 记忆：`sdk/memory` 服务契约、`plugins/memory/` 官方记忆插件、Agent 的记忆接入 | T-12 步骤 5 | T-08.5、T-11.2、T-12.2 | V-59 | 未开始 |
@@ -238,8 +238,8 @@ flowchart TD
 6. **实现提交与激活门禁。** Prepared 仅表示准备完成。新候选只有在 Core 状态事务提交 ActiveGeneration/COMMITTED 后才能收到 ACTIVATE；普通 restart 复用既有提交记录、Generation 和配置引用。SDK 执行 OnReady，唯一 writer 完整写出 ACTIVATED 后才打开本地 ready gate；Core reader 同步应用状态后再读后续业务帧。Preparing、Prepared、Activating 均拒绝业务；提交后启动失败进入 Degraded，不自动选旧数据。以无业务 DB 的候选完成本项集成，受管 DB 副本的真实提交/恢复由 T-08、T-09 验证。
 7. **完成阶段超时、停止和有限恢复。** 按主契约落实握手 10s、配置 60s、迁移 15 分钟、OnStart 60s、OnReady 30s 的独立预算；用户函数不响应 context 时仍须由 watchdog 结束失败进程。停用先冻结新根调用并最多排空 6s，允许既有父链内合法子调用完成；随后 Cancel 并发送 STOPPING，其期限为 `min(t0+10s, 发送时刻+4s)`。OnStop 使用独立 context，Core 在总 10s 截止处理进程树；Core Shutdown 并行停止所有插件。EOF 使旧 Session 立即失效，确认旧进程退出后才允许重启；5 分钟内第三次异常退出自动禁用，正常退出不自动重启。
 8. **建立真实进程的验收切片。** 最小示例覆盖正常启动/退出，测试辅助进程覆盖挂起、错帧、日志污染、迟到响应和突退。对同一 fixture 分别运行 TCP 与 stdio，检查进程和 Listener 已关闭；注入满额度、双 Core、并发管理操作和 Core 被终止场景。记录实际运行平台、命令、测试位置及结果，并把由 T-08、T-09 集成的配置/DB/更新场景明确标出。
-9. **建立统一日志。** 按 CONTRACTS §14 把 Core 与 SDK 现有的直接输出改为注入的 `*slog.Logger`：实现 §14.2 的控制台 Handler（来源标签、级别缩写、源码位置、`key=value`、多行缩进、按终端与 `NO_COLOR` 着色）与 JSON 输出，`--log-level`、`--log-format` 启动参数。SDK 把记录以 JSON 行写到 stderr，在调用边界（生命周期 Hook）捕获的 panic 记为带 `stack` 的 ERROR；Handler 的 Logger 附带 trace_id、route_id、call_id 与 Handler panic 的记录由 T-03.1 的业务分发实现，Bot API URL 中凭证的脱敏由 T-03.4 的 Bot API 客户端实现。Core 逐行解析插件 stderr，补上并保护来源字段，非 JSON 行作为 WARN 原样保留。Bootstrap 追加 `log_level`，SDK 与 Core 都按来源的生效级别过滤；按来源级别暂存在内存中，持久化与运行时修改由 T-09.10 接入。日志不输出 Secret、Bootstrap 与配置明文。按 CONTRACTS §14.6 写入按本地日期轮转的日志文件：同日达到单文件上限时续写编号文件，超过合计上限或保留天数时从最旧的删除，写入失败时继续运行并报告一次。
-10. **建立调优参数。** 新建 `internal/tune`，按 CONTRACTS §16 的表登记全部可调参数，把 `internal/wire` 与 `internal/core` 中对应的现有常量迁入，调用方改为读取生效值。实现 `--args` 的直接参数与文件输入、值的格式、约束与相互约束检查（出错时指明参数或文件行号）、存在覆盖时的启动 WARN 与 `alonabot tune list`。Bootstrap 追加 `session_limits`，SDK 使用下发的值；设置 `PLUGIN_MEMORY_SOFT_LIMIT` 时为子进程传入 `GOMEMLIMIT`。
+9. **建立统一日志。** 按 CONTRACTS §14 把 Core 与 SDK 现有的直接输出改为注入的 `*slog.Logger`：实现 §14.2 的控制台 Handler（来源标签、级别缩写、源码位置、`key=value`、多行缩进、按终端与 `NO_COLOR` 着色）与 JSON 输出，`--log-level`、`--log-format` 启动参数。SDK 把记录以 JSON 行写到 stderr，在调用边界（生命周期 Hook）捕获的 panic 记为带 `stack` 的 ERROR；Handler 的 Logger 附带 trace_id、route_id、call_id 与 Handler panic 的记录由 T-03.1 的业务分发实现，Bot API URL 中凭证的脱敏由 T-03.4 的 Bot API 客户端实现。Core 逐行解析插件 stderr，补上并保护来源字段，非 JSON 行作为 WARN 原样保留。Bootstrap 追加 `LogLevel log_level = 10`，SDK 与 Core 都按来源的生效级别过滤；按来源级别暂存在内存中，持久化与运行时修改由 T-09.10 接入。日志不输出 Secret、Bootstrap 与配置明文。按 CONTRACTS §14.6 写入按本地日期轮转的日志文件：同日达到单文件上限时续写编号文件，超过合计上限或保留天数时从最旧的删除，写入失败时继续运行并报告一次。
+10. **建立调优参数。** 新建 `internal/tune`，按 CONTRACTS §16 的表登记全部可调参数，把 `internal/wire` 与 `internal/core` 中对应的现有常量迁入，调用方改为读取生效值。实现 `--args` 的直接参数与文件输入、值的格式、约束与相互约束检查（出错时指明参数或文件行号）、存在覆盖时的启动 WARN 与 `alonabot tune list`。Bootstrap 追加 `SessionLimits session_limits = 11`，字段 `max_inflight`、`max_payload_bytes`、`request_timeout_ms` 分别对应每方向在途数、每 Session payload 预算、普通请求期限；Core 全局预算不下发给 SDK；设置 `PLUGIN_MEMORY_SOFT_LIMIT` 时为子进程传入 `GOMEMLIMIT`。
 
 #### 可审查交付
 
@@ -735,7 +735,62 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 
 #### 实施步骤
 
-1. **Provider 客户端。** 在 `plugins/agent/` 中用 net/http 实现 OpenAI 兼容的 Chat Completions 与 Anthropic Messages：流式请求、SSE 解析、文本增量与工具调用的组装、Provider 错误到安全错误的转换，不自动重试请求。为两种协议提供本地模拟服务，覆盖正常流、工具调用、中途断开与错误响应。
+1. **Provider 客户端。** 在 `plugins/agent/provider/` 中用标准库 `net/http` 实现 OpenAI 兼容 Chat Completions 与 Anthropic Messages：流式请求、SSE 解析、文本增量与工具调用组装、错误转换；请求失败不自动重试。建议使用回调式流接口，避免 goroutine/通道错误被丢失，也让调用方背压自然传递：
+   ```go
+   type Protocol string
+   const (
+       OpenAICompatible Protocol = "openai-compatible"
+       AnthropicMessages Protocol = "anthropic-messages"
+   )
+   type Config struct {
+       Protocol Protocol
+       BaseURL string // API base path，例如 OpenAI 的 https://api.openai.com/v1
+       APIKey string
+       Model string
+   }
+   type Message struct {
+       Role string // system、user、assistant
+       Content string
+       ToolCalls []ToolCall
+       ToolResults []ToolResult
+   }
+   type Tool struct {
+       Name string
+       Description string
+       InputSchema json.RawMessage
+   }
+   type Request struct {
+       Messages []Message
+       Tools []Tool
+       MaxTokens int // 必须大于 0；由调用方显式提供，不在 Provider 内猜默认值
+   }
+   type ToolCall struct {
+       ID string
+       Name string
+       Arguments json.RawMessage // 完整且合法的 JSON 对象
+   }
+   type ToolResult struct {
+       ToolCallID string
+       Content string
+   }
+   type EventKind uint8
+   const (
+       TextDelta EventKind = iota + 1
+       ToolCallComplete
+   )
+   type Event struct {
+       Kind EventKind
+       Text string
+       ToolCall *ToolCall
+   }
+   type Client interface {
+       Stream(ctx context.Context, req Request, emit func(Event) error) error
+   }
+   func New(config Config, httpClient *http.Client) (Client, error)
+   ```
+   `New` 校验协议、HTTP(S) base URL、model 和 API key，并要求注入非 nil 的 HTTP client，便于使用已有代理配置和本地测试服务。Request 的 MaxTokens 必须大于 0；Message.Role 只接受 system、user、assistant；ToolCalls 只能出现在 assistant 消息，ToolResults 只能出现在 user 消息，且每个 ToolResult.ToolCallID 必须非空。工具名必须非空且在同一 Request 中唯一，InputSchema 必须是 JSON 对象。OpenAI 把每个 ToolResult 转成对应的 tool 角色消息；Anthropic 把连续工具结果转成一个 user 消息中的 tool_result content blocks。Anthropic 的 system 消息按输入顺序合并到顶层 system 字段，其他消息保留顺序。BaseURL 以 API 根路径结尾，OpenAI 追加 `/chat/completions`，Anthropic 追加 `/messages`。OpenAI 使用 Bearer 认证；Anthropic 使用 `x-api-key` 与固定的 `anthropic-version` 请求头。
+   `Stream` 逐事件解析 SSE，不缓存完整响应；文本增量按到达顺序交给 emit。工具调用按协议的索引累积，只有收到完整结束标记且 arguments 是 JSON 对象后才发出 `ToolCallComplete`。只有收到协议终止标记才算成功；提前 EOF、无效事件、非成功 HTTP 状态、Provider 错误事件均返回错误。emit 返回错误时立即停止读取并关闭响应体。错误文本不得包含 API key、认证头或带凭证的 URL；已交付的文本增量由调用方保留，不自动重发请求。
+   为两种协议提供本地模拟服务，覆盖正常流、多个文本增量、完整工具调用、非成功 HTTP 状态、中途断开、畸形 SSE/JSON、取消 context 与 emit 返回错误。
 2. **插件骨架与配置。** 配置包含：Provider 条目（名称、协议、base_url、`secret` 标记的 api_key、model）与默认 Provider；命名人格（系统提示）与默认人格；纳入上下文的历史条数；记忆插件 ID；MCP 服务器（名称、传输方式；stdio 为 command、args 与 `secret` 标记的 env，streamable HTTP 为 url 与 `secret` 标记的 headers）；技能目录。Provider 列表可以为空，为空时 `/ask` 回复提示管理员配置。每个聊天当前的人格与 Provider 选择保存在插件数据库。
 3. **一轮对话。** 注册 `/ask`、`/agent on|off`、`/persona`、`/provider`、`/reset` 命令与 message 事件路由。`/ask` 与 `/reset` 的缺省权限为 User，`/agent`、`/persona` 与 `/provider` 为 Admin，管理员可按 T-04 的命令策略调整。`/ask` 在任何聊天中触发一轮对话；Admin 用 `/agent on` 为某个聊天开启自由对话后，该聊天中 `to_me` 的非命令消息也触发（私聊的消息都是 `to_me`），默认关闭。群聊的会话条目标明发言人。触发的 Handler 请求延续调用，在其中：
    - 从 Core 会话存储读取最近的历史条目，条数取自配置；会话的第一轮调用 `memory.context`，把结果作为快照条目写入会话；

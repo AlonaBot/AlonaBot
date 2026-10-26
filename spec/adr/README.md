@@ -9,7 +9,7 @@
 
 | 文件 | 内容与效力 |
 | --- | --- |
-| [DECISIONS.md](DECISIONS.md) | D-01～D-25 原决策，以及 P-01～P-14、Q-01～Q-18 的议题、处置、契约位置和状态 |
+| [DECISIONS.md](DECISIONS.md) | D-01～D-38 决策记录，以及 P-01～P-14、Q-01～Q-18 的议题、处置、契约位置和状态 |
 | [history/SELF-REVIEW.md](history/SELF-REVIEW.md) | 2026-10-21 可实施性审阅的 A-01～A-20 修复、历史 R 项与当时静态检查结果 |
 | [history/NOTES.md](history/NOTES.md) | 历史 Native 原型、实验局限、技术主源与当时核对记录 |
 | [history/LEGACY-PRD-COMPARISON.md](history/LEGACY-PRD-COMPARISON.md) | 旧 PRD 的 FR-01～FR-30 对照及历史方案冲突 |
@@ -27,7 +27,7 @@ D 编号及原已确认内容保留；后续改变某项行为时追加有日期
 - 原 CONTRACTS §11 的 P/Q 表合并到 DECISIONS；原章节号保留为实施契约的交付映射，§12 及其引用不改号。
 - PLAN 展开 T-01～T-10，每项具备前置输入、有序步骤、拟建目录、交付物、V 验收和失败停止条件。
 - 跨阶段用例指定最终闭合点：命令策略与 WebUI、Hook 与 Service、基础状态/候选资源与正式 Journal、HTTP 授权组件与首次管理登录分别有明确交接。
-- 本次是文档组织和执行细节补充；技术基线仍为 v0.6-review，V-01～V-47 仍未运行。
+- 本次是文档组织和执行细节补充；技术基线仍为 v0.6-review，除本文件引用的分项证据外，V-01～V-70 的完整验收与跨任务闭合仍未执行；各编号的当前证据以 [TEST-MATRIX.md](../TEST-MATRIX.md) §3 为准。
 
 ## 4. 原 PLAN 修订记录
 

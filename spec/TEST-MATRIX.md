@@ -143,6 +143,15 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 | V-63 | 全局级别过滤、按来源 debug 与 off（内存中）、Bootstrap 下发级别后 SDK 在进程内过滤（含 OFF 与 UNSPECIFIED） | 本地测试 `internal/core/logging`、`sdk`（未提交） | 通过 | 持久化、运行时修改、最近记录、SSE、CLI 与 WebUI（T-09.10） |
 | V-68 | 跨过零点换文件、同日写满后续写编号文件、重启后接着写序号最大的文件、合计上限从最旧删除且不删当前文件、超过 30 天删除、max_size 大于 max_total 拒绝、目录不可写时只报告一次并在换日期时恢复 | `cmd/alonabot`（e2e 读取当天日志文件）；本地测试 `internal/core/logging`（未提交） | 通过（darwin/arm64） | 真实磁盘写满、按日期查询（T-09.10） |
 
+### 3.2 已合并独立切片的验证证据
+
+下列结果仅记录已实际运行的检查。PR 的质量门槛通过不代表整个 V 编号已闭合。
+
+| 切片 | 实现与证据 | 结果 | 尚未闭合 |
+| --- | --- | --- | --- |
+| T-07.1 / V-20 计算分项 | `contracts/schedule/`；PR #17（合并提交 `02713770288be5c477e0451947684dcbad9ace1d`）；GitHub Actions Quality gate run 40294045649 | 通过：格式检查、静态检查、测试与五目标构建质量门槛均通过 | Core Scheduler 注册/运行槽、迟到响应与停止集成仍归 T-07.2～T-07.5；V-20 整体未闭合 |
+| T-12.1 / V-57 Provider 分项 | `plugins/agent/provider/`；PR #16（合并提交 `354c5b6f5cd123c0ef05fc09054d52fc16561083`）；GitHub Actions Quality gate run 40293852858 | 通过：格式检查、静态检查、测试与五目标构建质量门槛均通过；本地 `go test provider.go provider_test.go` 通过 | Agent 对话、流式显示、真实 Provider 验收归 T-12.2 与 T-10；V-57 整体未闭合 |
+
 发布阻塞：协议/Session 鉴权、Core 全局权限、数据代次唯一性、回滚/维护的真实性、安装包越界/来源安全及目标五平台构建失败，均不能通过文案豁免。v0.1 不设内存与吞吐的通过阈值，T-10 只报告 V-33 的实测结果；**不杜撰 100 MB 等硬性能指标**。
 
 ## 4. 实施交接
