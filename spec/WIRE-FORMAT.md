@@ -75,8 +75,21 @@ Bootstrap 属于私有、已认证 IPC，和整个 HELLO_ACK 一起受 **4 MiB**
 | `config_schema_hash`、`previous_config_version`、`target_config_version` | 与可信安装包对应的 Schema 和配置迁移输入；无配置插件仍以空对象表示 |
 | `database_descriptor` | 后端类型、受管 SQLite 当前准备视图路径或该插件 PostgreSQL 连接参数、迁移模式、已应用版本、activation_reason（first_install/resume/reload/update/rollback）、manual_migration_approved（仅Core显式维护许可且绑定当前Session/Generation/DB时true）；不下发 Core 管理数据库凭证 |
 | `http_proxy_auth` | 本 Session 独立的内部代理认证材料；只在插件声明 HTTP 能力时需要，不复用 Admin 凭证 |
-| `log_level` | 该来源当前生效的日志级别（CONTRACTS §14.3），SDK 据此在进程内过滤 |
-| `session_limits` | 本次运行生效的在途请求数、payload 预算与普通请求期限（CONTRACTS §16），SDK 与 Core 使用同一组值 |
+| `phase_limits`、`preparation_deadline_unix_ms`（字段号 8、9） | 准备、迁移和 Ready 的阶段预算及本轮绝对期限；迁移使用独立预算，不被普通业务 30s 截断 |
+| `string log_level`（字段号 10） | 生效级别：`debug`、`info`、`warn`、`error`、`off`；`inherit` 由 Core 先解析成全局级别后再下发 |
+| `SessionLimits session_limits`（字段号 11） | 本次运行生效的每方向在途请求数、每 Session payload 预算与普通请求期限；Core 全局 payload 预算只由 Core 使用 |
+
+`Bootstrap` 的字段号固定为 `log_level = 10`、`session_limits = 11`。新增消息结构如下，字段号不得重排或复用：
+
+```proto
+message SessionLimits {
+  uint32 max_inflight = 1;
+  uint32 max_payload_bytes = 2;
+  uint32 request_timeout_ms = 3;
+}
+```
+
+`max_inflight` 是每个 Session、每个发起方向的在途业务请求上限；`max_payload_bytes` 是该 Session 在途与排队请求/事件载荷的合计预算；`request_timeout_ms` 是普通业务请求的缺省期限。T-02.2 依赖 T-02.1 合并后再修改同一 `.proto` 文件，避免并行生成代码冲突。
 | `phase_limits`、`preparation_deadline_unix_ms` | 主契约固定的准备、迁移和 Ready 预算及本轮绝对期限；迁移使用独立预算，不被普通业务 30s 截断 |
 
 SDK 按配置契约执行 `OnLoad → 补缺失默认值 → typed decode/Validate → DB 迁移门槛核对及许可的迁移 → OnStart`（PG resume 不重跑 Migrate/Up，见 CONTRACTS §6.3），并在 REGISTER 回传完整、规范化的候选 JSON；私有载荷可包含供插件使用的已解析 Secret。Core 只为新候选抽取 Secret 并持久化新的引用快照，再计算 PREPARED 的 candidate digest；普通 restart 仅验证原快照一致性，复用原 Generation、Secret 引用与 COMMITTED 记录。Bootstrap、候选完整 JSON、DB 凭证及 HTTP 认证材料不得进入普通日志或管理 API 响应。
@@ -143,7 +156,7 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 
 Core→插件与 Core→Adapter 方向另有 `sdk.log.set_level`：新的生效级别 → 空结果，SDK 收到后立即按新级别过滤（CONTRACTS §14.3）。
 
-注册描述的追加字段：Service 描述增加可选的 `tool`（description、default_policy）；CommandMatch 追加 KEYWORD、STARTSWITH、ENDSWITH、FULLMATCH，CommandSpec 增加模式列表与 `ignore_case`；Actor 增加可选 `locale`；message.created 的载荷增加 `to_me`；Bootstrap 增加 `log_level` 与 `session_limits`；CommandSpec 增加可选的说明键（插件 `messages` 中的键，供 `core.command.list` 翻译）；BeforeSend/AfterSend 的输入增加操作类型与被编辑的 platform_message_id。这些都是追加，不改变 `contracts/wirespec_test.go` 固定的枚举。
+注册描述的追加字段：Service 描述增加可选的 `tool`（description、default_policy）；CommandMatch 追加 KEYWORD、STARTSWITH、ENDSWITH、FULLMATCH，CommandSpec 增加模式列表与 `ignore_case`；Actor 增加可选 `locale`；message.created 的载荷增加 `to_me`；Bootstrap 追加 `log_level`（字段号 10）与 `session_limits`（字段号 11），字段分配与切片顺序见 §3.2；CommandSpec 增加可选的说明键（插件 `messages` 中的键，供 `core.command.list` 翻译）；BeforeSend/AfterSend 的输入增加操作类型与被编辑的 platform_message_id。这些都是追加，不改变 `contracts/wirespec_test.go` 固定的枚举。
 
 ## 4. 调用上下文、读写与取消
 

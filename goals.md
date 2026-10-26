@@ -44,8 +44,8 @@
 | goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 等待前置 |
 | goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 等待前置 |
 | goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 等待前置 |
-| goal-65 | T-02.1 | 日志基线与日志文件 | — | 待编写 |
-| goal-76 | T-02.2 | 调优参数 | — | 待编写 |
+| goal-65 | T-02.1 | 日志基线与日志文件 | — | 可派发 |
+| goal-76 | T-02.2 | 调优参数 | T-02.1 | 等待前置 |
 | goal-4 | T-03.3 | Adapter 进程、sdk/adapter 与上下线事件 | T-03.1 | 待编写 |
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 待编写 |
 | goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 待编写 |
@@ -97,7 +97,7 @@
 | goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 待编写 |
 | goal-56 | T-11.3 | Agent 会话存储 | T-03.1 | 待编写 |
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 待编写 |
-| goal-58 | T-12.1 | Provider 客户端 | — | 待编写 |
+| goal-58 | T-12.1 | Provider 客户端 | — | 可派发 |
 | goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.3、T-08.4、T-11.3、T-12.1 | 待编写 |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 待编写 |
 | goal-61 | T-12.4 | 记忆插件 | T-08.5、T-11.2、T-12.2 | 待编写 |
@@ -559,13 +559,21 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 不做：IncomingMedia、Read、Grant、发送时消费租约、cmd/alonabot 装配。
 ```
 
-## 第 3 批及以后：待编写
+## 第 3 批及以后：逐切片派发说明
 
-以下 goal 只写了范围和要点。前置合并后，审查者按实际代码补全「接口」「行为」「测试」三段并改为可派发；在此之前不要派发。每条的完整语义以 PLAN §4 对应步骤及其失败停止条件为准，不另作设计。
+以下每个 Goal 都有独立派发语句。状态仍按总览维护；依赖未合并或接口尚未由审查者核实的切片不得提前实现。实施细节引用 PLAN 工作包，避免在 goals.md 复制一份可能漂移的契约。
 
 ### goal-65 · T-02.1 日志基线与日志文件
 
-状态：待编写。由审查者实现，维护者批准后开始。范围：Core 与 SDK 现有的直接输出、`control.proto` 的 Bootstrap（追加 `log_level`）、`cmd/alonabot` 的 `--log-level` 与 `--log-format`。要点：
+状态：可派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-65（切片 T-02.1：日志基线与日志文件）。goal 目录 goal-65，分支 goal-65，worktree .worktrees/goal-65，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：日志基线：Core 与 SDK 改用注入的 slog Logger，控制台与 JSON 格式、来源标签、插件 stderr 的 JSON 解析与非结构化行、panic 堆栈、Bootstrap 的 `string log_level = 10` 下发级别与进程内过滤；值为 `debug`、`info`、`warn`、`error` 或 `off`，`inherit` 必须先由 Core 解析、`--log-level`/`--log-format`、凭证脱敏；按日期轮转的日志文件与保留上限
+前置：T-02 已实现；无额外切片前置。
+依据：PLAN §3.1 的 T-02.1 行、§4 的 T-02 工作包；验收：V-62、V-63 的级别过滤分项、V-68 的写入与轮转分项。
+
 - 控制台格式按 CONTRACTS §14.2：`[时:分:秒.毫秒] [Core|Plug:<id>|Adpt:<id>/<实例>] [DBUG|INFO|WARN|ERRO] [目录/文件:行号]: 消息 key=value`，trace 显示前 8 位，多行值缩进 4 个空格，只在终端且未设置 `NO_COLOR` 时着色；另有 JSON 输出。
 - SDK 以 JSON 行写 stderr，Handler 的 Logger 附带 trace_id、route_id、call_id；调用边界捕获的 panic 记为带 `stack` 的 ERROR。
 - Core 逐行解析插件 stderr，补上并保护来源字段；非 JSON 行作为 WARN 原样保留。
@@ -574,18 +582,38 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - 只用标准库 `log/slog`，不加依赖；日志不含 Secret、Bootstrap 与配置明文。
 - 验收：V-62、V-63 的级别过滤分项、V-68 的写入与轮转分项。
 
+完成后运行本切片对应的完成条件命令，记录真实结果；未运行的环境验收标为「未运行」。PR 正文列出变更、验证、阻塞项及「文档同步」。遇到契约冲突、范围外修改、未批准依赖或协议字段变更时标记 [!]，不自行扩展范围。
+```
 ### goal-76 · T-02.2 调优参数
 
-状态：待编写。由审查者实现，维护者批准后开始。范围：新建 `internal/tune`，迁入 `internal/wire` 与 `internal/core` 中对应的现有常量；`cmd/alonabot` 的 `--args` 与 `tune list`；`control.proto` 的 Bootstrap（追加 `session_limits`）。要点：
+状态：等待前置。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-76（切片 T-02.2：调优参数）。goal 目录 goal-76，分支 goal-76，worktree .worktrees/goal-76，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：调优参数：`internal/tune` 参数表，把现有常量迁入；`--args` 的直接参数与文件输入、校验与相互约束、启动 WARN、`alonabot tune list`；`SessionLimits session_limits = 11`，其中 `max_inflight`、`max_payload_bytes`、`request_timeout_ms` 分别下发每方向在途数、每 Session payload 预算和普通请求期限；`GOMEMLIMIT` 软上限
+前置：T-02.1。
+依据：PLAN §3.1 的 T-02.2 行、§4 的 T-02 工作包；验收：V-69。
+
 - 参数表与缺省值按 CONTRACTS §16；不可调的协议、安全与平台常量留在原处。
 - `--args` 可重复：值含 `=` 时是逗号分隔的直接参数，否则是文本文件路径；后出现的覆盖先出现的；大小只接受二进制单位。
 - 未知键、格式错误、违反约束或相互矛盾时拒绝启动并指明出处；有覆盖时启动 WARN 列出全部覆盖项。
 - SDK 使用 Bootstrap 下发的 `session_limits`；设置 `PLUGIN_MEMORY_SOFT_LIMIT` 时为子进程传入 `GOMEMLIMIT`。
 - 验收：V-69。
 
+完成后运行本切片对应的完成条件命令，记录真实结果；未运行的环境验收标为「未运行」。PR 正文列出变更、验证、阻塞项及「文档同步」。遇到契约冲突、范围外修改、未批准依赖或协议字段变更时标记 [!]，不自行扩展范围。
+```
 ### goal-4 · T-03.3 Adapter 进程、sdk/adapter 与上下线事件
 
-状态：待编写（T-03.1）。范围：`contracts/proto` 的 `adapter.proto` 与生成代码（本切片获准修改 `.proto`）、manifest 的 `role`/`adapter_id` 解析、`internal/core/adapterhost/`（以 Adapter 进程为后端实现 T-03.1 的 `adapter.Instance`）、`internal/core/state` 的游标表、`sdk/adapter/`、`examples/adapters/loopback/`。要点：
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-4（切片 T-03.3：Adapter 进程、sdk/adapter 与上下线事件）。goal 目录 goal-4，分支 goal-4，worktree .worktrees/goal-4，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：Adapter 进程与 `sdk/adapter`：Adapter 角色的注册校验、实例启停、`adapter.send`、事件交付与游标持久化、事件归属校验、账号唯一；实例上下线时生成 `bot.online`/`bot.offline`；回环测试 Adapter
+前置：T-03.1。
+依据：PLAN §3.1 的 T-03.3 行、§4 的 T-03 工作包；验收：V-48 的进程与实例分项、V-51。
+
 - WIRE §3.4 的七个固定服务全部打通；Adapter 与插件的 REGISTER 按安装记录的角色互斥校验，角色不采信进程自报。
 - 实例启停：`adapter.instance.start` 下发实例配置与已保存的游标，按返回的 account_id 检查同一 `adapter_id` 下的账号唯一；启停一个实例不重启进程，也不影响同包的其他实例。
 - 交付：Core 先校验事件归属（adapter_id、adapter_instance_id、account_id 与本 Session 已启动的实例一致），再写入游标、接纳事件，最后应答；伪造实例的事件被拒并记诊断。event_id 由 Core 生成。
@@ -594,9 +622,19 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - 回环测试 Adapter 用于本切片和 T-05 的测试，不依赖任何真实平台。
 - 验收：V-48 的进程与实例分项、V-51。
 
+完成后运行本切片对应的完成条件命令，记录真实结果；未运行的环境验收标为「未运行」。PR 正文列出变更、验证、阻塞项及「文档同步」。遇到契约冲突、范围外修改、未批准依赖或协议字段变更时标记 [!]，不自行扩展范围。
+```
 ### goal-5 · T-03.4 官方 Telegram Adapter 的接收
 
-状态：待编写（T-03.3）。范围：`adapters/telegram/`（只经 `sdk/adapter` 与 Core 通信）与 `adapters/telegram/telegramtest/` 的本地 Bot API 模拟服务。要点：
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-5（切片 T-03.4：官方 Telegram Adapter 的接收）。goal 目录 goal-5，分支 goal-5，worktree .worktrees/goal-5，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：官方 Telegram Adapter 的接收：Bot API 客户端、本地 Bot API 模拟服务、getMe、webhook 冲突、long polling、逐条交付与游标、7 天轮次重建、401/409、媒体组、Actor.locale、`to_me`、实例代理
+前置：T-03.3。
+依据：PLAN §3.1 的 T-03.4 行、§4 的 T-03 工作包；验收：V-45、V-54 的 locale 分项。
+
 - `adapter.instance.start` 中依次执行 getMe（account_id 为 bot 用户 ID 的十进制字符串）、getWebhookInfo（url 非空则失败，不调用 deleteWebhook），然后启动接收循环。
 - long polling 的 allowed_updates 固定为 message、edited_message、channel_post、edited_channel_post、callback_query、my_chat_member、chat_member、message_reaction，timeout=30。
 - 一批 update 逐条经 `core.adapter.deliver` 交付，游标为 update_id+1；收到应答后才处理下一条，未接纳的事件只计数。不支持的 update 也推进游标。
@@ -607,17 +645,37 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - Adapter 实现放在可导入的包中（`telegram.New()`），`main` 只调用 `sdk/adapter` 的运行函数，供库模式直接引用（CONTRACTS §15.4）。
 - 验收：V-45、V-54 的 locale 分项。
 
+完成后运行本切片对应的完成条件命令，记录真实结果；未运行的环境验收标为「未运行」。PR 正文列出变更、验证、阻塞项及「文档同步」。遇到契约冲突、范围外修改、未批准依赖或协议字段变更时标记 [!]，不自行扩展范围。
+```
 ### goal-50 · T-03.7 官方 Telegram Adapter 的发送计划与回执
 
-状态：待编写（T-03.4）。范围：`adapters/telegram/` 的 `adapter.send` 实现与模拟服务的发送方法。要点：
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-50（切片 T-03.7：官方 Telegram Adapter 的发送计划与回执）。goal 目录 goal-50，分支 goal-50，worktree .worktrees/goal-50，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：官方 Telegram Adapter 的发送计划与回执：Chain 完整预检、物理操作计划、UTF-16 实体、相册/引用/按钮渲染、PartResult 汇总
+前置：T-03.4。
+依据：PLAN §3.1 的 T-03.7 行、§4 的 T-03 工作包；验收：V-08、V-35。
+
 - 发送前完成整条 Chain 的预检，生成有序的物理操作计划。文本、实体按 UTF-16 偏移；连续媒体按每组 2～10 项组成相册；Reference 只作用于首条，Buttons 作用于末条，相册后的按钮用 markup 更新补上。
 - 超长、超限或无法表达的组合在首个请求前返回 UNSUPPORTED 或 INVALID_ARGUMENT，不截断、不降级、不重排。
 - PartResult 区分 ACCEPTED、REJECTED、UNKNOWN、NOT_ATTEMPTED，逻辑状态按 MESSAGE-MODEL §4 汇总。遇到拒绝或结果未知即停止后续操作，保留已确认的 ID。message_id=0 不填入 ID，依赖它的步骤记为 NOT_ATTEMPTED。不自动重发。
 - 验收：V-08、V-35。
 
+完成后运行本切片对应的完成条件命令，记录真实结果；未运行的环境验收标为「未运行」。PR 正文列出变更、验证、阻塞项及「文档同步」。遇到契约冲突、范围外修改、未批准依赖或协议字段变更时标记 [!]，不自行扩展范围。
+```
 ### goal-7 · T-03.6 入站媒体与 Grant
 
-状态：待编写（T-03.2、T-03.4、T-03.5）。范围：`internal/core/media`、`adapters/telegram/` 的 `adapter.media.read`、`sdk` 的 Read 客户端。要点：
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-7（切片 T-03.6：入站媒体与 Grant）。goal 目录 goal-7，分支 goal-7，worktree .worktrees/goal-7，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：入站媒体与 Grant：IncomingMedia token、经 `adapter.media.read` 首次取件并校验缓存、多 Session 共享、Grant 范围、租约；出站媒体经 `core.media.read` 交给 Adapter
+前置：T-03.2、T-03.4、T-03.5。
+依据：PLAN §3.1 的 T-03.6 行、§4 的 T-03 工作包；验收：V-44、V-09。
+
 - IncomingMedia token 只映射可信 Adapter 给出的平台文件标识。首次 Read 时经 `adapter.media.read` 按需取件，校验后缓存，多个 Session 共享同一份缓存。
 - 出站媒体：Core 在 `adapter.send` 之前为本次发送签发只读 token，Adapter 经 `core.media.read` 读取。
 - offset 与 length 的边界按 CONTRACTS §1.4。
@@ -625,9 +683,19 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - Bot Token 和宿主路径不进入插件进程。
 - 验收：V-44、V-09。
 
+完成后运行本切片对应的完成条件命令，记录真实结果；未运行的环境验收标为「未运行」。PR 正文列出变更、验证、阻塞项及「文档同步」。遇到契约冲突、范围外修改、未批准依赖或协议字段变更时标记 [!]，不自行扩展范围。
+```
 ### goal-8 · T-03.8 按钮、extension 片段与依赖解析
 
-状态：待编写（T-03.2、T-03.7）。范围：Core 状态库的按钮 token 表、Telegram callback_query 处理、button.clicked 路由派发、extension 片段的声明与发送前校验、manifest 的 `adapter_dependencies` 与 `plugin_dependencies` 解析及开发入口的依赖检查。要点：
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-8（切片 T-03.8：按钮、extension 片段与依赖解析）。goal 目录 goal-8，分支 goal-8，worktree .worktrees/goal-8，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：按钮 token 与回调路由；extension 片段的声明与校验；manifest 的 `role`、`adapter_id`、`adapter_dependencies`、`plugin_dependencies` 解析与开发入口的依赖检查
+前置：T-03.2、T-03.7。
+依据：PLAN §3.1 的 T-03.8 行、§4 的 T-03 工作包；验收：V-08 的按钮分项、V-48 的依赖分项、V-52 的解析分项。
+
 - 按钮 token 为 32 字节随机值的无 padding base64url，持久化绑定 plugin、route、generation、Target 和 24 小时期限。
 - 先尽力调用 answerCallbackQuery，再逐次鉴权，Actor 取本次点击的用户。拒绝时不回落到 Raw/Regex，不发群消息。代次切换后 token 永久失效。
 - extension 片段按目标实例所属 Adapter 在 REGISTER 中声明的 name/version/Schema 校验；目标不属于该 Adapter 或版本未声明时返回 UNSUPPORTED，不降级。
@@ -635,110 +703,1384 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - `plugin_dependencies`：plugin_id、可选 `min_version`、是否必需；必需依赖未安装、未启用或版本不满足时拒绝启用，可选依赖缺失只记诊断，必需依赖成环在解析时拒绝（CONTRACTS §8）。
 - 验收：V-08 的按钮分项、V-48 的依赖分项、V-52 的解析分项。
 
+完成后运行本切片对应的完成条件命令，记录真实结果；未运行的环境验收标为「未运行」。PR 正文列出变更、验证、阻塞项及「文档同步」。遇到契约冲突、范围外修改、未批准依赖或协议字段变更时标记 [!]，不自行扩展范围。
+```
 ### goal-51 · T-03.9 消息编辑
 
-状态：待编写（T-03.7）。范围：`core.edit` 固定服务、`internal/core/adapter` 的可选接口 `Editor`、`adapter.edit`（获准修改 `adapter.proto` 与出站 Hook 载荷，只追加字段）、`adapters/telegram/` 的 editMessageText、SDK 的 `Edit`。要点：
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-51（切片 T-03.9：消息编辑）。goal 目录 goal-51，分支 goal-51，worktree .worktrees/goal-51，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：消息编辑：`core.edit`、`adapter.edit`、Telegram editMessageText、`message.edit` 能力、出站 Hook 的 edit 输入
+前置：T-03.7。
+依据：PLAN §3.1 的 T-03.9 行、§4 的 T-03 工作包；验收：V-53。
+
 - Target 准入与 Send 相同；Edit Chain 只能包含一个 text 片段和至多一个 buttons 片段，否则 INVALID_ARGUMENT。
 - 每次 Edit 执行一组 BeforeSend → Adapter.Edit → AfterSend，Hook 输入标明 edit 与被编辑的 platform_message_id。
 - 未声明 `message.edit` 的实例返回 UNSUPPORTED；平台拒绝（内容未变化、消息不可编辑）为 REJECTED，不改为发送新消息。
 - SendResult 只有一项，status 只取 ACCEPTED/REJECTED/UNKNOWN（MESSAGE-MODEL §4）。
 - 验收：V-53。
 
+完成后运行本切片对应的完成条件命令，记录真实结果；未运行的环境验收标为「未运行」。PR 正文列出变更、验证、阻塞项及「文档同步」。遇到契约冲突、范围外修改、未批准依赖或协议字段变更时标记 [!]，不自行扩展范围。
+```
 ### goal-9 · T-03.10 Telegram 接入开发入口与故障矩阵
 
-状态：待编写（T-03.6、T-03.8、T-03.9）。范围：`cmd/alonabot` 的开发装配（`alonabot run` 同时启动 Adapter 与插件；实例配置取自 `<data_dir>/adapters/<adapter_id>/instances/<instance_id>.json`，CONTRACTS §15.4）、`examples/plugins/echo` 与 media 示例、跨包故障矩阵测试、TEST-MATRIX 证据。要点：
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-9（切片 T-03.10：Telegram 接入开发入口与故障矩阵）。goal 目录 goal-9，分支 goal-9，worktree .worktrees/goal-9，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：开发入口（`alonabot run` 同时启动 Adapter 与插件，实例配置取自 `adapters/<adapter_id>/instances/`），echo/media 示例与发送接收故障矩阵，汇总证据
+前置：T-03.6、T-03.8、T-03.9。
+依据：PLAN §3.1 的 T-03.10 行、§4 的 T-03 工作包；验收：V-07、V-08、V-09、V-35、V-44、V-45、V-48、V-51～V-54 的 T-03 分项；真实 Telegram 需要测试账号。
+
 - 完成 PLAN T-03 步骤 8 的全部场景，包括实例上下线事件与消息编辑；用请求记录证明没有自动补发。
 - 真实 Telegram 没有测试账号时记为未运行。
 
-### goal-10 至 goal-14 · T-04.1～T-04.5
+完成后运行本切片对应的完成条件命令，记录真实结果；未运行的环境验收标为「未运行」。PR 正文列出变更、验证、阻塞项及「文档同步」。遇到契约冲突、范围外修改、未批准依赖或协议字段变更时标记 [!]，不自行扩展范围。
+```
+### goal-10 · T-04.1 根插件 API 与静态注册索引
 
-状态：待编写。要点按 PLAN T-04 各步骤：
-- 根插件与显式绑定；生成器只扫描当前模块的目标构建包。
-- 重复 route 一律拒绝；跨插件遮蔽稳定，与启动顺序无关。
-- 已识别的命令被拒绝后不回落，也不进入文本匹配。
-- keyword、startswith、endswith、fullmatch 与 Regex 同属文本匹配层，统一按 priority/plugin_id/route_id 排序；空模式拒绝注册，ignore_case 按 Unicode 简单大小写折叠。
-- 策略持久化，在下一次派发时生效；父级禁用优先于子级启用。
+状态：待编写。
 
-### goal-15 至 goal-18、goal-52 · T-05.1～T-05.5
+```text
+/goal 使用 $alonabot-execute 推进 goal-10（切片 T-04.1：根插件 API 与静态注册索引）。goal 目录 goal-10，分支 goal-10，worktree .worktrees/goal-10，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-状态：待编写。要点按 PLAN T-05 各步骤：
-- 并发链与等待队列遵守 64 条、256 条/8 MiB 的上限。
-- Rule 返回 false 时不执行 Handler；Stop 不会被错误清除；自动回复恰好发送一次。
-- Hook 不能修改可信绑定，BeforeSend 修改后重新预检，Hook 中禁止 Send。
-- goal-52（T-05.4）：延续调用保留原 Actor 与默认 Target，期限 15 分钟，不占分发链，每 Session 最多 128 个进行中；延续调用内再请求、无 Actor 或 Hook 调用链中的请求返回 FAILED_PRECONDITION。`core.wait` 的键为（adapter_instance_id、chat_id、thread_id、external_user_id），同键 ALREADY_EXISTS；命中的消息在 PreEvent 之后、命令匹配之前被等待消费；不持久化。获准在 HandlerRequest 上追加 `continuation_of` 字段（原调用的 call_id）。
+目标：根插件 API 与显式注册；静态注册索引、重复拒绝、跨插件遮蔽的稳定选择
+前置：T-03.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
 
-### goal-19 至 goal-22 · T-06.1～T-06.4
+依据与顺序：PLAN §3.1 的 T-04.1 行；按 PLAN §4 的「T-04 步骤 1、3」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
 
-状态：待编写。要点按 PLAN T-06 各步骤：
-- 编码、版本与授权错误在执行目标函数之前拒绝。
-- 循环返回 CALL_CYCLE，深度超过 16 返回 FAILED_PRECONDITION。
-- Cancel 不越过它的 Request。
-- Event Bus 每订阅者 256 条/4 MiB，满时 drop-newest。
-- Hook 经 Service 再 Send 的路径被拒绝。
+关键边界：根插件与显式绑定必须唯一；跨插件同名路由的可见性与选择顺序稳定，不依赖启动顺序。
 
-### goal-24 至 goal-27 · T-07.2～T-07.5
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
 
-状态：待编写。要点按 PLAN T-07 各步骤：
-- 同一 job 不重叠，离线错过的 tick 不补跑；运行槽要等 callback 真正返回或进程确认退出才释放。
-- HTTP Listener 绑定 127.0.0.1:0，准备阶段不放行业务请求，旧 Session 不再代理。
-- 两个 Host 的凭证隔离；所有停止共享同一个停止预算。
+完成条件：运行对应步骤要求的命令，并覆盖 V-10 的注册分项、V-02 的注册原子性；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
 
-### goal-28、goal-30 至 goal-35、goal-53 · T-08.1、T-08.3～T-08.9
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
 
-状态：待编写。要点按 PLAN T-08 各步骤：
-- OnLoad 先于 Schema 校验；默认值只补缺失的键。
-- secret 引用不可变，明文不进入日志和响应。
-- 迁移的 Up 与账本写在同一事务；PG 需要维护许可。
-- 候选 DB 写坏不影响旧数据。
-- 前端只使用已批准的 Vite、TypeScript、React 19、vitest；界面文案提供 en-US 与 zh-CN 两份目录。
-- goal-53（T-08.8）：`i18/*.json` 的 `messages` 检查（en-US 必须包含全部键，其他语言无多余键，占位符集合一致）；SDK 的 `T` 按 Actor locale → Core 默认 locale → en-US 选择，主语言回落按 CONTRACTS §5.4；Core 的 en-US/zh-CN 用户可见文案目录，usage 改为经目录生成。
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-11 · T-04.2 构建期生成器
 
-### goal-36、goal-38 至 goal-45、goal-66 · T-09.1、T-09.3～T-09.11
+状态：待编写。
 
-状态：待编写。要点按 PLAN T-09 各步骤：
-- 管理 token 只保存 SHA256；login 带 CSRF 校验。
-- 所有管理动作经唯一的管理服务，按插件串行。
-- 提交点是同一事务内的 ActiveGeneration+COMMITTED；崩溃后未提交恢复旧版、已提交恢复新版。
-- 旧进程退出未确认时不启动新的写入者。
-- 启用、停用、卸载与更新时检查插件依赖；影响依赖方的操作列出受影响插件并要求确认。
-- Admin 页面包含工具调用策略、Agent 会话的列出与清除，以及界面语言切换。
-- goal-38（T-09.3）的 `plugin init` 生成插件包与库模式调试用的 `main.go`，`plugin build` 生成调用 `sdk.Run` 的正式入口。
-- goal-39（T-09.4）的 `alonabot serve` 复用 T-13 的 Core 装配，按安装记录启动全部已启用的包。
-- goal-66（T-09.10）：按来源的日志级别持久化，经 `sdk.log.set_level` 立即生效；每个来源保留最近 1000 条记录，提供读取与 SSE，过去日期从日志文件按日期查询；`alonabot logs`、`log-level` 与 WebUI 日志页使用同一 API，页面筛选只在浏览器中进行。
+```text
+/goal 使用 $alonabot-execute 推进 goal-11（切片 T-04.2：构建期生成器）。goal 目录 goal-11，分支 goal-11，worktree .worktrees/goal-11，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-### goal-54 至 goal-57 · T-11.1～T-11.4
+目标：构建期生成器 `sdk/generate`：限定扫描范围、build tags、生成注册代码、稳定输出；`cmd/alonabot` 的构建检查入口
+前置：T-04.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
 
-状态：待编写。要点按 PLAN T-11 各步骤：
-- 只有 JSON 编码的 Service 可以声明 `tool`；策略为 allow/confirm/deny，未设置时取 default_policy，修改在下一次调用生效。
-- `core.tool.invoke` 与 `core.tool.confirm` 必须带 parent_call_id；没有 Actor 时 confirm 直接 PERMISSION_DENIED。
-- 确认消息由 Core 直接经 Adapter 发送，不执行插件出站 Hook；只接受同一 Actor 在 5 分钟内的第一次点击；不支持按钮时 UNSUPPORTED。
-- 会话存储按（plugin_id、会话键）隔离，追加原子、分页受帧上限约束、不截断；卸载默认保留，purge 删除。
+依据与顺序：PLAN §3.1 的 T-04.2 行；按 PLAN §4 的「T-04 步骤 2」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
 
-### goal-58 至 goal-64 · T-12.1～T-12.7
+关键边界：生成器只扫描当前 Go module 中符合目标构建条件的包；重复 route 必须在构建期明确报错。
 
-状态：待编写。要点按 PLAN T-12 各步骤。goal-58（T-12.1）不依赖 Core 的新能力，是这一组里最早可以细化并派发的：
-- 范围在 `plugins/agent/` 与 `plugins/memory/`，只 import `sdk/...` 与 `contracts`；`sdk/memory` 提供记忆服务的类型与 Schema。
-- Provider 只用标准库实现 SSE；MCP 客户端用已批准的 `github.com/modelcontextprotocol/go-sdk`，goal-60 获准把它加入 `go.mod`。
-- Provider 失败不自动重发；流式显示先发送再按间隔编辑，最后一次编辑为完整内容。
-- 工具与 MCP 操作都经策略与确认；单轮工具步数上限与编辑间隔是命名常量。
-- 记忆的字符上限为命名常量（2,200 与 1,375 码点），超限返回错误不丢已有条目；后台定时任务不注入记忆，confirm 工具一律拒绝。
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
 
-### goal-67 至 goal-70 · T-13.1～T-13.4
+完成条件：运行对应步骤要求的命令，并覆盖 V-10；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
 
-状态：待编写。要点按 PLAN T-13 各步骤：
-- 根包 `alonabot` 的 `Run` 与 `alonabot serve` 共用同一份 Core 装配；`internal/core`、`sdk`、`adapters/`、`plugins/` 都不能 import 根包。
-- 开发中的组件在 goroutine 中经 loopback TCP 走完整协议，不另建协议路径；组件身份取自生成代码嵌入的 manifest。
-- dev 来源使用固定代次 `dev`，配置直接读取 `config.json`，数据库为 `dev.sqlite`，不能 update 或 rollback。
-- 热部署用 `Reload` 选项或 `ALONABOT_RELOAD=1` 启用，不解析程序的命令行参数；500ms 轮询，编译失败时旧组件继续运行，其他 module 的组件不重启。
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
 
-### goal-71 至 goal-75、goal-77 · T-14.1～T-14.6
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-12 · T-04.3 命令选择、文本匹配与参数绑定
 
-状态：待编写。要点按 PLAN T-14 各步骤：
-- `core.command.list` 只返回调用者可用的命令，说明按 Actor locale 翻译。
-- rss 抓取只允许 http/https，解析出的地址与每次重定向后的地址都不能是 loopback、私网、链路本地、组播或未指定地址；响应大小与超时为命名常量。
-- 预装包照常验签；只在数据目录首次初始化时安装，默认启用 Agent、记忆与 help；签名私钥不进入仓库与日志。
-- goal-77（T-14.5）：镜像只含 `alonabot`、`packages/` 与 CA 证书，UID 10001，`/data` 卷，`init: true`；只有 `ALONABOT_CONTAINER=1` 时允许 `0.0.0.0` 搭配本机 http Base URL，并在启动时输出 WARN。
+状态：待编写。
 
-### goal-46 至 goal-49 · T-10.1～T-10.4
+```text
+/goal 使用 $alonabot-execute 推进 goal-12（切片 T-04.3：命令选择、文本匹配与参数绑定）。goal 目录 goal-12，分支 goal-12，worktree .worktrees/goal-12，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-状态：待编写。要点按 PLAN T-10 各步骤。需要真实的 Telegram、五个目标平台和固定的测量机器，缺少的部分记为未运行。
+目标：命令选择与参数绑定：完整 token、@username、最长路径/别名→文本匹配（Regex、keyword、startswith、endswith、fullmatch）→Raw、消费状态、参数语法、usage/silent
+前置：T-04.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-04.3 行；按 PLAN §4 的「T-04 步骤 4」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：命令一旦识别，权限拒绝、禁用或参数解析失败都不得回落到文本匹配；文本模式支持 keyword、startswith、endswith、fullmatch 与 Regex，按 priority/plugin_id/route_id 稳定排序，空模式拒绝注册，ignore_case 使用 Unicode 简单大小写折叠。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-11 的命令分项、V-49；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-13 · T-04.4 持久化命令策略
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-13（切片 T-04.4：持久化命令策略）。goal 目录 goal-13，分支 goal-13，worktree .worktrees/goal-13，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：持久化命令策略与管理服务层：继承、禁用、全局禁止、下一次派发生效
+前置：T-03.2、T-04.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-04.4 行；按 PLAN §4 的「T-04 步骤 5」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：命令策略持久化并在下一次派发时生效；父级禁用优先于子级启用。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-12、V-43 的服务层分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-14 · T-04.5 示例升级与 T-04 验收
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-14（切片 T-04.5：示例升级与 T-04 验收）。goal 目录 goal-14，分支 goal-14，worktree .worktrees/goal-14，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：用同一 SDK 升级示例，完成构建与策略验收，汇总证据
+前置：T-03.10、T-04.2、T-04.3、T-04.4。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-04.5 行；按 PLAN §4 的「T-04 步骤 6、7」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：示例与验收需覆盖生成注册表、命令选择、文本匹配和持久化策略的交接；只验证实际行为，不新增无独立价值的字符串断言。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-10、V-11、V-12、V-43、V-49 的 T-04 分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-15 · T-05.1 可信上下文与有界分发
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-15（切片 T-05.1：可信上下文与有界分发）。goal 目录 goal-15，分支 goal-15，worktree .worktrees/goal-15，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：可信事件上下文与有界同事件分发：64 条并发链、256 条/8 MiB 等待队列、稳定候选排序、链执行与读循环分离；经回环测试 Adapter 运行，按钮与 scheduled 绑定先用规范 fixture
+前置：T-03.3、T-04.3、T-04.4。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-05.1 行；按 PLAN §4 的「T-05 步骤 1、2」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：并发链与等待队列遵守契约上限：事件等待队列最多 64 条；每 Session 最多 256 条/8 MiB 的相关请求与排队载荷。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-13、V-16 的 fixture 分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-16 · T-05.2 Rule、HandlerOutcome 与传播
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-16（切片 T-05.2：Rule、HandlerOutcome 与传播）。goal 目录 goal-16，分支 goal-16，worktree .worktrees/goal-16，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支
+前置：T-05.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-05.2 行；按 PLAN §4 的「T-05 步骤 3、4」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：Rule 返回 false 时跳过 Handler；Stop 不被后续错误清除；自动回复每个事件最多发送一次。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-14、V-11 的 Rule 分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-17 · T-05.3 三阶段 Hook 与 send_forbidden
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-17（切片 T-05.3：三阶段 Hook 与 send_forbidden）。goal 目录 goal-17，分支 goal-17，worktree .worktrees/goal-17，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：PreEvent/BeforeSend/AfterSend 三阶段 Hook，send_forbidden 的保存与继承
+前置：T-05.2。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-05.3 行；按 PLAN §4 的「T-05 步骤 5、6」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：Hook 不得修改可信 Actor、Target 或已验证路由绑定；BeforeSend 修改消息后必须重新预检；Hook 执行期间直接或间接 Send 均拒绝。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-15 的直接路径分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-52 · T-05.4 延续调用与多轮等待
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-52（切片 T-05.4：延续调用与多轮等待）。goal 目录 goal-52，分支 goal-52，worktree .worktrees/goal-52，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：延续调用与多轮等待：`core.continuation.start`、`core.wait`、等待键与消费、超时与 Session 失效；SDK 的 `Continue` 与 `Wait`
+前置：T-05.2。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-05.4 行；按 PLAN §4 的「T-05 步骤 7」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-50；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-18 · T-05.5 多进程事件流水线验收
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-18（切片 T-05.5：多进程事件流水线验收）。goal 目录 goal-18，分支 goal-18，worktree .worktrees/goal-18，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：多进程事件流水线验收（含真实按钮回调与多轮等待），汇总证据
+前置：T-03.8、T-05.3、T-05.4。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-05.5 行；按 PLAN §4 的「T-05 步骤 8」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：必须以真实的多个插件进程完成流水线验收，覆盖真实按钮回调与多轮等待；进程内函数互调不能替代跨进程证据。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-11、V-13～V-16、V-43、V-49、V-50 的 T-05 分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-19 · T-06.1 Service/Bus 描述与 Broker 准入
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-19（切片 T-06.1：Service/Bus 描述与 Broker 准入）。goal 目录 goal-19，分支 goal-19，worktree .worktrees/goal-19，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：Service/Bus 描述与编码校验、SDK 入口；Broker 定位与准入
+前置：T-04.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-06.1 行；按 PLAN §4 的「T-06 步骤 1、2」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：编码、版本和授权错误必须在执行目标函数之前拒绝；只接受已声明的编码与 Schema 版本，不允许运行时网络 $ref。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-19；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-20 · T-06.2 父调用链、取消与背压
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-20（切片 T-06.2：父调用链、取消与背压）。goal 目录 goal-20，分支 goal-20，worktree .worktrees/goal-20，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：父调用链上下文传播、循环与深度检查、跨段取消与背压
+前置：T-03.6、T-05.3、T-06.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-06.2 行；按 PLAN §4 的「T-06 步骤 3、4」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：同一调用链重复进入插件返回 CALL_CYCLE，深度超过 16 返回 FAILED_PRECONDITION；Cancel 不得越过对应 Request，父调用结束后取消子调用且不重放。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-18、V-42 的嵌套分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-21 · T-06.3 非持久 Event Bus
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-21（切片 T-06.3：非持久 Event Bus）。goal 目录 goal-21，分支 goal-21，worktree .worktrees/goal-21，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：非持久 Event Bus：发布准入、逐订阅者 256 条/4 MiB 队列、drop-newest 计数
+前置：T-06.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-06.3 行；按 PLAN §4 的「T-06 步骤 5」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：Event Bus 每个订阅者最多 256 条或 4 MiB，先达到者为准；满时 drop-newest 并计数，离线不缓存、不补发，慢订阅者不能阻塞其他订阅者。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-17；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-22 · T-06.4 Session 清理与 Service 端到端
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-22（切片 T-06.4：Session 清理与 Service 端到端）。goal 目录 goal-22，分支 goal-22，worktree .worktrees/goal-22，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：Session 变更时的清理与计数，A/B/C 端到端验收（含 Hook→Service→Send），汇总证据
+前置：T-06.2、T-06.3。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-06.4 行；按 PLAN §4 的「T-06 步骤 6、7」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：完成 A/B/C 端到端链路并验证 Hook→Service→Send 的间接发送仍受 send_forbidden 约束；Session 失效时清理路由、订阅队列、Broker 映射与预算。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-15、V-17、V-18、V-19、V-42；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-24 · T-07.2 schedule 注册与运行槽
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-24（切片 T-07.2：schedule 注册与运行槽）。goal 目录 goal-24，分支 goal-24，worktree .worktrees/goal-24，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：schedule 注册校验，运行槽与调度调用：独立 run_id、15 分钟期限、同 job 跳过重叠、迟到响应与断链
+前置：T-05.1、T-07.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-07.2 行；按 PLAN §4 的「T-07 步骤 1（schedule）、3」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：同一 job 不重叠；离线错过的 tick 不补跑；运行槽只在 callback 真正返回或进程确认退出后释放，迟到响应不得提前释放。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-20、V-46、V-16 和 V-05 的 scheduled 分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-25 · T-07.3 SDK HTTP Listener 与 Core 代理
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-25（切片 T-07.3：SDK HTTP Listener 与 Core 代理）。goal 目录 goal-25，分支 goal-25，worktree .worktrees/goal-25，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：HTTP 注册校验，SDK 托管 HTTP Listener 与 Core Session 代理映射；Core 设置文件 `alonabot.yaml` 的读取、缺省值与命令行覆盖
+前置：T-04.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-07.3 行；按 PLAN §4 的「T-07 步骤 1（HTTP）、4、5」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：HTTP 仅在插件声明路由时启动 loopback Listener，绑定 127.0.0.1:0；准备阶段不接业务请求，旧 Session 失效后立即停止代理。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-22 的组件分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-26 · T-07.4 两个 Host 与插件票据
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-26（切片 T-07.4：两个 Host 与插件票据）。goal 目录 goal-26，分支 goal-26，worktree .worktrees/goal-26，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：两个 Host 的边界、插件兑换票据与插件会话
+前置：T-07.3。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-07.4 行；按 PLAN §4 的「T-07 步骤 6」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：两个 Host 的插件票据与 Session 必须隔离；停止流程共享一个停止预算，不为每个插件重新开始计时。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-47 的组件分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-27 · T-07.5 调度与 HTTP 启停集成及验收
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-27（切片 T-07.5：调度与 HTTP 启停集成及验收）。goal 目录 goal-27，分支 goal-27，worktree .worktrees/goal-27，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：统一启停与清理，时间、进程和 HTTP 边界验收，汇总证据
+前置：T-07.2、T-07.4。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-07.5 行；按 PLAN §4 的「T-07 步骤 7、8」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：端到端验证调度、HTTP、Session 变更与停止预算；旧 Session 的内部 HTTP 入口不得继续代理。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-20、V-21、V-22、V-46、V-47 的 T-07 分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-28 · T-08.1 配置字段描述与构建检查
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-28（切片 T-08.1：配置字段描述与构建检查）。goal 目录 goal-28，分支 goal-28，worktree .worktrees/goal-28，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：配置字段描述与构建检查（在 T-04 生成器上扩展）
+前置：T-04.2。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-08.1 行；按 PLAN §4 的「T-08 步骤 1」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：配置描述生成必须拒绝重复 Config、重复路由与无法静态确定的字段；Schema 描述和运行时字段语义保持一致。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-25 的描述分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-30 · T-08.3 SDK 配置准备顺序
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-30（切片 T-08.3：SDK 配置准备顺序）。goal 目录 goal-30，分支 goal-30，worktree .worktrees/goal-30，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：SDK 配置准备顺序：OnLoad→补缺键默认→typed decode/Schema→Validate
+前置：T-08.1、T-08.2。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-08.3 行；按 PLAN §4 的「T-08 步骤 3」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：严格按 OnLoad→仅补缺失键的默认值→typed decode/Schema→Validate 顺序准备配置；显式 false、0、空串、空数组、空对象与 null 均保留。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-37、V-21 的配置分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-31 · T-08.4 不可变 Secret Store
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-31（切片 T-08.4：不可变 Secret Store）。goal 目录 goal-31，分支 goal-31，worktree .worktrees/goal-31，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：不可变 Secret Store：引用、解引用、重新抽取、脱敏读取、受保护清理
+前置：T-08.1、T-08.2。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-08.4 行；按 PLAN §4 的「T-08 步骤 4」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：Secret 使用不可变引用；读取、日志、错误响应与配置快照不得泄漏明文；旧引用在候选失败时保持有效。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-25；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-32 · T-08.5 GORM 连接与迁移
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-32（切片 T-08.5：GORM 连接与迁移）。goal 目录 goal-32，分支 goal-32，worktree .worktrees/goal-32，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：`gormdb.Open` 连接生命周期、迁移互斥与 versioned 迁移、PG 门槛与维护许可
+前置：T-08.3。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-08.5 行；按 PLAN §4 的「T-08 步骤 5、6」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：每个迁移的 Up 与版本账本写入同一事务；GORM 的自动迁移与自定义迁移互斥，PostgreSQL 迁移需显式维护许可。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-26、V-39；PG 需要测试实例；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-33 · T-08.6 SQLite 候选与资源交接
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-33（切片 T-08.6：SQLite 候选与资源交接）。goal 目录 goal-33，分支 goal-33，worktree .worktrees/goal-33，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：SQLite 候选复制与资源交接，写出给 T-09 的调用约定
+前置：T-08.4、T-08.5。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-08.6 行；按 PLAN §4 的「T-08 步骤 7」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：候选 SQLite 使用独立准备视图；候选失败不污染旧代次的数据、配置或 Secret，新旧进程不得同时成为同一数据库的写入者。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-24、V-36 的候选分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-34 · T-08.7 web/admin 骨架、配置表单组件与界面文案
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-34（切片 T-08.7：web/admin 骨架、配置表单组件与界面文案）。goal 目录 goal-34，分支 goal-34，worktree .worktrees/goal-34，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：`web/admin` 前端骨架，配置表单与 i18 组件及 fixture，界面文案的 en-US/zh-CN 目录与语言切换
+前置：T-08.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-08.7 行；按 PLAN §4 的「T-08 步骤 9（前端）」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：前端只使用仓库已批准的 Vite、TypeScript、React 19 与 vitest；界面文案提供 en-US、zh-CN 两份目录。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-25 的表单分项、V-54 的界面组件分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-53 · T-08.8 用户可见文案目录
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-53（切片 T-08.8：用户可见文案目录）。goal 目录 goal-53，分支 goal-53，worktree .worktrees/goal-53，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：用户可见文案目录：插件 `i18/` 的 `messages`、SDK 的 `T`、Core 的 en-US/zh-CN 文案目录（usage 等）、check 的键与占位符检查
+前置：T-04.1、T-04.3、T-08.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-08.8 行；按 PLAN §4 的「T-08 步骤 8」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：检查插件 i18/*.json 的 messages：en-US 包含全部键、其他语言无多余键、占位符集合一致；SDK 的 T 按 Actor locale→Core 默认 locale→en-US 回退；Core 用户可见文案提供 en-US 与 zh-CN。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-54 的 SDK 与 Core 分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-35 · T-08.9 configdb 示例与 T-08 验收
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-35（切片 T-08.9：configdb 示例与 T-08 验收）。goal 目录 goal-35，分支 goal-35，worktree .worktrees/goal-35，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：configdb 示例与分层验证，汇总证据
+前置：T-08.6、T-08.7、T-08.8。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-08.9 行；按 PLAN §4 的「T-08 步骤 9」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：示例必须展示 JSON Pending、配置准备与数据库资源交接的正式路径；未完成的 PG 真实实例验收应明确标为未运行。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-23～V-26、V-38、V-39、V-54 的 T-08 分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-36 · T-09.1 首次管理认证
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-36（切片 T-09.1：首次管理认证）。goal 目录 goal-36，分支 goal-36，worktree .worktrees/goal-36，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：首次管理认证：admin-token init/reset、login、会话、CSRF、CLI Bearer
+前置：T-07.4。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-09.1 行；按 PLAN §4 的「T-09 步骤 1」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：管理 token 只保存 SHA-256 摘要；登录与状态变更使用 CSRF 校验，错误响应不得暴露凭证。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-47 的认证分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-38 · T-09.3 开发 CLI 与库模式脚手架
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-38（切片 T-09.3：开发 CLI 与库模式脚手架）。goal 目录 goal-38，分支 goal-38，worktree .worktrees/goal-38，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：开发 CLI：`plugin init/check/build/test/pack`；init 生成插件包与库模式调试用的 `main.go`，build 生成调用 `sdk.Run` 的正式入口
+前置：T-04.5、T-08.1、T-08.8、T-09.2、T-13.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-09.3 行；按 PLAN §4 的「T-09 步骤 2（CLI）」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：plugin init 生成可运行的插件包和库模式调试 main.go；plugin build 生成调用 sdk.Run 的正式入口；CLI 各命令复用相同的 manifest 与构建校验。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-01、V-41、V-54 的打包分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-39 · T-09.4 管理服务、安装记录与 serve
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-39（切片 T-09.4：管理服务、安装记录与 serve）。goal 目录 goal-39，分支 goal-39，worktree .worktrees/goal-39，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：唯一管理服务与安装记录：逐包串行、来源/pin/卸载保留、各管理动作的区分；Adapter 包与实例的管理（凭证经 Secret 引用）；启用、停用、卸载与更新时的 Adapter 依赖和插件依赖检查；`alonabot serve` 按安装记录启动全部已启用的包
+前置：T-03.8、T-08.4、T-09.1、T-09.2、T-13.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-09.4 行；按 PLAN §4 的「T-09 步骤 3」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：所有管理动作经唯一管理服务并按插件串行；启停、卸载、更新前检查依赖并列出受影响插件；serve 按安装记录启动已启用包，并复用 T-13 的 Core 装配。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-40、V-48、V-52、V-01 的安装分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-40 · T-09.5 候选 Journal 与准备编排
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-40（切片 T-09.5：候选 Journal 与准备编排）。goal 目录 goal-40，分支 goal-40，worktree .worktrees/goal-40，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：正式候选 Journal 与准备编排
+前置：T-09.4、T-08.6、T-06.4。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-09.5 行；按 PLAN §4 的「T-09 步骤 4」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：Journal 记录准备阶段与候选资源，任何准备失败都保留旧 Active；候选 DB 与 Secret 只在对应代次中可见。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-29；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-41 · T-09.6 唯一提交点与激活门禁
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-41（切片 T-09.6：唯一提交点与激活门禁）。goal 目录 goal-41，分支 goal-41，worktree .worktrees/goal-41，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：唯一提交点（ActiveGeneration+COMMITTED）与激活门禁
+前置：T-07.5、T-09.5。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-09.6 行；按 PLAN §4 的「T-09 步骤 5」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：唯一提交点是在同一事务中写入 ActiveGeneration 与 COMMITTED；提交前失败恢复旧版，提交后失败恢复新版并进入 Degraded，不能提前开放路由。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-30、V-21 的提交分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-42 · T-09.7 崩溃恢复、回退与回收
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-42（切片 T-09.7：崩溃恢复、回退与回收）。goal 目录 goal-42，分支 goal-42，worktree .worktrees/goal-42，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：崩溃恢复、显式回退与引用回收
+前置：T-09.6。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-09.7 行；按 PLAN §4 的「T-09 步骤 6」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：旧进程退出状态未确认时不得启动新的数据库写入者；恢复只信 Core 状态库的 Active 指针，并按引用关系回收旧资源。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-30、V-31、V-36；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-43 · T-09.8 Admin 管理页
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-43（切片 T-09.8：Admin 管理页）。goal 目录 goal-43，分支 goal-43，worktree .worktrees/goal-43，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：Admin 页面：真实登录、状态、插件与 Adapter 的安装启停、Adapter 实例管理、更新/恢复
+前置：T-09.6、T-08.7。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-09.8 行；按 PLAN §4 的「T-09 步骤 7（管理页）」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：管理页面展示真实安装、启停和恢复状态；UI 状态来自管理 API，不以本地猜测代替 Core 状态。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-40、V-47 的页面分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-44 · T-09.9 Admin 配置、权限、工具策略与插件页
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-44（切片 T-09.9：Admin 配置、权限、工具策略与插件页）。goal 目录 goal-44，分支 goal-44，worktree .worktrees/goal-44，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：Admin 页面：配置表单与 JSON 编辑、命令权限、发信许可、Core 设置（Core Admin 列表、默认 locale）、工具调用策略、Agent 会话的列出与清除、插件页面代理、界面语言切换
+前置：T-09.8、T-11.1、T-11.3。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-09.9 行；按 PLAN §4 的「T-09 步骤 7（配置与插件页）」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：Admin 页面包含工具调用策略、Agent 会话列出/清除、发信许可、Core Admin 列表、默认 locale 与界面语言切换；影响依赖方的操作须先展示影响并要求确认。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56 的页面分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-66 · T-09.10 日志管理与日志页
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-66（切片 T-09.10：日志管理与日志页）。goal 目录 goal-66，分支 goal-66，worktree .worktrees/goal-66，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：日志管理：按来源级别的持久化与运行时修改（`sdk.log.set_level`）、最近记录缓冲、按日期查询日志文件、管理 API 与 SSE、`alonabot logs` 与 `log-level`、WebUI 日志页
+前置：T-02.1、T-03.1、T-09.8。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-09.10 行；按 PLAN §4 的「T-09 步骤 7（日志）」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：按来源级别持久化并通过 sdk.log.set_level 立即生效；每个来源保留最近 1000 条记录，提供受认证保护的查询与 SSE，历史日志按日期读取；CLI 与 WebUI 共用同一 API，页面筛选只在浏览器进行。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-62、V-63、V-68；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-45 · T-09.11 正式流程故障注入与 T-09 验收
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-45（切片 T-09.11：正式流程故障注入与 T-09 验收）。goal 目录 goal-45，分支 goal-45，worktree .worktrees/goal-45，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：正式流程的故障注入，回填 T-08 待联验项，汇总证据
+前置：T-09.3、T-09.7、T-09.9、T-09.10。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-09.11 行；按 PLAN §4 的「T-09 步骤 8」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：用正式管理流程做故障注入并回填 T-08 待联验项；每个 V 项记录实际命令、环境、进程与日志，不以模拟服务替代真实平台证据。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-23～V-25、V-27～V-31、V-39、V-40、V-52、V-54～V-56、V-62、V-63；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-46 · T-10.1 证据汇总与跨组件联验
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-46（切片 T-10.1：证据汇总与跨组件联验）。goal 目录 goal-46，分支 goal-46，worktree .worktrees/goal-46，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：V-01～V-70 证据汇总与跨组件联验
+前置：T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-10.1 行；按 PLAN §4 的「T-10 步骤 1～4」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：汇总 V-01～V-70 的逐项证据并完成跨组件闭合；真实 Telegram 与 Provider 凭证缺失时只标记对应项未运行，不将模拟结果记为真实平台通过。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 全部；真实 Telegram 与 LLM Provider 需要测试凭证；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-47 · T-10.2 五平台构建与运行
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-47（切片 T-10.2：五平台构建与运行）。goal 目录 goal-47，分支 goal-47，worktree .worktrees/goal-47，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：五个目标组合的构建与运行、100 次启停
+前置：T-10.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-10.2 行；按 PLAN §4 的「T-10 步骤 5」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：在五个目标组合上实际构建并运行，执行 100 次启停；缺少目标平台时记录未运行及其平台，不用交叉编译代替运行。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-32、V-34；需要真实目标平台；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-48 · T-10.3 资源比较报告
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-48（切片 T-10.3：资源比较报告）。goal 目录 goal-48，分支 goal-48，worktree .worktrees/goal-48，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：资源比较报告
+前置：T-10.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-10.3 行；按 PLAN §4 的「T-10 步骤 6」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：资源比较使用固定机器、等价负载和可复现命令；报告方法、环境、测量数据与限制，不能从单次结果推断通用性能保证。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-33；需要固定机器与等价负载；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-49 · T-10.4 发布资产与说明
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-49（切片 T-10.4：发布资产与说明）。goal 目录 goal-49，分支 goal-49，worktree .worktrees/goal-49，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：发布资产、签名与发布说明
+前置：T-10.2、T-10.3。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-10.4 行；按 PLAN §4 的「T-10 步骤 7、8」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：发行资产包含可验证签名与发布说明；发布复验覆盖归档和平台清单，签名私钥不得进入仓库或日志。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-28、V-41 的发布复验；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-54 · T-11.1 工具描述、目录与策略
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-54（切片 T-11.1：工具描述、目录与策略）。goal 目录 goal-54，分支 goal-54，worktree .worktrees/goal-54，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：工具描述与目录：Service 描述的 `tool` 字段、注册校验、`core.tool.list`、调用策略的持久化与管理服务层
+前置：T-04.4、T-06.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-11.1 行；按 PLAN §4 的「T-11 步骤 1、2」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：只有 JSON 编码的 Service 可以声明 tool；策略为 allow/confirm/deny，未设置时使用 default_policy，策略修改从下一次调用生效。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-55 的目录与策略分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-55 · T-11.2 工具调用与用户确认
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-55（切片 T-11.2：工具调用与用户确认）。goal 目录 goal-55，分支 goal-55，worktree .worktrees/goal-55，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：工具调用与用户确认：`core.tool.invoke`、`core.tool.confirm`、Core 内部的确认记录与按钮、同一 Actor 与 5 分钟限时、确认文案
+前置：T-03.8、T-06.2、T-08.8、T-11.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-11.2 行；按 PLAN §4 的「T-11 步骤 3、4」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：core.tool.invoke 与 core.tool.confirm 必须带 parent_call_id；没有可信 Actor 的调用遇 confirm 直接 PERMISSION_DENIED。确认消息由 Core 经 Adapter 直接发送，不执行插件出站 Hook；只接受同一 Actor 在 5 分钟内的第一次点击，不支持按钮时 UNSUPPORTED。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-55；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-56 · T-11.3 Agent 会话存储
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-56（切片 T-11.3：Agent 会话存储）。goal 目录 goal-56，分支 goal-56，worktree .worktrees/goal-56，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：Agent 会话存储：状态库表、`core.conversation.*`、管理服务层的列出与清除、purge
+前置：T-03.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-11.3 行；按 PLAN §4 的「T-11 步骤 5」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：会话存储按 (plugin_id, session_key) 隔离，追加原子、分页受帧上限约束且不截断；卸载默认保留会话，只有显式 purge 才删除。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-56；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-57 · T-11.4 工具与会话的验收
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-57（切片 T-11.4：工具与会话的验收）。goal 目录 goal-57，分支 goal-57，worktree .worktrees/goal-57，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：工具与会话的多进程验收，汇总证据
+前置：T-11.2、T-11.3。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-11.4 行；按 PLAN §4 的「T-11 步骤 6」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：验收使用多个真实插件进程，覆盖工具策略、确认与会话隔离；进程内模拟调用不能替代 Core Broker 路径。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-55、V-56 的 T-11 分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-58 · T-12.1 Provider 客户端
+
+状态：可派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-58（切片 T-12.1：Provider 客户端）。goal 目录 goal-58，分支 goal-58，worktree .worktrees/goal-58，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：Provider 客户端：OpenAI 兼容与 Anthropic Messages 的流式请求、SSE 解析、工具调用解析、本地模拟服务
+
+前置：T-02 已实现，无额外切片前置。
+
+依据：spec/PLAN.md §4「T-12」步骤 1 的 Provider 接口与流语义；验收编号：V-57 的 Provider 分项。
+
+实施边界：
+- 严格按 PLAN §4「T-12」步骤 1 的 `provider` API 实现，不提前实现 Agent 对话、工具循环或 MCP。
+- 只新增/修改 `plugins/agent/provider/` 与该目录的本地模拟服务/测试；只用标准库，不新增依赖。
+- 开始修改前核对前置交付物和实际接口；如与契约冲突、必须修改未授权文件、需要新增未批准依赖或需要改变协议字段，标记 [!] 并暂停该项，不自行扩展范围。
+- 遵循 goals.md「所有 goal 的共同约束」中的测试提交规则、日志、错误、配置与资源生命周期要求。
+
+完成条件：
+- 完成 PLAN §4 对应工作包中与本切片相关的交付物和失败停止条件。
+- 运行该工作包明确要求的命令，并记录真实结果；未运行的环境验收标为「未运行」。
+- 覆盖本切片负责的验收项：V-57 的 Provider 分项。跨任务 V 项只有在 PLAN §5 指定的最终闭合点通过后才能标记完成。
+- 更新本地 goal 目录的 plan.md/tasks.md 回写区；PR 正文包含变更、验证结果、阻塞项及「文档同步」。
+```
+
+### goal-59 · T-12.2 Agent 对话与流式显示
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-59（切片 T-12.2：Agent 对话与流式显示）。goal 目录 goal-59，分支 goal-59，worktree .worktrees/goal-59，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：对话：`plugins/agent/` 骨架与配置、人格、历史、延续调用内的一轮对话、流式编辑显示、`/persona` 与 `/reset`
+前置：T-03.9、T-04.3、T-05.4、T-08.3、T-08.4、T-11.3、T-12.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-12.2 行；按 PLAN §4 的「T-12 步骤 2、3」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：流式回复先发送一条消息，再按 1 秒命名常量间隔编辑，结束时最后一次编辑写入完整内容；超长文本按段落边界拆成多条，模型输出按纯文本发送。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-57；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-60 · T-12.3 工具循环与 MCP
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-60（切片 T-12.3：工具循环与 MCP）。goal 目录 goal-60，分支 goal-60，worktree .worktrees/goal-60，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：工具循环与 MCP：Core 工具、MCP 客户端（stdio、streamable HTTP）、确认、单轮步数上限
+前置：T-11.2、T-12.2。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-12.3 行；按 PLAN §4 的「T-12 步骤 4」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：MCP 只在本切片获准加入 github.com/modelcontextprotocol/go-sdk；所有 MCP 操作先经 core.tool.confirm，单轮工具步数上限为命名常量（初值 20），拒绝/超时/工具错误作为结果交回模型。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-58；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-61 · T-12.4 记忆插件
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-61（切片 T-12.4：记忆插件）。goal 目录 goal-61，分支 goal-61，worktree .worktrees/goal-61，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：记忆：`sdk/memory` 服务契约、`plugins/memory/` 官方记忆插件、Agent 的记忆接入
+前置：T-08.5、T-11.2、T-12.2。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-12.4 行；按 PLAN §4 的「T-12 步骤 5」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：Agent 与记忆插件只经 sdk/... 和 contracts 交互；sdk/memory 提供三个固定 Service 的类型与 Schema。记忆按 Unicode 码点限制 2,200/1,375，超限、重复或含 Unicode Cf 的内容报错且保留旧数据；记忆插件不可用时本轮报错。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-59；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-62 · T-12.5 技能
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-62（切片 T-12.5：技能）。goal 目录 goal-62，分支 goal-62，worktree .worktrees/goal-62，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：技能：技能目录、`SKILL.md` 解析、`load_skill`
+前置：T-12.3。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-12.5 行；按 PLAN §4 的「T-12 步骤 6」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：技能目录读取各子目录的 SKILL.md；name、description frontmatter 必填，无效文件记诊断并跳过；load_skill 对不存在的技能返回明确错误。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-60；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-63 · T-12.6 定时 Agent 任务
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-63（切片 T-12.6：定时 Agent 任务）。goal 目录 goal-63，分支 goal-63，worktree .worktrees/goal-63，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：定时 Agent 任务：任务工具、任务表、分钟级固定 schedule、后台运行
+前置：T-07.2、T-08.5、T-12.3。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-12.6 行；按 PLAN §4 的「T-12 步骤 7」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：后台定时任务无 Actor、不注入记忆；confirm 策略的工具一律拒绝，离线错过的触发不补跑，发送仍需 allowed_adapter_instances。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-61；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-64 · T-12.7 官方插件打包与 T-12 验收
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-64（切片 T-12.7：官方插件打包与 T-12 验收）。goal 目录 goal-64，分支 goal-64，worktree .worktrees/goal-64，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：两个官方插件的打包与多进程验收，汇总证据
+前置：T-12.4、T-12.5、T-12.6。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-12.7 行；按 PLAN §4 的「T-12 步骤 8」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：官方 Agent 与记忆插件按 T-09 打包流程交付；使用本地 Provider/MCP 模拟服务与回环 Adapter 验收，真实 Provider/Telegram 无凭证时标未运行。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-57～V-61；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-67 · T-13.1 库模式入口与同进程组件
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-67（切片 T-13.1：库模式入口与同进程组件）。goal 目录 goal-67，分支 goal-67，worktree .worktrees/goal-67，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：库模式入口：根包 `alonabot.Run` 与选项、与 `serve` 共用的 Core 装配、开发组件同进程经 loopback 连接、生成代码中嵌入的组件身份、dev 来源与固定代次
+前置：T-02.1、T-03.3、T-04.2。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-13.1 行；按 PLAN §4 的「T-13 步骤 1、2」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：根包 alonabot.Run 与 alonabot serve 共用同一 Core 装配；internal/core、sdk、adapters/、plugins/ 不得 import 根包。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-64 的生命周期分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-68 · T-13.2 开发组件的配置与数据库
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-68（切片 T-13.2：开发组件的配置与数据库）。goal 目录 goal-68，分支 goal-68，worktree .worktrees/goal-68，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：开发组件的配置与数据库：`config.json` 直读与准备、`dev.sqlite`、拒绝 update/rollback
+前置：T-08.3、T-08.5、T-13.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-13.2 行；按 PLAN §4 的「T-13 步骤 3」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：开发组件使用固定代次 dev、config.json 与 dev.sqlite；拒绝 update/rollback，配置和数据库资源按开发组件生命周期管理。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-64；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-69 · T-13.3 热部署
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-69（切片 T-13.3：热部署）。goal 目录 goal-69，分支 goal-69，worktree .worktrees/goal-69，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：热部署：`Reload` 选项与 `ALONABOT_RELOAD`、源码轮询、重新编译、开发组件改为子进程并重启
+前置：T-13.1。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-13.3 行；按 PLAN §4 的「T-13 步骤 4」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：热部署由 Reload 选项或 ALONABOT_RELOAD=1 启用，500ms 轮询；编译失败时旧组件继续运行，重启开发组件，不重启来自其他 module 的组件。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-65；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-70 · T-13.4 库模式示例与验收
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-70（切片 T-13.4：库模式示例与验收）。goal 目录 goal-70，分支 goal-70，worktree .worktrees/goal-70，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：库模式示例与开发文档，汇总证据
+前置：T-03.10、T-13.2、T-13.3。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-13.4 行；按 PLAN §4 的「T-13 步骤 5」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：示例与文档验证库模式和热部署的实际生命周期；真实平台或环境缺失的验收项标未运行。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-64、V-65；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-71 · T-14.1 help 插件与命令列表
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-71（切片 T-14.1：help 插件与命令列表）。goal 目录 goal-71，分支 goal-71，worktree .worktrees/goal-71，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：help 插件与 `core.command.list`
+前置：T-04.4、T-05.2、T-08.8。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-14.1 行；按 PLAN §4 的「T-14 步骤 1」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：core.command.list 只返回调用者可用的命令，并按 Actor locale 翻译说明。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-67 的 help 分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-72 · T-14.2 welcome 与 rss 插件
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-72（切片 T-14.2：welcome 与 rss 插件）。goal 目录 goal-72，分支 goal-72，worktree .worktrees/goal-72，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：welcome 与 rss 插件
+前置：T-05.2、T-07.2、T-08.3、T-08.5、T-08.8。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-14.2 行；按 PLAN §4 的「T-14 步骤 2」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：RSS 只允许 http/https；每次请求与重定向都拒绝 loopback、私网、链路本地、组播和未指定地址，响应大小与超时使用命名常量。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-67；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-73 · T-14.3 发行归档
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-73（切片 T-14.3：发行归档）。goal 目录 goal-73，分支 goal-73，worktree .worktrees/goal-73，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：发行归档：构建与打包全部官方包、签名、内置官方发布者公钥
+前置：T-03.10、T-09.3、T-12.7、T-14.1、T-14.2。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-14.3 行；按 PLAN §4 的「T-14 步骤 3」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：发行包的每个安装资产都按正式来源和签名流程验证；发布流程不把私钥、凭证或本机绝对路径打入归档。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-66 的归档分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-74 · T-14.4 首次运行与预装
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-74（切片 T-14.4：首次运行与预装）。goal 目录 goal-74，分支 goal-74，worktree .worktrees/goal-74，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：首次运行：预装与默认启用、首次管理 token、内置包的可用更新
+前置：T-09.6、T-14.3。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-14.4 行；按 PLAN §4 的「T-14 步骤 4」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：预装包照常验签；只在数据目录首次初始化时安装，默认启用 Agent、记忆与 help；签名私钥不进入仓库与日志。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-66；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-77 · T-14.5 容器镜像
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-77（切片 T-14.5：容器镜像）。goal 目录 goal-77，分支 goal-77，worktree .worktrees/goal-77，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：容器镜像：`Dockerfile` 多阶段构建、linux/amd64 与 linux/arm64、非 root、`/data` 卷、`ALONABOT_CONTAINER` 的监听规则、`deploy/compose.yaml`
+前置：T-07.3、T-14.3。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-14.5 行；按 PLAN §4 的「T-14 步骤 5」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：镜像只含 alonabot、packages/ 与 CA 证书，以 UID 10001 运行，/data 为卷且 Docker init 开启；只有 ALONABOT_CONTAINER=1 时允许 0.0.0.0 配合本机 http Base URL，并启动时 WARN。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-70 的镜像分项；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
+### goal-75 · T-14.6 发行包与镜像端到端验收
+
+状态：待编写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-75（切片 T-14.6：发行包与镜像端到端验收）。goal 目录 goal-75，分支 goal-75，worktree .worktrees/goal-75，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：从发行归档与容器镜像到 Agent 对话的端到端验收，汇总证据
+前置：T-09.11、T-14.4、T-14.5。开始前确认这些前置已合并，并按合并后的实际接口执行；前置未满足时不实现依赖部分。
+
+依据与顺序：PLAN §3.1 的 T-14.6 行；按 PLAN §4 的「T-14 步骤 6」中本切片对应步骤实施，先满足该步骤的前置输入。接口、错误和边界遵循该步骤引用的 CONTRACTS、WIRE-FORMAT、MESSAGE-MODEL，不另造平行约定。
+
+关键边界：发行归档与镜像端到端验证安装、首次启动、预装插件与回退；真实目标平台缺失时逐项标未运行。
+
+范围：只完成本切片列出的工作；具体路径以对应步骤的交付物和工作包「拟目录与交付」为准。共享文件、import 方向和依赖限制遵循 docs/execution-order.md。不得顺带实现其他切片。
+
+完成条件：运行对应步骤要求的命令，并覆盖 V-66、V-67、V-70；记录实际命令和结果，缺少真实环境时标「未运行」。跨任务验收只在计划指定的最终闭合点通过后关闭。
+
+停止条件：若与现行契约冲突、需要改未授权文件或协议字段、增加未批准依赖，标记 [!] 并暂停受影响部分，说明具体冲突，不自行改变范围。
+
+完成后更新本地 goal 目录的 plan.md/tasks.md 回写区并开 PR；正文列出变更、验证、阻塞项和「文档同步」。不合并 PR。
+```
