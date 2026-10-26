@@ -412,7 +412,7 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
 
 ### 14.1 记录与来源
 
-- Core、插件与 Adapter 都用 Go 标准库 `log/slog` 记录。一条记录包含时间、级别、消息、源码位置（文件与行号）、来源与键值字段。来源分为 core、plugin、adapter 三类：plugin 与 adapter 另带来源 ID（plugin_id 或 adapter_id），与某个 Adapter 实例相关时带 instance_id。处理某次调用时，记录带上该调用的 trace_id（Envelope.trace_id）、route_id 与 call_id。
+- Core、插件与 Adapter 都用 Go 标准库 `log/slog` 记录。一条记录包含时间、级别、消息、源码位置（文件与行号）、来源与键值字段。来源分为 core、plugin、adapter 三类：plugin 与 adapter 另带来源 ID（plugin_id 或 adapter_id），与某个 Adapter 实例相关时带 instance_id。处理某次调用时，记录带上该调用的 trace_id（Envelope.trace_id）、route_id 与 call_id。记录中的字段名：来源类别 `component`（core、plugin、adapter）、`plugin_id`、`adapter_id`、`instance_id`、`session_id`（十六进制）、`generation_id`，调用字段 `trace_id`、`route_id`、`call_id`。
 - 级别为 DEBUG、INFO、WARN、ERROR。逐条事件与逐次调用的记录只用 DEBUG：
 
 | 级别 | 用途 |
@@ -423,7 +423,7 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
 | DEBUG | 单条事件与单次调用的过程：事件接收、匹配结果、调用耗时、发送回执、工具调用、Provider 请求 |
 
 - 插件与 Adapter 的 SDK 把记录以每行一个 JSON 对象写到 stderr，字段为 time、level、msg、source（file、line）与键值字段。Core 逐行解析，补上来源类别、来源 ID、session 与 generation 后输出；插件给出的同名字段不能覆盖 Core 补充的值。
-- 不是合法记录的行（直接写到 stderr 或 TCP 模式下 stdout 的文本、未被捕获的 panic 输出）作为 WARN 原样保留，消息为 `unstructured output` 并带 stream 字段，不丢弃。SDK 在调用边界捕获的 panic 记为一条 ERROR，堆栈放在 `stack` 字段。
+- 不是合法记录的行（直接写到 stderr 或 TCP 模式下 stdout 的文本、未被捕获的 panic 输出）作为 WARN 原样保留，消息为 `unstructured output`，带 stream 字段，原文在 output 字段，不丢弃。SDK 在调用边界捕获的 panic 记为一条 ERROR，堆栈放在 `stack` 字段。
 
 ### 14.2 输出格式
 
@@ -438,14 +438,16 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
   - 来源标签：Core 为 `[Core]`；插件为 `[Plug:<id>]`；Adapter 为 `[Adpt:<adapter_id>]`，与实例相关时为 `[Adpt:<adapter_id>/<instance_id>]`。插件 ID 去掉 `alonabot_plugin_` 市场前缀显示。
   - 级别缩写为 DBUG、INFO、WARN、ERRO。
   - 源码位置为「所在目录名/文件名:行号」。
-  - 消息之后按记录顺序输出 `key=value`，值含空白或引号时按 Go 的带引号字符串输出；trace_id 显示为 `trace=` 加前 8 位十六进制。多行的值（例如 `stack`）在后续行缩进 4 个空格输出。
+  - 消息之后按记录顺序输出 `key=value`，值含空白或引号时按 Go 的带引号字符串输出；trace_id 显示为 `trace=` 加前 8 位十六进制。多行的值（例如 `stack`）排在单行字段之后，值的每一行另起一行并缩进 4 个空格。
+  - 来源字段已体现在标签中：插件与 Adapter 的记录不再输出 component、来源 ID、instance_id、session_id 与 generation_id，这些只在 JSON 输出中出现；Core 关于某个插件的记录照常输出 plugin_id 等字段。
+  - 插件提供的消息、键与源码位置含换行或其他不可打印字符时按带引号的字符串输出，不能伪造出另一条记录。
   - 只有 stderr 是终端且未设置 `NO_COLOR` 时才着色：时间为绿色，DBUG 蓝色、INFO 青色、WARN 黄色、ERRO 红色。
 
 ### 14.3 级别
 
 - 全局级别由 `--log-level` 或设置文件的 `log.level`（§15.1）在启动时设置，缺省 info。管理员可以在运行时修改，立即生效，Core 重启后恢复为启动时的设置。Core 自己的记录按全局级别输出。
 - 每个插件与每个 Adapter 包可以单独设置级别：debug、info、warn、error、off，或 inherit（缺省，跟随全局）。该设置持久化在 Core 状态库，经管理服务修改后立即生效，Core 重启后保留。
-- Core 在 Bootstrap 的 `string log_level = 10` 中下发该来源的生效级别；允许值为 debug/info/warn/error/off，inherit 由 Core 先解析，运行时的变化经 `sdk.log.set_level` 通知。SDK 在进程内按这个级别过滤，off 时不输出任何记录；Core 对收到的记录再按同一级别过滤。
+- Core 在 Bootstrap 的 `LogLevel log_level = 10` 中下发该来源的生效级别；枚举值为 DEBUG、INFO、WARN、ERROR、OFF，UNSPECIFIED 按 INFO 处理，inherit 由 Core 先解析，运行时的变化经 `sdk.log.set_level` 通知。SDK 在进程内按这个级别过滤，off 时不输出任何记录；Core 对收到的记录再按同一级别过滤。
 - 来源设为 off 只隐藏该进程自己的记录；Core 关于它的记录（例如崩溃、停用）仍以 `[Core]` 按全局级别输出。库模式中开发中的组件缺省为 debug（§15.4）。
 
 ### 14.4 查看

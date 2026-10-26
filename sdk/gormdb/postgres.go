@@ -3,6 +3,7 @@ package gormdb
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 	"regexp"
@@ -43,7 +44,7 @@ func OpenPostgres(ctx context.Context, c *pb.PostgresConnection) (*gorm.DB, erro
 		Host: host, Path: "/" + c.GetDatabase(), RawQuery: q.Encode(),
 	}).String()
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: gormLogger})
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: newGormLogger(slog.Default())})
 	if err != nil {
 		// 不把 DSN（含密码）放进错误信息。
 		return nil, fmt.Errorf("connect to PostgreSQL %s/%s: %w", host, c.GetDatabase(), err)

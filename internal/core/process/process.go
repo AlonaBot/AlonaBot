@@ -1,6 +1,6 @@
 // Package process 启动与回收插件的 Native 子进程。
 //
-// 子进程只继承一小组白名单环境变量，标准输出与标准错误按行转成带插件 ID 的日志。
+// 子进程只继承一小组白名单环境变量，标准输出与标准错误按行交给调用方的 [LogFunc]。
 // 进程树在 Unix 上用进程组管理，在 Windows 上用 Job Object 管理，停止时整棵树一起结束，
 // 并确认已经清空后才返回。
 //
@@ -69,13 +69,8 @@ func Entrypoint(installDir, rel string) (string, error) {
 	return p, nil
 }
 
-// LogFunc 接收带插件 ID 的一行日志；stream 为 "stdout" 或 "stderr"。
+// LogFunc 接收插件进程输出的一行（不含换行符）；stream 为 "stdout" 或 "stderr"。
 type LogFunc func(pluginID, stream string, line []byte)
-
-// StderrLog 把插件日志写到 Core 的 stderr，前缀为插件 ID。
-func StderrLog(pluginID, stream string, line []byte) {
-	fmt.Fprintf(os.Stderr, "[plugin %s %s] %s\n", pluginID, stream, line)
-}
 
 // Spec 描述一次插件进程启动。
 type Spec struct {
@@ -107,11 +102,8 @@ type Process struct {
 	err   error            // cmd.Wait 的返回值
 }
 
-// Start 以精简环境启动插件进程，并把它放进新的进程组/Job Object。
+// Start 以精简环境启动插件进程，并把它放进新的进程组/Job Object；进程输出逐行交给 logf。
 func Start(spec Spec, logf LogFunc) (*Process, error) {
-	if logf == nil {
-		logf = StderrLog
-	}
 	// 1. 准备命令：精简环境，并让子进程进入新的进程组（Windows 在启动后加入 Job）。
 	cmd := exec.Command(spec.Path, spec.Args...)
 	cmd.Dir = spec.Dir

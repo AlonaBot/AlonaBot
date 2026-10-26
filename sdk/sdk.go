@@ -2,6 +2,7 @@
 //
 // 插件的 main 调用 Run，传入嵌入了 plugin.Base 的根插件。Run 取得 runtime.lock，
 // 收集根插件的注册项，与 Core 完成握手、准备和激活，然后一直运行到 Core 要求停止。
+// Run 把 log/slog 的默认 Logger 换成写 stderr 的 JSON 行，按 Core 下发的级别过滤（CONTRACTS §14）。
 // 根插件可以按需实现 Starter、Readier、Stopper 等生命周期接口。
 //
 // 业务分发、Send、HTTP 路由与定时任务尚未实现；它们返回 UNSUPPORTED 错误，不会 panic，也不会假装成功。
@@ -104,6 +105,7 @@ func (c *Context) Send(chain message.Chain, opts ...SendOption) (*pb.SendResult,
 // Run 作为插件 main 的入口：连接 Core、完成握手并处理请求，直到停止。
 // 顺序：取得 runtime.lock → 收集注册项 → 握手 → 准备阶段 → 激活（OnReady/ACTIVATED）→ 服务。
 func Run(root plugin.Root) error {
+	setupLogging()
 	// 1. 先取 runtime.lock：注册入口（Commands 等）也是用户代码，旧实例仍在时不能执行（CONTRACTS §12.2）。
 	lock, err := acquireRuntimeLock()
 	if err != nil {
@@ -134,6 +136,7 @@ func Run(root plugin.Root) error {
 	if err != nil {
 		return err
 	}
+	setLogLevel(ack.GetBootstrap().GetLogLevel())
 	if _, err := prepare(conn, l, ack, root, reg); err != nil {
 		return err
 	}

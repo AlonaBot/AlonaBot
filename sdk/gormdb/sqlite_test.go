@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -247,7 +248,7 @@ func TestGormLogOmitsParameters(t *testing.T) {
 		t.Fatal(err)
 	}
 	var buf bytes.Buffer
-	quiet := db.Session(&gorm.Session{Logger: newGormLogger(&buf)})
+	quiet := db.Session(&gorm.Session{Logger: newGormLogger(slog.New(slog.NewJSONHandler(&buf, nil)))})
 	const secret = "SECRET-VALUE-42"
 	if err := quiet.Exec("INSERT INTO child(id, parent_id, note) VALUES (?, ?, ?)", 1, 99, secret).Error; err == nil {
 		t.Fatal("foreign key constraint should make the insert fail")

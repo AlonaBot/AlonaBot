@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -94,6 +94,7 @@ func (a *activation) runOnReady(m *pb.Activate) {
 		go func() {
 			defer func() {
 				if p := recover(); p != nil {
+					logPanic("OnReady", p)
 					errc <- fmt.Errorf("OnReady panic: %v", p)
 				}
 			}()
@@ -104,7 +105,7 @@ func (a *activation) runOnReady(m *pb.Activate) {
 		select {
 		case err := <-errc:
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "OnReady failed: %v\n", err)
+				slog.Error("OnReady failed", "err", err)
 				a.reportFailure(pb.ErrorCode_ERROR_CODE_PLUGIN_NOT_READY, "OnReady returned an error", err)
 				return
 			}
@@ -156,18 +157,18 @@ func (a *activation) shutdown(deadline time.Time) {
 				defer close(done)
 				defer func() {
 					if p := recover(); p != nil {
-						fmt.Fprintf(os.Stderr, "OnStop panic: %v\n", p)
+						logPanic("OnStop", p)
 					}
 				}()
 				if err := s.OnStop(ctx); err != nil {
-					fmt.Fprintf(os.Stderr, "OnStop failed: %v\n", err)
+					slog.Error("OnStop failed", "err", err)
 				}
 			}()
 			timer := time.NewTimer(time.Until(deadline))
 			select {
 			case <-done:
 			case <-timer.C:
-				fmt.Fprintln(os.Stderr, "OnStop exceeded the stop deadline; giving up waiting")
+				slog.Warn("OnStop exceeded the stop deadline; giving up waiting")
 			}
 			timer.Stop()
 			cancel()

@@ -4,6 +4,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -134,9 +135,20 @@ func pluginExited(pid int, within time.Duration) bool {
 }
 
 // activatedRe 匹配激活日志，子匹配依次为代次、mode（new/restart）与插件 pid。
-const activatedRe = `activated generation=(\S+) mode=(\w+) pid=(\d+)`
+const activatedRe = `plugin activated plugin_id=demo generation_id=(\S+) mode=(\w+) pid=(\d+)`
 
-// 完整生命周期：两种传输都能走完 OnStart → OnReady → 激活 → SIGTERM → STOPPING/OnStop → 正常退出。
+// lifecycleLogRe 是一次完整生命周期在控制台格式（CONTRACTS §14.2）中必须出现的行，覆盖 Core 与插件两类来源。
+var lifecycleLogRe = []string{
+	`(?m)^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[Core\] \[INFO\] \[alonabot/main\.go:\d+\]: Core started data_dir=`,
+	`(?m)^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[Plug:demo\] \[INFO\] \[lifecycle/main\.go:\d+\]: OnStart$`,
+	`(?m)\[Plug:demo\] \[INFO\] \[lifecycle/main\.go:\d+\]: OnReady$`,
+	`(?m)\[Plug:demo\] \[INFO\] \[lifecycle/main\.go:\d+\]: OnStop$`,
+	`(?m)\[Plug:demo\] \[INFO\] \[lifecycle/main\.go:\d+\]: exiting normally$`,
+	`(?m)\[Core\] \[INFO\] \[alonabot/main\.go:\d+\]: plugin stopped plugin_id=demo drained=true killed=false$`,
+}
+
+// 完整生命周期：两种传输都能走完 OnStart → OnReady → 激活 → SIGTERM → STOPPING/OnStop → 正常退出；
+// 日志按控制台格式输出到 stderr（不是终端，不着色），并写入当天的日志文件。
 func TestLifecycleOverTCPAndStdio(t *testing.T) {
 	for _, transport := range []string{"tcp", "stdio"} {
 		t.Run(transport, func(t *testing.T) {
@@ -144,7 +156,8 @@ func TestLifecycleOverTCPAndStdio(t *testing.T) {
 			if transport == "stdio" {
 				extra = []string{"--stdio"}
 			}
-			c := startCore(t, t.TempDir(), extra...)
+			dir := t.TempDir()
+			c := startCore(t, dir, extra...)
 			m := c.waitFor(activatedRe)
 			pid, _ := strconv.Atoi(m[3])
 			if m[2] != "new" {
@@ -154,16 +167,59 @@ func TestLifecycleOverTCPAndStdio(t *testing.T) {
 			if code := c.wait(15 * time.Second); code != 0 {
 				t.Fatalf("alonabot exit code %d; log:\n%s", code, c.log())
 			}
-			log := c.log()
-			for _, want := range []string{"lifecycle: OnStart", "lifecycle: OnReady", "lifecycle: OnStop", "lifecycle: exiting normally", "killed=false"} {
-				if !strings.Contains(log, want) {
-					t.Fatalf("log is missing %q:\n%s", want, log)
+			// 运行可能跨过零点，读取全部日志文件。
+			names, err := filepath.Glob(filepath.Join(dir, "logs", "alonabot-*.log"))
+			if err != nil || len(names) == 0 {
+				t.Fatalf("no log file under %s/logs: %v", dir, err)
+			}
+			var file []byte
+			for _, n := range names {
+				b, err := os.ReadFile(n)
+				if err != nil {
+					t.Fatal(err)
+				}
+				file = append(file, b...)
+			}
+			for name, log := range map[string]string{"stderr": c.log(), "log file": string(file)} {
+				for _, re := range lifecycleLogRe {
+					if !regexp.MustCompile(re).MatchString(log) {
+						t.Fatalf("%s does not match %s:\n%s", name, re, log)
+					}
+				}
+				if strings.Contains(log, "\x1b[") {
+					t.Fatalf("%s should not be colored:\n%s", name, log)
 				}
 			}
 			if !pluginExited(pid, 2*time.Second) {
 				t.Fatalf("plugin process %d did not exit", pid)
 			}
 		})
+	}
+}
+
+// --log-format json：插件的记录带上 Core 补充的来源字段与 SDK 给出的源码位置（CONTRACTS §14.1）。
+func TestJSONLogFormat(t *testing.T) {
+	c := startCore(t, t.TempDir(), "--log-format", "json")
+	line := c.waitFor(`(?m)^(\{.*"msg":"OnReady".*\})$`)[1]
+	var rec struct {
+		Level        string
+		Msg          string
+		Component    string
+		PluginID     string `json:"plugin_id"`
+		SessionID    string `json:"session_id"`
+		GenerationID string `json:"generation_id"`
+		Source       struct{ File string }
+	}
+	if err := json.Unmarshal([]byte(line), &rec); err != nil {
+		t.Fatalf("%v: %s", err, line)
+	}
+	if rec.Level != "INFO" || rec.Component != "plugin" || rec.PluginID != "demo" || rec.SessionID == "" || rec.GenerationID == "" ||
+		!strings.HasSuffix(rec.Source.File, "lifecycle/main.go") {
+		t.Fatalf("unexpected plugin record: %s", line)
+	}
+	_ = c.cmd.Process.Signal(syscall.SIGTERM)
+	if code := c.wait(15 * time.Second); code != 0 {
+		t.Fatalf("alonabot exit code %d; log:\n%s", code, c.log())
 	}
 }
 
