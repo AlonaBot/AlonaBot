@@ -15,6 +15,8 @@
 | `internal/wire/` | 帧编解码（4 MiB 上限）、TCP/stdio 传输、Session 调用表、准入预算、优先通道、取消 | 业务路由、权限、插件生命周期决策 | 部分实现：帧编解码、Conn、ListenLoopback、全局预算（`budget.go`）、Session 调用引擎（配对/取消/准入/优先通道、认证后身份与版本核对 `CheckPeer`）；握手与生命周期编排在 `internal/core/host` 与 `sdk` |
 | `internal/tune/` | 调优参数表：名称、缺省值、单位、约束与 `--args` 解析（CONTRACTS §16） | 参数的业务含义（由使用方实现） | 拟建 |
 | `internal/oslock/` | 跨进程 OS 独占文件锁（flock / LockFileEx），供 core.lock 与 runtime.lock 共用 | 锁的业务语义（何时加锁由调用方决定） | 已实现 |
+| `internal/inproc/` | 库模式同进程组件的启动参数（根包构造、SDK 读取） | 启动流程本身（归 sdk 与根包） | 拟建 |
+| `internal/pluginkit/` | 开发 CLI 的打包、release.json 生成与签名（plugin build/pack） | 安装与预检（归 `internal/core/packages`） | 拟建 |
 | `sdk/`（含 `sdk/message`、`sdk/gormdb` 等子包） | 插件侧 API：根插件、Context/Send、注册、生命周期 Hook、runtime.lock、按需 GORM | Core 状态库、管理凭证、其他插件 | 部分实现：`sdk`（Base 与 Root、Context、注册器、Collect）、`sdk/message`、`sdk/config`、`sdk/gormdb`（OpenSQLite/OpenPostgres、RunVersioned、迁移接口互斥检查）；`Run` 完成取锁、握手、准备、激活与停止，并把 slog 默认 Logger 换成写 stderr 的 JSON 行；业务分发与 `Send` 仍返回 UNSUPPORTED |
 | `internal/core/` | 状态库与 core.lock、进程、RPC 编排、路由、权限、媒体、服务、调度、HTTP、配置、管理 | 平台协议细节（交 adapters）、插件进程内逻辑 | 部分实现：`internal/core/state`（core.lock、state.sqlite、提交原语）、`internal/core/process`（精简环境、日志、进程组/Job Object、runtime.lock 临时持有）、`internal/core/host`（握手认证、Bootstrap、REGISTER 原子校验、PREPARED、提交与激活门禁、Degraded、停止/排空/并行 Shutdown、有限重启策略）、`internal/core/supervisor`（启动/停止一个插件的完整装配）、`internal/core/logging`（控制台与 JSON 格式、插件 stderr 解析、按来源级别、按日期轮转的日志文件）、`internal/core/packages`（安装包预检、受控解压与不可变包目录）、`internal/core/config`（配置 JSON 规范化、Merge Patch 与 Pending 编辑） |
 | 根包 `alonabot`（模块根目录的 Go 文件） | 库模式入口 `alonabot.Run`（D-32）与 `alonabot serve` 共用的 Core 装配 | 业务逻辑（只组装 `internal/core` 与 SDK） | 拟建 |
@@ -39,12 +41,15 @@
 | `adapters/... -> sdk/...`、`-> contracts` | Adapter 程序与插件示例一样，只经公共 SDK（`sdk/adapter`）与 Core 通信 |
 | `cmd/alonabot -> internal/core/...`、`-> contracts`、`-> 根包`、`-> internal/tune` | 装配；`serve` 复用根包的 Core 装配；`--args` 与 `tune list` 使用调优参数表 |
 | `根包 -> internal/core/...`、`-> sdk/...`、`-> contracts` | 库模式在同一进程中装配 Core 与开发中的组件 |
+| `根包 -> internal/inproc`、`sdk/... -> internal/inproc` | 库模式把同进程组件的启动参数从根包交给 SDK；`internal` 保证外部模块无法构造这些参数 |
 | `cmd/alonabot -> sdk/generate` | 构建检查复用 SDK 的路由生成器（拟建） |
+| `cmd/alonabot -> internal/pluginkit`、`internal/pluginkit -> contracts/...`、`-> sdk/generate` | 开发 CLI 的构建与打包复用生成器与契约包 |
 | `examples/plugins/... -> sdk/...`、`-> contracts` | 示例只走公共 SDK |
+| `scripts/dist -> contracts/release`、`scripts/release-check -> contracts/release` | 发行构建与发布复验只用契约包核对签名；其余步骤经 `os/exec` 调用 go 与 alonabot |
 | `examples/devbot -> 根包`、`-> sdk/...` | 库模式示例 |
 | `plugins/... -> sdk/...`、`-> contracts` | 官方插件只走公共 SDK；Agent 插件另用已批准的 MCP go-sdk |
 
-明确禁止（重点）：`internal/oslock` 与 `internal/tune` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | adapters | plugins | cmd`；`internal/core -> sdk | adapters | plugins | cmd`；`adapters -> internal/core`；`plugins -> internal/core | adapters | cmd`；`internal/core | sdk | adapters | plugins -> 根包`；任何包 `-> examples`。依赖图不允许环。
+明确禁止（重点）：`internal/oslock`、`internal/tune` 与 `internal/inproc` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | adapters | plugins | cmd`；`internal/core -> sdk | adapters | plugins | cmd`；`adapters -> internal/core`；`plugins -> internal/core | adapters | cmd`；`internal/core | sdk | adapters | plugins -> 根包`；任何包 `-> examples`。依赖图不允许环。
 
 ## 状态归属
 
