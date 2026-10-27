@@ -103,9 +103,9 @@
 | goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 等待前置 |
 | goal-62 | T-12.5 | 技能 | T-12.3 | 等待前置 |
 | goal-63 | T-12.6 | 定时 Agent 任务 | T-07.2、T-08.5、T-12.3 | 等待前置 |
-| goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 待编写 |
-| goal-43 | T-09.8 | Admin 管理页 | T-09.6、T-08.7 | 待编写 |
-| goal-64 | T-12.7 | 官方插件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6 | 待编写 |
+| goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 等待前置 |
+| goal-43 | T-09.8 | Admin 管理页 | T-09.6、T-08.7 | 等待前置 |
+| goal-64 | T-12.7 | 官方插件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6 | 等待前置 |
 | goal-44 | T-09.9 | Admin 配置、权限、工具策略与插件页 | T-09.8、T-11.1、T-11.3 | 待编写 |
 | goal-66 | T-09.10 | 日志管理与日志页 | T-02.1、T-03.1、T-09.8 | 待编写 |
 | goal-73 | T-14.3 | 发行归档 | T-03.10、T-09.3、T-12.7、T-14.1、T-14.2 | 待编写 |
@@ -3813,45 +3813,129 @@ internal/core/journal
 ```
 ### goal-42 · T-09.7 崩溃恢复、回退与回收
 
-状态：待编写。
+状态：等待前置（T-09.6）。语句中 goal-33、goal-39～goal-41 提供的符号（journal 的阶段与 Abort、state.CommitCandidate、candidate 的 PrepareDatabase/Discard、manage.Candidates.Rollback、secret.Collect）只写名字；合并后由审查者核对，再改为可派发。
 
-目标：崩溃恢复、显式回退与引用回收
-前置：T-09.6。
+```text
+/goal 使用 $alonabot-execute 推进 goal-42（切片 T-09.7：崩溃恢复、回退与回收）。goal 目录 goal-42，分支 goal-42，worktree .worktrees/goal-42，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-09.7 行、§4 的 T-09 步骤 6。
+目标：Core 启动取得 core.lock 后按状态库的 Active 与 Journal 恢复：未提交的操作关闭候选、以旧程序启动新 Session（首次安装没有 Active 则保持未激活），已提交的只恢复当前代次；旧进程退出未确认时不启动新写入者。rollback 从选定的保留代次复制新的 SQLite 恢复候选并使用新代次，走同一准备与提交路径；PG 与外部数据沿用显式维护。只回收无人引用的失败候选、旧包与 secret，恢复中的操作与保留快照受保护。
 
-关键边界：旧进程退出状态未确认时不得启动新的数据库写入者；恢复只信 Core 状态库的 Active 指针，并按引用关系回收旧资源。
+依据：PLAN T-09 步骤 6；CONTRACTS §12、§6.3、§9.3（rollback）；MESSAGE-MODEL §6.3（rollback 不复活旧按钮）；TEST-MATRIX V-30、V-31、V-36。
 
-验收：V-30、V-31、V-36。
+范围（只新增或修改这些）：
+- internal/core/journal/：新增 recover.go（启动时恢复）与 rollback.go（实现 manage.Candidates.Rollback）
+- internal/core/state/：保留代次的读写（新文件；保留策略见下）
+- 新增 internal/core/gc/（引用回收）
+- 根包 assembly.go：serve/Run 启动时在启动任何包之前调用恢复（只加调用点）
+- docs/development.md：增加「备份与恢复」一节，说明整机备份覆盖整个 data_dir 与外部 PG（本切片获授权修改这一节）
+- 上述包的测试文件
+允许的新跨模块边：无。
 
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+internal/core/journal
+   func (o *Orchestrator) Recover(ctx context.Context) error // 处理全部未到 committed 或 cleaned 的 Journal
+   func (o *Orchestrator) Rollback(ctx context.Context, id, generation string) error
+internal/core/gc
+   func Collect(ctx context.Context, st *state.Store, secrets *secret.Store, packagesDir string) (removed []string, err error)
+internal/core/state
+   保留代次：每个插件保留最近 3 个已提交的代次（命名常量）及其程序包与数据库；读写方法自定。
+
+行为：
+- Recover（Core 启动时，在启动任何包之前；已持 core.lock）：
+  - Journal 阶段为 started、stopped_old、candidate_ready、prepared、failed：候选未提交。确认没有仍在运行的候选或旧进程（通过 runtime.lock 能否取得判断；取不到时该插件标为 Degraded 并以 ERROR 说明「旧进程可能仍在运行」，不启动任何实例）；然后 candidate.Discard 候选资源，Journal 改为 cleaned；有旧 Active 时稍后按正常启动流程启动旧版（新 Session），首次安装则保持未激活。
+  - Journal 阶段为 committed 但插件没有成功 ACTIVATED 过：只按当前 Active 启动（新代次），失败则 Degraded；不切回旧代次。
+  - 恢复判断只信状态库的 Active 指针与 Journal，不读插件目录猜测。
+- Rollback（管理服务调用，持插件操作锁）：选定的代次必须是保留代次之一且不是当前 Active；以 Journal kind=rollback 经 goal-40 的编排：停止当前版本、从选定代次的数据库用 Backup API 复制到新代次（不是复用旧文件）、以选定代次的程序包与配置快照启动候选（activation_reason=rollback）、经 goal-41 提交。新代次 ID 为新值，旧代次签发的按钮不会因此复活（解析时比较的是当前 Active）。PG 后端的插件 rollback 返回 FAILED_PRECONDITION（"NEEDS_MANUAL_MIGRATION"：需要维护与外部备份），不假装能恢复。
+- 回收（Collect，可在 serve 启动后与每次操作结束后调用）：删除不被 Active、保留代次、Pending 与未完成 Journal 引用的代次目录、程序包目录与 secret；绝不删除受保护资源；返回删除的路径列表并以 INFO 记录。
+- 文档：docs/development.md 新增「备份与恢复」：整机备份须在 Core 与插件停止后复制完整 data_dir，并单独备份外部 PG；只备份 state.sqlite 不包含插件业务数据。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/recover_e2e_test.go（//go:build unix）。用测试钩子在各节点杀掉 Core 进程（PREPARED 之后提交之前、提交之后 ACTIVATED 之前），再重启 serve：
+  - 提交前崩溃：只恢复旧版，候选目录被清理，Journal 为 cleaned。
+  - 提交后崩溃：只恢复新代次。
+  - 崩溃时旧插件进程仍存活并持有 runtime.lock（测试插件忽略断链）：重启后该插件为 Degraded，没有启动第二个写入者；旧进程退出后 restart 恢复。
+  - rollback 到上一代次：产生新代次与新的数据库副本，内容等于旧代次的数据；旧代次签发的按钮仍无效。
+  - PG 插件 rollback 返回 NEEDS_MANUAL_MIGRATION（ALONABOT_TEST_PG_DSN 未设置时跳过并记为未运行）。
+  - Collect 不删除保留代次与 Active，删除失败候选的残留。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Recover 对每个 Journal 阶段的分支；保留代次的淘汰顺序；Collect 对 Pending 引用的保护。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+
+不做：管理页面（T-09.8）；外部 PG 的备份工具（由管理员处理）。
+```
 ### goal-43 · T-09.8 Admin 管理页
 
-状态：待编写。
+状态：等待前置（T-09.6、T-08.7）。语句中 goal-34、goal-36、goal-39～goal-41 提供的符号（web/admin 的工程与组件、adminauth 的登录接口、manage 的 HTTP API）只写名字；合并后由审查者核对，再改为可派发。
 
-目标：Admin 页面：真实登录、状态、插件与 Adapter 的安装启停、Adapter 实例管理、更新/恢复
-前置：T-09.6、T-08.7。
+```text
+/goal 使用 $alonabot-execute 推进 goal-43（切片 T-09.8：Admin 管理页）。goal 目录 goal-43，分支 goal-43，worktree .worktrees/goal-43，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-09.8 行、§4 的 T-09 步骤 7（管理页）。
+目标：在 web/admin 中实现真实的登录、总览状态、插件与 Adapter 包的安装与启停、Adapter 实例管理、更新与恢复（rollback）页面，全部调用 T-09.4 的管理 API；Core 在 admin host 上提供构建后的静态资源。页面显示 Pending、候选失败、Degraded 与维护原因，只展示用户可操作的状态和具体错误。
 
-关键边界：管理页面展示真实安装、启停和恢复状态；UI 状态来自管理 API，不以本地猜测代替 Core 状态。
+依据：PLAN T-09 步骤 7（管理页）；CONTRACTS §7.3、§7.4、§9.3、§12.1；DECISIONS D-25；TEST-MATRIX V-40、V-47 的页面分项。
 
-验收：V-40、V-47 的页面分项。
+范围（只新增或修改这些）：
+- web/admin/src/：新增 api/（管理 API 客户端，带 CSRF 头）、pages/（Login、Overview、Packages、Instances、Updates）、路由（基于 window.location 与 history 的简单路由，不引入路由库）
+- web/admin/i18n/：补充页面文案（en-US 与 zh-CN 键集合一致）
+- 新增 internal/core/adminui/（嵌入 web/admin/dist 的静态资源并在 admin host 提供；go:embed）
+- cmd/alonabot 或根包 assembly：admin host 的非 /api/ 路径交给 adminui（只加调用点）
+- 构建流程：web/admin 的 npm run build 产物 dist/ 由 internal/core/adminui 的 go:generate 复制进包目录；生成物提交到仓库（与 proto 生成物同样处理），并在 docs/development.md 的生成命令中登记（本切片获授权修改该处）
+- 上述包的测试文件
+允许的依赖：前端仍只用已批准的 React、Vite、TypeScript、vitest；不引入路由、状态管理或 UI 库。
 
+行为：
+- 登录：POST /api/auth/login，成功后保存 csrf_token（内存中，刷新页面时重新登录或经 /api/auth/session 取回；若 goal-36 没有该端点，本切片在 adminauth 中追加 GET /api/auth/session 返回当前会话的 csrf_token，只在已登录时可用）；登出。未登录访问任何页面跳转到登录页。
+- Overview：Core 版本、监听地址、每个包的状态（未启用、运行、Pending、候选失败、Degraded 及原因、维护中）。
+- Packages：上传安装包（archive、release.json、.sig 三个文件，multipart 由 API 接收，若 goal-39 的 API 只接受路径，本切片在 manage 中追加 multipart 端点并写入临时目录后调用 Install）；启用、停用、重启、卸载（含 purge）、pin；需要确认时展示受影响列表并要求再次确认（API 的 409）。
+- Instances：列出 Adapter 实例（不显示凭证，只显示「已设置」）、创建（表单由该 Adapter 包的配置 Schema 经 goal-34 的 ConfigForm 生成）、启停、删除。
+- Updates：update 上传新包、rollback 选择保留代次；显示操作结果与失败原因。
+- 安全：所有修改请求带 X-Alonabot-CSRF；页面不读取或展示 token、secret 明文；静态资源响应带 CSP（default-src 'self'）、X-Frame-Options: DENY 与 nosniff。
+- adminui：只在 admin host 提供；未知路径返回 index.html（单页应用）；/plugins/ 与 /api/ 不经过它。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：
+  - web/admin/src/api/api.test.ts（vitest，不依赖 DOM）：用 fetch 的测试替身验证 API 客户端的 CSRF 头、409 确认流程的数据结构、错误格式解析。
+  - internal/core/supervisor/adminui_test.go（//go:build unix）：admin host 上 / 返回 index.html 且带 CSP；plugin host 上不提供；未登录时 API 返回 401；登录后经 API 完成一次安装与启用（复用 goal-39 的测试包）。
+- 本地自测（不提交，PR 中写明结果）：npm run build 与 typecheck；在浏览器中手动走一遍：登录 → 安装 → 启用 → 创建实例 → 停用 → rollback（写明浏览器与版本，属于手动验证）。
+
+完成条件：web/admin 下 npm ci、npm run typecheck、npm run test、npm run build 成功；go generate ./... 后无未提交差异；gofmt -l 无输出；go vet ./...；go test -race ./internal/... ./cmd/...；go build ./...。
+
+不做：配置、命令权限、发信许可、工具策略、会话与插件页（T-09.9）；日志页（T-09.10）；Core 设置页（T-09.9）。
+```
 ### goal-64 · T-12.7 官方插件打包与 T-12 验收
 
-状态：待编写。
+状态：等待前置（T-12.4、T-12.5、T-12.6）。语句中 goal-38、goal-58～goal-63 提供的命令与符号（plugin pack、Agent 与记忆插件、mcptest、模拟 Provider）只写名字；合并后由审查者核对，再改为可派发。
 
-目标：两个官方插件的打包与多进程验收，汇总证据
-前置：T-12.4、T-12.5、T-12.6。
+```text
+/goal 使用 $alonabot-execute 推进 goal-64（切片 T-12.7：官方插件打包与 T-12 验收）。goal 目录 goal-64，分支 goal-64，worktree .worktrees/goal-64，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-12.7 行、§4 的 T-12 步骤 8。
+目标：官方 Agent 插件与官方记忆插件按 T-09 的打包流程生成可安装包；用本地 Provider 与 MCP 模拟服务、回环测试 Adapter（或 Telegram 模拟服务）以安装包方式运行 V-57～V-61 的全部场景；在 TEST-MATRIX §3.2 记录 T-12 证据，真实 Provider 与真实 Telegram 没有凭证时记为未运行。
 
-关键边界：官方 Agent 与记忆插件按 T-09 打包流程交付；使用本地 Provider/MCP 模拟服务与回环 Adapter 验收，真实 Provider/Telegram 无凭证时标未运行。
+依据：PLAN T-12 步骤 8 与「停止和失败条件」；CONTRACTS §13、§9.3；TEST-MATRIX V-57～V-61。
 
-验收：V-57～V-61。
+范围（只新增或修改这些）：
+- plugins/agent/plugin.yaml、plugins/memory/plugin.yaml：补齐打包所需字段（version、source、os/arch 由 pack 填写的部分除外）
+- 新增 cmd/alonabot/t12_e2e_test.go（//go:build unix）
+- spec/TEST-MATRIX.md §3.2：追加 T-12 的证据行（本切片获授权修改这一处）
+- 上述包的测试文件
+允许的新跨模块边：无。
 
-## 第 14 波
+验收矩阵（以 plugin pack 产生的安装包经 alonabot serve 与管理 API 安装、启用后运行；各为一个子测试）：
+- V-57：两种协议的流式文本与工具调用；/ask 与自由对话开关；群聊非 to_me；/provider 与人格切换；/reset；超长回复分段；Provider 出错或中途断开。
+- V-58：连续调用 Core 工具与 MCP 工具（stdio、streamable HTTP）；确认拒绝；工具出错；超过单轮步数上限；MCP 进程随插件停止。
+- V-59：记忆 add/patch/remove、超限、重复、不可见字符、群聊多用户、会话中写入与 /reset、记忆插件不可用。
+- V-60：合法与不合法的 SKILL.md、load_skill 不存在的技能。
+- V-61：非 Admin 创建任务、interval/cron 任务到期运行、无发信许可、confirm 工具、插件离线错过。
+- 证据：TEST-MATRIX §3.2 追加 T-12 一行，写明测试位置、命令、平台与结果；Provider 与 MCP 标为本地模拟；真实 Provider 与 Telegram 为「未运行」。
 
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/t12_e2e_test.go。
+- 本地自测（不提交，PR 中写明结果）：两个包的 plugin check 与 pack（当前平台）；若维护者提供了 Provider 凭证，另附一次手动运行记录，不写入提交的测试。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+
+不做：发行归档与预装（T-14.3、T-14.4）。
+```
 ### goal-44 · T-09.9 Admin 配置、权限、工具策略与插件页
 
 状态：待编写。
