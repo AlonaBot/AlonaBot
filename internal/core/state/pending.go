@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// PendingConfig 是尚未激活的配置编辑，base_generation 记录它基于的 ActiveGeneration。
+// PendingConfig 记录尚未激活的配置编辑，BaseGeneration 是它写入时插件所处的 ActiveGeneration。
 type PendingConfig struct {
 	PluginID       string    // 所属插件，主键
 	BaseGeneration string    // 所基于的代次；插件尚无 Active 时为空串

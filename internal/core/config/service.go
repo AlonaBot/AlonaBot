@@ -3,17 +3,15 @@ package config
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
-	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 )
 
-// Pending 是一份待激活的配置编辑，只在它所基于的代次仍是插件当前 Active 时有效。
+// Pending 保存一份待激活的配置编辑，只在它所基于的代次仍是插件当前 Active 时有效。
 type Pending struct {
 	PluginID       string
 	BaseGeneration string // 编辑所基于的代次；尚无 Active 时为空串
@@ -47,9 +45,11 @@ func (s *Service) Pending(ctx context.Context, pluginID string) (Pending, bool, 
 func (s *Service) Replace(ctx context.Context, pluginID, baseGeneration string, full []byte) (Pending, error) {
 	unlock := s.store.LockPlugin(pluginID)
 	defer unlock()
+	// 1. 先拒绝陈旧提交，避免调用方拿旧代次覆盖别人的编辑。
 	if err := s.checkBase(ctx, pluginID, baseGeneration); err != nil {
 		return Pending{}, err
 	}
+	// 2. 完整替换使用调用方给出的对象，规范化后写入。
 	configJSON, err := Canonical(full)
 	if err != nil {
 		return Pending{}, err
@@ -62,9 +62,11 @@ func (s *Service) Replace(ctx context.Context, pluginID, baseGeneration string, 
 func (s *Service) Patch(ctx context.Context, pluginID, baseGeneration string, patch []byte) (Pending, error) {
 	unlock := s.store.LockPlugin(pluginID)
 	defer unlock()
+	// 1. 先拒绝陈旧提交。
 	if err := s.checkBase(ctx, pluginID, baseGeneration); err != nil {
 		return Pending{}, err
 	}
+	// 2. 取基础文档，再按 RFC 7396 合并。
 	base, err := s.patchBase(ctx, pluginID, baseGeneration)
 	if err != nil {
 		return Pending{}, err
@@ -81,16 +83,18 @@ func (s *Service) Patch(ctx context.Context, pluginID, baseGeneration string, pa
 func (s *Service) ImportSnapshot(ctx context.Context, pluginID string) (Pending, error) {
 	unlock := s.store.LockPlugin(pluginID)
 	defer unlock()
+	// 1. 导入以当前 Active 为基础，因此先确认插件存在并读出代次。
 	active, err := s.active(ctx, pluginID)
 	if err != nil {
 		return Pending{}, err
 	}
+	// 2. 读取编辑快照并校验它是 JSON 对象；失败时不动已有 Pending。
 	path := filepath.Join(s.dataDir, "plugins", pluginID, "config.json")
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return Pending{}, failure(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "config snapshot %s does not exist", path)
+		return Pending{}, configError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "config snapshot %s does not exist", path)
 	} else if err != nil {
-		return Pending{}, failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "read config snapshot %s: %v", path, err)
+		return Pending{}, configError(pb.ErrorCode_ERROR_CODE_INTERNAL, "read config snapshot %s: %v", path, err)
 	}
 	configJSON, err := Canonical(raw)
 	if err != nil {
@@ -104,7 +108,7 @@ func (s *Service) Discard(ctx context.Context, pluginID string) error {
 	unlock := s.store.LockPlugin(pluginID)
 	defer unlock()
 	if err := s.store.DeletePendingConfig(ctx, pluginID); err != nil {
-		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "delete pending config for plugin %s: %v", pluginID, err)
+		return configError(pb.ErrorCode_ERROR_CODE_INTERNAL, "delete pending config for plugin %s: %v", pluginID, err)
 	}
 	return nil
 }
@@ -113,9 +117,9 @@ func (s *Service) Discard(ctx context.Context, pluginID string) error {
 func (s *Service) active(ctx context.Context, pluginID string) (string, error) {
 	generation, err := s.store.Active(ctx, pluginID)
 	if errors.Is(err, state.ErrNotFound) {
-		return "", failure(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "plugin %s: %v", pluginID, err)
+		return "", configError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "plugin %s: %v", pluginID, err)
 	} else if err != nil {
-		return "", failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "read active generation of plugin %s: %v", pluginID, err)
+		return "", configError(pb.ErrorCode_ERROR_CODE_INTERNAL, "read active generation of plugin %s: %v", pluginID, err)
 	}
 	return generation, nil
 }
@@ -127,7 +131,7 @@ func (s *Service) checkBase(ctx context.Context, pluginID, baseGeneration string
 		return err
 	}
 	if baseGeneration != active {
-		return failure(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION,
+		return configError(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION,
 			"base generation %q is not the current active generation %q of plugin %s", baseGeneration, active, pluginID)
 	}
 	return nil
@@ -139,7 +143,7 @@ func (s *Service) pending(ctx context.Context, pluginID, active string) (Pending
 	if errors.Is(err, state.ErrNotFound) {
 		return Pending{}, false, nil
 	} else if err != nil {
-		return Pending{}, false, failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "read pending config for plugin %s: %v", pluginID, err)
+		return Pending{}, false, configError(pb.ErrorCode_ERROR_CODE_INTERNAL, "read pending config for plugin %s: %v", pluginID, err)
 	}
 	if stored.BaseGeneration != active {
 		return Pending{}, false, nil
@@ -164,14 +168,14 @@ func (s *Service) patchBase(ctx context.Context, pluginID, active string) ([]byt
 	}
 	snapshot, err := s.store.GenerationConfig(ctx, active)
 	if err != nil {
-		return nil, failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "read config of generation %s: %v", active, err)
+		return nil, configError(pb.ErrorCode_ERROR_CODE_INTERNAL, "read config of generation %s: %v", active, err)
 	}
 	return []byte(snapshot), nil
 }
 
 // put 写入 Pending，updated_at 取当前时间。
 func (s *Service) put(ctx context.Context, pluginID, baseGeneration string, configJSON []byte) (Pending, error) {
-	updatedAt := time.Now()
+	updatedAt := time.UnixMilli(time.Now().UnixMilli()) // 与状态库的毫秒精度保持一致
 	stored := state.PendingConfig{
 		PluginID:       pluginID,
 		BaseGeneration: baseGeneration,
@@ -179,7 +183,7 @@ func (s *Service) put(ctx context.Context, pluginID, baseGeneration string, conf
 		UpdatedAt:      updatedAt,
 	}
 	if err := s.store.PutPendingConfig(ctx, stored); err != nil {
-		return Pending{}, failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "write pending config for plugin %s: %v", pluginID, err)
+		return Pending{}, configError(pb.ErrorCode_ERROR_CODE_INTERNAL, "write pending config for plugin %s: %v", pluginID, err)
 	}
 	return Pending{
 		PluginID:       pluginID,
@@ -187,9 +191,4 @@ func (s *Service) put(ctx context.Context, pluginID, baseGeneration string, conf
 		ConfigJSON:     configJSON,
 		UpdatedAt:      updatedAt,
 	}, nil
-}
-
-// failure 构造带协议错误码的 *validate.Error；说明保留原始错误文本。
-func failure(code pb.ErrorCode, format string, args ...any) error {
-	return &validate.Error{Code: code, Message: fmt.Sprintf(format, args...)}
 }

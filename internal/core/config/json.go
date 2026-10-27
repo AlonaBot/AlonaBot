@@ -60,19 +60,20 @@ func decodeObject(raw []byte, name string) (map[string]any, error) {
 	decoder.UseNumber()
 	var value any
 	if err := decoder.Decode(&value); err != nil {
-		return nil, invalid("%s is not valid JSON: %v", name, err)
+		return nil, configError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "%s is not valid JSON: %v", name, err)
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); err != io.EOF {
-		return nil, invalid("%s has trailing data after the JSON value", name)
+		return nil, configError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "%s has trailing data after the JSON value", name)
 	}
 	object, ok := value.(map[string]any)
 	if !ok {
-		return nil, invalid("%s must be a JSON object", name)
+		return nil, configError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "%s must be a JSON object", name)
 	}
 	return object, nil
 }
 
-func invalid(format string, args ...any) error {
-	return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: fmt.Sprintf(format, args...)}
+// configError 构造带协议错误码的 *validate.Error。
+func configError(code pb.ErrorCode, format string, args ...any) error {
+	return &validate.Error{Code: code, Message: fmt.Sprintf(format, args...)}
 }
