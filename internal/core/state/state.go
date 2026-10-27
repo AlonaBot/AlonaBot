@@ -211,6 +211,12 @@ var migrations = []string{
 	   active_generation TEXT REFERENCES generations(generation_id),
 	   enabled           INTEGER NOT NULL DEFAULT 0
 	 );`,
+	`CREATE TABLE pending_configs (
+	   plugin_id       TEXT PRIMARY KEY REFERENCES installs(plugin_id),
+	   base_generation TEXT NOT NULL,
+	   config_json     TEXT NOT NULL,
+	   updated_at      INTEGER NOT NULL
+	 );`,
 }
 
 // migrate 只在全新文件上从版本 0 开始；已有文件的 schema_version 表已由 verify 确认存在。
