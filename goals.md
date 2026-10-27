@@ -109,9 +109,9 @@
 | goal-44 | T-09.9 | Admin 配置、权限、工具策略与插件页 | T-09.8、T-11.1、T-11.3 | 等待前置 |
 | goal-66 | T-09.10 | 日志管理与日志页 | T-02.1、T-03.1、T-09.8 | 等待前置 |
 | goal-73 | T-14.3 | 发行归档 | T-03.10、T-09.3、T-12.7、T-14.1、T-14.2 | 等待前置 |
-| goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10 | 待编写 |
-| goal-74 | T-14.4 | 首次运行与预装 | T-09.6、T-14.3 | 待编写 |
-| goal-77 | T-14.5 | 容器镜像 | T-07.3、T-14.3 | 待编写 |
+| goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10 | 等待前置 |
+| goal-74 | T-14.4 | 首次运行与预装 | T-09.6、T-14.3 | 等待前置 |
+| goal-77 | T-14.5 | 容器镜像 | T-07.3、T-14.3 | 等待前置 |
 | goal-75 | T-14.6 | 发行包与镜像端到端验收 | T-09.11、T-14.4、T-14.5 | 待编写 |
 | goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6 | 待编写 |
 | goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 待编写 |
@@ -4088,45 +4088,116 @@ internal/core/state
 ```
 ### goal-45 · T-09.11 正式流程故障注入与 T-09 验收
 
-状态：待编写。
+状态：等待前置（T-09.3、T-09.7、T-09.9、T-09.10）。语句中 goal-38～goal-44、goal-66 提供的命令与 API 只写名字；合并后由审查者核对，再改为可派发。
 
-目标：正式流程的故障注入，回填 T-08 待联验项，汇总证据
-前置：T-09.3、T-09.7、T-09.9、T-09.10。
+```text
+/goal 使用 $alonabot-execute 推进 goal-45（切片 T-09.11：正式流程故障注入与 T-09 验收）。goal 目录 goal-45，分支 goal-45，worktree .worktrees/goal-45，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-09.11 行、§4 的 T-09 步骤 8。
+目标：通过真实 CLI 与管理 API，在临时 data_dir 中跑完正式流程：首次安装 → enable → restart → reload → update → pin → disable → 同来源重装 → 显式 rollback；以包损坏、签名或公钥变化、PG 维护错误验证拒绝路径；在 PREPARED、提交前后与 OnReady 失败点终止 Core，连同残存旧进程、空间不足与同插件并发操作，验证没有双写、没有提前开放、没有静默的数据回滚。回填 T-08 留给集成的 V-23～V-25、V-39 证据，在 TEST-MATRIX §3.2 记录 T-09 证据，形成 T-10 可复用的恢复场景。
 
-关键边界：用正式管理流程做故障注入并回填 T-08 待联验项；每个 V 项记录实际命令、环境、进程与日志，不以模拟服务替代真实平台证据。
+依据：PLAN T-09 步骤 8 与「停止和失败条件」；CONTRACTS §5、§6、§7、§9、§12、§14；TEST-MATRIX V-23～V-25、V-27～V-31、V-39、V-40、V-52、V-54～V-56、V-62、V-63。
 
-验收：V-23～V-25、V-27～V-31、V-39、V-40、V-52、V-54～V-56、V-62、V-63。
+范围（只新增或修改这些）：
+- 新增 cmd/alonabot/t09_e2e_test.go（//go:build unix）与必要的测试插件（testdata 下）
+- 新增 scripts/scenarios/（可重复执行的恢复场景脚本或 Go 测试辅助，供 T-10 在其他平台复用；只调用 alonabot 二进制）
+- spec/TEST-MATRIX.md §3.2：追加 T-09 的证据行，并更新 T-08 行中留待集成的项（本切片获授权修改这两处）
+- 上述包的测试文件
+允许的新跨模块边：无。
 
+验收矩阵（各为一个子测试，记录命令、日志摘录与状态库检查）：
+1) 正式流程：首次安装 → enable（首个 Active）→ restart（只换 Session）→ 编辑 config.json 后 reload（新代次与 SQLite 副本）→ update（新包、新代次）→ pin → disable → uninstall 后同来源重装（复用数据）→ rollback 到上一代次（新代次、旧按钮不复活）。
+2) 拒绝路径：归档损坏、摘要不符、签名错误、发布者公钥变化（需要确认）、错误的 OS/arch、来源 ID 冲突、../ 与符号链接逃逸的归档：都在停止旧版前拒绝，旧版继续运行。
+3) PG（ALONABOT_TEST_PG_DSN 未设置时记为未运行）：已有数据的 update 返回 NEEDS_MANUAL_MIGRATION；授予维护许可后执行；rollback 返回 NEEDS_MANUAL_MIGRATION。
+4) 崩溃点：在 PREPARED 之后、提交之前、提交之后 ACTIVATED 之前、OnReady 失败时分别杀掉 Core，重启后的状态与 goal-42 的规则一致；任何时刻只有一个代次接单（以插件的事件处理日志证明）。
+5) 残存旧进程（忽略断链、持有 runtime.lock）：不启动第二个写入者，插件 Degraded。
+6) 空间不足（测试钩子使备份失败）：不激活，旧版不受影响。
+7) 同插件并发操作（两个 CLI 同时 reload 与 disable）：串行执行，没有交错的 Journal。
+8) 依赖：必需依赖缺失时拒绝启用并列出缺失项；停用被依赖的插件需要确认，确认后依赖方继续运行且调用返回 UNAVAILABLE；成环在安装时拒绝。
+9) 回填 T-08：V-23（config.json 编辑在 reload 前不生效）、V-24（候选 OnStart 写库后失败不污染旧库）、V-25（secret 修改、旧 secret 字段转未知键、掩码不成为保存值）、V-39（PG 维护门槛）经正式入口验证。
+10) 日志与 i18n（V-54、V-62、V-63）经正式入口的回归：日志级别修改、logs 查询、Core usage 的语言。
+- scripts/scenarios：把 1)、4)、5) 写成只依赖 alonabot 二进制与测试包的场景，T-10 在其他平台运行。
+- 证据：TEST-MATRIX §3.2 追加 T-09 一行；五平台的真实运行留给 T-10，写「未运行」。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/t09_e2e_test.go 与 scripts/scenarios。
+- 本地自测（不提交，PR 中写明结果）：在 -race 下重复运行崩溃点场景若干次无偶发失败。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+
+不做：五平台运行与发布（T-10）；新的产品功能（只做验收与必要的缺陷修复，修复需在 PR 中逐条说明）。
+```
 ### goal-74 · T-14.4 首次运行与预装
 
-状态：待编写。
+状态：等待前置（T-09.6、T-14.3）。语句中 goal-39、goal-41、goal-73 提供的符号（manage.Service、serve、trust.Official、发行归档结构）只写名字；合并后由审查者核对，再改为可派发。
 
-目标：首次运行：预装与默认启用、首次管理 token、内置包的可用更新
-前置：T-09.6、T-14.3。
+```text
+/goal 使用 $alonabot-execute 推进 goal-74（切片 T-14.4：首次运行与预装）。goal 目录 goal-74，分支 goal-74，worktree .worktrees/goal-74，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-14.4 行、§4 的 T-14 步骤 4。
+目标：数据目录首次初始化时，按普通安装流程安装发行包 packages/ 中的全部包，并启用 Agent、记忆与 help；Telegram Adapter 只安装，管理员添加第一个实例时才启用；其他预装插件只安装不启用。之后不再自动安装，已卸载的预装包不重新安装；新版本发行包中版本更高的内置包作为可用更新列出，由管理员确认后按 update 流程更新。
 
-关键边界：预装包照常验签；只在数据目录首次初始化时安装，默认启用 Agent、记忆与 help；签名私钥不进入仓库与日志。
+依据：PLAN T-14 步骤 4；CONTRACTS §15.1、§15.2；TEST-MATRIX V-66。
 
-验收：V-66。
+范围（只新增或修改这些）：
+- 根包 assembly.go：serve 首次初始化时的预装步骤（新增 preinstall.go，只在 Serve 中加调用点）
+- internal/core/state/：记录「已完成首次初始化」的设置项（沿用 core_settings）
+- internal/core/manage/：List 返回可用更新；CreateInstance 在 Telegram Adapter 未启用时先启用它
+- 上述包的测试文件
+允许的新跨模块边：无。
 
+行为：
+- 首次初始化：serve 取得 core.lock 后，若 core_settings 中没有 preinstalled 标记：查找 alonabot 可执行文件同目录下的 packages/（发行归档结构）；没有该目录时跳过（开发构建）。对其中每个包按 Install 的正常流程校验与安装；trust.Official 的公钥视为已信任来源，不逐个确认；签名或摘要校验失败的包不安装并记 ERROR，继续处理其余包。安装后启用 Agent、记忆与 help（按 manifest 的 id 识别），其余不启用。全部处理完后写入 preinstalled 标记（即使有包失败）。
+- 首次管理 token：沿用 goal-39 的 serve 规则（交互终端下生成并显示一次，非终端拒绝启动）；预装在 token 初始化之后执行。
+- Agent 在没有配置 Provider 时也能启用（/ask 回复提示）。
+- 之后的启动不再自动安装；已卸载（uninstalled）的预装包不重新安装。
+- 可用更新：List 时比较 packages/ 中每个包的版本与已安装版本，更高时在 Package 中标记 available_update（版本号），不自动更新；管理员经 update 选择该包。
+- Telegram：CreateInstance 发现 Adapter 包未启用时先启用它，再创建实例。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/firstrun_e2e_test.go（//go:build unix）：用 goal-73 的 dist 工具以临时密钥为当前平台构建发行归档并解压到临时目录，运行其中的 alonabot serve（干净 data_dir，测试钩子模拟交互终端）：
+  - 全部预装包已安装；Agent、记忆、help 已启用；welcome、rss 与 Telegram Adapter 未启用。
+  - 非终端运行时拒绝启动并提示 admin-token init。
+  - 把其中一个包的签名改坏：该包未安装并有 ERROR，其余正常。
+  - 卸载 rss 后重启 serve：不重新安装。
+  - 用版本号更高的发行归档替换 packages/ 后重启：list 显示可用更新，没有自动更新。
+  - 创建 Telegram 实例时 Adapter 被启用。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有 packages/ 时跳过；preinstalled 标记在部分失败时仍写入。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+
+不做：容器镜像（T-14.5）；Core 自身的升级（替换可执行文件，由管理员操作）。
+```
 ### goal-77 · T-14.5 容器镜像
 
-状态：待编写。
+状态：等待前置（T-07.3、T-14.3）。语句中 goal-25、goal-73 提供的符号（settings 的 listen 校验、scripts/dist）只写名字；合并后由审查者核对，再改为可派发。
 
-目标：容器镜像：`Dockerfile` 多阶段构建、linux/amd64 与 linux/arm64、非 root、`/data` 卷、`ALONABOT_CONTAINER` 的监听规则、`deploy/compose.yaml`
-前置：T-07.3、T-14.3。
+```text
+/goal 使用 $alonabot-execute 推进 goal-77（切片 T-14.5：容器镜像）。goal 目录 goal-77，分支 goal-77，worktree .worktrees/goal-77，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-14.5 行、§4 的 T-14 步骤 5。
+目标：仓库根目录的 Dockerfile 用多阶段构建产生 linux/amd64 与 linux/arm64 镜像：Go 构建阶段以 CGO_ENABLED=0 构建 Core 与全部官方包，最终镜像只含 alonabot、packages/ 与 CA 证书，以 UID 10001 运行 alonabot serve --data-dir /data，/data 为卷，设置 ALONABOT_CONTAINER=1。Core 只在该环境变量下允许 0.0.0.0 的 listen 搭配本机 http 的 Base URL，并在启动时输出 WARN。deploy/compose.yaml 给出卷、init: true、127.0.0.1:7650:7650 与首次 admin-token init 的用法。
 
-关键边界：镜像只含 alonabot、packages/ 与 CA 证书，以 UID 10001 运行，/data 为卷且 Docker init 开启；只有 ALONABOT_CONTAINER=1 时允许 0.0.0.0 配合本机 http Base URL，并启动时 WARN。
+依据：PLAN T-14 步骤 5；CONTRACTS §15.3、§15.1、§7.4；DECISIONS D-36；TEST-MATRIX V-70 的镜像分项。
 
-验收：V-70 的镜像分项。
+范围（只新增或修改这些）：
+- 新增 Dockerfile、.dockerignore、deploy/compose.yaml
+- internal/core/settings/：ALONABOT_CONTAINER=1 时 listen 缺省为 0.0.0.0:7650，并放宽「非 loopback 必须 https 或可信反代」的校验（只在该变量下），启动时输出 WARN "listening on all interfaces inside a container; publish the port to the host loopback only"
+- docs/development.md：增加「容器镜像」一节（本切片获授权修改这一节）
+- 上述包的测试文件
+允许的新跨模块边：无。
 
-## 第 16 波
+行为：
+- Dockerfile：构建阶段使用 go.mod 锁定的 Go 版本的官方镜像（标签写明版本与 digest）；以 scripts/dist 的同一逻辑为目标平台构建 alonabot 与官方包（签名密钥以 BuildKit secret 传入，不进入镜像层；没有密钥时构建失败并提示）；最终阶段为 scratch 加 CA 证书（从构建阶段复制 /etc/ssl/certs/ca-certificates.crt），USER 10001:10001，VOLUME /data，ENV ALONABOT_CONTAINER=1，ENTRYPOINT ["/alonabot"]，CMD ["serve", "--data-dir", "/data"]。镜像中没有 shell。
+- compose.yaml：image、init: true、volumes（命名卷到 /data）、ports "127.0.0.1:7650:7650"，注释说明首次运行前执行 docker compose run --rm -it alonabot admin-token init。
+- settings：没有 ALONABOT_CONTAINER 时行为不变（0.0.0.0 搭配 http Base URL 仍被拒绝）。
+- docs：写明构建命令（docker buildx build --platform linux/amd64,linux/arm64 --secret id=release_key,src=...）、首次初始化、端口只发布到宿主本机、远程访问用 SSH 隧道或 HTTPS 反代、MCP stdio 需要 shell 或其他运行时时须自建镜像。
 
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/settings 的测试追加：有与没有 ALONABOT_CONTAINER 时 listen 缺省值与校验的差异，以及 WARN。
+- 本地自测（不提交，PR 中写明结果）：在有 Docker 的机器上 buildx 构建两个平台（写明 Docker 版本）；干净卷无 TTY 启动被拒；-it admin-token init 后正常启动并能访问 http://127.0.0.1:7650；容器内进程的 UID 为 10001；镜像文件列表只有 alonabot、packages/ 与 CA 证书；出站 HTTPS 可用；docker stop 后插件进程全部退出。没有 Docker 环境时以上各项写「未运行」。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/...；go build ./...；node scripts/check-repository.mjs。
+
+不做：推送镜像到 ghcr.io（T-10.4）；Kubernetes 清单。
+```
 ### goal-75 · T-14.6 发行包与镜像端到端验收
 
 状态：待编写。
