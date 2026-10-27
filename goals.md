@@ -96,10 +96,10 @@
 | goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.1、T-08.8、T-09.2、T-13.1 | 等待前置 |
 | goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 等待前置 |
 | goal-70 | T-13.4 | 库模式示例与验收 | T-03.10、T-13.2、T-13.3 | 等待前置 |
-| goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 待编写 |
-| goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 待编写 |
-| goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 待编写 |
-| goal-61 | T-12.4 | 记忆插件 | T-08.5、T-11.2、T-12.2 | 待编写 |
+| goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 等待前置 |
+| goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 等待前置 |
+| goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 等待前置 |
+| goal-61 | T-12.4 | 记忆插件 | T-08.5、T-11.2、T-12.2 | 等待前置 |
 | goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 待编写 |
 | goal-62 | T-12.5 | 技能 | T-12.3 | 待编写 |
 | goal-63 | T-12.6 | 定时 Agent 任务 | T-07.2、T-08.5、T-12.3 | 待编写 |
@@ -3503,58 +3503,197 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 ```
 ### goal-40 · T-09.5 候选 Journal 与准备编排
 
-状态：待编写。
+状态：等待前置（T-09.4、T-08.6、T-06.4）。语句中 goal-22、goal-33、goal-39 提供的符号（manage.Service 与 Candidates 接口、candidate.PrepareDatabase/Discard 与交接约定、supervisor 的停止流程）只写名字；合并后由审查者核对，再改为可派发。
 
-目标：正式候选 Journal 与准备编排
-前置：T-09.4、T-08.6、T-06.4。
+```text
+/goal 使用 $alonabot-execute 推进 goal-40（切片 T-09.5：候选 Journal 与准备编排）。goal 目录 goal-40，分支 goal-40，worktree .worktrees/goal-40，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-09.5 行、§4 的 T-09 步骤 4。
+目标：为 reload、update 与首次启用实现正式的候选编排：预检通过后，以预期的旧 ActiveGeneration 写入持久化的管理操作记录（Journal）及其资源引用；冻结新根派发、drain 并停止旧进程，确认进程树退出且 runtime.lock 可取；调用 T-08.6 复制数据库并创建候选 Session（启动原因、维护许可与阶段预算放进 Bootstrap）；REGISTER 校验后持久化程序、配置快照、secret 与数据库的候选引用，形成 PREPARED。提交与激活门禁留给 T-09.6；失败时清理候选并以旧版的新 Session 恢复。
 
-关键边界：Journal 记录准备阶段与候选资源，任何准备失败都保留旧 Active；候选 DB 与 Secret 只在对应代次中可见。
+依据：PLAN T-09 步骤 4；CONTRACTS §12、§6.3、§5.2、§4.2；TEST-MATRIX V-29。
 
-验收：V-29。
+范围（只新增或修改这些）：
+- internal/core/state/：migrations 末尾追加一条；新增 journal.go
+- 新增 internal/core/journal/（操作记录的状态机与编排，实现 manage.Candidates 的 Reload 与 Update）
+- internal/core/manage/：首次启用改用 journal 编排，删除 goal-39 的 shortcut 注释（只改该处与装配）
+- 上述包的测试文件
+允许的新跨模块边：无。
 
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. internal/core/state
+   迁移：CREATE TABLE journal (op_id TEXT PRIMARY KEY, plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), kind TEXT NOT NULL, expected_old TEXT NOT NULL, new_generation TEXT NOT NULL, phase TEXT NOT NULL, package_dir TEXT NOT NULL, database_path TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+   kind 为 first_install、reload、update；phase 为 started、stopped_old、candidate_ready、prepared、committed、failed、cleaned。读写方法自定，阶段只能前进。
+2. internal/core/journal
+   type Orchestrator struct{ ... }
+   func New(opt Options) *Orchestrator // Options 由执行者按实际依赖列出：Store、Secrets、supervisor 启动函数、Router/Broker 的冻结入口、Log
+   type Result struct { OpID string; Generation string; Prepared *candidate.Prepared }
+   func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, stagedPackage string) (*Result, error) // 运行到 PREPARED 为止
+   func (o *Orchestrator) Abort(ctx context.Context, r *Result, cause error) error // 清理候选并以旧版的新 Session 恢复
+   func (o *Orchestrator) Reload(ctx context.Context, id string) error   // 实现 manage.Candidates：Prepare → 交给提交入口（T-09.6 之前提交入口为 UNSUPPORTED 时 Abort 并返回）
+   func (o *Orchestrator) Update(ctx context.Context, id, staged string) error
+
+行为（Prepare，调用方已持插件操作锁）：
+1) 预检：update 的包已经过 packages.Preflight（staged 目录）；reload 用 config.Service.ImportSnapshot 导入编辑快照为 Pending（base 为当前 Active）；first_install 没有旧 Active。所有静态错误在停止旧版之前返回。
+2) 写入 Journal（phase=started，expected_old=当前 Active，new_generation 为新 ID）。
+3) 冻结：Router/Broker/Bus/Scheduler/HTTP 停止向该插件派发新的根调用（沿用 goal-22 与 goal-27 的 Drain），按停止流程停止旧进程并等待进程树退出；phase=stopped_old。进程树没有在停止预算内清空时失败（不 sleep 猜测）。
+4) candidate.PrepareDatabase（取得 runtime.lock 后复制，完成后释放）；AddGeneration(new, 未提交)；phase=candidate_ready。
+5) 启动候选：supervisor.Launch（NewCandidate=true，Bootstrap 带 activation_reason（first_install/reload/update）、manual_migration_approved（只有管理员为本次 Session/Generation 显式授予时为 true）、阶段预算、Pending 解析后的配置），REGISTER 校验与 secret 抽取后得到快照；SetGenerationConfig 写入快照与 secret 路径；phase=prepared。此时不提交 Active、不发 ACTIVATE。
+6) PG 不可隔离的变更在 goal-32 的维护门槛停下（候选准备失败，返回 NEEDS_MANUAL_MIGRATION），按 Abort 处理。
+- 普通 resume（restart、Core 重启后的恢复）不经过本编排，不写新 Journal。
+- Abort：phase 改为 failed → 停止候选进程并确认退出 → candidate.Discard（只删未受保护的候选资源）→ 以旧 Active 启动旧版的新 Session（first_install 时保持未启用）→ phase=cleaned。Abort 本身失败时保留 Journal 供 T-09.7 恢复。
+- 任一步失败都调用 Abort；错误返回给管理服务（安全文本）。
+- 日志：每次 phase 变化以 INFO 记录（op_id、plugin_id、kind、phase）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/supervisor/journal_test.go（//go:build unix）。测试插件按环境变量在 OnStart 写库后失败、或迁移失败：
+  - reload 成功运行到 PREPARED：Journal phase 依次前进，候选数据库是独立副本，旧进程已退出，Active 未变。
+  - 候选 OnStart 失败：Abort 后旧版以新 Session 运行，旧库不含候选写入，候选目录已删除，phase=cleaned。
+  - 旧进程不退出（忽略 STOPPING 且持有 runtime.lock 的测试插件）：编排在停止预算内失败，没有复制数据库，旧版状态可诊断。
+  - 磁盘空间不足（用测试钩子使备份失败）：不激活，候选目录被清理。
+  - first_install：成功到 PREPARED；失败时插件保持未启用。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：phase 只能前进；expected_old 与写入一致；manual_migration_approved 只在显式授予时为 true；resume 不写 Journal。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/...；go build ./...。
+
+不做：唯一提交点与激活门禁（T-09.6）；崩溃恢复与 rollback（T-09.7）；维护许可的管理入口（T-09.9）。
+```
 ### goal-57 · T-11.4 工具与会话的验收
 
-状态：待编写。
+状态：等待前置（T-11.2、T-11.3）。语句中 goal-54～goal-56 提供的符号与测试插件只写名字；合并后由审查者核对，再改为可派发。
 
-目标：工具与会话的多进程验收，汇总证据
-前置：T-11.2、T-11.3。
+```text
+/goal 使用 $alonabot-execute 推进 goal-57（切片 T-11.4：工具与会话的验收）。goal 目录 goal-57，分支 goal-57，worktree .worktrees/goal-57，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-11.4 行、§4 的 T-11 步骤 6。
+目标：用一个提供工具的插件和一个调用工具的测试插件，经回环测试 Adapter（或 Telegram 模拟服务）以真实进程覆盖三种策略、确认的允许/拒绝/超时/他人点击、无 Actor、目标不支持按钮与策略的运行时修改；会话存储覆盖原子追加、分页、跨插件隔离与 Core 重启；在 TEST-MATRIX §3.2 记录 T-11 证据。
 
-关键边界：验收使用多个真实插件进程，覆盖工具策略、确认与会话隔离；进程内模拟调用不能替代 Core Broker 路径。
+依据：PLAN T-11 步骤 6 与「停止和失败条件」；CONTRACTS §13；TEST-MATRIX V-55、V-56 的 T-11 分项。
 
-验收：V-55、V-56 的 T-11 分项。
+范围（只新增或修改这些）：
+- 新增 cmd/alonabot/t11_e2e_test.go（//go:build unix）
+- 复用或补充 internal/core/supervisor/testdata 下的工具与会话测试插件
+- spec/TEST-MATRIX.md §3.2：追加 T-11 的证据行（本切片获授权修改这一处）
+允许的新跨模块边：无。
 
+验收矩阵（各为一个子测试）：
+1) allow、confirm、deny 三种策略各一次；deny 与拒绝返回 PERMISSION_DENIED 且工具未执行（以工具插件的调用计数证明）。
+2) 确认：允许、拒绝、超时（DEADLINE_EXCEEDED）、他人先点击（被拒、不影响结果）、token 第二次点击无效；确认消息展示实际 JSON 参数。
+3) 无 Actor 的后台调用遇到 confirm 直接 PERMISSION_DENIED，不发消息；目标不支持按钮时 UNSUPPORTED。
+4) core.tool.confirm 用于 MCP 风格的操作名（mcp/x/y），展示插件给出的摘要。
+5) 运行时修改策略：下一次调用生效，进程未重启。
+6) 工具仍按继承 Actor 检查 Service 访问规则。
+7) 会话：多条原子追加、跨帧上限分页不丢不重、两个插件同名会话互相隔离、Core 重启后保留、purge 后删除（卸载默认保留由 T-09.4 的测试覆盖，这里只覆盖服务层）。
+- 证据：TEST-MATRIX §3.2 追加 T-11 一行，写明测试位置、命令、平台与结果；工具策略与会话清除的管理页面留给 T-09.9，记为未闭合。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/t11_e2e_test.go。
+- 本地自测（不提交，PR 中写明结果）：在 -race 下重复运行矩阵若干次无偶发失败。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+
+不做：Agent 插件的工具循环（T-12.3）；管理页面（T-09.9）。
+```
 ### goal-60 · T-12.3 工具循环与 MCP
 
-状态：待编写。
+状态：等待前置（T-11.2、T-12.2）。语句中 goal-54、goal-55、goal-58、goal-59 提供的符号（sdk.ListTools、sdk.InvokeTool、sdk.ConfirmOperation、provider 的 Tool/ToolCall/ToolResult、plugins/agent 的一轮对话与 Config.MCPServers）只写名字；合并后由审查者核对，再改为可派发。本切片获授权引入已批准的 github.com/modelcontextprotocol/go-sdk（docs/development.md 只授权给 goal-60）。
 
-目标：工具循环与 MCP：Core 工具、MCP 客户端（stdio、streamable HTTP）、确认、单轮步数上限
-前置：T-11.2、T-12.2。
+```text
+/goal 使用 $alonabot-execute 推进 goal-60（切片 T-12.3：工具循环与 MCP）。goal 目录 goal-60，分支 goal-60，worktree .worktrees/goal-60，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-12.3 行、§4 的 T-12 步骤 4。
+目标：Agent 插件每轮把 core.tool.list 返回的工具与已连接 MCP 服务器的工具交给模型；工具名按 Provider 的命名规则映射且一轮内稳定；Core 工具经 core.tool.invoke 调用，MCP 工具先经 core.tool.confirm（操作名 mcp/<server>/<tool>）再调用；拒绝、超时与工具错误作为工具结果交回模型；单轮工具步数达到上限时结束本轮并告知用户；MCP 服务器首次使用时连接、随插件停止关闭，stdio 子进程属于插件的进程树。
 
-关键边界：MCP 只在本切片获准加入 github.com/modelcontextprotocol/go-sdk；所有 MCP 操作先经 core.tool.confirm，单轮工具步数上限为命名常量（初值 20），拒绝/超时/工具错误作为结果交回模型。
+依据：PLAN T-12 步骤 4；CONTRACTS §13.1、§13.2、§7.1（进程树）；DECISIONS D-27、D-38；docs/development.md（MCP go-sdk 的批准范围）；TEST-MATRIX V-58。
 
-验收：V-58。
+范围（只新增或修改这些）：
+- go.mod、go.sum：新增 github.com/modelcontextprotocol/go-sdk（取当前最新的 v1 版本，PR 中写明版本，并用 go mod why 说明它只被 plugins/agent 使用）
+- plugins/agent/：新增 tools.go（工具目录与名称映射）、mcp.go（MCP 客户端管理）、loop.go（工具循环）；一轮对话接入循环（只改调用处）
+- 新增 plugins/agent/mcptest/（stdio 与 streamable HTTP 的 MCP 模拟服务器，测试用）
+- i18n：en-US.json 与 zh-CN.json 增加步数上限与工具错误的文案
+- 上述包的测试文件
+允许的新跨模块边：只有 plugins/agent 可以 import MCP go-sdk。
 
+接口：plugins/agent 不新增导出符号（Config.MCPServers 已在 goal-59 声明）。mcptest 包导出测试所需的启动函数，由执行者在包文档列出。
+
+行为：
+- 工具目录：每轮开始时调用 sdk.ListTools，并对已连接（或首次使用时连接）的 MCP 服务器调用 tools/list；合并为一个列表交给模型。名称映射：Provider 只接受 ^[a-zA-Z0-9_-]{1,64}$ 的名字（两种协议都按此规则，命名常量），把 "plugin_id/service_name" 与 "mcp/<server>/<tool>" 转为合规名字（非法字符替换为 _，冲突或超长时加 _ 与短哈希）；映射在一轮内固定，结果交回模型时用映射后的名字。
+- 循环：模型返回工具调用时依次执行，结果作为 ToolResult 交回，再继续请求；文本照常流式显示（沿用 goal-59）。单轮工具步数上限为命名常量（初值 20），达到时停止请求模型，回复 agent.tool_limit。
+- Core 工具：sdk.InvokeTool（在延续调用内，继承父调用链与 Actor）；错误（PERMISSION_DENIED、DEADLINE_EXCEEDED、工具错误等）转为文本结果交回模型（"error: <code>: <safe_message>"），不重试。
+- MCP 工具：先 sdk.ConfirmOperation("mcp/<server>/<tool>", 参数的 JSON 摘要)，允许后经 go-sdk 调用；拒绝与超时同样作为结果交回。MCP 工具的参数在交给模型前就以其 inputSchema 暴露，调用前不在 Agent 侧另做 Schema 校验（由服务器校验）。
+- MCP 连接：stdio 以 command 与 args 启动子进程，env 为配置中解析后的 secret 值（SecretPair），子进程在插件的进程组内（由 Core 的进程树管理回收）；streamable HTTP 以 url 与 headers 连接。首次使用时连接，失败时该服务器本轮不可用并以 WARN 记录（不阻止对话）；插件 OnStop 时关闭全部会话并等待 stdio 子进程退出。
+- 安全：MCP 的 env 与 headers 中的值不写日志、不进入工具结果。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：plugins/agent/tools_test.go（//go:build unix）。用 goal-59 的测试装配、模拟 Provider（脚本化地返回工具调用）、goal-54/55 的工具插件与 mcptest 的两种服务器：
+  - 模型连续调用一个 Core 工具与一个 MCP 工具：两者都执行，结果交回模型，最终回复显示。
+  - Core 工具为 confirm 策略且用户拒绝：结果为错误文本交回模型，工具未执行；MCP 工具的确认被拒同样如此。
+  - 工具出错：错误作为结果交回，不重试。
+  - 模型持续请求工具超过 20 步：本轮结束并回复步数上限文案。
+  - 停止插件后 stdio MCP 子进程已退出（按 PID 检查）。
+  - 名称映射对含 / 与 . 的名字、冲突名字的结果稳定。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：名称映射函数；MCP 连接失败时对话继续；secret 值不出现在日志中；HTTP 服务器的 headers。
+
+完成条件：gofmt -l 无输出；go mod tidy 后无差异；go vet ./...；go test -race ./plugins/...；go build ./...。
+
+不做：记忆（T-12.4）；技能（T-12.5）；MCP 的资源与提示词能力（只用 tools）；真实 Provider（T-10）。
+```
 ### goal-61 · T-12.4 记忆插件
 
-状态：待编写。
+状态：等待前置（T-08.5、T-11.2、T-12.2）。语句中 goal-19、goal-32、goal-54、goal-59 提供的符号（sdk.JSONService 与 Tool 选项、gormdb.Open、plugins/agent 的一轮对话与 Config.MemoryPlugin）只写名字；合并后由审查者核对，再改为可派发。
 
-目标：记忆：`sdk/memory` 服务契约、`plugins/memory/` 官方记忆插件、Agent 的记忆接入
-前置：T-08.5、T-11.2、T-12.2。
+```text
+/goal 使用 $alonabot-execute 推进 goal-61（切片 T-12.4：记忆插件）。goal 目录 goal-61，分支 goal-61，worktree .worktrees/goal-61，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-12.4 行、§4 的 T-12 步骤 5。
+目标：sdk/memory 提供 memory.context、memory.prefetch、memory.sync 三个服务的类型、Schema 与注册辅助；官方记忆插件 plugins/memory/ 用 gormdb 保存会话笔记（按默认 Target）与用户档案（按 Actor），提供 memory 工具（allow）执行原子的 add/patch/remove；Agent 接入记忆：会话第一轮取 memory.context 写为快照条目，每轮取 memory.prefetch，结束后调用 memory.sync；配置的记忆插件不可用时本轮报错。
 
-关键边界：Agent 与记忆插件只经 sdk/... 和 contracts 交互；sdk/memory 提供三个固定 Service 的类型与 Schema。记忆按 Unicode 码点限制 2,200/1,375，超限、重复或含 Unicode Cf 的内容报错且保留旧数据；记忆插件不可用时本轮报错。
+依据：PLAN T-12 步骤 5；CONTRACTS §13.4、§13.1、§3；TEST-MATRIX V-59。
 
-验收：V-59。
+范围（只新增或修改这些）：
+- 新增 sdk/memory/
+- 新增 plugins/memory/（可导入的包、cmd/ 下的 main、plugin.yaml、i18n）
+- plugins/agent/：一轮对话接入记忆（新增 memory.go，只在调用处加三处调用）
+- 上述包的测试文件
+允许的新跨模块边：plugins/... -> sdk/...（已允许）。
 
-## 第 12 波
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+sdk/memory
+   const (ServiceContext = "memory.context"; ServicePrefetch = "memory.prefetch"; ServiceSync = "memory.sync")
+   const SchemaVersion = 1
+   type ContextResult struct { Text string `json:"text"` }
+   type PrefetchRequest struct { Message string `json:"message"` }
+   type PrefetchResult struct { Text string `json:"text"` }
+   type SyncRequest struct { Message string `json:"message"`; Reply string `json:"reply"` }
+   type SyncResult struct{}
+   type Provider interface {
+       Context(*sdk.Context) (ContextResult, error)
+       Prefetch(*sdk.Context, PrefetchRequest) (PrefetchResult, error)
+       Sync(*sdk.Context, SyncRequest) (SyncResult, error)
+   }
+   func Register(r *sdk.ServiceRegistry, p Provider, opts ...sdk.ServiceOption) // 用固定服务名与 schema 注册三个 JSON 服务
+   func Client(pluginID string) *MemoryClient // Agent 侧调用三个服务的客户端
+   type MemoryClient struct{ ... } // Context(ctx)、Prefetch(ctx, msg)、Sync(ctx, msg, reply)
 
+行为：
+- 范围：会话按默认 Target（adapter_instance_id、chat_id、thread_id），用户按 Actor（adapter_instance_id、external_user_id），都取自调用链的可信上下文；缺少所需的部分时返回 FAILED_PRECONDITION。
+- 记忆插件：
+  - memory.context 返回会话笔记；memory.prefetch 返回当前 Actor 的档案；memory.sync 不做操作。三个服务的访问规则为 ALLOWLIST，只允许配置中的 Agent 插件 ID（缺省为官方 Agent 的 ID）。
+  - memory 工具（JSON 服务加 sdk.Tool，default_policy=allow）：输入 {"operations": [{"op": "add"|"patch"|"remove", "target": "memory"|"user", "text": "...", "old_text": "..."}]}；patch 与 remove 用唯一的 old_text 定位（找不到或不唯一 → INVALID_ARGUMENT）；整组按结果检查上限（会话笔记 2,200、用户档案 1,375 个 Unicode 码点，命名常量）后在一个事务中写入；超限、完全重复的条目、含 Unicode Cf 类字符的内容返回错误，已有条目不变。
+  - 存储用 gormdb（versioned 迁移）；条目按写入顺序拼接为文本（每条一行）。
+- Agent 接入：Config.MemoryPlugin 非空时启用记忆：
+  - 会话的第一轮（会话为空时）调用 Context，把结果作为 {"role": "system", "kind": "memory_snapshot", "content": ...} 写入会话；之后的轮次使用会话中的快照，不再调用 Context（会话内快照不变、/reset 后下一会话重新取）。
+  - 每轮调用 Prefetch，结果附在本轮用户消息之前。
+  - 本轮结束后调用 Sync。
+  - 任一调用失败（插件未启用、UNAVAILABLE、PERMISSION_DENIED 等）：本轮按 agent.memory_error 报错并结束，不跳过记忆继续。
+  - Agent 不直接写记忆存储，写入只经 memory 工具（由模型在工具循环中调用；T-12.3 已接入工具循环，若本切片先于 goal-60 合并，工具调用留到 goal-60 之后验证）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：
+  - plugins/memory/memory_test.go（//go:build unix）：经真实 Core 装配调用 memory 工具：add、patch、remove 正确；超限时返回错误且已有条目不变；重复条目与含 U+200B 的内容被拒；群聊中两位用户各自只看到自己的档案；非允许的插件调用三个服务返回 PERMISSION_DENIED。
+  - plugins/agent/memory_test.go（//go:build unix）：Agent 配置记忆插件后，第一轮会话写入快照条目，第二轮没有再调用 Context；/reset 后重新取快照；记忆插件停用时本轮报错（agent.memory_error），没有调用 Provider。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：码点计数（含组合字符与 emoji）；old_text 不唯一；空操作组；缺少 Actor 或默认 Target 的 FAILED_PRECONDITION。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./sdk/... ./plugins/...；go build ./...；plugins/memory 运行 alonabot plugin check 通过。
+
+不做：技能（T-12.5）；定时任务（T-12.6）；向量检索或外部记忆后端。
+```
 ### goal-41 · T-09.6 唯一提交点与激活门禁
 
 状态：待编写。
