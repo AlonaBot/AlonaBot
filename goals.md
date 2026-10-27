@@ -91,11 +91,11 @@
 | goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.3、T-08.4、T-11.3、T-12.1 | 等待前置 |
 | goal-68 | T-13.2 | 开发组件的配置与数据库 | T-08.3、T-08.5、T-13.1 | 等待前置 |
 | goal-72 | T-14.2 | welcome 与 rss 插件 | T-05.2、T-07.2、T-08.3、T-08.5、T-08.8 | 等待前置 |
-| goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 待编写 |
-| goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8 | 待编写 |
-| goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.1、T-08.8、T-09.2、T-13.1 | 待编写 |
-| goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 待编写 |
-| goal-70 | T-13.4 | 库模式示例与验收 | T-03.10、T-13.2、T-13.3 | 待编写 |
+| goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 等待前置 |
+| goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8 | 等待前置 |
+| goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.1、T-08.8、T-09.2、T-13.1 | 等待前置 |
+| goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 等待前置 |
+| goal-70 | T-13.4 | 库模式示例与验收 | T-03.10、T-13.2、T-13.3 | 等待前置 |
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 待编写 |
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 待编写 |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 待编写 |
@@ -3275,71 +3275,232 @@ plugins/agent
 ```
 ### goal-22 · T-06.4 Session 清理与 Service 端到端
 
-状态：待编写。
+状态：等待前置（T-06.2、T-06.3）。语句中 goal-15、goal-17、goal-19～goal-21 提供的符号（router、broker、bus、hook 与各自的 Stats）只写名字；合并后由审查者核对，再改为可派发。
 
-目标：Session 变更时的清理与计数，A/B/C 端到端验收（含 Hook→Service→Send），汇总证据
-前置：T-06.2、T-06.3。
+```text
+/goal 使用 $alonabot-execute 推进 goal-22（切片 T-06.4：Session 清理与 Service 端到端）。goal 目录 goal-22，分支 goal-22，worktree .worktrees/goal-22，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-06.4 行、§4 的 T-06 步骤 6、7。
+目标：Session 停止或失效时，按 T-02 的冻结、drain、STOPPING 流程停止新的根调用，取消在途父链，并清理路由目标、Bus 订阅队列、Broker 映射与预算，不把未完成的工作转交给同插件的新 Session。错误只返回安全的 ErrorInfo 与 trace。记录按原因区分的拒绝、取消、离线与丢弃计数。在 TCP 与 stdio 上完成 A/B/C 嵌套与故障的端到端验收（含 Hook→Service→Send），在 TEST-MATRIX §3.2 记录 T-06 证据。
 
-关键边界：完成 A/B/C 端到端链路并验证 Hook→Service→Send 的间接发送仍受 send_forbidden 约束；Session 失效时清理路由、订阅队列、Broker 映射与预算。
+依据：PLAN T-06 步骤 6、7 与「停止和失败条件」；CONTRACTS §3、§1.2、§4.2、§14.5；TEST-MATRIX V-15、V-17、V-18、V-19、V-42。
 
-验收：V-15、V-17、V-18、V-19、V-42。
+范围（只新增或修改这些）：
+- internal/core/broker/、internal/core/bus/、internal/core/router/：Session 失效时的清理入口与计数（新增文件或只加调用点）
+- internal/core/supervisor/：停止流程中调用上述清理（只加调用点）
+- 新增 internal/core/metrics/（按原因的计数，只在内存中，供管理面读取）
+- 新增 cmd/alonabot/t06_e2e_test.go（//go:build unix）
+- spec/TEST-MATRIX.md §3.2：追加 T-06 的证据行（本切片获授权修改这一处）
+- 上述包的测试文件
+允许的新跨模块边：无。
 
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+internal/core/metrics
+   type Reason string // denied、cancelled、offline、dropped_queue、dropped_budget、cycle、depth
+   type Counters struct{ ... }
+   func (c *Counters) Add(pluginID string, kind string, r Reason) // kind 为 service、bus、event
+   func (c *Counters) Snapshot() map[string]map[string]map[Reason]uint64 // plugin → kind → reason → count
+broker、bus、router 的 Options 增加 Metrics *metrics.Counters（可为 nil）。
+
+行为：
+- 冻结：插件进入 Draining 后，Broker 对以它为目标的新调用返回 UNAVAILABLE（offline），Bus 不再向它入队，Router 不再派发给它。
+- 失效（STOPPING 或断链）：Broker 取消它作为调用方或目标的全部转发请求（调用方得到 UNAVAILABLE 或 CANCELLED），释放这些请求占用的预算；Bus 丢弃它的订阅队列（计入 offline）；Router 移除它的路由目标与等待（与 goal-52 的 Release 一致）。不转交新 Session，新 Session 从空状态开始。
+- 错误：返回给调用方的 ErrorInfo 只含 code、safe_message 与 trace_id；远端堆栈、Secret、文件路径只进 Core 日志。
+- 计数：每次拒绝、取消、离线、队列丢弃、CALL_CYCLE、深度超限都计数；不持久化，不建设可靠事件存储或自动重试。
+- 验收矩阵（t06_e2e_test.go，TCP 与 stdio 各运行一遍）：
+  1) A→B→C、A→B→A、深度边界、两条独立并发链：结果、Actor/Target、deadline 与取消在每一跳一致。
+  2) A 的出站 Hook → B 的 Service → Send：FAILED_PRECONDITION（闭合 V-15）。
+  3) B/C 挂起、进程退出、满额、畸形输入与输出、排队前取消：没有死锁，没有重复的业务效果（以目标插件的调用计数证明）。
+  4) Bus：慢订阅者、断线、条数满与字节满同时发生时，新事件按规则丢弃，其他订阅者继续收到。
+  5) 每项记录实际进程、传输、命令与日志摘录。
+- 证据：TEST-MATRIX §3.2 追加 T-06 一行，写明测试位置、命令、平台、传输与结果。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/t06_e2e_test.go（上述矩阵，复用 goal-19～goal-21 的测试插件）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Counters 的并发；失效后预算归还到初始值；ErrorInfo 中不含路径与堆栈。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+
+不做：管理面对计数的读取接口（T-09.9）；可靠事件存储与服务重试（契约不提供）。
+```
 ### goal-35 · T-08.9 configdb 示例与 T-08 验收
 
-状态：待编写。
+状态：等待前置（T-08.6、T-08.7、T-08.8）。语句中 goal-28～goal-34、goal-53 提供的符号与工具（生成器、Prepare、secret.Store、gormdb、candidate、web/admin 的表单模型、contracts/i18n）只写名字；合并后由审查者核对，再改为可派发。
 
-目标：configdb 示例与分层验证，汇总证据
-前置：T-08.6、T-08.7、T-08.8。
+```text
+/goal 使用 $alonabot-execute 推进 goal-35（切片 T-08.9：configdb 示例与 T-08 验收）。goal 目录 goal-35，分支 goal-35，worktree .worktrees/goal-35，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-08.9 行、§4 的 T-08 步骤 9。
+目标：新增 examples/plugins/configdb，覆盖配置迁移、显式空值、未知与 secret 字段、CRUD 与事务、versioned 迁移与失败、候选 OnStart 写库后失败；在临时 data_dir 与独立的 PG 测试 schema 上分层验证；用 web/admin 的 fixture 验证表单的字段顺序、hidden、i18 回退、掩码与 PATCH；在 TEST-MATRIX §3.2 记录 T-08 的组件证据，并单独列出需要 T-09 正式入口与 Journal 才能关闭的场景。
 
-关键边界：示例必须展示 JSON Pending、配置准备与数据库资源交接的正式路径；未完成的 PG 真实实例验收应明确标为未运行。
+依据：PLAN T-08 步骤 9 与「停止和失败条件」；CONTRACTS §5、§6；TEST-MATRIX V-23～V-26、V-38、V-39、V-54 的 T-08 分项。
 
-验收：V-23～V-26、V-38、V-39、V-54 的 T-08 分项。
+范围（只新增或修改这些）：
+- 新增 examples/plugins/configdb/（含 plugin.yaml、i18n/、Config 与 versioned 迁移）
+- web/admin/fixtures/：加入由 configdb 的 Config 生成的 Schema fixture，并在 schema.test.ts 中追加对应用例
+- 新增 cmd/alonabot/t08_e2e_test.go（//go:build unix）
+- spec/TEST-MATRIX.md §3.2：追加 T-08 的证据行（本切片获授权修改这一处）
+- 上述包的测试文件
+允许的新跨模块边：无。
 
+接口：不新增公开 Go 符号。
+
+验收矩阵（各为一个子测试；PG 部分在 ALONABOT_TEST_PG_DSN 未设置时跳过并记为未运行）：
+1) 配置迁移：config_version 1 的旧配置只有经 OnLoad 才满足 2 的 Schema；先迁移再校验，结果写入候选快照。
+2) 显式空值：false、0、""、[]、{}、null（指针字段）全部保留；缺失键补默认值；未知键与嵌套未知键保留在快照中。
+3) secret：快照只有引用；Schema 移除 secret 字段但候选保留该键时仍为引用；日志中没有明文。
+4) DB：CRUD 与事务（tx 回调）；versioned 两步迁移；第二步失败时账本只有第一步、候选失败、Active 不变。
+5) 候选：reload 后 OnStart 写入候选库再失败：Discard，Active 的数据与配置不变，旧版重启正常；新旧进程没有同时写同一个库（runtime.lock 证明）。
+6) PG：首装到空 schema 执行迁移；已有数据且没有维护许可时 NEEDS_MANUAL_MIGRATION；resume 不重跑迁移。
+7) i18n：Context.T 的语言选择与回退；plugin check 拒绝缺少 en-US 与占位符不一致。
+8) 表单（web/admin 的 vitest，非 DOM）：configdb 的 Schema 字段顺序与声明一致；hidden 不进 patch；未修改的 secret 不进 patch；i18 标签回退。
+- 证据：TEST-MATRIX §3.2 追加 T-08 一行；需要 T-09 正式 reload、WebUI/API 与 Journal 崩溃恢复才能关闭的 V-23～V-25、V-38 场景单独列为「未闭合」，不标成通过。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/t08_e2e_test.go；web/admin 的 schema.test.ts 追加用例。
+- 本地自测（不提交，PR 中写明结果）：npm run build；示例的 plugin check。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；web/admin 下 npm run test 通过；node scripts/check-repository.mjs。
+
+不做：正式 reload 与管理入口（T-09）；Journal 与崩溃恢复（T-09.5～T-09.7）。
+```
 ### goal-38 · T-09.3 开发 CLI 与库模式脚手架
 
-状态：待编写。
+状态：等待前置（T-04.5、T-08.1、T-08.8、T-09.2、T-13.1）。语句中 goal-11、goal-28、goal-37、goal-53、goal-67 提供的符号（sdk/generate、packages 的 Preflight 与包格式、contracts/release、contracts/i18n、根包 Run）只写名字；合并后由审查者核对，再改为可派发。
 
-目标：开发 CLI：`plugin init/check/build/test/pack`；init 生成插件包与库模式调试用的 `main.go`，build 生成调用 `sdk.Run` 的正式入口
-前置：T-04.5、T-08.1、T-08.8、T-09.2、T-13.1。
+```text
+/goal 使用 $alonabot-execute 推进 goal-38（切片 T-09.3：开发 CLI 与库模式脚手架）。goal 目录 goal-38，分支 goal-38，worktree .worktrees/goal-38，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-09.3 行、§4 的 T-09 步骤 2（CLI）。
+目标：完成开发命令 alonabot plugin init|check|build|test|pack：init 生成插件骨架与库模式调试用的 main.go；check 验证 CONTRACTS §9.1 的静态契约；build 用生成器为根插件生成调用 sdk.Run 的正式入口并按目标 OS/arch 编译，产物不含 Core；test 在临时数据与离线测试会话中检查加载与注册；pack 生成 tar.gz 安装包与归档外的 release.json，并可用本地密钥对清单的确切字节签名。
 
-关键边界：plugin init 生成可运行的插件包和库模式调试 main.go；plugin build 生成调用 sdk.Run 的正式入口；CLI 各命令复用相同的 manifest 与构建校验。
+依据：PLAN T-09 步骤 2（CLI）；CONTRACTS §9.1～§9.3、§15.4；DECISIONS D-42、D-43；TEST-MATRIX V-01、V-41、V-54 的打包分项。
 
-验收：V-01、V-41、V-54 的打包分项。
+范围（只新增或修改这些）：
+- cmd/alonabot/：plugin 命令组增加 init、build、test、pack，check 补齐静态契约（新文件）
+- 新增 sdk/generate/entry.go（正式入口生成）
+- 新增 internal/pluginkit/（打包、release.json 生成与签名，供 cmd 使用）；packages 的包格式与 goal-37 一致
+- 上述包的测试文件
+允许的新跨模块边：cmd/alonabot -> internal/pluginkit；internal/pluginkit -> contracts/...、-> sdk/generate（ARCHITECTURE 已登记）。
 
+接口：
+- alonabot plugin init <dir> --id ID [--role plugin|adapter] [--adapter-id ID]：生成 plugin.yaml（manifest_version 1、version 0.1.0、source 为占位并提示修改）、带 sdk.Base 的根插件、一个示例命令、i18n/en-US.json、main.go（调用 alonabot.Run(alonabot.Plugin(...))，供库模式调试）与 .gitignore；目录非空时拒绝。
+- alonabot plugin check [--dir] [--goos] [--goarch] [--tags]：在 goal-11/goal-28/goal-53 的检查之外，核对 manifest（Parse 与 §9.1 的字段规则、role 与描述一致、migration_mode 与实际迁移接口一致、prepare_effects 已声明）、Schema 与 config_version、i18 文件；全部问题一次列出。
+- alonabot plugin build [--dir] --goos OS --goarch ARCH [--out DIR]：生成正式入口（临时目录中的 main 包，调用 sdk.Run 或 sdk.RunAdapter，引用根类型），用锁定的 Go Modules 编译（CGO_ENABLED=0，-trimpath），输出可执行文件；不链接根包 alonabot。
+- alonabot plugin test [--dir]：build 当前平台后，在临时 data_dir 中经 Core 的开发入口启动一次，完成握手、准备、注册与激活后停止，报告注册的路由；不连接任何真实平台，不读取生产凭证。
+- alonabot plugin pack [--dir] --goos OS --goarch ARCH [--key FILE] [--out DIR]：build 后打包 tar.gz（plugin.yaml、entrypoint、config.schema.json、i18n/、build-info），生成 release.json（id、version、source、os/arch、归档 SHA256 与长度、发布者公钥 ID）；给出 --key（Ed25519 私钥文件）时对 release.json 的确切字节签名生成 release.json.sig，否则只输出待签名的 release.json。私钥不进入包。
+internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包文档列出。
+
+行为：
+- build 与 pack 的产物对同一源码与工具链可重复（tar 中的文件按名称排序、时间戳固定、权限固定）。
+- pack 前自动运行 check；有问题时不打包。
+- 签名：release.json 的签名对象是文件的确切字节（与 contracts/release.Verify 一致）；pack 输出的包必须能通过 goal-37 的 packages.Preflight（以测试中注入的公钥为受信来源）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/plugin_cli_e2e_test.go（//go:build unix）：在临时目录 init 一个插件 → check 通过 → build 当前平台 → test 报告注册的命令 → pack 带测试密钥 → packages.Preflight 校验通过并 MoveTo 成功；改动 manifest 使 migration_mode 与实际不符时 check 失败；init 的 main.go 能以库模式编译；pack 两次的归档字节相同。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：五个目标平台的 build（交叉编译，只编译不运行）；Adapter 角色的 init 与 build；目录非空时 init 拒绝；没有 --key 时只输出 release.json。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./cmd/... ./sdk/... ./internal/...；go build ./...。
+
+不做：安装与管理（T-09.4）；市场与远程发布；发行归档（T-14.3）。
+```
 ### goal-55 · T-11.2 工具调用与用户确认
 
-状态：待编写。
+状态：等待前置（T-03.8、T-06.2、T-08.8、T-11.1）。语句中 goal-8、goal-20、goal-53、goal-54 提供的符号（buttons.Service、broker 的父链调用、internal/core/i18n、tool.Catalog）只写名字；合并后由审查者核对，再改为可派发。
 
-目标：工具调用与用户确认：`core.tool.invoke`、`core.tool.confirm`、Core 内部的确认记录与按钮、同一 Actor 与 5 分钟限时、确认文案
-前置：T-03.8、T-06.2、T-08.8、T-11.1。
+```text
+/goal 使用 $alonabot-execute 推进 goal-55（切片 T-11.2：工具调用与用户确认）。goal 目录 goal-55，分支 goal-55，worktree .worktrees/goal-55，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-11.2 行、§4 的 T-11 步骤 3、4。
+目标：core.tool.invoke 校验父调用链后按生效策略分支：deny 直接拒绝；confirm 先经用户确认；allow 或确认通过后经 Broker 以父调用链调用目标 Service，结果与错误原样返回。core.tool.confirm 只执行策略与确认。确认由 Core 直接经 Adapter 向默认 Target 发送带「允许」「拒绝」按钮的消息（不执行插件出站 Hook），只接受同一 Actor 在 TOOL_CONFIRM_TIMEOUT 内的第一次点击。
 
-关键边界：core.tool.invoke 与 core.tool.confirm 必须带 parent_call_id；没有可信 Actor 的调用遇 confirm 直接 PERMISSION_DENIED。确认消息由 Core 经 Adapter 直接发送，不执行插件出站 Hook；只接受同一 Actor 在 5 分钟内的第一次点击，不支持按钮时 UNSUPPORTED。
+依据：PLAN T-11 步骤 3、4；CONTRACTS §13.1、§13.2、§5.4；MESSAGE-MODEL §6.3；WIRE-FORMAT §3.5；TEST-MATRIX V-55。
 
-验收：V-55。
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/tool.proto：追加 ToolInvokeRequest/Response 与 ToolConfirmRequest/Response。随后 go generate ./...（本切片获授权只追加这些）
+- contracts/wirespec_test.go：追加编号检查
+- internal/wire/services.go：末尾追加 ServiceToolInvoke = "core.tool.invoke"、ServiceToolConfirm = "core.tool.confirm"
+- internal/core/tool/：新增 invoke.go、confirm.go
+- internal/core/buttons/：确认记录绑定的 token（与插件按钮共用表，增加确认类型）
+- internal/core/i18n/：en-US.json 与 zh-CN.json 增加确认消息的文案
+- sdk/：tool.go 增加 InvokeTool 与 ConfirmOperation
+- 上述包的测试文件
+允许的新跨模块边：无。
 
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. proto
+   message ToolInvokeRequest { string name = 1; string arguments_json = 2; } // name 为 "plugin_id/service_name"
+   message ToolInvokeResponse { string result_json = 1; }
+   message ToolConfirmRequest { string operation = 1; string summary = 2; } // 例如 operation "mcp/<server>/<tool>"
+   message ToolConfirmResponse {}
+2. sdk
+   func InvokeTool(ctx context.Context, name string, arguments json.RawMessage) (json.RawMessage, error) // 必须在 Handler 或其延续调用内调用
+   func ConfirmOperation(ctx context.Context, operation, summary string) error // nil 表示用户允许
+
+行为：
+- 两个服务都必须带 parent_call_id（指向本 Session 在途的 Core→插件调用），否则 FAILED_PRECONDITION。
+- invoke：
+  1) name 必须是 core.tool.list 对调用者可见的工具（访问规则通过、生效策略不是 deny），否则 deny → PERMISSION_DENIED、不可见 → NOT_FOUND。arguments_json 必须是 JSON 对象，并通过工具的 input schema（jsonschema-go Validate）；否则 INVALID_ARGUMENT。
+  2) 策略 confirm：执行确认（见下），拒绝或超时时返回相应错误，不调用工具。
+  3) 经 Broker 以父调用链调用目标 Service（父链、Actor 与 send_forbidden 继承，工具仍按继承的 Actor 检查 Service 访问规则），结果原样放进 result_json，错误原样返回。不重试。
+  每次调用都读取当前策略，修改在下一次调用时生效。
+- confirm：operation 非空、summary 不超过 1024 字节（命名常量）；直接执行确认，不调用任何工具。
+- 确认：
+  - 父调用链没有可信 Actor 或默认 Target → PERMISSION_DENIED，不发消息。
+  - 目标实例不支持 buttons → UNSUPPORTED，不改为文字确认。
+  - Core 创建确认记录（随机 ID、Actor、Target、父调用、到期时间）与两个绑定它的按钮 token（沿用按钮 token 的格式与表，类型为 confirm，不绑定插件路由），按 Actor locale 选择 Core 文案：工具名或操作名；invoke 展示实际的 arguments_json（缩进格式化，超过 2048 字节时截断并注明，命名常量），confirm 展示插件给出的 summary。消息直接经 adapter.Instance.Send 发往默认 Target，不执行出站 Hook；发送失败时返回该错误，不执行工具。
+  - 点击（button.clicked 解析到 confirm 类型的 token）：只接受该记录的 Actor 的第一次点击；其他用户的点击被拒绝（不影响结果，以 INFO 记录）；token 只能使用一次；「允许」使调用继续，「拒绝」返回 PERMISSION_DENIED。点击后 Core 把原消息编辑为结果文案（目标支持 message.edit 时；不支持时不编辑）。
+  - 超时（TOOL_CONFIRM_TIMEOUT）→ DEADLINE_EXCEEDED；父调用结束或 Session 失效 → 记录作废，token 失效。确认只对本次调用有效。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/supervisor/tool_invoke_test.go（//go:build unix）。沿用 goal-54 的工具服务与测试插件（收到消息时调用 InvokeTool 或 ConfirmOperation 并回复结果），memory Adapter 支持 buttons 与 Editor：
+  - allow 工具直接返回结果；deny 工具返回 PERMISSION_DENIED 且工具未执行。
+  - confirm 工具：memory 收到带两个按钮的确认消息，内容含实际 JSON 参数；同一用户点「允许」后工具执行并返回结果；另一用户先点击被拒、不影响结果；点「拒绝」返回 PERMISSION_DENIED 且工具未执行；超时（注入较短的 TOOL_CONFIRM_TIMEOUT）返回 DEADLINE_EXCEEDED。
+  - 确认消息没有经过插件的 BeforeSend Hook（测试插件注册了会改链的 BeforeSend，确认消息不受影响）。
+  - 没有 Actor 的调用（scheduled fixture）遇到 confirm 返回 PERMISSION_DENIED，没有发消息；不支持 buttons 的实例返回 UNSUPPORTED。
+  - arguments 不符合 input schema 时 INVALID_ARGUMENT。
+  - ConfirmOperation 展示 summary 而不是参数。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：参数截断；token 只能用一次；父调用结束时记录作废；zh-CN 文案；策略在两次调用之间修改。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/...；go build ./...。
+
+不做：Agent 的工具循环与 MCP（T-12.3）；「总是允许」（契约不提供）；管理页面的工具策略（T-09.9）。
+```
 ### goal-70 · T-13.4 库模式示例与验收
 
-状态：待编写。
+状态：等待前置（T-03.10、T-13.2、T-13.3）。语句中 goal-9、goal-67～goal-69 提供的符号与示例（根包 Run、Reload、examples/devbot、回环 Adapter）只写名字；合并后由审查者核对，再改为可派发。
 
-目标：库模式示例与开发文档，汇总证据
-前置：T-03.10、T-13.2、T-13.3。
+```text
+/goal 使用 $alonabot-execute 推进 goal-70（切片 T-13.4：库模式示例与验收）。goal 目录 goal-70，分支 goal-70，worktree .worktrees/goal-70，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-13.4 行、§4 的 T-13 步骤 5。
+目标：examples/devbot/ 用库模式运行 echo 插件与回环测试 Adapter，覆盖同进程运行、热部署与编译失败；docs/development.md 补充库模式与热部署的用法；在 TEST-MATRIX §3.2 记录 V-64、V-65 的证据。
 
-关键边界：示例与文档验证库模式和热部署的实际生命周期；真实平台或环境缺失的验收项标未运行。
+依据：PLAN T-13 步骤 5 与「停止和失败条件」；CONTRACTS §15.4；TEST-MATRIX V-64、V-65。
 
-验收：V-64、V-65。
+范围（只新增或修改这些）：
+- examples/devbot/：改为同时引用 examples/plugins/echo 的插件与示例内的回环 Adapter，提供 Reload 开关
+- docs/development.md：新增「库模式与热部署」一节（本切片获授权修改这一节）
+- 新增 t13_e2e_test.go（根包，//go:build unix）
+- spec/TEST-MATRIX.md §3.2：追加 T-13 的证据行（本切片获授权修改这一处）
+- 上述包的测试文件
+允许的新跨模块边：无。
 
-## 第 11 波
+验收矩阵（各为一个子测试）：
+1) 同进程：插件与 Adapter 的握手、注册、权限与独立进程一致（同一组命令的回复与 goal-14 的结果相同）；从 instances/ 读取实例配置。
+2) dev 代次固定，重启后旧按钮仍有效。
+3) dev 来源 update/rollback 被拒。
+4) 未捕获的 panic 使进程退出且不重启。
+5) 停止超时时 Run 返回错误。
+6) 已安装包（独立进程）与开发组件混合运行。
+7) 两次启动之间 config.json 与 dev.sqlite 的变化生效。
+8) 热部署：改动插件源码后只重启开发组件，Adapter 连接与其他插件不中断；编译失败时旧组件继续；go.mod 变化输出 WARN；其他 module 的组件不重启。
+- docs/development.md 的新节写明：Run 的选项、数据目录、实例目录、热部署的启用方式与限制（没有进程隔离、不能 update/rollback、Windows 未验证等），以及运行示例的命令（fish 与 bash 通用的写法）。
+- 证据：TEST-MATRIX §3.2 追加 T-13 一行，写明测试位置、命令、平台与结果；Windows 与 Linux 未运行的项写「未运行」。
 
+测试（按编码规范「测试提交规则」）：
+- 提交：t13_e2e_test.go（上述矩阵，复用 goal-67～goal-69 的测试方式）。
+- 本地自测（不提交，PR 中写明结果）：按文档中的命令手动运行一次示例并记录输出。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+
+不做：发行与预装（T-14）。
+```
 ### goal-40 · T-09.5 候选 Journal 与准备编排
 
 状态：待编写。
