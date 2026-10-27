@@ -22,6 +22,8 @@
 | 根包 `alonabot`（模块根目录的 Go 文件） | 库模式入口 `alonabot.Run`（D-32）与 `alonabot serve` 共用的 Core 装配 | 业务逻辑（只组装 `internal/core` 与 SDK） | 拟建 |
 | `plugins/agent/`、`plugins/memory/`、`plugins/help/`、`plugins/welcome/`、`plugins/rss/` | 官方 Agent 插件、官方记忆插件与预装插件（D-27、D-28、D-32），与第三方插件一样只经 SDK 与 Core 通信 | Core 的工具策略、确认与会话存储（归 Core） | 已实现：`plugins/agent/provider`（Provider 流式客户端）；其余拟建 |
 | `adapters/telegram/` | 官方 Telegram Adapter 程序：接收、标准化、发送计划、能力与平台映射（D-26） | Core 策略、命令路由、游标持久化与按钮 token（归 Core） | 拟建 |
+| `adapters/onebot11/` | 官方 OneBot 11 Adapter 程序：正向 WebSocket 连接、接收、标准化、发送计划、能力与平台映射，以及本地模拟服务（D-46） | Core 策略、命令路由与按钮 token（归 Core） | 拟建 |
+| `plugintest/` | 插件测试套件（D-47）：在 `go test` 中用 `alonabot.Start` 启动真实 Core、测试 Adapter 与被测插件，注入事件并取得发送 | Core 的检查与派发（照常由 Core 执行，不另建路径） | 拟建 |
 | `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） | 部分实现：开发用 `alonabot run`（单插件启停、有限重启）；尚无正式管理 CLI |
 | `examples/plugins/` | 随 SDK 编译的示例与集成样例 | 生产代码依赖 | 部分实现：`showcase`（签名组合示例）、`lifecycle`（可真实运行的生命周期示例） |
 | `web/admin/` | Vite + TypeScript + React 19 管理界面 | 管理逻辑本身（调用 Core 管理 API） | 拟建 |
@@ -47,9 +49,10 @@
 | `examples/plugins/... -> sdk/...`、`-> contracts` | 示例只走公共 SDK |
 | `scripts/dist -> contracts/release`、`scripts/release-check -> contracts/release` | 发行构建与发布复验只用契约包核对签名；其余步骤经 `os/exec` 调用 go 与 alonabot |
 | `examples/devbot -> 根包`、`-> sdk/...` | 库模式示例 |
+| `plugintest -> 根包`、`-> sdk/...`、`-> internal/inproc`、`-> contracts`；`examples/plugins/... -> plugintest`（仅测试代码） | 套件经根包的 `Start` 装配 Core，经 `internal/inproc` 接收分发结束通知；示例插件的测试使用套件 |
 | `plugins/... -> sdk/...`、`-> contracts` | 官方插件只走公共 SDK；Agent 插件另用已批准的 MCP go-sdk |
 
-明确禁止（重点）：`internal/oslock`、`internal/tune` 与 `internal/inproc` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | adapters | plugins | cmd`；`internal/core -> sdk | adapters | plugins | cmd`；`adapters -> internal/core`；`plugins -> internal/core | adapters | cmd`；`internal/core | sdk | adapters | plugins -> 根包`；任何包 `-> examples`。依赖图不允许环。
+明确禁止（重点）：`internal/oslock`、`internal/tune` 与 `internal/inproc` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | adapters | plugins | cmd`；`internal/core -> sdk | adapters | plugins | cmd`；`adapters -> internal/core`；`plugins -> internal/core | adapters | cmd`；`internal/core | sdk | adapters | plugins -> 根包`；`internal/core | sdk | adapters | 根包 -> plugintest`，以及非测试代码 `-> plugintest`；任何包 `-> examples`。依赖图不允许环。
 
 ## 状态归属
 

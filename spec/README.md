@@ -10,12 +10,12 @@
 
 | 文件 | 执行时的用途 |
 | --- | --- |
-| [PLAN.md](PLAN.md) | 唯一详细实施计划，T-01～T-14 工作包、执行切片与交付次序 |
+| [PLAN.md](PLAN.md) | 唯一详细实施计划，T-01～T-16 工作包、执行切片与交付次序 |
 | [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md) | API、权限、生命周期、配置、数据与安装的精确行为 |
 | [WIRE-FORMAT.md](WIRE-FORMAT.md) | Protobuf 字段、枚举、控制帧、Bootstrap 与载荷定义 |
 | [MESSAGE-MODEL.md](MESSAGE-MODEL.md) | Event/Target/Chain、发送回执、媒体和 Telegram 映射 |
 | [DESIGN.md](DESIGN.md) | Core/SDK/Adapter 职责、模块关系与生命周期说明 |
-| [TEST-MATRIX.md](TEST-MATRIX.md) | V-01～V-70 的场景、通过条件、阶段分工与证据要求 |
+| [TEST-MATRIX.md](TEST-MATRIX.md) | V-01～V-73 的场景、通过条件、阶段分工与证据要求 |
 
 ## 决策与历史依据
 
