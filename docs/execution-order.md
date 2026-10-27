@@ -48,7 +48,7 @@
 | `internal/core/router` 的固定服务 mux | 新的 Core 固定服务在各自包里实现，只在装配处注册一行；服务名常量追加在 `internal/wire/services.go`。 |
 | `sdk/sdk.go`、`sdk/activate.go`、`sdk/session.go` | 新功能优先放进新文件，只在这几个文件里加必要的调用点；不重排、不顺手重写已有代码。 |
 | `cmd/alonabot/main.go` | 只有 goal 语句写明负责装配的切片才能改。 |
-| `go.mod`、`go.sum` | 不加依赖。需要依赖时标阻塞，由维护者决定。goal 语句明确授权的已批准依赖除外（MCP go-sdk 只授权给 goal-60）。 |
+| `go.mod`、`go.sum` | 不加依赖。需要依赖时标阻塞，由维护者决定。goal 语句明确授权的已批准依赖除外（MCP go-sdk 只授权给 goal-60；cobra 由 goal-76 引入，之后的 CLI 切片直接使用，不再改 go.mod）。 |
 | 日志 | T-02.1 合并后，一律使用注入的 `*slog.Logger` 与 CONTRACTS §14 的字段；不另建日志封装，不用 fmt 直接写 stderr/stdout（CLI 给用户的输出除外）。 |
 | `internal/tune/params.go` | 只追加参数，不改已合并参数的名称与缺省值；新增参数同时追加到 CONTRACTS §16 的表，由审查者在合并前同步。 |
 | 根包 `alonabot` 的 Core 装配 | 只有 goal 语句写明负责装配的切片才能改，与 `cmd/alonabot/main.go` 相同。 |

@@ -15,7 +15,7 @@
 
 已锁定并经测试验证的版本：protobuf v1.36.12、go.yaml.in/yaml/v3 v3.0.5、gorm v1.31.2、libtnb/sqlite v1.2.2、modernc.org/sqlite v1.61.0（已验证 CRUD/Tx/WAL Backup/迁移账本）、gorm.io/driver/postgres v1.6.3（pgx v5.10.0；已在 postgres:17 容器上验证；golang.org/x/sys v0.49.0 为直接依赖，用于 internal/oslock 的 flock/LockFileEx）。
 
-已批准的 Go 依赖（2026-10-21）：`google.golang.org/protobuf`、`gorm.io/gorm`、`github.com/libtnb/sqlite`、`modernc.org/sqlite`、`gorm.io/driver/postgres`、`golang.org/x/sys`、`go.yaml.in/yaml/v3`；2026-10-25 批准 `github.com/modelcontextprotocol/go-sdk`，只用于官方 Agent 插件的 MCP 客户端，版本在 T-12.3 验证后锁定。前端已批准：Vite、TypeScript、React 19、vitest。新增清单外依赖需要先征得维护者同意。
+已批准的 Go 依赖（2026-10-21）：`google.golang.org/protobuf`、`gorm.io/gorm`、`github.com/libtnb/sqlite`、`modernc.org/sqlite`、`gorm.io/driver/postgres`、`golang.org/x/sys`、`go.yaml.in/yaml/v3`；2026-10-25 批准 `github.com/modelcontextprotocol/go-sdk`，只用于官方 Agent 插件的 MCP 客户端，版本在 T-12.3 验证后锁定；2026-10-26 批准 `github.com/spf13/cobra`（随之引入 `github.com/spf13/pflag`），只用于 `cmd/alonabot` 的命令树与全局参数，版本在 T-02.2 引入时锁定。前端已批准：Vite、TypeScript、React 19、vitest。新增清单外依赖需要先征得维护者同意。
 
 ## 日常命令（仓库根目录）
 
