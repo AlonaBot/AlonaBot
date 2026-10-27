@@ -46,7 +46,7 @@ PR 按 [模板](.github/PULL_REQUEST_TEMPLATE.md) 写清变更原因、实际命
 ## GitHub 自动化的范围
 
 - Issue 表单将问题指派给维护者；PR 自动指派维护者、同步路径标签，非维护者提交的非草稿 PR 自动请求审阅。
-- `Quality gate` 校验仓库文档入口，并在存在产品 Go 源码时执行格式、生成一致性、vet、race 测试、临时 PostgreSQL 验证和五平台构建。具体触发与命令以 [工作流](.github/workflows/ci.yml) 为准。
+- `Quality gate` 校验仓库文档入口，并在存在产品 Go 源码时执行格式、生成一致性、vet、依赖允许清单检查、race 测试和五平台构建。具体触发与命令以 [工作流](.github/workflows/ci.yml) 为准。
 - `PR metadata` 检查非草稿 PR 的说明段落及必填确认项；这些声明仍需要人工审查，不代表自动证明了代码质量。
 - 带写权限的 triage 只操作 GitHub 元数据，不 checkout 或执行 PR 代码；代码验证使用只读权限且不接触生产 secret。
 - 工作流文件不等于已启用合并保护；维护者确认远端保护配置后才可称为强制合并门禁。

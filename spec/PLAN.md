@@ -8,7 +8,7 @@
 
 ## 1. 最终交付
 
-交付一个 Go Core、Go 插件与 Adapter SDK、可安装的官方 Telegram Adapter 包、官方 Agent 插件与官方记忆插件，以及管理 CLI/WebUI。用户下载发行包即可开箱即用；开发者可以在自己的 `main.go` 中把框架当作 Go 库运行，并在改动源码后热部署。用户能够安装预构建的插件与 Adapter，配置并启用它，在指定聊天/话题执行命令、发送消息和媒体、进行多轮对话，使用 Service、Event Bus、Scheduler、插件 HTTP 与 SQLite/PostgreSQL；能够与 Agent 对话，Agent 调用工具前按策略取得用户确认；管理动作能够按确定的代次和维护规则更新、停止及恢复。机器人回复与 WebUI 提供英文和简体中文。
+交付一个 Go Core、Go 插件与 Adapter SDK、可安装的官方 Telegram Adapter 包、官方 Agent 插件与官方记忆插件，以及管理 CLI/WebUI。用户下载发行包即可开箱即用；开发者可以在自己的 `main.go` 中把框架当作 Go 库运行，并在改动源码后热部署。用户能够安装预构建的插件与 Adapter，配置并启用它，在指定聊天/话题执行命令、发送消息和媒体、进行多轮对话，使用 Service、Event Bus、Scheduler、插件 HTTP 与受管 SQLite；能够与 Agent 对话，Agent 调用工具前按策略取得用户确认；管理动作能够按确定的代次和维护规则更新、停止及恢复。机器人回复与 WebUI 提供英文和简体中文。
 
 首发目标为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64。每插件一个 Native 子进程，每个 Adapter 包一个 Native 子进程（承载其全部实例），TCP 默认、stdio 可选；框架托管 HTTP 只开放 Core 的一个公开端口。动态跨插件命令 Router、其他官方 Adapter、多语言 SDK、持久化的多轮会话状态与暂停 DSL、跨会话的记忆检索和额外客户端后置。
 
@@ -20,7 +20,7 @@
 | --- | --- | --- |
 | `go.mod`、`go.sum` | 实际模块路径、Go 与依赖版本 | T-01 |
 | `contracts/` | Protobuf 源文件、生成类型、消息/配置/manifest Schema 和兼容 fixture | T-01 |
-| `sdk/` | Native 会话、Context/Send、注册、生命周期、媒体与按需 GORM 包；Adapter SDK（`sdk/adapter`）；记忆服务契约（`sdk/memory`） | T-01 给出类型，T-02～T-08 逐步实现 |
+| `sdk/` | Native 会话、Context/Send、注册、生命周期、媒体与按需数据库包（`sdk/sqlitedb`、`sdk/gormdb`）；Adapter SDK（`sdk/adapter`）；记忆服务契约（`sdk/memory`）与文本生成服务契约（`sdk/llm`） | T-01 给出类型，T-02～T-08 逐步实现 |
 | `internal/core/` | 状态、进程、RPC、路由、权限、服务、调度、HTTP 与管理编排 | T-02 起 |
 | `adapters/telegram/` | 官方 Telegram Adapter 程序：接收、发送、能力和平台映射 | T-03 |
 | `plugins/agent/`、`plugins/memory/` | 官方 Agent 插件与官方记忆插件 | T-12 |
@@ -41,7 +41,7 @@ go test ./...
 go build ./...
 ```
 
-Telegram、PG、LLM Provider、浏览器和目标平台的测试单独记录环境与命令；缺少真实环境时不能用普通测试结果替代。每个任务先验证直接变更及其边界，再做工作包要求的集成检查。
+Telegram、LLM Provider、浏览器和目标平台的测试单独记录环境与命令；缺少真实环境时不能用普通测试结果替代。Core 可执行文件与 SDK 根包链接的模块由 `node scripts/check-go-deps.mjs` 对照允许清单检查（V-75，CI 的 Go job 执行）。每个任务先验证直接变更及其边界，再做工作包要求的集成检查。
 
 ## 3. 任务依赖与交付次序
 
@@ -150,7 +150,7 @@ flowchart TD
 | T-08.2 | goal-29 | 配置 JSON 语义与 Pending：原始对象保留、完整替换、Merge Patch、编辑快照导入、base_generation | T-08 步骤 2 | T-02 | V-23、V-38 | 已完成（TEST-MATRIX §3.2） |
 | T-08.3 | goal-30 | SDK 配置准备顺序：OnLoad→补缺键默认→typed decode/Schema | T-08 步骤 3 | T-08.1、T-08.2 | V-37、V-21 的配置分项 | 未开始 |
 | T-08.4 | goal-31 | 不可变 Secret Store：引用、解引用、重新抽取、脱敏读取、受保护清理 | T-08 步骤 4 | T-08.1、T-08.2 | V-25 | 未开始 |
-| T-08.5 | goal-32 | `gormdb.Open` 连接生命周期、迁移互斥与 versioned 迁移、PG 门槛与维护许可 | T-08 步骤 5、6 | T-08.3 | V-26、V-39；PG 需要测试实例 | 未开始 |
+| T-08.5 | goal-32 | `sqlitedb.Open` 与 `gormdb.Open` 的连接生命周期、迁移互斥与 versioned 迁移、external 插件的维护许可 | T-08 步骤 5、6 | T-08.3 | V-26、V-39 | 未开始 |
 | T-08.6 | goal-33 | SQLite 候选复制与资源交接，写出给 T-09 的调用约定 | T-08 步骤 7 | T-08.4、T-08.5 | V-24、V-36 的候选分项 | 未开始 |
 | T-08.7 | goal-34 | `web/admin` 前端骨架，配置表单与 i18 组件及 fixture，界面文案的 en-US/zh-CN 目录与语言切换 | T-08 步骤 9（前端） | T-08.1 | V-25 的表单分项、V-54 的界面组件分项 | 未开始 |
 | T-08.8 | goal-53 | 用户可见文案目录：插件 `i18/` 的 `messages`、SDK 的 `T`、Core 的 en-US/zh-CN 文案目录（usage 等）、check 的键与占位符检查 | T-08 步骤 8 | T-04.1、T-04.3、T-08.1 | V-54 的 SDK 与 Core 分项 | 未开始 |
@@ -168,7 +168,7 @@ flowchart TD
 | T-09.11 | goal-45 | 正式流程的故障注入，回填 T-08 待联验项，汇总证据 | T-09 步骤 8 | T-09.3、T-09.7、T-09.9、T-09.10 | V-23～V-25、V-27～V-31、V-39、V-40、V-52、V-54～V-56、V-62、V-63 | 未开始 |
 | T-10.1 | goal-46 | V-01～V-73 证据汇总与跨组件联验 | T-10 步骤 1～4 | T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6、T-15.3、T-16.2 | 全部；真实 Telegram 与 LLM Provider 需要测试凭证 | 未开始 |
 | T-10.2 | goal-47 | 五个目标组合的构建与运行、100 次启停 | T-10 步骤 5 | T-10.1 | V-32、V-34；需要真实目标平台 | 未开始 |
-| T-10.3 | goal-48 | 资源比较报告 | T-10 步骤 6 | T-10.1 | V-33；需要固定机器与等价负载 | 未开始 |
+| T-10.3 | goal-48 | 资源比较报告与常驻内存预算核对 | T-10 步骤 6 | T-10.1 | V-33、V-74；需要固定机器与等价负载 | 未开始 |
 | T-10.4 | goal-49 | 发布资产、签名与发布说明 | T-10 步骤 7、8 | T-10.2、T-10.3 | V-28、V-41 的发布复验 | 未开始 |
 | T-11.1 | goal-54 | 工具描述与目录：Service 描述的 `tool` 字段、注册校验、`core.tool.list`、调用策略的持久化与管理服务层 | T-11 步骤 1、2 | T-04.4、T-06.1 | V-55 的目录与策略分项 | 未开始 |
 | T-11.2 | goal-55 | 工具调用与用户确认：`core.tool.invoke`、`core.tool.confirm`、Core 内部的确认记录与按钮、同一 Actor 与 5 分钟限时、确认文案 | T-11 步骤 3、4 | T-03.8、T-06.2、T-08.8、T-11.1 | V-55 | 未开始 |
@@ -180,7 +180,8 @@ flowchart TD
 | T-12.4 | goal-61 | 记忆：`sdk/memory` 服务契约、`plugins/memory/` 官方记忆插件、Agent 的记忆接入 | T-12 步骤 5 | T-08.5、T-11.2、T-12.2 | V-59 | 未开始 |
 | T-12.5 | goal-62 | 技能：技能目录、`SKILL.md` 解析、`load_skill` | T-12 步骤 6 | T-12.3 | V-60 | 未开始 |
 | T-12.6 | goal-63 | 定时 Agent 任务：任务工具、任务表、分钟级固定 schedule、后台运行 | T-12 步骤 7 | T-07.2、T-08.5、T-12.3 | V-61 | 未开始 |
-| T-12.7 | goal-64 | 两个官方插件的打包与多进程验收，汇总证据 | T-12 步骤 8 | T-12.4、T-12.5、T-12.6 | V-57～V-61 | 未开始 |
+| T-12.7 | goal-64 | 两个官方插件的打包与多进程验收，汇总证据 | T-12 步骤 8 | T-12.4、T-12.5、T-12.6、T-12.8 | V-57～V-61、V-76 | 未开始 |
+| T-12.8 | goal-83 | 文本生成服务：`sdk/llm` 的类型、Schema 与调用辅助，Agent 插件的 `llm.generate` 与调用方许可 | T-12 步骤 9 | T-06.1、T-12.2 | V-76 | 未开始 |
 | T-13.1 | goal-67 | 库模式入口：根包 `alonabot.Run`、`alonabot.Start` 与选项、与 `serve` 共用的 Core 装配、开发组件同进程经 loopback 连接、生成代码中嵌入的组件身份、dev 来源与固定代次 | T-13 步骤 1、2 | T-02.1、T-03.3、T-04.2 | V-64 的生命周期分项 | 未开始 |
 | T-13.2 | goal-68 | 开发组件的配置与数据库：`config.json` 直读与准备、`dev.sqlite`、拒绝 update/rollback | T-13 步骤 3 | T-08.3、T-08.5、T-13.1 | V-64 | 未开始 |
 | T-13.3 | goal-69 | 热部署：`Reload` 选项与 `ALONABOT_RELOAD`、源码轮询、重新编译、开发组件改为子进程并重启 | T-13 步骤 4 | T-13.1 | V-65 | 未开始 |
@@ -228,7 +229,7 @@ flowchart TD
 
 #### 停止和失败条件
 
-契约能编译、示例签名成立、生成稳定、默认数据库组合的关键事务/备份路径通过，才向 T-02 交付。字段无法表达、驱动无法满足候选复制或目标构建失败时，先定位并修正该具体缺口。若 PG 测试环境尚不可用，可推进已通过的 IPC 工作，但 PG 分支和发布验收保持未完成，不能用 SQLite 结果替代。
+契约能编译、示例签名成立、生成稳定、默认数据库组合的关键事务/备份路径通过，才向 T-02 交付。字段无法表达、驱动无法满足候选复制或目标构建失败时，先定位并修正该具体缺口。若 PG 测试环境尚不可用，可推进已通过的 IPC 工作，但 PG 分支和发布验收保持未完成，不能用 SQLite 结果替代。2026-10-27 起框架不再托管 PostgreSQL（D-48），本任务中的 PG 验证只作为当时的记录保留。
 
 ### T-02：Core 状态、Native 进程、双 IPC 与基础生命周期
 
@@ -562,10 +563,10 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 
 | 前置输入 | 开始本任务前须能取得的成果 |
 | --- | --- |
-| T-01 契约与依赖验证 | 可编译的 Bootstrap/REGISTER 类型、Config Schema 与 manifest 描述；锁定版本的 GORM、SQLite/Backup API、PG 驱动；真实 CRUD/事务/备份小验证。 |
+| T-01 契约与依赖验证 | 可编译的 Bootstrap/REGISTER 类型、Config Schema 与 manifest 描述；锁定版本的 GORM、SQLite/Backup API；真实 CRUD/事务/备份小验证。 |
 | T-02 基础运行时 | Core 状态库存取、Generation/Session 标识、逐插件操作锁、`core.lock`/`runtime.lock`、阶段预算与准备期业务门禁；可在临时数据目录启动测试插件并观察失败结果。 |
 | T-04 SDK/生成器 | 单 root/至多单 Config 的发现与注册、构建期类型检查、可扩展的配置字段描述；不重复制作第二套扫描器。 |
-| 现行规格 | CONTRACTS §5/§6/§12、WIRE Bootstrap 与 REGISTER、TEST-MATRIX V-23～V-26/V-38/V-39/V-54；迁移接口、JSON 语义、默认驱动和 PG 维护分支均沿用原契约。 |
+| 现行规格 | CONTRACTS §5/§6/§12、WIRE Bootstrap 与 REGISTER、TEST-MATRIX V-23～V-26/V-38/V-39/V-54；迁移接口（`sqlitedb` 与 `gormdb` 两组）、JSON 语义、默认驱动与 external 插件的维护分支以现行契约为准。 |
 
 **本任务交付候选准备能力，不提前实现 T-09 的正式 Journal 和 Active 提交编排。** T-02 只有基础代次/会话原语，不能据此宣称已经完成升级恢复。T-08 对外提供 Pending 导入、候选配置/DB 准备、资源引用与清理能力；T-09 决定何时停止旧版、创建正式操作记录、提交 Active、恢复和回收。测试驱动可以调用这些能力，但不能成为第二套生产激活入口。
 
@@ -575,21 +576,21 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 2. **实现完整 JSON 与 Pending 编辑能力。** 以原始对象保留嵌套未知键，区分缺失键与显式 `false/0/空串/空集合/null`；实现完整替换、RFC 7396 Merge Patch 和编辑快照导入。提交检查 `base_generation`，旧基线拒绝；直接编辑 `config.json` 不更改 Active。提供供 T-09 管理服务调用的应用层入口和结构化错误，不在此阶段开放未经认证的独立 HTTP 写接口。
 3. **接入 SDK 配置准备顺序。** 使用 T-02 的私有 Bootstrap，按 `OnLoad(raw, fromVersion)` → 仅补缺键默认 → typed decode/Schema 校验处理，再进入该启动原因允许的 DB 准备。完整规范 JSON 随 REGISTER 回传，禁止用 typed marshal 替换原始文档；新 Schema 检查必须在 OnLoad 之后。普通 restart 重验原 Active，相同配置版本的 OnLoad 若改变运行配置则失败；所有阶段错误、超限及超时走既有控制错误，准备期不能发普通业务 RPC。
 4. **实现不可变 Secret Store。** 新 secret 值生成新引用，Core 在所属 Session Bootstrap 前解引用，在 REGISTER 后按新 Schema 和保留的旧 secret 路径重新抽取；SDK 不计算持久化引用摘要。检查引用归属，管理读取返回引用/设置状态，掩码不成为保存值；日志、错误和普通响应不含明文 JSON、DSN 或 secret。实现运行账号权限/Windows ACL 与按引用清理能力；清理必须保护 Active、Pending、保留代次及恢复中操作引用，正式 Journal 引用由 T-09 接入。
-5. **实现原生 GORM 与连接生命周期。** `gormdb.Open(ctx)` 按 Session 固定后端并复用连接池，SDK 停止时关闭；插件不可取得 Core 状态库连接。按契约应用并核对 SQLite WAL/FULL/外键/5s busy timeout 与默认单连接，事务回调使用传入的 tx；PG 只接收管理员预置的插件 role/schema 凭证并校验指定 schema/search_path。连接、权限或数据损坏时返回错误，不能创建空库或自动换后端掩盖问题。
-6. **实现两种互斥迁移与 PG 门槛。** SDK 检查 `Migrate`/`Migrations` 互斥；versioned 模式校验非零、唯一、递增 ID，每步 Up 与 `_alonabot_migrations` 完成记录使用插件 DB 的同一事务，失败不记成功。PG `resume` 只核对已提交代次及账本/身份，不重新执行 Migrate/Up；首次空 schema、无待迁移且无副作用的自动候选、显式维护按各自分支执行。维护许可须匹配 Core 下发的本次 Session/Generation/DB；事务不支持的 SQL 不得偷偷转为事务外执行。
+5. **实现受管 SQLite 的两个入口与连接生命周期。** 新建 `sdk/sqlitedb`：`sqlitedb.Open(ctx)` 按 Session 的 DB 描述打开受管 SQLite，同一 Session 复用同一个连接，SDK 停止时关闭；现有 `gormdb.OpenSQLite` 的连接设置与回读核对移入此包，按契约应用 WAL/FULL/外键/5s busy timeout 与单连接。`gormdb.Open(ctx)` 经 libtnb 的 `Conn` 包装同一个 `*sql.DB`，不另开连接。插件不可取得 Core 状态库连接，事务回调使用传入的 tx。连接或数据损坏时返回错误，不能创建空库掩盖问题。只导入 `sqlitedb` 的插件不链接 GORM，用 `go list -deps` 验证。
+6. **实现两组互斥迁移与维护门槛。** `sqlitedb` 与 `gormdb` 各定义 SelfMigrator 与 VersionedMigrator，被导入时向 SDK 登记识别方式，SDK 本身不 import GORM；根插件最多实现一个迁移接口。versioned 模式校验非零、唯一、递增 ID，每步 Up 与 `_alonabot_migrations` 完成记录使用插件 DB 的同一事务，失败不记成功，两个包共用同一账本格式。`prepare_effects=external` 的插件在已有安装的候选上没有维护许可时返回 NEEDS_MANUAL_MIGRATION；维护许可须匹配 Core 下发的本次 Session/Generation/DB；事务不支持的 SQL 不得偷偷转为事务外执行。
 7. **形成可交接的候选资源结果。** 在已持逐插件操作锁、旧写入者退出且 Core 可取得 runtime.lock 的前提下，使用 Backup API 创建独立 SQLite 候选；首次安装创建空候选，reload/update 同样复制，普通 resume 复用 Active。复制完成后 Core 释放临时 runtime.lock，再由 SDK 取锁打开候选，避免互相等待。将准备好的程序/配置/secret/DB 引用、配置摘要、迁移完成状态与本次身份交给 T-09；本任务不写 Active 指针或伪造 COMMITTED。失败清理只处理未受保护的候选资源。
 8. **实现用户可见文案目录。** 在 T-04 生成器与 `plugin check` 中检查 `i18/*.json` 的 `messages`：en-US 必须存在且包含全部键，其他语言不得有 en-US 没有的键，同一键的占位符集合一致。SDK 提供 `T(key, args)`，按 Actor locale → Core 默认 locale → en-US 选择语言，主语言回落按 CONTRACTS §5.4；未知键与缺少参数返回错误。Core 内置 en-US 与 zh-CN 的用户可见文案目录，命令 usage 改为经该目录生成；Core 默认 locale 是一项全局设置。
-9. **完成示例与分层验证。** 在临时 data_dir 和独立测试 PG schema 上，运行配置迁移、显式空值、未知 secret、CRUD/事务、迁移失败以及候选 OnStart 写 DB 后失败的案例。为自动表单提供字段顺序、hidden、i18 回退、掩码和 PATCH 的组件/fixture 验证，并建立 WebUI 文案的 en-US/zh-CN 目录与语言切换组件；真实管理页面在 T-09 接入。记录可独立通过的组件证据，以及仍需 T-09 正式管理入口和 Journal 才能关闭的场景，不把后者标成已通过。
+9. **完成示例与分层验证。** 在临时 data_dir 上分别用 `sqlitedb` 与 `gormdb`，运行配置迁移、显式空值、未知 secret、CRUD/事务、迁移失败以及候选 OnStart 写 DB 后失败的案例。为自动表单提供字段顺序、hidden、i18 回退、掩码和 PATCH 的组件/fixture 验证，并建立 WebUI 文案的 en-US/zh-CN 目录与语言切换组件；真实管理页面在 T-09 接入。记录可独立通过的组件证据，以及仍需 T-09 正式管理入口和 Journal 才能关闭的场景，不把后者标成已通过。
 
 #### 拟目录与交付
 
 | 实施拟建或扩展路径 | 本任务职责 |
 | --- | --- |
 | `contracts/`、`sdk/config/` | 复用 T-01 描述，配置回调、默认值、原始对象保留、类型校验及对应测试。 |
-| `sdk/gormdb/` | Session 连接池、原生 GORM 入口、迁移执行器、后端集成测试。 |
+| `sdk/sqlitedb/`、`sdk/gormdb/` | 受管 SQLite 的 Session 连接、`database/sql` 与 GORM 两个入口、两组迁移接口与执行器、集成测试。 |
 | `internal/core/config/`、`internal/core/secrets/` | Pending/候选配置、引用归属、不可变 secret、脱敏读取与受保护引用清理。 |
 | `sdk/`、`internal/core/i18n/` | SDK 的 `T` 与 `messages` 加载；Core 的 en-US/zh-CN 用户可见文案目录与默认 locale。 |
-| `internal/core/storage/` | 受管 DB 描述、SQLite Backup/候选文件准备、PG 准入检查；复用 T-02 状态/锁原语，不另建状态库。 |
+| `internal/core/storage/` | 受管 DB 描述、SQLite Backup/候选文件准备、external 插件的维护准入；复用 T-02 状态/锁原语，不另建状态库。 |
 | `web/admin/` | 配置 Schema 消费、表单/i18 组件和 fixture；正式登录及管理 API 绑定属于 T-09。 |
 | `examples/plugins/configdb/` | 使用真实 SDK 的配置与数据库示例；失败点由测试夹具控制，测试数据不使用生产凭证。 |
 
@@ -602,13 +603,13 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 | V-23、V-38 | 原始/未知键保留，空值/默认/Merge Patch 正确，陈旧基线拒绝，restart 不改 Active。 | 真实 `plugin reload` 与 WebUI 提交链路在 T-09 复验。 |
 | V-24 | 独立候选 DB 中 OnStart 写入后失败，旧 DB/配置/secret 不变；锁阻止同时写入。 | Core 在正式候选流程中被 kill 后的权威代次选择，在 T-09 结合 V-30 完成，T-08 不提前关闭整项。 |
 | V-25 | 新旧 secret 引用分离、未知 secret 仍保密、hidden/i18/掩码与 PATCH fixture 正确。 | 真实页面、再认证与管理响应在 T-09 复验。 |
-| V-26、V-39 | 两后端 CRUD/Tx，接口互斥，Up+账本同事务，PG 首装/resume/维护许可有效性。 | T-09 补自动更新及显式维护的真实入口验证。 |
+| V-26、V-39 | 两个入口的 CRUD/Tx 共用连接，迁移接口互斥，Up+账本同事务，external 插件维护许可的有效性。 | T-09 补自动更新及显式维护的真实入口验证。 |
 | V-21、V-37 的配置/迁移分支 | 使用 T-02 会话验证阶段错误/超限/超时无半注册、无准备期业务请求。 | T-09 验证与正式提交前后恢复门槛组合。 |
 | V-54 | 文案选择顺序与主语言回落、check 的键与占位符检查、Core usage 文案、WebUI 文案组件。 | 真实页面的语言切换在 T-09 复验。 |
 
-建立上述包后，后端验证入口至少包括 `go test ./sdk/... ./internal/core/config/... ./internal/core/secrets/... ./internal/core/storage/...`；PG 使用专属测试角色/schema，按 T-01 已落地的环境方式提供连接。前端使用实际建立的组件测试入口，记录准确命令。所有结果按 TEST-MATRIX 记录代码位置、命令、版本、环境和日志；尚无环境时明确保持未运行。
+建立上述包后，后端验证入口至少包括 `go test ./sdk/... ./internal/core/config/... ./internal/core/secrets/... ./internal/core/storage/...`。前端使用实际建立的组件测试入口，记录准确命令。所有结果按 TEST-MATRIX 记录代码位置、命令、版本、环境和日志；尚无环境时明确保持未运行。
 
-出现候选污染旧数据、未知键/显式值丢失、secret 越权/明文泄漏、迁移成功记录与实际事务不一致、PG 未许可写生产数据、无法验证驱动/备份正确性时，停止向 T-09 交付并修复对应实现。缺少 T-02 锁/会话原语时先回补 T-02，不在本任务用睡眠、PID 猜测、复制 WAL 主文件或临时直写 Active 绕过依赖。
+出现候选污染旧数据、未知键/显式值丢失、secret 越权/明文泄漏、迁移成功记录与实际事务不一致、external 插件未经许可就准备候选、无法验证驱动/备份正确性时，停止向 T-09 交付并修复对应实现。缺少 T-02 锁/会话原语时先回补 T-02，不在本任务用睡眠、PID 猜测、复制 WAL 主文件或临时直写 Active 绕过依赖。
 
 ### T-09：安装分发、正式激活恢复与管理入口
 
@@ -621,7 +622,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 | T-01/T-04 构建契约 | manifest/Schema/注册描述解析器、生成器、构建输入约束和已锁定工具链；运行期显式注册的完整校验仍在 REGISTER。 |
 | T-02/T-06 基础运行时 | 会话/阶段原语、状态库、锁、普通请求与 Service/Bus 的停止准入接口；不在 Journal 事务中等待 IPC。 |
 | T-07 HTTP/调度 | 当前 Session 代理与任务门禁、Core 授权检查接口、票据/插件会话和拒绝路径。T-07 可用测试会话验组件，但生产没有有效管理会话必须拒绝。 |
-| T-08 候选能力 | Pending/配置准备、不可变 secret 引用、受管 SQLite 副本、GORM/迁移与 PG 准入、候选结果和清理所有权。 |
+| T-08 候选能力 | Pending/配置准备、不可变 secret 引用、受管 SQLite 副本、两个数据库入口/迁移与 external 维护准入、候选结果和清理所有权。 |
 | T-11 Agent 基础 | 工具调用策略与 Agent 会话的管理服务层。 |
 | 现行规格 | CONTRACTS §7.3/§7.4/§9/§12 与 TEST-MATRIX V-27～V-31/V-40/V-41/V-47；首次管理凭证与真实登录由本任务落地。 |
 
@@ -630,11 +631,11 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 1. **落地首次管理认证与真实入口。** 实现 `admin-token init/reset` 的离线 core.lock 检查、32-byte token 一次终端输出、仅存 SHA256 和认证代次；reset 撤销旧管理会话及派生票据/插件会话。实现 admin host 的 POST login、Origin/登录 CSRF、恒时摘要比较、8h 会话、登出撤销与 token 再认证查看 secret；CLI 使用显式 Bearer token。接 T-07 的授权检查，未初始化或无有效认证时拒绝管理访问；纯 loopback 开发与非 loopback HTTPS 边界沿用契约。
 2. **实现开发 CLI 与安装预检。** 把 `plugin init/check/build/test/pack` 接到既有生成器和锁定工具链；init 生成插件包与库模式调试用的 `main.go`，build 用生成器为根插件生成调用 `sdk.Run` 的正式入口，产物不包含 Core；仓库内示例复用根 module，面向外部作者的脚手架沿用插件自身 Go Modules 的既有方式。pack 生成 tar.gz 与归档外 release 清单，签名流程对清单确切字节签名；安装预检先做 Ed25519 验签，再核对归档 SHA256/长度、来源、平台和 manifest。受控解压拒绝越界、链接、设备、重复及大小写冲突路径，并执行 256 MiB/1 GiB/10,000 条目上限；所有下载/身份/静态错误必须在停止旧版前拒绝。
 3. **建立唯一管理服务与安装记录。** CLI/WebUI/API 调同一管理服务，插件包与 Adapter 包使用同一套安装、启停、更新与卸载流程，所有变更按包串行；`alonabot serve`（不带子命令时等同）复用 T-13 的 Core 装配，按安装记录启动全部已启用的包；Adapter 实例的创建、启停与删除也经此服务，凭证使用 T-08 的 Secret 引用；启用插件时检查其必需的 Adapter 依赖与插件依赖；卸载被依赖的 Adapter，或停用、卸载被依赖的插件、把它更新或回退到低于 `min_version` 的版本时，须列出受影响插件并显式确认。持久化安装序号、来源/受信公钥、pin、安装/卸载保留状态。实现 install/list/enable/disable/restart/reload/update/uninstall/pin/rollback 的既定区分：重启原 Active 只换 Session，reload 导入编辑快照；卸载默认保留数据及绑定，仅原来源可显式重装，purge 只删除已列明的框架受管对象。首次信任、公钥变化、恢复丢弃新写入等确认只用于契约要求的具体操作，不增加一套通用审批系统。
-4. **实现正式候选 Journal 与准备编排。** 通过预检后，以预期旧 ActiveGeneration 开始持久化管理操作记录及其资源引用；冻结新根派发，drain/停旧进程，确认树退出及 runtime.lock，再调用 T-08 复制 DB 和创建候选 Session。将启动原因、维护许可和阶段预算放入已有 Bootstrap；REGISTER 校验后持久化程序/配置/secret/DB 候选引用并形成 PREPARED。普通 resume 走原提交记录，不伪造新候选 Journal；PG 不可隔离变更在相应维护门槛停下。
+4. **实现正式候选 Journal 与准备编排。** 通过预检后，以预期旧 ActiveGeneration 开始持久化管理操作记录及其资源引用；冻结新根派发，drain/停旧进程，确认树退出及 runtime.lock，再调用 T-08 复制 DB 和创建候选 Session。将启动原因、维护许可和阶段预算放入已有 Bootstrap；REGISTER 校验后持久化程序/配置/secret/DB 候选引用并形成 PREPARED。普通 resume 走原提交记录，不伪造新候选 Journal；`prepare_effects=external` 的候选在维护门槛停下。
 5. **实现唯一提交点与激活门禁。** 确认候选文件及引用已持久化后，在 Core 状态库的同一事务复核预期旧代次并提交 ActiveGeneration+COMMITTED；事务内不做下载、备份或等待 RPC。随后发送 Activate，只有 OnReady/Activated 完整成功才开放命令、事件、Service、Bus、任务与 HTTP；复用 T-06/T-07 门禁。旧按钮按 Generation 失效；提交后启动/OnReady 失败保持新代次权威并进入 Degraded，不自动倒退到旧 DB。
-6. **实现崩溃恢复、显式回退与引用回收。** Core 启动持锁后按状态库 Active/Journal 恢复：未提交的已有安装关闭候选后以旧程序启动新 Session，首次安装尚无 Active 则保持未激活；已提交只恢复当前代次。旧进程退出未确认时不启动新写入者。rollback 从选定保留代次复制新的 SQLite 恢复候选并使用新 Generation，继续走同一准备/提交路径；PG/外部恢复沿用显式维护。只有无人引用的失败候选/旧包/secret 才可回收，恢复中操作和保留快照受保护；备份说明覆盖整个 data_dir 与外部 PG。
+6. **实现崩溃恢复、显式回退与引用回收。** Core 启动持锁后按状态库 Active/Journal 恢复：未提交的已有安装关闭候选后以旧程序启动新 Session，首次安装尚无 Active 则保持未激活；已提交只恢复当前代次。旧进程退出未确认时不启动新写入者。rollback 从选定保留代次复制新的 SQLite 恢复候选并使用新 Generation，继续走同一准备/提交路径；外部数据的恢复沿用显式维护。只有无人引用的失败候选/旧包/secret 才可回收，恢复中操作和保留快照受保护；备份说明覆盖整个 data_dir 与插件自管的外部数据。
 7. **完成最小 Admin 页面与 API 绑定。** 接入真实登录、状态/日志、安装启停、更新/恢复、配置表单/完整 JSON 编辑、命令权限、插件的发信许可（`allowed_adapter_instances`）、工具调用策略、Agent 会话的列出与清除，以及界面语言切换。Core 设置页管理 Core Admin 列表与默认 locale，与 `alonabot admin add|remove|list` 使用同一管理服务。使用 T-08 的 raw JSON/PATCH/base_generation/secret 语义，显示 Pending、候选失败、Degraded 与维护原因；动态权限复用 T-04。通过 T-07 的两个 host、Host 校验、CSRF、受限票据和代理身份处理提供插件页面；管理 Cookie/Authorization 不进入插件，单 host 不执行插件主动内容。页面只展示用户可操作状态和具体错误，不把内部协议步骤当作用户配置项。**日志：** 按来源的级别持久化在状态库，修改后经 `sdk.log.set_level` 通知 SDK 并立即生效；Core 为每个来源保留最近 1000 条记录，提供按来源、级别与 trace_id 的读取和 SSE 订阅，过去日期的记录从日志文件按日期查询；`alonabot logs`、`alonabot log-level` 与 WebUI 日志页使用同一 API，页面的筛选只在浏览器中进行（CONTRACTS §14.3、§14.4）。
-8. **完成正式流程的故障注入与交付证据。** 通过真实 CLI/API 在临时目录跑首次安装→enable→restart→reload→update→pin→disable→同来源重装→显式 rollback，并以包损坏/签名变化/PG 维护错误验证拒绝路径。在 PREPARED、提交前后和 OnReady 失败点终止 Core，连同残存旧进程、空间不足、并发同插件操作一起验证无双写、无提前开放、无静默数据回滚。回填 T-08 留待集成的 V-23～V-25/V-39 证据，形成 T-10 可重复使用的发布产物与恢复场景；五平台真实发布结果仍由 T-10 完成。
+8. **完成正式流程的故障注入与交付证据。** 通过真实 CLI/API 在临时目录跑首次安装→enable→restart→reload→update→pin→disable→同来源重装→显式 rollback，并以包损坏/签名变化/external 插件的维护错误验证拒绝路径。在 PREPARED、提交前后和 OnReady 失败点终止 Core，连同残存旧进程、空间不足、并发同插件操作一起验证无双写、无提前开放、无静默数据回滚。回填 T-08 留待集成的 V-23～V-25/V-39 证据，形成 T-10 可重复使用的发布产物与恢复场景；五平台真实发布结果仍由 T-10 完成。
 
 #### 拟目录与交付
 
@@ -648,7 +649,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 | `web/admin/` | 真实登录、管理页、配置/权限页及端到端交互；复用 T-08 组件。 |
 | `examples/plugins/`、相邻 `testdata/` | 可安装包、配置/DB 版本对、坏包与恢复故障夹具；不得包含生产 token、DB 或签名私钥。 |
 
-交付为可运行的管理 CLI/API/WebUI、可安装的示例发布包、唯一候选提交/恢复实现、备份与 PG 维护操作说明，以及按 V 编号关联的测试证据。实现形成后，入口至少包括 `go build ./cmd/alonabot`、管理/包/认证包测试、真实临时 Core 上的 CLI 流程和浏览器端到端验证；把实际 CLI 参数、启动配置和前端测试命令记录在夹具说明中，不能依赖执行者猜测目录或凭证来源。
+交付为可运行的管理 CLI/API/WebUI、可安装的示例发布包、唯一候选提交/恢复实现、备份与维护操作说明，以及按 V 编号关联的测试证据。实现形成后，入口至少包括 `go build ./cmd/alonabot`、管理/包/认证包测试、真实临时 Core 上的 CLI 流程和浏览器端到端验证；把实际 CLI 参数、启动配置和前端测试命令记录在夹具说明中，不能依赖执行者猜测目录或凭证来源。
 
 #### 对应 V 验收与停止条件
 
@@ -656,20 +657,20 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 | --- | --- |
 | V-27、V-28、V-41 | 安全解压和上限生效；签名/摘要/平台/来源变化均停机前拒绝；无自包含摘要循环，无验签失败降级无签名。 |
 | V-29、V-30，复验 V-21/V-24/V-36 | 真实 WAL 候选备份、空间/锁失败、逐提交点崩溃恢复符合契约；未提交选旧、已提交选新，旧进程残存时不另启写入者，未 Activated 不接单。 |
-| V-31、V-39 | PG 首装/resume/自动候选/显式维护均有正确分支；非法维护许可及不可隔离生产变更明确拒绝；失败不假称自动恢复。 |
+| V-31、V-39 | 首装、resume、自动候选与 external 插件的显式维护均有正确分支；非法维护许可及不可隔离生产变更明确拒绝；失败不假称自动恢复。 |
 | V-40、V-48，复验 V-23/V-25/V-38 | 所有管理命令有真实状态变化和持久记录；restart/reload 区分、同来源重装、pin、恢复新 Generation/DB 副本与旧按钮失效正确；配置/secret 语义在真实页面/API 保持。 |
 | V-62、V-63、V-68 | 按来源级别的持久化与运行时修改、最近记录与 SSE、按日期查询日志文件、CLI 与日志页、未认证拒绝。 |
 | V-52、V-54、V-55、V-56 | 启用、停用、卸载与更新时的插件依赖检查和确认；界面语言切换；工具策略修改在下一次调用生效；会话清除与 purge。 |
 | V-47，复验 V-12/V-22/V-43 | 首次 init/login/CLI 可用，reset 撤销旧授权；管理状态变更经认证/CSRF；插件 host 不取得 Admin API/Cookie/凭证；真实页面修改权限在下一次准入生效。 |
 
-协议/Session 鉴权、安装路径或来源校验、secret 泄漏、Active/Journal 原子性、崩溃后双写、提交后自动回退丢数据、PG 维护虚假成功，任何一项失败均阻塞向 T-10 交付。组件缺口回补对应前置任务；不能把授权缺口用测试会话带入生产，不能借 T-10 再处理本任务的确定性数据恢复缺陷。尚无目标平台、PG 或浏览器证据时如实标注缺口并准备可重复夹具，不把“可编译”写成“已发布通过”。
+协议/Session 鉴权、安装路径或来源校验、secret 泄漏、Active/Journal 原子性、崩溃后双写、提交后自动回退丢数据、维护虚假成功，任何一项失败均阻塞向 T-10 交付。组件缺口回补对应前置任务；不能把授权缺口用测试会话带入生产，不能借 T-10 再处理本任务的确定性数据恢复缺陷。尚无目标平台或浏览器证据时如实标注缺口并准备可重复夹具，不把“可编译”写成“已发布通过”。
 
 ### T-10：集成、目标平台与发布验收
 
 #### 前置输入
 
-- T-02～T-09、T-11～T-16 的实现、正式示例、构建产物和各阶段测试证据；73 项用例的未闭合部分可逐项定位。
-- 独立 Telegram 测试账号/聊天/话题、LLM Provider 的测试 API key、PG 测试 schema、五目标运行环境，以及资源比较使用的机器和等价工作负载。
+- T-02～T-09、T-11～T-16 的实现、正式示例、构建产物和各阶段测试证据；76 项用例的未闭合部分可逐项定位。
+- 独立 Telegram 测试账号/聊天/话题、LLM Provider 的测试 API key、五目标运行环境，以及资源比较使用的机器和等价工作负载。
 
 #### 拟涉及目录
 
@@ -677,20 +678,20 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 
 #### 按顺序实施
 
-1. 汇总 V-01～V-73 的证据，逐项标记已通过、失败、未运行或待联验。先补齐组件之间的联验：首次管理登录→安装启用→配置/权限→真实消息→插件 HTTP→重载/升级/回退；覆盖 TCP 与 stdio。
-2. 使用不同的真实插件二进制验证命令、文本匹配、多轮等待、主动 Send、Service、Event Bus、Scheduler、HTTP、GORM 组合，以及官方 Agent 插件与记忆插件。示例既覆盖无配置/无 DB 插件，也覆盖实际写入与迁移的插件；不以同一个 worker 的多份进程代替。
+1. 汇总 V-01～V-76 的证据，逐项标记已通过、失败、未运行或待联验。先补齐组件之间的联验：首次管理登录→安装启用→配置/权限→真实消息→插件 HTTP→重载/升级/回退；覆盖 TCP 与 stdio。
+2. 使用不同的真实插件二进制验证命令、文本匹配、多轮等待、主动 Send、Service、Event Bus、Scheduler、HTTP、`sqlitedb` 与 GORM 两个数据库入口，以及官方 Agent 插件与记忆插件。示例既覆盖无配置/无 DB 插件，也覆盖实际写入与迁移的插件；不以同一个 worker 的多份进程代替。
 3. 执行协议、权限和资源边界测试：伪造/过期 Session、命令遮蔽、无 Actor、实例许可、Hook 递归、媒体租约、满准入、Cancel 顺序、超时仍运行的 job。验证错误回执与已经确认的外部结果保持一致。
-4. 执行完整恢复故障注入：停止与持锁、SQLite WAL 备份、候选 OnStart 写入后失败、PREPARED/提交前后 Core 退出、不可变 secret、PG 维护许可及 resume、显式 rollback 的新代次。核对数据库内容和权威指针，不能只检查日志出现“恢复成功”。
+4. 执行完整恢复故障注入：停止与持锁、SQLite WAL 备份、候选 OnStart 写入后失败、PREPARED/提交前后 Core 退出、不可变 secret、external 插件的维护许可与 resume、显式 rollback 的新代次。核对数据库内容和权威指针，不能只检查日志出现“恢复成功”。
 5. 在五个目标组合分别构建并运行 Core 与插件，覆盖启动、停止、至少 100 次启停、异常退出、合作型子进程树和端口清理。记录 CGO 插件实际支持范围；无运行环境的目标保持未运行。
-6. 在固定机器上按 TEST-MATRIX V-33 的四种负载（空闲、消息、数据库、HTTP）测量 Core+插件及附属进程的总 RSS/私有内存、Linux PSS、CPU 与 P50/P95/P99，并用同一模拟服务与功能相同的插件测量 NoneBot2。输出原始数据和复现命令，不预设优胜结论或虚构内存阈值。
+6. 在固定机器上按 TEST-MATRIX V-33 的四种负载（空闲、消息、数据库、HTTP）测量 Core+插件及附属进程的总 RSS/私有内存、Linux PSS、CPU 与 P50/P95/P99，并用同一模拟服务与功能相同的插件测量 NoneBot2。再按 V-74 测量 Core 与示例插件空闲时的 PSS，对照预算。输出原始数据和复现命令，不预设优胜结论；超出预算按 CONTRACTS §10 处理。
 7. 生成五平台候选资产（含官方 Telegram Adapter、Agent 插件、记忆插件与预装插件）、T-14 的发行归档与容器镜像、外部 release.json 和签名；用干净测试 data_dir 从这些真实资产完成安装、更新和卸载重装。核对来源、长度、摘要、平台和 Schema/二进制一致性，确保安装不依赖开发机的未打包文件。
 8. 关闭全部阻塞用例，形成版本、平台、依赖、限制和恢复步骤的发布说明。准备好的发布包与验收记录构成本项交付。维护者用 T-14 的 `scripts/dist/` 在干净环境构建并签名，把发行归档、各安装包及其 `release.json`/`.sig` 发布到本仓库的 GitHub Release，把容器镜像推送到 `ghcr.io/alonabot/alonabot`；签名私钥只在维护者控制的环境中使用。
 
 #### 可审查交付
 
-- V-01～V-73 的完整结果与日志、故障注入后的状态/数据证据。
+- V-01～V-76 的完整结果与日志、故障注入后的状态/数据证据。
 - 五平台真实运行记录和可安装候选资产；可复现的资源比较报告。
-- 安装、更新、PG 维护和恢复的用户操作步骤，以及与产物一致的 SDK 示例。
+- 安装、更新、维护和恢复的用户操作步骤，以及与产物一致的 SDK 示例。
 
 #### 停止和失败条件
 
@@ -823,7 +824,8 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
    - confirm 策略的工具一律拒绝；
    - 不注入记忆，会话键与聊天会话分开；
    - 离线错过的触发不补跑。
-8. **打包与验收。** 两个插件按 T-09 的打包流程生成可安装包。用本地 Provider 与 MCP 模拟服务、回环测试 Adapter 运行 V-57～V-61 的全部场景；真实 Provider 与真实 Telegram 没有凭证时记为未运行。
+8. **打包与验收。** 两个插件按 T-09 的打包流程生成可安装包。用本地 Provider 与 MCP 模拟服务、回环测试 Adapter 运行 V-57～V-61 与 V-76 的全部场景；真实 Provider 与真实 Telegram 没有凭证时记为未运行。
+9. **文本生成服务。** `sdk/llm` 提供 CONTRACTS §13.5 `llm.generate` 的请求/响应类型、JSON Schema 与调用辅助（以官方 Agent 插件 ID 为目标，ID 与 `plugins/agent/plugin.yaml` 共用同一常量）。Agent 插件注册该服务（public），配置增加 `llm_service_allowed_plugins`（缺省空列表），按 Core 下发调用链中的上一跳插件检查许可；使用已有的 Provider 客户端完成一次非流式请求（流式接收后拼接），不调用工具、不读写会话与记忆、不套用人格。错误映射为 INVALID_ARGUMENT（Provider 不存在）与 UNAVAILABLE（Provider 出错或断开），不重试。
 
 #### 拟目录与交付
 
@@ -832,6 +834,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 | `plugins/agent/` | 官方 Agent 插件：Provider 客户端与模拟服务、对话、工具循环、MCP、技能与定时任务 |
 | `plugins/memory/` | 官方记忆插件 |
 | `sdk/memory/` | 记忆服务的类型、Schema 与注册辅助 |
+| `sdk/llm/` | 文本生成服务的类型、Schema 与调用辅助 |
 
 #### 验收与后续边界
 
@@ -842,6 +845,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 | V-59 | 记忆的增改删、上限与非法内容、快照在会话内不变、群聊多用户、记忆插件不可用 |
 | V-60 | 合法与不合法的 `SKILL.md`、`load_skill` |
 | V-61 | 定时任务的触发、无发信许可、confirm 工具被拒、离线不补跑 |
+| V-76 | `llm.generate` 的调用方许可、Provider 选择与错误映射、调用方期限、Agent 未启用 |
 
 两个插件的真实 Telegram 与真实 Provider 结果由 T-10 汇总。
 
@@ -904,12 +908,12 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 1. **help 插件与 `core.command.list`。** Core 按调用者 Actor 与默认 Target 返回可用的命令：已启用、权限满足、未被遮蔽；说明按 CommandSpec 的说明键在所属插件 `messages` 中查找，并按 Actor locale 翻译。`plugins/help/` 注册 `/help [命令]`，列出全部命令或单个命令的用法；`/whoami` 回复调用者的实例 ID 与用户 ID，用于添加第一个 Core Admin（CONTRACTS §15.2）。
 2. **welcome 与 rss。**
    - `plugins/welcome/` 在 member.joined 时向该聊天发送欢迎语，欢迎语中的 `{name}` 替换为新成员的显示名。欢迎语按聊天配置，缺省使用插件文案；`/welcome on|off|set <文案>` 只有 chat_admin 或 Core Admin 能执行，默认关闭。
-   - `plugins/rss/` 提供 `/rss add|list|remove`，订阅保存在插件数据库；add 与 remove 只有 chat_admin 或 Core Admin 能执行，list 不限。一个固定 interval 的 schedule 检查订阅，间隔是配置项（缺省 10 分钟）。用标准库解析 RSS 2.0 与 Atom，按 guid 或链接去重，只推送新条目；后台推送需要 `allowed_adapter_instances`。
+   - `plugins/rss/` 提供 `/rss add|list|remove`，订阅经 `sqlitedb` 保存在插件数据库，不链接 GORM；add 与 remove 只有 chat_admin 或 Core Admin 能执行，list 不限。一个固定 interval 的 schedule 检查订阅，间隔是配置项（缺省 10 分钟）。用标准库解析 RSS 2.0 与 Atom，按 guid 或链接去重，只推送新条目；后台推送需要 `allowed_adapter_instances`。
    - rss 抓取只允许 http 与 https；解析出的地址以及每次重定向后的地址都不能是 loopback、私网、链路本地、组播或未指定地址。响应大小上限 5 MiB、抓取超时 30s，均为命名常量，超过时本次抓取失败并记 WARN。
 3. **发行归档。** `scripts/dist/` 为每个目标平台构建 Core 与全部官方包，用 `plugin pack` 生成安装包与外部 `release.json`，签名后放入 `packages/`，再打成 zip（Windows）或 tar.gz。发行版 Core 在构建时嵌入官方发布者公钥。
-4. **首次运行。** 数据目录首次初始化时，按普通安装流程安装 `packages/` 中的包，并启用 Agent、记忆与 help；Telegram 与 OneBot 11 Adapter 在管理员为它添加第一个实例时启用。交互终端下按 CONTRACTS §15.1 初始化管理 token。之后不再自动安装；新版本发行包中版本更高的内置包作为可用更新列出。
+4. **首次运行。** 数据目录首次初始化时，按普通安装流程安装 `packages/` 中的包，只启用 help，Agent 与记忆插件只安装不启用（D-50）；Telegram 与 OneBot 11 Adapter 在管理员为它添加第一个实例时启用。交互终端下按 CONTRACTS §15.1 初始化管理 token。之后不再自动安装；新版本发行包中版本更高的内置包作为可用更新列出。
 5. **容器镜像。** 仓库根目录的 `Dockerfile` 用多阶段构建：在 Go 构建阶段以 `CGO_ENABLED=0` 构建 Core 与全部官方包，最终镜像只含 `alonabot`、`packages/` 与 CA 证书，以 UID 10001 运行，`/data` 为卷，设置 `ALONABOT_CONTAINER=1`。Core 在该环境变量下才允许 `0.0.0.0` 的 listen 搭配本机 http 的 Base URL，并在启动时输出 WARN 提醒端口只发布到宿主本机。`deploy/compose.yaml` 给出卷、`init: true`、`127.0.0.1:7650:7650` 与首次 `admin-token init` 的用法。镜像构建 linux/amd64 与 linux/arm64 两个平台。
-6. **端到端验收。** 在干净的数据目录上，分别从发行归档与容器镜像依次完成：首次运行、登录 WebUI、添加 Telegram 实例（本地 Bot API 模拟服务）、配置 Provider（本地模拟服务）、`/ask` 对话、`/help`、启用 rss 并收到推送。真实 Telegram 与真实 Provider 没有凭证时记为未运行。
+6. **端到端验收。** 在干净的数据目录上，分别从发行归档与容器镜像依次完成：首次运行、登录 WebUI、添加 Telegram 实例（本地 Bot API 模拟服务）、启用 Agent 与记忆插件并配置 Provider（本地模拟服务）、`/ask` 对话、`/help`、启用 rss 并收到推送。真实 Telegram 与真实 Provider 没有凭证时记为未运行。
 
 #### 拟目录与交付
 
@@ -1020,7 +1024,7 @@ WebUI 中可交互的沙盒不在 v0.1 范围内（D-47）。
 
 跨任务 V 用例按 TEST-MATRIX 的阶段分工记录。较早任务只完成自己负责的组件断言；用例整体在最终闭合任务完成后才标为通过。例如动态权限的管理服务测试不等于 WebUI 操作通过，内置 Send 的 Hook 检查不等于跨插件 Service 递归已经验证。后续接入仍复用较早实现，测试装配不能成为生产放行路径。
 
-每项 V 的证据记录包含实现版本、测试位置、完整运行命令、平台/依赖、结果与失败日志。T-10 汇总时按 V-01～V-73 逐项查证，不以其他名称的新清单取代现有编号。除 TEST-MATRIX §3.1 所列分项外均未运行。
+每项 V 的证据记录包含实现版本、测试位置、完整运行命令、平台/依赖、结果与失败日志。T-10 汇总时按 V-01～V-76 逐项查证，不以其他名称的新清单取代现有编号。除 TEST-MATRIX §3.1 所列分项外均未运行。
 
 若接口无法表达既定行为，先修对应契约和 fixture，再推进消费者；若已经表达但测试失败，先修负责实现。驱动备份、进程所有权、权限和提交唯一性未通过，不得被下游功能完成状态覆盖。
 

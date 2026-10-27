@@ -86,7 +86,9 @@ enum DatabaseBackend {
   // 无受管业务 DB。
   DATABASE_BACKEND_NONE = 1;
   DATABASE_BACKEND_SQLITE = 2;
-  DATABASE_BACKEND_POSTGRES = 3;
+  // 3 曾表示 PostgreSQL；框架不托管 PostgreSQL，编号与名称保留、不再复用。
+  reserved 3;
+  reserved "DATABASE_BACKEND_POSTGRES";
 }
 
 // MigrationMode 列出插件声明的数据库迁移方式（CONTRACTS §6.3）。
@@ -116,8 +118,9 @@ message DatabaseDescriptor {
   DatabaseBackend backend = 1;
   // SQLITE：受管候选（或 resume 时 Active）文件路径。
   string sqlite_path = 2;
-  // POSTGRES：该插件专属 role/schema 的连接参数；不含 Core 管理凭证。
-  PostgresConnection postgres = 3;
+  // 3 曾是 PostgreSQL 连接参数；框架不托管 PostgreSQL，编号与名称保留、不再复用。
+  reserved 3;
+  reserved "postgres";
   // 插件声明的迁移方式。
   MigrationMode migration_mode = 4;
   // versioned 模式下已完成的迁移 ID（升序）。
@@ -127,25 +130,6 @@ message DatabaseDescriptor {
   // 仅当管理员对本次 Session/Generation/DB 显式给出维护许可时为 true。
   bool manual_migration_approved = 7;
 }
-
-// PostgresConnection 描述插件专属 PostgreSQL role/schema 的连接参数。
-message PostgresConnection {
-  // 服务器主机名或地址。
-  string host = 1;
-  // 服务器端口。
-  uint32 port = 2;
-  // 数据库名。
-  string database = 3;
-  // 插件专属 role。
-  string user = 4;
-  // 该 role 的口令，属于敏感数据。
-  string password = 5;
-  // 插件专属 schema；search_path 限于它与系统目录。
-  string schema = 6;
-  // libpq 的 sslmode 取值。
-  string ssl_mode = 7;
-}
-
 // HttpProxyAuth 描述本 Session 独立的内部 HTTP 代理认证材料，不复用 Admin 凭证。
 message HttpProxyAuth {
   // 内部代理请求携带的认证令牌，属于敏感数据。

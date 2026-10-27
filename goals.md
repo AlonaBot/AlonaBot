@@ -82,7 +82,7 @@
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 等待前置 |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 等待前置 |
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 等待前置 |
-| goal-32 | T-08.5 | GORM 连接与迁移 | T-08.3 | 等待前置 |
+| goal-32 | T-08.5 | 受管 SQLite 连接与迁移 | T-08.3 | 等待前置 |
 | goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-08.4、T-09.1、T-09.2、T-13.1 | 等待前置 |
 | goal-71 | T-14.1 | help 插件与命令列表 | T-04.4、T-05.2、T-08.8 | 等待前置 |
 | goal-79 | T-15.2 | 官方 OneBot 11 Adapter 的发送、媒体与 extension | T-03.6、T-03.8、T-15.1 | 等待前置 |
@@ -100,6 +100,7 @@
 | goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 等待前置 |
 | goal-70 | T-13.4 | 库模式示例与验收 | T-03.10、T-13.2、T-13.3 | 等待前置 |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
+| goal-83 | T-12.8 | 文本生成服务 | T-06.1、T-12.2 | 等待前置 |
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 等待前置 |
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 等待前置 |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 等待前置 |
@@ -110,7 +111,7 @@
 | goal-63 | T-12.6 | 定时 Agent 任务 | T-07.2、T-08.5、T-12.3 | 等待前置 |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 等待前置 |
 | goal-43 | T-09.8 | Admin 管理页 | T-09.6、T-08.7 | 等待前置 |
-| goal-64 | T-12.7 | 官方插件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6 | 等待前置 |
+| goal-64 | T-12.7 | 官方插件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6、T-12.8 | 等待前置 |
 | goal-44 | T-09.9 | Admin 配置、权限、工具策略与插件页 | T-09.8、T-11.1、T-11.3 | 等待前置 |
 | goal-66 | T-09.10 | 日志管理与日志页 | T-02.1、T-03.1、T-09.8 | 等待前置 |
 | goal-73 | T-14.3 | 发行归档 | T-03.10、T-09.3、T-12.7、T-14.1、T-14.2、T-15.2 | 等待前置 |
@@ -120,7 +121,7 @@
 | goal-75 | T-14.6 | 发行包与镜像端到端验收 | T-09.11、T-14.4、T-14.5 | 等待前置 |
 | goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6、T-15.3、T-16.2 | 等待前置 |
 | goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 等待前置 |
-| goal-48 | T-10.3 | 资源比较报告 | T-10.1 | 等待前置 |
+| goal-48 | T-10.3 | 资源比较报告与常驻内存预算核对 | T-10.1 | 等待前置 |
 | goal-49 | T-10.4 | 发布资产与说明 | T-10.2、T-10.3 | 等待前置 |
 
 ## 第 1 波
@@ -2874,54 +2875,69 @@ sdk/config
 不做：管理认证（T-09.1，测试注入假会话）；serve（T-09.4）；Agent 定时任务（T-12.6）。
 ```
 
-### goal-32 · T-08.5 GORM 连接与迁移
+### goal-32 · T-08.5 受管 SQLite 连接与迁移
 
-状态：等待前置（T-08.3）。语句中 goal-30 提供的符号（sdk/config.Prepare 与 sdk 的准备流程）只写名字；sdk/gormdb 的现有函数（OpenSQLite、OpenPostgres、CheckMigrators、RunVersioned、AppliedMigrations）已在 main 上。合并后由审查者核对签名，再改为可派发。
+状态：等待前置（T-08.3）。语句中 goal-30 提供的符号（sdk/config.Prepare 与 sdk 的准备流程）只写名字；sdk/gormdb 的现有函数（OpenSQLite、ReadPragmas、CheckMigrators、RunVersioned、AppliedMigrations）已在 main 上。合并后由审查者核对签名，再改为可派发。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-32（切片 T-08.5：GORM 连接与迁移）。goal 目录 goal-32，分支 goal-32，worktree .worktrees/goal-32，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-32（切片 T-08.5：受管 SQLite 连接与迁移）。goal 目录 goal-32，分支 goal-32，worktree .worktrees/goal-32，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-目标：gormdb.Open(ctx) 按当前 Session 的数据库描述返回原生 *gorm.DB，同一 Session 复用连接池、SDK 停止时关闭；SDK 在配置准备之后、OnStart 之前按迁移方式（self 或 versioned，互斥）执行迁移，并在 REGISTER 中报告迁移结果；PG 的 resume 只核对不迁移，首次空 schema、自动候选与维护许可按契约分支执行；Core 为每个代次下发 SQLite 路径或 PG 描述。
+目标：受管 SQLite 有两个入口：新建的 sdk/sqlitedb 的 Open(ctx) 按当前 Session 的数据库描述返回 *sql.DB；sdk/gormdb 的 Open(ctx) 在同一个连接上返回原生 *gorm.DB。同一 Session 复用同一连接，SDK 停止时关闭。只导入 sqlitedb 的插件不链接 GORM。两个包各定义一组迁移接口，被导入时向 SDK 登记识别方式；SDK 在配置准备之后、OnStart 之前执行迁移，并在 REGISTER 中报告结果。Core 为每个代次下发 SQLite 路径。
 
-依据：PLAN T-08 步骤 5、6；CONTRACTS §6.1～§6.3、§4.2（迁移预算）；WIRE-FORMAT §3.2（database_descriptor）；docs/development.md（PG 测试实例）；TEST-MATRIX V-26、V-39。
+依据：PLAN T-08 步骤 5、6；CONTRACTS §6.1～§6.3、§4.2（迁移预算）；WIRE-FORMAT §3.2（database_descriptor）；DECISIONS D-48、D-49；TEST-MATRIX V-26、V-39。
 
 范围（只新增或修改这些）：
-- sdk/gormdb/：新增 open.go（Open 与 Session 绑定）、prepare.go（迁移阶段）
-- sdk/：session.go 在配置准备之后调用迁移阶段并填写 REGISTER 的 migration；activate.go 在停止时关闭连接池（只加调用点）
+- sdk/sqlitedb/：新建包。连接设置与回读核对从 sdk/gormdb/sqlite.go 移入；open.go（Open 与 Session 绑定）、migrate.go（迁移接口、RunVersioned、AppliedMigrations）
+- sdk/gormdb/：OpenSQLite 改为 sqlitedb.OpenFile 加 GORM 包装；新增 open.go（Open）；ReadPragmas 与 PragmaValues 移到 sqlitedb 后从本包删除
+- sdk/internal/dbhook/：新建内部包，供 sqlitedb 与 gormdb 向 sdk 登记迁移识别与执行，形状由执行者自定，只用标准库与 contracts 类型
+- sdk/：session.go 在配置准备之后调用迁移阶段并填写 REGISTER 的 migration；activate.go 在停止时关闭连接（只加调用点）
 - internal/core/supervisor/：Spec 增加 Database；新代次时创建 SQLite 代次目录并下发路径
 - internal/core/host/prepare.go：校验 REGISTER 的 migration 与 Bootstrap 描述一致（只加校验）
 - 上述包的测试文件
-允许的新跨模块边：sdk -> sdk/gormdb（同属 sdk 模块）。
+允许的新跨模块边：sdk -> sdk/sqlitedb、sdk/gormdb -> sdk/sqlitedb（同属 sdk 模块）。sdk 根包不得 import sdk/gormdb 或 gorm。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. sdk/gormdb
+1. sdk/sqlitedb
    var ErrNoDatabase = errors.New("this plugin has no database")
-   func Open(ctx context.Context) (*gorm.DB, error) // 未处于 Session 中返回 FAILED_PRECONDITION 的错误；backend 为 NONE 返回 ErrNoDatabase；同一 Session 重复调用返回同一个 *gorm.DB
-2. internal/core/supervisor
+   func Open(ctx context.Context) (*sql.DB, error) // 未处于 Session 中返回 FAILED_PRECONDITION 的错误；backend 为 NONE 返回 ErrNoDatabase；同一 Session 重复调用返回同一个 *sql.DB
+   func OpenFile(ctx context.Context, path string) (*sql.DB, error) // 原 gormdb.OpenSQLite 的设置与核对：WAL、FULL、外键、5s busy timeout、单连接
+   type PragmaValues struct { JournalMode string; Synchronous int; ForeignKeys int; BusyTimeout int }
+   func ReadPragmas(ctx context.Context, db *sql.DB) (PragmaValues, error)
+   type SelfMigrator interface { Migrate(ctx context.Context, db *sql.DB) error }
+   type Migration struct { ID uint32; Up func(context.Context, *sql.Tx) error }
+   type VersionedMigrator interface { Migrations() []Migration }
+   const LedgerTable = "_alonabot_migrations"
+   func RunVersioned(ctx context.Context, db *sql.DB, migrations []Migration) ([]uint32, error)
+   func AppliedMigrations(ctx context.Context, db *sql.DB) ([]uint32, error)
+2. sdk/gormdb
+   var ErrNoDatabase = sqlitedb.ErrNoDatabase
+   func Open(ctx context.Context) (*gorm.DB, error) // 经 libtnb sqlite.Config{Conn: ...} 包装 sqlitedb.Open 返回的同一个 *sql.DB；同一 Session 重复调用返回同一个 *gorm.DB
+   OpenSQLite、SelfMigrator、Migration、VersionedMigrator、RunVersioned、AppliedMigrations、CheckMigrators 保留现有签名；LedgerTable 改为引用 sqlitedb.LedgerTable
+3. internal/core/supervisor
    Spec 增加字段：Database *pb.DatabaseDescriptor // nil 时 supervisor 为 SQLite 生成描述：<plugins>/<id>/generations/<generation>/db.sqlite，activation_reason 由调用方在 Bootstrap 中给出
 
 行为：
-- Open：SQLite 用 OpenSQLite（WAL、FULL、外键、5s busy timeout、单连接，打开后核对实际生效值，不一致返回错误）；文件不存在时只有 activation_reason 为 first_install 时才创建，否则返回错误（不创建空库掩盖丢失）。PG 用 OpenPostgres，并核对 current_schema 与 search_path 只含插件 schema 与系统目录，否则返回错误。连接错误原样返回，不切换后端。插件拿不到 Core 状态库的任何路径或连接。
+- Open：文件不存在时只有 activation_reason 为 first_install 时才创建，否则返回错误（不创建空库掩盖丢失）。连接错误原样返回。插件拿不到 Core 状态库的任何路径或连接。
+- 登记：sqlitedb 与 gormdb 在包 init 中向 sdk/internal/dbhook 登记一个识别函数（只追加函数值，不做 I/O）；SDK 的迁移阶段只调用已登记的识别函数，因此未导入某个包时不认识它的接口。
 - 迁移阶段（SDK，配置准备之后、OnStart 之前，预算为 Bootstrap 的 migration 阶段预算，与普通业务期限无关）：
-  - CheckMigrators：同时实现 Migrate 与 Migrations 时失败（INVALID_ARGUMENT）。
+  - 根插件实现的迁移接口合计多于一个（含两个包混用，例如 sqlitedb 的 Migrate 加 gormdb 的 Migrations）时失败（INVALID_ARGUMENT）。
   - backend 为 NONE：跳过，migration.mode=NONE。
-  - versioned：Migrations 的 ID 必须非零、唯一、严格递增；SQLite 与 PG 首装、自动候选时用 RunVersioned（每步 Up 与 _alonabot_migrations 的完成记录在同一事务中，失败不记成功）。
+  - versioned：ID 必须非零、唯一、严格递增；每步 Up 与 _alonabot_migrations 的完成记录在同一事务中，失败不记成功。两个包的账本格式相同。
   - self：调用 Migrate，成功后 self_migrate_completed=true。
-  - PG 的 resume：不执行 Migrate 或 Up；versioned 时用 AppliedMigrations 核对声明的迁移全部已完成，缺项或不一致返回 FAILED_PRECONDITION；self 时只核对 Bootstrap 的 applied_migration_ids 与描述（程序与 DB 身份由 Core 核对）。
-  - PG 的其他候选：首次安装要求 schema 为空（没有任何表）才执行初始迁移；已有数据时，只有没有待执行迁移、没有 self Migrate、manifest 声明 prepare_effects=none 时允许继续（不迁移）；否则需要 manual_migration_approved=true 才执行，没有许可时返回 FAILED_PRECONDITION，safe_message "NEEDS_MANUAL_MIGRATION"。
   - REGISTER.migration：mode 与 completed_migration_ids（versioned，升序）或 self_migrate_completed（self）如实填写。
-- Core：supervisor 新代次时创建 generations/<g>/ 目录（0700）并下发 SQLite 路径；普通 restart 沿用 Active 代次的路径。host 校验 REGISTER.migration.mode 与 Bootstrap 的 migration_mode 一致、versioned 的 completed 包含 Bootstrap 的 applied 集合，否则注册失败。PG 描述（凭证）只由管理员预置（T-09），本切片经 Spec.Database 传入。
+- prepare_effects=external 的维护门槛由 Core 在建立候选前判断（T-09），本切片的 SDK 不读取 manifest 的 prepare_effects。
+- Core：supervisor 新代次时创建 generations/<g>/ 目录（0700）并下发 SQLite 路径；普通 restart 沿用 Active 代次的路径。host 校验 REGISTER.migration.mode 与 Bootstrap 的 migration_mode 一致、versioned 的 completed 包含 Bootstrap 的 applied 集合，否则注册失败。
 - 事务内不得等待同一单连接池的另一条独立查询（文档注释写明，测试覆盖一次死锁会被 busy timeout 以外的方式暴露为错误）。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：
-  - internal/core/supervisor/db_test.go（//go:build unix）：测试插件实现 Migrations（两步，第二步按环境变量可失败）并在 OnStart 中用 gormdb.Open 写一行：首装成功，REGISTER 报告 [1,2]，状态库代次目录下有 db.sqlite 且 PRAGMA 值正确；第二步失败时注册失败、账本只有 1；普通 restart 不重复执行迁移；同时实现 Migrate 与 Migrations 的插件在 CONFIG 之后失败。
-  - sdk/gormdb/postgres_test.go 追加（ALONABOT_TEST_PG_DSN 未设置时跳过并在 PR 中记为未运行）：resume 缺少迁移记录时 FAILED_PRECONDITION；已有数据且没有许可时 NEEDS_MANUAL_MIGRATION；有许可时执行；search_path 含其他 schema 时 Open 失败。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Open 的复用与停止时关闭；backend NONE；文件缺失时非首装不创建；ID 非递增；host 的 migration 一致性校验。
+  - internal/core/supervisor/db_test.go（//go:build unix）：两个测试插件，一个只导入 sqlitedb、一个用 gormdb，各实现 Migrations（两步，第二步按环境变量可失败）并在 OnStart 中写一行：首装成功，REGISTER 报告 [1,2]，状态库代次目录下有 db.sqlite 且 PRAGMA 值正确；第二步失败时注册失败、账本只有 1；普通 restart 不重复执行迁移；同时实现两个迁移接口的插件在 CONFIG 之后失败。
+  - 同一测试中断言只导入 sqlitedb 的测试插件二进制不含 gorm.io/gorm（`go version -m` 或 `go list -deps`）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：两个入口的复用、共用连接与停止时关闭；backend NONE；文件缺失时非首装不创建；ID 非递增；host 的 migration 一致性校验。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./sdk/... ./internal/core/...；go build ./...；PG 测试在设置了 ALONABOT_TEST_PG_DSN 时运行（写明 PG 版本），未设置时写「未运行」。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./sdk/... ./internal/core/...；go build ./...；node scripts/check-go-deps.mjs 通过。
 
-不做：SQLite 候选副本与 Backup API（T-08.6）；维护许可的管理入口与 Journal（T-09）；PG role/schema 的创建（管理员预置）。
+不做：SQLite 候选副本与 Backup API（T-08.6）；维护许可的管理入口、external 插件的候选门槛与 Journal（T-09）。
 ```
 
 ### goal-39 · T-09.4 管理服务、安装记录与 serve
@@ -2981,7 +2997,7 @@ sdk/config
 - enable：检查 manifest 的必需依赖（CheckDependencies，Installed 来自已启用的包与运行中的 Adapter 描述），有缺失时 FAILED_PRECONDITION 并列出全部缺失项；可选依赖缺失只记诊断。已有 Active 时以该代次启动；首次安装没有 Active 时以「首个候选」启动（新代次、首装 SQLite、配置为 {} 或编辑快照，提交后激活；Journal 由 T-09.5 接入，本切片用一行 shortcut 注释写明）。Adapter 包启用后按 adapter_instances 中 enabled 的实例 StartInstance。
 - disable：停止并保留安装与数据；被已启用包的必需依赖引用时，未带 confirm 返回 ErrNeedsConfirm（列出受影响者），确认后执行，依赖方继续运行，调用它返回 UNAVAILABLE。
 - restart：以当前 Active 启动新 Session（不导入编辑快照，不产生新代次）。
-- uninstall：同 disable 的确认规则；停止、解除运行注册、删除未被引用的程序包目录；默认保留数据、secret、来源绑定与 uninstalled=1 的记录。--purge 时先列出将删除的框架受管对象（代次目录、SQLite、secret、会话、按钮 token、策略、工具策略、Pending、Adapter 实例），未带 confirm 返回 ErrNeedsConfirm（Affected 为对象列表），确认后删除这些对象与安装记录；不删除外部 PG schema 与插件自管目录。
+- uninstall：同 disable 的确认规则；停止、解除运行注册、删除未被引用的程序包目录；默认保留数据、secret、来源绑定与 uninstalled=1 的记录。--purge 时先列出将删除的框架受管对象（代次目录、SQLite、secret、会话、按钮 token、策略、工具策略、Pending、Adapter 实例），未带 confirm 返回 ErrNeedsConfirm（Affected 为对象列表），确认后删除这些对象与安装记录；不删除插件自管的外部数据库与插件自管目录。
 - pin：持久化版本约束（SemVer 范围，manifest 的语法规则），update 只接受满足 pin 的候选。
 - reload/update/rollback：完成输入与前置校验（来源绑定、pin、版本不低于被依赖的 min_version 时需要 confirm），然后交给 Candidates；缺省实现返回 UNSUPPORTED。
 - Adapter 实例：CreateInstance 用该 Adapter 包的配置 Schema（安装包中的 Schema 资源）经 secret.Extract 存快照；Start 时 Resolve 后经 remote.Process 启动；同一 adapter_id 下账号唯一由 remote 检查。实例配置与凭证不出现在 List 或日志中，读取只返回 Redact 后的结果。
@@ -3303,7 +3319,7 @@ internal/core/candidate
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/...；go build ./...。
 
-不做：Journal、唯一提交点与恢复（T-09.5～T-09.7）；PG 的候选（契约只做维护许可，T-08.5 已覆盖）。
+不做：Journal、唯一提交点与恢复（T-09.5～T-09.7）；external 插件的候选门槛（T-09.5）。
 ```
 
 ### goal-59 · T-12.2 Agent 对话与流式显示
@@ -3416,7 +3432,7 @@ plugins/agent
 ```text
 /goal 使用 $alonabot-execute 推进 goal-72（切片 T-14.2：welcome 与 rss 插件）。goal 目录 goal-72，分支 goal-72，worktree .worktrees/goal-72，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-目标：预装插件 plugins/welcome/ 在 member.joined 时向该聊天发送欢迎语，按聊天开关与自定义文案；plugins/rss/ 提供 /rss add|list|remove，订阅保存在插件数据库，固定 interval 的定时任务抓取 RSS 2.0 与 Atom，按 guid 或链接去重，只推送新条目；抓取只允许 http/https，拒绝 loopback、私网、链路本地、组播与未指定地址（含每次重定向之后），响应上限 5 MiB、超时 30s。
+目标：预装插件 plugins/welcome/ 在 member.joined 时向该聊天发送欢迎语，按聊天开关与自定义文案；plugins/rss/ 提供 /rss add|list|remove，订阅经 sqlitedb.Open 保存在插件数据库（不链接 GORM，D-49），固定 interval 的定时任务抓取 RSS 2.0 与 Atom，按 guid 或链接去重，只推送新条目；抓取只允许 http/https，拒绝 loopback、私网、链路本地、组播与未指定地址（含每次重定向之后），响应上限 5 MiB、超时 30s。
 
 依据：PLAN T-14 步骤 2；CONTRACTS §15.2、§8（后台 Send 需要许可）、§5.4；TEST-MATRIX V-67。
 
@@ -3557,7 +3573,7 @@ broker、bus、router 的 Options 增加 Metrics *metrics.Counters（可为 nil�
 ```text
 /goal 使用 $alonabot-execute 推进 goal-35（切片 T-08.9：configdb 示例与 T-08 验收）。goal 目录 goal-35，分支 goal-35，worktree .worktrees/goal-35，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-目标：新增 examples/plugins/configdb，覆盖配置迁移、显式空值、未知与 secret 字段、CRUD 与事务、versioned 迁移与失败、候选 OnStart 写库后失败；在临时 data_dir 与独立的 PG 测试 schema 上分层验证；用 web/admin 的 fixture 验证表单的字段顺序、hidden、i18 回退、掩码与 PATCH；在 TEST-MATRIX §3.2 记录 T-08 的组件证据，并单独列出需要 T-09 正式入口与 Journal 才能关闭的场景。
+目标：新增 examples/plugins/configdb，覆盖配置迁移、显式空值、未知与 secret 字段、CRUD 与事务、versioned 迁移与失败、候选 OnStart 写库后失败；在临时 data_dir 上分层验证，数据库部分 sqlitedb 与 gormdb 各跑一遍；用 web/admin 的 fixture 验证表单的字段顺序、hidden、i18 回退、掩码与 PATCH；在 TEST-MATRIX §3.2 记录 T-08 的组件证据，并单独列出需要 T-09 正式入口与 Journal 才能关闭的场景。
 
 依据：PLAN T-08 步骤 9 与「停止和失败条件」；CONTRACTS §5、§6；TEST-MATRIX V-23～V-26、V-38、V-39、V-54 的 T-08 分项。
 
@@ -3571,13 +3587,13 @@ broker、bus、router 的 Options 增加 Metrics *metrics.Counters（可为 nil�
 
 接口：不新增公开 Go 符号。
 
-验收矩阵（各为一个子测试；PG 部分在 ALONABOT_TEST_PG_DSN 未设置时跳过并记为未运行）：
+验收矩阵（各为一个子测试）：
 1) 配置迁移：config_version 1 的旧配置只有经 OnLoad 才满足 2 的 Schema；先迁移再校验，结果写入候选快照。
 2) 显式空值：false、0、""、[]、{}、null（指针字段）全部保留；缺失键补默认值；未知键与嵌套未知键保留在快照中。
 3) secret：快照只有引用；Schema 移除 secret 字段但候选保留该键时仍为引用；日志中没有明文。
 4) DB：CRUD 与事务（tx 回调）；versioned 两步迁移；第二步失败时账本只有第一步、候选失败、Active 不变。
 5) 候选：reload 后 OnStart 写入候选库再失败：Discard，Active 的数据与配置不变，旧版重启正常；新旧进程没有同时写同一个库（runtime.lock 证明）。
-6) PG：首装到空 schema 执行迁移；已有数据且没有维护许可时 NEEDS_MANUAL_MIGRATION；resume 不重跑迁移。
+6) 两个入口：同一插件同时用 sqlitedb.Open 与 gormdb.Open 时共用同一连接，一边写入另一边立即可读；只用 sqlitedb 的示例变体不链接 gorm.io/gorm。
 7) i18n：Context.T 的语言选择与回退；plugin check 拒绝缺少 en-US 与占位符不一致。
 8) 表单（web/admin 的 vitest，非 DOM）：configdb 的 Schema 字段顺序与声明一致；hidden 不进 patch；未修改的 secret 不进 patch；i18 标签回退。
 - 证据：TEST-MATRIX §3.2 追加 T-08 一行；需要 T-09 正式 reload、WebUI/API 与 Journal 崩溃恢复才能关闭的 V-23～V-25、V-38 场景单独列为「未闭合」，不标成通过。
@@ -3818,6 +3834,59 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 不做：按钮点击、多轮等待、schedule 触发与后台发送（T-16.2）；用套件测试示例插件与开发文档（T-16.2）；WebUI 沙盒（v0.1 之外）。
 ```
 
+### goal-83 · T-12.8 文本生成服务
+
+状态：等待前置（T-06.1、T-12.2）。语句中 goal-19、goal-59 提供的符号（sdk.JSONService、sdk.CallJSON、sdk.WithAccess、Context.Caller、plugins/agent 的 Config、Provider 装配与 plugin.yaml 中的插件 ID）只写名字；合并后由审查者核对，再改为可派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-83（切片 T-12.8：文本生成服务）。goal 目录 goal-83，分支 goal-83，worktree .worktrees/goal-83，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：新建 sdk/llm，提供 CONTRACTS §13.5 llm.generate 的请求/响应类型、Schema 标识与调用辅助；官方 Agent 插件注册该服务（public），只接受配置项 llm_service_allowed_plugins 中的直接调用方，用已配置的 Provider 完成一次非流式请求。
+
+依据：PLAN T-12 步骤 9；CONTRACTS §13.5、§3；DECISIONS D-38、D-51；TEST-MATRIX V-76。
+
+范围（只新增或修改这些）：
+- sdk/llm/：新建包（类型、Schema 标识、Generate）
+- plugins/agent/：Config 增加字段；新增 generate.go（服务注册与处理）；provider 包不改
+- 上述包的测试文件
+允许的新跨模块边：无（plugins -> sdk/... 已允许）。sdk/llm 只 import sdk 与标准库。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. sdk/llm
+   const ServiceName = "llm.generate"
+   const AgentPluginID = "..." // 与 plugins/agent/plugin.yaml 的 id 相同，由审查者按 goal-59 合并后的值补入
+   const SchemaIn, SchemaOut = "...", "..." // 随包固定的 schema 标识，按 goal-19 的命名规则选定并写入包文档
+   const SchemaVersion uint32 = 1
+   type Message struct { Role string `json:"role"`; Text string `json:"text"` } // Role 为 "user" 或 "assistant"
+   type Request struct { Messages []Message `json:"messages"`; System string `json:"system,omitempty"`; Provider string `json:"provider,omitempty"`; MaxOutputTokens int `json:"max_output_tokens,omitempty"` }
+   type Response struct { Text string `json:"text"`; Provider string `json:"provider"`; Model string `json:"model"`; InputTokens int `json:"input_tokens,omitempty"`; OutputTokens int `json:"output_tokens,omitempty"` }
+   func Generate(ctx context.Context, req Request) (Response, error) // 经 sdk.CallJSON 调用 AgentPluginID + "/" + ServiceName
+2. plugins/agent
+   Config 增加字段：LLMServiceAllowedPlugins []string `json:"llm_service_allowed_plugins"`
+
+行为：
+- 注册：在 Services Hook 中以 JSONService 注册 ServiceName，WithAccess(Public)。
+- 许可：Context.Caller() 为空或不在 LLMServiceAllowedPlugins 中时返回 PERMISSION_DENIED，不请求 Provider。
+- 校验：messages 为空、role 不是 user 或 assistant、max_output_tokens 小于 0 时返回 INVALID_ARGUMENT；provider 非空且不存在时返回 INVALID_ARGUMENT；为空时使用 default_provider，没有任何可用 Provider 时返回 FAILED_PRECONDITION。
+- 请求：把 system 与 messages 组装成 provider.Request，MaxTokens 取 max_output_tokens（为 0 时取该 Provider 配置的 max_tokens），不传工具；用 Provider 客户端的流式接口接收并拼接全部文本，收到终止标记才算成功。用量只在 provider 包已经提供时填写，本切片不修改 provider 包。
+- 错误：Provider 返回错误或中途断开时返回 UNAVAILABLE，safe_message 不含 API Key 与消息内容；不自动重试（D-38）。调用方期限到达时取消 Provider 请求。
+- 不读写会话存储，不调用记忆插件，不套用人格，不调用工具。
+- 日志：每次调用以 INFO 记录调用方插件、provider、model、耗时与用量；不记录消息文本。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：plugins/agent/generate_test.go（//go:build unix）。用 goal-59 的测试装配、本地模拟 Provider 与一个调用 llm.Generate 的测试插件：
+  - 调用方未列入时 PERMISSION_DENIED，模拟 Provider 没有收到请求；列入后返回 text、provider 与 model，会话存储没有新增条目。
+  - provider 不存在为 INVALID_ARGUMENT；Agent 配置中没有 Provider 为 FAILED_PRECONDITION。
+  - 模拟 Provider 出错与中途断开为 UNAVAILABLE，模拟服务只收到一次请求，safe_message 不含 API Key。
+  - 调用方期限短于模拟 Provider 的延迟时，调用方得到 DEADLINE_EXCEEDED，模拟服务看到请求被取消。
+  - Agent 插件未启用时调用返回 UNAVAILABLE。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：校验分支；两种协议各一次。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./plugins/agent/... ./sdk/...；go build ./...；node scripts/check-go-deps.mjs 通过。
+
+不做：流式输出与工具调用（契约不提供）；llm_service_allowed_plugins 的专用管理页（配置表单随 T-09 由 Schema 生成）。
+```
+
 ## 第 11 波
 
 ### goal-40 · T-09.5 候选 Journal 与准备编排
@@ -3857,7 +3926,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 3) 冻结：Router/Broker/Bus/Scheduler/HTTP 停止向该插件派发新的根调用（沿用 goal-22 与 goal-27 的 Drain），按停止流程停止旧进程并等待进程树退出；phase=stopped_old。进程树没有在停止预算内清空时失败（不 sleep 猜测）。
 4) candidate.PrepareDatabase（取得 runtime.lock 后复制，完成后释放）；AddGeneration(new, 未提交)；phase=candidate_ready。
 5) 启动候选：supervisor.Launch（NewCandidate=true，Bootstrap 带 activation_reason（first_install/reload/update）、manual_migration_approved（只有管理员为本次 Session/Generation 显式授予时为 true）、阶段预算、Pending 解析后的配置），REGISTER 校验与 secret 抽取后得到快照；SetGenerationConfig 写入快照与 secret 路径；phase=prepared。此时不提交 Active、不发 ACTIVATE。
-6) PG 不可隔离的变更在 goal-32 的维护门槛停下（候选准备失败，返回 NEEDS_MANUAL_MIGRATION），按 Abort 处理。
+6) manifest 声明 prepare_effects=external 的插件，已有安装的 reload 与 update 在步骤 2 之前检查：没有本次操作的维护许可时返回 FAILED_PRECONDITION（safe_message "NEEDS_MANUAL_MIGRATION"），不写 Journal、不停止旧版；有许可时 Bootstrap 的 manual_migration_approved=true，其余照常。first_install 不受此门槛限制。
 - 普通 resume（restart、Core 重启后的恢复）不经过本编排，不写新 Journal。
 - Abort：phase 改为 failed → 停止候选进程并确认退出 → candidate.Discard（只删未受保护的候选资源）→ 以旧 Active 启动旧版的新 Session（first_install 时保持未启用）→ phase=cleaned。Abort 本身失败时保留 Journal 供 T-09.7 恢复。
 - 任一步失败都调用 Abort；错误返回给管理服务（安全文本）。
@@ -4205,7 +4274,7 @@ internal/core/journal
 ```text
 /goal 使用 $alonabot-execute 推进 goal-42（切片 T-09.7：崩溃恢复、回退与回收）。goal 目录 goal-42，分支 goal-42，worktree .worktrees/goal-42，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-目标：Core 启动取得 core.lock 后按状态库的 Active 与 Journal 恢复：未提交的操作关闭候选、以旧程序启动新 Session（首次安装没有 Active 则保持未激活），已提交的只恢复当前代次；旧进程退出未确认时不启动新写入者。rollback 从选定的保留代次复制新的 SQLite 恢复候选并使用新代次，走同一准备与提交路径；PG 与外部数据沿用显式维护。只回收无人引用的失败候选、旧包与 secret，恢复中的操作与保留快照受保护。
+目标：Core 启动取得 core.lock 后按状态库的 Active 与 Journal 恢复：未提交的操作关闭候选、以旧程序启动新 Session（首次安装没有 Active 则保持未激活），已提交的只恢复当前代次；旧进程退出未确认时不启动新写入者。rollback 从选定的保留代次复制新的 SQLite 恢复候选并使用新代次，走同一准备与提交路径；插件自管的外部数据沿用显式维护。只回收无人引用的失败候选、旧包与 secret，恢复中的操作与保留快照受保护。
 
 依据：PLAN T-09 步骤 6；CONTRACTS §12、§6.3、§9.3（rollback）；MESSAGE-MODEL §6.3（rollback 不复活旧按钮）；TEST-MATRIX V-30、V-31、V-36。
 
@@ -4214,7 +4283,7 @@ internal/core/journal
 - internal/core/state/：保留代次的读写（新文件；保留策略见下）
 - 新增 internal/core/gc/（引用回收）
 - 根包 assembly.go：serve/Run 启动时在启动任何包之前调用恢复（只加调用点）
-- docs/development.md：增加「备份与恢复」一节，说明整机备份覆盖整个 data_dir 与外部 PG（本切片获授权修改这一节）
+- docs/development.md：增加「备份与恢复」一节，说明整机备份覆盖整个 data_dir 与插件自管的外部数据（本切片获授权修改这一节）
 - 上述包的测试文件
 允许的新跨模块边：无。
 
@@ -4232,9 +4301,9 @@ internal/core/state
   - Journal 阶段为 started、stopped_old、candidate_ready、prepared、failed：候选未提交。确认没有仍在运行的候选或旧进程（通过 runtime.lock 能否取得判断；取不到时该插件标为 Degraded 并以 ERROR 说明「旧进程可能仍在运行」，不启动任何实例）；然后 candidate.Discard 候选资源，Journal 改为 cleaned；有旧 Active 时稍后按正常启动流程启动旧版（新 Session），首次安装则保持未激活。
   - Journal 阶段为 committed 但插件没有成功 ACTIVATED 过：只按当前 Active 启动（新代次），失败则 Degraded；不切回旧代次。
   - 恢复判断只信状态库的 Active 指针与 Journal，不读插件目录猜测。
-- Rollback（管理服务调用，持插件操作锁）：选定的代次必须是保留代次之一且不是当前 Active；以 Journal kind=rollback 经 goal-40 的编排：停止当前版本、从选定代次的数据库用 Backup API 复制到新代次（不是复用旧文件）、以选定代次的程序包与配置快照启动候选（activation_reason=rollback）、经 goal-41 提交。新代次 ID 为新值，旧代次签发的按钮不会因此复活（解析时比较的是当前 Active）。PG 后端的插件 rollback 返回 FAILED_PRECONDITION（"NEEDS_MANUAL_MIGRATION"：需要维护与外部备份），不假装能恢复。
+- Rollback（管理服务调用，持插件操作锁）：选定的代次必须是保留代次之一且不是当前 Active；以 Journal kind=rollback 经 goal-40 的编排：停止当前版本、从选定代次的数据库用 Backup API 复制到新代次（不是复用旧文件）、以选定代次的程序包与配置快照启动候选（activation_reason=rollback）、经 goal-41 提交。新代次 ID 为新值，旧代次签发的按钮不会因此复活（解析时比较的是当前 Active）。声明 prepare_effects=external 的插件 rollback 返回 FAILED_PRECONDITION（"NEEDS_MANUAL_MIGRATION"：需要维护与外部备份），不假装能恢复。
 - 回收（Collect，可在 serve 启动后与每次操作结束后调用）：删除不被 Active、保留代次、Pending 与未完成 Journal 引用的代次目录、程序包目录与 secret；绝不删除受保护资源；返回删除的路径列表并以 INFO 记录。
-- 文档：docs/development.md 新增「备份与恢复」：整机备份须在 Core 与插件停止后复制完整 data_dir，并单独备份外部 PG；只备份 state.sqlite 不包含插件业务数据。
+- 文档：docs/development.md 新增「备份与恢复」：整机备份须在 Core 与插件停止后复制完整 data_dir，并单独备份插件自管的外部数据；只备份 state.sqlite 不包含插件业务数据。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：cmd/alonabot/recover_e2e_test.go（//go:build unix）。用测试钩子在各节点杀掉 Core 进程（PREPARED 之后提交之前、提交之后 ACTIVATED 之前），再重启 serve：
@@ -4242,13 +4311,13 @@ internal/core/state
   - 提交后崩溃：只恢复新代次。
   - 崩溃时旧插件进程仍存活并持有 runtime.lock（测试插件忽略断链）：重启后该插件为 Degraded，没有启动第二个写入者；旧进程退出后 restart 恢复。
   - rollback 到上一代次：产生新代次与新的数据库副本，内容等于旧代次的数据；旧代次签发的按钮仍无效。
-  - PG 插件 rollback 返回 NEEDS_MANUAL_MIGRATION（ALONABOT_TEST_PG_DSN 未设置时跳过并记为未运行）。
+  - 声明 prepare_effects=external 的测试插件 rollback 返回 NEEDS_MANUAL_MIGRATION。
   - Collect 不删除保留代次与 Active，删除失败候选的残留。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：Recover 对每个 Journal 阶段的分支；保留代次的淘汰顺序；Collect 对 Pending 引用的保护。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
 
-不做：管理页面（T-09.8）；外部 PG 的备份工具（由管理员处理）。
+不做：管理页面（T-09.8）；外部数据的备份工具（由管理员处理）。
 ```
 
 ### goal-43 · T-09.8 Admin 管理页
@@ -4293,14 +4362,14 @@ internal/core/state
 
 ### goal-64 · T-12.7 官方插件打包与 T-12 验收
 
-状态：等待前置（T-12.4、T-12.5、T-12.6）。语句中 goal-38、goal-58～goal-63 提供的命令与符号（plugin pack、Agent 与记忆插件、mcptest、模拟 Provider）只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-12.4、T-12.5、T-12.6、T-12.8）。语句中 goal-38、goal-58～goal-63、goal-83 提供的命令与符号（plugin pack、Agent 与记忆插件、mcptest、模拟 Provider）只写名字；合并后由审查者核对，再改为可派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-64（切片 T-12.7：官方插件打包与 T-12 验收）。goal 目录 goal-64，分支 goal-64，worktree .worktrees/goal-64，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-目标：官方 Agent 插件与官方记忆插件按 T-09 的打包流程生成可安装包；用本地 Provider 与 MCP 模拟服务、回环测试 Adapter（或 Telegram 模拟服务）以安装包方式运行 V-57～V-61 的全部场景；在 TEST-MATRIX §3.2 记录 T-12 证据，真实 Provider 与真实 Telegram 没有凭证时记为未运行。
+目标：官方 Agent 插件与官方记忆插件按 T-09 的打包流程生成可安装包；用本地 Provider 与 MCP 模拟服务、回环测试 Adapter（或 Telegram 模拟服务）以安装包方式运行 V-57～V-61 与 V-76 的全部场景；在 TEST-MATRIX §3.2 记录 T-12 证据，真实 Provider 与真实 Telegram 没有凭证时记为未运行。
 
-依据：PLAN T-12 步骤 8 与「停止和失败条件」；CONTRACTS §13、§9.3；TEST-MATRIX V-57～V-61。
+依据：PLAN T-12 步骤 8 与「停止和失败条件」；CONTRACTS §13、§9.3；TEST-MATRIX V-57～V-61、V-76。
 
 范围（只新增或修改这些）：
 - plugins/agent/plugin.yaml、plugins/memory/plugin.yaml：补齐打包所需字段（version、source、os/arch 由 pack 填写的部分除外）
@@ -4315,6 +4384,7 @@ internal/core/state
 - V-59：记忆 add/patch/remove、超限、重复、不可见字符、群聊多用户、会话中写入与 /reset、记忆插件不可用。
 - V-60：合法与不合法的 SKILL.md、load_skill 不存在的技能。
 - V-61：非 Admin 创建任务、interval/cron 任务到期运行、无发信许可、confirm 工具、插件离线错过。
+- V-76：另一个测试插件经安装包调用 llm.generate：未列入与列入 llm_service_allowed_plugins、Provider 不存在、Provider 出错、Agent 未启用。
 - 证据：TEST-MATRIX §3.2 追加 T-12 一行，写明测试位置、命令、平台与结果；Provider 与 MCP 标为本地模拟；真实 Provider 与 Telegram 为「未运行」。
 
 测试（按编码规范「测试提交规则」）：
@@ -4490,7 +4560,7 @@ internal/core/state
 ```text
 /goal 使用 $alonabot-execute 推进 goal-45（切片 T-09.11：正式流程故障注入与 T-09 验收）。goal 目录 goal-45，分支 goal-45，worktree .worktrees/goal-45，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-目标：通过真实 CLI 与管理 API，在临时 data_dir 中跑完正式流程：首次安装 → enable → restart → reload → update → pin → disable → 同来源重装 → 显式 rollback；以包损坏、签名或公钥变化、PG 维护错误验证拒绝路径；在 PREPARED、提交前后与 OnReady 失败点终止 Core，连同残存旧进程、空间不足与同插件并发操作，验证没有双写、没有提前开放、没有静默的数据回滚。回填 T-08 留给集成的 V-23～V-25、V-39 证据，在 TEST-MATRIX §3.2 记录 T-09 证据，形成 T-10 可复用的恢复场景。
+目标：通过真实 CLI 与管理 API，在临时 data_dir 中跑完正式流程：首次安装 → enable → restart → reload → update → pin → disable → 同来源重装 → 显式 rollback；以包损坏、签名或公钥变化、external 插件的维护错误验证拒绝路径；在 PREPARED、提交前后与 OnReady 失败点终止 Core，连同残存旧进程、空间不足与同插件并发操作，验证没有双写、没有提前开放、没有静默的数据回滚。回填 T-08 留给集成的 V-23～V-25、V-39 证据，在 TEST-MATRIX §3.2 记录 T-09 证据，形成 T-10 可复用的恢复场景。
 
 依据：PLAN T-09 步骤 8 与「停止和失败条件」；CONTRACTS §5、§6、§7、§9、§12、§14；TEST-MATRIX V-23～V-25、V-27～V-31、V-39、V-40、V-52、V-54～V-56、V-62、V-63。
 
@@ -4504,13 +4574,13 @@ internal/core/state
 验收矩阵（各为一个子测试，记录命令、日志摘录与状态库检查）：
 1) 正式流程：首次安装 → enable（首个 Active）→ restart（只换 Session）→ 编辑 config.json 后 reload（新代次与 SQLite 副本）→ update（新包、新代次）→ pin → disable → uninstall 后同来源重装（复用数据）→ rollback 到上一代次（新代次、旧按钮不复活）。
 2) 拒绝路径：归档损坏、摘要不符、签名错误、发布者公钥变化（需要确认）、错误的 OS/arch、来源 ID 冲突、../ 与符号链接逃逸的归档：都在停止旧版前拒绝，旧版继续运行。
-3) PG（ALONABOT_TEST_PG_DSN 未设置时记为未运行）：已有数据的 update 返回 NEEDS_MANUAL_MIGRATION；授予维护许可后执行；rollback 返回 NEEDS_MANUAL_MIGRATION。
+3) external：声明 prepare_effects=external 的测试插件，已有安装的 update 返回 NEEDS_MANUAL_MIGRATION；授予维护许可后执行；rollback 返回 NEEDS_MANUAL_MIGRATION；普通 restart 不受影响。
 4) 崩溃点：在 PREPARED 之后、提交之前、提交之后 ACTIVATED 之前、OnReady 失败时分别杀掉 Core，重启后的状态与 goal-42 的规则一致；任何时刻只有一个代次接单（以插件的事件处理日志证明）。
 5) 残存旧进程（忽略断链、持有 runtime.lock）：不启动第二个写入者，插件 Degraded。
 6) 空间不足（测试钩子使备份失败）：不激活，旧版不受影响。
 7) 同插件并发操作（两个 CLI 同时 reload 与 disable）：串行执行，没有交错的 Journal。
 8) 依赖：必需依赖缺失时拒绝启用并列出缺失项；停用被依赖的插件需要确认，确认后依赖方继续运行且调用返回 UNAVAILABLE；成环在安装时拒绝。
-9) 回填 T-08：V-23（config.json 编辑在 reload 前不生效）、V-24（候选 OnStart 写库后失败不污染旧库）、V-25（secret 修改、旧 secret 字段转未知键、掩码不成为保存值）、V-39（PG 维护门槛）经正式入口验证。
+9) 回填 T-08：V-23（config.json 编辑在 reload 前不生效）、V-24（候选 OnStart 写库后失败不污染旧库）、V-25（secret 修改、旧 secret 字段转未知键、掩码不成为保存值）、V-39（external 插件的维护门槛）经正式入口验证。
 10) 日志与 i18n（V-54、V-62、V-63）经正式入口的回归：日志级别修改、logs 查询、Core usage 的语言。
 - scripts/scenarios：把 1)、4)、5) 写成只依赖 alonabot 二进制与测试包的场景，T-10 在其他平台运行。
 - 证据：TEST-MATRIX §3.2 追加 T-09 一行；五平台的真实运行留给 T-10，写「未运行」。
@@ -4531,7 +4601,7 @@ internal/core/state
 ```text
 /goal 使用 $alonabot-execute 推进 goal-74（切片 T-14.4：首次运行与预装）。goal 目录 goal-74，分支 goal-74，worktree .worktrees/goal-74，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-目标：数据目录首次初始化时，按普通安装流程安装发行包 packages/ 中的全部包，并启用 Agent、记忆与 help；Telegram 与 OneBot 11 Adapter 只安装，管理员为它添加第一个实例时才启用；其他预装插件只安装不启用。之后不再自动安装，已卸载的预装包不重新安装；新版本发行包中版本更高的内置包作为可用更新列出，由管理员确认后按 update 流程更新。
+目标：数据目录首次初始化时，按普通安装流程安装发行包 packages/ 中的全部包，只启用 help；Agent 与记忆插件只安装不启用（D-50）；Telegram 与 OneBot 11 Adapter 只安装，管理员为它添加第一个实例时才启用；其他预装插件只安装不启用。之后不再自动安装，已卸载的预装包不重新安装；新版本发行包中版本更高的内置包作为可用更新列出，由管理员确认后按 update 流程更新。
 
 依据：PLAN T-14 步骤 4；CONTRACTS §15.1、§15.2；TEST-MATRIX V-66。
 
@@ -4543,16 +4613,16 @@ internal/core/state
 允许的新跨模块边：无。
 
 行为：
-- 首次初始化：serve 取得 core.lock 后，若 core_settings 中没有 preinstalled 标记：查找 alonabot 可执行文件同目录下的 packages/（发行归档结构）；没有该目录时跳过（开发构建）。对其中每个包按 Install 的正常流程校验与安装；trust.Official 的公钥视为已信任来源，不逐个确认；签名或摘要校验失败的包不安装并记 ERROR，继续处理其余包。安装后启用 Agent、记忆与 help（按 manifest 的 id 识别），其余不启用。全部处理完后写入 preinstalled 标记（即使有包失败）。
+- 首次初始化：serve 取得 core.lock 后，若 core_settings 中没有 preinstalled 标记：查找 alonabot 可执行文件同目录下的 packages/（发行归档结构）；没有该目录时跳过（开发构建）。对其中每个包按 Install 的正常流程校验与安装；trust.Official 的公钥视为已信任来源，不逐个确认；签名或摘要校验失败的包不安装并记 ERROR，继续处理其余包。安装后只启用 help（按 manifest 的 id 识别），其余不启用。全部处理完后写入 preinstalled 标记（即使有包失败）。
 - 首次管理 token：沿用 goal-39 的 serve 规则（交互终端下生成并显示一次，非终端拒绝启动）；预装在 token 初始化之后执行。
-- Agent 在没有配置 Provider 时也能启用（/ask 回复提示）。
+- 管理员之后可经管理 API 或 CLI 启用 Agent 与记忆插件；Agent 在没有配置 Provider 时也能启用（/ask 回复提示）。
 - 之后的启动不再自动安装；已卸载（uninstalled）的预装包不重新安装。
 - 可用更新：List 时比较 packages/ 中每个包的版本与已安装版本，更高时在 Package 中标记 available_update（版本号），不自动更新；管理员经 update 选择该包。
 - Telegram：CreateInstance 发现 Adapter 包未启用时先启用它，再创建实例。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：cmd/alonabot/firstrun_e2e_test.go（//go:build unix）：用 goal-73 的 dist 工具以临时密钥为当前平台构建发行归档并解压到临时目录，运行其中的 alonabot serve（干净 data_dir，测试钩子模拟交互终端）：
-  - 全部预装包已安装；Agent、记忆、help 已启用；welcome、rss、Telegram 与 OneBot 11 Adapter 未启用。
+  - 全部预装包已安装；只有 help 已启用并有进程；Agent、记忆、welcome、rss、Telegram 与 OneBot 11 Adapter 未启用，没有对应进程。
   - 非终端运行时拒绝启动并提示 admin-token init。
   - 把其中一个包的签名改坏：该包未安装并有 ERROR，其余正常。
   - 卸载 rss 后重启 serve：不重新安装。
@@ -4607,7 +4677,7 @@ internal/core/state
 ```text
 /goal 使用 $alonabot-execute 推进 goal-75（切片 T-14.6：发行包与镜像的端到端验收）。goal 目录 goal-75，分支 goal-75，worktree .worktrees/goal-75，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-目标：在干净的数据目录上，分别从发行归档与容器镜像依次完成：首次运行、登录 WebUI、添加 Telegram 实例（本地 Bot API 模拟服务）、配置 Provider（本地模拟服务）、/ask 对话、/help、启用 rss 并收到推送；在 TEST-MATRIX §3.2 记录 T-14 证据，真实 Telegram 与真实 Provider 没有凭证时记为未运行。
+目标：在干净的数据目录上，分别从发行归档与容器镜像依次完成：首次运行、登录 WebUI、添加 Telegram 实例（本地 Bot API 模拟服务）、启用 Agent 与记忆插件并配置 Provider（本地模拟服务）、/ask 对话、/help、启用 rss 并收到推送；在 TEST-MATRIX §3.2 记录 T-14 证据，真实 Telegram 与真实 Provider 没有凭证时记为未运行。
 
 依据：PLAN T-14 步骤 6 与「停止和失败条件」；CONTRACTS §15；TEST-MATRIX V-66、V-67、V-70。
 
@@ -4662,7 +4732,7 @@ internal/core/state
 1) 组件链路：admin-token init → 登录 → 安装并启用 echo、configdb、http 示例与官方插件 → 配置与权限 → Telegram 模拟服务的真实消息 → 插件 HTTP 页面（经票据）→ reload → update → rollback。
 2) 能力组合（每个能力使用不同的插件二进制，不用同一个 worker 的多份进程代替）：命令、文本匹配、多轮等待、主动 Send、Service、Event Bus、Scheduler、HTTP、GORM（含迁移），以及 Agent 与记忆插件；既有无配置无数据库的插件，也有实际写入与迁移的插件。
 3) 边界：伪造与过期 Session、命令遮蔽、无 Actor、实例许可、Hook 递归、媒体租约、满准入、Cancel 顺序、超时仍运行的 job；错误回执与已确认的外部结果一致。
-4) 恢复：停止与持锁、SQLite WAL 备份、候选 OnStart 写入后失败、PREPARED 与提交前后 Core 退出、不可变 secret、PG 维护许可与 resume、显式 rollback 的新代次；核对数据库内容与状态库的 Active 指针，不能只看日志里的「恢复成功」。
+4) 恢复：停止与持锁、SQLite WAL 备份、候选 OnStart 写入后失败、PREPARED 与提交前后 Core 退出、不可变 secret、external 插件的维护许可与 resume、显式 rollback 的新代次；核对数据库内容与状态库的 Active 指针，不能只看日志里的「恢复成功」。
 - 汇总：TEST-MATRIX 中每个 V 条目写明测试位置、命令、平台与结果；失败的列为阻塞项；没有运行条件的（真实 Telegram、真实 Provider、非 darwin 平台等）写「未运行」与原因。
 
 测试（按编码规范「测试提交规则」）：
@@ -4709,27 +4779,28 @@ internal/core/state
 不做：资源报告（T-10.3）；发布（T-10.4）。
 ```
 
-### goal-48 · T-10.3 资源比较报告
+### goal-48 · T-10.3 资源比较报告与常驻内存预算核对
 
 状态：等待前置（T-10.1）。需要固定机器与等价负载；NoneBot2 侧的 Python 依赖在引入前须经维护者确认。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-48（切片 T-10.3：资源比较报告）。goal 目录 goal-48，分支 goal-48，worktree .worktrees/goal-48，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-48（切片 T-10.3：资源比较报告与常驻内存预算核对）。goal 目录 goal-48，分支 goal-48，worktree .worktrees/goal-48，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-目标：在一台固定机器上，按 TEST-MATRIX V-33 的四种负载（空闲、消息、数据库、HTTP）测量 Core 加插件及附属进程的总 RSS/私有内存、Linux PSS、CPU 与 P50/P95/P99 延迟，并用同一模拟服务与功能相同的插件测量 NoneBot2；输出原始数据与复现命令，不预设优胜结论，不虚构内存阈值。
+目标：在一台固定机器上，按 TEST-MATRIX V-33 的四种负载（空闲、消息、数据库、HTTP）测量 Core 加插件及附属进程的总 RSS/私有内存、Linux PSS、CPU 与 P50/P95/P99 延迟，并用同一模拟服务与功能相同的插件测量 NoneBot2；再按 V-74 测量 Core、echo、rss 与 configdb 的 gormdb 变体空闲时的 PSS 并对照预算。输出原始数据与复现命令，不预设优胜结论。
 
-依据：PLAN T-10 步骤 6；TEST-MATRIX V-33。
+依据：PLAN T-10 步骤 6；CONTRACTS §10；DECISIONS D-52；TEST-MATRIX V-33、V-74。
 
 范围（只新增或修改这些）：
 - 新增 bench/（负载生成器与采样程序：Go 程序）；bench/nonebot2/（NoneBot2 侧的等价插件与运行说明，Python 依赖用 uv 管理且只在该目录内）
 - 新增 docs/benchmarks.md（报告：机器、版本、命令、原始数据位置、结果表，不写优胜结论）
-- spec/TEST-MATRIX.md：V-33 的证据（本切片获授权修改这一处）
+- spec/TEST-MATRIX.md：V-33、V-74 的证据（本切片获授权修改这一处）
 允许的新跨模块边：bench 只经 os/exec 与 HTTP 调用被测程序。NoneBot2 及其 Python 依赖只用于基准，不进入 Go module；在 bench/nonebot2 中引入前标阻塞，列出版本，等维护者确认。
 
 行为：
 - 负载（V-33）：空闲——Core 与 echo、configdb、HTTP 示例三个插件运行 10 分钟；消息——每秒 20 条文本、持续 10 分钟，echo 逐条回复；数据库——每秒 20 条命令，每条在 SQLite 中写入并读取一行，持续 10 分钟；HTTP——每秒 50 个请求访问插件路由，持续 10 分钟。两边都使用同一个本地 Bot API 模拟服务。
 - 采样：每秒采样一次全部相关进程（Core、插件、Adapter 及其子进程；NoneBot2 的进程）的 RSS、私有内存（Linux 读 smaps_rollup 的 Private_*；macOS 写明使用的替代指标）、Linux PSS、CPU；延迟为模拟服务从发出 update 到收到回复的时间（消息与数据库负载），HTTP 为请求往返时间。
 - 输出：每次运行的原始 CSV 与汇总 JSON，复现命令写入 docs/benchmarks.md；报告只给数值与条件，不写结论。
+- V-74：linux/amd64，各进程 Activated 后空闲 2 分钟，读 smaps_rollup 的 Pss，取 3 轮中位数；超出预算时在报告中列出超出项与可见原因（例如新增依赖、init 分配），不自行调整预算。
 - TEST-MATRIX 记录机器、OS、版本与结果文件位置；没有在 Linux 上运行时 PSS 写「未运行」。
 
 测试（按编码规范「测试提交规则」）：
@@ -4738,7 +4809,7 @@ internal/core/state
 
 完成条件：gofmt -l 无输出；go vet ./...；go build ./...；一次完整基准运行的结果；node scripts/check-repository.mjs。
 
-不做：性能优化（发现问题时另行处理）；设定通过阈值（契约不设）。
+不做：性能优化（发现问题时另行处理）；修改 V-74 的预算（需维护者在 DECISIONS 记录）；为吞吐与延迟设定通过阈值（契约不设）。
 ```
 
 ## 第 19 波
@@ -4764,7 +4835,7 @@ internal/core/state
 行为：
 - 候选资产：执行者用测试密钥运行 scripts/dist 与镜像构建，得到与正式发布结构相同的候选资产；正式签名由维护者用官方私钥重新运行同一命令完成。
 - release-check：在干净 data_dir 中只使用候选资产（不访问源码树）：首次运行预装、安装一个第三方测试包、用新版本资产 update、卸载并同来源重装；对每个包核对 release.json 的来源、长度、SHA256、平台与包内 Schema、manifest、二进制的一致性；签名错误、来源不符的资产被拒绝（V-28、V-41 复验）。
-- 发布说明：写明支持的平台与实际运行结果（来自 T-10.2）、资源报告位置（T-10.3）、全部「未运行」项与原因、已知限制（Native 插件是可信代码、库模式无隔离、PG 不承诺自动回退等）、备份与恢复步骤、升级与回退方法。
+- 发布说明：写明支持的平台与实际运行结果（来自 T-10.2）、资源报告位置（T-10.3）、全部「未运行」项与原因、已知限制（Native 插件是可信代码、库模式无隔离、插件自管的外部数据不承诺自动回退等）、备份与恢复步骤、升级与回退方法。
 - 阻塞用例：TEST-MATRIX 中标为失败的条目必须全部修复或经维护者同意延后（在发布说明中列出）。
 - 发布：维护者在其环境中用 scripts/dist 构建并签名，把发行归档、各安装包及其 release.json/.sig 发布到本仓库的 GitHub Release，把镜像推送到 ghcr.io/alonabot/alonabot（:<version> 与 :latest）；执行者不持有私钥，不执行发布。
 

@@ -1,6 +1,6 @@
 # 设计决策记录
 
-版本：v0.6-review（2026-10-21；保留已确认 D-01～D-25，2026-10-25～2026-10-27 新增 D-26～D-47，不升版本）
+版本：v0.6-review（2026-10-21；保留已确认 D-01～D-25，2026-10-25～2026-10-27 新增 D-26～D-52，不升版本）
 
 D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置及当前状态。2026-10-21 的规格完善任务将剩余技术默认值收敛为实施基线，不追加虚构的历史确认记录；2026-10-22 将决策和历史记录归入 adr/。
 
@@ -23,14 +23,14 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | D-11 | Event Bus | 跨插件异步事件，非持久化尽力投递，离线不补发；不同于有结果的调用 |
 | D-12 | Service Call | 由 Core 路由，允许 A→B→C 嵌套，避免同步环；支持超时/取消，不自动重试有副作用的调用 |
 | D-13 | Go SDK 注册风格 | 一个插件包一个根插件类（`sdk.Base`，D-39 前为 `plugin.Base`），最多一个 Config 类；独立函数可经注解自动发现，实例方法显式注册；命令组/子命令 |
-| D-14 | 数据库与配置 | 首发 SQLite/PostgreSQL；原生 GORM；插件 JSON 配置、WebUI schema、secret/hidden/description、i18/；未知配置键默认保留 |
+| D-14 | 数据库与配置 | 首发 SQLite/PostgreSQL（PostgreSQL 由 D-48 移出框架）；原生 GORM；插件 JSON 配置、WebUI schema、secret/hidden/description、i18/；未知配置键默认保留 |
 | D-15 | HTTP 路由 | Core 统一公共 HTTP 服务，插件路由按 ID 前缀；不可信插件 UI 不能与 Admin UI 共用浏览器 Origin |
 | D-16 | 插件身份与更新来源 | `plugin.yaml` 的 ID 必须有且是 HTTP 路由前缀；市场发布需 `alonabot_plugin_` 前缀，本地命名不规范只警告；更新同时检查 ID + 原可信来源，避免同 ID 不同仓库混淆 |
 | D-17 | 首发范围 | Telegram 与最小机器人主链路优先；OneBot/QQ 官方/Discord 等其他 Adapter 后续扩展 |
 | D-18 | RPC 握手 | 身份、主/次版本与能力协商，主版本不兼容拒绝启动；只有 Ready 才激活路由 |
 | D-19 | 调度归 Core | Core 管理定时触发；不同任务在同一个 Native 插件内可以并发，不应彼此串行阻塞 |
 | D-20 | **重复冲突两类规则** | **不同插件包 ID 重复：first-wins，保留最先注册者、后者报告冲突，不可静默替换**。**同插件自动+显式 Handler / HTTP 路由重复：报错**，不再使用较早的 first-wins 路由规则 |
-| D-21 | GORM 和迁移 | 提供统一 `gormdb.Open(...)` SDK 入口；可选择不迁移、自行实现 `Migrate()`、或由 Core 协助的 `Migrations()`，后两种互斥；跨数据库搬迁由开发者负责 |
+| D-21 | GORM 和迁移 | 提供统一 `gormdb.Open(...)` SDK 入口（D-49 增加 `sqlitedb` 入口）；可选择不迁移、自行实现 `Migrate()`、或由 Core 协助的 `Migrations()`，后两种互斥；跨数据库搬迁由开发者负责 |
 | D-22 | 配置与翻译细节 | 每包最多一个 Config，多 Config 构建失败；`i18/` 下翻译 JSON 采用顶层 `config` 嵌套字段，不增加额外 i18n tag；secret/hidden、固定排序遵守最小配置原则 |
 | D-23 | SDK 开发体验 | plugin.yaml 元数据 ID 是真源，根类无需重复写 `ID()`；独立函数可自动注册，实例方法显式注册；辅助 Handler 可显式拿到根类指针；优先原生 Go Modules 与少反射 |
 | D-24 | 保留两条跨插件协作途径 | 公共接口注册到 Core → Service Call（推荐）；同时**保留**通过 Core 动态调用另一插件已注册命令/事件路由的需求，不能直接持有另一进程 Go 对象；v0.1 只交付 Service Call，动态调用命令/事件路由不在 v0.1 范围内（Q-15） |
@@ -41,7 +41,7 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | D-29 | NoneBot2 基础对齐 | **用户确认（2026-10-25）**：v0.1 补齐 keyword/startswith/endswith/fullmatch 文本匹配、基础多轮等待（非持久）、bot 上下线事件与插件依赖声明。为了让多轮等待与 Agent 的一轮对话不受普通请求 30s 期限和 64 条分发链的限制，规格完善时增加延续调用：Handler 可请求 Core 在本次调用结束后，以原可信上下文另发一次独立期限的调用 |
 | D-30 | 用户可见文案的 i18n | **用户确认（2026-10-25）**：日志、错误、CLI 输出与 safe_message 只用英文；机器人回复与 WebUI 经 i18n 提供，英文为源语言，附简体中文。插件文案放在 `i18/` 的 `messages`，按 Actor locale → Core 默认 locale → en-US 选择 |
 | D-31 | 统一日志 | **用户确认（2026-10-25）**：Core、插件与 Adapter 都使用标准库 `log/slog`。控制台格式仿照 AstrBot：`[时间] [来源] [级别] [文件:行号]: 消息`，来源标签为 `[Core]`、`[Plug:<id>]`、`[Adpt:<id>/<实例>]`，另可输出 JSON。默认 INFO；全局级别在启动时设置，也可在运行时修改。每个插件与 Adapter 可单独设置级别（含 off），持久化在 Core，修改立即生效。WebUI 的显示筛选与输出级别分开 |
-| D-32 | 两种运行方式 | **用户确认（2026-10-25）**：发行包开箱即用，包含 Core、官方 Telegram Adapter、Agent、记忆插件与预装插件，首次运行自动安装，默认只启用 Agent、记忆与 help；预装插件首批为 help、welcome、rss（规格完善时选定）。库模式供开发者把框架当作 Go 库使用：在自己的 `main.go` 中调用根包的 `alonabot.Run`，开发中的组件与 Core 同进程、走同一套协议；`-reload` 时 Core 常驻，只重新编译并重启开发中的组件。官方 Adapter 与官方插件在 v0.1 协议冻结后迁到独立仓库，`adapters/` 与 `plugins/` 不被本仓库其他包 import |
+| D-32 | 两种运行方式 | **用户确认（2026-10-25）**：发行包开箱即用，包含 Core、官方 Telegram Adapter、Agent、记忆插件与预装插件，首次运行自动安装，默认只启用 Agent、记忆与 help（D-50 改为只启用 help）；预装插件首批为 help、welcome、rss（规格完善时选定）。库模式供开发者把框架当作 Go 库使用：在自己的 `main.go` 中调用根包的 `alonabot.Run`，开发中的组件与 Core 同进程、走同一套协议；`-reload` 时 Core 常驻，只重新编译并重启开发中的组件。官方 Adapter 与官方插件在 v0.1 协议冻结后迁到独立仓库，`adapters/` 与 `plugins/` 不被本仓库其他包 import |
 | D-33 | 日志文件 | **用户确认（2026-10-25）**：日志按本地日期轮转写入文件，便于查询前几天的记录；单个文件 100 MiB 后同日切分，合计不超过 1 GiB、保留不超过 30 天，先达到的条件生效。文件开关与上限属于普通设置，可修改 |
 | D-34 | 调优参数 | **用户确认（2026-10-25）**：契约中可调的容量、期限与配额集中登记在一个参数文件中，只能在启动时用唯一的 `--args` 覆盖（直接写 `KEY=VALUE`，或给出文本文件），用于测试极端情况。日志级别与日志文件设置不属于调优参数。插件内存上限只做 Go 的 `GOMEMLIMIT` 软上限；渲染不进入 v0.1 |
 | D-35 | 规格完整性审查的补充 | **规格完善时选定（2026-10-25）**，按用户「计划中不能留待后续讨论的说法」的要求补齐：message.created 增加 `to_me` 与 SDK 的 `ToMe` Rule；第一个 Core Admin 经 `/whoami` 与 WebUI/CLI 添加；设置文件增加出站代理 `proxy`；Telegram 只支持 long polling，实例配置为 `token` 与 `api_base_url`；开发入口与库模式的实例配置放在 `adapters/<adapter_id>/instances/`；V-33 的工作负载给出具体数值；发布由维护者用 `scripts/dist/` 发布到本仓库的 GitHub Release；Agent、rss、welcome 的命令权限与 rss 的抓取上限给出具体值；v0.1 不提供 webhook 接收与系统服务安装脚本（容器镜像由 D-36 改为提供） |
@@ -57,6 +57,11 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | D-45 | Core 全局禁止 | **用户确认（2026-10-26）**：契约多处要求「Core 全局禁止」始终生效，但没有定义其内容。v0.1 定为两张持久化禁止表：用户（adapter_instance_id、external_user_id）与会话（adapter_instance_id、chat_id）。命令派发前先检查用户与会话，Send 准入先检查目标会话；策略覆盖与 Core Admin 都不能绕过。管理入口随 T-09 的 Core 设置提供。 |
 | D-46 | 官方 OneBot 11 Adapter | **用户确认（2026-10-27）**：v0.1 增加官方 OneBot 11 Adapter（`adapters/onebot11/`），与 Telegram 一样是可安装的独立 Adapter 包。两者在按钮、消息编辑、提及、媒体来源与专属内容上差别很大，用来检验通用 Segment 与 Capability 的设计，并新增跨 Adapter 一致性验收。v0.1 只实现正向 WebSocket（Adapter 主动连接 OneBot 实现端），使用 `github.com/coder/websocket`，该依赖只用于 `adapters/onebot11`；实例配置的 `mode` 只接受 `forward`。反向 WebSocket（`mode: reverse`，实现端连入 Adapter）不在 v0.1 范围内，加入时需要先定 Adapter 的监听与鉴权方式（例如复用 CONTRACTS §7.2 的统一端口代理），已有字段不变；该库同时提供服务端，不需要新依赖。真实 QQ 端依赖非官方协议实现，有账号风险，只由维护者手动测试；CI 与验收使用本地 OneBot 11 模拟服务，没有手测记录时记为未运行。 | CONTRACTS §0/§8/§11/§15.2、MESSAGE-MODEL §7、PLAN T-15、TEST-MATRIX V-71/V-72 |
 | D-47 | 插件测试套件 | **用户确认（2026-10-27）**：v0.1 提供公开的插件测试套件 `plugintest`（模块根目录下的包，参照 NoneBug 与 Koishi 的模拟适配器）。插件作者在 `go test` 中用它在同一进程启动真实 Core、套件自带的测试 Adapter 与被测组件，注入消息、按钮点击与 schedule 触发，取得这次分发产生的发送；全程走真实的握手、Session、权限与派发，不 mock SDK。为此根包增加 `Start`：全部组件激活后返回句柄，由调用方停止；`Run` 等于 `Start` 加等待信号，`Start` 也供把 Core 嵌入其他 Go 服务使用。分发结束的通知只经 `internal/inproc` 交给套件，不进入 wire 协议。套件属于 SDK 公共 API，兼容承诺与 `sdk` 相同。WebUI 中可交互的沙盒（参照 Koishi 的 sandbox）不在 v0.1 范围内。 | CONTRACTS §0/§11/§15.4/§17、PLAN T-13/T-16、TEST-MATRIX V-73、ARCHITECTURE |
+| D-48 | 框架只托管 SQLite | **用户确认（2026-10-27）**：移除框架托管的 PostgreSQL 后端：Core 不再下发 PG 连接、不管理每插件 role/schema，SDK 删除 `OpenPostgres`，`gorm.io/driver/postgres` 与 pgx 移出依赖清单。需要外部数据库的插件自带驱动、以 secret 配置项取得连接参数并自行管理数据；迁移或 OnStart 会写外部数据库时声明 `prepare_effects=external`，已有安装的 reload、update 与 rollback 走维护门槛。原因：PG 驱动与 SQLite 实现在同一个 `sdk/gormdb` 包中，所有用 SQLite 的插件都被迫链接它，本机实测（macOS footprint）每个插件进程因此多 1.7 MiB 常驻内存、二进制多 9 MiB；PG 分支（role/schema 预置、search_path、resume 只核对）又占了 §6 的大半复杂度。`DATABASE_BACKEND_POSTGRES`、`DatabaseDescriptor.postgres` 与消息 `PostgresConnection` 删除，编号与名称 reserved | CONTRACTS §0/§1.1/§6/§9/§12、WIRE §3.2/§5A、DESIGN §I/§N、PLAN T-08～T-10、TEST-MATRIX V-26/V-31/V-39/V-40 |
+| D-49 | 受管 SQLite 的两个入口 | **用户确认（2026-10-27）**：新增 `sdk/sqlitedb`，`sqlitedb.Open(ctx)` 返回 `*sql.DB`；`gormdb.Open(ctx)` 在同一连接上返回 `*gorm.DB`。两个包各定义一组迁移接口，被导入时向 SDK 登记识别方式，SDK 本身不 import GORM，插件只为用到的包付出内存。依据同一组实测：`database/sql` 加 modernc 的进程比空 Go 进程多 0.9 MiB，GORM 再多 1.5 MiB、二进制再多 4.7 MiB。GORM 仍是一等入口，D-01、D-21 不变 | CONTRACTS §6.1/§6.2、DESIGN §I、PLAN T-08 步骤 5/6/9 与 T-14 步骤 2、TEST-MATRIX V-26 |
+| D-50 | AI 组件默认不启用 | **用户确认默认不启用（2026-10-27），启用方式由规格完善时选定**：修订 D-32，首次运行只启用 help；Agent 与记忆插件随发行包安装但不启用，由管理员在 WebUI 或 CLI 按需启用，不用 AI 对话的部署不运行这两个进程。没有采用「配置第一个 Provider 时自动启用」：那需要 Core 理解 Agent 插件的配置内容，打破 Core 不感知插件业务配置的边界 | CONTRACTS §15.2、DESIGN §S、PLAN T-14 步骤 4/6、TEST-MATRIX V-66 |
+| D-51 | 文本生成服务 | **用户确认（2026-10-27）**：官方 Agent 插件提供 JSON Service `llm.generate`，其他插件经 Service Call 复用已配置的 Provider，类型与调用辅助在 `sdk/llm`。服务声明 public，但 Agent 只接受列入 `llm_service_allowed_plugins`（缺省为空）的直接调用方；一次调用就是一次非流式 Provider 请求，不涉及工具、会话、记忆与人格。模型能力因此只存在于 Agent 插件一个进程中，Core 不链接任何模型 SDK 或 Provider 客户端 | CONTRACTS §13/§13.5、DESIGN §R、PLAN T-12 步骤 9 与 T-12.8、TEST-MATRIX V-76 |
+| D-52 | Core 依赖允许清单与常驻内存预算 | **用户确认（2026-10-27），预算数值由规格完善时选定**：Core 可执行文件与 SDK 根包只链接 docs/development.md 列出的允许模块，`scripts/check-go-deps.mjs` 在 CI 中对五个目标逐一检查。空闲常驻内存设预算（linux/amd64 PSS）：Core ≤ 24 MiB、无数据库的示例插件 ≤ 10 MiB、`sqlitedb` 插件 ≤ 14 MiB、`gormdb` 插件 ≤ 16 MiB。初值依据 2026-10-27 的实测（Linux PSS，测量脚本未入库）：Core 约 11 MiB、轻量插件进程约 7.5 MiB、链接了 PG 驱动的 GORM SQLite 插件约 17.6 MiB；预算为之后的功能留出余量。超出视为回归，确需提高时在本文件记录新值与原因。插件作者的对应规则写在 [插件开发规范](../../docs/plugin-guide.md) | CONTRACTS §10、DESIGN §O、PLAN §2/T-10、TEST-MATRIX V-74/V-75 |
 
 ## P 类历史议题与当前处置
 
@@ -68,7 +73,7 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | P-04 | 多轮会话 | 由 D-29 取代：v0.1 提供延续调用内的基础多轮等待（非持久）；持久会话状态与暂停 DSL 仍后置。 | §2.4 | 已收敛 |
 | P-05 | Handler 双形式 | 两种 Handler 签名共用 HandlerOutcome；自动回复与主动 Send 分明，一次 Chain 可产生多物理消息，手动模式可多次 Send。 | §8 | 已收敛 |
 | P-06 | Adapter 形态 | 由 D-26 取代：Adapter 为安装包和独立进程，能力版本化，实例可单独启停。 | §8 | 已收敛 |
-| P-07 | 更新恢复 | Generation/Journal 管理受管 SQLite 候选副本；提交后显式恢复，PG/不可隔离迁移进入维护。 | §6 | 已收敛 |
+| P-07 | 更新恢复 | Generation/Journal 管理受管 SQLite 候选副本；提交后显式恢复，声明 `prepare_effects=external` 的不可隔离变更进入维护（D-48）。 | §6 | 已收敛 |
 | P-08 | 配置激活 | Pending→Candidate→Prepared→ActiveGeneration+COMMITTED→OnReady/Activated；secret 引用不可变，提交前失败启动旧版的新 Session。 | §5/§12 | 已收敛 |
 | P-09 | 匹配/传播 | 普通命令最长路径优先，识别后拒绝不回落；同事件 priority 小先、同级稳定 ID 排序，Regex/Raw 与 Stop 语义固定。 | §2/§3 | 已收敛 |
 | P-10 | Adapter 动态装载 | 已有 Adapter 实例开关首发；新类型热加载后置。 | §8 | 已收敛 |
@@ -83,22 +88,23 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | --- | --- | --- | --- | --- |
 | Q-01 | RPC 精确格式 | WIRE-FORMAT 固定 Envelope、控制失败、Bootstrap、状态、错误与 deadline/Cancel。 | §1 | 已收敛 |
 | Q-02 | Native 信任边界 | Native 插件按可信本地代码运行，不提供跨平台恶意代码沙箱。 | §7 | 已收敛；安全测试仍需做 |
-| Q-03 | 真实多插件内存 | T-10 测量多个真实不同 Native 可执行文件的总资源；不能以相同 worker 的 PSS 预设结论。 | §10 | 性能数值只能实施期验证 |
+| Q-03 | 真实多插件内存 | T-10 测量多个真实不同 Native 可执行文件的总资源；不能以相同 worker 的 PSS 预设结论。空闲常驻内存另有 V-74 的预算（D-52）。 | §10 | 性能数值只能实施期验证 |
 | Q-04 | 五平台/CGO | T-01 锁定驱动/工具链，T-10 完成五平台真实构建与启动；CGO=0 优先，CGO 插件单独发布并记录条件。 | §7/§9 | 已收敛；需真实构建 |
 | Q-05 | 事件 Hook/排序 | CONTRACTS 与 MESSAGE-MODEL 固定 priority、Rule 错误、StopPropagation、Hook 阶段、结果及允许修改范围。 | §2 | 已收敛 |
 | Q-06 | 媒体 | Core 顺序分块上传，MediaRef 使用受限 token、TTL、配额和消费租约。 | §1.3 | 已收敛 |
 | Q-07 | 版本/签名 | Core/protocol major.minor 与 SDK 编译版本区分；manifest、归档摘要、来源身份和外部 release 清单签名分别校验。 | §7/§9 | 已收敛 |
 | Q-08 | Config/i18 | Go Schema/JSON tag/i18 嵌套对应原始 JSON；固定类型、迁移、默认、PATCH、未知键保留与翻译规则。 | §5 | 已收敛 |
-| Q-09 | PostgreSQL | 管理员预置每插件专用 PG role/schema；SDK 执行迁移，遵守维护门槛，失败按人工恢复边界处理。 | §6 | 已收敛；需 PG 验证 |
+| Q-09 | PostgreSQL | 由 D-48 撤销：框架不再托管 PostgreSQL，需要外部数据库的插件自带驱动并自行管理，按 `prepare_effects=external` 的维护门槛更新。 | §6 | 已撤销 |
 | Q-10 | 第三方 Adapter | 由 D-26 收敛：Adapter 以安装包和独立进程交付，官方 Telegram 与第三方使用同一机制。 | §8 | 已收敛 |
 | Q-11 | 回执/片段 | MESSAGE-MODEL 定义两种 Handler 输出、物理发送计划、部分成功回执与不支持片段的明确失败。 | §8 | 已收敛 |
 | Q-12 | CLI/分发 | 交付已承诺的开发/管理 CLI、tar.gz、manifest、外部 release 清单与 GitHub Release 来源规则。 | §9 | 已收敛 |
-| Q-13 | Journal/快照 | Journal/Generation、SQLite Backup 候选、进程锁和持久化次序共同保证提交恢复；PG 不可逆变更拦截，恢复需故障注入。 | §6/§12 | 已收敛；恢复需故障注入 |
+| Q-13 | Journal/快照 | Journal/Generation、SQLite Backup 候选、进程锁和持久化次序共同保证提交恢复；声明 external 的不可逆变更拦截，恢复需故障注入。 | §6/§12 | 已收敛；恢复需故障注入 |
 | Q-14 | SDK 生成 | 在插件目标构建范围内扫描本模块包级函数；单 root、自动/显式冲突报错、实例显式绑定、Schema 生成由 T-01/T-04 编译验证。 | §9 | 已收敛；编译器必须验证 |
 | Q-15 | 动态命令调用 | v0.1 交付 Service Call/Event Bus；动态跨插件命令 Router 后置 v0.2，保留稳定 route ID 和需求。 | §3 | 明确后置（需求保留） |
 | Q-16 | Reload/Ready | 配置变更通过新 Session 重启式应用；OnReady 完成并 Activated 后才接业务，OnStop 负责停止。 | §4 | 已收敛 |
 | Q-17 | 配置包装 | 运行时 Config 直接使用 JSON 字段，无顶层包装。 | §5 | 已收敛 |
 | Q-18 | 进程/密钥/账号 | 合作型进程锁/子进程树清理与实例凭证作用域有明确规则，需跨平台验证；Native 仍不是沙箱。 | §7/§8/§12 | 已收敛；安全测试仍需做 |
+| Q-19 | Core 托管的轻量 KV | 只需保存少量状态（订阅、计数、开关）的插件，若由 Core 经 RPC 提供按插件隔离的 KV，就不必链接 SQLite，进程可保持在无数据库插件的水平。v0.1 不提供，简单状态继续用 `sqlitedb`。待定内容：容量与配额、是否纳入代次候选与回退、管理与 purge。 | — | 待定 |
 
 “已收敛”表示已有实施规则，后置需求仍保留；性能、驱动、生成器及故障恢复的结果须在 TEST-MATRIX 中取得实际证据。
 
@@ -143,3 +149,5 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-10-26：**D-43 已确认**：JSON Schema 使用 `github.com/google/jsonschema-go`，配置 Schema 由生成器构造、不用 `For` 推导。同步修改 docs/development.md 的依赖清单与 docs/execution-order.md。
 - 2026-10-26：**D-44、D-45 已确认**：message.created 在命令层之后进入事件路由；Core 全局禁止定为用户与会话两张禁止表。同步修改 CONTRACTS §2.2、§2.3 与 goals.md goal-12、goal-13。
 - 2026-10-27：**D-46、D-47 已确认**：v0.1 增加官方 OneBot 11 Adapter（正向 WebSocket，依赖 `github.com/coder/websocket`）与插件测试套件 `plugintest`，根包增加 `Start`。同步修改 CONTRACTS §0/§8/§11/§15.2/§15.4 并新增 §17，MESSAGE-MODEL 新增 §7（原 §7 顺延为 §8），PLAN 新增 T-15、T-16 并修订 T-13 步骤 1，TEST-MATRIX 新增 V-71～V-73，同步 ARCHITECTURE、docs/development.md 的依赖清单、docs/execution-order.md 与 goals.md（新增 goal-78～goal-82，修订 goal-67、goal-46、goal-73）。
+- 2026-10-27：评估「插件与 Adapter 合并进同一进程」后**未采纳**，维持 D-01、D-26 的一插件一进程。实测（测量脚本未入库）：20 个插件时，单进程的空闲内存是 NoneBot2 的 0.2～0.3 倍；代价是第三方插件必须在用户机器上构建（atri 上 512 MiB、1 CPU 首次构建三轮都 OOM，1 GiB、2 CPU 约 82 秒），依赖不再隔离，故障隔离与真正的热安装也随之失去。同期测得 Python 子进程插件每个进程的开销约为 Go 的 4～5 倍（macOS footprint），说明一插件一进程对 Go 仍然划算；需要控制的是 Core 与插件引入的依赖，由 D-48～D-52 处理。
+- 2026-10-27：**D-48～D-52 已确认**，新增待定的 Q-19：框架只托管 SQLite，受管 SQLite 增加 `database/sql` 入口，AI 组件默认不启用，Agent 插件提供 `llm.generate`，Core 设依赖允许清单与常驻内存预算。同步修改 CONTRACTS §0/§1.1/§6/§9/§10/§11/§12/§13（新增 §13.5）/§15.2、WIRE §3.2/§5A、DESIGN §I/§N/§O/§R/§S、PLAN（§1、§2、T-08～T-10、T-12 新增步骤 9 与切片 T-12.8、T-14）、TEST-MATRIX（V-26/V-31/V-39/V-40/V-66，新增 V-74～V-76）；删除 `sdk/gormdb` 的 PostgreSQL 实现与测试、`contracts/manifest.PostgresIdentifier` 与 CI 的 PostgreSQL service；新增 `scripts/check-go-deps.mjs` 与插件开发规范 docs/plugin-guide.md；同步 ARCHITECTURE、README、CONTRIBUTING、docs/development.md、docs/coding-standards.md、docs/execution-order.md、测试技能与 goals.md（新增 goal-83，修订 goal-32、goal-64 等）。

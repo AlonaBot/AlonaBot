@@ -34,7 +34,7 @@ SDK 公开三个可选进程 Hook：`OnStart(context.Context) error`、`OnReady(
 
 首发目标为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64。市场预构建优先，本地源码构建可选；Native 进程只要求协议兼容，不要求 Core 与插件使用相同 Go patch。
 
-`plugin.yaml` 是插件 ID/版本真源，生成产物包含静态描述、Schema、i18/ 和可执行程序。市场 ID 使用 `alonabot_plugin_` 规范；本地允许安全 slug 并警告缺前缀。ID 不直接当作 PostgreSQL 标识符或主机名。
+`plugin.yaml` 是插件 ID/版本真源，生成产物包含静态描述、Schema、i18/ 和可执行程序。市场 ID 使用 `alonabot_plugin_` 规范；本地允许安全 slug 并警告缺前缀。ID 不直接当作数据库标识符或主机名。
 
 不同包 ID 冲突保留持久化安装记录中的首个，拒绝后来的冲突来源；同一插件内部重复 route ID、命令路径/别名或 HTTP method+path 报错。已有插件更新必须校验原来源/发布者，不能借 first-wins 绕过更新身份校验。
 
@@ -129,7 +129,7 @@ Service 以 `plugin_id/service_name` 注册，使用显式 schema/version 的 JS
 
 每次执行有独立 run_id、job deadline 与 lifetime context，不被 30s 普通 RPC 默认值截断。任务超时后若插件未确认协作结束，不释放同 job 的运行槽并再次重叠启动；恢复策略见运行时契约。定时身份是显式 job/plugin scope，不获得默认 Admin。
 
-## I. HTTP、SQLite 与 PostgreSQL
+## I. HTTP 与 SQLite
 
 ### HTTP
 
@@ -141,11 +141,11 @@ Admin 与插件内容采用两个全局主机名，使用同一公开 Listener/�
 
 ### 数据库
 
-Core 管理状态库与插件业务库分开；`gormdb.Open(ctx) (*gorm.DB,error)` 按 Session 固定 backend 与连接池，插件得到原生 `*gorm.DB`。默认 pure-Go SQLite 组合与 PG 驱动在 CONTRACTS §6 指定，实际版本由 T-01 验证锁定。
+Core 管理状态库与插件业务库分开。框架只托管 SQLite（D-48）：`sqlitedb.Open(ctx) (*sql.DB,error)` 与 `gormdb.Open(ctx) (*gorm.DB,error)` 共用 Session 的同一个连接，插件只导入用到的包，不用 GORM 就不链接 GORM（D-49）。需要外部数据库的插件自带驱动、自行管理连接与数据。驱动组合在 CONTRACTS §6 指定，实际版本由 T-01 验证锁定。
 
-受管 SQLite 每插件、每候选代次独立文件。配置重载与版本更新统一先停止旧进程、备份候选副本，再迁移/初始化；不能复用旧可写 DB 来承诺提交前回退。PG 由管理员预置 role/schema，不复用 Core 管理凭证；有生产数据变更的升级按维护模式处理。
+受管 SQLite 每插件、每候选代次独立文件。配置重载与版本更新统一先停止旧进程、备份候选副本，再迁移/初始化；不能复用旧可写 DB 来承诺提交前回退。准备期会改动外部数据的插件声明 `prepare_effects=external`，已有安装的升级按维护模式处理。
 
-`Migrate(ctx, db)` 与 `Migrations() []Migration` 可选且互斥，回调在插件 SDK 内执行，Core 负责调度与代次门槛。辅助迁移的 Up 与成功记录在插件 DB 的同一事务；没有迁移接口就不主动迁移。PG 普通 resume 只核对已提交代次/迁移账本，不重跑 Migrate/Up；维护许可和启动原因在 Bootstrap 明确下发。后端切换不自动搬迁数据。
+`Migrate(ctx, db)` 与 `Migrations() []Migration` 可选且互斥，由 `sqlitedb` 与 `gormdb` 各定义一组，回调在插件 SDK 内执行，Core 负责调度与代次门槛。辅助迁移的 Up 与成功记录在插件 DB 的同一事务；没有迁移接口就不主动迁移。维护许可和启动原因在 Bootstrap 明确下发。
 
 ## J. Config、Schema 与 i18/
 
@@ -218,13 +218,15 @@ v0.1 只支持 Telegram long polling，先确定实际 bot 身份并校验 accou
 
 受管 SQLite 候选流程：**下载/验证 → 冻结新根请求 → drain/停旧进程 → 确认 runtime.lock 可取 → Backup 候选 DB → 配置/DB 迁移与 OnStart → Prepared → Core 单事务提交 ActiveGeneration+COMMITTED → OnReady/Activated → 服务**。
 
-提交前失败重启旧程序的新 Session；提交后新代次权威，失败进入 Degraded，不能悄悄切回旧 DB 丢弃已发生的新写入。管理员 rollback 以选定快照为输入创建新的恢复 Generation/SQLite 副本，保留原快照不变，并说明会丢弃该点之后的受管写入。PG 或插件自行管理的外部数据走维护流程。
+提交前失败重启旧程序的新 Session；提交后新代次权威，失败进入 Degraded，不能悄悄切回旧 DB 丢弃已发生的新写入。管理员 rollback 以选定快照为输入创建新的恢复 Generation/SQLite 副本，保留原快照不变，并说明会丢弃该点之后的受管写入。插件自行管理的外部数据走维护流程。
 
 包、配置、secret 引用与候选 DB 先持久化，再提交 Core 指针。Core 崩溃恢复还必须确认旧进程退出，Journal 不能替代进程锁。首发采用允许短暂停顿的切换，不实现双实例零停机。
 
 ## O. SDK 分层、CLI 与可观测性
 
 最小逻辑分层为 contracts、plugin SDK、Core 和 plugin CLI；contracts 不依赖具体平台 SDK/GORM，数据库作为按需 SDK 包。使用标准 Go 编译、Protocol Buffers、标准 HTTP 代理及选定驱动，不引入额外容器运行时、服务发现或迁移平台。
+
+**按需付费**（D-52）：Core 与 SDK 根包只链接允许清单中的模块，模型 SDK、Provider 客户端、MCP、外部数据库驱动与 GORM 一律放在需要它们的插件或按需 SDK 包里；没有安装或没有启用的组件不运行进程。Core 与示例插件的空闲常驻内存有预算（TEST-MATRIX V-74），依赖检查在 CI 中执行（V-75）。插件作者的对应规则见 [插件开发规范](../docs/plugin-guide.md)。
 
 CLI/API 的完整管理动作与包协议见 CONTRACTS §9。Core 状态库记录安装序号/来源、ActiveGeneration、Journal、权限、回调与配置引用；业务库由插件负责。所有状态变更通过同一个 Core 管理服务串行化，离线 CLI 不能绕过仍运行的 Core 直接改状态库。
 
@@ -249,6 +251,7 @@ Agent 分为 Core 基础与官方插件两层（D-27）。Core 负责必须可�
 - **工具**：模型请求的 Core 工具经 `core.tool.invoke` 调用；MCP 工具（stdio、streamable HTTP，经 `github.com/modelcontextprotocol/go-sdk`）执行前先经 `core.tool.confirm`。单轮的工具步数有上限。
 - **技能**：管理员放进技能目录的 `SKILL.md`，包含名称、描述与正文。系统提示只列出描述，模型经 `load_skill` 按需读取正文。
 - **定时任务**：用户让 Agent 创建的任务保存在插件数据库，由一个固定的 schedule 触发，在该回调内运行；没有 Actor，因此需要确认的工具一律拒绝。
+- **文本生成服务**：`llm.generate` 让其他插件复用已配置的 Provider（CONTRACTS §13.5）。只有管理员列入 `llm_service_allowed_plugins` 的插件能调用；一次调用就是一次完整的 Provider 请求，不涉及会话、记忆、人格与工具。
 
 记忆插件实现 CONTRACTS §13.4 的三个服务（D-28）。官方记忆插件 `plugins/memory/` 仿照 Hermes 的内置记忆：
 
@@ -264,7 +267,7 @@ AlonaBot 同时面向直接使用机器人的用户和写插件的开发者（D-
 | | 发行包（用户） | 库模式（开发者） |
 | --- | --- | --- |
 | 入口 | 从本仓库的 Release 下载发行归档，运行 `alonabot`，在 WebUI 中配置 | 在自己的 `main.go` 中调用 `alonabot.Run`，执行 `go run .` |
-| 包含 | Core、官方 Telegram Adapter、Agent、记忆插件与预装插件；首次运行自动安装，默认只启用 Agent、记忆与 help | 内嵌完整的 Core；开发中的插件、Adapter 或记忆插件由本进程运行 |
+| 包含 | Core、官方 Telegram Adapter、Agent、记忆插件与预装插件；首次运行自动安装，默认只启用 help，Agent 与记忆由管理员按需启用（D-50） | 内嵌完整的 Core；开发中的插件、Adapter 或记忆插件由本进程运行 |
 | 组件进程 | 每个已启用的包一个独立进程 | 开发中的组件与 Core 同进程，可直接打断点；已安装的其他包仍是独立进程 |
 
 库模式下开发者只写插件包和一个调试用的 `main.go`，发布时 `alonabot plugin build` 自动生成正式入口。开发时与生产时的行为只差进程隔离与崩溃重启。启用热部署后 Core 常驻，开发中的组件改为子进程：源码改动后重新编译，只重启这些组件，Adapter 连接、其他插件与按钮都不受影响；编译失败时旧版本继续运行（CONTRACTS §15）。

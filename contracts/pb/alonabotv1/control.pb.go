@@ -89,9 +89,8 @@ type DatabaseBackend int32
 const (
 	DatabaseBackend_DATABASE_BACKEND_UNSPECIFIED DatabaseBackend = 0
 	// 无受管业务 DB。
-	DatabaseBackend_DATABASE_BACKEND_NONE     DatabaseBackend = 1
-	DatabaseBackend_DATABASE_BACKEND_SQLITE   DatabaseBackend = 2
-	DatabaseBackend_DATABASE_BACKEND_POSTGRES DatabaseBackend = 3
+	DatabaseBackend_DATABASE_BACKEND_NONE   DatabaseBackend = 1
+	DatabaseBackend_DATABASE_BACKEND_SQLITE DatabaseBackend = 2
 )
 
 // Enum value maps for DatabaseBackend.
@@ -100,13 +99,11 @@ var (
 		0: "DATABASE_BACKEND_UNSPECIFIED",
 		1: "DATABASE_BACKEND_NONE",
 		2: "DATABASE_BACKEND_SQLITE",
-		3: "DATABASE_BACKEND_POSTGRES",
 	}
 	DatabaseBackend_value = map[string]int32{
 		"DATABASE_BACKEND_UNSPECIFIED": 0,
 		"DATABASE_BACKEND_NONE":        1,
 		"DATABASE_BACKEND_SQLITE":      2,
-		"DATABASE_BACKEND_POSTGRES":    3,
 	}
 )
 
@@ -800,8 +797,6 @@ type DatabaseDescriptor struct {
 	Backend DatabaseBackend `protobuf:"varint,1,opt,name=backend,proto3,enum=alonabot.v1.DatabaseBackend" json:"backend,omitempty"`
 	// SQLITE：受管候选（或 resume 时 Active）文件路径。
 	SqlitePath string `protobuf:"bytes,2,opt,name=sqlite_path,json=sqlitePath,proto3" json:"sqlite_path,omitempty"`
-	// POSTGRES：该插件专属 role/schema 的连接参数；不含 Core 管理凭证。
-	Postgres *PostgresConnection `protobuf:"bytes,3,opt,name=postgres,proto3" json:"postgres,omitempty"`
 	// 插件声明的迁移方式。
 	MigrationMode MigrationMode `protobuf:"varint,4,opt,name=migration_mode,json=migrationMode,proto3,enum=alonabot.v1.MigrationMode" json:"migration_mode,omitempty"`
 	// versioned 模式下已完成的迁移 ID（升序）。
@@ -858,13 +853,6 @@ func (x *DatabaseDescriptor) GetSqlitePath() string {
 	return ""
 }
 
-func (x *DatabaseDescriptor) GetPostgres() *PostgresConnection {
-	if x != nil {
-		return x.Postgres
-	}
-	return nil
-}
-
 func (x *DatabaseDescriptor) GetMigrationMode() MigrationMode {
 	if x != nil {
 		return x.MigrationMode
@@ -893,106 +881,6 @@ func (x *DatabaseDescriptor) GetManualMigrationApproved() bool {
 	return false
 }
 
-// PostgresConnection 描述插件专属 PostgreSQL role/schema 的连接参数。
-type PostgresConnection struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// 服务器主机名或地址。
-	Host string `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
-	// 服务器端口。
-	Port uint32 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
-	// 数据库名。
-	Database string `protobuf:"bytes,3,opt,name=database,proto3" json:"database,omitempty"`
-	// 插件专属 role。
-	User string `protobuf:"bytes,4,opt,name=user,proto3" json:"user,omitempty"`
-	// 该 role 的口令，属于敏感数据。
-	Password string `protobuf:"bytes,5,opt,name=password,proto3" json:"password,omitempty"`
-	// 插件专属 schema；search_path 限于它与系统目录。
-	Schema string `protobuf:"bytes,6,opt,name=schema,proto3" json:"schema,omitempty"`
-	// libpq 的 sslmode 取值。
-	SslMode       string `protobuf:"bytes,7,opt,name=ssl_mode,json=sslMode,proto3" json:"ssl_mode,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PostgresConnection) Reset() {
-	*x = PostgresConnection{}
-	mi := &file_alonabot_v1_control_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PostgresConnection) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PostgresConnection) ProtoMessage() {}
-
-func (x *PostgresConnection) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_control_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PostgresConnection.ProtoReflect.Descriptor instead.
-func (*PostgresConnection) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *PostgresConnection) GetHost() string {
-	if x != nil {
-		return x.Host
-	}
-	return ""
-}
-
-func (x *PostgresConnection) GetPort() uint32 {
-	if x != nil {
-		return x.Port
-	}
-	return 0
-}
-
-func (x *PostgresConnection) GetDatabase() string {
-	if x != nil {
-		return x.Database
-	}
-	return ""
-}
-
-func (x *PostgresConnection) GetUser() string {
-	if x != nil {
-		return x.User
-	}
-	return ""
-}
-
-func (x *PostgresConnection) GetPassword() string {
-	if x != nil {
-		return x.Password
-	}
-	return ""
-}
-
-func (x *PostgresConnection) GetSchema() string {
-	if x != nil {
-		return x.Schema
-	}
-	return ""
-}
-
-func (x *PostgresConnection) GetSslMode() string {
-	if x != nil {
-		return x.SslMode
-	}
-	return ""
-}
-
 // HttpProxyAuth 描述本 Session 独立的内部 HTTP 代理认证材料，不复用 Admin 凭证。
 type HttpProxyAuth struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1004,7 +892,7 @@ type HttpProxyAuth struct {
 
 func (x *HttpProxyAuth) Reset() {
 	*x = HttpProxyAuth{}
-	mi := &file_alonabot_v1_control_proto_msgTypes[6]
+	mi := &file_alonabot_v1_control_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1016,7 +904,7 @@ func (x *HttpProxyAuth) String() string {
 func (*HttpProxyAuth) ProtoMessage() {}
 
 func (x *HttpProxyAuth) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_control_proto_msgTypes[6]
+	mi := &file_alonabot_v1_control_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1029,7 +917,7 @@ func (x *HttpProxyAuth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HttpProxyAuth.ProtoReflect.Descriptor instead.
 func (*HttpProxyAuth) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{6}
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *HttpProxyAuth) GetToken() []byte {
@@ -1060,7 +948,7 @@ type PhaseLimits struct {
 
 func (x *PhaseLimits) Reset() {
 	*x = PhaseLimits{}
-	mi := &file_alonabot_v1_control_proto_msgTypes[7]
+	mi := &file_alonabot_v1_control_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1072,7 +960,7 @@ func (x *PhaseLimits) String() string {
 func (*PhaseLimits) ProtoMessage() {}
 
 func (x *PhaseLimits) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_control_proto_msgTypes[7]
+	mi := &file_alonabot_v1_control_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1085,7 +973,7 @@ func (x *PhaseLimits) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PhaseLimits.ProtoReflect.Descriptor instead.
 func (*PhaseLimits) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{7}
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *PhaseLimits) GetHandshakeMs() uint32 {
@@ -1143,7 +1031,7 @@ type HttpListener struct {
 
 func (x *HttpListener) Reset() {
 	*x = HttpListener{}
-	mi := &file_alonabot_v1_control_proto_msgTypes[8]
+	mi := &file_alonabot_v1_control_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1155,7 +1043,7 @@ func (x *HttpListener) String() string {
 func (*HttpListener) ProtoMessage() {}
 
 func (x *HttpListener) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_control_proto_msgTypes[8]
+	mi := &file_alonabot_v1_control_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1168,7 +1056,7 @@ func (x *HttpListener) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HttpListener.ProtoReflect.Descriptor instead.
 func (*HttpListener) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{8}
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *HttpListener) GetHost() string {
@@ -1198,7 +1086,7 @@ type Prepared struct {
 
 func (x *Prepared) Reset() {
 	*x = Prepared{}
-	mi := &file_alonabot_v1_control_proto_msgTypes[9]
+	mi := &file_alonabot_v1_control_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1210,7 +1098,7 @@ func (x *Prepared) String() string {
 func (*Prepared) ProtoMessage() {}
 
 func (x *Prepared) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_control_proto_msgTypes[9]
+	mi := &file_alonabot_v1_control_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1223,7 +1111,7 @@ func (x *Prepared) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Prepared.ProtoReflect.Descriptor instead.
 func (*Prepared) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{9}
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Prepared) GetRouteDescriptorHash() []byte {
@@ -1255,7 +1143,7 @@ type Activate struct {
 
 func (x *Activate) Reset() {
 	*x = Activate{}
-	mi := &file_alonabot_v1_control_proto_msgTypes[10]
+	mi := &file_alonabot_v1_control_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1267,7 +1155,7 @@ func (x *Activate) String() string {
 func (*Activate) ProtoMessage() {}
 
 func (x *Activate) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_control_proto_msgTypes[10]
+	mi := &file_alonabot_v1_control_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1280,7 +1168,7 @@ func (x *Activate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Activate.ProtoReflect.Descriptor instead.
 func (*Activate) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{10}
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Activate) GetGenerationId() string {
@@ -1317,7 +1205,7 @@ type Activated struct {
 
 func (x *Activated) Reset() {
 	*x = Activated{}
-	mi := &file_alonabot_v1_control_proto_msgTypes[11]
+	mi := &file_alonabot_v1_control_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1329,7 +1217,7 @@ func (x *Activated) String() string {
 func (*Activated) ProtoMessage() {}
 
 func (x *Activated) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_control_proto_msgTypes[11]
+	mi := &file_alonabot_v1_control_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1342,7 +1230,7 @@ func (x *Activated) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Activated.ProtoReflect.Descriptor instead.
 func (*Activated) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{11}
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Activated) GetGenerationId() string {
@@ -1370,7 +1258,7 @@ type Cancel struct {
 
 func (x *Cancel) Reset() {
 	*x = Cancel{}
-	mi := &file_alonabot_v1_control_proto_msgTypes[12]
+	mi := &file_alonabot_v1_control_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1382,7 +1270,7 @@ func (x *Cancel) String() string {
 func (*Cancel) ProtoMessage() {}
 
 func (x *Cancel) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_control_proto_msgTypes[12]
+	mi := &file_alonabot_v1_control_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1395,7 +1283,7 @@ func (x *Cancel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Cancel.ProtoReflect.Descriptor instead.
 func (*Cancel) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{12}
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Cancel) GetReason() CancelReason {
@@ -1418,7 +1306,7 @@ type Stopping struct {
 
 func (x *Stopping) Reset() {
 	*x = Stopping{}
-	mi := &file_alonabot_v1_control_proto_msgTypes[13]
+	mi := &file_alonabot_v1_control_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1430,7 +1318,7 @@ func (x *Stopping) String() string {
 func (*Stopping) ProtoMessage() {}
 
 func (x *Stopping) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_control_proto_msgTypes[13]
+	mi := &file_alonabot_v1_control_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1443,7 +1331,7 @@ func (x *Stopping) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Stopping.ProtoReflect.Descriptor instead.
 func (*Stopping) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{13}
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Stopping) GetDeadlineUnixMs() int64 {
@@ -1473,7 +1361,7 @@ type Heartbeat struct {
 
 func (x *Heartbeat) Reset() {
 	*x = Heartbeat{}
-	mi := &file_alonabot_v1_control_proto_msgTypes[14]
+	mi := &file_alonabot_v1_control_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1485,7 +1373,7 @@ func (x *Heartbeat) String() string {
 func (*Heartbeat) ProtoMessage() {}
 
 func (x *Heartbeat) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_control_proto_msgTypes[14]
+	mi := &file_alonabot_v1_control_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1498,7 +1386,7 @@ func (x *Heartbeat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Heartbeat.ProtoReflect.Descriptor instead.
 func (*Heartbeat) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{14}
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Heartbeat) GetSeq() uint64 {
@@ -1528,7 +1416,7 @@ type SessionError struct {
 
 func (x *SessionError) Reset() {
 	*x = SessionError{}
-	mi := &file_alonabot_v1_control_proto_msgTypes[15]
+	mi := &file_alonabot_v1_control_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1540,7 +1428,7 @@ func (x *SessionError) String() string {
 func (*SessionError) ProtoMessage() {}
 
 func (x *SessionError) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_control_proto_msgTypes[15]
+	mi := &file_alonabot_v1_control_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1553,7 +1441,7 @@ func (x *SessionError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionError.ProtoReflect.Descriptor instead.
 func (*SessionError) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{15}
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *SessionError) GetFailedPhase() SessionPhase {
@@ -1604,24 +1492,15 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"\x1cpreparation_deadline_unix_ms\x18\t \x01(\x03R\x19preparationDeadlineUnixMs\x122\n" +
 	"\tlog_level\x18\n" +
 	" \x01(\x0e2\x15.alonabot.v1.LogLevelR\blogLevelB\x1a\n" +
-	"\x18_previous_config_version\"\xa9\x03\n" +
+	"\x18_previous_config_version\"\xfc\x02\n" +
 	"\x12DatabaseDescriptor\x126\n" +
 	"\abackend\x18\x01 \x01(\x0e2\x1c.alonabot.v1.DatabaseBackendR\abackend\x12\x1f\n" +
 	"\vsqlite_path\x18\x02 \x01(\tR\n" +
-	"sqlitePath\x12;\n" +
-	"\bpostgres\x18\x03 \x01(\v2\x1f.alonabot.v1.PostgresConnectionR\bpostgres\x12A\n" +
+	"sqlitePath\x12A\n" +
 	"\x0emigration_mode\x18\x04 \x01(\x0e2\x1a.alonabot.v1.MigrationModeR\rmigrationMode\x122\n" +
 	"\x15applied_migration_ids\x18\x05 \x03(\rR\x13appliedMigrationIds\x12J\n" +
 	"\x11activation_reason\x18\x06 \x01(\x0e2\x1d.alonabot.v1.ActivationReasonR\x10activationReason\x12:\n" +
-	"\x19manual_migration_approved\x18\a \x01(\bR\x17manualMigrationApproved\"\xbb\x01\n" +
-	"\x12PostgresConnection\x12\x12\n" +
-	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
-	"\x04port\x18\x02 \x01(\rR\x04port\x12\x1a\n" +
-	"\bdatabase\x18\x03 \x01(\tR\bdatabase\x12\x12\n" +
-	"\x04user\x18\x04 \x01(\tR\x04user\x12\x1a\n" +
-	"\bpassword\x18\x05 \x01(\tR\bpassword\x12\x16\n" +
-	"\x06schema\x18\x06 \x01(\tR\x06schema\x12\x19\n" +
-	"\bssl_mode\x18\a \x01(\tR\asslMode\"%\n" +
+	"\x19manual_migration_approved\x18\a \x01(\bR\x17manualMigrationApprovedJ\x04\b\x03\x10\x04R\bpostgres\"%\n" +
 	"\rHttpProxyAuth\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\fR\x05token\"\xd4\x01\n" +
 	"\vPhaseLimits\x12!\n" +
@@ -1662,12 +1541,11 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"\x0eLOG_LEVEL_INFO\x10\x02\x12\x12\n" +
 	"\x0eLOG_LEVEL_WARN\x10\x03\x12\x13\n" +
 	"\x0fLOG_LEVEL_ERROR\x10\x04\x12\x11\n" +
-	"\rLOG_LEVEL_OFF\x10\x05*\x8a\x01\n" +
+	"\rLOG_LEVEL_OFF\x10\x05*\x8c\x01\n" +
 	"\x0fDatabaseBackend\x12 \n" +
 	"\x1cDATABASE_BACKEND_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15DATABASE_BACKEND_NONE\x10\x01\x12\x1b\n" +
-	"\x17DATABASE_BACKEND_SQLITE\x10\x02\x12\x1d\n" +
-	"\x19DATABASE_BACKEND_POSTGRES\x10\x03*\x7f\n" +
+	"\x17DATABASE_BACKEND_SQLITE\x10\x02\"\x04\b\x03\x10\x03*\x19DATABASE_BACKEND_POSTGRES*\x7f\n" +
 	"\rMigrationMode\x12\x1e\n" +
 	"\x1aMIGRATION_MODE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13MIGRATION_MODE_NONE\x10\x01\x12\x17\n" +
@@ -1719,7 +1597,7 @@ func file_alonabot_v1_control_proto_rawDescGZIP() []byte {
 }
 
 var file_alonabot_v1_control_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_alonabot_v1_control_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_alonabot_v1_control_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_alonabot_v1_control_proto_goTypes = []any{
 	(LogLevel)(0),              // 0: alonabot.v1.LogLevel
 	(DatabaseBackend)(0),       // 1: alonabot.v1.DatabaseBackend
@@ -1733,18 +1611,17 @@ var file_alonabot_v1_control_proto_goTypes = []any{
 	(*HelloAck)(nil),           // 9: alonabot.v1.HelloAck
 	(*Bootstrap)(nil),          // 10: alonabot.v1.Bootstrap
 	(*DatabaseDescriptor)(nil), // 11: alonabot.v1.DatabaseDescriptor
-	(*PostgresConnection)(nil), // 12: alonabot.v1.PostgresConnection
-	(*HttpProxyAuth)(nil),      // 13: alonabot.v1.HttpProxyAuth
-	(*PhaseLimits)(nil),        // 14: alonabot.v1.PhaseLimits
-	(*HttpListener)(nil),       // 15: alonabot.v1.HttpListener
-	(*Prepared)(nil),           // 16: alonabot.v1.Prepared
-	(*Activate)(nil),           // 17: alonabot.v1.Activate
-	(*Activated)(nil),          // 18: alonabot.v1.Activated
-	(*Cancel)(nil),             // 19: alonabot.v1.Cancel
-	(*Stopping)(nil),           // 20: alonabot.v1.Stopping
-	(*Heartbeat)(nil),          // 21: alonabot.v1.Heartbeat
-	(*SessionError)(nil),       // 22: alonabot.v1.SessionError
-	(FrameKind)(0),             // 23: alonabot.v1.FrameKind
+	(*HttpProxyAuth)(nil),      // 12: alonabot.v1.HttpProxyAuth
+	(*PhaseLimits)(nil),        // 13: alonabot.v1.PhaseLimits
+	(*HttpListener)(nil),       // 14: alonabot.v1.HttpListener
+	(*Prepared)(nil),           // 15: alonabot.v1.Prepared
+	(*Activate)(nil),           // 16: alonabot.v1.Activate
+	(*Activated)(nil),          // 17: alonabot.v1.Activated
+	(*Cancel)(nil),             // 18: alonabot.v1.Cancel
+	(*Stopping)(nil),           // 19: alonabot.v1.Stopping
+	(*Heartbeat)(nil),          // 20: alonabot.v1.Heartbeat
+	(*SessionError)(nil),       // 21: alonabot.v1.SessionError
+	(FrameKind)(0),             // 22: alonabot.v1.FrameKind
 }
 var file_alonabot_v1_control_proto_depIdxs = []int32{
 	7,  // 0: alonabot.v1.Hello.supported_capabilities:type_name -> alonabot.v1.ProtocolCapability
@@ -1752,22 +1629,21 @@ var file_alonabot_v1_control_proto_depIdxs = []int32{
 	7,  // 2: alonabot.v1.HelloAck.capability_intersection:type_name -> alonabot.v1.ProtocolCapability
 	10, // 3: alonabot.v1.HelloAck.bootstrap:type_name -> alonabot.v1.Bootstrap
 	11, // 4: alonabot.v1.Bootstrap.database_descriptor:type_name -> alonabot.v1.DatabaseDescriptor
-	13, // 5: alonabot.v1.Bootstrap.http_proxy_auth:type_name -> alonabot.v1.HttpProxyAuth
-	14, // 6: alonabot.v1.Bootstrap.phase_limits:type_name -> alonabot.v1.PhaseLimits
+	12, // 5: alonabot.v1.Bootstrap.http_proxy_auth:type_name -> alonabot.v1.HttpProxyAuth
+	13, // 6: alonabot.v1.Bootstrap.phase_limits:type_name -> alonabot.v1.PhaseLimits
 	0,  // 7: alonabot.v1.Bootstrap.log_level:type_name -> alonabot.v1.LogLevel
 	1,  // 8: alonabot.v1.DatabaseDescriptor.backend:type_name -> alonabot.v1.DatabaseBackend
-	12, // 9: alonabot.v1.DatabaseDescriptor.postgres:type_name -> alonabot.v1.PostgresConnection
-	2,  // 10: alonabot.v1.DatabaseDescriptor.migration_mode:type_name -> alonabot.v1.MigrationMode
-	3,  // 11: alonabot.v1.DatabaseDescriptor.activation_reason:type_name -> alonabot.v1.ActivationReason
-	4,  // 12: alonabot.v1.Cancel.reason:type_name -> alonabot.v1.CancelReason
-	5,  // 13: alonabot.v1.Stopping.reason:type_name -> alonabot.v1.StopReason
-	6,  // 14: alonabot.v1.SessionError.failed_phase:type_name -> alonabot.v1.SessionPhase
-	23, // 15: alonabot.v1.SessionError.failed_kind:type_name -> alonabot.v1.FrameKind
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	2,  // 9: alonabot.v1.DatabaseDescriptor.migration_mode:type_name -> alonabot.v1.MigrationMode
+	3,  // 10: alonabot.v1.DatabaseDescriptor.activation_reason:type_name -> alonabot.v1.ActivationReason
+	4,  // 11: alonabot.v1.Cancel.reason:type_name -> alonabot.v1.CancelReason
+	5,  // 12: alonabot.v1.Stopping.reason:type_name -> alonabot.v1.StopReason
+	6,  // 13: alonabot.v1.SessionError.failed_phase:type_name -> alonabot.v1.SessionPhase
+	22, // 14: alonabot.v1.SessionError.failed_kind:type_name -> alonabot.v1.FrameKind
+	15, // [15:15] is the sub-list for method output_type
+	15, // [15:15] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_control_proto_init() }
@@ -1783,7 +1659,7 @@ func file_alonabot_v1_control_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_control_proto_rawDesc), len(file_alonabot_v1_control_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   16,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

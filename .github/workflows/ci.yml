@@ -49,21 +49,6 @@ jobs:
     needs: repository
     if: needs.repository.outputs.has_go == 'true'
     runs-on: ubuntu-24.04
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_PASSWORD: alonabot
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      # 仅连接本 job 的一次性测试数据库，不使用仓库 secret。
-      ALONABOT_TEST_PG_DSN: postgres://postgres:alonabot@127.0.0.1:5432/postgres?sslmode=disable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -97,7 +82,9 @@ jobs:
           test -z "$(git ls-files --others --exclude-standard -- contracts)"
       - name: 静态检查
         run: go vet ./...
-      - name: 测试并检查数据竞争（含临时 PostgreSQL）
+      - name: 检查 Core 与 SDK 根包的依赖允许清单
+        run: node scripts/check-go-deps.mjs
+      - name: 测试并检查数据竞争
         env:
           CGO_ENABLED: '1'
         run: go test -race ./...

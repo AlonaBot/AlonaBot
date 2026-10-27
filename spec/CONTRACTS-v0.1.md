@@ -7,7 +7,7 @@
 
 ## 0. 范围和明确取舍
 
-v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Adapter 包、Native Go 插件与 Adapter SDK/子进程、双传输 RPC、命令/文本匹配/事件/权限、延续调用与基础多轮等待、Event Bus、Service Call、调度、插件 HTTP、SQLite/PostgreSQL、配置/WebUI、用户可见文案的 i18n、预构建安装/更新与有明确边界的回退，Agent 基础（§13）、官方 Agent 插件与官方记忆插件，统一日志（§14），发行包、预装插件与库模式（§15），调优参数（§16），以及插件测试套件（§17）。保留 D-01～D-36；Telegram 与 OneBot 11 之外的官方 Adapter、OneBot 11 反向 WebSocket、WebUI 交互沙盒、TUI、WASM、插件实例池、蓝绿零停机、持久化的多轮会话状态与暂停 DSL、动态跨插件命令 Router、复杂表单、Telegram webhook 接收与系统服务安装脚本均不在 v0.1 范围内。
+v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Adapter 包、Native Go 插件与 Adapter SDK/子进程、双传输 RPC、命令/文本匹配/事件/权限、延续调用与基础多轮等待、Event Bus、Service Call、调度、插件 HTTP、受管 SQLite（`database/sql` 与 GORM 两种入口）、配置/WebUI、用户可见文案的 i18n、预构建安装/更新与有明确边界的回退，Agent 基础（§13）、官方 Agent 插件与官方记忆插件，统一日志（§14），发行包、预装插件与库模式（§15），调优参数（§16），以及插件测试套件（§17）。保留 D-01～D-36；Telegram 与 OneBot 11 之外的官方 Adapter、OneBot 11 反向 WebSocket、WebUI 交互沙盒、TUI、WASM、插件实例池、蓝绿零停机、持久化的多轮会话状态与暂停 DSL、动态跨插件命令 Router、复杂表单、Telegram webhook 接收、系统服务安装脚本，以及由框架托管的 PostgreSQL 等外部数据库（插件可自带驱动自行管理，§6.1）均不在 v0.1 范围内。
 
 运行时容量、期限和配额有固定的缺省值，统一登记为调优参数（§16）。缺省值是初始实现边界，须通过 TEST-MATRIX 实测后调整，不是性能保证；运维与测试可以在启动时覆盖，不提供 WebUI 或逐插件的调参。现行技术细节按本轮用户授权完成，保留 v0.6-review 编号。
 
@@ -20,7 +20,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 - 两种传输均为 `uint32 big-endian payload length + Protobuf Envelope`；长度不含 4-byte 前缀，合法范围为 **1～4,194,304 bytes**。先验证长度再分配受限缓冲；完整读取前缀和载荷，不能假设一次 Read 得到一帧。长度 0、超限、截断或不可解码的 Envelope 终止当前连接。每方向只有一个帧写入器，多个 goroutine 的帧不能交错。
 - Hello 前不得发送其他帧。Protocol Major 不相等，或任一 required capability 不在双方能力交集中，拒绝握手；Minor 选双方支持范围内的较低版本。所有枚举保留零值 UNSPECIFIED，业务要求的枚举和身份字段解码后验证。Envelope 字段编号、控制帧方向及 schema 见 [WIRE-FORMAT.md](WIRE-FORMAT.md)，不另定义平行的 JSON 字节流协议。
 - HelloAck 的 `bootstrap` 一次性下发本 Session 的 `generation_id`、原始候选配置 JSON、配置版本、DB descriptor、内部 HTTP 认证凭证和阶段预算。Core 此时只检查配置是合法 JSON 对象并符合大小限额，**不在 OnLoad 迁移之前按新版 typed schema 拒绝旧配置**。运行所需 Secret 仅在该插件私有 IPC 中解引用，不继承其他插件或 Core 管理凭证；不得写入日志。Bootstrap 同样受 4 MiB 帧上限限制，超限明确拒绝启动。
-- SDK 在 Preparing 中执行配置 `OnLoad → 仅缺键补默认值 → typed decode/Schema 校验 → DB 迁移门槛核对及许可的迁移 → OnStart`；PG resume 只核对，见 §6.3。不存在的可选回调直接跳过。随后 REGISTER 一次性提交完整 RouteDescriptor、规范化配置及其版本、schema hash；声明 HTTP 路由时还提交实际已监听的 loopback endpoint。对新候选，Core 再次验证 Candidate，提取 Secret 为不可变引用后持久化；对已提交代次的普通重启，验证配置与原快照一致并复用原 Secret 引用，不创建新代次或改写快照。Core 校验所有路由和 endpoint 后才返回 PREPARED。明文配置只能经过私有 IPC 和必要的运行内存，不能进入 Journal 或普通配置快照。配置与 DB 细节分别以 §5、§6 为准。
+- SDK 在 Preparing 中执行配置 `OnLoad → 仅缺键补默认值 → typed decode/Schema 校验 → DB 迁移门槛核对及许可的迁移 → OnStart`。不存在的可选回调直接跳过。随后 REGISTER 一次性提交完整 RouteDescriptor、规范化配置及其版本、schema hash；声明 HTTP 路由时还提交实际已监听的 loopback endpoint。对新候选，Core 再次验证 Candidate，提取 Secret 为不可变引用后持久化；对已提交代次的普通重启，验证配置与原快照一致并复用原 Secret 引用，不创建新代次或改写快照。Core 校验所有路由和 endpoint 后才返回 PREPARED。明文配置只能经过私有 IPC 和必要的运行内存，不能进入 Journal 或普通配置快照。配置与 DB 细节分别以 §5、§6 为准。
 - Preparing/Prepared/Activating 不开放业务 REQUEST；配置、DB 位置和内部 HTTP 凭证由 Bootstrap 提供，不需要准备期通用 Core RPC。认证后的 OnLoad/迁移/OnStart/REGISTER/OnReady 失败使用 `SESSION_ERROR` 携带失败阶段和 ErrorInfo，然后关闭 Session；认证失败直接关闭，不暴露凭证信息或注册残留。
 
 ### 1.2 调用、取消与资源边界
@@ -173,41 +173,44 @@ PATCH 语义依据：[RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)。
 ### 6.1 数据所有权、连接与默认依赖
 
 - Core 元数据固定使用独立 `<data_dir>/state.sqlite`，记录安装/来源、代次、Journal、动态权限和 secret 引用关系，插件不复用其 DB 或凭证。Core 连接池固定为 1，采用 WAL、`synchronous=FULL`、`foreign_keys=ON`、`busy_timeout=5000`；每个物理连接都应用连接级设置，初始化核对实际生效值，失败停止启动。Core 的元数据事务只包含必要数据库操作，不在持锁事务中等待插件 RPC。状态库错误/损坏不能触发重建空库。
-- `gormdb.Open(ctx) (*gorm.DB, error)` 根据当前 Session 的数据库描述返回原生 GORM 对象；重复调用复用该 Session 连接池，SDK 停止时关闭。事务回调须使用传入的 tx，不能在事务里等待同一单连接池的另一条独立查询。受管 SQLite 也默认单连接、WAL、FULL、外键开启和 5s busy timeout；这不串行化整个插件的 goroutine/任务。PG 使用独立连接池和插件专属凭证。连接错误直接返回，不回退为空数据库，不自动切换后端。
+- 受管 SQLite 有两个入口，共用当前 Session 的同一个连接：`sqlitedb.Open(ctx) (*sql.DB, error)` 返回标准库 `database/sql` 对象；`gormdb.Open(ctx) (*gorm.DB, error)` 在同一连接上返回原生 GORM 对象。插件只导入用到的包，不用 GORM 的插件不链接 GORM。重复调用复用该连接，SDK 停止时关闭。事务回调须使用传入的 tx，不能在事务里等待同一单连接池的另一条独立查询。连接默认单连接、WAL、FULL、外键开启和 5s busy timeout；这不串行化整个插件的 goroutine/任务。连接错误直接返回，不回退为空数据库。
 - SQLite 文件按 generation 分开：`plugins/<id>/generations/<g>/db.sqlite`。首次安装创建候选文件；配置 reload 和版本 update **一律创建独立 SQLite 候选副本**，不因“只改配置”而复用旧 DB，因为 OnStart 也能写入。普通 restart/异常恢复启动现有 Active，不创建新配置代次。框架外文件、任意外部数据库和出站副作用不纳入受管回退。
-- 默认实现组合为插件 `gorm.io/gorm` + `github.com/libtnb/sqlite`，底层 `modernc.org/sqlite`；Core 元数据与 Backup API 直接使用同一 modernc 驱动。PG 使用 `gorm.io/driver/postgres`。T-01 已验证该组合的 CRUD/Tx/迁移、WAL Backup/恢复和五目标 `CGO_ENABLED=0` 构建，实际版本固定在 `go.mod/go.sum`，见 docs/development.md；不新增通用驱动兼容框架。
+- 框架只托管 SQLite。需要 PostgreSQL、MySQL 等外部数据库的插件自行导入驱动并管理连接，连接参数作为插件的 secret 配置项由管理员填写；这些数据属于插件自管的外部数据，Core 不创建、不校验、也不备份外部数据库。迁移或 OnStart 会写外部数据库的插件须在 manifest 声明 `prepare_effects=external`（§9.1），按 §6.3 的维护门槛更新。
+- `sqlitedb` 使用 `modernc.org/sqlite` 的 `database/sql` 驱动；`gormdb` 另用 `gorm.io/gorm` 与 `github.com/libtnb/sqlite`，经后者的 `Conn` 设置复用同一连接。Core 元数据与 Backup API 直接使用同一 modernc 驱动。T-01 已验证 GORM 组合的 CRUD/Tx/迁移、WAL Backup/恢复和五目标 `CGO_ENABLED=0` 构建，实际版本固定在 `go.mod/go.sum`，见 docs/development.md；不新增通用驱动兼容框架。
 
 ### 6.2 可选迁移接口
 
-迁移回调在插件 SDK 进程内执行；Core 管理启动阶段、候选目录和维护准入，不跨进程直接调用 Go 函数。以下两种接口互斥，两者都没有即不自动迁移：
+迁移回调在插件 SDK 进程内执行，只作用于受管 SQLite；Core 管理启动阶段、候选目录和维护准入，不跨进程直接调用 Go 函数。`sqlitedb` 与 `gormdb` 各定义一组形状相同的接口，只是数据库参数的类型不同。自管迁移与辅助迁移互斥，根插件最多实现一个迁移接口，都没有即不自动迁移：
 
 ```go
+// sdk/sqlitedb
 type SelfMigrator interface {
-    Migrate(ctx context.Context, db *gorm.DB) error
+    Migrate(ctx context.Context, db *sql.DB) error
 }
 type Migration struct {
     ID uint32
-    Up func(context.Context, *gorm.DB) error
+    Up func(context.Context, *sql.Tx) error
 }
 type VersionedMigrator interface {
     Migrations() []Migration
 }
+
+// sdk/gormdb：同名接口，Migrate 接收 *gorm.DB，Up 接收事务中的 *gorm.DB
 ```
 
+- SDK 只识别插件实际导入的包所定义的迁移接口：该包被导入时向 SDK 登记识别方式，SDK 自身不 import GORM。两个包的辅助迁移共用同一张完成表与同一套 ID 规则。
 - 自管 Migrate 在 SDK 准备阶段调用，由作者处理版本记录和重复启动的幂等性。辅助 Migrations 的 ID 必须非零、唯一、递增；发布后不能把旧 ID 改成另一项操作。SDK 只执行尚未完成的 ID，每一步 Up 与完成 ID 一起写入**当前插件 DB 的同一事务**，失败不记录成功；完成表固定为框架保留名 `_alonabot_migrations`，业务代码不得挪作他用。不得把迁移成功记录只写入 Core 状态库而假称两库原子提交。
-- 迁移门槛核对及本次启动原因允许的迁移均在 OnStart 之前完成，PG resume 只核对而不重跑回调，见 §6.3；同一插件的启停、配置、迁移、更新和恢复按 §12 的管理锁串行。事务内不支持的 SQL 直接失败，不能偷偷转为事务外执行；需要这种操作的作者选自管迁移并进入相应维护流程。Native 仍能自行调用 GORM/SQL，自动回退只覆盖契约允许的受管路径。
+- 迁移门槛核对及本次启动原因允许的迁移均在 OnStart 之前完成；同一插件的启停、配置、迁移、更新和恢复按 §12 的管理锁串行。事务内不支持的 SQL 直接失败，不能偷偷转为事务外执行；需要这种操作的作者选自管迁移并进入相应维护流程。Native 仍能自行调用 GORM/SQL，自动回退只覆盖契约允许的受管路径。
 
-### 6.3 SQLite 候选与 PG 维护
+### 6.3 SQLite 候选与维护
 
 - 受管 SQLite：下载/校验候选 → 冻结旧版新派发并排空 → 停止旧进程及合作型后台资源，确认连接释放 → 使用 SQLite Backup API 将旧 Active DB 备份到独立候选文件 → SDK 配置校验/迁移/OnStart → PREPARED → 同一 Core 事务更新 ActiveGeneration 与 COMMITTED → Activate/OnReady/Activated 后开放路由。副本、程序和不可变配置先持久化再提交引用；备份/空间/校验失败不提交。不能只拷贝运行中 WAL 数据库的主文件。
 - 提交前失败：保留旧 DB/程序/配置，重新启动旧版的**新 Session**。COMMITTED 后失败：新代次仍为权威，标记 Degraded 并关闭新派发；不自动切回已过时的旧数据。Core 崩溃恢复按 Journal 和 Active 指针判定，任意时刻只有一个代次可公开接单；完整时序见 §12。
-- PG：管理员预置每插件独立 role/schema，Core 仅使用和校验指定凭证及 schema，不常驻保存建角色的超级用户凭证。`search_path` 限于该插件 schema 与系统目录，不含其他插件可写 schema；schema/role 名必须满足服务器标识符限制，不能原样拼接可能过长或含 `-` 的插件 ID。跨后端搬迁由开发者处理，不能自动创建空库替代旧数据。
 - Bootstrap 的 database_descriptor 由 Core 下发 `activation_reason`（first_install/resume/reload/update/rollback）与 `manual_migration_approved`；后者只对经管理员显式维护许可的本次 Session/Generation/DB 为 true，不由插件请求自行设置。SDK 不需要在 Preparing 发起通用业务 RPC 获取许可。
-- PG 的 `activation_reason=resume` 只恢复原 ActiveGeneration 的同一程序、配置及 DB 描述，**不重新执行 Migrate 或 Up**。Core 必须有该代次已完成准备/迁移的提交记录；versioned 模式另查插件 DB 的 `_alonabot_migrations`，核对声明迁移已完成，缺项/不一致返回 FAILED_PRECONDITION 并保持停机等待维护。self 模式只核对已提交完成标记及程序/DB 身份，不假设能读取作者私有版本表；业务一致性检查仍可使 OnStart 失败。核对通过后正常 OnStart，不要求普通恢复声明 prepare_effects=none。其他 PG 候选才适用下条的首装、自动更新或维护分支。
-- 首次安装到专属、已确认为空的 PG schema，允许初始化迁移；失败保持未激活，记录待维护状态，不能自动删除已有对象。已有 PG/自管数据的更新，只有无待执行迁移、无自管 Migrate、声明配置兼容且 `prepare_effects=none` 时允许普通停机更新。其余返回 NEEDS_MANUAL_MIGRATION。`prepare_effects=none` 必须同时覆盖实际 DB 访问与 OnStart；SDK 先读取迁移账本判断待执行项，未取得维护许可不得执行 Up/Migrate。管理员显式进入维护、停止插件、完成并核对备份后才允许候选迁移；失败保留停机状态，按该插件恢复步骤处理，不自动重跑未知副作用。成功后重新核对迁移记录/配置并完成 Prepared/激活。Native 声明是可信代码契约，不是 Core 能静态证明任意 SQL 没有副作用。
-- 人工整机备份须在 Core 与插件停止后覆盖完整 data_dir 及外部 PG 备份；单独备份 state.sqlite 不包含插件业务数据。受管 SQLite 的在线副本仍使用 Backup API。不能删除 Active、恢复中 Journal 或保留回退代次引用的程序/DB/配置/secret；候选失败清理只作用于无引用资源。
+- 声明 `prepare_effects=external` 的插件在准备期会改动受管 SQLite 之外的数据，候选副本无法隔离。首次安装照常准备；已有安装的 reload、update 与 rollback 返回 NEEDS_MANUAL_MIGRATION。管理员显式进入维护、停止插件并自行完成外部数据的备份后，Core 才以 `manual_migration_approved=true` 准备候选；失败保留停机状态，按该插件的恢复步骤处理，不自动重跑未知副作用；成功后照常完成 Prepared 与激活。普通 restart 与崩溃恢复（`activation_reason=resume`）不建立候选，不受此门槛限制。`prepare_effects` 是可信代码的声明，Core 不能静态证明任意 SQL 没有副作用。
+- 人工整机备份须在 Core 与插件停止后覆盖完整 data_dir，以及插件自管的外部数据；单独备份 state.sqlite 不包含插件业务数据。受管 SQLite 的在线副本仍使用 Backup API。不能删除 Active、恢复中 Journal 或保留回退代次引用的程序/DB/配置/secret；候选失败清理只作用于无引用资源。
 
-依据：[GORM 连接文档](https://gorm.io/docs/connecting_to_the_database.html)、[libtnb SQLite 驱动](https://github.com/libtnb/sqlite)、[modernc Backup API](https://pkg.go.dev/modernc.org/sqlite#Backup)、[SQLite Backup](https://sqlite.org/backup.html)、[SQLite PRAGMA](https://www.sqlite.org/pragma.html)、[PG schema](https://www.postgresql.org/docs/current/ddl-schemas.html)、[PG 标识符](https://www.postgresql.org/docs/current/sql-syntax-lexical.html)、[PG 事务外索引操作](https://www.postgresql.org/docs/current/sql-createindex.html)。这些主源支持选型与约束，AlonaBot 集成测试仍待实施。
+依据：[GORM 连接文档](https://gorm.io/docs/connecting_to_the_database.html)、[libtnb SQLite 驱动](https://github.com/libtnb/sqlite)、[modernc Backup API](https://pkg.go.dev/modernc.org/sqlite#Backup)、[SQLite Backup](https://sqlite.org/backup.html)、[SQLite PRAGMA](https://www.sqlite.org/pragma.html)、[database/sql](https://pkg.go.dev/database/sql)。这些主源支持选型与约束，AlonaBot 集成测试仍待实施。
 
 ## 7. Native 信任、HTTP 与来源边界
 
@@ -272,7 +275,7 @@ type VersionedMigrator interface {
 
 - `plugin.yaml` 的 `manifest_version=1`；必填 `id`、SemVer `version`、`protocol_min_major/protocol_max_major`、`required_capabilities`、`os/arch`、相对可执行文件路径 `entrypoint`、`config_version`、`source`。包校验同时核对 Schema、注册描述、i18 与 build-info；SDK 是编译依赖，不要求 Core 和插件 Go patch 相同，运行兼容以协议和能力协商为准。
 - Adapter 包使用同一份 manifest：`role` 取 `plugin`（缺省）或 `adapter`。Adapter 包另需 `adapter_id`（小写平台类型，规则同本地 ID），不得声明插件路由、HTTP、数据库或迁移。市场 ID 使用 `^alonabot_adapter_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`。插件可声明 `adapter_dependencies` 与 `plugin_dependencies`，语义见 §8。
-- `migration_mode` 固定 `none/self/versioned`，与实际注册的迁移接口一致；`prepare_effects` 固定 `none/managed_db/external`，描述配置回调以外的迁移/OnStart 在准备期的副作用。`managed_db` 仅表示写所属 DB：SQLite 候选可隔离，PG 仍须 §6 的维护门槛；`external` 不具备自动回退承诺。缺失声明或不一致拒绝自动升级，不能把未知值解释成安全。它们是插件包静态声明，不是 WebUI 调参开关。
+- `migration_mode` 固定 `none/self/versioned`，与实际注册的迁移接口一致；`prepare_effects` 固定 `none/managed_db/external`，描述配置回调以外的迁移/OnStart 在准备期的副作用。`managed_db` 仅表示写所属的受管 SQLite，候选可隔离；`external` 表示会写框架外的数据（例如插件自管的外部数据库），不具备自动回退承诺，按 §6.3 的维护门槛更新。缺失声明或不一致拒绝自动升级，不能把未知值解释成安全。它们是插件包静态声明，不是 WebUI 调参开关。
 - 生成器只扫描当前插件模块的受标记包级函数，实例方法显式注册；只允许一个 root 和至多一个 Config，重复 Handler/HTTP 路由失败。Schema/注册描述与 binary 来自同一构建，安装期检查能静态取得的 Schema/能力与自动注册项；实例方法显式注册的完整集合在本次启动 REGISTER 时校验，不要求静态推导任意 Go 控制流或重复手写整张路由表。最终路由在该 Session 固定，Schema/能力必须与包资源一致；Go 与 protoc 的版本已由 T-01 锁定，见 docs/development.md。
 - `pack` 输出 `<id>-<version>-<os>-<arch>.tar.gz`，Windows 同格式。归档内包括 manifest、binary、生成的 Schema/描述文件、i18 静态资源和 build-info，不包含运行配置/DB/secret/签名私钥。只接受普通文件与目录，拒绝绝对路径、`..`、symlink/hardlink、设备文件、重复归档路径及跨平台大小写冲突；解压到新临时目录、验证后再移动为不可变包目录，不能覆盖正在使用的程序。
 
@@ -296,12 +299,12 @@ Core 由 `alonabot serve` 启动（§15.1）。Core 首次管理凭证与离线�
 | `restart` | 以当前 Active 程序/配置/DB 启动新 Session，不导入编辑中的 config.json。 |
 | `reload` | 把编辑快照导入 Pending，走配置校验及候选激活；SQLite 同样复制 DB。 |
 | `update` | 仅从绑定来源选择符合 pin 的候选版本并执行受控更新；不把 install 同 ID 当更新。 |
-| `uninstall` | 停止、解除运行注册并删除未引用程序包；默认保留数据、secret 与来源绑定，以便同来源重装。`--purge` 为显式删除框架受管数据/绑定的动作，须展示并确认准确对象；不擅自删除外部 PG schema 或任意插件自管目录。 |
+| `uninstall` | 停止、解除运行注册并删除未引用程序包；默认保留数据、secret 与来源绑定，以便同来源重装。`--purge` 为显式删除框架受管数据/绑定的动作，须展示并确认准确对象；不擅自删除插件自管的外部数据库或任意插件自管目录。 |
 | `pin` | 固定允许的更新版本；解除固定须显式操作，不能被自动更新忽略。 |
 | `admin add` / `admin remove` / `admin list` | 管理 Core Admin 列表（按 adapter_instance_id 与 external_user_id），与 WebUI 的 Core 设置页使用同一管理服务。 |
 | `logs` | 按来源、级别与 trace_id 读取最近记录，`--follow` 时持续输出（§14.4）。 |
 | `log-level` | 修改全局或某个插件、Adapter 的日志级别，立即生效（§14.3）。 |
-| `rollback` | 明确选择保留代次为输入，停机建立新的恢复候选 Generation；SQLite 从所选快照复制独立 DB，复用对应程序/配置/secret，走同一 Prepared/提交流程，不复用历史 Generation ID 或直接写保留快照；在执行前列明将舍弃该快照之后的本地写入，要求显式确认。无法恢复的 PG/外部数据返回 NEEDS_MANUAL_MIGRATION，外部已发送消息不会撤回。 |
+| `rollback` | 明确选择保留代次为输入，停机建立新的恢复候选 Generation；SQLite 从所选快照复制独立 DB，复用对应程序/配置/secret，走同一 Prepared/提交流程，不复用历史 Generation ID 或直接写保留快照；在执行前列明将舍弃该快照之后的本地写入，要求显式确认。声明 `prepare_effects=external` 的插件返回 NEEDS_MANUAL_MIGRATION，外部已发送消息不会撤回。 |
 
 管理动作按插件串行；安装顺序、来源、pin、卸载保留与恢复目标均持久化，Core 重启不能靠无序目录遍历重新决定。安装器初始固定上限为压缩包 256 MiB、展开总量 1 GiB、10,000 个条目，超限在写入/激活前报 RESOURCE_EXHAUSTED；T-01 验证计数覆盖流式解压，不新增用户调参页面。发布验收至少覆盖当前五个目标平台，CGO 插件由发布者提供对应产物，不自动假称能跨编译。
 
@@ -312,6 +315,8 @@ Core 由 `alonabot serve` 启动（§15.1）。Core 首次管理凭证与离线�
 沿用 T-01～T-16，不新建平行实施计划；全部 V 编号和通过条件集中维护在 [TEST-MATRIX.md](TEST-MATRIX.md)。每个任务同时完成对应实现与最小验证，不要求先跑尚不存在的应用测试。
 
 详细步骤、拟目录、交付物和失败停止条件见 [PLAN.md](PLAN.md)。SDK/Proto 编译、数据库恢复、跨平台进程清理、Telegram 集成及真实性能在相应任务中取得证据；跨阶段用例的分工与最终闭合点按 TEST-MATRIX 执行。
+
+Core 可执行文件与 SDK 根包只链接 [docs/development.md](../docs/development.md) 列出的允许模块，由 CI 的依赖检查执行（V-75）；Core 与示例插件空闲时的常驻内存不超过 V-74 的预算。超出预算视为回归：先定位原因，确需提高时在 adr/DECISIONS.md 记录新值与原因。
 
 可开始实施的条件是关键行为已有确定契约与验收；发布条件是相关阻塞测试实际通过。测试失败必须修实现或回写有依据的规格修订，不用静默异常、伪默认值或新增兼容层掩盖问题。
 
@@ -330,12 +335,12 @@ Core 由 `alonabot serve` 启动（§15.1）。Core 首次管理凭证与离线�
 | §8 Adapter/消息 | T-03 Adapter 进程与 SDK、官方 Telegram Adapter 包、Target、媒体、按钮、extension 片段、回执、消息编辑、bot 上下线事件与依赖解析；T-15 官方 OneBot 11 Adapter 包与跨 Adapter 一致性验收；T-09 Adapter 包与实例的正式管理及启用时的依赖检查 |
 | §9 构建/分发/管理 CLI | T-01 契约，T-04 生成器，T-09 完整工具和来源检查 |
 | §12 状态/锁/恢复 | T-02 建立共同原语，T-08 准备资源，T-09 复用原语完成正式 Journal 和恢复 |
-| §13 Agent 基础 | T-11 工具目录、策略、确认与会话存储；T-12 官方 Agent 插件与官方记忆插件；T-09 工具策略与会话清除的管理页 |
+| §13 Agent 基础 | T-11 工具目录、策略、确认与会话存储；T-12 官方 Agent 插件（含 `llm.generate` 服务）与官方记忆插件；T-09 工具策略与会话清除的管理页 |
 | §14 日志 | T-02.1 日志基线与日志文件；T-09.10 按来源级别的持久化、最近记录、按日期查询、管理 API、CLI 与日志页；各切片按 §14 记录 |
 | §15 运行方式 | T-07.3 设置文件；T-09.4 `alonabot serve`；T-13 库模式与热部署；T-14 发行包、容器镜像与预装插件 |
 | §17 插件测试套件 | T-13.1 根包 `Start`；T-16 `plugintest` 与示例插件的测试 |
 | §16 调优参数 | T-02.2 参数表、`--args` 与 Bootstrap 下发；之后的切片把新增的可调值登记到同一参数表 |
-| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-73 和五目标运行结果 |
+| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-76 和五目标运行结果 |
 
 ## 12. 跨层状态机与恢复不变量
 
@@ -365,10 +370,10 @@ Core 由 `alonabot serve` 启动（§15.1）。Core 首次管理凭证与离线�
 
 ### 12.3 提交、恢复与回退边界
 
-- 包、候选 Config、受管 DB 副本必须先持久化，Core 状态库再在同一事务提交 ActiveGeneration 与 COMMITTED。该事务仅控制 Core 元数据和已准备的引用，不是跨文件系统、PostgreSQL或外部 HTTP 的分布式事务。完整流程、迁移账本与备份要求以 §6 为唯一规范。
+- 包、候选 Config、受管 DB 副本必须先持久化，Core 状态库再在同一事务提交 ActiveGeneration 与 COMMITTED。该事务仅控制 Core 元数据和已准备的引用，不是跨文件系统、外部数据库或外部 HTTP 的分布式事务。完整流程、迁移账本与备份要求以 §6 为唯一规范。
 - 未提交候选失败：关闭候选并确认退出，使用旧包、旧配置和旧受管 DB 启动旧版本的**新 Session**。不是恢复已失效的旧 Session，也不重放在途业务。
 - 事务已 COMMITTED：恢复时只启动新代次；OnStart/OnReady/资源打开失败则 Degraded并禁止接单，保留可恢复材料。不能直接把旧快照当最新业务数据，也不能承诺已发送消息、SQL或原生文件变更可自动撤销。
-- 配置更新与版本升级在承诺受管 SQLite 候选回退时都使用独立副本；“没有 DDL”不能据此复用旧代次可写 DB。无业务 DB 的插件无需复制。PostgreSQL、插件自管文件/SQL和框架外副作用按 §6 的人工维护边界处理，不纳入无损自动恢复承诺。
+- 配置更新与版本升级在承诺受管 SQLite 候选回退时都使用独立副本；“没有 DDL”不能据此复用旧代次可写 DB。无业务 DB 的插件无需复制。插件自管的外部数据库与文件、框架外副作用按 §6 的人工维护边界处理，不纳入无损自动恢复承诺。
 
 ### 12.4 实证门槛
 
@@ -376,7 +381,7 @@ Core 由 `alonabot serve` 启动（§15.1）。Core 首次管理凭证与离线�
 
 ## 13. Agent 基础
 
-Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技能与定时任务由官方 Agent 插件实现（D-27），记忆由记忆插件实现（D-28）。
+Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端或模型 SDK；对话循环、Provider、MCP、技能与定时任务由官方 Agent 插件实现（D-27），记忆由记忆插件实现（D-28），其他插件经 Agent 插件的服务使用模型（§13.5）。
 
 ### 13.1 工具与调用策略
 
@@ -406,6 +411,14 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
   - `memory.sync`：输入本轮用户消息与最终回复文本，无输出。
 - 记忆范围由调用链的可信上下文决定：会话按默认 Target（adapter_instance_id、chat_id、thread_id），用户按 Actor。缺少所需的 Actor 或默认 Target 时返回 FAILED_PRECONDITION。三个服务的访问规则由记忆插件声明；官方记忆插件只允许官方 Agent 插件调用。
 - 记忆插件写入记忆的工具按 §13.1 注册，Agent 不直接写记忆存储。
+
+### 13.5 文本生成服务
+
+- 官方 Agent 插件注册 JSON Service `llm.generate`，让其他插件复用管理员已配置的 Provider，不必各自内嵌 Provider 客户端和 API Key（D-51）。Schema、Go 类型与调用辅助由 `sdk/llm` 提供，调用辅助以官方 Agent 插件为目标。
+- 输入：`messages`（至少一条，每条为 `role`（user 或 assistant）与 `text`）、可选的 `system`、可选的 `provider`（Agent 配置中的 Provider 名称，缺省为默认 Provider）与可选的 `max_output_tokens`。输出：`text`、实际使用的 `provider` 与 `model`，以及 Provider 返回用量时的 `input_tokens` 与 `output_tokens`。
+- 服务声明为 public（§3）。Agent 只接受直接调用方插件位于其配置项 `llm_service_allowed_plugins` 中的调用，缺省为空列表；不在列表中返回 PERMISSION_DENIED，不请求 Provider。直接调用方取 Core 下发的调用链中的上一跳插件，不采信请求内容。
+- 一次调用对应一次完整的 Provider 请求：不流式、不调用工具、不读写 Agent 会话与记忆，也不套用人格。`messages` 为空、`role` 非法或指定的 Provider 不存在返回 INVALID_ARGUMENT；没有配置任何 Provider 返回 FAILED_PRECONDITION；Provider 出错或中途断开返回 UNAVAILABLE，safe_message 不含 API Key；不自动重试（D-38）。
+- 生成可用的时间受调用方期限约束（§1.2）。普通请求只有 30s，需要更长时间的调用方在延续调用（§2.4）或 schedule 回调中发起。Agent 插件未启用时按 §3 的目标未激活处理。
 
 ## 14. 日志
 
@@ -492,7 +505,7 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
 
 - 每个目标平台发布一个发行归档 `alonabot-<version>-<os>-<arch>`（Windows 为 zip，其他为 tar.gz），包含 `alonabot` 可执行文件和 `packages/` 目录。`packages/` 中是官方 Telegram Adapter、官方 OneBot 11 Adapter、官方 Agent 插件、官方记忆插件与预装插件的安装包，以及各自归档外的 `release.json` 与 `.sig`（§9.2）。
 - 发行版 Core 内置官方发布者公钥作为已信任来源：运行官方发行包即视为接受该来源，预装包不再逐个确认。签名与摘要照常校验，校验失败的包不安装并记 ERROR。
-- 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，并启用 Agent、记忆与 help 插件；其余预装插件只安装不启用。官方 Telegram 与 OneBot 11 Adapter 只安装，管理员为它添加第一个实例时才启用。Agent 插件在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。
+- 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，只启用 help 插件；Agent、记忆与其余预装插件只安装不启用，不使用 AI 对话的部署不运行它们的进程（D-50）。官方 Telegram 与 OneBot 11 Adapter 只安装，管理员为它添加第一个实例时才启用。需要 AI 对话时，管理员在 WebUI 或 CLI 启用 Agent 与记忆插件；Agent 插件在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。
 - 之后不再自动安装，已卸载的预装包不会在下次启动时重新安装。新版本发行包中的包版本高于已安装版本时，作为可用更新列在管理界面与 `alonabot list` 中，由管理员确认后按 `update` 流程更新。Core 本身通过替换可执行文件升级。
 - 首批预装插件为 help（按调用者权限列出可用命令与用法，`/whoami` 回复调用者的实例与用户 ID）、welcome（新成员入群时发送欢迎语）与 rss（订阅 RSS/Atom 并推送到聊天）。
 - 第一个 Core Admin 的产生：用户在聊天中发送 `/whoami` 取得自己的实例与用户 ID，管理员在 WebUI 的 Core 设置页（或 `alonabot admin add`）把它加入 Core Admin 列表。它们与第三方插件一样以独立进程运行，只有启用的才运行。
