@@ -67,16 +67,16 @@
 | goal-28 | T-08.1 | 配置字段描述与构建检查 | T-04.2 | 等待前置 |
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-06.1 | 等待前置 |
 | goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2 | 等待前置 |
-| goal-8 | T-03.8 | 按钮、extension 片段与依赖解析 | T-03.2、T-03.7 | 待编写 |
-| goal-51 | T-03.9 | 消息编辑 | T-03.7 | 待编写 |
-| goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1 | 待编写 |
-| goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 待编写 |
-| goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 待编写 |
-| goal-31 | T-08.4 | 不可变 Secret Store | T-08.1、T-08.2 | 待编写 |
-| goal-34 | T-08.7 | web/admin 骨架、配置表单组件与界面文案 | T-08.1 | 待编写 |
-| goal-53 | T-08.8 | 用户可见文案目录 | T-04.1、T-04.3、T-08.1 | 待编写 |
-| goal-36 | T-09.1 | 首次管理认证 | T-07.4 | 待编写 |
-| goal-69 | T-13.3 | 热部署 | T-13.1 | 待编写 |
+| goal-8 | T-03.8 | 按钮、extension 片段与依赖解析 | T-03.2、T-03.7 | 等待前置 |
+| goal-51 | T-03.9 | 消息编辑 | T-03.7 | 等待前置 |
+| goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1 | 等待前置 |
+| goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 等待前置 |
+| goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 等待前置 |
+| goal-31 | T-08.4 | 不可变 Secret Store | T-08.1、T-08.2 | 等待前置 |
+| goal-34 | T-08.7 | web/admin 骨架、配置表单组件与界面文案 | T-08.1 | 等待前置 |
+| goal-53 | T-08.8 | 用户可见文案目录 | T-04.1、T-04.3、T-08.1 | 等待前置 |
+| goal-36 | T-09.1 | 首次管理认证 | T-07.4 | 等待前置 |
+| goal-69 | T-13.3 | 热部署 | T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9 | 待编写 |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 待编写 |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 待编写 |
@@ -1817,7 +1817,7 @@ internal/core/webhost
 行为：
 - 类型映射（CONTRACTS §5.1 第 2 条）：string → string；bool → boolean；有符号与无符号整数 → integer，并按 Go 类型设置 minimum/maximum；float32/float64 → number；struct → object（properties 按声明顺序，PropertyOrder 同序）；slice → array；map[string]T → object 的 additionalProperties；指针 → 允许 null（types 含 "null"）。
 - 对象一律不设 additionalProperties: false（未知键保留）；required 只包含 form 中声明了 required 的字段；其余字段可缺失。
-- 诊断（带位置，继续检查其余字段）：上述之外的类型（interface、chan、func、complex、非 string 键的 map、time.Time 等）；类型实现了 json.Marshaler/json.Unmarshaler/encoding.TextMarshaler/TextUnmarshaler；递归类型；json 标签为 "-" 之外的重复名；default 不能解码为字段类型或超出整数范围、不在 options 中、超出 min/max；min > max；options 用于非 string/数字字段；widget 与类型不符；secret 用于非 string 字段。类型分析使用 go/types（以源码方式导入扫描到的包），不用反射。
+- 诊断（带位置，继续检查其余字段）：上述之外的类型（interface、chan、func、complex、非 string 键的 map、time.Time 等）；类型实现了 json.Marshaler/json.Unmarshaler/encoding.TextMarshaler/TextUnmarshaler；递归类型；json 标签为 "-" 之外的重复名；default 不能解码为字段类型或超出整数范围、不在 options 中、超出 min/max；min > max；options 用于非 string/数字字段；widget 与类型不符；secret 用于非 string 或 *string 字段，或位于 slice、map 元素之中（secret 路径只经过对象属性）。类型分析使用 go/types（以源码方式导入扫描到的包），不用反射。
 - Schema 的根为 object，$schema 为 draft 2020-12；secret、hidden、form、i18 路径分别写入对应 Extra 关键字；default 写入 Default；不使用 jsonschema.For 推导（D-43）。
 - 生成文件把规范 Schema 作为字节常量嵌入，经 Generated.ConfigSchema 交给 SDK；同样输入生成的字节完全相同。plugin check 在 Schema 变化时报告生成文件过期（沿用 goal-11 的比较）。
 - 生成的 Schema 必须能被 jsonschema 的 Resolve（开启 ValidateDefaults）通过；不通过时作为诊断报告。
@@ -1961,139 +1961,561 @@ internal/core/webhost
 ```
 ### goal-8 · T-03.8 按钮、extension 片段与依赖解析
 
-状态：待编写。
+状态：等待前置（T-03.2、T-03.7）。语句中 goal-2～goal-5、goal-50 提供的符号（message.Service、policy.Policy、router 的派发、remote.Process、AdapterDescriptor 与 ExtensionDeclaration、Button.core_token、adapters/telegram 的实例）只写名字；合并后由审查者核对签名，再改为可派发。
 
-目标：按钮 token 与回调路由；extension 片段的声明与校验；manifest 的 `role`、`adapter_id`、`adapter_dependencies`、`plugin_dependencies` 解析与开发入口的依赖检查
-前置：T-03.2、T-03.7。
-依据：PLAN §3.1 的 T-03.8 行、§4 的 T-03 工作包；验收：V-08 的按钮分项、V-48 的依赖分项、V-52 的解析分项。
+```text
+/goal 使用 $alonabot-execute 推进 goal-8（切片 T-03.8：按钮、extension 片段与依赖解析）。goal 目录 goal-8，分支 goal-8，worktree .worktrees/goal-8，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-- 按钮 token 为 32 字节随机值的无 padding base64url，持久化绑定 plugin、route、generation、Target 和 24 小时期限。
-- 先尽力调用 answerCallbackQuery，再逐次鉴权，Actor 取本次点击的用户。拒绝时不回落到 Raw/Regex，不发群消息。代次切换后 token 永久失效。
-- extension 片段按目标实例所属 Adapter 在 REGISTER 中声明的 name/version/Schema 校验；目标不属于该 Adapter 或版本未声明时返回 UNSUPPORTED，不降级。
-- 必需的 Adapter 依赖缺失时拒绝激活插件并列出缺失项；Adapter 停用后，发往它的 Send 返回 UNAVAILABLE。
-- `plugin_dependencies`：plugin_id、可选 `min_version`、是否必需；必需依赖未安装、未启用或版本不满足时拒绝启用，可选依赖缺失只记诊断，必需依赖成环在解析时拒绝（CONTRACTS §8）。
-- 验收：V-08 的按钮分项、V-48 的依赖分项、V-52 的解析分项。
+目标：Core 为发送中的每个按钮签发持久化的 token（绑定插件、button.clicked 路由、代次、Target、value 与 24h 期限），Telegram 点击先 answerCallbackQuery，再由 Core 验证 token、当前 Actor 与策略后以普通请求调用正确的 Session；extension 片段按目标 Adapter 注册时声明的 Schema 在发送前校验；manifest 解析 role、adapter_id、adapter_dependencies 与 plugin_dependencies，开发入口启用插件时检查必需依赖。
 
+依据：PLAN T-03 步骤 7；CONTRACTS §8（extension、依赖与按钮段）、§9（manifest）；MESSAGE-MODEL §1.1、§6.3；DECISIONS D-26、D-43；TEST-MATRIX V-08 的按钮分项、V-48 的依赖分项、V-52 的解析分项。
+
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/message.proto：Segment 的 oneof 追加 ExtensionSegment extension = 9。随后 go generate ./...（本切片获授权只追加这一分支与消息）
+- contracts/wirespec_test.go：追加编号检查
+- contracts/manifest/：manifest.go 增加 role、adapter_id、adapter_dependencies、plugin_dependencies 字段与校验；新增 deps.go（依赖检查）
+- contracts/validate/register.go：button.clicked 事件路由的 action 校验
+- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/buttons.go
+- 新增 internal/core/buttons/
+- internal/core/message/：发送前签发按钮 token、校验 extension（只加调用点）
+- internal/core/adapter/remote/：保存 AdapterDescriptor 的 extension 声明，供 message 校验
+- internal/core/router/：button.clicked 改由 buttons 解析后派发（只加调用点）
+- sdk/：events.go 增加 OnButton；message 包增加 Buttons 与 Extension 片段构造
+- adapters/telegram/：callback_query 的处理与 answerCallbackQuery；extension 声明为空
+- cmd/alonabot/：run 在启动插件前读取插件目录下的 plugin.yaml（存在时）并执行依赖检查
+- 上述包的测试文件
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. message.proto
+   message ExtensionSegment { string adapter_id = 1; string name = 2; uint32 version = 3; string payload_json = 4; }
+2. contracts/manifest
+   Manifest 增加字段：Role string（plugin 或 adapter，缺省 plugin）；AdapterID string（adapter 时必填，小写，规则同本地 ID）；AdapterDependencies []AdapterDependency；PluginDependencies []PluginDependency
+   type AdapterDependency struct { AdapterID string; Extensions []ExtensionRequirement; Required bool }
+   type ExtensionRequirement struct { Name string; Version uint32 }
+   type PluginDependency struct { PluginID string; MinVersion string; Required bool } // MinVersion 为空表示不限
+   type Installed struct { Plugins map[string]string; Adapters map[string][]ExtensionRequirement } // 插件 ID→版本（只含已启用的）；adapter_id→已声明的 extension
+   type Problem struct { Dependency string; Required bool; Reason string }
+   func CheckDependencies(m *Manifest, in Installed) []Problem // 只报告问题，必需项的问题由调用方据此拒绝
+3. internal/core/buttons
+   type Service struct{ ... }
+   func New(store *state.Store, now func() time.Time) *Service
+   func (s *Service) Issue(ctx context.Context, pluginID, generationID string, target *pb.Target, chain *pb.MessageChain) error // 为 chain 中每个按钮写入 core_token 并持久化映射
+   func (s *Service) Resolve(ctx context.Context, ev *pb.Event) (pluginID, routeID string, err error) // 校验 button.clicked 事件并改写 payload 为插件注册的 action 与 value
+   func (s *Service) Purge(ctx context.Context, pluginID string) error // 卸载时调用
+4. sdk
+   func (r *EventRegistry) OnButton(routeID, actionID string, schemaVersion uint32, handler func(*Context) error, opts ...RouteOption)
+   func (c *Context) ButtonValue() string // button.clicked 的 value；其他事件为空
+   message 包：func Buttons(rows ...[]Button) Segment；type Button struct { ActionID, Label, Value string }；func Extension(adapterID, name string, version uint32, payload any) Segment // payload 用 encoding/json 编码
+
+行为：
+- 按钮签发（message.Service 在 BeforeSend 之前、adapter.send 之前）：插件给出的 core_token 一律清除；每个按钮的 action_id 必须对应发送插件当前注册的 button.clicked 路由（EventSpec.action_id），否则 INVALID_ARGUMENT。token 为 32 字节随机值的无 padding base64url（43 字节），持久化 (token, plugin_id, route_id, action_id, action_schema_version, generation_id, target 的 instance/chat/thread, value, expires_at=签发起 BUTTON_TOKEN_TTL)。value 不超过 1024 字节（命名常量）。持久化成功后才把 token 写入 core_token 并继续发送。
+- Telegram 点击：callback_query 先调用 answerCallbackQuery（失败只记日志），再交付 button.clicked：Target 取 callback_query.message 的 chat 与 thread（没有 message 的 inline 回调不交付，推进游标并以 INFO 记录），Actor 取 from，payload 的 value 暂放 callback_data，origin_platform_message_id 为消息 ID，callback_query_id 原样。
+- Core 解析（Router 在派发 button.clicked 前调用 Resolve）：token 不存在、过期、generation 已不是该插件的当前 Active、或 Target 与签发时不同 → 丢弃并以 INFO 记录，不派发、不回复、不进入 Raw 或文本匹配。有效时把 payload 改写为签发时的 action_id、action_schema_version 与 value，只派发给该插件的该路由；派发前执行 T-04.4 的 CheckCommand 等价检查（全局禁止与路由启用、权限），每次点击都按本次 Actor 重新检查；同一 token 可被多人、多次点击。token 不带任何角色。
+- extension：remote.Process 保存每个 Adapter 的 ExtensionDeclaration。发送前对每个 extension 片段：目标实例所属的 adapter_id 必须等于片段的 adapter_id，(name, version) 必须已声明，payload_json 必须通过该声明的 schema（jsonschema-go 的 Resolve 与 Validate，Loader 为 nil）；否则 UNSUPPORTED（Adapter 不符或未声明）或 INVALID_ARGUMENT（不符合 Schema），在调用 Adapter 之前返回。Telegram 本切片不声明 extension，所有 extension 片段发往 Telegram 都是 UNSUPPORTED。
+- manifest：role 为 adapter 时必须有 adapter_id，且不能有 adapter_dependencies、plugin_dependencies、migration_mode 或 prepare_effects；依赖项的 ID 格式、版本 SemVer、重复项都要校验；必需的 plugin_dependencies 不能直接依赖自己。环的检测需要全部安装记录，由 T-09.4 完成。
+- CheckDependencies：必需的 Adapter 依赖要求该 adapter_id 已安装且声明了全部所需 extension（版本相等）；必需的插件依赖要求已启用且版本 ≥ MinVersion；可选依赖缺失也报告（Required=false），调用方只记诊断。
+- cmd/alonabot run：插件目录下有 plugin.yaml 时解析并检查依赖（Installed 来自状态库中已启用的安装记录与当前运行的 Adapter 描述），有必需项问题时以 exitFailure 退出并列出全部缺失项。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：
+  - internal/core/supervisor/buttons_test.go（//go:build unix）：memory Adapter 与测试插件（注册 OnButton("vote", "vote", 1, ...)，收到 /poll 时发送两个按钮），用真实状态库装配：
+    - 发送后 memory 收到的按钮都有 43 字节的 core_token，状态库有映射；插件伪造的 core_token 被替换。
+    - 注入以该 token 为 callback_data 的 button.clicked：插件的 OnButton 被调用，ButtonValue 为原 value；两个不同用户点击各调用一次。
+    - 未知 token、过期 token（注入时钟）、另一个 chat 中的点击都不调用插件，也不进入 Raw。
+    - 按钮指向未注册的 action 时发送被拒，memory 没有收到。
+    - 插件产生新的 Active 代次后，旧 token 失效。
+    - extension 片段发往不声明它的 Adapter 返回 UNSUPPORTED；发往声明了它的 memory Adapter 时 payload 不符合 Schema 返回 INVALID_ARGUMENT，符合时发出。
+  - adapters/telegram/callback_test.go：telegramtest 推入 callback_query：先有 answerCallbackQuery 调用，再交付 button.clicked；没有 message 的 inline 回调不交付但推进游标。
+  - contracts/manifest 的现有集成测试（若有）追加 role 与依赖字段的解析。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：manifest 新字段的每种非法值；CheckDependencies 的判定表；token 的编码长度与唯一性；value 长度边界；Purge；Resolve 对 generation 的判断。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/... ./adapters/... ./cmd/...；go build ./...。
+
+不做：正式管理入口的依赖检查、确认与环检测（T-09.4）；消息编辑（T-03.9）；BeforeSend/AfterSend Hook（T-05.3）；Telegram 的 extension（之后按需由 Adapter 声明）。
+```
 ### goal-51 · T-03.9 消息编辑
 
-状态：待编写。
+状态：等待前置（T-03.7）。语句中 goal-2～goal-4、goal-50 提供的符号（message.Service、remote.Process、sdk/adapter 的 Instance、adapters/telegram 的发送与渲染）只写名字；合并后由审查者核对签名，再改为可派发。
 
-目标：消息编辑：`core.edit`、`adapter.edit`、Telegram editMessageText、`message.edit` 能力、出站 Hook 的 edit 输入
-前置：T-03.7。
-依据：PLAN §3.1 的 T-03.9 行、§4 的 T-03 工作包；验收：V-53。
+```text
+/goal 使用 $alonabot-execute 推进 goal-51（切片 T-03.9：消息编辑）。goal 目录 goal-51，分支 goal-51，worktree .worktrees/goal-51，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-- Target 准入与 Send 相同；Edit Chain 只能包含一个 text 片段和至多一个 buttons 片段，否则 INVALID_ARGUMENT。
-- 每次 Edit 执行一组 BeforeSend → Adapter.Edit → AfterSend，Hook 输入标明 edit 与被编辑的 platform_message_id。
-- 未声明 `message.edit` 的实例返回 UNSUPPORTED；平台拒绝（内容未变化、消息不可编辑）为 REJECTED，不改为发送新消息。
-- SendResult 只有一项，status 只取 ACCEPTED/REJECTED/UNKNOWN（MESSAGE-MODEL §4）。
-- 验收：V-53。
+目标：插件经 core.edit 修改一条已发送的平台消息：Core 按与 Send 相同的 Target 准入，校验 Edit Chain 只含一个 text 片段和至多一个 buttons 片段，经 adapter.edit 交给 Adapter；官方 Telegram Adapter 用 editMessageText 实现并声明 message.edit 能力；平台拒绝时按 MESSAGE-MODEL §4 报告，不改为发送新消息。
 
+依据：PLAN T-03 步骤 6（编辑）；CONTRACTS §8（Edit 段）；MESSAGE-MODEL §4、§6.2（Edit 条）；WIRE-FORMAT §3.4、§3.5；TEST-MATRIX V-53。
+
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/：message.proto 新增 EditRequest；adapter.proto 新增 AdapterEditRequest。随后 go generate ./...（本切片获授权只追加这两个消息）
+- contracts/wirespec_test.go：追加编号检查
+- internal/wire/services.go：末尾追加 ServiceEdit = "core.edit"、ServiceAdapterEdit = "adapter.edit"
+- internal/core/adapter/：新增 edit.go（可选接口 Editor）；remote 与 memory 实现它
+- internal/core/message/：新增 edit.go（core.edit）
+- sdk/：Context 与后台各增加 Edit；sdk/adapter 的 Instance 可选实现 Edit；RunAdapter 处理 adapter.edit
+- adapters/telegram/：新增 edit.go；Capabilities 增加 message.edit
+- adapters/telegram/telegramtest/：增加 editMessageText 与故障注入
+- 上述包的测试文件
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. proto
+   message EditRequest { Target to = 1; string platform_message_id = 2; MessageChain chain = 3; } // to 缺省时用默认目标；响应为 SendResult
+   message AdapterEditRequest { string instance_id = 1; Target target = 2; string platform_message_id = 3; MessageChain chain = 4; } // 响应为 SendResult
+2. internal/core/adapter
+   type Editor interface { Edit(ctx context.Context, target *pb.Target, platformMessageID string, chain *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo) }
+3. sdk
+   func (c *Context) Edit(platformMessageID string, chain message.Chain, opts ...SendOption) (*pb.SendResult, error)
+   func Edit(ctx context.Context, to *pb.Target, platformMessageID string, chain message.Chain) (*pb.SendResult, error) // 后台编辑，必须给出 to
+4. sdk/adapter
+   type Editor interface { Edit(ctx context.Context, target *pb.Target, platformMessageID string, chain *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo) } // Instance 可选实现；未实现时 adapter.edit 返回 UNSUPPORTED
+
+行为：
+- core.edit（Core）：确定 Target 与准入的步骤与 core.send 完全相同（默认目标、NO_DEFAULT_TARGET、policy.CheckSend、实例与账号绑定）。platform_message_id 为空 → INVALID_ARGUMENT。Chain 必须恰好一个 text 片段、至多一个 buttons 片段，不能有其他片段，否则 INVALID_ARGUMENT。目标实例的 Capability 没有 supported 的 message.edit，或实例不实现 Editor → UNSUPPORTED。按钮的 token 签发与 Send 相同（T-03.8）。然后调用 Editor.Edit，原样返回 SendResult 与 ErrorInfo。不自动重试，失败时不改为发送新消息。
+- Hook：BeforeSend/AfterSend 的输入标明操作为 edit 与被编辑的 platform_message_id，由 T-05.3 接入；本切片在 core.edit 中留出与 Send 相同的位置，以一行 shortcut 注释写明。
+- Telegram：editMessageText（chat_id、message_id、message_thread_id 不传）；text 的格式与实体规则同发送；buttons 转为 reply_markup。平台返回 "message is not modified" 或消息不可编辑时为 REJECTED（ErrorInfo 带平台描述）。只编辑文本消息，不编辑媒体说明（目标为媒体消息时平台拒绝，同样 REJECTED）。成功时 SendResult 为 ACCEPTED，platform_message_ids 为被编辑消息的 ID。
+- 能力：Telegram 实例启动时声明 message.edit（version 1，supported=true）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：
+  - adapters/telegram/edit_test.go：telegramtest 驱动：编辑成功的参数正确；"message is not modified" 为 REJECTED；带 buttons 时 reply_markup 正确；Calls() 中没有任何 send 方法。
+  - internal/core/supervisor/edit_test.go（//go:build unix）：memory Adapter 实现 Editor 并声明 message.edit；测试插件收到消息后发送一条再编辑它：memory 先收到发送、再收到编辑，ID 一致；Chain 含图片时被拒；memory 不声明 message.edit 时返回 UNSUPPORTED；编辑其他会话（没有许可）返回 PERMISSION_DENIED。
+  - contracts/wirespec_test.go：新消息的编号检查。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Edit Chain 的每种非法组合；后台 Edit 缺少 to；adapter.edit 在实例不实现 Editor 时的 UNSUPPORTED；Telegram 编辑的实体 UTF-16 偏移。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/... ./adapters/...；go build ./...。
+
+不做：出站 Hook 的执行（T-05.3）；编辑媒体或说明；message.edited 入站事件（已在 T-03.4）。
+```
 ### goal-16 · T-05.2 Rule、HandlerOutcome 与传播
 
-状态：待编写。
+状态：等待前置（T-05.1）。语句中 goal-2、goal-12、goal-15 提供的符号（sdk 的分发、RouteOption、Context、HandlerOutcome 的处理、router 的命令层与事件路由派发）只写名字；合并后由审查者核对签名，再改为可派发。
 
-目标：SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支
-前置：T-05.1。
+```text
+/goal 使用 $alonabot-execute 推进 goal-16（切片 T-05.2：Rule、HandlerOutcome 与传播）。goal 目录 goal-16，分支 goal-16，worktree .worktrees/goal-16，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-05.2 行、§4 的 T-05 步骤 3、4。
+目标：SDK 提供在同一 RPC 内执行的 Rule：多个 Rule 默认 AND，显式 OR 用 Any 组合，内置 ToMe 与 ChatAdmin；Rule 为 false 或出错时不运行目标函数并如实返回 matched 与错误。固定两种 Handler 签名的 HandlerOutcome、StopPropagation 锁存、错误分支与已识别命令的消费语义，并用测试证明发送后失败不会补发、撤销或自动回复错误。
 
-关键边界：Rule 返回 false 时跳过 Handler；Stop 不被后续错误清除；自动回复每个事件最多发送一次。
+依据：PLAN T-05 步骤 3、4；CONTRACTS §2.1、§2.2 第 3、6 条、§2.3 第 1 条、§8（自动回复段）；MESSAGE-MODEL §1.1（to_me）；TEST-MATRIX V-14、V-11 的 Rule 分项。
 
-验收：V-14、V-11 的 Rule 分项。
+范围（只新增或修改这些）：
+- sdk/：新增 rule.go；dispatch.go 在调用目标函数前执行 Rule；registry.go 与 events.go 接受 Rule 选项；session.go 的 buildRegister 写入 RuleDescriptor
+- internal/core/router/：HandlerOutcome 的处理按下文统一（只改派发处的判断）
+- 上述包的测试文件
+允许的新跨模块边：无。
 
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+sdk
+   type Rule func(*Context) (bool, error)
+   func WithRule(rules ...Rule) RouteOption // 可多次使用，全部 AND
+   func Any(rules ...Rule) Rule              // OR：依次求值，第一个 true 即为 true；全部 false 为 false；出错立即返回错误
+   func ToMe() Rule                           // message.created 的 to_me；其他事件为 false
+   func ChatAdmin() Rule                      // 调用 Actor 的 trusted_roles 含 CHAT_ADMIN
+
+行为：
+- Rule 在 SDK 的同一次 Handler 请求中、目标函数之前执行，顺序为注册顺序；任一 Rule 返回 false 时不运行目标函数，HandlerOutcome{matched:false, propagation:CONTINUE}；任一 Rule 返回错误时不运行目标函数，按 goal-2 的错误规则返回 Err（*sdk.Error 用其 Code，其他为 INTERNAL），matched=false。Rule panic 与 Handler panic 一样转 INTERNAL 并记录堆栈。
+- RuleDescriptor：有任何自定义 Rule 时 has_custom_rule=true；只用 ChatAdmin 时 require_chat_admin=true（Core 不据此预先过滤，只用于诊断显示）。
+- 传播：
+  - StopPropagation 在调用的任何时刻调用都锁存，即使之后 Rule false、Handler 返回错误或 panic，HandlerOutcome 仍为 STOP。
+  - Core 对事件路由与文本匹配/Raw：matched=false 跳过；业务错误以 WARN 记录后继续下一个候选；STOP 终止后续候选（含 D-44 中命令层之后的事件路由）。
+  - 已识别命令的胜出路由 Rule false 或出错时仍消费命令层（不回落到短路径、文本匹配或 Raw），不回复 usage；STOP 的效果同上。
+- 自动回复型 Handler 只在成功且 Chain 非空时由 Core 发送一次；返回错误时即使 Chain 非空也不发送；自动型内调用 Send 返回 FAILED_PRECONDITION（goal-12 已实现，本切片补齐测试）。手动型可多次 Send；返回错误时已发送的消息不撤销，Core 不自动发送错误回复。
+- Context 在 Handler 返回后失效：之后的 Send、Edit、Wait 返回 FAILED_PRECONDITION；后台 goroutine 持有的 Context 不能改变已返回的 HandlerOutcome。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/supervisor/rule_test.go（//go:build unix）。沿用 goal-12 的命令测试装配，测试插件注册：带 ToMe 的事件路由、带 ChatAdmin 的命令、带返回错误的自定义 Rule 的 keyword 路由、先 Stop 再返回错误的路由、发送两次后返回错误的手动命令、在自动型里调用 Send 的命令、在后台 goroutine 中于返回后调用 Send 的路由：
+  - to_me=false 的群消息不触发 ToMe 路由，私聊触发。
+  - 非 chat_admin 用户的命令被消费：不回 usage、不进入 Raw，插件目标函数未运行。
+  - Rule 出错的 keyword 路由不运行，后续候选继续；先 Stop 再出错的路由使后续候选不再调用。
+  - 手动命令的两条消息都已送达，之后没有任何补发或错误回复；自动型里的 Send 失败且只有返回的 Chain 被发出一次；返回后的后台 Send 返回 FAILED_PRECONDITION。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Any 的短路与错误；WithRule 多次使用的 AND；RuleDescriptor 的两个字段；Rule panic；Stop 在 Rule 中调用的锁存。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./sdk/...；go build ./...。
+
+不做：PreEvent 与出站 Hook（T-05.3）；延续调用与多轮等待（T-05.4）；Core 侧预先执行 chat_admin 过滤。
+```
 ### goal-24 · T-07.2 schedule 注册与运行槽
 
-状态：待编写。
+状态：等待前置（T-05.1、T-07.1）。语句中 goal-2、goal-15、goal-23（contracts/schedule）、goal-76 提供的符号（router.Router、router.Plugin、wire.Session 的 Call、schedule.Trigger、tune.Values、sdk 的 ScheduleRegistry 与分发）只写名字；合并后由审查者核对签名，再改为可派发。
 
-目标：schedule 注册校验，运行槽与调度调用：独立 run_id、15 分钟期限、同 job 跳过重叠、迟到响应与断链
-前置：T-05.1、T-07.1。
+```text
+/goal 使用 $alonabot-execute 推进 goal-24（切片 T-07.2：schedule 注册与运行槽）。goal 目录 goal-24，分支 goal-24，worktree .worktrees/goal-24，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-07.2 行、§4 的 T-07 步骤 1（schedule）、3。
+目标：插件注册的 interval/cron 定时任务经 REGISTER 校验后由 Core Scheduler 按 contracts/schedule 计算触发：每次触发以 Core→插件 REQUEST 调用任务（独立 run_id、JOB_TIMEOUT 期限、无 Actor、不默认 Admin），同一 job 有运行中的调用时跳过本次；到期只结束调用结果并取消，运行槽保留到插件真正返回（迟到响应只释放槽）或旧进程确认退出；不补跑错过的 tick。
 
-关键边界：同一 job 不重叠；离线错过的 tick 不补跑；运行槽只在 callback 真正返回或进程确认退出后释放，迟到响应不得提前释放。
+依据：PLAN T-07 步骤 1（schedule）、3；CONTRACTS §4.3、§1.2；MESSAGE-MODEL §1.1（scheduled）、§1 末段；WIRE-FORMAT §4；TEST-MATRIX V-20、V-46、V-16 与 V-05 的 scheduled 分项。
 
-验收：V-20、V-46、V-16 和 V-05 的 scheduled 分项。
+范围（只新增或修改这些）：
+- contracts/validate/register.go：SCHEDULE 路由的注册校验（调用 schedule.FromSpec）
+- internal/wire/session.go：Request 增加迟到响应回调（只加字段与触发点）
+- 新增 internal/core/scheduler/
+- sdk/：sdk.go 去掉「不支持 scheduled jobs」的拒绝（只改该处）；dispatch.go 分发 SCHEDULE 路由；session.go 的 buildRegister 输出 SCHEDULE 路由
+- 新增 internal/core/supervisor/testdata/jobplugin/
+- 上述包的测试文件
+允许的新跨模块边：internal/core/... -> contracts/schedule、contracts/validate -> contracts/schedule（同属 contracts 与已允许的 internal/core -> contracts）。
 
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. internal/wire
+   Request 增加字段：Late func(Response) // 非 nil 时，若响应在调用方期限之后才到达，读循环调用一次；期限内到达时不调用
+2. internal/core/scheduler
+   type Scheduler struct{ ... }
+   type Options struct { JobTimeout time.Duration; Now func() time.Time; Log *slog.Logger } // JobTimeout 取 tune.Values.JobTimeout
+   func New(opt Options) *Scheduler
+   func (s *Scheduler) Attach(p router.Plugin, activatedAt time.Time) // 为插件的 SCHEDULE 路由安排下一次触发；anchor 为激活时刻
+   func (s *Scheduler) Detach(pluginID string)                        // 停止安排新的触发；运行槽保持，直到 Released
+   func (s *Scheduler) Released(pluginID string)                       // 旧进程确认退出后调用：释放该插件的全部运行槽
+   func (s *Scheduler) Close()
+   type JobStats struct { Runs, Skipped, TimedOut, Late uint64; Running bool }
+   func (s *Scheduler) Stats(pluginID, jobID string) JobStats
+
+行为：
+- 注册校验：SCHEDULE 路由的 route_id 为 "job." + job_id；job_id 同插件内唯一；ScheduleSpec 必须恰有 interval_ms 或 cron 之一，经 schedule.FromSpec 校验（interval 至少 1s、cron 五字段、时区合法）；SDK 的 Every/Cron 生成对应描述。
+- 触发：每个 job 用 Trigger.Next(anchor, now) 得到下一次时刻并设定定时器；到点时若该 job 的运行槽空闲则发起一次调用，否则 Skipped 加一、不排队；之后再按 Next 安排（不补跑，跳过的 tick 不累积）。
+- 调用：Request{Target: route_id, Payload: HandlerRequest{route_id, context:{actor 为空, default_target 为空}, event: scheduled 事件（event_id 由 Core 生成、source_kind=SCHEDULER、payload 为 job_id、run_id（16 字节随机值的十六进制）、scheduled_at_unix_ms）}, Deadline: 触发时刻 + JobTimeout, Late: 释放运行槽}。直接调用插件 Session，不经事件队列与派发链。
+- 期限：到期时调用方得到 DEADLINE_EXCEEDED、Cancel 已发出，TimedOut 加一，但运行槽保留；迟到响应（Late 回调）到达时释放槽并计入 Late。期限内的响应（成功或错误）立即释放槽。Session 断开时不释放槽，直到 Released 被调用。
+- SDK：收到 SCHEDULE 路由的请求时以 Context（没有 Actor 与默认 Target，Send 必须显式 To）调用任务函数；ctx 被取消时仍等用户函数真正返回后才发送唯一的 Response。
+- 本切片不接统一启停（Draining 时停止新 tick 等属于 T-07.5），也不改 cmd/alonabot 的装配。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/supervisor/scheduler_test.go（//go:build unix）。构建 testdata/jobplugin（一个每 1s 的 interval 任务，按环境变量决定执行时长并以日志记录 run_id），Launch 后 Attach 到 Scheduler（JobTimeout 设为 2s）：
+  - 执行 0.2s 时，若干秒内有相应次数的调用，run_id 各不相同，事件没有 Actor。
+  - 执行 5s 时：第 2s 到期后 TimedOut=1、Running 仍为 true，期间到点的 tick 被 Skipped；第 5s 迟到响应到达后 Late=1、槽释放，下一次 tick 正常调用。
+  - 任务执行中杀掉插件进程：槽不释放；调用 Released 后释放，新进程 Attach 后从未来的 tick 开始，不补跑。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：注册校验的各条拒绝；wire 的 Late 回调只在期限后触发且只一次；cron 任务用注入时钟的 Next；Detach 后不再触发；Close 释放定时器。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/...；go build ./...。
+
+不做：Scheduler 与 HTTP 的统一启停、Draining 与停止预算（T-07.5）；Agent 的定时任务（T-12.6）；持久化的运行记录。
+```
 ### goal-30 · T-08.3 SDK 配置准备顺序
 
-状态：待编写。
+状态：等待前置（T-08.1、T-08.2）。语句中 goal-28 提供的符号（sdk.Generated.ConfigSchema、sdk/config 的扩展关键字与 MarshalSchema）只写名字；合并后由审查者核对签名，再改为可派发。
 
-目标：SDK 配置准备顺序：OnLoad→补缺键默认→typed decode/Schema
-前置：T-08.1、T-08.2。
+```text
+/goal 使用 $alonabot-execute 推进 goal-30（切片 T-08.3：SDK 配置准备顺序）。goal 目录 goal-30，分支 goal-30，worktree .worktrees/goal-30，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-08.3 行、§4 的 T-08 步骤 3。
+目标：SDK 在准备阶段严格按「OnLoad(fromVersion, raw) → 只给缺失键补默认值 → typed decode 与 Schema 校验」处理 Bootstrap 下发的候选配置，再执行 OnStart，并在 REGISTER 回传完整、规范化的候选 JSON（保留未知键，不用 typed marshal 覆盖原文档）。普通 restart 时 OnLoad 在相同配置版本上改变配置则失败。
 
-关键边界：严格按 OnLoad→仅补缺失键的默认值→typed decode/Schema 顺序准备配置；显式 false、0、空串、空数组、空对象与 null 均保留。
+依据：PLAN T-08 步骤 3；CONTRACTS §5.1 第 3 条、§5.2；WIRE-FORMAT §3.2；DECISIONS D-40、D-43；TEST-MATRIX V-37、V-21 的配置分项。
 
-验收：V-37、V-21 的配置分项。
+范围（只新增或修改这些）：
+- 新增 sdk/config/prepare.go（准备流程，供 sdk 调用）
+- sdk/session.go：prepare 在 OnStart 之前调用配置准备，REGISTER 使用准备后的 JSON（只改该段）
+- 上述包的测试文件
+允许的新跨模块边：无（jsonschema-go 已由 goal-28 引入）。
 
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+sdk/config
+   type Prepared struct {
+       JSON    []byte // 规范 JSON：键排序、无多余空白、数字保留原文；包含全部未知键
+       Version uint32 // target_config_version
+   }
+   // Prepare 按顺序执行：OnLoad → 补缺失键默认 → typed decode 到 cfg → Schema 校验；任何一步失败返回带 Code 的错误。
+   func Prepare(ctx context.Context, cfg Config, schema []byte, raw []byte, fromVersion *uint32, targetVersion uint32, restart bool) (Prepared, error)
+
+行为：
+- 输入：raw 为 Bootstrap.candidate_config_json；fromVersion 为 previous_config_version（首次安装为 nil，此时以 targetVersion 调用 OnLoad）；restart 为 true 表示 activation_reason 是普通 restart 或恢复。没有 Config（Root.Config 返回 nil）时跳过前三步，原样回传 raw 的规范形式。
+- OnLoad：在零值的配置类型上调用（cfg 指向新的零值实例），输入完整原 JSON；返回值必须是 JSON 对象，否则 INVALID_ARGUMENT；OnLoad 返回错误时为 INVALID_ARGUMENT（safe_message "config OnLoad rejected the configuration"，原文只写日志）。OnLoad 的预算是 Bootstrap 的 config 阶段预算，超时为 DEADLINE_EXCEEDED。
+- restart 时，OnLoad 的结果与输入的规范形式不同 → FAILED_PRECONDITION（不能借 restart 修改 Active 配置）。
+- 补默认值：用 jsonschema-go 的 Resolve（ValidateDefaults=true）与 ApplyDefaults，只给对象中缺失的属性补默认值；显式 false、0、""、[]、{} 与 null 都不覆盖；required 字段缺失且没有默认值时在下一步校验失败。
+- typed decode：把补完默认值的 JSON 用 encoding/json 解码到 cfg（数字超出字段范围、类型不符 → INVALID_ARGUMENT，错误指明 JSON 路径）；null 只允许出现在指针字段上。未知键不进入 cfg，但保留在 JSON 中。
+- Schema 校验：用 Resolved.Validate 校验补完默认值后的 JSON 对象（以 UseNumber 解码的副本）；失败 → INVALID_ARGUMENT，错误指明 JSON 路径，不含取值。大整数在校验副本中可能失去精度时，以 typed decode 的范围检查为准（D-43）。
+- 输出：Prepared.JSON 为补完默认值后的完整对象的规范形式（复用 internal/core/config.Canonical 的同一算法，在 sdk/config 中实现，不 import internal/core），Version 为 targetVersion。REGISTER 的 candidate_config_json 与 candidate_config_version 使用它们；SDK 不以 typed marshal 重建文档。
+- 失败时 SDK 按现有流程发送 SESSION_ERROR（阶段 CONFIG），不进入 OnStart；错误文本不含配置取值。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/supervisor/config_prepare_test.go（//go:build unix）：构建一个配置类型含 default、required、指针、嵌套与未知键场景的测试插件（经 goal-28 的生成器生成 Schema），以不同 Bootstrap 启动：
+  - 缺失键得到默认值；显式 false、0、""、null（指针字段）保留；未知键与嵌套未知键出现在 REGISTER 的 candidate_config_json 中。
+  - 旧版本配置（fromVersion=1）只有经 OnLoad 迁移后才满足新 Schema：启动成功；不覆盖 OnLoad 时同样的输入在校验阶段失败（阶段 CONFIG）。
+  - required 缺失、int 字段超出范围、OnLoad 返回错误时，SESSION_ERROR 阶段为 CONFIG，OnStart 未执行。
+  - restart 时 OnLoad 改变了配置：FAILED_PRECONDITION；OnLoad 保持不变时正常启动。
+  - 超过 2^53 的整数原样保留在回传 JSON 中。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：规范 JSON 与 internal/core/config.Canonical 的结果逐字节一致（同一组输入）；ApplyDefaults 不触碰显式值；没有 Config 时的路径；OnLoad 超时；错误信息不含取值。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./sdk/... ./internal/core/...；go build ./...。
+
+不做：Secret 的引用与解引用（T-08.4）；DB 迁移（T-08.5）；Pending 激活与 reload 流程（T-09）；表单（T-08.7）。
+```
 ### goal-31 · T-08.4 不可变 Secret Store
 
-状态：待编写。
+状态：等待前置（T-08.1、T-08.2）。语句中 goal-28、goal-29 提供的符号（sdk/config 的 KeywordSecret、MarshalSchema，internal/core/config 的 Canonical）只写名字；合并后由审查者核对签名，再改为可派发。
 
-目标：不可变 Secret Store：引用、解引用、重新抽取、脱敏读取、受保护清理
-前置：T-08.1、T-08.2。
+```text
+/goal 使用 $alonabot-execute 推进 goal-31（切片 T-08.4：不可变 Secret Store）。goal 目录 goal-31，分支 goal-31，worktree .worktrees/goal-31，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-08.4 行、§4 的 T-08 步骤 4。
+目标：配置快照中的 secret 字段只保存 {"$secret_ref": id}，Secret Store 保存不可变的 secret 版本。Core 在构造 Bootstrap 前把本插件有权访问的引用解析为明文，在 REGISTER 后按配置 Schema 的 secret 标记与此前保留的 secret 路径重新抽取，生成持久化快照，并以快照计算 PREPARED 的配置摘要；管理读取只返回引用是否已设置；按引用清理时保护 Active、Pending 与保留代次。
 
-关键边界：Secret 使用不可变引用；读取、日志、错误响应与配置快照不得泄漏明文；旧引用在候选失败时保持有效。
+依据：PLAN T-08 步骤 4；CONTRACTS §5.3、§5.2（PREPARED 摘要）、§14.5、§12；WIRE-FORMAT §3.2；TEST-MATRIX V-25。
 
-验收：V-25。
+范围（只新增或修改这些）：
+- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/secrets.go
+- 新增 internal/core/secret/
+- internal/core/host/prepare.go：Expect 增加快照回调；PREPARED 的摘要改为对快照计算；Prepared 增加 ConfigSnapshot
+- internal/core/supervisor/supervisor.go：Spec 增加 ConfigSchema；新候选时把快照写入代次，普通 restart 时核对快照一致
+- 上述包的测试文件
+允许的新跨模块边：internal/core/secret -> sdk/config 不允许（internal/core 不 import sdk）；secret 标记的关键字名在 internal/core/secret 中以常量重复声明，并由测试核对与 sdk/config 的常量一致。
 
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. internal/core/state
+   迁移：
+   CREATE TABLE secrets (ref_id TEXT PRIMARY KEY, plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), value BLOB NOT NULL, created_at INTEGER NOT NULL);
+   CREATE TABLE generation_secret_paths (generation_id TEXT NOT NULL REFERENCES generations(generation_id), path TEXT NOT NULL, PRIMARY KEY (generation_id, path));
+   func (s *Store) SetGenerationConfig(ctx context.Context, generationID, snapshot string) error // 只允许未提交的代次
+   其余读写方法自定（放在 secrets.go）。
+2. internal/core/secret
+   const RefKey = "$secret_ref"
+   type Store struct{ ... }
+   func New(st *state.Store) *Store
+   func (s *Store) Resolve(ctx context.Context, pluginID string, snapshot []byte) ([]byte, error) // 把引用换成明文；引用不属于该插件或不存在 → PERMISSION_DENIED / NOT_FOUND
+   // Extract 从候选 JSON 抽取 secret：schema 中标记的路径与 keptPaths 的并集。与 previous（上一快照）同一路径的明文相同则复用原引用，否则生成新引用（16 字节随机值的十六进制）。
+   func (s *Store) Extract(ctx context.Context, pluginID string, schema, candidate, previous []byte, keptPaths []string) (snapshot []byte, paths []string, err error)
+   func (s *Store) Redact(snapshot []byte) ([]byte, error) // 管理读取：每个引用替换为 {"$secret_set": true}
+   func (s *Store) Collect(ctx context.Context, pluginID string, protected [][]byte) (removed int, err error) // 删除该插件中未被 protected 快照（Active、Pending、保留代次）引用的 secret
+3. internal/core/host
+   Expect 增加字段：Snapshot func(candidate []byte) (snapshot []byte, err error) // nil 时快照等于候选（没有 secret）
+   Prepared 增加字段：ConfigSnapshot []byte
+   PREPARED.candidate_config_digest = SHA256(ConfigSnapshot)
+4. internal/core/supervisor
+   Spec 增加字段：ConfigSchema []byte; Secrets *secret.Store; KeptSecretPaths []string
+
+行为：
+- 路径：secret 路径为从根经对象属性到字段的 JSON 名，用 "." 连接（属性名含 "." 时按 RFC 6901 的方式转义为 "~1"，"~" 为 "~0"）；只经过对象属性（goal-28 已禁止数组与 map 中的 secret）。
+- Bootstrap：supervisor 在 Launch 前用 Resolve 把 Active（restart）或 Pending（新候选，由 T-09 提供）快照解析为明文，放进 candidate_config_json；明文 Bootstrap 只走认证 IPC。
+- REGISTER 之后：host 调用 Expect.Snapshot（supervisor 以 Extract 实现，schema=Spec.ConfigSchema，keptPaths=Spec.KeptSecretPaths 加上一代次的 generation_secret_paths），得到快照与路径集合；PREPARED 摘要对快照计算。字段值为 null 或缺失时不生成引用；字段值已经是 {"$secret_ref": id} 时拒绝（插件不能回传引用）。
+- 新候选：在提交 Active 之前，SetGenerationConfig 写入快照，并写入 generation_secret_paths。普通 restart：Extract 的结果必须与已提交的快照完全相同（明文未变时复用原引用），否则 FAILED_PRECONDITION，不提交新代次。
+- 旧 secret 字段从 Schema 移除但仍作为未知键保留时，因为路径在 keptPaths 中而继续被抽取；只有候选中该键被删除，路径才不再保留。
+- Redact 的结果用于管理 API；掩码不是协议值，表单提交时省略字段表示保持原值（T-09 与 T-08.7 遵守）。
+- Collect 只删除不被任何 protected 快照引用的 secret；正在恢复或 Journal 中的引用由 T-09 加入 protected。
+- 存储保护：状态库文件已是 0600；本切片在 Unix 上核对 data_dir 下状态库与其 WAL/SHM 文件的权限为 0600，在 Windows 上为状态库文件设置只允许当前账号访问的 ACL（golang.org/x/sys/windows，已批准）。
+- 日志、错误与普通响应中不出现明文、Bootstrap 或完整配置；错误只写路径。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/supervisor/secret_test.go（//go:build unix）。测试插件的配置含一个 secret 字段与一个普通字段，Spec.ConfigSchema 取生成器为它产生的 Schema：
+  - 首次启动：插件收到明文；状态库代次快照中该字段为 {"$secret_ref": ...}，secrets 表有一行；PREPARED 摘要等于快照的 SHA256。
+  - 明文不变的新候选复用同一引用；明文改变生成新引用，旧代次快照中的引用不变。
+  - 新 Schema 去掉该 secret 字段但候选保留该键：新快照中它仍是引用；候选删除该键后不再保留路径。
+  - 普通 restart 时插件回传了不同的明文：FAILED_PRECONDITION，Active 不变。
+  - Collect 在保护 Active 时不删除其引用，删除只被已丢弃候选引用的 secret。
+  - 日志缓冲中不出现明文字符串。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：路径转义；Resolve 拒绝其他插件的引用；插件回传引用被拒；Redact 的输出；关键字常量与 sdk/config 一致；文件权限检查。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/...；go build ./...。
+
+不做：Pending 中 secret 的写入与表单（T-09、T-08.7）；明文查看的再认证与审计（T-09.9）；Journal 中引用的保护（T-09.5）；Adapter 实例配置的 Secret（T-09.4）。
+```
 ### goal-34 · T-08.7 web/admin 骨架、配置表单组件与界面文案
 
-状态：待编写。
+状态：等待前置（T-08.1）。语句中 goal-28 定下的配置 Schema 格式（draft 2020-12 加 x-alonabot-secret、x-alonabot-hidden、x-alonabot-form、x-alonabot-i18n 关键字）只写名字；合并后由审查者用实际生成的 Schema 核对 fixture，再改为可派发。
 
-目标：`web/admin` 前端骨架，配置表单与 i18 组件及 fixture，界面文案的 en-US/zh-CN 目录与语言切换
-前置：T-08.1。
+```text
+/goal 使用 $alonabot-execute 推进 goal-34（切片 T-08.7：web/admin 骨架、配置表单组件与界面文案）。goal 目录 goal-34，分支 goal-34，worktree .worktrees/goal-34，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-08.7 行、§4 的 T-08 步骤 9（前端）。
+目标：建立 web/admin 前端工程（Vite、TypeScript、React 19、vitest），提供由配置 Schema 驱动的表单组件：字段按声明顺序展示，hidden 字段不显示也不被删除，secret 字段显示「已设置」状态而不把掩码当成保存值，提交生成 RFC 7396 Merge Patch；字段标签按 i18 回退规则显示；WebUI 自身文案有 en-US 与 zh-CN 目录和语言切换组件。真实管理页面与 API 在 T-09 接入。
 
-关键边界：前端只使用仓库已批准的 Vite、TypeScript、React 19 与 vitest；界面文案提供 en-US、zh-CN 两份目录。
+依据：PLAN T-08 步骤 9（前端）；CONTRACTS §5.1 第 4 条、§5.3、§5.4 最后一条；DECISIONS D-43；docs/development.md（Node 版本与已批准的前端依赖）；TEST-MATRIX V-25 的表单分项、V-54 的界面组件分项。
 
-验收：V-25 的表单分项、V-54 的界面组件分项。
+范围（只新增或修改这些）：
+- 新增 web/admin/（package.json、package-lock.json、tsconfig.json、vite.config.ts、index.html、src/、fixtures/、i18n/）
+- .gitignore：追加 web/admin/node_modules/ 与 web/admin/dist/
+- docs/development.md 不改；Node 使用 asdf 管理的 26.5.1，包管理用 npm
+允许的依赖：只用 react、react-dom、typescript、vite、@vitejs/plugin-react、vitest（均属已批准的 Vite、TypeScript、React 19、vitest）。需要 DOM 测试环境（jsdom、happy-dom）或 Testing Library 时标阻塞，等待维护者批准。
 
+接口（模块与导出，照此实现）：
+- src/schema/model.ts
+  export type Field = { path: string[]; type: 'string'|'integer'|'number'|'boolean'|'object'|'array'|'map'; nullable: boolean; required: boolean; secret: boolean; hidden: boolean; widget?: string; options?: (string|number)[]; min?: number; max?: number; defaultValue?: unknown; i18n: string; children?: Field[] }
+  export function fieldsFromSchema(schema: unknown): Field[] // 按 properties 的声明顺序（Schema 的 JSON 键顺序）；hidden 字段保留在模型中，标记 hidden
+- src/schema/patch.ts
+  export type SecretState = { set: boolean } // 来自管理读取的 {"$secret_set": true}
+  export function buildPatch(original: unknown, edited: unknown, fields: Field[]): Record<string, unknown> // RFC 7396：只包含改变的键；未触碰的 secret 与 hidden 字段不出现；清空可空字段生成 null 删除；数组整体替换
+- src/i18n/catalog.ts
+  export function pickLocale(available: string[], preferred: readonly string[]): string // 精确 → 主语言（字典序最小）→ en-US
+  export function fieldLabel(messages: Record<string, unknown>, fallback: Record<string, unknown>, field: Field): string // config.<path>.label → en-US → 字段名
+- src/components/ConfigForm.tsx：export function ConfigForm(props: { schema: unknown; value: unknown; secrets: Record<string, SecretState>; messages: Record<string, unknown>; onSubmit: (patch: Record<string, unknown>) => void })
+- src/components/LanguageSwitch.tsx：export function LanguageSwitch(props: { value: string; onChange: (tag: string) => void })
+- i18n/en-US.json、i18n/zh-CN.json：WebUI 文案（键集合一致）
+
+行为：
+- 表单：string 用文本框（widget=password 时为密码框，textarea 时为多行），integer/number 用数字框并按 min/max 限制，boolean 用开关，select 用下拉（options），object 嵌套为分组，array 与 map 提供增删行。required 字段标记必填。表单只在提交时生成 patch，不自行补默认值（默认值由 SDK 在准备时补，T-08.3）。
+- secret：显示「已设置/未设置」与「修改」按钮；未点「修改」时不出现在 patch 中；点了并输入后以新值出现；提供「清除」时（可空字段）生成 null。不把任何掩码字符串放进 patch。
+- hidden：不渲染，但 patch 永远不包含它（不会因未显示而被删除）。
+- 未知键：表单只渲染 Schema 中的字段；patch 只包含被编辑的已知字段，未知键不受影响。
+- 字段文案：标签与说明按 pickLocale 选出的语言取 config.<path>.label / description，缺失时回落 en-US，再回落字段的 JSON 名；options 只翻译显示文案，提交值不变。
+- 语言切换：初始语言按浏览器 navigator.languages 用 pickLocale 在 en-US 与 zh-CN 中选择；用户选择后保存在 localStorage，与机器人回复语言无关。
+- fixtures/：至少三个 Schema fixture（嵌套与顺序、secret 与 hidden、可空与数组/map），由 goal-28 的生成器为对应 Go 类型实际生成后放入（审查者在派发前核对）。
+- npm scripts：dev、build、test（vitest run）、typecheck（tsc --noEmit）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：web/admin/src/schema/schema.test.ts（vitest，不依赖 DOM）：用 fixtures 驱动 fieldsFromSchema 与 buildPatch，覆盖字段顺序、hidden 不进 patch、未修改的 secret 不进 patch、修改 secret 进 patch、清空可空字段生成 null、数组整体替换、未知键不受影响；pickLocale 与 fieldLabel 的回退。这是 Schema 格式与表单之间的契约测试。
+- 本地自测（不提交，PR 中写明结果）：npm run build、npm run typecheck；在浏览器中手动打开 dev 页面，用 fixture 渲染表单并切换语言（写明浏览器与版本，属于手动验证）。
+
+完成条件：在 web/admin 下 npm ci、npm run typecheck、npm run test、npm run build 全部成功；仓库根目录 node scripts/check-repository.mjs 通过；go build ./... 不受影响。
+
+不做：真实管理 API、登录与页面路由（T-09.1、T-09.8）；CI 中的前端任务（另行由维护者决定是否加入）；DOM 渲染测试（需要新依赖）。
+```
 ### goal-53 · T-08.8 用户可见文案目录
 
-状态：待编写。
+状态：等待前置（T-04.1、T-04.3、T-08.1）。语句中 goal-11、goal-12、goal-28 提供的符号（sdk/generate 的 Scan 与诊断、sdk.Generated、Context、router 的 usage 生成）只写名字；合并后由审查者核对签名，再改为可派发。
 
-目标：用户可见文案目录：插件 `i18/` 的 `messages`、SDK 的 `T`、Core 的 en-US/zh-CN 文案目录（usage 等）、check 的键与占位符检查
-前置：T-04.1、T-04.3、T-08.1。
+```text
+/goal 使用 $alonabot-execute 推进 goal-53（切片 T-08.8：用户可见文案目录）。goal 目录 goal-53，分支 goal-53，worktree .worktrees/goal-53，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-08.8 行、§4 的 T-08 步骤 8。
+目标：插件的 i18/<locale>.json 中 messages 的键与占位符在构建期检查，并由生成器嵌入；SDK 提供 Context.T 按「Actor locale → Core 默认 locale → en-US」选择语言、主语言回落；Core 内置 en-US 与 zh-CN 的用户文案目录，命令 usage 改为经它生成；Core 默认 locale 是一项持久化的全局设置。
 
-关键边界：检查插件 i18/*.json 的 messages：en-US 包含全部键、其他语言无多余键、占位符集合一致；SDK 的 T 按 Actor locale→Core 默认 locale→en-US 回退；Core 用户可见文案提供 en-US 与 zh-CN。
+依据：PLAN T-08 步骤 8；CONTRACTS §5.4、§5.3（config 根节点）、§2.2 第 8 条；MESSAGE-MODEL §1（Actor.locale）；TEST-MATRIX V-54 的 SDK 与 Core 分项。
 
-验收：V-54 的 SDK 与 Core 分项。
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/control.proto：Bootstrap 追加 string default_locale = 12。随后 go generate ./...（本切片获授权只追加这一字段）
+- contracts/wirespec_test.go：追加编号检查
+- 新增 contracts/i18n/（文件格式解析、占位符、语言选择，Core 与 SDK 共用）
+- sdk/generate/：检查并嵌入 i18/*.json；sdk 的 Generated 增加 I18n
+- sdk/：新增 i18n.go（Context.T 与后台 T）
+- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/settings.go
+- 新增 internal/core/i18n/（Core 内置目录与 en-US.json、zh-CN.json）
+- internal/core/router/：usage 改用 Core 目录，删除 goal-12 的 shortcut 注释
+- internal/core/host/prepare.go：Bootstrap 写入 default_locale
+- 上述包的测试文件
+允许的新跨模块边：sdk/... -> contracts、internal/core/... -> contracts（已允许）。
 
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. contracts/i18n
+   type Catalog struct{ ... } // 一个组件全部 locale 的 messages
+   type Problem struct { File string; Key string; Message string }
+   func Parse(files map[string][]byte) (*Catalog, []Problem) // 键为文件名（如 "en-US.json"）；有问题时 Catalog 为 nil
+   func (c *Catalog) Format(locales []string, key string, args map[string]string) (string, error) // locales 为按优先级的候选（如 [Actor locale, 默认 locale]），最后总会回落到 en-US
+   func Placeholders(message string) ([]string, error)
+2. sdk
+   func (c *Context) T(key string, args ...any) (string, error) // args 为成对的名字与值，值用 fmt.Sprint 格式化
+   func T(ctx context.Context, key string, args ...any) (string, error) // 没有 Actor：从 Core 默认 locale 开始
+   Generated 增加 I18n map[string][]byte
+3. internal/core/state
+   迁移：CREATE TABLE core_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+   func (s *Store) Setting(ctx context.Context, key string) (string, bool, error)
+   func (s *Store) PutSetting(ctx context.Context, key, value string) error
+4. internal/core/i18n
+   func Messages() *i18n.Catalog // Core 内置目录（嵌入的 en-US.json 与 zh-CN.json）
+   const SettingDefaultLocale = "default_locale"
+   func DefaultLocale(ctx context.Context, st *state.Store) (string, error) // 未设置时 "en-US"
+   func SetDefaultLocale(ctx context.Context, st *state.Store, tag string) error // 必须是规范的 BCP 47 标签
+
+行为：
+- 文件格式（Parse 校验，问题以 Problem 报告）：文件名必须是规范 BCP 47 标签加 .json；顶层只允许 config 与 messages 两个键；messages 的键为点分隔的 ASCII 标识（[a-z0-9_]+ 段），值为字符串；{name} 为占位符（name 同标识规则），{{ 与 }} 为字面花括号，其余单独的花括号是错误。必须有 en-US.json；其他语言不得有 en-US 没有的键；同一键在各语言的占位符集合必须与 en-US 相同；JSON 不合法是错误。config 根节点只检查是对象（字段翻译的路径检查属于表单，T-08.7）。
+- 语言选择（Format）：按候选顺序，每一级先精确匹配，再按主语言子标签匹配（同一主语言有多个文件时取字典序最小者）；都不命中时用 en-US；目标语言缺少该键时回落到 en-US 的该键。未知键（en-US 也没有）返回错误；缺少占位符参数返回错误；多余参数忽略。不用键名充当文案。
+- 生成器：构建入口目录下有 i18/ 时解析全部 .json，Problem 作为诊断报告（位置为文件名与键）；没有问题时把文件原文嵌入 Generated.I18n。plugin check 同样报告。
+- SDK：Context.T 的候选为 [Actor.locale（存在时）, Bootstrap.default_locale]；后台 T 为 [default_locale]。插件没有 i18 资源时 T 返回 NOT_FOUND 的错误。
+- Core：Bootstrap.default_locale 取 DefaultLocale；修改在之后建立的 Session 生效（已运行的插件在下次启动时看到新值）。命令 usage 的文案键为 core.usage.*（en-US 与 zh-CN 两份），按事件 Actor 的 locale 与默认 locale 选择语言；占位符为命令路径与参数用法。
+- 日志、错误字符串与 safe_message 仍只用英文。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：
+  - internal/core/supervisor/i18n_test.go（//go:build unix）：测试插件带 en-US、zh-CN、zh-TW 三个文件，收到消息时用 Context.T 回复：Actor.locale 为 zh-CN 得到中文；zh-HK 回落到主语言 zh 中字典序最小的 zh-CN；ja 与没有 Actor 时用默认 locale；把默认 locale 设为 zh-CN 并重启插件后，ja 得到中文。参数错误的命令 usage 在 zh-CN 用户处为中文、en-US 用户处为英文。
+  - sdk/generate/i18n_test.go：沿用 goal-11 的临时 module：缺少 en-US、zh-CN 多出的键、占位符集合不同、非法 JSON、多余顶层键各产生诊断；合法时 Generated.I18n 被嵌入。
+  - contracts/wirespec_test.go：Bootstrap.default_locale = 12。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：占位符与花括号转义；Format 的未知键与缺少参数；BCP 47 规范化；core 目录的 en-US 与 zh-CN 键集合一致；SetDefaultLocale 拒绝非法标签。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/...；go build ./...。
+
+不做：WebUI 文案与语言切换（T-08.7）；配置字段翻译的渲染（T-08.7）；确认消息的文案（T-11.2 使用本目录）；修改默认 locale 的管理 API（T-09.9）。
+```
 ### goal-36 · T-09.1 首次管理认证
 
-状态：待编写。
+状态：等待前置（T-07.4）。语句中 goal-25、goal-26、goal-76 提供的符号（webhost.Host、webhost.AdminSessions、settings.Settings、cobra 命令树）只写名字；合并后由审查者核对签名，再改为可派发。
 
-目标：首次管理认证：admin-token init/reset、login、会话、CSRF、CLI Bearer
-前置：T-07.4。
+```text
+/goal 使用 $alonabot-execute 推进 goal-36（切片 T-09.1：首次管理认证）。goal 目录 goal-36，分支 goal-36，worktree .worktrees/goal-36，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-09.1 行、§4 的 T-09 步骤 1。
+目标：alonabot admin-token init/reset 在持有 core.lock 时离线生成 32 字节管理 token，只在本机终端显示一次，状态库只存 SHA256 与认证代次；reset 递增代次并撤销全部管理会话、兑换票据与派生插件会话。admin host 提供 POST /api/auth/login（Origin 与登录 CSRF、恒时比较、8h 会话）与 POST /api/auth/logout；管理状态变更要求 CSRF；CLI 用显式 Bearer token。实现 webhost.AdminSessions，未初始化或认证无效时拒绝一切管理访问。
 
-关键边界：管理 token 只保存 SHA-256 摘要；登录与状态变更使用 CSRF 校验，错误响应不得暴露凭证。
+依据：PLAN T-09 步骤 1；CONTRACTS §7.3、§7.4、§15.1（listen 与 Base URL）、§14.5；TEST-MATRIX V-47 的认证分项。
 
-验收：V-47 的认证分项。
+范围（只新增或修改这些）：
+- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/admin.go
+- 新增 internal/core/adminauth/
+- internal/core/settings/：非 loopback 的 listen 必须配合 https 的 admin_base_url 或非空的 trusted_proxies（只加校验）
+- cmd/alonabot/：新增 admin-token 命令组（init、reset）；run 用 adminauth 作为 webhost 的 AdminSessions 并挂上登录接口
+- 上述包的测试文件
+允许的新跨模块边：无。
 
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. internal/core/state
+   迁移：
+   CREATE TABLE admin_credential (id INTEGER PRIMARY KEY CHECK (id = 1), token_sha256 BLOB NOT NULL, auth_generation INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+   CREATE TABLE admin_sessions (session_id TEXT PRIMARY KEY, csrf_token TEXT NOT NULL, auth_generation INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+   读写方法自定（放在 admin.go）。
+2. internal/core/adminauth
+   var ErrNotInitialized = errors.New("admin token is not initialized")
+   func InitToken(ctx context.Context, st *state.Store) (token string, err error)  // 已有凭证时返回错误；token 为 32 字节随机值的 base64url（无 padding）
+   func ResetToken(ctx context.Context, st *state.Store) (token string, err error) // 递增 auth_generation，删除全部管理会话
+   type Auth struct{ ... }
+   func New(st *state.Store, now func() time.Time, secure bool) *Auth // secure 为 true 时 Cookie 用 __Host- 前缀与 Secure
+   func (a *Auth) Routes(mux *http.ServeMux)        // POST /api/auth/login、POST /api/auth/logout
+   func (a *Auth) Require(next http.Handler) http.Handler // 管理 API 的中间件：Cookie 会话（变更方法要求 CSRF）或 Authorization: Bearer
+   func (a *Auth) Lookup(r *http.Request) (sessionID string, expiresAt time.Time, ok bool) // 实现 webhost.AdminSessions
+   func (a *Auth) Valid(sessionID string) bool
+   func (a *Auth) Reauthenticate(r *http.Request, token string) bool // 供明文查看 secret 前的再认证（T-09.9 使用）
+3. cmd/alonabot
+   alonabot admin-token init --data-dir DIR；alonabot admin-token reset --data-dir DIR
+   两者都要求 stdin 与 stderr 都是终端，否则以 exitUsage 退出且不生成 token；先取得 core.lock（Core 正在运行时失败并提示先停止 Core）；token 只写到 stderr 一次，不进日志。
+
+行为：
+- 登录：只在 admin host 上提供（webhost 已按 Host 分派）。请求必须是 POST、Content-Type 为 application/json、Origin 等于 admin_base_url 的 origin（缺失或不等 → 403）；请求体 {"token": "..."}。未初始化 → 503（ErrNotInitialized 的 safe 文本）。SHA256 后用 subtle.ConstantTimeCompare 比较；失败 → 401（不区分原因）。成功时创建会话（随机 32 字节 ID，csrf_token 为另一随机值，到期为 8h 后，命名常量，绑定当前 auth_generation），设置 Cookie（__Host-alonabot_admin 或 alonabot_admin；HttpOnly、SameSite=Strict、Path=/），响应体 {"csrf_token": "..."}。
+- Require：Cookie 会话必须存在、未过期且 auth_generation 等于当前值；GET/HEAD 之外的方法还要求请求头 X-Alonabot-CSRF 等于会话的 csrf_token 且 Origin 校验通过。或者 Authorization: Bearer <token> 与凭证摘要恒时比较相等（CLI 用，不需要 CSRF）。都不满足 → 401；未初始化 → 503。
+- 登出：删除会话及其派生的插件会话（webhost 通过 Valid 立即感知），清除 Cookie。
+- reset：auth_generation 加一并删除全部管理会话；派生票据与插件会话因 Valid 返回 false 而失效。
+- 安全：token、会话 ID 与 csrf_token 不写日志、不出现在错误中；登录失败以 INFO 记录（来源地址，不含 token）。设置校验：listen 不是 loopback 地址时，admin_base_url 必须是 https，或 trusted_proxies 非空（TLS 由可信反代终止），否则 Load 返回错误。
+- cmd/alonabot run：admin host 上把 /api/ 下的路由（目前只有认证路由）交给 Auth；webhost 使用 Auth 作为 AdminSessions。首次启动自动生成 token 的流程属于 serve（T-09.4）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：
+  - cmd/alonabot/e2e_test.go 追加：非终端运行 admin-token init 与 reset 时以 exitUsage 退出，状态库中没有凭证；Core 运行中执行 admin-token reset 时因 core.lock 失败。终端分支在本地自测中通过替换 cmd 内部的终端检测函数变量覆盖（不新增依赖）。
+  - internal/core/supervisor/adminauth_test.go（//go:build unix）：用 webhost、httpproxy 与 httpplugin 装配：未初始化时登录 503；错误 token 401；正确 token 得到 Cookie 与 csrf_token；缺少 CSRF 的 POST 管理请求 401；Bearer 请求通过；Origin 不符的登录 403；登录后经票据进入私有插件页面，reset 后该插件会话与管理会话都失效；8h 后会话失效（注入时钟）；插件收到的请求中没有管理 Cookie 与 Authorization。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：替换终端检测后 init 只显示一次 token、reset 递增代次；恒时比较；Cookie 属性在 secure 与否时的差异；settings 的非 loopback 校验；日志中不出现 token；InitToken 在已有凭证时失败；Reauthenticate。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/... ./cmd/...；go build ./...。
+
+不做：管理 API 的业务接口与页面（T-09.4、T-09.8）；serve 的首次启动生成 token（T-09.4）；多用户账号（契约不提供）；明文查看 secret 的接口（T-09.9）。
+```
 ### goal-69 · T-13.3 热部署
 
-状态：待编写。
+状态：等待前置（T-13.1）。语句中 goal-67 提供的符号（根包 Run 与选项、assembly、internal/inproc、开发组件的启动流程）只写名字；合并后由审查者核对签名，再改为可派发。
 
-目标：热部署：`Reload` 选项与 `ALONABOT_RELOAD`、源码轮询、重新编译、开发组件改为子进程并重启
-前置：T-13.1。
+```text
+/goal 使用 $alonabot-execute 推进 goal-69（切片 T-13.3：热部署）。goal 目录 goal-69，分支 goal-69，worktree .worktrees/goal-69，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-13.3 行、§4 的 T-13 步骤 4。
+目标：Reload 选项或 ALONABOT_RELOAD=1 启用热部署：根类型所在包属于 main 包所在 module 的开发组件改为子进程运行；Run 把当前 main 包编译到 <data_dir>/dev/bin/，按正常启动流程启动，并在启动环境中指明要运行的组件；每 DEV_RELOAD_POLL 用标准库轮询 module 内 .go 文件与嵌入资源的修改时间，编译成功后依次重启这些组件，编译失败时旧组件继续运行；其他 module 的组件留在 Core 进程中不重启；go.mod 或 go.sum 变化时输出 WARN。
 
-关键边界：热部署由 Reload 选项或 ALONABOT_RELOAD=1 启用，500ms 轮询；编译失败时旧组件继续运行，重启开发组件，不重启来自其他 module 的组件。
+依据：PLAN T-13 步骤 4；CONTRACTS §15.4、§16（DEV_RELOAD_POLL）；TEST-MATRIX V-65。
 
-验收：V-65。
+范围（只新增或修改这些）：
+- 根包：新增 reload.go；alonabot.go 增加 Reload 选项与子进程模式（只加分支）
+- internal/inproc/：增加子进程模式下指明组件的环境变量名常量
+- examples/devbot/：可选地演示 Reload（只改 main.go 的选项）
+- 上述包的测试文件
+允许的新跨模块边：无（编译使用 os/exec 调用 go build）。
 
-## 第 8 波
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. 根包 alonabot
+   func Reload() Option // 等同 ALONABOT_RELOAD=1
+2. internal/inproc
+   const EnvComponent = "ALONABOT_DEV_COMPONENT" // 子进程模式：值为要运行的组件 ID；设置时 Run 只运行该组件，不装配 Core
 
+行为：
+- 判定：组件根类型（reflect）的包路径以 main 包所在 module 路径（runtime/debug.ReadBuildInfo 的 Main.Path）为前缀时为本 module 组件，否则为其他 module 组件。
+- 编译：go build -o <data_dir>/dev/bin/<可执行文件名>（Windows 加 .exe），在 main 包目录执行，环境为当前环境；输出写到 Core 日志（INFO，失败时 ERROR 并附编译器输出）。
+- 启动：本 module 组件以子进程运行该二进制，环境中设置 EnvComponent 与通常的 Session 变量（沿用 process 与 supervisor 的启动流程，安装记录仍为 dev 来源、代次 dev）；子进程中的 Run 看到 EnvComponent 时只以独立进程方式运行该组件（调用 sdk.Run 或 sdk.RunAdapter 的环境变量版本），不装配 Core。子进程异常退出按有限重启策略处理。其他 module 的组件仍按 goal-67 在 Core 进程的 goroutine 中运行。
+- 轮询：每 DEV_RELOAD_POLL 遍历 module 根目录下的 .go 文件与 //go:embed 引用的文件（排除 <data_dir>、vendor、以 . 或 _ 开头的目录、testdata），比较修改时间与大小；有变化时编译，成功后依次停止并重新启动每个本 module 组件（每次一个，停止使用正常停止流程与预算）；Adapter 组件重启后由 remote.Process 恢复已启用的实例。编译失败时不停止旧组件。go.mod 或 go.sum 变化时只输出 WARN "go.mod or go.sum changed; restart alonabot to apply"，不编译。
+- 停止 Run 时停止轮询，并按 goal-67 的顺序停止全部组件；dev/bin 下的二进制保留。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：reload_test.go（根包，//go:build unix）：在 t.TempDir() 中写一个临时 module（go.mod replace 指向本仓库），含一个开发插件与一个来自本仓库 module 的回环 Adapter（属于「其他 module」）；以 ALONABOT_RELOAD=1 运行它的 main：
+  - 启动后插件以子进程运行（日志中有 pid，与 Core 进程不同），回环 Adapter 在 Core 进程中运行。
+  - 修改插件回复的文本并保存：在若干个轮询周期内插件重启，之后的回复为新文本；回环 Adapter 的实例没有 bot.offline。
+  - 写入语法错误：日志有编译错误，旧插件继续回复旧文本；修复后恢复。
+  - 修改 go.mod：日志有 WARN，没有重新编译。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：本 module 判定；轮询排除目录；Windows 可执行文件名（交叉检查，不在 Windows 运行）；子进程模式下 Run 只运行指定组件。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./... ；go build ./...。
+
+不做：配置与 dev.sqlite（T-13.2）；文件系统事件通知（只用标准库轮询）；Windows 上的实际运行验证（T-10）。
+```
 ### goal-9 · T-03.10 Telegram 接入开发入口与故障矩阵
 
 状态：待编写。
