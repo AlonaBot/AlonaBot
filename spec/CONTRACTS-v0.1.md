@@ -61,7 +61,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、N
 
 1. `message.created` 的文本命令首发使用 `/` 前缀，路径 token 大小写敏感、按完整 token 匹配；不以字符串前缀把 `/rssx` 当 `/rss`。Telegram `/cmd@BotUsername` 仅接受当前实例用户名（用户名比较不区分大小写）。空白后的子命令按最长完整路径选择。
 2. 普通命令/别名优先于文本匹配与 Raw。跨插件同路径以 priority/plugin_id/route_id 稳定选出**一个**胜出路由，并在管理诊断中显示被遮蔽者；同插件重复 route ID 或规范化路径/别名属于注册错误。禁用的已注册命令仍占有其路径，不能使同名低优先级路由接管。
-3. 一旦识别命令路径，权限拒绝、禁用、Rule false/error 或参数错误都消费该命令，不退到短路径、文本匹配或 Raw。没有识别到任何普通命令时才处理文本匹配，再处理 Raw；每类内部按固定顺序，可 Continue/Stop。其他 event_type 只进入对应事件路由。
+3. 一旦识别命令路径，权限拒绝、禁用、Rule false/error 或参数错误都消费该命令，不退到短路径、文本匹配或 Raw。没有识别到任何普通命令时才处理文本匹配，再处理 Raw；每类内部按固定顺序，可 Continue/Stop。命令层结束且没有 Stop 时，message.created 再进入该类型的事件路由（D-44）。其他 event_type 只进入对应事件路由。
 4. 参数只做分词与类型转换，不执行 shell 展开。空白分隔；单引号内容原样，双引号/未引号中的反斜杠仅转义下一字符；未闭合引号/尾部转义报 INVALID_ARGUMENT。string 保留解码文本；int 为有符号十进制 int64；float 为有限 float64（拒绝 NaN/Inf）；bool 只接受 true/false。显式空字符串不等于缺失。
 5. 注册描述包含每个参数 name/type/required/default，必需参数在可选参数前，default 只用于缺失位置。raw args 只能是最后一个 string 参数，与该尾部的再次分词互斥，保留最后一个已消费参数后的原始尾部，去掉尾部起始分隔空白；raw 为唯一参数时，从命令路径后的首个非分隔空白开始。多余参数、溢出或非法格式均失败；Go 函数类型与描述由生成器/显式适配器校验。
 6. message.created 的 `to_me` 表示消息是否发给机器人（MESSAGE-MODEL §1.1）；SDK 提供对应的 `ToMe` Rule，与其他 Rule 一样组合。
@@ -70,7 +70,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、N
 
 ### 2.3 权限与 Hook
 
-- User 表示具有可信 Actor 的普通用户；Admin 表示 Core 管理员列表中按 adapter_instance_id/external_user_id 绑定的机器人管理员。平台群管理员只形成 `chat_admin` Rule，不自动取得 Core 安装、配置或跨会话权限。没有 Actor 的 job/后台调用不能满足 User/Admin。
+- User 表示具有可信 Actor 的普通用户；Admin 表示 Core 管理员列表中按 adapter_instance_id/external_user_id 绑定的机器人管理员。平台群管理员只形成 `chat_admin` Rule，不自动取得 Core 安装、配置或跨会话权限。没有 Actor 的 job/后台调用不能满足 User/Admin。Core 全局禁止由状态库中的两张禁止表组成：按 adapter_instance_id/external_user_id 禁止用户，按 adapter_instance_id/chat_id 禁止会话；被禁止的用户触发的命令、发往被禁止会话的 Send 一律拒绝，任何策略覆盖与 Admin 身份都不能绕过（D-45）。
 - 命令策略以稳定 plugin_id/route_id 持久化，权限使用最近显式子项覆盖，否则继承父项；插件/父组/当前项任一 disabled 均拒绝，再与 Core 全局安全限制 AND。运行时修改在下一次派发检查时生效，不承诺撤销已开始的调用。
 - Hook 注册为独立 route kind，phase 仅 PreEvent/BeforeSend/AfterSend，沿用 priority 与稳定排序。PreEvent 只可改变业务 payload 或 Stop，Core 保留的 Actor、Target、来源与 trace 不可改；button.clicked 的 action_id/action_schema_version/value、scheduled 的 job_id/run_id 及平台原消息 ID 也属于不可修改的路由/来源字段，后续匹配使用 Core 保留的原绑定；Hook error 终止本次入站链并记录，不在失去预处理条件时继续。
 - 每次显式 Send 或自动返回非空 Chain 都执行 `BeforeSend → Adapter.Send → AfterSend`。BeforeSend 只修改 Chain 或拒绝，禁止修改 Target；变更后重新校验完整 Chain。BeforeSend 错误视为拒绝发送。AfterSend 只观察最终回执，错误记日志，不能改变已确认的发送事实。
