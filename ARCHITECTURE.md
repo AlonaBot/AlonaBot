@@ -45,6 +45,7 @@
 | `cmd/alonabot -> sdk/generate` | 构建检查复用 SDK 的路由生成器（拟建） |
 | `cmd/alonabot -> internal/pluginkit`、`internal/pluginkit -> contracts/...`、`-> sdk/generate` | 开发 CLI 的构建与打包复用生成器与契约包 |
 | `examples/plugins/... -> sdk/...`、`-> contracts` | 示例只走公共 SDK |
+| `scripts/dist -> contracts/release` | 发行构建脚本只用契约包自检签名；其余步骤经 `os/exec` 调用 go 与 alonabot |
 | `examples/devbot -> 根包`、`-> sdk/...` | 库模式示例 |
 | `plugins/... -> sdk/...`、`-> contracts` | 官方插件只走公共 SDK；Agent 插件另用已批准的 MCP go-sdk |
 

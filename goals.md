@@ -106,9 +106,9 @@
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 等待前置 |
 | goal-43 | T-09.8 | Admin 管理页 | T-09.6、T-08.7 | 等待前置 |
 | goal-64 | T-12.7 | 官方插件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6 | 等待前置 |
-| goal-44 | T-09.9 | Admin 配置、权限、工具策略与插件页 | T-09.8、T-11.1、T-11.3 | 待编写 |
-| goal-66 | T-09.10 | 日志管理与日志页 | T-02.1、T-03.1、T-09.8 | 待编写 |
-| goal-73 | T-14.3 | 发行归档 | T-03.10、T-09.3、T-12.7、T-14.1、T-14.2 | 待编写 |
+| goal-44 | T-09.9 | Admin 配置、权限、工具策略与插件页 | T-09.8、T-11.1、T-11.3 | 等待前置 |
+| goal-66 | T-09.10 | 日志管理与日志页 | T-02.1、T-03.1、T-09.8 | 等待前置 |
+| goal-73 | T-14.3 | 发行归档 | T-03.10、T-09.3、T-12.7、T-14.1、T-14.2 | 等待前置 |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10 | 待编写 |
 | goal-74 | T-14.4 | 首次运行与预装 | T-09.6、T-14.3 | 待编写 |
 | goal-77 | T-14.5 | 容器镜像 | T-07.3、T-14.3 | 待编写 |
@@ -3938,45 +3938,154 @@ internal/core/state
 ```
 ### goal-44 · T-09.9 Admin 配置、权限、工具策略与插件页
 
-状态：待编写。
+状态：等待前置（T-09.8、T-11.1、T-11.3）。语句中 goal-13、goal-29、goal-31、goal-34、goal-39、goal-43、goal-53～goal-56、goal-26 提供的符号（policy 的覆盖与 Admin 方法、config.Service、secret.Redact、ConfigForm、manage API、web/admin 页面框架、i18n 的默认 locale、tool.Catalog、conversation.Service、webhost 的票据）只写名字；合并后由审查者核对，再改为可派发。
 
-目标：Admin 页面：配置表单与 JSON 编辑、命令权限、发信许可、Core 设置（Core Admin 列表、默认 locale）、工具调用策略、Agent 会话的列出与清除、插件页面代理、界面语言切换
-前置：T-09.8、T-11.1、T-11.3。
+```text
+/goal 使用 $alonabot-execute 推进 goal-44（切片 T-09.9：Admin 配置、权限、工具策略与插件页）。goal 目录 goal-44，分支 goal-44，worktree .worktrees/goal-44，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-09.9 行、§4 的 T-09 步骤 7（配置与插件页）。
+目标：在管理 API 与 web/admin 中补齐：插件配置（表单与完整 JSON 编辑，使用 raw JSON、Merge Patch、base_generation 与 secret 语义，显示 Pending 并经 reload 激活）、命令权限与启用、发信许可（allowed_adapter_instances）、Core 设置（Core Admin 列表、默认 locale、全局禁止表）、工具调用策略、Agent 会话的列出与清除、插件页面入口（经兑换票据进入 plugin host），以及界面语言切换。
 
-关键边界：Admin 页面包含工具调用策略、Agent 会话列出/清除、发信许可、Core Admin 列表、默认 locale 与界面语言切换；影响依赖方的操作须先展示影响并要求确认。
+依据：PLAN T-09 步骤 7（配置与插件页）；CONTRACTS §5、§2.3、§8（allowed_adapter_instances）、§13、§7.3、§5.4；DECISIONS D-45；TEST-MATRIX V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56 的页面分项。
 
-验收：V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56 的页面分项。
+范围（只新增或修改这些）：
+- internal/core/manage/：新增 config_api.go、policy_api.go、settings_api.go、tool_api.go、conversation_api.go、pluginpage_api.go
+- web/admin/src/pages/：新增 Config、Permissions、CoreSettings、Tools、Conversations；Packages 页增加「打开插件页面」入口
+- web/admin/i18n/：补充文案
+- internal/core/adminui：重新生成嵌入的构建产物
+- 上述包的测试文件
+允许的依赖：与 goal-43 相同，不新增前端依赖。
 
+接口（HTTP，全部在 /api/v1 下、经 adminauth.Require；JSON；错误格式与 goal-39 一致）：
+- GET /plugins/{id}/config：{active_generation, active: Redact 后的快照, pending: {base_generation, config: Redact 后}|null, schema}
+- PUT /plugins/{id}/config/pending：{base_generation, config}（完整替换）；PATCH /plugins/{id}/config/pending：{base_generation, patch}（RFC 7396）；DELETE 丢弃 Pending；POST /plugins/{id}/config/import 导入 config.json；secret 字段的新值在写入 Pending 前经 secret.Extract 存为引用，省略或未修改的 secret 保持原引用；base 不是当前 Active 时 409 并返回 FAILED_PRECONDITION。
+- POST /plugins/{id}/reload：经 goal-40/41 激活 Pending。
+- GET/PUT /plugins/{id}/policies：命令覆盖（作用域、permission、enabled），以及 Router 的遮蔽诊断。
+- GET/PUT /plugins/{id}/allowed-instances：发信许可集合。
+- GET/PUT/DELETE /core/admins、/core/denies，GET/PUT /core/default-locale。
+- GET/PUT /tools/policies：工具策略（缺省与覆盖）。
+- GET /plugins/{id}/conversations、DELETE /plugins/{id}/conversations/{key}。
+- POST /plugins/{id}/page-ticket：返回 webhost.IssueTicket 的 URL（只给有 HTTP 路由的插件）。
+- GET /secrets/{plugin}/{path}/reveal：要求请求体中的当前 token 再认证（adminauth.Reauthenticate），通过后返回明文并以 INFO 审计记录（不含明文）。
+
+行为：
+- 配置页：用 ConfigForm 编辑（只提交 patch）或切换到完整 JSON 编辑（textarea，提交完整替换）；显示 Pending 与 Active 的差异（按键列出，secret 只显示是否已设置）；「激活」调用 reload；候选失败与 Degraded 显示具体原因。hidden 字段只在完整 JSON 编辑中可见。
+- 权限页：按命令树显示有效权限与启用状态（经 policy.CheckCommand 的同一规则计算），可设置插件、命令组、路由三层覆盖；显示遮蔽关系。
+- 发信许可：列出全部 Adapter 实例，勾选授予。
+- Core 设置：Core Admin 列表（与 alonabot admin add|remove|list 同一服务）、默认 locale、全局禁止表。
+- 工具页：列出全部工具及缺省与覆盖策略。
+- 会话页：按插件列出会话摘要（键、条目数、最后时间），可清除；不显示条目内容。
+- 语言切换：沿用 goal-34 的组件，保存在 localStorage。
+- 插件页面：点击后请求 page-ticket，在新窗口打开 plugin host 上的兑换 URL；未配置第二主机名时按钮禁用并提示。
+- 所有修改请求带 CSRF 头；修改后的策略在下一次派发时生效（页面不需要重启插件）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：
+  - internal/core/supervisor/admin_api_test.go（//go:build unix）：经管理 API 完成：PATCH 配置（未修改的 secret 保持原引用、新 secret 生成新引用、hidden 不被删除）、陈旧 base 409、reload 后 Active 改变；设置命令覆盖后下一条消息按新权限处理；授予发信许可后插件后台 Send 成功；设置默认 locale 后新 Session 使用；工具策略改为 deny 后 ListTools 不含它；清除会话；page-ticket 只给有 HTTP 路由的插件；reveal 需要再认证。
+  - web/admin 的 vitest：API 客户端对新端点的请求格式与 409 处理。
+- 本地自测（不提交，PR 中写明结果）：npm run build；浏览器中手动走一遍各页面并切换语言（写明浏览器与版本）。
+
+完成条件：web/admin 下 npm run typecheck、npm run test、npm run build 成功；go generate ./... 后无未提交差异；gofmt -l 无输出；go vet ./...；go test -race ./internal/... ./cmd/...；go build ./...。
+
+不做：日志页（T-09.10）；故障注入与验收汇总（T-09.11）。
+```
 ### goal-66 · T-09.10 日志管理与日志页
 
-状态：待编写。
+状态：等待前置（T-02.1、T-03.1、T-09.8）。语句中 goal-2、goal-39、goal-43、goal-65（logging 的 Output、Levels、Source）提供的符号只写名字；合并后由审查者核对，再改为可派发。
 
-目标：日志管理：按来源级别的持久化与运行时修改（`sdk.log.set_level`）、最近记录缓冲、按日期查询日志文件、管理 API 与 SSE、`alonabot logs` 与 `log-level`、WebUI 日志页
-前置：T-02.1、T-03.1、T-09.8。
+```text
+/goal 使用 $alonabot-execute 推进 goal-66（切片 T-09.10：日志管理与日志页）。goal 目录 goal-66，分支 goal-66，worktree .worktrees/goal-66，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-09.10 行、§4 的 T-09 步骤 7（日志）。
+目标：按来源的日志级别持久化在状态库，经管理服务修改后通过 sdk.log.set_level 通知 SDK 并立即生效；全局级别可在运行时修改、Core 重启后恢复为启动设置；Core 为每个来源保留最近 LOG_BUFFER_RECORDS 条已输出的记录，提供按来源、级别与 trace_id 的读取和 SSE 订阅，过去日期从日志文件查询；alonabot logs 与 log-level 命令、WebUI 日志页使用同一 API。
 
-关键边界：按来源级别持久化并通过 sdk.log.set_level 立即生效；每个来源保留最近 1000 条记录，提供受认证保护的查询与 SSE，历史日志按日期读取；CLI 与 WebUI 共用同一 API，页面筛选只在浏览器进行。
+依据：PLAN T-09 步骤 7（日志）；CONTRACTS §14.2～§14.6、§16（LOG_BUFFER_RECORDS）；WIRE-FORMAT §3.5（sdk.log.set_level）；TEST-MATRIX V-62、V-63、V-68。
 
-验收：V-62、V-63、V-68。
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/control.proto：新增 LogSetLevelRequest/Response。随后 go generate ./...（本切片获授权只追加这两个消息）
+- contracts/wirespec_test.go：追加编号检查
+- internal/wire/services.go：末尾追加 ServiceLogSetLevel = "sdk.log.set_level"
+- internal/core/logging/：新增 buffer.go（最近记录）、query.go（按日期查询日志文件）；Output 在输出时写入缓冲（只加调用点）
+- internal/core/state/：migrations 末尾追加一条；新增 loglevels.go
+- internal/core/manage/：新增 log_api.go（读取、SSE、级别修改）
+- sdk/：处理 sdk.log.set_level（新增文件；sdk/adapter 的 RunAdapter 同样处理）
+- cmd/alonabot/：新增 logs 与 log-level 命令
+- web/admin/src/pages/Logs：日志页；internal/core/adminui 重新生成
+- 上述包的测试文件
+允许的新跨模块边：无。
 
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. proto
+   message LogSetLevelRequest { LogLevel level = 1; }
+   message LogSetLevelResponse {}
+2. internal/core/state
+   迁移：CREATE TABLE log_levels (source_id TEXT PRIMARY KEY, level TEXT NOT NULL); -- level 为 debug、info、warn、error、off；inherit 不存行
+3. internal/core/logging
+   type Record struct { Time time.Time; Level slog.Level; Source string; Message string; Attrs map[string]any; TraceID string }
+   type Buffer struct{ ... } // 每个来源一个固定容量的环形缓冲
+   func (o *Output) Recent(source string) []Record
+   func (o *Output) Subscribe(ctx context.Context) <-chan Record // ctx 结束时关闭
+   func Query(dir string, date time.Time, source string, level slog.Level, traceID string) ([]Record, error) // 读该日期的全部文件（含编号续写的文件）
+4. HTTP（/api/v1，经 adminauth.Require）
+   GET /logs/recent?source=；GET /logs/stream（SSE，事件为 JSON 的 Record）；GET /logs/history?date=YYYY-MM-DD&source=&level=&trace=；GET/PUT /logs/levels（全局与按来源）
+5. cmd/alonabot
+   alonabot logs [--source ID] [--level L] [--trace T] [--follow] [--date YYYY-MM-DD]；alonabot log-level [ID] [LEVEL]（不带参数时列出，ID 为 global 时修改全局）；都经管理 API 与 Bearer token
+
+行为：
+- 缓冲：只保存已经通过级别过滤并实际输出的记录；每个来源（core、每个插件、每个 Adapter 包）最多 LOG_BUFFER_RECORDS 条，满时丢弃最旧的；只在内存中，重启后清空。
+- 级别：按来源的设置持久化；修改后先写状态库，再对运行中的 Session 发 sdk.log.set_level（inherit 时下发解析后的全局级别），并更新 Core 侧的 Levels；SDK 收到后立即按新级别过滤。全局级别的运行时修改只在内存中，Core 重启后恢复为 --log-level 或设置文件的值；inherit 的来源随之变化（同样发 set_level）。来源为 off 时 SDK 不输出，Core 关于它的记录仍按全局级别输出。
+- 读取与订阅都要求管理员会话或 Bearer；SSE 先发送当前缓冲中的记录再推送新记录（与页面的「先读再订阅」配合，页面按时间去重）。
+- 历史查询：按 CONTRACTS §14.6 的文件命名读取该日期的文件，解析控制台格式的行（goal-65 的文件格式）为 Record；文件不存在返回空列表。
+- 日志页：选择来源、级别、trace 与日期（今天为实时，过去日期为历史），筛选只在浏览器中进行并保存在 localStorage；修改输出级别使用级别设置区域（调用 PUT /logs/levels）。
+- 日志内容中的脱敏规则不变（goal-65 与 CONTRACTS §14.5）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/logs_e2e_test.go（//go:build unix）：运行 serve 与一个持续输出日志的测试插件：
+  - log-level 把该插件设为 debug 后，SDK 输出 DEBUG 记录且 logs 能读到；设为 off 后插件记录消失，Core 关于它的记录仍在；重启 serve 后按来源的设置保留，全局级别的运行时修改恢复为启动值。
+  - logs --follow 收到新记录；未带 token 时 401。
+  - 每个来源最多保留 LOG_BUFFER_RECORDS 条（用很小的值）。
+  - 写入前一天日期的日志文件后，logs --date 能查到。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：环形缓冲的边界；历史文件解析（多行值、转义）；SSE 的断开；web/admin 日志页的构建与手动验证。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交差异；go vet ./...；go test -race ./...；go build ./...；web/admin 下 npm run test 与 npm run build 成功。
+
+不做：远程日志收集与外部格式；日志文件设置的运行时修改（启动设置，§15.1）。
+```
 ### goal-73 · T-14.3 发行归档
 
-状态：待编写。
+状态：等待前置（T-03.10、T-09.3、T-12.7、T-14.1、T-14.2）。语句中 goal-38 提供的命令（plugin pack 与 --key）与各官方插件、Telegram Adapter 的目录只写名字；合并后由审查者核对，再改为可派发。
 
-目标：发行归档：构建与打包全部官方包、签名、内置官方发布者公钥
-前置：T-03.10、T-09.3、T-12.7、T-14.1、T-14.2。
+```text
+/goal 使用 $alonabot-execute 推进 goal-73（切片 T-14.3：发行归档）。goal 目录 goal-73，分支 goal-73，worktree .worktrees/goal-73，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-依据：PLAN §3.1 的 T-14.3 行、§4 的 T-14 步骤 3。
+目标：scripts/dist/ 为每个目标平台构建 Core 与全部官方包（Telegram Adapter、Agent、记忆、help、welcome、rss），用 plugin pack 生成安装包与外部 release.json，以官方发布者私钥签名后放入 packages/，再打成 zip（Windows）或 tar.gz；发行版 Core 在构建时嵌入官方发布者公钥。
 
-关键边界：发行包的每个安装资产都按正式来源和签名流程验证；发布流程不把私钥、凭证或本机绝对路径打入归档。
+依据：PLAN T-14 步骤 3；CONTRACTS §15.2、§9.2；docs/development.md（交叉编译）；TEST-MATRIX V-66 的归档分项。
 
-验收：V-66 的归档分项。
+范围（只新增或修改这些）：
+- 新增 scripts/dist/（Go 程序，go run ./scripts/dist 执行）
+- 新增 internal/core/trust/（官方发布者公钥；构建时通过 -ldflags -X 注入，开发构建为空）
+- internal/core/packages 或 manage：安装时把 trust 中的官方公钥视为已信任来源（只加调用点）
+- docs/development.md：增加「发行构建」一节（本切片获授权修改这一节）
+- 上述包的测试文件
+允许的新跨模块边：scripts/dist -> contracts/release（ARCHITECTURE 已登记，用于自检签名）；其余只经 os/exec 调用 go build 与 alonabot 二进制。
 
-## 第 15 波
+接口：
+- go run ./scripts/dist --version VERSION --key FILE --out DIR [--platforms linux/amd64,...]：缺省为五个目标平台；--key 为官方 Ed25519 私钥文件（不进入仓库与产物）。
+- internal/core/trust：var officialKey string（base64 公钥，由 -ldflags "-X github.com/AlonaBot/AlonaBot/internal/core/trust.officialKey=..." 注入）；func Official() (ed25519.PublicKey, bool) // 未注入时 false
 
+行为：
+- 每个平台：CGO_ENABLED=0、-trimpath、-ldflags 注入版本与官方公钥，构建 alonabot；用该版本的 alonabot plugin pack --goos --goarch --key 为每个官方包生成安装包、release.json 与 .sig；产物放入 alonabot-<version>-<os>-<arch>/（alonabot 可执行文件与 packages/），Windows 打 zip，其他打 tar.gz（文件按名称排序、时间戳固定，可重复）。
+- 自检：每个包用 contracts/release.Verify 与公钥验证一次；失败则中止。输出各归档的 SHA256 列表。
+- 官方公钥：发行版 Core 安装时把它视为已信任来源（预装包不逐个确认，签名与摘要照常校验）；开发构建没有内置公钥，行为不变。
+- 私钥只从 --key 读取，不写日志；docs/development.md 的「发行构建」写明命令、所需工具与私钥保管要求。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：scripts/dist/dist_test.go：用临时 Ed25519 密钥只为当前平台运行一次（--platforms 当前平台），检查归档结构（alonabot 与 packages/ 下每个官方包的三个文件）、每个 release.json 验签通过、两次运行的归档字节相同、构建出的 alonabot 内置的公钥等于测试公钥（经一个只读的 version 输出或测试钩子）。
+- 本地自测（不提交，PR 中写明结果）：五个平台的完整构建（交叉编译，只验证产物生成，不在其他平台运行）。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./scripts/... ./internal/...；go build ./...；node scripts/check-repository.mjs。
+
+不做：首次运行的预装（T-14.4）；容器镜像（T-14.5）；发布到 GitHub Releases（T-10.4）。
+```
 ### goal-45 · T-09.11 正式流程故障注入与 T-09 验收
 
 状态：待编写。
