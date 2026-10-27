@@ -52,6 +52,7 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | D-40 | 配置类型的默认实现，删除 Validate | **用户确认（2026-10-26）**：新增 `config.Base`，配置类型嵌入它即得到原样返回 raw 的默认 `OnLoad`，编辑器可补全；根插件的 `Config()` 改为返回 `config.Config`，覆盖 `OnLoad` 时签名不符在编译期失败，取代 D-39 中 Collect 的运行时检查。删除 `Validate` 回调：多数插件不需要自行校验，需要时在 `OnLoad` 中返回错误即可，失败路径相同（候选失败，不覆盖 Active）。保留 `Config()`，它是根插件上发现配置能力的补全入口，且不需要反射 | CONTRACTS §1.1/§4.1/§4.2/§5.2/§5.3、WIRE §3.2、DESIGN §D/§J、PLAN T-01/T-08.3、TEST-MATRIX V-38 |
 | D-41 | `--args` 是全局参数 | **用户确认（2026-10-26）**：调优参数的 `--args` 属于 `alonabot` 根命令，可以写在子命令之前或之后，对 `run`、`serve`、`tune list` 等所有子命令生效；任一子命令执行前先完成解析与校验，出错时不执行子命令。 |
 | D-42 | CLI 使用 cobra | **用户确认（2026-10-26）**：`cmd/alonabot` 用 `github.com/spf13/cobra` 组织命令树（`run`、`serve`、`tune`、`plugin`、`admin-token` 等命令组），`--args` 定义为根命令的 persistent flag；参数为 pflag 的 GNU 风格，长参数只接受 `--name`。依赖只用于 `cmd/alonabot`，SDK、Core 包与插件不 import cobra。 |
+| D-43 | JSON Schema 使用 jsonschema-go | **用户确认（2026-10-26）**：JSON Schema 的表示、序列化、引用解析、补默认值与校验统一使用 `github.com/google/jsonschema-go`（draft 2020-12），用于配置 Schema、Service 与工具的输入 Schema 和 MCP 工具。配置 Schema 由构建期生成器读取 `json/form/description/secret/hidden` 标签构造 `*jsonschema.Schema`，**不用 `For`/`ForType` 推导**：它默认禁止未知键（与保留未知键冲突）、把未写 `omitempty` 的字段都当必需（与显式 `required` 冲突）、描述读 `jsonschema` 标签（与 `description` 冲突）。`secret`、`hidden` 与表单控件放在 `Extra` 的自定义关键字中，字段顺序用 `PropertyOrder` 保持 Go 声明顺序。默认值只经 `ApplyDefaults` 补到原始 JSON 对象的缺失属性上，`Resolve` 时开启 `ValidateDefaults`。校验以原始 JSON 的解码副本进行，持久化的仍是原文；大整数的精度与范围以 typed decode 的结果为准，首个使用它的切片须验证 `json.Number` 输入的行为。`format` 关键字不校验，需要格式约束时用 `pattern`。该库仍是 v0.x，升级版本按一次行为改动验证。 |
 
 ## P 类历史议题与当前处置
 
@@ -135,3 +136,4 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-10-26：**D-40 已确认**：新增 `config.Base`，`Config()` 返回 `config.Config`；删除 Validate 回调，校验并入 OnLoad。同步修改 CONTRACTS §1.1/§4.1/§4.2/§5.2/§5.3、WIRE §3.2、DESIGN §D/§J、PLAN T-01/T-08.3、goals.md goal-30、TEST-MATRIX V-38。
 - 2026-10-26：**D-41 已确认**：`--args` 改为根命令的全局参数。同步修改 CONTRACTS §16 与 goals.md goal-76。
 - 2026-10-26：**D-42 已确认**：CLI 改用 cobra，`--args` 为 persistent flag，可写在子命令前后。同步修改 D-41、CONTRACTS §16、docs/development.md 的依赖清单、docs/execution-order.md 与 goals.md goal-76。
+- 2026-10-26：**D-43 已确认**：JSON Schema 使用 `github.com/google/jsonschema-go`，配置 Schema 由生成器构造、不用 `For` 推导。同步修改 docs/development.md 的依赖清单与 docs/execution-order.md。
