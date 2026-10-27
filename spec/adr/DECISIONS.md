@@ -1,10 +1,10 @@
 # 设计决策记录
 
-版本：v0.6-review（2026-10-21；保留已确认 D-01～D-25，2026-10-25～2026-10-26 新增 D-26～D-38，不升版本）
+版本：v0.6-review（2026-10-21；保留已确认 D-01～D-25，2026-10-25～2026-10-27 新增 D-26～D-47，不升版本）
 
 D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置及当前状态。2026-10-21 的规格完善任务将剩余技术默认值收敛为实施基线，不追加虚构的历史确认记录；2026-10-22 将决策和历史记录归入 adr/。
 
-**实施入口**：[PLAN.md](../PLAN.md) 给出 T-01～T-14 详细工作包；[CONTRACTS-v0.1.md](../CONTRACTS-v0.1.md) 固定行为，表内 § 编号均指该契约；验收见 [TEST-MATRIX.md](../TEST-MATRIX.md)。P/Q 处置表已从根目录 CONTRACTS 合并到本文件。D-07/D-18 的历史“Ready”统一解释为新状态机中完成 OnReady 并被 Core 接受的 `Activated`，不是 `Prepared`。
+**实施入口**：[PLAN.md](../PLAN.md) 给出 T-01～T-16 详细工作包；[CONTRACTS-v0.1.md](../CONTRACTS-v0.1.md) 固定行为，表内 § 编号均指该契约；验收见 [TEST-MATRIX.md](../TEST-MATRIX.md)。P/Q 处置表已从根目录 CONTRACTS 合并到本文件。D-07/D-18 的历史“Ready”统一解释为新状态机中完成 OnReady 并被 Core 接受的 `Activated`，不是 `Prepared`。
 
 ## 已确认
 
@@ -55,6 +55,8 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | D-43 | JSON Schema 使用 jsonschema-go | **用户确认（2026-10-26）**：JSON Schema 的表示、序列化、引用解析、补默认值与校验统一使用 `github.com/google/jsonschema-go`（draft 2020-12），用于配置 Schema、Service 与工具的输入 Schema 和 MCP 工具。配置 Schema 由构建期生成器读取 `json/form/description/secret/hidden` 标签构造 `*jsonschema.Schema`，**不用 `For`/`ForType` 推导**：它默认禁止未知键（与保留未知键冲突）、把未写 `omitempty` 的字段都当必需（与显式 `required` 冲突）、描述读 `jsonschema` 标签（与 `description` 冲突）。`secret`、`hidden` 与表单控件放在 `Extra` 的自定义关键字中，字段顺序用 `PropertyOrder` 保持 Go 声明顺序。默认值只经 `ApplyDefaults` 补到原始 JSON 对象的缺失属性上，`Resolve` 时开启 `ValidateDefaults`。校验以原始 JSON 的解码副本进行，持久化的仍是原文；大整数的精度与范围以 typed decode 的结果为准，首个使用它的切片须验证 `json.Number` 输入的行为。`format` 关键字不校验，需要格式约束时用 `pattern`。该库仍是 v0.x，升级版本按一次行为改动验证。 |
 | D-44 | message.created 的命令层与事件路由 | **用户确认（2026-10-26）**：message.created 先经过命令层（普通命令 → 文本匹配 → Raw，规则见 CONTRACTS §2.2）；命令层结束且没有任何 Handler 返回 Stop 时，再按 priority/plugin_id/route_id 派发该类型的事件路由。已识别的命令只消费命令层，不阻止事件路由；Stop 同时结束两者。 |
 | D-45 | Core 全局禁止 | **用户确认（2026-10-26）**：契约多处要求「Core 全局禁止」始终生效，但没有定义其内容。v0.1 定为两张持久化禁止表：用户（adapter_instance_id、external_user_id）与会话（adapter_instance_id、chat_id）。命令派发前先检查用户与会话，Send 准入先检查目标会话；策略覆盖与 Core Admin 都不能绕过。管理入口随 T-09 的 Core 设置提供。 |
+| D-46 | 官方 OneBot 11 Adapter | **用户确认（2026-10-27）**：v0.1 增加官方 OneBot 11 Adapter（`adapters/onebot11/`），与 Telegram 一样是可安装的独立 Adapter 包。两者在按钮、消息编辑、提及、媒体来源与专属内容上差别很大，用来检验通用 Segment 与 Capability 的设计，并新增跨 Adapter 一致性验收。v0.1 只实现正向 WebSocket（Adapter 主动连接 OneBot 实现端），使用 `github.com/coder/websocket`，该依赖只用于 `adapters/onebot11`；实例配置的 `mode` 只接受 `forward`。反向 WebSocket（`mode: reverse`，实现端连入 Adapter）不在 v0.1 范围内，加入时需要先定 Adapter 的监听与鉴权方式（例如复用 CONTRACTS §7.2 的统一端口代理），已有字段不变；该库同时提供服务端，不需要新依赖。真实 QQ 端依赖非官方协议实现，有账号风险，只由维护者手动测试；CI 与验收使用本地 OneBot 11 模拟服务，没有手测记录时记为未运行。 | CONTRACTS §0/§8/§11/§15.2、MESSAGE-MODEL §7、PLAN T-15、TEST-MATRIX V-71/V-72 |
+| D-47 | 插件测试套件 | **用户确认（2026-10-27）**：v0.1 提供公开的插件测试套件 `plugintest`（模块根目录下的包，参照 NoneBug 与 Koishi 的模拟适配器）。插件作者在 `go test` 中用它在同一进程启动真实 Core、套件自带的测试 Adapter 与被测组件，注入消息、按钮点击与 schedule 触发，取得这次分发产生的发送；全程走真实的握手、Session、权限与派发，不 mock SDK。为此根包增加 `Start`：全部组件激活后返回句柄，由调用方停止；`Run` 等于 `Start` 加等待信号，`Start` 也供把 Core 嵌入其他 Go 服务使用。分发结束的通知只经 `internal/inproc` 交给套件，不进入 wire 协议。套件属于 SDK 公共 API，兼容承诺与 `sdk` 相同。WebUI 中可交互的沙盒（参照 Koishi 的 sandbox）不在 v0.1 范围内。 | CONTRACTS §0/§11/§15.4/§17、PLAN T-13/T-16、TEST-MATRIX V-73、ARCHITECTURE |
 
 ## P 类历史议题与当前处置
 
@@ -140,3 +142,4 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-10-26：**D-42 已确认**：CLI 改用 cobra，`--args` 为 persistent flag，可写在子命令前后。同步修改 D-41、CONTRACTS §16、docs/development.md 的依赖清单、docs/execution-order.md 与 goals.md goal-76。
 - 2026-10-26：**D-43 已确认**：JSON Schema 使用 `github.com/google/jsonschema-go`，配置 Schema 由生成器构造、不用 `For` 推导。同步修改 docs/development.md 的依赖清单与 docs/execution-order.md。
 - 2026-10-26：**D-44、D-45 已确认**：message.created 在命令层之后进入事件路由；Core 全局禁止定为用户与会话两张禁止表。同步修改 CONTRACTS §2.2、§2.3 与 goals.md goal-12、goal-13。
+- 2026-10-27：**D-46、D-47 已确认**：v0.1 增加官方 OneBot 11 Adapter（正向 WebSocket，依赖 `github.com/coder/websocket`）与插件测试套件 `plugintest`，根包增加 `Start`。同步修改 CONTRACTS §0/§8/§11/§15.2/§15.4 并新增 §17，MESSAGE-MODEL 新增 §7（原 §7 顺延为 §8），PLAN 新增 T-15、T-16 并修订 T-13 步骤 1，TEST-MATRIX 新增 V-71～V-73，同步 ARCHITECTURE、docs/development.md 的依赖清单、docs/execution-order.md 与 goals.md（新增 goal-78～goal-82，修订 goal-67、goal-46、goal-73）。

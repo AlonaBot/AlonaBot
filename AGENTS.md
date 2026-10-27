@@ -1,6 +1,6 @@
 # AlonaBot 代理工作地图
 
-轻量级跨平台 Go 聊天机器人框架：Core + 独立进程的 Native Go 插件与可安装 Adapter（官方提供 Telegram）。目前处于实施初期。
+轻量级跨平台 Go 聊天机器人框架：Core + 独立进程的 Native Go 插件与可安装 Adapter（官方提供 Telegram 与 OneBot 11）。目前处于实施初期。
 
 ## 先读什么
 

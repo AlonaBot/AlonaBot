@@ -10,6 +10,6 @@ Module：`github.com/AlonaBot/AlonaBot`。
 
 参与开发先读 [贡献流程](CONTRIBUTING.md) 和 [编码与注释规范](docs/coding-standards.md)；项目维护技能随仓库提供，不依赖个人配置。
 
-- 首发：Native Go 插件与可安装 Adapter 的独立子进程、官方 Telegram Adapter、命令/文本匹配/事件、多轮等待、Service/广播、调度、配置/数据库、HTTP、管理 CLI/WebUI、插件安装更新、英文与简体中文的用户文案，以及 Agent（工具调用需用户确认）与记忆插件；面向用户的发行包与官方容器镜像开箱即用，开发者也可以在自己的 `main.go` 中把框架当作 Go 库运行并热部署。
+- 首发：Native Go 插件与可安装 Adapter 的独立子进程、官方 Telegram 与 OneBot 11 Adapter、命令/文本匹配/事件、多轮等待、Service/广播、调度、配置/数据库、HTTP、管理 CLI/WebUI、插件安装更新、英文与简体中文的用户文案，以及 Agent（工具调用需用户确认）与记忆插件；面向用户的发行包与官方容器镜像开箱即用，开发者也可以在自己的 `main.go` 中把框架当作 Go 库运行并热部署，并用插件测试套件在 `go test` 中以真实 Core 测试插件。
 - 后续：更多正式 Adapter、动态命令 Router、持久化的多轮会话、跨会话记忆检索与额外客户端等，按规格范围推进。
 - 实施约束：保持轻量、良好的开发体验和最小必要配置；以编译、集成和目标平台测试记录完成情况。

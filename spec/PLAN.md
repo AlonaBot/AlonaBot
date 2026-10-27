@@ -56,11 +56,13 @@ Telegram、PG、LLM Provider、浏览器和目标平台的测试单独记录环�
 | T-07 | T-05 | Core Scheduler、SDK HTTP 与统一代理组件 | 未开始 |
 | T-08 | T-04 | 配置/Secret/Schema/i18、用户可见文案与插件 DB 候选准备能力 | 未开始 |
 | T-09 | T-06、T-07、T-08、T-11 | 安装更新/回退、完整管理认证、CLI/API/WebUI | 未开始 |
-| T-10 | T-02～T-09、T-11～T-14 | 全部验收闭合、目标平台产物与资源报告 | 未开始 |
+| T-10 | T-02～T-09、T-11～T-16 | 全部验收闭合、目标平台产物与资源报告 | 未开始 |
 | T-11 | T-06、T-08 | 工具目录、调用策略与用户确认、Agent 会话存储 | 未开始 |
 | T-12 | T-05、T-07、T-08、T-11 | 官方 Agent 插件与官方记忆插件 | 未开始 |
 | T-13 | T-03、T-04、T-08 | 库模式入口、同进程的开发组件与热部署 | 未开始 |
-| T-14 | T-09、T-12 | 发行包、容器镜像、首次运行与预装插件 | 未开始 |
+| T-14 | T-09、T-12、T-15 | 发行包、容器镜像、首次运行与预装插件 | 未开始 |
+| T-15 | T-03 | 官方 OneBot 11 Adapter（正向 WebSocket）与跨 Adapter 一致性验收 | 未开始 |
+| T-16 | T-05、T-07、T-13 | 插件测试套件 `plugintest` | 未开始 |
 
 本表和下图是工作包整体完成的先后。切片按实际用到的成果另列前置（§3.1），可以在上游工作包完成前开始。T-10 的测试设施随任务建立，最终发布门槛在依赖全部完成后检查。
 
@@ -91,6 +93,13 @@ flowchart TD
   T12 --> T14
   T13 --> T10
   T14 --> T10
+  T03 --> T15["T-15 OneBot 11"]
+  T15 --> T14
+  T15 --> T10
+  T13 --> T16["T-16 插件测试套件"]
+  T05 --> T16
+  T07 --> T16
+  T16 --> T10
 ```
 
 ### 3.1 执行切片
@@ -157,7 +166,7 @@ flowchart TD
 | T-09.9 | goal-44 | Admin 页面：配置表单与 JSON 编辑、命令权限、发信许可、Core 设置（Core Admin 列表、默认 locale）、工具调用策略、Agent 会话的列出与清除、插件页面代理、界面语言切换 | T-09 步骤 7（配置与插件页） | T-09.8、T-11.1、T-11.3 | V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56 的页面分项 | 未开始 |
 | T-09.10 | goal-66 | 日志管理：按来源级别的持久化与运行时修改（`sdk.log.set_level`）、最近记录缓冲、按日期查询日志文件、管理 API 与 SSE、`alonabot logs` 与 `log-level`、WebUI 日志页 | T-09 步骤 7（日志） | T-02.1、T-03.1、T-09.8 | V-62、V-63、V-68 | 未开始 |
 | T-09.11 | goal-45 | 正式流程的故障注入，回填 T-08 待联验项，汇总证据 | T-09 步骤 8 | T-09.3、T-09.7、T-09.9、T-09.10 | V-23～V-25、V-27～V-31、V-39、V-40、V-52、V-54～V-56、V-62、V-63 | 未开始 |
-| T-10.1 | goal-46 | V-01～V-70 证据汇总与跨组件联验 | T-10 步骤 1～4 | T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6 | 全部；真实 Telegram 与 LLM Provider 需要测试凭证 | 未开始 |
+| T-10.1 | goal-46 | V-01～V-73 证据汇总与跨组件联验 | T-10 步骤 1～4 | T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6、T-15.3、T-16.2 | 全部；真实 Telegram 与 LLM Provider 需要测试凭证 | 未开始 |
 | T-10.2 | goal-47 | 五个目标组合的构建与运行、100 次启停 | T-10 步骤 5 | T-10.1 | V-32、V-34；需要真实目标平台 | 未开始 |
 | T-10.3 | goal-48 | 资源比较报告 | T-10 步骤 6 | T-10.1 | V-33；需要固定机器与等价负载 | 未开始 |
 | T-10.4 | goal-49 | 发布资产、签名与发布说明 | T-10 步骤 7、8 | T-10.2、T-10.3 | V-28、V-41 的发布复验 | 未开始 |
@@ -172,16 +181,21 @@ flowchart TD
 | T-12.5 | goal-62 | 技能：技能目录、`SKILL.md` 解析、`load_skill` | T-12 步骤 6 | T-12.3 | V-60 | 未开始 |
 | T-12.6 | goal-63 | 定时 Agent 任务：任务工具、任务表、分钟级固定 schedule、后台运行 | T-12 步骤 7 | T-07.2、T-08.5、T-12.3 | V-61 | 未开始 |
 | T-12.7 | goal-64 | 两个官方插件的打包与多进程验收，汇总证据 | T-12 步骤 8 | T-12.4、T-12.5、T-12.6 | V-57～V-61 | 未开始 |
-| T-13.1 | goal-67 | 库模式入口：根包 `alonabot.Run` 与选项、与 `serve` 共用的 Core 装配、开发组件同进程经 loopback 连接、生成代码中嵌入的组件身份、dev 来源与固定代次 | T-13 步骤 1、2 | T-02.1、T-03.3、T-04.2 | V-64 的生命周期分项 | 未开始 |
+| T-13.1 | goal-67 | 库模式入口：根包 `alonabot.Run`、`alonabot.Start` 与选项、与 `serve` 共用的 Core 装配、开发组件同进程经 loopback 连接、生成代码中嵌入的组件身份、dev 来源与固定代次 | T-13 步骤 1、2 | T-02.1、T-03.3、T-04.2 | V-64 的生命周期分项 | 未开始 |
 | T-13.2 | goal-68 | 开发组件的配置与数据库：`config.json` 直读与准备、`dev.sqlite`、拒绝 update/rollback | T-13 步骤 3 | T-08.3、T-08.5、T-13.1 | V-64 | 未开始 |
 | T-13.3 | goal-69 | 热部署：`Reload` 选项与 `ALONABOT_RELOAD`、源码轮询、重新编译、开发组件改为子进程并重启 | T-13 步骤 4 | T-13.1 | V-65 | 未开始 |
 | T-13.4 | goal-70 | 库模式示例与开发文档，汇总证据 | T-13 步骤 5 | T-03.10、T-13.2、T-13.3 | V-64、V-65 | 未开始 |
 | T-14.1 | goal-71 | help 插件与 `core.command.list` | T-14 步骤 1 | T-04.4、T-05.2、T-08.8 | V-67 的 help 分项 | 未开始 |
 | T-14.2 | goal-72 | welcome 与 rss 插件 | T-14 步骤 2 | T-05.2、T-07.2、T-08.3、T-08.5、T-08.8 | V-67 | 未开始 |
-| T-14.3 | goal-73 | 发行归档：构建与打包全部官方包、签名、内置官方发布者公钥 | T-14 步骤 3 | T-03.10、T-09.3、T-12.7、T-14.1、T-14.2 | V-66 的归档分项 | 未开始 |
+| T-14.3 | goal-73 | 发行归档：构建与打包全部官方包、签名、内置官方发布者公钥 | T-14 步骤 3 | T-03.10、T-09.3、T-12.7、T-14.1、T-14.2、T-15.2 | V-66 的归档分项 | 未开始 |
 | T-14.4 | goal-74 | 首次运行：预装与默认启用、首次管理 token、内置包的可用更新 | T-14 步骤 4 | T-09.6、T-14.3 | V-66 | 未开始 |
 | T-14.5 | goal-77 | 容器镜像：`Dockerfile` 多阶段构建、linux/amd64 与 linux/arm64、非 root、`/data` 卷、`ALONABOT_CONTAINER` 的监听规则、`deploy/compose.yaml` | T-14 步骤 5 | T-07.3、T-14.3 | V-70 的镜像分项 | 未开始 |
 | T-14.6 | goal-75 | 从发行归档与容器镜像到 Agent 对话的端到端验收，汇总证据 | T-14 步骤 6 | T-09.11、T-14.4、T-14.5 | V-66、V-67、V-70 | 未开始 |
+| T-15.1 | goal-78 | 官方 OneBot 11 Adapter 的连接与接收：正向 WebSocket、access_token、get_login_info、有界退避重连、self_id 校验、数组格式检查、实例事件队列、私聊/群聊/撤回/成员事件的标准化、to_me、本地 OneBot 11 模拟服务 | T-15 步骤 1、2 | T-03.3 | V-71 的接收分项 | 未开始 |
+| T-15.2 | goal-79 | 官方 OneBot 11 Adapter 的发送计划与回执、入站与出站媒体、`onebot11.face` extension、能力声明 | T-15 步骤 3、4 | T-03.6、T-03.8、T-15.1 | V-71 的发送与媒体分项 | 未开始 |
+| T-15.3 | goal-80 | 跨 Adapter 一致性验收与 OneBot 11 手测记录，汇总证据 | T-15 步骤 5 | T-03.10、T-15.2 | V-71、V-72；真实 QQ 端只手测 | 未开始 |
+| T-16.1 | goal-81 | 插件测试套件基础：`plugintest.Start`、测试 Adapter、会话与身份、Capability 子集、消息注入、`internal/inproc` 的分发结束通知、配置与数据库 | T-16 步骤 1、2 | T-05.2、T-13.2 | V-73 的基础分项 | 未开始 |
+| T-16.2 | goal-82 | 按钮点击、多轮等待、schedule 触发与后台发送；用套件测试示例插件，开发文档，汇总证据 | T-16 步骤 3、4 | T-03.8、T-05.4、T-07.2、T-16.1 | V-73 | 未开始 |
 
 ## 4. 逐任务实施工作包
 
@@ -654,7 +668,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 
 #### 前置输入
 
-- T-02～T-09、T-11～T-14 的实现、正式示例、构建产物和各阶段测试证据；70 项用例的未闭合部分可逐项定位。
+- T-02～T-09、T-11～T-16 的实现、正式示例、构建产物和各阶段测试证据；73 项用例的未闭合部分可逐项定位。
 - 独立 Telegram 测试账号/聊天/话题、LLM Provider 的测试 API key、PG 测试 schema、五目标运行环境，以及资源比较使用的机器和等价工作负载。
 
 #### 拟涉及目录
@@ -663,7 +677,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 
 #### 按顺序实施
 
-1. 汇总 V-01～V-70 的证据，逐项标记已通过、失败、未运行或待联验。先补齐组件之间的联验：首次管理登录→安装启用→配置/权限→真实消息→插件 HTTP→重载/升级/回退；覆盖 TCP 与 stdio。
+1. 汇总 V-01～V-73 的证据，逐项标记已通过、失败、未运行或待联验。先补齐组件之间的联验：首次管理登录→安装启用→配置/权限→真实消息→插件 HTTP→重载/升级/回退；覆盖 TCP 与 stdio。
 2. 使用不同的真实插件二进制验证命令、文本匹配、多轮等待、主动 Send、Service、Event Bus、Scheduler、HTTP、GORM 组合，以及官方 Agent 插件与记忆插件。示例既覆盖无配置/无 DB 插件，也覆盖实际写入与迁移的插件；不以同一个 worker 的多份进程代替。
 3. 执行协议、权限和资源边界测试：伪造/过期 Session、命令遮蔽、无 Actor、实例许可、Hook 递归、媒体租约、满准入、Cancel 顺序、超时仍运行的 job。验证错误回执与已经确认的外部结果保持一致。
 4. 执行完整恢复故障注入：停止与持锁、SQLite WAL 备份、候选 OnStart 写入后失败、PREPARED/提交前后 Core 退出、不可变 secret、PG 维护许可及 resume、显式 rollback 的新代次。核对数据库内容和权威指针，不能只检查日志出现“恢复成功”。
@@ -674,7 +688,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 
 #### 可审查交付
 
-- V-01～V-70 的完整结果与日志、故障注入后的状态/数据证据。
+- V-01～V-73 的完整结果与日志、故障注入后的状态/数据证据。
 - 五平台真实运行记录和可安装候选资产；可复现的资源比较报告。
 - 安装、更新、PG 维护和恢复的用户操作步骤，以及与产物一致的 SDK 示例。
 
@@ -848,7 +862,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 
 #### 实施步骤
 
-1. **根包与 Core 装配。** 根包 `alonabot` 提供 `Run(opts ...Option) error` 与 `Plugin`、`Adapter`、`Reload`、`DataDir` 等选项。`Run` 装配与 `alonabot serve` 相同的 Core，缺省数据目录为 `.alonabot/`，收到 SIGINT/SIGTERM 时按 CONTRACTS §4.2 停止；`cmd/alonabot` 的 serve 调用同一装配代码，不维护两份。
+1. **根包与 Core 装配。** 根包 `alonabot` 提供 `Run(opts ...Option) error`、`Start(ctx, opts ...Option) (*Core, error)` 与 `Plugin`、`Adapter`、`Reload`、`DataDir` 等选项。`Start` 装配与 `alonabot serve` 相同的 Core，在全部组件激活后返回句柄，ctx 取消时按 CONTRACTS §4.2 停止，`Wait` 返回停止结果；`Run` 是 `Start` 加 SIGINT/SIGTERM 处理，缺省数据目录为 `.alonabot/`（CONTRACTS §15.4）；`cmd/alonabot` 的 serve 调用同一装配代码，不维护两份。
 2. **同进程的开发组件。** SDK 与 `sdk/adapter` 的启动参数改为也可以由根包直接传入，外部模块不能构造这些参数。开发组件在 goroutine 中经 loopback TCP 连接 Core，走完整的握手、注册、激活与停止。T-04 生成器在构建期嵌入 manifest、Schema 与 i18 资源，根包从中读取组件身份。Core 为开发组件创建 dev 来源的安装记录与固定代次 `dev`；未捕获的 panic 使进程退出；停止预算到期组件仍未退出时，`Run` 返回错误。
 3. **开发组件的配置与数据库。** 开发中的 Adapter 的实例配置取自 `<data_dir>/adapters/<adapter_id>/instances/<instance_id>.json`，启动时全部启动。每次启动以 `<data_dir>/plugins/<id>/config.json`（缺失时为空对象）为配置，经 SDK 准备与校验后直接生效，不走候选与 Journal；受管 SQLite 为 `dev.sqlite`，不复制、不回退。dev 来源的组件拒绝 update 与 rollback。开发中的组件缺省日志级别为 debug。
 4. **热部署。** `Reload` 选项或 `ALONABOT_RELOAD=1` 启用：根类型所在包属于 main 包所在 module 的组件改为子进程运行，`Run` 把当前 main 包编译到 `<data_dir>/dev/bin/` 后按正常启动流程启动，并在启动环境中指明组件；这种启动环境下 `Run` 只运行该组件。每 500ms 用标准库轮询 module 内 `.go` 文件与嵌入资源的修改时间：编译失败时输出编译器信息，旧组件继续运行；编译成功后依次重启全部开发中的组件。其他 module 的组件留在 Core 进程中不重启；`go.mod` 或 `go.sum` 变化时输出 WARN，提示手动重启。
@@ -858,7 +872,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 
 | 拟目录 | 本工作包交付 |
 | --- | --- |
-| 根包 | `Run` 与选项、Core 装配 |
+| 根包 | `Run`、`Start` 与选项、Core 装配 |
 | `internal/core/devrun/` | dev 来源记录、同进程组件、源码轮询、编译与子进程重启 |
 | `sdk/`、`sdk/adapter/`、`sdk/generate/` | 可直接传入的启动参数；生成代码嵌入组件身份与资源 |
 | `examples/devbot/` | 库模式示例 |
@@ -882,7 +896,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 
 #### 前置输入
 
-- T-09 的安装、启用、更新、`serve` 与 WebUI；T-12 的 Agent 与记忆插件；T-03 的 Telegram Adapter 包；T-05、T-07、T-08 的事件、调度、配置、文案与数据库。
+- T-09 的安装、启用、更新、`serve` 与 WebUI；T-12 的 Agent 与记忆插件；T-03 的 Telegram Adapter 包与 T-15 的 OneBot 11 Adapter 包；T-05、T-07、T-08 的事件、调度、配置、文案与数据库。
 - 读取 CONTRACTS §9、§15.2。签名私钥由维护者保管，不进入仓库、构建日志或发行归档。
 
 #### 实施步骤
@@ -893,7 +907,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
    - `plugins/rss/` 提供 `/rss add|list|remove`，订阅保存在插件数据库；add 与 remove 只有 chat_admin 或 Core Admin 能执行，list 不限。一个固定 interval 的 schedule 检查订阅，间隔是配置项（缺省 10 分钟）。用标准库解析 RSS 2.0 与 Atom，按 guid 或链接去重，只推送新条目；后台推送需要 `allowed_adapter_instances`。
    - rss 抓取只允许 http 与 https；解析出的地址以及每次重定向后的地址都不能是 loopback、私网、链路本地、组播或未指定地址。响应大小上限 5 MiB、抓取超时 30s，均为命名常量，超过时本次抓取失败并记 WARN。
 3. **发行归档。** `scripts/dist/` 为每个目标平台构建 Core 与全部官方包，用 `plugin pack` 生成安装包与外部 `release.json`，签名后放入 `packages/`，再打成 zip（Windows）或 tar.gz。发行版 Core 在构建时嵌入官方发布者公钥。
-4. **首次运行。** 数据目录首次初始化时，按普通安装流程安装 `packages/` 中的包，并启用 Agent、记忆与 help；Telegram Adapter 在管理员添加第一个实例时启用。交互终端下按 CONTRACTS §15.1 初始化管理 token。之后不再自动安装；新版本发行包中版本更高的内置包作为可用更新列出。
+4. **首次运行。** 数据目录首次初始化时，按普通安装流程安装 `packages/` 中的包，并启用 Agent、记忆与 help；Telegram 与 OneBot 11 Adapter 在管理员为它添加第一个实例时启用。交互终端下按 CONTRACTS §15.1 初始化管理 token。之后不再自动安装；新版本发行包中版本更高的内置包作为可用更新列出。
 5. **容器镜像。** 仓库根目录的 `Dockerfile` 用多阶段构建：在 Go 构建阶段以 `CGO_ENABLED=0` 构建 Core 与全部官方包，最终镜像只含 `alonabot`、`packages/` 与 CA 证书，以 UID 10001 运行，`/data` 为卷，设置 `ALONABOT_CONTAINER=1`。Core 在该环境变量下才允许 `0.0.0.0` 的 listen 搭配本机 http 的 Base URL，并在启动时输出 WARN 提醒端口只发布到宿主本机。`deploy/compose.yaml` 给出卷、`init: true`、`127.0.0.1:7650:7650` 与首次 `admin-token init` 的用法。镜像构建 linux/amd64 与 linux/arm64 两个平台。
 6. **端到端验收。** 在干净的数据目录上，分别从发行归档与容器镜像依次完成：首次运行、登录 WebUI、添加 Telegram 实例（本地 Bot API 模拟服务）、配置 Provider（本地模拟服务）、`/ask` 对话、`/help`、启用 rss 并收到推送。真实 Telegram 与真实 Provider 没有凭证时记为未运行。
 
@@ -923,13 +937,90 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 - rss 能访问 loopback、私网或链路本地地址，阻止 rss 合入。
 - 签名私钥或管理 token 出现在仓库、日志或发行归档中，立即停止并处理。
 
+### T-15：官方 OneBot 11 Adapter
+
+**目标：** 提供第二个官方 Adapter，以正向 WebSocket 接入 OneBot 11 实现端；它与 Telegram 在按钮、编辑、提及、媒体与专属内容上的差别用来检验通用 Segment 与 Capability 的设计（CONTRACTS §8、MESSAGE-MODEL §7，D-46）。
+
+#### 前置输入
+
+- T-03 的 Adapter 进程与 `sdk/adapter`、入站媒体与 Grant、extension 声明与校验，以及 Telegram 的模拟服务与故障矩阵（一致性验收需要）。
+- 读取 CONTRACTS §8、MESSAGE-MODEL §2、§4、§7 与 OneBot 11 标准原文。依赖 `github.com/coder/websocket` 只用于 `adapters/onebot11/`。真实 QQ 端依赖非官方协议实现，有账号风险，只由维护者手动测试；CI 与验收使用本地模拟服务。
+
+#### 实施步骤
+
+1. **连接与账号。** `adapters/onebot11/` 为每个实例建立一条正向 WebSocket 连接（`mode` 只接受 `forward`），握手带 `access_token`；连接后调用 `get_login_info` 取得 account_id。握手 401/403 与字符串格式上报使实例致命失败并经 `core.adapter.status` 报告；断线按有界退避重连，重连不重放已提交的 Send。API 调用按 `echo` 配对，读循环同时处理响应、心跳与事件。实现放在可导入的包中（`onebot11.New()`），程序入口只调用 `sdk/adapter` 的运行函数。
+2. **接收与标准化。** 事件进入实例内 256 条的有界队列，按到达顺序逐条交付，收到应答后才交付下一条；队列满时丢弃并计数。按 MESSAGE-MODEL §7.1 映射私聊/群聊消息、撤回与成员变动，chat_id 写作 `private:<id>` 与 `group:<id>`，匿名消息不构造 Actor，无通用对应的段只留在 platform_payload；`self_id` 不符的事件丢弃并记诊断；to_me 按私聊、mention 本账号与 `get_msg` 查得的引用发送者计算。同时实现本地 OneBot 11 模拟服务（`adapters/onebot11/onebottest`），可注入上报、记录 API 调用并控制响应。
+3. **发送计划与回执。** 按 MESSAGE-MODEL §7.2 声明能力并生成物理操作：连续的 text、mention、image 与 extension 合成一条消息，video 单独成一条，reference 只加在第一条前；ok、async、failed、写出后断线与超时分别得到 ACCEPTED、ACCEPTED 加 message_ids_unavailable、REJECTED、UNKNOWN，遇到非 ACCEPTED 即停止并把其余部分记为 NOT_ATTEMPTED。
+4. **媒体与 extension。** 入站 image、video 签发 IncomingMedia token，`adapter.media.read` 时用段中的 `url` 取件（只允许 http 与 https）；出站 media_ref 与 incoming_ref 经 `core.media.read` 读出后以 `base64://` 发送，https_url 原样传递。注册 `onebot11.face` v1 extension 及其 Schema。
+5. **一致性验收与手测。** 让同一个插件经 `alonabot run` 同时连接 Telegram 与 OneBot 11 两个模拟服务，按 TEST-MATRIX V-72 的同一组 Chain 与入站消息比较两边的结果，并证明未声明的能力在首个平台请求前被拒绝。维护者用真实 OneBot 11 实现端与测试 QQ 账号手测时，记录实现端名称、版本与结果；没有手测时记为未运行。
+
+#### 拟目录与交付
+
+| 拟目录 | 本工作包交付 |
+| --- | --- |
+| `adapters/onebot11/` | 官方 OneBot 11 Adapter：连接、接收、标准化、发送计划、媒体与 extension |
+| `adapters/onebot11/onebottest/` | 本地 OneBot 11 模拟服务 |
+
+#### 验收与后续边界
+
+| 验收 | 本工作包必须提供的证据 |
+| --- | --- |
+| V-71 | 连接、鉴权、重连、格式检查、事件映射、to_me、队列上限、发送计划、媒体与各种响应的回执 |
+| V-72 | 同一组 Chain 与入站消息在两个 Adapter 上的结果对照，以及未声明能力在平台请求前被拒绝 |
+
+反向 WebSocket 不在 v0.1 范围内（D-46）。
+
+#### 失败停止条件
+
+- 为了 OneBot 11 修改通用 Segment 的语义，或让 Core 按 adapter_id 分支，先回到契约讨论，不合入。
+- 不支持的片段被静默丢弃、降级或拆成多次 Send，阻止合入。
+- access_token 出现在日志、错误或普通响应中，立即修复。
+
+### T-16：插件测试套件
+
+**目标：** 给插件作者一个类似 NoneBug 的集成测试工具：在 `go test` 中用真实 Core 与测试 Adapter 运行被测插件，注入事件并断言这次分发产生的发送（CONTRACTS §17，D-47）。
+
+#### 前置输入
+
+- T-13 的 `alonabot.Start`、同进程开发组件与 dev 配置/数据库；T-05 的 HandlerOutcome、多轮等待；T-03 的按钮；T-07 的 schedule。
+- 读取 CONTRACTS §15.4、§17。套件是 SDK 公共 API，导出的名称与语义要稳定。
+
+#### 实施步骤
+
+1. **套件骨架与测试 Adapter。** 新建 `plugintest/`：`Start(t, opts...)` 在 `t.TempDir()` 上用 `alonabot.Start` 装配 Core，登记被测插件与套件自带的测试 Adapter（adapter_id `plugintest`），写入实例文件并在 `t.Cleanup` 中停止。提供 `Plugin`、`Config`、`Admin`、`Capabilities` 与授予 `allowed_adapter_instances` 的选项，以及私聊、群聊、chat_admin 用户的构造函数。测试 Adapter 的发送与编辑一律 ACCEPTED，消息 ID 递增。
+2. **消息注入与分发结束通知。** Core 在一个事件的全部分发链结束，或其中的 Handler 进入多轮等待时，经 `internal/inproc` 通知套件；注入消息的方法据此返回这期间的全部 Send、Edit 与 Handler 错误。通知只在库模式装配中注册，独立进程运行的 Core 没有这条路径。
+3. **按钮、多轮等待、schedule 与后台发送。** 对结果中的按钮注入点击；多轮等待中的下一条消息按普通注入处理；立即触发一次 schedule 并在其调用结束后返回；后台发送按顺序读取。
+4. **示例、文档与证据。** 用套件为 `examples/plugins/` 中的示例插件编写提交的集成测试，覆盖 V-73 的场景；docs/development.md 补充套件的用法。
+
+#### 拟目录与交付
+
+| 拟目录 | 本工作包交付 |
+| --- | --- |
+| `plugintest/` | 公开的插件测试套件与测试 Adapter |
+| `internal/inproc/` | 分发结束通知 |
+| `examples/plugins/` | 用套件编写的示例测试 |
+
+#### 验收与后续边界
+
+| 验收 | 本工作包必须提供的证据 |
+| --- | --- |
+| V-73 | 套件覆盖命令、Rule、权限、Capability 子集、按钮、多轮等待、schedule、后台发送、配置与数据库；`-count=2 -race` 通过；Start 失败与停止后无残留 |
+
+WebUI 中可交互的沙盒不在 v0.1 范围内（D-47）。
+
+#### 失败停止条件
+
+- 套件为测试跳过权限、Target 准入、Capability 预检或 Hook，或另建一条派发路径，阻止合入。
+- 注入的返回依赖 sleep 或轮询时间，先改为 Core 的分发结束通知。
+- 生产代码或 `internal/core` import `plugintest`，按 ARCHITECTURE 修正。
+
 ## 5. 验收与任务完成规则
 
 任务完成需同时具备：本项列出的实现、可复现示例或测试、对应结果记录，以及供后续任务直接调用的明确接口。不得仅因某项接口已声明便把它记作完成。
 
 跨任务 V 用例按 TEST-MATRIX 的阶段分工记录。较早任务只完成自己负责的组件断言；用例整体在最终闭合任务完成后才标为通过。例如动态权限的管理服务测试不等于 WebUI 操作通过，内置 Send 的 Hook 检查不等于跨插件 Service 递归已经验证。后续接入仍复用较早实现，测试装配不能成为生产放行路径。
 
-每项 V 的证据记录包含实现版本、测试位置、完整运行命令、平台/依赖、结果与失败日志。T-10 汇总时按 V-01～V-70 逐项查证，不以其他名称的新清单取代现有编号。除 TEST-MATRIX §3.1 所列分项外均未运行。
+每项 V 的证据记录包含实现版本、测试位置、完整运行命令、平台/依赖、结果与失败日志。T-10 汇总时按 V-01～V-73 逐项查证，不以其他名称的新清单取代现有编号。除 TEST-MATRIX §3.1 所列分项外均未运行。
 
 若接口无法表达既定行为，先修对应契约和 fixture，再推进消费者；若已经表达但测试失败，先修负责实现。驱动备份、进程所有权、权限和提交唯一性未通过，不得被下游功能完成状态覆盖。
 

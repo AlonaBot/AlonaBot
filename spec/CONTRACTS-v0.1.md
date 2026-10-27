@@ -7,7 +7,7 @@
 
 ## 0. 范围和明确取舍
 
-v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram Adapter 包、Native Go 插件与 Adapter SDK/子进程、双传输 RPC、命令/文本匹配/事件/权限、延续调用与基础多轮等待、Event Bus、Service Call、调度、插件 HTTP、SQLite/PostgreSQL、配置/WebUI、用户可见文案的 i18n、预构建安装/更新与有明确边界的回退，Agent 基础（§13）、官方 Agent 插件与官方记忆插件，统一日志（§14），发行包、预装插件与库模式（§15），以及调优参数（§16）。保留 D-01～D-36；其他官方 Adapter、TUI、WASM、插件实例池、蓝绿零停机、持久化的多轮会话状态与暂停 DSL、动态跨插件命令 Router、复杂表单、Telegram webhook 接收与系统服务安装脚本均不在 v0.1 范围内。
+v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Adapter 包、Native Go 插件与 Adapter SDK/子进程、双传输 RPC、命令/文本匹配/事件/权限、延续调用与基础多轮等待、Event Bus、Service Call、调度、插件 HTTP、SQLite/PostgreSQL、配置/WebUI、用户可见文案的 i18n、预构建安装/更新与有明确边界的回退，Agent 基础（§13）、官方 Agent 插件与官方记忆插件，统一日志（§14），发行包、预装插件与库模式（§15），调优参数（§16），以及插件测试套件（§17）。保留 D-01～D-36；Telegram 与 OneBot 11 之外的官方 Adapter、OneBot 11 反向 WebSocket、WebUI 交互沙盒、TUI、WASM、插件实例池、蓝绿零停机、持久化的多轮会话状态与暂停 DSL、动态跨插件命令 Router、复杂表单、Telegram webhook 接收与系统服务安装脚本均不在 v0.1 范围内。
 
 运行时容量、期限和配额有固定的缺省值，统一登记为调优参数（§16）。缺省值是初始实现边界，须通过 TEST-MATRIX 实测后调整，不是性能保证；运维与测试可以在启动时覆盖，不提供 WebUI 或逐插件的调参。现行技术细节按本轮用户授权完成，保留 v0.6-review 编号。
 
@@ -250,6 +250,7 @@ type VersionedMigrator interface {
 - 接收游标由 Core 持久化：Adapter 每交付一条事件都附带交付后的不透明游标，Core 先写状态库，再接纳事件并应答；Adapter 收到应答后才处理下一条。没有事件时的游标变化（例如空闲轮次重建）使用单独的游标保存调用。实例启动时，Core 把已保存的游标交给 Adapter。
 - 平台凭证只在 `adapter.instance.start` 中下发给所属 Adapter 进程，不进入插件进程、日志或普通响应。入站媒体的平台文件标识留在 Adapter，Core 以 IncomingMedia token 映射，首次 Read 时经 `adapter.media.read` 取件；出站媒体由 Core 为该次发送向 Adapter Session 签发只读 token，Adapter 经 `core.media.read` 读取。
 - 官方 Telegram Adapter 用 getMe 验证真实账号与实例配置。v0.1 只支持 long polling 接收，已有 webhook 时明确报错，不自行删除。实例配置为 `token`（Secret，必填）、`api_base_url`（缺省 `https://api.telegram.org`，用于本地 Bot API 服务或模拟服务）与 `proxy`（Secret，可选，http、https 或 socks5 URL，可含用户名与密码）。实例设置了 `proxy` 时，该实例的全部 Bot API 请求（含 getFile 与文件下载）经它发出，优先于 §15.1 的全局代理；未设置时使用全局代理。代理连接失败按网络错误处理，接收退避重连，不改为直连。
+- 官方 OneBot 11 Adapter（D-46）以正向 WebSocket 连接 OneBot 11 实现端的通用端点（同一连接承载 API 调用与事件上报），用 `get_login_info` 取得账号。实例配置为 `ws_url`（必填，`ws://` 或 `wss://`）、`access_token`（Secret，可选，握手时以 `Authorization: Bearer` 发送）与 `mode`（缺省 `forward`，v0.1 只接受 `forward`）。握手被拒（401、403）时实例致命失败；连接断开按与 Telegram 相同的有界退避重连，重连不重放已提交的 Send。上报事件的 `self_id` 必须等于该实例的账号，否则丢弃并记诊断。OneBot 11 没有事件重放：断线期间的事件不补收，游标保持为空。只接受数组格式的消息上报，收到字符串（CQ 码）格式时实例致命失败，并在 safe_error 中提示修改实现端的上报格式。映射、能力与发送计划见 MESSAGE-MODEL §7。
 - Target 为 adapter_id/adapter_instance_id/account_id/chat_id/thread_id?。默认目标仅来自入站真实事件；无默认目标且未指定 To 返回 NO_DEFAULT_TARGET，不能由回执 message ID 猜测凭证。
 - Core 为每个 plugin_id 持久化 `allowed_adapter_instances`，默认空集，由管理员通过既有插件权限配置修改；协议 required_capabilities 不等于发信许可。持有仍在途的可信平台事件调用链时，插件及其合法 Service 子调用可向 Core 保留的原始完整 Target 回复，无需额外实例许可。独立后台、scheduled 或不同 Target 的 Send 必须显式 To，且目标实例在该插件许可集合中；再检查实例启用、account 绑定和 Core 全局禁止。许可覆盖该实例显式 chat/thread 目标，不赋予 User/Admin 或其他实例权限；无许可返回 PERMISSION_DENIED，动态撤销在下一次 Send 准入时生效。
 - 上传、读取自己拥有的媒体不要求发信许可；Core 对真实事件签发的 IncomingMedia token 本身授予该 Session 的对象读取权。Read 只认有效 token/read 范围，Send 另行检查上述目标授权。Grant 不扩大对象、操作、Target 或有效期，只向当前已激活且满足原对象消费范围的 Session 签发受限 read token；入站对象及其派生对象的接收者还须与该事件有合法在途调用关联，或已获源实例许可；插件自己上传的对象可由 owner 显式委托当前 Activated 接收 Session 只读使用，Core 记录委托且保持原对象/有效期/Target 限制。上述关联由 Core 验证，接收者再次 Send 仍须通过自己的发信准入。
@@ -308,7 +309,7 @@ Core 由 `alonabot serve` 启动（§15.1）。Core 首次管理凭证与离线�
 
 ## 10. 实施验收与停止条件
 
-沿用 T-01～T-14，不新建平行实施计划；全部 V 编号和通过条件集中维护在 [TEST-MATRIX.md](TEST-MATRIX.md)。每个任务同时完成对应实现与最小验证，不要求先跑尚不存在的应用测试。
+沿用 T-01～T-16，不新建平行实施计划；全部 V 编号和通过条件集中维护在 [TEST-MATRIX.md](TEST-MATRIX.md)。每个任务同时完成对应实现与最小验证，不要求先跑尚不存在的应用测试。
 
 详细步骤、拟目录、交付物和失败停止条件见 [PLAN.md](PLAN.md)。SDK/Proto 编译、数据库恢复、跨平台进程清理、Telegram 集成及真实性能在相应任务中取得证据；跨阶段用例的分工与最终闭合点按 TEST-MATRIX 执行。
 
@@ -326,14 +327,15 @@ Core 由 `alonabot serve` 启动（§15.1）。Core 首次管理凭证与离线�
 | §4 生命周期/调度 | T-02 生命周期原语，T-07 调度/HTTP，T-08 准备回调，T-09 正式更新集成 |
 | §5～§6 配置/Secret/数据库/文案 | T-01 先验驱动路径，T-08 候选准备与文案目录，T-09 提交与恢复；Telegram locale 映射在 T-03 |
 | §7 信任/HTTP/认证 | T-02 进程，T-07 代理与授权检查，T-09 首次登录及管理入口 |
-| §8 Adapter/消息 | T-03 Adapter 进程与 SDK、官方 Telegram Adapter 包、Target、媒体、按钮、extension 片段、回执、消息编辑、bot 上下线事件与依赖解析；T-09 Adapter 包与实例的正式管理及启用时的依赖检查 |
+| §8 Adapter/消息 | T-03 Adapter 进程与 SDK、官方 Telegram Adapter 包、Target、媒体、按钮、extension 片段、回执、消息编辑、bot 上下线事件与依赖解析；T-15 官方 OneBot 11 Adapter 包与跨 Adapter 一致性验收；T-09 Adapter 包与实例的正式管理及启用时的依赖检查 |
 | §9 构建/分发/管理 CLI | T-01 契约，T-04 生成器，T-09 完整工具和来源检查 |
 | §12 状态/锁/恢复 | T-02 建立共同原语，T-08 准备资源，T-09 复用原语完成正式 Journal 和恢复 |
 | §13 Agent 基础 | T-11 工具目录、策略、确认与会话存储；T-12 官方 Agent 插件与官方记忆插件；T-09 工具策略与会话清除的管理页 |
 | §14 日志 | T-02.1 日志基线与日志文件；T-09.10 按来源级别的持久化、最近记录、按日期查询、管理 API、CLI 与日志页；各切片按 §14 记录 |
 | §15 运行方式 | T-07.3 设置文件；T-09.4 `alonabot serve`；T-13 库模式与热部署；T-14 发行包、容器镜像与预装插件 |
+| §17 插件测试套件 | T-13.1 根包 `Start`；T-16 `plugintest` 与示例插件的测试 |
 | §16 调优参数 | T-02.2 参数表、`--args` 与 Bootstrap 下发；之后的切片把新增的可调值登记到同一参数表 |
-| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-70 和五目标运行结果 |
+| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-73 和五目标运行结果 |
 
 ## 12. 跨层状态机与恢复不变量
 
@@ -488,9 +490,9 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
 
 ### 15.2 发行包与预装插件
 
-- 每个目标平台发布一个发行归档 `alonabot-<version>-<os>-<arch>`（Windows 为 zip，其他为 tar.gz），包含 `alonabot` 可执行文件和 `packages/` 目录。`packages/` 中是官方 Telegram Adapter、官方 Agent 插件、官方记忆插件与预装插件的安装包，以及各自归档外的 `release.json` 与 `.sig`（§9.2）。
+- 每个目标平台发布一个发行归档 `alonabot-<version>-<os>-<arch>`（Windows 为 zip，其他为 tar.gz），包含 `alonabot` 可执行文件和 `packages/` 目录。`packages/` 中是官方 Telegram Adapter、官方 OneBot 11 Adapter、官方 Agent 插件、官方记忆插件与预装插件的安装包，以及各自归档外的 `release.json` 与 `.sig`（§9.2）。
 - 发行版 Core 内置官方发布者公钥作为已信任来源：运行官方发行包即视为接受该来源，预装包不再逐个确认。签名与摘要照常校验，校验失败的包不安装并记 ERROR。
-- 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，并启用 Agent、记忆与 help 插件；其余预装插件只安装不启用。官方 Telegram Adapter 只安装，管理员添加第一个实例并填写 Bot Token 时才启用。Agent 插件在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。
+- 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，并启用 Agent、记忆与 help 插件；其余预装插件只安装不启用。官方 Telegram 与 OneBot 11 Adapter 只安装，管理员为它添加第一个实例时才启用。Agent 插件在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。
 - 之后不再自动安装，已卸载的预装包不会在下次启动时重新安装。新版本发行包中的包版本高于已安装版本时，作为可用更新列在管理界面与 `alonabot list` 中，由管理员确认后按 `update` 流程更新。Core 本身通过替换可执行文件升级。
 - 首批预装插件为 help（按调用者权限列出可用命令与用法，`/whoami` 回复调用者的实例与用户 ID）、welcome（新成员入群时发送欢迎语）与 rss（订阅 RSS/Atom 并推送到聊天）。
 - 第一个 Core Admin 的产生：用户在聊天中发送 `/whoami` 取得自己的实例与用户 ID，管理员在 WebUI 的 Core 设置页（或 `alonabot admin add`）把它加入 Core Admin 列表。它们与第三方插件一样以独立进程运行，只有启用的才运行。
@@ -518,6 +520,7 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
   }
   ```
 
+- `alonabot.Start(ctx, opts...)` 使用与 `Run` 相同的选项与装配，在全部已启用的包与开发组件激活后返回句柄 `*alonabot.Core`；任一组件在激活前失败时，停止已启动的部分并返回错误。ctx 取消时按 §4.2 停止，句柄的 `Wait()` 等待停止完成，返回与 `Run` 相同的错误。`Run` 等于 `Start` 后等待 SIGINT/SIGTERM 再停止；`Start` 不处理信号，供把 Core 嵌入其他 Go 服务与插件测试套件（§17）使用。同一数据目录仍只能运行一个 Core。
 - 组件的 manifest、Schema 与 i18 资源取自 T-04 生成器在构建期嵌入的副本。开发中的组件不经安装包：
   - Core 为它们创建 dev 来源的安装记录，不做来源、签名与归档摘要校验，Hello 的 build_digest 使用 Core 为本次运行生成的值；dev 来源的组件只能在库模式中运行，不能 update 或 rollback。
   - 它们使用固定代次 `dev`，不走候选与 Journal：每次启动以 `<data_dir>/plugins/<id>/config.json`（缺失时为空对象）为配置，经 SDK 准备与校验后直接生效。受管 SQLite 为 `<data_dir>/plugins/<id>/dev.sqlite`，不复制、不回退。按钮 token 因代次固定，重启后仍然有效。
@@ -591,3 +594,10 @@ Core 只提供 Agent 需要的基础能力；对话循环、Provider、MCP、技
 | `DEV_RELOAD_POLL` | 500ms | > 0 | §15.5 |
 | `PLUGIN_MEMORY_SOFT_LIMIT` | 不设置 | > 0 | §16 |
 | `CORE_MEMORY_SOFT_LIMIT` | 不设置 | > 0 | §16 |
+
+## 17. 插件测试套件
+
+- 包 `github.com/AlonaBot/AlonaBot/plugintest`（D-47）供插件作者在 `go test` 中做集成测试，只在测试代码中使用。`plugintest.Start(t, opts...)` 在 `t.TempDir()` 的数据目录上用 `alonabot.Start`（§15.4）装配真实 Core，登记被测插件（`plugintest.Plugin(root)`，可以有多个）与套件自带的测试 Adapter（adapter_id `plugintest`），并在 `t.Cleanup` 中停止；任一组件激活失败时测试失败。被测插件是库模式的开发组件，配置取自 `plugintest.Config(root, json)`，受管 SQLite 为 `dev.sqlite`。
+- 测试 Adapter 只有一个实例和一个固定账号。会话分私聊与群聊，用户可标记为该会话的 chat_admin；`plugintest.Admin(user)` 把用户加入 Core Admin。实例缺省声明 `message.send`、`message.markdown`、`message.album`、`message.reference`、`message.buttons`、`message.forward` 与 `message.edit`，`plugintest.Capabilities(...)` 可改为子集：未声明能力对应的片段在发送时返回 UNSUPPORTED，用来测试插件的降级分支。发送与编辑一律 ACCEPTED，消息 ID 按发送顺序递增。
+- 注入事件：消息（message.created）、对已发送按钮的点击（button.clicked）与立即触发一次 schedule。每次注入在这个事件的全部分发链结束，或其中的 Handler 进入多轮等待（§2.4）后返回，结果包含这期间产生的全部 Send 与 Edit（Target、Chain、SendResult）和 Handler 返回的错误。分发结束由 Core 经 `internal/inproc` 通知套件，不靠等待时间判断。分发链之外的后台发送另行按顺序读取。
+- 套件不跳过 Core 的任何检查：权限、Target 准入（后台发送仍需要 `allowed_adapter_instances`，由套件选项授予）、Capability 预检、Hook 与文案都与正式运行相同。套件属于 SDK 公共 API，兼容承诺与 `sdk` 相同。
