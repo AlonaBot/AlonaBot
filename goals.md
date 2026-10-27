@@ -39,13 +39,14 @@
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
+| goal-65 | T-02.1 | 日志基线与日志文件 | — | 已完成 |
 | goal-23 | T-07.1 | 调度触发计算 | — | 已完成 |
-| goal-29 | T-08.2 | 配置 JSON 语义与 Pending | — | 可派发 |
+| goal-29 | T-08.2 | 配置 JSON 语义与 Pending | — | 已完成 |
 | goal-37 | T-09.2 | 安装包预检与安全解压 | — | 已完成 |
 | goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 等待前置 |
 | goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 等待前置 |
 | goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 等待前置 |
-| goal-76 | T-02.2 | 调优参数 | T-02.1 | 待编写 |
+| goal-76 | T-02.2 | 调优参数 | T-02.1 | 可派发 |
 | goal-4 | T-03.3 | Adapter 进程、sdk/adapter 与上下线事件 | T-03.1 | 待编写 |
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 待编写 |
 | goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 待编写 |
@@ -117,6 +118,41 @@
 
 ## 第 1 批：可派发
 
+### goal-65 · T-02.1 日志基线与日志文件
+
+状态：已完成（PR #13 已合并）。本 goal 早于 goals.md 派发，没有原始语句；下面记录合并后的实际接口，供后继切片引用。
+
+目标：日志基线：Core 与 SDK 改用注入的 slog Logger，控制台与 JSON 格式、来源标签、插件 stderr 的 JSON 解析与非结构化行、panic 堆栈、Bootstrap 下发级别与进程内过滤、`--log-level`/`--log-format`、不输出 Bootstrap 与配置明文；按日期轮转的日志文件与保留上限
+前置：T-02。
+依据：PLAN §3.1 的 T-02.1 行、§4 的 T-02 步骤 9；验收：V-62、V-63 的级别过滤分项、V-68 的写入与轮转分项。
+
+接口（main 上的实际代码）：
+
+```go
+// internal/core/logging
+const KeyComponent, KeyPluginID, KeyAdapterID, KeyInstanceID, KeySessionID, KeyGenerationID, KeyTraceID // 来源字段名
+const ComponentCore, ComponentPlugin, ComponentAdapter
+const LevelOff slog.Level // 来源级别 off
+type Format string // FormatText、FormatJSON
+type Options struct { Format Format; Level slog.Level; Stderr io.Writer }
+func Open(opt Options) (*Output, error)
+func (o *Output) Logger() *slog.Logger // component=core，按全局级别过滤
+func (o *Output) Levels() *Levels
+func (o *Output) EnableFile(opt FileOptions) error // 调用方须已持有 core.lock，只调用一次
+func (o *Output) Close() error
+func (o *Output) Plugin(pluginID, generationID string) *Source
+type Source struct{ ... }
+func (s *Source) SetSession(sessionID []byte)
+func (s *Source) Line(pluginID, stream string, line []byte) // 作为 process 的输出行回调
+type Levels struct{ ... } // SetGlobal、SetSource、InheritSource、Source
+func ProtoLevel(lv slog.Level) pb.LogLevel
+type FileOptions struct { Dir string; MaxSize, MaxTotal int64; MaxAgeDays int } // DefaultMaxFileSize、DefaultMaxTotalSize
+// contracts/proto：Bootstrap.log_level = 10（enum LogLevel）
+// sdk（未导出）：setLogLevel 按 Bootstrap.log_level 在进程内过滤；logPanic 记带 stack 的 ERROR；
+//   Run 把 slog 默认 Logger 换成写 stderr 的 JSON 行
+// cmd/alonabot run：--log-level、--log-format text|json
+```
+
 ### goal-23 · T-07.1 调度触发计算
 
 状态：已完成（PR 已合并）。
@@ -160,7 +196,7 @@ func (t Trigger) Next(anchor, now time.Time) time.Time // 严格晚于 now 的�
 
 ### goal-29 · T-08.2 配置 JSON 语义与 Pending
 
-状态：可派发。
+状态：已完成（PR #23 已合并）。后继注意：`pending_configs.plugin_id` 外键引用 `installs`，删除安装记录前须先删除该插件的 Pending 行。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-29（切片 T-08.2：配置 JSON 语义与 Pending）。goal 目录 goal-29，分支 goal-29，worktree .worktrees/goal-29，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -301,7 +337,7 @@ goal-2 等待调优参数（T-02.2），日志接口已按 T-02.1 的实现写�
 
 ### goal-2 · T-03.1 首个可用 SDK 切片
 
-状态：等待前置（T-02.2）。日志接口已按 T-02.1 的实现写入；调优参数合并后，审查者按实际的参数接口补充本语句，再改为可派发。
+状态：等待前置（T-02.2）。日志接口已按 T-02.1 的实现写入，SDK 根插件已按 sdk.Base 与 Root Hook 的现行模型修订；调优参数合并后，审查者按实际的参数接口补充本语句，再改为可派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-2（切片 T-03.1：首个可用 SDK 切片）。goal 目录 goal-2，分支 goal-2，worktree .worktrees/goal-2，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -315,7 +351,7 @@ goal-2 等待调优参数（T-02.2），日志接口已按 T-02.1 的实现写�
 - 新增 internal/core/adapter/ 和 internal/core/adapter/memory/
 - 新增 internal/core/router/ 和 internal/core/message/
 - 修改 internal/core/host/activate.go：Instance 增加 Routes 字段，在 Activate 中从 prep.Register 赋值
-- sdk/：新增 events.go、dispatch.go；修改 sdk.go（Context、Send、Registration、Collect）、activate.go（业务 Handler 与当前 Session）、session.go（buildRegister 输出事件路由）
+- sdk/：新增 events.go、dispatch.go；修改 base.go（Root 增加 Events Hook 与 Base 的默认实现）、sdk.go（Context、Send、Registration、Collect 与包文档的注册项列表）、activate.go（业务 Handler 与当前 Session）、session.go（buildRegister 输出事件路由）
 - 新增 examples/plugins/echo/
 - 新增 internal/core/supervisor/echo_test.go
 - 上述包的测试文件
@@ -381,11 +417,12 @@ goal-2 等待调优参数（T-02.2），日志接口已按 T-02.1 的实现写�
    func New(adapters *adapter.Registry) *Service
    func (s *Service) Send(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response // 注册为 Mux 的 wire.ServiceSend
 6. sdk
-   type EventProvider interface { Events(*EventRegistry) }
+   Root 增加 Hook：Events(*EventRegistry) // 在 Collect 时调用一次，注册事件路由；与 Commands、HTTP、Schedules 并列
+   func (*Base) Events(*EventRegistry)       // 默认不注册事件路由
    type EventRegistry struct{ ... }
    func (r *EventRegistry) On(routeID, eventType string, handler func(*Context) error)
    type EventRoute struct { RouteID string; EventType string; Handler func(*Context) error }
-   Registration 增加 Events []EventRoute；Collect 收集 EventProvider。
+   Registration 增加 Events []EventRoute；Collect 调用 root.Events，错误与其他注册项一起汇总。
    func (c *Context) Event() *pb.Event
    func (c *Context) Logger() *slog.Logger // slog.Default() 附带本次调用的 trace_id（十六进制）、route_id 与 call_id
    Context.Send 由返回 UNSUPPORTED 改为真实实现，签名不变。
@@ -413,7 +450,7 @@ goal-2 等待调优参数（T-02.2），日志接口已按 T-02.1 的实现写�
 - Context.Send：构造 SendRequest{to: To 选项, chain: chain.Proto()}，以本次 Inbound.CallID 为 ParentCallID 调用 wire.ServiceSend。有载荷就解码成 SendResult；有 Err 时返回 *sdk.Error（Code 经 validate.PublicCode）。结果与错误可以同时返回。
 - EventRegistry.On 的以下情况都记为 Collect 错误：routeID 为空；与已注册的事件或命令 route_id 重复；eventType 不是 message.proto 中列出的 8 种之一；handler 为 nil。
 - buildRegister 为每个事件生成 RouteDescriptor{route_id, kind=EVENT, default_enabled=true, required_permission=ANY, event: EventSpec{event_type_filter: [eventType], handler_mode=MANUAL}}，排在命令路由之后。
-- examples/plugins/echo：根插件注册 On("echo", "message.created", ...)，把收到消息中的 text 片段原样回复；没有 text 片段时不回复。
+- examples/plugins/echo：根插件嵌入 sdk.Base，覆盖 Events 注册 On("echo", "message.created", ...)，把收到消息中的 text 片段原样回复；没有 text 片段时不回复。
 
 测试（按编码规范「测试提交规则」：只提交集成测试；本地自测写在 *_local_test.go，不提交，PR 中写明结果）：
 - 提交：internal/core/supervisor/echo_test.go（//go:build unix）。按 supervisor_test.go 构建示例的方式构建 examples/plugins/echo，用 memory Adapter + adapter.Registry + message.Service + Mux + Router 装配；Spec.Log 与 Router 的 Logger 取自写到测试缓冲区的 logging.Output。Launch 后 Attach 实例。
@@ -566,17 +603,127 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-76 · T-02.2 调优参数
 
-状态：待编写（前置已合并）。
+状态：可派发。
 
-目标：调优参数：`internal/tune` 参数表，把现有常量迁入；`--args` 的直接参数与文件输入、校验与相互约束、启动 WARN、`alonabot tune list`；`SessionLimits session_limits = 11`，其中 `max_inflight`、`max_payload_bytes`、`request_timeout_ms` 分别下发每方向在途数、每 Session payload 预算和普通请求期限；`GOMEMLIMIT` 软上限
-前置：T-02.1。
-依据：PLAN §3.1 的 T-02.2 行、§4 的 T-02 工作包；验收：V-69。
+```text
+/goal 使用 $alonabot-execute 推进 goal-76（切片 T-02.2：调优参数）。goal 目录 goal-76，分支 goal-76，worktree .worktrees/goal-76，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-- 参数表与缺省值按 CONTRACTS §16；不可调的协议、安全与平台常量留在原处。
-- `--args` 可重复：值含 `=` 时是逗号分隔的直接参数，否则是文本文件路径；后出现的覆盖先出现的；大小只接受二进制单位。
-- 未知键、格式错误、违反约束或相互矛盾时拒绝启动并指明出处；有覆盖时启动 WARN 列出全部覆盖项。
-- SDK 使用 Bootstrap 下发的 `session_limits`；设置 `PLUGIN_MEMORY_SOFT_LIMIT` 时为子进程传入 `GOMEMLIMIT`。
-- 验收：V-69。
+目标：建立调优参数表 internal/tune，把 internal/wire 与 internal/core 中可调的现有常量改为读取生效值；alonabot run 接受可重复的 --args 并在启动时校验、报告覆盖；新增 alonabot tune list；Core 经 Bootstrap.session_limits 把 Session 限额下发给 SDK，双方按同一组值执行；PLUGIN_MEMORY_SOFT_LIMIT 与 CORE_MEMORY_SOFT_LIMIT 设置 Go 运行时软上限。
+
+依据：PLAN T-02 步骤 10；CONTRACTS §1.2、§4.2、§16；WIRE-FORMAT §3.2（SessionLimits）；TEST-MATRIX V-69。
+
+范围（只新增或修改这些）：
+- 新增 internal/tune/（doc.go、params.go 与解析代码）
+- contracts/proto/alonabot/v1/control.proto：追加 message SessionLimits 与 Bootstrap 的 SessionLimits session_limits = 11；随后 go generate ./... 重新生成 contracts/pb（本切片获授权修改该 proto，字段号按 WIRE-FORMAT，不改已有编号）
+- contracts/wirespec_test.go：追加 SessionLimits 与 Bootstrap.session_limits 的字段号检查
+- internal/wire/session.go：删除 DefaultDeadline、MaxInflightPerDirection、MaxBytesPerDirection、GlobalPayloadBytes 四个常量
+- internal/core/host/：prepare.go、activate.go、stop.go
+- internal/core/packages/preflight.go
+- internal/core/supervisor/supervisor.go
+- sdk/session.go、sdk/activate.go
+- cmd/alonabot/main.go
+- cmd/alonabot/e2e_test.go、internal/core/supervisor/supervisor_test.go：追加下文「测试」列出的用例
+- 上述包中引用被删除或改名符号的其他测试文件（只做随之必要的调用修改）
+允许的新跨模块边：cmd/alonabot -> internal/tune（ARCHITECTURE 已登记）。internal/wire、internal/core、sdk -> internal/tune 已允许；internal/tune 不 import 本 module 任何包。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. internal/tune
+   // Values 是一次运行的全部生效值，每个 CONTRACTS §16 参数一个字段；字段名为参数名的驼峰形式。
+   type Values struct {
+       SessionMaxInflight    int
+       SessionMaxPayload     int64         // 字节
+       CoreMaxPayload        int64
+       RequestTimeout        time.Duration
+       CallChainMaxDepth     int
+       DispatchConcurrency   int
+       DispatchQueueEvents   int
+       DispatchQueueBytes    int64
+       ContinuationMax       int
+       ContinuationTimeout   time.Duration
+       BusQueueEvents        int
+       BusQueueBytes         int64
+       MediaMaxObject        int64
+       MediaMaxUploads       int
+       MediaSessionBudget    int64
+       MediaDiskBudget       int64
+       MediaTTL              time.Duration
+       PhaseHello            time.Duration
+       PhaseConfig           time.Duration
+       PhaseMigration        time.Duration
+       PhaseOnStart          time.Duration
+       PhaseOnReady          time.Duration
+       StopTotal             time.Duration
+       StopDrain             time.Duration
+       StopOnStop            time.Duration
+       RestartWindow         time.Duration
+       RestartMaxCrashes     int
+       JobTimeout            time.Duration
+       ButtonTokenTTL        time.Duration
+       ToolConfirmTimeout    time.Duration
+       LogBufferRecords      int
+       InstallMaxArchive     int64
+       InstallMaxExpanded    int64
+       InstallMaxEntries     int
+       DevReloadPoll         time.Duration
+       PluginMemorySoftLimit int64 // 0 表示不设置
+       CoreMemorySoftLimit   int64 // 0 表示不设置
+   }
+   func Defaults() Values
+   // Override 是一项覆盖；Origin 为 "--args"（直接参数）或 "<文件路径>:<行号>"。
+   type Override struct { Name, Value, Origin string }
+   // Parse 依次应用 args 中的每一项（每项是一次 --args 的值），后出现的覆盖先出现的，最后检查约束与相互约束。
+   // 返回生效值与实际生效的覆盖（同一参数只保留最后一次），按参数表顺序排列。
+   func Parse(args []string) (Values, []Override, error)
+   // WriteList 按参数表顺序写出全部参数的名称、缺省值、约束与契约位置，供 alonabot tune list 使用。
+   func WriteList(w io.Writer) error
+2. contracts/proto（照 WIRE-FORMAT §3.2）
+   message SessionLimits { uint32 max_inflight = 1; uint32 max_payload_bytes = 2; uint32 request_timeout_ms = 3; }
+   Bootstrap 追加 SessionLimits session_limits = 11;
+3. internal/core/host
+   Limits 增加字段：SessionMaxInflight int; SessionMaxPayload int64; RequestTimeout time.Duration
+   func NewLimits(v tune.Values) Limits         // 取代 var DefaultLimits
+   func NewStopTiming(v tune.Values) StopTiming // 取代 var DefaultStopTiming
+   func NewRestartPolicy(v tune.Values) *RestartPolicy // 窗口与次数取 RestartWindow、RestartMaxCrashes；删除 restartWindow、restartLimit
+4. internal/core/packages
+   func NewLimits(v tune.Values) Limits // 取代 var DefaultLimits
+5. internal/core/supervisor
+   Spec 增加字段：MemorySoftLimit int64 // 大于 0 时为插件进程设置 GOMEMLIMIT
+
+行为：
+- 参数表：internal/tune/params.go 按 CONTRACTS §16 表的顺序登记全部 37 个参数，每项有名称、单位类别（整数、时长、大小）、缺省值、约束与契约位置；Defaults 与表一致。PLUGIN_MEMORY_SOFT_LIMIT、CORE_MEMORY_SOFT_LIMIT 缺省不设置。帧上限 4MiB 在 tune 内写成命名常量并注明与 wire.MaxFrame 相同（tune 不能 import wire）。
+- --args 每一项：
+  - 含 "=" 时是直接参数，按逗号分隔为多个 KEY=VALUE；
+  - 否则是文本文件路径：每行一个 KEY=VALUE，忽略空行与首个非空白字符为 # 的行；
+  - 同一参数后出现的覆盖先出现的，包括跨项与同一项内。
+- 值的格式：整数为十进制；时长用 time.ParseDuration；大小为十进制整数加 B、KiB、MiB、GiB 后缀之一；写成 KB、MB、GB 时报错并提示改用二进制单位。
+- 以下情况 Parse 返回错误，错误文本指明出处（"--args" 中的哪一项，或文件路径与行号）与参数名：未知键、缺少 "="、空键、格式错误、违反单值约束、文件不可读。相互约束（SESSION_MAX_PAYLOAD 与 DISPATCH_QUEUE_BYTES、BUS_QUEUE_BYTES ≥ 4MiB；CORE_MAX_PAYLOAD ≥ SESSION_MAX_PAYLOAD；CONTINUATION_MAX < SESSION_MAX_INFLIGHT；MEDIA_MAX_OBJECT ≤ MEDIA_SESSION_BUDGET ≤ MEDIA_DISK_BUDGET；INSTALL_MAX_EXPANDED ≥ INSTALL_MAX_ARCHIVE；STOP_TOTAL ≥ STOP_DRAIN + STOP_ONSTOP）在全部覆盖应用后检查，错误列出相关参数的值与各自出处。超出字段类型或 uint32 毫秒/字节下发范围的值按格式错误处理。
+- cmd/alonabot：
+  - run 增加可重复的 --args（flag.Value 收集），在 logging.Open 之后、打开状态库之前调用 tune.Parse；出错时把错误写到 stderr 并以 exitUsage 退出，不启动插件。
+  - 有覆盖时，以 Core Logger 输出一条 WARN，消息为 "tuning parameters overridden"，属性列出每项的名称、值与出处。
+  - 新增子命令 alonabot tune list：调用 tune.WriteList 写到 stdout，以 0 退出；不需要 data_dir。usage 文本同时列出 run 与 tune list。
+  - Core 使用生效值：supervisor.Spec 的 Limits=host.NewLimits(v)、Stop=host.NewStopTiming(v)、Global=wire.NewBudget(v.CoreMaxPayload)、MemorySoftLimit=v.PluginMemorySoftLimit；重启策略为 host.NewRestartPolicy(v)。
+  - CoreMemorySoftLimit > 0 时，启动时调用 debug.SetMemoryLimit。
+- host：Prepare 按 Limits 写入 Bootstrap.session_limits（request_timeout_ms 为毫秒），与 phase_limits 一样由 Core 填写；Activate 用同一 Limits 的 SessionMaxInflight、SessionMaxPayload、RequestTimeout 设置 Core 侧 wire.Options 的 MaxInflight、MaxBytes、DefaultDeadline。
+- wire：Options 的 MaxInflight、MaxBytes、DefaultDeadline 为零时改用 tune.Defaults() 的对应值（只供测试与零值兜底）；PriorityFrames 不是调优参数，保持原样。
+- SDK：prepare 读取 Bootstrap.session_limits，activate 用它设置插件侧 wire.Options 的 MaxInflight、MaxBytes、DefaultDeadline。session_limits 缺失或任一字段为 0 时，按 CONFIG 阶段以 INVALID_ARGUMENT 的 SESSION_ERROR 失败。SDK 的 handshakeTimeout 与 onStopBudget 在收到 Bootstrap 之前或断链时使用，不在本切片改动。
+- supervisor：MemorySoftLimit > 0 时，为插件进程的环境增加 GOMEMLIMIT=<字节数>（十进制整数，Go 运行时按字节解释）；0 时不设置。
+- 日志级别、日志文件上限、协议帧上限、Secret 与票据期限等 §16 列为不可调的值保持原处，不进入参数表。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：
+  - cmd/alonabot/e2e_test.go 追加：
+    - 用 --args 直接参数与文件各给一次 REQUEST_TIMEOUT，文件中的值后出现，Core 正常启动示例插件，stderr 中有一条 "tuning parameters overridden" 的 WARN，列出生效值与文件行号；
+    - --args SESSION_MAX_PAYLOAD=100MB、未知键、CONTINUATION_MAX=256（与缺省 SESSION_MAX_INFLIGHT 矛盾）各一次，Core 以 exitUsage 退出且不启动插件，stderr 指明出处；
+    - alonabot tune list 以 0 退出，输出包含全部 37 个参数名。
+  - internal/core/supervisor/supervisor_test.go 追加：rawPlugin 增加一种模式，把收到的 GOMEMLIMIT 环境变量与 HelloAck 中 Bootstrap.session_limits 的三个字段写到 stderr。Spec.MemorySoftLimit=256<<20、Limits 来自以 SESSION_MAX_INFLIGHT=2,REQUEST_TIMEOUT=2s 解析的 tune.Values 时，断言插件收到 GOMEMLIMIT=268435456 与 max_inflight=2、request_timeout_ms=2000；MemorySoftLimit=0 时插件环境中没有 GOMEMLIMIT。
+  - contracts/wirespec_test.go：SessionLimits 字段 1～3 的名称与编号、Bootstrap 字段 11 为 session_limits。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Defaults 与 CONTRACTS §16 逐项一致；每种单位的合法与非法写法（含 1.5MiB、-1s、KB/MB/GB）；直接参数中的多项与同项重复；文件中的空行、注释、缺少 "="、行号；每条相互约束的边界两侧；Override 只保留最后一次且按参数表顺序；host.NewLimits/NewStopTiming/NewRestartPolicy 与 packages.NewLimits 取值正确；SDK 在 session_limits 缺失时以 INVALID_ARGUMENT 失败。
+- 现有测试必须继续通过；引用 DefaultLimits、DefaultStopTiming、NewRestartPolicy() 与被删除 wire 常量的测试改为 tune.Defaults() 派生的值。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./internal/... ./sdk/... ./contracts/... ./cmd/...；go build ./...。
+
+不做：alonabot serve、库模式的 alonabot.Args 与 ALONABOT_ARGS（分别由 T-09.4、T-13.1 复用 tune.Parse 接入）；尚无调用方的参数（DISPATCH_*、BUS_*、MEDIA_*、JOB_TIMEOUT 等）只登记不接线；运行中修改参数；WebUI。
+```
 
 ### goal-4 · T-03.3 Adapter 进程、sdk/adapter 与上下线事件
 
@@ -1253,11 +1400,28 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-58 · T-12.1 Provider 客户端
 
-状态：已完成（PR 已合并）。
+状态：已完成（PR #16 已合并）。本 goal 的原始语句未保留；下面记录合并后的实际接口，供后继切片引用。
 
 目标：Provider 客户端：OpenAI 兼容与 Anthropic Messages 的流式请求、SSE 解析、工具调用解析、本地模拟服务
 前置：T-02。
 依据：PLAN §3.1 的 T-12.1 行、§4 的 T-12 步骤 1（接口与流语义）；验收：V-57 的 Provider 分项。
+
+接口（main 上的实际代码）：
+
+```go
+// plugins/agent/provider
+type Protocol string // OpenAICompatible = "openai-compatible"、AnthropicMessages = "anthropic-messages"
+type Config struct { Protocol Protocol; BaseURL string; APIKey string; Model string }
+type Message struct { Role string; Content string; ToolCalls []ToolCall; ToolResults []ToolResult } // Role：system、user、assistant
+type Tool struct { Name string; Description string; InputSchema json.RawMessage }
+type Request struct { Messages []Message; Tools []Tool; MaxTokens int } // MaxTokens 必须大于 0
+type ToolCall struct { ID string; Name string; Arguments json.RawMessage }
+type ToolResult struct { ToolCallID string; Content string }
+type Event struct { Text string; ToolCall *ToolCall } // ToolCall 非 nil 时是组装完整的一次工具调用
+func New(config Config, httpClient *http.Client) (*Client, error) // httpClient 由调用方注入
+func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error) error
+// Stream 不重发请求；已交给 emit 的文本增量由调用方保留；错误不含 API key 与认证头。
+```
 
 ### goal-59 · T-12.2 Agent 对话与流式显示
 
