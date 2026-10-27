@@ -367,9 +367,9 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 ```text
 /goal 使用 $alonabot-execute 推进 goal-76（切片 T-02.2：调优参数）。goal 目录 goal-76，分支 goal-76，worktree .worktrees/goal-76，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-目标：建立调优参数表 internal/tune，把 internal/wire 与 internal/core 中可调的现有常量改为读取生效值；alonabot run 接受可重复的 --args 并在启动时校验、报告覆盖；新增 alonabot tune list；Core 经 Bootstrap.session_limits 把 Session 限额下发给 SDK，双方按同一组值执行；PLUGIN_MEMORY_SOFT_LIMIT 与 CORE_MEMORY_SOFT_LIMIT 设置 Go 运行时软上限。
+目标：建立调优参数表 internal/tune，把 internal/wire 与 internal/core 中可调的现有常量改为读取生效值；alonabot 根命令接受可重复的全局参数 --args，在执行任何子命令前校验并报告覆盖；新增 alonabot tune list；Core 经 Bootstrap.session_limits 把 Session 限额下发给 SDK，双方按同一组值执行；PLUGIN_MEMORY_SOFT_LIMIT 与 CORE_MEMORY_SOFT_LIMIT 设置 Go 运行时软上限。
 
-依据：PLAN T-02 步骤 10；CONTRACTS §1.2、§4.2、§16；WIRE-FORMAT §3.2（SessionLimits）；TEST-MATRIX V-69。
+依据：PLAN T-02 步骤 10；CONTRACTS §1.2、§4.2、§16；WIRE-FORMAT §3.2（SessionLimits）；TEST-MATRIX V-69；DECISIONS D-41。
 
 范围（只新增或修改这些）：
 - 新增 internal/tune/（doc.go、params.go 与解析代码）
@@ -381,8 +381,7 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 - internal/core/supervisor/supervisor.go
 - sdk/session.go、sdk/activate.go
 - cmd/alonabot/main.go
-- cmd/alonabot/e2e_test.go、internal/core/supervisor/supervisor_test.go：追加下文「测试」列出的用例
-- 上述包中引用被删除或改名符号的其他测试文件（只做随之必要的调用修改）
+- 上述包中引用被删除或改名符号的测试文件（只做随之必要的调用修改）
 允许的新跨模块边：cmd/alonabot -> internal/tune（ARCHITECTURE 已登记）。internal/wire、internal/core、sdk -> internal/tune 已允许；internal/tune 不 import 本 module 任何包。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
@@ -433,8 +432,8 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
    // Parse 依次应用 args 中的每一项（每项是一次 --args 的值），后出现的覆盖先出现的，最后检查约束与相互约束。
    // 返回生效值与实际生效的覆盖（同一参数只保留最后一次），按参数表顺序排列。
    func Parse(args []string) (Values, []Override, error)
-   // WriteList 按参数表顺序写出全部参数的名称、缺省值、约束与契约位置，供 alonabot tune list 使用。
-   func WriteList(w io.Writer) error
+   // WriteList 按参数表顺序写出全部参数的名称、缺省值、v 中的生效值、约束与契约位置，供 alonabot tune list 使用。
+   func WriteList(w io.Writer, v Values) error
 2. contracts/proto（照 WIRE-FORMAT §3.2）
    message SessionLimits { uint32 max_inflight = 1; uint32 max_payload_bytes = 2; uint32 request_timeout_ms = 3; }
    Bootstrap 追加 SessionLimits session_limits = 11;
@@ -457,9 +456,10 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 - 值的格式：整数为十进制；时长用 time.ParseDuration；大小为十进制整数加 B、KiB、MiB、GiB 后缀之一；写成 KB、MB、GB 时报错并提示改用二进制单位。
 - 以下情况 Parse 返回错误，错误文本指明出处（"--args" 中的哪一项，或文件路径与行号）与参数名：未知键、缺少 "="、空键、格式错误、违反单值约束、文件不可读。相互约束（SESSION_MAX_PAYLOAD 与 DISPATCH_QUEUE_BYTES、BUS_QUEUE_BYTES ≥ 4MiB；CORE_MAX_PAYLOAD ≥ SESSION_MAX_PAYLOAD；CONTINUATION_MAX < SESSION_MAX_INFLIGHT；MEDIA_MAX_OBJECT ≤ MEDIA_SESSION_BUDGET ≤ MEDIA_DISK_BUDGET；INSTALL_MAX_EXPANDED ≥ INSTALL_MAX_ARCHIVE；STOP_TOTAL ≥ STOP_DRAIN + STOP_ONSTOP）在全部覆盖应用后检查，错误列出相关参数的值与各自出处。超出字段类型或 uint32 毫秒/字节下发范围的值按格式错误处理。
 - cmd/alonabot：
-  - run 增加可重复的 --args（flag.Value 收集），在 logging.Open 之后、打开状态库之前调用 tune.Parse；出错时把错误写到 stderr 并以 exitUsage 退出，不启动插件。
-  - 有覆盖时，以 Core Logger 输出一条 WARN，消息为 "tuning parameters overridden"，属性列出每项的名称、值与出处。
-  - 新增子命令 alonabot tune list：调用 tune.WriteList 写到 stdout，以 0 退出；不需要 data_dir。usage 文本同时列出 run 与 tune list。
+  - --args 是根命令的全局参数（D-41）：命令行形如 alonabot [--args V]... <子命令> [子命令参数]。根 FlagSet 只定义 --args（flag.Value 收集，可重复），解析到第一个非参数位置即为子命令；子命令之后出现的 --args 按该子命令的未知参数处理。
+  - 分派子命令之前调用 tune.Parse；出错时把错误写到 stderr 并以 exitUsage 退出，不执行任何子命令。
+  - run 在 logging.Open 之后，有覆盖时以 Core Logger 输出一条 WARN，消息为 "tuning parameters overridden"，属性列出每项的名称、值与出处。
+  - 新增子命令 alonabot tune list：调用 tune.WriteList(os.Stdout, v) 列出缺省值与生效值，以 0 退出；不需要 data_dir，也不输出 WARN。usage 文本写明全局参数 --args，并列出 run 与 tune list。
   - Core 使用生效值：supervisor.Spec 的 Limits=host.NewLimits(v)、Stop=host.NewStopTiming(v)、Global=wire.NewBudget(v.CoreMaxPayload)、MemorySoftLimit=v.PluginMemorySoftLimit；重启策略为 host.NewRestartPolicy(v)。
   - CoreMemorySoftLimit > 0 时，启动时调用 debug.SetMemoryLimit。
 - host：Prepare 按 Limits 写入 Bootstrap.session_limits（request_timeout_ms 为毫秒），与 phase_limits 一样由 Core 填写；Activate 用同一 Limits 的 SessionMaxInflight、SessionMaxPayload、RequestTimeout 设置 Core 侧 wire.Options 的 MaxInflight、MaxBytes、DefaultDeadline。
@@ -469,14 +469,12 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 - 日志级别、日志文件上限、协议帧上限、Secret 与票据期限等 §16 列为不可调的值保持原处，不进入参数表。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：
-  - cmd/alonabot/e2e_test.go 追加：
-    - 用 --args 直接参数与文件各给一次 REQUEST_TIMEOUT，文件中的值后出现，Core 正常启动示例插件，stderr 中有一条 "tuning parameters overridden" 的 WARN，列出生效值与文件行号；
-    - --args SESSION_MAX_PAYLOAD=100MB、未知键、CONTINUATION_MAX=256（与缺省 SESSION_MAX_INFLIGHT 矛盾）各一次，Core 以 exitUsage 退出且不启动插件，stderr 指明出处；
-    - alonabot tune list 以 0 退出，输出包含全部 37 个参数名。
-  - internal/core/supervisor/supervisor_test.go 追加：rawPlugin 增加一种模式，把收到的 GOMEMLIMIT 环境变量与 HelloAck 中 Bootstrap.session_limits 的三个字段写到 stderr。Spec.MemorySoftLimit=256<<20、Limits 来自以 SESSION_MAX_INFLIGHT=2,REQUEST_TIMEOUT=2s 解析的 tune.Values 时，断言插件收到 GOMEMLIMIT=268435456 与 max_inflight=2、request_timeout_ms=2000；MemorySoftLimit=0 时插件环境中没有 GOMEMLIMIT。
-  - contracts/wirespec_test.go：SessionLimits 字段 1～3 的名称与编号、Bootstrap 字段 11 为 session_limits。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Defaults 与 CONTRACTS §16 逐项一致；每种单位的合法与非法写法（含 1.5MiB、-1s、KB/MB/GB）；直接参数中的多项与同项重复；文件中的空行、注释、缺少 "="、行号；每条相互约束的边界两侧；Override 只保留最后一次且按参数表顺序；host.NewLimits/NewStopTiming/NewRestartPolicy 与 packages.NewLimits 取值正确；SDK 在 session_limits 缺失时以 INVALID_ARGUMENT 失败。
+- 提交：contracts/wirespec_test.go 追加协议编号检查：SessionLimits 字段 1～3 的名称与编号、Bootstrap 字段 11 为 session_limits。不提交其他测试。
+- 本地自测（*_local_test.go，不提交，PR 中逐项写明结果）：
+  - tune：Defaults 与 CONTRACTS §16 逐项一致；每种单位的合法与非法写法（含 1.5MiB、-1s、KB/MB/GB 的提示）；直接参数中的多项与同项重复；文件中的空行、注释、缺少 "="、行号；跨项后者覆盖前者；每条相互约束的边界两侧；Override 只保留最后一次且按参数表顺序；WriteList 输出全部 37 个参数及生效值。
+  - cmd/alonabot（构建真实二进制与 examples/plugins/lifecycle）：直接参数与文件各给一次 REQUEST_TIMEOUT 时以文件中的值生效，stderr 有一条列出生效值与文件行号的 "tuning parameters overridden" WARN；--args SESSION_MAX_PAYLOAD=100MB、未知键、CONTINUATION_MAX=256 各以 exitUsage 退出、不启动插件且 stderr 指明出处；子命令之后的 --args 被拒；alonabot --args REQUEST_TIMEOUT=2s tune list 以 0 退出并显示生效值 2s。
+  - supervisor：用回显环境与 Bootstrap 的测试辅助插件，确认 MemorySoftLimit=256<<20 时插件收到 GOMEMLIMIT=268435456、为 0 时没有 GOMEMLIMIT；以 SESSION_MAX_INFLIGHT=2,REQUEST_TIMEOUT=2s 解析的 Values 派生 Limits 时，插件收到 max_inflight=2、request_timeout_ms=2000。
+  - host/packages：NewLimits、NewStopTiming、NewRestartPolicy 与 packages.NewLimits 取值正确；SDK 在 session_limits 缺失或含 0 时以 INVALID_ARGUMENT 失败。
 - 现有测试必须继续通过；引用 DefaultLimits、DefaultStopTiming、NewRestartPolicy() 与被删除 wire 常量的测试改为 tune.Defaults() 派生的值。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./internal/... ./sdk/... ./contracts/... ./cmd/...；go build ./...。
