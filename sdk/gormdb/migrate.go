@@ -1,6 +1,6 @@
 // Package gormdb 为插件打开受管数据库，并提供迁移接口。
 //
-// OpenSQLite 与 OpenPostgres 返回原生的 *gorm.DB，并核对连接上的关键设置确实生效。
+// OpenSQLite 返回原生的 *gorm.DB，并核对连接上的关键设置确实生效。
 // 插件可以自己实现 Migrate，也可以交出按编号排列的 Migrations 由 SDK 执行，两者只能选一种。
 // 数据库的所有权、连接与迁移规则见 spec/CONTRACTS-v0.1.md §6。
 package gormdb

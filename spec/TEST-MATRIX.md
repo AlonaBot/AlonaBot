@@ -33,12 +33,12 @@
 | V-23 | T-08、T-09 | config.json 直接编辑、显式 reload、false/0/空串、未知键 | 编辑未激活前运行值不变；reload 创建 Pending；显式默认值不被覆盖；未知键保留 |
 | V-24 | T-08、T-09 | 仅改配置，候选OnStart写SQLite后失败；Core在候选阶段中断 | 候选使用独立DB，旧数据/配置/secret不变；新旧进程不同时写入；恢复只信Core状态库Active指针 |
 | V-25 | T-08、T-09 | secret修改后候选失败、旧secret字段转未知键、hidden/i18、掩码/PATCH | 新secret不覆盖旧引用；保留未知secret仍保密；掩码不成为保存值；hidden不意外删除；翻译不改键和值 |
-| V-26 | T-01、T-08 | GORM SQLite/PostgreSQL CRUD/Tx、Migrate 与 Migrations 同注册 | 两后端基本访问可用，迁移声明互斥检查失败；PG 最小权限凭证不复用 Core 超级用户 |
+| V-26 | T-01、T-08 | 受管 SQLite 经 `sqlitedb`（database/sql）与 `gormdb` 的 CRUD/Tx、同一插件同时使用两个入口、根插件实现多于一个迁移接口、只导入 `sqlitedb` 的插件 | 两个入口都可用，共用同一连接并看到同一数据；实现多个迁移接口时检查失败；只导入 `sqlitedb` 的插件不链接 GORM |
 | V-27 | T-09 | 安装包归档含 ../、绝对路径、symlink 逃逸、来源 ID 冲突 | 解压前拒绝路径越界；首次注册 ID 保留；后来源不可静默替换 |
 | V-28 | T-09 | 下载损坏 digest、签名错误、错误 OS/arch、不受信来源更新 | 所有错误在停止旧版前发现并拒绝；SHA256 不当作来源身份签名 |
 | V-29 | T-09 | SQLite WAL候选备份；迁移/OnStart失败；空间不足与残存进程 | 确认runtime.lock可取后备份；旧DB不污染；候选失败旧程序新Session恢复；空间/锁失败不激活 |
 | V-30 | T-09 | Core崩溃于PREPARED、Active+COMMITTED提交前后、OnReady失败 | 未提交只恢复旧版；已提交只恢复新代次；旧进程退出未确认时不启动第二写入者；无双代次接单或静默回滚 |
-| V-31 | T-09 | PG 或插件自管 SQL 有不可隔离变更，尝试自动升级 | 返回 NEEDS_MANUAL_MIGRATION，提示维护/备份流程；无虚假无损回退承诺 |
+| V-31 | T-09 | 声明 `prepare_effects=external` 的插件（准备期写外部数据库），尝试自动 reload、update 与 rollback | 返回 NEEDS_MANUAL_MIGRATION，提示维护/备份流程；维护许可只对本次 Session/代次有效；普通 restart 不受影响；无虚假无损回退承诺 |
 | V-32 | T-10 | Linux amd64/arm64、Windows amd64、macOS amd64/arm64 编译、启动/退出 | 五个组合都有真实记录；CGO 插件在不兼容平台标不支持而非虚假发布 |
 | V-33 | T-10 | 同一台固定机器、同一个本地 Bot API 模拟服务；NoneBot2 使用其 Telegram Adapter 与功能相同的插件。四种负载：空闲（Core 与 echo、configdb、HTTP 示例三个插件运行 10 分钟）；消息（每秒 20 条文本、持续 10 分钟，echo 逐条回复）；数据库（每秒 20 条命令，每条在 SQLite 中写入并读取一行，持续 10 分钟）；HTTP（每秒 50 个请求访问插件路由，持续 10 分钟） | 每种负载报告 RSS/私有内存、Linux PSS、CPU 与回复或响应延迟的 P50/P95/P99，并记录版本、机器与负载参数；不借同 worker PoC 代替 |
 | V-34 | T-10 | 100 次启停、多次异常退出、普通子进程树、外部副作用重试 | 无 Core 崩溃/会话泄漏，合作型子进程按平台能力清理，业务副作用默认不自动重试 |
@@ -46,8 +46,8 @@
 | V-36 | T-02、T-08、T-09 | 同data_dir双Core、同插件并发enable/update、Core被kill而子进程仍写DB | 独占锁/管理串行及预期代次检查生效；SDK断链退出；runtime.lock未释放不打开DB/启动替代实例 |
 | V-37 | T-01、T-02、T-08、T-09 | 旧配置需OnLoad才能符合新Schema、Bootstrap/REGISTER超4MiB、阶段错误 | 旧JSON先迁移再验证；完整配置只经私有IPC；超限/失败用合法SESSION_ERROR且无半注册；ACTIVATED严格先于业务帧 |
 | V-38 | T-08、T-09 | 配置版本迁移、nested未知键、null/缺失/false、Merge Patch、陈旧base_generation | 迁移/默认/typed顺序固定；null删除与空值区分；未知键保留；陈旧提交拒绝；restart不偷改Active |
-| V-39 | T-01、T-08、T-09 | GORM两后端、逐步迁移失败/重复ID、PG空schema首装、Active resume、已有数据升级与伪维护许可 | Up+成功账本同插件DB事务；失败无成功记录；PG空schema可初始化；resume只核对已提交迁移；非当前Session/代次许可无效；未许可生产写入前返回维护错误 |
-| V-40 | T-09 | install首次enable、restart/reload区别、pin、uninstall重装与显式rollback | 首次创建Active；restart仅新Session；卸载保留数据/来源且仅同来源可重装；pin持久化；rollback建立新代次/DB副本且不复活旧按钮，PG不假装通用恢复 |
+| V-39 | T-01、T-08、T-09 | 两个入口的逐步迁移失败/重复ID、首装、Active resume、external 插件已有安装的升级与伪维护许可 | Up+成功账本同插件DB事务；失败无成功记录；resume 不建立候选；非当前Session/代次许可无效；未许可的 external 候选在准备前返回维护错误 |
+| V-40 | T-09 | install首次enable、restart/reload区别、pin、uninstall重装与显式rollback | 首次创建Active；restart仅新Session；卸载保留数据/来源且仅同来源可重装；pin持久化；rollback建立新代次/DB副本且不复活旧按钮，external 数据不假装通用恢复 |
 | V-41 | T-01、T-09 | 外部release清单签名、归档摘要、来源/公钥变化、无签名本地包 | 对确切字节验签；无自包含摘要循环；所有身份/平台错误停机前拒绝；签名失败不降级本地信任 |
 | V-42 | T-02、T-06 | Request计数满、字节满、缓冲满、嵌套Send/Service与Cancel并发、Request发送前取消 | 超额明确失败；Response/控制仍有进展；无阻塞等待自己额度；Cancel不超越自己的Request；Event Bus 256条/4MiB双界限计数并drop-newest |
 | V-43 | T-04、T-05、T-09 | Core Admin与chat_admin、组禁用/子项启用、子权限放宽、运行时改策略 | 群管理员不取得Core管理权；父禁用优先；最近显式权限可覆盖但不能绕过全局限制；已开始请求不伪称撤销 |
@@ -73,7 +73,7 @@
 | V-63 | T-02、T-09 | 全局与按来源的级别、off、运行时修改、Core 重启、最近记录上限、SSE 订阅、`alonabot logs`、WebUI 筛选 | 修改立即生效；按来源的设置重启后保留，全局级别的运行时修改重启后恢复；off 时 SDK 不输出而 Core 关于它的记录仍在；每个来源最多保留 1000 条；未认证无法读取；WebUI 筛选不改变输出 |
 | V-64 | T-13 | 库模式下同进程插件与 Adapter 的完整生命周期、从 `instances/` 读取实例配置、dev 来源尝试 update/rollback、未捕获的 panic、停止超时、已安装包与开发组件混合运行、两次启动之间的配置与 dev.sqlite | 握手、注册、权限与独立进程一致；dev 组件使用固定代次，重启后按钮仍有效；update/rollback 被拒绝；panic 使进程退出且不重启；停止超时时 Run 返回错误 |
 | V-65 | T-13 | 热部署下改动插件源码、编译失败、改动 go.mod、来自其他 module 的 Adapter | 只重启开发中的组件，Adapter 连接与其他插件不中断；编译失败时旧组件继续运行；go.mod 变化输出 WARN；其他 module 的组件不重启 |
-| V-66 | T-14 | 干净数据目录首次运行、交互终端与非终端、预装包签名错误、卸载预装包后重启、新版本发行包 | 预装包全部安装，只启用 Agent、记忆与 help，Telegram 与 OneBot 11 Adapter 未启用；终端下 token 只显示一次，非终端拒绝启动；签名错误的包不安装并记 ERROR；已卸载的不重新安装；新版本只作为可用更新列出 |
+| V-66 | T-14 | 干净数据目录首次运行、交互终端与非终端、预装包签名错误、卸载预装包后重启、新版本发行包 | 预装包全部安装，只启用 help；Agent、记忆插件与 Telegram、OneBot 11 Adapter 都未启用，没有对应进程；终端下 token 只显示一次，非终端拒绝启动；签名错误的包不安装并记 ERROR；已卸载的不重新安装；新版本只作为可用更新列出 |
 | V-67 | T-14 | help 的权限过滤与翻译、`/whoami`、welcome 的入群欢迎与开关权限、rss 的订阅权限/去重/推送/私网地址/超大响应 | help 只列出调用者可用的命令；`/whoami` 返回调用者的实例与用户 ID；welcome 只响应 member.joined，只有 chat_admin 或 Core Admin 能开关；rss 的增删只有 chat_admin 或 Core Admin 能执行，超过 5 MiB 或 30s 的抓取失败，不重复推送同一条目，拒绝 loopback、私网与链路本地地址（含重定向之后），后台推送需要 allowed_adapter_instances |
 | V-68 | T-02、T-09 | 跨过零点、同日写满单文件上限、合计超过 1 GiB、超过 30 天、max_size 大于 max_total、磁盘写满、按日期查询 | 跨日换到新日期的文件；同日续写编号文件；从最旧的文件开始删除且不删正在写入的文件；配置矛盾时拒绝启动；写入失败时 Core 继续运行并只报告一次；`alonabot logs --date` 与 WebUI 能查到前一天的记录 |
 | V-69 | T-02 | `--args` 直接参数与文件输入、重复出现的键、未知键、`100MB` 等十进制单位、违反约束与相互矛盾的值、`PLUGIN_MEMORY_SOFT_LIMIT` | 后出现的覆盖先出现的；错误使 Core 拒绝启动并指明参数或文件行号；有覆盖时启动 WARN 列出全部覆盖项；SDK 使用 Bootstrap 下发的值；子进程收到 GOMEMLIMIT |
@@ -81,6 +81,9 @@
 | V-71 | T-15 | 本地 OneBot 11 模拟服务：get_login_info、access_token 错误、断线重连、self_id 不符、字符串格式上报、私聊/群聊/匿名消息、撤回与成员变动、to_me 的三种情况（含 get_msg 失败）、入站图片取件、实例队列满；发送混合段、video 拆分、reference、base64 媒体、async、failed、请求写出后断线 | 401 与字符串格式使实例致命失败并给出 safe_error；重连不重放已提交的 Send；self_id 不符的事件被丢弃；匿名消息没有 Actor；无通用对应的段只在 platform_payload 中；队列满时丢弃并计数而读循环继续；PartResult 与物理消息一一对应，async 标记 message_ids_unavailable，写出后断线为 UNKNOWN 且后续 NOT_ATTEMPTED；真实 QQ 端只有维护者手测记录，没有时记为未运行 |
 | V-72 | T-03、T-15 | 同一插件经 Telegram 与 OneBot 11 模拟服务的两个实例收发同一组 Chain：纯文本、mention、reference、图片加文本、buttons、forward、file、markdown、Edit、`onebot11.face` extension、发往其他 Adapter 的 extension；同一组入站消息 | 通用片段在两边语义一致：顺序、引用位置、PartResult 与 segment indexes 对应；每个实例只用自己声明的 Capability，未声明的片段或组合在首个平台请求前返回 UNSUPPORTED，模拟服务没有收到请求；extension 只在所属 Adapter 上成功；入站的 text、mention、reference、image 在两边得到相同结构的 chain；插件代码不按 adapter_id 分支 |
 | V-73 | T-13、T-16 | 用 `plugintest` 测试示例插件：命令回复、Rule、普通用户/chat_admin/Core Admin 的权限、Capability 子集下的 UNSUPPORTED、按钮点击、多轮等待、schedule 触发、后台发送有无许可、配置与 `dev.sqlite`；`go test -count=2 -race`；`alonabot.Start` 的激活失败与 ctx 取消 | 每次注入在分发结束或进入多轮等待后返回，结果完整，不依赖 sleep；行为与独立进程运行相同；测试之间的数据目录互不影响；Start 失败或停止后不残留组件 goroutine、core.lock 与子进程 |
+| V-74 | T-10 | linux/amd64，与 V-33 同一台机器；各进程 Activated 后空闲 2 分钟，读 `/proc/<pid>/smaps_rollup` 的 Pss，取 3 轮中位数：只运行 Core（不启用任何插件与 Adapter）；echo 示例插件进程；rss 插件进程（`sqlitedb`，有一个订阅）；configdb 示例的 `gormdb` 变体进程 | Core ≤ 24 MiB，echo ≤ 10 MiB，rss ≤ 14 MiB，configdb ≤ 16 MiB；同时记录 RSS 与私有内存。超出视为回归，按 CONTRACTS §10 处理 |
+| V-75 | T-01、T-10 | `node scripts/check-go-deps.mjs`：在五个目标上列出 Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）链接的模块；临时加入一个清单外的 import | 只含允许清单中的模块；清单外的模块使检查失败并列出模块名 |
+| V-76 | T-12 | 测试插件调用 `llm.generate`：在与不在 `llm_service_allowed_plugins` 中、指定不存在的 Provider、模拟 Provider 出错与中途断开、调用方期限短于生成耗时、Agent 配置中没有 Provider、Agent 插件未启用 | 不在列表中返回 PERMISSION_DENIED，模拟服务没有收到请求；不存在的 Provider 为 INVALID_ARGUMENT，没有 Provider 为 FAILED_PRECONDITION；出错与断开为 UNAVAILABLE，safe_message 不含 API Key，模拟服务只收到一次请求；期限到达时调用方得到 DEADLINE_EXCEEDED；Agent 未启用时按目标未激活失败；成功时返回 text、provider、model 与用量，会话存储没有新增条目 |
 
 ## 2. 跨任务验收的最终闭合点
 
@@ -96,7 +99,7 @@
 | V-21、V-37 | T-01 类型/上限，T-02 基础阶段/激活门；T-07 停止集成，T-08 配置/DB 回调 | T-09 与正式候选提交前后失败恢复组合 |
 | V-22、V-47 | T-07 Listener/代理、Host/凭证边界、票据与测试会话组件 | T-09 真实 init/reset、login/CLI、私有插件页面与授权撤销 |
 | V-23～V-25、V-38 | T-08 raw JSON、Secret、候选 DB、表单/i18 组件 | T-09 真实 reload/WebUI/API 和 Journal 崩溃恢复 |
-| V-26 | T-01 驱动 CRUD/事务验证 | T-08 实际 SDK 连接、迁移声明互斥与插件凭证边界 |
+| V-26 | T-01 驱动 CRUD/事务验证 | T-08 两个入口的 Session 连接、迁移声明互斥与不链接 GORM 的验证 |
 | V-36 | T-02 双 Core/操作串行/进程锁，T-08 DB 锁与候选资源 | T-09 正式 enable/update、Core 突退且旧进程仍写入 |
 | V-39 | T-01 驱动/事务小验证，T-08 迁移及许可检查 | T-09 首装/resume/更新及显式维护的真实管理入口 |
 | V-41 | T-01 外部清单与签名对象 fixture | T-09 真实包验签/来源/更新预检 |
@@ -125,7 +128,7 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 - **候选提交与命令：** 在 B1 修复分支的提交 e802828 上执行 `go test -race -count=1 ./...`（设置 `ALONABOT_TEST_PG_DSN`）：15 个包、291 个测试（含子测试）全部通过，无跳过；`go test -race -count=3 ./cmd/alonabot/ ./internal/core/supervisor/` 通过；`go generate ./...` 后无差异；五目标 `CGO_ENABLED=0 go build ./...` 通过。
 - **未运行：** linux/amd64、linux/arm64、windows/amd64 只做了交叉构建与 vet，**没有运行**；darwin/amd64 只构建。Windows Job Object、LockFileEx 与 Job 清空确认的代码因此没有运行证据。上述 fixture、辅助进程与本机运行都不代表真实平台结果。
 - **T-02.1（日志基线）：** 在 goal-65 分支上执行 `go test -race ./...` 全部通过（PostgreSQL 测试未设置 DSN，未运行）；`go generate ./...` 后无差异；五目标 `CGO_ENABLED=0 go build ./...` 通过。只在 darwin/arm64 运行。
-- **测试的去留：** 2026-10-25 起仓库只提交集成测试与协议编号检查（编码规范「测试提交规则」）。下表中 `contracts/validate`、`contracts/manifest`、`contracts/release`、`internal/core/host`、`internal/wire` 的 Session 测试（含 `TestUnknownErrorCodeMappedToInternal`、`TestCancelledRequestsReleaseQueueAndBudget`）以及 `sdk` 的单元测试已移出仓库；对应结果是它们在 e802828 上运行时的记录，之后不再由 CI 重跑。仍在仓库中的是 `cmd/alonabot`、`internal/core/supervisor`、`internal/core/process`、`internal/core/state`、`internal/oslock`、`internal/wire` 的帧测试、`sdk/gormdb` 与 `sdk` 的 runtime.lock 测试，以及 `contracts/wirespec_test.go`。
+- **测试的去留：** 2026-10-25 起仓库只提交集成测试与协议编号检查（编码规范「测试提交规则」）。下表中 `contracts/validate`、`contracts/manifest`、`contracts/release`、`internal/core/host`、`internal/wire` 的 Session 测试（含 `TestUnknownErrorCodeMappedToInternal`、`TestCancelledRequestsReleaseQueueAndBudget`）以及 `sdk` 的单元测试已移出仓库；对应结果是它们在 e802828 上运行时的记录，之后不再由 CI 重跑。仍在仓库中的是 `cmd/alonabot`、`internal/core/supervisor`、`internal/core/process`、`internal/core/state`、`internal/oslock`、`internal/wire` 的帧测试、`sdk/gormdb`（PostgreSQL 测试已随 D-48 删除）与 `sdk` 的 runtime.lock 测试，以及 `contracts/wirespec_test.go`。
 
 | V | 已运行的分项 | 测试位置 | 结果 | 未完成（承接任务） |
 | --- | --- | --- | --- | --- |
@@ -136,12 +139,12 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 | V-05 | 双向相同 call_id、乱序、迟到/重复 Response 只计数、父调用结束后子调用被拒或取消 | `internal/wire` | 通过 | Scheduler 迟到响应释放运行槽（T-07） |
 | V-06 | 日志带插件 ID、stdio stdout 污染使会话失败、5 分钟内第 3 次异常退出禁用、退出码 0 不进入崩溃计数 | `internal/core/process`、`internal/core/host`、`internal/core/supervisor`、`cmd/alonabot` | 通过 | 五平台运行（T-10） |
 | V-21 | OnStart/OnReady 失败与挂起、准备期硬截止、提交后 Degraded、ACTIVATED 前不开放业务、多实例共享停止预算 | `internal/core/host`、`sdk` | 通过 | 真实配置/DB 回调（T-08）、正式候选恢复（T-09）、Scheduler 停止集成（T-07） |
-| V-26 | GORM SQLite/PostgreSQL 的 CRUD/Tx、Migrate 与 Migrations 互斥 | `sdk/gormdb` | 通过（PG 在临时容器上实测） | SDK 实际连接与凭证边界（T-08） |
+| V-26 | GORM SQLite/PostgreSQL 的 CRUD/Tx、Migrate 与 Migrations 互斥 | `sdk/gormdb` | 通过（PG 在临时容器上实测） | `sqlitedb` 入口与两个入口共用连接（T-08）；PG 部分随 D-48 移出框架，相应测试已删除 |
 | V-32 | 五目标 `CGO_ENABLED=0` 构建 | 交叉编译命令（docs/development.md） | 构建 5/5 通过；运行只有 darwin/arm64 | 五平台运行（T-10） |
 | V-34 | 可复用的真实进程夹具；领头进程退出后，留在进程组内的子进程在停止与崩溃恢复两条路径上都被终止并确认消失后才放行 | `internal/core/process`、`internal/core/supervisor`（`TestLeftoverChildReapedBeforeReturn`） | 通过（Unix 进程组） | Windows Job 运行、100 次启停（T-10） |
 | V-36 | 双 Core（同进程/跨进程/真实二进制）、按插件串行（含 Stop 与 Launch）、旧实例持有 runtime.lock 时第二个实例在任何用户回调之前失败、Core 被 kill 后 SDK 断链退出并可恢复、相对 data_dir 在两种传输下可启动与重开 | `internal/core/state`、`internal/core/supervisor`、`sdk`、`cmd/alonabot` | 通过 | DB 锁与候选资源（T-08）、正式 enable/update 与仍写 DB 的子进程（T-09） |
 | V-37 | Bootstrap 与 REGISTER 超 4 MiB 拒绝、SESSION_ERROR 带失败阶段、无半注册、ACTIVATED 严格先于业务帧 | `internal/core/host`、`sdk` | 通过 | 旧配置先经 OnLoad 再验证（T-08）、T-09 组合 |
-| V-39 | Up 与 `_alonabot_migrations` 同一事务、失败不记录成功（SQLite 与 PG） | `sdk/gormdb` | 通过 | 首装/resume/维护许可（T-08、T-09） |
+| V-39 | Up 与 `_alonabot_migrations` 同一事务、失败不记录成功（SQLite 与 PG） | `sdk/gormdb` | 通过 | 首装/resume/维护许可（T-08、T-09）；PG 部分随 D-48 移出框架 |
 | V-41 | release.json 对确切字节验签、重新序列化无法通过、签名有效但内容非法仍拒绝 | `contracts/release` | 通过 | 真实包验签与更新预检（T-09） |
 | V-42 | 每方向 256 个/16 MiB 与全局 64 MiB 满额立即拒绝；Response/Cancel 仍可推进；发送前取消的请求移出队列并归还预算、不能借取消越过字节上限；写出中被取消的请求写完才归还预算，Cancel 不越过其 Request | `internal/wire`（含 `TestCancelledRequestsReleaseQueueAndBudget`） | 通过 | Service 嵌套与 Event Bus 双预算（T-06） |
 | V-62 | Core 与插件两类来源标签（插件 ID 去掉市场前缀）、text 与 json 格式、终端着色（`script` 伪终端）、非终端与 NO_COLOR 不着色、插件合法 JSON 行（时间、级别、源码位置、字段顺序、嵌套值）、非 JSON 行与 stdout 行记为 `unstructured output` 的 WARN、伪造来源字段被丢弃、消息与键中的换行和控制字符被转义、多行值缩进、生命周期 Hook 的 panic 为一条带 stack 的 ERROR | `cmd/alonabot`（e2e：`TestLifecycleOverTCPAndStdio`、`TestJSONLogFormat`）；本地测试 `internal/core/logging`、`sdk`（`*_local_test.go`，未提交）；着色用 `script -q /dev/null alonabot run ...` 手动核对 | 通过（darwin/arm64） | Adapter 来源（T-03.3）、Handler 的调用字段与 panic（T-03.1）、Bot Token URL 脱敏（T-03.4） |
@@ -159,7 +162,7 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 | T-09.2 / V-27、V-28、V-41 预检分项 | `internal/core/packages/`；集成测试 `TestPreflightAndMoveTo`、`TestPreflightRejects`、`TestPreflightFileModes`（unix）：在临时目录生成真实 tar.gz、release.json 与 Ed25519 签名，经 Preflight 与 MoveTo 驱动；覆盖合法包移入不可变目录、同一目标再次移动返回 ALREADY_EXISTS、签名/来源/平台/大小/摘要不符、manifest 的 id/version/source/平台/entrypoint 不符、`../x`、`/abs`、`a/../../x`、反斜杠、盘符、符号链接、硬链接、字符与块设备、FIFO、大小写冲突、重复路径、归档/条目数/展开字节超限，每项断言暂存目录无残留；权限 0600/0700 且去掉 setuid | `go test -race -count=1 ./internal/core/packages/` 通过（darwin/arm64）；Windows 未运行 | 下载、首次来源信任、安装记录与 CLI 归 T-09.3、T-09.4；V-27、V-28、V-41 整体未闭合 |
 | T-08.2 / V-23、V-38 的 raw JSON 分项 | `internal/core/config/`、`internal/core/state/`；集成测试 `TestPendingConfigEdits`：用 `state.Open` 打开临时 `data_dir` 的真实状态库，经 `Service` 公开方法驱动；覆盖 base 不等于 Active 时 Replace/Patch 返回 FAILED_PRECONDITION、CommitActive 新代次后旧 Pending 不再返回且行保留、Patch 叠加在有效 Pending 或 Active 配置上、嵌套未知键与显式 `false`/`0`/`""`/`[]`/`{}`/`null` 与 `9007199254740993` 保留、ImportSnapshot 不改变 Active、`config.json` 缺失为 NOT_FOUND、不是对象为 INVALID_ARGUMENT 且已有 Pending 不变。本地测试（未提交）：Canonical 的键与数字处理、RFC 7396 附录 A 全部示例、state 新方法读写往返；审查者另以本地测试复核过期 Pending 不作 Patch 基础、陈旧提交不覆盖新 Pending、尾随数据被拒 | `go test -race -count=1 ./internal/core/config/ ./internal/core/state/` 通过（darwin/arm64） | 默认值、Schema 与 Secret 归 T-08.3、T-08.4；激活 Pending、显式 reload 与 WebUI/API 入口归 T-09；V-23、V-38 整体未闭合 |
 
-发布阻塞：协议/Session 鉴权、Core 全局权限、数据代次唯一性、回滚/维护的真实性、安装包越界/来源安全及目标五平台构建失败，均不能通过文案豁免。v0.1 不设内存与吞吐的通过阈值，T-10 只报告 V-33 的实测结果；**不杜撰 100 MB 等硬性能指标**。
+发布阻塞：协议/Session 鉴权、Core 全局权限、数据代次唯一性、回滚/维护的真实性、安装包越界/来源安全及目标五平台构建失败，均不能通过文案豁免。v0.1 只对空闲常驻内存设预算（V-74），初值依据 D-52 记录的实测数据；吞吐与延迟不设通过阈值，T-10 只报告 V-33 的实测结果；**不杜撰 100 MB 等硬性能指标**。
 
 ## 4. 实施交接
 

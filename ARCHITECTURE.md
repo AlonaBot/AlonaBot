@@ -17,7 +17,7 @@
 | `internal/oslock/` | 跨进程 OS 独占文件锁（flock / LockFileEx），供 core.lock 与 runtime.lock 共用 | 锁的业务语义（何时加锁由调用方决定） | 已实现 |
 | `internal/inproc/` | 库模式同进程组件的启动参数（根包构造、SDK 读取） | 启动流程本身（归 sdk 与根包） | 拟建 |
 | `internal/pluginkit/` | 开发 CLI 的打包、release.json 生成与签名（plugin build/pack） | 安装与预检（归 `internal/core/packages`） | 拟建 |
-| `sdk/`（含 `sdk/message`、`sdk/gormdb` 等子包） | 插件侧 API：根插件、Context/Send、注册、生命周期 Hook、runtime.lock、按需 GORM | Core 状态库、管理凭证、其他插件 | 部分实现：`sdk`（Base 与 Root、Context、注册器、Collect）、`sdk/message`、`sdk/config`、`sdk/gormdb`（OpenSQLite/OpenPostgres、RunVersioned、迁移接口互斥检查）；`Run` 完成取锁、握手、准备、激活与停止，并把 slog 默认 Logger 换成写 stderr 的 JSON 行；业务分发与 `Send` 仍返回 UNSUPPORTED |
+| `sdk/`（含 `sdk/message`、`sdk/sqlitedb`、`sdk/gormdb`、`sdk/memory`、`sdk/llm` 等子包） | 插件侧 API：根插件、Context/Send、注册、生命周期 Hook、runtime.lock；受管 SQLite 的 `database/sql` 与 GORM 两个按需入口（D-49）；记忆与文本生成服务的类型 | Core 状态库、管理凭证、其他插件 | 部分实现：`sdk`（Base 与 Root、Context、注册器、Collect）、`sdk/message`、`sdk/config`、`sdk/gormdb`（OpenSQLite、RunVersioned、迁移接口互斥检查；`sdk/sqlitedb` 拟建）；`Run` 完成取锁、握手、准备、激活与停止，并把 slog 默认 Logger 换成写 stderr 的 JSON 行；业务分发与 `Send` 仍返回 UNSUPPORTED |
 | `internal/core/` | 状态库与 core.lock、进程、RPC 编排、路由、权限、媒体、服务、调度、HTTP、配置、管理 | 平台协议细节（交 adapters）、插件进程内逻辑 | 部分实现：`internal/core/state`（core.lock、state.sqlite、提交原语）、`internal/core/process`（精简环境、日志、进程组/Job Object、runtime.lock 临时持有）、`internal/core/host`（握手认证、Bootstrap、REGISTER 原子校验、PREPARED、提交与激活门禁、Degraded、停止/排空/并行 Shutdown、有限重启策略）、`internal/core/supervisor`（启动/停止一个插件的完整装配）、`internal/core/logging`（控制台与 JSON 格式、插件 stderr 解析、按来源级别、按日期轮转的日志文件）、`internal/core/packages`（安装包预检、受控解压与不可变包目录）、`internal/core/config`（配置 JSON 规范化、Merge Patch 与 Pending 编辑） |
 | 根包 `alonabot`（模块根目录的 Go 文件） | 库模式入口 `alonabot.Run`（D-32）与 `alonabot serve` 共用的 Core 装配 | 业务逻辑（只组装 `internal/core` 与 SDK） | 拟建 |
 | `plugins/agent/`、`plugins/memory/`、`plugins/help/`、`plugins/welcome/`、`plugins/rss/` | 官方 Agent 插件、官方记忆插件与预装插件（D-27、D-28、D-32），与第三方插件一样只经 SDK 与 Core 通信 | Core 的工具策略、确认与会话存储（归 Core） | 已实现：`plugins/agent/provider`（Provider 流式客户端）；其余拟建 |
@@ -60,7 +60,8 @@
 | --- | --- |
 | `<data_dir>/core.lock`、`state.sqlite`（安装、代次、Journal、策略、secret 引用、工具策略、Agent 会话） | `internal/core` |
 | `<plugins>/<id>/runtime.lock`、插件受管 DB 连接 | 插件进程内的 `sdk` |
-| 插件业务数据（SQLite 候选文件 / PG schema） | 插件；Core 只负责候选复制与准入 |
+| 插件业务数据（受管 SQLite 候选文件） | 插件；Core 只负责候选复制与准入 |
+| 插件自管的外部数据（外部数据库、框架外文件） | 插件；Core 不创建、不校验、不备份（D-48） |
 
 ## 文件组织
 
@@ -68,4 +69,4 @@
 
 ## 检查
 
-依赖方向由代码审查对照上表把关；import 环由 Go 编译器拒绝。
+依赖方向由代码审查对照上表把关；import 环由 Go 编译器拒绝。Core 可执行文件与 SDK 根包能链接的第三方模块由 `node scripts/check-go-deps.mjs` 在 CI 中检查（D-52），清单见 [docs/development.md](docs/development.md)。
