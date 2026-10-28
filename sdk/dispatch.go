@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime/debug"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
@@ -50,7 +51,7 @@ func invokeEvent(ctx context.Context, in *wire.Inbound, event *pb.Event, handler
 		c.active.Store(false)
 		cancel()
 		if p := recover(); p != nil {
-			logPanic("event handler", p)
+			c.Logger().Error("event handler panic", "panic", fmt.Sprint(p), "stack", string(debug.Stack()))
 			response.Err = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "handler panicked"}
 		}
 		// 2. 出错仍输出传播标记，保留 Handler 已经设置的 STOP。
