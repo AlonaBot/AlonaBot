@@ -14,6 +14,7 @@ import (
 	"io"
 	"net"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -24,6 +25,9 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
+
+// memoryLimitEnv 指定 Go 运行时读取插件内存软上限的环境变量。
+const memoryLimitEnv = "GOMEMLIMIT"
 
 // Spec 描述一次插件启动。
 type Spec struct {
@@ -47,8 +51,9 @@ type Spec struct {
 	Stop     host.StopTiming
 	Log      PluginLog // 接收插件进程的输出，必须设置
 	// Handler 处理插件激活后发起的业务调用。
-	Handler wire.Handler
-	Global  *wire.Budget // Core 全局载荷预算
+	Handler         wire.Handler
+	Global          *wire.Budget // Core 全局载荷预算
+	MemorySoftLimit int64        // 字节；大于 0 时为插件进程设置 GOMEMLIMIT
 }
 
 // PluginLog 接收一个插件进程的输出行；Launch 在 Session 建立后调用 SetSession，之后的行带上 session_id。
@@ -101,6 +106,9 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	}
 	for k, v := range spec.ExtraEnv {
 		env[k] = v
+	}
+	if spec.MemorySoftLimit > 0 {
+		env[memoryLimitEnv] = strconv.FormatInt(spec.MemorySoftLimit, 10)
 	}
 	// 2. TCP 传输先持有 loopback Listener，再把地址交给插件。
 	var ln net.Listener
