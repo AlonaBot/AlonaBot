@@ -47,12 +47,12 @@
 | goal-37 | T-09.2 | 安装包预检与安全解压 | — | 已完成 |
 | goal-58 | T-12.1 | Provider 客户端 | — | 已完成 |
 | goal-76 | T-02.2 | 调优参数 | T-02.1 | 已完成（PR #28） |
-| goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 可派发 |
-| goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 等待前置 |
-| goal-4 | T-03.3 | Adapter 进程、sdk/adapter 与上下线事件 | T-03.1 | 等待前置 |
-| goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 等待前置 |
-| goal-10 | T-04.1 | 根插件 API 与静态注册索引 | T-03.1 | 等待前置 |
-| goal-56 | T-11.3 | Agent 会话存储 | T-03.1 | 等待前置 |
+| goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 已完成（PR #29） |
+| goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 可派发 |
+| goal-4 | T-03.3 | Adapter 进程、sdk/adapter 与上下线事件 | T-03.1 | 可派发 |
+| goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 可派发 |
+| goal-10 | T-04.1 | 根插件 API 与静态注册索引 | T-03.1 | 可派发 |
+| goal-56 | T-11.3 | Agent 会话存储 | T-03.1 | 可派发 |
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 等待前置 |
 | goal-11 | T-04.2 | 构建期生成器 | T-04.1 | 等待前置 |
 | goal-12 | T-04.3 | 命令选择、文本匹配与参数绑定 | T-04.1 | 等待前置 |
@@ -495,7 +495,7 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 
 ### goal-2 · T-03.1 首个可用 SDK 切片
 
-状态：可派发。日志接口、SDK 根插件与调优参数接口已按 T-02.1、T-02.2 的实现核对；Router 队列容量取 tune.Values.DispatchQueueEvents。
+状态：已完成（[PR #29](https://github.com/AlonaBot/AlonaBot/pull/29)，合并提交 `c79d723`）。真实 TCP/stdio echo 与三项评审修复验证通过；合并后 main 的 Quality gate 已通过，证据见 TEST-MATRIX §3.2。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-2（切片 T-03.1：首个可用 SDK 切片）。goal 目录 goal-2，分支 goal-2，worktree .worktrees/goal-2，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -626,7 +626,7 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 
 ### goal-3 · T-03.2 Target 与发信许可
 
-状态：等待前置（T-03.1）。语句中 goal-2 提供的符号（router.Invocation、message.Service、currentSession）在 goal-2 合并后由审查者核对签名，再改为可派发。
+状态：可派发。前置 T-03.1 已由 PR #29 合并；router.Invocation 与 message.Service 的实际签名已核对，保留原事件回复路径。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-3（切片 T-03.2：Target 与发信许可）。goal 目录 goal-3，分支 goal-3，worktree .worktrees/goal-3，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -645,6 +645,13 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 允许的新跨模块边：无。
 
 接口：
+// T-03.1 已合入的服务接口：
+// router.Caller { PluginID string; GenerationID string; SessionKey string }
+// router.NewCaller(pluginID, generationID string) Caller
+// type router.ServiceFunc func(context.Context, router.Caller, *wire.Inbound) wire.Response
+// router.NewMux() *Mux；(*Mux).Handle(name string, fn ServiceFunc)；(*Mux).For(c Caller) wire.Handler
+// sdk.currentSession() (*wire.Session, error)：未就绪或停止时为 FAILED_PRECONDITION 的 *sdk.Error；保持 sdk/activate.go 不变。
+// router.Invocation { PluginID string; Event *pb.Event; DefaultTarget *pb.Target }；message.New(adapters *adapter.Registry) *Service（下文改为增加 policy 参数）。
 // internal/core/state/permissions.go
 func (s *Store) AllowedAdapterInstances(ctx context.Context, pluginID string) ([]string, error) // 按字典序返回
 func (s *Store) GrantAdapterInstance(ctx context.Context, pluginID, instanceID string) error    // 幂等
@@ -687,7 +694,7 @@ func Send(ctx context.Context, to *pb.Target, chain message.Chain) (*pb.SendResu
 
 ### goal-4 · T-03.3 Adapter 进程、sdk/adapter 与上下线事件
 
-状态：等待前置（T-03.1）。语句中 goal-2 提供的符号（adapter.Instance、adapter.Sink、adapter.Registry、router.Mux、router.Caller、wire.ServiceSend 等）只写名字；goal-2 合并后，审查者按实际签名核对，再改为可派发。
+状态：可派发。前置 T-03.1 已由 PR #29 合并；adapter.Instance/Sink/Registry、router.Caller/Mux 与 wire.ServiceSend 已核对；Registry 的移除操作在本 goal 明确新增。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-4（切片 T-03.3：Adapter 进程、sdk/adapter 与上下线事件）。goal 目录 goal-4，分支 goal-4，worktree .worktrees/goal-4，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -704,6 +711,7 @@ func Send(ctx context.Context, to *pb.Target, chain message.Chain) (*pb.SendResu
 - internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/adapter.go
 - internal/core/host/prepare.go：Expect 增加角色，Prepare 按角色选择 REGISTER 校验
 - internal/core/supervisor/supervisor.go：Spec 增加角色字段并传给 host.Expect
+- 修改 internal/core/adapter/adapter.go：Registry 新增 Remove，支持停用与进程退出时撤销登记；保持 Instance、Sink 接口不变
 - 新增 internal/core/adapter/remote/
 - sdk/：新增 adapter_run.go（RunAdapter）；sdk/events.go 的事件类型白名单加入 bot.online、bot.offline
 - 新增 sdk/adapter/
@@ -711,6 +719,13 @@ func Send(ctx context.Context, to *pb.Target, chain message.Chain) (*pb.SendResu
 允许的新跨模块边：无（internal/core/adapter/remote 在 internal/core 内；sdk -> sdk/adapter 属同一模块）。sdk/adapter 只 import contracts，不 import sdk，避免循环。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
+// T-03.1 已合入的服务接口：
+// router.Caller { PluginID string; GenerationID string; SessionKey string }
+// router.NewCaller(pluginID, generationID string) Caller
+// type router.ServiceFunc func(context.Context, router.Caller, *wire.Inbound) wire.Response
+// router.NewMux() *Mux；(*Mux).Handle(name string, fn ServiceFunc)；(*Mux).For(c Caller) wire.Handler
+// adapter.NewRegistry() *Registry；(*Registry).Add(in Instance) error；(*Registry).Get(instanceID string) (Instance, bool)；wire.ServiceSend = "core.send"。
+// 本 goal 新增：func (r *Registry) Remove(instanceID string)；并发安全，移除不存在的 ID 无副作用。
 1. contracts/proto（adapter.proto，包 alonabot.v1）
    message AdapterDescriptor { string adapter_id = 1; repeated Capability capabilities = 2; repeated ExtensionDeclaration extensions = 3; }
    message ExtensionDeclaration { string name = 1; uint32 version = 2; string schema_json = 3; } // 本切片只随描述保存，校验在 T-03.8
@@ -834,7 +849,7 @@ func Send(ctx context.Context, to *pb.Target, chain message.Chain) (*pb.SendResu
 
 ### goal-6 · T-03.5 媒体上传与配额
 
-状态：等待前置（T-03.1）。配额与期限已按 T-02.2 的调优参数表改为从 tune.Values 取值；语句中 goal-2 提供的符号（router.Mux、router.Caller、currentSession）在 goal-2 合并后由审查者核对签名，再改为可派发。
+状态：可派发。前置 T-03.1 已由 PR #29 合并；router.Caller/Mux 与 currentSession 已核对；配额继续使用 tune.Values。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-6（切片 T-03.5：媒体上传与配额）。goal 目录 goal-6，分支 goal-6，worktree .worktrees/goal-6，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -851,6 +866,12 @@ func Send(ctx context.Context, to *pb.Target, chain message.Chain) (*pb.SendResu
 允许的新跨模块边：无。
 
 接口：
+// T-03.1 已合入的服务接口：
+// router.Caller { PluginID string; GenerationID string; SessionKey string }
+// router.NewCaller(pluginID, generationID string) Caller
+// type router.ServiceFunc func(context.Context, router.Caller, *wire.Inbound) wire.Response
+// router.NewMux() *Mux；(*Mux).Handle(name string, fn ServiceFunc)；(*Mux).For(c Caller) wire.Handler
+// sdk.currentSession() (*wire.Session, error)：未就绪或停止时为 FAILED_PRECONDITION 的 *sdk.Error；保持 sdk/activate.go 不变。
 // internal/wire/services.go 追加
 const ServiceMediaBeginUpload = "core.media.begin_upload"
 const ServiceMediaWriteChunk  = "core.media.write_chunk"
@@ -907,7 +928,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-10 · T-04.1 根插件 API 与静态注册索引
 
-状态：等待前置（T-03.1）。语句中 goal-2 提供的符号（sdk.EventRegistry、router.Router、router.Plugin、router.FromInstance 等）只写名字；goal-2 合并后，审查者按实际签名核对，再改为可派发。
+状态：可派发。前置 T-03.1 已由 PR #29 合并；EventRegistry.On、Router.Attach/Detach、Plugin 与 FromInstance 已按合入代码核对。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-10（切片 T-04.1：根插件 API 与静态注册索引）。goal 目录 goal-10，分支 goal-10，worktree .worktrees/goal-10，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -927,6 +948,9 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 允许的新跨模块边：无（testdata 下的插件程序只 import sdk）。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
+// T-03.1 既有：EventRegistry.On(routeID, eventType string, handler func(*Context) error)；EventRoute { RouteID string; EventType string; Handler func(*Context) error }。
+// router.New(log *slog.Logger, queueEvents int) *Router；(*Router).Attach(p Plugin)；(*Router).Detach(pluginID string)；FromInstance(in *host.Instance) Plugin。
+// Plugin 提供 PluginID() string、Activated() bool、Routes() []*pb.RouteDescriptor、Call(context.Context, wire.Request) (wire.Response, error)。
 1. sdk
    type RouteOption func(*routeOptions)
    func Alias(path ...string) RouteOption // 命令的别名，path 为完整 token 路径（不加分组前缀）；可多次使用
@@ -983,7 +1007,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-56 · T-11.3 Agent 会话存储
 
-状态：等待前置（T-03.1）。语句中 goal-2 提供的符号（router.Mux、router.Caller、wire.ServiceSend、sdk 的 currentSession、memory Adapter 与事件路由）只写名字；goal-2 合并后，审查者按实际签名核对，再改为可派发。
+状态：可派发。前置 T-03.1 已由 PR #29 合并；router.Caller/Mux、currentSession 与 echo 装配已核对；默认 message.New(adapters) 和 wire.ServiceSend 可直接复用。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-56（切片 T-11.3：Agent 会话存储）。goal 目录 goal-56，分支 goal-56，worktree .worktrees/goal-56，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1004,6 +1028,13 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 允许的新跨模块边：无。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
+// T-03.1 已合入的服务接口：
+// router.Caller { PluginID string; GenerationID string; SessionKey string }
+// router.NewCaller(pluginID, generationID string) Caller
+// type router.ServiceFunc func(context.Context, router.Caller, *wire.Inbound) wire.Response
+// router.NewMux() *Mux；(*Mux).Handle(name string, fn ServiceFunc)；(*Mux).For(c Caller) wire.Handler
+// sdk.currentSession() (*wire.Session, error)：未就绪或停止时为 FAILED_PRECONDITION 的 *sdk.Error；保持 sdk/activate.go 不变。
+// message.New(adapters *adapter.Registry) *Service；(*Service).Send(context.Context, router.Caller, *wire.Inbound) wire.Response；wire.ServiceSend = "core.send"。
 1. contracts/proto（conversation.proto，包 alonabot.v1）
    message ConversationAppendRequest { string conversation_key = 1; repeated string entries_json = 2; }
    message ConversationAppendResponse { uint64 last_seq = 1; }
