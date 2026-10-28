@@ -171,6 +171,16 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 
 发布阻塞：协议/Session 鉴权、Core 全局权限、数据代次唯一性、回滚/维护的真实性、安装包越界/来源安全及目标五平台构建失败，均不能通过文案豁免。v0.1 只对空闲常驻内存设预算（V-74），初值依据 D-52 记录的实测数据；吞吐与延迟不设通过阈值，T-10 只报告 V-33 的实测结果；**不杜撰 100 MB 等硬性能指标**。
 
+### 3.3 Target 与发信许可分项证据
+
+[PR #31](https://github.com/AlonaBot/AlonaBot/pull/31)（T-03.2），产品代码 head `bb5992119928b06a3df89f8445a2da9b4e005472`；2026-10-28 在 macOS 27.0.1（26A434）、darwin/arm64、Go 1.27.1 上运行。
+
+| V | 已运行的分项与测试位置 | 命令与结果 | 未运行与承接 |
+| --- | --- | --- | --- |
+| V-07 | `internal/core/message/permissions_test.go` 的 `TestSendPermissions`：临时 data_dir 的真实状态库、policy、message.Service 与 memory Adapter，17 个表驱动场景；覆盖原 Target 默认/显式回复豁免、跨插件附件无豁免、其他目标授权前拒绝/授权后放行/撤销后下一次拒绝、后台发送、A/B 实例隔离、同实例 chat/thread、thread 改变需许可、账号与 adapter 绑定、许可先于实例查询、NO_DEFAULT_TARGET；断言回执与实际发送数量、完整目标及链。已有 `TestEchoBothTransports` 验证真实插件 TCP/stdio 回复 | `gofmt -l` 无输出；`go vet ./...`、`go test -race ./internal/core/... ./sdk/...`、`go build ./...` 通过；[产品代码 head 的 Quality gate](https://github.com/AlonaBot/AlonaBot/actions/runs/40687478509) 通过 | 真实 Telegram 未运行，交后续 Adapter 切片验收；V-07 整体未闭合 |
+
+本地自测（`*_local_test.go`，未提交）也随上述 race 命令通过：state 的 `TestPermissionsRoundTripLocal` 覆盖许可空集、字典序、授权/撤销幂等、插件隔离、关闭重开持久化和安装外键；policy 的 `TestCheckSendLocal` 覆盖回复豁免、跨插件附件、后台授权/撤销及查询取消时的完整错误；sdk 的 `TestSendBeforeReadyLocal` 覆盖无 Session、尚未就绪与 stopping 时的 FAILED_PRECONDITION。
+
 ## 4. 实施交接
 
 1. 采用 v0.6-review 技术基线，按 PLAN 的 T-01 开始；任务完成条件及部分验收的后续承接以详细工作包为准。
