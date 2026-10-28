@@ -217,6 +217,14 @@ var migrations = []string{
 	   config_json     TEXT NOT NULL,
 	   updated_at      INTEGER NOT NULL
 	 );`,
+	`CREATE TABLE conversation_entries (
+	   plugin_id        TEXT NOT NULL REFERENCES installs(plugin_id),
+	   conversation_key TEXT NOT NULL,
+	   seq              INTEGER NOT NULL,
+	   entry_json       TEXT NOT NULL,
+	   created_at       INTEGER NOT NULL,
+	   PRIMARY KEY (plugin_id, conversation_key, seq)
+	 );`,
 }
 
 // migrate 只在全新文件上从版本 0 开始；已有文件的 schema_version 表已由 verify 确认存在。
