@@ -1,6 +1,6 @@
 # 插件开发规范
 
-负责范围：插件作者（含本仓库的官方插件、Adapter 与示例）在依赖、存储、日志、生命周期与发布上必须遵守的规则，以及这样要求的原因。行为的权威是 [CONTRACTS](../spec/CONTRACTS-v0.1.md)，本文只列规则并指向对应条款，两者冲突时以契约为准。
+负责范围：插件作者（含本仓库的官方插件、Adapter、Agent 与示例）在依赖、存储、日志、生命周期与发布上必须遵守的规则，以及这样要求的原因。Adapter 与 Agent 是有进程的非插件组件（DESIGN §T），这里的规则同样适用于它们；WebUI 组件只含静态文件，只需遵守第 9 节与 CONTRACTS §7.5。行为的权威是 [CONTRACTS](../spec/CONTRACTS-v0.1.md)，本文只列规则并指向对应条款，两者冲突时以契约为准。
 更新时机：契约中影响插件作者的条款变化、SDK 新增按需包或依赖政策变化时。
 
 SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未全部实现；实际进度见 [spec/README.md](../spec/README.md)。
@@ -13,7 +13,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 ## 2. 依赖
 
 - 只导入用到的包。SDK 根包只允许依赖 protobuf、x/sys 与 jsonschema-go（D-52）；数据库在 `sdk/sqlitedb` 与 `sdk/gormdb` 中，不导入就不链接（D-49）。
-- 能用标准库就不引入第三方库。HTTP 用 `net/http`；不要内嵌模型厂商的 SDK 或自己的 Provider 客户端，需要模型时调用 Agent 插件的 `llm.generate`（第 6 节）。
+- 能用标准库就不引入第三方库。HTTP 用 `net/http`；不要内嵌模型厂商的 SDK 或自己的 Provider 客户端，需要模型时调用 Agent 组件的 `llm.generate`（第 6 节）。
 - 包级变量与 `init` 不做重活：不加载大文件、不建大表、不批量编译正则，推迟到 OnStart 或首次使用。所有被链接的包的 `init` 都会在启动时执行，分配的内存会一直常驻。
 - 优先纯 Go。确需 CGO 时，必须为每个声明支持的平台提供真实可运行的二进制，不支持的平台在 manifest 中不声明（CONTRACTS §7.1、§9.1）。
 - 插件的依赖由它自己的 `go.mod` 管理，与其他插件和 Core 互不影响；代价是每个依赖都完整地进入这个插件的进程。
@@ -42,7 +42,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 ## 6. 跨插件协作
 
 - 用 Service Call 与 Event Bus 协作，不直接读写其他插件的文件或数据库（CONTRACTS §3）。
-- 需要模型能力时调用官方 Agent 插件的 `llm.generate`（`sdk/llm` 提供类型与调用辅助），并请管理员把插件加入 `llm_service_allowed_plugins`；一次调用是一次非流式请求，期限受调用方约束（CONTRACTS §13.5）。
+- 需要模型能力时调用 Agent 组件的 `llm.generate`：`sdk/llm` 提供类型与以 `@agent` 为目标的调用辅助，官方 Agent 被替换后也不用修改；请管理员把插件加入 `llm_service_allowed_plugins`；一次调用是一次非流式请求，期限受调用方约束（CONTRACTS §13.5）。
 - 要把能力交给 Agent 使用时，注册带 `tool` 描述的 JSON Service（CONTRACTS §13.1）。
 
 ## 7. 配置与 secret
@@ -57,5 +57,6 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 
 ## 9. 发布
 
-- 市场 ID 使用 `alonabot_plugin_` 前缀（CONTRACTS §9.1）。
+- 市场 ID 按角色使用 `alonabot_plugin_`、`alonabot_adapter_`、`alonabot_agent_` 或 `alonabot_webui_` 前缀（CONTRACTS §9.1）。manifest 可以用 `icon` 声明组件图标，配置表单的选项也可以各带图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
+- 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`（CONTRACTS §9.3）。
 - 用 `alonabot plugin check` 与 `alonabot plugin pack` 为每个支持的平台生成安装包与外部 `release.json`，用 Ed25519 签名（CONTRACTS §9.2、§9.3）。签名私钥由作者保管，不放进仓库或构建日志。
