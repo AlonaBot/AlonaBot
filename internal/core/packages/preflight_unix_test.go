@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
 
 // TestPreflightFileModes 确认解压后的权限：带执行位的文件为 0700，其余为 0600，setuid 被去掉。
