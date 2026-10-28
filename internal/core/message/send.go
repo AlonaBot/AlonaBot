@@ -18,7 +18,7 @@ import (
 
 const schemaVersion = 1
 
-// Service 使用 Adapter 注册表处理消息发送。
+// Service 按插件发信许可准入目标，再由注册的 Adapter 实例执行发送。
 type Service struct {
 	adapters *adapter.Registry
 	policy   *policy.Policy

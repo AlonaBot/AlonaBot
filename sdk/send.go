@@ -11,6 +11,7 @@ import (
 )
 
 // Send 通过已激活的 Session 独立向 to 发送，不关联入站调用。
+// Session 尚未就绪或已停止时返回 FAILED_PRECONDITION。
 // to 为 nil 时由 Core 返回 NO_DEFAULT_TARGET；出错时仍保留有效的部分发送结果。
 func Send(ctx context.Context, to *pb.Target, chain message.Chain) (*pb.SendResult, error) {
 	// 1. Session 就绪后编码发送请求，目标许可交由 Core 判断。
@@ -34,11 +35,10 @@ func Send(ctx context.Context, to *pb.Target, chain message.Chain) (*pb.SendResu
 			return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, Message: err.Error()}
 		}
 	}
-	if response.Err != nil {
-		return result, &Error{Code: validate.PublicCode(response.Err.GetCode()), Message: response.Err.GetSafeMessage()}
-	}
 	if callError != nil {
-		return result, &Error{Code: validate.PublicCode(wire.CodeOf(callError)), Message: callError.Error()}
+		// Session.Call 的远端错误与本地准入错误均为 *wire.CallError，保留其原始消息。
+		info := callError.(*wire.CallError).ErrorInfo
+		return result, &Error{Code: validate.PublicCode(info.GetCode()), Message: info.GetSafeMessage()}
 	}
 	return result, nil
 }
