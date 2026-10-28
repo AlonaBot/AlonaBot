@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -170,10 +171,7 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 		if err != nil {
 			core.stopped.Store(true)
 			// 实例配置含凭证，启动错误中的配置原文也随错误一起脱敏。
-			safe := err.Error()
-			if request.ConfigJson != "" {
-				safe = strings.ReplaceAll(safe, request.ConfigJson, "[redacted]")
-			}
+			safe := adapterSafeError(err, []byte(request.ConfigJson))
 			code := pb.ErrorCode_ERROR_CODE_INTERNAL
 			var public *Error
 			if errors.As(err, &public) {
@@ -260,4 +258,34 @@ func (c *adapterCore) SaveCursor(ctx context.Context, cursor []byte) error {
 func (c *adapterCore) ReportFailure(ctx context.Context, safe *pb.ErrorInfo) error {
 	c.stopped.Store(true)
 	return c.call(ctx, wire.ServiceCoreAdapterStatus, &pb.AdapterStatusRequest{InstanceId: c.instanceID, State: pb.AdapterInstanceState_ADAPTER_INSTANCE_STATE_FAILED, SafeError: safe}, &pb.AdapterStatusResponse{})
+}
+
+// adapterSafeError 保留错误上下文，移除实例配置全文与其中的字符串值。
+func adapterSafeError(err error, config []byte) string {
+	safe := err.Error()
+	if len(config) > 0 {
+		safe = strings.ReplaceAll(safe, string(config), "[redacted]")
+	}
+	var value any
+	if json.Unmarshal(config, &value) == nil {
+		var redact func(any)
+		redact = func(value any) {
+			switch v := value.(type) {
+			case string:
+				if v != "" {
+					safe = strings.ReplaceAll(safe, v, "[redacted]")
+				}
+			case map[string]any:
+				for _, item := range v {
+					redact(item)
+				}
+			case []any:
+				for _, item := range v {
+					redact(item)
+				}
+			}
+		}
+		redact(value)
+	}
+	return safe
 }

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -66,9 +67,13 @@ func (*loopAdapter) Descriptor() *pb.AdapterDescriptor {
 func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core sdkadapter.Core) (sdkadapter.Instance, error) {
 	var config struct {
 		Account string `json:"account"`
+		Token   string `json:"token"`
 	}
 	if err := json.Unmarshal(req.ConfigJSON, &config); err != nil {
 		return nil, err
+	}
+	if config.Account == "start-error" {
+		return nil, fmt.Errorf("invalid token: %s", config.Token)
 	}
 	n := 0
 	if len(req.Cursor) > 0 {
@@ -82,6 +87,7 @@ func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core s
 }
 
 type loopInstance struct {
+	stopFailed           bool
 	id, account, initial string
 	core                 sdkadapter.Core
 	mu                   sync.Mutex
@@ -92,7 +98,15 @@ func (i *loopInstance) Account() sdkadapter.Account { return sdkadapter.Account{
 func (i *loopInstance) Capabilities() []*pb.Capability {
 	return []*pb.Capability{{Name: "message.text", Version: 1, Supported: true}}
 }
-func (i *loopInstance) Stop(context.Context) error { return nil }
+func (i *loopInstance) Stop(context.Context) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.account == "stop-error" && !i.stopFailed {
+		i.stopFailed = true
+		return errors.New("platform stop failed")
+	}
+	return nil
+}
 func (i *loopInstance) Send(ctx context.Context, target *pb.Target, chain *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -294,6 +308,32 @@ func TestRemoteLifecycle(t *testing.T) {
 		if ev.EventType == "bot.offline" && ev.GetAdapterInstanceId() == "failed" && ev.EventPayload.GetBotOffline().GetSafeError().GetSafeMessage() != "account rejected" {
 			t.Fatal("safe error lost")
 		}
+	}
+	// 故障实例可在同一个 Adapter 进程内重新启用。
+	start("failed", "c")
+	mustSend("failed", "recovered")
+	if err := p.StopInstance(ctx, "failed"); err != nil {
+		t.Fatal(err)
+	}
+	// 停止 RPC 报错仍关闭 Core 运行登记，且保留原始错误。
+	start("stop-error", "stop-error")
+	if err := p.StopInstance(ctx, "stop-error"); err == nil || !strings.Contains(err.Error(), "platform stop failed") {
+		t.Fatalf("stop error lost: %v", err)
+	}
+	if _, ok := registry.Get("stop-error"); ok {
+		t.Fatal("failed stop remained registered")
+	}
+	if count("bot.offline", "stop-error", pb.BotOfflineReason_BOT_OFFLINE_REASON_STOPPED) != 1 {
+		t.Fatal("failed stop missed offline event")
+	}
+	// 未清理的 SDK 实例在显式重新启用前先完成清理。
+	start("stop-error", "stop-error")
+	if err := p.StopInstance(ctx, "stop-error"); err == nil {
+		t.Fatal("expected new instance stop failure")
+	}
+	err = p.StartInstance(ctx, "start-error", []byte(`{"account":"start-error","token":"credential-canary"}`))
+	if err == nil || strings.Contains(err.Error(), "credential-canary") {
+		t.Fatalf("startup credential leaked: %v", err)
 	}
 	start("three", "d")
 	mustSend("three", "before crash")

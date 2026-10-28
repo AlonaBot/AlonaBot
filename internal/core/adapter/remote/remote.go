@@ -48,6 +48,7 @@ type Process struct {
 }
 
 type instance struct {
+	needsStop    bool // SDK 中仍有待回收的平台实例，由 Process.mu 保护
 	process      *Process
 	id           string
 	config       []byte // 只保留在内存中，恢复时重新下发
@@ -114,9 +115,19 @@ func (p *Process) start(ctx context.Context, id string, config []byte) error {
 		p.mu.Unlock()
 		return failure(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "adapter instance already running")
 	}
+	previous := p.instances[id]
+	cleanup := previous != nil && previous.needsStop && bound != nil && previous.session == bound.Session
 	p.mu.Unlock()
 	if bound == nil {
 		return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter session is unavailable")
+	}
+	if cleanup {
+		if _, err := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: id}, &pb.AdapterInstanceStopResponse{}); err != nil {
+			return err
+		}
+		p.mu.Lock()
+		previous.needsStop = false
+		p.mu.Unlock()
 	}
 	cursor, err := p.opt.Store.AdapterCursor(ctx, id)
 	if err != nil {
@@ -149,7 +160,7 @@ func (p *Process) start(ctx context.Context, id string, config []byte) error {
 	// 3. 运行登记与在线事件在状态锁内完成，服务只接纳已登记实例。
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	entry := &instance{process: p, id: id, config: append([]byte(nil), config...), enabled: true, running: true, account: response.AccountId, displayName: response.AccountDisplayName, capabilities: response.Capabilities, session: bound.Session}
+	entry := &instance{needsStop: true, process: p, id: id, config: append([]byte(nil), config...), enabled: true, running: true, account: response.AccountId, displayName: response.AccountDisplayName, capabilities: response.Capabilities, session: bound.Session}
 	if err := p.opt.Registry.Add(entry); err != nil {
 		p.mu.Unlock()
 		_, stopErr := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: id}, &pb.AdapterInstanceStopResponse{})
@@ -173,23 +184,25 @@ func (p *Process) StopInstance(ctx context.Context, instanceID string) error {
 	p.mu.Lock()
 	entry, ok := p.instances[instanceID]
 	bound := p.session
-	running := ok && entry.running
+	cleanup := ok && entry.needsStop && bound != nil && entry.session == bound.Session
 	p.mu.Unlock()
 	if !ok {
 		return failure(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
 	}
-	if running && bound != nil {
-		if _, err := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: instanceID}, &pb.AdapterInstanceStopResponse{}); err != nil {
-			return err
-		}
+	var stopErr error
+	if cleanup {
+		_, stopErr = call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: instanceID}, &pb.AdapterInstanceStopResponse{})
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	entry.enabled = false
-	if entry.running {
-		return p.offline(ctx, entry, pb.BotOfflineReason_BOT_OFFLINE_REASON_STOPPED, nil)
+	if cleanup && stopErr == nil {
+		entry.needsStop = false
 	}
-	return nil
+	if entry.running {
+		return errors.Join(stopErr, p.offline(ctx, entry, pb.BotOfflineReason_BOT_OFFLINE_REASON_STOPPED, nil))
+	}
+	return stopErr
 }
 
 func (p *Process) offline(ctx context.Context, entry *instance, reason pb.BotOfflineReason, safe *pb.ErrorInfo) error {
