@@ -217,6 +217,11 @@ var migrations = []string{
 	   base_generation TEXT NOT NULL,
 	   config_json     TEXT NOT NULL,
 	   updated_at      INTEGER NOT NULL
+	 );
+	 CREATE TABLE plugin_adapter_permissions (
+	   plugin_id TEXT NOT NULL REFERENCES installs(plugin_id),
+	   adapter_instance_id TEXT NOT NULL,
+	   PRIMARY KEY (plugin_id, adapter_instance_id)
 	 );`,
 }
 
