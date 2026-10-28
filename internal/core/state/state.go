@@ -186,7 +186,8 @@ func preflight(ctx context.Context, path string) error {
 	return nil
 }
 
-// migrations 按顺序执行，版本号即下标加 1；已发布的条目不得修改，只能追加。
+// migrations 按顺序执行，版本号即下标加 1。首次发布前只有初始这一条，schema 改动直接写在其中，
+// 不追加迁移（编码规范「首次发布前不写兼容层」）。
 var migrations = []string{
 	`CREATE TABLE schema_version (version INTEGER NOT NULL);
 	 INSERT INTO schema_version (version) VALUES (0);
@@ -210,14 +211,18 @@ var migrations = []string{
 	   plugin_id         TEXT PRIMARY KEY REFERENCES installs(plugin_id),
 	   active_generation TEXT REFERENCES generations(generation_id),
 	   enabled           INTEGER NOT NULL DEFAULT 0
-	 );`,
-	`CREATE TABLE pending_configs (
+	 );
+	 CREATE TABLE pending_configs (
 	   plugin_id       TEXT PRIMARY KEY REFERENCES installs(plugin_id),
 	   base_generation TEXT NOT NULL,
 	   config_json     TEXT NOT NULL,
 	   updated_at      INTEGER NOT NULL
+	 );
+	 CREATE TABLE plugin_adapter_permissions (
+	   plugin_id TEXT NOT NULL REFERENCES installs(plugin_id),
+	   adapter_instance_id TEXT NOT NULL,
+	   PRIMARY KEY (plugin_id, adapter_instance_id)
 	 );`,
-	`CREATE TABLE plugin_adapter_permissions (plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), adapter_instance_id TEXT NOT NULL, PRIMARY KEY (plugin_id, adapter_instance_id));`,
 }
 
 // migrate 只在全新文件上从版本 0 开始；已有文件的 schema_version 表已由 verify 确认存在。
