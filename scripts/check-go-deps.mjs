@@ -23,6 +23,7 @@ const allowed = {
     'github.com/google/jsonschema-go',
     'github.com/spf13/cobra',
     'github.com/spf13/pflag',
+    'github.com/inconshreveable/mousetrap', // Cobra 只在 Windows 链接。
     ...sqlite,
   ]),
   './sdk': new Set(['google.golang.org/protobuf', 'golang.org/x/sys', 'github.com/google/jsonschema-go']),
