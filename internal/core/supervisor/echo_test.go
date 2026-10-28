@@ -19,6 +19,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/message"
+	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
@@ -69,7 +70,7 @@ func TestEchoBothTransports(t *testing.T) {
 				t.Fatal(err)
 			}
 			mux := router.NewMux()
-			mux.Handle(wire.ServiceSend, message.New(registry).Send)
+			mux.Handle(wire.ServiceSend, message.New(registry, policy.New(store)).Send)
 			spec.Handler = mux.For(router.NewCaller(spec.PluginID, spec.GenerationID))
 			events := router.New(output.Logger(), values.DispatchQueueEvents)
 			events.Start()
