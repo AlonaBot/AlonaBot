@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
 
 // TestPreflightFileModes 确认解压后的权限：带执行位的文件为 0700，其余为 0600，setuid 被去掉。
@@ -15,7 +17,7 @@ func TestPreflightFileModes(t *testing.T) {
 		testEntry{name: "data.txt", typeflag: tar.TypeReg, mode: 0o666, body: "data"},
 		testEntry{name: "setuid", typeflag: tar.TypeReg, mode: 0o4755, body: "x"},
 	), nil)
-	c, err := Preflight(p.input, filepath.Join(p.root, "staging"), DefaultLimits)
+	c, err := Preflight(p.input, filepath.Join(p.root, "staging"), NewLimits(tune.Defaults()))
 	if err != nil {
 		t.Fatal(err)
 	}

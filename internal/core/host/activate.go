@@ -43,7 +43,7 @@ type ActivateOptions struct {
 	// Handler 处理 Activated 之后插件发起的业务调用。
 	Handler wire.Handler
 	Global  *wire.Budget // Core 全局载荷预算
-	// Limits 提供 OnReady 预算。
+	// Limits 提供 OnReady 预算与 Core 侧 Session 限额；与 Prepare 使用同一组值。
 	Limits Limits
 }
 
@@ -141,6 +141,7 @@ func Activate(ctx context.Context, conn *wire.Conn, prep *Prepared, opt Activate
 	in.Session = wire.NewSession(conn, wire.Options{
 		Local: pb.InitiatorSide_INITIATOR_SIDE_CORE, SessionID: prep.SessionID, ProtocolMinor: prep.Minor,
 		SourcePluginID: opt.PluginID, Handler: opt.Handler, Admit: in.admit, Control: in.control, Global: opt.Global,
+		MaxInflight: opt.Limits.SessionMaxInflight, MaxBytes: opt.Limits.SessionMaxPayload, DefaultDeadline: opt.Limits.RequestTimeout,
 	})
 
 	deadline := time.Now().Add(opt.Limits.OnReady)

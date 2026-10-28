@@ -166,3 +166,26 @@ func screamingSnake(s string) string {
 	}
 	return strings.ToUpper(b.String())
 }
+
+// SessionLimits 的字段名称、类型与编号遵循 WIRE §3.2。
+func TestSessionLimitsFieldNumbers(t *testing.T) {
+	fields := (&pb.SessionLimits{}).ProtoReflect().Descriptor().Fields()
+	names := []string{"max_inflight", "max_payload_bytes", "request_timeout_ms"}
+	if fields.Len() != len(names) {
+		t.Fatalf("SessionLimits has %d fields, want %d", fields.Len(), len(names))
+	}
+	for i, name := range names {
+		field := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+		if field == nil || string(field.Name()) != name || field.Kind() != protoreflect.Uint32Kind {
+			t.Errorf("SessionLimits field %d should be uint32 %s, got %v", i+1, name, field)
+		}
+	}
+}
+
+// Bootstrap.session_limits 固定为字段 11，并引用 SessionLimits（WIRE §3.2）。
+func TestBootstrapSessionLimitsFieldNumber(t *testing.T) {
+	field := (&pb.Bootstrap{}).ProtoReflect().Descriptor().Fields().ByNumber(11)
+	if field == nil || field.Name() != "session_limits" || field.Kind() != protoreflect.MessageKind || field.Message().FullName() != "alonabot.v1.SessionLimits" {
+		t.Errorf("Bootstrap field 11 should be SessionLimits session_limits, got %v", field)
+	}
+}

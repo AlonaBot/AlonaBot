@@ -46,8 +46,8 @@
 | goal-29 | T-08.2 | 配置 JSON 语义与 Pending | — | 已完成 |
 | goal-37 | T-09.2 | 安装包预检与安全解压 | — | 已完成 |
 | goal-58 | T-12.1 | Provider 客户端 | — | 已完成 |
-| goal-76 | T-02.2 | 调优参数 | T-02.1 | 可派发 |
-| goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 等待前置 |
+| goal-76 | T-02.2 | 调优参数 | T-02.1 | 已完成（PR #28） |
+| goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 可派发 |
 | goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 等待前置 |
 | goal-4 | T-03.3 | Adapter 进程、sdk/adapter 与上下线事件 | T-03.1 | 等待前置 |
 | goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 等待前置 |
@@ -368,7 +368,7 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 
 ### goal-76 · T-02.2 调优参数
 
-状态：可派发。
+状态：已完成（PR #28；实现、本地验收与评论修复完成）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-76（切片 T-02.2：调优参数）。goal 目录 goal-76，分支 goal-76，worktree .worktrees/goal-76，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -495,7 +495,7 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 
 ### goal-2 · T-03.1 首个可用 SDK 切片
 
-状态：等待前置（T-02.2）。日志接口已按 T-02.1 的实现写入，SDK 根插件已按 sdk.Base 与 Root Hook 的现行模型修订，Router 队列容量改为取 goal-76 的 tune.Values.DispatchQueueEvents；调优参数合并后，审查者按实际的参数接口补充本语句，再改为可派发。
+状态：可派发。日志接口、SDK 根插件与调优参数接口已按 T-02.1、T-02.2 的实现核对；Router 队列容量取 tune.Values.DispatchQueueEvents。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-2（切片 T-03.1：首个可用 SDK 切片）。goal 目录 goal-2，分支 goal-2，worktree .worktrees/goal-2，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -564,7 +564,7 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
    }
    func FromInstance(in *host.Instance) Plugin
    type Router struct{ ... }
-   func New(log *slog.Logger, queueEvents int) *Router // log 为 Core 的 Logger（logging.Output.Logger）；queueEvents 取 tune.Values.DispatchQueueEvents
+   func New(log *slog.Logger, queueEvents int) *Router // log 为 Core 的 Logger（logging.Output.Logger）；queueEvents 取 tune.Values.DispatchQueueEvents；本切片测试与示例用 tune.Defaults() 派生，已有启动路径沿用 tune.Parse 的生效值
    func (r *Router) Attach(p Plugin)
    func (r *Router) Detach(pluginID string)
    func (r *Router) Start() // 启动单个派发 worker

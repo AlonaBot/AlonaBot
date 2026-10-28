@@ -24,25 +24,30 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
 
-// Limits 规定各阶段的时间预算（CONTRACTS §4.2 的首发常量）；测试可注入更短的值。
+// Limits 规定阶段预算与双方共用的 Session 限额（CONTRACTS §4.2、§16）。
 type Limits struct {
 	// 从连接建立到 HELLO_ACK 发出的预算（CONTRACTS §4.2 的 Hello/HelloAck）。
-	Handshake time.Duration
-	Config    time.Duration // 配置转换与校验的预算
-	Migration time.Duration // 数据库迁移的预算
-	OnStart   time.Duration
-	OnReady   time.Duration
-	StopTotal time.Duration // 一次停用的总预算
+	Handshake          time.Duration
+	Config             time.Duration // 配置转换与校验的预算
+	Migration          time.Duration // 数据库迁移的预算
+	OnStart            time.Duration
+	OnReady            time.Duration
+	StopTotal          time.Duration // 一次停用的总预算
+	SessionMaxInflight int
+	SessionMaxPayload  int64 // 每方向在途与排队载荷的字节预算
+	RequestTimeout     time.Duration
 }
 
-// DefaultLimits 与 CONTRACTS §4.2 一致。
-var DefaultLimits = Limits{
-	Handshake: 10 * time.Second, Config: 60 * time.Second, Migration: 15 * time.Minute,
-	OnStart: 60 * time.Second, OnReady: 30 * time.Second, StopTotal: 10 * time.Second,
+// NewLimits 从本次运行的生效调优值构造阶段预算与 Session 限额。
+func NewLimits(v tune.Values) Limits {
+	return Limits{Handshake: v.PhaseHello, Config: v.PhaseConfig, Migration: v.PhaseMigration,
+		OnStart: v.PhaseOnStart, OnReady: v.PhaseOnReady, StopTotal: v.StopTotal,
+		SessionMaxInflight: v.SessionMaxInflight, SessionMaxPayload: v.SessionMaxPayload, RequestTimeout: v.RequestTimeout}
 }
 
 // proto 把预算转为 Bootstrap 中的毫秒值。
@@ -187,6 +192,7 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 	prepBudget := lim.Config + lim.Migration + lim.OnStart // Preparing 的硬截止为各适用阶段预算之和
 	boot = proto.Clone(boot).(*pb.Bootstrap)
 	boot.PhaseLimits = lim.proto()
+	boot.SessionLimits = &pb.SessionLimits{MaxInflight: uint32(lim.SessionMaxInflight), MaxPayloadBytes: uint32(lim.SessionMaxPayload), RequestTimeoutMs: uint32(lim.RequestTimeout / time.Millisecond)}
 	boot.PreparationDeadlineUnixMs = time.Now().Add(prepBudget).UnixMilli()
 	ack := &pb.HelloAck{SessionId: sid, ChosenMinor: agree.Minor, CapabilityIntersection: agree.Intersection, Bootstrap: boot}
 	ackEnv, err := wire.ControlEnvelope(sid, agree.Minor, "", pb.FrameKind_FRAME_KIND_HELLO_ACK, ack)

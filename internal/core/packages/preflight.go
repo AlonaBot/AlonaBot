@@ -28,6 +28,7 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
 
 const (
@@ -48,8 +49,10 @@ type Limits struct {
 	MaxEntries       int   // 归档条目数，含目录
 }
 
-// DefaultLimits 是 CONTRACTS §16 中 INSTALL_MAX_ARCHIVE、INSTALL_MAX_EXPANDED、INSTALL_MAX_ENTRIES 的缺省值。
-var DefaultLimits = Limits{MaxArchiveBytes: 256 << 20, MaxExpandedBytes: 1 << 30, MaxEntries: 10000}
+// NewLimits 从生效调优值构造安装包的资源上限（CONTRACTS §16）。
+func NewLimits(v tune.Values) Limits {
+	return Limits{MaxArchiveBytes: v.InstallMaxArchive, MaxExpandedBytes: v.InstallMaxExpanded, MaxEntries: v.InstallMaxEntries}
+}
 
 // Input 是 [Preflight] 的输入。
 type Input struct {

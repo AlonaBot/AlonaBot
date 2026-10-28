@@ -67,6 +67,18 @@ message Bootstrap {
   int64 preparation_deadline_unix_ms = 9;
   // 该来源当前生效的日志级别（CONTRACTS §14.3）；UNSPECIFIED 按 INFO 处理。
   LogLevel log_level = 10;
+  // 本次运行生效的 Session 限额，由 Core 填写（CONTRACTS §16）。
+  SessionLimits session_limits = 11;
+}
+
+// SessionLimits 描述 Core 与 SDK 共同执行的 Session 限额（WIRE-FORMAT §3.2）。
+message SessionLimits {
+  // 每个发起方向的在途业务请求上限。
+  uint32 max_inflight = 1;
+  // 本 Session 在途与排队请求、事件载荷的合计预算，单位为字节。
+  uint32 max_payload_bytes = 2;
+  // 普通业务请求的缺省期限，单位为毫秒。
+  uint32 request_timeout_ms = 3;
 }
 
 // LogLevel 列出 Core 下发给 SDK 的日志级别（CONTRACTS §14.3）。

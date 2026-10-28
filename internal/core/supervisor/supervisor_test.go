@@ -22,6 +22,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
@@ -114,7 +115,8 @@ func rawPlugin(fault string) int {
 // 缩短的阶段预算与停止预算。
 var (
 	fastLimits = host.Limits{Handshake: 2 * time.Second, Config: 2 * time.Second, Migration: 2 * time.Second,
-		OnStart: 2 * time.Second, OnReady: 2 * time.Second, StopTotal: time.Second}
+		OnStart: 2 * time.Second, OnReady: 2 * time.Second, StopTotal: time.Second,
+		SessionMaxInflight: tune.Defaults().SessionMaxInflight, SessionMaxPayload: tune.Defaults().SessionMaxPayload, RequestTimeout: tune.Defaults().RequestTimeout}
 	fastStop = host.StopTiming{Drain: 200 * time.Millisecond, Total: 800 * time.Millisecond, OnStopAt: 400 * time.Millisecond}
 )
 
@@ -242,7 +244,7 @@ func TestNonCooperativePluginKilledAtDeadline(t *testing.T) {
 // 激活后崩溃：报告异常退出；有限重启在第三次时禁用。
 func TestCrashAfterActivationAndRestartPolicy(t *testing.T) {
 	s, spec, _ := rawSpec(t, "crash", false)
-	policy := host.NewRestartPolicy()
+	policy := host.NewRestartPolicy(tune.Defaults())
 	var decisions []host.Decision
 	for i := 0; i < 3; i++ {
 		r, err := Launch(context.Background(), s, spec)
@@ -302,7 +304,7 @@ func TestConcurrentLaunchSamePluginOnlyOneRuns(t *testing.T) {
 		t.Fatalf("build example plugin: %v\n%s", err, out)
 	}
 	s, spec := setup(t, bin)
-	spec.Limits = host.DefaultLimits
+	spec.Limits = host.NewLimits(tune.Defaults())
 	first, err := Launch(context.Background(), s, spec)
 	if err != nil {
 		t.Fatal(err)

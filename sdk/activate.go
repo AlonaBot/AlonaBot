@@ -201,9 +201,11 @@ func businessHandler(context.Context, *wire.Inbound) wire.Response {
 func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root) (*wire.Session, *activation, error) {
 	a := &activation{l: l, ack: ack, root: root, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
 	a.lifetime, a.stopLifetime = context.WithCancel(context.Background())
+	limits := ack.GetBootstrap().GetSessionLimits()
 	a.sess = wire.New(conn, wire.Options{
 		Local: pb.InitiatorSide_INITIATOR_SIDE_PLUGIN, SessionID: ack.GetSessionId(), ProtocolMinor: ack.GetChosenMinor(),
 		SourcePluginID: l.pluginID, Handler: businessHandler, Admit: a.admit, Control: a.control,
+		MaxInflight: int(limits.GetMaxInflight()), MaxBytes: int64(limits.GetMaxPayloadBytes()), DefaultDeadline: time.Duration(limits.GetRequestTimeoutMs()) * time.Millisecond,
 	})
 	a.sess.Start() // a.sess 赋值之后再启动，回调中使用的指针一定有效
 	select {

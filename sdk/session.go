@@ -162,6 +162,12 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 			pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "Bootstrap is missing phase limits or the preparation deadline", nil)
 	}
 
+	sessionLimits := boot.GetSessionLimits()
+	if sessionLimits.GetMaxInflight() == 0 || sessionLimits.GetMaxPayloadBytes() == 0 || sessionLimits.GetRequestTimeoutMs() == 0 {
+		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_HELLO_ACK,
+			pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "Bootstrap is missing valid session limits", nil)
+	}
+
 	// 2. OnStart：用户函数不响应 context 时，由 watchdog 判定失败（Run 随后退出进程）。
 	budget := time.Duration(limits.GetOnStartMs()) * time.Millisecond
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
