@@ -24,6 +24,7 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
@@ -62,6 +63,8 @@ const failNotifyTimeout = time.Second
 
 // Expect 携带 Core 启动记录中与本次进程绑定的身份信息，用于核对 HELLO。
 type Expect struct {
+	Role        state.Role     // 由安装记录指定；空值沿用插件角色
+	AdapterID   string         // Adapter 角色要求的平台注册身份
 	PluginID    string         // Core 启动该进程时的插件 ID
 	Secret      []byte         // 本次启动的 32 字节 Session Secret
 	BuildDigest []byte         // 安装时已验证的归档摘要
@@ -228,7 +231,13 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		_ = conn.Close()
 		return nil, &PhaseError{Phase: m.GetFailedPhase(), Code: validate.PublicCode(env.GetError().GetCode()), Message: env.GetError().GetSafeMessage()}
 	case *pb.Register:
-		if err := validate.Register(m); err != nil {
+		var registerErr error
+		if exp.Role == state.RoleAdapter {
+			registerErr = validate.AdapterRegister(m, exp.AdapterID)
+		} else {
+			registerErr = validate.Register(m)
+		}
+		if err := registerErr; err != nil {
 			var ve *validate.Error
 			code := pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT
 			if errors.As(err, &ve) {
