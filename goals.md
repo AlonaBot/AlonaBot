@@ -48,8 +48,8 @@
 | goal-58 | T-12.1 | Provider 客户端 | — | 已完成 |
 | goal-76 | T-02.2 | 调优参数 | T-02.1 | 已完成（PR #28） |
 | goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 已完成（PR #29） |
-| goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 可派发 |
-| goal-4 | T-03.3 | Adapter 进程、sdk/adapter 与上下线事件 | T-03.1 | 可派发 |
+| goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 已完成（PR #31） |
+| goal-4 | T-03.3 | Adapter 进程、sdk/adapter 与上下线事件 | T-03.1 | 已完成（PR #32） |
 | goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 可派发 |
 | goal-10 | T-04.1 | 根插件 API 与静态注册索引 | T-03.1 | 可派发 |
 | goal-56 | T-11.3 | Agent 会话存储 | T-03.1 | 可派发 |
@@ -631,7 +631,7 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 
 ### goal-3 · T-03.2 Target 与发信许可
 
-状态：可派发。前置 T-03.1 已由 PR #29 合并；router.Invocation 与 message.Service 的实际签名已核对，保留原事件回复路径。
+状态：已完成（[PR #31](https://github.com/AlonaBot/AlonaBot/pull/31)，合并提交 `33426cd`）。证据见 TEST-MATRIX §3.3。条目保留供后继切片查阅接口。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-3（切片 T-03.2：Target 与发信许可）。goal 目录 goal-3，分支 goal-3，worktree .worktrees/goal-3，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -699,7 +699,7 @@ func Send(ctx context.Context, to *pb.Target, chain message.Chain) (*pb.SendResu
 
 ### goal-4 · T-03.3 Adapter 进程、sdk/adapter 与上下线事件
 
-状态：可派发。前置 T-03.1 已由 PR #29 合并；adapter.Instance/Sink/Registry、router.Caller/Mux 与 wire.ServiceSend 已核对；Registry 的移除操作在本 goal 明确新增。
+状态：已完成（[PR #32](https://github.com/AlonaBot/AlonaBot/pull/32)，合并提交 `db3c1c7`）。证据见 TEST-MATRIX §3.2。条目保留供后继切片查阅接口。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-4（切片 T-03.3：Adapter 进程、sdk/adapter 与上下线事件）。goal 目录 goal-4，分支 goal-4，worktree .worktrees/goal-4，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
