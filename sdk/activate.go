@@ -21,6 +21,7 @@ type activation struct {
 	root Root          // 用户的根插件
 	sess *wire.Session // 激活后使用的 Session
 
+	readyMu sync.Mutex    // 同步 ACTIVATED 写出、ready 发布与首条业务准入
 	ready   atomic.Bool   // ready gate：ACTIVATED 完整写出后才为 true
 	readyCh chan struct{} // ready gate 打开时关闭
 	started atomic.Bool   // 已收到 ACTIVATE
@@ -41,6 +42,9 @@ type activation struct {
 
 // admit 在读循环中同步检查 Core 的业务请求：ready gate 打开之前一律拒绝。
 func (a *activation) admit(*wire.Inbound) *pb.ErrorInfo {
+	// writer 完整写出 ACTIVATED 后，先等待 ready 发布再决定首条请求准入。
+	a.readyMu.Lock()
+	defer a.readyMu.Unlock()
 	if !a.ready.Load() {
 		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "plugin is not ready yet"}
 	}
@@ -111,7 +115,9 @@ func (a *activation) runOnReady(m *pb.Activate) {
 		a.reportFailure(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnReady exceeded its budget", nil)
 		return
 	}
-	// 2. 唯一 writer 完整写出 ACTIVATED 之后才打开 ready gate。
+	// 2. 写出与 ready 发布对准入串行化，避免对端已收到 ACTIVATED 而本地仍误拒请求。
+	a.readyMu.Lock()
+	defer a.readyMu.Unlock()
 	if err := a.sess.SendControlSync(pb.FrameKind_FRAME_KIND_ACTIVATED, &pb.Activated{GenerationId: m.GetGenerationId(), Ready: true}); err != nil {
 		a.fail(fmt.Errorf("write ACTIVATED: %w", err))
 		return
