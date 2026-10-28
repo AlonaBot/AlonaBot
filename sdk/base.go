@@ -30,6 +30,8 @@ type Root interface {
 	Config() config.Config
 	// Commands 在 Collect 时调用一次，注册命令。
 	Commands(*CommandRegistry)
+	// Events 在 Collect 时调用一次，注册事件路由。
+	Events(*EventRegistry)
 	// HTTP 在 Collect 时调用一次，注册 HTTP 路由。
 	HTTP(*HTTPRegistry)
 	// Schedules 在 Collect 时调用一次，注册定时任务。
@@ -52,6 +54,9 @@ func (*Base) Config() config.Config { return nil }
 
 // Commands 默认不注册命令。
 func (*Base) Commands(*CommandRegistry) {}
+
+// Events 默认不注册事件路由。
+func (*Base) Events(*EventRegistry) {}
 
 // HTTP 默认不注册 HTTP 路由。
 func (*Base) HTTP(*HTTPRegistry) {}

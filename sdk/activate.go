@@ -21,6 +21,7 @@ type activation struct {
 	root Root          // 用户的根插件
 	sess *wire.Session // 激活后使用的 Session
 
+	readyMu sync.Mutex    // 同步 ACTIVATED 写出、ready 发布与首条业务准入
 	ready   atomic.Bool   // ready gate：ACTIVATED 完整写出后才为 true
 	readyCh chan struct{} // ready gate 打开时关闭
 	started atomic.Bool   // 已收到 ACTIVATE
@@ -41,6 +42,9 @@ type activation struct {
 
 // admit 在读循环中同步检查 Core 的业务请求：ready gate 打开之前一律拒绝。
 func (a *activation) admit(*wire.Inbound) *pb.ErrorInfo {
+	// writer 完整写出 ACTIVATED 后，先等待 ready 发布再决定首条请求准入。
+	a.readyMu.Lock()
+	defer a.readyMu.Unlock()
 	if !a.ready.Load() {
 		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "plugin is not ready yet"}
 	}
@@ -111,7 +115,9 @@ func (a *activation) runOnReady(m *pb.Activate) {
 		a.reportFailure(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnReady exceeded its budget", nil)
 		return
 	}
-	// 2. 唯一 writer 完整写出 ACTIVATED 之后才打开 ready gate。
+	// 2. 写出与 ready 发布对准入串行化，避免对端已收到 ACTIVATED 而本地仍误拒请求。
+	a.readyMu.Lock()
+	defer a.readyMu.Unlock()
 	if err := a.sess.SendControlSync(pb.FrameKind_FRAME_KIND_ACTIVATED, &pb.Activated{GenerationId: m.GetGenerationId(), Ready: true}); err != nil {
 		a.fail(fmt.Errorf("write ACTIVATED: %w", err))
 		return
@@ -190,23 +196,34 @@ func serve(sess *wire.Session, a *activation) error {
 	return fmt.Errorf("connection to Core lost: %w", sess.Err())
 }
 
-// businessHandler 处理 ready 之后的 Core 请求。
-// shortcut: 尚无业务消息分发，一律回 UNSUPPORTED；接入命令与事件分发时替换。
-func businessHandler(context.Context, *wire.Inbound) wire.Response {
-	return wire.Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, SafeMessage: "plugin has not implemented business dispatch"}}
+// activeSession 只发布已构造的 activation；ready、stopping 和 Session.Done 决定当前是否可用。
+var activeSession atomic.Pointer[activation]
+
+func currentSession() (*wire.Session, error) {
+	a := activeSession.Load()
+	if a == nil || !a.ready.Load() || a.stopping.Load() {
+		return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "plugin session is not active"}
+	}
+	select {
+	case <-a.sess.Done():
+		return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "plugin session has stopped"}
+	default:
+		return a.sess, nil
+	}
 }
 
 // activate 在 PREPARED 之后启动 Session，等待 ACTIVATE、执行 OnReady 并写出 ACTIVATED。
 // 返回时 ready gate 已打开；失败时已向 Core 报告并关闭 Session。之后用 serve 等待停止。
-func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root) (*wire.Session, *activation, error) {
+func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Registration) (*wire.Session, *activation, error) {
 	a := &activation{l: l, ack: ack, root: root, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
 	a.lifetime, a.stopLifetime = context.WithCancel(context.Background())
 	limits := ack.GetBootstrap().GetSessionLimits()
 	a.sess = wire.New(conn, wire.Options{
 		Local: pb.InitiatorSide_INITIATOR_SIDE_PLUGIN, SessionID: ack.GetSessionId(), ProtocolMinor: ack.GetChosenMinor(),
-		SourcePluginID: l.pluginID, Handler: businessHandler, Admit: a.admit, Control: a.control,
+		SourcePluginID: l.pluginID, Handler: businessHandler(reg), Admit: a.admit, Control: a.control,
 		MaxInflight: int(limits.GetMaxInflight()), MaxBytes: int64(limits.GetMaxPayloadBytes()), DefaultDeadline: time.Duration(limits.GetRequestTimeoutMs()) * time.Millisecond,
 	})
+	activeSession.Store(a)
 	a.sess.Start() // a.sess 赋值之后再启动，回调中使用的指针一定有效
 	select {
 	case <-a.readyCh:
