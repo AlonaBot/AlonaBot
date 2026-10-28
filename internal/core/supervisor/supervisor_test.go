@@ -80,7 +80,11 @@ func rawPlugin(fault string) int {
 	_, msg := recv()
 	ack := msg.(*pb.HelloAck)
 	sid := ack.GetSessionId()
-	reg, _ := wire.ControlEnvelope(sid, 0, id, pb.FrameKind_FRAME_KIND_REGISTER, &pb.Register{CandidateConfigJson: "{}"})
+	registration := &pb.Register{CandidateConfigJson: "{}"}
+	if fault == commandConflictFault {
+		registration = conflictingCommands()
+	}
+	reg, _ := wire.ControlEnvelope(sid, 0, id, pb.FrameKind_FRAME_KIND_REGISTER, registration)
 	_ = conn.WriteFrame(reg)
 	recv() // PREPARED
 	_, msg = recv()
