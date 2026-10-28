@@ -20,7 +20,7 @@ enum EventSourceKind {
 
 // Event 描述 Core 标准化后的入站事件。
 // event_type 取值：message.created、message.edited、message.deleted、button.clicked、
-// member.joined、member.left、reaction.added、scheduled；与 event_payload 的分支一一对应。
+// member.joined、member.left、reaction.added、scheduled、bot.online、bot.offline；与 event_payload 的分支一一对应。
 message Event {
   // Core 入站标准化时产生。
   string event_id = 1;
@@ -82,6 +82,10 @@ message EventPayload {
     ReactionAddedPayload reaction_added = 7;
     // scheduled。
     ScheduledPayload scheduled = 8;
+    // bot.online。
+    BotOnlinePayload bot_online = 9;
+    // bot.offline。
+    BotOfflinePayload bot_offline = 10;
   }
 }
 
@@ -391,4 +395,29 @@ message PartResult {
   bool message_ids_unavailable = 5;
   // 本操作失败时的安全错误。
   ErrorInfo error = 6;
+}
+
+// BotOnlinePayload 记录 Core 已启动的实例账号。
+message BotOnlinePayload {
+  string adapter_id = 1;
+  string adapter_instance_id = 2;
+  string account_id = 3;
+  optional string account_display_name = 4;
+}
+
+// BotOfflineReason 标记实例离开运行状态的原因。
+enum BotOfflineReason {
+  BOT_OFFLINE_REASON_UNSPECIFIED = 0;
+  BOT_OFFLINE_REASON_STOPPED = 1;
+  BOT_OFFLINE_REASON_ADAPTER_EXITED = 2;
+  BOT_OFFLINE_REASON_INSTANCE_FAILED = 3;
+}
+
+// BotOfflinePayload 记录实例离线原因；safe_error 仅在 INSTANCE_FAILED 时设置。
+message BotOfflinePayload {
+  string adapter_id = 1;
+  string adapter_instance_id = 2;
+  string account_id = 3;
+  BotOfflineReason reason = 4;
+  ErrorInfo safe_error = 5;
 }
