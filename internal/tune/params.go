@@ -151,7 +151,10 @@ func (p parameter) format(n int64) string {
 		return time.Duration(n).String()
 	case bytesUnit:
 		if n == 0 {
-			return "unset"
+			if p.defaultValue == 0 {
+				return "unset"
+			}
+			return "0B"
 		}
 		for _, suffix := range []struct {
 			name string

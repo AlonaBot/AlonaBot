@@ -89,6 +89,9 @@ func Parse(args []string) (Values, []Override, error) {
 	for _, p := range parameters {
 		n := p.get(&v)
 		_, overridden := overrides[p.name]
+		if p.name == "MEDIA_MAX_OBJECT" || p.name == "MEDIA_SESSION_BUDGET" {
+			continue // 这两项按 CONTRACTS §16 的媒体预算相互约束检查。
+		}
 		if n <= 0 && (p.defaultValue != 0 || overridden) {
 			return Values{}, nil, fmt.Errorf("%s: must be > 0", describe(p.name))
 		}

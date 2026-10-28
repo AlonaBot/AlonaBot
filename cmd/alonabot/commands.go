@@ -65,8 +65,21 @@ func execute(args []string) int {
 	tuneCommand.AddCommand(listCommand)
 	root.AddCommand(runCommand, tuneCommand)
 	// 2. 由 Cobra 生成帮助，错误只在这里打印一次。
+	var helpErr error
+	help := root.HelpFunc()
+	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		// Cobra 在 PreRun 之前处理 --help，帮助路径也要校验全局覆盖。
+		_, _, helpErr = tune.Parse(inputs)
+		if helpErr == nil {
+			help(cmd, args)
+		}
+	})
 	root.SetArgs(args)
-	if err := root.Execute(); err != nil {
+	err := root.Execute()
+	if err == nil {
+		err = helpErr
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "alonabot:", err)
 		return code
 	}
