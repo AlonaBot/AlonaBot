@@ -69,14 +69,15 @@ type parameter struct {
 	name         string
 	unit         unit
 	defaultValue int64
+	positive     bool // 覆盖值须大于零；缺省0表示未设置的内存软上限除外
 	constraint   string
 	location     string
 	get          func(*Values) int64
 	set          func(*Values, int64)
 }
 
-func param[T ~int | ~int64](name string, unit unit, value T, constraint, location string, field func(*Values) *T) parameter {
-	return parameter{name: name, unit: unit, defaultValue: int64(value), constraint: constraint, location: location,
+func param[T ~int | ~int64](name string, unit unit, value T, positive bool, constraint, location string, field func(*Values) *T) parameter {
+	return parameter{name: name, unit: unit, defaultValue: int64(value), positive: positive, constraint: constraint, location: location,
 		get: func(v *Values) int64 { return int64(*field(v)) },
 		set: func(v *Values, n int64) { *field(v) = T(n) },
 	}
@@ -84,43 +85,43 @@ func param[T ~int | ~int64](name string, unit unit, value T, constraint, locatio
 
 // parameters 的顺序与 CONTRACTS §16 一致。
 var parameters = []parameter{
-	param("SESSION_MAX_INFLIGHT", integerUnit, int(256), ">= 1", "§1.2", func(v *Values) *int { return &v.SessionMaxInflight }),
-	param("SESSION_MAX_PAYLOAD", bytesUnit, int64(16<<20), ">= frame limit 4MiB", "§1.2", func(v *Values) *int64 { return &v.SessionMaxPayload }),
-	param("CORE_MAX_PAYLOAD", bytesUnit, int64(64<<20), ">= SESSION_MAX_PAYLOAD", "§1.2", func(v *Values) *int64 { return &v.CoreMaxPayload }),
-	param("REQUEST_TIMEOUT", durationUnit, time.Duration(30*time.Second), "> 0", "§1.2", func(v *Values) *time.Duration { return &v.RequestTimeout }),
-	param("CALL_CHAIN_MAX_DEPTH", integerUnit, int(16), ">= 1", "§3", func(v *Values) *int { return &v.CallChainMaxDepth }),
-	param("DISPATCH_CONCURRENCY", integerUnit, int(64), ">= 1", "§2.1", func(v *Values) *int { return &v.DispatchConcurrency }),
-	param("DISPATCH_QUEUE_EVENTS", integerUnit, int(256), ">= 1", "§2.1", func(v *Values) *int { return &v.DispatchQueueEvents }),
-	param("DISPATCH_QUEUE_BYTES", bytesUnit, int64(8<<20), ">= frame limit 4MiB", "§2.1", func(v *Values) *int64 { return &v.DispatchQueueBytes }),
-	param("CONTINUATION_MAX", integerUnit, int(128), ">= 1 and < SESSION_MAX_INFLIGHT", "§2.4", func(v *Values) *int { return &v.ContinuationMax }),
-	param("CONTINUATION_TIMEOUT", durationUnit, time.Duration(15*time.Minute), "> 0", "§2.4", func(v *Values) *time.Duration { return &v.ContinuationTimeout }),
-	param("BUS_QUEUE_EVENTS", integerUnit, int(256), ">= 1", "§1.2, §3", func(v *Values) *int { return &v.BusQueueEvents }),
-	param("BUS_QUEUE_BYTES", bytesUnit, int64(4<<20), ">= frame limit 4MiB", "§1.2, §3", func(v *Values) *int64 { return &v.BusQueueBytes }),
-	param("MEDIA_MAX_OBJECT", bytesUnit, int64(100<<20), "<= MEDIA_SESSION_BUDGET", "§1.3", func(v *Values) *int64 { return &v.MediaMaxObject }),
-	param("MEDIA_MAX_UPLOADS", integerUnit, int(4), ">= 1", "§1.3", func(v *Values) *int { return &v.MediaMaxUploads }),
-	param("MEDIA_SESSION_BUDGET", bytesUnit, int64(256<<20), "<= MEDIA_DISK_BUDGET", "§1.3", func(v *Values) *int64 { return &v.MediaSessionBudget }),
-	param("MEDIA_DISK_BUDGET", bytesUnit, int64(2<<30), "> 0", "§1.3", func(v *Values) *int64 { return &v.MediaDiskBudget }),
-	param("MEDIA_TTL", durationUnit, time.Duration(15*time.Minute), "> 0", "§1.3, §1.4", func(v *Values) *time.Duration { return &v.MediaTTL }),
-	param("PHASE_HELLO", durationUnit, time.Duration(10*time.Second), "> 0", "§4.2", func(v *Values) *time.Duration { return &v.PhaseHello }),
-	param("PHASE_CONFIG", durationUnit, time.Duration(60*time.Second), "> 0", "§4.2", func(v *Values) *time.Duration { return &v.PhaseConfig }),
-	param("PHASE_MIGRATION", durationUnit, time.Duration(15*time.Minute), "> 0", "§4.2", func(v *Values) *time.Duration { return &v.PhaseMigration }),
-	param("PHASE_ONSTART", durationUnit, time.Duration(60*time.Second), "> 0", "§4.2", func(v *Values) *time.Duration { return &v.PhaseOnStart }),
-	param("PHASE_ONREADY", durationUnit, time.Duration(30*time.Second), "> 0", "§4.2", func(v *Values) *time.Duration { return &v.PhaseOnReady }),
-	param("STOP_TOTAL", durationUnit, time.Duration(10*time.Second), ">= STOP_DRAIN + STOP_ONSTOP", "§4.2", func(v *Values) *time.Duration { return &v.StopTotal }),
-	param("STOP_DRAIN", durationUnit, time.Duration(6*time.Second), "> 0", "§4.2", func(v *Values) *time.Duration { return &v.StopDrain }),
-	param("STOP_ONSTOP", durationUnit, time.Duration(4*time.Second), "> 0", "§4.2", func(v *Values) *time.Duration { return &v.StopOnStop }),
-	param("RESTART_WINDOW", durationUnit, time.Duration(5*time.Minute), "> 0", "§4.2", func(v *Values) *time.Duration { return &v.RestartWindow }),
-	param("RESTART_MAX_CRASHES", integerUnit, int(3), ">= 1", "§4.2", func(v *Values) *int { return &v.RestartMaxCrashes }),
-	param("JOB_TIMEOUT", durationUnit, time.Duration(15*time.Minute), "> 0", "§4.3", func(v *Values) *time.Duration { return &v.JobTimeout }),
-	param("BUTTON_TOKEN_TTL", durationUnit, time.Duration(24*time.Hour), "> 0", "MESSAGE-MODEL §6.3", func(v *Values) *time.Duration { return &v.ButtonTokenTTL }),
-	param("TOOL_CONFIRM_TIMEOUT", durationUnit, time.Duration(5*time.Minute), "> 0", "§13.2", func(v *Values) *time.Duration { return &v.ToolConfirmTimeout }),
-	param("LOG_BUFFER_RECORDS", integerUnit, int(1000), ">= 1", "§14.4", func(v *Values) *int { return &v.LogBufferRecords }),
-	param("INSTALL_MAX_ARCHIVE", bytesUnit, int64(256<<20), "> 0", "§9.3", func(v *Values) *int64 { return &v.InstallMaxArchive }),
-	param("INSTALL_MAX_EXPANDED", bytesUnit, int64(1<<30), ">= INSTALL_MAX_ARCHIVE", "§9.3", func(v *Values) *int64 { return &v.InstallMaxExpanded }),
-	param("INSTALL_MAX_ENTRIES", integerUnit, int(10000), ">= 1", "§9.3", func(v *Values) *int { return &v.InstallMaxEntries }),
-	param("DEV_RELOAD_POLL", durationUnit, time.Duration(500*time.Millisecond), "> 0", "§15.5", func(v *Values) *time.Duration { return &v.DevReloadPoll }),
-	param("PLUGIN_MEMORY_SOFT_LIMIT", bytesUnit, int64(0), "> 0", "§16", func(v *Values) *int64 { return &v.PluginMemorySoftLimit }),
-	param("CORE_MEMORY_SOFT_LIMIT", bytesUnit, int64(0), "> 0", "§16", func(v *Values) *int64 { return &v.CoreMemorySoftLimit }),
+	param("SESSION_MAX_INFLIGHT", integerUnit, int(256), true, ">= 1", "§1.2", func(v *Values) *int { return &v.SessionMaxInflight }),
+	param("SESSION_MAX_PAYLOAD", bytesUnit, int64(16<<20), true, ">= frame limit 4MiB", "§1.2", func(v *Values) *int64 { return &v.SessionMaxPayload }),
+	param("CORE_MAX_PAYLOAD", bytesUnit, int64(64<<20), true, ">= SESSION_MAX_PAYLOAD", "§1.2", func(v *Values) *int64 { return &v.CoreMaxPayload }),
+	param("REQUEST_TIMEOUT", durationUnit, time.Duration(30*time.Second), true, "> 0", "§1.2", func(v *Values) *time.Duration { return &v.RequestTimeout }),
+	param("CALL_CHAIN_MAX_DEPTH", integerUnit, int(16), true, ">= 1", "§3", func(v *Values) *int { return &v.CallChainMaxDepth }),
+	param("DISPATCH_CONCURRENCY", integerUnit, int(64), true, ">= 1", "§2.1", func(v *Values) *int { return &v.DispatchConcurrency }),
+	param("DISPATCH_QUEUE_EVENTS", integerUnit, int(256), true, ">= 1", "§2.1", func(v *Values) *int { return &v.DispatchQueueEvents }),
+	param("DISPATCH_QUEUE_BYTES", bytesUnit, int64(8<<20), true, ">= frame limit 4MiB", "§2.1", func(v *Values) *int64 { return &v.DispatchQueueBytes }),
+	param("CONTINUATION_MAX", integerUnit, int(128), true, ">= 1 and < SESSION_MAX_INFLIGHT", "§2.4", func(v *Values) *int { return &v.ContinuationMax }),
+	param("CONTINUATION_TIMEOUT", durationUnit, time.Duration(15*time.Minute), true, "> 0", "§2.4", func(v *Values) *time.Duration { return &v.ContinuationTimeout }),
+	param("BUS_QUEUE_EVENTS", integerUnit, int(256), true, ">= 1", "§1.2, §3", func(v *Values) *int { return &v.BusQueueEvents }),
+	param("BUS_QUEUE_BYTES", bytesUnit, int64(4<<20), true, ">= frame limit 4MiB", "§1.2, §3", func(v *Values) *int64 { return &v.BusQueueBytes }),
+	param("MEDIA_MAX_OBJECT", bytesUnit, int64(100<<20), false, "<= MEDIA_SESSION_BUDGET", "§1.3", func(v *Values) *int64 { return &v.MediaMaxObject }),
+	param("MEDIA_MAX_UPLOADS", integerUnit, int(4), true, ">= 1", "§1.3", func(v *Values) *int { return &v.MediaMaxUploads }),
+	param("MEDIA_SESSION_BUDGET", bytesUnit, int64(256<<20), false, "<= MEDIA_DISK_BUDGET", "§1.3", func(v *Values) *int64 { return &v.MediaSessionBudget }),
+	param("MEDIA_DISK_BUDGET", bytesUnit, int64(2<<30), true, "> 0", "§1.3", func(v *Values) *int64 { return &v.MediaDiskBudget }),
+	param("MEDIA_TTL", durationUnit, time.Duration(15*time.Minute), true, "> 0", "§1.3, §1.4", func(v *Values) *time.Duration { return &v.MediaTTL }),
+	param("PHASE_HELLO", durationUnit, time.Duration(10*time.Second), true, "> 0", "§4.2", func(v *Values) *time.Duration { return &v.PhaseHello }),
+	param("PHASE_CONFIG", durationUnit, time.Duration(60*time.Second), true, "> 0", "§4.2", func(v *Values) *time.Duration { return &v.PhaseConfig }),
+	param("PHASE_MIGRATION", durationUnit, time.Duration(15*time.Minute), true, "> 0", "§4.2", func(v *Values) *time.Duration { return &v.PhaseMigration }),
+	param("PHASE_ONSTART", durationUnit, time.Duration(60*time.Second), true, "> 0", "§4.2", func(v *Values) *time.Duration { return &v.PhaseOnStart }),
+	param("PHASE_ONREADY", durationUnit, time.Duration(30*time.Second), true, "> 0", "§4.2", func(v *Values) *time.Duration { return &v.PhaseOnReady }),
+	param("STOP_TOTAL", durationUnit, time.Duration(10*time.Second), true, ">= STOP_DRAIN + STOP_ONSTOP", "§4.2", func(v *Values) *time.Duration { return &v.StopTotal }),
+	param("STOP_DRAIN", durationUnit, time.Duration(6*time.Second), true, "> 0", "§4.2", func(v *Values) *time.Duration { return &v.StopDrain }),
+	param("STOP_ONSTOP", durationUnit, time.Duration(4*time.Second), true, "> 0", "§4.2", func(v *Values) *time.Duration { return &v.StopOnStop }),
+	param("RESTART_WINDOW", durationUnit, time.Duration(5*time.Minute), true, "> 0", "§4.2", func(v *Values) *time.Duration { return &v.RestartWindow }),
+	param("RESTART_MAX_CRASHES", integerUnit, int(3), true, ">= 1", "§4.2", func(v *Values) *int { return &v.RestartMaxCrashes }),
+	param("JOB_TIMEOUT", durationUnit, time.Duration(15*time.Minute), true, "> 0", "§4.3", func(v *Values) *time.Duration { return &v.JobTimeout }),
+	param("BUTTON_TOKEN_TTL", durationUnit, time.Duration(24*time.Hour), true, "> 0", "MESSAGE-MODEL §6.3", func(v *Values) *time.Duration { return &v.ButtonTokenTTL }),
+	param("TOOL_CONFIRM_TIMEOUT", durationUnit, time.Duration(5*time.Minute), true, "> 0", "§13.2", func(v *Values) *time.Duration { return &v.ToolConfirmTimeout }),
+	param("LOG_BUFFER_RECORDS", integerUnit, int(1000), true, ">= 1", "§14.4", func(v *Values) *int { return &v.LogBufferRecords }),
+	param("INSTALL_MAX_ARCHIVE", bytesUnit, int64(256<<20), true, "> 0", "§9.3", func(v *Values) *int64 { return &v.InstallMaxArchive }),
+	param("INSTALL_MAX_EXPANDED", bytesUnit, int64(1<<30), true, ">= INSTALL_MAX_ARCHIVE", "§9.3", func(v *Values) *int64 { return &v.InstallMaxExpanded }),
+	param("INSTALL_MAX_ENTRIES", integerUnit, int(10000), true, ">= 1", "§9.3", func(v *Values) *int { return &v.InstallMaxEntries }),
+	param("DEV_RELOAD_POLL", durationUnit, time.Duration(500*time.Millisecond), true, "> 0", "§15.5", func(v *Values) *time.Duration { return &v.DevReloadPoll }),
+	param("PLUGIN_MEMORY_SOFT_LIMIT", bytesUnit, int64(0), true, "> 0", "§16", func(v *Values) *int64 { return &v.PluginMemorySoftLimit }),
+	param("CORE_MEMORY_SOFT_LIMIT", bytesUnit, int64(0), true, "> 0", "§16", func(v *Values) *int64 { return &v.CoreMemorySoftLimit }),
 }
 
 // Defaults 返回 CONTRACTS §16 规定的全部缺省值。

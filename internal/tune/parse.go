@@ -89,10 +89,7 @@ func Parse(args []string) (Values, []Override, error) {
 	for _, p := range parameters {
 		n := p.get(&v)
 		_, overridden := overrides[p.name]
-		if p.name == "MEDIA_MAX_OBJECT" || p.name == "MEDIA_SESSION_BUDGET" {
-			continue // 这两项按 CONTRACTS §16 的媒体预算相互约束检查。
-		}
-		if n <= 0 && (p.defaultValue != 0 || overridden) {
+		if p.positive && n <= 0 && (p.defaultValue != 0 || overridden) {
 			return Values{}, nil, fmt.Errorf("%s: must be > 0", describe(p.name))
 		}
 	}
@@ -135,6 +132,9 @@ func (p parameter) parse(raw string) (int64, error) {
 	var err error
 	switch p.unit {
 	case integerUnit:
+		if strings.HasPrefix(raw, "+") {
+			return 0, fmt.Errorf("expected a decimal integer without a leading plus sign")
+		}
 		n, err = strconv.ParseInt(raw, 10, strconv.IntSize)
 	case durationUnit:
 		var value time.Duration
@@ -163,7 +163,10 @@ func (p parameter) parse(raw string) (int64, error) {
 		}
 		n, err = strconv.ParseInt(digits, 10, 64)
 		if err == nil {
-			if n > math.MaxInt64/multiplier || n < math.MinInt64/multiplier {
+			if n < 0 {
+				return 0, fmt.Errorf("size must be non-negative")
+			}
+			if n > math.MaxInt64/multiplier {
 				return 0, fmt.Errorf("size exceeds int64 range")
 			}
 			n *= multiplier
