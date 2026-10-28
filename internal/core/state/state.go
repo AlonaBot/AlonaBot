@@ -217,6 +217,7 @@ var migrations = []string{
 	   config_json     TEXT NOT NULL,
 	   updated_at      INTEGER NOT NULL
 	 );`,
+	`CREATE TABLE plugin_adapter_permissions (plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), adapter_instance_id TEXT NOT NULL, PRIMARY KEY (plugin_id, adapter_instance_id));`,
 }
 
 // migrate 只在全新文件上从版本 0 开始；已有文件的 schema_version 表已由 verify 确认存在。
