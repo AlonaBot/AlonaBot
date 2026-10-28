@@ -30,8 +30,8 @@ const (
 
 // Options 绑定一个安装包的进程身份、状态库与事件接纳入口。
 type Options struct {
-	AdapterID string
-	PluginID  string
+	AdapterID string // 平台类型
+	PluginID  string // Adapter 包的安装 ID，用于核对调用者与写游标
 	Store     *state.Store
 	Registry  *adapter.Registry
 	Sink      adapter.Sink
@@ -47,17 +47,18 @@ type Process struct {
 	instances  map[string]*instance
 }
 
+// instance 保存远端账号身份与启停状态；可变字段统一由 Process.mu 保护。
 type instance struct {
 	needsStop    bool // SDK 中仍有待回收的平台实例，由 Process.mu 保护
 	process      *Process
 	id           string
 	config       []byte // 只保留在内存中，恢复时重新下发
-	enabled      bool
-	running      bool
+	enabled      bool   // 管理员要求运行，Bind 时恢复
+	running      bool   // 已登记到 Registry，绑定当前 Session
 	account      string
 	displayName  *string
 	capabilities []*pb.Capability
-	dropped      uint64
+	dropped      uint64        // 事件队列满时累计丢弃数
 	session      *wire.Session // 本次运行所属 Session，旧 Registry 引用不得切到新 Session
 }
 
@@ -122,7 +123,7 @@ func (p *Process) start(ctx context.Context, id string, config []byte) error {
 		return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter session is unavailable")
 	}
 	if cleanup {
-		if _, err := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: id}, &pb.AdapterInstanceStopResponse{}); err != nil {
+		if err := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: id}, &pb.AdapterInstanceStopResponse{}); err != nil {
 			return err
 		}
 		p.mu.Lock()
@@ -134,7 +135,7 @@ func (p *Process) start(ctx context.Context, id string, config []byte) error {
 		return err
 	}
 	response := &pb.AdapterInstanceStartResponse{}
-	_, err = call(ctx, bound.Session, wire.ServiceAdapterInstanceStart, &pb.AdapterInstanceStartRequest{InstanceId: id, ConfigJson: string(config), Cursor: cursor}, response)
+	err = call(ctx, bound.Session, wire.ServiceAdapterInstanceStart, &pb.AdapterInstanceStartRequest{InstanceId: id, ConfigJson: string(config), Cursor: cursor}, response)
 	if err != nil {
 		return err
 	}
@@ -148,7 +149,7 @@ func (p *Process) start(ctx context.Context, id string, config []byte) error {
 	}
 	p.mu.Unlock()
 	if response.AccountId == "" || conflict {
-		_, stopErr := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: id}, &pb.AdapterInstanceStopResponse{})
+		stopErr := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: id}, &pb.AdapterInstanceStopResponse{})
 		code := pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT
 		message := "adapter returned an empty account_id"
 		if conflict {
@@ -163,7 +164,7 @@ func (p *Process) start(ctx context.Context, id string, config []byte) error {
 	entry := &instance{needsStop: true, process: p, id: id, config: append([]byte(nil), config...), enabled: true, running: true, account: response.AccountId, displayName: response.AccountDisplayName, capabilities: response.Capabilities, session: bound.Session}
 	if err := p.opt.Registry.Add(entry); err != nil {
 		p.mu.Unlock()
-		_, stopErr := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: id}, &pb.AdapterInstanceStopResponse{})
+		stopErr := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: id}, &pb.AdapterInstanceStopResponse{})
 		p.mu.Lock()
 		return errors.Join(err, stopErr)
 	}
@@ -191,7 +192,7 @@ func (p *Process) StopInstance(ctx context.Context, instanceID string) error {
 	}
 	var stopErr error
 	if cleanup {
-		_, stopErr = call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: instanceID}, &pb.AdapterInstanceStopResponse{})
+		stopErr = call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: instanceID}, &pb.AdapterInstanceStopResponse{})
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -238,6 +239,8 @@ func (entry *instance) AdapterID() string              { return entry.process.op
 func (entry *instance) InstanceID() string             { return entry.id }
 func (entry *instance) AccountID() string              { return entry.account }
 func (entry *instance) Capabilities() []*pb.Capability { return entry.capabilities }
+
+// Start 沿用保存的配置重启实例，事件统一经 Options.Sink 交付。
 func (entry *instance) Start(ctx context.Context, _ adapter.Sink) error {
 	return entry.process.StartInstance(ctx, entry.id, entry.config)
 }
@@ -282,20 +285,20 @@ func payload(message proto.Message) (wire.Payload, error) {
 }
 func decode(in wire.Payload, message proto.Message) error {
 	if in.Encoding != pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF || in.SchemaID != validate.SchemaID(message) || in.SchemaVersion != schemaVersion {
-		return fmt.Errorf("expected %s protobuf schema version 1", message.ProtoReflect().Descriptor().Name())
+		return fmt.Errorf("expected %s protobuf schema version %d", message.ProtoReflect().Descriptor().Name(), schemaVersion)
 	}
 	return proto.Unmarshal(in.Bytes, message)
 }
-func call(ctx context.Context, session *wire.Session, target string, request, response proto.Message) (*pb.ErrorInfo, error) {
+func call(ctx context.Context, session *wire.Session, target string, request, response proto.Message) error {
 	encoded, err := payload(request)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	out, err := session.Call(ctx, wire.Request{Target: target, Payload: encoded})
 	if out.Payload.SchemaID != "" {
 		if decodeErr := decode(out.Payload, response); decodeErr != nil {
-			return out.Err, decodeErr
+			return decodeErr
 		}
 	}
-	return out.Err, err
+	return err
 }

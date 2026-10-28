@@ -7,16 +7,6 @@ import (
 	"time"
 )
 
-// Role 标记可信安装记录中的进程角色。
-type Role string
-
-const (
-	// RolePlugin 指定插件进程。
-	RolePlugin Role = "plugin"
-	// RoleAdapter 指定承载平台账号实例的 Adapter 进程。
-	RoleAdapter Role = "adapter"
-)
-
 // AdapterCursor 读取实例的已持久化游标；没有记录时返回 nil, nil。
 func (s *Store) AdapterCursor(ctx context.Context, instanceID string) ([]byte, error) {
 	var cursor []byte

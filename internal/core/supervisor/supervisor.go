@@ -31,7 +31,7 @@ const memoryLimitEnv = "GOMEMLIMIT"
 
 // Spec 描述一次插件启动。
 type Spec struct {
-	Role      state.Role // 来自安装记录；空值沿用插件角色
+	Role      state.Role // 必填，来自安装记录
 	AdapterID string     // 安装记录绑定的平台类型
 	PluginID  string
 	// <plugins>/<id>：工作目录与 runtime.lock 所在；可以是相对路径，Launch 会转为绝对路径。

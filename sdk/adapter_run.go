@@ -106,7 +106,7 @@ func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, a adapter.Adapt
 		}
 		return err
 	}
-	// 2. 准备结果仍由 Core 原子校验，角色来源保留在安装记录。
+	// 2. 读取 Core 的准备结果：PREPARED 继续，SessionError 转为错误返回。
 	frame, err = conn.ReadFrame()
 	if err != nil {
 		return err

@@ -63,7 +63,7 @@ const failNotifyTimeout = time.Second
 
 // Expect 携带 Core 启动记录中与本次进程绑定的身份信息，用于核对 HELLO。
 type Expect struct {
-	Role        state.Role     // 由安装记录指定；空值沿用插件角色
+	Role        state.Role     // 必填，由安装记录指定
 	AdapterID   string         // Adapter 角色要求的平台注册身份
 	PluginID    string         // Core 启动该进程时的插件 ID
 	Secret      []byte         // 本次启动的 32 字节 Session Secret
@@ -234,8 +234,10 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		var registerErr error
 		if exp.Role == state.RoleAdapter {
 			registerErr = validate.AdapterRegister(m, exp.AdapterID)
-		} else {
+		} else if exp.Role == state.RolePlugin {
 			registerErr = validate.Register(m)
+		} else {
+			registerErr = fmt.Errorf("invalid expected role %q", exp.Role)
 		}
 		if err := registerErr; err != nil {
 			var ve *validate.Error

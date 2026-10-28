@@ -197,7 +197,9 @@ var migrations = []string{
 	   source       TEXT NOT NULL,
 	   entrypoint   TEXT NOT NULL,
 	   build_digest BLOB NOT NULL,
-	   created_at   INTEGER NOT NULL
+	   created_at   INTEGER NOT NULL,
+	   role TEXT NOT NULL,
+	   adapter_id TEXT NOT NULL
 	 );
 	 CREATE TABLE generations (
 	   generation_id   TEXT PRIMARY KEY,
@@ -217,9 +219,7 @@ var migrations = []string{
 	   base_generation TEXT NOT NULL,
 	   config_json     TEXT NOT NULL,
 	   updated_at      INTEGER NOT NULL
-	 );`,
-	`ALTER TABLE installs ADD COLUMN role TEXT NOT NULL DEFAULT 'plugin';
-	 ALTER TABLE installs ADD COLUMN adapter_id TEXT NOT NULL DEFAULT '';
+	 );
 	 CREATE TABLE adapter_cursors (
 	   instance_id TEXT PRIMARY KEY,
 	   plugin_id TEXT NOT NULL REFERENCES installs(plugin_id),
@@ -281,9 +281,19 @@ func (s *Store) LockPlugin(pluginID string) (unlock func()) {
 	return m.Unlock
 }
 
+// Role 标记可信安装记录中的进程角色。
+type Role string
+
+const (
+	// RolePlugin 指定插件进程。
+	RolePlugin Role = "plugin"
+	// RoleAdapter 指定承载平台账号实例的 Adapter 进程。
+	RoleAdapter Role = "adapter"
+)
+
 // Install 记录插件的最小安装信息；尚不含来源绑定、pin、卸载保留等内容。
 type Install struct {
-	Role        Role   // 空值在写入时按 RolePlugin 处理
+	Role        Role   // 必填的安装角色
 	AdapterID   string // RoleAdapter 必填的平台类型
 	PluginID    string // 插件 ID，主键
 	Source      string // 安装来源（开发模式为 dev-local）
@@ -292,11 +302,11 @@ type Install struct {
 }
 
 // AddInstall 登记安装记录，install_seq 按登记顺序递增（first-wins 的依据）。
-// 空角色写为 RolePlugin；Adapter 必须指定 adapter_id，且同一平台类型只允许安装一个包。
+// Role 必须明确指定；Adapter 必须指定 adapter_id，且同一平台类型只允许安装一个包。
 func (s *Store) AddInstall(ctx context.Context, in Install) error {
-	// 1. 保留插件调用者的默认角色，并检查 Adapter 安装的必填身份。
-	if in.Role == "" {
-		in.Role = RolePlugin
+	// 1. 校验安装角色与 Adapter 的必填身份。
+	if in.Role != RolePlugin && in.Role != RoleAdapter {
+		return fmt.Errorf("invalid installation role %q", in.Role)
 	}
 	if in.Role == RoleAdapter && in.AdapterID == "" {
 		return errors.New("adapter installation requires adapter_id")
