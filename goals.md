@@ -46,7 +46,7 @@
 | goal-29 | T-08.2 | 配置 JSON 语义与 Pending | — | 已完成 |
 | goal-37 | T-09.2 | 安装包预检与安全解压 | — | 已完成 |
 | goal-58 | T-12.1 | Provider 客户端 | — | 已完成 |
-| goal-76 | T-02.2 | 调优参数 | T-02.1 | 实施中（实现完成，依赖门禁阻塞，待审查） |
+| goal-76 | T-02.2 | 调优参数 | T-02.1 | 实施完成（PR #28 待审查合并） |
 | goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 等待前置 |
 | goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 等待前置 |
 | goal-4 | T-03.3 | Adapter 进程、sdk/adapter 与上下线事件 | T-03.1 | 等待前置 |
@@ -368,7 +368,7 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 
 ### goal-76 · T-02.2 调优参数
 
-状态：实施中（本分支实现与本地验收完成；Windows 的 mousetrap 依赖允许清单待同步，PR 待审查）。
+状态：实施完成（本分支实现与本地验收完成，PR #28 待审查合并；评论提出的依赖门禁、运行错误日志和数值校验问题已修复）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-76（切片 T-02.2：调优参数）。goal 目录 goal-76，分支 goal-76，worktree .worktrees/goal-76，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
