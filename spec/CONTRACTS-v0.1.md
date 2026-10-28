@@ -87,7 +87,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 ## 3. 跨插件调用、动态 Router 与权限
 
 - v0.1 交付显式 Service Call 与非持久 Event Bus；通过 Core 动态调用其他插件的命令/事件 Router 不在 v0.1 范围内（Q-15），v0.1 只固定稳定 route ID。
-- Service 调用的目标可以写作 `@agent`：Core 在 Broker 定位时把它解析为已安装的 Agent 组件（§9.1、§13），访问规则、调用链与 CALL_CYCLE 都按解析后的组件 ID 执行；没有安装 Agent 组件时与目标未激活相同。`@` 不是合法的 ID 字符，不会与组件 ID 冲突（D-55）。
+- Service 调用的目标可以写作 `@agent`：Core 在 Broker 定位时把它解析为已安装的 Agent 组件（§9.1、§13），访问规则、调用链与 CALL_CYCLE 都按解析后的组件 ID 执行；没有安装 Agent 组件时与目标未激活相同。`@` 不是合法的 ID 字符，不会与组件 ID 冲突（D-61）。
 - Service 名为 `plugin_id/service_name`，描述包含输入/输出 schema_id/version、编码与调用规则。默认允许 Core 与本插件，其他插件必须位于发布者声明的 allowlist，或服务明确声明 public；public 仍仅表示已启用插件可调用，不赋予用户 Admin。目标须 Activated，权限/输入检查失败不运行函数。
 - JSON 服务只使用 UTF-8 JSON + 明确 schema/version，Protobuf 服务使用对应类型与二进制编码；不得把任意 JSON 冒充 Any。Core 检查已注册 schema 标识/版本、编码、大小与 JSON 语法，SDK 用生成类型/校验器验证业务字段；Schema 资源随包固定，不允许运行时访问网络 `$ref`。空响应也用声明的空对象/消息，不能把编解码失败吞成空结果。
 - 每一跳由 Core 关联可信 Actor、权限 scope、trace、祖先插件链和执行限制。插件发起 Request 的 parent_call_id 只能引用**同一 Session 中仍在途的 Core→该插件 Request**；Core 从此记录派生上下文，不采信插件自报角色。父请求完成/超时/取消会取消未完成子调用；无父调用的后台/主动 Service 只有插件身份，不能沿用已结束用户权限。
@@ -248,7 +248,7 @@ type VersionedMigrator interface {
 
 ### 7.5 组件静态文件
 
-- Core 在 admin host 上直接提供两类组件静态文件，只读取不可变包目录中的文件，不经组件进程（D-56、D-57）：
+- Core 在 admin host 上直接提供两类组件静态文件，只读取不可变包目录中的文件，不经组件进程（D-62、D-63）：
   - **WebUI 组件的文件**：除 Admin API（`/api/`）与 Core 保留的内部路径外，admin host 的 GET 请求按路径取已启用 WebUI 组件静态根目录中的文件；路径不存在且最后一段不含扩展名时返回 `index.html`，供单页应用的前端路由使用。没有已启用的 WebUI 时返回 503 与英文纯文本提示，说明用 `alonabot install` 安装 WebUI 组件。
   - **组件图标**：manifest 的 `icon` 与配置表单选项声明的图标（§5.1），只提供声明过的路径。类型按扩展名取 SVG、PNG 或 WebP，其他扩展名在包校验时拒绝。响应带 `Content-Security-Policy: sandbox; default-src 'none'; style-src 'unsafe-inline'` 与 `X-Content-Type-Options: nosniff`，要求管理员会话；WebUI 只用 `<img>` 引用图标，直接打开图标 URL 时也只在隔离的源中渲染，SVG 中的脚本不会在 Admin 源中执行。
 - Admin API 是带主版本号的公开契约，接口与主版本记录在 Admin API 参考（`spec/ADMIN-API.md`，T-09.12 交付）；同一主版本内只做向后兼容的增加。WebUI 在 manifest 中声明支持的主版本范围（§9.1），Core 的主版本不在范围内时拒绝安装与启用；Core 升级后不兼容的已安装 WebUI 不再提供文件，admin host 返回说明版本不兼容的提示。
@@ -283,7 +283,7 @@ type VersionedMigrator interface {
 所有 ID 最长 64 个 ASCII 字符。市场使用 `^alonabot_plugin_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`，同时应用长度上限；本地使用 `^[a-z][a-z0-9_-]{0,63}$`，缺市场前缀只警告。为保证五平台路径有效，本地 ID 还拒绝 Windows 保留设备名 con/prn/aux/nul/com1～com9/lpt1～lpt9；大小写以规范小写保存，不能靠大小写形成两个安装。
 
 - `plugin.yaml` 的 `manifest_version=1`；必填 `id`、SemVer `version`、`protocol_min_major/protocol_max_major`、`required_capabilities`、`os/arch`、相对可执行文件路径 `entrypoint`、`config_version`、`source`。包校验同时核对 Schema、注册描述、i18 与 build-info；SDK 是编译依赖，不要求 Core 和插件 Go patch 相同，运行兼容以协议和能力协商为准。
-- 可安装的包统称组件，使用同一份 manifest，`role` 取 `plugin`（缺省）、`adapter`、`agent` 或 `webui`（D-53）。只有 `plugin` 是插件，可以安装任意多个；`adapter` 每个 `adapter_id` 至多安装一个，`agent` 与 `webui` 全局各至多安装一个，同类组件的替换见 §9.3。市场 ID 依次使用 `alonabot_plugin_`、`alonabot_adapter_`、`alonabot_agent_`、`alonabot_webui_` 前缀，其余部分与插件市场 ID 的规则相同。
+- 可安装的包统称组件，使用同一份 manifest，`role` 取 `plugin`（缺省）、`adapter`、`agent` 或 `webui`（D-59）。只有 `plugin` 是插件，可以安装任意多个；`adapter` 每个 `adapter_id` 至多安装一个，`agent` 与 `webui` 全局各至多安装一个，同类组件的替换见 §9.3。市场 ID 依次使用 `alonabot_plugin_`、`alonabot_adapter_`、`alonabot_agent_`、`alonabot_webui_` 前缀，其余部分与插件市场 ID 的规则相同。
   - Adapter 另需 `adapter_id`（小写平台类型，规则同本地 ID），不得声明插件路由、HTTP、数据库或迁移。
   - Agent 的声明与插件相同，可以有路由、HTTP、数据库与 schedule；它额外承担 §13 的职责，并是 `@agent` 的解析目标（§3）。
   - WebUI 只含静态文件，没有进程、配置、数据库与路由：必填 `id`、`version`、`role`、`source`、静态根目录 `assets`（包内相对目录，含 `index.html`）与 Admin API 主版本范围 `admin_api_min_major`/`admin_api_max_major`（§7.5）；不声明 `entrypoint`、协议主版本、`required_capabilities` 与 `config_version`。WebUI 与平台无关，`os/arch` 写 `any`，归档名为 `<id>-<version>-any.tar.gz`。
@@ -353,7 +353,7 @@ Core 可执行文件与 SDK 根包只链接 [docs/development.md](../docs/develo
 | §15 运行方式 | T-07.3 设置文件；T-09.4 `alonabot serve`；T-13 库模式与热部署；T-14 发行包、容器镜像、install.sh 与预装插件 |
 | §17 插件测试套件 | T-13.1 根包 `Start`；T-16 `plugintest` 与示例插件的测试 |
 | §16 调优参数 | T-02.2 参数表、`--args` 与 Bootstrap 下发；之后的切片把新增的可调值登记到同一参数表 |
-| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-79 和五目标运行结果 |
+| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-84 和五目标运行结果 |
 
 ## 12. 跨层状态机与恢复不变量
 
@@ -394,7 +394,7 @@ Core 可执行文件与 SDK 根包只链接 [docs/development.md](../docs/develo
 
 ## 13. Agent 基础
 
-Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端或模型 SDK；对话循环、Provider、MCP、技能、记忆与定时任务由 Agent 组件（`role: agent`，§9.1）实现（D-27、D-54），其他插件经 `@agent` 的服务使用模型（§13.5）。Agent 组件全局至多一个，官方 Agent 组件可以被社区 Agent 替换（D-53）；除同类唯一与 `@agent` 外，它与插件使用同一 SDK、生命周期、权限与本节的 Core 服务。
+Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端或模型 SDK；对话循环、Provider、MCP、技能、记忆与定时任务由 Agent 组件（`role: agent`，§9.1）实现（D-27、D-60），其他插件经 `@agent` 的服务使用模型（§13.5）。Agent 组件全局至多一个，官方 Agent 组件可以被社区 Agent 替换（D-59）；除同类唯一与 `@agent` 外，它与插件使用同一 SDK、生命周期、权限与本节的 Core 服务。
 
 ### 13.1 工具与调用策略
 
@@ -418,13 +418,13 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 ### 13.4 记忆
 
-- 记忆由 Agent 组件自己实现和存储，Core 不提供记忆服务（D-54）。官方 Agent 组件的记忆见 DESIGN §R 与 PLAN T-12 步骤 5，社区 Agent 可以采用其他实现。
+- 记忆由 Agent 组件自己实现和存储，Core 不提供记忆服务（D-60）。官方 Agent 组件的记忆见 DESIGN §R 与 PLAN T-12 步骤 5，社区 Agent 可以采用其他实现。
 - Agent 把写入记忆的操作注册为工具（§13.1），模型的调用照常经 `core.tool.invoke`，管理员可以按工具设置策略。
 - 记忆的范围取自 Core 下发的可信上下文：会话按默认 Target（adapter_instance_id、chat_id、thread_id），用户按 Actor，不采信模型或插件在参数中给出的范围。缺少所需的 Actor 或默认 Target 时返回 FAILED_PRECONDITION。
 
 ### 13.5 文本生成服务
 
-- Agent 组件注册 JSON Service `llm.generate`，让其他插件复用管理员已配置的 Provider，不必各自内嵌 Provider 客户端和 API Key（D-51）。Schema、Go 类型与调用辅助由 `sdk/llm` 提供，调用辅助以 `@agent` 为目标（§3、D-55），因此替换 Agent 组件后调用方不用修改；替换官方 Agent 的组件应实现本服务。
+- Agent 组件注册 JSON Service `llm.generate`，让其他插件复用管理员已配置的 Provider，不必各自内嵌 Provider 客户端和 API Key（D-51）。Schema、Go 类型与调用辅助由 `sdk/llm` 提供，调用辅助以 `@agent` 为目标（§3、D-61），因此替换 Agent 组件后调用方不用修改；替换官方 Agent 的组件应实现本服务。
 - 输入：`messages`（至少一条，每条为 `role`（user 或 assistant）与 `text`）、可选的 `system`、可选的 `provider`（Agent 配置中的 Provider 名称，缺省为默认 Provider）与可选的 `max_output_tokens`。输出：`text`、实际使用的 `provider` 与 `model`，以及 Provider 返回用量时的 `input_tokens` 与 `output_tokens`。
 - 服务声明为 public（§3）。Agent 只接受直接调用方插件位于其配置项 `llm_service_allowed_plugins` 中的调用，缺省为空列表；不在列表中返回 PERMISSION_DENIED，不请求 Provider。直接调用方取 Core 下发的调用链中的上一跳插件，不采信请求内容。
 - 一次调用对应一次完整的 Provider 请求：不流式、不调用工具、不读写 Agent 会话与记忆，也不套用人格。`messages` 为空、`role` 非法或指定的 Provider 不存在返回 INVALID_ARGUMENT；没有配置任何 Provider 返回 FAILED_PRECONDITION；Provider 出错或中途断开返回 UNAVAILABLE，safe_message 不含 API Key；不自动重试（D-38）。
@@ -513,10 +513,10 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 ### 15.2 发行包、官方整合包与预装组件
 
-- 官方整合包是同一套发行物的三种安装方式（D-58）：发行归档、容器镜像与 `deploy/compose.yaml`（§15.3），以及 `install.sh`（§15.6）。三者包含相同的 Core 与官方组件。
+- 官方整合包是同一套发行物的三种安装方式（D-64）：发行归档、容器镜像与 `deploy/compose.yaml`（§15.3），以及 `install.sh`（§15.6）。三者包含相同的 Core 与官方组件。
 - 每个目标平台发布一个发行归档 `alonabot-<version>-<os>-<arch>`（Windows 为 zip，其他为 tar.gz），包含 `alonabot` 可执行文件和 `packages/` 目录。`packages/` 中是官方 Telegram Adapter、官方 OneBot 11 Adapter、官方 Agent、官方 WebUI 与预装插件的组件包，以及各自归档外的 `release.json` 与 `.sig`（§9.2）。同一 Release 另附 `install.sh` 与列出全部发行归档 SHA256 的 `SHA256SUMS`。
 - 发行版 Core 内置官方发布者公钥作为已信任来源：运行官方发行包即视为接受该来源，预装包不再逐个确认。签名与摘要照常校验，校验失败的包不安装并记 ERROR。
-- 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，只启用 help 插件与官方 WebUI；Agent 组件与 help 以外的预装插件只安装不启用，不使用 AI 对话的部署不运行它们的进程（D-50、D-56）。官方 Telegram 与 OneBot 11 Adapter 只安装，管理员为它添加第一个实例时才启用。需要 AI 对话时，管理员在 WebUI 或 CLI 启用 Agent；Agent 在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。
+- 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，只启用 help 插件与官方 WebUI；Agent 组件与 help 以外的预装插件只安装不启用，不使用 AI 对话的部署不运行它们的进程（D-50、D-62）。官方 Telegram 与 OneBot 11 Adapter 只安装，管理员为它添加第一个实例时才启用。需要 AI 对话时，管理员在 WebUI 或 CLI 启用 Agent；Agent 在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。
 - 管理员可以用 `install --source <来源> --replace` 把任一官方 Adapter、Agent 或 WebUI 换成社区组件（§9.3）；之后不再从官方来源更新该组件。卸载或损坏 WebUI 后，用 `alonabot install` 从 `packages/` 重装官方 WebUI。
 - 之后不再自动安装，已卸载的预装包不会在下次启动时重新安装。新版本发行包中的包版本高于已安装版本时，作为可用更新列在管理界面与 `alonabot list` 中，由管理员确认后按 `update` 流程更新。Core 本身通过替换可执行文件升级。
 - 首批预装插件为 help（按调用者权限列出可用命令与用法，`/whoami` 回复调用者的实例与用户 ID）、welcome（新成员入群时发送欢迎语）与 rss（订阅 RSS/Atom 并推送到聊天）。
@@ -570,7 +570,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 ### 15.6 install.sh
 
-- `install.sh` 在 Linux（需要 systemd）与 macOS（launchd）上安装 Core 与官方组件并注册系统服务（D-58）；其他系统与没有 systemd 的 Linux 在改动任何文件之前报错退出，提示改用发行归档或容器镜像。脚本只依赖 POSIX sh、`curl`、`tar`，以及 `sha256sum`（Linux）或 `shasum`（macOS）。
+- `install.sh` 在 Linux（需要 systemd）与 macOS（launchd）上安装 Core 与官方组件并注册系统服务（D-64）；其他系统与没有 systemd 的 Linux 在改动任何文件之前报错退出，提示改用发行归档或容器镜像。脚本只依赖 POSIX sh、`curl`、`tar`，以及 `sha256sum`（Linux）或 `shasum`（macOS）。
 
 | | Linux | macOS |
 | --- | --- | --- |
