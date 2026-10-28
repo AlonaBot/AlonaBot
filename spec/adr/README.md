@@ -9,7 +9,8 @@
 
 | 文件 | 内容与效力 |
 | --- | --- |
-| [DECISIONS.md](DECISIONS.md) | D-01～D-38 决策记录，以及 P-01～P-14、Q-01～Q-18 的议题、处置、契约位置和状态 |
+| [DECISIONS.md](DECISIONS.md) | D-01～D-58 决策记录，以及 P-01～P-14、Q-01～Q-18 的议题、处置、契约位置和状态 |
+| [SLEEP-DESIGN.md](SLEEP-DESIGN.md) | 分层休眠与按需唤醒的设计依据（D-53～D-58），对应 PLAN §7 的 S-01～S-06；各工作包实施时并入契约 |
 | [history/SELF-REVIEW.md](history/SELF-REVIEW.md) | 2026-10-21 可实施性审阅的 A-01～A-20 修复、历史 R 项与当时静态检查结果 |
 | [history/NOTES.md](history/NOTES.md) | 历史 Native 原型、实验局限、技术主源与当时核对记录 |
 | [history/LEGACY-PRD-COMPARISON.md](history/LEGACY-PRD-COMPARISON.md) | 旧 PRD 的 FR-01～FR-30 对照及历史方案冲突 |

@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"strings"
 	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -145,8 +144,13 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32) *
 		for i, p := range c.Params {
 			spec.Params = append(spec.Params, &pb.CommandParam{Name: fmt.Sprintf("arg%d", i+1), Type: p, Required: true})
 		}
-		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: "cmd." + strings.Join(c.Path, "."), Kind: pb.RouteKind_ROUTE_KIND_COMMAND,
+		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: commandRouteID(c), Kind: pb.RouteKind_ROUTE_KIND_COMMAND,
 			DefaultEnabled: true, RequiredPermission: pb.Permission_PERMISSION_ANY, Spec: &pb.RouteDescriptor_Command{Command: spec}})
+	}
+	for _, event := range reg.Events {
+		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: event.RouteID, Kind: pb.RouteKind_ROUTE_KIND_EVENT,
+			DefaultEnabled: true, RequiredPermission: pb.Permission_PERMISSION_ANY,
+			Spec: &pb.RouteDescriptor_Event{Event: &pb.EventSpec{EventTypeFilter: []string{event.EventType}, HandlerMode: pb.HandlerMode_HANDLER_MODE_MANUAL}}})
 	}
 	return r
 }
@@ -160,6 +164,12 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 	if limits == nil || limits.GetOnStartMs() == 0 || boot.GetPreparationDeadlineUnixMs() == 0 {
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_HELLO_ACK,
 			pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "Bootstrap is missing phase limits or the preparation deadline", nil)
+	}
+
+	sessionLimits := boot.GetSessionLimits()
+	if sessionLimits.GetMaxInflight() == 0 || sessionLimits.GetMaxPayloadBytes() == 0 || sessionLimits.GetRequestTimeoutMs() == 0 {
+		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_HELLO_ACK,
+			pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "Bootstrap is missing valid session limits", nil)
 	}
 
 	// 2. OnStart：用户函数不响应 context 时，由 watchdog 判定失败（Run 随后退出进程）。

@@ -1,0 +1,93 @@
+// Adapter 描述、实例启停、发送、事件交付、游标与故障载荷（WIRE §3.4、CONTRACTS §8）。
+syntax = "proto3";
+
+package alonabot.v1;
+
+import "alonabot/v1/identity.proto";
+import "alonabot/v1/message.proto";
+import "alonabot/v1/errors.proto";
+
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
+
+// AdapterInstanceState 列出实例可上报的终止状态。
+enum AdapterInstanceState {
+  ADAPTER_INSTANCE_STATE_UNSPECIFIED = 0;
+  ADAPTER_INSTANCE_STATE_FAILED = 1;
+}
+
+// AdapterDescriptor 声明安装包提供的平台能力与 extension Schema。
+message AdapterDescriptor {
+  string adapter_id = 1;
+  repeated Capability capabilities = 2;
+  repeated ExtensionDeclaration extensions = 3;
+}
+
+// ExtensionDeclaration 声明平台专有片段的名称、版本与 JSON Schema。
+message ExtensionDeclaration {
+  string name = 1;
+  uint32 version = 2;
+  string schema_json = 3;
+}
+
+// AdapterInstanceStartRequest 下发实例配置与已持久化游标。
+message AdapterInstanceStartRequest {
+  string instance_id = 1;
+  string config_json = 2;
+  bytes cursor = 3;
+}
+
+// AdapterInstanceStartResponse 返回已验证账号与实例能力。
+message AdapterInstanceStartResponse {
+  string account_id = 1;
+  optional string account_display_name = 2;
+  repeated Capability capabilities = 3;
+}
+
+// AdapterInstanceStopRequest 指定要停止接收的实例。
+message AdapterInstanceStopRequest {
+  string instance_id = 1;
+}
+
+// AdapterInstanceStopResponse 确认实例已经停止。
+message AdapterInstanceStopResponse {
+}
+
+// AdapterSendRequest 向指定实例发送消息链；响应为 SendResult。
+message AdapterSendRequest {
+  string instance_id = 1;
+  Target target = 2;
+  MessageChain chain = 3;
+}
+
+// AdapterDeliverRequest 交付实例事件及交付后的游标。
+message AdapterDeliverRequest {
+  string instance_id = 1;
+  Event event = 2;
+  bytes cursor = 3;
+}
+
+// AdapterDeliverResponse 报告 Core 是否接纳事件。
+message AdapterDeliverResponse {
+  bool accepted = 1;
+}
+
+// AdapterCursorRequest 保存没有事件时推进的游标。
+message AdapterCursorRequest {
+  string instance_id = 1;
+  bytes cursor = 2;
+}
+
+// AdapterCursorResponse 确认游标已持久化。
+message AdapterCursorResponse {
+}
+
+// AdapterStatusRequest 报告实例致命错误。
+message AdapterStatusRequest {
+  string instance_id = 1;
+  AdapterInstanceState state = 2;
+  ErrorInfo safe_error = 3;
+}
+
+// AdapterStatusResponse 确认实例故障已处理。
+message AdapterStatusResponse {
+}

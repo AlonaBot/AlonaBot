@@ -1,7 +1,7 @@
 // Package schedule 校验 interval 与五字段 cron 触发规则，并计算下一次触发时刻。
 //
 // 包只做纯计算：不读当前时间、不持有状态，同样的输入总是得到同样的结果。
-// Core Scheduler 与官方 Agent 插件的定时任务共用它。触发语义见 spec/CONTRACTS-v0.1.md §4.3。
+// Core Scheduler 与官方 Agent 组件的定时任务共用它。触发语义见 spec/CONTRACTS-v0.1.md §4.3。
 //
 // interval 的触发时刻是 anchor + k×d（k ≥ 1），错过的直接跳过。
 // cron 按真实时刻逐分钟推进，用任务时区的本地时间判断是否匹配：

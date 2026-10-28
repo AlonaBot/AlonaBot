@@ -10,7 +10,7 @@
 
 | 文件 | 执行时的用途 |
 | --- | --- |
-| [PLAN.md](PLAN.md) | 唯一详细实施计划，T-01～T-16 工作包、执行切片与交付次序 |
+| [PLAN.md](PLAN.md) | 唯一详细实施计划，T-01～T-16 工作包、执行切片与交付次序；§7 为 v0.1 之后的休眠扩展 S-01～S-06 |
 | [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md) | API、权限、生命周期、配置、数据与安装的精确行为 |
 | [WIRE-FORMAT.md](WIRE-FORMAT.md) | Protobuf 字段、枚举、控制帧、Bootstrap 与载荷定义 |
 | [MESSAGE-MODEL.md](MESSAGE-MODEL.md) | Event/Target/Chain、发送回执、媒体和 Telegram 映射 |

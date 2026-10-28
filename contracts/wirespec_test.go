@@ -72,6 +72,8 @@ func TestEnumValues(t *testing.T) {
 			"DEADLINE_EXCEEDED", "CANCELLED", "UNAVAILABLE", "INTERNAL", "PROTOCOL_ERROR",
 			"CALL_CYCLE", "PLUGIN_NOT_READY", "NO_DEFAULT_TARGET", "NEEDS_MANUAL_MIGRATION"}},
 		// MESSAGE-MODEL §4。
+		{pb.AdapterInstanceState(0).Descriptor(), "ADAPTER_INSTANCE_STATE_", []string{"UNSPECIFIED", "FAILED"}},
+		{pb.BotOfflineReason(0).Descriptor(), "BOT_OFFLINE_REASON_", []string{"UNSPECIFIED", "STOPPED", "ADAPTER_EXITED", "INSTANCE_FAILED"}},
 		{pb.SendStatus(0).Descriptor(), "SEND_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "PARTIAL", "REJECTED", "UNKNOWN"}},
 		{pb.PartStatus(0).Descriptor(), "PART_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "REJECTED", "UNKNOWN", "NOT_ATTEMPTED"}},
 		// MESSAGE-MODEL §3。
@@ -165,4 +167,78 @@ func screamingSnake(s string) string {
 		b.WriteRune(r)
 	}
 	return strings.ToUpper(b.String())
+}
+
+// SessionLimits 的字段名称、类型与编号遵循 WIRE §3.2。
+func TestSessionLimitsFieldNumbers(t *testing.T) {
+	fields := (&pb.SessionLimits{}).ProtoReflect().Descriptor().Fields()
+	names := []string{"max_inflight", "max_payload_bytes", "request_timeout_ms"}
+	if fields.Len() != len(names) {
+		t.Fatalf("SessionLimits has %d fields, want %d", fields.Len(), len(names))
+	}
+	for i, name := range names {
+		field := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+		if field == nil || string(field.Name()) != name || field.Kind() != protoreflect.Uint32Kind {
+			t.Errorf("SessionLimits field %d should be uint32 %s, got %v", i+1, name, field)
+		}
+	}
+}
+
+// Bootstrap.session_limits 固定为字段 11，并引用 SessionLimits（WIRE §3.2）。
+func TestBootstrapSessionLimitsFieldNumber(t *testing.T) {
+	field := (&pb.Bootstrap{}).ProtoReflect().Descriptor().Fields().ByNumber(11)
+	if field == nil || field.Name() != "session_limits" || field.Kind() != protoreflect.MessageKind || field.Message().FullName() != "alonabot.v1.SessionLimits" {
+		t.Errorf("Bootstrap field 11 should be SessionLimits session_limits, got %v", field)
+	}
+}
+
+// TestAdapterFieldNumbers 固定 Adapter 载荷与追加字段的线上编号。
+func TestAdapterFieldNumbers(t *testing.T) {
+	cases := map[string][]string{
+		"AdapterDescriptor":            {"adapter_id", "capabilities", "extensions"},
+		"ExtensionDeclaration":         {"name", "version", "schema_json"},
+		"AdapterInstanceStartRequest":  {"instance_id", "config_json", "cursor"},
+		"AdapterInstanceStartResponse": {"account_id", "account_display_name", "capabilities"},
+		"AdapterInstanceStopRequest":   {"instance_id"},
+		"AdapterInstanceStopResponse":  {},
+		"AdapterSendRequest":           {"instance_id", "target", "chain"},
+		"AdapterDeliverRequest":        {"instance_id", "event", "cursor"},
+		"AdapterDeliverResponse":       {"accepted"},
+		"AdapterCursorRequest":         {"instance_id", "cursor"},
+		"AdapterCursorResponse":        {},
+		"AdapterStatusRequest":         {"instance_id", "state", "safe_error"},
+		"AdapterStatusResponse":        {},
+		"BotOnlinePayload":             {"adapter_id", "adapter_instance_id", "account_id", "account_display_name"},
+		"BotOfflinePayload":            {"adapter_id", "adapter_instance_id", "account_id", "reason", "safe_error"},
+	}
+	for name, names := range cases {
+		d, err := protoregistry.GlobalFiles.FindDescriptorByName(protoreflect.FullName("alonabot.v1." + name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		fields := d.(protoreflect.MessageDescriptor).Fields()
+		if fields.Len() != len(names) {
+			t.Errorf("%s field count = %d, want %d", name, fields.Len(), len(names))
+		}
+		for i, name := range names {
+			f := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+			if f == nil || string(f.Name()) != name {
+				t.Errorf("%s field %d should be %s, got %v", d.FullName(), i+1, name, f)
+			}
+		}
+	}
+	for _, c := range []struct {
+		fields protoreflect.FieldDescriptors
+		number protoreflect.FieldNumber
+		name   protoreflect.Name
+	}{
+		{(&pb.Register{}).ProtoReflect().Descriptor().Fields(), 7, "adapter"},
+		{(&pb.EventPayload{}).ProtoReflect().Descriptor().Fields(), 9, "bot_online"},
+		{(&pb.EventPayload{}).ProtoReflect().Descriptor().Fields(), 10, "bot_offline"},
+	} {
+		f := c.fields.ByNumber(c.number)
+		if f == nil || f.Name() != c.name {
+			t.Errorf("field %d should be %s, got %v", c.number, c.name, f)
+		}
+	}
 }
