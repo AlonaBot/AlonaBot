@@ -45,6 +45,9 @@ func IsJSONObject(b []byte) bool {
 // Register 原子校验整份注册集（WIRE §3.1/§3.3）：任一项不合法都整体拒绝，调用方不得保留部分注册。
 // 各 kind 的语义细节（命令路径、cron、Schema 等）由各自的工作包在此基础上扩展。
 func Register(r *pb.Register) error {
+	if r.GetAdapter() != nil {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "plugin registration contains adapter descriptor")
+	}
 	seen := make(map[string]bool, len(r.GetRoutes()))
 	for i, rd := range r.GetRoutes() {
 		id := rd.GetRouteId()

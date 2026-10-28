@@ -29,7 +29,7 @@ func TestSendPermissions(t *testing.T) {
 		}
 	})
 	const pluginID = "sender"
-	if err := store.AddInstall(ctx, state.Install{PluginID: pluginID, Source: "dev-local", Entrypoint: "unused", BuildDigest: []byte{1}}); err != nil {
+	if err := store.AddInstall(ctx, state.Install{Role: state.RolePlugin, PluginID: pluginID, Source: "dev-local", Entrypoint: "unused", BuildDigest: []byte{1}}); err != nil {
 		t.Fatal(err)
 	}
 	registry := adapter.NewRegistry()

@@ -44,10 +44,10 @@ func (r *EventRegistry) On(routeID, eventType string, handler func(*Context) err
 }
 
 func validEventType(eventType string) bool {
-	// message.proto 的 Event.event_type 与 EventPayload 八个分支一一对应。
+	// message.proto 的 Event.event_type 与 EventPayload 的分支一一对应。
 	switch eventType {
 	case "message.created", "message.edited", "message.deleted", "button.clicked",
-		"member.joined", "member.left", "reaction.added", "scheduled":
+		"member.joined", "member.left", "reaction.added", "scheduled", "bot.online", "bot.offline":
 		return true
 	}
 	return false
