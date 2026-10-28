@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -9,6 +10,9 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/spf13/cobra"
 )
+
+// reportedError 标记已由 Core Logger 记录的运行错误，避免命令层重复输出。
+type reportedError struct{ error }
 
 func execute(args []string) int {
 	// 1. 参数与命令解析失败使用 usage 退出码；进入业务执行后切换为 failure。
@@ -46,15 +50,12 @@ func execute(args []string) int {
 			return err
 		}
 		defer out.Close()
-		if len(overrides) > 0 {
-			attrs := make([]any, 0, len(overrides))
-			for _, override := range overrides {
-				attrs = append(attrs, slog.Group(override.Name, "value", override.Value, "origin", override.Origin))
-			}
-			out.Logger().Warn("tuning parameters overridden", attrs...)
-		}
 		code = exitFailure
-		return run(out, dataDir, pluginID, entry, stdio, values)
+		if err := run(out, dataDir, pluginID, entry, stdio, values, overrides); err != nil {
+			out.Logger().Error("Core stopped", "err", err)
+			return &reportedError{err}
+		}
+		return nil
 	}
 	tuneCommand := &cobra.Command{Use: "tune", Short: "Inspect tuning parameters", Args: cobra.NoArgs, RunE: root.RunE}
 	listCommand := &cobra.Command{Use: "list", Short: "List default and effective tuning parameters", Args: cobra.NoArgs,
@@ -80,7 +81,10 @@ func execute(args []string) int {
 		err = helpErr
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "alonabot:", err)
+		var reported *reportedError
+		if !errors.As(err, &reported) {
+			fmt.Fprintln(os.Stderr, "alonabot:", err)
+		}
 		return code
 	}
 	return 0

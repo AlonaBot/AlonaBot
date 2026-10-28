@@ -44,7 +44,7 @@ func main() { os.Exit(execute(os.Args[1:])) }
 
 // run 打开 data_dir、登记开发安装记录，然后启动插件；收到 SIGINT/SIGTERM 时停止它，
 // 异常退出按有限重启策略重启或禁用。
-func run(out *logging.Output, dataDir, pluginID, entry string, stdio bool, v tune.Values) error {
+func run(out *logging.Output, dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides []tune.Override) error {
 	if v.CoreMemorySoftLimit > 0 {
 		debug.SetMemoryLimit(v.CoreMemorySoftLimit)
 	}
@@ -60,6 +60,13 @@ func run(out *logging.Output, dataDir, pluginID, entry string, stdio bool, v tun
 		return err
 	}
 	log := out.Logger()
+	if len(overrides) > 0 {
+		attrs := make([]any, 0, len(overrides))
+		for _, override := range overrides {
+			attrs = append(attrs, slog.Group(override.Name, "value", override.Value, "origin", override.Origin))
+		}
+		log.Warn("tuning parameters overridden", attrs...)
+	}
 	log.Info("Core started", "data_dir", dataDir)
 	plog := log.With(logging.KeyPluginID, pluginID)
 
