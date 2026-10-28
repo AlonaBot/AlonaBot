@@ -9,7 +9,7 @@
 //
 // 包的组成：
 //   - 插件的 main 调用 [Run]；[Collect] 单独收集注册项，供检查与测试使用。
-//   - [CommandRegistry]、[HTTPRegistry] 与 [ScheduleRegistry] 收集命令、HTTP 路由和定时任务。
+//   - [CommandRegistry]、[EventRegistry]、[HTTPRegistry] 与 [ScheduleRegistry] 收集命令、事件、HTTP 路由和定时任务。
 //   - [Context] 只在一次 Handler 调用期间有效，提供 [Context.Send] 与 [Context.StopPropagation]。
 //   - 根插件嵌入 [Base]，覆盖 [Root] 中需要的 Hook。
 package sdk
@@ -112,6 +112,7 @@ func Run(root Root) error {
 // Registration 汇总从根插件收集到的静态注册项。
 type Registration struct {
 	Commands  []Command
+	Events    []EventRoute
 	HTTP      []HTTPRoute
 	Schedules []Schedule
 }
@@ -123,10 +124,15 @@ func Collect(root Root) (*Registration, error) {
 	}
 	cmds, routes, jobs := &CommandRegistry{}, &HTTPRegistry{}, &ScheduleRegistry{}
 	root.Commands(cmds)
+	events := &EventRegistry{seen: make(map[string]bool)}
+	for _, command := range cmds.commands {
+		events.seen[commandRouteID(command)] = true
+	}
+	root.Events(events)
 	root.HTTP(routes)
 	root.Schedules(jobs)
-	reg := &Registration{Commands: cmds.commands, HTTP: routes.routes, Schedules: jobs.jobs}
-	errs := slices.Concat(cmds.errs, routes.errs, jobs.errs)
+	reg := &Registration{Commands: cmds.commands, Events: events.events, HTTP: routes.routes, Schedules: jobs.jobs}
+	errs := slices.Concat(cmds.errs, events.errs, routes.errs, jobs.errs)
 	if err := errors.Join(errs...); err != nil {
 		return nil, fmt.Errorf("invalid registration of %T: %w", root, err)
 	}
