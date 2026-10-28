@@ -217,6 +217,14 @@ var migrations = []string{
 	   config_json     TEXT NOT NULL,
 	   updated_at      INTEGER NOT NULL
 	 );`,
+	`ALTER TABLE installs ADD COLUMN role TEXT NOT NULL DEFAULT 'plugin';
+	 ALTER TABLE installs ADD COLUMN adapter_id TEXT NOT NULL DEFAULT '';
+	 CREATE TABLE adapter_cursors (
+	   instance_id TEXT PRIMARY KEY,
+	   plugin_id TEXT NOT NULL REFERENCES installs(plugin_id),
+	   cursor BLOB NOT NULL,
+	   updated_at INTEGER NOT NULL
+	 );`,
 }
 
 // migrate 只在全新文件上从版本 0 开始；已有文件的 schema_version 表已由 verify 确认存在。
@@ -274,6 +282,8 @@ func (s *Store) LockPlugin(pluginID string) (unlock func()) {
 
 // Install 记录插件的最小安装信息；尚不含来源绑定、pin、卸载保留等内容。
 type Install struct {
+	Role        Role   // 空值在写入时按 RolePlugin 处理
+	AdapterID   string // RoleAdapter 必填的平台类型
 	PluginID    string // 插件 ID，主键
 	Source      string // 安装来源（开发模式为 dev-local）
 	Entrypoint  string // 入口可执行文件的路径
@@ -281,12 +291,30 @@ type Install struct {
 }
 
 // AddInstall 登记安装记录，install_seq 按登记顺序递增（first-wins 的依据）。
+// 空角色写为 RolePlugin；Adapter 必须指定 adapter_id，且同一平台类型只允许安装一个包。
 func (s *Store) AddInstall(ctx context.Context, in Install) error {
+	// 1. 保留插件调用者的默认角色，并检查 Adapter 安装的必填身份。
+	if in.Role == "" {
+		in.Role = RolePlugin
+	}
+	if in.Role == RoleAdapter && in.AdapterID == "" {
+		return errors.New("adapter installation requires adapter_id")
+	}
 	return s.tx(ctx, func(tx *sql.Tx) error {
+		// 2. 在单连接事务内核对平台类型唯一性并写入安装与启用状态。
+		if in.Role == RoleAdapter {
+			var exists bool
+			if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM installs WHERE role = ? AND adapter_id = ?)", RoleAdapter, in.AdapterID).Scan(&exists); err != nil {
+				return err
+			}
+			if exists {
+				return fmt.Errorf("adapter %q is already installed", in.AdapterID)
+			}
+		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO installs (plugin_id, install_seq, source, entrypoint, build_digest, created_at)
-			 VALUES (?, (SELECT coalesce(max(install_seq), 0) + 1 FROM installs), ?, ?, ?, ?)`,
-			in.PluginID, in.Source, in.Entrypoint, in.BuildDigest, time.Now().UnixMilli()); err != nil {
+			`INSERT INTO installs (plugin_id, install_seq, source, entrypoint, build_digest, created_at, role, adapter_id)
+			 VALUES (?, (SELECT coalesce(max(install_seq), 0) + 1 FROM installs), ?, ?, ?, ?, ?, ?)`,
+			in.PluginID, in.Source, in.Entrypoint, in.BuildDigest, time.Now().UnixMilli(), in.Role, in.AdapterID); err != nil {
 			return err
 		}
 		_, err := tx.ExecContext(ctx, "INSERT INTO plugin_state (plugin_id) VALUES (?)", in.PluginID)
@@ -297,8 +325,8 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 // GetInstall 读取安装记录。
 func (s *Store) GetInstall(ctx context.Context, pluginID string) (Install, error) {
 	in := Install{PluginID: pluginID}
-	err := s.db.QueryRowContext(ctx, "SELECT source, entrypoint, build_digest FROM installs WHERE plugin_id = ?", pluginID).
-		Scan(&in.Source, &in.Entrypoint, &in.BuildDigest)
+	err := s.db.QueryRowContext(ctx, "SELECT source, entrypoint, build_digest, role, adapter_id FROM installs WHERE plugin_id = ?", pluginID).
+		Scan(&in.Source, &in.Entrypoint, &in.BuildDigest, &in.Role, &in.AdapterID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return in, fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 	}
