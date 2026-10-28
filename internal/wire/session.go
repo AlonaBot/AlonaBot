@@ -10,17 +10,12 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"google.golang.org/protobuf/proto"
 )
 
-// 首发固定常量（CONTRACTS §1.2）。Options 中的同名字段只供测试缩小。
-const (
-	DefaultDeadline         = 30 * time.Second // 请求未指定期限时的默认期限
-	MaxInflightPerDirection = 256              // 每 Session 每方向最多的在途业务请求数
-	MaxBytesPerDirection    = 16 << 20         // 每 Session 每方向在途与排队载荷的字节上限
-	GlobalPayloadBytes      = 64 << 20         // Core 所有 Session 合计的载荷字节上限
-	defaultPriorityFrames   = 1024             // 优先通道（Response/Cancel/控制帧）的容量
-)
+// defaultPriorityFrames 限定优先通道（Response/Cancel/控制帧）的容量。
+const defaultPriorityFrames = 1024
 
 // Payload 携带一次调用或响应的业务载荷。
 type Payload struct {
@@ -35,7 +30,7 @@ type Request struct {
 	Target  string // 被调用的 route/service 或 Core 服务名
 	Payload Payload
 	TraceID []byte // 16 字节业务追踪 ID；没有业务上下文时为空
-	// Deadline 为零时使用 DefaultDeadline；最终期限还会受 ctx 与父调用约束。
+	// Deadline 为零时使用 Options.DefaultDeadline；最终期限还会受 ctx 与父调用约束。
 	Deadline time.Time
 	// ParentCallID 只能由插件侧设置，引用同 Session 中仍在途的 Core→插件 请求。
 	ParentCallID uint64
@@ -111,11 +106,11 @@ type Options struct {
 	Admit  func(*Inbound) *pb.ErrorInfo
 	Global *Budget // 跨 Session 共享的全局预算；为 nil 时不限额（插件侧）
 
-	// 以下为零时使用首发常量，只供测试缩小。
+	// 以下可调值为零时使用 tune.Defaults()；正常运行由 Core 与 SDK 显式设置。
 
-	// MaxInflight 覆盖 MaxInflightPerDir。
+	// MaxInflight 限定每方向在途业务请求数。
 	MaxInflight int
-	// MaxBytes 覆盖 MaxBytesPerDir。
+	// MaxBytes 限定每方向在途与排队载荷字节数。
 	MaxBytes int64
 	// PriorityFrames 覆盖优先通道容量。
 	PriorityFrames int
@@ -226,17 +221,18 @@ func NewSession(conn *Conn, opt Options) *Session {
 // New 创建 Session 但不启动读写循环；回调需要引用该 Session 时，先保存指针再调用 Start，
 // 避免第一帧在赋值之前就被处理。
 func New(conn *Conn, opt Options) *Session {
+	defaults := tune.Defaults()
 	if opt.MaxInflight == 0 {
-		opt.MaxInflight = MaxInflightPerDirection
+		opt.MaxInflight = defaults.SessionMaxInflight
 	}
 	if opt.MaxBytes == 0 {
-		opt.MaxBytes = MaxBytesPerDirection
+		opt.MaxBytes = defaults.SessionMaxPayload
 	}
 	if opt.PriorityFrames == 0 {
 		opt.PriorityFrames = defaultPriorityFrames
 	}
 	if opt.DefaultDeadline == 0 {
-		opt.DefaultDeadline = DefaultDeadline
+		opt.DefaultDeadline = defaults.RequestTimeout
 	}
 	peer := pb.InitiatorSide_INITIATOR_SIDE_CORE
 	if opt.Local == pb.InitiatorSide_INITIATOR_SIDE_CORE {

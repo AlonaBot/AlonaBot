@@ -6,6 +6,7 @@ import (
 	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
 
 // StopTiming 规定停止的时间预算（CONTRACTS §4.2）；测试可注入更短的值。
@@ -15,8 +16,10 @@ type StopTiming struct {
 	OnStopAt time.Duration // STOPPING 发出后留给 OnStop 与资源关闭的时间
 }
 
-// DefaultStopTiming 与 CONTRACTS §4.2 一致：排空 6s、总计 10s、OnStop 4s。
-var DefaultStopTiming = StopTiming{Drain: 6 * time.Second, Total: 10 * time.Second, OnStopAt: 4 * time.Second}
+// NewStopTiming 从生效调优值构造排空、总停止与 OnStop 预算。
+func NewStopTiming(v tune.Values) StopTiming {
+	return StopTiming{Drain: v.StopDrain, Total: v.StopTotal, OnStopAt: v.StopOnStop}
+}
 
 // Tree 抽象被停止插件的进程树，process.Process 满足此接口。
 type Tree interface {
@@ -119,15 +122,9 @@ type RestartPolicy struct {
 	failures map[string][]time.Time
 }
 
-// 首发的有限重启规则（D-06）：窗口内第 restartLimit 次异常退出时禁用。
-const (
-	restartWindow = 5 * time.Minute
-	restartLimit  = 3
-)
-
-// NewRestartPolicy 使用首发规则：5 分钟内第 3 次异常退出时禁用。
-func NewRestartPolicy() *RestartPolicy {
-	return &RestartPolicy{Window: restartWindow, Limit: restartLimit, failures: map[string][]time.Time{}}
+// NewRestartPolicy 从生效调优值构造异常退出的滑动窗口策略。
+func NewRestartPolicy(v tune.Values) *RestartPolicy {
+	return &RestartPolicy{Window: v.RestartWindow, Limit: v.RestartMaxCrashes, failures: map[string][]time.Time{}}
 }
 
 // Decision 表示一次进程退出后的处理决定。

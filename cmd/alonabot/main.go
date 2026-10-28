@@ -25,6 +25,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
+	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
 
 // 进程退出码。
@@ -110,7 +111,7 @@ func run(out *logging.Output, dataDir, pluginID, entry string, stdio bool) error
 	}
 
 	// 3. 启动插件并等待信号或进程退出；只有旧进程树确认清空后才重启。
-	policy := host.NewRestartPolicy()
+	policy := host.NewRestartPolicy(tune.Defaults())
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
 	for {
@@ -181,7 +182,7 @@ func launch(ctx context.Context, out *logging.Output, plog *slog.Logger, store *
 		Bootstrap: &pb.Bootstrap{GenerationId: gen, CandidateConfigJson: "{}", TargetConfigVersion: 1,
 			DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE},
 			LogLevel:           logging.ProtoLevel(out.Levels().Source(pluginID))},
-		NewCandidate: isNew, Stdio: stdio, Limits: host.DefaultLimits, Stop: host.DefaultStopTiming, Log: out.Plugin(pluginID, gen),
+		NewCandidate: isNew, Stdio: stdio, Limits: host.NewLimits(tune.Defaults()), Stop: host.NewStopTiming(tune.Defaults()), Log: out.Plugin(pluginID, gen),
 	})
 	if err != nil {
 		return nil, err

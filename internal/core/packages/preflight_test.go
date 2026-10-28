@@ -19,6 +19,7 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
 
 const (
@@ -128,7 +129,7 @@ func TestPreflightAndMoveTo(t *testing.T) {
 	p := newPackage(t, validEntries(), nil)
 	staging, packages := filepath.Join(p.root, "staging"), filepath.Join(p.root, "packages")
 
-	c, err := Preflight(p.input, staging, DefaultLimits)
+	c, err := Preflight(p.input, staging, NewLimits(tune.Defaults()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +146,7 @@ func TestPreflightAndMoveTo(t *testing.T) {
 	assertNoStaging(t, staging)
 
 	// 同一包再次预检后移动到同一目标，不能覆盖已有包目录。
-	again, err := Preflight(p.input, staging, DefaultLimits)
+	again, err := Preflight(p.input, staging, NewLimits(tune.Defaults()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +220,7 @@ func TestPreflightRejects(t *testing.T) {
 			}
 			limits := tc.limits
 			if limits == (Limits{}) {
-				limits = DefaultLimits
+				limits = NewLimits(tune.Defaults())
 			}
 			staging := filepath.Join(p.root, "staging")
 
