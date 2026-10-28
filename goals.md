@@ -881,7 +881,7 @@ type Limits struct { MaxFileBytes, MaxSessionBytes, MaxCoreBytes int64; MaxUploa
 func NewLimits(v tune.Values) Limits // 取 MEDIA_MAX_OBJECT、MEDIA_SESSION_BUDGET、MEDIA_DISK_BUDGET、MEDIA_MAX_UPLOADS、MEDIA_TTL 的生效值
 const MaxChunkBytes = 1 << 20 // 协议固定的分块上限（CONTRACTS §1.3），不是调优参数
 type Store struct{ ... }
-func Open(dir string, lim Limits, now func() time.Time) (*Store, error) // dir 是 <data_dir>/media；打开时清空上次遗留的临时文件
+func Open(log *slog.Logger, dir string, lim Limits, now func() time.Time) (*Store, error) // dir 是 <data_dir>/media；打开时清空上次遗留的临时文件，清理失败返回 error
 func (s *Store) AddServices(m *router.Mux)             // 把上面 3 个服务加到 Mux；「Register」专指协议的 REGISTER，这里不用
 func (s *Store) ReleaseSession(sessionKey string)      // Session 结束时调用：回收该 Session 的未完成上传与引用
 func (s *Store) Sweep()                                // 回收所有过期对象；由调用方定期调用
@@ -907,6 +907,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
   - 实际长度必须等于 size、SHA256 必须相符，否则 INVALID_ARGUMENT，并终止。
   - 成功后签发 MediaRef{token: 16 字节随机值的十六进制, size, mime, sha256, expires_at: Commit 时刻起 TTL}。引用绑定 owner Session，预留转为引用占用。
 - 回收：上传终止、过期或 ReleaseSession 时，删除临时文件并扣回预留与占用。
+  - 删除失败（不含文件已不存在）时经注入的 Logger 记一条 WARN，带 path 与 err 字段；预留与占用照常扣回，upload_id/token 照常失效。残留文件由下次 Open 清理，不重试删除。
 - 过期或已回收的 upload_id/token 一律视为不存在。
 - 所有拒绝都不产生可用 MediaRef。
 - 预留与占用的计数在并发请求下必须正确，用锁保护，不能出现负数或超额。
