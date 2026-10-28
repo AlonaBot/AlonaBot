@@ -53,13 +53,12 @@
 | goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 可派发 |
 | goal-10 | T-04.1 | 根插件 API 与静态注册索引 | T-03.1 | 可派发 |
 | goal-56 | T-11.3 | Agent 会话存储 | T-03.1 | 可派发 |
-| goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 等待前置 |
+| goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 可派发 |
 | goal-11 | T-04.2 | 构建期生成器 | T-04.1 | 等待前置 |
 | goal-12 | T-04.3 | 命令选择、文本匹配与参数绑定 | T-04.1 | 等待前置 |
 | goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1 | 等待前置 |
 | goal-19 | T-06.1 | Service/Bus 描述与 Broker 准入 | T-04.1 | 等待前置 |
 | goal-25 | T-07.3 | SDK HTTP Listener 与 Core 代理 | T-04.1 | 等待前置 |
-| goal-78 | T-15.1 | 官方 OneBot 11 Adapter 的连接与接收 | T-03.3 | 等待前置 |
 | goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 等待前置 |
 | goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 等待前置 |
 | goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 等待前置 |
@@ -68,6 +67,7 @@
 | goal-28 | T-08.1 | 配置字段描述与构建检查 | T-04.2 | 等待前置 |
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-06.1 | 等待前置 |
 | goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2 | 等待前置 |
+| goal-78 | T-15.1 | 官方 OneBot 11 Adapter 的连接与接收 | T-03.3、T-03.4 | 等待前置 |
 | goal-8 | T-03.8 | 按钮、extension 片段与依赖解析 | T-03.2、T-03.7 | 等待前置 |
 | goal-51 | T-03.9 | 消息编辑 | T-03.7 | 等待前置 |
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1 | 等待前置 |
@@ -1102,7 +1102,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-5 · T-03.4 官方 Telegram Adapter 的接收
 
-状态：等待前置（T-03.3）。语句中 goal-4 提供的符号（sdk/adapter 的 Adapter、Instance、Core、StartRequest，sdk.RunAdapter，remote.Process）只写名字；goal-4 合并后，审查者按实际签名核对，再改为可派发。
+状态：可派发。前置 T-03.3 已由 PR #32 合并；sdk/adapter 的 Adapter、Instance、Core、StartRequest、Account 与 sdk.RunAdapter 已按合入代码核对，Core 对交付事件的归属校验与字段重写（internal/core/adapter/remote）已写进行为段；Actor 的字段号 5 与 MessageCreatedPayload 的字段号 3 仍未占用。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-5（切片 T-03.4：官方 Telegram Adapter 的接收）。goal 目录 goal-5，分支 goal-5，worktree .worktrees/goal-5，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1116,7 +1116,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - contracts/wirespec_test.go：追加这两个字段的编号检查
 - 新增 adapters/telegram/（可导入的包 telegram）
 - 新增 adapters/telegram/telegramtest/（本地 Bot API 模拟服务）
-- 新增 adapters/telegram/cmd/alonabot-adapter-telegram/main.go（只调用 sdk.RunAdapter(telegram.New())）
+- 新增 adapters/telegram/cmd/alonabot-adapter-telegram/main.go（只调用 sdk.RunAdapter(telegram.New())；返回错误时与 examples/plugins/echo 一样 slog.Error 后 os.Exit(1)）
 - 上述包的测试文件
 允许的新跨模块边：adapters/... -> sdk/...、-> contracts（ARCHITECTURE 已登记）。adapters 不 import internal/...，测试也一样。
 
@@ -1143,12 +1143,14 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
   2) 构建该实例专用的 http.Client：设置了 proxy 时 Transport.Proxy 固定为它，否则用 http.ProxyFromEnvironment（Core 已按 §15.1 设置子进程环境）。代理不可达按网络错误处理，不改为直连。
   3) getMe：account_id 为机器人用户 ID 的十进制字符串，DisplayName 为 username；失败时 Start 返回错误（401 → PERMISSION_DENIED，其余 → UNAVAILABLE）。
   4) getWebhookInfo：url 非空 → FAILED_PRECONDITION，不调用 deleteWebhook。
-  5) 启动后台接收循环后返回；Instance.Capabilities 本切片只声明接收相关能力，发送能力由 T-03.7 补充。
+  5) 启动后台接收循环后返回 Instance：Account() 返回 getMe 的账号；Capabilities 本切片只声明接收相关能力，发送能力由 T-03.7 补充；Send 本切片返回 UNSUPPORTED 的 ErrorInfo（发送由 T-03.7 实现）。Descriptor 的能力名称不能重复，本切片不声明 extension。
+- 交付给 Core 的事件：Event 的 adapter_id、adapter_instance_id（StartRequest.InstanceID）与 account_id（Account.ID）必须与 Target 中的同名字段一致，否则 Core 以 INVALID_ARGUMENT 拒绝；event_id、source_kind 与 capabilities 由 Core 重建，Adapter 不填；Actor.trusted_roles 只保留 CHAT_ADMIN。 occurred_at_unix_ms 取 Telegram 的 date（秒）乘以 1000。
 - 游标：Adapter 自定义的不透明 JSON 字节 {"offset": int64, "round_start_unix_ms": int64, "last_accepted_unix_ms": int64}；Start 收到空游标时以当前时刻为轮次起点、offset 为 0（不带 offset）。
 - 接收循环：
   - 每次 getUpdates 显式传 allowed_updates=["message","edited_message","channel_post","edited_channel_post","callback_query","my_chat_member","chat_member","message_reaction"]、timeout=30、offset（为 0 时不传）。
   - 一批 update 按返回顺序逐条处理：能标准化的经 Core.Deliver 交付，游标 offset=update_id+1、last_accepted 为接纳时刻；收到应答（无论 accepted 是否为 true）后才处理下一条。不支持或本切片不处理的 update 经 Core.SaveCursor 推进游标，不交付。不得在交付第一条前保存整批最大 update_id。
   - 7 天重建：在一次 long poll 结束且没有请求在途时，若 max(round_start, last_accepted) 距今满 7 天（命名常量），先 SaveCursor 保存 {offset: 0, round_start: 现在}，再继续拉取。
+  - Deliver 或 SaveCursor 返回错误：实例停止后为 FAILED_PRECONDITION，接收循环退出；其他错误不推进本地游标，退避后从上次保存的 offset 重新拉取（可能重复交付，MESSAGE-MODEL 不承诺 exactly-once）。
   - 401 或 409：经 Core.ReportFailure 报告（safe_message 写明 "telegram rejected the token" 或 "another getUpdates or webhook owns this bot"），停止接收，不再重试。
   - 网络错误、5xx 与 429：接收按有上限的指数退避重试（初始与上限为命名常量；429 使用 retry_after）。只用于接收，与发送无关。
   - Stop：取消在途的 getUpdates 并等待循环退出后返回；Stop 之后不再交付。同一实例的 Start/Stop/重连不会出现两个并行的接收循环。
@@ -1537,81 +1539,6 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/... ./cmd/...；go build ./...。
 
 不做：两个 Host 的边界、插件兑换票据与插件会话（T-07.4）；管理认证与 Admin 页面（T-09）；HTTPS 与可信反代的 Host 校验（T-07.4、T-09）；alonabot serve（T-09.4）。
-```
-
-### goal-78 · T-15.1 官方 OneBot 11 Adapter 的连接与接收
-
-状态：等待前置（T-03.3）。语句中 goal-4 提供的符号（sdk/adapter 的 Adapter、Instance、Core、StartRequest、Account，sdk.RunAdapter）只写名字；goal-4 合并后，审查者按实际签名核对，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-78（切片 T-15.1：官方 OneBot 11 Adapter 的连接与接收）。goal 目录 goal-78，分支 goal-78，worktree .worktrees/goal-78，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：实现官方 OneBot 11 Adapter 的连接与接收：正向 WebSocket 连接与 access_token、get_login_info 账号、按 echo 配对的 API 调用、有界退避重连、self_id 校验、数组格式检查、实例内有界事件队列与逐条交付、私聊/群聊/撤回/成员事件的标准化与 to_me；提供本地 OneBot 11 模拟服务，供本切片与后续 OneBot 11 切片测试。
-
-依据：PLAN T-15 步骤 1、2；CONTRACTS §8（OneBot 11 段）、§14.5；MESSAGE-MODEL §1、§1.1、§7、§7.1；DECISIONS D-46；TEST-MATRIX V-71 的接收分项；OneBot 11 标准原文（https://github.com/botuniverse/onebot-11 的 communication/ws.md、event/、api/public.md、message/segment.md），字段名以原文为准。
-
-范围（只新增或修改这些）：
-- go.mod、go.sum：引入 github.com/coder/websocket（本切片获授权引入，只在 adapters/onebot11 使用，版本取当前最新的正式版）
-- 新增 adapters/onebot11/（可导入的包 onebot11）
-- 新增 adapters/onebot11/onebottest/（本地 OneBot 11 模拟服务）
-- 新增 adapters/onebot11/cmd/alonabot-adapter-onebot11/main.go（只调用 sdk.RunAdapter(onebot11.New())）
-- 上述包的测试文件
-允许的新跨模块边：adapters/... -> sdk/...、-> contracts（ARCHITECTURE 已登记）。adapters 不 import internal/...，测试也一样。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. adapters/onebot11
-   const AdapterID = "onebot11"
-   func New() adapter.Adapter // 实现 sdk/adapter 的 Adapter；Descriptor 的 adapter_id 为 AdapterID
-   实例配置 JSON：{"ws_url": string（必填，ws:// 或 wss://）, "access_token": string（可选）, "mode": string（缺省 "forward"，只接受 "forward"）}
-2. adapters/onebot11/onebottest
-   type Call struct { Action string; Params map[string]any }
-   type Server struct{ ... }
-   func NewServer(t testing.TB, accessToken string) *Server // httptest 服务，在 "/" 提供 OneBot 11 正向 WebSocket 通用端点；accessToken 非空时校验 Authorization: Bearer，不符返回 401；t.Cleanup 时关闭
-   func (s *Server) URL() string                       // ws:// 地址，作为 ws_url
-   func (s *Server) SetLogin(userID int64, nickname string)
-   func (s *Server) Push(events ...json.RawMessage)    // 按顺序推送上报；没有连接时排队，连接建立后推送
-   func (s *Server) Disconnect()                       // 关闭当前连接，模拟断线
-   func (s *Server) Connections() int                  // 累计接受的连接数
-   func (s *Server) Calls() []Call                     // 依次记录每个 API 请求
-   func (s *Server) Respond(action string, fn func(params map[string]any) (status string, retcode int, data any)) // 替换某个 action 的响应；status 为空字符串时不响应
-   缺省响应：get_login_info 返回 SetLogin 的值；get_msg 在 Push 过的 message 上报中按 message_id 查找并返回其 sender，找不到返回 failed；其他 action 返回 status "failed"、retcode 1404。
-
-行为：
-- Start（sdk/adapter 的 Adapter.Start）：
-  1) 解析实例配置：ws_url 不是 ws/wss URL、mode 不是 "forward" → INVALID_ARGUMENT（错误不含配置原文与 access_token）。
-  2) 用 websocket.Dial 连接 ws_url，access_token 非空时带 Authorization: Bearer；握手 401/403 → PERMISSION_DENIED，其他失败 → UNAVAILABLE。Start 失败不重试。
-  3) get_login_info：account_id 为 user_id 的十进制字符串，DisplayName 为 nickname；失败 → UNAVAILABLE。
-  4) 启动读循环与交付循环后返回。Capabilities 本切片只声明接收相关的能力，发送能力由 T-15.2 补充。
-- API 调用：每个请求带实例内唯一的 echo（递增的十进制字符串），响应按 echo 配对；调用以 ctx 为期限，ctx 结束时返回 ctx 的错误；连接断开时全部在途调用以 UNAVAILABLE 结束。带 echo 的帧是响应，其余帧是上报。
-- 读循环一直读取，不因等待交付而停止：
-  - 响应交给配对的调用；meta_event 不入队（lifecycle 的 connect 只记 DEBUG）。
-  - 其余上报放进实例事件队列（256 条，命名常量）；队列满时丢弃该上报，累加丢弃计数并记 WARN（带累计数）。
-- 交付循环按顺序取出上报，标准化后经 Core.Deliver 交付，游标为空；收到应答（无论 accepted）后才取下一条。不交付的上报直接跳过。
-- 格式与身份：message 上报的 message 字段是字符串（CQ 码格式）时，经 Core.ReportFailure 报告（safe_message "onebot implementation must post messages in array format"），关闭连接并停止接收。self_id 与 account_id 不符的上报丢弃并记 WARN。
-- 断线：连接关闭或读错误（Stop 引起的除外）后按有上限的指数退避重连（初始 1s、上限 60s，命名常量），重连后重新 get_login_info；user_id 变化 → ReportFailure（"onebot account changed"）并停止；握手 401/403 → ReportFailure（"onebot implementation rejected the access token"）并停止。断线期间的上报不补收；重连与已提交的 Send 无关，不重放任何请求。
-- Stop：关闭连接，等待读循环与交付循环退出后返回；Stop 之后不再交付。同一实例不会有两条并行的连接。
-- 标准化（MESSAGE-MODEL §7.1；数字 ID 一律转为十进制字符串）：
-  - Target：adapter_id、adapter_instance_id、account_id、chat_id（"private:<user_id>" 或 "group:<group_id>"），没有 thread_id。
-  - message（private、group）→ message.created：platform_message_id 为 message_id，source_event_id 同 message_id；Actor.external_user_id 为 user_id，display_name 取非空的 sender.card，否则 sender.nickname，locale absent；群聊中 sender.role 为 owner 或 admin 时 trusted_roles 含 CHAT_ADMIN；sub_type 为 anonymous 时不构造 Actor。
-  - chain：text → plain text；at → mention（qq 为 "all" 时不生成）；reply → reference；image、video 本切片不生成（T-15.2 接入入站媒体）；其他段不生成。platform_payload 为原始上报 JSON，chain 可以为空。
-  - to_me：私聊；chain 中有 external_user_id 等于 account_id 的 mention；reply 引用的消息经 get_msg 查得 sender.user_id 等于 account_id。get_msg 失败按 false 处理并记 DEBUG。
-  - notice.group_recall、notice.friend_recall → message.deleted（platform_message_ids 只含 message_id；operator_id 存在时作为 actor）；notice.group_increase、notice.group_decrease → member.joined、member.left（member_external_user_id 为 user_id；operator_id 非 0 且不等于 user_id 时作为 actor）；其他 notice 与全部 request 不交付，计数并记 DEBUG。
-- 脱敏：access_token 不进入日志、错误与普通响应；ws_url 带 userinfo 或查询参数时，记录前去掉这两部分。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：adapters/onebot11/onebot11_test.go。用 onebottest.Server 与一个记录调用的 adapter.Core 测试替身驱动 onebot11.New() 的实例（不经 Core 进程）：
-  - Start 得到 get_login_info 的 account_id 与 nickname；access_token 错误时 Start 返回 PERMISSION_DENIED。
-  - 推入私聊消息、群聊消息（sender.role 为 admin）、匿名群消息、撤回、入群与一条 request：依次交付 5 个事件，字段与 MESSAGE-MODEL §7.1 一致，request 未交付；Core 替身对第二条返回 accepted=false 时后续照样交付。
-  - to_me：私聊为 true；@本账号为 true；reply 本账号的消息为 true；reply 他人消息与 get_msg 失败为 false。
-  - 字符串格式的 message 上报产生一次 ReportFailure，接收停止；self_id 不符的上报未交付。
-  - Disconnect 后在退避期内重连（Connections 为 2），之后推入的消息正常交付，没有重复交付；重连后 get_login_info 返回其他 user_id 时 ReportFailure。
-  - Core 替身的 Deliver 阻塞期间推入 300 条上报：读循环仍能完成一次 get_msg 调用，有上报被丢弃且丢弃计数与未交付数一致；解除阻塞后按原顺序交付队列中的事件。
-  - 错误与日志中不出现 access_token（用测试 token 字符串做断言）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：配置的各种非法值；echo 配对与并发调用；ctx 超时与断线时的在途调用；退避上限；Stop 期间读循环退出；ws_url 的脱敏。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./adapters/...；go build ./...；go mod tidy 后 go.mod 与 go.sum 无差异。
-
-不做：发送、发送计划与回执、入站与出站媒体、extension（T-15.2）；Core 侧装配、alonabot run 联验与一致性验收（T-15.3）；反向 WebSocket（v0.1 之外）。
 ```
 
 ## 第 6 波
@@ -2100,6 +2027,82 @@ internal/core/webhost
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./... ；go build ./...。
 
 不做：config.json 直读、dev.sqlite 与拒绝 update/rollback（T-13.2）；热部署与 Reload（T-13.3）；alonabot serve（T-09.4，复用本切片的装配）；HTTP 与设置文件的装配（随 T-07.5、T-09.4 接入）。
+```
+
+### goal-78 · T-15.1 官方 OneBot 11 Adapter 的连接与接收
+
+状态：等待前置（T-03.4）。T-03.3 已由 PR #32 合并，sdk/adapter 的 Adapter、Instance、Core、StartRequest、Account 与 sdk.RunAdapter 已按合入代码核对；to_me 使用的 MessageCreatedPayload.to_me 由 goal-5 追加到 proto，本切片不改 proto，因此等 T-03.4 合并后核对该字段，再改为可派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-78（切片 T-15.1：官方 OneBot 11 Adapter 的连接与接收）。goal 目录 goal-78，分支 goal-78，worktree .worktrees/goal-78，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：实现官方 OneBot 11 Adapter 的连接与接收：正向 WebSocket 连接与 access_token、get_login_info 账号、按 echo 配对的 API 调用、有界退避重连、self_id 校验、数组格式检查、实例内有界事件队列与逐条交付、私聊/群聊/撤回/成员事件的标准化与 to_me；提供本地 OneBot 11 模拟服务，供本切片与后续 OneBot 11 切片测试。
+
+依据：PLAN T-15 步骤 1、2；CONTRACTS §8（OneBot 11 段）、§14.5；MESSAGE-MODEL §1、§1.1、§7、§7.1；DECISIONS D-46；TEST-MATRIX V-71 的接收分项；OneBot 11 标准原文（https://github.com/botuniverse/onebot-11 的 communication/ws.md、event/、api/public.md、message/segment.md），字段名以原文为准。
+
+范围（只新增或修改这些）：
+- go.mod、go.sum：引入 github.com/coder/websocket（本切片获授权引入，只在 adapters/onebot11 使用，版本取当前最新的正式版）
+- 新增 adapters/onebot11/（可导入的包 onebot11）
+- 新增 adapters/onebot11/onebottest/（本地 OneBot 11 模拟服务）
+- 新增 adapters/onebot11/cmd/alonabot-adapter-onebot11/main.go（只调用 sdk.RunAdapter(onebot11.New())；返回错误时与 examples/plugins/echo 一样 slog.Error 后 os.Exit(1)）
+- 上述包的测试文件
+允许的新跨模块边：adapters/... -> sdk/...、-> contracts（ARCHITECTURE 已登记）。adapters 不 import internal/...，测试也一样。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. adapters/onebot11
+   const AdapterID = "onebot11"
+   func New() adapter.Adapter // 实现 sdk/adapter 的 Adapter；Descriptor 的 adapter_id 为 AdapterID
+   实例配置 JSON：{"ws_url": string（必填，ws:// 或 wss://）, "access_token": string（可选）, "mode": string（缺省 "forward"，只接受 "forward"）}
+2. adapters/onebot11/onebottest
+   type Call struct { Action string; Params map[string]any }
+   type Server struct{ ... }
+   func NewServer(t testing.TB, accessToken string) *Server // httptest 服务，在 "/" 提供 OneBot 11 正向 WebSocket 通用端点；accessToken 非空时校验 Authorization: Bearer，不符返回 401；t.Cleanup 时关闭
+   func (s *Server) URL() string                       // ws:// 地址，作为 ws_url
+   func (s *Server) SetLogin(userID int64, nickname string)
+   func (s *Server) Push(events ...json.RawMessage)    // 按顺序推送上报；没有连接时排队，连接建立后推送
+   func (s *Server) Disconnect()                       // 关闭当前连接，模拟断线
+   func (s *Server) Connections() int                  // 累计接受的连接数
+   func (s *Server) Calls() []Call                     // 依次记录每个 API 请求
+   func (s *Server) Respond(action string, fn func(params map[string]any) (status string, retcode int, data any)) // 替换某个 action 的响应；status 为空字符串时不响应
+   缺省响应：get_login_info 返回 SetLogin 的值；get_msg 在 Push 过的 message 上报中按 message_id 查找并返回其 sender，找不到返回 failed；其他 action 返回 status "failed"、retcode 1404。
+
+行为：
+- Start（sdk/adapter 的 Adapter.Start）：
+  1) 解析实例配置：ws_url 不是 ws/wss URL、mode 不是 "forward" → INVALID_ARGUMENT（错误不含配置原文与 access_token）。
+  2) 用 websocket.Dial 连接 ws_url，access_token 非空时带 Authorization: Bearer；握手 401/403 → PERMISSION_DENIED，其他失败 → UNAVAILABLE。Start 失败不重试。
+  3) get_login_info：account_id 为 user_id 的十进制字符串，DisplayName 为 nickname；失败 → UNAVAILABLE。
+  4) 启动读循环与交付循环后返回 Instance：Account() 返回 get_login_info 的账号；Capabilities 本切片只声明接收相关的能力，发送能力由 T-15.2 补充；Send 本切片返回 UNSUPPORTED 的 ErrorInfo（发送由 T-15.2 实现）。
+- 交付给 Core 的事件：Event 的 adapter_id、adapter_instance_id（StartRequest.InstanceID）与 account_id（Account.ID）必须与 Target 中的同名字段一致，否则 Core 以 INVALID_ARGUMENT 拒绝；event_id、source_kind 与 capabilities 由 Core 重建，Adapter 不填；Actor.trusted_roles 只保留 CHAT_ADMIN。 occurred_at_unix_ms 取上报的 time（秒）乘以 1000。
+- API 调用：每个请求带实例内唯一的 echo（递增的十进制字符串），响应按 echo 配对；调用以 ctx 为期限，ctx 结束时返回 ctx 的错误；连接断开时全部在途调用以 UNAVAILABLE 结束。带 echo 的帧是响应，其余帧是上报。
+- 读循环一直读取，不因等待交付而停止：
+  - 响应交给配对的调用；meta_event 不入队（lifecycle 的 connect 只记 DEBUG）。
+  - 其余上报放进实例事件队列（256 条，命名常量）；队列满时丢弃该上报，累加丢弃计数并记 WARN（带累计数）。
+- 交付循环按顺序取出上报，标准化后经 Core.Deliver 交付，游标为空；收到应答（无论 accepted）后才取下一条。不交付的上报直接跳过。Deliver 返回错误时：实例停止后为 FAILED_PRECONDITION，交付循环退出；其他错误记 WARN 后继续下一条（OneBot 11 没有重放，与队列满时丢弃一致）。
+- 格式与身份：message 上报的 message 字段是字符串（CQ 码格式）时，经 Core.ReportFailure 报告（safe_message "onebot implementation must post messages in array format"），关闭连接并停止接收。self_id 与 account_id 不符的上报丢弃并记 WARN。
+- 断线：连接关闭或读错误（Stop 引起的除外）后按有上限的指数退避重连（初始 1s、上限 60s，命名常量），重连后重新 get_login_info；user_id 变化 → ReportFailure（"onebot account changed"）并停止；握手 401/403 → ReportFailure（"onebot implementation rejected the access token"）并停止。断线期间的上报不补收；重连与已提交的 Send 无关，不重放任何请求。
+- Stop：关闭连接，等待读循环与交付循环退出后返回；Stop 之后不再交付。同一实例不会有两条并行的连接。
+- 标准化（MESSAGE-MODEL §7.1；数字 ID 一律转为十进制字符串）：
+  - Target：adapter_id、adapter_instance_id、account_id、chat_id（"private:<user_id>" 或 "group:<group_id>"），没有 thread_id。
+  - message（private、group）→ message.created：platform_message_id 为 message_id，source_event_id 同 message_id；Actor.external_user_id 为 user_id，display_name 取非空的 sender.card，否则 sender.nickname，locale absent；群聊中 sender.role 为 owner 或 admin 时 trusted_roles 含 CHAT_ADMIN；sub_type 为 anonymous 时不构造 Actor。
+  - chain：text → plain text；at → mention（qq 为 "all" 时不生成）；reply → reference；image、video 本切片不生成（T-15.2 接入入站媒体）；其他段不生成。platform_payload 为原始上报 JSON，chain 可以为空。
+  - to_me：私聊；chain 中有 external_user_id 等于 account_id 的 mention；reply 引用的消息经 get_msg 查得 sender.user_id 等于 account_id。get_msg 失败按 false 处理并记 DEBUG。
+  - notice.group_recall、notice.friend_recall → message.deleted（platform_message_ids 只含 message_id；operator_id 存在时作为 actor）；notice.group_increase、notice.group_decrease → member.joined、member.left（member_external_user_id 为 user_id；operator_id 非 0 且不等于 user_id 时作为 actor）；其他 notice 与全部 request 不交付，计数并记 DEBUG。
+- 脱敏：access_token 不进入日志、错误与普通响应；ws_url 带 userinfo 或查询参数时，记录前去掉这两部分。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：adapters/onebot11/onebot11_test.go。用 onebottest.Server 与一个记录调用的 adapter.Core 测试替身驱动 onebot11.New() 的实例（不经 Core 进程）：
+  - Start 得到 get_login_info 的 account_id 与 nickname；access_token 错误时 Start 返回 PERMISSION_DENIED。
+  - 推入私聊消息、群聊消息（sender.role 为 admin）、匿名群消息、撤回、入群与一条 request：依次交付 5 个事件，字段与 MESSAGE-MODEL §7.1 一致，request 未交付；Core 替身对第二条返回 accepted=false 时后续照样交付。
+  - to_me：私聊为 true；@本账号为 true；reply 本账号的消息为 true；reply 他人消息与 get_msg 失败为 false。
+  - 字符串格式的 message 上报产生一次 ReportFailure，接收停止；self_id 不符的上报未交付。
+  - Disconnect 后在退避期内重连（Connections 为 2），之后推入的消息正常交付，没有重复交付；重连后 get_login_info 返回其他 user_id 时 ReportFailure。
+  - Core 替身的 Deliver 阻塞期间推入 300 条上报：读循环仍能完成一次 get_msg 调用，有上报被丢弃且丢弃计数与未交付数一致；解除阻塞后按原顺序交付队列中的事件。
+  - 错误与日志中不出现 access_token（用测试 token 字符串做断言）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：配置的各种非法值；echo 配对与并发调用；ctx 超时与断线时的在途调用；退避上限；Stop 期间读循环退出；ws_url 的脱敏。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./adapters/...；go build ./...；go mod tidy 后 go.mod 与 go.sum 无差异。
+
+不做：发送、发送计划与回执、入站与出站媒体、extension（T-15.2）；Core 侧装配、alonabot run 联验与一致性验收（T-15.3）；反向 WebSocket（v0.1 之外）。
 ```
 
 ## 第 7 波
