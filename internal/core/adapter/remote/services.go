@@ -69,7 +69,7 @@ func (p *Process) service(ctx context.Context, caller router.Caller, in *wire.In
 	switch r := request.(type) {
 	case *pb.AdapterDeliverRequest:
 		ev := r.Event
-		if ev == nil || ev.GetAdapterId() != p.opt.AdapterID || ev.GetAdapterInstanceId() != id || ev.GetAccountId() != entry.account {
+		if ev == nil || !adapterEventPayload(ev) || ev.GetAdapterId() != p.opt.AdapterID || ev.GetAdapterInstanceId() != id || ev.GetAccountId() != entry.account {
 			return invalid()
 		}
 		if target := ev.Target; target != nil && (target.AdapterId != p.opt.AdapterID || target.AdapterInstanceId != id || target.AccountId != entry.account) {
@@ -113,4 +113,26 @@ func (p *Process) service(ctx context.Context, caller router.Caller, in *wire.In
 		return serviceResponse(&pb.AdapterStatusResponse{})
 	}
 	panic("unreachable adapter service")
+}
+
+// adapterEventPayload 只接受平台事件，并核对类型与载荷的唯一分支。
+func adapterEventPayload(ev *pb.Event) bool {
+	switch ev.EventType {
+	case "message.created":
+		return ev.GetEventPayload().GetMessageCreated() != nil
+	case "message.edited":
+		return ev.GetEventPayload().GetMessageEdited() != nil
+	case "message.deleted":
+		return ev.GetEventPayload().GetMessageDeleted() != nil
+	case "button.clicked":
+		return ev.GetEventPayload().GetButtonClicked() != nil
+	case "member.joined":
+		return ev.GetEventPayload().GetMemberJoined() != nil
+	case "member.left":
+		return ev.GetEventPayload().GetMemberLeft() != nil
+	case "reaction.added":
+		return ev.GetEventPayload().GetReactionAdded() != nil
+	default:
+		return false
+	}
 }

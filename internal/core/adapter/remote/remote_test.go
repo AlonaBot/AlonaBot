@@ -83,10 +83,11 @@ func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core s
 			return nil, err
 		}
 	}
-	return &loopInstance{id: req.InstanceID, account: config.Account, core: core, sequence: n, initial: string(req.Cursor)}, nil
+	return &loopInstance{id: req.InstanceID, account: config.Account, core: core, sequence: n, initial: string(req.Cursor), token: config.Token}, nil
 }
 
 type loopInstance struct {
+	token                string
 	stopFailed           bool
 	id, account, initial string
 	core                 sdkadapter.Core
@@ -103,7 +104,7 @@ func (i *loopInstance) Stop(context.Context) error {
 	defer i.mu.Unlock()
 	if i.account == "stop-error" && !i.stopFailed {
 		i.stopFailed = true
-		return errors.New("platform stop failed")
+		return errors.New("platform stop failed: " + i.token)
 	}
 	return nil
 }
@@ -129,6 +130,12 @@ func (i *loopInstance) Send(ctx context.Context, target *pb.Target, chain *pb.Me
 		id = "other-instance"
 	}
 	ev := &pb.Event{EventId: "adapter-forged-id", EventType: "message.created", AdapterId: proto.String("loop"), AdapterInstanceId: proto.String(id), AccountId: proto.String(i.account), Target: target, EventPayload: &pb.EventPayload{Kind: &pb.EventPayload_MessageCreated{MessageCreated: &pb.MessageCreatedPayload{Chain: chain, PlatformMessageId: strconv.Itoa(i.sequence)}}}}
+	switch text {
+	case "bot.online", "bot.offline", "scheduled":
+		ev.EventType = text
+	case "mismatched-payload":
+		ev.EventType = "message.edited"
+	}
 	accepted, err := i.core.Deliver(ctx, ev, []byte(strconv.Itoa(i.sequence)))
 	if err != nil {
 		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, SafeMessage: err.Error()}
@@ -282,6 +289,15 @@ func TestRemoteLifecycle(t *testing.T) {
 	after, err := store.AdapterCursor(ctx, "two")
 	if err != nil || !bytes.Equal(before, after) || len(sink.snapshot()) != eventsBefore {
 		t.Fatal("forgery advanced cursor or delivered event")
+	}
+	for _, text := range []string{"bot.online", "bot.offline", "scheduled", "mismatched-payload"} {
+		if _, safe := send("two", text); safe == nil {
+			t.Fatalf("invalid event %s accepted", text)
+		}
+		current, err := store.AdapterCursor(ctx, "two")
+		if err != nil || !bytes.Equal(before, current) || len(sink.snapshot()) != eventsBefore {
+			t.Fatalf("invalid event %s changed cursor or Sink", text)
+		}
 	}
 	if err := p.StartInstance(ctx, "duplicate", []byte(`{"account":"a"}`)); wire.CodeOf(err) != pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS {
 		t.Fatalf("duplicate account: %v", err)

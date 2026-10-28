@@ -49,7 +49,7 @@ type Process struct {
 
 // instance 保存远端账号身份与启停状态；可变字段统一由 Process.mu 保护。
 type instance struct {
-	needsStop    bool // SDK 中仍有待回收的平台实例，由 Process.mu 保护
+	needsStop    bool // SDK 中仍有待回收的平台实例
 	process      *Process
 	id           string
 	config       []byte // 只保留在内存中，恢复时重新下发

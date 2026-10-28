@@ -17,19 +17,26 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// adapterRuntime 串行化实例创建与停止；发送在实例锁外运行，避免同步交付造成死锁。
+// adapterRuntime 按实例串行化启停；全局状态锁只保护登记，不跨平台操作持有。
 // Session 生命周期沿用 activation；每个实例 Core 客户端独立关闭交付入口。
 type adapterRuntime struct {
+	activation *activation // Session.Start 前发布，提供出站停止门禁
 	Base
 	adapter   adapter.Adapter
-	mu        sync.Mutex // 保护 instances 与实例启停
+	mu        sync.Mutex // 保护实例登记、状态与配置
+	stopping  bool       // 与停止快照一起在 mu 下发布，阻止已准入但尚未执行的 Start
 	instances map[string]*adapterEntry
 	session   *wire.Session // Session.Start 前赋值，此后保持不变
 }
 
+// adapterEntry 保留实例状态与脱敏配置，生命周期操作由本实例锁串行化。
+// busy、config、instance 与 core 由 adapterRuntime.mu 保护。
 type adapterEntry struct {
-	instance adapter.Instance
-	core     *adapterCore
+	lifecycle sync.Mutex // 只串行化本实例的 Start 与 Stop，不阻塞其他实例
+	busy      bool       // 正在启动或停止，由 adapterRuntime.mu 保护
+	config    []byte     // 错误脱敏所需配置，由 adapterRuntime.mu 保护
+	instance  adapter.Instance
+	core      *adapterCore
 }
 
 type adapterCore struct {
@@ -71,6 +78,7 @@ func RunAdapter(a adapter.Adapter) error {
 	limits := ack.GetBootstrap().GetSessionLimits()
 	active.sess = wire.New(conn, wire.Options{Local: pb.InitiatorSide_INITIATOR_SIDE_PLUGIN, SessionID: ack.GetSessionId(), ProtocolMinor: ack.GetChosenMinor(), SourcePluginID: l.pluginID,
 		Handler: runtime.handle, Admit: active.admit, Control: active.control, MaxInflight: int(limits.GetMaxInflight()), MaxBytes: int64(limits.GetMaxPayloadBytes()), DefaultDeadline: time.Duration(limits.GetRequestTimeoutMs()) * time.Millisecond})
+	runtime.activation = active
 	runtime.session = active.sess
 	activeSession.Store(active)
 	active.sess.Start() // 回调使用的 Session 指针先发布，再启动读循环。
@@ -131,14 +139,50 @@ func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, a adapter.Adapt
 // OnStop 依次停止全部实例，在 activation 提供的停止预算内回收平台资源。
 func (r *adapterRuntime) OnStop(ctx context.Context) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.stopping = true
+	entries := make([]*adapterEntry, 0, len(r.instances))
+	for _, entry := range r.instances {
+		if entry.core != nil {
+			entry.core.stopped.Store(true)
+		}
+		entries = append(entries, entry)
+	}
+	r.mu.Unlock()
 	var errs []error
-	for id, entry := range r.instances {
-		entry.core.stopped.Store(true)
-		errs = append(errs, entry.instance.Stop(ctx))
-		delete(r.instances, id)
+	for _, entry := range entries {
+		if err := r.stopEntry(ctx, entry); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	return errors.Join(errs...)
+}
+
+// stopEntry 先关闭交付入口，再在本实例的生命周期锁内停止平台接收。
+func (r *adapterRuntime) stopEntry(ctx context.Context, entry *adapterEntry) error {
+	entry.lifecycle.Lock()
+	defer entry.lifecycle.Unlock()
+	r.mu.Lock()
+	instance := entry.instance
+	if instance == nil {
+		r.mu.Unlock()
+		return nil
+	}
+	entry.busy = true
+	entry.core.stopped.Store(true)
+	config := entry.config
+	r.mu.Unlock()
+	err := instance.Stop(ctx)
+	r.mu.Lock()
+	entry.busy = false
+	if err == nil {
+		entry.instance = nil
+		entry.config = nil
+	}
+	r.mu.Unlock()
+	if err != nil {
+		return errors.New(adapterSafeError(err, config))
+	}
+	return nil
 }
 
 func adapterPayload(message proto.Message) (wire.Payload, error) {
@@ -162,24 +206,48 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 		}
 		r.mu.Lock()
-		defer r.mu.Unlock()
-		if _, ok := r.instances[request.InstanceId]; ok {
+		if r.stopping {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter runtime is stopping")
+		}
+		entry := r.instances[request.InstanceId]
+		if entry == nil {
+			entry = &adapterEntry{}
+			r.instances[request.InstanceId] = entry
+		}
+		r.mu.Unlock()
+		entry.lifecycle.Lock()
+		defer entry.lifecycle.Unlock()
+		r.mu.Lock()
+		if r.stopping {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter runtime is stopping")
+		}
+		if entry.instance != nil {
+			r.mu.Unlock()
 			return dispatchError(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "adapter instance already started")
 		}
 		core := &adapterCore{runtime: r, instanceID: request.InstanceId}
+		entry.busy = true
+		entry.core = core
+		entry.config = []byte(request.ConfigJson)
+		r.mu.Unlock()
 		instance, err := r.adapter.Start(ctx, adapter.StartRequest{InstanceID: request.InstanceId, ConfigJSON: []byte(request.ConfigJson), Cursor: request.Cursor}, core)
+		r.mu.Lock()
+		entry.busy = false
 		if err != nil {
 			core.stopped.Store(true)
-			// 实例配置含凭证，启动错误中的配置原文也随错误一起脱敏。
-			safe := adapterSafeError(err, []byte(request.ConfigJson))
+			entry.config = nil
+			r.mu.Unlock()
 			code := pb.ErrorCode_ERROR_CODE_INTERNAL
 			var public *Error
 			if errors.As(err, &public) {
 				code = public.Code
 			}
-			return dispatchError(code, safe)
+			return dispatchError(code, adapterSafeError(err, []byte(request.ConfigJson)))
 		}
-		r.instances[request.InstanceId] = &adapterEntry{instance: instance, core: core}
+		entry.instance = instance
+		r.mu.Unlock()
 		account := instance.Account()
 		response := &pb.AdapterInstanceStartResponse{AccountId: account.ID, Capabilities: instance.Capabilities()}
 		if account.DisplayName != "" {
@@ -192,16 +260,14 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 		}
 		r.mu.Lock()
-		defer r.mu.Unlock()
 		entry, ok := r.instances[request.InstanceId]
+		r.mu.Unlock()
 		if !ok {
 			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
 		}
-		entry.core.stopped.Store(true)
-		if err := entry.instance.Stop(ctx); err != nil {
+		if err := r.stopEntry(ctx, entry); err != nil {
 			return dispatchError(pb.ErrorCode_ERROR_CODE_INTERNAL, err.Error())
 		}
-		delete(r.instances, request.InstanceId)
 		return adapterResponse(&pb.AdapterInstanceStopResponse{}, nil)
 	case wire.ServiceAdapterSend:
 		request := &pb.AdapterSendRequest{}
@@ -210,11 +276,17 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 		}
 		r.mu.Lock()
 		entry, ok := r.instances[request.InstanceId]
-		r.mu.Unlock()
-		if !ok || entry.core.stopped.Load() {
-			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not running")
+		if !ok {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
 		}
-		result, safe := entry.instance.Send(ctx, request.Target, request.Chain)
+		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		instance := entry.instance
+		r.mu.Unlock()
+		result, safe := instance.Send(ctx, request.Target, request.Chain)
 		if result == nil {
 			return wire.Response{Err: safe}
 		}
@@ -225,6 +297,11 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 }
 
 func (c *adapterCore) call(ctx context.Context, target string, request, response proto.Message) error {
+	a := c.runtime.activation
+	if !a.ready.Load() || a.stopping.Load() {
+		return &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "adapter session is not active"}
+	}
+
 	payload, err := adapterPayload(request)
 	if err != nil {
 		return err
