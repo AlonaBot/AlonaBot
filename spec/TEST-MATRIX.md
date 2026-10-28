@@ -66,14 +66,14 @@
 | V-56 | T-11、T-09 | 多条原子追加、跨帧上限分页、跨插件读取、清除、Core 重启、卸载与 purge | 序号连续且顺序稳定；分页不丢不重；插件只能访问自己的会话；重启后保留；卸载默认保留，purge 删除；不截断 |
 | V-57 | T-12 | OpenAI 兼容与 Anthropic 的流式文本与工具调用（本地模拟服务）、/ask 与自由对话开关、群聊中非 to_me 的消息、`/provider` 切换、人格切换、/reset、超过单条长度的回复、Provider 返回错误或中途断开 | 消息先发送再按间隔编辑，最后一次编辑为完整内容；超长回复在段落边界分成多条；自由对话默认关闭，只有 Admin 能开启，群聊中只响应 to_me 的消息；工具调用正确解析；断开或错误时保留已显示内容并报告错误，不自动重发请求；历史写入会话存储 |
 | V-58 | T-12 | 模型连续调用 Core 工具与 MCP 工具（stdio、streamable HTTP 模拟服务）、确认拒绝、工具出错、超过单轮步数上限 | 每个工具经策略与确认；拒绝与错误作为工具结果交回模型；达到上限后结束本轮并告知用户；MCP 进程随插件停止 |
-| V-59 | T-12 | 记忆 add/patch/remove、超过字符上限、重复条目、不可见字符、群聊多用户、会话中写入与 /reset、记忆插件不可用 | 超限与非法内容返回错误且不丢已有条目；快照在会话内不变、下一会话生效；每位用户只看到自己的档案；配置的记忆插件不可用时本轮报错 |
+| V-59 | T-12 | Agent 的记忆：`memory` 工具的 add/patch/remove、超过字符上限、重复条目、不可见字符、群聊多用户、会话中写入与 /reset、管理员把 `memory` 工具设为 confirm 与 deny | 超限与非法内容返回错误且不丢已有条目；快照在会话内不变、下一会话生效；每位用户只看到自己的档案；`memory` 工具按策略确认或拒绝，拒绝作为工具结果交回模型 |
 | V-60 | T-12 | 技能目录含合法与缺少 frontmatter 的 SKILL.md、load_skill 不存在的技能 | 系统提示只含合法技能的描述；不合法文件记诊断并跳过；load_skill 返回正文或明确错误 |
 | V-61 | T-12 | 非 Admin 尝试创建任务、创建 interval/cron 定时 Agent 任务、到期运行、无发信许可、需要确认的工具、插件离线错过 | 只有 Core Admin 能创建与取消任务；任务按 CONTRACTS §4.3 的触发规则运行且不补跑；无许可时 PERMISSION_DENIED；confirm 工具一律拒绝；后台运行不注入记忆 |
 | V-62 | T-02、T-09 | Core/插件/Adapter 三类来源、插件写合法 JSON 行与非 JSON 行、插件伪造来源字段、Handler panic、text 与 json 格式、终端与非终端输出、含 Bot Token 的 URL 错误 | 控制台格式与来源标签符合 CONTRACTS §14.2；非结构化行原样保留为 WARN；插件不能覆盖来源字段；panic 为一条带 stack 的 ERROR；非终端或设置 NO_COLOR 时不着色；日志中没有 token、Secret 与配置明文 |
 | V-63 | T-02、T-09 | 全局与按来源的级别、off、运行时修改、Core 重启、最近记录上限、SSE 订阅、`alonabot logs`、WebUI 筛选 | 修改立即生效；按来源的设置重启后保留，全局级别的运行时修改重启后恢复；off 时 SDK 不输出而 Core 关于它的记录仍在；每个来源最多保留 1000 条；未认证无法读取；WebUI 筛选不改变输出 |
 | V-64 | T-13 | 库模式下同进程插件与 Adapter 的完整生命周期、从 `instances/` 读取实例配置、dev 来源尝试 update/rollback、未捕获的 panic、停止超时、已安装包与开发组件混合运行、两次启动之间的配置与 dev.sqlite | 握手、注册、权限与独立进程一致；dev 组件使用固定代次，重启后按钮仍有效；update/rollback 被拒绝；panic 使进程退出且不重启；停止超时时 Run 返回错误 |
 | V-65 | T-13 | 热部署下改动插件源码、编译失败、改动 go.mod、来自其他 module 的 Adapter | 只重启开发中的组件，Adapter 连接与其他插件不中断；编译失败时旧组件继续运行；go.mod 变化输出 WARN；其他 module 的组件不重启 |
-| V-66 | T-14 | 干净数据目录首次运行、交互终端与非终端、预装包签名错误、卸载预装包后重启、新版本发行包 | 预装包全部安装，只启用 help；Agent、记忆插件与 Telegram、OneBot 11 Adapter 都未启用，没有对应进程；终端下 token 只显示一次，非终端拒绝启动；签名错误的包不安装并记 ERROR；已卸载的不重新安装；新版本只作为可用更新列出 |
+| V-66 | T-14 | 干净数据目录首次运行、交互终端与非终端、预装包签名错误、卸载预装包后重启、新版本发行包 | 预装包全部安装，只启用 help；help 与官方 WebUI 已启用；Agent 与 Telegram、OneBot 11 Adapter 都未启用，没有对应进程；终端下 token 只显示一次，非终端拒绝启动；签名错误的包不安装并记 ERROR；已卸载的不重新安装；新版本只作为可用更新列出 |
 | V-67 | T-14 | help 的权限过滤与翻译、`/whoami`、welcome 的入群欢迎与开关权限、rss 的订阅权限/去重/推送/私网地址/超大响应 | help 只列出调用者可用的命令；`/whoami` 返回调用者的实例与用户 ID；welcome 只响应 member.joined，只有 chat_admin 或 Core Admin 能开关；rss 的增删只有 chat_admin 或 Core Admin 能执行，超过 5 MiB 或 30s 的抓取失败，不重复推送同一条目，拒绝 loopback、私网与链路本地地址（含重定向之后），后台推送需要 allowed_adapter_instances |
 | V-68 | T-02、T-09 | 跨过零点、同日写满单文件上限、合计超过 1 GiB、超过 30 天、max_size 大于 max_total、磁盘写满、按日期查询 | 跨日换到新日期的文件；同日续写编号文件；从最旧的文件开始删除且不删正在写入的文件；配置矛盾时拒绝启动；写入失败时 Core 继续运行并只报告一次；`alonabot logs --date` 与 WebUI 能查到前一天的记录 |
 | V-69 | T-02 | `--args` 直接参数与文件输入、重复出现的键、未知键、`100MB` 等十进制单位、违反约束与相互矛盾的值、`PLUGIN_MEMORY_SOFT_LIMIT` | 后出现的覆盖先出现的；错误使 Core 拒绝启动并指明参数或文件行号；有覆盖时启动 WARN 列出全部覆盖项；SDK 使用 Bootstrap 下发的值；子进程收到 GOMEMLIMIT |
@@ -83,7 +83,10 @@
 | V-73 | T-13、T-16 | 用 `plugintest` 测试示例插件：命令回复、Rule、普通用户/chat_admin/Core Admin 的权限、Capability 子集下的 UNSUPPORTED、按钮点击、多轮等待、schedule 触发、后台发送有无许可、配置与 `dev.sqlite`；`go test -count=2 -race`；`alonabot.Start` 的激活失败与 ctx 取消 | 每次注入在分发结束或进入多轮等待后返回，结果完整，不依赖 sleep；行为与独立进程运行相同；测试之间的数据目录互不影响；Start 失败或停止后不残留组件 goroutine、core.lock 与子进程 |
 | V-74 | T-10 | linux/amd64，与 V-33 同一台机器；各进程 Activated 后空闲 2 分钟，读 `/proc/<pid>/smaps_rollup` 的 Pss，取 3 轮中位数：只运行 Core（不启用任何插件与 Adapter）；echo 示例插件进程；rss 插件进程（`sqlitedb`，有一个订阅）；configdb 示例的 `gormdb` 变体进程 | Core ≤ 24 MiB，echo ≤ 10 MiB，rss ≤ 14 MiB，configdb ≤ 16 MiB；同时记录 RSS 与私有内存。超出视为回归，按 CONTRACTS §10 处理 |
 | V-75 | T-01、T-10 | `node scripts/check-go-deps.mjs`：在五个目标上列出 Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）链接的模块；临时加入一个清单外的 import | 只含允许清单中的模块；清单外的模块使检查失败并列出模块名 |
-| V-76 | T-12 | 测试插件调用 `llm.generate`：在与不在 `llm_service_allowed_plugins` 中、指定不存在的 Provider、模拟 Provider 出错与中途断开、调用方期限短于生成耗时、Agent 配置中没有 Provider、Agent 插件未启用 | 不在列表中返回 PERMISSION_DENIED，模拟服务没有收到请求；不存在的 Provider 为 INVALID_ARGUMENT，没有 Provider 为 FAILED_PRECONDITION；出错与断开为 UNAVAILABLE，safe_message 不含 API Key，模拟服务只收到一次请求；期限到达时调用方得到 DEADLINE_EXCEEDED；Agent 未启用时按目标未激活失败；成功时返回 text、provider、model 与用量，会话存储没有新增条目 |
+| V-76 | T-12 | 测试插件调用 `llm.generate`：在与不在 `llm_service_allowed_plugins` 中、指定不存在的 Provider、模拟 Provider 出错与中途断开、调用方期限短于生成耗时、Agent 配置中没有 Provider、Agent 组件未启用、调用方经 `@agent` 调用 | 不在列表中返回 PERMISSION_DENIED，模拟服务没有收到请求；不存在的 Provider 为 INVALID_ARGUMENT，没有 Provider 为 FAILED_PRECONDITION；出错与断开为 UNAVAILABLE，safe_message 不含 API Key，模拟服务只收到一次请求；期限到达时调用方得到 DEADLINE_EXCEEDED；Agent 未启用时按目标未激活失败；`@agent` 解析到已安装的 Agent 组件；成功时返回 text、provider、model 与用量，会话存储没有新增条目 |
+| V-77 | T-09、T-12 | 已安装官方 Agent、WebUI 与 Telegram Adapter 时，不带与带 `--replace` 安装同类的社区组件（本地签名的测试包与本地 Release 模拟服务）、新组件预检失败、替换后 update、`@agent` 调用、按原来源重装旧组件、两个不同 `adapter_id` 的 Adapter | 不带 `--replace` 返回 ALREADY_EXISTS 并列出已安装的组件；预检失败时旧组件不受影响；替换在确认后卸载旧组件并保留其数据与来源绑定，新组件沿用旧组件的启用状态，被替换 Adapter 的实例不出现在新 Adapter 下；之后 update 只查询新来源；`@agent` 调用到达新 Agent；旧组件可按原来源重装并复用数据；不同 `adapter_id` 的 Adapter 可以并存 |
+| V-78 | T-08、T-09 | WebUI 组件：已启用、未安装、Admin API 主版本不在声明范围内、前端路由路径、`/api/` 与内部路径、带扩展名的不存在路径、库模式 `alonabot.WebUI`；图标：manifest 与表单选项声明的 SVG、PNG、WebP，未声明的包内文件、其他扩展名、含 `<script>` 的 SVG、未认证请求 | WebUI 文件来自不可变包目录，前端路由回退 `index.html`，`/api/` 不被覆盖，带扩展名的不存在路径返回 404；未安装返回 503 与提示；版本不兼容时拒绝安装与启用；图标只提供声明过的路径并带 sandbox CSP 与 nosniff，其他扩展名在包校验时拒绝，未认证返回 401；直接打开含脚本的 SVG 时脚本不在 Admin 源执行 |
+| V-79 | T-14 | 在真实 systemd Linux（root）与 macOS（当前用户）上：全新安装、`SHA256SUMS` 不一致、经管道运行且有与没有终端、再次运行升级、`--uninstall`、不支持的系统与没有 systemd 的 Linux | 校验失败时不改动已有安装；有终端时 token 只显示一次并启动服务，没有终端时不启动服务并输出初始化命令；升级保留数据目录、设置文件与已安装组件；卸载删除服务与程序目录并保留数据目录；不支持的系统在改动前退出；容器内的 systemd 与模拟环境不算真实结果 |
 
 ## 2. 跨任务验收的最终闭合点
 
@@ -113,6 +116,8 @@
 | V-62、V-63、V-68 | T-02.1 记录、格式、来源标签、进程内过滤与日志文件 | T-09.10 按来源级别的持久化、最近记录、按日期查询、管理 API、CLI 与日志页 |
 | V-72 | T-03 Telegram 发送计划、能力与模拟服务；T-15 OneBot 11 映射与模拟服务 | T-15.3 以同一组用例运行两个 Adapter |
 | V-73 | T-13.1 `alonabot.Start`；T-16.1 套件基础 | T-16.2 按钮、多轮等待、schedule 与示例插件的测试 |
+| V-77 | T-03.8 manifest 角色解析；T-12.8 `@agent` 解析 | T-09.4 同类唯一、`--source` 与 `--replace` 的正式管理流程 |
+| V-78 | T-08.1 表单选项图标的构建检查；T-08.7 WebUI 用 `<img>` 显示图标 | T-09.12 WebUI 文件与图标的提供、Admin API 版本检查 |
 
 T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前者可支持后续开发，真实平台部分仍由 T-10 查证。测试会话、无配置/无 DB 最小插件和 payload fixture 的范围必须写明，不可据此关闭生产认证或数据恢复用例。
 
@@ -158,7 +163,7 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 | 切片 | 实现与证据 | 结果 | 尚未闭合 |
 | --- | --- | --- | --- |
 | T-07.1 / V-20 计算分项 | `contracts/schedule/`；本地测试 `schedule_local_test.go`（未提交）：错过的 tick 被跳过、interval 小于 1s 或超出 Duration 范围被拒、cron 语法（`*`、a-b、列表、`*/n`、a-b/n、星期 0 与 7）及名称/宏/L/越界/步长 0/a>b/字段数错误被拒、日与星期同时受限按 OR、America/New_York 春季跳过 02:30 与秋季 01:30 触发两次、Local 与无效时区被拒、`0 0 30 2 *` 被拒、FromSpec 两个分支与空 trigger | `go test -race -count=1 ./contracts/schedule/` 通过（darwin/arm64） | Core Scheduler 注册/运行槽、迟到响应与停止集成仍归 T-07.2～T-07.5；V-20 整体未闭合 |
-| T-12.1 / V-57 Provider 分项 | `plugins/agent/provider/`；集成测试 `TestStream`（本地模拟 Provider，两种协议）：多段文本增量、分段工具调用组装、请求编码与认证头、非 2xx、缺少终止标记、事件中途断开、畸形 JSON、Provider 错误事件、工具参数不是对象、emit 返回错误、取消 context，错误不含 API key | `go test -race -count=1 ./plugins/agent/provider/` 通过（darwin/arm64）；只对模拟服务运行，真实 Provider 未运行 | Agent 对话、流式显示、真实 Provider 验收归 T-12.2 与 T-10；V-57 整体未闭合 |
+| T-12.1 / V-57 Provider 分项 | `agent/provider/`；集成测试 `TestStream`（本地模拟 Provider，`openai`、`openai-compatible` 与 Anthropic 三种协议）：多段文本增量、分段工具调用组装、兼容实现重复 id 与 name 的分段、忽略未知 Anthropic 事件、停止原因与用量（含 Anthropic 缓存 token）、两种 OpenAI 协议的输出上限参数与 `stream_options`、工具结果与文本同在的消息编码、请求编码与认证头、非 2xx 及其错误说明、缺少终止标记、事件中途断开、畸形 JSON、Provider 错误事件及其说明、工具参数不是对象、emit 返回错误、取消 context，错误不含 API key（回显的 key 替换为 `[REDACTED]`） | `go test -race -count=1 ./agent/provider/` 通过（darwin/arm64，2026-10-28 D-58 修正后重跑）；只对模拟服务运行，真实 Provider 未运行 | Agent 对话、流式显示、真实 Provider 验收归 T-12.2 与 T-10；V-57 整体未闭合 |
 | T-09.2 / V-27、V-28、V-41 预检分项 | `internal/core/packages/`；集成测试 `TestPreflightAndMoveTo`、`TestPreflightRejects`、`TestPreflightFileModes`（unix）：在临时目录生成真实 tar.gz、release.json 与 Ed25519 签名，经 Preflight 与 MoveTo 驱动；覆盖合法包移入不可变目录、同一目标再次移动返回 ALREADY_EXISTS、签名/来源/平台/大小/摘要不符、manifest 的 id/version/source/平台/entrypoint 不符、`../x`、`/abs`、`a/../../x`、反斜杠、盘符、符号链接、硬链接、字符与块设备、FIFO、大小写冲突、重复路径、归档/条目数/展开字节超限，每项断言暂存目录无残留；权限 0600/0700 且去掉 setuid | `go test -race -count=1 ./internal/core/packages/` 通过（darwin/arm64）；Windows 未运行 | 下载、首次来源信任、安装记录与 CLI 归 T-09.3、T-09.4；V-27、V-28、V-41 整体未闭合 |
 | T-08.2 / V-23、V-38 的 raw JSON 分项 | `internal/core/config/`、`internal/core/state/`；集成测试 `TestPendingConfigEdits`：用 `state.Open` 打开临时 `data_dir` 的真实状态库，经 `Service` 公开方法驱动；覆盖 base 不等于 Active 时 Replace/Patch 返回 FAILED_PRECONDITION、CommitActive 新代次后旧 Pending 不再返回且行保留、Patch 叠加在有效 Pending 或 Active 配置上、嵌套未知键与显式 `false`/`0`/`""`/`[]`/`{}`/`null` 与 `9007199254740993` 保留、ImportSnapshot 不改变 Active、`config.json` 缺失为 NOT_FOUND、不是对象为 INVALID_ARGUMENT 且已有 Pending 不变。本地测试（未提交）：Canonical 的键与数字处理、RFC 7396 附录 A 全部示例、state 新方法读写往返；审查者另以本地测试复核过期 Pending 不作 Patch 基础、陈旧提交不覆盖新 Pending、尾随数据被拒 | `go test -race -count=1 ./internal/core/config/ ./internal/core/state/` 通过（darwin/arm64） | 默认值、Schema 与 Secret 归 T-08.3、T-08.4；激活 Pending、显式 reload 与 WebUI/API 入口归 T-09；V-23、V-38 整体未闭合 |
 
