@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"time"
+	"unicode"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
@@ -14,18 +15,40 @@ import (
 
 // Command 记录一条已收集的命令注册。
 type Command struct {
-	Path    []string       // 完整命令路径（含分组前缀），大小写敏感
-	Handler any            // 已通过签名检查的处理函数
-	Mode    pb.HandlerMode // 由签名推出的 Handler 形态
-	Params  []pb.ParamType // Context 之后各参数的类型
+	Aliases  [][]string     // 完整别名路径，不附加分组前缀
+	Priority int32          // 数值越小越先，缺省为 0
+	Path     []string       // 完整命令路径（含分组前缀），大小写敏感
+	Handler  any            // 已通过签名检查的处理函数
+	Mode     pb.HandlerMode // 由签名推出的 Handler 形态
+	Params   []pb.ParamType // Context 之后各参数的类型
 }
 
 // CommandRegistry 收集命令；实例方法以方法值显式传入，不做自动 DI。
 type CommandRegistry struct {
-	prefix   []string        // 本分组的公共路径前缀
-	commands []Command       // 已收集的命令，按注册顺序排列
-	errs     []error         // 收集过程中发现的错误，由 Collect 一并返回
-	seen     map[string]bool // 已注册的完整路径，用于检查重复；惰性创建
+	prefix   []string          // 本分组的公共路径前缀
+	commands []Command         // 已收集的命令，按注册顺序排列
+	errs     []error           // 收集过程中发现的错误，由 Collect 一并返回
+	seen     map[string]string // 路径或别名对应的 route_id；惰性创建
+	routeIDs map[string]bool   // 命令路径生成的 route_id，跨分组检查重复
+}
+
+type routeOptions struct {
+	aliases  [][]string
+	priority int32
+}
+
+// RouteOption 调整命令或事件路由的静态声明。
+type RouteOption func(*routeOptions)
+
+// Alias 添加命令的完整别名路径，不附加命令组前缀；可多次使用。
+func Alias(path ...string) RouteOption {
+	snapshot := append([]string(nil), path...)
+	return func(o *routeOptions) { o.aliases = append(o.aliases, append([]string(nil), snapshot...)) }
+}
+
+// Priority 设置路由优先级，数值越小越先；多次设置时取最后一次。
+func Priority(p int32) RouteOption {
+	return func(o *routeOptions) { o.priority = p }
 }
 
 // CommandGroup 用公共路径前缀组织一组子命令。
@@ -42,33 +65,63 @@ func (r *CommandRegistry) Group(name string, fn func(*CommandGroup)) {
 //
 //	func(*sdk.Context, ...参数) (message.Chain, error)  // 自动回复
 //	func(*sdk.Context, ...参数) error                   // 主动发送
-func (r *CommandRegistry) Command(name string, handler any) {
+func (r *CommandRegistry) Command(name string, handler any, opts ...RouteOption) {
 	path := append(append([]string{}, r.prefix...), name)
 	mode, params, err := checkHandler(handler)
 	if err != nil {
 		r.errs = append(r.errs, fmt.Errorf("command /%s: %w", strings.Join(path, " "), err))
 		return
 	}
-	r.add(Command{Path: path, Handler: handler, Mode: mode, Params: params})
+	var options routeOptions
+	for _, option := range opts {
+		option(&options)
+	}
+	r.add(Command{Path: path, Aliases: options.aliases, Priority: options.priority, Handler: handler, Mode: mode, Params: params})
 }
 
 // add 检查路径 token 并去重后登记命令；问题记入 errs。
 func (r *CommandRegistry) add(c Command) {
-	key := strings.Join(c.Path, " ")
-	for _, tok := range c.Path {
-		if tok == "" || strings.ContainsAny(tok, " \t\n") {
-			r.errs = append(r.errs, fmt.Errorf("command path %q contains an empty token or whitespace", key))
+	// 1. 同一条命令的路径与别名先独立校验，失败时不登记部分路径。
+	paths := append([][]string{c.Path}, c.Aliases...)
+	pending := make(map[string]bool, len(paths))
+	id := commandRouteID(c)
+	for _, path := range paths {
+		key := strings.Join(path, " ")
+		if len(path) == 0 {
+			r.errs = append(r.errs, fmt.Errorf("command %q has an empty path", id))
 			return
 		}
+		for _, token := range path {
+			if token == "" || strings.ContainsFunc(token, unicode.IsSpace) || strings.HasPrefix(token, "/") {
+				r.errs = append(r.errs, fmt.Errorf("command %q has invalid path token %q", id, token))
+				return
+			}
+		}
+		previous, exists := r.seen[key]
+		if pending[key] || exists {
+			if pending[key] {
+				previous = id
+			}
+			r.errs = append(r.errs, fmt.Errorf("command path %q conflicts between routes %q and %q", key, previous, id))
+			return
+		}
+		pending[key] = true
 	}
-	if r.seen == nil {
-		r.seen = map[string]bool{}
-	}
-	if r.seen[key] {
-		r.errs = append(r.errs, fmt.Errorf("command /%s registered twice", key))
+	if r.routeIDs[id] {
+		r.errs = append(r.errs, fmt.Errorf("route %q registered twice", id))
 		return
 	}
-	r.seen[key] = true
+	// 2. 全部通过后统一登记，分组合并也走相同检查。
+	if r.seen == nil {
+		r.seen = make(map[string]string)
+	}
+	if r.routeIDs == nil {
+		r.routeIDs = make(map[string]bool)
+	}
+	for key := range pending {
+		r.seen[key] = id
+	}
+	r.routeIDs[id] = true
 	r.commands = append(r.commands, c)
 }
 

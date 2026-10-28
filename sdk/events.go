@@ -10,6 +10,7 @@ type EventRoute struct {
 	RouteID   string
 	EventType string
 	Handler   func(*Context) error
+	Priority  int32 // 数值越小越先，缺省为 0
 }
 
 // EventRegistry 按注册顺序收集事件路由，错误由 Collect 统一返回。
@@ -21,10 +22,20 @@ type EventRegistry struct {
 }
 
 // On 注册事件路由；空 ID、重复 ID、未知事件类型或 nil Handler 记为注册错误。
-func (r *EventRegistry) On(routeID, eventType string, handler func(*Context) error) {
+func (r *EventRegistry) On(routeID, eventType string, handler func(*Context) error, opts ...RouteOption) {
+	var options routeOptions
+	for _, option := range opts {
+		option(&options)
+	}
 	switch {
 	case routeID == "":
 		r.errs = append(r.errs, fmt.Errorf("event route is missing route_id"))
+		return
+	case strings.HasPrefix(routeID, "cmd."):
+		r.errs = append(r.errs, fmt.Errorf("event route %q uses reserved cmd. prefix", routeID))
+		return
+	case len(options.aliases) != 0:
+		r.errs = append(r.errs, fmt.Errorf("event route %q cannot declare aliases", routeID))
 		return
 	case r.seen[routeID]:
 		r.errs = append(r.errs, fmt.Errorf("route %q registered twice", routeID))
@@ -40,7 +51,7 @@ func (r *EventRegistry) On(routeID, eventType string, handler func(*Context) err
 		r.seen = make(map[string]bool)
 	}
 	r.seen[routeID] = true
-	r.events = append(r.events, EventRoute{RouteID: routeID, EventType: eventType, Handler: handler})
+	r.events = append(r.events, EventRoute{RouteID: routeID, EventType: eventType, Handler: handler, Priority: options.priority})
 }
 
 func validEventType(eventType string) bool {
