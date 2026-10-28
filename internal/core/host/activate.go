@@ -50,8 +50,9 @@ type ActivateOptions struct {
 // Instance 跟踪一个已进入激活流程的插件 Session 及其状态。
 type Instance struct {
 	PluginID     string
-	GenerationID string        // 本实例服务的代次
-	Session      *wire.Session // 本实例的调用引擎；进入激活流程时创建
+	GenerationID string                // 本实例服务的代次
+	Session      *wire.Session         // 本实例的调用引擎；进入激活流程时创建
+	Routes       []*pb.RouteDescriptor // 准备阶段已校验的静态路由，激活后只读
 
 	state atomic.Int32 // State，读循环与停止流程并发访问
 	// activated 在读循环应用 ACTIVATED 时关闭。
@@ -136,7 +137,7 @@ func Activate(ctx context.Context, conn *wire.Conn, prep *Prepared, opt Activate
 	}
 
 	// 2. 在 Activating 状态下启动 Session，并发出带 OnReady 截止时间的 ACTIVATE。
-	in := &Instance{PluginID: opt.PluginID, GenerationID: opt.GenerationID, activated: make(chan struct{})}
+	in := &Instance{PluginID: opt.PluginID, GenerationID: opt.GenerationID, Routes: prep.Register.GetRoutes(), activated: make(chan struct{})}
 	in.state.Store(int32(StateActivating))
 	in.Session = wire.NewSession(conn, wire.Options{
 		Local: pb.InitiatorSide_INITIATOR_SIDE_CORE, SessionID: prep.SessionID, ProtocolMinor: prep.Minor,

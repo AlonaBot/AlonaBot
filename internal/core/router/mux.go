@@ -1,7 +1,8 @@
-// Package router 提供 Core 的可信调用身份与固定服务分流。
+// Package router 提供 Core 的可信调用身份、固定服务分流与标准事件派发。
 //
 // [Caller] 绑定一次插件 Session；[Invocation] 保存在 Core 发起的父请求附件中。
 // [Mux] 将插件请求交给固定服务，身份由装配时的 For 参数决定（CONTRACTS §1.2）。
+// [Router] 按优先级、插件与路由 ID 顺序调用已激活的 [Plugin]，遵循传播停止标记。
 package router
 
 import (
