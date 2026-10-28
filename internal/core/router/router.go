@@ -191,12 +191,11 @@ func (r *Router) dispatch(ev *pb.Event) {
 		})
 		if err != nil {
 			log.Warn("event handler call failed", "error", err)
-			continue
 		}
-		if response.Err != nil {
+		if response.Err != nil && err == nil {
 			log.Warn("event handler returned an error", "code", response.Err.GetCode(), "error", response.Err.GetSafeMessage())
-			continue
 		}
+		// 业务错误仍可能携带有效 STOP；先读取传播结果，再决定是否继续。
 		outcome, err := decodeOutcome(response.Payload)
 		if err != nil {
 			log.Warn("decode event handler outcome failed", "error", err)
