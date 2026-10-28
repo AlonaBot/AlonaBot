@@ -288,7 +288,7 @@ type VersionedMigrator interface {
 
 ### 9.3 CLI 的最小完整动作
 
-Core 由 `alonabot serve` 启动（§15.1）。Core 首次管理凭证与离线恢复使用 §7.4 的 `alonabot admin-token init/reset`。开发者命令为 `alonabot plugin init|check|build|test|pack`；`init` 生成插件包与库模式调试用的 `main.go`（§15.4），`build` 用 T-04 生成器为根插件生成调用 `sdk.Run` 的正式入口，使用已锁定 Go Modules 与目标 OS/arch，源码安装显式选择本地构建，预编译安装不要求服务器编译。`check` 验证本节静态契约；`test` 在临时数据和离线测试会话检查加载/注册，不能调用生产凭证或宣称已测试平台发信。`pack` 可以生成待离线签名的外部发布清单，私钥不进入包。
+Core 由 `alonabot serve` 启动（§15.1）。Core 首次管理凭证与离线恢复使用 §7.4 的 `alonabot admin-token init/reset`。开发者命令为 `alonabot plugin init|check|build|test|pack`；`init` 生成插件包、库模式调试用的 `main.go`（§15.4）与忽略 `.alonabot/` 的 `.gitignore`，`build` 用 T-04 生成器为根插件生成调用 `sdk.Run` 的正式入口，使用已锁定 Go Modules 与目标 OS/arch，源码安装显式选择本地构建，预编译安装不要求服务器编译。`check` 验证本节静态契约；`test` 在临时数据和离线测试会话检查加载/注册，不能调用生产凭证或宣称已测试平台发信。`pack` 可以生成待离线签名的外部发布清单，私钥不进入包。
 
 管理命令如下；修改均经 Core 管理接口，CLI 不直接写状态库，离线时只允许只读检查或明确的维护恢复流程：
 
@@ -534,7 +534,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
   ```
 
 - `alonabot.Start(ctx, opts...)` 使用与 `Run` 相同的选项与装配，在全部已启用的包与开发组件激活后返回句柄 `*alonabot.Core`；任一组件在激活前失败时，停止已启动的部分并返回错误。ctx 取消时按 §4.2 停止，句柄的 `Wait()` 等待停止完成，返回与 `Run` 相同的错误。`Run` 等于 `Start` 后等待 SIGINT/SIGTERM 再停止；`Start` 不处理信号，供把 Core 嵌入其他 Go 服务与插件测试套件（§17）使用。同一数据目录仍只能运行一个 Core。
-- 组件的 manifest、Schema 与 i18 资源取自 T-04 生成器在构建期嵌入的副本。开发中的组件不经安装包：
+- 组件的 manifest、Schema 与 i18 资源取自 T-04 生成器在构建期嵌入的副本。同一插件 ID 或 adapter_id 被登记两次，或与已安装的包相同时，`Start` 在启动任何组件前返回错误，不以后登记的覆盖。开发中的组件不经安装包：
   - Core 为它们创建 dev 来源的安装记录，不做来源、签名与归档摘要校验，Hello 的 build_digest 使用 Core 为本次运行生成的值；dev 来源的组件只能在库模式中运行，不能 update 或 rollback。
   - 它们使用固定代次 `dev`，不走候选与 Journal：每次启动以 `<data_dir>/plugins/<id>/config.json`（缺失时为空对象）为配置，经 SDK 准备与校验后直接生效。受管 SQLite 为 `<data_dir>/plugins/<id>/dev.sqlite`，不复制、不回退。按钮 token 因代次固定，重启后仍然有效。
 - Core 按正常启动流程为每个开发组件创建 Session，SDK 在本进程的 goroutine 中经 loopback TCP 连接，握手、Bootstrap、注册、激活、调用与停止都与独立进程相同；已安装的其他包照常以独立进程运行。与独立进程的区别只有两点：

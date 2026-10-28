@@ -1,10 +1,10 @@
 # 设计决策记录
 
-版本：v0.6-review（2026-10-21；保留已确认 D-01～D-25，2026-10-25～2026-10-27 新增 D-26～D-52，不升版本）
+版本：v0.6-review（2026-10-21；保留已确认 D-01～D-25，2026-10-25～2026-10-28 新增 D-26～D-58，不升版本）
 
 D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置及当前状态。2026-10-21 的规格完善任务将剩余技术默认值收敛为实施基线，不追加虚构的历史确认记录；2026-10-22 将决策和历史记录归入 adr/。
 
-**实施入口**：[PLAN.md](../PLAN.md) 给出 T-01～T-16 详细工作包；[CONTRACTS-v0.1.md](../CONTRACTS-v0.1.md) 固定行为，表内 § 编号均指该契约；验收见 [TEST-MATRIX.md](../TEST-MATRIX.md)。P/Q 处置表已从根目录 CONTRACTS 合并到本文件。D-07/D-18 的历史“Ready”统一解释为新状态机中完成 OnReady 并被 Core 接受的 `Activated`，不是 `Prepared`。
+**实施入口**：[PLAN.md](../PLAN.md) 给出 T-01～T-16 详细工作包与 §7 的休眠扩展 S-01～S-06；[CONTRACTS-v0.1.md](../CONTRACTS-v0.1.md) 固定行为，表内 § 编号均指该契约；验收见 [TEST-MATRIX.md](../TEST-MATRIX.md)。P/Q 处置表已从根目录 CONTRACTS 合并到本文件。D-07/D-18 的历史“Ready”统一解释为新状态机中完成 OnReady 并被 Core 接受的 `Activated`，不是 `Prepared`。
 
 ## 已确认
 
@@ -62,6 +62,12 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | D-50 | AI 组件默认不启用 | **用户确认默认不启用（2026-10-27），启用方式由规格完善时选定**：修订 D-32，首次运行只启用 help；Agent 与记忆插件随发行包安装但不启用，由管理员在 WebUI 或 CLI 按需启用，不用 AI 对话的部署不运行这两个进程。没有采用「配置第一个 Provider 时自动启用」：那需要 Core 理解 Agent 插件的配置内容，打破 Core 不感知插件业务配置的边界 | CONTRACTS §15.2、DESIGN §S、PLAN T-14 步骤 4/6、TEST-MATRIX V-66 |
 | D-51 | 文本生成服务 | **用户确认（2026-10-27）**：官方 Agent 插件提供 JSON Service `llm.generate`，其他插件经 Service Call 复用已配置的 Provider，类型与调用辅助在 `sdk/llm`。服务声明 public，但 Agent 只接受列入 `llm_service_allowed_plugins`（缺省为空）的直接调用方；一次调用就是一次非流式 Provider 请求，不涉及工具、会话、记忆与人格。模型能力因此只存在于 Agent 插件一个进程中，Core 不链接任何模型 SDK 或 Provider 客户端 | CONTRACTS §13/§13.5、DESIGN §R、PLAN T-12 步骤 9 与 T-12.8、TEST-MATRIX V-76 |
 | D-52 | Core 依赖允许清单与常驻内存预算 | **用户确认（2026-10-27），预算数值由规格完善时选定**：Core 可执行文件与 SDK 根包只链接 docs/development.md 列出的允许模块，`scripts/check-go-deps.mjs` 在 CI 中对五个目标逐一检查。空闲常驻内存设预算（linux/amd64 PSS）：Core ≤ 24 MiB、无数据库的示例插件 ≤ 10 MiB、`sqlitedb` 插件 ≤ 14 MiB、`gormdb` 插件 ≤ 16 MiB。初值依据 2026-10-27 的实测（Linux PSS，测量脚本未入库）：Core 约 11 MiB、轻量插件进程约 7.5 MiB、链接了 PG 驱动的 GORM SQLite 插件约 17.6 MiB；预算为之后的功能留出余量。超出视为回归，确需提高时在本文件记录新值与原因。插件作者的对应规则写在 [插件开发规范](../../docs/plugin-guide.md) | CONTRACTS §10、DESIGN §O、PLAN §2/T-10、TEST-MATRIX V-74/V-75 |
+| D-53 | 插件休眠用正常进程退出 | **用户确认（2026-10-28）**：插件因空闲退出进程，不冻结进程；唤醒复用现有生命周期与 `activation_reason=resume`，正常空闲退出不计入有限重启的异常次数。只有 manifest 声明可休眠的插件参与，未声明的常驻，因为 Core 观察不到插件自行创建的 goroutine 与外部连接 | PLAN §7 S-01、S-02；adr/SLEEP-DESIGN.md §4 |
+| D-54 | 已提交代次的路由快照 | **用户确认（2026-10-28）**：Core 持久化已提交代次的路由描述与摘要，插件不运行时仍能被路由定位；唤醒后 REGISTER 的摘要不一致时停止激活，不悄悄改变路由 | PLAN §7 S-01；adr/SLEEP-DESIGN.md §4.2 |
+| D-55 | 官方 Adapter 缺少外部入口时常驻 | **用户确认（2026-10-28）**：Telegram long polling 与 OneBot 11 正向 WebSocket 在没有可靠外部入口时不休眠，也不为休眠改变通信模式；同一 Adapter 包仍有运行实例时不停止进程（D-26） | PLAN §7 S-04；adr/SLEEP-DESIGN.md §5 |
+| D-56 | Core 整机休眠的前提 | **用户确认（2026-10-28）**：只有外部消息接管、未来任务的外部调度与实例唤醒都已确认时，Core 才整机休眠；任一条件缺失时保持运行。库模式不整机休眠 | PLAN §7 S-05；adr/SLEEP-DESIGN.md §6 |
+| D-57 | 外部调度只决定触发时刻 | **用户确认（2026-10-28）**：外部调度器只负责何时唤醒，不接管插件执行、权限与业务数据；任务认领、去重与 `UNKNOWN` 记录仍由 Core 负责，语义为至多一次执行尝试（D-19） | PLAN §7 S-05；adr/SLEEP-DESIGN.md §7 |
+| D-58 | 休眠扩展在 v0.1 之后 | **用户确认（2026-10-28）**：休眠以 S-01～S-06 列入计划，先组件级、后整机；S 工作包不是 T-10 的前置，不进入 v0.1 发布门槛，未启用时 v0.1 行为不变 | PLAN §7；TEST-MATRIX V-77～V-81 |
 
 ## P 类历史议题与当前处置
 
@@ -151,3 +157,5 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-10-27：**D-46、D-47 已确认**：v0.1 增加官方 OneBot 11 Adapter（正向 WebSocket，依赖 `github.com/coder/websocket`）与插件测试套件 `plugintest`，根包增加 `Start`。同步修改 CONTRACTS §0/§8/§11/§15.2/§15.4 并新增 §17，MESSAGE-MODEL 新增 §7（原 §7 顺延为 §8），PLAN 新增 T-15、T-16 并修订 T-13 步骤 1，TEST-MATRIX 新增 V-71～V-73，同步 ARCHITECTURE、docs/development.md 的依赖清单、docs/execution-order.md 与 goals.md（新增 goal-78～goal-82，修订 goal-67、goal-46、goal-73）。
 - 2026-10-27：评估「插件与 Adapter 合并进同一进程」后**未采纳**，维持 D-01、D-26 的一插件一进程。实测（测量脚本未入库）：20 个插件时，单进程的空闲内存是 NoneBot2 的 0.2～0.3 倍；代价是第三方插件必须在用户机器上构建（atri 上 512 MiB、1 CPU 首次构建三轮都 OOM，1 GiB、2 CPU 约 82 秒），依赖不再隔离，故障隔离与真正的热安装也随之失去。同期测得 Python 子进程插件每个进程的开销约为 Go 的 4～5 倍（macOS footprint），说明一插件一进程对 Go 仍然划算；需要控制的是 Core 与插件引入的依赖，由 D-48～D-52 处理。
 - 2026-10-27：**D-48～D-52 已确认**，新增待定的 Q-19：框架只托管 SQLite，受管 SQLite 增加 `database/sql` 入口，AI 组件默认不启用，Agent 插件提供 `llm.generate`，Core 设依赖允许清单与常驻内存预算。同步修改 CONTRACTS §0/§1.1/§6/§9/§10/§11/§12/§13（新增 §13.5）/§15.2、WIRE §3.2/§5A、DESIGN §I/§N/§O/§R/§S、PLAN（§1、§2、T-08～T-10、T-12 新增步骤 9 与切片 T-12.8、T-14）、TEST-MATRIX（V-26/V-31/V-39/V-40/V-66，新增 V-74～V-76）；删除 `sdk/gormdb` 的 PostgreSQL 实现与测试、`contracts/manifest.PostgresIdentifier` 与 CI 的 PostgreSQL service；新增 `scripts/check-go-deps.mjs` 与插件开发规范 docs/plugin-guide.md；同步 ARCHITECTURE、README、CONTRIBUTING、docs/development.md、docs/coding-standards.md、docs/execution-order.md、测试技能与 goals.md（新增 goal-83，修订 goal-32、goal-64 等）。
+- 2026-10-28：**D-53～D-58 已确认**：分层休眠与按需唤醒以 S-01～S-06 列入 PLAN §7，设计依据存为 adr/SLEEP-DESIGN.md，新增 TEST-MATRIX V-77～V-81；v0.1 契约不变，各 S 工作包实施时再把对应设计并入 CONTRACTS、WIRE 与 DESIGN（包括修订 CONTRACTS §4.3 的离线 tick 规则）。
+- 2026-10-28：审阅「未实现能力与规格补充」草案的 G-01～G-09 后，补齐三处 v0.1 缺口：官方 Agent 插件按事件的 capabilities 选择回复方式，目标不声明 `message.edit`（如 OneBot 11）时生成结束后一次发送；会话键由 adapter_instance_id、chat_id 与可选的 thread_id 组成，只用于会话存储，不影响 Target 与显式 To；库模式中同一组件 ID 登记两次时启动前报错。`plugin init` 生成的 `.gitignore` 忽略 `.alonabot/`。同步修改 CONTRACTS §9/§15.4、DESIGN §R、PLAN T-09/T-12/T-13、TEST-MATRIX V-57/V-64 与 goals.md goal-38/goal-59/goal-67。**未采纳**：CLI 的 `--plugin . --reload`（与 T-13.3 重复成第二条热部署路径）；同 module 开发 Adapter 不随热部署重启（同 module 的 Adapter 通常正在开发，现有规则已保证其他 module 的组件不重启）；开发模式配置热加载与编辑器关联示例（重启即可生效，示例不属于规格）。G-02 的其余内容、OneBot 上的工具确认与 Provider 管理已由 D-26、CONTRACTS §13 与 T-12 覆盖；G-06～G-09 与休眠设计重复，以 adr/SLEEP-DESIGN.md 为准。

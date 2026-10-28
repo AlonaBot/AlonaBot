@@ -10,7 +10,7 @@
 
 交付一个 Go Core、Go 插件与 Adapter SDK、可安装的官方 Telegram Adapter 包、官方 Agent 插件与官方记忆插件，以及管理 CLI/WebUI。用户下载发行包即可开箱即用；开发者可以在自己的 `main.go` 中把框架当作 Go 库运行，并在改动源码后热部署。用户能够安装预构建的插件与 Adapter，配置并启用它，在指定聊天/话题执行命令、发送消息和媒体、进行多轮对话，使用 Service、Event Bus、Scheduler、插件 HTTP 与受管 SQLite；能够与 Agent 对话，Agent 调用工具前按策略取得用户确认；管理动作能够按确定的代次和维护规则更新、停止及恢复。机器人回复与 WebUI 提供英文和简体中文。
 
-首发目标为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64。每插件一个 Native 子进程，每个 Adapter 包一个 Native 子进程（承载其全部实例），TCP 默认、stdio 可选；框架托管 HTTP 只开放 Core 的一个公开端口。动态跨插件命令 Router、其他官方 Adapter、多语言 SDK、持久化的多轮会话状态与暂停 DSL、跨会话的记忆检索和额外客户端后置。
+首发目标为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64。每插件一个 Native 子进程，每个 Adapter 包一个 Native 子进程（承载其全部实例），TCP 默认、stdio 可选；框架托管 HTTP 只开放 Core 的一个公开端口。动态跨插件命令 Router、其他官方 Adapter、多语言 SDK、持久化的多轮会话状态与暂停 DSL、跨会话的记忆检索和额外客户端后置。分层休眠与按需唤醒在 §7 单独规划（S-01～S-06），不属于 v0.1 交付。
 
 ## 2. 实施目录和工作流
 
@@ -64,7 +64,7 @@ Telegram、LLM Provider、浏览器和目标平台的测试单独记录环境与
 | T-15 | T-03 | 官方 OneBot 11 Adapter（正向 WebSocket）与跨 Adapter 一致性验收 | 未开始 |
 | T-16 | T-05、T-07、T-13 | 插件测试套件 `plugintest` | 未开始 |
 
-本表和下图是工作包整体完成的先后。切片按实际用到的成果另列前置（§3.1），可以在上游工作包完成前开始。T-10 的测试设施随任务建立，最终发布门槛在依赖全部完成后检查。
+本表和下图是工作包整体完成的先后，休眠扩展的 S 工作包见 §7。切片按实际用到的成果另列前置（§3.1），可以在上游工作包完成前开始。T-10 的测试设施随任务建立，最终发布门槛在依赖全部完成后检查。
 
 ```mermaid
 flowchart TD
@@ -629,7 +629,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 #### 实施动作
 
 1. **落地首次管理认证与真实入口。** 实现 `admin-token init/reset` 的离线 core.lock 检查、32-byte token 一次终端输出、仅存 SHA256 和认证代次；reset 撤销旧管理会话及派生票据/插件会话。实现 admin host 的 POST login、Origin/登录 CSRF、恒时摘要比较、8h 会话、登出撤销与 token 再认证查看 secret；CLI 使用显式 Bearer token。接 T-07 的授权检查，未初始化或无有效认证时拒绝管理访问；纯 loopback 开发与非 loopback HTTPS 边界沿用契约。
-2. **实现开发 CLI 与安装预检。** 把 `plugin init/check/build/test/pack` 接到既有生成器和锁定工具链；init 生成插件包与库模式调试用的 `main.go`，build 用生成器为根插件生成调用 `sdk.Run` 的正式入口，产物不包含 Core；仓库内示例复用根 module，面向外部作者的脚手架沿用插件自身 Go Modules 的既有方式。pack 生成 tar.gz 与归档外 release 清单，签名流程对清单确切字节签名；安装预检先做 Ed25519 验签，再核对归档 SHA256/长度、来源、平台和 manifest。受控解压拒绝越界、链接、设备、重复及大小写冲突路径，并执行 256 MiB/1 GiB/10,000 条目上限；所有下载/身份/静态错误必须在停止旧版前拒绝。
+2. **实现开发 CLI 与安装预检。** 把 `plugin init/check/build/test/pack` 接到既有生成器和锁定工具链；init 生成插件包、库模式调试用的 `main.go` 与忽略 `.alonabot/` 的 `.gitignore`（开发数据目录中的实例配置可能含平台凭证），build 用生成器为根插件生成调用 `sdk.Run` 的正式入口，产物不包含 Core；仓库内示例复用根 module，面向外部作者的脚手架沿用插件自身 Go Modules 的既有方式。pack 生成 tar.gz 与归档外 release 清单，签名流程对清单确切字节签名；安装预检先做 Ed25519 验签，再核对归档 SHA256/长度、来源、平台和 manifest。受控解压拒绝越界、链接、设备、重复及大小写冲突路径，并执行 256 MiB/1 GiB/10,000 条目上限；所有下载/身份/静态错误必须在停止旧版前拒绝。
 3. **建立唯一管理服务与安装记录。** CLI/WebUI/API 调同一管理服务，插件包与 Adapter 包使用同一套安装、启停、更新与卸载流程，所有变更按包串行；`alonabot serve`（不带子命令时等同）复用 T-13 的 Core 装配，按安装记录启动全部已启用的包；Adapter 实例的创建、启停与删除也经此服务，凭证使用 T-08 的 Secret 引用；启用插件时检查其必需的 Adapter 依赖与插件依赖；卸载被依赖的 Adapter，或停用、卸载被依赖的插件、把它更新或回退到低于 `min_version` 的版本时，须列出受影响插件并显式确认。持久化安装序号、来源/受信公钥、pin、安装/卸载保留状态。实现 install/list/enable/disable/restart/reload/update/uninstall/pin/rollback 的既定区分：重启原 Active 只换 Session，reload 导入编辑快照；卸载默认保留数据及绑定，仅原来源可显式重装，purge 只删除已列明的框架受管对象。首次信任、公钥变化、恢复丢弃新写入等确认只用于契约要求的具体操作，不增加一套通用审批系统。
 4. **实现正式候选 Journal 与准备编排。** 通过预检后，以预期旧 ActiveGeneration 开始持久化管理操作记录及其资源引用；冻结新根派发，drain/停旧进程，确认树退出及 runtime.lock，再调用 T-08 复制 DB 和创建候选 Session。将启动原因、维护许可和阶段预算放入已有 Bootstrap；REGISTER 校验后持久化程序/配置/secret/DB 候选引用并形成 PREPARED。普通 resume 走原提交记录，不伪造新候选 Journal；`prepare_effects=external` 的候选在维护门槛停下。
 5. **实现唯一提交点与激活门禁。** 确认候选文件及引用已持久化后，在 Core 状态库的同一事务复核预期旧代次并提交 ActiveGeneration+COMMITTED；事务内不做下载、备份或等待 RPC。随后发送 Activate，只有 OnReady/Activated 完整成功才开放命令、事件、Service、Bus、任务与 HTTP；复用 T-06/T-07 门禁。旧按钮按 Generation 失效；提交后启动/OnReady 失败保持新代次权威并进入 Degraded，不自动倒退到旧 DB。
@@ -801,11 +801,11 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
    `Stream` 逐事件解析 SSE，不缓存完整响应；文本增量按到达顺序交给 emit。工具调用按协议的索引累积，只有收到完整结束标记且 arguments 是 JSON 对象后才发出带 ToolCall 的 Event。只有收到协议终止标记才算成功；提前 EOF、无效事件、非成功 HTTP 状态、Provider 错误事件均返回错误。emit 返回错误时立即停止读取并关闭响应体。错误文本不得包含 API key、认证头或带凭证的 URL；已交付的文本增量由调用方保留，不自动重发请求。
    为两种协议提供本地模拟服务，覆盖正常流、多个文本增量、完整工具调用、非成功 HTTP 状态、中途断开、畸形 SSE/JSON、取消 context 与 emit 返回错误。
 2. **插件骨架与配置。** 配置包含：Provider 条目（名称、协议、base_url、`secret` 标记的 api_key、model）与默认 Provider；命名人格（系统提示）与默认人格；纳入上下文的历史条数；记忆插件 ID；MCP 服务器（名称、传输方式；stdio 为 command、args 与 `secret` 标记的 env，streamable HTTP 为 url 与 `secret` 标记的 headers）；技能目录。Provider 列表可以为空，为空时 `/ask` 回复提示管理员配置。每个聊天当前的人格与 Provider 选择保存在插件数据库。
-3. **一轮对话。** 注册 `/ask`、`/agent on|off`、`/persona`、`/provider`、`/reset` 命令与 message 事件路由。`/ask` 与 `/reset` 的缺省权限为 User，`/agent`、`/persona` 与 `/provider` 为 Admin，管理员可按 T-04 的命令策略调整。`/ask` 在任何聊天中触发一轮对话；Admin 用 `/agent on` 为某个聊天开启自由对话后，该聊天中 `to_me` 的非命令消息也触发（私聊的消息都是 `to_me`），默认关闭。群聊的会话条目标明发言人。触发的 Handler 请求延续调用，在其中：
+3. **一轮对话。** 注册 `/ask`、`/agent on|off`、`/persona`、`/provider`、`/reset` 命令与 message 事件路由。`/ask` 与 `/reset` 的缺省权限为 User，`/agent`、`/persona` 与 `/provider` 为 Admin，管理员可按 T-04 的命令策略调整。`/ask` 在任何聊天中触发一轮对话；Admin 用 `/agent on` 为某个聊天开启自由对话后，该聊天中 `to_me` 的非命令消息也触发（私聊的消息都是 `to_me`），默认关闭。群聊的会话条目标明发言人。会话键由入站事件的 adapter_instance_id、chat_id 与 thread_id（事件带有时）组成，不同实例、聊天与话题的历史互不共用；会话键只用于会话存储，不改变发送：回复仍使用事件的 Target，显式 To 照常可以省略 thread_id。触发的 Handler 请求延续调用，在其中：
    - 从 Core 会话存储读取最近的历史条目，条数取自配置；会话的第一轮调用 `memory.context`，把结果作为快照条目写入会话；
    - 调用 `memory.prefetch` 取本轮记忆，组装请求并流式接收；
-   - 先发送一条消息，再按命名常量的间隔（初值 1 秒）用 Edit 刷新已生成的内容；平台限流时推迟下一次编辑，生成结束后用完整内容做最后一次编辑；回复以纯文本发送，不把模型输出的 Markdown 交给平台解析；
-   - 当前消息的文本将超过配置的单条长度上限（默认 4096 字符，对应 Telegram 的单条上限）时，在最近的段落边界结束这条消息，再发送新消息继续显示；
+   - 事件的 capabilities 含 `message.edit` 时，先发送一条消息，再按命名常量的间隔（初值 1 秒）用 Edit 刷新已生成的内容；平台限流时推迟下一次编辑，生成结束后用完整内容做最后一次编辑。不含 `message.edit` 时（例如 OneBot 11），生成结束后一次发送完整内容，不发送中间增量。回复以纯文本发送，不把模型输出的 Markdown 交给平台解析；
+   - 当前消息的文本将超过配置的单条长度上限（默认 4096 字符，对应 Telegram 的单条上限）时，在最近的段落边界结束这条消息，再发送新消息继续显示；不能编辑时同样按上限分成多条发送；
    - 本轮结束后追加会话条目并调用 `memory.sync`。
 
    Provider 返回错误或中途断开时保留已显示的内容，按 Actor locale 回复错误说明，不自动重发请求。`/reset` 清除该会话，下一轮重新取记忆快照。
@@ -866,7 +866,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 
 #### 实施步骤
 
-1. **根包与 Core 装配。** 根包 `alonabot` 提供 `Run(opts ...Option) error`、`Start(ctx, opts ...Option) (*Core, error)` 与 `Plugin`、`Adapter`、`Reload`、`DataDir` 等选项。`Start` 装配与 `alonabot serve` 相同的 Core，在全部组件激活后返回句柄，ctx 取消时按 CONTRACTS §4.2 停止，`Wait` 返回停止结果；`Run` 是 `Start` 加 SIGINT/SIGTERM 处理，缺省数据目录为 `.alonabot/`（CONTRACTS §15.4）；`cmd/alonabot` 的 serve 调用同一装配代码，不维护两份。
+1. **根包与 Core 装配。** 根包 `alonabot` 提供 `Run(opts ...Option) error`、`Start(ctx, opts ...Option) (*Core, error)` 与 `Plugin`、`Adapter`、`Reload`、`DataDir` 等选项。`Start` 装配与 `alonabot serve` 相同的 Core，在全部组件激活后返回句柄，ctx 取消时按 CONTRACTS §4.2 停止，`Wait` 返回停止结果；`Run` 是 `Start` 加 SIGINT/SIGTERM 处理，缺省数据目录为 `.alonabot/`（CONTRACTS §15.4）；`cmd/alonabot` 的 serve 调用同一装配代码，不维护两份。同一组件 ID 登记两次或与已安装包相同时，在启动任何组件前返回错误。
 2. **同进程的开发组件。** SDK 与 `sdk/adapter` 的启动参数改为也可以由根包直接传入，外部模块不能构造这些参数。开发组件在 goroutine 中经 loopback TCP 连接 Core，走完整的握手、注册、激活与停止。T-04 生成器在构建期嵌入 manifest、Schema 与 i18 资源，根包从中读取组件身份。Core 为开发组件创建 dev 来源的安装记录与固定代次 `dev`；未捕获的 panic 使进程退出；停止预算到期组件仍未退出时，`Run` 返回错误。
 3. **开发组件的配置与数据库。** 开发中的 Adapter 的实例配置取自 `<data_dir>/adapters/<adapter_id>/instances/<instance_id>.json`，启动时全部启动。每次启动以 `<data_dir>/plugins/<id>/config.json`（缺失时为空对象）为配置，经 SDK 准备与校验后直接生效，不走候选与 Journal；受管 SQLite 为 `dev.sqlite`，不复制、不回退。dev 来源的组件拒绝 update 与 rollback。开发中的组件缺省日志级别为 debug。
 4. **热部署。** `Reload` 选项或 `ALONABOT_RELOAD=1` 启用：根类型所在包属于 main 包所在 module 的组件改为子进程运行，`Run` 把当前 main 包编译到 `<data_dir>/dev/bin/` 后按正常启动流程启动，并在启动环境中指明组件；这种启动环境下 `Run` 只运行该组件。每 500ms 用标准库轮询 module 内 `.go` 文件与嵌入资源的修改时间：编译失败时输出编译器信息，旧组件继续运行；编译成功后依次重启全部开发中的组件。其他 module 的组件留在 Core 进程中不重启；`go.mod` 或 `go.sum` 变化时输出 WARN，提示手动重启。
@@ -1024,7 +1024,7 @@ WebUI 中可交互的沙盒不在 v0.1 范围内（D-47）。
 
 跨任务 V 用例按 TEST-MATRIX 的阶段分工记录。较早任务只完成自己负责的组件断言；用例整体在最终闭合任务完成后才标为通过。例如动态权限的管理服务测试不等于 WebUI 操作通过，内置 Send 的 Hook 检查不等于跨插件 Service 递归已经验证。后续接入仍复用较早实现，测试装配不能成为生产放行路径。
 
-每项 V 的证据记录包含实现版本、测试位置、完整运行命令、平台/依赖、结果与失败日志。T-10 汇总时按 V-01～V-76 逐项查证，不以其他名称的新清单取代现有编号。除 TEST-MATRIX §3.1 所列分项外均未运行。
+每项 V 的证据记录包含实现版本、测试位置、完整运行命令、平台/依赖、结果与失败日志。T-10 汇总时按 V-01～V-76 逐项查证，不以其他名称的新清单取代现有编号；休眠扩展的 V-77～V-81 由 S-06 汇总，不属于 T-10。除 TEST-MATRIX §3.1 所列分项外均未运行。
 
 若接口无法表达既定行为，先修对应契约和 fixture，再推进消费者；若已经表达但测试失败，先修负责实现。驱动备份、进程所有权、权限和提交唯一性未通过，不得被下游功能完成状态覆盖。
 
@@ -1033,3 +1033,65 @@ WebUI 中可交互的沙盒不在 v0.1 范围内（D-47）。
 根目录维护当前实施工作和契约；[adr/DECISIONS.md](adr/DECISIONS.md) 保存 D/P/Q 决策及处置，[adr/README.md](adr/README.md) 索引历史审阅和依据。需要了解选择原因时查 ADR，执行任务时直接按本文件与契约推进。
 
 后续修改行为时同步契约、工作包、依赖和验收；决策理由和历史审计保存在 adr/，已有编号保持稳定。
+
+## 7. 休眠扩展
+
+**目标：** 让闲置的插件、Adapter 乃至整个实例释放进程与内存，并在消息、命令、HTTP、跨插件调用或定时任务到来时按需唤醒（D-53～D-58）。设计依据见 [adr/SLEEP-DESIGN.md](adr/SLEEP-DESIGN.md)。
+
+S 工作包在 v0.1 主链路之后推进：不是 T-10 的前置，不进入 v0.1 发布门槛，未启用休眠时 v0.1 的行为与验收不变。每个 S 工作包的第一步是把设计中对应的部分并入 CONTRACTS、WIRE 与 DESIGN，并同步 TEST-MATRIX；之后按契约实施，设计文档不再同步细节。切片与 goal 在前置合并后由审查者拆分，写入 §3.1 与 goals.md。
+
+| 工作包 | 前置 | 完成时的可用能力 | 主要验收 | 当前状态 |
+| --- | --- | --- | --- | --- |
+| S-01 | T-04.1、T-09.4、T-09.6 | 插件运行状态（含 `SUSPENDED`）与已提交代次的路由快照，插件不运行时仍能定位路由 | V-77 的快照分项 | 未开始 |
+| S-02 | S-01、T-05、T-06、T-07.5 | 插件按需唤醒、并发唤醒合并、有界等待、空闲退出 | V-77 | 未开始 |
+| S-03 | S-02、T-07.2 | Scheduler 唤醒休眠插件，区分正常休眠与异常离线 | V-78 | 未开始 |
+| S-04 | S-02、T-03.3、T-15 | Adapter 休眠准入，实例停止与进程停止分开，`bot.offline` 区分空闲休眠 | V-79 | 未开始 |
+| S-05 | S-03、S-04、T-09.7、T-14 | 外部唤醒提供者、整机休眠事务、外部触发的认领与去重（先支持 Stop/Start） | V-80 | 未开始 |
+| S-06 | S-02～S-05 | 管理 CLI/WebUI 的模式与状态、指标、故障注入、资源测量与初值调整 | V-81 | 未开始 |
+
+### S-01：路由快照与运行状态
+
+1. **并入契约。** 把设计 §3、§4.1、§4.2 并入 CONTRACTS（运行模式、运行状态、路由快照的内容与校验）与 DESIGN；manifest 增加可休眠声明（缺省不可休眠）。
+2. **运行状态。** 管理层的运行状态与 `enabled` 分开持久化；缺省模式 `always_on`。
+3. **路由快照。** 激活提交时把 REGISTER 的路由描述、路由摘要与包摘要写入状态库，不保存 Listener 地址、Session Secret 与进程句柄；Core 重启后从当前代次的快照恢复路由索引。
+
+**失败停止条件：** 快照与当前代次不一致仍被采用，或快照中出现 Secret，阻止合入。
+
+### S-02：插件按需唤醒
+
+1. **并入契约。** 把设计 §4.3～§4.5 并入 CONTRACTS 与 WIRE（StopReason 追加 `IDLE`）。
+2. **EnsureActive 与活动引用。** Supervisor 提供 EnsureActive：同一插件的并发唤醒合并为一次启动，以 `activation_reason=resume` 建立 Session，ACTIVATED 后校验路由摘要，不一致时停止激活。路由、Broker 与 HTTP 代理在交付前取得活动引用，结束时释放。
+3. **有界等待。** 等待唤醒的请求进入有界队列，沿用原有的绝对 deadline；取消的请求移出队列；交付前重新检查截止时间、路由与权限。
+4. **空闲退出。** Idle Controller（拟建 `internal/core/idle/`，按 ARCHITECTURE 登记依赖）在设计 §4.4 的条件全部满足时经正常 STOPPING 退出，记 `SUSPENDED`；停止与新请求由同一门禁协调；空闲退出不计入有限重启的异常次数。空闲超时等初值登记到 `internal/tune`。
+
+**失败停止条件：** 出现双进程、请求被交付两次、冷启动延长了请求期限，或休眠触发了 ActiveGeneration 更新与迁移，阻止合入。
+
+### S-03：Scheduler 唤醒休眠插件
+
+1. **并入契约。** 修订 CONTRACTS §4.3：`SUSPENDED` 插件的到期任务经唤醒后执行，异常离线仍跳过且不补执行。
+2. **唤醒执行。** Scheduler 到期时对目标插件执行 EnsureActive，ACTIVATED 后按现有 `scheduled` 调用；同一 job 不重叠、15 分钟期限与不自动重试保持不变；结束后释放活动引用。
+
+**失败停止条件：** 正常休眠的插件丢失到期任务，或异常离线期间的 tick 被补执行，阻止合入。
+
+### S-04：Adapter 休眠准入
+
+1. **并入契约。** 把设计 §5 并入 CONTRACTS §8 与 MESSAGE-MODEL：Adapter 声明是否具备外部唤醒来源；`bot.offline` 的 payload 区分空闲休眠与真实掉线。
+2. **准入与恢复。** 只有全部实例都不需要持续连接、且声明了外部唤醒来源的 Adapter 包可以休眠；官方 Telegram（long polling）与 OneBot 11（正向 WebSocket）保持常驻。唤醒时重建连接、验证账号、恢复实例配置与游标，可用后才交付业务。
+
+**失败停止条件：** 为休眠改变官方 Adapter 的通信模式，或有活跃接收实例的 Adapter 进程被停止，阻止合入。
+
+### S-05：Core 整机休眠
+
+1. **并入契约。** 把设计 §6、§7.2～§7.4 并入 CONTRACTS：外部唤醒提供者接口、整机休眠事务、触发凭证、认领记录与 `UNKNOWN` 状态、迟到容忍窗口。
+2. **调度提供者。** 定义提交、取消与核对未来触发计划的接口；实现 Core 内置与外部 HTTP Wake/Timer 两种。
+3. **休眠事务。** 按设计 §6.3 的顺序执行，任一步失败时恢复服务；外部唤醒时取得 core.lock 后恢复状态并激活组件，再通知外部入口继续交付。
+4. **认领与去重。** 外部触发按计划时刻与修订标识持久化认领，重复触发不造成第二次执行尝试；结果未知的记 `UNKNOWN`，不重跑。
+
+**失败停止条件：** 外部接管或触发器注册未确认就退出，或同一次触发被执行两次，阻止合入。库模式进入整机休眠，按设计 §6.4 修正。
+
+### S-06：管理与性能验收
+
+1. 管理 CLI 与 WebUI 显示运行模式、各组件运行状态与最近的唤醒/休眠原因，管理员可以切换模式与按组件关闭自动休眠。
+2. 指标：冷启动 P50/P95/P99、活跃与休眠时的 PSS/RSS、唤醒次数、失败与丢弃数。
+3. 故障注入：唤醒中崩溃、停止中到达请求、外部调度器不可用、切回 `always_on`。
+4. 按测量调整设计 §8 的初值，在 TEST-MATRIX §3 记录 V-77～V-81 的证据；需要真实托管平台的分项没有环境时记为未运行。

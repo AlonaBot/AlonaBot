@@ -2,7 +2,7 @@
 
 版本：v0.6-review · 2026-10-21
 状态：**T-01/T-02 的分项已有运行证据（见 §3.1），其余分项与全部跨任务闭合点未执行**。用于实施交接与风险门槛，并非自动化测试报告。
-规范来源：[PLAN.md](PLAN.md)（T-01～T-16 详细工作包）、[CONTRACTS-v0.1.md](CONTRACTS-v0.1.md)、[WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md)。决策依据见 [adr/DECISIONS.md](adr/DECISIONS.md)。阶段归属更新：2026-10-22。
+规范来源：[PLAN.md](PLAN.md)（T-01～T-16 详细工作包与 §7 的 S-01～S-06）、[CONTRACTS-v0.1.md](CONTRACTS-v0.1.md)、[WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md)。决策依据见 [adr/DECISIONS.md](adr/DECISIONS.md)。阶段归属更新：2026-10-22。
 
 ## 1. 逐任务验收条目
 
@@ -64,14 +64,14 @@
 | V-54 | T-03、T-08、T-09 | Actor.locale 为 zh-CN/zh-TW/未知/absent、插件缺少翻译键、占位符不一致、Core usage 与确认消息、WebUI 切换语言 | 选择顺序为 Actor locale→Core 默认→en-US，主语言回落确定；check/pack 拒绝缺少 en-US 与占位符不一致；未知键返回错误不输出键名；日志与错误始终为英文 |
 | V-55 | T-11、T-09 | 工具 allow/confirm/deny、确认允许/拒绝/超时/他人点击、确认消息展示的参数、无 Actor 的后台调用、目标不支持按钮、core.tool.confirm 的 MCP 操作、运行时改策略 | deny 与拒绝返回 PERMISSION_DENIED 且不执行工具；超时 DEADLINE_EXCEEDED；invoke 的确认消息展示实际 JSON 参数；只接受同一 Actor 的第一次点击；无 Actor 时 confirm 直接拒绝；不支持按钮时 UNSUPPORTED；策略下一次调用生效；工具仍按继承 Actor 检查 required_permission |
 | V-56 | T-11、T-09 | 多条原子追加、跨帧上限分页、跨插件读取、清除、Core 重启、卸载与 purge | 序号连续且顺序稳定；分页不丢不重；插件只能访问自己的会话；重启后保留；卸载默认保留，purge 删除；不截断 |
-| V-57 | T-12 | OpenAI 兼容与 Anthropic 的流式文本与工具调用（本地模拟服务）、/ask 与自由对话开关、群聊中非 to_me 的消息、`/provider` 切换、人格切换、/reset、超过单条长度的回复、Provider 返回错误或中途断开 | 消息先发送再按间隔编辑，最后一次编辑为完整内容；超长回复在段落边界分成多条；自由对话默认关闭，只有 Admin 能开启，群聊中只响应 to_me 的消息；工具调用正确解析；断开或错误时保留已显示内容并报告错误，不自动重发请求；历史写入会话存储 |
+| V-57 | T-12 | OpenAI 兼容与 Anthropic 的流式文本与工具调用（本地模拟服务）、/ask 与自由对话开关、群聊中非 to_me 的消息、`/provider` 切换、人格切换、/reset、超过单条长度的回复、目标实例不声明 `message.edit`、两个 Adapter 实例中相同 chat_id 的会话、Provider 返回错误或中途断开 | 声明 `message.edit` 时消息先发送再按间隔编辑，最后一次编辑为完整内容；不声明时生成结束后一次发送，没有中间增量与编辑；不同实例的会话历史互不共用；超长回复在段落边界分成多条；自由对话默认关闭，只有 Admin 能开启，群聊中只响应 to_me 的消息；工具调用正确解析；断开或错误时保留已显示内容并报告错误，不自动重发请求；历史写入会话存储 |
 | V-58 | T-12 | 模型连续调用 Core 工具与 MCP 工具（stdio、streamable HTTP 模拟服务）、确认拒绝、工具出错、超过单轮步数上限 | 每个工具经策略与确认；拒绝与错误作为工具结果交回模型；达到上限后结束本轮并告知用户；MCP 进程随插件停止 |
 | V-59 | T-12 | 记忆 add/patch/remove、超过字符上限、重复条目、不可见字符、群聊多用户、会话中写入与 /reset、记忆插件不可用 | 超限与非法内容返回错误且不丢已有条目；快照在会话内不变、下一会话生效；每位用户只看到自己的档案；配置的记忆插件不可用时本轮报错 |
 | V-60 | T-12 | 技能目录含合法与缺少 frontmatter 的 SKILL.md、load_skill 不存在的技能 | 系统提示只含合法技能的描述；不合法文件记诊断并跳过；load_skill 返回正文或明确错误 |
 | V-61 | T-12 | 非 Admin 尝试创建任务、创建 interval/cron 定时 Agent 任务、到期运行、无发信许可、需要确认的工具、插件离线错过 | 只有 Core Admin 能创建与取消任务；任务按 CONTRACTS §4.3 的触发规则运行且不补跑；无许可时 PERMISSION_DENIED；confirm 工具一律拒绝；后台运行不注入记忆 |
 | V-62 | T-02、T-09 | Core/插件/Adapter 三类来源、插件写合法 JSON 行与非 JSON 行、插件伪造来源字段、Handler panic、text 与 json 格式、终端与非终端输出、含 Bot Token 的 URL 错误 | 控制台格式与来源标签符合 CONTRACTS §14.2；非结构化行原样保留为 WARN；插件不能覆盖来源字段；panic 为一条带 stack 的 ERROR；非终端或设置 NO_COLOR 时不着色；日志中没有 token、Secret 与配置明文 |
 | V-63 | T-02、T-09 | 全局与按来源的级别、off、运行时修改、Core 重启、最近记录上限、SSE 订阅、`alonabot logs`、WebUI 筛选 | 修改立即生效；按来源的设置重启后保留，全局级别的运行时修改重启后恢复；off 时 SDK 不输出而 Core 关于它的记录仍在；每个来源最多保留 1000 条；未认证无法读取；WebUI 筛选不改变输出 |
-| V-64 | T-13 | 库模式下同进程插件与 Adapter 的完整生命周期、从 `instances/` 读取实例配置、dev 来源尝试 update/rollback、未捕获的 panic、停止超时、已安装包与开发组件混合运行、两次启动之间的配置与 dev.sqlite | 握手、注册、权限与独立进程一致；dev 组件使用固定代次，重启后按钮仍有效；update/rollback 被拒绝；panic 使进程退出且不重启；停止超时时 Run 返回错误 |
+| V-64 | T-13 | 库模式下同进程插件与 Adapter 的完整生命周期、同一插件 ID 或 adapter_id 登记两次及与已安装包同 ID、从 `instances/` 读取实例配置、dev 来源尝试 update/rollback、未捕获的 panic、停止超时、已安装包与开发组件混合运行、两次启动之间的配置与 dev.sqlite | 握手、注册、权限与独立进程一致；dev 组件使用固定代次，重启后按钮仍有效；update/rollback 被拒绝；重复或冲突的 ID 在启动任何组件前报错；panic 使进程退出且不重启；停止超时时 Run 返回错误 |
 | V-65 | T-13 | 热部署下改动插件源码、编译失败、改动 go.mod、来自其他 module 的 Adapter | 只重启开发中的组件，Adapter 连接与其他插件不中断；编译失败时旧组件继续运行；go.mod 变化输出 WARN；其他 module 的组件不重启 |
 | V-66 | T-14 | 干净数据目录首次运行、交互终端与非终端、预装包签名错误、卸载预装包后重启、新版本发行包 | 预装包全部安装，只启用 help；Agent、记忆插件与 Telegram、OneBot 11 Adapter 都未启用，没有对应进程；终端下 token 只显示一次，非终端拒绝启动；签名错误的包不安装并记 ERROR；已卸载的不重新安装；新版本只作为可用更新列出 |
 | V-67 | T-14 | help 的权限过滤与翻译、`/whoami`、welcome 的入群欢迎与开关权限、rss 的订阅权限/去重/推送/私网地址/超大响应 | help 只列出调用者可用的命令；`/whoami` 返回调用者的实例与用户 ID；welcome 只响应 member.joined，只有 chat_admin 或 Core Admin 能开关；rss 的增删只有 chat_admin 或 Core Admin 能执行，超过 5 MiB 或 30s 的抓取失败，不重复推送同一条目，拒绝 loopback、私网与链路本地地址（含重定向之后），后台推送需要 allowed_adapter_instances |
@@ -84,6 +84,11 @@
 | V-74 | T-10 | linux/amd64，与 V-33 同一台机器；各进程 Activated 后空闲 2 分钟，读 `/proc/<pid>/smaps_rollup` 的 Pss，取 3 轮中位数：只运行 Core（不启用任何插件与 Adapter）；echo 示例插件进程；rss 插件进程（`sqlitedb`，有一个订阅）；configdb 示例的 `gormdb` 变体进程 | Core ≤ 24 MiB，echo ≤ 10 MiB，rss ≤ 14 MiB，configdb ≤ 16 MiB；同时记录 RSS 与私有内存。超出视为回归，按 CONTRACTS §10 处理 |
 | V-75 | T-01、T-10 | `node scripts/check-go-deps.mjs`：在五个目标上列出 Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）链接的模块；临时加入一个清单外的 import | 只含允许清单中的模块；清单外的模块使检查失败并列出模块名 |
 | V-76 | T-12 | 测试插件调用 `llm.generate`：在与不在 `llm_service_allowed_plugins` 中、指定不存在的 Provider、模拟 Provider 出错与中途断开、调用方期限短于生成耗时、Agent 配置中没有 Provider、Agent 插件未启用 | 不在列表中返回 PERMISSION_DENIED，模拟服务没有收到请求；不存在的 Provider 为 INVALID_ARGUMENT，没有 Provider 为 FAILED_PRECONDITION；出错与断开为 UNAVAILABLE，safe_message 不含 API Key，模拟服务只收到一次请求；期限到达时调用方得到 DEADLINE_EXCEEDED；Agent 未启用时按目标未激活失败；成功时返回 text、provider、model 与用量，会话存储没有新增条目 |
+| V-77 | S-01、S-02 | 插件声明可休眠且空闲达到阈值后退出；休眠后首条命令、Service 调用与 HTTP 请求；同一插件 100 个并发唤醒；等待中取消与 deadline 到达；STOPPING 期间到达请求；唤醒后 REGISTER 的路由摘要与快照不一致；在途 Handler、Service、HTTP、多轮等待阻止休眠；Core 重启后从快照恢复路由；未启用休眠 | 首条请求按原权限、Target、Trace 与 deadline 交付一次；并发唤醒只产生一个新 Session；冷启动不延长请求期限，取消的请求不交付；停止中到达的请求等旧进程退出后由新 Session 处理，没有双进程；摘要不一致时停止激活；空闲退出记 `SUSPENDED`、StopReason 为 `IDLE`，不计入异常退出，不更新 ActiveGeneration、不重跑迁移；快照不含 Secret；未启用时生命周期与事件行为不变 |
+| V-78 | S-03 | 休眠插件上 12:00、16:00、22:00 三个 cron 任务与一个 interval 任务；同一 job 上一轮未结束；插件异常离线期间到期 | 休眠插件按计划被唤醒并执行，结果记录后可再次休眠；同一 job 不重叠；异常离线期间的 tick 跳过且不补执行 |
+| V-79 | S-04 | Telegram long polling 与 OneBot 11 正向 WebSocket 实例空闲；同一 Adapter 包一个实例停止、另一个仍运行；声明外部唤醒来源的测试 Adapter 空闲、收到出站调用与外部缓冲事件 | 官方两个 Adapter 不休眠；仍有运行实例时进程不停止；测试 Adapter 休眠后被唤醒，恢复游标后交付且不重复；`bot.offline` 区分空闲休眠与掉线 |
+| V-80 | S-05 | 外部唤醒提供者（本地模拟）可用与不可用；触发器注册失败；休眠事务各步注入失败；同一次外部触发重复送达与并发送达；执行中崩溃；唤醒迟到超出容忍窗口；库模式 | 接管或注册未确认时保持运行；任一步失败恢复服务；重复触发只产生一次执行尝试；结果未知的记 `UNKNOWN` 不重跑；超出窗口的记为跳过；唤醒时不出现第二个持有 core.lock 的实例；库模式不进入整机休眠 |
+| V-81 | S-06 | 固定机器上 echo 示例插件与 V-74 的同组插件：冷启动到 ACTIVATED 各 100 次；活跃与休眠时的 PSS/RSS；频繁唤醒；切回 `always_on` | 记录冷启动 P50/P95/P99（echo 的 P95 以 200 ms 为初步目标）、PSS/RSS、CPU、唤醒次数、失败与丢弃数；超过冷启动阈值的插件转为常驻；切回 `always_on` 后按原代次启动全部已启用组件，路由快照、任务记录与业务数据保留 |
 
 ## 2. 跨任务验收的最终闭合点
 
