@@ -1416,9 +1416,9 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 1. sdk
    Root 增加 Hook：Services(*ServiceRegistry) // Collect 时调用一次；func (*Base) Services(*ServiceRegistry) 默认不注册
    type ServiceRegistry struct{ ... }
-   type Access int // Private（缺省，只允许 Core 与本插件）、Allowlist、Public
+   type Access int // 常量 AccessPrivate（缺省，只允许 Core 与本插件）、AccessAllowlist、AccessPublic；带类型名前缀，避免与 HTTP 的 sdk.Public(mode) 冲突
    type ServiceOption func(*serviceOptions)
-   func WithAccess(a Access, allowlist ...string) ServiceOption // Allowlist 时给出允许的插件 ID
+   func WithAccess(a Access, allowlist ...string) ServiceOption // AccessAllowlist 时给出允许的插件 ID
    // JSON 服务：In/Out 为可 json 编解码的类型；schemaIn/schemaOut 为随包固定的 schema 标识，版本由 version 给出
    func JSONService[In, Out any](r *ServiceRegistry, name, schemaIn, schemaOut string, version uint32, h func(*Context, In) (Out, error), opts ...ServiceOption)
    // Protobuf 服务：schema 标识取 validate.SchemaID，版本 1
@@ -3939,7 +3939,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 行为：
 - `@agent`：Broker 定位目标时，`@agent` 解析为当前安装记录（或库模式的 dev 组件）中 role 为 agent 的组件 ID，之后的访问规则、调用链、CALL_CYCLE 与激活检查按解析后的 ID 执行；没有 Agent 组件时与目标未激活相同。
-- 注册：在 Services Hook 中以 JSONService 注册 ServiceName，WithAccess(Public)。
+- 注册：在 Services Hook 中以 JSONService 注册 ServiceName，WithAccess(sdk.AccessPublic)。
 - 许可：Context.Caller() 为空或不在 LLMServiceAllowedPlugins 中时返回 PERMISSION_DENIED，不请求 Provider。
 - 校验：messages 为空、role 不是 user 或 assistant、max_output_tokens 小于 0 时返回 INVALID_ARGUMENT；provider 非空且不存在时返回 INVALID_ARGUMENT；为空时使用 default_provider，没有任何可用 Provider 时返回 FAILED_PRECONDITION。
 - 请求：把 system 与 messages 组装成 provider.Request，MaxTokens 取 max_output_tokens（为 0 时取该 Provider 配置的 max_tokens），不传工具；用 Provider 客户端的流式接口接收并拼接全部文本，收到终止标记才算成功；用量取自 provider.Result.Usage，为 nil 时不填写。
