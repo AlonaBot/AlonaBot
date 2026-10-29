@@ -57,8 +57,8 @@ type File struct {
 
 type entry struct {
 	file   File
-	owner  string
-	offset uint64
+	owner  string // owner Session 的 SessionKey
+	offset uint64 // 已确认写入的长度，单位为字节
 }
 
 // Store 串行管理文件变更与配额；上传提交后只转移索引，保留原有占用。
@@ -71,7 +71,7 @@ type Store struct {
 	now     func() time.Time
 	uploads map[string]*entry
 	refs    map[string]*entry
-	used    map[string]int64
+	used    map[string]int64 // SessionKey 到预留与引用占用字节数之和，由 mu 保护
 	total   int64
 }
 
