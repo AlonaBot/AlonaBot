@@ -64,6 +64,8 @@ RESPONSE 的 payload 与 ErrorInfo **不是 oneof**。例如部分发送成功�
 
 能力项使用 `name + version`，supported 列表是可用集合，required 是必须包含于交集的子集。Major 必须相同，minor 选择 `min(local,peer)`；不能凭相同 minor 假定对方支持未声明能力。
 
+已定义的协议能力：`http_listener` 版本 1（D-65）。插件存在 HTTP 路由时 SDK 把它放进 HELLO 的 required；Core 支持它，交集含该项时才在 Bootstrap 中下发 `http_proxy_auth`，REGISTER 带 HTTP 路由而交集不含该项时拒绝注册。
+
 ### 3.2 Bootstrap 的最小内容
 
 Bootstrap 属于私有、已认证 IPC，和整个 HELLO_ACK 一起受 **4 MiB** 限制。超限明确失败；首发不增加分块 Bootstrap 或准备期业务 RPC。
@@ -74,7 +76,7 @@ Bootstrap 属于私有、已认证 IPC，和整个 HELLO_ACK 一起受 **4 MiB**
 | `candidate_config_json` | UTF-8 JSON 对象，Core 先验证对象/大小并解析既有 Secret 引用；允许旧版本字段进入 SDK 配置迁移，不先用新版 Schema 否决旧配置 |
 | `config_schema_hash`、`previous_config_version`、`target_config_version` | 与可信安装包对应的 Schema 和配置迁移输入；无配置插件仍以空对象表示 |
 | `database_descriptor` | 后端类型（NONE 或受管 SQLite）、受管 SQLite 当前准备视图路径、迁移模式、已应用版本、activation_reason（first_install/resume/reload/update/rollback）、manual_migration_approved（仅Core显式维护许可且绑定当前Session/Generation/DB时true）；不下发 Core 管理数据库凭证 |
-| `http_proxy_auth` | 本 Session 独立的内部代理认证材料；只在插件声明 HTTP 能力时需要，不复用 Admin 凭证 |
+| `http_proxy_auth` | 本 Session 独立的内部代理认证材料；只在 HELLO 协商出 `http_listener` 能力时下发（§3.1），不复用 Admin 凭证 |
 | `phase_limits`、`preparation_deadline_unix_ms`（字段号 8、9） | 准备、迁移和 Ready 的阶段预算及本轮绝对期限；迁移使用独立预算，不被普通业务 30s 截断 |
 | `LogLevel log_level`（字段号 10） | 该来源当前生效的日志级别（CONTRACTS §14.3），SDK 据此在进程内过滤；枚举 `LogLevel` 依次为 UNSPECIFIED、DEBUG、INFO、WARN、ERROR、OFF，UNSPECIFIED 按 INFO 处理；`inherit` 由 Core 先解析成全局级别后再下发 |
 | `SessionLimits session_limits`（字段号 11） | 本次运行生效的每方向在途请求数、每 Session payload 预算与普通请求期限；Core 全局 payload 预算只由 Core 使用 |

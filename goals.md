@@ -1194,7 +1194,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 范围（只新增或修改这些）：
 - 新增 sdk/generate/
 - sdk/：新增 generated.go（生成代码调用的注册入口）；sdk.go 的 Collect 合并生成的注册项（只加调用点）
-- cmd/alonabot/：新增 plugin 命令组及 generate、check 子命令（新文件）
+- cmd/alonabot/：新增 plugin 命令组及 generate、check 子命令（新文件）；commands.go 只加装配：execute 中 root.AddCommand 接入 plugin 命令组，并把 &code 传给它，进入业务执行后设为 exitFailure
 - 上述包的测试文件
 允许的新跨模块边：cmd/alonabot -> sdk/generate（ARCHITECTURE 已登记）。sdk/generate 只用标准库，不 import sdk 的其他包。
 
@@ -1265,9 +1265,11 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - contracts/wirespec_test.go：追加上述编号检查
 - contracts/validate/register.go：文本匹配与参数描述的注册校验
 - internal/core/adapter/：新增 naming.go（可选接口）；internal/core/adapter/remote 的实例实现它
-- internal/core/router/：新增 command.go（命令派发）与 args.go（分词与类型转换）；router.go 中 message.created 改走命令层（只加调用点）
-- sdk/：registry.go（文本匹配、Raw 与参数选项）、dispatch.go（命令路由的分发与参数绑定）、session.go（buildRegister 输出新字段）
+- internal/core/router/：新增 command.go（命令派发）与 args.go（分词与类型转换）；router.go 中 message.created 改走命令层（只加调用点），New 按下方接口增加参数
+- internal/core/supervisor/：echo_test.go、conversation_test.go、index_test.go 只同步 router.New 的新签名
+- sdk/：registry.go（文本匹配、Raw 与参数选项）、dispatch.go（命令路由的分发与参数绑定）、session.go（buildRegister 输出新字段）；sdk.go 只给 Context 加捕获组与自动回复标记两个未导出字段，并在 Send 开头加自动回复检查
 - 上述包的测试文件
+不修改 internal/core/host：Regex 的 REGISTER 拒绝由 host 已调用的 validate.Register 完成，编译结果缓存在 Router 中。
 允许的新跨模块边：无。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
@@ -1288,9 +1290,13 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
    func (r *CommandRegistry) Raw(routeID string, handler any, opts ...RouteOption)
    func (c *Context) Match() []string // Regex 的捕获组（含整体匹配在 [0]）；其他路由为 nil
    文本匹配与 Raw 的 handler 只能是 func(*Context) error 或 func(*Context) (message.Chain, error)。
+3. internal/core/router（message 已 import router，发送经注入的回调完成，避免循环依赖）
+   func New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send ServiceFunc) *Router
+   // adapters 用于查找目标实例的 Named；send 由装配处传入 message.Service.Send。Router 以回复所属路由的插件构造 Caller{PluginID}，
+   // 以 &Invocation{PluginID, Event, DefaultTarget} 作为 ParentAttach、SendRequest（不设 To）作为载荷调用 send，走与 core.send 相同的校验。
 
 行为：
-- 注册校验（Collect 与 validate.Register 两处）：Regex 编译失败、patterns 为空或含空串、Raw 带 patterns、必需参数出现在可选参数之后、RawTail 用于非 string 或非最后一个参数、Optional 指向不存在的参数名、default 不能按参数类型解析，都拒绝注册（INVALID_ARGUMENT）。Core 在 REGISTER 时编译 Regex 并缓存在 Session 的路由上，不在派发时编译。
+- 注册校验（Collect 与 validate.Register 两处）：Regex 编译失败、patterns 为空或含空串、Raw 带 patterns、必需参数出现在可选参数之后、RawTail 用于非 string 或非最后一个参数、Optional 指向不存在的参数名、default 不能按参数类型解析，都拒绝注册（INVALID_ARGUMENT）。Regex 编译失败经 validate.Register 在 REGISTER 时拒绝；Router 在 Attach 时编译并缓存到该插件的路由快照，不在派发时编译。
 - 选择（只对 message.created）：
   1) 文本取 chain 中各 text 片段按顺序直接连接的结果。以 "/" 开头时，按空白切出 token；第一个 token 形如 name@user 时，只有 user 与目标实例的 Named.AccountName() 不区分大小写相等才去掉 @user，否则整条消息不算命令（实例不实现 Named 时不接受 @ 形式）。
   2) 用 CommandIndex.Lookup 匹配最长完整路径或别名。命中时只调用该胜出路由：本层结束，不再进入文本匹配与 Raw（即使参数错误或 Handler 返回错误）。
@@ -1410,9 +1416,9 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 1. sdk
    Root 增加 Hook：Services(*ServiceRegistry) // Collect 时调用一次；func (*Base) Services(*ServiceRegistry) 默认不注册
    type ServiceRegistry struct{ ... }
-   type Access int // Private（缺省，只允许 Core 与本插件）、Allowlist、Public
+   type Access int // 常量 AccessPrivate（缺省，只允许 Core 与本插件）、AccessAllowlist、AccessPublic；带类型名前缀，避免与 HTTP 的 sdk.Public(mode) 冲突
    type ServiceOption func(*serviceOptions)
-   func WithAccess(a Access, allowlist ...string) ServiceOption // Allowlist 时给出允许的插件 ID
+   func WithAccess(a Access, allowlist ...string) ServiceOption // AccessAllowlist 时给出允许的插件 ID
    // JSON 服务：In/Out 为可 json 编解码的类型；schemaIn/schemaOut 为随包固定的 schema 标识，版本由 version 给出
    func JSONService[In, Out any](r *ServiceRegistry, name, schemaIn, schemaOut string, version uint32, h func(*Context, In) (Out, error), opts ...ServiceOption)
    // Protobuf 服务：schema 标识取 validate.SchemaID，版本 1
@@ -1466,16 +1472,16 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 目标：插件只注册 http.Handler：SDK 在存在 HTTP 路由时持有 127.0.0.1:0 的 Listener，并在 REGISTER 报告实际端点，用户 Handler 外包内部凭证校验与就绪门禁；Core 读取 <data_dir>/alonabot.yaml（不存在时以缺省值创建），在唯一的公开 Listener 上把 /plugins/{id}/... 经标准库 ReverseProxy.Rewrite 转发给当前已激活 Session 的端点，清除可伪造的身份信息并注入受信凭证；Session 结束或代次变化时撤销映射。
 
-依据：PLAN T-07 步骤 1（HTTP）、4、5；CONTRACTS §7.2、§15.1、§14.6；WIRE-FORMAT §3.2（http_proxy_auth）、§3.3；DECISIONS D-25；TEST-MATRIX V-22 的组件分项。
+依据：PLAN T-07 步骤 1（HTTP）、4、5；CONTRACTS §7.2、§15.1、§14.6；WIRE-FORMAT §3.1（HTTP 能力）、§3.2（http_proxy_auth）、§3.3；DECISIONS D-25、D-65；TEST-MATRIX V-22 的组件分项。
 
 范围（只新增或修改这些）：
 - contracts/validate/register.go：HTTP 路由描述的注册校验
-- internal/wire/：新增 http.go（内部认证头名常量）
+- internal/wire/：新增 http.go（内部认证头名与 HTTP 协议能力名常量）
 - internal/tune/：新增导出的大小解析函数（供设置文件复用）
 - 新增 internal/core/settings/（alonabot.yaml）
 - 新增 internal/core/httpproxy/
-- internal/core/host/prepare.go：插件声明 HTTP 路由时在 Bootstrap 中下发 http_proxy_auth
-- sdk/：新增 http.go（Listener、门禁与凭证校验）；sdk.go 去掉「不支持 HTTP 路由」的拒绝（只改该处）；activate.go 与 session.go 只加启动、上报与关闭 Listener 的调用点
+- internal/core/host/prepare.go：插件在 HELLO 声明 HTTP 能力时在 Bootstrap 中下发 http_proxy_auth；internal/core/host/activate.go 只给 Instance 加 HTTP 端点与代理 token 两个字段，并在构造 Instance 处从 Prepared 赋值（装配处经 supervisor 返回的 Running.Instance 读取后调用 Bind，不修改 supervisor.go）
+- sdk/：新增 http.go（Listener、门禁与凭证校验）；sdk.go 去掉「不支持 HTTP 路由」的拒绝（只改该处）；registry.go 只改 Handle 的路径规范校验（允许前缀路由的尾斜杠）；activate.go 与 session.go 只加启动、上报与关闭 Listener 的调用点，session.go 另在构造 Hello 处声明 HTTP 能力
 - cmd/alonabot/：run 读取设置文件、增加 --listen 并让 --log-level/--log-format 覆盖设置文件；启动 Core HTTP Listener 并接入插件的 HTTP 路由
 - 新增 internal/core/supervisor/testdata/httpplugin/（集成测试用的插件程序）
 - 上述包的测试文件
@@ -1484,6 +1490,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 1. internal/wire/http.go
    const HeaderProxyAuth = "X-Alonabot-Proxy-Auth" // Core 注入、SDK 校验的内部凭证头；值为 http_proxy_auth.token 的十六进制
+   const CapabilityHTTPListener = "http_listener" // HTTP 协议能力名，版本 1（WIRE-FORMAT §3.1）
 2. internal/tune
    func ParseSize(s string) (int64, error) // 与 --args 中大小值相同的语法与错误提示（B、KiB、MiB、GiB；MB 等提示改用二进制单位）
 3. internal/core/settings
@@ -1510,12 +1517,14 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 5. sdk（HTTPRegistry 已存在）：Handle 的注册项随 REGISTER 上报；不新增公开符号。
 
 行为：
-- 注册校验（validate.Register 与 SDK Collect）：HTTP 路由的 method 为大写的标准方法之一；path 以 "/" 开头、是 path.Clean 后的规范形式、不含 "?"、"#" 与 ".."；同插件的 (method, path) 唯一；is_public 为 true 时 auth_mode 必须是 CALLBACK_STATE 或 CALLBACK_SIGNATURE，为 false 时必须是 CORE_SESSION；有 HTTP 路由时 http_listener 必须存在且为 loopback 非零端口，没有 HTTP 路由时必须不存在。
+- 注册校验（validate.Register 与 SDK Collect）：HTTP 路由的 method 为大写的标准方法之一；path 以 "/" 开头、是规范形式（path.Clean 的结果；原路径以 "/" 结尾且结果不是 "/" 时再补回一个 "/"，即前缀路由，"/" 本身是匹配全部路径的前缀路由）、不含 "?"、"#" 与 ".."；"/static" 与 "/static/" 是两条不同的路由；同插件的 (method, path) 唯一；is_public 为 true 时 auth_mode 必须是 CALLBACK_STATE 或 CALLBACK_SIGNATURE，为 false 时必须是 CORE_SESSION；有 HTTP 路由时 http_listener 必须存在且为 loopback 非零端口，没有 HTTP 路由时必须不存在。
 - SDK：
+  - 存在 HTTP 路由时在 HELLO 的 required_capabilities 中声明 {CapabilityHTTPListener, 1}，没有时不声明。
   - 只有存在 HTTP 路由时才在准备阶段监听 127.0.0.1:0，REGISTER 报告实际 host 与 port；Listener 在整个 Session 期间保持打开，不释放后重开。
   - 每个请求先校验 HeaderProxyAuth 等于 Bootstrap 下发 token 的十六进制（恒定时间比较），不符返回 401 且不进入用户 Handler；Session 尚未 ACTIVATED 时返回 503；校验通过后删除该头再交给用户 Handler。路由匹配按注册的 method 与 path（精确匹配 path，或注册为以 "/" 结尾的前缀）。
   - STOPPING、断链、激活失败与 Run 返回时关闭 Listener 并等待在途请求结束（受停止预算约束）。
-- Core host：插件声明了 HTTP 路由时，Bootstrap.http_proxy_auth.token 为本次 Session 新生成的 32 字节随机值；不进入日志。
+- Core host：Core 的 supported 能力包含 {CapabilityHTTPListener, 1}；能力交集含该项时，Bootstrap.http_proxy_auth.token 为本次 Session 新生成的 32 字节随机值，否则不设置；token 不进入日志。REGISTER 带 HTTP 路由而交集不含该项时拒绝注册（INVALID_ARGUMENT）。
+- Core httpproxy 与 SDK 用同一份未清理的请求路径做路由匹配，两侧对同一请求选出同一条路由，避免经公开前缀路由（如 /static/../hello）绕过私有路由的授权。
 - Core httpproxy：
   - 只处理 /plugins/{id}/...；其余路径返回 404（Admin、API、healthz 归 T-07.4 与 T-09）。
   - 找到当前映射后按 method 与去掉 /plugins/{id} 后的路径匹配路由；没有映射（未激活、已停用或代次变化）返回 503，没有匹配路由返回 404，method 不符返回 405。
@@ -3930,7 +3939,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 行为：
 - `@agent`：Broker 定位目标时，`@agent` 解析为当前安装记录（或库模式的 dev 组件）中 role 为 agent 的组件 ID，之后的访问规则、调用链、CALL_CYCLE 与激活检查按解析后的 ID 执行；没有 Agent 组件时与目标未激活相同。
-- 注册：在 Services Hook 中以 JSONService 注册 ServiceName，WithAccess(Public)。
+- 注册：在 Services Hook 中以 JSONService 注册 ServiceName，WithAccess(sdk.AccessPublic)。
 - 许可：Context.Caller() 为空或不在 LLMServiceAllowedPlugins 中时返回 PERMISSION_DENIED，不请求 Provider。
 - 校验：messages 为空、role 不是 user 或 assistant、max_output_tokens 小于 0 时返回 INVALID_ARGUMENT；provider 非空且不存在时返回 INVALID_ARGUMENT；为空时使用 default_provider，没有任何可用 Provider 时返回 FAILED_PRECONDITION。
 - 请求：把 system 与 messages 组装成 provider.Request，MaxTokens 取 max_output_tokens（为 0 时取该 Provider 配置的 max_tokens），不传工具；用 Provider 客户端的流式接口接收并拼接全部文本，收到终止标记才算成功；用量取自 provider.Result.Usage，为 nil 时不填写。
