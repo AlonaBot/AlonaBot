@@ -3,7 +3,10 @@ package validate
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"net"
+	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -81,6 +84,9 @@ func Register(r *pb.Register) error {
 		switch route.GetKind() {
 		case pb.RouteKind_ROUTE_KIND_COMMAND:
 			command := route.GetCommand()
+			if err := registerCommand(command, route.GetRouteId()); err != nil {
+				return err
+			}
 			if command.GetMatch() == pb.CommandMatch_COMMAND_MATCH_PATH && len(command.GetPath()) == 0 {
 				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q has an empty path", route.GetRouteId())
 			}
@@ -128,6 +134,85 @@ func registerCommandPath(paths map[string]string, path []string, routeID string)
 		return errf(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "command path %q conflicts between routes %q and %q", key, previous, routeID)
 	}
 	paths[key] = routeID
+	return nil
+}
+
+func registerCommand(command *pb.CommandSpec, routeID string) error {
+	// 1. 匹配描述在注册边界检查，避免非法模式进入派发快照。
+	switch command.GetMatch() {
+	case pb.CommandMatch_COMMAND_MATCH_PATH:
+	case pb.CommandMatch_COMMAND_MATCH_REGEX:
+		if _, err := regexp.Compile(command.GetRegex()); err != nil {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q has invalid regex: %v", routeID, err)
+		}
+	case pb.CommandMatch_COMMAND_MATCH_KEYWORD, pb.CommandMatch_COMMAND_MATCH_STARTSWITH,
+		pb.CommandMatch_COMMAND_MATCH_ENDSWITH, pb.CommandMatch_COMMAND_MATCH_FULLMATCH:
+		if len(command.GetPatterns()) == 0 {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q has no patterns", routeID)
+		}
+		for _, pattern := range command.GetPatterns() {
+			if pattern == "" {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q has an empty pattern", routeID)
+			}
+		}
+	case pb.CommandMatch_COMMAND_MATCH_RAW:
+		if len(command.GetPatterns()) != 0 {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "raw route %q contains patterns", routeID)
+		}
+	default:
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q has an invalid match mode", routeID)
+	}
+	if command.GetMatch() != pb.CommandMatch_COMMAND_MATCH_PATH && len(command.GetParams()) != 0 {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "text or raw route %q contains command parameters", routeID)
+	}
+
+	// 2. 参数名对应调用载荷中的绑定键，顺序、类型与缺失值均须可执行。
+	names := make(map[string]bool, len(command.GetParams()))
+	optional := false
+	for i, param := range command.GetParams() {
+		name := param.GetName()
+		if name == "" || names[name] {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q has an empty or duplicate parameter name %q", routeID, name)
+		}
+		names[name] = true
+		if param.GetType() == pb.ParamType_PARAM_TYPE_UNSPECIFIED || !knownEnum(param.GetType()) {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q parameter %q has an invalid type", routeID, name)
+		}
+		if param.GetRequired() && optional {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q required parameter %q follows an optional parameter", routeID, name)
+		}
+		optional = optional || !param.GetRequired()
+		if param.GetRaw() && (param.GetType() != pb.ParamType_PARAM_TYPE_STRING || i != len(command.GetParams())-1) {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q raw parameter %q must be the last string parameter", routeID, name)
+		}
+		if param.DefaultValue != nil {
+			if err := commandDefault(param); err != nil {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q parameter %q has invalid default: %v", routeID, name, err)
+			}
+		}
+	}
+	return nil
+}
+
+func commandDefault(param *pb.CommandParam) error {
+	value := param.GetDefaultValue()
+	switch param.GetType() {
+	case pb.ParamType_PARAM_TYPE_INT:
+		_, err := strconv.ParseInt(value, 10, 64)
+		return err
+	case pb.ParamType_PARAM_TYPE_FLOAT:
+		n, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		if math.IsNaN(n) || math.IsInf(n, 0) {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "float must be finite")
+		}
+	case pb.ParamType_PARAM_TYPE_BOOL:
+		if value != "true" && value != "false" {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "bool must be true or false")
+		}
+	}
 	return nil
 }
 
