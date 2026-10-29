@@ -130,6 +130,7 @@ func (a *telegramAdapter) Start(ctx context.Context, request adapter.StartReques
 	}()
 	return i, nil
 }
+
 func startError(err error) error {
 	code := pb.ErrorCode_ERROR_CODE_UNAVAILABLE
 	var api *apiError
@@ -322,6 +323,7 @@ func (i *instance) save(ctx context.Context, event *pb.Event, next cursor) error
 	_, err = i.core.Deliver(ctx, event, encoded)
 	return err
 }
+
 func waitReceive(ctx context.Context, delay time.Duration) bool {
 	timer := time.NewTimer(delay)
 	defer timer.Stop()

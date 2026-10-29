@@ -46,6 +46,7 @@ func (c *recordingCore) Deliver(ctx context.Context, event *pb.Event, raw []byte
 	c.mu.Unlock()
 	return false, c.SaveCursor(ctx, raw)
 }
+
 func (c *recordingCore) SaveCursor(_ context.Context, raw []byte) error {
 	var next cursor
 	if err := json.Unmarshal(raw, &next); err != nil {
@@ -61,13 +62,16 @@ func (c *recordingCore) SaveCursor(_ context.Context, raw []byte) error {
 	c.saved <- struct{}{}
 	return nil
 }
+
 func (c *recordingCore) ReportFailure(_ context.Context, e *pb.ErrorInfo) error {
 	c.failures <- e
 	return nil
 }
+
 func newRecordingCore() *recordingCore {
 	return &recordingCore{failures: make(chan *pb.ErrorInfo, 8), saved: make(chan struct{}, 16)}
 }
+
 func startRequest(t *testing.T, server *telegramtest.Server) adapter.StartRequest {
 	t.Helper()
 	raw, err := json.Marshal(map[string]string{"token": "local-secret-token", "api_base_url": server.URL()})
@@ -76,6 +80,7 @@ func startRequest(t *testing.T, server *telegramtest.Server) adapter.StartReques
 	}
 	return adapter.StartRequest{InstanceID: "test-instance", ConfigJSON: raw}
 }
+
 func waitSaved(t *testing.T, channel <-chan struct{}) {
 	t.Helper()
 	select {
@@ -84,6 +89,7 @@ func waitSaved(t *testing.T, channel <-chan struct{}) {
 		t.Fatal("receive did not finish")
 	}
 }
+
 func TestReceiveLifecycle(t *testing.T) {
 	server := telegramtest.NewServer(t, "local-secret-token")
 	server.SetMe(42, "example_bot")
@@ -123,6 +129,7 @@ func TestReceiveLifecycle(t *testing.T) {
 		t.Fatalf("webhook error: %v", err)
 	}
 }
+
 func TestFatalAndRetry(t *testing.T) {
 	for _, status := range []int{401, 409, 502} {
 		t.Run(strconv.Itoa(status), func(t *testing.T) {

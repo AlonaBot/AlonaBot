@@ -18,10 +18,12 @@ type telegramUser struct {
 	LastName     string  `json:"last_name"`
 	LanguageCode *string `json:"language_code"`
 }
+
 type telegramChat struct {
 	ID   int64  `json:"id"`
 	Type string `json:"type"`
 }
+
 type telegramEntity struct {
 	Type     string        `json:"type"`
 	Offset   int           `json:"offset"`
@@ -30,6 +32,7 @@ type telegramEntity struct {
 	Language *string       `json:"language"`
 	User     *telegramUser `json:"user"`
 }
+
 type telegramMessage struct {
 	ID              int64            `json:"message_id"`
 	Date            int64            `json:"date"`
@@ -44,6 +47,7 @@ type telegramMessage struct {
 	CaptionEntities []telegramEntity `json:"caption_entities"`
 	MediaGroupID    *string          `json:"media_group_id"`
 }
+
 type chatMember struct {
 	Status   string       `json:"status"`
 	IsMember bool         `json:"is_member"`
@@ -68,6 +72,7 @@ type membershipUpdate struct {
 	Old  chatMember    `json:"old_chat_member"`
 	New  chatMember    `json:"new_chat_member"`
 }
+
 type telegramReaction struct {
 	Type          string `json:"type"`
 	Emoji         string `json:"emoji"`
@@ -171,13 +176,16 @@ func (i *instance) normalize(raw json.RawMessage) ([]*pb.Event, error) {
 	}
 	return events, nil
 }
+
 func (i *instance) baseEvent(chat telegramChat, date int64, user *telegramUser) *pb.Event {
 	return &pb.Event{AdapterId: proto.String(AdapterID), AdapterInstanceId: proto.String(i.id), AccountId: proto.String(i.account.ID), Target: &pb.Target{AdapterId: AdapterID, AdapterInstanceId: i.id, AccountId: i.account.ID, ChatId: strconv.FormatInt(chat.ID, 10)}, OccurredAtUnixMs: date * 1000, Actor: i.actor(user)}
 }
+
 func (*instance) source(event *pb.Event, id int64, raw json.RawMessage) {
 	event.SourceEventId = proto.String(strconv.FormatInt(id, 10))
 	event.PlatformPayload = raw
 }
+
 func (i *instance) actor(user *telegramUser) *pb.Actor {
 	if user == nil {
 		return nil
@@ -275,9 +283,11 @@ func entityText(text string, offset, length int) (string, error) {
 	}
 	return string(utf16.Decode(units[offset:end])), nil
 }
+
+var entityTypes = map[string]pb.EntityType{"bold": pb.EntityType_ENTITY_TYPE_BOLD, "italic": pb.EntityType_ENTITY_TYPE_ITALIC, "underline": pb.EntityType_ENTITY_TYPE_UNDERLINE, "strikethrough": pb.EntityType_ENTITY_TYPE_STRIKETHROUGH, "spoiler": pb.EntityType_ENTITY_TYPE_SPOILER, "code": pb.EntityType_ENTITY_TYPE_CODE, "pre": pb.EntityType_ENTITY_TYPE_PRE, "text_link": pb.EntityType_ENTITY_TYPE_TEXT_LINK, "text_mention": pb.EntityType_ENTITY_TYPE_TEXT_MENTION}
+
 func mapEntity(entity telegramEntity) *pb.TextEntity {
-	types := map[string]pb.EntityType{"bold": pb.EntityType_ENTITY_TYPE_BOLD, "italic": pb.EntityType_ENTITY_TYPE_ITALIC, "underline": pb.EntityType_ENTITY_TYPE_UNDERLINE, "strikethrough": pb.EntityType_ENTITY_TYPE_STRIKETHROUGH, "spoiler": pb.EntityType_ENTITY_TYPE_SPOILER, "code": pb.EntityType_ENTITY_TYPE_CODE, "pre": pb.EntityType_ENTITY_TYPE_PRE, "text_link": pb.EntityType_ENTITY_TYPE_TEXT_LINK, "text_mention": pb.EntityType_ENTITY_TYPE_TEXT_MENTION}
-	kind, ok := types[entity.Type]
+	kind, ok := entityTypes[entity.Type]
 	// mention、bot_command 等保持普通文本，平台特有元数据仍在原始 update 中。
 	if !ok {
 		return nil

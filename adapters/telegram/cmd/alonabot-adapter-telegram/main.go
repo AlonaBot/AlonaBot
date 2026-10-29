@@ -2,10 +2,11 @@
 package main
 
 import (
-	"github.com/AlonaBot/AlonaBot/adapters/telegram"
-	"github.com/AlonaBot/AlonaBot/sdk"
 	"log/slog"
 	"os"
+
+	"github.com/AlonaBot/AlonaBot/adapters/telegram"
+	"github.com/AlonaBot/AlonaBot/sdk"
 )
 
 func main() {
