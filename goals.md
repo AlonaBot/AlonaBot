@@ -1328,7 +1328,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 依据：PLAN T-04 步骤 5；CONTRACTS §2.2 第 2、3、8 条、§2.3 第 1、2 条、§7（Core Admin 列表）；MESSAGE-MODEL §1；DECISIONS D-45；TEST-MATRIX V-12、V-43 的服务层分项。
 
 范围（只新增或修改这些）：
-- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/policy.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/policy.go
 - internal/core/policy/：新增 command.go、admins.go、denies.go；policy.go 的 CheckSend 增加全局禁止检查
 - internal/core/router/：命令派发在调用插件前检查策略；事件进入派发前由策略补全 Actor 的 trusted_roles（只加调用点）
 - 上述包的测试文件
@@ -1914,7 +1914,7 @@ internal/core/webhost
 - contracts/wirespec_test.go：追加编号检查
 - contracts/validate/register.go：工具描述的注册校验
 - internal/wire/services.go：末尾追加 ServiceToolList = "core.tool.list"
-- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/tool.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/tool.go
 - 新增 internal/core/tool/
 - sdk/：services.go 增加 Tool 选项与工具输入 Schema 的生成；新增 tool.go（ListTools）
 - go.mod、go.sum：仅在 jsonschema-go 尚未引入时新增（D-43）
@@ -2123,7 +2123,7 @@ internal/core/webhost
 - contracts/wirespec_test.go：追加编号检查
 - contracts/manifest/：manifest.go 增加 role、adapter_id、icon、assets、admin_api_min_major、admin_api_max_major、adapter_dependencies、plugin_dependencies 字段与按角色的校验；新增 deps.go（依赖检查）
 - contracts/validate/register.go：button.clicked 事件路由的 action 校验
-- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/buttons.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/buttons.go
 - 新增 internal/core/buttons/
 - internal/core/message/：发送前签发按钮 token、校验 extension（只加调用点）
 - internal/core/adapter/remote/：保存 AdapterDescriptor 的 extension 声明，供 message 校验
@@ -2401,7 +2401,7 @@ sdk/config
 依据：PLAN T-08 步骤 4；CONTRACTS §5.3、§5.2（PREPARED 摘要）、§14.5、§12；WIRE-FORMAT §3.2；TEST-MATRIX V-25。
 
 范围（只新增或修改这些）：
-- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/secrets.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/secrets.go
 - 新增 internal/core/secret/
 - internal/core/host/prepare.go：Expect 增加快照回调；PREPARED 的摘要改为对快照计算；Prepared 增加 ConfigSnapshot
 - internal/core/supervisor/supervisor.go：Spec 增加 ConfigSchema；新候选时把快照写入代次，普通 restart 时核对快照一致
@@ -2525,7 +2525,7 @@ sdk/config
 - 新增 contracts/i18n/（文件格式解析、占位符、语言选择，Core 与 SDK 共用）
 - sdk/generate/：检查并嵌入 i18/*.json；sdk 的 Generated 增加 I18n
 - sdk/：新增 i18n.go（Context.T 与后台 T）
-- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/settings.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/settings.go
 - 新增 internal/core/i18n/（Core 内置目录与 en-US.json、zh-CN.json）
 - internal/core/router/：usage 改用 Core 目录，删除 goal-12 的 shortcut 注释
 - internal/core/host/prepare.go：Bootstrap 写入 default_locale
@@ -2585,7 +2585,7 @@ sdk/config
 依据：PLAN T-09 步骤 1；CONTRACTS §7.3、§7.4、§15.1（listen 与 Base URL）、§14.5；TEST-MATRIX V-47 的认证分项。
 
 范围（只新增或修改这些）：
-- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/admin.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/admin.go
 - 新增 internal/core/adminauth/
 - internal/core/settings/：非 loopback 的 listen 必须配合 https 的 admin_base_url 或非空的 trusted_proxies（只加校验）
 - cmd/alonabot/：新增 admin-token 命令组（init、reset）；run 用 adminauth 作为 webhost 的 AdminSessions 并挂上登录接口
@@ -2992,7 +2992,7 @@ sdk/config
 依据：PLAN T-09 步骤 3；CONTRACTS §9.1～§9.3、§8（依赖段）、§15.1、§15.2、§7.4、§5.3；DECISIONS D-26、D-42、D-59；TEST-MATRIX V-40、V-48、V-52、V-82、V-01 的安装分项。
 
 范围（只新增或修改这些）：
-- internal/core/state/：migrations 末尾追加一条；新增 installs_admin.go（安装记录的扩展字段与 Adapter 实例表）
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 的 installs 表定义中加入新列、末尾加入新表，安装记录的写入与读取方法同步新列；新增 internal/core/state/installs_admin.go（安装记录的扩展字段与 Adapter 实例表）
 - 新增 internal/core/manage/（管理服务与 HTTP API）
 - 根包 assembly.go：增加按安装记录启动全部已启用包、挂载管理 API 的步骤；新增导出的 Serve 供 cmd 使用
 - cmd/alonabot/：serve（以及不带子命令时）调用根包 Serve；新增 install、list、enable、disable、restart、reload、update、rollback、uninstall、pin、adapter instance、admin 命令（经管理 API 访问）
@@ -3002,7 +3002,7 @@ sdk/config
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 1. internal/core/state
-   迁移：ALTER TABLE installs ADD COLUMN version TEXT NOT NULL DEFAULT ''; ALTER TABLE installs ADD COLUMN publisher_key_id TEXT NOT NULL DEFAULT ''; ALTER TABLE installs ADD COLUMN pin TEXT NOT NULL DEFAULT ''; ALTER TABLE installs ADD COLUMN uninstalled INTEGER NOT NULL DEFAULT 0;
+   迁移：installs 表定义加入列 version TEXT NOT NULL, publisher_key_id TEXT NOT NULL, pin TEXT NOT NULL, uninstalled INTEGER NOT NULL（不设 DEFAULT，写入安装记录时给出全部列）；
    CREATE TABLE adapter_instances (instance_id TEXT PRIMARY KEY, plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), config_snapshot TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL);
    读写方法自定。
 2. internal/core/manage
@@ -3967,7 +3967,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 依据：PLAN T-09 步骤 4；CONTRACTS §12、§6.3、§5.2、§4.2；TEST-MATRIX V-29。
 
 范围（只新增或修改这些）：
-- internal/core/state/：migrations 末尾追加一条；新增 journal.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/journal.go
 - 新增 internal/core/journal/（操作记录的状态机与编排，实现 manage.Candidates 的 Reload 与 Update）
 - internal/core/manage/：首次启用改用 journal 编排，删除 goal-39 的 shortcut 注释（只改该处与装配）
 - 上述包的测试文件
@@ -4511,7 +4511,7 @@ internal/core/state
 - contracts/wirespec_test.go：追加编号检查
 - internal/wire/services.go：末尾追加 ServiceLogSetLevel = "sdk.log.set_level"
 - internal/core/logging/：新增 buffer.go（最近记录）、query.go（按日期查询日志文件）；Output 在输出时写入缓冲（只加调用点）
-- internal/core/state/：migrations 末尾追加一条；新增 loglevels.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/loglevels.go
 - internal/core/manage/：新增 log_api.go（读取、SSE、级别修改）
 - sdk/：处理 sdk.log.set_level（新增文件；sdk/adapter 的 RunAdapter 同样处理）
 - cmd/alonabot/：新增 logs 与 log-level 命令
