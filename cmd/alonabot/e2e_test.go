@@ -4,11 +4,15 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/AlonaBot/AlonaBot/internal/core/settings"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -301,5 +305,119 @@ func TestRelativeDataDir(t *testing.T) {
 				t.Fatalf("runtime.lock should be kept: %v", err)
 			}
 		})
+	}
+}
+
+// 首次设置文件保持缺省值，显式监听覆盖只影响当前进程。
+func TestSettingsAndListenOverride(t *testing.T) {
+	dir := t.TempDir()
+	c := startCore(t, dir, "--listen", "127.0.0.1:0")
+	c.waitFor(activatedRe)
+	address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
+	response, err := http.Get("http://" + address + "/plugins/demo/unknown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("unmapped plugin status = %d", response.StatusCode)
+	}
+	name := filepath.Join(dir, settings.FileName)
+	original, err := os.ReadFile(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mode, err := os.Stat(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode.Mode().Perm() != 0o600 {
+		t.Fatalf("settings mode = %v", mode.Mode())
+	}
+	loaded, err := settings.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(loaded, settings.Defaults()) {
+		t.Fatalf("default settings changed by override: %+v", loaded)
+	}
+	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := c.wait(15 * time.Second); code != 0 {
+		t.Fatalf("exit %d: %s", code, c.log())
+	}
+	second := startCore(t, dir, "--listen", "127.0.0.1:0")
+	second.waitFor(activatedRe)
+	if err := second.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := second.wait(15 * time.Second); code != 0 {
+		t.Fatalf("exit %d: %s", code, second.log())
+	}
+	current, err := os.ReadFile(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(original, current) {
+		t.Fatal("command line override rewrote settings")
+	}
+}
+
+// 设置文件中的日志设置可由显式参数覆盖，日志文件开关仍按文件生效。
+func TestConfiguredLogOverrides(t *testing.T) {
+	dir := t.TempDir()
+	original := []byte("listen: 127.0.0.1:0\nlog:\n  level: warn\n  format: json\n  file:\n    enabled: false\n")
+	name := filepath.Join(dir, settings.FileName)
+	if err := os.WriteFile(name, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := startCore(t, dir, "--log-level", "info", "--log-format", "text")
+	c.waitFor(activatedRe)
+	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := c.wait(15 * time.Second); code != 0 {
+		t.Fatalf("exit %d: %s", code, c.log())
+	}
+	if _, err := os.Stat(filepath.Join(dir, "logs")); !os.IsNotExist(err) {
+		t.Fatalf("disabled file logging created logs: %v", err)
+	}
+	current, err := os.ReadFile(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(original, current) {
+		t.Fatal("log overrides rewrote settings")
+	}
+	// 未显式给参数时，日志格式取自文件，而非 Cobra 旗标的缺省值。
+	configured := bytes.Replace(original, []byte("level: warn"), []byte("level: info"), 1)
+	if err := os.WriteFile(name, configured, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fromFile := startCore(t, dir)
+	fromFile.waitFor(`(?m)^(\{.*"msg":"OnReady".*\})$`)
+	if err := fromFile.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := fromFile.wait(15 * time.Second); code != 0 {
+		t.Fatalf("exit %d: %s", code, fromFile.log())
+	}
+
+}
+
+// 未知设置必须以 usage 退出码返回，并指明完整键名与行号。
+func TestUnknownSettingUsage(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte("log:\n  unknown: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(filepath.Join(binDir, "alonabot"), "run", "--data-dir", dir, "--plugin-id", "demo", "--entry", filepath.Join(binDir, "lifecycle"))
+	output, err := command.CombinedOutput()
+	if err == nil || command.ProcessState.ExitCode() != exitUsage {
+		t.Fatalf("expected usage exit: %v %s", err, output)
+	}
+	if !strings.Contains(string(output), "log.unknown") || !strings.Contains(string(output), "line 2") {
+		t.Fatalf("incomplete setting error: %s", output)
 	}
 }
