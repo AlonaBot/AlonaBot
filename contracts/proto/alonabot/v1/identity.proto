@@ -40,6 +40,8 @@ message Actor {
   optional string display_name = 3;
   // Core 认定的角色集合。
   repeated TrustedRole trusted_roles = 4;
+  // 平台提供的语言，按 BCP 47 规范化；未提供时缺省。
+  optional string locale = 5;
 }
 
 // Capability 描述 Adapter 公布的一项平台能力；未知能力不推定支持。

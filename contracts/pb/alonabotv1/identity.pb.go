@@ -171,7 +171,9 @@ type Actor struct {
 	// 展示名；平台没有提供时缺省。
 	DisplayName *string `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
 	// Core 认定的角色集合。
-	TrustedRoles  []TrustedRole `protobuf:"varint,4,rep,packed,name=trusted_roles,json=trustedRoles,proto3,enum=alonabot.v1.TrustedRole" json:"trusted_roles,omitempty"`
+	TrustedRoles []TrustedRole `protobuf:"varint,4,rep,packed,name=trusted_roles,json=trustedRoles,proto3,enum=alonabot.v1.TrustedRole" json:"trusted_roles,omitempty"`
+	// 平台提供的语言，按 BCP 47 规范化；未提供时缺省。
+	Locale        *string `protobuf:"bytes,5,opt,name=locale,proto3,oneof" json:"locale,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -232,6 +234,13 @@ func (x *Actor) GetTrustedRoles() []TrustedRole {
 		return x.TrustedRoles
 	}
 	return nil
+}
+
+func (x *Actor) GetLocale() string {
+	if x != nil && x.Locale != nil {
+		return *x.Locale
+	}
+	return ""
 }
 
 // Capability 描述 Adapter 公布的一项平台能力；未知能力不推定支持。
@@ -312,13 +321,15 @@ const file_alonabot_v1_identity_proto_rawDesc = "" +
 	"\achat_id\x18\x04 \x01(\tR\x06chatId\x12 \n" +
 	"\tthread_id\x18\x05 \x01(\tH\x00R\bthreadId\x88\x01\x01B\f\n" +
 	"\n" +
-	"_thread_id\"\xd9\x01\n" +
+	"_thread_id\"\x81\x02\n" +
 	"\x05Actor\x12(\n" +
 	"\x10external_user_id\x18\x01 \x01(\tR\x0eexternalUserId\x12.\n" +
 	"\x13adapter_instance_id\x18\x02 \x01(\tR\x11adapterInstanceId\x12&\n" +
 	"\fdisplay_name\x18\x03 \x01(\tH\x00R\vdisplayName\x88\x01\x01\x12=\n" +
-	"\rtrusted_roles\x18\x04 \x03(\x0e2\x18.alonabot.v1.TrustedRoleR\ftrustedRolesB\x0f\n" +
-	"\r_display_name\"X\n" +
+	"\rtrusted_roles\x18\x04 \x03(\x0e2\x18.alonabot.v1.TrustedRoleR\ftrustedRoles\x12\x1b\n" +
+	"\x06locale\x18\x05 \x01(\tH\x01R\x06locale\x88\x01\x01B\x0f\n" +
+	"\r_display_nameB\t\n" +
+	"\a_locale\"X\n" +
 	"\n" +
 	"Capability\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +

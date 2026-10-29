@@ -818,7 +818,9 @@ type MessageCreatedPayload struct {
 	// 新消息的平台 ID。
 	PlatformMessageId string `protobuf:"bytes,1,opt,name=platform_message_id,json=platformMessageId,proto3" json:"platform_message_id,omitempty"`
 	// 新消息的内容。
-	Chain         *MessageChain `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`
+	Chain *MessageChain `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`
+	// 私聊、回复或提及本机器人。
+	ToMe          bool `protobuf:"varint,3,opt,name=to_me,json=toMe,proto3" json:"to_me,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -865,6 +867,13 @@ func (x *MessageCreatedPayload) GetChain() *MessageChain {
 		return x.Chain
 	}
 	return nil
+}
+
+func (x *MessageCreatedPayload) GetToMe() bool {
+	if x != nil {
+		return x.ToMe
+	}
+	return false
 }
 
 // MessageEditedPayload 承载消息被编辑事件的载荷。
@@ -2782,10 +2791,11 @@ const file_alonabot_v1_message_proto_rawDesc = "" +
 	"\vbot_offline\x18\n" +
 	" \x01(\v2\x1e.alonabot.v1.BotOfflinePayloadH\x00R\n" +
 	"botOfflineB\x06\n" +
-	"\x04kind\"x\n" +
+	"\x04kind\"\x8d\x01\n" +
 	"\x15MessageCreatedPayload\x12.\n" +
 	"\x13platform_message_id\x18\x01 \x01(\tR\x11platformMessageId\x12/\n" +
-	"\x05chain\x18\x02 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\"\xaf\x01\n" +
+	"\x05chain\x18\x02 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\x12\x13\n" +
+	"\x05to_me\x18\x03 \x01(\bR\x04toMe\"\xaf\x01\n" +
 	"\x14MessageEditedPayload\x12.\n" +
 	"\x13platform_message_id\x18\x01 \x01(\tR\x11platformMessageId\x12/\n" +
 	"\x05chain\x18\x02 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\x126\n" +

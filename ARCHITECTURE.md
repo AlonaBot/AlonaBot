@@ -22,7 +22,7 @@
 | 根包 `alonabot`（模块根目录的 Go 文件） | 库模式入口 `alonabot.Run`（D-32）与 `alonabot serve` 共用的 Core 装配 | 业务逻辑（只组装 `internal/core` 与 SDK） | 拟建 |
 | `plugins/help/`、`plugins/welcome/`、`plugins/rss/` | 预装插件（D-32），与第三方插件一样只经 SDK 与 Core 通信 | Core 的命令列表与权限（归 Core） | 拟建 |
 | `agent/` | 官方 Agent 组件（`role: agent`，D-27、D-59～D-61）：对话循环、Provider、工具与 MCP、记忆、技能、定时任务与 `llm.generate`；只经 SDK 与 Core 通信，可被社区 Agent 替换 | Core 的工具策略、确认与会话存储（归 Core） | 部分实现：`agent/provider`（Provider 流式客户端）；其余拟建 |
-| `adapters/telegram/` | 官方 Telegram Adapter 程序：接收、标准化、发送计划、能力与平台映射（D-26） | Core 策略、命令路由、游标持久化与按钮 token（归 Core） | 拟建 |
+| `adapters/telegram/` | 官方 Telegram Adapter 程序：接收、标准化、发送计划、能力与平台映射（D-26） | Core 策略、命令路由、游标持久化与按钮 token（归 Core） | 部分实现：账号检查、long polling、逐条游标与标准化、本地 Bot API 模拟服务；发送、媒体与按钮由后继切片实现 |
 | `adapters/onebot11/` | 官方 OneBot 11 Adapter 程序：正向 WebSocket 连接、接收、标准化、发送计划、能力与平台映射，以及本地模拟服务（D-46） | Core 策略、命令路由与按钮 token（归 Core） | 拟建 |
 | `plugintest/` | 插件测试套件（D-47）：在 `go test` 中用 `alonabot.Start` 启动真实 Core、测试 Adapter 与被测插件，注入事件并取得发送 | Core 的检查与派发（照常由 Core 执行，不另建路径） | 拟建 |
 | `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） | 部分实现：开发用 `alonabot run`（单插件启停、有限重启）、全局 `--args` 与 `tune list`；尚无正式管理 CLI |
