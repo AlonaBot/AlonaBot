@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
@@ -15,6 +16,9 @@ const (
 	LoopbackIPv4 = "127.0.0.1"
 	LoopbackIPv6 = "::1"
 )
+
+// Service 名称长度遵循 Service 描述约定。
+const maxServiceNameLength = 64
 
 // routeKindOf 给出 RouteDescriptor 的 spec 分支对应的 kind。
 func routeKindOf(r *pb.RouteDescriptor) pb.RouteKind {
@@ -44,7 +48,7 @@ func IsJSONObject(b []byte) bool {
 }
 
 // Register 原子校验整份注册集（WIRE §3.1/§3.3）：任一项不合法都整体拒绝，调用方不得保留部分注册。
-// 命令路径、别名与事件过滤器随整份描述一起检查。
+// 命令路径、别名、事件过滤器、Service 与 Bus 订阅随整份描述一起检查。
 func Register(r *pb.Register) error {
 	// 1. 先检查描述身份、分支与注册公共字段。
 	if r.GetAdapter() != nil {
@@ -75,7 +79,7 @@ func Register(r *pb.Register) error {
 		}
 	}
 
-	// 2. 共享路径表覆盖全部命令及其别名，任一冲突都拒绝整份注册。
+	// 2. 校验各类描述；共享路径表覆盖命令及别名，Bus 回调可引用后面的路由。
 	paths := make(map[string]string)
 	for _, route := range r.GetRoutes() {
 		switch route.GetKind() {
@@ -93,6 +97,22 @@ func Register(r *pb.Register) error {
 				if err := registerCommandPath(paths, alias.GetPath(), route.GetRouteId()); err != nil {
 					return err
 				}
+			}
+		case pb.RouteKind_ROUTE_KIND_SERVICE:
+			if err := registerService(route); err != nil {
+				return err
+			}
+		case pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION:
+			subscription := route.GetBusSubscription()
+			pluginID, eventName, ok := strings.Cut(subscription.GetEventName(), "/")
+			if _, err := manifest.ValidateID(pluginID); err != nil || !ok || eventName == "" || strings.Contains(eventName, "/") {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "bus route %q has invalid event_name %q", route.GetRouteId(), subscription.GetEventName())
+			}
+			if subscription.GetSchemaId() == "" || subscription.GetSchemaVersion() == 0 {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "bus route %q is missing schema ID or version", route.GetRouteId())
+			}
+			if !seen[subscription.GetCallbackRouteId()] {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "bus route %q refers to unknown callback %q", route.GetRouteId(), subscription.GetCallbackRouteId())
 			}
 		case pb.RouteKind_ROUTE_KIND_EVENT:
 			filters := route.GetEvent().GetEventTypeFilter()
@@ -144,4 +164,48 @@ func IsEventType(eventType string) bool {
 		return true
 	}
 	return false
+}
+
+func registerService(route *pb.RouteDescriptor) error {
+	service := route.GetService()
+	name := service.GetServiceName()
+	if !validServiceName(name) || route.GetRouteId() != "svc."+name {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service route %q has invalid name or route_id", route.GetRouteId())
+	}
+	if service.GetEncoding() != pb.PayloadEncoding_PAYLOAD_ENCODING_JSON && service.GetEncoding() != pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q has invalid encoding", name)
+	}
+	if route.GetInputSchemaId() == "" || route.GetInputSchemaVersion() == 0 || route.GetOutputSchemaId() == "" || route.GetOutputSchemaVersion() == 0 {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q is missing input or output schema ID or version", name)
+	}
+	switch service.GetAccess() {
+	case pb.ServiceAccess_SERVICE_ACCESS_PRIVATE, pb.ServiceAccess_SERVICE_ACCESS_PUBLIC:
+		if len(service.GetAllowlistPluginIds()) != 0 {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q has an allowlist without ALLOWLIST access", name)
+		}
+	case pb.ServiceAccess_SERVICE_ACCESS_ALLOWLIST:
+		if len(service.GetAllowlistPluginIds()) == 0 {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q has an empty allowlist", name)
+		}
+		for _, pluginID := range service.GetAllowlistPluginIds() {
+			if _, err := manifest.ValidateID(pluginID); err != nil {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q has invalid allowlist plugin ID: %v", name, err)
+			}
+		}
+	default:
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q has invalid access", name)
+	}
+	return nil
+}
+
+func validServiceName(name string) bool {
+	if len(name) == 0 || len(name) > maxServiceNameLength || name[0] < 'a' || name[0] > 'z' {
+		return false
+	}
+	for _, c := range name {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '.') {
+			return false
+		}
+	}
+	return true
 }
