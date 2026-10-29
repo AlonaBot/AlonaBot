@@ -229,11 +229,16 @@ func (i *instance) receive(ctx context.Context, saved cursor) {
 				next.Offset = *update.ID + 1
 				if len(events) > 0 {
 					next.LastAcceptedUnixMS = i.now().UnixMilli()
-					for _, event := range events {
+					for n, event := range events {
 						if ctx.Err() != nil {
 							return
 						}
-						err = i.save(ctx, event, next)
+						// 一个 update 的全部事件完成前，Core 仍保存旧游标以便重拉。
+						deliveryCursor := saved
+						if n == len(events)-1 {
+							deliveryCursor = next
+						}
+						err = i.save(ctx, event, deliveryCursor)
 						if err != nil {
 							break
 						}

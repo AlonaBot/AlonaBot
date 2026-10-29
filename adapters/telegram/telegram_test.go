@@ -500,3 +500,57 @@ func registerStop(t *testing.T, running adapter.Instance) {
 		}
 	})
 }
+
+func TestReactionCursorSurvivesRestart(t *testing.T) {
+	server := telegramtest.NewServer(t, "local-secret-token")
+	server.Push(json.RawMessage(`{"update_id":10,"message_reaction":{"date":123,"chat":{"id":-1},"user":{"id":7},"message_id":1,"old_reaction":[],"new_reaction":[{"type":"emoji","emoji":"👍"},{"type":"emoji","emoji":"❤"}]}}`))
+	core := newRecordingCore()
+	second := make(chan struct{})
+	var calls atomic.Int64
+	core.deliver = func(ctx context.Context, e *pb.Event, raw []byte) (bool, error) {
+		if calls.Add(1) == 2 {
+			close(second)
+			<-ctx.Done()
+			return false, ctx.Err()
+		}
+		return true, core.SaveCursor(ctx, raw)
+	}
+	a := New()
+	request := startRequest(t, server)
+	running, err := a.Start(context.Background(), request, core)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerStop(t, running)
+	waitSaved(t, second)
+	if err := running.Stop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	core.mu.Lock()
+	saved := core.cursors[0]
+	core.mu.Unlock()
+	if saved.Offset != 0 {
+		t.Fatalf("reaction update completed before its final event: offset=%d", saved.Offset)
+	}
+	request.Cursor, err = json.Marshal(saved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restarted := newRecordingCore()
+	running, err = a.Start(context.Background(), request, restarted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerStop(t, running)
+	for range 2 {
+		waitSaved(t, restarted.saved)
+	}
+	if err := running.Stop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	restarted.mu.Lock()
+	defer restarted.mu.Unlock()
+	if len(restarted.events) != 2 || restarted.events[0].GetEventPayload().GetReactionAdded().Reaction != "👍" || restarted.events[1].GetEventPayload().GetReactionAdded().Reaction != "❤" || restarted.offsets[0] != 0 || restarted.offsets[1] != 11 {
+		t.Fatalf("restarted reactions=%v cursors=%v", restarted.events, restarted.offsets)
+	}
+}
