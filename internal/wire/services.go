@@ -18,6 +18,15 @@ const (
 	ServiceCoreAdapterStatus = "core.adapter.status"
 )
 
+// ServiceMediaBeginUpload 指定媒体上传的声明与预留服务。
+const ServiceMediaBeginUpload = "core.media.begin_upload"
+
+// ServiceMediaWriteChunk 指定媒体顺序分块服务。
+const ServiceMediaWriteChunk = "core.media.write_chunk"
+
+// ServiceMediaCommitUpload 指定媒体校验与引用签发服务。
+const ServiceMediaCommitUpload = "core.media.commit_upload"
+
 // 会话服务按调用插件身份隔离数据，允许无父调用链的请求。
 const (
 	// ServiceConversationAppend 指定会话条目追加服务。
