@@ -122,6 +122,7 @@ func token() string {
 }
 
 func (s *Store) begin(_ context.Context, c router.Caller, in *wire.Inbound) wire.Response {
+	// 1. 校验上传声明，拒绝无效大小、MIME 和摘要。
 	req := &pb.BeginUploadRequest{}
 	if err := decode(in, req); err != nil {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err)
@@ -129,9 +130,11 @@ func (s *Store) begin(_ context.Context, c router.Caller, in *wire.Inbound) wire
 	if req.Size == 0 || req.Size > uint64(s.lim.MaxFileBytes) || req.Mime == "" || len(req.Sha256) != sha256.Size {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, errors.New("invalid media size, MIME or SHA256"))
 	}
-	s.mu.Lock() // 准入和文件创建与回收共用锁，预留只提交一次
+	// 2. 准入、建文件和登记共用锁，避免回收或其他请求穿插占用配额。
+	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sweep()
+	// 3. 先核对上传槽与两级字节余量，再创建临时文件。
 	count := 0
 	for _, e := range s.uploads {
 		if e.owner == c.SessionKey {
@@ -142,6 +145,7 @@ func (s *Store) begin(_ context.Context, c router.Caller, in *wire.Inbound) wire
 	if count >= s.lim.MaxUploads || size > s.lim.MaxSessionBytes-s.used[c.SessionKey] || size > s.lim.MaxCoreBytes-s.total {
 		return failure(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, errors.New("media quota exceeded"))
 	}
+	// 4. 创建独占文件；创建或关闭失败时保留原有配额。
 	id := token()
 	path := filepath.Join(s.dir, id)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, fileMode)
@@ -152,6 +156,7 @@ func (s *Store) begin(_ context.Context, c router.Caller, in *wire.Inbound) wire
 		s.remove(path)
 		return s.storageFailure(path, err)
 	}
+	// 5. 文件就绪后登记 Begin 期限与预留，之后才返回上传 ID。
 	expires := s.now().Add(s.lim.TTL)
 	s.uploads[id] = &entry{file: File{path, req.Size, req.Mime, bytes.Clone(req.Sha256), expires}, owner: c.SessionKey}
 	s.used[c.SessionKey] += size
@@ -187,6 +192,7 @@ func (s *Store) write(_ context.Context, c router.Caller, in *wire.Inbound) wire
 	return response(&pb.WriteChunkResponse{NextOffset: e.offset})
 }
 func (s *Store) commit(_ context.Context, c router.Caller, in *wire.Inbound) wire.Response {
+	// 1. 校验请求，在锁内清理过期上传并核对 Session 所有权。
 	req := &pb.CommitUploadRequest{}
 	if err := decode(in, req); err != nil {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err)
@@ -198,7 +204,7 @@ func (s *Store) commit(_ context.Context, c router.Caller, in *wire.Inbound) wir
 	if !ok || e.owner != c.SessionKey {
 		return failure(pb.ErrorCode_ERROR_CODE_NOT_FOUND, errors.New("upload not found"))
 	}
-	// 提交前核对真实文件，避免内存确认长度替代磁盘内容校验。
+	// 2. 核对真实文件大小与摘要；持锁使校验和签发之间不会发生回收。
 	f, err := os.Open(e.file.Path)
 	if err != nil {
 		s.release(s.uploads, req.UploadId, e)
@@ -215,6 +221,7 @@ func (s *Store) commit(_ context.Context, c router.Caller, in *wire.Inbound) wir
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, errors.New("media size or SHA256 mismatch"))
 	}
 
+	// 3. 从 Commit 起计算引用期限，转移索引并保留原有配额占用。
 	id := token()
 	e.file.ExpiresAt = s.now().Add(s.lim.TTL)
 	delete(s.uploads, req.UploadId)
