@@ -101,7 +101,7 @@ func (s *Store) AddServices(m *router.Mux) {
 
 func decode(in *wire.Inbound, msg proto.Message) error {
 	if in.Payload.Encoding != pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF || in.Payload.SchemaID != validate.SchemaID(msg) || in.Payload.SchemaVersion != schemaVersion {
-		return errors.New("expected media protobuf schema version 1")
+		return fmt.Errorf("expected media protobuf schema version %d", schemaVersion)
 	}
 	return proto.Unmarshal(in.Payload.Bytes, msg)
 }
