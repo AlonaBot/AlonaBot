@@ -243,6 +243,25 @@ func TestAdapterFieldNumbers(t *testing.T) {
 	}
 }
 
+// TestTelegramMetadataFieldNumbers 固定入站语言与消息指向字段的编号和 presence。
+func TestTelegramMetadataFieldNumbers(t *testing.T) {
+	for _, c := range []struct {
+		message  protoreflect.MessageDescriptor
+		name     protoreflect.Name
+		number   protoreflect.FieldNumber
+		kind     protoreflect.Kind
+		presence bool
+	}{
+		{(&pb.Actor{}).ProtoReflect().Descriptor(), "locale", 5, protoreflect.StringKind, true},
+		{(&pb.MessageCreatedPayload{}).ProtoReflect().Descriptor(), "to_me", 3, protoreflect.BoolKind, false},
+	} {
+		f := c.message.Fields().ByNumber(c.number)
+		if f == nil || f.Name() != c.name || f.Kind() != c.kind || f.HasPresence() != c.presence {
+			t.Errorf("%s field %d = %v, want %s (%s, presence=%v)", c.message.Name(), c.number, f, c.name, c.kind, c.presence)
+		}
+	}
+}
+
 // 会话消息固定字段编号、类型、重复性与分页游标的 presence。
 func TestConversationFieldNumbers(t *testing.T) {
 	cases := []struct {

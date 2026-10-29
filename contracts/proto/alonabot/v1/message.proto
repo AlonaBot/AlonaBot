@@ -95,6 +95,8 @@ message MessageCreatedPayload {
   string platform_message_id = 1;
   // 新消息的内容。
   MessageChain chain = 2;
+  // 私聊、回复或提及本机器人。
+  bool to_me = 3;
 }
 
 // MessageEditedPayload 承载消息被编辑事件的载荷。
