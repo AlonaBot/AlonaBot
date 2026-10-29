@@ -228,6 +228,10 @@ func (s *Server) getUpdates(w http.ResponseWriter, r *http.Request) {
 			s.respond(w, status, nil)
 			return
 		}
+		// offset 确认此前的 update；后续归零也不会重新返回已确认数据。
+		if request.Offset > 0 {
+			s.updates = slices.DeleteFunc(s.updates, func(update queuedUpdate) bool { return update.id < request.Offset })
+		}
 		result := make([]json.RawMessage, 0)
 		for _, update := range s.updates {
 			if update.id >= request.Offset {

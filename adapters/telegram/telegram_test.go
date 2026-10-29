@@ -194,9 +194,10 @@ func TestRoundRebuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerStop(t, instance)
-	for range 3 {
+	for range 2 {
 		waitSaved(t, core.saved)
 	}
+	awaitCondition(t, func() bool { return len(server.Offsets()) >= 2 })
 	if err := instance.Stop(context.Background()); err != nil {
 		t.Fatal(err)
 	}
