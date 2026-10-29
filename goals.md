@@ -53,13 +53,13 @@
 | goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 已完成（PR #38） |
 | goal-10 | T-04.1 | 根插件 API 与静态注册索引 | T-03.1 | 已完成（PR #34） |
 | goal-56 | T-11.3 | Agent 会话存储 | T-03.1 | 已完成（PR #35） |
-| goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 可派发 |
+| goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 已完成（PR #39） |
 | goal-11 | T-04.2 | 构建期生成器 | T-04.1 | 可派发 |
 | goal-12 | T-04.3 | 命令选择、文本匹配与参数绑定 | T-04.1 | 可派发 |
 | goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1 | 等待前置 |
 | goal-19 | T-06.1 | Service/Bus 描述与 Broker 准入 | T-04.1 | 可派发 |
 | goal-25 | T-07.3 | SDK HTTP Listener 与 Core 代理 | T-04.1 | 可派发 |
-| goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 等待前置 |
+| goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 可派发 |
 | goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 等待前置 |
 | goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 等待前置 |
 | goal-21 | T-06.3 | 非持久 Event Bus | T-06.1 | 等待前置 |
@@ -67,7 +67,7 @@
 | goal-28 | T-08.1 | 配置字段描述与构建检查 | T-04.2 | 等待前置 |
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-06.1 | 等待前置 |
 | goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2 | 等待前置 |
-| goal-78 | T-15.1 | 官方 OneBot 11 Adapter 的连接与接收 | T-03.3、T-03.4 | 等待前置 |
+| goal-78 | T-15.1 | 官方 OneBot 11 Adapter 的连接与接收 | T-03.3、T-03.4 | 可派发 |
 | goal-8 | T-03.8 | 按钮、extension 片段与依赖解析 | T-03.2、T-03.7 | 等待前置 |
 | goal-51 | T-03.9 | 消息编辑 | T-03.7 | 等待前置 |
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1 | 等待前置 |
@@ -1102,7 +1102,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-5 · T-03.4 官方 Telegram Adapter 的接收
 
-状态：可派发。前置 T-03.3 已由 PR #32 合并；sdk/adapter 的 Adapter、Instance、Core、StartRequest、Account 与 sdk.RunAdapter 已按合入代码核对，Core 对交付事件的归属校验与字段重写（internal/core/adapter/remote）已写进行为段；Actor 的字段号 5 与 MessageCreatedPayload 的字段号 3 仍未占用。
+状态：已完成（PR #39，squash commit `604dc65`）。接收与标准化、`telegramtest.Server`、命令入口已合入；`Actor.locale = 5` 与 `MessageCreatedPayload.to_me = 3` 已追加，现有编号保持不变。模拟、真实私聊接收及未运行项见 TEST-MATRIX §3.2。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-5（切片 T-03.4：官方 Telegram Adapter 的接收）。goal 目录 goal-5，分支 goal-5，worktree .worktrees/goal-5，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1545,7 +1545,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-7 · T-03.6 入站媒体与 Grant
 
-状态：等待前置（T-03.4）。T-03.2、T-03.5 已合并（PR #31、#38）；goal-6 的符号已核对：`media.Open(log *slog.Logger, dir string, lim Limits, now func() time.Time) (*Store, error)`、`(*Store).AddServices`、`ReleaseSession`、`Sweep`、`Lookup(token string, c router.Caller) (File, error)`、`media.File{Path, Size, MIME, SHA256, ExpiresAt}`，分块上限为 `wire.MaxMediaChunk`；回收删除失败记 WARN、存储错误的 safe_message 固定为 `media storage failed`。其余符号待 T-03.4 合并后核对。
+状态：可派发。T-03.2、T-03.4、T-03.5 已合并（PR #31、#39、#38）。已核对媒体存储入口 `media.Open(log *slog.Logger, dir string, lim Limits, now func() time.Time) (*Store, error)`、`AddServices`、`ReleaseSession`、`Sweep`、`Lookup(token string, c router.Caller) (File, error)`、`media.File{Path, Size, MIME, SHA256, ExpiresAt}` 与 `wire.MaxMediaChunk`；回收删除失败记 WARN，safe_message 为 `media storage failed`。Telegram 可复用 `New() adapter.Adapter`、私有 `instance`、`telegramMessage`、`messageEvent`、`botClient.call(ctx context.Context, method string, request any, result any) error`；`telegramtest.NewServer(t testing.TB, token string) *Server` 与接收模拟入口已合入。`sdk/adapter.Core` 当前含 Deliver、SaveCursor、ReportFailure，ReadMedia 由本切片按下文接口追加。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-7（切片 T-03.6：入站媒体与 Grant）。goal 目录 goal-7，分支 goal-7，worktree .worktrees/goal-7，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1612,7 +1612,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-50 · T-03.7 官方 Telegram Adapter 的发送计划与回执
 
-状态：等待前置（T-03.4）。语句中 goal-4、goal-5 提供的符号（adapters/telegram 的实例与 Bot API 客户端、telegramtest.Server、sdk/adapter 的 Instance 与 Core）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：等待前置。T-03.4 已由 PR #39 合并，已核对 `telegram.New() adapter.Adapter`、私有 `instance` 与 `botClient.call(ctx context.Context, method string, request any, result any) error`、`telegramtest.NewServer(t testing.TB, token string) *Server`，以及 `Instance.Send(ctx context.Context, target *pb.Target, chain *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo)`。媒体发送依赖本语句中的 `Core.ReadMedia`，该接口由 goal-7 / T-03.6 追加，当前 `sdk/adapter.Core` 尚未提供；待 T-03.6 合并并核对 ReadMedia 后再改为可派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-50（切片 T-03.7：官方 Telegram Adapter 的发送计划与回执）。goal 目录 goal-50，分支 goal-50，worktree .worktrees/goal-50，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -2031,7 +2031,7 @@ internal/core/webhost
 
 ### goal-78 · T-15.1 官方 OneBot 11 Adapter 的连接与接收
 
-状态：等待前置（T-03.4）。T-03.3 已由 PR #32 合并，sdk/adapter 的 Adapter、Instance、Core、StartRequest、Account 与 sdk.RunAdapter 已按合入代码核对；to_me 使用的 MessageCreatedPayload.to_me 由 goal-5 追加到 proto，本切片不改 proto，因此等 T-03.4 合并后核对该字段，再改为可派发。
+状态：可派发。T-03.3、T-03.4 已由 PR #32、#39 合并；已核对 `sdk/adapter` 的 Adapter、Instance、Core、StartRequest、Account 与 `sdk.RunAdapter(adapter.Adapter) error`。`MessageCreatedPayload.to_me` 为字段 3，`Actor.locale` 为 optional 字段 5，OneBot 本切片直接使用已生成类型，无需修改 proto。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-78（切片 T-15.1：官方 OneBot 11 Adapter 的连接与接收）。goal 目录 goal-78，分支 goal-78，worktree .worktrees/goal-78，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
