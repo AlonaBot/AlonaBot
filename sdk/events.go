@@ -2,8 +2,9 @@ package sdk
 
 import (
 	"fmt"
-	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"strings"
+
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 )
 
 const commandRoutePrefix = "cmd."
@@ -35,7 +36,7 @@ func (r *EventRegistry) On(routeID, eventType string, handler func(*Context) err
 		r.errs = append(r.errs, fmt.Errorf("event route is missing route_id"))
 		return
 	case strings.HasPrefix(routeID, commandRoutePrefix):
-		r.errs = append(r.errs, fmt.Errorf("event route %q uses reserved cmd. prefix", routeID))
+		r.errs = append(r.errs, fmt.Errorf("event route %q uses reserved %s prefix", routeID, commandRoutePrefix))
 		return
 	case len(options.aliases) != 0:
 		r.errs = append(r.errs, fmt.Errorf("event route %q cannot declare aliases", routeID))
@@ -43,7 +44,7 @@ func (r *EventRegistry) On(routeID, eventType string, handler func(*Context) err
 	case r.seen[routeID]:
 		r.errs = append(r.errs, fmt.Errorf("route %q registered twice", routeID))
 		return
-	case !validEventType(eventType):
+	case !validate.IsEventType(eventType):
 		r.errs = append(r.errs, fmt.Errorf("event route %q has unknown event type %q", routeID, eventType))
 		return
 	case handler == nil:
@@ -56,8 +57,6 @@ func (r *EventRegistry) On(routeID, eventType string, handler func(*Context) err
 	r.seen[routeID] = true
 	r.events = append(r.events, EventRoute{RouteID: routeID, EventType: eventType, Handler: handler, Priority: options.priority})
 }
-
-func validEventType(eventType string) bool { return validate.ValidEventType(eventType) }
 
 func commandRouteID(command Command) string {
 	return commandRoutePrefix + strings.Join(command.Path, ".")

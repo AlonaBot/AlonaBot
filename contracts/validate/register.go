@@ -101,7 +101,7 @@ func Register(r *pb.Register) error {
 			}
 			seenEvents := make(map[string]bool, len(filters))
 			for _, eventType := range filters {
-				if !ValidEventType(eventType) {
+				if !IsEventType(eventType) {
 					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "event route %q has unknown event type %q", route.GetRouteId(), eventType)
 				}
 				if seenEvents[eventType] {
@@ -119,7 +119,7 @@ func registerCommandPath(paths map[string]string, path []string, routeID string)
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q has an empty alias path", routeID)
 	}
 	for _, token := range path {
-		if !ValidCommandToken(token) {
+		if !IsCommandToken(token) {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q has invalid path token %q", routeID, token)
 		}
 	}
@@ -131,13 +131,13 @@ func registerCommandPath(paths map[string]string, path []string, routeID string)
 	return nil
 }
 
-// ValidCommandToken 检查命令路径 token：非空、不含空白且不以 / 开头。
-func ValidCommandToken(token string) bool {
+// IsCommandToken 检查命令路径 token：非空、不含空白且不以 / 开头。
+func IsCommandToken(token string) bool {
 	return token != "" && !strings.ContainsFunc(token, unicode.IsSpace) && !strings.HasPrefix(token, "/")
 }
 
-// ValidEventType 检查 message.proto 声明的标准事件类型。
-func ValidEventType(eventType string) bool {
+// IsEventType 检查 message.proto 声明的标准事件类型。
+func IsEventType(eventType string) bool {
 	switch eventType {
 	case "message.created", "message.edited", "message.deleted", "button.clicked",
 		"member.joined", "member.left", "reaction.added", "scheduled", "bot.online", "bot.offline":

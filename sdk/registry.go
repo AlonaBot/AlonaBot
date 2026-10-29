@@ -92,7 +92,7 @@ func (r *CommandRegistry) add(c Command) {
 			return
 		}
 		for _, token := range path {
-			if !validate.ValidCommandToken(token) {
+			if !validate.IsCommandToken(token) {
 				r.errs = append(r.errs, fmt.Errorf("command %q has invalid path token %q", id, token))
 				return
 			}
