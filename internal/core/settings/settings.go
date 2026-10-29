@@ -28,6 +28,12 @@ const FileName = "alonabot.yaml"
 
 const defaultListen = "127.0.0.1:7650"
 
+// DNS文本长度扣除可选的终止点，遵循net解析器采用的RFC 1035线格式上限。
+const (
+	maxDNSNameBytes  = 253
+	maxDNSLabelBytes = 63
+)
+
 // Settings 保存本次运行的启动设置；大小以字节计，TrustedProxies 保存可信反代的 CIDR 范围。
 type Settings struct {
 	Listen         string
@@ -327,11 +333,11 @@ func validHost(host string) bool {
 		return true
 	}
 	host = strings.TrimSuffix(host, ".")
-	if host == "" {
+	if host == "" || len(host) > maxDNSNameBytes {
 		return false
 	}
 	for _, label := range strings.Split(host, ".") {
-		if label == "" || label[0] == '-' || label[len(label)-1] == '-' {
+		if label == "" || len(label) > maxDNSLabelBytes || label[0] == '-' || label[len(label)-1] == '-' {
 			return false
 		}
 		for _, c := range label {
