@@ -1267,7 +1267,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - internal/core/adapter/：新增 naming.go（可选接口）；internal/core/adapter/remote 的实例实现它
 - internal/core/router/：新增 command.go（命令派发）与 args.go（分词与类型转换）；router.go 中 message.created 改走命令层（只加调用点），New 按下方接口增加参数
 - internal/core/supervisor/：echo_test.go、conversation_test.go、index_test.go 只同步 router.New 的新签名
-- sdk/：registry.go（文本匹配、Raw 与参数选项）、dispatch.go（命令路由的分发与参数绑定）、session.go（buildRegister 输出新字段）；sdk.go 只给 Context 加捕获组与自动回复标记两个未导出字段，并在 Send 开头加自动回复检查
+- sdk/：registry.go（文本匹配、Raw 与参数选项）、dispatch.go（命令路由的分发与参数绑定）、session.go（buildRegister 输出新字段）；sdk.go 只给 Context 加捕获组与自动回复标记两个未导出字段，并在 Send 开头加自动回复检查；events.go 只改 commandRouteID：文本匹配与 Raw 的显式 route_id 保存在 Command 的未导出字段中，非空时原样返回，普通命令仍生成 cmd.<path>（Collect、buildRegister 与分发共用这一函数，调用方不改）
 - 上述包的测试文件
 不修改 internal/core/host：Regex 的 REGISTER 拒绝由 host 已调用的 validate.Register 完成，编译结果缓存在 Router 中。
 允许的新跨模块边：无。
@@ -1296,7 +1296,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
    // 以 &Invocation{PluginID, Event, DefaultTarget} 作为 ParentAttach、SendRequest（不设 To）作为载荷调用 send，走与 core.send 相同的校验。
 
 行为：
-- 注册校验（Collect 与 validate.Register 两处）：Regex 编译失败、patterns 为空或含空串、Raw 带 patterns、必需参数出现在可选参数之后、RawTail 用于非 string 或非最后一个参数、Optional 指向不存在的参数名、default 不能按参数类型解析，都拒绝注册（INVALID_ARGUMENT）。Regex 编译失败经 validate.Register 在 REGISTER 时拒绝；Router 在 Attach 时编译并缓存到该插件的路由快照，不在派发时编译。
+- 注册校验（Collect 与 validate.Register 两处）：Regex 编译失败、patterns 为空或含空串、Raw 带 patterns、必需参数出现在可选参数之后、RawTail 用于非 string 或非最后一个参数、Optional 指向不存在的参数名、default 不能按参数类型解析，都拒绝注册（INVALID_ARGUMENT）。文本匹配与 Raw 的 route_id 不得使用命令保留的 cmd. 前缀，与其他路由的 route_id 重复同样拒绝（Collect 处）。Regex 编译失败经 validate.Register 在 REGISTER 时拒绝；Router 在 Attach 时编译并缓存到该插件的路由快照，不在派发时编译。
 - 选择（只对 message.created）：
   1) 文本取 chain 中各 text 片段按顺序直接连接的结果。以 "/" 开头时，按空白切出 token；第一个 token 形如 name@user 时，只有 user 与目标实例的 Named.AccountName() 不区分大小写相等才去掉 @user，否则整条消息不算命令（实例不实现 Named 时不接受 @ 形式）。
   2) 用 CommandIndex.Lookup 匹配最长完整路径或别名。命中时只调用该胜出路由：本层结束，不再进入文本匹配与 Raw（即使参数错误或 Handler 返回错误）。
@@ -1405,6 +1405,8 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 范围（只新增或修改这些）：
 - contracts/validate/register.go：Service 与 Bus 订阅描述的注册校验
+- contracts/validate/envelope.go：只改 checkPayload 的 schema_version 检查——控制帧仍要求为 1，REQUEST/RESPONSE 的业务载荷只要求 ≥ 1（D-66）；contracts/wirespec_test.go 追加对应的帧检查
+- internal/wire/session.go：只改 dispatch 对 validate.Envelope 错误的处理——REQUEST 的错误码为 INVALID_ARGUMENT（JSON 语法不符，Envelope 的结构检查此前已通过）时不关闭 Session：照常做 CheckPeer 与 onRequest 的 call_id 单调、阶段和父调用检查，再对该次调用回复 INVALID_ARGUMENT，不执行 Handler；其余校验错误与 RESPONSE 帧仍按协议错误关闭（CONTRACTS §3）
 - 新增 internal/core/broker/
 - internal/core/router/：Mux 增加对含 "/" 目标的转交入口；Router 增加按 plugin_id 查找已 Attach 插件的方法
 - sdk/：新增 services.go（Service 注册与调用）；base.go 的 Root 增加 Services Hook 与 Base 默认实现；sdk.go 的 Collect 与 dispatch.go 的分发接入服务路由（只加调用点）；session.go 的 buildRegister 输出服务路由
@@ -1456,9 +1458,9 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
   - 声明 JSON 服务时用错误的 schema 版本、错误的编码、非法 JSON 调用都返回 INVALID_ARGUMENT，a 未被调用；调用不存在的服务为 NOT_FOUND，调用未启动的插件为 UNAVAILABLE。
   - a 返回与 output schema 不符的结果时，调用方收到 INTERNAL。
   - Protobuf 服务的往返正确。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：validate 的 Service 与 Bus 订阅描述各条拒绝；Collect 的服务名重复与非法；期限取最早者；Context.Caller；SDK 解码失败不调用 h；Mux.Forward 不覆盖固定服务。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：validate 的 Service 与 Bus 订阅描述各条拒绝；Collect 的服务名重复与非法；期限取最早者；Context.Caller；SDK 解码失败不调用 h；Mux.Forward 不覆盖固定服务；wire.Session 收到 JSON 语法不符的 REQUEST 时回复 INVALID_ARGUMENT、不调用 Handler，同一 Session 的后续调用仍成功（SDK 会在发送前拒绝非法 JSON，这一项用原始帧驱动）。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./contracts/... ./internal/core/... ./internal/wire/... ./sdk/...；go build ./...。
 
 不做：父调用链、深度与 CALL_CYCLE、取消与背压（T-06.2）；Event Bus 的发布与投递（T-06.3）；工具描述（T-11.1）；用 jsonschema-go 校验业务字段（Core 不校验，SDK 以类型解码为准；工具的 Schema 校验在 T-11）。
 ```
@@ -1481,7 +1483,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - 新增 internal/core/settings/（alonabot.yaml）
 - 新增 internal/core/httpproxy/
 - internal/core/host/prepare.go：插件在 HELLO 声明 HTTP 能力时在 Bootstrap 中下发 http_proxy_auth；internal/core/host/activate.go 只给 Instance 加 HTTP 端点与代理 token 两个字段，并在构造 Instance 处从 Prepared 赋值（装配处经 supervisor 返回的 Running.Instance 读取后调用 Bind，不修改 supervisor.go）
-- sdk/：新增 http.go（Listener、门禁与凭证校验）；sdk.go 去掉「不支持 HTTP 路由」的拒绝（只改该处）；registry.go 只改 Handle 的路径规范校验（允许前缀路由的尾斜杠）；activate.go 与 session.go 只加启动、上报与关闭 Listener 的调用点，session.go 另在构造 Hello 处声明 HTTP 能力
+- sdk/：新增 http.go（Listener、门禁与凭证校验）；sdk.go 去掉「不支持 HTTP 路由」的拒绝，Run 中只加 Listener 的创建、向 prepare 与 activate 的传递和随 Run 返回的关闭，并把是否有 HTTP 路由传给 clientHandshake，Collect 不改；registry.go 只改 Handle 的校验分支，规则与 validate.Register 的 HTTP 路由校验一致（标准方法、规范路径与前缀路由的尾斜杠、不含 "?" 与 "#"、is_public 与 auth_mode 的对应），错误照旧经 errs 由 Collect 返回；activate.go 与 session.go 只加启动、上报与关闭 Listener 的调用点及持有 Listener 的未导出字段，session.go 另在构造 Hello 处声明 HTTP 能力
 - cmd/alonabot/：run 读取设置文件、增加 --listen 并让 --log-level/--log-format 覆盖设置文件；启动 Core HTTP Listener 并接入插件的 HTTP 路由
 - 新增 internal/core/supervisor/testdata/httpplugin/（集成测试用的插件程序）
 - 上述包的测试文件
