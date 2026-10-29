@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/AlonaBot/AlonaBot/sdk/generate"
 )
@@ -212,5 +213,108 @@ func TestScanDiagnostics(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPluginCLIIntegration(t *testing.T) {
+	dir := pluginModuleDir(t)
+	_, file, _, _ := runtime.Caller(0)
+	root := filepath.Dir(filepath.Dir(filepath.Dir(file)))
+	executable := filepath.Join(t.TempDir(), "alonabot")
+	if runtime.GOOS == "windows" {
+		executable += ".exe"
+	}
+	runPluginCommand(t, root, nil, "go", "build", "-o", executable, "./cmd/alonabot")
+	source := `package main
+import "github.com/AlonaBot/AlonaBot/sdk"
+type Plugin struct{ sdk.Base }
+//alonabot:command rss add alias=feed/new priority=-5
+func Add(*sdk.Context) error {return nil}
+func main(){}
+`
+	writePluginFile(t, dir, "main.go", source)
+	writePluginFile(t, dir, "tagged.go", `//go:build first && second
+
+package main
+import "github.com/AlonaBot/AlonaBot/sdk"
+//alonabot:event ready bot.online
+func Ready(*sdk.Context) error {return nil}
+`)
+	flags := []string{"--dir", dir, "--goos", "darwin", "--goarch", "arm64", "--tags", "first,second"}
+	cli := func(action string) {
+		t.Helper()
+		runPluginCommand(t, dir, nil, executable, append([]string{"plugin", action}, flags...)...)
+	}
+	failure := func(action, message string) string {
+		t.Helper()
+		cmd := exec.Command(executable, append([]string{"plugin", action}, flags...)...)
+		cmd.Dir = dir
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		exit, ok := err.(*exec.ExitError)
+		if !ok || exit.ExitCode() != 1 || !strings.Contains(stderr.String(), message) || stdout.Len() != 0 {
+			t.Fatalf("%s: exit=%v stdout=%s stderr=%s", action, err, &stdout, &stderr)
+		}
+		return stderr.String()
+	}
+	const outdated = "alonabot_gen.go is out of date; run alonabot plugin generate"
+	failure("check", outdated)
+	cli("generate")
+	cli("check")
+	generatedPath := filepath.Join(dir, generate.FileName)
+	generated, err := os.ReadFile(generatedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(generated, []byte(`"ready", "bot.online"`)) {
+		t.Fatalf("CLI build tags not applied: %s", generated)
+	}
+	// 固定历史时间，不依赖 sleep 区分相同内容是否重写。
+	stamp := time.Unix(1_000_000, 0)
+	if err := os.Chtimes(generatedPath, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(generatedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cli("generate")
+	cli("check")
+	after, err := os.Stat(generatedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !before.ModTime().Equal(after.ModTime()) {
+		t.Fatalf("unchanged generation rewrote file: %v -> %v", before.ModTime(), after.ModTime())
+	}
+	writePluginFile(t, dir, generate.FileName, string(generated)+"\n// manual edit\n")
+	failure("check", outdated)
+	cli("generate")
+	cli("check")
+	writePluginFile(t, dir, "main.go", source+"\n//alonabot:command bad unknown=1\nfunc Bad(*sdk.Context) error{return nil}\n")
+	for _, action := range []string{"generate", "check"} {
+		diagnostic := failure(action, "main.go:")
+		if !strings.Contains(diagnostic, ": unknown option \"unknown\"\n") || strings.Contains(diagnostic, "alonabot:") {
+			t.Fatalf("unexpected diagnostic format: %s", diagnostic)
+		}
+	}
+	afterDiagnostics, err := os.ReadFile(generatedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(generated, afterDiagnostics) {
+		t.Fatalf("diagnostics changed generated file: %s", afterDiagnostics)
+	}
+	// 工具链失败保留 go list stderr，且保留现有生成文件。
+	writePluginFile(t, dir, "main.go", "package main\nimport invalid\n")
+	failure("generate", "go list:")
+	afterToolError, err := os.ReadFile(generatedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(generated, afterToolError) {
+		t.Fatal("toolchain error changed generated file")
 	}
 }

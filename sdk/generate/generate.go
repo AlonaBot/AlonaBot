@@ -116,7 +116,7 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 	args = append(args, ".")
 	cmd := exec.CommandContext(ctx, "go", args...)
 	cmd.Dir = dir
-	cmd.Env = os.Environ()
+	cmd.Env = cmd.Environ() // 连同 PWD 一起匹配 Dir，避免继承调用进程的路径别名。
 	if opt.GOOS != "" {
 		cmd.Env = append(cmd.Env, "GOOS="+opt.GOOS)
 	}
