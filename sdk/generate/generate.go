@@ -78,6 +78,7 @@ type Result struct {
 type listedPackage struct {
 	Dir, ImportPath, Name string
 	GoFiles               []string
+	CgoFiles              []string // 仅在 GoFiles 为空时定位缺根诊断
 	Module                *struct{ Main bool }
 }
 
@@ -309,7 +310,12 @@ func (s *scan) checkTypes() {
 			message += " at " + strings.Join(positions, ", ")
 		}
 		if pos == token.NoPos {
-			s.result.Diagnostics = append(s.result.Diagnostics, Diagnostic{filepath.ToSlash(s.entry.GoFiles[0]) + ":1:1", message})
+			files := s.entry.GoFiles
+			if len(files) == 0 {
+				// go list 成功的纯 cgo 包在 CgoFiles 中提供源码文件名。
+				files = s.entry.CgoFiles
+			}
+			s.result.Diagnostics = append(s.result.Diagnostics, Diagnostic{filepath.ToSlash(files[0]) + ":1:1", message})
 		} else {
 			s.diagnostic(pos, message)
 		}
