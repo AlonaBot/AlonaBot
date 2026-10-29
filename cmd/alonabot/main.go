@@ -84,7 +84,7 @@ func run(out *logging.Output, dataDir, pluginID, entry string, stdio bool, v tun
 	}
 	// 2. 开发模式：首次运行时登记安装记录（不做正式安装与来源校验）。
 	if _, err := store.GetInstall(ctx, pluginID); errors.Is(err, state.ErrNotFound) {
-		if err := store.AddInstall(ctx, state.Install{PluginID: pluginID, Source: "dev-local", Entrypoint: exe, BuildDigest: digest}); err != nil {
+		if err := store.AddInstall(ctx, state.Install{Role: state.RolePlugin, PluginID: pluginID, Source: "dev-local", Entrypoint: exe, BuildDigest: digest}); err != nil {
 			return err
 		}
 	} else if err != nil {
@@ -159,7 +159,7 @@ func launch(ctx context.Context, out *logging.Output, plog *slog.Logger, store *
 			return nil, err
 		}
 	}
-	r, err := supervisor.Launch(ctx, store, supervisor.Spec{
+	r, err := supervisor.Launch(ctx, store, supervisor.Spec{Role: state.RolePlugin,
 		PluginID: pluginID, PluginDir: pluginDir, Executable: exe, BuildDigest: digest, GenerationID: gen,
 		Bootstrap: &pb.Bootstrap{GenerationId: gen, CandidateConfigJson: "{}", TargetConfigVersion: 1,
 			DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE},

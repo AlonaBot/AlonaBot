@@ -4,6 +4,7 @@ syntax = "proto3";
 package alonabot.v1;
 
 import "alonabot/v1/control.proto";
+import "alonabot/v1/adapter.proto";
 import "alonabot/v1/envelope.proto";
 
 option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
@@ -22,6 +23,8 @@ message Register {
   HttpListener http_listener = 5;
   // 本次准备阶段的迁移结果。
   MigrationState migration = 6;
+  // 仅 Adapter 角色设置。
+  AdapterDescriptor adapter = 7;
 }
 
 // MigrationState 描述本次准备阶段的迁移完成信息。

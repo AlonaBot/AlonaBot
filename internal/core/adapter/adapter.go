@@ -62,3 +62,10 @@ func (r *Registry) Get(instanceID string) (Instance, bool) {
 	in, ok := r.instances[instanceID]
 	return in, ok
 }
+
+// Remove 撤销实例登记；不存在的 ID 无副作用，可与 Add、Get 并发调用。
+func (r *Registry) Remove(instanceID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.instances, instanceID)
+}

@@ -31,7 +31,9 @@ const memoryLimitEnv = "GOMEMLIMIT"
 
 // Spec 描述一次插件启动。
 type Spec struct {
-	PluginID string
+	Role      state.Role // 必填，来自安装记录
+	AdapterID string     // 安装记录绑定的平台类型
+	PluginID  string
 	// <plugins>/<id>：工作目录与 runtime.lock 所在；可以是相对路径，Launch 会转为绝对路径。
 	PluginDir    string
 	Executable   string // 已校验的入口可执行文件
@@ -148,7 +150,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		return fail(err)
 	}
 	secretBytes, _ := hex.DecodeString(secret)
-	exp := host.Expect{PluginID: spec.PluginID, Secret: secretBytes, BuildDigest: spec.BuildDigest,
+	exp := host.Expect{Role: spec.Role, AdapterID: spec.AdapterID, PluginID: spec.PluginID, Secret: secretBytes, BuildDigest: spec.BuildDigest,
 		Offer: validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}}
 	prep, err := host.Prepare(ctx, conn, exp, spec.Bootstrap, spec.Limits)
 	if err != nil {

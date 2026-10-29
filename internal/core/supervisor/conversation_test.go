@@ -23,6 +23,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/message"
+	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
@@ -85,7 +86,7 @@ func TestConversationProcesses(t *testing.T) {
 	specs := make([]Spec, 2)
 	for i, id := range []string{"a", "b"} {
 		digest := []byte("conversation integration plugin")
-		if err := store.AddInstall(ctx, state.Install{PluginID: id, Source: "test", Entrypoint: binary, BuildDigest: digest}); err != nil {
+		if err := store.AddInstall(ctx, state.Install{PluginID: id, Role: state.RolePlugin, Source: "test", Entrypoint: binary, BuildDigest: digest}); err != nil {
 			t.Fatal(err)
 		}
 		gen := "generation-" + id
@@ -96,7 +97,7 @@ func TestConversationProcesses(t *testing.T) {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
-		specs[i] = Spec{PluginID: id, GenerationID: gen, PluginDir: dir, Executable: binary, BuildDigest: digest, NewCandidate: true,
+		specs[i] = Spec{PluginID: id, Role: state.RolePlugin, GenerationID: gen, PluginDir: dir, Executable: binary, BuildDigest: digest, NewCandidate: true,
 			Bootstrap: &pb.Bootstrap{GenerationId: gen, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE}},
 			Limits:    host.NewLimits(values), Stop: fastStop, Log: output.Plugin(id, gen), ExtraEnv: map[string]string{"CONV_PLUGIN_ID": id}}
 	}
@@ -108,7 +109,7 @@ func TestConversationProcesses(t *testing.T) {
 		service = conversation.New(store)
 		mux := router.NewMux()
 		service.Register(mux)
-		mux.Handle(wire.ServiceSend, message.New(registry).Send)
+		mux.Handle(wire.ServiceSend, message.New(registry, policy.New(store)).Send)
 		events = router.New(output.Logger(), values.DispatchQueueEvents)
 		events.Start()
 		if err := platform.Start(ctx, events); err != nil {

@@ -170,7 +170,7 @@ func openStore(t *testing.T) (*state.Store, string) {
 // installPlugin 登记一个最小安装记录，让配置编辑有可写入的插件。
 func installPlugin(t *testing.T, store *state.Store, pluginID string) {
 	t.Helper()
-	if err := store.AddInstall(context.Background(), state.Install{
+	if err := store.AddInstall(context.Background(), state.Install{Role: state.RolePlugin,
 		PluginID:    pluginID,
 		Source:      "dev-local",
 		Entrypoint:  "bin/" + pluginID,
