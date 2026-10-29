@@ -141,36 +141,7 @@ func (p parameter) parse(raw string) (int64, error) {
 		value, err = time.ParseDuration(raw)
 		n = int64(value)
 	case bytesUnit:
-		for _, suffix := range []string{"KB", "MB", "GB"} {
-			if strings.HasSuffix(raw, suffix) {
-				return 0, fmt.Errorf("use B, KiB, MiB or GiB instead of %s", suffix)
-			}
-		}
-		multiplier := int64(0)
-		digits := ""
-		for _, suffix := range []struct {
-			name string
-			size int64
-		}{{"GiB", 1 << 30}, {"MiB", 1 << 20}, {"KiB", 1 << 10}, {"B", 1}} {
-			if strings.HasSuffix(raw, suffix.name) {
-				multiplier = suffix.size
-				digits = strings.TrimSuffix(raw, suffix.name)
-				break
-			}
-		}
-		if multiplier == 0 {
-			return 0, fmt.Errorf("expected a decimal integer with B, KiB, MiB or GiB suffix")
-		}
-		n, err = strconv.ParseInt(digits, 10, 64)
-		if err == nil {
-			if n < 0 {
-				return 0, fmt.Errorf("size must be non-negative")
-			}
-			if n > math.MaxInt64/multiplier {
-				return 0, fmt.Errorf("size exceeds int64 range")
-			}
-			n *= multiplier
-		}
+		n, err = ParseSize(raw)
 	}
 	if err != nil {
 		return 0, err
@@ -185,6 +156,44 @@ func (p parameter) parse(raw string) (int64, error) {
 		if n > 0 && (n%int64(time.Millisecond) != 0 || n/int64(time.Millisecond) > math.MaxUint32) {
 			return 0, fmt.Errorf("duration must fit uint32 whole milliseconds")
 		}
+	}
+	return n, nil
+}
+
+// ParseSize 解析带 B、KiB、MiB 或 GiB 后缀的非负十进制字节数，沿用 --args 的语法与错误提示。
+func ParseSize(raw string) (int64, error) {
+	for _, suffix := range []string{"KB", "MB", "GB"} {
+		if strings.HasSuffix(raw, suffix) {
+			return 0, fmt.Errorf("use B, KiB, MiB or GiB instead of %s", suffix)
+		}
+	}
+	multiplier := int64(0)
+	digits := ""
+	for _, suffix := range []struct {
+		name string
+		size int64
+	}{{"GiB", 1 << 30}, {"MiB", 1 << 20}, {"KiB", 1 << 10}, {"B", 1}} {
+		if strings.HasSuffix(raw, suffix.name) {
+			multiplier = suffix.size
+			digits = strings.TrimSuffix(raw, suffix.name)
+			break
+		}
+	}
+	if multiplier == 0 {
+		return 0, fmt.Errorf("expected a decimal integer with B, KiB, MiB or GiB suffix")
+	}
+	n, err := strconv.ParseInt(digits, 10, 64)
+	if err == nil {
+		if n < 0 {
+			return 0, fmt.Errorf("size must be non-negative")
+		}
+		if n > math.MaxInt64/multiplier {
+			return 0, fmt.Errorf("size exceeds int64 range")
+		}
+		n *= multiplier
+	}
+	if err != nil {
+		return 0, err
 	}
 	return n, nil
 }
