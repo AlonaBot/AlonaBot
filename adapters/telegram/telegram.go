@@ -220,17 +220,27 @@ func (i *instance) receive(ctx context.Context, saved cursor) {
 					err = errors.New("telegram update_id is missing")
 					break
 				}
-				var event *pb.Event
-				event, err = i.normalize(raw)
+				var events []*pb.Event
+				events, err = i.normalize(raw)
 				if err != nil {
 					break
 				}
 				next := saved
 				next.Offset = *update.ID + 1
-				if event != nil {
+				if len(events) > 0 {
 					next.LastAcceptedUnixMS = i.now().UnixMilli()
+					for _, event := range events {
+						if ctx.Err() != nil {
+							return
+						}
+						err = i.save(ctx, event, next)
+						if err != nil {
+							break
+						}
+					}
+				} else {
+					err = i.save(ctx, nil, next)
 				}
-				err = i.save(ctx, event, next)
 				if err != nil {
 					break
 				}
@@ -254,7 +264,7 @@ func (i *instance) receive(ctx context.Context, saved cursor) {
 			if !waitReceive(ctx, delay) {
 				return
 			}
-			backoff = min(backoff*2, maxReceiveBackoff)
+			backoff = nextReceiveBackoff(backoff)
 			continue
 		}
 		backoff = initialReceiveBackoff
@@ -271,7 +281,7 @@ func (i *instance) receive(ctx context.Context, saved cursor) {
 				if !waitReceive(ctx, backoff) {
 					return
 				}
-				backoff = min(backoff*2, maxReceiveBackoff)
+				backoff = nextReceiveBackoff(backoff)
 				continue
 			}
 			saved = next
@@ -298,4 +308,8 @@ func waitReceive(ctx context.Context, delay time.Duration) bool {
 	case <-timer.C:
 		return true
 	}
+}
+
+func nextReceiveBackoff(current time.Duration) time.Duration {
+	return min(current*2, maxReceiveBackoff)
 }
