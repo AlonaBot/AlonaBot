@@ -29,10 +29,12 @@ import (
 
 // MaxChunkBytes 固定协议分块上限为 1 MiB（CONTRACTS §1.3）。
 const MaxChunkBytes = 1 << 20
-const tokenBytes = 16
-const schemaVersion = 1
-const directoryMode = 0700
-const fileMode = 0600
+const (
+	tokenBytes    = 16
+	schemaVersion = 1
+	directoryMode = 0700
+	fileMode      = 0600
+)
 
 // Limits 指定字节配额、未完成上传数量和有效期。
 type Limits struct {
@@ -105,9 +107,11 @@ func decode(in *wire.Inbound, msg proto.Message) error {
 	}
 	return proto.Unmarshal(in.Payload.Bytes, msg)
 }
+
 func failure(code pb.ErrorCode, err error) wire.Response {
 	return wire.Response{Err: &pb.ErrorInfo{Code: code, SafeMessage: err.Error()}}
 }
+
 func response(msg proto.Message) wire.Response {
 	b, err := proto.Marshal(msg)
 	if err != nil {
@@ -115,6 +119,7 @@ func response(msg proto.Message) wire.Response {
 	}
 	return wire.Response{Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(msg), SchemaVersion: schemaVersion, Bytes: b}}
 }
+
 func token() string {
 	b := make([]byte, tokenBytes)
 	rand.Read(b)
@@ -163,6 +168,7 @@ func (s *Store) begin(_ context.Context, c router.Caller, in *wire.Inbound) wire
 	s.total += size
 	return response(&pb.BeginUploadResponse{UploadId: id, ExpiresAtUnixMs: expires.UnixMilli()})
 }
+
 func (s *Store) write(_ context.Context, c router.Caller, in *wire.Inbound) wire.Response {
 	req := &pb.WriteChunkRequest{}
 	if err := decode(in, req); err != nil {
@@ -191,6 +197,7 @@ func (s *Store) write(_ context.Context, c router.Caller, in *wire.Inbound) wire
 	e.offset += uint64(len(req.Data))
 	return response(&pb.WriteChunkResponse{NextOffset: e.offset})
 }
+
 func (s *Store) commit(_ context.Context, c router.Caller, in *wire.Inbound) wire.Response {
 	// 1. 校验请求，在锁内清理过期上传并核对 Session 所有权。
 	req := &pb.CommitUploadRequest{}
@@ -257,7 +264,12 @@ func (s *Store) ReleaseSession(sessionKey string) {
 }
 
 // Sweep 回收全部到期上传与引用。
-func (s *Store) Sweep() { s.mu.Lock(); defer s.mu.Unlock(); s.sweep() }
+func (s *Store) Sweep() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sweep()
+}
+
 func (s *Store) sweep() {
 	now := s.now()
 	for _, entries := range []map[string]*entry{s.uploads, s.refs} {
@@ -268,6 +280,7 @@ func (s *Store) sweep() {
 		}
 	}
 }
+
 func (s *Store) release(entries map[string]*entry, id string, e *entry) {
 	s.remove(e.file.Path)
 	delete(entries, id)
@@ -277,6 +290,7 @@ func (s *Store) release(entries map[string]*entry, id string, e *entry) {
 		delete(s.used, e.owner)
 	}
 }
+
 func (s *Store) remove(path string) {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		s.log.Warn("remove media file failed", "path", path, "err", err)
