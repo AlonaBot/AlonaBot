@@ -155,6 +155,7 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32) *
 			DefaultEnabled: true, RequiredPermission: pb.Permission_PERMISSION_ANY,
 			Spec: &pb.RouteDescriptor_Event{Event: &pb.EventSpec{EventTypeFilter: []string{event.EventType}, HandlerMode: pb.HandlerMode_HANDLER_MODE_MANUAL}}})
 	}
+	appendServiceRoutes(reg, r)
 	return r
 }
 
