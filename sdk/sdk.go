@@ -44,11 +44,13 @@ var ErrNotImplemented = &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Messag
 
 // Context 只在一次 Handler 调用期间有效。
 type Context struct {
-	ctx     context.Context // 本次调用的 context
-	stopped atomic.Bool     // 锁存的停止传播标记，一经设置不能清除
-	active  atomic.Bool     // Handler 返回时关闭，阻止继续使用父调用
-	inbound *wire.Inbound
-	event   *pb.Event
+	ctx       context.Context // 本次调用的 context
+	stopped   atomic.Bool     // 锁存的停止传播标记，一经设置不能清除
+	active    atomic.Bool     // Handler 返回时关闭，阻止继续使用父调用
+	inbound   *wire.Inbound
+	event     *pb.Event
+	match     []string // 本次 Regex 的捕获组
+	autoReply bool     // 自动回复 Handler 通过返回 Chain 发送
 }
 
 // Context 返回本次调用的 context（含 deadline 与取消）。
@@ -78,6 +80,9 @@ func To(t *pb.Target) SendOption { return func(o *sendOptions) { o.to = t } }
 
 // Send 发起一次逻辑发送。出错时仍可能返回已确认的部分结果（MESSAGE-MODEL §4）。
 func (c *Context) Send(chain message.Chain, opts ...SendOption) (*pb.SendResult, error) {
+	if c.autoReply {
+		return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "auto-reply handler cannot call Send"}
+	}
 	// 1. Handler 有效期与 Session 就绪状态均满足时才允许发起子请求。
 	if !c.active.Load() {
 		return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "handler context has expired"}
