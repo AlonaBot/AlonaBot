@@ -11,8 +11,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const uploadChunkBytes = 1 << 20 // CONTRACTS §1.3 的协议分块上限
-
 // Upload 顺序上传 r 的全部内容，由 Core 校验声明的大小、MIME 和摘要后签发引用。
 // Session 未就绪或已停止时返回 FAILED_PRECONDITION；读取失败保留原始错误。
 // 中断的上传由 Core 在期限到达或 Session 结束时回收。
@@ -42,7 +40,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 		return nil, err
 	}
 	// 2. 固定大小读取直到 EOF，大小不符由 Core 的写入和提交检查拒绝。
-	buffer := make([]byte, uploadChunkBytes)
+	buffer := make([]byte, wire.MaxMediaChunk)
 	var offset uint64
 	for {
 		n, readErr := io.ReadFull(r, buffer)

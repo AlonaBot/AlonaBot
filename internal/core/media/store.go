@@ -27,8 +27,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// MaxChunkBytes 固定协议分块上限为 1 MiB（CONTRACTS §1.3）。
-const MaxChunkBytes = 1 << 20
 const (
 	tokenBytes    = 16
 	schemaVersion = 1
@@ -181,7 +179,7 @@ func (s *Store) write(_ context.Context, c router.Caller, in *wire.Inbound) wire
 	if !ok || e.owner != c.SessionKey {
 		return failure(pb.ErrorCode_ERROR_CODE_NOT_FOUND, errors.New("upload not found"))
 	}
-	if req.Offset != e.offset || len(req.Data) > MaxChunkBytes || uint64(len(req.Data)) > e.file.Size-e.offset {
+	if req.Offset != e.offset || len(req.Data) > wire.MaxMediaChunk || uint64(len(req.Data)) > e.file.Size-e.offset {
 		s.release(s.uploads, req.UploadId, e)
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, errors.New("invalid media chunk offset or size"))
 	}
