@@ -261,3 +261,48 @@ func TestTelegramMetadataFieldNumbers(t *testing.T) {
 		}
 	}
 }
+
+// 会话消息固定字段编号、类型、重复性与分页游标的 presence。
+func TestConversationFieldNumbers(t *testing.T) {
+	cases := []struct {
+		message protoreflect.Message
+		names   []protoreflect.Name
+		kinds   []protoreflect.Kind
+	}{
+		{(&pb.ConversationAppendRequest{}).ProtoReflect(), []protoreflect.Name{"conversation_key", "entries_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind}},
+		{(&pb.ConversationAppendResponse{}).ProtoReflect(), []protoreflect.Name{"last_seq"}, []protoreflect.Kind{protoreflect.Uint64Kind}},
+		{(&pb.ConversationListRequest{}).ProtoReflect(), []protoreflect.Name{"conversation_key", "from_seq"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.Uint64Kind}},
+		{(&pb.ConversationEntry{}).ProtoReflect(), []protoreflect.Name{"seq", "entry_json"}, []protoreflect.Kind{protoreflect.Uint64Kind, protoreflect.StringKind}},
+		{(&pb.ConversationListResponse{}).ProtoReflect(), []protoreflect.Name{"entries", "next_seq"}, []protoreflect.Kind{protoreflect.MessageKind, protoreflect.Uint64Kind}},
+		{(&pb.ConversationClearRequest{}).ProtoReflect(), []protoreflect.Name{"conversation_key"}, []protoreflect.Kind{protoreflect.StringKind}},
+		{(&pb.ConversationClearResponse{}).ProtoReflect(), nil, nil},
+	}
+	for _, c := range cases {
+		t.Run(string(c.message.Descriptor().Name()), func(t *testing.T) {
+			fields := c.message.Descriptor().Fields()
+			if fields.Len() != len(c.names) {
+				t.Fatalf("field count = %d, want %d", fields.Len(), len(c.names))
+			}
+			for i, name := range c.names {
+				f := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+				if f == nil || f.Name() != name || f.Kind() != c.kinds[i] {
+					t.Fatalf("field %d should be %s %s, got %v", i+1, c.kinds[i], name, f)
+				}
+				repeated := name == "entries" || name == "entries_json"
+				wantCardinality := protoreflect.Optional
+				if repeated {
+					wantCardinality = protoreflect.Repeated
+				}
+				if f.Cardinality() != wantCardinality {
+					t.Errorf("%s cardinality = %v, want %v", name, f.Cardinality(), wantCardinality)
+				}
+				if f.HasPresence() != (name == "next_seq") {
+					t.Errorf("%s presence = %v", name, f.HasPresence())
+				}
+				if name == "entries" && f.Message().FullName() != "alonabot.v1.ConversationEntry" {
+					t.Errorf("entries type = %s, want ConversationEntry", f.Message().FullName())
+				}
+			}
+		})
+	}
+}

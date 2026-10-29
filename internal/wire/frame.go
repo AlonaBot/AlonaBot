@@ -30,6 +30,9 @@ import (
 // MaxFrame 限制单帧载荷（Envelope 编码后）的字节数。
 const MaxFrame = 4 << 20
 
+// MaxMediaChunk 固定媒体分块上限为 1 MiB（CONTRACTS §1.3），不作为调优参数。
+const MaxMediaChunk = 1 << 20
+
 var (
 	// ErrEmptyFrame 表示长度前缀为 0。
 	ErrEmptyFrame = errors.New("frame length is 0")

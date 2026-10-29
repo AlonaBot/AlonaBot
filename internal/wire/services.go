@@ -17,3 +17,22 @@ const (
 	// ServiceCoreAdapterStatus 上报实例致命错误。
 	ServiceCoreAdapterStatus = "core.adapter.status"
 )
+
+// ServiceMediaBeginUpload 指定媒体上传的声明与预留服务。
+const ServiceMediaBeginUpload = "core.media.begin_upload"
+
+// ServiceMediaWriteChunk 指定媒体顺序分块服务。
+const ServiceMediaWriteChunk = "core.media.write_chunk"
+
+// ServiceMediaCommitUpload 指定媒体校验与引用签发服务。
+const ServiceMediaCommitUpload = "core.media.commit_upload"
+
+// 会话服务按调用插件身份隔离数据，允许无父调用链的请求。
+const (
+	// ServiceConversationAppend 指定会话条目追加服务。
+	ServiceConversationAppend = "core.conversation.append"
+	// ServiceConversationList 指定会话条目分页读取服务。
+	ServiceConversationList = "core.conversation.list"
+	// ServiceConversationClear 指定会话清除服务。
+	ServiceConversationClear = "core.conversation.clear"
+)

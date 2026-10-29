@@ -50,15 +50,15 @@
 | goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 已完成（PR #29） |
 | goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 已完成（PR #31） |
 | goal-4 | T-03.3 | Adapter 进程、sdk/adapter 与上下线事件 | T-03.1 | 已完成（PR #32） |
-| goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 可派发 |
-| goal-10 | T-04.1 | 根插件 API 与静态注册索引 | T-03.1 | 可派发 |
-| goal-56 | T-11.3 | Agent 会话存储 | T-03.1 | 可派发 |
+| goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 已完成（PR #38） |
+| goal-10 | T-04.1 | 根插件 API 与静态注册索引 | T-03.1 | 已完成（PR #34） |
+| goal-56 | T-11.3 | Agent 会话存储 | T-03.1 | 已完成（PR #35） |
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 可派发 |
-| goal-11 | T-04.2 | 构建期生成器 | T-04.1 | 等待前置 |
-| goal-12 | T-04.3 | 命令选择、文本匹配与参数绑定 | T-04.1 | 等待前置 |
+| goal-11 | T-04.2 | 构建期生成器 | T-04.1 | 可派发 |
+| goal-12 | T-04.3 | 命令选择、文本匹配与参数绑定 | T-04.1 | 可派发 |
 | goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1 | 等待前置 |
-| goal-19 | T-06.1 | Service/Bus 描述与 Broker 准入 | T-04.1 | 等待前置 |
-| goal-25 | T-07.3 | SDK HTTP Listener 与 Core 代理 | T-04.1 | 等待前置 |
+| goal-19 | T-06.1 | Service/Bus 描述与 Broker 准入 | T-04.1 | 可派发 |
+| goal-25 | T-07.3 | SDK HTTP Listener 与 Core 代理 | T-04.1 | 可派发 |
 | goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 等待前置 |
 | goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 等待前置 |
 | goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 等待前置 |
@@ -854,7 +854,7 @@ func Send(ctx context.Context, to *pb.Target, chain message.Chain) (*pb.SendResu
 
 ### goal-6 · T-03.5 媒体上传与配额
 
-状态：可派发。前置 T-03.1 已由 PR #29 合并；router.Caller/Mux 与 currentSession 已核对；配额继续使用 tune.Values。
+状态：已完成（[PR #38](https://github.com/AlonaBot/AlonaBot/pull/38)，合并提交 `51a7078`）。证据见 TEST-MATRIX §3.2。审查中把分块上限移到 `internal/wire`：接口段的 `media.MaxChunkBytes` 已改为 `wire.MaxMediaChunk`（定义在 internal/wire/frame.go，`media` 不再导出该常量）。条目保留供后继切片查阅接口。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-6（切片 T-03.5：媒体上传与配额）。goal 目录 goal-6，分支 goal-6，worktree .worktrees/goal-6，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -884,7 +884,7 @@ const ServiceMediaCommitUpload = "core.media.commit_upload"
 // internal/core/media
 type Limits struct { MaxFileBytes, MaxSessionBytes, MaxCoreBytes int64; MaxUploads int; TTL time.Duration }
 func NewLimits(v tune.Values) Limits // 取 MEDIA_MAX_OBJECT、MEDIA_SESSION_BUDGET、MEDIA_DISK_BUDGET、MEDIA_MAX_UPLOADS、MEDIA_TTL 的生效值
-const MaxChunkBytes = 1 << 20 // 协议固定的分块上限（CONTRACTS §1.3），不是调优参数
+// 分块上限为 wire.MaxMediaChunk = 1 << 20（internal/wire/frame.go，CONTRACTS §1.3），不是调优参数
 type Store struct{ ... }
 func Open(log *slog.Logger, dir string, lim Limits, now func() time.Time) (*Store, error) // dir 是 <data_dir>/media；打开时清空上次遗留的临时文件，清理失败返回 error
 func (s *Store) AddServices(m *router.Mux)             // 把上面 3 个服务加到 Mux；「Register」专指协议的 REGISTER，这里不用
@@ -905,7 +905,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - WriteChunk：
   - upload_id 必须属于调用的 Session，否则 NOT_FOUND。
   - offset 必须等于当前已确认的长度，否则 INVALID_ARGUMENT，并终止该上传、释放预留。
-  - 单块超过 MaxChunkBytes，或写入后超过声明的 size → INVALID_ARGUMENT，并终止。
+  - 单块超过 wire.MaxMediaChunk，或写入后超过声明的 size → INVALID_ARGUMENT，并终止。
   - 磁盘写入失败 → INTERNAL，并终止。
   - 成功时返回 next_offset。
 - Commit：
@@ -934,7 +934,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-10 · T-04.1 根插件 API 与静态注册索引
 
-状态：可派发。前置 T-03.1 已由 PR #29 合并；EventRegistry.On、Router.Attach/Detach、Plugin 与 FromInstance 已按合入代码核对。
+状态：已完成（[PR #34](https://github.com/AlonaBot/AlonaBot/pull/34)，合并提交 `284961b`）。证据见 TEST-MATRIX §3.2。审查中另增两个导出函数，事件类型与命令 token 规则由 SDK 与 Core 共用：`validate.IsCommandToken(token string) bool`、`validate.IsEventType(eventType string) bool`（含 bot.online/bot.offline）。`CommandIndex.Lookup` 与 `Shadows` 返回的 Path、Shadowed 切片只读。条目保留供后继切片查阅接口。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-10（切片 T-04.1：根插件 API 与静态注册索引）。goal 目录 goal-10，分支 goal-10，worktree .worktrees/goal-10，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1013,7 +1013,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-56 · T-11.3 Agent 会话存储
 
-状态：可派发。前置 T-03.1 已由 PR #29 合并；router.Caller/Mux、currentSession 与 echo 装配已核对；默认 message.New(adapters) 和 wire.ServiceSend 可直接复用。
+状态：已完成（[PR #35](https://github.com/AlonaBot/AlonaBot/pull/35)，合并提交 `d0983f0`）。证据见 TEST-MATRIX §3.2。会话表按首次发布前规则并入唯一的初始迁移；Purge 供 T-09.4 的卸载 `--purge` 调用。条目保留供后继切片查阅接口。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-56（切片 T-11.3：Agent 会话存储）。goal 目录 goal-56，分支 goal-56，worktree .worktrees/goal-56，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1026,7 +1026,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - contracts/proto/alonabot/v1/：新增 conversation.proto，随后 go generate ./...（本切片获授权新增该 proto 文件）
 - contracts/wirespec_test.go：追加新消息的编号检查
 - internal/wire/services.go：末尾追加三个服务名常量
-- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/conversation.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/conversation.go
 - 新增 internal/core/conversation/
 - sdk/：新增 conversation.go
 - 新增 internal/core/supervisor/testdata/convplugin/（集成测试用的插件程序）
@@ -1182,7 +1182,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-11 · T-04.2 构建期生成器
 
-状态：等待前置（T-04.1）。语句中 goal-10 与 goal-76 提供的符号（sdk.RouteOption、sdk.Alias、sdk.Priority、EventRegistry.On 的选项、cmd/alonabot 的 cobra 命令树）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：可派发。前置 T-04.1 已由 PR #34 合并；goal-10 的符号已按合入代码核对：`sdk.RouteOption`（`func(*routeOptions)`）、`sdk.Alias(path ...string)`、`sdk.Priority(p int32)`、`(*CommandRegistry).Command(name, handler, opts ...RouteOption)`、`(*EventRegistry).On(routeID, eventType, handler, opts ...RouteOption)`、`sdk.Command{Path, Aliases, Priority, Handler, Mode, Params}`、`sdk.EventRoute{RouteID, EventType, Handler, Priority}`、`router.CommandEntry`、`router.Shadow`、`(*CommandIndex).Lookup(tokens []string) (CommandEntry, int, bool)`、`(*CommandIndex).Shadows() []Shadow`（返回切片只读）、`(*Router).Commands() *CommandIndex`；goal-76 的 cobra 命令树在 cmd/alonabot/commands.go 的 `execute` 中构造（根命令 `alonabot`，已有 `run`、`tune list`）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-11（切片 T-04.2：构建期生成器）。goal 目录 goal-11，分支 goal-11，worktree .worktrees/goal-11，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1251,7 +1251,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-12 · T-04.3 命令选择、文本匹配与参数绑定
 
-状态：等待前置（T-04.1）。语句中 goal-2、goal-4、goal-10 提供的符号（router.Router、router.CommandIndex、router.Invocation、message.Service、adapter.Registry、sdk.RouteOption 等）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：可派发。前置 T-04.1 已由 PR #34 合并；goal-10 的符号已按合入代码核对：`sdk.RouteOption`（`func(*routeOptions)`）、`sdk.Alias(path ...string)`、`sdk.Priority(p int32)`、`(*CommandRegistry).Command(name, handler, opts ...RouteOption)`、`(*EventRegistry).On(routeID, eventType, handler, opts ...RouteOption)`、`sdk.Command{Path, Aliases, Priority, Handler, Mode, Params}`、`sdk.EventRoute{RouteID, EventType, Handler, Priority}`、`router.CommandEntry`、`router.Shadow`、`(*CommandIndex).Lookup(tokens []string) (CommandEntry, int, bool)`、`(*CommandIndex).Shadows() []Shadow`（返回切片只读）、`(*Router).Commands() *CommandIndex`；router.Router、router.Invocation、adapter.Registry 沿用已合入代码，`message.New(adapters *adapter.Registry, p *policy.Policy) *Service`（PR #31 起需要 policy）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-12（切片 T-04.3：命令选择、文本匹配与参数绑定）。goal 目录 goal-12，分支 goal-12，worktree .worktrees/goal-12，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1318,7 +1318,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-13 · T-04.4 持久化命令策略
 
-状态：等待前置（T-03.2、T-04.1）。语句中 goal-3、goal-10、goal-12 提供的符号（policy.Policy、policy.New、router 的命令派发、CommandIndex）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：等待前置。T-03.2、T-04.1 已合并（PR #31、#34），goal-10 的 CommandIndex 与 `Router.Commands().Shadows()` 已核对；语句还引用 goal-12 的命令派发，待 goal-12 合并后核对签名，再改为可派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-13（切片 T-04.4：持久化命令策略）。goal 目录 goal-13，分支 goal-13，worktree .worktrees/goal-13，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1328,7 +1328,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 依据：PLAN T-04 步骤 5；CONTRACTS §2.2 第 2、3、8 条、§2.3 第 1、2 条、§7（Core Admin 列表）；MESSAGE-MODEL §1；DECISIONS D-45；TEST-MATRIX V-12、V-43 的服务层分项。
 
 范围（只新增或修改这些）：
-- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/policy.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/policy.go
 - internal/core/policy/：新增 command.go、admins.go、denies.go；policy.go 的 CheckSend 增加全局禁止检查
 - internal/core/router/：命令派发在调用插件前检查策略；事件进入派发前由策略补全 Actor 的 trusted_roles（只加调用点）
 - 上述包的测试文件
@@ -1388,7 +1388,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-19 · T-06.1 Service/Bus 描述与 Broker 准入
 
-状态：等待前置（T-04.1）。语句中 goal-2、goal-10 提供的符号（router.Router、router.Mux、router.Plugin、router.Caller、sdk 的分发与 currentSession、RouteOption）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：可派发。前置 T-04.1 已由 PR #34 合并；goal-10 的符号已按合入代码核对：`sdk.RouteOption`（`func(*routeOptions)`）、`sdk.Alias(path ...string)`、`sdk.Priority(p int32)`、`(*CommandRegistry).Command(name, handler, opts ...RouteOption)`、`(*EventRegistry).On(routeID, eventType, handler, opts ...RouteOption)`、`sdk.Command{Path, Aliases, Priority, Handler, Mode, Params}`、`sdk.EventRoute{RouteID, EventType, Handler, Priority}`、`router.CommandEntry`、`router.Shadow`、`(*CommandIndex).Lookup(tokens []string) (CommandEntry, int, bool)`、`(*CommandIndex).Shadows() []Shadow`（返回切片只读）、`(*Router).Commands() *CommandIndex`；router.Router、router.Mux（现有 `NewMux`、`Handle`、`For`，`Forward` 由本切片新增）、router.Plugin、router.Caller、`tune.Values.RequestTimeout` 与 sdk 的 currentSession 沿用已合入代码。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-19（切片 T-06.1：Service/Bus 描述与 Broker 准入）。goal 目录 goal-19，分支 goal-19，worktree .worktrees/goal-19，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1459,7 +1459,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-25 · T-07.3 SDK HTTP Listener 与 Core 代理
 
-状态：等待前置（T-04.1）。语句中 goal-2、goal-10、goal-76 提供的符号（router.Router、router.Plugin、sdk 的 HTTPRegistry 与激活流程、cobra 的 run 命令、internal/tune）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：可派发。前置 T-04.1 已由 PR #34 合并；goal-10 的符号已按合入代码核对：`sdk.RouteOption`（`func(*routeOptions)`）、`sdk.Alias(path ...string)`、`sdk.Priority(p int32)`、`(*CommandRegistry).Command(name, handler, opts ...RouteOption)`、`(*EventRegistry).On(routeID, eventType, handler, opts ...RouteOption)`、`sdk.Command{Path, Aliases, Priority, Handler, Mode, Params}`、`sdk.EventRoute{RouteID, EventType, Handler, Priority}`、`router.CommandEntry`、`router.Shadow`、`(*CommandIndex).Lookup(tokens []string) (CommandEntry, int, bool)`、`(*CommandIndex).Shadows() []Shadow`（返回切片只读）、`(*Router).Commands() *CommandIndex`；router.Router、router.Plugin、`(*sdk.HTTPRegistry).Handle(method, path string, h http.Handler, opts ...HTTPOption)`、cmd/alonabot/commands.go 中 `execute` 构造的 `run` 命令与 internal/tune 沿用已合入代码。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-25（切片 T-07.3：SDK HTTP Listener 与 Core 代理）。goal 目录 goal-25，分支 goal-25，worktree .worktrees/goal-25，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1545,7 +1545,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-7 · T-03.6 入站媒体与 Grant
 
-状态：等待前置（T-03.2、T-03.4、T-03.5）。语句中 goal-2～goal-6 提供的符号（media.Store、media.File、remote.Process、sdk/adapter 的 Core 与 Instance、router 的派发、message.Service、policy.Policy）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：等待前置（T-03.4）。T-03.2、T-03.5 已合并（PR #31、#38）；goal-6 的符号已核对：`media.Open(log *slog.Logger, dir string, lim Limits, now func() time.Time) (*Store, error)`、`(*Store).AddServices`、`ReleaseSession`、`Sweep`、`Lookup(token string, c router.Caller) (File, error)`、`media.File{Path, Size, MIME, SHA256, ExpiresAt}`，分块上限为 `wire.MaxMediaChunk`；回收删除失败记 WARN、存储错误的 safe_message 固定为 `media storage failed`。其余符号待 T-03.4 合并后核对。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-7（切片 T-03.6：入站媒体与 Grant）。goal 目录 goal-7，分支 goal-7，worktree .worktrees/goal-7，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1914,7 +1914,7 @@ internal/core/webhost
 - contracts/wirespec_test.go：追加编号检查
 - contracts/validate/register.go：工具描述的注册校验
 - internal/wire/services.go：末尾追加 ServiceToolList = "core.tool.list"
-- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/tool.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/tool.go
 - 新增 internal/core/tool/
 - sdk/：services.go 增加 Tool 选项与工具输入 Schema 的生成；新增 tool.go（ListTools）
 - go.mod、go.sum：仅在 jsonschema-go 尚未引入时新增（D-43）
@@ -2123,7 +2123,7 @@ internal/core/webhost
 - contracts/wirespec_test.go：追加编号检查
 - contracts/manifest/：manifest.go 增加 role、adapter_id、icon、assets、admin_api_min_major、admin_api_max_major、adapter_dependencies、plugin_dependencies 字段与按角色的校验；新增 deps.go（依赖检查）
 - contracts/validate/register.go：button.clicked 事件路由的 action 校验
-- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/buttons.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/buttons.go
 - 新增 internal/core/buttons/
 - internal/core/message/：发送前签发按钮 token、校验 extension（只加调用点）
 - internal/core/adapter/remote/：保存 AdapterDescriptor 的 extension 声明，供 message 校验
@@ -2401,7 +2401,7 @@ sdk/config
 依据：PLAN T-08 步骤 4；CONTRACTS §5.3、§5.2（PREPARED 摘要）、§14.5、§12；WIRE-FORMAT §3.2；TEST-MATRIX V-25。
 
 范围（只新增或修改这些）：
-- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/secrets.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/secrets.go
 - 新增 internal/core/secret/
 - internal/core/host/prepare.go：Expect 增加快照回调；PREPARED 的摘要改为对快照计算；Prepared 增加 ConfigSnapshot
 - internal/core/supervisor/supervisor.go：Spec 增加 ConfigSchema；新候选时把快照写入代次，普通 restart 时核对快照一致
@@ -2525,7 +2525,7 @@ sdk/config
 - 新增 contracts/i18n/（文件格式解析、占位符、语言选择，Core 与 SDK 共用）
 - sdk/generate/：检查并嵌入 i18/*.json；sdk 的 Generated 增加 I18n
 - sdk/：新增 i18n.go（Context.T 与后台 T）
-- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/settings.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/settings.go
 - 新增 internal/core/i18n/（Core 内置目录与 en-US.json、zh-CN.json）
 - internal/core/router/：usage 改用 Core 目录，删除 goal-12 的 shortcut 注释
 - internal/core/host/prepare.go：Bootstrap 写入 default_locale
@@ -2585,7 +2585,7 @@ sdk/config
 依据：PLAN T-09 步骤 1；CONTRACTS §7.3、§7.4、§15.1（listen 与 Base URL）、§14.5；TEST-MATRIX V-47 的认证分项。
 
 范围（只新增或修改这些）：
-- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/admin.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/admin.go
 - 新增 internal/core/adminauth/
 - internal/core/settings/：非 loopback 的 listen 必须配合 https 的 admin_base_url 或非空的 trusted_proxies（只加校验）
 - cmd/alonabot/：新增 admin-token 命令组（init、reset）；run 用 adminauth 作为 webhost 的 AdminSessions 并挂上登录接口
@@ -2992,7 +2992,7 @@ sdk/config
 依据：PLAN T-09 步骤 3；CONTRACTS §9.1～§9.3、§8（依赖段）、§15.1、§15.2、§7.4、§5.3；DECISIONS D-26、D-42、D-59；TEST-MATRIX V-40、V-48、V-52、V-82、V-01 的安装分项。
 
 范围（只新增或修改这些）：
-- internal/core/state/：migrations 末尾追加一条；新增 installs_admin.go（安装记录的扩展字段与 Adapter 实例表）
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 的 installs 表定义中加入新列、末尾加入新表，安装记录的写入与读取方法同步新列；新增 internal/core/state/installs_admin.go（安装记录的扩展字段与 Adapter 实例表）
 - 新增 internal/core/manage/（管理服务与 HTTP API）
 - 根包 assembly.go：增加按安装记录启动全部已启用包、挂载管理 API 的步骤；新增导出的 Serve 供 cmd 使用
 - cmd/alonabot/：serve（以及不带子命令时）调用根包 Serve；新增 install、list、enable、disable、restart、reload、update、rollback、uninstall、pin、adapter instance、admin 命令（经管理 API 访问）
@@ -3002,7 +3002,7 @@ sdk/config
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 1. internal/core/state
-   迁移：ALTER TABLE installs ADD COLUMN version TEXT NOT NULL DEFAULT ''; ALTER TABLE installs ADD COLUMN publisher_key_id TEXT NOT NULL DEFAULT ''; ALTER TABLE installs ADD COLUMN pin TEXT NOT NULL DEFAULT ''; ALTER TABLE installs ADD COLUMN uninstalled INTEGER NOT NULL DEFAULT 0;
+   迁移：installs 表定义加入列 version TEXT NOT NULL, publisher_key_id TEXT NOT NULL, pin TEXT NOT NULL, uninstalled INTEGER NOT NULL（不设 DEFAULT，写入安装记录时给出全部列）；
    CREATE TABLE adapter_instances (instance_id TEXT PRIMARY KEY, plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), config_snapshot TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL);
    读写方法自定。
 2. internal/core/manage
@@ -3967,7 +3967,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 依据：PLAN T-09 步骤 4；CONTRACTS §12、§6.3、§5.2、§4.2；TEST-MATRIX V-29。
 
 范围（只新增或修改这些）：
-- internal/core/state/：migrations 末尾追加一条；新增 journal.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/journal.go
 - 新增 internal/core/journal/（操作记录的状态机与编排，实现 manage.Candidates 的 Reload 与 Update）
 - internal/core/manage/：首次启用改用 journal 编排，删除 goal-39 的 shortcut 注释（只改该处与装配）
 - 上述包的测试文件
@@ -4511,7 +4511,7 @@ internal/core/state
 - contracts/wirespec_test.go：追加编号检查
 - internal/wire/services.go：末尾追加 ServiceLogSetLevel = "sdk.log.set_level"
 - internal/core/logging/：新增 buffer.go（最近记录）、query.go（按日期查询日志文件）；Output 在输出时写入缓冲（只加调用点）
-- internal/core/state/：migrations 末尾追加一条；新增 loglevels.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/loglevels.go
 - internal/core/manage/：新增 log_api.go（读取、SSE、级别修改）
 - sdk/：处理 sdk.log.set_level（新增文件；sdk/adapter 的 RunAdapter 同样处理）
 - cmd/alonabot/：新增 logs 与 log-level 命令

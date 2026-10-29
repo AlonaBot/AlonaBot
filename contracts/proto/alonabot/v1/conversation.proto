@@ -1,0 +1,43 @@
+// Agent 会话条目存储（CONTRACTS §13.3、WIRE-FORMAT §3.5）。
+syntax = "proto3";
+
+package alonabot.v1;
+
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
+
+// ConversationAppendRequest 按给定顺序追加原样 JSON 对象。
+message ConversationAppendRequest {
+  string conversation_key = 1;
+  repeated string entries_json = 2;
+}
+
+// ConversationAppendResponse 返回本次追加的最后一个序号。
+message ConversationAppendResponse {
+  uint64 last_seq = 1;
+}
+
+// ConversationListRequest 从 from_seq 开始读取；零值表示从 1 开始。
+message ConversationListRequest {
+  string conversation_key = 1;
+  uint64 from_seq = 2;
+}
+
+// ConversationEntry 保存序号与原样 JSON 对象。
+message ConversationEntry {
+  uint64 seq = 1;
+  string entry_json = 2;
+}
+
+// ConversationListResponse 返回一页条目；还有条目时才携带 next_seq。
+message ConversationListResponse {
+  repeated ConversationEntry entries = 1;
+  optional uint64 next_seq = 2;
+}
+
+// ConversationClearRequest 删除指定会话的全部条目。
+message ConversationClearRequest {
+  string conversation_key = 1;
+}
+
+// ConversationClearResponse 确认清除完成。
+message ConversationClearResponse {}
