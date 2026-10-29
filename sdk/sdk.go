@@ -175,11 +175,14 @@ func Collect(root Root) (*Registration, error) {
 		return nil, errors.New("root plugin is nil")
 	}
 	cmds, routes, jobs := &CommandRegistry{}, &HTTPRegistry{}, &ScheduleRegistry{}
+	generated := generatedFor(root)
+	generated.registerCommands(cmds)
 	root.Commands(cmds)
 	events := &EventRegistry{seen: make(map[string]bool)}
 	for _, command := range cmds.commands {
 		events.seen[commandRouteID(command)] = true
 	}
+	generated.registerEvents(events)
 	root.Events(events)
 	root.HTTP(routes)
 	root.Schedules(jobs)
