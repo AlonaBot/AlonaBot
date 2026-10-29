@@ -554,3 +554,82 @@ func TestReactionCursorSurvivesRestart(t *testing.T) {
 		t.Fatalf("restarted reactions=%v cursors=%v", restarted.events, restarted.offsets)
 	}
 }
+
+func TestMalformedUpdateDoesNotBlockFollowingMessage(t *testing.T) {
+	for name, bad := range map[string]string{
+		"entity_range":     `{"update_id":10,"message":{"message_id":1,"date":123,"chat":{"id":9,"type":"private"},"text":"private-update-text","entities":[{"type":"bold","offset":0,"length":50}]}}`,
+		"entity_surrogate": `{"update_id":10,"message":{"message_id":1,"date":123,"chat":{"id":9,"type":"private"},"text":"😀","entities":[{"type":"bold","offset":1,"length":1}]}}`,
+		"message_shape":    `{"update_id":10,"message":"private-update-text"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := telegramtest.NewServer(t, "local-secret-token")
+			server.Push(json.RawMessage(bad), json.RawMessage(`{"update_id":11,"message":{"message_id":2,"date":124,"chat":{"id":9,"type":"private"},"text":"following"}}`))
+			core := newRecordingCore()
+			running, err := New().Start(context.Background(), startRequest(t, server), core)
+			if err != nil {
+				t.Fatal(err)
+			}
+			registerStop(t, running)
+			for range 2 {
+				waitSaved(t, core.saved)
+			}
+			if err := running.Stop(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			core.mu.Lock()
+			defer core.mu.Unlock()
+			if len(core.events) != 1 || core.events[0].GetSourceEventId() != "11" || !reflect.DeepEqual(core.offsets, []int64{11, 12}) {
+				t.Fatalf("events=%v offsets=%v", core.events, core.offsets)
+			}
+		})
+	}
+}
+
+func TestInvalidUpdateIDReportsFailure(t *testing.T) {
+	var polls atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var result any
+		switch path.Base(r.URL.Path) {
+		case "getMe":
+			result = map[string]any{"id": 42, "username": "example_bot"}
+		case "getWebhookInfo":
+			result = map[string]any{"url": ""}
+		case "getUpdates":
+			polls.Add(1)
+			result = []any{map[string]any{"update_id": "invalid"}}
+		default:
+			t.Errorf("unexpected method: %s", path.Base(r.URL.Path))
+		}
+		if err := json.NewEncoder(w).Encode(map[string]any{"ok": true, "result": result}); err != nil {
+			t.Error(err)
+		}
+	}))
+	defer server.Close()
+	raw, err := json.Marshal(map[string]string{"token": "local-secret-token", "api_base_url": server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	core := newRecordingCore()
+	running, err := New().Start(context.Background(), adapter.StartRequest{InstanceID: "invalid-id", ConfigJSON: raw}, core)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerStop(t, running)
+	select {
+	case failure := <-core.failures:
+		if failure.SafeMessage != "telegram update has no valid update_id" {
+			t.Fatalf("failure: %v", failure)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("invalid ID was not reported")
+	}
+	if err := running.Stop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	core.mu.Lock()
+	defer core.mu.Unlock()
+	if polls.Load() != 1 || len(core.offsets) != 0 || len(core.events) != 0 {
+		t.Fatalf("invalid ID retried or guessed cursor: polls=%d offsets=%v", polls.Load(), core.offsets)
+	}
+}

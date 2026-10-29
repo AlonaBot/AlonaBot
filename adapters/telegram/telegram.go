@@ -178,6 +178,7 @@ func (i *instance) Stop(_ context.Context) error {
 func (i *instance) receive(ctx context.Context, saved cursor) {
 	backoff := initialReceiveBackoff
 	for ctx.Err() == nil {
+		// 1. 拉取一批 update，不在拉取时提前推进游标。
 		var batch []json.RawMessage
 		err := i.client.call(ctx, "getUpdates", struct {
 			Offset  int64    `json:"offset,omitempty"`
@@ -187,6 +188,7 @@ func (i *instance) receive(ctx context.Context, saved cursor) {
 		if ctx.Err() != nil {
 			return
 		}
+		// 2. 凭证或 owner 冲突上报后退出；其他拉取错误交给退避阶段。
 		if err != nil {
 			var api *apiError
 			if errors.As(err, &api) && (api.status == http.StatusUnauthorized || api.status == http.StatusConflict) {
@@ -204,58 +206,29 @@ func (i *instance) receive(ctx context.Context, saved cursor) {
 				return
 			}
 		} else {
-			// 每条交付独立等待 Core 确认，批内任何失败都从上次确认的 offset 重拉。
+			// 3. 逐条解析和交付，等待 Core 确认后再处理下一条。
 			for _, raw := range batch {
 				if ctx.Err() != nil {
 					return
 				}
-				var update struct {
-					ID *int64 `json:"update_id"`
-				}
-				if parseErr := json.Unmarshal(raw, &update); parseErr != nil {
-					err = parseErr
-					break
-				}
-				if update.ID == nil {
-					err = errors.New("telegram update_id is missing")
-					break
-				}
-				var events []*pb.Event
-				events, err = i.normalize(raw)
+				saved, err = i.processUpdate(ctx, raw, saved)
 				if err != nil {
 					break
 				}
-				next := saved
-				next.Offset = *update.ID + 1
-				if len(events) > 0 {
-					next.LastAcceptedUnixMS = i.now().UnixMilli()
-					for n, event := range events {
-						if ctx.Err() != nil {
-							return
-						}
-						// 一个 update 的全部事件完成前，Core 仍保存旧游标以便重拉。
-						deliveryCursor := saved
-						if n == len(events)-1 {
-							deliveryCursor = next
-						}
-						err = i.save(ctx, event, deliveryCursor)
-						if err != nil {
-							break
-						}
-					}
-				} else {
-					err = i.save(ctx, nil, next)
-				}
-				if err != nil {
-					break
-				}
-				saved = next
 			}
 		}
 		if ctx.Err() != nil {
 			return
 		}
+		// 4. Core 确认失败保留旧游标并退避；无法定位的 update 上报后退出。
 		if err != nil {
+			if errors.Is(err, errInvalidUpdateID) {
+				slog.Warn("telegram receive failed", "adapter_instance_id", i.id, "error", i.client.safeError(err))
+				if reportErr := i.core.ReportFailure(ctx, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: errInvalidUpdateID.Error()}); reportErr != nil {
+					slog.Error("report telegram failure", "error", i.client.safeError(reportErr))
+				}
+				return
+			}
 			var public *sdk.Error
 			if errors.As(err, &public) && public.Code == pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION {
 				return
@@ -273,7 +246,7 @@ func (i *instance) receive(ctx context.Context, saved cursor) {
 			continue
 		}
 		backoff = initialReceiveBackoff
-		// 当前 long poll 已结束；先持久化轮次，再发起新的请求。
+		// 5. 当前 long poll 已结束；先持久化轮次，再发起新的请求。
 		now := i.now()
 		if now.UnixMilli()-max(saved.RoundStartUnixMS, saved.LastAcceptedUnixMS) >= receiveRoundDuration.Milliseconds() {
 			next := cursor{RoundStartUnixMS: now.UnixMilli()}
@@ -293,6 +266,51 @@ func (i *instance) receive(ctx context.Context, saved cursor) {
 		}
 	}
 }
+
+var errInvalidUpdateID = errors.New("telegram update has no valid update_id")
+
+func (i *instance) processUpdate(ctx context.Context, raw json.RawMessage, saved cursor) (cursor, error) {
+	// 1. 单独读取 update_id，使其他字段解析失败时仍可安全推进游标。
+	var update struct {
+		ID *int64 `json:"update_id"`
+	}
+	if err := json.Unmarshal(raw, &update); err != nil {
+		return saved, errors.Join(errInvalidUpdateID, err)
+	}
+	if update.ID == nil {
+		return saved, errInvalidUpdateID
+	}
+	next := saved
+	next.Offset = *update.ID + 1
+	events, err := i.normalize(raw)
+	if err != nil {
+		slog.Warn("skip malformed telegram update", "adapter_instance_id", i.id, "update_id", *update.ID, "error", i.client.safeError(err))
+		events = nil
+	}
+	// 2. 无法标准化或不支持的 update 仅推进游标，保存失败仍按旧游标重拉。
+	if len(events) == 0 {
+		if err := i.save(ctx, nil, next); err != nil {
+			return saved, err
+		}
+		return next, nil
+	}
+	// 3. 一个 update 的全部事件完成前，Core 仍保存旧游标以便重拉。
+	next.LastAcceptedUnixMS = i.now().UnixMilli()
+	for n, event := range events {
+		if err := ctx.Err(); err != nil {
+			return saved, err
+		}
+		deliveryCursor := saved
+		if n == len(events)-1 {
+			deliveryCursor = next
+		}
+		if err := i.save(ctx, event, deliveryCursor); err != nil {
+			return saved, err
+		}
+	}
+	return next, nil
+}
+
 func (i *instance) save(ctx context.Context, event *pb.Event, next cursor) error {
 	encoded, err := json.Marshal(next)
 	if err != nil {
