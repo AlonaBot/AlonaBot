@@ -47,37 +47,40 @@ func (p *instancePlugin) Call(ctx context.Context, req wire.Request) (wire.Respo
 // Router 按顺序派发已接纳事件；New 创建，Start 启动，Close 取消在途派发并等待 worker 退出。
 // 队列接纳与插件注册由 mu 串行化，worker 调用插件时不持锁；队列不关闭，避免并发投递遇到已关闭 channel。
 type Router struct {
-	log     *slog.Logger
-	queue   chan *pb.Event
-	ctx     context.Context
-	cancel  context.CancelFunc
-	mu      sync.Mutex // 保护 plugins、started、closed 与 worker 的启动
-	plugins map[string]Plugin
-	started bool
-	closed  bool
-	worker  sync.WaitGroup
+	log      *slog.Logger
+	queue    chan *pb.Event
+	ctx      context.Context
+	cancel   context.CancelFunc
+	mu       sync.Mutex // 保护 plugins、commands、started、closed 与 worker 的启动
+	plugins  map[string]Plugin
+	commands *CommandIndex // 在 mu 下发布；已发布快照只读
+	started  bool
+	closed   bool
+	worker   sync.WaitGroup
 }
 
 // New 创建容量为 queueEvents 的事件队列，log 使用 Core 的 Logger。
 // queueEvents 由装配处传入 tune.Values.DispatchQueueEvents。
 func New(log *slog.Logger, queueEvents int) *Router {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Router{log: log, queue: make(chan *pb.Event, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]Plugin)}
+	return &Router{log: log, queue: make(chan *pb.Event, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]Plugin), commands: &CommandIndex{}}
 }
 
-// Attach 注册一个接收派发的插件；相同插件 ID 替换为新实例。
+// Attach 注册一个接收派发的插件并重建命令索引；相同插件 ID 替换为新实例。
 func (r *Router) Attach(p Plugin) {
 	id := p.PluginID()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.plugins[id] = p
+	r.rebuildCommands()
 }
 
-// Detach 使插件不再进入后续事件的候选集。
+// Detach 移除插件并重建命令索引，使其退出后续事件的候选集。
 func (r *Router) Detach(pluginID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.plugins, pluginID)
+	r.rebuildCommands()
 }
 
 // Start 启动唯一的派发 worker；重复启动或关闭后的启动不产生 worker。
