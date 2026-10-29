@@ -49,6 +49,9 @@ func (h *uploadHarness) call(t *testing.T, c router.Caller, target string, req p
 		t.Fatal(err)
 	}
 	r := h.mux.For(c)(context.Background(), &wire.Inbound{Target: target, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(req), SchemaVersion: 1, Bytes: b}})
+	if code == pb.ErrorCode_ERROR_CODE_INTERNAL && strings.Contains(r.Err.GetSafeMessage(), h.dir) {
+		t.Fatalf("internal response exposed media directory: %q", r.Err.GetSafeMessage())
+	}
 	if r.Err.GetCode() != code {
 		t.Fatalf("%s: error = %v, want %v", target, r.Err, code)
 	}

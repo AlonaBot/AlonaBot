@@ -146,11 +146,11 @@ func (s *Store) begin(_ context.Context, c router.Caller, in *wire.Inbound) wire
 	path := filepath.Join(s.dir, id)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, fileMode)
 	if err != nil {
-		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, err)
+		return s.storageFailure(path, err)
 	}
 	if err := f.Close(); err != nil {
 		s.remove(path)
-		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, err)
+		return s.storageFailure(path, err)
 	}
 	expires := s.now().Add(s.lim.TTL)
 	s.uploads[id] = &entry{file: File{path, req.Size, req.Mime, bytes.Clone(req.Sha256), expires}, owner: c.SessionKey}
@@ -181,7 +181,7 @@ func (s *Store) write(_ context.Context, c router.Caller, in *wire.Inbound) wire
 	}
 	if err != nil {
 		s.release(s.uploads, req.UploadId, e)
-		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, err)
+		return s.storageFailure(e.file.Path, err)
 	}
 	e.offset += uint64(len(req.Data))
 	return response(&pb.WriteChunkResponse{NextOffset: e.offset})
@@ -202,13 +202,13 @@ func (s *Store) commit(_ context.Context, c router.Caller, in *wire.Inbound) wir
 	f, err := os.Open(e.file.Path)
 	if err != nil {
 		s.release(s.uploads, req.UploadId, e)
-		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, err)
+		return s.storageFailure(e.file.Path, err)
 	}
 	digest := sha256.New()
 	n, readErr := io.Copy(digest, f)
 	if err := errors.Join(readErr, f.Close()); err != nil {
 		s.release(s.uploads, req.UploadId, e)
-		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, err)
+		return s.storageFailure(e.file.Path, err)
 	}
 	if uint64(n) != e.file.Size || !bytes.Equal(digest.Sum(nil), e.file.SHA256) {
 		s.release(s.uploads, req.UploadId, e)
@@ -274,4 +274,9 @@ func (s *Store) remove(path string) {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		s.log.Warn("remove media file failed", "path", path, "err", err)
 	}
+}
+
+func (s *Store) storageFailure(path string, err error) wire.Response {
+	s.log.Error("media storage failed", "path", path, "err", err)
+	return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, errors.New("media storage failed"))
 }
