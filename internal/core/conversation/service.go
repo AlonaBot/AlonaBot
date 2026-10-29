@@ -21,7 +21,7 @@ import (
 const (
 	schemaVersion     = 1
 	maxKeyBytes       = 256      // CONTRACTS §13.3：会话键的字节上限。
-	envelopeAllowance = 64 << 10 // CONTRACTS §1.2 帧上限；64 KiB 余量按会话分页切片约定。
+	envelopeAllowance = 64 << 10 // CONTRACTS §1.2：为信封字段预留的余量。
 	readBatchEntries  = 128
 )
 
