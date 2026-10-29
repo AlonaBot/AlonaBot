@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"net/http"
 	"os"
 	"os/exec"
@@ -20,19 +19,21 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 )
 
-// binDir 存放 TestMain 构建的 alonabot 与 lifecycle 二进制。
+// binDir 存放 TestMain 构建的 Core 与真实插件二进制。
 var binDir string
 
-// TestMain 先构建 alonabot 与 examples/plugins/lifecycle，再运行测试，结束后删除构建目录。
+// TestMain 先构建 Core 与集成插件，再运行测试，结束后删除构建目录。
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "alonabot-e2e-")
 	if err != nil {
 		panic(err)
 	}
 	binDir = dir
-	for name, pkg := range map[string]string{"alonabot": ".", "lifecycle": "../../examples/plugins/lifecycle"} {
+	for name, pkg := range map[string]string{"alonabot": ".", "lifecycle": "../../examples/plugins/lifecycle", "httpplugin": "../../internal/core/supervisor/testdata/httpplugin"} {
 		if out, err := exec.Command("go", "build", "-o", filepath.Join(dir, name), pkg).CombinedOutput(); err != nil {
 			fmt.Fprintf(os.Stderr, "build %s failed: %v\n%s", name, err, out)
 			os.Exit(1)
@@ -419,5 +420,62 @@ func TestUnknownSettingUsage(t *testing.T) {
 	}
 	if !strings.Contains(string(output), "log.unknown") || !strings.Contains(string(output), "line 2") {
 		t.Fatalf("incomplete setting error: %s", output)
+	}
+}
+
+// TestHTTPPluginSettings 通过真实Core公开端口验证插件绑定和设置文件到子进程的代理环境传递。
+func TestHTTPPluginSettings(t *testing.T) {
+	for _, test := range []struct {
+		name, proxy string
+		stdio       bool
+	}{
+		{name: "configured", proxy: "socks5://proxy.example:1080"},
+		{name: "inherited", stdio: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			environment := map[string]string{"HTTP_PROXY": "http://inherited.example:8080", "HTTPS_PROXY": "https://inherited.example:8443", "NO_PROXY": "localhost,127.0.0.1"}
+			for key, value := range environment {
+				t.Setenv(key, value)
+			}
+			dir := t.TempDir()
+			configuration := "listen: 127.0.0.1:0\nproxy: \"" + test.proxy + "\"\n"
+			if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte(configuration), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			extra := []string{"--entry", filepath.Join(binDir, "httpplugin")}
+			if test.stdio {
+				extra = append(extra, "--stdio")
+			}
+			c := startCore(t, dir, extra...)
+			c.waitFor(activatedRe)
+			address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
+			response, err := http.Post("http://"+address+"/plugins/demo/hook?state=test-state", "text/plain", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			var reply struct {
+				Path, Query string
+				Environment map[string]string
+			}
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("public plugin HTTP status = %d; log:\n%s", response.StatusCode, c.log())
+			}
+			if err := json.NewDecoder(response.Body).Decode(&reply); err != nil {
+				t.Fatal(err)
+			}
+			if test.proxy != "" {
+				environment["HTTP_PROXY"], environment["HTTPS_PROXY"] = test.proxy, test.proxy
+			}
+			if reply.Path != "/hook" || reply.Query != "state=test-state" || !reflect.DeepEqual(reply.Environment, environment) {
+				t.Fatalf("public plugin reply: %+v; want environment %v", reply, environment)
+			}
+			if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+				t.Fatal(err)
+			}
+			if code := c.wait(15 * time.Second); code != 0 {
+				t.Fatalf("exit %d: %s", code, c.log())
+			}
+		})
 	}
 }
