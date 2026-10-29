@@ -226,7 +226,7 @@ type VersionedMigrator interface {
 ### 7.2 统一端口的 HTTP 代理
 
 - D-25 保持不变：只有 Core 公开 HTTP(S) Listener；插件作者注册 Go `http.Handler`，不选择、配置或向部署用户开放内部端口。SDK 仅在存在 HTTP route 时创建 `127.0.0.1:0` Listener，并向 REGISTER 报告实际 endpoint；无 HTTP route 不创建 Listener。SDK 持续持有该 Listener，不能释放端口后另起服务。
-- Core 只接受当前 Session 注册的 loopback endpoint，使用标准 `httputil.ReverseProxy` 和 `Rewrite` 构造转发；不接受外部请求指定代理目标。外部路径固定 `/plugins/{id}/...`，Core 完成 ID、method、route 和权限匹配后去掉 `/plugins/{id}` 前缀，插件收到以 `/` 开头的相对应用路径。Core 保留 Admin/API/healthz 和内部认证路径，不让插件覆盖。
+- Core 只接受当前 Session 注册的 loopback endpoint，使用标准 `httputil.ReverseProxy` 和 `Rewrite` 构造转发；不接受外部请求指定代理目标。外部路径固定 `/plugins/{id}/...`，Core 完成 ID、method、route 和权限匹配后去掉 `/plugins/{id}` 前缀，插件收到以 `/` 开头的相对应用路径。路由 path 以 `/` 开头且为规范形式：`path.Clean` 的结果，原路径以 `/` 结尾时保留一个尾斜杠并表示前缀路由（`/` 匹配全部路径），其余为精确路由；Core 与 SDK 用同一份未清理的请求路径匹配，两侧选出同一条路由（D-65）。Core 保留 Admin/API/healthz 和内部认证路径，不让插件覆盖。
 - Bootstrap 中的 HTTP 凭证与 Session/Generation 绑定。Core 删除外部可伪造的内部身份/认证头，并在 Rewrite 阶段注入受信凭证；SDK 在进入用户 Handler 前校验。Core 不向插件转发 admin Cookie、admin Authorization 或未验证的 Forwarded/X-Forwarded 身份信息；路由停止、Session 失效或代次变化时撤销代理映射，SDK 关闭 Listener。
 - 框架托管 HTTP 默认要求 Core 授权。公开 OAuth/Webhook 在描述中显式声明；插件必须验证对应 state、签名或 nonce，不能把“public”理解为免除业务来源验证。回调地址由已配置 Base URL 生成，不以任意 Host 或 Forwarded 请求头拼接；允许的 Host 与可信反代来源由 Core 全局设置验证。
 - HTTP 代理与普通命令/事件/Service 的 Protobuf RPC 分工不变；Native 插件自行建立的框架外 Listener 不享受统一入口和生命周期托管承诺。
