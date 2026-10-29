@@ -61,7 +61,12 @@ func execute(args []string) int {
 			selected.listen = &listen
 		}
 		if flags.Changed("log-level") {
-			selected.level = &level
+			switch level {
+			case slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError:
+				selected.level = &level
+			default:
+				return fmt.Errorf("--log-level must be debug, info, warn or error")
+			}
 		}
 		if flags.Changed("log-format") {
 			selected.format = &format
