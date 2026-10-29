@@ -235,9 +235,17 @@ func (p *Process) deliver(ctx context.Context, entry *instance, ev *pb.Event) er
 	return err
 }
 
-func (entry *instance) AdapterID() string              { return entry.process.opt.AdapterID }
-func (entry *instance) InstanceID() string             { return entry.id }
-func (entry *instance) AccountID() string              { return entry.account }
+func (entry *instance) AdapterID() string  { return entry.process.opt.AdapterID }
+func (entry *instance) InstanceID() string { return entry.id }
+func (entry *instance) AccountID() string  { return entry.account }
+
+// AccountName 返回实例启动时平台确认的账号用户名。
+func (entry *instance) AccountName() string {
+	if entry.displayName == nil {
+		return ""
+	}
+	return *entry.displayName
+}
 func (entry *instance) Capabilities() []*pb.Capability { return entry.capabilities }
 
 // Start 沿用保存的配置重启实例，事件统一经 Options.Sink 交付。
