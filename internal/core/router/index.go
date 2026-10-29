@@ -25,42 +25,35 @@ type Shadow struct {
 }
 
 // CommandIndex 保存不可变的静态命令快照；零值为空索引。
-// 路径在建立索引及返回结果时复制，调用者修改结果不会影响其他读取者。
+// 路径在建立索引时复制；返回的 Path 及 Shadows 切片内容只读。
 type CommandIndex struct {
 	paths map[string][]CommandEntry // 候选按 priority、plugin_id、route_id 升序排列
 }
 
 // Lookup 按最长完整 token 路径查找命令，大小写敏感；consumed 为匹配的 token 数。
+// 返回的 entry.Path 只读。
 func (x *CommandIndex) Lookup(tokens []string) (entry CommandEntry, consumed int, ok bool) {
 	for n := len(tokens); n > 0; n-- {
 		candidates := x.paths[strings.Join(tokens[:n], " ")]
 		if len(candidates) > 0 && slices.Equal(candidates[0].Path, tokens[:n]) {
-			return cloneEntry(candidates[0]), n, true
+			return candidates[0], n, true
 		}
 	}
 	return CommandEntry{}, 0, false
 }
 
-// Shadows 按规范路径字典序返回遮蔽关系；返回的切片可由调用者独立修改。
+// Shadows 按规范路径字典序返回遮蔽关系；返回的 Path 和 Shadowed 切片只读。
 func (x *CommandIndex) Shadows() []Shadow {
 	var shadows []Shadow
 	for _, entries := range x.paths {
 		if len(entries) < 2 {
 			continue
 		}
-		shadow := Shadow{Path: slices.Clone(entries[0].Path), Winner: cloneEntry(entries[0])}
-		for _, entry := range entries[1:] {
-			shadow.Shadowed = append(shadow.Shadowed, cloneEntry(entry))
-		}
+		shadow := Shadow{Path: entries[0].Path, Winner: entries[0], Shadowed: entries[1:]}
 		shadows = append(shadows, shadow)
 	}
 	slices.SortFunc(shadows, func(a, b Shadow) int { return strings.Compare(strings.Join(a.Path, " "), strings.Join(b.Path, " ")) })
 	return shadows
-}
-
-func cloneEntry(entry CommandEntry) CommandEntry {
-	entry.Path = slices.Clone(entry.Path)
-	return entry
 }
 
 // Commands 返回最近一次 Attach/Detach 建立的索引快照，可在后续重建期间继续读取。

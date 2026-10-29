@@ -7,17 +7,17 @@ import (
 	"reflect"
 	"strings"
 	"time"
-	"unicode"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
 // Command 记录一条已收集的命令注册。
 type Command struct {
+	Path     []string       // 完整命令路径（含分组前缀），大小写敏感
 	Aliases  [][]string     // 完整别名路径，不附加分组前缀
 	Priority int32          // 数值越小越先，缺省为 0
-	Path     []string       // 完整命令路径（含分组前缀），大小写敏感
 	Handler  any            // 已通过签名检查的处理函数
 	Mode     pb.HandlerMode // 由签名推出的 Handler 形态
 	Params   []pb.ParamType // Context 之后各参数的类型
@@ -43,7 +43,7 @@ type RouteOption func(*routeOptions)
 // Alias 添加命令的完整别名路径，不附加命令组前缀；可多次使用。
 func Alias(path ...string) RouteOption {
 	snapshot := append([]string(nil), path...)
-	return func(o *routeOptions) { o.aliases = append(o.aliases, append([]string(nil), snapshot...)) }
+	return func(o *routeOptions) { o.aliases = append(o.aliases, snapshot) }
 }
 
 // Priority 设置路由优先级，数值越小越先；多次设置时取最后一次。
@@ -92,16 +92,16 @@ func (r *CommandRegistry) add(c Command) {
 			return
 		}
 		for _, token := range path {
-			if token == "" || strings.ContainsFunc(token, unicode.IsSpace) || strings.HasPrefix(token, "/") {
+			if !validate.ValidCommandToken(token) {
 				r.errs = append(r.errs, fmt.Errorf("command %q has invalid path token %q", id, token))
 				return
 			}
 		}
-		previous, exists := r.seen[key]
-		if pending[key] || exists {
-			if pending[key] {
-				previous = id
-			}
+		if pending[key] {
+			r.errs = append(r.errs, fmt.Errorf("command path %q repeated in route %q", key, id))
+			return
+		}
+		if previous, exists := r.seen[key]; exists {
 			r.errs = append(r.errs, fmt.Errorf("command path %q conflicts between routes %q and %q", key, previous, id))
 			return
 		}

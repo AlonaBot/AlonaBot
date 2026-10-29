@@ -39,7 +39,7 @@ func commandSpec(t *testing.T, binary, id, commands string) (*state.Store, Spec)
 	})
 	// 固定 fixture 摘要只用于测试握手双方的一致性。
 	digest := make([]byte, 32)
-	if err := store.AddInstall(ctx, state.Install{PluginID: id, Source: "test", Entrypoint: binary, BuildDigest: digest}); err != nil {
+	if err := store.AddInstall(ctx, state.Install{Role: state.RolePlugin, PluginID: id, Source: "test", Entrypoint: binary, BuildDigest: digest}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.AddGeneration(ctx, id, "gen-1", "{}", 1); err != nil {
@@ -49,7 +49,7 @@ func commandSpec(t *testing.T, binary, id, commands string) (*state.Store, Spec)
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	return store, Spec{PluginID: id, PluginDir: pluginDir, Executable: binary, BuildDigest: digest, GenerationID: "gen-1",
+	return store, Spec{Role: state.RolePlugin, PluginID: id, PluginDir: pluginDir, Executable: binary, BuildDigest: digest, GenerationID: "gen-1",
 		Bootstrap:    &pb.Bootstrap{GenerationId: "gen-1", CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE}},
 		NewCandidate: true, Limits: fastLimits, Stop: fastStop, Log: &logBuf{}, ExtraEnv: map[string]string{commandTestEnv: commands}}
 }

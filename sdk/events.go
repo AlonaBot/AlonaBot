@@ -2,8 +2,11 @@ package sdk
 
 import (
 	"fmt"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"strings"
 )
+
+const commandRoutePrefix = "cmd."
 
 // EventRoute 保存一个手动发送事件 Handler 的静态注册。
 type EventRoute struct {
@@ -31,7 +34,7 @@ func (r *EventRegistry) On(routeID, eventType string, handler func(*Context) err
 	case routeID == "":
 		r.errs = append(r.errs, fmt.Errorf("event route is missing route_id"))
 		return
-	case strings.HasPrefix(routeID, "cmd."):
+	case strings.HasPrefix(routeID, commandRoutePrefix):
 		r.errs = append(r.errs, fmt.Errorf("event route %q uses reserved cmd. prefix", routeID))
 		return
 	case len(options.aliases) != 0:
@@ -54,14 +57,8 @@ func (r *EventRegistry) On(routeID, eventType string, handler func(*Context) err
 	r.events = append(r.events, EventRoute{RouteID: routeID, EventType: eventType, Handler: handler, Priority: options.priority})
 }
 
-func validEventType(eventType string) bool {
-	// message.proto 的 Event.event_type 与 EventPayload 的分支一一对应。
-	switch eventType {
-	case "message.created", "message.edited", "message.deleted", "button.clicked",
-		"member.joined", "member.left", "reaction.added", "scheduled", "bot.online", "bot.offline":
-		return true
-	}
-	return false
-}
+func validEventType(eventType string) bool { return validate.ValidEventType(eventType) }
 
-func commandRouteID(command Command) string { return "cmd." + strings.Join(command.Path, ".") }
+func commandRouteID(command Command) string {
+	return commandRoutePrefix + strings.Join(command.Path, ".")
+}
