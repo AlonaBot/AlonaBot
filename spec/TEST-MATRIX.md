@@ -26,7 +26,7 @@
 | V-16 | T-05、T-07 | scheduled 没有 Actor、插件伪造 is_admin、按钮/消息编辑等事件 | 无 Actor 无默认 Admin；仅可信 Adapter/Core 赋予身份；未支持事件明确返回能力缺失 |
 | V-17 | T-06 | Event Bus 的插件离线/队列溢出/慢订阅者 | 离线不积压、不补发；到固定上限丢弃并计数；其他订阅者不被阻塞 |
 | V-18 | T-06 | A→B→C Service、A→B→A 循环、两条独立并发调用链 | 嵌套调用正确返回；同链重复插件时 CALL_CYCLE；两独立链互不误判 |
-| V-19 | T-06 | Service JSON Schema、错误 encoding/未知版本、缺授权 | 不受支持的编码/Schema、超限 payload、跨插件不授权均返回明确错误且不运行目标函数 |
+| V-19 | T-06 | Service JSON Schema、错误 encoding/未知版本、缺授权、声明版本大于 1 的服务 | 不受支持的编码/Schema、超限 payload、跨插件不授权均返回明确错误且不运行目标函数；版本不符返回 INVALID_ARGUMENT 后调用方 Session 仍可继续调用；声明版本大于 1 的服务按该版本正常调用 |
 | V-20 | T-07 | 长短任务、五字段cron/IANA时区/夏令时、interval、离线和重叠 | 不同job并发；同job跳过重叠；漏tick不补；触发按固定起点与真实时间；非法语法注册失败 |
 | V-21 | T-02、T-07、T-08、T-09 | 配置/迁移/OnStart/注册/OnReady失败与挂起；Core多插件Shutdown | 失败控制帧合法；各阶段有预算；提交前恢复旧版、提交后Degraded；新路由不提前开放；全部插件共享10s停止预算 |
 | V-22 | T-07、T-09 | 插件仅注册 Go `http.Handler`，自动启动/停止内部 loopback Listener；Core 统一反向代理、公开/私有回调与不可信页面 | 插件作者不提供端口且无 HTTP 路由插件不监听；用户/容器只暴露 Core 公开端口；内部端口仅 loopback、插件停止/Session 变更不可再代理；私有默认鉴权、公开声明需校验、Core 保留路径不可覆盖、插件 JS 不与 Admin UI 同 Origin |

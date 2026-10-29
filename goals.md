@@ -1405,6 +1405,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 范围（只新增或修改这些）：
 - contracts/validate/register.go：Service 与 Bus 订阅描述的注册校验
+- contracts/validate/envelope.go：只改 checkPayload 的 schema_version 检查——控制帧仍要求为 1，REQUEST/RESPONSE 的业务载荷只要求 ≥ 1（D-66）；contracts/wirespec_test.go 追加对应的帧检查
 - 新增 internal/core/broker/
 - internal/core/router/：Mux 增加对含 "/" 目标的转交入口；Router 增加按 plugin_id 查找已 Attach 插件的方法
 - sdk/：新增 services.go（Service 注册与调用）；base.go 的 Root 增加 Services Hook 与 Base 默认实现；sdk.go 的 Collect 与 dispatch.go 的分发接入服务路由（只加调用点）；session.go 的 buildRegister 输出服务路由
