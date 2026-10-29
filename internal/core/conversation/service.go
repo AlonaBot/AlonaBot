@@ -20,10 +20,12 @@ import (
 
 const (
 	schemaVersion     = 1
-	maxKeyBytes       = 256
-	envelopeAllowance = 64 << 10
+	maxKeyBytes       = 256      // CONTRACTS §13.3：会话键的字节上限。
+	envelopeAllowance = 64 << 10 // CONTRACTS §1.2 帧上限；64 KiB 余量按会话分页切片约定。
 	readBatchEntries  = 128
 )
+
+var invalidKeyMessage = fmt.Sprintf("conversation key must be 1 to %d bytes of valid UTF-8", maxKeyBytes)
 
 // Service 经 Core 状态库保存会话，插件身份由注册的 Mux 提供。
 type Service struct{ store *state.Store }
@@ -55,7 +57,7 @@ func (s *Service) Purge(ctx context.Context, pluginID string) error {
 
 func decode(in *wire.Inbound, request proto.Message) error {
 	if in.Payload.Encoding != pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF || in.Payload.SchemaID != validate.SchemaID(request) || in.Payload.SchemaVersion != schemaVersion {
-		return fmt.Errorf("expected %s protobuf schema version 1", validate.SchemaID(request))
+		return fmt.Errorf("expected %s protobuf schema version %d", validate.SchemaID(request), schemaVersion)
 	}
 	if err := proto.Unmarshal(in.Payload.Bytes, request); err != nil {
 		return fmt.Errorf("invalid conversation request protobuf: %w", err)
@@ -86,7 +88,7 @@ func (s *Service) append(ctx context.Context, caller router.Caller, in *wire.Inb
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 	}
 	if !validKey(request.ConversationKey) {
-		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "conversation key must be 1 to 256 bytes of valid UTF-8")
+		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, invalidKeyMessage)
 	}
 	if len(request.EntriesJson) == 0 {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "conversation append requires at least one entry")
@@ -111,7 +113,7 @@ func (s *Service) list(ctx context.Context, caller router.Caller, in *wire.Inbou
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 	}
 	if !validKey(request.ConversationKey) {
-		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "conversation key must be 1 to 256 bytes of valid UTF-8")
+		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, invalidKeyMessage)
 	}
 	fromSeq := max(request.FromSeq, 1)
 	result := &pb.ConversationListResponse{}
@@ -145,7 +147,7 @@ func (s *Service) clear(ctx context.Context, caller router.Caller, in *wire.Inbo
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 	}
 	if !validKey(request.ConversationKey) {
-		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "conversation key must be 1 to 256 bytes of valid UTF-8")
+		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, invalidKeyMessage)
 	}
 	if err := s.store.ClearConversation(ctx, caller.PluginID, request.ConversationKey); err != nil {
 		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "clear conversation: "+err.Error())
