@@ -42,7 +42,7 @@
 | 共享对象 | 规则 |
 | --- | --- |
 | `.proto` 与生成代码 | 只有 goal 语句明确授权的切片才能改；未授权却需要改时标阻塞。字段号和枚举值只能追加，不能改动已有编号。T-02.1 先追加 `Bootstrap.log_level = 10`；T-02.2 依赖 T-02.1 合并后再追加 `Bootstrap.session_limits = 11`，不得并行修改同一 proto 与生成文件。 |
-| `internal/core/state/state.go` 的 `migrations` | 只追加条目，不修改已合并的条目；新表的访问方法放在 `internal/core/state/` 下按主题新建的文件里。同步 main 后如果和别的切片追加的条目冲突，把自己的条目移到末尾，再重跑 state 测试。 |
+| `internal/core/state/state.go` 的 `migrations` | 首次发布前只有一条初始迁移（[编码规范](coding-standards.md)「首次发布前不写兼容层」）：新表和新列直接写进 `migrations[0]`，不追加条目，不用 `ALTER TABLE`；新表的访问方法放在 `internal/core/state/` 下按主题新建的文件里。同步 main 后如果和别的切片在初始迁移末尾冲突，两边的表都保留，把自己的表放在最后，再重跑 state 测试。 |
 | `internal/core/adapter` 的 `Instance`、`Sink` 接口 | T-03.1 合并后不再修改。之后的切片需要更多 Adapter 能力时，在同一个包里新增可选接口，调用方用类型断言获取，不改已有接口。 |
 | `internal/wire/services.go` | 固定服务名只追加常量，不重排、不改已有值。多个切片并行追加时，由先合并者保留；后合并者同步最新 main 后把自己的常量追加到文件末尾，再运行 `go test ./internal/wire/...` 和本切片服务测试。 |
 | `internal/core/router` 的固定服务 mux | 新的 Core 固定服务在各自包里实现，只在装配处注册一行；服务名常量追加在 `internal/wire/services.go`。 |

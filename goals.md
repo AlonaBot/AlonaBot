@@ -1026,7 +1026,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - contracts/proto/alonabot/v1/：新增 conversation.proto，随后 go generate ./...（本切片获授权新增该 proto 文件）
 - contracts/wirespec_test.go：追加新消息的编号检查
 - internal/wire/services.go：末尾追加三个服务名常量
-- internal/core/state/state.go：migrations 末尾追加一条；新增 internal/core/state/conversation.go
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/conversation.go
 - 新增 internal/core/conversation/
 - sdk/：新增 conversation.go
 - 新增 internal/core/supervisor/testdata/convplugin/（集成测试用的插件程序）
