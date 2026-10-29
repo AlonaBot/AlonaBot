@@ -155,7 +155,7 @@ func setup(t *testing.T, exe string) (*state.Store, Spec) {
 	}
 	t.Cleanup(func() { _ = s.Close() })
 	digest := sha256.Sum256([]byte(exe))
-	if err := s.AddInstall(ctx, state.Install{PluginID: "demo", Source: "test", Entrypoint: exe, BuildDigest: digest[:]}); err != nil {
+	if err := s.AddInstall(ctx, state.Install{Role: state.RolePlugin, PluginID: "demo", Source: "test", Entrypoint: exe, BuildDigest: digest[:]}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.AddGeneration(ctx, "demo", "gen-1", "{}", 1); err != nil {
@@ -163,7 +163,7 @@ func setup(t *testing.T, exe string) (*state.Store, Spec) {
 	}
 	pluginDir := filepath.Join(dir, "plugins", "demo")
 	_ = os.MkdirAll(pluginDir, 0o700)
-	return s, Spec{PluginID: "demo", PluginDir: pluginDir, Executable: exe, BuildDigest: digest[:], GenerationID: "gen-1",
+	return s, Spec{Role: state.RolePlugin, PluginID: "demo", PluginDir: pluginDir, Executable: exe, BuildDigest: digest[:], GenerationID: "gen-1",
 		Bootstrap: &pb.Bootstrap{GenerationId: "gen-1", CandidateConfigJson: "{}", TargetConfigVersion: 1,
 			DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE}},
 		NewCandidate: true, Limits: fastLimits, Stop: fastStop, Log: &logBuf{}}

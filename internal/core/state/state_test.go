@@ -55,7 +55,7 @@ func TestOpenPragmasAndReopen(t *testing.T) {
 	if err != nil || p != (Pragmas{"wal", 2, 1, 5000}) {
 		t.Fatalf("PRAGMA values %+v, %v", p, err)
 	}
-	if err := s.AddInstall(ctx, Install{PluginID: "demo", Source: "local", Entrypoint: "bin/demo", BuildDigest: []byte{1}}); err != nil {
+	if err := s.AddInstall(ctx, Install{Role: RolePlugin, PluginID: "demo", Source: "local", Entrypoint: "bin/demo", BuildDigest: []byte{1}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {
@@ -108,7 +108,7 @@ func TestCommitActiveChecksExpectedOld(t *testing.T) {
 	ctx := context.Background()
 	s := mustOpen(t, t.TempDir())
 	for _, id := range []string{"a", "b"} {
-		if err := s.AddInstall(ctx, Install{PluginID: id, Source: "local", Entrypoint: "x", BuildDigest: []byte{1}}); err != nil {
+		if err := s.AddInstall(ctx, Install{Role: RolePlugin, PluginID: id, Source: "local", Entrypoint: "x", BuildDigest: []byte{1}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -261,7 +261,7 @@ func TestRelativeDataDirReopens(t *testing.T) {
 			t.Fatalf("open with a relative path failed on attempt %d: %v", i+1, err)
 		}
 		if i == 0 {
-			if err := s.AddInstall(ctx, Install{PluginID: "demo", Source: "local", Entrypoint: "x", BuildDigest: []byte{1}}); err != nil {
+			if err := s.AddInstall(ctx, Install{Role: RolePlugin, PluginID: "demo", Source: "local", Entrypoint: "x", BuildDigest: []byte{1}}); err != nil {
 				t.Fatal(err)
 			}
 		} else if _, err := s.GetInstall(ctx, "demo"); err != nil {

@@ -47,6 +47,9 @@ func IsJSONObject(b []byte) bool {
 // 命令路径、别名与事件过滤器随整份描述一起检查。
 func Register(r *pb.Register) error {
 	// 1. 先检查描述身份、分支与注册公共字段。
+	if r.GetAdapter() != nil {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "plugin registration contains adapter descriptor")
+	}
 	seen := make(map[string]bool, len(r.GetRoutes()))
 	for i, rd := range r.GetRoutes() {
 		id := rd.GetRouteId()
@@ -98,10 +101,7 @@ func Register(r *pb.Register) error {
 			}
 			seenEvents := make(map[string]bool, len(filters))
 			for _, eventType := range filters {
-				switch eventType {
-				case "message.created", "message.edited", "message.deleted", "button.clicked",
-					"member.joined", "member.left", "reaction.added", "scheduled":
-				default:
+				if !ValidEventType(eventType) {
 					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "event route %q has unknown event type %q", route.GetRouteId(), eventType)
 				}
 				if seenEvents[eventType] {
@@ -119,7 +119,7 @@ func registerCommandPath(paths map[string]string, path []string, routeID string)
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q has an empty alias path", routeID)
 	}
 	for _, token := range path {
-		if token == "" || strings.ContainsFunc(token, unicode.IsSpace) || strings.HasPrefix(token, "/") {
+		if !ValidCommandToken(token) {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q has invalid path token %q", routeID, token)
 		}
 	}
@@ -129,4 +129,19 @@ func registerCommandPath(paths map[string]string, path []string, routeID string)
 	}
 	paths[key] = routeID
 	return nil
+}
+
+// ValidCommandToken 检查命令路径 token：非空、不含空白且不以 / 开头。
+func ValidCommandToken(token string) bool {
+	return token != "" && !strings.ContainsFunc(token, unicode.IsSpace) && !strings.HasPrefix(token, "/")
+}
+
+// ValidEventType 检查 message.proto 声明的标准事件类型。
+func ValidEventType(eventType string) bool {
+	switch eventType {
+	case "message.created", "message.edited", "message.deleted", "button.clicked",
+		"member.joined", "member.left", "reaction.added", "scheduled", "bot.online", "bot.offline":
+		return true
+	}
+	return false
 }

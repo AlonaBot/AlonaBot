@@ -550,7 +550,9 @@ type Register struct {
 	// 仅在声明 HTTP 路由时设置。
 	HttpListener *HttpListener `protobuf:"bytes,5,opt,name=http_listener,json=httpListener,proto3" json:"http_listener,omitempty"`
 	// 本次准备阶段的迁移结果。
-	Migration     *MigrationState `protobuf:"bytes,6,opt,name=migration,proto3" json:"migration,omitempty"`
+	Migration *MigrationState `protobuf:"bytes,6,opt,name=migration,proto3" json:"migration,omitempty"`
+	// 仅 Adapter 角色设置。
+	Adapter       *AdapterDescriptor `protobuf:"bytes,7,opt,name=adapter,proto3" json:"adapter,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -623,6 +625,13 @@ func (x *Register) GetHttpListener() *HttpListener {
 func (x *Register) GetMigration() *MigrationState {
 	if x != nil {
 		return x.Migration
+	}
+	return nil
+}
+
+func (x *Register) GetAdapter() *AdapterDescriptor {
+	if x != nil {
+		return x.Adapter
 	}
 	return nil
 }
@@ -1710,14 +1719,15 @@ var File_alonabot_v1_route_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\n" +
-	"\x17alonabot/v1/route.proto\x12\valonabot.v1\x1a\x19alonabot/v1/control.proto\x1a\x1aalonabot/v1/envelope.proto\"\xd7\x02\n" +
+	"\x17alonabot/v1/route.proto\x12\valonabot.v1\x1a\x19alonabot/v1/control.proto\x1a\x19alonabot/v1/adapter.proto\x1a\x1aalonabot/v1/envelope.proto\"\x91\x03\n" +
 	"\bRegister\x124\n" +
 	"\x06routes\x18\x01 \x03(\v2\x1c.alonabot.v1.RouteDescriptorR\x06routes\x12,\n" +
 	"\x12config_schema_hash\x18\x02 \x01(\fR\x10configSchemaHash\x122\n" +
 	"\x15candidate_config_json\x18\x03 \x01(\tR\x13candidateConfigJson\x128\n" +
 	"\x18candidate_config_version\x18\x04 \x01(\rR\x16candidateConfigVersion\x12>\n" +
 	"\rhttp_listener\x18\x05 \x01(\v2\x19.alonabot.v1.HttpListenerR\fhttpListener\x129\n" +
-	"\tmigration\x18\x06 \x01(\v2\x1b.alonabot.v1.MigrationStateR\tmigration\"\xae\x01\n" +
+	"\tmigration\x18\x06 \x01(\v2\x1b.alonabot.v1.MigrationStateR\tmigration\x128\n" +
+	"\aadapter\x18\a \x01(\v2\x1e.alonabot.v1.AdapterDescriptorR\aadapter\"\xae\x01\n" +
 	"\x0eMigrationState\x12.\n" +
 	"\x04mode\x18\x01 \x01(\x0e2\x1a.alonabot.v1.MigrationModeR\x04mode\x126\n" +
 	"\x17completed_migration_ids\x18\x02 \x03(\rR\x15completedMigrationIds\x124\n" +
@@ -1886,41 +1896,43 @@ var file_alonabot_v1_route_proto_goTypes = []any{
 	(*HttpRouteSpec)(nil),       // 20: alonabot.v1.HttpRouteSpec
 	(*BusSubscriptionSpec)(nil), // 21: alonabot.v1.BusSubscriptionSpec
 	(*HttpListener)(nil),        // 22: alonabot.v1.HttpListener
-	(MigrationMode)(0),          // 23: alonabot.v1.MigrationMode
-	(PayloadEncoding)(0),        // 24: alonabot.v1.PayloadEncoding
+	(*AdapterDescriptor)(nil),   // 23: alonabot.v1.AdapterDescriptor
+	(MigrationMode)(0),          // 24: alonabot.v1.MigrationMode
+	(PayloadEncoding)(0),        // 25: alonabot.v1.PayloadEncoding
 }
 var file_alonabot_v1_route_proto_depIdxs = []int32{
 	11, // 0: alonabot.v1.Register.routes:type_name -> alonabot.v1.RouteDescriptor
 	22, // 1: alonabot.v1.Register.http_listener:type_name -> alonabot.v1.HttpListener
 	10, // 2: alonabot.v1.Register.migration:type_name -> alonabot.v1.MigrationState
-	23, // 3: alonabot.v1.MigrationState.mode:type_name -> alonabot.v1.MigrationMode
-	0,  // 4: alonabot.v1.RouteDescriptor.kind:type_name -> alonabot.v1.RouteKind
-	1,  // 5: alonabot.v1.RouteDescriptor.required_permission:type_name -> alonabot.v1.Permission
-	13, // 6: alonabot.v1.RouteDescriptor.command:type_name -> alonabot.v1.CommandSpec
-	16, // 7: alonabot.v1.RouteDescriptor.event:type_name -> alonabot.v1.EventSpec
-	17, // 8: alonabot.v1.RouteDescriptor.hook:type_name -> alonabot.v1.HookSpec
-	18, // 9: alonabot.v1.RouteDescriptor.service:type_name -> alonabot.v1.ServiceSpec
-	19, // 10: alonabot.v1.RouteDescriptor.schedule:type_name -> alonabot.v1.ScheduleSpec
-	20, // 11: alonabot.v1.RouteDescriptor.http:type_name -> alonabot.v1.HttpRouteSpec
-	21, // 12: alonabot.v1.RouteDescriptor.bus_subscription:type_name -> alonabot.v1.BusSubscriptionSpec
-	3,  // 13: alonabot.v1.CommandSpec.match:type_name -> alonabot.v1.CommandMatch
-	14, // 14: alonabot.v1.CommandSpec.aliases:type_name -> alonabot.v1.CommandAlias
-	15, // 15: alonabot.v1.CommandSpec.params:type_name -> alonabot.v1.CommandParam
-	2,  // 16: alonabot.v1.CommandSpec.handler_mode:type_name -> alonabot.v1.HandlerMode
-	12, // 17: alonabot.v1.CommandSpec.rule:type_name -> alonabot.v1.RuleDescriptor
-	4,  // 18: alonabot.v1.CommandSpec.usage_mode:type_name -> alonabot.v1.UsageMode
-	5,  // 19: alonabot.v1.CommandParam.type:type_name -> alonabot.v1.ParamType
-	2,  // 20: alonabot.v1.EventSpec.handler_mode:type_name -> alonabot.v1.HandlerMode
-	12, // 21: alonabot.v1.EventSpec.rule:type_name -> alonabot.v1.RuleDescriptor
-	6,  // 22: alonabot.v1.HookSpec.phase:type_name -> alonabot.v1.HookPhase
-	7,  // 23: alonabot.v1.ServiceSpec.access:type_name -> alonabot.v1.ServiceAccess
-	24, // 24: alonabot.v1.ServiceSpec.encoding:type_name -> alonabot.v1.PayloadEncoding
-	8,  // 25: alonabot.v1.HttpRouteSpec.auth_mode:type_name -> alonabot.v1.HttpAuthMode
-	26, // [26:26] is the sub-list for method output_type
-	26, // [26:26] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	23, // 3: alonabot.v1.Register.adapter:type_name -> alonabot.v1.AdapterDescriptor
+	24, // 4: alonabot.v1.MigrationState.mode:type_name -> alonabot.v1.MigrationMode
+	0,  // 5: alonabot.v1.RouteDescriptor.kind:type_name -> alonabot.v1.RouteKind
+	1,  // 6: alonabot.v1.RouteDescriptor.required_permission:type_name -> alonabot.v1.Permission
+	13, // 7: alonabot.v1.RouteDescriptor.command:type_name -> alonabot.v1.CommandSpec
+	16, // 8: alonabot.v1.RouteDescriptor.event:type_name -> alonabot.v1.EventSpec
+	17, // 9: alonabot.v1.RouteDescriptor.hook:type_name -> alonabot.v1.HookSpec
+	18, // 10: alonabot.v1.RouteDescriptor.service:type_name -> alonabot.v1.ServiceSpec
+	19, // 11: alonabot.v1.RouteDescriptor.schedule:type_name -> alonabot.v1.ScheduleSpec
+	20, // 12: alonabot.v1.RouteDescriptor.http:type_name -> alonabot.v1.HttpRouteSpec
+	21, // 13: alonabot.v1.RouteDescriptor.bus_subscription:type_name -> alonabot.v1.BusSubscriptionSpec
+	3,  // 14: alonabot.v1.CommandSpec.match:type_name -> alonabot.v1.CommandMatch
+	14, // 15: alonabot.v1.CommandSpec.aliases:type_name -> alonabot.v1.CommandAlias
+	15, // 16: alonabot.v1.CommandSpec.params:type_name -> alonabot.v1.CommandParam
+	2,  // 17: alonabot.v1.CommandSpec.handler_mode:type_name -> alonabot.v1.HandlerMode
+	12, // 18: alonabot.v1.CommandSpec.rule:type_name -> alonabot.v1.RuleDescriptor
+	4,  // 19: alonabot.v1.CommandSpec.usage_mode:type_name -> alonabot.v1.UsageMode
+	5,  // 20: alonabot.v1.CommandParam.type:type_name -> alonabot.v1.ParamType
+	2,  // 21: alonabot.v1.EventSpec.handler_mode:type_name -> alonabot.v1.HandlerMode
+	12, // 22: alonabot.v1.EventSpec.rule:type_name -> alonabot.v1.RuleDescriptor
+	6,  // 23: alonabot.v1.HookSpec.phase:type_name -> alonabot.v1.HookPhase
+	7,  // 24: alonabot.v1.ServiceSpec.access:type_name -> alonabot.v1.ServiceAccess
+	25, // 25: alonabot.v1.ServiceSpec.encoding:type_name -> alonabot.v1.PayloadEncoding
+	8,  // 26: alonabot.v1.HttpRouteSpec.auth_mode:type_name -> alonabot.v1.HttpAuthMode
+	27, // [27:27] is the sub-list for method output_type
+	27, // [27:27] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_route_proto_init() }
@@ -1929,6 +1941,7 @@ func file_alonabot_v1_route_proto_init() {
 		return
 	}
 	file_alonabot_v1_control_proto_init()
+	file_alonabot_v1_adapter_proto_init()
 	file_alonabot_v1_envelope_proto_init()
 	file_alonabot_v1_route_proto_msgTypes[2].OneofWrappers = []any{
 		(*RouteDescriptor_Command)(nil),

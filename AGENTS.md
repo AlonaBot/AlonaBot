@@ -1,6 +1,6 @@
 # AlonaBot 代理工作地图
 
-轻量级跨平台 Go 聊天机器人框架：Core + 独立进程的 Native Go 插件与可安装 Adapter（官方提供 Telegram 与 OneBot 11）。目前处于实施初期。
+轻量级跨平台 Go 聊天机器人框架：Core + 可安装、可替换的组件——独立进程的 Native Go 插件、Adapter（官方提供 Telegram 与 OneBot 11）与 Agent，以及静态的 WebUI。目前处于实施初期。
 
 ## 先读什么
 
@@ -16,7 +16,7 @@
 | 修改文档、AGENTS/CLAUDE 或仓库技能 | [alonabot-docs](.agents/skills/alonabot-docs/SKILL.md) | 权威单一、路由有效、状态有依据 |
 | 任何实现工作 | [spec/PLAN.md](spec/PLAN.md) 中对应的 T 工作包，及其引用的 CONTRACTS/WIRE/MESSAGE 小节 | 工作包的「停止和失败条件」 |
 | 新增包、跨包 import | [ARCHITECTURE.md](ARCHITECTURE.md) | 依赖表允许这条边 |
-| 编写官方插件、Adapter 或示例插件 | [插件开发规范](docs/plugin-guide.md) | 依赖、存储与常驻内存符合规范；`node scripts/check-go-deps.mjs` 通过 |
+| 编写官方插件、Adapter、Agent 或示例插件 | [插件开发规范](docs/plugin-guide.md) | 依赖、存储与常驻内存符合规范；`node scripts/check-go-deps.mjs` 通过 |
 | 构建、测试、依赖、外部环境 | [docs/development.md](docs/development.md) | 按需运行 `go generate ./...`、`go test ./...`、`go build ./...` |
 | 记录验收 | [spec/TEST-MATRIX.md](spec/TEST-MATRIX.md) §3 | 写明测试位置、命令、平台和结果；没运行的写「未运行」 |
 | 契约有缺口或冲突 | [spec/README.md](spec/README.md)「执行与维护」 | 先修契约、PLAN 和 TEST-MATRIX，再在 spec/adr/DECISIONS.md 记录原因 |
@@ -27,6 +27,7 @@
 
 - Go 代码遵循 [Google Go Style Guide](https://google.github.io/styleguide/go/)（Guide、Decisions、Best Practices；可用时加载 `go-google-style-guide`、`go-google-style-decisions`、`go-google-best-practices` 技能），项目自己的命名、文件头、注释和测试提交规则见 [编码规范](docs/coding-standards.md)，两者冲突时以编码规范为准。
 - 代码注释、commit message、文档一律用简体中文；标识符和协议名保留英文。程序输出（日志、错误字符串、CLI 输出、协议 safe_message）一律用英文；面向用户的界面与机器人回复通过 i18n 提供。
+- 首次发布前不写兼容层：Core 状态库只有一条初始迁移，schema 改动直接写进去；改签名或语义时同步全部调用方，不给零值套旧语义、不留别名（[编码规范](docs/coding-standards.md#首次发布前不写兼容层)）。
 - 依赖只用 docs/development.md 中列出的已批准清单；需要新依赖时先停下来征求维护者同意。
 - 生成代码只改源文件（`.proto`、生成器），然后重新运行 `go generate ./...`，不手改生成产物。
 - 不把 fixture、模拟服务或交叉编译结果记成真实平台/环境的验证结果。
