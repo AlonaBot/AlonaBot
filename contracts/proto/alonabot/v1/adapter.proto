@@ -91,3 +91,18 @@ message AdapterStatusRequest {
 // AdapterStatusResponse 确认实例故障已处理。
 message AdapterStatusResponse {
 }
+
+// AdapterMediaReadRequest 从指定实例读取平台文件，length 为 1～1 MiB。
+message AdapterMediaReadRequest {
+  string instance_id = 1;
+  string file_id = 2;
+  uint64 offset = 3;
+  uint32 length = 4;
+}
+
+// AdapterMediaReadResponse 返回文件分块及下一次读取位置。
+message AdapterMediaReadResponse {
+  bytes data = 1;
+  uint64 next_offset = 2;
+  bool eof = 3;
+}

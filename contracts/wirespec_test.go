@@ -208,6 +208,8 @@ func TestAdapterFieldNumbers(t *testing.T) {
 		"AdapterCursorResponse":        {},
 		"AdapterStatusRequest":         {"instance_id", "state", "safe_error"},
 		"AdapterStatusResponse":        {},
+		"AdapterMediaReadRequest":      {"instance_id", "file_id", "offset", "length"},
+		"AdapterMediaReadResponse":     {"data", "next_offset", "eof"},
 		"BotOnlinePayload":             {"adapter_id", "adapter_instance_id", "account_id", "account_display_name"},
 		"BotOfflinePayload":            {"adapter_id", "adapter_instance_id", "account_id", "reason", "safe_error"},
 	}
