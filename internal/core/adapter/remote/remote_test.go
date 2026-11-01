@@ -19,9 +19,11 @@ import (
 	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter/remote"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
+	"github.com/AlonaBot/AlonaBot/internal/core/media"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
@@ -95,7 +97,10 @@ func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core s
 
 type mediaLoopInstance struct{ *loopInstance }
 
-func (*mediaLoopInstance) ReadPlatformFile(_ context.Context, fileID string, offset uint64, length uint32) ([]byte, uint64, bool, error) {
+func (i *mediaLoopInstance) ReadPlatformFile(_ context.Context, fileID string, offset uint64, length uint32) ([]byte, uint64, bool, error) {
+	i.mu.Lock()
+	i.mediaReads++
+	i.mu.Unlock()
 	if fileID != "platform-file" {
 		return nil, 0, false, &sdk.Error{Code: pb.ErrorCode_ERROR_CODE_NOT_FOUND, Message: "platform file not found"}
 	}
@@ -115,6 +120,7 @@ type loopInstance struct {
 	core                  sdkadapter.Core
 	mu                    sync.Mutex
 	sequence              int
+	mediaReads            int
 }
 
 func (i *loopInstance) Account() sdkadapter.Account {
@@ -148,6 +154,9 @@ func (i *loopInstance) Send(ctx context.Context, target *pb.Target, chain *pb.Me
 	if text == "cursor" {
 		return &pb.SendResult{Status: pb.SendStatus_SEND_STATUS_ACCEPTED, PlatformMessageIds: []string{i.initial}}, nil
 	}
+	if text == "media-read-count" {
+		return &pb.SendResult{Status: pb.SendStatus_SEND_STATUS_ACCEPTED, PlatformMessageIds: []string{strconv.Itoa(i.mediaReads)}}, nil
+	}
 	i.sequence++
 	id := i.id
 	if text == "forge" {
@@ -159,6 +168,12 @@ func (i *loopInstance) Send(ctx context.Context, target *pb.Target, chain *pb.Me
 		ev.EventType = text
 	case "mismatched-payload":
 		ev.EventType = "message.edited"
+	case "media-created":
+		ev.Message = &pb.PlatformMessage{Chain: chain}
+	case "media-edited":
+		ev.Message = &pb.PlatformMessage{Chain: chain}
+		ev.EventType = "message.edited"
+		ev.EventPayload = &pb.EventPayload{Kind: &pb.EventPayload_MessageEdited{MessageEdited: &pb.MessageEditedPayload{Chain: chain, OldChain: chain}}}
 	}
 	accepted, err := i.core.Deliver(ctx, ev, []byte(strconv.Itoa(i.sequence)))
 	if err != nil {
@@ -229,13 +244,22 @@ func setup(t *testing.T) (*state.Store, supervisor.Spec, *processLog) {
 	return store, supervisor.Spec{PluginID: "loop-package", Role: state.RoleAdapter, AdapterID: "loop", PluginDir: pluginDir, Executable: os.Args[0], BuildDigest: digest, GenerationID: "gen", Bootstrap: &pb.Bootstrap{GenerationId: "gen", CandidateConfigJson: "{}", TargetConfigVersion: 1}, NewCandidate: true, Limits: limits, Stop: host.NewStopTiming(values), Log: logs, ExtraEnv: map[string]string{helperEnv: "adapter", "GORACE": "atexit_sleep_ms=0"}}, logs
 }
 
+func openMediaStore(t *testing.T, logs *processLog) *media.Store {
+	t.Helper()
+	store, err := media.Open(slog.New(slog.NewTextHandler(logs, nil)), t.TempDir(), media.NewLimits(tune.Defaults()), time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store
+}
+
 // TestRemoteLifecycle 覆盖真实进程的多实例收发、账号唯一性、伪造拒绝、故障与游标恢复。
 func TestRemoteLifecycle(t *testing.T) {
 	ctx := context.Background()
 	store, spec, logs := setup(t)
 	registry := adapter.NewRegistry()
 	sink := &eventSink{}
-	p := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: sink, Log: slog.New(slog.NewTextHandler(logs, nil))})
+	p := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: sink, Log: slog.New(slog.NewTextHandler(logs, nil)), RegisterIncoming: openMediaStore(t, logs).RegisterIncoming})
 	launch := func() *supervisor.Running {
 		t.Helper()
 		mux := router.NewMux()
@@ -470,14 +494,17 @@ func TestRemoteRoleMismatch(t *testing.T) {
 	}
 }
 
-// TestRemoteMediaRead 经真实 Adapter 进程分块取件，保持 Session 身份与平台错误。
+// TestRemoteMediaRead 经真实 Adapter 进程登记并共享入站媒体，保持 Session 身份与平台错误。
 func TestRemoteMediaRead(t *testing.T) {
 	ctx := t.Context()
 	store, spec, logs := setup(t)
 	registry := adapter.NewRegistry()
-	p := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: &eventSink{}, Log: slog.New(slog.NewTextHandler(logs, nil))})
+	mediaStore := openMediaStore(t, logs)
+	sink := &eventSink{}
+	p := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: sink, Log: slog.New(slog.NewTextHandler(logs, nil)), RegisterIncoming: mediaStore.RegisterIncoming})
 	mux := router.NewMux()
 	p.Services(mux)
+	mediaStore.AddReadServices(mux, registry)
 	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
 	spec.Handler = mux.For(caller)
 	running, err := supervisor.Launch(ctx, store, spec)
@@ -504,6 +531,108 @@ func TestRemoteMediaRead(t *testing.T) {
 	if got := in.(adapter.MediaSession).MediaSessionKey(); got != caller.SessionKey {
 		t.Fatalf("media session = %q, want %q", got, caller.SessionKey)
 	}
+	// 1. 真实交付先登记对象，所有消息链和转发条目均改写，接纳期间不下载。
+	target := &pb.Target{AdapterId: "loop", AdapterInstanceId: "readable", AccountId: in.AccountID(), ChatId: "chat"}
+	chain := func(command, token string) *pb.MessageChain {
+		source := func() *pb.MediaSource {
+			return &pb.MediaSource{Source: &pb.MediaSource_IncomingRef{IncomingRef: &pb.IncomingMedia{Token: token, Size: proto.Uint64(11), Mime: proto.String("application/octet-stream")}}}
+		}
+		return &pb.MessageChain{Segments: []*pb.Segment{
+			{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: command}}},
+			{Data: &pb.Segment_Image{Image: &pb.ImageSegment{Source: source(), Caption: proto.String("image")}}},
+			{Data: &pb.Segment_Video{Video: &pb.VideoSegment{Source: source(), Caption: proto.String("video")}}},
+			{Data: &pb.Segment_File{File: &pb.FileSegment{Source: source(), Filename: proto.String("file")}}},
+			{Data: &pb.Segment_Forward{Forward: &pb.ForwardSegment{Items: []*pb.ForwardItem{{Chain: &pb.MessageChain{Segments: []*pb.Segment{
+				{Data: &pb.Segment_Image{Image: &pb.ImageSegment{Source: source()}}},
+			}}}}}}},
+			{Data: &pb.Segment_Image{Image: &pb.ImageSegment{Source: &pb.MediaSource{Source: &pb.MediaSource_HttpsUrl{HttpsUrl: "https://example.com/image"}}}}},
+		}}
+	}
+	var objectID string
+	for _, command := range []string{"media-created", "media-edited"} {
+		if _, safe := in.Send(ctx, target, chain(command, "platform-file")); safe != nil {
+			t.Fatal(safe)
+		}
+		events := sink.snapshot()
+		ev := events[len(events)-1]
+		id := ev.GetMessage().GetChain().GetSegments()[1].GetImage().GetSource().GetIncomingRef().GetToken()
+		if id == "" || id == "platform-file" || objectID != "" && id != objectID {
+			t.Fatalf("incoming object ID = %q, previous %q", id, objectID)
+		}
+		objectID = id
+		chains := []*pb.MessageChain{ev.GetMessage().GetChain()}
+		if command == "media-created" {
+			chains = append(chains, ev.GetEventPayload().GetMessageCreated().GetChain())
+		} else {
+			chains = append(chains, ev.GetEventPayload().GetMessageEdited().GetChain(), ev.GetEventPayload().GetMessageEdited().GetOldChain())
+		}
+		for index, got := range chains {
+			if want := chain(command, objectID); !proto.Equal(got, want) {
+				t.Fatalf("%s chain %d = %v, want %v", command, index, got, want)
+			}
+		}
+	}
+	readCount := func(want string) {
+		t.Helper()
+		out, safe := in.Send(ctx, target, &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: "media-read-count"}}}}})
+		if safe != nil {
+			t.Fatal(safe)
+		}
+		if len(out.PlatformMessageIds) != 1 || out.PlatformMessageIds[0] != want {
+			t.Fatalf("platform read count = %v, want %s", out.PlatformMessageIds, want)
+		}
+	}
+	readCount("0")
+	if id := mediaStore.RegisterIncoming("readable", "platform-file", nil, nil); id != objectID {
+		t.Fatalf("registered object ID = %q, want %q", id, objectID)
+	}
+	if id := mediaStore.RegisterIncoming("unsupported", "platform-file", nil, nil); id == objectID {
+		t.Fatal("different adapter instances shared an incoming object")
+	}
+
+	// 2. 两个接收 Session 使用独立令牌，经 Core 读取同一份惰性缓存。
+	var firstToken string
+	for _, pluginID := range []string{"a", "b"} {
+		consumer := router.NewCaller(pluginID, "generation")
+		incoming := mediaStore.IssueIncoming(objectID, consumer, []*pb.Target{target})
+		if incoming == nil {
+			t.Fatal("incoming object disappeared before issue")
+		}
+		if incoming.Token == firstToken || incoming.Token == objectID || len(incoming.Token) != 32 || incoming.GetSize() != 11 || incoming.GetMime() != "application/octet-stream" || incoming.Readability != pb.MediaReadability_MEDIA_READABILITY_READABLE {
+			t.Fatalf("invalid incoming descriptor: %v", incoming)
+		}
+		firstToken = incoming.Token
+		var content []byte
+		for offset := uint64(0); ; {
+			request := &pb.ReadRequest{Token: incoming.Token, Offset: offset, Length: 4}
+			encoded, err := proto.Marshal(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			out := mux.For(consumer)(ctx, &wire.Inbound{Target: wire.ServiceMediaRead, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: 1, Bytes: encoded}})
+			if out.Err != nil {
+				t.Fatal(out.Err)
+			}
+			response := &pb.ReadResponse{}
+			if err := proto.Unmarshal(out.Payload.Bytes, response); err != nil {
+				t.Fatal(err)
+			}
+			content = append(content, response.Data...)
+			if response.NextOffset != offset+uint64(len(response.Data)) {
+				t.Fatalf("Core read offset = %d after %d bytes", response.NextOffset, len(response.Data))
+			}
+			offset = response.NextOffset
+			if response.Eof {
+				break
+			}
+		}
+		if string(content) != "image bytes" {
+			t.Fatalf("consumer %s content = %q", pluginID, content)
+		}
+		readCount("1")
+	}
+
+	// 3. 底层读取继续保留分块、EOF、平台错误和实例生命周期语义。
 	reader := in.(adapter.MediaReader)
 	var content []byte
 	var offset uint64

@@ -31,12 +31,13 @@ const (
 
 // Options 绑定一个安装包的进程身份、状态库与事件接纳入口。
 type Options struct {
-	AdapterID string // 平台类型
-	PluginID  string // Adapter 包的安装 ID，用于核对调用者与写游标
-	Store     *state.Store
-	Registry  *adapter.Registry
-	Sink      adapter.Sink
-	Log       *slog.Logger
+	AdapterID        string // 平台类型
+	PluginID         string // Adapter 包的安装 ID，用于核对调用者与写游标
+	Store            *state.Store
+	Registry         *adapter.Registry
+	Sink             adapter.Sink
+	Log              *slog.Logger
+	RegisterIncoming func(instanceID, fileID string, size *uint64, mime *string) string // 装配处必须提供媒体 Store 的入站登记入口
 }
 
 // Process 并发安全地管理一个 Adapter 包进程及其账号实例。
@@ -233,6 +234,7 @@ func (p *Process) event(entry *instance, eventType string) *pb.Event {
 
 // deliver 在调用方持有状态锁时投递，队列满只记丢弃；其他错误保留给调用方。
 func (p *Process) deliver(ctx context.Context, entry *instance, ev *pb.Event) error {
+	p.registerIncoming(entry.id, ev)
 	err := p.opt.Sink.Deliver(ctx, ev)
 	if errors.Is(err, adapter.ErrQueueFull) {
 		entry.dropped++
