@@ -13,6 +13,7 @@
 //   - 插件的 main 调用 [Run]；[Collect] 单独收集注册项，供检查与测试使用。
 //   - [CommandRegistry]、[EventRegistry]、[HTTPRegistry] 与 [ScheduleRegistry] 收集命令、事件、HTTP 路由和定时任务。
 //   - [ServiceRegistry] 收集类型化服务；[CallJSON] 与 [CallProto] 经 Core 调用目标插件。
+//   - [SubscriptionRegistry] 收集 Event Bus 订阅；[Publish] 发布本插件命名空间下的 JSON 事件。
 //   - [Context] 只在一次 Handler 调用期间有效，提供 [Context.Send] 与 [Context.StopPropagation]。
 //   - 根插件嵌入 [Base]，覆盖 [Root] 中需要的 Hook。
 package sdk
@@ -175,11 +176,12 @@ func Run(root Root) error {
 
 // Registration 汇总从根插件收集到的静态注册项。
 type Registration struct {
-	Commands  []Command
-	Events    []EventRoute
-	HTTP      []HTTPRoute
-	Schedules []Schedule
-	services  []serviceRoute
+	Commands      []Command
+	Events        []EventRoute
+	HTTP          []HTTPRoute
+	Schedules     []Schedule
+	services      []serviceRoute
+	subscriptions []subscriptionRoute
 }
 
 // Collect 调用根插件的注册入口，检查 Handler 签名与同插件内的重复项（D-20：同插件重复即报错）。
@@ -209,6 +211,7 @@ func Collect(root Root) (*Registration, error) {
 	}
 	reg := &Registration{Commands: cmds.commands, Events: events.events, HTTP: routes.routes, Schedules: jobs.jobs}
 	errs := append(slices.Concat(cmds.errs, events.errs, routes.errs, jobs.errs), collectServices(root, reg))
+	errs = append(errs, collectSubscriptions(root, reg))
 	if err := errors.Join(errs...); err != nil {
 		return nil, fmt.Errorf("invalid registration of %T: %w", root, err)
 	}
