@@ -22,7 +22,7 @@
 | 11 | `trace_id` | bytes | 有业务上下文时为 Core 关联的 16-byte ID；不是权限凭证；Core 不采信插件用它替换 actor/scope |
 | 12 | `payload_encoding` | enum | UNSPECIFIED=0、PROTOBUF=1、JSON=2；控制帧使用 PROTOBUF |
 | 13 | `schema_id` | string | 固定 `alonabot.*.v1` 或服务声明的契约 ID；有 payload 时必需 |
-| 14 | `schema_version` | uint32 | 有 payload 时必需且首发为 1；独立于 transport major/minor |
+| 14 | `schema_version` | uint32 | 有 payload 时必需且 ≥ 1；控制帧与 Core 固定载荷首发为 1，REQUEST/RESPONSE 携带的 Service 业务载荷取服务注册的版本（D-66）；独立于 transport major/minor |
 | 15 | `payload` | bytes | 按 encoding/schema 解释，连同 Envelope 其余字段一起计入 4 MiB |
 | 16 | `error` | message ErrorInfo | RESPONSE 或 SESSION_ERROR 失败时使用；RESPONSE 可同时包含有效结果 payload 与 error |
 
@@ -127,7 +127,7 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 
 | 服务 | 方向 | 请求 → 响应 |
 | --- | --- | --- |
-| `adapter.instance.start` | Core→Adapter | instance_id、实例配置 JSON（含已解析凭证）、已保存的游标 → account_id、账号展示名、该实例的 Capability |
+| `adapter.instance.start` | Core→Adapter | instance_id、实例配置 JSON（含已解析凭证）、已保存的游标 → account_id、账号展示名、账号用户名（`account_username`，平台上可寻址的标识，用于 `/cmd@username` 与 mention；平台没有时 absent，D-67）、该实例的 Capability |
 | `adapter.instance.stop` | Core→Adapter | instance_id → 空结果；实例停止接收，不再交付事件 |
 | `adapter.send` | Core→Adapter | instance_id、Target、MessageChain → SendResult 与/或 ErrorInfo，语义同 MESSAGE-MODEL §4 |
 | `adapter.edit` | Core→Adapter | instance_id、Target、platform_message_id、MessageChain → SendResult 与/或 ErrorInfo，语义同 MESSAGE-MODEL §4 的 Edit |
@@ -175,7 +175,7 @@ Core→插件与 Core→Adapter 方向另有 `sdk.log.set_level`：新的生效�
 
 - Event Bus 的发布通过普通 REQUEST 返回“是否被 Core 接纳”的结果；它不确认订阅者已处理。Core 向订阅者发 EVENT。BusEvent 至少包括 event_name、Core event_id、source_plugin_id、occurred_at、schema_id/version、payload。发布者只能发布自身 `plugin_id/event_name` 命名空间；订阅者 Actor 缺省，业务 payload 不产生管理权限。
 - 每订阅者最多 256 个且 4 MiB 待处理事件；任一满额丢弃新事件并计数，插件离线不积压、不补发。业务处理无 ACK、自动重试或 StopPropagation。Scheduler 的 scheduled 通过有 CallID/独立 deadline 的 REQUEST/RESPONSE 判定完成与重叠。
-- 服务 JSON 使用 `payload_encoding=JSON` 和注册的 schema/version，严格验证 UTF-8 JSON 及结构；若使用 Protobuf Any，必须是真实的 type_url 和 Protobuf bytes。未知 encoding/schema/version 明确拒绝。
+- 服务 JSON 使用 `payload_encoding=JSON` 和注册的 schema/version，严格验证 UTF-8 JSON 及结构；若使用 Protobuf Any，必须是真实的 type_url 和 Protobuf bytes。未知 encoding/schema/version 明确拒绝：Envelope 校验只要求业务载荷的 `schema_version` ≥ 1，与目标服务注册的版本是否一致由 Broker 判断，不一致时对该次调用返回 INVALID_ARGUMENT，不作为协议错误关闭调用方 Session（D-66）。
 - MediaRef 为 Core 分配、受 Session 和目标范围约束的 capability；上传请求包含 upload_id、offset、chunk bytes。顺序分块只接受当前已确认 offset；重复或跳跃 offset 返回 INVALID_ARGUMENT，不静默追加。提交校验声明总量与 sha256 后才产生 MediaRef；未提交上传、过期引用和消费租约按主契约清理。
 - MessageChain/Event/Actor/Target/HandlerOutcome/SendResult 的载荷遵循 [MESSAGE-MODEL.md](MESSAGE-MODEL.md)。公共 JSON 标识符使用字符串；媒体数据不直接塞进普通 MessageChain JSON。
 
@@ -203,7 +203,7 @@ Core 媒体服务固定为 BeginUpload/WriteChunk/CommitUpload/Read/Grant：Read
 - Event 按类型区分的载荷放在 `EventPayload` oneof 中，PreEventResult 只能回传这一部分；按钮 `value` 与服务载荷之外的 JSON 一律以 UTF-8 文本表示。
 - `ForwardSource` 的结构（display_name、external_user_id）由 T-01 补定；新增 `SendRequest{to, chain}` 作为 Core Send 服务的请求。
 - Core→目标插件的 Service 调用载荷是 `ServiceInvocation{route_id, context, encoding, schema_id, schema_version, payload}`：可信上下文与业务载荷分开传输，服务响应直接使用 output schema 的业务载荷（REVIEW-1 补充）。
-- 控制帧与 Core 固定载荷的 `schema_id` 为 `alonabot.<snake_case 消息名>.v1`（例如 `alonabot.hello_ack.v1`），控制帧一律使用 PROTOBUF 编码。是否携带载荷以 `schema_id` 是否为空来判断，而不看 payload 长度，因为空消息序列化后是 0 字节。校验入口为 `contracts/validate`。
+- 控制帧与 Core 固定载荷的 `schema_id` 为 `alonabot.<snake_case 消息名>.v1`（例如 `alonabot.hello_ack.v1`），控制帧一律使用 PROTOBUF 编码。控制帧的 `schema_version` 不为 1 属于协议错误；Core 固定服务的请求与响应由各自的接收方检查版本为 1（D-66）。是否携带载荷以 `schema_id` 是否为空来判断，而不看 payload 长度，因为空消息序列化后是 0 字节。校验入口为 `contracts/validate`。
 - Core 启动插件进程时通过环境变量传递会话参数（常量定义在 `internal/wire/env.go`）：`ALONABOT_PLUGIN_ID`、`ALONABOT_SESSION_SECRET`（32 字节十六进制）、`ALONABOT_TRANSPORT`（`tcp`/`stdio`）、`ALONABOT_CORE_ADDR`（TCP loopback 地址）、`ALONABOT_BUILD_DIGEST`（归档 SHA256 十六进制）、`ALONABOT_RUNTIME_LOCK`（runtime.lock 的绝对路径）。其余环境变量只从白名单继承（PATH、HOME、临时目录、SystemRoot、LANG、TZ），Core 管理凭证不会进入插件环境；设置了调优参数 `PLUGIN_MEMORY_SOFT_LIMIT` 时另传 `GOMEMLIMIT`（CONTRACTS §16）；出站代理按 CONTRACTS §15.1 的 `proxy` 设置传递 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`。
 - 握手与准备：认证失败（Secret 恒时比较、插件 ID、build_digest 任一不符）时 Core 直接关闭连接，不回复任何帧；认证之后的失败（协议协商、Bootstrap 超限、REGISTER 不合法、准备期出现非控制帧）先发 SESSION_ERROR 再关闭，发送 SESSION_ERROR 限时 1s，对端不读时不会卡住失败路径。Preparing 的硬截止为配置、迁移、OnStart 三个阶段预算之和，写入 Bootstrap.preparation_deadline_unix_ms。PREPARED 中 route_descriptor_hash 为按顺序拼接各 RouteDescriptor 确定性编码后的 SHA256，candidate_config_digest 为候选配置 JSON 的 SHA256（T-08 引入 secret 引用后改为对持久化快照计算）。
 - 协议能力项使用 `ProtocolCapability{name, version}`，与 Adapter 平台能力 `Capability{name, version, supported}` 分开。
