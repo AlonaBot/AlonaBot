@@ -1558,6 +1558,8 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 状态：可派发。T-03.2、T-03.4、T-03.5 已合并（PR #31、#39、#38）。已核对媒体存储入口 `media.Open(log *slog.Logger, dir string, lim Limits, now func() time.Time) (*Store, error)`、`AddServices`、`ReleaseSession`、`Sweep`、`Lookup(token string, c router.Caller) (File, error)`、`media.File{Path, Size, MIME, SHA256, ExpiresAt}` 与 `wire.MaxMediaChunk`；回收删除失败记 WARN，safe_message 为 `media storage failed`。Telegram 可复用 `New() adapter.Adapter`、私有 `instance`、`telegramMessage`、`messageEvent`、`botClient.call(ctx context.Context, method string, request any, result any) error`；`telegramtest.NewServer(t testing.TB, token string) *Server` 与接收模拟入口已合入。`sdk/adapter.Core` 当前含 Deliver、SaveCursor、ReportFailure，ReadMedia 由本切片按下文接口追加。
 
+范围修订（2026-11-01，维护者确认）：执行者在 GN-02 报告的阻塞中，有三项现在补齐，见语句「范围」与「接口」：修改 media/store.go，接入共享对象与租约回收；`LeaseForSend` 增加目标 Adapter Session 的 SessionKey 输入；Adapter 实例提供该 SessionKey，remote 由此改为 Bind 时传入 Caller，入站登记经 Options 注入。仍待补写的是 Router 与 Grant 一侧的装配：Router 为接收 Session 签发 token 的回调注入、grantee 的已激活 Session 查询、同事件在途关联查询、`AddReadServices` 的许可查询参数。这些都落在 internal/core/router，而 #45（`Router.Plugin`）与 #47（`router.New` 签名）正在修改该包，等两者合并后按合入代码写出签名。在此之前，依赖这些装配的部分（Router 改写 incoming token、core.media.grant）保持阻塞，其余可以继续执行。
+
 ```text
 /goal 使用 $alonabot-execute 推进 goal-7（切片 T-03.6：入站媒体与 Grant）。goal 目录 goal-7，分支 goal-7，worktree .worktrees/goal-7，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
@@ -1569,8 +1571,8 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - contracts/proto/alonabot/v1/adapter.proto：追加 AdapterMediaReadRequest/Response。随后 go generate ./...（本切片获授权只追加这两个消息）
 - contracts/wirespec_test.go：追加编号检查
 - internal/wire/services.go：末尾追加 ServiceAdapterMediaRead = "adapter.media.read"、ServiceMediaRead = "core.media.read"、ServiceMediaGrant = "core.media.grant"
-- internal/core/media/：新增 incoming.go、read.go、grant.go、lease.go
-- internal/core/adapter/：新增 media.go（可选接口）；internal/core/adapter/remote 与 internal/core/adapter/memory 实现它；remote 的 deliver 改写入站媒体来源
+- internal/core/media/：新增 incoming.go、read.go、grant.go、lease.go；store.go 只扩展 entry 与 Store 的字段，以及 ReleaseSession、Sweep、release 的回收条件（接入入站共享对象、按 Session 的 token 与发送租约），上传（begin、write、commit）与 Lookup 对已提交 MediaRef 的现有行为不变
+- internal/core/adapter/：新增 media.go（两个可选接口）；internal/core/adapter/remote 与 internal/core/adapter/memory 实现它们；remote 的 deliver 改写入站媒体来源；remote.go 的 Bind 增加 Caller 参数，Options 增加入站登记回调（同步 remote_test.go 的调用点）
 - internal/core/router/：派发前为每个接收 Session 改写 incoming token（只加调用点）
 - internal/core/message/：发送前解析媒体来源并签发 Adapter 只读 token
 - sdk/：media.go 增加读取与授权函数；sdk/adapter 的 Core 增加 ReadMedia，Instance 可选实现平台文件读取；sdk 的 RunAdapter 处理 adapter.media.read
@@ -1584,11 +1586,15 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
    message AdapterMediaReadResponse { bytes data = 1; uint64 next_offset = 2; bool eof = 3; }
 2. internal/core/adapter
    type MediaReader interface { ReadMedia(ctx context.Context, fileID string, offset uint64, length uint32) (data []byte, next uint64, eof bool, err error) } // Instance 可选实现
+   type MediaSession interface { MediaSessionKey() string } // Instance 可选实现：该实例所属 Adapter Session 的 SessionKey，出站只读 token 绑定到它；adapter 包不 import router，因此只传 SessionKey
+   remote：func (p *Process) Bind(ctx context.Context, in *host.Instance, caller router.Caller) error // caller 为该 Session 装配 Mux.For 时使用的同一个 Caller；实例的 MediaSessionKey 返回 caller.SessionKey
+   remote：Options 增加 RegisterIncoming func(instanceID, fileID string, size *uint64, mime *string) string // 装配处传入 media.Store.RegisterIncoming；remote 不 import media
+   memory：MediaSessionKey 返回该实例固定的 SessionKey，测试以 router.Caller{SessionKey: 该值} 调用 media.Store.Lookup 读出只读 token 的内容
 3. internal/core/media（在 goal-6 的 Store 上追加）
    func (s *Store) RegisterIncoming(instanceID, fileID string, size *uint64, mime *string) string // 返回对象 ID；同一实例同一 file_id 复用同一对象
    func (s *Store) IssueIncoming(objectID string, c router.Caller, targets []*pb.Target) *pb.IncomingMedia // 给一个接收 Session 签发 token
    func (s *Store) AddReadServices(m *router.Mux, readers *adapter.Registry) // 注册 core.media.read 与 core.media.grant
-   func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, source *pb.MediaSource, deadline time.Time) (readToken string, release func(), err error) // 供 message.Service：解析 media_ref 或 incoming_ref，签发给 Adapter Session 的只读 token
+   func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSessionKey string, source *pb.MediaSource, deadline time.Time) (readToken string, release func(), err error) // 供 message.Service：解析 media_ref 或 incoming_ref，签发只读 token 并绑定到 readerSessionKey（目标实例的 MediaSessionKey）
 4. sdk
    func ReadMedia(ctx context.Context, token string, offset uint64, length uint32) (data []byte, next uint64, eof bool, err error)
    func GrantMedia(ctx context.Context, token, granteePluginID string, targets ...*pb.Target) (string, error) // 返回给对方的新 token
@@ -1603,7 +1609,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
   - 已提交的 MediaRef（goal-6）直接按 offset 读取。
   - 入站对象首次被读取时取件：预留容量（已知 size 用它，未知按 MEDIA_MAX_OBJECT），计入 Core 总预算与读取者 Session 的预算，超限 RESOURCE_EXHAUSTED；按 1 MiB 依次调用 MediaReader 写入暂存区，总长超过预留或与声明的 size 不符时失败并删除；完成后计算 SHA256。取件期限取调用者期限与 MEDIA_TTL 中较早者。并发的首次读取只取件一次，其余等待结果。取件失败返回 UNAVAILABLE（平台错误的 safe_message 原样），不自动重试。
 - core.media.grant：只能授权自己持有的 token；grantee 必须是当前已激活的插件；targets 必须是原 token 范围的子集（原范围为空时 targets 必须为空）。入站对象还要求 grantee 与该事件有在途调用关联（Router 记录的同一事件派发），或 grantee 的 allowed_adapter_instances 含来源实例；插件自己上传的对象由 owner 直接委托。新 token 不延长有效期（取原 token 的到期时间）。不满足时 PERMISSION_DENIED。
-- 出站：message.Service 在调用 Instance.Send 前，对每个 media_ref 或 incoming_ref 来源调用 LeaseForSend：校验调用者对该 token 的权利，入站对象必要时先取件，再签发绑定目标 Adapter Session 的只读 token 并替换片段来源；租约在发送返回或期限到达时释放。租约期间对象不被 Sweep 回收，但仍计入磁盘预算。https_url 来源原样交给 Adapter。取件失败发生在平台发送之前，不调用 Send。
+- 出站：message.Service 在调用 Instance.Send 前，对每个 media_ref 或 incoming_ref 来源调用 LeaseForSend：校验调用者对该 token 的权利，入站对象必要时先取件，再签发绑定目标 Adapter Session 的只读 token 并替换片段来源；租约在发送返回或期限到达时释放。租约期间对象不被 Sweep 回收，但仍计入磁盘预算。https_url 来源原样交给 Adapter。取件失败发生在平台发送之前，不调用 Send。目标实例不实现 adapter.MediaSession 而 Chain 含 media_ref 或 incoming_ref 时，在首个副作用前返回 UNSUPPORTED。
 - Session 结束（ReleaseSession）只撤销该 Session 的 token；入站对象在所有 token 过期且没有租约时才删除。
 - Adapter 端：RunAdapter 收到 adapter.media.read 时调用实例的 MediaSource；Adapter 用 Core.ReadMedia 读取出站只读 token 的内容。
 - Telegram：photo（取最大尺寸）、video、document、animation、audio、voice 生成对应的 image/video/file 片段，incoming_ref.token 为 file_id，size 取 file_size（有时），mime 取 mime_type（有时），caption 写入片段；实例实现 MediaSource：首次读取时 getFile 得到 file_path，经实例的 http.Client（含代理）下载 /file/bot<token>/<file_path>，按 offset 返回；超过 Bot API 的 20 MiB 下载上限（命名常量）时返回 UNSUPPORTED。下载 URL 同样脱敏。
