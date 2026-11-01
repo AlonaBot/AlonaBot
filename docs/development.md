@@ -61,6 +61,15 @@ bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle --args
 
 `--args` 可重复，放在子命令前后均生效，后出现的覆盖先出现的。直接参数支持逗号分隔的 `KEY=VALUE`；文件每行一项，空行和以 `#` 开头的注释行会被忽略。时长使用 `2s` 等 Go 时长格式；大小使用 `B`、`KiB`、`MiB`、`GiB`，`MB` 等十进制单位会报错。`run` 将最终覆盖值及出处记为 WARN。
 
+插件注册代码由构建期生成器从标记生成，标记语法见 `sdk/generate` 的包文档。在插件构建入口目录生成或检查 `alonabot_gen.go`：
+
+```sh
+bin/alonabot plugin generate --dir ./myplugin   # 内容不变时不改文件
+bin/alonabot plugin check --dir ./myplugin --goos linux --goarch amd64 --tags a,b
+```
+
+两者按 `--goos`、`--goarch`、`--tags` 筛选源码（缺省取当前环境），只扫描入口及其依赖的本 module 包，不受现有生成文件的 import 影响。源码问题逐行输出为 `文件:行:列: 说明`，此时不写文件；`check` 在生成内容与现有文件不同时报告过期。两种情况都以退出码 1 结束。
+
 真实进程验收（Unix；会在测试中构建上述两个二进制）：
 
 ```sh
