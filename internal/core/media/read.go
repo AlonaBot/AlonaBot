@@ -93,6 +93,10 @@ func (s *Store) fetchIncoming(ctx context.Context, id string, object *incomingOb
 			s.log.Error("media storage failed", "path", path, "err", closeErr)
 			err = errors.Join(err, mediaCallError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "media storage failed"))
 		}
+		// 最后一块返回或文件关闭期间也可能到期，成功结果发布前仍须遵守取件期限。
+		if ctxErr := ctx.Err(); err == nil && ctxErr != nil {
+			err = incomingFailure(ctxErr)
+		}
 		if err != nil {
 			s.remove(path)
 		}
