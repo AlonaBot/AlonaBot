@@ -26,7 +26,8 @@ import (
 // FileName 指定 data_dir 中的 Core 设置文件名。
 const FileName = "alonabot.yaml"
 
-const defaultListen = "127.0.0.1:7650"
+const defaultPort = "7650"
+const defaultListen = "127.0.0.1:" + defaultPort
 
 // DNS文本长度扣除可选的终止点，遵循net解析器采用的RFC 1035线格式上限。
 const (
@@ -52,7 +53,7 @@ type Settings struct {
 
 // Defaults 返回 CONTRACTS §15.1 的启动缺省值。
 func Defaults() Settings {
-	s := Settings{Listen: defaultListen, AdminBaseURL: "http://" + defaultListen, PluginBaseURL: "http://localhost:7650", LogLevel: slog.LevelInfo, LogFormat: string(logging.FormatText)}
+	s := Settings{Listen: defaultListen, AdminBaseURL: "http://" + defaultListen, PluginBaseURL: "http://localhost:" + defaultPort, LogLevel: slog.LevelInfo, LogFormat: string(logging.FormatText)}
 	s.LogFile.Enabled = true
 	s.LogFile.MaxSize = logging.DefaultMaxFileSize
 	s.LogFile.MaxTotal = logging.DefaultMaxTotalSize
