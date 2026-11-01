@@ -36,3 +36,6 @@ const (
 	// ServiceConversationClear 指定会话清除服务。
 	ServiceConversationClear = "core.conversation.clear"
 )
+
+// ServiceBusPublish 指定 Event Bus 的发布准入服务。
+const ServiceBusPublish = "core.bus.publish"
