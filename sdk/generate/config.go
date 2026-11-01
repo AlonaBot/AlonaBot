@@ -340,12 +340,11 @@ func (b *configBuilder) structure(structure *types.Struct, path string) *jsonsch
 			name = ""
 		}
 		if field.Embedded() && name == "" {
-			if named, ok := baseType.(*types.Named); ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == configPath && named.Obj().Name() == "Base" {
-				continue
-			}
 			if _, structure := baseType.Underlying().(*types.Struct); structure {
 				child := b.schema(fieldType, field.Pos(), path)
 				if child != nil {
+					// 展开前检查匿名字段本身的标签；输出沿用子字段的元数据。
+					b.metadata(child, fieldType, tags, path, field.Pos())
 					for _, key := range child.PropertyOrder {
 						b.property(schema, key, child.Properties[key], field.Pos())
 					}
