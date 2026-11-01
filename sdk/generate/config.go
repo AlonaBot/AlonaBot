@@ -24,7 +24,7 @@ import (
 
 const configSchemaDraft = "https://json-schema.org/draft/2020-12/schema"
 
-// configImporter 对扫描到的本模块包检查源码，其他包读取同一构建环境的导出数据。
+// configImporter 对扫描包及依赖它们的外部包检查源码，其他包读取同一构建环境的导出数据。
 type configImporter struct {
 	scan     *scan
 	compiled types.Importer
@@ -56,7 +56,7 @@ func (i *configImporter) Import(path string) (*types.Package, error) {
 }
 
 func (s *scan) configSchema(ctx context.Context, list *exec.Cmd) error {
-	// 1. 在相同 GOOS/GOARCH、tags 与 overlay 下取得外部包导出数据和目标位宽。
+	// 1. 在相同 GOOS/GOARCH、tags 与 overlay 下取得依赖构建视图和目标位宽。
 	external := map[string]bool{"encoding": true, "encoding/json": true}
 	for _, files := range s.syntax {
 		for _, file := range files {
@@ -76,7 +76,7 @@ func (s *scan) configSchema(ctx context.Context, list *exec.Cmd) error {
 		paths = append(paths, path)
 	}
 	slices.Sort(paths)
-	args := append(slices.Clone(list.Args[1:len(list.Args)-1]), "-export")
+	args := append(slices.Clone(list.Args[1:len(list.Args)-1]), "-export", "-compiled")
 	args = append(args, paths...)
 	command := exec.CommandContext(ctx, list.Path, args...)
 	command.Dir, command.Env = s.dir, list.Env
@@ -96,6 +96,24 @@ func (s *scan) configSchema(ctx context.Context, list *exec.Cmd) error {
 			return fmt.Errorf("decode config imports: %w", err)
 		}
 		exports[pkg.ImportPath] = pkg.Export
+		if _, source := s.syntax[pkg.ImportPath]; source {
+			continue
+		}
+		// go list -deps 按依赖优先输出；回引源码包的整条链共用同一份类型身份。
+		if !slices.ContainsFunc(pkg.Imports, func(path string) bool { _, source := s.syntax[path]; return source }) {
+			continue
+		}
+		for _, name := range pkg.CompiledGoFiles {
+			path := name
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(pkg.Dir, path)
+			}
+			file, err := s.parseFile(path)
+			if err != nil {
+				return err
+			}
+			s.syntax[pkg.ImportPath] = append(s.syntax[pkg.ImportPath], file)
+		}
 	}
 	command = exec.CommandContext(ctx, list.Path, "env", "GOARCH")
 	command.Dir, command.Env = s.dir, list.Env

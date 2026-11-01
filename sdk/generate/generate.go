@@ -80,6 +80,8 @@ type listedPackage struct {
 	Dir, ImportPath, Name string
 	GoFiles               []string
 	CgoFiles              []string // 仅在 GoFiles 为空时定位缺根诊断
+	CompiledGoFiles       []string // -compiled 选出的源码，包含 cgo 生成文件。
+	Imports               []string
 	Export                string
 	Module                *struct {
 		Main bool
@@ -220,15 +222,14 @@ func (s *scan) diagnostic(pos token.Pos, message string) {
 	s.result.Diagnostics = append(s.result.Diagnostics, Diagnostic{s.position(pos), message})
 }
 
-func (s *scan) readFile(pkg listedPackage, path string, names map[string]string) error {
-	// 1. 在文件系统边界读取文件，解析器统一使用相对入口目录的文件名。
+func (s *scan) parseFile(path string) (*ast.File, error) {
 	source, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("read %s: %w", path, err)
+		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 	relative, err := filepath.Rel(s.dir, path)
 	if err != nil {
-		return fmt.Errorf("resolve source path: %w", err)
+		return nil, fmt.Errorf("resolve source path: %w", err)
 	}
 	file, err := parser.ParseFile(s.files, filepath.ToSlash(relative), source, parser.ParseComments|parser.AllErrors)
 	if err != nil {
@@ -237,8 +238,17 @@ func (s *scan) readFile(pkg listedPackage, path string, names map[string]string)
 				s.result.Diagnostics = append(s.result.Diagnostics, Diagnostic{fmt.Sprintf("%s:%d:%d", problem.Pos.Filename, problem.Pos.Line, problem.Pos.Column), problem.Msg})
 			}
 		} else {
-			return fmt.Errorf("parse %s: %w", path, err)
+			return nil, fmt.Errorf("parse %s: %w", path, err)
 		}
+	}
+	return file, nil
+}
+
+func (s *scan) readFile(pkg listedPackage, path string, names map[string]string) error {
+	// 1. 在文件系统边界读取文件，解析器统一使用相对入口目录的文件名。
+	file, err := s.parseFile(path)
+	if err != nil {
+		return err
 	}
 	if file == nil {
 		return nil
