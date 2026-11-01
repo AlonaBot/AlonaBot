@@ -20,6 +20,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -61,6 +62,12 @@ func (l Limits) proto() *pb.PhaseLimits {
 // failNotifyTimeout 限制失败路径上发送 SESSION_ERROR 的时间：会话已经判定失败，只是尽力通知。
 const failNotifyTimeout = time.Second
 
+// HTTP 代理材料与 WIRE §3.1 的 http_listener v1 协议一致。
+const (
+	httpListenerVersion = 1
+	httpProxyTokenBytes = 32
+)
+
 // Expect 携带 Core 启动记录中与本次进程绑定的身份信息，用于核对 HELLO。
 type Expect struct {
 	Role        state.Role     // 必填，由安装记录指定
@@ -94,7 +101,8 @@ type Prepared struct {
 	Register     *pb.Register             // 已通过校验的注册载荷
 	RouteHash    []byte                   // PREPARED 中的 route_descriptor_hash
 	// PREPARED 中的 candidate_config_digest。
-	ConfigDigest []byte
+	ConfigDigest   []byte
+	httpProxyToken []byte // 本 Session 的内部代理凭证；仅交给 Instance，不进入日志
 }
 
 // Prepare 在一条刚建立的连接上完成 HELLO → HELLO_ACK(Bootstrap) → REGISTER → PREPARED。
@@ -178,7 +186,10 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		_ = conn.Close()
 	}
 
-	agree, err := validate.Negotiate(exp.Offer, validate.Offer{
+	offer := exp.Offer
+	offer.Supported = append(slices.Clone(offer.Supported),
+		&pb.ProtocolCapability{Name: wire.CapabilityHTTPListener, Version: httpListenerVersion})
+	agree, err := validate.Negotiate(offer, validate.Offer{
 		Major: hello.GetSupportedMajor(), Minor: hello.GetSupportedMinor(),
 		Supported: hello.GetSupportedCapabilities(), Required: hello.GetRequiredCapabilities()})
 	if err != nil {
@@ -194,6 +205,18 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 	}
 	prepBudget := lim.Config + lim.Migration + lim.OnStart // Preparing 的硬截止为各适用阶段预算之和
 	boot = proto.Clone(boot).(*pb.Bootstrap)
+	boot.HttpProxyAuth = nil
+	for _, capability := range agree.Intersection {
+		if capability.GetName() == wire.CapabilityHTTPListener && capability.GetVersion() == httpListenerVersion {
+			token := make([]byte, httpProxyTokenBytes)
+			if _, err := rand.Read(token); err != nil {
+				sendErr(pb.SessionPhase_SESSION_PHASE_HANDSHAKE, pb.FrameKind_FRAME_KIND_HELLO_ACK, pb.ErrorCode_ERROR_CODE_INTERNAL, "generate HTTP proxy credential failed")
+				return nil, fmt.Errorf("generate HTTP proxy credential: %w", err)
+			}
+			boot.HttpProxyAuth = &pb.HttpProxyAuth{Token: token}
+			break
+		}
+	}
 	boot.PhaseLimits = lim.proto()
 	boot.SessionLimits = &pb.SessionLimits{MaxInflight: uint32(lim.SessionMaxInflight), MaxPayloadBytes: uint32(lim.SessionMaxPayload), RequestTimeoutMs: uint32(lim.RequestTimeout / time.Millisecond)}
 	boot.PreparationDeadlineUnixMs = time.Now().Add(prepBudget).UnixMilli()
@@ -253,7 +276,7 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 			return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "listener reported without declaring HTTP capability")
 		}
 		p := &Prepared{SessionID: sid, Minor: agree.Minor, Capabilities: agree.Intersection, Register: m,
-			RouteHash: routeHash(m), ConfigDigest: digest([]byte(m.GetCandidateConfigJson()))}
+			RouteHash: routeHash(m), ConfigDigest: digest([]byte(m.GetCandidateConfigJson())), httpProxyToken: boot.GetHttpProxyAuth().GetToken()}
 		prep, err := wire.ControlEnvelope(sid, agree.Minor, "", pb.FrameKind_FRAME_KIND_PREPARED, &pb.Prepared{RouteDescriptorHash: p.RouteHash, CandidateConfigDigest: p.ConfigDigest})
 		if err == nil {
 			err = conn.WriteFrame(prep)

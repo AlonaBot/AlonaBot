@@ -5,7 +5,8 @@
 // Run 把 log/slog 的默认 Logger 换成写 stderr 的 JSON 行，按 Core 下发的级别过滤（CONTRACTS §14）。
 // Base 为 [Root] 的全部 Hook 提供空的默认实现，根插件只覆盖需要的方法。
 //
-// 事件 Handler 可通过 Context.Send 回复原事件目标；命令分发、HTTP 路由与定时任务尚未实现。
+// 事件 Handler 可通过 Context.Send 回复原事件目标；HTTP 路由由 SDK 托管 Listener 并校验 Session 凭证。
+// 命令分发与定时任务尚未实现。
 //
 // 包的组成：
 //   - 插件的 main 调用 [Run]；[Collect] 单独收集注册项，供检查与测试使用。
@@ -23,6 +24,7 @@ import (
 	"log/slog"
 	"slices"
 	"sync/atomic"
+	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
@@ -134,8 +136,8 @@ func Run(root Root) error {
 	if err != nil {
 		return err
 	}
-	if len(reg.HTTP) > 0 || len(reg.Schedules) > 0 {
-		return &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "this SDK version does not support HTTP routes or scheduled jobs yet"}
+	if len(reg.Schedules) > 0 {
+		return &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "this SDK version does not support scheduled jobs yet"}
 	}
 
 	// 3. 连接 Core 并依次完成握手、准备与激活，然后进入服务循环。
@@ -143,6 +145,8 @@ func Run(root Root) error {
 	if err != nil {
 		return err
 	}
+	l.http = newHTTPListener(reg.HTTP)
+	defer func() { l.http.close(time.Now().Add(onStopBudget)) }()
 	conn, err := dial(l)
 	if err != nil {
 		return err
@@ -178,11 +182,14 @@ func Collect(root Root) (*Registration, error) {
 		return nil, errors.New("root plugin is nil")
 	}
 	cmds, routes, jobs := &CommandRegistry{}, &HTTPRegistry{}, &ScheduleRegistry{}
+	generated := generatedFor(root)
+	generated.registerCommands(cmds)
 	root.Commands(cmds)
 	events := &EventRegistry{seen: make(map[string]bool)}
 	for _, command := range cmds.commands {
 		events.seen[commandRouteID(command)] = true
 	}
+	generated.registerEvents(events)
 	root.Events(events)
 	root.HTTP(routes)
 	root.Schedules(jobs)

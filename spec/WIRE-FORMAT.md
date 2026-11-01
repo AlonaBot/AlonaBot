@@ -127,7 +127,7 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 
 | 服务 | 方向 | 请求 → 响应 |
 | --- | --- | --- |
-| `adapter.instance.start` | Core→Adapter | instance_id、实例配置 JSON（含已解析凭证）、已保存的游标 → account_id、账号展示名、该实例的 Capability |
+| `adapter.instance.start` | Core→Adapter | instance_id、实例配置 JSON（含已解析凭证）、已保存的游标 → account_id、账号展示名、账号用户名（`account_username`，平台上可寻址的标识，用于 `/cmd@username` 与 mention；平台没有时 absent，D-67）、该实例的 Capability |
 | `adapter.instance.stop` | Core→Adapter | instance_id → 空结果；实例停止接收，不再交付事件 |
 | `adapter.send` | Core→Adapter | instance_id、Target、MessageChain → SendResult 与/或 ErrorInfo，语义同 MESSAGE-MODEL §4 |
 | `adapter.edit` | Core→Adapter | instance_id、Target、platform_message_id、MessageChain → SendResult 与/或 ErrorInfo，语义同 MESSAGE-MODEL §4 的 Edit |

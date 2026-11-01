@@ -4,11 +4,14 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -16,19 +19,21 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 )
 
-// binDir 存放 TestMain 构建的 alonabot 与 lifecycle 二进制。
+// binDir 存放 TestMain 构建的 Core 与真实插件二进制。
 var binDir string
 
-// TestMain 先构建 alonabot 与 examples/plugins/lifecycle，再运行测试，结束后删除构建目录。
+// TestMain 先构建 Core 与集成插件，再运行测试，结束后删除构建目录。
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "alonabot-e2e-")
 	if err != nil {
 		panic(err)
 	}
 	binDir = dir
-	for name, pkg := range map[string]string{"alonabot": ".", "lifecycle": "../../examples/plugins/lifecycle"} {
+	for name, pkg := range map[string]string{"alonabot": ".", "lifecycle": "../../examples/plugins/lifecycle", "httpplugin": "../../internal/core/supervisor/testdata/httpplugin"} {
 		if out, err := exec.Command("go", "build", "-o", filepath.Join(dir, name), pkg).CombinedOutput(); err != nil {
 			fmt.Fprintf(os.Stderr, "build %s failed: %v\n%s", name, err, out)
 			os.Exit(1)
@@ -299,6 +304,177 @@ func TestRelativeDataDir(t *testing.T) {
 			}
 			if _, err := os.Stat(filepath.Join("data", "plugins", "demo", "runtime.lock")); err != nil {
 				t.Fatalf("runtime.lock should be kept: %v", err)
+			}
+		})
+	}
+}
+
+// 首次设置文件保持缺省值，显式监听覆盖只影响当前进程。
+func TestSettingsAndListenOverride(t *testing.T) {
+	dir := t.TempDir()
+	c := startCore(t, dir, "--listen", "127.0.0.1:0")
+	c.waitFor(activatedRe)
+	address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
+	response, err := http.Get("http://" + address + "/plugins/demo/unknown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("unmapped plugin status = %d", response.StatusCode)
+	}
+	name := filepath.Join(dir, settings.FileName)
+	original, err := os.ReadFile(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mode, err := os.Stat(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode.Mode().Perm() != 0o600 {
+		t.Fatalf("settings mode = %v", mode.Mode())
+	}
+	loaded, err := settings.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(loaded, settings.Defaults()) {
+		t.Fatalf("default settings changed by override: %+v", loaded)
+	}
+	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := c.wait(15 * time.Second); code != 0 {
+		t.Fatalf("exit %d: %s", code, c.log())
+	}
+	second := startCore(t, dir, "--listen", "127.0.0.1:0")
+	second.waitFor(activatedRe)
+	if err := second.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := second.wait(15 * time.Second); code != 0 {
+		t.Fatalf("exit %d: %s", code, second.log())
+	}
+	current, err := os.ReadFile(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(original, current) {
+		t.Fatal("command line override rewrote settings")
+	}
+}
+
+// 设置文件中的日志设置可由显式参数覆盖，日志文件开关仍按文件生效。
+func TestConfiguredLogOverrides(t *testing.T) {
+	dir := t.TempDir()
+	original := []byte("listen: 127.0.0.1:0\nlog:\n  level: warn\n  format: json\n  file:\n    enabled: false\n")
+	name := filepath.Join(dir, settings.FileName)
+	if err := os.WriteFile(name, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := startCore(t, dir, "--log-level", "info", "--log-format", "text")
+	c.waitFor(activatedRe)
+	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := c.wait(15 * time.Second); code != 0 {
+		t.Fatalf("exit %d: %s", code, c.log())
+	}
+	if _, err := os.Stat(filepath.Join(dir, "logs")); !os.IsNotExist(err) {
+		t.Fatalf("disabled file logging created logs: %v", err)
+	}
+	current, err := os.ReadFile(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(original, current) {
+		t.Fatal("log overrides rewrote settings")
+	}
+	// 未显式给参数时，日志格式取自文件，而非 Cobra 旗标的缺省值。
+	configured := bytes.Replace(original, []byte("level: warn"), []byte("level: info"), 1)
+	if err := os.WriteFile(name, configured, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fromFile := startCore(t, dir)
+	fromFile.waitFor(`(?m)^(\{.*"msg":"OnReady".*\})$`)
+	if err := fromFile.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := fromFile.wait(15 * time.Second); code != 0 {
+		t.Fatalf("exit %d: %s", code, fromFile.log())
+	}
+
+}
+
+// 未知设置必须以 usage 退出码返回，并指明完整键名与行号。
+func TestUnknownSettingUsage(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte("log:\n  unknown: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(filepath.Join(binDir, "alonabot"), "run", "--data-dir", dir, "--plugin-id", "demo", "--entry", filepath.Join(binDir, "lifecycle"))
+	output, err := command.CombinedOutput()
+	if err == nil || command.ProcessState.ExitCode() != exitUsage {
+		t.Fatalf("expected usage exit: %v %s", err, output)
+	}
+	if !strings.Contains(string(output), "log.unknown") || !strings.Contains(string(output), "line 2") {
+		t.Fatalf("incomplete setting error: %s", output)
+	}
+}
+
+// TestHTTPPluginSettings 通过真实Core公开端口验证插件绑定和设置文件到子进程的代理环境传递。
+func TestHTTPPluginSettings(t *testing.T) {
+	for _, test := range []struct {
+		name, proxy string
+		stdio       bool
+	}{
+		{name: "configured", proxy: "socks5://proxy.example:1080"},
+		{name: "inherited", stdio: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			environment := map[string]string{"HTTP_PROXY": "http://inherited.example:8080", "HTTPS_PROXY": "https://inherited.example:8443", "NO_PROXY": "localhost,127.0.0.1"}
+			for key, value := range environment {
+				t.Setenv(key, value)
+			}
+			dir := t.TempDir()
+			configuration := "listen: 127.0.0.1:0\nproxy: \"" + test.proxy + "\"\n"
+			if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte(configuration), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			extra := []string{"--entry", filepath.Join(binDir, "httpplugin")}
+			if test.stdio {
+				extra = append(extra, "--stdio")
+			}
+			c := startCore(t, dir, extra...)
+			c.waitFor(activatedRe)
+			address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
+			response, err := http.Post("http://"+address+"/plugins/demo/hook?state=test-state", "text/plain", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			var reply struct {
+				Path, Query string
+				Environment map[string]string
+			}
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("public plugin HTTP status = %d; log:\n%s", response.StatusCode, c.log())
+			}
+			if err := json.NewDecoder(response.Body).Decode(&reply); err != nil {
+				t.Fatal(err)
+			}
+			if test.proxy != "" {
+				environment["HTTP_PROXY"], environment["HTTPS_PROXY"] = test.proxy, test.proxy
+			}
+			if reply.Path != "/hook" || reply.Query != "state=test-state" || !reflect.DeepEqual(reply.Environment, environment) {
+				t.Fatalf("public plugin reply: %+v; want environment %v", reply, environment)
+			}
+			if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+				t.Fatal(err)
+			}
+			if code := c.wait(15 * time.Second); code != 0 {
+				t.Fatalf("exit %d: %s", code, c.log())
 			}
 		})
 	}

@@ -22,10 +22,11 @@ var handshakeTimeout = 10 * time.Second
 // launch 保存 Core 通过环境变量下发的启动参数（见 internal/wire/env.go）。
 type launch struct {
 	pluginID  string
-	transport string // tcp 或 stdio
-	addr      string // TCP 传输时 Core 的 loopback 地址
-	secret    []byte // 32 字节 Session Secret
-	digest    []byte // 安装时已验证的归档摘要，在 HELLO 中原样回显
+	transport string        // tcp 或 stdio
+	addr      string        // TCP 传输时 Core 的 loopback 地址
+	secret    []byte        // 32 字节 Session Secret
+	digest    []byte        // 安装时已验证的归档摘要，在 HELLO 中原样回显
+	http      *httpListener // 有HTTP路由时持有本Run的Listener，传给prepare与activation
 }
 
 // readLaunch 读取并校验 Core 下发的启动环境变量。
@@ -88,9 +89,10 @@ func withWatchdog(conn *wire.Conn, d time.Duration) (stop func()) {
 func clientHandshake(conn *wire.Conn, l launch) (*pb.HelloAck, error) {
 	stop := withWatchdog(conn, handshakeTimeout)
 	defer stop()
+	supported, required := httpOffer(l)
 	hello, err := wire.ControlEnvelope(nil, 0, l.pluginID, pb.FrameKind_FRAME_KIND_HELLO, &pb.Hello{
 		PluginId: l.pluginID, Secret: l.secret, SupportedMajor: sdkOffer.Major, SupportedMinor: sdkOffer.Minor,
-		BuildDigest: l.digest, SupportedCapabilities: sdkOffer.Supported, RequiredCapabilities: sdkOffer.Required})
+		BuildDigest: l.digest, SupportedCapabilities: supported, RequiredCapabilities: required})
 	if err != nil {
 		return nil, err
 	}
@@ -155,6 +157,7 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32) *
 			DefaultEnabled: true, RequiredPermission: pb.Permission_PERMISSION_ANY,
 			Spec: &pb.RouteDescriptor_Event{Event: &pb.EventSpec{EventTypeFilter: []string{event.EventType}, HandlerMode: pb.HandlerMode_HANDLER_MODE_MANUAL}}})
 	}
+	appendHTTPRoutes(r, reg.HTTP)
 	appendServiceRoutes(reg, r)
 	return r
 }
@@ -174,6 +177,10 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 	if sessionLimits.GetMaxInflight() == 0 || sessionLimits.GetMaxPayloadBytes() == 0 || sessionLimits.GetRequestTimeoutMs() == 0 {
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_HELLO_ACK,
 			pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "Bootstrap is missing valid session limits", nil)
+	}
+
+	if err := l.http.start(boot); err != nil {
+		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER, pb.ErrorCode_ERROR_CODE_INTERNAL, "prepare HTTP listener failed", err)
 	}
 
 	// 2. OnStart：用户函数不响应 context 时，由 watchdog 判定失败（Run 随后退出进程）。
@@ -207,8 +214,9 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 	}
 
 	// 3. 发送完整 REGISTER；超过 4 MiB 时报告 RESOURCE_EXHAUSTED。
-	regEnv, err := wire.ControlEnvelope(sid, minor, l.pluginID, pb.FrameKind_FRAME_KIND_REGISTER,
-		buildRegister(reg, boot.GetCandidateConfigJson(), boot.GetTargetConfigVersion()))
+	registration := buildRegister(reg, boot.GetCandidateConfigJson(), boot.GetTargetConfigVersion())
+	l.http.report(registration)
+	regEnv, err := wire.ControlEnvelope(sid, minor, l.pluginID, pb.FrameKind_FRAME_KIND_REGISTER, registration)
 	if err != nil {
 		return nil, err
 	}

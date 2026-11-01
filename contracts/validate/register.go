@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"net"
+	"net/http"
+	"path"
 	"strings"
 	"unicode"
 
@@ -47,13 +49,14 @@ func IsJSONObject(b []byte) bool {
 }
 
 // Register 原子校验整份注册集（WIRE §3.1/§3.3）：任一项不合法都整体拒绝，调用方不得保留部分注册。
-// 命令路径、别名、事件过滤器、Service 与 Bus 订阅随整份描述一起检查。
+// 命令路径、别名、事件过滤器、HTTP 路由与 Listener、Service 与 Bus 订阅随整份描述一起检查。
 func Register(r *pb.Register) error {
 	// 1. 先检查描述身份、分支与注册公共字段。
 	if r.GetAdapter() != nil {
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "plugin registration contains adapter descriptor")
 	}
 	seen := make(map[string]bool, len(r.GetRoutes()))
+	hasHTTP := false
 	for i, rd := range r.GetRoutes() {
 		id := rd.GetRouteId()
 		switch {
@@ -67,9 +70,13 @@ func Register(r *pb.Register) error {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q has kind %s, which does not match its spec", id, rd.GetKind())
 		}
 		seen[id] = true
+		hasHTTP = hasHTTP || rd.GetKind() == pb.RouteKind_ROUTE_KIND_HTTP
 	}
 	if !IsJSONObject([]byte(r.GetCandidateConfigJson())) {
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "candidate_config_json is not a JSON object")
+	}
+	if hasHTTP != (r.GetHttpListener() != nil) {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "HTTP routes and HTTP listener must be registered together")
 	}
 	if l := r.GetHttpListener(); l != nil {
 		ip := net.ParseIP(l.GetHost())
@@ -78,8 +85,9 @@ func Register(r *pb.Register) error {
 		}
 	}
 
-	// 2. 校验各类描述；共享路径表覆盖命令及别名，Bus 回调可引用后面的路由。
+	// 2. 按路由类型检查描述；共享路径表覆盖全部命令及其别名，HTTP 按 method/path 检查冲突，Bus 回调可引用后面的路由。
 	paths := make(map[string]string)
+	httpRoutes := make(map[[2]string]string)
 	for _, route := range r.GetRoutes() {
 		switch route.GetKind() {
 		case pb.RouteKind_ROUTE_KIND_COMMAND:
@@ -96,6 +104,10 @@ func Register(r *pb.Register) error {
 				if err := registerCommandPath(paths, alias.GetPath(), route.GetRouteId()); err != nil {
 					return err
 				}
+			}
+		case pb.RouteKind_ROUTE_KIND_HTTP:
+			if err := registerHTTPRoute(httpRoutes, route); err != nil {
+				return err
 			}
 		case pb.RouteKind_ROUTE_KIND_SERVICE:
 			if err := registerService(route); err != nil {
@@ -163,6 +175,37 @@ func IsEventType(eventType string) bool {
 		return true
 	}
 	return false
+}
+
+func registerHTTPRoute(routes map[[2]string]string, route *pb.RouteDescriptor) error {
+	spec := route.GetHttp()
+	method, rawPath := spec.GetMethod(), spec.GetPath()
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodDelete,
+		http.MethodConnect, http.MethodOptions, http.MethodTrace, http.MethodPatch:
+	default:
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "HTTP route %q has invalid method %q", route.GetRouteId(), method)
+	}
+	canonical := path.Clean(rawPath)
+	if strings.HasSuffix(rawPath, "/") && canonical != "/" {
+		canonical += "/"
+	}
+	if !strings.HasPrefix(rawPath, "/") || canonical != rawPath || strings.ContainsAny(rawPath, "?#") || strings.Contains(rawPath, "..") {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "HTTP route %q has invalid path %q", route.GetRouteId(), rawPath)
+	}
+	if spec.GetIsPublic() {
+		if spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_STATE && spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_SIGNATURE {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "public HTTP route %q must declare callback verification", route.GetRouteId())
+		}
+	} else if spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CORE_SESSION {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "private HTTP route %q must use Core session authentication", route.GetRouteId())
+	}
+	key := [2]string{method, rawPath}
+	if previous, exists := routes[key]; exists {
+		return errf(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "HTTP %s %s conflicts between routes %q and %q", method, rawPath, previous, route.GetRouteId())
+	}
+	routes[key] = route.GetRouteId()
+	return nil
 }
 
 func registerService(route *pb.RouteDescriptor) error {
