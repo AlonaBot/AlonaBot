@@ -239,7 +239,8 @@ func (entry *instance) AdapterID() string  { return entry.process.opt.AdapterID 
 func (entry *instance) InstanceID() string { return entry.id }
 func (entry *instance) AccountID() string  { return entry.account }
 
-// AccountName 返回实例启动时平台确认的账号用户名。
+// AccountName 返回启动响应中的 account_display_name。
+// 当前依赖 Telegram 将 getMe.username 填入该字段；其他平台的用户名契约需单独确定。
 func (entry *instance) AccountName() string {
 	if entry.displayName == nil {
 		return ""
