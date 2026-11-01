@@ -46,6 +46,23 @@ func (p *plugin) HTTP(r *sdk.HTTPRegistry) {
 			}
 			return
 		}
+		switch r.URL.Path {
+		case "/static/page":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			if _, err := fmt.Fprint(w, "<html><body>plugin page</body></html>"); err != nil {
+				slog.Error("write plugin page failed", "err", err)
+			}
+			return
+		case "/static/cookies":
+			w.Header().Add("Set-Cookie", "parent=secret; Domain=.test; Path=/")
+			w.Header().Add("Set-Cookie", "alonabot_admin=secret; Path=/")
+			w.Header().Add("Set-Cookie", "__Host-alonabot_admin=secret; Secure; Path=/")
+			w.Header().Add("Set-Cookie", "plugin=keep; HttpOnly; Path=/")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("X-Content-Type-Options", "plugin-value")
+			w.Header().Set("Content-Security-Policy", "default-src *")
+		}
+		w.Header().Set("Content-Type", "application/json")
 		reply := struct {
 			Path, Query string
 			Header      http.Header
