@@ -17,7 +17,7 @@
 | `internal/oslock/` | 跨进程 OS 独占文件锁（flock / LockFileEx），供 core.lock 与 runtime.lock 共用 | 锁的业务语义（何时加锁由调用方决定） | 已实现 |
 | `internal/inproc/` | 库模式同进程组件的启动参数（根包构造、SDK 读取） | 启动流程本身（归 sdk 与根包） | 拟建 |
 | `internal/pluginkit/` | 开发 CLI 的打包、release.json 生成与签名（plugin build/pack） | 安装与预检（归 `internal/core/packages`） | 拟建 |
-| `sdk/`（含 `sdk/message`、`sdk/sqlitedb`、`sdk/gormdb`、`sdk/llm` 等子包） | 组件侧 API：根插件、Context/Send、注册、生命周期 Hook、runtime.lock；受管 SQLite 的 `database/sql` 与 GORM 两个按需入口（D-49）；文本生成服务的类型与以 `@agent` 为目标的调用辅助 | Core 状态库、管理凭证、其他插件 | 部分实现：`sdk`（Base 与 Root、Context、注册器、Collect，命令 `Alias`/`Priority` 选项与同插件重复检查）、`sdk/message`、`sdk/config`、`sdk/gormdb`（OpenSQLite、RunVersioned、迁移接口互斥检查；`sdk/sqlitedb` 拟建）；`Run` 完成取锁、握手、准备、激活与停止，并把 slog 默认 Logger 换成写 stderr 的 JSON 行；已接通事件路由注册、手动 Handler、Context.Send、独立后台 `sdk.Send`、媒体分块上传 `sdk.Upload`、Agent 会话的 `AppendConversation`/`ListConversation`/`ClearConversation` 与调用关联日志；`sdk/adapter` 与 `RunAdapter`（Adapter 角色的握手、注册、实例启停与事件交付）；命令分发仍返回 UNSUPPORTED |
+| `sdk/`（含 `sdk/message`、`sdk/sqlitedb`、`sdk/gormdb`、`sdk/llm` 等子包） | 组件侧 API：根插件、Context/Send、注册、生命周期 Hook、runtime.lock；受管 SQLite 的 `database/sql` 与 GORM 两个按需入口（D-49）；文本生成服务的类型与以 `@agent` 为目标的调用辅助 | Core 状态库、管理凭证、其他插件 | 部分实现：`sdk`（Base 与 Root、Context、注册器、Collect，命令 `Alias`/`Priority` 选项与同插件重复检查）、`sdk/message`、`sdk/config`、`sdk/gormdb`（OpenSQLite、RunVersioned、迁移接口互斥检查；`sdk/sqlitedb` 拟建）；`Run` 完成取锁、握手、准备、激活与停止，并把 slog 默认 Logger 换成写 stderr 的 JSON 行；已接通事件路由注册、手动 Handler、Context.Send、独立后台 `sdk.Send`、媒体分块上传 `sdk.Upload`、Agent 会话的 `AppendConversation`/`ListConversation`/`ClearConversation` 与调用关联日志；`sdk/adapter` 与 `RunAdapter`（Adapter 角色的握手、注册、实例启停与事件交付）；`sdk/generate` 按目标环境扫描入口及本 module 依赖中的标记，生成稳定的注册代码，经 `sdk.UseGenerated` 按根类型登记并由 Collect 合并；命令分发仍返回 UNSUPPORTED |
 | `internal/core/` | 状态库与 core.lock、进程、RPC 编排、路由、权限、媒体、服务、调度、HTTP、配置、管理 | 平台协议细节（交 adapters）、插件进程内逻辑 | 部分实现：`internal/core/state`（core.lock、state.sqlite、提交原语、插件实例发信许可读写、Agent 会话条目的事务追加与查询）、`internal/core/process`（精简环境、日志、进程组/Job Object、runtime.lock 临时持有）、`internal/core/host`（握手认证、Bootstrap、REGISTER 原子校验、PREPARED、提交与激活门禁、Degraded、停止/排空/并行 Shutdown、有限重启策略）、`internal/core/supervisor`（启动/停止一个插件的完整装配）、`internal/core/logging`（控制台与 JSON 格式、插件 stderr 解析、按来源级别、按日期轮转的日志文件）、`internal/core/packages`（安装包预检、受控解压与不可变包目录）、`internal/core/config`（配置 JSON 规范化、Merge Patch 与 Pending 编辑）、`internal/core/adapter`（实例接口、Registry、测试用 memory Adapter；`remote` 为 Adapter 进程：实例启停、事件归属校验、游标持久化、账号唯一与上下线事件）、`internal/core/router`（可信 Caller、固定服务 Mux、有界顺序事件派发、已激活插件命令的不可变静态索引与遮蔽诊断）、`internal/core/policy`（原 Target 回复豁免、逐次读取实例发信许可）、`internal/core/message`（目标选择、发送准入、实例绑定检查与回执转发）、`internal/core/media`（Session 所有的分块上传、配额与期限、MediaRef 签发、过期与 Session 结束回收）、`internal/core/conversation`（按插件身份隔离的 `core.conversation.*` 服务、按帧上限分页，以及供管理层使用的列出、清除与 purge） |
 | 根包 `alonabot`（模块根目录的 Go 文件） | 库模式入口 `alonabot.Run`（D-32）与 `alonabot serve` 共用的 Core 装配 | 业务逻辑（只组装 `internal/core` 与 SDK） | 拟建 |
 | `plugins/help/`、`plugins/welcome/`、`plugins/rss/` | 预装插件（D-32），与第三方插件一样只经 SDK 与 Core 通信 | Core 的命令列表与权限（归 Core） | 拟建 |
@@ -25,7 +25,7 @@
 | `adapters/telegram/` | 官方 Telegram Adapter 程序：接收、标准化、发送计划、能力与平台映射（D-26） | Core 策略、命令路由、游标持久化与按钮 token（归 Core） | 部分实现：账号检查、long polling、逐条游标与标准化、本地 Bot API 模拟服务；发送、媒体与按钮由后继切片实现 |
 | `adapters/onebot11/` | 官方 OneBot 11 Adapter 程序：正向 WebSocket 连接、接收、标准化、发送计划、能力与平台映射，以及本地模拟服务（D-46） | Core 策略、命令路由与按钮 token（归 Core） | 拟建 |
 | `plugintest/` | 插件测试套件（D-47）：在 `go test` 中用 `alonabot.Start` 启动真实 Core、测试 Adapter 与被测插件，注入事件并取得发送 | Core 的检查与派发（照常由 Core 执行，不另建路径） | 拟建 |
-| `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） | 部分实现：开发用 `alonabot run`（单插件启停、有限重启）、全局 `--args` 与 `tune list`；尚无正式管理 CLI |
+| `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） | 部分实现：开发用 `alonabot run`（单插件启停、有限重启）、全局 `--args`、`tune list`，以及生成并检查插件注册代码的 `plugin generate`/`plugin check`；尚无正式管理 CLI |
 | `examples/plugins/` | 随 SDK 编译的示例与集成样例 | 生产代码依赖 | 部分实现：`showcase`（签名组合示例）、`lifecycle`（可真实运行的生命周期示例）、`echo`（真实 Session 的手动事件回复） |
 | `web/admin/` | 官方 WebUI 组件（`role: webui`，D-62）的源码：Vite + TypeScript + React 19 管理界面，构建产物打成静态组件包 | 管理逻辑本身（只调用带主版本号的 Admin API，CONTRACTS §7.5） | 拟建 |
 | `Dockerfile`、`deploy/` | 官方容器镜像、compose 整合包入口与 `install.sh`（CONTRACTS §15.3、§15.6，D-64） | Core 行为（镜像与脚本只安装发行归档的内容） | 拟建 |
@@ -45,7 +45,7 @@
 | `cmd/alonabot -> internal/core/...`、`-> contracts`、`-> 根包`、`-> internal/tune` | 装配；`serve` 复用根包的 Core 装配；`--args` 与 `tune list` 使用调优参数表 |
 | `根包 -> internal/core/...`、`-> sdk/...`、`-> contracts` | 库模式在同一进程中装配 Core 与开发中的组件 |
 | `根包 -> internal/inproc`、`sdk/... -> internal/inproc` | 库模式把同进程组件的启动参数从根包交给 SDK；`internal` 保证外部模块无法构造这些参数 |
-| `cmd/alonabot -> sdk/generate` | 构建检查复用 SDK 的路由生成器（拟建） |
+| `cmd/alonabot -> sdk/generate` | `plugin generate`/`plugin check` 复用 SDK 的路由生成器 |
 | `cmd/alonabot -> internal/pluginkit`、`internal/pluginkit -> contracts/...`、`-> sdk/generate` | 开发 CLI 的构建与打包复用生成器与契约包 |
 | `examples/plugins/... -> sdk/...`、`-> contracts` | 示例只走公共 SDK |
 | `scripts/dist -> contracts/release`、`scripts/release-check -> contracts/release` | 发行构建与发布复验只用契约包核对签名；其余步骤经 `os/exec` 调用 go 与 alonabot |
