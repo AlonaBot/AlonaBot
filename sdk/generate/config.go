@@ -9,7 +9,6 @@ import (
 	"go/token"
 	"go/types"
 	"io"
-	"math"
 	"math/big"
 	"os"
 	"os/exec"
@@ -120,7 +119,10 @@ func (s *scan) configSchema(ctx context.Context, list *exec.Cmd) error {
 	if err != nil {
 		return nil // go/types 的位置诊断已完整收集。
 	}
-	b := &configBuilder{scan: s, sizes: i.sizes, active: make(map[types.Type]bool), fields: make(map[*jsonschema.Schema]types.Type)}
+	b := &configBuilder{
+		scan: s, sizes: i.sizes, active: make(map[types.Type]bool),
+		fields: make(map[*jsonschema.Schema]types.Type), bounds: make(map[*jsonschema.Schema][2]json.Number),
+	}
 	for _, entry := range []struct{ path, name string }{
 		{"encoding/json", "Marshaler"}, {"encoding/json", "Unmarshaler"},
 		{"encoding", "TextMarshaler"}, {"encoding", "TextUnmarshaler"},
@@ -141,7 +143,7 @@ func (s *scan) configSchema(ctx context.Context, list *exec.Cmd) error {
 		s.diagnostic(declaration.pos, "invalid config schema: "+err.Error())
 		return nil
 	}
-	s.result.ConfigSchema, err = config.MarshalSchema(schema)
+	s.result.ConfigSchema, err = b.marshalSchema(schema)
 	return err
 }
 
@@ -156,7 +158,8 @@ type configBuilder struct {
 	sizes  types.Sizes
 	active map[types.Type]bool
 	codecs []configCodec
-	fields map[*jsonschema.Schema]types.Type // 默认值按源码字段类型检查，包含匿名展开后的属性。
+	fields map[*jsonschema.Schema]types.Type     // 默认值按源码字段类型检查，包含匿名展开后的属性。
+	bounds map[*jsonschema.Schema][2]json.Number // 库的 float64 字段无法保存的精确整数端点。
 }
 
 func (b *configBuilder) schema(fieldType types.Type, pos token.Pos, path string) *jsonschema.Schema {
@@ -183,11 +186,15 @@ func (b *configBuilder) schema(fieldType types.Type, pos token.Pos, path string)
 			return &jsonschema.Schema{Type: "boolean"}
 		case underlying.Info()&types.IsInteger != 0:
 			bits := int(b.sizes.Sizeof(fieldType) * 8)
-			minimum, maximum := 0.0, math.Ldexp(1, bits)-1
+			minimum, maximum := int64(0), ^uint64(0)>>(64-bits)
 			if underlying.Info()&types.IsUnsigned == 0 {
-				minimum, maximum = -math.Ldexp(1, bits-1), math.Ldexp(1, bits-1)-1
+				maximum >>= 1
+				minimum = -int64(maximum) - 1
 			}
-			return &jsonschema.Schema{Type: "integer", Minimum: &minimum, Maximum: &maximum}
+			lower, upper := float64(minimum), float64(maximum)
+			schema := &jsonschema.Schema{Type: "integer", Minimum: &lower, Maximum: &upper}
+			b.bounds[schema] = [2]json.Number{json.Number(strconv.FormatInt(minimum, 10)), json.Number(strconv.FormatUint(maximum, 10))}
+			return schema
 		case underlying.Info()&types.IsFloat != 0:
 			return &jsonschema.Schema{Type: "number"}
 		}
@@ -224,6 +231,41 @@ func (b *configBuilder) schema(fieldType types.Type, pos token.Pos, path string)
 	}
 	b.scan.diagnostic(pos, "unsupported config type "+fieldType.String())
 	return nil
+}
+
+// marshalSchema 在规范 JSON 中恢复整数端点，库的浮点表示仍供 Resolve 使用。
+func (b *configBuilder) marshalSchema(schema *jsonschema.Schema) ([]byte, error) {
+	raw, err := config.MarshalSchema(schema)
+	if err != nil {
+		return nil, err
+	}
+	value, err := configJSON(string(raw))
+	if err != nil {
+		return nil, fmt.Errorf("decode config schema: %w", err)
+	}
+	b.exactBounds(schema, value.(configObject))
+	return json.Marshal(value)
+}
+
+// exactBounds 只沿生成器创建的 Schema 边遍历，保留 default 和扩展关键字中的普通数据。
+func (b *configBuilder) exactBounds(schema *jsonschema.Schema, object configObject) {
+	for index := range object {
+		member := &object[index]
+		switch member.name {
+		case "minimum":
+			member.value = b.bounds[schema][0]
+		case "maximum":
+			member.value = b.bounds[schema][1]
+		case "properties":
+			for _, property := range member.value.(configObject) {
+				b.exactBounds(schema.Properties[property.name], property.value.(configObject))
+			}
+		case "items":
+			b.exactBounds(schema.Items, member.value.(configObject))
+		case "additionalProperties":
+			b.exactBounds(schema.AdditionalProperties, member.value.(configObject))
+		}
+	}
 }
 
 func (b *configBuilder) customCodec(fieldType types.Type, pos token.Pos) bool {
@@ -576,12 +618,33 @@ func configJSON(raw string) (any, error) {
 	return value, nil
 }
 
-// configObject 保留默认值的键顺序和重复键，逐项模拟 typed decode 的检查。
+// configObject 保留 JSON 的键顺序和重复键，供默认值检查及 Schema 精确序列化使用。
 type configObject []configMember
 
 type configMember struct {
 	name  string
 	value any
+}
+
+// MarshalJSON 保留已有规范键序，包括 properties 的声明顺序。
+func (object configObject) MarshalJSON() ([]byte, error) {
+	var out bytes.Buffer
+	out.WriteByte('{')
+	for index, member := range object {
+		if index > 0 {
+			out.WriteByte(',')
+		}
+		key, _ := json.Marshal(member.name) // 字符串编码没有失败分支。
+		out.Write(key)
+		out.WriteByte(':')
+		value, err := json.Marshal(member.value)
+		if err != nil {
+			return nil, err
+		}
+		out.Write(value)
+	}
+	out.WriteByte('}')
+	return out.Bytes(), nil
 }
 
 func configJSONValue(decoder *json.Decoder) (any, error) {
@@ -606,7 +669,7 @@ func configJSONValue(decoder *json.Decoder) (any, error) {
 		_, err = decoder.Token()
 		return object, err
 	case json.Delim('['):
-		var items []any
+		items := []any{} // 空数组在重新编码时保持 []。
 		for decoder.More() {
 			item, err := configJSONValue(decoder)
 			if err != nil {
