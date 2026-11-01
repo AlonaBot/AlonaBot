@@ -1,0 +1,35 @@
+{
+  "eventId": "button-event-1",
+  "eventType": "button.clicked",
+  "sourceKind": "EVENT_SOURCE_KIND_ADAPTER",
+  "occurredAtUnixMs": "1793491200000",
+  "adapterId": "telegram",
+  "adapterInstanceId": "dispatch-instance",
+  "accountId": "dispatch-bot",
+  "target": {
+    "adapterId": "telegram",
+    "adapterInstanceId": "dispatch-instance",
+    "accountId": "dispatch-bot",
+    "chatId": "dispatch-chat",
+    "threadId": "dispatch-thread"
+  },
+  "actor": {
+    "externalUserId": "clicking-user",
+    "adapterInstanceId": "dispatch-instance",
+    "displayName": "Clicking user",
+    "locale": "en-US"
+  },
+  "message": {
+    "platformMessageId": "button-message-1"
+  },
+  "eventPayload": {
+    "buttonClicked": {
+      "actionId": "confirm",
+      "actionSchemaVersion": 1,
+      "value": "{\"selection\":\"approve\",\"quantity\":2}",
+      "callbackQueryId": "callback-1",
+      "originPlatformMessageId": "button-message-1"
+    }
+  },
+  "sourceEventId": "platform-button-event-1"
+}
