@@ -23,7 +23,7 @@ gh run view RUN_ID --repo AlonaBot/AlonaBot --json event,headSha,status,conclusi
 gh run view RUN_ID --repo AlonaBot/AlonaBot --log-failed
 ```
 
-替换已核实的编号；检查 pending、skipped、failed 与 success 的区别。CI 的 `Repository contract` 负责文档路由和技能入口；`Go quality` 仅在存在产品 Go 源码时运行。没有产品代码不等于 Go 验收通过。
+替换已核实的编号；检查 pending、skipped、failed 与 success 的区别。CI 的 `Repository` 只检查空白错误；`Go quality` 仅在存在产品 Go 源码时运行。没有产品代码不等于 Go 验收通过。
 
 ## 修复 CI 的实际原因
 
