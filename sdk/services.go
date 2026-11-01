@@ -132,7 +132,24 @@ func collectServices(root Root, reg *Registration) error {
 	r := &ServiceRegistry{}
 	root.Services(r)
 	reg.services = r.services
-	return errors.Join(append(r.errs, validate.Register(buildRegister(reg, "{}", invocationSchemaVersion)))...)
+	registration := &pb.Register{CandidateConfigJson: "{}"}
+	appendServiceRoutes(reg, registration)
+	// Collect 尚未创建 HTTP Listener，仅校验 Services Hook 的描述。
+	r.errs = append(r.errs, validate.Register(registration))
+	seen := make(map[string]bool)
+	for _, command := range reg.Commands {
+		seen[commandRouteID(command)] = true
+	}
+	for _, event := range reg.Events {
+		seen[event.RouteID] = true
+	}
+	for _, service := range r.services {
+		id := service.descriptor.GetRouteId()
+		if seen[id] {
+			r.errs = append(r.errs, fmt.Errorf("service route %q conflicts with another route", id))
+		}
+	}
+	return errors.Join(r.errs...)
 }
 
 func appendServiceRoutes(reg *Registration, registration *pb.Register) {

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
@@ -105,7 +104,7 @@ func Register(r *pb.Register) error {
 		case pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION:
 			subscription := route.GetBusSubscription()
 			pluginID, eventName, ok := strings.Cut(subscription.GetEventName(), "/")
-			if _, err := manifest.ValidateID(pluginID); err != nil || !ok || eventName == "" || strings.Contains(eventName, "/") {
+			if _, err := PluginID(pluginID); err != nil || !ok || eventName == "" || strings.Contains(eventName, "/") {
 				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "bus route %q has invalid event_name %q", route.GetRouteId(), subscription.GetEventName())
 			}
 			if subscription.GetSchemaId() == "" || subscription.GetSchemaVersion() == 0 {
@@ -188,7 +187,7 @@ func registerService(route *pb.RouteDescriptor) error {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q has an empty allowlist", name)
 		}
 		for _, pluginID := range service.GetAllowlistPluginIds() {
-			if _, err := manifest.ValidateID(pluginID); err != nil {
+			if _, err := PluginID(pluginID); err != nil {
 				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q has invalid allowlist plugin ID: %v", name, err)
 			}
 		}

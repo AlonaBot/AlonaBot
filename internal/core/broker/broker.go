@@ -14,7 +14,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
@@ -23,6 +22,7 @@ import (
 )
 
 const (
+	// 服务名上限与 contracts/validate/register.go 的注册规则一致。
 	maxServiceNameLength    = 64
 	invocationSchemaVersion = 1
 )
@@ -52,7 +52,7 @@ func New(r *router.Router, log *slog.Logger, requestTimeout time.Duration) *Brok
 func (b *Broker) Call(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
 	// 1. 目标语法必须先于插件与服务查找检查。
 	pluginID, name, ok := strings.Cut(in.Target, "/")
-	if _, err := manifest.ValidateID(pluginID); err != nil || !ok || !validServiceName(name) {
+	if _, err := validate.PluginID(pluginID); err != nil || !ok || !validServiceName(name) {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid service target")
 	}
 	plugin, ok := b.router.Plugin(pluginID)
@@ -78,6 +78,7 @@ func (b *Broker) Call(ctx context.Context, c router.Caller, in *wire.Inbound) wi
 	if payload.Encoding != spec.GetEncoding() || payload.SchemaID != service.GetInputSchemaId() || payload.SchemaVersion != service.GetInputSchemaVersion() {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service input does not match registered encoding or schema")
 	}
+	// Service 准入按约定复查 UTF-8 JSON；json.Valid 本身接受无效 UTF-8 字符串。
 	if payload.Encoding == pb.PayloadEncoding_PAYLOAD_ENCODING_JSON && !validJSON(payload.Bytes) {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service input is not valid UTF-8 JSON")
 	}
@@ -137,6 +138,7 @@ func failure(code pb.ErrorCode, message string) wire.Response {
 
 func validJSON(b []byte) bool { return utf8.Valid(b) && json.Valid(b) }
 
+// validServiceName 遵循 contracts/validate/register.go 的同一名称规则，在目标查找前校验。
 func validServiceName(name string) bool {
 	if len(name) == 0 || len(name) > maxServiceNameLength || name[0] < 'a' || name[0] > 'z' {
 		return false
