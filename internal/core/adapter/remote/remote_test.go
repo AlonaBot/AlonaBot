@@ -66,8 +66,10 @@ func (*loopAdapter) Descriptor() *pb.AdapterDescriptor {
 }
 func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core sdkadapter.Core) (sdkadapter.Instance, error) {
 	var config struct {
-		Account string `json:"account"`
-		Token   string `json:"token"`
+		Account     string `json:"account"`
+		Token       string `json:"token"`
+		DisplayName string `json:"display_name"`
+		Username    string `json:"username"`
 	}
 	if err := json.Unmarshal(req.ConfigJSON, &config); err != nil {
 		return nil, err
@@ -83,19 +85,22 @@ func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core s
 			return nil, err
 		}
 	}
-	return &loopInstance{id: req.InstanceID, account: config.Account, core: core, sequence: n, initial: string(req.Cursor), token: config.Token}, nil
+	return &loopInstance{id: req.InstanceID, account: config.Account, displayName: config.DisplayName, username: config.Username, core: core, sequence: n, initial: string(req.Cursor), token: config.Token}, nil
 }
 
 type loopInstance struct {
-	token                string
-	stopFailed           bool
-	id, account, initial string
-	core                 sdkadapter.Core
-	mu                   sync.Mutex
-	sequence             int
+	token                 string
+	stopFailed            bool
+	id, account, initial  string
+	displayName, username string
+	core                  sdkadapter.Core
+	mu                    sync.Mutex
+	sequence              int
 }
 
-func (i *loopInstance) Account() sdkadapter.Account { return sdkadapter.Account{ID: i.account} }
+func (i *loopInstance) Account() sdkadapter.Account {
+	return sdkadapter.Account{ID: i.account, DisplayName: i.displayName, Username: i.username}
+}
 func (i *loopInstance) Capabilities() []*pb.Capability {
 	return []*pb.Capability{{Name: "message.text", Version: 1, Supported: true}}
 }
@@ -235,7 +240,7 @@ func TestRemoteLifecycle(t *testing.T) {
 	pid := running.Process.Pid()
 	start := func(id, account string) {
 		t.Helper()
-		if err := p.StartInstance(ctx, id, []byte(`{"account":"`+account+`","token":"credential-canary"}`)); err != nil {
+		if err := p.StartInstance(ctx, id, []byte(`{"account":"`+account+`","display_name":"Loop display","token":"credential-canary"}`)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -264,8 +269,25 @@ func TestRemoteLifecycle(t *testing.T) {
 		}
 		return n
 	}
-	start("one", "a")
+	if err := p.StartInstance(ctx, "one", []byte(`{"account":"a","display_name":"Loop display","username":"loop_bot","token":"credential-canary"}`)); err != nil {
+		t.Fatal(err)
+	}
 	start("two", "b")
+	for _, c := range []struct{ id, username string }{{"one", "loop_bot"}, {"two", ""}} {
+		in, ok := registry.Get(c.id)
+		if !ok {
+			t.Fatalf("missing instance %s", c.id)
+		}
+		named, ok := in.(adapter.Named)
+		if !ok || named.AccountName() != c.username {
+			t.Fatalf("instance %s username = %v, want %q", c.id, in, c.username)
+		}
+	}
+	for _, ev := range sink.snapshot() {
+		if got := ev.GetEventPayload().GetBotOnline().GetAccountDisplayName(); got != "Loop display" {
+			t.Fatalf("online display name = %q, want Loop display", got)
+		}
+	}
 	if count("bot.online", "one", 0) != 1 || count("bot.online", "two", 0) != 1 {
 		t.Fatal("missing online events")
 	}

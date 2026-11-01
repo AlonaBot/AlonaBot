@@ -47,6 +47,9 @@ func (p *instancePlugin) Call(ctx context.Context, req wire.Request) (wire.Respo
 // Router 按顺序派发已接纳事件；New 创建，Start 启动，Close 取消在途派发并等待 worker 退出。
 // 队列接纳与插件注册由 mu 串行化，worker 调用插件时不持锁；队列不关闭，避免并发投递遇到已关闭 channel。
 type Router struct {
+	adapters *adapter.Registry
+	send     ServiceFunc
+	matches  map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
 	log      *slog.Logger
 	queue    chan *pb.Event
 	ctx      context.Context
@@ -61,9 +64,10 @@ type Router struct {
 
 // New 创建容量为 queueEvents 的事件队列，log 使用 Core 的 Logger。
 // queueEvents 由装配处传入 tune.Values.DispatchQueueEvents。
-func New(log *slog.Logger, queueEvents int) *Router {
+// adapters 提供账号用户名，send 接入 message.Service.Send 处理 usage 与自动回复。
+func New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send ServiceFunc) *Router {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Router{log: log, queue: make(chan *pb.Event, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]Plugin), commands: &CommandIndex{}}
+	return &Router{adapters: adapters, send: send, matches: make(map[string][]commandRoute), log: log, queue: make(chan *pb.Event, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]Plugin), commands: &CommandIndex{}}
 }
 
 // Attach 注册一个接收派发的插件并重建命令索引；相同插件 ID 替换为新实例。
@@ -72,6 +76,7 @@ func (r *Router) Attach(p Plugin) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.plugins[id] = p
+	r.cacheCommands(p)
 	r.rebuildCommands()
 }
 
@@ -88,6 +93,7 @@ func (r *Router) Detach(pluginID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.plugins, pluginID)
+	delete(r.matches, pluginID)
 	r.rebuildCommands()
 }
 
@@ -179,6 +185,9 @@ func (r *Router) candidates(ev *pb.Event) []candidate {
 }
 
 func (r *Router) dispatch(ev *pb.Event) {
+	if ev.GetEventType() == "message.created" && r.dispatchCommands(ev) {
+		return
+	}
 	for _, candidate := range r.candidates(ev) {
 		if r.ctx.Err() != nil {
 			return

@@ -84,6 +84,7 @@ func TestEnumValues(t *testing.T) {
 		{pb.RouteKind(0).Descriptor(), "ROUTE_KIND_", []string{
 			"UNSPECIFIED", "COMMAND", "EVENT", "HOOK", "SERVICE", "SCHEDULE", "HTTP", "BUS_SUBSCRIPTION"}},
 		{pb.HookPhase(0).Descriptor(), "HOOK_PHASE_", []string{"UNSPECIFIED", "PRE_EVENT", "BEFORE_SEND", "AFTER_SEND"}},
+		{pb.CommandMatch(0).Descriptor(), "COMMAND_MATCH_", []string{"UNSPECIFIED", "PATH", "REGEX", "RAW", "KEYWORD", "STARTSWITH", "ENDSWITH", "FULLMATCH"}},
 		// WIRE §3.2 的 log_level。
 		{pb.LogLevel(0).Descriptor(), "LOG_LEVEL_", []string{"UNSPECIFIED", "DEBUG", "INFO", "WARN", "ERROR", "OFF"}},
 	}
@@ -97,6 +98,27 @@ func TestEnumValues(t *testing.T) {
 			if v == nil || string(v.Name()) != c.prefix+name {
 				t.Errorf("%s value %d should be %s%s, got %v", c.enum.Name(), num, c.prefix, name, v)
 			}
+		}
+	}
+}
+
+// TestCommandSpecFieldNumbers 固定命令描述及追加文本匹配字段的编号、类型与重复性。
+func TestCommandSpecFieldNumbers(t *testing.T) {
+	names := []protoreflect.Name{"match", "path", "aliases", "params", "handler_mode", "rule", "regex", "usage_mode", "custom_usage", "patterns", "ignore_case"}
+	kinds := []protoreflect.Kind{protoreflect.EnumKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.MessageKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.BoolKind}
+	fields := (&pb.CommandSpec{}).ProtoReflect().Descriptor().Fields()
+	if fields.Len() != len(names) {
+		t.Fatalf("CommandSpec has %d fields, want %d", fields.Len(), len(names))
+	}
+	for i, name := range names {
+		f := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+		if f == nil || f.Name() != name || f.Kind() != kinds[i] {
+			t.Errorf("CommandSpec field %d should be %s %s, got %v", i+1, kinds[i], name, f)
+			continue
+		}
+		repeated := name == "path" || name == "aliases" || name == "params" || name == "patterns"
+		if f.IsList() != repeated {
+			t.Errorf("CommandSpec.%s list = %v, want %v", name, f.IsList(), repeated)
 		}
 	}
 }
@@ -200,7 +222,7 @@ func TestAdapterFieldNumbers(t *testing.T) {
 		"AdapterDescriptor":            {"adapter_id", "capabilities", "extensions"},
 		"ExtensionDeclaration":         {"name", "version", "schema_json"},
 		"AdapterInstanceStartRequest":  {"instance_id", "config_json", "cursor"},
-		"AdapterInstanceStartResponse": {"account_id", "account_display_name", "capabilities"},
+		"AdapterInstanceStartResponse": {"account_id", "account_display_name", "capabilities", "account_username"},
 		"AdapterInstanceStopRequest":   {"instance_id"},
 		"AdapterInstanceStopResponse":  {},
 		"AdapterSendRequest":           {"instance_id", "target", "chain"},

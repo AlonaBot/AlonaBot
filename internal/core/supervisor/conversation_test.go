@@ -109,8 +109,9 @@ func TestConversationProcesses(t *testing.T) {
 		service = conversation.New(store)
 		mux := router.NewMux()
 		service.Register(mux)
-		mux.Handle(wire.ServiceSend, message.New(registry, policy.New(store)).Send)
-		events = router.New(output.Logger(), values.DispatchQueueEvents)
+		sender := message.New(registry, policy.New(store))
+		mux.Handle(wire.ServiceSend, sender.Send)
+		events = router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send)
 		events.Start()
 		if err := platform.Start(ctx, events); err != nil {
 			t.Fatal(err)

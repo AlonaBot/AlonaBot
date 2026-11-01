@@ -142,13 +142,7 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32) *
 	r := &pb.Register{CandidateConfigJson: configJSON, CandidateConfigVersion: configVersion,
 		Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 	for _, c := range reg.Commands {
-		spec := &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_PATH, Path: c.Path, HandlerMode: c.Mode, UsageMode: pb.UsageMode_USAGE_MODE_DEFAULT}
-		for _, path := range c.Aliases {
-			spec.Aliases = append(spec.Aliases, &pb.CommandAlias{Path: path})
-		}
-		for i, p := range c.Params {
-			spec.Params = append(spec.Params, &pb.CommandParam{Name: fmt.Sprintf("arg%d", i+1), Type: p, Required: true})
-		}
+		spec := c.spec
 		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: commandRouteID(c), Priority: c.Priority, Kind: pb.RouteKind_ROUTE_KIND_COMMAND,
 			DefaultEnabled: true, RequiredPermission: pb.Permission_PERMISSION_ANY, Spec: &pb.RouteDescriptor_Command{Command: spec}})
 	}

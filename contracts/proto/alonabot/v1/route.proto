@@ -125,6 +125,14 @@ enum CommandMatch {
   COMMAND_MATCH_REGEX = 2;
   // 交给 Handler 自行解析。
   COMMAND_MATCH_RAW = 3;
+  // 文本包含任一模式。
+  COMMAND_MATCH_KEYWORD = 4;
+  // 文本以任一模式开头。
+  COMMAND_MATCH_STARTSWITH = 5;
+  // 文本以任一模式结尾。
+  COMMAND_MATCH_ENDSWITH = 6;
+  // 文本与任一模式完全相同。
+  COMMAND_MATCH_FULLMATCH = 7;
 }
 
 // UsageMode 决定参数错误时如何提示用法。
@@ -158,6 +166,10 @@ message CommandSpec {
   UsageMode usage_mode = 8;
   // USAGE_MODE_CUSTOM 时发送的文本。
   string custom_usage = 9;
+  // KEYWORD、STARTSWITH、ENDSWITH、FULLMATCH：非空模式列表。
+  repeated string patterns = 10;
+  // 文本模式比较采用 Unicode 简单大小写折叠。
+  bool ignore_case = 11;
 }
 
 // CommandAlias 描述命令的一条别名路径。
