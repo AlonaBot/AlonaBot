@@ -2,7 +2,8 @@
 //
 // [Host] 在管理请求进入页面处理器前通过 [AdminSessions] 记录会话期限，
 // 页面调用 [Host.IssueTicket] 后，浏览器在插件主机兑换一次性票据。
-// 管理认证由装配方提供；Host 只负责 CONTRACTS §7.3 的主机与派生授权边界。
+// 管理认证由装配方提供；插件响应在写出前经过 Cookie、CORS 与单 Host 主动内容策略，
+// 对应 CONTRACTS §7.3。
 package webhost
 
 import (
@@ -59,11 +60,18 @@ func New(log *slog.Logger, opt Options) *Host {
 
 // ServeHTTP 仅使用请求 Host 分派管理入口、插件路由和票据兑换。
 func (h *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, pluginPrefix) {
+		w = h.pluginWriter(w, r)
+	}
 	hostname := requestHostname(r.Host)
 	if strings.EqualFold(hostname, h.opt.AdminBaseURL.Hostname()) {
 		if strings.HasPrefix(r.URL.Path, pluginPrefix) {
 			if h.opt.SecondHost {
 				http.NotFound(w, r)
+				return
+			}
+			if activeAccept(r.Header) {
+				http.Error(w, strings.TrimSpace(configurePluginHost), http.StatusConflict)
 				return
 			}
 			h.opt.Proxy.ServeHTTP(w, r)
@@ -80,7 +88,16 @@ func (h *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				h.mu.Unlock()
 			}
 		}
+		if h.opt.SecondHost && pluginOrigin(r.Header.Get("Origin"), h.opt.PluginBaseURL) {
+			w = &responseWriter{ResponseWriter: w, before: func(header http.Header) {
+				header.Del("Access-Control-Allow-Origin")
+				header.Del("Access-Control-Allow-Credentials")
+			}}
+		}
 		h.opt.Admin.ServeHTTP(w, r)
+		if policy, ok := w.(*responseWriter); ok && !policy.wrote {
+			policy.before(policy.Header())
+		}
 		return
 	}
 	if h.opt.SecondHost && strings.EqualFold(hostname, h.opt.PluginBaseURL.Hostname()) {
