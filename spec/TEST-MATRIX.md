@@ -51,7 +51,7 @@
 | V-41 | T-01、T-09 | 外部release清单签名、归档摘要、来源/公钥变化、无签名本地包 | 对确切字节验签；无自包含摘要循环；所有身份/平台错误停机前拒绝；签名失败不降级本地信任 |
 | V-42 | T-02、T-06 | Request计数满、字节满、缓冲满、嵌套Send/Service与Cancel并发、Request发送前取消 | 超额明确失败；Response/控制仍有进展；无阻塞等待自己额度；Cancel不超越自己的Request；Event Bus 256条/4MiB双界限计数并drop-newest |
 | V-43 | T-04、T-05、T-09 | 权限名集合（`user`、`admin`、`chat_admin` 与 Adapter 权限）、组禁用/子项启用、子权限放宽、运行时改策略、策略引用未安装 Adapter 的权限 | 平台权限与 `chat_admin` 不满足 `admin`，`admin` 不自动满足其他权限名；未安装 Adapter 的权限名不被满足且在诊断中标出；父禁用优先；最近显式权限可覆盖但不能绕过全局限制；已开始请求不伪称撤销 |
-| V-44 | T-03 | 入站媒体惰性Read、多Session共享、越界offset/配额/过期、owner退出 | 不预下载所有图；不泄BotToken/路径；首次取件校验后读取；有效租约保护共享对象；错误不制造MediaRef/空成功 |
+| V-44 | T-03 | 入站媒体惰性Read、多Session共享、越界offset/配额/过期、owner退出、首个读取者取消、未声明 `media.read` 的实例、超出原 token 范围的发送 Target | 不预下载所有图；不泄BotToken/路径；首次取件校验后读取；有效租约保护共享对象；错误不制造MediaRef/空成功；一次取件失败不影响之后的读取；未声明能力时 readability 为 UNSUPPORTED；越界 Target 在平台发送前被拒 |
 | V-45 | T-03 | getMe账号重复、webhook/401/409、allowed_updates/匿名身份、私聊/回复机器人/提及机器人时的 to_me、实例代理与全局代理、代理连接失败、游标提交崩溃及7天空闲ID重置 | 冲突报管理状态、不擅自删webhook；逐条持久游标后非持久派发；显式订阅成员/Reaction且核对权限；匿名sender_chat不伪造User；7天空闲重建轮次不沿用旧高offset；允许丢失边界明确 |
 | V-46 | T-07 | job超时后callback继续执行、迟到Response、RPC断链但进程未退出 | 超时结果先返回但running不释放；无重叠/补跑；实际callback返回或进程确认退出才释放；迟到成功不改超时 |
 | V-47 | T-07、T-09 | 首次管理token/离线reset、登录/CLI、同端口两个Host、代理身份头伪造、单Host主动内容 | 插件host不可访问Admin API；admin Cookie/Authorization不传入插件；Host/CSRF/内部认证检查生效；首次能登录，reset撤销旧会话/票据；单Host不执行插件主动内容 |

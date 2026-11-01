@@ -42,11 +42,11 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 
 ### 1.4 入站媒体与读取
 
-- 入站图片/文件先使用 `IncomingMedia` 描述符：Core opaque token、声明 size/MIME、readability；Core 私下保存对应 Adapter 实例的 file_id。未知 MIME/大小为 absent，不能伪造已计算的 SHA256。首发不为每个入站媒体预先下载，也不把未取件对象当已提交 MediaRef。
-- SDK `media.Read(ctx, token, offset, length)` 返回 bytes、next_offset、eof，单次 length 为 1～1 MiB，offset 为非负字节偏移；offset 等于实际大小时返回空 bytes、原 offset、eof=true，大于实际大小时返回 INVALID_ARGUMENT，不产生空成功。错误返回明确 code。首次 Read 由 Core 内置 Adapter 使用受信平台文件 API 按需取件，写入 §1.3 的同一暂存区并校验实际大小/计算摘要后才返回内容；随后按 offset 读取。首次取件截止取调用者/父链与 15 分钟预算的较早者，不能绕过上游 deadline。
+- 入站图片/文件先使用 `IncomingMedia` 描述符：Core opaque token、声明 size/MIME、readability；Core 私下保存对应 Adapter 实例的 file_id。未知 MIME/大小为 absent，不能伪造已计算的 SHA256。首发不为每个入站媒体预先下载，也不把未取件对象当已提交 MediaRef。readability 只在来源实例的启动响应声明了能力 `media.read` v1 且 supported 时为 READABLE；Adapter 交付时把某个来源标为 UNSUPPORTED 的，Core 保留（D-73）。
+- SDK `media.Read(ctx, token, offset, length)` 返回 bytes、next_offset、eof，单次 length 为 1～1 MiB，offset 为非负字节偏移；offset 等于实际大小时返回空 bytes、原 offset、eof=true，大于实际大小时返回 INVALID_ARGUMENT，不产生空成功。错误返回明确 code。首次 Read 由 Core 内置 Adapter 使用受信平台文件 API 按需取件，写入 §1.3 的同一暂存区并校验实际大小/计算摘要后才返回内容；随后按 offset 读取。首次取件截止取调用者/父链与 15 分钟预算的较早者，不能绕过上游 deadline。一次取件失败（包括发起取件的读取者被取消或到期）只返回给这一轮等待的读取者，不记为对象状态；下一次 Read 重新取件，同一次调用内不自动重试（D-73）。
 - 同一入站对象由 Core 持有，向接收它的各 Handler Session 签独立的目标受限 token，缓存仅保存一份。token 自签发 15 分钟有效，发送/读取期间用有截止时间的租约保护；一个 Session 失效只撤销其授权，不能删除其他有效消费者仍使用的对象。取件前预留实际可接受的容量，计入 Core 2 GiB 总预算与每个消费 Session 256 MiB 引用预算；未知长度最多按单对象 100 MiB 接收，超限立即失败。
-- 超平台下载能力返回 UNSUPPORTED，超配额返回 RESOURCE_EXHAUSTED，事件仍保留不可读取的元数据。Token 仅映射可信 Adapter 已提供的文件标识，不接受用户指定的任意下载地址，不下发 Bot Token/宿主路径。
-- Segment 可用 `incoming_ref` 作为与 media_ref/https_url 互斥的来源；Send 重新验证目标授权，必要时按需取件为已校验 MediaRef，再执行发送计划。取件失败发生在平台发送前，不自动重试业务发送；共享对象到期且无租约后回收。
+- 超平台下载能力返回 UNSUPPORTED，超配额返回 RESOURCE_EXHAUSTED，事件仍保留不可读取的元数据。Token 仅映射可信 Adapter 已提供的文件标识，不接受用户指定的任意下载地址，不下发 Bot Token/宿主路径。平台文件标识不是插件可用的读取凭证：插件只能用 Core 签发的 token 读取或发送；Adapter 的 platform_payload 原样保留，其中出现的平台标识没有授权作用，Core 也不接受它作为媒体来源（D-73）。
+- Segment 可用 `incoming_ref` 作为与 media_ref/https_url 互斥的来源；Send 重新验证目标授权，并核对本次发送的 Target 在原 token 的范围内，必要时按需取件为已校验 MediaRef，再执行发送计划。取件失败发生在平台发送前，不自动重试业务发送；共享对象到期且无租约后回收。
 
 ## 2. 事件、命令、Rule、Hook 和传播
 
