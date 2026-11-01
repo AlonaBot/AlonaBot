@@ -70,6 +70,7 @@ func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core s
 		Token       string `json:"token"`
 		DisplayName string `json:"display_name"`
 		Username    string `json:"username"`
+		Media       bool   `json:"media"`
 	}
 	if err := json.Unmarshal(req.ConfigJSON, &config); err != nil {
 		return nil, err
@@ -85,7 +86,25 @@ func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core s
 			return nil, err
 		}
 	}
-	return &loopInstance{id: req.InstanceID, account: config.Account, displayName: config.DisplayName, username: config.Username, core: core, sequence: n, initial: string(req.Cursor), token: config.Token}, nil
+	instance := &loopInstance{id: req.InstanceID, account: config.Account, displayName: config.DisplayName, username: config.Username, core: core, sequence: n, initial: string(req.Cursor), token: config.Token}
+	if config.Media {
+		return &mediaLoopInstance{loopInstance: instance}, nil
+	}
+	return instance, nil
+}
+
+type mediaLoopInstance struct{ *loopInstance }
+
+func (*mediaLoopInstance) ReadPlatformFile(_ context.Context, fileID string, offset uint64, length uint32) ([]byte, uint64, bool, error) {
+	if fileID != "platform-file" {
+		return nil, 0, false, &sdk.Error{Code: pb.ErrorCode_ERROR_CODE_NOT_FOUND, Message: "platform file not found"}
+	}
+	const content = "image bytes"
+	if offset > uint64(len(content)) {
+		return nil, 0, false, &sdk.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "media offset exceeds file size"}
+	}
+	end := min(offset+uint64(length), uint64(len(content)))
+	return []byte(content[offset:end]), end, end == uint64(len(content)), nil
 }
 
 type loopInstance struct {
@@ -221,7 +240,8 @@ func TestRemoteLifecycle(t *testing.T) {
 		t.Helper()
 		mux := router.NewMux()
 		p.Services(mux)
-		spec.Handler = mux.For(router.NewCaller(spec.PluginID, spec.GenerationID))
+		caller := router.NewCaller(spec.PluginID, spec.GenerationID)
+		spec.Handler = mux.For(caller)
 		running, err := supervisor.Launch(ctx, store, spec)
 		if err != nil {
 			t.Fatal(err)
@@ -231,7 +251,7 @@ func TestRemoteLifecycle(t *testing.T) {
 				t.Error(res.Err)
 			}
 		})
-		if err := p.Bind(ctx, running.Instance); err != nil {
+		if err := p.Bind(ctx, running.Instance, caller); err != nil {
 			t.Fatal(err)
 		}
 		return running
@@ -382,6 +402,8 @@ func TestRemoteLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	oldInstance, _ := registry.Get("two")
+	oldSessionKey := oldInstance.(adapter.MediaSession).MediaSessionKey()
 	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
 		t.Fatal(err)
 	}
@@ -397,6 +419,10 @@ func TestRemoteLifecycle(t *testing.T) {
 	}
 	spec.NewCandidate = false
 	running = launch()
+	restored, _ := registry.Get("two")
+	if restored.(adapter.MediaSession).MediaSessionKey() == oldSessionKey || oldInstance.(adapter.MediaSession).MediaSessionKey() != oldSessionKey {
+		t.Fatal("restored instance reused its old media session or changed the old instance identity")
+	}
 	for _, id := range []string{"one", "failed", "duplicate"} {
 		if _, ok := registry.Get(id); ok {
 			t.Fatalf("disabled instance %s restored", id)
@@ -441,5 +467,87 @@ func TestRemoteRoleMismatch(t *testing.T) {
 				t.Fatalf("role mismatch failed outside REGISTER: %v", err)
 			}
 		})
+	}
+}
+
+// TestRemoteMediaRead 经真实 Adapter 进程分块取件，保持 Session 身份与平台错误。
+func TestRemoteMediaRead(t *testing.T) {
+	ctx := t.Context()
+	store, spec, logs := setup(t)
+	registry := adapter.NewRegistry()
+	p := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: &eventSink{}, Log: slog.New(slog.NewTextHandler(logs, nil))})
+	mux := router.NewMux()
+	p.Services(mux)
+	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
+	spec.Handler = mux.For(caller)
+	running, err := supervisor.Launch(ctx, store, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if result := running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE); result.Err != nil {
+			t.Error(result.Err)
+		}
+	})
+	if err := p.Bind(ctx, running.Instance, caller); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ id, config string }{
+		{"readable", `{"account":"media-reader-account","media":true}`},
+		{"unsupported", `{"account":"unsupported-account"}`},
+	} {
+		if err := p.StartInstance(ctx, c.id, []byte(c.config)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	in, _ := registry.Get("readable")
+	if got := in.(adapter.MediaSession).MediaSessionKey(); got != caller.SessionKey {
+		t.Fatalf("media session = %q, want %q", got, caller.SessionKey)
+	}
+	reader := in.(adapter.MediaReader)
+	var content []byte
+	var offset uint64
+	for {
+		data, next, eof, err := reader.ReadMedia(ctx, "platform-file", offset, 4)
+		if err != nil {
+			t.Fatal(err)
+		}
+		content = append(content, data...)
+		if next != offset+uint64(len(data)) {
+			t.Fatalf("next offset = %d after %d bytes", next, len(data))
+		}
+		offset = next
+		if eof {
+			break
+		}
+	}
+	if string(content) != "image bytes" {
+		t.Fatalf("content = %q", content)
+	}
+	if data, next, eof, err := reader.ReadMedia(ctx, "platform-file", offset, 4); err != nil || len(data) != 0 || next != offset || !eof {
+		t.Fatalf("read at EOF = %q %d %v %v", data, next, eof, err)
+	}
+	if _, _, _, err := reader.ReadMedia(ctx, "missing", 0, 4); wire.CodeOf(err) != pb.ErrorCode_ERROR_CODE_NOT_FOUND {
+		t.Fatalf("missing file error = %v", err)
+	} else {
+		var call *wire.CallError
+		if !errors.As(err, &call) || call.ErrorInfo.SafeMessage != "platform file not found" {
+			t.Fatalf("platform safe message changed: %v", err)
+		}
+	}
+	for _, length := range []uint32{0, wire.MaxMediaChunk + 1} {
+		if _, _, _, err := reader.ReadMedia(ctx, "platform-file", 0, length); wire.CodeOf(err) != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT {
+			t.Fatalf("length %d error = %v", length, err)
+		}
+	}
+	unsupported, _ := registry.Get("unsupported")
+	if _, _, _, err := unsupported.(adapter.MediaReader).ReadMedia(ctx, "platform-file", 0, 4); wire.CodeOf(err) != pb.ErrorCode_ERROR_CODE_UNSUPPORTED {
+		t.Fatalf("unsupported instance error = %v", err)
+	}
+	if err := p.StopInstance(ctx, "readable"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := reader.ReadMedia(ctx, "platform-file", 0, 4); wire.CodeOf(err) != pb.ErrorCode_ERROR_CODE_UNAVAILABLE {
+		t.Fatalf("stopped instance error = %v", err)
 	}
 }

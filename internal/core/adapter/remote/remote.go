@@ -18,6 +18,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
+	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
@@ -44,6 +45,7 @@ type Process struct {
 	operations sync.Mutex // 串行化 Bind、Unbind 与实例启停
 	mu         sync.Mutex // 保护 session、instances 与实例状态；RPC 期间释放
 	session    *host.Instance
+	caller     router.Caller // 与当前 Session 的 Mux.For 使用相同身份，由 mu 保护
 	instances  map[string]*instance
 }
 
@@ -61,17 +63,20 @@ type instance struct {
 	capabilities []*pb.Capability
 	dropped      uint64        // 事件队列满时累计丢弃数
 	session      *wire.Session // 本次运行所属 Session，旧 Registry 引用不得切到新 Session
+	sessionKey   string        // 实例创建时绑定，Session 更换后旧实例仍保留旧值
 }
 
 // New 创建尚未绑定 Session 的 Adapter 包进程管理器。
 func New(opt Options) *Process { return &Process{opt: opt, instances: make(map[string]*instance)} }
 
 // Bind 绑定已激活的新 Session，并按保存的配置恢复全部已启用实例。
-func (p *Process) Bind(ctx context.Context, in *host.Instance) error {
+// caller 必须与为该 Session 装配 Mux.For 时使用的身份相同。
+func (p *Process) Bind(ctx context.Context, in *host.Instance, caller router.Caller) error {
 	p.operations.Lock()
 	defer p.operations.Unlock()
 	p.mu.Lock()
 	p.session = in
+	p.caller = caller
 	var enabled []*instance
 	for _, entry := range p.instances {
 		if entry.enabled {
@@ -163,6 +168,7 @@ func (p *Process) start(ctx context.Context, id string, config []byte) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	entry := &instance{needsStop: true, process: p, id: id, config: append([]byte(nil), config...), enabled: true, running: true, account: response.AccountId, displayName: response.AccountDisplayName, username: response.GetAccountUsername(), capabilities: response.Capabilities, session: bound.Session}
+	entry.sessionKey = p.caller.SessionKey
 	if err := p.opt.Registry.Add(entry); err != nil {
 		p.mu.Unlock()
 		stopErr := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: id}, &pb.AdapterInstanceStopResponse{})
