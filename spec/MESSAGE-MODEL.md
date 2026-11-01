@@ -141,7 +141,7 @@ ACCEPTED 只表示平台 API 确认接受，不保证用户阅读。跨多条平
 - Adapter 在发出请求前建立确定的物理操作计划并校验当前平台限制。超长文本、超限 caption、无法表达的格式或片段组合在首发明确拒绝，不自动截断。无跨 API 回滚或静默降级。
 - Telegram 的 markdown 能力明确使用 MarkdownV2；实体采用平台要求的 UTF-16 单元偏移。原始输入须满足其格式规则，不能把任意 HTML 或其他 Markdown 方言当作已转换文本。
 - Telegram 可能确认接受发送但暂返 message_id=0；此时 PartResult 标明 message_ids_unavailable，0 不进入 platform_message_ids。若计划的后续 markup 操作依赖该 ID，则该步 NOT_ATTEMPTED 并返回明确下游错误，逻辑结果 PARTIAL；保留已接受事实，不补发相册或轮询猜测消息 ID。
-- Edit 使用 editMessageText，buttons 片段转为 reply_markup；文本与实体的规则同发送。v0.1 只编辑文本消息，不编辑媒体说明。平台返回内容未变化或消息不可编辑时为 REJECTED。实例启动时声明 `message.edit` 能力。
+- Edit 使用 editMessageText，buttons 片段转为 reply_markup；文本与实体的规则同发送。v0.1 只编辑文本消息，不编辑媒体说明。平台返回内容未变化或消息不可编辑时为 REJECTED。实例启动时声明 `message.edit` 能力。实例同时声明 `media.read` v1，入站媒体经 getFile 按需取件（CONTRACTS §1.4）。
 - mention 仅在平台可按 external_user_id 正确表示时渲染；forward 合并转发无等价能力时返回 UNSUPPORTED。edited/deleted 等事件仅映射平台实际提供的 update；不能轮询猜测来制造平台未提供的删除事件。
 
 ### 6.3 按钮与回调
@@ -175,7 +175,7 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 
 - 入站 Chain：`text` 为 plain 的 text；`at` 为 mention（`qq` 为 all 时没有通用对应）；`reply` 为 reference；`image`、`video` 为带 incoming_ref 的 image、video。没有通用对应的段（`at` all、`face`、`record`、`forward`、`json` 等）不进入 chain，原始消息数组完整保存在 platform_payload 中；因此 chain 可以为空。
 - to_me 在以下情况为 true：私聊；chain 中有指向本账号的 mention；`reply` 引用的消息经 `get_msg` 查得发送者是本账号。`get_msg` 失败时按 false 处理并记诊断。
-- 入站媒体：`adapter.media.read` 时 Adapter 用段中的 `url` 经 HTTP GET 取件，只允许 http 与 https；段中没有 `url` 时 readability 为 UNSUPPORTED。
+- 入站媒体：实例声明 `media.read` v1；`adapter.media.read` 时 Adapter 用段中的 `url` 经 HTTP GET 取件，只允许 http 与 https；段中没有 `url` 时 Adapter 把该来源的 readability 标为 UNSUPPORTED。
 
 ### 7.2 能力与发送计划
 
