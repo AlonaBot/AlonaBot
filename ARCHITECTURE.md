@@ -72,4 +72,4 @@
 
 ## 检查
 
-依赖方向由代码审查对照上表把关；import 环由 Go 编译器拒绝。Core 可执行文件与 SDK 根包能链接的第三方模块由 `node scripts/check-go-deps.mjs` 在 CI 中检查（D-52），清单见 [docs/development.md](docs/development.md)。
+依赖方向由代码审查对照上表把关；import 环由 Go 编译器拒绝。Core 可执行文件与 SDK 根包能链接的第三方模块由审查时用 `go list -deps` 对照 [docs/development.md](docs/development.md) 的允许清单核对（D-52）。

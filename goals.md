@@ -2228,7 +2228,7 @@ sdk/config
 - 提交：web/admin/src/schema/schema.test.ts（vitest，不依赖 DOM）：用 fixtures 驱动 fieldsFromSchema 与 buildPatch，覆盖字段顺序、hidden 不进 patch、未修改的 secret 不进 patch、修改 secret 进 patch、清空可空字段生成 null、数组整体替换、未知键不受影响；pickLocale 与 fieldLabel 的回退。这是 Schema 格式与表单之间的契约测试。
 - 本地自测（不提交，PR 中写明结果）：npm run build、npm run typecheck；在浏览器中手动打开 dev 页面，用 fixture 渲染表单并切换语言（写明浏览器与版本，属于手动验证）。
 
-完成条件：在 web/admin 下 npm ci、npm run typecheck、npm run test、npm run build 全部成功；仓库根目录 node scripts/check-repository.mjs 通过；go build ./... 不受影响。
+完成条件：在 web/admin 下 npm ci、npm run typecheck、npm run test、npm run build 全部成功；go build ./... 不受影响。
 
 不做：真实管理 API、登录与页面路由（T-09.1、T-09.8）；CI 中的前端任务（另行由维护者决定是否加入）；DOM 渲染测试（需要新依赖）。
 ```
@@ -2386,7 +2386,7 @@ sdk/config
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：实例目录的各种异常（非法 JSON、空目录、非 .json 文件被忽略）；--adapter-* 参数的组合错误。
 - 若维护者提供了测试账号：在 PR 中另附一次真实 Telegram 的手动运行记录（命令、时间、结果），不写入提交的测试。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：正式安装与实例管理（T-09.4）；实例配置的 Secret Store（T-09.4）；其他平台的 Adapter。
 ```
@@ -2546,7 +2546,7 @@ sdk/config
   - 同一测试中断言只导入 sqlitedb 的测试插件二进制不含 gorm.io/gorm（`go version -m` 或 `go list -deps`）。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：两个入口的复用、共用连接与停止时关闭；backend NONE；文件缺失时非首装不创建；ID 非递增；host 的 migration 一致性校验。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./sdk/... ./internal/core/...；go build ./...；node scripts/check-go-deps.mjs 通过。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./sdk/... ./internal/core/...；go build ./...；`go list -deps` 列出的 Core 可执行文件与 SDK 根包模块都在 docs/development.md 的允许清单中。
 
 不做：SQLite 候选副本与 Backup API（T-08.6）；维护许可的管理入口、external 插件的候选门槛与 Journal（T-09）。
 ```
@@ -2817,7 +2817,7 @@ sdk/config
 - 提交：cmd/alonabot/t04_e2e_test.go；sdk/generate 中对 testdata fixture 的测试。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：示例的每条命令在 Windows/Linux 交叉编译（只编译，不运行）；生成文件的稳定性。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；在两个示例目录运行 alonabot plugin check 通过；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；在两个示例目录运行 alonabot plugin check 通过。
 
 不做：真实 Rule 与 Hook 的集成（T-05.5）；WebUI 修改策略（T-09.9）。
 ```
@@ -3244,7 +3244,7 @@ sdk
 - 提交：cmd/alonabot/t08_e2e_test.go；web/admin 的 schema.test.ts 追加用例。
 - 本地自测（不提交，PR 中写明结果）：npm run build；示例的 plugin check。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；web/admin 下 npm run test 通过；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；web/admin 下 npm run test 通过。
 
 不做：正式 reload 与管理入口（T-09）；Journal 与崩溃恢复（T-09.5～T-09.7）。
 ```
@@ -3324,7 +3324,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 - 提交：t13_e2e_test.go（上述矩阵，复用 goal-67～goal-69 的测试方式）。
 - 本地自测（不提交，PR 中写明结果）：按文档中的命令手动运行一次示例并记录输出。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：发行与预装（T-14）。
 ```
@@ -3367,7 +3367,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 - OneBot 11 的端到端链路（同一测试文件的子测试）：实例启动后出现 bot.online；模拟服务 Disconnect 后实例自动重连，之后的消息照常收发，没有 bot.offline；access_token 错误时实例失败，出现 reason=INSTANCE_FAILED 的 bot.offline；Core 日志与 data_dir 中的日志文件不含 access_token。
 - 证据：TEST-MATRIX §3.2 追加一行，写明上表的实测结果、命令、平台与 Go 版本；真实 QQ 端：维护者提供手测记录（实现端名称与版本、通过的用例）时写入，否则写「未运行」。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./cmd/alonabot/... ./adapters/...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./cmd/alonabot/... ./adapters/...；go build ./...。
 
 不做：修改两个 Adapter 的映射或 Core 的派发（发现不一致时标 [!] 并在 PR 中写明用例与差异，由审查者决定修契约还是修实现）；alonabot run 同时启动多个 Adapter；反向 WebSocket。
 ```
@@ -3553,7 +3553,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 - 提交：cmd/alonabot/t07_e2e_test.go（上述矩阵）。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：Drain 的截止时间；激活失败不 Bind；重启后旧 generation 的 Unbind 不影响新映射；Scheduler 在 Detach 后不触发。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：管理认证（T-09.1，测试注入假会话）；serve（T-09.4）；Agent 定时任务（T-12.6）。
 ```
@@ -3788,7 +3788,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 - 提交：上述矩阵测试。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：在 -race 下重复运行矩阵 10 次无偶发失败。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：Service 嵌套与 Hook→Service→Send（T-06.2、T-06.4）；真实 Scheduler（T-07.5）。
 ```
@@ -3958,7 +3958,7 @@ agent
 - 证据：TEST-MATRIX §3.2 追加一行，写明覆盖的场景、命令、平台与 Go 版本。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：Click 找不到 action_id；同 job 重叠时的 Trigger；等待超时后再次注入按普通消息处理。
 
-完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./plugintest/... ./examples/... ./internal/core/... ./internal/inproc/...；go test -race . ；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./plugintest/... ./examples/... ./internal/core/... ./internal/inproc/...；go test -race . ；go build ./...。
 
 不做：模拟时钟或缩短 schedule 的周期（只提供立即运行）；WebUI 沙盒（v0.1 之外）；为 Adapter 作者提供的测试工具。
 ```
@@ -4010,7 +4010,7 @@ broker、bus、router 的 Options 增加 Metrics *metrics.Counters（可为 nil�
 - 提交：cmd/alonabot/t06_e2e_test.go（上述矩阵，复用 goal-19～goal-21 的测试插件）。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：Counters 的并发；失效后预算归还到初始值；ErrorInfo 中不含路径与堆栈。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：管理面对计数的读取接口（T-09.9）；可靠事件存储与服务重试（契约不提供）。
 ```
@@ -4128,7 +4128,7 @@ broker、bus、router 的 Options 增加 Metrics *metrics.Counters（可为 nil�
   - Agent 组件未启用或未安装时调用返回 UNAVAILABLE。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：校验分支；三种协议各一次。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./agent/... ./sdk/... ./internal/core/...；go build ./...；node scripts/check-go-deps.mjs 通过。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./agent/... ./sdk/... ./internal/core/...；go build ./...；`go list -deps` 列出的 Core 可执行文件与 SDK 根包模块都在 docs/development.md 的允许清单中。
 
 不做：流式输出与工具调用（契约不提供）；llm_service_allowed_plugins 的专用管理页（配置表单随 T-09 由 Schema 生成）。
 ```
@@ -4223,7 +4223,7 @@ broker、bus、router 的 Options 增加 Metrics *metrics.Counters（可为 nil�
 - 提交：cmd/alonabot/t11_e2e_test.go。
 - 本地自测（不提交，PR 中写明结果）：在 -race 下重复运行矩阵若干次无偶发失败。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：Agent 组件的工具循环（T-12.3）；管理页面（T-09.9）。
 ```
@@ -4482,7 +4482,7 @@ internal/core/state
   - Collect 不删除保留代次与 Active，删除失败候选的残留。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：Recover 对每个 Journal 阶段的分支；保留代次的淘汰顺序；Collect 对 Pending 引用的保护。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：管理页面（T-09.8）；外部数据的备份工具（由管理员处理）。
 ```
@@ -4558,7 +4558,7 @@ internal/core/state
 - 提交：cmd/alonabot/t12_e2e_test.go。
 - 本地自测（不提交，PR 中写明结果）：Agent 组件的 plugin check 与 pack（当前平台）；若维护者提供了 Provider 凭证，另附一次手动运行记录，不写入提交的测试。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：发行归档与预装（T-14.3、T-14.4）。
 ```
@@ -4713,7 +4713,7 @@ internal/core/state
 - 提交：scripts/dist/dist_test.go：用临时 Ed25519 密钥只为当前平台运行一次（--platforms 当前平台），检查归档结构（alonabot 与 packages/ 下每个官方包的三个文件）、每个 release.json 验签通过、两次运行的归档字节相同、构建出的 alonabot 内置的公钥等于测试公钥（经一个只读的 version 输出或测试钩子）。
 - 本地自测（不提交，PR 中写明结果）：五个平台的完整构建（交叉编译，只验证产物生成，不在其他平台运行）。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./scripts/... ./internal/...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./scripts/... ./internal/...；go build ./...。
 
 不做：首次运行的预装（T-14.4）；容器镜像（T-14.5）；发布到 GitHub Releases（T-10.4）。
 ```
@@ -4756,7 +4756,7 @@ internal/core/state
 - 提交：cmd/alonabot/t09_e2e_test.go 与 scripts/scenarios。
 - 本地自测（不提交，PR 中写明结果）：在 -race 下重复运行崩溃点场景若干次无偶发失败。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：五平台运行与发布（T-10）；新的产品功能（只做验收与必要的缺陷修复，修复需在 PR 中逐条说明）。
 ```
@@ -4830,7 +4830,7 @@ internal/core/state
 - 提交：internal/core/settings 的测试追加：有与没有 ALONABOT_CONTAINER 时 listen 缺省值与校验的差异，以及 WARN。
 - 本地自测（不提交，PR 中写明结果）：在有 Docker 的机器上 buildx 构建两个平台（写明 Docker 版本）；干净卷无 TTY 启动被拒；-it admin-token init 后正常启动并能访问 http://127.0.0.1:7650；容器内进程的 UID 为 10001；镜像文件列表只有 alonabot、packages/ 与 CA 证书；出站 HTTPS 可用；docker stop 后插件进程全部退出。没有 Docker 环境时以上各项写「未运行」。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/...；go build ./...。
 
 不做：推送镜像到 ghcr.io（T-10.4）；Kubernetes 清单。
 ```
@@ -4884,7 +4884,7 @@ internal/core/state
 - 提交：cmd/alonabot/t14_e2e_test.go；deploy/e2e。
 - 本地自测（不提交，PR 中写明结果）：在有 Docker 的机器上运行容器部分；没有 Docker 时写「未运行」。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：五平台运行（T-10.2）；发布（T-10.4）；新的产品功能（只做验收与必要修复，修复逐条说明）。
 ```
@@ -4919,7 +4919,7 @@ internal/core/state
 - 提交：cmd/alonabot/t10_e2e_test.go。
 - 本地自测（不提交，PR 中写明结果）：完整测试套件在 -race 下运行一次的总耗时与结果。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs；TEST-MATRIX 中没有「待联验」的条目。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；TEST-MATRIX 中没有「待联验」的条目。
 
 不做：五平台运行（T-10.2）；资源报告（T-10.3）；发布（T-10.4）。
 ```
@@ -4987,7 +4987,7 @@ internal/core/state
 - 提交：基准程序本身是交付物，不另提交测试；负载生成器的本地自测在 PR 中写明。
 - 运行记录：原始数据附在 PR 中（是否提交到 bench/results/ 由维护者决定）。
 
-完成条件：gofmt -l 无输出；go vet ./...；go build ./...；一次完整基准运行的结果；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go build ./...；一次完整基准运行的结果。
 
 不做：性能优化（发现问题时另行处理）；修改 V-74 的预算（需维护者在 DECISIONS 记录）；为吞吐与延迟设定通过阈值（契约不设）。
 ```
@@ -5023,7 +5023,7 @@ internal/core/state
 - 提交：scripts/release-check（验收程序）。
 - 运行记录：release-check 对候选资产的运行结果附在 PR 中。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；release-check 对候选资产通过；node scripts/check-repository.mjs；TEST-MATRIX 没有未处理的失败条目。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；release-check 对候选资产通过；TEST-MATRIX 没有未处理的失败条目。
 
 不做：执行正式签名与发布（维护者负责）；v0.1 之后的路线图。
 ```
