@@ -1,4 +1,4 @@
-// 检查 Core 可执行文件与 SDK 根包在五个目标上链接的 Go 模块都在允许清单中（CONTRACTS §10、D-52）。
+// 检查 Core 可执行文件与 SDK 根包在五个目标上链接的 Go 模块都在允许清单中（CONTRACTS §10、D-52、D-68）。
 // 允许清单只在本文件维护，是 docs/development.md 已批准依赖的子集；新增模块须先按该文件的依赖流程取得批准。
 import { execFileSync } from 'node:child_process';
 
@@ -15,6 +15,9 @@ const sqlite = [
   'github.com/ncruces/go-strftime',
 ];
 
+// GORM 与 libtnb/sqlite 及其传递依赖，供 Core 状态库使用（D-68）。
+const gorm = ['gorm.io/gorm', 'github.com/libtnb/sqlite', 'github.com/jinzhu/inflection', 'github.com/jinzhu/now', 'golang.org/x/text'];
+
 const allowed = {
   './cmd/alonabot': new Set([
     'google.golang.org/protobuf',
@@ -25,6 +28,7 @@ const allowed = {
     'github.com/spf13/pflag',
     'github.com/inconshreveable/mousetrap', // Cobra 只在 Windows 链接。
     ...sqlite,
+    ...gorm,
   ]),
   './sdk': new Set(['google.golang.org/protobuf', 'golang.org/x/sys', 'github.com/google/jsonschema-go']),
 };
