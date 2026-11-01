@@ -22,13 +22,13 @@ import (
 const httpTokenBytes = 32
 const httpCapabilityVersion = 1
 
-// httpListener 持有一次Run的HTTP资源；准备期创建端点，激活后复用activation的ready gate。
-// routes/token在Serve启动前写入；activation通过原子指针发布，关闭按首次停止的截止执行一次。
+// httpListener 持有一次 Run 的 HTTP 资源；准备期创建端点，激活后复用 activation 的 ready gate。
+// routes/token 在 Serve 启动前写入；activation 通过原子指针发布，关闭按首次停止的截止执行一次。
 type httpListener struct {
 	routes     []HTTPRoute
 	listener   net.Listener
 	server     *http.Server
-	token      []byte // token的十六进制，仅在进入用户Handler前比较
+	token      []byte // token 的十六进制，仅在进入用户 Handler 前比较
 	activation atomic.Pointer[activation]
 	closeOnce  sync.Once
 }
@@ -88,7 +88,7 @@ func (h *httpListener) close(deadline time.Time) {
 }
 
 func (h *httpListener) serveHTTP(w http.ResponseWriter, r *http.Request) {
-	// 1. 所有请求先验Session凭证；未激活端点同样拒绝伪造身份。
+	// 1. 所有请求先验 Session 凭证；未激活端点同样拒绝伪造身份。
 	if subtle.ConstantTimeCompare([]byte(r.Header.Get(wire.HeaderProxyAuth)), h.token) != 1 {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
@@ -98,7 +98,7 @@ func (h *httpListener) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 		return
 	}
-	// 与ACTIVATED写出同步，复用RPC门禁，避免首个代理请求读到过期的ready状态。
+	// 与 ACTIVATED 写出同步，复用 RPC 门禁，避免首个代理请求读到过期的 ready 状态。
 	a.readyMu.Lock()
 	ready := a.ready.Load() && !a.stopping.Load()
 	select {
@@ -111,7 +111,7 @@ func (h *httpListener) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 		return
 	}
-	// 2. 与Core一致：对未清理Path按method选择最长精确/尾斜杠前缀。
+	// 2. 与 Core 一致：对未清理 Path 按 method 选择最长精确/尾斜杠前缀。
 	var selected *HTTPRoute
 	pathExists := false
 	for i := range h.routes {
