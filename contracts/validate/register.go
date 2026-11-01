@@ -139,8 +139,14 @@ func registerCommandPath(paths map[string]string, path []string, routeID string)
 
 func registerCommand(command *pb.CommandSpec, routeID string) error {
 	// 1. 匹配描述在注册边界检查，避免非法模式进入派发快照。
+	if command.GetMatch() != pb.CommandMatch_COMMAND_MATCH_PATH && (len(command.GetPath()) != 0 || len(command.GetAliases()) != 0) {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "non-path route %q contains command paths or aliases", routeID)
+	}
 	switch command.GetMatch() {
 	case pb.CommandMatch_COMMAND_MATCH_PATH:
+		if command.GetRegex() != "" || len(command.GetPatterns()) != 0 || command.GetIgnoreCase() {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "path route %q contains text matching fields", routeID)
+		}
 	case pb.CommandMatch_COMMAND_MATCH_REGEX:
 		if _, err := regexp.Compile(command.GetRegex()); err != nil {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q has invalid regex: %v", routeID, err)
@@ -156,8 +162,8 @@ func registerCommand(command *pb.CommandSpec, routeID string) error {
 			}
 		}
 	case pb.CommandMatch_COMMAND_MATCH_RAW:
-		if len(command.GetPatterns()) != 0 {
-			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "raw route %q contains patterns", routeID)
+		if command.GetRegex() != "" || len(command.GetPatterns()) != 0 {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "raw route %q contains regex or patterns", routeID)
 		}
 	default:
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q has an invalid match mode", routeID)
