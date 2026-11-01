@@ -199,6 +199,14 @@ func Collect(root Root) (*Registration, error) {
 	root.Events(events)
 	root.HTTP(routes)
 	root.Schedules(jobs)
+	// HTTP Listener 尚未创建，此处只核对跨注册器的 route_id。
+	httpRoutes := &pb.Register{}
+	appendHTTPRoutes(httpRoutes, routes.routes)
+	for _, route := range httpRoutes.Routes {
+		if events.seen[route.GetRouteId()] {
+			routes.errs = append(routes.errs, fmt.Errorf("HTTP route %q conflicts with another route", route.GetRouteId()))
+		}
+	}
 	reg := &Registration{Commands: cmds.commands, Events: events.events, HTTP: routes.routes, Schedules: jobs.jobs}
 	errs := append(slices.Concat(cmds.errs, events.errs, routes.errs, jobs.errs), collectServices(root, reg))
 	if err := errors.Join(errs...); err != nil {
