@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -23,7 +25,9 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
+	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
+	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
@@ -44,7 +48,7 @@ func main() { os.Exit(execute(os.Args[1:])) }
 
 // run 打开 data_dir、登记开发安装记录，然后启动插件；收到 SIGINT/SIGTERM 时停止它，
 // 异常退出按有限重启策略重启或禁用。
-func run(out *logging.Output, dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides []tune.Override) error {
+func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides []tune.Override, selected startupOverrides) (runErr error) {
 	if v.CoreMemorySoftLimit > 0 {
 		debug.SetMemoryLimit(v.CoreMemorySoftLimit)
 	}
@@ -55,11 +59,64 @@ func run(out *logging.Output, dataDir, pluginID, entry string, stdio bool, v tun
 		return err
 	}
 	defer store.Close()
-	if err := out.EnableFile(logging.FileOptions{Dir: filepath.Join(dataDir, logsDir), MaxSize: logging.DefaultMaxFileSize,
-		MaxTotal: logging.DefaultMaxTotalSize, MaxAgeDays: logging.DefaultMaxAgeDays}); err != nil {
-		return err
+	configuration, err := settings.Load(dataDir)
+	if err != nil {
+		return &usageError{err}
 	}
+	if selected.listen != nil {
+		if err := settings.ValidateListen(*selected.listen); err != nil {
+			return &usageError{fmt.Errorf("--listen: %w", err)}
+		}
+		configuration.Listen = *selected.listen
+	}
+	if selected.level != nil {
+		configuration.LogLevel = *selected.level
+	}
+	if selected.format != nil {
+		configuration.LogFormat = *selected.format
+	}
+	out, err := logging.Open(logging.Options{Format: logging.Format(configuration.LogFormat), Level: configuration.LogLevel, Stderr: os.Stderr})
+	if err != nil {
+		return &usageError{err}
+	}
+	defer out.Close()
 	log := out.Logger()
+	defer func() {
+		if runErr != nil {
+			log.Error("Core stopped", "err", runErr)
+			runErr = &reportedError{runErr}
+		}
+	}()
+	if configuration.LogFile.Enabled {
+		if err := out.EnableFile(logging.FileOptions{Dir: filepath.Join(dataDir, logsDir), MaxSize: configuration.LogFile.MaxSize, MaxTotal: configuration.LogFile.MaxTotal, MaxAgeDays: configuration.LogFile.MaxAgeDays}); err != nil {
+			return err
+		}
+	}
+	if configuration.Proxy != "" {
+		for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY"} {
+			if err := os.Setenv(name, configuration.Proxy); err != nil {
+				return fmt.Errorf("set %s: %w", name, err)
+			}
+		}
+	}
+	environment := make(map[string]string)
+	for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"} {
+		if value, exists := os.LookupEnv(name); exists {
+			environment[name] = value
+		}
+	}
+	// shortcut: 私有 HTTP 路由一律拒绝，有插件会话授权实现后接入 Authorizer。
+	proxy := httpproxy.New(log, nil)
+	listener, err := net.Listen("tcp", configuration.Listen)
+	if err != nil {
+		return fmt.Errorf("listen HTTP: %w", err)
+	}
+	httpServer := &http.Server{Handler: proxy, ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelError)}
+	httpErrors := make(chan error, 1)
+	go func() { httpErrors <- httpServer.Serve(listener) }()
+	defer httpServer.Close()
+	log.Info("HTTP listener started", "listen", listener.Addr().String())
+
 	if len(overrides) > 0 {
 		attrs := make([]any, 0, len(overrides))
 		for _, override := range overrides {
@@ -96,11 +153,29 @@ func run(out *logging.Output, dataDir, pluginID, entry string, stdio bool, v tun
 	global := wire.NewBudget(v.CoreMaxPayload)
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigc)
 	for {
-		r, err := launch(ctx, out, plog, store, pluginID, pluginDir, exe, digest, stdio, v, global)
+		r, err := launch(ctx, out, plog, store, pluginID, pluginDir, exe, digest, stdio, v, global, environment)
 		if err != nil {
 			return err
 		}
+		if endpoint := r.Instance.HTTPListener; endpoint != nil {
+			proxy.Bind(pluginID, r.Instance.GenerationID, endpoint, r.Instance.HTTPProxyToken, r.Instance.Routes)
+		}
+		unbound := make(chan struct{})
+		go func() { <-r.Instance.Session.Done(); proxy.Unbind(pluginID, r.Instance.GenerationID); close(unbound) }()
+		stop := func() error {
+			now := time.Now()
+			proxy.Unbind(pluginID, r.Instance.GenerationID)
+			stopContext, cancel := context.WithDeadline(context.Background(), now.Add(v.StopTotal))
+			defer cancel()
+			httpStopped := make(chan error, 1)
+			go func() { httpStopped <- httpServer.Shutdown(stopContext) }()
+			res := r.Stop(now, pb.StopReason_STOP_REASON_CORE_SHUTDOWN)
+			plog.Info("plugin stopped", "drained", res.Drained, "killed", res.Killed)
+			return errors.Join(res.Err, <-httpStopped)
+		}
+
 		// exit 记录一次 WaitExit 的结果。
 		type exit struct {
 			// abnormal 为 true 表示未经 Stop 且退出码非 0。
@@ -120,14 +195,15 @@ func run(out *logging.Output, dataDir, pluginID, entry string, stdio bool, v tun
 		}()
 		select {
 		case <-sigc:
-			res := r.Stop(time.Now(), pb.StopReason_STOP_REASON_CORE_SHUTDOWN)
-			plog.Info("plugin stopped", "drained", res.Drained, "killed", res.Killed)
-			if res.Err != nil {
-				return fmt.Errorf("process tree of plugin %s not confirmed empty: %w", pluginID, res.Err)
+			if err := stop(); err != nil {
+				return fmt.Errorf("stop Core: %w", err)
 			}
 			log.Info("Core stopped")
 			return nil
+		case err := <-httpErrors:
+			return errors.Join(fmt.Errorf("serve HTTP: %w", err), stop())
 		case e := <-exitc:
+			<-unbound // 旧代次可能被restart复用；先完成旧Session撤销，再发布新映射。
 			if e.err != nil {
 				return fmt.Errorf("process tree of plugin %s not confirmed empty, not starting a replacement: %w", pluginID, e.err)
 			}
@@ -147,7 +223,7 @@ func run(out *logging.Output, dataDir, pluginID, entry string, stdio bool, v tun
 }
 
 // launch 首次运行时提交新代次；之后复用已提交的 Active 代次（普通 restart，不产生新 Generation）。
-func launch(ctx context.Context, out *logging.Output, plog *slog.Logger, store *state.Store, pluginID, pluginDir, exe string, digest []byte, stdio bool, v tune.Values, global *wire.Budget) (*supervisor.Running, error) {
+func launch(ctx context.Context, out *logging.Output, plog *slog.Logger, store *state.Store, pluginID, pluginDir, exe string, digest []byte, stdio bool, v tune.Values, global *wire.Budget, environment map[string]string) (*supervisor.Running, error) {
 	active, err := store.Active(ctx, pluginID)
 	if err != nil {
 		return nil, err
@@ -165,7 +241,7 @@ func launch(ctx context.Context, out *logging.Output, plog *slog.Logger, store *
 			DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE},
 			LogLevel:           logging.ProtoLevel(out.Levels().Source(pluginID))},
 		NewCandidate: isNew, Stdio: stdio, Limits: host.NewLimits(v), Stop: host.NewStopTiming(v), Log: out.Plugin(pluginID, gen),
-		Global: global, MemorySoftLimit: v.PluginMemorySoftLimit,
+		Global: global, MemorySoftLimit: v.PluginMemorySoftLimit, ExtraEnv: environment,
 	})
 	if err != nil {
 		return nil, err

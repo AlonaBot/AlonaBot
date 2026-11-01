@@ -14,6 +14,16 @@ import (
 // reportedError 标记已由 Core Logger 记录的运行错误，避免命令层重复输出。
 type reportedError struct{ error }
 
+// usageError 标记启动设置或显式覆盖错误，由 CLI 使用 usage 退出码报告。
+type usageError struct{ error }
+
+// startupOverrides 只记录命令行显式设置的值，零值沿用设置文件。
+type startupOverrides struct {
+	listen *string
+	level  *slog.Level
+	format *string
+}
+
 func execute(args []string) int {
 	// 1. 参数与命令解析失败使用 usage 退出码；进入业务执行后切换为 failure。
 	code := exitUsage
@@ -30,7 +40,7 @@ func execute(args []string) int {
 		values, overrides, err = tune.Parse(inputs)
 		return err
 	}
-	var dataDir, pluginID, entry, format string
+	var dataDir, pluginID, entry, format, listen string
 	var stdio bool
 	level := slog.LevelInfo
 	runCommand := &cobra.Command{Use: "run", Short: "Run a local plugin in development mode", Args: cobra.NoArgs}
@@ -39,21 +49,35 @@ func execute(args []string) int {
 	flags.StringVar(&pluginID, "plugin-id", "", "plugin ID")
 	flags.StringVar(&entry, "entry", "", "plugin executable path (development mode: a local build)")
 	flags.BoolVar(&stdio, "stdio", false, "use stdio transport (default: TCP loopback)")
+	flags.StringVar(&listen, "listen", "", "Core HTTP listen address (overrides settings for this run)")
 	flags.TextVar(&level, "log-level", slog.LevelInfo, "global log level: debug, info, warn or error")
 	flags.StringVar(&format, "log-format", string(logging.FormatText), "stderr log format: text or json")
 	runCommand.RunE = func(cmd *cobra.Command, args []string) error {
 		if dataDir == "" || pluginID == "" || entry == "" {
 			return fmt.Errorf("--data-dir, --plugin-id and --entry are required")
 		}
-		out, err := logging.Open(logging.Options{Format: logging.Format(format), Level: level, Stderr: os.Stderr})
-		if err != nil {
-			return err
+		selected := startupOverrides{}
+		if flags.Changed("listen") {
+			selected.listen = &listen
 		}
-		defer out.Close()
+		if flags.Changed("log-level") {
+			switch level {
+			case slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError:
+				selected.level = &level
+			default:
+				return fmt.Errorf("--log-level must be debug, info, warn or error")
+			}
+		}
+		if flags.Changed("log-format") {
+			selected.format = &format
+		}
 		code = exitFailure
-		if err := run(out, dataDir, pluginID, entry, stdio, values, overrides); err != nil {
-			out.Logger().Error("Core stopped", "err", err)
-			return &reportedError{err}
+		if err := run(dataDir, pluginID, entry, stdio, values, overrides, selected); err != nil {
+			var usage *usageError
+			if errors.As(err, &usage) {
+				code = exitUsage
+			}
+			return err
 		}
 		return nil
 	}
