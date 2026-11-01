@@ -141,6 +141,7 @@ func (s *scan) configSchema(ctx context.Context, list *exec.Cmd) error {
 	b := &configBuilder{
 		scan: s, sizes: i.sizes, active: make(map[types.Type]bool),
 		fields: make(map[*jsonschema.Schema]types.Type), bounds: make(map[*jsonschema.Schema][2]json.Number),
+		unexported: make(map[*jsonschema.Schema]types.Type),
 	}
 	for _, entry := range []struct{ path, name string }{
 		{"encoding/json", "Marshaler"}, {"encoding/json", "Unmarshaler"},
@@ -173,12 +174,13 @@ type configCodec struct {
 
 // configBuilder 为每个字段创建独立 Schema 节点；active 只记录当前路径，拒绝递归类型。
 type configBuilder struct {
-	scan   *scan
-	sizes  types.Sizes
-	active map[types.Type]bool
-	codecs []configCodec
-	fields map[*jsonschema.Schema]types.Type     // 默认值按源码字段类型检查，包含匿名展开后的属性。
-	bounds map[*jsonschema.Schema][2]json.Number // 库的 float64 字段无法保存的精确整数端点。
+	scan       *scan
+	sizes      types.Sizes
+	active     map[types.Type]bool
+	codecs     []configCodec
+	fields     map[*jsonschema.Schema]types.Type     // 默认值按源码字段类型检查，包含匿名展开后的属性。
+	bounds     map[*jsonschema.Schema][2]json.Number // 库的 float64 字段无法保存的精确整数端点。
+	unexported map[*jsonschema.Schema]types.Type     // 默认对象访问属性时无法设置的匿名指针。
 }
 
 func (b *configBuilder) schema(fieldType types.Type, pos token.Pos, path string) *jsonschema.Schema {
@@ -308,7 +310,8 @@ func (b *configBuilder) structure(structure *types.Struct, path string) *jsonsch
 		field := structure.Field(index)
 		fieldType := field.Type()
 		baseType := types.Unalias(fieldType)
-		if pointer, ok := baseType.(*types.Pointer); ok {
+		pointer, indirect := baseType.(*types.Pointer)
+		if indirect {
 			baseType = types.Unalias(pointer.Elem())
 		}
 		if !field.Exported() {
@@ -346,6 +349,9 @@ func (b *configBuilder) structure(structure *types.Struct, path string) *jsonsch
 					// 展开前检查匿名字段本身的标签；输出沿用子字段的元数据。
 					b.metadata(child, fieldType, tags, path, field.Pos())
 					for _, key := range child.PropertyOrder {
+						if !field.Exported() && indirect {
+							b.unexported[child.Properties[key]] = baseType
+						}
 						b.property(schema, key, child.Properties[key], field.Pos())
 					}
 					schema.Required = append(schema.Required, child.Required...)
@@ -359,6 +365,9 @@ func (b *configBuilder) structure(structure *types.Struct, path string) *jsonsch
 		child := b.schema(fieldType, field.Pos(), path+"."+name)
 		if child != nil {
 			b.fields[child] = fieldType
+			if !field.Exported() && indirect {
+				b.unexported[child] = baseType
+			}
 			if b.metadata(child, fieldType, tags, path+"."+name, field.Pos()) {
 				schema.Required = append(schema.Required, name)
 			}
@@ -829,6 +838,9 @@ func (b *configBuilder) defaultValue(fieldType types.Type, schema *jsonschema.Sc
 					}
 				}
 				if child != nil {
+					if embedded := b.unexported[child]; embedded != nil {
+						return fmt.Errorf("field %q: cannot set embedded pointer to unexported struct type %s", item.name, embedded)
+					}
 					if err := b.defaultValue(b.fields[child], child, item.value); err != nil {
 						return fmt.Errorf("field %q: %w", item.name, err)
 					}
