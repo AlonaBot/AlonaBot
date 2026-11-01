@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -38,50 +39,10 @@ func SupportedPlatform(os, arch string) bool {
 	return false
 }
 
-// 插件 ID 规则（CONTRACTS §7.1）。
-const (
-	MaxIDLen     = 64                 // 插件 ID 的最大字节数
-	MarketPrefix = "alonabot_plugin_" // 市场插件 ID 的固定前缀
-)
-
 var (
-	marketID = regexp.MustCompile(`^alonabot_plugin_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`)
-	localID  = regexp.MustCompile(fmt.Sprintf(`^[a-z][a-z0-9_-]{0,%d}$`, MaxIDLen-1))
 	// SemVer 2.0 官方正则。
 	semver = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
 )
-
-// reservedNames 收录 Windows 保留设备名，它们作为路径组件在 Windows 上不可用。
-var reservedNames = func() map[string]bool {
-	m := map[string]bool{"con": true, "prn": true, "aux": true, "nul": true}
-	for i := 1; i <= 9; i++ {
-		m[fmt.Sprintf("com%d", i)] = true
-		m[fmt.Sprintf("lpt%d", i)] = true
-	}
-	return m
-}()
-
-// ValidateID 校验插件 ID。市场 ID 直接通过；不带市场前缀的安全本地 ID 通过但返回警告。
-// 大写字母被拒绝：ID 以规范小写保存，不能靠大小写区分两个安装。
-func ValidateID(id string) (warnings []string, err error) {
-	switch {
-	case id == "":
-		return nil, errors.New("missing plugin ID")
-	case len(id) > MaxIDLen:
-		return nil, fmt.Errorf("plugin ID length %d exceeds %d", len(id), MaxIDLen)
-	case marketID.MatchString(id):
-		return nil, nil
-	case strings.HasPrefix(id, MarketPrefix):
-		return nil, fmt.Errorf("plugin ID %q has the market prefix but does not match the market ID rule", id)
-	case strings.ToLower(id) != id:
-		return nil, fmt.Errorf("plugin ID %q contains uppercase letters; use lowercase", id)
-	case !localID.MatchString(id):
-		return nil, fmt.Errorf("plugin ID %q is not a safe slug (must start with a lowercase letter, followed by lowercase letters, digits, _ or -)", id)
-	case reservedNames[id]:
-		return nil, fmt.Errorf("plugin ID %q is a Windows reserved device name", id)
-	}
-	return []string{fmt.Sprintf("plugin ID %q lacks the market prefix %s and can only be installed as a local plugin", id, MarketPrefix)}, nil
-}
 
 // ValidVersion 报告 v 是否为合法 SemVer 2.0。
 func ValidVersion(v string) bool { return semver.MatchString(v) }
@@ -106,7 +67,7 @@ const (
 // Manifest 对应 plugin.yaml。必填字段使用指针以区分「缺失」与零值。
 type Manifest struct {
 	ManifestVersion      *int          `yaml:"manifest_version"`      // manifest 格式版本，目前必须为 1
-	ID                   string        `yaml:"id"`                    // 插件 ID，规则见 ValidateID
+	ID                   string        `yaml:"id"`                    // 插件 ID，规则见 validate.PluginID
 	Version              string        `yaml:"version"`               // 插件版本，SemVer 2.0
 	ProtocolMinMajor     *uint32       `yaml:"protocol_min_major"`    // 支持的最低协议主版本，不能为 0
 	ProtocolMaxMajor     *uint32       `yaml:"protocol_max_major"`    // 支持的最高协议主版本，不小于 ProtocolMinMajor
@@ -151,7 +112,7 @@ func (m *Manifest) validate() ([]string, error) {
 	if m.ManifestVersion == nil || *m.ManifestVersion != 1 {
 		return nil, errors.New("manifest_version must be 1")
 	}
-	warnings, err := ValidateID(m.ID)
+	warnings, err := validate.PluginID(m.ID)
 	if err != nil {
 		return nil, err
 	}

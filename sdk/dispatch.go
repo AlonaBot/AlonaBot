@@ -23,7 +23,11 @@ func businessHandler(reg *Registration) wire.Handler {
 	for _, command := range reg.Commands {
 		commands[commandRouteID(command)] = true
 	}
+	services := serviceHandler(reg)
 	return func(ctx context.Context, in *wire.Inbound) wire.Response {
+		if response, ok := services(ctx, in); ok {
+			return response
+		}
 		route, ok := routes[in.Target]
 		if !ok {
 			if commands[in.Target] {
@@ -46,6 +50,7 @@ func invokeEvent(ctx context.Context, in *wire.Inbound, event *pb.Event, handler
 	// 1. 为 Handler 建立独立有效期，返回或 panic 后取消所有仍在使用 Context 的工作。
 	ctx, cancel := context.WithCancel(ctx)
 	c := &Context{ctx: ctx, inbound: in, event: event}
+	bindServiceContext(c)
 	c.active.Store(true)
 	defer func() {
 		c.active.Store(false)

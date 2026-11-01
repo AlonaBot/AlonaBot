@@ -18,6 +18,7 @@ import (
 	"regexp"
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 )
 
 // Release 对应 release.json。
@@ -95,7 +96,7 @@ func Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*Release, error) {
 
 // validate 校验插件 ID、来源、版本，以及每个资产的平台、大小、摘要和 URL。
 func (r *Release) validate() error {
-	if _, err := manifest.ValidateID(r.PluginID); err != nil {
+	if _, err := validate.PluginID(r.PluginID); err != nil {
 		return err
 	}
 	if r.Source == "" {

@@ -158,6 +158,7 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32) *
 			Spec: &pb.RouteDescriptor_Event{Event: &pb.EventSpec{EventTypeFilter: []string{event.EventType}, HandlerMode: pb.HandlerMode_HANDLER_MODE_MANUAL}}})
 	}
 	appendHTTPRoutes(r, reg.HTTP)
+	appendServiceRoutes(reg, r)
 	return r
 }
 

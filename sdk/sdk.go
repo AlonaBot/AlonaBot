@@ -11,6 +11,7 @@
 // 包的组成：
 //   - 插件的 main 调用 [Run]；[Collect] 单独收集注册项，供检查与测试使用。
 //   - [CommandRegistry]、[EventRegistry]、[HTTPRegistry] 与 [ScheduleRegistry] 收集命令、事件、HTTP 路由和定时任务。
+//   - [ServiceRegistry] 收集类型化服务；[CallJSON] 与 [CallProto] 经 Core 调用目标插件。
 //   - [Context] 只在一次 Handler 调用期间有效，提供 [Context.Send] 与 [Context.StopPropagation]。
 //   - 根插件嵌入 [Base]，覆盖 [Root] 中需要的 Hook。
 package sdk
@@ -50,6 +51,7 @@ type Context struct {
 	stopped atomic.Bool     // 锁存的停止传播标记，一经设置不能清除
 	active  atomic.Bool     // Handler 返回时关闭，阻止继续使用父调用
 	inbound *wire.Inbound
+	caller  string // Core 下发的服务直接调用方
 	event   *pb.Event
 }
 
@@ -171,6 +173,7 @@ type Registration struct {
 	Events    []EventRoute
 	HTTP      []HTTPRoute
 	Schedules []Schedule
+	services  []serviceRoute
 }
 
 // Collect 调用根插件的注册入口，检查 Handler 签名与同插件内的重复项（D-20：同插件重复即报错）。
@@ -191,7 +194,7 @@ func Collect(root Root) (*Registration, error) {
 	root.HTTP(routes)
 	root.Schedules(jobs)
 	reg := &Registration{Commands: cmds.commands, Events: events.events, HTTP: routes.routes, Schedules: jobs.jobs}
-	errs := slices.Concat(cmds.errs, events.errs, routes.errs, jobs.errs)
+	errs := append(slices.Concat(cmds.errs, events.errs, routes.errs, jobs.errs), collectServices(root, reg))
 	if err := errors.Join(errs...); err != nil {
 		return nil, fmt.Errorf("invalid registration of %T: %w", root, err)
 	}
