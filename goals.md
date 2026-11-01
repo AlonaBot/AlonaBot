@@ -1754,7 +1754,13 @@ internal/core/router
 
 ### goal-21 · T-06.3 非持久 Event Bus
 
-状态：可派发。前置 T-06.1 已由 PR #45 合并；goal-2、goal-19 的符号已按合入代码核对：`router.NewMux() *Mux`、`(*Mux).Handle(name string, fn ServiceFunc)`、`(*Mux).Forward(fn ServiceFunc)`、`(*Mux).For(c Caller) wire.Handler`；`router.Plugin` 接口为 `PluginID() string`、`Activated() bool`、`Routes() []*pb.RouteDescriptor`、`Call(ctx, wire.Request) (wire.Response, error)`；`(*Router).Plugin(pluginID string) (Plugin, bool)`；SDK 的 `ServiceRegistry`、Root 的 `Services(*ServiceRegistry)` Hook，以及 dispatch.go 中先查服务路由、再查事件与命令路由的分发入口；BUS_SUBSCRIPTION 的注册校验在 `validate.Register`，事件名中的插件 ID 用 `validate.PluginID` 校验，callback_route_id 必须指向同一注册中的路由。注意 goal-12（PR #47）正在把 sdk/dispatch.go 的 `invokeEvent` 改为 `invokeHandler`，最好在它合入后再从 main 创建分支。
+状态：可派发。前置 T-06.1 已由 PR #45 合并；goal-2、goal-19 的符号已按合入代码核对：`router.NewMux() *Mux`、`(*Mux).Handle(name string, fn ServiceFunc)`、`(*Mux).Forward(fn ServiceFunc)`、`(*Mux).For(c Caller) wire.Handler`；`router.Plugin` 接口为 `PluginID() string`、`Activated() bool`、`Routes() []*pb.RouteDescriptor`、`Call(ctx, wire.Request) (wire.Response, error)`；`(*Router).Plugin(pluginID string) (Plugin, bool)`；SDK 的 `ServiceRegistry`、Root 的 `Services(*ServiceRegistry)` Hook，以及 dispatch.go 中先查服务路由、再查事件与命令路由的分发入口；BUS_SUBSCRIPTION 的注册校验在 `validate.Register`，事件名中的插件 ID 用 `validate.PluginID` 校验，callback_route_id 必须指向同一注册中的路由。goal-12（PR #47）已合并，sdk/dispatch.go 的分发入口现为 `invokeHandler`。
+
+范围修订（2026-11-01，维护者确认）：执行者报告三处接口缺口，对照 origin/main 核实后按以下方式补齐，见语句「范围」「接口」「行为」与「测试」：
+- `router.Plugin` 只有 `Call`：接口追加 `SendEvent`，唯一实现 `instancePlugin` 转调 `wire.Session.SendEvent`。原范围中的「Router 在 Attach/Detach 时通知 bus」取消：bus import router，Router 反向持有 Bus 会形成循环；Router 的 Attach/Detach 目前只在 supervisor 测试的装配处调用，由装配处在旁边同时调用 `bus.Attach`/`bus.Detach`。
+- 现有 `SendEnvelopeSync` 走优先通道，通道满会关闭 Session，且不计业务预算：wire 新增 `SendEvent`，事件走业务 FIFO，按 CONTRACTS §1.2 计入本方向与全局 payload 预算，写出后才返回。只有写出后才返回，Bus 的每订阅者队列才是真正的积压上限；否则事件会全部堆进 wire 的 16 MiB 业务队列。
+- EVENT 原本进 SDK 的 `activation.control`：改由 wire 的新钩子 `Options.Event` 接收。接收方向按同一预算准入，超额丢弃并计数；SDK 在 activate.go 设置该钩子（只加调用点），dispatch.go 不改。
+- 原测试让 slow 在回调里阻塞，但 SDK 的读循环不停，事件写出后就离开 Core，Bus 队列不会满，Dropped 恒为 0。slow 改为在 Core 侧用带闸门的 `router.Plugin` 包装模拟写出受阻，丢弃数因此可以精确断言；回调阻塞的订阅者改测「不阻塞他人」。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-21（切片 T-06.3：非持久 Event Bus）。goal 目录 goal-21，分支 goal-21，worktree .worktrees/goal-21，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1765,24 +1771,32 @@ internal/core/router
 
 范围（只新增或修改这些）：
 - internal/wire/services.go：末尾追加 ServiceBusPublish = "core.bus.publish"
+- internal/wire/session.go：新增 SendEvent、Options.Event 与 Stats.DroppedEvents，以及 EVENT 的收发预算
 - 新增 internal/core/bus/
-- internal/core/router/：Router 在 Attach/Detach 时通知 bus（只加调用点）
-- sdk/：新增 bus.go（发布与订阅）；sdk.go 的 Collect 与 dispatch.go 接入订阅回调（只加调用点）；session.go 的 buildRegister 输出订阅路由；base.go 的 Root 增加 Subscriptions Hook 与 Base 默认实现
+- internal/core/router/router.go：Plugin 接口追加 SendEvent，instancePlugin 实现它（Router 本身不改）
+- sdk/：新增 bus.go（发布与订阅）；sdk.go 的 Collect 收集订阅（只加调用点）；activate.go 设置 wire.Options.Event（只加调用点）；session.go 的 buildRegister 输出订阅路由；base.go 的 Root 增加 Subscriptions Hook 与 Base 默认实现
 - 新增 internal/core/supervisor/testdata/busplugin/
 - 上述包的测试文件
 允许的新跨模块边：无。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. internal/core/bus
+1. internal/wire
+   func (s *Session) SendEvent(ctx context.Context, target string, ev *pb.BusEvent) error // Core 侧；target 为 callback_route_id
+   Options 增加 Event func(env *pb.Envelope, release func()) // 为 nil 时 EVENT 仍交给 Control
+   Stats 增加 DroppedEvents int64 // 接收方向预算不足而丢弃的 EVENT 数
+2. internal/core/router
+   Plugin 接口追加 SendEvent(ctx context.Context, target string, ev *pb.BusEvent) error // instancePlugin 转调 instance.Session.SendEvent
+3. internal/core/bus
    type Bus struct{ ... }
    type Options struct { QueueEvents int; QueueBytes int64 } // BUS_QUEUE_EVENTS、BUS_QUEUE_BYTES
    func New(log *slog.Logger, opt Options) *Bus
    func (b *Bus) Register(m *router.Mux) // 注册 core.bus.publish
    func (b *Bus) Attach(p router.Plugin) // 按插件的 BUS_SUBSCRIPTION 路由建立订阅与队列
-   func (b *Bus) Detach(pluginID string) // 丢弃该插件队列中未发出的事件
+   func (b *Bus) Detach(pluginID string) // 丢弃该插件队列中未发出的事件，取消正在等待写出的发送
    type Stats struct { Published, Delivered, Dropped uint64 }
    func (b *Bus) Stats(pluginID string) Stats // pluginID 为订阅者；Published 只对发布者有意义
-2. sdk
+   装配处在 router.Attach/Detach 旁边调用 bus.Attach/Detach，Router 不持有 Bus。
+4. sdk
    Root 增加 Hook：Subscriptions(*SubscriptionRegistry) // func (*Base) Subscriptions(*SubscriptionRegistry) 默认不订阅
    type SubscriptionRegistry struct{ ... }
    func Subscribe[T any](r *SubscriptionRegistry, routeID, eventName, schemaID string, version uint32, h func(*Context, T) error) // JSON 载荷；eventName 为 "plugin_id/event_name"
@@ -1792,17 +1806,20 @@ internal/core/router
 - Publish（core.bus.publish，载荷为 PublishRequest，响应为 PublishResponse）：event_name 必须属于调用者的命名空间（"<调用者 plugin_id>/" 前缀，名字部分同 Service 名规则），否则 PERMISSION_DENIED；encoding 为 JSON 时载荷必须是合法 UTF-8 JSON；schema_id 与版本非空。准入通过后分配 event_id（16 字节随机值的十六进制），把 BusEvent 依次放进每个匹配订阅者的队列（入队操作不等待订阅者），然后立即响应。没有订阅者也成功。发布不携带任何可信 Actor 权限。
 - 匹配：订阅的 event_name、schema_id 与 schema_version 都相等才投递；版本不同的订阅者不收到，也不计为丢弃。
 - 队列：每个订阅者独立；条数达到 QueueEvents 或字节超过 QueueBytes 时丢弃新事件（drop-newest）并计数，以 WARN 记录（订阅者、事件名、累计计数）。订阅者未激活或已 Detach 时不入队、不缓存，Core 重启或插件重启不补发。
-- 投递：每个订阅者一个发送 goroutine，按队列顺序以 FRAME_KIND_EVENT 发出（Target 为 callback_route_id，载荷为 BusEvent），不等待业务回执；一个订阅者的 Session 慢或阻塞时只影响它自己的队列。
-- SDK：收到 EVENT 时按 callback_route_id 找到订阅，把 payload 按 JSON 解码为 T（失败以 WARN 记录并丢弃，不回应），以订阅插件自身身份调用 h（Context 没有 Actor 与默认 Target，Send 必须显式 To）。h 的错误与 panic 只记日志。广播不参与普通事件的 StopPropagation。
+- 投递：每个订阅者一个发送 goroutine，按队列顺序逐条调用 Plugin.SendEvent（Target 为 callback_route_id，载荷为 BusEvent），等这一条写出后再发下一条，不等待业务回执；一个订阅者的 Session 慢或阻塞时只影响它自己的队列。SendEvent 返回错误（预算不足、Session 关闭、Detach 取消）时该事件计入 Dropped 并以 WARN 记录，不重试。Delivered 只表示已写出，不表示订阅者已处理。
+- wire 发送（SendEvent）：构造 FRAME_KIND_EVENT（call_id 为 0，载荷为 protobuf 编码的 BusEvent）。入队前在 s.mu 下按本方向 outBytes/MaxBytes 与 Global 准入，不足立即返回 RESOURCE_EXHAUSTED，不等待；EVENT 不占在途 Request 条数。帧进入业务 FIFO，排在优先通道之后，与 REQUEST 共用唯一的 writer。写出后归还预算并返回；写出前 ctx 结束则撤出队列、归还预算并返回 ctx 的错误；Session 关闭返回 UNAVAILABLE。不经优先通道。
+- wire 接收：Options.Event 非 nil 时，EVENT 不交给 Control，而是在读循环中按本方向 inBytes/MaxBytes（Global 非 nil 时也算）准入。不足时丢弃该帧、DroppedEvents 加一，Session 不关闭；通过时计入 inBytes 并调用 Event，release 归还预算，重复调用无副作用。Event 不得阻塞读循环。Core 侧不设置 Event，插件发来的 EVENT 仍由 Control 按协议违规关闭 Session；Adapter Session（sdk/adapter_run.go）不订阅，同样不设置。
+- SDK：activate.go 设置 Event。ready gate 未打开或已收到 STOPPING 时，以 WARN 记录并立即 release，不关闭 Session。其余事件放进每个 Session 唯一的投递 goroutine，按到达顺序串行处理：按 callback_route_id 找到订阅，把 payload 按 JSON 解码为 T（失败以 WARN 记录并丢弃，不回应），以订阅插件自身身份调用 h（Context 没有 Actor 与默认 Target，Send 必须显式 To）。h 返回后 release。h 的错误与 panic 只记日志。广播不参与普通事件的 StopPropagation。
 - Publish 在 Handler 内外都可以调用；在 Handler 内也不继承用户权限。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/supervisor/bus_test.go（//go:build unix）：构建 testdata/busplugin，以 pub、fast、slow 三个插件 ID 启动（slow 的回调阻塞到测试放行）。用 Bus{QueueEvents: 3} 装配：
-  - pub 发布 10 条：fast 收到全部 10 条且顺序不变；slow 只收到前若干条，其余计入 Dropped；pub 的 Publish 全部立即返回。
+- 提交：internal/core/supervisor/bus_test.go（//go:build unix）：构建 testdata/busplugin，以 pub、fast、slow、stuck 四个插件 ID 启动。用 Bus{QueueEvents: 3} 装配，订阅者以 `router.FromInstance` 接入；slow 外面再包一层测试内的 router.Plugin，它的 SendEvent 先等测试关闭闸门再转调真实实现，模拟 Session 写出受阻；stuck 的订阅回调在插件内阻塞，直到测试放行。
+  - 闸门关闭时 pub 先发布第 1 条，等包装层报告 SendEvent 已进入（第 1 条已离开队列）后，再发布第 2～10 条：Publish 全部立即返回；fast 收到全部 10 条且顺序不变；slow 的 Dropped 为 6（1 条等待写出、3 条排队）。开闸后 slow 按顺序恰好收到第 1～4 条，Delivered 为 4。
+  - stuck 的回调阻塞期间，fast 与 pub 不受影响；放行后 stuck 按发布顺序处理已收到的事件。
   - pub 发布到 "fast/x"（不属于自己）返回 PERMISSION_DENIED。
   - schema 版本不同的订阅者收不到，Dropped 不变。
-  - slow 停止后再发布：不入队；slow 重新启动后收不到之前的事件。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：QueueBytes 的边界；非法 JSON；没有订阅者；订阅回调的 Context 没有 Actor；解码失败只记日志；Detach 丢弃未发出的事件。
+  - slow 停止（装配处 Detach）后再发布：不入队；slow 重新启动后收不到之前的事件。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：QueueBytes 的边界；非法 JSON；没有订阅者；订阅回调的 Context 没有 Actor；解码失败只记日志；Detach 丢弃未发出的事件并取消正在等待写出的 SendEvent；wire 的 SendEvent 在本方向或全局预算不足时立即返回 RESOURCE_EXHAUSTED、写出后归还预算、写出前 ctx 结束则撤出队列；接收方向预算不足时丢弃 EVENT 并计入 DroppedEvents，Session 不关闭。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./sdk/...；go build ./...。
 
