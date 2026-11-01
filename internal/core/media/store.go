@@ -57,9 +57,12 @@ type File struct {
 }
 
 type entry struct {
-	file   File
-	owner  string // owner Session 的 SessionKey
-	offset uint64 // 已确认写入的长度，单位为字节
+	file    File
+	owner   string      // owner Session 的 SessionKey
+	offset  uint64      // 已确认写入的长度，单位为字节
+	leases  int         // 此上传对象的在途发送租约数，由 Store.mu 保护
+	retired bool        // 原引用已撤销或到期，最后一个租约负责回收文件
+	lease   *mediaLease // 非 nil 表示绑定 Adapter Session 的只读消费令牌
 }
 
 // Store 串行管理文件变更与配额；上传提交后只转移索引，保留原有占用。
@@ -287,8 +290,16 @@ func (s *Store) sweep() {
 }
 
 func (s *Store) release(entries map[string]*entry, id string, e *entry) {
-	s.remove(e.file.Path)
 	delete(entries, id)
+	if e.lease != nil {
+		s.releaseLease(e.lease)
+		return
+	}
+	if e.leases > 0 {
+		e.retired = true
+		return
+	}
+	s.remove(e.file.Path)
 	s.total -= int64(e.file.Size)
 	s.used[e.owner] -= int64(e.file.Size)
 	if s.used[e.owner] == 0 {

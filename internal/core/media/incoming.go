@@ -28,6 +28,7 @@ type incomingObject struct {
 	err      error
 	reserved int64
 	charges  map[string]int64 // 每个消费 Session 的引用预算，Core 磁盘只计一份
+	leases   int              // 发送消费租约数，由 Store.mu 保护
 }
 
 type incomingAccess struct {
@@ -163,8 +164,8 @@ func (s *Store) sweepIncoming() {
 				s.uncharge(object, sessionKey)
 			}
 		}
-		// 取件期间保留预留和文件，由取件者统一发布结果或清理失败。
-		if object.fetching != nil {
+		// 取件和发送期间保留对象，由对应的完成路径发布结果或释放租约。
+		if object.fetching != nil || object.leases > 0 {
 			continue
 		}
 		if len(live[object]) > 0 || (!object.issued && now.Before(object.expires)) {
