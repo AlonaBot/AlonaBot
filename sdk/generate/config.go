@@ -18,6 +18,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/sdk/config"
 	"github.com/google/jsonschema-go/jsonschema"
 )
@@ -598,8 +599,8 @@ func configSecretType(fieldType types.Type) bool {
 }
 
 func (b *configBuilder) icon(path string) error {
-	if !filepath.IsLocal(path) {
-		return fmt.Errorf("option icon must be relative to the module directory: %q", path)
+	if err := manifest.ValidateRelPath(path); err != nil {
+		return fmt.Errorf("invalid option icon path %q: %w", path, err)
 	}
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".svg", ".png", ".webp":
