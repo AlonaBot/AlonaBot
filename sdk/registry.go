@@ -3,7 +3,6 @@ package sdk
 import (
 	"fmt"
 	"net/http"
-	pathpkg "path"
 	"reflect"
 	"strings"
 	"time"
@@ -347,11 +346,14 @@ func (r *HTTPRegistry) Handle(method, path string, h http.Handler, opts ...HTTPO
 	switch {
 	case h == nil:
 		r.errs = append(r.errs, fmt.Errorf("handler for HTTP %s %s is nil", method, path))
-	case !strings.HasPrefix(path, "/") || pathpkg.Clean(path) != path:
-		// 非规范写法（//、..、尾部 /）会让同一资源有多个路径，代理匹配时产生歧义。
-		r.errs = append(r.errs, fmt.Errorf("HTTP path %q must start with / and be canonical", path))
-	case route.Public && route.AuthMode == pb.HttpAuthMode_HTTP_AUTH_MODE_CORE_SESSION:
-		r.errs = append(r.errs, fmt.Errorf("public route %s %s must declare a callback verification mode", method, path))
+	case !validHTTPMethod(method) || !validHTTPMethod(route.Method):
+		r.errs = append(r.errs, fmt.Errorf("HTTP method must be standard and uppercase: input %q, registered %q", method, route.Method))
+	case !canonicalHTTPPath(route.Path):
+		r.errs = append(r.errs, fmt.Errorf("HTTP path %q must start with / and be canonical", route.Path))
+	case route.Public && route.AuthMode != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_STATE && route.AuthMode != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_SIGNATURE:
+		r.errs = append(r.errs, fmt.Errorf("public HTTP route %s %s must declare state or signature verification", method, path))
+	case !route.Public && route.AuthMode != pb.HttpAuthMode_HTTP_AUTH_MODE_CORE_SESSION:
+		r.errs = append(r.errs, fmt.Errorf("private HTTP route %s %s must use Core session authentication", method, path))
 	default:
 		for _, e := range r.routes {
 			if e.Method == route.Method && e.Path == route.Path {

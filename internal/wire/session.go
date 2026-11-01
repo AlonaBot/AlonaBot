@@ -671,8 +671,11 @@ func (s *Session) readLoop() {
 
 // dispatch 校验一帧并按种类分流；返回错误时读循环关闭 Session。
 func (s *Session) dispatch(env *pb.Envelope) error {
+	var payloadError *validate.Error
 	if err := validate.Envelope(env); err != nil {
-		return err
+		if env.GetKind() != pb.FrameKind_FRAME_KIND_REQUEST || !errors.As(err, &payloadError) || payloadError.Code != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT {
+			return err
+		}
 	}
 	peerID := "" // 对端为 Core 时帧上不带插件来源
 	if s.opt.Local == pb.InitiatorSide_INITIATOR_SIDE_CORE {
@@ -683,7 +686,7 @@ func (s *Session) dispatch(env *pb.Envelope) error {
 	}
 	switch env.GetKind() {
 	case pb.FrameKind_FRAME_KIND_REQUEST:
-		return s.onRequest(env)
+		return s.onRequest(env, payloadError)
 	case pb.FrameKind_FRAME_KIND_RESPONSE:
 		return s.onResponse(env)
 	case pb.FrameKind_FRAME_KIND_CANCEL:
@@ -702,7 +705,7 @@ func payloadOf(env *pb.Envelope) Payload {
 
 // onRequest 处理对端 REQUEST：检查编号单调、阶段门禁、父调用与准入预算，通过后另起 goroutine 执行 Handler；
 // 拒绝时经优先通道回复错误。
-func (s *Session) onRequest(env *pb.Envelope) error {
+func (s *Session) onRequest(env *pb.Envelope, payloadError *validate.Error) error {
 	if env.GetInitiatorSide() != s.peer {
 		return errors.New("REQUEST initiator_side is not the peer")
 	}
@@ -741,6 +744,11 @@ func (s *Session) onRequest(env *pb.Envelope) error {
 			deadline = parent.deadline // 子请求不得延长父期限
 			in.Deadline = deadline
 		}
+	}
+	// JSON 语法错误只拒绝本次调用；身份、编号、阶段和父调用检查仍先执行。
+	if payloadError != nil {
+		s.mu.Unlock()
+		return s.respondErr(id, payloadError.Code, payloadError.Message)
 	}
 	// 4. 对端方向的准入预算；通过后登记在途，另起 goroutine 执行 Handler，读循环不等待它。
 	if len(s.inbound) >= s.opt.MaxInflight || s.inBytes+n > s.opt.MaxBytes || !s.opt.Global.acquire(n) {

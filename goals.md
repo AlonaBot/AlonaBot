@@ -54,17 +54,17 @@
 | goal-10 | T-04.1 | 根插件 API 与静态注册索引 | T-03.1 | 已完成（PR #34） |
 | goal-56 | T-11.3 | Agent 会话存储 | T-03.1 | 已完成（PR #35） |
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 已完成（PR #39） |
-| goal-11 | T-04.2 | 构建期生成器 | T-04.1 | 可派发 |
+| goal-11 | T-04.2 | 构建期生成器 | T-04.1 | 已完成（PR #42） |
 | goal-12 | T-04.3 | 命令选择、文本匹配与参数绑定 | T-04.1 | 可派发 |
 | goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1 | 等待前置 |
-| goal-19 | T-06.1 | Service/Bus 描述与 Broker 准入 | T-04.1 | 可派发 |
-| goal-25 | T-07.3 | SDK HTTP Listener 与 Core 代理 | T-04.1 | 可派发 |
+| goal-19 | T-06.1 | Service/Bus 描述与 Broker 准入 | T-04.1 | 已完成（PR #45） |
+| goal-25 | T-07.3 | SDK HTTP Listener 与 Core 代理 | T-04.1 | 已完成（PR #46） |
 | goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 可派发 |
 | goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 等待前置 |
 | goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 等待前置 |
-| goal-21 | T-06.3 | 非持久 Event Bus | T-06.1 | 等待前置 |
-| goal-26 | T-07.4 | 两个 Host 与插件票据 | T-07.3 | 等待前置 |
-| goal-28 | T-08.1 | 配置字段描述与构建检查 | T-04.2 | 等待前置 |
+| goal-21 | T-06.3 | 非持久 Event Bus | T-06.1 | 可派发 |
+| goal-26 | T-07.4 | 两个 Host 与插件票据 | T-07.3 | 可派发 |
+| goal-28 | T-08.1 | 配置字段描述与构建检查 | T-04.2 | 可派发 |
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-06.1 | 等待前置 |
 | goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2 | 等待前置 |
 | goal-78 | T-15.1 | 官方 OneBot 11 Adapter 的连接与接收 | T-03.3、T-03.4 | 可派发 |
@@ -1182,7 +1182,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-11 · T-04.2 构建期生成器
 
-状态：可派发。前置 T-04.1 已由 PR #34 合并；goal-10 的符号已按合入代码核对：`sdk.RouteOption`（`func(*routeOptions)`）、`sdk.Alias(path ...string)`、`sdk.Priority(p int32)`、`(*CommandRegistry).Command(name, handler, opts ...RouteOption)`、`(*EventRegistry).On(routeID, eventType, handler, opts ...RouteOption)`、`sdk.Command{Path, Aliases, Priority, Handler, Mode, Params}`、`sdk.EventRoute{RouteID, EventType, Handler, Priority}`、`router.CommandEntry`、`router.Shadow`、`(*CommandIndex).Lookup(tokens []string) (CommandEntry, int, bool)`、`(*CommandIndex).Shadows() []Shadow`（返回切片只读）、`(*Router).Commands() *CommandIndex`；goal-76 的 cobra 命令树在 cmd/alonabot/commands.go 的 `execute` 中构造（根命令 `alonabot`，已有 `run`、`tune list`）。
+状态：已完成（PR #42，squash commit `62d5afa`）。`sdk/generate` 的 Scan、Options、Result、Diagnostic、Command、Event 与 `FileName`、`sdk.Generated`、`sdk.UseGenerated`、`alonabot plugin generate/check` 已合入。Scan 用 `go list -overlay` 把现有生成文件排除在依赖闭包之外。验证证据见 TEST-MATRIX §3.2。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-11（切片 T-04.2：构建期生成器）。goal 目录 goal-11，分支 goal-11，worktree .worktrees/goal-11，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1401,7 +1401,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-19 · T-06.1 Service/Bus 描述与 Broker 准入
 
-状态：可派发。前置 T-04.1 已由 PR #34 合并；goal-10 的符号已按合入代码核对：`sdk.RouteOption`（`func(*routeOptions)`）、`sdk.Alias(path ...string)`、`sdk.Priority(p int32)`、`(*CommandRegistry).Command(name, handler, opts ...RouteOption)`、`(*EventRegistry).On(routeID, eventType, handler, opts ...RouteOption)`、`sdk.Command{Path, Aliases, Priority, Handler, Mode, Params}`、`sdk.EventRoute{RouteID, EventType, Handler, Priority}`、`router.CommandEntry`、`router.Shadow`、`(*CommandIndex).Lookup(tokens []string) (CommandEntry, int, bool)`、`(*CommandIndex).Shadows() []Shadow`（返回切片只读）、`(*Router).Commands() *CommandIndex`；router.Router、router.Mux（现有 `NewMux`、`Handle`、`For`，`Forward` 由本切片新增）、router.Plugin、router.Caller、`tune.Values.RequestTimeout` 与 sdk 的 currentSession 沿用已合入代码。
+状态：已完成（PR #45，squash commit `dcb4ec2`）。已合入：`internal/core/broker`（New、Call）、`(*router.Mux).Forward`、`(*router.Router).Plugin`，以及 SDK 的 Services Hook、ServiceRegistry、Access 常量、WithAccess、JSONService、ProtoService、CallJSON、CallProto、Context.Caller。审查中经维护者授权，插件 ID 规则从 `manifest.ValidateID` 移到 `validate.PluginID`，同时移走的还有 `validate.MaxPluginIDLen` 与 `validate.MarketPrefix`；manifest 不保留旧入口，语句中的 manifest.ValidateID 以此为准。验证证据见 TEST-MATRIX §3.2。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-19（切片 T-06.1：Service/Bus 描述与 Broker 准入）。goal 目录 goal-19，分支 goal-19，worktree .worktrees/goal-19，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1474,7 +1474,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-25 · T-07.3 SDK HTTP Listener 与 Core 代理
 
-状态：可派发。前置 T-04.1 已由 PR #34 合并；goal-10 的符号已按合入代码核对：`sdk.RouteOption`（`func(*routeOptions)`）、`sdk.Alias(path ...string)`、`sdk.Priority(p int32)`、`(*CommandRegistry).Command(name, handler, opts ...RouteOption)`、`(*EventRegistry).On(routeID, eventType, handler, opts ...RouteOption)`、`sdk.Command{Path, Aliases, Priority, Handler, Mode, Params}`、`sdk.EventRoute{RouteID, EventType, Handler, Priority}`、`router.CommandEntry`、`router.Shadow`、`(*CommandIndex).Lookup(tokens []string) (CommandEntry, int, bool)`、`(*CommandIndex).Shadows() []Shadow`（返回切片只读）、`(*Router).Commands() *CommandIndex`；router.Router、router.Plugin、`(*sdk.HTTPRegistry).Handle(method, path string, h http.Handler, opts ...HTTPOption)`、cmd/alonabot/commands.go 中 `execute` 构造的 `run` 命令与 internal/tune 沿用已合入代码。
+状态：已完成（PR #46，squash commit `1c3c912`）。`internal/core/settings`（Settings、Defaults、Load、ValidateListen、FileName）、`internal/core/httpproxy`（Authorizer、Server、New、Bind、Unbind、ServeHTTP）、`wire.HeaderProxyAuth`、`wire.CapabilityHTTPListener` 与 SDK HTTP Listener 已合入。`ValidateListen` 是审查中经维护者认可追加的导出符号，供 YAML 与 `--listen` 共用。验证证据见 TEST-MATRIX §3.2。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-25（切片 T-07.3：SDK HTTP Listener 与 Core 代理）。goal 目录 goal-25，分支 goal-25，worktree .worktrees/goal-25，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1742,7 +1742,7 @@ internal/core/router
 
 ### goal-21 · T-06.3 非持久 Event Bus
 
-状态：等待前置（T-06.1）。语句中 goal-2、goal-19 提供的符号（router.Mux、router.Router、router.Plugin、sdk 的 ServiceRegistry 与分发、BUS_SUBSCRIPTION 的注册校验）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：可派发。前置 T-06.1 已由 PR #45 合并；goal-2、goal-19 的符号已按合入代码核对：`router.NewMux() *Mux`、`(*Mux).Handle(name string, fn ServiceFunc)`、`(*Mux).Forward(fn ServiceFunc)`、`(*Mux).For(c Caller) wire.Handler`；`router.Plugin` 接口为 `PluginID() string`、`Activated() bool`、`Routes() []*pb.RouteDescriptor`、`Call(ctx, wire.Request) (wire.Response, error)`；`(*Router).Plugin(pluginID string) (Plugin, bool)`；SDK 的 `ServiceRegistry`、Root 的 `Services(*ServiceRegistry)` Hook，以及 dispatch.go 中先查服务路由、再查事件与命令路由的分发入口；BUS_SUBSCRIPTION 的注册校验在 `validate.Register`，事件名中的插件 ID 用 `validate.PluginID` 校验，callback_route_id 必须指向同一注册中的路由。注意 goal-12（PR #47）正在把 sdk/dispatch.go 的 `invokeEvent` 改为 `invokeHandler`，最好在它合入后再从 main 创建分支。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-21（切片 T-06.3：非持久 Event Bus）。goal 目录 goal-21，分支 goal-21，worktree .worktrees/goal-21，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1799,7 +1799,7 @@ internal/core/router
 
 ### goal-26 · T-07.4 两个 Host 与插件票据
 
-状态：等待前置（T-07.3）。语句中 goal-25 提供的符号（httpproxy.Server、httpproxy.Authorizer、settings.Settings、wire.HeaderProxyAuth）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：可派发。前置 T-07.3 已由 PR #46 合并；goal-25 的符号已按合入代码核对：`httpproxy.Authorizer{ Authorize(r *http.Request, pluginID string) bool }`，`httpproxy.New(log *slog.Logger, auth Authorizer) *Server`，以及 `(*Server).Bind(pluginID, generationID string, endpoint *pb.HttpListener, token []byte, routes []*pb.RouteDescriptor)`、`Unbind(pluginID, generationID string)`、`ServeHTTP`；`settings.Settings` 的 `AdminBaseURL`、`PluginBaseURL` 为字符串，由 `settings.Load` 校验 scheme、端口与主机名，装配处用 `url.Parse` 转成 `*url.URL` 交给 webhost.Options；`wire.HeaderProxyAuth = "X-Alonabot-Proxy-Auth"`。cmd/alonabot 的 run 现在用 `httpproxy.New(log, nil)` 作为公开 Listener 的 Handler，并带 shortcut 注释。httpproxy.New 在构造时就要 Authorizer，而 webhost.Options 又需要 *httpproxy.Server：装配处先用一个转调 `host.Authorize` 的本地适配器构造 Server，再构造 Host，不需要改 httpproxy 的签名。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-26（切片 T-07.4：两个 Host 与插件票据）。goal 目录 goal-26，分支 goal-26，worktree .worktrees/goal-26，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1863,7 +1863,7 @@ internal/core/webhost
 
 ### goal-28 · T-08.1 配置字段描述与构建检查
 
-状态：等待前置（T-04.2）。语句中 goal-11 提供的符号（sdk/generate 的 Scan、Result、Diagnostic，sdk.Generated、sdk.UseGenerated，plugin generate/check）只写名字；合并后由审查者核对签名，再改为可派发。本切片首次引入已批准的 github.com/google/jsonschema-go（D-43）。
+状态：可派发。前置 T-04.2 已由 PR #42 合并；goal-11 的符号已按合入代码核对：`generate.Scan(ctx context.Context, opt Options) (*Result, error)`，`Result{RootType, ConfigType string; Commands []Command; Events []Event; Source []byte; Diagnostics []Diagnostic}`，`Diagnostic{Pos, Message string}`，`generate.FileName = "alonabot_gen.go"`；`sdk.Generated{Commands func(*CommandRegistry); Events func(*EventRegistry)}`，`sdk.UseGenerated(root Root, g Generated)`；`plugin generate/check` 在 cmd/alonabot/plugin.go 的 `pluginGeneration` 中逐字节比较生成内容。Scan 以 `-overlay` 把现有 alonabot_gen.go 排除在 `go list` 之外，Config 分析沿用这一扫描视图。本切片首次引入已批准的 github.com/google/jsonschema-go（D-43）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-28（切片 T-08.1：配置字段描述与构建检查）。goal 目录 goal-28，分支 goal-28，worktree .worktrees/goal-28，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1988,7 +1988,7 @@ internal/core/webhost
 
 ### goal-67 · T-13.1 库模式入口与同进程组件
 
-状态：等待前置（T-02.1、T-03.3、T-04.2）。语句中 goal-2、goal-4、goal-11、goal-76 提供的符号（router、message.Service、remote.Process、supervisor、sdk.Run 与 sdk.RunAdapter 的内部流程、sdk.Generated、tune.Parse）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：等待前置。T-02.1、T-03.3、T-04.2 都已合并（PR #42 合入 sdk.Generated、sdk.UseGenerated 与生成器）。装配依赖的 `router.New` 正由 goal-12（PR #47）修改签名，`remote.Process.Bind` 正由 goal-7 增加 Caller 参数；两者合入后，审查者按实际代码核对语句中的 router、message.Service、remote.Process、supervisor、sdk.Run 与 sdk.RunAdapter 的内部流程以及 tune.Parse，再改为可派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-67（切片 T-13.1：库模式入口与同进程组件）。goal 目录 goal-67，分支 goal-67，worktree .worktrees/goal-67，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。

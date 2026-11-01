@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
@@ -326,5 +328,29 @@ func TestConversationFieldNumbers(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestEnvelopeSchemaVersions 区分业务版本和固定控制帧版本（WIRE §1）。
+func TestEnvelopeSchemaVersions(t *testing.T) {
+	for _, kind := range []pb.FrameKind{pb.FrameKind_FRAME_KIND_REQUEST, pb.FrameKind_FRAME_KIND_RESPONSE, pb.FrameKind_FRAME_KIND_HEARTBEAT} {
+		for _, version := range []uint32{0, 1, 2} {
+			env := &pb.Envelope{ProtocolMajor: 1, SessionId: make([]byte, 16), Kind: kind, PayloadEncoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaId: "test.service.v1", SchemaVersion: version}
+			if kind == pb.FrameKind_FRAME_KIND_HEARTBEAT {
+				env.SchemaId = validate.SchemaID(&pb.Heartbeat{})
+			} else {
+				env.InitiatorSide = pb.InitiatorSide_INITIATOR_SIDE_PLUGIN
+				env.CallId = 1
+			}
+			if kind == pb.FrameKind_FRAME_KIND_REQUEST {
+				env.Target = "a/echo"
+				env.DeadlineUnixMs = proto.Int64(1)
+			}
+			wantValid := version >= 1 && (kind != pb.FrameKind_FRAME_KIND_HEARTBEAT || version == 1)
+			err := validate.Envelope(env)
+			if (err == nil) != wantValid {
+				t.Errorf("kind=%s version=%d: error=%v want_valid=%v", kind, version, err, wantValid)
+			}
+		}
 	}
 }

@@ -5,11 +5,14 @@
 // Run 把 log/slog 的默认 Logger 换成写 stderr 的 JSON 行，按 Core 下发的级别过滤（CONTRACTS §14）。
 // Base 为 [Root] 的全部 Hook 提供空的默认实现，根插件只覆盖需要的方法。
 //
-// 事件 Handler 可通过 Context.Send 回复原事件目标；命令分发、HTTP 路由与定时任务尚未实现。
+// 命令与事件 Handler 可通过 Context.Send 回复原事件目标；自动回复型命令返回 Chain，由 Core 发送一次。
+// 文本匹配与 Raw 共用 Handler 调用上下文；HTTP 路由由 SDK 托管 Listener 并校验 Session 凭证。
+// 定时任务尚未实现。
 //
 // 包的组成：
 //   - 插件的 main 调用 [Run]；[Collect] 单独收集注册项，供检查与测试使用。
 //   - [CommandRegistry]、[EventRegistry]、[HTTPRegistry] 与 [ScheduleRegistry] 收集命令、事件、HTTP 路由和定时任务。
+//   - [ServiceRegistry] 收集类型化服务；[CallJSON] 与 [CallProto] 经 Core 调用目标插件。
 //   - [Context] 只在一次 Handler 调用期间有效，提供 [Context.Send] 与 [Context.StopPropagation]。
 //   - 根插件嵌入 [Base]，覆盖 [Root] 中需要的 Hook。
 package sdk
@@ -22,6 +25,7 @@ import (
 	"log/slog"
 	"slices"
 	"sync/atomic"
+	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
@@ -48,6 +52,7 @@ type Context struct {
 	stopped   atomic.Bool     // 锁存的停止传播标记，一经设置不能清除
 	active    atomic.Bool     // Handler 返回时关闭，阻止继续使用父调用
 	inbound   *wire.Inbound
+	caller    string // Core 下发的服务直接调用方
 	event     *pb.Event
 	match     []string // 本次 Regex 的捕获组
 	autoReply bool     // 自动回复 Handler 通过返回 Chain 发送
@@ -137,8 +142,8 @@ func Run(root Root) error {
 	if err != nil {
 		return err
 	}
-	if len(reg.HTTP) > 0 || len(reg.Schedules) > 0 {
-		return &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "this SDK version does not support HTTP routes or scheduled jobs yet"}
+	if len(reg.Schedules) > 0 {
+		return &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "this SDK version does not support scheduled jobs yet"}
 	}
 
 	// 3. 连接 Core 并依次完成握手、准备与激活，然后进入服务循环。
@@ -146,6 +151,8 @@ func Run(root Root) error {
 	if err != nil {
 		return err
 	}
+	l.http = newHTTPListener(reg.HTTP)
+	defer func() { l.http.close(time.Now().Add(onStopBudget)) }()
 	conn, err := dial(l)
 	if err != nil {
 		return err
@@ -172,6 +179,7 @@ type Registration struct {
 	Events    []EventRoute
 	HTTP      []HTTPRoute
 	Schedules []Schedule
+	services  []serviceRoute
 }
 
 // Collect 调用根插件的注册入口，检查 Handler 签名与同插件内的重复项（D-20：同插件重复即报错）。
@@ -180,16 +188,19 @@ func Collect(root Root) (*Registration, error) {
 		return nil, errors.New("root plugin is nil")
 	}
 	cmds, routes, jobs := &CommandRegistry{}, &HTTPRegistry{}, &ScheduleRegistry{}
+	generated := generatedFor(root)
+	generated.registerCommands(cmds)
 	root.Commands(cmds)
 	events := &EventRegistry{seen: make(map[string]bool)}
 	for _, command := range cmds.commands {
 		events.seen[commandRouteID(command)] = true
 	}
+	generated.registerEvents(events)
 	root.Events(events)
 	root.HTTP(routes)
 	root.Schedules(jobs)
 	reg := &Registration{Commands: cmds.commands, Events: events.events, HTTP: routes.routes, Schedules: jobs.jobs}
-	errs := slices.Concat(cmds.errs, events.errs, routes.errs, jobs.errs)
+	errs := append(slices.Concat(cmds.errs, events.errs, routes.errs, jobs.errs), collectServices(root, reg))
 	if err := errors.Join(errs...); err != nil {
 		return nil, fmt.Errorf("invalid registration of %T: %w", root, err)
 	}

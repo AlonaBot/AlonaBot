@@ -19,6 +19,7 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter/memory"
+	"github.com/AlonaBot/AlonaBot/internal/core/broker"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/message"
@@ -91,10 +92,22 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 				t.Fatal(err)
 			}
 			sender := message.New(registry, policy.New(store))
+			target := &pb.Target{AdapterId: "memory", AdapterInstanceId: "instance", AccountId: "account", ChatId: "chat", ThreadId: proto.String("topic")}
+			actor := &pb.Actor{ExternalUserId: "user", AdapterInstanceId: "instance"}
 			mux := router.NewMux()
 			mux.Handle(wire.ServiceSend, sender.Send)
 			spec.Handler = mux.For(router.NewCaller(spec.PluginID, spec.GenerationID))
 			events := router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send)
+			services := broker.New(events, output.Logger(), values.RequestTimeout)
+			serviceParents := make(chan uint64, 1)
+			mux.Forward(func(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response {
+				parent, ok := in.ParentAttach.(*router.Invocation)
+				if in.ParentCallID == 0 || !ok || !proto.Equal(parent.Event.GetActor(), actor) || !proto.Equal(parent.DefaultTarget, target) {
+					t.Errorf("service lost command parent: call_id=%d attach=%+v", in.ParentCallID, in.ParentAttach)
+				}
+				serviceParents <- in.ParentCallID
+				return services.Call(ctx, caller, in)
+			})
 			events.Start()
 			defer events.Close()
 			if err := platform.Start(ctx, events); err != nil {
@@ -112,14 +125,13 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 				}
 			}()
 			events.Attach(router.FromInstance(running.Instance))
-			target := &pb.Target{AdapterId: "memory", AdapterInstanceId: "instance", AccountId: "account", ChatId: "chat", ThreadId: proto.String("topic")}
 			inject := func(parts ...string) {
 				t.Helper()
 				chain := &pb.MessageChain{}
 				for _, part := range parts {
 					chain.Segments = append(chain.Segments, &pb.Segment{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: part}}})
 				}
-				if err := platform.Inject(ctx, &pb.Event{EventType: "message.created", SourceKind: pb.EventSourceKind_EVENT_SOURCE_KIND_ADAPTER, Target: target, EventPayload: &pb.EventPayload{Kind: &pb.EventPayload_MessageCreated{MessageCreated: &pb.MessageCreatedPayload{Chain: chain}}}}); err != nil {
+				if err := platform.Inject(ctx, &pb.Event{EventType: "message.created", SourceKind: pb.EventSourceKind_EVENT_SOURCE_KIND_ADAPTER, Target: target, Actor: actor, EventPayload: &pb.EventPayload{Kind: &pb.EventPayload_MessageCreated{MessageCreated: &pb.MessageCreatedPayload{Chain: chain}}}}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -136,6 +148,7 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 				{"username", []string{"/rss@BoT"}, []string{"rss", "event"}, []string{"rss"}},
 				{"wrong_username", []string{"/rss@other"}, []string{"raw", "event"}, nil},
 				{"sum", []string{"/calc 1 2"}, []string{"calc", "event"}, []string{"3"}},
+				{"service", []string{"/service"}, []string{"service", "event"}, []string{"service reply", "demo"}},
 				{"bad_number", []string{"/calc 1 x"}, []string{"event"}, []string{"Usage: /calc <a:int> <b:int>"}},
 				{"missing", []string{"/calc 1"}, []string{"event"}, []string{"Usage: /calc <a:int> <b:int>"}},
 				{"extra", []string{"/calc 1 2 3"}, []string{"event"}, []string{"Usage: /calc <a:int> <b:int>"}},
@@ -192,10 +205,20 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 							t.Errorf("target changed: %v", send.Target)
 						}
 					}
+					if tc.name == "service" {
+						select {
+						case parent := <-serviceParents:
+							if parent == 0 {
+								t.Error("service request has no parent_call_id")
+							}
+						default:
+							t.Error("command did not call Service Broker")
+						}
+					}
+					if tc.name == "auto_send_guard" && !strings.Contains(logs.String(), "ERROR_CODE_FAILED_PRECONDITION") {
+						t.Error("missing auto-reply Send rejection diagnostic")
+					}
 				})
-			}
-			if !strings.Contains(logs.String(), "ERROR_CODE_FAILED_PRECONDITION") {
-				t.Error("missing auto-reply Send rejection diagnostic")
 			}
 		})
 	}

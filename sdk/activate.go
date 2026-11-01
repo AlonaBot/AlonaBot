@@ -152,6 +152,7 @@ func (a *activation) shutdown(deadline time.Time) {
 		// 1. 关闭 ready gate 并取消 lifetime，不再接受新业务。
 		a.ready.Store(false)
 		a.stopLifetime()
+		go a.l.http.close(deadline)
 		// 2. 用独立的截止 context 执行 OnStop，最多等到 deadline。
 		ctx, cancel := context.WithDeadline(context.Background(), deadline)
 		done := make(chan struct{})
@@ -174,6 +175,7 @@ func (a *activation) shutdown(deadline time.Time) {
 		}
 		timer.Stop()
 		cancel()
+		a.l.http.close(deadline)
 		// 3. 关闭 Session 并通知 serve 返回。
 		_ = a.sess.Close()
 		close(a.finished)
@@ -223,6 +225,9 @@ func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regis
 		SourcePluginID: l.pluginID, Handler: businessHandler(reg), Admit: a.admit, Control: a.control,
 		MaxInflight: int(limits.GetMaxInflight()), MaxBytes: int64(limits.GetMaxPayloadBytes()), DefaultDeadline: time.Duration(limits.GetRequestTimeoutMs()) * time.Millisecond,
 	})
+	if l.http != nil {
+		l.http.activation.Store(a)
+	}
 	activeSession.Store(a)
 	a.sess.Start() // a.sess 赋值之后再启动，回调中使用的指针一定有效
 	select {

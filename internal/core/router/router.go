@@ -80,6 +80,14 @@ func (r *Router) Attach(p Plugin) {
 	r.rebuildCommands()
 }
 
+// Plugin 返回最近一次 Attach 的插件实例及查找结果；激活状态由调用方即时检查。
+func (r *Router) Plugin(pluginID string) (Plugin, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	plugin, ok := r.plugins[pluginID]
+	return plugin, ok
+}
+
 // Detach 移除插件并重建命令索引，使其退出后续事件的候选集。
 func (r *Router) Detach(pluginID string) {
 	r.mu.Lock()

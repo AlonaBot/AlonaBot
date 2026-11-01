@@ -13,7 +13,12 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
-const auditEnv = "ALONABOT_TEST_COMMAND_AUDIT"
+const (
+	auditEnv             = "ALONABOT_TEST_COMMAND_AUDIT"
+	serviceInputSchema   = "test.command.service.input.v1"
+	serviceOutputSchema  = "test.command.service.output.v1"
+	serviceSchemaVersion = 1
+)
 
 type plugin struct{ sdk.Base }
 
@@ -39,6 +44,13 @@ func reply(entry, text string) (message.Chain, error) {
 
 // Commands 注册有实际副作用记录的命令与文本路由。
 func (*plugin) Commands(r *sdk.CommandRegistry) {
+	r.Command("service", func(c *sdk.Context) (message.Chain, error) {
+		caller, err := sdk.CallJSON[string](c.Context(), "demo/context", serviceInputSchema, serviceSchemaVersion, "service reply")
+		if err != nil {
+			return nil, err
+		}
+		return reply("service", caller)
+	})
 	r.Command("rss", func(*sdk.Context) (message.Chain, error) { return reply("rss", "rss") }, sdk.Alias("feed"))
 	r.Group("rss", func(g *sdk.CommandGroup) {
 		g.Command("add", func(_ *sdk.Context, url string) (message.Chain, error) { return reply("add:"+url, "added:"+url) }, sdk.Args("url"))
@@ -83,6 +95,14 @@ func (*plugin) Commands(r *sdk.CommandRegistry) {
 	r.EndsWith("ends", []string{"END"}, func(*sdk.Context) error { return record("ends") })
 	r.FullMatch("full", []string{"hello", "WHOLE"}, func(*sdk.Context) error { return record("full") })
 	r.Raw("raw", func(*sdk.Context) error { return record("raw") }, sdk.Priority(-100))
+}
+
+// Services 通过原 Target 回复，验证命令派生的 Service 调用保留可信上下文。
+func (*plugin) Services(r *sdk.ServiceRegistry) {
+	sdk.JSONService(r, "context", serviceInputSchema, serviceOutputSchema, serviceSchemaVersion, func(c *sdk.Context, text string) (string, error) {
+		_, err := c.Send(message.Chain{message.Text(text)})
+		return c.Caller(), err
+	})
 }
 
 // Events 记录命令层继续后进入普通事件路由的实际调用。

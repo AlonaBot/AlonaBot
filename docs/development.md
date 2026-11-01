@@ -51,6 +51,14 @@ bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle --stdi
 
 首次运行会登记开发用安装记录并提交新代次（`mode=new`），之后复用已提交代次（`mode=restart`）。尚无正式的安装、来源校验与管理 CLI。
 
+`run` 取得 core.lock 后读取 `<data_dir>/alonabot.yaml`；文件不存在时以 0600 权限写入缺省值（键与缺省值见 CONTRACTS §15.1），未知键、类型或取值错误时以 usage 退出码报告键名与行号。修改设置文件后重启生效。`--listen`、`--log-level`、`--log-format` 只在命令行显式给出时覆盖设置，只对本次运行有效，不改文件：
+
+```sh
+bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/httpplugin --listen 127.0.0.1:8080
+```
+
+Core 在 `listen` 地址（缺省 `127.0.0.1:7650`）上提供唯一的公开 HTTP 入口，`/plugins/{id}/...` 转发给该插件当前 Session 的路由；私有路由尚未接入插件会话授权，目前一律返回 401。设置了 `proxy` 时，Core 与子进程使用它作为 `HTTP_PROXY`/`HTTPS_PROXY`；为空时原样传递环境中的 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`。
+
 调优参数在启动时解析；修改后重启生效。查看全部 37 项参数及当前生效值：
 
 ```sh
@@ -60,6 +68,15 @@ bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle --args
 ```
 
 `--args` 可重复，放在子命令前后均生效，后出现的覆盖先出现的。直接参数支持逗号分隔的 `KEY=VALUE`；文件每行一项，空行和以 `#` 开头的注释行会被忽略。时长使用 `2s` 等 Go 时长格式；大小使用 `B`、`KiB`、`MiB`、`GiB`，`MB` 等十进制单位会报错。`run` 将最终覆盖值及出处记为 WARN。
+
+插件注册代码由构建期生成器从标记生成，标记语法见 `sdk/generate` 的包文档。在插件构建入口目录生成或检查 `alonabot_gen.go`：
+
+```sh
+bin/alonabot plugin generate --dir ./myplugin   # 内容不变时不改文件
+bin/alonabot plugin check --dir ./myplugin --goos linux --goarch amd64 --tags a,b
+```
+
+两者按 `--goos`、`--goarch`、`--tags` 筛选源码（缺省取当前环境），只扫描入口及其依赖的本 module 包，不受现有生成文件的 import 影响。源码问题逐行输出为 `文件:行:列: 说明`，此时不写文件；`check` 在生成内容与现有文件不同时报告过期。两种情况都以退出码 1 结束。
 
 真实进程验收（Unix；会在测试中构建上述两个二进制）：
 
