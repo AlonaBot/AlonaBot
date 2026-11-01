@@ -91,10 +91,12 @@ func main() {
  _ = handlers.List
  if os.Getenv("SCAN_PLUGIN_TEST")!="" {
   reg,err:=sdk.Collect(&Plugin{});if err!=nil{panic(err)}
-  var paths [][]string;var events []string
-  for _,command:=range reg.Commands{paths=append(paths,command.Path)}
-  for _,event:=range reg.Events{events=append(events,event.RouteID)}
-  encoded,err:=json.Marshal(struct{Commands [][]string;Events []string}{paths,events});if err!=nil{panic(err)}
+  type Command struct { Path []string; Aliases [][]string; Priority int32 }
+  type Event struct { RouteID, EventType string; Priority int32 }
+  var commands []Command;var events []Event
+  for _,command:=range reg.Commands{commands=append(commands,Command{command.Path,command.Aliases,command.Priority})}
+  for _,event:=range reg.Events{events=append(events,Event{event.RouteID,event.EventType,event.Priority})}
+  encoded,err:=json.Marshal(struct{Commands []Command;Events []Event}{commands,events});if err!=nil{panic(err)}
   fmt.Println(string(encoded))
  }
 }
@@ -160,23 +162,32 @@ type UnrelatedRoot struct{ sdk.Base }
 	}
 	runPluginCommand(t, dir, nil, "go", "build", "-o", executable, ".")
 	output := runPluginCommand(t, dir, []string{"SCAN_PLUGIN_TEST=1"}, executable)
+	type collectedCommand struct {
+		Path     []string
+		Aliases  [][]string
+		Priority int32
+	}
+	type collectedEvent struct {
+		RouteID, EventType string
+		Priority           int32
+	}
 	var got struct {
-		Commands [][]string
-		Events   []string
+		Commands []collectedCommand
+		Events   []collectedEvent
 	}
 	if err := json.Unmarshal(output, &got); err != nil {
 		t.Fatalf("decode runtime registration: %v\n%s", err, output)
 	}
-	var paths [][]string
-	var events []string
+	var commands []collectedCommand
+	var events []collectedEvent
 	for _, command := range native.Commands {
-		paths = append(paths, command.Path)
+		commands = append(commands, collectedCommand{command.Path, command.Aliases, command.Priority})
 	}
 	for _, event := range native.Events {
-		events = append(events, event.RouteID)
+		events = append(events, collectedEvent{event.RouteID, event.EventType, event.Priority})
 	}
-	if !reflect.DeepEqual(got.Commands, paths) || !reflect.DeepEqual(got.Events, events) {
-		t.Fatalf("runtime registration = %+v, want %v %v", got, paths, events)
+	if !reflect.DeepEqual(got.Commands, commands) || !reflect.DeepEqual(got.Events, events) {
+		t.Fatalf("runtime registration = %+v, want %v %v", got, commands, events)
 	}
 	tagged := scanPlugin(t, generate.Options{Dir: dir, GOOS: "darwin", GOARCH: "arm64", Tags: []string{"special"}})
 	if len(tagged.Diagnostics) != 0 || len(tagged.Commands) != 3 || tagged.Commands[2].Func != "Special" {
@@ -317,4 +328,52 @@ func Ready(*sdk.Context) error {return nil}
 	if !bytes.Equal(generated, afterToolError) {
 		t.Fatal("toolchain error changed generated file")
 	}
+}
+
+func TestGeneratedImportsDoNotExpandScope(t *testing.T) {
+	dir := pluginModuleDir(t)
+	source := "package main\nimport (\"github.com/AlonaBot/AlonaBot/sdk\"; _ \"example.com/scanplugin/handlers\")\ntype Plugin struct{sdk.Base}\nfunc main(){}\n"
+	writePluginFile(t, dir, "main.go", source)
+	writePluginFile(t, dir, "handlers/handlers.go", "package handlers\nimport \"github.com/AlonaBot/AlonaBot/sdk\"\n//alonabot:command list\nfunc List(*sdk.Context) error{return nil}\n")
+	first := scanPlugin(t, generate.Options{Dir: dir})
+	if len(first.Diagnostics) != 0 || len(first.Commands) != 1 {
+		t.Fatalf("initial scan: %+v", first)
+	}
+	writePluginFile(t, dir, generate.FileName, string(first.Source))
+	writePluginFile(t, dir, "main.go", strings.Replace(source, `; _ "example.com/scanplugin/handlers"`, "", 1))
+	detached := scanPlugin(t, generate.Options{Dir: dir})
+	if len(detached.Diagnostics) != 0 || len(detached.Commands) != 0 {
+		t.Errorf("generated import kept detached handler: %+v", detached.Commands)
+	}
+	if err := os.RemoveAll(filepath.Join(dir, "handlers")); err != nil {
+		t.Fatal(err)
+	}
+	deleted := scanPlugin(t, generate.Options{Dir: dir})
+	if len(deleted.Diagnostics) != 0 || len(deleted.Commands) != 0 {
+		t.Fatalf("deleted handler scan: %+v", deleted)
+	}
+	preserved, err := os.ReadFile(filepath.Join(dir, generate.FileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(first.Source, preserved) {
+		t.Fatal("Scan changed the generated file")
+	}
+	_, file, _, _ := runtime.Caller(0)
+	root := filepath.Dir(filepath.Dir(filepath.Dir(file)))
+	executable := filepath.Join(t.TempDir(), "alonabot")
+	if runtime.GOOS == "windows" {
+		executable += ".exe"
+	}
+	runPluginCommand(t, root, nil, "go", "build", "-o", executable, "./cmd/alonabot")
+	runPluginCommand(t, dir, nil, executable, "plugin", "generate")
+	runPluginCommand(t, dir, nil, executable, "plugin", "check")
+	current, err := os.ReadFile(filepath.Join(dir, generate.FileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(current, deleted.Source) {
+		t.Fatalf("CLI did not remove stale import:\n%s", current)
+	}
+	runPluginCommand(t, dir, nil, "go", "build", ".")
 }

@@ -110,7 +110,23 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve plugin directory links: %w", err)
 	}
-	args := []string{"list", "-deps", "-json"}
+	// 生成文件中的旧 import 不参与依赖闭包，文件本身保持原样。
+	overlay, err := os.CreateTemp("", "alonabot-scan-*.json")
+	if err != nil {
+		return nil, fmt.Errorf("create scan overlay: %w", err)
+	}
+	defer os.Remove(overlay.Name())
+	encodeErr := json.NewEncoder(overlay).Encode(map[string]map[string]string{
+		"Replace": {filepath.Join(dir, FileName): ""},
+	})
+	closeErr := overlay.Close()
+	if encodeErr != nil {
+		return nil, fmt.Errorf("write scan overlay: %w", encodeErr)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close scan overlay: %w", closeErr)
+	}
+	args := []string{"list", "-deps", "-json", "-overlay", overlay.Name()}
 	if len(opt.Tags) > 0 {
 		args = append(args, "-tags", strings.Join(opt.Tags, ","))
 	}
@@ -205,8 +221,8 @@ func (s *scan) readFile(pkg listedPackage, path string, names map[string]string)
 	}
 	file, err := parser.ParseFile(s.files, filepath.ToSlash(relative), source, parser.ParseComments|parser.AllErrors)
 	if err != nil {
-		if errors, ok := err.(scanner.ErrorList); ok {
-			for _, problem := range errors {
+		if list, ok := err.(scanner.ErrorList); ok {
+			for _, problem := range list {
 				s.result.Diagnostics = append(s.result.Diagnostics, Diagnostic{fmt.Sprintf("%s:%d:%d", problem.Pos.Filename, problem.Pos.Line, problem.Pos.Column), problem.Msg})
 			}
 		} else {

@@ -83,6 +83,7 @@ func (s *scan) marker(comment *ast.Comment, function, pkg string) {
 	if route == "" || route == `""` || strings.HasPrefix(route, "cmd.") {
 		s.diagnostic(comment.Pos(), "event route_id must be non-empty and must not start with cmd.")
 	}
+	// 与 contracts/validate.IsEventType 保持一致；生成器的依赖范围限于标准库。
 	switch event {
 	case "message.created", "message.edited", "message.deleted", "button.clicked", "member.joined", "member.left", "reaction.added", "scheduled", "bot.online", "bot.offline":
 	default:
@@ -92,6 +93,7 @@ func (s *scan) marker(comment *ast.Comment, function, pkg string) {
 	s.result.Events = append(s.result.Events, Event{RouteID: route, EventType: event, Priority: priority, Package: pkg, Func: function})
 }
 
+// checkTokens 复用 contracts/validate.IsCommandToken 的规则；标准库依赖约束要求在此实现。
 func (s *scan) checkTokens(comment *ast.Comment, path []string) {
 	for _, value := range path {
 		if value == "" || strings.ContainsFunc(value, unicode.IsSpace) || strings.HasPrefix(value, "/") {
