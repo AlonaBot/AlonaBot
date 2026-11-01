@@ -183,6 +183,11 @@ type configBuilder struct {
 
 func (b *configBuilder) schema(fieldType types.Type, pos token.Pos, path string) *jsonschema.Schema {
 	fieldType = types.Unalias(fieldType)
+	// json.Number 由标准库特殊编解码，底层 string 无法描述它的 JSON 数值语义。
+	if named, ok := fieldType.(*types.Named); ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == "encoding/json" && named.Obj().Name() == "Number" {
+		b.scan.diagnostic(pos, "unsupported config type "+fieldType.String())
+		return nil
+	}
 	if b.customCodec(fieldType, pos) {
 		return nil
 	}
