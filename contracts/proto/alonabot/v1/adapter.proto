@@ -41,6 +41,7 @@ message AdapterInstanceStartResponse {
   string account_id = 1;
   optional string account_display_name = 2;
   repeated Capability capabilities = 3;
+  optional string account_username = 4; // 平台上可寻址的账号标识；平台没有时 absent。
 }
 
 // AdapterInstanceStopRequest 指定要停止接收的实例。

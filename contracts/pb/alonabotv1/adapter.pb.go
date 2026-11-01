@@ -259,6 +259,7 @@ type AdapterInstanceStartResponse struct {
 	AccountId          string                 `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
 	AccountDisplayName *string                `protobuf:"bytes,2,opt,name=account_display_name,json=accountDisplayName,proto3,oneof" json:"account_display_name,omitempty"`
 	Capabilities       []*Capability          `protobuf:"bytes,3,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	AccountUsername    *string                `protobuf:"bytes,4,opt,name=account_username,json=accountUsername,proto3,oneof" json:"account_username,omitempty"` // 平台上可寻址的账号标识；平台没有时 absent。
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -312,6 +313,13 @@ func (x *AdapterInstanceStartResponse) GetCapabilities() []*Capability {
 		return x.Capabilities
 	}
 	return nil
+}
+
+func (x *AdapterInstanceStartResponse) GetAccountUsername() string {
+	if x != nil && x.AccountUsername != nil {
+		return *x.AccountUsername
+	}
+	return ""
 }
 
 // AdapterInstanceStopRequest 指定要停止接收的实例。
@@ -903,13 +911,15 @@ const file_alonabot_v1_adapter_proto_rawDesc = "" +
 	"instanceId\x12\x1f\n" +
 	"\vconfig_json\x18\x02 \x01(\tR\n" +
 	"configJson\x12\x16\n" +
-	"\x06cursor\x18\x03 \x01(\fR\x06cursor\"\xca\x01\n" +
+	"\x06cursor\x18\x03 \x01(\fR\x06cursor\"\x8f\x02\n" +
 	"\x1cAdapterInstanceStartResponse\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x125\n" +
 	"\x14account_display_name\x18\x02 \x01(\tH\x00R\x12accountDisplayName\x88\x01\x01\x12;\n" +
-	"\fcapabilities\x18\x03 \x03(\v2\x17.alonabot.v1.CapabilityR\fcapabilitiesB\x17\n" +
-	"\x15_account_display_name\"=\n" +
+	"\fcapabilities\x18\x03 \x03(\v2\x17.alonabot.v1.CapabilityR\fcapabilities\x12.\n" +
+	"\x10account_username\x18\x04 \x01(\tH\x01R\x0faccountUsername\x88\x01\x01B\x17\n" +
+	"\x15_account_display_nameB\x13\n" +
+	"\x11_account_username\"=\n" +
 	"\x1aAdapterInstanceStopRequest\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\"\x1d\n" +

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"unicode"
 
-	"github.com/AlonaBot/AlonaBot/contracts/manifest"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 )
 
 // traceDigits 是控制台显示的 trace_id 位数（CONTRACTS §14.2）。
@@ -173,7 +173,7 @@ func (h *consoleHandler) Handle(_ context.Context, r slog.Record) error {
 func sourceTag(fields map[string]string) string {
 	switch fields[KeyComponent] {
 	case ComponentPlugin:
-		return "Plug:" + printable(strings.TrimPrefix(fields[KeyPluginID], manifest.MarketPrefix))
+		return "Plug:" + printable(strings.TrimPrefix(fields[KeyPluginID], validate.MarketPrefix))
 	case ComponentAdapter:
 		tag := "Adpt:" + printable(fields[KeyAdapterID])
 		if id := fields[KeyInstanceID]; id != "" {

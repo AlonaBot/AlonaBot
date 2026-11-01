@@ -1,0 +1,379 @@
+package generate_test
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"reflect"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/AlonaBot/AlonaBot/sdk/generate"
+)
+
+const pluginModule = "example.com/scanplugin"
+
+func writePluginFile(t *testing.T, dir, name, source string) {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+func pluginModuleDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	_, file, _, _ := runtime.Caller(0)
+	root := filepath.Dir(filepath.Dir(filepath.Dir(file)))
+	mod, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var version string
+	for _, line := range strings.Split(string(mod), "\n") {
+		if strings.HasPrefix(line, "go ") {
+			version = strings.TrimPrefix(line, "go ")
+		}
+	}
+	writePluginFile(t, dir, "go.mod", fmt.Sprintf("module %s\n\ngo %s\nrequire github.com/AlonaBot/AlonaBot v0.0.0\nreplace github.com/AlonaBot/AlonaBot => %s\n", pluginModule, version, filepath.ToSlash(root)))
+	// 临时插件按本仓库依赖生成自己的 go.sum；不修改源码仓库的依赖。
+	t.Setenv("GOFLAGS", "-mod=mod")
+	t.Setenv("GOWORK", "off")
+	return dir
+}
+func runPluginCommand(t *testing.T, dir string, env []string, name string, args ...string) []byte {
+	t.Helper()
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), env...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s %v: %v\n%s", name, args, err, out)
+	}
+	return out
+}
+func scanPlugin(t *testing.T, options generate.Options) *generate.Result {
+	t.Helper()
+	result, err := generate.Scan(context.Background(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func TestScanPluginIntegration(t *testing.T) {
+	dir := pluginModuleDir(t)
+	writePluginFile(t, dir, "main.go", `package main
+import (
+ "encoding/json"
+ "os"
+ "fmt"
+ sdk "github.com/AlonaBot/AlonaBot/sdk"
+ conf "github.com/AlonaBot/AlonaBot/sdk/config"
+ "example.com/scanplugin/handlers"
+)
+type Plugin struct{ sdk.Base }
+type Config struct{ conf.Base }
+//alonabot:command rss add alias=feed/new priority=-5
+func Add(*sdk.Context) error { return nil }
+//alonabot:event z.message message.created priority=7
+func Event(*sdk.Context) error { return nil }
+func main() {
+ _ = handlers.List
+ if os.Getenv("SCAN_PLUGIN_TEST")!="" {
+  reg,err:=sdk.Collect(&Plugin{});if err!=nil{panic(err)}
+  type Command struct { Path []string; Aliases [][]string; Priority int32 }
+  type Event struct { RouteID, EventType string; Priority int32 }
+  var commands []Command;var events []Event
+  for _,command:=range reg.Commands{commands=append(commands,Command{command.Path,command.Aliases,command.Priority})}
+  for _,event:=range reg.Events{events=append(events,Event{event.RouteID,event.EventType,event.Priority})}
+  encoded,err:=json.Marshal(struct{Commands []Command;Events []Event}{commands,events});if err!=nil{panic(err)}
+  fmt.Println(string(encoded))
+ }
+}
+`)
+	writePluginFile(t, dir, "handlers/handlers.go", `package handlers
+import "github.com/AlonaBot/AlonaBot/sdk"
+//alonabot:command list
+func List(*sdk.Context) error { return nil }
+//alonabot:event a.online bot.online
+func Online(*sdk.Context) error { return nil }
+`)
+	writePluginFile(t, dir, "linux_linux.go", `package main
+import "github.com/AlonaBot/AlonaBot/sdk"
+//alonabot:command linux
+func Linux(*sdk.Context) error { return nil }
+`)
+	writePluginFile(t, dir, "tagged.go", `//go:build special
+
+package main
+import "github.com/AlonaBot/AlonaBot/sdk"
+//alonabot:command special
+func Special(*sdk.Context) error { return nil }
+`)
+	writePluginFile(t, dir, "ignored_test.go", `package main
+import "github.com/AlonaBot/AlonaBot/sdk"
+type TestRoot struct{ sdk.Base }
+//alonabot:command test
+func TestOnly(*sdk.Context) error { return nil }
+`)
+	writePluginFile(t, dir, "unused/plugin.go", `package unused
+import "github.com/AlonaBot/AlonaBot/sdk"
+type UnrelatedRoot struct{ sdk.Base }
+`)
+	result := scanPlugin(t, generate.Options{Dir: dir, GOOS: "darwin", GOARCH: "arm64"})
+	wantCommands := []generate.Command{
+		{Path: []string{"list"}, Package: pluginModule + "/handlers", Func: "List"},
+		{Path: []string{"rss", "add"}, Aliases: [][]string{{"feed", "new"}}, Priority: -5, Package: pluginModule, Func: "Add"},
+	}
+	wantEvents := []generate.Event{
+		{RouteID: "a.online", EventType: "bot.online", Package: pluginModule + "/handlers", Func: "Online"},
+		{RouteID: "z.message", EventType: "message.created", Priority: 7, Package: pluginModule, Func: "Event"},
+	}
+	if len(result.Diagnostics) != 0 || result.RootType != pluginModule+".Plugin" || result.ConfigType != pluginModule+".Config" || !reflect.DeepEqual(result.Commands, wantCommands) || !reflect.DeepEqual(result.Events, wantEvents) {
+		t.Fatalf("unexpected scan: %+v", result)
+	}
+	if !bytes.HasPrefix(result.Source, []byte("// Code generated by alonabot plugin generate. DO NOT EDIT.\n")) {
+		t.Fatalf("missing generated header: %s", result.Source)
+	}
+	writePluginFile(t, dir, generate.FileName, string(result.Source))
+	again := scanPlugin(t, generate.Options{Dir: dir, GOOS: "darwin", GOARCH: "arm64"})
+	if len(again.Diagnostics) != 0 || !bytes.Equal(result.Source, again.Source) {
+		t.Fatalf("unstable scan: %v\n%s", again.Diagnostics, again.Source)
+	}
+	// 本机生成、编译并运行；linux 构建文件在 Linux 本机按预期参与。
+	native := scanPlugin(t, generate.Options{Dir: dir})
+	if len(native.Diagnostics) != 0 {
+		t.Fatal(native.Diagnostics)
+	}
+	writePluginFile(t, dir, generate.FileName, string(native.Source))
+	executable := filepath.Join(dir, "plugin")
+	if runtime.GOOS == "windows" {
+		executable += ".exe"
+	}
+	runPluginCommand(t, dir, nil, "go", "build", "-o", executable, ".")
+	output := runPluginCommand(t, dir, []string{"SCAN_PLUGIN_TEST=1"}, executable)
+	type collectedCommand struct {
+		Path     []string
+		Aliases  [][]string
+		Priority int32
+	}
+	type collectedEvent struct {
+		RouteID, EventType string
+		Priority           int32
+	}
+	var got struct {
+		Commands []collectedCommand
+		Events   []collectedEvent
+	}
+	if err := json.Unmarshal(output, &got); err != nil {
+		t.Fatalf("decode runtime registration: %v\n%s", err, output)
+	}
+	var commands []collectedCommand
+	var events []collectedEvent
+	for _, command := range native.Commands {
+		commands = append(commands, collectedCommand{command.Path, command.Aliases, command.Priority})
+	}
+	for _, event := range native.Events {
+		events = append(events, collectedEvent{event.RouteID, event.EventType, event.Priority})
+	}
+	if !reflect.DeepEqual(got.Commands, commands) || !reflect.DeepEqual(got.Events, events) {
+		t.Fatalf("runtime registration = %+v, want %v %v", got, commands, events)
+	}
+	tagged := scanPlugin(t, generate.Options{Dir: dir, GOOS: "darwin", GOARCH: "arm64", Tags: []string{"special"}})
+	if len(tagged.Diagnostics) != 0 || len(tagged.Commands) != 3 || tagged.Commands[2].Func != "Special" {
+		t.Fatalf("build tag scan: %+v", tagged)
+	}
+	linux := scanPlugin(t, generate.Options{Dir: dir, GOOS: "linux", GOARCH: "amd64"})
+	if len(linux.Diagnostics) != 0 || len(linux.Commands) != 3 || linux.Commands[0].Func != "Linux" {
+		t.Fatalf("GOOS scan: %+v", linux)
+	}
+}
+
+func TestScanDiagnostics(t *testing.T) {
+	for _, test := range []struct{ name, source, sub, message string }{
+		{name: "two roots", source: "type Other struct{ sdk.Base }", message: "expected exactly one root"},
+		{name: "two configs", source: "type First struct{ config.Base }; type Second struct{ config.Base }", message: "expected at most one Config"},
+		{name: "method marker", source: "//alonabot:command method\nfunc (*Plugin) Method(*sdk.Context) error{return nil}", message: "package-level function"},
+		{name: "unexported dependency", sub: "//alonabot:command hidden\nfunc hidden(*sdk.Context) error{return nil}", message: "must be exported"},
+		{name: "duplicate path", source: "//alonabot:command duplicate\nfunc First(*sdk.Context) error{return nil}\n//alonabot:command duplicate\nfunc Second(*sdk.Context) error{return nil}", message: "duplicate command path"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := pluginModuleDir(t)
+			writePluginFile(t, dir, "main.go", "package main\nimport (\"github.com/AlonaBot/AlonaBot/sdk\";\"github.com/AlonaBot/AlonaBot/sdk/config\";\"example.com/scanplugin/sub\")\ntype Plugin struct{sdk.Base}\nvar _ config.Base\nvar _ = sub.Exported\nfunc main(){}\n"+test.source+"\n")
+			writePluginFile(t, dir, "sub/sub.go", "package sub\nimport \"github.com/AlonaBot/AlonaBot/sdk\"\nvar _ sdk.Base\nfunc Exported(){}\n"+test.sub+"\n")
+			result := scanPlugin(t, generate.Options{Dir: dir})
+			if len(result.Diagnostics) != 1 || !strings.Contains(result.Diagnostics[0].Message, test.message) || result.Source != nil {
+				t.Fatalf("unexpected diagnostics: %+v", result)
+			}
+			if !strings.Contains(result.Diagnostics[0].Pos, ".go:") || strings.Contains(result.Diagnostics[0].Pos, dir) {
+				t.Fatalf("invalid diagnostic position: %+v", result.Diagnostics)
+			}
+			if test.name == "two roots" || test.name == "two configs" {
+				if strings.Count(result.Diagnostics[0].Message, "main.go:") != 2 {
+					t.Fatalf("missing declaration positions: %+v", result.Diagnostics)
+				}
+			}
+		})
+	}
+}
+
+func TestPluginCLIIntegration(t *testing.T) {
+	dir := pluginModuleDir(t)
+	_, file, _, _ := runtime.Caller(0)
+	root := filepath.Dir(filepath.Dir(filepath.Dir(file)))
+	executable := filepath.Join(t.TempDir(), "alonabot")
+	if runtime.GOOS == "windows" {
+		executable += ".exe"
+	}
+	runPluginCommand(t, root, nil, "go", "build", "-o", executable, "./cmd/alonabot")
+	source := `package main
+import "github.com/AlonaBot/AlonaBot/sdk"
+type Plugin struct{ sdk.Base }
+//alonabot:command rss add alias=feed/new priority=-5
+func Add(*sdk.Context) error {return nil}
+func main(){}
+`
+	writePluginFile(t, dir, "main.go", source)
+	writePluginFile(t, dir, "tagged.go", `//go:build first && second
+
+package main
+import "github.com/AlonaBot/AlonaBot/sdk"
+//alonabot:event ready bot.online
+func Ready(*sdk.Context) error {return nil}
+`)
+	flags := []string{"--dir", dir, "--goos", "darwin", "--goarch", "arm64", "--tags", "first,second"}
+	cli := func(action string) {
+		t.Helper()
+		runPluginCommand(t, dir, nil, executable, append([]string{"plugin", action}, flags...)...)
+	}
+	failure := func(action, message string) string {
+		t.Helper()
+		cmd := exec.Command(executable, append([]string{"plugin", action}, flags...)...)
+		cmd.Dir = dir
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		exit, ok := err.(*exec.ExitError)
+		if !ok || exit.ExitCode() != 1 || !strings.Contains(stderr.String(), message) || stdout.Len() != 0 {
+			t.Fatalf("%s: exit=%v stdout=%s stderr=%s", action, err, &stdout, &stderr)
+		}
+		return stderr.String()
+	}
+	const outdated = "alonabot_gen.go is out of date; run alonabot plugin generate"
+	failure("check", outdated)
+	cli("generate")
+	cli("check")
+	generatedPath := filepath.Join(dir, generate.FileName)
+	generated, err := os.ReadFile(generatedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(generated, []byte(`"ready", "bot.online"`)) {
+		t.Fatalf("CLI build tags not applied: %s", generated)
+	}
+	// 固定历史时间，不依赖 sleep 区分相同内容是否重写。
+	stamp := time.Unix(1_000_000, 0)
+	if err := os.Chtimes(generatedPath, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(generatedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cli("generate")
+	cli("check")
+	after, err := os.Stat(generatedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !before.ModTime().Equal(after.ModTime()) {
+		t.Fatalf("unchanged generation rewrote file: %v -> %v", before.ModTime(), after.ModTime())
+	}
+	writePluginFile(t, dir, generate.FileName, string(generated)+"\n// manual edit\n")
+	failure("check", outdated)
+	cli("generate")
+	cli("check")
+	writePluginFile(t, dir, "main.go", source+"\n//alonabot:command bad unknown=1\nfunc Bad(*sdk.Context) error{return nil}\n")
+	for _, action := range []string{"generate", "check"} {
+		diagnostic := failure(action, "main.go:")
+		if !strings.Contains(diagnostic, ": unknown option \"unknown\"\n") || strings.Contains(diagnostic, "alonabot:") {
+			t.Fatalf("unexpected diagnostic format: %s", diagnostic)
+		}
+	}
+	afterDiagnostics, err := os.ReadFile(generatedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(generated, afterDiagnostics) {
+		t.Fatalf("diagnostics changed generated file: %s", afterDiagnostics)
+	}
+	// 工具链失败保留 go list stderr，且保留现有生成文件。
+	writePluginFile(t, dir, "main.go", "package main\nimport invalid\n")
+	failure("generate", "go list:")
+	afterToolError, err := os.ReadFile(generatedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(generated, afterToolError) {
+		t.Fatal("toolchain error changed generated file")
+	}
+}
+
+func TestGeneratedImportsDoNotExpandScope(t *testing.T) {
+	dir := pluginModuleDir(t)
+	source := "package main\nimport (\"github.com/AlonaBot/AlonaBot/sdk\"; _ \"example.com/scanplugin/handlers\")\ntype Plugin struct{sdk.Base}\nfunc main(){}\n"
+	writePluginFile(t, dir, "main.go", source)
+	writePluginFile(t, dir, "handlers/handlers.go", "package handlers\nimport \"github.com/AlonaBot/AlonaBot/sdk\"\n//alonabot:command list\nfunc List(*sdk.Context) error{return nil}\n")
+	first := scanPlugin(t, generate.Options{Dir: dir})
+	if len(first.Diagnostics) != 0 || len(first.Commands) != 1 {
+		t.Fatalf("initial scan: %+v", first)
+	}
+	writePluginFile(t, dir, generate.FileName, string(first.Source))
+	writePluginFile(t, dir, "main.go", strings.Replace(source, `; _ "example.com/scanplugin/handlers"`, "", 1))
+	detached := scanPlugin(t, generate.Options{Dir: dir})
+	if len(detached.Diagnostics) != 0 || len(detached.Commands) != 0 {
+		t.Errorf("generated import kept detached handler: %+v", detached.Commands)
+	}
+	if err := os.RemoveAll(filepath.Join(dir, "handlers")); err != nil {
+		t.Fatal(err)
+	}
+	deleted := scanPlugin(t, generate.Options{Dir: dir})
+	if len(deleted.Diagnostics) != 0 || len(deleted.Commands) != 0 {
+		t.Fatalf("deleted handler scan: %+v", deleted)
+	}
+	preserved, err := os.ReadFile(filepath.Join(dir, generate.FileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(first.Source, preserved) {
+		t.Fatal("Scan changed the generated file")
+	}
+	_, file, _, _ := runtime.Caller(0)
+	root := filepath.Dir(filepath.Dir(filepath.Dir(file)))
+	executable := filepath.Join(t.TempDir(), "alonabot")
+	if runtime.GOOS == "windows" {
+		executable += ".exe"
+	}
+	runPluginCommand(t, root, nil, "go", "build", "-o", executable, "./cmd/alonabot")
+	runPluginCommand(t, dir, nil, executable, "plugin", "generate")
+	runPluginCommand(t, dir, nil, executable, "plugin", "check")
+	current, err := os.ReadFile(filepath.Join(dir, generate.FileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(current, deleted.Source) {
+		t.Fatalf("CLI did not remove stale import:\n%s", current)
+	}
+	runPluginCommand(t, dir, nil, "go", "build", ".")
+}

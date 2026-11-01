@@ -1,7 +1,7 @@
 // Package router 提供 Core 的可信调用身份、固定服务分流与标准事件派发。
 //
 // [Caller] 绑定一次插件 Session；[Invocation] 保存在 Core 发起的父请求附件中。
-// [Mux] 将插件请求交给固定服务，身份由装配时的 For 参数决定（CONTRACTS §1.2）。
+// [Mux] 将插件请求交给固定服务或 Service Broker，身份由装配时的 For 参数决定（CONTRACTS §1.2）。
 // [Router] 按优先级、插件与路由 ID 顺序调用已激活的 [Plugin]，遵循传播停止标记。
 package router
 
@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"strings"
 	"sync"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -43,8 +44,9 @@ type ServiceFunc func(ctx context.Context, c Caller, in *wire.Inbound) wire.Resp
 
 // Mux 并发安全地保存固定服务注册；服务函数在锁外执行。
 type Mux struct {
-	mu       sync.RWMutex // 保护 services，不跨服务调用持锁
+	mu       sync.RWMutex // 保护 services 与 forward，不跨服务调用持锁
 	services map[string]ServiceFunc
+	forward  ServiceFunc
 }
 
 // NewMux 创建空的固定服务分流器。
@@ -60,13 +62,23 @@ func (m *Mux) Handle(name string, fn ServiceFunc) {
 	m.services[name] = fn
 }
 
-// For 将调用身份固定到一个 Session；未知服务返回 NOT_FOUND。
+// Forward 设置跨插件 Service 的转交入口；固定服务始终优先。
+func (m *Mux) Forward(fn ServiceFunc) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.forward = fn
+}
+
+// For 将调用身份固定到一个 Session；含 / 的未知目标交给 Forward，其余返回 NOT_FOUND。
 func (m *Mux) For(c Caller) wire.Handler {
 	return func(ctx context.Context, in *wire.Inbound) wire.Response {
 		m.mu.RLock()
 		fn, ok := m.services[in.Target]
+		if !ok && strings.Contains(in.Target, "/") {
+			fn = m.forward
+		}
 		m.mu.RUnlock()
-		if !ok {
+		if fn == nil {
 			return wire.Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_NOT_FOUND, SafeMessage: "Core service not found"}}
 		}
 		return fn(ctx, c, in)

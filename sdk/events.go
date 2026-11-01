@@ -59,5 +59,8 @@ func (r *EventRegistry) On(routeID, eventType string, handler func(*Context) err
 }
 
 func commandRouteID(command Command) string {
+	if command.routeID != "" {
+		return command.routeID
+	}
 	return commandRoutePrefix + strings.Join(command.Path, ".")
 }

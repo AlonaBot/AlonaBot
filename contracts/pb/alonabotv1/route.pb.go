@@ -207,6 +207,14 @@ const (
 	CommandMatch_COMMAND_MATCH_REGEX CommandMatch = 2
 	// 交给 Handler 自行解析。
 	CommandMatch_COMMAND_MATCH_RAW CommandMatch = 3
+	// 文本包含任一模式。
+	CommandMatch_COMMAND_MATCH_KEYWORD CommandMatch = 4
+	// 文本以任一模式开头。
+	CommandMatch_COMMAND_MATCH_STARTSWITH CommandMatch = 5
+	// 文本以任一模式结尾。
+	CommandMatch_COMMAND_MATCH_ENDSWITH CommandMatch = 6
+	// 文本与任一模式完全相同。
+	CommandMatch_COMMAND_MATCH_FULLMATCH CommandMatch = 7
 )
 
 // Enum value maps for CommandMatch.
@@ -216,12 +224,20 @@ var (
 		1: "COMMAND_MATCH_PATH",
 		2: "COMMAND_MATCH_REGEX",
 		3: "COMMAND_MATCH_RAW",
+		4: "COMMAND_MATCH_KEYWORD",
+		5: "COMMAND_MATCH_STARTSWITH",
+		6: "COMMAND_MATCH_ENDSWITH",
+		7: "COMMAND_MATCH_FULLMATCH",
 	}
 	CommandMatch_value = map[string]int32{
 		"COMMAND_MATCH_UNSPECIFIED": 0,
 		"COMMAND_MATCH_PATH":        1,
 		"COMMAND_MATCH_REGEX":       2,
 		"COMMAND_MATCH_RAW":         3,
+		"COMMAND_MATCH_KEYWORD":     4,
+		"COMMAND_MATCH_STARTSWITH":  5,
+		"COMMAND_MATCH_ENDSWITH":    6,
+		"COMMAND_MATCH_FULLMATCH":   7,
 	}
 )
 
@@ -1028,7 +1044,11 @@ type CommandSpec struct {
 	// 参数错误时的用法提示方式。
 	UsageMode UsageMode `protobuf:"varint,8,opt,name=usage_mode,json=usageMode,proto3,enum=alonabot.v1.UsageMode" json:"usage_mode,omitempty"`
 	// USAGE_MODE_CUSTOM 时发送的文本。
-	CustomUsage   string `protobuf:"bytes,9,opt,name=custom_usage,json=customUsage,proto3" json:"custom_usage,omitempty"`
+	CustomUsage string `protobuf:"bytes,9,opt,name=custom_usage,json=customUsage,proto3" json:"custom_usage,omitempty"`
+	// KEYWORD、STARTSWITH、ENDSWITH、FULLMATCH：非空模式列表。
+	Patterns []string `protobuf:"bytes,10,rep,name=patterns,proto3" json:"patterns,omitempty"`
+	// 文本模式比较采用 Unicode 简单大小写折叠。
+	IgnoreCase    bool `protobuf:"varint,11,opt,name=ignore_case,json=ignoreCase,proto3" json:"ignore_case,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1124,6 +1144,20 @@ func (x *CommandSpec) GetCustomUsage() string {
 		return x.CustomUsage
 	}
 	return ""
+}
+
+func (x *CommandSpec) GetPatterns() []string {
+	if x != nil {
+		return x.Patterns
+	}
+	return nil
+}
+
+func (x *CommandSpec) GetIgnoreCase() bool {
+	if x != nil {
+		return x.IgnoreCase
+	}
+	return false
 }
 
 // CommandAlias 描述命令的一条别名路径。
@@ -1753,7 +1787,7 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x04spec\"f\n" +
 	"\x0eRuleDescriptor\x12&\n" +
 	"\x0fhas_custom_rule\x18\x01 \x01(\bR\rhasCustomRule\x12,\n" +
-	"\x12require_chat_admin\x18\x02 \x01(\bR\x10requireChatAdmin\"\x98\x03\n" +
+	"\x12require_chat_admin\x18\x02 \x01(\bR\x10requireChatAdmin\"\xd5\x03\n" +
 	"\vCommandSpec\x12/\n" +
 	"\x05match\x18\x01 \x01(\x0e2\x19.alonabot.v1.CommandMatchR\x05match\x12\x12\n" +
 	"\x04path\x18\x02 \x03(\tR\x04path\x123\n" +
@@ -1764,7 +1798,11 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x05regex\x18\a \x01(\tR\x05regex\x125\n" +
 	"\n" +
 	"usage_mode\x18\b \x01(\x0e2\x16.alonabot.v1.UsageModeR\tusageMode\x12!\n" +
-	"\fcustom_usage\x18\t \x01(\tR\vcustomUsage\"\"\n" +
+	"\fcustom_usage\x18\t \x01(\tR\vcustomUsage\x12\x1a\n" +
+	"\bpatterns\x18\n" +
+	" \x03(\tR\bpatterns\x12\x1f\n" +
+	"\vignore_case\x18\v \x01(\bR\n" +
+	"ignoreCase\"\"\n" +
 	"\fCommandAlias\x12\x12\n" +
 	"\x04path\x18\x01 \x03(\tR\x04path\"\xb8\x01\n" +
 	"\fCommandParam\x12\x12\n" +
@@ -1824,12 +1862,16 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\vHandlerMode\x12\x1c\n" +
 	"\x18HANDLER_MODE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17HANDLER_MODE_AUTO_REPLY\x10\x01\x12\x17\n" +
-	"\x13HANDLER_MODE_MANUAL\x10\x02*u\n" +
+	"\x13HANDLER_MODE_MANUAL\x10\x02*\xe7\x01\n" +
 	"\fCommandMatch\x12\x1d\n" +
 	"\x19COMMAND_MATCH_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12COMMAND_MATCH_PATH\x10\x01\x12\x17\n" +
 	"\x13COMMAND_MATCH_REGEX\x10\x02\x12\x15\n" +
-	"\x11COMMAND_MATCH_RAW\x10\x03*m\n" +
+	"\x11COMMAND_MATCH_RAW\x10\x03\x12\x19\n" +
+	"\x15COMMAND_MATCH_KEYWORD\x10\x04\x12\x1c\n" +
+	"\x18COMMAND_MATCH_STARTSWITH\x10\x05\x12\x1a\n" +
+	"\x16COMMAND_MATCH_ENDSWITH\x10\x06\x12\x1b\n" +
+	"\x17COMMAND_MATCH_FULLMATCH\x10\a*m\n" +
 	"\tUsageMode\x12\x1a\n" +
 	"\x16USAGE_MODE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12USAGE_MODE_DEFAULT\x10\x01\x12\x15\n" +

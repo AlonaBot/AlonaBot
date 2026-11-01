@@ -32,6 +32,8 @@ type Root interface {
 	Commands(*CommandRegistry)
 	// Events 在 Collect 时调用一次，注册事件路由。
 	Events(*EventRegistry)
+	// Services 在 Collect 时调用一次，注册服务。
+	Services(*ServiceRegistry)
 	// HTTP 在 Collect 时调用一次，注册 HTTP 路由。
 	HTTP(*HTTPRegistry)
 	// Schedules 在 Collect 时调用一次，注册定时任务。
@@ -57,6 +59,9 @@ func (*Base) Commands(*CommandRegistry) {}
 
 // Events 默认不注册事件路由。
 func (*Base) Events(*EventRegistry) {}
+
+// Services 默认不注册服务。
+func (*Base) Services(*ServiceRegistry) {}
 
 // HTTP 默认不注册 HTTP 路由。
 func (*Base) HTTP(*HTTPRegistry) {}

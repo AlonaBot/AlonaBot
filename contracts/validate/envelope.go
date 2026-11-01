@@ -20,7 +20,7 @@ import (
 const (
 	ProtocolMajor uint32 = 1 // 传输协议主版本
 	ProtocolMinor uint32 = 0 // 本实现支持的最高次版本
-	// 有 payload 时 schema_version 首发固定为 1。
+	// SchemaVersion 固定控制帧与 Core 固定载荷的首发版本。
 	SchemaVersion uint32 = 1
 )
 
@@ -195,7 +195,10 @@ func checkPayload(env *pb.Envelope) error {
 	if enc == pb.PayloadEncoding_PAYLOAD_ENCODING_UNSPECIFIED || !knownEnum(enc) {
 		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "a payload requires a valid payload_encoding")
 	}
-	if env.GetSchemaVersion() != SchemaVersion {
+	if env.GetSchemaVersion() == 0 {
+		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "a payload requires a non-zero schema_version")
+	}
+	if k != pb.FrameKind_FRAME_KIND_REQUEST && k != pb.FrameKind_FRAME_KIND_RESPONSE && env.GetSchemaVersion() != SchemaVersion {
 		return errf(pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "schema_version=%d, only %d is supported", env.GetSchemaVersion(), SchemaVersion)
 	}
 	if newMessage, control := controlPayload[k]; control {

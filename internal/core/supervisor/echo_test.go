@@ -70,9 +70,10 @@ func TestEchoBothTransports(t *testing.T) {
 				t.Fatal(err)
 			}
 			mux := router.NewMux()
-			mux.Handle(wire.ServiceSend, message.New(registry, policy.New(store)).Send)
+			sender := message.New(registry, policy.New(store))
+			mux.Handle(wire.ServiceSend, sender.Send)
 			spec.Handler = mux.For(router.NewCaller(spec.PluginID, spec.GenerationID))
-			events := router.New(output.Logger(), values.DispatchQueueEvents)
+			events := router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send)
 			events.Start()
 			defer events.Close()
 			if err := platform.Start(ctx, events); err != nil {
