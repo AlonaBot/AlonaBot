@@ -8,7 +8,7 @@
 // alias 可以重复，使用 / 分隔路径 token。方法、类型和变量上的标记产生诊断；
 // 实例方法通过 Commands/Events 显式注册。生成器用嵌套 Group 注册多 token 命令。
 // 扫描遵守 GOOS/GOARCH 和 build tags，排除外部依赖、vendor 与测试文件。
-// 注册规则见 CONTRACTS §9、§2.2。
+// 配置类型经 go/types 分析为 Schema，字段契约见 CONTRACTS §5.1；注册规则见 §9、§2.2。
 //
 // 包的组成：[Scan] 接收 [Options]，返回描述、源码与 [Diagnostic] 汇总的 [Result]。
 package generate
@@ -67,18 +67,20 @@ type Event struct {
 
 // Result 保存扫描描述、生成源码和全部源码诊断。
 type Result struct {
-	RootType    string    // 导入路径.类型名
-	ConfigType  string    // 没有 Config 时为空
-	Commands    []Command // 按规范路径排序
-	Events      []Event   // 按 route_id 排序
-	Source      []byte    // 完整 gofmt 源码；有诊断时为 nil
-	Diagnostics []Diagnostic
+	RootType     string    // 导入路径.类型名
+	ConfigType   string    // 没有 Config 时为空
+	ConfigSchema []byte    // 规范 JSON；没有 Config 时为 nil
+	Commands     []Command // 按规范路径排序
+	Events       []Event   // 按 route_id 排序
+	Source       []byte    // 完整 gofmt 源码；有诊断时为 nil
+	Diagnostics  []Diagnostic
 }
 
 type listedPackage struct {
 	Dir, ImportPath, Name string
 	GoFiles               []string
 	CgoFiles              []string // 仅在 GoFiles 为空时定位缺根诊断
+	Export                string
 	Module                *struct{ Main bool }
 }
 
@@ -95,6 +97,7 @@ type scan struct {
 	entry          listedPackage
 	roots, configs []declaration
 	paths, routes  map[string]string // 键对应首次声明的位置
+	syntax         map[string][]*ast.File
 }
 
 // Scan 按目标环境扫描源码并生成注册代码。源码问题记入 Diagnostics；
@@ -163,7 +166,7 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 			packages = append(packages, pkg)
 		}
 	}
-	s := &scan{files: token.NewFileSet(), dir: dir, paths: make(map[string]string), routes: make(map[string]string)}
+	s := &scan{files: token.NewFileSet(), dir: dir, paths: make(map[string]string), routes: make(map[string]string), syntax: make(map[string][]*ast.File)}
 	for _, pkg := range packages {
 		if filepath.Clean(pkg.Dir) == dir {
 			s.entry = pkg
@@ -183,6 +186,11 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 		}
 	}
 	s.checkTypes()
+	if len(s.configs) == 1 {
+		if err := s.configSchema(ctx, cmd); err != nil {
+			return nil, err
+		}
+	}
 	slices.SortFunc(s.result.Commands, func(a, b Command) int { return strings.Compare(strings.Join(a.Path, " "), strings.Join(b.Path, " ")) })
 	slices.SortFunc(s.result.Events, func(a, b Event) int { return strings.Compare(a.RouteID, b.RouteID) })
 	slices.SortFunc(s.result.Diagnostics, func(a, b Diagnostic) int {
@@ -232,6 +240,7 @@ func (s *scan) readFile(pkg listedPackage, path string, names map[string]string)
 	if file == nil {
 		return nil
 	}
+	s.syntax[pkg.ImportPath] = append(s.syntax[pkg.ImportPath], file)
 	imports := make(map[string]string)
 	for _, imp := range file.Imports {
 		path, err := strconv.Unquote(imp.Path.Value)
