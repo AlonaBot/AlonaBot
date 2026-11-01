@@ -155,12 +155,9 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigc)
 	for {
-		r, err := launch(ctx, out, plog, store, pluginID, pluginDir, exe, digest, stdio, v, global, environment)
+		r, err := launch(ctx, out, plog, store, pluginID, pluginDir, exe, digest, stdio, v, global, environment, proxy)
 		if err != nil {
 			return err
-		}
-		if endpoint := r.Instance.HTTPListener; endpoint != nil {
-			proxy.Bind(pluginID, r.Instance.GenerationID, endpoint, r.Instance.HTTPProxyToken, r.Instance.Routes)
 		}
 		unbound := make(chan struct{})
 		go func() { <-r.Instance.Session.Done(); proxy.Unbind(pluginID, r.Instance.GenerationID); close(unbound) }()
@@ -223,7 +220,8 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 }
 
 // launch 首次运行时提交新代次；之后复用已提交的 Active 代次（普通 restart，不产生新 Generation）。
-func launch(ctx context.Context, out *logging.Output, plog *slog.Logger, store *state.Store, pluginID, pluginDir, exe string, digest []byte, stdio bool, v tune.Values, global *wire.Budget, environment map[string]string) (*supervisor.Running, error) {
+// 插件有 HTTP 端点时，先把它绑定到 proxy，再记录激活。
+func launch(ctx context.Context, out *logging.Output, plog *slog.Logger, store *state.Store, pluginID, pluginDir, exe string, digest []byte, stdio bool, v tune.Values, global *wire.Budget, environment map[string]string, proxy *httpproxy.Server) (*supervisor.Running, error) {
 	active, err := store.Active(ctx, pluginID)
 	if err != nil {
 		return nil, err
@@ -245,6 +243,10 @@ func launch(ctx context.Context, out *logging.Output, plog *slog.Logger, store *
 	})
 	if err != nil {
 		return nil, err
+	}
+	// 先发布 HTTP 映射再记录激活：日志出现时插件路由已可经公开入口访问。
+	if endpoint := r.Instance.HTTPListener; endpoint != nil {
+		proxy.Bind(pluginID, r.Instance.GenerationID, endpoint, r.Instance.HTTPProxyToken, r.Instance.Routes)
 	}
 	mode := "restart"
 	if isNew {
