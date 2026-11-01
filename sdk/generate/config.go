@@ -300,7 +300,18 @@ func (b *configBuilder) structure(structure *types.Struct, path string) *jsonsch
 		if tags["json"] == "-" {
 			continue
 		}
-		name := strings.SplitN(tags["json"], ",", 2)[0]
+		name, options, _ := strings.Cut(tags["json"], ",")
+		if slices.Contains(strings.Split(options, ","), "string") {
+			// encoding/json 的 string 选项只跟随一层指针，包含命名指针类型。
+			quotedType := fieldType.Underlying()
+			if pointer, ok := quotedType.(*types.Pointer); ok {
+				quotedType = pointer.Elem().Underlying()
+			}
+			if basic, ok := quotedType.(*types.Basic); ok && basic.Info()&(types.IsString|types.IsBoolean|types.IsInteger|types.IsFloat) != 0 {
+				b.scan.diagnostic(field.Pos(), fmt.Sprintf("json string option is unsupported for config type %s", fieldType))
+				continue
+			}
+		}
 		if !configJSONName(name) {
 			name = ""
 		}
