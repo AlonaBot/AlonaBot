@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -216,6 +217,29 @@ func TestWebHostProcesses(t *testing.T) {
 		if blocked.Header().Get("Content-Security-Policy") != "default-src 'none'; frame-ancestors 'none'" {
 			t.Fatalf("missing single-host CSP: %v", blocked.Header())
 		}
+	}
+	// 通过真实公开 Listener 检查 net/http 的缺省嗅探，Recorder 无法覆盖这个分支。
+	public := httptest.NewServer(single)
+	defer public.Close()
+	request, err := http.NewRequest(http.MethodGet, public.URL+"/plugins/demo/static/untyped", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = "admin.test"
+	untyped, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(untyped.Body)
+	untyped.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if untyped.StatusCode != 200 || untyped.Header.Get("Content-Type") != "application/octet-stream" || string(body) != "<html><body>plugin page</body></html>" {
+		t.Fatalf("untyped plugin response: status %d headers %v body %q", untyped.StatusCode, untyped.Header, body)
+	}
+	if untyped.Header.Get("X-Content-Type-Options") != "nosniff" || untyped.Header.Get("Content-Security-Policy") != "default-src 'none'; frame-ancestors 'none'" {
+		t.Fatalf("untyped plugin response policy: %v", untyped.Header)
 	}
 	filtered := send(single, "GET", base+"/static/cookies", nil, 200)
 	if filtered.Header().Get("Content-Security-Policy") != "default-src 'none'; frame-ancestors 'none'" || len(filtered.Header().Values("Set-Cookie")) != 1 {

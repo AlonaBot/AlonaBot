@@ -12,6 +12,7 @@ import (
 const (
 	singleHostCSP       = "default-src 'none'; frame-ancestors 'none'"
 	configurePluginHost = "configure plugin_base_url to serve active plugin content\n"
+	untypedContentType  = "application/octet-stream"
 )
 
 func (h *Host) pluginWriter(w http.ResponseWriter, r *http.Request) *responseWriter {
@@ -20,6 +21,10 @@ func (h *Host) pluginWriter(w http.ResponseWriter, r *http.Request) *responseWri
 	apply := func(header http.Header) { h.pluginHeaders(header, pluginID) }
 	return &responseWriter{ResponseWriter: w, before: apply, modify: func(response *http.Response) error {
 		apply(response.Header)
+		if !h.opt.SecondHost && response.Header.Get("Content-Type") == "" {
+			// 阻止公开 Listener 在写出缺失 MIME 的正文时重新嗅探成 HTML。
+			response.Header.Set("Content-Type", untypedContentType)
+		}
 		if h.opt.SecondHost || !activeContent(response.Header.Get("Content-Type")) {
 			return nil
 		}

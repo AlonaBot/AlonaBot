@@ -47,8 +47,12 @@ func (p *plugin) HTTP(r *sdk.HTTPRegistry) {
 			return
 		}
 		switch r.URL.Path {
-		case "/static/page":
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		case "/static/page", "/static/untyped":
+			if r.URL.Path == "/static/untyped" {
+				w.Header()["Content-Type"] = nil
+			} else {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			}
 			if _, err := fmt.Fprint(w, "<html><body>plugin page</body></html>"); err != nil {
 				slog.Error("write plugin page failed", "err", err)
 			}
