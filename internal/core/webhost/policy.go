@@ -107,7 +107,7 @@ func pluginOrigin(origin string, base *url.URL) bool {
 
 func originPort(u *url.URL) string {
 	if port := u.Port(); port != "" {
-		return port
+		return strings.TrimLeft(port, "0")
 	}
 	if u.Scheme == "https" {
 		return "443"
