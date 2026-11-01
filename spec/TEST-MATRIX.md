@@ -50,7 +50,7 @@
 | V-40 | T-09 | install首次enable、restart/reload区别、pin、uninstall重装与显式rollback | 首次创建Active；restart仅新Session；卸载保留数据/来源且仅同来源可重装；pin持久化；rollback建立新代次/DB副本且不复活旧按钮，external 数据不假装通用恢复 |
 | V-41 | T-01、T-09 | 外部release清单签名、归档摘要、来源/公钥变化、无签名本地包 | 对确切字节验签；无自包含摘要循环；所有身份/平台错误停机前拒绝；签名失败不降级本地信任 |
 | V-42 | T-02、T-06 | Request计数满、字节满、缓冲满、嵌套Send/Service与Cancel并发、Request发送前取消 | 超额明确失败；Response/控制仍有进展；无阻塞等待自己额度；Cancel不超越自己的Request；Event Bus 256条/4MiB双界限计数并drop-newest |
-| V-43 | T-04、T-05、T-09 | Core Admin与chat_admin、组禁用/子项启用、子权限放宽、运行时改策略 | 群管理员不取得Core管理权；父禁用优先；最近显式权限可覆盖但不能绕过全局限制；已开始请求不伪称撤销 |
+| V-43 | T-04、T-05、T-09 | 权限名集合（`user`、`admin`、`chat_admin` 与 Adapter 权限）、组禁用/子项启用、子权限放宽、运行时改策略、策略引用未安装 Adapter 的权限 | 平台权限与 `chat_admin` 不满足 `admin`，`admin` 不自动满足其他权限名；未安装 Adapter 的权限名不被满足且在诊断中标出；父禁用优先；最近显式权限可覆盖但不能绕过全局限制；已开始请求不伪称撤销 |
 | V-44 | T-03 | 入站媒体惰性Read、多Session共享、越界offset/配额/过期、owner退出 | 不预下载所有图；不泄BotToken/路径；首次取件校验后读取；有效租约保护共享对象；错误不制造MediaRef/空成功 |
 | V-45 | T-03 | getMe账号重复、webhook/401/409、allowed_updates/匿名身份、私聊/回复机器人/提及机器人时的 to_me、实例代理与全局代理、代理连接失败、游标提交崩溃及7天空闲ID重置 | 冲突报管理状态、不擅自删webhook；逐条持久游标后非持久派发；显式订阅成员/Reaction且核对权限；匿名sender_chat不伪造User；7天空闲重建轮次不沿用旧高offset；允许丢失边界明确 |
 | V-46 | T-07 | job超时后callback继续执行、迟到Response、RPC断链但进程未退出 | 超时结果先返回但running不释放；无重叠/补跑；实际callback返回或进程确认退出才释放；迟到成功不改超时 |
@@ -80,7 +80,7 @@
 | V-70 | T-14 | linux/amd64 与 linux/arm64 镜像、干净卷首次运行、无 TTY 启动、`-it admin-token init`、端口只发布到宿主本机、停止容器 | 镜像只含 `alonabot`、`packages/` 与 CA 证书并以 UID 10001 运行；无 TTY 时拒绝启动并提示初始化；初始化后正常启动并能访问 WebUI；出站 HTTPS 可用；没有 `ALONABOT_CONTAINER` 时 `0.0.0.0` 搭配 http Base URL 被拒绝；停止容器后插件进程全部退出 |
 | V-71 | T-15 | 本地 OneBot 11 模拟服务：get_login_info、access_token 错误、断线重连、self_id 不符、字符串格式上报、私聊/群聊/匿名消息、撤回与成员变动、to_me 的三种情况（含 get_msg 失败）、入站图片取件、实例队列满；发送混合段、video 拆分、reference、base64 媒体、async、failed、请求写出后断线 | 401 与字符串格式使实例致命失败并给出 safe_error；重连不重放已提交的 Send；self_id 不符的事件被丢弃；匿名消息没有 Actor；无通用对应的段只在 platform_payload 中；队列满时丢弃并计数而读循环继续；PartResult 与物理消息一一对应，async 标记 message_ids_unavailable，写出后断线为 UNKNOWN 且后续 NOT_ATTEMPTED；真实 QQ 端只有维护者手测记录，没有时记为未运行 |
 | V-72 | T-03、T-15 | 同一插件经 Telegram 与 OneBot 11 模拟服务的两个实例收发同一组 Chain：纯文本、mention、reference、图片加文本、buttons、forward、file、markdown、Edit、`onebot11.face` extension、发往其他 Adapter 的 extension；同一组入站消息 | 通用片段在两边语义一致：顺序、引用位置、PartResult 与 segment indexes 对应；每个实例只用自己声明的 Capability，未声明的片段或组合在首个平台请求前返回 UNSUPPORTED，模拟服务没有收到请求；extension 只在所属 Adapter 上成功；入站的 text、mention、reference、image 在两边得到相同结构的 chain；插件代码不按 adapter_id 分支 |
-| V-73 | T-13、T-16 | 用 `plugintest` 测试示例插件：命令回复、Rule、普通用户/chat_admin/Core Admin 的权限、Capability 子集下的 UNSUPPORTED、按钮点击、多轮等待、schedule 触发、后台发送有无许可、配置与 `dev.sqlite`；`go test -count=2 -race`；`alonabot.Start` 的激活失败与 ctx 取消 | 每次注入在分发结束或进入多轮等待后返回，结果完整，不依赖 sleep；行为与独立进程运行相同；测试之间的数据目录互不影响；Start 失败或停止后不残留组件 goroutine、core.lock 与子进程 |
+| V-73 | T-13、T-16 | 用 `plugintest` 测试示例插件：命令回复、Rule、普通用户/平台权限/Core Admin 的权限、Capability 子集下的 UNSUPPORTED、按钮点击、多轮等待、schedule 触发、后台发送有无许可、配置与 `dev.sqlite`；`go test -count=2 -race`；`alonabot.Start` 的激活失败与 ctx 取消 | 每次注入在分发结束或进入多轮等待后返回，结果完整，不依赖 sleep；行为与独立进程运行相同；测试之间的数据目录互不影响；Start 失败或停止后不残留组件 goroutine、core.lock 与子进程 |
 | V-74 | T-10 | linux/amd64，与 V-33 同一台机器；各进程 Activated 后空闲 2 分钟，读 `/proc/<pid>/smaps_rollup` 的 Pss，取 3 轮中位数：只运行 Core（不启用任何插件与 Adapter）；echo 示例插件进程；rss 插件进程（`sqlitedb`，有一个订阅）；configdb 示例的 `gormdb` 变体进程 | Core ≤ 24 MiB，echo ≤ 10 MiB，rss ≤ 14 MiB，configdb ≤ 16 MiB；同时记录 RSS 与私有内存。超出视为回归，按 CONTRACTS §10 处理 |
 | V-75 | T-01、T-10 | `node scripts/check-go-deps.mjs`：在五个目标上列出 Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）链接的模块；临时加入一个清单外的 import | 只含允许清单中的模块；清单外的模块使检查失败并列出模块名 |
 | V-76 | T-12 | 测试插件调用 `llm.generate`：在与不在 `llm_service_allowed_plugins` 中、指定不存在的 Provider、模拟 Provider 出错与中途断开、调用方期限短于生成耗时、Agent 配置中没有 Provider、Agent 组件未启用、调用方经 `@agent` 调用 | 不在列表中返回 PERMISSION_DENIED，模拟服务没有收到请求；不存在的 Provider 为 INVALID_ARGUMENT，没有 Provider 为 FAILED_PRECONDITION；出错与断开为 UNAVAILABLE，safe_message 不含 API Key，模拟服务只收到一次请求；期限到达时调用方得到 DEADLINE_EXCEEDED；Agent 未启用时按目标未激活失败；`@agent` 解析到已安装的 Agent 组件；成功时返回 text、provider、model 与用量，会话存储没有新增条目 |
@@ -92,6 +92,9 @@
 | V-82 | T-09、T-12 | 已安装官方 Agent、WebUI 与 Telegram Adapter 时，不带与带 `--replace` 安装同类的社区组件（本地签名的测试包与本地 Release 模拟服务）、新组件预检失败、替换后 update、`@agent` 调用、按原来源重装旧组件、两个不同 `adapter_id` 的 Adapter | 不带 `--replace` 返回 ALREADY_EXISTS 并列出已安装的组件；预检失败时旧组件不受影响；替换在确认后卸载旧组件并保留其数据与来源绑定，新组件沿用旧组件的启用状态，被替换 Adapter 的实例不出现在新 Adapter 下；之后 update 只查询新来源；`@agent` 调用到达新 Agent；旧组件可按原来源重装并复用数据；不同 `adapter_id` 的 Adapter 可以并存 |
 | V-83 | T-08、T-09 | WebUI 组件：已启用、未安装、Admin API 主版本不在声明范围内、前端路由路径、`/api/` 与内部路径、带扩展名的不存在路径、库模式 `alonabot.WebUI`；图标：manifest 与表单选项声明的 SVG、PNG、WebP，未声明的包内文件、其他扩展名、含 `<script>` 的 SVG、未认证请求 | WebUI 文件来自不可变包目录，前端路由回退 `index.html`，`/api/` 不被覆盖，带扩展名的不存在路径返回 404；未安装返回 503 与提示；版本不兼容时拒绝安装与启用；图标只提供声明过的路径并带 sandbox CSP 与 nosniff，其他扩展名在包校验时拒绝，未认证返回 401；直接打开含脚本的 SVG 时脚本不在 Admin 源执行 |
 | V-84 | T-14 | 在真实 systemd Linux（root）与 macOS（当前用户）上：全新安装、`SHA256SUMS` 不一致、经管道运行且有与没有终端、再次运行升级、`--uninstall`、不支持的系统与没有 systemd 的 Linux | 校验失败时不改动已有安装；有终端时 token 只显示一次并启动服务，没有终端时不启动服务并输出初始化命令；升级保留数据目录、设置文件与已安装组件；卸载删除服务与程序目录并保留数据目录；不支持的系统在改动前退出；容器内的 systemd 与模拟环境不算真实结果 |
+| V-85 | T-03、T-04、T-15、T-16 | Adapter 权限声明：错误前缀、非法名称、隐含 `user`/`admin`、隐含成环；事件带未声明的权限名；OneBot 11 的 owner/admin/member，以及私聊的 friend 与 group 子类型；Telegram 的 creator/administrator、缓存作废与 `getChatAdministrators` 失败；`plugintest.Adapter` 声明的权限 | 非法声明使 Adapter 注册失败；未声明的权限名被丢弃并记诊断；隐含关系完整展开（群主同时满足群管理员与 `chat_admin`）；获取失败的事件不带平台权限；平台权限不跨会话 |
+| V-86 | T-04、T-16 | Adapter 扩展事件：声明与 Schema、未声明的名称、版本不符、payload 不符合 Schema；插件注册未安装 Adapter 的扩展事件路由；SDK 的事件常量与 Handler 参数类型不符；扩展事件遇到命令层与多轮等待 | 不符的事件被拒绝并记诊断；未安装时注册成功、诊断标出且不触发；参数类型不符在 `Collect` 时报错；扩展事件只进入事件路由 |
+| V-87 | T-04、T-08 | `command_prefixes` 的缺省值、多个前缀、空前缀与按实例覆盖；开头的 reference 与本账号 mention；`/kick @某人` 的 `user` 参数（OneBot 的 mention 与 Telegram 的 `text_mention`）、`image` 参数、末位 `message` 参数、非文本 token 出现在 string 位置；自定义 usage 文案键的语言选择 | 前缀按最长匹配，覆盖只作用于该实例；开头片段不影响命令匹配；参数按片段顺序绑定，类型不符时发一次 usage；usage 按调用者 locale 选择语言，未知键在构建检查中失败 |
 
 ## 2. 跨任务验收的最终闭合点
 
@@ -123,6 +126,7 @@
 | V-73 | T-13.1 `alonabot.Start`；T-16.1 套件基础 | T-16.2 按钮、多轮等待、schedule 与示例插件的测试 |
 | V-82 | T-03.8 manifest 角色解析；T-12.8 `@agent` 解析 | T-09.4 同类唯一、`--source` 与 `--replace` 的正式管理流程 |
 | V-83 | T-08.1 表单选项图标的构建检查；T-08.7 WebUI 用 `<img>` 显示图标 | T-09.12 WebUI 文件与图标的提供、Admin API 版本检查 |
+| V-85～V-87 | T-04.6 Core 侧校验、展开与命令解析；T-04.7 SDK 常量与类型核对；T-03.11、T-15.1 两个官方 Adapter 的平台权限 | T-16 用 `plugintest.Adapter` 覆盖依赖平台权限与扩展事件的路由；V-87 的 usage 语言选择随 T-08.8 完成 |
 
 T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前者可支持后续开发，真实平台部分仍由 T-10 查证。测试会话、无配置/无 DB 最小插件和 payload fixture 的范围必须写明，不可据此关闭生产认证或数据恢复用例。
 

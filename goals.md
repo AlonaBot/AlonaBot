@@ -56,7 +56,11 @@
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 已完成（PR #39） |
 | goal-11 | T-04.2 | 构建期生成器 | T-04.1 | 已完成（PR #42） |
 | goal-12 | T-04.3 | 命令选择、文本匹配与参数绑定 | T-04.1 | 已完成（PR #47） |
-| goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1 | 可派发 |
+| goal-86 | T-02.3 | 状态库改用 GORM | T-02 | 待编写 |
+| goal-87 | T-04.6 | 权限、扩展事件与命令解析的协议和 Core 侧 | T-03.3、T-03.6、T-04.3 | 待编写 |
+| goal-88 | T-04.7 | SDK 链式注册与自有类型 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | 待编写 |
+| goal-89 | T-03.11 | 官方 Telegram Adapter 的平台权限 | T-04.6 | 待编写 |
+| goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1、T-04.6 | 待修订（D-68～D-72） |
 | goal-19 | T-06.1 | Service/Bus 描述与 Broker 准入 | T-04.1 | 已完成（PR #45） |
 | goal-25 | T-07.3 | SDK HTTP Listener 与 Core 代理 | T-04.1 | 已完成（PR #46） |
 | goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 可派发 |
@@ -67,15 +71,15 @@
 | goal-28 | T-08.1 | 配置字段描述与构建检查 | T-04.2 | 可派发 |
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-06.1 | 等待前置 |
 | goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2 | 等待前置 |
-| goal-78 | T-15.1 | 官方 OneBot 11 Adapter 的连接与接收 | T-03.3、T-03.4 | 可派发 |
+| goal-78 | T-15.1 | 官方 OneBot 11 Adapter 的连接与接收 | T-03.3、T-03.4、T-04.6 | 待修订（D-68～D-72） |
 | goal-8 | T-03.8 | 按钮、extension 片段与依赖解析 | T-03.2、T-03.7 | 等待前置 |
 | goal-51 | T-03.9 | 消息编辑 | T-03.7 | 等待前置 |
-| goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1 | 等待前置 |
+| goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1 | 待修订（D-68～D-72） |
 | goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 等待前置 |
 | goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 等待前置 |
 | goal-31 | T-08.4 | 不可变 Secret Store | T-08.1、T-08.2 | 等待前置 |
 | goal-34 | T-08.7 | web/admin 骨架、配置表单组件与界面文案 | T-08.1 | 等待前置 |
-| goal-53 | T-08.8 | 用户可见文案目录 | T-04.1、T-04.3、T-08.1 | 等待前置 |
+| goal-53 | T-08.8 | 用户可见文案目录 | T-04.1、T-04.3、T-08.1、T-04.6 | 待修订（D-68～D-72） |
 | goal-36 | T-09.1 | 首次管理认证 | T-07.4 | 等待前置 |
 | goal-69 | T-13.3 | 热部署 | T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9 | 等待前置 |
@@ -84,23 +88,23 @@
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 等待前置 |
 | goal-32 | T-08.5 | 受管 SQLite 连接与迁移 | T-08.3 | 等待前置 |
 | goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-08.4、T-09.1、T-09.2、T-13.1 | 等待前置 |
-| goal-71 | T-14.1 | help 插件与命令列表 | T-04.4、T-05.2、T-08.8 | 等待前置 |
+| goal-71 | T-14.1 | help 插件与命令列表 | T-04.4、T-05.2、T-08.8 | 待修订（D-68～D-72） |
 | goal-79 | T-15.2 | 官方 OneBot 11 Adapter 的发送、媒体与 extension | T-03.6、T-03.8、T-15.1 | 等待前置 |
-| goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4 | 等待前置 |
+| goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7 | 待修订（D-68～D-72） |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 等待前置 |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 等待前置 |
 | goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 等待前置 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.4、T-09.1、T-09.4、T-13.1 | 待编写 |
 | goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.3、T-08.4、T-11.3、T-12.1 | 等待前置 |
 | goal-68 | T-13.2 | 开发组件的配置与数据库 | T-08.3、T-08.5、T-13.1 | 等待前置 |
-| goal-72 | T-14.2 | welcome 与 rss 插件 | T-05.2、T-07.2、T-08.3、T-08.5、T-08.8 | 等待前置 |
+| goal-72 | T-14.2 | welcome 与 rss 插件 | T-05.2、T-07.2、T-08.3、T-08.5、T-08.8 | 待修订（D-68～D-72） |
 | goal-80 | T-15.3 | 跨 Adapter 一致性验收 | T-03.10、T-15.2 | 等待前置 |
 | goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 等待前置 |
 | goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8 | 等待前置 |
 | goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.1、T-08.8、T-09.2、T-13.1 | 等待前置 |
 | goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 等待前置 |
 | goal-70 | T-13.4 | 库模式示例与验收 | T-03.10、T-13.2、T-13.3 | 等待前置 |
-| goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
+| goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 待修订（D-68～D-72） |
 | goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-12.2 | 等待前置 |
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 等待前置 |
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 等待前置 |
@@ -121,7 +125,7 @@
 | goal-77 | T-14.5 | 容器镜像 | T-07.3、T-14.3 | 等待前置 |
 | goal-85 | T-14.7 | install.sh | T-14.3 | 待编写 |
 | goal-75 | T-14.6 | 发行包与镜像端到端验收 | T-09.11、T-14.4、T-14.5 | 等待前置 |
-| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-15.3、T-16.2 | 等待前置 |
+| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-15.3、T-16.2 | 等待前置 |
 | goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 等待前置 |
 | goal-48 | T-10.3 | 资源比较报告与常驻内存预算核对 | T-10.1 | 等待前置 |
 | goal-49 | T-10.4 | 发布资产与说明 | T-10.2、T-10.3 | 等待前置 |
@@ -1331,7 +1335,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-13 · T-04.4 持久化命令策略
 
-状态：可派发。T-03.2、T-04.1 及命令派发 T-04.3 已由 PR #31、#34、#47 合并。已核对 `Router.Commands().Shadows()`、`router.New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send router.ServiceFunc) *router.Router`、`dispatchCommands` 与 `invokeCommand`。策略依赖通过下方 CommandPolicy 注入，避免 router 与 policy 的循环 import。
+状态：按 D-68～D-72（2026-11-01）修订：审查者按新契约更新本语句前不派发。T-03.2、T-04.1 及命令派发 T-04.3 已由 PR #31、#34、#47 合并。已核对 `Router.Commands().Shadows()`、`router.New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send router.ServiceFunc) *router.Router`、`dispatchCommands` 与 `invokeCommand`。策略依赖通过下方 CommandPolicy 注入，避免 router 与 policy 的循环 import。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-13（切片 T-04.4：持久化命令策略）。goal 目录 goal-13，分支 goal-13，worktree .worktrees/goal-13，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -2084,7 +2088,7 @@ internal/core/webhost
 
 ### goal-78 · T-15.1 官方 OneBot 11 Adapter 的连接与接收
 
-状态：可派发。T-03.3、T-03.4 已由 PR #32、#39 合并；已核对 `sdk/adapter` 的 Adapter、Instance、Core、StartRequest、Account 与 `sdk.RunAdapter(adapter.Adapter) error`。`MessageCreatedPayload.to_me` 为字段 3，`Actor.locale` 为 optional 字段 5，OneBot 本切片直接使用已生成类型，无需修改 proto。
+状态：按 D-68～D-72（2026-11-01）修订：审查者按新契约更新本语句前不派发。T-03.3、T-03.4 已由 PR #32、#39 合并；已核对 `sdk/adapter` 的 Adapter、Instance、Core、StartRequest、Account 与 `sdk.RunAdapter(adapter.Adapter) error`。`MessageCreatedPayload.to_me` 为字段 3，`Actor.locale` 为 optional 字段 5，OneBot 本切片直接使用已生成类型，无需修改 proto。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-78（切片 T-15.1：官方 OneBot 11 Adapter 的连接与接收）。goal 目录 goal-78，分支 goal-78，worktree .worktrees/goal-78，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -2291,7 +2295,7 @@ internal/core/webhost
 
 ### goal-16 · T-05.2 Rule、HandlerOutcome 与传播
 
-状态：等待前置（T-05.1）。语句中 goal-2、goal-12、goal-15 提供的符号（sdk 的分发、RouteOption、Context、HandlerOutcome 的处理、router 的命令层与事件路由派发）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：按 D-68～D-72（2026-11-01）修订：审查者按新契约更新本语句前不派发。等待前置（T-05.1）。语句中 goal-2、goal-12、goal-15 提供的符号（sdk 的分发、RouteOption、Context、HandlerOutcome 的处理、router 的命令层与事件路由派发）只写名字；合并后由审查者核对签名，再改为可派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-16（切片 T-05.2：Rule、HandlerOutcome 与传播）。goal 目录 goal-16，分支 goal-16，worktree .worktrees/goal-16，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -2563,7 +2567,7 @@ sdk/config
 
 ### goal-53 · T-08.8 用户可见文案目录
 
-状态：等待前置（T-08.1）。T-04.1、T-04.3 已合并；已核对 `sdk.Context`、`sdk.Usage(text string) RouteOption` 与 `router/command.go` 的 `commandUsage(spec *pb.CommandSpec) *pb.MessageChain`，usage 经注入的 message.Service.Send 发送。生成器与配置描述接口仍待 goal-28 合并后核对。
+状态：按 D-68～D-72（2026-11-01）修订：审查者按新契约更新本语句前不派发。等待前置（T-08.1）。T-04.1、T-04.3 已合并；已核对 `sdk.Context`、`sdk.Usage(text string) RouteOption` 与 `router/command.go` 的 `commandUsage(spec *pb.CommandSpec) *pb.MessageChain`，usage 经注入的 message.Service.Send 发送。生成器与配置描述接口仍待 goal-28 合并后核对。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-53（切片 T-08.8：用户可见文案目录）。goal 目录 goal-53，分支 goal-53，worktree .worktrees/goal-53，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -3125,7 +3129,7 @@ sdk/config
 
 ### goal-71 · T-14.1 help 插件与命令列表
 
-状态：等待前置（T-04.4、T-05.2、T-08.8）。语句中 goal-10、goal-12、goal-13、goal-16、goal-53 提供的符号（router.CommandIndex、policy.CheckCommand、contracts/i18n、sdk 的命令注册与 Context.T）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：按 D-68～D-72（2026-11-01）修订：审查者按新契约更新本语句前不派发。等待前置（T-04.4、T-05.2、T-08.8）。语句中 goal-10、goal-12、goal-13、goal-16、goal-53 提供的符号（router.CommandIndex、policy.CheckCommand、contracts/i18n、sdk 的命令注册与 Context.T）只写名字；合并后由审查者核对签名，再改为可派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-71（切片 T-14.1：help 插件与命令列表）。goal 目录 goal-71，分支 goal-71，worktree .worktrees/goal-71，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -3235,7 +3239,7 @@ sdk/config
 
 ### goal-14 · T-04.5 示例升级与 T-04 验收
 
-状态：等待前置（T-03.10、T-04.4）。T-04.2、T-04.3 已合并；已核对 `CommandRegistry.Command`、`Regex`、`Keyword`、`Raw`，以及 Args、Optional、RawTail、Usage、Silent、IgnoreCase 和 Context.Match。策略与 Adapter 开发入口的实际接口仍待前置合并后核对。
+状态：按 D-68～D-72（2026-11-01）修订：审查者按新契约更新本语句前不派发。等待前置（T-03.10、T-04.4）。T-04.2、T-04.3 已合并；已核对 `CommandRegistry.Command`、`Regex`、`Keyword`、`Raw`，以及 Args、Optional、RawTail、Usage、Silent、IgnoreCase 和 Context.Match。策略与 Adapter 开发入口的实际接口仍待前置合并后核对。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-14（切片 T-04.5：示例升级与 T-04 验收）。goal 目录 goal-14，分支 goal-14，worktree .worktrees/goal-14，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -3543,7 +3547,7 @@ agent
 
 ### goal-72 · T-14.2 welcome 与 rss 插件
 
-状态：等待前置（T-05.2、T-07.2、T-08.3、T-08.5、T-08.8）。语句中 goal-16、goal-24、goal-30、goal-32、goal-53 提供的符号（ChatAdmin Rule、ScheduleRegistry.Every、Config 与 OnLoad、gormdb.Open、Context.T、sdk.Send）只写名字；合并后由审查者核对，再改为可派发。
+状态：按 D-68～D-72（2026-11-01）修订：审查者按新契约更新本语句前不派发。等待前置（T-05.2、T-07.2、T-08.3、T-08.5、T-08.8）。语句中 goal-16、goal-24、goal-30、goal-32、goal-53 提供的符号（ChatAdmin Rule、ScheduleRegistry.Every、Config 与 OnLoad、gormdb.Open、Context.T、sdk.Send）只写名字；合并后由审查者核对，再改为可派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-72（切片 T-14.2：welcome 与 rss 插件）。goal 目录 goal-72，分支 goal-72，worktree .worktrees/goal-72，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -3867,7 +3871,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 ### goal-81 · T-16.1 插件测试套件基础
 
-状态：等待前置（T-05.2、T-13.2）。语句中 goal-4、goal-16、goal-67、goal-68 提供的符号（sdk/adapter 的 Adapter 与 Instance、Router 的分发流程、alonabot.Start 与 Core、Plugin/Adapter/DataDir 选项、dev 的 config.json 与 dev.sqlite、生成器的 Generated）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：按 D-68～D-72（2026-11-01）修订：审查者按新契约更新本语句前不派发。等待前置（T-05.2、T-13.2）。语句中 goal-4、goal-16、goal-67、goal-68 提供的符号（sdk/adapter 的 Adapter 与 Instance、Router 的分发流程、alonabot.Start 与 Core、Plugin/Adapter/DataDir 选项、dev 的 config.json 与 dev.sqlite、生成器的 Generated）只写名字；合并后由审查者核对签名，再改为可派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-81（切片 T-16.1：插件测试套件基础）。goal 目录 goal-81，分支 goal-81，worktree .worktrees/goal-81，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4828,7 +4832,7 @@ internal/core/state
 ```text
 /goal 使用 $alonabot-execute 推进 goal-46（切片 T-10.1：证据汇总与跨组件联验）。goal 目录 goal-46，分支 goal-46，worktree .worktrees/goal-46，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-目标：汇总 V-01～V-76 与 V-82～V-84 的证据，逐项标记已通过、失败、未运行或待联验；补齐组件之间的联验（首次管理登录 → 安装启用 → 配置/权限 → 真实消息 → 插件 HTTP → 重载/升级/回退，TCP 与 stdio）；用不同的真实插件二进制覆盖各能力组合；执行协议、权限、资源边界与完整恢复的故障注入，核对数据库内容与权威指针。
+目标：汇总 V-01～V-76 与 V-82～V-87 的证据，逐项标记已通过、失败、未运行或待联验；补齐组件之间的联验（首次管理登录 → 安装启用 → 配置/权限 → 真实消息 → 插件 HTTP → 重载/升级/回退，TCP 与 stdio）；用不同的真实插件二进制覆盖各能力组合；执行协议、权限、资源边界与完整恢复的故障注入，核对数据库内容与权威指针。
 
 依据：PLAN T-10 步骤 1～4 与「停止和失败条件」；TEST-MATRIX 全部；CONTRACTS §12.4。
 
@@ -4957,3 +4961,39 @@ internal/core/state
 
 不做：执行正式签名与发布（维护者负责）；v0.1 之后的路线图。
 ```
+
+## 契约修订切片（D-68～D-72）
+
+以下切片由 2026-11-01 的契约修订新增，接口与测试段待审查者按合入代码写出。合并顺序：goal-86 与进行中的 PR 没有共享文件，可以随时派发；goal-87 等 goal-7（PR #55）合并后派发，goal-88 等 goal-21（PR #56）与 goal-28（PR #54）合并后派发；goal-87 先于 goal-88、goal-89，以及上面标注「待修订」的 goal。进行中的 goal-7、goal-15、goal-21、goal-26、goal-28 按原语句完成，不受本次修订影响；goal-15 用到的 `trusted_roles` 由 goal-87 在其合并后改为权限名集合。
+
+### goal-86 · T-02.3 状态库改用 GORM
+
+状态：待编写（前置 T-02）。依据 D-68 新增。
+
+目标：`internal/core/state` 现有各表的读写改为 GORM 模型，经 `libtnb/sqlite` 的 `Conn` 复用同一个单连接；schema 仍由唯一的初始迁移定义，不用 AutoMigrate。core.lock、PRAGMA 回读核对、损坏不重建、提交时核对预期旧代次的行为与现有集成测试都不变。
+
+依据：PLAN T-02 步骤 11；CONTRACTS §6.1；DECISIONS D-68；TEST-MATRIX V-36、V-75。
+
+### goal-87 · T-04.6 权限、扩展事件与命令解析的协议和 Core 侧
+
+状态：待编写（前置 T-03.3、T-04.3 已合并；T-03.6 的 PR #55 正在进行，它也修改 `adapter.proto`、`sdk/adapter` 与 remote Adapter，本切片在其合并后再派发）。依据 D-69、D-71、D-72 新增。
+
+目标：按 WIRE-FORMAT §5A 的 2026-11-01 条目修改 proto 并重新生成；Core 校验 Adapter 的权限与扩展事件声明，交付时保留已声明的平台权限并展开隐含关系，按声明校验扩展事件，路由按权限名集合判定；实现 `command_prefixes` 与按实例覆盖、去掉开头的 reference 与本账号 mention、非文本 token 与 `user`/`image`/`message` 参数、usage 文案键；同步已合并的 router、remote Adapter、`sdk/adapter`、Telegram Adapter 与集成测试。
+
+依据：PLAN T-04 步骤 8；CONTRACTS §2.2、§2.3、§8、§15.1；MESSAGE-MODEL §1、§1.2；WIRE-FORMAT §3.3、§5A；DECISIONS D-69、D-71、D-72；TEST-MATRIX V-85～V-87。
+
+### goal-88 · T-04.7 SDK 链式注册与自有类型
+
+状态：待编写（前置 T-04.2、T-04.6、T-06.1、T-06.3、T-08.1）。依据 D-70 新增。T-06.3（PR #56）新增的 Event Bus 订阅与发布入口、T-08.1（PR #54）对生成器与 `sdk/session.go` 的修改都按旧写法进行，由本切片在它们合并后一并改为链式，避免与进行中的 PR 同时修改这些文件。
+
+目标：命令、文本匹配、事件、Service 与 Event Bus 订阅的注册改为链式构建，删除 `RouteOption`、`ServiceOption` 与位置参数形式；新增 Permission 值对象与 `c.Has`、标准事件常量与 `sdk.AdapterEvent`；Service Schema 由生成器生成；Context、Send、事件 payload 与错误码改用 SDK 自有类型，自动回复型 Handler 可以 `c.Send`；构建期生成器、示例与已合并调用方同步。
+
+依据：PLAN T-04 步骤 9；CONTRACTS §2.1、§3、§8；MESSAGE-MODEL §3；DESIGN §D、§F；DECISIONS D-69、D-70、D-71；TEST-MATRIX V-10、V-14、V-86。
+
+### goal-89 · T-03.11 官方 Telegram Adapter 的平台权限
+
+状态：待编写（前置 T-04.6）。依据 D-69 新增。
+
+目标：Adapter 描述声明 `telegram.chat_owner` 与 `telegram.chat_admin`；群与超级群中的事件按 `getChatAdministrators` 的会话缓存给出 Actor 的平台权限，缓存 10 分钟，`chat_member`、`my_chat_member` 使缓存作废，获取失败时不带平台权限并记诊断；发布只含常量的 `adapters/telegram/perm`。
+
+依据：PLAN T-03 步骤 9；MESSAGE-MODEL §6.1；CONTRACTS §2.3、§8；DECISIONS D-69；TEST-MATRIX V-85。

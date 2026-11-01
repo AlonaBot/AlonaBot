@@ -52,8 +52,9 @@
 | `examples/devbot -> 根包`、`-> sdk/...` | 库模式示例 |
 | `plugintest -> 根包`、`-> sdk/...`、`-> internal/inproc`、`-> contracts`；`examples/plugins/... -> plugintest`（仅测试代码） | 套件经根包的 `Start` 装配 Core，经 `internal/inproc` 接收分发结束通知；示例插件的测试使用套件 |
 | `plugins/... -> sdk/...`、`-> contracts`；`agent/... -> sdk/...`、`-> contracts` | 官方插件与 Agent 组件只走公共 SDK；Agent 另用已批准的 MCP go-sdk |
+| `plugins/...`、`agent/...`、`examples/plugins/...`、`plugintest -> adapters/<adapter_id>/perm`、`-> adapters/<adapter_id>/event` | 引用 Adapter 声明的权限与扩展事件（D-69、D-71）；这两个包只含常量与数据类型，只 import `sdk` 根包，不链接 Adapter 的运行时 |
 
-明确禁止（重点）：`internal/oslock`、`internal/tune` 与 `internal/inproc` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | adapters | plugins | agent | cmd`；`internal/core -> sdk | adapters | plugins | agent | cmd`；`adapters -> internal/core`；`plugins | agent -> internal/core | adapters | cmd`；`plugins`、`agent` 之间不互相 import；`internal/core | sdk | adapters | plugins | agent -> 根包`；`internal/core | sdk | adapters | 根包 -> plugintest`，以及非测试代码 `-> plugintest`；任何包 `-> examples`。依赖图不允许环。
+明确禁止（重点）：`internal/oslock`、`internal/tune` 与 `internal/inproc` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | adapters | plugins | agent | cmd`；`internal/core -> sdk | adapters | plugins | agent | cmd`；`adapters -> internal/core`；`plugins | agent -> internal/core | adapters（上表的常量包除外）| cmd`；`plugins`、`agent` 之间不互相 import；`internal/core | sdk | adapters | plugins | agent -> 根包`；`internal/core | sdk | adapters | 根包 -> plugintest`，以及非测试代码 `-> plugintest`；任何包 `-> examples`。依赖图不允许环。
 
 ## 状态归属
 

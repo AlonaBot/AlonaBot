@@ -9,11 +9,11 @@
 | 类型 | 字段 | 来源与验证 |
 | --- | --- | --- |
 | Event | event_id、event_type、source_kind、occurred_at_unix_ms、adapter_id?、adapter_instance_id?、account_id?、target?、actor?、message?、event_payload、capabilities、platform_payload? | event_id 由 Core 在入站标准化时产生；source_kind 为 ADAPTER/SCHEDULER，Core 为实例状态生成的 bot.online/bot.offline 也记为 ADAPTER。平台字段只对相应来源存在；原平台事件标识另存 source_event_id |
-| Actor | external_user_id、adapter_instance_id、display_name?、locale?、trusted_roles | 来源必须为可信 Adapter 元数据及 Core policy；用户身份按实例作用域绑定；插件/外部 webhook 的 is_admin 不是身份依据。locale 是平台给出的用户语言（规范化的 BCP 47 标签），平台未提供时 absent，用于 CONTRACTS §5.4 的文案选择 |
+| Actor | external_user_id、adapter_instance_id、display_name?、locale?、permissions | permissions 是 Core 按 CONTRACTS §2.3 计算的权限名集合，Adapter 只给出本会话的平台权限；来源必须为可信 Adapter 元数据及 Core policy；用户身份按实例作用域绑定；插件/外部 webhook 的 is_admin 不是身份依据。locale 是平台给出的用户语言（规范化的 BCP 47 标签），平台未提供时 absent，用于 CONTRACTS §5.4 的文案选择 |
 | Target | adapter_id、adapter_instance_id、account_id、chat_id、thread_id? | Adapter 验证 account 与实例绑定；默认 Target 仅来自当前实际入站事件；主动任务须显式 To，按 CONTRACTS §8 的 allowed_adapter_instances 与原事件回复范围准入 |
 | Capability | name、version、supported | 使用 Adapter 明确公布的能力；未知能力不推定支持 |
 
-命令权限中的 User 指具有可信 Actor 的普通用户；Admin 指 Core 配置的、以 adapter_instance_id/external_user_id 标识的机器人管理员。平台群管理员只形成该会话的 chat_admin Rule，不因此取得 Core 管理、插件安装或其他会话权限。Core 全局禁止规则始终生效，动态策略在每次派发前重新检查。
+命令权限按权限名判定（CONTRACTS §2.3，D-69）：`user` 指具有可信 Actor 的用户；`admin` 指 Core 配置的、以 adapter_instance_id/external_user_id 标识的机器人管理员；`chat_admin` 与 Adapter 声明的平台权限（例如 `onebot11.group_owner`）只在该会话有效，不因此取得 Core 管理、插件安装或其他会话权限。Core 全局禁止规则始终生效，动态策略在每次派发前重新检查。
 
 ### 1.1 按事件类型区分的 payload
 
@@ -28,6 +28,10 @@
 | scheduled | job_id、run_id、scheduled_at_unix_ms | adapter/account/target/actor/message 均可 absent；只具有 Core 授予的 job scope |
 | bot.online | adapter_id、adapter_instance_id、account_id、account_display_name? | target/actor/message 均 absent；由 Core 在实例启动成功后生成 |
 | bot.offline | adapter_id、adapter_instance_id、account_id、reason（STOPPED 停用 / ADAPTER_EXITED Adapter 进程退出 / INSTANCE_FAILED 实例致命错误）、safe_error? | target/actor/message 均 absent；safe_error 仅在 INSTANCE_FAILED 时给出 |
+
+### 1.2 Adapter 扩展事件
+
+平台专有的事件由 Adapter 按 CONTRACTS §8 声明，event_type 为完整名 `<adapter_id>.<name>`，event_payload 为扩展事件载荷：声明的 version 与符合声明 Schema 的 JSON 对象（D-71）。adapter/account/target/actor 的来源与校验规则与标准事件相同，平台没有提供的字段 absent。扩展事件只进入声明了该 event_type 的事件路由，不进入命令层与多轮等待；PreEvent 可以修改其 payload，修改后仍须符合 Schema。
 
 Scheduler 事件必须通过 REQUEST/RESPONSE 调用任务 Handler，使用独立 job deadline；到期只结束调用结果，实际运行槽需 callback 返回或旧进程确认退出才能释放，不能用 Event Bus 的 EVENT 帧推断任务结束。Event Bus 使用独立 BusEvent 载荷，不伪装成可信平台事件。
 
@@ -59,8 +63,8 @@ Core/Adapter 先验证整个 Chain 的结构、顺序、片段数、媒体租约
 
 保留两种开发者 Handler 形式：
 
-- `func(c *Context, ...) (Chain, error)`：自动回复模式；成功返回非空 Chain 后由 Core 自动 Send 一次。返回空 Chain 且无错误代表不回复。该模式内部调用 `c.Send` 返回 FAILED_PRECONDITION。
-- `func(c *Context, ...) error`：主动发送模式；Handler 可在内部调用一次或多次 `c.Send`，每次独立形成 SendResult。
+- `func(c *Context, ...) (Chain, error)`：自动回复模式；成功返回非空 Chain 后由 Core 自动 Send 一次，排在 Handler 内显式 `c.Send` 之后。返回空 Chain 且无错误代表不回复（D-70）。
+- `func(c *Context, ...) error`：主动发送模式；Handler 可在内部调用一次或多次 `c.Send`，每次独立形成 SendResult。自动回复模式内的显式 Send 规则相同。
 
 两个签名都通过 `c.StopPropagation()` 锁存本次 Handler 的停止标记；默认 Continue，不增加第三套返回签名。SDK 把本次执行结果转为统一的 `HandlerOutcome`：
 
@@ -122,7 +126,7 @@ ACCEPTED 只表示平台 API 确认接受，不保证用户阅读。跨多条平
 
 - 首发使用 long polling；getMe 固定该实例 account_id/username：`username` 为 account_username，`first_name` 为 account_display_name（D-67），同一个 Bot 账号只允许一个 Core 入站 owner。启动发现已有 webhook 时返回 FAILED_PRECONDITION，由管理员处理冲突，不擅自调用 deleteWebhook。
 - 每次 getUpdates 显式传 `allowed_updates=["message","edited_message","channel_post","edited_channel_post","callback_query","my_chat_member","chat_member","message_reaction"]`，不依赖服务器旧设置或空列表默认值。成员/Reaction 事件还受 Bot 群管理员等平台权限限制，能力状态按实际权限呈现；遗留的未订阅 update 明确忽略并推进游标，不伪造支持。
-- Message 带 sender_chat 时，不用兼容性的 fake from 构造个人 User/Admin；保留发送聊天的原始信息，缺少真实个人身份就让 Actor absent。button Actor 始终取本次 CallbackQuery.from。Actor.locale 取 from.language_code（平台给出时），按 BCP 47 规范化大小写。to_me 在以下情况为 true：chat.type 为 private；reply_to_message.from 是本机器人；文本实体中有指向本机器人用户名的 mention 或指向其用户 ID 的 text_mention。
+- Message 带 sender_chat 时，不用兼容性的 fake from 构造个人 User/Admin；保留发送聊天的原始信息，缺少真实个人身份就让 Actor absent。button Actor 始终取本次 CallbackQuery.from。群与超级群中的 Actor 带平台权限（D-69）：Adapter 声明 `telegram.chat_owner`（隐含 `telegram.chat_admin`）与 `telegram.chat_admin`（隐含 `chat_admin`）；chat member 状态为 creator 时给出前者，为 administrator 时给出后者。Adapter 按会话缓存 `getChatAdministrators` 的结果，首次需要时获取，缓存 10 分钟（固定常量），收到该会话的 `chat_member` 或 `my_chat_member` update 时作废；获取失败时本事件不带平台权限并记诊断，不按成功处理。私聊不带平台权限。入站 text 中的 `text_mention` 实体保留在 entities 中，命令参数的 `user` 类型按 CONTRACTS §2.2 第 4 条从中取值。Actor.locale 取 from.language_code（平台给出时），按 BCP 47 规范化大小写。to_me 在以下情况为 true：chat.type 为 private；reply_to_message.from 是本机器人；文本实体中有指向本机器人用户名的 mention 或指向其用户 ID 的 text_mention。
 - Adapter.Start 完成凭证/冲突检查和接收循环初始化后返回；循环在后台运行。401/409 等凭证失效/并发 owner 冲突终止实例接收并上报管理状态，不伪装为正常空闲。短暂读网络错误可按 Core 固定、带上限的退避重连；此接收恢复不允许重试已提交的 Send。
 - getUpdates 每个 update 按返回顺序单独接纳：先在 Core 状态库持久化该实例的已接收游标，再交给非持久事件队列；重启从已持久化游标的下一个 offset 拉取，不重放已接纳业务。因此在持久化后、Handler 完成前崩溃，允许该事件丢失。首发交付的是尽力投递，不承诺 durable inbox 或完整补处理。
 - Telegram 在至少一周没有新 update 后可能随机选择后续 ID，不能假定 ID 永久递增。Core 记录最后接纳时间与当前接收轮次起点；从两者较晚者起连续 7 天没有接纳新 update 时，在当前 long-poll 结束且无接收请求在途的边界持久化新接收轮次/起点、清除 offset，再开始拉取，避免旧高游标永远屏蔽新序列，也避免空闲时每次轮询都重置。平台更新最长仅保存 24h，该重建不承诺恢复空闲期早已过期的事件。
@@ -163,11 +167,11 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 
 | OneBot 11 上报 | 标准事件 | 规则 |
 | --- | --- | --- |
-| `message`（private、group） | message.created | platform_message_id 为 message_id；Actor.external_user_id 为 user_id，display_name 取非空的 `sender.card`，否则取 `sender.nickname`，locale absent；群聊中 `sender.role` 为 owner 或 admin 时给出 chat_admin 事实；匿名群消息（`sub_type` 为 anonymous）不构造 Actor |
+| `message`（private、group） | message.created | platform_message_id 为 message_id；Actor.external_user_id 为 user_id，display_name 取非空的 `sender.card`，否则取 `sender.nickname`，locale absent；群聊中 `sender.role` 为 owner 时给出平台权限 `onebot11.group_owner`，为 admin 时给出 `onebot11.group_admin`；私聊中 `sub_type` 为 friend（好友私聊）时给出 `onebot11.private_friend`，群临时会话等其他子类型不给出；Adapter 声明 `onebot11.group_owner` 隐含 `onebot11.group_admin`，后者隐含 `chat_admin`，`onebot11.private_friend` 不隐含其他权限（D-69）；匿名群消息（`sub_type` 为 anonymous）不构造 Actor |
 | `notice.group_recall`、`notice.friend_recall` | message.deleted | platform_message_ids 只含该 message_id；actor 取 operator_id（存在时） |
 | `notice.group_increase`、`notice.group_decrease` | member.joined、member.left | member_external_user_id 为 user_id；operator_id 非 0 且与 user_id 不同时作为 actor |
 | `meta_event`（lifecycle、heartbeat） | 不交付 | 只用于连接状态 |
-| 其他 `notice` 与全部 `request` | 不交付 | 明确忽略并计数，不伪造事件 |
+| 其他 `notice` 与全部 `request` | 不交付 | 明确忽略并计数，不伪造事件；需要交付时按 §1.2 声明为扩展事件，v0.1 的官方 OneBot 11 Adapter 不声明扩展事件 |
 
 - 入站 Chain：`text` 为 plain 的 text；`at` 为 mention（`qq` 为 all 时没有通用对应）；`reply` 为 reference；`image`、`video` 为带 incoming_ref 的 image、video。没有通用对应的段（`at` all、`face`、`record`、`forward`、`json` 等）不进入 chain，原始消息数组完整保存在 platform_payload 中；因此 chain 可以为空。
 - to_me 在以下情况为 true：私聊；chain 中有指向本账号的 mention；`reply` 引用的消息经 `get_msg` 查得发送者是本账号。`get_msg` 失败时按 false 处理并记诊断。
