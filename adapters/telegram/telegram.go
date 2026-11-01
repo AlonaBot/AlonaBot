@@ -1,4 +1,4 @@
-// Package telegram 实现官方 Telegram Adapter 的账号检查与 long polling 接收。
+// Package telegram 实现官方 Telegram Adapter 的账号检查、long polling 接收与媒体取件。
 //
 // [New] 创建供 sdk.RunAdapter 使用的 Adapter。每个实例独占 HTTP 客户端和接收循环；
 // Core 持久化逐条游标，实例仅在收到应答后推进内存状态（MESSAGE-MODEL §6.1）。
