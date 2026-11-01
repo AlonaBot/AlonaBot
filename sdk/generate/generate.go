@@ -81,7 +81,10 @@ type listedPackage struct {
 	GoFiles               []string
 	CgoFiles              []string // 仅在 GoFiles 为空时定位缺根诊断
 	Export                string
-	Module                *struct{ Main bool }
+	Module                *struct {
+		Main bool
+		Dir  string
+	}
 }
 
 type declaration struct {
