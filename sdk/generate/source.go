@@ -40,8 +40,12 @@ func (s *scan) source() ([]byte, error) {
 		}
 		return imports[pkg] + "." + name
 	}
-	// 2. 沿描述顺序注册，命令的父 token 通过 Group 逐层表达。
-	fmt.Fprintf(&out, ")\n\nfunc init() {\n%s.UseGenerated((*%s)(nil), %s.Generated{\nCommands: func(r *%s.CommandRegistry) {\n", sdk, s.roots[0].name, sdk, sdk)
+	// 2. 嵌入配置 Schema 并沿描述顺序注册，命令的父 token 通过 Group 逐层表达。
+	fmt.Fprintf(&out, ")\n\nfunc init() {\n%s.UseGenerated((*%s)(nil), %s.Generated{\n", sdk, s.roots[0].name, sdk)
+	if len(s.result.ConfigSchema) != 0 {
+		fmt.Fprintf(&out, "ConfigSchema: []byte(%q),\n", s.result.ConfigSchema)
+	}
+	fmt.Fprintf(&out, "Commands: func(r *%s.CommandRegistry) {\n", sdk)
 	for _, command := range s.result.Commands {
 		for _, group := range command.Path[:len(command.Path)-1] {
 			fmt.Fprintf(&out, "r.Group(%q, func(r *%s.CommandGroup) {\n", group, sdk)

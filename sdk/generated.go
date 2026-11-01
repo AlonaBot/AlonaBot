@@ -5,13 +5,14 @@ import (
 	"reflect"
 )
 
-// Generated 提供构建期生成的命令与事件注册函数；nil 字段表示没有对应注册项。
+// Generated 提供构建期生成的配置 Schema、命令与事件注册函数；nil 字段表示没有对应项。
 type Generated struct {
-	Commands func(*CommandRegistry)
-	Events   func(*EventRegistry)
+	ConfigSchema []byte // 规范 JSON；没有 Config 时为 nil。
+	Commands     func(*CommandRegistry)
+	Events       func(*EventRegistry)
 }
 
-// generatedRegistrations 仅在生成代码的 init 中写入，初始化完成后由 Collect 读取。
+// generatedRegistrations 仅在生成代码的 init 中写入，初始化完成后由 Collect 和准备阶段读取。
 var generatedRegistrations = make(map[reflect.Type]Generated)
 
 // UseGenerated 按根类型登记生成项，只供生成代码在 init 中调用。
