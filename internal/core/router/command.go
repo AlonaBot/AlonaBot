@@ -236,7 +236,7 @@ func (r *Router) sendReply(c candidate, ev *pb.Event, chain *pb.MessageChain, tr
 func commandUsage(spec *pb.CommandSpec) *pb.MessageChain {
 	text := spec.GetCustomUsage()
 	if text == "" {
-		// shortcut: usage 暂用英文，T-08.8 的 Core 文案目录接入后替换。
+		// shortcut: usage 暂用英文，Core 文案目录接入后替换。
 		text = "Usage: /" + strings.Join(spec.GetPath(), " ")
 		for _, alias := range spec.GetAliases() {
 			text += " | /" + strings.Join(alias.GetPath(), " ")
