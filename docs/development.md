@@ -51,6 +51,14 @@ bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle --stdi
 
 首次运行会登记开发用安装记录并提交新代次（`mode=new`），之后复用已提交代次（`mode=restart`）。尚无正式的安装、来源校验与管理 CLI。
 
+`run` 取得 core.lock 后读取 `<data_dir>/alonabot.yaml`；文件不存在时以 0600 权限写入缺省值（键与缺省值见 CONTRACTS §15.1），未知键、类型或取值错误时以 usage 退出码报告键名与行号。修改设置文件后重启生效。`--listen`、`--log-level`、`--log-format` 只在命令行显式给出时覆盖设置，只对本次运行有效，不改文件：
+
+```sh
+bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/httpplugin --listen 127.0.0.1:8080
+```
+
+Core 在 `listen` 地址（缺省 `127.0.0.1:7650`）上提供唯一的公开 HTTP 入口，`/plugins/{id}/...` 转发给该插件当前 Session 的路由；私有路由尚未接入插件会话授权，目前一律返回 401。设置了 `proxy` 时，Core 与子进程使用它作为 `HTTP_PROXY`/`HTTPS_PROXY`；为空时原样传递环境中的 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`。
+
 调优参数在启动时解析；修改后重启生效。查看全部 37 项参数及当前生效值：
 
 ```sh
