@@ -20,7 +20,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -65,12 +64,8 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 		return &usageError{err}
 	}
 	if selected.listen != nil {
-		_, port, err := net.SplitHostPort(*selected.listen)
-		if err != nil {
+		if err := settings.ValidateListen(*selected.listen); err != nil {
 			return &usageError{fmt.Errorf("--listen: %w", err)}
-		}
-		if _, err := strconv.ParseUint(port, 10, 16); err != nil {
-			return &usageError{fmt.Errorf("--listen port: %w", err)}
 		}
 		configuration.Listen = *selected.listen
 	}

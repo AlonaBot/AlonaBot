@@ -61,6 +61,22 @@ func Defaults() Settings {
 	return s
 }
 
+// ValidateListen 校验 host:port 形式的监听地址；host 可以为空，端口可以是 0。
+// 返回的规则错误不含设置键名、行号或命令行参数名，由调用方添加来源。
+func ValidateListen(address string) error {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	if err := validPort(port, true); err != nil {
+		return err
+	}
+	if host != "" && !validHost(host) {
+		return errors.New("invalid hostname or IP address")
+	}
+	return nil
+}
+
 // Load 读取启动设置；文件不存在时以 0600 权限创建缺省内容。
 // 未知键、类型与值错误包含完整键名和 YAML 行号。
 func Load(dataDir string) (Settings, error) {
@@ -205,15 +221,8 @@ func readValue(n *yaml.Node, key string, s *Settings) error {
 	}
 	switch key {
 	case "listen":
-		host, port, err := net.SplitHostPort(n.Value)
-		if err != nil {
+		if err := ValidateListen(n.Value); err != nil {
 			return err
-		}
-		if err := validPort(port, true); err != nil {
-			return err
-		}
-		if host != "" && !validHost(host) {
-			return errors.New("invalid hostname or IP address")
 		}
 		s.Listen = n.Value
 	case "admin_base_url":
