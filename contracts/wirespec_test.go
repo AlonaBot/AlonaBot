@@ -220,7 +220,7 @@ func TestAdapterFieldNumbers(t *testing.T) {
 		"AdapterDescriptor":            {"adapter_id", "capabilities", "extensions"},
 		"ExtensionDeclaration":         {"name", "version", "schema_json"},
 		"AdapterInstanceStartRequest":  {"instance_id", "config_json", "cursor"},
-		"AdapterInstanceStartResponse": {"account_id", "account_display_name", "capabilities"},
+		"AdapterInstanceStartResponse": {"account_id", "account_display_name", "capabilities", "account_username"},
 		"AdapterInstanceStopRequest":   {"instance_id"},
 		"AdapterInstanceStopResponse":  {},
 		"AdapterSendRequest":           {"instance_id", "target", "chain"},

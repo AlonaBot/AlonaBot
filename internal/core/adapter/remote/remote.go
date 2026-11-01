@@ -57,6 +57,7 @@ type instance struct {
 	running      bool   // 已登记到 Registry，绑定当前 Session
 	account      string
 	displayName  *string
+	username     string
 	capabilities []*pb.Capability
 	dropped      uint64        // 事件队列满时累计丢弃数
 	session      *wire.Session // 本次运行所属 Session，旧 Registry 引用不得切到新 Session
@@ -161,7 +162,7 @@ func (p *Process) start(ctx context.Context, id string, config []byte) error {
 	// 3. 运行登记与在线事件在状态锁内完成，服务只接纳已登记实例。
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	entry := &instance{needsStop: true, process: p, id: id, config: append([]byte(nil), config...), enabled: true, running: true, account: response.AccountId, displayName: response.AccountDisplayName, capabilities: response.Capabilities, session: bound.Session}
+	entry := &instance{needsStop: true, process: p, id: id, config: append([]byte(nil), config...), enabled: true, running: true, account: response.AccountId, displayName: response.AccountDisplayName, username: response.GetAccountUsername(), capabilities: response.Capabilities, session: bound.Session}
 	if err := p.opt.Registry.Add(entry); err != nil {
 		p.mu.Unlock()
 		stopErr := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: id}, &pb.AdapterInstanceStopResponse{})
@@ -239,13 +240,9 @@ func (entry *instance) AdapterID() string  { return entry.process.opt.AdapterID 
 func (entry *instance) InstanceID() string { return entry.id }
 func (entry *instance) AccountID() string  { return entry.account }
 
-// AccountName 返回启动响应中的 account_display_name。
-// 当前依赖 Telegram 将 getMe.username 填入该字段；其他平台的用户名契约需单独确定。
+// AccountName 返回启动响应中的 account_username；平台没有用户名时返回空串。
 func (entry *instance) AccountName() string {
-	if entry.displayName == nil {
-		return ""
-	}
-	return *entry.displayName
+	return entry.username
 }
 func (entry *instance) Capabilities() []*pb.Capability { return entry.capabilities }
 

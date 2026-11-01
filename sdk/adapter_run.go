@@ -253,6 +253,9 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 		if account.DisplayName != "" {
 			response.AccountDisplayName = &account.DisplayName
 		}
+		if account.Username != "" {
+			response.AccountUsername = &account.Username
+		}
 		return adapterResponse(response, nil)
 	case wire.ServiceAdapterInstanceStop:
 		request := &pb.AdapterInstanceStopRequest{}

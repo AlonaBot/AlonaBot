@@ -13,6 +13,7 @@ import (
 type Account struct {
 	ID          string
 	DisplayName string // 空值表示平台没有提供展示名
+	Username    string // 平台上可寻址的账号标识；空值表示平台没有用户名
 }
 
 // StartRequest 携带实例配置与 Core 已保存的不透明游标。
