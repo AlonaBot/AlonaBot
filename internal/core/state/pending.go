@@ -22,7 +22,7 @@ type PendingConfig struct {
 func (s *Store) GetPendingConfig(ctx context.Context, pluginID string) (PendingConfig, error) {
 	p := PendingConfig{PluginID: pluginID}
 	var row pendingConfig
-	err := s.db.WithContext(ctx).Where(&pendingConfig{PluginID: pluginID}, "PluginID").Take(&row).Error
+	err := s.db.WithContext(ctx).Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return p, fmt.Errorf("plugin %s: pending config: %w", pluginID, ErrNotFound)
 	}
@@ -45,13 +45,13 @@ func (s *Store) PutPendingConfig(ctx context.Context, p PendingConfig) error {
 
 // DeletePendingConfig 删除插件的 Pending 配置；没有记录时不报错。
 func (s *Store) DeletePendingConfig(ctx context.Context, pluginID string) error {
-	return s.db.WithContext(ctx).Where(&pendingConfig{PluginID: pluginID}, "PluginID").Delete(&pendingConfig{}).Error
+	return s.db.WithContext(ctx).Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Delete(&pendingConfig{}).Error
 }
 
 // GenerationConfig 读取某个代次保存的配置快照；代次不存在时返回 ErrNotFound。
 func (s *Store) GenerationConfig(ctx context.Context, generationID string) (string, error) {
 	var row generation
-	err := s.db.WithContext(ctx).Where(&generation{GenerationID: generationID}, "GenerationID").Take(&row).Error
+	err := s.db.WithContext(ctx).Where(clause.Eq{Column: clause.PrimaryColumn, Value: generationID}).Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", fmt.Errorf("generation %s: %w", generationID, ErrNotFound)
 	}

@@ -31,7 +31,7 @@ func (s *Store) AppendConversation(ctx context.Context, pluginID, key string, en
 	err = s.tx(ctx, func(tx *gorm.DB) error {
 		// 单连接在事务期间独占，读末尾和写入之间不会穿插其他追加。
 		var last conversationEntry
-		err := tx.Where(&conversationEntry{PluginID: pluginID, ConversationKey: key}, "PluginID", "ConversationKey").
+		err := tx.Where(&conversationEntry{PluginID: pluginID, ConversationKey: key}).
 			Order(clause.OrderByColumn{Column: clause.Column{Name: columnSeq}, Desc: true}).Take(&last).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
@@ -59,7 +59,7 @@ func (s *Store) ListConversation(ctx context.Context, pluginID, key string, from
 		return nil, nil
 	}
 	var rows []conversationEntry
-	err := s.db.WithContext(ctx).Where(&conversationEntry{PluginID: pluginID, ConversationKey: key}, "PluginID", "ConversationKey").
+	err := s.db.WithContext(ctx).Where(&conversationEntry{PluginID: pluginID, ConversationKey: key}).
 		Where(clause.Gte{Column: clause.Column{Name: columnSeq}, Value: fromSeq}).
 		Order(clause.OrderByColumn{Column: clause.Column{Name: columnSeq}}).Limit(limit).Find(&rows).Error
 	if err != nil {
@@ -74,7 +74,7 @@ func (s *Store) ListConversation(ctx context.Context, pluginID, key string, from
 
 // ClearConversation 删除该插件指定会话的全部条目；不存在时也成功。
 func (s *Store) ClearConversation(ctx context.Context, pluginID, key string) error {
-	return s.db.WithContext(ctx).Where(&conversationEntry{PluginID: pluginID, ConversationKey: key}, "PluginID", "ConversationKey").Delete(&conversationEntry{}).Error
+	return s.db.WithContext(ctx).Where(&conversationEntry{PluginID: pluginID, ConversationKey: key}).Delete(&conversationEntry{}).Error
 }
 
 // Conversations 按会话键字典序返回该插件的非空会话摘要。
@@ -85,7 +85,7 @@ func (s *Store) Conversations(ctx context.Context, pluginID string) ([]Conversat
 		CreatedAt       int64
 	}
 	if err := s.db.WithContext(ctx).Model(&conversationEntry{}).
-		Where(&conversationEntry{PluginID: pluginID}, "PluginID").Find(&rows).Error; err != nil {
+		Where(&conversationEntry{PluginID: pluginID}).Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	byKey := make(map[string]ConversationSummary)
@@ -109,5 +109,5 @@ func (s *Store) Conversations(ctx context.Context, pluginID string) ([]Conversat
 
 // PurgeConversations 删除该插件的全部会话条目。
 func (s *Store) PurgeConversations(ctx context.Context, pluginID string) error {
-	return s.db.WithContext(ctx).Where(&conversationEntry{PluginID: pluginID}, "PluginID").Delete(&conversationEntry{}).Error
+	return s.db.WithContext(ctx).Where(&conversationEntry{PluginID: pluginID}).Delete(&conversationEntry{}).Error
 }

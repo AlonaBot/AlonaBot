@@ -12,7 +12,7 @@ import (
 // AdapterCursor 读取实例的已持久化游标；没有记录时返回 nil, nil。
 func (s *Store) AdapterCursor(ctx context.Context, instanceID string) ([]byte, error) {
 	var row adapterCursor
-	err := s.db.WithContext(ctx).Where(&adapterCursor{InstanceID: instanceID}, "InstanceID").Take(&row).Error
+	err := s.db.WithContext(ctx).Where(clause.Eq{Column: clause.PrimaryColumn, Value: instanceID}).Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}

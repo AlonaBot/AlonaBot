@@ -333,7 +333,7 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 		// 2. 在单连接事务内核对平台类型唯一性并写入安装与启用状态。
 		if in.Role == RoleAdapter {
 			var count int64
-			if err := tx.Model(&installation{}).Where(&installation{Role: RoleAdapter, AdapterID: in.AdapterID}, "Role", "AdapterID").Count(&count).Error; err != nil {
+			if err := tx.Model(&installation{}).Where(&installation{Role: RoleAdapter, AdapterID: in.AdapterID}).Count(&count).Error; err != nil {
 				return err
 			}
 			if count > 0 {
@@ -361,7 +361,7 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 // GetInstall 读取安装记录。
 func (s *Store) GetInstall(ctx context.Context, pluginID string) (Install, error) {
 	var row installation
-	err := s.db.WithContext(ctx).Where(&installation{PluginID: pluginID}, "PluginID").Take(&row).Error
+	err := s.db.WithContext(ctx).Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&row).Error
 	in := Install{PluginID: pluginID, Source: row.Source, Entrypoint: row.Entrypoint,
 		BuildDigest: row.BuildDigest, Role: row.Role, AdapterID: row.AdapterID}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -384,7 +384,7 @@ func (s *Store) CommitActive(ctx context.Context, pluginID, expectedOld, newGen 
 	return s.tx(ctx, func(tx *gorm.DB) error {
 		// 1. 核对当前 Active 等于调用方预期的旧值。
 		var current pluginState
-		err := tx.Where(&pluginState{PluginID: pluginID}, "PluginID").Take(&current).Error
+		err := tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&current).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 		} else if err != nil {
@@ -395,7 +395,7 @@ func (s *Store) CommitActive(ctx context.Context, pluginID, expectedOld, newGen 
 		}
 		// 2. 给属于该插件且尚未提交的新代次写入 COMMITTED 标记。
 		var candidate generation
-		err = tx.Where(&generation{GenerationID: newGen}, "GenerationID").Take(&candidate).Error
+		err = tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: newGen}).Take(&candidate).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
@@ -416,7 +416,7 @@ func (s *Store) CommitActive(ctx context.Context, pluginID, expectedOld, newGen 
 // Active 返回插件当前的 ActiveGeneration（未激活时为空）。只有已 COMMITTED 的代次能成为 Active。
 func (s *Store) Active(ctx context.Context, pluginID string) (string, error) {
 	var row pluginState
-	err := s.db.WithContext(ctx).Where(&pluginState{PluginID: pluginID}, "PluginID").Take(&row).Error
+	err := s.db.WithContext(ctx).Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 	}
@@ -427,7 +427,7 @@ func (s *Store) Active(ctx context.Context, pluginID string) (string, error) {
 func (s *Store) SetEnabled(ctx context.Context, pluginID string, enabled bool) error {
 	return s.tx(ctx, func(tx *gorm.DB) error {
 		var row pluginState
-		err := tx.Where(&pluginState{PluginID: pluginID}, "PluginID").Take(&row).Error
+		err := tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&row).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 		}
@@ -442,7 +442,7 @@ func (s *Store) SetEnabled(ctx context.Context, pluginID string, enabled bool) e
 // Enabled 读取启用状态。
 func (s *Store) Enabled(ctx context.Context, pluginID string) (bool, error) {
 	var row pluginState
-	err := s.db.WithContext(ctx).Where(&pluginState{PluginID: pluginID}, "PluginID").Take(&row).Error
+	err := s.db.WithContext(ctx).Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 	}
