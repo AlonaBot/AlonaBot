@@ -6,6 +6,7 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
+	"google.golang.org/protobuf/proto"
 )
 
 // mediaLease 在 Store.mu 下管理只读令牌、文件所有权和结束回调。
@@ -20,8 +21,8 @@ type mediaLease struct {
 }
 
 // LeaseForSend 为目标 Adapter Session 签发只读令牌，保护对象到发送结束或 deadline。
-// 入站对象在签发前完成取件；release 可重复调用，取消 ctx 也会释放租约。
-func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSessionKey string, source *pb.MediaSource, deadline time.Time) (readToken string, release func(), err error) {
+// 入站对象先检查原令牌的目标范围再取件；release 可重复调用，取消 ctx 也会释放租约。
+func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSessionKey string, target *pb.Target, source *pb.MediaSource, deadline time.Time) (readToken string, release func(), err error) {
 	if err := ctx.Err(); err != nil {
 		return "", nil, err
 	}
@@ -31,7 +32,7 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 	if !deadline.After(s.now()) {
 		return "", nil, mediaCallError(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "media send deadline has expired")
 	}
-	// 1. 区分两类已授权来源，入站对象先按原读取者的预算完成唯一取件。
+	// 1. 区分来源，入站对象先核对完整目标范围，再按原读取者的预算取件。
 	var original string
 	incoming := false
 	switch value := source.GetSource().(type) {
@@ -44,8 +45,26 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 		return "", nil, mediaCallError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "expected media_ref or incoming_ref source")
 	}
 	if incoming {
+		s.mu.Lock()
+		s.sweep()
+		access, err := s.incomingAccess(original, c.SessionKey)
+		if err != nil {
+			s.mu.Unlock()
+			return "", nil, err
+		}
+		allowed := false
+		for _, scoped := range access.targets {
+			if proto.Equal(scoped, target) {
+				allowed = true
+				break
+			}
+		}
+		s.mu.Unlock()
+		if !allowed {
+			return "", nil, mediaCallError(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "media token does not allow target")
+		}
 		fetchCtx, cancel := context.WithTimeout(ctx, deadline.Sub(s.now()))
-		err := s.loadIncoming(fetchCtx, c, original)
+		err = s.loadIncoming(fetchCtx, c, original)
 		cancel()
 		if err != nil {
 			return "", nil, err
