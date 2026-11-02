@@ -66,7 +66,7 @@ func TestOpenPragmasAndReopen(t *testing.T) {
 		t.Fatalf("records lost after reopening: %+v %v", in, err)
 	}
 	var v int
-	if err := s2.db.QueryRow("SELECT version FROM schema_version").Scan(&v); err != nil || v != len(migrations) {
+	if err := s2.db.Model(&schemaVersion{}).Select("version").Scan(&v).Error; err != nil || v != len(migrations) {
 		t.Fatalf("schema version = %d, %v", v, err)
 	}
 }
@@ -210,7 +210,7 @@ func TestNewerSchemaRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Exec("UPDATE schema_version SET version = 99"); err != nil {
+	if err := s.db.Model(&schemaVersion{}).Where("1 = 1").Update("version", 99).Error; err != nil {
 		t.Fatal(err)
 	}
 	_ = s.Close()
