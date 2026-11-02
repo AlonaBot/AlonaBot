@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -28,8 +29,6 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
-	"github.com/AlonaBot/AlonaBot/sdk"
-	sdkmessage "github.com/AlonaBot/AlonaBot/sdk/message"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -52,6 +51,29 @@ func (a *incomingMediaAdapter) ReadMedia(_ context.Context, fileID string, offse
 	}
 	return bytes.Clone(a.data), uint64(len(a.data)), true, nil
 }
+
+type incomingMediaReport struct {
+	PluginID, Token string
+	Data            []byte
+	Chunks          int
+	DeniedCode      pb.ErrorCode
+	DeniedMessage   string
+	GrantedToken    string
+}
+
+// incomingMediaPluginSource 独立编译 SDK 夹具，遵循 Core 测试包的依赖方向。
+const incomingMediaPluginSource = `package main
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/sdk"
+	sdkmessage "github.com/AlonaBot/AlonaBot/sdk/message"
+)
 
 type incomingMediaReport struct {
 	PluginID, Token string
@@ -114,7 +136,7 @@ func (p *incomingMediaPlugin) Events(r *sdk.EventRegistry) {
 				return err
 			}
 			// SDK 的类型化入口保留父调用，将收到的 incoming_ref 原样交回消息服务。
-			result, err := sdk.CallProto[*pb.SendResult](c.Context(), wire.ServiceSend, &pb.SendRequest{Chain: chain})
+			result, err := sdk.CallProto[*pb.SendResult](c.Context(), "` + wire.ServiceSend + `", &pb.SendRequest{Chain: chain})
 			if err != nil {
 				return err
 			}
@@ -131,22 +153,31 @@ func (p *incomingMediaPlugin) Events(r *sdk.EventRegistry) {
 	}, sdk.Priority(priority))
 }
 
+func main() {
+	if err := sdk.Run(&incomingMediaPlugin{id: os.Getenv("` + incomingMediaPluginEnv + `")}); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+`
+
 // TestIncomingMedia 验证真实插件进程的独立令牌、共享取件、授权与只读回发。
 func TestIncomingMedia(t *testing.T) {
-	if id := os.Getenv(incomingMediaPluginEnv); id != "" {
-		// 复用测试二进制运行真实 SDK；退出时跳过 testing 的 stdout 文本，保留 stdio 协议流。
-		if err := sdk.Run(&incomingMediaPlugin{id: id}); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		os.Exit(0)
+	dir := t.TempDir()
+	source := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(source, []byte(incomingMediaPluginSource), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(dir, "incoming-media")
+	if out, err := exec.Command("go", "build", "-race", "-o", binary, source).CombinedOutput(); err != nil {
+		t.Fatalf("build incoming media plugin: %v\n%s", err, out)
 	}
 	for _, stdio := range []bool{false, true} {
-		t.Run(fmt.Sprintf("stdio=%v", stdio), func(t *testing.T) { testIncomingMedia(t, stdio) })
+		t.Run(fmt.Sprintf("stdio=%v", stdio), func(t *testing.T) { testIncomingMedia(t, binary, stdio) })
 	}
 }
 
-func testIncomingMedia(t *testing.T, stdio bool) {
+func testIncomingMedia(t *testing.T, binary string, stdio bool) {
 	t.Helper()
 	ctx := context.Background()
 	store, err := state.Open(ctx, t.TempDir())
@@ -209,7 +240,7 @@ func testIncomingMedia(t *testing.T, stdio bool) {
 	}()
 	for _, id := range []string{"a", "b", "c"} {
 		digest := []byte("incoming media integration fixture")
-		if err := store.AddInstall(ctx, state.Install{Role: state.RolePlugin, PluginID: id, Source: "test", Entrypoint: os.Args[0], BuildDigest: digest}); err != nil {
+		if err := store.AddInstall(ctx, state.Install{Role: state.RolePlugin, PluginID: id, Source: "test", Entrypoint: binary, BuildDigest: digest}); err != nil {
 			t.Fatal(err)
 		}
 		generation := "generation-" + id
@@ -222,7 +253,7 @@ func testIncomingMedia(t *testing.T, stdio bool) {
 		}
 		caller := router.NewCaller(id, generation)
 		callers[id] = caller
-		spec := Spec{PluginID: id, Role: state.RolePlugin, GenerationID: generation, PluginDir: dir, Executable: os.Args[0], Args: []string{"-test.run=^TestIncomingMedia$"}, BuildDigest: digest, NewCandidate: true, Stdio: stdio,
+		spec := Spec{PluginID: id, Role: state.RolePlugin, GenerationID: generation, PluginDir: dir, Executable: binary, BuildDigest: digest, NewCandidate: true, Stdio: stdio,
 			ExtraEnv:  map[string]string{incomingMediaPluginEnv: id, "GORACE": "atexit_sleep_ms=0"},
 			Bootstrap: &pb.Bootstrap{GenerationId: generation, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE}},
 			Limits:    host.NewLimits(values), Stop: host.NewStopTiming(values), Log: output.Plugin(id, generation), Handler: mux.For(caller),
