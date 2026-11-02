@@ -52,7 +52,7 @@
 
 v0.1 首次发布前，没有需要兼容的旧状态库、旧调用方或旧插件。改动直接写成最终形态，不为开发中的旧状态留过渡代码。
 
-- Core 状态库（`state.sqlite`）只有一条初始迁移。新表、新列和约束直接写进 `internal/core/state` 中 `migrations` 的第一条；不追加迁移，不用 `ALTER TABLE` 加列，不为旧行补默认值或回填。本地的开发状态库在 schema 变化后删除重建。
+- Core 状态库（`state.sqlite`）只有一条初始迁移。新表、新列和约束直接写进 `internal/core/state/schema.sql`；不追加迁移，不用 `ALTER TABLE` 加列，不为旧行补默认值或回填。本地的开发状态库在 schema 变化后删除重建。
 - 修改函数签名、结构字段或其语义时，同一次改动更新全部调用方。不为了让已有调用方免改，把新字段的零值解释为旧行为（例如「空值沿用插件角色」）；不保留旧名的别名、包装函数或 `Deprecated` 标记。
 - 只约束仓库自身的代码与状态库。插件受管 SQLite 的迁移接口、配置的 `config_version` 转换是面向插件作者的产品功能，照契约实现；protoc-gen-go 在生成文件里写的 `Deprecated: Use ... Descriptor instead` 是生成器样板，不属于兼容层。
 - 首次发布时再规定状态库只追加迁移的规则，并在此处更新。
@@ -67,7 +67,8 @@ Core 状态库（`internal/core/state`）经 GORM 读写，业务的增删改查
 - 按主键覆盖写入用 `clause.OnConflict{UpdateAll: true}`，重复插入时不做事用 `clause.OnConflict{DoNothing: true}`，不列出冲突列和更新列。
 - 更新在事务内按主键读出行，在 Go 中检查条件（例如「尚未提交」），修改字段后 `Save`；不用结构体 `Updates` 写 false、0 等零值。全表更新用 `Session(&gorm.Session{AllowGlobalUpdate: true})`，不写 `Where("1 = 1")`。
 - 范围条件、排序与取最大值用 `clause` 结构（`clause.Gte`、`clause.OrderByColumn` 等），列名写成包内常量；取最大值按该列降序取一行，不写 `max()`、`coalesce()`。能在 Go 中完成的排序与聚合不写进查询。不引入 GORM CLI 等查询代码生成工具。
-- 初始迁移的建表语句、PRAGMA 回读与打开前的只读预检属于 schema 与连接管理，可以写 SQL。
+- DDL 不写在 Go 代码里。建表、索引等语句放在包内的 `*.sql` 文件中，用 `//go:embed` 读入后执行；初始迁移即 `internal/core/state/schema.sql`。测试为构造异常文件临时建的表不在此列。
+- PRAGMA 回读与打开前的只读预检属于连接管理，可以在 Go 代码里写 SQL。
 - 只约束 Core。插件经 `sdk/sqlitedb` 使用 `database/sql` 是面向插件作者的产品功能（D-49），官方插件按[插件开发规范](plugin-guide.md)选择入口。
 
 ## 程序输出用英文
