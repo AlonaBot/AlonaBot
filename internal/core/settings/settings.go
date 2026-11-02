@@ -122,7 +122,7 @@ func Load(dataDir string) (Settings, error) {
 	if err := readMapping(document.Content[0], "", &s, locations); err != nil {
 		return Settings{}, fmt.Errorf("%s: %w", name, err)
 	}
-	// 2. 两个 Base URL 和日志文件限额需要联合校验。
+	// 2. 联合校验 Base URL、监听安全边界与日志文件限额。
 	admin, err := baseURL(s.AdminBaseURL)
 	if err != nil {
 		return Settings{}, fmt.Errorf("%s: %w", name, at(locations, "admin_base_url", err))
@@ -136,6 +136,10 @@ func Load(dataDir string) (Settings, error) {
 	}
 	if strings.EqualFold(admin.Hostname(), plugin.Hostname()) {
 		return Settings{}, fmt.Errorf("%s: %w", name, at(locations, "plugin_base_url", errors.New("must use a different hostname from admin_base_url")))
+	}
+	host, _, _ := net.SplitHostPort(s.Listen) // listen 的语法已在 readValue 中校验。
+	if !net.ParseIP(host).IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && admin.Scheme != "https" && len(s.TrustedProxies) == 0 {
+		return Settings{}, fmt.Errorf("%s: %w", name, at(locations, "listen", errors.New("non-loopback listen requires HTTPS admin_base_url or trusted_proxies")))
 	}
 	if s.LogFile.MaxSize > s.LogFile.MaxTotal {
 		return Settings{}, fmt.Errorf("%s: %w", name, at(locations, "log.file.max_size", errors.New("exceeds log.file.max_total")))
