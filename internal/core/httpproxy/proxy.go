@@ -145,7 +145,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
-	current.proxy.ServeHTTP(w, r)
+	// 每次请求复制代理配置，响应策略不会改写其他并发请求的快照。
+	proxy := *current.proxy
+	if policy, ok := w.(interface{ ModifyResponse(*http.Response) error }); ok {
+		proxy.ModifyResponse = policy.ModifyResponse
+	}
+	proxy.ServeHTTP(w, r)
 }
 
 func stripIdentity(r *http.Request) {
@@ -157,7 +162,7 @@ func stripIdentity(r *http.Request) {
 	cookies := r.Cookies()
 	r.Header.Del("Cookie")
 	for _, cookie := range cookies {
-		if !strings.HasPrefix(cookie.Name, "alonabot_") {
+		if !strings.HasPrefix(cookie.Name, "alonabot_") && !strings.HasPrefix(cookie.Name, "__Host-alonabot_") {
 			r.AddCookie(cookie)
 		}
 	}

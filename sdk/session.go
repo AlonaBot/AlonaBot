@@ -157,6 +157,7 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32, c
 	}
 	appendHTTPRoutes(r, reg.HTTP)
 	appendServiceRoutes(reg, r)
+	appendSubscriptionRoutes(reg, r)
 	return r
 }
 
