@@ -23,6 +23,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/oslock"
 	"github.com/libtnb/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 	_ "modernc.org/sqlite" // 注册 "sqlite" 驱动
 )
@@ -270,7 +271,7 @@ func (s *Store) migrate(ctx context.Context, fresh bool) error {
 			if err := tx.Exec(migrations[v]).Error; err != nil {
 				return err
 			}
-			return tx.Model(&schemaVersion{}).Where("1 = 1").Update("version", v+1).Error
+			return tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Model(&schemaVersion{}).Updates(&schemaVersion{Version: v + 1}).Error
 		})
 		if err != nil {
 			return fmt.Errorf("migrate state database to version %d: %w", v+1, err)
@@ -332,17 +333,19 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 		// 2. 在单连接事务内核对平台类型唯一性并写入安装与启用状态。
 		if in.Role == RoleAdapter {
 			var count int64
-			if err := tx.Model(&installation{}).Where("role = ? AND adapter_id = ?", RoleAdapter, in.AdapterID).Count(&count).Error; err != nil {
+			if err := tx.Model(&installation{}).Where(&installation{Role: RoleAdapter, AdapterID: in.AdapterID}, "Role", "AdapterID").Count(&count).Error; err != nil {
 				return err
 			}
 			if count > 0 {
 				return fmt.Errorf("adapter %q is already installed", in.AdapterID)
 			}
 		}
-		var sequence int64
-		if err := tx.Model(&installation{}).Select("coalesce(max(install_seq), 0) + 1").Scan(&sequence).Error; err != nil {
+		var last installation
+		err := tx.Order(clause.OrderByColumn{Column: clause.Column{Name: columnInstallSeq}, Desc: true}).Take(&last).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
+		sequence := last.InstallSeq + 1
 		row := installation{
 			PluginID: in.PluginID, InstallSeq: sequence, Source: in.Source,
 			Entrypoint: in.Entrypoint, BuildDigest: in.BuildDigest,
@@ -358,7 +361,7 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 // GetInstall 读取安装记录。
 func (s *Store) GetInstall(ctx context.Context, pluginID string) (Install, error) {
 	var row installation
-	err := s.db.WithContext(ctx).Where("plugin_id = ?", pluginID).Take(&row).Error
+	err := s.db.WithContext(ctx).Where(&installation{PluginID: pluginID}, "PluginID").Take(&row).Error
 	in := Install{PluginID: pluginID, Source: row.Source, Entrypoint: row.Entrypoint,
 		BuildDigest: row.BuildDigest, Role: row.Role, AdapterID: row.AdapterID}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -381,7 +384,7 @@ func (s *Store) CommitActive(ctx context.Context, pluginID, expectedOld, newGen 
 	return s.tx(ctx, func(tx *gorm.DB) error {
 		// 1. 核对当前 Active 等于调用方预期的旧值。
 		var current pluginState
-		err := tx.Select("active_generation").Where("plugin_id = ?", pluginID).Take(&current).Error
+		err := tx.Where(&pluginState{PluginID: pluginID}, "PluginID").Take(&current).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 		} else if err != nil {
@@ -390,25 +393,30 @@ func (s *Store) CommitActive(ctx context.Context, pluginID, expectedOld, newGen 
 		if current.ActiveGeneration.String != expectedOld {
 			return fmt.Errorf("%w: expected %q, got %q", ErrStaleGeneration, expectedOld, current.ActiveGeneration.String)
 		}
-		// 2. 给新代次写入 COMMITTED 标记；它必须存在、属于该插件且从未提交过。
-		res := tx.Model(&generation{}).
-			Where("generation_id = ? AND plugin_id = ? AND committed_at IS NULL", newGen, pluginID).
-			Update("committed_at", time.Now().UnixMilli())
-		if res.Error != nil {
-			return res.Error
+		// 2. 给属于该插件且尚未提交的新代次写入 COMMITTED 标记。
+		var candidate generation
+		err = tx.Where(&generation{GenerationID: newGen}, "GenerationID").Take(&candidate).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
 		}
-		if res.RowsAffected != 1 {
+		if errors.Is(err, gorm.ErrRecordNotFound) || candidate.PluginID != pluginID || candidate.CommittedAt != nil {
 			return fmt.Errorf("generation %s does not exist, does not belong to plugin %s, or was already committed", newGen, pluginID)
 		}
-		// 3. 切换 Active。
-		return tx.Model(&pluginState{}).Where("plugin_id = ?", pluginID).Update("active_generation", newGen).Error
+		committedAt := time.Now().UnixMilli()
+		candidate.CommittedAt = &committedAt
+		if err := tx.Save(&candidate).Error; err != nil {
+			return err
+		}
+		// 3. 切换 Active；事务内保留其余状态字段。
+		current.ActiveGeneration = sql.NullString{String: newGen, Valid: true}
+		return tx.Save(&current).Error
 	})
 }
 
 // Active 返回插件当前的 ActiveGeneration（未激活时为空）。只有已 COMMITTED 的代次能成为 Active。
 func (s *Store) Active(ctx context.Context, pluginID string) (string, error) {
 	var row pluginState
-	err := s.db.WithContext(ctx).Select("active_generation").Where("plugin_id = ?", pluginID).Take(&row).Error
+	err := s.db.WithContext(ctx).Where(&pluginState{PluginID: pluginID}, "PluginID").Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 	}
@@ -417,20 +425,24 @@ func (s *Store) Active(ctx context.Context, pluginID string) (string, error) {
 
 // SetEnabled 持久化启用状态。
 func (s *Store) SetEnabled(ctx context.Context, pluginID string, enabled bool) error {
-	res := s.db.WithContext(ctx).Model(&pluginState{}).Where("plugin_id = ?", pluginID).Update("enabled", enabled)
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected != 1 {
-		return fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
-	}
-	return nil
+	return s.tx(ctx, func(tx *gorm.DB) error {
+		var row pluginState
+		err := tx.Where(&pluginState{PluginID: pluginID}, "PluginID").Take(&row).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
+		}
+		if err != nil {
+			return err
+		}
+		row.Enabled = enabled
+		return tx.Save(&row).Error
+	})
 }
 
 // Enabled 读取启用状态。
 func (s *Store) Enabled(ctx context.Context, pluginID string) (bool, error) {
 	var row pluginState
-	err := s.db.WithContext(ctx).Select("enabled").Where("plugin_id = ?", pluginID).Take(&row).Error
+	err := s.db.WithContext(ctx).Where(&pluginState{PluginID: pluginID}, "PluginID").Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 	}

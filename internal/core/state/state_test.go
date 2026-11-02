@@ -14,6 +14,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"gorm.io/gorm"
 )
 
 // TestMain 在设置 STATE_HOLD_DIR 时作为子进程运行：以另一个 Core 的身份打开 data_dir 并持有，直到 stdin 关闭。
@@ -210,7 +212,7 @@ func TestNewerSchemaRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.db.Model(&schemaVersion{}).Where("1 = 1").Update("version", 99).Error; err != nil {
+	if err := s.db.Session(&gorm.Session{AllowGlobalUpdate: true}).Model(&schemaVersion{}).Updates(&schemaVersion{Version: 99}).Error; err != nil {
 		t.Fatal(err)
 	}
 	_ = s.Close()
