@@ -58,3 +58,17 @@ CREATE TABLE conversation_entry (
   created_at       INTEGER NOT NULL,
   PRIMARY KEY (plugin_id, conversation_key, seq)
 );
+
+CREATE TABLE admin_credential (
+  id              INTEGER PRIMARY KEY CHECK (id = 1),
+  token_sha256    BLOB NOT NULL,
+  auth_generation INTEGER NOT NULL,
+  updated_at      INTEGER NOT NULL
+);
+
+CREATE TABLE admin_session (
+  session_id      TEXT PRIMARY KEY,
+  csrf_token      TEXT NOT NULL,
+  auth_generation INTEGER NOT NULL,
+  expires_at      INTEGER NOT NULL
+);
