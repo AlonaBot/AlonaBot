@@ -267,12 +267,12 @@ const (
 
 // Install 记录插件的最小安装信息；尚不含来源绑定、pin、卸载保留等内容。
 type Install struct {
-	Role        Role   // 必填的安装角色
-	AdapterID   string // RoleAdapter 必填的平台类型
-	PluginID    string // 插件 ID，主键
-	Source      string // 安装来源（开发模式为 dev-local）
-	Entrypoint  string // 入口可执行文件的路径
-	BuildDigest []byte // 安装时已验证的归档摘要，经启动上下文交给 SDK 回显
+	Role        Role   `gorm:"column:role"`                 // 必填的安装角色
+	AdapterID   string `gorm:"column:adapter_id"`           // RoleAdapter 必填的平台类型
+	PluginID    string `gorm:"column:plugin_id;primaryKey"` // 插件 ID，主键
+	Source      string `gorm:"column:source"`               // 安装来源（开发模式为 dev-local）
+	Entrypoint  string `gorm:"column:entrypoint"`           // 入口可执行文件的路径
+	BuildDigest []byte `gorm:"column:build_digest"`         // 安装时已验证的归档摘要，经启动上下文交给 SDK 回显
 }
 
 // AddInstall 登记安装记录，install_seq 按登记顺序递增（first-wins 的依据）。
@@ -289,7 +289,7 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 		// 2. 在单连接事务内核对平台类型唯一性并写入安装与启用状态。
 		if in.Role == RoleAdapter {
 			var count int64
-			if err := tx.Model(&installation{}).Where(&installation{Role: RoleAdapter, AdapterID: in.AdapterID}).Count(&count).Error; err != nil {
+			if err := tx.Model(&installation{}).Where(&installation{Install: Install{Role: RoleAdapter, AdapterID: in.AdapterID}}).Count(&count).Error; err != nil {
 				return err
 			}
 			if count > 0 {
@@ -302,11 +302,7 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 			return err
 		}
 		sequence := last.InstallSeq + 1
-		row := installation{
-			PluginID: in.PluginID, InstallSeq: sequence, Source: in.Source,
-			Entrypoint: in.Entrypoint, BuildDigest: in.BuildDigest,
-			CreatedAt: time.Now().UnixMilli(), Role: in.Role, AdapterID: in.AdapterID,
-		}
+		row := installation{Install: in, InstallSeq: sequence, CreatedAt: time.Now().UnixMilli()}
 		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
@@ -318,12 +314,11 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 func (s *Store) GetInstall(ctx context.Context, pluginID string) (Install, error) {
 	var row installation
 	err := s.db.WithContext(ctx).Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&row).Error
-	in := Install{PluginID: pluginID, Source: row.Source, Entrypoint: row.Entrypoint,
-		BuildDigest: row.BuildDigest, Role: row.Role, AdapterID: row.AdapterID}
+	row.Install.PluginID = pluginID
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return in, fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
+		return row.Install, fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 	}
-	return in, err
+	return row.Install, err
 }
 
 // AddGeneration 持久化一个候选代次（尚未提交）。配置快照只能含 secret 引用，不含明文。

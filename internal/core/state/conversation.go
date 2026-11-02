@@ -14,8 +14,8 @@ import (
 
 // ConversationEntry 保存会话内的连续序号和原样 JSON 条目。
 type ConversationEntry struct {
-	Seq       uint64
-	EntryJSON string
+	Seq       uint64 `gorm:"column:seq;primaryKey;autoIncrement:false"`
+	EntryJSON string `gorm:"column:entry_json"`
 }
 
 // ConversationSummary 汇总一个会话的条目数量、末尾序号和最后追加时间。
@@ -47,7 +47,7 @@ func (s *Store) AppendConversation(ctx context.Context, pluginID, key string, en
 		createdAt := time.Now().UnixMilli()
 		for _, entry := range entries {
 			lastSeq++
-			if err := tx.Create(&conversationEntry{PluginID: pluginID, ConversationKey: key, Seq: lastSeq, EntryJSON: entry, CreatedAt: createdAt}).Error; err != nil {
+			if err := tx.Create(&conversationEntry{ConversationEntry: ConversationEntry{Seq: lastSeq, EntryJSON: entry}, PluginID: pluginID, ConversationKey: key, CreatedAt: createdAt}).Error; err != nil {
 				return err
 			}
 		}
@@ -72,16 +72,12 @@ func (s *Store) ListConversation(ctx context.Context, pluginID, key string, from
 	if fromSeq > math.MaxInt64 {
 		return nil, nil
 	}
-	var rows []conversationEntry
-	err := s.db.WithContext(ctx).Where(&conversationEntry{PluginID: pluginID, ConversationKey: key}).
-		Where(clause.Gte{Column: clause.Column{Name: columnSeq}, Value: fromSeq}).
-		Order(clause.OrderByColumn{Column: clause.Column{Name: columnSeq}}).Limit(limit).Find(&rows).Error
-	if err != nil {
-		return nil, err
-	}
 	var entries []ConversationEntry
-	for _, row := range rows {
-		entries = append(entries, ConversationEntry{Seq: row.Seq, EntryJSON: row.EntryJSON})
+	err := s.db.WithContext(ctx).Model(&conversationEntry{}).Where(&conversationEntry{PluginID: pluginID, ConversationKey: key}).
+		Where(clause.Gte{Column: clause.Column{Name: columnSeq}, Value: fromSeq}).
+		Order(clause.OrderByColumn{Column: clause.Column{Name: columnSeq}}).Limit(limit).Find(&entries).Error
+	if err != nil || len(entries) == 0 {
+		return nil, err
 	}
 	return entries, nil
 }

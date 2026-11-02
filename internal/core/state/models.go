@@ -15,14 +15,9 @@ type schemaVersion struct {
 func (schemaVersion) TableName() string { return "schema_version" }
 
 type installation struct {
-	PluginID    string `gorm:"column:plugin_id;primaryKey"`
-	InstallSeq  int64  `gorm:"column:install_seq"`
-	Source      string `gorm:"column:source"`
-	Entrypoint  string `gorm:"column:entrypoint"`
-	BuildDigest []byte `gorm:"column:build_digest"`
-	CreatedAt   int64  `gorm:"column:created_at;autoCreateTime:false"` // 毫秒，由调用方显式赋值
-	Role        Role   `gorm:"column:role"`
-	AdapterID   string `gorm:"column:adapter_id"`
+	Install    `gorm:"embedded"`
+	InstallSeq int64 `gorm:"column:install_seq"`
+	CreatedAt  int64 `gorm:"column:created_at;autoCreateTime:false"` // 毫秒，由调用方显式赋值
 }
 
 func (installation) TableName() string { return "install" }
@@ -47,10 +42,8 @@ type pluginState struct {
 func (pluginState) TableName() string { return "plugin_state" }
 
 type pendingConfig struct {
-	PluginID       string `gorm:"column:plugin_id;primaryKey"`
-	BaseGeneration string `gorm:"column:base_generation"`
-	ConfigJSON     string `gorm:"column:config_json"`
-	UpdatedAt      int64  `gorm:"column:updated_at;autoUpdateTime:false"` // 毫秒，保留显式零值
+	PendingConfig   `gorm:"embedded"`
+	UpdatedAtMillis int64 `gorm:"column:updated_at;autoUpdateTime:false"` // 毫秒，保留显式零值
 }
 
 func (pendingConfig) TableName() string { return "pending_config" }
@@ -72,11 +65,10 @@ type adapterPermission struct {
 func (adapterPermission) TableName() string { return "plugin_adapter_permission" }
 
 type conversationEntry struct {
-	PluginID        string `gorm:"column:plugin_id;primaryKey"`
-	ConversationKey string `gorm:"column:conversation_key;primaryKey"`
-	Seq             uint64 `gorm:"column:seq;primaryKey;autoIncrement:false"`
-	EntryJSON       string `gorm:"column:entry_json"`
-	CreatedAt       int64  `gorm:"column:created_at;autoCreateTime:false"` // 毫秒
+	ConversationEntry `gorm:"embedded"`
+	PluginID          string `gorm:"column:plugin_id;primaryKey"`
+	ConversationKey   string `gorm:"column:conversation_key;primaryKey"`
+	CreatedAt         int64  `gorm:"column:created_at;autoCreateTime:false"` // 毫秒
 }
 
 func (conversationEntry) TableName() string { return "conversation_entry" }

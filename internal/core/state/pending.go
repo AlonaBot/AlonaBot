@@ -12,10 +12,10 @@ import (
 
 // PendingConfig 记录尚未激活的配置编辑，BaseGeneration 是它写入时插件所处的 ActiveGeneration。
 type PendingConfig struct {
-	PluginID       string    // 所属插件，主键
-	BaseGeneration string    // 所基于的代次；插件尚无 Active 时为空串
-	ConfigJSON     string    // 已规范化的完整 JSON 对象
-	UpdatedAt      time.Time // 最后一次写入时间，按毫秒存取
+	PluginID       string    `gorm:"column:plugin_id;primaryKey"` // 所属插件，主键
+	BaseGeneration string    `gorm:"column:base_generation"`      // 所基于的代次；插件尚无 Active 时为空串
+	ConfigJSON     string    `gorm:"column:config_json"`          // 已规范化的完整 JSON 对象
+	UpdatedAt      time.Time `gorm:"-"`                           // 最后一次写入时间，按毫秒存取
 }
 
 // GetPendingConfig 读取插件的 Pending 配置；没有记录时返回 ErrNotFound。
@@ -29,15 +29,13 @@ func (s *Store) GetPendingConfig(ctx context.Context, pluginID string) (PendingC
 	if err != nil {
 		return p, err
 	}
-	p.BaseGeneration = row.BaseGeneration
-	p.ConfigJSON = row.ConfigJSON
-	p.UpdatedAt = time.UnixMilli(row.UpdatedAt)
-	return p, nil
+	row.PendingConfig.UpdatedAt = time.UnixMilli(row.UpdatedAtMillis)
+	return row.PendingConfig, nil
 }
 
 // PutPendingConfig 覆盖写入插件的 Pending 配置。
 func (s *Store) PutPendingConfig(ctx context.Context, p PendingConfig) error {
-	return s.db.WithContext(ctx).Clauses(clause.OnConflict{UpdateAll: true}).Create(&pendingConfig{PluginID: p.PluginID, BaseGeneration: p.BaseGeneration, ConfigJSON: p.ConfigJSON, UpdatedAt: p.UpdatedAt.UnixMilli()}).Error
+	return s.db.WithContext(ctx).Clauses(clause.OnConflict{UpdateAll: true}).Create(&pendingConfig{PendingConfig: p, UpdatedAtMillis: p.UpdatedAt.UnixMilli()}).Error
 }
 
 // DeletePendingConfig 删除插件的 Pending 配置；没有记录时不报错。
