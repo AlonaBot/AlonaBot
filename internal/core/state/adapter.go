@@ -12,7 +12,7 @@ import (
 // AdapterCursor 读取实例的已持久化游标；没有记录时返回 nil, nil。
 func (s *Store) AdapterCursor(ctx context.Context, instanceID string) ([]byte, error) {
 	var row adapterCursor
-	err := s.db.WithContext(ctx).Select("cursor").Where("instance_id = ?", instanceID).Take(&row).Error
+	err := s.db.WithContext(ctx).Where(&adapterCursor{InstanceID: instanceID}, "InstanceID").Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -26,7 +26,7 @@ func (s *Store) PutAdapterCursor(ctx context.Context, pluginID, instanceID strin
 		cursor = []byte{}
 	}
 	return s.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "instance_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"plugin_id", "cursor", "updated_at"}),
+		Columns:   []clause.Column{{Name: columnInstanceID}},
+		DoUpdates: clause.AssignmentColumns([]string{columnPluginID, columnCursor, columnUpdatedAt}),
 	}).Create(&adapterCursor{InstanceID: instanceID, PluginID: pluginID, Cursor: cursor, UpdatedAt: time.Now().UnixMilli()}).Error
 }
