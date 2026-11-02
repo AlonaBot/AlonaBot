@@ -88,7 +88,7 @@ func execute(args []string) int {
 			return tune.WriteList(os.Stdout, values)
 		}}
 	tuneCommand.AddCommand(listCommand)
-	root.AddCommand(runCommand, tuneCommand, pluginCommand(&code))
+	root.AddCommand(runCommand, tuneCommand, pluginCommand(&code), adminTokenCommand(&code))
 	// 2. 由 Cobra 生成帮助，错误只在这里打印一次。
 	var helpErr error
 	help := root.HelpFunc()

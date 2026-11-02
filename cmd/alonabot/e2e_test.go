@@ -5,7 +5,9 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,6 +15,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +24,7 @@ import (
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
+	"github.com/AlonaBot/AlonaBot/internal/core/state"
 )
 
 // binDir 存放 TestMain 构建的 Core 与真实插件二进制。
@@ -488,5 +492,54 @@ func TestHTTPPluginSettings(t *testing.T) {
 				t.Fatalf("exit %d: %s", code, c.log())
 			}
 		})
+	}
+}
+
+// TestAdminTokenRequiresTerminal 验证非终端命令以 usage 退出且没有初始化凭证。
+func TestAdminTokenRequiresTerminal(t *testing.T) {
+	for _, action := range []string{"init", "reset"} {
+		t.Run(action, func(t *testing.T) {
+			dir := t.TempDir()
+			command := exec.Command(filepath.Join(binDir, "alonabot"), "admin-token", action, "--data-dir", dir)
+			output, err := command.CombinedOutput()
+			if err == nil || command.ProcessState.ExitCode() != exitUsage || !strings.Contains(string(output), "stdin and stderr to be terminals") {
+				t.Fatalf("non-terminal %s: err=%v, output=%s", action, err, output)
+			}
+			store, err := state.Open(context.Background(), dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, readErr := store.AdminCredential(context.Background())
+			closeErr := store.Close()
+			if !errors.Is(readErr, state.ErrNotFound) || closeErr != nil {
+				t.Fatalf("credential after non-terminal %s: read=%v, close=%v", action, readErr, closeErr)
+			}
+		})
+	}
+}
+
+// TestAdminTokenResetWhileCoreRunning 通过真实伪终端越过终端门禁，验证 core.lock 拒绝离线 reset。
+func TestAdminTokenResetWhileCoreRunning(t *testing.T) {
+	dir := t.TempDir()
+	c := startCore(t, dir, "--listen", "127.0.0.1:0")
+	c.waitFor(activatedRe)
+	binary := filepath.Join(binDir, "alonabot")
+	var command *exec.Cmd
+	if runtime.GOOS == "linux" {
+		// util-linux script 接受单个 shell 命令，用环境传参以保留路径原文。
+		command = exec.Command("script", "-q", "-e", "-c", `exec "$ALONABOT_TEST_BINARY" admin-token reset --data-dir "$ALONABOT_TEST_DATA_DIR"`, os.DevNull)
+		command.Env = append(os.Environ(), "ALONABOT_TEST_BINARY="+binary, "ALONABOT_TEST_DATA_DIR="+dir)
+	} else {
+		command = exec.Command("script", "-q", os.DevNull, binary, "admin-token", "reset", "--data-dir", dir)
+	}
+	output, err := command.CombinedOutput()
+	if err == nil || command.ProcessState.ExitCode() != exitFailure || !strings.Contains(string(output), state.ErrDataDirLocked.Error()) || !strings.Contains(string(output), "stop Core") {
+		t.Fatalf("reset with Core holding core.lock: err=%v, output=%s", err, output)
+	}
+	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := c.wait(15 * time.Second); code != 0 {
+		t.Fatalf("Core exit %d: %s", code, c.log())
 	}
 }
