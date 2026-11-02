@@ -30,6 +30,8 @@ type Plugin interface {
 	Activated() bool
 	Routes() []*pb.RouteDescriptor
 	Call(ctx context.Context, req wire.Request) (wire.Response, error)
+	// SendEvent 等待 EVENT 帧写出，不等待订阅回调。
+	SendEvent(ctx context.Context, target string, ev *pb.BusEvent) error
 }
 
 type instancePlugin struct{ instance *host.Instance }
@@ -42,6 +44,10 @@ func (p *instancePlugin) Activated() bool               { return p.instance.Stat
 func (p *instancePlugin) Routes() []*pb.RouteDescriptor { return p.instance.Routes }
 func (p *instancePlugin) Call(ctx context.Context, req wire.Request) (wire.Response, error) {
 	return p.instance.Session.Call(ctx, req)
+}
+
+func (p *instancePlugin) SendEvent(ctx context.Context, target string, ev *pb.BusEvent) error {
+	return p.instance.Session.SendEvent(ctx, target, ev)
 }
 
 // Router 按顺序派发已接纳事件；New 创建，Start 启动，Close 取消在途派发并等待 worker 退出。
