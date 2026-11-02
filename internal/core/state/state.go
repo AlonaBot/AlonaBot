@@ -46,6 +46,9 @@ const (
 var pragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(" + strconv.Itoa(busyTimeoutMillis) + ")"
 
 var (
+	errEmptyPluginID        = errors.New("plugin_id is required")
+	errEmptyConversationKey = errors.New("conversation key is required")
+
 	// ErrDataDirLocked 表示同一 data_dir 已有另一个 Core 在运行。
 	ErrDataDirLocked = errors.New("data_dir is locked by another Core")
 	// ErrStaleGeneration 表示提交时 ActiveGeneration 已不是调用方预期的旧值。

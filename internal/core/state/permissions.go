@@ -9,6 +9,9 @@ import (
 
 // AllowedAdapterInstances 按字典序读取插件当前获准发送的 Adapter 实例。
 func (s *Store) AllowedAdapterInstances(ctx context.Context, pluginID string) ([]string, error) {
+	if pluginID == "" {
+		return nil, errEmptyPluginID
+	}
 	var rows []adapterPermission
 	err := s.db.WithContext(ctx).Where(&adapterPermission{PluginID: pluginID}).Find(&rows).Error
 	var instances []string

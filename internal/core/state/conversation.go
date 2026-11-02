@@ -28,6 +28,13 @@ type ConversationSummary struct {
 
 // AppendConversation 在一个事务内按输入顺序追加，返回提交后的末尾序号。
 func (s *Store) AppendConversation(ctx context.Context, pluginID, key string, entries []string) (lastSeq uint64, err error) {
+	if pluginID == "" {
+		return 0, errEmptyPluginID
+	}
+	if key == "" {
+		return 0, errEmptyConversationKey
+	}
+
 	err = s.tx(ctx, func(tx *gorm.DB) error {
 		// 单连接在事务期间独占，读末尾和写入之间不会穿插其他追加。
 		var last conversationEntry
@@ -54,6 +61,13 @@ func (s *Store) AppendConversation(ctx context.Context, pluginID, key string, en
 
 // ListConversation 按序号升序读取 seq >= fromSeq 的条目，至多返回 limit 条。
 func (s *Store) ListConversation(ctx context.Context, pluginID, key string, fromSeq uint64, limit int) ([]ConversationEntry, error) {
+	if pluginID == "" {
+		return nil, errEmptyPluginID
+	}
+	if key == "" {
+		return nil, errEmptyConversationKey
+	}
+
 	// SQLite INTEGER 的序号最大为 MaxInt64，更大的起点没有匹配条目。
 	if fromSeq > math.MaxInt64 {
 		return nil, nil
@@ -74,11 +88,22 @@ func (s *Store) ListConversation(ctx context.Context, pluginID, key string, from
 
 // ClearConversation 删除该插件指定会话的全部条目；不存在时也成功。
 func (s *Store) ClearConversation(ctx context.Context, pluginID, key string) error {
+	if pluginID == "" {
+		return errEmptyPluginID
+	}
+	if key == "" {
+		return errEmptyConversationKey
+	}
+
 	return s.db.WithContext(ctx).Where(&conversationEntry{PluginID: pluginID, ConversationKey: key}).Delete(&conversationEntry{}).Error
 }
 
 // Conversations 按会话键字典序返回该插件的非空会话摘要。
 func (s *Store) Conversations(ctx context.Context, pluginID string) ([]ConversationSummary, error) {
+	if pluginID == "" {
+		return nil, errEmptyPluginID
+	}
+
 	var rows []struct {
 		ConversationKey string
 		Seq             uint64
