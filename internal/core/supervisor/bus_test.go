@@ -108,7 +108,7 @@ func testBusProcesses(t *testing.T, binary string, stdio bool) {
 	services := broker.New(routes, output.Logger(), values.RequestTimeout)
 	mux := router.NewMux()
 	mux.Forward(services.Call)
-	broadcast := bus.New(output.Logger(), bus.Options{QueueEvents: 3})
+	broadcast := bus.New(output.Logger(), bus.Options{QueueEvents: 3, QueueBytes: values.BusQueueBytes})
 	broadcast.Register(mux)
 	budget := wire.NewBudget(values.CoreMaxPayload)
 	running := make(map[string]*Running)

@@ -84,6 +84,7 @@ func (h *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if h.opt.Sessions != nil {
 			if id, expires, ok := h.opt.Sessions.Lookup(r); ok {
 				h.mu.Lock()
+				h.expire(h.opt.Now())
 				h.adminExpires[id] = expires
 				h.mu.Unlock()
 			}

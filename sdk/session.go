@@ -14,6 +14,7 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/sdk/config"
 )
 
 // handshakeTimeout 与 CONTRACTS §4.2 的 Hello/HelloAck 预算一致。
@@ -138,9 +139,12 @@ func sessionFailure(conn *wire.Conn, sid []byte, minor uint32, pluginID string, 
 
 // buildRegister 把收集到的注册项转成 REGISTER。
 // shortcut: route_id 暂用 "cmd.<路径以 . 连接>"，有稳定 route_id 生成器后替换。
-func buildRegister(reg *Registration, configJSON string, configVersion uint32) *pb.Register {
+func buildRegister(reg *Registration, configJSON string, configVersion uint32, configSchema []byte) *pb.Register {
 	r := &pb.Register{CandidateConfigJson: configJSON, CandidateConfigVersion: configVersion,
 		Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	if len(configSchema) != 0 {
+		r.ConfigSchemaHash = config.SchemaHash(configSchema)
+	}
 	for _, c := range reg.Commands {
 		spec := c.spec
 		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: commandRouteID(c), Priority: c.Priority, Kind: pb.RouteKind_ROUTE_KIND_COMMAND,
@@ -209,7 +213,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 	}
 
 	// 3. 发送完整 REGISTER；超过 4 MiB 时报告 RESOURCE_EXHAUSTED。
-	registration := buildRegister(reg, boot.GetCandidateConfigJson(), boot.GetTargetConfigVersion())
+	registration := buildRegister(reg, boot.GetCandidateConfigJson(), boot.GetTargetConfigVersion(), generatedFor(root).ConfigSchema)
 	l.http.report(registration)
 	regEnv, err := wire.ControlEnvelope(sid, minor, l.pluginID, pb.FrameKind_FRAME_KIND_REGISTER, registration)
 	if err != nil {

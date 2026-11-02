@@ -4,13 +4,14 @@
 **目录更新：** 2026-10-22  
 **当前状态：** T-01（契约与工具链）与 T-02（Core 状态、Native 进程、双 IPC、基础生命周期）以及日志基线（T-02.1）已实现，分项验收证据见 [TEST-MATRIX §3.1](TEST-MATRIX.md#31-已运行的分项证据t-01t-02)；调优参数（T-02.2）、T-03～T-14 的能力与全部跨任务验收尚未实施。
 
-按 [PLAN.md §3.1](PLAN.md#31-执行切片) 与 [goals.md](../goals.md) 推进。依赖图中最早可推进的未实现切片是 T-02.2；T-02.1、T-07.1、T-08.2、T-09.2 与 T-12.1 已合并。实际派发仍须满足 goals.md 的状态规则。T-03.1 需等待 T-02.2 合并。PLAN 给出任务依赖、切片划分、输入、操作步骤、交付物和完成条件。
+按 [PLAN.md §3.1](PLAN.md#31-执行切片) 的章节、各章节实施计划（[plan/](plan/core.md)）与 [docs/goals/](../docs/goals/README.md) 推进。依赖图中最早可推进的未实现切片是 T-02.2；T-02.1、T-07.1、T-08.2、T-09.2 与 T-12.1 已合并。实际派发仍须满足 docs/goals/ 的状态规则。T-03.1 需等待 T-02.2 合并。PLAN 给出任务依赖、切片划分、输入、操作步骤、交付物和完成条件。
 
 ## 根目录：当前实施所需资料
 
 | 文件 | 执行时的用途 |
 | --- | --- |
-| [PLAN.md](PLAN.md) | 唯一详细实施计划，T-01～T-16 工作包、执行切片与交付次序；§7 为 v0.1 之后的休眠扩展 S-01～S-06 |
+| [PLAN.md](PLAN.md) | 实施计划总纲：最终交付、工作包依赖与交付次序、章节划分（§3.1）、验收规则；§7 为 v0.1 之后的休眠扩展 S-01～S-06 |
+| [plan/](plan/core.md) | 各章节的实施计划：核心、Agent、适配器（[总述](plan/adapters/README.md)、Telegram、OneBot 11）、插件、WebUI、集成与发布；每章有切片表与工作包 |
 | [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md) | API、权限、生命周期、配置、数据与安装的精确行为 |
 | [WIRE-FORMAT.md](WIRE-FORMAT.md) | Protobuf 字段、枚举、控制帧、Bootstrap 与载荷定义 |
 | [MESSAGE-MODEL.md](MESSAGE-MODEL.md) | Event/Target/Chain、发送回执、媒体和 Telegram 映射 |

@@ -1,12 +1,12 @@
 # 并行执行顺序
 
-本文件约束多个执行者并行推进切片时的派发时机、共享文件和合并顺序。切片的内容与前置以 [PLAN §3.1](../spec/PLAN.md#31-执行切片) 为准，派发用的 goal 语句在 [goals.md](../goals.md)，角色与合并授权见 [CONTRIBUTING「角色与合并」](../CONTRIBUTING.md#角色与合并)。
+本文件约束多个执行者并行推进切片时的派发时机、共享文件和合并顺序。切片的内容与前置以各章节实施计划的切片表为准（章节划分见 [PLAN §3.1](../spec/PLAN.md#31-执行切片)），派发用的 goal 语句在 [docs/goals/](goals/README.md)，角色与合并授权见 [CONTRIBUTING「角色与合并」](../CONTRIBUTING.md#角色与合并)。
 
 ## 1. 派发规则
 
 - 一个 goal 同时只交给一个执行者。
-- 只派发 goals.md 中状态为「待派发」的 goal。待派发要求 PLAN §3.1 中它的全部前置都是「已完成」，而且审查者已经按合并后的代码补全了接口段。
-- 执行者在派发时从最新的 `origin/main` 创建 `goal-N` 分支和 `.worktrees/goal-N`。goal 编号固定，由 goals.md 指定，不按 goal-mode 的默认规则自选。
+- 只派发 docs/goals/ 中状态为「待派发」的 goal。待派发要求切片表中它的全部前置都是「已完成」（前置可能在其他章节），而且审查者已经按合并后的代码补全了接口段。
+- 执行者在派发时从最新的 `origin/main` 创建 `goal-N` 分支和 `.worktrees/goal-N`。goal 编号固定，由 goal 语句指定，不按 goal-mode 的默认规则自选。
 - 某个前置 PR 已开但还没合并时，不派发依赖它的 goal，即使代码看起来已经够用。
 
 ## 2. 波次参考
@@ -21,8 +21,8 @@
 | 4 | T-03.2、T-03.3、T-03.5、T-04.1、T-11.3 |
 | 5 | T-03.4、T-04.2、T-04.3、T-06.1、T-07.3 |
 | 6 | T-03.6、T-03.7、T-06.3、T-07.4、T-08.1、T-13.1 |
-| 7 | T-03.8、T-03.9、T-04.6、T-08.3、T-08.4、T-08.7、T-09.1、T-13.3 |
-| 8 | T-03.10、T-03.11、T-04.4、T-04.7、T-08.5、T-08.8、T-09.4、T-15.1 |
+| 7 | T-03.8、T-03.9、T-04.6、T-08.3、T-08.4、T-08.10、T-09.1、T-13.3 |
+| 8 | T-03.10、T-03.11、T-04.4、T-04.7、T-08.5、T-08.7、T-08.8、T-09.4、T-15.1 |
 | 9 | T-04.5、T-05.1、T-08.6、T-09.12、T-11.1、T-13.2、T-15.2 |
 | 10 | T-05.2、T-07.2、T-08.9、T-09.3、T-13.4、T-15.3 |
 | 11 | T-05.3、T-05.4、T-07.5、T-14.1、T-14.2、T-16.1 |
@@ -45,7 +45,7 @@
 | 共享对象 | 规则 |
 | --- | --- |
 | `.proto` 与生成代码 | 只有 goal 语句明确授权的切片才能改；未授权却需要改时标阻塞。字段号和枚举值只能追加，不能改动已有编号。T-02.1 先追加 `Bootstrap.log_level = 10`；T-02.2 依赖 T-02.1 合并后再追加 `Bootstrap.session_limits = 11`，不得并行修改同一 proto 与生成文件。 |
-| `internal/core/state/state.go` 的 `migrations` | 首次发布前只有一条初始迁移（[编码规范](coding-standards.md)「首次发布前不写兼容层」）：新表和新列直接写进 `migrations[0]`，不追加条目，不用 `ALTER TABLE`；新表的访问方法放在 `internal/core/state/` 下按主题新建的文件里。同步 main 后如果和别的切片在初始迁移末尾冲突，两边的表都保留，把自己的表放在最后，再重跑 state 测试。 |
+| `internal/core/state/schema.sql`（唯一的初始迁移） | 首次发布前只有一条初始迁移（[编码规范](coding-standards.md)「首次发布前不写兼容层」）：新表和新列直接写进 `schema.sql`，不新增迁移文件，不用 `ALTER TABLE`；新表的访问方法放在 `internal/core/state/` 下按主题新建的文件里。同步 main 后如果和别的切片在初始迁移末尾冲突，两边的表都保留，把自己的表放在最后，再重跑 state 测试。`schema.sql` 与 GORM 模型由 T-02.3（goal-86）引入，T-02.3 合并前，需要加表或加列的切片不派发。 |
 | `internal/core/adapter` 的 `Instance`、`Sink` 接口 | T-03.1 合并后不再修改。之后的切片需要更多 Adapter 能力时，在同一个包里新增可选接口，调用方用类型断言获取，不改已有接口。 |
 | `internal/wire/services.go` | 固定服务名只追加常量，不重排、不改已有值。多个切片并行追加时，由先合并者保留；后合并者同步最新 main 后把自己的常量追加到文件末尾，再运行 `go test ./internal/wire/...` 和本切片服务测试。 |
 | `router.New` 与 `Router.Attach` 的签名 | goal-7 给 `New` 追加 prepare、给 `Attach` 追加 Caller，goal-13 给 `New` 追加 CommandPolicy。后合并的一方在先合并者的签名末尾追加自己的参数，并同步 supervisor 测试与装配处的全部调用点，不重排已有参数。 |
@@ -59,7 +59,7 @@
 | 根包 `alonabot` 的 Core 装配 | 只有 goal 语句写明负责装配的切片才能改，与 `cmd/alonabot/main.go` 相同。 |
 | 包文档 | 只在包的职责确实变化时更新，不顺手重写。 |
 | `ARCHITECTURE.md`、`README.md`、`spec/` | 执行者不改，需要同步的内容在 PR 正文「文档同步」一节列出，由审查者在合并前补上。例外是 goal 语句明确要求的证据记录。 |
-| `goals.md`、`docs/execution-order.md` | 只由审查者维护。 |
+| `docs/goals/`、`docs/execution-order.md` | 只由审查者维护。 |
 
 新建 Go 包时先核对 [ARCHITECTURE.md](../ARCHITECTURE.md) 的依赖表。goal 语句会列出本切片允许新增的跨模块边；需要其他边时标阻塞。
 
@@ -67,7 +67,7 @@
 
 - 执行者需要 main 的新提交时，用 `git fetch origin && git merge origin/main` 同步，不 rebase、不 force-push。同步后重跑该切片的完成条件命令。
 - 审查者按 PR 就绪的先后逐个审查和合并。合并一个 PR 后，同一波次里还开着的 PR 如果和它冲突，或者 CI 需要在新 main 上重跑，由审查者通知执行者同步。
-- 审查者合并前，在 PR 分支上推送一个 commit：把 PLAN §3.1 里的状态改为「已完成」，补上 PR 正文列出的文档同步。合并后，再更新 goals.md 中依赖它的 goal 的接口段和状态。
+- 审查者合并前，在 PR 分支上推送一个 commit：把所属章节实施计划切片表里的状态改为「已完成」，补上 PR 正文列出的文档同步。合并后，再更新 docs/goals/ 中依赖它的 goal 的接口段和状态。
 
 ## 5. 阻塞与升级
 

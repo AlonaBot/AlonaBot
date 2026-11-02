@@ -12,6 +12,7 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
@@ -59,7 +60,7 @@ func collectSubscriptions(root Root, reg *Registration) error {
 	r.errs = append(r.errs, validate.Register(registration))
 	// 复用实际 REGISTER 的 route_id 生成规则，核对与其他注册器的冲突；HTTP Listener 此时尚未创建。
 	seen := make(map[string]bool)
-	for _, route := range buildRegister(reg, "{}", 0).GetRoutes() {
+	for _, route := range buildRegister(reg, "{}", 0, nil).GetRoutes() {
 		if route.GetKind() != pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION {
 			seen[route.GetRouteId()] = true
 		}
@@ -99,8 +100,12 @@ func Publish(ctx context.Context, eventName, schemaID string, version uint32, pa
 	response, err := session.Call(ctx, wire.Request{Target: wire.ServiceBusPublish,
 		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: invocationSchemaVersion, Bytes: encoded}})
 	if err != nil {
-		info := err.(*wire.CallError).ErrorInfo
-		return "", &Error{Code: validate.PublicCode(info.GetCode()), Message: info.GetSafeMessage()}
+		message := err.Error()
+		var callError *wire.CallError
+		if errors.As(err, &callError) {
+			message = callError.ErrorInfo.GetSafeMessage()
+		}
+		return "", &Error{Code: validate.PublicCode(wire.CodeOf(err)), Message: message}
 	}
 	result := &pb.PublishResponse{}
 	if err := decodeInvocation(response.Payload, result); err != nil {
@@ -115,13 +120,15 @@ type subscriptionDelivery struct {
 }
 
 // subscriptionEvents 为本次 Session 创建唯一的订阅投递 goroutine，接收端只做门禁与入队。
-// 队列载荷仍占 wire 的接收预算，不另设容量；慢回调不会占用读循环。
+// 排队及正在处理的载荷合计最多占 BUS_QUEUE_BYTES 的缺省值，满时 drop-newest 并立即归还 wire 预算。
 func subscriptionEvents(a *activation, reg *Registration) func(*pb.Envelope, func()) {
 	routes := make(map[string]subscriptionRoute, len(reg.subscriptions))
 	for _, sub := range reg.subscriptions {
 		routes[sub.descriptor.GetBusSubscription().GetCallbackRouteId()] = sub
 	}
-	var mu sync.Mutex // 保护 queue 与 closed，串行交接预算所有权
+	var mu sync.Mutex // 保护 queue、bytes 与 closed，串行交接预算所有权
+	var bytes int64   // 包含正在执行回调的载荷，防止慢回调占满共享接收预算
+	maxBytes := tune.Defaults().BusQueueBytes
 	var queue []subscriptionDelivery
 	closed := false
 	wake := make(chan struct{}, 1)
@@ -175,7 +182,20 @@ func subscriptionEvents(a *activation, reg *Registration) func(*pb.Envelope, fun
 			release()
 			return
 		}
-		queue = append(queue, subscriptionDelivery{env: env, release: release})
+		n := int64(len(env.GetPayload()))
+		if bytes+n > maxBytes {
+			mu.Unlock()
+			slog.Warn("bus event dropped because subscription payload budget is full", "route_id", env.GetTarget())
+			release()
+			return
+		}
+		bytes += n
+		queue = append(queue, subscriptionDelivery{env: env, release: func() {
+			mu.Lock()
+			bytes -= n
+			mu.Unlock()
+			release()
+		}})
 		mu.Unlock()
 		// 唤醒信号合并，接收路径不等待用户回调。
 		select {

@@ -24,7 +24,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 - 迁移用所选包的 `Migrate` 或 `Migrations`，二者择一；辅助迁移的 ID 发布后不能改成另一项操作（CONTRACTS §6.2）。
 - 受管 SQLite 在 reload 与 update 时使用独立候选副本，准备失败会回到旧数据（CONTRACTS §6.3）。框架外的文件与外部数据库不在这个保证内。
 - 大数据放在磁盘上：索引、缓存、向量放进受管 SQLite 或插件数据目录中的文件，不整份载入内存；内存缓存必须有上限。
-- 需要 PostgreSQL、MySQL 等外部数据库时自带驱动，连接参数做成 `secret:"true"` 的配置项由管理员填写。迁移或 OnStart 会写外部数据库时，manifest 声明 `prepare_effects=external`，此后已有安装的更新需要管理员进入维护（CONTRACTS §6.1、§6.3）。Core 不创建、不备份外部数据库。
+- 需要 PostgreSQL、MySQL 等外部数据库时自带驱动，连接参数做成带 `config:"secret"` 标志的配置项由管理员填写。迁移或 OnStart 会写外部数据库时，manifest 声明 `prepare_effects=external`，此后已有安装的更新需要管理员进入维护（CONTRACTS §6.1、§6.3）。Core 不创建、不备份外部数据库。
 - Core 托管的轻量 KV 尚未提供（Q-19），简单状态也用 `sqlitedb`。
 
 ## 4. 日志与文案
@@ -49,7 +49,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 ## 7. 配置与 secret
 
 - 根插件嵌入 `sdk.Base`，至多一个配置类型并嵌入 `config.Base`；校验写在 OnLoad 中（D-39、D-40、CONTRACTS §5）。
-- secret 字段加 `secret:"true"`，不写进日志、错误或数据库明文（CONTRACTS §5.3）。
+- secret 字段在 `config` 标签中加 `secret` 标志（例如 `config:"secret"`），不写进日志、错误或数据库明文（CONTRACTS §5.3）。
 
 ## 8. 测试
 
@@ -58,6 +58,6 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 
 ## 9. 发布
 
-- 市场 ID 按角色使用 `alonabot_plugin_`、`alonabot_adapter_`、`alonabot_agent_` 或 `alonabot_webui_` 前缀（CONTRACTS §9.1）。manifest 可以用 `icon` 声明组件图标，配置表单的选项也可以各带图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
+- 市场 ID 按角色使用 `alonabot_plugin_`、`alonabot_adapter_`、`alonabot_agent_` 或 `alonabot_webui_` 前缀（CONTRACTS §9.1）。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
 - 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`（CONTRACTS §9.3）。
 - 用 `alonabot plugin check` 与 `alonabot plugin pack` 为每个支持的平台生成安装包与外部 `release.json`，用 Ed25519 签名（CONTRACTS §9.2、§9.3）。签名私钥由作者保管，不放进仓库或构建日志。
