@@ -15,7 +15,7 @@ import (
 type platformFile struct{ instanceID, fileID string }
 
 // incomingObject 的状态由 Store.mu 保护；只有一个取件者在锁外写文件。
-// fetching 关闭后发布取件结果，其他读取者共享同一文件或失败结果。
+// 每轮取件单独发布完成信号与错误，失败后对象可由新的读取调用重新取件。
 type incomingObject struct {
 	source   platformFile
 	size     *uint64
@@ -23,12 +23,17 @@ type incomingObject struct {
 	file     File
 	expires  time.Time
 	issued   bool
-	fetching chan struct{}
+	fetching *incomingFetch
 	fetched  bool
-	err      error
 	reserved int64
 	charges  map[string]int64 // 每个消费 Session 的引用预算，Core 磁盘只计一份
 	leases   int              // 发送消费租约数，由 Store.mu 保护
+}
+
+// incomingFetch 在 done 关闭后只读，等待者持有本轮结果，避免消费后来取件的结果。
+type incomingFetch struct {
+	done chan struct{}
+	err  error
 }
 
 type incomingAccess struct {
@@ -191,16 +196,15 @@ func (s *Store) loadIncoming(ctx context.Context, c router.Caller, id string) er
 			return err
 		}
 		object := access.object
-		if object.err != nil {
-			s.mu.Unlock()
-			return object.err
-		}
 		if object.fetching != nil {
-			done := object.fetching
+			fetch := object.fetching
 			s.mu.Unlock()
 			// 共享取件结果，等待者取消只结束自己的读取。
 			select {
-			case <-done:
+			case <-fetch.done:
+				if fetch.err != nil {
+					return fetch.err
+				}
 				continue
 			case <-ctx.Done():
 				return incomingFailure(ctx.Err())
@@ -242,7 +246,8 @@ func (s *Store) loadIncoming(ctx context.Context, c router.Caller, id string) er
 			s.mu.Unlock()
 			return mediaCallError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support media reads")
 		}
-		object.fetching = make(chan struct{})
+		fetch := &incomingFetch{done: make(chan struct{})}
+		object.fetching = fetch
 		object.reserved = reservation
 		object.charges[c.SessionKey] = reservation
 		s.total += reservation
@@ -257,7 +262,7 @@ func (s *Store) loadIncoming(ctx context.Context, c router.Caller, id string) er
 		// 4. 成功后按实际大小计费，失败释放预留并保留本次失败结果。
 		s.mu.Lock()
 		if fetchErr != nil {
-			object.err = fetchErr
+			fetch.err = fetchErr
 			s.total -= object.reserved
 			object.reserved = 0
 			for sessionKey := range object.charges {
@@ -274,9 +279,12 @@ func (s *Store) loadIncoming(ctx context.Context, c router.Caller, id string) er
 				object.charges[sessionKey] = actual
 			}
 		}
-		// 先发布结果再唤醒等待者，下一轮重新核对令牌和 Session 是否仍有效。
-		close(object.fetching)
+		// 关闭信号前写入本轮结果；后续新调用可重新取件，本轮调用直接返回失败。
+		close(fetch.done)
 		object.fetching = nil
 		s.mu.Unlock()
+		if fetchErr != nil {
+			return fetchErr
+		}
 	}
 }
