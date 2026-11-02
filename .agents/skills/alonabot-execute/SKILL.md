@@ -1,16 +1,16 @@
 ---
 name: alonabot-execute
-description: 执行者按 goals.md 中的 goal 语句推进 AlonaBot 切片时使用；用 goal-mode 初始化切片卡，一轮一个 task，按语句给出的范围和接口实现并取证，完成后推送分支并开 PR，审查与合并由审查者负责。
+description: 执行者按 docs/goals/ 中的 goal 语句推进 AlonaBot 切片时使用；用 goal-mode 初始化切片卡，一轮一个 task，按语句给出的范围和接口实现并取证，完成后推送分支并开 PR，审查与合并由审查者负责。
 ---
 
 # 执行 AlonaBot 切片
 
-[PLAN §3.1](../../../spec/PLAN.md#31-执行切片) 把每个工作包拆成若干切片，一个切片对应一个 goal：`goal-N` 目录、分支和 PR。审查者在 [goals.md](../../../goals.md) 写出每个 goal 的派发语句；执行者按本技能推进。并行时的共享文件和同步规则见 [执行顺序](../../../docs/execution-order.md)，角色和合并授权见 [贡献流程](../../../CONTRIBUTING.md#角色与合并)。
+[PLAN §3.1](../../../spec/PLAN.md#31-执行切片) 把工作包分为若干章节，各章节实施计划（`spec/plan/`）再把工作包拆成切片，一个切片对应一个 goal：`goal-N` 目录、分支和 PR。审查者在 [docs/goals/](../../../docs/goals/README.md) 按章节写出每个 goal 的派发语句；执行者按本技能推进。并行时的共享文件和同步规则见 [执行顺序](../../../docs/execution-order.md)，角色和合并授权见 [贡献流程](../../../CONTRIBUTING.md#角色与合并)。
 
 ## 开始前
 
 1. 从最新的 `origin/main` 创建 `.worktrees/goal-N` 和分支 `goal-N`，N 用 goal 语句指定的编号，不按 goal-mode 的默认规则自选。切片卡写在 worktree 的 `goal-N/`，该目录已被 `.gitignore` 忽略。
-2. 完整读取 goals.md「所有 goal 的共同约束」、根 [AGENTS.md](../../../AGENTS.md)、[编码规范](../../../docs/coding-standards.md)、执行顺序，以及 goal 语句「依据」列出的规格小节。实现时按 [开发技能](../alonabot-develop/SKILL.md)、[测试技能](../alonabot-test/SKILL.md) 和 [注释技能](../alonabot-code-commenting/SKILL.md) 执行。
+2. 完整读取 docs/goals/README.md「所有 goal 的共同约束」、根 [AGENTS.md](../../../AGENTS.md)、[编码规范](../../../docs/coding-standards.md)、执行顺序，以及 goal 语句「依据」列出的规格小节。实现时按 [开发技能](../alonabot-develop/SKILL.md)、[测试技能](../alonabot-test/SKILL.md) 和 [注释技能](../alonabot-code-commenting/SKILL.md) 执行。
 3. goal-mode 第一轮只做初始化：
    - `goal-N/input.md` 原样保存整段 goal 语句。`goal-*/` 已被 git 忽略，切片卡和回写区只留在本地，不要提交。
    - `plan.md` 和 `tasks.md` 按下文「切片卡格式」编写。语句中的每个接口、行为要点和测试都要落到某个 task 上，不增加也不删减范围。
@@ -50,7 +50,7 @@ REVIEW task 要按 goal-mode 的集中检查清单复查前面几个 task，发�
 2. 推送 `goal-N`，按 [PR 模板](../../../.github/PULL_REQUEST_TEMPLATE.md) 开 PR 到 `main`。标题写成「切片 ID + 中文标题」，正文列出每个 task 的结果、验证证据、未运行的项和阻塞项，并加一节「文档同步」，写明需要审查者同步到 ARCHITECTURE、README 或 spec 的内容。有阻塞时开草稿 PR。无法创建 PR 时，只推送分支，并在 PR 描述里说明原因；`goal-N/` 的切片卡不进仓库，PR 正文就是唯一的执行记录。
 3. 审查者通过 PR review 提出修改要求。每条意见在本地 tasks.md 末尾登记一个 FIX-n，一轮处理一个，之后推送普通 commit，并在 PR 中回复对应的 commit SHA。不同意某条意见时，在 PR 中附上证据回复，留给审查者决定。
 
-维护者把 goals.md 中该 goal 的整段语句原样发给执行者，以此启动切片。
+维护者把 docs/goals/ 中该 goal 的整段语句原样发给执行者，以此启动切片。
 
 ## 切片卡格式
 
