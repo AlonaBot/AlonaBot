@@ -6,7 +6,6 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
-	"google.golang.org/protobuf/proto"
 )
 
 // mediaLease 在 Store.mu 下管理只读令牌、文件所有权和结束回调。
@@ -52,13 +51,7 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 			s.mu.Unlock()
 			return "", nil, err
 		}
-		allowed := false
-		for _, scoped := range access.targets {
-			if proto.Equal(scoped, target) {
-				allowed = true
-				break
-			}
-		}
+		allowed := allowsTarget(access.targets, target)
 		s.mu.Unlock()
 		if !allowed {
 			return "", nil, mediaCallError(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "media token does not allow target")
@@ -98,6 +91,12 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 		if upload.lease != nil {
 			return "", nil, mediaCallError(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "read-only media token cannot be delegated")
 		}
+		if upload.grant != nil {
+			if !allowsTarget(upload.targets, target) {
+				return "", nil, mediaCallError(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "media token does not allow target")
+			}
+			upload = upload.grant
+		}
 		lease.upload = upload
 		upload.leases++
 		file = upload.file
@@ -122,7 +121,7 @@ func (s *Store) releaseLease(lease *mediaLease) {
 	lease.stopContext()
 	if lease.upload != nil {
 		lease.upload.leases--
-		if lease.upload.retired && lease.upload.leases == 0 {
+		if lease.upload.retired && lease.upload.leases == 0 && lease.upload.grants == 0 {
 			s.release(nil, "", lease.upload)
 		}
 	} else {

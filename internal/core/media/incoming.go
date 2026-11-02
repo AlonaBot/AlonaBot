@@ -37,10 +37,12 @@ type incomingFetch struct {
 }
 
 type incomingAccess struct {
-	object     *incomingObject
-	sessionKey string
-	expires    time.Time
-	targets    []*pb.Target
+	object      *incomingObject
+	sessionKey  string
+	expires     time.Time
+	targets     []*pb.Target
+	event       *pb.Event // 原事件的 event_id 快照；直接 IssueIncoming 时为 nil
+	unsupported bool      // 保留签发时的来源可读性，Grant 继承该限制
 }
 
 // RegisterIncoming 为可信实例的平台文件登记对象，同一实例与 fileID 复用对象。
@@ -101,7 +103,84 @@ func (s *Store) IssueIncoming(objectID string, c router.Caller, targets []*pb.Ta
 			result.Readability = pb.MediaReadability_MEDIA_READABILITY_READABLE
 		}
 	}
+	access.unsupported = result.Readability == pb.MediaReadability_MEDIA_READABILITY_UNSUPPORTED
 	return result
+}
+
+// PrepareIncoming 克隆事件，为接收 Session 改写所有入站来源，并记录原事件关联。
+// Adapter 显式标记的 UNSUPPORTED 与每个来源的可选元数据保持原样。
+func (s *Store) PrepareIncoming(ev *pb.Event, c router.Caller) (prepared *pb.Event, err error) {
+	// 1. 保存独立事件与原事件标识，失败时撤销本次未派发的令牌。
+	prepared = proto.CloneOf(ev)
+	event := &pb.Event{EventId: ev.GetEventId()}
+	var targets []*pb.Target
+	if ev.Target != nil {
+		targets = []*pb.Target{ev.Target}
+	}
+	var issued []string
+	defer func() {
+		if err != nil {
+			// 某个来源过期或 Session 被撤销时，本次未派发的令牌一并回收。
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			for _, id := range issued {
+				delete(s.incomingTokens, id)
+			}
+			s.sweepIncoming()
+		}
+	}()
+	// 2. 递归改写消息链中的来源，保留可选元数据与来源的不可读限制。
+	seen := make(map[*pb.IncomingMedia]bool)
+	var rewrite func(*pb.MessageChain) error
+	rewrite = func(chain *pb.MessageChain) error {
+		for _, segment := range chain.GetSegments() {
+			var source *pb.MediaSource
+			switch value := segment.GetData().(type) {
+			case *pb.Segment_Image:
+				source = value.Image.GetSource()
+			case *pb.Segment_Video:
+				source = value.Video.GetSource()
+			case *pb.Segment_File:
+				source = value.File.GetSource()
+			}
+			if incoming := source.GetIncomingRef(); incoming != nil && !seen[incoming] {
+				seen[incoming] = true
+				access := s.IssueIncoming(incoming.Token, c, targets)
+				if access == nil {
+					return mediaCallError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "incoming media object not found")
+				}
+				issued = append(issued, access.Token)
+				s.mu.Lock()
+				bound, err := s.incomingAccess(access.Token, c.SessionKey)
+				if err == nil {
+					bound.event = event
+					bound.unsupported = bound.unsupported || incoming.Readability == pb.MediaReadability_MEDIA_READABILITY_UNSUPPORTED
+				}
+				s.mu.Unlock()
+				if err != nil {
+					return err
+				}
+				incoming.Token = access.Token
+				incoming.ExpiresAtUnixMs = access.ExpiresAtUnixMs
+				if incoming.Readability != pb.MediaReadability_MEDIA_READABILITY_UNSUPPORTED {
+					incoming.Readability = access.Readability
+				}
+			}
+			for _, item := range segment.GetForward().GetItems() {
+				if err := rewrite(item.GetChain()); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	payload := prepared.GetEventPayload()
+	for _, chain := range []*pb.MessageChain{prepared.GetMessage().GetChain(), payload.GetMessageCreated().GetChain(), payload.GetMessageEdited().GetChain(), payload.GetMessageEdited().GetOldChain()} {
+		if err := rewrite(chain); err != nil {
+			return nil, err
+		}
+	}
+	return prepared, nil
 }
 
 func mediaCallError(code pb.ErrorCode, message string) error {
@@ -196,6 +275,10 @@ func (s *Store) loadIncoming(ctx context.Context, c router.Caller, id string) er
 			return err
 		}
 		object := access.object
+		if access.unsupported {
+			s.mu.Unlock()
+			return mediaCallError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "media source does not support reads")
+		}
 		if object.fetching != nil {
 			fetch := object.fetching
 			s.mu.Unlock()

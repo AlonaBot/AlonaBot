@@ -58,11 +58,14 @@ type File struct {
 
 type entry struct {
 	file    File
-	owner   string      // owner Session 的 SessionKey
-	offset  uint64      // 已确认写入的长度，单位为字节
-	leases  int         // 此上传对象的在途发送租约数，由 Store.mu 保护
-	retired bool        // 原引用已撤销或到期，最后一个租约负责回收文件
-	lease   *mediaLease // 非 nil 表示绑定 Adapter Session 的只读消费令牌
+	owner   string       // owner Session 的 SessionKey
+	offset  uint64       // 已确认写入的长度，单位为字节
+	leases  int          // 此上传对象的在途发送租约数，由 Store.mu 保护
+	grants  int          // 此上传对象尚存的委托令牌数，由 Store.mu 保护
+	retired bool         // 原引用已撤销或到期，最后一个消费者负责回收文件
+	lease   *mediaLease  // 非 nil 表示绑定 Adapter Session 的只读消费令牌
+	grant   *entry       // 非 nil 表示委托令牌，指向原上传对象
+	targets []*pb.Target // 委托令牌的发送范围；原上传引用沿用 owner 权利
 }
 
 // Store 串行管理文件变更与配额；上传提交后只转移索引，保留原有占用。
@@ -295,7 +298,14 @@ func (s *Store) release(entries map[string]*entry, id string, e *entry) {
 		s.releaseLease(e.lease)
 		return
 	}
-	if e.leases > 0 {
+	if e.grant != nil {
+		e.grant.grants--
+		if e.grant.retired && e.grant.grants == 0 && e.grant.leases == 0 {
+			s.release(nil, "", e.grant)
+		}
+		return
+	}
+	if e.leases > 0 || e.grants > 0 {
 		e.retired = true
 		return
 	}
