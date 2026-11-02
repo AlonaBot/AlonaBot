@@ -7,6 +7,7 @@
 package supervisor
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -22,8 +23,10 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/process"
+	"github.com/AlonaBot/AlonaBot/internal/core/secret"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"google.golang.org/protobuf/proto"
 )
 
 // memoryLimitEnv 指定 Go 运行时读取插件内存软上限的环境变量。
@@ -40,7 +43,10 @@ type Spec struct {
 	BuildDigest  []byte // 安装时已验证的归档摘要
 	GenerationID string // 要激活的代次
 	// Bootstrap 携带 generation_id 与候选配置等；阶段预算由 host 填写。
-	Bootstrap *pb.Bootstrap
+	Bootstrap       *pb.Bootstrap
+	ConfigSchema    []byte        // 当前安装包生成的配置 Schema
+	Secrets         *secret.Store // nil 时绑定本次 Launch 使用的状态库
+	KeptSecretPaths []string      // 调用方额外提供的旧 secret 路径模式
 	// NewCandidate 为 true 时在 ACTIVATE 前提交 ActiveGeneration（期望旧值 ExpectedOld）；
 	// false 表示普通 restart，复用已提交的代次。
 	NewCandidate bool
@@ -91,17 +97,51 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	unlock := store.LockPlugin(spec.PluginID)
 	defer unlock()
 
-	// 1. 准备启动参数：工作目录与 runtime.lock 路径用同一个绝对路径：SDK 只接受绝对锁路径，相对路径也会随子进程 cwd 改变含义。
+	// 1. 读取上一快照和路径；restart 的配置以已提交代次为准，新候选使用调用方提供的 Pending 快照。
+	secrets := spec.Secrets
+	if secrets == nil {
+		secrets = secret.New(store)
+	}
+	previousID := spec.ExpectedOld
+	if !spec.NewCandidate {
+		previousID = spec.GenerationID
+	}
+	var previous []byte
+	keptPaths := append([]string(nil), spec.KeptSecretPaths...)
+	if previousID != "" {
+		snapshot, err := store.GenerationConfig(ctx, previousID)
+		if err != nil {
+			return nil, err
+		}
+		previous = []byte(snapshot)
+		paths, err := store.GenerationSecretPaths(ctx, previousID)
+		if err != nil {
+			return nil, err
+		}
+		keptPaths = append(keptPaths, paths...)
+	}
+	boot := proto.Clone(spec.Bootstrap).(*pb.Bootstrap)
+	input := []byte(boot.GetCandidateConfigJson())
+	if !spec.NewCandidate {
+		input = previous
+	}
+	plaintext, err := secrets.Resolve(ctx, spec.PluginID, input)
+	if err != nil {
+		return nil, err
+	}
+	boot.CandidateConfigJson = string(plaintext)
+
+	// 2. 准备启动参数：工作目录与 runtime.lock 路径用同一个绝对路径：SDK 只接受绝对锁路径，相对路径也会随子进程 cwd 改变含义。
 	pluginDir, err := filepath.Abs(spec.PluginDir)
 	if err != nil {
 		return nil, err
 	}
-	secret, err := process.NewSecret()
+	sessionSecret, err := process.NewSecret()
 	if err != nil {
 		return nil, err
 	}
 	env := map[string]string{
-		wire.EnvPluginID: spec.PluginID, wire.EnvSecret: secret,
+		wire.EnvPluginID: spec.PluginID, wire.EnvSecret: sessionSecret,
 		wire.EnvBuildDigest: hex.EncodeToString(spec.BuildDigest),
 		wire.EnvRuntimeLock: filepath.Join(pluginDir, wire.RuntimeLockFile),
 		wire.EnvTransport:   wire.TransportTCP,
@@ -112,7 +152,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	if spec.MemorySoftLimit > 0 {
 		env[memoryLimitEnv] = strconv.FormatInt(spec.MemorySoftLimit, 10)
 	}
-	// 2. TCP 传输先持有 loopback Listener，再把地址交给插件。
+	// 3. TCP 传输先持有 loopback Listener，再把地址交给插件。
 	var ln net.Listener
 	if spec.Stdio {
 		env[wire.EnvTransport] = wire.TransportStdio
@@ -123,7 +163,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		env[wire.EnvCoreAddr] = ln.Addr().String()
 	}
 
-	// 3. 启动进程；之后任何失败都由 fail 终止并确认进程树清空再返回，无法确认时错误中带上原因。
+	// 4. 启动进程；之后任何失败都由 fail 终止并确认进程树清空再返回，无法确认时错误中带上原因。
 	proc, err := process.Start(process.Spec{PluginID: spec.PluginID, Path: spec.Executable, Dir: pluginDir,
 		Args: spec.Args, Env: env, Stdio: spec.Stdio}, spec.Log.Line)
 	if err != nil {
@@ -144,15 +184,29 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		return nil, err
 	}
 
-	// 4. 建立连接，完成握手与准备，再提交（新候选）并激活。
+	// 5. 建立连接，注册后抽取快照；新候选先持久化，restart 只核对且保持原代次不变。
 	conn, err := connect(ln, proc, spec)
 	if err != nil {
 		return fail(err)
 	}
-	secretBytes, _ := hex.DecodeString(secret)
+	secretBytes, _ := hex.DecodeString(sessionSecret)
 	exp := host.Expect{Role: spec.Role, AdapterID: spec.AdapterID, PluginID: spec.PluginID, Secret: secretBytes, BuildDigest: spec.BuildDigest,
 		Offer: validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}}
-	prep, err := host.Prepare(ctx, conn, exp, spec.Bootstrap, spec.Limits)
+	exp.Snapshot = func(candidate []byte) ([]byte, error) {
+		snapshot, paths, err := secrets.Extract(ctx, spec.PluginID, spec.ConfigSchema, candidate, previous, keptPaths)
+		if err != nil {
+			return nil, err
+		}
+		if spec.NewCandidate {
+			if err := store.SetGenerationConfig(ctx, spec.GenerationID, string(snapshot), paths); err != nil {
+				return nil, err
+			}
+		} else if !bytes.Equal(snapshot, previous) {
+			return nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "config snapshot changed during restart"}
+		}
+		return snapshot, nil
+	}
+	prep, err := host.Prepare(ctx, conn, exp, boot, spec.Limits)
 	if err != nil {
 		return fail(err)
 	}
