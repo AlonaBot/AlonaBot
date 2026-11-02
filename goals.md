@@ -4,19 +4,18 @@
 
 ## 用法
 
-1. 在「总览」中找到状态为**可派发**的 goal。
+1. 在「总览」中找到状态为**待派发**的 goal。
 2. 把该 goal 的整段语句（代码块内的全部文字）原样发给一个执行者。一个 goal 同时只交给一个执行者。
 3. 执行者开出 PR 后，把 PR 链接交给审查者审查。
 4. 审查者合并后，会更新依赖它的 goal 的状态和接口段。
 
 「总览」和各条目按 [执行顺序 §2](docs/execution-order.md#2-波次参考) 的波次排列，同一波次内按切片号排列，因此每个 goal 的前置都排在它前面。波次以执行顺序为准；新增切片或前置变化时先改那张表，再调整本文件的位置。状态只写在总览和条目的状态行，状态变化时条目不移动。
 
-状态的含义：
+状态只有以下三种：
 
-- **可派发**：前置都已合并，语句已写到接口签名，可以直接派发。
-- **等待前置**：语句已写完整，等前置合并、审查者核对接口后转为可派发。
+- **待派发**：PLAN §3.1 中的前置都已完成，语句已按合并后的代码写到接口签名，可以直接派发。已派发、PR 尚未合并的 goal 保持此状态，直到合并。
+- **等待前置**：前置尚未全部合并。语句可能已经写完整，也可能只写了目标、依据和要点（范围与要点已由 PLAN 确定，没有待决的设计问题）；前置合并后，审查者按实际代码核对或写出接口、行为和测试段，再改为待派发。每条的完整语义以 PLAN §4 对应步骤及其失败停止条件为准，不另作设计。
 - **已完成**：切片 PR 已由审查者合并，验证证据见 TEST-MATRIX §3.2。条目保留供后继切片查阅接口。
-- **待编写**：范围与要点已由 PLAN 确定，没有待决的设计问题；条目只写了目标、依据和要点，还不是可派发的语句。前置合并后，审查者按实际代码写出接口、行为和测试段并写成可复制的语句块，然后才能派发。每条的完整语义以 PLAN §4 对应步骤及其失败停止条件为准，不另作设计。
 
 ## 所有 goal 的共同约束
 
@@ -42,6 +41,7 @@
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
 | goal-65 | T-02.1 | 日志基线与日志文件 | — | 已完成 |
+| goal-86 | T-02.3 | 状态库改用 GORM | — | 待派发 |
 | goal-23 | T-07.1 | 调度触发计算 | — | 已完成 |
 | goal-29 | T-08.2 | 配置 JSON 语义与 Pending | — | 已完成 |
 | goal-37 | T-09.2 | 安装包预检与安全解压 | — | 已完成 |
@@ -56,57 +56,60 @@
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 已完成（PR #39） |
 | goal-11 | T-04.2 | 构建期生成器 | T-04.1 | 已完成（PR #42） |
 | goal-12 | T-04.3 | 命令选择、文本匹配与参数绑定 | T-04.1 | 已完成（PR #47） |
-| goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1 | 可派发 |
 | goal-19 | T-06.1 | Service/Bus 描述与 Broker 准入 | T-04.1 | 已完成（PR #45） |
 | goal-25 | T-07.3 | SDK HTTP Listener 与 Core 代理 | T-04.1 | 已完成（PR #46） |
-| goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 可派发 |
+| goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 待派发 |
 | goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 等待前置 |
-| goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 等待前置 |
-| goal-21 | T-06.3 | 非持久 Event Bus | T-06.1 | 可派发 |
-| goal-26 | T-07.4 | 两个 Host 与插件票据 | T-07.3 | 可派发 |
-| goal-28 | T-08.1 | 配置字段描述与构建检查 | T-04.2 | 可派发 |
-| goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-06.1 | 等待前置 |
+| goal-21 | T-06.3 | 非持久 Event Bus | T-06.1 | 待派发 |
+| goal-26 | T-07.4 | 两个 Host 与插件票据 | T-07.3 | 待派发 |
+| goal-28 | T-08.1 | 配置字段描述与构建检查 | T-04.2 | 待派发 |
 | goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2 | 等待前置 |
-| goal-78 | T-15.1 | 官方 OneBot 11 Adapter 的连接与接收 | T-03.3、T-03.4 | 可派发 |
 | goal-8 | T-03.8 | 按钮、extension 片段与依赖解析 | T-03.2、T-03.7 | 等待前置 |
 | goal-51 | T-03.9 | 消息编辑 | T-03.7 | 等待前置 |
-| goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1 | 等待前置 |
-| goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 等待前置 |
+| goal-87 | T-04.6 | 权限、扩展事件与命令解析的协议和 Core 侧 | T-03.3、T-03.6、T-04.3 | 等待前置 |
 | goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 等待前置 |
 | goal-31 | T-08.4 | 不可变 Secret Store | T-08.1、T-08.2 | 等待前置 |
 | goal-34 | T-08.7 | web/admin 骨架、配置表单组件与界面文案 | T-08.1 | 等待前置 |
-| goal-53 | T-08.8 | 用户可见文案目录 | T-04.1、T-04.3、T-08.1 | 等待前置 |
 | goal-36 | T-09.1 | 首次管理认证 | T-07.4 | 等待前置 |
 | goal-69 | T-13.3 | 热部署 | T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9 | 等待前置 |
+| goal-89 | T-03.11 | 官方 Telegram Adapter 的平台权限 | T-04.6 | 等待前置 |
+| goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1、T-04.6 | 等待前置 |
+| goal-88 | T-04.7 | SDK 链式注册与自有类型 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | 等待前置 |
+| goal-32 | T-08.5 | 受管 SQLite 连接与迁移 | T-08.3 | 等待前置 |
+| goal-53 | T-08.8 | 用户可见文案目录 | T-04.1、T-04.3、T-04.6、T-08.1 | 等待前置 |
+| goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-08.4、T-09.1、T-09.2、T-13.1 | 等待前置 |
+| goal-78 | T-15.1 | 官方 OneBot 11 Adapter 的连接与接收 | T-03.3、T-03.4、T-04.6 | 等待前置 |
+| goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7 | 等待前置 |
+| goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 等待前置 |
+| goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 等待前置 |
+| goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.4、T-09.1、T-09.4、T-13.1 | 等待前置 |
+| goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-06.1 | 等待前置 |
+| goal-68 | T-13.2 | 开发组件的配置与数据库 | T-08.3、T-08.5、T-13.1 | 等待前置 |
+| goal-79 | T-15.2 | 官方 OneBot 11 Adapter 的发送、媒体与 extension | T-03.6、T-03.8、T-15.1 | 等待前置 |
+| goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7 | 等待前置 |
+| goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 等待前置 |
+| goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8 | 等待前置 |
+| goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.1、T-08.8、T-09.2、T-13.1 | 等待前置 |
+| goal-70 | T-13.4 | 库模式示例与验收 | T-03.10、T-13.2、T-13.3 | 等待前置 |
+| goal-80 | T-15.3 | 跨 Adapter 一致性验收 | T-03.10、T-15.2 | 等待前置 |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 等待前置 |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 等待前置 |
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 等待前置 |
-| goal-32 | T-08.5 | 受管 SQLite 连接与迁移 | T-08.3 | 等待前置 |
-| goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-08.4、T-09.1、T-09.2、T-13.1 | 等待前置 |
 | goal-71 | T-14.1 | help 插件与命令列表 | T-04.4、T-05.2、T-08.8 | 等待前置 |
-| goal-79 | T-15.2 | 官方 OneBot 11 Adapter 的发送、媒体与 extension | T-03.6、T-03.8、T-15.1 | 等待前置 |
-| goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4 | 等待前置 |
+| goal-72 | T-14.2 | welcome 与 rss 插件 | T-05.2、T-07.2、T-08.3、T-08.5、T-08.8 | 等待前置 |
+| goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 等待前置 |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 等待前置 |
-| goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 等待前置 |
-| goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.4、T-09.1、T-09.4、T-13.1 | 待编写 |
 | goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.3、T-08.4、T-11.3、T-12.1 | 等待前置 |
-| goal-68 | T-13.2 | 开发组件的配置与数据库 | T-08.3、T-08.5、T-13.1 | 等待前置 |
-| goal-72 | T-14.2 | welcome 与 rss 插件 | T-05.2、T-07.2、T-08.3、T-08.5、T-08.8 | 等待前置 |
-| goal-80 | T-15.3 | 跨 Adapter 一致性验收 | T-03.10、T-15.2 | 等待前置 |
+| goal-82 | T-16.2 | 按钮、多轮等待、schedule 与示例测试 | T-03.8、T-05.4、T-07.2、T-16.1 | 等待前置 |
 | goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 等待前置 |
-| goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8 | 等待前置 |
-| goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.1、T-08.8、T-09.2、T-13.1 | 等待前置 |
 | goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 等待前置 |
-| goal-70 | T-13.4 | 库模式示例与验收 | T-03.10、T-13.2、T-13.3 | 等待前置 |
-| goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
 | goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-12.2 | 等待前置 |
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 等待前置 |
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 等待前置 |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 等待前置 |
 | goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 等待前置 |
-| goal-82 | T-16.2 | 按钮、多轮等待、schedule 与示例测试 | T-03.8、T-05.4、T-07.2、T-16.1 | 等待前置 |
 | goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 等待前置 |
 | goal-62 | T-12.5 | 技能 | T-12.3 | 等待前置 |
 | goal-63 | T-12.6 | 定时 Agent 任务 | T-07.2、T-08.5、T-12.3 | 等待前置 |
@@ -119,9 +122,9 @@
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12 | 等待前置 |
 | goal-74 | T-14.4 | 首次运行与预装 | T-09.6、T-14.3 | 等待前置 |
 | goal-77 | T-14.5 | 容器镜像 | T-07.3、T-14.3 | 等待前置 |
-| goal-85 | T-14.7 | install.sh | T-14.3 | 待编写 |
+| goal-85 | T-14.7 | install.sh | T-14.3 | 等待前置 |
 | goal-75 | T-14.6 | 发行包与镜像端到端验收 | T-09.11、T-14.4、T-14.5 | 等待前置 |
-| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-15.3、T-16.2 | 等待前置 |
+| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-15.3、T-16.2 | 等待前置 |
 | goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 等待前置 |
 | goal-48 | T-10.3 | 资源比较报告与常驻内存预算核对 | T-10.1 | 等待前置 |
 | goal-49 | T-10.4 | 发布资产与说明 | T-10.2、T-10.3 | 等待前置 |
@@ -161,6 +164,43 @@ type FileOptions struct { Dir string; MaxSize, MaxTotal int64; MaxAgeDays int } 
 // sdk（未导出）：setLogLevel 按 Bootstrap.log_level 在进程内过滤；logPanic 记带 stack 的 ERROR；
 //   Run 把 slog 默认 Logger 换成写 stderr 的 JSON 行
 // cmd/alonabot run：--log-level、--log-format text|json
+```
+
+### goal-86 · T-02.3 状态库改用 GORM
+
+状态：待派发。前置 T-02 已完成。已核对 `internal/core/state` 的现有实现：`open` 以 `sql.Open("sqlite", path+"?"+pragmas)` 打开单连接，已有文件先经 `preflight` 只读预检，`migrations[0]` 是唯一的初始迁移，`tx` 封装事务；包外只经公开方法访问，没有调用方拿到 `*sql.DB` 或 `*sql.Tx`，只有 `state_test.go` 直接用了 `s.db.Exec`。进行中的 PR #53～#56 与 goal-15 都不修改此包。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-86（切片 T-02.3：状态库改用 GORM）。goal 目录 goal-86，分支 goal-86，worktree .worktrees/goal-86，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：internal/core/state 的读写改用 GORM，不再手写 INSERT/SELECT 与逐列扫描；公开 API、schema 与全部现有行为不变。
+
+依据：PLAN T-02 步骤 11；CONTRACTS §6.1；DECISIONS D-68；TEST-MATRIX V-36、V-75；docs/execution-order.md §3 中 `migrations` 的规则。
+
+范围（只新增或修改这些）：
+- internal/core/state/：state.go、adapter.go、conversation.go、pending.go、permissions.go；可新增 models.go 放 GORM 模型
+- internal/core/state/state_test.go：只把直接使用 `s.db` 的地方改为 GORM 写法，断言不变
+允许的新跨模块边：无。go.mod 已直接依赖 gorm.io/gorm 与 github.com/libtnb/sqlite，不加新依赖。
+
+接口：
+- 公开符号与签名全部不变（Open、Close、ReadPragmas、LockPlugin，Install、Role、Pragmas、PendingConfig、ConversationEntry、ConversationSummary 等类型，以及各读写方法），不新增公开符号。调用方（cmd/alonabot、internal/core/adapter/remote、config、conversation、policy、supervisor 与它们的测试）不改。
+- Store 的连接字段改为 *gorm.DB。
+
+行为：
+- 打开：已有文件仍先经 preflight 只读预检（可以继续用 database/sql 的只读连接），通过后以 gorm.Open(sqlite.Open(path+"?"+pragmas)) 打开；DSN 与 PRAGMA 不变，SetMaxOpenConns(1)、SetMaxIdleConns(1)。ReadPragmas 的回读与核对、「损坏不重建」、先取 core.lock 再打开状态库的顺序都不变。
+- GORM 的 logger 设为 Silent：错误照常返回给调用方，由调用方用注入的 Logger 记录；不向 stdout/stderr 直接输出。
+- Schema：migrations[0] 的 SQL 原样保留，迁移照旧用一次 Exec 执行并更新 schema_version；不使用 AutoMigrate，不让 GORM 推断或修改表结构。每张表有对应的模型类型，用 TableName 与 column 标签对齐现有的表名与列名；可空列用指针或 sql.Null* 表示，保持现有的 NULL 语义。
+- 读写：查询、插入、更新、删除改用 GORM 的链式 API；现有 SQL 中的 ON CONFLICT 用 clause.OnConflict 表达，语义一致（adapter_cursors 与 pending_configs 冲突时更新，plugin_adapter_permissions 冲突时不做事）。gorm.ErrRecordNotFound 映射为现有的 ErrNotFound；SetEnabled 等按受影响行数判断不存在的地方用 RowsAffected。
+- 事务：tx 改为基于 db.Transaction，事务内只使用传入的 *gorm.DB；CommitActive 仍在同一事务内核对预期旧值并返回 ErrStaleGeneration；AppendConversation 仍在一个事务内读末尾序号再追加；事务内不等待插件 RPC。
+- 排序、上限与返回顺序与现有实现一致（例如 ListConversation 按 seq 升序且至多 limit 条，Conversations 按会话键字典序，AllowedAdapterInstances 的顺序不变）。
+
+测试（按编码规范「测试提交规则」）：
+- 不新增提交的测试。现有提交的集成测试全部原样通过：internal/core/state/state_test.go，以及使用状态库的 internal/core/config、internal/core/message、internal/core/adapter/remote、internal/core/supervisor 与 cmd/alonabot 的测试。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：同一组操作分别经改写前的实现（从 main 复制到本地测试中）与新实现执行，比较各表内容一致；由旧实现创建的状态库能被新实现打开并读写；Silent logger 下错误仍完整返回。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./cmd/...；go build ./...；`go list -deps` 列出的 Core 可执行文件与 SDK 根包模块都在 docs/development.md 的允许清单中。
+
+不做：新增表或列；AutoMigrate；Backup API（仍直接用 modernc）；修改公开 API；其他包的重构。
 ```
 
 ### goal-23 · T-07.1 调度触发计算
@@ -1329,85 +1369,6 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 不做：命令策略、权限与禁用（T-04.4）；Rule 与 ToMe（T-05.2）；Hook（T-05.3）；延续调用（T-05.4）；usage 的多语言文案（T-08.8）；生成器对新选项的标记语法（T-04.2 之后按需追加）。
 ```
 
-### goal-13 · T-04.4 持久化命令策略
-
-状态：可派发。T-03.2、T-04.1 及命令派发 T-04.3 已由 PR #31、#34、#47 合并。已核对 `Router.Commands().Shadows()`、`router.New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send router.ServiceFunc) *router.Router`、`dispatchCommands` 与 `invokeCommand`。策略依赖通过下方 CommandPolicy 注入，避免 router 与 policy 的循环 import。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-13（切片 T-04.4：持久化命令策略）。goal 目录 goal-13，分支 goal-13，worktree .worktrees/goal-13，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：以 plugin_id 加作用域（插件、命令组、路由）持久化权限与启用覆盖；派发命令前按「最近显式权限、任一层禁用即拒绝、再与 Core 全局禁止合并」判定；Core 依据 Core Admin 列表给 Actor 赋予 USER/ADMIN 角色；提供管理服务层的查询与修改方法，持久化成功后才返回成功，运行时修改在下一次派发时生效。
-
-依据：PLAN T-04 步骤 5；CONTRACTS §2.2 第 2、3、8 条、§2.3 第 1、2 条、§7（Core Admin 列表）；MESSAGE-MODEL §1；DECISIONS D-45；TEST-MATRIX V-12、V-43 的服务层分项。
-
-范围（只新增或修改这些）：
-- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/policy.go
-- internal/core/policy/：新增 command.go、admins.go、denies.go；policy.go 的 CheckSend 增加全局禁止检查
-- internal/core/router/：命令派发在调用插件前检查策略；事件进入派发前由策略补全 Actor 的 trusted_roles（只加调用点）
-- 更新 router.New 的全部调用者（含 supervisor 测试与其他已存在的装配代码），注入同一份 policy.Policy
-- 上述包的测试文件
-允许的新跨模块边：无。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. internal/core/state
-   迁移：
-   CREATE TABLE command_policies (plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), scope TEXT NOT NULL, permission INTEGER NOT NULL DEFAULT 0, enabled INTEGER, PRIMARY KEY (plugin_id, scope)); -- permission 0 表示不覆盖；enabled 为 NULL 表示不覆盖
-   CREATE TABLE core_admins (adapter_instance_id TEXT NOT NULL, external_user_id TEXT NOT NULL, PRIMARY KEY (adapter_instance_id, external_user_id));
-   CREATE TABLE global_denies (kind TEXT NOT NULL, adapter_instance_id TEXT NOT NULL, subject_id TEXT NOT NULL, PRIMARY KEY (kind, adapter_instance_id, subject_id)); -- kind 为 user 或 chat
-   读写方法自定（放在 policy.go），全部按主键幂等。
-2. internal/core/policy
-   type ScopeKind int // ScopePlugin、ScopeGroup、ScopeRoute
-   type Scope struct { Kind ScopeKind; Group []string; RouteID string } // Group 用于 ScopeGroup（命令路径前缀 token）；RouteID 用于 ScopeRoute
-   type Override struct { Permission pb.Permission; Enabled *bool } // Permission 为 UNSPECIFIED、Enabled 为 nil 表示该项不覆盖
-   type ScopedOverride struct { Scope Scope; Override Override }
-   func (p *Policy) SetOverride(ctx context.Context, pluginID string, s Scope, o Override) error // 两项都不覆盖时等同删除
-   func (p *Policy) Overrides(ctx context.Context, pluginID string) ([]ScopedOverride, error) // 按插件、组（路径字典序）、路由排序
-   func (p *Policy) CheckCommand(ctx context.Context, pluginID string, route *pb.RouteDescriptor, actor *pb.Actor, target *pb.Target) *pb.ErrorInfo // nil 表示放行
-   func (p *Policy) TrustedRoles(ctx context.Context, actor *pb.Actor) []pb.TrustedRole
-   func (p *Policy) AddAdmin(ctx context.Context, instanceID, userID string) error
-   func (p *Policy) RemoveAdmin(ctx context.Context, instanceID, userID string) error
-   func (p *Policy) Admins(ctx context.Context) ([]Admin, error) // type Admin struct { InstanceID, UserID string }
-   type DenyKind string // DenyUser = "user"、DenyChat = "chat"
-   func (p *Policy) Deny(ctx context.Context, kind DenyKind, instanceID, subjectID string) error
-   func (p *Policy) Undeny(ctx context.Context, kind DenyKind, instanceID, subjectID string) error
-   func (p *Policy) Denies(ctx context.Context) ([]Deny, error) // type Deny struct { Kind DenyKind; InstanceID, SubjectID string }
-
-3. internal/core/router
-   type CommandPolicy interface {
-       CheckCommand(ctx context.Context, pluginID string, route *pb.RouteDescriptor, actor *pb.Actor, target *pb.Target) *pb.ErrorInfo
-       TrustedRoles(ctx context.Context, actor *pb.Actor) []pb.TrustedRole
-   }
-   func New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send ServiceFunc, p CommandPolicy) *Router
-   // 保留已合入的 Adapter Registry 与发送回调；p 由装配处传入同一份 *policy.Policy，router 不 import policy。
-
-行为：
-- TrustedRoles：actor 为 nil 返回空。否则含 USER；(actor.adapter_instance_id, external_user_id) 在 Core Admin 列表中时再含 ADMIN；Adapter 给出的 CHAT_ADMIN 原样保留。Router 在每个事件进入派发前调用它重写 actor.trusted_roles，插件与 Adapter 自报的 USER/ADMIN 一律不采信。
-- CheckCommand 的顺序（任一步拒绝即返回）：
-  1) 全局禁止：actor 存在且 (实例, external_user_id) 在 user 禁止表中，或 target 存在且 (实例, chat_id) 在 chat 禁止表中 → PERMISSION_DENIED。
-  2) 启用：插件作用域、该路由命令路径的每一层祖先组、路由自身中，任一层显式 Enabled=false → 拒绝（FAILED_PRECONDITION，safe_message "command is disabled"）。路由自身没有显式 Enabled 时取 route.default_enabled。子项的 Enabled=true 不能抵消祖先的 false。
-  3) 权限：取最近的显式 Permission（路由 → 最长的祖先组 → 插件），都没有时取 route.required_permission。ANY 放行；USER 需要 TrustedRoles 含 USER；ADMIN 需要含 ADMIN；否则 PERMISSION_DENIED。没有 Actor 的调用不满足 USER 与 ADMIN。
-  文本匹配与 Raw 路由的祖先组为空，只看插件与路由自身。
-- 每次 CheckCommand 都从状态库读取当前策略，不缓存；同一次检查内的多次读取在一个只读事务中完成，保证看到一致的快照。修改在下一次派发时生效，已开始的调用不受影响。
-- Router（goal-12 的命令层）：普通命令选出胜出路由后，在参数解析和 usage 发送之前执行 CheckCommand；拒绝时消费该命令（不进入文本匹配与 Raw），不向会话回复，以 INFO 记录（plugin_id、route_id、错误码，不含消息内容）。文本匹配与 Raw 路由被拒时跳过该候选，继续后面的候选。
-- CheckSend（goal-3）在许可检查之前先检查 chat 禁止：目标 (实例, chat_id) 被禁止 → PERMISSION_DENIED。
-- 管理服务层：SetOverride、AddAdmin、Deny 等写操作在事务提交成功后才返回 nil；参数非法（未知 ScopeKind、ScopeGroup 的 Group 为空、ScopeRoute 的 RouteID 为空、Permission 不是已知枚举值、kind 未知）返回 INVALID_ARGUMENT。遮蔽诊断直接使用 goal-10 的 Router.Commands().Shadows()，本切片不重复实现。
-- 卸载插件时策略行的清理由 T-09.4 负责（command_policies 外键引用 installs）。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/supervisor/policy_test.go（//go:build unix）。沿用 goal-12 的命令测试装配与测试插件，接入真实状态库上的 policy.Policy：
-  - /rss list 的 required_permission 为 ANY 时任何人可用；对插件作用域设 ADMIN 后普通用户被拒（不回复、插件未被调用、文本匹配也未被调用），加入 Core Admin 后放行。
-  - 组 rss 设 ADMIN、路由 rss list 设 ANY：list 对普通用户放行（最近显式覆盖），rss add 仍要求 ADMIN。
-  - 组 rss 禁用、路由 rss list 显式启用：list 仍被拒（父禁用优先）；取消组禁用后放行，不重启插件。
-  - 把用户加入 user 禁止表：即使是 Core Admin 也被拒；把会话加入 chat 禁止表：sdk.Send 发往该会话返回 PERMISSION_DENIED。
-  - Adapter 自报的 ADMIN 角色被丢弃，插件收到的 Actor 只有 Core 判定的角色。
-  - 关闭并重新打开状态库后策略仍在。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：CheckCommand 的完整判定表（含 default_enabled=false、无 Actor、多层组）；SetOverride 两项都不覆盖时删除行；非法参数；并发修改与检查在 -race 下无数据竞争。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./sdk/...；go build ./...。
-
-不做：管理 API、CLI 与 WebUI（T-09.4、T-09.9）；/whoami（T-14）；Rule 与 chat_admin Rule（T-05.2）；Hook（T-05.3）。
-```
-
 ### goal-19 · T-06.1 Service/Bus 描述与 Broker 准入
 
 状态：已完成（PR #45，squash commit `dcb4ec2`）。已合入：`internal/core/broker`（New、Call）、`(*router.Mux).Forward`、`(*router.Router).Plugin`，以及 SDK 的 Services Hook、ServiceRegistry、Access 常量、WithAccess、JSONService、ProtoService、CallJSON、CallProto、Context.Caller。审查中经维护者授权，插件 ID 规则从 `manifest.ValidateID` 移到 `validate.PluginID`，同时移走的还有 `validate.MaxPluginIDLen` 与 `validate.MarketPrefix`；manifest 不保留旧入口，语句中的 manifest.ValidateID 以此为准。验证证据见 TEST-MATRIX §3.2。
@@ -1572,10 +1533,18 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-7 · T-03.6 入站媒体与 Grant
 
-状态：可派发。T-03.2、T-03.4、T-03.5 已合并（PR #31、#39、#38）。已核对媒体存储入口 `media.Open(log *slog.Logger, dir string, lim Limits, now func() time.Time) (*Store, error)`、`AddServices`、`ReleaseSession`、`Sweep`、`Lookup(token string, c router.Caller) (File, error)`、`media.File{Path, Size, MIME, SHA256, ExpiresAt}` 与 `wire.MaxMediaChunk`；回收删除失败记 WARN，safe_message 为 `media storage failed`。Telegram 可复用 `New() adapter.Adapter`、私有 `instance`、`telegramMessage`、`messageEvent`、`botClient.call(ctx context.Context, method string, request any, result any) error`；`telegramtest.NewServer(t testing.TB, token string) *Server` 与接收模拟入口已合入。`sdk/adapter.Core` 当前含 Deliver、SaveCursor、ReportFailure，ReadMedia 由本切片按下文接口追加。
+状态：待派发。T-03.2、T-03.4、T-03.5 已合并（PR #31、#39、#38）。已核对媒体存储入口 `media.Open(log *slog.Logger, dir string, lim Limits, now func() time.Time) (*Store, error)`、`AddServices`、`ReleaseSession`、`Sweep`、`Lookup(token string, c router.Caller) (File, error)`、`media.File{Path, Size, MIME, SHA256, ExpiresAt}` 与 `wire.MaxMediaChunk`；回收删除失败记 WARN，safe_message 为 `media storage failed`。Telegram 可复用 `New() adapter.Adapter`、私有 `instance`、`telegramMessage`、`messageEvent`、`botClient.call(ctx context.Context, method string, request any, result any) error`；`telegramtest.NewServer(t testing.TB, token string) *Server` 与接收模拟入口已合入。`sdk/adapter.Core` 当前含 Deliver、SaveCursor、ReportFailure，ReadMedia 由本切片按下文接口追加。
 
 范围修订（2026-11-01，维护者确认）：执行者在 GN-02 报告的阻塞中，有三项现在补齐，见语句「范围」与「接口」：修改 media/store.go，接入共享对象与租约回收；`LeaseForSend` 增加目标 Adapter Session 的 SessionKey 输入；Adapter 实例提供该 SessionKey，remote 由此改为 Bind 时传入 Caller，入站登记经 Options 注入。仍待补写的是 Router 与 Grant 一侧的装配：Router 为接收 Session 签发 token 的回调注入、grantee 的已激活 Session 查询、同事件在途关联查询、`AddReadServices` 的许可查询参数。这些都落在 internal/core/router；#45（`Router.Plugin`）与 #47（`router.New` 签名）现已合并，已核对 `Router.New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send router.ServiceFunc) *router.Router` 和 `Router.Plugin(pluginID string) (router.Plugin, bool)`。审查者仍需据此补写媒体回调和关联查询的装配签名，依赖这些装配的部分（Router 改写 incoming token、core.media.grant）保持阻塞，其余可以继续执行。
 
+
+范围修订（2026-11-02，维护者按 PR #55 的审查建议确认）：执行者在 PR #55 提出的四个阻塞项按以下方式补齐，见语句「范围」「接口」「行为」与「测试」：
+- GN-03 装配：Router 的 Attach 接收 Caller，新增 `Caller` 与 `HasInFlight`，`New` 增加 prepare 回调；media 新增 `PrepareIncoming`，`AddReadServices` 增加 Router 与实例许可查询；message 的 `New` 增加 lease 回调。依赖方向保持 media→router、message 不 import media。「在途调用关联」定义为 grantee 正在处理同一可信事件的实际调用，调用开始时登记，返回或取消时移除。
+- FIX-3：`LeaseForSend` 增加最终发送的 Target，取件前检查原 token 的 Target 范围。
+- FIX-1：可读性由实例启动响应中的能力 `media.read` v1 决定，SDK 按实例是否实现 MediaSource 生成；不改 proto。
+- FIX-2：不过滤 `platform_payload`。平台文件标识不是插件可用的读取凭证，Core 只认自己签发的 token（CONTRACTS §1.4，D-73）。
+- 审查发现的 P1：取件失败（含首个读取者的 ctx 取消或到期）不缓存为对象状态，下一次 Read 重新取件。
+- `router.New` 与 goal-13 同时改签名，按 docs/execution-order.md §3 处理。
 ```text
 /goal 使用 $alonabot-execute 推进 goal-7（切片 T-03.6：入站媒体与 Grant）。goal 目录 goal-7，分支 goal-7，worktree .worktrees/goal-7，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
@@ -1589,9 +1558,9 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 - internal/wire/services.go：末尾追加 ServiceAdapterMediaRead = "adapter.media.read"、ServiceMediaRead = "core.media.read"、ServiceMediaGrant = "core.media.grant"
 - internal/core/media/：新增 incoming.go、read.go、grant.go、lease.go；store.go 只扩展 entry 与 Store 的字段，以及 ReleaseSession、Sweep、release 的回收条件（接入入站共享对象、按 Session 的 token 与发送租约），上传（begin、write、commit）与 Lookup 对已提交 MediaRef 的现有行为不变
 - internal/core/adapter/：新增 media.go（两个可选接口）；internal/core/adapter/remote 与 internal/core/adapter/memory 实现它们；remote 的 deliver 改写入站媒体来源；remote.go 的 Bind 增加 Caller 参数，Options 增加入站登记回调（同步 remote_test.go 的调用点）
-- internal/core/router/：派发前为每个接收 Session 改写 incoming token（只加调用点）
-- internal/core/message/：发送前解析媒体来源并签发 Adapter 只读 token
-- sdk/：media.go 增加读取与授权函数；sdk/adapter 的 Core 增加 ReadMedia，Instance 可选实现平台文件读取；sdk 的 RunAdapter 处理 adapter.media.read
+- internal/core/router/：Attach 增加 Caller 参数，新增 Caller 与 HasInFlight，New 增加 prepare 回调并在派发前对每个接收 Session 调用；同步 internal/core/supervisor 测试中全部 router.New 与 Attach 的调用点
+- internal/core/message/：New 增加 lease 回调（同步全部调用点）；发送前解析媒体来源并签发 Adapter 只读 token
+- sdk/：media.go 增加读取与授权函数；sdk/adapter 的 Core 增加 ReadMedia，Instance 可选实现平台文件读取；sdk 的 RunAdapter 处理 adapter.media.read，并按实例是否实现 MediaSource 在启动响应的 capabilities 中声明 `media.read` v1
 - adapters/telegram/：新增 media.go（入站媒体片段与 getFile 取件）；adapters/telegram/telegramtest/ 增加 getFile 与文件下载
 - 上述包的测试文件（含扩展 internal/core/adapter/remote/remote_test.go 的回环 Adapter）
 允许的新跨模块边：无。
@@ -1609,8 +1578,16 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 3. internal/core/media（在 goal-6 的 Store 上追加）
    func (s *Store) RegisterIncoming(instanceID, fileID string, size *uint64, mime *string) string // 返回对象 ID；同一实例同一 file_id 复用同一对象
    func (s *Store) IssueIncoming(objectID string, c router.Caller, targets []*pb.Target) *pb.IncomingMedia // 给一个接收 Session 签发 token
-   func (s *Store) AddReadServices(m *router.Mux, readers *adapter.Registry) // 注册 core.media.read 与 core.media.grant
-   func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSessionKey string, source *pb.MediaSource, deadline time.Time) (readToken string, release func(), err error) // 供 message.Service：解析 media_ref 或 incoming_ref，签发只读 token 并绑定到 readerSessionKey（目标实例的 MediaSessionKey）
+   func (s *Store) PrepareIncoming(ev *pb.Event, c router.Caller) (*pb.Event, error) // 交给 router.New 的 prepare：克隆事件，把其中每个入站对象 ID 换成为 c 签发的 token（内部调用 IssueIncoming），token 记录签发它的原事件
+   func (s *Store) AddReadServices(m *router.Mux, readers *adapter.Registry, dispatch *router.Router, allowedInstances func(ctx context.Context, pluginID string) ([]string, error)) // 注册 core.media.read 与 core.media.grant；allowedInstances 由装配处绑定 state.Store.AllowedAdapterInstances
+   func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSessionKey string, target *pb.Target, source *pb.MediaSource, deadline time.Time) (readToken string, release func(), err error) // 供 message.Service：解析 media_ref 或 incoming_ref，签发只读 token 并绑定到 readerSessionKey（目标实例的 MediaSessionKey）
+3a. internal/core/router
+   func New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send ServiceFunc, prepare func(ev *pb.Event, c Caller) (*pb.Event, error)) *Router // prepare 为 nil 时原样派发
+   func (r *Router) Attach(p Plugin, c Caller) // c 与装配处传给 Mux.For 的是同一个 Caller
+   func (r *Router) Caller(pluginID string) (Caller, bool) // 只返回当前已激活实例绑定的 Caller；替换、Detach 与退出后不再返回旧值
+   func (r *Router) HasInFlight(c Caller, ev *pb.Event) bool // c 正在处理 ev（按 event_id）的实际调用
+3b. internal/core/message
+   func New(adapters *adapter.Registry, p *policy.Policy, lease func(ctx context.Context, c router.Caller, readerSessionKey string, target *pb.Target, source *pb.MediaSource, deadline time.Time) (string, func(), error)) *Service // 装配处传入 media.Store.LeaseForSend；message 不 import media
 4. sdk
    func ReadMedia(ctx context.Context, token string, offset uint64, length uint32) (data []byte, next uint64, eof bool, err error)
    func GrantMedia(ctx context.Context, token, granteePluginID string, targets ...*pb.Target) (string, error) // 返回给对方的新 token
@@ -1619,13 +1596,13 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
    type MediaSource interface { ReadPlatformFile(ctx context.Context, fileID string, offset uint64, length uint32) ([]byte, uint64, bool, error) } // Instance 可选实现；未实现时 adapter.media.read 返回 UNSUPPORTED
 
 行为：
-- 入站：Adapter 在 image/video/file 片段的 MediaSource.incoming_ref.token 中放平台文件标识（可带 size、mime）。remote 的 deliver 在接纳前把每个这样的来源登记为对象（RegisterIncoming），token 改为对象 ID；平台文件标识此后只留在 Core。Router 为每个接收 Session 调用 IssueIncoming，把对象 ID 换成该 Session 独立的 token（16 字节随机值的十六进制，自签发起 MEDIA_TTL 有效，readability 为 READABLE；实例不实现 MediaReader 时为 UNSUPPORTED）。插件看不到平台文件标识。
+- 入站：Adapter 在 image/video/file 片段的 MediaSource.incoming_ref.token 中放平台文件标识（可带 size、mime）。remote 的 deliver 在接纳前把每个这样的来源登记为对象（RegisterIncoming），token 改为对象 ID；平台文件标识此后只留在 Core。Router 在每个接收 Session 派发前调用 prepare（装配处传入 PrepareIncoming），由它为该 Session 调用 IssueIncoming，把对象 ID 换成该 Session 独立的 token（16 字节随机值的十六进制，自签发起 MEDIA_TTL 有效，readability 为 READABLE；实例在 adapter.instance.start 的 capabilities 中声明了 `media.read` v1 且 supported 时为 READABLE，否则为 UNSUPPORTED；Adapter 交付时已把某个来源的 readability 标为 UNSUPPORTED 的，Core 保留。remote 只在实例声明了该能力时实现 MediaReader）。平台文件标识不是插件可用的读取凭证：插件只能用 Core 签发的 token 读取或发送；Adapter 的 platform_payload 原样保留，其中出现的平台标识没有授权作用，Core 也不接受它作为媒体来源。
 - core.media.read（插件与 Adapter 都可调用，只认调用者 Session 持有的有效 token）：
   - length 为 0 或超过 1 MiB、offset 超过实际大小 → INVALID_ARGUMENT；offset 等于实际大小 → 空 data、原 offset、eof=true。
   - 已提交的 MediaRef（goal-6）直接按 offset 读取。
-  - 入站对象首次被读取时取件：预留容量（已知 size 用它，未知按 MEDIA_MAX_OBJECT），计入 Core 总预算与读取者 Session 的预算，超限 RESOURCE_EXHAUSTED；按 1 MiB 依次调用 MediaReader 写入暂存区，总长超过预留或与声明的 size 不符时失败并删除；完成后计算 SHA256。取件期限取调用者期限与 MEDIA_TTL 中较早者。并发的首次读取只取件一次，其余等待结果。取件失败返回 UNAVAILABLE（平台错误的 safe_message 原样），不自动重试。
-- core.media.grant：只能授权自己持有的 token；grantee 必须是当前已激活的插件；targets 必须是原 token 范围的子集（原范围为空时 targets 必须为空）。入站对象还要求 grantee 与该事件有在途调用关联（Router 记录的同一事件派发），或 grantee 的 allowed_adapter_instances 含来源实例；插件自己上传的对象由 owner 直接委托。新 token 不延长有效期（取原 token 的到期时间）。不满足时 PERMISSION_DENIED。
-- 出站：message.Service 在调用 Instance.Send 前，对每个 media_ref 或 incoming_ref 来源调用 LeaseForSend：校验调用者对该 token 的权利，入站对象必要时先取件，再签发绑定目标 Adapter Session 的只读 token 并替换片段来源；租约在发送返回或期限到达时释放。租约期间对象不被 Sweep 回收，但仍计入磁盘预算。https_url 来源原样交给 Adapter。取件失败发生在平台发送之前，不调用 Send。目标实例不实现 adapter.MediaSession 而 Chain 含 media_ref 或 incoming_ref 时，在首个副作用前返回 UNSUPPORTED。
+  - 入站对象首次被读取时取件：预留容量（已知 size 用它，未知按 MEDIA_MAX_OBJECT），计入 Core 总预算与读取者 Session 的预算，超限 RESOURCE_EXHAUSTED；按 1 MiB 依次调用 MediaReader 写入暂存区，总长超过预留或与声明的 size 不符时失败并删除；完成后计算 SHA256。取件期限取调用者期限与 MEDIA_TTL 中较早者。并发的首次读取只取件一次，其余等待结果。取件失败返回 UNAVAILABLE（平台错误的 safe_message 原样），同一次调用内不自动重试。失败（包括首个读取者的 ctx 取消或到期）只返回给本轮正在等待的读取者，不记为对象状态：对象恢复为未取件、预留归还，下一次 Read 由新的读取者重新取件。
+- core.media.grant：只能授权自己持有的 token；grantee 必须是当前已激活的插件；targets 必须是原 token 范围的子集（原范围为空时 targets 必须为空）。入站对象还要求 grantee 与该事件有在途调用关联（Router.HasInFlight：grantee 正在处理签发原 token 的那个事件的实际调用，调用开始时登记、返回或取消时移除，候选与排队阶段不算；Grant 派生的 token 继承原事件），或 grantee 的 allowed_adapter_instances 含来源实例；插件自己上传的对象由 owner 直接委托。新 token 不延长有效期（取原 token 的到期时间）。不满足时 PERMISSION_DENIED。
+- 出站：message.Service 在发信准入通过后、调用 Instance.Send 前，对每个 media_ref 或 incoming_ref 来源调用 lease（即 LeaseForSend，传入最终 Target 与目标实例的 MediaSessionKey）：先检查原 token 的 Target 范围，校验调用者对该 token 的权利，入站对象必要时先取件，再签发绑定目标 Adapter Session 的只读 token 并替换片段来源；租约在发送返回或期限到达时释放。租约期间对象不被 Sweep 回收，但仍计入磁盘预算。https_url 来源原样交给 Adapter。取件失败发生在平台发送之前，不调用 Send；任一来源失败时释放本次已取得的全部租约。目标实例不实现 adapter.MediaSession 而 Chain 含 media_ref 或 incoming_ref 时，在首个副作用前返回 UNSUPPORTED。
 - Session 结束（ReleaseSession）只撤销该 Session 的 token；入站对象在所有 token 过期且没有租约时才删除。
 - Adapter 端：RunAdapter 收到 adapter.media.read 时调用实例的 MediaSource；Adapter 用 Core.ReadMedia 读取出站只读 token 的内容。
 - Telegram：photo（取最大尺寸）、video、document、animation、audio、voice 生成对应的 image/video/file 片段，incoming_ref.token 为 file_id，size 取 file_size（有时），mime 取 mime_type（有时），caption 写入片段；实例实现 MediaSource：首次读取时 getFile 得到 file_path，经实例的 http.Client（含代理）下载 /file/bot<token>/<file_path>，按 offset 返回；超过 Bot API 的 20 MiB 下载上限（命名常量）时返回 UNSUPPORTED。下载 URL 同样脱敏。
@@ -1636,7 +1613,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
   - internal/core/adapter/remote/remote_test.go 追加：回环 Adapter 实现 MediaSource；经真实 adapter.media.read 取件并在 Read 中得到相同内容；未实现 MediaSource 的实例使 readability 为 UNSUPPORTED。
   - contracts/wirespec_test.go：新消息的编号检查。
   - adapters/telegram/media_test.go：telegramtest 推入带 photo 与 document 的消息，片段的 incoming_ref.token 为 file_id；MediaSource 经 getFile 与下载返回正确内容，错误中不含 token。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：offset/length 边界；声明 size 与实际不符；未知大小超过上限；并发首次读取只取件一次；token 过期；Grant 扩大范围被拒；租约期间 Sweep 不删除；ReleaseSession 不影响其他 Session 的 token。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：offset/length 边界；声明 size 与实际不符；未知大小超过上限；并发首次读取只取件一次；token 过期；Grant 扩大范围被拒；租约期间 Sweep 不删除；ReleaseSession 不影响其他 Session 的 token；首个读取者取消或到期后，另一 Session 仍能读到完整内容且 MediaReader 被再次调用；未声明 `media.read` 的实例 readability 为 UNSUPPORTED；Router.Caller 在 Detach 后不再返回旧值；LeaseForSend 对超出原 token 范围的 Target 返回 PERMISSION_DENIED。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/... ./adapters/...；go build ./...。
 
@@ -1645,7 +1622,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-50 · T-03.7 官方 Telegram Adapter 的发送计划与回执
 
-状态：等待前置。T-03.4 已由 PR #39 合并，已核对 `telegram.New() adapter.Adapter`、私有 `instance` 与 `botClient.call(ctx context.Context, method string, request any, result any) error`、`telegramtest.NewServer(t testing.TB, token string) *Server`，以及 `Instance.Send(ctx context.Context, target *pb.Target, chain *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo)`。媒体发送依赖本语句中的 `Core.ReadMedia`，该接口由 goal-7 / T-03.6 追加，当前 `sdk/adapter.Core` 尚未提供；待 T-03.6 合并并核对 ReadMedia 后再改为可派发。
+状态：等待前置。T-03.4 已由 PR #39 合并，已核对 `telegram.New() adapter.Adapter`、私有 `instance` 与 `botClient.call(ctx context.Context, method string, request any, result any) error`、`telegramtest.NewServer(t testing.TB, token string) *Server`，以及 `Instance.Send(ctx context.Context, target *pb.Target, chain *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo)`。媒体发送依赖本语句中的 `Core.ReadMedia`，该接口由 goal-7 / T-03.6 追加，当前 `sdk/adapter.Core` 尚未提供；待 T-03.6 合并并核对 ReadMedia 后再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-50（切片 T-03.7：官方 Telegram Adapter 的发送计划与回执）。goal 目录 goal-50，分支 goal-50，worktree .worktrees/goal-50，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1698,63 +1675,15 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 不做：按钮 token 的签发与 callback_query（T-03.8）；extension（T-03.8）；编辑（T-03.9）；入站媒体与 getFile（T-03.6 之后在 T-03.10 补 MediaSource）；BeforeSend/AfterSend Hook（T-05.3）。
 ```
 
-### goal-15 · T-05.1 可信上下文与有界分发
-
-状态：等待前置（T-04.4）。T-03.3、T-04.3 已合并；当前 Router.New 的四参数为 log、queueEvents、adapters、send，已核对 Router.Plugin、dispatchCommands 与 commandUsage。goal-13 将注入 CommandPolicy；其合并后再核对策略接口并转为可派发。下方 Options 保留现有账号名、发送与策略能力。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-15（切片 T-05.1：可信上下文与有界分发）。goal 目录 goal-15，分支 goal-15，worktree .worktrees/goal-15，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：Router 把 Adapter 输入转为 Core 保留的可信信息（Actor、Target、来源消息 ID、路由绑定）与可修改的业务 payload 两部分，插件看到的 Event 由 Core 保留的部分重建；用有界的并发派发替换单 worker：最多 DISPATCH_CONCURRENCY 条链并发、等待队列受 DISPATCH_QUEUE_EVENTS 与 DISPATCH_QUEUE_BYTES 限制并计入 Core 总预算，同一事件的候选在一条链内顺序执行，链与 Session 读循环分离。
-
-依据：PLAN T-05 步骤 1、2；CONTRACTS §2.1、§2.3 第 1 条、§1.2；MESSAGE-MODEL §1、§1.1；TEST-MATRIX V-13、V-16 的 fixture 分项。
-
-范围（只新增或修改这些）：
-- internal/core/router/：新增 dispatch.go（并发链与等待队列）、trusted.go（可信信息的保留与重建）；router.go 的 New、Deliver 与 worker 改用它们，删除 goal-2 的单 worker shortcut 注释
-- 更新 router.New 的全部调用者（含测试与 cmd/alonabot 之外的装配代码；cmd/alonabot 若已装配 Router 也一并更新）
-- 新增 contracts/testdata/events/：button.clicked 与 scheduled 的规范 fixture（JSON 形式的 pb.Event）
-- 上述包的测试文件
-允许的新跨模块边：无。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-internal/core/router
-   type Options struct {
-       Concurrency int          // DISPATCH_CONCURRENCY
-       QueueEvents int          // DISPATCH_QUEUE_EVENTS
-       QueueBytes  int64        // DISPATCH_QUEUE_BYTES
-       Global      *wire.Budget // Core 全局 payload 预算；排队中的事件占用它
-       Adapters    *adapter.Registry // 沿用账号用户名查询
-       Send        ServiceFunc // 沿用 usage 与自动回复发送
-       Policy      CommandPolicy // 沿用 goal-13 的策略注入，待其合并核对
-   }
-   func New(log *slog.Logger, opt Options) *Router // 取代带 adapters、send 与策略参数的 New，保留这些能力
-   type Stats struct { Accepted, DroppedQueueFull, DroppedBudget uint64; Running, Queued int }
-   func (r *Router) Stats() Stats
-
-行为：
-- Deliver：事件编码后的大小计入 QueueBytes 与 Global；等待中的事件数达到 QueueEvents、字节超过 QueueBytes 或 Global 无法预留时，立即返回 adapter.ErrQueueFull 并计数（分别计入 DroppedQueueFull、DroppedBudget），不阻塞调用方。事件开始执行时释放它在队列与 Global 中的占用。
-- 并发：最多 Concurrency 个事件同时执行；同一事件的全部候选（命令层与事件路由）在一条链内按 (priority, plugin_id, route_id) 顺序执行，不同事件互不等待。链执行在独立 goroutine 中，不在任何 Session 的读循环里运行；慢 Handler 不影响其他 Session 的 Response、Cancel 与控制帧。
-- 可信信息：Deliver 时把 Event 拆成 Core 保留部分（event_id、event_type、source_kind、adapter_id、adapter_instance_id、account_id、target、actor、message 的 platform_message_id、source_event_id，以及 button.clicked 的 action_id/action_schema_version/value、scheduled 的 job_id/run_id/scheduled_at）与业务 payload。每次构造 HandlerRequest 时用保留部分重建这些字段，业务 payload 只来自当前（后续 PreEvent 可改写的）副本；InvocationContext 的 actor 与 default_target 只取保留部分。T-05.3 的 PreEvent 只能改写业务副本。
-- 身份：Actor 的 trusted_roles 在 Deliver 时按 T-04.4 的 TrustedRoles 计算一次并保留；没有 Actor 的事件（例如 scheduled 与 bot.online）不补用户，命令的 USER/ADMIN 检查一律不满足。
-- Router.Close：停止接收新事件，等待运行中的链在调用方给出的 ctx 内结束，然后释放全部队列占用。
-- 本切片不改变命令层与事件路由的匹配规则，也不实现 PreEvent、Rule 与传播的新语义。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/supervisor/dispatch_test.go（//go:build unix）：构建一个测试插件，其事件路由按收到文本睡眠指定时长后回复，可用不同 priority 以三个插件 ID 启动。用 memory Adapter 与 Options{Concurrency: 2, QueueEvents: 3, QueueBytes: 很小的值} 装配：
-  - 三个插件以不同顺序启动时，同一事件的调用顺序都是 (priority, plugin_id, route_id)。
-  - 两个慢事件执行期间，第三个事件进入队列，再多的事件得到 ErrQueueFull，Stats 计数正确；慢事件结束后排队事件被执行。
-  - 慢 Handler 执行期间，同一插件的 Session 仍能完成另一条 core.send 的 Response（读循环未被占住）。
-  - 读入 contracts/testdata/events 的 button.clicked 与 scheduled fixture 并 Deliver：插件收到的 action_id/value、job_id/run_id 与 fixture 一致；scheduled 事件没有 Actor，需要 USER 的命令不可用。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：QueueBytes 与 Global 的预留与释放在并发下正确（-race）；Close 时排队事件的占用被释放；trusted_roles 不能被插件自报的值改变；可信字段在重建时覆盖业务副本中的同名值。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./sdk/...；go build ./...。
-
-不做：PreEvent 与出站 Hook（T-05.3）；Rule 与 HandlerOutcome 新语义（T-05.2）；延续调用（T-05.4）；实际的 scheduled tick（T-07.2）；按钮 token（T-03.8）。
-```
-
 ### goal-21 · T-06.3 非持久 Event Bus
 
-状态：可派发。前置 T-06.1 已由 PR #45 合并；goal-2、goal-19 的符号已按合入代码核对：`router.NewMux() *Mux`、`(*Mux).Handle(name string, fn ServiceFunc)`、`(*Mux).Forward(fn ServiceFunc)`、`(*Mux).For(c Caller) wire.Handler`；`router.Plugin` 接口为 `PluginID() string`、`Activated() bool`、`Routes() []*pb.RouteDescriptor`、`Call(ctx, wire.Request) (wire.Response, error)`；`(*Router).Plugin(pluginID string) (Plugin, bool)`；SDK 的 `ServiceRegistry`、Root 的 `Services(*ServiceRegistry)` Hook，以及 dispatch.go 中先查服务路由、再查事件与命令路由的分发入口；BUS_SUBSCRIPTION 的注册校验在 `validate.Register`，事件名中的插件 ID 用 `validate.PluginID` 校验，callback_route_id 必须指向同一注册中的路由。注意 goal-12（PR #47）正在把 sdk/dispatch.go 的 `invokeEvent` 改为 `invokeHandler`，最好在它合入后再从 main 创建分支。
+状态：待派发。前置 T-06.1 已由 PR #45 合并；goal-2、goal-19 的符号已按合入代码核对：`router.NewMux() *Mux`、`(*Mux).Handle(name string, fn ServiceFunc)`、`(*Mux).Forward(fn ServiceFunc)`、`(*Mux).For(c Caller) wire.Handler`；`router.Plugin` 接口为 `PluginID() string`、`Activated() bool`、`Routes() []*pb.RouteDescriptor`、`Call(ctx, wire.Request) (wire.Response, error)`；`(*Router).Plugin(pluginID string) (Plugin, bool)`；SDK 的 `ServiceRegistry`、Root 的 `Services(*ServiceRegistry)` Hook，以及 dispatch.go 中先查服务路由、再查事件与命令路由的分发入口；BUS_SUBSCRIPTION 的注册校验在 `validate.Register`，事件名中的插件 ID 用 `validate.PluginID` 校验，callback_route_id 必须指向同一注册中的路由。goal-12（PR #47）已合并，sdk/dispatch.go 的分发入口现为 `invokeHandler`。
+
+范围修订（2026-11-01，维护者确认）：执行者报告三处接口缺口，对照 origin/main 核实后按以下方式补齐，见语句「范围」「接口」「行为」与「测试」：
+- `router.Plugin` 只有 `Call`：接口追加 `SendEvent`，唯一实现 `instancePlugin` 转调 `wire.Session.SendEvent`。原范围中的「Router 在 Attach/Detach 时通知 bus」取消：bus import router，Router 反向持有 Bus 会形成循环；Router 的 Attach/Detach 目前只在 supervisor 测试的装配处调用，由装配处在旁边同时调用 `bus.Attach`/`bus.Detach`。
+- 现有 `SendEnvelopeSync` 走优先通道，通道满会关闭 Session，且不计业务预算：wire 新增 `SendEvent`，事件走业务 FIFO，按 CONTRACTS §1.2 计入本方向与全局 payload 预算，写出后才返回。只有写出后才返回，Bus 的每订阅者队列才是真正的积压上限；否则事件会全部堆进 wire 的 16 MiB 业务队列。
+- EVENT 原本进 SDK 的 `activation.control`：改由 wire 的新钩子 `Options.Event` 接收。接收方向按同一预算准入，超额丢弃并计数；SDK 在 activate.go 设置该钩子（只加调用点），dispatch.go 不改。
+- 原测试让 slow 在回调里阻塞，但 SDK 的读循环不停，事件写出后就离开 Core，Bus 队列不会满，Dropped 恒为 0。slow 改为在 Core 侧用带闸门的 `router.Plugin` 包装模拟写出受阻，丢弃数因此可以精确断言；回调阻塞的订阅者改测「不阻塞他人」。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-21（切片 T-06.3：非持久 Event Bus）。goal 目录 goal-21，分支 goal-21，worktree .worktrees/goal-21，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1765,24 +1694,32 @@ internal/core/router
 
 范围（只新增或修改这些）：
 - internal/wire/services.go：末尾追加 ServiceBusPublish = "core.bus.publish"
+- internal/wire/session.go：新增 SendEvent、Options.Event 与 Stats.DroppedEvents，以及 EVENT 的收发预算
 - 新增 internal/core/bus/
-- internal/core/router/：Router 在 Attach/Detach 时通知 bus（只加调用点）
-- sdk/：新增 bus.go（发布与订阅）；sdk.go 的 Collect 与 dispatch.go 接入订阅回调（只加调用点）；session.go 的 buildRegister 输出订阅路由；base.go 的 Root 增加 Subscriptions Hook 与 Base 默认实现
+- internal/core/router/router.go：Plugin 接口追加 SendEvent，instancePlugin 实现它（Router 本身不改）
+- sdk/：新增 bus.go（发布与订阅）；sdk.go 的 Collect 收集订阅（只加调用点）；activate.go 设置 wire.Options.Event（只加调用点）；session.go 的 buildRegister 输出订阅路由；base.go 的 Root 增加 Subscriptions Hook 与 Base 默认实现
 - 新增 internal/core/supervisor/testdata/busplugin/
 - 上述包的测试文件
 允许的新跨模块边：无。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. internal/core/bus
+1. internal/wire
+   func (s *Session) SendEvent(ctx context.Context, target string, ev *pb.BusEvent) error // Core 侧；target 为 callback_route_id
+   Options 增加 Event func(env *pb.Envelope, release func()) // 为 nil 时 EVENT 仍交给 Control
+   Stats 增加 DroppedEvents int64 // 接收方向预算不足而丢弃的 EVENT 数
+2. internal/core/router
+   Plugin 接口追加 SendEvent(ctx context.Context, target string, ev *pb.BusEvent) error // instancePlugin 转调 instance.Session.SendEvent
+3. internal/core/bus
    type Bus struct{ ... }
    type Options struct { QueueEvents int; QueueBytes int64 } // BUS_QUEUE_EVENTS、BUS_QUEUE_BYTES
    func New(log *slog.Logger, opt Options) *Bus
    func (b *Bus) Register(m *router.Mux) // 注册 core.bus.publish
    func (b *Bus) Attach(p router.Plugin) // 按插件的 BUS_SUBSCRIPTION 路由建立订阅与队列
-   func (b *Bus) Detach(pluginID string) // 丢弃该插件队列中未发出的事件
+   func (b *Bus) Detach(pluginID string) // 丢弃该插件队列中未发出的事件，取消正在等待写出的发送
    type Stats struct { Published, Delivered, Dropped uint64 }
    func (b *Bus) Stats(pluginID string) Stats // pluginID 为订阅者；Published 只对发布者有意义
-2. sdk
+   装配处在 router.Attach/Detach 旁边调用 bus.Attach/Detach，Router 不持有 Bus。
+4. sdk
    Root 增加 Hook：Subscriptions(*SubscriptionRegistry) // func (*Base) Subscriptions(*SubscriptionRegistry) 默认不订阅
    type SubscriptionRegistry struct{ ... }
    func Subscribe[T any](r *SubscriptionRegistry, routeID, eventName, schemaID string, version uint32, h func(*Context, T) error) // JSON 载荷；eventName 为 "plugin_id/event_name"
@@ -1792,17 +1729,20 @@ internal/core/router
 - Publish（core.bus.publish，载荷为 PublishRequest，响应为 PublishResponse）：event_name 必须属于调用者的命名空间（"<调用者 plugin_id>/" 前缀，名字部分同 Service 名规则），否则 PERMISSION_DENIED；encoding 为 JSON 时载荷必须是合法 UTF-8 JSON；schema_id 与版本非空。准入通过后分配 event_id（16 字节随机值的十六进制），把 BusEvent 依次放进每个匹配订阅者的队列（入队操作不等待订阅者），然后立即响应。没有订阅者也成功。发布不携带任何可信 Actor 权限。
 - 匹配：订阅的 event_name、schema_id 与 schema_version 都相等才投递；版本不同的订阅者不收到，也不计为丢弃。
 - 队列：每个订阅者独立；条数达到 QueueEvents 或字节超过 QueueBytes 时丢弃新事件（drop-newest）并计数，以 WARN 记录（订阅者、事件名、累计计数）。订阅者未激活或已 Detach 时不入队、不缓存，Core 重启或插件重启不补发。
-- 投递：每个订阅者一个发送 goroutine，按队列顺序以 FRAME_KIND_EVENT 发出（Target 为 callback_route_id，载荷为 BusEvent），不等待业务回执；一个订阅者的 Session 慢或阻塞时只影响它自己的队列。
-- SDK：收到 EVENT 时按 callback_route_id 找到订阅，把 payload 按 JSON 解码为 T（失败以 WARN 记录并丢弃，不回应），以订阅插件自身身份调用 h（Context 没有 Actor 与默认 Target，Send 必须显式 To）。h 的错误与 panic 只记日志。广播不参与普通事件的 StopPropagation。
+- 投递：每个订阅者一个发送 goroutine，按队列顺序逐条调用 Plugin.SendEvent（Target 为 callback_route_id，载荷为 BusEvent），等这一条写出后再发下一条，不等待业务回执；一个订阅者的 Session 慢或阻塞时只影响它自己的队列。SendEvent 返回错误（预算不足、Session 关闭、Detach 取消）时该事件计入 Dropped 并以 WARN 记录，不重试。Delivered 只表示已写出，不表示订阅者已处理。
+- wire 发送（SendEvent）：构造 FRAME_KIND_EVENT（call_id 为 0，载荷为 protobuf 编码的 BusEvent）。入队前在 s.mu 下按本方向 outBytes/MaxBytes 与 Global 准入，不足立即返回 RESOURCE_EXHAUSTED，不等待；EVENT 不占在途 Request 条数。帧进入业务 FIFO，排在优先通道之后，与 REQUEST 共用唯一的 writer。写出后归还预算并返回；写出前 ctx 结束则撤出队列、归还预算并返回 ctx 的错误；Session 关闭返回 UNAVAILABLE。不经优先通道。
+- wire 接收：Options.Event 非 nil 时，EVENT 不交给 Control，而是在读循环中按本方向 inBytes/MaxBytes（Global 非 nil 时也算）准入。不足时丢弃该帧、DroppedEvents 加一，Session 不关闭；通过时计入 inBytes 并调用 Event，release 归还预算，重复调用无副作用。Event 不得阻塞读循环。Core 侧不设置 Event，插件发来的 EVENT 仍由 Control 按协议违规关闭 Session；Adapter Session（sdk/adapter_run.go）不订阅，同样不设置。
+- SDK：activate.go 设置 Event。ready gate 未打开或已收到 STOPPING 时，以 WARN 记录并立即 release，不关闭 Session。其余事件放进每个 Session 唯一的投递 goroutine，按到达顺序串行处理：按 callback_route_id 找到订阅，把 payload 按 JSON 解码为 T（失败以 WARN 记录并丢弃，不回应），以订阅插件自身身份调用 h（Context 没有 Actor 与默认 Target，Send 必须显式 To）。h 返回后 release。h 的错误与 panic 只记日志。广播不参与普通事件的 StopPropagation。
 - Publish 在 Handler 内外都可以调用；在 Handler 内也不继承用户权限。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/supervisor/bus_test.go（//go:build unix）：构建 testdata/busplugin，以 pub、fast、slow 三个插件 ID 启动（slow 的回调阻塞到测试放行）。用 Bus{QueueEvents: 3} 装配：
-  - pub 发布 10 条：fast 收到全部 10 条且顺序不变；slow 只收到前若干条，其余计入 Dropped；pub 的 Publish 全部立即返回。
+- 提交：internal/core/supervisor/bus_test.go（//go:build unix）：构建 testdata/busplugin，以 pub、fast、slow、stuck 四个插件 ID 启动。用 Bus{QueueEvents: 3} 装配，订阅者以 `router.FromInstance` 接入；slow 外面再包一层测试内的 router.Plugin，它的 SendEvent 先等测试关闭闸门再转调真实实现，模拟 Session 写出受阻；stuck 的订阅回调在插件内阻塞，直到测试放行。
+  - 闸门关闭时 pub 先发布第 1 条，等包装层报告 SendEvent 已进入（第 1 条已离开队列）后，再发布第 2～10 条：Publish 全部立即返回；fast 收到全部 10 条且顺序不变；slow 的 Dropped 为 6（1 条等待写出、3 条排队）。开闸后 slow 按顺序恰好收到第 1～4 条，Delivered 为 4。
+  - stuck 的回调阻塞期间，fast 与 pub 不受影响；放行后 stuck 按发布顺序处理已收到的事件。
   - pub 发布到 "fast/x"（不属于自己）返回 PERMISSION_DENIED。
   - schema 版本不同的订阅者收不到，Dropped 不变。
-  - slow 停止后再发布：不入队；slow 重新启动后收不到之前的事件。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：QueueBytes 的边界；非法 JSON；没有订阅者；订阅回调的 Context 没有 Actor；解码失败只记日志；Detach 丢弃未发出的事件。
+  - slow 停止（装配处 Detach）后再发布：不入队；slow 重新启动后收不到之前的事件。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：QueueBytes 的边界；非法 JSON；没有订阅者；订阅回调的 Context 没有 Actor；解码失败只记日志；Detach 丢弃未发出的事件并取消正在等待写出的 SendEvent；wire 的 SendEvent 在本方向或全局预算不足时立即返回 RESOURCE_EXHAUSTED、写出后归还预算、写出前 ctx 结束则撤出队列；接收方向预算不足时丢弃 EVENT 并计入 DroppedEvents，Session 不关闭。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./sdk/...；go build ./...。
 
@@ -1811,7 +1751,7 @@ internal/core/router
 
 ### goal-26 · T-07.4 两个 Host 与插件票据
 
-状态：可派发。前置 T-07.3 已由 PR #46 合并；goal-25 的符号已按合入代码核对：`httpproxy.Authorizer{ Authorize(r *http.Request, pluginID string) bool }`，`httpproxy.New(log *slog.Logger, auth Authorizer) *Server`，以及 `(*Server).Bind(pluginID, generationID string, endpoint *pb.HttpListener, token []byte, routes []*pb.RouteDescriptor)`、`Unbind(pluginID, generationID string)`、`ServeHTTP`；`settings.Settings` 的 `AdminBaseURL`、`PluginBaseURL` 为字符串，由 `settings.Load` 校验 scheme、端口与主机名，装配处用 `url.Parse` 转成 `*url.URL` 交给 webhost.Options；`wire.HeaderProxyAuth = "X-Alonabot-Proxy-Auth"`。cmd/alonabot 的 run 现在用 `httpproxy.New(log, nil)` 作为公开 Listener 的 Handler，并带 shortcut 注释。httpproxy.New 在构造时就要 Authorizer，而 webhost.Options 又需要 *httpproxy.Server：装配处先用一个转调 `host.Authorize` 的本地适配器构造 Server，再构造 Host，不需要改 httpproxy 的签名。
+状态：待派发。前置 T-07.3 已由 PR #46 合并；goal-25 的符号已按合入代码核对：`httpproxy.Authorizer{ Authorize(r *http.Request, pluginID string) bool }`，`httpproxy.New(log *slog.Logger, auth Authorizer) *Server`，以及 `(*Server).Bind(pluginID, generationID string, endpoint *pb.HttpListener, token []byte, routes []*pb.RouteDescriptor)`、`Unbind(pluginID, generationID string)`、`ServeHTTP`；`settings.Settings` 的 `AdminBaseURL`、`PluginBaseURL` 为字符串，由 `settings.Load` 校验 scheme、端口与主机名，装配处用 `url.Parse` 转成 `*url.URL` 交给 webhost.Options；`wire.HeaderProxyAuth = "X-Alonabot-Proxy-Auth"`。cmd/alonabot 的 run 现在用 `httpproxy.New(log, nil)` 作为公开 Listener 的 Handler，并带 shortcut 注释。httpproxy.New 在构造时就要 Authorizer，而 webhost.Options 又需要 *httpproxy.Server：装配处先用一个转调 `host.Authorize` 的本地适配器构造 Server，再构造 Host，不需要改 httpproxy 的签名。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-26（切片 T-07.4：两个 Host 与插件票据）。goal 目录 goal-26，分支 goal-26，worktree .worktrees/goal-26，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1875,7 +1815,7 @@ internal/core/webhost
 
 ### goal-28 · T-08.1 配置字段描述与构建检查
 
-状态：可派发。前置 T-04.2 已由 PR #42 合并；goal-11 的符号已按合入代码核对：`generate.Scan(ctx context.Context, opt Options) (*Result, error)`，`Result{RootType, ConfigType string; Commands []Command; Events []Event; Source []byte; Diagnostics []Diagnostic}`，`Diagnostic{Pos, Message string}`，`generate.FileName = "alonabot_gen.go"`；`sdk.Generated{Commands func(*CommandRegistry); Events func(*EventRegistry)}`，`sdk.UseGenerated(root Root, g Generated)`；`plugin generate/check` 在 cmd/alonabot/plugin.go 的 `pluginGeneration` 中逐字节比较生成内容。Scan 以 `-overlay` 把现有 alonabot_gen.go 排除在 `go list` 之外，Config 分析沿用这一扫描视图。本切片首次引入已批准的 github.com/google/jsonschema-go（D-43）。
+状态：待派发。前置 T-04.2 已由 PR #42 合并；goal-11 的符号已按合入代码核对：`generate.Scan(ctx context.Context, opt Options) (*Result, error)`，`Result{RootType, ConfigType string; Commands []Command; Events []Event; Source []byte; Diagnostics []Diagnostic}`，`Diagnostic{Pos, Message string}`，`generate.FileName = "alonabot_gen.go"`；`sdk.Generated{Commands func(*CommandRegistry); Events func(*EventRegistry)}`，`sdk.UseGenerated(root Root, g Generated)`；`plugin generate/check` 在 cmd/alonabot/plugin.go 的 `pluginGeneration` 中逐字节比较生成内容。Scan 以 `-overlay` 把现有 alonabot_gen.go 排除在 `go list` 之外，Config 分析沿用这一扫描视图。本切片首次引入已批准的 github.com/google/jsonschema-go（D-43）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-28（切片 T-08.1：配置字段描述与构建检查）。goal 目录 goal-28，分支 goal-28，worktree .worktrees/goal-28，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -1934,73 +1874,9 @@ internal/core/webhost
 不做：配置准备顺序、默认值补齐与 Schema 校验的运行时（T-08.3）；Secret Store（T-08.4）；i18 文件的检查（T-08.8）；表单组件（T-08.7）。
 ```
 
-### goal-54 · T-11.1 工具描述、目录与策略
-
-状态：等待前置（T-04.4、T-06.1）。语句中 goal-13、goal-19 提供的符号（policy.Policy、broker.Broker、sdk.JSONService、ServiceOption、router.Mux）只写名字；合并后由审查者核对签名，再改为可派发。jsonschema-go 若尚未由 goal-28 引入，本切片按 D-43 引入。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-54（切片 T-11.1：工具描述、目录与策略）。goal 目录 goal-54，分支 goal-54，worktree .worktrees/goal-54，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：JSON Service 可以声明为工具（给模型的说明、缺省策略 allow 或 confirm，输入 Schema 为该服务的输入 JSON Schema）；Core 校验工具描述，提供 core.tool.list 返回调用插件可以调用、且生效策略不是 deny 的工具；工具策略按 plugin_id/service_name 持久化，提供管理服务层的查询与修改，下一次调用生效。
-
-依据：PLAN T-11 步骤 1、2；CONTRACTS §13.1、§13.2（策略段）、§3；WIRE-FORMAT §3.5（core.tool.list 与 Service 描述的 tool）；DECISIONS D-43；TEST-MATRIX V-55 的目录与策略分项。
-
-范围（只新增或修改这些）：
-- contracts/proto/alonabot/v1/：route.proto 的 ServiceSpec 追加 ToolSpec tool = 5；新增 tool.proto（ToolPolicy、ToolInfo、ToolListRequest/Response）。随后 go generate ./...（本切片获授权只追加这些）
-- contracts/wirespec_test.go：追加编号检查
-- contracts/validate/register.go：工具描述的注册校验
-- internal/wire/services.go：末尾追加 ServiceToolList = "core.tool.list"
-- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/tool.go
-- 新增 internal/core/tool/
-- sdk/：services.go 增加 Tool 选项与工具输入 Schema 的生成；新增 tool.go（ListTools）
-- go.mod、go.sum：仅在 jsonschema-go 尚未引入时新增（D-43）
-- 上述包的测试文件
-允许的新跨模块边：无。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. proto
-   enum ToolPolicy { TOOL_POLICY_UNSPECIFIED = 0; TOOL_POLICY_ALLOW = 1; TOOL_POLICY_CONFIRM = 2; TOOL_POLICY_DENY = 3; }
-   message ToolSpec { string description = 1; ToolPolicy default_policy = 2; string input_schema_json = 3; } // default_policy 只能是 ALLOW 或 CONFIRM
-   message ToolInfo { string name = 1; string description = 2; string input_schema_json = 3; ToolPolicy policy = 4; } // name 为 "plugin_id/service_name"
-   message ToolListRequest {}
-   message ToolListResponse { repeated ToolInfo tools = 1; }
-2. internal/core/state
-   迁移：CREATE TABLE tool_policies (plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), service_name TEXT NOT NULL, policy INTEGER NOT NULL, PRIMARY KEY (plugin_id, service_name));
-   读写方法自定（放在 tool.go），按主键幂等。
-3. internal/core/tool
-   type Catalog struct{ ... }
-   func New(store *state.Store, r *router.Router) *Catalog
-   func (c *Catalog) Register(m *router.Mux)                                  // 注册 core.tool.list
-   func (c *Catalog) Effective(ctx context.Context, pluginID, service string) (pb.ToolPolicy, error) // 覆盖优先，否则缺省策略；供 T-11.2 的 invoke
-   func (c *Catalog) SetPolicy(ctx context.Context, pluginID, service string, p pb.ToolPolicy) error // UNSPECIFIED 表示删除覆盖
-   func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error) // type ToolPolicyEntry struct { PluginID, Service string; Default, Override pb.ToolPolicy }
-4. sdk
-   func Tool(description string, defaultPolicy ToolDefault) ServiceOption // type ToolDefault int：ToolAllow、ToolConfirm；只用于 JSONService
-   type ToolInfo struct { Name, Description string; InputSchema json.RawMessage; Policy string } // Policy 为 "allow" 或 "confirm"
-   func ListTools(ctx context.Context) ([]ToolInfo, error)
-
-行为：
-- SDK：JSONService 带 Tool 选项时，输入 Schema 由 jsonschema.For[In] 生成（工具输入可以拒绝未知键，与配置 Schema 不同，D-43 只约束配置），序列化为 input_schema_json；Tool 用于 ProtoService 是 Collect 错误。
-- 注册校验：tool 只允许出现在 encoding 为 JSON 的服务上；description 非空且不超过 1024 字节（命名常量）；default_policy 为 ALLOW 或 CONFIRM；input_schema_json 必须能被 jsonschema 解析并 Resolve（不加载远程 $ref，ResolveOptions.Loader 为 nil），根类型为 object。任一失败整体拒绝注册。
-- core.tool.list：遍历 Router 中已激活插件的工具服务，按 goal-19 的访问规则只保留调用插件可以调用的，再去掉生效策略为 DENY 的；按 name 字典序返回。调用者自己的工具同样按规则出现。每次调用都读取当前策略，不缓存。
-- 策略：覆盖可为 ALLOW、CONFIRM、DENY；生效策略 = 覆盖或缺省。SetPolicy 在事务提交成功后才返回；插件或服务不存在时仍可设置（安装记录必须存在，否则 NOT_FOUND）。修改在下一次 list 与 invoke 时生效。
-- 工具调用（core.tool.invoke）与确认在 T-11.2。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/supervisor/tool_test.go（//go:build unix）：沿用 goal-19 的 svcplugin，增加带 Tool 选项的服务（PUBLIC 的 a/search 为 allow，ALLOWLIST: b 的 a/admin 为 confirm）；b 与 c 收到消息时调用 sdk.ListTools 并回复结果：
-  - b 看到 a/admin 与 a/search，c 只看到 a/search；input_schema 与 In 的类型一致，policy 正确。
-  - SetPolicy(a, search, DENY) 后两者都看不到 a/search；删除覆盖后恢复；关闭并重新打开状态库后覆盖仍在。
-  - 注册一个 description 为空或 input schema 含远程 $ref 的工具时 REGISTER 失败。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Tool 用于 Protobuf 服务的 Collect 错误；description 长度边界；Policies 的输出；未知 ToolPolicy 被拒。
-
-完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go mod tidy 后无差异；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
-
-不做：core.tool.invoke、确认与确认按钮（T-11.2）；Agent 组件与 MCP（T-12）；管理 API 与页面（T-09.9）。
-```
-
 ### goal-67 · T-13.1 库模式入口与同进程组件
 
-状态：等待前置。T-02.1、T-03.3、T-04.2 都已合并（PR #42 合入 sdk.Generated、sdk.UseGenerated 与生成器）。装配依赖的 `router.New` 正由 goal-12（PR #47）修改签名，`remote.Process.Bind` 正由 goal-7 增加 Caller 参数；两者合入后，审查者按实际代码核对语句中的 router、message.Service、remote.Process、supervisor、sdk.Run 与 sdk.RunAdapter 的内部流程以及 tune.Parse，再改为可派发。
+状态：等待前置。T-02.1、T-03.3、T-04.2 都已合并（PR #42 合入 sdk.Generated、sdk.UseGenerated 与生成器）。装配依赖的 `router.New` 正由 goal-12（PR #47）修改签名，`remote.Process.Bind` 正由 goal-7 增加 Caller 参数；两者合入后，审查者按实际代码核对语句中的 router、message.Service、remote.Process、supervisor、sdk.Run 与 sdk.RunAdapter 的内部流程以及 tune.Parse，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-67（切片 T-13.1：库模式入口与同进程组件）。goal 目录 goal-67，分支 goal-67，worktree .worktrees/goal-67，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -2065,87 +1941,11 @@ internal/core/webhost
 不做：config.json 直读、dev.sqlite 与拒绝 update/rollback（T-13.2）；热部署与 Reload（T-13.3）；alonabot serve（T-09.4，复用本切片的装配）；HTTP 与设置文件的装配（随 T-07.5、T-09.4 接入）。
 ```
 
-### goal-78 · T-15.1 官方 OneBot 11 Adapter 的连接与接收
-
-状态：可派发。T-03.3、T-03.4 已由 PR #32、#39 合并；已核对 `sdk/adapter` 的 Adapter、Instance、Core、StartRequest、Account 与 `sdk.RunAdapter(adapter.Adapter) error`。`MessageCreatedPayload.to_me` 为字段 3，`Actor.locale` 为 optional 字段 5，OneBot 本切片直接使用已生成类型，无需修改 proto。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-78（切片 T-15.1：官方 OneBot 11 Adapter 的连接与接收）。goal 目录 goal-78，分支 goal-78，worktree .worktrees/goal-78，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：实现官方 OneBot 11 Adapter 的连接与接收：正向 WebSocket 连接与 access_token、get_login_info 账号、按 echo 配对的 API 调用、有界退避重连、self_id 校验、数组格式检查、实例内有界事件队列与逐条交付、私聊/群聊/撤回/成员事件的标准化与 to_me；提供本地 OneBot 11 模拟服务，供本切片与后续 OneBot 11 切片测试。
-
-依据：PLAN T-15 步骤 1、2；CONTRACTS §8（OneBot 11 段）、§14.5；MESSAGE-MODEL §1、§1.1、§7、§7.1；DECISIONS D-46；TEST-MATRIX V-71 的接收分项；OneBot 11 标准原文（https://github.com/botuniverse/onebot-11 的 communication/ws.md、event/、api/public.md、message/segment.md），字段名以原文为准。
-
-范围（只新增或修改这些）：
-- go.mod、go.sum：引入 github.com/coder/websocket（本切片获授权引入，只在 adapters/onebot11 使用，版本取当前最新的正式版）
-- 新增 adapters/onebot11/（可导入的包 onebot11）
-- 新增 adapters/onebot11/onebottest/（本地 OneBot 11 模拟服务）
-- 新增 adapters/onebot11/cmd/alonabot-adapter-onebot11/main.go（只调用 sdk.RunAdapter(onebot11.New())；返回错误时与 examples/plugins/echo 一样 slog.Error 后 os.Exit(1)）
-- 上述包的测试文件
-允许的新跨模块边：adapters/... -> sdk/...、-> contracts（ARCHITECTURE 已登记）。adapters 不 import internal/...，测试也一样。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. adapters/onebot11
-   const AdapterID = "onebot11"
-   func New() adapter.Adapter // 实现 sdk/adapter 的 Adapter；Descriptor 的 adapter_id 为 AdapterID
-   实例配置 JSON：{"ws_url": string（必填，ws:// 或 wss://）, "access_token": string（可选）, "mode": string（缺省 "forward"，只接受 "forward"）}
-2. adapters/onebot11/onebottest
-   type Call struct { Action string; Params map[string]any }
-   type Server struct{ ... }
-   func NewServer(t testing.TB, accessToken string) *Server // httptest 服务，在 "/" 提供 OneBot 11 正向 WebSocket 通用端点；accessToken 非空时校验 Authorization: Bearer，不符返回 401；t.Cleanup 时关闭
-   func (s *Server) URL() string                       // ws:// 地址，作为 ws_url
-   func (s *Server) SetLogin(userID int64, nickname string)
-   func (s *Server) Push(events ...json.RawMessage)    // 按顺序推送上报；没有连接时排队，连接建立后推送
-   func (s *Server) Disconnect()                       // 关闭当前连接，模拟断线
-   func (s *Server) Connections() int                  // 累计接受的连接数
-   func (s *Server) Calls() []Call                     // 依次记录每个 API 请求
-   func (s *Server) Respond(action string, fn func(params map[string]any) (status string, retcode int, data any)) // 替换某个 action 的响应；status 为空字符串时不响应
-   缺省响应：get_login_info 返回 SetLogin 的值；get_msg 在 Push 过的 message 上报中按 message_id 查找并返回其 sender，找不到返回 failed；其他 action 返回 status "failed"、retcode 1404。
-
-行为：
-- Start（sdk/adapter 的 Adapter.Start）：
-  1) 解析实例配置：ws_url 不是 ws/wss URL、mode 不是 "forward" → INVALID_ARGUMENT（错误不含配置原文与 access_token）。
-  2) 用 websocket.Dial 连接 ws_url，access_token 非空时带 Authorization: Bearer；握手 401/403 → PERMISSION_DENIED，其他失败 → UNAVAILABLE。Start 失败不重试。
-  3) get_login_info：account_id 为 user_id 的十进制字符串，DisplayName 为 nickname，Username 留空（OneBot 11 没有可寻址的账号用户名，命令不接受 @ 形式，D-67）；失败 → UNAVAILABLE。
-  4) 启动读循环与交付循环后返回 Instance：Account() 返回 get_login_info 的账号；Capabilities 本切片只声明接收相关的能力，发送能力由 T-15.2 补充；Send 本切片返回 UNSUPPORTED 的 ErrorInfo（发送由 T-15.2 实现）。
-- 交付给 Core 的事件：Event 的 adapter_id、adapter_instance_id（StartRequest.InstanceID）与 account_id（Account.ID）必须与 Target 中的同名字段一致，否则 Core 以 INVALID_ARGUMENT 拒绝；event_id、source_kind 与 capabilities 由 Core 重建，Adapter 不填；Actor.trusted_roles 只保留 CHAT_ADMIN。 occurred_at_unix_ms 取上报的 time（秒）乘以 1000。
-- API 调用：每个请求带实例内唯一的 echo（递增的十进制字符串），响应按 echo 配对；调用以 ctx 为期限，ctx 结束时返回 ctx 的错误；连接断开时全部在途调用以 UNAVAILABLE 结束。带 echo 的帧是响应，其余帧是上报。
-- 读循环一直读取，不因等待交付而停止：
-  - 响应交给配对的调用；meta_event 不入队（lifecycle 的 connect 只记 DEBUG）。
-  - 其余上报放进实例事件队列（256 条，命名常量）；队列满时丢弃该上报，累加丢弃计数并记 WARN（带累计数）。
-- 交付循环按顺序取出上报，标准化后经 Core.Deliver 交付，游标为空；收到应答（无论 accepted）后才取下一条。不交付的上报直接跳过。Deliver 返回错误时：实例停止后为 FAILED_PRECONDITION，交付循环退出；其他错误记 WARN 后继续下一条（OneBot 11 没有重放，与队列满时丢弃一致）。
-- 格式与身份：message 上报的 message 字段是字符串（CQ 码格式）时，经 Core.ReportFailure 报告（safe_message "onebot implementation must post messages in array format"），关闭连接并停止接收。self_id 与 account_id 不符的上报丢弃并记 WARN。
-- 断线：连接关闭或读错误（Stop 引起的除外）后按有上限的指数退避重连（初始 1s、上限 60s，命名常量），重连后重新 get_login_info；user_id 变化 → ReportFailure（"onebot account changed"）并停止；握手 401/403 → ReportFailure（"onebot implementation rejected the access token"）并停止。断线期间的上报不补收；重连与已提交的 Send 无关，不重放任何请求。
-- Stop：关闭连接，等待读循环与交付循环退出后返回；Stop 之后不再交付。同一实例不会有两条并行的连接。
-- 标准化（MESSAGE-MODEL §7.1；数字 ID 一律转为十进制字符串）：
-  - Target：adapter_id、adapter_instance_id、account_id、chat_id（"private:<user_id>" 或 "group:<group_id>"），没有 thread_id。
-  - message（private、group）→ message.created：platform_message_id 为 message_id，source_event_id 同 message_id；Actor.external_user_id 为 user_id，display_name 取非空的 sender.card，否则 sender.nickname，locale absent；群聊中 sender.role 为 owner 或 admin 时 trusted_roles 含 CHAT_ADMIN；sub_type 为 anonymous 时不构造 Actor。
-  - chain：text → plain text；at → mention（qq 为 "all" 时不生成）；reply → reference；image、video 本切片不生成（T-15.2 接入入站媒体）；其他段不生成。platform_payload 为原始上报 JSON，chain 可以为空。
-  - to_me：私聊；chain 中有 external_user_id 等于 account_id 的 mention；reply 引用的消息经 get_msg 查得 sender.user_id 等于 account_id。get_msg 失败按 false 处理并记 DEBUG。
-  - notice.group_recall、notice.friend_recall → message.deleted（platform_message_ids 只含 message_id；operator_id 存在时作为 actor）；notice.group_increase、notice.group_decrease → member.joined、member.left（member_external_user_id 为 user_id；operator_id 非 0 且不等于 user_id 时作为 actor）；其他 notice 与全部 request 不交付，计数并记 DEBUG。
-- 脱敏：access_token 不进入日志、错误与普通响应；ws_url 带 userinfo 或查询参数时，记录前去掉这两部分。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：adapters/onebot11/onebot11_test.go。用 onebottest.Server 与一个记录调用的 adapter.Core 测试替身驱动 onebot11.New() 的实例（不经 Core 进程）：
-  - Start 得到 get_login_info 的 account_id 与 nickname；access_token 错误时 Start 返回 PERMISSION_DENIED。
-  - 推入私聊消息、群聊消息（sender.role 为 admin）、匿名群消息、撤回、入群与一条 request：依次交付 5 个事件，字段与 MESSAGE-MODEL §7.1 一致，request 未交付；Core 替身对第二条返回 accepted=false 时后续照样交付。
-  - to_me：私聊为 true；@本账号为 true；reply 本账号的消息为 true；reply 他人消息与 get_msg 失败为 false。
-  - 字符串格式的 message 上报产生一次 ReportFailure，接收停止；self_id 不符的上报未交付。
-  - Disconnect 后在退避期内重连（Connections 为 2），之后推入的消息正常交付，没有重复交付；重连后 get_login_info 返回其他 user_id 时 ReportFailure。
-  - Core 替身的 Deliver 阻塞期间推入 300 条上报：读循环仍能完成一次 get_msg 调用，有上报被丢弃且丢弃计数与未交付数一致；解除阻塞后按原顺序交付队列中的事件。
-  - 错误与日志中不出现 access_token（用测试 token 字符串做断言）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：配置的各种非法值；echo 配对与并发调用；ctx 超时与断线时的在途调用；退避上限；Stop 期间读循环退出；ws_url 的脱敏。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./adapters/...；go build ./...；go mod tidy 后 go.mod 与 go.sum 无差异。
-
-不做：发送、发送计划与回执、入站与出站媒体、extension（T-15.2）；Core 侧装配、alonabot run 联验与一致性验收（T-15.3）；反向 WebSocket（v0.1 之外）。
-```
-
 ## 第 7 波
 
 ### goal-8 · T-03.8 按钮、extension 片段与依赖解析
 
-状态：等待前置（T-03.2、T-03.7）。语句中 goal-2～goal-5、goal-50 提供的符号（message.Service、policy.Policy、router 的派发、remote.Process、AdapterDescriptor 与 ExtensionDeclaration、Button.core_token、adapters/telegram 的实例）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：等待前置（T-03.2、T-03.7）。语句中 goal-2～goal-5、goal-50 提供的符号（message.Service、policy.Policy、router 的派发、remote.Process、AdapterDescriptor 与 ExtensionDeclaration、Button.core_token、adapters/telegram 的实例）只写名字；合并后由审查者核对签名，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-8（切片 T-03.8：按钮、extension 片段与依赖解析）。goal 目录 goal-8，分支 goal-8，worktree .worktrees/goal-8，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -2221,7 +2021,7 @@ internal/core/webhost
 
 ### goal-51 · T-03.9 消息编辑
 
-状态：等待前置（T-03.7）。语句中 goal-2～goal-4、goal-50 提供的符号（message.Service、remote.Process、sdk/adapter 的 Instance、adapters/telegram 的发送与渲染）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：等待前置（T-03.7）。语句中 goal-2～goal-4、goal-50 提供的符号（message.Service、remote.Process、sdk/adapter 的 Instance、adapters/telegram 的发送与渲染）只写名字；合并后由审查者核对签名，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-51（切片 T-03.9：消息编辑）。goal 目录 goal-51，分支 goal-51，worktree .worktrees/goal-51，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -2272,112 +2072,17 @@ internal/core/webhost
 不做：出站 Hook 的执行（T-05.3）；编辑媒体或说明；message.edited 入站事件（已在 T-03.4）。
 ```
 
-### goal-16 · T-05.2 Rule、HandlerOutcome 与传播
+### goal-87 · T-04.6 权限、扩展事件与命令解析的协议和 Core 侧
 
-状态：等待前置（T-05.1）。语句中 goal-2、goal-12、goal-15 提供的符号（sdk 的分发、RouteOption、Context、HandlerOutcome 的处理、router 的命令层与事件路由派发）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：等待前置（T-03.6，PR #55 正在进行；T-03.3、T-04.3 已合并）。T-03.6 也修改 `adapter.proto`、`sdk/adapter` 与 remote Adapter，本切片在它合并后再写接口段。语句只写了目标、依据和要点。依据 D-69、D-71、D-72 新增。
 
-```text
-/goal 使用 $alonabot-execute 推进 goal-16（切片 T-05.2：Rule、HandlerOutcome 与传播）。goal 目录 goal-16，分支 goal-16，worktree .worktrees/goal-16，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+目标：按 WIRE-FORMAT §5A 的 2026-11-01 条目修改 proto 并重新生成；Core 校验 Adapter 的权限与扩展事件声明，交付时保留已声明的平台权限并展开隐含关系，按声明校验扩展事件，路由按权限名集合判定；实现 `command_prefixes` 与按实例覆盖、去掉开头的 reference 与本账号 mention、非文本 token 与 `user`/`image`/`message` 参数、usage 文案键；同步已合并的 router、remote Adapter、`sdk/adapter`、Telegram Adapter 与集成测试。
 
-目标：SDK 提供在同一 RPC 内执行的 Rule：多个 Rule 默认 AND，显式 OR 用 Any 组合，内置 ToMe 与 ChatAdmin；Rule 为 false 或出错时不运行目标函数并如实返回 matched 与错误。固定两种 Handler 签名的 HandlerOutcome、StopPropagation 锁存、错误分支与已识别命令的消费语义，并用测试证明发送后失败不会补发、撤销或自动回复错误。
-
-依据：PLAN T-05 步骤 3、4；CONTRACTS §2.1、§2.2 第 3、6 条、§2.3 第 1 条、§8（自动回复段）；MESSAGE-MODEL §1.1（to_me）；TEST-MATRIX V-14、V-11 的 Rule 分项。
-
-范围（只新增或修改这些）：
-- sdk/：新增 rule.go；dispatch.go 在调用目标函数前执行 Rule；registry.go 与 events.go 接受 Rule 选项；session.go 的 buildRegister 写入 RuleDescriptor
-- internal/core/router/：HandlerOutcome 的处理按下文统一（只改派发处的判断）
-- 上述包的测试文件
-允许的新跨模块边：无。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-sdk
-   type Rule func(*Context) (bool, error)
-   func WithRule(rules ...Rule) RouteOption // 可多次使用，全部 AND
-   func Any(rules ...Rule) Rule              // OR：依次求值，第一个 true 即为 true；全部 false 为 false；出错立即返回错误
-   func ToMe() Rule                           // message.created 的 to_me；其他事件为 false
-   func ChatAdmin() Rule                      // 调用 Actor 的 trusted_roles 含 CHAT_ADMIN
-   func CoreAdmin() Rule                      // 调用 Actor 的 trusted_roles 含 ADMIN（Core 判定的机器人管理员）
-
-行为：
-- Rule 在 SDK 的同一次 Handler 请求中、目标函数之前执行，顺序为注册顺序；任一 Rule 返回 false 时不运行目标函数，HandlerOutcome{matched:false, propagation:CONTINUE}；任一 Rule 返回错误时不运行目标函数，按 goal-2 的错误规则返回 Err（*sdk.Error 用其 Code，其他为 INTERNAL），matched=false。Rule panic 与 Handler panic 一样转 INTERNAL 并记录堆栈。
-- RuleDescriptor：有任何自定义 Rule 时 has_custom_rule=true；只用 ChatAdmin 时 require_chat_admin=true（Core 不据此预先过滤，只用于诊断显示）。
-- 传播：
-  - StopPropagation 在调用的任何时刻调用都锁存，即使之后 Rule false、Handler 返回错误或 panic，HandlerOutcome 仍为 STOP。
-  - Core 对事件路由与文本匹配/Raw：matched=false 跳过；业务错误以 WARN 记录后继续下一个候选；STOP 终止后续候选（含 D-44 中命令层之后的事件路由）。
-  - 已识别命令的胜出路由 Rule false 或出错时仍消费命令层（不回落到短路径、文本匹配或 Raw），不回复 usage；STOP 的效果同上。
-- 自动回复型 Handler 只在成功且 Chain 非空时由 Core 发送一次；返回错误时即使 Chain 非空也不发送；自动型内调用 Send 返回 FAILED_PRECONDITION（goal-12 已实现，本切片补齐测试）。手动型可多次 Send；返回错误时已发送的消息不撤销，Core 不自动发送错误回复。
-- Context 在 Handler 返回后失效：之后的 Send、Edit、Wait 返回 FAILED_PRECONDITION；后台 goroutine 持有的 Context 不能改变已返回的 HandlerOutcome。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/supervisor/rule_test.go（//go:build unix）。沿用 goal-12 的命令测试装配，测试插件注册：带 ToMe 的事件路由、带 ChatAdmin 的命令、带返回错误的自定义 Rule 的 keyword 路由、先 Stop 再返回错误的路由、发送两次后返回错误的手动命令、在自动型里调用 Send 的命令、在后台 goroutine 中于返回后调用 Send 的路由：
-  - to_me=false 的群消息不触发 ToMe 路由，私聊触发。
-  - 非 chat_admin 用户的命令被消费：不回 usage、不进入 Raw，插件目标函数未运行。
-  - Rule 出错的 keyword 路由不运行，后续候选继续；先 Stop 再出错的路由使后续候选不再调用。
-  - 手动命令的两条消息都已送达，之后没有任何补发或错误回复；自动型里的 Send 失败且只有返回的 Chain 被发出一次；返回后的后台 Send 返回 FAILED_PRECONDITION。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Any 的短路与错误；WithRule 多次使用的 AND；RuleDescriptor 的两个字段；Rule panic；Stop 在 Rule 中调用的锁存。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./sdk/...；go build ./...。
-
-不做：PreEvent 与出站 Hook（T-05.3）；延续调用与多轮等待（T-05.4）；Core 侧预先执行 chat_admin 过滤。
-```
-
-### goal-24 · T-07.2 schedule 注册与运行槽
-
-状态：等待前置（T-05.1、T-07.1）。语句中 goal-2、goal-15、goal-23（contracts/schedule）、goal-76 提供的符号（router.Router、router.Plugin、wire.Session 的 Call、schedule.Trigger、tune.Values、sdk 的 ScheduleRegistry 与分发）只写名字；合并后由审查者核对签名，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-24（切片 T-07.2：schedule 注册与运行槽）。goal 目录 goal-24，分支 goal-24，worktree .worktrees/goal-24，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：插件注册的 interval/cron 定时任务经 REGISTER 校验后由 Core Scheduler 按 contracts/schedule 计算触发：每次触发以 Core→插件 REQUEST 调用任务（独立 run_id、JOB_TIMEOUT 期限、无 Actor、不默认 Admin），同一 job 有运行中的调用时跳过本次；到期只结束调用结果并取消，运行槽保留到插件真正返回（迟到响应只释放槽）或旧进程确认退出；不补跑错过的 tick。
-
-依据：PLAN T-07 步骤 1（schedule）、3；CONTRACTS §4.3、§1.2；MESSAGE-MODEL §1.1（scheduled）、§1 末段；WIRE-FORMAT §4；TEST-MATRIX V-20、V-46、V-16 与 V-05 的 scheduled 分项。
-
-范围（只新增或修改这些）：
-- contracts/validate/register.go：SCHEDULE 路由的注册校验（调用 schedule.FromSpec）
-- internal/wire/session.go：Request 增加迟到响应回调（只加字段与触发点）
-- 新增 internal/core/scheduler/
-- sdk/：sdk.go 去掉「不支持 scheduled jobs」的拒绝（只改该处）；dispatch.go 分发 SCHEDULE 路由；session.go 的 buildRegister 输出 SCHEDULE 路由
-- 新增 internal/core/supervisor/testdata/jobplugin/
-- 上述包的测试文件
-允许的新跨模块边：internal/core/... -> contracts/schedule、contracts/validate -> contracts/schedule（同属 contracts 与已允许的 internal/core -> contracts）。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. internal/wire
-   Request 增加字段：Late func(Response) // 非 nil 时，若响应在调用方期限之后才到达，读循环调用一次；期限内到达时不调用
-2. internal/core/scheduler
-   type Scheduler struct{ ... }
-   type Options struct { JobTimeout time.Duration; Now func() time.Time; Log *slog.Logger } // JobTimeout 取 tune.Values.JobTimeout
-   func New(opt Options) *Scheduler
-   func (s *Scheduler) Attach(p router.Plugin, activatedAt time.Time) // 为插件的 SCHEDULE 路由安排下一次触发；anchor 为激活时刻
-   func (s *Scheduler) Detach(pluginID string)                        // 停止安排新的触发；运行槽保持，直到 Released
-   func (s *Scheduler) Released(pluginID string)                       // 旧进程确认退出后调用：释放该插件的全部运行槽
-   func (s *Scheduler) Close()
-   type JobStats struct { Runs, Skipped, TimedOut, Late uint64; Running bool }
-   func (s *Scheduler) Stats(pluginID, jobID string) JobStats
-
-行为：
-- 注册校验：SCHEDULE 路由的 route_id 为 "job." + job_id；job_id 同插件内唯一；ScheduleSpec 必须恰有 interval_ms 或 cron 之一，经 schedule.FromSpec 校验（interval 至少 1s、cron 五字段、时区合法）；SDK 的 Every/Cron 生成对应描述。
-- 触发：每个 job 用 Trigger.Next(anchor, now) 得到下一次时刻并设定定时器；到点时若该 job 的运行槽空闲则发起一次调用，否则 Skipped 加一、不排队；之后再按 Next 安排（不补跑，跳过的 tick 不累积）。
-- 调用：Request{Target: route_id, Payload: HandlerRequest{route_id, context:{actor 为空, default_target 为空}, event: scheduled 事件（event_id 由 Core 生成、source_kind=SCHEDULER、payload 为 job_id、run_id（16 字节随机值的十六进制）、scheduled_at_unix_ms）}, Deadline: 触发时刻 + JobTimeout, Late: 释放运行槽}。直接调用插件 Session，不经事件队列与派发链。
-- 期限：到期时调用方得到 DEADLINE_EXCEEDED、Cancel 已发出，TimedOut 加一，但运行槽保留；迟到响应（Late 回调）到达时释放槽并计入 Late。期限内的响应（成功或错误）立即释放槽。Session 断开时不释放槽，直到 Released 被调用。
-- SDK：收到 SCHEDULE 路由的请求时以 Context（没有 Actor 与默认 Target，Send 必须显式 To）调用任务函数；ctx 被取消时仍等用户函数真正返回后才发送唯一的 Response。
-- 本切片不接统一启停（Draining 时停止新 tick 等属于 T-07.5），也不改 cmd/alonabot 的装配。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/supervisor/scheduler_test.go（//go:build unix）。构建 testdata/jobplugin（一个每 1s 的 interval 任务，按环境变量决定执行时长并以日志记录 run_id），Launch 后 Attach 到 Scheduler（JobTimeout 设为 2s）：
-  - 执行 0.2s 时，若干秒内有相应次数的调用，run_id 各不相同，事件没有 Actor。
-  - 执行 5s 时：第 2s 到期后 TimedOut=1、Running 仍为 true，期间到点的 tick 被 Skipped；第 5s 迟到响应到达后 Late=1、槽释放，下一次 tick 正常调用。
-  - 任务执行中杀掉插件进程：槽不释放；调用 Released 后释放，新进程 Attach 后从未来的 tick 开始，不补跑。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：注册校验的各条拒绝；wire 的 Late 回调只在期限后触发且只一次；cron 任务用注入时钟的 Next；Detach 后不再触发；Close 释放定时器。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/...；go build ./...。
-
-不做：Scheduler 与 HTTP 的统一启停、Draining 与停止预算（T-07.5）；Agent 的定时任务（T-12.6）；持久化的运行记录。
-```
+依据：PLAN T-04 步骤 8；CONTRACTS §2.2、§2.3、§8、§15.1；MESSAGE-MODEL §1、§1.2；WIRE-FORMAT §3.3、§5A；DECISIONS D-69、D-71、D-72；TEST-MATRIX V-85～V-87。
 
 ### goal-30 · T-08.3 SDK 配置准备顺序
 
-状态：等待前置（T-08.1、T-08.2）。语句中 goal-28 提供的符号（sdk.Generated.ConfigSchema、sdk/config 的扩展关键字与 MarshalSchema）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：等待前置（T-08.1、T-08.2）。语句中 goal-28 提供的符号（sdk.Generated.ConfigSchema、sdk/config 的扩展关键字与 MarshalSchema）只写名字；合并后由审查者核对签名，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-30（切片 T-08.3：SDK 配置准备顺序）。goal 目录 goal-30，分支 goal-30，worktree .worktrees/goal-30，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -2427,7 +2132,7 @@ sdk/config
 
 ### goal-31 · T-08.4 不可变 Secret Store
 
-状态：等待前置（T-08.1、T-08.2）。语句中 goal-28、goal-29 提供的符号（sdk/config 的 KeywordSecret、MarshalSchema，internal/core/config 的 Canonical）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：等待前置（T-08.1、T-08.2）。语句中 goal-28、goal-29 提供的符号（sdk/config 的 KeywordSecret、MarshalSchema，internal/core/config 的 Canonical）只写名字；合并后由审查者核对签名，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-31（切片 T-08.4：不可变 Secret Store）。goal 目录 goal-31，分支 goal-31，worktree .worktrees/goal-31，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -2496,7 +2201,7 @@ sdk/config
 
 ### goal-34 · T-08.7 web/admin 骨架、配置表单组件与界面文案
 
-状态：等待前置（T-08.1）。语句中 goal-28 定下的配置 Schema 格式（draft 2020-12 加 x-alonabot-secret、x-alonabot-hidden、x-alonabot-form、x-alonabot-i18n 关键字）只写名字；合并后由审查者用实际生成的 Schema 核对 fixture，再改为可派发。
+状态：等待前置（T-08.1）。语句中 goal-28 定下的配置 Schema 格式（draft 2020-12 加 x-alonabot-secret、x-alonabot-hidden、x-alonabot-form、x-alonabot-i18n 关键字）只写名字；合并后由审查者用实际生成的 Schema 核对 fixture，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-34（切片 T-08.7：web/admin 骨架、配置表单组件与界面文案）。goal 目录 goal-34，分支 goal-34，worktree .worktrees/goal-34，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -2539,14 +2244,332 @@ sdk/config
 - 提交：web/admin/src/schema/schema.test.ts（vitest，不依赖 DOM）：用 fixtures 驱动 fieldsFromSchema 与 buildPatch，覆盖字段顺序、hidden 不进 patch、未修改的 secret 不进 patch、修改 secret 进 patch、清空可空字段生成 null、数组整体替换、未知键不受影响；pickLocale 与 fieldLabel 的回退。这是 Schema 格式与表单之间的契约测试。
 - 本地自测（不提交，PR 中写明结果）：npm run build、npm run typecheck；在浏览器中手动打开 dev 页面，用 fixture 渲染表单并切换语言（写明浏览器与版本，属于手动验证）。
 
-完成条件：在 web/admin 下 npm ci、npm run typecheck、npm run test、npm run build 全部成功；仓库根目录 node scripts/check-repository.mjs 通过；go build ./... 不受影响。
+完成条件：在 web/admin 下 npm ci、npm run typecheck、npm run test、npm run build 全部成功；go build ./... 不受影响。
 
 不做：真实管理 API、登录与页面路由（T-09.1、T-09.8）；CI 中的前端任务（另行由维护者决定是否加入）；DOM 渲染测试（需要新依赖）。
 ```
 
+### goal-36 · T-09.1 首次管理认证
+
+状态：等待前置（T-07.4）。语句中 goal-25、goal-26、goal-76 提供的符号（webhost.Host、webhost.AdminSessions、settings.Settings、cobra 命令树）只写名字；合并后由审查者核对签名，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-36（切片 T-09.1：首次管理认证）。goal 目录 goal-36，分支 goal-36，worktree .worktrees/goal-36，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：alonabot admin-token init/reset 在持有 core.lock 时离线生成 32 字节管理 token，只在本机终端显示一次，状态库只存 SHA256 与认证代次；reset 递增代次并撤销全部管理会话、兑换票据与派生插件会话。admin host 提供 POST /api/auth/login（Origin 与登录 CSRF、恒时比较、8h 会话）与 POST /api/auth/logout；管理状态变更要求 CSRF；CLI 用显式 Bearer token。实现 webhost.AdminSessions，未初始化或认证无效时拒绝一切管理访问。
+
+依据：PLAN T-09 步骤 1；CONTRACTS §7.3、§7.4、§15.1（listen 与 Base URL）、§14.5；TEST-MATRIX V-47 的认证分项。
+
+范围（只新增或修改这些）：
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/admin.go
+- 新增 internal/core/adminauth/
+- internal/core/settings/：非 loopback 的 listen 必须配合 https 的 admin_base_url 或非空的 trusted_proxies（只加校验）
+- cmd/alonabot/：新增 admin-token 命令组（init、reset）；run 用 adminauth 作为 webhost 的 AdminSessions 并挂上登录接口
+- 上述包的测试文件
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. internal/core/state
+   迁移：
+   CREATE TABLE admin_credential (id INTEGER PRIMARY KEY CHECK (id = 1), token_sha256 BLOB NOT NULL, auth_generation INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+   CREATE TABLE admin_sessions (session_id TEXT PRIMARY KEY, csrf_token TEXT NOT NULL, auth_generation INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+   读写方法自定（放在 admin.go）。
+2. internal/core/adminauth
+   var ErrNotInitialized = errors.New("admin token is not initialized")
+   func InitToken(ctx context.Context, st *state.Store) (token string, err error)  // 已有凭证时返回错误；token 为 32 字节随机值的 base64url（无 padding）
+   func ResetToken(ctx context.Context, st *state.Store) (token string, err error) // 递增 auth_generation，删除全部管理会话
+   type Auth struct{ ... }
+   func New(st *state.Store, now func() time.Time, secure bool) *Auth // secure 为 true 时 Cookie 用 __Host- 前缀与 Secure
+   func (a *Auth) Routes(mux *http.ServeMux)        // POST /api/auth/login、POST /api/auth/logout
+   func (a *Auth) Require(next http.Handler) http.Handler // 管理 API 的中间件：Cookie 会话（变更方法要求 CSRF）或 Authorization: Bearer
+   func (a *Auth) Lookup(r *http.Request) (sessionID string, expiresAt time.Time, ok bool) // 实现 webhost.AdminSessions
+   func (a *Auth) Valid(sessionID string) bool
+   func (a *Auth) Reauthenticate(r *http.Request, token string) bool // 供明文查看 secret 前的再认证（T-09.9 使用）
+3. cmd/alonabot
+   alonabot admin-token init --data-dir DIR；alonabot admin-token reset --data-dir DIR
+   两者都要求 stdin 与 stderr 都是终端，否则以 exitUsage 退出且不生成 token；先取得 core.lock（Core 正在运行时失败并提示先停止 Core）；token 只写到 stderr 一次，不进日志。
+
+行为：
+- 登录：只在 admin host 上提供（webhost 已按 Host 分派）。请求必须是 POST、Content-Type 为 application/json、Origin 等于 admin_base_url 的 origin（缺失或不等 → 403）；请求体 {"token": "..."}。未初始化 → 503（ErrNotInitialized 的 safe 文本）。SHA256 后用 subtle.ConstantTimeCompare 比较；失败 → 401（不区分原因）。成功时创建会话（随机 32 字节 ID，csrf_token 为另一随机值，到期为 8h 后，命名常量，绑定当前 auth_generation），设置 Cookie（__Host-alonabot_admin 或 alonabot_admin；HttpOnly、SameSite=Strict、Path=/），响应体 {"csrf_token": "..."}。
+- Require：Cookie 会话必须存在、未过期且 auth_generation 等于当前值；GET/HEAD 之外的方法还要求请求头 X-Alonabot-CSRF 等于会话的 csrf_token 且 Origin 校验通过。或者 Authorization: Bearer <token> 与凭证摘要恒时比较相等（CLI 用，不需要 CSRF）。都不满足 → 401；未初始化 → 503。
+- 登出：删除会话及其派生的插件会话（webhost 通过 Valid 立即感知），清除 Cookie。
+- reset：auth_generation 加一并删除全部管理会话；派生票据与插件会话因 Valid 返回 false 而失效。
+- 安全：token、会话 ID 与 csrf_token 不写日志、不出现在错误中；登录失败以 INFO 记录（来源地址，不含 token）。设置校验：listen 不是 loopback 地址时，admin_base_url 必须是 https，或 trusted_proxies 非空（TLS 由可信反代终止），否则 Load 返回错误。
+- cmd/alonabot run：admin host 上把 /api/ 下的路由（目前只有认证路由）交给 Auth；webhost 使用 Auth 作为 AdminSessions。首次启动自动生成 token 的流程属于 serve（T-09.4）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：
+  - cmd/alonabot/e2e_test.go 追加：非终端运行 admin-token init 与 reset 时以 exitUsage 退出，状态库中没有凭证；Core 运行中执行 admin-token reset 时因 core.lock 失败。终端分支在本地自测中通过替换 cmd 内部的终端检测函数变量覆盖（不新增依赖）。
+  - internal/core/supervisor/adminauth_test.go（//go:build unix）：用 webhost、httpproxy 与 httpplugin 装配：未初始化时登录 503；错误 token 401；正确 token 得到 Cookie 与 csrf_token；缺少 CSRF 的 POST 管理请求 401；Bearer 请求通过；Origin 不符的登录 403；登录后经票据进入私有插件页面，reset 后该插件会话与管理会话都失效；8h 后会话失效（注入时钟）；插件收到的请求中没有管理 Cookie 与 Authorization。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：替换终端检测后 init 只显示一次 token、reset 递增代次；恒时比较；Cookie 属性在 secure 与否时的差异；settings 的非 loopback 校验；日志中不出现 token；InitToken 在已有凭证时失败；Reauthenticate。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/... ./cmd/...；go build ./...。
+
+不做：管理 API 的业务接口与页面（T-09.4、T-09.8）；serve 的首次启动生成 token（T-09.4）；多用户账号（契约不提供）；明文查看 secret 的接口（T-09.9）。
+```
+
+### goal-69 · T-13.3 热部署
+
+状态：等待前置（T-13.1）。语句中 goal-67 提供的符号（根包 Run 与选项、assembly、internal/inproc、开发组件的启动流程）只写名字；合并后由审查者核对签名，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-69（切片 T-13.3：热部署）。goal 目录 goal-69，分支 goal-69，worktree .worktrees/goal-69，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：Reload 选项或 ALONABOT_RELOAD=1 启用热部署：根类型所在包属于 main 包所在 module 的开发组件改为子进程运行；Run 把当前 main 包编译到 <data_dir>/dev/bin/，按正常启动流程启动，并在启动环境中指明要运行的组件；每 DEV_RELOAD_POLL 用标准库轮询 module 内 .go 文件与嵌入资源的修改时间，编译成功后依次重启这些组件，编译失败时旧组件继续运行；其他 module 的组件留在 Core 进程中不重启；go.mod 或 go.sum 变化时输出 WARN。
+
+依据：PLAN T-13 步骤 4；CONTRACTS §15.4、§16（DEV_RELOAD_POLL）；TEST-MATRIX V-65。
+
+范围（只新增或修改这些）：
+- 根包：新增 reload.go；alonabot.go 增加 Reload 选项与子进程模式（只加分支）
+- internal/inproc/：增加子进程模式下指明组件的环境变量名常量
+- examples/devbot/：可选地演示 Reload（只改 main.go 的选项）
+- 上述包的测试文件
+允许的新跨模块边：无（编译使用 os/exec 调用 go build）。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. 根包 alonabot
+   func Reload() Option // 等同 ALONABOT_RELOAD=1
+2. internal/inproc
+   const EnvComponent = "ALONABOT_DEV_COMPONENT" // 子进程模式：值为要运行的组件 ID；设置时 Run 只运行该组件，不装配 Core
+
+行为：
+- 判定：组件根类型（reflect）的包路径以 main 包所在 module 路径（runtime/debug.ReadBuildInfo 的 Main.Path）为前缀时为本 module 组件，否则为其他 module 组件。
+- 编译：go build -o <data_dir>/dev/bin/<可执行文件名>（Windows 加 .exe），在 main 包目录执行，环境为当前环境；输出写到 Core 日志（INFO，失败时 ERROR 并附编译器输出）。
+- 启动：本 module 组件以子进程运行该二进制，环境中设置 EnvComponent 与通常的 Session 变量（沿用 process 与 supervisor 的启动流程，安装记录仍为 dev 来源、代次 dev）；子进程中的 Run 看到 EnvComponent 时只以独立进程方式运行该组件（调用 sdk.Run 或 sdk.RunAdapter 的环境变量版本），不装配 Core。子进程异常退出按有限重启策略处理。其他 module 的组件仍按 goal-67 在 Core 进程的 goroutine 中运行。
+- 轮询：每 DEV_RELOAD_POLL 遍历 module 根目录下的 .go 文件与 //go:embed 引用的文件（排除 <data_dir>、vendor、以 . 或 _ 开头的目录、testdata），比较修改时间与大小；有变化时编译，成功后依次停止并重新启动每个本 module 组件（每次一个，停止使用正常停止流程与预算）；Adapter 组件重启后由 remote.Process 恢复已启用的实例。编译失败时不停止旧组件。go.mod 或 go.sum 变化时只输出 WARN "go.mod or go.sum changed; restart alonabot to apply"，不编译。
+- 停止 Run 时停止轮询，并按 goal-67 的顺序停止全部组件；dev/bin 下的二进制保留。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：reload_test.go（根包，//go:build unix）：在 t.TempDir() 中写一个临时 module（go.mod replace 指向本仓库），含一个开发插件与一个来自本仓库 module 的回环 Adapter（属于「其他 module」）；以 ALONABOT_RELOAD=1 运行它的 main：
+  - 启动后插件以子进程运行（日志中有 pid，与 Core 进程不同），回环 Adapter 在 Core 进程中运行。
+  - 修改插件回复的文本并保存：在若干个轮询周期内插件重启，之后的回复为新文本；回环 Adapter 的实例没有 bot.offline。
+  - 写入语法错误：日志有编译错误，旧插件继续回复旧文本；修复后恢复。
+  - 修改 go.mod：日志有 WARN，没有重新编译。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：本 module 判定；轮询排除目录；Windows 可执行文件名（交叉检查，不在 Windows 运行）；子进程模式下 Run 只运行指定组件。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./... ；go build ./...。
+
+不做：配置与 dev.sqlite（T-13.2）；文件系统事件通知（只用标准库轮询）；Windows 上的实际运行验证（T-10）。
+```
+
+## 第 8 波
+
+### goal-9 · T-03.10 Telegram 接入开发入口与故障矩阵
+
+状态：等待前置（T-03.6、T-03.8、T-03.9）。语句中 goal-4～goal-8、goal-50、goal-51 提供的符号（remote.Process、supervisor.Spec 的 Role、adapters/telegram、telegramtest、media.Store、buttons.Service、message 的 Send/Edit）只写名字；合并后由审查者核对签名，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-9（切片 T-03.10：Telegram 接入开发入口与故障矩阵）。goal 目录 goal-9，分支 goal-9，worktree .worktrees/goal-9，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：alonabot run 可以同时启动一个 Adapter 包与一个插件，Adapter 的实例配置取自 <data_dir>/adapters/<adapter_id>/instances/<instance_id>.json；提供 echo 与媒体示例；用本地 Bot API 模拟服务跑完 PLAN T-03 步骤 8 的发送与接收故障矩阵，并在 TEST-MATRIX §3.2 记录 T-03 的证据。真实 Telegram 没有测试账号时记为未运行。
+
+依据：PLAN T-03 步骤 8 与「停止和失败条件」；CONTRACTS §8、§15.4（实例目录）；MESSAGE-MODEL §4、§6；TEST-MATRIX V-07、V-08、V-09、V-35、V-44、V-45、V-48、V-51～V-54 的 T-03 分项。
+
+范围（只新增或修改这些）：
+- cmd/alonabot/：run 增加 --adapter-id、--adapter-entry、--adapter-dir（可选；给出时以 Adapter 角色启动该包，读取实例目录并启动全部实例，再启动插件）
+- 新增 examples/plugins/echo/ 的媒体回送能力（收到图片时以 incoming_ref 原样回送）；新增 examples/plugins/media/（上传一个内置图片并发送相册与按钮）
+- adapters/telegram/telegramtest/：补齐矩阵所需的故障注入（getUpdates 409、提交后超时、相册后 markup 失败等）
+- 新增 cmd/alonabot/telegram_e2e_test.go（//go:build unix）
+- spec/TEST-MATRIX.md §3.2：追加 T-03 的证据行（本切片获授权修改这一处；其他 spec 文件不改）
+- 上述包的测试文件
+允许的新跨模块边：cmd/alonabot 的测试 -> adapters/telegram/telegramtest（测试代码，审查者确认允许）。
+
+接口：
+- alonabot run 的新参数：--adapter-id ID --adapter-entry PATH [--adapter-dir DIR]。Adapter 的安装记录为 dev-local 来源、Role=adapter、AdapterID=ID；实例目录为 <data_dir>/adapters/<ID>/instances/，每个 *.json 是一个实例（文件名去掉 .json 为 instance_id），内容原样作为实例配置；目录不存在时没有实例并输出 WARN。
+- 不新增公开 Go 符号。
+
+行为：
+- 启动顺序：取得 core.lock → 启动 Adapter 进程并 Bind → 启动全部实例 → 启动插件。插件停止与 Core 退出时先停插件、再停 Adapter。Adapter 进程异常退出按有限重启策略恢复，Bind 后恢复已启用的实例。
+- 实例文件中的 Secret 字段（token、proxy）在本切片按原样下发；它们只出现在 adapter.instance.start 请求中，不写日志。Secret Store 对实例配置的处理由 T-09.4 接入，用一行 shortcut 注释写明。
+- 故障矩阵（全部以 telegramtest 运行，在 telegram_e2e_test.go 中各为一个子测试，并以 telegramtest.Calls() 的实际请求数量为证据）：
+  1) 同包两个实例单独启停；停一个不影响另一个，进程 PID 不变。
+  2) Adapter 进程被杀后恢复：两条 ADAPTER_EXITED 的 bot.offline，恢复后各一条 bot.online，从已保存游标继续，不重复交付。
+  3) 伪造其他实例的事件被拒（使用回环测试 Adapter 的方式无法覆盖时，以 Telegram 实例在 deliver 中填错 account_id 的测试钩子验证）。
+  4) 话题（thread）消息的回复带 message_thread_id。
+  5) 一条 Chain 生成多条物理消息与两次 Send 的区别：请求数分别为 N 与 2。
+  6) 提交后超时：第一个物理请求断开，结果 UNKNOWN，此后没有任何补发请求。
+  7) 相册后 markup 失败：PARTIAL，媒体组 ID 保留，没有重发相册。
+  8) message_id=0：PARTIAL，依赖它的 markup 为 NOT_ATTEMPTED。
+  9) 入站图片：两个插件共享一次 getFile 下载；授权与过期按 goal-7；超出配额 RESOURCE_EXHAUSTED。
+  10) 游标提交后崩溃：交付后杀掉 Core 进程，重启后不重复交付该 update。
+  11) getUpdates 409：实例停止并产生 INSTANCE_FAILED 的 bot.offline。
+  12) 按钮点击回到发送插件；编辑消息成功，不改为发送新消息。
+  13) Actor.locale、to_me 的映射（各一条）。
+- 证据：TEST-MATRIX §3.2 追加 T-03 一行，写明测试位置、命令、平台（darwin/arm64 等实际运行平台）与结果，模拟服务的结果标为「本地 Bot API 模拟」；真实 Telegram 标「未运行」并写明原因，不用模拟结果代替。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/telegram_e2e_test.go（上述矩阵）；构建 cmd/alonabot、adapters/telegram/cmd/alonabot-adapter-telegram、examples/plugins/echo 与 media 后以真实进程运行。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：实例目录的各种异常（非法 JSON、空目录、非 .json 文件被忽略）；--adapter-* 参数的组合错误。
+- 若维护者提供了测试账号：在 PR 中另附一次真实 Telegram 的手动运行记录（命令、时间、结果），不写入提交的测试。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+
+不做：正式安装与实例管理（T-09.4）；实例配置的 Secret Store（T-09.4）；其他平台的 Adapter。
+```
+
+### goal-89 · T-03.11 官方 Telegram Adapter 的平台权限
+
+状态：等待前置（T-04.6）。语句只写了目标、依据和要点。依据 D-69 新增。
+
+目标：Adapter 描述声明 `telegram.chat_owner` 与 `telegram.chat_admin`；群与超级群中的事件按 `getChatAdministrators` 的会话缓存给出 Actor 的平台权限，缓存 10 分钟，`chat_member`、`my_chat_member` 使缓存作废，获取失败时不带平台权限并记诊断；发布只含常量的 `adapters/telegram/perm`。
+
+依据：PLAN T-03 步骤 9；MESSAGE-MODEL §6.1；CONTRACTS §2.3、§8；DECISIONS D-69；TEST-MATRIX V-85。
+
+### goal-13 · T-04.4 持久化命令策略
+
+状态：等待前置（T-03.2、T-04.1、T-04.6）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-03.2、T-04.1 及命令派发 T-04.3 已由 PR #31、#34、#47 合并。已核对 `Router.Commands().Shadows()`、`router.New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send router.ServiceFunc) *router.Router`、`dispatchCommands` 与 `invokeCommand`。策略依赖通过下方 CommandPolicy 注入，避免 router 与 policy 的循环 import。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-13（切片 T-04.4：持久化命令策略）。goal 目录 goal-13，分支 goal-13，worktree .worktrees/goal-13，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：以 plugin_id 加作用域（插件、命令组、路由）持久化权限与启用覆盖；派发命令前按「最近显式权限、任一层禁用即拒绝、再与 Core 全局禁止合并」判定；Core 依据 Core Admin 列表给 Actor 赋予 USER/ADMIN 角色；提供管理服务层的查询与修改方法，持久化成功后才返回成功，运行时修改在下一次派发时生效。
+
+依据：PLAN T-04 步骤 5；CONTRACTS §2.2 第 2、3、8 条、§2.3 第 1、2 条、§7（Core Admin 列表）；MESSAGE-MODEL §1；DECISIONS D-45；TEST-MATRIX V-12、V-43 的服务层分项。
+
+范围（只新增或修改这些）：
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/policy.go
+- internal/core/policy/：新增 command.go、admins.go、denies.go；policy.go 的 CheckSend 增加全局禁止检查
+- internal/core/router/：命令派发在调用插件前检查策略；事件进入派发前由策略补全 Actor 的 trusted_roles（只加调用点）
+- 更新 router.New 的全部调用者（含 supervisor 测试与其他已存在的装配代码），注入同一份 policy.Policy
+- 上述包的测试文件
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. internal/core/state
+   迁移：
+   CREATE TABLE command_policies (plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), scope TEXT NOT NULL, permission INTEGER NOT NULL DEFAULT 0, enabled INTEGER, PRIMARY KEY (plugin_id, scope)); -- permission 0 表示不覆盖；enabled 为 NULL 表示不覆盖
+   CREATE TABLE core_admins (adapter_instance_id TEXT NOT NULL, external_user_id TEXT NOT NULL, PRIMARY KEY (adapter_instance_id, external_user_id));
+   CREATE TABLE global_denies (kind TEXT NOT NULL, adapter_instance_id TEXT NOT NULL, subject_id TEXT NOT NULL, PRIMARY KEY (kind, adapter_instance_id, subject_id)); -- kind 为 user 或 chat
+   读写方法自定（放在 policy.go），全部按主键幂等。
+2. internal/core/policy
+   type ScopeKind int // ScopePlugin、ScopeGroup、ScopeRoute
+   type Scope struct { Kind ScopeKind; Group []string; RouteID string } // Group 用于 ScopeGroup（命令路径前缀 token）；RouteID 用于 ScopeRoute
+   type Override struct { Permission pb.Permission; Enabled *bool } // Permission 为 UNSPECIFIED、Enabled 为 nil 表示该项不覆盖
+   type ScopedOverride struct { Scope Scope; Override Override }
+   func (p *Policy) SetOverride(ctx context.Context, pluginID string, s Scope, o Override) error // 两项都不覆盖时等同删除
+   func (p *Policy) Overrides(ctx context.Context, pluginID string) ([]ScopedOverride, error) // 按插件、组（路径字典序）、路由排序
+   func (p *Policy) CheckCommand(ctx context.Context, pluginID string, route *pb.RouteDescriptor, actor *pb.Actor, target *pb.Target) *pb.ErrorInfo // nil 表示放行
+   func (p *Policy) TrustedRoles(ctx context.Context, actor *pb.Actor) []pb.TrustedRole
+   func (p *Policy) AddAdmin(ctx context.Context, instanceID, userID string) error
+   func (p *Policy) RemoveAdmin(ctx context.Context, instanceID, userID string) error
+   func (p *Policy) Admins(ctx context.Context) ([]Admin, error) // type Admin struct { InstanceID, UserID string }
+   type DenyKind string // DenyUser = "user"、DenyChat = "chat"
+   func (p *Policy) Deny(ctx context.Context, kind DenyKind, instanceID, subjectID string) error
+   func (p *Policy) Undeny(ctx context.Context, kind DenyKind, instanceID, subjectID string) error
+   func (p *Policy) Denies(ctx context.Context) ([]Deny, error) // type Deny struct { Kind DenyKind; InstanceID, SubjectID string }
+
+3. internal/core/router
+   type CommandPolicy interface {
+       CheckCommand(ctx context.Context, pluginID string, route *pb.RouteDescriptor, actor *pb.Actor, target *pb.Target) *pb.ErrorInfo
+       TrustedRoles(ctx context.Context, actor *pb.Actor) []pb.TrustedRole
+   }
+   func New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send ServiceFunc, p CommandPolicy) *Router
+   // 保留已合入的 Adapter Registry 与发送回调；p 由装配处传入同一份 *policy.Policy，router 不 import policy。
+
+行为：
+- TrustedRoles：actor 为 nil 返回空。否则含 USER；(actor.adapter_instance_id, external_user_id) 在 Core Admin 列表中时再含 ADMIN；Adapter 给出的 CHAT_ADMIN 原样保留。Router 在每个事件进入派发前调用它重写 actor.trusted_roles，插件与 Adapter 自报的 USER/ADMIN 一律不采信。
+- CheckCommand 的顺序（任一步拒绝即返回）：
+  1) 全局禁止：actor 存在且 (实例, external_user_id) 在 user 禁止表中，或 target 存在且 (实例, chat_id) 在 chat 禁止表中 → PERMISSION_DENIED。
+  2) 启用：插件作用域、该路由命令路径的每一层祖先组、路由自身中，任一层显式 Enabled=false → 拒绝（FAILED_PRECONDITION，safe_message "command is disabled"）。路由自身没有显式 Enabled 时取 route.default_enabled。子项的 Enabled=true 不能抵消祖先的 false。
+  3) 权限：取最近的显式 Permission（路由 → 最长的祖先组 → 插件），都没有时取 route.required_permission。ANY 放行；USER 需要 TrustedRoles 含 USER；ADMIN 需要含 ADMIN；否则 PERMISSION_DENIED。没有 Actor 的调用不满足 USER 与 ADMIN。
+  文本匹配与 Raw 路由的祖先组为空，只看插件与路由自身。
+- 每次 CheckCommand 都从状态库读取当前策略，不缓存；同一次检查内的多次读取在一个只读事务中完成，保证看到一致的快照。修改在下一次派发时生效，已开始的调用不受影响。
+- Router（goal-12 的命令层）：普通命令选出胜出路由后，在参数解析和 usage 发送之前执行 CheckCommand；拒绝时消费该命令（不进入文本匹配与 Raw），不向会话回复，以 INFO 记录（plugin_id、route_id、错误码，不含消息内容）。文本匹配与 Raw 路由被拒时跳过该候选，继续后面的候选。
+- CheckSend（goal-3）在许可检查之前先检查 chat 禁止：目标 (实例, chat_id) 被禁止 → PERMISSION_DENIED。
+- 管理服务层：SetOverride、AddAdmin、Deny 等写操作在事务提交成功后才返回 nil；参数非法（未知 ScopeKind、ScopeGroup 的 Group 为空、ScopeRoute 的 RouteID 为空、Permission 不是已知枚举值、kind 未知）返回 INVALID_ARGUMENT。遮蔽诊断直接使用 goal-10 的 Router.Commands().Shadows()，本切片不重复实现。
+- 卸载插件时策略行的清理由 T-09.4 负责（command_policies 外键引用 installs）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/supervisor/policy_test.go（//go:build unix）。沿用 goal-12 的命令测试装配与测试插件，接入真实状态库上的 policy.Policy：
+  - /rss list 的 required_permission 为 ANY 时任何人可用；对插件作用域设 ADMIN 后普通用户被拒（不回复、插件未被调用、文本匹配也未被调用），加入 Core Admin 后放行。
+  - 组 rss 设 ADMIN、路由 rss list 设 ANY：list 对普通用户放行（最近显式覆盖），rss add 仍要求 ADMIN。
+  - 组 rss 禁用、路由 rss list 显式启用：list 仍被拒（父禁用优先）；取消组禁用后放行，不重启插件。
+  - 把用户加入 user 禁止表：即使是 Core Admin 也被拒；把会话加入 chat 禁止表：sdk.Send 发往该会话返回 PERMISSION_DENIED。
+  - Adapter 自报的 ADMIN 角色被丢弃，插件收到的 Actor 只有 Core 判定的角色。
+  - 关闭并重新打开状态库后策略仍在。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：CheckCommand 的完整判定表（含 default_enabled=false、无 Actor、多层组）；SetOverride 两项都不覆盖时删除行；非法参数；并发修改与检查在 -race 下无数据竞争。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./sdk/...；go build ./...。
+
+不做：管理 API、CLI 与 WebUI（T-09.4、T-09.9）；/whoami（T-14）；Rule 与 chat_admin Rule（T-05.2）；Hook（T-05.3）。
+```
+
+### goal-88 · T-04.7 SDK 链式注册与自有类型
+
+状态：等待前置（T-04.2、T-04.6、T-06.1、T-06.3、T-08.1）。语句只写了目标、依据和要点。依据 D-70 新增。T-06.3（PR #56）新增的 Event Bus 订阅与发布入口、T-08.1（PR #54）对生成器与 `sdk/session.go` 的修改都按旧写法进行，由本切片在它们合并后一并改为链式，避免与进行中的 PR 同时修改这些文件。
+
+目标：命令、文本匹配、事件、Service 与 Event Bus 订阅的注册改为链式构建，删除 `RouteOption`、`ServiceOption` 与位置参数形式；新增 Permission 值对象与 `c.Has`、标准事件常量与 `sdk.AdapterEvent`；Service Schema 由生成器生成；Context、Send、事件 payload 与错误码改用 SDK 自有类型，自动回复型 Handler 可以 `c.Send`；构建期生成器、示例与已合并调用方同步。
+
+依据：PLAN T-04 步骤 9；CONTRACTS §2.1、§3、§8；MESSAGE-MODEL §3；DESIGN §D、§F；DECISIONS D-69、D-70、D-71；TEST-MATRIX V-10、V-14、V-86。
+
+### goal-32 · T-08.5 受管 SQLite 连接与迁移
+
+状态：等待前置（T-08.3）。语句中 goal-30 提供的符号（sdk/config.Prepare 与 sdk 的准备流程）只写名字；sdk/gormdb 的现有函数（OpenSQLite、ReadPragmas、CheckMigrators、RunVersioned、AppliedMigrations）已在 main 上。合并后由审查者核对签名，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-32（切片 T-08.5：受管 SQLite 连接与迁移）。goal 目录 goal-32，分支 goal-32，worktree .worktrees/goal-32，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：受管 SQLite 有两个入口：新建的 sdk/sqlitedb 的 Open(ctx) 按当前 Session 的数据库描述返回 *sql.DB；sdk/gormdb 的 Open(ctx) 在同一个连接上返回原生 *gorm.DB。同一 Session 复用同一连接，SDK 停止时关闭。只导入 sqlitedb 的插件不链接 GORM。两个包各定义一组迁移接口，被导入时向 SDK 登记识别方式；SDK 在配置准备之后、OnStart 之前执行迁移，并在 REGISTER 中报告结果。Core 为每个代次下发 SQLite 路径。
+
+依据：PLAN T-08 步骤 5、6；CONTRACTS §6.1～§6.3、§4.2（迁移预算）；WIRE-FORMAT §3.2（database_descriptor）；DECISIONS D-48、D-49；TEST-MATRIX V-26、V-39。
+
+范围（只新增或修改这些）：
+- sdk/sqlitedb/：新建包。连接设置与回读核对从 sdk/gormdb/sqlite.go 移入；open.go（Open 与 Session 绑定）、migrate.go（迁移接口、RunVersioned、AppliedMigrations）
+- sdk/gormdb/：OpenSQLite 改为 sqlitedb.OpenFile 加 GORM 包装；新增 open.go（Open）；ReadPragmas 与 PragmaValues 移到 sqlitedb 后从本包删除
+- sdk/internal/dbhook/：新建内部包，供 sqlitedb 与 gormdb 向 sdk 登记迁移识别与执行，形状由执行者自定，只用标准库与 contracts 类型
+- sdk/：session.go 在配置准备之后调用迁移阶段并填写 REGISTER 的 migration；activate.go 在停止时关闭连接（只加调用点）
+- internal/core/supervisor/：Spec 增加 Database；新代次时创建 SQLite 代次目录并下发路径
+- internal/core/host/prepare.go：校验 REGISTER 的 migration 与 Bootstrap 描述一致（只加校验）
+- 上述包的测试文件
+允许的新跨模块边：sdk -> sdk/sqlitedb、sdk/gormdb -> sdk/sqlitedb（同属 sdk 模块）。sdk 根包不得 import sdk/gormdb 或 gorm。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. sdk/sqlitedb
+   var ErrNoDatabase = errors.New("this plugin has no database")
+   func Open(ctx context.Context) (*sql.DB, error) // 未处于 Session 中返回 FAILED_PRECONDITION 的错误；backend 为 NONE 返回 ErrNoDatabase；同一 Session 重复调用返回同一个 *sql.DB
+   func OpenFile(ctx context.Context, path string) (*sql.DB, error) // 原 gormdb.OpenSQLite 的设置与核对：WAL、FULL、外键、5s busy timeout、单连接
+   type PragmaValues struct { JournalMode string; Synchronous int; ForeignKeys int; BusyTimeout int }
+   func ReadPragmas(ctx context.Context, db *sql.DB) (PragmaValues, error)
+   type SelfMigrator interface { Migrate(ctx context.Context, db *sql.DB) error }
+   type Migration struct { ID uint32; Up func(context.Context, *sql.Tx) error }
+   type VersionedMigrator interface { Migrations() []Migration }
+   const LedgerTable = "_alonabot_migrations"
+   func RunVersioned(ctx context.Context, db *sql.DB, migrations []Migration) ([]uint32, error)
+   func AppliedMigrations(ctx context.Context, db *sql.DB) ([]uint32, error)
+2. sdk/gormdb
+   var ErrNoDatabase = sqlitedb.ErrNoDatabase
+   func Open(ctx context.Context) (*gorm.DB, error) // 经 libtnb sqlite.Config{Conn: ...} 包装 sqlitedb.Open 返回的同一个 *sql.DB；同一 Session 重复调用返回同一个 *gorm.DB
+   OpenSQLite、SelfMigrator、Migration、VersionedMigrator、RunVersioned、AppliedMigrations、CheckMigrators 保留现有签名；LedgerTable 改为引用 sqlitedb.LedgerTable
+3. internal/core/supervisor
+   Spec 增加字段：Database *pb.DatabaseDescriptor // nil 时 supervisor 为 SQLite 生成描述：<plugins>/<id>/generations/<generation>/db.sqlite，activation_reason 由调用方在 Bootstrap 中给出
+
+行为：
+- Open：文件不存在时只有 activation_reason 为 first_install 时才创建，否则返回错误（不创建空库掩盖丢失）。连接错误原样返回。插件拿不到 Core 状态库的任何路径或连接。
+- 登记：sqlitedb 与 gormdb 在包 init 中向 sdk/internal/dbhook 登记一个识别函数（只追加函数值，不做 I/O）；SDK 的迁移阶段只调用已登记的识别函数，因此未导入某个包时不认识它的接口。
+- 迁移阶段（SDK，配置准备之后、OnStart 之前，预算为 Bootstrap 的 migration 阶段预算，与普通业务期限无关）：
+  - 根插件实现的迁移接口合计多于一个（含两个包混用，例如 sqlitedb 的 Migrate 加 gormdb 的 Migrations）时失败（INVALID_ARGUMENT）。
+  - backend 为 NONE：跳过，migration.mode=NONE。
+  - versioned：ID 必须非零、唯一、严格递增；每步 Up 与 _alonabot_migrations 的完成记录在同一事务中，失败不记成功。两个包的账本格式相同。
+  - self：调用 Migrate，成功后 self_migrate_completed=true。
+  - REGISTER.migration：mode 与 completed_migration_ids（versioned，升序）或 self_migrate_completed（self）如实填写。
+- prepare_effects=external 的维护门槛由 Core 在建立候选前判断（T-09），本切片的 SDK 不读取 manifest 的 prepare_effects。
+- Core：supervisor 新代次时创建 generations/<g>/ 目录（0700）并下发 SQLite 路径；普通 restart 沿用 Active 代次的路径。host 校验 REGISTER.migration.mode 与 Bootstrap 的 migration_mode 一致、versioned 的 completed 包含 Bootstrap 的 applied 集合，否则注册失败。
+- 事务内不得等待同一单连接池的另一条独立查询（文档注释写明，测试覆盖一次死锁会被 busy timeout 以外的方式暴露为错误）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：
+  - internal/core/supervisor/db_test.go（//go:build unix）：两个测试插件，一个只导入 sqlitedb、一个用 gormdb，各实现 Migrations（两步，第二步按环境变量可失败）并在 OnStart 中写一行：首装成功，REGISTER 报告 [1,2]，状态库代次目录下有 db.sqlite 且 PRAGMA 值正确；第二步失败时注册失败、账本只有 1；普通 restart 不重复执行迁移；同时实现两个迁移接口的插件在 CONFIG 之后失败。
+  - 同一测试中断言只导入 sqlitedb 的测试插件二进制不含 gorm.io/gorm（`go version -m` 或 `go list -deps`）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：两个入口的复用、共用连接与停止时关闭；backend NONE；文件缺失时非首装不创建；ID 非递增；host 的 migration 一致性校验。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./sdk/... ./internal/core/...；go build ./...；`go list -deps` 列出的 Core 可执行文件与 SDK 根包模块都在 docs/development.md 的允许清单中。
+
+不做：SQLite 候选副本与 Backup API（T-08.6）；维护许可的管理入口、external 插件的候选门槛与 Journal（T-09）。
+```
+
 ### goal-53 · T-08.8 用户可见文案目录
 
-状态：等待前置（T-08.1）。T-04.1、T-04.3 已合并；已核对 `sdk.Context`、`sdk.Usage(text string) RouteOption` 与 `router/command.go` 的 `commandUsage(spec *pb.CommandSpec) *pb.MessageChain`，usage 经注入的 message.Service.Send 发送。生成器与配置描述接口仍待 goal-28 合并后核对。
+状态：等待前置（T-04.1、T-04.3、T-04.6、T-08.1）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.1、T-04.3 已合并；已核对 `sdk.Context`、`sdk.Usage(text string) RouteOption` 与 `router/command.go` 的 `commandUsage(spec *pb.CommandSpec) *pb.MessageChain`，usage 经注入的 message.Service.Send 发送。生成器与配置描述接口仍待 goal-28 合并后核对。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-53（切片 T-08.8：用户可见文案目录）。goal 目录 goal-53，分支 goal-53，worktree .worktrees/goal-53，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -2609,416 +2632,9 @@ sdk/config
 不做：WebUI 文案与语言切换（T-08.7）；配置字段翻译的渲染（T-08.7）；确认消息的文案（T-11.2 使用本目录）；修改默认 locale 的管理 API（T-09.9）。
 ```
 
-### goal-36 · T-09.1 首次管理认证
-
-状态：等待前置（T-07.4）。语句中 goal-25、goal-26、goal-76 提供的符号（webhost.Host、webhost.AdminSessions、settings.Settings、cobra 命令树）只写名字；合并后由审查者核对签名，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-36（切片 T-09.1：首次管理认证）。goal 目录 goal-36，分支 goal-36，worktree .worktrees/goal-36，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：alonabot admin-token init/reset 在持有 core.lock 时离线生成 32 字节管理 token，只在本机终端显示一次，状态库只存 SHA256 与认证代次；reset 递增代次并撤销全部管理会话、兑换票据与派生插件会话。admin host 提供 POST /api/auth/login（Origin 与登录 CSRF、恒时比较、8h 会话）与 POST /api/auth/logout；管理状态变更要求 CSRF；CLI 用显式 Bearer token。实现 webhost.AdminSessions，未初始化或认证无效时拒绝一切管理访问。
-
-依据：PLAN T-09 步骤 1；CONTRACTS §7.3、§7.4、§15.1（listen 与 Base URL）、§14.5；TEST-MATRIX V-47 的认证分项。
-
-范围（只新增或修改这些）：
-- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/admin.go
-- 新增 internal/core/adminauth/
-- internal/core/settings/：非 loopback 的 listen 必须配合 https 的 admin_base_url 或非空的 trusted_proxies（只加校验）
-- cmd/alonabot/：新增 admin-token 命令组（init、reset）；run 用 adminauth 作为 webhost 的 AdminSessions 并挂上登录接口
-- 上述包的测试文件
-允许的新跨模块边：无。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. internal/core/state
-   迁移：
-   CREATE TABLE admin_credential (id INTEGER PRIMARY KEY CHECK (id = 1), token_sha256 BLOB NOT NULL, auth_generation INTEGER NOT NULL, updated_at INTEGER NOT NULL);
-   CREATE TABLE admin_sessions (session_id TEXT PRIMARY KEY, csrf_token TEXT NOT NULL, auth_generation INTEGER NOT NULL, expires_at INTEGER NOT NULL);
-   读写方法自定（放在 admin.go）。
-2. internal/core/adminauth
-   var ErrNotInitialized = errors.New("admin token is not initialized")
-   func InitToken(ctx context.Context, st *state.Store) (token string, err error)  // 已有凭证时返回错误；token 为 32 字节随机值的 base64url（无 padding）
-   func ResetToken(ctx context.Context, st *state.Store) (token string, err error) // 递增 auth_generation，删除全部管理会话
-   type Auth struct{ ... }
-   func New(st *state.Store, now func() time.Time, secure bool) *Auth // secure 为 true 时 Cookie 用 __Host- 前缀与 Secure
-   func (a *Auth) Routes(mux *http.ServeMux)        // POST /api/auth/login、POST /api/auth/logout
-   func (a *Auth) Require(next http.Handler) http.Handler // 管理 API 的中间件：Cookie 会话（变更方法要求 CSRF）或 Authorization: Bearer
-   func (a *Auth) Lookup(r *http.Request) (sessionID string, expiresAt time.Time, ok bool) // 实现 webhost.AdminSessions
-   func (a *Auth) Valid(sessionID string) bool
-   func (a *Auth) Reauthenticate(r *http.Request, token string) bool // 供明文查看 secret 前的再认证（T-09.9 使用）
-3. cmd/alonabot
-   alonabot admin-token init --data-dir DIR；alonabot admin-token reset --data-dir DIR
-   两者都要求 stdin 与 stderr 都是终端，否则以 exitUsage 退出且不生成 token；先取得 core.lock（Core 正在运行时失败并提示先停止 Core）；token 只写到 stderr 一次，不进日志。
-
-行为：
-- 登录：只在 admin host 上提供（webhost 已按 Host 分派）。请求必须是 POST、Content-Type 为 application/json、Origin 等于 admin_base_url 的 origin（缺失或不等 → 403）；请求体 {"token": "..."}。未初始化 → 503（ErrNotInitialized 的 safe 文本）。SHA256 后用 subtle.ConstantTimeCompare 比较；失败 → 401（不区分原因）。成功时创建会话（随机 32 字节 ID，csrf_token 为另一随机值，到期为 8h 后，命名常量，绑定当前 auth_generation），设置 Cookie（__Host-alonabot_admin 或 alonabot_admin；HttpOnly、SameSite=Strict、Path=/），响应体 {"csrf_token": "..."}。
-- Require：Cookie 会话必须存在、未过期且 auth_generation 等于当前值；GET/HEAD 之外的方法还要求请求头 X-Alonabot-CSRF 等于会话的 csrf_token 且 Origin 校验通过。或者 Authorization: Bearer <token> 与凭证摘要恒时比较相等（CLI 用，不需要 CSRF）。都不满足 → 401；未初始化 → 503。
-- 登出：删除会话及其派生的插件会话（webhost 通过 Valid 立即感知），清除 Cookie。
-- reset：auth_generation 加一并删除全部管理会话；派生票据与插件会话因 Valid 返回 false 而失效。
-- 安全：token、会话 ID 与 csrf_token 不写日志、不出现在错误中；登录失败以 INFO 记录（来源地址，不含 token）。设置校验：listen 不是 loopback 地址时，admin_base_url 必须是 https，或 trusted_proxies 非空（TLS 由可信反代终止），否则 Load 返回错误。
-- cmd/alonabot run：admin host 上把 /api/ 下的路由（目前只有认证路由）交给 Auth；webhost 使用 Auth 作为 AdminSessions。首次启动自动生成 token 的流程属于 serve（T-09.4）。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：
-  - cmd/alonabot/e2e_test.go 追加：非终端运行 admin-token init 与 reset 时以 exitUsage 退出，状态库中没有凭证；Core 运行中执行 admin-token reset 时因 core.lock 失败。终端分支在本地自测中通过替换 cmd 内部的终端检测函数变量覆盖（不新增依赖）。
-  - internal/core/supervisor/adminauth_test.go（//go:build unix）：用 webhost、httpproxy 与 httpplugin 装配：未初始化时登录 503；错误 token 401；正确 token 得到 Cookie 与 csrf_token；缺少 CSRF 的 POST 管理请求 401；Bearer 请求通过；Origin 不符的登录 403；登录后经票据进入私有插件页面，reset 后该插件会话与管理会话都失效；8h 后会话失效（注入时钟）；插件收到的请求中没有管理 Cookie 与 Authorization。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：替换终端检测后 init 只显示一次 token、reset 递增代次；恒时比较；Cookie 属性在 secure 与否时的差异；settings 的非 loopback 校验；日志中不出现 token；InitToken 在已有凭证时失败；Reauthenticate。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/... ./cmd/...；go build ./...。
-
-不做：管理 API 的业务接口与页面（T-09.4、T-09.8）；serve 的首次启动生成 token（T-09.4）；多用户账号（契约不提供）；明文查看 secret 的接口（T-09.9）。
-```
-
-### goal-69 · T-13.3 热部署
-
-状态：等待前置（T-13.1）。语句中 goal-67 提供的符号（根包 Run 与选项、assembly、internal/inproc、开发组件的启动流程）只写名字；合并后由审查者核对签名，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-69（切片 T-13.3：热部署）。goal 目录 goal-69，分支 goal-69，worktree .worktrees/goal-69，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：Reload 选项或 ALONABOT_RELOAD=1 启用热部署：根类型所在包属于 main 包所在 module 的开发组件改为子进程运行；Run 把当前 main 包编译到 <data_dir>/dev/bin/，按正常启动流程启动，并在启动环境中指明要运行的组件；每 DEV_RELOAD_POLL 用标准库轮询 module 内 .go 文件与嵌入资源的修改时间，编译成功后依次重启这些组件，编译失败时旧组件继续运行；其他 module 的组件留在 Core 进程中不重启；go.mod 或 go.sum 变化时输出 WARN。
-
-依据：PLAN T-13 步骤 4；CONTRACTS §15.4、§16（DEV_RELOAD_POLL）；TEST-MATRIX V-65。
-
-范围（只新增或修改这些）：
-- 根包：新增 reload.go；alonabot.go 增加 Reload 选项与子进程模式（只加分支）
-- internal/inproc/：增加子进程模式下指明组件的环境变量名常量
-- examples/devbot/：可选地演示 Reload（只改 main.go 的选项）
-- 上述包的测试文件
-允许的新跨模块边：无（编译使用 os/exec 调用 go build）。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. 根包 alonabot
-   func Reload() Option // 等同 ALONABOT_RELOAD=1
-2. internal/inproc
-   const EnvComponent = "ALONABOT_DEV_COMPONENT" // 子进程模式：值为要运行的组件 ID；设置时 Run 只运行该组件，不装配 Core
-
-行为：
-- 判定：组件根类型（reflect）的包路径以 main 包所在 module 路径（runtime/debug.ReadBuildInfo 的 Main.Path）为前缀时为本 module 组件，否则为其他 module 组件。
-- 编译：go build -o <data_dir>/dev/bin/<可执行文件名>（Windows 加 .exe），在 main 包目录执行，环境为当前环境；输出写到 Core 日志（INFO，失败时 ERROR 并附编译器输出）。
-- 启动：本 module 组件以子进程运行该二进制，环境中设置 EnvComponent 与通常的 Session 变量（沿用 process 与 supervisor 的启动流程，安装记录仍为 dev 来源、代次 dev）；子进程中的 Run 看到 EnvComponent 时只以独立进程方式运行该组件（调用 sdk.Run 或 sdk.RunAdapter 的环境变量版本），不装配 Core。子进程异常退出按有限重启策略处理。其他 module 的组件仍按 goal-67 在 Core 进程的 goroutine 中运行。
-- 轮询：每 DEV_RELOAD_POLL 遍历 module 根目录下的 .go 文件与 //go:embed 引用的文件（排除 <data_dir>、vendor、以 . 或 _ 开头的目录、testdata），比较修改时间与大小；有变化时编译，成功后依次停止并重新启动每个本 module 组件（每次一个，停止使用正常停止流程与预算）；Adapter 组件重启后由 remote.Process 恢复已启用的实例。编译失败时不停止旧组件。go.mod 或 go.sum 变化时只输出 WARN "go.mod or go.sum changed; restart alonabot to apply"，不编译。
-- 停止 Run 时停止轮询，并按 goal-67 的顺序停止全部组件；dev/bin 下的二进制保留。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：reload_test.go（根包，//go:build unix）：在 t.TempDir() 中写一个临时 module（go.mod replace 指向本仓库），含一个开发插件与一个来自本仓库 module 的回环 Adapter（属于「其他 module」）；以 ALONABOT_RELOAD=1 运行它的 main：
-  - 启动后插件以子进程运行（日志中有 pid，与 Core 进程不同），回环 Adapter 在 Core 进程中运行。
-  - 修改插件回复的文本并保存：在若干个轮询周期内插件重启，之后的回复为新文本；回环 Adapter 的实例没有 bot.offline。
-  - 写入语法错误：日志有编译错误，旧插件继续回复旧文本；修复后恢复。
-  - 修改 go.mod：日志有 WARN，没有重新编译。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：本 module 判定；轮询排除目录；Windows 可执行文件名（交叉检查，不在 Windows 运行）；子进程模式下 Run 只运行指定组件。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./... ；go build ./...。
-
-不做：配置与 dev.sqlite（T-13.2）；文件系统事件通知（只用标准库轮询）；Windows 上的实际运行验证（T-10）。
-```
-
-## 第 8 波
-
-### goal-9 · T-03.10 Telegram 接入开发入口与故障矩阵
-
-状态：等待前置（T-03.6、T-03.8、T-03.9）。语句中 goal-4～goal-8、goal-50、goal-51 提供的符号（remote.Process、supervisor.Spec 的 Role、adapters/telegram、telegramtest、media.Store、buttons.Service、message 的 Send/Edit）只写名字；合并后由审查者核对签名，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-9（切片 T-03.10：Telegram 接入开发入口与故障矩阵）。goal 目录 goal-9，分支 goal-9，worktree .worktrees/goal-9，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：alonabot run 可以同时启动一个 Adapter 包与一个插件，Adapter 的实例配置取自 <data_dir>/adapters/<adapter_id>/instances/<instance_id>.json；提供 echo 与媒体示例；用本地 Bot API 模拟服务跑完 PLAN T-03 步骤 8 的发送与接收故障矩阵，并在 TEST-MATRIX §3.2 记录 T-03 的证据。真实 Telegram 没有测试账号时记为未运行。
-
-依据：PLAN T-03 步骤 8 与「停止和失败条件」；CONTRACTS §8、§15.4（实例目录）；MESSAGE-MODEL §4、§6；TEST-MATRIX V-07、V-08、V-09、V-35、V-44、V-45、V-48、V-51～V-54 的 T-03 分项。
-
-范围（只新增或修改这些）：
-- cmd/alonabot/：run 增加 --adapter-id、--adapter-entry、--adapter-dir（可选；给出时以 Adapter 角色启动该包，读取实例目录并启动全部实例，再启动插件）
-- 新增 examples/plugins/echo/ 的媒体回送能力（收到图片时以 incoming_ref 原样回送）；新增 examples/plugins/media/（上传一个内置图片并发送相册与按钮）
-- adapters/telegram/telegramtest/：补齐矩阵所需的故障注入（getUpdates 409、提交后超时、相册后 markup 失败等）
-- 新增 cmd/alonabot/telegram_e2e_test.go（//go:build unix）
-- spec/TEST-MATRIX.md §3.2：追加 T-03 的证据行（本切片获授权修改这一处；其他 spec 文件不改）
-- 上述包的测试文件
-允许的新跨模块边：cmd/alonabot 的测试 -> adapters/telegram/telegramtest（测试代码，审查者确认允许）。
-
-接口：
-- alonabot run 的新参数：--adapter-id ID --adapter-entry PATH [--adapter-dir DIR]。Adapter 的安装记录为 dev-local 来源、Role=adapter、AdapterID=ID；实例目录为 <data_dir>/adapters/<ID>/instances/，每个 *.json 是一个实例（文件名去掉 .json 为 instance_id），内容原样作为实例配置；目录不存在时没有实例并输出 WARN。
-- 不新增公开 Go 符号。
-
-行为：
-- 启动顺序：取得 core.lock → 启动 Adapter 进程并 Bind → 启动全部实例 → 启动插件。插件停止与 Core 退出时先停插件、再停 Adapter。Adapter 进程异常退出按有限重启策略恢复，Bind 后恢复已启用的实例。
-- 实例文件中的 Secret 字段（token、proxy）在本切片按原样下发；它们只出现在 adapter.instance.start 请求中，不写日志。Secret Store 对实例配置的处理由 T-09.4 接入，用一行 shortcut 注释写明。
-- 故障矩阵（全部以 telegramtest 运行，在 telegram_e2e_test.go 中各为一个子测试，并以 telegramtest.Calls() 的实际请求数量为证据）：
-  1) 同包两个实例单独启停；停一个不影响另一个，进程 PID 不变。
-  2) Adapter 进程被杀后恢复：两条 ADAPTER_EXITED 的 bot.offline，恢复后各一条 bot.online，从已保存游标继续，不重复交付。
-  3) 伪造其他实例的事件被拒（使用回环测试 Adapter 的方式无法覆盖时，以 Telegram 实例在 deliver 中填错 account_id 的测试钩子验证）。
-  4) 话题（thread）消息的回复带 message_thread_id。
-  5) 一条 Chain 生成多条物理消息与两次 Send 的区别：请求数分别为 N 与 2。
-  6) 提交后超时：第一个物理请求断开，结果 UNKNOWN，此后没有任何补发请求。
-  7) 相册后 markup 失败：PARTIAL，媒体组 ID 保留，没有重发相册。
-  8) message_id=0：PARTIAL，依赖它的 markup 为 NOT_ATTEMPTED。
-  9) 入站图片：两个插件共享一次 getFile 下载；授权与过期按 goal-7；超出配额 RESOURCE_EXHAUSTED。
-  10) 游标提交后崩溃：交付后杀掉 Core 进程，重启后不重复交付该 update。
-  11) getUpdates 409：实例停止并产生 INSTANCE_FAILED 的 bot.offline。
-  12) 按钮点击回到发送插件；编辑消息成功，不改为发送新消息。
-  13) Actor.locale、to_me 的映射（各一条）。
-- 证据：TEST-MATRIX §3.2 追加 T-03 一行，写明测试位置、命令、平台（darwin/arm64 等实际运行平台）与结果，模拟服务的结果标为「本地 Bot API 模拟」；真实 Telegram 标「未运行」并写明原因，不用模拟结果代替。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/telegram_e2e_test.go（上述矩阵）；构建 cmd/alonabot、adapters/telegram/cmd/alonabot-adapter-telegram、examples/plugins/echo 与 media 后以真实进程运行。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：实例目录的各种异常（非法 JSON、空目录、非 .json 文件被忽略）；--adapter-* 参数的组合错误。
-- 若维护者提供了测试账号：在 PR 中另附一次真实 Telegram 的手动运行记录（命令、时间、结果），不写入提交的测试。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
-
-不做：正式安装与实例管理（T-09.4）；实例配置的 Secret Store（T-09.4）；其他平台的 Adapter。
-```
-
-### goal-17 · T-05.3 三阶段 Hook 与 send_forbidden
-
-状态：等待前置（T-05.2）。语句中 goal-2、goal-12、goal-15、goal-16、goal-51 提供的符号（router 的派发链与可信信息、message.Service 的 Send 与 Edit、sdk 的分发与 RouteOption）只写名字；合并后由审查者核对签名，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-17（切片 T-05.3：三阶段 Hook 与 send_forbidden）。goal 目录 goal-17，分支 goal-17，worktree .worktrees/goal-17，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：运行 PreEvent、BeforeSend、AfterSend 三类 Hook：PreEvent 只能改写业务 payload 或 Stop，失败时结束本次入站链；每次显式或自动 Send（以及 Edit）独立执行一组 BeforeSend → Adapter.Send → AfterSend，BeforeSend 只能改 Chain 或拒绝，改后重新预检；AfterSend 只观察。出站 Hook 的执行上下文带 send_forbidden，该标记保存在 Core 的父调用记录中并随派生调用继承，Hook 内直接 Send 被拒。
-
-依据：PLAN T-05 步骤 5、6；CONTRACTS §2.3 第 3～5 条、§8（Edit 的 Hook 段）；WIRE-FORMAT §3.5（Hook 输入的追加）；TEST-MATRIX V-15 的直接路径分项。
-
-范围（只新增或修改这些）：
-- contracts/proto/alonabot/v1/invocation.proto：BeforeSendRequest 与 AfterSendRequest 各追加 SendOperation operation 与 optional string edited_platform_message_id，并新增 enum SendOperation。随后 go generate ./...（本切片获授权只追加这些）
-- contracts/wirespec_test.go：追加编号检查
-- contracts/validate/register.go：HOOK 路由的注册校验
-- 新增 internal/core/hook/
-- internal/core/router/：派发链在命令层之前执行 PreEvent（只加调用点）
-- internal/core/message/：Send 与 Edit 在调用 Adapter 前后执行出站 Hook；删除 goal-51 的 shortcut 注释
-- internal/core/router/：调用记录（Invocation）增加 send_forbidden，并在 InvocationContext 中下发
-- sdk/：新增 hooks.go（注册与分发）；base.go 的 Root 增加 Hooks Hook 与 Base 默认实现；session.go 的 buildRegister 输出 HOOK 路由
-- 上述包的测试文件
-允许的新跨模块边：无。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. proto
-   enum SendOperation { SEND_OPERATION_UNSPECIFIED = 0; SEND_OPERATION_SEND = 1; SEND_OPERATION_EDIT = 2; }
-   BeforeSendRequest 追加 SendOperation operation = 5; optional string edited_platform_message_id = 6;
-   AfterSendRequest 追加 SendOperation operation = 7; optional string edited_platform_message_id = 8;
-2. sdk
-   Root 增加 Hook：Hooks(*HookRegistry) // func (*Base) Hooks(*HookRegistry) 默认不注册
-   type HookRegistry struct{ ... }
-   func (r *HookRegistry) PreEvent(routeID string, eventTypes []string, h func(*Context, *pb.EventPayload) (*pb.EventPayload, error), opts ...RouteOption)
-   func (r *HookRegistry) BeforeSend(routeID string, h func(*Context, *pb.Target, *pb.MessageChain) (*pb.MessageChain, error), opts ...RouteOption)
-   func (r *HookRegistry) AfterSend(routeID string, h func(*Context, *pb.Target, *pb.SendResult, error), opts ...RouteOption)
-   func (c *Context) Operation() pb.SendOperation // 出站 Hook 中可用
-3. internal/core/hook
-   type Runner struct{ ... }
-   func New(r *router.Router, log *slog.Logger) *Runner
-   func (h *Runner) PreEvent(ctx context.Context, ev *router.Dispatch) (stop bool, err error) // router 的派发对象；只改写其业务副本
-   func (h *Runner) BeforeSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, parent *router.Invocation) (*pb.MessageChain, *pb.ErrorInfo)
-   func (h *Runner) AfterSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, result *pb.SendResult, errInfo *pb.ErrorInfo, parent *router.Invocation)
-
-行为：
-- 注册校验：HOOK 路由的 phase 必须是三者之一；PreEvent 的 event_type_filter 非空且为已知类型；BeforeSend/AfterSend 不带 event_type_filter。
-- 候选：同一阶段的 Hook 按 (priority, plugin_id, route_id) 稳定排序，只包含已激活插件；Hook 自己不受命令策略约束（插件启用即生效）。
-- PreEvent（Router 在可信信息保留之后、D-44 的命令层之前，按事件类型）：依次调用，每个 Hook 收到当前业务副本；返回的 event_payload 的分支必须与 event_type 一致，否则视为该 Hook 失败；可信字段（goal-15 列出的身份、Target、来源与按钮/任务绑定）不在 PreEventResult 中，无法改写。任一 Hook 返回错误或 panic：以 WARN 记录并结束本次入站链（不派发命令与事件路由）。propagation=STOP：结束本次入站链，此前改写保留。
-- 出站：message.Service 对每次 Send 与 Edit（包括 Core 代发的自动回复与 usage）：
-  1) 先完成 goal-2/goal-3/goal-51 的目标与准入、Chain 预检；
-  2) 依次调用 BeforeSend：返回新 Chain 时替换并对整条 Chain 重新做完整预检（失败视为拒绝）；返回错误即拒绝本次发送，返回 REJECTED 的 SendResult 加该 ErrorInfo，不调用 Adapter，也不执行 AfterSend；Hook 不能修改 Target（请求中没有可回写的 Target）。
-  3) 调用 Adapter；4) 依次调用 AfterSend，传入最终的 SendResult 与 ErrorInfo，错误只记日志，不改变返回给调用方的结果。
-  每次 Send 是独立的一组，不合并。
-- send_forbidden：Core 调用出站 Hook 时，在该次调用的 Invocation 中设置 send_forbidden=true，并经 InvocationContext.send_forbidden 下发；Hook 内（及以该调用为父请求的任何子请求，Broker 转发时沿用父调用的标记）调用 core.send 或 core.edit 返回 FAILED_PRECONDITION。标记只来自 Core 的调用记录，插件自报的值被忽略。
-- SDK：按 route_id 分发 Hook；PreEvent 的 h 返回 nil payload 表示不改写；Context.StopPropagation 在 PreEvent 中使 propagation=STOP；出站 Hook 的 Context 中 Send/Edit 由 Core 拒绝。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/supervisor/hook_test.go（//go:build unix）。两个测试插件：h 注册 PreEvent（把 text 改成大写）、BeforeSend（在 Chain 末尾追加一段文本；遇到含 "deny" 的 Chain 返回错误；尝试在 Hook 内 Send）、AfterSend（记录结果后返回错误）；e 注册 echo 事件路由与一个命令：
-  - 入站 "hi" 被 PreEvent 改为 "HI" 后到达 e；e 回复时 memory 收到追加了文本的 Chain；AfterSend 收到 ACCEPTED 的结果，它返回的错误不影响 e 收到的 SendResult。
-  - 一次 Handler 内两次 Send：BeforeSend 与 AfterSend 各执行两次。
-  - 含 "deny" 的回复被拒，memory 没有收到，e 收到 REJECTED 与错误；AfterSend 未执行。
-  - BeforeSend 内的 Send 返回 FAILED_PRECONDITION。
-  - PreEvent 返回错误时 e 的路由与命令都没有被调用。
-  - Edit 时出站 Hook 收到 operation=EDIT 与被编辑的消息 ID。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：PreEvent 返回不匹配分支的 payload；BeforeSend 修改后 Chain 预检失败；排序的稳定性；插件自报 send_forbidden 被忽略；InvocationContext 中的标记在派生请求中保留（接口 fixture）。
-
-完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
-
-不做：Hook→Service→Send 的间接递归回归（T-06.2 的必交用例，本切片只保证标记随父调用记录保存）；延续调用（T-05.4）。
-```
-
-### goal-52 · T-05.4 延续调用与多轮等待
-
-状态：等待前置（T-05.2）。语句中 goal-2、goal-15、goal-16、goal-76 提供的符号（router 的派发链与 Invocation、sdk 的 Context 与分发、tune.Values）只写名字；合并后由审查者核对签名，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-52（切片 T-05.4：延续调用与多轮等待）。goal 目录 goal-52，分支 goal-52，worktree .worktrees/goal-52，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：由真实入站事件触发、具有 Actor 与默认 Target 的 Handler 可以经 core.continuation.start 请求一次延续调用：原调用成功结束后，Core 以同一插件、同一 route_id 与原可信上下文发出新的 Handler 请求（continuation_of 为原 call_id），使用独立的 CONTINUATION_TIMEOUT 期限，不占用分发链。延续调用内可以经 core.wait 等待同一 Actor 在同一 Target 的下一条消息，命中的消息不进入普通分发。SDK 提供 Context.Continue 与 Context.Wait。
-
-依据：PLAN T-05 步骤 7；CONTRACTS §2.4；WIRE-FORMAT §3.5；DESIGN（延续调用示例）；TEST-MATRIX V-50。
-
-范围（只新增或修改这些）：
-- contracts/proto/alonabot/v1/invocation.proto：HandlerRequest 追加 optional uint64 continuation_of = 5；新增 ContinuationStartRequest/Response 与 WaitRequest/Response。随后 go generate ./...（本切片获授权只追加这些）
-- contracts/wirespec_test.go：追加编号检查
-- internal/wire/services.go：末尾追加 ServiceContinuationStart = "core.continuation.start"、ServiceWait = "core.wait"
-- 新增 internal/core/continuation/
-- internal/core/router/：派发链在 PreEvent 之后、命令层之前检查等待（只加调用点）；Handler 调用结束时通知 continuation（只加调用点）
-- sdk/：新增 continuation.go（Continue 与 Wait）；dispatch.go 按 continuation_of 找到登记的延续函数
-- 上述包的测试文件
-允许的新跨模块边：无。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. proto
-   message ContinuationStartRequest {}
-   message ContinuationStartResponse {}
-   message WaitRequest { uint32 timeout_ms = 1; } // 1～CONTINUATION_TIMEOUT
-   message WaitResponse { Event event = 1; }
-2. internal/core/continuation
-   type Manager struct{ ... }
-   type Options struct { Max int; Timeout time.Duration } // CONTINUATION_MAX、CONTINUATION_TIMEOUT
-   func New(r *router.Router, log *slog.Logger, opt Options) *Manager
-   func (m *Manager) Register(mux *router.Mux)
-   func (m *Manager) Finished(inv *router.Invocation, callID uint64, ok bool) // Router 在 Handler 调用结束后调用；ok 为原调用成功（没有 Err）
-   func (m *Manager) Match(ev *router.Dispatch) bool // Router 在命令层之前调用；命中等待时返回 true，事件不再进入普通分发
-   func (m *Manager) Release(pluginID string) // Session 失效：结束该插件的全部等待与待发出的延续调用
-3. sdk
-   func (c *Context) Continue(fn func(*Context) error) error // 只能在 Handler 中调用一次；fn 在延续调用中执行
-   func (c *Context) Wait(timeout time.Duration) (*Context, error) // 只能在延续调用中调用；返回命中消息的 Context（可用 Event()、Text() 等）
-   func (c *Context) Text() string // message.created 的文本片段连接结果；其他事件为空
-
-行为：
-- core.continuation.start（必须带 parent_call_id，指向本 Session 中仍在途的 Core→插件 Handler 调用）：以下情况返回 FAILED_PRECONDITION：父调用不是由真实入站事件触发（例如 scheduled、Bus、Service）、缺少 Actor 或默认 Target、父调用带 send_forbidden（出站 Hook 内）、父调用本身就是延续调用、同一父调用已请求过。本 Session 进行中的延续调用（已登记待发出与正在运行的）达到 Max 时返回 RESOURCE_EXHAUSTED。成功时只登记，返回空结果。
-- 发出：Finished(ok=true) 时为登记的父调用发出新的 Handler REQUEST：同一插件、同一 route_id，HandlerRequest.continuation_of=原 call_id，event 为原事件（Core 保留的可信信息重建），context 为原调用的 Actor、默认 Target、scope、trace 与插件链；期限为发出时刻起 Timeout。它不经事件队列与派发链，不计入 DISPATCH_CONCURRENCY；返回值不参与原事件的传播。Finished(ok=false) 时丢弃登记，不发出。
-- core.wait（必须带 parent_call_id，父调用必须是延续调用）：等待键为（adapter_instance_id、chat_id、thread_id（无则为空）、external_user_id），取自延续调用的默认 Target 与 Actor。同键已有等待 → ALREADY_EXISTS。timeout_ms 不在范围内 → INVALID_ARGUMENT。等待在 Core 内存中，不持久化。
-- 匹配：Router 对每个 message.created，在 PreEvent 之后、命令层之前调用 Match：Target 与 Actor 构成的键命中等待时，该事件作为 WaitResponse 返回给等待者，并且不再进入命令层与事件路由。不同 Actor 或不同 thread 不命中。
-- 结束：超时 → DEADLINE_EXCEEDED；父请求被取消 → CANCELLED；Release（插件停用或 Session 失效）→ 等待以 UNAVAILABLE 结束，待发出的延续调用丢弃，不补发。延续调用的期限到达时，其中的等待一并结束。
-- SDK：Continue 在 Handler 返回前请求 core.continuation.start，并登记 fn（按原 call_id）；收到 continuation_of 的请求时调用对应 fn。Continue 在延续调用中调用返回 FAILED_PRECONDITION。Wait 发起 core.wait，以本次延续调用为父请求。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/supervisor/continuation_test.go（//go:build unix）。测试插件注册 /quiz 命令：Continue 中依次 Wait 两次并把收到的回答回复出来；另有一个 echo 事件路由用来证明消息是否进入普通分发：
-  - 用户 A 发 /quiz 后，A 的下两条消息被 quiz 收到并回答，它们没有到达 echo；原命令的 HandlerOutcome 决定的传播不受影响。
-  - 同一群里 A 与 B 同时 /quiz，各自只收到自己的回答；不同 thread 的消息不命中。
-  - Wait 超时返回 DEADLINE_EXCEEDED；同键第二个 Wait 返回 ALREADY_EXISTS。
-  - 延续调用中再次 Continue 返回 FAILED_PRECONDITION；没有 Actor 的 scheduled 事件 fixture 中请求 Continue 返回 FAILED_PRECONDITION。
-  - 用很小的 Max：超过的 Continue 返回 RESOURCE_EXHAUSTED。
-  - 等待期间停止插件：等待结束，重启后不补发。
-  - 延续调用执行期间，其他事件照常派发（不占分发链）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：原调用返回错误时不发出；父调用带 send_forbidden 时被拒；timeout_ms 边界；Release 与超时的并发；SDK 中按 continuation_of 找不到 fn 时返回 NOT_FOUND。
-
-完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
-
-不做：持久化的等待与延续调用（契约不提供）；Agent 的流式对话（T-12.2 使用本切片）。
-```
-
-### goal-27 · T-07.5 调度与 HTTP 启停集成及验收
-
-状态：等待前置（T-07.2、T-07.4）。语句中 goal-24～goal-26 提供的符号（scheduler.Scheduler、httpproxy.Server、webhost.Host、host 的停止流程与 StopTiming、supervisor.Running）只写名字；合并后由审查者核对签名，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-27（切片 T-07.5：调度与 HTTP 启停集成及验收）。goal 目录 goal-27，分支 goal-27，worktree .worktrees/goal-27，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：把 Scheduler 与 HTTP 代理接入 T-02 的生命周期：插件 Activated 之后才 Attach/Bind；Draining 时停止新 tick 与新 HTTP 派发；停止阶段取消余留调用、撤销映射、关闭 Listener，全部复用全局 STOP_TOTAL 预算；Session 或代次变化后旧端点、凭证与运行记录不再接收新业务。完成 T-07 的时间、进程与 HTTP 边界验收，在 TEST-MATRIX §3.2 记录证据。
-
-依据：PLAN T-07 步骤 7、8 与「停止和失败条件」；CONTRACTS §4.2、§4.3、§7.2；TEST-MATRIX V-20、V-21、V-22、V-46、V-47 的 T-07 分项。
-
-范围（只新增或修改这些）：
-- internal/core/supervisor/：Launch 的激活之后与停止流程中加入 Scheduler 与 httpproxy 的接入点（Spec 增加两个可选依赖）
-- internal/core/scheduler/：增加 Drain（停止新 tick，保留运行槽）
-- internal/core/httpproxy/：增加 Drain（新请求返回 503，等待在途请求到截止时间）
-- cmd/alonabot/：run 装配 Scheduler，并把两者交给 supervisor
-- 新增 cmd/alonabot/t07_e2e_test.go（//go:build unix）
-- spec/TEST-MATRIX.md §3.2：追加 T-07 的证据行（本切片获授权修改这一处）
-- 上述包的测试文件
-允许的新跨模块边：无。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-- internal/core/supervisor
-  Spec 增加字段：Scheduler *scheduler.Scheduler; HTTP *httpproxy.Server // 都可以为 nil
-- internal/core/scheduler
-  func (s *Scheduler) Drain(pluginID string) // 不再触发新的 tick；运行中的调用照常等待
-- internal/core/httpproxy
-  func (s *Server) Drain(pluginID string, deadline time.Time) // 新请求 503；在途请求最多等到 deadline
-
-行为：
-- 激活：supervisor 在 host.Activate 成功（ACTIVATED 已应用）之后才调用 Scheduler.Attach（anchor 为激活时刻）与 HTTP.Bind；激活失败不 Attach、不 Bind。
-- 停止（复用 host 的停止流程与同一个 STOP_TOTAL）：冻结时同时 Scheduler.Drain 与 HTTP.Drain（截止取 STOP_DRAIN 的结束时刻）；STOPPING 之后 Scheduler.Detach、HTTP.Unbind；进程树清空后 Scheduler.Released。不为 Scheduler 或 HTTP 另起独立预算。多个插件并行停止时共享 Core 的全局停止截止。
-- 崩溃与重启：Session 断开时 HTTP.Unbind（以旧 generation）、Scheduler.Detach；旧进程确认退出后 Released；重启成功后以新 Session 重新 Attach/Bind，旧 token 与端点不能再接请求。
-- HTTP 失败不触发任何业务重试；未激活的插件返回 503。
-- 验收矩阵（t07_e2e_test.go，以真实进程运行，各为一个子测试）：
-  1) cron 与 interval 的触发时刻（用 goal-23 的规范期望值与短周期 interval 实测），夏令时规则以 contracts/schedule 的结果为准。
-  2) 不合作 callback：job 超过 JOB_TIMEOUT 后槽不释放、迟到响应释放；断链后槽保持到进程退出。
-  3) 停用插件时：新 tick 不再触发，HTTP 返回 503，Listener 端口已关闭；总耗时不超过 STOP_TOTAL。
-  4) 未激活、停用后、伪造内部头、私有路由无会话、公开回调、两个 Host、单 Host 主动内容，各返回契约规定的结果。
-  5) 两个插件并行停止共享同一 STOP_TOTAL。
-- 证据：TEST-MATRIX §3.2 追加 T-07 一行，写明测试位置、命令、平台与结果；仍需 T-09 首次认证与真实管理页面才能完成的端到端项写为「未闭合」。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/t07_e2e_test.go（上述矩阵）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Drain 的截止时间；激活失败不 Bind；重启后旧 generation 的 Unbind 不影响新映射；Scheduler 在 Detach 后不触发。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
-
-不做：管理认证（T-09.1，测试注入假会话）；serve（T-09.4）；Agent 定时任务（T-12.6）。
-```
-
-### goal-32 · T-08.5 受管 SQLite 连接与迁移
-
-状态：等待前置（T-08.3）。语句中 goal-30 提供的符号（sdk/config.Prepare 与 sdk 的准备流程）只写名字；sdk/gormdb 的现有函数（OpenSQLite、ReadPragmas、CheckMigrators、RunVersioned、AppliedMigrations）已在 main 上。合并后由审查者核对签名，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-32（切片 T-08.5：受管 SQLite 连接与迁移）。goal 目录 goal-32，分支 goal-32，worktree .worktrees/goal-32，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：受管 SQLite 有两个入口：新建的 sdk/sqlitedb 的 Open(ctx) 按当前 Session 的数据库描述返回 *sql.DB；sdk/gormdb 的 Open(ctx) 在同一个连接上返回原生 *gorm.DB。同一 Session 复用同一连接，SDK 停止时关闭。只导入 sqlitedb 的插件不链接 GORM。两个包各定义一组迁移接口，被导入时向 SDK 登记识别方式；SDK 在配置准备之后、OnStart 之前执行迁移，并在 REGISTER 中报告结果。Core 为每个代次下发 SQLite 路径。
-
-依据：PLAN T-08 步骤 5、6；CONTRACTS §6.1～§6.3、§4.2（迁移预算）；WIRE-FORMAT §3.2（database_descriptor）；DECISIONS D-48、D-49；TEST-MATRIX V-26、V-39。
-
-范围（只新增或修改这些）：
-- sdk/sqlitedb/：新建包。连接设置与回读核对从 sdk/gormdb/sqlite.go 移入；open.go（Open 与 Session 绑定）、migrate.go（迁移接口、RunVersioned、AppliedMigrations）
-- sdk/gormdb/：OpenSQLite 改为 sqlitedb.OpenFile 加 GORM 包装；新增 open.go（Open）；ReadPragmas 与 PragmaValues 移到 sqlitedb 后从本包删除
-- sdk/internal/dbhook/：新建内部包，供 sqlitedb 与 gormdb 向 sdk 登记迁移识别与执行，形状由执行者自定，只用标准库与 contracts 类型
-- sdk/：session.go 在配置准备之后调用迁移阶段并填写 REGISTER 的 migration；activate.go 在停止时关闭连接（只加调用点）
-- internal/core/supervisor/：Spec 增加 Database；新代次时创建 SQLite 代次目录并下发路径
-- internal/core/host/prepare.go：校验 REGISTER 的 migration 与 Bootstrap 描述一致（只加校验）
-- 上述包的测试文件
-允许的新跨模块边：sdk -> sdk/sqlitedb、sdk/gormdb -> sdk/sqlitedb（同属 sdk 模块）。sdk 根包不得 import sdk/gormdb 或 gorm。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. sdk/sqlitedb
-   var ErrNoDatabase = errors.New("this plugin has no database")
-   func Open(ctx context.Context) (*sql.DB, error) // 未处于 Session 中返回 FAILED_PRECONDITION 的错误；backend 为 NONE 返回 ErrNoDatabase；同一 Session 重复调用返回同一个 *sql.DB
-   func OpenFile(ctx context.Context, path string) (*sql.DB, error) // 原 gormdb.OpenSQLite 的设置与核对：WAL、FULL、外键、5s busy timeout、单连接
-   type PragmaValues struct { JournalMode string; Synchronous int; ForeignKeys int; BusyTimeout int }
-   func ReadPragmas(ctx context.Context, db *sql.DB) (PragmaValues, error)
-   type SelfMigrator interface { Migrate(ctx context.Context, db *sql.DB) error }
-   type Migration struct { ID uint32; Up func(context.Context, *sql.Tx) error }
-   type VersionedMigrator interface { Migrations() []Migration }
-   const LedgerTable = "_alonabot_migrations"
-   func RunVersioned(ctx context.Context, db *sql.DB, migrations []Migration) ([]uint32, error)
-   func AppliedMigrations(ctx context.Context, db *sql.DB) ([]uint32, error)
-2. sdk/gormdb
-   var ErrNoDatabase = sqlitedb.ErrNoDatabase
-   func Open(ctx context.Context) (*gorm.DB, error) // 经 libtnb sqlite.Config{Conn: ...} 包装 sqlitedb.Open 返回的同一个 *sql.DB；同一 Session 重复调用返回同一个 *gorm.DB
-   OpenSQLite、SelfMigrator、Migration、VersionedMigrator、RunVersioned、AppliedMigrations、CheckMigrators 保留现有签名；LedgerTable 改为引用 sqlitedb.LedgerTable
-3. internal/core/supervisor
-   Spec 增加字段：Database *pb.DatabaseDescriptor // nil 时 supervisor 为 SQLite 生成描述：<plugins>/<id>/generations/<generation>/db.sqlite，activation_reason 由调用方在 Bootstrap 中给出
-
-行为：
-- Open：文件不存在时只有 activation_reason 为 first_install 时才创建，否则返回错误（不创建空库掩盖丢失）。连接错误原样返回。插件拿不到 Core 状态库的任何路径或连接。
-- 登记：sqlitedb 与 gormdb 在包 init 中向 sdk/internal/dbhook 登记一个识别函数（只追加函数值，不做 I/O）；SDK 的迁移阶段只调用已登记的识别函数，因此未导入某个包时不认识它的接口。
-- 迁移阶段（SDK，配置准备之后、OnStart 之前，预算为 Bootstrap 的 migration 阶段预算，与普通业务期限无关）：
-  - 根插件实现的迁移接口合计多于一个（含两个包混用，例如 sqlitedb 的 Migrate 加 gormdb 的 Migrations）时失败（INVALID_ARGUMENT）。
-  - backend 为 NONE：跳过，migration.mode=NONE。
-  - versioned：ID 必须非零、唯一、严格递增；每步 Up 与 _alonabot_migrations 的完成记录在同一事务中，失败不记成功。两个包的账本格式相同。
-  - self：调用 Migrate，成功后 self_migrate_completed=true。
-  - REGISTER.migration：mode 与 completed_migration_ids（versioned，升序）或 self_migrate_completed（self）如实填写。
-- prepare_effects=external 的维护门槛由 Core 在建立候选前判断（T-09），本切片的 SDK 不读取 manifest 的 prepare_effects。
-- Core：supervisor 新代次时创建 generations/<g>/ 目录（0700）并下发 SQLite 路径；普通 restart 沿用 Active 代次的路径。host 校验 REGISTER.migration.mode 与 Bootstrap 的 migration_mode 一致、versioned 的 completed 包含 Bootstrap 的 applied 集合，否则注册失败。
-- 事务内不得等待同一单连接池的另一条独立查询（文档注释写明，测试覆盖一次死锁会被 busy timeout 以外的方式暴露为错误）。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：
-  - internal/core/supervisor/db_test.go（//go:build unix）：两个测试插件，一个只导入 sqlitedb、一个用 gormdb，各实现 Migrations（两步，第二步按环境变量可失败）并在 OnStart 中写一行：首装成功，REGISTER 报告 [1,2]，状态库代次目录下有 db.sqlite 且 PRAGMA 值正确；第二步失败时注册失败、账本只有 1；普通 restart 不重复执行迁移；同时实现两个迁移接口的插件在 CONFIG 之后失败。
-  - 同一测试中断言只导入 sqlitedb 的测试插件二进制不含 gorm.io/gorm（`go version -m` 或 `go list -deps`）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：两个入口的复用、共用连接与停止时关闭；backend NONE；文件缺失时非首装不创建；ID 非递增；host 的 migration 一致性校验。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./sdk/... ./internal/core/...；go build ./...；node scripts/check-go-deps.mjs 通过。
-
-不做：SQLite 候选副本与 Backup API（T-08.6）；维护许可的管理入口、external 插件的候选门槛与 Journal（T-09）。
-```
-
 ### goal-39 · T-09.4 管理服务、安装记录与 serve
 
-状态：等待前置（T-03.8、T-08.4、T-09.1、T-09.2、T-13.1）。语句中 goal-8、goal-31、goal-36、goal-37（packages）、goal-67 提供的符号（manifest.CheckDependencies、secret.Store、adminauth.Auth、packages.Preflight、根包的 assembly、remote.Process、policy 的 Admin 方法）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：等待前置（T-03.8、T-08.4、T-09.1、T-09.2、T-13.1）。语句中 goal-8、goal-31、goal-36、goal-37（packages）、goal-67 提供的符号（manifest.CheckDependencies、secret.Store、adminauth.Auth、packages.Preflight、根包的 assembly、remote.Process、policy 的 Admin 方法）只写名字；合并后由审查者核对签名，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-39（切片 T-09.4：管理服务、安装记录与 serve）。goal 目录 goal-39，分支 goal-39，worktree .worktrees/goal-39，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -3106,119 +2722,87 @@ sdk/config
 不做：候选 Journal 与准备编排（T-09.5）；唯一提交点与激活门禁（T-09.6）；崩溃恢复、回退与回收（T-09.7）；管理页面（T-09.8、T-09.9）。
 ```
 
-### goal-71 · T-14.1 help 插件与命令列表
+### goal-78 · T-15.1 官方 OneBot 11 Adapter 的连接与接收
 
-状态：等待前置（T-04.4、T-05.2、T-08.8）。语句中 goal-10、goal-12、goal-13、goal-16、goal-53 提供的符号（router.CommandIndex、policy.CheckCommand、contracts/i18n、sdk 的命令注册与 Context.T）只写名字；合并后由审查者核对签名，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-71（切片 T-14.1：help 插件与命令列表）。goal 目录 goal-71，分支 goal-71，worktree .worktrees/goal-71，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：Core 提供 core.command.list：按调用者 Actor 与默认 Target 返回可用的命令（已启用、权限满足、未被遮蔽），说明按 CommandSpec 的说明键在所属插件的 messages 中按 Actor locale 翻译。官方 help 插件 plugins/help/ 注册 /help [命令] 与 /whoami。
-
-依据：PLAN T-14 步骤 1；CONTRACTS §15.2、§2.2、§2.3、§5.4；WIRE-FORMAT §3.5（core.command.list 与 CommandSpec 的说明键）；TEST-MATRIX V-67 的 help 分项。
-
-范围（只新增或修改这些）：
-- contracts/proto/alonabot/v1/：route.proto 的 CommandSpec 追加 optional string description_key = 12；新增 CommandListRequest/Response 与 CommandInfo。随后 go generate ./...（本切片获授权只追加这些）
-- contracts/wirespec_test.go：追加编号检查
-- internal/wire/services.go：末尾追加 ServiceCommandList = "core.command.list"
-- 新增 internal/core/commandlist/
-- internal/core/supervisor 或 cmd/alonabot 的装配处：调用 SetMessages（只加调用点）
-- sdk/：Description(key string) 路由选项；buildRegister 写入 description_key；新增 commands.go（ListCommands）
-- 新增 plugins/help/（main 包与可导入的 help 包，含 plugin.yaml 与 i18n/en-US.json、zh-CN.json）
-- 上述包的测试文件
-允许的新跨模块边：plugins/... -> sdk/...、-> contracts（已允许）。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. proto
-   message CommandListRequest {}
-   message CommandInfo { string plugin_id = 1; string route_id = 2; repeated string path = 3; repeated CommandAlias aliases = 4; string usage = 5; optional string description = 6; }
-   message CommandListResponse { repeated CommandInfo commands = 1; }
-2. internal/core/commandlist
-   type Service struct{ ... }
-   func New(r *router.Router, p *policy.Policy) *Service
-   func (s *Service) Register(m *router.Mux)
-   func (s *Service) SetMessages(pluginID string, files map[string][]byte) // 文件按 contracts/i18n 解析；有问题时记 WARN 并忽略该插件的说明
-3. sdk
-   func Description(key string) RouteOption // 命令说明在本插件 messages 中的键
-   type CommandInfo struct { PluginID, RouteID string; Path []string; Aliases [][]string; Usage string; Description string }
-   func ListCommands(ctx context.Context) ([]CommandInfo, error) // 必须在 Handler 内调用（需要父调用链）
-4. plugins/help
-   func New() sdk.Root // 根插件
-
-行为：
-- core.command.list（必须带 parent_call_id；Actor 与默认 Target 取自父调用的可信上下文，没有 Actor 时只列出 ANY 权限的命令）：遍历 Router 的 CommandIndex，只保留每个规范路径的胜出者（被遮蔽者不列出）；对每条命令执行 policy.CheckCommand（全局禁止、启用、权限），通过的才列出；按路径字典序返回。usage 与 goal-12 的 usage 生成规则相同（按 Actor locale 使用 Core 文案目录）；description 在所属插件的 messages 中按 [Actor.locale, 默认 locale, en-US] 翻译，键不存在时 absent。
-- 插件的 messages：SDK 不在 REGISTER 中上传。commandlist.Service 提供 SetMessages(pluginID string, files map[string][]byte)，由装配方调用：已安装的包读取包目录下的 i18n/*.json；库模式的开发组件使用生成器嵌入的 Generated.I18n；alonabot run 的开发入口读取 --entry 所在目录的 i18n/（存在时）。取不到时 description absent。
-- help 插件：
-  - /help：调用 ListCommands，按插件分组列出路径与说明，文案经 Context.T（键 help.list.header 等）。
-  - /help <路径>：只显示匹配命令的 usage、别名与说明；没有可用的匹配命令时回复 help.not_found。
-  - /whoami：回复调用者的 adapter_instance_id 与 external_user_id（文案键 help.whoami，参数 instance 与 user）；没有 Actor 时回复 help.whoami.no_actor。
-  - 所有回复都用 Context.Send 回复原 Target；用户可见文案只来自 i18n（en-US 与 zh-CN）。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/supervisor/help_test.go（//go:build unix）：构建 plugins/help 与两个测试插件（一个有 ADMIN 权限的命令，一个与另一插件同路径且 priority 较低的命令），用 memory Adapter 装配：
-  - 普通用户的 /help 不包含 ADMIN 命令与被遮蔽的命令；Core Admin 能看到 ADMIN 命令。
-  - zh-CN 用户看到中文说明，en-US 用户看到英文；说明键缺失的命令没有说明。
-  - 禁用的命令不出现；/help 某命令显示 usage。
-  - /whoami 回复正确的实例 ID 与用户 ID。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有父调用链时 core.command.list 返回 FAILED_PRECONDITION；没有 Actor 时只列 ANY；排序；help 的 i18n 文件在 plugin check 中通过。
-
-完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./...；go build ./...。
-
-不做：welcome 与 rss（T-14.2）；help 的安装包与预装（T-14.3、T-14.4）；管理页面中的命令列表（T-09.9）。
-```
-
-### goal-79 · T-15.2 官方 OneBot 11 Adapter 的发送、媒体与 extension
-
-状态：等待前置（T-03.6、T-03.8、T-15.1）。语句中 goal-7、goal-8、goal-78 提供的符号（sdk/adapter 的 Core.ReadMedia 与实例可选实现的平台文件读取接口、ExtensionDeclaration 的校验、adapters/onebot11 的实例与 API 调用、onebottest.Server）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：等待前置（T-03.3、T-03.4、T-04.6）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-03.3、T-03.4 已由 PR #32、#39 合并；已核对 `sdk/adapter` 的 Adapter、Instance、Core、StartRequest、Account 与 `sdk.RunAdapter(adapter.Adapter) error`。`MessageCreatedPayload.to_me` 为字段 3，`Actor.locale` 为 optional 字段 5，OneBot 本切片直接使用已生成类型，无需修改 proto。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-79（切片 T-15.2：官方 OneBot 11 Adapter 的发送、媒体与 extension）。goal 目录 goal-79，分支 goal-79，worktree .worktrees/goal-79，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-78（切片 T-15.1：官方 OneBot 11 Adapter 的连接与接收）。goal 目录 goal-78，分支 goal-78，worktree .worktrees/goal-78，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-目标：OneBot 11 实例的 Send 先对整条 Chain 做完整预检并生成确定的物理操作计划，再依次调用 send_msg；连续的 text、mention、image 与 extension 合成一条消息，video 单独成一条，reference 只加在第一条前；每条消息一个 PartResult，按 MESSAGE-MODEL §4 汇总。入站 image、video 生成带 incoming_ref 的片段并实现平台文件读取；出站媒体经 Core.ReadMedia 读出后以 base64 发送；注册 onebot11.face extension。
+目标：实现官方 OneBot 11 Adapter 的连接与接收：正向 WebSocket 连接与 access_token、get_login_info 账号、按 echo 配对的 API 调用、有界退避重连、self_id 校验、数组格式检查、实例内有界事件队列与逐条交付、私聊/群聊/撤回/成员事件的标准化与 to_me；提供本地 OneBot 11 模拟服务，供本切片与后续 OneBot 11 切片测试。
 
-依据：PLAN T-15 步骤 3、4；CONTRACTS §8（Send、Chain 与计划段，extension 段）、§1.4；MESSAGE-MODEL §2、§4、§7.1 的入站媒体、§7.2；DECISIONS D-46；TEST-MATRIX V-71 的发送与媒体分项。
+依据：PLAN T-15 步骤 1、2；CONTRACTS §8（OneBot 11 段）、§14.5；MESSAGE-MODEL §1、§1.1、§7、§7.1；DECISIONS D-46；TEST-MATRIX V-71 的接收分项；OneBot 11 标准原文（https://github.com/botuniverse/onebot-11 的 communication/ws.md、event/、api/public.md、message/segment.md），字段名以原文为准。
 
 范围（只新增或修改这些）：
-- adapters/onebot11/：新增 plan.go、send.go、media.go；实例的 Send、Capabilities 与 Descriptor 的 extensions 补全；标准化补上入站 image、video
-- adapters/onebot11/onebottest/：增加 send_msg 的缺省响应与故障注入
+- go.mod、go.sum：引入 github.com/coder/websocket（本切片获授权引入，只在 adapters/onebot11 使用，版本取当前最新的正式版）
+- 新增 adapters/onebot11/（可导入的包 onebot11）
+- 新增 adapters/onebot11/onebottest/（本地 OneBot 11 模拟服务）
+- 新增 adapters/onebot11/cmd/alonabot-adapter-onebot11/main.go（只调用 sdk.RunAdapter(onebot11.New())；返回错误时与 examples/plugins/echo 一样 slog.Error 后 os.Exit(1)）
 - 上述包的测试文件
-允许的新跨模块边：无。
+允许的新跨模块边：adapters/... -> sdk/...、-> contracts（ARCHITECTURE 已登记）。adapters 不 import internal/...，测试也一样。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. adapters/onebot11：实例实现 sdk/adapter 的 Instance.Send 与 goal-7 定义的平台文件读取接口；不新增导出符号。
-2. adapters/onebot11/onebottest（在 goal-78 的 Server 上追加）
-   func (s *Server) DisconnectOn(action string, nth int) // 收到第 nth 次该 action 后不响应并关闭连接（请求已写出、结果未知）
-   send_msg 的缺省响应：status "ok"，data.message_id 从 1001 起递增。
+1. adapters/onebot11
+   const AdapterID = "onebot11"
+   func New() adapter.Adapter // 实现 sdk/adapter 的 Adapter；Descriptor 的 adapter_id 为 AdapterID
+   实例配置 JSON：{"ws_url": string（必填，ws:// 或 wss://）, "access_token": string（可选）, "mode": string（缺省 "forward"，只接受 "forward"）}
+2. adapters/onebot11/onebottest
+   type Call struct { Action string; Params map[string]any }
+   type Server struct{ ... }
+   func NewServer(t testing.TB, accessToken string) *Server // httptest 服务，在 "/" 提供 OneBot 11 正向 WebSocket 通用端点；accessToken 非空时校验 Authorization: Bearer，不符返回 401；t.Cleanup 时关闭
+   func (s *Server) URL() string                       // ws:// 地址，作为 ws_url
+   func (s *Server) SetLogin(userID int64, nickname string)
+   func (s *Server) Push(events ...json.RawMessage)    // 按顺序推送上报；没有连接时排队，连接建立后推送
+   func (s *Server) Disconnect()                       // 关闭当前连接，模拟断线
+   func (s *Server) Connections() int                  // 累计接受的连接数
+   func (s *Server) Calls() []Call                     // 依次记录每个 API 请求
+   func (s *Server) Respond(action string, fn func(params map[string]any) (status string, retcode int, data any)) // 替换某个 action 的响应；status 为空字符串时不响应
+   缺省响应：get_login_info 返回 SetLogin 的值；get_msg 在 Push 过的 message 上报中按 message_id 查找并返回其 sender，找不到返回 failed；其他 action 返回 status "failed"、retcode 1404。
 
 行为：
-- 能力与 extension：Capabilities 声明 message.send、message.reference（version 1，supported=true）；不声明 message.markdown、message.album、message.buttons、message.edit。Descriptor 的 extensions 含 {name "face", version 1, schema_json 为只有必需字符串属性 "id"（pattern ^[0-9]+$）、不允许其他属性的 JSON Schema}；片段的 adapter_id 为 AdapterID。
-- 预检（任何 send_msg 之前，任一失败都返回 REJECTED 的 SendResult 加 ErrorInfo，part_results 为空）：
-  - 片段只支持 plain 且无 entities 的 text、image、video、mention、reference 与本 Adapter 的 face extension；带 markdown 或 entities 的 text、file、buttons、forward 与其他 extension → UNSUPPORTED。
-  - target.chat_id 必须是 "private:<十进制>" 或 "group:<十进制>"，否则 INVALID_ARGUMENT；thread_id 存在 → UNSUPPORTED。mention 的 external_user_id、reference 的 original_platform_message_id 必须是十进制，否则 INVALID_ARGUMENT。
-  - 媒体来源：https_url 只接受 https，原样作为段的 file；media_ref 与 incoming_ref 由 Core 换成的只读 token 在执行该部分时经 Core.ReadMedia 读完，编码为 "base64://..."。
-- 物理计划：按原顺序扫描，连续的 text、mention、image、face 合成一条消息的段数组（text → text，mention → at{qq}，image → image{file}，face → face{id}）；video 单独成一条（video{file}）；reference 转为第一条消息最前面的 reply{id}。每条消息一个 send_msg（private 用 user_id，group 用 group_id，message 为段数组），对应一项 PartResult（part_index 从 0 起，segment_indexes 为它覆盖的片段，reference 计入第一项）。
-- 执行与回执：按计划顺序执行。status ok → ACCEPTED，message_id 的十进制进入 platform_message_ids；status async → ACCEPTED 且 message_ids_unavailable=true；status failed → REJECTED，ErrorInfo 为 FAILED_PRECONDITION，safe_message 带 retcode；请求写出后连接断开或到 ctx 期限仍无响应 → UNKNOWN；发出前连接不可用 → 该部分 REJECTED，ErrorInfo 为 UNAVAILABLE。任一部分不是 ACCEPTED 后，其余部分 NOT_ATTEMPTED。整体状态与 primary_platform_message_id 按 MESSAGE-MODEL §4 汇总，部分成功时同时返回 ErrorInfo。不自动重试。
-- 入站媒体：image、video 段生成 image、video 片段，incoming_ref.token 为段的 url（没有 url 时为 file，并在读取时返回 UNSUPPORTED）；平台文件读取接口首次被调用时经 HTTP GET 下载 url（只允许 http、https；响应非 2xx → UNAVAILABLE），按 offset 返回；下载使用实例自己的 http.Client 与 http.ProxyFromEnvironment。
-- 脱敏沿用 goal-78：access_token 不进入日志与错误。
+- Start（sdk/adapter 的 Adapter.Start）：
+  1) 解析实例配置：ws_url 不是 ws/wss URL、mode 不是 "forward" → INVALID_ARGUMENT（错误不含配置原文与 access_token）。
+  2) 用 websocket.Dial 连接 ws_url，access_token 非空时带 Authorization: Bearer；握手 401/403 → PERMISSION_DENIED，其他失败 → UNAVAILABLE。Start 失败不重试。
+  3) get_login_info：account_id 为 user_id 的十进制字符串，DisplayName 为 nickname，Username 留空（OneBot 11 没有可寻址的账号用户名，命令不接受 @ 形式，D-67）；失败 → UNAVAILABLE。
+  4) 启动读循环与交付循环后返回 Instance：Account() 返回 get_login_info 的账号；Capabilities 本切片只声明接收相关的能力，发送能力由 T-15.2 补充；Send 本切片返回 UNSUPPORTED 的 ErrorInfo（发送由 T-15.2 实现）。
+- 交付给 Core 的事件：Event 的 adapter_id、adapter_instance_id（StartRequest.InstanceID）与 account_id（Account.ID）必须与 Target 中的同名字段一致，否则 Core 以 INVALID_ARGUMENT 拒绝；event_id、source_kind 与 capabilities 由 Core 重建，Adapter 不填；Actor.trusted_roles 只保留 CHAT_ADMIN。 occurred_at_unix_ms 取上报的 time（秒）乘以 1000。
+- API 调用：每个请求带实例内唯一的 echo（递增的十进制字符串），响应按 echo 配对；调用以 ctx 为期限，ctx 结束时返回 ctx 的错误；连接断开时全部在途调用以 UNAVAILABLE 结束。带 echo 的帧是响应，其余帧是上报。
+- 读循环一直读取，不因等待交付而停止：
+  - 响应交给配对的调用；meta_event 不入队（lifecycle 的 connect 只记 DEBUG）。
+  - 其余上报放进实例事件队列（256 条，命名常量）；队列满时丢弃该上报，累加丢弃计数并记 WARN（带累计数）。
+- 交付循环按顺序取出上报，标准化后经 Core.Deliver 交付，游标为空；收到应答（无论 accepted）后才取下一条。不交付的上报直接跳过。Deliver 返回错误时：实例停止后为 FAILED_PRECONDITION，交付循环退出；其他错误记 WARN 后继续下一条（OneBot 11 没有重放，与队列满时丢弃一致）。
+- 格式与身份：message 上报的 message 字段是字符串（CQ 码格式）时，经 Core.ReportFailure 报告（safe_message "onebot implementation must post messages in array format"），关闭连接并停止接收。self_id 与 account_id 不符的上报丢弃并记 WARN。
+- 断线：连接关闭或读错误（Stop 引起的除外）后按有上限的指数退避重连（初始 1s、上限 60s，命名常量），重连后重新 get_login_info；user_id 变化 → ReportFailure（"onebot account changed"）并停止；握手 401/403 → ReportFailure（"onebot implementation rejected the access token"）并停止。断线期间的上报不补收；重连与已提交的 Send 无关，不重放任何请求。
+- Stop：关闭连接，等待读循环与交付循环退出后返回；Stop 之后不再交付。同一实例不会有两条并行的连接。
+- 标准化（MESSAGE-MODEL §7.1；数字 ID 一律转为十进制字符串）：
+  - Target：adapter_id、adapter_instance_id、account_id、chat_id（"private:<user_id>" 或 "group:<group_id>"），没有 thread_id。
+  - message（private、group）→ message.created：platform_message_id 为 message_id，source_event_id 同 message_id；Actor.external_user_id 为 user_id，display_name 取非空的 sender.card，否则 sender.nickname，locale absent；群聊中 sender.role 为 owner 或 admin 时 trusted_roles 含 CHAT_ADMIN；sub_type 为 anonymous 时不构造 Actor。
+  - chain：text → plain text；at → mention（qq 为 "all" 时不生成）；reply → reference；image、video 本切片不生成（T-15.2 接入入站媒体）；其他段不生成。platform_payload 为原始上报 JSON，chain 可以为空。
+  - to_me：私聊；chain 中有 external_user_id 等于 account_id 的 mention；reply 引用的消息经 get_msg 查得 sender.user_id 等于 account_id。get_msg 失败按 false 处理并记 DEBUG。
+  - notice.group_recall、notice.friend_recall → message.deleted（platform_message_ids 只含 message_id；operator_id 存在时作为 actor）；notice.group_increase、notice.group_decrease → member.joined、member.left（member_external_user_id 为 user_id；operator_id 非 0 且不等于 user_id 时作为 actor）；其他 notice 与全部 request 不交付，计数并记 DEBUG。
+- 脱敏：access_token 不进入日志、错误与普通响应；ws_url 带 userinfo 或查询参数时，记录前去掉这两部分。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：adapters/onebot11/send_test.go。用 onebottest.Server 与 Core 测试替身（ReadMedia 返回内存字节）驱动真实实例：
-  - reference+text+mention+image(media_ref)+face+video(https_url)+text 的计划为三次 send_msg：[reply, text, at, image(base64://), face]、[video(https URL)]、[text]，参数与顺序正确，三项 PartResult 的 segment_indexes 正确。
-  - 第二次 send_msg 返回 failed：第一项 ACCEPTED、第二项 REJECTED、第三项 NOT_ATTEMPTED，整体 PARTIAL 并带 ErrorInfo；DisconnectOn 第一次 send_msg：整体 UNKNOWN，其余 NOT_ATTEMPTED；async 响应标记 message_ids_unavailable 且 platform_message_ids 为空。
-  - 预检失败（buttons、file、forward、markdown、thread_id、非法 chat_id、其他 Adapter 的 extension）时 Calls() 中没有 send_msg。
-  - adapters/onebot11/media_test.go：推入带 image 的群消息（url 指向测试 HTTP 服务），片段的 incoming_ref.token 为该 url；平台文件读取返回正确内容；url 为 file:// 时读取返回 UNSUPPORTED。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：face 的 Schema 校验正反例；只含 reference 的 Chain 被拒；大媒体的 base64 编码与分块读取；ctx 期限到达时的 UNKNOWN。
+- 提交：adapters/onebot11/onebot11_test.go。用 onebottest.Server 与一个记录调用的 adapter.Core 测试替身驱动 onebot11.New() 的实例（不经 Core 进程）：
+  - Start 得到 get_login_info 的 account_id 与 nickname；access_token 错误时 Start 返回 PERMISSION_DENIED。
+  - 推入私聊消息、群聊消息（sender.role 为 admin）、匿名群消息、撤回、入群与一条 request：依次交付 5 个事件，字段与 MESSAGE-MODEL §7.1 一致，request 未交付；Core 替身对第二条返回 accepted=false 时后续照样交付。
+  - to_me：私聊为 true；@本账号为 true；reply 本账号的消息为 true；reply 他人消息与 get_msg 失败为 false。
+  - 字符串格式的 message 上报产生一次 ReportFailure，接收停止；self_id 不符的上报未交付。
+  - Disconnect 后在退避期内重连（Connections 为 2），之后推入的消息正常交付，没有重复交付；重连后 get_login_info 返回其他 user_id 时 ReportFailure。
+  - Core 替身的 Deliver 阻塞期间推入 300 条上报：读循环仍能完成一次 get_msg 调用，有上报被丢弃且丢弃计数与未交付数一致；解除阻塞后按原顺序交付队列中的事件。
+  - 错误与日志中不出现 access_token（用测试 token 字符串做断言）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：配置的各种非法值；echo 配对与并发调用；ctx 超时与断线时的在途调用；退避上限；Stop 期间读循环退出；ws_url 的脱敏。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./adapters/...；go build ./...。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./adapters/...；go build ./...；go mod tidy 后 go.mod 与 go.sum 无差异。
 
-不做：Core 侧装配、alonabot run 联验与一致性验收（T-15.3）；消息编辑（OneBot 11 不支持，由 Core 按未声明的 message.edit 拒绝）；合并转发与文件上传（v0.1 不支持）。
+不做：发送、发送计划与回执、入站与出站媒体、extension（T-15.2）；Core 侧装配、alonabot run 联验与一致性验收（T-15.3）；反向 WebSocket（v0.1 之外）。
 ```
 
 ## 第 9 波
 
 ### goal-14 · T-04.5 示例升级与 T-04 验收
 
-状态：等待前置（T-03.10、T-04.4）。T-04.2、T-04.3 已合并；已核对 `CommandRegistry.Command`、`Regex`、`Keyword`、`Raw`，以及 Args、Optional、RawTail、Usage、Silent、IgnoreCase 和 Context.Match。策略与 Adapter 开发入口的实际接口仍待前置合并后核对。
+状态：等待前置（T-03.10、T-04.2、T-04.3、T-04.4、T-04.7）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.2、T-04.3 已合并；已核对 `CommandRegistry.Command`、`Regex`、`Keyword`、`Raw`，以及 Args、Optional、RawTail、Usage、Silent、IgnoreCase 和 Context.Match。策略与 Adapter 开发入口的实际接口仍待前置合并后核对。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-14（切片 T-04.5：示例升级与 T-04 验收）。goal 目录 goal-14，分支 goal-14，worktree .worktrees/goal-14，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -3249,103 +2833,68 @@ sdk/config
 - 提交：cmd/alonabot/t04_e2e_test.go；sdk/generate 中对 testdata fixture 的测试。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：示例的每条命令在 Windows/Linux 交叉编译（只编译，不运行）；生成文件的稳定性。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；在两个示例目录运行 alonabot plugin check 通过；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；在两个示例目录运行 alonabot plugin check 通过。
 
 不做：真实 Rule 与 Hook 的集成（T-05.5）；WebUI 修改策略（T-09.9）。
 ```
 
-### goal-18 · T-05.5 多进程事件流水线验收
+### goal-15 · T-05.1 可信上下文与有界分发
 
-状态：等待前置（T-03.8、T-05.3、T-05.4）。语句中 goal-8、goal-15～goal-17、goal-52 提供的符号（按钮、Rule、Hook、延续调用与等待、Router 的 Stats）只写名字；合并后由审查者核对，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-18（切片 T-05.5：多进程事件流水线验收）。goal 目录 goal-18，分支 goal-18，worktree .worktrees/goal-18，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：用多个真实插件进程跑完整的事件流水线：多个 priority 与同优先级逆安装顺序、自定义 Rule、两种 Handler 签名、三个 Hook、真实按钮回调、两个用户在同一群同时等待、等待超时与等待期间停用插件；用恶意载荷尝试修改可信字段，用延迟 Handler 验证控制帧仍推进；在 TEST-MATRIX §3.2 记录 T-05 证据。
-
-依据：PLAN T-05 步骤 8 与「停止和失败条件」；CONTRACTS §2；MESSAGE-MODEL §1、§6.3；TEST-MATRIX V-11、V-13～V-16、V-43、V-49、V-50 的 T-05 分项。
-
-范围（只新增或修改这些）：
-- 新增 internal/core/supervisor/testdata/pipeline/（流水线测试插件，按环境变量配置 priority、Rule、Hook 与命令）
-- 新增 cmd/alonabot/t05_e2e_test.go（//go:build unix，经 Telegram 模拟服务运行）或 internal/core/supervisor/pipeline_test.go（memory Adapter），执行者按需要真实按钮回调的项选择前者
-- spec/TEST-MATRIX.md §3.2：追加 T-05 的证据行（本切片获授权修改这一处）
-允许的新跨模块边：无。
-
-接口：不新增公开 Go 符号。
-
-验收矩阵（各为一个子测试，以平台调用记录、候选调用次序日志与 HandlerOutcome 为证据）：
-1) 三个插件 priority 为 0、0、-1，以两种不同的安装与启动顺序运行：调用顺序都是 (priority, plugin_id, route_id)。
-2) 自定义 Rule 为 false 与出错：事件路由跳过、已识别命令被消费且不回落（V-11 的真实 Rule 分项）。
-3) 两种 Handler：自动回复只发一次；手动多次 Send；自动型内 Send 被拒。
-4) Hook：PreEvent 改 payload、BeforeSend 改链与拒绝、AfterSend 出错不改结果；每次 Send 一组 Hook。
-5) 恶意载荷：Adapter 侧（经模拟服务）与插件侧（PreEvent 返回）尝试改 Actor、Target、button 的 action/value、scheduled 的 job_id：插件收到的仍是 Core 保留的值。
-6) 真实按钮：发送带按钮的消息后在模拟服务中点击：先有 answerCallbackQuery，再调用正确的插件；另一用户点击也调用一次；过期 token 不调用、不落入 Raw。
-7) 等待：两个用户在同一群同时进入 Wait，各自只收到自己的下一条消息，且这些消息不进入普通分发；超时为 DEADLINE_EXCEEDED；等待期间停用插件，重启后不补发。
-8) 延迟 Handler（睡眠数秒）执行期间，同一插件 Session 的另一请求的 Response 与 Cancel 正常完成，其他事件照常派发。
-9) 权限组合（V-43）：chat_admin 不取得 Core Admin；组禁用优先于子项启用；最近显式权限覆盖父项；运行时修改在下一次派发生效，已开始的调用不被撤销。
-10) scheduled：只用规范 fixture，证据中标明尚未覆盖真实 Scheduler（T-07.5 覆盖）。
-- 证据：TEST-MATRIX §3.2 追加 T-05 一行，写明测试位置、命令、平台、结果与 fixture 覆盖的项。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：上述矩阵测试。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：在 -race 下重复运行矩阵 10 次无偶发失败。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
-
-不做：Service 嵌套与 Hook→Service→Send（T-06.2、T-06.4）；真实 Scheduler（T-07.5）。
-```
-
-### goal-20 · T-06.2 父调用链、取消与背压
-
-状态：等待前置（T-03.6、T-05.3、T-06.1）。语句中 goal-7、goal-17、goal-19 提供的符号（broker.Broker、router.Invocation 与 send_forbidden、media 的 Grant、wire 的 ParentAttach 与预算）只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-04.4）。T-03.3、T-04.3 已合并；当前 Router.New 的四参数为 log、queueEvents、adapters、send，已核对 Router.Plugin、dispatchCommands 与 commandUsage。goal-13 将注入 CommandPolicy；其合并后再核对策略接口并转为待派发。下方 Options 保留现有账号名、发送与策略能力。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-20（切片 T-06.2：父调用链、取消与背压）。goal 目录 goal-20，分支 goal-20，worktree .worktrees/goal-20，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-15（切片 T-05.1：可信上下文与有界分发）。goal 目录 goal-15，分支 goal-15，worktree .worktrees/goal-15，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-目标：Broker 沿父调用链传播 Core 记录的可信上下文（actor、target、scope、trace、祖先插件链、send_forbidden），不接受插件覆盖；同链重复插件返回 CALL_CYCLE，深度超过 CALL_CHAIN_MAX_DEPTH 返回 FAILED_PRECONDITION；子调用期限取父与自身预算中较早者；父完成、超时、取消或任一 Session 断开时取消未完成的子调用；复用 wire 的在途数与字节预算，额满立即失败，不出现互相等待额度的死锁。
+目标：Router 把 Adapter 输入转为 Core 保留的可信信息（Actor、Target、来源消息 ID、路由绑定）与可修改的业务 payload 两部分，插件看到的 Event 由 Core 保留的部分重建；用有界的并发派发替换单 worker：最多 DISPATCH_CONCURRENCY 条链并发、等待队列受 DISPATCH_QUEUE_EVENTS 与 DISPATCH_QUEUE_BYTES 限制并计入 Core 总预算，同一事件的候选在一条链内顺序执行，链与 Session 读循环分离。
 
-依据：PLAN T-06 步骤 3、4；CONTRACTS §3 第 4、5 条、§1.2、§2.3（send_forbidden）；WIRE-FORMAT §4；TEST-MATRIX V-18、V-42 的嵌套分项、V-15 的间接递归分项。
+依据：PLAN T-05 步骤 1、2；CONTRACTS §2.1、§2.3 第 1 条、§1.2；MESSAGE-MODEL §1、§1.1；TEST-MATRIX V-13、V-16 的 fixture 分项。
 
 范围（只新增或修改这些）：
-- internal/core/broker/：调用链记录、循环与深度检查、期限与取消传播
-- internal/core/router/：Invocation 增加祖先插件链与 scope，并在 InvocationContext 中下发（只加字段与填写处）
-- internal/wire/：如需在父请求结束时通知子调用取消，只加回调字段与触发点（与 goal-24 的 Late 同样的方式）
-- 新增 internal/core/supervisor/testdata/chainplugin/
+- internal/core/router/：新增 dispatch.go（并发链与等待队列）、trusted.go（可信信息的保留与重建）；router.go 的 New、Deliver 与 worker 改用它们，删除 goal-2 的单 worker shortcut 注释
+- 更新 router.New 的全部调用者（含测试与 cmd/alonabot 之外的装配代码；cmd/alonabot 若已装配 Router 也一并更新）
+- 新增 contracts/testdata/events/：button.clicked 与 scheduled 的规范 fixture（JSON 形式的 pb.Event）
 - 上述包的测试文件
 允许的新跨模块边：无。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
-- internal/core/router：Invocation 增加字段 Chain []string（祖先插件链，最早者在前）、Scopes []string、SendForbidden bool（goal-17 已有时沿用）
-- internal/core/broker：Options 增加 MaxDepth int（tune.Values.CallChainMaxDepth）；New 的签名相应改为接收 Options，并更新全部调用者
+internal/core/router
+   type Options struct {
+       Concurrency int          // DISPATCH_CONCURRENCY
+       QueueEvents int          // DISPATCH_QUEUE_EVENTS
+       QueueBytes  int64        // DISPATCH_QUEUE_BYTES
+       Global      *wire.Budget // Core 全局 payload 预算；排队中的事件占用它
+       Adapters    *adapter.Registry // 沿用账号用户名查询
+       Send        ServiceFunc // 沿用 usage 与自动回复发送
+       Policy      CommandPolicy // 沿用 goal-13 的策略注入，待其合并核对
+   }
+   func New(log *slog.Logger, opt Options) *Router // 取代带 adapters、send 与策略参数的 New，保留这些能力
+   type Stats struct { Accepted, DroppedQueueFull, DroppedBudget uint64; Running, Queued int }
+   func (r *Router) Stats() Stats
 
 行为：
-- 父请求：插件发起的 Service 调用带 parent_call_id 时，必须指向同一 Session 中仍在途的 Core→该插件请求（wire 已保证属于同一 Session）；Broker 从该父请求的 Invocation 派生上下文：actor、default_target、scopes、trace_id、send_forbidden 原样继承，Chain = 父 Chain + [调用方]。插件载荷中的任何身份字段被忽略。没有父请求时只有插件身份：Chain = [调用方]，actor 与 target 为空。
-- 检查：目标插件已在 Chain 中 → CALL_CYCLE；len(Chain)+1 > MaxDepth → FAILED_PRECONDITION。在调用目标函数之前返回。不同的独立链互不影响（检查只看本链）。
-- 期限：子请求期限 = min(父请求期限, 调用方请求自带期限, REQUEST_TIMEOUT 起算的期限)。
-- 取消：父请求完成（成功或失败）、到期、被取消，或调用方 Session、目标 Session 断开时，Broker 取消尚未完成的转发请求（发送 Cancel），并使调用方得到 CANCELLED 或 UNAVAILABLE；不重放、不重试。普通迟到响应不会再次完成已结束的调用。
-- 背压：转发请求使用目标 Session 的现有准入（在途 256、每方向字节预算、Core 全局预算），额满时立即向调用方返回 RESOURCE_EXHAUSTED，不排队等待。Broker 不在持有任何锁时等待业务槽位；Response、Cancel 与控制帧的处理不依赖 Broker。
-- send_forbidden 的间接路径：出站 Hook 内调用 Service、该 Service 再调用 core.send 时返回 FAILED_PRECONDITION（V-15 的必交回归）。
-- 媒体：Service 中向原事件 Target Send 仍经 T-03 准入；跨 Session 使用媒体仍须 Grant。
+- Deliver：事件编码后的大小计入 QueueBytes 与 Global；等待中的事件数达到 QueueEvents、字节超过 QueueBytes 或 Global 无法预留时，立即返回 adapter.ErrQueueFull 并计数（分别计入 DroppedQueueFull、DroppedBudget），不阻塞调用方。事件开始执行时释放它在队列与 Global 中的占用。
+- 并发：最多 Concurrency 个事件同时执行；同一事件的全部候选（命令层与事件路由）在一条链内按 (priority, plugin_id, route_id) 顺序执行，不同事件互不等待。链执行在独立 goroutine 中，不在任何 Session 的读循环里运行；慢 Handler 不影响其他 Session 的 Response、Cancel 与控制帧。
+- 可信信息：Deliver 时把 Event 拆成 Core 保留部分（event_id、event_type、source_kind、adapter_id、adapter_instance_id、account_id、target、actor、message 的 platform_message_id、source_event_id，以及 button.clicked 的 action_id/action_schema_version/value、scheduled 的 job_id/run_id/scheduled_at）与业务 payload。每次构造 HandlerRequest 时用保留部分重建这些字段，业务 payload 只来自当前（后续 PreEvent 可改写的）副本；InvocationContext 的 actor 与 default_target 只取保留部分。T-05.3 的 PreEvent 只能改写业务副本。
+- 身份：Actor 的 trusted_roles 在 Deliver 时按 T-04.4 的 TrustedRoles 计算一次并保留；没有 Actor 的事件（例如 scheduled 与 bot.online）不补用户，命令的 USER/ADMIN 检查一律不满足。
+- Router.Close：停止接收新事件，等待运行中的链在调用方给出的 ctx 内结束，然后释放全部队列占用。
+- 本切片不改变命令层与事件路由的匹配规则，也不实现 PreEvent、Rule 与传播的新语义。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/supervisor/chain_test.go（//go:build unix）。构建 testdata/chainplugin（按环境变量决定收到调用后转调哪个插件、睡眠多久、是否在 BeforeSend 中调用 Service），以 a、b、c 启动：
-  - A→B→C 正确返回，C 看到的 Actor 与 Target 是原事件的，Chain 为 [a, b]。
-  - A→B→A 返回 CALL_CYCLE，A 的第二次函数未运行；两条同时进行的独立链 A→B 与 C→B 都成功。
-  - 把 MaxDepth 设为 2：A→B→C 返回 FAILED_PRECONDITION。
-  - A 的父事件 Handler 到期：B、C 的未完成调用被取消（C 收到取消，日志可见），A 得到错误；没有重试。
-  - 杀掉 B 的进程：A 立即得到 UNAVAILABLE。
-  - 出站 Hook 中经 Service 再 Send 被拒（FAILED_PRECONDITION）。
-  - 用很小的 wire 预算使转发请求额满：立即 RESOURCE_EXHAUSTED，期间其他 Session 的 Response 照常完成。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：期限取最小值；没有父请求的后台调用只有插件身份；插件载荷中伪造的 actor 被忽略；Cancel 不越过其 Request。
+- 提交：internal/core/supervisor/dispatch_test.go（//go:build unix）：构建一个测试插件，其事件路由按收到文本睡眠指定时长后回复，可用不同 priority 以三个插件 ID 启动。用 memory Adapter 与 Options{Concurrency: 2, QueueEvents: 3, QueueBytes: 很小的值} 装配：
+  - 三个插件以不同顺序启动时，同一事件的调用顺序都是 (priority, plugin_id, route_id)。
+  - 两个慢事件执行期间，第三个事件进入队列，再多的事件得到 ErrQueueFull，Stats 计数正确；慢事件结束后排队事件被执行。
+  - 慢 Handler 执行期间，同一插件的 Session 仍能完成另一条 core.send 的 Response（读循环未被占住）。
+  - 读入 contracts/testdata/events 的 button.clicked 与 scheduled fixture 并 Deliver：插件收到的 action_id/value、job_id/run_id 与 fixture 一致；scheduled 事件没有 Actor，需要 USER 的命令不可用。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：QueueBytes 与 Global 的预留与释放在并发下正确（-race）；Close 时排队事件的占用被释放；trusted_roles 不能被插件自报的值改变；可信字段在重建时覆盖业务副本中的同名值。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/... ./sdk/...；go build ./...。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./sdk/...；go build ./...。
 
-不做：Event Bus（T-06.3）；Session 清理的完整矩阵（T-06.4）。
+不做：PreEvent 与出站 Hook（T-05.3）；Rule 与 HandlerOutcome 新语义（T-05.2）；延续调用（T-05.4）；实际的 scheduled tick（T-07.2）；按钮 token（T-03.8）。
 ```
 
 ### goal-33 · T-08.6 SQLite 候选与资源交接
 
-状态：等待前置（T-08.4、T-08.5）。语句中 goal-31、goal-32 提供的符号（secret.Store、supervisor.Spec 的 Database 与 ConfigSchema、gormdb 的 SQLite 设置）只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-08.4、T-08.5）。语句中 goal-31、goal-32 提供的符号（secret.Store、supervisor.Spec 的 Database 与 ConfigSchema、gormdb 的 SQLite 设置）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-33（切片 T-08.6：SQLite 候选与资源交接）。goal 目录 goal-33，分支 goal-33，worktree .worktrees/goal-33，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -3409,7 +2958,7 @@ internal/core/candidate
 
 ### goal-84 · T-09.12 WebUI 组件与组件图标
 
-状态：待编写（前置 T-07.4、T-09.1、T-09.4、T-13.1）。依据 D-62、D-63 新增；前置合并后由审查者按实际的 webhost、adminauth、manage 与根包装配写出接口和测试段。
+状态：等待前置（T-07.4、T-09.1、T-09.4、T-13.1）。语句只写了目标、依据和要点。依据 D-62、D-63 新增；前置合并后由审查者按实际的 webhost、adminauth、manage 与根包装配写出接口和测试段。
 
 目标：Core 在 admin host 上以组件方式提供 WebUI 与组件图标：已启用 WebUI 组件的静态文件（保留 `/api/` 与内部路径，无扩展名的不存在路径回退 index.html，未安装时 503 与英文提示），Admin API 主版本常量与 WebUI 声明范围的检查（不兼容时拒绝安装与启用并提示），只提供 manifest 与表单选项声明的图标并带 sandbox CSP 与 nosniff、要求管理员会话；写出 spec/ADMIN-API.md（主版本、全部接口、认证与错误格式）；根包增加 `alonabot.WebUI(fsys fs.FS)` 选项。
 
@@ -3421,74 +2970,73 @@ internal/core/candidate
 - spec/ADMIN-API.md 由本切片新建，之后新增接口的切片同步追加；同一主版本内只做向后兼容的增加。
 - 提交的集成测试经真实 Core 与临时安装的 WebUI 测试包覆盖 V-83 的全部场景；含脚本的 SVG 在浏览器中不执行的检查没有浏览器时记为未运行。
 
-### goal-59 · T-12.2 Agent 对话与流式显示
+### goal-54 · T-11.1 工具描述、目录与策略
 
-状态：等待前置（T-03.9、T-05.4、T-08.3、T-08.4）。T-04.3、T-11.3、T-12.1 已合并；命令注册、Args/Optional、Context.Match 与自动回复接口已按 PR #47 核对。Context.Edit、Continue、配置及数据库入口仍待相关前置合并后核对。
+状态：等待前置（T-04.4、T-06.1）。语句中 goal-13、goal-19 提供的符号（policy.Policy、broker.Broker、sdk.JSONService、ServiceOption、router.Mux）只写名字；合并后由审查者核对签名，再改为待派发。jsonschema-go 若尚未由 goal-28 引入，本切片按 D-43 引入。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-59（切片 T-12.2：Agent 对话与流式显示）。goal 目录 goal-59，分支 goal-59，worktree .worktrees/goal-59，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-54（切片 T-11.1：工具描述、目录与策略）。goal 目录 goal-54，分支 goal-54，worktree .worktrees/goal-54，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-目标：建立官方 Agent 组件 agent/（manifest `role: agent`）的骨架与配置（Provider 与预设、人格、历史条数等），注册 /ask、/agent on|off、/persona、/provider、/reset 与 message 事件路由；一轮对话在延续调用中执行：读取会话历史、组装请求、经 Provider 流式接收，先发送一条消息再按 1s 间隔编辑，结束时以完整内容最后编辑，超长时在段落边界换新消息；结束后追加会话条目。Provider 出错或中途断开时保留已显示内容并按 Actor locale 报告，不自动重发。
+目标：JSON Service 可以声明为工具（给模型的说明、缺省策略 allow 或 confirm，输入 Schema 为该服务的输入 JSON Schema）；Core 校验工具描述，提供 core.tool.list 返回调用插件可以调用、且生效策略不是 deny 的工具；工具策略按 plugin_id/service_name 持久化，提供管理服务层的查询与修改，下一次调用生效。
 
-依据：PLAN T-12 步骤 2、3；CONTRACTS §13（Agent 段）、§2.4、§8（Edit）、§5.4；DECISIONS D-27、D-38；TEST-MATRIX V-57。
+依据：PLAN T-11 步骤 1、2；CONTRACTS §13.1、§13.2（策略段）、§3；WIRE-FORMAT §3.5（core.tool.list 与 Service 描述的 tool）；DECISIONS D-43；TEST-MATRIX V-55 的目录与策略分项。
 
 范围（只新增或修改这些）：
-- agent/：新增 agent 包（可导入的根组件 agent.New()）、cmd/ 下的 main、plugin.yaml（`role: agent`、`icon`）、i18n/en-US.json 与 zh-CN.json、assets/icons/（Provider 预设与组件自身的图标）；provider 包已存在，不改
+- contracts/proto/alonabot/v1/：route.proto 的 ServiceSpec 追加 ToolSpec tool = 5；新增 tool.proto（ToolPolicy、ToolInfo、ToolListRequest/Response）。随后 go generate ./...（本切片获授权只追加这些）
+- contracts/wirespec_test.go：追加编号检查
+- contracts/validate/register.go：工具描述的注册校验
+- internal/wire/services.go：末尾追加 ServiceToolList = "core.tool.list"
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/tool.go
+- 新增 internal/core/tool/
+- sdk/：services.go 增加 Tool 选项与工具输入 Schema 的生成；新增 tool.go（ListTools）
+- go.mod、go.sum：仅在 jsonschema-go 尚未引入时新增（D-43）
 - 上述包的测试文件
-允许的新跨模块边：agent/... -> sdk/...、-> contracts（已允许）。不 import internal/...。
+允许的新跨模块边：无。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
-agent
-   func New() sdk.Root
-   type Config struct {
-       config.Base
-       Providers       []ProviderConfig `json:"providers"`
-       DefaultProvider string           `json:"default_provider"`
-       Personas        map[string]string `json:"personas"`        // 名称 → 系统提示
-       DefaultPersona  string           `json:"default_persona"`
-       HistoryEntries  int              `json:"history_entries" form:"default=20;min=0;max=500"`
-       MessageLimit    int              `json:"message_limit" form:"default=4096;min=256;max=65536"`
-       MCPServers      []MCPServer      `json:"mcp_servers"`     // T-12.3 使用
-       SkillsDir       string           `json:"skills_dir"`      // T-12.5 使用
-   }
-   type ProviderConfig struct { Name string `json:"name"`; Preset string `json:"preset"`; Protocol string `json:"protocol"`; BaseURL string `json:"base_url"`; APIKey string `json:"api_key" secret:"true"`; Model string `json:"model"`; MaxTokens int `json:"max_tokens" form:"default=2048;min=1"` }
-   type MCPServer struct { Name string `json:"name"`; Transport string `json:"transport"`; Command string `json:"command"`; Args []string `json:"args"`; Env []SecretPair `json:"env"`; URL string `json:"url"`; Headers []SecretPair `json:"headers"` }
-   type SecretPair struct { Name string `json:"name"`; Value string `json:"value" secret:"true"` }
+1. proto
+   enum ToolPolicy { TOOL_POLICY_UNSPECIFIED = 0; TOOL_POLICY_ALLOW = 1; TOOL_POLICY_CONFIRM = 2; TOOL_POLICY_DENY = 3; }
+   message ToolSpec { string description = 1; ToolPolicy default_policy = 2; string input_schema_json = 3; } // default_policy 只能是 ALLOW 或 CONFIRM
+   message ToolInfo { string name = 1; string description = 2; string input_schema_json = 3; ToolPolicy policy = 4; } // name 为 "plugin_id/service_name"
+   message ToolListRequest {}
+   message ToolListResponse { repeated ToolInfo tools = 1; }
+2. internal/core/state
+   迁移：CREATE TABLE tool_policies (plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), service_name TEXT NOT NULL, policy INTEGER NOT NULL, PRIMARY KEY (plugin_id, service_name));
+   读写方法自定（放在 tool.go），按主键幂等。
+3. internal/core/tool
+   type Catalog struct{ ... }
+   func New(store *state.Store, r *router.Router) *Catalog
+   func (c *Catalog) Register(m *router.Mux)                                  // 注册 core.tool.list
+   func (c *Catalog) Effective(ctx context.Context, pluginID, service string) (pb.ToolPolicy, error) // 覆盖优先，否则缺省策略；供 T-11.2 的 invoke
+   func (c *Catalog) SetPolicy(ctx context.Context, pluginID, service string, p pb.ToolPolicy) error // UNSPECIFIED 表示删除覆盖
+   func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error) // type ToolPolicyEntry struct { PluginID, Service string; Default, Override pb.ToolPolicy }
+4. sdk
+   func Tool(description string, defaultPolicy ToolDefault) ServiceOption // type ToolDefault int：ToolAllow、ToolConfirm；只用于 JSONService
+   type ToolInfo struct { Name, Description string; InputSchema json.RawMessage; Policy string } // Policy 为 "allow" 或 "confirm"
+   func ListTools(ctx context.Context) ([]ToolInfo, error)
 
 行为：
-- 配置：preset 的表单选项为 openai、anthropic、deepseek、ollama 与 custom，各附 assets/icons/ 下的图标（选项图标的 tag 写法以 goal-28 合并后的生成器为准）；preset 给出 protocol 与 base_url 的缺省值，配置中显式给出的值优先。OnLoad 校验 providers 的 name 唯一、protocol 为 openai、openai-compatible 或 anthropic-messages、default_provider 与 default_persona 指向存在的项（列表为空时允许为空）；错误时返回 OnLoad 错误。
-- 数据：每个聊天（adapter_instance_id、chat_id、thread_id）当前的人格、Provider 与自由对话开关保存在 Agent 的数据库（gormdb.Open，versioned 迁移）。
-- 命令：/ask <text:raw>（缺省 USER）、/agent on|off（ADMIN）、/persona [name]（ADMIN，无参数时列出）、/provider [name]（ADMIN）、/reset（USER），说明用 sdk.Description 指向 messages。自由对话开启时，该聊天中 to_me 的非命令 message.created 也触发一轮（message 事件路由带 ToMe Rule，并检查开关）；私聊的消息都是 to_me。默认关闭。
-- 一轮对话（Handler 调用 Continue，在延续调用中执行）：
-  1) 没有可用 Provider 时用 Context.T 回复 agent.no_provider，结束。
-  2) 会话键为 "<instance>/<chat>/<thread>"；ListConversation 读取最近 history_entries 条（从末尾往前，按序号顺序组装）。条目为 JSON 对象 {"role": "user"|"assistant", "speaker": 外部用户 ID（群聊时）, "content": 文本}。
-  3) 以人格为 system 消息，组装 provider.Request（MaxTokens 取 Provider 配置）。
-  4) 事件的 capabilities 含 message.edit 时：发送一条占位消息（agent.thinking），之后流式接收：每累计到新的文本时，距上次编辑不少于 1s（命名常量）才 Edit；Edit 返回限流错误时把下一次编辑推迟 retry_after；生成结束后用完整内容最后编辑一次。不含 message.edit 时：不发占位消息，不发送中间增量，生成结束后一次发送完整内容。回复以纯文本发送（不使用 markdown 格式）。
-  5) 当前消息的内容将超过 message_limit 时，在最近的段落边界（"\n\n"，没有时为 "\n"，再没有时为空白，最后硬切）结束当前消息，再发送新消息继续显示；不能编辑时按同样的切分发送多条。
-  6) 结束后用 AppendConversation 追加本轮的 user 与 assistant 条目。
-  7) Provider 返回错误或中途断开：保留已显示的内容（不能编辑时不发送已生成的部分），在其后编辑或发送 agent.error（按 Actor locale，参数为错误码），不追加 assistant 条目，不重发请求。
-- /reset：ClearConversation 清除该会话。
-- 工具、MCP、记忆与技能分别在 T-12.3、T-12.4、T-12.5 接入；本切片不调用它们。
+- SDK：JSONService 带 Tool 选项时，输入 Schema 由 jsonschema.For[In] 生成（工具输入可以拒绝未知键，与配置 Schema 不同，D-43 只约束配置），序列化为 input_schema_json；Tool 用于 ProtoService 是 Collect 错误。
+- 注册校验：tool 只允许出现在 encoding 为 JSON 的服务上；description 非空且不超过 1024 字节（命名常量）；default_policy 为 ALLOW 或 CONFIRM；input_schema_json 必须能被 jsonschema 解析并 Resolve（不加载远程 $ref，ResolveOptions.Loader 为 nil），根类型为 object。任一失败整体拒绝注册。
+- core.tool.list：遍历 Router 中已激活插件的工具服务，按 goal-19 的访问规则只保留调用插件可以调用的，再去掉生效策略为 DENY 的；按 name 字典序返回。调用者自己的工具同样按规则出现。每次调用都读取当前策略，不缓存。
+- 策略：覆盖可为 ALLOW、CONFIRM、DENY；生效策略 = 覆盖或缺省。SetPolicy 在事务提交成功后才返回；插件或服务不存在时仍可设置（安装记录必须存在，否则 NOT_FOUND）。修改在下一次 list 与 invoke 时生效。
+- 工具调用（core.tool.invoke）与确认在 T-11.2。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：agent/agent_test.go（//go:build unix）。用本仓库 Core 的测试装配（supervisor、memory Adapter，实现 Editor 与 Named）、真实状态库与 agent/provider 的本地模拟 Provider（三种协议各一次）：
-  - /ask hello：memory 先收到一条发送，随后收到若干次编辑，最后一次编辑是完整回复；编辑间隔不小于 1s（用注入时钟或计时断言）。
-  - 回复超过 message_limit（测试中设为 256）时分成多条消息，切分点在段落边界。
-  - 实例不声明 message.edit 时：memory 只收到完整回复的发送（超过 message_limit 时为多条），没有占位消息与编辑。
-  - 模拟 Provider 中途断开：已显示内容保留，最后有错误说明，会话中没有 assistant 条目，Provider 只收到一次请求。
-  - 自由对话关闭时群聊中的 to_me 消息不触发；Admin /agent on 后触发；非 to_me 的消息不触发。
-  - /persona 切换后请求的 system 消息改变；/reset 后历史为空。
-  - 普通用户执行 /agent 被拒（不回复）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：段落切分函数；OnLoad 的校验；限流推迟；会话条目格式；配置 Schema 由生成器生成且 api_key 为 secret。
+- 提交：internal/core/supervisor/tool_test.go（//go:build unix）：沿用 goal-19 的 svcplugin，增加带 Tool 选项的服务（PUBLIC 的 a/search 为 allow，ALLOWLIST: b 的 a/admin 为 confirm）；b 与 c 收到消息时调用 sdk.ListTools 并回复结果：
+  - b 看到 a/admin 与 a/search，c 只看到 a/search；input_schema 与 In 的类型一致，policy 正确。
+  - SetPolicy(a, search, DENY) 后两者都看不到 a/search；删除覆盖后恢复；关闭并重新打开状态库后覆盖仍在。
+  - 注册一个 description 为空或 input schema 含远程 $ref 的工具时 REGISTER 失败。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Tool 用于 Protobuf 服务的 Collect 错误；description 长度边界；Policies 的输出；未知 ToolPolicy 被拒。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./agent/... ./internal/core/...；go build ./...；在 agent 运行 alonabot plugin check 通过。
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go mod tidy 后无差异；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
 
-不做：工具循环与 MCP（T-12.3）；记忆（T-12.4）；技能（T-12.5）；定时任务（T-12.6）；打包（T-12.7）；真实 Provider（T-10）。
+不做：core.tool.invoke、确认与确认按钮（T-11.2）；Agent 组件与 MCP（T-12）；管理 API 与页面（T-09.9）。
 ```
 
 ### goal-68 · T-13.2 开发组件的配置与数据库
 
-状态：等待前置（T-08.3、T-08.5、T-13.1）。语句中 goal-30、goal-32、goal-67 提供的符号（sdk/config.Prepare、gormdb 的描述、根包 assembly 与 dev 安装记录）只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-08.3、T-08.5、T-13.1）。语句中 goal-30、goal-32、goal-67 提供的符号（sdk/config.Prepare、gormdb 的描述、根包 assembly 与 dev 安装记录）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-68（切片 T-13.2：开发组件的配置与数据库）。goal 目录 goal-68，分支 goal-68，worktree .worktrees/goal-68，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -3524,9 +3072,572 @@ agent
 不做：热部署（T-13.3）；库模式示例与验收汇总（T-13.4）。
 ```
 
+### goal-79 · T-15.2 官方 OneBot 11 Adapter 的发送、媒体与 extension
+
+状态：等待前置（T-03.6、T-03.8、T-15.1）。语句中 goal-7、goal-8、goal-78 提供的符号（sdk/adapter 的 Core.ReadMedia 与实例可选实现的平台文件读取接口、ExtensionDeclaration 的校验、adapters/onebot11 的实例与 API 调用、onebottest.Server）只写名字；合并后由审查者核对签名，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-79（切片 T-15.2：官方 OneBot 11 Adapter 的发送、媒体与 extension）。goal 目录 goal-79，分支 goal-79，worktree .worktrees/goal-79，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：OneBot 11 实例的 Send 先对整条 Chain 做完整预检并生成确定的物理操作计划，再依次调用 send_msg；连续的 text、mention、image 与 extension 合成一条消息，video 单独成一条，reference 只加在第一条前；每条消息一个 PartResult，按 MESSAGE-MODEL §4 汇总。入站 image、video 生成带 incoming_ref 的片段并实现平台文件读取；出站媒体经 Core.ReadMedia 读出后以 base64 发送；注册 onebot11.face extension。
+
+依据：PLAN T-15 步骤 3、4；CONTRACTS §8（Send、Chain 与计划段，extension 段）、§1.4；MESSAGE-MODEL §2、§4、§7.1 的入站媒体、§7.2；DECISIONS D-46；TEST-MATRIX V-71 的发送与媒体分项。
+
+范围（只新增或修改这些）：
+- adapters/onebot11/：新增 plan.go、send.go、media.go；实例的 Send、Capabilities 与 Descriptor 的 extensions 补全；标准化补上入站 image、video
+- adapters/onebot11/onebottest/：增加 send_msg 的缺省响应与故障注入
+- 上述包的测试文件
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. adapters/onebot11：实例实现 sdk/adapter 的 Instance.Send 与 goal-7 定义的平台文件读取接口；不新增导出符号。
+2. adapters/onebot11/onebottest（在 goal-78 的 Server 上追加）
+   func (s *Server) DisconnectOn(action string, nth int) // 收到第 nth 次该 action 后不响应并关闭连接（请求已写出、结果未知）
+   send_msg 的缺省响应：status "ok"，data.message_id 从 1001 起递增。
+
+行为：
+- 能力与 extension：Capabilities 声明 message.send、message.reference（version 1，supported=true）；不声明 message.markdown、message.album、message.buttons、message.edit。Descriptor 的 extensions 含 {name "face", version 1, schema_json 为只有必需字符串属性 "id"（pattern ^[0-9]+$）、不允许其他属性的 JSON Schema}；片段的 adapter_id 为 AdapterID。
+- 预检（任何 send_msg 之前，任一失败都返回 REJECTED 的 SendResult 加 ErrorInfo，part_results 为空）：
+  - 片段只支持 plain 且无 entities 的 text、image、video、mention、reference 与本 Adapter 的 face extension；带 markdown 或 entities 的 text、file、buttons、forward 与其他 extension → UNSUPPORTED。
+  - target.chat_id 必须是 "private:<十进制>" 或 "group:<十进制>"，否则 INVALID_ARGUMENT；thread_id 存在 → UNSUPPORTED。mention 的 external_user_id、reference 的 original_platform_message_id 必须是十进制，否则 INVALID_ARGUMENT。
+  - 媒体来源：https_url 只接受 https，原样作为段的 file；media_ref 与 incoming_ref 由 Core 换成的只读 token 在执行该部分时经 Core.ReadMedia 读完，编码为 "base64://..."。
+- 物理计划：按原顺序扫描，连续的 text、mention、image、face 合成一条消息的段数组（text → text，mention → at{qq}，image → image{file}，face → face{id}）；video 单独成一条（video{file}）；reference 转为第一条消息最前面的 reply{id}。每条消息一个 send_msg（private 用 user_id，group 用 group_id，message 为段数组），对应一项 PartResult（part_index 从 0 起，segment_indexes 为它覆盖的片段，reference 计入第一项）。
+- 执行与回执：按计划顺序执行。status ok → ACCEPTED，message_id 的十进制进入 platform_message_ids；status async → ACCEPTED 且 message_ids_unavailable=true；status failed → REJECTED，ErrorInfo 为 FAILED_PRECONDITION，safe_message 带 retcode；请求写出后连接断开或到 ctx 期限仍无响应 → UNKNOWN；发出前连接不可用 → 该部分 REJECTED，ErrorInfo 为 UNAVAILABLE。任一部分不是 ACCEPTED 后，其余部分 NOT_ATTEMPTED。整体状态与 primary_platform_message_id 按 MESSAGE-MODEL §4 汇总，部分成功时同时返回 ErrorInfo。不自动重试。
+- 入站媒体：image、video 段生成 image、video 片段，incoming_ref.token 为段的 url（没有 url 时为 file，并在读取时返回 UNSUPPORTED）；平台文件读取接口首次被调用时经 HTTP GET 下载 url（只允许 http、https；响应非 2xx → UNAVAILABLE），按 offset 返回；下载使用实例自己的 http.Client 与 http.ProxyFromEnvironment。
+- 脱敏沿用 goal-78：access_token 不进入日志与错误。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：adapters/onebot11/send_test.go。用 onebottest.Server 与 Core 测试替身（ReadMedia 返回内存字节）驱动真实实例：
+  - reference+text+mention+image(media_ref)+face+video(https_url)+text 的计划为三次 send_msg：[reply, text, at, image(base64://), face]、[video(https URL)]、[text]，参数与顺序正确，三项 PartResult 的 segment_indexes 正确。
+  - 第二次 send_msg 返回 failed：第一项 ACCEPTED、第二项 REJECTED、第三项 NOT_ATTEMPTED，整体 PARTIAL 并带 ErrorInfo；DisconnectOn 第一次 send_msg：整体 UNKNOWN，其余 NOT_ATTEMPTED；async 响应标记 message_ids_unavailable 且 platform_message_ids 为空。
+  - 预检失败（buttons、file、forward、markdown、thread_id、非法 chat_id、其他 Adapter 的 extension）时 Calls() 中没有 send_msg。
+  - adapters/onebot11/media_test.go：推入带 image 的群消息（url 指向测试 HTTP 服务），片段的 incoming_ref.token 为该 url；平台文件读取返回正确内容；url 为 file:// 时读取返回 UNSUPPORTED。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：face 的 Schema 校验正反例；只含 reference 的 Chain 被拒；大媒体的 base64 编码与分块读取；ctx 期限到达时的 UNKNOWN。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./adapters/...；go build ./...。
+
+不做：Core 侧装配、alonabot run 联验与一致性验收（T-15.3）；消息编辑（OneBot 11 不支持，由 Core 按未声明的 message.edit 拒绝）；合并转发与文件上传（v0.1 不支持）。
+```
+
+## 第 10 波
+
+### goal-16 · T-05.2 Rule、HandlerOutcome 与传播
+
+状态：等待前置（T-05.1、T-04.7）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。语句中 goal-2、goal-12、goal-15 提供的符号（sdk 的分发、RouteOption、Context、HandlerOutcome 的处理、router 的命令层与事件路由派发）只写名字；合并后由审查者核对签名，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-16（切片 T-05.2：Rule、HandlerOutcome 与传播）。goal 目录 goal-16，分支 goal-16，worktree .worktrees/goal-16，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：SDK 提供在同一 RPC 内执行的 Rule：多个 Rule 默认 AND，显式 OR 用 Any 组合，内置 ToMe 与 ChatAdmin；Rule 为 false 或出错时不运行目标函数并如实返回 matched 与错误。固定两种 Handler 签名的 HandlerOutcome、StopPropagation 锁存、错误分支与已识别命令的消费语义，并用测试证明发送后失败不会补发、撤销或自动回复错误。
+
+依据：PLAN T-05 步骤 3、4；CONTRACTS §2.1、§2.2 第 3、6 条、§2.3 第 1 条、§8（自动回复段）；MESSAGE-MODEL §1.1（to_me）；TEST-MATRIX V-14、V-11 的 Rule 分项。
+
+范围（只新增或修改这些）：
+- sdk/：新增 rule.go；dispatch.go 在调用目标函数前执行 Rule；registry.go 与 events.go 接受 Rule 选项；session.go 的 buildRegister 写入 RuleDescriptor
+- internal/core/router/：HandlerOutcome 的处理按下文统一（只改派发处的判断）
+- 上述包的测试文件
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+sdk
+   type Rule func(*Context) (bool, error)
+   func WithRule(rules ...Rule) RouteOption // 可多次使用，全部 AND
+   func Any(rules ...Rule) Rule              // OR：依次求值，第一个 true 即为 true；全部 false 为 false；出错立即返回错误
+   func ToMe() Rule                           // message.created 的 to_me；其他事件为 false
+   func ChatAdmin() Rule                      // 调用 Actor 的 trusted_roles 含 CHAT_ADMIN
+   func CoreAdmin() Rule                      // 调用 Actor 的 trusted_roles 含 ADMIN（Core 判定的机器人管理员）
+
+行为：
+- Rule 在 SDK 的同一次 Handler 请求中、目标函数之前执行，顺序为注册顺序；任一 Rule 返回 false 时不运行目标函数，HandlerOutcome{matched:false, propagation:CONTINUE}；任一 Rule 返回错误时不运行目标函数，按 goal-2 的错误规则返回 Err（*sdk.Error 用其 Code，其他为 INTERNAL），matched=false。Rule panic 与 Handler panic 一样转 INTERNAL 并记录堆栈。
+- RuleDescriptor：有任何自定义 Rule 时 has_custom_rule=true；只用 ChatAdmin 时 require_chat_admin=true（Core 不据此预先过滤，只用于诊断显示）。
+- 传播：
+  - StopPropagation 在调用的任何时刻调用都锁存，即使之后 Rule false、Handler 返回错误或 panic，HandlerOutcome 仍为 STOP。
+  - Core 对事件路由与文本匹配/Raw：matched=false 跳过；业务错误以 WARN 记录后继续下一个候选；STOP 终止后续候选（含 D-44 中命令层之后的事件路由）。
+  - 已识别命令的胜出路由 Rule false 或出错时仍消费命令层（不回落到短路径、文本匹配或 Raw），不回复 usage；STOP 的效果同上。
+- 自动回复型 Handler 只在成功且 Chain 非空时由 Core 发送一次；返回错误时即使 Chain 非空也不发送；自动型内调用 Send 返回 FAILED_PRECONDITION（goal-12 已实现，本切片补齐测试）。手动型可多次 Send；返回错误时已发送的消息不撤销，Core 不自动发送错误回复。
+- Context 在 Handler 返回后失效：之后的 Send、Edit、Wait 返回 FAILED_PRECONDITION；后台 goroutine 持有的 Context 不能改变已返回的 HandlerOutcome。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/supervisor/rule_test.go（//go:build unix）。沿用 goal-12 的命令测试装配，测试插件注册：带 ToMe 的事件路由、带 ChatAdmin 的命令、带返回错误的自定义 Rule 的 keyword 路由、先 Stop 再返回错误的路由、发送两次后返回错误的手动命令、在自动型里调用 Send 的命令、在后台 goroutine 中于返回后调用 Send 的路由：
+  - to_me=false 的群消息不触发 ToMe 路由，私聊触发。
+  - 非 chat_admin 用户的命令被消费：不回 usage、不进入 Raw，插件目标函数未运行。
+  - Rule 出错的 keyword 路由不运行，后续候选继续；先 Stop 再出错的路由使后续候选不再调用。
+  - 手动命令的两条消息都已送达，之后没有任何补发或错误回复；自动型里的 Send 失败且只有返回的 Chain 被发出一次；返回后的后台 Send 返回 FAILED_PRECONDITION。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Any 的短路与错误；WithRule 多次使用的 AND；RuleDescriptor 的两个字段；Rule panic；Stop 在 Rule 中调用的锁存。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./sdk/...；go build ./...。
+
+不做：PreEvent 与出站 Hook（T-05.3）；延续调用与多轮等待（T-05.4）；Core 侧预先执行 chat_admin 过滤。
+```
+
+### goal-24 · T-07.2 schedule 注册与运行槽
+
+状态：等待前置（T-05.1、T-07.1）。语句中 goal-2、goal-15、goal-23（contracts/schedule）、goal-76 提供的符号（router.Router、router.Plugin、wire.Session 的 Call、schedule.Trigger、tune.Values、sdk 的 ScheduleRegistry 与分发）只写名字；合并后由审查者核对签名，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-24（切片 T-07.2：schedule 注册与运行槽）。goal 目录 goal-24，分支 goal-24，worktree .worktrees/goal-24，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：插件注册的 interval/cron 定时任务经 REGISTER 校验后由 Core Scheduler 按 contracts/schedule 计算触发：每次触发以 Core→插件 REQUEST 调用任务（独立 run_id、JOB_TIMEOUT 期限、无 Actor、不默认 Admin），同一 job 有运行中的调用时跳过本次；到期只结束调用结果并取消，运行槽保留到插件真正返回（迟到响应只释放槽）或旧进程确认退出；不补跑错过的 tick。
+
+依据：PLAN T-07 步骤 1（schedule）、3；CONTRACTS §4.3、§1.2；MESSAGE-MODEL §1.1（scheduled）、§1 末段；WIRE-FORMAT §4；TEST-MATRIX V-20、V-46、V-16 与 V-05 的 scheduled 分项。
+
+范围（只新增或修改这些）：
+- contracts/validate/register.go：SCHEDULE 路由的注册校验（调用 schedule.FromSpec）
+- internal/wire/session.go：Request 增加迟到响应回调（只加字段与触发点）
+- 新增 internal/core/scheduler/
+- sdk/：sdk.go 去掉「不支持 scheduled jobs」的拒绝（只改该处）；dispatch.go 分发 SCHEDULE 路由；session.go 的 buildRegister 输出 SCHEDULE 路由
+- 新增 internal/core/supervisor/testdata/jobplugin/
+- 上述包的测试文件
+允许的新跨模块边：internal/core/... -> contracts/schedule、contracts/validate -> contracts/schedule（同属 contracts 与已允许的 internal/core -> contracts）。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. internal/wire
+   Request 增加字段：Late func(Response) // 非 nil 时，若响应在调用方期限之后才到达，读循环调用一次；期限内到达时不调用
+2. internal/core/scheduler
+   type Scheduler struct{ ... }
+   type Options struct { JobTimeout time.Duration; Now func() time.Time; Log *slog.Logger } // JobTimeout 取 tune.Values.JobTimeout
+   func New(opt Options) *Scheduler
+   func (s *Scheduler) Attach(p router.Plugin, activatedAt time.Time) // 为插件的 SCHEDULE 路由安排下一次触发；anchor 为激活时刻
+   func (s *Scheduler) Detach(pluginID string)                        // 停止安排新的触发；运行槽保持，直到 Released
+   func (s *Scheduler) Released(pluginID string)                       // 旧进程确认退出后调用：释放该插件的全部运行槽
+   func (s *Scheduler) Close()
+   type JobStats struct { Runs, Skipped, TimedOut, Late uint64; Running bool }
+   func (s *Scheduler) Stats(pluginID, jobID string) JobStats
+
+行为：
+- 注册校验：SCHEDULE 路由的 route_id 为 "job." + job_id；job_id 同插件内唯一；ScheduleSpec 必须恰有 interval_ms 或 cron 之一，经 schedule.FromSpec 校验（interval 至少 1s、cron 五字段、时区合法）；SDK 的 Every/Cron 生成对应描述。
+- 触发：每个 job 用 Trigger.Next(anchor, now) 得到下一次时刻并设定定时器；到点时若该 job 的运行槽空闲则发起一次调用，否则 Skipped 加一、不排队；之后再按 Next 安排（不补跑，跳过的 tick 不累积）。
+- 调用：Request{Target: route_id, Payload: HandlerRequest{route_id, context:{actor 为空, default_target 为空}, event: scheduled 事件（event_id 由 Core 生成、source_kind=SCHEDULER、payload 为 job_id、run_id（16 字节随机值的十六进制）、scheduled_at_unix_ms）}, Deadline: 触发时刻 + JobTimeout, Late: 释放运行槽}。直接调用插件 Session，不经事件队列与派发链。
+- 期限：到期时调用方得到 DEADLINE_EXCEEDED、Cancel 已发出，TimedOut 加一，但运行槽保留；迟到响应（Late 回调）到达时释放槽并计入 Late。期限内的响应（成功或错误）立即释放槽。Session 断开时不释放槽，直到 Released 被调用。
+- SDK：收到 SCHEDULE 路由的请求时以 Context（没有 Actor 与默认 Target，Send 必须显式 To）调用任务函数；ctx 被取消时仍等用户函数真正返回后才发送唯一的 Response。
+- 本切片不接统一启停（Draining 时停止新 tick 等属于 T-07.5），也不改 cmd/alonabot 的装配。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/supervisor/scheduler_test.go（//go:build unix）。构建 testdata/jobplugin（一个每 1s 的 interval 任务，按环境变量决定执行时长并以日志记录 run_id），Launch 后 Attach 到 Scheduler（JobTimeout 设为 2s）：
+  - 执行 0.2s 时，若干秒内有相应次数的调用，run_id 各不相同，事件没有 Actor。
+  - 执行 5s 时：第 2s 到期后 TimedOut=1、Running 仍为 true，期间到点的 tick 被 Skipped；第 5s 迟到响应到达后 Late=1、槽释放，下一次 tick 正常调用。
+  - 任务执行中杀掉插件进程：槽不释放；调用 Released 后释放，新进程 Attach 后从未来的 tick 开始，不补跑。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：注册校验的各条拒绝；wire 的 Late 回调只在期限后触发且只一次；cron 任务用注入时钟的 Next；Detach 后不再触发；Close 释放定时器。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/...；go build ./...。
+
+不做：Scheduler 与 HTTP 的统一启停、Draining 与停止预算（T-07.5）；Agent 的定时任务（T-12.6）；持久化的运行记录。
+```
+
+### goal-35 · T-08.9 configdb 示例与 T-08 验收
+
+状态：等待前置（T-08.6、T-08.7、T-08.8）。语句中 goal-28～goal-34、goal-53 提供的符号与工具（生成器、Prepare、secret.Store、gormdb、candidate、web/admin 的表单模型、contracts/i18n）只写名字；合并后由审查者核对，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-35（切片 T-08.9：configdb 示例与 T-08 验收）。goal 目录 goal-35，分支 goal-35，worktree .worktrees/goal-35，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：新增 examples/plugins/configdb，覆盖配置迁移、显式空值、未知与 secret 字段、CRUD 与事务、versioned 迁移与失败、候选 OnStart 写库后失败；在临时 data_dir 上分层验证，数据库部分 sqlitedb 与 gormdb 各跑一遍；用 web/admin 的 fixture 验证表单的字段顺序、hidden、i18 回退、掩码与 PATCH；在 TEST-MATRIX §3.2 记录 T-08 的组件证据，并单独列出需要 T-09 正式入口与 Journal 才能关闭的场景。
+
+依据：PLAN T-08 步骤 9 与「停止和失败条件」；CONTRACTS §5、§6；TEST-MATRIX V-23～V-26、V-38、V-39、V-54 的 T-08 分项。
+
+范围（只新增或修改这些）：
+- 新增 examples/plugins/configdb/（含 plugin.yaml、i18n/、Config 与 versioned 迁移）
+- web/admin/fixtures/：加入由 configdb 的 Config 生成的 Schema fixture，并在 schema.test.ts 中追加对应用例
+- 新增 cmd/alonabot/t08_e2e_test.go（//go:build unix）
+- spec/TEST-MATRIX.md §3.2：追加 T-08 的证据行（本切片获授权修改这一处）
+- 上述包的测试文件
+允许的新跨模块边：无。
+
+接口：不新增公开 Go 符号。
+
+验收矩阵（各为一个子测试）：
+1) 配置迁移：config_version 1 的旧配置只有经 OnLoad 才满足 2 的 Schema；先迁移再校验，结果写入候选快照。
+2) 显式空值：false、0、""、[]、{}、null（指针字段）全部保留；缺失键补默认值；未知键与嵌套未知键保留在快照中。
+3) secret：快照只有引用；Schema 移除 secret 字段但候选保留该键时仍为引用；日志中没有明文。
+4) DB：CRUD 与事务（tx 回调）；versioned 两步迁移；第二步失败时账本只有第一步、候选失败、Active 不变。
+5) 候选：reload 后 OnStart 写入候选库再失败：Discard，Active 的数据与配置不变，旧版重启正常；新旧进程没有同时写同一个库（runtime.lock 证明）。
+6) 两个入口：同一插件同时用 sqlitedb.Open 与 gormdb.Open 时共用同一连接，一边写入另一边立即可读；只用 sqlitedb 的示例变体不链接 gorm.io/gorm。
+7) i18n：Context.T 的语言选择与回退；plugin check 拒绝缺少 en-US 与占位符不一致。
+8) 表单（web/admin 的 vitest，非 DOM）：configdb 的 Schema 字段顺序与声明一致；hidden 不进 patch；未修改的 secret 不进 patch；i18 标签回退。
+- 证据：TEST-MATRIX §3.2 追加 T-08 一行；需要 T-09 正式 reload、WebUI/API 与 Journal 崩溃恢复才能关闭的 V-23～V-25、V-38 场景单独列为「未闭合」，不标成通过。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/t08_e2e_test.go；web/admin 的 schema.test.ts 追加用例。
+- 本地自测（不提交，PR 中写明结果）：npm run build；示例的 plugin check。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；web/admin 下 npm run test 通过。
+
+不做：正式 reload 与管理入口（T-09）；Journal 与崩溃恢复（T-09.5～T-09.7）。
+```
+
+### goal-38 · T-09.3 开发 CLI 与库模式脚手架
+
+状态：等待前置（T-04.5、T-08.1、T-08.8、T-09.2、T-13.1）。语句中 goal-11、goal-28、goal-37、goal-53、goal-67 提供的符号（sdk/generate、packages 的 Preflight 与包格式、contracts/release、contracts/i18n、根包 Run）只写名字；合并后由审查者核对，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-38（切片 T-09.3：开发 CLI 与库模式脚手架）。goal 目录 goal-38，分支 goal-38，worktree .worktrees/goal-38，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：完成开发命令 alonabot plugin init|check|build|test|pack：init 生成插件骨架与库模式调试用的 main.go；check 验证 CONTRACTS §9.1 的静态契约；build 用生成器为根插件生成调用 sdk.Run 的正式入口并按目标 OS/arch 编译，产物不含 Core；test 在临时数据与离线测试会话中检查加载与注册；pack 为四种角色的组件生成 tar.gz 安装包与归档外的 release.json（WebUI 只含 plugin.yaml、icon 与 assets 目录，平台为 any，不运行 build），并可用本地密钥对清单的确切字节签名。
+
+依据：PLAN T-09 步骤 2（CLI）；CONTRACTS §9.1～§9.3、§15.4、§7.5；DECISIONS D-42、D-43、D-59、D-62、D-63；TEST-MATRIX V-01、V-41、V-54 的打包分项。
+
+范围（只新增或修改这些）：
+- cmd/alonabot/：plugin 命令组增加 init、build、test、pack，check 补齐静态契约（新文件）
+- 新增 sdk/generate/entry.go（正式入口生成）
+- 新增 internal/pluginkit/（打包、release.json 生成与签名，供 cmd 使用）；packages 的包格式与 goal-37 一致
+- 上述包的测试文件
+允许的新跨模块边：cmd/alonabot -> internal/pluginkit；internal/pluginkit -> contracts/...、-> sdk/generate（ARCHITECTURE 已登记）。
+
+接口：
+- alonabot plugin init <dir> --id ID [--role plugin|adapter] [--adapter-id ID]：生成 plugin.yaml（manifest_version 1、version 0.1.0、source 为占位并提示修改）、带 sdk.Base 的根插件、一个示例命令、i18n/en-US.json、main.go（调用 alonabot.Run(alonabot.Plugin(...))，供库模式调试）与 .gitignore（忽略 .alonabot/，其中的实例配置可能含平台凭证）；目录非空时拒绝。
+- alonabot plugin check [--dir] [--goos] [--goarch] [--tags]：在 goal-11/goal-28/goal-53 的检查之外，核对 manifest（Parse 与 §9.1 的字段规则、role 与描述一致、migration_mode 与实际迁移接口一致、prepare_effects 已声明）、Schema 与 config_version、i18 文件；全部问题一次列出。
+- alonabot plugin build [--dir] --goos OS --goarch ARCH [--out DIR]：生成正式入口（临时目录中的 main 包，调用 sdk.Run 或 sdk.RunAdapter，引用根类型），用锁定的 Go Modules 编译（CGO_ENABLED=0，-trimpath），输出可执行文件；不链接根包 alonabot。
+- alonabot plugin test [--dir]：build 当前平台后，在临时 data_dir 中经 Core 的开发入口启动一次，完成握手、准备、注册与激活后停止，报告注册的路由；不连接任何真实平台，不读取生产凭证。
+- alonabot plugin pack [--dir] --goos OS --goarch ARCH [--key FILE] [--out DIR]：build 后打包 tar.gz（plugin.yaml、entrypoint、config.schema.json、i18n/、build-info，以及 manifest 的 icon 与表单选项图标）；role 为 webui 时不需要 --goos/--goarch，只打包 plugin.yaml、icon 与 assets 目录，归档名为 <id>-<version>-any.tar.gz；生成 release.json（id、version、source、os/arch、归档 SHA256 与长度、发布者公钥 ID）；给出 --key（Ed25519 私钥文件）时对 release.json 的确切字节签名生成 release.json.sig，否则只输出待签名的 release.json。私钥不进入包。
+internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包文档列出。
+
+行为：
+- build 与 pack 的产物对同一源码与工具链可重复（tar 中的文件按名称排序、时间戳固定、权限固定）。
+- pack 前自动运行 check；有问题时不打包。
+- 签名：release.json 的签名对象是文件的确切字节（与 contracts/release.Verify 一致）；pack 输出的包必须能通过 goal-37 的 packages.Preflight（以测试中注入的公钥为受信来源）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/plugin_cli_e2e_test.go（//go:build unix）：在临时目录 init 一个插件 → check 通过 → build 当前平台 → test 报告注册的命令 → pack 带测试密钥 → packages.Preflight 校验通过并 MoveTo 成功；改动 manifest 使 migration_mode 与实际不符时 check 失败；init 的 main.go 能以库模式编译；pack 两次的归档字节相同。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：五个目标平台的 build（交叉编译，只编译不运行）；Adapter 与 Agent 角色的 init 与 build；WebUI 包的 pack（缺少 assets/index.html 时 check 失败）；目录非空时 init 拒绝；没有 --key 时只输出 release.json。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./cmd/... ./sdk/... ./internal/...；go build ./...。
+
+不做：安装与管理（T-09.4）；市场与远程发布；发行归档（T-14.3）。
+```
+
+### goal-70 · T-13.4 库模式示例与验收
+
+状态：等待前置（T-03.10、T-13.2、T-13.3）。语句中 goal-9、goal-67～goal-69 提供的符号与示例（根包 Run、Reload、examples/devbot、回环 Adapter）只写名字；合并后由审查者核对，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-70（切片 T-13.4：库模式示例与验收）。goal 目录 goal-70，分支 goal-70，worktree .worktrees/goal-70，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：examples/devbot/ 用库模式运行 echo 插件与回环测试 Adapter，覆盖同进程运行、热部署与编译失败；docs/development.md 补充库模式与热部署的用法；在 TEST-MATRIX §3.2 记录 V-64、V-65 的证据。
+
+依据：PLAN T-13 步骤 5 与「停止和失败条件」；CONTRACTS §15.4；TEST-MATRIX V-64、V-65。
+
+范围（只新增或修改这些）：
+- examples/devbot/：改为同时引用 examples/plugins/echo 的插件与示例内的回环 Adapter，提供 Reload 开关
+- docs/development.md：新增「库模式与热部署」一节（本切片获授权修改这一节）
+- 新增 t13_e2e_test.go（根包，//go:build unix）
+- spec/TEST-MATRIX.md §3.2：追加 T-13 的证据行（本切片获授权修改这一处）
+- 上述包的测试文件
+允许的新跨模块边：无。
+
+验收矩阵（各为一个子测试）：
+1) 同进程：插件与 Adapter 的握手、注册、权限与独立进程一致（同一组命令的回复与 goal-14 的结果相同）；从 instances/ 读取实例配置。
+2) dev 代次固定，重启后旧按钮仍有效。
+3) dev 来源 update/rollback 被拒。
+4) 未捕获的 panic 使进程退出且不重启。
+5) 停止超时时 Run 返回错误。
+6) 已安装包（独立进程）与开发组件混合运行。
+7) 两次启动之间 config.json 与 dev.sqlite 的变化生效。
+8) 热部署：改动插件源码后只重启开发组件，Adapter 连接与其他插件不中断；编译失败时旧组件继续；go.mod 变化输出 WARN；其他 module 的组件不重启。
+- docs/development.md 的新节写明：Run 的选项、数据目录、实例目录、热部署的启用方式与限制（没有进程隔离、不能 update/rollback、Windows 未验证等），以及运行示例的命令（fish 与 bash 通用的写法）。
+- 证据：TEST-MATRIX §3.2 追加 T-13 一行，写明测试位置、命令、平台与结果；Windows 与 Linux 未运行的项写「未运行」。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：t13_e2e_test.go（上述矩阵，复用 goal-67～goal-69 的测试方式）。
+- 本地自测（不提交，PR 中写明结果）：按文档中的命令手动运行一次示例并记录输出。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+
+不做：发行与预装（T-14）。
+```
+
+### goal-80 · T-15.3 跨 Adapter 一致性验收
+
+状态：等待前置（T-03.10、T-15.2）。语句中 goal-9、goal-78、goal-79 提供的符号（alonabot run 的 --adapter-id/--adapter-entry、cmd/alonabot/telegram_e2e_test.go 的装配方式、telegramtest.Server、onebottest.Server）只写名字；合并后由审查者核对，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-80（切片 T-15.3：跨 Adapter 一致性验收）。goal 目录 goal-80，分支 goal-80，worktree .worktrees/goal-80，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：用同一个插件二进制，分别经 Telegram 与 OneBot 11 两个模拟服务收发同一组 Chain 与入站消息，对照两边的结果，证明通用片段在两边语义一致、每个实例只用自己声明的能力、未声明的能力在首个平台请求前被拒绝；经 alonabot run 跑 OneBot 11 的端到端链路；在 TEST-MATRIX §3.2 记录 V-71、V-72 的证据。真实 QQ 端只有维护者的手测记录，没有时记为未运行。
+
+依据：PLAN T-15 步骤 5 与「失败停止条件」；CONTRACTS §8；MESSAGE-MODEL §2、§4、§6.2、§7；DECISIONS D-46；TEST-MATRIX V-71、V-72。
+
+范围（只新增或修改这些）：
+- 新增 cmd/alonabot/testdata/conformance/（测试插件：收到 "case:<name>" 时发送下表中该用例的 Chain，并以一行 INFO 记录 SendResult 的摘要；收到其他消息时以一行 INFO 记录入站 chain 的片段类型序列与 to_me）
+- 新增 cmd/alonabot/conformance_e2e_test.go（//go:build unix）
+- docs/development.md：在 alonabot run 一节补充以 OneBot 11 Adapter 运行的示例命令与实例文件（本切片获授权修改这一处）
+- spec/TEST-MATRIX.md §3.2：追加 T-15 的证据行（本切片获授权修改这一处；其他 spec 文件不改）
+允许的新跨模块边：cmd/alonabot 的测试 -> adapters/telegram/telegramtest、-> adapters/onebot11/onebottest（测试代码，审查者确认允许）。
+
+接口：不新增公开 Go 符号，不修改 alonabot run 的参数。测试插件的日志摘要格式自定，但须包含 status、每项 PartResult 的 status 与 segment_indexes、ErrorInfo 的 code。
+
+行为与测试：
+- conformance_e2e_test.go 构建 alonabot 与两个 Adapter 程序和测试插件，对每个 Adapter 各起一次 alonabot run（各自的临时 data_dir 与实例文件，同一个插件二进制）；经模拟服务注入 "case:<name>" 消息，从 Core 日志读出摘要，从模拟服务的 Calls() 读出实际平台请求，再按下表断言：
+  | 用例 | Telegram | OneBot 11 |
+  | text | ACCEPTED，1 项 | ACCEPTED，1 项 |
+  | mention+text | ACCEPTED（text_mention） | ACCEPTED（at 段） |
+  | reference+text | ACCEPTED，reply_parameters 只在第一个请求 | ACCEPTED，reply 段只在第一条消息最前 |
+  | text+image+text | ACCEPTED，3 项 | ACCEPTED，1 项 |
+  | text+buttons | ACCEPTED | REJECTED/UNSUPPORTED，send_msg 为 0 次 |
+  | file | ACCEPTED | REJECTED/UNSUPPORTED，send_msg 为 0 次 |
+  | markdown text | ACCEPTED | REJECTED/UNSUPPORTED，send_msg 为 0 次 |
+  | forward | REJECTED/UNSUPPORTED，Bot API 请求为 0 次 | REJECTED/UNSUPPORTED，send_msg 为 0 次 |
+  | onebot11.face extension | REJECTED/UNSUPPORTED，由 Core 拒绝，Bot API 请求为 0 次 | ACCEPTED |
+  | Edit 文本 | ACCEPTED（editMessageText） | UNSUPPORTED，由 Core 按 message.edit 拒绝，send_msg 为 0 次 |
+  两边都 ACCEPTED 的用例另外断言：每个片段恰好出现在一项 PartResult 的 segment_indexes 中，按项的顺序展开等于原片段顺序；platform_message_ids 的数量等于物理请求数。
+- 入站对照：两边各注入一组语义相同的消息（纯文本；@本机器人加文本；回复本机器人消息；带图片的消息），测试插件记录的片段类型序列与 to_me 在两边相同。
+- OneBot 11 的端到端链路（同一测试文件的子测试）：实例启动后出现 bot.online；模拟服务 Disconnect 后实例自动重连，之后的消息照常收发，没有 bot.offline；access_token 错误时实例失败，出现 reason=INSTANCE_FAILED 的 bot.offline；Core 日志与 data_dir 中的日志文件不含 access_token。
+- 证据：TEST-MATRIX §3.2 追加一行，写明上表的实测结果、命令、平台与 Go 版本；真实 QQ 端：维护者提供手测记录（实现端名称与版本、通过的用例）时写入，否则写「未运行」。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./cmd/alonabot/... ./adapters/...；go build ./...。
+
+不做：修改两个 Adapter 的映射或 Core 的派发（发现不一致时标 [!] 并在 PR 中写明用例与差异，由审查者决定修契约还是修实现）；alonabot run 同时启动多个 Adapter；反向 WebSocket。
+```
+
+## 第 11 波
+
+### goal-17 · T-05.3 三阶段 Hook 与 send_forbidden
+
+状态：等待前置（T-05.2）。语句中 goal-2、goal-12、goal-15、goal-16、goal-51 提供的符号（router 的派发链与可信信息、message.Service 的 Send 与 Edit、sdk 的分发与 RouteOption）只写名字；合并后由审查者核对签名，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-17（切片 T-05.3：三阶段 Hook 与 send_forbidden）。goal 目录 goal-17，分支 goal-17，worktree .worktrees/goal-17，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：运行 PreEvent、BeforeSend、AfterSend 三类 Hook：PreEvent 只能改写业务 payload 或 Stop，失败时结束本次入站链；每次显式或自动 Send（以及 Edit）独立执行一组 BeforeSend → Adapter.Send → AfterSend，BeforeSend 只能改 Chain 或拒绝，改后重新预检；AfterSend 只观察。出站 Hook 的执行上下文带 send_forbidden，该标记保存在 Core 的父调用记录中并随派生调用继承，Hook 内直接 Send 被拒。
+
+依据：PLAN T-05 步骤 5、6；CONTRACTS §2.3 第 3～5 条、§8（Edit 的 Hook 段）；WIRE-FORMAT §3.5（Hook 输入的追加）；TEST-MATRIX V-15 的直接路径分项。
+
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/invocation.proto：BeforeSendRequest 与 AfterSendRequest 各追加 SendOperation operation 与 optional string edited_platform_message_id，并新增 enum SendOperation。随后 go generate ./...（本切片获授权只追加这些）
+- contracts/wirespec_test.go：追加编号检查
+- contracts/validate/register.go：HOOK 路由的注册校验
+- 新增 internal/core/hook/
+- internal/core/router/：派发链在命令层之前执行 PreEvent（只加调用点）
+- internal/core/message/：Send 与 Edit 在调用 Adapter 前后执行出站 Hook；删除 goal-51 的 shortcut 注释
+- internal/core/router/：调用记录（Invocation）增加 send_forbidden，并在 InvocationContext 中下发
+- sdk/：新增 hooks.go（注册与分发）；base.go 的 Root 增加 Hooks Hook 与 Base 默认实现；session.go 的 buildRegister 输出 HOOK 路由
+- 上述包的测试文件
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. proto
+   enum SendOperation { SEND_OPERATION_UNSPECIFIED = 0; SEND_OPERATION_SEND = 1; SEND_OPERATION_EDIT = 2; }
+   BeforeSendRequest 追加 SendOperation operation = 5; optional string edited_platform_message_id = 6;
+   AfterSendRequest 追加 SendOperation operation = 7; optional string edited_platform_message_id = 8;
+2. sdk
+   Root 增加 Hook：Hooks(*HookRegistry) // func (*Base) Hooks(*HookRegistry) 默认不注册
+   type HookRegistry struct{ ... }
+   func (r *HookRegistry) PreEvent(routeID string, eventTypes []string, h func(*Context, *pb.EventPayload) (*pb.EventPayload, error), opts ...RouteOption)
+   func (r *HookRegistry) BeforeSend(routeID string, h func(*Context, *pb.Target, *pb.MessageChain) (*pb.MessageChain, error), opts ...RouteOption)
+   func (r *HookRegistry) AfterSend(routeID string, h func(*Context, *pb.Target, *pb.SendResult, error), opts ...RouteOption)
+   func (c *Context) Operation() pb.SendOperation // 出站 Hook 中可用
+3. internal/core/hook
+   type Runner struct{ ... }
+   func New(r *router.Router, log *slog.Logger) *Runner
+   func (h *Runner) PreEvent(ctx context.Context, ev *router.Dispatch) (stop bool, err error) // router 的派发对象；只改写其业务副本
+   func (h *Runner) BeforeSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, parent *router.Invocation) (*pb.MessageChain, *pb.ErrorInfo)
+   func (h *Runner) AfterSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, result *pb.SendResult, errInfo *pb.ErrorInfo, parent *router.Invocation)
+
+行为：
+- 注册校验：HOOK 路由的 phase 必须是三者之一；PreEvent 的 event_type_filter 非空且为已知类型；BeforeSend/AfterSend 不带 event_type_filter。
+- 候选：同一阶段的 Hook 按 (priority, plugin_id, route_id) 稳定排序，只包含已激活插件；Hook 自己不受命令策略约束（插件启用即生效）。
+- PreEvent（Router 在可信信息保留之后、D-44 的命令层之前，按事件类型）：依次调用，每个 Hook 收到当前业务副本；返回的 event_payload 的分支必须与 event_type 一致，否则视为该 Hook 失败；可信字段（goal-15 列出的身份、Target、来源与按钮/任务绑定）不在 PreEventResult 中，无法改写。任一 Hook 返回错误或 panic：以 WARN 记录并结束本次入站链（不派发命令与事件路由）。propagation=STOP：结束本次入站链，此前改写保留。
+- 出站：message.Service 对每次 Send 与 Edit（包括 Core 代发的自动回复与 usage）：
+  1) 先完成 goal-2/goal-3/goal-51 的目标与准入、Chain 预检；
+  2) 依次调用 BeforeSend：返回新 Chain 时替换并对整条 Chain 重新做完整预检（失败视为拒绝）；返回错误即拒绝本次发送，返回 REJECTED 的 SendResult 加该 ErrorInfo，不调用 Adapter，也不执行 AfterSend；Hook 不能修改 Target（请求中没有可回写的 Target）。
+  3) 调用 Adapter；4) 依次调用 AfterSend，传入最终的 SendResult 与 ErrorInfo，错误只记日志，不改变返回给调用方的结果。
+  每次 Send 是独立的一组，不合并。
+- send_forbidden：Core 调用出站 Hook 时，在该次调用的 Invocation 中设置 send_forbidden=true，并经 InvocationContext.send_forbidden 下发；Hook 内（及以该调用为父请求的任何子请求，Broker 转发时沿用父调用的标记）调用 core.send 或 core.edit 返回 FAILED_PRECONDITION。标记只来自 Core 的调用记录，插件自报的值被忽略。
+- SDK：按 route_id 分发 Hook；PreEvent 的 h 返回 nil payload 表示不改写；Context.StopPropagation 在 PreEvent 中使 propagation=STOP；出站 Hook 的 Context 中 Send/Edit 由 Core 拒绝。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/supervisor/hook_test.go（//go:build unix）。两个测试插件：h 注册 PreEvent（把 text 改成大写）、BeforeSend（在 Chain 末尾追加一段文本；遇到含 "deny" 的 Chain 返回错误；尝试在 Hook 内 Send）、AfterSend（记录结果后返回错误）；e 注册 echo 事件路由与一个命令：
+  - 入站 "hi" 被 PreEvent 改为 "HI" 后到达 e；e 回复时 memory 收到追加了文本的 Chain；AfterSend 收到 ACCEPTED 的结果，它返回的错误不影响 e 收到的 SendResult。
+  - 一次 Handler 内两次 Send：BeforeSend 与 AfterSend 各执行两次。
+  - 含 "deny" 的回复被拒，memory 没有收到，e 收到 REJECTED 与错误；AfterSend 未执行。
+  - BeforeSend 内的 Send 返回 FAILED_PRECONDITION。
+  - PreEvent 返回错误时 e 的路由与命令都没有被调用。
+  - Edit 时出站 Hook 收到 operation=EDIT 与被编辑的消息 ID。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：PreEvent 返回不匹配分支的 payload；BeforeSend 修改后 Chain 预检失败；排序的稳定性；插件自报 send_forbidden 被忽略；InvocationContext 中的标记在派生请求中保留（接口 fixture）。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
+
+不做：Hook→Service→Send 的间接递归回归（T-06.2 的必交用例，本切片只保证标记随父调用记录保存）；延续调用（T-05.4）。
+```
+
+### goal-52 · T-05.4 延续调用与多轮等待
+
+状态：等待前置（T-05.2）。语句中 goal-2、goal-15、goal-16、goal-76 提供的符号（router 的派发链与 Invocation、sdk 的 Context 与分发、tune.Values）只写名字；合并后由审查者核对签名，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-52（切片 T-05.4：延续调用与多轮等待）。goal 目录 goal-52，分支 goal-52，worktree .worktrees/goal-52，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：由真实入站事件触发、具有 Actor 与默认 Target 的 Handler 可以经 core.continuation.start 请求一次延续调用：原调用成功结束后，Core 以同一插件、同一 route_id 与原可信上下文发出新的 Handler 请求（continuation_of 为原 call_id），使用独立的 CONTINUATION_TIMEOUT 期限，不占用分发链。延续调用内可以经 core.wait 等待同一 Actor 在同一 Target 的下一条消息，命中的消息不进入普通分发。SDK 提供 Context.Continue 与 Context.Wait。
+
+依据：PLAN T-05 步骤 7；CONTRACTS §2.4；WIRE-FORMAT §3.5；DESIGN（延续调用示例）；TEST-MATRIX V-50。
+
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/invocation.proto：HandlerRequest 追加 optional uint64 continuation_of = 5；新增 ContinuationStartRequest/Response 与 WaitRequest/Response。随后 go generate ./...（本切片获授权只追加这些）
+- contracts/wirespec_test.go：追加编号检查
+- internal/wire/services.go：末尾追加 ServiceContinuationStart = "core.continuation.start"、ServiceWait = "core.wait"
+- 新增 internal/core/continuation/
+- internal/core/router/：派发链在 PreEvent 之后、命令层之前检查等待（只加调用点）；Handler 调用结束时通知 continuation（只加调用点）
+- sdk/：新增 continuation.go（Continue 与 Wait）；dispatch.go 按 continuation_of 找到登记的延续函数
+- 上述包的测试文件
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. proto
+   message ContinuationStartRequest {}
+   message ContinuationStartResponse {}
+   message WaitRequest { uint32 timeout_ms = 1; } // 1～CONTINUATION_TIMEOUT
+   message WaitResponse { Event event = 1; }
+2. internal/core/continuation
+   type Manager struct{ ... }
+   type Options struct { Max int; Timeout time.Duration } // CONTINUATION_MAX、CONTINUATION_TIMEOUT
+   func New(r *router.Router, log *slog.Logger, opt Options) *Manager
+   func (m *Manager) Register(mux *router.Mux)
+   func (m *Manager) Finished(inv *router.Invocation, callID uint64, ok bool) // Router 在 Handler 调用结束后调用；ok 为原调用成功（没有 Err）
+   func (m *Manager) Match(ev *router.Dispatch) bool // Router 在命令层之前调用；命中等待时返回 true，事件不再进入普通分发
+   func (m *Manager) Release(pluginID string) // Session 失效：结束该插件的全部等待与待发出的延续调用
+3. sdk
+   func (c *Context) Continue(fn func(*Context) error) error // 只能在 Handler 中调用一次；fn 在延续调用中执行
+   func (c *Context) Wait(timeout time.Duration) (*Context, error) // 只能在延续调用中调用；返回命中消息的 Context（可用 Event()、Text() 等）
+   func (c *Context) Text() string // message.created 的文本片段连接结果；其他事件为空
+
+行为：
+- core.continuation.start（必须带 parent_call_id，指向本 Session 中仍在途的 Core→插件 Handler 调用）：以下情况返回 FAILED_PRECONDITION：父调用不是由真实入站事件触发（例如 scheduled、Bus、Service）、缺少 Actor 或默认 Target、父调用带 send_forbidden（出站 Hook 内）、父调用本身就是延续调用、同一父调用已请求过。本 Session 进行中的延续调用（已登记待发出与正在运行的）达到 Max 时返回 RESOURCE_EXHAUSTED。成功时只登记，返回空结果。
+- 发出：Finished(ok=true) 时为登记的父调用发出新的 Handler REQUEST：同一插件、同一 route_id，HandlerRequest.continuation_of=原 call_id，event 为原事件（Core 保留的可信信息重建），context 为原调用的 Actor、默认 Target、scope、trace 与插件链；期限为发出时刻起 Timeout。它不经事件队列与派发链，不计入 DISPATCH_CONCURRENCY；返回值不参与原事件的传播。Finished(ok=false) 时丢弃登记，不发出。
+- core.wait（必须带 parent_call_id，父调用必须是延续调用）：等待键为（adapter_instance_id、chat_id、thread_id（无则为空）、external_user_id），取自延续调用的默认 Target 与 Actor。同键已有等待 → ALREADY_EXISTS。timeout_ms 不在范围内 → INVALID_ARGUMENT。等待在 Core 内存中，不持久化。
+- 匹配：Router 对每个 message.created，在 PreEvent 之后、命令层之前调用 Match：Target 与 Actor 构成的键命中等待时，该事件作为 WaitResponse 返回给等待者，并且不再进入命令层与事件路由。不同 Actor 或不同 thread 不命中。
+- 结束：超时 → DEADLINE_EXCEEDED；父请求被取消 → CANCELLED；Release（插件停用或 Session 失效）→ 等待以 UNAVAILABLE 结束，待发出的延续调用丢弃，不补发。延续调用的期限到达时，其中的等待一并结束。
+- SDK：Continue 在 Handler 返回前请求 core.continuation.start，并登记 fn（按原 call_id）；收到 continuation_of 的请求时调用对应 fn。Continue 在延续调用中调用返回 FAILED_PRECONDITION。Wait 发起 core.wait，以本次延续调用为父请求。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/supervisor/continuation_test.go（//go:build unix）。测试插件注册 /quiz 命令：Continue 中依次 Wait 两次并把收到的回答回复出来；另有一个 echo 事件路由用来证明消息是否进入普通分发：
+  - 用户 A 发 /quiz 后，A 的下两条消息被 quiz 收到并回答，它们没有到达 echo；原命令的 HandlerOutcome 决定的传播不受影响。
+  - 同一群里 A 与 B 同时 /quiz，各自只收到自己的回答；不同 thread 的消息不命中。
+  - Wait 超时返回 DEADLINE_EXCEEDED；同键第二个 Wait 返回 ALREADY_EXISTS。
+  - 延续调用中再次 Continue 返回 FAILED_PRECONDITION；没有 Actor 的 scheduled 事件 fixture 中请求 Continue 返回 FAILED_PRECONDITION。
+  - 用很小的 Max：超过的 Continue 返回 RESOURCE_EXHAUSTED。
+  - 等待期间停止插件：等待结束，重启后不补发。
+  - 延续调用执行期间，其他事件照常派发（不占分发链）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：原调用返回错误时不发出；父调用带 send_forbidden 时被拒；timeout_ms 边界；Release 与超时的并发；SDK 中按 continuation_of 找不到 fn 时返回 NOT_FOUND。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
+
+不做：持久化的等待与延续调用（契约不提供）；Agent 的流式对话（T-12.2 使用本切片）。
+```
+
+### goal-27 · T-07.5 调度与 HTTP 启停集成及验收
+
+状态：等待前置（T-07.2、T-07.4）。语句中 goal-24～goal-26 提供的符号（scheduler.Scheduler、httpproxy.Server、webhost.Host、host 的停止流程与 StopTiming、supervisor.Running）只写名字；合并后由审查者核对签名，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-27（切片 T-07.5：调度与 HTTP 启停集成及验收）。goal 目录 goal-27，分支 goal-27，worktree .worktrees/goal-27，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：把 Scheduler 与 HTTP 代理接入 T-02 的生命周期：插件 Activated 之后才 Attach/Bind；Draining 时停止新 tick 与新 HTTP 派发；停止阶段取消余留调用、撤销映射、关闭 Listener，全部复用全局 STOP_TOTAL 预算；Session 或代次变化后旧端点、凭证与运行记录不再接收新业务。完成 T-07 的时间、进程与 HTTP 边界验收，在 TEST-MATRIX §3.2 记录证据。
+
+依据：PLAN T-07 步骤 7、8 与「停止和失败条件」；CONTRACTS §4.2、§4.3、§7.2；TEST-MATRIX V-20、V-21、V-22、V-46、V-47 的 T-07 分项。
+
+范围（只新增或修改这些）：
+- internal/core/supervisor/：Launch 的激活之后与停止流程中加入 Scheduler 与 httpproxy 的接入点（Spec 增加两个可选依赖）
+- internal/core/scheduler/：增加 Drain（停止新 tick，保留运行槽）
+- internal/core/httpproxy/：增加 Drain（新请求返回 503，等待在途请求到截止时间）
+- cmd/alonabot/：run 装配 Scheduler，并把两者交给 supervisor
+- 新增 cmd/alonabot/t07_e2e_test.go（//go:build unix）
+- spec/TEST-MATRIX.md §3.2：追加 T-07 的证据行（本切片获授权修改这一处）
+- 上述包的测试文件
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+- internal/core/supervisor
+  Spec 增加字段：Scheduler *scheduler.Scheduler; HTTP *httpproxy.Server // 都可以为 nil
+- internal/core/scheduler
+  func (s *Scheduler) Drain(pluginID string) // 不再触发新的 tick；运行中的调用照常等待
+- internal/core/httpproxy
+  func (s *Server) Drain(pluginID string, deadline time.Time) // 新请求 503；在途请求最多等到 deadline
+
+行为：
+- 激活：supervisor 在 host.Activate 成功（ACTIVATED 已应用）之后才调用 Scheduler.Attach（anchor 为激活时刻）与 HTTP.Bind；激活失败不 Attach、不 Bind。
+- 停止（复用 host 的停止流程与同一个 STOP_TOTAL）：冻结时同时 Scheduler.Drain 与 HTTP.Drain（截止取 STOP_DRAIN 的结束时刻）；STOPPING 之后 Scheduler.Detach、HTTP.Unbind；进程树清空后 Scheduler.Released。不为 Scheduler 或 HTTP 另起独立预算。多个插件并行停止时共享 Core 的全局停止截止。
+- 崩溃与重启：Session 断开时 HTTP.Unbind（以旧 generation）、Scheduler.Detach；旧进程确认退出后 Released；重启成功后以新 Session 重新 Attach/Bind，旧 token 与端点不能再接请求。
+- HTTP 失败不触发任何业务重试；未激活的插件返回 503。
+- 验收矩阵（t07_e2e_test.go，以真实进程运行，各为一个子测试）：
+  1) cron 与 interval 的触发时刻（用 goal-23 的规范期望值与短周期 interval 实测），夏令时规则以 contracts/schedule 的结果为准。
+  2) 不合作 callback：job 超过 JOB_TIMEOUT 后槽不释放、迟到响应释放；断链后槽保持到进程退出。
+  3) 停用插件时：新 tick 不再触发，HTTP 返回 503，Listener 端口已关闭；总耗时不超过 STOP_TOTAL。
+  4) 未激活、停用后、伪造内部头、私有路由无会话、公开回调、两个 Host、单 Host 主动内容，各返回契约规定的结果。
+  5) 两个插件并行停止共享同一 STOP_TOTAL。
+- 证据：TEST-MATRIX §3.2 追加 T-07 一行，写明测试位置、命令、平台与结果；仍需 T-09 首次认证与真实管理页面才能完成的端到端项写为「未闭合」。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/t07_e2e_test.go（上述矩阵）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Drain 的截止时间；激活失败不 Bind；重启后旧 generation 的 Unbind 不影响新映射；Scheduler 在 Detach 后不触发。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+
+不做：管理认证（T-09.1，测试注入假会话）；serve（T-09.4）；Agent 定时任务（T-12.6）。
+```
+
+### goal-71 · T-14.1 help 插件与命令列表
+
+状态：等待前置（T-04.4、T-05.2、T-08.8）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。语句中 goal-10、goal-12、goal-13、goal-16、goal-53 提供的符号（router.CommandIndex、policy.CheckCommand、contracts/i18n、sdk 的命令注册与 Context.T）只写名字；合并后由审查者核对签名，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-71（切片 T-14.1：help 插件与命令列表）。goal 目录 goal-71，分支 goal-71，worktree .worktrees/goal-71，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：Core 提供 core.command.list：按调用者 Actor 与默认 Target 返回可用的命令（已启用、权限满足、未被遮蔽），说明按 CommandSpec 的说明键在所属插件的 messages 中按 Actor locale 翻译。官方 help 插件 plugins/help/ 注册 /help [命令] 与 /whoami。
+
+依据：PLAN T-14 步骤 1；CONTRACTS §15.2、§2.2、§2.3、§5.4；WIRE-FORMAT §3.5（core.command.list 与 CommandSpec 的说明键）；TEST-MATRIX V-67 的 help 分项。
+
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/：route.proto 的 CommandSpec 追加 optional string description_key = 12；新增 CommandListRequest/Response 与 CommandInfo。随后 go generate ./...（本切片获授权只追加这些）
+- contracts/wirespec_test.go：追加编号检查
+- internal/wire/services.go：末尾追加 ServiceCommandList = "core.command.list"
+- 新增 internal/core/commandlist/
+- internal/core/supervisor 或 cmd/alonabot 的装配处：调用 SetMessages（只加调用点）
+- sdk/：Description(key string) 路由选项；buildRegister 写入 description_key；新增 commands.go（ListCommands）
+- 新增 plugins/help/（main 包与可导入的 help 包，含 plugin.yaml 与 i18n/en-US.json、zh-CN.json）
+- 上述包的测试文件
+允许的新跨模块边：plugins/... -> sdk/...、-> contracts（已允许）。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. proto
+   message CommandListRequest {}
+   message CommandInfo { string plugin_id = 1; string route_id = 2; repeated string path = 3; repeated CommandAlias aliases = 4; string usage = 5; optional string description = 6; }
+   message CommandListResponse { repeated CommandInfo commands = 1; }
+2. internal/core/commandlist
+   type Service struct{ ... }
+   func New(r *router.Router, p *policy.Policy) *Service
+   func (s *Service) Register(m *router.Mux)
+   func (s *Service) SetMessages(pluginID string, files map[string][]byte) // 文件按 contracts/i18n 解析；有问题时记 WARN 并忽略该插件的说明
+3. sdk
+   func Description(key string) RouteOption // 命令说明在本插件 messages 中的键
+   type CommandInfo struct { PluginID, RouteID string; Path []string; Aliases [][]string; Usage string; Description string }
+   func ListCommands(ctx context.Context) ([]CommandInfo, error) // 必须在 Handler 内调用（需要父调用链）
+4. plugins/help
+   func New() sdk.Root // 根插件
+
+行为：
+- core.command.list（必须带 parent_call_id；Actor 与默认 Target 取自父调用的可信上下文，没有 Actor 时只列出 ANY 权限的命令）：遍历 Router 的 CommandIndex，只保留每个规范路径的胜出者（被遮蔽者不列出）；对每条命令执行 policy.CheckCommand（全局禁止、启用、权限），通过的才列出；按路径字典序返回。usage 与 goal-12 的 usage 生成规则相同（按 Actor locale 使用 Core 文案目录）；description 在所属插件的 messages 中按 [Actor.locale, 默认 locale, en-US] 翻译，键不存在时 absent。
+- 插件的 messages：SDK 不在 REGISTER 中上传。commandlist.Service 提供 SetMessages(pluginID string, files map[string][]byte)，由装配方调用：已安装的包读取包目录下的 i18n/*.json；库模式的开发组件使用生成器嵌入的 Generated.I18n；alonabot run 的开发入口读取 --entry 所在目录的 i18n/（存在时）。取不到时 description absent。
+- help 插件：
+  - /help：调用 ListCommands，按插件分组列出路径与说明，文案经 Context.T（键 help.list.header 等）。
+  - /help <路径>：只显示匹配命令的 usage、别名与说明；没有可用的匹配命令时回复 help.not_found。
+  - /whoami：回复调用者的 adapter_instance_id 与 external_user_id（文案键 help.whoami，参数 instance 与 user）；没有 Actor 时回复 help.whoami.no_actor。
+  - 所有回复都用 Context.Send 回复原 Target；用户可见文案只来自 i18n（en-US 与 zh-CN）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/supervisor/help_test.go（//go:build unix）：构建 plugins/help 与两个测试插件（一个有 ADMIN 权限的命令，一个与另一插件同路径且 priority 较低的命令），用 memory Adapter 装配：
+  - 普通用户的 /help 不包含 ADMIN 命令与被遮蔽的命令；Core Admin 能看到 ADMIN 命令。
+  - zh-CN 用户看到中文说明，en-US 用户看到英文；说明键缺失的命令没有说明。
+  - 禁用的命令不出现；/help 某命令显示 usage。
+  - /whoami 回复正确的实例 ID 与用户 ID。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有父调用链时 core.command.list 返回 FAILED_PRECONDITION；没有 Actor 时只列 ANY；排序；help 的 i18n 文件在 plugin check 中通过。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./...；go build ./...。
+
+不做：welcome 与 rss（T-14.2）；help 的安装包与预装（T-14.3、T-14.4）；管理页面中的命令列表（T-09.9）。
+```
+
 ### goal-72 · T-14.2 welcome 与 rss 插件
 
-状态：等待前置（T-05.2、T-07.2、T-08.3、T-08.5、T-08.8）。语句中 goal-16、goal-24、goal-30、goal-32、goal-53 提供的符号（ChatAdmin Rule、ScheduleRegistry.Every、Config 与 OnLoad、gormdb.Open、Context.T、sdk.Send）只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-05.2、T-07.2、T-08.3、T-08.5、T-08.8）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。语句中 goal-16、goal-24、goal-30、goal-32、goal-53 提供的符号（ChatAdmin Rule、ScheduleRegistry.Every、Config 与 OnLoad、gormdb.Open、Context.T、sdk.Send）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-72（切片 T-14.2：welcome 与 rss 插件）。goal 目录 goal-72，分支 goal-72，worktree .worktrees/goal-72，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -3570,287 +3681,9 @@ agent
 不做：发行归档与预装（T-14.3、T-14.4）；HTML 清洗与富文本推送；代理设置（沿用进程环境的 HTTP_PROXY）。
 ```
 
-### goal-80 · T-15.3 跨 Adapter 一致性验收
-
-状态：等待前置（T-03.10、T-15.2）。语句中 goal-9、goal-78、goal-79 提供的符号（alonabot run 的 --adapter-id/--adapter-entry、cmd/alonabot/telegram_e2e_test.go 的装配方式、telegramtest.Server、onebottest.Server）只写名字；合并后由审查者核对，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-80（切片 T-15.3：跨 Adapter 一致性验收）。goal 目录 goal-80，分支 goal-80，worktree .worktrees/goal-80，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：用同一个插件二进制，分别经 Telegram 与 OneBot 11 两个模拟服务收发同一组 Chain 与入站消息，对照两边的结果，证明通用片段在两边语义一致、每个实例只用自己声明的能力、未声明的能力在首个平台请求前被拒绝；经 alonabot run 跑 OneBot 11 的端到端链路；在 TEST-MATRIX §3.2 记录 V-71、V-72 的证据。真实 QQ 端只有维护者的手测记录，没有时记为未运行。
-
-依据：PLAN T-15 步骤 5 与「失败停止条件」；CONTRACTS §8；MESSAGE-MODEL §2、§4、§6.2、§7；DECISIONS D-46；TEST-MATRIX V-71、V-72。
-
-范围（只新增或修改这些）：
-- 新增 cmd/alonabot/testdata/conformance/（测试插件：收到 "case:<name>" 时发送下表中该用例的 Chain，并以一行 INFO 记录 SendResult 的摘要；收到其他消息时以一行 INFO 记录入站 chain 的片段类型序列与 to_me）
-- 新增 cmd/alonabot/conformance_e2e_test.go（//go:build unix）
-- docs/development.md：在 alonabot run 一节补充以 OneBot 11 Adapter 运行的示例命令与实例文件（本切片获授权修改这一处）
-- spec/TEST-MATRIX.md §3.2：追加 T-15 的证据行（本切片获授权修改这一处；其他 spec 文件不改）
-允许的新跨模块边：cmd/alonabot 的测试 -> adapters/telegram/telegramtest、-> adapters/onebot11/onebottest（测试代码，审查者确认允许）。
-
-接口：不新增公开 Go 符号，不修改 alonabot run 的参数。测试插件的日志摘要格式自定，但须包含 status、每项 PartResult 的 status 与 segment_indexes、ErrorInfo 的 code。
-
-行为与测试：
-- conformance_e2e_test.go 构建 alonabot 与两个 Adapter 程序和测试插件，对每个 Adapter 各起一次 alonabot run（各自的临时 data_dir 与实例文件，同一个插件二进制）；经模拟服务注入 "case:<name>" 消息，从 Core 日志读出摘要，从模拟服务的 Calls() 读出实际平台请求，再按下表断言：
-  | 用例 | Telegram | OneBot 11 |
-  | text | ACCEPTED，1 项 | ACCEPTED，1 项 |
-  | mention+text | ACCEPTED（text_mention） | ACCEPTED（at 段） |
-  | reference+text | ACCEPTED，reply_parameters 只在第一个请求 | ACCEPTED，reply 段只在第一条消息最前 |
-  | text+image+text | ACCEPTED，3 项 | ACCEPTED，1 项 |
-  | text+buttons | ACCEPTED | REJECTED/UNSUPPORTED，send_msg 为 0 次 |
-  | file | ACCEPTED | REJECTED/UNSUPPORTED，send_msg 为 0 次 |
-  | markdown text | ACCEPTED | REJECTED/UNSUPPORTED，send_msg 为 0 次 |
-  | forward | REJECTED/UNSUPPORTED，Bot API 请求为 0 次 | REJECTED/UNSUPPORTED，send_msg 为 0 次 |
-  | onebot11.face extension | REJECTED/UNSUPPORTED，由 Core 拒绝，Bot API 请求为 0 次 | ACCEPTED |
-  | Edit 文本 | ACCEPTED（editMessageText） | UNSUPPORTED，由 Core 按 message.edit 拒绝，send_msg 为 0 次 |
-  两边都 ACCEPTED 的用例另外断言：每个片段恰好出现在一项 PartResult 的 segment_indexes 中，按项的顺序展开等于原片段顺序；platform_message_ids 的数量等于物理请求数。
-- 入站对照：两边各注入一组语义相同的消息（纯文本；@本机器人加文本；回复本机器人消息；带图片的消息），测试插件记录的片段类型序列与 to_me 在两边相同。
-- OneBot 11 的端到端链路（同一测试文件的子测试）：实例启动后出现 bot.online；模拟服务 Disconnect 后实例自动重连，之后的消息照常收发，没有 bot.offline；access_token 错误时实例失败，出现 reason=INSTANCE_FAILED 的 bot.offline；Core 日志与 data_dir 中的日志文件不含 access_token。
-- 证据：TEST-MATRIX §3.2 追加一行，写明上表的实测结果、命令、平台与 Go 版本；真实 QQ 端：维护者提供手测记录（实现端名称与版本、通过的用例）时写入，否则写「未运行」。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./cmd/alonabot/... ./adapters/...；go build ./...；node scripts/check-repository.mjs。
-
-不做：修改两个 Adapter 的映射或 Core 的派发（发现不一致时标 [!] 并在 PR 中写明用例与差异，由审查者决定修契约还是修实现）；alonabot run 同时启动多个 Adapter；反向 WebSocket。
-```
-
-## 第 10 波
-
-### goal-22 · T-06.4 Session 清理与 Service 端到端
-
-状态：等待前置（T-06.2、T-06.3）。语句中 goal-15、goal-17、goal-19～goal-21 提供的符号（router、broker、bus、hook 与各自的 Stats）只写名字；合并后由审查者核对，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-22（切片 T-06.4：Session 清理与 Service 端到端）。goal 目录 goal-22，分支 goal-22，worktree .worktrees/goal-22，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：Session 停止或失效时，按 T-02 的冻结、drain、STOPPING 流程停止新的根调用，取消在途父链，并清理路由目标、Bus 订阅队列、Broker 映射与预算，不把未完成的工作转交给同插件的新 Session。错误只返回安全的 ErrorInfo 与 trace。记录按原因区分的拒绝、取消、离线与丢弃计数。在 TCP 与 stdio 上完成 A/B/C 嵌套与故障的端到端验收（含 Hook→Service→Send），在 TEST-MATRIX §3.2 记录 T-06 证据。
-
-依据：PLAN T-06 步骤 6、7 与「停止和失败条件」；CONTRACTS §3、§1.2、§4.2、§14.5；TEST-MATRIX V-15、V-17、V-18、V-19、V-42。
-
-范围（只新增或修改这些）：
-- internal/core/broker/、internal/core/bus/、internal/core/router/：Session 失效时的清理入口与计数（新增文件或只加调用点）
-- internal/core/supervisor/：停止流程中调用上述清理（只加调用点）
-- 新增 internal/core/metrics/（按原因的计数，只在内存中，供管理面读取）
-- 新增 cmd/alonabot/t06_e2e_test.go（//go:build unix）
-- spec/TEST-MATRIX.md §3.2：追加 T-06 的证据行（本切片获授权修改这一处）
-- 上述包的测试文件
-允许的新跨模块边：无。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-internal/core/metrics
-   type Reason string // denied、cancelled、offline、dropped_queue、dropped_budget、cycle、depth
-   type Counters struct{ ... }
-   func (c *Counters) Add(pluginID string, kind string, r Reason) // kind 为 service、bus、event
-   func (c *Counters) Snapshot() map[string]map[string]map[Reason]uint64 // plugin → kind → reason → count
-broker、bus、router 的 Options 增加 Metrics *metrics.Counters（可为 nil）。
-
-行为：
-- 冻结：插件进入 Draining 后，Broker 对以它为目标的新调用返回 UNAVAILABLE（offline），Bus 不再向它入队，Router 不再派发给它。
-- 失效（STOPPING 或断链）：Broker 取消它作为调用方或目标的全部转发请求（调用方得到 UNAVAILABLE 或 CANCELLED），释放这些请求占用的预算；Bus 丢弃它的订阅队列（计入 offline）；Router 移除它的路由目标与等待（与 goal-52 的 Release 一致）。不转交新 Session，新 Session 从空状态开始。
-- 错误：返回给调用方的 ErrorInfo 只含 code、safe_message 与 trace_id；远端堆栈、Secret、文件路径只进 Core 日志。
-- 计数：每次拒绝、取消、离线、队列丢弃、CALL_CYCLE、深度超限都计数；不持久化，不建设可靠事件存储或自动重试。
-- 验收矩阵（t06_e2e_test.go，TCP 与 stdio 各运行一遍）：
-  1) A→B→C、A→B→A、深度边界、两条独立并发链：结果、Actor/Target、deadline 与取消在每一跳一致。
-  2) A 的出站 Hook → B 的 Service → Send：FAILED_PRECONDITION（闭合 V-15）。
-  3) B/C 挂起、进程退出、满额、畸形输入与输出、排队前取消：没有死锁，没有重复的业务效果（以目标插件的调用计数证明）。
-  4) Bus：慢订阅者、断线、条数满与字节满同时发生时，新事件按规则丢弃，其他订阅者继续收到。
-  5) 每项记录实际进程、传输、命令与日志摘录。
-- 证据：TEST-MATRIX §3.2 追加 T-06 一行，写明测试位置、命令、平台、传输与结果。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/t06_e2e_test.go（上述矩阵，复用 goal-19～goal-21 的测试插件）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Counters 的并发；失效后预算归还到初始值；ErrorInfo 中不含路径与堆栈。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
-
-不做：管理面对计数的读取接口（T-09.9）；可靠事件存储与服务重试（契约不提供）。
-```
-
-### goal-35 · T-08.9 configdb 示例与 T-08 验收
-
-状态：等待前置（T-08.6、T-08.7、T-08.8）。语句中 goal-28～goal-34、goal-53 提供的符号与工具（生成器、Prepare、secret.Store、gormdb、candidate、web/admin 的表单模型、contracts/i18n）只写名字；合并后由审查者核对，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-35（切片 T-08.9：configdb 示例与 T-08 验收）。goal 目录 goal-35，分支 goal-35，worktree .worktrees/goal-35，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：新增 examples/plugins/configdb，覆盖配置迁移、显式空值、未知与 secret 字段、CRUD 与事务、versioned 迁移与失败、候选 OnStart 写库后失败；在临时 data_dir 上分层验证，数据库部分 sqlitedb 与 gormdb 各跑一遍；用 web/admin 的 fixture 验证表单的字段顺序、hidden、i18 回退、掩码与 PATCH；在 TEST-MATRIX §3.2 记录 T-08 的组件证据，并单独列出需要 T-09 正式入口与 Journal 才能关闭的场景。
-
-依据：PLAN T-08 步骤 9 与「停止和失败条件」；CONTRACTS §5、§6；TEST-MATRIX V-23～V-26、V-38、V-39、V-54 的 T-08 分项。
-
-范围（只新增或修改这些）：
-- 新增 examples/plugins/configdb/（含 plugin.yaml、i18n/、Config 与 versioned 迁移）
-- web/admin/fixtures/：加入由 configdb 的 Config 生成的 Schema fixture，并在 schema.test.ts 中追加对应用例
-- 新增 cmd/alonabot/t08_e2e_test.go（//go:build unix）
-- spec/TEST-MATRIX.md §3.2：追加 T-08 的证据行（本切片获授权修改这一处）
-- 上述包的测试文件
-允许的新跨模块边：无。
-
-接口：不新增公开 Go 符号。
-
-验收矩阵（各为一个子测试）：
-1) 配置迁移：config_version 1 的旧配置只有经 OnLoad 才满足 2 的 Schema；先迁移再校验，结果写入候选快照。
-2) 显式空值：false、0、""、[]、{}、null（指针字段）全部保留；缺失键补默认值；未知键与嵌套未知键保留在快照中。
-3) secret：快照只有引用；Schema 移除 secret 字段但候选保留该键时仍为引用；日志中没有明文。
-4) DB：CRUD 与事务（tx 回调）；versioned 两步迁移；第二步失败时账本只有第一步、候选失败、Active 不变。
-5) 候选：reload 后 OnStart 写入候选库再失败：Discard，Active 的数据与配置不变，旧版重启正常；新旧进程没有同时写同一个库（runtime.lock 证明）。
-6) 两个入口：同一插件同时用 sqlitedb.Open 与 gormdb.Open 时共用同一连接，一边写入另一边立即可读；只用 sqlitedb 的示例变体不链接 gorm.io/gorm。
-7) i18n：Context.T 的语言选择与回退；plugin check 拒绝缺少 en-US 与占位符不一致。
-8) 表单（web/admin 的 vitest，非 DOM）：configdb 的 Schema 字段顺序与声明一致；hidden 不进 patch；未修改的 secret 不进 patch；i18 标签回退。
-- 证据：TEST-MATRIX §3.2 追加 T-08 一行；需要 T-09 正式 reload、WebUI/API 与 Journal 崩溃恢复才能关闭的 V-23～V-25、V-38 场景单独列为「未闭合」，不标成通过。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/t08_e2e_test.go；web/admin 的 schema.test.ts 追加用例。
-- 本地自测（不提交，PR 中写明结果）：npm run build；示例的 plugin check。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；web/admin 下 npm run test 通过；node scripts/check-repository.mjs。
-
-不做：正式 reload 与管理入口（T-09）；Journal 与崩溃恢复（T-09.5～T-09.7）。
-```
-
-### goal-38 · T-09.3 开发 CLI 与库模式脚手架
-
-状态：等待前置（T-04.5、T-08.1、T-08.8、T-09.2、T-13.1）。语句中 goal-11、goal-28、goal-37、goal-53、goal-67 提供的符号（sdk/generate、packages 的 Preflight 与包格式、contracts/release、contracts/i18n、根包 Run）只写名字；合并后由审查者核对，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-38（切片 T-09.3：开发 CLI 与库模式脚手架）。goal 目录 goal-38，分支 goal-38，worktree .worktrees/goal-38，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：完成开发命令 alonabot plugin init|check|build|test|pack：init 生成插件骨架与库模式调试用的 main.go；check 验证 CONTRACTS §9.1 的静态契约；build 用生成器为根插件生成调用 sdk.Run 的正式入口并按目标 OS/arch 编译，产物不含 Core；test 在临时数据与离线测试会话中检查加载与注册；pack 为四种角色的组件生成 tar.gz 安装包与归档外的 release.json（WebUI 只含 plugin.yaml、icon 与 assets 目录，平台为 any，不运行 build），并可用本地密钥对清单的确切字节签名。
-
-依据：PLAN T-09 步骤 2（CLI）；CONTRACTS §9.1～§9.3、§15.4、§7.5；DECISIONS D-42、D-43、D-59、D-62、D-63；TEST-MATRIX V-01、V-41、V-54 的打包分项。
-
-范围（只新增或修改这些）：
-- cmd/alonabot/：plugin 命令组增加 init、build、test、pack，check 补齐静态契约（新文件）
-- 新增 sdk/generate/entry.go（正式入口生成）
-- 新增 internal/pluginkit/（打包、release.json 生成与签名，供 cmd 使用）；packages 的包格式与 goal-37 一致
-- 上述包的测试文件
-允许的新跨模块边：cmd/alonabot -> internal/pluginkit；internal/pluginkit -> contracts/...、-> sdk/generate（ARCHITECTURE 已登记）。
-
-接口：
-- alonabot plugin init <dir> --id ID [--role plugin|adapter] [--adapter-id ID]：生成 plugin.yaml（manifest_version 1、version 0.1.0、source 为占位并提示修改）、带 sdk.Base 的根插件、一个示例命令、i18n/en-US.json、main.go（调用 alonabot.Run(alonabot.Plugin(...))，供库模式调试）与 .gitignore（忽略 .alonabot/，其中的实例配置可能含平台凭证）；目录非空时拒绝。
-- alonabot plugin check [--dir] [--goos] [--goarch] [--tags]：在 goal-11/goal-28/goal-53 的检查之外，核对 manifest（Parse 与 §9.1 的字段规则、role 与描述一致、migration_mode 与实际迁移接口一致、prepare_effects 已声明）、Schema 与 config_version、i18 文件；全部问题一次列出。
-- alonabot plugin build [--dir] --goos OS --goarch ARCH [--out DIR]：生成正式入口（临时目录中的 main 包，调用 sdk.Run 或 sdk.RunAdapter，引用根类型），用锁定的 Go Modules 编译（CGO_ENABLED=0，-trimpath），输出可执行文件；不链接根包 alonabot。
-- alonabot plugin test [--dir]：build 当前平台后，在临时 data_dir 中经 Core 的开发入口启动一次，完成握手、准备、注册与激活后停止，报告注册的路由；不连接任何真实平台，不读取生产凭证。
-- alonabot plugin pack [--dir] --goos OS --goarch ARCH [--key FILE] [--out DIR]：build 后打包 tar.gz（plugin.yaml、entrypoint、config.schema.json、i18n/、build-info，以及 manifest 的 icon 与表单选项图标）；role 为 webui 时不需要 --goos/--goarch，只打包 plugin.yaml、icon 与 assets 目录，归档名为 <id>-<version>-any.tar.gz；生成 release.json（id、version、source、os/arch、归档 SHA256 与长度、发布者公钥 ID）；给出 --key（Ed25519 私钥文件）时对 release.json 的确切字节签名生成 release.json.sig，否则只输出待签名的 release.json。私钥不进入包。
-internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包文档列出。
-
-行为：
-- build 与 pack 的产物对同一源码与工具链可重复（tar 中的文件按名称排序、时间戳固定、权限固定）。
-- pack 前自动运行 check；有问题时不打包。
-- 签名：release.json 的签名对象是文件的确切字节（与 contracts/release.Verify 一致）；pack 输出的包必须能通过 goal-37 的 packages.Preflight（以测试中注入的公钥为受信来源）。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/plugin_cli_e2e_test.go（//go:build unix）：在临时目录 init 一个插件 → check 通过 → build 当前平台 → test 报告注册的命令 → pack 带测试密钥 → packages.Preflight 校验通过并 MoveTo 成功；改动 manifest 使 migration_mode 与实际不符时 check 失败；init 的 main.go 能以库模式编译；pack 两次的归档字节相同。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：五个目标平台的 build（交叉编译，只编译不运行）；Adapter 与 Agent 角色的 init 与 build；WebUI 包的 pack（缺少 assets/index.html 时 check 失败）；目录非空时 init 拒绝；没有 --key 时只输出 release.json。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./cmd/... ./sdk/... ./internal/...；go build ./...。
-
-不做：安装与管理（T-09.4）；市场与远程发布；发行归档（T-14.3）。
-```
-
-### goal-55 · T-11.2 工具调用与用户确认
-
-状态：等待前置（T-03.8、T-06.2、T-08.8、T-11.1）。语句中 goal-8、goal-20、goal-53、goal-54 提供的符号（buttons.Service、broker 的父链调用、internal/core/i18n、tool.Catalog）只写名字；合并后由审查者核对，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-55（切片 T-11.2：工具调用与用户确认）。goal 目录 goal-55，分支 goal-55，worktree .worktrees/goal-55，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：core.tool.invoke 校验父调用链后按生效策略分支：deny 直接拒绝；confirm 先经用户确认；allow 或确认通过后经 Broker 以父调用链调用目标 Service，结果与错误原样返回。core.tool.confirm 只执行策略与确认。确认由 Core 直接经 Adapter 向默认 Target 发送带「允许」「拒绝」按钮的消息（不执行插件出站 Hook），只接受同一 Actor 在 TOOL_CONFIRM_TIMEOUT 内的第一次点击。
-
-依据：PLAN T-11 步骤 3、4；CONTRACTS §13.1、§13.2、§5.4；MESSAGE-MODEL §6.3；WIRE-FORMAT §3.5；TEST-MATRIX V-55。
-
-范围（只新增或修改这些）：
-- contracts/proto/alonabot/v1/tool.proto：追加 ToolInvokeRequest/Response 与 ToolConfirmRequest/Response。随后 go generate ./...（本切片获授权只追加这些）
-- contracts/wirespec_test.go：追加编号检查
-- internal/wire/services.go：末尾追加 ServiceToolInvoke = "core.tool.invoke"、ServiceToolConfirm = "core.tool.confirm"
-- internal/core/tool/：新增 invoke.go、confirm.go
-- internal/core/buttons/：确认记录绑定的 token（与插件按钮共用表，增加确认类型）
-- internal/core/i18n/：en-US.json 与 zh-CN.json 增加确认消息的文案
-- sdk/：tool.go 增加 InvokeTool 与 ConfirmOperation
-- 上述包的测试文件
-允许的新跨模块边：无。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. proto
-   message ToolInvokeRequest { string name = 1; string arguments_json = 2; } // name 为 "plugin_id/service_name"
-   message ToolInvokeResponse { string result_json = 1; }
-   message ToolConfirmRequest { string operation = 1; string summary = 2; } // 例如 operation "mcp/<server>/<tool>"
-   message ToolConfirmResponse {}
-2. sdk
-   func InvokeTool(ctx context.Context, name string, arguments json.RawMessage) (json.RawMessage, error) // 必须在 Handler 或其延续调用内调用
-   func ConfirmOperation(ctx context.Context, operation, summary string) error // nil 表示用户允许
-
-行为：
-- 两个服务都必须带 parent_call_id（指向本 Session 在途的 Core→插件调用），否则 FAILED_PRECONDITION。
-- invoke：
-  1) name 必须是 core.tool.list 对调用者可见的工具（访问规则通过、生效策略不是 deny），否则 deny → PERMISSION_DENIED、不可见 → NOT_FOUND。arguments_json 必须是 JSON 对象，并通过工具的 input schema（jsonschema-go Validate）；否则 INVALID_ARGUMENT。
-  2) 策略 confirm：执行确认（见下），拒绝或超时时返回相应错误，不调用工具。
-  3) 经 Broker 以父调用链调用目标 Service（父链、Actor 与 send_forbidden 继承，工具仍按继承的 Actor 检查 Service 访问规则），结果原样放进 result_json，错误原样返回。不重试。
-  每次调用都读取当前策略，修改在下一次调用时生效。
-- confirm：operation 非空、summary 不超过 1024 字节（命名常量）；直接执行确认，不调用任何工具。
-- 确认：
-  - 父调用链没有可信 Actor 或默认 Target → PERMISSION_DENIED，不发消息。
-  - 目标实例不支持 buttons → UNSUPPORTED，不改为文字确认。
-  - Core 创建确认记录（随机 ID、Actor、Target、父调用、到期时间）与两个绑定它的按钮 token（沿用按钮 token 的格式与表，类型为 confirm，不绑定插件路由），按 Actor locale 选择 Core 文案：工具名或操作名；invoke 展示实际的 arguments_json（缩进格式化，超过 2048 字节时截断并注明，命名常量），confirm 展示插件给出的 summary。消息直接经 adapter.Instance.Send 发往默认 Target，不执行出站 Hook；发送失败时返回该错误，不执行工具。
-  - 点击（button.clicked 解析到 confirm 类型的 token）：只接受该记录的 Actor 的第一次点击；其他用户的点击被拒绝（不影响结果，以 INFO 记录）；token 只能使用一次；「允许」使调用继续，「拒绝」返回 PERMISSION_DENIED。点击后 Core 把原消息编辑为结果文案（目标支持 message.edit 时；不支持时不编辑）。
-  - 超时（TOOL_CONFIRM_TIMEOUT）→ DEADLINE_EXCEEDED；父调用结束或 Session 失效 → 记录作废，token 失效。确认只对本次调用有效。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/supervisor/tool_invoke_test.go（//go:build unix）。沿用 goal-54 的工具服务与测试插件（收到消息时调用 InvokeTool 或 ConfirmOperation 并回复结果），memory Adapter 支持 buttons 与 Editor：
-  - allow 工具直接返回结果；deny 工具返回 PERMISSION_DENIED 且工具未执行。
-  - confirm 工具：memory 收到带两个按钮的确认消息，内容含实际 JSON 参数；同一用户点「允许」后工具执行并返回结果；另一用户先点击被拒、不影响结果；点「拒绝」返回 PERMISSION_DENIED 且工具未执行；超时（注入较短的 TOOL_CONFIRM_TIMEOUT）返回 DEADLINE_EXCEEDED。
-  - 确认消息没有经过插件的 BeforeSend Hook（测试插件注册了会改链的 BeforeSend，确认消息不受影响）。
-  - 没有 Actor 的调用（scheduled fixture）遇到 confirm 返回 PERMISSION_DENIED，没有发消息；不支持 buttons 的实例返回 UNSUPPORTED。
-  - arguments 不符合 input schema 时 INVALID_ARGUMENT。
-  - ConfirmOperation 展示 summary 而不是参数。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：参数截断；token 只能用一次；父调用结束时记录作废；zh-CN 文案；策略在两次调用之间修改。
-
-完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/...；go build ./...。
-
-不做：Agent 的工具循环与 MCP（T-12.3）；「总是允许」（契约不提供）；管理页面的工具策略（T-09.9）。
-```
-
-### goal-70 · T-13.4 库模式示例与验收
-
-状态：等待前置（T-03.10、T-13.2、T-13.3）。语句中 goal-9、goal-67～goal-69 提供的符号与示例（根包 Run、Reload、examples/devbot、回环 Adapter）只写名字；合并后由审查者核对，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-70（切片 T-13.4：库模式示例与验收）。goal 目录 goal-70，分支 goal-70，worktree .worktrees/goal-70，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：examples/devbot/ 用库模式运行 echo 插件与回环测试 Adapter，覆盖同进程运行、热部署与编译失败；docs/development.md 补充库模式与热部署的用法；在 TEST-MATRIX §3.2 记录 V-64、V-65 的证据。
-
-依据：PLAN T-13 步骤 5 与「停止和失败条件」；CONTRACTS §15.4；TEST-MATRIX V-64、V-65。
-
-范围（只新增或修改这些）：
-- examples/devbot/：改为同时引用 examples/plugins/echo 的插件与示例内的回环 Adapter，提供 Reload 开关
-- docs/development.md：新增「库模式与热部署」一节（本切片获授权修改这一节）
-- 新增 t13_e2e_test.go（根包，//go:build unix）
-- spec/TEST-MATRIX.md §3.2：追加 T-13 的证据行（本切片获授权修改这一处）
-- 上述包的测试文件
-允许的新跨模块边：无。
-
-验收矩阵（各为一个子测试）：
-1) 同进程：插件与 Adapter 的握手、注册、权限与独立进程一致（同一组命令的回复与 goal-14 的结果相同）；从 instances/ 读取实例配置。
-2) dev 代次固定，重启后旧按钮仍有效。
-3) dev 来源 update/rollback 被拒。
-4) 未捕获的 panic 使进程退出且不重启。
-5) 停止超时时 Run 返回错误。
-6) 已安装包（独立进程）与开发组件混合运行。
-7) 两次启动之间 config.json 与 dev.sqlite 的变化生效。
-8) 热部署：改动插件源码后只重启开发组件，Adapter 连接与其他插件不中断；编译失败时旧组件继续；go.mod 变化输出 WARN；其他 module 的组件不重启。
-- docs/development.md 的新节写明：Run 的选项、数据目录、实例目录、热部署的启用方式与限制（没有进程隔离、不能 update/rollback、Windows 未验证等），以及运行示例的命令（fish 与 bash 通用的写法）。
-- 证据：TEST-MATRIX §3.2 追加 T-13 一行，写明测试位置、命令、平台与结果；Windows 与 Linux 未运行的项写「未运行」。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：t13_e2e_test.go（上述矩阵，复用 goal-67～goal-69 的测试方式）。
-- 本地自测（不提交，PR 中写明结果）：按文档中的命令手动运行一次示例并记录输出。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
-
-不做：发行与预装（T-14）。
-```
-
 ### goal-81 · T-16.1 插件测试套件基础
 
-状态：等待前置（T-05.2、T-13.2）。语句中 goal-4、goal-16、goal-67、goal-68 提供的符号（sdk/adapter 的 Adapter 与 Instance、Router 的分发流程、alonabot.Start 与 Core、Plugin/Adapter/DataDir 选项、dev 的 config.json 与 dev.sqlite、生成器的 Generated）只写名字；合并后由审查者核对签名，再改为可派发。
+状态：等待前置（T-05.2、T-13.2）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。语句中 goal-4、goal-16、goal-67、goal-68 提供的符号（sdk/adapter 的 Adapter 与 Instance、Router 的分发流程、alonabot.Start 与 Core、Plugin/Adapter/DataDir 选项、dev 的 config.json 与 dev.sqlite、生成器的 Generated）只写名字；合并后由审查者核对签名，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-81（切片 T-16.1：插件测试套件基础）。goal 目录 goal-81，分支 goal-81，worktree .worktrees/goal-81，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -3933,9 +3766,336 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 不做：按钮点击、多轮等待、schedule 触发与后台发送（T-16.2）；用套件测试示例插件与开发文档（T-16.2）；WebUI 沙盒（v0.1 之外）。
 ```
 
+## 第 12 波
+
+### goal-18 · T-05.5 多进程事件流水线验收
+
+状态：等待前置（T-03.8、T-05.3、T-05.4）。语句中 goal-8、goal-15～goal-17、goal-52 提供的符号（按钮、Rule、Hook、延续调用与等待、Router 的 Stats）只写名字；合并后由审查者核对，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-18（切片 T-05.5：多进程事件流水线验收）。goal 目录 goal-18，分支 goal-18，worktree .worktrees/goal-18，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：用多个真实插件进程跑完整的事件流水线：多个 priority 与同优先级逆安装顺序、自定义 Rule、两种 Handler 签名、三个 Hook、真实按钮回调、两个用户在同一群同时等待、等待超时与等待期间停用插件；用恶意载荷尝试修改可信字段，用延迟 Handler 验证控制帧仍推进；在 TEST-MATRIX §3.2 记录 T-05 证据。
+
+依据：PLAN T-05 步骤 8 与「停止和失败条件」；CONTRACTS §2；MESSAGE-MODEL §1、§6.3；TEST-MATRIX V-11、V-13～V-16、V-43、V-49、V-50 的 T-05 分项。
+
+范围（只新增或修改这些）：
+- 新增 internal/core/supervisor/testdata/pipeline/（流水线测试插件，按环境变量配置 priority、Rule、Hook 与命令）
+- 新增 cmd/alonabot/t05_e2e_test.go（//go:build unix，经 Telegram 模拟服务运行）或 internal/core/supervisor/pipeline_test.go（memory Adapter），执行者按需要真实按钮回调的项选择前者
+- spec/TEST-MATRIX.md §3.2：追加 T-05 的证据行（本切片获授权修改这一处）
+允许的新跨模块边：无。
+
+接口：不新增公开 Go 符号。
+
+验收矩阵（各为一个子测试，以平台调用记录、候选调用次序日志与 HandlerOutcome 为证据）：
+1) 三个插件 priority 为 0、0、-1，以两种不同的安装与启动顺序运行：调用顺序都是 (priority, plugin_id, route_id)。
+2) 自定义 Rule 为 false 与出错：事件路由跳过、已识别命令被消费且不回落（V-11 的真实 Rule 分项）。
+3) 两种 Handler：自动回复只发一次；手动多次 Send；自动型内 Send 被拒。
+4) Hook：PreEvent 改 payload、BeforeSend 改链与拒绝、AfterSend 出错不改结果；每次 Send 一组 Hook。
+5) 恶意载荷：Adapter 侧（经模拟服务）与插件侧（PreEvent 返回）尝试改 Actor、Target、button 的 action/value、scheduled 的 job_id：插件收到的仍是 Core 保留的值。
+6) 真实按钮：发送带按钮的消息后在模拟服务中点击：先有 answerCallbackQuery，再调用正确的插件；另一用户点击也调用一次；过期 token 不调用、不落入 Raw。
+7) 等待：两个用户在同一群同时进入 Wait，各自只收到自己的下一条消息，且这些消息不进入普通分发；超时为 DEADLINE_EXCEEDED；等待期间停用插件，重启后不补发。
+8) 延迟 Handler（睡眠数秒）执行期间，同一插件 Session 的另一请求的 Response 与 Cancel 正常完成，其他事件照常派发。
+9) 权限组合（V-43）：chat_admin 不取得 Core Admin；组禁用优先于子项启用；最近显式权限覆盖父项；运行时修改在下一次派发生效，已开始的调用不被撤销。
+10) scheduled：只用规范 fixture，证据中标明尚未覆盖真实 Scheduler（T-07.5 覆盖）。
+- 证据：TEST-MATRIX §3.2 追加 T-05 一行，写明测试位置、命令、平台、结果与 fixture 覆盖的项。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：上述矩阵测试。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：在 -race 下重复运行矩阵 10 次无偶发失败。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+
+不做：Service 嵌套与 Hook→Service→Send（T-06.2、T-06.4）；真实 Scheduler（T-07.5）。
+```
+
+### goal-20 · T-06.2 父调用链、取消与背压
+
+状态：等待前置（T-03.6、T-05.3、T-06.1）。语句中 goal-7、goal-17、goal-19 提供的符号（broker.Broker、router.Invocation 与 send_forbidden、media 的 Grant、wire 的 ParentAttach 与预算）只写名字；合并后由审查者核对，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-20（切片 T-06.2：父调用链、取消与背压）。goal 目录 goal-20，分支 goal-20，worktree .worktrees/goal-20，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：Broker 沿父调用链传播 Core 记录的可信上下文（actor、target、scope、trace、祖先插件链、send_forbidden），不接受插件覆盖；同链重复插件返回 CALL_CYCLE，深度超过 CALL_CHAIN_MAX_DEPTH 返回 FAILED_PRECONDITION；子调用期限取父与自身预算中较早者；父完成、超时、取消或任一 Session 断开时取消未完成的子调用；复用 wire 的在途数与字节预算，额满立即失败，不出现互相等待额度的死锁。
+
+依据：PLAN T-06 步骤 3、4；CONTRACTS §3 第 4、5 条、§1.2、§2.3（send_forbidden）；WIRE-FORMAT §4；TEST-MATRIX V-18、V-42 的嵌套分项、V-15 的间接递归分项。
+
+范围（只新增或修改这些）：
+- internal/core/broker/：调用链记录、循环与深度检查、期限与取消传播
+- internal/core/router/：Invocation 增加祖先插件链与 scope，并在 InvocationContext 中下发（只加字段与填写处）
+- internal/wire/：如需在父请求结束时通知子调用取消，只加回调字段与触发点（与 goal-24 的 Late 同样的方式）
+- 新增 internal/core/supervisor/testdata/chainplugin/
+- 上述包的测试文件
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+- internal/core/router：Invocation 增加字段 Chain []string（祖先插件链，最早者在前）、Scopes []string、SendForbidden bool（goal-17 已有时沿用）
+- internal/core/broker：Options 增加 MaxDepth int（tune.Values.CallChainMaxDepth）；New 的签名相应改为接收 Options，并更新全部调用者
+
+行为：
+- 父请求：插件发起的 Service 调用带 parent_call_id 时，必须指向同一 Session 中仍在途的 Core→该插件请求（wire 已保证属于同一 Session）；Broker 从该父请求的 Invocation 派生上下文：actor、default_target、scopes、trace_id、send_forbidden 原样继承，Chain = 父 Chain + [调用方]。插件载荷中的任何身份字段被忽略。没有父请求时只有插件身份：Chain = [调用方]，actor 与 target 为空。
+- 检查：目标插件已在 Chain 中 → CALL_CYCLE；len(Chain)+1 > MaxDepth → FAILED_PRECONDITION。在调用目标函数之前返回。不同的独立链互不影响（检查只看本链）。
+- 期限：子请求期限 = min(父请求期限, 调用方请求自带期限, REQUEST_TIMEOUT 起算的期限)。
+- 取消：父请求完成（成功或失败）、到期、被取消，或调用方 Session、目标 Session 断开时，Broker 取消尚未完成的转发请求（发送 Cancel），并使调用方得到 CANCELLED 或 UNAVAILABLE；不重放、不重试。普通迟到响应不会再次完成已结束的调用。
+- 背压：转发请求使用目标 Session 的现有准入（在途 256、每方向字节预算、Core 全局预算），额满时立即向调用方返回 RESOURCE_EXHAUSTED，不排队等待。Broker 不在持有任何锁时等待业务槽位；Response、Cancel 与控制帧的处理不依赖 Broker。
+- send_forbidden 的间接路径：出站 Hook 内调用 Service、该 Service 再调用 core.send 时返回 FAILED_PRECONDITION（V-15 的必交回归）。
+- 媒体：Service 中向原事件 Target Send 仍经 T-03 准入；跨 Session 使用媒体仍须 Grant。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/supervisor/chain_test.go（//go:build unix）。构建 testdata/chainplugin（按环境变量决定收到调用后转调哪个插件、睡眠多久、是否在 BeforeSend 中调用 Service），以 a、b、c 启动：
+  - A→B→C 正确返回，C 看到的 Actor 与 Target 是原事件的，Chain 为 [a, b]。
+  - A→B→A 返回 CALL_CYCLE，A 的第二次函数未运行；两条同时进行的独立链 A→B 与 C→B 都成功。
+  - 把 MaxDepth 设为 2：A→B→C 返回 FAILED_PRECONDITION。
+  - A 的父事件 Handler 到期：B、C 的未完成调用被取消（C 收到取消，日志可见），A 得到错误；没有重试。
+  - 杀掉 B 的进程：A 立即得到 UNAVAILABLE。
+  - 出站 Hook 中经 Service 再 Send 被拒（FAILED_PRECONDITION）。
+  - 用很小的 wire 预算使转发请求额满：立即 RESOURCE_EXHAUSTED，期间其他 Session 的 Response 照常完成。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：期限取最小值；没有父请求的后台调用只有插件身份；插件载荷中伪造的 actor 被忽略；Cancel 不越过其 Request。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/... ./sdk/...；go build ./...。
+
+不做：Event Bus（T-06.3）；Session 清理的完整矩阵（T-06.4）。
+```
+
+### goal-59 · T-12.2 Agent 对话与流式显示
+
+状态：等待前置（T-03.9、T-05.4、T-08.3、T-08.4）。T-04.3、T-11.3、T-12.1 已合并；命令注册、Args/Optional、Context.Match 与自动回复接口已按 PR #47 核对。Context.Edit、Continue、配置及数据库入口仍待相关前置合并后核对。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-59（切片 T-12.2：Agent 对话与流式显示）。goal 目录 goal-59，分支 goal-59，worktree .worktrees/goal-59，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：建立官方 Agent 组件 agent/（manifest `role: agent`）的骨架与配置（Provider 与预设、人格、历史条数等），注册 /ask、/agent on|off、/persona、/provider、/reset 与 message 事件路由；一轮对话在延续调用中执行：读取会话历史、组装请求、经 Provider 流式接收，先发送一条消息再按 1s 间隔编辑，结束时以完整内容最后编辑，超长时在段落边界换新消息；结束后追加会话条目。Provider 出错或中途断开时保留已显示内容并按 Actor locale 报告，不自动重发。
+
+依据：PLAN T-12 步骤 2、3；CONTRACTS §13（Agent 段）、§2.4、§8（Edit）、§5.4；DECISIONS D-27、D-38；TEST-MATRIX V-57。
+
+范围（只新增或修改这些）：
+- agent/：新增 agent 包（可导入的根组件 agent.New()）、cmd/ 下的 main、plugin.yaml（`role: agent`、`icon`）、i18n/en-US.json 与 zh-CN.json、assets/icons/（Provider 预设与组件自身的图标）；provider 包已存在，不改
+- 上述包的测试文件
+允许的新跨模块边：agent/... -> sdk/...、-> contracts（已允许）。不 import internal/...。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+agent
+   func New() sdk.Root
+   type Config struct {
+       config.Base
+       Providers       []ProviderConfig `json:"providers"`
+       DefaultProvider string           `json:"default_provider"`
+       Personas        map[string]string `json:"personas"`        // 名称 → 系统提示
+       DefaultPersona  string           `json:"default_persona"`
+       HistoryEntries  int              `json:"history_entries" form:"default=20;min=0;max=500"`
+       MessageLimit    int              `json:"message_limit" form:"default=4096;min=256;max=65536"`
+       MCPServers      []MCPServer      `json:"mcp_servers"`     // T-12.3 使用
+       SkillsDir       string           `json:"skills_dir"`      // T-12.5 使用
+   }
+   type ProviderConfig struct { Name string `json:"name"`; Preset string `json:"preset"`; Protocol string `json:"protocol"`; BaseURL string `json:"base_url"`; APIKey string `json:"api_key" secret:"true"`; Model string `json:"model"`; MaxTokens int `json:"max_tokens" form:"default=2048;min=1"` }
+   type MCPServer struct { Name string `json:"name"`; Transport string `json:"transport"`; Command string `json:"command"`; Args []string `json:"args"`; Env []SecretPair `json:"env"`; URL string `json:"url"`; Headers []SecretPair `json:"headers"` }
+   type SecretPair struct { Name string `json:"name"`; Value string `json:"value" secret:"true"` }
+
+行为：
+- 配置：preset 的表单选项为 openai、anthropic、deepseek、ollama 与 custom，各附 assets/icons/ 下的图标（选项图标的 tag 写法以 goal-28 合并后的生成器为准）；preset 给出 protocol 与 base_url 的缺省值，配置中显式给出的值优先。OnLoad 校验 providers 的 name 唯一、protocol 为 openai、openai-compatible 或 anthropic-messages、default_provider 与 default_persona 指向存在的项（列表为空时允许为空）；错误时返回 OnLoad 错误。
+- 数据：每个聊天（adapter_instance_id、chat_id、thread_id）当前的人格、Provider 与自由对话开关保存在 Agent 的数据库（gormdb.Open，versioned 迁移）。
+- 命令：/ask <text:raw>（缺省 USER）、/agent on|off（ADMIN）、/persona [name]（ADMIN，无参数时列出）、/provider [name]（ADMIN）、/reset（USER），说明用 sdk.Description 指向 messages。自由对话开启时，该聊天中 to_me 的非命令 message.created 也触发一轮（message 事件路由带 ToMe Rule，并检查开关）；私聊的消息都是 to_me。默认关闭。
+- 一轮对话（Handler 调用 Continue，在延续调用中执行）：
+  1) 没有可用 Provider 时用 Context.T 回复 agent.no_provider，结束。
+  2) 会话键为 "<instance>/<chat>/<thread>"；ListConversation 读取最近 history_entries 条（从末尾往前，按序号顺序组装）。条目为 JSON 对象 {"role": "user"|"assistant", "speaker": 外部用户 ID（群聊时）, "content": 文本}。
+  3) 以人格为 system 消息，组装 provider.Request（MaxTokens 取 Provider 配置）。
+  4) 事件的 capabilities 含 message.edit 时：发送一条占位消息（agent.thinking），之后流式接收：每累计到新的文本时，距上次编辑不少于 1s（命名常量）才 Edit；Edit 返回限流错误时把下一次编辑推迟 retry_after；生成结束后用完整内容最后编辑一次。不含 message.edit 时：不发占位消息，不发送中间增量，生成结束后一次发送完整内容。回复以纯文本发送（不使用 markdown 格式）。
+  5) 当前消息的内容将超过 message_limit 时，在最近的段落边界（"\n\n"，没有时为 "\n"，再没有时为空白，最后硬切）结束当前消息，再发送新消息继续显示；不能编辑时按同样的切分发送多条。
+  6) 结束后用 AppendConversation 追加本轮的 user 与 assistant 条目。
+  7) Provider 返回错误或中途断开：保留已显示的内容（不能编辑时不发送已生成的部分），在其后编辑或发送 agent.error（按 Actor locale，参数为错误码），不追加 assistant 条目，不重发请求。
+- /reset：ClearConversation 清除该会话。
+- 工具、MCP、记忆与技能分别在 T-12.3、T-12.4、T-12.5 接入；本切片不调用它们。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：agent/agent_test.go（//go:build unix）。用本仓库 Core 的测试装配（supervisor、memory Adapter，实现 Editor 与 Named）、真实状态库与 agent/provider 的本地模拟 Provider（三种协议各一次）：
+  - /ask hello：memory 先收到一条发送，随后收到若干次编辑，最后一次编辑是完整回复；编辑间隔不小于 1s（用注入时钟或计时断言）。
+  - 回复超过 message_limit（测试中设为 256）时分成多条消息，切分点在段落边界。
+  - 实例不声明 message.edit 时：memory 只收到完整回复的发送（超过 message_limit 时为多条），没有占位消息与编辑。
+  - 模拟 Provider 中途断开：已显示内容保留，最后有错误说明，会话中没有 assistant 条目，Provider 只收到一次请求。
+  - 自由对话关闭时群聊中的 to_me 消息不触发；Admin /agent on 后触发；非 to_me 的消息不触发。
+  - /persona 切换后请求的 system 消息改变；/reset 后历史为空。
+  - 普通用户执行 /agent 被拒（不回复）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：段落切分函数；OnLoad 的校验；限流推迟；会话条目格式；配置 Schema 由生成器生成且 api_key 为 secret。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./agent/... ./internal/core/...；go build ./...；在 agent 运行 alonabot plugin check 通过。
+
+不做：工具循环与 MCP（T-12.3）；记忆（T-12.4）；技能（T-12.5）；定时任务（T-12.6）；打包（T-12.7）；真实 Provider（T-10）。
+```
+
+### goal-82 · T-16.2 按钮、多轮等待、schedule 与示例测试
+
+状态：等待前置（T-03.8、T-05.4、T-07.2、T-16.1）。语句中 goal-8、goal-24、goal-52、goal-81 提供的符号（Button.core_token 与 button.clicked 的派发、调度器的运行入口、core.wait 的等待状态、plugintest 与 inproc.Harness）只写名字；合并后由审查者核对签名，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-82（切片 T-16.2：按钮、多轮等待、schedule 与示例测试）。goal 目录 goal-82，分支 goal-82，worktree .worktrees/goal-82，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：plugintest 支持对已发送按钮的点击、多轮等待中的注入、立即触发一次 schedule 与读取分发链之外的后台发送；用套件为示例插件编写提交的集成测试；docs/development.md 补充「插件测试」一节；在 TEST-MATRIX §3.2 记录 V-73 的证据。
+
+依据：PLAN T-16 步骤 3、4 与「失败停止条件」；CONTRACTS §17、§2.4、§4.3、§8（后台 Send 的准入）、MESSAGE-MODEL §6.3 的按钮 token 规则；DECISIONS D-47；TEST-MATRIX V-73。
+
+范围（只新增或修改这些）：
+- plugintest/：Click、Trigger、Background 与等待状态的处理
+- plugintest/internal/probe/：增加按钮、多轮等待、schedule 与后台发送的用例路由
+- internal/inproc/harness.go：Outcome 增加 Waiting；Harness 增加 Trigger
+- 根包：把调度器的立即运行入口接到 Harness.Trigger（只加调用点）
+- internal/core/router/：Handler 进入 core.wait 时也调用分发结束回调（只加调用点）
+- internal/core/ 中 goal-24 的调度器：没有立即运行一次的入口时增加一个（只加函数，复用正常的运行槽、期限与跳过重叠规则）
+- examples/plugins/ 下的示例：为合并时已有的 echo、media 与命令示例各新增一个 *_test.go（用 plugintest）
+- docs/development.md：新增「插件测试」一节（本切片获授权修改这一节）
+- spec/TEST-MATRIX.md §3.2：追加 T-16 的证据行（本切片获授权修改这一处；其他 spec 文件不改）
+允许的新跨模块边：examples/plugins/... -> plugintest（仅测试代码，ARCHITECTURE 已登记）。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. internal/inproc
+   Outcome 增加 Waiting bool // Handler 进入多轮等待，分发链尚未结束
+   Harness 增加 Trigger func(ctx context.Context, pluginID, jobID string) (runID string, err error) // 由根包设置；在调用结束后返回
+   Dispatch 增加 RunID string // schedule 调用结束时设置，SourceEventID 为空
+2. plugintest（在 goal-81 上追加）
+   Outcome 增加 Waiting bool
+   func (h *Harness) Click(from User, sent Sent, actionID string) Result // 在 sent.Chain 的 buttons 中按 action_id 找到按钮，以其 core_token 交付 button.clicked；找不到时 t.Fatal
+   func (h *Harness) Trigger(root sdk.Root, jobID string) Result       // 立即运行该插件的一次 schedule，调用结束后返回期间的发送记录
+   func (h *Harness) Background() []Sent                                // 返回并清空不属于任何一次注入的发送记录，按发生顺序
+
+行为：
+- 等待：Router 在某条分发链的 Handler 进入 core.wait 时，以 Waiting=true 的 Outcome 调用分发结束回调；Message 与 Click 收到它后返回。之后对同一会话与用户的 Message 按普通注入处理，Core 按等待键把它交给等待中的 Handler，该 Handler 的后续发送属于这次注入的结果。
+- Click：button.clicked 的 Actor 为 from，Target 为 sent 的 Target，origin_platform_message_id 为 sent 的消息 ID；token 过期、插件代次变化或权限不足时由 Core 照常拒绝，结果中没有发送，Outcomes 为空。
+- Trigger：经 Harness.Trigger 运行一次，走与定时触发相同的运行槽、15 分钟期限与跳过重叠规则；同 job 正在运行时返回该错误并 t.Fatal。返回这次调用期间的发送记录与 Outcome。
+- Background：注入与 Trigger 之外发生的发送（例如插件在 OnReady 中启动的后台任务）进入后台记录。后台 Send 仍经 Core 的 Target 准入：没有 Allow 时结果为 PERMISSION_DENIED。
+- 示例测试：每个示例至少覆盖它的主要命令或事件，以及一条失败路径（权限、参数错误或 UNSUPPORTED）；不依赖 time.Sleep。
+- 文档：「插件测试」一节给出最小示例（Start、Text、断言 Sent）、各选项的用途、不跳过 Core 检查的说明，以及运行命令 go test -race ./...。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：plugintest/plugintest_test.go 追加：
+  - 按钮：/menu 发送带两个按钮的消息；Click 第一个按钮得到对应回复；另一个用户 Click 同一按钮也得到回复（按点击者鉴权）；按钮对应的 action 要求 Core Admin 时，普通用户 Click 没有回复。
+  - 多轮等待：/ask 询问后 Message 立即返回，Outcomes 中有 Waiting；同一用户回答后得到确认回复；另一个用户的消息不被等待中的 Handler 消费。
+  - schedule：probe 注册的 job 发送到 Allow 过的测试实例，Trigger 返回一条 Sent；未 Allow 时该发送为 PERMISSION_DENIED。
+  - 后台：probe 的 OnReady 启动的后台发送出现在 Background 中，读取后清空。
+  - go test -race -count=2 ./plugintest/... ./examples/... 两遍都通过。
+- 证据：TEST-MATRIX §3.2 追加一行，写明覆盖的场景、命令、平台与 Go 版本。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Click 找不到 action_id；同 job 重叠时的 Trigger；等待超时后再次注入按普通消息处理。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./plugintest/... ./examples/... ./internal/core/... ./internal/inproc/...；go test -race . ；go build ./...。
+
+不做：模拟时钟或缩短 schedule 的周期（只提供立即运行）；WebUI 沙盒（v0.1 之外）；为 Adapter 作者提供的测试工具。
+```
+
+## 第 13 波
+
+### goal-22 · T-06.4 Session 清理与 Service 端到端
+
+状态：等待前置（T-06.2、T-06.3）。语句中 goal-15、goal-17、goal-19～goal-21 提供的符号（router、broker、bus、hook 与各自的 Stats）只写名字；合并后由审查者核对，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-22（切片 T-06.4：Session 清理与 Service 端到端）。goal 目录 goal-22，分支 goal-22，worktree .worktrees/goal-22，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：Session 停止或失效时，按 T-02 的冻结、drain、STOPPING 流程停止新的根调用，取消在途父链，并清理路由目标、Bus 订阅队列、Broker 映射与预算，不把未完成的工作转交给同插件的新 Session。错误只返回安全的 ErrorInfo 与 trace。记录按原因区分的拒绝、取消、离线与丢弃计数。在 TCP 与 stdio 上完成 A/B/C 嵌套与故障的端到端验收（含 Hook→Service→Send），在 TEST-MATRIX §3.2 记录 T-06 证据。
+
+依据：PLAN T-06 步骤 6、7 与「停止和失败条件」；CONTRACTS §3、§1.2、§4.2、§14.5；TEST-MATRIX V-15、V-17、V-18、V-19、V-42。
+
+范围（只新增或修改这些）：
+- internal/core/broker/、internal/core/bus/、internal/core/router/：Session 失效时的清理入口与计数（新增文件或只加调用点）
+- internal/core/supervisor/：停止流程中调用上述清理（只加调用点）
+- 新增 internal/core/metrics/（按原因的计数，只在内存中，供管理面读取）
+- 新增 cmd/alonabot/t06_e2e_test.go（//go:build unix）
+- spec/TEST-MATRIX.md §3.2：追加 T-06 的证据行（本切片获授权修改这一处）
+- 上述包的测试文件
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+internal/core/metrics
+   type Reason string // denied、cancelled、offline、dropped_queue、dropped_budget、cycle、depth
+   type Counters struct{ ... }
+   func (c *Counters) Add(pluginID string, kind string, r Reason) // kind 为 service、bus、event
+   func (c *Counters) Snapshot() map[string]map[string]map[Reason]uint64 // plugin → kind → reason → count
+broker、bus、router 的 Options 增加 Metrics *metrics.Counters（可为 nil）。
+
+行为：
+- 冻结：插件进入 Draining 后，Broker 对以它为目标的新调用返回 UNAVAILABLE（offline），Bus 不再向它入队，Router 不再派发给它。
+- 失效（STOPPING 或断链）：Broker 取消它作为调用方或目标的全部转发请求（调用方得到 UNAVAILABLE 或 CANCELLED），释放这些请求占用的预算；Bus 丢弃它的订阅队列（计入 offline）；Router 移除它的路由目标与等待（与 goal-52 的 Release 一致）。不转交新 Session，新 Session 从空状态开始。
+- 错误：返回给调用方的 ErrorInfo 只含 code、safe_message 与 trace_id；远端堆栈、Secret、文件路径只进 Core 日志。
+- 计数：每次拒绝、取消、离线、队列丢弃、CALL_CYCLE、深度超限都计数；不持久化，不建设可靠事件存储或自动重试。
+- 验收矩阵（t06_e2e_test.go，TCP 与 stdio 各运行一遍）：
+  1) A→B→C、A→B→A、深度边界、两条独立并发链：结果、Actor/Target、deadline 与取消在每一跳一致。
+  2) A 的出站 Hook → B 的 Service → Send：FAILED_PRECONDITION（闭合 V-15）。
+  3) B/C 挂起、进程退出、满额、畸形输入与输出、排队前取消：没有死锁，没有重复的业务效果（以目标插件的调用计数证明）。
+  4) Bus：慢订阅者、断线、条数满与字节满同时发生时，新事件按规则丢弃，其他订阅者继续收到。
+  5) 每项记录实际进程、传输、命令与日志摘录。
+- 证据：TEST-MATRIX §3.2 追加 T-06 一行，写明测试位置、命令、平台、传输与结果。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/t06_e2e_test.go（上述矩阵，复用 goal-19～goal-21 的测试插件）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Counters 的并发；失效后预算归还到初始值；ErrorInfo 中不含路径与堆栈。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+
+不做：管理面对计数的读取接口（T-09.9）；可靠事件存储与服务重试（契约不提供）。
+```
+
+### goal-55 · T-11.2 工具调用与用户确认
+
+状态：等待前置（T-03.8、T-06.2、T-08.8、T-11.1）。语句中 goal-8、goal-20、goal-53、goal-54 提供的符号（buttons.Service、broker 的父链调用、internal/core/i18n、tool.Catalog）只写名字；合并后由审查者核对，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-55（切片 T-11.2：工具调用与用户确认）。goal 目录 goal-55，分支 goal-55，worktree .worktrees/goal-55，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
+
+目标：core.tool.invoke 校验父调用链后按生效策略分支：deny 直接拒绝；confirm 先经用户确认；allow 或确认通过后经 Broker 以父调用链调用目标 Service，结果与错误原样返回。core.tool.confirm 只执行策略与确认。确认由 Core 直接经 Adapter 向默认 Target 发送带「允许」「拒绝」按钮的消息（不执行插件出站 Hook），只接受同一 Actor 在 TOOL_CONFIRM_TIMEOUT 内的第一次点击。
+
+依据：PLAN T-11 步骤 3、4；CONTRACTS §13.1、§13.2、§5.4；MESSAGE-MODEL §6.3；WIRE-FORMAT §3.5；TEST-MATRIX V-55。
+
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/tool.proto：追加 ToolInvokeRequest/Response 与 ToolConfirmRequest/Response。随后 go generate ./...（本切片获授权只追加这些）
+- contracts/wirespec_test.go：追加编号检查
+- internal/wire/services.go：末尾追加 ServiceToolInvoke = "core.tool.invoke"、ServiceToolConfirm = "core.tool.confirm"
+- internal/core/tool/：新增 invoke.go、confirm.go
+- internal/core/buttons/：确认记录绑定的 token（与插件按钮共用表，增加确认类型）
+- internal/core/i18n/：en-US.json 与 zh-CN.json 增加确认消息的文案
+- sdk/：tool.go 增加 InvokeTool 与 ConfirmOperation
+- 上述包的测试文件
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. proto
+   message ToolInvokeRequest { string name = 1; string arguments_json = 2; } // name 为 "plugin_id/service_name"
+   message ToolInvokeResponse { string result_json = 1; }
+   message ToolConfirmRequest { string operation = 1; string summary = 2; } // 例如 operation "mcp/<server>/<tool>"
+   message ToolConfirmResponse {}
+2. sdk
+   func InvokeTool(ctx context.Context, name string, arguments json.RawMessage) (json.RawMessage, error) // 必须在 Handler 或其延续调用内调用
+   func ConfirmOperation(ctx context.Context, operation, summary string) error // nil 表示用户允许
+
+行为：
+- 两个服务都必须带 parent_call_id（指向本 Session 在途的 Core→插件调用），否则 FAILED_PRECONDITION。
+- invoke：
+  1) name 必须是 core.tool.list 对调用者可见的工具（访问规则通过、生效策略不是 deny），否则 deny → PERMISSION_DENIED、不可见 → NOT_FOUND。arguments_json 必须是 JSON 对象，并通过工具的 input schema（jsonschema-go Validate）；否则 INVALID_ARGUMENT。
+  2) 策略 confirm：执行确认（见下），拒绝或超时时返回相应错误，不调用工具。
+  3) 经 Broker 以父调用链调用目标 Service（父链、Actor 与 send_forbidden 继承，工具仍按继承的 Actor 检查 Service 访问规则），结果原样放进 result_json，错误原样返回。不重试。
+  每次调用都读取当前策略，修改在下一次调用时生效。
+- confirm：operation 非空、summary 不超过 1024 字节（命名常量）；直接执行确认，不调用任何工具。
+- 确认：
+  - 父调用链没有可信 Actor 或默认 Target → PERMISSION_DENIED，不发消息。
+  - 目标实例不支持 buttons → UNSUPPORTED，不改为文字确认。
+  - Core 创建确认记录（随机 ID、Actor、Target、父调用、到期时间）与两个绑定它的按钮 token（沿用按钮 token 的格式与表，类型为 confirm，不绑定插件路由），按 Actor locale 选择 Core 文案：工具名或操作名；invoke 展示实际的 arguments_json（缩进格式化，超过 2048 字节时截断并注明，命名常量），confirm 展示插件给出的 summary。消息直接经 adapter.Instance.Send 发往默认 Target，不执行出站 Hook；发送失败时返回该错误，不执行工具。
+  - 点击（button.clicked 解析到 confirm 类型的 token）：只接受该记录的 Actor 的第一次点击；其他用户的点击被拒绝（不影响结果，以 INFO 记录）；token 只能使用一次；「允许」使调用继续，「拒绝」返回 PERMISSION_DENIED。点击后 Core 把原消息编辑为结果文案（目标支持 message.edit 时；不支持时不编辑）。
+  - 超时（TOOL_CONFIRM_TIMEOUT）→ DEADLINE_EXCEEDED；父调用结束或 Session 失效 → 记录作废，token 失效。确认只对本次调用有效。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/supervisor/tool_invoke_test.go（//go:build unix）。沿用 goal-54 的工具服务与测试插件（收到消息时调用 InvokeTool 或 ConfirmOperation 并回复结果），memory Adapter 支持 buttons 与 Editor：
+  - allow 工具直接返回结果；deny 工具返回 PERMISSION_DENIED 且工具未执行。
+  - confirm 工具：memory 收到带两个按钮的确认消息，内容含实际 JSON 参数；同一用户点「允许」后工具执行并返回结果；另一用户先点击被拒、不影响结果；点「拒绝」返回 PERMISSION_DENIED 且工具未执行；超时（注入较短的 TOOL_CONFIRM_TIMEOUT）返回 DEADLINE_EXCEEDED。
+  - 确认消息没有经过插件的 BeforeSend Hook（测试插件注册了会改链的 BeforeSend，确认消息不受影响）。
+  - 没有 Actor 的调用（scheduled fixture）遇到 confirm 返回 PERMISSION_DENIED，没有发消息；不支持 buttons 的实例返回 UNSUPPORTED。
+  - arguments 不符合 input schema 时 INVALID_ARGUMENT。
+  - ConfirmOperation 展示 summary 而不是参数。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：参数截断；token 只能用一次；父调用结束时记录作废；zh-CN 文案；策略在两次调用之间修改。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/...；go build ./...。
+
+不做：Agent 的工具循环与 MCP（T-12.3）；「总是允许」（契约不提供）；管理页面的工具策略（T-09.9）。
+```
+
 ### goal-83 · T-12.8 文本生成服务
 
-状态：等待前置（T-03.8、T-06.1、T-12.2）。语句中 goal-8、goal-19、goal-59 提供的符号（manifest 的 role 解析、Service Broker 的目标定位、sdk.JSONService、sdk.CallJSON、sdk.WithAccess、Context.Caller、agent 的 Config 与 Provider 装配）只写名字；合并后由审查者核对，再改为可派发。2026-10-28 按 D-61 改为以 `@agent` 为目标。
+状态：等待前置（T-03.8、T-06.1、T-12.2）。语句中 goal-8、goal-19、goal-59 提供的符号（manifest 的 role 解析、Service Broker 的目标定位、sdk.JSONService、sdk.CallJSON、sdk.WithAccess、Context.Caller、agent 的 Config 与 Provider 装配）只写名字；合并后由审查者核对，再改为待派发。2026-10-28 按 D-61 改为以 `@agent` 为目标。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-83（切片 T-12.8：文本生成服务）。goal 目录 goal-83，分支 goal-83，worktree .worktrees/goal-83，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -3984,16 +4144,16 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
   - Agent 组件未启用或未安装时调用返回 UNAVAILABLE。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：校验分支；三种协议各一次。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./agent/... ./sdk/... ./internal/core/...；go build ./...；node scripts/check-go-deps.mjs 通过。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./agent/... ./sdk/... ./internal/core/...；go build ./...；`go list -deps` 列出的 Core 可执行文件与 SDK 根包模块都在 docs/development.md 的允许清单中。
 
 不做：流式输出与工具调用（契约不提供）；llm_service_allowed_plugins 的专用管理页（配置表单随 T-09 由 Schema 生成）。
 ```
 
-## 第 11 波
+## 第 14 波
 
 ### goal-40 · T-09.5 候选 Journal 与准备编排
 
-状态：等待前置（T-09.4、T-08.6、T-06.4）。语句中 goal-22、goal-33、goal-39 提供的符号（manage.Service 与 Candidates 接口、candidate.PrepareDatabase/Discard 与交接约定、supervisor 的停止流程）只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-09.4、T-08.6、T-06.4）。语句中 goal-22、goal-33、goal-39 提供的符号（manage.Service 与 Candidates 接口、candidate.PrepareDatabase/Discard 与交接约定、supervisor 的停止流程）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-40（切片 T-09.5：候选 Journal 与准备编排）。goal 目录 goal-40，分支 goal-40，worktree .worktrees/goal-40，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4050,7 +4210,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 ### goal-57 · T-11.4 工具与会话的验收
 
-状态：等待前置（T-11.2、T-11.3）。语句中 goal-54～goal-56 提供的符号与测试插件只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-11.2、T-11.3）。语句中 goal-54～goal-56 提供的符号与测试插件只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-57（切片 T-11.4：工具与会话的验收）。goal 目录 goal-57，分支 goal-57，worktree .worktrees/goal-57，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4079,14 +4239,14 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 - 提交：cmd/alonabot/t11_e2e_test.go。
 - 本地自测（不提交，PR 中写明结果）：在 -race 下重复运行矩阵若干次无偶发失败。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：Agent 组件的工具循环（T-12.3）；管理页面（T-09.9）。
 ```
 
 ### goal-60 · T-12.3 工具循环与 MCP
 
-状态：等待前置（T-11.2、T-12.2）。语句中 goal-54、goal-55、goal-58、goal-59 提供的符号（sdk.ListTools、sdk.InvokeTool、sdk.ConfirmOperation、provider 的 Tool/ToolCall/ToolResult、agent 的一轮对话与 Config.MCPServers）只写名字；合并后由审查者核对，再改为可派发。本切片获授权引入已批准的 github.com/modelcontextprotocol/go-sdk（docs/development.md 只授权给 goal-60）。
+状态：等待前置（T-11.2、T-12.2）。语句中 goal-54、goal-55、goal-58、goal-59 提供的符号（sdk.ListTools、sdk.InvokeTool、sdk.ConfirmOperation、provider 的 Tool/ToolCall/ToolResult、agent 的一轮对话与 Config.MCPServers）只写名字；合并后由审查者核对，再改为待派发。本切片获授权引入已批准的 github.com/modelcontextprotocol/go-sdk（docs/development.md 只授权给 goal-60）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-60（切片 T-12.3：工具循环与 MCP）。goal 目录 goal-60，分支 goal-60，worktree .worktrees/goal-60，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4130,7 +4290,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 ### goal-61 · T-12.4 Agent 的记忆
 
-状态：等待前置（T-08.5、T-11.2、T-12.2）。语句中 goal-19、goal-32、goal-54、goal-59 提供的符号（sdk.JSONService 与 Tool 选项、gormdb.Open、agent 的一轮对话）只写名字；合并后由审查者核对，再改为可派发。2026-10-28 按 D-60 改写：记忆并入 Agent，不再有 sdk/memory 与记忆插件。
+状态：等待前置（T-08.5、T-11.2、T-12.2）。语句中 goal-19、goal-32、goal-54、goal-59 提供的符号（sdk.JSONService 与 Tool 选项、gormdb.Open、agent 的一轮对话）只写名字；合并后由审查者核对，再改为待派发。2026-10-28 按 D-60 改写：记忆并入 Agent，不再有 sdk/memory 与记忆插件。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-61（切片 T-12.4：Agent 的记忆）。goal 目录 goal-61，分支 goal-61，worktree .worktrees/goal-61，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4166,68 +4326,11 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 不做：技能（T-12.5）；定时任务（T-12.6）；向量检索或外部记忆后端。
 ```
 
-### goal-82 · T-16.2 按钮、多轮等待、schedule 与示例测试
-
-状态：等待前置（T-03.8、T-05.4、T-07.2、T-16.1）。语句中 goal-8、goal-24、goal-52、goal-81 提供的符号（Button.core_token 与 button.clicked 的派发、调度器的运行入口、core.wait 的等待状态、plugintest 与 inproc.Harness）只写名字；合并后由审查者核对签名，再改为可派发。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-82（切片 T-16.2：按钮、多轮等待、schedule 与示例测试）。goal 目录 goal-82，分支 goal-82，worktree .worktrees/goal-82，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
-
-目标：plugintest 支持对已发送按钮的点击、多轮等待中的注入、立即触发一次 schedule 与读取分发链之外的后台发送；用套件为示例插件编写提交的集成测试；docs/development.md 补充「插件测试」一节；在 TEST-MATRIX §3.2 记录 V-73 的证据。
-
-依据：PLAN T-16 步骤 3、4 与「失败停止条件」；CONTRACTS §17、§2.4、§4.3、§8（后台 Send 的准入）、MESSAGE-MODEL §6.3 的按钮 token 规则；DECISIONS D-47；TEST-MATRIX V-73。
-
-范围（只新增或修改这些）：
-- plugintest/：Click、Trigger、Background 与等待状态的处理
-- plugintest/internal/probe/：增加按钮、多轮等待、schedule 与后台发送的用例路由
-- internal/inproc/harness.go：Outcome 增加 Waiting；Harness 增加 Trigger
-- 根包：把调度器的立即运行入口接到 Harness.Trigger（只加调用点）
-- internal/core/router/：Handler 进入 core.wait 时也调用分发结束回调（只加调用点）
-- internal/core/ 中 goal-24 的调度器：没有立即运行一次的入口时增加一个（只加函数，复用正常的运行槽、期限与跳过重叠规则）
-- examples/plugins/ 下的示例：为合并时已有的 echo、media 与命令示例各新增一个 *_test.go（用 plugintest）
-- docs/development.md：新增「插件测试」一节（本切片获授权修改这一节）
-- spec/TEST-MATRIX.md §3.2：追加 T-16 的证据行（本切片获授权修改这一处；其他 spec 文件不改）
-允许的新跨模块边：examples/plugins/... -> plugintest（仅测试代码，ARCHITECTURE 已登记）。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. internal/inproc
-   Outcome 增加 Waiting bool // Handler 进入多轮等待，分发链尚未结束
-   Harness 增加 Trigger func(ctx context.Context, pluginID, jobID string) (runID string, err error) // 由根包设置；在调用结束后返回
-   Dispatch 增加 RunID string // schedule 调用结束时设置，SourceEventID 为空
-2. plugintest（在 goal-81 上追加）
-   Outcome 增加 Waiting bool
-   func (h *Harness) Click(from User, sent Sent, actionID string) Result // 在 sent.Chain 的 buttons 中按 action_id 找到按钮，以其 core_token 交付 button.clicked；找不到时 t.Fatal
-   func (h *Harness) Trigger(root sdk.Root, jobID string) Result       // 立即运行该插件的一次 schedule，调用结束后返回期间的发送记录
-   func (h *Harness) Background() []Sent                                // 返回并清空不属于任何一次注入的发送记录，按发生顺序
-
-行为：
-- 等待：Router 在某条分发链的 Handler 进入 core.wait 时，以 Waiting=true 的 Outcome 调用分发结束回调；Message 与 Click 收到它后返回。之后对同一会话与用户的 Message 按普通注入处理，Core 按等待键把它交给等待中的 Handler，该 Handler 的后续发送属于这次注入的结果。
-- Click：button.clicked 的 Actor 为 from，Target 为 sent 的 Target，origin_platform_message_id 为 sent 的消息 ID；token 过期、插件代次变化或权限不足时由 Core 照常拒绝，结果中没有发送，Outcomes 为空。
-- Trigger：经 Harness.Trigger 运行一次，走与定时触发相同的运行槽、15 分钟期限与跳过重叠规则；同 job 正在运行时返回该错误并 t.Fatal。返回这次调用期间的发送记录与 Outcome。
-- Background：注入与 Trigger 之外发生的发送（例如插件在 OnReady 中启动的后台任务）进入后台记录。后台 Send 仍经 Core 的 Target 准入：没有 Allow 时结果为 PERMISSION_DENIED。
-- 示例测试：每个示例至少覆盖它的主要命令或事件，以及一条失败路径（权限、参数错误或 UNSUPPORTED）；不依赖 time.Sleep。
-- 文档：「插件测试」一节给出最小示例（Start、Text、断言 Sent）、各选项的用途、不跳过 Core 检查的说明，以及运行命令 go test -race ./...。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：plugintest/plugintest_test.go 追加：
-  - 按钮：/menu 发送带两个按钮的消息；Click 第一个按钮得到对应回复；另一个用户 Click 同一按钮也得到回复（按点击者鉴权）；按钮对应的 action 要求 Core Admin 时，普通用户 Click 没有回复。
-  - 多轮等待：/ask 询问后 Message 立即返回，Outcomes 中有 Waiting；同一用户回答后得到确认回复；另一个用户的消息不被等待中的 Handler 消费。
-  - schedule：probe 注册的 job 发送到 Allow 过的测试实例，Trigger 返回一条 Sent；未 Allow 时该发送为 PERMISSION_DENIED。
-  - 后台：probe 的 OnReady 启动的后台发送出现在 Background 中，读取后清空。
-  - go test -race -count=2 ./plugintest/... ./examples/... 两遍都通过。
-- 证据：TEST-MATRIX §3.2 追加一行，写明覆盖的场景、命令、平台与 Go 版本。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Click 找不到 action_id；同 job 重叠时的 Trigger；等待超时后再次注入按普通消息处理。
-
-完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./plugintest/... ./examples/... ./internal/core/... ./internal/inproc/...；go test -race . ；go build ./...；node scripts/check-repository.mjs。
-
-不做：模拟时钟或缩短 schedule 的周期（只提供立即运行）；WebUI 沙盒（v0.1 之外）；为 Adapter 作者提供的测试工具。
-```
-
-## 第 12 波
+## 第 15 波
 
 ### goal-41 · T-09.6 唯一提交点与激活门禁
 
-状态：等待前置（T-07.5、T-09.5）。语句中 goal-27、goal-40 提供的符号（journal.Orchestrator 与 Result、supervisor 的激活与接入点、host 的 Degraded）只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-07.5、T-09.5）。语句中 goal-27、goal-40 提供的符号（journal.Orchestrator 与 Result、supervisor 的激活与接入点、host 的 Degraded）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-41（切片 T-09.6：唯一提交点与激活门禁）。goal 目录 goal-41，分支 goal-41，worktree .worktrees/goal-41，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4273,7 +4376,7 @@ internal/core/journal
 
 ### goal-62 · T-12.5 技能
 
-状态：等待前置（T-12.3）。语句中 goal-59、goal-60 提供的符号（agent 的 Config.SkillsDir、工具目录与循环）只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-12.3）。语句中 goal-59、goal-60 提供的符号（agent 的 Config.SkillsDir、工具目录与循环）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-62（切片 T-12.5：技能）。goal 目录 goal-62，分支 goal-62，worktree .worktrees/goal-62，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4305,7 +4408,7 @@ internal/core/journal
 
 ### goal-63 · T-12.6 定时 Agent 任务
 
-状态：等待前置（T-07.2、T-08.5、T-12.3）。语句中 goal-24、goal-32、goal-55、goal-59、goal-60 提供的符号（ScheduleRegistry.Every、gormdb.Open、sdk.ConfirmOperation、Agent 的一轮对话与工具循环、contracts/schedule）只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-07.2、T-08.5、T-12.3）。语句中 goal-24、goal-32、goal-55、goal-59、goal-60 提供的符号（ScheduleRegistry.Every、gormdb.Open、sdk.ConfirmOperation、Agent 的一轮对话与工具循环、contracts/schedule）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-63（切片 T-12.6：定时 Agent 任务）。goal 目录 goal-63，分支 goal-63，worktree .worktrees/goal-63，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4345,11 +4448,11 @@ internal/core/journal
 不做：打包与 T-12 验收（T-12.7）；任务的管理页面。
 ```
 
-## 第 13 波
+## 第 16 波
 
 ### goal-42 · T-09.7 崩溃恢复、回退与回收
 
-状态：等待前置（T-09.6）。语句中 goal-33、goal-39～goal-41 提供的符号（journal 的阶段与 Abort、state.CommitCandidate、candidate 的 PrepareDatabase/Discard、manage.Candidates.Rollback、secret.Collect）只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-09.6）。语句中 goal-33、goal-39～goal-41 提供的符号（journal 的阶段与 Abort、state.CommitCandidate、candidate 的 PrepareDatabase/Discard、manage.Candidates.Rollback、secret.Collect）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-42（切片 T-09.7：崩溃恢复、回退与回收）。goal 目录 goal-42，分支 goal-42，worktree .worktrees/goal-42，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4395,14 +4498,14 @@ internal/core/state
   - Collect 不删除保留代次与 Active，删除失败候选的残留。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：Recover 对每个 Journal 阶段的分支；保留代次的淘汰顺序；Collect 对 Pending 引用的保护。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：管理页面（T-09.8）；外部数据的备份工具（由管理员处理）。
 ```
 
 ### goal-43 · T-09.8 Admin 管理页
 
-状态：等待前置（T-09.6、T-08.7、T-09.12）。语句中 goal-34、goal-36、goal-39～goal-41、goal-84 提供的符号（web/admin 的工程与组件、adminauth 的登录接口、manage 的 HTTP API、Admin API 参考与 WebUI 的提供）只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-09.6、T-08.7、T-09.12）。语句中 goal-34、goal-36、goal-39～goal-41、goal-84 提供的符号（web/admin 的工程与组件、adminauth 的登录接口、manage 的 HTTP API、Admin API 参考与 WebUI 的提供）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-43（切片 T-09.8：Admin 管理页）。goal 目录 goal-43，分支 goal-43，worktree .worktrees/goal-43，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4442,7 +4545,7 @@ internal/core/state
 
 ### goal-64 · T-12.7 官方 Agent 组件打包与 T-12 验收
 
-状态：等待前置（T-12.4、T-12.5、T-12.6、T-12.8）。语句中 goal-38、goal-58～goal-63、goal-83 提供的命令与符号（plugin pack、Agent 组件、mcptest、模拟 Provider）只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-12.4、T-12.5、T-12.6、T-12.8）。语句中 goal-38、goal-58～goal-63、goal-83 提供的命令与符号（plugin pack、Agent 组件、mcptest、模拟 Provider）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-64（切片 T-12.7：官方 Agent 组件打包与 T-12 验收）。goal 目录 goal-64，分支 goal-64，worktree .worktrees/goal-64，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4471,16 +4574,16 @@ internal/core/state
 - 提交：cmd/alonabot/t12_e2e_test.go。
 - 本地自测（不提交，PR 中写明结果）：Agent 组件的 plugin check 与 pack（当前平台）；若维护者提供了 Provider 凭证，另附一次手动运行记录，不写入提交的测试。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：发行归档与预装（T-14.3、T-14.4）。
 ```
 
-## 第 14 波
+## 第 17 波
 
 ### goal-44 · T-09.9 Admin 配置、权限、工具策略与插件页
 
-状态：等待前置（T-09.8、T-11.1、T-11.3）。语句中 goal-13、goal-29、goal-31、goal-34、goal-39、goal-43、goal-53～goal-56、goal-26 提供的符号（policy 的覆盖与 Admin 方法、config.Service、secret.Redact、ConfigForm、manage API、web/admin 页面框架、i18n 的默认 locale、tool.Catalog、conversation.Service、webhost 的票据）只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-09.8、T-11.1、T-11.3）。语句中 goal-13、goal-29、goal-31、goal-34、goal-39、goal-43、goal-53～goal-56、goal-26 提供的符号（policy 的覆盖与 Admin 方法、config.Service、secret.Redact、ConfigForm、manage API、web/admin 页面框架、i18n 的默认 locale、tool.Catalog、conversation.Service、webhost 的票据）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-44（切片 T-09.9：Admin 配置、权限、工具策略与插件页）。goal 目录 goal-44，分支 goal-44，worktree .worktrees/goal-44，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4533,7 +4636,7 @@ internal/core/state
 
 ### goal-66 · T-09.10 日志管理与日志页
 
-状态：等待前置（T-02.1、T-03.1、T-09.8）。语句中 goal-2、goal-39、goal-43、goal-65（logging 的 Output、Levels、Source）提供的符号只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-02.1、T-03.1、T-09.8）。语句中 goal-2、goal-39、goal-43、goal-65（logging 的 Output、Levels、Source）提供的符号只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-66（切片 T-09.10：日志管理与日志页）。goal 目录 goal-66，分支 goal-66，worktree .worktrees/goal-66，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4595,7 +4698,7 @@ internal/core/state
 
 ### goal-73 · T-14.3 发行归档
 
-状态：等待前置（T-03.10、T-09.3、T-12.7、T-14.1、T-14.2、T-15.2）。语句中 goal-38 提供的命令（plugin pack 与 --key）与各官方插件、Telegram 与 OneBot 11 Adapter 的目录只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-03.10、T-09.3、T-12.7、T-14.1、T-14.2、T-15.2）。语句中 goal-38 提供的命令（plugin pack 与 --key）与各官方插件、Telegram 与 OneBot 11 Adapter 的目录只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-73（切片 T-14.3：发行归档）。goal 目录 goal-73，分支 goal-73，worktree .worktrees/goal-73，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4626,16 +4729,16 @@ internal/core/state
 - 提交：scripts/dist/dist_test.go：用临时 Ed25519 密钥只为当前平台运行一次（--platforms 当前平台），检查归档结构（alonabot 与 packages/ 下每个官方包的三个文件）、每个 release.json 验签通过、两次运行的归档字节相同、构建出的 alonabot 内置的公钥等于测试公钥（经一个只读的 version 输出或测试钩子）。
 - 本地自测（不提交，PR 中写明结果）：五个平台的完整构建（交叉编译，只验证产物生成，不在其他平台运行）。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./scripts/... ./internal/...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./scripts/... ./internal/...；go build ./...。
 
 不做：首次运行的预装（T-14.4）；容器镜像（T-14.5）；发布到 GitHub Releases（T-10.4）。
 ```
 
-## 第 15 波
+## 第 18 波
 
 ### goal-45 · T-09.11 正式流程故障注入与 T-09 验收
 
-状态：等待前置（T-09.3、T-09.7、T-09.9、T-09.10、T-09.12）。语句中 goal-38～goal-44、goal-66、goal-84 提供的命令与 API 只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-09.3、T-09.7、T-09.9、T-09.10、T-09.12）。语句中 goal-38～goal-44、goal-66、goal-84 提供的命令与 API 只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-45（切片 T-09.11：正式流程故障注入与 T-09 验收）。goal 目录 goal-45，分支 goal-45，worktree .worktrees/goal-45，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4669,14 +4772,14 @@ internal/core/state
 - 提交：cmd/alonabot/t09_e2e_test.go 与 scripts/scenarios。
 - 本地自测（不提交，PR 中写明结果）：在 -race 下重复运行崩溃点场景若干次无偶发失败。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：五平台运行与发布（T-10）；新的产品功能（只做验收与必要的缺陷修复，修复需在 PR 中逐条说明）。
 ```
 
 ### goal-74 · T-14.4 首次运行与预装
 
-状态：等待前置（T-09.6、T-14.3）。语句中 goal-39、goal-41、goal-73 提供的符号（manage.Service、serve、trust.Official、发行归档结构）只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-09.6、T-14.3）。语句中 goal-39、goal-41、goal-73 提供的符号（manage.Service、serve、trust.Official、发行归档结构）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-74（切片 T-14.4：首次运行与预装）。goal 目录 goal-74，分支 goal-74，worktree .worktrees/goal-74，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4717,7 +4820,7 @@ internal/core/state
 
 ### goal-77 · T-14.5 容器镜像
 
-状态：等待前置（T-07.3、T-14.3）。语句中 goal-25、goal-73 提供的符号（settings 的 listen 校验、scripts/dist）只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-07.3、T-14.3）。语句中 goal-25、goal-73 提供的符号（settings 的 listen 校验、scripts/dist）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-77（切片 T-14.5：容器镜像）。goal 目录 goal-77，分支 goal-77，worktree .worktrees/goal-77，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4743,14 +4846,14 @@ internal/core/state
 - 提交：internal/core/settings 的测试追加：有与没有 ALONABOT_CONTAINER 时 listen 缺省值与校验的差异，以及 WARN。
 - 本地自测（不提交，PR 中写明结果）：在有 Docker 的机器上 buildx 构建两个平台（写明 Docker 版本）；干净卷无 TTY 启动被拒；-it admin-token init 后正常启动并能访问 http://127.0.0.1:7650；容器内进程的 UID 为 10001；镜像文件列表只有 alonabot、packages/ 与 CA 证书；出站 HTTPS 可用；docker stop 后插件进程全部退出。没有 Docker 环境时以上各项写「未运行」。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/...；go build ./...。
 
 不做：推送镜像到 ghcr.io（T-10.4）；Kubernetes 清单。
 ```
 
 ### goal-85 · T-14.7 install.sh
 
-状态：待编写（前置 T-14.3）。依据 D-64 新增；T-14.3 合并后由审查者按实际的发行归档与 SHA256SUMS 写出范围和测试段。
+状态：等待前置（T-14.3）。语句只写了目标、依据和要点。依据 D-64 新增；T-14.3 合并后由审查者按实际的发行归档与 SHA256SUMS 写出范围和测试段。
 
 目标：deploy/install.sh 按 CONTRACTS §15.6 在 Linux（systemd，root）与 macOS（launchd，当前用户）上安装 Core 与官方组件：下载并按 SHA256SUMS 校验发行归档，校验失败不改动已有安装；替换程序目录；尚无管理凭证时经 /dev/tty 运行 admin-token init，没有终端时不启动服务并输出初始化命令；写入 systemd 单元（系统用户 alonabot）或用户 LaunchAgent 并启动；再次运行即升级，`--uninstall` 保留数据目录；不支持的系统在改动前退出。Release 流程上传 install.sh 与 SHA256SUMS。
 
@@ -4761,11 +4864,11 @@ internal/core/state
 - 下载地址的基址可由环境变量覆盖，供本地 Release 模拟服务测试；测试与真实安装都不写入开发机的系统目录之外的位置。
 - V-84 需要真实的 systemd Linux 与 macOS；容器内的 systemd 与模拟环境的结果单独记录，不算真实结果。
 
-## 第 16 波
+## 第 19 波
 
 ### goal-75 · T-14.6 发行包与镜像端到端验收
 
-状态：等待前置（T-09.11、T-14.4、T-14.5）。语句中 goal-43、goal-44、goal-73、goal-74、goal-77 提供的产物与入口（发行归档、容器镜像、WebUI 页面、管理 API）只写名字；合并后由审查者核对，再改为可派发。
+状态：等待前置（T-09.11、T-14.4、T-14.5）。语句中 goal-43、goal-44、goal-73、goal-74、goal-77 提供的产物与入口（发行归档、容器镜像、WebUI 页面、管理 API）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-75（切片 T-14.6：发行包与镜像的端到端验收）。goal 目录 goal-75，分支 goal-75，worktree .worktrees/goal-75，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
@@ -4797,12 +4900,12 @@ internal/core/state
 - 提交：cmd/alonabot/t14_e2e_test.go；deploy/e2e。
 - 本地自测（不提交，PR 中写明结果）：在有 Docker 的机器上运行容器部分；没有 Docker 时写「未运行」。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：五平台运行（T-10.2）；发布（T-10.4）；新的产品功能（只做验收与必要修复，修复逐条说明）。
 ```
 
-## 第 17 波
+## 第 20 波
 
 ### goal-46 · T-10.1 证据汇总与跨组件联验
 
@@ -4811,7 +4914,7 @@ internal/core/state
 ```text
 /goal 使用 $alonabot-execute 推进 goal-46（切片 T-10.1：证据汇总与跨组件联验）。goal 目录 goal-46，分支 goal-46，worktree .worktrees/goal-46，从最新 origin/main 创建。开始前完整读取 goals.md「所有 goal 的共同约束」。
 
-目标：汇总 V-01～V-76 与 V-82～V-84 的证据，逐项标记已通过、失败、未运行或待联验；补齐组件之间的联验（首次管理登录 → 安装启用 → 配置/权限 → 真实消息 → 插件 HTTP → 重载/升级/回退，TCP 与 stdio）；用不同的真实插件二进制覆盖各能力组合；执行协议、权限、资源边界与完整恢复的故障注入，核对数据库内容与权威指针。
+目标：汇总 V-01～V-76 与 V-82～V-87 的证据，逐项标记已通过、失败、未运行或待联验；补齐组件之间的联验（首次管理登录 → 安装启用 → 配置/权限 → 真实消息 → 插件 HTTP → 重载/升级/回退，TCP 与 stdio）；用不同的真实插件二进制覆盖各能力组合；执行协议、权限、资源边界与完整恢复的故障注入，核对数据库内容与权威指针。
 
 依据：PLAN T-10 步骤 1～4 与「停止和失败条件」；TEST-MATRIX 全部；CONTRACTS §12.4。
 
@@ -4832,12 +4935,12 @@ internal/core/state
 - 提交：cmd/alonabot/t10_e2e_test.go。
 - 本地自测（不提交，PR 中写明结果）：完整测试套件在 -race 下运行一次的总耗时与结果。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；node scripts/check-repository.mjs；TEST-MATRIX 中没有「待联验」的条目。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；TEST-MATRIX 中没有「待联验」的条目。
 
 不做：五平台运行（T-10.2）；资源报告（T-10.3）；发布（T-10.4）。
 ```
 
-## 第 18 波
+## 第 21 波
 
 ### goal-47 · T-10.2 五平台构建与运行
 
@@ -4900,12 +5003,12 @@ internal/core/state
 - 提交：基准程序本身是交付物，不另提交测试；负载生成器的本地自测在 PR 中写明。
 - 运行记录：原始数据附在 PR 中（是否提交到 bench/results/ 由维护者决定）。
 
-完成条件：gofmt -l 无输出；go vet ./...；go build ./...；一次完整基准运行的结果；node scripts/check-repository.mjs。
+完成条件：gofmt -l 无输出；go vet ./...；go build ./...；一次完整基准运行的结果。
 
 不做：性能优化（发现问题时另行处理）；修改 V-74 的预算（需维护者在 DECISIONS 记录）；为吞吐与延迟设定通过阈值（契约不设）。
 ```
 
-## 第 19 波
+## 第 22 波
 
 ### goal-49 · T-10.4 发布资产与说明
 
@@ -4936,7 +5039,7 @@ internal/core/state
 - 提交：scripts/release-check（验收程序）。
 - 运行记录：release-check 对候选资产的运行结果附在 PR 中。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；release-check 对候选资产通过；node scripts/check-repository.mjs；TEST-MATRIX 没有未处理的失败条目。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；release-check 对候选资产通过；TEST-MATRIX 没有未处理的失败条目。
 
 不做：执行正式签名与发布（维护者负责）；v0.1 之后的路线图。
 ```

@@ -27,4 +27,4 @@ description: 修改 AlonaBot 文档、AGENTS/CLAUDE 或仓库技能时使用；�
 
 ## 完成检查
 
-运行 `node scripts/check-repository.mjs` 和 `git diff --check`，检查技能 frontmatter/UI YAML、相对链接及相关锚点；检查器不联网、不验证锚点或注释语义，必要时人工核对。技能可用现有校验器验证，缺工具先报告，不自动安装依赖。普通文档任务不启动产品实现、发布或整库重构。
+运行 `git diff --check`，并人工核对技能 frontmatter/UI YAML、相对链接及相关锚点。技能可用现有校验器验证，缺工具先报告，不自动安装依赖。普通文档任务不启动产品实现、发布或整库重构。
