@@ -25,7 +25,7 @@ type installation struct {
 	AdapterID   string `gorm:"column:adapter_id"`
 }
 
-func (installation) TableName() string { return "installs" }
+func (installation) TableName() string { return "install" }
 
 type generation struct {
 	GenerationID   string `gorm:"column:generation_id;primaryKey"`
@@ -36,7 +36,7 @@ type generation struct {
 	CommittedAt    *int64 `gorm:"column:committed_at"`                    // NULL 表示尚未提交
 }
 
-func (generation) TableName() string { return "generations" }
+func (generation) TableName() string { return "generation" }
 
 type pluginState struct {
 	PluginID         string         `gorm:"column:plugin_id;primaryKey"`
@@ -53,7 +53,7 @@ type pendingConfig struct {
 	UpdatedAt      int64  `gorm:"column:updated_at;autoUpdateTime:false"` // 毫秒，保留显式零值
 }
 
-func (pendingConfig) TableName() string { return "pending_configs" }
+func (pendingConfig) TableName() string { return "pending_config" }
 
 type adapterCursor struct {
 	InstanceID string `gorm:"column:instance_id;primaryKey"`
@@ -62,14 +62,14 @@ type adapterCursor struct {
 	UpdatedAt  int64  `gorm:"column:updated_at;autoUpdateTime:false"` // 毫秒
 }
 
-func (adapterCursor) TableName() string { return "adapter_cursors" }
+func (adapterCursor) TableName() string { return "adapter_cursor" }
 
 type adapterPermission struct {
 	PluginID          string `gorm:"column:plugin_id;primaryKey"`
 	AdapterInstanceID string `gorm:"column:adapter_instance_id;primaryKey"`
 }
 
-func (adapterPermission) TableName() string { return "plugin_adapter_permissions" }
+func (adapterPermission) TableName() string { return "plugin_adapter_permission" }
 
 type conversationEntry struct {
 	PluginID        string `gorm:"column:plugin_id;primaryKey"`
@@ -79,4 +79,4 @@ type conversationEntry struct {
 	CreatedAt       int64  `gorm:"column:created_at;autoCreateTime:false"` // 毫秒
 }
 
-func (conversationEntry) TableName() string { return "conversation_entries" }
+func (conversationEntry) TableName() string { return "conversation_entry" }
