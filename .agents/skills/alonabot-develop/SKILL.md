@@ -9,7 +9,7 @@ description: 实现、诊断、重构或设计 AlonaBot 的 Go 代码时使用�
 
 ## 确定责任和完成条件
 
-读取根 [AGENTS.md](../../../AGENTS.md)、[编码规范](../../../docs/coding-standards.md)、[架构地图](../../../ARCHITECTURE.md) 和 [PLAN](../../../spec/PLAN.md) 对应 T 工作包及失败停止条件。检查分支、基线、已有 diff、调用者与测试；Git 写操作使用独立 worktree，遵循 [贡献流程](../../../CONTRIBUTING.md) 的授权边界。
+读取根 [AGENTS.md](../../../AGENTS.md)、[编码规范](../../../docs/coding-standards.md)、[架构地图](../../../ARCHITECTURE.md) 和 [PLAN](../../../spec/PLAN.md) §3.1 所指章节实施计划中对应的 T 工作包及失败停止条件。检查分支、基线、已有 diff、调用者与测试；Git 写操作使用独立 worktree，遵循 [贡献流程](../../../CONTRIBUTING.md) 的授权边界。
 
 对 Bug 先追踪输入、责任层和可复现失败；对新行为明确使用者、可观察结果和兼容性影响。若契约冲突，先按 spec 的维护流程解决，不改测试或文档来迁就未接受的行为。
 

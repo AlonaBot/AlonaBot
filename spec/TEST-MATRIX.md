@@ -24,7 +24,7 @@
 | V-14 | T-05 | 两种Handler签名、自定义Rule false/error、Stop后error、自动型调用Send | HandlerOutcome能表达matched/propagation；显式Stop不被error清掉；自动非空回复只发一次，自动型Send明确拒绝 |
 | V-15 | T-05、T-06 | PreEvent改身份/按钮任务绑定、BeforeSend拒绝/改链、AfterSend失败、Hook经Service递归Send | 身份/Target及已验证路由绑定不可改；每次Send一组Hook；错误不伪造成功或改变已获平台确认事实；直接和间接递归都被拒绝 |
 | V-16 | T-05、T-07 | scheduled 没有 Actor、插件伪造 is_admin、按钮/消息编辑等事件 | 无 Actor 无默认 Admin；仅可信 Adapter/Core 赋予身份；未支持事件明确返回能力缺失 |
-| V-17 | T-06 | Event Bus 的插件离线/队列溢出/慢订阅者 | 离线不积压、不补发；到固定上限丢弃并计数；其他订阅者不被阻塞 |
+| V-17 | T-06 | Event Bus 的插件离线/队列溢出/慢订阅者与同 Session 请求隔离 | 离线不积压、不补发；到固定上限丢弃并计数；其他订阅者不被阻塞 |
 | V-18 | T-06 | A→B→C Service、A→B→A 循环、两条独立并发调用链 | 嵌套调用正确返回；同链重复插件时 CALL_CYCLE；两独立链互不误判 |
 | V-19 | T-06 | Service JSON Schema、错误 encoding/未知版本、缺授权、声明版本大于 1 的服务 | 不受支持的编码/Schema、超限 payload、跨插件不授权均返回明确错误且不运行目标函数；版本不符返回 INVALID_ARGUMENT 后调用方 Session 仍可继续调用；声明版本大于 1 的服务按该版本正常调用 |
 | V-20 | T-07 | 长短任务、五字段cron/IANA时区/夏令时、interval、离线和重叠 | 不同job并发；同job跳过重叠；漏tick不补；触发按固定起点与真实时间；非法语法注册失败 |
@@ -50,8 +50,8 @@
 | V-40 | T-09 | install首次enable、restart/reload区别、pin、uninstall重装与显式rollback | 首次创建Active；restart仅新Session；卸载保留数据/来源且仅同来源可重装；pin持久化；rollback建立新代次/DB副本且不复活旧按钮，external 数据不假装通用恢复 |
 | V-41 | T-01、T-09 | 外部release清单签名、归档摘要、来源/公钥变化、无签名本地包 | 对确切字节验签；无自包含摘要循环；所有身份/平台错误停机前拒绝；签名失败不降级本地信任 |
 | V-42 | T-02、T-06 | Request计数满、字节满、缓冲满、嵌套Send/Service与Cancel并发、Request发送前取消 | 超额明确失败；Response/控制仍有进展；无阻塞等待自己额度；Cancel不超越自己的Request；Event Bus 256条/4MiB双界限计数并drop-newest |
-| V-43 | T-04、T-05、T-09 | Core Admin与chat_admin、组禁用/子项启用、子权限放宽、运行时改策略 | 群管理员不取得Core管理权；父禁用优先；最近显式权限可覆盖但不能绕过全局限制；已开始请求不伪称撤销 |
-| V-44 | T-03 | 入站媒体惰性Read、多Session共享、越界offset/配额/过期、owner退出 | 不预下载所有图；不泄BotToken/路径；首次取件校验后读取；有效租约保护共享对象；错误不制造MediaRef/空成功 |
+| V-43 | T-04、T-05、T-09 | 权限名集合（`user`、`admin`、`chat_admin` 与 Adapter 权限）、组禁用/子项启用、子权限放宽、运行时改策略、策略引用未安装 Adapter 的权限 | 平台权限与 `chat_admin` 不满足 `admin`，`admin` 不自动满足其他权限名；未安装 Adapter 的权限名不被满足且在诊断中标出；父禁用优先；最近显式权限可覆盖但不能绕过全局限制；已开始请求不伪称撤销 |
+| V-44 | T-03 | 入站媒体惰性Read、多Session共享、越界offset/配额/过期、owner退出、首个读取者取消、未声明 `media.read` 的实例、超出原 token 范围的发送 Target | 不预下载所有图；不泄BotToken/路径；首次取件校验后读取；有效租约保护共享对象；错误不制造MediaRef/空成功；一次取件失败不影响之后的读取；未声明能力时 readability 为 UNSUPPORTED；越界 Target 在平台发送前被拒 |
 | V-45 | T-03 | getMe账号重复、webhook/401/409、allowed_updates/匿名身份、私聊/回复机器人/提及机器人时的 to_me、实例代理与全局代理、代理连接失败、游标提交崩溃及7天空闲ID重置 | 冲突报管理状态、不擅自删webhook；逐条持久游标后非持久派发；显式订阅成员/Reaction且核对权限；匿名sender_chat不伪造User；7天空闲重建轮次不沿用旧高offset；允许丢失边界明确 |
 | V-46 | T-07 | job超时后callback继续执行、迟到Response、RPC断链但进程未退出 | 超时结果先返回但running不释放；无重叠/补跑；实际callback返回或进程确认退出才释放；迟到成功不改超时 |
 | V-47 | T-07、T-09 | 首次管理token/离线reset、登录/CLI、同端口两个Host、代理身份头伪造、单Host主动内容 | 插件host不可访问Admin API；admin Cookie/Authorization不传入插件；Host/CSRF/内部认证检查生效；首次能登录，reset撤销旧会话/票据；单Host不执行插件主动内容 |
@@ -80,9 +80,9 @@
 | V-70 | T-14 | linux/amd64 与 linux/arm64 镜像、干净卷首次运行、无 TTY 启动、`-it admin-token init`、端口只发布到宿主本机、停止容器 | 镜像只含 `alonabot`、`packages/` 与 CA 证书并以 UID 10001 运行；无 TTY 时拒绝启动并提示初始化；初始化后正常启动并能访问 WebUI；出站 HTTPS 可用；没有 `ALONABOT_CONTAINER` 时 `0.0.0.0` 搭配 http Base URL 被拒绝；停止容器后插件进程全部退出 |
 | V-71 | T-15 | 本地 OneBot 11 模拟服务：get_login_info、access_token 错误、断线重连、self_id 不符、字符串格式上报、私聊/群聊/匿名消息、撤回与成员变动、to_me 的三种情况（含 get_msg 失败）、入站图片取件、实例队列满；发送混合段、video 拆分、reference、base64 媒体、async、failed、请求写出后断线 | 401 与字符串格式使实例致命失败并给出 safe_error；重连不重放已提交的 Send；self_id 不符的事件被丢弃；匿名消息没有 Actor；无通用对应的段只在 platform_payload 中；队列满时丢弃并计数而读循环继续；PartResult 与物理消息一一对应，async 标记 message_ids_unavailable，写出后断线为 UNKNOWN 且后续 NOT_ATTEMPTED；真实 QQ 端只有维护者手测记录，没有时记为未运行 |
 | V-72 | T-03、T-15 | 同一插件经 Telegram 与 OneBot 11 模拟服务的两个实例收发同一组 Chain：纯文本、mention、reference、图片加文本、buttons、forward、file、markdown、Edit、`onebot11.face` extension、发往其他 Adapter 的 extension；同一组入站消息 | 通用片段在两边语义一致：顺序、引用位置、PartResult 与 segment indexes 对应；每个实例只用自己声明的 Capability，未声明的片段或组合在首个平台请求前返回 UNSUPPORTED，模拟服务没有收到请求；extension 只在所属 Adapter 上成功；入站的 text、mention、reference、image 在两边得到相同结构的 chain；插件代码不按 adapter_id 分支 |
-| V-73 | T-13、T-16 | 用 `plugintest` 测试示例插件：命令回复、Rule、普通用户/chat_admin/Core Admin 的权限、Capability 子集下的 UNSUPPORTED、按钮点击、多轮等待、schedule 触发、后台发送有无许可、配置与 `dev.sqlite`；`go test -count=2 -race`；`alonabot.Start` 的激活失败与 ctx 取消 | 每次注入在分发结束或进入多轮等待后返回，结果完整，不依赖 sleep；行为与独立进程运行相同；测试之间的数据目录互不影响；Start 失败或停止后不残留组件 goroutine、core.lock 与子进程 |
+| V-73 | T-13、T-16 | 用 `plugintest` 测试示例插件：命令回复、Rule、普通用户/平台权限/Core Admin 的权限、Capability 子集下的 UNSUPPORTED、按钮点击、多轮等待、schedule 触发、后台发送有无许可、配置与 `dev.sqlite`；`go test -count=2 -race`；`alonabot.Start` 的激活失败与 ctx 取消 | 每次注入在分发结束或进入多轮等待后返回，结果完整，不依赖 sleep；行为与独立进程运行相同；测试之间的数据目录互不影响；Start 失败或停止后不残留组件 goroutine、core.lock 与子进程 |
 | V-74 | T-10 | linux/amd64，与 V-33 同一台机器；各进程 Activated 后空闲 2 分钟，读 `/proc/<pid>/smaps_rollup` 的 Pss，取 3 轮中位数：只运行 Core（不启用任何插件与 Adapter）；echo 示例插件进程；rss 插件进程（`sqlitedb`，有一个订阅）；configdb 示例的 `gormdb` 变体进程 | Core ≤ 24 MiB，echo ≤ 10 MiB，rss ≤ 14 MiB，configdb ≤ 16 MiB；同时记录 RSS 与私有内存。超出视为回归，按 CONTRACTS §10 处理 |
-| V-75 | T-01、T-10 | `node scripts/check-go-deps.mjs`：在五个目标上列出 Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）链接的模块；临时加入一个清单外的 import | 只含允许清单中的模块；清单外的模块使检查失败并列出模块名 |
+| V-75 | T-01、T-10 | 用 docs/development.md 的 `go list -deps` 命令，在五个目标上（设 GOOS/GOARCH）列出 Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）链接的模块 | 只含 docs/development.md 允许清单中的模块 |
 | V-76 | T-12 | 测试插件调用 `llm.generate`：在与不在 `llm_service_allowed_plugins` 中、指定不存在的 Provider、模拟 Provider 出错与中途断开、调用方期限短于生成耗时、Agent 配置中没有 Provider、Agent 组件未启用、调用方经 `@agent` 调用 | 不在列表中返回 PERMISSION_DENIED，模拟服务没有收到请求；不存在的 Provider 为 INVALID_ARGUMENT，没有 Provider 为 FAILED_PRECONDITION；出错与断开为 UNAVAILABLE，safe_message 不含 API Key，模拟服务只收到一次请求；期限到达时调用方得到 DEADLINE_EXCEEDED；Agent 未启用时按目标未激活失败；`@agent` 解析到已安装的 Agent 组件；成功时返回 text、provider、model 与用量，会话存储没有新增条目 |
 | V-77 | S-01、S-02 | 插件声明可休眠且空闲达到阈值后退出；休眠后首条命令、Service 调用与 HTTP 请求；同一插件 100 个并发唤醒；等待中取消与 deadline 到达；STOPPING 期间到达请求；唤醒后 REGISTER 的路由摘要与快照不一致；在途 Handler、Service、HTTP、多轮等待阻止休眠；Core 重启后从快照恢复路由；未启用休眠 | 首条请求按原权限、Target、Trace 与 deadline 交付一次；并发唤醒只产生一个新 Session；冷启动不延长请求期限，取消的请求不交付；停止中到达的请求等旧进程退出后由新 Session 处理，没有双进程；摘要不一致时停止激活；空闲退出记 `SUSPENDED`、StopReason 为 `IDLE`，不计入异常退出，不更新 ActiveGeneration、不重跑迁移；快照不含 Secret；未启用时生命周期与事件行为不变 |
 | V-78 | S-03 | 休眠插件上 12:00、16:00、22:00 三个 cron 任务与一个 interval 任务；同一 job 上一轮未结束；插件异常离线期间到期 | 休眠插件按计划被唤醒并执行，结果记录后可再次休眠；同一 job 不重叠；异常离线期间的 tick 跳过且不补执行 |
@@ -92,6 +92,9 @@
 | V-82 | T-09、T-12 | 已安装官方 Agent、WebUI 与 Telegram Adapter 时，不带与带 `--replace` 安装同类的社区组件（本地签名的测试包与本地 Release 模拟服务）、新组件预检失败、替换后 update、`@agent` 调用、按原来源重装旧组件、两个不同 `adapter_id` 的 Adapter | 不带 `--replace` 返回 ALREADY_EXISTS 并列出已安装的组件；预检失败时旧组件不受影响；替换在确认后卸载旧组件并保留其数据与来源绑定，新组件沿用旧组件的启用状态，被替换 Adapter 的实例不出现在新 Adapter 下；之后 update 只查询新来源；`@agent` 调用到达新 Agent；旧组件可按原来源重装并复用数据；不同 `adapter_id` 的 Adapter 可以并存 |
 | V-83 | T-08、T-09 | WebUI 组件：已启用、未安装、Admin API 主版本不在声明范围内、前端路由路径、`/api/` 与内部路径、带扩展名的不存在路径、库模式 `alonabot.WebUI`；图标：manifest 与表单选项声明的 SVG、PNG、WebP，未声明的包内文件、其他扩展名、含 `<script>` 的 SVG、未认证请求 | WebUI 文件来自不可变包目录，前端路由回退 `index.html`，`/api/` 不被覆盖，带扩展名的不存在路径返回 404；未安装返回 503 与提示；版本不兼容时拒绝安装与启用；图标只提供声明过的路径并带 sandbox CSP 与 nosniff，其他扩展名在包校验时拒绝，未认证返回 401；直接打开含脚本的 SVG 时脚本不在 Admin 源执行 |
 | V-84 | T-14 | 在真实 systemd Linux（root）与 macOS（当前用户）上：全新安装、`SHA256SUMS` 不一致、经管道运行且有与没有终端、再次运行升级、`--uninstall`、不支持的系统与没有 systemd 的 Linux | 校验失败时不改动已有安装；有终端时 token 只显示一次并启动服务，没有终端时不启动服务并输出初始化命令；升级保留数据目录、设置文件与已安装组件；卸载删除服务与程序目录并保留数据目录；不支持的系统在改动前退出；容器内的 systemd 与模拟环境不算真实结果 |
+| V-85 | T-03、T-04、T-15、T-16 | Adapter 权限声明：错误前缀、非法名称、隐含 `user`/`admin`、隐含成环；事件带未声明的权限名；OneBot 11 的 owner/admin/member，以及私聊的 friend 与 group 子类型；Telegram 的 creator/administrator、缓存作废与 `getChatAdministrators` 失败；`plugintest.Adapter` 声明的权限 | 非法声明使 Adapter 注册失败；未声明的权限名被丢弃并记诊断；隐含关系完整展开（群主同时满足群管理员与 `chat_admin`）；获取失败的事件不带平台权限；平台权限不跨会话 |
+| V-86 | T-04、T-16 | Adapter 扩展事件：声明与 Schema、未声明的名称、版本不符、payload 不符合 Schema；插件注册未安装 Adapter 的扩展事件路由；SDK 的事件常量与 Handler 参数类型不符；扩展事件遇到命令层与多轮等待 | 不符的事件被拒绝并记诊断；未安装时注册成功、诊断标出且不触发；参数类型不符在 `Collect` 时报错；扩展事件只进入事件路由 |
+| V-87 | T-04、T-08 | `command_prefixes` 的缺省值、多个前缀、空前缀与按实例覆盖；开头的 reference 与本账号 mention；`/kick @某人` 的 `user` 参数（OneBot 的 mention 与 Telegram 的 `text_mention`）、`image` 参数、末位 `message` 参数、非文本 token 出现在 string 位置；自定义 usage 文案键的语言选择 | 前缀按最长匹配，覆盖只作用于该实例；开头片段不影响命令匹配；参数按片段顺序绑定，类型不符时发一次 usage；usage 按调用者 locale 选择语言，未知键在构建检查中失败 |
 
 ## 2. 跨任务验收的最终闭合点
 
@@ -123,6 +126,7 @@
 | V-73 | T-13.1 `alonabot.Start`；T-16.1 套件基础 | T-16.2 按钮、多轮等待、schedule 与示例插件的测试 |
 | V-82 | T-03.8 manifest 角色解析；T-12.8 `@agent` 解析 | T-09.4 同类唯一、`--source` 与 `--replace` 的正式管理流程 |
 | V-83 | T-08.1 表单选项图标的构建检查；T-08.7 WebUI 用 `<img>` 显示图标 | T-09.12 WebUI 文件与图标的提供、Admin API 版本检查 |
+| V-85～V-87 | T-04.6 Core 侧校验、展开与命令解析；T-04.7 SDK 常量与类型核对；T-03.11、T-15.1 两个官方 Adapter 的平台权限 | T-16 用 `plugintest.Adapter` 覆盖依赖平台权限与扩展事件的路由；V-87 的 usage 语言选择随 T-08.8 完成 |
 
 T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前者可支持后续开发，真实平台部分仍由 T-10 查证。测试会话、无配置/无 DB 最小插件和 payload fixture 的范围必须写明，不可据此关闭生产认证或数据恢复用例。
 
@@ -184,6 +188,9 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 
 发布阻塞：协议/Session 鉴权、Core 全局权限、数据代次唯一性、回滚/维护的真实性、安装包越界/来源安全及目标五平台构建失败，均不能通过文案豁免。v0.1 只对空闲常驻内存设预算（V-74），初值依据 D-52 记录的实测数据；吞吐与延迟不设通过阈值，T-10 只报告 V-33 的实测结果；**不杜撰 100 MB 等硬性能指标**。
 | T-04.3（PR #47） | `internal/core/supervisor/command_test.go:TestCommandDispatchBothTransports` 经真实插件、Session、Router、Broker、message.Service 与内存 Adapter 验证 TCP/stdio：最长路径/别名、完整 token、@username、参数/usage/silent、文本统一排序/Raw/STOP、自动回复一次及命令派生 Service 的 parent_call_id、Actor、默认 Target；remote 与 Telegram 集成测试覆盖 D-67 用户名/展示名分离；忽略的本地测试覆盖注册拒绝、数值边界与 Unicode 折叠 | darwin/arm64、Go 1.27.3：格式、生成一致性、`go vet ./...`、`go test -race ./...`、`go build ./...` 通过。临时去掉 bindServiceContext 后两种传输均复现父上下文丢失，恢复后通过 | V-11/V-49 的命令分项通过；权限/禁用、Rule 及组合由后继切片验证。真实 Telegram 与其他 OS 运行未运行；CI 构建独立记录 |
+| T-07.4 / V-47 的组件分项 | [PR #53](https://github.com/AlonaBot/AlonaBot/pull/53)；`internal/core/supervisor/webhost_test.go` 的 `TestWebHostProcesses`（unix）：真实 Supervisor、SDK 与 httpplugin 进程，假 AdminSessions；plugin host 的 `/api/x` 与 admin host 的 `/plugins/` 均 404、未知 Host 421、私有路由未认证 401、票据兑换的 Cookie/303/`no-referrer`、重复兑换与 61s 过期被拒、原管理会话撤销后插件会话失效、Set-Cookie 与凭证 CORS 清理、单 Host 的 JSON/HTML/Accept/CSP 与缺失 MIME 不嗅探；`cmd/alonabot` 既有集成测试改为发送配置对应的 Host；PR 中另列本地 `*_local_test.go`（未提交），覆盖开放重定向、并发单次兑换、HTTP/HTTPS Cookie 名、流式响应与 Origin 端口规范化 | darwin/arm64、Go 1.27.1；[head 815b4df 的 Quality gate](https://github.com/AlonaBot/AlonaBot/actions/runs/41332541096) 通过；审查者在 head 上复跑 `go test -race -run TestWebHost ./internal/core/supervisor/`，并在合入 main（含 #57～#59）后的结果上复跑 `go build ./...`、`go vet ./...`、`go test -race -count=1 ./...` 通过。执行者首轮完整门禁中既有的 `TestNonCooperativePluginKilledAtDeadline` 出现一次 `Killed=true, Err=operation not permitted` 的失败（macOS，与本切片无关，未稳定复现，同类现象见 T-06.1 行） | 真实管理登录、admin-token/reset、CSRF 与浏览器端到端联验归 T-09；生产装配尚未提供 AdminSessions，私有插件路由仍一律 401；其他目标平台的实际运行未运行 |
+| T-06.3 / V-17 | [PR #56](https://github.com/AlonaBot/AlonaBot/pull/56)；`internal/core/supervisor/bus_test.go` 的 `TestBusProcesses`（unix）：TCP 与 stdio 下各启动 pub/fast/slow/stuck 四个真实 busplugin 进程（`-race` 构建），经 Supervisor 握手、REGISTER、激活与 `router.FromInstance` 接入；slow 写出受阻时 10 次 Publish 均成功、event_id 不重复，fast 按序收齐 1～10；slow 精确 Dropped=6，放行后只收到 1～4、Delivered=4；stuck 的 SDK 回调阻塞时控制 RPC 与其他订阅者照常推进，放行后串行处理 1～10；越权发布 `fast/x` 返回 PERMISSION_DENIED 且 Published 不变；同名事件按版本精确匹配；Detach 后离线发布不计数，重新启动后不补发旧事件；PR 中另列 wire、bus、sdk 的本地 `*_local_test.go`（未提交），覆盖预算准入与撤回、QueueBytes 边界、发送失败计数、串行与 release、ready/STOPPING 丢弃 | darwin/arm64、Go 1.27.1；PR head fe2c6d2 上 Quality gate 通过；审查者在 head 上复跑 `go test -race -count=1 ./internal/wire/... ./sdk/` 与 `-run TestBusProcesses ./internal/core/supervisor/`，并在合入 main（含 #53、#57～#59）后的结果上复跑 `go build ./...`、`go vet ./...`、`go test -race -count=1 ./...` 通过 | Session 清理与生产装配（含 `tune.Values` 的队列参数传入）归 T-06.4；SDK 接收上限的后续修复见下方补充验收；V-17 整体未闭合；其他目标平台的实际运行未运行 |
+| T-06.3 / V-17 补充 | `sdk/bus_test.go` 的 `TestSubscriptionBudgetPreservesRequests`：真实双 wire Session，首条回调阻塞时发送 20 条各略大于 1 MiB 的 EVENT，同 Session 的 2 MiB REQUEST 仍成功；放行后仅按序处理 a/b/c，再收到新事件 z，证明 drop-newest 与预算回收；wire 的 DroppedEvents 为 0，超额由 SDK 释放 | darwin/arm64、Go 1.27.1；`go test -race ./sdk/... ./internal/core/bus/... ./internal/core/broker/... ./internal/core/supervisor/... ./contracts/...`、`go vet ./...`、`go build ./...` 通过；以旧版 sdk/bus.go overlay 运行同一回归测试得到 RESOURCE_EXHAUSTED，修复后通过 | Core Session 清理与生产装配仍归 T-06.4；其他平台实际运行未运行 |
 
 ### 3.3 Target 与发信许可分项证据
 
@@ -199,6 +206,6 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 
 1. 采用 v0.6-review 技术基线，按 PLAN 的 T-01 开始；任务完成条件及部分验收的后续承接以详细工作包为准。
 2. 执行方确认 Go 编译器与目标 OS/arch CI 可用；源码、数据库、Telegram 凭证以及真实测试环境由授权范围决定。
-3. T-01→T-02→T-03→T-04→T-05 完成主链路，T-08 可在 T-04 后并行，T-06/T-07 在 T-05 后并行，T-11 在 T-06、T-08 后推进，T-12 在 T-11 后推进，T-13 在 T-04、T-08 后推进，T-09 待相关依赖完成再集成，T-14 在 T-09、T-12 后推进。切片级的前置以 PLAN §3.1 为准。
+3. T-01→T-02→T-03→T-04→T-05 完成主链路，T-08 可在 T-04 后并行，T-06/T-07 在 T-05 后并行，T-11 在 T-06、T-08 后推进，T-12 在 T-11 后推进，T-13 在 T-04、T-08 后推进，T-09 待相关依赖完成再集成，T-14 在 T-09、T-12 后推进。切片级的前置以各章节实施计划的切片表为准（章节见 PLAN §3.1）。
 4. 执行中发现契约缺口，先修对应契约、工作包和用例，在 adr/DECISIONS.md 记录原因；不能在代码中默默更改已接受的协议。
 

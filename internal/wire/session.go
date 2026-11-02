@@ -101,6 +101,9 @@ type Options struct {
 	Handler Handler
 	// Control 在读循环中同步处理非调用帧（控制帧与 EVENT），保证状态变化按帧顺序生效；返回错误关闭 Session。
 	Control func(*pb.Envelope) error
+	// Event 在读循环中接纳 EVENT，必须立即返回；处理结束后调用 release 归还载荷预算。
+	// 为 nil 时 EVENT 交给 Control；release 可重复调用。
+	Event func(env *pb.Envelope, release func())
 	// Admit 在读循环中同步决定是否接受对端的业务 REQUEST（阶段门禁）；返回非 nil 时直接回该错误，不执行 Handler。
 	// 必须在读循环中同步判断：状态变化（如 ACTIVATED）也在读循环中同步生效，帧顺序因此得到保证。
 	Admit  func(*Inbound) *pb.ErrorInfo
@@ -122,9 +125,10 @@ type Options struct {
 type Stats struct {
 	LateResponses  int64 // 迟到、重复或未知的 Response 数
 	UnknownCancels int64 // 找不到对应在途调用的 Cancel 数
+	DroppedEvents  int64 // 接收方向预算不足而丢弃的 EVENT 数
 }
 
-// callState 表示本端请求在写出方向上的进度，只前进不回退。
+// callState 表示本端业务帧在写出方向上的进度，只前进不回退。
 type callState int
 
 // 请求的写出状态。
@@ -135,16 +139,18 @@ const (
 	withdrawn                  // 写出前被结束，已移出队列，永不上线
 )
 
-// outCall 跟踪本端发起、尚未完成的一次调用。
+// outCall 跟踪本端发起的 REQUEST 或 EVENT；EVENT 只等待写出结果。
 type outCall struct {
 	id uint64 // 本端分配的调用编号
-	// 待写出的 REQUEST，由 Session.mu 保护；移出队列或写出后置 nil，不再持有载荷。
+	// 待写出的业务帧，由 Session.mu 保护；移出队列或写出后置 nil，不再持有载荷。
 	env      *pb.Envelope
 	deadline time.Time // 有效期限，子调用不能超过它
 	// Request.Attach，交给以本调用为父的子请求的 Handler。
 	attach any
 	// result 容量 1，只写一次。
 	result chan Response
+	// eventResult 非 nil 表示无业务回执的 EVENT；只通知写出结果，不登记到 pending。
+	eventResult chan error
 
 	// ctx 在调用存续期间有效，结束时取消（子调用以此派生）。
 	ctx context.Context
@@ -155,7 +161,7 @@ type outCall struct {
 
 	bytes int64 // 仍计入本方向与全局预算的载荷字节；归还后为 0，保证只归还一次
 	state callState
-	// finished 为 true 表示调用方已得到结果（已移出 pending）。
+	// finished 为 true 表示调用方已得到结果；REQUEST 同时移出 pending。
 	finished bool
 	// 写出过程中被本端放弃时，写完后发送 Cancel 的原因；UNSPECIFIED 表示不发。
 	cancelReason pb.CancelReason
@@ -182,9 +188,9 @@ type Session struct {
 	opt  Options          // 已补齐默认值的配置，创建后不变
 	peer pb.InitiatorSide // 对端身份，由 opt.Local 推出
 
-	// 优先通道：Response、Cancel 与控制帧，总是先于业务 Request 写出。
+	// 优先通道：Response、Cancel 与控制帧，先于业务 REQUEST/EVENT 写出。
 	priority chan priorityFrame
-	// bizSig 容量 1，有新业务 Request 入队时唤醒 writer。
+	// bizSig 容量 1，有新业务帧入队时唤醒 writer。
 	bizSig chan struct{}
 	// done 在 Session 关闭时关闭。
 	done chan struct{}
@@ -193,13 +199,14 @@ type Session struct {
 	mu     sync.Mutex
 	nextID uint64 // 本端最近分配的调用编号
 	lastIn uint64 // 对端最近的调用编号，用于检查单调递增
-	// 等待写出的业务 Request，按入队顺序排列，只含 queued 状态的调用。
+	// 等待写出的业务帧，按入队顺序排列，只含 queued 状态的发送。
 	biz      []*outCall
-	pending  map[uint64]*outCall // 本端发起、尚未完成的调用
-	inbound  map[uint64]*inCall  // 对端发起、尚未响应的调用
-	outBytes int64               // 本方向仍计入预算的载荷字节
-	inBytes  int64               // 对端方向在途的载荷字节
-	err      error               // 关闭原因；非 nil 表示 Session 已关闭
+	events   map[*outCall]struct{} // 尚未写完的 EVENT，由 mu 保护
+	pending  map[uint64]*outCall   // 本端发起、尚未完成的调用
+	inbound  map[uint64]*inCall    // 对端发起、尚未响应的调用
+	outBytes int64                 // 本方向仍计入预算的载荷字节
+	inBytes  int64                 // 对端方向在途的载荷字节
+	err      error                 // 关闭原因；非 nil 表示 Session 已关闭
 	// changed 在在途调用数变化时关闭并替换，唤醒 WaitIdle。
 	changed chan struct{}
 
@@ -207,6 +214,7 @@ type Session struct {
 	late atomic.Int64
 	// unknownCancel 计数找不到在途调用的 Cancel。
 	unknownCancel atomic.Int64
+	droppedEvents atomic.Int64
 	// closeOnce 保证关闭流程只执行一次。
 	closeOnce sync.Once
 }
@@ -244,6 +252,7 @@ func New(conn *Conn, opt Options) *Session {
 		bizSig:   make(chan struct{}, 1),
 		done:     make(chan struct{}),
 		pending:  map[uint64]*outCall{},
+		events:   map[*outCall]struct{}{},
 		inbound:  map[uint64]*inCall{},
 		changed:  make(chan struct{}),
 	}
@@ -274,7 +283,7 @@ func (s *Session) Close() error {
 
 // Stats 返回计数快照。
 func (s *Session) Stats() Stats {
-	return Stats{LateResponses: s.late.Load(), UnknownCancels: s.unknownCancel.Load()}
+	return Stats{LateResponses: s.late.Load(), UnknownCancels: s.unknownCancel.Load(), DroppedEvents: s.droppedEvents.Load()}
 }
 
 // envelope 构造本 Session 发出的帧外壳：协议版本、session_id，插件侧另填 source_plugin_id。
@@ -446,6 +455,98 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 	}
 }
 
+// SendEvent 在 Core 侧发送 EVENT，等待帧写出；事件与 REQUEST 共用业务 FIFO 和载荷预算。
+// ctx 在写出前结束时撤回帧；写出中结束时先返回，预算保留到 writer 完成。
+func (s *Session) SendEvent(ctx context.Context, target string, ev *pb.BusEvent) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.opt.Local != pb.InitiatorSide_INITIATOR_SIDE_CORE {
+		return callErr(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "only Core can send events")
+	}
+	env, err := s.controlEnvelope(pb.FrameKind_FRAME_KIND_EVENT, ev)
+	if err != nil {
+		return fmt.Errorf("encode BusEvent: %w", err)
+	}
+	env.Target = target
+	n := int64(len(env.Payload))
+	// 1. 事件只占字节预算，不占在途 Request 条数。
+	s.mu.Lock()
+	if s.err != nil {
+		s.mu.Unlock()
+		return callErr(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "session is closed")
+	}
+	if s.outBytes+n > s.opt.MaxBytes || !s.opt.Global.acquire(n) {
+		s.mu.Unlock()
+		return callErr(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "event payload budget is full")
+	}
+	c := &outCall{env: env, bytes: n, eventResult: make(chan error, 1)}
+	s.events[c] = struct{}{}
+	s.outBytes += n
+	s.biz = append(s.biz, c)
+	s.mu.Unlock()
+	s.signalBiz()
+	// 2. 只等唯一 writer 的结果；取消通知不产生 CANCEL 帧。
+	select {
+	case err := <-c.eventResult:
+		return err
+	case <-ctx.Done():
+		s.finishEvent(c, ctx.Err())
+		return <-c.eventResult
+	}
+}
+
+func (s *Session) finishEvent(c *outCall, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if c.finished {
+		return
+	}
+	c.finished = true
+	if c.state == queued {
+		s.unqueueLocked(c)
+		c.state = withdrawn
+		s.releaseLocked(c)
+		delete(s.events, c)
+	}
+	c.eventResult <- err // 容量为 1，结果仅由第一个结束者交付。
+}
+
+func (s *Session) writeEvent(c *outCall, env *pb.Envelope) {
+	err := s.write(env)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c.state, c.env = written, nil
+	s.releaseLocked(c)
+	delete(s.events, c)
+	if !c.finished {
+		c.finished = true
+		c.eventResult <- err
+	}
+}
+
+// receiveEvent 在读循环中只占预算并交接，业务处理和释放由 Event 回调负责。
+func (s *Session) receiveEvent(env *pb.Envelope) {
+	n := int64(len(env.Payload))
+	s.mu.Lock()
+	if s.inBytes+n > s.opt.MaxBytes || !s.opt.Global.acquire(n) {
+		s.mu.Unlock()
+		s.droppedEvents.Add(1)
+		return
+	}
+	s.inBytes += n
+	s.mu.Unlock()
+	var once sync.Once // 重复 release 只归还一次预算。
+	s.opt.Event(env, func() {
+		once.Do(func() {
+			s.mu.Lock()
+			s.inBytes -= n
+			s.mu.Unlock()
+			s.opt.Global.release(n)
+		})
+	})
+}
+
 // errorOf 把结果中的错误转为 *CallError；没有错误时返回 nil。
 func errorOf(r Response) error {
 	if r.Err != nil {
@@ -582,7 +683,7 @@ func (s *Session) signalBiz() {
 	}
 }
 
-// popBiz 取出队首请求并标记为正在写出；队列中只有尚未结束的调用。
+// popBiz 取出队首 REQUEST 或 EVENT 并标记为正在写出；队列中只有尚未结束的发送。
 func (s *Session) popBiz() (*outCall, *pb.Envelope) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -596,7 +697,7 @@ func (s *Session) popBiz() (*outCall, *pb.Envelope) {
 	return c, c.env
 }
 
-// writeLoop 作为唯一的写者运行：优先通道（Response/Cancel/控制）总是先于业务 Request 写出。
+// writeLoop 作为唯一的写者运行：优先通道（Response/Cancel/控制）先于业务 REQUEST/EVENT 写出。
 func (s *Session) writeLoop() {
 	for {
 		select {
@@ -608,7 +709,11 @@ func (s *Session) writeLoop() {
 		default:
 		}
 		if c, env := s.popBiz(); c != nil {
-			s.writeRequest(c, env)
+			if c.eventResult != nil {
+				s.writeEvent(c, env)
+			} else {
+				s.writeRequest(c, env)
+			}
 			continue
 		}
 		select {
@@ -691,6 +796,11 @@ func (s *Session) dispatch(env *pb.Envelope) error {
 		return s.onResponse(env)
 	case pb.FrameKind_FRAME_KIND_CANCEL:
 		return s.onCancel(env)
+	case pb.FrameKind_FRAME_KIND_EVENT:
+		if s.opt.Event != nil {
+			s.receiveEvent(env)
+			return nil
+		}
 	}
 	if s.opt.Control == nil {
 		return fmt.Errorf("unhandled frame kind %s", env.GetKind())
@@ -856,6 +966,10 @@ func (s *Session) fail(err error) {
 		for _, c := range s.pending {
 			pending = append(pending, c)
 		}
+		events := make([]*outCall, 0, len(s.events))
+		for c := range s.events {
+			events = append(events, c)
+		}
 		inbound := make([]*inCall, 0, len(s.inbound))
 		for _, in := range s.inbound {
 			inbound = append(inbound, in)
@@ -867,6 +981,9 @@ func (s *Session) fail(err error) {
 		// 3. 结束本端调用（排队中的请求随之移出队列），取消对端调用的 Handler。
 		for _, c := range pending {
 			s.complete(c, Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "session disconnected"}}, pb.CancelReason_CANCEL_REASON_UNSPECIFIED)
+		}
+		for _, c := range events {
+			s.finishEvent(c, callErr(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "session disconnected"))
 		}
 		for _, in := range inbound {
 			in.cancel()

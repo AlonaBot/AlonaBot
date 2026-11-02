@@ -34,6 +34,8 @@ type Root interface {
 	Events(*EventRegistry)
 	// Services 在 Collect 时调用一次，注册服务。
 	Services(*ServiceRegistry)
+	// Subscriptions 在 Collect 时调用一次，注册 Event Bus 订阅。
+	Subscriptions(*SubscriptionRegistry)
 	// HTTP 在 Collect 时调用一次，注册 HTTP 路由。
 	HTTP(*HTTPRegistry)
 	// Schedules 在 Collect 时调用一次，注册定时任务。
@@ -62,6 +64,9 @@ func (*Base) Events(*EventRegistry) {}
 
 // Services 默认不注册服务。
 func (*Base) Services(*ServiceRegistry) {}
+
+// Subscriptions 默认不订阅 Event Bus。
+func (*Base) Subscriptions(*SubscriptionRegistry) {}
 
 // HTTP 默认不注册 HTTP 路由。
 func (*Base) HTTP(*HTTPRegistry) {}

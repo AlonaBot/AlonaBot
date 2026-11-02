@@ -10,7 +10,7 @@
 | [plugin-guide.md](plugin-guide.md) | 插件作者的依赖、存储、日志、生命周期、协作与发布规则 | 插件作者规则；行为以 CONTRACTS 为准 |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | Issue、PR、Git 授权和 GitHub 自动化 | 贡献流程 |
 | [AGENTS.md](../AGENTS.md) | 项目维护技能与规格的按任务路由 | Agent 工作入口 |
-| [goals.md](../goals.md) | 可派发的切片 goal 语句与状态 | 派发入口 |
+| [goals/](goals/README.md) | 按章节分文件的切片 goal 语句与状态 | 派发入口 |
 | [execution-order.md](execution-order.md) | 并行派发、共享文件与合并顺序 | 并行约束 |
 
 按任务找文档：

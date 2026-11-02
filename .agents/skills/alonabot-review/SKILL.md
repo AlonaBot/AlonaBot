@@ -9,7 +9,7 @@ description: 审查 AlonaBot 工作区、commit 范围或 PR 时使用；分别�
 
 ## 固定对象
 
-检查 `git status -sb`、范围 diff/stat，记录 base/head SHA。PR 没有工作区 diff 不表示分支没有改动。读取原始需求、对应 [PLAN 工作包](../../../spec/PLAN.md)、[架构地图](../../../ARCHITECTURE.md) 和 [编码规范](../../../docs/coding-standards.md)。未获修复授权时不改源文件。
+检查 `git status -sb`、范围 diff/stat，记录 base/head SHA。PR 没有工作区 diff 不表示分支没有改动。读取原始需求、对应 [PLAN](../../../spec/PLAN.md) 所指章节实施计划中的工作包、[架构地图](../../../ARCHITECTURE.md) 和 [编码规范](../../../docs/coding-standards.md)。未获修复授权时不改源文件。
 
 ## 分开审查两条轴
 
@@ -23,12 +23,12 @@ description: 审查 AlonaBot 工作区、commit 范围或 PR 时使用；分别�
 
 审查者在合并前按以下顺序检查；合并授权和合并条件见 [贡献流程「角色与合并」](../../../CONTRIBUTING.md#角色与合并)。
 
-1. 记录 PR 的 base/head 完整 SHA，读取当前 head 的检查结果。读 goals.md 中该 goal 的语句和 PR 正文：核对 PR 没有偏离语句，每个 task 的证据与 commit 对得上。切片卡 `goal-N/` 被 git 忽略，只留在执行者本地，需要时向执行者索取。
+1. 记录 PR 的 base/head 完整 SHA，读取当前 head 的检查结果。读 docs/goals/ 中该 goal 的语句和 PR 正文：核对 PR 没有偏离语句，每个 task 的证据与 commit 对得上。切片卡 `goal-N/` 被 git 忽略，只留在执行者本地，需要时向执行者索取。
 2. 读完整 diff，按上面两条轴审查。超出语句「范围」的修改、语句没要求的接口或功能、注释里的阶段编号都算问题。
 3. 针对语句中的行为要点和 PLAN 该工作包的失败停止条件，自己写临时测试（`*_local_test.go` 或 `tmp/test/`）实际运行，试着让它在这些条件下出错。只读代码或只看 CI 通过，不能下结论。
 4. 有问题时用 `gh pr review --request-changes` 提出，每条意见对应一个 FIX，写明位置、触发条件、影响和期望的修复，由执行者修复。审查者不替执行者改产品代码，只推送切片状态和证据记录。
-5. 全部通过后，在 PR 分支上把 PLAN §3.1 的状态改为「已完成」，补上 PR 正文「文档同步」列出的内容，等 CI 在新 head 上通过，再按贡献流程合并，并确认 `main` 的 CI 结果。
-6. 合并后，按实际代码修订 goals.md 中依赖它的 goal：补全接口段，把前置都已完成的 goal 改为「可派发」。
+5. 全部通过后，在 PR 分支上把所属章节实施计划切片表中的状态改为「已完成」，补上 PR 正文「文档同步」列出的内容，等 CI 在新 head 上通过，再按贡献流程合并，并确认 `main` 的 CI 结果。
+6. 合并后，按实际代码修订 docs/goals/ 中依赖它的 goal（可能在其他章节）：补全接口段，把前置都已完成的 goal 改为「待派发」。
 
 ## 输出可执行结论
 

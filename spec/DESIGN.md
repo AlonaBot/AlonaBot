@@ -60,10 +60,18 @@ TCP 为默认，Core 持有 loopback 端口 0 分配的 Listener；stdio 可选�
 type RSS struct { sdk.Base }
 
 func (p *RSS) Commands(r *sdk.CommandRegistry) {
-    r.Group("rss", func(g *sdk.CommandGroup) {
-        g.Command("list", p.List)
-        g.Command("add", p.Add)
-    })
+    g := r.Group("rss")
+    g.Command("list").Handle(p.List)
+    g.Command("add").
+        Args("url").
+        Permission(sdk.Admin.Or(sdk.ChatAdmin)).
+        Handle(p.Add)
+}
+
+func (p *RSS) Events(r *sdk.EventRegistry) {
+    r.On("poke", obevent.Poke). // OneBot 11 Adapter 声明的扩展事件
+        Rule(sdk.ToMe()).
+        Handle(p.Poke)
 }
 
 func (p *RSS) List(c *sdk.Context) (message.Chain, error) {
@@ -75,9 +83,16 @@ func (p *RSS) Add(c *sdk.Context, url string) error {
     _, err := c.Send(message.Chain{message.Text("已收到订阅请求")})
     return err
 }
+
+func (p *RSS) Poke(c *sdk.Context, e *obevent.PokePayload) error {
+    _, err := c.Send(message.Chain{message.Text("别戳啦")})
+    return err
+}
 ```
 
-两类 Handler 保留：返回 `(Chain,error)` 的自动回复型成功时由 Core 发一次非空 Chain；返回 `error` 的主动发送型可多次 Send。自动回复型内部调用 Send 返回 FAILED_PRECONDITION。`c.StopPropagation()` 锁存传播结果，由 SDK 统一编码到 HandlerOutcome；不会给开发者增加第三套 Handler 签名。
+注册采用链式构建（D-70）：命令、文本匹配、事件与 Service 各由注册器的方法开始，`Handle` 结束；漏写 `Handle` 是注册错误。分组上设置的权限由组内路由继承。Permission 是不可变的值，用 `Or` 组合，满足其中任一即可（D-69）；Rule 是在 SDK 内执行的 Go 函数，`Rule(...)` 多个时全部满足，`sdk.Any` 表示任一。事件常量带 payload 的 Go 类型，`Collect` 核对 Handler 的参数类型；Adapter 的常量包（例如 `adapters/onebot11/perm`、`adapters/onebot11/event`）只含常量与数据类型，插件导入它们不链接 Adapter 的运行时。插件 API 不暴露生成的 pb 类型，Message、Target、Actor、SendResult 与错误码由 SDK 自己定义。
+
+两类 Handler 保留：返回 `(Chain,error)` 的自动回复型成功时由 Core 在 Handler 返回后发一次非空 Chain；两种 Handler 都可以在内部多次 `c.Send`（D-70）。包级 `sdk.Send` 只供没有 Handler 上下文的后台任务使用。`c.StopPropagation()` 锁存传播结果，由 SDK 统一编码到 HandlerOutcome；不会给开发者增加第三套 Handler 签名。
 
 Handler 调用受普通请求期限约束，返回后不能再以原上下文工作。需要等待用户回复或较长时间生成时，Handler 请求一次延续调用：Core 在本次调用结束后，以原可信上下文另发一个独立期限的调用，它不占用分发链（CONTRACTS §2.4）。多轮等待只在延续调用内使用：
 
@@ -105,11 +120,11 @@ Target 明确 Adapter、实例、账号、聊天和可选话题；没有真实�
 
 普通命令按完整 token 路径最长匹配，再以 priority/plugin_id/route_id 选稳定胜出者；已识别的禁用、无权限、参数错误命令不回落 Regex/Raw/短路径。没有普通命令才按文本匹配（Regex、keyword、startswith、endswith、fullmatch）→Raw 处理，支持停止传播。跨插件同名命令在诊断中显示遮蔽关系，不由启动顺序决定。
 
-Core 命令 Admin 是按 Adapter 实例与外部用户 ID 配置的机器人管理员；平台群管理员只形成 chat_admin Rule，不自动取得 Core 管理权限。命令树取最近显式权限策略，允许子命令放宽或收紧，但所有层的禁用和 Core 全局禁止始终生效。每次派发前读取当前策略，已开始调用不宣称可撤销。
+路由权限是一组权限名，满足任一即可（D-69）：Core 内置 `user`、`admin`（按 Adapter 实例与外部用户 ID 配置的机器人管理员）与 `chat_admin`，Adapter 另行声明自己的平台权限，例如 QQ 的群主与群管理员。平台权限只在该会话有效，不自动取得 Core 管理权限。命令树取最近显式权限策略，允许子命令放宽或收紧，但所有层的禁用和 Core 全局禁止始终生效。每次派发前读取当前策略，已开始调用不宣称可撤销。
 
 ## F. 事件管道：Hook、Rule 和传播
 
-同一 Event 只有一条按固定顺序推进的普通 Handler 链，不同事件并发。入站 `Normalize → PreEvent → Match/Permission → Rule/Handler`；SDK 可在一次 Handler RPC 内先执行自定义 Go Rule，False 返回 matched=false。
+同一 Event 只有一条按固定顺序推进的普通 Handler 链，不同事件并发。入站 `Normalize → PreEvent → Match/Permission → Rule/Handler`；Permission 由 Core 在派发前判定，管理员可以覆盖；SDK 在一次 Handler RPC 内先执行自定义 Go Rule（例如 `ToMe`），False 返回 matched=false。
 
 priority 数字小的先执行，同值按稳定 plugin_id/route_id 排序。业务错误记录并继续普通事件分发；显式 Stop 优先，命令被识别后的拒绝不进入其他匹配类别。PreEvent 仅可修改允许的业务 payload/停止普通传播，不能改 Core 保存的身份、Target、按钮/任务绑定或来源。
 
@@ -226,7 +241,7 @@ v0.1 只支持 Telegram long polling，先确定实际 bot 身份并校验 accou
 
 最小逻辑分层为 contracts、plugin SDK、Core 和 plugin CLI；contracts 不依赖具体平台 SDK/GORM，数据库作为按需 SDK 包。使用标准 Go 编译、Protocol Buffers、标准 HTTP 代理及选定驱动，不引入额外容器运行时、服务发现或迁移平台。
 
-**按需付费**（D-52）：Core 与 SDK 根包只链接允许清单中的模块，模型 SDK、Provider 客户端、MCP、外部数据库驱动与 GORM 一律放在需要它们的插件或按需 SDK 包里；没有安装或没有启用的组件不运行进程。Core 与示例插件的空闲常驻内存有预算（TEST-MATRIX V-74），依赖检查在 CI 中执行（V-75）。插件作者的对应规则见 [插件开发规范](../docs/plugin-guide.md)。
+**按需付费**（D-52）：Core 与 SDK 根包只链接允许清单中的模块，模型 SDK、Provider 客户端、MCP 与外部数据库驱动一律放在需要它们的插件或按需 SDK 包里；GORM 由 Core 状态库使用（D-68），插件仍只在导入 `sdk/gormdb` 时链接；没有安装或没有启用的组件不运行进程。Core 与示例插件的空闲常驻内存有预算（TEST-MATRIX V-74），依赖由审查用 `go list -deps` 核对（V-75）。插件作者的对应规则见 [插件开发规范](../docs/plugin-guide.md)。
 
 CLI/API 的完整管理动作与包协议见 CONTRACTS §9。Core 状态库记录安装序号/来源、ActiveGeneration、Journal、权限、回调与配置引用；业务库由插件负责。所有状态变更通过同一个 Core 管理服务串行化，离线 CLI 不能绕过仍运行的 Core 直接改状态库。
 
