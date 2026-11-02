@@ -41,7 +41,7 @@ go test ./...
 go build ./...
 ```
 
-Telegram、LLM Provider、浏览器和目标平台的测试单独记录环境与命令；缺少真实环境时不能用普通测试结果替代。Core 可执行文件与 SDK 根包链接的模块由 `node scripts/check-go-deps.mjs` 对照允许清单检查（V-75，CI 的 Go job 执行）。每个任务先验证直接变更及其边界，再做工作包要求的集成检查。
+Telegram、LLM Provider、浏览器和目标平台的测试单独记录环境与命令；缺少真实环境时不能用普通测试结果替代。Core 可执行文件与 SDK 根包链接的模块由审查时用 `go list -deps` 对照允许清单核对（V-75）。每个任务先验证直接变更及其边界，再做工作包要求的集成检查。
 
 ## 3. 任务依赖与交付次序
 
@@ -117,6 +117,7 @@ flowchart TD
 | --- | --- | --- | --- | --- | --- | --- |
 | T-02.1 | goal-65 | 日志基线：Core 与 SDK 改用注入的 slog Logger，控制台与 JSON 格式、来源标签、插件 stderr 的 JSON 解析与非结构化行、panic 堆栈、Bootstrap 下发级别与进程内过滤、`--log-level`/`--log-format`、不输出 Bootstrap 与配置明文；按日期轮转的日志文件与保留上限 | T-02 步骤 9 | T-02 | V-62、V-63 的级别过滤分项、V-68 的写入与轮转分项 | 已完成，darwin/arm64 运行通过（TEST-MATRIX §3.1） |
 | T-02.2 | goal-76 | 调优参数：`internal/tune` 参数表，把现有常量迁入；`--args` 的直接参数与文件输入、校验与相互约束、启动 WARN、`alonabot tune list`；`SessionLimits session_limits = 11`（max_inflight、max_payload_bytes、request_timeout_ms）；`GOMEMLIMIT` 软上限 | T-02 步骤 10 | T-02.1 | V-69 | 已完成，darwin/arm64 运行通过（TEST-MATRIX §3.2） |
+| T-02.3 | goal-86 | 状态库改用 GORM：现有各表的读写改为 GORM 模型，经 `libtnb/sqlite` 复用同一单连接，schema 仍由唯一的初始迁移定义，锁、PRAGMA 核对与损坏不重建的行为不变 | T-02 步骤 11 | T-02 | V-36 的状态库分项与现有状态库集成测试的回归、V-75 | 未开始 |
 | T-03.1 | goal-2 | 首个可用 SDK 切片：事件路由注册、Context/Send、业务分发；Core 的 Adapter 实例接口、内存 Adapter、固定服务 mux、事件派发与 `core.send`；echo 插件经真实 REGISTER/ACTIVATED 后收发 | T-03 步骤 1 | T-02.1、T-02.2 | V-07、V-08 的 SDK 分项，V-62 的 Handler 分项 | 已完成（PR #29；TEST-MATRIX §3.2） |
 | T-03.2 | goal-3 | Target 与最小授权：`allowed_adapter_instances` 持久化、显式 To、后台 Send、逐次发送准入、NO_DEFAULT_TARGET、Core 内部许可读写入口 | T-03 步骤 3 | T-03.1 | V-07 | 已完成（PR #31；TEST-MATRIX §3.3） |
 | T-03.3 | goal-4 | Adapter 进程与 `sdk/adapter`：Adapter 角色的注册校验、实例启停、`adapter.send`、事件交付与游标持久化、事件归属校验、账号唯一；实例上下线时生成 `bot.online`/`bot.offline`；回环测试 Adapter | T-03 步骤 2 | T-03.1 | V-48 的进程与实例分项、V-51 | 已完成（PR #32；TEST-MATRIX §3.2） |
@@ -127,24 +128,27 @@ flowchart TD
 | T-03.8 | goal-8 | 按钮 token 与回调路由；extension 片段的声明与校验；manifest 的 `role`（plugin/adapter/agent/webui）、`adapter_id`、`icon`、`adapter_dependencies`、`plugin_dependencies` 与 WebUI 字段的解析，开发入口的依赖检查 | T-03 步骤 7 | T-03.2、T-03.7 | V-08 的按钮分项、V-48 的依赖分项、V-52 的解析分项 | 未开始 |
 | T-03.9 | goal-51 | 消息编辑：`core.edit`、`adapter.edit`、Telegram editMessageText、`message.edit` 能力、出站 Hook 的 edit 输入 | T-03 步骤 6（编辑） | T-03.7 | V-53 | 未开始 |
 | T-03.10 | goal-9 | 开发入口（`alonabot run` 同时启动 Adapter 与插件，实例配置取自 `adapters/<adapter_id>/instances/`），echo/media 示例与发送接收故障矩阵，汇总证据 | T-03 步骤 8 | T-03.6、T-03.8、T-03.9 | V-07、V-08、V-09、V-35、V-44、V-45、V-48、V-51～V-54 的 T-03 分项；真实 Telegram 需要测试账号 | 未开始 |
+| T-03.11 | goal-89 | 官方 Telegram Adapter 的平台权限：`telegram.chat_owner`/`telegram.chat_admin` 的声明、`getChatAdministrators` 的会话缓存与作废、获取失败时不带权限，`adapters/telegram/perm` 常量包 | T-03 步骤 9 | T-04.6 | V-85 的 Telegram 分项 | 未开始 |
 | T-04.1 | goal-10 | 根插件 API 与显式注册；静态注册索引、重复拒绝、跨插件遮蔽的稳定选择 | T-04 步骤 1、3 | T-03.1 | V-10 的注册分项、V-02 的注册原子性 | 已完成（PR #34；TEST-MATRIX §3.2） |
 | T-04.2 | goal-11 | 构建期生成器 `sdk/generate`：限定扫描范围、build tags、生成注册代码、稳定输出；`cmd/alonabot` 的构建检查入口 | T-04 步骤 2 | T-04.1 | V-10 | 已完成（PR #42；TEST-MATRIX §3.2） |
 | T-04.3 | goal-12 | 命令选择与参数绑定：完整 token、@username、最长路径/别名→文本匹配（Regex、keyword、startswith、endswith、fullmatch）→Raw、消费状态、参数语法、usage/silent | T-04 步骤 4 | T-04.1 | V-11 的命令分项、V-49 | 已完成（PR #47；TEST-MATRIX §3.2） |
-| T-04.4 | goal-13 | 持久化命令策略与管理服务层：继承、禁用、全局禁止、下一次派发生效 | T-04 步骤 5 | T-03.2、T-04.1 | V-12、V-43 的服务层分项 | 未开始 |
-| T-04.5 | goal-14 | 用同一 SDK 升级示例，完成构建与策略验收，汇总证据 | T-04 步骤 6、7 | T-03.10、T-04.2、T-04.3、T-04.4 | V-10、V-11、V-12、V-43、V-49 的 T-04 分项 | 未开始 |
+| T-04.4 | goal-13 | 持久化命令策略与管理服务层：继承、禁用、全局禁止、下一次派发生效 | T-04 步骤 5 | T-03.2、T-04.1、T-04.6 | V-12、V-43 的服务层分项 | 未开始 |
+| T-04.5 | goal-14 | 用同一 SDK 升级示例，完成构建与策略验收，汇总证据 | T-04 步骤 6、7 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7 | V-10、V-11、V-12、V-43、V-49 的 T-04 分项 | 未开始 |
+| T-04.6 | goal-87 | 权限、扩展事件与命令解析的协议和 Core 侧：proto 修改与生成；Adapter 权限与扩展事件声明的校验；平台权限的保留与隐含展开、按权限名集合判定；扩展事件的交付校验；`command_prefixes` 与按实例覆盖、去掉开头的 reference 与本账号 mention、非文本 token 与 `user`/`image`/`message` 参数、usage 文案键 | T-04 步骤 8 | T-03.3、T-03.6、T-04.3 | V-85、V-86、V-87 的 Core 分项 | 未开始 |
+| T-04.7 | goal-88 | SDK 链式注册与自有类型：命令、文本匹配、事件、Service 与 Event Bus 订阅的 builder，Permission 值对象，事件常量与 `sdk.AdapterEvent`，Service Schema 由生成器生成，SDK 自有的 Message/Target/Actor/SendResult/错误码，自动回复型可 `c.Send`；生成器、示例与已合并调用方同步 | T-04 步骤 9 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | V-10、V-14 与 V-86 的 SDK 分项 | 未开始 |
 | T-05.1 | goal-15 | 可信事件上下文与有界同事件分发：64 条并发链、256 条/8 MiB 等待队列、稳定候选排序、链执行与读循环分离；经回环测试 Adapter 运行，按钮与 scheduled 绑定先用规范 fixture | T-05 步骤 1、2 | T-03.3、T-04.3、T-04.4 | V-13、V-16 的 fixture 分项 | 未开始 |
-| T-05.2 | goal-16 | SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支 | T-05 步骤 3、4 | T-05.1 | V-14、V-11 的 Rule 分项 | 未开始 |
+| T-05.2 | goal-16 | SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支 | T-05 步骤 3、4 | T-05.1、T-04.7 | V-14、V-11 的 Rule 分项 | 未开始 |
 | T-05.3 | goal-17 | PreEvent/BeforeSend/AfterSend 三阶段 Hook，send_forbidden 的保存与继承 | T-05 步骤 5、6 | T-05.2 | V-15 的直接路径分项 | 未开始 |
 | T-05.4 | goal-52 | 延续调用与多轮等待：`core.continuation.start`、`core.wait`、等待键与消费、超时与 Session 失效；SDK 的 `Continue` 与 `Wait` | T-05 步骤 7 | T-05.2 | V-50 | 未开始 |
 | T-05.5 | goal-18 | 多进程事件流水线验收（含真实按钮回调与多轮等待），汇总证据 | T-05 步骤 8 | T-03.8、T-05.3、T-05.4 | V-11、V-13～V-16、V-43、V-49、V-50 的 T-05 分项 | 未开始 |
 | T-06.1 | goal-19 | Service/Bus 描述与编码校验、SDK 入口；Broker 定位与准入 | T-06 步骤 1、2 | T-04.1 | V-19 | 已完成（PR #45；TEST-MATRIX §3.2） |
 | T-06.2 | goal-20 | 父调用链上下文传播、循环与深度检查、跨段取消与背压 | T-06 步骤 3、4 | T-03.6、T-05.3、T-06.1 | V-18、V-42 的嵌套分项 | 未开始 |
-| T-06.3 | goal-21 | 非持久 Event Bus：发布准入、逐订阅者 256 条/4 MiB 队列、drop-newest 计数 | T-06 步骤 5 | T-06.1 | V-17 | 未开始 |
+| T-06.3 | goal-21 | 非持久 Event Bus：发布准入、逐订阅者 256 条/4 MiB 队列、drop-newest 计数 | T-06 步骤 5 | T-06.1 | V-17 | 已完成 |
 | T-06.4 | goal-22 | Session 变更时的清理与计数，A/B/C 端到端验收（含 Hook→Service→Send），汇总证据 | T-06 步骤 6、7 | T-06.2、T-06.3 | V-15、V-17、V-18、V-19、V-42 | 未开始 |
 | T-07.1 | goal-23 | interval/五字段 cron/IANA 时区/夏令时的表达式校验与下一次触发计算（纯计算包 `contracts/schedule`，Core 与官方 Agent 组件共用） | T-07 步骤 2 | T-02 | V-20 的计算分项 | 已完成（TEST-MATRIX §3.2） |
 | T-07.2 | goal-24 | schedule 注册校验，运行槽与调度调用：独立 run_id、15 分钟期限、同 job 跳过重叠、迟到响应与断链 | T-07 步骤 1（schedule）、3 | T-05.1、T-07.1 | V-20、V-46、V-16 和 V-05 的 scheduled 分项 | 未开始 |
 | T-07.3 | goal-25 | HTTP 注册校验，SDK 托管 HTTP Listener 与 Core Session 代理映射；Core 设置文件 `alonabot.yaml` 的读取、缺省值与命令行覆盖 | T-07 步骤 1（HTTP）、4、5 | T-04.1 | V-22 的组件分项 | 已完成（PR #46；TEST-MATRIX §3.2） |
-| T-07.4 | goal-26 | 两个 Host 的边界、插件兑换票据与插件会话 | T-07 步骤 6 | T-07.3 | V-47 的组件分项 | 未开始 |
+| T-07.4 | goal-26 | 两个 Host 的边界、插件兑换票据与插件会话 | T-07 步骤 6 | T-07.3 | V-47 的组件分项 | 已完成 |
 | T-07.5 | goal-27 | 统一启停与清理，时间、进程和 HTTP 边界验收，汇总证据 | T-07 步骤 7、8 | T-07.2、T-07.4 | V-20、V-21、V-22、V-46、V-47 的 T-07 分项 | 未开始 |
 | T-08.1 | goal-28 | 配置字段描述与构建检查（在 T-04 生成器上扩展），含表单选项的图标路径 | T-08 步骤 1 | T-04.2 | V-25 的描述分项 | 未开始 |
 | T-08.2 | goal-29 | 配置 JSON 语义与 Pending：原始对象保留、完整替换、Merge Patch、编辑快照导入、base_generation | T-08 步骤 2 | T-02 | V-23、V-38 | 已完成（TEST-MATRIX §3.2） |
@@ -153,7 +157,7 @@ flowchart TD
 | T-08.5 | goal-32 | `sqlitedb.Open` 与 `gormdb.Open` 的连接生命周期、迁移互斥与 versioned 迁移、external 插件的维护许可 | T-08 步骤 5、6 | T-08.3 | V-26、V-39 | 未开始 |
 | T-08.6 | goal-33 | SQLite 候选复制与资源交接，写出给 T-09 的调用约定 | T-08 步骤 7 | T-08.4、T-08.5 | V-24、V-36 的候选分项 | 未开始 |
 | T-08.7 | goal-34 | `web/admin` 前端骨架（官方 WebUI 组件的源码），配置表单与 i18 组件及 fixture（选项图标用 `<img>`），界面文案的 en-US/zh-CN 目录与语言切换 | T-08 步骤 9（前端） | T-08.1 | V-25 的表单分项、V-54 的界面组件分项 | 未开始 |
-| T-08.8 | goal-53 | 用户可见文案目录：插件 `i18/` 的 `messages`、SDK 的 `T`、Core 的 en-US/zh-CN 文案目录（usage 等）、check 的键与占位符检查 | T-08 步骤 8 | T-04.1、T-04.3、T-08.1 | V-54 的 SDK 与 Core 分项 | 未开始 |
+| T-08.8 | goal-53 | 用户可见文案目录：插件 `i18/` 的 `messages`、SDK 的 `T`、Core 的 en-US/zh-CN 文案目录（usage 等）、check 的键与占位符检查 | T-08 步骤 8 | T-04.1、T-04.3、T-04.6、T-08.1 | V-54 的 SDK 与 Core 分项 | 未开始 |
 | T-08.9 | goal-35 | configdb 示例与分层验证，汇总证据 | T-08 步骤 9 | T-08.6、T-08.7、T-08.8 | V-23～V-26、V-38、V-39、V-54 的 T-08 分项 | 未开始 |
 | T-09.1 | goal-36 | 首次管理认证：admin-token init/reset、login、会话、CSRF、CLI Bearer | T-09 步骤 1 | T-07.4 | V-47 的认证分项 | 未开始 |
 | T-09.2 | goal-37 | 安装包预检与安全解压：验签、来源、平台、长度/摘要、受控解压与上限、不可变包目录 | T-09 步骤 2（预检） | T-02 | V-27、V-28、V-41 的预检分项 | 已完成（TEST-MATRIX §3.2） |
@@ -167,7 +171,7 @@ flowchart TD
 | T-09.10 | goal-66 | 日志管理：按来源级别的持久化与运行时修改（`sdk.log.set_level`）、最近记录缓冲、按日期查询日志文件、管理 API 与 SSE、`alonabot logs` 与 `log-level`、WebUI 日志页 | T-09 步骤 7（日志） | T-02.1、T-03.1、T-09.8 | V-62、V-63、V-68 | 未开始 |
 | T-09.11 | goal-45 | 正式流程的故障注入，回填 T-08 待联验项，汇总证据 | T-09 步骤 8 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12 | V-23～V-25、V-27～V-31、V-39、V-40、V-52、V-54～V-56、V-62、V-63、V-82、V-83 | 未开始 |
 | T-09.12 | goal-84 | WebUI 组件与组件图标：Admin host 提供 WebUI 静态文件与单页路由回退、未安装与版本不兼容的提示、Admin API 主版本与 `spec/ADMIN-API.md` 参考、带 sandbox CSP 的图标、库模式的 `alonabot.WebUI` 选项 | T-09 步骤 9 | T-07.4、T-09.1、T-09.4、T-13.1 | V-83 | 未开始 |
-| T-10.1 | goal-46 | V-01～V-76、V-82～V-84 证据汇总与跨组件联验 | T-10 步骤 1～4 | T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-15.3、T-16.2 | 全部；真实 Telegram 与 LLM Provider 需要测试凭证 | 未开始 |
+| T-10.1 | goal-46 | V-01～V-76、V-82～V-87 证据汇总与跨组件联验 | T-10 步骤 1～4 | T-02.3、T-03.11、T-05.5、T-08.9、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-15.3、T-16.2 | 全部；真实 Telegram 与 LLM Provider 需要测试凭证 | 未开始 |
 | T-10.2 | goal-47 | 五个目标组合的构建与运行、100 次启停 | T-10 步骤 5 | T-10.1 | V-32、V-34；需要真实目标平台 | 未开始 |
 | T-10.3 | goal-48 | 资源比较报告与常驻内存预算核对 | T-10 步骤 6 | T-10.1 | V-33、V-74；需要固定机器与等价负载 | 未开始 |
 | T-10.4 | goal-49 | 发布资产、签名与发布说明 | T-10 步骤 7、8 | T-10.2、T-10.3 | V-28、V-41 的发布复验 | 未开始 |
@@ -194,7 +198,7 @@ flowchart TD
 | T-14.5 | goal-77 | 容器镜像：`Dockerfile` 多阶段构建、linux/amd64 与 linux/arm64、非 root、`/data` 卷、`ALONABOT_CONTAINER` 的监听规则、作为官方整合包入口的 `deploy/compose.yaml` | T-14 步骤 5 | T-07.3、T-14.3 | V-70 的镜像分项 | 未开始 |
 | T-14.6 | goal-75 | 从发行归档与容器镜像到 Agent 对话的端到端验收，汇总证据 | T-14 步骤 6 | T-09.11、T-14.4、T-14.5 | V-66、V-67、V-70 | 未开始 |
 | T-14.7 | goal-85 | `install.sh`：Linux（systemd）与 macOS（launchd）的安装、`SHA256SUMS` 校验、管理 token 初始化、服务注册、升级与 `--uninstall` | T-14 步骤 7 | T-14.3 | V-84 | 未开始 |
-| T-15.1 | goal-78 | 官方 OneBot 11 Adapter 的连接与接收：正向 WebSocket、access_token、get_login_info、有界退避重连、self_id 校验、数组格式检查、实例事件队列、私聊/群聊/撤回/成员事件的标准化、to_me、本地 OneBot 11 模拟服务 | T-15 步骤 1、2 | T-03.3、T-03.4 | V-71 的接收分项 | 未开始 |
+| T-15.1 | goal-78 | 官方 OneBot 11 Adapter 的连接与接收：正向 WebSocket、access_token、get_login_info、有界退避重连、self_id 校验、数组格式检查、实例事件队列、私聊/群聊/撤回/成员事件的标准化、to_me、群主、群管理员与好友私聊的平台权限及 `adapters/onebot11/perm`、本地 OneBot 11 模拟服务 | T-15 步骤 1、2 | T-03.3、T-03.4、T-04.6 | V-71 的接收分项、V-85 的 OneBot 11 分项 | 未开始 |
 | T-15.2 | goal-79 | 官方 OneBot 11 Adapter 的发送计划与回执、入站与出站媒体、`onebot11.face` extension、能力声明 | T-15 步骤 3、4 | T-03.6、T-03.8、T-15.1 | V-71 的发送与媒体分项 | 未开始 |
 | T-15.3 | goal-80 | 跨 Adapter 一致性验收与 OneBot 11 手测记录，汇总证据 | T-15 步骤 5 | T-03.10、T-15.2 | V-71、V-72；真实 QQ 端只手测 | 未开始 |
 | T-16.1 | goal-81 | 插件测试套件基础：`plugintest.Start`、测试 Adapter、会话与身份、Capability 子集、消息注入、`internal/inproc` 的分发结束通知、配置与数据库 | T-16 步骤 1、2 | T-05.2、T-13.2 | V-73 的基础分项 | 未开始 |
@@ -257,6 +261,7 @@ flowchart TD
 8. **建立真实进程的验收切片。** 最小示例覆盖正常启动/退出，测试辅助进程覆盖挂起、错帧、日志污染、迟到响应和突退。对同一 fixture 分别运行 TCP 与 stdio，检查进程和 Listener 已关闭；注入满额度、双 Core、并发管理操作和 Core 被终止场景。记录实际运行平台、命令、测试位置及结果，并把由 T-08、T-09 集成的配置/DB/更新场景明确标出。
 9. **建立统一日志。** 按 CONTRACTS §14 把 Core 与 SDK 现有的直接输出改为注入的 `*slog.Logger`：实现 §14.2 的控制台 Handler（来源标签、级别缩写、源码位置、`key=value`、多行缩进、按终端与 `NO_COLOR` 着色）与 JSON 输出，`--log-level`、`--log-format` 启动参数。SDK 把记录以 JSON 行写到 stderr，在调用边界（生命周期 Hook）捕获的 panic 记为带 `stack` 的 ERROR；Handler 的 Logger 附带 trace_id、route_id、call_id 与 Handler panic 的记录由 T-03.1 的业务分发实现，Bot API URL 中凭证的脱敏由 T-03.4 的 Bot API 客户端实现。Core 逐行解析插件 stderr，补上并保护来源字段，非 JSON 行作为 WARN 原样保留。Bootstrap 追加 `LogLevel log_level = 10`，SDK 与 Core 都按来源的生效级别过滤；按来源级别暂存在内存中，持久化与运行时修改由 T-09.10 接入。日志不输出 Secret、Bootstrap 与配置明文。按 CONTRACTS §14.6 写入按本地日期轮转的日志文件：同日达到单文件上限时续写编号文件，超过合计上限或保留天数时从最旧的删除，写入失败时继续运行并报告一次。
 10. **建立调优参数。** 新建 `internal/tune`，按 CONTRACTS §16 的表登记全部可调参数，把 `internal/wire` 与 `internal/core` 中对应的现有常量迁入，调用方改为读取生效值。实现 `--args` 的直接参数与文件输入、值的格式、约束与相互约束检查（出错时指明参数或文件行号）、存在覆盖时的启动 WARN 与 `alonabot tune list`。Bootstrap 追加 `SessionLimits session_limits = 11`，字段 `max_inflight`、`max_payload_bytes`、`request_timeout_ms` 分别对应每方向在途数、每 Session payload 预算、普通请求期限；Core 全局预算不下发给 SDK；设置 `PLUGIN_MEMORY_SOFT_LIMIT` 时为子进程传入 `GOMEMLIMIT`。
+11. **状态库改用 GORM。** 按 CONTRACTS §6.1 与 D-68，把 `internal/core/state` 现有各表的读写改为 GORM 模型，经 `libtnb/sqlite` 的 `Conn` 复用同一个单连接；schema 仍由唯一的初始迁移定义，不用 AutoMigrate。core.lock、PRAGMA 回读核对、损坏不重建、提交时核对预期旧代次与事务内不等待插件 RPC 的行为都不变，调用方与集成测试同步修改。之后新增的状态库表直接使用 GORM 模型。
 
 #### 可审查交付
 
@@ -310,6 +315,8 @@ Adapter 以安装包和独立进程运行（CONTRACTS §8）。以下步骤中�
 7. **接通按钮 token、回调路由与 extension 片段。** 使用显式注册的 button.clicked 路由验证 action/schema/value；Core 生成 32 字节随机值的无 padding base64url token，持久化绑定插件、路由、Generation、Target 和 24 小时期限。点击先尽力 answerCallbackQuery，再验证 token、当前 actor/策略及目标，使用普通 REQUEST 调用正确 Session。多用户点击逐次鉴权；普通同代次重启保留 token，卸载/切换代次永久失效。拒绝不能落入 Raw/Regex，也不能发额外群错误消息；缺少可核验普通 Target 的 inline 回调明确拒绝。answerCallbackQuery 由 Adapter 在交付点击事件前调用。Adapter 在注册时声明 extension 及其 Schema，Core 在发送前按目标实例所属 Adapter 校验；解析 manifest 的 `role`（plugin/adapter/agent/webui）、`adapter_id`、`icon`、WebUI 的 `assets` 与 Admin API 主版本范围、`adapter_dependencies` 与 `plugin_dependencies`，按 CONTRACTS §9.1 校验各角色的必填与禁止字段，在开发入口启用插件时检查必需依赖（正式管理入口在 T-09）。
 
 8. **运行发送与接收故障矩阵并记录证据。** 让 `alonabot run` 能同时启动一个 Adapter 包与插件，Adapter 的实例配置取自 `<data_dir>/adapters/<adapter_id>/instances/<instance_id>.json`（CONTRACTS §15.4），构建 echo/媒体示例以及本地 Bot API 测试服务；覆盖同包两个实例单独启停、Adapter 进程崩溃后恢复、伪造实例事件被拒、实例上下线事件、消息编辑，验证两个账号/实例、话题、多物理消息、提交后超时、相册后 markup 失败、零 ID、媒体过期/共享/配额、游标提交后崩溃和接收冲突。以调用记录证明失败后没有自动补发，以平台请求的实际数量证明一条 Chain 与两次 Send 的区别。跨插件媒体授权先用两个真实 Session 和显式测试调用验证，不等待 T-06 Service。记录运行命令、实现变更、模拟/真实平台版本和日志；真实 Telegram 尚无可用测试环境时单独标「未运行」，不得用模拟结果冒充平台实测。
+
+9. **接通 Telegram 的平台权限。** 按 MESSAGE-MODEL §6.1 在 Adapter 描述中声明 `telegram.chat_owner` 与 `telegram.chat_admin`；群与超级群中的事件按 `getChatAdministrators` 的会话缓存给出 Actor 的平台权限，缓存 10 分钟，收到该会话的 `chat_member`、`my_chat_member` 时作废；获取失败时本事件不带平台权限并记诊断。发布只含常量的 `adapters/telegram/perm`。
 
 #### 拟目录与交付
 
@@ -372,6 +379,10 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 
 7. **完成构建和策略验收。** 使用独立测试插件或构建 fixture 验证多 root/Config、错误方法签名、依赖中的伪标记、不同 build tags、重复路由和参数溢出；以两个实际 Session 验证交叉同名命令与禁用保留路径。直接调用 Core 管理服务层修改策略，确认下一次派发生效、进程未重启、Core 重启后保留；为后续 WebUI 提供同一方法的输入、输出和失败条件。将静态解析证据与待 T-05/T-09 集成的用例分项登记。
 
+8. **改造权限、扩展事件与命令解析的协议和 Core 侧。** 按 WIRE-FORMAT §5A 的 2026-11-01 条目修改 proto 并重新生成。Core 校验 Adapter 的权限与扩展事件声明（前缀、名称、隐含关系无环、Schema 可编译）；交付事件时只保留已声明的平台权限并展开隐含关系，按声明校验扩展事件；路由按权限名集合判定（CONTRACTS §2.3）。按 CONTRACTS §2.2 实现 `command_prefixes` 与按实例覆盖、去掉开头的 reference 与指向本账号的 mention、非文本 token、`user`/`image`/`message` 参数与 usage 文案键。同步修改已合并的 router、remote Adapter、`sdk/adapter`、Telegram Adapter 与集成测试（D-69、D-71、D-72）。
+
+9. **SDK 改为链式注册并使用自有类型。** 按 D-70 把命令、文本匹配、事件、Service 与 Event Bus 订阅的注册改为链式构建，删除 `RouteOption`、`ServiceOption` 与位置参数形式；新增 Permission 值对象（`Or`）与 `c.Has`、标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对 Handler 的参数类型；Service 的 Schema 由生成器从 Go 类型生成；Context、Send、事件 payload 与错误码改用 SDK 自有类型，自动回复型 Handler 可以 `c.Send`。构建期生成器、示例、`sdk/adapter` 的公共类型与已合并调用方同步修改。
+
 #### 拟目录与交付
 
 | 拟目录 | 本工作包交付 |
@@ -390,7 +401,8 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 | V-11 | 路径/别名/遮蔽/参数/Regex/Raw 的实际调用；Rule 消费先有结果 fixture，真实 Rule 组合由 T-05 闭合 |
 | V-49 | 文本匹配的注册校验、排序、ignore_case 与「已识别命令不进入文本匹配」；与 Rule 和传播的组合由 T-05 闭合 |
 | V-12 | 策略服务层的即时生效、持久化和全局禁止优先；实际 WebUI 操作由 T-09 完成 |
-| V-43 | 父禁用、子权限覆盖、Core Admin/chat_admin 分辨及下一次派发生效；完整多事件流程由 T-05 再验证 |
+| V-43 | 父禁用、子权限覆盖、权限名集合的判定（`admin`、`chat_admin` 与 Adapter 权限互不替代）及下一次派发生效；完整多事件流程由 T-05 再验证 |
+| V-85～V-87 | Adapter 权限与扩展事件的声明校验、平台权限的保留与展开、命令前缀与非文本参数；Telegram 的平台权限由 T-03.11、OneBot 11 的由 T-15.1 提供 |
 
 V-12 是跨任务验收：T-04 不依赖尚不存在的 WebUI，但必须交付后续 UI 实际调用的策略服务层。矩阵中保存分项证据；只有 T-09 的鉴权后浏览器操作也完成，才将整项 V-12 标为通过。T-04 完成后，T-05 和 T-08 可以分别使用同一注册器继续实施。
 
@@ -398,7 +410,7 @@ V-12 是跨任务验收：T-04 不依赖尚不存在的 WebUI，但必须交付�
 
 - 生成器扫描外部依赖或隐式构造接收者、同一源码因启动顺序而选择不同路由、重复 route 被静默覆盖，阻止生成器/注册器合入。
 - 已识别但拒绝的命令落入低优先级同名项、短命令或 Regex/Raw，先修复分发状态，不用示例避开冲突。
-- 子项启用绕过父禁用、平台 chat_admin 获得 Core Admin、策略重启后丢失或需要重启插件才生效，阻止策略功能完成。
+- 子项启用绕过父禁用、平台权限或 chat_admin 满足 `admin`、Adapter 给出未声明的权限名仍被采信、策略重启后丢失或需要重启插件才生效，阻止策略功能完成。
 - 为了测试 UI 而增加临时无鉴权管理端点，或为未来配置迁移建立与 T-08 相竞争的运行时，停止该实现并复用既定服务入口。
 
 ### T-05：普通事件分发、Rule、Hook、可信权限链与多轮等待
@@ -413,7 +425,7 @@ V-12 是跨任务验收：T-04 不依赖尚不存在的 WebUI，但必须交付�
 
 #### 实施步骤
 
-1. **收口可信事件上下文。** 将 Adapter 原始输入转为 Core 保留的身份、Target、来源消息 ID 及路由绑定，业务 payload 与这些保留信息分开。确认只有可信个人 Actor 才满足 User，Core 实例作用域管理员才满足 Admin；群管理员仅供 chat_admin Rule。没有 Actor 的事件和后台调用不补用户。按钮 action/schema/value 与 scheduled job/run 等已验证绑定不随可修改 payload 改变；scheduled 用规范 fixture 验证即可，实际 tick 由 T-07 接入。
+1. **收口可信事件上下文。** 将 Adapter 原始输入转为 Core 保留的身份、Target、来源消息 ID 及路由绑定，业务 payload 与这些保留信息分开。确认只有可信个人 Actor 才带 `user`，Core 实例作用域管理员才带 `admin`；平台权限只来自 Adapter 的声明，只在该会话有效（CONTRACTS §2.3）。没有 Actor 的事件和后台调用不补用户。按钮 action/schema/value 与 scheduled job/run 等已验证绑定不随可修改 payload 改变；scheduled 用规范 fixture 验证即可，实际 tick 由 T-07 接入。
 
 2. **实现有界的同事件分发。** 接收入口统一执行 Normalize→PreEvent→命令/类型匹配与 Core 权限→SDK Rule/Handler。普通事件每条链顺序执行，跨事件最多 64 条并发；等待队列不超过 256 条且 8 MiB，并计入已有 Core payload 总预算。候选按 priority/plugin_id/route_id 稳定排序；入站超额明确拒绝/丢弃并计数，接收游标依 T-03 规则处理。链执行从 Session 读循环分离，慢 Handler 不能停止 Response/Cancel/控制帧处理。
 
@@ -479,7 +491,7 @@ T-05 完成条件包含直接 Hook 和上下文继承能力，不要求 T-06 尚
 
 4. **接通跨段取消和背压。** 子调用 deadline 取父与自身操作预算较早者；父完成/超时/取消或任一 Session 断开，结束对应结果并取消未完成子调用，不重放。复用 T-02 的 256 在途、16 MiB/方向、Core 64 MiB 预算，额满立即失败。Broker、SDK 与各 Handler 不在等普通业务槽位时互相占锁；Response/Cancel/控制保持进展，尚未写出的 Request 被取消即撤出，Cancel 不超越其 Request。普通迟到响应不二次完成调用。
 
-5. **实现独立的非持久广播。** Publish 使用普通带 CallID 的请求，仅确认 Core 完成发布准入；所有权限及命名空间检查在分发前完成。按订阅注册的事件名/schema/version发送无业务回执 EVENT；每个订阅者最多 256 条且 4 MiB，满时 drop-newest 并计数，离线不缓存、不补发。广播回调使用订阅插件身份，不沿用发布者的用户权限；一个慢订阅者不得阻塞其他订阅者或 Publish。广播不参与普通事件的 StopPropagation，也不伪装成 scheduled 请求。
+5. **实现独立的非持久广播。** Publish 使用普通带 CallID 的请求，仅确认 Core 完成发布准入；所有权限及命名空间检查在分发前完成。按订阅注册的事件名/schema/version发送无业务回执 EVENT；每个订阅者最多 256 条且 4 MiB，满时 drop-newest 并计数，离线不缓存、不补发。广播回调使用订阅插件身份，不沿用发布者的用户权限；一个慢订阅者不得阻塞其他订阅者或 Publish。广播不参与普通事件的 StopPropagation，也不伪装成 scheduled 请求。SDK 对每个 Session 的订阅投递额外限制为 4 MiB（`BUS_QUEUE_BYTES` 缺省值），包含排队及正在处理的 EVENT protobuf 载荷；超出时 drop-newest、WARN 并立即 release wire 接收预算。Core 的 `BUS_QUEUE_BYTES` 覆盖仅调整 Core 等待队列，SDK 此上限保持 4 MiB，以给同 Session 的业务请求留出预算。
 
 6. **接入 Session 变更和可诊断结果。** 按 T-02 的冻结/drain/STOPPING 流程停止新根调用，处理在途父链和取消；Session 失效时清理路由目标、订阅队列、Broker 映射与预算，不能转交同插件新 Session 自动执行。错误只返回安全 ErrorInfo 与 trace，不暴露远端堆栈/Secret/路径。记录按原因区分的调用拒绝、取消、离线与队列丢弃计数，供后续管理面读取；不建设可靠事件存储或服务自动重试层。
 
@@ -683,7 +695,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 
 #### 按顺序实施
 
-1. 汇总 V-01～V-76 与 V-82～V-84 的证据，逐项标记已通过、失败、未运行或待联验。先补齐组件之间的联验：首次管理登录→安装启用→配置/权限→真实消息→插件 HTTP→重载/升级/回退；覆盖 TCP 与 stdio。
+1. 汇总 V-01～V-76 与 V-82～V-87 的证据，逐项标记已通过、失败、未运行或待联验。先补齐组件之间的联验：首次管理登录→安装启用→配置/权限→真实消息→插件 HTTP→重载/升级/回退；覆盖 TCP 与 stdio。
 2. 使用不同的真实插件二进制验证命令、文本匹配、多轮等待、主动 Send、Service、Event Bus、Scheduler、HTTP、`sqlitedb` 与 GORM 两个数据库入口，以及官方 Agent 组件与 WebUI 组件。示例既覆盖无配置/无 DB 插件，也覆盖实际写入与迁移的插件；不以同一个 worker 的多份进程代替。
 3. 执行协议、权限和资源边界测试：伪造/过期 Session、命令遮蔽、无 Actor、实例许可、Hook 递归、媒体租约、满准入、Cancel 顺序、超时仍运行的 job。验证错误回执与已经确认的外部结果保持一致。
 4. 执行完整恢复故障注入：停止与持锁、SQLite WAL 备份、候选 OnStart 写入后失败、PREPARED/提交前后 Core 退出、不可变 secret、external 插件的维护许可与 resume、显式 rollback 的新代次。核对数据库内容和权威指针，不能只检查日志出现“恢复成功”。
@@ -694,7 +706,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 
 #### 可审查交付
 
-- V-01～V-76、V-82～V-84 的完整结果与日志、故障注入后的状态/数据证据。
+- V-01～V-76、V-82～V-87 的完整结果与日志、故障注入后的状态/数据证据。
 - 五平台真实运行记录和可安装候选资产；可复现的资源比较报告。
 - 安装、更新、维护和恢复的用户操作步骤，以及与产物一致的 SDK 示例。
 
@@ -925,8 +937,8 @@ Agent 组件的真实 Telegram 与真实 Provider 结果由 T-10 汇总。
 
 1. **help 插件与 `core.command.list`。** Core 按调用者 Actor 与默认 Target 返回可用的命令：已启用、权限满足、未被遮蔽；说明按 CommandSpec 的说明键在所属插件 `messages` 中查找，并按 Actor locale 翻译。`plugins/help/` 注册 `/help [命令]`，列出全部命令或单个命令的用法；`/whoami` 回复调用者的实例 ID 与用户 ID，用于添加第一个 Core Admin（CONTRACTS §15.2）。
 2. **welcome 与 rss。**
-   - `plugins/welcome/` 在 member.joined 时向该聊天发送欢迎语，欢迎语中的 `{name}` 替换为新成员的显示名。欢迎语按聊天配置，缺省使用插件文案；`/welcome on|off|set <文案>` 只有 chat_admin 或 Core Admin 能执行，默认关闭。
-   - `plugins/rss/` 提供 `/rss add|list|remove`，订阅经 `sqlitedb` 保存在插件数据库，不链接 GORM；add 与 remove 只有 chat_admin 或 Core Admin 能执行，list 不限。一个固定 interval 的 schedule 检查订阅，间隔是配置项（缺省 10 分钟）。用标准库解析 RSS 2.0 与 Atom，按 guid 或链接去重，只推送新条目；后台推送需要 `allowed_adapter_instances`。
+   - `plugins/welcome/` 在 member.joined 时向该聊天发送欢迎语，欢迎语中的 `{name}` 替换为新成员的显示名。欢迎语按聊天配置，缺省使用插件文案；`/welcome on|off|set <文案>` 的权限为 `admin` 或 `chat_admin`，默认关闭。
+   - `plugins/rss/` 提供 `/rss add|list|remove`，订阅经 `sqlitedb` 保存在插件数据库，不链接 GORM；add 与 remove 的权限为 `admin` 或 `chat_admin`，list 不限。一个固定 interval 的 schedule 检查订阅，间隔是配置项（缺省 10 分钟）。用标准库解析 RSS 2.0 与 Atom，按 guid 或链接去重，只推送新条目；后台推送需要 `allowed_adapter_instances`。
    - rss 抓取只允许 http 与 https；解析出的地址以及每次重定向后的地址都不能是 loopback、私网、链路本地、组播或未指定地址。响应大小上限 5 MiB、抓取超时 30s，均为命名常量，超过时本次抓取失败并记 WARN。
 3. **发行归档。** `scripts/dist/` 为每个目标平台构建 Core 与全部官方组件（含构建 `web/admin/` 得到的 WebUI 包），用 `plugin pack` 生成安装包与外部 `release.json`，签名后放入 `packages/`，再打成 zip（Windows）或 tar.gz，并生成列出全部发行归档 SHA256 的 `SHA256SUMS`。发行版 Core 在构建时嵌入官方发布者公钥。
 4. **首次运行。** 数据目录首次初始化时，按普通安装流程安装 `packages/` 中的包，只启用 help 与官方 WebUI，Agent 只安装不启用（D-50、D-62）；Telegram 与 OneBot 11 Adapter 在管理员为它添加第一个实例时启用。交互终端下按 CONTRACTS §15.1 初始化管理 token。之后不再自动安装；新版本发行包中版本更高的内置包作为可用更新列出。
@@ -1013,7 +1025,7 @@ Agent 组件的真实 Telegram 与真实 Provider 结果由 T-10 汇总。
 
 #### 实施步骤
 
-1. **套件骨架与测试 Adapter。** 新建 `plugintest/`：`Start(t, opts...)` 在 `t.TempDir()` 上用 `alonabot.Start` 装配 Core，登记被测插件与套件自带的测试 Adapter（adapter_id `plugintest`），写入实例文件并在 `t.Cleanup` 中停止。提供 `Plugin`、`Config`、`Admin`、`Capabilities` 与授予 `allowed_adapter_instances` 的选项，以及私聊、群聊、chat_admin 用户的构造函数。测试 Adapter 的发送与编辑一律 ACCEPTED，消息 ID 递增。
+1. **套件骨架与测试 Adapter。** 新建 `plugintest/`：`Start(t, opts...)` 在 `t.TempDir()` 上用 `alonabot.Start` 装配 Core，登记被测插件与套件自带的测试 Adapter（adapter_id 缺省 `plugintest`），写入实例文件并在 `t.Cleanup` 中停止。提供 `Plugin`、`Config`、`Admin`、`Capabilities`、`Adapter`（指定 adapter_id 并声明其权限与扩展事件）与授予 `allowed_adapter_instances` 的选项，以及私聊、群聊、带平台权限的用户的构造函数；可以注入已声明的扩展事件。测试 Adapter 的发送与编辑一律 ACCEPTED，消息 ID 递增。
 2. **消息注入与分发结束通知。** Core 在一个事件的全部分发链结束，或其中的 Handler 进入多轮等待时，经 `internal/inproc` 通知套件；注入消息的方法据此返回这期间的全部 Send、Edit 与 Handler 错误。通知只在库模式装配中注册，独立进程运行的 Core 没有这条路径。
 3. **按钮、多轮等待、schedule 与后台发送。** 对结果中的按钮注入点击；多轮等待中的下一条消息按普通注入处理；立即触发一次 schedule 并在其调用结束后返回；后台发送按顺序读取。
 4. **示例、文档与证据。** 用套件为 `examples/plugins/` 中的示例插件编写提交的集成测试，覆盖 V-73 的场景；docs/development.md 补充套件的用法。
@@ -1046,7 +1058,7 @@ WebUI 中可交互的沙盒不在 v0.1 范围内（D-47）。
 
 跨任务 V 用例按 TEST-MATRIX 的阶段分工记录。较早任务只完成自己负责的组件断言；用例整体在最终闭合任务完成后才标为通过。例如动态权限的管理服务测试不等于 WebUI 操作通过，内置 Send 的 Hook 检查不等于跨插件 Service 递归已经验证。后续接入仍复用较早实现，测试装配不能成为生产放行路径。
 
-每项 V 的证据记录包含实现版本、测试位置、完整运行命令、平台/依赖、结果与失败日志。T-10 汇总时按 V-01～V-76 与 V-82～V-84 逐项查证，不以其他名称的新清单取代现有编号；休眠扩展的 V-77～V-81 由 S-06 汇总，不属于 T-10。除 TEST-MATRIX §3.1 所列分项外均未运行。
+每项 V 的证据记录包含实现版本、测试位置、完整运行命令、平台/依赖、结果与失败日志。T-10 汇总时按 V-01～V-76 与 V-82～V-87 逐项查证，不以其他名称的新清单取代现有编号；休眠扩展的 V-77～V-81 由 S-06 汇总，不属于 T-10。除 TEST-MATRIX §3.1 所列分项外均未运行。
 
 若接口无法表达既定行为，先修对应契约和 fixture，再推进消费者；若已经表达但测试失败，先修负责实现。驱动备份、进程所有权、权限和提交唯一性未通过，不得被下游功能完成状态覆盖。
 

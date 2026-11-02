@@ -223,6 +223,7 @@ func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regis
 	a.sess = wire.New(conn, wire.Options{
 		Local: pb.InitiatorSide_INITIATOR_SIDE_PLUGIN, SessionID: ack.GetSessionId(), ProtocolMinor: ack.GetChosenMinor(),
 		SourcePluginID: l.pluginID, Handler: businessHandler(reg), Admit: a.admit, Control: a.control,
+		Event:       subscriptionEvents(a, reg),
 		MaxInflight: int(limits.GetMaxInflight()), MaxBytes: int64(limits.GetMaxPayloadBytes()), DefaultDeadline: time.Duration(limits.GetRequestTimeoutMs()) * time.Millisecond,
 	})
 	if l.http != nil {

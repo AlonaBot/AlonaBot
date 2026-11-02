@@ -37,6 +37,9 @@ const (
 	ServiceConversationClear = "core.conversation.clear"
 )
 
+// ServiceBusPublish 指定 Event Bus 的发布准入服务。
+const ServiceBusPublish = "core.bus.publish"
+
 // ServiceAdapterMediaRead 指定 Adapter 平台文件的分块读取服务。
 const ServiceAdapterMediaRead = "adapter.media.read"
 
