@@ -1,12 +1,12 @@
 # 并行执行顺序
 
-本文件约束多个执行者并行推进切片时的派发时机、共享文件和合并顺序。切片的内容与前置以 [PLAN §3.1](../spec/PLAN.md#31-执行切片) 为准，派发用的 goal 语句在 [goals.md](../goals.md)，角色与合并授权见 [CONTRIBUTING「角色与合并」](../CONTRIBUTING.md#角色与合并)。
+本文件约束多个执行者并行推进切片时的派发时机、共享文件和合并顺序。切片的内容与前置以各章节实施计划的切片表为准（章节划分见 [PLAN §3.1](../spec/PLAN.md#31-执行切片)），派发用的 goal 语句在 [docs/goals/](goals/README.md)，角色与合并授权见 [CONTRIBUTING「角色与合并」](../CONTRIBUTING.md#角色与合并)。
 
 ## 1. 派发规则
 
 - 一个 goal 同时只交给一个执行者。
-- 只派发 goals.md 中状态为「待派发」的 goal。待派发要求 PLAN §3.1 中它的全部前置都是「已完成」，而且审查者已经按合并后的代码补全了接口段。
-- 执行者在派发时从最新的 `origin/main` 创建 `goal-N` 分支和 `.worktrees/goal-N`。goal 编号固定，由 goals.md 指定，不按 goal-mode 的默认规则自选。
+- 只派发 docs/goals/ 中状态为「待派发」的 goal。待派发要求切片表中它的全部前置都是「已完成」（前置可能在其他章节），而且审查者已经按合并后的代码补全了接口段。
+- 执行者在派发时从最新的 `origin/main` 创建 `goal-N` 分支和 `.worktrees/goal-N`。goal 编号固定，由 goal 语句指定，不按 goal-mode 的默认规则自选。
 - 某个前置 PR 已开但还没合并时，不派发依赖它的 goal，即使代码看起来已经够用。
 
 ## 2. 波次参考
@@ -59,7 +59,7 @@
 | 根包 `alonabot` 的 Core 装配 | 只有 goal 语句写明负责装配的切片才能改，与 `cmd/alonabot/main.go` 相同。 |
 | 包文档 | 只在包的职责确实变化时更新，不顺手重写。 |
 | `ARCHITECTURE.md`、`README.md`、`spec/` | 执行者不改，需要同步的内容在 PR 正文「文档同步」一节列出，由审查者在合并前补上。例外是 goal 语句明确要求的证据记录。 |
-| `goals.md`、`docs/execution-order.md` | 只由审查者维护。 |
+| `docs/goals/`、`docs/execution-order.md` | 只由审查者维护。 |
 
 新建 Go 包时先核对 [ARCHITECTURE.md](../ARCHITECTURE.md) 的依赖表。goal 语句会列出本切片允许新增的跨模块边；需要其他边时标阻塞。
 
@@ -67,7 +67,7 @@
 
 - 执行者需要 main 的新提交时，用 `git fetch origin && git merge origin/main` 同步，不 rebase、不 force-push。同步后重跑该切片的完成条件命令。
 - 审查者按 PR 就绪的先后逐个审查和合并。合并一个 PR 后，同一波次里还开着的 PR 如果和它冲突，或者 CI 需要在新 main 上重跑，由审查者通知执行者同步。
-- 审查者合并前，在 PR 分支上推送一个 commit：把 PLAN §3.1 里的状态改为「已完成」，补上 PR 正文列出的文档同步。合并后，再更新 goals.md 中依赖它的 goal 的接口段和状态。
+- 审查者合并前，在 PR 分支上推送一个 commit：把所属章节实施计划切片表里的状态改为「已完成」，补上 PR 正文列出的文档同步。合并后，再更新 docs/goals/ 中依赖它的 goal 的接口段和状态。
 
 ## 5. 阻塞与升级
 
