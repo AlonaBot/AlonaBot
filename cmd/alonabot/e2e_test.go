@@ -315,7 +315,12 @@ func TestSettingsAndListenOverride(t *testing.T) {
 	c := startCore(t, dir, "--listen", "127.0.0.1:0")
 	c.waitFor(activatedRe)
 	address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
-	response, err := http.Get("http://" + address + "/plugins/demo/unknown")
+	request, err := http.NewRequest(http.MethodGet, "http://"+address+"/plugins/demo/unknown", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = "localhost"
+	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,7 +454,13 @@ func TestHTTPPluginSettings(t *testing.T) {
 			c := startCore(t, dir, extra...)
 			c.waitFor(activatedRe)
 			address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
-			response, err := http.Post("http://"+address+"/plugins/demo/hook?state=test-state", "text/plain", nil)
+			request, err := http.NewRequest(http.MethodPost, "http://"+address+"/plugins/demo/hook?state=test-state", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Host = "localhost"
+			request.Header.Set("Content-Type", "text/plain")
+			response, err := http.DefaultClient.Do(request)
 			if err != nil {
 				t.Fatal(err)
 			}

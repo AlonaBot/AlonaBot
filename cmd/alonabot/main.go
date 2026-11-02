@@ -16,10 +16,12 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"syscall"
 	"time"
 
@@ -30,6 +32,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
+	"github.com/AlonaBot/AlonaBot/internal/core/webhost"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
@@ -105,13 +108,25 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 			environment[name] = value
 		}
 	}
-	// shortcut: 私有 HTTP 路由一律拒绝，有插件会话授权实现后接入 Authorizer。
-	proxy := httpproxy.New(log, nil)
+	adminURL, err := url.Parse(configuration.AdminBaseURL)
+	if err != nil {
+		return fmt.Errorf("parse admin_base_url: %w", err)
+	}
+	pluginURL, err := url.Parse(configuration.PluginBaseURL)
+	if err != nil {
+		return fmt.Errorf("parse plugin_base_url: %w", err)
+	}
+	var publicHost *webhost.Host
+	proxy := httpproxy.New(log, pluginAuthorizer(func(r *http.Request, pluginID string) bool { return publicHost.Authorize(r, pluginID) }))
+	publicHost = webhost.New(log, webhost.Options{
+		AdminBaseURL: adminURL, PluginBaseURL: pluginURL,
+		SecondHost: !strings.EqualFold(adminURL.Hostname(), pluginURL.Hostname()), Proxy: proxy,
+	})
 	listener, err := net.Listen("tcp", configuration.Listen)
 	if err != nil {
 		return fmt.Errorf("listen HTTP: %w", err)
 	}
-	httpServer := &http.Server{Handler: proxy, ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelError)}
+	httpServer := &http.Server{Handler: publicHost, ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelError)}
 	httpErrors := make(chan error, 1)
 	go func() { httpErrors <- httpServer.Serve(listener) }()
 	defer httpServer.Close()
@@ -268,4 +283,11 @@ func fileDigest(path string) ([]byte, error) {
 		return nil, err
 	}
 	return h.Sum(nil), nil
+}
+
+// pluginAuthorizer 在公开 Listener 开始接单前接好 Host 与 Proxy 的双向装配。
+type pluginAuthorizer func(*http.Request, string) bool
+
+func (a pluginAuthorizer) Authorize(r *http.Request, pluginID string) bool {
+	return a(r, pluginID)
 }
