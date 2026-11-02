@@ -59,7 +59,7 @@ func collectSubscriptions(root Root, reg *Registration) error {
 	r.errs = append(r.errs, validate.Register(registration))
 	// 复用实际 REGISTER 的 route_id 生成规则，核对与其他注册器的冲突；HTTP Listener 此时尚未创建。
 	seen := make(map[string]bool)
-	for _, route := range buildRegister(reg, "{}", 0).GetRoutes() {
+	for _, route := range buildRegister(reg, "{}", 0, nil).GetRoutes() {
 		if route.GetKind() != pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION {
 			seen[route.GetRouteId()] = true
 		}

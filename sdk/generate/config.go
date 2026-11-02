@@ -234,6 +234,11 @@ func (b *configBuilder) schema(fieldType types.Type, pos token.Pos, path string)
 		}
 		return schema
 	case *types.Slice:
+		// encoding/json 将字节切片编码为 base64 字符串，数组 Schema 无法描述该语义。
+		if element, ok := underlying.Elem().Underlying().(*types.Basic); ok && element.Kind() == types.Uint8 {
+			b.scan.diagnostic(pos, "unsupported config type "+fieldType.String())
+			return nil
+		}
 		items := b.schema(underlying.Elem(), pos, path)
 		if items != nil {
 			return &jsonschema.Schema{Type: "array", Items: items}
