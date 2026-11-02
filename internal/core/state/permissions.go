@@ -21,9 +21,7 @@ func (s *Store) AllowedAdapterInstances(ctx context.Context, pluginID string) ([
 
 // GrantAdapterInstance 幂等地授予插件向指定 Adapter 实例发送的许可。
 func (s *Store) GrantAdapterInstance(ctx context.Context, pluginID, instanceID string) error {
-	return s.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: columnPluginID}, {Name: columnAdapterInstanceID}}, DoNothing: true,
-	}).Create(&adapterPermission{PluginID: pluginID, AdapterInstanceID: instanceID}).Error
+	return s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&adapterPermission{PluginID: pluginID, AdapterInstanceID: instanceID}).Error
 }
 
 // RevokeAdapterInstance 幂等地撤销插件向指定 Adapter 实例发送的许可。

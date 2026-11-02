@@ -25,8 +25,5 @@ func (s *Store) PutAdapterCursor(ctx context.Context, pluginID, instanceID strin
 	if cursor == nil {
 		cursor = []byte{}
 	}
-	return s.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: columnInstanceID}},
-		DoUpdates: clause.AssignmentColumns([]string{columnPluginID, columnCursor, columnUpdatedAt}),
-	}).Create(&adapterCursor{InstanceID: instanceID, PluginID: pluginID, Cursor: cursor, UpdatedAt: time.Now().UnixMilli()}).Error
+	return s.db.WithContext(ctx).Clauses(clause.OnConflict{UpdateAll: true}).Create(&adapterCursor{InstanceID: instanceID, PluginID: pluginID, Cursor: cursor, UpdatedAt: time.Now().UnixMilli()}).Error
 }

@@ -37,10 +37,7 @@ func (s *Store) GetPendingConfig(ctx context.Context, pluginID string) (PendingC
 
 // PutPendingConfig 覆盖写入插件的 Pending 配置。
 func (s *Store) PutPendingConfig(ctx context.Context, p PendingConfig) error {
-	return s.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: columnPluginID}},
-		DoUpdates: clause.AssignmentColumns([]string{columnBaseGeneration, columnConfigJSON, columnUpdatedAt}),
-	}).Create(&pendingConfig{PluginID: p.PluginID, BaseGeneration: p.BaseGeneration, ConfigJSON: p.ConfigJSON, UpdatedAt: p.UpdatedAt.UnixMilli()}).Error
+	return s.db.WithContext(ctx).Clauses(clause.OnConflict{UpdateAll: true}).Create(&pendingConfig{PluginID: p.PluginID, BaseGeneration: p.BaseGeneration, ConfigJSON: p.ConfigJSON, UpdatedAt: p.UpdatedAt.UnixMilli()}).Error
 }
 
 // DeletePendingConfig 删除插件的 Pending 配置；没有记录时不报错。

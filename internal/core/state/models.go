@@ -4,15 +4,8 @@ import "database/sql"
 
 // clause 使用的列名与下方模型标签保持一致。
 const (
-	columnPluginID          = "plugin_id"
-	columnInstanceID        = "instance_id"
-	columnCursor            = "cursor"
-	columnUpdatedAt         = "updated_at"
-	columnBaseGeneration    = "base_generation"
-	columnConfigJSON        = "config_json"
-	columnAdapterInstanceID = "adapter_instance_id"
-	columnSeq               = "seq"
-	columnInstallSeq        = "install_seq"
+	columnSeq        = "seq"
+	columnInstallSeq = "install_seq"
 )
 
 type schemaVersion struct {
