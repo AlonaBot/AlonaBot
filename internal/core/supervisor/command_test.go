@@ -91,7 +91,7 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 			if err := registry.Add(platform); err != nil {
 				t.Fatal(err)
 			}
-			sender := message.New(registry, policy.New(store), nil)
+			sender := message.New(registry, policy.New(store), nil, values.RequestTimeout)
 			target := &pb.Target{AdapterId: "memory", AdapterInstanceId: "instance", AccountId: "account", ChatId: "chat", ThreadId: proto.String("topic")}
 			actor := &pb.Actor{ExternalUserId: "user", AdapterInstanceId: "instance"}
 			mux := router.NewMux()

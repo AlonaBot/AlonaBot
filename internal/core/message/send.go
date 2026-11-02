@@ -14,7 +14,6 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
-	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
@@ -23,15 +22,17 @@ const schemaVersion = 1
 
 // Service 按插件发信许可准入目标，再由注册的 Adapter 实例执行发送。
 type Service struct {
-	adapters *adapter.Registry
-	policy   *policy.Policy
-	lease    func(context.Context, router.Caller, string, *pb.Target, *pb.MediaSource, time.Time) (string, func(), error)
+	requestTimeout time.Duration
+	adapters       *adapter.Registry
+	policy         *policy.Policy
+	lease          func(context.Context, router.Caller, string, *pb.Target, *pb.MediaSource, time.Time) (string, func(), error)
 }
 
 // New 创建消息发送服务；装配处将 Send 注册为 wire.ServiceSend。
-// lease 由媒体 Store 提供，签发绑定目标 Adapter Session 的只读令牌。
-func New(adapters *adapter.Registry, p *policy.Policy, lease func(ctx context.Context, c router.Caller, readerSessionKey string, target *pb.Target, source *pb.MediaSource, deadline time.Time) (string, func(), error)) *Service {
-	return &Service{adapters: adapters, policy: p, lease: lease}
+// lease 由媒体 Store 提供，签发绑定目标 Adapter Session 的只读令牌；
+// requestTimeout 使用生效配置，在调用没有期限时提供媒体请求预算。
+func New(adapters *adapter.Registry, p *policy.Policy, lease func(ctx context.Context, c router.Caller, readerSessionKey string, target *pb.Target, source *pb.MediaSource, deadline time.Time) (string, func(), error), requestTimeout time.Duration) *Service {
+	return &Service{adapters: adapters, policy: p, lease: lease, requestTimeout: requestTimeout}
 }
 
 // Send 按载荷、可信目标、消息链和实例绑定依次准入，不自动重试平台发送。
@@ -86,7 +87,7 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 		}
 		if deadline.IsZero() {
 			// Core 自动回复直接调用 Send；没有 RPC 期限时使用契约的普通请求预算。
-			deadline = time.Now().Add(tune.Defaults().RequestTimeout)
+			deadline = time.Now().Add(s.requestTimeout)
 		}
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithDeadline(ctx, deadline)

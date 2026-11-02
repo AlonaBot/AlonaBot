@@ -109,7 +109,7 @@ func TestConversationProcesses(t *testing.T) {
 		service = conversation.New(store)
 		mux := router.NewMux()
 		service.Register(mux)
-		sender := message.New(registry, policy.New(store), nil)
+		sender := message.New(registry, policy.New(store), nil, values.RequestTimeout)
 		mux.Handle(wire.ServiceSend, sender.Send)
 		events = router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send, nil)
 		events.Start()
