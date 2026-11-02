@@ -14,14 +14,14 @@
 | 审查分支、commit 或 PR | [alonabot-review](.agents/skills/alonabot-review/SKILL.md) | 契约与规范两轴，问题有位置、影响和修复方案 |
 | 准备或更新 PR、诊断 GitHub Actions | [alonabot-pr](.agents/skills/alonabot-pr/SKILL.md)、[贡献流程](CONTRIBUTING.md) | 授权、模板、当前 head 的检查及真实未运行项 |
 | 修改文档、AGENTS/CLAUDE 或仓库技能 | [alonabot-docs](.agents/skills/alonabot-docs/SKILL.md) | 权威单一、路由有效、状态有依据 |
-| 任何实现工作 | [spec/PLAN.md](spec/PLAN.md) 中对应的 T 工作包，及其引用的 CONTRACTS/WIRE/MESSAGE 小节 | 工作包的「停止和失败条件」 |
+| 任何实现工作 | [spec/PLAN.md](spec/PLAN.md) §3.1 的章节表与所属章节实施计划（`spec/plan/`）中对应的 T 工作包，及其引用的 CONTRACTS/WIRE/MESSAGE 小节 | 工作包的「停止和失败条件」 |
 | 新增包、跨包 import | [ARCHITECTURE.md](ARCHITECTURE.md) | 依赖表允许这条边 |
 | 编写官方插件、Adapter、Agent 或示例插件 | [插件开发规范](docs/plugin-guide.md) | 依赖、存储与常驻内存符合规范 |
 | 构建、测试、依赖、外部环境 | [docs/development.md](docs/development.md) | 按需运行 `go generate ./...`、`go test ./...`、`go build ./...` |
 | 记录验收 | [spec/TEST-MATRIX.md](spec/TEST-MATRIX.md) §3 | 写明测试位置、命令、平台和结果；没运行的写「未运行」 |
 | 契约有缺口或冲突 | [spec/README.md](spec/README.md)「执行与维护」 | 先修契约、PLAN 和 TEST-MATRIX，再在 spec/adr/DECISIONS.md 记录原因 |
-| 执行切片 goal（执行者） | [goals.md](goals.md) 中该 goal 的语句、[alonabot-execute](.agents/skills/alonabot-execute/SKILL.md)、[执行顺序](docs/execution-order.md)、本地 `goal-N/`（被 git 忽略） | 每个 task 的回写区填写完整；完成后推送并开 PR，不合并 |
-| 编写 goal 语句、审查并合并执行者 PR（审查者） | [goals.md](goals.md)、[执行顺序](docs/execution-order.md)、[alonabot-review](.agents/skills/alonabot-review/SKILL.md)「审查执行者的切片 PR」 | 语句的接口与测试足够具体；合并前核对 head SHA、CI 与自己的复现结果；合并后更新后继 goal |
+| 执行切片 goal（执行者） | [docs/goals/](docs/goals/README.md) 中所属章节文件里该 goal 的语句与 README 的共同约束、[alonabot-execute](.agents/skills/alonabot-execute/SKILL.md)、[执行顺序](docs/execution-order.md)、本地 `goal-N/`（被 git 忽略） | 每个 task 的回写区填写完整；完成后推送并开 PR，不合并 |
+| 编写 goal 语句、审查并合并执行者 PR（审查者） | [docs/goals/](docs/goals/README.md)、[执行顺序](docs/execution-order.md)、[alonabot-review](.agents/skills/alonabot-review/SKILL.md)「审查执行者的切片 PR」 | 语句的接口与测试足够具体；合并前核对 head SHA、CI 与自己的复现结果；合并后更新后继 goal |
 
 ## 项目约定
 

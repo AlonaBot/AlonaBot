@@ -1,5 +1,5 @@
 # 本文件提供技能选择界面的名称、简述及入口提示。
 interface:
   display_name: "AlonaBot 切片执行"
-  short_description: "按 goals.md 的 goal 语句逐个完成 task、取证、推送并开 PR，不合并。"
+  short_description: "按 docs/goals/ 的 goal 语句逐个完成 task、取证、推送并开 PR，不合并。"
   default_prompt: "使用 $alonabot-execute 推进当前的切片 goal。"
