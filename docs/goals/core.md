@@ -31,9 +31,9 @@
 | goal-51 | T-03.9 | 消息编辑 | T-03.7 | 等待前置 |
 | goal-87 | T-04.6 | 权限、扩展事件与命令解析的协议和 Core 侧 | T-03.3、T-03.6、T-04.3 | 等待前置 |
 | goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 待派发 |
-| goal-31 | T-08.4 | 不可变 Secret Store | T-02.3、T-08.1、T-08.2 | 等待前置 |
+| goal-31 | T-08.4 | 不可变 Secret Store | T-02.3、T-08.1、T-08.2 | 待派发 |
 | goal-90 | T-08.10 | 配置标签统一 | T-08.1 | 待派发 |
-| goal-36 | T-09.1 | 首次管理认证 | T-02.3、T-07.4 | 等待前置 |
+| goal-36 | T-09.1 | 首次管理认证 | T-02.3、T-07.4 | 待派发 |
 | goal-69 | T-13.3 | 热部署 | T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9 | 等待前置 |
 | goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1、T-04.6 | 等待前置 |
@@ -1932,7 +1932,7 @@ sdk/config
 
 ### goal-31 · T-08.4 不可变 Secret Store
 
-状态：等待前置（T-02.3）。T-08.1（PR #54）、T-08.2 已合并。还要等 T-02.3（goal-86，PR #63），原因有两点：本切片在 `internal/core/state/schema.sql` 中加表，并按编码规范「Core 状态库不写 SQL」经 GORM 读写；`schema.sql` 和 GORM 模型都要等 #63 合并后才存在。
+状态：待派发。前置 T-02.3（PR #63，合并提交 `6b197d8`）、T-08.1（PR #54）、T-08.2 均已合并。
 
 goal-28、goal-29 的符号已按合入代码核对：
 - `config.KeywordSecret = "x-alonabot-secret"` 写在字段自身的属性 Schema 上，值为 `true`。secret 只允许 string 或 *string，可空时 type 为 `["string","null"]`。
@@ -1941,7 +1941,11 @@ goal-28、goal-29 的符号已按合入代码核对：
 - `config.MarshalSchema` 只序列化 `*jsonschema.Schema`，本切片用不到。
 - Core 不 import sdk：`internal/core/secret` 自行解析 Schema JSON，关键字名按「允许的新跨模块边」以常量重复声明。
 
-#63 合并后，按它的模型与命名约定核对本语句的表结构与 `SetGenerationConfig`，再改为待派发。
+已按 #63 合入的代码核对状态库：
+- 表名 `secret`、`generation_secret_path` 符合单数命名。被引用的 `generation` 表主键是 `generation_id`，列 `config_snapshot` 存配置快照；`committed_at` 为 NULL 表示尚未提交。
+- 现有模型都在 `models.go`；本切片把新模型和读写方法一起放在 `secrets.go`，不改 `models.go`，以减少并行冲突。
+- `SetGenerationConfig` 改为在同一事务内写入快照和 secret 路径，避免快照和路径只写入一半。
+- T-08.10（goal-90）把 secret 标记改为 `config:"secret"`。Schema 关键字 `x-alonabot-secret` 不变。测试插件按合并时 main 上的写法书写，后合并的一方同步。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-31（切片 T-08.4：不可变 Secret Store）。goal 目录 goal-31，分支 goal-31，worktree .worktrees/goal-31，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -1963,8 +1967,13 @@ goal-28、goal-29 的符号已按合入代码核对：
    迁移：
    CREATE TABLE secret (ref_id TEXT PRIMARY KEY, plugin_id TEXT NOT NULL REFERENCES install(plugin_id), value BLOB NOT NULL, created_at INTEGER NOT NULL);
    CREATE TABLE generation_secret_path (generation_id TEXT NOT NULL REFERENCES generation(generation_id), path TEXT NOT NULL, PRIMARY KEY (generation_id, path));
-   func (s *Store) SetGenerationConfig(ctx context.Context, generationID, snapshot string) error // 只允许未提交的代次
-   其余读写方法自定（放在 secrets.go）。
+   func (s *Store) SetGenerationConfig(ctx context.Context, generationID, snapshot string, secretPaths []string) error // 只允许未提交的代次；同一事务内写入快照并替换该代次的 secret 路径
+   其余读写方法自定。模型类型与读写方法都放在 secrets.go：TableName 指向表名，列名写在 column 标签，created_at 为毫秒，由调用方显式赋值（autoCreateTime:false）。
+   读写遵守编码规范「Core 状态库不写 SQL」：
+   - SetGenerationConfig 在事务内按主键读出代次，在 Go 中检查 committed_at 为 NULL（已提交时返回错误），改 config_snapshot 后 Save；再删除该代次原有的路径行，逐条写入新路径。
+   - secret 按主键读取，在 Go 中核对 plugin_id。
+   - 按插件或代次列出时用结构体条件，入口拒绝空的 plugin_id 与 generation_id。
+   - Collect 先按插件列出 secret，在 Go 中算出未被引用的 ref_id，再用 clause.IN{Column: clause.PrimaryColumn, Values: ...} 删除；集合为空时不执行删除。
 2. internal/core/secret
    const RefKey = "$secret_ref"
    type Store struct{ ... }
@@ -1985,7 +1994,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 - 路径：secret 路径模式由从根到字段的 JSON 名用 "." 连接（属性名中的 "~" 与 "." 按 RFC 6901 的方式转义为 "~0" 与 "~1"），数组元素与 map 的任意键写作 "*"，例如 providers.*.api_key、mcp_servers.*.env.*.value。Extract 按模式遍历候选 JSON 的每个具体位置；复用引用时与 previous 中同一具体位置（同一数组下标或 map 键）的明文比较。
 - Bootstrap：supervisor 在 Launch 前用 Resolve 把 Active（restart）或 Pending（新候选，由 T-09 提供）快照解析为明文，放进 candidate_config_json；明文 Bootstrap 只走认证 IPC。
 - REGISTER 之后：host 调用 Expect.Snapshot（supervisor 以 Extract 实现，schema=Spec.ConfigSchema，keptPaths=Spec.KeptSecretPaths 加上一代次的 generation_secret_path），得到快照与路径集合；PREPARED 摘要对快照计算。字段值为 null 或缺失时不生成引用；字段值已经是 {"$secret_ref": id} 时拒绝（插件不能回传引用）。
-- 新候选：在提交 Active 之前，SetGenerationConfig 写入快照，并写入 generation_secret_path。普通 restart：Extract 的结果必须与已提交的快照完全相同（明文未变时复用原引用），否则 FAILED_PRECONDITION，不提交新代次。
+- 新候选：在提交 Active 之前，SetGenerationConfig 在同一事务内写入快照与 generation_secret_path。普通 restart：Extract 的结果必须与已提交的快照完全相同（明文未变时复用原引用），否则 FAILED_PRECONDITION，不提交新代次。
 - 旧 secret 字段从 Schema 移除但仍作为未知键保留时，因为路径在 keptPaths 中而继续被抽取；只有候选中该键被删除，路径才不再保留。
 - Redact 的结果用于管理 API；掩码不是协议值，表单提交时省略字段表示保持原值（T-09 与 T-08.7 遵守）。
 - Collect 只删除不被任何 protected 快照引用的 secret；正在恢复或 Journal 中的引用由 T-09 加入 protected。
@@ -2081,7 +2090,13 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-36 · T-09.1 首次管理认证
 
-状态：等待前置（T-02.3）。前置 T-07.4 已由 PR #53 合并；本切片在 `internal/core/state/schema.sql` 中加表并经 GORM 读写，二者在 T-02.3（goal-86，PR #63）合并后才存在，因此还要等它合并，届时按它的模型与命名约定核对本语句的表结构，再改为待派发。符号已按合入代码核对：`webhost.AdminSessions{ Lookup(r *http.Request) (sessionID string, expiresAt time.Time, ok bool); Valid(sessionID string) bool }`，Host 只在 admin host 的请求上调用 Lookup 并记录会话期限，签发、兑换票据与每次插件授权都调用 Valid，所以 reset 与登出只要让 Valid 返回 false，派生的票据与插件会话就随之失效；`webhost.New(log *slog.Logger, opt webhost.Options) *Host`，`Options{AdminBaseURL, PluginBaseURL *url.URL; SecondHost bool; Admin http.Handler; Proxy *httpproxy.Server; Sessions AdminSessions; Now func() time.Time}`，Admin 为 nil 时管理入口返回 404；`(*Host).IssueTicket(adminSessionID, pluginID string) (ticketURL string, err error)`。cmd/alonabot 的 run 现在只传 AdminBaseURL、PluginBaseURL、SecondHost 与 Proxy，本切片补上 Admin 与 Sessions。Host 与插件响应策略已过滤 `alonabot_` 与 `__Host-alonabot_` 前缀的 Cookie；插件会话 Cookie 为 `__Host-alonabot_plugin`（HTTPS）或 `alonabot_plugin`，管理会话 Cookie 不要与之同名。`settings.Settings` 的 AdminBaseURL、PluginBaseURL 是字符串，由 settings.Load 校验；命令树在 cmd/alonabot/commands.go（cobra）。
+状态：待派发。前置 T-02.3（PR #63，合并提交 `6b197d8`）、T-07.4（PR #53）均已合并。已按 #63 的模型与命名约定核对表结构：
+- `admin_credential`、`admin_session` 符合单数命名。
+- 模型类型与读写方法一起放在 `admin.go`，不改 `models.go`。
+- 单行表的整数主键要关闭 GORM 的自增推断。
+- 全部会话的删除要显式允许全表操作。
+
+符号已按合入代码核对：`webhost.AdminSessions{ Lookup(r *http.Request) (sessionID string, expiresAt time.Time, ok bool); Valid(sessionID string) bool }`，Host 只在 admin host 的请求上调用 Lookup 并记录会话期限，签发、兑换票据与每次插件授权都调用 Valid，所以 reset 与登出只要让 Valid 返回 false，派生的票据与插件会话就随之失效；`webhost.New(log *slog.Logger, opt webhost.Options) *Host`，`Options{AdminBaseURL, PluginBaseURL *url.URL; SecondHost bool; Admin http.Handler; Proxy *httpproxy.Server; Sessions AdminSessions; Now func() time.Time}`，Admin 为 nil 时管理入口返回 404；`(*Host).IssueTicket(adminSessionID, pluginID string) (ticketURL string, err error)`。cmd/alonabot 的 run 现在只传 AdminBaseURL、PluginBaseURL、SecondHost 与 Proxy，本切片补上 Admin 与 Sessions。Host 与插件响应策略已过滤 `alonabot_` 与 `__Host-alonabot_` 前缀的 Cookie；插件会话 Cookie 为 `__Host-alonabot_plugin`（HTTPS）或 `alonabot_plugin`，管理会话 Cookie 不要与之同名。`settings.Settings` 的 AdminBaseURL、PluginBaseURL 是字符串，由 settings.Load 校验；命令树在 cmd/alonabot/commands.go（cobra）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-36（切片 T-09.1：首次管理认证）。goal 目录 goal-36，分支 goal-36，worktree .worktrees/goal-36，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -2103,7 +2118,13 @@ goal-28、goal-29 的符号已按合入代码核对：
    迁移：
    CREATE TABLE admin_credential (id INTEGER PRIMARY KEY CHECK (id = 1), token_sha256 BLOB NOT NULL, auth_generation INTEGER NOT NULL, updated_at INTEGER NOT NULL);
    CREATE TABLE admin_session (session_id TEXT PRIMARY KEY, csrf_token TEXT NOT NULL, auth_generation INTEGER NOT NULL, expires_at INTEGER NOT NULL);
-   读写方法自定（放在 admin.go）。
+   读写方法自定。模型类型与读写方法都放在 admin.go：TableName 指向表名，列名写在 column 标签，updated_at、expires_at 为毫秒，由调用方显式赋值（autoUpdateTime:false）。
+   读写遵守编码规范「Core 状态库不写 SQL」：
+   - admin_credential 的 id 字段标 primaryKey;autoIncrement:false，取值为命名常量 1，按 clause.Eq{Column: clause.PrimaryColumn, Value: 1} 读取。
+   - InitToken 在事务内读不到凭证时才 Create，已有凭证时返回错误。
+   - ResetToken 在事务内读出凭证（不存在时返回 ErrNotInitialized），auth_generation 加一并写入新摘要后 Save；同一事务内用 Session(&gorm.Session{AllowGlobalUpdate: true}) 删除全部 admin_session。
+   - 会话按主键读取与删除，入口拒绝空的会话 ID；是否过期、代次是否一致在 Go 中判断。
+   - 登录创建会话时，同一事务内删除已过期的会话：用 clause.Lte 与包内列名常量 expires_at。
 2. internal/core/adminauth
    var ErrNotInitialized = errors.New("admin token is not initialized")
    func InitToken(ctx context.Context, st *state.Store) (token string, err error)  // 已有凭证时返回错误；token 为 32 字节随机值的 base64url（无 padding）
