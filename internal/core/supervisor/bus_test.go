@@ -103,7 +103,7 @@ func testBusProcesses(t *testing.T, binary string, stdio bool) {
 		}
 	}()
 	values := tune.Defaults()
-	routes := router.New(output.Logger(), values.DispatchQueueEvents, nil, nil)
+	routes := router.New(output.Logger(), values.DispatchQueueEvents, nil, nil, nil)
 	defer routes.Close()
 	services := broker.New(routes, output.Logger(), values.RequestTimeout)
 	mux := router.NewMux()
@@ -137,10 +137,11 @@ func testBusProcesses(t *testing.T, binary string, stdio bool) {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
+		caller := router.NewCaller(id, generation)
 		spec := Spec{PluginID: id, Role: state.RolePlugin, GenerationID: generation, PluginDir: dir, Executable: binary, BuildDigest: digest,
 			NewCandidate: true, Stdio: stdio, ExtraEnv: map[string]string{"ALONABOT_TEST_BUS_ID": id},
 			Bootstrap: &pb.Bootstrap{GenerationId: generation, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE}},
-			Limits:    host.NewLimits(values), Stop: host.NewStopTiming(values), Log: output.Plugin(id, generation), Global: budget, Handler: mux.For(router.NewCaller(id, generation)),
+			Limits:    host.NewLimits(values), Stop: host.NewStopTiming(values), Log: output.Plugin(id, generation), Global: budget, Handler: mux.For(caller),
 		}
 		instance, err := Launch(ctx, store, spec)
 		if err != nil {
@@ -152,7 +153,7 @@ func testBusProcesses(t *testing.T, binary string, stdio bool) {
 			gate.Plugin = plugin
 			plugin = gate
 		}
-		routes.Attach(plugin)
+		routes.Attach(plugin, caller)
 		broadcast.Attach(plugin)
 	}
 	control := func(id string, request busControl) busReply {
@@ -276,14 +277,15 @@ func testBusProcesses(t *testing.T, binary string, stdio bool) {
 	spec := specs["slow"]
 	spec.NewCandidate = false
 	spec.Log = output.Plugin(spec.PluginID, spec.GenerationID)
-	spec.Handler = mux.For(router.NewCaller(spec.PluginID, spec.GenerationID))
+	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
+	spec.Handler = mux.For(caller)
 	restarted, err := Launch(ctx, store, spec)
 	if err != nil {
 		t.Fatalf("restart slow: %v", err)
 	}
 	running["slow"] = restarted
 	plugin := router.FromInstance(restarted.Instance)
-	routes.Attach(plugin)
+	routes.Attach(plugin, caller)
 	broadcast.Attach(plugin)
 	publish("x", 1, 12)
 	wait("restarted subscriber receives fresh marker", func() bool {

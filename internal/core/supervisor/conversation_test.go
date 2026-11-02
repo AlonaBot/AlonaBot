@@ -111,19 +111,20 @@ func TestConversationProcesses(t *testing.T) {
 		service.Register(mux)
 		sender := message.New(registry, policy.New(store))
 		mux.Handle(wire.ServiceSend, sender.Send)
-		events = router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send)
+		events = router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send, nil)
 		events.Start()
 		if err := platform.Start(ctx, events); err != nil {
 			t.Fatal(err)
 		}
 		for i := range specs {
-			specs[i].Handler = mux.For(router.NewCaller(specs[i].PluginID, specs[i].GenerationID))
+			caller := router.NewCaller(specs[i].PluginID, specs[i].GenerationID)
+			specs[i].Handler = mux.For(caller)
 			instance, err := Launch(ctx, store, specs[i])
 			if err != nil {
 				t.Fatal(err)
 			}
 			running = append(running, instance)
-			events.Attach(router.FromInstance(instance.Instance))
+			events.Attach(router.FromInstance(instance.Instance), caller)
 			specs[i].NewCandidate = false
 		}
 	}
