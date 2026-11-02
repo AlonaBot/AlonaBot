@@ -68,7 +68,7 @@ const (
 	httpProxyTokenBytes = 32
 )
 
-// Expect 携带 Core 启动记录中与本次进程绑定的身份信息，用于核对 HELLO。
+// Expect 携带本次进程的可信身份及配置快照回调。
 type Expect struct {
 	Role        state.Role     // 必填，由安装记录指定
 	AdapterID   string         // Adapter 角色要求的平台注册身份
@@ -76,6 +76,9 @@ type Expect struct {
 	Secret      []byte         // 本次启动的 32 字节 Session Secret
 	BuildDigest []byte         // 安装时已验证的归档摘要
 	Offer       validate.Offer // Core 一侧支持/要求的协议版本与能力
+	// Snapshot 在 REGISTER 校验后生成持久化快照；nil 时使用原候选配置。
+	// 回调的错误消息须省略配置值。
+	Snapshot func(candidate []byte) (snapshot []byte, err error)
 }
 
 // PhaseError 记录准备阶段在哪个阶段、以什么错误码失败；消息不含 Secret 或配置内容。
@@ -95,12 +98,13 @@ func phaseErr(phase pb.SessionPhase, code pb.ErrorCode, format string, args ...a
 
 // Prepared 保存 REGISTER 校验通过后的结果；Core 提交 ActiveGeneration 之前不对外公开任何路由。
 type Prepared struct {
-	SessionID    []byte
-	Minor        uint32                   // 协商出的协议次版本
-	Capabilities []*pb.ProtocolCapability // 双方都支持的协议能力
-	Register     *pb.Register             // 已通过校验的注册载荷
-	RouteHash    []byte                   // PREPARED 中的 route_descriptor_hash
-	// PREPARED 中的 candidate_config_digest。
+	SessionID      []byte
+	Minor          uint32                   // 协商出的协议次版本
+	Capabilities   []*pb.ProtocolCapability // 双方都支持的协议能力
+	Register       *pb.Register             // 已通过校验的注册载荷
+	RouteHash      []byte                   // PREPARED 中的 route_descriptor_hash
+	ConfigSnapshot []byte                   // 准备持久化的配置，secret 字段只包含引用
+	// PREPARED 中的 candidate_config_digest，对 ConfigSnapshot 计算。
 	ConfigDigest   []byte
 	httpProxyToken []byte // 本 Session 的内部代理凭证；仅交给 Instance，不进入日志
 }
@@ -275,8 +279,23 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 			sendErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "listener reported without declaring HTTP capability")
 			return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "listener reported without declaring HTTP capability")
 		}
+		// 4. 注册校验通过后形成持久化快照，PREPARED 只确认该快照的摘要。
+		snapshot := []byte(m.GetCandidateConfigJson())
+		if exp.Snapshot != nil {
+			snapshot, err = exp.Snapshot(snapshot)
+			if err != nil {
+				code := pb.ErrorCode_ERROR_CODE_INTERNAL
+				safe := "create config snapshot failed"
+				var ve *validate.Error
+				if errors.As(err, &ve) {
+					code, safe = validate.PublicCode(ve.Code), ve.Message
+				}
+				sendErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER, code, safe)
+				return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_REGISTER, code, "%v", err)
+			}
+		}
 		p := &Prepared{SessionID: sid, Minor: agree.Minor, Capabilities: agree.Intersection, Register: m,
-			RouteHash: routeHash(m), ConfigDigest: digest([]byte(m.GetCandidateConfigJson())), httpProxyToken: boot.GetHttpProxyAuth().GetToken()}
+			RouteHash: routeHash(m), ConfigSnapshot: snapshot, ConfigDigest: digest(snapshot), httpProxyToken: boot.GetHttpProxyAuth().GetToken()}
 		prep, err := wire.ControlEnvelope(sid, agree.Minor, "", pb.FrameKind_FRAME_KIND_PREPARED, &pb.Prepared{RouteDescriptorHash: p.RouteHash, CandidateConfigDigest: p.ConfigDigest})
 		if err == nil {
 			err = conn.WriteFrame(prep)
