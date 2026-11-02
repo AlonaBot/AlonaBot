@@ -138,7 +138,8 @@ func Load(dataDir string) (Settings, error) {
 		return Settings{}, fmt.Errorf("%s: %w", name, at(locations, "plugin_base_url", errors.New("must use a different hostname from admin_base_url")))
 	}
 	host, _, _ := net.SplitHostPort(s.Listen) // listen 的语法已在 readValue 中校验。
-	if !net.ParseIP(host).IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && admin.Scheme != "https" && len(s.TrustedProxies) == 0 {
+	ip, _ := netip.ParseAddr(host)
+	if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && admin.Scheme != "https" && len(s.TrustedProxies) == 0 {
 		return Settings{}, fmt.Errorf("%s: %w", name, at(locations, "listen", errors.New("non-loopback listen requires HTTPS admin_base_url or trusted_proxies")))
 	}
 	if s.LogFile.MaxSize > s.LogFile.MaxTotal {

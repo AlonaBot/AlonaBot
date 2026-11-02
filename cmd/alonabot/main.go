@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"os/signal"
@@ -75,7 +76,8 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 			return &usageError{fmt.Errorf("--listen: %w", err)}
 		}
 		host, _, _ := net.SplitHostPort(*selected.listen) // 已通过 ValidateListen。
-		if !net.ParseIP(host).IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && adminURL.Scheme != "https" && len(configuration.TrustedProxies) == 0 {
+		ip, _ := netip.ParseAddr(host)
+		if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && adminURL.Scheme != "https" && len(configuration.TrustedProxies) == 0 {
 			return &usageError{errors.New("--listen: non-loopback listen requires HTTPS admin_base_url or trusted_proxies")}
 		}
 		configuration.Listen = *selected.listen
