@@ -57,7 +57,7 @@ bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle --stdi
 bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/httpplugin --listen 127.0.0.1:8080
 ```
 
-Core 在 `listen` 地址（缺省 `127.0.0.1:7650`）上提供唯一的公开 HTTP 入口，`/plugins/{id}/...` 转发给该插件当前 Session 的路由；私有路由尚未接入插件会话授权，目前一律返回 401。设置了 `proxy` 时，Core 与子进程使用它作为 `HTTP_PROXY`/`HTTPS_PROXY`；为空时原样传递环境中的 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`。
+Core 在 `listen` 地址（缺省 `127.0.0.1:7650`）上提供唯一的公开 HTTP 入口，只按请求的 Host 分派：`admin_base_url` 的主机名进入管理入口，`plugin_base_url` 的主机名提供 `/plugins/{id}/...`，转发给该插件当前 Session 的路由；其他 Host 返回 421。本地调试时请求要带对应的 Host，例如缺省设置下用 `http://localhost:7650/plugins/demo/...` 访问插件。两个 Base URL 必须同 scheme、同有效端口、主机名不同（CONTRACTS §7.3）。管理认证尚未接入，插件兑换票据无法签发，私有路由目前一律返回 401。设置了 `proxy` 时，Core 与子进程使用它作为 `HTTP_PROXY`/`HTTPS_PROXY`；为空时原样传递环境中的 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`。
 
 调优参数在启动时解析；修改后重启生效。查看全部 37 项参数及当前生效值：
 
