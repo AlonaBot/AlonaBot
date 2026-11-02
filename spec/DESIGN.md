@@ -164,24 +164,27 @@ Core 管理状态库与插件业务库分开。框架只托管 SQLite（D-48）�
 
 ## J. Config、Schema 与 i18/
 
-运行配置为普通 JSON 对象，无外层 config；i18/ 翻译才以 config 为顶层。Go Config 的 json/form/description/secret/hidden tag 生成 Schema 与表单，字段按声明顺序，保留未知键、显式 false/0/空串与隐藏字段。
+运行配置为普通 JSON 对象，无外层 config；i18/ 翻译才以 config 为顶层。Go Config 的 `json` 标签决定字段名，`config` 标签统一承载表单与 secret/hidden 元数据（语法同 GORM 标签，label 与 description 直接写英文源文案），二者生成 Schema 与表单，字段按声明顺序，保留未知键、显式 false/0/空串与隐藏字段。
 
 `OnLoad` 是配置回调，区别于三个进程 Hook，也负责拒绝不合法的业务取值，SDK 不另设 Validate 回调。流程为原始对象→配置版本迁移（OnLoad）→仅补缺键默认→typed decode/Schema 校验→Candidate；不能先用新 Schema 拒绝仍需迁移的旧字段。持久化保留原始完整对象，不能用 typed marshal 丢掉未知键。
 
 Core 状态库的 ActiveGeneration 是权威，`config.json` 是用户编辑快照。直接编辑不热生效，`plugin reload` 导入 Pending 后走候选流程。新 secret 产生新不可变引用，候选失败不修改旧凭证；普通配置 API 不返回明文。表单 PATCH 采用明确操作，掩码不当作真实值。
 
+```go
+Interval int    `json:"interval" config:"label:Refresh interval;description:Polling interval;default:10;min:1"`
+Mode     string `json:"mode" config:"label:Mode;options:fast|safe;labels:Fast|Safe"`
+```
+
 ```json
 {
   "config": {
-    "interval": {
-      "label": "Refresh interval",
-      "description": "Polling interval"
-    }
+    "interval": { "label": "刷新间隔", "description": "轮询间隔" },
+    "mode": { "label": "模式", "labels": ["快速", "安全"] }
   }
 }
 ```
 
-以上是 i18/en-US.json 示例；语言仅影响文案，查找为当前 locale→en-US→默认 tag。选项显示名可翻译，值和配置 JSON 路径保持不变。
+以上是 i18/zh-CN.json 示例：源文案写在标签里，翻译文件按字段名嵌套覆盖（D-74，仿照 AstrBot）。语言仅影响文案，查找为当前 locale→标签中的源文案→字段的 JSON 名。选项的存储值不翻译，显示文案由 labels 提供。
 
 同一文件的顶层 `messages` 存放机器人回复的文案，例如 `{"messages": {"quiz.got": "You answered {answer}."}}`。SDK 的 `c.T` 按用户的 locale、Core 默认 locale、en-US 的顺序选择语言；日志与错误只用英文，不进入文案目录（CONTRACTS §5.4）。
 
@@ -262,7 +265,7 @@ Target 与凭证按 Adapter 实例/账号区分，不把特定 X/Twitter 多账�
 Agent 分为 Core 基础与 Agent 组件两层（D-27）。Core 负责必须可信的部分：工具目录与按工具的调用策略、调用前的用户确认、会话存储；它们复用 Service Broker、按钮 token 与 Target 准入的实现（CONTRACTS §13）。Agent 组件（`role: agent`，全局至多一个，D-59）只经 SDK 访问 Core。官方 Agent 组件位于 `agent/`，可以被社区 Agent 替换；其他插件经 `@agent` 调用 `llm.generate`，替换后不用修改（D-61）。官方 Agent 组件：
 
 - **一轮对话**：`/ask` 在任何聊天中触发；Admin 为某个聊天开启自由对话后，该聊天中 `to_me` 的非命令消息也触发（私聊的消息都是 `to_me`）。触发的 Handler 请求延续调用，在其中读取会话历史，按人格组装系统提示，调用 Provider 并流式接收。目标实例支持 `message.edit` 时，先发送一条消息，再按固定间隔编辑它，显示已生成的内容，生成结束后用完整内容做最后一次编辑；不支持时生成结束后一次发送。会话按 Adapter 实例、聊天与话题区分。
-- **Provider**：官方 OpenAI（`openai`）、OpenAI 兼容（`openai-compatible`）的 Chat Completions 与 Anthropic Messages，用标准库 net/http 与 SSE 实现；api_key 使用 Secret 引用。两种 OpenAI 协议只差输出上限的参数名（D-64）。Provider 条目可以选择预设（例如 openai、anthropic、deepseek），预设给出缺省的协议与 base_url，在配置表单中带各自的图标（D-63）。流结束时得到停止原因与用量。
+- **Provider**：官方 OpenAI（`openai`）、OpenAI 兼容（`openai-compatible`）的 Chat Completions 与 Anthropic Messages，用标准库 net/http 与 SSE 实现；api_key 使用 Secret 引用。两种 OpenAI 协议只差输出上限的参数名（D-64）。Provider 条目可以选择预设（例如 openai、anthropic、deepseek），预设给出缺省的协议与 base_url。流结束时得到停止原因与用量。
 - **工具**：模型请求的 Core 工具经 `core.tool.invoke` 调用；MCP 工具（stdio、streamable HTTP，经 `github.com/modelcontextprotocol/go-sdk`）执行前先经 `core.tool.confirm`。单轮的工具步数有上限。
 - **技能**：管理员放进技能目录的 `SKILL.md`，包含名称、描述与正文。系统提示只列出描述，模型经 `load_skill` 按需读取正文。
 - **定时任务**：用户让 Agent 创建的任务保存在 Agent 的数据库，由一个固定的 schedule 触发，在该回调内运行；没有 Actor，因此需要确认的工具一律拒绝。
