@@ -170,7 +170,14 @@ func (p *Process) start(ctx context.Context, id string, config []byte) error {
 	defer p.mu.Unlock()
 	entry := &instance{needsStop: true, process: p, id: id, config: append([]byte(nil), config...), enabled: true, running: true, account: response.AccountId, displayName: response.AccountDisplayName, username: response.GetAccountUsername(), capabilities: response.Capabilities, session: bound.Session}
 	entry.sessionKey = p.caller.SessionKey
-	if err := p.opt.Registry.Add(entry); err != nil {
+	var registered adapter.Instance = entry
+	for _, capability := range entry.capabilities {
+		if capability.GetName() == mediaReadCapability && capability.GetVersion() == 1 && capability.GetSupported() {
+			registered = &mediaInstance{instance: entry}
+			break
+		}
+	}
+	if err := p.opt.Registry.Add(registered); err != nil {
 		p.mu.Unlock()
 		stopErr := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: id}, &pb.AdapterInstanceStopResponse{})
 		p.mu.Lock()

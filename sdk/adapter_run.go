@@ -17,6 +17,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const adapterMediaReadCapability = "media.read"
+
 // adapterRuntime 按实例串行化启停；全局状态锁只保护登记，不跨平台操作持有。
 // Session 生命周期沿用 activation；每个实例 Core 客户端独立关闭交付入口。
 type adapterRuntime struct {
@@ -249,7 +251,17 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 		entry.instance = instance
 		r.mu.Unlock()
 		account := instance.Account()
-		response := &pb.AdapterInstanceStartResponse{AccountId: account.ID, Capabilities: instance.Capabilities()}
+		// 读取能力由实例接口决定，避免平台自报能力与实际 RPC 入口不一致。
+		var capabilities []*pb.Capability
+		for _, capability := range instance.Capabilities() {
+			if capability.GetName() != adapterMediaReadCapability {
+				capabilities = append(capabilities, capability)
+			}
+		}
+		if _, ok := instance.(adapter.MediaSource); ok {
+			capabilities = append(capabilities, &pb.Capability{Name: adapterMediaReadCapability, Version: 1, Supported: true})
+		}
+		response := &pb.AdapterInstanceStartResponse{AccountId: account.ID, Capabilities: capabilities}
 		if account.DisplayName != "" {
 			response.AccountDisplayName = &account.DisplayName
 		}

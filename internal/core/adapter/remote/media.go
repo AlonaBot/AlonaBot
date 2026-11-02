@@ -8,8 +8,13 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
+const mediaReadCapability = "media.read"
+
+// mediaInstance 只包装明确声明读取能力的实例，其他可选接口沿用 instance。
+type mediaInstance struct{ *instance }
+
 var (
-	_ adapter.MediaReader  = (*instance)(nil)
+	_ adapter.MediaReader  = (*mediaInstance)(nil)
 	_ adapter.MediaSession = (*instance)(nil)
 )
 
@@ -49,7 +54,7 @@ func (p *Process) registerIncoming(instanceID string, ev *pb.Event) {
 func (entry *instance) MediaSessionKey() string { return entry.sessionKey }
 
 // ReadMedia 经实例创建时的 Session 按需读取平台文件，不自动重试。
-func (entry *instance) ReadMedia(ctx context.Context, fileID string, offset uint64, length uint32) ([]byte, uint64, bool, error) {
+func (entry *mediaInstance) ReadMedia(ctx context.Context, fileID string, offset uint64, length uint32) ([]byte, uint64, bool, error) {
 	p := entry.process
 	p.mu.Lock()
 	running := entry.running

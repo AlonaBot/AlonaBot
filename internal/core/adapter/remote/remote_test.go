@@ -97,6 +97,10 @@ func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core s
 
 type mediaLoopInstance struct{ *loopInstance }
 
+func (i *mediaLoopInstance) Capabilities() []*pb.Capability {
+	return append(i.loopInstance.Capabilities(), &pb.Capability{Name: "media.read", Version: 2})
+}
+
 func (i *mediaLoopInstance) ReadPlatformFile(_ context.Context, fileID string, offset uint64, length uint32) ([]byte, uint64, bool, error) {
 	i.mu.Lock()
 	i.mediaReads++
@@ -528,6 +532,35 @@ func TestRemoteMediaRead(t *testing.T) {
 		}
 	}
 	in, _ := registry.Get("readable")
+	unsupported, _ := registry.Get("unsupported")
+	for _, check := range []struct {
+		in       adapter.Instance
+		readable bool
+	}{
+		{in, true},
+		{unsupported, false},
+	} {
+		_, implements := check.in.(adapter.MediaReader)
+		if implements != check.readable {
+			t.Fatalf("instance %s MediaReader = %v, want %v", check.in.InstanceID(), implements, check.readable)
+		}
+		var declared bool
+		declarations := 0
+		for _, capability := range check.in.Capabilities() {
+			if capability.Name == "media.read" {
+				declarations++
+			}
+			if capability.Name == "media.read" && capability.Version == 1 && capability.Supported {
+				declared = true
+			}
+		}
+		if declared != check.readable {
+			t.Fatalf("instance %s media.read declaration = %v", check.in.InstanceID(), declared)
+		}
+		if declarations > 1 {
+			t.Fatalf("instance %s has duplicate media.read declarations", check.in.InstanceID())
+		}
+	}
 	if got := in.(adapter.MediaSession).MediaSessionKey(); got != caller.SessionKey {
 		t.Fatalf("media session = %q, want %q", got, caller.SessionKey)
 	}
@@ -586,8 +619,22 @@ func TestRemoteMediaRead(t *testing.T) {
 	if id := mediaStore.RegisterIncoming("readable", "platform-file", nil, nil); id != objectID {
 		t.Fatalf("registered object ID = %q, want %q", id, objectID)
 	}
-	if id := mediaStore.RegisterIncoming("unsupported", "platform-file", nil, nil); id == objectID {
+	unsupportedID := mediaStore.RegisterIncoming("unsupported", "platform-file", nil, nil)
+	if unsupportedID == objectID {
 		t.Fatal("different adapter instances shared an incoming object")
+	}
+	consumer := router.NewCaller("unsupported-consumer", "generation")
+	descriptor := mediaStore.IssueIncoming(unsupportedID, consumer, nil)
+	if descriptor.Readability != pb.MediaReadability_MEDIA_READABILITY_UNSUPPORTED {
+		t.Fatalf("unsupported readability = %v", descriptor.Readability)
+	}
+	readRequest := &pb.ReadRequest{Token: descriptor.Token, Length: 4}
+	encoded, err := proto.Marshal(readRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out := mux.For(consumer)(ctx, &wire.Inbound{Target: wire.ServiceMediaRead, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(readRequest), SchemaVersion: 1, Bytes: encoded}}); out.Err.GetCode() != pb.ErrorCode_ERROR_CODE_UNSUPPORTED {
+		t.Fatalf("unsupported Core read = %v", out.Err)
 	}
 
 	// 2. 两个接收 Session 使用独立令牌，经 Core 读取同一份惰性缓存。
@@ -669,8 +716,12 @@ func TestRemoteMediaRead(t *testing.T) {
 			t.Fatalf("length %d error = %v", length, err)
 		}
 	}
-	unsupported, _ := registry.Get("unsupported")
-	if _, _, _, err := unsupported.(adapter.MediaReader).ReadMedia(ctx, "platform-file", 0, 4); wire.CodeOf(err) != pb.ErrorCode_ERROR_CODE_UNSUPPORTED {
+	mediaRequest := &pb.AdapterMediaReadRequest{InstanceId: "unsupported", FileId: "platform-file", Length: 4}
+	encoded, err = proto.Marshal(mediaRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := running.Instance.Session.Call(ctx, wire.Request{Target: wire.ServiceAdapterMediaRead, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(mediaRequest), SchemaVersion: 1, Bytes: encoded}}); wire.CodeOf(err) != pb.ErrorCode_ERROR_CODE_UNSUPPORTED {
 		t.Fatalf("unsupported instance error = %v", err)
 	}
 	if err := p.StopInstance(ctx, "readable"); err != nil {
