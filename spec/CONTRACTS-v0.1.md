@@ -135,7 +135,7 @@ SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 contex
 ### 5.1 配置真源、缺失值与编辑
 
 - 每插件使用独立 JSON 对象，不加外层 `config`；`config` 只用于 `i18/*.json` 的翻译根节点。`<data_dir>/plugins/<id>/config.json` 是可编辑快照，运行值以 Core 状态库的 Active Generation 为准。直接编辑后执行 `alonabot plugin reload <id>` 才导入 Pending；`restart` 只重启已激活配置。已有状态库无法读取时必须报错，不能把编辑快照或空对象当成新的 Active。
-- 每包至多一个 Config 类型，以 `json` tag 为字段真源。v0.1 生成器支持 string、bool、整数、有限浮点数、struct、这些类型的 slice、`map[string]T` 与可空指针；不支持的自定义 JSON 编解码/递归类型在 `check` 时明确报错。Go 声明顺序决定结构字段顺序，map 的动态键不参与手工排序。`form` 承载 label/widget/options/min/max/default/required，options 的每个选项可以附一个包内图标的相对路径（§7.5）；required 显式声明必需字段；其他缺失字段按 Go 零值解码但不伪造持久化键。`description`、`secret:"true"`、`hidden:"true"` 独立表达对应属性。
+- 每包至多一个 Config 类型，以 `json` tag 为字段真源。v0.1 生成器支持 string、bool、整数、有限浮点数、struct、这些类型的 slice、`map[string]T` 与可空指针；不支持的自定义 JSON 编解码/递归类型在 `check` 时明确报错。Go 声明顺序决定结构字段顺序，map 的动态键不参与手工排序。字段的表单、i18 与 secret 元数据统一写在 `config` 标签中，语法与 GORM 标签相同：`key:value;key:value;flag`，例如 `config:"label:config.display;widget:select;options:openai@assets/icons/openai.svg|custom;required"`，secret 字段写 `config:"secret"`。值键为 label 与 description（完整的 i18 键，以 `config.` 开头，见 §5.3）、widget、options、min、max、default（JSON 字面量，可以含 `;` 与 `:`）；标志为 required、secret、hidden。options 的每个选项可以附一个包内图标的相对路径（§7.5）；required 显式声明必需字段；其他缺失字段按 Go 零值解码但不伪造持久化键。未知键、标志带值、值键缺值、i18 键不以 `config.` 开头，以及配置字段上残留的 `form`、`description`、`secret`、`hidden` 独立标签，都在 `check` 时报错。
 - 未知键默认保留；SDK 以完整原始 JSON 对象维护配置，只把已声明字段解码供插件使用，不能用 typed Config 重新 marshal 后覆盖整个文档。默认值只补**缺失键**，显式 `false`、`0`、`""`、空数组/对象均保留；完整 JSON 中的 `null` 是已提供的值，只允许可空类型且不触发默认值。缺少必需字段且没有默认值，或数字超出 Go 字段范围，返回 INVALID_ARGUMENT。
 - WebUI 的字段 PATCH 使用 JSON Merge Patch：对象递归合并、数组整体替换、未提交键保持、`null` 表示删除键；删除后仍须经过默认值与必需字段校验。需要把可空字段设为 JSON `null` 时使用完整 JSON 编辑/替换入口，避免把 Merge Patch 的删除误当成空值。提交携带所基于的 `base_generation`；旧代次提交返回 FAILED_PRECONDITION，不能覆盖另一项已完成的配置修改。`hidden` 字段不出现在表单中，PATCH 不能因未显示就删除它。
 
@@ -158,7 +158,7 @@ type Config interface {
 - **配置快照存引用，Secret Store 存不可变 secret 版本**。持久化 secret 字段使用 `{"$secret_ref":"opaque-id"}`；v0.1 的 secret 字段为 string 或可空 string 指针。新值生成新引用，旧代次的引用不可原地改值；普通配置 API 只返回引用/是否已设置，表单据此显示掩码，不能把掩码当成保存或“保持不变”的协议值。省略字段保持原值，显式删除走 §5.1 的校验。
 - Core 在构造本 Session 的 bootstrap 前解析其有权访问的引用，SDK 接收正常运行值完成 OnLoad；REGISTER 回传后 Core 按新 Schema **以及此前保留的 secret 路径标记**重新抽取秘密值。旧 secret 字段从 Schema 移除但仍作为未知键保留时继续保密；只有迁移明确删除该键才移除对应路径标记。不能把其他插件的引用解析给当前插件，也不能把含明文的 bootstrap/REGISTER、DSN、配置差异写入日志或普通管理响应。
 - 首发 Secret Store 与 Core 状态一起持久化，使用仅运行账号可读写的文件权限/Windows ACL；这保护普通管理访问，不承诺隔离同账号 Native 代码。管理员明文查看须再次认证并审计。失败候选的 secret 仅在未被 Active、Pending 或保留代次引用时回收；保留旧程序/DB 却提前删旧密钥不算可恢复快照。
-- `i18/en-US.json` 采用 `config.<field>.label/description`，按当前 locale → en-US → Go tag/字段名回退。嵌套结构按 JSON 路径查找；options 只翻译显示文案，不改变存储值。缺少翻译不改变配置内容；`hidden` 不是权限控制，不另建字段排序或并发调参页面。
+- `i18/<locale>.json` 的顶层 `config` 与 `messages`（§5.4）一样是扁平对象：键为点分路径，值为文案字符串；完整的 i18 键是 `config.` 加上该键，例如 `{"config": {"providers.api_key": "API key", "providers.api_key.help": "Get it from the console"}}` 中的 `config.providers.api_key`。字段标签的键取 `config` 标签的 label，缺省为字段的 i18 路径 `config.<json 路径>`（数组元素与 map 值内的字段不含下标或键）；说明的键只来自 `config` 标签的 description，没有缺省。查找按当前 locale → en-US → 字段的 JSON 名回退；options 只翻译显示文案，不改变存储值。缺少翻译不改变配置内容；`hidden` 不是权限控制，不另建字段排序或并发调参页面。
 
 PATCH 语义依据：[RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)。
 

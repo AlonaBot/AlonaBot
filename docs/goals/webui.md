@@ -6,16 +6,16 @@
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
-| goal-34 | T-08.7 | web/admin 骨架、配置表单组件与界面文案 | T-08.1 | 等待前置 |
+| goal-34 | T-08.7 | web/admin 骨架、配置表单组件与界面文案 | T-08.1、T-08.10 | 等待前置 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.4、T-09.1、T-09.4、T-13.1 | 等待前置 |
 | goal-43 | T-09.8 | Admin 管理页 | T-09.6、T-08.7、T-09.12 | 等待前置 |
 | goal-44 | T-09.9 | Admin 配置、权限、工具策略与插件页 | T-09.8、T-11.1、T-11.3 | 等待前置 |
 
-## 第 7 波
+## 第 8 波
 
 ### goal-34 · T-08.7 web/admin 骨架、配置表单组件与界面文案
 
-状态：等待前置。T-08.1 已合并（PR #54，合并提交 `021e972`）。
+状态：等待前置（T-08.10）。T-08.1 已合并（PR #54，合并提交 `021e972`）。
 
 已用 `sdk/generate/config_test.go` 中的期望 Schema 核对实际格式：
 - 字段按声明顺序出现在 `properties` 中。
@@ -25,22 +25,21 @@
   - `x-alonabot-i18n`：`config.<json 路径>`，数组元素与 map 值内的字段不含下标或键，例如 `config.providers.api_key`。
   - `x-alonabot-form`：对象，含 `label`，以及按需出现的 `widget`、`options`、`option_icons`、`min`、`max`。
 - `x-alonabot-secret`、`x-alonabot-hidden` 只在为 true 时出现。
-- `default` 写在 Default 上；`description` 是 `description` 标签给出的 i18 键，没写时省略。
+- `default` 写在 Default 上；`description` 是标签中 description 给出的 i18 键，没写时省略。
 
-改为待派发前，要先请维护者解决一处冲突：
-- CONTRACTS §5.4 规定标签和说明的 i18 键是 `config.<field>.label/description`，按 JSON 路径嵌套查找。
-- 生成器按 goal-28 语句实现：`form.label` 在没写 label 时等于 i18 路径 `config.<path>`，没有 `.label`；`description` 没写时为空。按嵌套查找，`config.<path>` 指向的是对象，不是字符串，所以表单不能直接拿 `form.label` 当键。
+i18 键的冲突已由维护者按 D-74 决定，契约跟随生成器：
+- `i18/<locale>.json` 的 `config` 与 `messages` 同为扁平对象。完整键 `config.a.b` 对应文件中 `config` 对象的键 `a.b`。
+- 字段标签的键是 `x-alonabot-form.label`，缺省即 i18 路径；说明的键是 Schema 的 `description`，没有时不显示说明。
+- 本语句的 `Field` 与 `fieldLabel` 已按此修订。
 
-审查者建议改生成器，向契约看齐：`form.label` 缺省为 `config.<path>.label`，description 缺省为 `config.<path>.description`；`label=` 与 `description:` 显式给出时作为完整的 i18 键。这样 goal-34 的 `fieldLabel` 直接用这两个键，goal-53 的键检查也用同一规则。
-
-决定后修订本语句的 `Field` 映射（可空、map、i18 键的来源）与 `fieldLabel`，并把 `config_test.go` 中的期望 Schema 拆成 fixtures，再改为待派发。
+T-08.10（goal-90）把字段元数据统一收进 `config` 标签，Schema 格式不变。它合并后，审查者用新标签生成 fixtures 并核对本语句，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-34（切片 T-08.7：web/admin 骨架、配置表单组件与界面文案）。goal 目录 goal-34，分支 goal-34，worktree .worktrees/goal-34，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：建立 web/admin 前端工程（Vite、TypeScript、React 19、vitest），它是官方 WebUI 组件（`role: webui`）的源码，构建产物 dist/ 是组件的静态根目录；提供由配置 Schema 驱动的表单组件：字段按声明顺序展示，hidden 字段不显示也不被删除，secret 字段显示「已设置」状态而不把掩码当成保存值，提交生成 RFC 7396 Merge Patch；字段标签按 i18 回退规则显示；WebUI 自身文案有 en-US 与 zh-CN 目录和语言切换组件。真实管理页面与 API 在 T-09 接入。
 
-依据：PLAN T-08 步骤 9（前端）；CONTRACTS §5.1 第 4 条、§5.3、§5.4 最后一条、§7.5、§9.1（WebUI 字段）；DECISIONS D-43、D-62、D-63；docs/development.md（Node 版本与已批准的前端依赖）；TEST-MATRIX V-25 的表单分项、V-54 的界面组件分项。
+依据：PLAN T-08 步骤 9（前端）；CONTRACTS §5.1 第 4 条、§5.3、§5.4 最后一条、§7.5、§9.1（WebUI 字段）；DECISIONS D-43、D-62、D-63、D-74；docs/development.md（Node 版本与已批准的前端依赖）；TEST-MATRIX V-25 的表单分项、V-54 的界面组件分项。
 
 范围（只新增或修改这些）：
 - 新增 web/admin/（package.json、package-lock.json、tsconfig.json、vite.config.ts、index.html、src/、fixtures/、i18n/，以及 manifest plugin.yaml：`role: webui`、`assets: dist`、Admin API 主版本范围 1～1）
@@ -50,14 +49,14 @@
 
 接口（模块与导出，照此实现）：
 - src/schema/model.ts
-  export type Field = { path: string[]; type: 'string'|'integer'|'number'|'boolean'|'object'|'array'|'map'; nullable: boolean; required: boolean; secret: boolean; hidden: boolean; widget?: string; options?: (string|number)[]; optionIcons?: Record<string, string>; min?: number; max?: number; defaultValue?: unknown; i18n: string; children?: Field[] }
+  export type Field = { path: string[]; type: 'string'|'integer'|'number'|'boolean'|'object'|'array'|'map'; nullable: boolean; required: boolean; secret: boolean; hidden: boolean; widget?: string; options?: (string|number)[]; optionIcons?: Record<string, string>; min?: number; max?: number; defaultValue?: unknown; i18n: string; label: string; description?: string; children?: Field[] } // label 与 description 是 i18 键，取自 x-alonabot-form.label 与 description
   export function fieldsFromSchema(schema: unknown): Field[] // 按 properties 的声明顺序（Schema 的 JSON 键顺序）；hidden 字段保留在模型中，标记 hidden
 - src/schema/patch.ts
   export type SecretState = { set: boolean } // 来自管理读取的 {"$secret_set": true}
   export function buildPatch(original: unknown, edited: unknown, fields: Field[]): Record<string, unknown> // RFC 7396：只包含改变的键；未触碰的 secret 与 hidden 字段不出现；清空可空字段生成 null 删除；数组整体替换
 - src/i18n/catalog.ts
   export function pickLocale(available: string[], preferred: readonly string[]): string // 精确 → 主语言（字典序最小）→ en-US
-  export function fieldLabel(messages: Record<string, unknown>, fallback: Record<string, unknown>, field: Field): string // config.<path>.label → en-US → 字段名
+  export function fieldLabel(messages: Record<string, unknown>, fallback: Record<string, unknown>, field: Field): string // 以 field.label 在 messages.config（扁平键，去掉 "config." 前缀）中查找 → fallback（en-US）→ 字段的 JSON 名
 - src/components/ConfigForm.tsx：export function ConfigForm(props: { schema: unknown; value: unknown; secrets: Record<string, SecretState>; messages: Record<string, unknown>; onSubmit: (patch: Record<string, unknown>) => void })
 - src/components/LanguageSwitch.tsx：export function LanguageSwitch(props: { value: string; onChange: (tag: string) => void })
 - i18n/en-US.json、i18n/zh-CN.json：WebUI 文案（键集合一致）
@@ -67,7 +66,7 @@
 - secret：显示「已设置/未设置」与「修改」按钮；未点「修改」时不出现在 patch 中；点了并输入后以新值出现；提供「清除」时（可空字段）生成 null。不把任何掩码字符串放进 patch。
 - hidden：不渲染，但 patch 永远不包含它（不会因未显示而被删除）。
 - 未知键：表单只渲染 Schema 中的字段；patch 只包含被编辑的已知字段，未知键不受影响。
-- 字段文案：标签与说明按 pickLocale 选出的语言取 config.<path>.label / description，缺失时回落 en-US，再回落字段的 JSON 名；options 只翻译显示文案，提交值不变。
+- 字段文案：标签与说明按 pickLocale 选出的语言，以 Field 的 label 与 description 键在该语言文件的 config 对象中查找（D-74 的扁平键），缺失时回落 en-US；标签再回落字段的 JSON 名，说明缺失时不显示；options 只翻译显示文案，提交值不变。
 - 语言切换：初始语言按浏览器 navigator.languages 用 pickLocale 在 en-US 与 zh-CN 中选择；用户选择后保存在 localStorage，与机器人回复语言无关。
 - fixtures/：至少三个 Schema fixture（嵌套与顺序、secret 与 hidden、可空与数组/map），由 goal-28 的生成器为对应 Go 类型实际生成后放入（审查者在派发前核对）。
 - npm scripts：dev、build、test（vitest run）、typecheck（tsc --noEmit）。

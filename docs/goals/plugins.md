@@ -90,7 +90,7 @@
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 - plugins/welcome：func New() sdk.Root
-- plugins/rss：func New() sdk.Root；type Config struct { config.Base; IntervalMinutes int `json:"interval_minutes" form:"default=10;min=1;max=1440"` }
+- plugins/rss：func New() sdk.Root；type Config struct { config.Base; IntervalMinutes int `json:"interval_minutes" config:"default:10;min:1;max:1440"` }
 
 行为：
 - welcome：
