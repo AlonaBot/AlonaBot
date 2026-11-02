@@ -49,12 +49,12 @@
 | T-08.1 | goal-28 | 配置字段描述与构建检查（在 T-04 生成器上扩展），含表单选项的图标路径 | T-08 步骤 1 | T-04.2 | V-25 的描述分项 | 已完成（PR #54；TEST-MATRIX §3.2） |
 | T-08.2 | goal-29 | 配置 JSON 语义与 Pending：原始对象保留、完整替换、Merge Patch、编辑快照导入、base_generation | T-08 步骤 2 | T-02 | V-23、V-38 | 已完成（TEST-MATRIX §3.2） |
 | T-08.3 | goal-30 | SDK 配置准备顺序：OnLoad→补缺键默认→typed decode/Schema | T-08 步骤 3 | T-08.1、T-08.2 | V-37、V-21 的配置分项 | 未开始 |
-| T-08.4 | goal-31 | 不可变 Secret Store：引用、解引用、重新抽取、脱敏读取、受保护清理 | T-08 步骤 4 | T-08.1、T-08.2 | V-25 | 未开始 |
+| T-08.4 | goal-31 | 不可变 Secret Store：引用、解引用、重新抽取、脱敏读取、受保护清理 | T-08 步骤 4 | T-02.3、T-08.1、T-08.2 | V-25 | 未开始 |
 | T-08.5 | goal-32 | `sqlitedb.Open` 与 `gormdb.Open` 的连接生命周期、迁移互斥与 versioned 迁移、external 插件的维护许可 | T-08 步骤 5、6 | T-08.3 | V-26、V-39 | 未开始 |
 | T-08.6 | goal-33 | SQLite 候选复制与资源交接，写出给 T-09 的调用约定 | T-08 步骤 7 | T-08.4、T-08.5 | V-24、V-36 的候选分项 | 未开始 |
 | T-08.8 | goal-53 | 用户可见文案目录：插件 `i18/` 的 `messages`、SDK 的 `T`、Core 的 en-US/zh-CN 文案目录（usage 等）、check 的键与占位符检查 | T-08 步骤 8 | T-04.1、T-04.3、T-04.6、T-08.1 | V-54 的 SDK 与 Core 分项 | 未开始 |
 | T-08.9 | goal-35 | configdb 示例与分层验证，汇总证据 | T-08 步骤 9 | T-08.6、T-08.7、T-08.8 | V-23～V-26、V-38、V-39、V-54 的 T-08 分项 | 未开始 |
-| T-09.1 | goal-36 | 首次管理认证：admin-token init/reset、login、会话、CSRF、CLI Bearer | T-09 步骤 1 | T-07.4 | V-47 的认证分项 | 未开始 |
+| T-09.1 | goal-36 | 首次管理认证：admin-token init/reset、login、会话、CSRF、CLI Bearer | T-09 步骤 1 | T-02.3、T-07.4 | V-47 的认证分项 | 未开始 |
 | T-09.2 | goal-37 | 安装包预检与安全解压：验签、来源、平台、长度/摘要、受控解压与上限、不可变包目录 | T-09 步骤 2（预检） | T-02 | V-27、V-28、V-41 的预检分项 | 已完成（TEST-MATRIX §3.2） |
 | T-09.3 | goal-38 | 开发 CLI：`plugin init/check/build/test/pack`；init 生成插件包与库模式调试用的 `main.go`，build 生成调用 `sdk.Run` 的正式入口；pack 支持四种角色，WebUI 包为 `any` 平台 | T-09 步骤 2（CLI） | T-04.5、T-08.1、T-08.8、T-09.2、T-13.1 | V-01、V-41、V-54 的打包分项 | 未开始 |
 | T-09.4 | goal-39 | 唯一管理服务与安装记录：逐包串行、来源/pin/卸载保留、各管理动作的区分；组件角色的同类唯一、`install --source` 与 `--replace`；Adapter 包与实例的管理（凭证经 Secret 引用）；启用、停用、卸载与更新时的 Adapter 依赖和插件依赖检查；`alonabot serve` 按安装记录启动全部已启用的包 | T-09 步骤 3 | T-03.8、T-08.4、T-09.1、T-09.2、T-13.1 | V-40、V-48、V-52、V-82、V-01 的安装分项 | 未开始 |

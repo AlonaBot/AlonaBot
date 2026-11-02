@@ -30,9 +30,9 @@
 | goal-8 | T-03.8 | 按钮、extension 片段与依赖解析 | T-03.2、T-03.7 | 等待前置 |
 | goal-51 | T-03.9 | 消息编辑 | T-03.7 | 等待前置 |
 | goal-87 | T-04.6 | 权限、扩展事件与命令解析的协议和 Core 侧 | T-03.3、T-03.6、T-04.3 | 等待前置 |
-| goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 等待前置 |
-| goal-31 | T-08.4 | 不可变 Secret Store | T-08.1、T-08.2 | 等待前置 |
-| goal-36 | T-09.1 | 首次管理认证 | T-07.4 | 待派发 |
+| goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 待派发 |
+| goal-31 | T-08.4 | 不可变 Secret Store | T-02.3、T-08.1、T-08.2 | 等待前置 |
+| goal-36 | T-09.1 | 首次管理认证 | T-02.3、T-07.4 | 等待前置 |
 | goal-69 | T-13.3 | 热部署 | T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9 | 等待前置 |
 | goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1、T-04.6 | 等待前置 |
@@ -1606,7 +1606,7 @@ internal/core/webhost
 
 ### goal-28 · T-08.1 配置字段描述与构建检查
 
-状态：已完成（[PR #54](https://github.com/AlonaBot/AlonaBot/pull/54)）。证据见 TEST-MATRIX §3.2。审查留下一项 P3 交给后继语句：本语句写 `sdk/config/schema.go` 供 Core 共用，但 ARCHITECTURE 禁止 `internal/core -> sdk`；goal-30、goal-31 改为待派发前核对，需要时把 `MarshalSchema`、`SchemaHash` 移到 `contracts/`。条目保留供后继切片查阅接口。
+状态：已完成（[PR #54](https://github.com/AlonaBot/AlonaBot/pull/54)，合并提交 `021e972`）。证据见 TEST-MATRIX §3.2。审查留给后继语句的 P3（`sdk/config` 能否供 Core 共用）已结清：goal-30 只在 SDK 内使用 `sdk/config`，goal-31 的 `internal/core/secret` 自行解析 Schema 并重复声明关键字常量，`MarshalSchema`、`SchemaHash` 不需要移到 `contracts/`。合并后核对 goal-34 时发现，本语句「字段的 i18 路径……未写 label 时以它为 label 键」与 CONTRACTS §5.4 的 `config.<field>.label` 不一致，生成器按本语句实现，见 goal-34 的状态。条目保留供后继切片查阅接口。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-28（切片 T-08.1：配置字段描述与构建检查）。goal 目录 goal-28，分支 goal-28，worktree .worktrees/goal-28，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -1874,7 +1874,13 @@ internal/core/webhost
 
 ### goal-30 · T-08.3 SDK 配置准备顺序
 
-状态：等待前置（T-08.1、T-08.2）。语句中 goal-28 提供的符号（sdk.Generated.ConfigSchema、sdk/config 的扩展关键字与 MarshalSchema）只写名字；合并后由审查者核对签名，再改为待派发。
+状态：待派发。前置 T-08.1（PR #54）、T-08.2 已合并。goal-28 的符号已按合入代码核对：
+- `sdk.Generated.ConfigSchema []byte` 是规范 JSON，没有 Config 时为 nil。
+- `config.Config` 只有 `OnLoad(ctx context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)` 一个方法，`config.Base` 的默认实现原样返回 raw。根插件经 `Config() config.Config` 提供配置，`sdk.Base` 返回 nil。
+- 扩展关键字为 `config.KeywordSecret`、`KeywordHidden`、`KeywordForm`、`KeywordI18n`（`x-alonabot-*`）。
+- 公开函数有 `config.MarshalSchema(*jsonschema.Schema) ([]byte, error)` 与 `config.SchemaHash(canonical []byte) []byte`。
+- `sdk/session.go` 的 prepare 目前原样透传候选配置（step 1 注释为「目前原样透传」），REGISTER 由 `buildRegister(reg, boot.GetCandidateConfigJson(), boot.GetTargetConfigVersion(), generatedFor(root).ConfigSchema)` 构造。本切片在 OnStart 之前插入配置准备，并替换前两个参数。
+- jsonschema-go v0.4.3 的 `Resolved.ApplyDefaults` 只沿 properties 递归，跳过 required 属性，也不进入 items 与 additionalProperties。生成器会给数组元素和 map 值内的属性写默认值，这部分由 Prepare 自行遍历补齐，见「行为」。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-30（切片 T-08.3：SDK 配置准备顺序）。goal 目录 goal-30，分支 goal-30，worktree .worktrees/goal-30，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -1902,7 +1908,7 @@ sdk/config
 - 输入：raw 为 Bootstrap.candidate_config_json；fromVersion 为 previous_config_version（首次安装为 nil，此时以 targetVersion 调用 OnLoad）；restart 为 true 表示 activation_reason 是普通 restart 或恢复。没有 Config（Root.Config 返回 nil）时跳过前三步，原样回传 raw 的规范形式。
 - OnLoad：在零值的配置类型上调用（cfg 指向新的零值实例），输入完整原 JSON；返回值必须是 JSON 对象，否则 INVALID_ARGUMENT；OnLoad 返回错误时为 INVALID_ARGUMENT（safe_message "config OnLoad rejected the configuration"，原文只写日志）。OnLoad 的预算是 Bootstrap 的 config 阶段预算，超时为 DEADLINE_EXCEEDED。
 - restart 时，OnLoad 的结果与输入的规范形式不同 → FAILED_PRECONDITION（不能借 restart 修改 Active 配置）。
-- 补默认值：用 jsonschema-go 的 Resolve（ValidateDefaults=true）与 ApplyDefaults，只给对象中缺失的属性补默认值；显式 false、0、""、[]、{} 与 null 都不覆盖；required 字段缺失且没有默认值时在下一步校验失败。
+- 补默认值：用 jsonschema-go 的 Resolve（ValidateDefaults=true）与 ApplyDefaults，只给对象中缺失的属性补默认值；显式 false、0、""、[]、{} 与 null 都不覆盖；required 字段缺失且没有默认值时在下一步校验失败。ApplyDefaults 不进入 items 与 additionalProperties，数组的每个元素、map 的每个值若是对象，Prepare 按对应子 Schema 递归补齐其中缺失的属性。补默认值所用的 JSON 以 UseNumber 解码，默认值与原有数字都不经过 float64。
 - typed decode：把补完默认值的 JSON 用 encoding/json 解码到 cfg（数字超出字段范围、类型不符 → INVALID_ARGUMENT，错误指明 JSON 路径）；null 只允许出现在指针字段上。未知键不进入 cfg，但保留在 JSON 中。
 - Schema 校验：用 Resolved.Validate 校验补完默认值后的 JSON 对象（以 UseNumber 解码的副本）；失败 → INVALID_ARGUMENT，错误指明 JSON 路径，不含取值。大整数在校验副本中可能失去精度时，以 typed decode 的范围检查为准（D-43）。
 - 输出：Prepared.JSON 为补完默认值后的完整对象的规范形式（复用 internal/core/config.Canonical 的同一算法，在 sdk/config 中实现，不 import internal/core），Version 为 targetVersion。REGISTER 的 candidate_config_json 与 candidate_config_version 使用它们；SDK 不以 typed marshal 重建文档。
@@ -1915,6 +1921,7 @@ sdk/config
   - required 缺失、int 字段超出范围、OnLoad 返回错误时，SESSION_ERROR 阶段为 CONFIG，OnStart 未执行。
   - restart 时 OnLoad 改变了配置：FAILED_PRECONDITION；OnLoad 保持不变时正常启动。
   - 超过 2^53 的整数原样保留在回传 JSON 中。
+  - 数组元素与 map 值内缺失的属性得到默认值；元素中显式给出的值不被覆盖。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：规范 JSON 与 internal/core/config.Canonical 的结果逐字节一致（同一组输入）；ApplyDefaults 不触碰显式值；没有 Config 时的路径；OnLoad 超时；错误信息不含取值。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./sdk/... ./internal/core/...；go build ./...。
@@ -1924,7 +1931,16 @@ sdk/config
 
 ### goal-31 · T-08.4 不可变 Secret Store
 
-状态：等待前置（T-08.1、T-08.2）。语句中 goal-28、goal-29 提供的符号（sdk/config 的 KeywordSecret、MarshalSchema，internal/core/config 的 Canonical）只写名字；合并后由审查者核对签名，再改为待派发。
+状态：等待前置（T-02.3）。T-08.1（PR #54）、T-08.2 已合并。还要等 T-02.3（goal-86，PR #63），原因有两点：本切片在 `internal/core/state/schema.sql` 中加表，并按编码规范「Core 状态库不写 SQL」经 GORM 读写；`schema.sql` 和 GORM 模型都要等 #63 合并后才存在。
+
+goal-28、goal-29 的符号已按合入代码核对：
+- `config.KeywordSecret = "x-alonabot-secret"` 写在字段自身的属性 Schema 上，值为 `true`。secret 只允许 string 或 *string，可空时 type 为 `["string","null"]`。
+- 数组元素与 map 值内的 secret 字段分别位于 `items.properties.<名>` 与 `additionalProperties.properties.<名>` 下，对应本语句的 `*` 路径段。
+- `internal/core/config.Canonical(raw []byte) ([]byte, error)`：键排序、无多余空白，数字保持原文。
+- `config.MarshalSchema` 只序列化 `*jsonschema.Schema`，本切片用不到。
+- Core 不 import sdk：`internal/core/secret` 自行解析 Schema JSON，关键字名按「允许的新跨模块边」以常量重复声明。
+
+#63 合并后，按它的模型与命名约定核对本语句的表结构与 `SetGenerationConfig`，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-31（切片 T-08.4：不可变 Secret Store）。goal 目录 goal-31，分支 goal-31，worktree .worktrees/goal-31，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -1993,7 +2009,7 @@ sdk/config
 
 ### goal-36 · T-09.1 首次管理认证
 
-状态：待派发。前置 T-07.4 已由 PR #53 合并；符号已按合入代码核对：`webhost.AdminSessions{ Lookup(r *http.Request) (sessionID string, expiresAt time.Time, ok bool); Valid(sessionID string) bool }`，Host 只在 admin host 的请求上调用 Lookup 并记录会话期限，签发、兑换票据与每次插件授权都调用 Valid，所以 reset 与登出只要让 Valid 返回 false，派生的票据与插件会话就随之失效；`webhost.New(log *slog.Logger, opt webhost.Options) *Host`，`Options{AdminBaseURL, PluginBaseURL *url.URL; SecondHost bool; Admin http.Handler; Proxy *httpproxy.Server; Sessions AdminSessions; Now func() time.Time}`，Admin 为 nil 时管理入口返回 404；`(*Host).IssueTicket(adminSessionID, pluginID string) (ticketURL string, err error)`。cmd/alonabot 的 run 现在只传 AdminBaseURL、PluginBaseURL、SecondHost 与 Proxy，本切片补上 Admin 与 Sessions。Host 与插件响应策略已过滤 `alonabot_` 与 `__Host-alonabot_` 前缀的 Cookie；插件会话 Cookie 为 `__Host-alonabot_plugin`（HTTPS）或 `alonabot_plugin`，管理会话 Cookie 不要与之同名。`settings.Settings` 的 AdminBaseURL、PluginBaseURL 是字符串，由 settings.Load 校验；命令树在 cmd/alonabot/commands.go（cobra）。
+状态：等待前置（T-02.3）。前置 T-07.4 已由 PR #53 合并；本切片在 `internal/core/state/schema.sql` 中加表并经 GORM 读写，二者在 T-02.3（goal-86，PR #63）合并后才存在，因此还要等它合并，届时按它的模型与命名约定核对本语句的表结构，再改为待派发。符号已按合入代码核对：`webhost.AdminSessions{ Lookup(r *http.Request) (sessionID string, expiresAt time.Time, ok bool); Valid(sessionID string) bool }`，Host 只在 admin host 的请求上调用 Lookup 并记录会话期限，签发、兑换票据与每次插件授权都调用 Valid，所以 reset 与登出只要让 Valid 返回 false，派生的票据与插件会话就随之失效；`webhost.New(log *slog.Logger, opt webhost.Options) *Host`，`Options{AdminBaseURL, PluginBaseURL *url.URL; SecondHost bool; Admin http.Handler; Proxy *httpproxy.Server; Sessions AdminSessions; Now func() time.Time}`，Admin 为 nil 时管理入口返回 404；`(*Host).IssueTicket(adminSessionID, pluginID string) (ticketURL string, err error)`。cmd/alonabot 的 run 现在只传 AdminBaseURL、PluginBaseURL、SecondHost 与 Proxy，本切片补上 Admin 与 Sessions。Host 与插件响应策略已过滤 `alonabot_` 与 `__Host-alonabot_` 前缀的 Cookie；插件会话 Cookie 为 `__Host-alonabot_plugin`（HTTPS）或 `alonabot_plugin`，管理会话 Cookie 不要与之同名。`settings.Settings` 的 AdminBaseURL、PluginBaseURL 是字符串，由 settings.Load 校验；命令树在 cmd/alonabot/commands.go（cobra）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-36（切片 T-09.1：首次管理认证）。goal 目录 goal-36，分支 goal-36，worktree .worktrees/goal-36，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -2304,7 +2320,7 @@ sdk/config
 
 ### goal-53 · T-08.8 用户可见文案目录
 
-状态：等待前置（T-04.1、T-04.3、T-04.6、T-08.1）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.1、T-04.3 已合并；已核对 `sdk.Context`、`sdk.Usage(text string) RouteOption` 与 `router/command.go` 的 `commandUsage(spec *pb.CommandSpec) *pb.MessageChain`，usage 经注入的 message.Service.Send 发送。生成器与配置描述接口仍待 goal-28 合并后核对。
+状态：等待前置（T-04.1、T-04.3、T-04.6、T-08.1）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.1、T-04.3 已合并；已核对 `sdk.Context`、`sdk.Usage(text string) RouteOption` 与 `router/command.go` 的 `commandUsage(spec *pb.CommandSpec) *pb.MessageChain`，usage 经注入的 message.Service.Send 发送。goal-28 已合并（PR #54）：生成器在 Schema 中为每个字段写入 `x-alonabot-i18n`（`config.<json 路径>`，数组元素与 map 值不含下标或键）与 `x-alonabot-form.label`（未写 label 时等于 i18 路径），description 标签原样写入 description；这与 CONTRACTS §5.4 的 `config.<field>.label/description` 不一致，本切片的键检查以维护者对 goal-34 状态中该冲突的决定为准。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-53（切片 T-08.8：用户可见文案目录）。goal 目录 goal-53，分支 goal-53，worktree .worktrees/goal-53，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -2618,7 +2634,7 @@ internal/core/candidate
 
 ### goal-54 · T-11.1 工具描述、目录与策略
 
-状态：等待前置（T-04.4、T-06.1）。语句中 goal-13、goal-19 提供的符号（policy.Policy、broker.Broker、sdk.JSONService、ServiceOption、router.Mux）只写名字；合并后由审查者核对签名，再改为待派发。jsonschema-go 若尚未由 goal-28 引入，本切片按 D-43 引入。
+状态：等待前置（T-04.4、T-06.1）。语句中 goal-13、goal-19 提供的符号（policy.Policy、broker.Broker、sdk.JSONService、ServiceOption、router.Mux）只写名字；合并后由审查者核对签名，再改为待派发。jsonschema-go 已由 goal-28（PR #54）引入。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-54（切片 T-11.1：工具描述、目录与策略）。goal 目录 goal-54，分支 goal-54，worktree .worktrees/goal-54，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

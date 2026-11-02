@@ -83,7 +83,7 @@ agent
    type SecretPair struct { Name string `json:"name"`; Value string `json:"value" secret:"true"` }
 
 行为：
-- 配置：preset 的表单选项为 openai、anthropic、deepseek、ollama 与 custom，各附 assets/icons/ 下的图标（选项图标的 tag 写法以 goal-28 合并后的生成器为准）；preset 给出 protocol 与 base_url 的缺省值，配置中显式给出的值优先。OnLoad 校验 providers 的 name 唯一、protocol 为 openai、openai-compatible 或 anthropic-messages、default_provider 与 default_persona 指向存在的项（列表为空时允许为空）；错误时返回 OnLoad 错误。
+- 配置：preset 的表单选项为 openai、anthropic、deepseek、ollama 与 custom，各附 assets/icons/ 下的图标（form 标签写成 `options=openai@assets/icons/openai.svg|anthropic@assets/icons/anthropic.svg|…`，每个取值后用 @ 接图标路径，图标须是模块内的 .svg、.png 或 .webp 文件，见 `sdk/config` 的包文档）；preset 给出 protocol 与 base_url 的缺省值，配置中显式给出的值优先。OnLoad 校验 providers 的 name 唯一、protocol 为 openai、openai-compatible 或 anthropic-messages、default_provider 与 default_persona 指向存在的项（列表为空时允许为空）；错误时返回 OnLoad 错误。
 - 数据：每个聊天（adapter_instance_id、chat_id、thread_id）当前的人格、Provider 与自由对话开关保存在 Agent 的数据库（gormdb.Open，versioned 迁移）。
 - 命令：/ask <text:raw>（缺省 USER）、/agent on|off（ADMIN）、/persona [name]（ADMIN，无参数时列出）、/provider [name]（ADMIN）、/reset（USER），说明用 sdk.Description 指向 messages。自由对话开启时，该聊天中 to_me 的非命令 message.created 也触发一轮（message 事件路由带 ToMe Rule，并检查开关）；私聊的消息都是 to_me。默认关闭。
 - 一轮对话（Handler 调用 Continue，在延续调用中执行）：

@@ -15,7 +15,25 @@
 
 ### goal-34 · T-08.7 web/admin 骨架、配置表单组件与界面文案
 
-状态：等待前置（T-08.1）。语句中 goal-28 定下的配置 Schema 格式（draft 2020-12 加 x-alonabot-secret、x-alonabot-hidden、x-alonabot-form、x-alonabot-i18n 关键字）只写名字；合并后由审查者用实际生成的 Schema 核对 fixture，再改为待派发。
+状态：等待前置。T-08.1 已合并（PR #54，合并提交 `021e972`）。
+
+已用 `sdk/generate/config_test.go` 中的期望 Schema 核对实际格式：
+- 字段按声明顺序出现在 `properties` 中。
+- 可空字段的 `type` 为 `["<类型>","null"]`。
+- 数组为 `type: array` 加 `items`；`map[string]T` 为 `type: object` 加 `additionalProperties`，没有 `properties`。
+- 每个字段都有：
+  - `x-alonabot-i18n`：`config.<json 路径>`，数组元素与 map 值内的字段不含下标或键，例如 `config.providers.api_key`。
+  - `x-alonabot-form`：对象，含 `label`，以及按需出现的 `widget`、`options`、`option_icons`、`min`、`max`。
+- `x-alonabot-secret`、`x-alonabot-hidden` 只在为 true 时出现。
+- `default` 写在 Default 上；`description` 是 `description` 标签给出的 i18 键，没写时省略。
+
+改为待派发前，要先请维护者解决一处冲突：
+- CONTRACTS §5.4 规定标签和说明的 i18 键是 `config.<field>.label/description`，按 JSON 路径嵌套查找。
+- 生成器按 goal-28 语句实现：`form.label` 在没写 label 时等于 i18 路径 `config.<path>`，没有 `.label`；`description` 没写时为空。按嵌套查找，`config.<path>` 指向的是对象，不是字符串，所以表单不能直接拿 `form.label` 当键。
+
+审查者建议改生成器，向契约看齐：`form.label` 缺省为 `config.<path>.label`，description 缺省为 `config.<path>.description`；`label=` 与 `description:` 显式给出时作为完整的 i18 键。这样 goal-34 的 `fieldLabel` 直接用这两个键，goal-53 的键检查也用同一规则。
+
+决定后修订本语句的 `Field` 映射（可空、map、i18 键的来源）与 `fieldLabel`，并把 `config_test.go` 中的期望 Schema 拆成 fixtures，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-34（切片 T-08.7：web/admin 骨架、配置表单组件与界面文案）。goal 目录 goal-34，分支 goal-34，worktree .worktrees/goal-34，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
