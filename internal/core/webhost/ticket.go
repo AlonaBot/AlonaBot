@@ -152,7 +152,7 @@ func validNext(next, pluginID string) bool {
 	return strings.HasPrefix(target.Path, prefix) && strings.HasPrefix(path.Clean(target.Path)+"/", prefix)
 }
 
-// expire 在签发新授权时回收已过期状态，无需常驻清理 goroutine。
+// expire 在记录管理会话或签发新授权时回收已过期状态，无需常驻清理 goroutine。
 // 调用者持有 mu。
 func (h *Host) expire(now time.Time) {
 	for id, expires := range h.adminExpires {
