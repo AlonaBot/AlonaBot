@@ -72,13 +72,13 @@
 
 范围（只新增或修改这些）：
 - 根包 assembly.go：serve 首次初始化时的预装步骤（新增 preinstall.go，只在 Serve 中加调用点）
-- internal/core/state/：记录「已完成首次初始化」的设置项（沿用 core_settings）
+- internal/core/state/：记录「已完成首次初始化」的设置项（沿用 core_setting）
 - internal/core/manage/：List 返回可用更新；CreateInstance 在实例所属的 Adapter 未启用时先启用它
 - 上述包的测试文件
 允许的新跨模块边：无。
 
 行为：
-- 首次初始化：serve 取得 core.lock 后，若 core_settings 中没有 preinstalled 标记：查找 alonabot 可执行文件同目录下的 packages/（发行归档结构）；没有该目录时跳过（开发构建）。对其中每个包按 Install 的正常流程校验与安装；trust.Official 的公钥视为已信任来源，不逐个确认；签名或摘要校验失败的包不安装并记 ERROR，继续处理其余包。安装后只启用 help（按 manifest 的 id 识别）与 role 为 webui 的官方 WebUI，其余不启用。全部处理完后写入 preinstalled 标记（即使有包失败）。
+- 首次初始化：serve 取得 core.lock 后，若 core_setting 中没有 preinstalled 标记：查找 alonabot 可执行文件同目录下的 packages/（发行归档结构）；没有该目录时跳过（开发构建）。对其中每个包按 Install 的正常流程校验与安装；trust.Official 的公钥视为已信任来源，不逐个确认；签名或摘要校验失败的包不安装并记 ERROR，继续处理其余包。安装后只启用 help（按 manifest 的 id 识别）与 role 为 webui 的官方 WebUI，其余不启用。全部处理完后写入 preinstalled 标记（即使有包失败）。
 - 首次管理 token：沿用 goal-39 的 serve 规则（交互终端下生成并显示一次，非终端拒绝启动）；预装在 token 初始化之后执行。
 - 管理员之后可经管理 API 或 CLI 启用 Agent；Agent 在没有配置 Provider 时也能启用（/ask 回复提示）。
 - 之后的启动不再自动安装；已卸载（uninstalled）的预装包不重新安装。

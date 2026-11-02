@@ -109,10 +109,12 @@ type FileOptions struct { Dir string; MaxSize, MaxTotal int64; MaxAgeDays int } 
 
 范围修订（2026-11-02，维护者确认）：PR #63 把原 SQL 片段搬进了 `Where("... = ?")`、`Select("coalesce(max(seq), 0)")` 与 `Where("1 = 1")`，没有达到改用 GORM 的目的。维护者要求 Core 的业务 CRUD 不写 SQL，范围、排序与取最大值用 clause 结构，不引入 GORM CLI；规则写入编码规范「Core 状态库不写 SQL」，语句「读写」一条与范围（增加 conversation/service.go 的 Clear 校验）随之修订。PR #63 按审查评论的 FIX-1～FIX-3 修改。
 
+范围修订（2026-11-02，维护者确认）：复审 PR #63 时发现仍有硬写的名字，`Where` 后面追加 `"PluginID"` 等字段名参数，upsert 列出了冲突列和更新列；维护者同时要求表名改用单数。规则写入编码规范「Core 状态库不写 SQL」，语句「目标」「Schema」「读写」三条与本地自测随之修订。PR #63 按审查评论的 FIX-4～FIX-6 修改。
+
 ```text
 /goal 使用 $alonabot-execute 推进 goal-86（切片 T-02.3：状态库改用 GORM）。goal 目录 goal-86，分支 goal-86，worktree .worktrees/goal-86，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：internal/core/state 的读写改用 GORM，不再手写 INSERT/SELECT 与逐列扫描；公开 API、schema 与全部现有行为不变。
+目标：internal/core/state 的读写改用 GORM，不再手写 INSERT/SELECT 与逐列扫描；表名改用单数；公开 API、列与全部现有行为不变。
 
 依据：PLAN T-02 步骤 11；CONTRACTS §6.1；DECISIONS D-68；TEST-MATRIX V-36、V-75；docs/execution-order.md §3 中 `migrations` 的规则。
 
@@ -129,15 +131,15 @@ type FileOptions struct { Dir string; MaxSize, MaxTotal int64; MaxAgeDays int } 
 行为：
 - 打开：已有文件仍先经 preflight 只读预检（可以继续用 database/sql 的只读连接），通过后以 gorm.Open(sqlite.Open(path+"?"+pragmas)) 打开；DSN 与 PRAGMA 不变，SetMaxOpenConns(1)、SetMaxIdleConns(1)。ReadPragmas 的回读与核对、「损坏不重建」、先取 core.lock 再打开状态库的顺序都不变。
 - GORM 的 logger 设为 Silent：错误照常返回给调用方，由调用方用注入的 Logger 记录；不向 stdout/stderr 直接输出。
-- Schema：migrations[0] 的 SQL 原样保留，迁移照旧用一次 Exec 执行并更新 schema_version；不使用 AutoMigrate，不让 GORM 推断或修改表结构。每张表有对应的模型类型，用 TableName 与 column 标签对齐现有的表名与列名；可空列用指针或 sql.Null* 表示，保持现有的 NULL 语义。
-- 读写：查询、插入、更新、删除改用 GORM，按编码规范「Core 状态库不写 SQL」不写 SQL 文本与字符串条件：等值条件用主键或结构体条件；更新在事务内按主键读出、在 Go 中检查条件后 Save；全表更新用 AllowGlobalUpdate；ListConversation 的 seq 范围、排序与条数，以及末尾 seq、下一个 install_seq 的取值用 clause.Gte 与 clause.OrderByColumn（降序取一行，没有记录时按 0），列名写成包内常量；AllowedAdapterInstances 的排序与 Conversations 的汇总在 Go 中完成，汇总只选 conversation_key、seq、created_at 三列。现有 SQL 中的 ON CONFLICT 用 clause.OnConflict 表达，语义一致（adapter_cursors 与 pending_configs 冲突时更新，plugin_adapter_permissions 冲突时不做事）。gorm.ErrRecordNotFound 映射为现有的 ErrNotFound；SetEnabled 等原来按受影响行数判断不存在的地方，改为在事务内按主键读取，不存在时返回 ErrNotFound。
+- Schema：按编码规范把 migrations[0] 中的表名直接改为单数：installs→install、generations→generation、pending_configs→pending_config、adapter_cursors→adapter_cursor、plugin_adapter_permissions→plugin_adapter_permission、conversation_entries→conversation_entry，外键引用同步修改；schema_version 与 plugin_state 不变，列、约束与 schema 版本号不变。首次发布前不写兼容层，不追加改名迁移。迁移照旧用一次 Exec 执行并更新 schema_version；不使用 AutoMigrate，不让 GORM 推断或修改表结构。每张表有对应的模型类型，用 TableName 与 column 标签对齐表名与列名；可空列用指针或 sql.Null* 表示，保持现有的 NULL 语义。
+- 读写：查询、插入、更新、删除改用 GORM，按编码规范「Core 状态库不写 SQL」不写 SQL 文本、字符串条件与字段名参数：单主键的读取与删除用 clause.PrimaryColumn，RevokeAdapterInstance 用带复合主键值的目标结构体删除，部分列匹配用结构体条件；更新在事务内按主键读出、在 Go 中检查条件后 Save；全表更新用 AllowGlobalUpdate；ListConversation 的 seq 范围、排序与条数，以及末尾 seq、下一个 install_seq 的取值用 clause.Gte 与 clause.OrderByColumn（降序取一行，没有记录时按 0），列名写成包内常量；AllowedAdapterInstances 的排序与 Conversations 的汇总在 Go 中完成，汇总只选 conversation_key、seq、created_at 三列。现有 SQL 中的 ON CONFLICT 用 clause.OnConflict 表达，语义一致且不列出冲突列和更新列（adapter_cursor 与 pending_config 用 UpdateAll，plugin_adapter_permission 用 DoNothing）；包内列名常量只保留 seq 与 install_seq。gorm.ErrRecordNotFound 映射为现有的 ErrNotFound；SetEnabled 等原来按受影响行数判断不存在的地方，改为在事务内按主键读取，不存在时返回 ErrNotFound。
 - 结构体条件忽略零值字段：conversation.Service.Clear 用与插件入口相同的 validKey 校验会话键，非法时返回错误，不调用状态库。
 - 事务：tx 改为基于 db.Transaction，事务内只使用传入的 *gorm.DB；CommitActive 仍在同一事务内核对预期旧值并返回 ErrStaleGeneration；AppendConversation 仍在一个事务内读末尾序号再追加；事务内不等待插件 RPC。
 - 排序、上限与返回顺序与现有实现一致（例如 ListConversation 按 seq 升序且至多 limit 条，Conversations 按会话键字典序，AllowedAdapterInstances 的顺序不变）。
 
 测试（按编码规范「测试提交规则」）：
 - 不新增提交的测试。现有提交的集成测试全部原样通过：internal/core/state/state_test.go，以及使用状态库的 internal/core/config、internal/core/message、internal/core/adapter/remote、internal/core/supervisor 与 cmd/alonabot 的测试。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：同一组操作分别经改写前的实现（从 main 复制到本地测试中）与新实现执行，比较各表内容一致；由旧实现创建的状态库能被新实现打开并读写；Silent logger 下错误仍完整返回。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：同一组操作分别经改写前的实现（从 main 复制到本地测试中）与新实现执行，按新旧表名对应比较各表内容一致；Silent logger 下错误仍完整返回。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./cmd/...；go build ./...；`go list -deps` 列出的 Core 可执行文件与 SDK 根包模块都在 docs/development.md 的允许清单中。
 
@@ -187,7 +189,7 @@ func (t Trigger) Next(anchor, now time.Time) time.Time // 严格晚于 now 的�
 
 ### goal-29 · T-08.2 配置 JSON 语义与 Pending
 
-状态：已完成（PR #23 已合并）。后继注意：`pending_configs.plugin_id` 外键引用 `installs`，删除安装记录前须先删除该插件的 Pending 行。
+状态：已完成（PR #23 已合并）。后继注意：`pending_config.plugin_id` 外键引用 `install`，删除安装记录前须先删除该插件的 Pending 行。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-29（切片 T-08.2：配置 JSON 语义与 Pending）。goal 目录 goal-29，分支 goal-29，worktree .worktrees/goal-29，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -225,8 +227,8 @@ type PendingConfig struct { PluginID string; BaseGeneration string; ConfigJSON s
 func (s *Store) GetPendingConfig(ctx context.Context, pluginID string) (PendingConfig, error) // 不存在时返回 ErrNotFound
 func (s *Store) PutPendingConfig(ctx context.Context, p PendingConfig) error
 func (s *Store) DeletePendingConfig(ctx context.Context, pluginID string) error
-func (s *Store) GenerationConfig(ctx context.Context, generationID string) (string, error) // 读 generations.config_snapshot
-迁移：CREATE TABLE pending_configs (plugin_id TEXT PRIMARY KEY REFERENCES installs(plugin_id), base_generation TEXT NOT NULL, config_json TEXT NOT NULL, updated_at INTEGER NOT NULL);
+func (s *Store) GenerationConfig(ctx context.Context, generationID string) (string, error) // 读 generation.config_snapshot
+迁移：CREATE TABLE pending_config (plugin_id TEXT PRIMARY KEY REFERENCES install(plugin_id), base_generation TEXT NOT NULL, config_json TEXT NOT NULL, updated_at INTEGER NOT NULL);
 
 行为：
 - Pending 只有在 base_generation 等于插件当前 Active 时才有效。Active 变化后，旧 Pending 在 Pending() 中视为不存在（不删除，由 Discard 或下一次写入覆盖）。插件尚无 Active 时，有效的 base 是空串。
@@ -617,7 +619,7 @@ func (c *Candidate) Discard() error                            // 删除暂存�
 func (s *Store) AllowedAdapterInstances(ctx context.Context, pluginID string) ([]string, error) // 按字典序返回
 func (s *Store) GrantAdapterInstance(ctx context.Context, pluginID, instanceID string) error    // 幂等
 func (s *Store) RevokeAdapterInstance(ctx context.Context, pluginID, instanceID string) error   // 幂等
-迁移：CREATE TABLE plugin_adapter_permissions (plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), adapter_instance_id TEXT NOT NULL, PRIMARY KEY (plugin_id, adapter_instance_id));
+迁移：CREATE TABLE plugin_adapter_permission (plugin_id TEXT NOT NULL REFERENCES install(plugin_id), adapter_instance_id TEXT NOT NULL, PRIMARY KEY (plugin_id, adapter_instance_id));
 // internal/core/policy
 type Policy struct{ ... }
 func New(store *state.Store) *Policy
@@ -721,7 +723,7 @@ func Send(ctx context.Context, to *pb.Target, chain message.Chain) (*pb.SendResu
        ServiceCoreAdapterStatus    = "core.adapter.status"
    )
 4. internal/core/state
-   迁移：ALTER TABLE installs ADD COLUMN role TEXT NOT NULL DEFAULT 'plugin'; ALTER TABLE installs ADD COLUMN adapter_id TEXT NOT NULL DEFAULT ''; CREATE TABLE adapter_cursors (instance_id TEXT PRIMARY KEY, plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), cursor BLOB NOT NULL, updated_at INTEGER NOT NULL);
+   迁移：ALTER TABLE install ADD COLUMN role TEXT NOT NULL DEFAULT 'plugin'; ALTER TABLE install ADD COLUMN adapter_id TEXT NOT NULL DEFAULT ''; CREATE TABLE adapter_cursor (instance_id TEXT PRIMARY KEY, plugin_id TEXT NOT NULL REFERENCES install(plugin_id), cursor BLOB NOT NULL, updated_at INTEGER NOT NULL);
    type Role string // RolePlugin = "plugin"、RoleAdapter = "adapter"
    Install 增加字段：Role Role（为空时按 RolePlugin 写入）；AdapterID string（RoleAdapter 时必填）
    AddInstall/GetInstall 读写这两个字段；RoleAdapter 且 adapter_id 已被另一条安装记录占用时 AddInstall 返回错误（同一 adapter_id 只能安装一个包）
@@ -775,7 +777,7 @@ func Send(ctx context.Context, to *pb.Target, chain message.Chain) (*pb.SendResu
 - 角色由安装记录决定：supervisor 按 Spec.Role 设置 host.Expect，Adapter 的 REGISTER 只经 validate.AdapterRegister，插件的只经 validate.Register，不一致按注册失败处理（SESSION_ERROR，阶段 REGISTER）。进程不自报角色。
 - RunAdapter：与 Run 相同地取 runtime.lock、握手、在 OnStart 预算位置不执行用户代码，REGISTER 只携带 a.Descriptor()、原样回传 Bootstrap 的 candidate_config_json 与 target_config_version、migration 为 NONE；激活后把 adapter.instance.start/stop、adapter.send 交给对应实例。收到 STOPPING 或断链时，在 STOP_ONSTOP 预算内依次 Stop 全部实例后返回。Adapter 包级配置类型不在本切片。
 - adapter.instance.start（Core 发起，期限 REQUEST_TIMEOUT）：
-  - Core 先从 adapter_cursors 读出游标放进请求；SDK 调用 Adapter.Start，失败时返回其错误（不含配置原文）。
+  - Core 先从 adapter_cursor 读出游标放进请求；SDK 调用 Adapter.Start，失败时返回其错误（不含配置原文）。
   - 响应的 account_id 为空 → Core 判定失败；同一 Process 中已有运行中的实例使用同一 account_id → Core 立即对新实例发 adapter.instance.stop，StartInstance 返回 ALREADY_EXISTS。
   - 成功后，以 adapter.Instance 登记到 Registry（AdapterID、InstanceID、AccountID、Capabilities 取自响应），标记为运行中与已启用，并生成 bot.online。
 - StopInstance：发 adapter.instance.stop，从 Registry 移除，标记为未启用，生成 reason=STOPPED 的 bot.offline。实例不存在返回 NOT_FOUND。停一个实例不影响同进程的其他实例。
@@ -1009,7 +1011,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 2. internal/wire/services.go（追加在末尾）
    const ( ServiceConversationAppend = "core.conversation.append"; ServiceConversationList = "core.conversation.list"; ServiceConversationClear = "core.conversation.clear" )
 3. internal/core/state
-   迁移：CREATE TABLE conversation_entries (plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), conversation_key TEXT NOT NULL, seq INTEGER NOT NULL, entry_json TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (plugin_id, conversation_key, seq));
+   迁移：CREATE TABLE conversation_entry (plugin_id TEXT NOT NULL REFERENCES install(plugin_id), conversation_key TEXT NOT NULL, seq INTEGER NOT NULL, entry_json TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (plugin_id, conversation_key, seq));
    type ConversationEntry struct { Seq uint64; EntryJSON string }
    type ConversationSummary struct { Key string; Entries int; LastSeq uint64; UpdatedAt time.Time }
    func (s *Store) AppendConversation(ctx context.Context, pluginID, key string, entries []string) (lastSeq uint64, err error) // 一个事务内写入，序号接续该会话当前最大值
@@ -1940,8 +1942,8 @@ sdk/config
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 1. internal/core/state
    迁移：
-   CREATE TABLE secrets (ref_id TEXT PRIMARY KEY, plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), value BLOB NOT NULL, created_at INTEGER NOT NULL);
-   CREATE TABLE generation_secret_paths (generation_id TEXT NOT NULL REFERENCES generations(generation_id), path TEXT NOT NULL, PRIMARY KEY (generation_id, path));
+   CREATE TABLE secret (ref_id TEXT PRIMARY KEY, plugin_id TEXT NOT NULL REFERENCES install(plugin_id), value BLOB NOT NULL, created_at INTEGER NOT NULL);
+   CREATE TABLE generation_secret_path (generation_id TEXT NOT NULL REFERENCES generation(generation_id), path TEXT NOT NULL, PRIMARY KEY (generation_id, path));
    func (s *Store) SetGenerationConfig(ctx context.Context, generationID, snapshot string) error // 只允许未提交的代次
    其余读写方法自定（放在 secrets.go）。
 2. internal/core/secret
@@ -1963,8 +1965,8 @@ sdk/config
 行为：
 - 路径：secret 路径模式由从根到字段的 JSON 名用 "." 连接（属性名中的 "~" 与 "." 按 RFC 6901 的方式转义为 "~0" 与 "~1"），数组元素与 map 的任意键写作 "*"，例如 providers.*.api_key、mcp_servers.*.env.*.value。Extract 按模式遍历候选 JSON 的每个具体位置；复用引用时与 previous 中同一具体位置（同一数组下标或 map 键）的明文比较。
 - Bootstrap：supervisor 在 Launch 前用 Resolve 把 Active（restart）或 Pending（新候选，由 T-09 提供）快照解析为明文，放进 candidate_config_json；明文 Bootstrap 只走认证 IPC。
-- REGISTER 之后：host 调用 Expect.Snapshot（supervisor 以 Extract 实现，schema=Spec.ConfigSchema，keptPaths=Spec.KeptSecretPaths 加上一代次的 generation_secret_paths），得到快照与路径集合；PREPARED 摘要对快照计算。字段值为 null 或缺失时不生成引用；字段值已经是 {"$secret_ref": id} 时拒绝（插件不能回传引用）。
-- 新候选：在提交 Active 之前，SetGenerationConfig 写入快照，并写入 generation_secret_paths。普通 restart：Extract 的结果必须与已提交的快照完全相同（明文未变时复用原引用），否则 FAILED_PRECONDITION，不提交新代次。
+- REGISTER 之后：host 调用 Expect.Snapshot（supervisor 以 Extract 实现，schema=Spec.ConfigSchema，keptPaths=Spec.KeptSecretPaths 加上一代次的 generation_secret_path），得到快照与路径集合；PREPARED 摘要对快照计算。字段值为 null 或缺失时不生成引用；字段值已经是 {"$secret_ref": id} 时拒绝（插件不能回传引用）。
+- 新候选：在提交 Active 之前，SetGenerationConfig 写入快照，并写入 generation_secret_path。普通 restart：Extract 的结果必须与已提交的快照完全相同（明文未变时复用原引用），否则 FAILED_PRECONDITION，不提交新代次。
 - 旧 secret 字段从 Schema 移除但仍作为未知键保留时，因为路径在 keptPaths 中而继续被抽取；只有候选中该键被删除，路径才不再保留。
 - Redact 的结果用于管理 API；掩码不是协议值，表单提交时省略字段表示保持原值（T-09 与 T-08.7 遵守）。
 - Collect 只删除不被任何 protected 快照引用的 secret；正在恢复或 Journal 中的引用由 T-09 加入 protected。
@@ -1973,7 +1975,7 @@ sdk/config
 
 测试（按编码规范「测试提交规则」）：
 - 提交：internal/core/supervisor/secret_test.go（//go:build unix）。测试插件的配置含一个 secret 字段与一个普通字段，Spec.ConfigSchema 取生成器为它产生的 Schema：
-  - 首次启动：插件收到明文；状态库代次快照中该字段为 {"$secret_ref": ...}，secrets 表有一行；PREPARED 摘要等于快照的 SHA256。
+  - 首次启动：插件收到明文；状态库代次快照中该字段为 {"$secret_ref": ...}，secret 表有一行；PREPARED 摘要等于快照的 SHA256。
   - 明文不变的新候选复用同一引用；明文改变生成新引用，旧代次快照中的引用不变。
   - 新 Schema 去掉该 secret 字段但候选保留该键：新快照中它仍是引用；候选删除该键后不再保留路径。
   - 普通 restart 时插件回传了不同的明文：FAILED_PRECONDITION，Active 不变。
@@ -2010,7 +2012,7 @@ sdk/config
 1. internal/core/state
    迁移：
    CREATE TABLE admin_credential (id INTEGER PRIMARY KEY CHECK (id = 1), token_sha256 BLOB NOT NULL, auth_generation INTEGER NOT NULL, updated_at INTEGER NOT NULL);
-   CREATE TABLE admin_sessions (session_id TEXT PRIMARY KEY, csrf_token TEXT NOT NULL, auth_generation INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+   CREATE TABLE admin_session (session_id TEXT PRIMARY KEY, csrf_token TEXT NOT NULL, auth_generation INTEGER NOT NULL, expires_at INTEGER NOT NULL);
    读写方法自定（放在 admin.go）。
 2. internal/core/adminauth
    var ErrNotInitialized = errors.New("admin token is not initialized")
@@ -2168,9 +2170,9 @@ sdk/config
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 1. internal/core/state
    迁移：
-   CREATE TABLE command_policies (plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), scope TEXT NOT NULL, permission INTEGER NOT NULL DEFAULT 0, enabled INTEGER, PRIMARY KEY (plugin_id, scope)); -- permission 0 表示不覆盖；enabled 为 NULL 表示不覆盖
-   CREATE TABLE core_admins (adapter_instance_id TEXT NOT NULL, external_user_id TEXT NOT NULL, PRIMARY KEY (adapter_instance_id, external_user_id));
-   CREATE TABLE global_denies (kind TEXT NOT NULL, adapter_instance_id TEXT NOT NULL, subject_id TEXT NOT NULL, PRIMARY KEY (kind, adapter_instance_id, subject_id)); -- kind 为 user 或 chat
+   CREATE TABLE command_policy (plugin_id TEXT NOT NULL REFERENCES install(plugin_id), scope TEXT NOT NULL, permission INTEGER NOT NULL DEFAULT 0, enabled INTEGER, PRIMARY KEY (plugin_id, scope)); -- permission 0 表示不覆盖；enabled 为 NULL 表示不覆盖
+   CREATE TABLE core_admin (adapter_instance_id TEXT NOT NULL, external_user_id TEXT NOT NULL, PRIMARY KEY (adapter_instance_id, external_user_id));
+   CREATE TABLE global_deny (kind TEXT NOT NULL, adapter_instance_id TEXT NOT NULL, subject_id TEXT NOT NULL, PRIMARY KEY (kind, adapter_instance_id, subject_id)); -- kind 为 user 或 chat
    读写方法自定（放在 policy.go），全部按主键幂等。
 2. internal/core/policy
    type ScopeKind int // ScopePlugin、ScopeGroup、ScopeRoute
@@ -2208,7 +2210,7 @@ sdk/config
 - Router（goal-12 的命令层）：普通命令选出胜出路由后，在参数解析和 usage 发送之前执行 CheckCommand；拒绝时消费该命令（不进入文本匹配与 Raw），不向会话回复，以 INFO 记录（plugin_id、route_id、错误码，不含消息内容）。文本匹配与 Raw 路由被拒时跳过该候选，继续后面的候选。
 - CheckSend（goal-3）在许可检查之前先检查 chat 禁止：目标 (实例, chat_id) 被禁止 → PERMISSION_DENIED。
 - 管理服务层：SetOverride、AddAdmin、Deny 等写操作在事务提交成功后才返回 nil；参数非法（未知 ScopeKind、ScopeGroup 的 Group 为空、ScopeRoute 的 RouteID 为空、Permission 不是已知枚举值、kind 未知）返回 INVALID_ARGUMENT。遮蔽诊断直接使用 goal-10 的 Router.Commands().Shadows()，本切片不重复实现。
-- 卸载插件时策略行的清理由 T-09.4 负责（command_policies 外键引用 installs）。
+- 卸载插件时策略行的清理由 T-09.4 负责（command_policy 外键引用 install）。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：internal/core/supervisor/policy_test.go（//go:build unix）。沿用 goal-12 的命令测试装配与测试插件，接入真实状态库上的 policy.Policy：
@@ -2334,7 +2336,7 @@ sdk/config
    func T(ctx context.Context, key string, args ...any) (string, error) // 没有 Actor：从 Core 默认 locale 开始
    Generated 增加 I18n map[string][]byte
 3. internal/core/state
-   迁移：CREATE TABLE core_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+   迁移：CREATE TABLE core_setting (key TEXT PRIMARY KEY, value TEXT NOT NULL);
    func (s *Store) Setting(ctx context.Context, key string) (string, bool, error)
    func (s *Store) PutSetting(ctx context.Context, key, value string) error
 4. internal/core/i18n
@@ -2375,7 +2377,7 @@ sdk/config
 依据：PLAN T-09 步骤 3；CONTRACTS §9.1～§9.3、§8（依赖段）、§15.1、§15.2、§7.4、§5.3；DECISIONS D-26、D-42、D-59；TEST-MATRIX V-40、V-48、V-52、V-82、V-01 的安装分项。
 
 范围（只新增或修改这些）：
-- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 的 installs 表定义中加入新列、末尾加入新表，安装记录的写入与读取方法同步新列；新增 internal/core/state/installs_admin.go（安装记录的扩展字段与 Adapter 实例表）
+- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 的 install 表定义中加入新列、末尾加入新表，安装记录的写入与读取方法同步新列；新增 internal/core/state/installs_admin.go（安装记录的扩展字段与 Adapter 实例表）
 - 新增 internal/core/manage/（管理服务与 HTTP API）
 - 根包 assembly.go：增加按安装记录启动全部已启用包、挂载管理 API 的步骤；新增导出的 Serve 供 cmd 使用
 - cmd/alonabot/：serve（以及不带子命令时）调用根包 Serve；新增 install、list、enable、disable、restart、reload、update、rollback、uninstall、pin、adapter instance、admin 命令（经管理 API 访问）
@@ -2385,8 +2387,8 @@ sdk/config
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 1. internal/core/state
-   迁移：installs 表定义加入列 version TEXT NOT NULL, publisher_key_id TEXT NOT NULL, pin TEXT NOT NULL, uninstalled INTEGER NOT NULL（不设 DEFAULT，写入安装记录时给出全部列）；
-   CREATE TABLE adapter_instances (instance_id TEXT PRIMARY KEY, plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), config_snapshot TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL);
+   迁移：install 表定义加入列 version TEXT NOT NULL, publisher_key_id TEXT NOT NULL, pin TEXT NOT NULL, uninstalled INTEGER NOT NULL（不设 DEFAULT，写入安装记录时给出全部列）；
+   CREATE TABLE adapter_instance (instance_id TEXT PRIMARY KEY, plugin_id TEXT NOT NULL REFERENCES install(plugin_id), config_snapshot TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL);
    读写方法自定。
 2. internal/core/manage
    type Service struct{ ... }
@@ -2423,7 +2425,7 @@ sdk/config
 
 行为：
 - install：packages.Preflight（验签、来源、平台、大小、摘要）→ MoveTo 不可变目录 → 写安装记录（install_seq 递增、source、publisher_key_id、version、role、adapter_id）。仍处于已安装状态的同 ID 返回 ALREADY_EXISTS，不覆盖。同类组件（同一 adapter_id 的 adapter、任一 agent、任一 webui）已安装时：未带 Replace 返回 ALREADY_EXISTS，safe_message 列出已安装的组件 ID；带 Replace 未带 confirm 返回 ErrNeedsConfirm（Affected 为将被卸载的组件）；确认后先完成新组件的下载与 Preflight，再按 uninstall 的缺省语义卸载旧组件，最后写新安装记录；旧组件原来启用时按 Enable 启用新组件。被替换 Adapter 的实例记录留在旧组件名下，不转给新组件，Affected 中列出这些实例。新组件在卸载旧组件之后失败时旧组件保持已卸载。Source 持久化为来源，之后的 update 只从它取版本；已卸载的保留记录只允许来源与发布者公钥都相同的重装（复用数据），否则 PERMISSION_DENIED。安装时用全部安装记录的 plugin_dependencies 检查必需依赖成环，成环拒绝。首次信任新发布者公钥需要 confirm。
-- enable：检查 manifest 的必需依赖（CheckDependencies，Installed 来自已启用的包与运行中的 Adapter 描述），有缺失时 FAILED_PRECONDITION 并列出全部缺失项；可选依赖缺失只记诊断。已有 Active 时以该代次启动；首次安装没有 Active 时以「首个候选」启动（新代次、首装 SQLite、配置为 {} 或编辑快照，提交后激活；Journal 由 T-09.5 接入，本切片用一行 shortcut 注释写明）。Adapter 包启用后按 adapter_instances 中 enabled 的实例 StartInstance。
+- enable：检查 manifest 的必需依赖（CheckDependencies，Installed 来自已启用的包与运行中的 Adapter 描述），有缺失时 FAILED_PRECONDITION 并列出全部缺失项；可选依赖缺失只记诊断。已有 Active 时以该代次启动；首次安装没有 Active 时以「首个候选」启动（新代次、首装 SQLite、配置为 {} 或编辑快照，提交后激活；Journal 由 T-09.5 接入，本切片用一行 shortcut 注释写明）。Adapter 包启用后按 adapter_instance 中 enabled 的实例 StartInstance。
 - disable：停止并保留安装与数据；被已启用包的必需依赖引用时，未带 confirm 返回 ErrNeedsConfirm（列出受影响者），确认后执行，依赖方继续运行，调用它返回 UNAVAILABLE。
 - restart：以当前 Active 启动新 Session（不导入编辑快照，不产生新代次）。
 - uninstall：同 disable 的确认规则；停止、解除运行注册、删除未被引用的程序包目录；默认保留数据、secret、来源绑定与 uninstalled=1 的记录。--purge 时先列出将删除的框架受管对象（代次目录、SQLite、secret、会话、按钮 token、策略、工具策略、Pending、Adapter 实例），未带 confirm 返回 ErrNeedsConfirm（Affected 为对象列表），确认后删除这些对象与安装记录；不删除插件自管的外部数据库与插件自管目录。
@@ -2643,7 +2645,7 @@ internal/core/candidate
    message ToolListRequest {}
    message ToolListResponse { repeated ToolInfo tools = 1; }
 2. internal/core/state
-   迁移：CREATE TABLE tool_policies (plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), service_name TEXT NOT NULL, policy INTEGER NOT NULL, PRIMARY KEY (plugin_id, service_name));
+   迁移：CREATE TABLE tool_policy (plugin_id TEXT NOT NULL REFERENCES install(plugin_id), service_name TEXT NOT NULL, policy INTEGER NOT NULL, PRIMARY KEY (plugin_id, service_name));
    读写方法自定（放在 tool.go），按主键幂等。
 3. internal/core/tool
    type Catalog struct{ ... }
@@ -3500,7 +3502,7 @@ broker、bus、router 的 Options 增加 Metrics *metrics.Counters（可为 nil�
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 1. internal/core/state
-   迁移：CREATE TABLE journal (op_id TEXT PRIMARY KEY, plugin_id TEXT NOT NULL REFERENCES installs(plugin_id), kind TEXT NOT NULL, expected_old TEXT NOT NULL, new_generation TEXT NOT NULL, phase TEXT NOT NULL, package_dir TEXT NOT NULL, database_path TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+   迁移：CREATE TABLE journal (op_id TEXT PRIMARY KEY, plugin_id TEXT NOT NULL REFERENCES install(plugin_id), kind TEXT NOT NULL, expected_old TEXT NOT NULL, new_generation TEXT NOT NULL, phase TEXT NOT NULL, package_dir TEXT NOT NULL, database_path TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
    kind 为 first_install、reload、update；phase 为 started、stopped_old、candidate_ready、prepared、committed、failed、cleaned。读写方法自定，阶段只能前进。
 2. internal/core/journal
    type Orchestrator struct{ ... }
@@ -3601,7 +3603,7 @@ internal/core/journal
    func (o *Orchestrator) Commit(ctx context.Context, r *Result) error // CommitCandidate → ACTIVATE → 等待 ACTIVATED；之后 Attach 到 Router/Broker/Bus/Scheduler/HTTP
 
 行为：
-- 提交前置：journal 阶段为 prepared、候选代次的 config_snapshot 与 generation_secret_paths 已写入、候选目录与数据库文件存在（fsync 已完成），否则不提交，按 Abort 处理。
+- 提交前置：journal 阶段为 prepared、候选代次的 config_snapshot 与 generation_secret_path 已写入、候选目录与数据库文件存在（fsync 已完成），否则不提交，按 Abort 处理。
 - 事务：CommitCandidate 只操作状态库元数据；任何文件操作或 RPC 都在事务之外完成。提交失败（Active 已被并发修改等）→ 不激活，Abort 候选，旧版以新 Session 恢复。
 - 激活：提交成功后向候选 Session 发送 ACTIVATE（带 OnReady 截止），收到 ACTIVATED 后才 Attach 到 Router、Broker、Bus、Scheduler 与 HTTP（复用 goal-27 的接入点）；在此之前候选的路由不可见。
 - 提交后失败（OnReady 失败、超时、进程退出）：新代次保持为 Active，插件进入 Degraded（不派发、HTTP 503、Scheduler 不触发），以 ERROR 记录；不切回旧代次、不使用旧数据库。之后的恢复由管理员 restart（以新代次的新 Session）或 T-09.7 的 rollback 处理。
@@ -3710,7 +3712,7 @@ internal/core/state
    message LogSetLevelRequest { LogLevel level = 1; }
    message LogSetLevelResponse {}
 2. internal/core/state
-   迁移：CREATE TABLE log_levels (source_id TEXT PRIMARY KEY, level TEXT NOT NULL); -- level 为 debug、info、warn、error、off；inherit 不存行
+   迁移：CREATE TABLE log_level (source_id TEXT PRIMARY KEY, level TEXT NOT NULL); -- level 为 debug、info、warn、error、off；inherit 不存行
 3. internal/core/logging
    type Record struct { Time time.Time; Level slog.Level; Source string; Message string; Attrs map[string]any; TraceID string }
    type Buffer struct{ ... } // 每个来源一个固定容量的环形缓冲

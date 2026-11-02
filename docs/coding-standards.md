@@ -61,8 +61,10 @@ v0.1 首次发布前，没有需要兼容的旧状态库、旧调用方或旧插
 
 Core 状态库（`internal/core/state`）经 GORM 读写，业务的增删改查不写 SQL 文本，也不写 `Where("plugin_id = ?", id)` 这类字符串条件。
 
-- 等值条件用主键或结构体条件：目标结构体带主键值即为条件，例如 `Take(&pendingConfig{PluginID: id})`、`Delete(&adapterPermission{PluginID: p, AdapterInstanceID: i})`；只按部分列匹配时用 `Where(&conversationEntry{PluginID: p, ConversationKey: k})`。
-- 结构体条件忽略零值字段。全部字段为零时 GORM 拒绝执行，只有部分字段为零时条件会被放宽，删除时会删掉多余的行。可能为空的条件字段在入口校验非空；需要按零值匹配的条件不用结构体表达。
+- 表名用单数名词的 snake_case，一行表示一个对象，例如 `install`、`pending_config`、`conversation_entry`；关联两个对象的表用两者的名字相连，例如 `plugin_adapter_permission`。模型类型用 `TableName` 指向表名，列名写在 `column` 标签里。
+- 等值条件不写字段名或列名。单主键表用 `Where(clause.Eq{Column: clause.PrimaryColumn, Value: id})`，主键为空串时同样精确匹配；按复合主键删除时让目标结构体带上主键值，例如 `Delete(&adapterPermission{PluginID: p, AdapterInstanceID: i})`；只按部分列匹配时用结构体条件，例如 `Where(&conversationEntry{PluginID: p, ConversationKey: k})`，不在后面追加 `"PluginID"` 这类字段名参数。
+- 结构体条件忽略零值字段。全部字段为零时 GORM 拒绝执行，只有部分字段为零时条件会被放宽，删除时会删掉多余的行；目标结构体只带主键值、主键又为空时，`Take` 不加条件，会读到任意一行。可能为空的条件字段在入口校验非空；需要按零值匹配的条件不用结构体表达。
+- 按主键覆盖写入用 `clause.OnConflict{UpdateAll: true}`，重复插入时不做事用 `clause.OnConflict{DoNothing: true}`，不列出冲突列和更新列。
 - 更新在事务内按主键读出行，在 Go 中检查条件（例如「尚未提交」），修改字段后 `Save`；不用结构体 `Updates` 写 false、0 等零值。全表更新用 `Session(&gorm.Session{AllowGlobalUpdate: true})`，不写 `Where("1 = 1")`。
 - 范围条件、排序与取最大值用 `clause` 结构（`clause.Gte`、`clause.OrderByColumn` 等），列名写成包内常量；取最大值按该列降序取一行，不写 `max()`、`coalesce()`。能在 Go 中完成的排序与聚合不写进查询。不引入 GORM CLI 等查询代码生成工具。
 - 初始迁移的建表语句、PRAGMA 回读与打开前的只读预检属于 schema 与连接管理，可以写 SQL。
