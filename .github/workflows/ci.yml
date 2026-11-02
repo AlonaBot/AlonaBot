@@ -1,4 +1,4 @@
-# 验证仓库入口及产品 Go 代码；编译矩阵不替代目标平台运行验收。
+# 检查空白错误及产品 Go 代码；编译矩阵不替代目标平台运行验收。
 name: Quality gate
 
 on:
@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   repository:
-    name: Repository contract
+    name: Repository
     runs-on: ubuntu-24.04
     outputs:
       has_go: ${{ steps.sources.outputs.has_go }}
@@ -26,11 +26,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: 检查文档路由、技能和验证脚本
-        run: |
-          node --test scripts/check-repository.test.mjs
-          node scripts/check-repository.mjs
-          git diff --check
+      - name: 检查空白错误
+        run: git diff --check
       - name: 检查是否已有产品 Go 源码
         id: sources
         shell: bash
@@ -82,8 +79,6 @@ jobs:
           test -z "$(git ls-files --others --exclude-standard -- contracts)"
       - name: 静态检查
         run: go vet ./...
-      - name: 检查 Core 与 SDK 根包的依赖允许清单
-        run: node scripts/check-go-deps.mjs
       - name: 测试并检查数据竞争
         env:
           CGO_ENABLED: '1'

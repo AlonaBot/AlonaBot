@@ -100,7 +100,7 @@ SDK 按配置契约执行 `OnLoad → 补缺失默认值 → typed decode/Schema
 
 ### 3.3 注册描述与 HTTP Listener
 
-RouteDescriptor 公共字段为 `route_id`、`kind`、`priority`、`default_enabled`、`required_permission`、输入/输出 `schema_id/version`。ID 在一个插件内唯一且跨版本保持业务含义稳定；`target` 使用 `plugin_id/route_id`。各 kind 再提供必要字段：
+RouteDescriptor 公共字段为 `route_id`、`kind`、`priority`、`default_enabled`、`required_permissions`（权限名集合，满足任一即可，D-69）、输入/输出 `schema_id/version`。ID 在一个插件内唯一且跨版本保持业务含义稳定；`target` 使用 `plugin_id/route_id`。各 kind 再提供必要字段：
 
 | kind | 专属描述 |
 | --- | --- |
@@ -198,7 +198,7 @@ Core 媒体服务固定为 BeginUpload/WriteChunk/CommitUpload/Read/Grant：Read
 规格只给出语义、由 T-01 确定的实现选择：
 
 - 没有编号表的消息，字段号按规格表格中的字段顺序从 1 开始编排。
-- 新增枚举 CancelReason、StopReason、SessionPhase、DatabaseBackend（显式 `NONE` 表示没有业务 DB）、MigrationMode、ActivationReason、TrustedRole（USER/ADMIN/CHAT_ADMIN）、Permission（ANY/USER/ADMIN）、HandlerMode、CommandMatch（PATH/REGEX/RAW）、UsageMode、ParamType、ServiceAccess（PRIVATE/ALLOWLIST/PUBLIC）、HttpAuthMode、TextFormat、EntityType、MediaReadability。
+- 新增枚举 CancelReason、StopReason、SessionPhase、DatabaseBackend（显式 `NONE` 表示没有业务 DB）、MigrationMode、ActivationReason、HandlerMode、CommandMatch（PATH/REGEX/RAW）、UsageMode、ParamType（含 USER、IMAGE、MESSAGE，D-72）、ServiceAccess（PRIVATE/ALLOWLIST/PUBLIC）、HttpAuthMode、TextFormat、EntityType、MediaReadability。
 - 为避免 import 循环，Target/Actor/Capability 单独放在 `identity.proto`；Segment 的 `incoming_ref` 直接携带 IncomingMedia 描述符，`media_ref` 是 MediaRef 的 token。
 - Event 按类型区分的载荷放在 `EventPayload` oneof 中，PreEventResult 只能回传这一部分；按钮 `value` 与服务载荷之外的 JSON 一律以 UTF-8 文本表示。
 - `ForwardSource` 的结构（display_name、external_user_id）由 T-01 补定；新增 `SendRequest{to, chain}` 作为 Core Send 服务的请求。
@@ -207,6 +207,7 @@ Core 媒体服务固定为 BeginUpload/WriteChunk/CommitUpload/Read/Grant：Read
 - Core 启动插件进程时通过环境变量传递会话参数（常量定义在 `internal/wire/env.go`）：`ALONABOT_PLUGIN_ID`、`ALONABOT_SESSION_SECRET`（32 字节十六进制）、`ALONABOT_TRANSPORT`（`tcp`/`stdio`）、`ALONABOT_CORE_ADDR`（TCP loopback 地址）、`ALONABOT_BUILD_DIGEST`（归档 SHA256 十六进制）、`ALONABOT_RUNTIME_LOCK`（runtime.lock 的绝对路径）。其余环境变量只从白名单继承（PATH、HOME、临时目录、SystemRoot、LANG、TZ），Core 管理凭证不会进入插件环境；设置了调优参数 `PLUGIN_MEMORY_SOFT_LIMIT` 时另传 `GOMEMLIMIT`（CONTRACTS §16）；出站代理按 CONTRACTS §15.1 的 `proxy` 设置传递 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`。
 - 握手与准备：认证失败（Secret 恒时比较、插件 ID、build_digest 任一不符）时 Core 直接关闭连接，不回复任何帧；认证之后的失败（协议协商、Bootstrap 超限、REGISTER 不合法、准备期出现非控制帧）先发 SESSION_ERROR 再关闭，发送 SESSION_ERROR 限时 1s，对端不读时不会卡住失败路径。Preparing 的硬截止为配置、迁移、OnStart 三个阶段预算之和，写入 Bootstrap.preparation_deadline_unix_ms。PREPARED 中 route_descriptor_hash 为按顺序拼接各 RouteDescriptor 确定性编码后的 SHA256，candidate_config_digest 为候选配置 JSON 的 SHA256（T-08 引入 secret 引用后改为对持久化快照计算）。
 - 协议能力项使用 `ProtocolCapability{name, version}`，与 Adapter 平台能力 `Capability{name, version, supported}` 分开。
+- 2026-11-01 权限、扩展事件与参数类型（D-69、D-71、D-72）：删除枚举 `TrustedRole` 与 `Permission`、字段 `Actor.trusted_roles` 与 `RuleDescriptor.require_chat_admin`，编号与名称 reserved。`Actor` 新增 `repeated string permissions`；`RouteDescriptor.required_permission` 改为 `repeated string required_permissions`；`AdapterDescriptor` 新增 `repeated PermissionDeclaration permissions`（name、implies、label_key）与 `repeated EventDeclaration events`（name、version、schema_json）；`EventPayload` oneof 新增 `AdapterEventPayload adapter_event`（version、payload_json）；`ParamType` 新增 USER、IMAGE、MESSAGE；`CommandSpec.custom_usage` 改为插件 `i18/` 中的文案键。字段号由 T-04.6 编排。
 - 2026-10-27 框架移除 PostgreSQL 后端（D-48）：删除枚举值 `DATABASE_BACKEND_POSTGRES = 3`、`DatabaseDescriptor.postgres = 3` 与消息 `PostgresConnection`，两处编号与名称都已 reserved。
 
 ## 6. 实施验证与依据
