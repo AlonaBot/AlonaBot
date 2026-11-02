@@ -1607,7 +1607,7 @@ internal/core/webhost
 
 ### goal-28 · T-08.1 配置字段描述与构建检查
 
-状态：已完成（[PR #54](https://github.com/AlonaBot/AlonaBot/pull/54)，合并提交 `021e972`）。证据见 TEST-MATRIX §3.2。审查留给后继语句的 P3（`sdk/config` 能否供 Core 共用）已结清：goal-30 只在 SDK 内使用 `sdk/config`，goal-31 的 `internal/core/secret` 自行解析 Schema 并重复声明关键字常量，`MarshalSchema`、`SchemaHash` 不需要移到 `contracts/`。合并后核对 goal-34 时发现，本语句的标签键与 CONTRACTS 当时的嵌套写法 `config.<field>.label` 不一致。维护者按 D-74 让契约跟随生成器，并把标签统一为 `config` 标签，由 goal-90 修订生成器；下方语句中的 form、description、secret、hidden 标签写法已被取代。条目保留供后继切片查阅接口。
+状态：已完成（[PR #54](https://github.com/AlonaBot/AlonaBot/pull/54)，合并提交 `021e972`）。证据见 TEST-MATRIX §3.2。审查留给后继语句的 P3（`sdk/config` 能否供 Core 共用）已结清：goal-30 只在 SDK 内使用 `sdk/config`，goal-31 的 `internal/core/secret` 自行解析 Schema 并重复声明关键字常量，`MarshalSchema`、`SchemaHash` 不需要移到 `contracts/`。合并后核对 goal-34 时发现，本语句的标签键与 CONTRACTS 当时的嵌套写法 `config.<field>.label` 不一致。维护者按 D-74 改为仿照 AstrBot：标签统一为 `config` 标签，label 与 description 写源文案，翻译文件按字段名嵌套覆盖，取消选项图标，由 goal-90 修订生成器；下方语句中的 form、description、secret、hidden 标签与选项图标写法已被取代。条目保留供后继切片查阅接口。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-28（切片 T-08.1：配置字段描述与构建检查）。goal 目录 goal-28，分支 goal-28，worktree .worktrees/goal-28，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -2015,44 +2015,68 @@ goal-28、goal-29 的符号已按合入代码核对：
 已核对现有实现：
 - `sdk/generate/config.go` 的 `metadata` 分别读取 `description`、`secret`、`hidden` 三个独立标签。
 - `configForm` 解析 `form` 标签，语法为 `key=value;flag`；default 按 JSON 字面量解码，因此可以含 `;`。
-- `x-alonabot-form.label` 缺省为字段的 i18 路径，`description` 为标签原文。Schema 的完整格式见 goal-34 的状态。
-- `sdk/config/config.go` 的包文档描述了旧标签语法。
-- `sdk/generate/config_test.go` 的测试插件、期望 Schema 与诊断用例都使用旧标签；仓库中其他 Go 代码没有用到这些标签。
+- options 的 `@图标路径` 由 `configBuilder.icon` 检查，写入 `x-alonabot-form.option_icons`。
+- 每个字段写入 `x-alonabot-i18n`（`config.<json 路径>`）；`x-alonabot-form.label` 缺省等于它，description 为标签原文。
+- `sdk/config/schema.go` 声明了 `KeywordI18n`，`sdk/config/config.go` 的包文档描述了旧标签语法。
+- `sdk/generate/config_test.go` 的测试插件、期望 Schema 与诊断用例都使用旧标签。仓库中其他 Go 代码没有用到这些标签。
 - 进行中的 goal-30 若先合并，它的测试插件使用旧标签，由本切片一并改写（docs/execution-order.md：后合并的一方同步）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-90（切片 T-08.10：配置标签统一）。goal 目录 goal-90，分支 goal-90，worktree .worktrees/goal-90，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：Config 字段的表单、i18 与 secret 元数据统一写在 config 标签中，语法与 GORM 标签相同（key:value;key:value;flag），不再读取 form、description、secret、hidden 独立标签。生成的 Schema 格式不变；同一 Config 改用新标签后，Schema 与 config_schema_hash 逐字节不变。
+目标：仿照 AstrBot 的插件配置，Config 字段的表单与 secret 元数据统一写在 config 标签中，语法与 GORM 标签相同（key:value;key:value;flag）。label 与 description 是英文源文案，不再是 i18 键。表单特性补齐选项显示名与说明、多选、滑块、代码编辑器、醒目提示与显示条件；取消选项图标。
 
-依据：CONTRACTS §5.1、§5.3；DECISIONS D-74；TEST-MATRIX V-25 的描述分项。
+依据：CONTRACTS §5.1、§5.3、§7.5；DECISIONS D-74；TEST-MATRIX V-25 的描述分项。
 
 范围（只新增或修改这些）：
-- sdk/generate/config.go：标签的读取、解析与诊断
-- sdk/config/config.go：包文档中的标签语法与示例
-- sdk/generate/config_test.go：测试插件与诊断用例改用新标签，期望 Schema 不变；补充下文的诊断
+- sdk/generate/config.go：标签的读取、解析、Schema 生成与诊断；删除选项图标的解析与检查
+- sdk/config/schema.go：删除 KeywordI18n；sdk/config/config.go：包文档中的标签语法与示例
+- sdk/generate/config_test.go：测试插件、期望 Schema 与诊断用例改用新写法
 - 合并时 main 上已有的、使用旧标签的 Config（例如 goal-30 的测试插件）
 允许的新跨模块边：无。
 
-接口：不增减公开符号。
+接口：删除 config.KeywordI18n，其余公开符号不变。
 
 行为：
-- 读取 config 标签。值键：label、description、widget、options、min、max、default；标志：required、secret、hidden。键与值以第一个 ":" 分隔。default 的值按 JSON 字面量解码（沿用现有解析，可以含 ";" 与 ":"），解码结束处之后必须是 ";" 或标签结尾；其余值键的值到下一个 ";" 为止。各项的含义、取值范围与现有 form 标签相同（widget 的取值、options 的 "|" 与 "@图标路径"、图标检查、min/max 与 default 的精确校验）。
+- 读取 config 标签。值键：label、description、widget、options、labels、subtitles、min、max、step、language、when、default；标志：required、secret、hidden、obvious。键与值以第一个 ":" 分隔。default 的值按 JSON 字面量解码（沿用现有解析，可以含 ";" 与 ":"），解码结束处之后必须是 ";" 或标签结尾；其余值键的值到下一个 ";" 为止。
+- 各键的含义：
+  - label、description：英文源文案，原样写入 Schema。没写 label 时不生成 label，表单回落到 JSON 名。
+  - widget：text、password、textarea、number、slider、switch、select、code。
+  - options：以 "|" 分隔的存储值，按字段（或 slice 元素）的类型解析；[]T 带 options 时为多选。
+  - labels、subtitles：以 "|" 分隔的显示文案与选项说明，按下标与 options 对齐，可以比 options 短，不能更长。
+  - min、max、step：数字字段的边界与步长；widget 为 slider 时必须有 min 与 max。
+  - language：widget 为 code 时编辑器的语言，缺省为 json。
+  - when：表单显示条件，形如 mode=regex，多个条件以 "," 连接。字段名指同一对象内的兄弟字段（按 JSON 名），值按该字段的类型解析：bool 与数字按 JSON 字面量，字符串原样。
+  - obvious：提示醒目显示。
+- Schema：
+  - x-alonabot-form 写入 label、widget、options、labels、subtitles、min、max、step、language、when（对象：字段名 → 取值）、obvious；description 写入 Schema 的 description。
+  - 不再写 x-alonabot-i18n 与 option_icons，其余关键字不变。
+  - 翻译路径由 WebUI 按 Schema 的嵌套位置推出，不写入 Schema。
 - 诊断（带位置，沿用现有诊断格式，英文）：
-  - 未知键；标志带值；值键缺值；同一键出现两次。
-  - label 或 description 不以 "config." 开头，或 "config." 之后为空。
+  - 未知键、标志带值、值键缺值、同一键出现两次。
+  - widget 与类型不符：slider 与 number 只用于数字，switch 只用于 bool，select 需要 options，code 只用于 string。
+  - labels 或 subtitles 多于 options；options 的取值不能解析为字段类型；slider 缺少 min 或 max；step 用于非数字字段；language 用于非 code 字段。
+  - when 引用不存在的兄弟字段，或取值不能解析为该字段的类型。
+  - 字段的 JSON 名为 label、description、labels 或 subtitles（与翻译文件的覆盖键冲突）。
   - 配置字段（含嵌套结构、slice 与 map 元素中的字段）上出现 form、description、secret 或 hidden 独立标签，提示改用 config 标签。
-  - 现有的诊断保持不变（例如 secret 只用于 string 与 *string）。
-- Schema 输出与改动前相同：x-alonabot-form.label 缺省为 i18 路径，写了 label 时为它；description 写入 description 键；secret、hidden 只在为 true 时写入。
-- 不保留旧标签的兼容读取（编码规范「首次发布前不写兼容层」）。
+  - 现有诊断保持不变（例如 secret 只用于 string 与 *string）。
+- 不保留旧标签与选项图标的兼容读取（编码规范「首次发布前不写兼容层」）。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：sdk/generate/config_test.go 的 TestConfigSchemaIntegration 改用新标签，期望 Schema 与摘要保持原值不变；TestConfigDiagnosticsIntegration 覆盖上述每类新诊断各一例，其中旧标签一例放在嵌套结构的字段上。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：default 为含 ";" 与 ":" 的字符串、对象与数组字面量；options 带图标；标志与值键的不同顺序；旧标签与 config 标签同时出现；未写 config 标签的字段。
+- 提交：
+  - sdk/generate/config_test.go 的 TestConfigSchemaIntegration 改用新写法，覆盖 labels、subtitles、多选、slider、code、obvious 与 when，期望 Schema 按上文更新，两次生成仍逐字节相同，REGISTER 的 config_schema_hash 与新 Schema 一致。
+  - TestConfigDiagnosticsIntegration 覆盖上述每类新诊断各一例，其中旧标签一例放在嵌套结构的字段上。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：
+  - default 为含 ";" 与 ":" 的字符串、对象与数组字面量。
+  - 标志与值键的不同顺序；未写 config 标签的字段。
+  - when 引用 bool、数字与字符串字段。
+  - 多选的 options 按元素类型解析。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./sdk/...；go build ./...。
 
-不做：i18 文件内容的检查（T-08.8）；表单组件（T-08.7）；运行时的配置准备（T-08.3）；Schema 格式的任何改动。
+不做：
+- i18 文件内容的检查（T-08.8）；表单组件（T-08.7）；运行时的配置准备（T-08.3）。
+- D-74 列为以后再考虑的特性：JSON 文件定义配置元数据、Core 数据源选择、文件上传、多模板列表。
 ```
 
 ### goal-36 · T-09.1 首次管理认证
@@ -2368,7 +2392,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-53 · T-08.8 用户可见文案目录
 
-状态：等待前置（T-04.6、T-08.10）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.1、T-04.3 已合并；已核对 `sdk.Context`、`sdk.Usage(text string) RouteOption` 与 `router/command.go` 的 `commandUsage(spec *pb.CommandSpec) *pb.MessageChain`，usage 经注入的 message.Service.Send 发送。goal-28 已合并（PR #54）：生成器在 Schema 中为每个字段写入 `x-alonabot-i18n`（`config.<json 路径>`，数组元素与 map 值不含下标或键）与 `x-alonabot-form.label`（未写 label 时等于 i18 路径），description 键写入 description。按 D-74，i18 文件的 `config` 与 `messages` 同为扁平对象，字段标签的键就是 Schema 中的 label；标签写法由 T-08.10（goal-90）统一为 `config` 标签。
+状态：等待前置（T-04.6、T-08.10）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.1、T-04.3 已合并；已核对 `sdk.Context`、`sdk.Usage(text string) RouteOption` 与 `router/command.go` 的 `commandUsage(spec *pb.CommandSpec) *pb.MessageChain`，usage 经注入的 message.Service.Send 发送。goal-28 已合并（PR #54）：生成器在 Schema 中为每个字段写入 `x-alonabot-i18n`（`config.<json 路径>`，数组元素与 map 值不含下标或键）与 `x-alonabot-form.label`（未写 label 时等于 i18 路径），description 键写入 description。按 D-74，label 与 description 改为标签中的源文案，`x-alonabot-i18n` 删除，i18 文件的 `config` 按 JSON 字段名嵌套、覆盖 label、description、labels、subtitles；这些由 T-08.10（goal-90）实现。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-53（切片 T-08.8：用户可见文案目录）。goal 目录 goal-53，分支 goal-53，worktree .worktrees/goal-53，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -2412,7 +2436,7 @@ goal-28、goal-29 的符号已按合入代码核对：
    func SetDefaultLocale(ctx context.Context, st *state.Store, tag string) error // 必须是规范的 BCP 47 标签
 
 行为：
-- 文件格式（Parse 校验，问题以 Problem 报告）：文件名必须是规范 BCP 47 标签加 .json；顶层只允许 config 与 messages 两个键；messages 的键为点分隔的 ASCII 标识（[a-z0-9_]+ 段），值为字符串；{name} 为占位符（name 同标识规则），{{ 与 }} 为字面花括号，其余单独的花括号是错误。必须有 en-US.json；其他语言不得有 en-US 没有的键；同一键在各语言的占位符集合必须与 en-US 相同；JSON 不合法是错误。config 根节点按 D-74 是扁平对象：键为非空的点分路径，值为字符串，不含占位符检查；字段键是否被 Schema 使用不检查（表单负责回退，T-08.7）。
+- 文件格式（Parse 校验，问题以 Problem 报告）：文件名必须是规范 BCP 47 标签加 .json；顶层只允许 config 与 messages 两个键；messages 的键为点分隔的 ASCII 标识（[a-z0-9_]+ 段），值为字符串；{name} 为占位符（name 同标识规则），{{ 与 }} 为字面花括号，其余单独的花括号是错误。必须有 en-US.json；其他语言不得有 en-US 没有的键；同一键在各语言的占位符集合必须与 en-US 相同；JSON 不合法是错误。config 根节点按 D-74 按字段名嵌套：每层是对象，叶子只能是 label、description（字符串）与 labels、subtitles（字符串数组），不含占位符检查；字段名是否存在于 Schema 不检查（表单负责回退，T-08.7）。
 - 语言选择（Format）：按候选顺序，每一级先精确匹配，再按主语言子标签匹配（同一主语言有多个文件时取字典序最小者）；都不命中时用 en-US；目标语言缺少该键时回落到 en-US 的该键。未知键（en-US 也没有）返回错误；缺少占位符参数返回错误；多余参数忽略。不用键名充当文案。
 - 生成器：构建入口目录下有 i18/ 时解析全部 .json，Problem 作为诊断报告（位置为文件名与键）；没有问题时把文件原文嵌入 Generated.I18n。plugin check 同样报告。
 - SDK：Context.T 的候选为 [Actor.locale（存在时）, Bootstrap.default_locale]；后台 T 为 [default_locale]。插件没有 i18 资源时 T 返回 NOT_FOUND 的错误。
@@ -2952,7 +2976,7 @@ sdk
 - alonabot plugin check [--dir] [--goos] [--goarch] [--tags]：在 goal-11/goal-28/goal-53 的检查之外，核对 manifest（Parse 与 §9.1 的字段规则、role 与描述一致、migration_mode 与实际迁移接口一致、prepare_effects 已声明）、Schema 与 config_version、i18 文件；全部问题一次列出。
 - alonabot plugin build [--dir] --goos OS --goarch ARCH [--out DIR]：生成正式入口（临时目录中的 main 包，调用 sdk.Run 或 sdk.RunAdapter，引用根类型），用锁定的 Go Modules 编译（CGO_ENABLED=0，-trimpath），输出可执行文件；不链接根包 alonabot。
 - alonabot plugin test [--dir]：build 当前平台后，在临时 data_dir 中经 Core 的开发入口启动一次，完成握手、准备、注册与激活后停止，报告注册的路由；不连接任何真实平台，不读取生产凭证。
-- alonabot plugin pack [--dir] --goos OS --goarch ARCH [--key FILE] [--out DIR]：build 后打包 tar.gz（plugin.yaml、entrypoint、config.schema.json、i18n/、build-info，以及 manifest 的 icon 与表单选项图标）；role 为 webui 时不需要 --goos/--goarch，只打包 plugin.yaml、icon 与 assets 目录，归档名为 <id>-<version>-any.tar.gz；生成 release.json（id、version、source、os/arch、归档 SHA256 与长度、发布者公钥 ID）；给出 --key（Ed25519 私钥文件）时对 release.json 的确切字节签名生成 release.json.sig，否则只输出待签名的 release.json。私钥不进入包。
+- alonabot plugin pack [--dir] --goos OS --goarch ARCH [--key FILE] [--out DIR]：build 后打包 tar.gz（plugin.yaml、entrypoint、config.schema.json、i18n/、build-info，以及 manifest 的 icon）；role 为 webui 时不需要 --goos/--goarch，只打包 plugin.yaml、icon 与 assets 目录，归档名为 <id>-<version>-any.tar.gz；生成 release.json（id、version、source、os/arch、归档 SHA256 与长度、发布者公钥 ID）；给出 --key（Ed25519 私钥文件）时对 release.json 的确切字节签名生成 release.json.sig，否则只输出待签名的 release.json。私钥不进入包。
 internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包文档列出。
 
 行为：

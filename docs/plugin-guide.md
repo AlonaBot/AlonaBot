@@ -58,6 +58,6 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 
 ## 9. 发布
 
-- 市场 ID 按角色使用 `alonabot_plugin_`、`alonabot_adapter_`、`alonabot_agent_` 或 `alonabot_webui_` 前缀（CONTRACTS §9.1）。manifest 可以用 `icon` 声明组件图标，配置表单的选项也可以各带图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
+- 市场 ID 按角色使用 `alonabot_plugin_`、`alonabot_adapter_`、`alonabot_agent_` 或 `alonabot_webui_` 前缀（CONTRACTS §9.1）。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
 - 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`（CONTRACTS §9.3）。
 - 用 `alonabot plugin check` 与 `alonabot plugin pack` 为每个支持的平台生成安装包与外部 `release.json`，用 Ed25519 签名（CONTRACTS §9.2、§9.3）。签名私钥由作者保管，不放进仓库或构建日志。

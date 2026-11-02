@@ -90,7 +90,7 @@
 | V-80 | S-05 | 外部唤醒提供者（本地模拟）可用与不可用；触发器注册失败；休眠事务各步注入失败；同一次外部触发重复送达与并发送达；执行中崩溃；唤醒迟到超出容忍窗口；库模式 | 接管或注册未确认时保持运行；任一步失败恢复服务；重复触发只产生一次执行尝试；结果未知的记 `UNKNOWN` 不重跑；超出窗口的记为跳过；唤醒时不出现第二个持有 core.lock 的实例；库模式不进入整机休眠 |
 | V-81 | S-06 | 固定机器上 echo 示例插件与 V-74 的同组插件：冷启动到 ACTIVATED 各 100 次；活跃与休眠时的 PSS/RSS；频繁唤醒；切回 `always_on` | 记录冷启动 P50/P95/P99（echo 的 P95 以 200 ms 为初步目标）、PSS/RSS、CPU、唤醒次数、失败与丢弃数；超过冷启动阈值的插件转为常驻；切回 `always_on` 后按原代次启动全部已启用组件，路由快照、任务记录与业务数据保留 |
 | V-82 | T-09、T-12 | 已安装官方 Agent、WebUI 与 Telegram Adapter 时，不带与带 `--replace` 安装同类的社区组件（本地签名的测试包与本地 Release 模拟服务）、新组件预检失败、替换后 update、`@agent` 调用、按原来源重装旧组件、两个不同 `adapter_id` 的 Adapter | 不带 `--replace` 返回 ALREADY_EXISTS 并列出已安装的组件；预检失败时旧组件不受影响；替换在确认后卸载旧组件并保留其数据与来源绑定，新组件沿用旧组件的启用状态，被替换 Adapter 的实例不出现在新 Adapter 下；之后 update 只查询新来源；`@agent` 调用到达新 Agent；旧组件可按原来源重装并复用数据；不同 `adapter_id` 的 Adapter 可以并存 |
-| V-83 | T-08、T-09 | WebUI 组件：已启用、未安装、Admin API 主版本不在声明范围内、前端路由路径、`/api/` 与内部路径、带扩展名的不存在路径、库模式 `alonabot.WebUI`；图标：manifest 与表单选项声明的 SVG、PNG、WebP，未声明的包内文件、其他扩展名、含 `<script>` 的 SVG、未认证请求 | WebUI 文件来自不可变包目录，前端路由回退 `index.html`，`/api/` 不被覆盖，带扩展名的不存在路径返回 404；未安装返回 503 与提示；版本不兼容时拒绝安装与启用；图标只提供声明过的路径并带 sandbox CSP 与 nosniff，其他扩展名在包校验时拒绝，未认证返回 401；直接打开含脚本的 SVG 时脚本不在 Admin 源执行 |
+| V-83 | T-08、T-09 | WebUI 组件：已启用、未安装、Admin API 主版本不在声明范围内、前端路由路径、`/api/` 与内部路径、带扩展名的不存在路径、库模式 `alonabot.WebUI`；图标：manifest 声明的 SVG、PNG、WebP，未声明的包内文件、其他扩展名、含 `<script>` 的 SVG、未认证请求 | WebUI 文件来自不可变包目录，前端路由回退 `index.html`，`/api/` 不被覆盖，带扩展名的不存在路径返回 404；未安装返回 503 与提示；版本不兼容时拒绝安装与启用；图标只提供声明过的路径并带 sandbox CSP 与 nosniff，其他扩展名在包校验时拒绝，未认证返回 401；直接打开含脚本的 SVG 时脚本不在 Admin 源执行 |
 | V-84 | T-14 | 在真实 systemd Linux（root）与 macOS（当前用户）上：全新安装、`SHA256SUMS` 不一致、经管道运行且有与没有终端、再次运行升级、`--uninstall`、不支持的系统与没有 systemd 的 Linux | 校验失败时不改动已有安装；有终端时 token 只显示一次并启动服务，没有终端时不启动服务并输出初始化命令；升级保留数据目录、设置文件与已安装组件；卸载删除服务与程序目录并保留数据目录；不支持的系统在改动前退出；容器内的 systemd 与模拟环境不算真实结果 |
 | V-85 | T-03、T-04、T-15、T-16 | Adapter 权限声明：错误前缀、非法名称、隐含 `user`/`admin`、隐含成环；事件带未声明的权限名；OneBot 11 的 owner/admin/member，以及私聊的 friend 与 group 子类型；Telegram 的 creator/administrator、缓存作废与 `getChatAdministrators` 失败；`plugintest.Adapter` 声明的权限 | 非法声明使 Adapter 注册失败；未声明的权限名被丢弃并记诊断；隐含关系完整展开（群主同时满足群管理员与 `chat_admin`）；获取失败的事件不带平台权限；平台权限不跨会话 |
 | V-86 | T-04、T-16 | Adapter 扩展事件：声明与 Schema、未声明的名称、版本不符、payload 不符合 Schema；插件注册未安装 Adapter 的扩展事件路由；SDK 的事件常量与 Handler 参数类型不符；扩展事件遇到命令层与多轮等待 | 不符的事件被拒绝并记诊断；未安装时注册成功、诊断标出且不触发；参数类型不符在 `Collect` 时报错；扩展事件只进入事件路由 |
@@ -125,7 +125,7 @@
 | V-72 | T-03 Telegram 发送计划、能力与模拟服务；T-15 OneBot 11 映射与模拟服务 | T-15.3 以同一组用例运行两个 Adapter |
 | V-73 | T-13.1 `alonabot.Start`；T-16.1 套件基础 | T-16.2 按钮、多轮等待、schedule 与示例插件的测试 |
 | V-82 | T-03.8 manifest 角色解析；T-12.8 `@agent` 解析 | T-09.4 同类唯一、`--source` 与 `--replace` 的正式管理流程 |
-| V-83 | T-08.1 表单选项图标的构建检查；T-08.7 WebUI 用 `<img>` 显示图标 | T-09.12 WebUI 文件与图标的提供、Admin API 版本检查 |
+| V-83 | T-08.1 表单选项图标的构建检查（已由 D-74 取消，T-08.10 删除） | T-09.12 WebUI 文件与图标的提供、Admin API 版本检查 |
 | V-85～V-87 | T-04.6 Core 侧校验、展开与命令解析；T-04.7 SDK 常量与类型核对；T-03.11、T-15.1 两个官方 Adapter 的平台权限 | T-16 用 `plugintest.Adapter` 覆盖依赖平台权限与扩展事件的路由；V-87 的 usage 语言选择随 T-08.8 完成 |
 
 T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前者可支持后续开发，真实平台部分仍由 T-10 查证。测试会话、无配置/无 DB 最小插件和 payload fixture 的范围必须写明，不可据此关闭生产认证或数据恢复用例。
