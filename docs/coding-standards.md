@@ -57,6 +57,17 @@ v0.1 首次发布前，没有需要兼容的旧状态库、旧调用方或旧插
 - 只约束仓库自身的代码与状态库。插件受管 SQLite 的迁移接口、配置的 `config_version` 转换是面向插件作者的产品功能，照契约实现；protoc-gen-go 在生成文件里写的 `Deprecated: Use ... Descriptor instead` 是生成器样板，不属于兼容层。
 - 首次发布时再规定状态库只追加迁移的规则，并在此处更新。
 
+## Core 状态库不写 SQL
+
+Core 状态库（`internal/core/state`）经 GORM 读写，业务的增删改查不写 SQL 文本，也不写 `Where("plugin_id = ?", id)` 这类字符串条件。
+
+- 等值条件用主键或结构体条件：目标结构体带主键值即为条件，例如 `Take(&pendingConfig{PluginID: id})`、`Delete(&adapterPermission{PluginID: p, AdapterInstanceID: i})`；只按部分列匹配时用 `Where(&conversationEntry{PluginID: p, ConversationKey: k})`。
+- 结构体条件忽略零值字段。全部字段为零时 GORM 拒绝执行，只有部分字段为零时条件会被放宽，删除时会删掉多余的行。可能为空的条件字段在入口校验非空；需要按零值匹配的条件不用结构体表达。
+- 更新在事务内按主键读出行，在 Go 中检查条件（例如「尚未提交」），修改字段后 `Save`；不用结构体 `Updates` 写 false、0 等零值。全表更新用 `Session(&gorm.Session{AllowGlobalUpdate: true})`，不写 `Where("1 = 1")`。
+- 范围条件、排序与取最大值用 `clause` 结构（`clause.Gte`、`clause.OrderByColumn` 等），列名写成包内常量；取最大值按该列降序取一行，不写 `max()`、`coalesce()`。能在 Go 中完成的排序与聚合不写进查询。不引入 GORM CLI 等查询代码生成工具。
+- 初始迁移的建表语句、PRAGMA 回读与打开前的只读预检属于 schema 与连接管理，可以写 SQL。
+- 只约束 Core。插件经 `sdk/sqlitedb` 使用 `database/sql` 是面向插件作者的产品功能（D-49），官方插件按[插件开发规范](plugin-guide.md)选择入口。
+
 ## 程序输出用英文
 
 - 日志、错误字符串、CLI 输出、panic 消息、测试失败消息，以及协议中的 safe_message 一律用英文。错误字符串按 Go 惯例小写开头、不加句号，用 `%w` 包装时前面写清正在做什么，例如 `open SQLite: %w`。
