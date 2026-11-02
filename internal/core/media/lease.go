@@ -28,7 +28,7 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 	if parent, ok := ctx.Deadline(); ok && parent.Before(deadline) {
 		deadline = parent
 	}
-	if !deadline.After(time.Now()) {
+	if !deadline.After(s.now()) {
 		return "", nil, mediaCallError(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "media send deadline has expired")
 	}
 	// 1. 区分两类已授权来源，入站对象先按原读取者的预算完成唯一取件。
@@ -44,7 +44,7 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 		return "", nil, mediaCallError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "expected media_ref or incoming_ref source")
 	}
 	if incoming {
-		fetchCtx, cancel := context.WithDeadline(ctx, deadline)
+		fetchCtx, cancel := context.WithTimeout(ctx, deadline.Sub(s.now()))
 		err := s.loadIncoming(fetchCtx, c, original)
 		cancel()
 		if err != nil {
@@ -54,7 +54,7 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 	if err := ctx.Err(); err != nil {
 		return "", nil, err
 	}
-	if !deadline.After(time.Now()) {
+	if !deadline.After(s.now()) {
 		return "", nil, mediaCallError(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "media send deadline has expired")
 	}
 	// 2. 在同一回收锁下重新核对原 token，并向目标 Session 绑定新的只读引用。
@@ -87,7 +87,7 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 	s.refs[lease.token] = &entry{file: file, owner: readerSessionKey, lease: lease}
 	// 3. 回调只持有此租约；结束路径停止另一个回调，避免回收后的长期引用。
 	release = func() { s.mu.Lock(); defer s.mu.Unlock(); s.releaseLease(lease) }
-	lease.timer = time.AfterFunc(time.Until(deadline), release)
+	lease.timer = time.AfterFunc(deadline.Sub(s.now()), release)
 	lease.stopContext = context.AfterFunc(ctx, release)
 	return lease.token, release, nil
 }
