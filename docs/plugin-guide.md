@@ -42,6 +42,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 ## 6. 跨插件协作
 
 - 用 Service Call 与 Event Bus 协作，不直接读写其他插件的文件或数据库（CONTRACTS §3）。
+- Event Bus 是非持久广播：`sdk.Publish` 只能发布到本插件的命名空间，返回成功只表示 Core 准入，不代表有人收到；订阅方队列满、预算不足或离线时事件会丢失，也不会补发。需要回执或可靠送达时改用 Service Call。订阅回调串行执行，不要在其中阻塞：积压的事件占用本插件的接收预算，会让命令请求也被拒绝。回调里没有 Actor 与默认 Target，发消息时要显式指定 To。
 - 需要模型能力时调用 Agent 组件的 `llm.generate`：`sdk/llm` 提供类型与以 `@agent` 为目标的调用辅助，官方 Agent 被替换后也不用修改；请管理员把插件加入 `llm_service_allowed_plugins`；一次调用是一次非流式请求，期限受调用方约束（CONTRACTS §13.5）。
 - 要把能力交给 Agent 使用时，注册带 `tool` 描述的 JSON Service（CONTRACTS §13.1）。
 
