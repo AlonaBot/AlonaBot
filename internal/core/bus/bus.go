@@ -20,18 +20,13 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
-	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
 
-const (
-	eventIDBytes = 16
-	// 名字部分与 contracts/validate 的 Service 名称规则相同。
-	maxEventNameLength = 64
-)
+const eventIDBytes = 16
 
-// Options 配置逐订阅插件的等待队列；零值读取 tune.Defaults()。
+// Options 配置逐订阅插件的等待队列；装配处传入 tune.Values 的生效值。
 type Options struct {
 	QueueEvents int   // BUS_QUEUE_EVENTS：等待发送的条数上限
 	QueueBytes  int64 // BUS_QUEUE_BYTES：等待发送的 BusEvent protobuf 载荷字节上限
@@ -80,13 +75,6 @@ type droppedEvent struct {
 
 // New 创建独立的非持久 Bus；log 由 Core 注入。
 func New(log *slog.Logger, opt Options) *Bus {
-	defaults := tune.Defaults()
-	if opt.QueueEvents == 0 {
-		opt.QueueEvents = defaults.BusQueueEvents
-	}
-	if opt.QueueBytes == 0 {
-		opt.QueueBytes = defaults.BusQueueBytes
-	}
 	return &Bus{log: log, opt: opt, subscribers: make(map[string]*subscriber), counts: make(map[string]*Stats)}
 }
 
@@ -178,7 +166,7 @@ func (b *Bus) publish(_ context.Context, caller router.Caller, in *wire.Inbound)
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid publish request protobuf: "+err.Error())
 	}
 	name, owned := strings.CutPrefix(req.GetEventName(), caller.PluginID+"/")
-	if !owned || !validEventName(name) {
+	if !owned || !validate.IsServiceName(name) {
 		return failure(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "event name must belong to the caller namespace and use a valid service name")
 	}
 	if req.GetSchemaId() == "" || req.GetSchemaVersion() == 0 {
@@ -293,16 +281,4 @@ func (b *Bus) warnDrop(d droppedEvent, reason string) {
 
 func failure(code pb.ErrorCode, message string) wire.Response {
 	return wire.Response{Err: &pb.ErrorInfo{Code: code, SafeMessage: message}}
-}
-
-func validEventName(name string) bool {
-	if len(name) == 0 || len(name) > maxEventNameLength || name[0] < 'a' || name[0] > 'z' {
-		return false
-	}
-	for _, c := range name {
-		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '.') {
-			return false
-		}
-	}
-	return true
 }

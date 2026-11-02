@@ -302,7 +302,7 @@ func registerHTTPRoute(routes map[[2]string]string, route *pb.RouteDescriptor) e
 func registerService(route *pb.RouteDescriptor) error {
 	service := route.GetService()
 	name := service.GetServiceName()
-	if !validServiceName(name) || route.GetRouteId() != "svc."+name {
+	if !IsServiceName(name) || route.GetRouteId() != "svc."+name {
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service route %q has invalid name or route_id", route.GetRouteId())
 	}
 	if service.GetEncoding() != pb.PayloadEncoding_PAYLOAD_ENCODING_JSON && service.GetEncoding() != pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF {
@@ -331,7 +331,8 @@ func registerService(route *pb.RouteDescriptor) error {
 	return nil
 }
 
-func validServiceName(name string) bool {
+// IsServiceName 检查 Service 名称是否为 1～64 字节，以小写字母开头且只含小写字母、数字、下划线和点。
+func IsServiceName(name string) bool {
 	if len(name) == 0 || len(name) > maxServiceNameLength || name[0] < 'a' || name[0] > 'z' {
 		return false
 	}

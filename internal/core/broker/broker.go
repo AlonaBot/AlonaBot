@@ -22,8 +22,6 @@ import (
 )
 
 const (
-	// 服务名上限与 contracts/validate/register.go 的注册规则一致。
-	maxServiceNameLength    = 64
 	invocationSchemaVersion = 1
 )
 
@@ -52,7 +50,7 @@ func New(r *router.Router, log *slog.Logger, requestTimeout time.Duration) *Brok
 func (b *Broker) Call(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
 	// 1. 目标语法必须先于插件与服务查找检查。
 	pluginID, name, ok := strings.Cut(in.Target, "/")
-	if _, err := validate.PluginID(pluginID); err != nil || !ok || !validServiceName(name) {
+	if _, err := validate.PluginID(pluginID); err != nil || !ok || !validate.IsServiceName(name) {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid service target")
 	}
 	plugin, ok := b.router.Plugin(pluginID)
@@ -137,16 +135,3 @@ func failure(code pb.ErrorCode, message string) wire.Response {
 }
 
 func validJSON(b []byte) bool { return utf8.Valid(b) && json.Valid(b) }
-
-// validServiceName 遵循 contracts/validate/register.go 的同一名称规则，在目标查找前校验。
-func validServiceName(name string) bool {
-	if len(name) == 0 || len(name) > maxServiceNameLength || name[0] < 'a' || name[0] > 'z' {
-		return false
-	}
-	for _, c := range name {
-		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '.') {
-			return false
-		}
-	}
-	return true
-}
