@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -34,6 +35,16 @@ func TestIncomingMedia(t *testing.T) {
 	}
 	reverse := httputil.NewSingleHostReverseProxy(target)
 	var getFiles, downloads atomic.Int32
+	var downloadedBytes atomic.Int64
+	reverse.ModifyResponse = func(r *http.Response) error {
+		if strings.HasPrefix(r.Request.URL.Path, "/file/") {
+			if r.StatusCode != http.StatusPartialContent {
+				return fmt.Errorf("download did not use Range: %d", r.StatusCode)
+			}
+			downloadedBytes.Add(r.ContentLength)
+		}
+		return nil
+	}
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/getFile") {
 			getFiles.Add(1)
@@ -111,8 +122,8 @@ func TestIncomingMedia(t *testing.T) {
 			t.Fatalf("content = %q", actual)
 		}
 	}
-	if getFiles.Load() == 0 || downloads.Load() == 0 {
-		t.Fatalf("getFile=%d downloads=%d", getFiles.Load(), downloads.Load())
+	if getFiles.Load() != 2 || downloads.Load() != 10 || downloadedBytes.Load() != int64(2*len(content)) {
+		t.Fatalf("getFile=%d downloads=%d bytes=%d", getFiles.Load(), downloads.Load(), downloadedBytes.Load())
 	}
 }
 

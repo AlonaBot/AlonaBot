@@ -60,40 +60,116 @@ func (m *telegramMessage) mediaSegment() *pb.Segment {
 	}
 }
 
-// ReadPlatformFile 经实例的 HTTP 客户端按需读取平台文件；内容缓存由 Core 持有。
-func (i *instance) ReadPlatformFile(ctx context.Context, fileID string, offset uint64, length uint32) ([]byte, uint64, bool, error) {
-	// 1. 只接受 getFile 返回的路径，并在下载前检查平台大小上限。
-	var file struct {
-		Path string  `json:"file_path"`
-		Size *uint64 `json:"file_size"`
+type platformFileLocation struct {
+	Path string  `json:"file_path"`
+	Size *uint64 `json:"file_size"`
+}
+
+func (i *instance) fileLocation(ctx context.Context, fileID string) (*platformFileLocation, error) {
+	i.fileMu.Lock()
+	defer i.fileMu.Unlock()
+	if file := i.files[fileID]; file != nil {
+		return file, nil
 	}
+	file := &platformFileLocation{}
 	if err := i.client.call(ctx, "getFile", struct {
 		ID string `json:"file_id"`
-	}{fileID}, &file); err != nil {
+	}{fileID}, file); err != nil {
 		var api *apiError
 		if errors.As(err, &api) && api.status == http.StatusBadRequest && strings.Contains(api.description, "file is too big") {
-			return nil, offset, false, &sdk.Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: api.Error()}
+			return nil, &sdk.Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: api.Error()}
 		}
-		return nil, offset, false, err
+		return nil, err
 	}
 	if file.Size != nil && *file.Size > maxDownloadSize {
-		return nil, offset, false, downloadUnsupported()
+		return nil, downloadUnsupported()
 	}
 	if file.Path == "" {
-		return nil, offset, false, fmt.Errorf("telegram getFile returned no file_path")
+		return nil, fmt.Errorf("telegram getFile returned no file_path")
 	}
+	if i.files == nil {
+		i.files = make(map[string]*platformFileLocation)
+	}
+	i.files[fileID] = file
+	return file, nil
+}
+
+// ReadPlatformFile 经实例的 HTTP 客户端按需读取平台文件；内容缓存由 Core 持有。
+// 文件路径在分块之间复用，读取完成或出错时移除。
+func (i *instance) ReadPlatformFile(ctx context.Context, fileID string, offset uint64, length uint32) (data []byte, next uint64, eof bool, err error) {
+	// 1. 首次读取取得可信平台路径；同一文件取件期间复用路径。
+	file, err := i.fileLocation(ctx, fileID)
+	if err != nil {
+		return nil, offset, false, err
+	}
+	defer func() {
+		if err != nil || eof {
+			i.fileMu.Lock()
+			if i.files[fileID] == file {
+				delete(i.files, fileID)
+			}
+			i.fileMu.Unlock()
+		}
+	}()
 	if offset > maxDownloadSize {
 		return nil, offset, false, &sdk.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "media offset exceeds download limit"}
 	}
+	if file.Size != nil {
+		if offset > *file.Size {
+			return nil, offset, false, &sdk.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "media offset exceeds file size"}
+		}
+		if offset == *file.Size {
+			return nil, offset, true, nil
+		}
+	}
+	requested := min(uint64(length), maxDownloadSize-offset)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, i.client.fileBase+file.Path, nil)
 	if err != nil {
 		return nil, offset, false, i.client.safeError(err)
+	}
+	// 2. 请求精确范围；206 的总大小用于判断 EOF，避免相邻分块重复传输。
+	if requested > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", offset, offset+requested-1))
 	}
 	response, err := i.client.http.Do(req)
 	if err != nil {
 		return nil, offset, false, i.client.safeError(err)
 	}
 	defer response.Body.Close()
+	if response.StatusCode == http.StatusRequestedRangeNotSatisfiable {
+		var total uint64
+		header := response.Header.Get("Content-Range")
+		if n, parseErr := fmt.Sscanf(header, "bytes */%d", &total); parseErr == nil && n == 1 && header == fmt.Sprintf("bytes */%d", total) {
+			if total > maxDownloadSize {
+				return nil, offset, false, downloadUnsupported()
+			}
+			if offset == total {
+				return nil, offset, true, nil
+			}
+			if offset > total {
+				return nil, offset, false, &sdk.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "media offset exceeds file size"}
+			}
+		}
+	}
+	if response.StatusCode == http.StatusPartialContent {
+		var start, end, total uint64
+		header := response.Header.Get("Content-Range")
+		n, parseErr := fmt.Sscanf(header, "bytes %d-%d/%d", &start, &end, &total)
+		if parseErr != nil || n != 3 || header != fmt.Sprintf("bytes %d-%d/%d", start, end, total) || start != offset || end < start || end >= total || end-start >= requested {
+			return nil, offset, false, i.client.safeError(fmt.Errorf("telegram invalid Content-Range: %q", header))
+		}
+		if total > maxDownloadSize {
+			return nil, offset, false, downloadUnsupported()
+		}
+		data, err = io.ReadAll(io.LimitReader(response.Body, int64(end-start)+2))
+		if err != nil {
+			return nil, offset, false, i.client.safeError(err)
+		}
+		if uint64(len(data)) != end-start+1 {
+			return nil, offset, false, fmt.Errorf("telegram range body size mismatch")
+		}
+		return data, end + 1, end+1 == total, nil
+	}
 	if response.StatusCode != http.StatusOK {
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
@@ -104,23 +180,21 @@ func (i *instance) ReadPlatformFile(ctx context.Context, fileID string, offset u
 	if response.ContentLength > maxDownloadSize {
 		return nil, offset, false, downloadUnsupported()
 	}
-	// 2. 流式跳过前缀，只保留请求分块和一个 EOF 探测字节，避免 Adapter 再缓存完整对象。
-	// shortcut: 分块重新下载前缀；需要优化带宽且平台支持 Range 时改用范围读取。
+	// 3. 平台忽略 Range 返回 200 时，沿用流式跳过前缀和一个字节的 EOF 探测。
 	if _, err := io.CopyN(io.Discard, response.Body, int64(offset)); err != nil {
 		if err == io.EOF {
 			return nil, offset, false, &sdk.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "media offset exceeds file size"}
 		}
 		return nil, offset, false, i.client.safeError(err)
 	}
-	requested := min(uint64(length), maxDownloadSize-offset)
-	data, err := io.ReadAll(io.LimitReader(response.Body, int64(requested)+1))
+	data, err = io.ReadAll(io.LimitReader(response.Body, int64(requested)+1))
 	if err != nil {
 		return nil, offset, false, i.client.safeError(err)
 	}
 	if offset+uint64(len(data)) > maxDownloadSize {
 		return nil, offset, false, downloadUnsupported()
 	}
-	eof := uint64(len(data)) <= requested
+	eof = uint64(len(data)) <= requested
 	if !eof {
 		data = data[:requested]
 	}
