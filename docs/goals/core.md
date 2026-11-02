@@ -111,15 +111,17 @@ type FileOptions struct { Dir string; MaxSize, MaxTotal int64; MaxAgeDays int } 
 
 范围修订（2026-11-02，维护者确认）：复审 PR #63 时发现仍有硬写的名字，`Where` 后面追加 `"PluginID"` 等字段名参数，upsert 列出了冲突列和更新列；维护者同时要求表名改用单数。规则写入编码规范「Core 状态库不写 SQL」，语句「目标」「Schema」「读写」三条与本地自测随之修订。PR #63 按审查评论的 FIX-4～FIX-6 修改。
 
+范围修订（2026-11-02，维护者确认）：维护者要求 DDL 从 Go 代码中拆到 `*.sql` 文件。规则写入编码规范「Core 状态库不写 SQL」，语句「范围」「Schema」两条随之修订。PR #63 按审查评论的 FIX-7 修改。
+
 ```text
 /goal 使用 $alonabot-execute 推进 goal-86（切片 T-02.3：状态库改用 GORM）。goal 目录 goal-86，分支 goal-86，worktree .worktrees/goal-86，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：internal/core/state 的读写改用 GORM，不再手写 INSERT/SELECT 与逐列扫描；表名改用单数；公开 API、列与全部现有行为不变。
 
-依据：PLAN T-02 步骤 11；CONTRACTS §6.1；DECISIONS D-68；TEST-MATRIX V-36、V-75；docs/execution-order.md §3 中 `migrations` 的规则。
+依据：PLAN T-02 步骤 11；CONTRACTS §6.1；DECISIONS D-68；TEST-MATRIX V-36、V-75；docs/execution-order.md §3 中 `schema.sql` 的规则。
 
 范围（只新增或修改这些）：
-- internal/core/state/：state.go、adapter.go、conversation.go、pending.go、permissions.go；可新增 models.go 放 GORM 模型
+- internal/core/state/：state.go、adapter.go、conversation.go、pending.go、permissions.go；新增 schema.sql 放初始迁移；可新增 models.go 放 GORM 模型
 - internal/core/state/state_test.go：只把直接使用 `s.db` 的地方改为 GORM 写法，断言不变
 - internal/core/conversation/service.go：只在 Clear 中加入会话键校验
 允许的新跨模块边：无。go.mod 已直接依赖 gorm.io/gorm 与 github.com/libtnb/sqlite，不加新依赖。
@@ -131,7 +133,7 @@ type FileOptions struct { Dir string; MaxSize, MaxTotal int64; MaxAgeDays int } 
 行为：
 - 打开：已有文件仍先经 preflight 只读预检（可以继续用 database/sql 的只读连接），通过后以 gorm.Open(sqlite.Open(path+"?"+pragmas)) 打开；DSN 与 PRAGMA 不变，SetMaxOpenConns(1)、SetMaxIdleConns(1)。ReadPragmas 的回读与核对、「损坏不重建」、先取 core.lock 再打开状态库的顺序都不变。
 - GORM 的 logger 设为 Silent：错误照常返回给调用方，由调用方用注入的 Logger 记录；不向 stdout/stderr 直接输出。
-- Schema：按编码规范把 migrations[0] 中的表名直接改为单数：installs→install、generations→generation、pending_configs→pending_config、adapter_cursors→adapter_cursor、plugin_adapter_permissions→plugin_adapter_permission、conversation_entries→conversation_entry，外键引用同步修改；schema_version 与 plugin_state 不变，列、约束与 schema 版本号不变。首次发布前不写兼容层，不追加改名迁移。迁移照旧用一次 Exec 执行并更新 schema_version；不使用 AutoMigrate，不让 GORM 推断或修改表结构。每张表有对应的模型类型，用 TableName 与 column 标签对齐表名与列名；可空列用指针或 sql.Null* 表示，保持现有的 NULL 语义。
+- Schema：初始迁移的 DDL 从 state.go 移到 internal/core/state/schema.sql，用 //go:embed 读入，作为唯一的一条迁移执行；state.go 中不再有建表语句。按编码规范把表名直接改为单数：installs→install、generations→generation、pending_configs→pending_config、adapter_cursors→adapter_cursor、plugin_adapter_permissions→plugin_adapter_permission、conversation_entries→conversation_entry，外键引用同步修改；schema_version 与 plugin_state 不变，列、约束与 schema 版本号不变。首次发布前不写兼容层，不追加改名迁移。迁移照旧用一次 Exec 执行并更新 schema_version；不使用 AutoMigrate，不让 GORM 推断或修改表结构。每张表有对应的模型类型，用 TableName 与 column 标签对齐表名与列名；可空列用指针或 sql.Null* 表示，保持现有的 NULL 语义。
 - 读写：查询、插入、更新、删除改用 GORM，按编码规范「Core 状态库不写 SQL」不写 SQL 文本、字符串条件与字段名参数：单主键的读取与删除用 clause.PrimaryColumn，RevokeAdapterInstance 用带复合主键值的目标结构体删除，部分列匹配用结构体条件；更新在事务内按主键读出、在 Go 中检查条件后 Save；全表更新用 AllowGlobalUpdate；ListConversation 的 seq 范围、排序与条数，以及末尾 seq、下一个 install_seq 的取值用 clause.Gte 与 clause.OrderByColumn（降序取一行，没有记录时按 0），列名写成包内常量；AllowedAdapterInstances 的排序与 Conversations 的汇总在 Go 中完成，汇总只选 conversation_key、seq、created_at 三列。现有 SQL 中的 ON CONFLICT 用 clause.OnConflict 表达，语义一致且不列出冲突列和更新列（adapter_cursor 与 pending_config 用 UpdateAll，plugin_adapter_permission 用 DoNothing）；包内列名常量只保留 seq 与 install_seq。gorm.ErrRecordNotFound 映射为现有的 ErrNotFound；SetEnabled 等原来按受影响行数判断不存在的地方，改为在事务内按主键读取，不存在时返回 ErrNotFound。
 - 结构体条件忽略零值字段：conversation.Service.Clear 用与插件入口相同的 validKey 校验会话键，非法时返回错误，不调用状态库。
 - 事务：tx 改为基于 db.Transaction，事务内只使用传入的 *gorm.DB；CommitActive 仍在同一事务内核对预期旧值并返回 ErrStaleGeneration；AppendConversation 仍在一个事务内读末尾序号再追加；事务内不等待插件 RPC。
@@ -1749,7 +1751,7 @@ internal/core/webhost
 - contracts/wirespec_test.go：追加编号检查
 - contracts/manifest/：manifest.go 增加 role、adapter_id、icon、assets、admin_api_min_major、admin_api_max_major、adapter_dependencies、plugin_dependencies 字段与按角色的校验；新增 deps.go（依赖检查）
 - contracts/validate/register.go：button.clicked 事件路由的 action 校验
-- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/buttons.go
+- internal/core/state/schema.sql：在唯一的初始迁移末尾加入新表；新增 internal/core/state/buttons.go
 - 新增 internal/core/buttons/
 - internal/core/message/：发送前签发按钮 token、校验 extension（只加调用点）
 - internal/core/adapter/remote/：保存 AdapterDescriptor 的 extension 声明，供 message 校验
@@ -1932,7 +1934,7 @@ sdk/config
 依据：PLAN T-08 步骤 4；CONTRACTS §5.3、§5.2（PREPARED 摘要）、§14.5、§12；WIRE-FORMAT §3.2；TEST-MATRIX V-25。
 
 范围（只新增或修改这些）：
-- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/secrets.go
+- internal/core/state/schema.sql：在唯一的初始迁移末尾加入新表；新增 internal/core/state/secrets.go
 - 新增 internal/core/secret/
 - internal/core/host/prepare.go：Expect 增加快照回调；PREPARED 的摘要改为对快照计算；Prepared 增加 ConfigSnapshot
 - internal/core/supervisor/supervisor.go：Spec 增加 ConfigSchema；新候选时把快照写入代次，普通 restart 时核对快照一致
@@ -2001,7 +2003,7 @@ sdk/config
 依据：PLAN T-09 步骤 1；CONTRACTS §7.3、§7.4、§15.1（listen 与 Base URL）、§14.5；TEST-MATRIX V-47 的认证分项。
 
 范围（只新增或修改这些）：
-- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/admin.go
+- internal/core/state/schema.sql：在唯一的初始迁移末尾加入新表；新增 internal/core/state/admin.go
 - 新增 internal/core/adminauth/
 - internal/core/settings/：非 loopback 的 listen 必须配合 https 的 admin_base_url 或非空的 trusted_proxies（只加校验）
 - cmd/alonabot/：新增 admin-token 命令组（init、reset）；run 用 adminauth 作为 webhost 的 AdminSessions 并挂上登录接口
@@ -2160,7 +2162,7 @@ sdk/config
 依据：PLAN T-04 步骤 5；CONTRACTS §2.2 第 2、3、8 条、§2.3 第 1、2 条、§7（Core Admin 列表）；MESSAGE-MODEL §1；DECISIONS D-45；TEST-MATRIX V-12、V-43 的服务层分项。
 
 范围（只新增或修改这些）：
-- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/policy.go
+- internal/core/state/schema.sql：在唯一的初始迁移末尾加入新表；新增 internal/core/state/policy.go
 - internal/core/policy/：新增 command.go、admins.go、denies.go；policy.go 的 CheckSend 增加全局禁止检查
 - internal/core/router/：命令派发在调用插件前检查策略；事件进入派发前由策略补全 Actor 的 trusted_roles（只加调用点）
 - 更新 router.New 的全部调用者（含 supervisor 测试与其他已存在的装配代码），注入同一份 policy.Policy
@@ -2317,7 +2319,7 @@ sdk/config
 - 新增 contracts/i18n/（文件格式解析、占位符、语言选择，Core 与 SDK 共用）
 - sdk/generate/：检查并嵌入 i18/*.json；sdk 的 Generated 增加 I18n
 - sdk/：新增 i18n.go（Context.T 与后台 T）
-- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/settings.go
+- internal/core/state/schema.sql：在唯一的初始迁移末尾加入新表；新增 internal/core/state/settings.go
 - 新增 internal/core/i18n/（Core 内置目录与 en-US.json、zh-CN.json）
 - internal/core/router/：usage 改用 Core 目录，删除 goal-12 的 shortcut 注释
 - internal/core/host/prepare.go：Bootstrap 写入 default_locale
@@ -2377,7 +2379,7 @@ sdk/config
 依据：PLAN T-09 步骤 3；CONTRACTS §9.1～§9.3、§8（依赖段）、§15.1、§15.2、§7.4、§5.3；DECISIONS D-26、D-42、D-59；TEST-MATRIX V-40、V-48、V-52、V-82、V-01 的安装分项。
 
 范围（只新增或修改这些）：
-- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 的 install 表定义中加入新列、末尾加入新表，安装记录的写入与读取方法同步新列；新增 internal/core/state/installs_admin.go（安装记录的扩展字段与 Adapter 实例表）
+- internal/core/state/schema.sql：在唯一的初始迁移的 install 表定义中加入新列、末尾加入新表，安装记录的写入与读取方法同步新列；新增 internal/core/state/installs_admin.go（安装记录的扩展字段与 Adapter 实例表）
 - 新增 internal/core/manage/（管理服务与 HTTP API）
 - 根包 assembly.go：增加按安装记录启动全部已启用包、挂载管理 API 的步骤；新增导出的 Serve 供 cmd 使用
 - cmd/alonabot/：serve（以及不带子命令时）调用根包 Serve；新增 install、list、enable、disable、restart、reload、update、rollback、uninstall、pin、adapter instance、admin 命令（经管理 API 访问）
@@ -2630,7 +2632,7 @@ internal/core/candidate
 - contracts/wirespec_test.go：追加编号检查
 - contracts/validate/register.go：工具描述的注册校验
 - internal/wire/services.go：末尾追加 ServiceToolList = "core.tool.list"
-- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/tool.go
+- internal/core/state/schema.sql：在唯一的初始迁移末尾加入新表；新增 internal/core/state/tool.go
 - 新增 internal/core/tool/
 - sdk/：services.go 增加 Tool 选项与工具输入 Schema 的生成；新增 tool.go（ListTools）
 - go.mod、go.sum：仅在 jsonschema-go 尚未引入时新增（D-43）
@@ -3494,7 +3496,7 @@ broker、bus、router 的 Options 增加 Metrics *metrics.Counters（可为 nil�
 依据：PLAN T-09 步骤 4；CONTRACTS §12、§6.3、§5.2、§4.2；TEST-MATRIX V-29。
 
 范围（只新增或修改这些）：
-- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/journal.go
+- internal/core/state/schema.sql：在唯一的初始迁移末尾加入新表；新增 internal/core/state/journal.go
 - 新增 internal/core/journal/（操作记录的状态机与编排，实现 manage.Candidates 的 Reload 与 Update）
 - internal/core/manage/：首次启用改用 journal 编排，删除 goal-39 的 shortcut 注释（只改该处与装配）
 - 上述包的测试文件
@@ -3699,7 +3701,7 @@ internal/core/state
 - contracts/wirespec_test.go：追加编号检查
 - internal/wire/services.go：末尾追加 ServiceLogSetLevel = "sdk.log.set_level"
 - internal/core/logging/：新增 buffer.go（最近记录）、query.go（按日期查询日志文件）；Output 在输出时写入缓冲（只加调用点）
-- internal/core/state/state.go：在唯一的初始迁移 migrations[0] 末尾加入新表；新增 internal/core/state/loglevels.go
+- internal/core/state/schema.sql：在唯一的初始迁移末尾加入新表；新增 internal/core/state/loglevels.go
 - internal/core/manage/：新增 log_api.go（读取、SSE、级别修改）
 - sdk/：处理 sdk.log.set_level（新增文件；sdk/adapter 的 RunAdapter 同样处理）
 - cmd/alonabot/：新增 logs 与 log-level 命令
