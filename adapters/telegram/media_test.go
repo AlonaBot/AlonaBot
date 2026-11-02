@@ -125,6 +125,23 @@ func TestIncomingMedia(t *testing.T) {
 	if getFiles.Load() != 2 || downloads.Load() != 10 || downloadedBytes.Load() != int64(2*len(content)) {
 		t.Fatalf("getFile=%d downloads=%d bytes=%d", getFiles.Load(), downloads.Load(), downloadedBytes.Load())
 	}
+	t.Run("abandoned fetch", func(t *testing.T) {
+		reader := inst.(adapter.MediaSource)
+		before := getFiles.Load()
+		data, next, eof, err := reader.ReadPlatformFile(t.Context(), "large-photo", 0, 7)
+		if err != nil || !bytes.Equal(data, content[:7]) || next != 7 || eof {
+			t.Fatalf("first chunk: data=%q next=%d eof=%v err=%v", data, next, eof, err)
+		}
+		// Core 在首块后放弃；下一轮必须重新取得已变更的平台路径。
+		server.AddFile("large-photo", "photos/refreshed.jpg", content)
+		data, next, eof, err = reader.ReadPlatformFile(t.Context(), "large-photo", 0, uint32(len(content)))
+		if err != nil || !bytes.Equal(data, content) || next != uint64(len(content)) || !eof {
+			t.Fatalf("restarted fetch: data=%q next=%d eof=%v err=%v", data, next, eof, err)
+		}
+		if calls := getFiles.Load() - before; calls != 2 {
+			t.Fatalf("getFile calls across two fetches = %d, want 2", calls)
+		}
+	})
 }
 
 func TestMediaDownloadRedaction(t *testing.T) {

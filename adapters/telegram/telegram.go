@@ -149,7 +149,7 @@ type cursor struct {
 
 // instance 的接收状态仅由 receive goroutine 修改；Stop 通过 cancel/done 交接生命周期。
 type instance struct {
-	fileMu  sync.Mutex // 保护文件路径缓存及首次 getFile 请求。
+	fileMu  sync.Mutex // 仅保护文件路径缓存的读写。
 	files   map[string]*platformFileLocation
 	client  *botClient
 	core    adapter.Core

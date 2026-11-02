@@ -65,12 +65,16 @@ type platformFileLocation struct {
 	Size *uint64 `json:"file_size"`
 }
 
-func (i *instance) fileLocation(ctx context.Context, fileID string) (*platformFileLocation, error) {
-	i.fileMu.Lock()
-	defer i.fileMu.Unlock()
-	if file := i.files[fileID]; file != nil {
-		return file, nil
+func (i *instance) fileLocation(ctx context.Context, fileID string, offset uint64) (*platformFileLocation, error) {
+	if offset > 0 {
+		i.fileMu.Lock()
+		file := i.files[fileID]
+		i.fileMu.Unlock()
+		if file != nil {
+			return file, nil
+		}
 	}
+	// 新一轮取件刷新路径；网络请求留在锁外，其他文件可同时取件。
 	file := &platformFileLocation{}
 	if err := i.client.call(ctx, "getFile", struct {
 		ID string `json:"file_id"`
@@ -87,18 +91,20 @@ func (i *instance) fileLocation(ctx context.Context, fileID string) (*platformFi
 	if file.Path == "" {
 		return nil, fmt.Errorf("telegram getFile returned no file_path")
 	}
+	i.fileMu.Lock()
 	if i.files == nil {
 		i.files = make(map[string]*platformFileLocation)
 	}
 	i.files[fileID] = file
+	i.fileMu.Unlock()
 	return file, nil
 }
 
 // ReadPlatformFile 经实例的 HTTP 客户端按需读取平台文件；内容缓存由 Core 持有。
-// 文件路径在分块之间复用，读取完成或出错时移除。
+// offset 为 0 时刷新文件路径，后续分块复用，读取完成或出错时移除。
 func (i *instance) ReadPlatformFile(ctx context.Context, fileID string, offset uint64, length uint32) (data []byte, next uint64, eof bool, err error) {
-	// 1. 首次读取取得可信平台路径；同一文件取件期间复用路径。
-	file, err := i.fileLocation(ctx, fileID)
+	// 1. 新一轮取件刷新可信平台路径，避免沿用上次中途放弃的过期路径。
+	file, err := i.fileLocation(ctx, fileID, offset)
 	if err != nil {
 		return nil, offset, false, err
 	}
