@@ -59,7 +59,7 @@ func (r *Router) dispatchCommands(ev *pb.Event) bool {
 				if route.pluginID != entry.PluginID || route.route.GetRouteId() != entry.RouteID {
 					continue
 				}
-				if !route.plugin.Activated() {
+				if !route.plugin.Activated() || !r.permitted(route.candidate, ev) {
 					return false
 				}
 				tail := text
@@ -119,7 +119,7 @@ func (r *Router) dispatchCommands(ev *pb.Event) bool {
 				}
 			}
 		}
-		if matched && r.invokeCommand(route.candidate, ev, invocation) {
+		if matched && r.permitted(route.candidate, ev) && r.invokeCommand(route.candidate, ev, invocation) {
 			return true
 		}
 	}

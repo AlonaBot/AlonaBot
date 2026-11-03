@@ -233,14 +233,27 @@ func (r *Router) candidates(ev *pb.Event) []candidate {
 }
 
 func (r *Router) dispatch(ev *pb.Event) {
+	// 1. Core 权限在进入任一路由前统一计算，来源只提供平台权限及其展开结果。
+	if actor := ev.GetActor(); actor != nil {
+		permissions := []string{"user"}
+		for _, permission := range actor.GetPermissions() {
+			if permission != "user" && permission != "admin" {
+				permissions = append(permissions, permission)
+			}
+		}
+		slices.Sort(permissions)
+		actor.Permissions = slices.Compact(permissions)
+	}
+	// 2. 命令层的 STOP 终止整条分发链；消费但继续的命令仍进入事件层。
 	if ev.GetEventType() == "message.created" && r.dispatchCommands(ev) {
 		return
 	}
+	// 3. 事件路由独立判断权限，拒绝当前候选后继续后继路由。
 	for _, candidate := range r.candidates(ev) {
 		if r.ctx.Err() != nil {
 			return
 		}
-		if !candidate.plugin.Activated() {
+		if !candidate.plugin.Activated() || !r.permitted(candidate, ev) {
 			continue
 		}
 		trace := make([]byte, traceIDBytes)
@@ -264,6 +277,19 @@ func (r *Router) dispatch(ev *pb.Event) {
 			return
 		}
 	}
+}
+
+func (r *Router) permitted(c candidate, ev *pb.Event) bool {
+	if len(c.route.GetRequiredPermissions()) == 0 {
+		return true
+	}
+	for _, required := range c.route.GetRequiredPermissions() {
+		if slices.Contains(ev.GetActor().GetPermissions(), required) {
+			return true
+		}
+	}
+	r.log.Debug("route permission denied", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId())
+	return false
 }
 
 // current 在持有 mu 时检查候选仍属于当前的激活绑定，隔离旧候选快照。
