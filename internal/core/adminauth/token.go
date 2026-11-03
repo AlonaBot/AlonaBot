@@ -2,7 +2,8 @@
 //
 // InitToken 和 ResetToken 通过已持有 core.lock 的 state.Store 离线更新凭证；
 // 返回的随机 token 由命令层只向本机终端显示一次，状态库只保存摘要和认证代次。
-// 规则见 CONTRACTS §7.4。
+// [Auth] 提供登录、会话校验与 CSRF 中间件，并实现 webhost 的管理会话检查。
+// 规则见 CONTRACTS §7.3、§7.4。
 package adminauth
 
 import (
