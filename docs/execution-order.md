@@ -48,7 +48,7 @@
 | `internal/core/state/schema.sql`（唯一的初始迁移） | 首次发布前只有一条初始迁移（[编码规范](coding-standards.md)「首次发布前不写兼容层」）：新表和新列直接写进 `schema.sql`，不新增迁移文件，不用 `ALTER TABLE`；新表的 GORM 模型和访问方法一起放在 `internal/core/state/` 下按主题新建的文件里，不改 `models.go`；读写遵守[编码规范](coding-standards.md)「Core 状态库不写 SQL」。同步 main 后如果和别的切片在初始迁移末尾冲突，两边的表都保留，把自己的表放在最后，再重跑 state 测试。`schema.sql` 与 GORM 模型由 T-02.3（goal-86，PR #63）引入；给已有表加列的切片同步修改 `models.go` 中对应的模型。 |
 | `internal/core/adapter` 的 `Instance`、`Sink` 接口 | T-03.1 合并后不再修改。之后的切片需要更多 Adapter 能力时，在同一个包里新增可选接口，调用方用类型断言获取，不改已有接口。 |
 | `internal/wire/services.go` | 固定服务名只追加常量，不重排、不改已有值。多个切片并行追加时，由先合并者保留；后合并者同步最新 main 后把自己的常量追加到文件末尾，再运行 `go test ./internal/wire/...` 和本切片服务测试。 |
-| `router.New` 与 `Router.Attach` 的签名 | goal-7 给 `New` 追加 prepare、给 `Attach` 追加 Caller，goal-13 给 `New` 追加 CommandPolicy。后合并的一方在先合并者的签名末尾追加自己的参数，并同步 supervisor 测试与装配处的全部调用点，不重排已有参数。 |
+| `router.New` 与 `Router.Attach` 的签名 | goal-7 给 `New` 追加 prepare、给 `Attach` 追加 Caller，goal-87 给 `New` 追加 prefixes，goal-13 给 `New` 追加 CommandPolicy。后合并的一方在先合并者的签名末尾追加自己的参数，并同步 supervisor 测试与装配处的全部调用点，不重排已有参数。 |
 | `internal/core/router` 的固定服务 mux | 新的 Core 固定服务在各自包里实现，只在装配处注册一行；服务名常量追加在 `internal/wire/services.go`。 |
 | `sdk/sdk.go`、`sdk/activate.go`、`sdk/session.go` | 新功能优先放进新文件，只在这几个文件里加必要的调用点；不重排、不顺手重写已有代码。 |
 | `cmd/alonabot/main.go` | 只有 goal 语句写明负责装配的切片才能改。 |
