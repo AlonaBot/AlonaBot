@@ -38,7 +38,7 @@
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9 | 等待前置 |
 | goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1、T-04.6 | 等待前置 |
 | goal-88 | T-04.7 | SDK 链式注册与自有类型 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | 等待前置 |
-| goal-32 | T-08.5 | 受管 SQLite 连接与迁移 | T-08.3 | 等待前置 |
+| goal-32 | T-08.5 | 受管 SQLite 连接与迁移 | T-08.3 | 待派发 |
 | goal-53 | T-08.8 | 用户可见文案目录 | T-04.1、T-04.3、T-04.6、T-08.1、T-08.10 | 等待前置 |
 | goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-08.4、T-09.1、T-09.2、T-13.1 | 等待前置 |
 | goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7 | 等待前置 |
@@ -2444,7 +2444,18 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-32 · T-08.5 受管 SQLite 连接与迁移
 
-状态：等待前置（T-08.3）。语句中 goal-30 提供的符号（sdk/config.Prepare 与 sdk 的准备流程）只写名字；sdk/gormdb 的现有函数（OpenSQLite、ReadPragmas、CheckMigrators、RunVersioned、AppliedMigrations）已在 main 上。合并后由审查者核对签名，再改为待派发。
+状态：待派发。前置 T-08.3（PR #73，合并提交 `225f132`）已合并。符号已按合入代码核对：
+- `sdk/session.go` 的 prepare：step 1 核对 Bootstrap 预算（缺 `config_ms`、`on_start_ms` 或准备截止时为 PROTOCOL_ERROR）；step 2 在 `config_ms` 预算内调用 `config.Prepare`，失败以 `SESSION_PHASE_CONFIG` 报告；随后启动 HTTP Listener，step 3 运行 OnStart，step 4 用 `buildRegister(reg, configJSON, configVersion, configSchema)` 构造 REGISTER。`buildRegister` 目前把 `Migration` 固定为 `MIGRATION_MODE_NONE`。Adapter 角色在 `sdk/adapter_run.go` 中自行构造 REGISTER，同样固定为 NONE，`validate.AdapterRegister` 也要求 Adapter 的 migration 为 NONE；本切片不改 `adapter_run.go`。
+- `sdk/activate.go` 的 `shutdown` 分三步：关闭 ready gate 并取消 lifetime → OnStop → 关闭 Session。`currentSession()` 只在 ready 之后、STOPPING 之前可用，准备期（迁移与 OnStart）拿不到它。
+- `sdk/gormdb` 现有公开符号：`OpenSQLite(ctx, path) (*gorm.DB, error)`、`PragmaValues`、`ReadPragmas(ctx, *gorm.DB)`、`SelfMigrator`、`Migration{ID uint32; Up func(context.Context, *gorm.DB) error}`、`VersionedMigrator`、`ModeNone`/`ModeSelf`/`ModeVersioned`、`CheckMigrators(root any) (string, error)`、`LedgerTable`、`RunVersioned`、`AppliedMigrations`。账本由 `AutoMigrate(&ledgerRow{})` 建立，列为 `id`（主键）与 `applied_at`（UTC 毫秒）。
+- `github.com/libtnb/sqlite` v1.2.2 提供 `sqlite.New(sqlite.Config{Conn: gorm.ConnPool})`，驱动名常量 `sqlite.DriverName = "sqlite"`，即 modernc 注册的名字。
+- 协议：`DatabaseDescriptor{backend, sqlite_path, migration_mode, applied_migration_ids, activation_reason, manual_migration_approved}`、`PhaseLimits.migration_ms`、`SESSION_PHASE_MIGRATION`、`MigrationState{mode, completed_migration_ids, self_migrate_completed}` 都已在 proto 中。
+- `supervisor.Spec` 已有 `PluginDir`（`<plugins>/<id>`）、`GenerationID`、`Bootstrap`、`NewCandidate`；数据库描述目前由调用方写在 `Spec.Bootstrap.DatabaseDescriptor` 中（cmd/alonabot 与全部现有测试传 `BACKEND_NONE`）。
+
+核对时修订了原语句的三处：
+- 原「允许的新跨模块边」含 `sdk -> sdk/sqlitedb`。这会让每个插件都链接 modernc SQLite，违反 D-52（SDK 根包只允许 protobuf、x/sys 与 jsonschema-go）和 D-49（不导入就不链接）。改为 SDK 根包只 import `sdk/internal/dbhook`，Session 的数据库描述、连接与关闭都经 dbhook 交接。
+- 原接口 3 新增 `Spec.Database`，nil 时生成 SQLite 描述。这与已有的 `Bootstrap.DatabaseDescriptor` 重复，并会把现有调用方的 nil 当成 SQLite。改为不加 Spec 字段，沿用 Bootstrap 中的描述，只由 supervisor 补默认路径；调用方给出的非空路径原样下发，供 goal-33 的候选副本与 goal-68 的 `dev.sqlite` 使用。
+- 补充迁移阶段的预算校验与失败阶段、`Open` 在准备期的可用范围、准备失败时关闭连接、两个包共用的账本 DDL。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-32（切片 T-08.5：受管 SQLite 连接与迁移）。goal 目录 goal-32，分支 goal-32，worktree .worktrees/goal-32，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -2457,11 +2468,12 @@ goal-28、goal-29 的符号已按合入代码核对：
 - sdk/sqlitedb/：新建包。连接设置与回读核对从 sdk/gormdb/sqlite.go 移入；open.go（Open 与 Session 绑定）、migrate.go（迁移接口、RunVersioned、AppliedMigrations）
 - sdk/gormdb/：OpenSQLite 改为 sqlitedb.OpenFile 加 GORM 包装；新增 open.go（Open）；ReadPragmas 与 PragmaValues 移到 sqlitedb 后从本包删除
 - sdk/internal/dbhook/：新建内部包，供 sqlitedb 与 gormdb 向 sdk 登记迁移识别与执行，形状由执行者自定，只用标准库与 contracts 类型
-- sdk/：session.go 在配置准备之后调用迁移阶段并填写 REGISTER 的 migration；activate.go 在停止时关闭连接（只加调用点）
-- internal/core/supervisor/：Spec 增加 Database；新代次时创建 SQLite 代次目录并下发路径
+- sdk/：session.go 在配置准备之后调用迁移阶段并填写 REGISTER 的 migration，准备失败时关闭连接；activate.go 在停止时关闭连接（只加调用点）
+- sdk/gormdb/sqlite_test.go：随 ReadPragmas 移到 sqlitedb 同步改写
+- internal/core/supervisor/supervisor.go：backend 为 SQLITE 且 sqlite_path 为空时补默认代次路径，新候选时创建代次目录（只加这一段）
 - internal/core/host/prepare.go：校验 REGISTER 的 migration 与 Bootstrap 描述一致（只加校验）
 - 上述包的测试文件
-允许的新跨模块边：sdk -> sdk/sqlitedb、sdk/gormdb -> sdk/sqlitedb（同属 sdk 模块）。sdk 根包不得 import sdk/gormdb 或 gorm。
+允许的新跨模块边：无（以下均在 sdk 模块内）。包内依赖为 sdk -> sdk/internal/dbhook、sdk/sqlitedb -> sdk/internal/dbhook、sdk/gormdb -> sdk/sqlitedb 与 sdk/internal/dbhook。sdk 根包不得 import sdk/sqlitedb、sdk/gormdb、gorm.io/gorm、github.com/libtnb/sqlite 或 modernc.org/sqlite（D-49、D-52）。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 1. sdk/sqlitedb
@@ -2481,26 +2493,29 @@ goal-28、goal-29 的符号已按合入代码核对：
    func Open(ctx context.Context) (*gorm.DB, error) // 经 libtnb sqlite.Config{Conn: ...} 包装 sqlitedb.Open 返回的同一个 *sql.DB；同一 Session 重复调用返回同一个 *gorm.DB
    OpenSQLite、SelfMigrator、Migration、VersionedMigrator、RunVersioned、AppliedMigrations、CheckMigrators 保留现有签名；LedgerTable 改为引用 sqlitedb.LedgerTable
 3. internal/core/supervisor
-   Spec 增加字段：Database *pb.DatabaseDescriptor // nil 时 supervisor 为 SQLite 生成描述：<plugins>/<id>/generations/<generation>/db.sqlite，activation_reason 由调用方在 Bootstrap 中给出
+   不新增公开符号。数据库描述沿用 Spec.Bootstrap.DatabaseDescriptor：backend、migration_mode、applied_migration_ids、activation_reason 由调用方给出；backend 为 SQLITE 且 sqlite_path 为空时，supervisor 在 Launch 使用的 Bootstrap 副本中填写 <PluginDir>/generations/<GenerationID>/db.sqlite（绝对路径），非空时原样下发。
+4. sdk/internal/dbhook（内部包，形状自定）
+   只用标准库与 contracts 类型。至少承载：已登记的迁移识别与执行函数；当前 Session 的数据库描述（准备阶段由 sdk 写入）；sqlitedb 打开的连接及其关闭函数（sdk 在停止与准备失败时调用）。并发访问加锁。
 
 行为：
-- Open：文件不存在时只有 activation_reason 为 first_install 时才创建，否则返回错误（不创建空库掩盖丢失）。连接错误原样返回。插件拿不到 Core 状态库的任何路径或连接。
+- Open：可用范围为迁移阶段开始到 Session 停止（含 Migrate、Up 与 OnStart 中的调用），范围外返回错误码为 FAILED_PRECONDITION 的错误。文件不存在时只有 activation_reason 为 first_install 时才创建，否则返回错误（不创建空库掩盖丢失；OpenFile 本身不做这项判断）。连接错误原样返回。插件拿不到 Core 状态库的任何路径或连接。
+- 连接生命周期：同一 Session 只打开一次，sqlitedb.Open 与 gormdb.Open 共用它；activate 的 shutdown 在 OnStop 返回后、关闭 Session 之前关闭连接；准备阶段任一步失败（迁移、OnStart、REGISTER、等待 PREPARED）时也关闭。gormdb.Open 返回的 *gorm.DB 不另行关闭底层连接。
 - 登记：sqlitedb 与 gormdb 在包 init 中向 sdk/internal/dbhook 登记一个识别函数（只追加函数值，不做 I/O）；SDK 的迁移阶段只调用已登记的识别函数，因此未导入某个包时不认识它的接口。
-- 迁移阶段（SDK，配置准备之后、OnStart 之前，预算为 Bootstrap 的 migration 阶段预算，与普通业务期限无关）：
+- 迁移阶段（SDK，配置准备之后、OnStart 之前，预算为 Bootstrap 的 PhaseLimits.migration_ms，与普通业务期限无关；step 1 的预算校验加入 migration_ms，缺失时与 config_ms 一样报 PROTOCOL_ERROR。迁移阶段的任何失败以 SESSION_PHASE_MIGRATION 报告，不进入 OnStart；超时为 DEADLINE_EXCEEDED）：
   - 根插件实现的迁移接口合计多于一个（含两个包混用，例如 sqlitedb 的 Migrate 加 gormdb 的 Migrations）时失败（INVALID_ARGUMENT）。
   - backend 为 NONE：跳过，migration.mode=NONE。
-  - versioned：ID 必须非零、唯一、严格递增；每步 Up 与 _alonabot_migrations 的完成记录在同一事务中，失败不记成功。两个包的账本格式相同。
+  - versioned：ID 必须非零、唯一、严格递增；每步 Up 与 _alonabot_migrations 的完成记录在同一事务中，失败不记成功。两个包用同一条 DDL 建账本：CREATE TABLE IF NOT EXISTS _alonabot_migrations (id INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)（applied_at 为 UTC 毫秒）；gormdb 的 RunVersioned 改用这条 DDL，不再 AutoMigrate。
   - self：调用 Migrate，成功后 self_migrate_completed=true。
-  - REGISTER.migration：mode 与 completed_migration_ids（versioned，升序）或 self_migrate_completed（self）如实填写。
+  - REGISTER.migration：mode 与 completed_migration_ids（versioned，账本中的全部 ID，升序）或 self_migrate_completed（self）如实填写。Adapter 角色不执行迁移，仍为 NONE。
 - prepare_effects=external 的维护门槛由 Core 在建立候选前判断（T-09），本切片的 SDK 不读取 manifest 的 prepare_effects。
-- Core：supervisor 新代次时创建 generations/<g>/ 目录（0700）并下发 SQLite 路径；普通 restart 沿用 Active 代次的路径。host 校验 REGISTER.migration.mode 与 Bootstrap 的 migration_mode 一致、versioned 的 completed 包含 Bootstrap 的 applied 集合，否则注册失败。
+- Core：supervisor 只在 NewCandidate 且使用默认路径时创建 generations/<g>/ 目录（0700），普通 restart 的 GenerationID 就是 Active 代次，沿用它的路径，不创建目录；调用方给出的 Bootstrap 不被修改（与 Secret 解析共用同一个副本）。host 校验 REGISTER.migration.mode 与 Bootstrap 的 migration_mode 一致、versioned 的 completed 包含 Bootstrap 的 applied 集合，否则注册失败。
 - 事务内不得等待同一单连接池的另一条独立查询（文档注释写明，测试覆盖一次死锁会被 busy timeout 以外的方式暴露为错误）。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：
-  - internal/core/supervisor/db_test.go（//go:build unix）：两个测试插件，一个只导入 sqlitedb、一个用 gormdb，各实现 Migrations（两步，第二步按环境变量可失败）并在 OnStart 中写一行：首装成功，REGISTER 报告 [1,2]，状态库代次目录下有 db.sqlite 且 PRAGMA 值正确；第二步失败时注册失败、账本只有 1；普通 restart 不重复执行迁移；同时实现两个迁移接口的插件在 CONFIG 之后失败。
-  - 同一测试中断言只导入 sqlitedb 的测试插件二进制不含 gorm.io/gorm（`go version -m` 或 `go list -deps`）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：两个入口的复用、共用连接与停止时关闭；backend NONE；文件缺失时非首装不创建；ID 非递增；host 的 migration 一致性校验。
+  - internal/core/supervisor/db_test.go（//go:build unix）：两个测试插件，一个只导入 sqlitedb、一个用 gormdb，各实现 Migrations（两步，第二步按环境变量可失败）并在 OnStart 中写一行：首装成功，REGISTER 报告 [1,2]，插件代次目录 <PluginDir>/generations/<g>/ 下有 db.sqlite 且 PRAGMA 值正确；第二步失败时 SESSION_ERROR 阶段为 MIGRATION、注册失败、账本只有 1；普通 restart 不重复执行迁移；同时实现两个迁移接口的插件在 CONFIG 之后以 MIGRATION 阶段失败。
+  - 同一测试中断言只导入 sqlitedb 的测试插件二进制不含 gorm.io/gorm（`go version -m` 或 `go list -deps`），且 `go list -deps ./sdk` 不含 modernc.org/sqlite 与 gorm.io/gorm。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：两个入口的复用、共用连接与停止时关闭；准备失败时关闭连接；准备期之外 Open 返回 FAILED_PRECONDITION；backend NONE；文件缺失时非首装不创建；ID 非递增；一个包写的账本另一个包能读出相同的 ID；host 的 migration 一致性校验；调用方给出的非空 sqlite_path 原样下发。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./sdk/... ./internal/core/...；go build ./...；`go list -deps` 列出的 Core 可执行文件与 SDK 根包模块都在 docs/development.md 的允许清单中。
 
@@ -2759,7 +2774,7 @@ internal/core/router
 
 ### goal-33 · T-08.6 SQLite 候选与资源交接
 
-状态：等待前置（T-08.4、T-08.5）。语句中 goal-31、goal-32 提供的符号（secret.Store、supervisor.Spec 的 Database 与 ConfigSchema、gormdb 的 SQLite 设置）只写名字；合并后由审查者核对，再改为待派发。
+状态：等待前置（T-08.4、T-08.5）。语句中 goal-31、goal-32 提供的符号（secret.Store、supervisor.Spec 的 ConfigSchema、Bootstrap 数据库描述的 sqlite_path、sqlitedb 的 SQLite 设置）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-33（切片 T-08.6：SQLite 候选与资源交接）。goal 目录 goal-33，分支 goal-33，worktree .worktrees/goal-33，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -2806,7 +2821,7 @@ internal/core/candidate
 - 完成后（成功或失败）释放 runtime.lock，再返回；SDK 随后按自己的流程取锁打开。
 - 失败：备份、空间或校验失败时删除临时文件与本次新建的目录，返回错误；不触碰 FromGeneration 的文件。
 - Discard：只删除 NewGeneration 的目录及仅被该候选引用的 secret（secret.Collect，保护 Active、Pending 与保留代次）；Active 或保留代次的资源一律不删。
-- 交接约定（写在包文档）：1) 持插件锁并停止旧进程 → 2) PrepareDatabase → 3) AddGeneration（未提交）→ 4) Launch（NewCandidate=true，Database 为候选路径）→ 5) PREPARED 后由 T-09.6 的唯一提交点在同一事务中提交 Active 与 COMMITTED → 6) 失败时 Discard 并重启旧版的新 Session。本包不写 Active，不写 COMMITTED。
+- 交接约定（写在包文档）：1) 持插件锁并停止旧进程 → 2) PrepareDatabase → 3) AddGeneration（未提交）→ 4) Launch（NewCandidate=true，Bootstrap.database_descriptor.sqlite_path 为候选路径）→ 5) PREPARED 后由 T-09.6 的唯一提交点在同一事务中提交 Active 与 COMMITTED → 6) 失败时 Discard 并重启旧版的新 Session。本包不写 Active，不写 COMMITTED。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：internal/core/supervisor/candidate_test.go（//go:build unix）。测试插件在 OnStart 中写一行，并按环境变量在写入后让 OnStart 失败：
