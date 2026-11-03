@@ -64,7 +64,27 @@ func (*loopPlugin) Events(r *sdk.EventRegistry) {
 type loopAdapter struct{}
 
 func (*loopAdapter) Descriptor() *pb.AdapterDescriptor {
-	return &pb.AdapterDescriptor{AdapterId: "loop"}
+	descriptor := &pb.AdapterDescriptor{AdapterId: "loop", Permissions: []*pb.PermissionDeclaration{
+		{Name: "loop.owner", Implies: []string{"loop.admin"}, LabelKey: "permissions.owner"},
+		{Name: "loop.admin", Implies: []string{"chat_admin"}, LabelKey: "permissions.admin"},
+	}, Events: []*pb.EventDeclaration{{Name: "loop.poke", Version: 1, SchemaJson: `{"type":"object","properties":{"user":{"type":"string"}},"required":["user"]}`}}}
+	switch os.Getenv(helperEnv) {
+	case "permission-prefix":
+		descriptor.Permissions[0].Name = "other.owner"
+	case "implies-user":
+		descriptor.Permissions[0].Implies = []string{"user"}
+	case "implies-admin":
+		descriptor.Permissions[0].Implies = []string{"admin"}
+	case "permission-cycle":
+		descriptor.Permissions[1].Implies = []string{"loop.owner"}
+	case "event-prefix":
+		descriptor.Events[0].Name = "other.poke"
+	case "schema-parse":
+		descriptor.Events[0].SchemaJson = `{"type":1}`
+	case "schema-resolve":
+		descriptor.Events[0].SchemaJson = `{"$ref":"#/$defs/missing"}`
+	}
+	return descriptor
 }
 func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core sdkadapter.Core) (sdkadapter.Instance, error) {
 	var config struct {
@@ -255,6 +275,39 @@ func openMediaStore(t *testing.T, logs *processLog) *media.Store {
 		t.Fatal(err)
 	}
 	return store
+}
+
+// TestAdapterRegistrationDeclarations 验证真实 Adapter 进程的非法权限和事件声明在注册阶段被拒绝。
+func TestAdapterRegistrationDeclarations(t *testing.T) {
+	for _, stdio := range []bool{false, true} {
+		for _, tc := range []struct {
+			mode string
+			want string
+		}{
+			{"permission-prefix", "invalid adapter permission name"},
+			{"implies-user", "implies invalid permission"},
+			{"implies-admin", "implies invalid permission"},
+			{"permission-cycle", "implication cycle"},
+			{"event-prefix", "invalid adapter event name"},
+			{"schema-parse", "parse adapter event"},
+			{"schema-resolve", "resolve adapter event"},
+		} {
+			t.Run(fmt.Sprintf("%s/stdio=%v", tc.mode, stdio), func(t *testing.T) {
+				store, spec, _ := setup(t)
+				spec.Stdio = stdio
+				spec.ExtraEnv[helperEnv] = tc.mode
+				running, err := supervisor.Launch(context.Background(), store, spec)
+				if err == nil {
+					stopped := running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
+					t.Fatalf("invalid adapter registration activated: stop=%+v", stopped)
+				}
+				var phase *host.PhaseError
+				if !errors.As(err, &phase) || phase.Phase != pb.SessionPhase_SESSION_PHASE_REGISTER || phase.Code != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT || !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("registration error = %v, want REGISTER/INVALID_ARGUMENT containing %q", err, tc.want)
+				}
+			})
+		}
+	}
 }
 
 // TestRemoteLifecycle 覆盖真实进程的多实例收发、账号唯一性、伪造拒绝、故障与游标恢复。
