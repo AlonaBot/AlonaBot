@@ -38,6 +38,9 @@ const (
 // sqlitePragmas 随 DSN 应用到每个新物理连接，连接被替换后设置仍然生效。
 var sqlitePragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(" + strconv.Itoa(busyTimeoutMillis) + ")"
 
+// sqliteTimeParameters 保留原 libtnb DSN 的时间语义，使共享连接上的 GORM 时间可供 SQLite 时间函数使用。
+const sqliteTimeParameters = "_texttotime=1&_inttotime=1&_time_format=sqlite"
+
 // Open 返回当前 Session 的受管连接，同一 Session 重复调用复用同一个 *sql.DB。
 // 迁移阶段开始前及 Session 停止后返回 FAILED_PRECONDITION；无数据库时返回 ErrNoDatabase。
 // 只有 first_install 允许创建文件；连接由 SDK 关闭，调用方须保持它打开。
@@ -75,7 +78,7 @@ func openFile(ctx context.Context, path string, create bool) (*sql.DB, error) {
 	if !strings.HasPrefix(p, "/") {
 		p = "/" + p // Windows 盘符需写为 file:///C:/...，与 Core 状态库相同。
 	}
-	query := sqlitePragmas
+	query := sqlitePragmas + "&" + sqliteTimeParameters
 	if !create {
 		query += "&mode=rw"
 	}
