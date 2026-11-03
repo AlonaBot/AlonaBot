@@ -2,28 +2,16 @@ package gormdb
 
 import (
 	"context"
+	"database/sql"
 	"errors"
-	"fmt"
 	"log/slog"
-	"strconv"
-	"strings"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/sdk/sqlitedb"
 	"github.com/libtnb/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
-
-// 受管 SQLite 的连接设置（CONTRACTS §6.1），以回读 PRAGMA 时得到的值表示。
-const (
-	journalModeWAL    = "wal"
-	synchronousFull   = 2
-	foreignKeysOn     = 1
-	busyTimeoutMillis = 5000
-)
-
-// sqlitePragmas 写在 DSN 中，驱动对每个新物理连接都会执行（CONTRACTS §6.1）。
-var sqlitePragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(" + strconv.Itoa(busyTimeoutMillis) + ")"
 
 // slowQueryThreshold 超过它的 SQL 会以慢查询记录。
 const slowQueryThreshold = 200 * time.Millisecond
@@ -39,62 +27,36 @@ func newGormLogger(l *slog.Logger) logger.Interface {
 }
 
 // OpenSQLite 以受管默认值打开 path 处的 SQLite：单连接、WAL、synchronous=FULL、外键开启、
-// busy_timeout=5000，并回读核对实际生效值；连接或核对失败时返回错误，不会改用空库或其他后端。
+// busy_timeout=5000，并回读核对实际生效值。返回连接由调用方关闭。
 // 事务回调必须使用传入的 tx：单连接池下在事务里等待另一条独立查询会自锁。
 func OpenSQLite(ctx context.Context, path string) (*gorm.DB, error) {
-	if path == "" || strings.ContainsAny(path, "?#") {
-		return nil, fmt.Errorf("SQLite path %q is empty or contains ? or #", path)
-	}
-	db, err := gorm.Open(sqlite.Open(path+"?"+sqlitePragmas), &gorm.Config{Logger: newGormLogger(slog.Default())})
-	if err != nil {
-		return nil, fmt.Errorf("open SQLite: %w", err)
-	}
-	sqlDB, err := db.DB()
+	db, err := sqlitedb.OpenFile(ctx, path)
 	if err != nil {
 		return nil, err
 	}
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
-	if err := checkPragmas(ctx, db); err != nil {
-		_ = sqlDB.Close()
+	wrapped, err := wrap(ctx, db)
+	if err != nil {
+		return nil, errors.Join(err, db.Close())
+	}
+	return wrapped, nil
+}
+
+func wrap(ctx context.Context, db *sql.DB) (*gorm.DB, error) {
+	// libtnb 初始化时以 Background 查询 SQLite 版本；先按调用方 ctx 取得物理连接，
+	// 避免单连接池被事务占用时，初始化查询忽略迁移取消并一直等待。
+	conn, err := db.Conn(ctx)
+	if err != nil {
 		return nil, err
 	}
-	return db, nil
-}
-
-// PragmaValues 记录受管 SQLite 连接上实际生效的设置。
-type PragmaValues struct {
-	// JournalMode 应为 wal。
-	JournalMode string
-	// Synchronous 应为 2（FULL）。
-	Synchronous int
-	// ForeignKeys 应为 1（开启）。
-	ForeignKeys int
-	BusyTimeout int // 忙等待毫秒数，应为 5000
-}
-
-// ReadPragmas 读取当前连接上实际生效的 PRAGMA 值。
-func ReadPragmas(ctx context.Context, db *gorm.DB) (PragmaValues, error) {
-	var v PragmaValues
-	q := db.WithContext(ctx)
-	err := errors.Join(
-		q.Raw("PRAGMA journal_mode").Scan(&v.JournalMode).Error,
-		q.Raw("PRAGMA synchronous").Scan(&v.Synchronous).Error,
-		q.Raw("PRAGMA foreign_keys").Scan(&v.ForeignKeys).Error,
-		q.Raw("PRAGMA busy_timeout").Scan(&v.BusyTimeout).Error,
-	)
-	return v, err
-}
-
-// checkPragmas 核对 PRAGMA 实际值与要求一致。
-func checkPragmas(ctx context.Context, db *gorm.DB) error {
-	v, err := ReadPragmas(ctx, db)
-	if err != nil {
-		return fmt.Errorf("read PRAGMA: %w", err)
+	dialector := sqlite.New(sqlite.Config{Conn: conn})
+	wrapped, err := gorm.Open(dialector, &gorm.Config{Logger: newGormLogger(slog.Default())})
+	closeError := conn.Close()
+	if err != nil || closeError != nil {
+		return nil, errors.Join(err, closeError)
 	}
-	want := PragmaValues{JournalMode: journalModeWAL, Synchronous: synchronousFull, ForeignKeys: foreignKeysOn, BusyTimeout: busyTimeoutMillis}
-	if v != want {
-		return fmt.Errorf("SQLite settings not applied: got %+v, want %+v", v, want)
-	}
-	return nil
+	// 初始化专用的 *sql.Conn 已归还，之后全部操作使用原来的受管连接池。
+	dialector.(*sqlite.Dialector).Conn = db
+	wrapped.ConnPool = db
+	wrapped.Statement.ConnPool = db
+	return wrapped, nil
 }

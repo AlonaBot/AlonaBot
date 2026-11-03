@@ -21,6 +21,7 @@ var current struct {
 	descriptor *pb.DatabaseDescriptor
 	db         *sql.DB
 	close      func() error
+	gorm       any // 缓存按需入口创建的 *gorm.DB，本包保持对 GORM 的静态隔离。
 }
 
 // Begin 开始当前 Session 的数据库可用期；SDK 须先关闭上一 Session。
@@ -51,6 +52,25 @@ func Connection(ctx context.Context, open func(context.Context, *pb.DatabaseDesc
 	return db, nil
 }
 
+// GORM 返回 db 对应的 Session 包装，首次调用时通过 wrap 构造。
+// wrap 在连接锁内执行；db 须为 Connection 返回的受管连接。
+func GORM(db *sql.DB, wrap func() (any, error)) (any, error) {
+	current.mu.Lock()
+	defer current.mu.Unlock()
+	if current.descriptor == nil || current.db != db {
+		return nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "plugin database session has stopped"}
+	}
+	if current.gorm != nil {
+		return current.gorm, nil
+	}
+	wrapped, err := wrap()
+	if err != nil {
+		return nil, err
+	}
+	current.gorm = wrapped
+	return wrapped, nil
+}
+
 // Close 结束数据库可用期并关闭受管连接；重复调用无副作用。
 func Close() error {
 	current.mu.Lock()
@@ -58,6 +78,7 @@ func Close() error {
 	current.descriptor = nil
 	current.db = nil
 	current.close = nil
+	current.gorm = nil
 	current.mu.Unlock()
 	if closeDB != nil {
 		return closeDB()

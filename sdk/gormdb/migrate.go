@@ -1,14 +1,21 @@
 // Package gormdb 为插件打开受管数据库，并提供迁移接口。
 //
-// OpenSQLite 返回原生的 *gorm.DB，并核对连接上的关键设置确实生效。
+// [Open] 包装当前 Session 的受管连接；[OpenSQLite] 打开由调用方关闭的独立连接。
+// 两者均返回原生的 *gorm.DB，并核对连接上的关键设置确实生效。
 // 插件可以自己实现 Migrate，也可以交出按编号排列的 Migrations 由 SDK 执行，两者只能选一种。
 // 数据库的所有权、连接与迁移规则见 spec/CONTRACTS-v0.1.md §6。
+//
+// 包的组成：[SelfMigrator] 承载自行管理的迁移，[VersionedMigrator] 提供逐步迁移；
+// [RunVersioned] 与 [AppliedMigrations] 执行迁移并查询两个数据库入口共用的账本。
 package gormdb
 
 import (
 	"context"
 	"fmt"
 
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
 	"gorm.io/gorm"
 )
 
@@ -21,7 +28,7 @@ type SelfMigrator interface {
 // Migration 描述辅助迁移的一步；ID 非零、唯一、递增，发布后不得改作他用。
 type Migration struct {
 	ID uint32 // 迁移编号，非零、唯一、递增
-	// Up 在事务中执行这一步迁移。
+	// Up 须使用传入的 tx，在单连接池的事务内等待独立查询会自锁。
 	Up func(context.Context, *gorm.DB) error
 }
 
@@ -44,7 +51,7 @@ func CheckMigrators(root any) (string, error) {
 	versioned, isVersioned := root.(VersionedMigrator)
 	switch {
 	case isSelf && isVersioned:
-		return "", fmt.Errorf("%T implements both Migrate and Migrations, which are mutually exclusive", root)
+		return "", &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: fmt.Sprintf("%T implements both Migrate and Migrations, which are mutually exclusive", root)}
 	case isSelf:
 		return ModeSelf, nil
 	case !isVersioned:
@@ -54,13 +61,45 @@ func CheckMigrators(root any) (string, error) {
 	for i, m := range versioned.Migrations() {
 		switch {
 		case m.ID == 0:
-			return "", fmt.Errorf("migration %d has ID 0", i)
+			return "", &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: fmt.Sprintf("migration %d has ID 0", i)}
 		case m.ID <= last:
-			return "", fmt.Errorf("migration ID %d is not greater than the previous ID %d (must be unique and increasing)", m.ID, last)
+			return "", &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: fmt.Sprintf("migration ID %d is not greater than the previous ID %d (must be unique and increasing)", m.ID, last)}
 		case m.Up == nil:
-			return "", fmt.Errorf("migration %d has no Up", m.ID)
+			return "", &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: fmt.Sprintf("migration %d has no Up", m.ID)}
 		}
 		last = m.ID
 	}
 	return ModeVersioned, nil
+}
+
+func init() { dbhook.Register(recognize) }
+
+func recognize(root any) []dbhook.Migrator {
+	var migrators []dbhook.Migrator
+	if self, ok := root.(SelfMigrator); ok {
+		migrators = append(migrators, dbhook.Migrator{Mode: pb.MigrationMode_MIGRATION_MODE_SELF, Run: func(ctx context.Context) (*pb.MigrationState, error) {
+			db, err := Open(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if err := self.Migrate(ctx, db); err != nil {
+				return nil, err
+			}
+			return &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_SELF, SelfMigrateCompleted: true}, nil
+		}})
+	}
+	if versioned, ok := root.(VersionedMigrator); ok {
+		migrators = append(migrators, dbhook.Migrator{Mode: pb.MigrationMode_MIGRATION_MODE_VERSIONED, Run: func(ctx context.Context) (*pb.MigrationState, error) {
+			db, err := Open(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := RunVersioned(ctx, db, versioned.Migrations()); err != nil {
+				return nil, err
+			}
+			ids, err := AppliedMigrations(ctx, db)
+			return &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_VERSIONED, CompletedMigrationIds: ids}, err
+		}})
+	}
+	return migrators
 }

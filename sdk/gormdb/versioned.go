@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
+	"github.com/AlonaBot/AlonaBot/sdk/sqlitedb"
 	"gorm.io/gorm"
 )
 
 // LedgerTable 指定框架保留的迁移完成表名，业务代码不得挪作他用。
-const LedgerTable = "_alonabot_migrations"
+const LedgerTable = sqlitedb.LedgerTable
 
 // ledgerRow 对应迁移账本中的一行。
 type ledgerRow struct {
@@ -23,7 +25,11 @@ func (ledgerRow) TableName() string { return LedgerTable }
 // AppliedMigrations 返回账本中已完成的迁移 ID（升序）；账本不存在时返回空。
 func AppliedMigrations(ctx context.Context, db *gorm.DB) ([]uint32, error) {
 	q := db.WithContext(ctx)
-	if !q.Migrator().HasTable(LedgerTable) {
+	var exists bool
+	if err := q.Raw("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?)", LedgerTable).Scan(&exists).Error; err != nil {
+		return nil, err
+	}
+	if !exists {
 		return nil, nil
 	}
 	var ids []uint32
@@ -33,13 +39,14 @@ func AppliedMigrations(ctx context.Context, db *gorm.DB) ([]uint32, error) {
 
 // RunVersioned 依次执行尚未完成的迁移。每一步 Up 与账本记录在插件 DB 的同一事务中提交；
 // Up 失败时整步回滚、不记录成功，并停止执行后续迁移。返回本次新完成的 ID。
+// Up 须使用传入的 tx，在事务内等待此单连接池的独立查询会自锁。
 func RunVersioned(ctx context.Context, db *gorm.DB, migrations []Migration) ([]uint32, error) {
 	// 1. 校验迁移列表，确保账本存在并读出已完成的 ID。
 	if _, err := CheckMigrators(versionedList(migrations)); err != nil {
 		return nil, err
 	}
 	q := db.WithContext(ctx)
-	if err := q.AutoMigrate(&ledgerRow{}); err != nil {
+	if err := q.Exec(dbhook.LedgerDDL).Error; err != nil {
 		return nil, fmt.Errorf("create migration ledger: %w", err)
 	}
 	applied, err := AppliedMigrations(ctx, db)

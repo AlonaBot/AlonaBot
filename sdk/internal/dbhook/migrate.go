@@ -7,6 +7,12 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
+// LedgerTable 指定两个数据库入口共用的迁移账本名。
+const LedgerTable = "_alonabot_migrations"
+
+// LedgerDDL 固定迁移账本的持久化格式，避免两个入口推导出不同结构。
+const LedgerDDL = "CREATE TABLE IF NOT EXISTS " + LedgerTable + " (id INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)"
+
 // Migrator 承载数据库入口识别到的一项迁移声明及其执行函数。
 type Migrator struct {
 	Mode pb.MigrationMode

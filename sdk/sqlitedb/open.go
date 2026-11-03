@@ -3,6 +3,9 @@
 // [Open] 返回当前 Session 复用的连接，由 SDK 在停止或准备失败时关闭。
 // [OpenFile] 打开独立文件，由调用方关闭。[ReadPragmas] 回读连接实际生效的设置。
 // 两个入口均采用单连接、WAL、FULL、外键和 5 秒忙等待，见 CONTRACTS §6.1。
+//
+// 包的组成：[SelfMigrator] 承载自行管理的迁移，[VersionedMigrator] 提供逐步迁移；
+// [RunVersioned] 与 [AppliedMigrations] 执行迁移并查询与 GORM 入口共用的账本。
 package sqlitedb
 
 import (
