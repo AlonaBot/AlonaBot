@@ -32,7 +32,7 @@
 | goal-87 | T-04.6 | 权限、扩展事件与命令解析的协议和 Core 侧 | T-03.3、T-03.6、T-04.3 | 待派发 |
 | goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 已完成 |
 | goal-31 | T-08.4 | 不可变 Secret Store | T-02.3、T-08.1、T-08.2 | 已完成 |
-| goal-90 | T-08.10 | 配置标签统一 | T-08.1 | 待派发 |
+| goal-90 | T-08.10 | 配置标签统一 | T-08.1 | 已完成 |
 | goal-36 | T-09.1 | 首次管理认证 | T-02.3、T-07.4 | 已完成 |
 | goal-69 | T-13.3 | 热部署 | T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9 | 等待前置 |
@@ -2115,7 +2115,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-90 · T-08.10 配置标签统一
 
-状态：待派发。前置 T-08.1 已由 PR #54 合并（合并提交 `021e972`）。依据 D-74 新增。
+状态：已完成（[PR #77](https://github.com/AlonaBot/AlonaBot/pull/77)），证据见 TEST-MATRIX §3.2。实现按语句完成，`internal/core/supervisor` 中配置准备与 Secret Store 的测试插件一并改用新标签。派发时：前置 T-08.1 已由 PR #54 合并（合并提交 `021e972`）；依据 D-74 新增。
 
 已核对现有实现：
 - `sdk/generate/config.go` 的 `metadata` 分别读取 `description`、`secret`、`hidden` 三个独立标签。
@@ -2524,7 +2524,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-53 · T-08.8 用户可见文案目录
 
-状态：等待前置（T-04.6、T-08.10）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.1、T-04.3 已合并；已核对 `sdk.Context`、`sdk.Usage(text string) RouteOption` 与 `router/command.go` 的 `commandUsage(spec *pb.CommandSpec) *pb.MessageChain`，usage 经注入的 message.Service.Send 发送。goal-28 已合并（PR #54）：生成器在 Schema 中为每个字段写入 `x-alonabot-i18n`（`config.<json 路径>`，数组元素与 map 值不含下标或键）与 `x-alonabot-form.label`（未写 label 时等于 i18 路径），description 键写入 description。按 D-74，label 与 description 改为标签中的源文案，`x-alonabot-i18n` 删除，i18 文件的 `config` 按 JSON 字段名嵌套、覆盖 label、description、labels、subtitles；这些由 T-08.10（goal-90）实现。
+状态：等待前置（T-04.6、T-08.10）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.1、T-04.3 已合并；已核对 `sdk.Context`、`sdk.Usage(text string) RouteOption` 与 `router/command.go` 的 `commandUsage(spec *pb.CommandSpec) *pb.MessageChain`，usage 经注入的 message.Service.Send 发送。goal-28 已合并（PR #54）：生成器在 Schema 中为每个字段写入 `x-alonabot-i18n`（`config.<json 路径>`，数组元素与 map 值不含下标或键）与 `x-alonabot-form.label`（未写 label 时等于 i18 路径），description 键写入 description。按 D-74，label 与 description 改为标签中的源文案，`x-alonabot-i18n` 删除，i18 文件的 `config` 按 JSON 字段名嵌套、覆盖 label、description、labels、subtitles；这些已由 T-08.10（goal-90，PR #77）实现。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-53（切片 T-08.8：用户可见文案目录）。goal 目录 goal-53，分支 goal-53，worktree .worktrees/goal-53，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
