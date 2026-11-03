@@ -71,3 +71,17 @@ CREATE TABLE generation_secret_path (
   path          TEXT NOT NULL,
   PRIMARY KEY (generation_id, path)
 );
+
+CREATE TABLE admin_credential (
+  id              INTEGER PRIMARY KEY CHECK (id = 1),
+  token_sha256    BLOB NOT NULL,
+  auth_generation INTEGER NOT NULL,
+  updated_at      INTEGER NOT NULL
+);
+
+CREATE TABLE admin_session (
+  session_id      TEXT PRIMARY KEY,
+  csrf_token      TEXT NOT NULL,
+  auth_generation INTEGER NOT NULL,
+  expires_at      INTEGER NOT NULL
+);

@@ -55,7 +55,7 @@
 | T-08.8 | goal-53 | 用户可见文案目录：插件 `i18/` 的 `messages`、SDK 的 `T`、Core 的 en-US/zh-CN 文案目录（usage 等）、check 的键与占位符检查 | T-08 步骤 8 | T-04.1、T-04.3、T-04.6、T-08.1、T-08.10 | V-54 的 SDK 与 Core 分项 | 未开始 |
 | T-08.9 | goal-35 | configdb 示例与分层验证，汇总证据 | T-08 步骤 9 | T-08.6、T-08.7、T-08.8 | V-23～V-26、V-38、V-39、V-54 的 T-08 分项 | 未开始 |
 | T-08.10 | goal-90 | 配置标签统一：表单与 secret 元数据收进 `config` 标签（语法同 GORM 标签），label 与 description 改为源文案，补齐 labels、subtitles、多选、slider、code 编辑器、obvious 与 when，取消选项图标；残留的旧标签给出诊断（D-74） | T-08 步骤 1 | T-08.1 | V-25 的描述分项 | 未开始 |
-| T-09.1 | goal-36 | 首次管理认证：admin-token init/reset、login、会话、CSRF、CLI Bearer | T-09 步骤 1 | T-02.3、T-07.4 | V-47 的认证分项 | 未开始 |
+| T-09.1 | goal-36 | 首次管理认证：admin-token init/reset、login、会话、CSRF、CLI Bearer | T-09 步骤 1 | T-02.3、T-07.4 | V-47 的认证分项 | 已完成（PR #72；TEST-MATRIX §3.2） |
 | T-09.2 | goal-37 | 安装包预检与安全解压：验签、来源、平台、长度/摘要、受控解压与上限、不可变包目录 | T-09 步骤 2（预检） | T-02 | V-27、V-28、V-41 的预检分项 | 已完成（TEST-MATRIX §3.2） |
 | T-09.3 | goal-38 | 开发 CLI：`plugin init/check/build/test/pack`；init 生成插件包与库模式调试用的 `main.go`，build 生成调用 `sdk.Run` 的正式入口；pack 支持四种角色，WebUI 包为 `any` 平台 | T-09 步骤 2（CLI） | T-04.5、T-08.1、T-08.8、T-09.2、T-13.1 | V-01、V-41、V-54 的打包分项 | 未开始 |
 | T-09.4 | goal-39 | 唯一管理服务与安装记录：逐包串行、来源/pin/卸载保留、各管理动作的区分；组件角色的同类唯一、`install --source` 与 `--replace`；Adapter 包与实例的管理（凭证经 Secret 引用）；启用、停用、卸载与更新时的 Adapter 依赖和插件依赖检查；`alonabot serve` 按安装记录启动全部已启用的包 | T-09 步骤 3 | T-03.8、T-08.4、T-09.1、T-09.2、T-13.1 | V-40、V-48、V-52、V-82、V-01 的安装分项 | 未开始 |

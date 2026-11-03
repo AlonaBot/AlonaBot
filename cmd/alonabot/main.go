@@ -4,7 +4,7 @@
 // 收到 SIGINT 或 SIGTERM 时停止它；插件异常退出时按有限重启策略重启或禁用。
 // Core 与插件的日志写到 stderr，并写入 <data_dir>/logs/ 下按日期轮转的文件（CONTRACTS §14）。
 // tune list 列出调优参数；全局 --args 在启动前覆盖并校验参数。
-// 正式的安装与管理命令尚未提供。
+// admin-token init/reset 在 Core 停止后离线更新管理凭证，仅向本机终端显示一次。
 package main
 
 import (
@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"os/signal"
@@ -26,6 +27,7 @@ import (
 	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/internal/core/adminauth"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
@@ -66,9 +68,18 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 	if err != nil {
 		return &usageError{err}
 	}
+	adminURL, err := url.Parse(configuration.AdminBaseURL)
+	if err != nil {
+		return fmt.Errorf("parse admin_base_url: %w", err)
+	}
 	if selected.listen != nil {
 		if err := settings.ValidateListen(*selected.listen); err != nil {
 			return &usageError{fmt.Errorf("--listen: %w", err)}
+		}
+		host, _, _ := net.SplitHostPort(*selected.listen) // 已通过 ValidateListen。
+		ip, _ := netip.ParseAddr(host)
+		if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && adminURL.Scheme != "https" && len(configuration.TrustedProxies) == 0 {
+			return &usageError{errors.New("--listen: non-loopback listen requires HTTPS admin_base_url or trusted_proxies")}
 		}
 		configuration.Listen = *selected.listen
 	}
@@ -108,19 +119,20 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 			environment[name] = value
 		}
 	}
-	adminURL, err := url.Parse(configuration.AdminBaseURL)
-	if err != nil {
-		return fmt.Errorf("parse admin_base_url: %w", err)
-	}
 	pluginURL, err := url.Parse(configuration.PluginBaseURL)
 	if err != nil {
 		return fmt.Errorf("parse plugin_base_url: %w", err)
 	}
+	authentication := adminauth.New(store, time.Now, adminURL, log)
+	adminMux := http.NewServeMux()
+	authentication.Routes(adminMux)
+	adminMux.Handle("/", authentication.Require(http.NotFoundHandler()))
 	var publicHost *webhost.Host
 	proxy := httpproxy.New(log, pluginAuthorizer(func(r *http.Request, pluginID string) bool { return publicHost.Authorize(r, pluginID) }))
 	publicHost = webhost.New(log, webhost.Options{
 		AdminBaseURL: adminURL, PluginBaseURL: pluginURL,
 		SecondHost: !strings.EqualFold(adminURL.Hostname(), pluginURL.Hostname()), Proxy: proxy,
+		Admin: adminMux, Sessions: authentication,
 	})
 	listener, err := net.Listen("tcp", configuration.Listen)
 	if err != nil {

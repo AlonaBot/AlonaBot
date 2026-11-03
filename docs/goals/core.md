@@ -33,7 +33,7 @@
 | goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 已完成 |
 | goal-31 | T-08.4 | 不可变 Secret Store | T-02.3、T-08.1、T-08.2 | 已完成 |
 | goal-90 | T-08.10 | 配置标签统一 | T-08.1 | 待派发 |
-| goal-36 | T-09.1 | 首次管理认证 | T-02.3、T-07.4 | 待派发 |
+| goal-36 | T-09.1 | 首次管理认证 | T-02.3、T-07.4 | 已完成 |
 | goal-69 | T-13.3 | 热部署 | T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9 | 等待前置 |
 | goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1、T-04.6 | 等待前置 |
@@ -2186,7 +2186,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-36 · T-09.1 首次管理认证
 
-状态：待派发。前置 T-02.3（PR #63，合并提交 `6b197d8`）、T-07.4（PR #53）均已合并。已按 #63 的模型与命名约定核对表结构：
+状态：已完成（[PR #72](https://github.com/AlonaBot/AlonaBot/pull/72)），证据见 TEST-MATRIX §3.2。审查期间按裁决改 `New` 的签名：原签名拿不到 Origin 校验所需的 admin_base_url 与记录登录失败的 Logger，改为接收二者，并由 Base URL 的 scheme 推导 secure（见接口 2）。派发时：前置 T-02.3（PR #63，合并提交 `6b197d8`）、T-07.4（PR #53）均已合并。已按 #63 的模型与命名约定核对表结构：
 - `admin_credential`、`admin_session` 符合单数命名。
 - 模型类型与读写方法一起放在 `admin.go`，不改 `models.go`。
 - 单行表的整数主键要关闭 GORM 的自增推断。
@@ -2226,7 +2226,7 @@ goal-28、goal-29 的符号已按合入代码核对：
    func InitToken(ctx context.Context, st *state.Store) (token string, err error)  // 已有凭证时返回错误；token 为 32 字节随机值的 base64url（无 padding）
    func ResetToken(ctx context.Context, st *state.Store) (token string, err error) // 递增 auth_generation，删除全部管理会话
    type Auth struct{ ... }
-   func New(st *state.Store, now func() time.Time, secure bool) *Auth // secure 为 true 时 Cookie 用 __Host- 前缀与 Secure
+   func New(st *state.Store, now func() time.Time, adminBaseURL *url.URL, log *slog.Logger) *Auth // adminBaseURL 为 https 时 Cookie 用 __Host- 前缀与 Secure；Origin 比较 scheme、主机名与有效端口，不比较 path
    func (a *Auth) Routes(mux *http.ServeMux)        // POST /api/auth/login、POST /api/auth/logout
    func (a *Auth) Require(next http.Handler) http.Handler // 管理 API 的中间件：Cookie 会话（变更方法要求 CSRF）或 Authorization: Bearer
    func (a *Auth) Lookup(r *http.Request) (sessionID string, expiresAt time.Time, ok bool) // 实现 webhost.AdminSessions
@@ -2248,7 +2248,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 - 提交：
   - cmd/alonabot/e2e_test.go 追加：非终端运行 admin-token init 与 reset 时以 exitUsage 退出，状态库中没有凭证；Core 运行中执行 admin-token reset 时因 core.lock 失败。终端分支在本地自测中通过替换 cmd 内部的终端检测函数变量覆盖（不新增依赖）。
   - internal/core/supervisor/adminauth_test.go（//go:build unix）：用 webhost、httpproxy 与 httpplugin 装配：未初始化时登录 503；错误 token 401；正确 token 得到 Cookie 与 csrf_token；缺少 CSRF 的 POST 管理请求 401；Bearer 请求通过；Origin 不符的登录 403；登录后经票据进入私有插件页面，reset 后该插件会话与管理会话都失效；8h 后会话失效（注入时钟）；插件收到的请求中没有管理 Cookie 与 Authorization。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：替换终端检测后 init 只显示一次 token、reset 递增代次；恒时比较；Cookie 属性在 secure 与否时的差异；settings 的非 loopback 校验；日志中不出现 token；InitToken 在已有凭证时失败；Reauthenticate。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：替换终端检测后 init 只显示一次 token、reset 递增代次；恒时比较；Cookie 属性在 http 与 https 的 adminBaseURL 下的差异；settings 的非 loopback 校验；日志中不出现 token；InitToken 在已有凭证时失败；Reauthenticate。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/... ./cmd/...；go build ./...。
 
