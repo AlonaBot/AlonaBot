@@ -98,7 +98,7 @@ func TestConversationProcesses(t *testing.T) {
 			t.Fatal(err)
 		}
 		specs[i] = Spec{PluginID: id, Role: state.RolePlugin, GenerationID: gen, PluginDir: dir, Executable: binary, BuildDigest: digest, NewCandidate: true,
-			Bootstrap: &pb.Bootstrap{GenerationId: gen, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE}},
+			Bootstrap: &pb.Bootstrap{GenerationId: gen, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}},
 			Limits:    host.NewLimits(values), Stop: fastStop, Log: output.Plugin(id, gen), ExtraEnv: map[string]string{"CONV_PLUGIN_ID": id}}
 	}
 	var events *router.Router

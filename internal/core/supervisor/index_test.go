@@ -50,7 +50,7 @@ func commandSpec(t *testing.T, binary, id, commands string) (*state.Store, Spec)
 		t.Fatal(err)
 	}
 	return store, Spec{Role: state.RolePlugin, PluginID: id, PluginDir: pluginDir, Executable: binary, BuildDigest: digest, GenerationID: "gen-1",
-		Bootstrap:    &pb.Bootstrap{GenerationId: "gen-1", CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE}},
+		Bootstrap:    &pb.Bootstrap{GenerationId: "gen-1", CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}},
 		NewCandidate: true, Limits: fastLimits, Stop: fastStop, Log: &logBuf{}, ExtraEnv: map[string]string{commandTestEnv: commands}}
 }
 

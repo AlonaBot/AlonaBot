@@ -260,7 +260,8 @@ func TestSecretStoreProcesses(t *testing.T) {
 			t.Helper()
 			next := spec
 			next.GenerationID, next.ExpectedOld, next.Executable, next.ConfigSchema = generation, previous, executable, description
-			next.Bootstrap = &pb.Bootstrap{GenerationId: generation, CandidateConfigJson: config, TargetConfigVersion: 1}
+			next.Bootstrap = &pb.Bootstrap{GenerationId: generation, CandidateConfigJson: config, TargetConfigVersion: 1,
+				DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 			next.ExtraEnv = map[string]string{"SECRET_TEST_MODE": mode}
 			if generation != "gen-1" {
 				if err := store.AddGeneration(t.Context(), "demo", generation, `{}`, 1); err != nil {
@@ -374,7 +375,8 @@ func TestSecretStoreProcesses(t *testing.T) {
 			t.Fatal("array elements share a reference")
 		}
 		spec.GenerationID, spec.ExpectedOld = "gen-2", "gen-1"
-		spec.Bootstrap = &pb.Bootstrap{GenerationId: "gen-2", CandidateConfigJson: `{"providers":[{"api_key":"array-secret-two"},{"api_key":"array-secret-one"}]}`, TargetConfigVersion: 1}
+		spec.Bootstrap = &pb.Bootstrap{GenerationId: "gen-2", CandidateConfigJson: `{"providers":[{"api_key":"array-secret-two"},{"api_key":"array-secret-one"}]}`, TargetConfigVersion: 1,
+			DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 		if err := store.AddGeneration(t.Context(), "demo", "gen-2", `{}`, 1); err != nil {
 			t.Fatal(err)
 		}

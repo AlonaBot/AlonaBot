@@ -266,6 +266,9 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		} else {
 			registerErr = fmt.Errorf("invalid expected role %q", exp.Role)
 		}
+		if registerErr == nil {
+			registerErr = checkMigration(m.GetMigration(), boot.GetDatabaseDescriptor())
+		}
 		if err := registerErr; err != nil {
 			var ve *validate.Error
 			code := pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT
@@ -309,6 +312,24 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		sendErr(pb.SessionPhase_SESSION_PHASE_REGISTER, env.GetKind(), pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "only REGISTER or SESSION_ERROR is accepted during preparation")
 		return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_REGISTER, pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "received %s during preparation", env.GetKind())
 	}
+}
+
+func checkMigration(migration *pb.MigrationState, database *pb.DatabaseDescriptor) error {
+	if migration.GetMode() != database.GetMigrationMode() {
+		return fmt.Errorf("registered migration mode %s does not match Bootstrap mode %s", migration.GetMode(), database.GetMigrationMode())
+	}
+	if database.GetMigrationMode() == pb.MigrationMode_MIGRATION_MODE_VERSIONED {
+		completed := make(map[uint32]bool, len(migration.GetCompletedMigrationIds()))
+		for _, id := range migration.GetCompletedMigrationIds() {
+			completed[id] = true
+		}
+		for _, id := range database.GetAppliedMigrationIds() {
+			if !completed[id] {
+				return fmt.Errorf("registered migrations omit previously applied ID %d", id)
+			}
+		}
+	}
+	return nil
 }
 
 // authentic 用恒时比较核对 Secret，并核对插件 ID 与 build_digest；不区分是哪一项失败。
