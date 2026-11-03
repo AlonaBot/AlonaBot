@@ -36,7 +36,7 @@ func Subscribe[T any](r *SubscriptionRegistry, routeID, eventName, schemaID stri
 		return
 	}
 	r.subscriptions = append(r.subscriptions, subscriptionRoute{descriptor: &pb.RouteDescriptor{
-		RouteId: routeID, Kind: pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION, DefaultEnabled: true, RequiredPermission: pb.Permission_PERMISSION_ANY,
+		RouteId: routeID, Kind: pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION, DefaultEnabled: true,
 		Spec: &pb.RouteDescriptor_BusSubscription{BusSubscription: &pb.BusSubscriptionSpec{EventName: eventName, SchemaId: schemaID, SchemaVersion: version, CallbackRouteId: routeID}},
 	}, invoke: func(c *Context, payload []byte) error {
 		var input T

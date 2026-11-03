@@ -12,6 +12,9 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
+// UserID 携带命令 user 参数所指向的 external_user_id。
+type UserID string
+
 // Command 记录一条已收集的命令注册。
 type Command struct {
 	Path     []string       // 完整命令路径（含分组前缀），大小写敏感
@@ -41,7 +44,7 @@ type routeOptions struct {
 	optional   []optionalArgument
 	raw        bool
 	usageMode  pb.UsageMode
-	usage      string
+	usageKey   string
 	ignoreCase bool
 }
 
@@ -81,9 +84,9 @@ func Optional(name string, def ...string) RouteOption {
 // RawTail 让最后一个 string 参数接收剩余原文。
 func RawTail() RouteOption { return func(o *routeOptions) { o.raw = true } }
 
-// Usage 设置参数错误时回复的自定义用法。
-func Usage(text string) RouteOption {
-	return func(o *routeOptions) { o.usageMode, o.usage = pb.UsageMode_USAGE_MODE_CUSTOM, text }
+// UsageKey 设置参数错误时使用的插件 messages 文案键。
+func UsageKey(key string) RouteOption {
+	return func(o *routeOptions) { o.usageMode, o.usageKey = pb.UsageMode_USAGE_MODE_CUSTOM, key }
 }
 
 // Silent 设置参数错误时保持沉默。
@@ -104,7 +107,7 @@ func (r *CommandRegistry) Group(name string, fn func(*CommandGroup)) {
 	r.merge(sub)
 }
 
-// Command 注册一条命令。handler 必须是以下两种签名之一，参数类型限于 string/int64/float64/bool：
+// Command 注册一条命令。handler 必须是以下两种签名之一，参数类型支持 string、int64、float64、bool、UserID、*pb.ImageSegment 和末位 *pb.MessageChain：
 //
 //	func(*sdk.Context, ...参数) (message.Chain, error)  // 自动回复
 //	func(*sdk.Context, ...参数) error                   // 主动发送
@@ -167,7 +170,7 @@ func (r *CommandRegistry) register(c Command, opts []RouteOption) {
 	c.Aliases, c.Priority = options.aliases, options.priority
 	spec := c.spec
 	spec.Path, spec.HandlerMode = c.Path, mode
-	spec.UsageMode, spec.CustomUsage, spec.IgnoreCase = options.usageMode, options.usage, options.ignoreCase
+	spec.UsageMode, spec.UsageKey, spec.IgnoreCase = options.usageMode, options.usageKey, options.ignoreCase
 	if len(options.names) > len(params) {
 		r.errs = append(r.errs, invalidCommand("command %q has more argument names than parameters", commandRouteID(c)))
 		return
@@ -279,10 +282,13 @@ var (
 	errorType   = reflect.TypeOf((*error)(nil)).Elem()
 	chainType   = reflect.TypeOf(message.Chain(nil))
 	paramTypes  = map[reflect.Type]pb.ParamType{
-		reflect.TypeOf(""):         pb.ParamType_PARAM_TYPE_STRING,
-		reflect.TypeOf(int64(0)):   pb.ParamType_PARAM_TYPE_INT,
-		reflect.TypeOf(float64(0)): pb.ParamType_PARAM_TYPE_FLOAT,
-		reflect.TypeOf(false):      pb.ParamType_PARAM_TYPE_BOOL,
+		reflect.TypeOf(""):                      pb.ParamType_PARAM_TYPE_STRING,
+		reflect.TypeOf(int64(0)):                pb.ParamType_PARAM_TYPE_INT,
+		reflect.TypeOf(float64(0)):              pb.ParamType_PARAM_TYPE_FLOAT,
+		reflect.TypeOf(false):                   pb.ParamType_PARAM_TYPE_BOOL,
+		reflect.TypeOf(UserID("")):              pb.ParamType_PARAM_TYPE_USER,
+		reflect.TypeOf((*pb.ImageSegment)(nil)): pb.ParamType_PARAM_TYPE_IMAGE,
+		reflect.TypeOf((*pb.MessageChain)(nil)): pb.ParamType_PARAM_TYPE_MESSAGE,
 	}
 )
 
@@ -299,7 +305,7 @@ func checkHandler(h any) (pb.HandlerMode, []pb.ParamType, error) {
 	for i := 1; i < t.NumIn(); i++ {
 		p, ok := paramTypes[t.In(i)]
 		if !ok {
-			return 0, nil, fmt.Errorf("type %[2]s of parameter %[1]d is not supported (only string/int64/float64/bool)", i, t.In(i))
+			return 0, nil, fmt.Errorf("type %[2]s of parameter %[1]d is not supported (expected string, int64, float64, bool, sdk.UserID, *pb.ImageSegment or *pb.MessageChain)", i, t.In(i))
 		}
 		params = append(params, p)
 	}
