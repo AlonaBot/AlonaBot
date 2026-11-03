@@ -39,7 +39,7 @@ func init() { dbhook.Register(recognize) }
 func recognize(root any) []dbhook.Migrator {
 	var migrators []dbhook.Migrator
 	if self, ok := root.(SelfMigrator); ok {
-		migrators = append(migrators, dbhook.Migrator{Mode: pb.MigrationMode_MIGRATION_MODE_SELF, Run: func(ctx context.Context) (*pb.MigrationState, error) {
+		migrators = append(migrators, dbhook.Migrator{Run: func(ctx context.Context) (*pb.MigrationState, error) {
 			db, err := Open(ctx)
 			if err != nil {
 				return nil, err
@@ -51,7 +51,7 @@ func recognize(root any) []dbhook.Migrator {
 		}})
 	}
 	if versioned, ok := root.(VersionedMigrator); ok {
-		migrators = append(migrators, dbhook.Migrator{Mode: pb.MigrationMode_MIGRATION_MODE_VERSIONED, Run: func(ctx context.Context) (*pb.MigrationState, error) {
+		migrators = append(migrators, dbhook.Migrator{Run: func(ctx context.Context) (*pb.MigrationState, error) {
 			db, err := Open(ctx)
 			if err != nil {
 				return nil, err

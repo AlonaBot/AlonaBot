@@ -15,8 +15,7 @@ const LedgerDDL = "CREATE TABLE IF NOT EXISTS " + LedgerTable + " (id INTEGER PR
 
 // Migrator 承载数据库入口识别到的一项迁移声明及其执行函数。
 type Migrator struct {
-	Mode pb.MigrationMode
-	Run  func(context.Context) (*pb.MigrationState, error)
+	Run func(context.Context) (*pb.MigrationState, error)
 }
 
 var registry struct {
