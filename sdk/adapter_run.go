@@ -17,6 +17,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const adapterMediaReadCapability = "media.read"
+
 // adapterRuntime 按实例串行化启停；全局状态锁只保护登记，不跨平台操作持有。
 // Session 生命周期沿用 activation；每个实例 Core 客户端独立关闭交付入口。
 type adapterRuntime struct {
@@ -249,7 +251,17 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 		entry.instance = instance
 		r.mu.Unlock()
 		account := instance.Account()
-		response := &pb.AdapterInstanceStartResponse{AccountId: account.ID, Capabilities: instance.Capabilities()}
+		// 读取能力由实例接口决定，避免平台自报能力与实际 RPC 入口不一致。
+		var capabilities []*pb.Capability
+		for _, capability := range instance.Capabilities() {
+			if capability.GetName() != adapterMediaReadCapability {
+				capabilities = append(capabilities, capability)
+			}
+		}
+		if _, ok := instance.(adapter.MediaSource); ok {
+			capabilities = append(capabilities, &pb.Capability{Name: adapterMediaReadCapability, Version: 1, Supported: true})
+		}
+		response := &pb.AdapterInstanceStartResponse{AccountId: account.ID, Capabilities: capabilities}
 		if account.DisplayName != "" {
 			response.AccountDisplayName = &account.DisplayName
 		}
@@ -272,6 +284,43 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(pb.ErrorCode_ERROR_CODE_INTERNAL, err.Error())
 		}
 		return adapterResponse(&pb.AdapterInstanceStopResponse{}, nil)
+	case wire.ServiceAdapterMediaRead:
+		request := &pb.AdapterMediaReadRequest{}
+		if err := decodeInvocation(in.Payload, request); err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		if request.Length == 0 || request.Length > wire.MaxMediaChunk {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid media read length")
+		}
+		r.mu.Lock()
+		entry, ok := r.instances[request.InstanceId]
+		if !ok {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
+		}
+		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		source, supported := entry.instance.(adapter.MediaSource)
+		config := entry.config
+		r.mu.Unlock()
+		if !supported {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support media reads")
+		}
+		// 平台请求在锁外执行，停止和其他实例的操作可继续推进。
+		data, next, eof, err := source.ReadPlatformFile(ctx, request.FileId, request.Offset, request.Length)
+		if err != nil {
+			code := pb.ErrorCode_ERROR_CODE_UNAVAILABLE
+			message := err.Error()
+			var public *Error
+			if errors.As(err, &public) {
+				code = validate.PublicCode(public.Code)
+				message = public.Message
+			}
+			return dispatchError(code, adapterSafeError(errors.New(message), config))
+		}
+		return adapterResponse(&pb.AdapterMediaReadResponse{Data: data, NextOffset: next, Eof: eof}, nil)
 	case wire.ServiceAdapterSend:
 		request := &pb.AdapterSendRequest{}
 		if err := decodeInvocation(in.Payload, request); err != nil {
@@ -333,6 +382,17 @@ func (c *adapterCore) SaveCursor(ctx context.Context, cursor []byte) error {
 		return &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "adapter instance has stopped"}
 	}
 	return c.call(ctx, wire.ServiceCoreAdapterCursor, &pb.AdapterCursorRequest{InstanceId: c.instanceID, Cursor: cursor}, &pb.AdapterCursorResponse{})
+}
+
+func (c *adapterCore) ReadMedia(ctx context.Context, token string, offset uint64, length uint32) ([]byte, uint64, bool, error) {
+	if c.stopped.Load() {
+		return nil, 0, false, &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "adapter instance has stopped"}
+	}
+	response := &pb.ReadResponse{}
+	if err := c.call(ctx, wire.ServiceMediaRead, &pb.ReadRequest{Token: token, Offset: offset, Length: length}, response); err != nil {
+		return nil, 0, false, err
+	}
+	return response.Data, response.NextOffset, response.Eof, nil
 }
 
 func (c *adapterCore) ReportFailure(ctx context.Context, safe *pb.ErrorInfo) error {

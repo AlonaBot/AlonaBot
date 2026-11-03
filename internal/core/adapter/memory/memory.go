@@ -6,6 +6,7 @@ package memory
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"strconv"
 	"sync"
@@ -27,6 +28,7 @@ type Adapter struct {
 	adapterID  string
 	instanceID string
 	accountID  string
+	sessionKey string     // 构造时生成，实例整个生命周期固定
 	mu         sync.Mutex // 保护 sink、sent、nextID 和 sendFunc
 	sink       adapter.Sink
 	sent       []Sent
@@ -34,11 +36,14 @@ type Adapter struct {
 	sendFunc   func(*pb.Target, *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo)
 }
 
-var _ adapter.Instance = (*Adapter)(nil)
+var (
+	_ adapter.Instance     = (*Adapter)(nil)
+	_ adapter.MediaSession = (*Adapter)(nil)
+)
 
 // New 创建指定平台、实例与账号身份的内存接入。
 func New(adapterID, instanceID, accountID string) *Adapter {
-	return &Adapter{adapterID: adapterID, instanceID: instanceID, accountID: accountID}
+	return &Adapter{adapterID: adapterID, instanceID: instanceID, accountID: accountID, sessionKey: rand.Text()}
 }
 
 // AdapterID 返回平台类型。
@@ -49,6 +54,9 @@ func (a *Adapter) InstanceID() string { return a.instanceID }
 
 // AccountID 返回平台账号 ID。
 func (a *Adapter) AccountID() string { return a.accountID }
+
+// MediaSessionKey 返回构造时固定的媒体消费 Session 身份。
+func (a *Adapter) MediaSessionKey() string { return a.sessionKey }
 
 // Capabilities 返回该内存接入的能力声明；当前没有额外平台能力。
 func (a *Adapter) Capabilities() []*pb.Capability { return nil }

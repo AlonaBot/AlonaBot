@@ -1,6 +1,7 @@
 // Package adapter 定义独立 Adapter 进程的平台接入接口。
 //
-// [Adapter] 创建账号实例，[Instance] 提供发送和停止，[Core] 将事件与游标交给宿主。
+// [Adapter] 创建账号实例，[Instance] 提供发送和停止，[MediaSource] 提供可选的平台文件读取。
+// [Core] 将事件与游标交给宿主，并读取出站媒体。
 // 实例配置只在启动请求中传递；生命周期由 sdk.RunAdapter 管理。
 package adapter
 
@@ -23,7 +24,7 @@ type StartRequest struct {
 	Cursor     []byte
 }
 
-// Core 绑定一个实例，交付事件、推进游标和报告致命故障。
+// Core 绑定一个实例，交付事件、推进游标、报告致命故障并读取出站媒体。
 type Core interface {
 	// Deliver 交付事件与游标；accepted=false 表示队列满而丢弃，游标已持久化，Adapter 不重放。
 	Deliver(ctx context.Context, ev *pb.Event, cursor []byte) (accepted bool, err error)
@@ -31,6 +32,14 @@ type Core interface {
 	SaveCursor(ctx context.Context, cursor []byte) error
 	// ReportFailure 关闭实例交付入口；调用后 Deliver 返回错误。
 	ReportFailure(ctx context.Context, safe *pb.ErrorInfo) error
+	// ReadMedia 读取 Core 为当前 Adapter Session 签发的只读媒体令牌。
+	ReadMedia(ctx context.Context, token string, offset uint64, length uint32) ([]byte, uint64, bool, error)
+}
+
+// MediaSource 提供实例可选的平台文件读取能力，length 为 1～1 MiB。
+// 未实现此接口的实例在收到 adapter.media.read 时返回 UNSUPPORTED。
+type MediaSource interface {
+	ReadPlatformFile(ctx context.Context, fileID string, offset uint64, length uint32) ([]byte, uint64, bool, error)
 }
 
 // Instance 提供一个平台账号的身份、能力、发送与停止操作。

@@ -83,8 +83,8 @@ func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
 		replies <- chain.Segments[0].GetText().GetText()
 		return &pb.SendResult{Status: pb.SendStatus_SEND_STATUS_ACCEPTED, Target: target}, nil
 	})
-	sender := message.New(registry, policy.New(store))
-	events := router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send)
+	sender := message.New(registry, policy.New(store), nil, values.RequestTimeout)
+	events := router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send, nil)
 	events.Start()
 	defer events.Close()
 	if err := platform.Start(ctx, events); err != nil {
@@ -122,16 +122,17 @@ func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
 		if id == "a" && badOutput {
 			env["ALONABOT_TEST_BAD_SERVICE_OUTPUT"] = "1"
 		}
+		caller := router.NewCaller(id, generation)
 		spec := Spec{PluginID: id, Role: state.RolePlugin, GenerationID: generation, PluginDir: dir, Executable: binary, BuildDigest: digest, NewCandidate: true, Stdio: stdio, ExtraEnv: env,
 			Bootstrap: &pb.Bootstrap{GenerationId: generation, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE}},
-			Limits:    host.NewLimits(values), Stop: host.NewStopTiming(values), Log: output.Plugin(id, generation), Handler: mux.For(router.NewCaller(id, generation)),
+			Limits:    host.NewLimits(values), Stop: host.NewStopTiming(values), Log: output.Plugin(id, generation), Handler: mux.For(caller),
 		}
 		instance, err := Launch(ctx, store, spec)
 		if err != nil {
 			t.Fatalf("launch %s: %v", id, err)
 		}
 		running = append(running, instance)
-		events.Attach(router.FromInstance(instance.Instance))
+		events.Attach(router.FromInstance(instance.Instance), caller)
 	}
 	target := &pb.Target{AdapterId: "memory", AdapterInstanceId: "instance", AccountId: "account", ChatId: "chat"}
 	command := func(t *testing.T, id, operation, service string) serviceReply {

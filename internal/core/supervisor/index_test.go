@@ -75,11 +75,13 @@ func TestCommandIndexProcesses(t *testing.T) {
 	for _, stdio := range []bool{false, true} {
 		for _, order := range [][]string{{"a", "b", "c"}, {"a", "c", "b"}, {"b", "a", "c"}, {"b", "c", "a"}, {"c", "a", "b"}, {"c", "b", "a"}} {
 			t.Run(fmt.Sprintf("stdio=%v/order=%v", stdio, order), func(t *testing.T) {
-				r := router.New(slog.New(slog.NewTextHandler(io.Discard, nil)), 1, nil, nil)
+				r := router.New(slog.New(slog.NewTextHandler(io.Discard, nil)), 1, nil, nil, nil)
 				defer r.Close()
 				for _, id := range order {
 					store, spec := commandSpec(t, binary, id, definitions[id])
 					spec.Stdio = stdio
+					caller := router.NewCaller(spec.PluginID, spec.GenerationID)
+					spec.Handler = router.NewMux().For(caller)
 					running, err := Launch(context.Background(), store, spec)
 					if err != nil {
 						t.Fatalf("launch %s: %v; logs: %s", id, err, spec.Log.(*logBuf).String())
@@ -90,7 +92,7 @@ func TestCommandIndexProcesses(t *testing.T) {
 							t.Errorf("stop %s: %+v", id, result)
 						}
 					})
-					r.Attach(router.FromInstance(running.Instance))
+					r.Attach(router.FromInstance(running.Instance), caller)
 				}
 				x := r.Commands()
 				for _, c := range []struct {
