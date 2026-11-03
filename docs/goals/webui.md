@@ -170,7 +170,7 @@
 - 配置页：用 ConfigForm 编辑（只提交 patch）或切换到完整 JSON 编辑（textarea，提交完整替换）；显示 Pending 与 Active 的差异（按键列出，secret 只显示是否已设置）；「激活」调用 reload；候选失败与 Degraded 显示具体原因。hidden 字段只在完整 JSON 编辑中可见。
 - 权限页：按命令树显示有效权限与启用状态（经 policy.CheckCommand 的同一规则计算），可设置插件、命令组、路由三层覆盖；显示遮蔽关系。
 - 发信许可：列出全部 Adapter 实例，勾选授予。
-- Core 设置：Core Admin 列表（与 alonabot admin add|remove|list 同一服务）、默认 locale、全局禁止表。
+- Core 设置：Core Admin 列表（与 alonabot admin add|remove|list 同一服务）、默认 locale、命令前缀 `command_prefixes` 与按 Adapter 实例的覆盖（保存在状态库，经 goal-87 的 `router.New` prefixes 参数生效）、全局禁止表。
 - 工具页：列出全部工具及缺省与覆盖策略。
 - 会话页：按插件列出会话摘要（键、条目数、最后时间），可清除；不显示条目内容。
 - 语言切换：沿用 goal-34 的组件，保存在 localStorage。

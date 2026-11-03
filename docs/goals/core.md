@@ -22,14 +22,14 @@
 | goal-12 | T-04.3 | 命令选择、文本匹配与参数绑定 | T-04.1 | 已完成（PR #47） |
 | goal-19 | T-06.1 | Service/Bus 描述与 Broker 准入 | T-04.1 | 已完成（PR #45） |
 | goal-25 | T-07.3 | SDK HTTP Listener 与 Core 代理 | T-04.1 | 已完成（PR #46） |
-| goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 待派发 |
+| goal-7 | T-03.6 | 入站媒体与 Grant | T-03.2、T-03.4、T-03.5 | 已完成（PR #55） |
 | goal-21 | T-06.3 | 非持久 Event Bus | T-06.1 | 已完成（PR #56） |
 | goal-26 | T-07.4 | 两个 Host 与插件票据 | T-07.3 | 已完成（PR #53） |
 | goal-28 | T-08.1 | 配置字段描述与构建检查 | T-04.2 | 已完成（PR #54） |
 | goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2 | 等待前置 |
 | goal-8 | T-03.8 | 按钮、extension 片段与依赖解析 | T-03.2、T-03.7 | 等待前置 |
 | goal-51 | T-03.9 | 消息编辑 | T-03.7 | 等待前置 |
-| goal-87 | T-04.6 | 权限、扩展事件与命令解析的协议和 Core 侧 | T-03.3、T-03.6、T-04.3 | 等待前置 |
+| goal-87 | T-04.6 | 权限、扩展事件与命令解析的协议和 Core 侧 | T-03.3、T-03.6、T-04.3 | 待派发 |
 | goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 待派发 |
 | goal-31 | T-08.4 | 不可变 Secret Store | T-02.3、T-08.1、T-08.2 | 待派发 |
 | goal-90 | T-08.10 | 配置标签统一 | T-08.1 | 待派发 |
@@ -1376,7 +1376,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-7 · T-03.6 入站媒体与 Grant
 
-状态：待派发。T-03.2、T-03.4、T-03.5 已合并（PR #31、#39、#38）。已核对媒体存储入口 `media.Open(log *slog.Logger, dir string, lim Limits, now func() time.Time) (*Store, error)`、`AddServices`、`ReleaseSession`、`Sweep`、`Lookup(token string, c router.Caller) (File, error)`、`media.File{Path, Size, MIME, SHA256, ExpiresAt}` 与 `wire.MaxMediaChunk`；回收删除失败记 WARN，safe_message 为 `media storage failed`。Telegram 可复用 `New() adapter.Adapter`、私有 `instance`、`telegramMessage`、`messageEvent`、`botClient.call(ctx context.Context, method string, request any, result any) error`；`telegramtest.NewServer(t testing.TB, token string) *Server` 与接收模拟入口已合入。`sdk/adapter.Core` 当前含 Deliver、SaveCursor、ReportFailure，ReadMedia 由本切片按下文接口追加。
+状态：已完成（[PR #55](https://github.com/AlonaBot/AlonaBot/pull/55)），证据见 TEST-MATRIX §3.2。审查期间按复审评论追加 `message.New` 末尾的 `requestTimeout`（见接口 3b），Telegram 取件按 Range 分块并在每轮 offset 0 刷新平台路径。派发时：T-03.2、T-03.4、T-03.5 已合并（PR #31、#39、#38）。已核对媒体存储入口 `media.Open(log *slog.Logger, dir string, lim Limits, now func() time.Time) (*Store, error)`、`AddServices`、`ReleaseSession`、`Sweep`、`Lookup(token string, c router.Caller) (File, error)`、`media.File{Path, Size, MIME, SHA256, ExpiresAt}` 与 `wire.MaxMediaChunk`；回收删除失败记 WARN，safe_message 为 `media storage failed`。Telegram 可复用 `New() adapter.Adapter`、私有 `instance`、`telegramMessage`、`messageEvent`、`botClient.call(ctx context.Context, method string, request any, result any) error`；`telegramtest.NewServer(t testing.TB, token string) *Server` 与接收模拟入口已合入。`sdk/adapter.Core` 当前含 Deliver、SaveCursor、ReportFailure，ReadMedia 由本切片按下文接口追加。
 
 范围修订（2026-11-01，维护者确认）：执行者在 GN-02 报告的阻塞中，有三项现在补齐，见语句「范围」与「接口」：修改 media/store.go，接入共享对象与租约回收；`LeaseForSend` 增加目标 Adapter Session 的 SessionKey 输入；Adapter 实例提供该 SessionKey，remote 由此改为 Bind 时传入 Caller，入站登记经 Options 注入。仍待补写的是 Router 与 Grant 一侧的装配：Router 为接收 Session 签发 token 的回调注入、grantee 的已激活 Session 查询、同事件在途关联查询、`AddReadServices` 的许可查询参数。这些都落在 internal/core/router；#45（`Router.Plugin`）与 #47（`router.New` 签名）现已合并，已核对 `Router.New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send router.ServiceFunc) *router.Router` 和 `Router.Plugin(pluginID string) (router.Plugin, bool)`。审查者仍需据此补写媒体回调和关联查询的装配签名，依赖这些装配的部分（Router 改写 incoming token、core.media.grant）保持阻塞，其余可以继续执行。
 
@@ -1430,7 +1430,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
    func (r *Router) Caller(pluginID string) (Caller, bool) // 只返回当前已激活实例绑定的 Caller；替换、Detach 与退出后不再返回旧值
    func (r *Router) HasInFlight(c Caller, ev *pb.Event) bool // c 正在处理 ev（按 event_id）的实际调用
 3b. internal/core/message
-   func New(adapters *adapter.Registry, p *policy.Policy, lease func(ctx context.Context, c router.Caller, readerSessionKey string, target *pb.Target, source *pb.MediaSource, deadline time.Time) (string, func(), error)) *Service // 装配处传入 media.Store.LeaseForSend；message 不 import media
+   func New(adapters *adapter.Registry, p *policy.Policy, lease func(ctx context.Context, c router.Caller, readerSessionKey string, target *pb.Target, source *pb.MediaSource, deadline time.Time) (string, func(), error), requestTimeout time.Duration) *Service // 装配处传入 media.Store.LeaseForSend 与 tune.Values.RequestTimeout；message 不 import media；没有 RPC 期限的发送（如自动回复）用 requestTimeout 计算媒体期限
 4. sdk
    func ReadMedia(ctx context.Context, token string, offset uint64, length uint32) (data []byte, next uint64, eof bool, err error)
    func GrantMedia(ctx context.Context, token, granteePluginID string, targets ...*pb.Target) (string, error) // 返回给对方的新 token
@@ -1867,11 +1867,105 @@ internal/core/webhost
 
 ### goal-87 · T-04.6 权限、扩展事件与命令解析的协议和 Core 侧
 
-状态：等待前置（T-03.6，PR #55 正在进行；T-03.3、T-04.3 已合并）。T-03.6 也修改 `adapter.proto`、`sdk/adapter` 与 remote Adapter，本切片在它合并后再写接口段。语句只写了目标、依据和要点。依据 D-69、D-71、D-72 新增。
+状态：待派发。前置 T-03.3（PR #32）、T-03.6（PR #55，合并提交 `b023130`）、T-04.3（PR #47）均已合并。依据 D-69、D-71、D-72 新增。
 
-目标：按 WIRE-FORMAT §5A 的 2026-11-01 条目修改 proto 并重新生成；Core 校验 Adapter 的权限与扩展事件声明，交付时保留已声明的平台权限并展开隐含关系，按声明校验扩展事件，路由按权限名集合判定；实现 `command_prefixes` 与按实例覆盖、去掉开头的 reference 与本账号 mention、非文本 token 与 `user`/`image`/`message` 参数、usage 文案键；同步已合并的 router、remote Adapter、`sdk/adapter`、Telegram Adapter 与集成测试。
+已按合入代码核对：
+- 旧写法的全部使用点：`remote/services.go` 交付时只保留 Adapter 给出的 `TRUSTED_ROLE_CHAT_ADMIN`；`router/command.go` 的 `commandTokens` 写死 `/` 前缀并对各 text 片段连接后的文本做 `strings.Fields`，`commandUsage` 读 `custom_usage`、usage 文本写死 `/`；`router/args.go` 的 `commandArgs(params, text)` 只处理文本；SDK 的 `buildRegister`、`appendServiceRoutes`、`appendSubscriptionRoutes`、`appendHTTPRoutes` 一律写 `PERMISSION_ANY`，`sdk.Usage(text)` 写 `custom_usage`；`supervisor/testdata/commanddispatch` 用了 `sdk.Usage`。Router 目前不检查任何路由权限。
+- `validate.AdapterRegister` 只检查 capability 与 extension 声明；`validate.IsEventType` 是标准事件的封闭列表；`remote.adapterEventPayload` 按 event_type 与 payload 分支的对应关系接受平台事件。
+- `router.New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send ServiceFunc, prepare func(*pb.Event, Caller) (*pb.Event, error)) *Router`（goal-7 已追加 prepare）。生产装配尚未调用 `router.New`，调用点只在 supervisor 与 remote 的测试中。
+- `sdk/adapter.Adapter.Descriptor()` 直接返回 `*pb.AdapterDescriptor`，Adapter 声明权限与扩展事件不需要新的 SDK 接口。Telegram 已把 `text_mention` 映射为带 `external_user_id` 的 `ENTITY_TYPE_TEXT_MENTION`，不声明平台权限（由 T-03.11 实现）。
+- `remote_test.go` 的 loopAdapter 经 `sdk.RunAdapter` 以真实 Adapter 进程运行，可在 Descriptor 中声明权限与扩展事件。
+- `github.com/google/jsonschema-go` 已批准且在 go.mod 中（`sdk/config` 使用），Core 与 SDK 根包的允许清单都包含它。
+
+后继注意：
+- `admin` 权限依据的 Core Admin 列表（`core_admin` 表）由 goal-13 实现。本切片的 Router 不赋予 `admin`；goal-13 按新契约改写时，以追加 `router.New` 参数的方式接入，并把 TrustedRoles 的写法改为权限名集合。
+- 自定义 usage 的文案键由 goal-53（T-08.8）在 Core 文案目录接入时查找；goal-53 改写时补上这一项。
+- `command_prefixes` 及按实例覆盖的持久化与管理由 goal-44（T-09.9）的 Core 设置提供；本切片只提供 Router 的注入点。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-87（切片 T-04.6：权限、扩展事件与命令解析的协议和 Core 侧）。goal 目录 goal-87，分支 goal-87，worktree .worktrees/goal-87，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：按 WIRE-FORMAT §5A 的 2026-11-01 条目修改 proto 并重新生成；Core 校验 Adapter 的权限与扩展事件声明，交付时只保留已声明的平台权限并展开隐含关系，按声明校验扩展事件，路由按权限名集合判定；实现 command_prefixes 与按实例覆盖、去掉开头的 reference 与本账号 mention、非文本 token 与 user/image/message 参数、usage 文案键；同步已合并的 router、remote Adapter、SDK 与集成测试。
 
 依据：PLAN T-04 步骤 8；CONTRACTS §2.2、§2.3、§8、§15.1；MESSAGE-MODEL §1、§1.2；WIRE-FORMAT §3.3、§5A；DECISIONS D-69、D-71、D-72；TEST-MATRIX V-85～V-87。
+
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/ 的 identity.proto、route.proto、adapter.proto、message.proto、invocation.proto，然后 go generate ./...
+- contracts/validate/：AdapterRegister 的权限与扩展事件声明、插件路由的 required_permissions、扩展事件的 event_type、新参数类型
+- contracts/wirespec_test.go：新增与删除字段的编号检查
+- internal/core/adapter/remote/：平台权限的过滤与展开、扩展事件的交付校验
+- internal/core/router/：权限计算与判定、命令前缀、开头片段、按片段分词与新参数类型、usage
+- sdk/：路由描述的 required_permissions、Usage 改为文案键、新参数类型的 Handler 绑定
+- 上述包及 internal/core/supervisor 的测试与 testdata；router.New 的全部调用点
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. proto（删除的字段与枚举值一律 reserved 编号与名称，不复用编号）
+   identity.proto：删除 enum TrustedRole；Actor 删除 trusted_roles = 4，新增 repeated string permissions = 6。
+   route.proto：删除 enum Permission；RouteDescriptor 删除 required_permission = 5，新增 repeated string required_permissions = 17；RuleDescriptor 删除 require_chat_admin = 2；ParamType 新增 PARAM_TYPE_USER = 5、PARAM_TYPE_IMAGE = 6、PARAM_TYPE_MESSAGE = 7；CommandSpec 删除 custom_usage = 9，新增 string usage_key = 12（USAGE_MODE_CUSTOM 时为插件 i18/ 中 messages 的键）。
+   adapter.proto：AdapterDescriptor 新增 repeated PermissionDeclaration permissions = 4、repeated EventDeclaration events = 5；
+     message PermissionDeclaration { string name = 1; repeated string implies = 2; string label_key = 3; }  // name 与 implies 为完整名
+     message EventDeclaration { string name = 1; uint32 version = 2; string schema_json = 3; }  // name 为完整名
+   message.proto：EventPayload 的 oneof 新增 AdapterEventPayload adapter_event = 11；message AdapterEventPayload { uint32 version = 1; string payload_json = 2; }
+   invocation.proto：ArgValue 的 oneof 新增 string user_id = 6、ImageSegment image = 7、MessageChain message = 8。
+2. contracts/validate
+   func IsPermissionName(name string) bool   // user、admin、chat_admin，或 <adapter_id>.<name>
+   func IsAdapterEventType(eventType string) bool   // <adapter_id>.<name>
+   完整名在最后一个 "." 处拆分：前半部分按 CONTRACTS §7.1 的本地 ID 规则（复用 validate.PluginID 的检查，且不带市场前缀），后半部分只用小写字母、数字与下划线且非空。
+3. internal/core/router
+   func New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send ServiceFunc, prepare func(*pb.Event, Caller) (*pb.Event, error), prefixes func(adapterInstanceID string) []string) *Router
+   // prefixes 为 nil 时所有实例取 ["/"]；返回值由设置层保证非空。
+4. sdk
+   func UsageKey(key string) RouteOption   // 取代 Usage(text)，删除 Usage
+   type UserID string   // Handler 参数类型，对应 PARAM_TYPE_USER；值为 external_user_id
+   Handler 参数类型映射新增：UserID → USER，*pb.ImageSegment → IMAGE，*pb.MessageChain → MESSAGE（goal-88 改为 SDK 自有类型）。
+
+行为：
+- Adapter 注册（validate.AdapterRegister，失败则 Adapter 注册失败）：
+  - 权限名与扩展事件名必须以 `<本 adapter_id>.` 开头且后半部分合法；同类声明内名称唯一。
+  - implies 的每一项是本 Adapter 已声明的权限或 chat_admin；不能是 user、admin 或自身；隐含关系不能成环；label_key 非空。
+  - 扩展事件的 version ≥ 1，同名只声明一个版本；schema_json 是 JSON 对象，并能用 jsonschema-go 解析与 Resolve。
+- 平台权限（remote 交付时）：Adapter 在 Actor.permissions 中给出平台权限。Core 丢弃未声明的名字（包括 user、admin、chat_admin），每次丢弃记 WARN（plugin_id、instance_id、名称，作为诊断），再按声明展开隐含关系的传递闭包，结果去重后按字典序排列。Actor 为空时忽略。
+- Actor 的权限集合（Router 在每个事件进入派发前计算，覆盖 remote 交付的事件、memory Adapter 与 Core 生成的事件）：actor 不为空时加入 user，再加上 remote 交付的平台权限与展开结果；来源事件中的 user 与 admin 不采信，本切片不赋予 admin。插件看到的 Actor.permissions 就是这个集合。
+- 路由权限（Router，只作用于 COMMAND 与 EVENT 路由）：required_permissions 为空时放行；否则 Actor 权限集合与它有交集才放行，没有 Actor 不满足任何非空集合。
+  - 已识别的命令路径被拒绝时消费该命令：不回复、不退到短路径、文本匹配或 Raw，记 DEBUG（plugin_id、route_id）；随后照常进入事件路由。
+  - 文本匹配、Raw 与事件路由被拒绝时视为未匹配，继续下一条。
+- 插件注册（validate.Register）：required_permissions 的每一项满足 IsPermissionName 且不重复；引用的 Adapter 不必已安装。事件路由的 event_type 是标准类型或满足 IsAdapterEventType；扩展事件路由不要求对应 Adapter 已安装，未安装或未声明时不会被触发。
+- 扩展事件（remote 交付时）：event_type 为 `<本 adapter_id>.<已声明名>`，payload 分支为 adapter_event，version 等于声明的版本，payload_json 是符合声明 Schema 的 JSON 对象（注册时 Resolve 一次，交付时 Validate）；不符则按现有的非法事件处理拒绝并记 WARN。Actor、Target 与实例归属的校验与标准事件相同。扩展事件只进入 event_type_filter 含该完整名的事件路由，不进入命令层。
+- 命令前缀（Router，message.created）：取 prefixes(事件的 adapter_instance_id)；去掉开头片段后的文本能匹配多个前缀时取最长者，空字符串前缀表示不带前缀；都不匹配时不识别命令路径，继续文本匹配与 Raw。首个路径 token 的 `@username` 规则保持不变。缺省 usage 中的前缀用本次匹配到的前缀。
+- 开头片段：识别命令路径前，从 chain 开头连续去掉 reference 片段、external_user_id 等于事件 account_id 的 mention 片段以及只含空白的 text 片段，再去掉随后 text 的起始空白。文本匹配与 Raw 仍作用于完整 chain 中各 text 片段连接的文本。
+- 分词与参数（替换 commandArgs 的文本入口）：
+  - 路径 token 取开头片段之后、第一个非文本片段之前的文本中以空白分隔的词（与现有行为一致）。
+  - 参数取路径之后的片段：每个 text 片段内部按现有引号与转义规则分词，引号与转义不跨片段，未闭合时报参数错误；每个 mention 与 image 片段各是一个非文本 token；其他片段不参与分词。
+  - text 片段中范围恰好等于一个 text_mention 实体、且前后是空白或片段边界的文字作为一个文本 token（不在内部按空白切分），它可以绑定 user 参数，值为实体的 external_user_id；绑定 string 时值为其文字。
+  - user 接受 mention token 或上述 text_mention token；image 接受 image token，值为该片段（含 incoming_ref）；string/int/float/bool 只接受文本 token。非文本 token 出现在其他类型的位置，或出现在 raw 尾部，都是参数错误。
+  - message 只能是最后一个参数，与 raw 互斥：接收最后一个已消费参数之后的全部片段，去掉起始分隔空白，不再分词；没有剩余片段时视为缺失。
+  - user、image、message 参数不能声明 default（validate 拒绝）。参数错误按现有规则回复一次 usage 或 silent。
+- usage：缺省 usage 为 user、image、message 参数分别标出 `:user`、`:image`、`:message`。USAGE_MODE_CUSTOM 时 usage_key 必须非空（validate 拒绝空键）；在文案目录接入前按缺省 usage 发送，代码中以 `shortcut:` 注释写明由 T-08.8 的文案目录查找该键。
+- SDK：命令与文本匹配路由的 required_permissions 缺省为 ["user"]；事件、Service、Bus 订阅与 HTTP 路由为空集合（权限的值对象与按路由设置由 goal-88 提供）。sdk.UsageKey 写入 usage_key。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：
+  - contracts/wirespec_test.go：上述新增字段与枚举值的编号，以及删除编号已 reserved。
+  - internal/core/adapter/remote/remote_test.go：loopAdapter 声明 `<id>.owner`（隐含 `<id>.admin`）、`<id>.admin`（隐含 chat_admin）与一个扩展事件。错误前缀、隐含 user 或 admin、隐含成环、Schema 无法解析的声明各使 Adapter 注册失败；交付带 owner、未声明名与 user 的事件，插件收到的 Actor.permissions 为 user、`<id>.admin`、`<id>.owner`、chat_admin，并记丢弃诊断；扩展事件在名称未声明、版本不符、payload 不符合 Schema 时被拒绝，合法时只到达对应事件路由。
+  - internal/core/supervisor/command_test.go（真实插件进程，TCP 与 stdio）：
+    - 权限：required_permissions 为 ["<id>.admin"] 的命令被普通用户触发时不调用 Handler、不回复、不进入文本匹配；带该平台权限的用户成功；没有 Actor 的 message.created 不触发缺省 ["user"] 的命令。
+    - 前缀：缺省 "/"；prefixes 返回 ["!", "!!", ""] 时 "!!x" 按 "!!" 匹配、无前缀的 "x" 也能触发；另一个实例仍只认 "/"。
+    - 开头片段：reference + 指向本账号的 mention + " /kick" 识别为命令；指向他人的 mention 在开头时不识别。
+    - 参数：`/kick @某人` 的 user 参数分别来自 mention 片段与 text_mention 实体；image 参数；末位 message 参数收到剩余的 text 与 mention 片段；mention 出现在 int 位置回复一次 usage。
+    - 自定义 usage 键：参数错误时回复缺省 usage。
+  - 已有集成测试按新字段与缺省权限同步（需要触发命令的事件补上 Actor），原断言保持。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：IsPermissionName 与 IsAdapterEventType 的边界；隐含闭包的多级传递；前缀的最长匹配与空前缀；引号不跨片段；text_mention 只覆盖部分词时不成为 user token；raw 尾部含 mention；message 参数为空；user/image/message 带 default 被拒绝；扩展事件路由在 Adapter 未安装时注册成功且不触发。
+
+完成条件：gofmt -l 无输出；go generate ./... 后生成产物无差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/... ./adapters/...；go build ./...。
+
+不做：
+- Core Admin 列表与 admin 权限、命令策略与全局禁止（T-04.4，goal-13）。
+- command_prefixes 的持久化与管理（T-09.9）；usage 文案键的查找与语言选择（T-08.8）。
+- 扩展事件路由的管理诊断展示（管理 API 切片）；PreEvent Hook 修改扩展事件 payload 后的重新校验（Hook 切片）；多轮等待（T-05）。
+- SDK 的链式注册、Permission 值对象、事件常量与 sdk.AdapterEvent（T-04.7，goal-88）。
+- Telegram 与 OneBot 11 的平台权限映射（T-03.11、T-15.1）。
+```
 
 ### goal-30 · T-08.3 SDK 配置准备顺序
 
