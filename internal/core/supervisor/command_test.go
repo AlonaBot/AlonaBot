@@ -91,13 +91,14 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 			if err := registry.Add(platform); err != nil {
 				t.Fatal(err)
 			}
-			sender := message.New(registry, policy.New(store))
+			sender := message.New(registry, policy.New(store), nil, values.RequestTimeout)
 			target := &pb.Target{AdapterId: "memory", AdapterInstanceId: "instance", AccountId: "account", ChatId: "chat", ThreadId: proto.String("topic")}
 			actor := &pb.Actor{ExternalUserId: "user", AdapterInstanceId: "instance"}
 			mux := router.NewMux()
 			mux.Handle(wire.ServiceSend, sender.Send)
-			spec.Handler = mux.For(router.NewCaller(spec.PluginID, spec.GenerationID))
-			events := router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send)
+			caller := router.NewCaller(spec.PluginID, spec.GenerationID)
+			spec.Handler = mux.For(caller)
+			events := router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send, nil)
 			services := broker.New(events, output.Logger(), values.RequestTimeout)
 			serviceParents := make(chan uint64, 1)
 			mux.Forward(func(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response {
@@ -124,7 +125,7 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 					t.Errorf("plugin did not stop cleanly: %+v", stopped)
 				}
 			}()
-			events.Attach(router.FromInstance(running.Instance))
+			events.Attach(router.FromInstance(running.Instance), caller)
 			inject := func(parts ...string) {
 				t.Helper()
 				chain := &pb.MessageChain{}

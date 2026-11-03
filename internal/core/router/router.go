@@ -36,6 +36,16 @@ type Plugin interface {
 
 type instancePlugin struct{ instance *host.Instance }
 
+type pluginSession struct {
+	plugin Plugin
+	caller Caller // 与该 Session 的 Mux.For 绑定相同身份
+}
+
+type inFlightKey struct {
+	caller  Caller
+	eventID string
+}
+
 // FromInstance 把真实宿主实例接入路由器，激活状态从宿主实时读取。
 func FromInstance(in *host.Instance) Plugin { return &instancePlugin{instance: in} }
 
@@ -55,14 +65,16 @@ func (p *instancePlugin) SendEvent(ctx context.Context, target string, ev *pb.Bu
 type Router struct {
 	adapters *adapter.Registry
 	send     ServiceFunc
+	prepare  func(*pb.Event, Caller) (*pb.Event, error)
 	matches  map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
 	log      *slog.Logger
 	queue    chan *pb.Event
 	ctx      context.Context
 	cancel   context.CancelFunc
-	mu       sync.Mutex // 保护 plugins、commands、started、closed 与 worker 的启动
-	plugins  map[string]Plugin
-	commands *CommandIndex // 在 mu 下发布；已发布快照只读
+	mu       sync.Mutex // 保护注册、在途调用、命令索引与 worker 的启动
+	plugins  map[string]*pluginSession
+	inFlight map[inFlightKey]struct{} // 仅覆盖 Plugin.Call；排队与 prepare 期间不登记
+	commands *CommandIndex            // 在 mu 下发布；已发布快照只读
 	started  bool
 	closed   bool
 	worker   sync.WaitGroup
@@ -71,18 +83,21 @@ type Router struct {
 // New 创建容量为 queueEvents 的事件队列，log 使用 Core 的 Logger。
 // queueEvents 由装配处传入 tune.Values.DispatchQueueEvents。
 // adapters 提供账号用户名，send 接入 message.Service.Send 处理 usage 与自动回复。
-func New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send ServiceFunc) *Router {
+// prepare 在每次 Handler 调用前改写接收 Session 的事件；nil 时原样派发。
+func New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send ServiceFunc, prepare func(*pb.Event, Caller) (*pb.Event, error)) *Router {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Router{adapters: adapters, send: send, matches: make(map[string][]commandRoute), log: log, queue: make(chan *pb.Event, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]Plugin), commands: &CommandIndex{}}
+	return &Router{adapters: adapters, send: send, prepare: prepare, matches: make(map[string][]commandRoute), log: log, queue: make(chan *pb.Event, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]*pluginSession), inFlight: make(map[inFlightKey]struct{}), commands: &CommandIndex{}}
 }
 
 // Attach 注册一个接收派发的插件并重建命令索引；相同插件 ID 替换为新实例。
-func (r *Router) Attach(p Plugin) {
+// c 必须与该 Session 的 Mux.For 使用同一个 Caller。
+func (r *Router) Attach(p Plugin, c Caller) {
 	id := p.PluginID()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.plugins[id] = p
-	r.cacheCommands(p)
+	session := &pluginSession{plugin: p, caller: c}
+	r.plugins[id] = session
+	r.cacheCommands(session)
 	r.rebuildCommands()
 }
 
@@ -90,8 +105,35 @@ func (r *Router) Attach(p Plugin) {
 func (r *Router) Plugin(pluginID string) (Plugin, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	plugin, ok := r.plugins[pluginID]
-	return plugin, ok
+	session, ok := r.plugins[pluginID]
+	if !ok {
+		return nil, false
+	}
+	return session.plugin, true
+}
+
+// Caller 返回当前已激活绑定的可信身份；替换、移除或退出后的身份不再返回。
+func (r *Router) Caller(pluginID string) (Caller, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	session, ok := r.plugins[pluginID]
+	if !ok || !session.plugin.Activated() {
+		return Caller{}, false
+	}
+	return session.caller, true
+}
+
+// HasInFlight 按 event_id 检查当前 Session 是否正在调用该事件的 Handler。
+// 调用返回、Router 取消或插件绑定失效后，关联立即失效。
+func (r *Router) HasInFlight(c Caller, ev *pb.Event) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	session, ok := r.plugins[c.PluginID]
+	if !ok || session.caller != c || !session.plugin.Activated() || r.ctx.Err() != nil {
+		return false
+	}
+	_, ok = r.inFlight[inFlightKey{caller: c, eventID: ev.GetEventId()}]
+	return ok
 }
 
 // Detach 移除插件并重建命令索引，使其退出后续事件的候选集。
@@ -155,26 +197,26 @@ func (r *Router) Deliver(ctx context.Context, ev *pb.Event) error {
 }
 
 type candidate struct {
-	plugin   Plugin
+	*pluginSession
 	pluginID string
 	route    *pb.RouteDescriptor
 }
 
 func (r *Router) candidates(ev *pb.Event) []candidate {
 	r.mu.Lock()
-	plugins := make([]Plugin, 0, len(r.plugins))
+	plugins := make([]*pluginSession, 0, len(r.plugins))
 	for _, p := range r.plugins {
 		plugins = append(plugins, p)
 	}
 	r.mu.Unlock()
 	var candidates []candidate
 	for _, p := range plugins {
-		if !p.Activated() {
+		if !p.plugin.Activated() {
 			continue
 		}
-		for _, route := range p.Routes() {
+		for _, route := range p.plugin.Routes() {
 			if route.GetKind() == pb.RouteKind_ROUTE_KIND_EVENT && slices.Contains(route.GetEvent().GetEventTypeFilter(), ev.GetEventType()) {
-				candidates = append(candidates, candidate{plugin: p, pluginID: p.PluginID(), route: route})
+				candidates = append(candidates, candidate{pluginSession: p, pluginID: p.plugin.PluginID(), route: route})
 			}
 		}
 	}
@@ -205,16 +247,7 @@ func (r *Router) dispatch(ev *pb.Event) {
 		rand.Read(trace)
 		routeID := candidate.route.GetRouteId()
 		log := r.log.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace))
-		request := &pb.HandlerRequest{RouteId: routeID, Event: ev, Context: &pb.InvocationContext{Actor: ev.GetActor(), DefaultTarget: ev.GetTarget()}}
-		encoded, err := proto.Marshal(request)
-		if err != nil {
-			log.Warn("encode event handler request failed", "error", err)
-			continue
-		}
-		response, err := candidate.plugin.Call(r.ctx, wire.Request{
-			Target: routeID, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
-			TraceID: trace, Attach: &Invocation{PluginID: candidate.pluginID, Event: ev, DefaultTarget: ev.GetTarget()},
-		})
+		response, err := r.call(candidate, ev, nil, trace)
 		if err != nil {
 			log.Warn("event handler call failed", "error", err)
 		}
@@ -231,6 +264,53 @@ func (r *Router) dispatch(ev *pb.Event) {
 			return
 		}
 	}
+}
+
+// current 在持有 mu 时检查候选仍属于当前的激活绑定，隔离旧候选快照。
+func (r *Router) current(c candidate) bool {
+	return r.ctx.Err() == nil && r.plugins[c.pluginID] == c.pluginSession && c.plugin.Activated()
+}
+
+func (r *Router) call(c candidate, ev *pb.Event, command *pb.CommandInvocation, trace []byte) (wire.Response, error) {
+	// 1. prepare 在锁外执行，仍使用原始事件给各接收 Session 分别签发。
+	r.mu.Lock()
+	current := r.current(c)
+	r.mu.Unlock()
+	if !current {
+		return wire.Response{}, errors.New("plugin Session is no longer active")
+	}
+	prepared := ev
+	if r.prepare != nil {
+		var err error
+		prepared, err = r.prepare(ev, c.caller)
+		if err != nil {
+			return wire.Response{}, fmt.Errorf("prepare handler event: %w", err)
+		}
+	}
+	request := &pb.HandlerRequest{RouteId: c.route.GetRouteId(), Event: prepared, Command: command, Context: &pb.InvocationContext{Actor: ev.GetActor(), DefaultTarget: ev.GetTarget()}}
+	encoded, err := proto.Marshal(request)
+	if err != nil {
+		return wire.Response{}, fmt.Errorf("encode handler request: %w", err)
+	}
+	// 2. prepare 期间可能发生替换或移除；实际调用前再核对，并只为本次 Call 登记关联。
+	key := inFlightKey{caller: c.caller, eventID: ev.GetEventId()}
+	r.mu.Lock()
+	if !r.current(c) {
+		r.mu.Unlock()
+		return wire.Response{}, errors.New("plugin Session is no longer active")
+	}
+	r.inFlight[key] = struct{}{}
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		delete(r.inFlight, key)
+		r.mu.Unlock()
+	}()
+	return c.plugin.Call(r.ctx, wire.Request{
+		Target: request.RouteId, TraceID: trace,
+		Attach:  &Invocation{PluginID: c.pluginID, Event: prepared, DefaultTarget: ev.GetTarget()},
+		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
+	})
 }
 
 func decodeOutcome(payload wire.Payload) (*pb.HandlerOutcome, error) {
