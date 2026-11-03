@@ -62,6 +62,12 @@ message ArgValue {
     double float_value = 4;
     // BOOL 参数。
     bool bool_value = 5;
+    // USER 参数的 external_user_id。
+    string user_id = 6;
+    // IMAGE 参数，保留原片段的媒体来源。
+    ImageSegment image = 7;
+    // MESSAGE 参数保留剩余片段的顺序。
+    MessageChain message = 8;
   }
 }
 
