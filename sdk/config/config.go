@@ -32,8 +32,10 @@
 // 这些元数据分别通过 [KeywordSecret]、[KeywordHidden]、[KeywordForm]、[KeywordI18n]
 // 写入 Schema 扩展关键字。表单元数据包含 label、widget、options、option_icons、min、max。
 //
-// 包的组成：[Base] 提供 [Config] 的默认回调；[MarshalSchema] 保留字段顺序并规范序列化，
-// [SchemaHash] 计算 REGISTER 使用的 Schema 摘要。字段契约见 spec/CONTRACTS-v0.1.md §5.1、§5.3。
+// 包的组成：[Base] 提供 [Config] 的默认回调；[Prepare] 依次执行 OnLoad、补缺失键默认值、
+// typed decode 与 Schema 校验，将保留未知键的完整规范 JSON 和目标版本写入 [Prepared]，供 REGISTER 回传。
+// [MarshalSchema] 保留字段顺序并规范序列化，[SchemaHash] 计算 REGISTER 使用的 Schema 摘要。
+// 字段与准备流程契约见 spec/CONTRACTS-v0.1.md §5.1～§5.3。
 package config
 
 import (
