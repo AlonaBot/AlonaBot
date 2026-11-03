@@ -97,7 +97,7 @@ func run() (runErr error) {
  values := tune.Defaults()
  limits := host.NewLimits(values)
  boot := &pb.Bootstrap{GenerationId: "gen-1", CandidateConfigJson: os.Args[2], TargetConfigVersion: 7,
-  DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE}}
+  DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
  prepared, err := host.Prepare(ctx, conn, host.Expect{
   Role: state.RolePlugin, PluginID: "schema-test", Secret: secretBytes, BuildDigest: digest,
   Offer: validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor},
