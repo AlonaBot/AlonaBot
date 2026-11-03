@@ -59,6 +59,19 @@ CREATE TABLE conversation_entry (
   PRIMARY KEY (plugin_id, conversation_key, seq)
 );
 
+CREATE TABLE secret (
+  ref_id     TEXT PRIMARY KEY,
+  plugin_id  TEXT NOT NULL REFERENCES install(plugin_id),
+  value      BLOB NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE generation_secret_path (
+  generation_id TEXT NOT NULL REFERENCES generation(generation_id),
+  path          TEXT NOT NULL,
+  PRIMARY KEY (generation_id, path)
+);
+
 CREATE TABLE admin_credential (
   id              INTEGER PRIMARY KEY CHECK (id = 1),
   token_sha256    BLOB NOT NULL,

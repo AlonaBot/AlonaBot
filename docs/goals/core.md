@@ -30,8 +30,8 @@
 | goal-8 | T-03.8 | 按钮、extension 片段与依赖解析 | T-03.2、T-03.7 | 等待前置 |
 | goal-51 | T-03.9 | 消息编辑 | T-03.7 | 等待前置 |
 | goal-87 | T-04.6 | 权限、扩展事件与命令解析的协议和 Core 侧 | T-03.3、T-03.6、T-04.3 | 待派发 |
-| goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 待派发 |
-| goal-31 | T-08.4 | 不可变 Secret Store | T-02.3、T-08.1、T-08.2 | 待派发 |
+| goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 已完成 |
+| goal-31 | T-08.4 | 不可变 Secret Store | T-02.3、T-08.1、T-08.2 | 已完成 |
 | goal-90 | T-08.10 | 配置标签统一 | T-08.1 | 待派发 |
 | goal-36 | T-09.1 | 首次管理认证 | T-02.3、T-07.4 | 待派发 |
 | goal-69 | T-13.3 | 热部署 | T-13.1 | 等待前置 |
@@ -1969,7 +1969,7 @@ internal/core/webhost
 
 ### goal-30 · T-08.3 SDK 配置准备顺序
 
-状态：待派发。前置 T-08.1（PR #54）、T-08.2 已合并。goal-28 的符号已按合入代码核对：
+状态：已完成（[PR #73](https://github.com/AlonaBot/AlonaBot/pull/73)），证据见 TEST-MATRIX §3.2。审查期间按授权改写 `sdk/generate/config_test.go` 的候选断言为规范 JSON，并在 `sdk/config` 包文档加入 Prepare 入口；`sdk/session.go` 另把 `PhaseLimits.config_ms` 缺失并入 Bootstrap 预算缺失的 PROTOCOL_ERROR。派发时：前置 T-08.1（PR #54）、T-08.2 已合并。goal-28 的符号已按合入代码核对：
 - `sdk.Generated.ConfigSchema []byte` 是规范 JSON，没有 Config 时为 nil。
 - `config.Config` 只有 `OnLoad(ctx context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)` 一个方法，`config.Base` 的默认实现原样返回 raw。根插件经 `Config() config.Config` 提供配置，`sdk.Base` 返回 nil。
 - 扩展关键字为 `config.KeywordSecret`、`KeywordHidden`、`KeywordForm`、`KeywordI18n`（`x-alonabot-*`）。
@@ -2026,7 +2026,7 @@ sdk/config
 
 ### goal-31 · T-08.4 不可变 Secret Store
 
-状态：待派发。前置 T-02.3（PR #63，合并提交 `6b197d8`）、T-08.1（PR #54）、T-08.2 均已合并。
+状态：已完成（[PR #74](https://github.com/AlonaBot/AlonaBot/pull/74)），证据见 TEST-MATRIX §3.2。审查中发现原语句「状态库文件已是 0600」的前提不成立（data_dir 为 0700，文件按进程 umask 创建）；维护者在 PR 中确认扩围，范围、行为与测试已按合入代码改写。派发时：前置 T-02.3（PR #63，合并提交 `6b197d8`）、T-08.1（PR #54）、T-08.2 均已合并。
 
 goal-28、goal-29 的符号已按合入代码核对：
 - `config.KeywordSecret = "x-alonabot-secret"` 写在字段自身的属性 Schema 上，值为 `true`。secret 只允许 string 或 *string，可空时 type 为 `["string","null"]`。
@@ -2050,6 +2050,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 范围（只新增或修改这些）：
 - internal/core/state/schema.sql：在唯一的初始迁移末尾加入新表；新增 internal/core/state/secrets.go
+- internal/core/state/state.go：Open 的建库与打开后核对；新增 internal/core/state/permissions_unix.go、permissions_windows.go（审查期间经维护者确认扩围）
 - 新增 internal/core/secret/
 - internal/core/host/prepare.go：Expect 增加快照回调；PREPARED 的摘要改为对快照计算；Prepared 增加 ConfigSnapshot
 - internal/core/supervisor/supervisor.go：Spec 增加 ConfigSchema；新候选时把快照写入代次，普通 restart 时核对快照一致
@@ -2092,7 +2093,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 - 旧 secret 字段从 Schema 移除但仍作为未知键保留时，因为路径在 keptPaths 中而继续被抽取；只有候选中该键被删除，路径才不再保留。
 - Redact 的结果用于管理 API；掩码不是协议值，表单提交时省略字段表示保持原值（T-09 与 T-08.7 遵守）。
 - Collect 只删除不被任何 protected 快照引用的 secret；正在恢复或 Journal 中的引用由 T-09 加入 protected。
-- 存储保护：状态库文件已是 0600；本切片在 Unix 上核对 data_dir 下状态库与其 WAL/SHM 文件的权限为 0600，在 Windows 上为状态库文件设置只允许当前账号访问的 ACL（golang.org/x/sys/windows，已批准）。
+- 存储保护：Unix 上新状态库在 gorm.Open 之前以 O_CREATE|O_EXCL 和 0600 创建，WAL/SHM 由 SQLite 沿用主库权限；每次打开后核对主库及存在的 -wal、-shm 均为 0600，不符时 Open 返回带路径的错误并释放连接与锁，不自动修正。Windows 上在创建状态库之前为 data_dir 设置受保护、可继承、只授予当前账号完全控制的 DACL（golang.org/x/sys/windows，已批准），不检查 mode 位。
 - 日志、错误与普通响应中不出现明文、Bootstrap 或完整配置；错误只写路径。
 
 测试（按编码规范「测试提交规则」）：
@@ -2104,7 +2105,8 @@ goal-28、goal-29 的符号已按合入代码核对：
   - Collect 在保护 Active 时不删除其引用，删除只被已丢弃候选引用的 secret。
   - 日志缓冲中不出现明文字符串。
   - 数组中的 secret（providers.*.api_key，两个元素）各自生成引用；调换元素顺序后按位置比较，明文变化的位置生成新引用。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：路径转义与 * 模式；Resolve 拒绝其他插件的引用；插件回传引用被拒；Redact 的输出；关键字常量与 sdk/config 一致；文件权限检查。
+- 提交：internal/core/state/permissions_test.go（unix）：子进程在 umask 022 下创建并写入真实状态库，主库、WAL、SHM 均为 0600；已有 0644 的库被拒绝，权限不被修改，失败后锁已释放。Windows DACL 只有交叉构建证据，实机验证记「未运行」。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：路径转义与 * 模式；Resolve 拒绝其他插件的引用；插件回传引用被拒；Redact 的输出；关键字常量与 sdk/config 一致。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/...；go build ./...。
 

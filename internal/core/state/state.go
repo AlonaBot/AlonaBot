@@ -4,7 +4,8 @@
 // 保证同一个 data_dir 只有一个 Core；已有但无法读取的状态库会报错，不会被重建成空库。
 // 提交 ActiveGeneration 时核对预期的旧值，拒绝陈旧候选。规则见 spec/CONTRACTS-v0.1.md §6.1 与 §12.2。
 //
-// 尚不含候选资源引用、完整的 Journal 与恢复编排。
+// Secret 与配置路径随代次保存；正式 Journal 与恢复编排由管理层负责。
+// Unix 核对数据库及 WAL/SHM 的 0600 权限，Windows 为 data_dir 设置当前账号专用的可继承 DACL。
 package state
 
 import (
@@ -78,6 +79,9 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create data_dir: %w", err)
 	}
+	if err := protectStateDirectory(dataDir); err != nil {
+		return nil, err
+	}
 	// 2. 先取 core.lock，确保同一 data_dir 只有一个 Core 打开状态库。
 	lock, err := oslock.TryLock(filepath.Join(dataDir, lockFile))
 	if errors.Is(err, oslock.ErrLocked) {
@@ -112,6 +116,15 @@ func open(ctx context.Context, path string) (*Store, error) {
 		if err := preflight(ctx, path); err != nil {
 			return nil, err
 		}
+	} else {
+		// 主库先以仅当前账号可读写的权限创建，WAL/SHM 由 SQLite 继承保护。
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err != nil {
+			return nil, fmt.Errorf("create state database %q: %w", path, err)
+		}
+		if err := file.Close(); err != nil {
+			return nil, fmt.Errorf("close new state database %q: %w", path, err)
+		}
 	}
 	db, err := gorm.Open(sqlite.Open(path+"?"+pragmas), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
@@ -127,6 +140,9 @@ func open(ctx context.Context, path string) (*Store, error) {
 	if err := s.verify(ctx, fresh); err != nil {
 		_ = connection.Close()
 		return nil, err
+	}
+	if err := checkStatePermissions(path); err != nil {
+		return nil, errors.Join(err, connection.Close())
 	}
 	return s, nil
 }
