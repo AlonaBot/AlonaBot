@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"regexp"
 	"slices"
 	"strings"
@@ -73,16 +74,18 @@ func (r *Router) dispatchCommands(ev *pb.Event) bool {
 						tail = tail[end:]
 					}
 				}
-				invocation, err := commandArgs(route.route.GetCommand().GetParams(), tail)
-				if err != nil {
-					r.log.Debug("command arguments rejected", "plugin_id", entry.PluginID, "route_id", entry.RouteID, "error", err)
-					if route.route.GetCommand().GetUsageMode() != pb.UsageMode_USAGE_MODE_SILENT {
-						r.sendReply(route.candidate, ev, commandUsage(route.route.GetCommand(), prefix), nil)
+				skipped := len(head) - len(tail)
+				bind := func(prepared *pb.Event) (*pb.CommandInvocation, error) {
+					cursor := commandStart(prepared.GetEventPayload().GetMessageCreated().GetChain(), prepared.GetAccountId())
+					cursor.skipText(skipped)
+					invocation, err := commandArgs(route.route.GetCommand().GetParams(), cursor)
+					if err != nil {
+						return nil, err
 					}
-					return false
+					invocation.Path = entry.Path
+					return invocation, nil
 				}
-				invocation.Path = entry.Path
-				return r.invokeCommand(route.candidate, ev, invocation)
+				return r.invokeCommand(route.candidate, ev, bind, prefix)
 			}
 			return false
 		}
@@ -120,7 +123,7 @@ func (r *Router) dispatchCommands(ev *pb.Event) bool {
 				}
 			}
 		}
-		if matched && r.permitted(route.candidate, ev) && r.invokeCommand(route.candidate, ev, invocation) {
+		if matched && r.permitted(route.candidate, ev) && r.invokeCommand(route.candidate, ev, func(*pb.Event) (*pb.CommandInvocation, error) { return invocation, nil }, "") {
 			return true
 		}
 	}
@@ -134,25 +137,32 @@ func commandPhase(route commandRoute) int {
 	return 0
 }
 
-// commandHead 只读取连续的开头文本；非文本参数后面的文字不参与路径选择。
-func commandHead(chain *pb.MessageChain, accountID string) string {
-	segments := chain.GetSegments()
-	for len(segments) > 0 {
-		segment := segments[0]
+func commandStart(chain *pb.MessageChain, accountID string) argumentCursor {
+	cursor := argumentCursor{segments: chain.GetSegments()}
+	for cursor.segment < len(cursor.segments) {
+		segment := cursor.segments[cursor.segment]
 		if segment.GetReference() != nil || (segment.GetMention() != nil && segment.GetMention().GetExternalUserId() == accountID) || (segment.GetText() != nil && strings.TrimSpace(segment.GetText().GetText()) == "") {
-			segments = segments[1:]
+			cursor.segment++
 			continue
 		}
 		break
 	}
+	cursor.trimSpace()
+	return cursor
+}
+
+// commandHead 只读取连续的开头文本；非文本参数后面的文字不参与路径选择。
+func commandHead(chain *pb.MessageChain, accountID string) string {
+	cursor := commandStart(chain, accountID)
 	var head strings.Builder
-	for _, segment := range segments {
+	for _, segment := range cursor.segments[cursor.segment:] {
 		if segment.GetText() == nil {
 			break
 		}
-		head.WriteString(segment.GetText().GetText())
+		head.WriteString(segment.GetText().GetText()[cursor.offset:])
+		cursor.offset = 0
 	}
-	return strings.TrimLeftFunc(head.String(), unicode.IsSpace)
+	return head.String()
 }
 
 func (r *Router) commandTokens(text string, ev *pb.Event) ([]string, string) {
@@ -220,14 +230,21 @@ func foldText(text string) string {
 	}, text)
 }
 
-func (r *Router) invokeCommand(c candidate, ev *pb.Event, invocation *pb.CommandInvocation) bool {
+func (r *Router) invokeCommand(c candidate, ev *pb.Event, bind func(*pb.Event) (*pb.CommandInvocation, error), prefix string) bool {
 	if r.ctx.Err() != nil || !c.plugin.Activated() {
 		return false
 	}
 	trace := make([]byte, traceIDBytes)
 	rand.Read(trace)
 	log := r.log.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace))
-	response, callError := r.call(c, ev, invocation, trace)
+	response, callError := r.call(c, ev, bind, trace)
+	if errors.Is(callError, errCommandArguments) {
+		log.Debug("command arguments rejected", "error", callError)
+		if c.route.GetCommand().GetUsageMode() != pb.UsageMode_USAGE_MODE_SILENT {
+			r.sendReply(c, ev, commandUsage(c.route.GetCommand(), prefix), trace)
+		}
+		return false
+	}
 	if callError != nil {
 		log.Warn("command handler call failed", "error", callError)
 	}

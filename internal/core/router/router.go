@@ -302,7 +302,7 @@ func (r *Router) current(c candidate) bool {
 	return r.ctx.Err() == nil && r.plugins[c.pluginID] == c.pluginSession && c.plugin.Activated()
 }
 
-func (r *Router) call(c candidate, ev *pb.Event, command *pb.CommandInvocation, trace []byte) (wire.Response, error) {
+func (r *Router) call(c candidate, ev *pb.Event, bind func(*pb.Event) (*pb.CommandInvocation, error), trace []byte) (wire.Response, error) {
 	// 1. prepare 在锁外执行，仍使用原始事件给各接收 Session 分别签发。
 	r.mu.Lock()
 	current := r.current(c)
@@ -316,6 +316,15 @@ func (r *Router) call(c candidate, ev *pb.Event, command *pb.CommandInvocation, 
 		prepared, err = r.prepare(ev, c.caller)
 		if err != nil {
 			return wire.Response{}, fmt.Errorf("prepare handler event: %w", err)
+		}
+	}
+	// 参数从接收方事件绑定，使媒体令牌与该 Session 的事件授权一致。
+	var command *pb.CommandInvocation
+	if bind != nil {
+		var err error
+		command, err = bind(prepared)
+		if err != nil {
+			return wire.Response{}, fmt.Errorf("%w: %w", errCommandArguments, err)
 		}
 	}
 	request := &pb.HandlerRequest{RouteId: c.route.GetRouteId(), Event: prepared, Command: command, Context: &pb.InvocationContext{Actor: ev.GetActor(), DefaultTarget: ev.GetTarget()}}
