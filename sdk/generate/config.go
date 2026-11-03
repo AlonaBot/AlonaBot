@@ -18,7 +18,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/sdk/config"
 	"github.com/google/jsonschema-go/jsonschema"
 )
@@ -141,7 +140,7 @@ func (s *scan) configSchema(ctx context.Context, list *exec.Cmd) error {
 	b := &configBuilder{
 		scan: s, sizes: i.sizes, active: make(map[types.Type]bool),
 		fields: make(map[*jsonschema.Schema]types.Type), bounds: make(map[*jsonschema.Schema][2]json.Number),
-		unexported: make(map[*jsonschema.Schema]types.Type),
+		unexported: make(map[*jsonschema.Schema]types.Type), positions: make(map[*jsonschema.Schema]token.Pos),
 	}
 	for _, entry := range []struct{ path, name string }{
 		{"encoding/json", "Marshaler"}, {"encoding/json", "Unmarshaler"},
@@ -153,8 +152,12 @@ func (s *scan) configSchema(ctx context.Context, list *exec.Cmd) error {
 		}
 		b.codecs = append(b.codecs, configCodec{entry.path + "." + entry.name, dependency.Scope().Lookup(entry.name).Type().Underlying().(*types.Interface)})
 	}
-	schema := b.schema(pkg.Scope().Lookup(declaration.name).Type(), declaration.pos, "config")
-	if schema == nil || len(s.result.Diagnostics) != 0 {
+	schema := b.schema(pkg.Scope().Lookup(declaration.name).Type(), declaration.pos)
+	if schema == nil {
+		return nil
+	}
+	b.conditions(schema)
+	if len(s.result.Diagnostics) != 0 {
 		return nil
 	}
 	schema.Schema = configSchemaDraft
@@ -181,9 +184,10 @@ type configBuilder struct {
 	fields     map[*jsonschema.Schema]types.Type     // 默认值按源码字段类型检查，包含匿名展开后的属性。
 	bounds     map[*jsonschema.Schema][2]json.Number // 库的 float64 字段无法保存的精确整数端点。
 	unexported map[*jsonschema.Schema]types.Type     // 默认对象访问属性时无法设置的匿名指针。
+	positions  map[*jsonschema.Schema]token.Pos      // 显示条件在整棵树完成后校验，保留原字段位置。
 }
 
-func (b *configBuilder) schema(fieldType types.Type, pos token.Pos, path string) *jsonschema.Schema {
+func (b *configBuilder) schema(fieldType types.Type, pos token.Pos) *jsonschema.Schema {
 	fieldType = types.Unalias(fieldType)
 	// json.Number 由标准库特殊编解码，底层 string 无法描述它的 JSON 数值语义。
 	if named, ok := fieldType.(*types.Named); ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == "encoding/json" && named.Obj().Name() == "Number" {
@@ -225,7 +229,7 @@ func (b *configBuilder) schema(fieldType types.Type, pos token.Pos, path string)
 			return &jsonschema.Schema{Type: "number"}
 		}
 	case *types.Pointer:
-		schema := b.schema(underlying.Elem(), pos, path)
+		schema := b.schema(underlying.Elem(), pos)
 		if schema == nil {
 			return nil
 		}
@@ -239,7 +243,7 @@ func (b *configBuilder) schema(fieldType types.Type, pos token.Pos, path string)
 			b.scan.diagnostic(pos, "unsupported config type "+fieldType.String())
 			return nil
 		}
-		items := b.schema(underlying.Elem(), pos, path)
+		items := b.schema(underlying.Elem(), pos)
 		if items != nil {
 			return &jsonschema.Schema{Type: "array", Items: items}
 		}
@@ -252,13 +256,13 @@ func (b *configBuilder) schema(fieldType types.Type, pos token.Pos, path string)
 		if b.customCodec(underlying.Key(), pos) {
 			return nil
 		}
-		values := b.schema(underlying.Elem(), pos, path)
+		values := b.schema(underlying.Elem(), pos)
 		if values != nil {
 			return &jsonschema.Schema{Type: "object", AdditionalProperties: values}
 		}
 		return nil
 	case *types.Struct:
-		return b.structure(underlying, path)
+		return b.structure(underlying)
 	}
 	b.scan.diagnostic(pos, "unsupported config type "+fieldType.String())
 	return nil
@@ -309,7 +313,7 @@ func (b *configBuilder) customCodec(fieldType types.Type, pos token.Pos) bool {
 	return false
 }
 
-func (b *configBuilder) structure(structure *types.Struct, path string) *jsonschema.Schema {
+func (b *configBuilder) structure(structure *types.Struct) *jsonschema.Schema {
 	schema := &jsonschema.Schema{Type: "object", Properties: make(map[string]*jsonschema.Schema)}
 	for index := range structure.NumFields() {
 		field := structure.Field(index)
@@ -328,6 +332,11 @@ func (b *configBuilder) structure(structure *types.Struct, path string) *jsonsch
 		if err != nil {
 			b.scan.diagnostic(field.Pos(), err.Error())
 			continue
+		}
+		for _, key := range []string{"form", "description", "secret", "hidden"} {
+			if _, exists := tags[key]; exists {
+				b.scan.diagnostic(field.Pos(), fmt.Sprintf("standalone %s tag is unsupported; use the config tag", key))
+			}
 		}
 		if tags["json"] == "-" {
 			continue
@@ -349,10 +358,10 @@ func (b *configBuilder) structure(structure *types.Struct, path string) *jsonsch
 		}
 		if field.Embedded() && name == "" {
 			if _, structure := baseType.Underlying().(*types.Struct); structure {
-				child := b.schema(fieldType, field.Pos(), path)
+				child := b.schema(fieldType, field.Pos())
 				if child != nil {
 					// 展开前检查匿名字段本身的标签；输出沿用子字段的元数据。
-					b.metadata(child, fieldType, tags, path, field.Pos())
+					b.metadata(child, fieldType, tags, field.Pos())
 					for _, key := range child.PropertyOrder {
 						if !field.Exported() && indirect {
 							b.unexported[child.Properties[key]] = baseType
@@ -367,13 +376,13 @@ func (b *configBuilder) structure(structure *types.Struct, path string) *jsonsch
 		if name == "" {
 			name = field.Name()
 		}
-		child := b.schema(fieldType, field.Pos(), path+"."+name)
+		child := b.schema(fieldType, field.Pos())
 		if child != nil {
 			b.fields[child] = fieldType
 			if !field.Exported() && indirect {
 				b.unexported[child] = baseType
 			}
-			if b.metadata(child, fieldType, tags, path+"."+name, field.Pos()) {
+			if b.metadata(child, fieldType, tags, field.Pos()) {
 				schema.Required = append(schema.Required, name)
 			}
 			b.property(schema, name, child, field.Pos())
@@ -383,6 +392,10 @@ func (b *configBuilder) structure(structure *types.Struct, path string) *jsonsch
 }
 
 func (b *configBuilder) property(schema *jsonschema.Schema, name string, child *jsonschema.Schema, pos token.Pos) {
+	switch name {
+	case "label", "description", "labels", "subtitles":
+		b.scan.diagnostic(pos, fmt.Sprintf("config JSON name %q conflicts with translation override keys", name))
+	}
 	if _, exists := schema.Properties[name]; exists {
 		b.scan.diagnostic(pos, "duplicate config JSON name "+strconv.Quote(name))
 		return
@@ -426,40 +439,43 @@ func configJSONName(name string) bool {
 	return name != ""
 }
 
-// configForm 用 JSON 解码器读取 default，保留字符串和容器内的分号。
+// configForm 用 JSON 解码器读取 default，保留字符串和容器内的分号与冒号。
 func configForm(tag string) (map[string]string, error) {
 	form := make(map[string]string)
 	for tag != "" {
-		key, rest, hasValue := strings.Cut(tag, "=")
+		key, rest, hasValue := strings.Cut(tag, ":")
 		if end := strings.IndexByte(tag, ';'); end >= 0 && (!hasValue || end < len(key)) {
 			key, rest, hasValue = tag[:end], tag[end+1:], false
 		} else if !hasValue {
 			rest = ""
 		}
+		if _, exists := form[key]; exists {
+			return nil, fmt.Errorf("duplicate config key %q", key)
+		}
 		switch key {
-		case "required":
+		case "required", "secret", "hidden", "obvious":
 			if hasValue {
-				return nil, fmt.Errorf("form required must be a flag")
+				return nil, fmt.Errorf("config %s must be a flag", key)
 			}
 			form[key], tag = "", rest
 			continue
-		case "label", "widget", "options", "min", "max", "default":
-			if !hasValue {
-				return nil, fmt.Errorf("form %s requires a value", key)
+		case "label", "description", "widget", "options", "labels", "subtitles", "min", "max", "step", "language", "when", "default":
+			if !hasValue || rest == "" || strings.HasPrefix(rest, ";") {
+				return nil, fmt.Errorf("config %s requires a value", key)
 			}
 		default:
-			return nil, fmt.Errorf("unknown form key %q", key)
+			return nil, fmt.Errorf("unknown config key %q", key)
 		}
 		if key == "default" {
 			decoder := json.NewDecoder(strings.NewReader(rest))
 			var value json.RawMessage
 			if err := decoder.Decode(&value); err != nil {
-				return nil, fmt.Errorf("invalid form default: %w", err)
+				return nil, fmt.Errorf("invalid config default: %w", err)
 			}
 			form[key] = string(value)
 			tag = strings.TrimLeft(rest[decoder.InputOffset():], " \t\r\n")
 			if tag != "" && tag[0] != ';' {
-				return nil, fmt.Errorf("expected semicolon after form default: %q", tag)
+				return nil, fmt.Errorf("expected semicolon after config default: %q", tag)
 			}
 			tag = strings.TrimPrefix(tag, ";")
 		} else {
@@ -469,57 +485,85 @@ func configForm(tag string) (map[string]string, error) {
 	return form, nil
 }
 
-func (b *configBuilder) metadata(schema *jsonschema.Schema, fieldType types.Type, tags map[string]string, path string, pos token.Pos) bool {
-	// 1. 每个 JSON 字段都有稳定的翻译路径，标签只覆盖显式声明的元数据。
-	form := map[string]any{"label": path}
-	schema.Description = tags["description"]
-	schema.Extra = map[string]any{config.KeywordI18n: path, config.KeywordForm: form}
-	for _, entry := range []struct{ tag, keyword string }{{"secret", config.KeywordSecret}, {"hidden", config.KeywordHidden}} {
-		switch tags[entry.tag] {
-		case "", "false":
-		case "true":
-			if entry.tag == "secret" && !configSecretType(fieldType) {
-				b.scan.diagnostic(pos, "secret requires string or *string")
-			}
-			schema.Extra[entry.keyword] = true
-		default:
-			b.scan.diagnostic(pos, fmt.Sprintf("invalid %s tag %q: want true or false", entry.tag, tags[entry.tag]))
-		}
-	}
-	values, err := configForm(tags["form"])
+func (b *configBuilder) metadata(schema *jsonschema.Schema, fieldType types.Type, tags map[string]string, pos token.Pos) bool {
+	// 1. 只输出显式元数据；翻译路径由表单从 Schema 的嵌套位置推导。
+	values, err := configForm(tags["config"])
 	if err != nil {
 		b.scan.diagnostic(pos, err.Error())
 		return false
 	}
-	if label, ok := values["label"]; ok {
-		form["label"] = label
-	}
-	if widget, ok := values["widget"]; ok {
-		basic := configBasic(fieldType)
-		valid := false
-		if basic != nil {
-			switch widget {
-			case "text", "password", "textarea":
-				valid = basic.Info()&types.IsString != 0
-			case "number":
-				valid = basic.Info()&(types.IsInteger|types.IsFloat) != 0
-			case "switch":
-				valid = basic.Info()&types.IsBoolean != 0
-			case "select":
-				valid = basic.Info()&(types.IsString|types.IsInteger|types.IsFloat) != 0
+	form := make(map[string]any)
+	schema.Extra = map[string]any{config.KeywordForm: form}
+	schema.Description = values["description"]
+	for _, entry := range []struct{ tag, keyword string }{{"secret", config.KeywordSecret}, {"hidden", config.KeywordHidden}} {
+		if _, exists := values[entry.tag]; exists {
+			if entry.tag == "secret" && !configSecretType(fieldType) {
+				b.scan.diagnostic(pos, "secret requires string or *string")
 			}
+			schema.Extra[entry.keyword] = true
+		}
+	}
+	for _, key := range []string{"label", "widget", "language", "when"} {
+		if value, exists := values[key]; exists {
+			form[key] = value
+		}
+	}
+	if _, exists := values["obvious"]; exists {
+		form["obvious"] = true
+	}
+	// 多选的取值类型与 Schema 来自 slice 元素，控件和数字边界仍属于字段本身。
+	optionType, optionSchema := fieldType, schema
+	for {
+		pointer, ok := optionType.Underlying().(*types.Pointer)
+		if !ok {
+			break
+		}
+		optionType = pointer.Elem()
+	}
+	if slice, ok := optionType.Underlying().(*types.Slice); ok {
+		optionType, optionSchema = slice.Elem(), schema.Items
+	}
+	basic := configBasic(fieldType)
+	if widget, ok := values["widget"]; ok {
+		valid := false
+		switch widget {
+		case "select":
+			choice := configBasic(optionType)
+			valid = choice != nil && choice.Info()&(types.IsString|types.IsInteger|types.IsFloat) != 0
+			if _, exists := values["options"]; !exists {
+				b.scan.diagnostic(pos, "select widget requires options")
+			}
+		case "text", "password", "textarea", "code":
+			valid = basic != nil && basic.Info()&types.IsString != 0
+		case "number", "slider":
+			valid = basic != nil && basic.Info()&(types.IsInteger|types.IsFloat) != 0
+		case "switch":
+			valid = basic != nil && basic.Info()&types.IsBoolean != 0
 		}
 		if !valid {
 			b.scan.diagnostic(pos, fmt.Sprintf("widget %q is incompatible with %s", widget, fieldType))
 		}
-		form["widget"] = widget
+		if widget == "slider" {
+			for _, key := range []string{"min", "max"} {
+				if _, exists := values[key]; !exists {
+					b.scan.diagnostic(pos, fmt.Sprintf("slider widget requires %s", key))
+				}
+			}
+		}
+		if widget == "code" {
+			if _, exists := values["language"]; !exists {
+				form["language"] = "json"
+			}
+		}
+	}
+	if _, exists := values["language"]; exists && values["widget"] != "code" {
+		b.scan.diagnostic(pos, "language requires the code widget")
 	}
 	// 2. 表单选项与边界保留数值原文；默认值按十进制位数和有效数字精确比较。
-	for _, key := range []string{"min", "max"} {
+	for _, key := range []string{"min", "max", "step"} {
 		if raw, ok := values[key]; ok {
 			value, err := configJSON(raw)
 			number, numeric := value.(json.Number)
-			basic := configBasic(fieldType)
 			if err != nil {
 				b.scan.diagnostic(pos, fmt.Sprintf("form %s must be a JSON number: %q: %v", key, raw, err))
 				continue
@@ -544,43 +588,36 @@ func (b *configBuilder) metadata(schema *jsonschema.Schema, fieldType types.Type
 		b.scan.diagnostic(pos, "form min exceeds max")
 	}
 	if options, ok := values["options"]; ok {
-		basic := configBasic(fieldType)
-		if basic == nil || basic.Info()&(types.IsString|types.IsInteger|types.IsFloat) == 0 {
-			b.scan.diagnostic(pos, "form options require a string or numeric field")
+		choice := configBasic(optionType)
+		if choice == nil || choice.Info()&(types.IsString|types.IsInteger|types.IsFloat) == 0 {
+			b.scan.diagnostic(pos, "form options require a string or numeric field or slice element")
 		} else {
 			var choices []any
-			icons := make(map[string]string)
 			for _, option := range strings.Split(options, "|") {
-				value, icon, hasIcon := strings.Cut(option, "@")
-				var choice any = value
-				if basic.Info()&types.IsString == 0 {
-					choice, err = configJSON(value)
-					if _, numeric := choice.(json.Number); err == nil && !numeric {
-						err = fmt.Errorf("want a JSON number")
-					}
-					if err == nil {
-						err = b.defaultValue(fieldType, schema, choice)
-					}
-					if err != nil {
-						b.scan.diagnostic(pos, fmt.Sprintf("invalid numeric form option %q: %v", value, err))
-						continue
-					}
+				value, err := b.literal(optionType, optionSchema, option)
+				if err != nil {
+					b.scan.diagnostic(pos, fmt.Sprintf("invalid form option %q: %v", option, err))
+					continue
 				}
-				choices = append(choices, choice)
-				if hasIcon {
-					if err := b.icon(icon); err != nil {
-						b.scan.diagnostic(pos, err.Error())
-					} else {
-						icons[value] = icon
-					}
-				}
+				choices = append(choices, value)
 			}
 			form["options"] = choices
-			if len(icons) != 0 {
-				form["option_icons"] = icons
-			}
 		}
 	}
+	for _, key := range []string{"labels", "subtitles"} {
+		if raw, ok := values[key]; ok {
+			labels := strings.Split(raw, "|")
+			options, _ := form["options"].([]any)
+			if len(labels) > len(options) {
+				b.scan.diagnostic(pos, fmt.Sprintf("config %s has more entries than options", key))
+			}
+			form[key] = labels
+		}
+	}
+	if len(form) == 0 {
+		delete(schema.Extra, config.KeywordForm)
+	}
+	b.positions[schema] = pos
 	// 3. 源码类型检查补上库的 float64 默认值校验无法识别的整数越界。
 	if raw, ok := values["default"]; ok {
 		value, err := configJSON(raw)
@@ -595,6 +632,67 @@ func (b *configBuilder) metadata(schema *jsonschema.Schema, fieldType types.Type
 	}
 	_, required := values["required"]
 	return required
+}
+
+// literal 按源码标量类型解析标签值；字符串原样保留，数字与布尔使用 JSON 字面量。
+func (b *configBuilder) literal(fieldType types.Type, schema *jsonschema.Schema, raw string) (any, error) {
+	basic := configBasic(fieldType)
+	if basic == nil {
+		return nil, fmt.Errorf("expected a scalar config field, got %s", fieldType)
+	}
+	var value any = raw
+	var err error
+	if basic.Info()&types.IsString == 0 {
+		value, err = configJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		if value == nil {
+			return nil, fmt.Errorf("want %s, got null", fieldType)
+		}
+	}
+	if err := b.defaultValue(fieldType, schema, value); err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+// conditions 在完整 JSON 对象上解析显示条件，因此支持后声明和匿名展开的兄弟字段。
+func (b *configBuilder) conditions(schema *jsonschema.Schema) {
+	for _, name := range schema.PropertyOrder {
+		child := schema.Properties[name]
+		form, _ := child.Extra[config.KeywordForm].(map[string]any)
+		if raw, ok := form["when"].(string); ok {
+			conditions := make(map[string]any)
+			for _, condition := range strings.Split(raw, ",") {
+				key, value, paired := strings.Cut(condition, "=")
+				if !paired {
+					b.scan.diagnostic(b.positions[child], fmt.Sprintf("invalid config when condition %q: expected field=value", condition))
+					continue
+				}
+				sibling, exists := schema.Properties[key]
+				if !exists {
+					b.scan.diagnostic(b.positions[child], fmt.Sprintf("config when references unknown sibling field %q", key))
+					continue
+				}
+				// when 仅比较取值类型，不套用兄弟字段的表单选项或数字边界。
+				parsed, err := b.literal(b.fields[sibling], &jsonschema.Schema{}, value)
+				if err != nil {
+					b.scan.diagnostic(b.positions[child], fmt.Sprintf("invalid config when value for %q: %v", key, err))
+					continue
+				}
+				conditions[key] = parsed
+			}
+			form["when"] = conditions
+		}
+		b.conditions(child)
+	}
+	if schema.Items != nil {
+		b.conditions(schema.Items)
+	}
+	if schema.AdditionalProperties != nil {
+		b.conditions(schema.AdditionalProperties)
+	}
 }
 
 func configBasic(fieldType types.Type) *types.Basic {
@@ -614,40 +712,6 @@ func configSecretType(fieldType types.Type) bool {
 	}
 	basic, ok := fieldType.Underlying().(*types.Basic)
 	return ok && basic.Info()&types.IsString != 0
-}
-
-func (b *configBuilder) icon(path string) error {
-	if err := manifest.ValidateRelPath(path); err != nil {
-		return fmt.Errorf("invalid option icon path %q: %w", path, err)
-	}
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".svg", ".png", ".webp":
-	default:
-		return fmt.Errorf("unsupported option icon extension: %q", path)
-	}
-	root, err := filepath.EvalSymlinks(b.scan.entry.Module.Dir)
-	if err != nil {
-		return fmt.Errorf("resolve option icon module: %w", err)
-	}
-	real, err := filepath.EvalSymlinks(filepath.Join(root, path))
-	if err != nil {
-		return fmt.Errorf("resolve option icon %q: %w", path, err)
-	}
-	relative, err := filepath.Rel(root, real)
-	if err != nil {
-		return fmt.Errorf("resolve option icon relative path %q: %w", path, err)
-	}
-	if !filepath.IsLocal(relative) {
-		return fmt.Errorf("option icon escapes module directory: %q", path)
-	}
-	file, err := os.Stat(real)
-	if err != nil {
-		return fmt.Errorf("stat option icon %q: %w", path, err)
-	}
-	if !file.Mode().IsRegular() {
-		return fmt.Errorf("option icon must be a regular file: %q", path)
-	}
-	return nil
 }
 
 func configJSON(raw string) (any, error) {
@@ -812,11 +876,18 @@ func (b *configBuilder) defaultValue(fieldType types.Type, schema *jsonschema.Sc
 		if !ok {
 			return fmt.Errorf("want %s, got %T", fieldType, value)
 		}
+		form, _ := schema.Extra[config.KeywordForm].(map[string]any)
 		for index, item := range items {
 			if err := b.defaultValue(underlying.Elem(), schema.Items, item); err != nil {
 				return fmt.Errorf("item %d: %w", index, err)
 			}
+			if choices, ok := form["options"].([]any); ok {
+				if err := configChoice(item, choices); err != nil {
+					return fmt.Errorf("item %d: %w", index, err)
+				}
+			}
 		}
+		return nil
 	case *types.Map, *types.Struct:
 		object, ok := value.(configObject)
 		if !ok {
@@ -868,16 +939,20 @@ func (b *configBuilder) defaultValue(fieldType types.Type, schema *jsonschema.Sc
 		}
 	}
 	if choices, ok := form["options"].([]any); ok {
-		for _, choice := range choices {
-			if number, ok := value.(json.Number); ok {
-				if configCompare(number, choice.(json.Number)) == 0 {
-					return nil
-				}
-			} else if value == choice {
-				return nil
-			}
-		}
-		return fmt.Errorf("%v is not in form options", value)
+		return configChoice(value, choices)
 	}
 	return nil
+}
+
+func configChoice(value any, choices []any) error {
+	for _, choice := range choices {
+		if number, ok := value.(json.Number); ok {
+			if configCompare(number, choice.(json.Number)) == 0 {
+				return nil
+			}
+		} else if value == choice {
+			return nil
+		}
+	}
+	return fmt.Errorf("%v is not in form options", value)
 }

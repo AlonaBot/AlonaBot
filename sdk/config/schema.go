@@ -16,10 +16,8 @@ const (
 	KeywordSecret = "x-alonabot-secret"
 	// KeywordHidden 标记表单中隐藏的配置字段。
 	KeywordHidden = "x-alonabot-hidden"
-	// KeywordForm 承载 label、widget、options、option_icons、min、max 表单元数据。
+	// KeywordForm 承载字段文案、控件、选项、数字边界和显示条件等表单元数据。
 	KeywordForm = "x-alonabot-form"
-	// KeywordI18n 保存字段的 config.<json 路径> 翻译路径。
-	KeywordI18n = "x-alonabot-i18n"
 )
 
 // MarshalSchema 输出紧凑的规范 JSON：properties 遵循 PropertyOrder，其余对象键排序。
