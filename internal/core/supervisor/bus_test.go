@@ -103,7 +103,7 @@ func testBusProcesses(t *testing.T, binary string, stdio bool) {
 		}
 	}()
 	values := tune.Defaults()
-	routes := router.New(output.Logger(), values.DispatchQueueEvents, nil, nil, nil)
+	routes := router.New(output.Logger(), values.DispatchQueueEvents, nil, nil, nil, nil)
 	defer routes.Close()
 	services := broker.New(routes, output.Logger(), values.RequestTimeout)
 	mux := router.NewMux()

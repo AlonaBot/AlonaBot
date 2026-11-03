@@ -66,6 +66,7 @@ type Router struct {
 	adapters *adapter.Registry
 	send     ServiceFunc
 	prepare  func(*pb.Event, Caller) (*pb.Event, error)
+	prefixes func(adapterInstanceID string) []string
 	matches  map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
 	log      *slog.Logger
 	queue    chan *pb.Event
@@ -84,9 +85,13 @@ type Router struct {
 // queueEvents 由装配处传入 tune.Values.DispatchQueueEvents。
 // adapters 提供账号用户名，send 接入 message.Service.Send 处理 usage 与自动回复。
 // prepare 在每次 Handler 调用前改写接收 Session 的事件；nil 时原样派发。
-func New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send ServiceFunc, prepare func(*pb.Event, Caller) (*pb.Event, error)) *Router {
+// prefixes 按实例提供非空的前缀列表；nil 时所有实例使用 ["/"]。
+func New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send ServiceFunc, prepare func(*pb.Event, Caller) (*pb.Event, error), prefixes func(adapterInstanceID string) []string) *Router {
+	if prefixes == nil {
+		prefixes = func(string) []string { return []string{"/"} }
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Router{adapters: adapters, send: send, prepare: prepare, matches: make(map[string][]commandRoute), log: log, queue: make(chan *pb.Event, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]*pluginSession), inFlight: make(map[inFlightKey]struct{}), commands: &CommandIndex{}}
+	return &Router{adapters: adapters, send: send, prepare: prepare, prefixes: prefixes, matches: make(map[string][]commandRoute), log: log, queue: make(chan *pb.Event, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]*pluginSession), inFlight: make(map[inFlightKey]struct{}), commands: &CommandIndex{}}
 }
 
 // Attach 注册一个接收派发的插件并重建命令索引；相同插件 ID 替换为新实例。

@@ -98,7 +98,7 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 			mux.Handle(wire.ServiceSend, sender.Send)
 			caller := router.NewCaller(spec.PluginID, spec.GenerationID)
 			spec.Handler = mux.For(caller)
-			events := router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send, nil)
+			events := router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send, nil, nil)
 			services := broker.New(events, output.Logger(), values.RequestTimeout)
 			serviceParents := make(chan uint64, 1)
 			mux.Forward(func(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response {

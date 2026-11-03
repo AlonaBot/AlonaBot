@@ -53,7 +53,8 @@ func (r *Router) dispatchCommands(ev *pb.Event) bool {
 		content.WriteString(segment.GetText().GetText())
 	}
 	text := content.String()
-	if tokens := r.commandTokens(text, ev); len(tokens) != 0 {
+	head := commandHead(ev.GetEventPayload().GetMessageCreated().GetChain(), ev.GetAccountId())
+	if tokens, prefix := r.commandTokens(head, ev); len(tokens) != 0 {
 		if entry, consumed, ok := index.Lookup(tokens); ok {
 			for _, route := range routes {
 				if route.pluginID != entry.PluginID || route.route.GetRouteId() != entry.RouteID {
@@ -62,7 +63,7 @@ func (r *Router) dispatchCommands(ev *pb.Event) bool {
 				if !route.plugin.Activated() || !r.permitted(route.candidate, ev) {
 					return false
 				}
-				tail := text
+				tail := strings.TrimPrefix(head, prefix)
 				for range consumed {
 					tail = strings.TrimLeftFunc(tail, unicode.IsSpace)
 					end := strings.IndexFunc(tail, unicode.IsSpace)
@@ -76,7 +77,7 @@ func (r *Router) dispatchCommands(ev *pb.Event) bool {
 				if err != nil {
 					r.log.Debug("command arguments rejected", "plugin_id", entry.PluginID, "route_id", entry.RouteID, "error", err)
 					if route.route.GetCommand().GetUsageMode() != pb.UsageMode_USAGE_MODE_SILENT {
-						r.sendReply(route.candidate, ev, commandUsage(route.route.GetCommand()), nil)
+						r.sendReply(route.candidate, ev, commandUsage(route.route.GetCommand(), prefix), nil)
 					}
 					return false
 				}
@@ -133,24 +134,59 @@ func commandPhase(route commandRoute) int {
 	return 0
 }
 
-func (r *Router) commandTokens(text string, ev *pb.Event) []string {
-	if !strings.HasPrefix(text, "/") {
-		return nil
+// commandHead 只读取连续的开头文本；非文本参数后面的文字不参与路径选择。
+func commandHead(chain *pb.MessageChain, accountID string) string {
+	segments := chain.GetSegments()
+	for len(segments) > 0 {
+		segment := segments[0]
+		if segment.GetReference() != nil || (segment.GetMention() != nil && segment.GetMention().GetExternalUserId() == accountID) || (segment.GetText() != nil && strings.TrimSpace(segment.GetText().GetText()) == "") {
+			segments = segments[1:]
+			continue
+		}
+		break
 	}
-	tokens := strings.Fields(text)
-	tokens[0] = strings.TrimPrefix(tokens[0], "/")
+	var head strings.Builder
+	for _, segment := range segments {
+		if segment.GetText() == nil {
+			break
+		}
+		head.WriteString(segment.GetText().GetText())
+	}
+	return strings.TrimLeftFunc(head.String(), unicode.IsSpace)
+}
+
+func (r *Router) commandTokens(text string, ev *pb.Event) ([]string, string) {
+	prefix := ""
+	matched := false
+	for _, candidate := range r.prefixes(ev.GetAdapterInstanceId()) {
+		if strings.HasPrefix(text, candidate) && (!matched || len(candidate) > len(prefix)) {
+			prefix, matched = candidate, true
+		}
+	}
+	if !matched {
+		return nil, ""
+	}
+	remainder := strings.TrimPrefix(text, prefix)
+	// 路径紧接前缀，保留 / cmd 不被识别为 /cmd 的既有行为。
+	if remainder != strings.TrimLeftFunc(remainder, unicode.IsSpace) {
+		return nil, ""
+	}
+	tokens := strings.Fields(remainder)
+	if len(tokens) == 0 {
+		return nil, ""
+	}
 	if name, user, hasName := strings.Cut(tokens[0], "@"); hasName {
 		instance, ok := r.adapters.Get(ev.GetTarget().GetAdapterInstanceId())
 		if !ok {
-			return nil
+			return nil, ""
 		}
 		named, ok := instance.(adapter.Named)
 		if !ok || user == "" || !strings.EqualFold(user, named.AccountName()) {
-			return nil
+			return nil, ""
 		}
 		tokens[0] = name
 	}
-	return tokens
+	return tokens, prefix
 }
 
 func matchPattern(text, pattern string, match pb.CommandMatch, ignoreCase bool) bool {
@@ -228,32 +264,35 @@ func (r *Router) sendReply(c candidate, ev *pb.Event, chain *pb.MessageChain, tr
 	}
 }
 
-func commandUsage(spec *pb.CommandSpec) *pb.MessageChain {
-	text := spec.GetCustomUsage()
-	if text == "" {
-		// shortcut: usage 暂用英文，Core 文案目录接入后替换。
-		text = "Usage: /" + strings.Join(spec.GetPath(), " ")
-		for _, alias := range spec.GetAliases() {
-			text += " | /" + strings.Join(alias.GetPath(), " ")
+func commandUsage(spec *pb.CommandSpec, prefix string) *pb.MessageChain {
+	// shortcut: usage_key 暂按缺省 usage 发送，T-08.8 文案目录接入后查找该键。
+	text := "Usage: " + prefix + strings.Join(spec.GetPath(), " ")
+	for _, alias := range spec.GetAliases() {
+		text += " | " + prefix + strings.Join(alias.GetPath(), " ")
+	}
+	for _, param := range spec.GetParams() {
+		label := param.GetName()
+		switch param.GetType() {
+		case pb.ParamType_PARAM_TYPE_INT:
+			label += ":int"
+		case pb.ParamType_PARAM_TYPE_FLOAT:
+			label += ":float"
+		case pb.ParamType_PARAM_TYPE_BOOL:
+			label += ":bool"
+		case pb.ParamType_PARAM_TYPE_USER:
+			label += ":user"
+		case pb.ParamType_PARAM_TYPE_IMAGE:
+			label += ":image"
+		case pb.ParamType_PARAM_TYPE_MESSAGE:
+			label += ":message"
 		}
-		for _, param := range spec.GetParams() {
-			label := param.GetName()
-			switch param.GetType() {
-			case pb.ParamType_PARAM_TYPE_INT:
-				label += ":int"
-			case pb.ParamType_PARAM_TYPE_FLOAT:
-				label += ":float"
-			case pb.ParamType_PARAM_TYPE_BOOL:
-				label += ":bool"
-			}
-			if param.GetRaw() {
-				label += "..."
-			}
-			if param.GetRequired() {
-				text += " <" + label + ">"
-			} else {
-				text += " [" + label + "]"
-			}
+		if param.GetRaw() {
+			label += "..."
+		}
+		if param.GetRequired() {
+			text += " <" + label + ">"
+		} else {
+			text += " [" + label + "]"
 		}
 	}
 	return &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: text}}}}}

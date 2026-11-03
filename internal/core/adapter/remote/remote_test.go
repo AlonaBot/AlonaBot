@@ -561,7 +561,7 @@ func TestRemoteMediaRead(t *testing.T) {
 	p := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: sink, Log: slog.New(slog.NewTextHandler(logs, nil)), RegisterIncoming: mediaStore.RegisterIncoming})
 	mux := router.NewMux()
 	p.Services(mux)
-	dispatch := router.New(slog.New(slog.NewTextHandler(logs, nil)), 1, registry, nil, mediaStore.PrepareIncoming)
+	dispatch := router.New(slog.New(slog.NewTextHandler(logs, nil)), 1, registry, nil, mediaStore.PrepareIncoming, nil)
 	t.Cleanup(dispatch.Close)
 	mediaStore.AddReadServices(mux, registry, dispatch, store.AllowedAdapterInstances)
 	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
