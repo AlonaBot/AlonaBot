@@ -162,6 +162,7 @@ func TestConfigSchemaIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	const candidate = `{"name":"custom","unknown":true,"nested":{"extra":1},"providers":[{"extra":2}],"lookup":{"first":{"extra":3}}}`
+	const wantCandidate = `{"lookup":{"first":{"extra":3}},"name":"custom","nested":{"extra":1},"providers":[{"extra":2}],"unknown":true}`
 	var value any
 	if err := json.Unmarshal([]byte(candidate), &value); err != nil {
 		t.Fatal(err)
@@ -209,8 +210,8 @@ func TestConfigSchemaIntegration(t *testing.T) {
 		if len(schema) != 0 {
 			hash = config.SchemaHash(schema)
 		}
-		if !bytes.Equal(registration.ConfigSchemaHash, hash) || registration.CandidateConfigJson != candidate || registration.CandidateConfigVersion != 7 || registration.Migration.GetMode() != pb.MigrationMode_MIGRATION_MODE_NONE {
-			t.Fatalf("REGISTER = %s, want hash %x and unchanged candidate/version", output, hash)
+		if !bytes.Equal(registration.ConfigSchemaHash, hash) || registration.CandidateConfigJson != wantCandidate || registration.CandidateConfigVersion != 7 || registration.Migration.GetMode() != pb.MigrationMode_MIGRATION_MODE_NONE {
+			t.Fatalf("REGISTER = %s, want hash %x, canonical candidate and version 7", output, hash)
 		}
 	}
 	checkRegister(result.ConfigSchema)

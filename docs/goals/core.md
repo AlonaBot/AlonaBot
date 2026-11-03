@@ -30,7 +30,7 @@
 | goal-8 | T-03.8 | 按钮、extension 片段与依赖解析 | T-03.2、T-03.7 | 等待前置 |
 | goal-51 | T-03.9 | 消息编辑 | T-03.7 | 等待前置 |
 | goal-87 | T-04.6 | 权限、扩展事件与命令解析的协议和 Core 侧 | T-03.3、T-03.6、T-04.3 | 待派发 |
-| goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 待派发 |
+| goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 已完成 |
 | goal-31 | T-08.4 | 不可变 Secret Store | T-02.3、T-08.1、T-08.2 | 待派发 |
 | goal-90 | T-08.10 | 配置标签统一 | T-08.1 | 待派发 |
 | goal-36 | T-09.1 | 首次管理认证 | T-02.3、T-07.4 | 待派发 |
@@ -1969,7 +1969,7 @@ internal/core/webhost
 
 ### goal-30 · T-08.3 SDK 配置准备顺序
 
-状态：待派发。前置 T-08.1（PR #54）、T-08.2 已合并。goal-28 的符号已按合入代码核对：
+状态：已完成（[PR #73](https://github.com/AlonaBot/AlonaBot/pull/73)），证据见 TEST-MATRIX §3.2。审查期间按授权改写 `sdk/generate/config_test.go` 的候选断言为规范 JSON，并在 `sdk/config` 包文档加入 Prepare 入口；`sdk/session.go` 另把 `PhaseLimits.config_ms` 缺失并入 Bootstrap 预算缺失的 PROTOCOL_ERROR。派发时：前置 T-08.1（PR #54）、T-08.2 已合并。goal-28 的符号已按合入代码核对：
 - `sdk.Generated.ConfigSchema []byte` 是规范 JSON，没有 Config 时为 nil。
 - `config.Config` 只有 `OnLoad(ctx context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)` 一个方法，`config.Base` 的默认实现原样返回 raw。根插件经 `Config() config.Config` 提供配置，`sdk.Base` 返回 nil。
 - 扩展关键字为 `config.KeywordSecret`、`KeywordHidden`、`KeywordForm`、`KeywordI18n`（`x-alonabot-*`）。

@@ -161,13 +161,13 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32, c
 	return r
 }
 
-// prepare 执行准备阶段：配置准备（目前原样透传）→ OnStart（独立 watchdog）→ REGISTER → 等待 PREPARED。
+// prepare 执行准备阶段：配置准备 → OnStart（独立 watchdog）→ REGISTER → 等待 PREPARED。
 // 准备期不能发起业务 RPC。失败时已向 Core 报告 SESSION_ERROR 并关闭连接。
 func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Registration) (*pb.Prepared, error) {
 	sid, boot, minor := ack.GetSessionId(), ack.GetBootstrap(), ack.GetChosenMinor()
 	limits := boot.GetPhaseLimits()
 	// 1. Core 必须下发阶段预算与准备截止时间；缺失时报协议错误，而不是把预算当作 0 误报超时。
-	if limits == nil || limits.GetOnStartMs() == 0 || boot.GetPreparationDeadlineUnixMs() == 0 {
+	if limits == nil || limits.GetConfigMs() == 0 || limits.GetOnStartMs() == 0 || boot.GetPreparationDeadlineUnixMs() == 0 {
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_HELLO_ACK,
 			pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "Bootstrap is missing phase limits or the preparation deadline", nil)
 	}
@@ -178,11 +178,23 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 			pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "Bootstrap is missing valid session limits", nil)
 	}
 
+	// 2. 在 OnStart 之前完成配置迁移、默认值与校验；restart 与恢复均使用 RESUME。
+	configContext, cancelConfig := context.WithTimeout(context.Background(), time.Duration(limits.GetConfigMs())*time.Millisecond)
+	preparedConfig, err := config.Prepare(configContext, root.Config(), generatedFor(root).ConfigSchema,
+		[]byte(boot.GetCandidateConfigJson()), boot.PreviousConfigVersion, boot.GetTargetConfigVersion(),
+		boot.GetDatabaseDescriptor().GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME)
+	cancelConfig()
+	if err != nil {
+		failure := err.(*validate.Error) // Prepare 的失败均携带协议错误码和安全消息。
+		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
+			failure.Code, failure.Message, err)
+	}
+
 	if err := l.http.start(boot); err != nil {
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER, pb.ErrorCode_ERROR_CODE_INTERNAL, "prepare HTTP listener failed", err)
 	}
 
-	// 2. OnStart：用户函数不响应 context 时，由 watchdog 判定失败（Run 随后退出进程）。
+	// 3. OnStart：用户函数不响应 context 时，由 watchdog 判定失败（Run 随后退出进程）。
 	budget := time.Duration(limits.GetOnStartMs()) * time.Millisecond
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	errc := make(chan error, 1)
@@ -212,8 +224,8 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 			pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnStart exceeded its budget", nil)
 	}
 
-	// 3. 发送完整 REGISTER；超过 4 MiB 时报告 RESOURCE_EXHAUSTED。
-	registration := buildRegister(reg, boot.GetCandidateConfigJson(), boot.GetTargetConfigVersion(), generatedFor(root).ConfigSchema)
+	// 4. 发送完整 REGISTER；超过 4 MiB 时报告 RESOURCE_EXHAUSTED。
+	registration := buildRegister(reg, string(preparedConfig.JSON), preparedConfig.Version, generatedFor(root).ConfigSchema)
 	l.http.report(registration)
 	regEnv, err := wire.ControlEnvelope(sid, minor, l.pluginID, pb.FrameKind_FRAME_KIND_REGISTER, registration)
 	if err != nil {
@@ -227,7 +239,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 		return nil, fmt.Errorf("send REGISTER: %w", err)
 	}
 
-	// 4. 在准备截止前等待 PREPARED 或 Core 的 SESSION_ERROR。
+	// 5. 在准备截止前等待 PREPARED 或 Core 的 SESSION_ERROR。
 	deadline := time.UnixMilli(boot.GetPreparationDeadlineUnixMs())
 	stop := withWatchdog(conn, time.Until(deadline))
 	defer stop()
