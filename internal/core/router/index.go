@@ -67,7 +67,8 @@ func (r *Router) Commands() *CommandIndex {
 func (r *Router) rebuildCommands() {
 	// 1. 只收集已激活插件，命令 path 与各 alias 分别参与选择。
 	next := &CommandIndex{paths: make(map[string][]CommandEntry)}
-	for _, plugin := range r.plugins {
+	for _, session := range r.plugins {
+		plugin := session.plugin
 		if !plugin.Activated() {
 			continue
 		}

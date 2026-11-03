@@ -39,3 +39,12 @@ const (
 
 // ServiceBusPublish 指定 Event Bus 的发布准入服务。
 const ServiceBusPublish = "core.bus.publish"
+
+// ServiceAdapterMediaRead 指定 Adapter 平台文件的分块读取服务。
+const ServiceAdapterMediaRead = "adapter.media.read"
+
+// ServiceMediaRead 指定 Core 媒体令牌的分块读取服务。
+const ServiceMediaRead = "core.media.read"
+
+// ServiceMediaGrant 指定 Core 媒体读取权限的受限授权服务。
+const ServiceMediaGrant = "core.media.grant"

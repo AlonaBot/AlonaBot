@@ -22,14 +22,15 @@ type commandRoute struct {
 }
 
 // cacheCommands 在持有 mu 时构建插件路由快照；描述已经过 REGISTER 校验。
-func (r *Router) cacheCommands(p Plugin) {
+func (r *Router) cacheCommands(session *pluginSession) {
+	p := session.plugin
 	var routes []commandRoute
 	for _, route := range p.Routes() {
 		if route.GetKind() != pb.RouteKind_ROUTE_KIND_COMMAND {
 			continue
 		}
 		snapshot := proto.CloneOf(route)
-		next := commandRoute{candidate: candidate{plugin: p, pluginID: p.PluginID(), route: snapshot}}
+		next := commandRoute{candidate: candidate{pluginSession: session, pluginID: p.PluginID(), route: snapshot}}
 		if snapshot.GetCommand().GetMatch() == pb.CommandMatch_COMMAND_MATCH_REGEX {
 			next.regex = regexp.MustCompile(snapshot.GetCommand().GetRegex())
 		}
@@ -190,13 +191,7 @@ func (r *Router) invokeCommand(c candidate, ev *pb.Event, invocation *pb.Command
 	trace := make([]byte, traceIDBytes)
 	rand.Read(trace)
 	log := r.log.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace))
-	request := &pb.HandlerRequest{RouteId: c.route.GetRouteId(), Event: ev, Command: invocation, Context: &pb.InvocationContext{Actor: ev.GetActor(), DefaultTarget: ev.GetTarget()}}
-	encoded, err := proto.Marshal(request)
-	if err != nil {
-		log.Warn("encode command handler request failed", "error", err)
-		return false
-	}
-	response, callError := c.plugin.Call(r.ctx, wire.Request{Target: request.RouteId, TraceID: trace, Attach: &Invocation{PluginID: c.pluginID, Event: ev, DefaultTarget: ev.GetTarget()}, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded}})
+	response, callError := r.call(c, ev, invocation, trace)
 	if callError != nil {
 		log.Warn("command handler call failed", "error", callError)
 	}
@@ -221,7 +216,7 @@ func (r *Router) sendReply(c candidate, ev *pb.Event, chain *pb.MessageChain, tr
 		r.log.Warn("encode reply failed", "error", err)
 		return
 	}
-	response := r.send(r.ctx, Caller{PluginID: c.pluginID}, &wire.Inbound{TraceID: trace, ParentAttach: &Invocation{PluginID: c.pluginID, Event: ev, DefaultTarget: ev.GetTarget()}, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded}})
+	response := r.send(r.ctx, c.caller, &wire.Inbound{TraceID: trace, ParentAttach: &Invocation{PluginID: c.pluginID, Event: ev, DefaultTarget: ev.GetTarget()}, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded}})
 	result := &pb.SendResult{}
 	if err := proto.Unmarshal(response.Payload.Bytes, result); err != nil {
 		r.log.Warn("decode reply result failed", "error", err)

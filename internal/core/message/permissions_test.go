@@ -12,6 +12,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
@@ -39,7 +40,7 @@ func TestSendPermissions(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	service := message.New(registry, policy.New(store))
+	service := message.New(registry, policy.New(store), nil, tune.Defaults().RequestTimeout)
 	original := &pb.Target{AdapterId: "memory", AdapterInstanceId: "a", AccountId: "account-a", ChatId: "original", ThreadId: proto.String("topic")}
 	otherChat := proto.CloneOf(original)
 	otherChat.ChatId = "other"
