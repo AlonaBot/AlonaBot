@@ -6,6 +6,7 @@ package conversation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"unicode/utf8"
 
@@ -47,6 +48,9 @@ func (s *Service) List(ctx context.Context, pluginID string) ([]state.Conversati
 
 // Clear 删除指定插件的指定会话条目。
 func (s *Service) Clear(ctx context.Context, pluginID, key string) error {
+	if !validKey(key) {
+		return errors.New(invalidKeyMessage)
+	}
 	return s.store.ClearConversation(ctx, pluginID, key)
 }
 

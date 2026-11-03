@@ -1,16 +1,21 @@
 package state
 
 import (
+	"cmp"
 	"context"
-	"database/sql"
+	"errors"
 	"math"
+	"slices"
 	"time"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ConversationEntry 保存会话内的连续序号和原样 JSON 条目。
 type ConversationEntry struct {
-	Seq       uint64
-	EntryJSON string
+	Seq       uint64 `gorm:"column:seq;primaryKey;autoIncrement:false"`
+	EntryJSON string `gorm:"column:entry_json"`
 }
 
 // ConversationSummary 汇总一个会话的条目数量、末尾序号和最后追加时间。
@@ -23,19 +28,26 @@ type ConversationSummary struct {
 
 // AppendConversation 在一个事务内按输入顺序追加，返回提交后的末尾序号。
 func (s *Store) AppendConversation(ctx context.Context, pluginID, key string, entries []string) (lastSeq uint64, err error) {
-	err = s.tx(ctx, func(tx *sql.Tx) error {
+	if pluginID == "" {
+		return 0, errEmptyPluginID
+	}
+	if key == "" {
+		return 0, errEmptyConversationKey
+	}
+
+	err = s.tx(ctx, func(tx *gorm.DB) error {
 		// 单连接在事务期间独占，读末尾和写入之间不会穿插其他追加。
-		if err := tx.QueryRowContext(ctx,
-			"SELECT coalesce(max(seq), 0) FROM conversation_entries WHERE plugin_id = ? AND conversation_key = ?",
-			pluginID, key).Scan(&lastSeq); err != nil {
+		var last conversationEntry
+		err := tx.Where(&conversationEntry{PluginID: pluginID, ConversationKey: key}).
+			Order(clause.OrderByColumn{Column: clause.Column{Name: columnSeq}, Desc: true}).Take(&last).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
+		lastSeq = last.Seq
 		createdAt := time.Now().UnixMilli()
 		for _, entry := range entries {
 			lastSeq++
-			if _, err := tx.ExecContext(ctx,
-				"INSERT INTO conversation_entries (plugin_id, conversation_key, seq, entry_json, created_at) VALUES (?, ?, ?, ?, ?)",
-				pluginID, key, lastSeq, entry, createdAt); err != nil {
+			if err := tx.Create(&conversationEntry{ConversationEntry: ConversationEntry{Seq: lastSeq, EntryJSON: entry}, PluginID: pluginID, ConversationKey: key, CreatedAt: createdAt}).Error; err != nil {
 				return err
 			}
 		}
@@ -49,59 +61,74 @@ func (s *Store) AppendConversation(ctx context.Context, pluginID, key string, en
 
 // ListConversation 按序号升序读取 seq >= fromSeq 的条目，至多返回 limit 条。
 func (s *Store) ListConversation(ctx context.Context, pluginID, key string, fromSeq uint64, limit int) ([]ConversationEntry, error) {
+	if pluginID == "" {
+		return nil, errEmptyPluginID
+	}
+	if key == "" {
+		return nil, errEmptyConversationKey
+	}
+
 	// SQLite INTEGER 的序号最大为 MaxInt64，更大的起点没有匹配条目。
 	if fromSeq > math.MaxInt64 {
 		return nil, nil
 	}
-	rows, err := s.db.QueryContext(ctx,
-		"SELECT seq, entry_json FROM conversation_entries WHERE plugin_id = ? AND conversation_key = ? AND seq >= ? ORDER BY seq LIMIT ?",
-		pluginID, key, fromSeq, limit)
-	if err != nil {
+	var entries []ConversationEntry
+	err := s.db.WithContext(ctx).Model(&conversationEntry{}).Where(&conversationEntry{PluginID: pluginID, ConversationKey: key}).
+		Where(clause.Gte{Column: clause.Column{Name: columnSeq}, Value: fromSeq}).
+		Order(clause.OrderByColumn{Column: clause.Column{Name: columnSeq}}).Limit(limit).Find(&entries).Error
+	if err != nil || len(entries) == 0 {
 		return nil, err
 	}
-	defer rows.Close()
-	var entries []ConversationEntry
-	for rows.Next() {
-		var entry ConversationEntry
-		if err := rows.Scan(&entry.Seq, &entry.EntryJSON); err != nil {
-			return nil, err
-		}
-		entries = append(entries, entry)
-	}
-	return entries, rows.Err()
+	return entries, nil
 }
 
 // ClearConversation 删除该插件指定会话的全部条目；不存在时也成功。
 func (s *Store) ClearConversation(ctx context.Context, pluginID, key string) error {
-	_, err := s.db.ExecContext(ctx,
-		"DELETE FROM conversation_entries WHERE plugin_id = ? AND conversation_key = ?", pluginID, key)
-	return err
+	if pluginID == "" {
+		return errEmptyPluginID
+	}
+	if key == "" {
+		return errEmptyConversationKey
+	}
+
+	return s.db.WithContext(ctx).Where(&conversationEntry{PluginID: pluginID, ConversationKey: key}).Delete(&conversationEntry{}).Error
 }
 
 // Conversations 按会话键字典序返回该插件的非空会话摘要。
 func (s *Store) Conversations(ctx context.Context, pluginID string) ([]ConversationSummary, error) {
-	rows, err := s.db.QueryContext(ctx,
-		"SELECT conversation_key, count(*), max(seq), max(created_at) FROM conversation_entries WHERE plugin_id = ? GROUP BY conversation_key ORDER BY conversation_key",
-		pluginID)
-	if err != nil {
+	if pluginID == "" {
+		return nil, errEmptyPluginID
+	}
+
+	var rows []struct {
+		ConversationKey string
+		Seq             uint64
+		CreatedAt       int64
+	}
+	if err := s.db.WithContext(ctx).Model(&conversationEntry{}).
+		Where(&conversationEntry{PluginID: pluginID}).Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var summaries []ConversationSummary
-	for rows.Next() {
-		var summary ConversationSummary
-		var updatedAt int64
-		if err := rows.Scan(&summary.Key, &summary.Entries, &summary.LastSeq, &updatedAt); err != nil {
-			return nil, err
+	byKey := make(map[string]ConversationSummary)
+	for _, row := range rows {
+		summary, exists := byKey[row.ConversationKey]
+		summary.Key = row.ConversationKey
+		summary.Entries++
+		summary.LastSeq = max(summary.LastSeq, row.Seq)
+		if !exists || row.CreatedAt > summary.UpdatedAt.UnixMilli() {
+			summary.UpdatedAt = time.UnixMilli(row.CreatedAt)
 		}
-		summary.UpdatedAt = time.UnixMilli(updatedAt)
+		byKey[row.ConversationKey] = summary
+	}
+	var summaries []ConversationSummary
+	for _, summary := range byKey {
 		summaries = append(summaries, summary)
 	}
-	return summaries, rows.Err()
+	slices.SortFunc(summaries, func(a, b ConversationSummary) int { return cmp.Compare(a.Key, b.Key) })
+	return summaries, nil
 }
 
 // PurgeConversations 删除该插件的全部会话条目。
 func (s *Store) PurgeConversations(ctx context.Context, pluginID string) error {
-	_, err := s.db.ExecContext(ctx, "DELETE FROM conversation_entries WHERE plugin_id = ?", pluginID)
-	return err
+	return s.db.WithContext(ctx).Where(&conversationEntry{PluginID: pluginID}).Delete(&conversationEntry{}).Error
 }
