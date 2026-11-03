@@ -150,6 +150,7 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 					t.Errorf("plugin did not stop cleanly: %+v", stopped)
 				}
 			}()
+			uninstalledRoute := false
 			for _, route := range running.Instance.Routes {
 				var want []string
 				if route.GetKind() == pb.RouteKind_ROUTE_KIND_COMMAND {
@@ -159,9 +160,17 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 					t.Errorf("route %s permissions=%v, want %v", route.GetRouteId(), route.GetRequiredPermissions(), want)
 				}
 				// SDK 的按路由权限 API 尚待接入；这里为 Core 提供对应的静态描述。
-				if route.GetRouteId() == "cmd.rss.guarded" || route.GetRouteId() == "restricted.event" {
+				switch route.GetRouteId() {
+				case "cmd.rss.guarded", "restricted.event", "restricted.text", "restricted.raw":
 					route.RequiredPermissions = []string{"memory.admin"}
+				case "allowed.text":
+					route.RequiredPermissions = []string{"memory.support", "user"}
+				case "uninstalled.poke":
+					uninstalledRoute = reflect.DeepEqual(route.GetEvent().GetEventTypeFilter(), []string{"not-installed.poke"})
 				}
+			}
+			if !uninstalledRoute {
+				t.Fatal("uninstalled adapter event route was not registered")
 			}
 			events.Attach(router.FromInstance(running.Instance), caller)
 			injectAs := func(as *pb.Actor, parts ...string) {
@@ -182,6 +191,7 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 				"no_actor_text":          nil,
 				"permissions_normalized": {ExternalUserId: "privileged", AdapterInstanceId: "instance", Permissions: []string{"user", "admin", "memory.admin", "chat_admin", "memory.admin"}},
 			}
+			permissionActors["text_raw_allowed"] = permissionActors["permissions_allowed"]
 			inputEvents := map[string]*pb.Event{
 				"event_permissions_denied":   {EventType: "member.joined", Actor: actor},
 				"event_permissions_allowed":  {EventType: "member.joined", Actor: permissionActors["permissions_allowed"]},
@@ -197,6 +207,9 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 					Actor:        &pb.Actor{ExternalUserId: "user", AdapterInstanceId: to.AdapterInstanceId},
 					EventPayload: &pb.EventPayload{Kind: &pb.EventPayload_MessageCreated{MessageCreated: &pb.MessageCreatedPayload{Chain: &pb.MessageChain{Segments: segments}}}}}
 			}
+			inputEvents["adapter_event"] = &pb.Event{EventType: "memory.poke", SourceKind: pb.EventSourceKind_EVENT_SOURCE_KIND_ADAPTER,
+				AdapterId: proto.String("memory"), AdapterInstanceId: proto.String("instance"), AccountId: proto.String("account"), Target: target, Actor: actor,
+				EventPayload: &pb.EventPayload{Kind: &pb.EventPayload_AdapterEvent{AdapterEvent: &pb.AdapterEventPayload{Version: 1, PayloadJson: `{"command":"/rss hello"}`}}}}
 			for name, text := range map[string]string{"longest_prefix": "!!rss", "empty_prefix": "rss", "custom_usage_prefix": "!!calc x", "empty_usage_prefix": "calc x", "custom_slash_not_implicit": "/rss"} {
 				inputEvents[name] = commandEvent(customTarget, textSegment(text))
 			}
@@ -234,6 +247,9 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 				calls   []string
 				replies []string
 			}{
+				{"adapter_event", nil, []string{`adapter.poke:1:{"command":"/rss hello"}`}, nil},
+				{"text_raw_denied", []string{"protected"}, []string{"allowed.text", "raw", "event"}, nil},
+				{"text_raw_allowed", []string{"protected"}, []string{"restricted.text", "allowed.text", "restricted.raw", "raw", "event"}, nil},
 				{"user_mention", nil, []string{"kick:external-7", "event"}, []string{"external-7"}},
 				{"user_text_mention", nil, []string{"kick:external-7", "event"}, []string{"external-7"}},
 				{"leading_kick", nil, []string{"kick:external-7", "event"}, []string{"external-7"}},

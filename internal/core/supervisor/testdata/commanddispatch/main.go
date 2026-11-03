@@ -151,6 +151,9 @@ func (*plugin) Commands(r *sdk.CommandRegistry) {
 	r.StartsWith("starts", []string{"BEGIN"}, func(*sdk.Context) error { return record("starts") })
 	r.EndsWith("ends", []string{"END"}, func(*sdk.Context) error { return record("ends") })
 	r.FullMatch("full", []string{"hello", "WHOLE"}, func(*sdk.Context) error { return record("full") })
+	r.Keyword("restricted.text", []string{"protected"}, func(*sdk.Context) error { return record("restricted.text") }, sdk.Priority(-20))
+	r.Keyword("allowed.text", []string{"protected"}, func(*sdk.Context) error { return record("allowed.text") }, sdk.Priority(-19))
+	r.Raw("restricted.raw", func(*sdk.Context) error { return record("restricted.raw") }, sdk.Priority(-101))
 	r.Raw("raw", func(*sdk.Context) error { return record("raw") }, sdk.Priority(-100))
 }
 
@@ -169,7 +172,11 @@ func (*plugin) Events(r *sdk.EventRegistry) {
 	r.On("observer", "member.joined", func(c *sdk.Context) error {
 		return record("observer:" + strings.Join(c.Event().GetActor().GetPermissions(), ","))
 	})
-
+	r.On("adapter.poke", "memory.poke", func(c *sdk.Context) error {
+		payload := c.Event().GetEventPayload().GetAdapterEvent()
+		return record("adapter.poke:" + strconv.FormatUint(uint64(payload.GetVersion()), 10) + ":" + payload.GetPayloadJson())
+	})
+	r.On("uninstalled.poke", "not-installed.poke", func(*sdk.Context) error { return record("uninstalled.poke") })
 }
 
 func main() {
