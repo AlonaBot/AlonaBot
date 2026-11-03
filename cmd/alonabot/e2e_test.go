@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -23,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/internal/core/adminauth"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 )
@@ -541,5 +543,116 @@ func TestAdminTokenResetWhileCoreRunning(t *testing.T) {
 	}
 	if code := c.wait(15 * time.Second); code != 0 {
 		t.Fatalf("Core exit %d: %s", code, c.log())
+	}
+}
+
+// TestAdminAuthRun 通过真实 Core 公开入口验证管理认证装配与 Host 隔离。
+func TestAdminAuthRun(t *testing.T) {
+	for _, initialized := range []bool{false, true} {
+		t.Run(fmt.Sprintf("initialized=%t", initialized), func(t *testing.T) {
+			dir := t.TempDir()
+			var token string
+			var credentials []string
+			if initialized {
+				store, err := state.Open(context.Background(), dir)
+				if err != nil {
+					t.Fatal(err)
+				}
+				token, err = adminauth.InitToken(context.Background(), store)
+				closeErr := store.Close()
+				if err != nil || closeErr != nil {
+					t.Fatalf("prepare credential: %v; close: %v", err, closeErr)
+				}
+			}
+			const origin = "http://admin.test:7650"
+			if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte("listen: 127.0.0.1:0\nadmin_base_url: "+origin+"\nplugin_base_url: http://plugin.test:7650\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			c := startCore(t, dir)
+			c.waitFor(activatedRe)
+			address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
+			send := func(method, path, host, source, body string, cookie *http.Cookie, csrf, bearer string, want int) (*http.Response, []byte) {
+				t.Helper()
+				req, err := http.NewRequest(method, "http://"+address+path, strings.NewReader(body))
+				if err != nil {
+					t.Fatal(err)
+				}
+				req.Host = host
+				req.Header.Set("Content-Type", "application/json")
+				if source != "" {
+					req.Header.Set("Origin", source)
+				}
+				if cookie != nil {
+					req.AddCookie(cookie)
+				}
+				if csrf != "" {
+					req.Header.Set("X-Alonabot-CSRF", csrf)
+				}
+				if bearer != "" {
+					req.Header.Set("Authorization", "Bearer "+bearer)
+				}
+				response, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				content, readErr := io.ReadAll(response.Body)
+				closeErr := response.Body.Close()
+				if readErr != nil || closeErr != nil {
+					t.Fatalf("read HTTP response: %v; close: %v", readErr, closeErr)
+				}
+				if response.StatusCode != want {
+					t.Fatalf("%s %s Host=%s: got %d want %d", method, path, host, response.StatusCode, want)
+				}
+				return response, content
+			}
+			send("POST", "/api/auth/login", "plugin.test", origin, `{"token":"wrong"}`, nil, "", "", 404)
+			send("POST", "/api/auth/login", "unknown.test", origin, `{"token":"wrong"}`, nil, "", "", 421)
+			if !initialized {
+				_, content := send("POST", "/api/auth/login", "admin.test", origin, `{"token":"wrong"}`, nil, "", "", 503)
+				if strings.TrimSpace(string(content)) != adminauth.ErrNotInitialized.Error() {
+					t.Fatal("uninitialized login did not return its safe error")
+				}
+				send("GET", "/api/probe", "admin.test", "", "", nil, "", "", 503)
+			} else {
+				send("POST", "/api/auth/login", "admin.test", origin, `{"token":"wrong"}`, nil, "", "", 401)
+				body, err := json.Marshal(map[string]string{"token": token})
+				if err != nil {
+					t.Fatal(err)
+				}
+				send("POST", "/api/auth/login", "admin.test", "http://admin.test:7651", string(body), nil, "", "", 403)
+				response, content := send("POST", "/api/auth/login", "admin.test", origin, string(body), nil, "", "", 200)
+				var reply struct {
+					CSRFToken string `json:"csrf_token"`
+				}
+				if err := json.Unmarshal(content, &reply); err != nil {
+					t.Fatal(err)
+				}
+				cookies := response.Cookies()
+				if len(cookies) != 1 || reply.CSRFToken == "" {
+					t.Fatal("login did not return one cookie and CSRF token")
+				}
+				cookie := cookies[0]
+				// 业务路由尚未注册；通过认证后到达404，未认证时被入口拒绝。
+				send("GET", "/api/probe", "admin.test", "", "", nil, "", "", 401)
+				send("GET", "/api/probe", "admin.test", "", "", cookie, "", "", 404)
+				send("GET", "/api/probe", "admin.test", "", "", nil, "", token, 404)
+				send("POST", "/api/probe", "admin.test", origin, "", cookie, "", "", 401)
+				send("POST", "/api/probe", "admin.test", origin, "", cookie, reply.CSRFToken, "", 404)
+				send("POST", "/api/auth/logout", "admin.test", origin, "", cookie, reply.CSRFToken, "", 204)
+				send("GET", "/api/probe", "admin.test", "", "", cookie, "", "", 401)
+				credentials = []string{token, cookie.Value, reply.CSRFToken}
+			}
+			if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+				t.Fatal(err)
+			}
+			if code := c.wait(15 * time.Second); code != 0 {
+				t.Fatalf("Core exit %d: %s", code, c.log())
+			}
+			for _, credential := range credentials {
+				if strings.Contains(c.log(), credential) {
+					t.Fatal("Core log contains management credentials")
+				}
+			}
+		})
 	}
 }
