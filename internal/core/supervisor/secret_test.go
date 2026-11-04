@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -230,8 +231,11 @@ func TestSecretStoreProcesses(t *testing.T) {
 	binary, schema, withoutBinary, withoutSchema := buildSecretPlugins(t)
 	t.Run("generations", func(t *testing.T) {
 		store, spec := setup(t, binary)
-		secrets := secret.New(store)
 		logs := &logBuf{}
+		previous := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(logs, nil)))
+		t.Cleanup(func() { slog.SetDefault(previous) })
+		secrets := secret.New(store)
 		spec.Secrets, spec.ConfigSchema, spec.Stdio, spec.Log = secrets, schema, true, logs
 		start := func(current Spec) error {
 			t.Helper()
@@ -353,6 +357,9 @@ func TestSecretStoreProcesses(t *testing.T) {
 	t.Run("array-positions", func(t *testing.T) {
 		store, spec := setup(t, binary)
 		logs := &logBuf{}
+		previous := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(logs, nil)))
+		t.Cleanup(func() { slog.SetDefault(previous) })
 		spec.ConfigSchema, spec.Secrets, spec.Stdio, spec.Log = schema, secret.New(store), true, logs
 		launch := func(mode string) {
 			t.Helper()

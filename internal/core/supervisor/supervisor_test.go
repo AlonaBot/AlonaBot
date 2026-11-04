@@ -125,11 +125,11 @@ var (
 	fastStop = host.StopTiming{Drain: 200 * time.Millisecond, Total: 800 * time.Millisecond, OnStopAt: 400 * time.Millisecond}
 )
 
-// logBuf 收集插件日志，供断言与失败时打印。
+// logBuf 收集插件输出与 Core 日志，供断言与失败时打印。
 type logBuf struct {
 	// mu 保护 b。
 	mu sync.Mutex
-	b  bytes.Buffer // 「插件ID|流|内容」形式的日志
+	b  bytes.Buffer // 插件行带「插件ID|流|内容」前缀，Core 行由默认 Logger 写入
 }
 
 // Line 记录一行日志，签名与 process.LogFunc 相同。
@@ -137,6 +137,13 @@ func (l *logBuf) Line(id, stream string, line []byte) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	fmt.Fprintf(&l.b, "%s|%s|%s\n", id, stream, line)
+}
+
+// Write 把默认 Logger 的输出写入同一日志缓冲区。
+func (l *logBuf) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
 }
 
 // SetSession 满足 PluginLog；测试不记录 session_id。
