@@ -15,7 +15,7 @@
 
 ### goal-34 · T-08.7 web/admin 骨架、配置表单组件与界面文案
 
-状态：等待前置（T-08.10）。T-08.1 已合并（PR #54，合并提交 `021e972`）。
+状态：等待前置。前置 T-08.1（PR #54，合并提交 `021e972`）与 T-08.10（PR #77）均已合并；审查者按下文生成 fixtures 并核对本语句后改为待派发。
 
 已用 `sdk/generate/config_test.go` 中的期望 Schema 核对 T-08.1 的格式：字段按声明顺序出现在 `properties` 中；可空字段的 `type` 为 `["<类型>","null"]`；数组为 `type: array` 加 `items`；`map[string]T` 为 `type: object` 加 `additionalProperties`，没有 `properties`；`x-alonabot-secret`、`x-alonabot-hidden` 只在为 true 时出现；`default` 写在 Default 上。
 

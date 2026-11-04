@@ -32,18 +32,22 @@ func main() {
 `
 
 const configDeclarations = "type Provider struct {\n" +
-	" APIKey *string `json:\"api_key\" secret:\"true\" hidden:\"true\" form:\"widget=password;default=null\"`\n" +
+	" APIKey *string `json:\"api_key\" config:\"secret;hidden;widget:password;default:null\"`\n" +
 	"}\n" +
 	"type Config struct {\n" +
 	" config.Base\n" +
-	" Name string `json:\"name,omitempty\" description:\"config.name.description\" form:\"label=config.display;widget=select;options=openai@assets/openai.svg|custom;required;default=\\\"openai\\\"\"`\n" +
-	" Enabled bool `json:\"enabled\" form:\"widget=switch;default=true\"`\n" +
-	" Count uint64 `json:\"count\" form:\"widget=number;min=1;max=10;options=1|10;default=10\"`\n" +
+	" Name string `json:\"name,omitempty\" config:\"label:Provider;description:Provider to use;widget:select;options:openai|custom;labels:OpenAI|Custom;subtitles:Hosted service;required;default:\\\"openai\\\"\"`\n" +
+	" Enabled bool `json:\"enabled\" config:\"widget:switch;default:true\"`\n" +
+	" Count uint64 `json:\"count\" config:\"widget:slider;min:1;max:10;step:1;options:1|10;default:10\"`\n" +
 	" Nested Provider `json:\"nested\"`\n" +
-	" Providers []Provider `json:\"providers\" form:\"default=[{\\\"api_key\\\":\\\"x\\\"}]\"`\n" +
-	" Lookup map[string]Provider `json:\"lookup\" form:\"default={\\\"first\\\":{\\\"api_key\\\":null}}\"`\n" +
-	" Maybe *int16 `json:\"maybe,omitempty\" form:\"default=null\"`\n" +
-	" Note string `json:\"note\" form:\"widget=textarea;default=\\\"hello;世界=ok\\\"\"`\n" +
+	" Providers []Provider `json:\"providers\" config:\"default:[{\\\"api_key\\\":\\\"x\\\"}]\"`\n" +
+	" Lookup map[string]Provider `json:\"lookup\" config:\"default:{\\\"first\\\":{\\\"api_key\\\":null}}\"`\n" +
+	" Maybe *int16 `json:\"maybe,omitempty\" config:\"default:null\"`\n" +
+	" Note string `json:\"note\" config:\"description:Advanced settings;widget:textarea;obvious;when:name=custom;default:\\\"hello;world:ok\\\"\"`\n" +
+	" Modes []string `json:\"modes\" config:\"widget:select;options:fast|safe@literal;labels:Fast|Safe;subtitles:Quick response|Extra checks;default:[\\\"fast\\\"]\"`\n" +
+	" Ports []uint16 `json:\"ports\" config:\"options:80|443;default:[80,443]\"`\n" +
+	" Script string `json:\"script\" config:\"widget:code;when:enabled=true,count=10\"`\n" +
+	" Query string `json:\"query\" config:\"widget:code;language:sql\"`\n" +
 	"}\n"
 
 // configCoreMain 在独立临时 module 中装配真实 Core，使 SDK 测试通过进程边界观察 REGISTER。
@@ -126,7 +130,6 @@ func TestConfigSchemaIntegration(t *testing.T) {
 	dir := pluginModuleDir(t)
 	source := configPluginMain + configDeclarations
 	writePluginFile(t, dir, "main.go", source)
-	writePluginFile(t, dir, "assets/openai.svg", `<svg xmlns="http://www.w3.org/2000/svg"/>`)
 	result := scanPlugin(t, generate.Options{Dir: dir})
 	if len(result.Diagnostics) != 0 {
 		t.Fatal(result.Diagnostics)
@@ -134,14 +137,18 @@ func TestConfigSchemaIntegration(t *testing.T) {
 	const expected = `{
  "$schema":"https://json-schema.org/draft/2020-12/schema",
  "properties":{
-  "name":{"default":"openai","description":"config.name.description","type":"string","x-alonabot-form":{"label":"config.display","option_icons":{"openai":"assets/openai.svg"},"options":["openai","custom"],"widget":"select"},"x-alonabot-i18n":"config.name"},
-  "enabled":{"default":true,"type":"boolean","x-alonabot-form":{"label":"config.enabled","widget":"switch"},"x-alonabot-i18n":"config.enabled"},
-  "count":{"default":10,"maximum":18446744073709551615,"minimum":0,"type":"integer","x-alonabot-form":{"label":"config.count","max":10,"min":1,"options":[1,10],"widget":"number"},"x-alonabot-i18n":"config.count"},
-  "nested":{"properties":{"api_key":{"default":null,"type":["string","null"],"x-alonabot-form":{"label":"config.nested.api_key","widget":"password"},"x-alonabot-hidden":true,"x-alonabot-i18n":"config.nested.api_key","x-alonabot-secret":true}},"type":"object","x-alonabot-form":{"label":"config.nested"},"x-alonabot-i18n":"config.nested"},
-  "providers":{"default":[{"api_key":"x"}],"items":{"properties":{"api_key":{"default":null,"type":["string","null"],"x-alonabot-form":{"label":"config.providers.api_key","widget":"password"},"x-alonabot-hidden":true,"x-alonabot-i18n":"config.providers.api_key","x-alonabot-secret":true}},"type":"object"},"type":"array","x-alonabot-form":{"label":"config.providers"},"x-alonabot-i18n":"config.providers"},
-  "lookup":{"additionalProperties":{"properties":{"api_key":{"default":null,"type":["string","null"],"x-alonabot-form":{"label":"config.lookup.api_key","widget":"password"},"x-alonabot-hidden":true,"x-alonabot-i18n":"config.lookup.api_key","x-alonabot-secret":true}},"type":"object"},"default":{"first":{"api_key":null}},"type":"object","x-alonabot-form":{"label":"config.lookup"},"x-alonabot-i18n":"config.lookup"},
-  "maybe":{"default":null,"maximum":32767,"minimum":-32768,"type":["integer","null"],"x-alonabot-form":{"label":"config.maybe"},"x-alonabot-i18n":"config.maybe"},
-  "note":{"default":"hello;世界=ok","type":"string","x-alonabot-form":{"label":"config.note","widget":"textarea"},"x-alonabot-i18n":"config.note"}
+  "name":{"default":"openai","description":"Provider to use","type":"string","x-alonabot-form":{"label":"Provider","labels":["OpenAI","Custom"],"options":["openai","custom"],"subtitles":["Hosted service"],"widget":"select"}},
+  "enabled":{"default":true,"type":"boolean","x-alonabot-form":{"widget":"switch"}},
+  "count":{"default":10,"maximum":18446744073709551615,"minimum":0,"type":"integer","x-alonabot-form":{"max":10,"min":1,"options":[1,10],"step":1,"widget":"slider"}},
+  "nested":{"properties":{"api_key":{"default":null,"type":["string","null"],"x-alonabot-form":{"widget":"password"},"x-alonabot-hidden":true,"x-alonabot-secret":true}},"type":"object"},
+  "providers":{"default":[{"api_key":"x"}],"items":{"properties":{"api_key":{"default":null,"type":["string","null"],"x-alonabot-form":{"widget":"password"},"x-alonabot-hidden":true,"x-alonabot-secret":true}},"type":"object"},"type":"array"},
+  "lookup":{"additionalProperties":{"properties":{"api_key":{"default":null,"type":["string","null"],"x-alonabot-form":{"widget":"password"},"x-alonabot-hidden":true,"x-alonabot-secret":true}},"type":"object"},"default":{"first":{"api_key":null}},"type":"object"},
+  "maybe":{"default":null,"maximum":32767,"minimum":-32768,"type":["integer","null"]},
+  "note":{"default":"hello;world:ok","description":"Advanced settings","type":"string","x-alonabot-form":{"obvious":true,"when":{"name":"custom"},"widget":"textarea"}},
+  "modes":{"default":["fast"],"items":{"type":"string"},"type":"array","x-alonabot-form":{"labels":["Fast","Safe"],"options":["fast","safe@literal"],"subtitles":["Quick response","Extra checks"],"widget":"select"}},
+  "ports":{"default":[80,443],"items":{"maximum":65535,"minimum":0,"type":"integer"},"type":"array","x-alonabot-form":{"options":[80,443]}},
+  "script":{"type":"string","x-alonabot-form":{"language":"json","when":{"count":10,"enabled":true},"widget":"code"}},
+  "query":{"type":"string","x-alonabot-form":{"language":"sql","widget":"code"}}
  },
  "required":["name"],
  "type":"object"
@@ -225,7 +232,7 @@ func TestConfigSchemaIntegration(t *testing.T) {
 	}
 	runPluginCommand(t, root, nil, "go", "build", "-o", cli, "./cmd/alonabot")
 	runPluginCommand(t, dir, nil, cli, "plugin", "check")
-	writePluginFile(t, dir, "main.go", strings.Replace(source, "label=config.display", "label=config.changed", 1))
+	writePluginFile(t, dir, "main.go", strings.Replace(source, "label:Provider", "label:Changed provider", 1))
 	command := exec.Command(cli, "plugin", "check")
 	command.Dir = dir
 	var stdout, stderr bytes.Buffer
@@ -275,7 +282,6 @@ type Recursive struct { Next *Recursive }
 type private struct { Value string }
 type Nested struct { *private }
 `)
-	writePluginFile(t, dir, "icon.gif", "GIF89a")
 	tests := []struct{ name, field, tag, message string }{
 		{"Channel", "chan bool", "", "unsupported config type chan bool"},
 		{"Interface", "any", "", "unsupported config type interface{}"},
@@ -288,26 +294,52 @@ type Nested struct { *private }
 		{"TextRead", "TextRead", "", "implements encoding.TextUnmarshaler"},
 		{"TextWrite", "TextWrite", "", "implements encoding.TextMarshaler"},
 		{"Recursive", "*Recursive", "", "recursive config type"},
-		{"WrongDefault", "int", `form:"default=\"x\""`, "want int, got string"},
-		{"Overflow", "uint64", `form:"default=18446744073709551616"`, "value out of range"},
-		{"UnknownForm", "string", `form:"unknown=value"`, `unknown form key "unknown"`},
-		{"MissingIcon", "string", `form:"options=x@missing.svg"`, "resolve option icon"},
-		{"GIFIcon", "string", `form:"options=x@icon.gif"`, "unsupported option icon extension"},
-		{"EscapeIcon", "string", `form:"options=x@../outside.svg"`, "invalid option icon path"},
+		{"WrongDefault", "int", `config:"default:\"x\""`, "want int, got string"},
+		{"Overflow", "uint64", `config:"default:18446744073709551616"`, "value out of range"},
+		{"UnknownConfig", "string", `config:"unknown:value"`, `unknown config key "unknown"`},
+		{"FlagValue", "string", `config:"required:true"`, "config required must be a flag"},
+		{"MissingValue", "string", `config:"widget"`, "config widget requires a value"},
+		{"EmptyValue", "string", `config:"label:"`, "config label requires a value"},
+		{"DuplicateKey", "string", `config:"label:First;label:Second"`, `duplicate config key "label"`},
+		{"DuplicateFlag", "string", `config:"hidden;hidden"`, `duplicate config key "hidden"`},
+		{"DefaultDelimiter", "string", `config:"default:\"x\"label:Title"`, "expected semicolon after config default"},
 		{"Duplicate", "string", `json:"duplicate"`, `duplicate config JSON name "duplicate"`},
-		{"Choice", "string", `form:"options=a|b;default=\"c\""`, "not in form options"},
-		{"Minimum", "int8", `form:"min=2;default=1"`, "below form min"},
-		{"Maximum", "int8", `form:"max=2;default=3"`, "exceeds form max"},
-		{"Inverted", "int8", `form:"min=2;max=1"`, "form min exceeds max"},
-		{"Options", "bool", `form:"options=true|false"`, "options require a string or numeric field"},
-		{"Widget", "int", `form:"widget=text"`, "incompatible"},
-		{"Secret", "int", `secret:"true"`, "secret requires string or *string"},
+		{"Choice", "string", `config:"options:a|b;default:\"c\""`, "not in form options"},
+		{"Minimum", "int8", `config:"min:2;default:1"`, "below form min"},
+		{"Maximum", "int8", `config:"max:2;default:3"`, "exceeds form max"},
+		{"Inverted", "int8", `config:"min:2;max:1"`, "form min exceeds max"},
+		{"Options", "bool", `config:"options:true|false"`, "options require a string or numeric field"},
+		{"InvalidOption", "uint16", `config:"options:bad"`, `invalid form option "bad"`},
+		{"Labels", "string", `config:"options:a;labels:A|B"`, "config labels has more entries than options"},
+		{"Subtitles", "string", `config:"options:a;subtitles:First|Second"`, "config subtitles has more entries than options"},
+		{"Widget", "int", `config:"widget:text"`, "incompatible"},
+		{"NumberWidget", "string", `config:"widget:number"`, "incompatible"},
+		{"SliderWidget", "string", `config:"widget:slider;min:1;max:2"`, "incompatible"},
+		{"SwitchWidget", "string", `config:"widget:switch"`, "incompatible"},
+		{"CodeWidget", "int", `config:"widget:code"`, "incompatible"},
+		{"SelectOptions", "string", `config:"widget:select"`, "select widget requires options"},
+		{"SliderMin", "int", `config:"widget:slider;max:10"`, "slider widget requires min"},
+		{"SliderMax", "int", `config:"widget:slider;min:1"`, "slider widget requires max"},
+		{"Step", "string", `config:"step:1"`, "form step requires a numeric field"},
+		{"Language", "string", `config:"language:sql"`, "language requires the code widget"},
+		{"UnknownSibling", "string", `config:"when:missing=x"`, `config when references unknown sibling field "missing"`},
+		{"InvalidWhen", "string", `config:"when:condition=wrong"`, `invalid config when value for "condition"`},
+		{"ReservedLabel", "string", `json:"label"`, `config JSON name "label" conflicts`},
+		{"ReservedDescription", "string", `json:"description"`, `config JSON name "description" conflicts`},
+		{"ReservedLabels", "string", `json:"labels"`, `config JSON name "labels" conflicts`},
+		{"ReservedSubtitles", "string", `json:"subtitles"`, `config JSON name "subtitles" conflicts`},
+		{"LegacyForm", "struct { LegacyValue string `form:\"widget=text\"` }", "", "standalone form tag is unsupported; use the config tag"},
+		{"LegacyDescription", "[]struct { LegacyValue string `description:\"hint\"` }", "", "standalone description tag is unsupported; use the config tag"},
+		{"LegacySecret", "map[string]struct { LegacyValue string `secret:\"true\"` }", "", "standalone secret tag is unsupported; use the config tag"},
+		{"LegacyHidden", "string", `hidden:"true"`, "standalone hidden tag is unsupported; use the config tag"},
+		{"Secret", "int", `config:"secret"`, "secret requires string or *string"},
 		{"Number", "json.Number", "", "unsupported config type encoding/json.Number"},
 		{"Quoted", "int", `json:",string"`, "json string option is unsupported"},
-		{"EmbeddedDefault", "Nested", `form:"default={\"Value\":\"x\"}"`, "cannot set embedded pointer to unexported struct type"},
+		{"EmbeddedDefault", "Nested", `config:"default:{\"Value\":\"x\"}"`, "cannot set embedded pointer to unexported struct type"},
 	}
+
 	var source strings.Builder
-	source.WriteString("package main\nimport (\"encoding/json\";\"time\";\"github.com/AlonaBot/AlonaBot/sdk\";\"github.com/AlonaBot/AlonaBot/sdk/config\")\ntype Plugin struct { sdk.Base }\ntype Config struct {\n config.Base\n Existing string `json:\"duplicate\"`\n")
+	source.WriteString("package main\nimport (\"encoding/json\";\"time\";\"github.com/AlonaBot/AlonaBot/sdk\";\"github.com/AlonaBot/AlonaBot/sdk/config\")\ntype Plugin struct { sdk.Base }\ntype Config struct {\n config.Base\n Existing string `json:\"duplicate\"`\n Condition bool `json:\"condition\"`\n")
 	firstLine := strings.Count(source.String(), "\n") + 1
 	for _, test := range tests {
 		fmt.Fprintf(&source, " %s %s `%s`\n", test.name, test.field, test.tag)
@@ -315,12 +347,18 @@ type Nested struct { *private }
 	source.WriteString("}\nfunc main() {}\n")
 	writePluginFile(t, dir, "main.go", source.String())
 	result := scanPlugin(t, generate.Options{Dir: dir})
-	if len(result.Diagnostics) != len(tests) || result.ConfigSchema != nil || result.Source != nil {
-		t.Fatalf("got %d diagnostics, want %d: %+v", len(result.Diagnostics), len(tests), result.Diagnostics)
+	// SliderWidget 同时触发两个非数字边界诊断。
+	wantDiagnostics := len(tests) + 2
+	if len(result.Diagnostics) != wantDiagnostics || result.ConfigSchema != nil || result.Source != nil {
+		t.Fatalf("got %d diagnostics, want %d: %+v", len(result.Diagnostics), wantDiagnostics, result.Diagnostics)
 	}
 	for index, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			position := fmt.Sprintf("main.go:%d:2", firstLine+index)
+			if strings.Contains(test.field, "LegacyValue") {
+				line := fmt.Sprintf(" %s %s `%s`", test.name, test.field, test.tag)
+				position = fmt.Sprintf("main.go:%d:%d", firstLine+index, strings.Index(line, "LegacyValue")+1)
+			}
 			if test.name == "Recursive" {
 				position = "types.go:10:25"
 			}

@@ -39,10 +39,10 @@ import (
 )
 type Plugin struct { sdk.Base; settings Config }
 func(p *Plugin) Config() config.Config { return &p.settings }
-type Provider struct { APIKey string ` + "`json:\"api_key\" secret:\"true\"`" + ` }
+type Provider struct { APIKey string ` + "`json:\"api_key\" config:\"secret\"`" + ` }
 type Config struct {
  config.Base
- Token string ` + "`json:\"token\" secret:\"true\"`" + `
+ Token string ` + "`json:\"token\" config:\"secret\"`" + `
  Ordinary string ` + "`json:\"ordinary\"`" + `
  Providers []Provider ` + "`json:\"providers\"`" + `
 }
@@ -160,7 +160,7 @@ func buildSecretPlugins(t *testing.T) (binary string, schema []byte, withoutBina
 	write("go.sum", string(sums))
 	write("generator/main.go", secretGeneratorSource)
 	write("original/main.go", secretPluginSource)
-	without := strings.Replace(secretPluginSource, " Token string `json:\"token\" secret:\"true\"`\n", "", 1)
+	without := strings.Replace(secretPluginSource, " Token string `json:\"token\" config:\"secret\"`\n", "", 1)
 	if without == secretPluginSource {
 		t.Fatal("secret field was not removed from fixture")
 	}

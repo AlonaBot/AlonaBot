@@ -37,17 +37,17 @@ import (
  "github.com/AlonaBot/AlonaBot/sdk/config"
 )
 type Child struct {
- Score int64 ` + "`json:\"score\" form:\"default=9007199254740993\"`" + `
- Note string ` + "`json:\"note\" form:\"default=\\\"child\\\"\"`" + `
+ Score int64 ` + "`json:\"score\" config:\"default:9007199254740993\"`" + `
+ Note string ` + "`json:\"note\" config:\"default:\\\"child\\\"\"`" + `
 }
 type Config struct {
  config.Base
- Name string ` + "`json:\"name\" form:\"required\"`" + `
- Enabled bool ` + "`json:\"enabled\" form:\"default=true\"`" + `
- Count int ` + "`json:\"count\" form:\"default=7\"`" + `
- Text string ` + "`json:\"text\" form:\"default=\\\"hello\\\"\"`" + `
- Optional *string ` + "`json:\"optional\" form:\"default=\\\"fallback\\\"\"`" + `
- RequiredDefault string ` + "`json:\"required_default\" form:\"required;default=\\\"provided\\\"\"`" + `
+ Name string ` + "`json:\"name\" config:\"required\"`" + `
+ Enabled bool ` + "`json:\"enabled\" config:\"default:true\"`" + `
+ Count int ` + "`json:\"count\" config:\"default:7\"`" + `
+ Text string ` + "`json:\"text\" config:\"default:\\\"hello\\\"\"`" + `
+ Optional *string ` + "`json:\"optional\" config:\"default:\\\"fallback\\\"\"`" + `
+ RequiredDefault string ` + "`json:\"required_default\" config:\"required;default:\\\"provided\\\"\"`" + `
  Nested Child ` + "`json:\"nested\"`" + `
  Rows []Child ` + "`json:\"rows\"`" + `
  Lookup map[string]Child ` + "`json:\"lookup\"`" + `
