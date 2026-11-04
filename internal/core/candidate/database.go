@@ -2,6 +2,20 @@
 //
 // 调用方持有插件操作锁，并在复制前确认旧进程树退出；PrepareDatabase 暂持
 // runtime.lock，返回前释放，随后由 SDK 取锁打开候选。规则见 CONTRACTS §6.1、§6.3、§12.2。
+//
+// 包的入口为 [PrepareDatabase] 与 [Discard]，分别返回 [Prepared] 和清理未受保护的候选。
+// 管理层按以下顺序使用本包：
+//
+//  1. 持插件操作锁，冻结并停止旧进程，确认进程树退出。
+//  2. 调用 PrepareDatabase。
+//  3. 调用 state.Store.AddGeneration 保存未提交代次。
+//  4. 调用 supervisor.Launch：NewCandidate=true，ExpectedOld=FromGeneration，
+//     Bootstrap.database_descriptor.activation_reason=Reason，sqlite_path=Prepared.DatabasePath。
+//  5. PREPARED 后由管理层的唯一提交点在同一事务中提交 Active 与 COMMITTED。
+//  6. 提交前失败时关闭候选并确认进程树退出，再调用 Discard，随后用旧代次启动新 Session
+//     （NewCandidate=false）。
+//
+// Active 与 COMMITTED 的写入及恢复编排由管理层负责；本包只准备和清理资源。
 package candidate
 
 import (
