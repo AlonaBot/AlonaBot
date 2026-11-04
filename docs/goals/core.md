@@ -2610,6 +2610,285 @@ goal-28、goal-29 的符号已按合入代码核对：
 不做：SDK 自有的 Message、Target、Actor、SendResult、错误码与入站片段，标准事件常量、sdk.AdapterEvent 与事件 Handler 的 payload 类型核对，sdk/adapter 的公共类型（T-04.8，goal-91）；Rule（T-05.2）；HTTP 与 Schedule 注册的写法；Service 的 tool 描述（T-12）；docs/plugin-guide.md 的更新（由审查者在合并前同步）。
 ```
 
+### goal-32 · T-08.5 受管 SQLite 连接与迁移
+
+状态：已完成（PR #79）。审查中经维护者批准扩大范围一处（FIX-3，见下方范围的最后一项）。
+
+派发时的核对：前置 T-08.3（PR #73，合并提交 `225f132`）已合并。符号已按合入代码核对：
+- `sdk/session.go` 的 prepare：step 1 核对 Bootstrap 预算（缺 `config_ms`、`on_start_ms` 或准备截止时为 PROTOCOL_ERROR）；step 2 在 `config_ms` 预算内调用 `config.Prepare`，失败以 `SESSION_PHASE_CONFIG` 报告；随后启动 HTTP Listener，step 3 运行 OnStart，step 4 用 `buildRegister(reg, configJSON, configVersion, configSchema)` 构造 REGISTER。`buildRegister` 目前把 `Migration` 固定为 `MIGRATION_MODE_NONE`。Adapter 角色在 `sdk/adapter_run.go` 中自行构造 REGISTER，同样固定为 NONE，`validate.AdapterRegister` 也要求 Adapter 的 migration 为 NONE；本切片不改 `adapter_run.go`。
+- `sdk/activate.go` 的 `shutdown` 分三步：关闭 ready gate 并取消 lifetime → OnStop → 关闭 Session。`currentSession()` 只在 ready 之后、STOPPING 之前可用，准备期（迁移与 OnStart）拿不到它。
+- `sdk/gormdb` 现有公开符号：`OpenSQLite(ctx, path) (*gorm.DB, error)`、`PragmaValues`、`ReadPragmas(ctx, *gorm.DB)`、`SelfMigrator`、`Migration{ID uint32; Up func(context.Context, *gorm.DB) error}`、`VersionedMigrator`、`ModeNone`/`ModeSelf`/`ModeVersioned`、`CheckMigrators(root any) (string, error)`、`LedgerTable`、`RunVersioned`、`AppliedMigrations`。账本由 `AutoMigrate(&ledgerRow{})` 建立，列为 `id`（主键）与 `applied_at`（UTC 毫秒）。
+- `github.com/libtnb/sqlite` v1.2.2 提供 `sqlite.New(sqlite.Config{Conn: gorm.ConnPool})`，驱动名常量 `sqlite.DriverName = "sqlite"`，即 modernc 注册的名字。
+- 协议：`DatabaseDescriptor{backend, sqlite_path, migration_mode, applied_migration_ids, activation_reason, manual_migration_approved}`、`PhaseLimits.migration_ms`、`SESSION_PHASE_MIGRATION`、`MigrationState{mode, completed_migration_ids, self_migrate_completed}` 都已在 proto 中。
+- `supervisor.Spec` 已有 `PluginDir`（`<plugins>/<id>`）、`GenerationID`、`Bootstrap`、`NewCandidate`；数据库描述目前由调用方写在 `Spec.Bootstrap.DatabaseDescriptor` 中（cmd/alonabot 与全部现有测试传 `BACKEND_NONE`）。
+
+核对时修订了原语句的三处：
+- 原「允许的新跨模块边」含 `sdk -> sdk/sqlitedb`。这会让每个插件都链接 modernc SQLite，违反 D-52（SDK 根包只允许 protobuf、x/sys 与 jsonschema-go）和 D-49（不导入就不链接）。改为 SDK 根包只 import `sdk/internal/dbhook`，Session 的数据库描述、连接与关闭都经 dbhook 交接。
+- 原接口 3 新增 `Spec.Database`，nil 时生成 SQLite 描述。这与已有的 `Bootstrap.DatabaseDescriptor` 重复，并会把现有调用方的 nil 当成 SQLite。改为不加 Spec 字段，沿用 Bootstrap 中的描述，只由 supervisor 补默认路径；调用方给出的非空路径原样下发，供 goal-33 的候选副本与 goal-68 的 `dev.sqlite` 使用。
+- 补充迁移阶段的预算校验与失败阶段、`Open` 在准备期的可用范围、准备失败时关闭连接、两个包共用的账本 DDL。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-32（切片 T-08.5：受管 SQLite 连接与迁移）。goal 目录 goal-32，分支 goal-32，worktree .worktrees/goal-32，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：受管 SQLite 有两个入口：新建的 sdk/sqlitedb 的 Open(ctx) 按当前 Session 的数据库描述返回 *sql.DB；sdk/gormdb 的 Open(ctx) 在同一个连接上返回原生 *gorm.DB。同一 Session 复用同一连接，SDK 停止时关闭。只导入 sqlitedb 的插件不链接 GORM。两个包各定义一组迁移接口，被导入时向 SDK 登记识别方式；SDK 在配置准备之后、OnStart 之前执行迁移，并在 REGISTER 中报告结果。Core 为每个代次下发 SQLite 路径。
+
+依据：PLAN T-08 步骤 5、6；CONTRACTS §6.1～§6.3、§4.2（迁移预算）；WIRE-FORMAT §3.2（database_descriptor）；DECISIONS D-48、D-49；TEST-MATRIX V-26、V-39。
+
+范围（只新增或修改这些）：
+- sdk/sqlitedb/：新建包。连接设置与回读核对从 sdk/gormdb/sqlite.go 移入；open.go（Open 与 Session 绑定）、migrate.go（迁移接口、RunVersioned、AppliedMigrations）
+- sdk/gormdb/：OpenSQLite 改为 sqlitedb.OpenFile 加 GORM 包装；新增 open.go（Open）；ReadPragmas 与 PragmaValues 移到 sqlitedb 后从本包删除
+- sdk/internal/dbhook/：新建内部包，供 sqlitedb 与 gormdb 向 sdk 登记迁移识别与执行，形状由执行者自定，只用标准库与 contracts 类型
+- sdk/：session.go 在配置准备之后调用迁移阶段并填写 REGISTER 的 migration，准备失败时关闭连接；activate.go 在停止时关闭连接（只加调用点）
+- sdk/gormdb/sqlite_test.go：随 ReadPragmas 移到 sqlitedb 同步改写
+- internal/core/supervisor/supervisor.go：backend 为 SQLITE 且 sqlite_path 为空时补默认代次路径，新候选时创建代次目录（只加这一段）
+- internal/core/host/prepare.go：校验 REGISTER 的 migration 与 Bootstrap 描述一致（只加校验）
+- 上述包的测试文件
+- 维护者批准（PR #79，FIX-3）：cmd/alonabot/main.go、internal/core/adapter/remote/remote_test.go、sdk/generate/config_test.go 中已有的 DatabaseDescriptor 字面量补上 MigrationMode: MIGRATION_MODE_NONE，不做其他改动
+允许的新跨模块边：无（以下均在 sdk 模块内）。包内依赖为 sdk -> sdk/internal/dbhook、sdk/sqlitedb -> sdk/internal/dbhook、sdk/gormdb -> sdk/sqlitedb 与 sdk/internal/dbhook。sdk 根包不得 import sdk/sqlitedb、sdk/gormdb、gorm.io/gorm、github.com/libtnb/sqlite 或 modernc.org/sqlite（D-49、D-52）。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. sdk/sqlitedb
+   var ErrNoDatabase = errors.New("this plugin has no database")
+   func Open(ctx context.Context) (*sql.DB, error) // 未处于 Session 中返回 FAILED_PRECONDITION 的错误；backend 为 NONE 返回 ErrNoDatabase；同一 Session 重复调用返回同一个 *sql.DB
+   func OpenFile(ctx context.Context, path string) (*sql.DB, error) // 原 gormdb.OpenSQLite 的设置与核对：WAL、FULL、外键、5s busy timeout、单连接
+   type PragmaValues struct { JournalMode string; Synchronous int; ForeignKeys int; BusyTimeout int }
+   func ReadPragmas(ctx context.Context, db *sql.DB) (PragmaValues, error)
+   type SelfMigrator interface { Migrate(ctx context.Context, db *sql.DB) error }
+   type Migration struct { ID uint32; Up func(context.Context, *sql.Tx) error }
+   type VersionedMigrator interface { Migrations() []Migration }
+   const LedgerTable = "_alonabot_migrations"
+   func RunVersioned(ctx context.Context, db *sql.DB, migrations []Migration) ([]uint32, error)
+   func AppliedMigrations(ctx context.Context, db *sql.DB) ([]uint32, error)
+2. sdk/gormdb
+   var ErrNoDatabase = sqlitedb.ErrNoDatabase
+   func Open(ctx context.Context) (*gorm.DB, error) // 经 libtnb sqlite.Config{Conn: ...} 包装 sqlitedb.Open 返回的同一个 *sql.DB；同一 Session 重复调用返回同一个 *gorm.DB
+   OpenSQLite、SelfMigrator、Migration、VersionedMigrator、RunVersioned、AppliedMigrations、CheckMigrators 保留现有签名；LedgerTable 改为引用 sqlitedb.LedgerTable
+3. internal/core/supervisor
+   不新增公开符号。数据库描述沿用 Spec.Bootstrap.DatabaseDescriptor：backend、migration_mode、applied_migration_ids、activation_reason 由调用方给出；backend 为 SQLITE 且 sqlite_path 为空时，supervisor 在 Launch 使用的 Bootstrap 副本中填写 <PluginDir>/generations/<GenerationID>/db.sqlite（绝对路径），非空时原样下发。
+4. sdk/internal/dbhook（内部包，形状自定）
+   只用标准库与 contracts 类型。至少承载：已登记的迁移识别与执行函数；当前 Session 的数据库描述（准备阶段由 sdk 写入）；sqlitedb 打开的连接及其关闭函数（sdk 在停止与准备失败时调用）。并发访问加锁。
+
+行为：
+- Open：可用范围为迁移阶段开始到 Session 停止（含 Migrate、Up 与 OnStart 中的调用），范围外返回错误码为 FAILED_PRECONDITION 的错误。文件不存在时只有 activation_reason 为 first_install 时才创建，否则返回错误（不创建空库掩盖丢失；OpenFile 本身不做这项判断）。连接错误原样返回。插件拿不到 Core 状态库的任何路径或连接。
+- 连接生命周期：同一 Session 只打开一次，sqlitedb.Open 与 gormdb.Open 共用它；activate 的 shutdown 在 OnStop 返回后、关闭 Session 之前关闭连接；准备阶段任一步失败（迁移、OnStart、REGISTER、等待 PREPARED）时也关闭。gormdb.Open 返回的 *gorm.DB 不另行关闭底层连接。
+- 登记：sqlitedb 与 gormdb 在包 init 中向 sdk/internal/dbhook 登记一个识别函数（只追加函数值，不做 I/O）；SDK 的迁移阶段只调用已登记的识别函数，因此未导入某个包时不认识它的接口。
+- 迁移阶段（SDK，配置准备之后、OnStart 之前，预算为 Bootstrap 的 PhaseLimits.migration_ms，与普通业务期限无关；step 1 的预算校验加入 migration_ms，缺失时与 config_ms 一样报 PROTOCOL_ERROR。迁移阶段的任何失败以 SESSION_PHASE_MIGRATION 报告，不进入 OnStart；超时为 DEADLINE_EXCEEDED）：
+  - 根插件实现的迁移接口合计多于一个（含两个包混用，例如 sqlitedb 的 Migrate 加 gormdb 的 Migrations）时失败（INVALID_ARGUMENT）。
+  - backend 为 NONE：跳过，migration.mode=NONE。
+  - versioned：ID 必须非零、唯一、严格递增；每步 Up 与 _alonabot_migrations 的完成记录在同一事务中，失败不记成功。两个包用同一条 DDL 建账本：CREATE TABLE IF NOT EXISTS _alonabot_migrations (id INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)（applied_at 为 UTC 毫秒）；gormdb 的 RunVersioned 改用这条 DDL，不再 AutoMigrate。
+  - self：调用 Migrate，成功后 self_migrate_completed=true。
+  - REGISTER.migration：mode 与 completed_migration_ids（versioned，账本中的全部 ID，升序）或 self_migrate_completed（self）如实填写。Adapter 角色不执行迁移，仍为 NONE。
+- prepare_effects=external 的维护门槛由 Core 在建立候选前判断（T-09），本切片的 SDK 不读取 manifest 的 prepare_effects。
+- Core：supervisor 只在 NewCandidate 且使用默认路径时创建 generations/<g>/ 目录（0700），普通 restart 的 GenerationID 就是 Active 代次，沿用它的路径，不创建目录；调用方给出的 Bootstrap 不被修改（与 Secret 解析共用同一个副本）。host 校验 REGISTER.migration.mode 与 Bootstrap 的 migration_mode 一致、versioned 的 completed 包含 Bootstrap 的 applied 集合，否则注册失败。
+- 事务内不得等待同一单连接池的另一条独立查询（文档注释写明，测试覆盖一次死锁会被 busy timeout 以外的方式暴露为错误）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：
+  - internal/core/supervisor/db_test.go（//go:build unix）：两个测试插件，一个只导入 sqlitedb、一个用 gormdb，各实现 Migrations（两步，第二步按环境变量可失败）并在 OnStart 中写一行：首装成功，REGISTER 报告 [1,2]，插件代次目录 <PluginDir>/generations/<g>/ 下有 db.sqlite 且 PRAGMA 值正确；第二步失败时 SESSION_ERROR 阶段为 MIGRATION、注册失败、账本只有 1；普通 restart 不重复执行迁移；同时实现两个迁移接口的插件在 CONFIG 之后以 MIGRATION 阶段失败。
+  - 同一测试中断言只导入 sqlitedb 的测试插件二进制不含 gorm.io/gorm（`go version -m` 或 `go list -deps`），且 `go list -deps ./sdk` 不含 modernc.org/sqlite 与 gorm.io/gorm。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：两个入口的复用、共用连接与停止时关闭；准备失败时关闭连接；准备期之外 Open 返回 FAILED_PRECONDITION；backend NONE；文件缺失时非首装不创建；ID 非递增；一个包写的账本另一个包能读出相同的 ID；host 的 migration 一致性校验；调用方给出的非空 sqlite_path 原样下发。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./sdk/... ./internal/core/...；go build ./...；`go list -deps` 列出的 Core 可执行文件与 SDK 根包模块都在 docs/development.md 的允许清单中。
+
+不做：SQLite 候选副本与 Backup API（T-08.6）；维护许可的管理入口、external 插件的候选门槛与 Journal（T-09）。
+```
+
+### goal-53 · T-08.8 用户可见文案目录
+
+状态：待派发。前置 T-04.1、T-04.3、T-04.6（PR #78，合并提交 `0a320c5`）、T-08.1、T-08.10（PR #77）均已合并。2026-11-04 按 D-69～D-74 改写，符号已按合入代码核对：
+- 命令 usage：`router/command.go` 的 `commandUsage(spec *pb.CommandSpec, prefix string) *pb.MessageChain` 以英文 "Usage: " 加本次匹配到的前缀、规范路径、别名与参数标注拼出缺省 usage；USAGE_MODE_CUSTOM 时也按缺省 usage 发送，函数开头有一条 `shortcut:` 注释，说明待 T-08.8 查找 usage_key。usage 经注入的发送回调（message.Service.Send）发出。
+- `CommandSpec.usage_key = 12` 是插件 i18/ 中 messages 的键；`sdk.UsageKey(key) RouteOption` 写入 USAGE_MODE_CUSTOM 与 usage_key；`Usage(text)` 已删除。`sdk.Collect(root) (*Registration, error)` 在启动时合并生成项与注册。
+- `sdk.Generated{ConfigSchema, Commands, Events}`，由生成代码在 init 中经 `sdk.UseGenerated` 登记。`sdk/generate` 只做静态扫描，看不到运行时注册的 UsageKey 参数。
+- Bootstrap 已用到 11（session_limits），12 空闲。
+- `router.Plugin` 接口有 PluginID、Activated、Routes、Call、SendEvent，`router.FromInstance(*host.Instance)` 是唯一的生产实现；`supervisor/bus_test.go` 的 `busWriteGate` 嵌入 `router.Plugin`。`host.ActivateOptions` 与 `host.Instance` 由 supervisor 在 Launch 中构造；`supervisor.Spec.ConfigSchema` 由调用方从当前安装包取得，按同样方式传入 i18 资源。
+- 字段文案的 i18 格式已由 T-08.10 实现：`config` 按 JSON 字段名嵌套，覆盖 label、description、labels、subtitles。
+
+核对时补上原语句缺的一处：CONTRACTS §2.2 与 §5.4 要求自定义 usage 按插件 i18/ 的键与调用者语言发送，但没有写 Core 从哪里取插件的文案。这里定为仿照 ConfigSchema：调用方经 `supervisor.Spec.I18n` 传入当前包的 i18/ 原文（安装包与库模式的嵌入副本都有，CONTRACTS §9、§15），Launch 解析后放进 Instance，Router 经 `Plugin.Messages()` 读取。不加 proto 字段，也不改 `router.New`，避免与 goal-13 同时修改它。未知的 usage_key 由 SDK 在 Collect 时报错：生成器看不到运行时注册的参数，TEST-MATRIX V-87「构建检查」的部分由 Collect 与插件测试承担。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-53（切片 T-08.8：用户可见文案目录）。goal 目录 goal-53，分支 goal-53，worktree .worktrees/goal-53，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：
+- 插件 i18/<locale>.json 中 messages 的键与占位符在构建期检查，并由生成器嵌入。
+- SDK 提供 Context.T，按「Actor locale → Core 默认 locale → en-US」选择语言，支持主语言回落。
+- Core 内置 en-US 与 zh-CN 的用户文案目录，缺省命令 usage 改为经它生成；自定义 usage 按插件 i18/ 的 usage_key 与同一规则选择语言。
+- Core 默认 locale 是一项持久化的全局设置，经 Bootstrap 下发给 SDK。
+
+依据：PLAN T-08 步骤 8；CONTRACTS §5.4、§5.3（config 根节点）、§2.2 第 8 条；MESSAGE-MODEL §1（Actor.locale）；DECISIONS D-72、D-74；TEST-MATRIX V-54 的 SDK 与 Core 分项、V-87 的 usage 语言分项。
+
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/control.proto：Bootstrap 追加 string default_locale = 12，随后运行 go generate ./...（本切片获授权只追加这一字段）
+- contracts/wirespec_test.go：追加编号检查
+- 新增 contracts/i18n/：文件格式解析、占位符、语言选择，Core 与 SDK 共用
+- sdk/generate/：检查并嵌入 i18/*.json；sdk/generated.go 的 Generated 增加 I18n
+- sdk/：新增 i18n.go（Context.T 与后台 T）；Collect 检查 usage_key；session.go 读取 Bootstrap.default_locale（只加读取）
+- internal/core/state/schema.sql：在唯一的初始迁移末尾加入新表；新增 internal/core/state/settings.go
+- 新增 internal/core/i18n/：Core 内置目录与 en-US.json、zh-CN.json
+- internal/core/host/：ActivateOptions 与 Instance 增加 Messages；Bootstrap 写入 default_locale 的调用点
+- internal/core/supervisor/supervisor.go：Spec 增加 I18n 与 DefaultLocale，Launch 解析 I18n 并传给 Activate（只加这一段）
+- internal/core/router/：Plugin 接口与 instancePlugin 增加 Messages；commandUsage 改用目录，删除其中的 shortcut 注释
+- 上述包的测试文件
+允许的新跨模块边：无（contracts/i18n 在 contracts 内；sdk/... -> contracts、internal/core/... -> contracts 已允许）。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. contracts/i18n
+   type Catalog struct{ ... } // 一个组件全部 locale 的 messages
+   type Problem struct { File string; Key string; Message string }
+   func Parse(files map[string][]byte) (*Catalog, []Problem) // 键为文件名（如 "en-US.json"）；有问题时 Catalog 为 nil；files 为空时返回 nil, nil
+   func (c *Catalog) Has(key string) bool // en-US 中是否有该键
+   func (c *Catalog) Format(locales []string, key string, args map[string]string) (string, error) // locales 为按优先级排列的候选（如 [Actor locale, 默认 locale]），最后总会回落到 en-US
+   func Placeholders(message string) ([]string, error)
+2. sdk
+   func (c *Context) T(key string, args ...any) (string, error) // args 为成对的名字与值，值用 fmt.Sprint 格式化
+   func T(ctx context.Context, key string, args ...any) (string, error) // 没有 Actor：从 Core 默认 locale 开始
+   Generated 增加 I18n map[string][]byte // 文件名 → 原文
+3. internal/core/state
+   迁移：CREATE TABLE core_setting (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+   func (s *Store) Setting(ctx context.Context, key string) (string, bool, error)
+   func (s *Store) PutSetting(ctx context.Context, key, value string) error
+4. internal/core/i18n
+   func Messages() *i18n.Catalog // Core 内置目录（嵌入的 en-US.json 与 zh-CN.json）
+   const SettingDefaultLocale = "default_locale"
+   func DefaultLocale(ctx context.Context, st *state.Store) (string, error) // 未设置时为 "en-US"
+   func SetDefaultLocale(ctx context.Context, st *state.Store, tag string) error // 必须是规范的 BCP 47 标签
+5. internal/core/host
+   ActivateOptions 增加 Messages *i18n.Catalog
+   Instance 增加 Messages *i18n.Catalog // 当前包的用户可见文案；没有 i18 资源时为 nil，激活后只读
+6. internal/core/supervisor
+   Spec 增加 I18n map[string][]byte // 当前包的 i18/*.json 原文，来自安装包或库模式的嵌入副本；nil 表示没有文案资源
+   Spec 增加 DefaultLocale string // 写入 Bootstrap.default_locale；装配处由 i18n.DefaultLocale 取得，空值按 "en-US"
+7. internal/core/router
+   Plugin 接口增加 Messages() *i18n.Catalog；instancePlugin 返回 instance.Messages
+
+行为：
+- 文件格式（Parse 校验，问题以 Problem 报告）：
+  - 文件名必须是规范 BCP 47 标签加 .json；JSON 不合法是错误；顶层只允许 config 与 messages 两个键。
+  - messages 的键为点分隔的 ASCII 标识（每段为 [a-z0-9_]+），值为字符串。{name} 为占位符（name 遵循同样的标识规则），{{ 与 }} 为字面花括号，其余单独的花括号是错误。
+  - 必须有 en-US.json；其他语言不得有 en-US 没有的键；同一键在各语言中的占位符集合必须与 en-US 相同。
+  - config 根节点（D-74）按字段名嵌套：每层是对象，叶子只能是 label、description（字符串）与 labels、subtitles（字符串数组）；不做占位符检查，也不检查字段名是否存在于 Schema（表单负责回退，T-08.7）。
+- 语言选择（Format）：按候选顺序逐级尝试，每一级先精确匹配，再按主语言子标签匹配（同一主语言有多个文件时取字典序最小者）；都不命中时用 en-US。目标语言缺少该键时回落到 en-US 的该键。en-US 也没有的键返回错误；缺少占位符参数返回错误；多余参数忽略。不用键名充当文案。
+- 生成器：构建入口目录下有 i18/ 时解析其中全部 .json，Problem 作为诊断报告（位置为文件名与键）；没有问题时把文件原文嵌入 Generated.I18n。plugin check 报告同样的诊断。
+- SDK：
+  - Context.T 的候选为 [Actor.locale（存在时）, Bootstrap.default_locale]；后台 T 为 [default_locale]。插件没有 i18 资源时，T 返回 NOT_FOUND 的错误。
+  - Collect：USAGE_MODE_CUSTOM 的路由，其 usage_key 不在 en-US messages 中（或插件没有 i18 资源）时返回错误。
+- Core：
+  - Launch 用 contracts/i18n.Parse 解析 Spec.I18n，有 Problem 时在启动进程前返回 INVALID_ARGUMENT 的错误；Bootstrap.default_locale 取 Spec.DefaultLocale。修改默认 locale 后，新值在之后建立的 Session 生效（已运行的插件在下次启动时看到新值）。
+  - 缺省 usage：文案键为 core.usage.*（en-US 与 zh-CN 两份），占位符为本次匹配到的前缀、命令路径、别名与参数用法（参数类型标注 :int、:float、:bool、:user、:image、:message 保持不变）。语言按 [事件 Actor 的 locale, 默认 locale] 选择；Router 取默认 locale 的方式由执行者在 Router 内部自定，不改 router.New。
+  - 自定义 usage（USAGE_MODE_CUSTOM）：用 Plugin.Messages() 的 usage_key 按同一候选格式化，参数为 prefix（本次匹配到的前缀）与 command（前缀加规范路径），多余参数照常忽略。Messages 为 nil、缺少该键或格式化失败时，记 WARN（plugin_id、route_id、错误），改发缺省 usage。
+- 日志、错误字符串与 safe_message 仍只用英文。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：
+  - internal/core/supervisor/i18n_test.go（//go:build unix），测试插件带 en-US、zh-CN、zh-TW 三个文件，收到消息时用 Context.T 回复：
+    - Actor.locale 为 zh-CN 时得到中文；zh-HK 回落到主语言 zh 中字典序最小的 zh-CN；ja 与没有 Actor 时用默认 locale。
+    - 把默认 locale 设为 zh-CN 并重启插件后，ja 得到中文。
+    - 参数错误时的缺省 usage：zh-CN 用户收到中文，en-US 用户收到英文。
+    - 带 UsageKey 的命令参数错误时，按调用者语言发送插件的自定义 usage。
+    - Spec.I18n 有问题（如 zh-CN 多出键）时 Launch 返回 INVALID_ARGUMENT，且没有启动进程。
+  - sdk/generate/i18n_test.go：沿用 generate_test.go 的临时 module 辅助函数。缺少 en-US、zh-CN 多出的键、占位符集合不同、非法 JSON、多余的顶层键、config 叶子不合法时各产生诊断；合法时 Generated.I18n 被嵌入。
+  - contracts/wirespec_test.go：Bootstrap.default_locale = 12。
+- 已有集成测试中断言英文缺省 usage 原文的地方（如 command_test.go）按 en-US 目录的文案同步，覆盖的场景不变。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：
+  - 占位符与花括号转义；Format 的未知键与缺少参数。
+  - BCP 47 规范化；SetDefaultLocale 拒绝非法标签。
+  - Core 目录的 en-US 与 zh-CN 键集合一致。
+  - Collect 拒绝未知的 usage_key；Messages 为 nil 时回落到缺省 usage 并记 WARN。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/...；go build ./...。
+
+不做：WebUI 文案、语言切换与配置字段翻译的渲染（T-08.7）；确认消息的文案（T-11.2 使用本目录）；修改默认 locale 的管理 API（T-09.9）；从安装包与库模式读取 i18/ 并填入 Spec.I18n 与 Spec.DefaultLocale 的装配（T-09.5、T-13.1）；Adapter 权限的 label_key 显示（T-09.9）。
+```
+
+### goal-39 · T-09.4 管理服务、安装记录与 serve
+
+状态：等待前置（T-03.8、T-08.4、T-09.1、T-09.2、T-13.1）。语句中 goal-8、goal-31、goal-36、goal-37（packages）、goal-67 提供的符号（manifest.CheckDependencies、secret.Store、adminauth.Auth、packages.Preflight、根包的 assembly、remote.Process、policy 的 Admin 方法）只写名字；合并后由审查者核对签名，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-39（切片 T-09.4：管理服务、安装记录与 serve）。goal 目录 goal-39，分支 goal-39，worktree .worktrees/goal-39，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：建立唯一的管理服务，CLI 与（之后的）WebUI 都经它的 HTTP API 操作；四种角色的组件使用同一套 install、list、enable、disable、restart、uninstall（含 --purge）、pin 流程，所有变更按包串行；install 按角色执行同类唯一，`--source` 指定并持久化来源，`--replace` 显式替换同类组件；Adapter 实例的创建、启停与删除经此服务，凭证存为 Secret 引用；启用时检查必需依赖，停用、卸载被依赖的包时列出受影响者并要求显式确认；admin add/remove/list；alonabot serve（不带子命令时相同）复用根包的 Core 装配，按安装记录启动全部已启用的包。reload、update、rollback 的入口与校验在此定义，候选编排由 T-09.5 起接入。
+
+依据：PLAN T-09 步骤 3；CONTRACTS §9.1～§9.3、§8（依赖段）、§15.1、§15.2、§7.4、§5.3；DECISIONS D-26、D-42、D-59；TEST-MATRIX V-40、V-48、V-52、V-82、V-01 的安装分项。
+
+范围（只新增或修改这些）：
+- internal/core/state/schema.sql：在唯一的初始迁移的 install 表定义中加入新列、末尾加入新表，安装记录的写入与读取方法同步新列；新增 internal/core/state/installs_admin.go（安装记录的扩展字段与 Adapter 实例表）
+- 新增 internal/core/manage/（管理服务与 HTTP API）
+- 根包 assembly.go：增加按安装记录启动全部已启用包、挂载管理 API 的步骤；新增导出的 Serve 供 cmd 使用
+- cmd/alonabot/：serve（以及不带子命令时）调用根包 Serve；新增 install、list、enable、disable、restart、reload、update、rollback、uninstall、pin、adapter instance、admin 命令（经管理 API 访问）
+- internal/core/buttons、conversation、policy、tool、secret：在卸载与 purge 中调用其已有的清理方法（只加调用点）
+- 上述包的测试文件
+允许的新跨模块边：无（cmd/alonabot -> 根包已允许）。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. internal/core/state
+   迁移：install 表定义加入列 version TEXT NOT NULL, publisher_key_id TEXT NOT NULL, pin TEXT NOT NULL, uninstalled INTEGER NOT NULL（不设 DEFAULT，写入安装记录时给出全部列）；
+   CREATE TABLE adapter_instance (instance_id TEXT PRIMARY KEY, plugin_id TEXT NOT NULL REFERENCES install(plugin_id), config_snapshot TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL);
+   读写方法自定。
+2. internal/core/manage
+   type Service struct{ ... }
+   type Options struct { /* Store、Secrets、Supervisor 装配、Packages 根目录、Log、ReleaseBaseURL（缺省 https://github.com，测试指向本地 Release 模拟服务）等，执行者按实际依赖列出 */ }
+   func New(opt Options) *Service
+   type Confirm struct { Affected []string } // 需要确认时返回，调用方带 confirm=true 重试
+   type ErrNeedsConfirm struct{ Affected []string } // 实现 error
+   // 以下方法都按包串行（复用 state.Store.LockPlugin），错误为带 Code 的 *validate.Error 或 ErrNeedsConfirm
+   type InstallRequest struct {
+       Archive, ReleaseJSON, Signature string // 本地包；Source 非空时由服务下载，三者留空
+       Source  string // GitHub 仓库 owner/repo；从 <ReleaseBaseURL>/<owner>/<repo>/releases/latest/download/ 取 release.json 与 release.json.sig，再按其中的资产 URL 取当前平台（WebUI 为 any）的归档
+       Replace bool   // 同类组件已安装时替换它
+       Confirm bool
+   }
+   func (s *Service) Install(ctx context.Context, req InstallRequest) (Package, error)
+   func (s *Service) List(ctx context.Context) ([]Package, error)
+   func (s *Service) Enable(ctx context.Context, id string) error
+   func (s *Service) Disable(ctx context.Context, id string, confirm bool) error
+   func (s *Service) Restart(ctx context.Context, id string) error
+   func (s *Service) Uninstall(ctx context.Context, id string, purge, confirm bool) error
+   func (s *Service) Pin(ctx context.Context, id, constraint string) error // 空串表示解除
+   func (s *Service) Reload(ctx context.Context, id string) error
+   func (s *Service) Update(ctx context.Context, id, archive, releaseJSON, signature string, confirm bool) error
+   func (s *Service) Rollback(ctx context.Context, id, generation string, confirm bool) error
+   func (s *Service) CreateInstance(ctx context.Context, adapterPackageID, instanceID string, config []byte) error // 配置中的 secret 字段经 Secret Store 存为引用
+   func (s *Service) StartInstance(ctx context.Context, instanceID string) error
+   func (s *Service) StopInstance(ctx context.Context, instanceID string) error
+   func (s *Service) DeleteInstance(ctx context.Context, instanceID string) error
+   type Package struct { ID, Role, AdapterID, Version, Source, Pin string; Enabled, Uninstalled bool; Active string; State string }
+   type Candidates interface { Reload(ctx context.Context, id string) error; Update(ctx context.Context, id, staged string) error; Rollback(ctx context.Context, id, generation string) error } // T-09.5 起实现；缺省实现返回 UNSUPPORTED
+   func (s *Service) Handler(auth *adminauth.Auth) http.Handler // /api/v1/...，全部经 auth.Require
+3. 根包
+   func Serve(ctx context.Context, dataDir string, args []string) error // cmd/alonabot serve 使用；与 Run 共用 assembly
+
+行为：
+- install：packages.Preflight（验签、来源、平台、大小、摘要）→ MoveTo 不可变目录 → 写安装记录（install_seq 递增、source、publisher_key_id、version、role、adapter_id）。仍处于已安装状态的同 ID 返回 ALREADY_EXISTS，不覆盖。同类组件（同一 adapter_id 的 adapter、任一 agent、任一 webui）已安装时：未带 Replace 返回 ALREADY_EXISTS，safe_message 列出已安装的组件 ID；带 Replace 未带 confirm 返回 ErrNeedsConfirm（Affected 为将被卸载的组件）；确认后先完成新组件的下载与 Preflight，再按 uninstall 的缺省语义卸载旧组件，最后写新安装记录；旧组件原来启用时按 Enable 启用新组件。被替换 Adapter 的实例记录留在旧组件名下，不转给新组件，Affected 中列出这些实例。新组件在卸载旧组件之后失败时旧组件保持已卸载。Source 持久化为来源，之后的 update 只从它取版本；已卸载的保留记录只允许来源与发布者公钥都相同的重装（复用数据），否则 PERMISSION_DENIED。安装时用全部安装记录的 plugin_dependencies 检查必需依赖成环，成环拒绝。首次信任新发布者公钥需要 confirm。
+- enable：检查 manifest 的必需依赖（CheckDependencies，Installed 来自已启用的包与运行中的 Adapter 描述），有缺失时 FAILED_PRECONDITION 并列出全部缺失项；可选依赖缺失只记诊断。已有 Active 时以该代次启动；首次安装没有 Active 时以「首个候选」启动（新代次、首装 SQLite、配置为 {} 或编辑快照，提交后激活；Journal 由 T-09.5 接入，本切片用一行 shortcut 注释写明）。Adapter 包启用后按 adapter_instance 中 enabled 的实例 StartInstance。
+- disable：停止并保留安装与数据；被已启用包的必需依赖引用时，未带 confirm 返回 ErrNeedsConfirm（列出受影响者），确认后执行，依赖方继续运行，调用它返回 UNAVAILABLE。
+- restart：以当前 Active 启动新 Session（不导入编辑快照，不产生新代次）。
+- uninstall：同 disable 的确认规则；停止、解除运行注册、删除未被引用的程序包目录；默认保留数据、secret、来源绑定与 uninstalled=1 的记录。--purge 时先列出将删除的框架受管对象（代次目录、SQLite、secret、会话、按钮 token、策略、工具策略、Pending、Adapter 实例），未带 confirm 返回 ErrNeedsConfirm（Affected 为对象列表），确认后删除这些对象与安装记录；不删除插件自管的外部数据库与插件自管目录。
+- pin：持久化版本约束（SemVer 范围，manifest 的语法规则），update 只接受满足 pin 的候选。
+- reload/update/rollback：完成输入与前置校验（来源绑定、pin、版本不低于被依赖的 min_version 时需要 confirm），然后交给 Candidates；缺省实现返回 UNSUPPORTED。
+- Adapter 实例：CreateInstance 用该 Adapter 包的配置 Schema（安装包中的 Schema 资源）经 secret.Extract 存快照；Start 时 Resolve 后经 remote.Process 启动；同一 adapter_id 下账号唯一由 remote 检查。实例配置与凭证不出现在 List 或日志中，读取只返回 Redact 后的结果。
+- admin add/remove/list 经 policy 的 Admin 方法。
+- HTTP API（只在 admin host，全部经 adminauth.Require）：每个方法一个 JSON 端点，需要确认时返回 409 与 {"affected": [...]}；错误返回 {"code", "safe_message"}。CLI 命令从 --admin-url（缺省取设置文件的 admin_base_url）与 ALONABOT_ADMIN_TOKEN 环境变量（或 --token-file）取得 Bearer token，不读取插件环境；确认通过 --yes 显式给出。CLI 不直接写状态库。
+- WebUI 组件没有进程：enable/disable 只改记录，restart 返回 FAILED_PRECONDITION；文件的提供在 T-09.12。list 返回 role。
+- serve：取得 core.lock；没有管理凭证时，stdin 与 stderr 都是终端则按 admin-token init 生成并显示一次后继续，否则拒绝启动并提示先运行 admin-token init；装配 Core（与 Run 共用 assembly），启动 HTTP Listener、webhost、管理 API，按 install_seq 顺序启动全部已启用的包。不带子命令运行 alonabot 等同 serve。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/manage_e2e_test.go（//go:build unix）。测试中用 goal-37 的测试工具生成签名的插件包、Adapter 包与依赖它们的插件包，在临时 data_dir 运行 alonabot serve（预先用测试钩子初始化管理 token），再用 CLI 命令操作：
+  - install 后 list 显示未启用；enable 产生第一个 Active；restart 只换 Session（代次不变）。
+  - 依赖 Adapter 的插件在 Adapter 未安装时 enable 失败并列出缺失项；安装 Adapter 后成功；disable Adapter 未加 --yes 时被拒并列出受影响插件，加 --yes 后执行，插件继续运行。
+  - uninstall 后同来源重装复用数据；不同来源重装被拒；--purge 列出对象并在 --yes 后删除。
+  - 已安装 Agent 测试组件时安装另一个 Agent：不带 --replace 返回 ALREADY_EXISTS；带 --replace 与 --yes 后旧组件已卸载、新组件已安装并沿用旧组件的启用状态；替换 Adapter 时旧实例不出现在新 Adapter 下；不同 adapter_id 的两个 Adapter 可以并存。
+  - --source 指向本地 Release 模拟服务：安装成功且来源被持久化；模拟服务上的签名被篡改时安装失败，已有组件不受影响。
+  - pin 持久化，重启 serve 后仍在。
+  - 创建 Adapter 实例：状态库中的配置只有 secret 引用；list 与日志中没有 token；实例可启停。
+  - 插件依赖成环的包在安装时被拒。
+  - reload、update、rollback 返回 UNSUPPORTED（等待 T-09.5）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：串行化（同一包的并发操作排队）；ErrNeedsConfirm 的 Affected 内容；API 的错误格式；没有管理凭证且非终端时 serve 拒绝启动；Package.State 的取值。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+
+不做：候选 Journal 与准备编排（T-09.5）；唯一提交点与激活门禁（T-09.6）；崩溃恢复、回退与回收（T-09.7）；管理页面（T-09.8、T-09.9）。
+```
+
 ## 第 9 波
 
 ### goal-91 · T-04.8 SDK 自有类型与事件常量
