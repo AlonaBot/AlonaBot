@@ -29,7 +29,7 @@
 | goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2 | 等待前置 |
 | goal-8 | T-03.8 | 按钮、extension 片段与依赖解析 | T-03.2、T-03.7 | 等待前置 |
 | goal-51 | T-03.9 | 消息编辑 | T-03.7 | 等待前置 |
-| goal-87 | T-04.6 | 权限、扩展事件与命令解析的协议和 Core 侧 | T-03.3、T-03.6、T-04.3 | 待派发 |
+| goal-87 | T-04.6 | 权限、扩展事件与命令解析的协议和 Core 侧 | T-03.3、T-03.6、T-04.3 | 已完成 |
 | goal-30 | T-08.3 | SDK 配置准备顺序 | T-08.1、T-08.2 | 已完成 |
 | goal-31 | T-08.4 | 不可变 Secret Store | T-02.3、T-08.1、T-08.2 | 已完成 |
 | goal-90 | T-08.10 | 配置标签统一 | T-08.1 | 已完成 |
@@ -1867,7 +1867,9 @@ internal/core/webhost
 
 ### goal-87 · T-04.6 权限、扩展事件与命令解析的协议和 Core 侧
 
-状态：待派发。前置 T-03.3（PR #32）、T-03.6（PR #55，合并提交 `b023130`）、T-04.3（PR #47）均已合并。依据 D-69、D-71、D-72 新增。
+状态：已完成（PR #78）。审查中经维护者批准扩大范围两处（SCOPE-01、SCOPE-02，见下方范围的最后两项与接口 5）。
+
+派发时：前置 T-03.3（PR #32）、T-03.6（PR #55，合并提交 `b023130`）、T-04.3（PR #47）均已合并。依据 D-69、D-71、D-72 新增。
 
 已按合入代码核对：
 - 旧写法的全部使用点：`remote/services.go` 交付时只保留 Adapter 给出的 `TRUSTED_ROLE_CHAT_ADMIN`；`router/command.go` 的 `commandTokens` 写死 `/` 前缀并对各 text 片段连接后的文本做 `strings.Fields`，`commandUsage` 读 `custom_usage`、usage 文本写死 `/`；`router/args.go` 的 `commandArgs(params, text)` 只处理文本；SDK 的 `buildRegister`、`appendServiceRoutes`、`appendSubscriptionRoutes`、`appendHTTPRoutes` 一律写 `PERMISSION_ANY`，`sdk.Usage(text)` 写 `custom_usage`；`supervisor/testdata/commanddispatch` 用了 `sdk.Usage`。Router 目前不检查任何路由权限。
@@ -1897,6 +1899,8 @@ internal/core/webhost
 - internal/core/router/：权限计算与判定、命令前缀、开头片段、按片段分词与新参数类型、usage
 - sdk/：路由描述的 required_permissions、Usage 改为文案键、新参数类型的 Handler 绑定
 - 上述包及 internal/core/supervisor 的测试与 testdata；router.New 的全部调用点
+- 维护者批准（PR #78，SCOPE-01）：adapters/telegram/telegram_test.go 中 Actor 的断言由 TrustedRoles 改为 permissions，只改这一处
+- 维护者批准（PR #78，SCOPE-02）：internal/core/host/activate.go 的 Instance 新增 Adapter 字段，Activate 从 REGISTER 保留；remote.Bind 从该字段读取权限与扩展事件声明
 允许的新跨模块边：无。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
@@ -1919,6 +1923,8 @@ internal/core/webhost
    func UsageKey(key string) RouteOption   // 取代 Usage(text)，删除 Usage
    type UserID string   // Handler 参数类型，对应 PARAM_TYPE_USER；值为 external_user_id
    Handler 参数类型映射新增：UserID → USER，*pb.ImageSegment → IMAGE，*pb.MessageChain → MESSAGE（goal-88 改为 SDK 自有类型）。
+5. internal/core/host（SCOPE-02）
+   Instance 新增字段 Adapter *pb.AdapterDescriptor   // 准备阶段已校验的 Adapter 描述，激活后只读；插件角色为 nil
 
 行为：
 - Adapter 注册（validate.AdapterRegister，失败则 Adapter 注册失败）：
@@ -2357,7 +2363,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-13 · T-04.4 持久化命令策略
 
-状态：等待前置（T-03.2、T-04.1、T-04.6）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-03.2、T-04.1 及命令派发 T-04.3 已由 PR #31、#34、#47 合并。已核对 `Router.Commands().Shadows()`、`router.New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send router.ServiceFunc) *router.Router`、`dispatchCommands` 与 `invokeCommand`。策略依赖通过下方 CommandPolicy 注入，避免 router 与 policy 的循环 import。
+状态：等待前置。前置 T-03.2、T-04.1、T-04.6（PR #78）均已合并；审查者按新契约改写并核对本语句后改为待派发。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-03.2、T-04.1 及命令派发 T-04.3 已由 PR #31、#34、#47 合并。已核对 `Router.Commands().Shadows()`、`router.New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send router.ServiceFunc) *router.Router`、`dispatchCommands` 与 `invokeCommand`。策略依赖通过下方 CommandPolicy 注入，避免 router 与 policy 的循环 import。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-13（切片 T-04.4：持久化命令策略）。goal 目录 goal-13，分支 goal-13，worktree .worktrees/goal-13，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -2436,7 +2442,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-88 · T-04.7 SDK 链式注册与自有类型
 
-状态：等待前置（T-04.2、T-04.6、T-06.1、T-06.3、T-08.1）。语句只写了目标、依据和要点。依据 D-70 新增。T-06.3（PR #56）新增的 Event Bus 订阅与发布入口、T-08.1（PR #54）对生成器与 `sdk/session.go` 的修改都按旧写法进行，由本切片在它们合并后一并改为链式，避免与进行中的 PR 同时修改这些文件。
+状态：等待前置。前置 T-04.2、T-04.6（PR #78）、T-06.1、T-06.3、T-08.1 均已合并；审查者补全接口与测试并核对后改为待派发。语句只写了目标、依据和要点。依据 D-70 新增。T-06.3（PR #56）新增的 Event Bus 订阅与发布入口、T-08.1（PR #54）对生成器与 `sdk/session.go` 的修改都按旧写法进行，由本切片在它们合并后一并改为链式，避免与进行中的 PR 同时修改这些文件。
 
 目标：命令、文本匹配、事件、Service 与 Event Bus 订阅的注册改为链式构建，删除 `RouteOption`、`ServiceOption` 与位置参数形式；新增 Permission 值对象与 `c.Has`、标准事件常量与 `sdk.AdapterEvent`；Service Schema 由生成器生成；Context、Send、事件 payload 与错误码改用 SDK 自有类型，自动回复型 Handler 可以 `c.Send`；构建期生成器、示例与已合并调用方同步。
 
@@ -2524,7 +2530,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-53 · T-08.8 用户可见文案目录
 
-状态：等待前置（T-04.6、T-08.10）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.1、T-04.3 已合并；已核对 `sdk.Context`、`sdk.Usage(text string) RouteOption` 与 `router/command.go` 的 `commandUsage(spec *pb.CommandSpec) *pb.MessageChain`，usage 经注入的 message.Service.Send 发送。goal-28 已合并（PR #54）：生成器在 Schema 中为每个字段写入 `x-alonabot-i18n`（`config.<json 路径>`，数组元素与 map 值不含下标或键）与 `x-alonabot-form.label`（未写 label 时等于 i18 路径），description 键写入 description。按 D-74，label 与 description 改为标签中的源文案，`x-alonabot-i18n` 删除，i18 文件的 `config` 按 JSON 字段名嵌套、覆盖 label、description、labels、subtitles；这些已由 T-08.10（goal-90，PR #77）实现。
+状态：等待前置。前置 T-04.6（PR #78）与 T-08.10（PR #77）均已合并；审查者按新契约改写并核对本语句后改为待派发。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.1、T-04.3 已合并；已核对 `sdk.Context`、`sdk.Usage(text string) RouteOption` 与 `router/command.go` 的 `commandUsage(spec *pb.CommandSpec) *pb.MessageChain`，usage 经注入的 message.Service.Send 发送。goal-28 已合并（PR #54）：生成器在 Schema 中为每个字段写入 `x-alonabot-i18n`（`config.<json 路径>`，数组元素与 map 值不含下标或键）与 `x-alonabot-form.label`（未写 label 时等于 i18 路径），description 键写入 description。按 D-74，label 与 description 改为标签中的源文案，`x-alonabot-i18n` 删除，i18 文件的 `config` 按 JSON 字段名嵌套、覆盖 label、description、labels、subtitles；这些已由 T-08.10（goal-90，PR #77）实现。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-53（切片 T-08.8：用户可见文案目录）。goal 目录 goal-53，分支 goal-53，worktree .worktrees/goal-53，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
