@@ -29,11 +29,12 @@
 | T-04.2 | goal-11 | 构建期生成器 `sdk/generate`：限定扫描范围、build tags、生成注册代码、稳定输出；`cmd/alonabot` 的构建检查入口 | T-04 步骤 2 | T-04.1 | V-10 | 已完成（PR #42；TEST-MATRIX §3.2） |
 | T-04.3 | goal-12 | 命令选择与参数绑定：完整 token、@username、最长路径/别名→文本匹配（Regex、keyword、startswith、endswith、fullmatch）→Raw、消费状态、参数语法、usage/silent | T-04 步骤 4 | T-04.1 | V-11 的命令分项、V-49 | 已完成（PR #47；TEST-MATRIX §3.2） |
 | T-04.4 | goal-13 | 持久化命令策略与管理服务层：继承、禁用、全局禁止、下一次派发生效 | T-04 步骤 5 | T-03.2、T-04.1、T-04.6 | V-12、V-43 的服务层分项 | 未开始 |
-| T-04.5 | goal-14 | 用同一 SDK 升级示例，完成构建与策略验收，汇总证据 | T-04 步骤 6、7 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7 | V-10、V-11、V-12、V-43、V-49 的 T-04 分项 | 未开始 |
+| T-04.5 | goal-14 | 用同一 SDK 升级示例，完成构建与策略验收，汇总证据 | T-04 步骤 6、7 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8 | V-10、V-11、V-12、V-43、V-49 的 T-04 分项 | 未开始 |
 | T-04.6 | goal-87 | 权限、扩展事件与命令解析的协议和 Core 侧：proto 修改与生成；Adapter 权限与扩展事件声明的校验；平台权限的保留与隐含展开、按权限名集合判定；扩展事件的交付校验；`command_prefixes` 与按实例覆盖、去掉开头的 reference 与本账号 mention、非文本 token 与 `user`/`image`/`message` 参数、usage 文案键 | T-04 步骤 8 | T-03.3、T-03.6、T-04.3 | V-85、V-86、V-87 的 Core 分项 | 已完成（PR #78；TEST-MATRIX §3.2） |
-| T-04.7 | goal-88 | SDK 链式注册与自有类型：命令、文本匹配、事件、Service 与 Event Bus 订阅的 builder，Permission 值对象，事件常量与 `sdk.AdapterEvent`，Service Schema 由生成器生成，SDK 自有的 Message/Target/Actor/SendResult/错误码，自动回复型可 `c.Send`；生成器、示例与已合并调用方同步 | T-04 步骤 9 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | V-10、V-14 与 V-86 的 SDK 分项 | 未开始 |
+| T-04.7 | goal-88 | SDK 链式注册：命令、文本匹配、事件、Service 与 Event Bus 订阅的 builder，Permission 值对象与 `c.Has`，Service Schema 由生成器生成且 schema_id 由 Go 类型决定，自动回复型可 `c.Send`；生成器、示例与已合并调用方同步 | T-04 步骤 9 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | V-10、V-14 的 SDK 分项 | 未开始 |
+| T-04.8 | goal-91 | SDK 自有类型与事件常量：Message/Target/Actor/SendResult/错误码与入站片段，标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对事件 Handler 的 payload 类型，`sdk/adapter` 的公共类型；Telegram Adapter、示例与已合并调用方同步 | T-04 步骤 9 | T-04.7 | V-14 的类型分项、V-86 的 SDK 分项 | 未开始 |
 | T-05.1 | goal-15 | 可信事件上下文与有界同事件分发：64 条并发链、256 条/8 MiB 等待队列、稳定候选排序、链执行与读循环分离；经回环测试 Adapter 运行，按钮与 scheduled 绑定先用规范 fixture | T-05 步骤 1、2 | T-03.3、T-04.3、T-04.4 | V-13、V-16 的 fixture 分项 | 未开始 |
-| T-05.2 | goal-16 | SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支 | T-05 步骤 3、4 | T-05.1、T-04.7 | V-14、V-11 的 Rule 分项 | 未开始 |
+| T-05.2 | goal-16 | SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支 | T-05 步骤 3、4 | T-05.1、T-04.7、T-04.8 | V-14、V-11 的 Rule 分项 | 未开始 |
 | T-05.3 | goal-17 | PreEvent/BeforeSend/AfterSend 三阶段 Hook，send_forbidden 的保存与继承 | T-05 步骤 5、6 | T-05.2 | V-15 的直接路径分项 | 未开始 |
 | T-05.4 | goal-52 | 延续调用与多轮等待：`core.continuation.start`、`core.wait`、等待键与消费、超时与 Session 失效；SDK 的 `Continue` 与 `Wait` | T-05 步骤 7 | T-05.2 | V-50 | 未开始 |
 | T-05.5 | goal-18 | 多进程事件流水线验收（含真实按钮回调与多轮等待），汇总证据 | T-05 步骤 8 | T-03.8、T-05.3、T-05.4 | V-11、V-13～V-16、V-43、V-49、V-50 的 T-05 分项 | 未开始 |
@@ -252,7 +253,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 
 8. **改造权限、扩展事件与命令解析的协议和 Core 侧。** 按 WIRE-FORMAT §5A 的 2026-11-01 条目修改 proto 并重新生成。Core 校验 Adapter 的权限与扩展事件声明（前缀、名称、隐含关系无环、Schema 可编译）；交付事件时只保留已声明的平台权限并展开隐含关系，按声明校验扩展事件；路由按权限名集合判定（CONTRACTS §2.3）。按 CONTRACTS §2.2 实现 `command_prefixes` 与按实例覆盖、去掉开头的 reference 与指向本账号的 mention、非文本 token、`user`/`image`/`message` 参数与 usage 文案键。同步修改已合并的 router、remote Adapter、`sdk/adapter`、Telegram Adapter 与集成测试（D-69、D-71、D-72）。
 
-9. **SDK 改为链式注册并使用自有类型。** 按 D-70 把命令、文本匹配、事件、Service 与 Event Bus 订阅的注册改为链式构建，删除 `RouteOption`、`ServiceOption` 与位置参数形式；新增 Permission 值对象（`Or`）与 `c.Has`、标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对 Handler 的参数类型；Service 的 Schema 由生成器从 Go 类型生成；Context、Send、事件 payload 与错误码改用 SDK 自有类型，自动回复型 Handler 可以 `c.Send`。构建期生成器、示例、`sdk/adapter` 的公共类型与已合并调用方同步修改。
+9. **SDK 改为链式注册并使用自有类型。** 按 D-70 把命令、文本匹配、事件、Service 与 Event Bus 订阅的注册改为链式构建，删除 `RouteOption`、`ServiceOption` 与位置参数形式；新增 Permission 值对象（`Or`）与 `c.Has`、标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对 Handler 的参数类型；Service 的 Schema 由生成器从 Go 类型生成；Context、Send、事件 payload 与错误码改用 SDK 自有类型，自动回复型 Handler 可以 `c.Send`。构建期生成器、示例、`sdk/adapter` 的公共类型与已合并调用方同步修改。链式注册（含 Permission 与 Service Schema）为 T-04.7，自有类型、事件常量与 `sdk/adapter` 的公共类型为 T-04.8（2026-11-04 拆分）。
 
 #### 拟目录与交付
 
