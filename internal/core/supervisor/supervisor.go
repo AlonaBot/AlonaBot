@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -31,6 +32,13 @@ import (
 
 // memoryLimitEnv 指定 Go 运行时读取插件内存软上限的环境变量。
 const memoryLimitEnv = "GOMEMLIMIT"
+
+// 受管 SQLite 的代次路径与权限见 CONTRACTS §6.1。
+const (
+	generationsDirectory    = "generations"
+	generationDatabaseFile  = "db.sqlite"
+	generationDirectoryMode = 0o700
+)
 
 // Spec 描述一次插件启动。
 type Spec struct {
@@ -135,6 +143,15 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	pluginDir, err := filepath.Abs(spec.PluginDir)
 	if err != nil {
 		return nil, err
+	}
+	if database := boot.GetDatabaseDescriptor(); database.GetBackend() == pb.DatabaseBackend_DATABASE_BACKEND_SQLITE && database.GetSqlitePath() == "" {
+		directory := filepath.Join(pluginDir, generationsDirectory, spec.GenerationID)
+		database.SqlitePath = filepath.Join(directory, generationDatabaseFile)
+		if spec.NewCandidate {
+			if err := os.MkdirAll(directory, generationDirectoryMode); err != nil {
+				return nil, err
+			}
+		}
 	}
 	sessionSecret, err := process.NewSecret()
 	if err != nil {

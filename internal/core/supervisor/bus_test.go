@@ -140,7 +140,7 @@ func testBusProcesses(t *testing.T, binary string, stdio bool) {
 		caller := router.NewCaller(id, generation)
 		spec := Spec{PluginID: id, Role: state.RolePlugin, GenerationID: generation, PluginDir: dir, Executable: binary, BuildDigest: digest,
 			NewCandidate: true, Stdio: stdio, ExtraEnv: map[string]string{"ALONABOT_TEST_BUS_ID": id},
-			Bootstrap: &pb.Bootstrap{GenerationId: generation, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE}},
+			Bootstrap: &pb.Bootstrap{GenerationId: generation, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}},
 			Limits:    host.NewLimits(values), Stop: host.NewStopTiming(values), Log: output.Plugin(id, generation), Global: budget, Handler: mux.For(caller),
 		}
 		instance, err := Launch(ctx, store, spec)

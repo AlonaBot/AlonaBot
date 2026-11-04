@@ -255,7 +255,7 @@ func testIncomingMedia(t *testing.T, binary string, stdio bool) {
 		callers[id] = caller
 		spec := Spec{PluginID: id, Role: state.RolePlugin, GenerationID: generation, PluginDir: dir, Executable: binary, BuildDigest: digest, NewCandidate: true, Stdio: stdio,
 			ExtraEnv:  map[string]string{incomingMediaPluginEnv: id, "GORACE": "atexit_sleep_ms=0"},
-			Bootstrap: &pb.Bootstrap{GenerationId: generation, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE}},
+			Bootstrap: &pb.Bootstrap{GenerationId: generation, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}},
 			Limits:    host.NewLimits(values), Stop: host.NewStopTiming(values), Log: output.Plugin(id, generation), Handler: mux.For(caller),
 		}
 		instance, err := Launch(ctx, store, spec)

@@ -263,7 +263,7 @@ func launch(ctx context.Context, out *logging.Output, plog *slog.Logger, store *
 	r, err := supervisor.Launch(ctx, store, supervisor.Spec{Role: state.RolePlugin,
 		PluginID: pluginID, PluginDir: pluginDir, Executable: exe, BuildDigest: digest, GenerationID: gen,
 		Bootstrap: &pb.Bootstrap{GenerationId: gen, CandidateConfigJson: "{}", TargetConfigVersion: 1,
-			DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE},
+			DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE},
 			LogLevel:           logging.ProtoLevel(out.Levels().Source(pluginID))},
 		NewCandidate: isNew, Stdio: stdio, Limits: host.NewLimits(v), Stop: host.NewStopTiming(v), Log: out.Plugin(pluginID, gen),
 		Global: global, MemorySoftLimit: v.PluginMemorySoftLimit, ExtraEnv: environment,

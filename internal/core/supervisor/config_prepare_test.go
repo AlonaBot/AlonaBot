@@ -165,7 +165,7 @@ func TestConfigPrepare(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			boot := &pb.Bootstrap{GenerationId: "gen-1", CandidateConfigJson: test.raw, TargetConfigVersion: 2, PreviousConfigVersion: test.from,
-				DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, ActivationReason: pb.ActivationReason_ACTIVATION_REASON_UPDATE}}
+				DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE, ActivationReason: pb.ActivationReason_ACTIVATION_REASON_UPDATE}}
 			if test.from == nil {
 				boot.DatabaseDescriptor.ActivationReason = pb.ActivationReason_ACTIVATION_REASON_FIRST_INSTALL
 			}
