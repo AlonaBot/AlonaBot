@@ -31,14 +31,13 @@ type Auth struct {
 	store   *state.Store
 	now     func() time.Time
 	baseURL url.URL
-	log     *slog.Logger
 	secure  bool
 }
 
-// New 使用已校验的管理 Base URL 与 Core Logger 构造认证入口。
+// New 使用已校验的管理 Base URL 构造认证入口。
 // HTTPS 同时决定 Cookie 的 Secure 属性与 __Host- 前缀；now 提供会话时钟。
-func New(st *state.Store, now func() time.Time, adminBaseURL *url.URL, log *slog.Logger) *Auth {
-	return &Auth{store: st, now: now, baseURL: *adminBaseURL, log: log, secure: adminBaseURL.Scheme == "https"}
+func New(st *state.Store, now func() time.Time, adminBaseURL *url.URL) *Auth {
+	return &Auth{store: st, now: now, baseURL: *adminBaseURL, secure: adminBaseURL.Scheme == "https"}
 }
 
 // Routes 注册登录与需认证的登出接口；装配方只在 admin host 调用这些路由。
@@ -69,7 +68,7 @@ func (a *Auth) Require(next http.Handler) http.Handler {
 }
 
 // Lookup 返回当前 Cookie 会话及其到期时刻，供 webhost 绑定派生授权。
-// 无效凭证返回 ok=false，状态库故障交给注入的 Logger 记录。
+// 无效凭证返回 ok=false，状态库故障用 slog 记录。
 func (a *Auth) Lookup(r *http.Request) (sessionID string, expiresAt time.Time, ok bool) {
 	credential, err := a.credential(r.Context())
 	if err != nil {
@@ -174,7 +173,7 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(struct {
 		CSRFToken string `json:"csrf_token"`
 	}{session.CSRFToken}); err != nil {
-		a.log.Error("write admin login response", "err", err)
+		slog.Error("write admin login response", "err", err)
 	}
 }
 
@@ -278,12 +277,12 @@ func (a *Auth) cookie(value string) *http.Cookie {
 }
 
 func (a *Auth) loginFailed(r *http.Request) {
-	a.log.Info("admin login failed", "remote_addr", r.RemoteAddr)
+	slog.Info("admin login failed", "remote_addr", r.RemoteAddr)
 }
 
 func (a *Auth) lookupError(err error) {
 	if !errors.Is(err, ErrNotInitialized) {
-		a.log.Error("read admin authentication", "err", err)
+		slog.Error("read admin authentication", "err", err)
 	}
 }
 
@@ -292,6 +291,6 @@ func (a *Auth) respondError(w http.ResponseWriter, err error) {
 		http.Error(w, ErrNotInitialized.Error(), http.StatusServiceUnavailable)
 		return
 	}
-	a.log.Error("admin authentication failed", "err", err)
+	slog.Error("admin authentication failed", "err", err)
 	http.Error(w, "internal server error", http.StatusInternalServerError)
 }

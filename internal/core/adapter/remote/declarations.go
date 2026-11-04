@@ -3,6 +3,7 @@ package remote
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"slices"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -64,7 +65,7 @@ func (p *Process) platformPermissions(instanceID string, permissions []string) [
 	for _, name := range permissions {
 		implied, declared := p.declarations.permissions[name]
 		if !declared {
-			p.opt.Log.Warn("discard undeclared adapter permission", "plugin_id", p.opt.PluginID, "instance_id", instanceID, "name", name)
+			slog.Warn("discard undeclared adapter permission", "plugin_id", p.opt.PluginID, "instance_id", instanceID, "name", name)
 			continue
 		}
 		expanded = append(expanded, implied...)

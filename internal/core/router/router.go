@@ -68,7 +68,6 @@ type Router struct {
 	prepare  func(*pb.Event, Caller) (*pb.Event, error)
 	prefixes func(adapterInstanceID string) []string
 	matches  map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
-	log      *slog.Logger
 	queue    chan *pb.Event
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -81,17 +80,17 @@ type Router struct {
 	worker   sync.WaitGroup
 }
 
-// New 创建容量为 queueEvents 的事件队列，log 使用 Core 的 Logger。
+// New 创建容量为 queueEvents 的事件队列。
 // queueEvents 由装配处传入 tune.Values.DispatchQueueEvents。
 // adapters 提供账号用户名，send 接入 message.Service.Send 处理 usage 与自动回复。
 // prepare 在每次 Handler 调用前改写接收 Session 的事件；nil 时原样派发。
 // prefixes 按实例提供非空的前缀列表；nil 时所有实例使用 ["/"]。
-func New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send ServiceFunc, prepare func(*pb.Event, Caller) (*pb.Event, error), prefixes func(adapterInstanceID string) []string) *Router {
+func New(queueEvents int, adapters *adapter.Registry, send ServiceFunc, prepare func(*pb.Event, Caller) (*pb.Event, error), prefixes func(adapterInstanceID string) []string) *Router {
 	if prefixes == nil {
 		prefixes = func(string) []string { return []string{"/"} }
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Router{adapters: adapters, send: send, prepare: prepare, prefixes: prefixes, matches: make(map[string][]commandRoute), log: log, queue: make(chan *pb.Event, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]*pluginSession), inFlight: make(map[inFlightKey]struct{}), commands: &CommandIndex{}}
+	return &Router{adapters: adapters, send: send, prepare: prepare, prefixes: prefixes, matches: make(map[string][]commandRoute), queue: make(chan *pb.Event, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]*pluginSession), inFlight: make(map[inFlightKey]struct{}), commands: &CommandIndex{}}
 }
 
 // Attach 注册一个接收派发的插件并重建命令索引；相同插件 ID 替换为新实例。
@@ -264,18 +263,17 @@ func (r *Router) dispatch(ev *pb.Event) {
 		trace := make([]byte, traceIDBytes)
 		rand.Read(trace)
 		routeID := candidate.route.GetRouteId()
-		log := r.log.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace))
 		response, err := r.call(candidate, ev, nil, trace)
 		if err != nil {
-			log.Warn("event handler call failed", "error", err)
+			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("event handler call failed", "error", err)
 		}
 		if response.Err != nil && err == nil {
-			log.Warn("event handler returned an error", "code", response.Err.GetCode(), "error", response.Err.GetSafeMessage())
+			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("event handler returned an error", "code", response.Err.GetCode(), "error", response.Err.GetSafeMessage())
 		}
 		// 业务错误仍可能携带有效 STOP；先读取传播结果，再决定是否继续。
 		outcome, err := decodeOutcome(response.Payload)
 		if err != nil {
-			log.Warn("decode event handler outcome failed", "error", err)
+			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("decode event handler outcome failed", "error", err)
 			continue
 		}
 		if outcome.GetPropagation() == pb.Propagation_PROPAGATION_STOP {
@@ -293,7 +291,7 @@ func (r *Router) permitted(c candidate, ev *pb.Event) bool {
 			return true
 		}
 	}
-	r.log.Debug("route permission denied", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId())
+	slog.Debug("route permission denied", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId())
 	return false
 }
 
