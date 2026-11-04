@@ -94,7 +94,7 @@ message SessionLimits {
 `max_inflight` 是每个 Session、每个发起方向的在途业务请求上限；`max_payload_bytes` 是该 Session 在途与排队请求/事件载荷的合计预算；`request_timeout_ms` 是普通业务请求的缺省期限。T-02.2 依赖 T-02.1 合并后再修改同一 `.proto` 文件，避免并行生成代码冲突。
 | `phase_limits`、`preparation_deadline_unix_ms` | 主契约固定的准备、迁移和 Ready 预算及本轮绝对期限；迁移使用独立预算，不被普通业务 30s 截断 |
 
-SDK 按配置契约执行 `OnLoad → 补缺失默认值 → typed decode/Schema 校验 → DB 迁移门槛核对及许可的迁移 → OnStart`，并在 REGISTER 回传完整、规范化的候选 JSON；私有载荷可包含供插件使用的已解析 Secret。Core 只为新候选抽取 Secret 并持久化新的引用快照，再计算 PREPARED 的 candidate digest；普通 restart 仅验证原快照一致性，复用原 Generation、Secret 引用与 COMMITTED 记录。Bootstrap、候选完整 JSON、DB 凭证及 HTTP 认证材料不得进入普通日志或管理 API 响应。
+SDK 按配置契约执行 `OnConfigLoad → 补缺失值 → schema 校验 → DB 迁移门槛核对及许可的迁移 → OnStart`，并在 REGISTER 回传完整、规范化的候选 JSON；私有载荷可包含供插件使用的已解析 Secret。Core 只为新候选抽取 Secret 并持久化新的引用快照，再计算 PREPARED 的 candidate digest；普通 restart 仅验证原快照一致性，复用原 Generation、Secret 引用与 COMMITTED 记录。Bootstrap、候选完整 JSON、DB 凭证及 HTTP 认证材料不得进入普通日志或管理 API 响应。
 
 准备所需数据由 Bootstrap 一次下发，因此 OnStart/OnReady **不能发起普通业务 Send、Service、Publish，也不能等待自身 ready gate**。数据库操作遵循 Candidate 视图及主契约的副作用边界。后台任务可在 OnReady 注册启动意图；SDK 在唯一 writer 成功写完整个 ACTIVATED 后才放开 ready gate。Core 按同一连接帧顺序先处理 ACTIVATED，后处理紧随其后的业务 REQUEST；无额外 ActivatedAck。
 

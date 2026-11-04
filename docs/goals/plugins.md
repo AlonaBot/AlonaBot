@@ -7,7 +7,7 @@
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
 | goal-71 | T-14.1 | help 插件与命令列表 | T-04.4、T-05.2、T-08.8 | 等待前置 |
-| goal-72 | T-14.2 | welcome 与 rss 插件 | T-05.2、T-07.2、T-08.3、T-08.5、T-08.8 | 等待前置 |
+| goal-72 | T-14.2 | welcome 与 rss 插件 | T-05.2、T-07.2、T-08.5、T-08.8、T-08.11 | 等待前置 |
 
 ## 第 11 波
 
@@ -74,7 +74,7 @@
 
 ### goal-72 · T-14.2 welcome 与 rss 插件
 
-状态：等待前置（T-05.2、T-07.2、T-08.3、T-08.5、T-08.8）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。语句中 goal-16、goal-24、goal-30、goal-32、goal-53 提供的符号（ChatAdmin Rule、ScheduleRegistry.Every、Config 与 OnLoad、gormdb.Open、Context.T、sdk.Send）只写名字；合并后由审查者核对，再改为待派发。
+状态：等待前置（T-05.2、T-07.2、T-08.5、T-08.8、T-08.11）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。语句中 goal-16、goal-24、goal-32、goal-53、goal-95 提供的符号（ChatAdmin Rule、ScheduleRegistry.Every、gormdb.Open、Context.T、sdk.Send、Config() 与 OnConfigLoad）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-72（切片 T-14.2：welcome 与 rss 插件）。goal 目录 goal-72，分支 goal-72，worktree .worktrees/goal-72，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -90,7 +90,7 @@
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 - plugins/welcome：func New() sdk.Root
-- plugins/rss：func New() sdk.Root；type Config struct { config.Base; IntervalMinutes int `json:"interval_minutes" config:"default:10;min:1;max:1440"` }
+- plugins/rss：func New() sdk.Root；plugins/rss/config_schema.json 声明 {"interval_minutes": {"description": "Check interval (minutes)", "type": "int", "default": 10, "slider": {"min": 1, "max": 1440}}}，以 Config().Int("interval_minutes") 读取（D-76）
 
 行为：
 - welcome：
