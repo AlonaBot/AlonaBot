@@ -50,7 +50,7 @@ TCP 为默认，Core 持有 loopback 端口 0 分配的 Listener；stdio 可选�
 
 ## D. Go SDK 与 Handler 注册
 
-一个插件包恰好一个根类，嵌入 `sdk.Base`，最多一个 Config 类型。`sdk.Base` 为根插件的全部 Hook（`OnStart`/`OnReady`/`OnStop`、`Config`、`Commands`/`HTTP`/`Schedules`）提供空的默认实现，根插件只覆盖需要的方法，SDK 原样调用，不区分是否覆盖；这样编辑器能补全出全部 Hook。`sdk.Root` 接口列出全部 Hook，覆盖时签名不符（或根插件有与 Hook 同名的字段）会使根插件不再满足 `sdk.Root`，在调用 `sdk.Run` 处编译失败，不会静默跳过。`Config` 返回 `config.Config`，配置类型嵌入 `config.Base`（默认 `OnLoad` 原样返回 raw），覆盖 `OnLoad` 时签名不符同样在编译期失败。元数据 ID 只来自 plugin.yaml；辅助 Handler 可以显式接收根类指针，不引入自动 DI。包级函数可用 `//alonabot:command`、`//alonabot:event` 构建期标记发现；实例方法必须提供实例显式注册。
+一个插件包恰好一个根类，嵌入 `sdk.Base`；配置由包内的 `config_schema.json` 声明，不定义 Go 配置类型（D-76）。`sdk.Base` 为根插件的全部 Hook（`OnStart`/`OnReady`/`OnStop`、`OnConfigLoad`、`Commands`/`HTTP`/`Schedules`）提供空的默认实现，并提供读取本 Session 配置的 `Config()`，根插件只覆盖需要的方法，SDK 原样调用，不区分是否覆盖；这样编辑器能补全出全部 Hook。`sdk.Root` 接口列出全部 Hook，覆盖时签名不符（或根插件有与 Hook 同名的字段）会使根插件不再满足 `sdk.Root`，在调用 `sdk.Run` 处编译失败，不会静默跳过。默认的 `OnConfigLoad` 原样返回 raw，覆盖时签名不符同样在编译期失败。元数据 ID 只来自 plugin.yaml；辅助 Handler 可以显式接收根类指针，不引入自动 DI。包级函数可用 `//alonabot:command`、`//alonabot:event` 构建期标记发现；实例方法必须提供实例显式注册。
 
 生成器只扫描当前模块的目标构建包，遵守 Go build tags/GOOS/GOARCH，排除外部依赖、vendor 和测试文件；用生成 Go 代码让编译器检查签名。路由、配置 Schema 和 i18/ 的构建检查在 T-01/T-04 落地；不在运行时从磁盘扫描任意包。单次 Session 注册描述固定，Core 动态修改权限/开关，不重建插件对象。
 
@@ -164,27 +164,40 @@ Core 管理状态库与插件业务库分开。框架只托管 SQLite（D-48）�
 
 ## J. Config、Schema 与 i18/
 
-运行配置为普通 JSON 对象，无外层 config；i18/ 翻译才以 config 为顶层。Go Config 的 `json` 标签决定字段名，`config` 标签统一承载表单与 secret/hidden 元数据（语法同 GORM 标签，label 与 description 直接写英文源文案），二者生成 Schema 与表单，字段按声明顺序，保留未知键、显式 false/0/空串与隐藏字段。
+运行配置为普通 JSON 对象，无外层 config；i18/ 翻译才以 config 为顶层。字段由包内手写的 `config_schema.json` 声明（D-76），键名沿用 AstrBot 的 `_conf_schema.json`，另有 `secret`、`required` 与只能选一个模板的 `template`；键的顺序就是表单顺序。每个字段都有值：缺失键补 default 或类型零值，显式 false/0/空串与 invisible 字段保留，未知键保留。
 
-`OnLoad` 是配置回调，区别于三个进程 Hook，也负责拒绝不合法的业务取值，SDK 不另设 Validate 回调。流程为原始对象→配置版本迁移（OnLoad）→仅补缺键默认→typed decode/Schema 校验→Candidate；不能先用新 Schema 拒绝仍需迁移的旧字段。持久化保留原始完整对象，不能用 typed marshal 丢掉未知键。
+`OnConfigLoad` 是配置回调，区别于三个进程 Hook，也负责拒绝不合法的业务取值，SDK 不另设 Validate 回调。流程为原始对象→配置版本迁移（OnConfigLoad）→补缺失值→schema 校验→Candidate；不能先用新 schema 拒绝仍需迁移的旧字段。持久化保留原始完整对象，不能用只含已声明字段的结果丢掉未知键。插件经 `Config()` 按类型取值，键未声明或类型不符直接 panic，这类错误在开发时就会暴露。
 
 Core 状态库的 ActiveGeneration 是权威，`config.json` 是用户编辑快照。直接编辑不热生效，`plugin reload` 导入 Pending 后走候选流程。新 secret 产生新不可变引用，候选失败不修改旧凭证；普通配置 API 不返回明文。表单 PATCH 采用明确操作，掩码不当作真实值。
 
+```json
+{
+  "interval": {"description": "Refresh interval", "hint": "Polling interval in seconds", "type": "int", "default": 10, "slider": {"min": 1, "max": 600}},
+  "mode": {"description": "Mode", "type": "string", "options": ["fast", "safe"], "labels": ["Fast", "Safe"], "default": "fast"},
+  "music": {"description": "Music source", "type": "template", "templates": {
+    "netease": {"name": "NetEase Cloud Music", "items": {"cookie": {"description": "Cookie", "type": "string", "secret": true, "required": true}}}
+  }}
+}
+```
+
 ```go
-Interval int    `json:"interval" config:"label:Refresh interval;description:Polling interval;default:10;min:1"`
-Mode     string `json:"mode" config:"label:Mode;options:fast|safe;labels:Fast|Safe"`
+interval := p.Config().Int("interval")
+if m := p.Config().Template("music"); m.Key() == "netease" {
+    cookie := m.String("cookie")
+}
 ```
 
 ```json
 {
   "config": {
-    "interval": { "label": "刷新间隔", "description": "轮询间隔" },
-    "mode": { "label": "模式", "labels": ["快速", "安全"] }
+    "interval": { "description": "刷新间隔", "hint": "轮询间隔（秒）" },
+    "mode": { "description": "模式", "labels": ["快速", "安全"] },
+    "music": { "templates": { "netease": { "name": "网易云音乐" } } }
   }
 }
 ```
 
-以上是 i18/zh-CN.json 示例：源文案写在标签里，翻译文件按字段名嵌套覆盖（D-74，仿照 AstrBot）。语言仅影响文案，查找为当前 locale→标签中的源文案→字段的 JSON 名。选项的存储值不翻译，显示文案由 labels 提供。
+以上依次是 `config_schema.json`、插件取值与 i18/zh-CN.json 示例：源文案写在 schema 中，翻译文件与 schema 同形覆盖（保留 items、templates 两层）。语言仅影响文案，查找为当前 locale→schema 中的源文案→字段键。选项的存储值不翻译，显示文案由 labels 提供。
 
 同一文件的顶层 `messages` 存放机器人回复的文案，例如 `{"messages": {"quiz.got": "You answered {answer}."}}`。SDK 的 `c.T` 按用户的 locale、Core 默认 locale、en-US 的顺序选择语言；日志与错误只用英文，不进入文案目录（CONTRACTS §5.4）。
 

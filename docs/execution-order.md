@@ -23,9 +23,9 @@
 | 6 | T-03.6、T-03.7、T-06.3、T-07.4、T-08.1、T-13.1 |
 | 7 | T-03.8、T-03.9、T-04.6、T-08.3、T-08.4、T-08.10、T-09.1、T-13.3 |
 | 8 | T-03.10、T-03.11、T-04.4、T-04.7、T-08.5、T-08.7、T-08.8、T-09.4、T-15.1 |
-| 9 | T-04.8、T-05.1、T-08.6、T-09.12、T-11.1、T-13.2、T-15.2 |
-| 10 | T-04.5、T-05.2、T-07.2、T-08.9、T-09.10、T-09.13、T-13.4、T-15.3 |
-| 11 | T-05.3、T-05.4、T-07.5、T-09.3、T-14.1、T-14.2、T-16.1 |
+| 9 | T-04.8、T-05.1、T-08.6、T-08.11、T-09.12、T-11.1、T-15.2 |
+| 10 | T-04.5、T-05.2、T-07.2、T-08.9、T-09.10、T-09.13、T-13.2、T-15.3 |
+| 11 | T-05.3、T-05.4、T-07.5、T-09.3、T-13.4、T-14.1、T-14.2、T-16.1 |
 | 12 | T-05.5、T-06.2、T-12.2、T-16.2 |
 | 13 | T-06.4、T-11.2、T-12.8 |
 | 14 | T-09.5、T-11.4、T-12.3、T-12.4 |
@@ -49,7 +49,7 @@
 | `internal/core/adapter` 的 `Instance`、`Sink` 接口 | T-03.1 合并后不再修改。之后的切片需要更多 Adapter 能力时，在同一个包里新增可选接口，调用方用类型断言获取，不改已有接口。 |
 | `internal/wire/services.go` | 固定服务名只追加常量，不重排、不改已有值。多个切片并行追加时，由先合并者保留；后合并者同步最新 main 后把自己的常量追加到文件末尾，再运行 `go test ./internal/wire/...` 和本切片服务测试。 |
 | `router.New` 与 `Router.Attach` 的签名 | goal-7 给 `New` 追加 prepare、给 `Attach` 追加 Caller，goal-87 给 `New` 追加 prefixes，goal-13 给 `New` 追加 CommandPolicy。后合并的一方在先合并者的签名末尾追加自己的参数，并同步 supervisor 测试与装配处的全部调用点，不重排已有参数。 |
-| `sdk/generated.go` 的 `Generated`、`sdk.Collect` 与 `sdk/generate` | goal-53 只做三处追加：给 `Generated` 加 `I18n` 字段，在 `Collect` 中检查 usage_key，在生成器中检查并嵌入 i18。goal-88 重写注册 API，并为 Service 生成 Schema。先合并者的代码保留；后合并者同步 main 后在新代码上重做自己的改动，不回退对方的修改。 |
+| `sdk/generated.go` 的 `Generated`、`sdk.Collect` 与 `sdk/generate` | goal-53 只做三处追加：给 `Generated` 加 `I18n` 字段，在 `Collect` 中检查 usage_key，在生成器中检查并嵌入 i18。goal-88 重写注册 API，并为 Service 生成 Schema。goal-95 在 goal-88 合并之后进行，删除配置专用的标签解析与 Config 类型发现、改为检查并嵌入 `config_schema.json`，保留 goal-88 用于 Service Schema 的 go/types 类型推导；i18/ 中 `config` 的结构检查属于 goal-53，与 schema 的核对属于 goal-95。先合并者的代码保留；后合并者同步 main 后在新代码上重做自己的改动，不回退对方的修改。 |
 | `router.Plugin` 接口 | goal-53 追加 `Messages()`。之后需要更多插件信息的切片同样只追加方法，并同步 `instancePlugin` 与测试中嵌入该接口的包装类型。 |
 | `spec/ADMIN-API.md` 与管理服务的 HTTP 路由 | goal-84 新建 `spec/ADMIN-API.md`，goal-39 建立管理服务的 HTTP 路由。之后新增 Admin API 的切片（goal-66、goal-92、goal-93）在自己的新文件里实现端点，只在路由注册处和 `spec/ADMIN-API.md` 末尾追加，不改已有条目；并行时由先合并者保留，后合并者同步 main 后追加。 |
 | `web/admin/src/api/` 与 `web/admin/i18n/*.json` | goal-43 建立 Admin API 客户端与页面文案；goal-44、goal-94 只追加自己的客户端函数与文案键，冲突时两边都保留，en-US 与 zh-CN 的键集合保持一致。 |
