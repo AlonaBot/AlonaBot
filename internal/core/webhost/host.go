@@ -7,7 +7,6 @@
 package webhost
 
 import (
-	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -42,7 +41,6 @@ type Options struct {
 // Host 持有主机分派和派生授权；方法可并发调用。
 // mu 保护管理期限、待兑换票据和插件会话，调用外部管理会话来源前释放。
 type Host struct {
-	log          *slog.Logger
 	opt          Options
 	mu           sync.Mutex
 	adminExpires map[string]time.Time
@@ -51,11 +49,11 @@ type Host struct {
 }
 
 // New 构造受控 Host 入口；opt 的 Base URL 已由 settings 校验。
-func New(log *slog.Logger, opt Options) *Host {
+func New(opt Options) *Host {
 	if opt.Now == nil {
 		opt.Now = time.Now
 	}
-	return &Host{log: log, opt: opt, adminExpires: make(map[string]time.Time), tickets: make(map[string]ticket), sessions: make(map[string]pluginSession)}
+	return &Host{opt: opt, adminExpires: make(map[string]time.Time), tickets: make(map[string]ticket), sessions: make(map[string]pluginSession)}
 }
 
 // ServeHTTP 仅使用请求 Host 分派管理入口、插件路由和票据兑换。

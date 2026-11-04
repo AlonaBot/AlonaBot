@@ -92,7 +92,6 @@
 不做：发送、发送计划与回执（T-03.7）；入站媒体与 IncomingMedia（T-03.6）；按钮与 callback_query（T-03.8）；编辑（T-03.9）；Core 侧装配与真实 Telegram 联验（T-03.10）。
 ```
 
-
 ## 第 6 波
 
 ### goal-50 · T-03.7 官方 Telegram Adapter 的发送计划与回执
@@ -149,7 +148,6 @@
 
 不做：按钮 token 的签发与 callback_query（T-03.8）；extension（T-03.8）；编辑（T-03.9）；入站媒体与 getFile（T-03.6 之后在 T-03.10 补 MediaSource）；BeforeSend/AfterSend Hook（T-05.3）。
 ```
-
 
 ## 第 8 波
 

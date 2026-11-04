@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path"
@@ -86,7 +87,7 @@ func (h *Host) exchange(w http.ResponseWriter, r *http.Request) {
 	// 2. 派生会话使用原管理会话期限，不因兑换而延长有效期。
 	id, err := randomCredential()
 	if err != nil {
-		h.log.Error("create plugin session failed", "err", err)
+		slog.Error("create plugin session failed", "err", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}

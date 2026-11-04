@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -88,12 +89,12 @@ func (s *Store) fetchIncoming(ctx context.Context, id string, object *incomingOb
 	path := filepath.Join(s.dir, id)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, fileMode)
 	if err != nil {
-		s.log.Error("media storage failed", "path", path, "err", err)
+		slog.Error("media storage failed", "path", path, "err", err)
 		return File{}, mediaCallError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "media storage failed")
 	}
 	defer func() {
 		if closeErr := f.Close(); closeErr != nil {
-			s.log.Error("media storage failed", "path", path, "err", closeErr)
+			slog.Error("media storage failed", "path", path, "err", closeErr)
 			err = errors.Join(err, mediaCallError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "media storage failed"))
 		}
 		// 最后一块返回或文件关闭期间也可能到期，成功结果发布前仍须遵守取件期限。
@@ -122,7 +123,7 @@ func (s *Store) fetchIncoming(ctx context.Context, id string, object *incomingOb
 			return File{}, mediaCallError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "media content exceeds reserved size")
 		}
 		if _, err := writer.Write(data); err != nil {
-			s.log.Error("media storage failed", "path", path, "err", err)
+			slog.Error("media storage failed", "path", path, "err", err)
 			return File{}, mediaCallError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "media storage failed")
 		}
 		offset = next

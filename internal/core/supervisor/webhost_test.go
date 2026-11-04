@@ -71,7 +71,7 @@ func TestWebHostProcesses(t *testing.T) {
 	now := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
 	sessions := &webAdminSessions{t: t, expiresAt: now.Add(8 * time.Hour), valid: true}
 	var logs bytes.Buffer
-	log := slog.New(slog.NewJSONHandler(&logs, nil))
+	setDefaultLogger(t, slog.New(slog.NewJSONHandler(&logs, nil)))
 	adminURL, err := url.Parse("http://admin.test:7650")
 	if err != nil {
 		t.Fatal(err)
@@ -82,9 +82,9 @@ func TestWebHostProcesses(t *testing.T) {
 	}
 	newHost := func(second bool) *webhost.Host {
 		var host *webhost.Host
-		proxy := httpproxy.New(log, webAuthorizer(func(r *http.Request, id string) bool { return host.Authorize(r, id) }))
+		proxy := httpproxy.New(webAuthorizer(func(r *http.Request, id string) bool { return host.Authorize(r, id) }))
 		proxy.Bind("demo", running.Instance.GenerationID, running.Instance.HTTPListener, running.Instance.HTTPProxyToken, running.Instance.Routes)
-		host = webhost.New(log, webhost.Options{
+		host = webhost.New(webhost.Options{
 			AdminBaseURL: adminURL, PluginBaseURL: pluginURL, SecondHost: second, Proxy: proxy, Sessions: sessions, Now: func() time.Time { return now },
 			Admin: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path == "/open" {
