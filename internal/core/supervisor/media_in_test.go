@@ -223,7 +223,7 @@ func testIncomingMedia(t *testing.T, binary string, stdio bool) {
 	defer platform.Stop(ctx)
 	mux := router.NewMux()
 	mux.Handle(wire.ServiceSend, sender.Send)
-	mediaStore.AddReadServices(mux, registry, events, store.AllowedAdapterInstances)
+	mediaStore.AddReadServices(mux, registry, events, store.AdapterInstanceAllowed)
 
 	// 2. 三个进程独立握手和激活，Mux 与 Router 绑定相同的可信 Caller。
 	var running []*Running
@@ -266,14 +266,13 @@ func testIncomingMedia(t *testing.T, binary string, stdio bool) {
 		running = append(running, instance)
 		events.Attach(router.FromInstance(instance.Instance), caller)
 	}
-	if err := store.GrantAdapterInstance(ctx, "b", platform.InstanceID()); err != nil {
+	// a 自身的入站 token 与原目标回复在空许可集合下仍有效；b 沿用缺省全部实例。
+	if err := store.SetAdapterInstanceAccess(ctx, "a", false, nil); err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []string{"a", "c"} {
-		allowed, err := store.AllowedAdapterInstances(ctx, id)
-		if err != nil || len(allowed) != 0 {
-			t.Fatalf("unexpected %s permissions: %v, %v", id, allowed, err)
-		}
+	// c 被收紧到另一个实例，拒绝接收本实例入站对象的读授权。
+	if err := store.SetAdapterInstanceAccess(ctx, "c", false, []string{"other-instance"}); err != nil {
+		t.Fatal(err)
 	}
 
 	// 3. SendFunc 在实际发送租约内按 Adapter Session 回读文件，并保存原始发送快照。
