@@ -140,13 +140,10 @@ func PrepareDatabase(ctx context.Context, req Request) (prepared *Prepared, err 
 	if err := checkIntegrity(ctx, temporaryPath); err != nil {
 		return nil, err
 	}
-	if err := syncPath(temporaryPath); err != nil {
+	if err := syncFile(temporaryPath); err != nil {
 		return nil, err
 	}
-	if err := os.Rename(temporaryPath, prepared.DatabasePath); err != nil {
-		return nil, err
-	}
-	if err := syncPath(directory); err != nil {
+	if err := publishDatabase(temporaryPath, prepared.DatabasePath); err != nil {
 		return nil, err
 	}
 	prepared.Created = true
@@ -235,8 +232,8 @@ func checkIntegrity(ctx context.Context, path string) (err error) {
 	return nil
 }
 
-func syncPath(path string) (err error) {
-	file, err := os.Open(path)
+func syncFile(path string) (err error) {
+	file, err := os.OpenFile(path, os.O_RDWR, 0)
 	if err != nil {
 		return err
 	}
