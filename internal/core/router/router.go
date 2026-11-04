@@ -66,6 +66,7 @@ type Router struct {
 	adapters *adapter.Registry
 	send     ServiceFunc
 	prepare  func(*pb.Event, Caller) (*pb.Event, error)
+	prefixes func(adapterInstanceID string) []string
 	matches  map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
 	log      *slog.Logger
 	queue    chan *pb.Event
@@ -84,9 +85,13 @@ type Router struct {
 // queueEvents 由装配处传入 tune.Values.DispatchQueueEvents。
 // adapters 提供账号用户名，send 接入 message.Service.Send 处理 usage 与自动回复。
 // prepare 在每次 Handler 调用前改写接收 Session 的事件；nil 时原样派发。
-func New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send ServiceFunc, prepare func(*pb.Event, Caller) (*pb.Event, error)) *Router {
+// prefixes 按实例提供非空的前缀列表；nil 时所有实例使用 ["/"]。
+func New(log *slog.Logger, queueEvents int, adapters *adapter.Registry, send ServiceFunc, prepare func(*pb.Event, Caller) (*pb.Event, error), prefixes func(adapterInstanceID string) []string) *Router {
+	if prefixes == nil {
+		prefixes = func(string) []string { return []string{"/"} }
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Router{adapters: adapters, send: send, prepare: prepare, matches: make(map[string][]commandRoute), log: log, queue: make(chan *pb.Event, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]*pluginSession), inFlight: make(map[inFlightKey]struct{}), commands: &CommandIndex{}}
+	return &Router{adapters: adapters, send: send, prepare: prepare, prefixes: prefixes, matches: make(map[string][]commandRoute), log: log, queue: make(chan *pb.Event, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]*pluginSession), inFlight: make(map[inFlightKey]struct{}), commands: &CommandIndex{}}
 }
 
 // Attach 注册一个接收派发的插件并重建命令索引；相同插件 ID 替换为新实例。
@@ -233,14 +238,27 @@ func (r *Router) candidates(ev *pb.Event) []candidate {
 }
 
 func (r *Router) dispatch(ev *pb.Event) {
+	// 1. Core 权限在进入任一路由前统一计算，来源只提供平台权限及其展开结果。
+	if actor := ev.GetActor(); actor != nil {
+		permissions := []string{"user"}
+		for _, permission := range actor.GetPermissions() {
+			if permission != "user" && permission != "admin" {
+				permissions = append(permissions, permission)
+			}
+		}
+		slices.Sort(permissions)
+		actor.Permissions = slices.Compact(permissions)
+	}
+	// 2. 命令层的 STOP 终止整条分发链；消费但继续的命令仍进入事件层。
 	if ev.GetEventType() == "message.created" && r.dispatchCommands(ev) {
 		return
 	}
+	// 3. 事件路由独立判断权限，拒绝当前候选后继续后继路由。
 	for _, candidate := range r.candidates(ev) {
 		if r.ctx.Err() != nil {
 			return
 		}
-		if !candidate.plugin.Activated() {
+		if !candidate.plugin.Activated() || !r.permitted(candidate, ev) {
 			continue
 		}
 		trace := make([]byte, traceIDBytes)
@@ -266,12 +284,25 @@ func (r *Router) dispatch(ev *pb.Event) {
 	}
 }
 
+func (r *Router) permitted(c candidate, ev *pb.Event) bool {
+	if len(c.route.GetRequiredPermissions()) == 0 {
+		return true
+	}
+	for _, required := range c.route.GetRequiredPermissions() {
+		if slices.Contains(ev.GetActor().GetPermissions(), required) {
+			return true
+		}
+	}
+	r.log.Debug("route permission denied", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId())
+	return false
+}
+
 // current 在持有 mu 时检查候选仍属于当前的激活绑定，隔离旧候选快照。
 func (r *Router) current(c candidate) bool {
 	return r.ctx.Err() == nil && r.plugins[c.pluginID] == c.pluginSession && c.plugin.Activated()
 }
 
-func (r *Router) call(c candidate, ev *pb.Event, command *pb.CommandInvocation, trace []byte) (wire.Response, error) {
+func (r *Router) call(c candidate, ev *pb.Event, bind func(*pb.Event) (*pb.CommandInvocation, error), trace []byte) (wire.Response, error) {
 	// 1. prepare 在锁外执行，仍使用原始事件给各接收 Session 分别签发。
 	r.mu.Lock()
 	current := r.current(c)
@@ -285,6 +316,15 @@ func (r *Router) call(c candidate, ev *pb.Event, command *pb.CommandInvocation, 
 		prepared, err = r.prepare(ev, c.caller)
 		if err != nil {
 			return wire.Response{}, fmt.Errorf("prepare handler event: %w", err)
+		}
+	}
+	// 参数从接收方事件绑定，使媒体令牌与该 Session 的事件授权一致。
+	var command *pb.CommandInvocation
+	if bind != nil {
+		var err error
+		command, err = bind(prepared)
+		if err != nil {
+			return wire.Response{}, fmt.Errorf("%w: %w", errCommandArguments, err)
 		}
 	}
 	request := &pb.HandlerRequest{RouteId: c.route.GetRouteId(), Event: prepared, Command: command, Context: &pb.InvocationContext{Actor: ev.GetActor(), DefaultTarget: ev.GetTarget()}}

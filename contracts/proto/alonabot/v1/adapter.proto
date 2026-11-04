@@ -15,15 +15,35 @@ enum AdapterInstanceState {
   ADAPTER_INSTANCE_STATE_FAILED = 1;
 }
 
-// AdapterDescriptor 声明安装包提供的平台能力与 extension Schema。
+// AdapterDescriptor 声明安装包提供的平台能力、片段、权限与扩展事件。
 message AdapterDescriptor {
   string adapter_id = 1;
   repeated Capability capabilities = 2;
   repeated ExtensionDeclaration extensions = 3;
+  repeated PermissionDeclaration permissions = 4;
+  repeated EventDeclaration events = 5;
 }
 
 // ExtensionDeclaration 声明平台专有片段的名称、版本与 JSON Schema。
 message ExtensionDeclaration {
+  string name = 1;
+  uint32 version = 2;
+  string schema_json = 3;
+}
+
+// PermissionDeclaration 声明平台权限及其隐含关系。
+message PermissionDeclaration {
+  // 完整权限名，带本 Adapter 的 ID 前缀。
+  string name = 1;
+  // 本 Adapter 已声明的完整权限名或 chat_admin。
+  repeated string implies = 2;
+  // Adapter 包 i18/ 中 messages 的文案键。
+  string label_key = 3;
+}
+
+// EventDeclaration 声明平台扩展事件及其载荷 Schema。
+message EventDeclaration {
+  // 完整事件名，带本 Adapter 的 ID 前缀。
   string name = 1;
   uint32 version = 2;
   string schema_json = 3;

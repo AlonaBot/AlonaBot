@@ -8,9 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,6 +37,7 @@ import (
 )
 
 const helperEnv = "ALONABOT_LOOP_ADAPTER"
+const observerAuditEnv = "ALONABOT_LOOP_OBSERVER_AUDIT"
 
 // TestMain 将测试二进制切换为经真实 SDK 运行的回环 Adapter 或插件。
 func TestMain(m *testing.M) {
@@ -57,14 +60,64 @@ func TestMain(m *testing.M) {
 
 type loopPlugin struct{ sdk.Base }
 
+type observedEvent struct {
+	Route       string
+	Permissions []string
+	Version     uint32
+	Payload     string
+}
+
+func observe(route string, c *sdk.Context) error {
+	payload := c.Event().GetEventPayload().GetAdapterEvent()
+	report := observedEvent{Route: route, Permissions: c.Event().GetActor().GetPermissions(), Version: payload.GetVersion(), Payload: payload.GetPayloadJson()}
+	data, err := json.Marshal(report)
+	if err != nil {
+		return err
+	}
+	file, err := os.OpenFile(os.Getenv(observerAuditEnv), os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return err
+	}
+	_, err = file.Write(append(data, '\n'))
+	return errors.Join(err, file.Close())
+}
+
+// Events 记录真实插件收到的权限和扩展载荷，barrier 用于确定完整派发已结束。
 func (*loopPlugin) Events(r *sdk.EventRegistry) {
-	r.On("loop", "message.created", func(*sdk.Context) error { return nil })
+	for _, route := range []struct{ id, event string }{{"loop", "message.created"}, {"extension", "loop.poke"}, {"uninstalled", "other.poke"}, {"barrier", "scheduled"}} {
+		r.On(route.id, route.event, func(c *sdk.Context) error { return observe(route.id, c) })
+	}
+}
+
+// Commands 让扩展事件误入命令层时留下可观察记录。
+func (*loopPlugin) Commands(r *sdk.CommandRegistry) {
+	r.Raw("raw", func(c *sdk.Context) error { return observe("raw", c) })
 }
 
 type loopAdapter struct{}
 
 func (*loopAdapter) Descriptor() *pb.AdapterDescriptor {
-	return &pb.AdapterDescriptor{AdapterId: "loop"}
+	descriptor := &pb.AdapterDescriptor{AdapterId: "loop", Permissions: []*pb.PermissionDeclaration{
+		{Name: "loop.owner", Implies: []string{"loop.admin"}, LabelKey: "permissions.owner"},
+		{Name: "loop.admin", Implies: []string{"chat_admin"}, LabelKey: "permissions.admin"},
+	}, Events: []*pb.EventDeclaration{{Name: "loop.poke", Version: 1, SchemaJson: `{"type":"object","properties":{"user":{"type":"string"}},"required":["user"]}`}}}
+	switch os.Getenv(helperEnv) {
+	case "permission-prefix":
+		descriptor.Permissions[0].Name = "other.owner"
+	case "implies-user":
+		descriptor.Permissions[0].Implies = []string{"user"}
+	case "implies-admin":
+		descriptor.Permissions[0].Implies = []string{"admin"}
+	case "permission-cycle":
+		descriptor.Permissions[1].Implies = []string{"loop.owner"}
+	case "event-prefix":
+		descriptor.Events[0].Name = "other.poke"
+	case "schema-parse":
+		descriptor.Events[0].SchemaJson = `{"type":1}`
+	case "schema-resolve":
+		descriptor.Events[0].SchemaJson = `{"$ref":"#/$defs/missing"}`
+	}
+	return descriptor
 }
 func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core sdkadapter.Core) (sdkadapter.Instance, error) {
 	var config struct {
@@ -179,6 +232,37 @@ func (i *loopInstance) Send(ctx context.Context, target *pb.Target, chain *pb.Me
 		ev.EventType = "message.edited"
 		ev.EventPayload = &pb.EventPayload{Kind: &pb.EventPayload_MessageEdited{MessageEdited: &pb.MessageEditedPayload{Chain: chain, OldChain: chain}}}
 	}
+	if text == "permissions" || strings.HasPrefix(text, "extension") || text == "actor-forge" || text == "target-forge" {
+		ev.Actor = &pb.Actor{ExternalUserId: "external-7", AdapterInstanceId: i.id, Permissions: []string{"loop.owner", "loop.unknown", "user", "admin", "chat_admin", "loop.owner"}}
+	}
+	if strings.HasPrefix(text, "extension") {
+		ev.EventType = "loop.poke"
+		payload := &pb.AdapterEventPayload{Version: 1, PayloadJson: `{"user":"external-7"}`}
+		ev.EventPayload = &pb.EventPayload{Kind: &pb.EventPayload_AdapterEvent{AdapterEvent: payload}}
+		switch text {
+		case "extension-unknown":
+			ev.EventType = "loop.unknown"
+		case "extension-other":
+			ev.EventType = "other.poke"
+		case "extension-version":
+			payload.Version = 2
+		case "extension-schema":
+			payload.PayloadJson = `{"user":7}`
+		case "extension-array":
+			payload.PayloadJson = `[]`
+		case "extension-json":
+			payload.PayloadJson = `{`
+		case "extension-branch":
+			ev.EventPayload = &pb.EventPayload{Kind: &pb.EventPayload_MessageCreated{MessageCreated: &pb.MessageCreatedPayload{Chain: chain}}}
+		}
+	}
+	if text == "actor-forge" {
+		ev.Actor.AdapterInstanceId = "other"
+	}
+	if text == "target-forge" {
+		ev.Target = proto.CloneOf(target)
+		ev.Target.AccountId = "other"
+	}
 	accepted, err := i.core.Deliver(ctx, ev, []byte(strconv.Itoa(i.sequence)))
 	if err != nil {
 		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, SafeMessage: err.Error()}
@@ -255,6 +339,39 @@ func openMediaStore(t *testing.T, logs *processLog) *media.Store {
 		t.Fatal(err)
 	}
 	return store
+}
+
+// TestAdapterRegistrationDeclarations 验证真实 Adapter 进程的非法权限和事件声明在注册阶段被拒绝。
+func TestAdapterRegistrationDeclarations(t *testing.T) {
+	for _, stdio := range []bool{false, true} {
+		for _, tc := range []struct {
+			mode string
+			want string
+		}{
+			{"permission-prefix", "invalid adapter permission name"},
+			{"implies-user", "implies invalid permission"},
+			{"implies-admin", "implies invalid permission"},
+			{"permission-cycle", "implication cycle"},
+			{"event-prefix", "invalid adapter event name"},
+			{"schema-parse", "parse adapter event"},
+			{"schema-resolve", "resolve adapter event"},
+		} {
+			t.Run(fmt.Sprintf("%s/stdio=%v", tc.mode, stdio), func(t *testing.T) {
+				store, spec, _ := setup(t)
+				spec.Stdio = stdio
+				spec.ExtraEnv[helperEnv] = tc.mode
+				running, err := supervisor.Launch(context.Background(), store, spec)
+				if err == nil {
+					stopped := running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
+					t.Fatalf("invalid adapter registration activated: stop=%+v", stopped)
+				}
+				var phase *host.PhaseError
+				if !errors.As(err, &phase) || phase.Phase != pb.SessionPhase_SESSION_PHASE_REGISTER || phase.Code != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT || !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("registration error = %v, want REGISTER/INVALID_ARGUMENT containing %q", err, tc.want)
+				}
+			})
+		}
+	}
 }
 
 // TestRemoteLifecycle 覆盖真实进程的多实例收发、账号唯一性、伪造拒绝、故障与游标恢复。
@@ -508,7 +625,7 @@ func TestRemoteMediaRead(t *testing.T) {
 	p := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: sink, Log: slog.New(slog.NewTextHandler(logs, nil)), RegisterIncoming: mediaStore.RegisterIncoming})
 	mux := router.NewMux()
 	p.Services(mux)
-	dispatch := router.New(slog.New(slog.NewTextHandler(logs, nil)), 1, registry, nil, mediaStore.PrepareIncoming)
+	dispatch := router.New(slog.New(slog.NewTextHandler(logs, nil)), 1, registry, nil, mediaStore.PrepareIncoming, nil)
 	t.Cleanup(dispatch.Close)
 	mediaStore.AddReadServices(mux, registry, dispatch, store.AllowedAdapterInstances)
 	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
@@ -731,5 +848,173 @@ func TestRemoteMediaRead(t *testing.T) {
 	}
 	if _, _, _, err := reader.ReadMedia(ctx, "platform-file", 0, 4); wire.CodeOf(err) != pb.ErrorCode_ERROR_CODE_UNAVAILABLE {
 		t.Fatalf("stopped instance error = %v", err)
+	}
+}
+
+// TestRemotePermissionsAndEvents 验证真实 Adapter/插件进程之间的声明、权限展开和扩展事件准入。
+func TestRemotePermissionsAndEvents(t *testing.T) {
+	for _, stdio := range []bool{false, true} {
+		t.Run(fmt.Sprintf("stdio=%v", stdio), func(t *testing.T) {
+			ctx := t.Context()
+			store, spec, logs := setup(t)
+			spec.Stdio = stdio
+			registry := adapter.NewRegistry()
+			dispatch := router.New(slog.New(slog.NewTextHandler(logs, nil)), tune.Defaults().DispatchQueueEvents, registry, nil, nil, nil)
+			dispatch.Start()
+			defer dispatch.Close()
+			process := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: dispatch, Log: slog.New(slog.NewTextHandler(logs, nil)), RegisterIncoming: openMediaStore(t, logs).RegisterIncoming})
+			mux := router.NewMux()
+			process.Services(mux)
+			caller := router.NewCaller(spec.PluginID, spec.GenerationID)
+			spec.Handler = mux.For(caller)
+			running, err := supervisor.Launch(ctx, store, spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
+			if !proto.Equal(running.Instance.Adapter, (&loopAdapter{}).Descriptor()) {
+				t.Fatalf("activated descriptor=%v", running.Instance.Adapter)
+			}
+			if err := process.Bind(ctx, running.Instance, caller); err != nil {
+				t.Fatal(err)
+			}
+			if err := process.StartInstance(ctx, "one", []byte(`{"account":"a"}`)); err != nil {
+				t.Fatal(err)
+			}
+			audit := filepath.Join(t.TempDir(), "observer.jsonl")
+			if err := os.WriteFile(audit, nil, 0600); err != nil {
+				t.Fatal(err)
+			}
+			observer := spec
+			observer.PluginID = "observer"
+			observer.Role = state.RolePlugin
+			observer.AdapterID = ""
+			observer.GenerationID = "observer-gen"
+			observer.PluginDir = t.TempDir()
+			observer.Handler = nil
+			observer.Bootstrap = &pb.Bootstrap{GenerationId: observer.GenerationID, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+			observer.ExtraEnv = map[string]string{helperEnv: "plugin", observerAuditEnv: audit, "GORACE": "atexit_sleep_ms=0"}
+			if err := store.AddInstall(ctx, state.Install{PluginID: observer.PluginID, Role: state.RolePlugin, BuildDigest: observer.BuildDigest}); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.AddGeneration(ctx, observer.PluginID, observer.GenerationID, "{}", 1); err != nil {
+				t.Fatal(err)
+			}
+			plugin, err := supervisor.Launch(ctx, store, observer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer plugin.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
+			dispatch.Attach(router.FromInstance(plugin.Instance), router.NewCaller(observer.PluginID, observer.GenerationID))
+			reports := func() []observedEvent {
+				t.Helper()
+				file, err := os.Open(audit)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer file.Close()
+				decoder := json.NewDecoder(file)
+				var all []observedEvent
+				for {
+					var report observedEvent
+					err := decoder.Decode(&report)
+					if err == io.EOF {
+						return all
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					all = append(all, report)
+				}
+			}
+			instance, _ := registry.Get("one")
+			target := &pb.Target{AdapterId: "loop", AdapterInstanceId: "one", AccountId: "a", ChatId: "chat"}
+			for _, tc := range []struct {
+				name     string
+				rejected bool
+				routes   []string
+			}{
+				{"permissions", false, []string{"raw", "loop"}},
+				{"extension", false, []string{"extension"}},
+				{"extension-unknown", true, nil}, {"extension-other", true, nil}, {"extension-version", true, nil}, {"extension-schema", true, nil}, {"extension-array", true, nil}, {"extension-json", true, nil}, {"extension-branch", true, nil}, {"actor-forge", true, nil}, {"target-forge", true, nil},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					before := len(reports())
+					cursor, err := store.AdapterCursor(ctx, "one")
+					if err != nil {
+						t.Fatal(err)
+					}
+					chain := &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: tc.name}}}}}
+					_, safe := instance.Send(ctx, target, chain)
+					if (safe != nil) != tc.rejected {
+						t.Fatalf("send error=%v rejected=%v", safe, tc.rejected)
+					}
+					if tc.rejected {
+						after, err := store.AdapterCursor(ctx, "one")
+						if err != nil || !bytes.Equal(cursor, after) {
+							t.Fatalf("rejected event advanced cursor: %q -> %q error=%v", cursor, after, err)
+						}
+					}
+					if err := dispatch.Deliver(ctx, &pb.Event{EventType: "scheduled", SourceKind: pb.EventSourceKind_EVENT_SOURCE_KIND_SCHEDULER}); err != nil {
+						t.Fatal(err)
+					}
+					deadline := time.Now().Add(5 * time.Second)
+					var observed []observedEvent
+					for {
+						observed = reports()[before:]
+						if len(observed) > 0 && observed[len(observed)-1].Route == "barrier" {
+							break
+						}
+						if time.Now().After(deadline) {
+							t.Fatalf("observer barrier missing: %v", observed)
+						}
+						time.Sleep(10 * time.Millisecond)
+					}
+					observed = observed[:len(observed)-1]
+					var routes []string
+					for _, report := range observed {
+						routes = append(routes, report.Route)
+						if !reflect.DeepEqual(report.Permissions, []string{"chat_admin", "loop.admin", "loop.owner", "user"}) {
+							t.Fatalf("permissions=%v", report.Permissions)
+						}
+						if report.Route == "extension" && (report.Version != 1 || report.Payload != `{"user":"external-7"}`) {
+							t.Fatalf("extension report=%+v", report)
+						}
+					}
+					if !reflect.DeepEqual(routes, tc.routes) {
+						t.Fatalf("routes=%v want %v", routes, tc.routes)
+					}
+				})
+			}
+			// 同一安装包的旧 Caller 也无法推进当前 Session 的游标。
+			cursor, err := store.AdapterCursor(ctx, "one")
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := &pb.AdapterDeliverRequest{InstanceId: "one", Cursor: []byte("stale"), Event: &pb.Event{EventType: "message.created", AdapterId: proto.String("loop"), AdapterInstanceId: proto.String("one"), AccountId: proto.String("a"), Target: target, EventPayload: &pb.EventPayload{Kind: &pb.EventPayload_MessageCreated{MessageCreated: &pb.MessageCreatedPayload{Chain: &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: "stale"}}}}}}}}}}
+			encoded, err := proto.Marshal(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response := mux.For(router.NewCaller(spec.PluginID, "old-generation"))(ctx, &wire.Inbound{Target: wire.ServiceCoreAdapterDeliver, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: 1, Bytes: encoded}})
+			after, err := store.AdapterCursor(ctx, "one")
+			if response.Err.GetCode() != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT || err != nil || !bytes.Equal(cursor, after) {
+				t.Fatalf("stale Caller result=%v cursor=%q -> %q error=%v", response.Err, cursor, after, err)
+			}
+			logs.mu.Lock()
+			text := logs.b.String()
+			logs.mu.Unlock()
+			if strings.Count(text, "discard undeclared adapter permission") != 8 {
+				t.Fatalf("discard diagnostics=%s", text)
+			}
+			for _, name := range []string{"loop.unknown", "user", "admin", "chat_admin"} {
+				if !strings.Contains(text, "name="+name) {
+					t.Errorf("missing discarded permission diagnostic %q", name)
+				}
+			}
+			if !strings.Contains(text, "level=WARN") || !strings.Contains(text, "plugin_id=loop-package instance_id=one") || !strings.Contains(text, "invalid adapter instance event") {
+				t.Fatalf("missing rejection identity or level: %s", text)
+			}
+		})
 	}
 }

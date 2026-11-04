@@ -213,7 +213,7 @@ func testIncomingMedia(t *testing.T, binary string, stdio bool) {
 		t.Fatal(err)
 	}
 	sender := message.New(registry, policy.New(store), mediaStore.LeaseForSend, values.RequestTimeout)
-	events := router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send, mediaStore.PrepareIncoming)
+	events := router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send, mediaStore.PrepareIncoming, nil)
 	events.Start()
 	defer events.Close()
 	if err := platform.Start(ctx, events); err != nil {

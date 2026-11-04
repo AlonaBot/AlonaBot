@@ -42,12 +42,13 @@ type Options struct {
 
 // Process 并发安全地管理一个 Adapter 包进程及其账号实例。
 type Process struct {
-	opt        Options
-	operations sync.Mutex // 串行化 Bind、Unbind 与实例启停
-	mu         sync.Mutex // 保护 session、instances 与实例状态；RPC 期间释放
-	session    *host.Instance
-	caller     router.Caller // 与当前 Session 的 Mux.For 使用相同身份，由 mu 保护
-	instances  map[string]*instance
+	opt          Options
+	operations   sync.Mutex // 串行化 Bind、Unbind 与实例启停
+	mu           sync.Mutex // 保护 session、instances 与实例状态；RPC 期间释放
+	session      *host.Instance
+	caller       router.Caller // 与当前 Session 的 Mux.For 使用相同身份，由 mu 保护
+	instances    map[string]*instance
+	declarations declarations // 当前绑定 Session 的声明缓存，由 mu 保护
 }
 
 // instance 保存远端账号身份与启停状态；可变字段统一由 Process.mu 保护。
@@ -75,9 +76,14 @@ func New(opt Options) *Process { return &Process{opt: opt, instances: make(map[s
 func (p *Process) Bind(ctx context.Context, in *host.Instance, caller router.Caller) error {
 	p.operations.Lock()
 	defer p.operations.Unlock()
+	declarations, err := compileDeclarations(in.Adapter)
+	if err != nil {
+		return err
+	}
 	p.mu.Lock()
 	p.session = in
 	p.caller = caller
+	p.declarations = declarations
 	var enabled []*instance
 	for _, entry := range p.instances {
 		if entry.enabled {
@@ -99,6 +105,7 @@ func (p *Process) Unbind() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.session = nil
+	p.declarations = declarations{}
 	for _, entry := range p.instances {
 		if entry.running {
 			if err := p.offline(context.Background(), entry, pb.BotOfflineReason_BOT_OFFLINE_REASON_ADAPTER_EXITED, nil); err != nil {

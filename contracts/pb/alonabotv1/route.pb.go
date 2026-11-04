@@ -88,62 +88,6 @@ func (RouteKind) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{0}
 }
 
-// Permission 列出调用路由所需的最低权限。
-type Permission int32
-
-const (
-	Permission_PERMISSION_UNSPECIFIED Permission = 0
-	// 不要求 Actor（例如非用户触发的事件）。
-	Permission_PERMISSION_ANY Permission = 1
-	// 具有可信 Actor 的普通用户。
-	Permission_PERMISSION_USER Permission = 2
-	// Core 配置的机器人管理员。
-	Permission_PERMISSION_ADMIN Permission = 3
-)
-
-// Enum value maps for Permission.
-var (
-	Permission_name = map[int32]string{
-		0: "PERMISSION_UNSPECIFIED",
-		1: "PERMISSION_ANY",
-		2: "PERMISSION_USER",
-		3: "PERMISSION_ADMIN",
-	}
-	Permission_value = map[string]int32{
-		"PERMISSION_UNSPECIFIED": 0,
-		"PERMISSION_ANY":         1,
-		"PERMISSION_USER":        2,
-		"PERMISSION_ADMIN":       3,
-	}
-)
-
-func (x Permission) Enum() *Permission {
-	p := new(Permission)
-	*p = x
-	return p
-}
-
-func (x Permission) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (Permission) Descriptor() protoreflect.EnumDescriptor {
-	return file_alonabot_v1_route_proto_enumTypes[1].Descriptor()
-}
-
-func (Permission) Type() protoreflect.EnumType {
-	return &file_alonabot_v1_route_proto_enumTypes[1]
-}
-
-func (x Permission) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use Permission.Descriptor instead.
-func (Permission) EnumDescriptor() ([]byte, []int) {
-	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{1}
-}
-
 // HandlerMode 列出 Handler 的签名形态。
 type HandlerMode int32
 
@@ -180,11 +124,11 @@ func (x HandlerMode) String() string {
 }
 
 func (HandlerMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_alonabot_v1_route_proto_enumTypes[2].Descriptor()
+	return file_alonabot_v1_route_proto_enumTypes[1].Descriptor()
 }
 
 func (HandlerMode) Type() protoreflect.EnumType {
-	return &file_alonabot_v1_route_proto_enumTypes[2]
+	return &file_alonabot_v1_route_proto_enumTypes[1]
 }
 
 func (x HandlerMode) Number() protoreflect.EnumNumber {
@@ -193,7 +137,7 @@ func (x HandlerMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use HandlerMode.Descriptor instead.
 func (HandlerMode) EnumDescriptor() ([]byte, []int) {
-	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{2}
+	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{1}
 }
 
 // CommandMatch 列出命令的匹配方式。
@@ -201,7 +145,7 @@ type CommandMatch int32
 
 const (
 	CommandMatch_COMMAND_MATCH_UNSPECIFIED CommandMatch = 0
-	// `/` 前缀完整 token 路径。
+	// 按实例配置的前缀与完整 token 路径。
 	CommandMatch_COMMAND_MATCH_PATH CommandMatch = 1
 	// 按正则匹配整条消息。
 	CommandMatch_COMMAND_MATCH_REGEX CommandMatch = 2
@@ -252,11 +196,11 @@ func (x CommandMatch) String() string {
 }
 
 func (CommandMatch) Descriptor() protoreflect.EnumDescriptor {
-	return file_alonabot_v1_route_proto_enumTypes[3].Descriptor()
+	return file_alonabot_v1_route_proto_enumTypes[2].Descriptor()
 }
 
 func (CommandMatch) Type() protoreflect.EnumType {
-	return &file_alonabot_v1_route_proto_enumTypes[3]
+	return &file_alonabot_v1_route_proto_enumTypes[2]
 }
 
 func (x CommandMatch) Number() protoreflect.EnumNumber {
@@ -265,7 +209,7 @@ func (x CommandMatch) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CommandMatch.Descriptor instead.
 func (CommandMatch) EnumDescriptor() ([]byte, []int) {
-	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{3}
+	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{2}
 }
 
 // UsageMode 决定参数错误时如何提示用法。
@@ -277,7 +221,7 @@ const (
 	UsageMode_USAGE_MODE_DEFAULT UsageMode = 1
 	// 不提示。
 	UsageMode_USAGE_MODE_SILENT UsageMode = 2
-	// 发送 custom_usage。
+	// 使用 usage_key 指向的文案。
 	UsageMode_USAGE_MODE_CUSTOM UsageMode = 3
 )
 
@@ -308,11 +252,11 @@ func (x UsageMode) String() string {
 }
 
 func (UsageMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_alonabot_v1_route_proto_enumTypes[4].Descriptor()
+	return file_alonabot_v1_route_proto_enumTypes[3].Descriptor()
 }
 
 func (UsageMode) Type() protoreflect.EnumType {
-	return &file_alonabot_v1_route_proto_enumTypes[4]
+	return &file_alonabot_v1_route_proto_enumTypes[3]
 }
 
 func (x UsageMode) Number() protoreflect.EnumNumber {
@@ -321,7 +265,7 @@ func (x UsageMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use UsageMode.Descriptor instead.
 func (UsageMode) EnumDescriptor() ([]byte, []int) {
-	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{4}
+	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{3}
 }
 
 // ParamType 列出命令参数的类型。
@@ -336,6 +280,12 @@ const (
 	ParamType_PARAM_TYPE_FLOAT ParamType = 3
 	// 只接受 true/false。
 	ParamType_PARAM_TYPE_BOOL ParamType = 4
+	// mention 或 text_mention 实体指向的用户。
+	ParamType_PARAM_TYPE_USER ParamType = 5
+	// 图片片段，保留 incoming_ref。
+	ParamType_PARAM_TYPE_IMAGE ParamType = 6
+	// 末位参数接收剩余的完整消息片段，与 raw 互斥。
+	ParamType_PARAM_TYPE_MESSAGE ParamType = 7
 )
 
 // Enum value maps for ParamType.
@@ -346,6 +296,9 @@ var (
 		2: "PARAM_TYPE_INT",
 		3: "PARAM_TYPE_FLOAT",
 		4: "PARAM_TYPE_BOOL",
+		5: "PARAM_TYPE_USER",
+		6: "PARAM_TYPE_IMAGE",
+		7: "PARAM_TYPE_MESSAGE",
 	}
 	ParamType_value = map[string]int32{
 		"PARAM_TYPE_UNSPECIFIED": 0,
@@ -353,6 +306,9 @@ var (
 		"PARAM_TYPE_INT":         2,
 		"PARAM_TYPE_FLOAT":       3,
 		"PARAM_TYPE_BOOL":        4,
+		"PARAM_TYPE_USER":        5,
+		"PARAM_TYPE_IMAGE":       6,
+		"PARAM_TYPE_MESSAGE":     7,
 	}
 )
 
@@ -367,11 +323,11 @@ func (x ParamType) String() string {
 }
 
 func (ParamType) Descriptor() protoreflect.EnumDescriptor {
-	return file_alonabot_v1_route_proto_enumTypes[5].Descriptor()
+	return file_alonabot_v1_route_proto_enumTypes[4].Descriptor()
 }
 
 func (ParamType) Type() protoreflect.EnumType {
-	return &file_alonabot_v1_route_proto_enumTypes[5]
+	return &file_alonabot_v1_route_proto_enumTypes[4]
 }
 
 func (x ParamType) Number() protoreflect.EnumNumber {
@@ -380,7 +336,7 @@ func (x ParamType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ParamType.Descriptor instead.
 func (ParamType) EnumDescriptor() ([]byte, []int) {
-	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{5}
+	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{4}
 }
 
 // HookPhase 列出 Hook 的执行阶段。
@@ -420,11 +376,11 @@ func (x HookPhase) String() string {
 }
 
 func (HookPhase) Descriptor() protoreflect.EnumDescriptor {
-	return file_alonabot_v1_route_proto_enumTypes[6].Descriptor()
+	return file_alonabot_v1_route_proto_enumTypes[5].Descriptor()
 }
 
 func (HookPhase) Type() protoreflect.EnumType {
-	return &file_alonabot_v1_route_proto_enumTypes[6]
+	return &file_alonabot_v1_route_proto_enumTypes[5]
 }
 
 func (x HookPhase) Number() protoreflect.EnumNumber {
@@ -433,7 +389,7 @@ func (x HookPhase) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use HookPhase.Descriptor instead.
 func (HookPhase) EnumDescriptor() ([]byte, []int) {
-	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{6}
+	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{5}
 }
 
 // ServiceAccess 列出服务的访问范围。
@@ -476,11 +432,11 @@ func (x ServiceAccess) String() string {
 }
 
 func (ServiceAccess) Descriptor() protoreflect.EnumDescriptor {
-	return file_alonabot_v1_route_proto_enumTypes[7].Descriptor()
+	return file_alonabot_v1_route_proto_enumTypes[6].Descriptor()
 }
 
 func (ServiceAccess) Type() protoreflect.EnumType {
-	return &file_alonabot_v1_route_proto_enumTypes[7]
+	return &file_alonabot_v1_route_proto_enumTypes[6]
 }
 
 func (x ServiceAccess) Number() protoreflect.EnumNumber {
@@ -489,7 +445,7 @@ func (x ServiceAccess) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ServiceAccess.Descriptor instead.
 func (ServiceAccess) EnumDescriptor() ([]byte, []int) {
-	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{7}
+	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{6}
 }
 
 // HttpAuthMode 列出 HTTP 路由的认证方式。
@@ -536,11 +492,11 @@ func (x HttpAuthMode) String() string {
 }
 
 func (HttpAuthMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_alonabot_v1_route_proto_enumTypes[8].Descriptor()
+	return file_alonabot_v1_route_proto_enumTypes[7].Descriptor()
 }
 
 func (HttpAuthMode) Type() protoreflect.EnumType {
-	return &file_alonabot_v1_route_proto_enumTypes[8]
+	return &file_alonabot_v1_route_proto_enumTypes[7]
 }
 
 func (x HttpAuthMode) Number() protoreflect.EnumNumber {
@@ -549,7 +505,7 @@ func (x HttpAuthMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use HttpAuthMode.Descriptor instead.
 func (HttpAuthMode) EnumDescriptor() ([]byte, []int) {
-	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{8}
+	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{7}
 }
 
 // Register 承载 REGISTER（Plugin→Core）的载荷，配置准备与 OnStart 完成后仅发送一次；Core 原子校验整份注册集。
@@ -727,8 +683,6 @@ type RouteDescriptor struct {
 	Priority int32 `protobuf:"varint,3,opt,name=priority,proto3" json:"priority,omitempty"`
 	// 安装后默认是否启用。
 	DefaultEnabled bool `protobuf:"varint,4,opt,name=default_enabled,json=defaultEnabled,proto3" json:"default_enabled,omitempty"`
-	// 调用所需的最低权限。
-	RequiredPermission Permission `protobuf:"varint,5,opt,name=required_permission,json=requiredPermission,proto3,enum=alonabot.v1.Permission" json:"required_permission,omitempty"`
 	// 请求载荷的契约 ID。
 	InputSchemaId string `protobuf:"bytes,6,opt,name=input_schema_id,json=inputSchemaId,proto3" json:"input_schema_id,omitempty"`
 	// 请求载荷的契约版本。
@@ -748,9 +702,11 @@ type RouteDescriptor struct {
 	//	*RouteDescriptor_Schedule
 	//	*RouteDescriptor_Http
 	//	*RouteDescriptor_BusSubscription
-	Spec          isRouteDescriptor_Spec `protobuf_oneof:"spec"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Spec isRouteDescriptor_Spec `protobuf_oneof:"spec"`
+	// 触发者满足其中任一权限即可；空集合不要求 Actor。
+	RequiredPermissions []string `protobuf:"bytes,17,rep,name=required_permissions,json=requiredPermissions,proto3" json:"required_permissions,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *RouteDescriptor) Reset() {
@@ -809,13 +765,6 @@ func (x *RouteDescriptor) GetDefaultEnabled() bool {
 		return x.DefaultEnabled
 	}
 	return false
-}
-
-func (x *RouteDescriptor) GetRequiredPermission() Permission {
-	if x != nil {
-		return x.RequiredPermission
-	}
-	return Permission_PERMISSION_UNSPECIFIED
 }
 
 func (x *RouteDescriptor) GetInputSchemaId() string {
@@ -916,6 +865,13 @@ func (x *RouteDescriptor) GetBusSubscription() *BusSubscriptionSpec {
 	return nil
 }
 
+func (x *RouteDescriptor) GetRequiredPermissions() []string {
+	if x != nil {
+		return x.RequiredPermissions
+	}
+	return nil
+}
+
 type isRouteDescriptor_Spec interface {
 	isRouteDescriptor_Spec()
 }
@@ -974,10 +930,8 @@ type RuleDescriptor struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 是否有需要 SDK 执行的自定义 Rule。
 	HasCustomRule bool `protobuf:"varint,1,opt,name=has_custom_rule,json=hasCustomRule,proto3" json:"has_custom_rule,omitempty"`
-	// 是否要求触发者是平台群管理员。
-	RequireChatAdmin bool `protobuf:"varint,2,opt,name=require_chat_admin,json=requireChatAdmin,proto3" json:"require_chat_admin,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RuleDescriptor) Reset() {
@@ -1017,13 +971,6 @@ func (x *RuleDescriptor) GetHasCustomRule() bool {
 	return false
 }
 
-func (x *RuleDescriptor) GetRequireChatAdmin() bool {
-	if x != nil {
-		return x.RequireChatAdmin
-	}
-	return false
-}
-
 // CommandSpec 描述命令路由的专属描述。
 type CommandSpec struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1043,12 +990,12 @@ type CommandSpec struct {
 	Regex string `protobuf:"bytes,7,opt,name=regex,proto3" json:"regex,omitempty"`
 	// 参数错误时的用法提示方式。
 	UsageMode UsageMode `protobuf:"varint,8,opt,name=usage_mode,json=usageMode,proto3,enum=alonabot.v1.UsageMode" json:"usage_mode,omitempty"`
-	// USAGE_MODE_CUSTOM 时发送的文本。
-	CustomUsage string `protobuf:"bytes,9,opt,name=custom_usage,json=customUsage,proto3" json:"custom_usage,omitempty"`
 	// KEYWORD、STARTSWITH、ENDSWITH、FULLMATCH：非空模式列表。
 	Patterns []string `protobuf:"bytes,10,rep,name=patterns,proto3" json:"patterns,omitempty"`
 	// 文本模式比较采用 Unicode 简单大小写折叠。
-	IgnoreCase    bool `protobuf:"varint,11,opt,name=ignore_case,json=ignoreCase,proto3" json:"ignore_case,omitempty"`
+	IgnoreCase bool `protobuf:"varint,11,opt,name=ignore_case,json=ignoreCase,proto3" json:"ignore_case,omitempty"`
+	// USAGE_MODE_CUSTOM：插件 i18/ 中 messages 的文案键。
+	UsageKey      string `protobuf:"bytes,12,opt,name=usage_key,json=usageKey,proto3" json:"usage_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1139,13 +1086,6 @@ func (x *CommandSpec) GetUsageMode() UsageMode {
 	return UsageMode_USAGE_MODE_UNSPECIFIED
 }
 
-func (x *CommandSpec) GetCustomUsage() string {
-	if x != nil {
-		return x.CustomUsage
-	}
-	return ""
-}
-
 func (x *CommandSpec) GetPatterns() []string {
 	if x != nil {
 		return x.Patterns
@@ -1158,6 +1098,13 @@ func (x *CommandSpec) GetIgnoreCase() bool {
 		return x.IgnoreCase
 	}
 	return false
+}
+
+func (x *CommandSpec) GetUsageKey() string {
+	if x != nil {
+		return x.UsageKey
+	}
+	return ""
 }
 
 // CommandAlias 描述命令的一条别名路径。
@@ -1765,13 +1712,12 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x0eMigrationState\x12.\n" +
 	"\x04mode\x18\x01 \x01(\x0e2\x1a.alonabot.v1.MigrationModeR\x04mode\x126\n" +
 	"\x17completed_migration_ids\x18\x02 \x03(\rR\x15completedMigrationIds\x124\n" +
-	"\x16self_migrate_completed\x18\x03 \x01(\bR\x14selfMigrateCompleted\"\xaa\x06\n" +
+	"\x16self_migrate_completed\x18\x03 \x01(\bR\x14selfMigrateCompleted\"\xae\x06\n" +
 	"\x0fRouteDescriptor\x12\x19\n" +
 	"\broute_id\x18\x01 \x01(\tR\arouteId\x12*\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x16.alonabot.v1.RouteKindR\x04kind\x12\x1a\n" +
 	"\bpriority\x18\x03 \x01(\x05R\bpriority\x12'\n" +
-	"\x0fdefault_enabled\x18\x04 \x01(\bR\x0edefaultEnabled\x12H\n" +
-	"\x13required_permission\x18\x05 \x01(\x0e2\x17.alonabot.v1.PermissionR\x12requiredPermission\x12&\n" +
+	"\x0fdefault_enabled\x18\x04 \x01(\bR\x0edefaultEnabled\x12&\n" +
 	"\x0finput_schema_id\x18\x06 \x01(\tR\rinputSchemaId\x120\n" +
 	"\x14input_schema_version\x18\a \x01(\rR\x12inputSchemaVersion\x12(\n" +
 	"\x10output_schema_id\x18\b \x01(\tR\x0eoutputSchemaId\x122\n" +
@@ -1783,11 +1729,11 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\aservice\x18\r \x01(\v2\x18.alonabot.v1.ServiceSpecH\x00R\aservice\x127\n" +
 	"\bschedule\x18\x0e \x01(\v2\x19.alonabot.v1.ScheduleSpecH\x00R\bschedule\x120\n" +
 	"\x04http\x18\x0f \x01(\v2\x1a.alonabot.v1.HttpRouteSpecH\x00R\x04http\x12M\n" +
-	"\x10bus_subscription\x18\x10 \x01(\v2 .alonabot.v1.BusSubscriptionSpecH\x00R\x0fbusSubscriptionB\x06\n" +
-	"\x04spec\"f\n" +
+	"\x10bus_subscription\x18\x10 \x01(\v2 .alonabot.v1.BusSubscriptionSpecH\x00R\x0fbusSubscription\x121\n" +
+	"\x14required_permissions\x18\x11 \x03(\tR\x13requiredPermissionsB\x06\n" +
+	"\x04specJ\x04\b\x05\x10\x06R\x13required_permission\"R\n" +
 	"\x0eRuleDescriptor\x12&\n" +
-	"\x0fhas_custom_rule\x18\x01 \x01(\bR\rhasCustomRule\x12,\n" +
-	"\x12require_chat_admin\x18\x02 \x01(\bR\x10requireChatAdmin\"\xd5\x03\n" +
+	"\x0fhas_custom_rule\x18\x01 \x01(\bR\rhasCustomRuleJ\x04\b\x02\x10\x03R\x12require_chat_admin\"\xe3\x03\n" +
 	"\vCommandSpec\x12/\n" +
 	"\x05match\x18\x01 \x01(\x0e2\x19.alonabot.v1.CommandMatchR\x05match\x12\x12\n" +
 	"\x04path\x18\x02 \x03(\tR\x04path\x123\n" +
@@ -1797,12 +1743,13 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x04rule\x18\x06 \x01(\v2\x1b.alonabot.v1.RuleDescriptorR\x04rule\x12\x14\n" +
 	"\x05regex\x18\a \x01(\tR\x05regex\x125\n" +
 	"\n" +
-	"usage_mode\x18\b \x01(\x0e2\x16.alonabot.v1.UsageModeR\tusageMode\x12!\n" +
-	"\fcustom_usage\x18\t \x01(\tR\vcustomUsage\x12\x1a\n" +
+	"usage_mode\x18\b \x01(\x0e2\x16.alonabot.v1.UsageModeR\tusageMode\x12\x1a\n" +
 	"\bpatterns\x18\n" +
 	" \x03(\tR\bpatterns\x12\x1f\n" +
 	"\vignore_case\x18\v \x01(\bR\n" +
-	"ignoreCase\"\"\n" +
+	"ignoreCase\x12\x1b\n" +
+	"\tusage_key\x18\f \x01(\tR\busageKeyJ\x04\b\t\x10\n" +
+	"R\fcustom_usage\"\"\n" +
 	"\fCommandAlias\x12\x12\n" +
 	"\x04path\x18\x01 \x03(\tR\x04path\"\xb8\x01\n" +
 	"\fCommandParam\x12\x12\n" +
@@ -1852,13 +1799,7 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x12ROUTE_KIND_SERVICE\x10\x04\x12\x17\n" +
 	"\x13ROUTE_KIND_SCHEDULE\x10\x05\x12\x13\n" +
 	"\x0fROUTE_KIND_HTTP\x10\x06\x12\x1f\n" +
-	"\x1bROUTE_KIND_BUS_SUBSCRIPTION\x10\a*g\n" +
-	"\n" +
-	"Permission\x12\x1a\n" +
-	"\x16PERMISSION_UNSPECIFIED\x10\x00\x12\x12\n" +
-	"\x0ePERMISSION_ANY\x10\x01\x12\x13\n" +
-	"\x0fPERMISSION_USER\x10\x02\x12\x14\n" +
-	"\x10PERMISSION_ADMIN\x10\x03*a\n" +
+	"\x1bROUTE_KIND_BUS_SUBSCRIPTION\x10\a*a\n" +
 	"\vHandlerMode\x12\x1c\n" +
 	"\x18HANDLER_MODE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17HANDLER_MODE_AUTO_REPLY\x10\x01\x12\x17\n" +
@@ -1876,13 +1817,16 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x16USAGE_MODE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12USAGE_MODE_DEFAULT\x10\x01\x12\x15\n" +
 	"\x11USAGE_MODE_SILENT\x10\x02\x12\x15\n" +
-	"\x11USAGE_MODE_CUSTOM\x10\x03*}\n" +
+	"\x11USAGE_MODE_CUSTOM\x10\x03*\xc0\x01\n" +
 	"\tParamType\x12\x1a\n" +
 	"\x16PARAM_TYPE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11PARAM_TYPE_STRING\x10\x01\x12\x12\n" +
 	"\x0ePARAM_TYPE_INT\x10\x02\x12\x14\n" +
 	"\x10PARAM_TYPE_FLOAT\x10\x03\x12\x13\n" +
-	"\x0fPARAM_TYPE_BOOL\x10\x04*x\n" +
+	"\x0fPARAM_TYPE_BOOL\x10\x04\x12\x13\n" +
+	"\x0fPARAM_TYPE_USER\x10\x05\x12\x14\n" +
+	"\x10PARAM_TYPE_IMAGE\x10\x06\x12\x16\n" +
+	"\x12PARAM_TYPE_MESSAGE\x10\a*x\n" +
 	"\tHookPhase\x12\x1a\n" +
 	"\x16HOOK_PHASE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14HOOK_PHASE_PRE_EVENT\x10\x01\x12\x1a\n" +
@@ -1912,69 +1856,67 @@ func file_alonabot_v1_route_proto_rawDescGZIP() []byte {
 	return file_alonabot_v1_route_proto_rawDescData
 }
 
-var file_alonabot_v1_route_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
+var file_alonabot_v1_route_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
 var file_alonabot_v1_route_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_alonabot_v1_route_proto_goTypes = []any{
 	(RouteKind)(0),              // 0: alonabot.v1.RouteKind
-	(Permission)(0),             // 1: alonabot.v1.Permission
-	(HandlerMode)(0),            // 2: alonabot.v1.HandlerMode
-	(CommandMatch)(0),           // 3: alonabot.v1.CommandMatch
-	(UsageMode)(0),              // 4: alonabot.v1.UsageMode
-	(ParamType)(0),              // 5: alonabot.v1.ParamType
-	(HookPhase)(0),              // 6: alonabot.v1.HookPhase
-	(ServiceAccess)(0),          // 7: alonabot.v1.ServiceAccess
-	(HttpAuthMode)(0),           // 8: alonabot.v1.HttpAuthMode
-	(*Register)(nil),            // 9: alonabot.v1.Register
-	(*MigrationState)(nil),      // 10: alonabot.v1.MigrationState
-	(*RouteDescriptor)(nil),     // 11: alonabot.v1.RouteDescriptor
-	(*RuleDescriptor)(nil),      // 12: alonabot.v1.RuleDescriptor
-	(*CommandSpec)(nil),         // 13: alonabot.v1.CommandSpec
-	(*CommandAlias)(nil),        // 14: alonabot.v1.CommandAlias
-	(*CommandParam)(nil),        // 15: alonabot.v1.CommandParam
-	(*EventSpec)(nil),           // 16: alonabot.v1.EventSpec
-	(*HookSpec)(nil),            // 17: alonabot.v1.HookSpec
-	(*ServiceSpec)(nil),         // 18: alonabot.v1.ServiceSpec
-	(*ScheduleSpec)(nil),        // 19: alonabot.v1.ScheduleSpec
-	(*HttpRouteSpec)(nil),       // 20: alonabot.v1.HttpRouteSpec
-	(*BusSubscriptionSpec)(nil), // 21: alonabot.v1.BusSubscriptionSpec
-	(*HttpListener)(nil),        // 22: alonabot.v1.HttpListener
-	(*AdapterDescriptor)(nil),   // 23: alonabot.v1.AdapterDescriptor
-	(MigrationMode)(0),          // 24: alonabot.v1.MigrationMode
-	(PayloadEncoding)(0),        // 25: alonabot.v1.PayloadEncoding
+	(HandlerMode)(0),            // 1: alonabot.v1.HandlerMode
+	(CommandMatch)(0),           // 2: alonabot.v1.CommandMatch
+	(UsageMode)(0),              // 3: alonabot.v1.UsageMode
+	(ParamType)(0),              // 4: alonabot.v1.ParamType
+	(HookPhase)(0),              // 5: alonabot.v1.HookPhase
+	(ServiceAccess)(0),          // 6: alonabot.v1.ServiceAccess
+	(HttpAuthMode)(0),           // 7: alonabot.v1.HttpAuthMode
+	(*Register)(nil),            // 8: alonabot.v1.Register
+	(*MigrationState)(nil),      // 9: alonabot.v1.MigrationState
+	(*RouteDescriptor)(nil),     // 10: alonabot.v1.RouteDescriptor
+	(*RuleDescriptor)(nil),      // 11: alonabot.v1.RuleDescriptor
+	(*CommandSpec)(nil),         // 12: alonabot.v1.CommandSpec
+	(*CommandAlias)(nil),        // 13: alonabot.v1.CommandAlias
+	(*CommandParam)(nil),        // 14: alonabot.v1.CommandParam
+	(*EventSpec)(nil),           // 15: alonabot.v1.EventSpec
+	(*HookSpec)(nil),            // 16: alonabot.v1.HookSpec
+	(*ServiceSpec)(nil),         // 17: alonabot.v1.ServiceSpec
+	(*ScheduleSpec)(nil),        // 18: alonabot.v1.ScheduleSpec
+	(*HttpRouteSpec)(nil),       // 19: alonabot.v1.HttpRouteSpec
+	(*BusSubscriptionSpec)(nil), // 20: alonabot.v1.BusSubscriptionSpec
+	(*HttpListener)(nil),        // 21: alonabot.v1.HttpListener
+	(*AdapterDescriptor)(nil),   // 22: alonabot.v1.AdapterDescriptor
+	(MigrationMode)(0),          // 23: alonabot.v1.MigrationMode
+	(PayloadEncoding)(0),        // 24: alonabot.v1.PayloadEncoding
 }
 var file_alonabot_v1_route_proto_depIdxs = []int32{
-	11, // 0: alonabot.v1.Register.routes:type_name -> alonabot.v1.RouteDescriptor
-	22, // 1: alonabot.v1.Register.http_listener:type_name -> alonabot.v1.HttpListener
-	10, // 2: alonabot.v1.Register.migration:type_name -> alonabot.v1.MigrationState
-	23, // 3: alonabot.v1.Register.adapter:type_name -> alonabot.v1.AdapterDescriptor
-	24, // 4: alonabot.v1.MigrationState.mode:type_name -> alonabot.v1.MigrationMode
+	10, // 0: alonabot.v1.Register.routes:type_name -> alonabot.v1.RouteDescriptor
+	21, // 1: alonabot.v1.Register.http_listener:type_name -> alonabot.v1.HttpListener
+	9,  // 2: alonabot.v1.Register.migration:type_name -> alonabot.v1.MigrationState
+	22, // 3: alonabot.v1.Register.adapter:type_name -> alonabot.v1.AdapterDescriptor
+	23, // 4: alonabot.v1.MigrationState.mode:type_name -> alonabot.v1.MigrationMode
 	0,  // 5: alonabot.v1.RouteDescriptor.kind:type_name -> alonabot.v1.RouteKind
-	1,  // 6: alonabot.v1.RouteDescriptor.required_permission:type_name -> alonabot.v1.Permission
-	13, // 7: alonabot.v1.RouteDescriptor.command:type_name -> alonabot.v1.CommandSpec
-	16, // 8: alonabot.v1.RouteDescriptor.event:type_name -> alonabot.v1.EventSpec
-	17, // 9: alonabot.v1.RouteDescriptor.hook:type_name -> alonabot.v1.HookSpec
-	18, // 10: alonabot.v1.RouteDescriptor.service:type_name -> alonabot.v1.ServiceSpec
-	19, // 11: alonabot.v1.RouteDescriptor.schedule:type_name -> alonabot.v1.ScheduleSpec
-	20, // 12: alonabot.v1.RouteDescriptor.http:type_name -> alonabot.v1.HttpRouteSpec
-	21, // 13: alonabot.v1.RouteDescriptor.bus_subscription:type_name -> alonabot.v1.BusSubscriptionSpec
-	3,  // 14: alonabot.v1.CommandSpec.match:type_name -> alonabot.v1.CommandMatch
-	14, // 15: alonabot.v1.CommandSpec.aliases:type_name -> alonabot.v1.CommandAlias
-	15, // 16: alonabot.v1.CommandSpec.params:type_name -> alonabot.v1.CommandParam
-	2,  // 17: alonabot.v1.CommandSpec.handler_mode:type_name -> alonabot.v1.HandlerMode
-	12, // 18: alonabot.v1.CommandSpec.rule:type_name -> alonabot.v1.RuleDescriptor
-	4,  // 19: alonabot.v1.CommandSpec.usage_mode:type_name -> alonabot.v1.UsageMode
-	5,  // 20: alonabot.v1.CommandParam.type:type_name -> alonabot.v1.ParamType
-	2,  // 21: alonabot.v1.EventSpec.handler_mode:type_name -> alonabot.v1.HandlerMode
-	12, // 22: alonabot.v1.EventSpec.rule:type_name -> alonabot.v1.RuleDescriptor
-	6,  // 23: alonabot.v1.HookSpec.phase:type_name -> alonabot.v1.HookPhase
-	7,  // 24: alonabot.v1.ServiceSpec.access:type_name -> alonabot.v1.ServiceAccess
-	25, // 25: alonabot.v1.ServiceSpec.encoding:type_name -> alonabot.v1.PayloadEncoding
-	8,  // 26: alonabot.v1.HttpRouteSpec.auth_mode:type_name -> alonabot.v1.HttpAuthMode
-	27, // [27:27] is the sub-list for method output_type
-	27, // [27:27] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	12, // 6: alonabot.v1.RouteDescriptor.command:type_name -> alonabot.v1.CommandSpec
+	15, // 7: alonabot.v1.RouteDescriptor.event:type_name -> alonabot.v1.EventSpec
+	16, // 8: alonabot.v1.RouteDescriptor.hook:type_name -> alonabot.v1.HookSpec
+	17, // 9: alonabot.v1.RouteDescriptor.service:type_name -> alonabot.v1.ServiceSpec
+	18, // 10: alonabot.v1.RouteDescriptor.schedule:type_name -> alonabot.v1.ScheduleSpec
+	19, // 11: alonabot.v1.RouteDescriptor.http:type_name -> alonabot.v1.HttpRouteSpec
+	20, // 12: alonabot.v1.RouteDescriptor.bus_subscription:type_name -> alonabot.v1.BusSubscriptionSpec
+	2,  // 13: alonabot.v1.CommandSpec.match:type_name -> alonabot.v1.CommandMatch
+	13, // 14: alonabot.v1.CommandSpec.aliases:type_name -> alonabot.v1.CommandAlias
+	14, // 15: alonabot.v1.CommandSpec.params:type_name -> alonabot.v1.CommandParam
+	1,  // 16: alonabot.v1.CommandSpec.handler_mode:type_name -> alonabot.v1.HandlerMode
+	11, // 17: alonabot.v1.CommandSpec.rule:type_name -> alonabot.v1.RuleDescriptor
+	3,  // 18: alonabot.v1.CommandSpec.usage_mode:type_name -> alonabot.v1.UsageMode
+	4,  // 19: alonabot.v1.CommandParam.type:type_name -> alonabot.v1.ParamType
+	1,  // 20: alonabot.v1.EventSpec.handler_mode:type_name -> alonabot.v1.HandlerMode
+	11, // 21: alonabot.v1.EventSpec.rule:type_name -> alonabot.v1.RuleDescriptor
+	5,  // 22: alonabot.v1.HookSpec.phase:type_name -> alonabot.v1.HookPhase
+	6,  // 23: alonabot.v1.ServiceSpec.access:type_name -> alonabot.v1.ServiceAccess
+	24, // 24: alonabot.v1.ServiceSpec.encoding:type_name -> alonabot.v1.PayloadEncoding
+	7,  // 25: alonabot.v1.HttpRouteSpec.auth_mode:type_name -> alonabot.v1.HttpAuthMode
+	26, // [26:26] is the sub-list for method output_type
+	26, // [26:26] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_route_proto_init() }
@@ -2004,7 +1946,7 @@ func file_alonabot_v1_route_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_route_proto_rawDesc), len(file_alonabot_v1_route_proto_rawDesc)),
-			NumEnums:      9,
+			NumEnums:      8,
 			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,

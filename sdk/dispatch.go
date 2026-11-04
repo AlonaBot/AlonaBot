@@ -154,6 +154,12 @@ func commandArguments(command Command, invocation *pb.CommandInvocation) ([]refl
 			args[i+1] = reflect.ValueOf(value.FloatValue)
 		case *pb.ArgValue_BoolValue:
 			args[i+1] = reflect.ValueOf(value.BoolValue)
+		case *pb.ArgValue_UserId:
+			args[i+1] = reflect.ValueOf(UserID(value.UserId))
+		case *pb.ArgValue_Image:
+			args[i+1] = reflect.ValueOf(value.Image)
+		case *pb.ArgValue_Message:
+			args[i+1] = reflect.ValueOf(value.Message)
 		}
 		if args[i+1].Type() != handlerType.In(i+1) {
 			return nil, fmt.Errorf("parameter %q value has an incorrect type", param.GetName())

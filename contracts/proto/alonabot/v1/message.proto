@@ -20,7 +20,8 @@ enum EventSourceKind {
 
 // Event 描述 Core 标准化后的入站事件。
 // event_type 取值：message.created、message.edited、message.deleted、button.clicked、
-// member.joined、member.left、reaction.added、scheduled、bot.online、bot.offline；与 event_payload 的分支一一对应。
+// member.joined、member.left、reaction.added、scheduled、bot.online、bot.offline，或 Adapter 声明的完整扩展事件名。
+// 标准类型与 event_payload 的分支一一对应，扩展类型使用 adapter_event 分支。
 message Event {
   // Core 入站标准化时产生。
   string event_id = 1;
@@ -86,7 +87,15 @@ message EventPayload {
     BotOnlinePayload bot_online = 9;
     // bot.offline。
     BotOfflinePayload bot_offline = 10;
+    // Adapter 声明的扩展事件。
+    AdapterEventPayload adapter_event = 11;
   }
+}
+
+// AdapterEventPayload 承载与 Adapter 注册声明一致的版本和 JSON 对象。
+message AdapterEventPayload {
+  uint32 version = 1;
+  string payload_json = 2;
 }
 
 // MessageCreatedPayload 承载新消息事件的载荷。

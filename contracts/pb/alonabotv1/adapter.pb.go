@@ -70,12 +70,14 @@ func (AdapterInstanceState) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{0}
 }
 
-// AdapterDescriptor 声明安装包提供的平台能力与 extension Schema。
+// AdapterDescriptor 声明安装包提供的平台能力、片段、权限与扩展事件。
 type AdapterDescriptor struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
-	AdapterId     string                  `protobuf:"bytes,1,opt,name=adapter_id,json=adapterId,proto3" json:"adapter_id,omitempty"`
-	Capabilities  []*Capability           `protobuf:"bytes,2,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
-	Extensions    []*ExtensionDeclaration `protobuf:"bytes,3,rep,name=extensions,proto3" json:"extensions,omitempty"`
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	AdapterId     string                   `protobuf:"bytes,1,opt,name=adapter_id,json=adapterId,proto3" json:"adapter_id,omitempty"`
+	Capabilities  []*Capability            `protobuf:"bytes,2,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	Extensions    []*ExtensionDeclaration  `protobuf:"bytes,3,rep,name=extensions,proto3" json:"extensions,omitempty"`
+	Permissions   []*PermissionDeclaration `protobuf:"bytes,4,rep,name=permissions,proto3" json:"permissions,omitempty"`
+	Events        []*EventDeclaration      `protobuf:"bytes,5,rep,name=events,proto3" json:"events,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -127,6 +129,20 @@ func (x *AdapterDescriptor) GetCapabilities() []*Capability {
 func (x *AdapterDescriptor) GetExtensions() []*ExtensionDeclaration {
 	if x != nil {
 		return x.Extensions
+	}
+	return nil
+}
+
+func (x *AdapterDescriptor) GetPermissions() []*PermissionDeclaration {
+	if x != nil {
+		return x.Permissions
+	}
+	return nil
+}
+
+func (x *AdapterDescriptor) GetEvents() []*EventDeclaration {
+	if x != nil {
+		return x.Events
 	}
 	return nil
 }
@@ -192,6 +208,132 @@ func (x *ExtensionDeclaration) GetSchemaJson() string {
 	return ""
 }
 
+// PermissionDeclaration 声明平台权限及其隐含关系。
+type PermissionDeclaration struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 完整权限名，带本 Adapter 的 ID 前缀。
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// 本 Adapter 已声明的完整权限名或 chat_admin。
+	Implies []string `protobuf:"bytes,2,rep,name=implies,proto3" json:"implies,omitempty"`
+	// Adapter 包 i18/ 中 messages 的文案键。
+	LabelKey      string `protobuf:"bytes,3,opt,name=label_key,json=labelKey,proto3" json:"label_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PermissionDeclaration) Reset() {
+	*x = PermissionDeclaration{}
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PermissionDeclaration) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PermissionDeclaration) ProtoMessage() {}
+
+func (x *PermissionDeclaration) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PermissionDeclaration.ProtoReflect.Descriptor instead.
+func (*PermissionDeclaration) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *PermissionDeclaration) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *PermissionDeclaration) GetImplies() []string {
+	if x != nil {
+		return x.Implies
+	}
+	return nil
+}
+
+func (x *PermissionDeclaration) GetLabelKey() string {
+	if x != nil {
+		return x.LabelKey
+	}
+	return ""
+}
+
+// EventDeclaration 声明平台扩展事件及其载荷 Schema。
+type EventDeclaration struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 完整事件名，带本 Adapter 的 ID 前缀。
+	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version       uint32 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	SchemaJson    string `protobuf:"bytes,3,opt,name=schema_json,json=schemaJson,proto3" json:"schema_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EventDeclaration) Reset() {
+	*x = EventDeclaration{}
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EventDeclaration) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EventDeclaration) ProtoMessage() {}
+
+func (x *EventDeclaration) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EventDeclaration.ProtoReflect.Descriptor instead.
+func (*EventDeclaration) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *EventDeclaration) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *EventDeclaration) GetVersion() uint32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *EventDeclaration) GetSchemaJson() string {
+	if x != nil {
+		return x.SchemaJson
+	}
+	return ""
+}
+
 // AdapterInstanceStartRequest 下发实例配置与已持久化游标。
 type AdapterInstanceStartRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -204,7 +346,7 @@ type AdapterInstanceStartRequest struct {
 
 func (x *AdapterInstanceStartRequest) Reset() {
 	*x = AdapterInstanceStartRequest{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[2]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -216,7 +358,7 @@ func (x *AdapterInstanceStartRequest) String() string {
 func (*AdapterInstanceStartRequest) ProtoMessage() {}
 
 func (x *AdapterInstanceStartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[2]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -229,7 +371,7 @@ func (x *AdapterInstanceStartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterInstanceStartRequest.ProtoReflect.Descriptor instead.
 func (*AdapterInstanceStartRequest) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{2}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *AdapterInstanceStartRequest) GetInstanceId() string {
@@ -266,7 +408,7 @@ type AdapterInstanceStartResponse struct {
 
 func (x *AdapterInstanceStartResponse) Reset() {
 	*x = AdapterInstanceStartResponse{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[3]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -278,7 +420,7 @@ func (x *AdapterInstanceStartResponse) String() string {
 func (*AdapterInstanceStartResponse) ProtoMessage() {}
 
 func (x *AdapterInstanceStartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[3]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -291,7 +433,7 @@ func (x *AdapterInstanceStartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterInstanceStartResponse.ProtoReflect.Descriptor instead.
 func (*AdapterInstanceStartResponse) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{3}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *AdapterInstanceStartResponse) GetAccountId() string {
@@ -332,7 +474,7 @@ type AdapterInstanceStopRequest struct {
 
 func (x *AdapterInstanceStopRequest) Reset() {
 	*x = AdapterInstanceStopRequest{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[4]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -344,7 +486,7 @@ func (x *AdapterInstanceStopRequest) String() string {
 func (*AdapterInstanceStopRequest) ProtoMessage() {}
 
 func (x *AdapterInstanceStopRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[4]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -357,7 +499,7 @@ func (x *AdapterInstanceStopRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterInstanceStopRequest.ProtoReflect.Descriptor instead.
 func (*AdapterInstanceStopRequest) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{4}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *AdapterInstanceStopRequest) GetInstanceId() string {
@@ -376,7 +518,7 @@ type AdapterInstanceStopResponse struct {
 
 func (x *AdapterInstanceStopResponse) Reset() {
 	*x = AdapterInstanceStopResponse{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[5]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -388,7 +530,7 @@ func (x *AdapterInstanceStopResponse) String() string {
 func (*AdapterInstanceStopResponse) ProtoMessage() {}
 
 func (x *AdapterInstanceStopResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[5]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -401,7 +543,7 @@ func (x *AdapterInstanceStopResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterInstanceStopResponse.ProtoReflect.Descriptor instead.
 func (*AdapterInstanceStopResponse) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{5}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{7}
 }
 
 // AdapterSendRequest 向指定实例发送消息链；响应为 SendResult。
@@ -416,7 +558,7 @@ type AdapterSendRequest struct {
 
 func (x *AdapterSendRequest) Reset() {
 	*x = AdapterSendRequest{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[6]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -428,7 +570,7 @@ func (x *AdapterSendRequest) String() string {
 func (*AdapterSendRequest) ProtoMessage() {}
 
 func (x *AdapterSendRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[6]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -441,7 +583,7 @@ func (x *AdapterSendRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterSendRequest.ProtoReflect.Descriptor instead.
 func (*AdapterSendRequest) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{6}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AdapterSendRequest) GetInstanceId() string {
@@ -477,7 +619,7 @@ type AdapterDeliverRequest struct {
 
 func (x *AdapterDeliverRequest) Reset() {
 	*x = AdapterDeliverRequest{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[7]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -489,7 +631,7 @@ func (x *AdapterDeliverRequest) String() string {
 func (*AdapterDeliverRequest) ProtoMessage() {}
 
 func (x *AdapterDeliverRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[7]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -502,7 +644,7 @@ func (x *AdapterDeliverRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterDeliverRequest.ProtoReflect.Descriptor instead.
 func (*AdapterDeliverRequest) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{7}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *AdapterDeliverRequest) GetInstanceId() string {
@@ -536,7 +678,7 @@ type AdapterDeliverResponse struct {
 
 func (x *AdapterDeliverResponse) Reset() {
 	*x = AdapterDeliverResponse{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[8]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -548,7 +690,7 @@ func (x *AdapterDeliverResponse) String() string {
 func (*AdapterDeliverResponse) ProtoMessage() {}
 
 func (x *AdapterDeliverResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[8]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -561,7 +703,7 @@ func (x *AdapterDeliverResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterDeliverResponse.ProtoReflect.Descriptor instead.
 func (*AdapterDeliverResponse) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{8}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *AdapterDeliverResponse) GetAccepted() bool {
@@ -582,7 +724,7 @@ type AdapterCursorRequest struct {
 
 func (x *AdapterCursorRequest) Reset() {
 	*x = AdapterCursorRequest{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[9]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -594,7 +736,7 @@ func (x *AdapterCursorRequest) String() string {
 func (*AdapterCursorRequest) ProtoMessage() {}
 
 func (x *AdapterCursorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[9]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -607,7 +749,7 @@ func (x *AdapterCursorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterCursorRequest.ProtoReflect.Descriptor instead.
 func (*AdapterCursorRequest) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{9}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *AdapterCursorRequest) GetInstanceId() string {
@@ -633,7 +775,7 @@ type AdapterCursorResponse struct {
 
 func (x *AdapterCursorResponse) Reset() {
 	*x = AdapterCursorResponse{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[10]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -645,7 +787,7 @@ func (x *AdapterCursorResponse) String() string {
 func (*AdapterCursorResponse) ProtoMessage() {}
 
 func (x *AdapterCursorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[10]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -658,7 +800,7 @@ func (x *AdapterCursorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterCursorResponse.ProtoReflect.Descriptor instead.
 func (*AdapterCursorResponse) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{10}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{12}
 }
 
 // AdapterStatusRequest 报告实例致命错误。
@@ -673,7 +815,7 @@ type AdapterStatusRequest struct {
 
 func (x *AdapterStatusRequest) Reset() {
 	*x = AdapterStatusRequest{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[11]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -685,7 +827,7 @@ func (x *AdapterStatusRequest) String() string {
 func (*AdapterStatusRequest) ProtoMessage() {}
 
 func (x *AdapterStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[11]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -698,7 +840,7 @@ func (x *AdapterStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterStatusRequest.ProtoReflect.Descriptor instead.
 func (*AdapterStatusRequest) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{11}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *AdapterStatusRequest) GetInstanceId() string {
@@ -731,7 +873,7 @@ type AdapterStatusResponse struct {
 
 func (x *AdapterStatusResponse) Reset() {
 	*x = AdapterStatusResponse{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[12]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -743,7 +885,7 @@ func (x *AdapterStatusResponse) String() string {
 func (*AdapterStatusResponse) ProtoMessage() {}
 
 func (x *AdapterStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[12]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -756,7 +898,7 @@ func (x *AdapterStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterStatusResponse.ProtoReflect.Descriptor instead.
 func (*AdapterStatusResponse) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{12}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{14}
 }
 
 // AdapterMediaReadRequest 从指定实例读取平台文件，length 为 1～1 MiB。
@@ -772,7 +914,7 @@ type AdapterMediaReadRequest struct {
 
 func (x *AdapterMediaReadRequest) Reset() {
 	*x = AdapterMediaReadRequest{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[13]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -784,7 +926,7 @@ func (x *AdapterMediaReadRequest) String() string {
 func (*AdapterMediaReadRequest) ProtoMessage() {}
 
 func (x *AdapterMediaReadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[13]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -797,7 +939,7 @@ func (x *AdapterMediaReadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterMediaReadRequest.ProtoReflect.Descriptor instead.
 func (*AdapterMediaReadRequest) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{13}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *AdapterMediaReadRequest) GetInstanceId() string {
@@ -840,7 +982,7 @@ type AdapterMediaReadResponse struct {
 
 func (x *AdapterMediaReadResponse) Reset() {
 	*x = AdapterMediaReadResponse{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[14]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -852,7 +994,7 @@ func (x *AdapterMediaReadResponse) String() string {
 func (*AdapterMediaReadResponse) ProtoMessage() {}
 
 func (x *AdapterMediaReadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[14]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -865,7 +1007,7 @@ func (x *AdapterMediaReadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterMediaReadResponse.ProtoReflect.Descriptor instead.
 func (*AdapterMediaReadResponse) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{14}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *AdapterMediaReadResponse) GetData() []byte {
@@ -893,15 +1035,26 @@ var File_alonabot_v1_adapter_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_adapter_proto_rawDesc = "" +
 	"\n" +
-	"\x19alonabot/v1/adapter.proto\x12\valonabot.v1\x1a\x1aalonabot/v1/identity.proto\x1a\x19alonabot/v1/message.proto\x1a\x18alonabot/v1/errors.proto\"\xb2\x01\n" +
+	"\x19alonabot/v1/adapter.proto\x12\valonabot.v1\x1a\x1aalonabot/v1/identity.proto\x1a\x19alonabot/v1/message.proto\x1a\x18alonabot/v1/errors.proto\"\xaf\x02\n" +
 	"\x11AdapterDescriptor\x12\x1d\n" +
 	"\n" +
 	"adapter_id\x18\x01 \x01(\tR\tadapterId\x12;\n" +
 	"\fcapabilities\x18\x02 \x03(\v2\x17.alonabot.v1.CapabilityR\fcapabilities\x12A\n" +
 	"\n" +
 	"extensions\x18\x03 \x03(\v2!.alonabot.v1.ExtensionDeclarationR\n" +
-	"extensions\"e\n" +
+	"extensions\x12D\n" +
+	"\vpermissions\x18\x04 \x03(\v2\".alonabot.v1.PermissionDeclarationR\vpermissions\x125\n" +
+	"\x06events\x18\x05 \x03(\v2\x1d.alonabot.v1.EventDeclarationR\x06events\"e\n" +
 	"\x14ExtensionDeclaration\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\rR\aversion\x12\x1f\n" +
+	"\vschema_json\x18\x03 \x01(\tR\n" +
+	"schemaJson\"b\n" +
+	"\x15PermissionDeclaration\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aimplies\x18\x02 \x03(\tR\aimplies\x12\x1b\n" +
+	"\tlabel_key\x18\x03 \x01(\tR\blabelKey\"a\n" +
+	"\x10EventDeclaration\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\rR\aversion\x12\x1f\n" +
 	"\vschema_json\x18\x03 \x01(\tR\n" +
@@ -976,44 +1129,48 @@ func file_alonabot_v1_adapter_proto_rawDescGZIP() []byte {
 }
 
 var file_alonabot_v1_adapter_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_alonabot_v1_adapter_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_alonabot_v1_adapter_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_alonabot_v1_adapter_proto_goTypes = []any{
 	(AdapterInstanceState)(0),            // 0: alonabot.v1.AdapterInstanceState
 	(*AdapterDescriptor)(nil),            // 1: alonabot.v1.AdapterDescriptor
 	(*ExtensionDeclaration)(nil),         // 2: alonabot.v1.ExtensionDeclaration
-	(*AdapterInstanceStartRequest)(nil),  // 3: alonabot.v1.AdapterInstanceStartRequest
-	(*AdapterInstanceStartResponse)(nil), // 4: alonabot.v1.AdapterInstanceStartResponse
-	(*AdapterInstanceStopRequest)(nil),   // 5: alonabot.v1.AdapterInstanceStopRequest
-	(*AdapterInstanceStopResponse)(nil),  // 6: alonabot.v1.AdapterInstanceStopResponse
-	(*AdapterSendRequest)(nil),           // 7: alonabot.v1.AdapterSendRequest
-	(*AdapterDeliverRequest)(nil),        // 8: alonabot.v1.AdapterDeliverRequest
-	(*AdapterDeliverResponse)(nil),       // 9: alonabot.v1.AdapterDeliverResponse
-	(*AdapterCursorRequest)(nil),         // 10: alonabot.v1.AdapterCursorRequest
-	(*AdapterCursorResponse)(nil),        // 11: alonabot.v1.AdapterCursorResponse
-	(*AdapterStatusRequest)(nil),         // 12: alonabot.v1.AdapterStatusRequest
-	(*AdapterStatusResponse)(nil),        // 13: alonabot.v1.AdapterStatusResponse
-	(*AdapterMediaReadRequest)(nil),      // 14: alonabot.v1.AdapterMediaReadRequest
-	(*AdapterMediaReadResponse)(nil),     // 15: alonabot.v1.AdapterMediaReadResponse
-	(*Capability)(nil),                   // 16: alonabot.v1.Capability
-	(*Target)(nil),                       // 17: alonabot.v1.Target
-	(*MessageChain)(nil),                 // 18: alonabot.v1.MessageChain
-	(*Event)(nil),                        // 19: alonabot.v1.Event
-	(*ErrorInfo)(nil),                    // 20: alonabot.v1.ErrorInfo
+	(*PermissionDeclaration)(nil),        // 3: alonabot.v1.PermissionDeclaration
+	(*EventDeclaration)(nil),             // 4: alonabot.v1.EventDeclaration
+	(*AdapterInstanceStartRequest)(nil),  // 5: alonabot.v1.AdapterInstanceStartRequest
+	(*AdapterInstanceStartResponse)(nil), // 6: alonabot.v1.AdapterInstanceStartResponse
+	(*AdapterInstanceStopRequest)(nil),   // 7: alonabot.v1.AdapterInstanceStopRequest
+	(*AdapterInstanceStopResponse)(nil),  // 8: alonabot.v1.AdapterInstanceStopResponse
+	(*AdapterSendRequest)(nil),           // 9: alonabot.v1.AdapterSendRequest
+	(*AdapterDeliverRequest)(nil),        // 10: alonabot.v1.AdapterDeliverRequest
+	(*AdapterDeliverResponse)(nil),       // 11: alonabot.v1.AdapterDeliverResponse
+	(*AdapterCursorRequest)(nil),         // 12: alonabot.v1.AdapterCursorRequest
+	(*AdapterCursorResponse)(nil),        // 13: alonabot.v1.AdapterCursorResponse
+	(*AdapterStatusRequest)(nil),         // 14: alonabot.v1.AdapterStatusRequest
+	(*AdapterStatusResponse)(nil),        // 15: alonabot.v1.AdapterStatusResponse
+	(*AdapterMediaReadRequest)(nil),      // 16: alonabot.v1.AdapterMediaReadRequest
+	(*AdapterMediaReadResponse)(nil),     // 17: alonabot.v1.AdapterMediaReadResponse
+	(*Capability)(nil),                   // 18: alonabot.v1.Capability
+	(*Target)(nil),                       // 19: alonabot.v1.Target
+	(*MessageChain)(nil),                 // 20: alonabot.v1.MessageChain
+	(*Event)(nil),                        // 21: alonabot.v1.Event
+	(*ErrorInfo)(nil),                    // 22: alonabot.v1.ErrorInfo
 }
 var file_alonabot_v1_adapter_proto_depIdxs = []int32{
-	16, // 0: alonabot.v1.AdapterDescriptor.capabilities:type_name -> alonabot.v1.Capability
+	18, // 0: alonabot.v1.AdapterDescriptor.capabilities:type_name -> alonabot.v1.Capability
 	2,  // 1: alonabot.v1.AdapterDescriptor.extensions:type_name -> alonabot.v1.ExtensionDeclaration
-	16, // 2: alonabot.v1.AdapterInstanceStartResponse.capabilities:type_name -> alonabot.v1.Capability
-	17, // 3: alonabot.v1.AdapterSendRequest.target:type_name -> alonabot.v1.Target
-	18, // 4: alonabot.v1.AdapterSendRequest.chain:type_name -> alonabot.v1.MessageChain
-	19, // 5: alonabot.v1.AdapterDeliverRequest.event:type_name -> alonabot.v1.Event
-	0,  // 6: alonabot.v1.AdapterStatusRequest.state:type_name -> alonabot.v1.AdapterInstanceState
-	20, // 7: alonabot.v1.AdapterStatusRequest.safe_error:type_name -> alonabot.v1.ErrorInfo
-	8,  // [8:8] is the sub-list for method output_type
-	8,  // [8:8] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	3,  // 2: alonabot.v1.AdapterDescriptor.permissions:type_name -> alonabot.v1.PermissionDeclaration
+	4,  // 3: alonabot.v1.AdapterDescriptor.events:type_name -> alonabot.v1.EventDeclaration
+	18, // 4: alonabot.v1.AdapterInstanceStartResponse.capabilities:type_name -> alonabot.v1.Capability
+	19, // 5: alonabot.v1.AdapterSendRequest.target:type_name -> alonabot.v1.Target
+	20, // 6: alonabot.v1.AdapterSendRequest.chain:type_name -> alonabot.v1.MessageChain
+	21, // 7: alonabot.v1.AdapterDeliverRequest.event:type_name -> alonabot.v1.Event
+	0,  // 8: alonabot.v1.AdapterStatusRequest.state:type_name -> alonabot.v1.AdapterInstanceState
+	22, // 9: alonabot.v1.AdapterStatusRequest.safe_error:type_name -> alonabot.v1.ErrorInfo
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_adapter_proto_init() }
@@ -1024,14 +1181,14 @@ func file_alonabot_v1_adapter_proto_init() {
 	file_alonabot_v1_identity_proto_init()
 	file_alonabot_v1_message_proto_init()
 	file_alonabot_v1_errors_proto_init()
-	file_alonabot_v1_adapter_proto_msgTypes[3].OneofWrappers = []any{}
+	file_alonabot_v1_adapter_proto_msgTypes[5].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_adapter_proto_rawDesc), len(file_alonabot_v1_adapter_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   15,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
