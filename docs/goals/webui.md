@@ -1,15 +1,15 @@
 # goal 语句：WebUI
 
-本文件收录「WebUI」章节的 goal 语句，切片表在[WebUI 实施计划](../../spec/plan/webui.md)。用法、状态与所有 goal 的共同约束见 [README](README.md)；本文件只由审查者维护。
+本文件收录「WebUI」章节的 goal 语句，切片表在[WebUI 实施计划](../../spec/plan/webui.md)。本章节只有 `web/admin` 的前端；页面调用的 Admin API 与 WebUI 的提供在[核心章节](core.md)（goal-66、goal-84、goal-92、goal-93）。用法、状态与所有 goal 的共同约束见 [README](README.md)；本文件只由审查者维护。
 
 ## 总览
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
 | goal-34 | T-08.7 | web/admin 骨架、配置表单组件与界面文案 | T-08.1、T-08.10 | 待派发 |
-| goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.4、T-09.1、T-09.4、T-13.1 | 等待前置 |
-| goal-43 | T-09.8 | Admin 管理页 | T-09.6、T-08.7、T-09.12 | 等待前置 |
-| goal-44 | T-09.9 | Admin 配置、权限、工具策略与插件页 | T-09.8、T-11.1、T-11.3 | 等待前置 |
+| goal-43 | T-09.8 | Admin 管理页 | T-08.7、T-09.6、T-09.12、T-09.13 | 等待前置 |
+| goal-44 | T-09.9 | Admin 配置、权限、工具策略与插件页 | T-09.8、T-09.14 | 等待前置 |
+| goal-94 | T-09.15 | 日志页 | T-09.8、T-09.10 | 等待前置 |
 
 ## 第 8 波
 
@@ -145,117 +145,111 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 不做：真实管理 API、登录与页面路由（T-09.1、T-09.8）；CI 中的前端任务（另由维护者决定是否加入）；DOM 渲染测试（需要新依赖）；超出 JavaScript 安全整数范围的整数值的编辑（这类字段未修改时不进 patch，不受影响）。
 ```
 
-## 第 9 波
-
-### goal-84 · T-09.12 WebUI 组件与组件图标
-
-状态：等待前置（T-07.4、T-09.1、T-09.4、T-13.1）。语句只写了目标、依据和要点。依据 D-62、D-63 新增；前置合并后由审查者按实际的 webhost、adminauth、manage 与根包装配写出接口和测试段。
-
-目标：Core 在 admin host 上以组件方式提供 WebUI 与组件图标：已启用 WebUI 组件的静态文件（保留 `/api/` 与内部路径，无扩展名的不存在路径回退 index.html，未安装时 503 与英文提示），Admin API 主版本常量与 WebUI 声明范围的检查（不兼容时拒绝安装与启用并提示），只提供 manifest 声明的图标并带 sandbox CSP 与 nosniff、要求管理员会话；写出 spec/ADMIN-API.md（主版本、全部接口、认证与错误格式）；根包增加 `alonabot.WebUI(fsys fs.FS)` 选项。
-
-依据：PLAN T-09 步骤 9、§3.1 的 T-09.12 行；CONTRACTS §7.3、§7.5、§9.1、§15.4；DECISIONS D-62、D-63；TEST-MATRIX V-83。
-
-要点：
-- 文件只从不可变包目录读取，路径按 CONTRACTS §9.1 的相对路径规则校验，不跟随链接，不经组件进程。
-- 图标的类型只按扩展名取 image/svg+xml、image/png、image/webp；未声明的包内文件即使存在也返回 404。
-- spec/ADMIN-API.md 由本切片新建，之后新增接口的切片同步追加；同一主版本内只做向后兼容的增加。
-- 提交的集成测试经真实 Core 与临时安装的 WebUI 测试包覆盖 V-83 的全部场景；含脚本的 SVG 在浏览器中不执行的检查没有浏览器时记为未运行。
-
-
 ## 第 16 波
 
 ### goal-43 · T-09.8 Admin 管理页
 
-状态：等待前置（T-09.6、T-08.7、T-09.12）。语句中 goal-34、goal-36、goal-39～goal-41、goal-84 提供的符号（web/admin 的工程与组件、adminauth 的登录接口、manage 的 HTTP API、Admin API 参考与 WebUI 的提供）只写名字；合并后由审查者核对，再改为待派发。
+状态：等待前置（T-08.7、T-09.6、T-09.12、T-09.13）。语句中 goal-34、goal-36、goal-39～goal-41、goal-84、goal-92 提供的符号（web/admin 的工程与组件、登录接口、管理服务的 HTTP API、Admin API 参考、会话取回与上传接口）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按前后端拆分改写：会话取回与 multipart 上传移到 goal-92（T-09.13）；原语句中嵌入 dist 的 `internal/core/adminui` 与 D-62「Core 不内嵌任何前端」冲突，已删去，静态文件由 goal-84（T-09.12）以 WebUI 组件的方式提供。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-43（切片 T-09.8：Admin 管理页）。goal 目录 goal-43，分支 goal-43，worktree .worktrees/goal-43，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：在官方 WebUI 组件 web/admin 中实现真实的登录、总览状态、各角色组件的安装、启停与替换（`--source`、`--replace` 的页面入口，组件图标用 `<img>` 显示）、Adapter 实例管理、更新与恢复（rollback）页面，全部只调用 spec/ADMIN-API.md 列出的 Admin API；静态文件由 T-09.12 以 WebUI 组件的方式提供。页面显示 Pending、候选失败、Degraded 与维护原因，只展示用户可操作的状态和具体错误。
+目标：在官方 WebUI 组件 web/admin 中实现真实的登录、总览状态、各角色组件的安装、启停与替换（`--source`、`--replace` 的页面入口，组件图标用 `<img>` 显示）、Adapter 实例管理、更新与恢复（rollback）页面，全部只调用 spec/ADMIN-API.md 列出的 Admin API。构建产物 dist/ 是 WebUI 组件的静态根目录，由 Core 按 T-09.12 提供，本切片不改 Go 代码。页面显示 Pending、候选失败、Degraded 与维护原因，只展示用户可操作的状态和具体错误。
 
-依据：PLAN T-09 步骤 7（管理页）；CONTRACTS §7.3、§7.4、§9.3、§12.1；DECISIONS D-25；TEST-MATRIX V-40、V-47 的页面分项。
+依据：PLAN T-09 步骤 7（管理页）；CONTRACTS §7.3、§7.4、§7.5、§9.3、§12.1；DECISIONS D-25、D-62、D-63；TEST-MATRIX V-40、V-47 的页面分项。
 
 范围（只新增或修改这些）：
-- web/admin/src/：新增 api/（管理 API 客户端，带 CSRF 头）、pages/（Login、Overview、Packages、Instances、Updates）、路由（基于 window.location 与 history 的简单路由，不引入路由库）
+- web/admin/src/：新增 api/（Admin API 客户端，带 CSRF 头）、pages/（Login、Overview、Packages、Instances、Updates）、路由（基于 window.location 与 history 的简单路由，不引入路由库）
 - web/admin/i18n/：补充页面文案（en-US 与 zh-CN 键集合一致）
-- 新增 internal/core/adminui/（嵌入 web/admin/dist 的静态资源并在 admin host 提供；go:embed）
-- cmd/alonabot 或根包 assembly：admin host 的非 /api/ 路径交给 adminui（只加调用点）
-- 构建流程：web/admin 的 npm run build 产物 dist/ 由 internal/core/adminui 的 go:generate 复制进包目录；生成物提交到仓库（与 proto 生成物同样处理），并在 docs/development.md 的生成命令中登记（本切片获授权修改该处）
-- 上述包的测试文件
+- 上述的测试文件
 允许的依赖：前端仍只用已批准的 React、Vite、TypeScript、vitest；不引入路由、状态管理或 UI 库。
 
 行为：
-- 登录：POST /api/auth/login，成功后保存 csrf_token（内存中，刷新页面时重新登录或经 /api/auth/session 取回；若 goal-36 没有该端点，本切片在 adminauth 中追加 GET /api/auth/session 返回当前会话的 csrf_token，只在已登录时可用）；登出。未登录访问任何页面跳转到登录页。
-- Overview：Core 版本、监听地址、每个包的状态（未启用、运行、Pending、候选失败、Degraded 及原因、维护中）。
-- Packages：上传安装包（archive、release.json、.sig 三个文件，multipart 由 API 接收，若 goal-39 的 API 只接受路径，本切片在 manage 中追加 multipart 端点并写入临时目录后调用 Install）；启用、停用、重启、卸载（含 purge）、pin；需要确认时展示受影响列表并要求再次确认（API 的 409）。
+- 登录：POST /api/auth/login，成功后把 csrf_token 保存在内存中；刷新页面后经 goal-92 的 GET /api/auth/session 取回。登出。未登录访问任何页面跳转到登录页。
+- Overview：Core 版本、监听地址（goal-92）、每个包的状态（未启用、运行、Pending、候选失败、Degraded 及原因、维护中）。
+- Packages：经 goal-92 的上传接口安装（archive、release.json、.sig 三个文件）；启用、停用、重启、卸载（含 purge）、pin；需要确认时展示受影响列表并要求再次确认（API 的 409）。
 - Instances：列出 Adapter 实例（不显示凭证，只显示「已设置」）、创建（表单由该 Adapter 包的配置 Schema 经 goal-34 的 ConfigForm 生成）、启停、删除。
-- Updates：update 上传新包、rollback 选择保留代次；显示操作结果与失败原因。
-- 安全：所有修改请求带 X-Alonabot-CSRF；页面不读取或展示 token、secret 明文；静态资源响应带 CSP（default-src 'self'）、X-Frame-Options: DENY 与 nosniff。
-- adminui：只在 admin host 提供；未知路径返回 index.html（单页应用）；/plugins/ 与 /api/ 不经过它。
+- Updates：经 goal-92 的上传接口 update 新包、rollback 选择保留代次；显示操作结果与失败原因。
+- 安全：所有修改请求带 X-Alonabot-CSRF；页面不读取或展示 token、secret 明文；组件图标只用 `<img>` 引用（D-63）。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：
-  - web/admin/src/api/api.test.ts（vitest，不依赖 DOM）：用 fetch 的测试替身验证 API 客户端的 CSRF 头、409 确认流程的数据结构、错误格式解析。
-  - internal/core/supervisor/adminui_test.go（//go:build unix）：admin host 上 / 返回 index.html 且带 CSP；plugin host 上不提供；未登录时 API 返回 401；登录后经 API 完成一次安装与启用（复用 goal-39 的测试包）。
-- 本地自测（不提交，PR 中写明结果）：npm run build 与 typecheck；在浏览器中手动走一遍：登录 → 安装 → 启用 → 创建实例 → 停用 → rollback（写明浏览器与版本，属于手动验证）。
+- 提交：web/admin/src/api/api.test.ts（vitest，不依赖 DOM）：用 fetch 的测试替身验证 API 客户端的 CSRF 头、会话取回、409 确认流程的数据结构、错误格式解析。
+- 本地自测（不提交，PR 中写明结果）：npm run build 与 typecheck；用 goal-84 的 `alonabot.WebUI` 选项或安装构建出的 WebUI 包，在真实 Core 上用浏览器手动走一遍：登录 → 安装 → 启用 → 创建实例 → 停用 → rollback（写明浏览器与版本，属于手动验证）。
 
-完成条件：web/admin 下 npm ci、npm run typecheck、npm run test、npm run build 成功；go generate ./... 后无未提交差异；gofmt -l 无输出；go vet ./...；go test -race ./internal/... ./cmd/...；go build ./...。
+完成条件：web/admin 下 npm ci、npm run typecheck、npm run test、npm run build 成功。
 
-不做：配置、命令权限、发信许可、工具策略、会话与插件页（T-09.9）；日志页（T-09.10）；Core 设置页（T-09.9）。
+不做：Admin API、会话取回与上传接口（T-09.4、T-09.13）；WebUI 静态文件的提供（T-09.12）；配置、命令权限、发信许可、工具策略、会话与插件页（T-09.9）；日志页（T-09.15）；Core 设置页（T-09.9）。
 ```
-
 
 ## 第 17 波
 
 ### goal-44 · T-09.9 Admin 配置、权限、工具策略与插件页
 
-状态：等待前置（T-09.8、T-11.1、T-11.3）。语句中 goal-13、goal-29、goal-31、goal-34、goal-39、goal-43、goal-53～goal-56、goal-26 提供的符号（policy 的覆盖与 Admin 方法、config.Service、secret.Redact、ConfigForm、manage API、web/admin 页面框架、i18n 的默认 locale、tool.Catalog、conversation.Service、webhost 的票据）只写名字；合并后由审查者核对，再改为待派发。
+状态：等待前置（T-09.8、T-09.14）。语句中 goal-34、goal-43、goal-93 提供的符号（ConfigForm、LanguageSwitch、web/admin 的页面框架与 API 客户端、T-09.14 的 HTTP 接口）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按前后端拆分改写：原语句中的管理 API（internal/core/manage 的 *_api.go 与 admin_api_test.go）移到 goal-93（T-09.14）；嵌入构建产物的 `internal/core/adminui` 与 D-62 冲突，已删去。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-44（切片 T-09.9：Admin 配置、权限、工具策略与插件页）。goal 目录 goal-44，分支 goal-44，worktree .worktrees/goal-44，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：在管理 API 与 web/admin 中补齐：插件配置（表单与完整 JSON 编辑，使用 raw JSON、Merge Patch、base_generation 与 secret 语义，显示 Pending 并经 reload 激活）、命令权限与启用、发信许可（allowed_adapter_instances）、Core 设置（Core Admin 列表、默认 locale、全局禁止表）、工具调用策略、Agent 会话的列出与清除、插件页面入口（经兑换票据进入 plugin host），以及界面语言切换。
+目标：在官方 WebUI 组件 web/admin 中补齐页面：插件配置（表单与完整 JSON 编辑，显示 Pending 并经 reload 激活）、命令权限与启用、发信许可（allowed_adapter_instances）、Core 设置（Core Admin 列表、默认 locale、命令前缀、全局禁止表）、工具调用策略、Agent 会话的列出与清除、插件页面入口，以及界面语言切换。全部只调用 goal-93（T-09.14）写入 spec/ADMIN-API.md 的接口，本切片不改 Go 代码。
 
-依据：PLAN T-09 步骤 7（配置与插件页）；CONTRACTS §5、§2.3、§8（allowed_adapter_instances）、§13、§7.3、§5.4；DECISIONS D-45；TEST-MATRIX V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56 的页面分项。
+依据：PLAN T-09 步骤 7（配置与插件页）；CONTRACTS §5、§2.3、§8（allowed_adapter_instances）、§13、§7.3、§5.4；DECISIONS D-45、D-62；TEST-MATRIX V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56 的页面分项。
 
 范围（只新增或修改这些）：
-- internal/core/manage/：新增 config_api.go、policy_api.go、settings_api.go、tool_api.go、conversation_api.go、pluginpage_api.go
 - web/admin/src/pages/：新增 Config、Permissions、CoreSettings、Tools、Conversations；Packages 页增加「打开插件页面」入口
-- web/admin/i18n/：补充文案
-- internal/core/adminui：重新生成嵌入的构建产物
-- 上述包的测试文件
+- web/admin/src/api/：追加 goal-93 接口的客户端函数
+- web/admin/i18n/：补充文案（en-US 与 zh-CN 键集合一致）
+- 上述的测试文件
 允许的依赖：与 goal-43 相同，不新增前端依赖。
 
-接口（HTTP，全部在 /api/v1 下、经 adminauth.Require；JSON；错误格式与 goal-39 一致）：
-- GET /plugins/{id}/config：{active_generation, active: Redact 后的快照, pending: {base_generation, config: Redact 后}|null, schema}
-- PUT /plugins/{id}/config/pending：{base_generation, config}（完整替换）；PATCH /plugins/{id}/config/pending：{base_generation, patch}（RFC 7396）；DELETE 丢弃 Pending；POST /plugins/{id}/config/import 导入 config.json；secret 字段的新值在写入 Pending 前经 secret.Extract 存为引用，省略或未修改的 secret 保持原引用；base 不是当前 Active 时 409 并返回 FAILED_PRECONDITION。
-- POST /plugins/{id}/reload：经 goal-40/41 激活 Pending。
-- GET/PUT /plugins/{id}/policies：命令覆盖（作用域、permission、enabled），以及 Router 的遮蔽诊断。
-- GET/PUT /plugins/{id}/allowed-instances：发信许可集合。
-- GET/PUT/DELETE /core/admins、/core/denies，GET/PUT /core/default-locale。
-- GET/PUT /tools/policies：工具策略（缺省与覆盖）。
-- GET /plugins/{id}/conversations、DELETE /plugins/{id}/conversations/{key}。
-- POST /plugins/{id}/page-ticket：返回 webhost.IssueTicket 的 URL（只给有 HTTP 路由的插件）。
-- GET /secrets/{plugin}/{path}/reveal：要求请求体中的当前 token 再认证（adminauth.Reauthenticate），通过后返回明文并以 INFO 审计记录（不含明文）。
-
 行为：
-- 配置页：用 ConfigForm 编辑（只提交 patch）或切换到完整 JSON 编辑（textarea，提交完整替换）；显示 Pending 与 Active 的差异（按键列出，secret 只显示是否已设置）；「激活」调用 reload；候选失败与 Degraded 显示具体原因。hidden 字段只在完整 JSON 编辑中可见。
-- 权限页：按命令树显示有效权限与启用状态（经 policy.CheckCommand 的同一规则计算），可设置插件、命令组、路由三层覆盖；显示遮蔽关系。
+- 配置页：用 ConfigForm 编辑（只提交 patch）或切换到完整 JSON 编辑（textarea，提交完整替换），都带 base_generation；显示 Pending 与 Active 的差异（按键列出，secret 只显示是否已设置）；「激活」调用 reload；候选失败与 Degraded 显示具体原因；409 时提示配置已被他处修改并重新读取。hidden 字段只在完整 JSON 编辑中可见。
+- 权限页：按命令树显示 API 返回的有效权限与启用状态（页面不自行推导），可设置插件、命令组、路由三层覆盖；显示遮蔽关系。
 - 发信许可：列出全部 Adapter 实例，勾选授予。
-- Core 设置：Core Admin 列表（与 alonabot admin add|remove|list 同一服务）、默认 locale、命令前缀 `command_prefixes` 与按 Adapter 实例的覆盖（保存在状态库，经 goal-87 的 `router.New` prefixes 参数生效）、全局禁止表。
+- Core 设置：Core Admin 列表、默认 locale、命令前缀 `command_prefixes` 与按 Adapter 实例的覆盖、全局禁止表。
 - 工具页：列出全部工具及缺省与覆盖策略。
 - 会话页：按插件列出会话摘要（键、条目数、最后时间），可清除；不显示条目内容。
+- secret 明文查看：要求重新输入管理 token，经 reveal 接口取回后只在当前视图显示，不写入任何存储。
 - 语言切换：沿用 goal-34 的组件，保存在 localStorage。
-- 插件页面：点击后请求 page-ticket，在新窗口打开 plugin host 上的兑换 URL；未配置第二主机名时按钮禁用并提示。
-- 所有修改请求带 CSRF 头；修改后的策略在下一次派发时生效（页面不需要重启插件）。
+- 插件页面：点击后请求 page-ticket，在新窗口打开返回的兑换 URL；没有可用的 plugin host 时按钮禁用并提示。
+- 所有修改请求带 CSRF 头。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：
-  - internal/core/supervisor/admin_api_test.go（//go:build unix）：经管理 API 完成：PATCH 配置（未修改的 secret 保持原引用、新 secret 生成新引用、hidden 不被删除）、陈旧 base 409、reload 后 Active 改变；设置命令覆盖后下一条消息按新权限处理；授予发信许可后插件后台 Send 成功；设置默认 locale 后新 Session 使用；工具策略改为 deny 后 ListTools 不含它；清除会话；page-ticket 只给有 HTTP 路由的插件；reveal 需要再认证。
-  - web/admin 的 vitest：API 客户端对新端点的请求格式与 409 处理。
-- 本地自测（不提交，PR 中写明结果）：npm run build；浏览器中手动走一遍各页面并切换语言（写明浏览器与版本）。
+- 提交：web/admin 的 vitest（不依赖 DOM）：API 客户端对 goal-93 端点的请求格式、base_generation 与 409 处理。
+- 本地自测（不提交，PR 中写明结果）：npm run build 与 typecheck；在真实 Core 上用浏览器手动走一遍各页面并切换语言（写明浏览器与版本，属于手动验证）。
 
-完成条件：web/admin 下 npm run typecheck、npm run test、npm run build 成功；go generate ./... 后无未提交差异；gofmt -l 无输出；go vet ./...；go test -race ./internal/... ./cmd/...；go build ./...。
+完成条件：web/admin 下 npm ci、npm run typecheck、npm run test、npm run build 成功。
 
-不做：日志页（T-09.10）；故障注入与验收汇总（T-09.11）。
+不做：管理 API（T-09.14）；日志页（T-09.15）；故障注入与验收汇总（T-09.11）。
+```
+
+### goal-94 · T-09.15 日志页
+
+状态：等待前置（T-09.8、T-09.10）。2026-11-04 从 goal-66（T-09.10）中拆出。语句中 goal-43、goal-66 提供的符号（web/admin 的页面框架与 API 客户端、日志接口）只写名字；合并后由审查者核对，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-94（切片 T-09.15：日志页）。goal 目录 goal-94，分支 goal-94，worktree .worktrees/goal-94，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：在官方 WebUI 组件 web/admin 中实现日志页：按来源、级别、trace 与日期查看日志，今天的记录实时订阅，过去日期查询历史；在页面中修改全局与按来源的输出级别。只调用 goal-66（T-09.10）写入 spec/ADMIN-API.md 的日志接口，本切片不改 Go 代码。
+
+依据：PLAN T-09 步骤 7（日志）；CONTRACTS §14.3、§14.4；TEST-MATRIX V-62、V-63 的页面分项。
+
+范围（只新增或修改这些）：
+- web/admin/src/pages/：新增 Logs
+- web/admin/src/api/：追加日志接口的客户端函数
+- web/admin/i18n/：补充文案（en-US 与 zh-CN 键集合一致）
+- 上述的测试文件
+允许的依赖：与 goal-43 相同，不新增前端依赖。
+
+行为：
+- 今天：先读 GET /logs/recent，再订阅 GET /logs/stream（SSE 会先重发缓冲中的记录），页面按时间去重。过去日期：GET /logs/history。
+- 来源、级别、trace 与日期的筛选只在浏览器中进行，筛选条件保存在 localStorage。
+- 级别设置区域：经 GET/PUT /logs/levels 读取和修改全局与按来源的级别。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：web/admin 的 vitest（不依赖 DOM）：日志接口客户端的请求格式；SSE 记录的解析与按时间去重；筛选条件的保存与恢复。
+- 本地自测（不提交，PR 中写明结果）：npm run build 与 typecheck；在真实 Core 上用浏览器手动验证实时订阅、历史查询与级别修改（写明浏览器与版本，属于手动验证）。
+
+完成条件：web/admin 下 npm ci、npm run typecheck、npm run test、npm run build 成功。
+
+不做：日志 API、CLI 与 sdk.log.set_level（T-09.10）。
 ```

@@ -124,7 +124,7 @@ flowchart TD
 | 适配器 · Telegram | 官方 Telegram Adapter 的平台实现 | [plan/adapters/telegram.md](plan/adapters/telegram.md) | [docs/goals/adapters/telegram.md](../docs/goals/adapters/telegram.md) |
 | 适配器 · OneBot 11 | 官方 OneBot 11 Adapter 的平台实现与跨 Adapter 一致性验收 | [plan/adapters/onebot11.md](plan/adapters/onebot11.md) | [docs/goals/adapters/onebot11.md](../docs/goals/adapters/onebot11.md) |
 | 插件 | 预装插件 help、welcome、rss | [plan/plugins.md](plan/plugins.md) | [docs/goals/plugins.md](../docs/goals/plugins.md) |
-| WebUI | 官方 WebUI 组件 `web/admin/` | [plan/webui.md](plan/webui.md) | [docs/goals/webui.md](../docs/goals/webui.md) |
+| WebUI | 官方 WebUI 组件 `web/admin/` 的前端；页面调用的 Admin API 与 WebUI 的提供在核心章节 | [plan/webui.md](plan/webui.md) | [docs/goals/webui.md](../docs/goals/webui.md) |
 | 集成与发布 | 验收汇总、目标平台、发行包、镜像与 install.sh | [plan/release.md](plan/release.md) | [docs/goals/release.md](../docs/goals/release.md) |
 
 ## 4. 逐任务实施工作包
@@ -141,7 +141,7 @@ flowchart TD
 | [T-06：Service Broker 与非持久 Event Bus](plan/core.md#t-06service-broker-与非持久-event-bus) | 核心 | — |
 | [T-07：Scheduler 与统一 HTTP 入口](plan/core.md#t-07scheduler-与统一-http-入口) | 核心 | — |
 | [T-08：配置、Secret 与数据库候选准备](plan/core.md#t-08配置secret-与数据库候选准备) | 核心 | — |
-| [T-09：安装分发、正式激活恢复与管理入口](plan/core.md#t-09安装分发正式激活恢复与管理入口) | 核心 | 步骤 7、9 → WebUI |
+| [T-09：安装分发、正式激活恢复与管理入口](plan/core.md#t-09安装分发正式激活恢复与管理入口) | 核心 | — |
 | [T-10：集成、目标平台与发布验收](plan/release.md#t-10集成目标平台与发布验收) | 集成与发布 | — |
 | [T-11：Agent 基础](plan/core.md#t-11agent-基础) | 核心 | — |
 | [T-12：官方 Agent 组件](plan/agent.md#t-12官方-agent-组件) | Agent | — |

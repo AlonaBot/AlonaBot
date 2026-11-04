@@ -44,12 +44,15 @@
 | goal-91 | T-04.8 | SDK 自有类型与事件常量 | T-04.7 | 等待前置 |
 | goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 等待前置 |
 | goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 待派发 |
+| goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.4、T-09.1、T-09.4、T-13.1 | 等待前置 |
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-06.1 | 等待前置 |
 | goal-68 | T-13.2 | 开发组件的配置与数据库 | T-08.3、T-08.5、T-13.1 | 等待前置 |
 | goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8 | 等待前置 |
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 等待前置 |
 | goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 等待前置 |
 | goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8 | 等待前置 |
+| goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-09.4、T-09.12 | 等待前置 |
+| goal-92 | T-09.13 | 管理页所需的会话与上传接口 | T-09.1、T-09.4、T-09.12 | 等待前置 |
 | goal-70 | T-13.4 | 库模式示例与验收 | T-03.10、T-13.2、T-13.3 | 等待前置 |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 等待前置 |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 等待前置 |
@@ -65,8 +68,8 @@
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 等待前置 |
 | goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 等待前置 |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 等待前置 |
-| goal-66 | T-09.10 | 日志管理与日志页 | T-02.1、T-03.1、T-09.8 | 等待前置 |
-| goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12 | 等待前置 |
+| goal-93 | T-09.14 | 配置、权限、工具策略与会话的管理 API | T-08.8、T-09.6、T-09.12、T-11.1、T-11.3 | 等待前置 |
+| goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
 
 ## 第 1 波
 
@@ -2464,7 +2467,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./sdk/...；go build ./...。
 
-不做：管理 API、CLI 与 WebUI，以及在管理视图中标出未声明的权限名（T-09.4、T-09.9）；/whoami（T-14）；Rule 与 chat_admin Rule（T-05.2）；Hook（T-05.3）；SDK 的按路由权限设置（T-04.7）。
+不做：管理 API、CLI 与 WebUI，以及在管理视图中标出未声明的权限名（T-09.4、T-09.14、T-09.9）；/whoami（T-14）；Rule 与 chat_admin Rule（T-05.2）；Hook（T-05.3）；SDK 的按路由权限设置（T-04.7）。
 ```
 
 ### goal-88 · T-04.7 SDK 链式注册
@@ -2796,7 +2799,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/...；go build ./...。
 
-不做：WebUI 文案、语言切换与配置字段翻译的渲染（T-08.7）；确认消息的文案（T-11.2 使用本目录）；修改默认 locale 的管理 API（T-09.9）；从安装包与库模式读取 i18/ 并填入 Spec.I18n 与 Spec.DefaultLocale 的装配（T-09.5、T-13.1）；Adapter 权限的 label_key 显示（T-09.9）。
+不做：WebUI 文案、语言切换与配置字段翻译的渲染（T-08.7）；确认消息的文案（T-11.2 使用本目录）；修改默认 locale 的管理 API（T-09.14）；从安装包与库模式读取 i18/ 并填入 Spec.I18n 与 Spec.DefaultLocale 的装配（T-09.5、T-13.1）；Adapter 权限的 label_key 显示（T-09.9）。
 ```
 
 ### goal-39 · T-09.4 管理服务、安装记录与 serve
@@ -2886,7 +2889,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
-不做：候选 Journal 与准备编排（T-09.5）；唯一提交点与激活门禁（T-09.6）；崩溃恢复、回退与回收（T-09.7）；管理页面（T-09.8、T-09.9）。
+不做：候选 Journal 与准备编排（T-09.5）；唯一提交点与激活门禁（T-09.6）；崩溃恢复、回退与回收（T-09.7）；WebUI 用的会话取回与上传接口（T-09.13）；管理页面（T-09.8、T-09.9）。
 ```
 
 ## 第 9 波
@@ -3061,6 +3064,21 @@ internal/core/router
 不做：Journal、唯一提交点与恢复（T-09.5～T-09.7）；external 插件的候选门槛（T-09.5）；保留回退代次与 rollback（T-09.7）；把 Launch 内的提交移出（T-09.6）。
 ```
 
+### goal-84 · T-09.12 WebUI 组件与组件图标
+
+状态：等待前置（T-07.4、T-09.1、T-09.4、T-13.1）。语句只写了目标、依据和要点。依据 D-62、D-63 新增；前置合并后由审查者按实际的 webhost、adminauth、manage 与根包装配写出接口和测试段。2026-11-04 随前后端拆分从 WebUI 章节移入核心章节。
+
+目标：Core 在 admin host 上以组件方式提供 WebUI 与组件图标：已启用 WebUI 组件的静态文件（保留 `/api/` 与内部路径，无扩展名的不存在路径回退 index.html，未安装时 503 与英文提示），Admin API 主版本常量与 WebUI 声明范围的检查（不兼容时拒绝安装与启用并提示），只提供 manifest 声明的图标并带 sandbox CSP 与 nosniff、要求管理员会话；写出 spec/ADMIN-API.md（主版本、全部接口、认证与错误格式）；根包增加 `alonabot.WebUI(fsys fs.FS)` 选项。
+
+依据：PLAN T-09 步骤 9、§3.1 的 T-09.12 行；CONTRACTS §7.3、§7.5、§9.1、§15.4；DECISIONS D-62、D-63；TEST-MATRIX V-83。
+
+要点：
+- 文件只从不可变包目录读取，路径按 CONTRACTS §9.1 的相对路径规则校验，不跟随链接，不经组件进程。
+- 图标的类型只按扩展名取 image/svg+xml、image/png、image/webp；未声明的包内文件即使存在也返回 404。
+- spec/ADMIN-API.md 由本切片新建，写入此时已有的全部 Admin API（goal-36、goal-39 等）；之后新增接口的切片（goal-66、goal-92、goal-93）同步追加；同一主版本内只做向后兼容的增加。
+- 原 goal-43 要求 Core 给 WebUI 静态文件加 `Content-Security-Policy: default-src 'self'`、`X-Frame-Options: DENY` 与 `nosniff`。CONTRACTS §7.5 目前只规定了图标的响应头，没有这一条；补写接口段前先由维护者确认，确认后写入 §7.5 再列入本语句。
+- 提交的集成测试经真实 Core 与临时安装的 WebUI 测试包覆盖 V-83 的全部场景；含脚本的 SVG 在浏览器中不执行的检查没有浏览器时记为未运行。
+
 ### goal-54 · T-11.1 工具描述、目录与策略
 
 状态：等待前置（T-04.4、T-06.1）。语句中 goal-13、goal-19 提供的符号（policy.Policy、broker.Broker、sdk.JSONService、ServiceOption、router.Mux）只写名字；合并后由审查者核对签名，再改为待派发。jsonschema-go 已由 goal-28（PR #54）引入。
@@ -3122,7 +3140,7 @@ internal/core/router
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go mod tidy 后无差异；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
 
-不做：core.tool.invoke、确认与确认按钮（T-11.2）；Agent 组件与 MCP（T-12）；管理 API 与页面（T-09.9）。
+不做：core.tool.invoke、确认与确认按钮（T-11.2）；Agent 组件与 MCP（T-12）；管理 API 与页面（T-09.14、T-09.9）。
 ```
 
 ### goal-68 · T-13.2 开发组件的配置与数据库
@@ -3347,6 +3365,81 @@ sdk
 
 不做：正式 reload 与管理入口（T-09）；Journal 与崩溃恢复（T-09.5～T-09.7）。
 ```
+
+### goal-66 · T-09.10 日志管理
+
+状态：等待前置（T-02.1、T-03.1、T-09.4、T-09.12）。语句中 goal-2、goal-39、goal-65（logging 的 Output、Levels、Source）、goal-84（spec/ADMIN-API.md）提供的符号只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按前后端拆分改写：日志页移到 goal-94（T-09.15），本切片不再等待 T-09.8。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-66（切片 T-09.10：日志管理）。goal 目录 goal-66，分支 goal-66，worktree .worktrees/goal-66，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：按来源的日志级别持久化在状态库，经管理服务修改后通过 sdk.log.set_level 通知 SDK 并立即生效；全局级别可在运行时修改、Core 重启后恢复为启动设置；Core 为每个来源保留最近 LOG_BUFFER_RECORDS 条已输出的记录，提供按来源、级别与 trace_id 的读取和 SSE 订阅，过去日期从日志文件查询；alonabot logs 与 log-level 命令、WebUI 日志页（T-09.15）使用同一 API。
+
+依据：PLAN T-09 步骤 7（日志）；CONTRACTS §14.2～§14.6、§16（LOG_BUFFER_RECORDS）；WIRE-FORMAT §3.5（sdk.log.set_level）；TEST-MATRIX V-62、V-63、V-68。
+
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/control.proto：新增 LogSetLevelRequest/Response。随后 go generate ./...（本切片获授权只追加这两个消息）
+- contracts/wirespec_test.go：追加编号检查
+- internal/wire/services.go：末尾追加 ServiceLogSetLevel = "sdk.log.set_level"
+- internal/core/logging/：新增 buffer.go（最近记录）、query.go（按日期查询日志文件）；Output 在输出时写入缓冲（只加调用点）
+- internal/core/state/schema.sql：在唯一的初始迁移末尾加入新表；新增 internal/core/state/loglevels.go
+- internal/core/manage/：新增 log_api.go（读取、SSE、级别修改）
+- sdk/：处理 sdk.log.set_level（新增文件；sdk/adapter 的 RunAdapter 同样处理）
+- cmd/alonabot/：新增 logs 与 log-level 命令
+- spec/ADMIN-API.md：追加日志接口（本切片获授权修改该文件）
+- 上述包的测试文件
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. proto
+   message LogSetLevelRequest { LogLevel level = 1; }
+   message LogSetLevelResponse {}
+2. internal/core/state
+   迁移：CREATE TABLE log_level (source_id TEXT PRIMARY KEY, level TEXT NOT NULL); -- level 为 debug、info、warn、error、off；inherit 不存行
+3. internal/core/logging
+   type Record struct { Time time.Time; Level slog.Level; Source string; Message string; Attrs map[string]any; TraceID string }
+   type Buffer struct{ ... } // 每个来源一个固定容量的环形缓冲
+   func (o *Output) Recent(source string) []Record
+   func (o *Output) Subscribe(ctx context.Context) <-chan Record // ctx 结束时关闭
+   func Query(dir string, date time.Time, source string, level slog.Level, traceID string) ([]Record, error) // 读该日期的全部文件（含编号续写的文件）
+4. HTTP（/api/v1，经 adminauth.Require）
+   GET /logs/recent?source=；GET /logs/stream（SSE，事件为 JSON 的 Record）；GET /logs/history?date=YYYY-MM-DD&source=&level=&trace=；GET/PUT /logs/levels（全局与按来源）
+5. cmd/alonabot
+   alonabot logs [--source ID] [--level L] [--trace T] [--follow] [--date YYYY-MM-DD]；alonabot log-level [ID] [LEVEL]（不带参数时列出，ID 为 global 时修改全局）；都经管理 API 与 Bearer token
+
+行为：
+- 缓冲：只保存已经通过级别过滤并实际输出的记录；每个来源（core、每个插件、每个 Adapter 包）最多 LOG_BUFFER_RECORDS 条，满时丢弃最旧的；只在内存中，重启后清空。
+- 级别：按来源的设置持久化；修改后先写状态库，再对运行中的 Session 发 sdk.log.set_level（inherit 时下发解析后的全局级别），并更新 Core 侧的 Levels；SDK 收到后立即按新级别过滤。全局级别的运行时修改只在内存中，Core 重启后恢复为 --log-level 或设置文件的值；inherit 的来源随之变化（同样发 set_level）。来源为 off 时 SDK 不输出，Core 关于它的记录仍按全局级别输出。
+- 读取与订阅都要求管理员会话或 Bearer；SSE 先发送当前缓冲中的记录再推送新记录（与页面的「先读再订阅」配合，页面按时间去重）。
+- 历史查询：按 CONTRACTS §14.6 的文件命名读取该日期的文件，解析控制台格式的行（goal-65 的文件格式）为 Record；文件不存在返回空列表。
+- 日志内容中的脱敏规则不变（goal-65 与 CONTRACTS §14.5）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/logs_e2e_test.go（//go:build unix）：运行 serve 与一个持续输出日志的测试插件：
+  - log-level 把该插件设为 debug 后，SDK 输出 DEBUG 记录且 logs 能读到；设为 off 后插件记录消失，Core 关于它的记录仍在；重启 serve 后按来源的设置保留，全局级别的运行时修改恢复为启动值。
+  - logs --follow 收到新记录；未带 token 时 401。
+  - 每个来源最多保留 LOG_BUFFER_RECORDS 条（用很小的值）。
+  - 写入前一天日期的日志文件后，logs --date 能查到。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：环形缓冲的边界；历史文件解析（多行值、转义）；SSE 的断开。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交差异；go vet ./...；go test -race ./...；go build ./...。
+
+不做：日志页（T-09.15）；远程日志收集与外部格式；日志文件设置的运行时修改（启动设置，§15.1）。
+```
+
+### goal-92 · T-09.13 管理页所需的会话与上传接口
+
+状态：等待前置（T-09.1、T-09.4、T-09.12）。2026-11-04 按前后端拆分新增，内容取自原 goal-43（T-09.8）语句中的后端部分：goal-36 合并的 adminauth 只有 login 与 logout，goal-39 的安装与更新只接受本地路径，浏览器中的 WebUI 用不了。语句只写了目标、依据和要点，前置合并后由审查者按实际的 adminauth、管理服务与 spec/ADMIN-API.md 写出接口和测试段。
+
+目标：补齐浏览器中的 WebUI 需要、goal-36 与 goal-39 没有提供的 Admin API：已登录时取回当前会话的 csrf_token（GET /api/auth/session）；以 multipart 上传安装包与更新包（archive、release.json、.sig 三个文件），写入临时目录后调用管理服务的 Install 与 Update；总览页显示的 Core 版本与监听地址。新接口追加到 spec/ADMIN-API.md。
+
+依据：PLAN T-09 步骤 7（管理页）；CONTRACTS §7.3、§7.4、§7.5、§9.3；DECISIONS D-62；TEST-MATRIX V-40、V-47 的 API 分项。
+
+要点：
+- GET /api/auth/session 只在已登录时可用，返回当前会话的 csrf_token 与过期时间；不签发新会话，不返回管理 token。
+- 上传端点经 adminauth.Require 与 CSRF 检查；预检、确认（409 与 affected）与错误格式和 goal-39 的 JSON 端点一致；临时文件在调用结束后删除，失败时不留残余。
+- Core 版本与监听地址不含任何 secret；Admin API 主版本沿用 goal-84 的常量。
+- 提交的集成测试经真实 Core 覆盖：未登录取会话返回 401；登录后取回的 csrf_token 可用于修改请求；multipart 安装与更新成功；缺少文件或签名错误时拒绝，已有组件不受影响，临时目录为空。
 
 ### goal-70 · T-13.4 库模式示例与验收
 
@@ -3899,7 +3992,7 @@ broker、bus、router 的 Options 增加 Metrics *metrics.Counters（可为 nil�
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
-不做：管理面对计数的读取接口（T-09.9）；可靠事件存储与服务重试（契约不提供）。
+不做：管理面对计数的读取接口（T-09.14）；可靠事件存储与服务重试（契约不提供）。
 ```
 
 ### goal-55 · T-11.2 工具调用与用户确认
@@ -4021,7 +4114,7 @@ broker、bus、router 的 Options 增加 Metrics *metrics.Counters（可为 nil�
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/...；go build ./...。
 
-不做：唯一提交点与激活门禁（T-09.6）；崩溃恢复与 rollback（T-09.7）；维护许可的管理入口（T-09.9）。
+不做：唯一提交点与激活门禁（T-09.6）；崩溃恢复与 rollback（T-09.7）；维护许可的管理入口（T-09.14、T-09.9）。
 ```
 
 ### goal-57 · T-11.4 工具与会话的验收
@@ -4165,69 +4258,49 @@ internal/core/state
 不做：管理页面（T-09.8）；外部数据的备份工具（由管理员处理）。
 ```
 
+### goal-93 · T-09.14 配置、权限、工具策略与会话的管理 API
 
-## 第 17 波
-
-### goal-66 · T-09.10 日志管理与日志页
-
-状态：等待前置（T-02.1、T-03.1、T-09.8）。语句中 goal-2、goal-39、goal-43、goal-65（logging 的 Output、Levels、Source）提供的符号只写名字；合并后由审查者核对，再改为待派发。
+状态：等待前置（T-08.8、T-09.6、T-09.12、T-11.1、T-11.3）。2026-11-04 按前后端拆分新增，内容取自原 goal-44（T-09.9）语句中的管理 API；页面留在 goal-44。原语句的明文查看接口写成 GET 并在请求体中带 token，浏览器的 fetch 不允许 GET 带请求体，这里改为 POST。语句中 goal-13、goal-26、goal-29、goal-31、goal-36、goal-39～goal-41、goal-53～goal-56、goal-84、goal-87 提供的符号（policy 的覆盖与 Admin 方法、webhost 的票据、config.Service、secret.Store 与 Redact、adminauth.Reauthenticate、管理服务与 reload、i18n 的默认 locale、tool.Catalog、conversation.Service、spec/ADMIN-API.md、router.New 的 prefixes）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-66（切片 T-09.10：日志管理与日志页）。goal 目录 goal-66，分支 goal-66，worktree .worktrees/goal-66，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-93（切片 T-09.14：配置、权限、工具策略与会话的管理 API）。goal 目录 goal-93，分支 goal-93，worktree .worktrees/goal-93，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：按来源的日志级别持久化在状态库，经管理服务修改后通过 sdk.log.set_level 通知 SDK 并立即生效；全局级别可在运行时修改、Core 重启后恢复为启动设置；Core 为每个来源保留最近 LOG_BUFFER_RECORDS 条已输出的记录，提供按来源、级别与 trace_id 的读取和 SSE 订阅，过去日期从日志文件查询；alonabot logs 与 log-level 命令、WebUI 日志页使用同一 API。
+目标：在管理服务中补齐 Admin API：插件配置（raw JSON、Merge Patch、base_generation 与 secret 语义，Pending 经 reload 激活）、命令权限与启用、发信许可（allowed_adapter_instances）、Core 设置（Core Admin 列表、默认 locale、命令前缀、全局禁止表）、工具调用策略、Agent 会话的列出与清除、插件页面票据，以及 secret 明文查看的再认证与审计。接口追加到 spec/ADMIN-API.md；页面由 WebUI 章节的 T-09.9 实现。
 
-依据：PLAN T-09 步骤 7（日志）；CONTRACTS §14.2～§14.6、§16（LOG_BUFFER_RECORDS）；WIRE-FORMAT §3.5（sdk.log.set_level）；TEST-MATRIX V-62、V-63、V-68。
+依据：PLAN T-09 步骤 7（配置与插件页）；CONTRACTS §5、§2.3、§8（allowed_adapter_instances）、§13、§7.3、§5.4；DECISIONS D-45、D-62；TEST-MATRIX V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56 的管理 API 分项。
 
 范围（只新增或修改这些）：
-- contracts/proto/alonabot/v1/control.proto：新增 LogSetLevelRequest/Response。随后 go generate ./...（本切片获授权只追加这两个消息）
-- contracts/wirespec_test.go：追加编号检查
-- internal/wire/services.go：末尾追加 ServiceLogSetLevel = "sdk.log.set_level"
-- internal/core/logging/：新增 buffer.go（最近记录）、query.go（按日期查询日志文件）；Output 在输出时写入缓冲（只加调用点）
-- internal/core/state/schema.sql：在唯一的初始迁移末尾加入新表；新增 internal/core/state/loglevels.go
-- internal/core/manage/：新增 log_api.go（读取、SSE、级别修改）
-- sdk/：处理 sdk.log.set_level（新增文件；sdk/adapter 的 RunAdapter 同样处理）
-- cmd/alonabot/：新增 logs 与 log-level 命令
-- web/admin/src/pages/Logs：日志页；internal/core/adminui 重新生成
+- internal/core/manage/：新增 config_api.go、policy_api.go、settings_api.go、tool_api.go、conversation_api.go、pluginpage_api.go；在管理服务的 HTTP 路由中追加注册
+- spec/ADMIN-API.md：追加本切片的接口（本切片获授权修改该文件）
 - 上述包的测试文件
-允许的新跨模块边：无。
 
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. proto
-   message LogSetLevelRequest { LogLevel level = 1; }
-   message LogSetLevelResponse {}
-2. internal/core/state
-   迁移：CREATE TABLE log_level (source_id TEXT PRIMARY KEY, level TEXT NOT NULL); -- level 为 debug、info、warn、error、off；inherit 不存行
-3. internal/core/logging
-   type Record struct { Time time.Time; Level slog.Level; Source string; Message string; Attrs map[string]any; TraceID string }
-   type Buffer struct{ ... } // 每个来源一个固定容量的环形缓冲
-   func (o *Output) Recent(source string) []Record
-   func (o *Output) Subscribe(ctx context.Context) <-chan Record // ctx 结束时关闭
-   func Query(dir string, date time.Time, source string, level slog.Level, traceID string) ([]Record, error) // 读该日期的全部文件（含编号续写的文件）
-4. HTTP（/api/v1，经 adminauth.Require）
-   GET /logs/recent?source=；GET /logs/stream（SSE，事件为 JSON 的 Record）；GET /logs/history?date=YYYY-MM-DD&source=&level=&trace=；GET/PUT /logs/levels（全局与按来源）
-5. cmd/alonabot
-   alonabot logs [--source ID] [--level L] [--trace T] [--follow] [--date YYYY-MM-DD]；alonabot log-level [ID] [LEVEL]（不带参数时列出，ID 为 global 时修改全局）；都经管理 API 与 Bearer token
+接口（HTTP，全部在 /api/v1 下、经 adminauth.Require；JSON；错误格式与 goal-39 一致）：
+- GET /plugins/{id}/config：{active_generation, active: Redact 后的快照, pending: {base_generation, config: Redact 后}|null, schema}
+- PUT /plugins/{id}/config/pending：{base_generation, config}（完整替换）；PATCH /plugins/{id}/config/pending：{base_generation, patch}（RFC 7396）；DELETE 丢弃 Pending；POST /plugins/{id}/config/import 导入 config.json；secret 字段的新值在写入 Pending 前经 secret.Extract 存为引用，省略或未修改的 secret 保持原引用；base 不是当前 Active 时 409 并返回 FAILED_PRECONDITION。
+- POST /plugins/{id}/reload：经 goal-40/41 激活 Pending。
+- GET/PUT /plugins/{id}/policies：命令覆盖（作用域、permission、enabled），以及 Router 的遮蔽诊断。
+- GET/PUT /plugins/{id}/allowed-instances：发信许可集合。
+- GET/PUT/DELETE /core/admins、/core/denies，GET/PUT /core/default-locale，GET/PUT /core/command-prefixes（全局与按 Adapter 实例的覆盖）。
+- GET/PUT /tools/policies：工具策略（缺省与覆盖）。
+- GET /plugins/{id}/conversations、DELETE /plugins/{id}/conversations/{key}。
+- POST /plugins/{id}/page-ticket：返回 webhost.IssueTicket 的 URL（只给有 HTTP 路由的插件）。
+- POST /secrets/{plugin}/{path}/reveal：请求体带当前管理 token 再认证（adminauth.Reauthenticate），通过后返回明文并以 INFO 审计记录（不含明文）。
 
 行为：
-- 缓冲：只保存已经通过级别过滤并实际输出的记录；每个来源（core、每个插件、每个 Adapter 包）最多 LOG_BUFFER_RECORDS 条，满时丢弃最旧的；只在内存中，重启后清空。
-- 级别：按来源的设置持久化；修改后先写状态库，再对运行中的 Session 发 sdk.log.set_level（inherit 时下发解析后的全局级别），并更新 Core 侧的 Levels；SDK 收到后立即按新级别过滤。全局级别的运行时修改只在内存中，Core 重启后恢复为 --log-level 或设置文件的值；inherit 的来源随之变化（同样发 set_level）。来源为 off 时 SDK 不输出，Core 关于它的记录仍按全局级别输出。
-- 读取与订阅都要求管理员会话或 Bearer；SSE 先发送当前缓冲中的记录再推送新记录（与页面的「先读再订阅」配合，页面按时间去重）。
-- 历史查询：按 CONTRACTS §14.6 的文件命名读取该日期的文件，解析控制台格式的行（goal-65 的文件格式）为 Record；文件不存在返回空列表。
-- 日志页：选择来源、级别、trace 与日期（今天为实时，过去日期为历史），筛选只在浏览器中进行并保存在 localStorage；修改输出级别使用级别设置区域（调用 PUT /logs/levels）。
-- 日志内容中的脱敏规则不变（goal-65 与 CONTRACTS §14.5）。
+- 配置：hidden 字段在读取中照常返回，是否展示由页面决定；PATCH 不会因为未提交 hidden 字段而删除它。
+- 命令权限：有效权限与启用状态按 policy.CheckCommand 的同一规则计算后返回，覆盖分插件、命令组、路由三层；同时返回遮蔽关系。
+- Core 设置：Core Admin 列表与 alonabot admin add|remove|list 使用同一服务；默认 locale 经 goal-53 的 i18n.SetDefaultLocale；command_prefixes 与按 Adapter 实例的覆盖保存在状态库，经 goal-87 的 router.New prefixes 参数生效。
+- 会话：只返回摘要（键、条目数、最后时间），不返回条目内容。
+- page-ticket：没有可用的 plugin host 时返回 FAILED_PRECONDITION，页面据此禁用入口。
+- 所有修改请求经 CSRF 检查；修改后的策略在下一次派发时生效，不需要重启插件。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/logs_e2e_test.go（//go:build unix）：运行 serve 与一个持续输出日志的测试插件：
-  - log-level 把该插件设为 debug 后，SDK 输出 DEBUG 记录且 logs 能读到；设为 off 后插件记录消失，Core 关于它的记录仍在；重启 serve 后按来源的设置保留，全局级别的运行时修改恢复为启动值。
-  - logs --follow 收到新记录；未带 token 时 401。
-  - 每个来源最多保留 LOG_BUFFER_RECORDS 条（用很小的值）。
-  - 写入前一天日期的日志文件后，logs --date 能查到。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：环形缓冲的边界；历史文件解析（多行值、转义）；SSE 的断开；web/admin 日志页的构建与手动验证。
+- 提交：internal/core/supervisor/admin_api_test.go（//go:build unix）：经管理 API 完成：PATCH 配置（未修改的 secret 保持原引用、新 secret 生成新引用、hidden 不被删除）、陈旧 base 409、reload 后 Active 改变；设置命令覆盖后下一条消息按新权限处理；授予发信许可后插件后台 Send 成功；设置默认 locale 后新 Session 使用；工具策略改为 deny 后 ListTools 不含它；清除会话；page-ticket 只给有 HTTP 路由的插件；reveal 需要再认证。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：各端点的错误格式与 409；读取结果中没有 secret 明文。
 
-完成条件：gofmt -l 无输出；go generate ./... 后无未提交差异；go vet ./...；go test -race ./...；go build ./...；web/admin 下 npm run test 与 npm run build 成功。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/... ./cmd/...；go build ./...。
 
-不做：远程日志收集与外部格式；日志文件设置的运行时修改（启动设置，§15.1）。
+不做：页面（T-09.9）；日志 API（T-09.10）；故障注入与验收汇总（T-09.11）。
 ```
 
 
@@ -4235,7 +4308,7 @@ internal/core/state
 
 ### goal-45 · T-09.11 正式流程故障注入与 T-09 验收
 
-状态：等待前置（T-09.3、T-09.7、T-09.9、T-09.10、T-09.12）。语句中 goal-38～goal-44、goal-66、goal-84 提供的命令与 API 只写名字；合并后由审查者核对，再改为待派发。
+状态：等待前置（T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15）。语句中 goal-38～goal-44、goal-66、goal-84、goal-92～goal-94 提供的命令与 API 只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-45（切片 T-09.11：正式流程故障注入与 T-09 验收）。goal 目录 goal-45，分支 goal-45，worktree .worktrees/goal-45，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

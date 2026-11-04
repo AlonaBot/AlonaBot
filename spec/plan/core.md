@@ -6,9 +6,9 @@
 
 本章节覆盖 Core（`internal/core/`、`internal/wire/`、`internal/tune/`）、协议契约（`contracts/`）、插件与 Adapter SDK（`sdk/`，含 `sdk/adapter`、`sdk/generate` 与插件测试套件）、`cmd/alonabot`、库模式根包，以及作为 SDK 验收手段的 `examples/`。Adapter 的接口层面（`sdk/adapter`、`internal/core/adapter` 与 `remote`、`adapter.*` 与 `core.adapter.*` 服务、能力与 extension 声明的校验）属于本章节；各平台的实现在适配器章节。
 
-- 工作包：T-01、T-02、T-03（Telegram 步骤除外）、T-04～T-08、T-09（WebUI 步骤除外）、T-11、T-13、T-16。T-11 是 Core 提供给任何 Agent 组件的工具目录、调用确认与会话存储，所以放在本章节。
+- 工作包：T-01、T-02、T-03（Telegram 步骤除外）、T-04～T-08、T-09、T-11、T-13、T-16。T-11 是 Core 提供给任何 Agent 组件的工具目录、调用确认与会话存储，所以放在本章节。
 - 含 Telegram 部分的核心切片：T-03.6（getFile 取件）、T-03.8（callback_query 与 answerCallbackQuery）、T-03.9（editMessageText）、T-03.10（Bot API 模拟服务上的故障矩阵）。这些切片用官方 Telegram Adapter 作为首个真实实现来验收 Core 功能，[Telegram 实施计划](adapters/telegram.md)同时列出它们。
-- T-08.7 的 WebUI 骨架与 T-09.10 的日志页分别在 T-08 步骤 9 与 T-09.10 中描述；前者的切片归 WebUI 章节，后者整体留在本章节。
+- `web/admin` 的前端切片（T-08.7、T-09.8、T-09.9、T-09.15）归 WebUI 章节，步骤文字仍在本章节的 T-08 步骤 9 与 T-09 步骤 7。页面调用的 Admin API 与 WebUI 静态文件的提供（T-09.10、T-09.12～T-09.14）属于本章节。
 
 ## 2. 执行切片
 
@@ -63,8 +63,11 @@
 | T-09.5 | goal-40 | 正式候选 Journal 与准备编排 | T-09 步骤 4 | T-09.4、T-08.6、T-06.4 | V-29 | 未开始 |
 | T-09.6 | goal-41 | 唯一提交点（ActiveGeneration+COMMITTED）与激活门禁 | T-09 步骤 5 | T-07.5、T-09.5 | V-30、V-21 的提交分项 | 未开始 |
 | T-09.7 | goal-42 | 崩溃恢复、显式回退与引用回收 | T-09 步骤 6 | T-09.6 | V-30、V-31、V-36 | 未开始 |
-| T-09.10 | goal-66 | 日志管理：按来源级别的持久化与运行时修改（`sdk.log.set_level`）、最近记录缓冲、按日期查询日志文件、管理 API 与 SSE、`alonabot logs` 与 `log-level`、WebUI 日志页 | T-09 步骤 7（日志） | T-02.1、T-03.1、T-09.8 | V-62、V-63、V-68 | 未开始 |
-| T-09.11 | goal-45 | 正式流程的故障注入，回填 T-08 待联验项，汇总证据 | T-09 步骤 8 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12 | V-23～V-25、V-27～V-31、V-39、V-40、V-52、V-54～V-56、V-62、V-63、V-82、V-83 | 未开始 |
+| T-09.10 | goal-66 | 日志管理：按来源级别的持久化与运行时修改（`sdk.log.set_level`）、最近记录缓冲、按日期查询日志文件、管理 API 与 SSE、`alonabot logs` 与 `log-level` | T-09 步骤 7（日志） | T-02.1、T-03.1、T-09.4、T-09.12 | V-62、V-63、V-68 | 未开始 |
+| T-09.11 | goal-45 | 正式流程的故障注入，回填 T-08 待联验项，汇总证据 | T-09 步骤 8 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | V-23～V-25、V-27～V-31、V-39、V-40、V-52、V-54～V-56、V-62、V-63、V-82、V-83 | 未开始 |
+| T-09.12 | goal-84 | WebUI 组件与组件图标：Admin host 提供 WebUI 静态文件与单页路由回退、未安装与版本不兼容的提示、Admin API 主版本与 `spec/ADMIN-API.md` 参考、带 sandbox CSP 的图标、库模式的 `alonabot.WebUI` 选项 | T-09 步骤 9 | T-07.4、T-09.1、T-09.4、T-13.1 | V-83 | 未开始 |
+| T-09.13 | goal-92 | 管理页所需的会话与上传接口：已登录会话取回 csrf_token、multipart 上传安装包与更新包、总览的 Core 版本与监听地址，追加到 `spec/ADMIN-API.md` | T-09 步骤 7（管理页） | T-09.1、T-09.4、T-09.12 | V-40、V-47 的 API 分项 | 未开始 |
+| T-09.14 | goal-93 | 配置、权限、工具策略与会话的管理 API：配置 raw JSON/PATCH/base_generation/secret、命令权限、发信许可、Core 设置（Core Admin 列表、默认 locale、命令前缀、全局禁止表）、工具调用策略、Agent 会话、插件页面票据、secret 明文查看的再认证 | T-09 步骤 7（配置与插件页） | T-08.8、T-09.6、T-09.12、T-11.1、T-11.3 | V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56 的管理 API 分项 | 未开始 |
 | T-11.1 | goal-54 | 工具描述与目录：Service 描述的 `tool` 字段、注册校验、`core.tool.list`、调用策略的持久化与管理服务层 | T-11 步骤 1、2 | T-04.4、T-06.1 | V-55 的目录与策略分项 | 未开始 |
 | T-11.2 | goal-55 | 工具调用与用户确认：`core.tool.invoke`、`core.tool.confirm`、Core 内部的确认记录与按钮、同一 Actor 与 5 分钟限时、确认文案 | T-11 步骤 3、4 | T-03.8、T-06.2、T-08.8、T-11.1 | V-55 | 未开始 |
 | T-11.3 | goal-56 | Agent 会话存储：状态库表、`core.conversation.*`、管理服务层的列出与清除、purge | T-11 步骤 5 | T-03.1 | V-56 | 已完成（PR #35；TEST-MATRIX §3.2） |
@@ -520,9 +523,9 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 4. **实现正式候选 Journal 与准备编排。** 通过预检后，以预期旧 ActiveGeneration 开始持久化管理操作记录及其资源引用；冻结新根派发，drain/停旧进程，确认树退出及 runtime.lock，再调用 T-08 复制 DB 和创建候选 Session。将启动原因、维护许可和阶段预算放入已有 Bootstrap；REGISTER 校验后持久化程序/配置/secret/DB 候选引用并形成 PREPARED。普通 resume 走原提交记录，不伪造新候选 Journal；`prepare_effects=external` 的候选在维护门槛停下。
 5. **实现唯一提交点与激活门禁。** 确认候选文件及引用已持久化后，在 Core 状态库的同一事务复核预期旧代次并提交 ActiveGeneration+COMMITTED；事务内不做下载、备份或等待 RPC。随后发送 Activate，只有 OnReady/Activated 完整成功才开放命令、事件、Service、Bus、任务与 HTTP；复用 T-06/T-07 门禁。旧按钮按 Generation 失效；提交后启动/OnReady 失败保持新代次权威并进入 Degraded，不自动倒退到旧 DB。
 6. **实现崩溃恢复、显式回退与引用回收。** Core 启动持锁后按状态库 Active/Journal 恢复：未提交的已有安装关闭候选后以旧程序启动新 Session，首次安装尚无 Active 则保持未激活；已提交只恢复当前代次。旧进程退出未确认时不启动新写入者。rollback 从选定保留代次复制新的 SQLite 恢复候选并使用新 Generation，继续走同一准备/提交路径；外部数据的恢复沿用显式维护。只有无人引用的失败候选/旧包/secret 才可回收，恢复中操作和保留快照受保护；备份说明覆盖整个 data_dir 与插件自管的外部数据。
-7. **完成最小 Admin 页面与 API 绑定。** 在[WebUI 实施计划](webui.md#t-09-的-webui-步骤)中实施。
+7. **完成最小 Admin 页面与 API 绑定。** 页面属于官方 WebUI 组件（`web/admin/`），只调用 Admin API。接入真实登录、状态/日志、安装启停、更新/恢复、配置表单/完整 JSON 编辑、命令权限、插件的发信许可（`allowed_adapter_instances`）、工具调用策略、Agent 会话的列出与清除，以及界面语言切换。Core 设置页管理 Core Admin 列表与默认 locale，与 `alonabot admin add|remove|list` 使用同一管理服务。使用 T-08 的 raw JSON/PATCH/base_generation/secret 语义，显示 Pending、候选失败、Degraded 与维护原因；动态权限复用 T-04。通过 T-07 的两个 host、Host 校验、CSRF、受限票据和代理身份处理提供插件页面；管理 Cookie/Authorization 不进入插件，单 host 不执行插件主动内容。页面只展示用户可操作状态和具体错误，不把内部协议步骤当作用户配置项。**日志：** 按来源的级别持久化在状态库，修改后经 `sdk.log.set_level` 通知 SDK 并立即生效；Core 为每个来源保留最近 1000 条记录，提供按来源、级别与 trace_id 的读取和 SSE 订阅，过去日期的记录从日志文件按日期查询；`alonabot logs`、`alonabot log-level` 与 WebUI 日志页使用同一 API，页面的筛选只在浏览器中进行（CONTRACTS §14.3、§14.4）。 Admin API 与日志管理在本章节（T-09.10、T-09.13、T-09.14），页面在 WebUI 章节（T-09.8、T-09.9、T-09.15）。
 8. **完成正式流程的故障注入与交付证据。** 通过真实 CLI/API 在临时目录跑首次安装→enable→restart→reload→update→pin→disable→同来源重装→显式 rollback，并以包损坏/签名变化/external 插件的维护错误验证拒绝路径。在 PREPARED、提交前后和 OnReady 失败点终止 Core，连同残存旧进程、空间不足、并发同插件操作一起验证无双写、无提前开放、无静默数据回滚。回填 T-08 留待集成的 V-23～V-25/V-39 证据，形成 T-10 可重复使用的发布产物与恢复场景；五平台真实发布结果仍由 T-10 完成。
-9. **WebUI 组件与组件图标。** 在[WebUI 实施计划](webui.md#t-09-的-webui-步骤)中实施。
+9. **WebUI 组件与组件图标。** 按 CONTRACTS §7.5 在 admin host 提供已启用 WebUI 组件的静态文件：保留 `/api/` 与内部路径，不存在且无扩展名的路径回退 `index.html`，未安装时返回 503 与英文提示，Admin API 主版本不在 WebUI 声明的范围内时拒绝安装与启用并在 admin host 提示。Admin API 定义主版本号常量，并在 `spec/ADMIN-API.md` 写出全部接口、认证与错误格式，官方 WebUI 只使用其中的接口。图标只提供 manifest 的 `icon` 声明的路径（表单选项不带图标，D-74），带 sandbox CSP 与 nosniff，并要求管理员会话。库模式增加 `alonabot.WebUI(fsys fs.FS)` 选项，以 dev 来源提供开发中的 WebUI。
 
 #### 拟目录与交付
 
