@@ -75,7 +75,8 @@ func TestCommandIndexProcesses(t *testing.T) {
 	for _, stdio := range []bool{false, true} {
 		for _, order := range [][]string{{"a", "b", "c"}, {"a", "c", "b"}, {"b", "a", "c"}, {"b", "c", "a"}, {"c", "a", "b"}, {"c", "b", "a"}} {
 			t.Run(fmt.Sprintf("stdio=%v/order=%v", stdio, order), func(t *testing.T) {
-				r := router.New(slog.New(slog.NewTextHandler(io.Discard, nil)), 1, nil, nil, nil, nil)
+				setDefaultLogger(t, slog.New(slog.NewTextHandler(io.Discard, nil)))
+				r := router.New(1, nil, nil, nil, nil)
 				defer r.Close()
 				for _, id := range order {
 					store, spec := commandSpec(t, binary, id, definitions[id])

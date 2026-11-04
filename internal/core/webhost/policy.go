@@ -3,6 +3,7 @@ package webhost
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -52,7 +53,7 @@ func (h *Host) pluginHeaders(header http.Header, pluginID string) {
 		header.Set("Content-Security-Policy", singleHostCSP)
 	}
 	if header.Get("Access-Control-Allow-Credentials") != "" {
-		h.log.Warn("removed plugin credential CORS header", "plugin_id", pluginID)
+		slog.Warn("removed plugin credential CORS header", "plugin_id", pluginID)
 	}
 	header.Del("Access-Control-Allow-Credentials")
 	cookies := header.Values("Set-Cookie")
@@ -69,7 +70,7 @@ func (h *Host) pluginHeaders(header http.Header, pluginID string) {
 			}
 		}
 		if domain || strings.HasPrefix(name, "alonabot_") || strings.HasPrefix(name, "__Host-alonabot_") {
-			h.log.Warn("removed plugin cookie", "plugin_id", pluginID, "cookie_name", name)
+			slog.Warn("removed plugin cookie", "plugin_id", pluginID, "cookie_name", name)
 			continue
 		}
 		header.Add("Set-Cookie", value)

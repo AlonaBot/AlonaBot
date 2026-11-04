@@ -8,7 +8,7 @@
 
 ## 1. 最终交付
 
-交付一个 Go Core、Go 插件与 Adapter SDK、可安装的官方 Telegram 与 OneBot 11 Adapter、官方 Agent 组件、可替换的官方 WebUI 组件与管理 CLI。用户用发行归档、`install.sh` 或 `docker compose` 安装官方整合包即可开箱即用，官方 Adapter、Agent 与 WebUI 都可以换成社区组件；开发者可以在自己的 `main.go` 中把框架当作 Go 库运行，并在改动源码后热部署。用户能够安装预构建的插件与 Adapter，配置并启用它，在指定聊天/话题执行命令、发送消息和媒体、进行多轮对话，使用 Service、Event Bus、Scheduler、插件 HTTP 与受管 SQLite；能够与 Agent 对话，Agent 调用工具前按策略取得用户确认；管理动作能够按确定的代次和维护规则更新、停止及恢复。机器人回复与 WebUI 提供英文和简体中文。
+交付一个 Go Core、Go 插件与 Adapter SDK、可安装的官方 Telegram 与 OneBot 11 Adapter、官方 Agent 组件、可替换的官方 WebUI 组件与管理 CLI。用户用发行归档、`install.sh` 或 `docker compose` 安装官方整合包即可开箱即用，官方 Adapter、Agent 与 WebUI 都可以换成社区组件；开发者用 `alonabot init` 创建组件工程、用 `alonabot run --reload` 在工程目录中开发，改动源码后只重启该组件；需要把 Core 嵌入其他 Go 程序或在同一进程中调试时，也可以把框架当作 Go 库运行。用户能够安装预构建的插件与 Adapter，配置并启用它，在指定聊天/话题执行命令、发送消息和媒体、进行多轮对话，使用 Service、Event Bus、Scheduler、插件 HTTP 与受管 SQLite；能够与 Agent 对话，Agent 调用工具前按策略取得用户确认；管理动作能够按确定的代次和维护规则更新、停止及恢复。机器人回复与 WebUI 提供英文和简体中文。
 
 首发目标为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64。每插件一个 Native 子进程，每个 Adapter 包一个 Native 子进程（承载其全部实例），TCP 默认、stdio 可选；框架托管 HTTP 只开放 Core 的一个公开端口。动态跨插件命令 Router、其他官方 Adapter、多语言 SDK、持久化的多轮会话状态与暂停 DSL、跨会话的记忆检索和额外客户端后置。分层休眠与按需唤醒在 §7 单独规划（S-01～S-06），不属于 v0.1 交付。
 
@@ -25,7 +25,7 @@
 | `adapters/telegram/` | 官方 Telegram Adapter 程序：接收、发送、能力和平台映射 | T-03 |
 | `agent/` | 官方 Agent 组件（含记忆） | T-12 |
 | `plugins/help/`、`plugins/welcome/`、`plugins/rss/` | 预装插件 | T-14 |
-| 根包（`alonabot.go` 等） | 库模式入口 `alonabot.Run`，与 `alonabot serve` 共用 Core 装配 | T-13 |
+| 根包（`alonabot.go` 等） | 库模式入口 `alonabot.Run`，与 `alonabot run` 共用 Core 装配 | T-13 |
 | `scripts/dist/` | 发行归档的构建与打包 | T-14 |
 | `Dockerfile`、`deploy/compose.yaml`、`deploy/install.sh` | 官方容器镜像、compose 整合包入口与 install.sh | T-14 |
 | `cmd/alonabot/` | Core 启停、开发者与管理 CLI 装配 | T-02 起，T-09 完整 |
@@ -59,7 +59,7 @@ Telegram、LLM Provider、浏览器和目标平台的测试单独记录环境与
 | T-10 | T-02～T-09、T-11～T-16 | 全部验收闭合、目标平台产物与资源报告 | 未开始 |
 | T-11 | T-06、T-08 | 工具目录、调用策略与用户确认、Agent 会话存储 | 未开始 |
 | T-12 | T-05、T-07、T-08、T-11 | 官方 Agent 组件（含记忆） | 未开始 |
-| T-13 | T-03、T-04、T-08 | 库模式入口、同进程的开发组件与热部署 | 未开始 |
+| T-13 | T-03、T-04、T-08 | `alonabot run` 的开发运行与热部署、库模式入口与同进程的开发组件 | 未开始 |
 | T-14 | T-09、T-12、T-15 | 发行包、容器镜像、首次运行与预装插件 | 未开始 |
 | T-15 | T-03 | 官方 OneBot 11 Adapter（正向 WebSocket）与跨 Adapter 一致性验收 | 未开始 |
 | T-16 | T-05、T-07、T-13 | 插件测试套件 `plugintest` | 未开始 |
@@ -86,7 +86,7 @@ flowchart TD
   T08 --> T12
   T09 --> T10["T-10 发布验收"]
   T12 --> T10
-  T04 --> T13["T-13 库模式"]
+  T04 --> T13["T-13 开发运行与库模式"]
   T08 --> T13
   T13 --> T09
   T09 --> T14["T-14 发行包"]
@@ -124,7 +124,7 @@ flowchart TD
 | 适配器 · Telegram | 官方 Telegram Adapter 的平台实现 | [plan/adapters/telegram.md](plan/adapters/telegram.md) | [docs/goals/adapters/telegram.md](../docs/goals/adapters/telegram.md) |
 | 适配器 · OneBot 11 | 官方 OneBot 11 Adapter 的平台实现与跨 Adapter 一致性验收 | [plan/adapters/onebot11.md](plan/adapters/onebot11.md) | [docs/goals/adapters/onebot11.md](../docs/goals/adapters/onebot11.md) |
 | 插件 | 预装插件 help、welcome、rss | [plan/plugins.md](plan/plugins.md) | [docs/goals/plugins.md](../docs/goals/plugins.md) |
-| WebUI | 官方 WebUI 组件 `web/admin/` | [plan/webui.md](plan/webui.md) | [docs/goals/webui.md](../docs/goals/webui.md) |
+| WebUI | 官方 WebUI 组件 `web/admin/` 的前端；页面调用的 Admin API 与 WebUI 的提供在核心章节 | [plan/webui.md](plan/webui.md) | [docs/goals/webui.md](../docs/goals/webui.md) |
 | 集成与发布 | 验收汇总、目标平台、发行包、镜像与 install.sh | [plan/release.md](plan/release.md) | [docs/goals/release.md](../docs/goals/release.md) |
 
 ## 4. 逐任务实施工作包
@@ -141,11 +141,11 @@ flowchart TD
 | [T-06：Service Broker 与非持久 Event Bus](plan/core.md#t-06service-broker-与非持久-event-bus) | 核心 | — |
 | [T-07：Scheduler 与统一 HTTP 入口](plan/core.md#t-07scheduler-与统一-http-入口) | 核心 | — |
 | [T-08：配置、Secret 与数据库候选准备](plan/core.md#t-08配置secret-与数据库候选准备) | 核心 | — |
-| [T-09：安装分发、正式激活恢复与管理入口](plan/core.md#t-09安装分发正式激活恢复与管理入口) | 核心 | 步骤 7、9 → WebUI |
+| [T-09：安装分发、正式激活恢复与管理入口](plan/core.md#t-09安装分发正式激活恢复与管理入口) | 核心 | — |
 | [T-10：集成、目标平台与发布验收](plan/release.md#t-10集成目标平台与发布验收) | 集成与发布 | — |
 | [T-11：Agent 基础](plan/core.md#t-11agent-基础) | 核心 | — |
 | [T-12：官方 Agent 组件](plan/agent.md#t-12官方-agent-组件) | Agent | — |
-| [T-13：库模式与热部署](plan/core.md#t-13库模式与热部署) | 核心 | — |
+| [T-13：开发运行与库模式](plan/core.md#t-13开发运行与库模式) | 核心 | — |
 | [T-14：官方整合包与预装组件](plan/release.md#t-14官方整合包与预装组件) | 集成与发布 | 步骤 1、2 → 插件 |
 | [T-15：官方 OneBot 11 Adapter](plan/adapters/onebot11.md#t-15官方-onebot-11-adapter) | 适配器 · OneBot 11 | — |
 | [T-16：插件测试套件](plan/core.md#t-16插件测试套件) | 核心 | — |

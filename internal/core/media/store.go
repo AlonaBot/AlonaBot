@@ -72,7 +72,6 @@ type entry struct {
 // 上传文件每块写入后关闭，Store 无需持有长期文件描述符。
 type Store struct {
 	mu             sync.Mutex // 同时保护文件、索引与配额，避免释放和写入交错
-	log            *slog.Logger
 	dir            string
 	lim            Limits
 	now            func() time.Time
@@ -87,7 +86,7 @@ type Store struct {
 }
 
 // Open 清空独占媒体目录中的遗留文件；清理失败直接返回原错误。
-func Open(log *slog.Logger, dir string, lim Limits, now func() time.Time) (*Store, error) {
+func Open(dir string, lim Limits, now func() time.Time) (*Store, error) {
 	if err := os.MkdirAll(dir, directoryMode); err != nil {
 		return nil, fmt.Errorf("create media directory: %w", err)
 	}
@@ -100,7 +99,7 @@ func Open(log *slog.Logger, dir string, lim Limits, now func() time.Time) (*Stor
 			return nil, fmt.Errorf("clean media directory: %w", err)
 		}
 	}
-	return &Store{log: log, dir: dir, lim: lim, now: now, uploads: make(map[string]*entry), refs: make(map[string]*entry), used: make(map[string]int64)}, nil
+	return &Store{dir: dir, lim: lim, now: now, uploads: make(map[string]*entry), refs: make(map[string]*entry), used: make(map[string]int64)}, nil
 }
 
 // AddServices 注册三个 Core 固定上传服务。
@@ -319,11 +318,11 @@ func (s *Store) release(entries map[string]*entry, id string, e *entry) {
 
 func (s *Store) remove(path string) {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		s.log.Warn("remove media file failed", "path", path, "err", err)
+		slog.Warn("remove media file failed", "path", path, "err", err)
 	}
 }
 
 func (s *Store) storageFailure(path string, err error) wire.Response {
-	s.log.Error("media storage failed", "path", path, "err", err)
+	slog.Error("media storage failed", "path", path, "err", err)
 	return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, errors.New("media storage failed"))
 }

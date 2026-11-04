@@ -8,6 +8,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -125,11 +127,11 @@ var (
 	fastStop = host.StopTiming{Drain: 200 * time.Millisecond, Total: 800 * time.Millisecond, OnStopAt: 400 * time.Millisecond}
 )
 
-// logBuf 收集插件日志，供断言与失败时打印。
+// logBuf 收集插件输出与 Core 日志，供断言与失败时打印。
 type logBuf struct {
 	// mu 保护 b。
 	mu sync.Mutex
-	b  bytes.Buffer // 「插件ID|流|内容」形式的日志
+	b  bytes.Buffer // 插件行带「插件ID|流|内容」前缀，Core 行由默认 Logger 写入
 }
 
 // Line 记录一行日志，签名与 process.LogFunc 相同。
@@ -139,11 +141,30 @@ func (l *logBuf) Line(id, stream string, line []byte) {
 	fmt.Fprintf(&l.b, "%s|%s|%s\n", id, stream, line)
 }
 
+// Write 把默认 Logger 的输出写入同一日志缓冲区。
+func (l *logBuf) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
 // SetSession 满足 PluginLog；测试不记录 session_id。
 func (l *logBuf) SetSession([]byte) {}
 
 // String 返回已收集的全部日志。
 func (l *logBuf) String() string { l.mu.Lock(); defer l.mu.Unlock(); return l.b.String() }
+
+// SetDefault 会同时修改 log 包的输出与标志，清理时一并恢复。
+func setDefaultLogger(t *testing.T, logger *slog.Logger) {
+	t.Helper()
+	previous, writer, flags := slog.Default(), log.Writer(), log.Flags()
+	slog.SetDefault(logger)
+	t.Cleanup(func() {
+		slog.SetDefault(previous)
+		log.SetOutput(writer)
+		log.SetFlags(flags)
+	})
+}
 
 // setup 准备已安装 demo、含候选代次 gen-1 的状态库，并返回以 exe 为入口的启动描述。
 func setup(t *testing.T, exe string) (*state.Store, Spec) {
