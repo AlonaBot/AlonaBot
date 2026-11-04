@@ -13,7 +13,7 @@ type echo struct{ sdk.Base }
 
 // Events 注册手动回复事件 Handler；无文本片段时不发送。
 func (*echo) Events(r *sdk.EventRegistry) {
-	r.On("echo", "message.created", func(c *sdk.Context) error {
+	r.On("echo", "message.created").Handle(func(c *sdk.Context) error {
 		var chain message.Chain
 		for _, segment := range c.Event().GetEventPayload().GetMessageCreated().GetChain().GetSegments() {
 			if text := segment.GetText(); text != nil {

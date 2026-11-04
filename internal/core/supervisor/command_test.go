@@ -296,7 +296,7 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 				{"trailing_escape", []string{`/quote a b\`}, []string{"event"}, []string{"Usage: /quote <a> <b>"}},
 				{"default", []string{"/optional"}, []string{"optional", "event"}, []string{"9"}},
 				{"custom_usage_key", []string{"/custom x"}, []string{"event"}, []string{"Usage: /custom <arg1:int>"}},
-				{"auto_send_guard", []string{"/sendguard"}, []string{"sendguard", "event"}, nil},
+				{"auto_send_order", []string{"/sendguard"}, []string{"sendguard", "event"}, []string{"explicit", "automatic"}},
 				{"consume_text_matches", []string{"/say hello"}, []string{"say:hello", "event"}, []string{"hello"}},
 				{"mixed_text_order", []string{"hel", "lo"}, []string{"regex:hello|hello", "full", "keyword", "raw", "event"}, nil},
 				{"stop", []string{"hello stop"}, []string{"regex:hello|hello", "keyword"}, nil},
@@ -397,9 +397,6 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 						default:
 							t.Error("command did not call Service Broker")
 						}
-					}
-					if tc.name == "auto_send_guard" && !strings.Contains(logs.String(), "ERROR_CODE_FAILED_PRECONDITION") {
-						t.Error("missing auto-reply Send rejection diagnostic")
 					}
 				})
 			}

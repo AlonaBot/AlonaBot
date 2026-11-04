@@ -60,7 +60,7 @@ func (*plugin) Events(r *sdk.EventRegistry) {
 	if os.Getenv(pluginIDEnv) == "a" {
 		return
 	}
-	r.On("call", "message.created", func(c *sdk.Context) error {
+	r.On("call", "message.created").Handle(func(c *sdk.Context) error {
 		text := c.Event().GetEventPayload().GetMessageCreated().GetChain().GetSegments()[0].GetText().GetText()
 		parts := strings.Fields(text)
 		if parts[0] != os.Getenv(pluginIDEnv) {

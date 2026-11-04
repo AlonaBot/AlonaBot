@@ -25,26 +25,18 @@ type plugin struct {
 // Commands 以完整路径注册环境中给出的命令。
 func (p *plugin) Commands(r *sdk.CommandRegistry) {
 	for _, c := range p.commands {
-		options := []sdk.RouteOption{sdk.Priority(c.Priority)}
+		builder := r.Command(c.Path...).Priority(c.Priority)
 		for _, path := range c.Aliases {
-			options = append(options, sdk.Alias(path...))
+			builder.Alias(path...)
 		}
-		register(r, c.Path, options)
+		builder.Handle(func(*sdk.Context) error { return nil })
 	}
 }
 
 // Events 验证标准上下线事件可通过 SDK 收集与 Core 注册校验。
 func (p *plugin) Events(r *sdk.EventRegistry) {
-	r.On("online", "bot.online", func(*sdk.Context) error { return nil })
-	r.On("offline", "bot.offline", func(*sdk.Context) error { return nil })
-}
-
-func register(r *sdk.CommandRegistry, path []string, options []sdk.RouteOption) {
-	if len(path) > 1 {
-		r.Group(path[0], func(g *sdk.CommandGroup) { register(g, path[1:], options) })
-		return
-	}
-	r.Command(path[0], func(*sdk.Context) error { return nil }, options...)
+	r.On("online", "bot.online").Handle(func(*sdk.Context) error { return nil })
+	r.On("offline", "bot.offline").Handle(func(*sdk.Context) error { return nil })
 }
 
 func main() {
