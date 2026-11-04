@@ -64,6 +64,9 @@ func TestConversationProcesses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	previous := slog.Default()
+	slog.SetDefault(output.Logger())
+	t.Cleanup(func() { slog.SetDefault(previous) })
 	defer output.Close()
 	defer func() {
 		if t.Failed() {
@@ -111,7 +114,7 @@ func TestConversationProcesses(t *testing.T) {
 		service.Register(mux)
 		sender := message.New(registry, policy.New(store), nil, values.RequestTimeout)
 		mux.Handle(wire.ServiceSend, sender.Send)
-		events = router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send, nil, nil)
+		events = router.New(values.DispatchQueueEvents, registry, sender.Send, nil, nil)
 		events.Start()
 		if err := platform.Start(ctx, events); err != nil {
 			t.Fatal(err)

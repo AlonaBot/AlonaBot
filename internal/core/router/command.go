@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"regexp"
 	"slices"
 	"strings"
@@ -236,24 +237,23 @@ func (r *Router) invokeCommand(c candidate, ev *pb.Event, bind func(*pb.Event) (
 	}
 	trace := make([]byte, traceIDBytes)
 	rand.Read(trace)
-	log := r.log.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace))
 	response, callError := r.call(c, ev, bind, trace)
 	if errors.Is(callError, errCommandArguments) {
-		log.Debug("command arguments rejected", "error", callError)
+		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Debug("command arguments rejected", "error", callError)
 		if c.route.GetCommand().GetUsageMode() != pb.UsageMode_USAGE_MODE_SILENT {
 			r.sendReply(c, ev, commandUsage(c.route.GetCommand(), prefix), trace)
 		}
 		return false
 	}
 	if callError != nil {
-		log.Warn("command handler call failed", "error", callError)
+		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn("command handler call failed", "error", callError)
 	}
 	if response.Err != nil {
-		log.Warn("command handler returned an error", "code", response.Err.GetCode(), "error", response.Err.GetSafeMessage())
+		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn("command handler returned an error", "code", response.Err.GetCode(), "error", response.Err.GetSafeMessage())
 	}
 	outcome, err := decodeOutcome(response.Payload)
 	if err != nil {
-		log.Warn("decode command handler outcome failed", "error", err)
+		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn("decode command handler outcome failed", "error", err)
 		return false
 	}
 	if callError == nil && response.Err == nil && len(outcome.GetChain().GetSegments()) != 0 {
@@ -266,18 +266,18 @@ func (r *Router) sendReply(c candidate, ev *pb.Event, chain *pb.MessageChain, tr
 	request := &pb.SendRequest{Chain: chain}
 	encoded, err := proto.Marshal(request)
 	if err != nil {
-		r.log.Warn("encode reply failed", "error", err)
+		slog.Warn("encode reply failed", "error", err)
 		return
 	}
 	response := r.send(r.ctx, c.caller, &wire.Inbound{TraceID: trace, ParentAttach: &Invocation{PluginID: c.pluginID, Event: ev, DefaultTarget: ev.GetTarget()}, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded}})
 	result := &pb.SendResult{}
 	if err := proto.Unmarshal(response.Payload.Bytes, result); err != nil {
-		r.log.Warn("decode reply result failed", "error", err)
+		slog.Warn("decode reply result failed", "error", err)
 	}
 	if response.Err != nil {
-		r.log.Warn("reply failed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", response.Err, "result", result)
+		slog.Warn("reply failed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", response.Err, "result", result)
 	} else {
-		r.log.Debug("reply completed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "result", result)
+		slog.Debug("reply completed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "result", result)
 	}
 }
 

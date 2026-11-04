@@ -53,6 +53,9 @@ func TestEchoBothTransports(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			previous := slog.Default()
+			slog.SetDefault(output.Logger())
+			t.Cleanup(func() { slog.SetDefault(previous) })
 			defer output.Close()
 			defer func() {
 				if t.Failed() {
@@ -74,7 +77,7 @@ func TestEchoBothTransports(t *testing.T) {
 			mux.Handle(wire.ServiceSend, sender.Send)
 			caller := router.NewCaller(spec.PluginID, spec.GenerationID)
 			spec.Handler = mux.For(caller)
-			events := router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send, nil, nil)
+			events := router.New(values.DispatchQueueEvents, registry, sender.Send, nil, nil)
 			events.Start()
 			defer events.Close()
 			if err := platform.Start(ctx, events); err != nil {

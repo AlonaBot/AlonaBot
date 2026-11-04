@@ -194,6 +194,9 @@ func testIncomingMedia(t *testing.T, binary string, stdio bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	previous := slog.Default()
+	slog.SetDefault(output.Logger())
+	t.Cleanup(func() { slog.SetDefault(previous) })
 	defer output.Close()
 	defer func() {
 		if t.Failed() {
@@ -202,7 +205,7 @@ func testIncomingMedia(t *testing.T, binary string, stdio bool) {
 	}()
 	// 1. 装配真实状态库、媒体目录、路由与消息服务，平台文件由内存 Adapter 提供。
 	values := tune.Defaults()
-	mediaStore, err := media.Open(output.Logger(), t.TempDir(), media.NewLimits(values), time.Now)
+	mediaStore, err := media.Open(t.TempDir(), media.NewLimits(values), time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +216,7 @@ func testIncomingMedia(t *testing.T, binary string, stdio bool) {
 		t.Fatal(err)
 	}
 	sender := message.New(registry, policy.New(store), mediaStore.LeaseForSend, values.RequestTimeout)
-	events := router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send, mediaStore.PrepareIncoming, nil)
+	events := router.New(values.DispatchQueueEvents, registry, sender.Send, mediaStore.PrepareIncoming, nil)
 	events.Start()
 	defer events.Close()
 	if err := platform.Start(ctx, events); err != nil {

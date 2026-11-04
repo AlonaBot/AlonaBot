@@ -329,12 +329,15 @@ func setup(t *testing.T) (*state.Store, supervisor.Spec, *processLog) {
 	limits.Handshake = 3 * time.Second
 	limits.OnReady = 3 * time.Second
 	logs := &processLog{}
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
 	return store, supervisor.Spec{PluginID: "loop-package", Role: state.RoleAdapter, AdapterID: "loop", PluginDir: pluginDir, Executable: os.Args[0], BuildDigest: digest, GenerationID: "gen", Bootstrap: &pb.Bootstrap{GenerationId: "gen", CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}, NewCandidate: true, Limits: limits, Stop: host.NewStopTiming(values), Log: logs, ExtraEnv: map[string]string{helperEnv: "adapter", "GORACE": "atexit_sleep_ms=0"}}, logs
 }
 
-func openMediaStore(t *testing.T, logs *processLog) *media.Store {
+func openMediaStore(t *testing.T) *media.Store {
 	t.Helper()
-	store, err := media.Open(slog.New(slog.NewTextHandler(logs, nil)), t.TempDir(), media.NewLimits(tune.Defaults()), time.Now)
+	store, err := media.Open(t.TempDir(), media.NewLimits(tune.Defaults()), time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,7 +383,7 @@ func TestRemoteLifecycle(t *testing.T) {
 	store, spec, logs := setup(t)
 	registry := adapter.NewRegistry()
 	sink := &eventSink{}
-	p := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: sink, Log: slog.New(slog.NewTextHandler(logs, nil)), RegisterIncoming: openMediaStore(t, logs).RegisterIncoming})
+	p := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: sink, RegisterIncoming: openMediaStore(t).RegisterIncoming})
 	launch := func() *supervisor.Running {
 		t.Helper()
 		mux := router.NewMux()
@@ -618,14 +621,14 @@ func TestRemoteRoleMismatch(t *testing.T) {
 // TestRemoteMediaRead 经真实 Adapter 进程登记并共享入站媒体，保持 Session 身份与平台错误。
 func TestRemoteMediaRead(t *testing.T) {
 	ctx := t.Context()
-	store, spec, logs := setup(t)
+	store, spec, _ := setup(t)
 	registry := adapter.NewRegistry()
-	mediaStore := openMediaStore(t, logs)
+	mediaStore := openMediaStore(t)
 	sink := &eventSink{}
-	p := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: sink, Log: slog.New(slog.NewTextHandler(logs, nil)), RegisterIncoming: mediaStore.RegisterIncoming})
+	p := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: sink, RegisterIncoming: mediaStore.RegisterIncoming})
 	mux := router.NewMux()
 	p.Services(mux)
-	dispatch := router.New(slog.New(slog.NewTextHandler(logs, nil)), 1, registry, nil, mediaStore.PrepareIncoming, nil)
+	dispatch := router.New(1, registry, nil, mediaStore.PrepareIncoming, nil)
 	t.Cleanup(dispatch.Close)
 	mediaStore.AddReadServices(mux, registry, dispatch, store.AllowedAdapterInstances)
 	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
@@ -859,10 +862,10 @@ func TestRemotePermissionsAndEvents(t *testing.T) {
 			store, spec, logs := setup(t)
 			spec.Stdio = stdio
 			registry := adapter.NewRegistry()
-			dispatch := router.New(slog.New(slog.NewTextHandler(logs, nil)), tune.Defaults().DispatchQueueEvents, registry, nil, nil, nil)
+			dispatch := router.New(tune.Defaults().DispatchQueueEvents, registry, nil, nil, nil)
 			dispatch.Start()
 			defer dispatch.Close()
-			process := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: dispatch, Log: slog.New(slog.NewTextHandler(logs, nil)), RegisterIncoming: openMediaStore(t, logs).RegisterIncoming})
+			process := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: dispatch, RegisterIncoming: openMediaStore(t).RegisterIncoming})
 			mux := router.NewMux()
 			process.Services(mux)
 			caller := router.NewCaller(spec.PluginID, spec.GenerationID)

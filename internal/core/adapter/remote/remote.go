@@ -36,7 +36,6 @@ type Options struct {
 	Store            *state.Store
 	Registry         *adapter.Registry
 	Sink             adapter.Sink
-	Log              *slog.Logger
 	RegisterIncoming func(instanceID, fileID string, size *uint64, mime *string) string // 装配处必须提供媒体 Store 的入站登记入口
 }
 
@@ -109,7 +108,7 @@ func (p *Process) Unbind() {
 	for _, entry := range p.instances {
 		if entry.running {
 			if err := p.offline(context.Background(), entry, pb.BotOfflineReason_BOT_OFFLINE_REASON_ADAPTER_EXITED, nil); err != nil {
-				p.opt.Log.Error("deliver adapter offline event failed", "plugin_id", p.opt.PluginID, "instance_id", entry.id, "error", err)
+				slog.Error("deliver adapter offline event failed", "plugin_id", p.opt.PluginID, "instance_id", entry.id, "error", err)
 			}
 		}
 	}
@@ -252,7 +251,7 @@ func (p *Process) deliver(ctx context.Context, entry *instance, ev *pb.Event) er
 	err := p.opt.Sink.Deliver(ctx, ev)
 	if errors.Is(err, adapter.ErrQueueFull) {
 		entry.dropped++
-		p.opt.Log.Warn("adapter event dropped", "plugin_id", p.opt.PluginID, "instance_id", entry.id, "dropped", entry.dropped)
+		slog.Warn("adapter event dropped", "plugin_id", p.opt.PluginID, "instance_id", entry.id, "dropped", entry.dropped)
 		return adapter.ErrQueueFull
 	}
 	return err

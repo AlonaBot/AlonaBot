@@ -42,7 +42,6 @@ type Stats struct {
 // Bus 保存订阅队列与按插件累计的计数；New 创建，Register/Attach/Detach 接入装配。
 // mu 串行化发布入队与订阅变更；发送和日志均在锁外进行，慢 Session 只占用自己的发送 goroutine。
 type Bus struct {
-	log         *slog.Logger
 	opt         Options
 	mu          sync.Mutex // 保护 subscribers、counts 和 subscriber 的队列；不跨 SendEvent 持锁
 	subscribers map[string]*subscriber
@@ -73,9 +72,9 @@ type droppedEvent struct {
 	count     uint64
 }
 
-// New 创建独立的非持久 Bus；log 由 Core 注入。
-func New(log *slog.Logger, opt Options) *Bus {
-	return &Bus{log: log, opt: opt, subscribers: make(map[string]*subscriber), counts: make(map[string]*Stats)}
+// New 创建独立的非持久 Bus。
+func New(opt Options) *Bus {
+	return &Bus{opt: opt, subscribers: make(map[string]*subscriber), counts: make(map[string]*Stats)}
 }
 
 // Register 将 core.bus.publish 注册到 m。
@@ -276,7 +275,7 @@ func (b *Bus) dropLocked(sub *subscriber, ev *pb.BusEvent) droppedEvent {
 }
 
 func (b *Bus) warnDrop(d droppedEvent, reason string) {
-	b.log.Warn("bus event dropped", "plugin_id", d.pluginID, "event_name", d.eventName, "dropped", d.count, "reason", reason)
+	slog.Warn("bus event dropped", "plugin_id", d.pluginID, "event_name", d.eventName, "dropped", d.count, "reason", reason)
 }
 
 func failure(code pb.ErrorCode, message string) wire.Response {

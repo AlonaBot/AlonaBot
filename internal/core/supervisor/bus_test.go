@@ -96,6 +96,9 @@ func testBusProcesses(t *testing.T, binary string, stdio bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	previous := slog.Default()
+	slog.SetDefault(output.Logger())
+	t.Cleanup(func() { slog.SetDefault(previous) })
 	defer output.Close()
 	defer func() {
 		if t.Failed() {
@@ -103,12 +106,12 @@ func testBusProcesses(t *testing.T, binary string, stdio bool) {
 		}
 	}()
 	values := tune.Defaults()
-	routes := router.New(output.Logger(), values.DispatchQueueEvents, nil, nil, nil, nil)
+	routes := router.New(values.DispatchQueueEvents, nil, nil, nil, nil)
 	defer routes.Close()
-	services := broker.New(routes, output.Logger(), values.RequestTimeout)
+	services := broker.New(routes, values.RequestTimeout)
 	mux := router.NewMux()
 	mux.Forward(services.Call)
-	broadcast := bus.New(output.Logger(), bus.Options{QueueEvents: 3, QueueBytes: values.BusQueueBytes})
+	broadcast := bus.New(bus.Options{QueueEvents: 3, QueueBytes: values.BusQueueBytes})
 	broadcast.Register(mux)
 	budget := wire.NewBudget(values.CoreMaxPayload)
 	running := make(map[string]*Running)
