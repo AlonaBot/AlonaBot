@@ -6,7 +6,7 @@
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
-| goal-34 | T-08.7 | web/admin 骨架、配置表单组件与界面文案 | T-08.1、T-08.10 | 等待前置 |
+| goal-34 | T-08.7 | web/admin 骨架、配置表单组件与界面文案 | T-08.1、T-08.10 | 待派发 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.4、T-09.1、T-09.4、T-13.1 | 等待前置 |
 | goal-43 | T-09.8 | Admin 管理页 | T-09.6、T-08.7、T-09.12 | 等待前置 |
 | goal-44 | T-09.9 | Admin 配置、权限、工具策略与插件页 | T-09.8、T-11.1、T-11.3 | 等待前置 |
@@ -15,63 +15,135 @@
 
 ### goal-34 · T-08.7 web/admin 骨架、配置表单组件与界面文案
 
-状态：等待前置。前置 T-08.1（PR #54，合并提交 `021e972`）与 T-08.10（PR #77）均已合并；审查者按下文生成 fixtures 并核对本语句后改为待派发。
+状态：待派发。前置 T-08.1（PR #54，合并提交 `021e972`）与 T-08.10（PR #77，合并提交 `f34b1e8`）均已合并。审查者用 main `0a320c5` 构建的 `alonabot plugin generate` 为下文三组 Go 类型实际生成了 Schema，并按生成结果核对本语句：
+- 根对象带 `$schema`，字段按 Go 声明顺序出现在 `properties` 中，必填字段名列在所属对象的 `required` 数组里。
+- 可空字段的 `type` 为 `["<类型>","null"]`。struct 为 `type: object` 加 `properties`；`[]T` 为 `type: array` 加 `items`；`map[string]T` 为 `type: object` 加 `additionalProperties`，没有 `properties`。
+- 源文案：label 在 `x-alonabot-form.label`，description 是 Schema 自身的 `description`。
+- `x-alonabot-form` 里还有 widget、options、labels、subtitles、min、max、step、language、when、obvious。`when` 是「同级字段的 JSON 名 → 取值」的对象，多个条件同时满足才成立。
+- 多选没有单独的键：`[]T` 带 options 就是多选（例如 `tags` 的 widget 为 select，`ports` 不写 widget）。
+- `x-alonabot-secret`、`x-alonabot-hidden` 只在为 true 时出现，`default` 写在字段上。
+- 整数字段的 `minimum`/`maximum` 是 Go 类型的范围（int 为 ±9223372036854775807），超出 JavaScript 的安全整数范围；表单的数字范围来自 `x-alonabot-form` 的 min/max。
+- 管理读取经 `secret.Store.Redact` 把每个已设置的 secret 原位替换为 `{"$secret_set": true}`，数组元素与 map 值中的 secret 也是如此。
 
-已用 `sdk/generate/config_test.go` 中的期望 Schema 核对 T-08.1 的格式：字段按声明顺序出现在 `properties` 中；可空字段的 `type` 为 `["<类型>","null"]`；数组为 `type: array` 加 `items`；`map[string]T` 为 `type: object` 加 `additionalProperties`，没有 `properties`；`x-alonabot-secret`、`x-alonabot-hidden` 只在为 true 时出现；`default` 写在 Default 上。
-
-核对时发现生成器的标签键与契约当时的 i18 写法冲突。维护者按 D-74 改为仿照 AstrBot，由 T-08.10（goal-90）修订生成器：
-- label、description 改为标签中的英文源文案；`x-alonabot-form` 增加 labels、subtitles、step、language、when、obvious。
-- 删除 `x-alonabot-i18n` 与 `option_icons`，选项不再带图标。
-- 翻译文件的 `config` 按 JSON 字段名嵌套，覆盖 label、description、labels、subtitles。
-
-本语句的 `Field`、`fieldText` 与表单行为已按此修订。goal-90 合并后，审查者用它生成 fixtures 并核对本语句，再改为待派发。
+核对时修订了原语句的三处：
+- `ConfigForm` 去掉 `secrets` 参数，`patch.ts` 的 `SecretState` 改为 `isSecretSet`：设置状态已经原位出现在 value 中，单独按路径传会和数组、map 中的位置对不上。
+- `Field` 增加 `element`，描述数组元素与 map 值；`min`、`max`、`multiple`、`required` 写明来源。
+- 补上数组中含 secret 时的规则：Merge Patch 整体替换数组，而掩码不能作为保持不变的协议值（CONTRACTS §5.1、§5.3），所以修改这类数组时必须重新输入其中的全部 secret；Core 遇到相同的值会复用原引用。map 是 JSON 对象，按键递归合并，不受此限。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-34（切片 T-08.7：web/admin 骨架、配置表单组件与界面文案）。goal 目录 goal-34，分支 goal-34，worktree .worktrees/goal-34，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：建立 web/admin 前端工程（Vite、TypeScript、React 19、vitest），它是官方 WebUI 组件（`role: webui`）的源码，构建产物 dist/ 是组件的静态根目录；提供由配置 Schema 驱动的表单组件：字段按声明顺序展示，hidden 字段不显示也不被删除，secret 字段显示「已设置」状态而不把掩码当成保存值，提交生成 RFC 7396 Merge Patch；字段标签按 i18 回退规则显示；WebUI 自身文案有 en-US 与 zh-CN 目录和语言切换组件。真实管理页面与 API 在 T-09 接入。
+目标：建立 web/admin 前端工程（Vite、TypeScript、React 19、vitest）。它是官方 WebUI 组件（`role: webui`）的源码，构建产物 dist/ 是组件的静态根目录。提供由配置 Schema 驱动的表单组件：
+- 字段按声明顺序展示；hidden 字段不显示，也不会被删除。
+- secret 字段显示「已设置」状态，不把掩码当成保存值。
+- 提交时生成 RFC 7396 Merge Patch。
+- 字段文案按 i18 回退规则显示。
+WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组件。真实的管理页面与 API 在 T-09 接入。
 
 依据：PLAN T-08 步骤 9（前端）；CONTRACTS §5.1 第 4 条、§5.3、§5.4 最后一条、§7.5、§9.1（WebUI 字段）；DECISIONS D-43、D-62、D-63、D-74；docs/development.md（Node 版本与已批准的前端依赖）；TEST-MATRIX V-25 的表单分项、V-54 的界面组件分项。
 
 范围（只新增或修改这些）：
-- 新增 web/admin/（package.json、package-lock.json、tsconfig.json、vite.config.ts、index.html、src/、fixtures/、i18n/，以及 manifest plugin.yaml：`role: webui`、`assets: dist`、Admin API 主版本范围 1～1）
+- 新增 web/admin/：package.json、package-lock.json、tsconfig.json、vite.config.ts、index.html、src/、fixtures/、i18n/，以及 manifest plugin.yaml（`role: webui`、`assets: dist`、Admin API 主版本范围 1～1）
 - .gitignore：追加 web/admin/node_modules/ 与 web/admin/dist/
-- docs/development.md 不改；Node 使用 asdf 管理的 26.5.1，包管理用 npm
-允许的依赖：只用 react、react-dom、typescript、vite、@vitejs/plugin-react、vitest（均属已批准的 Vite、TypeScript、React 19、vitest）。需要 DOM 测试环境（jsdom、happy-dom）或 Testing Library 时标阻塞，等待维护者批准。
+- docs/development.md 不改。Node 使用 asdf 管理的 26.5.1，包管理用 npm。
+允许的依赖：只用 react、react-dom、typescript、vite、@vitejs/plugin-react、vitest（都属于已批准的 Vite、TypeScript、React 19、vitest）。需要 DOM 测试环境（jsdom、happy-dom）或 Testing Library 时标阻塞，等待维护者批准。
 
 接口（模块与导出，照此实现）：
 - src/schema/model.ts
-  export type Field = { path: string[]; type: 'string'|'integer'|'number'|'boolean'|'object'|'array'|'map'; nullable: boolean; required: boolean; secret: boolean; hidden: boolean; obvious: boolean; multiple: boolean; widget?: string; options?: (string|number)[]; labels?: string[]; subtitles?: string[]; min?: number; max?: number; step?: number; language?: string; when?: Record<string, unknown>; defaultValue?: unknown; label?: string; description?: string; children?: Field[] } // label、description、labels、subtitles 是标签中的英文源文案；path 是 JSON 名的路径，数组元素与 map 值不含下标或键
-  export function fieldsFromSchema(schema: unknown): Field[] // 按 properties 的声明顺序（Schema 的 JSON 键顺序）；hidden 字段保留在模型中，标记 hidden
+  export type Field = { path: string[]; type: 'string'|'integer'|'number'|'boolean'|'object'|'array'|'map'; nullable: boolean; required: boolean; secret: boolean; hidden: boolean; obvious: boolean; multiple: boolean; widget?: string; options?: (string|number)[]; labels?: string[]; subtitles?: string[]; min?: number; max?: number; step?: number; language?: string; when?: Record<string, unknown>; defaultValue?: unknown; label?: string; description?: string; children?: Field[]; element?: Field }
+  // path 是 JSON 名的路径，数组元素与 map 值不含下标或键（element.path 等于所属字段的 path）
+  // label 来自 x-alonabot-form.label，description 来自 Schema 的 description，二者与 labels、subtitles 都是英文源文案
+  // children：object 字段的 properties；element：array 的 items 与 map 的 additionalProperties
+  // nullable：type 数组含 "null"；required：字段名在所属对象的 required 中
+  // min、max：只取 x-alonabot-form 的 min、max，不读 Schema 的 minimum、maximum
+  // multiple：type 为 array 且有 options；此时 options 等来自该字段自身的 x-alonabot-form
+  export function fieldsFromSchema(schema: unknown): Field[] // 按 properties 的 JSON 键顺序；hidden 字段保留在模型中并标记 hidden
 - src/schema/patch.ts
-  export type SecretState = { set: boolean } // 来自管理读取的 {"$secret_set": true}
-  export function buildPatch(original: unknown, edited: unknown, fields: Field[]): Record<string, unknown> // RFC 7396：只包含改变的键；未触碰的 secret 与 hidden 字段不出现；清空可空字段生成 null 删除；数组整体替换
+  export function isSecretSet(value: unknown): boolean // value 恰为 {"$secret_set": true}
+  export function buildPatch(original: unknown, edited: unknown, fields: Field[]): Record<string, unknown>
+  // RFC 7396：只包含改变的键；仍为 {"$secret_set": true} 的 secret 与 hidden 字段不出现；清空可空字段生成 null（删除，交由默认值）；数组整体替换；结果中任何位置都不能出现 {"$secret_set": true}
 - src/i18n/catalog.ts
-  export function pickLocale(available: string[], preferred: readonly string[]): string // 精确 → 主语言（字典序最小）→ en-US
-  export function fieldText(locale: Record<string, unknown>, field: Field): { label: string; description?: string; labels?: string[]; subtitles?: string[] } // 按 field.path 在 locale.config 中逐层查找覆盖 → 源文案 → 字段的 JSON 名；locale 为 pickLocale 选出的插件语言文件
-- src/components/ConfigForm.tsx：export function ConfigForm(props: { schema: unknown; value: unknown; secrets: Record<string, SecretState>; messages: Record<string, unknown>; onSubmit: (patch: Record<string, unknown>) => void })
+  export function pickLocale(available: string[], preferred: readonly string[]): string // 精确匹配 → 主语言（多个时取字典序最小）→ en-US
+  export function fieldText(locale: Record<string, unknown>, field: Field): { label: string; description?: string; labels?: string[]; subtitles?: string[] }
+  // 按 field.path 在 locale.config 中逐层查找覆盖 → 源文案 → 字段的 JSON 名；locale 是 pickLocale 选出的插件语言文件
+- src/components/ConfigForm.tsx：export function ConfigForm(props: { schema: unknown; value: unknown; messages: Record<string, unknown>; onSubmit: (patch: Record<string, unknown>) => void })
+  // value 是管理读取的配置（secret 已原位替换为 {"$secret_set": true}）；messages 是插件语言文件
 - src/components/LanguageSwitch.tsx：export function LanguageSwitch(props: { value: string; onChange: (tag: string) => void })
-- i18n/en-US.json、i18n/zh-CN.json：WebUI 文案（键集合一致）
+- i18n/en-US.json、i18n/zh-CN.json：WebUI 文案，两个文件的键集合一致
 
 行为：
-- 表单：string 用文本框（widget=password 时为密码框，textarea 时为多行），integer/number 用数字框并按 min/max 限制，boolean 用开关，integer/number 的 widget=slider 用滑块（min、max、step），string 的 widget=code 用代码编辑区（language 只作标注，不引入编辑器依赖），select 用下拉（显示 labels，下方显示 subtitles，提交 options 中的存储值；multiple 为多选），description 作为提示，obvious 时醒目显示；when 的条件不满足时字段不显示，但已有值不被删除，也不进 patch；object 嵌套为分组，array 与 map 提供增删行。required 字段标记必填。表单只在提交时生成 patch，不自行补默认值（默认值由 SDK 在准备时补，T-08.3）。
-- secret：显示「已设置/未设置」与「修改」按钮；未点「修改」时不出现在 patch 中；点了并输入后以新值出现；提供「清除」时（可空字段）生成 null。不把任何掩码字符串放进 patch。
-- hidden：不渲染，但 patch 永远不包含它（不会因未显示而被删除）。
+- 控件：
+  - string：文本框；widget 为 password 时为密码框，为 textarea 时为多行文本框，为 code 时为代码编辑区（language 只作标注，不引入编辑器依赖）。
+  - integer/number：数字框，按 min/max 限制；widget 为 slider 时用滑块（min、max、step）。
+  - boolean：开关。
+  - 有 options 且 widget 为 select 或省略时：用下拉框，显示 labels，下方显示 subtitles，提交 options 中的存储值；multiple 时为多选。
+  - description 作为提示；obvious 为 true 时醒目显示；required 的字段标记为必填。
+  - object 嵌套为分组；array 与 map 提供增、删行。
+- when：条件不满足时字段不显示，已有值不删除，也不进 patch。
+- 默认值：表单只在提交时生成 patch，不自行补默认值（由 SDK 在准备时补，T-08.3）。
+- secret：
+  - 显示「已设置/未设置」和「修改」按钮。未点「修改」时不进 patch；点了并输入后以新值进 patch。可空字段提供「清除」，生成 null。
+  - 任何掩码字符串都不放进 patch。
+  - 数组元素中含 secret 时：修改该数组（增删行或改任一元素）的同时，必须为其中每个 {"$secret_set": true} 重新输入值，否则阻止提交并标出缺少的项。这是因为 Merge Patch 整体替换数组，而掩码不能表示「保持不变」。map 值按键递归合并，不受此限。
+- hidden：不渲染，patch 永远不包含它，不会因未显示而被删除。
 - 未知键：表单只渲染 Schema 中的字段；patch 只包含被编辑的已知字段，未知键不受影响。
-- 字段文案：标签、提示与选项文案按 fieldText 取得：pickLocale 选出的插件语言文件中，`config` 按字段的 JSON 名逐层嵌套，覆盖键为 label、description、labels、subtitles（D-74，仿照 AstrBot）；缺失时用 Schema 中的源文案，标签再回落字段的 JSON 名，说明缺失时不显示；options 的存储值不翻译。
-- 语言切换：初始语言按浏览器 navigator.languages 用 pickLocale 在 en-US 与 zh-CN 中选择；用户选择后保存在 localStorage，与机器人回复语言无关。
-- fixtures/：至少三个 Schema fixture（嵌套与顺序、secret 与 hidden、可空与数组/map），由 goal-90 修订后的生成器为对应 Go 类型实际生成后放入，并附一个覆盖嵌套字段与选项文案的插件语言文件（审查者在派发前核对）。
+- 字段文案：标签、提示与选项文案经 fieldText 取得。pickLocale 选出的插件语言文件中，`config` 按字段的 JSON 名逐层嵌套，覆盖键为 label、description、labels、subtitles（D-74，仿照 AstrBot）。缺失时用 Schema 中的源文案；标签再回落到字段的 JSON 名，说明缺失时不显示。options 的存储值不翻译。
+- 语言切换：初始语言按 navigator.languages 用 pickLocale 在 en-US 与 zh-CN 中选择；用户选择后保存在 localStorage，与机器人回复的语言无关。
+- fixtures/：nested.schema.json、secrets.schema.json、collections.schema.json，由下面的 Go 类型实际生成；另手写 fixtures/i18n/zh-CN.json，覆盖嵌套字段（reply.mode 的 label 与 labels）、数组元素字段（accounts.api_key 的 label）以及一个只覆盖 description 的字段。生成步骤：
+  1. 在临时目录建 module：go.mod 写 `require github.com/AlonaBot/AlonaBot v0.0.0` 并 `replace` 到本仓库；main.go 定义 `type Plugin struct{ sdk.Base }`，`func (*Plugin) Config() config.Config { return &Config{} }`，main 调用 `sdk.Run(&Plugin{})`。
+  2. config.go 用下面对应的类型（package main，import "github.com/AlonaBot/AlonaBot/sdk/config"）。
+  3. `go build -o <tmp>/alonabot ./cmd/alonabot` 后，在该 module 中以 `GOFLAGS=-mod=mod GOWORK=off <tmp>/alonabot plugin generate --dir .` 生成。
+  4. 取 alonabot_gen.go 中 `ConfigSchema` 字符串的内容作为 fixture，原样保存，不格式化、不改键序。
+  nested：
+    type Reply struct {
+      Prefix string `json:"prefix" config:"label:Prefix;description:Text placed before every reply;default:\"> \""`
+      Mode   string `json:"mode" config:"label:Mode;widget:select;options:fast|safe;labels:Fast|Safe;subtitles:Quick response|Extra checks;default:\"fast\""`
+    }
+
+    type Config struct {
+      config.Base
+      Welcome  string `json:"welcome" config:"label:Welcome message;widget:textarea;required;default:\"Hello\""`
+      Reply    Reply  `json:"reply"`
+      Level    int    `json:"level" config:"label:Level;widget:slider;min:1;max:5;step:1;default:3"`
+      Advanced bool   `json:"advanced" config:"label:Advanced;widget:switch;default:false"`
+      Template string `json:"template" config:"label:Template;widget:code;language:json;obvious;when:advanced=true"`
+    }
+  secrets：
+    type Config struct {
+      config.Base
+      Token    string  `json:"token" config:"label:Bot token;secret;required;widget:password"`
+      Backup   *string `json:"backup" config:"label:Backup token;secret;default:null"`
+      Internal string  `json:"internal" config:"hidden;default:\"v1\""`
+      Endpoint string  `json:"endpoint" config:"label:Endpoint;description:Base URL of the service;default:\"https://example.com\""`
+    }
+  collections：
+    type Account struct {
+      Name   string  `json:"name" config:"label:Name"`
+      APIKey *string `json:"api_key" config:"label:API key;secret;default:null"`
+    }
+
+    type Config struct {
+      config.Base
+      Limit    *int               `json:"limit" config:"label:Limit;min:1;max:100;default:null"`
+      Tags     []string           `json:"tags" config:"label:Tags;widget:select;options:news|sports|tech;labels:News|Sports|Tech;default:[\"news\"]"`
+      Ports    []uint16           `json:"ports" config:"label:Ports;options:80|443|8080;default:[80]"`
+      Accounts []Account          `json:"accounts" config:"label:Accounts;default:[]"`
+      Groups   map[string]Account `json:"groups" config:"label:Groups;default:{}"`
+      Ratio    float64            `json:"ratio" config:"label:Ratio;widget:slider;min:0;max:1;step:0.1;default:0.5"`
+    }
 - npm scripts：dev、build、test（vitest run）、typecheck（tsc --noEmit）。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：web/admin/src/schema/schema.test.ts（vitest，不依赖 DOM）：用 fixtures 驱动 fieldsFromSchema 与 buildPatch，覆盖字段顺序、hidden 不进 patch、未修改的 secret 不进 patch、修改 secret 进 patch、清空可空字段生成 null、数组整体替换、未知键不受影响；pickLocale 与 fieldText 的回退（当前语言覆盖 → 源文案 → JSON 名）。这是 Schema 格式与表单之间的契约测试。
+- 提交：web/admin/src/schema/schema.test.ts（vitest，不依赖 DOM），用 fixtures 驱动。这是 Schema 格式与表单之间的契约测试，覆盖：
+  - fieldsFromSchema：nested 的字段顺序（welcome、reply、level、advanced、template）与 reply 的子字段顺序；required、nullable、multiple（tags 与 ports）、element（accounts 与 groups）；level 的 min/max 为 1/5；template 的 when。
+  - buildPatch：hidden 不进 patch；未修改的 secret 不进 patch；修改后的 secret 进 patch；清空可空字段生成 null；数组整体替换；未知键不受影响；修改含 secret 的 accounts 时，缺少重新输入的值会被拒绝。
+  - pickLocale 与 fieldText 的回退：当前语言的覆盖 → 源文案 → JSON 名。
 - 本地自测（不提交，PR 中写明结果）：npm run build、npm run typecheck；在浏览器中手动打开 dev 页面，用 fixture 渲染表单并切换语言（写明浏览器与版本，属于手动验证）。
 
 完成条件：在 web/admin 下 npm ci、npm run typecheck、npm run test、npm run build 全部成功；go build ./... 不受影响。
 
-不做：真实管理 API、登录与页面路由（T-09.1、T-09.8）；CI 中的前端任务（另行由维护者决定是否加入）；DOM 渲染测试（需要新依赖）。
+不做：真实管理 API、登录与页面路由（T-09.1、T-09.8）；CI 中的前端任务（另由维护者决定是否加入）；DOM 渲染测试（需要新依赖）；超出 JavaScript 安全整数范围的整数值的编辑（这类字段未修改时不进 patch，不受影响）。
 ```
-
 
 ## 第 9 波
 
