@@ -121,7 +121,7 @@
 | V-52 | T-03 manifest 解析与开发入口的依赖检查 | T-09 正式启用、停用、卸载与更新时的检查和确认 |
 | V-54 | T-03 locale 映射，T-08 SDK 与 Core 文案目录及 check/pack 检查 | T-09 WebUI 语言切换与真实页面 |
 | V-55、V-56 | T-11 Core 服务、策略与确认、会话存储 | T-09 工具策略与会话清除的管理页 |
-| V-62、V-63、V-68 | T-02.1 记录、格式、来源标签、进程内过滤与日志文件 | T-09.10 按来源级别的持久化、最近记录、按日期查询、管理 API、CLI 与日志页 |
+| V-62、V-63、V-68 | T-02.1 记录、格式、来源标签、进程内过滤与日志文件 | T-09.10 按来源级别的持久化、最近记录、按日期查询、管理 API 与 CLI；T-09.15 日志页 |
 | V-72 | T-03 Telegram 发送计划、能力与模拟服务；T-15 OneBot 11 映射与模拟服务 | T-15.3 以同一组用例运行两个 Adapter |
 | V-73 | T-13.1 `alonabot.Start`；T-16.1 套件基础 | T-16.2 按钮、多轮等待、schedule 与示例插件的测试 |
 | V-82 | T-03.8 manifest 角色解析；T-12.8 `@agent` 解析 | T-09.4 同类唯一、`--source` 与 `--replace` 的正式管理流程 |
@@ -162,7 +162,7 @@ T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前�
 | V-41 | release.json 对确切字节验签、重新序列化无法通过、签名有效但内容非法仍拒绝 | `contracts/release` | 通过 | 真实包验签与更新预检（T-09） |
 | V-42 | 每方向 256 个/16 MiB 与全局 64 MiB 满额立即拒绝；Response/Cancel 仍可推进；发送前取消的请求移出队列并归还预算、不能借取消越过字节上限；写出中被取消的请求写完才归还预算，Cancel 不越过其 Request | `internal/wire`（含 `TestCancelledRequestsReleaseQueueAndBudget`） | 通过 | Service 嵌套与 Event Bus 双预算（T-06） |
 | V-62 | Core 与插件两类来源标签（插件 ID 去掉市场前缀）、text 与 json 格式、终端着色（`script` 伪终端）、非终端与 NO_COLOR 不着色、插件合法 JSON 行（时间、级别、源码位置、字段顺序、嵌套值）、非 JSON 行与 stdout 行记为 `unstructured output` 的 WARN、伪造来源字段被丢弃、消息与键中的换行和控制字符被转义、多行值缩进、生命周期 Hook 的 panic 为一条带 stack 的 ERROR | `cmd/alonabot`（e2e：`TestLifecycleOverTCPAndStdio`、`TestJSONLogFormat`）；本地测试 `internal/core/logging`、`sdk`（`*_local_test.go`，未提交）；着色用 `script -q /dev/null alonabot run ...` 手动核对 | 通过（darwin/arm64） | Adapter 来源（T-03.3）、Bot Token URL 脱敏（T-03.4） |
-| V-63 | 全局级别过滤、按来源 debug 与 off（内存中）、Bootstrap 下发级别后 SDK 在进程内过滤（含 OFF 与 UNSPECIFIED） | 本地测试 `internal/core/logging`、`sdk`（未提交） | 通过 | 持久化、运行时修改、最近记录、SSE、CLI 与 WebUI（T-09.10） |
+| V-63 | 全局级别过滤、按来源 debug 与 off（内存中）、Bootstrap 下发级别后 SDK 在进程内过滤（含 OFF 与 UNSPECIFIED） | 本地测试 `internal/core/logging`、`sdk`（未提交） | 通过 | 持久化、运行时修改、最近记录、SSE 与 CLI（T-09.10），日志页（T-09.15） |
 | V-68 | 跨过零点换文件、同日写满后续写编号文件、重启后接着写序号最大的文件、合计上限从最旧删除且不删当前文件、超过 30 天删除、max_size 大于 max_total 拒绝、目录不可写时只报告一次并在换日期时恢复 | `cmd/alonabot`（e2e 读取当天日志文件）；本地测试 `internal/core/logging`（未提交） | 通过（darwin/arm64） | 真实磁盘写满、按日期查询（T-09.10） |
 
 ### 3.2 已合并独立切片的验证证据

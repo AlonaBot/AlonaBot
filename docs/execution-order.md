@@ -24,14 +24,14 @@
 | 7 | T-03.8、T-03.9、T-04.6、T-08.3、T-08.4、T-08.10、T-09.1、T-13.3 |
 | 8 | T-03.10、T-03.11、T-04.4、T-04.7、T-08.5、T-08.7、T-08.8、T-09.4、T-15.1 |
 | 9 | T-04.8、T-05.1、T-08.6、T-09.12、T-11.1、T-13.2、T-15.2 |
-| 10 | T-04.5、T-05.2、T-07.2、T-08.9、T-13.4、T-15.3 |
+| 10 | T-04.5、T-05.2、T-07.2、T-08.9、T-09.10、T-09.13、T-13.4、T-15.3 |
 | 11 | T-05.3、T-05.4、T-07.5、T-09.3、T-14.1、T-14.2、T-16.1 |
 | 12 | T-05.5、T-06.2、T-12.2、T-16.2 |
 | 13 | T-06.4、T-11.2、T-12.8 |
 | 14 | T-09.5、T-11.4、T-12.3、T-12.4 |
 | 15 | T-09.6、T-12.5、T-12.6 |
-| 16 | T-09.7、T-09.8、T-12.7 |
-| 17 | T-09.9、T-09.10、T-14.3 |
+| 16 | T-09.7、T-09.8、T-09.14、T-12.7 |
+| 17 | T-09.9、T-09.15、T-14.3 |
 | 18 | T-09.11、T-14.4、T-14.5、T-14.7 |
 | 19 | T-14.6 |
 | 20 | T-10.1 |
@@ -51,6 +51,8 @@
 | `router.New` 与 `Router.Attach` 的签名 | goal-7 给 `New` 追加 prepare、给 `Attach` 追加 Caller，goal-87 给 `New` 追加 prefixes，goal-13 给 `New` 追加 CommandPolicy。后合并的一方在先合并者的签名末尾追加自己的参数，并同步 supervisor 测试与装配处的全部调用点，不重排已有参数。 |
 | `sdk/generated.go` 的 `Generated`、`sdk.Collect` 与 `sdk/generate` | goal-53 只做三处追加：给 `Generated` 加 `I18n` 字段，在 `Collect` 中检查 usage_key，在生成器中检查并嵌入 i18。goal-88 重写注册 API，并为 Service 生成 Schema。先合并者的代码保留；后合并者同步 main 后在新代码上重做自己的改动，不回退对方的修改。 |
 | `router.Plugin` 接口 | goal-53 追加 `Messages()`。之后需要更多插件信息的切片同样只追加方法，并同步 `instancePlugin` 与测试中嵌入该接口的包装类型。 |
+| `spec/ADMIN-API.md` 与管理服务的 HTTP 路由 | goal-84 新建 `spec/ADMIN-API.md`，goal-39 建立管理服务的 HTTP 路由。之后新增 Admin API 的切片（goal-66、goal-92、goal-93）在自己的新文件里实现端点，只在路由注册处和 `spec/ADMIN-API.md` 末尾追加，不改已有条目；并行时由先合并者保留，后合并者同步 main 后追加。 |
+| `web/admin/src/api/` 与 `web/admin/i18n/*.json` | goal-43 建立 Admin API 客户端与页面文案；goal-44、goal-94 只追加自己的客户端函数与文案键，冲突时两边都保留，en-US 与 zh-CN 的键集合保持一致。 |
 | `internal/core/router` 的固定服务 mux | 新的 Core 固定服务在各自包里实现，只在装配处注册一行；服务名常量追加在 `internal/wire/services.go`。 |
 | `sdk/sdk.go`、`sdk/activate.go`、`sdk/session.go` | 新功能优先放进新文件，只在这几个文件里加必要的调用点；不重排、不顺手重写已有代码。 |
 | `cmd/alonabot/main.go` | 只有 goal 语句写明负责装配的切片才能改。 |
