@@ -8,16 +8,16 @@
 
 | 测试 ID | 任务 | 场景/方法 | 通过条件 |
 | --- | --- | --- | --- |
-| V-01 | T-01、T-04、T-09 | 解析 manifest，市场与本地 ID、缺失/重复 ID、OS/arch 不匹配 | 市场规范 ID 可用；本地非前缀安全 slug 仅警告；路径穿越与缺失 ID 拒绝；重复 ID 的先后顺序稳定 |
+| V-01 | T-01、T-04、T-09 | 解析 manifest，市场与本地 ID、缺失/重复 ID、OS/arch 不匹配；工程 manifest 写了构建字段、包内 manifest 缺少构建字段、`metadata` 翻译 | 市场规范 ID 可用；本地非前缀安全 slug 仅警告；路径穿越与缺失 ID 拒绝；重复 ID 的先后顺序稳定；工程 manifest 只接受作者信息，构建字段由 build 与 pack 写入，包内 manifest 仍严格校验（D-78） |
 | V-02 | T-01、T-02、T-04 | Protocol 1.0、枚举零值、Major/Minor、未知必需能力、Schema 缺失 | Major/required 不兼容明确拒绝；UNSPECIFIED/未知kind不视为成功；Minor正确取交集，无注册残留 |
 | V-03 | T-02 | TCP 和 stdio 使用同样的 Length-Prefixed Protobuf fixture | 双传输序列化语义一致；4 MiB 限额、零帧及错帧正确拒绝；没有 TCP 独占功能 |
 | V-04 | T-02 | 伪造 Session Secret、跨插件 Session、旧 Generation 请求 | 校验失败不激活；旧代次不接受请求；身份错误不会泄漏 Secret |
 | V-05 | T-02、T-07 | 双向相同call_id、乱序/重复/Cancel迟到Response、父调用已完成 | 三元键不串号；用户父上下文失效后子请求不能沿用Actor；迟到结果不二次完成（scheduled只释放实际运行槽） |
 | V-06 | T-02 | stderr/stdout 混入日志、单插件崩溃/退出 | TCP 日志带插件 ID；stdio stdout 非协议字节隔离会话；3 次异常崩溃限重启，正常退出不重启 |
-| V-07 | T-03 | Telegram 不同实例/账号/话题的回复、主动发送与实例许可撤销 | 原事件Target可回复；后台/其他Target需allowed_adapter_instances；无许可PERMISSION_DENIED；凭证不串用、无目标NO_DEFAULT_TARGET |
+| V-07 | T-03 | Telegram 不同实例/账号/话题的回复、主动发送、许可收紧与撤销 | 原事件Target可回复；后台/其他Target需目标实例在allowed_adapter_instances中（缺省为全部实例，D-83）；收紧后不在集合内的实例PERMISSION_DENIED；凭证不串用、无目标NO_DEFAULT_TARGET |
 | V-08 | T-03 | 一条 Text/Image/Reference/Buttons Chain、两次独立 Send | 一次 Chain 的逻辑发送和两次 Send 区分明确；支持能力正常渲染，不支持能力返回 UNSUPPORTED且不静默降级 |
 | V-09 | T-03 | 大媒体分块上传、摘要/大小/到期、传递其他插件 | 未授权或过期 MediaRef 被拒绝；提交前校验哈希；转发有 Core 签发的范围受限 token |
-| V-10 | T-04 | 包内多个 root/Config、注解函数、实例方法、外部依赖扫描 | 单 root/至多单 Config；多 Config/重复路由报错；依赖源码不扫描；实例方法不会被错误构造 |
+| V-10 | T-04 | 包内多个 root/Config、包级函数与实例方法的链式注册、残留的构建期标记、外部依赖扫描 | 单 root/至多单 Config；多 Config/重复路由报错；依赖源码不扫描；标记注释不再产生注册（D-79） |
 | V-11 | T-04、T-05 | 长/短命令、别名、跨插件同名、Regex/Raw、引号/raw/可选值 | 最长完整路径+固定排序；跨插件遮蔽可见；路径已识别后禁用/权限/解析/Rule失败不回落；非法类型返回usage或声明silent |
 | V-12 | T-04、T-09 | WebUI 改写组/子命令权限、禁用命令 | 不重启插件即可生效并持久化；Core 全局安全限制始终优先 |
 | V-13 | T-05 | 同事件多插件 priorities、小优先级先、同优先级反向安装次序 | 以 priority、plugin_id、route_id 稳定排序，跨进程启动顺序变化不影响语义 |
@@ -45,16 +45,16 @@
 | V-35 | T-03 | 多物理消息、平台明确拒绝、先成功再超时、相册按钮失败、成功message_id=0 | ACCEPTED/PARTIAL/REJECTED/UNKNOWN与每part一致；已确认ID保留、0不当可编辑ID；未尝试列出；payload+error同时返回，不自动补发 |
 | V-36 | T-02、T-08、T-09 | 同data_dir双Core、同插件并发enable/update、Core被kill而子进程仍写DB | 独占锁/管理串行及预期代次检查生效；SDK断链退出；runtime.lock未释放不打开DB/启动替代实例 |
 | V-37 | T-01、T-02、T-08、T-09 | 旧配置需OnConfigLoad才能符合新Schema、Bootstrap/REGISTER超4MiB、阶段错误 | 旧JSON先迁移再验证；完整配置只经私有IPC；超限/失败用合法SESSION_ERROR且无半注册；ACTIVATED严格先于业务帧 |
-| V-38 | T-08、T-09 | 配置版本迁移、nested未知键、null/缺失/false、Merge Patch、陈旧base_generation、选项/模板/slider/required 不合法、取未声明的键 | 迁移/补值/schema校验顺序固定；Merge Patch的null删除键后按默认值补齐，存储的null被拒绝，显式空值保留；未知键保留；不合法的值返回INVALID_ARGUMENT且带路径；取值方法对未声明键或类型不符panic；陈旧提交拒绝；restart不偷改Active |
+| V-38 | T-08、T-09 | 配置版本迁移（`$migrations` 的 rename、map、wrap、remove，schema 删除的字段）、nested未知键、null/缺失/false、Merge Patch、陈旧base_generation、选项/模板/slider/required 不合法、取未声明的键 | 声明式迁移/OnConfigLoad/补值/schema校验顺序固定；schema 删除的字段作为未知键保留（D-85）；Merge Patch的null删除键后按默认值补齐，存储的null被拒绝，显式空值保留；未知键保留；不合法的值返回INVALID_ARGUMENT且带路径；取值方法对未声明键或类型不符panic；陈旧提交拒绝；restart不偷改Active |
 | V-39 | T-01、T-08、T-09 | 两个入口的逐步迁移失败/重复ID、首装、Active resume、external 插件已有安装的升级与伪维护许可 | Up+成功账本同插件DB事务；失败无成功记录；resume 不建立候选；非当前Session/代次许可无效；未许可的 external 候选在准备前返回维护错误 |
 | V-40 | T-09 | install首次enable、restart/reload区别、pin、uninstall重装与显式rollback | 首次创建Active；restart仅新Session；卸载保留数据/来源且仅同来源可重装；pin持久化；rollback建立新代次/DB副本且不复活旧按钮，external 数据不假装通用恢复 |
-| V-41 | T-01、T-09 | 外部release清单签名、归档摘要、来源/公钥变化、无签名本地包 | 对确切字节验签；无自包含摘要循环；所有身份/平台错误停机前拒绝；签名失败不降级本地信任 |
+| V-41 | T-01、T-09 | 外部release清单签名、归档摘要、来源/公钥变化、无签名的仓库来源与本地包 | 有签名时对确切字节验签；无自包含摘要循环；所有身份/平台错误停机前拒绝；无签名来源须管理员确认并标明，之后只从同一仓库更新；已签名来源不能降级为无签名，签名失败不降级为无签名信任（D-81） |
 | V-42 | T-02、T-06 | Request计数满、字节满、缓冲满、嵌套Send/Service与Cancel并发、Request发送前取消 | 超额明确失败；Response/控制仍有进展；无阻塞等待自己额度；Cancel不超越自己的Request；Event Bus 256条/4MiB双界限计数并drop-newest |
 | V-43 | T-04、T-05、T-09 | 权限名集合（`user`、`admin`、`chat_admin` 与 Adapter 权限）、组禁用/子项启用、子权限放宽、运行时改策略、策略引用未安装 Adapter 的权限 | 平台权限与 `chat_admin` 不满足 `admin`，`admin` 不自动满足其他权限名；未安装 Adapter 的权限名不被满足且在诊断中标出；父禁用优先；最近显式权限可覆盖但不能绕过全局限制；已开始请求不伪称撤销 |
 | V-44 | T-03 | 入站媒体惰性Read、多Session共享、越界offset/配额/过期、owner退出、首个读取者取消、未声明 `media.read` 的实例、超出原 token 范围的发送 Target | 不预下载所有图；不泄BotToken/路径；首次取件校验后读取；有效租约保护共享对象；错误不制造MediaRef/空成功；一次取件失败不影响之后的读取；未声明能力时 readability 为 UNSUPPORTED；越界 Target 在平台发送前被拒 |
 | V-45 | T-03 | getMe账号重复、webhook/401/409、allowed_updates/匿名身份、私聊/回复机器人/提及机器人时的 to_me、实例代理与全局代理、代理连接失败、游标提交崩溃及7天空闲ID重置 | 冲突报管理状态、不擅自删webhook；逐条持久游标后非持久派发；显式订阅成员/Reaction且核对权限；匿名sender_chat不伪造User；7天空闲重建轮次不沿用旧高offset；允许丢失边界明确 |
 | V-46 | T-07 | job超时后callback继续执行、迟到Response、RPC断链但进程未退出 | 超时结果先返回但running不释放；无重叠/补跑；实际callback返回或进程确认退出才释放；迟到成功不改超时 |
-| V-47 | T-07、T-09 | 首次管理token/离线reset、登录/CLI、同端口两个Host、代理身份头伪造、单Host主动内容 | 插件host不可访问Admin API；admin Cookie/Authorization不传入插件；Host/CSRF/内部认证检查生效；首次能登录，reset撤销旧会话/票据；单Host不执行插件主动内容 |
+| V-47 | T-07、T-09 | 首次管理token（终端与 `admin_token` 文件）/离线reset、登录/CLI、单一主机名下的插件页面、代理身份头伪造、插件响应设置Cookie | admin Cookie/Authorization不传入插件；插件路由响应带不含allow-same-origin的CSP sandbox与nosniff，插件的Set-Cookie被去掉；非公开路由要求管理会话，非GET验证CSRF；Host/CSRF/内部认证检查生效；首次能登录，登录后`admin_token`被删除，reset撤销旧会话（D-82、D-84） |
 | V-48 | T-03、T-09 | 安装/卸载 Adapter 包、同包多个实例单独启停、Adapter 进程崩溃后恢复、Adapter 为非自身实例交付事件、插件依赖 Adapter 的 extension 片段 | 启停一个实例不影响同包其他实例且不重启进程；崩溃后只恢复启用的实例并从已保存游标继续；伪造实例的事件被拒；凭证不进入插件；必需依赖缺失时拒绝启用插件；extension 发往其他 Adapter 返回 UNSUPPORTED |
 | V-49 | T-04、T-05 | keyword/startswith/endswith/fullmatch 与 Regex 混合声明、ignore_case、空模式、命令与文本匹配同时可命中、`ToMe` Rule | 已识别普通命令时文本匹配不运行；文本匹配层按 priority/plugin_id/route_id 统一排序；ignore_case 按 Unicode 简单折叠；空模式与非法 Regex 拒绝注册 |
 | V-50 | T-05 | Handler 请求延续调用后立即返回、延续调用内多轮等待、两个用户在同一群同时等待、等待超时、等待期间插件停用、延续调用内再请求延续调用、第 129 个进行中的延续调用 | 延续调用保留原 Actor/Target 且不占分发链；原事件传播只看原 HandlerOutcome；等待只命中同一 Actor 同一 Target（含 thread）的下一条消息且该消息不进入普通分发；同键第二个等待 ALREADY_EXISTS；超时 DEADLINE_EXCEEDED；Session 失效后不补发；嵌套请求 FAILED_PRECONDITION；超过 128 个时 RESOURCE_EXHAUSTED，普通派发不受影响 |
@@ -71,19 +71,19 @@
 | V-61 | T-12 | 非 Admin 尝试创建任务、创建 interval/cron 定时 Agent 任务、到期运行、无发信许可、需要确认的工具、插件离线错过 | 只有 Core Admin 能创建与取消任务；任务按 CONTRACTS §4.3 的触发规则运行且不补跑；无许可时 PERMISSION_DENIED；confirm 工具一律拒绝；后台运行不注入记忆 |
 | V-62 | T-02、T-09 | Core/插件/Adapter 三类来源、插件写合法 JSON 行与非 JSON 行、插件伪造来源字段、Handler panic、text 与 json 格式、终端与非终端输出、含 Bot Token 的 URL 错误 | 控制台格式与来源标签符合 CONTRACTS §14.2；非结构化行原样保留为 WARN；插件不能覆盖来源字段；panic 为一条带 stack 的 ERROR；非终端或设置 NO_COLOR 时不着色；日志中没有 token、Secret 与配置明文 |
 | V-63 | T-02、T-09 | 全局与按来源的级别、off、运行时修改、Core 重启、最近记录上限、SSE 订阅、`alonabot logs`、WebUI 筛选 | 修改立即生效；按来源的设置重启后保留，全局级别的运行时修改重启后恢复；off 时 SDK 不输出而 Core 关于它的记录仍在；每个来源最多保留 1000 条；未认证无法读取；WebUI 筛选不改变输出 |
-| V-64 | T-13 | 库模式下同进程插件与 Adapter 的完整生命周期、同一插件 ID 或 adapter_id 登记两次及与已安装包同 ID、从 `instances/` 读取实例配置、dev 来源尝试 update/rollback、未捕获的 panic、停止超时、已安装包与开发组件混合运行、两次启动之间的配置与 dev.sqlite | 握手、注册、权限与独立进程一致；dev 组件使用固定代次，重启后按钮仍有效；update/rollback 被拒绝；重复或冲突的 ID 在启动任何组件前报错；panic 使进程退出且不重启；停止超时时 Run 返回错误 |
-| V-65 | T-13 | 热部署下改动插件源码、编译失败、改动 go.mod、来自其他 module 的 Adapter | 只重启开发中的组件，Adapter 连接与其他插件不中断；编译失败时旧组件继续运行；go.mod 变化输出 WARN；其他 module 的组件不重启 |
-| V-66 | T-14 | 干净数据目录首次运行、交互终端与非终端、预装包签名错误、卸载预装包后重启、新版本发行包 | 预装包全部安装，只启用 help；help 与官方 WebUI 已启用；Agent 与 Telegram、OneBot 11 Adapter 都未启用，没有对应进程；终端下 token 只显示一次，非终端拒绝启动；签名错误的包不安装并记 ERROR；已卸载的不重新安装；新版本只作为可用更新列出 |
+| V-64 | T-13 | 开发组件（`alonabot run` 的独立进程与库模式的同进程）的完整生命周期、同一插件 ID 或 adapter_id 登记两次及与已安装包同 ID、开发 Adapter 的实例取自 `core_config.json`、dev 来源尝试 update/rollback/uninstall、WebUI 修改开发组件配置、未捕获的 panic（库模式）、停止超时、已安装包与开发组件混合运行、两次启动之间的配置与 dev.sqlite | 握手、注册、权限与已安装组件一致；dev 组件使用固定代次，重启后按钮仍有效；update/rollback/uninstall 被拒绝；WebUI 的修改校验后写回 `config.json` 并重启该组件；重复或冲突的 ID 在启动任何组件前报错；库模式中 panic 使进程退出且不重启；停止超时时返回错误 |
+| V-65 | T-13 | `alonabot run --reload` 下改动插件源码、`config_schema.json`、`i18n/` 与 `config.json`，编译失败，同时开发插件与 Adapter 两个目录 | 只重启变化的组件，Core、已安装组件与 Adapter 连接不中断；编译失败时旧组件继续运行；只改配置时不重新构建；改动 schema 或 i18n 后重新构建并生效（D-77） |
+| V-66 | T-14 | 干净数据目录首次运行、交互终端与非终端、`core_config.json` 中写了 Adapter 实例、预装包签名错误、卸载预装包后重启、新版本发行包 | 预装包全部安装，只启用 help；help 与官方 WebUI 已启用；Agent 未启用；没写实例的 Telegram、OneBot 11 Adapter 未启用，写了实例的自动启用；终端下 token 只显示一次，非终端写入 `admin_token`；签名错误的包不安装并记 ERROR；已卸载的不重新安装；新版本只作为可用更新列出 |
 | V-67 | T-14 | help 的权限过滤与翻译、`/whoami`、welcome 的入群欢迎与开关权限、rss 的订阅权限/去重/推送/私网地址/超大响应 | help 只列出调用者可用的命令；`/whoami` 返回调用者的实例与用户 ID；welcome 只响应 member.joined，只有 chat_admin 或 Core Admin 能开关；rss 的增删只有 chat_admin 或 Core Admin 能执行，超过 5 MiB 或 30s 的抓取失败，不重复推送同一条目，拒绝 loopback、私网与链路本地地址（含重定向之后），后台推送需要 allowed_adapter_instances |
 | V-68 | T-02、T-09 | 跨过零点、同日写满单文件上限、合计超过 1 GiB、超过 30 天、max_size 大于 max_total、磁盘写满、按日期查询 | 跨日换到新日期的文件；同日续写编号文件；从最旧的文件开始删除且不删正在写入的文件；配置矛盾时拒绝启动；写入失败时 Core 继续运行并只报告一次；`alonabot logs --date` 与 WebUI 能查到前一天的记录 |
 | V-69 | T-02 | `--args` 直接参数与文件输入、重复出现的键、未知键、`100MB` 等十进制单位、违反约束与相互矛盾的值、`PLUGIN_MEMORY_SOFT_LIMIT` | 后出现的覆盖先出现的；错误使 Core 拒绝启动并指明参数或文件行号；有覆盖时启动 WARN 列出全部覆盖项；SDK 使用 Bootstrap 下发的值；子进程收到 GOMEMLIMIT |
-| V-70 | T-14 | linux/amd64 与 linux/arm64 镜像、干净卷首次运行、无 TTY 启动、`-it admin-token init`、端口只发布到宿主本机、停止容器 | 镜像只含 `alonabot`、`packages/` 与 CA 证书并以 UID 10001 运行；无 TTY 时拒绝启动并提示初始化；初始化后正常启动并能访问 WebUI；出站 HTTPS 可用；没有 `ALONABOT_CONTAINER` 时 `0.0.0.0` 搭配 http Base URL 被拒绝；停止容器后插件进程全部退出 |
+| V-70 | T-14 | linux/amd64 与 linux/arm64 镜像、干净卷首次运行、无 TTY 启动、`admin-token show`、经环境变量传入 Adapter 凭证、端口只发布到宿主本机、停止容器 | 镜像只含 `alonabot`、`packages/` 与 CA 证书并以 UID 10001 运行；无 TTY 时正常启动并把 token 写入 `/data/admin_token`，`docker compose exec … admin-token show` 能读出，登录后文件被删除；`${环境变量}` 展开后 Adapter 实例启动；出站 HTTPS 可用；没有 `ALONABOT_CONTAINER` 时 `0.0.0.0` 搭配 http `base_url` 被拒绝；停止容器后插件进程全部退出 |
 | V-71 | T-15 | 本地 OneBot 11 模拟服务：get_login_info、access_token 错误、断线重连、self_id 不符、字符串格式上报、私聊/群聊/匿名消息、撤回与成员变动、to_me 的三种情况（含 get_msg 失败）、入站图片取件、实例队列满；发送混合段、video 拆分、reference、base64 媒体、async、failed、请求写出后断线 | 401 与字符串格式使实例致命失败并给出 safe_error；重连不重放已提交的 Send；self_id 不符的事件被丢弃；匿名消息没有 Actor；无通用对应的段只在 platform_payload 中；队列满时丢弃并计数而读循环继续；PartResult 与物理消息一一对应，async 标记 message_ids_unavailable，写出后断线为 UNKNOWN 且后续 NOT_ATTEMPTED；真实 QQ 端只有维护者手测记录，没有时记为未运行 |
 | V-72 | T-03、T-15 | 同一插件经 Telegram 与 OneBot 11 模拟服务的两个实例收发同一组 Chain：纯文本、mention、reference、图片加文本、buttons、forward、file、markdown、Edit、`onebot11.face` extension、发往其他 Adapter 的 extension；同一组入站消息 | 通用片段在两边语义一致：顺序、引用位置、PartResult 与 segment indexes 对应；每个实例只用自己声明的 Capability，未声明的片段或组合在首个平台请求前返回 UNSUPPORTED，模拟服务没有收到请求；extension 只在所属 Adapter 上成功；入站的 text、mention、reference、image 在两边得到相同结构的 chain；插件代码不按 adapter_id 分支 |
-| V-73 | T-13、T-16 | 用 `plugintest` 测试示例插件：命令回复、Rule、普通用户/平台权限/Core Admin 的权限、Capability 子集下的 UNSUPPORTED、按钮点击、多轮等待、schedule 触发、后台发送有无许可、配置与 `dev.sqlite`；`go test -count=2 -race`；`alonabot.Start` 的激活失败与 ctx 取消 | 每次注入在分发结束或进入多轮等待后返回，结果完整，不依赖 sleep；行为与独立进程运行相同；测试之间的数据目录互不影响；Start 失败或停止后不残留组件 goroutine、core.lock 与子进程 |
+| V-73 | T-13、T-16 | 用 `plugintest` 测试示例插件：命令回复、Rule、普通用户/平台权限/Core Admin 的权限、Capability 子集下的 UNSUPPORTED、按钮点击、多轮等待、schedule 触发、后台发送的缺省许可与收紧后的拒绝、`plugintest.LLM` 替身（D-77）、配置与 `dev.sqlite`；`go test -count=2 -race`；`alonabot.Start` 的激活失败与 ctx 取消 | 每次注入在分发结束或进入多轮等待后返回，结果完整，不依赖 sleep；行为与独立进程运行相同；测试之间的数据目录互不影响；Start 失败或停止后不残留组件 goroutine、core.lock 与子进程 |
 | V-74 | T-10 | linux/amd64，与 V-33 同一台机器；各进程 Activated 后空闲 2 分钟，读 `/proc/<pid>/smaps_rollup` 的 Pss，取 3 轮中位数：只运行 Core（不启用任何插件与 Adapter）；echo 示例插件进程；rss 插件进程（`sqlitedb`，有一个订阅）；configdb 示例的 `gormdb` 变体进程 | Core ≤ 24 MiB，echo ≤ 10 MiB，rss ≤ 14 MiB，configdb ≤ 16 MiB；同时记录 RSS 与私有内存。超出视为回归，按 CONTRACTS §10 处理 |
 | V-75 | T-01、T-10 | 用 docs/development.md 的 `go list -deps` 命令，在五个目标上（设 GOOS/GOARCH）列出 Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）链接的模块 | 只含 docs/development.md 允许清单中的模块 |
-| V-76 | T-12 | 测试插件调用 `llm.generate`：在与不在 `llm_service_allowed_plugins` 中、指定不存在的 Provider、模拟 Provider 出错与中途断开、调用方期限短于生成耗时、Agent 配置中没有 Provider、Agent 组件未启用、调用方经 `@agent` 调用 | 不在列表中返回 PERMISSION_DENIED，模拟服务没有收到请求；不存在的 Provider 为 INVALID_ARGUMENT，没有 Provider 为 FAILED_PRECONDITION；出错与断开为 UNAVAILABLE，safe_message 不含 API Key，模拟服务只收到一次请求；期限到达时调用方得到 DEADLINE_EXCEEDED；Agent 未启用时按目标未激活失败；`@agent` 解析到已安装的 Agent 组件；成功时返回 text、provider、model 与用量，会话存储没有新增条目 |
+| V-76 | T-12 | 测试插件调用 `llm.generate`：`llm_service_allowed_plugins` 为缺省的 `["*"]`、改为名单后在与不在名单中、指定不存在的 Provider、模拟 Provider 出错与中途断开、调用方期限短于生成耗时、Agent 配置中没有 Provider、Agent 组件未启用、调用方经 `@agent` 调用 | 缺省时调用成功；改为名单后不在名单中返回 PERMISSION_DENIED，模拟服务没有收到请求（D-83）；不存在的 Provider 为 INVALID_ARGUMENT，没有 Provider 为 FAILED_PRECONDITION；出错与断开为 UNAVAILABLE，safe_message 不含 API Key，模拟服务只收到一次请求；期限到达时调用方得到 DEADLINE_EXCEEDED；Agent 未启用时按目标未激活失败；`@agent` 解析到已安装的 Agent 组件；成功时返回 text、provider、model 与用量，会话存储没有新增条目 |
 | V-77 | S-01、S-02 | 插件声明可休眠且空闲达到阈值后退出；休眠后首条命令、Service 调用与 HTTP 请求；同一插件 100 个并发唤醒；等待中取消与 deadline 到达；STOPPING 期间到达请求；唤醒后 REGISTER 的路由摘要与快照不一致；在途 Handler、Service、HTTP、多轮等待阻止休眠；Core 重启后从快照恢复路由；未启用休眠 | 首条请求按原权限、Target、Trace 与 deadline 交付一次；并发唤醒只产生一个新 Session；冷启动不延长请求期限，取消的请求不交付；停止中到达的请求等旧进程退出后由新 Session 处理，没有双进程；摘要不一致时停止激活；空闲退出记 `SUSPENDED`、StopReason 为 `IDLE`，不计入异常退出，不更新 ActiveGeneration、不重跑迁移；快照不含 Secret；未启用时生命周期与事件行为不变 |
 | V-78 | S-03 | 休眠插件上 12:00、16:00、22:00 三个 cron 任务与一个 interval 任务；同一 job 上一轮未结束；插件异常离线期间到期 | 休眠插件按计划被唤醒并执行，结果记录后可再次休眠；同一 job 不重叠；异常离线期间的 tick 跳过且不补执行 |
 | V-79 | S-04 | Telegram long polling 与 OneBot 11 正向 WebSocket 实例空闲；同一 Adapter 包一个实例停止、另一个仍运行；声明外部唤醒来源的测试 Adapter 空闲、收到出站调用与外部缓冲事件 | 官方两个 Adapter 不休眠；仍有运行实例时进程不停止；测试 Adapter 休眠后被唤醒，恢复游标后交付且不重复；`bot.offline` 区分空闲休眠与掉线 |
@@ -95,6 +95,7 @@
 | V-85 | T-03、T-04、T-15、T-16 | Adapter 权限声明：错误前缀、非法名称、隐含 `user`/`admin`、隐含成环；事件带未声明的权限名；OneBot 11 的 owner/admin/member，以及私聊的 friend 与 group 子类型；Telegram 的 creator/administrator、缓存作废与 `getChatAdministrators` 失败；`plugintest.Adapter` 声明的权限 | 非法声明使 Adapter 注册失败；未声明的权限名被丢弃并记诊断；隐含关系完整展开（群主同时满足群管理员与 `chat_admin`）；获取失败的事件不带平台权限；平台权限不跨会话 |
 | V-86 | T-04、T-16 | Adapter 扩展事件：声明与 Schema、未声明的名称、版本不符、payload 不符合 Schema；插件注册未安装 Adapter 的扩展事件路由；SDK 的事件常量与 Handler 参数类型不符；扩展事件遇到命令层与多轮等待 | 不符的事件被拒绝并记诊断；未安装时注册成功、诊断标出且不触发；参数类型不符在 `Collect` 时报错；扩展事件只进入事件路由 |
 | V-87 | T-04、T-08 | `command_prefixes` 的缺省值、多个前缀、空前缀与按实例覆盖；开头的 reference 与本账号 mention；`/kick @某人` 的 `user` 参数（OneBot 的 mention 与 Telegram 的 `text_mention`）、`image` 参数、末位 `message` 参数、非文本 token 出现在 string 位置；自定义 usage 文案键的语言选择 | 前缀按最长匹配，覆盖只作用于该实例；开头片段不影响命令匹配；参数按片段顺序绑定，类型不符时发一次 usage；usage 按调用者 locale 选择语言，未知键在构建检查中失败 |
+| V-88 | T-07、T-08、T-09 | `core_config.json`：缺省创建、`${环境变量}` 展开与缺失、WebUI 与 CLI 修改后写回、手动修改后重启、`run --reload` 时重新读取、文件不合法；Core 升级迁移 `$version`、迁移失败、文件版本高于程序；Adapter 更新时实例配置的迁移 | 写回保留原有 `${...}` 与未修改的键；缺失的环境变量与不合法的文件使 Core 拒绝启动并指出键或位置；运行设置与 Adapter 实例在重新读取后生效，启动设置提示重启；迁移前备份原文件，失败与降级时拒绝启动且原文件不变；实例配置迁移失败时在停止旧版本前拒绝更新（D-82、D-85） |
 
 ## 2. 跨任务验收的最终闭合点
 
@@ -108,8 +109,9 @@
 | V-12 | T-04 持久策略服务与下一次准入生效 | T-09 鉴权后通过真实 WebUI 修改并验证 |
 | V-15 | T-05 三阶段 Hook、直接 Send 禁令与可信标记继承 | T-06 真实 Hook→Service→Send 间接递归拒绝 |
 | V-21、V-37 | T-01 类型/上限，T-02 基础阶段/激活门；T-07 停止集成，T-08 配置/DB 回调 | T-09 与正式候选提交前后失败恢复组合 |
-| V-22、V-47 | T-07 Listener/代理、Host/凭证边界、票据与测试会话组件 | T-09 真实 init/reset、login/CLI、私有插件页面与授权撤销 |
+| V-22、V-47 | T-07 Listener/代理、Host/凭证边界、插件响应的沙箱头与测试会话组件 | T-09 真实首次 token、reset、login/CLI 与经 WebUI 桥访问的插件页面 |
 | V-23～V-25、V-38 | T-08 raw JSON、Secret、候选 DB、表单/i18 组件 | T-09 真实 reload/WebUI/API 和 Journal 崩溃恢复 |
+| V-88 | T-07.6 读取、写回、重新读取与首次 token 文件；T-08.12 实例配置与 `core_config.json` 的迁移与备份 | T-09 管理服务的写回、Adapter 更新时的实例配置迁移 |
 | V-26 | T-01 驱动 CRUD/事务验证 | T-08 两个入口的 Session 连接、迁移声明互斥与不链接 GORM 的验证 |
 | V-36 | T-02 双 Core/操作串行/进程锁，T-08 DB 锁与候选资源 | T-09 正式 enable/update、Core 突退且旧进程仍写入 |
 | V-39 | T-01 驱动/事务小验证，T-08 迁移及许可检查 | T-09 首装/resume/更新及显式维护的真实管理入口 |
