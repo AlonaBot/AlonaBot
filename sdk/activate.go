@@ -12,6 +12,7 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
 )
 
 // activation 跟踪 ACTIVATE → OnReady → ACTIVATED 与本地 ready gate（CONTRACTS §4.1）。
@@ -176,6 +177,9 @@ func (a *activation) shutdown(deadline time.Time) {
 		timer.Stop()
 		cancel()
 		a.l.http.close(deadline)
+		if err := dbhook.Close(); err != nil {
+			slog.Error("close plugin database failed", "err", err)
+		}
 		// 3. 关闭 Session 并通知 serve 返回。
 		_ = a.sess.Close()
 		close(a.finished)
@@ -216,7 +220,12 @@ func currentSession() (*wire.Session, error) {
 
 // activate 在 PREPARED 之后启动 Session，等待 ACTIVATE、执行 OnReady 并写出 ACTIVATED。
 // 返回时 ready gate 已打开；失败时已向 Core 报告并关闭 Session。之后用 serve 等待停止。
-func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Registration) (*wire.Session, *activation, error) {
+func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Registration) (session *wire.Session, active *activation, err error) {
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, dbhook.Close())
+		}
+	}()
 	a := &activation{l: l, ack: ack, root: root, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
 	a.lifetime, a.stopLifetime = context.WithCancel(context.Background())
 	limits := ack.GetBootstrap().GetSessionLimits()

@@ -62,6 +62,7 @@ func runBadOutput() error {
 	}
 	sid, minor := ack.GetSessionId(), ack.GetChosenMinor()
 	registration := &pb.Register{CandidateConfigJson: "{}", CandidateConfigVersion: 1, Routes: []*pb.RouteDescriptor{{RouteId: "svc.bad", Kind: pb.RouteKind_ROUTE_KIND_SERVICE, InputSchemaId: inputSchema, InputSchemaVersion: schemaVersion, OutputSchemaId: outputSchema, OutputSchemaVersion: schemaVersion, Spec: &pb.RouteDescriptor_Service{Service: &pb.ServiceSpec{ServiceName: "bad", Access: pb.ServiceAccess_SERVICE_ACCESS_PUBLIC, Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON}}}}}
+	registration.Migration = &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}
 	if err := send(sid, minor, pb.FrameKind_FRAME_KIND_REGISTER, registration); err != nil {
 		return err
 	}
