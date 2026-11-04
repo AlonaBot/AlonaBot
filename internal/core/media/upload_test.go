@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -30,12 +31,22 @@ type uploadHarness struct {
 	now    time.Time
 }
 
+// SetDefault 会同时修改 log 包的输出与标志，清理时一并恢复。
+func setDefaultLogger(t *testing.T, logger *slog.Logger) {
+	t.Helper()
+	previous, writer, flags := slog.Default(), log.Writer(), log.Flags()
+	slog.SetDefault(logger)
+	t.Cleanup(func() {
+		slog.SetDefault(previous)
+		log.SetOutput(writer)
+		log.SetFlags(flags)
+	})
+}
+
 func newHarness(t *testing.T, lim media.Limits) *uploadHarness {
 	t.Helper()
 	h := &uploadHarness{mux: router.NewMux(), caller: router.NewCaller("plugin", "generation"), now: time.Unix(1000, 0), dir: t.TempDir()}
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&h.logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	setDefaultLogger(t, slog.New(slog.NewTextHandler(&h.logs, nil)))
 	var err error
 	h.store, err = media.Open(h.dir, lim, func() time.Time { return h.now })
 	if err != nil {

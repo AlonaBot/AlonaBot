@@ -44,9 +44,7 @@ func TestAdminAuthProcesses(t *testing.T) {
 	})
 	now := time.Date(2026, 11, 3, 0, 0, 0, 0, time.UTC)
 	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	setDefaultLogger(t, slog.New(slog.NewJSONHandler(&logs, nil)))
 	adminURL, err := url.Parse("http://admin.test:7650")
 	if err != nil {
 		t.Fatal(err)

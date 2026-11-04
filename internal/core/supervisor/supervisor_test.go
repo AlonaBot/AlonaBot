@@ -8,6 +8,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -151,6 +153,18 @@ func (l *logBuf) SetSession([]byte) {}
 
 // String 返回已收集的全部日志。
 func (l *logBuf) String() string { l.mu.Lock(); defer l.mu.Unlock(); return l.b.String() }
+
+// SetDefault 会同时修改 log 包的输出与标志，清理时一并恢复。
+func setDefaultLogger(t *testing.T, logger *slog.Logger) {
+	t.Helper()
+	previous, writer, flags := slog.Default(), log.Writer(), log.Flags()
+	slog.SetDefault(logger)
+	t.Cleanup(func() {
+		slog.SetDefault(previous)
+		log.SetOutput(writer)
+		log.SetFlags(flags)
+	})
+}
 
 // setup 准备已安装 demo、含候选代次 gen-1 的状态库，并返回以 exe 为入口的启动描述。
 func setup(t *testing.T, exe string) (*state.Store, Spec) {

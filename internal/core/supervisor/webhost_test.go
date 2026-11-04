@@ -71,9 +71,7 @@ func TestWebHostProcesses(t *testing.T) {
 	now := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
 	sessions := &webAdminSessions{t: t, expiresAt: now.Add(8 * time.Hour), valid: true}
 	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	setDefaultLogger(t, slog.New(slog.NewJSONHandler(&logs, nil)))
 	adminURL, err := url.Parse("http://admin.test:7650")
 	if err != nil {
 		t.Fatal(err)

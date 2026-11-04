@@ -45,9 +45,7 @@ func TestHTTPProcesses(t *testing.T) {
 	store, spec := setup(t, binary)
 	spec.Stop = host.StopTiming{Drain: 100 * time.Millisecond, Total: 2 * time.Second, OnStopAt: 1500 * time.Millisecond}
 	spec.ExtraEnv = map[string]string{"HTTP_PROXY": "http://proxy.example:8080", "HTTPS_PROXY": "http://proxy.example:8080", "NO_PROXY": "localhost"}
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	setDefaultLogger(t, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	proxy := httpproxy.New(nil)
 	launch := func() *Running {
 		t.Helper()

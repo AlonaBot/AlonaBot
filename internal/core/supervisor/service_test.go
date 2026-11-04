@@ -66,9 +66,7 @@ func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	previous := slog.Default()
-	slog.SetDefault(output.Logger())
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	setDefaultLogger(t, output.Logger())
 	defer output.Close()
 	defer func() {
 		if t.Failed() {
