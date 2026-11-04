@@ -66,6 +66,7 @@ func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	setDefaultLogger(t, output.Logger())
 	defer output.Close()
 	defer func() {
 		if t.Failed() {
@@ -84,7 +85,7 @@ func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
 		return &pb.SendResult{Status: pb.SendStatus_SEND_STATUS_ACCEPTED, Target: target}, nil
 	})
 	sender := message.New(registry, policy.New(store), nil, values.RequestTimeout)
-	events := router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send, nil, nil)
+	events := router.New(values.DispatchQueueEvents, registry, sender.Send, nil, nil)
 	events.Start()
 	defer events.Close()
 	if err := platform.Start(ctx, events); err != nil {
@@ -92,7 +93,7 @@ func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
 	}
 	defer platform.Stop(ctx)
 	mux := router.NewMux()
-	mux.Forward(broker.New(events, output.Logger(), values.RequestTimeout).Call)
+	mux.Forward(broker.New(events, values.RequestTimeout).Call)
 	mux.Handle(wire.ServiceSend, sender.Send)
 	// 各进程经过真实握手、REGISTER、激活和独立的 Session；测试只用内存平台替代外部平台。
 	var running []*Running

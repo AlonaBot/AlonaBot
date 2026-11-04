@@ -93,11 +93,11 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 	if err != nil {
 		return &usageError{err}
 	}
+	slog.SetDefault(out.Logger())
 	defer out.Close()
-	log := out.Logger()
 	defer func() {
 		if runErr != nil {
-			log.Error("Core stopped", "err", runErr)
+			slog.Error("Core stopped", "err", runErr)
 			runErr = &reportedError{runErr}
 		}
 	}()
@@ -123,13 +123,13 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 	if err != nil {
 		return fmt.Errorf("parse plugin_base_url: %w", err)
 	}
-	authentication := adminauth.New(store, time.Now, adminURL, log)
+	authentication := adminauth.New(store, time.Now, adminURL)
 	adminMux := http.NewServeMux()
 	authentication.Routes(adminMux)
 	adminMux.Handle("/", authentication.Require(http.NotFoundHandler()))
 	var publicHost *webhost.Host
-	proxy := httpproxy.New(log, pluginAuthorizer(func(r *http.Request, pluginID string) bool { return publicHost.Authorize(r, pluginID) }))
-	publicHost = webhost.New(log, webhost.Options{
+	proxy := httpproxy.New(pluginAuthorizer(func(r *http.Request, pluginID string) bool { return publicHost.Authorize(r, pluginID) }))
+	publicHost = webhost.New(webhost.Options{
 		AdminBaseURL: adminURL, PluginBaseURL: pluginURL,
 		SecondHost: !strings.EqualFold(adminURL.Hostname(), pluginURL.Hostname()), Proxy: proxy,
 		Admin: adminMux, Sessions: authentication,
@@ -138,21 +138,20 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 	if err != nil {
 		return fmt.Errorf("listen HTTP: %w", err)
 	}
-	httpServer := &http.Server{Handler: publicHost, ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelError)}
+	httpServer := &http.Server{Handler: publicHost, ErrorLog: slog.NewLogLogger(slog.Default().Handler(), slog.LevelError)}
 	httpErrors := make(chan error, 1)
 	go func() { httpErrors <- httpServer.Serve(listener) }()
 	defer httpServer.Close()
-	log.Info("HTTP listener started", "listen", listener.Addr().String())
+	slog.Info("HTTP listener started", "listen", listener.Addr().String())
 
 	if len(overrides) > 0 {
 		attrs := make([]any, 0, len(overrides))
 		for _, override := range overrides {
 			attrs = append(attrs, slog.Group(override.Name, "value", override.Value, "origin", override.Origin))
 		}
-		log.Warn("tuning parameters overridden", attrs...)
+		slog.Warn("tuning parameters overridden", attrs...)
 	}
-	log.Info("Core started", "data_dir", dataDir)
-	plog := log.With(logging.KeyPluginID, pluginID)
+	slog.Info("Core started", "data_dir", dataDir)
 
 	exe, err := filepath.Abs(entry)
 	if err != nil {
@@ -182,7 +181,7 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigc)
 	for {
-		r, err := launch(ctx, out, plog, store, pluginID, pluginDir, exe, digest, stdio, v, global, environment, proxy)
+		r, err := launch(ctx, out, store, pluginID, pluginDir, exe, digest, stdio, v, global, environment, proxy)
 		if err != nil {
 			return err
 		}
@@ -196,7 +195,7 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 			httpStopped := make(chan error, 1)
 			go func() { httpStopped <- httpServer.Shutdown(stopContext) }()
 			res := r.Stop(now, pb.StopReason_STOP_REASON_CORE_SHUTDOWN)
-			plog.Info("plugin stopped", "drained", res.Drained, "killed", res.Killed)
+			slog.With(logging.KeyPluginID, pluginID).Info("plugin stopped", "drained", res.Drained, "killed", res.Killed)
 			return errors.Join(res.Err, <-httpStopped)
 		}
 
@@ -211,9 +210,9 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 		go func() {
 			abnormal, st, err := r.WaitExit()
 			if abnormal {
-				plog.Error("plugin exited abnormally", "state", st)
+				slog.With(logging.KeyPluginID, pluginID).Error("plugin exited abnormally", "state", st)
 			} else {
-				plog.Info("plugin exited", "state", st)
+				slog.With(logging.KeyPluginID, pluginID).Info("plugin exited", "state", st)
 			}
 			exitc <- exit{abnormal, err}
 		}()
@@ -222,7 +221,7 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 			if err := stop(); err != nil {
 				return fmt.Errorf("stop Core: %w", err)
 			}
-			log.Info("Core stopped")
+			slog.Info("Core stopped")
 			return nil
 		case err := <-httpErrors:
 			return errors.Join(fmt.Errorf("serve HTTP: %w", err), stop())
@@ -233,13 +232,13 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 			}
 			switch policy.OnExit(pluginID, e.abnormal, time.Now()) {
 			case host.DecisionRestart:
-				plog.Info("restarting plugin")
+				slog.With(logging.KeyPluginID, pluginID).Info("restarting plugin")
 				continue
 			case host.DecisionDisable:
 				_ = store.SetEnabled(ctx, pluginID, false)
 				return fmt.Errorf("plugin %s exited abnormally %d times within %s and has been disabled", pluginID, v.RestartMaxCrashes, v.RestartWindow)
 			default:
-				log.Info("Core stopped")
+				slog.Info("Core stopped")
 				return nil
 			}
 		}
@@ -248,7 +247,7 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 
 // launch 首次运行时提交新代次；之后复用已提交的 Active 代次（普通 restart，不产生新 Generation）。
 // 插件有 HTTP 端点时，先把它绑定到 proxy，再记录激活。
-func launch(ctx context.Context, out *logging.Output, plog *slog.Logger, store *state.Store, pluginID, pluginDir, exe string, digest []byte, stdio bool, v tune.Values, global *wire.Budget, environment map[string]string, proxy *httpproxy.Server) (*supervisor.Running, error) {
+func launch(ctx context.Context, out *logging.Output, store *state.Store, pluginID, pluginDir, exe string, digest []byte, stdio bool, v tune.Values, global *wire.Budget, environment map[string]string, proxy *httpproxy.Server) (*supervisor.Running, error) {
 	active, err := store.Active(ctx, pluginID)
 	if err != nil {
 		return nil, err
@@ -279,7 +278,7 @@ func launch(ctx context.Context, out *logging.Output, plog *slog.Logger, store *
 	if isNew {
 		mode = "new"
 	}
-	plog.Info("plugin activated", logging.KeyGenerationID, gen, "mode", mode, "pid", r.Process.Pid())
+	slog.With(logging.KeyPluginID, pluginID).Info("plugin activated", logging.KeyGenerationID, gen, "mode", mode, "pid", r.Process.Pid())
 	return r, nil
 }
 

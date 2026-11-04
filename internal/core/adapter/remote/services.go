@@ -3,6 +3,7 @@ package remote
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
@@ -60,7 +61,7 @@ func (p *Process) service(ctx context.Context, caller router.Caller, in *wire.In
 	defer p.mu.Unlock()
 	entry := p.instances[id]
 	invalid := func() wire.Response {
-		p.opt.Log.Warn("invalid adapter instance event", "plugin_id", p.opt.PluginID, "instance_id", id)
+		slog.Warn("invalid adapter instance event", "plugin_id", p.opt.PluginID, "instance_id", id)
 		return serviceError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "adapter instance or event identity mismatch")
 	}
 	if ctx.Err() != nil || p.session == nil || caller != p.caller || entry == nil || !entry.running || entry.session != p.session.Session {
@@ -81,7 +82,7 @@ func (p *Process) service(ctx context.Context, caller router.Caller, in *wire.In
 				err = p.declarations.validateEvent(ev)
 			}
 			if err != nil {
-				p.opt.Log.Warn("invalid adapter instance event", "plugin_id", p.opt.PluginID, "instance_id", id, "error", err)
+				slog.Warn("invalid adapter instance event", "plugin_id", p.opt.PluginID, "instance_id", id, "error", err)
 				return serviceError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 			}
 		}

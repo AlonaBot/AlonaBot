@@ -73,6 +73,7 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			setDefaultLogger(t, output.Logger())
 			defer output.Close()
 			defer func() {
 				if t.Failed() {
@@ -89,7 +90,7 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 				t.Fatal(err)
 			}
 			spec.ExtraEnv = map[string]string{"ALONABOT_TEST_COMMAND_AUDIT": audit}
-			mediaStore, err := media.Open(output.Logger(), t.TempDir(), media.NewLimits(values), time.Now)
+			mediaStore, err := media.Open(t.TempDir(), media.NewLimits(values), time.Now)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -111,14 +112,14 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 			caller := router.NewCaller(spec.PluginID, spec.GenerationID)
 			defer mediaStore.ReleaseSession(caller.SessionKey)
 			spec.Handler = mux.For(caller)
-			events := router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send, mediaStore.PrepareIncoming, func(instanceID string) []string {
+			events := router.New(values.DispatchQueueEvents, registry, sender.Send, mediaStore.PrepareIncoming, func(instanceID string) []string {
 				if instanceID == "custom" {
 					return []string{"!", "!!", ""}
 				}
 				return []string{"/"}
 			})
 			mediaStore.AddReadServices(mux, registry, events, store.AllowedAdapterInstances)
-			services := broker.New(events, output.Logger(), values.RequestTimeout)
+			services := broker.New(events, values.RequestTimeout)
 			serviceParents := make(chan uint64, 1)
 			mux.Forward(func(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response {
 				parent, ok := in.ParentAttach.(*router.Invocation)

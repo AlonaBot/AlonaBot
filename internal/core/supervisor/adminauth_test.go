@@ -44,7 +44,7 @@ func TestAdminAuthProcesses(t *testing.T) {
 	})
 	now := time.Date(2026, 11, 3, 0, 0, 0, 0, time.UTC)
 	var logs bytes.Buffer
-	log := slog.New(slog.NewJSONHandler(&logs, nil))
+	setDefaultLogger(t, slog.New(slog.NewJSONHandler(&logs, nil)))
 	adminURL, err := url.Parse("http://admin.test:7650")
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +53,7 @@ func TestAdminAuthProcesses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	auth := adminauth.New(store, func() time.Time { return now }, adminURL, log)
+	auth := adminauth.New(store, func() time.Time { return now }, adminURL)
 	mux := http.NewServeMux()
 	auth.Routes(mux)
 	mux.Handle("POST /api/change", auth.Require(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })))
@@ -75,9 +75,9 @@ func TestAdminAuthProcesses(t *testing.T) {
 			t.Errorf("write ticket: %v", err)
 		}
 	})))
-	proxy := httpproxy.New(log, webAuthorizer(func(r *http.Request, id string) bool { return host.Authorize(r, id) }))
+	proxy := httpproxy.New(webAuthorizer(func(r *http.Request, id string) bool { return host.Authorize(r, id) }))
 	proxy.Bind("demo", running.Instance.GenerationID, running.Instance.HTTPListener, running.Instance.HTTPProxyToken, running.Instance.Routes)
-	host = webhost.New(log, webhost.Options{AdminBaseURL: adminURL, PluginBaseURL: pluginURL, SecondHost: true, Admin: mux, Proxy: proxy, Sessions: auth, Now: func() time.Time { return now }})
+	host = webhost.New(webhost.Options{AdminBaseURL: adminURL, PluginBaseURL: pluginURL, SecondHost: true, Admin: mux, Proxy: proxy, Sessions: auth, Now: func() time.Time { return now }})
 	send := func(t *testing.T, method, target, body string, headers http.Header, want int) *httptest.ResponseRecorder {
 		t.Helper()
 		request := httptest.NewRequest(method, target, strings.NewReader(body))

@@ -55,7 +55,7 @@
 | `sdk/sdk.go`、`sdk/activate.go`、`sdk/session.go` | 新功能优先放进新文件，只在这几个文件里加必要的调用点；不重排、不顺手重写已有代码。 |
 | `cmd/alonabot/main.go` | 只有 goal 语句写明负责装配的切片才能改。 |
 | `go.mod`、`go.sum` | 不加依赖。需要依赖时标阻塞，由维护者决定。goal 语句明确授权的已批准依赖除外（MCP go-sdk 只授权给 goal-60，只在 `agent/` 使用；cobra 由 goal-76 引入，之后的 CLI 切片直接使用，不再改 go.mod；coder/websocket 由 goal-78 引入，只在 adapters/onebot11 使用；jsonschema-go 由首个使用它的 goal 语句授权引入，用法遵守 D-43）。 |
-| 日志 | T-02.1 合并后，一律使用注入的 `*slog.Logger` 与 CONTRACTS §14 的字段；不另建日志封装，不用 fmt 直接写 stderr/stdout（CLI 给用户的输出除外）。 |
+| 日志 | 按[编码规范「日志用默认 Logger，依赖显式传递」](coding-standards.md#日志用默认-logger依赖显式传递)取用默认 Logger，并遵循 CONTRACTS §14 的字段；不另建日志封装，不用 fmt 直接写 stderr/stdout（CLI 给用户的输出除外）。 |
 | `internal/inproc/harness.go` | 只由 goal-81、goal-82 修改，只用标准库类型；字段只追加。 |
 | `internal/tune/params.go` | 只追加参数，不改已合并参数的名称与缺省值；新增参数同时追加到 CONTRACTS §16 的表，由审查者在合并前同步。 |
 | 根包 `alonabot` 的 Core 装配 | 只有 goal 语句写明负责装配的切片才能改，与 `cmd/alonabot/main.go` 相同。 |

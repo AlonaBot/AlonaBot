@@ -28,7 +28,6 @@ type Authorizer interface {
 // Server 保存当前已激活 Session 的代理映射；Bind、Unbind 与 ServeHTTP 可并发调用。
 // 映射撤销阻止新的请求；已经取得快照的在途请求由 SDK 的门禁与停止预算收尾。
 type Server struct {
-	log      *slog.Logger
 	auth     Authorizer   // nil 时拒绝全部私有路由
 	mu       sync.RWMutex // 保护 mappings；调用授权方与网络转发前释放
 	mappings map[string]*binding
@@ -47,8 +46,8 @@ type route struct {
 }
 
 // New 构造统一插件代理；auth 为 nil 时私有路由返回 401。
-func New(log *slog.Logger, auth Authorizer) *Server {
-	return &Server{log: log, auth: auth, mappings: make(map[string]*binding)}
+func New(auth Authorizer) *Server {
+	return &Server{auth: auth, mappings: make(map[string]*binding)}
 }
 
 // Bind 用已通过注册校验、且已激活的 Session 替换插件的旧映射。
@@ -65,7 +64,7 @@ func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, 
 		}
 	}
 	current.proxy = &httputil.ReverseProxy{
-		ErrorLog: slog.NewLogLogger(s.log.With("plugin_id", pluginID).Handler(), slog.LevelError),
+		ErrorLog: slog.NewLogLogger(slog.With("plugin_id", pluginID).Handler(), slog.LevelError),
 		// 禁用连接复用，避免 Transport 对已复用连接上的幂等请求自动重试；内部 loopback 直连不走出站代理。
 		Transport: &http.Transport{DisableKeepAlives: true},
 		Rewrite: func(request *httputil.ProxyRequest) {
@@ -80,7 +79,7 @@ func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, 
 			request.Out.Header.Set(wire.HeaderProxyAuth, auth)
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			s.log.Error("plugin HTTP proxy failed", "plugin_id", pluginID, "err", err)
+			slog.Error("plugin HTTP proxy failed", "plugin_id", pluginID, "err", err)
 			http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
 		},
 	}
