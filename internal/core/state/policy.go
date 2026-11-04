@@ -12,7 +12,6 @@ const (
 	columnPluginID          = "plugin_id"
 	columnScope             = "scope"
 	columnAdapterInstanceID = "adapter_instance_id"
-	columnExternalUserID    = "external_user_id"
 	columnDenyKind          = "kind"
 	columnSubjectID         = "subject_id"
 )
@@ -27,15 +26,6 @@ type CommandPolicy struct {
 
 // TableName 指定命令策略表。
 func (CommandPolicy) TableName() string { return "command_policy" }
-
-// CoreAdmin 绑定一个 Adapter 实例中的 Core 管理员身份。
-type CoreAdmin struct {
-	InstanceID string `gorm:"column:adapter_instance_id;primaryKey"`
-	UserID     string `gorm:"column:external_user_id;primaryKey"`
-}
-
-// TableName 指定 Core 管理员表。
-func (CoreAdmin) TableName() string { return "core_admin" }
 
 // GlobalDeny 保存实例作用域中的用户或会话禁止；Kind 由策略服务校验。
 type GlobalDeny struct {
@@ -87,30 +77,6 @@ func (s *Store) CommandPolicySnapshot(ctx context.Context, pluginID string, subj
 	return rows, denied, err
 }
 
-// AddCoreAdmin 幂等添加管理员；调用方负责身份校验。
-func (s *Store) AddCoreAdmin(ctx context.Context, row CoreAdmin) error {
-	return s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error
-}
-
-// RemoveCoreAdmin 按主键幂等移除管理员。
-func (s *Store) RemoveCoreAdmin(ctx context.Context, instanceID, userID string) error {
-	return s.db.WithContext(ctx).Where(coreAdminKey(instanceID, userID)).Delete(&CoreAdmin{}).Error
-}
-
-// IsCoreAdmin 查询实例中的用户是否在管理员列表。
-func (s *Store) IsCoreAdmin(ctx context.Context, instanceID, userID string) (bool, error) {
-	var count int64
-	err := s.db.WithContext(ctx).Model(&CoreAdmin{}).Where(coreAdminKey(instanceID, userID)).Count(&count).Error
-	return count > 0, err
-}
-
-// CoreAdmins 读取管理员列表；排序由策略服务完成。
-func (s *Store) CoreAdmins(ctx context.Context) ([]CoreAdmin, error) {
-	var rows []CoreAdmin
-	err := s.db.WithContext(ctx).Find(&rows).Error
-	return rows, err
-}
-
 // AddGlobalDeny 幂等添加禁止记录；调用方负责种类与身份校验。
 func (s *Store) AddGlobalDeny(ctx context.Context, row GlobalDeny) error {
 	return s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error
@@ -142,10 +108,6 @@ func hasGlobalDeny(db *gorm.DB, row GlobalDeny) (bool, error) {
 // 使用等值条件保留零值主键的精确语义，避免 GORM 的结构体条件忽略空串。
 func commandPolicyKey(pluginID, scope string) clause.Expression {
 	return clause.And(clause.Eq{Column: columnPluginID, Value: pluginID}, clause.Eq{Column: columnScope, Value: scope})
-}
-
-func coreAdminKey(instanceID, userID string) clause.Expression {
-	return clause.And(clause.Eq{Column: columnAdapterInstanceID, Value: instanceID}, clause.Eq{Column: columnExternalUserID, Value: userID})
 }
 
 func globalDenyKey(row GlobalDeny) clause.Expression {

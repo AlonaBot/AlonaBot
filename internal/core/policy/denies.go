@@ -5,7 +5,9 @@ import (
 	"context"
 	"slices"
 
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
 // DenyKind 区分被禁止的用户与会话。
@@ -67,4 +69,8 @@ func checkDeny(kind DenyKind, instanceID, subjectID string) error {
 		return invalidArgument("instance ID and subject ID are required")
 	}
 	return nil
+}
+
+func invalidArgument(message string) error {
+	return &wire.CallError{ErrorInfo: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, SafeMessage: message}}
 }

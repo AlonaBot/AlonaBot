@@ -1,12 +1,13 @@
-// Package policy 实现 Core 的实例发信许可检查。
+// Package policy 管理 Core 的管理员身份、全局禁止与实例发信许可。
 //
 // [Policy] 对可信调用的原始完整 Target 放行，其他目标逐次读取状态库中的实例许可。
-// 许可仅控制发送，不赋予 User/Admin 身份（CONTRACTS §8）。
+// 管理员由装配处设置内存列表；其文件持久化由设置服务负责（D-82）。
 package policy
 
 import (
 	"context"
 	"slices"
+	"sync"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
@@ -14,8 +15,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Policy 从 Core 状态库读取插件当前的实例发信许可，不缓存查询结果。
-type Policy struct{ store *state.Store }
+// Policy 持有内存中的管理员列表，并逐次读取状态库中的实例发信许可。
+type Policy struct {
+	store    *state.Store
+	adminsMu sync.RWMutex // 保护管理员列表的整体替换与读取
+	admins   []Admin
+}
 
 // New 创建使用指定状态库的发送策略。
 func New(store *state.Store) *Policy { return &Policy{store: store} }

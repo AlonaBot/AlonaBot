@@ -94,12 +94,6 @@ CREATE TABLE command_policy (
   PRIMARY KEY (plugin_id, scope)
 );
 
-CREATE TABLE core_admin (
-  adapter_instance_id TEXT NOT NULL,
-  external_user_id    TEXT NOT NULL,
-  PRIMARY KEY (adapter_instance_id, external_user_id)
-);
-
 CREATE TABLE global_deny (
   kind                TEXT NOT NULL,
   adapter_instance_id TEXT NOT NULL,
