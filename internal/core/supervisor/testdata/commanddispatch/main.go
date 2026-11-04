@@ -71,6 +71,16 @@ func readImage(c *sdk.Context, image *pb.ImageSegment) ([]byte, error) {
 
 // Commands 注册有实际副作用记录的命令与文本路由。
 func (*plugin) Commands(r *sdk.CommandRegistry) {
+	permissions := r.Group("permission").Permission(sdk.Admin.Or(sdk.ChatAdmin))
+	permissions.Command("restricted").Handle(func(c *sdk.Context) (message.Chain, error) {
+		return reply("group.restricted", strconv.FormatBool(c.Has(sdk.ChatAdmin)))
+	})
+	permissions.Command("inherited").Handle(func(c *sdk.Context) (message.Chain, error) {
+		return reply("group.inherited", strconv.FormatBool(c.Has(sdk.ChatAdmin)))
+	})
+	permissions.Command("open").Permission(sdk.Anyone).Handle(func(c *sdk.Context) (message.Chain, error) {
+		return reply("group.open", strconv.FormatBool(c.Has(sdk.ChatAdmin)))
+	})
 	r.Command("service").Handle(func(c *sdk.Context) (message.Chain, error) {
 		caller, err := sdk.CallJSON[string](c.Context(), "demo/context", serviceInputSchema, serviceSchemaVersion, "service reply")
 		if err != nil {
