@@ -26,15 +26,16 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/oslock"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"modernc.org/sqlite"
 )
 
 const (
-	runtimeLockFile      = "runtime.lock"
 	generationsDirectory = "generations"
 	databaseFile         = "db.sqlite"
 	temporaryPattern     = ".db-*.sqlite"
@@ -80,7 +81,7 @@ func PrepareDatabase(ctx context.Context, req Request) (prepared *Prepared, err 
 		return nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "invalid source generation or resume generation mismatch"}
 	}
 	// 1. 先取跨代次进程锁，确保目录和数据库操作不会与旧 SDK 重叠。
-	lock, err := oslock.TryLock(filepath.Join(req.PluginDir, runtimeLockFile))
+	lock, err := oslock.TryLock(filepath.Join(req.PluginDir, wire.RuntimeLockFile))
 	if errors.Is(err, oslock.ErrLocked) {
 		return nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "plugin process still holds runtime.lock"}
 	}
@@ -208,12 +209,28 @@ func checkIntegrity(ctx context.Context, path string) (err error) {
 			err = errors.Join(err, closeErr)
 		}
 	}()
-	var result string
-	if err := db.QueryRowContext(ctx, "PRAGMA integrity_check").Scan(&result); err != nil {
+	rows, err := db.QueryContext(ctx, "PRAGMA integrity_check")
+	if err != nil {
 		return err
 	}
-	if result != integrityOK {
-		return fmt.Errorf("candidate integrity_check: %s", result)
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}()
+	var results []string
+	for rows.Next() {
+		var result string
+		if err := rows.Scan(&result); err != nil {
+			return err
+		}
+		results = append(results, result)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(results) != 1 || results[0] != integrityOK {
+		return fmt.Errorf("candidate integrity_check: %s", strings.Join(results, "\n"))
 	}
 	return nil
 }
