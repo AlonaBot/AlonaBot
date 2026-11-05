@@ -19,6 +19,7 @@ import (
 
 // SubscriptionRegistry 收集静态 Event Bus 订阅；零值可用，Collect 统一返回描述错误。
 type SubscriptionRegistry struct {
+	pending       []func() error
 	subscriptions []subscriptionRoute
 	errs          []error
 }
@@ -28,29 +29,54 @@ type subscriptionRoute struct {
 	invoke     func(*Context, []byte) error
 }
 
-// Subscribe 注册 eventName（plugin_id/event_name）的类型化 JSON 订阅，以 routeID 标识回调。
-// 回调按 Session 串行执行，Context 无 Actor 与默认 Target；错误和 panic 只写日志，无业务回执。
-func Subscribe[T any](r *SubscriptionRegistry, routeID, eventName, schemaID string, version uint32, h func(*Context, T) error) {
-	if h == nil {
-		r.errs = append(r.errs, fmt.Errorf("handler for subscription %q is nil", routeID))
-		return
-	}
-	r.subscriptions = append(r.subscriptions, subscriptionRoute{descriptor: &pb.RouteDescriptor{
-		RouteId: routeID, Kind: pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION, DefaultEnabled: true,
-		Spec: &pb.RouteDescriptor_BusSubscription{BusSubscription: &pb.BusSubscriptionSpec{EventName: eventName, SchemaId: schemaID, SchemaVersion: version, CallbackRouteId: routeID}},
-	}, invoke: func(c *Context, payload []byte) error {
-		var input T
-		if err := json.Unmarshal(payload, &input); err != nil {
-			c.Logger().Warn("decode bus event payload failed", "error", err)
-			return nil
-		}
-		return h(c, input)
-	}})
+// Subscription 构建一条类型化订阅；Handle 结束声明。
+type Subscription[T any] struct {
+	routeID   string
+	eventName string
+	handles   int
+	handler   func(*Context, T) error
 }
+
+// Subscribe 开始构建 eventName（plugin_id/event_name）的 JSON 订阅。
+// 回调按 Session 串行执行，Context 无 Actor 与默认 Target。
+func Subscribe[T any](r *SubscriptionRegistry, routeID, eventName string) *Subscription[T] {
+	s := &Subscription[T]{routeID: routeID, eventName: eventName}
+	r.pending = append(r.pending, func() error {
+		if s.handles != 1 {
+			return fmt.Errorf("subscription route %q has invalid Handle sequence", s.routeID)
+		}
+		if s.handler == nil {
+			return fmt.Errorf("handler for subscription route %q is nil", s.routeID)
+		}
+		handler := s.handler // 收集后冻结 Handler，运行时注册描述保持固定。
+		id, version, err := jsonType[T]()
+		if err != nil {
+			return fmt.Errorf("subscription route %q: %w", s.routeID, err)
+		}
+		r.subscriptions = append(r.subscriptions, subscriptionRoute{descriptor: &pb.RouteDescriptor{
+			RouteId: s.routeID, Kind: pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION, DefaultEnabled: true,
+			Spec: &pb.RouteDescriptor_BusSubscription{BusSubscription: &pb.BusSubscriptionSpec{EventName: s.eventName, SchemaId: id, SchemaVersion: version, CallbackRouteId: s.routeID}},
+		}, invoke: func(c *Context, payload []byte) error {
+			var input T
+			if err := json.Unmarshal(payload, &input); err != nil {
+				return fmt.Errorf("decode bus event payload: %w", err)
+			}
+			return handler(c, input)
+		}})
+		return nil
+	})
+	return s
+}
+
+// Handle 结束订阅声明，签名由类型参数约束。
+func (s *Subscription[T]) Handle(h func(*Context, T) error) { s.handles++; s.handler = h }
 
 func collectSubscriptions(root Root, reg *Registration) error {
 	r := &SubscriptionRegistry{}
 	root.Subscriptions(r)
+	for _, finish := range r.pending {
+		r.errs = append(r.errs, finish())
+	}
 	reg.subscriptions = r.subscriptions
 	if len(r.subscriptions) == 0 {
 		return errors.Join(r.errs...)
@@ -79,9 +105,14 @@ func appendSubscriptionRoutes(reg *Registration, registration *pb.Register) {
 	}
 }
 
-// Publish 将 JSON 载荷发布到本插件的 eventName，SDK 补上 plugin_id/ 前缀。
+// Publish 从具名载荷类型推导 Schema 标识与版本，再发布到本插件的 eventName。
+// SDK 补上 plugin_id/ 前缀。
 // 返回值只确认 Core 已完成发布准入。Handler 内外均可调用；ctx 只传递取消和期限，不继承用户权限。
-func Publish(ctx context.Context, eventName, schemaID string, version uint32, payload any) (eventID string, err error) {
+func Publish[T any](ctx context.Context, eventName string, payload T) (eventID string, err error) {
+	schemaID, version, err := jsonType[T]()
+	if err != nil {
+		return "", err
+	}
 	// 1. 复用 Session ready gate，以当前插件身份编码 JSON 和发布请求。
 	session, err := currentSession()
 	if err != nil {

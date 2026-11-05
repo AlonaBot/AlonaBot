@@ -228,6 +228,9 @@ func testBusProcesses(t *testing.T, binary string, stdio bool) {
 	if got := broadcast.Stats("pub").Published; got != 10 {
 		t.Fatalf("published=%d, want 10", got)
 	}
+	if result := control("pub", busControl{Operation: "mismatched_version"}); result.Code != 0 || result.EventID == "" {
+		t.Fatalf("version probe rejected: %+v", result)
+	}
 	close(gate.release)
 	control("stuck", busControl{Operation: "release"})
 	wait("slow first four and stuck full sequence", func() bool {
