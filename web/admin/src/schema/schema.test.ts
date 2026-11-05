@@ -5,6 +5,7 @@ import collections from '../../fixtures/collections.config_schema.json';
 import templates from '../../fixtures/templates.config_schema.json';
 import chinese from '../../fixtures/i18n/zh-CN.json';
 import { fieldsFromSchema } from './model';
+import { buildPatch, isSecretSet, MissingSecretsError } from './patch';
 import { fieldText, pickLocale, templateText } from '../i18n/catalog';
 
 describe('config_schema.json form contract (V-25)', () => {
@@ -84,4 +85,90 @@ describe('form text and locale contract (V-54)', () => {
     expect(templateText({}, unnamed)).toEqual({ name: 'simple' });
     expect(fieldsFromSchema(nested)[1].children![1].options).toEqual(['fast', 'safe']);
   });
+});
+
+describe('form Merge Patch contract (V-25)', () => {
+  const setSecret = { $secret_set: true };
+
+  it('omits invisible and unknown fields and unchanged secrets', () => {
+    const original = { token: setSecret, backup: '', internal: 'v1', endpoint: 'https://example.com', unknown: { keep: 1 } };
+    const edited = { ...original, internal: 'v2', unknown: { keep: 2 }, endpoint: 'https://new.example' };
+    expect(buildPatch(original, edited, fieldsFromSchema(secrets))).toEqual({ endpoint: 'https://new.example' });
+    expect(buildPatch(original, { ...edited, token: 'new token' }, fieldsFromSchema(secrets))).toEqual({ token: 'new token', endpoint: 'https://new.example' });
+    expect(original.token).toEqual({ $secret_set: true });
+  });
+
+  it('uses null for explicit default restoration and secret clearing', () => {
+    expect(buildPatch({ token: setSecret, endpoint: 'https://custom.example' }, { token: null, endpoint: null }, fieldsFromSchema(secrets)))
+      .toEqual({ token: null, endpoint: null });
+    expect(buildPatch({ level: 4 }, { level: null }, fieldsFromSchema(nested))).toEqual({ level: null });
+  });
+
+  it('replaces arrays and recursively deletes dict keys', () => {
+    const original = { tags: ['news'], keywords: ['one'], headers: { A: 'one', B: 'two', nested: { keep: true, remove: 1 } } };
+    const edited = { tags: ['sports', 'tech'], keywords: [], headers: { A: 'one', nested: { keep: true } } };
+    expect(buildPatch(original, edited, fieldsFromSchema(collections))).toEqual({
+      tags: ['sports', 'tech'], keywords: [], headers: { B: null, nested: { remove: null } },
+    });
+  });
+
+  it('omits conditionally hidden edits while preserving explicit scalar values', () => {
+    const original = { advanced: true, template: 'old', welcome: 'Hello', reply: { prefix: '> ', mode: 'fast', unknown: true } };
+    expect(buildPatch(original, { ...original, advanced: false, template: 'edited', welcome: '', reply: { ...original.reply, prefix: '', unknown: false } }, fieldsFromSchema(nested)))
+      .toEqual({ advanced: false, welcome: '', reply: { prefix: '' } });
+    expect(buildPatch({ ratio: 0.5 }, { ratio: 0 }, fieldsFromSchema(collections))).toEqual({ ratio: 0 });
+  });
+
+  it('omits unchanged masked arrays but reports every missing account secret after an edit', () => {
+    const original = { accounts: [{ name: 'one', api_key: setSecret }, { name: 'two', api_key: setSecret }] };
+    expect(buildPatch(original, structuredClone(original), fieldsFromSchema(collections))).toEqual({});
+    const edited = structuredClone(original);
+    edited.accounts[0].name = 'changed';
+    try {
+      buildPatch(original, edited, fieldsFromSchema(collections));
+      throw new Error('expected MissingSecretsError');
+    } catch (error) {
+      expect(error).toBeInstanceOf(MissingSecretsError);
+      expect((error as MissingSecretsError).paths).toEqual(['/accounts/0/api_key', '/accounts/1/api_key']);
+    }
+    expect(buildPatch(original, { accounts: [{ name: 'changed', api_key: 'first' }, { name: 'two', api_key: 'second' }] }, fieldsFromSchema(collections)))
+      .toEqual({ accounts: [{ name: 'changed', api_key: 'first' }, { name: 'two', api_key: 'second' }] });
+  });
+
+  it('requires secrets for edited template lists and permits deleting masked rows', () => {
+    const original = { sources: [{ webhook: { token: setSecret } }] };
+    expect(() => buildPatch(original, { sources: [...original.sources, { rss: { url: 'https://feed.example', every_minutes: 30 } }] }, fieldsFromSchema(templates)))
+      .toThrow(MissingSecretsError);
+    expect(buildPatch(original, { sources: [] }, fieldsFromSchema(templates))).toEqual({ sources: [] });
+    expect(buildPatch(original, { sources: [{ webhook: { token: 'new value' } }] }, fieldsFromSchema(templates)))
+      .toEqual({ sources: [{ webhook: { token: 'new value' } }] });
+  });
+
+  it('removes the old template key when selecting a new template', () => {
+    const original = { music: { netease: { cookie: setSecret } } };
+    expect(buildPatch(original, { music: { local: { dir: 'music' } } }, fieldsFromSchema(templates)))
+      .toEqual({ music: { netease: null, local: { dir: 'music' } } });
+    expect(buildPatch({}, { music: { local: {} } }, fieldsFromSchema(templates))).toEqual({ music: { local: {} } });
+  });
+
+  it('merges secret-bearing objects by key without resubmitting masked siblings', () => {
+    const schema = fieldsFromSchema({ object: { type: 'object', items: secrets } });
+    const original = { object: { token: setSecret, internal: 'v1', endpoint: 'before', unknown: 'keep' } };
+    expect(buildPatch(original, { object: { token: setSecret, internal: 'changed', endpoint: 'after', unknown: 'changed' } }, schema))
+      .toEqual({ object: { endpoint: 'after' } });
+    const dict = { headers: { auth: setSecret, nested: { token: setSecret, plain: 'before' } } };
+    expect(buildPatch(dict, { headers: { auth: setSecret, nested: { token: setSecret, plain: 'after' } } }, fieldsFromSchema(collections)))
+      .toEqual({ headers: { nested: { plain: 'after' } } });
+  });
+
+  it('recognizes only the exact secret marker and escapes missing value paths', () => {
+    expect(isSecretSet(setSecret)).toBe(true);
+    for (const value of [null, true, '$secret_set', { $secret_set: false }, { $secret_set: true, other: 1 }]) {
+      expect(isSecretSet(value)).toBe(false);
+    }
+    const original = { headers: { rows: [] } };
+    expect(() => buildPatch(original, { headers: { rows: [{ 'a/b~c': setSecret }] } }, fieldsFromSchema(collections)))
+      .toThrow('missing secret values at /headers/rows/0/a~1b~0c');
+  });
+
 });
