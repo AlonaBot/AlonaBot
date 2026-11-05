@@ -136,8 +136,17 @@ type ConfigFormProps = {
   onSubmit: (patch: Record<string, unknown>) => void;
 };
 
-/** ConfigForm 渲染配置字段并在提交时生成补丁。 */
+/** ConfigForm 将完整编辑状态绑定到当前读取的配置和 Schema。 */
 export function ConfigForm(props: ConfigFormProps) {
+  const [source, setSource] = useState({ value: props.value, schema: props.schema, revision: 0 });
+  if (source.value !== props.value || source.schema !== props.schema) {
+    // 输入快照变化时在渲染子控件前切换版本，避免旧行与新补丁基线配对。
+    setSource({ value: props.value, schema: props.schema, revision: source.revision + 1 });
+  }
+  return <FormEditor key={source.revision} {...props} />;
+}
+
+function FormEditor(props: ConfigFormProps) {
   const ui = useUI();
   const fields = useMemo(() => fieldsFromSchema(props.schema), [props.schema]);
   const [edited, setEdited] = useState(() => structuredClone(props.value) as Record<string, unknown>);
