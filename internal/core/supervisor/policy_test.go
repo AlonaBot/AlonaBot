@@ -239,7 +239,7 @@ func TestCommandPolicyBothTransports(t *testing.T) {
 			}
 			check("chat_deny_command", "/rss list hello", actor, []string{"event"}, nil)
 			// 即使已获实例许可，显式目标发送也受同一会话禁止约束。
-			if err := store.GrantAdapterInstance(ctx, spec.PluginID, "instance"); err != nil {
+			if err := store.SetAdapterInstanceAccess(ctx, spec.PluginID, false, []string{"instance"}); err != nil {
 				t.Fatal(err)
 			}
 			request := &pb.SendRequest{To: target, Chain: &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: "explicit"}}}}}}

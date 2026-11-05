@@ -18,7 +18,7 @@
 | goal-6 | T-03.5 | 媒体上传与配额 | T-03.1 | 已完成（PR #38） |
 | goal-10 | T-04.1 | 根插件 API 与静态注册索引 | T-03.1 | 已完成（PR #34） |
 | goal-56 | T-11.3 | Agent 会话存储 | T-03.1 | 已完成（PR #35） |
-| goal-99 | T-03.12 | 后台发信许可缺省为全部实例 | T-03.2 | 待派发 |
+| goal-99 | T-03.12 | 后台发信许可缺省为全部实例 | T-03.2 | 已完成 |
 | goal-11 | T-04.2 | 构建期生成器 | T-04.1 | 已完成（PR #42） |
 | goal-12 | T-04.3 | 命令选择、文本匹配与参数绑定 | T-04.1 | 已完成（PR #47） |
 | goal-19 | T-06.1 | Service/Bus 描述与 Broker 准入 | T-04.1 | 已完成（PR #45） |
@@ -1071,7 +1071,7 @@ func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []by
 
 ### goal-99 · T-03.12 后台发信许可缺省为全部实例
 
-状态：待派发。前置 T-03.2（PR #31）已合并。依据 D-83 新增。
+状态：已完成（PR #90）。前置 T-03.2（PR #31）已合并。依据 D-83 新增。`AdapterInstanceAllowed`、`AdapterInstanceAccess`、`SetAdapterInstanceAccess` 与 `plugin_adapter_restriction` 已合入；未安装的插件 ID 返回包装了 `state.ErrNotFound` 的错误，重复实例按主键去重。验证证据见 TEST-MATRIX §3.2。
 
 已核对现有实现（main `1c07284`）：
 - `internal/core/state/schema.sql` 的 `plugin_adapter_permission(plugin_id, adapter_instance_id)` 保存逐实例许可；`state/permissions.go` 有 `AllowedAdapterInstances`、`GrantAdapterInstance`、`RevokeAdapterInstance`。

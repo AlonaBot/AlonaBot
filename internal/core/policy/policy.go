@@ -7,7 +7,6 @@ package policy
 
 import (
 	"context"
-	"slices"
 	"sync"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -42,11 +41,11 @@ func (p *Policy) CheckSend(ctx context.Context, pluginID string, inv *router.Inv
 		return nil
 	}
 	// 3. 每次准入重新读库，使撤销在下一次发送时生效。
-	instances, err := p.store.AllowedAdapterInstances(ctx, pluginID)
+	allowed, err := p.store.AdapterInstanceAllowed(ctx, pluginID, target.GetAdapterInstanceId())
 	if err != nil {
 		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "read allowed adapter instances: " + err.Error()}
 	}
-	if !slices.Contains(instances, target.GetAdapterInstanceId()) {
+	if !allowed {
 		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, SafeMessage: "adapter instance is not allowed for plugin"}
 	}
 	return nil

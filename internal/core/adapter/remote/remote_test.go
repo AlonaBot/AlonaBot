@@ -641,7 +641,7 @@ func TestRemoteMediaRead(t *testing.T) {
 	p.Services(mux)
 	dispatch := router.New(1, registry, nil, mediaStore.PrepareIncoming, nil, nil)
 	t.Cleanup(dispatch.Close)
-	mediaStore.AddReadServices(mux, registry, dispatch, store.AllowedAdapterInstances)
+	mediaStore.AddReadServices(mux, registry, dispatch, store.AdapterInstanceAllowed)
 	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
 	spec.Handler = mux.For(caller)
 	running, err := supervisor.Launch(ctx, store, spec)
