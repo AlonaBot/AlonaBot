@@ -169,6 +169,9 @@ func (*plugin) Commands(r *sdk.CommandRegistry) {
 // Services 通过原 Target 回复，验证命令派生的 Service 调用保留可信上下文。
 func (*plugin) Services(r *sdk.ServiceRegistry) {
 	sdk.JSON[serviceText, serviceText](r, "context").Handle(func(c *sdk.Context, text serviceText) (serviceText, error) {
+		if !c.Has(sdk.User) || c.Event() != nil {
+			return "", errors.New("service lost trusted actor or fabricated an event")
+		}
 		_, err := c.Send(message.Chain{message.Text(string(text))})
 		return serviceText(c.Caller()), err
 	})

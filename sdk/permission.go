@@ -42,7 +42,11 @@ func (c *Context) Has(p Permission) bool {
 	if len(p.names) == 0 {
 		return true
 	}
-	for _, name := range c.event.GetActor().GetPermissions() {
+	actor := c.actor
+	if c.event != nil {
+		actor = c.event.GetActor()
+	}
+	for _, name := range actor.GetPermissions() {
 		if slices.Contains(p.names, name) {
 			return true
 		}

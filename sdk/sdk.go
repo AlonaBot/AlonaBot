@@ -53,7 +53,8 @@ type Context struct {
 	stopped   atomic.Bool     // 锁存的停止传播标记，一经设置不能清除
 	active    atomic.Bool     // Handler 返回时关闭，阻止继续使用父调用
 	inbound   *wire.Inbound
-	caller    string // Core 下发的服务直接调用方
+	caller    string    // Core 下发的服务直接调用方
+	actor     *pb.Actor // Service 继承的可信 Actor；事件调用从 event 读取。
 	event     *pb.Event
 	match     []string // 本次 Regex 的捕获组
 	autoReply bool     // 自动回复 Handler 通过返回 Chain 发送
