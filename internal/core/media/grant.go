@@ -41,7 +41,7 @@ func (s *Store) grantSource(c router.Caller, request *pb.GrantRequest) (*incomin
 	return nil, nil
 }
 
-func (s *Store) grant(ctx context.Context, c router.Caller, in *wire.Inbound, dispatch *router.Router, allowedInstances func(context.Context, string) ([]string, error)) wire.Response {
+func (s *Store) grant(ctx context.Context, c router.Caller, in *wire.Inbound, dispatch *router.Router, allowed func(context.Context, string, string) (bool, error)) wire.Response {
 	request := &pb.GrantRequest{}
 	if err := decode(in, request); err != nil {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err)
@@ -60,11 +60,11 @@ func (s *Store) grant(ctx context.Context, c router.Caller, in *wire.Inbound, di
 		return denied
 	}
 	if incoming != nil && (incoming.event == nil || !dispatch.HasInFlight(grantee, incoming.event)) {
-		instances, err := allowedInstances(ctx, grantee.PluginID)
+		permitted, err := allowed(ctx, grantee.PluginID, incoming.object.source.instanceID)
 		if err != nil {
 			return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, fmt.Errorf("read allowed adapter instances: %w", err))
 		}
-		if !slices.Contains(instances, incoming.object.source.instanceID) {
+		if !permitted {
 			return denied
 		}
 	}

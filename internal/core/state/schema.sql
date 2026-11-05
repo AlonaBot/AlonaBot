@@ -50,6 +50,10 @@ CREATE TABLE plugin_adapter_permission (
   PRIMARY KEY (plugin_id, adapter_instance_id)
 );
 
+CREATE TABLE plugin_adapter_restriction (
+  plugin_id TEXT PRIMARY KEY REFERENCES install(plugin_id)
+);
+
 CREATE TABLE conversation_entry (
   plugin_id        TEXT NOT NULL REFERENCES install(plugin_id),
   conversation_key TEXT NOT NULL,
