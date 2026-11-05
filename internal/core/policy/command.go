@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 )
@@ -150,4 +151,63 @@ func storedScope(key string) (Scope, error) {
 	default:
 		return Scope{}, fmt.Errorf("unknown stored command scope %q", key)
 	}
+}
+
+// CheckCommand 按全局禁止、逐层启用与最近显式权限判定当前命令。
+// 每次检查读取同一状态库快照；返回 nil 放行，读取失败返回 INTERNAL。
+func (p *Policy) CheckCommand(ctx context.Context, pluginID string, route *pb.RouteDescriptor, actor *pb.Actor, target *pb.Target) *pb.ErrorInfo {
+	// 1. 全局禁止优先，管理员身份与空权限集合都不能绕过。
+	var subjects []state.GlobalDeny
+	if actor != nil {
+		subjects = append(subjects, state.GlobalDeny{Kind: string(DenyUser), InstanceID: actor.GetAdapterInstanceId(), SubjectID: actor.GetExternalUserId()})
+	}
+	if target != nil {
+		subjects = append(subjects, state.GlobalDeny{Kind: string(DenyChat), InstanceID: target.GetAdapterInstanceId(), SubjectID: target.GetChatId()})
+	}
+	rows, denied, err := p.store.CommandPolicySnapshot(ctx, pluginID, subjects)
+	if err != nil {
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "read command policy: " + err.Error()}
+	}
+	if denied {
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, SafeMessage: "command is globally denied"}
+	}
+
+	// 2. 从插件到规范路径祖先再到路由逐层处理；子层只能覆盖权限，不能抵消父层禁用。
+	overrides := make(map[string]state.CommandPolicy, len(rows))
+	for _, row := range rows {
+		overrides[row.Scope] = row
+	}
+	keys := []string{pluginScopeKey}
+	if command := route.GetCommand(); command.GetMatch() == pb.CommandMatch_COMMAND_MATCH_PATH {
+		path := command.GetPath()
+		for length := 1; length < len(path); length++ {
+			keys = append(keys, scopeKey(Scope{Kind: ScopeGroup, Group: path[:length]}))
+		}
+	}
+	routeKey := scopeKey(Scope{Kind: ScopeRoute, RouteID: route.GetRouteId()})
+	keys = append(keys, routeKey)
+	permissions := route.GetRequiredPermissions()
+	for _, key := range keys {
+		override := overrides[key]
+		if override.Enabled != nil && !*override.Enabled {
+			return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "command is disabled"}
+		}
+		if override.Permissions != nil {
+			permissions = override.Permissions
+		}
+	}
+	if overrides[routeKey].Enabled == nil && !route.GetDefaultEnabled() {
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "command is disabled"}
+	}
+
+	// 3. 最近的显式权限集合按交集判定；空集合也允许无 Actor 的命令。
+	if len(permissions) == 0 {
+		return nil
+	}
+	for _, permission := range permissions {
+		if slices.Contains(actor.GetPermissions(), permission) {
+			return nil
+		}
+	}
+	return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, SafeMessage: "command permission is required"}
 }
