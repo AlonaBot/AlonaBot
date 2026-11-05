@@ -14,8 +14,6 @@ import (
 
 const (
 	pluginIDEnv    = "ALONABOT_TEST_BUS_ID"
-	controlSchema  = "test.bus.control.v1"
-	replySchema    = "test.bus.reply.v1"
 	eventSchema    = "test.bus.number.v1"
 	publishService = "core.bus.publish"
 	schemaVersion  = 1
@@ -31,8 +29,8 @@ type control struct {
 
 type reply struct {
 	EventID   string
-	Seen      []int
-	Versioned []int
+	Seen      []int `json:",omitempty"`
+	Versioned []int `json:",omitempty"`
 	Entered   bool
 	Code      pb.ErrorCode
 	Error     string
@@ -86,7 +84,7 @@ func (p *plugin) Subscriptions(r *sdk.SubscriptionRegistry) {
 
 // Services 暴露测试控制入口；发布仍经过插件到 Core 的真实 Publish RPC。
 func (p *plugin) Services(r *sdk.ServiceRegistry) {
-	sdk.JSONService(r, "control", controlSchema, replySchema, schemaVersion, func(c *sdk.Context, in control) (reply, error) {
+	sdk.JSON[control, reply](r, "control").Handle(func(c *sdk.Context, in control) (reply, error) {
 		out := reply{}
 		var err error
 		switch in.Operation {

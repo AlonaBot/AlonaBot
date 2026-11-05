@@ -28,8 +28,8 @@ import (
 )
 
 const (
-	busControlSchema = "test.bus.control.v1"
-	busReplySchema   = "test.bus.reply.v1"
+	busControlSchema = "main.control"
+	busReplySchema   = "main.reply"
 	busTestTimeout   = 5 * time.Second
 )
 

@@ -17,13 +17,18 @@ import (
 const (
 	pluginIDEnv   = "ALONABOT_TEST_SERVICE_ID"
 	badOutputEnv  = "ALONABOT_TEST_BAD_SERVICE_OUTPUT"
-	inputSchema   = "test.service.input.v1"
-	outputSchema  = "test.service.output.v1"
+	inputSchema   = "main.input"
+	outputSchema  = "main.reply"
 	schemaVersion = 1
 	exitFailure   = 1
 )
 
 type input struct{ Text string }
+type inputV2 input
+
+func (inputV2) SchemaVersion() uint32 { return 2 }
+
+type wrongInput input
 type reply struct {
 	Text   string
 	Caller string
@@ -44,15 +49,15 @@ func (p *plugin) Services(r *sdk.ServiceRegistry) {
 	echo := func(c *sdk.Context, in input) (reply, error) {
 		return reply{Text: in.Text, Caller: c.Caller(), Calls: p.calls.Add(1)}, nil
 	}
-	sdk.JSONService(r, "echo", inputSchema, outputSchema, schemaVersion, echo)
-	sdk.JSONService(r, "pub", inputSchema, outputSchema, schemaVersion, echo, sdk.WithAccess(sdk.AccessPublic))
-	sdk.JSONService(r, "v2", inputSchema, outputSchema, schemaVersion+1, echo, sdk.WithAccess(sdk.AccessPublic))
-	sdk.JSONService(r, "allow", inputSchema, outputSchema, schemaVersion, echo, sdk.WithAccess(sdk.AccessAllowlist, "b"))
-	sdk.JSONService(r, "count", inputSchema, outputSchema, schemaVersion, func(*sdk.Context, input) (reply, error) { return reply{Calls: p.calls.Load()}, nil }, sdk.WithAccess(sdk.AccessPublic))
-	sdk.ProtoService(r, "proto", func(_ *sdk.Context, in *pb.ConversationClearRequest) (*pb.ConversationClearRequest, error) {
+	sdk.JSON[input, reply](r, "echo").Handle(echo)
+	sdk.JSON[input, reply](r, "pub").Access(sdk.AccessPublic).Handle(echo)
+	sdk.JSON[inputV2, reply](r, "v2").Access(sdk.AccessPublic).Handle(func(c *sdk.Context, in inputV2) (reply, error) { return echo(c, input(in)) })
+	sdk.JSON[input, reply](r, "allow").Access(sdk.AccessAllowlist, "b").Handle(echo)
+	sdk.JSON[input, reply](r, "count").Access(sdk.AccessPublic).Handle(func(*sdk.Context, input) (reply, error) { return reply{Calls: p.calls.Load()}, nil })
+	sdk.Proto[*pb.ConversationClearRequest, *pb.ConversationClearRequest](r, "proto").Access(sdk.AccessPublic).Handle(func(_ *sdk.Context, in *pb.ConversationClearRequest) (*pb.ConversationClearRequest, error) {
 		p.calls.Add(1)
 		return in, nil
-	}, sdk.WithAccess(sdk.AccessPublic))
+	})
 }
 
 // Events 在 b/c 按消息文本发起指定的 SDK Service 调用并回复结果。
@@ -71,15 +76,15 @@ func (*plugin) Events(r *sdk.EventRegistry) {
 		var err error
 		switch operation {
 		case "json", "count":
-			out, err = sdk.CallJSON[reply](c.Context(), target, inputSchema, schemaVersion, input{Text: "hello 世界"})
+			out, err = sdk.CallJSON[input, reply](c.Context(), target, input{Text: "hello 世界"})
 		case "v2":
-			out, err = sdk.CallJSON[reply](c.Context(), target, inputSchema, schemaVersion+1, input{Text: "hello 世界"})
+			out, err = sdk.CallJSON[inputV2, reply](c.Context(), target, inputV2{Text: "hello 世界"})
 		case "version":
-			out, err = sdk.CallJSON[reply](c.Context(), target, inputSchema, schemaVersion+1, input{})
+			out, err = sdk.CallJSON[inputV2, reply](c.Context(), target, inputV2{})
 		case "schema":
-			out, err = sdk.CallJSON[reply](c.Context(), target, "wrong.schema", schemaVersion, input{})
+			out, err = sdk.CallJSON[wrongInput, reply](c.Context(), target, wrongInput{})
 		case "invalid_json":
-			out, err = sdk.CallJSON[reply](c.Context(), target, inputSchema, schemaVersion, json.RawMessage(`{`))
+			out, err = sdk.CallJSON[json.RawMessage, reply](c.Context(), target, json.RawMessage(`{`))
 		case "encoding", "proto":
 			var result *pb.ConversationClearRequest
 			result, err = sdk.CallProto[*pb.ConversationClearRequest](c.Context(), target, &pb.ConversationClearRequest{ConversationKey: "hello 世界"})

@@ -18,14 +18,12 @@ import (
 )
 
 const (
-	auditEnv             = "ALONABOT_TEST_COMMAND_AUDIT"
-	serviceInputSchema   = "test.command.service.input.v1"
-	serviceOutputSchema  = "test.command.service.output.v1"
-	serviceSchemaVersion = 1
-	mediaReadBytes       = 1024
+	auditEnv       = "ALONABOT_TEST_COMMAND_AUDIT"
+	mediaReadBytes = 1024
 )
 
 type plugin struct{ sdk.Base }
+type serviceText string
 
 func record(entry string) error {
 	data, err := json.Marshal(entry)
@@ -44,7 +42,7 @@ func reply(entry, text string) (message.Chain, error) {
 	if err := record(entry); err != nil {
 		return nil, err
 	}
-	return message.Chain{message.Text(text)}, nil
+	return message.Chain{message.Text(string(text))}, nil
 }
 
 // readImage 同时检查参数与 prepared Event 的同源内容，并用当前 Session 读取实际媒体。
@@ -82,11 +80,11 @@ func (*plugin) Commands(r *sdk.CommandRegistry) {
 		return reply("group.open", strconv.FormatBool(c.Has(sdk.ChatAdmin)))
 	})
 	r.Command("service").Handle(func(c *sdk.Context) (message.Chain, error) {
-		caller, err := sdk.CallJSON[string](c.Context(), "demo/context", serviceInputSchema, serviceSchemaVersion, "service reply")
+		caller, err := sdk.CallJSON[serviceText, serviceText](c.Context(), "demo/context", serviceText("service reply"))
 		if err != nil {
 			return nil, err
 		}
-		return reply("service", caller)
+		return reply("service", string(caller))
 	})
 	r.Command("rss").Alias("feed").Handle(func(*sdk.Context) (message.Chain, error) { return reply("rss", "rss") })
 	{
@@ -170,9 +168,9 @@ func (*plugin) Commands(r *sdk.CommandRegistry) {
 
 // Services 通过原 Target 回复，验证命令派生的 Service 调用保留可信上下文。
 func (*plugin) Services(r *sdk.ServiceRegistry) {
-	sdk.JSONService(r, "context", serviceInputSchema, serviceOutputSchema, serviceSchemaVersion, func(c *sdk.Context, text string) (string, error) {
-		_, err := c.Send(message.Chain{message.Text(text)})
-		return c.Caller(), err
+	sdk.JSON[serviceText, serviceText](r, "context").Handle(func(c *sdk.Context, text serviceText) (serviceText, error) {
+		_, err := c.Send(message.Chain{message.Text(string(text))})
+		return serviceText(c.Caller()), err
 	})
 }
 

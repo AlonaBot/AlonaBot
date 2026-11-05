@@ -201,7 +201,11 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 				s.diagnostic(ident.Pos(), "service type must be a package-level named non-generic type: "+typ.String())
 				continue
 			}
-			id := named.Obj().Pkg().Path() + "." + named.Obj().Name()
+			pkgPath := named.Obj().Pkg().Path()
+			if named.Obj().Pkg().Name() == "main" {
+				pkgPath = "main"
+			}
+			id := pkgPath + "." + named.Obj().Name()
 			if previous := ids[id]; previous != nil {
 				if !types.Identical(previous, typ) {
 					s.diagnostic(ident.Pos(), "conflicting service schema_id "+id)
