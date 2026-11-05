@@ -117,7 +117,7 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 					return []string{"!", "!!", ""}
 				}
 				return []string{"/"}
-			})
+			}, nil)
 			mediaStore.AddReadServices(mux, registry, events, store.AllowedAdapterInstances)
 			services := broker.New(events, values.RequestTimeout)
 			serviceParents := make(chan uint64, 1)
