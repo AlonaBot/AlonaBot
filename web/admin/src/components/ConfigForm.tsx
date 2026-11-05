@@ -1,9 +1,9 @@
 import { useId, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { fieldsFromSchema } from '../schema/model';
-import type { Field } from '../schema/model';
+import type { Field, Template } from '../schema/model';
 import { buildPatch, isSecretSet, MissingSecretsError } from '../schema/patch';
-import { fieldText } from '../i18n/catalog';
+import { fieldText, templateText } from '../i18n/catalog';
 import { useUI } from '../i18n/UI';
 
 function valuePath(path: string[]): string {
@@ -46,6 +46,10 @@ function FieldControl({ field, value, original, path, messages, missing, onChang
     </div>;
   } else {
     switch (field.type) {
+      case 'template':
+      case 'template_list':
+        control = <TemplateControl {...{ field, value, original, path, messages, missing, onChange }} id={id} />;
+        break;
       case 'list':
         control = <ListControl {...{ field, value, original, path, messages, missing, onChange }} id={id} />;
         break;
@@ -262,5 +266,78 @@ function DictControl({ value, onChange, id, required }: { value: Record<string, 
       let key = ''; while (rows.some((row: DictRow) => row.key === key)) key += '_';
       update([...rows, dictRow(key, '', serial.current++)]);
     }}>{ui.addRow}</button>
+  </div>;
+}
+
+// 仅在新选模板时预填声明过的默认值，读取的配置仍由 SDK 补齐。
+function templateDefaults(fields: Field[]): Record<string, unknown> {
+  return Object.fromEntries(fields.flatMap(field => Object.hasOwn(field, 'defaultValue') ? [[field.key, structuredClone(field.defaultValue)]]
+    : field.type === 'object' ? [[field.key, templateDefaults(field.children!)]] : []));
+}
+
+function TemplateControl(props: FieldProps & { id: string }) {
+  const ui = useUI();
+  const many = props.field.type === 'template_list';
+  const values = many ? props.value as Record<string, unknown>[] : [props.value as Record<string, unknown> | undefined];
+  const serial = useRef(0);
+  const rows = useRef(values.map(value => ({ id: serial.current++, original: value })));
+  function selection(value: Record<string, unknown> | undefined) {
+    return props.field.templates!.find(template => value && Object.hasOwn(value, template.key));
+  }
+  function edit(index: number, next: unknown) {
+    props.onChange(many ? values.map((value, at) => at === index ? next : value) : next);
+  }
+  function label(template: Template, value: Record<string, unknown>) {
+    const text = templateText(props.messages, template);
+    if (!template.displayItem) return text.name;
+    const parts = template.displayItem.split('.');
+    let current = value[template.key] as Record<string, unknown>;
+    let children = template.children;
+    let field: Field | undefined;
+    for (const part of parts) {
+      field = children.find(child => child.key === part)!;
+      current = current?.[part] as Record<string, unknown>;
+      children = field.children ?? [];
+    }
+    return current ? `${text.name} · ${fieldText(props.messages, field!).description}: ${String(current)}` : text.name;
+  }
+  function editor(value: Record<string, unknown> | undefined, index: number) {
+    const template = selection(value);
+    const text = template && templateText(props.messages, template);
+    const rowPath = many ? [...props.path, String(index)] : props.path;
+    return <>
+      <select id={many ? undefined : props.id} aria-label={fieldText(props.messages, props.field).description}
+        required={many || props.field.required} value={template?.key ?? ''}
+        onChange={(event: ChangeEvent<HTMLSelectElement>) => {
+          const chosen = props.field.templates!.find(candidate => candidate.key === event.currentTarget.value);
+          edit(index, chosen ? { [chosen.key]: templateDefaults(chosen.children) } : null);
+        }}>
+        <option value="">{ui.chooseTemplate}</option>
+        {props.field.templates!.map(candidate => <option key={candidate.key} value={candidate.key}>{templateText(props.messages, candidate).name}</option>)}
+      </select>
+      {text?.hint && <p className="field-hint">{text.hint}</p>}
+      {template && <Fields key={template.key} fields={template.children} value={value![template.key] as Record<string, unknown>}
+        original={((many ? rows.current[index].original : props.original) as Record<string, unknown> | undefined)?.[template.key] as Record<string, unknown>}
+        path={[...rowPath, template.key]} messages={props.messages} missing={props.missing}
+        onChange={next => edit(index, { [template.key]: next })} />}
+    </>;
+  }
+  if (!many) return editor(values[0], 0);
+  return <div id={props.id} className="template-list">
+    {values.map((value, index) => {
+      const template = selection(value);
+      const text = template && templateText(props.messages, template);
+      return <div key={rows.current[index].id} className="collection-row">
+        <details open={props.missing.some(path => path.startsWith(valuePath([...props.path, String(index)]) + '/')) || undefined}>
+          <summary>{template ? label(template, value!) : ui.chooseTemplate}
+            {text?.hint && !template!.hideHintInList && <span className="summary-hint">{text.hint}</span>}
+          </summary>
+          {editor(value, index)}
+        </details>
+        <button type="button" onClick={() => { rows.current.splice(index, 1); props.onChange(values.filter((_, at) => at !== index)); }}>{ui.removeRow}</button>
+      </div>;
+    })}
+    {props.field.required && values.length === 0 && <input required value="" aria-label={ui.emptyCollection} onChange={() => {}} />}
+    <button type="button" onClick={() => { rows.current.push({ id: serial.current++, original: {} }); props.onChange([...values, {}]); }}>{ui.addRow}</button>
   </div>;
 }

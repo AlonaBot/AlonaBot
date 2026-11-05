@@ -26,6 +26,19 @@
     "invalidJSON": "请输入合法的 JSON。",
     "invalidNumber": "请输入有限数字。",
     "duplicateKey": "每个键须唯一。",
-    "emptyCollection": "请至少添加一项。"
+    "emptyCollection": "请至少添加一项。",
+    "chooseTemplate": "选择模板",
+    "language": "界面语言",
+    "english": "English",
+    "chinese": "简体中文",
+    "pageTitle": "配置表单预览",
+    "pageIntro": "体验 Schema 驱动的配置表单，查看修改生成的补丁。",
+    "fixtureNested": "基础与嵌套",
+    "fixtureSecrets": "密钥",
+    "fixtureCollections": "集合",
+    "fixtureTemplates": "模板",
+    "patchTitle": "Merge Patch",
+    "patchEmpty": "保存修改后，在这里查看生成的补丁。",
+    "fixtureLabel": "配置示例"
   }
 }
