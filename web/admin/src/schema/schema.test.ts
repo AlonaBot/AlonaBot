@@ -171,4 +171,12 @@ describe('form Merge Patch contract (V-25)', () => {
       .toThrow('missing secret values at /headers/rows/0/a~1b~0c');
   });
 
+  it('rejects object differences that would synthesize a secret marker', () => {
+    const original = { headers: { nested: { keep: 'value' } } };
+    const edited = { headers: { nested: { keep: 'value', $secret_set: true } } };
+    expect(() => buildPatch(original, edited, fieldsFromSchema(collections)))
+      .toThrow('/headers/nested: patch would contain a reserved secret marker');
+    expect(original).toEqual({ headers: { nested: { keep: 'value' } } });
+    expect(edited).toEqual({ headers: { nested: { keep: 'value', $secret_set: true } } });
+  });
 });

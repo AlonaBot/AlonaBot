@@ -58,6 +58,7 @@ function diff(original: unknown, edited: unknown, path: string[], missing: strin
       if (change !== undefined) entries.push([key, change]);
     }
     const patch = Object.fromEntries(entries);
+    if (isSecretSet(patch)) throw new Error(`${pointer(path)}: patch would contain a reserved secret marker`);
     // 新的空对象也要写入；已有对象无变化时省略整个节点。
     return entries.length || !isObject(original) ? patch : undefined;
   }
