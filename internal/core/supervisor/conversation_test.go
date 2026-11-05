@@ -112,7 +112,7 @@ func TestConversationProcesses(t *testing.T) {
 		service.Register(mux)
 		sender := message.New(registry, policy.New(store), nil, values.RequestTimeout)
 		mux.Handle(wire.ServiceSend, sender.Send)
-		events = router.New(values.DispatchQueueEvents, registry, sender.Send, nil, nil)
+		events = router.New(values.DispatchQueueEvents, registry, sender.Send, nil, nil, nil)
 		events.Start()
 		if err := platform.Start(ctx, events); err != nil {
 			t.Fatal(err)

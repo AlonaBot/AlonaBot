@@ -89,3 +89,18 @@ CREATE TABLE admin_session (
   auth_generation INTEGER NOT NULL,
   expires_at      INTEGER NOT NULL
 );
+
+CREATE TABLE command_policy (
+  plugin_id   TEXT NOT NULL REFERENCES install(plugin_id),
+  scope       TEXT NOT NULL,
+  permissions TEXT,
+  enabled     INTEGER,
+  PRIMARY KEY (plugin_id, scope)
+);
+
+CREATE TABLE global_deny (
+  kind                TEXT NOT NULL,
+  adapter_instance_id TEXT NOT NULL,
+  subject_id          TEXT NOT NULL,
+  PRIMARY KEY (kind, adapter_instance_id, subject_id)
+);

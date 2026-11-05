@@ -639,7 +639,7 @@ func TestRemoteMediaRead(t *testing.T) {
 	p := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: sink, RegisterIncoming: mediaStore.RegisterIncoming})
 	mux := router.NewMux()
 	p.Services(mux)
-	dispatch := router.New(1, registry, nil, mediaStore.PrepareIncoming, nil)
+	dispatch := router.New(1, registry, nil, mediaStore.PrepareIncoming, nil, nil)
 	t.Cleanup(dispatch.Close)
 	mediaStore.AddReadServices(mux, registry, dispatch, store.AdapterInstanceAllowed)
 	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
@@ -873,7 +873,7 @@ func TestRemotePermissionsAndEvents(t *testing.T) {
 			store, spec, logs := setup(t)
 			spec.Stdio = stdio
 			registry := adapter.NewRegistry()
-			dispatch := router.New(tune.Defaults().DispatchQueueEvents, registry, nil, nil, nil)
+			dispatch := router.New(tune.Defaults().DispatchQueueEvents, registry, nil, nil, nil, nil)
 			dispatch.Start()
 			defer dispatch.Close()
 			process := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: dispatch, RegisterIncoming: openMediaStore(t).RegisterIncoming})
