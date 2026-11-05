@@ -2,17 +2,12 @@ package generate
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
-	"go/importer"
 	"go/token"
 	"go/types"
 	"io"
 	"math/big"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -24,114 +19,8 @@ import (
 
 const configSchemaDraft = "https://json-schema.org/draft/2020-12/schema"
 
-// configImporter 对扫描包及依赖它们的外部包检查源码，其他包读取同一构建环境的导出数据。
-type configImporter struct {
-	scan     *scan
-	compiled types.Importer
-	sizes    types.Sizes
-	checked  map[string]*types.Package
-}
-
-func (i *configImporter) Import(path string) (*types.Package, error) {
-	if pkg := i.checked[path]; pkg != nil {
-		return pkg, nil
-	}
-	syntax, local := i.scan.syntax[path]
-	if !local {
-		return i.compiled.Import(path)
-	}
-	options := &types.Config{
-		Importer: i, Sizes: i.sizes, IgnoreFuncBodies: true,
-		Error: func(err error) {
-			problem := err.(types.Error)
-			i.scan.diagnostic(problem.Pos, problem.Msg)
-		},
-	}
-	pkg, err := options.Check(path, i.scan.files, syntax, nil)
-	if err != nil {
-		return nil, err
-	}
-	i.checked[path] = pkg
-	return pkg, nil
-}
-
-func (s *scan) configSchema(ctx context.Context, list *exec.Cmd) error {
-	// 1. 在相同 GOOS/GOARCH、tags 与 overlay 下取得依赖构建视图和目标位宽。
-	external := map[string]bool{"encoding": true, "encoding/json": true}
-	for _, files := range s.syntax {
-		for _, file := range files {
-			for _, spec := range file.Imports {
-				path, err := strconv.Unquote(spec.Path.Value)
-				if err != nil {
-					continue // 语法诊断已由 readFile 保留。
-				}
-				if _, local := s.syntax[path]; !local {
-					external[path] = true
-				}
-			}
-		}
-	}
-	var paths []string
-	for path := range external {
-		paths = append(paths, path)
-	}
-	slices.Sort(paths)
-	args := append(slices.Clone(list.Args[1:len(list.Args)-1]), "-export", "-compiled")
-	args = append(args, paths...)
-	command := exec.CommandContext(ctx, list.Path, args...)
-	command.Dir, command.Env = s.dir, list.Env
-	var stderr bytes.Buffer
-	command.Stderr = &stderr
-	output, err := command.Output()
-	if err != nil {
-		return fmt.Errorf("go list config imports: %w\n%s", err, stderr.String())
-	}
-	exports := make(map[string]string)
-	decoder := json.NewDecoder(bytes.NewReader(output))
-	for {
-		var pkg listedPackage
-		if err := decoder.Decode(&pkg); err == io.EOF {
-			break
-		} else if err != nil {
-			return fmt.Errorf("decode config imports: %w", err)
-		}
-		exports[pkg.ImportPath] = pkg.Export
-		if _, source := s.syntax[pkg.ImportPath]; source {
-			continue
-		}
-		// go list -deps 按依赖优先输出；回引源码包的整条链共用同一份类型身份。
-		if !slices.ContainsFunc(pkg.Imports, func(path string) bool { _, source := s.syntax[path]; return source }) {
-			continue
-		}
-		for _, name := range pkg.CompiledGoFiles {
-			path := name
-			if !filepath.IsAbs(path) {
-				path = filepath.Join(pkg.Dir, path)
-			}
-			file, err := s.parseFile(path)
-			if err != nil {
-				return err
-			}
-			s.syntax[pkg.ImportPath] = append(s.syntax[pkg.ImportPath], file)
-		}
-	}
-	command = exec.CommandContext(ctx, list.Path, "env", "GOARCH")
-	command.Dir, command.Env = s.dir, list.Env
-	output, err = command.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("go env GOARCH: %w\n%s", err, output)
-	}
-	i := &configImporter{
-		scan: s, sizes: types.SizesFor("gc", strings.TrimSpace(string(output))), checked: make(map[string]*types.Package),
-		compiled: importer.ForCompiler(s.files, "gc", func(path string) (io.ReadCloser, error) {
-			file, err := os.Open(exports[path])
-			if err != nil {
-				return nil, fmt.Errorf("open export data for %s: %w", path, err)
-			}
-			return file, nil
-		}),
-	}
-	// 2. 复用扫描 AST，按真实方法集识别自定义编解码，并从 Config 声明构造 Schema。
+func (s *scan) configSchema(i *schemaImporter) error {
+	// 1. 复用扫描 AST，按真实方法集识别自定义编解码，并从 Config 声明构造 Schema。
 	declaration := s.configs[0]
 	pkg, err := i.Import(declaration.pkg)
 	if err != nil {
@@ -161,7 +50,7 @@ func (s *scan) configSchema(ctx context.Context, list *exec.Cmd) error {
 		return nil
 	}
 	schema.Schema = configSchemaDraft
-	// 3. Schema 的结构与默认值检查通过后，再生成规范字节。
+	// 2. Schema 的结构与默认值检查通过后，再生成规范字节。
 	if _, err := schema.Resolve(&jsonschema.ResolveOptions{ValidateDefaults: true}); err != nil {
 		s.diagnostic(declaration.pos, "invalid config schema: "+err.Error())
 		return nil

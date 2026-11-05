@@ -45,6 +45,18 @@ func (s *scan) source() ([]byte, error) {
 	if len(s.result.ConfigSchema) != 0 {
 		fmt.Fprintf(&out, "ConfigSchema: []byte(%q),\n", s.result.ConfigSchema)
 	}
+	if len(s.serviceSchemas) != 0 {
+		out.WriteString("ServiceSchemas: map[string][]byte{\n")
+		ids := make([]string, 0, len(s.serviceSchemas))
+		for id := range s.serviceSchemas {
+			ids = append(ids, id)
+		}
+		slices.Sort(ids)
+		for _, id := range ids {
+			fmt.Fprintf(&out, "%q: []byte(%q),\n", id, s.serviceSchemas[id])
+		}
+		out.WriteString("},\n")
+	}
 	fmt.Fprintf(&out, "Commands: func(r *%s.CommandRegistry) {\n", sdk)
 	for _, command := range s.result.Commands {
 		out.WriteString("r")
