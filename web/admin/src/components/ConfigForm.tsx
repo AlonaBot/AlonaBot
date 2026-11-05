@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { fieldsFromSchema } from '../schema/model';
 import type { Field } from '../schema/model';
@@ -46,6 +46,12 @@ function FieldControl({ field, value, original, path, messages, missing, onChang
     </div>;
   } else {
     switch (field.type) {
+      case 'list':
+        control = <ListControl {...{ field, value, original, path, messages, missing, onChange }} id={id} />;
+        break;
+      case 'dict':
+        control = <DictControl value={value as Record<string, unknown>} onChange={onChange} id={id} required={field.required} />;
+        break;
       case 'object':
         control = <Fields fields={field.children!} value={value as Record<string, unknown>}
           original={original as Record<string, unknown>} path={path} messages={messages} missing={missing} onChange={onChange} />;
@@ -158,4 +164,103 @@ export function ConfigForm(props: ConfigFormProps) {
     </div>}
     <button type="submit" className="save-button">{ui.save}</button>
   </form>;
+}
+
+function ListControl(props: FieldProps & { id: string }) {
+  const ui = useUI();
+  const values = props.value as unknown[];
+  const serial = useRef(0);
+  const rows = useRef(values.map(value => ({ id: serial.current++, original: value })));
+  const text = fieldText(props.messages, props.field);
+  if (props.field.options) return <select id={props.id} multiple required={props.field.required} value={values as string[]}
+    onChange={(event: ChangeEvent<HTMLSelectElement>) => props.onChange(Array.from<HTMLOptionElement, string>(event.currentTarget.selectedOptions, option => option.value))}>
+    {props.field.options.map((option, index) => <option key={option} value={option}>{text.labels?.[index] ?? option}</option>)}
+  </select>;
+  return <div id={props.id} className="list-control">
+    {values.map((value, index) => <div key={rows.current[index].id} className="collection-row">
+      {props.field.children ? <Fields fields={props.field.children} value={value as Record<string, unknown>}
+        original={rows.current[index].original as Record<string, unknown>} path={[...props.path, String(index)]}
+        messages={props.messages} missing={props.missing} onChange={next => props.onChange(values.map((entry, at) => at === index ? next : entry))} />
+        : <input aria-label={`${text.description} ${index + 1}`} value={value as string}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => { const next = event.currentTarget.value; props.onChange(values.map((entry, at) => at === index ? next : entry)); }} />}
+      <button type="button" onClick={() => { rows.current.splice(index, 1); props.onChange(values.filter((_, at) => at !== index)); }}>{ui.removeRow}</button>
+    </div>)}
+    {props.field.required && values.length === 0 && <input required value="" aria-label={ui.emptyCollection} onChange={() => {}} />}
+    <button type="button" onClick={() => {
+      const value = props.field.children ? {} : '';
+      rows.current.push({ id: serial.current++, original: value }); props.onChange([...values, value]);
+    }}>{ui.addRow}</button>
+  </div>;
+}
+
+type DictRow = { id: number; key: string; kind: 'string' | 'number' | 'boolean' | 'json' | 'secret'; text: string; editingSecret: boolean; stored: unknown };
+function dictRow(key: string, value: unknown, id: number): DictRow {
+  const kind = isSecretSet(value) ? 'secret' : typeof value === 'string' ? 'string' : typeof value === 'number' ? 'number' : typeof value === 'boolean' ? 'boolean' : 'json';
+  return { id, key, kind, text: kind === 'secret' ? '' : kind === 'string' ? value as string : JSON.stringify(value), editingSecret: false, stored: value };
+}
+function dictValue(row: DictRow): unknown {
+  switch (row.kind) {
+    case 'secret': return row.stored;
+    case 'string': return row.text;
+    case 'boolean': return row.text === 'true';
+    case 'number': {
+      const number = Number(row.text);
+      if (!row.text.trim() || !Number.isFinite(number)) throw new Error('expected a finite number');
+      return number;
+    }
+    case 'json': return JSON.parse(row.text);
+  }
+}
+function DictControl({ value, onChange, id, required }: { value: Record<string, unknown>; onChange: (value: unknown) => void; id: string; required: boolean }) {
+  const ui = useUI();
+  const serial = useRef(0);
+  const [rows, setRows] = useState<DictRow[]>(() => Object.entries(value).map(([key, entry]) => dictRow(key, entry, serial.current++)));
+  function update(next: DictRow[]) {
+    setRows(next);
+    if (next.some((row, index) => next.findIndex(other => other.key === row.key) !== index)) return;
+    const entries: [string, unknown][] = [];
+    for (const row of next) {
+      try { entries.push([row.key, dictValue(row)]); }
+      catch (error) { if (!(error instanceof Error)) throw error; return; }
+    }
+    onChange(Object.fromEntries(entries));
+  }
+  return <div id={id} className="dict-control">
+    {rows.map((row: DictRow, index: number) => {
+      const duplicate = rows.some((other: DictRow) => other.id !== row.id && other.key === row.key);
+      let parseError: string | undefined;
+      try { dictValue(row); } catch (error) { if (!(error instanceof Error)) throw error; parseError = error.message; }
+      const change = (changes: Partial<DictRow>) => update(rows.map((entry: DictRow, at: number) => at === index ? { ...row, ...changes } : entry));
+      return <div key={row.id} className="collection-row dict-row">
+        <label>{ui.key}<input value={row.key} aria-invalid={duplicate || undefined}
+          ref={(input: HTMLInputElement | null) => { input?.setCustomValidity(duplicate ? ui.duplicateKey : ''); }}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => change({ key: event.currentTarget.value })} /></label>
+        {duplicate && <p role="alert">{ui.duplicateKey}</p>}
+        {row.kind === 'secret' ? <div><span>{isSecretSet(row.stored) || row.stored !== '' ? ui.secretSet : ui.secretUnset}</span>
+          {row.editingSecret ? <input type="password" aria-label={ui.value} autoComplete="new-password"
+            onChange={(event: ChangeEvent<HTMLInputElement>) => change({ stored: event.currentTarget.value, text: event.currentTarget.value })} />
+            : <button type="button" onClick={() => change({ editingSecret: true })}>{ui.modify}</button>}
+        </div> : <>
+          <label>{ui.valueType}<select value={row.kind} onChange={(event: ChangeEvent<HTMLSelectElement>) => {
+            const kind = event.currentTarget.value as DictRow['kind'];
+            change({ kind, text: kind === 'string' ? '' : kind === 'number' ? '0' : kind === 'boolean' ? 'false' : '{}' });
+          }}><option value="string">{ui.stringValue}</option><option value="number">{ui.numberValue}</option>
+            <option value="boolean">{ui.booleanValue}</option><option value="json">{ui.jsonValue}</option></select></label>
+          <label>{ui.value}{row.kind === 'boolean' ? <select value={row.text}
+            onChange={(event: ChangeEvent<HTMLSelectElement>) => change({ text: event.currentTarget.value })}>
+            <option value="true">{ui.trueValue}</option><option value="false">{ui.falseValue}</option></select>
+            : <textarea value={row.text} className={row.kind === 'json' ? 'code-editor' : undefined} aria-invalid={!!parseError || undefined}
+              ref={(input: HTMLTextAreaElement | null) => { input?.setCustomValidity(parseError ? row.kind === 'number' ? ui.invalidNumber : ui.invalidJSON : ''); }}
+              onChange={(event: ChangeEvent<HTMLTextAreaElement>) => change({ text: event.currentTarget.value })} />}</label>
+          {parseError && <p role="alert">{row.kind === 'number' ? ui.invalidNumber : ui.invalidJSON} <code>{parseError}</code></p>}
+        </>}
+        <button type="button" onClick={() => update(rows.filter((entry: DictRow) => entry.id !== row.id))}>{ui.removeRow}</button>
+      </div>;
+    })}
+    {required && rows.length === 0 && <input required value="" aria-label={ui.emptyCollection} onChange={() => {}} />}
+    <button type="button" onClick={() => {
+      let key = ''; while (rows.some((row: DictRow) => row.key === key)) key += '_';
+      update([...rows, dictRow(key, '', serial.current++)]);
+    }}>{ui.addRow}</button>
+  </div>;
 }

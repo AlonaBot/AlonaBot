@@ -11,6 +11,21 @@
     "clear": "清除",
     "patchError": "请检查配置后再保存。",
     "missingSecrets": "替换列表前，请重新输入以下密钥：",
-    "codeLanguage": "代码语言"
+    "codeLanguage": "代码语言",
+    "addRow": "添加一行",
+    "removeRow": "删除此行",
+    "key": "键",
+    "value": "值",
+    "valueType": "值类型",
+    "stringValue": "字符串",
+    "numberValue": "数字",
+    "booleanValue": "布尔值",
+    "jsonValue": "JSON",
+    "trueValue": "真",
+    "falseValue": "假",
+    "invalidJSON": "请输入合法的 JSON。",
+    "invalidNumber": "请输入有限数字。",
+    "duplicateKey": "每个键须唯一。",
+    "emptyCollection": "请至少添加一项。"
   }
 }

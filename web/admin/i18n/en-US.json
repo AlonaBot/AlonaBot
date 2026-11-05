@@ -11,6 +11,21 @@
     "clear": "Clear",
     "patchError": "Review the configuration before saving.",
     "missingSecrets": "Enter new values for these secrets to replace the list:",
-    "codeLanguage": "Code language"
+    "codeLanguage": "Code language",
+    "addRow": "Add row",
+    "removeRow": "Remove row",
+    "key": "Key",
+    "value": "Value",
+    "valueType": "Value type",
+    "stringValue": "String",
+    "numberValue": "Number",
+    "booleanValue": "Boolean",
+    "jsonValue": "JSON",
+    "trueValue": "True",
+    "falseValue": "False",
+    "invalidJSON": "Enter valid JSON.",
+    "invalidNumber": "Enter a finite number.",
+    "duplicateKey": "Each key must be unique.",
+    "emptyCollection": "Add at least one entry."
   }
 }
