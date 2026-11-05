@@ -1,0 +1,16 @@
+{
+  "messages": {
+    "save": "保存修改",
+    "restoreDefault": "恢复默认",
+    "defaultPending": "保存后恢复默认值。",
+    "undoReset": "撤销恢复",
+    "required": "必填",
+    "secretSet": "已设置",
+    "secretUnset": "未设置",
+    "modify": "修改",
+    "clear": "清除",
+    "patchError": "请检查配置后再保存。",
+    "missingSecrets": "替换列表前，请重新输入以下密钥：",
+    "codeLanguage": "代码语言"
+  }
+}

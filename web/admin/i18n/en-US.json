@@ -1,0 +1,16 @@
+{
+  "messages": {
+    "save": "Save changes",
+    "restoreDefault": "Restore default",
+    "defaultPending": "The default will be restored when you save.",
+    "undoReset": "Undo reset",
+    "required": "Required",
+    "secretSet": "Set",
+    "secretUnset": "Not set",
+    "modify": "Modify",
+    "clear": "Clear",
+    "patchError": "Review the configuration before saving.",
+    "missingSecrets": "Enter new values for these secrets to replace the list:",
+    "codeLanguage": "Code language"
+  }
+}
