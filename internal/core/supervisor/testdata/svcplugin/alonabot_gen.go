@@ -9,9 +9,10 @@ import (
 func init() {
 	alonabotgen0.UseGenerated((*plugin)(nil), alonabotgen0.Generated{
 		ServiceSchemas: map[string][]byte{
-			"main.input":   []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"properties\":{\"Text\":{\"type\":\"string\"}},\"required\":[\"Text\"],\"type\":\"object\"}"),
-			"main.inputV2": []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"properties\":{\"Text\":{\"type\":\"string\"}},\"required\":[\"Text\"],\"type\":\"object\"}"),
-			"main.reply":   []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"properties\":{\"Caller\":{\"type\":\"string\"},\"Calls\":{\"maximum\":9223372036854775807,\"minimum\":-9223372036854775808,\"type\":\"integer\"},\"Code\":{\"maximum\":2147483647,\"minimum\":-2147483648,\"type\":\"integer\"},\"Error\":{\"type\":\"string\"},\"Text\":{\"type\":\"string\"}},\"required\":[\"Text\",\"Caller\",\"Calls\",\"Code\",\"Error\"],\"type\":\"object\"}"),
+			"main.input":         []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"properties\":{\"Text\":{\"type\":\"string\"}},\"required\":[\"Text\"],\"type\":\"object\"}"),
+			"main.inputV2":       []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"properties\":{\"Text\":{\"type\":\"string\"}},\"required\":[\"Text\"],\"type\":\"object\"}"),
+			"main.invalidOutput": []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"properties\":{\"Secret\":{\"type\":\"string\"},\"Values\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"}},\"required\":[\"Secret\",\"Values\"],\"type\":\"object\"}"),
+			"main.reply":         []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"properties\":{\"Caller\":{\"type\":\"string\"},\"Calls\":{\"maximum\":9223372036854775807,\"minimum\":-9223372036854775808,\"type\":\"integer\"},\"Code\":{\"maximum\":2147483647,\"minimum\":-2147483648,\"type\":\"integer\"},\"Error\":{\"type\":\"string\"},\"Text\":{\"type\":\"string\"}},\"required\":[\"Text\",\"Caller\",\"Calls\",\"Code\",\"Error\"],\"type\":\"object\"}"),
 		},
 		Commands: func(r *alonabotgen0.CommandRegistry) {
 		},

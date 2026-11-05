@@ -93,7 +93,8 @@ func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
 	}
 	defer platform.Stop(ctx)
 	mux := router.NewMux()
-	mux.Forward(broker.New(events, values.RequestTimeout).Call)
+	services := broker.New(events, values.RequestTimeout)
+	mux.Forward(services.Call)
 	mux.Handle(wire.ServiceSend, sender.Send)
 	// 各进程经过真实握手、REGISTER、激活和独立的 Session；测试只用内存平台替代外部平台。
 	var running []*Running
@@ -133,6 +134,20 @@ func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
 			t.Fatalf("launch %s: %v", id, err)
 		}
 		running = append(running, instance)
+		if id == "a" && !badOutput {
+			found := false
+			for _, route := range instance.Instance.Routes {
+				if route.GetService().GetServiceName() == "v2" {
+					found = true
+					if route.GetInputSchemaId() != "main.inputV2" || route.GetInputSchemaVersion() != 2 || route.GetOutputSchemaId() != "main.reply" || route.GetOutputSchemaVersion() != 1 {
+						t.Fatalf("versioned service descriptor: %v", route)
+					}
+				}
+			}
+			if !found {
+				t.Fatal("version 2 service is not registered")
+			}
+		}
 		events.Attach(router.FromInstance(instance.Instance), caller)
 	}
 	target := &pb.Target{AdapterId: "memory", AdapterInstanceId: "instance", AccountId: "account", ChatId: "chat"}
@@ -215,4 +230,52 @@ func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
 			}
 		})
 	}
+	// 通过真实 Broker 和 Service Session 注入合法 JSON，隔离业务字段 Schema 的准入。
+	for _, test := range []struct{ name, payload string }{
+		{"schema_missing_required", `{}`},
+		{"schema_wrong_field_type", `{"Text":42}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			before := count(t)
+			response := services.Call(ctx, router.Caller{}, &wire.Inbound{Target: "a/pub", Payload: wire.Payload{
+				Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: "main.input", SchemaVersion: 1, Bytes: []byte(test.payload),
+			}})
+			if response.Err.GetCode() != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT {
+				t.Fatalf("input schema error=%v, want INVALID_ARGUMENT", response.Err)
+			}
+			if after := count(t); after != before {
+				t.Fatalf("invalid input invoked handler: before=%d after=%d", before, after)
+			}
+		})
+	}
+	t.Run("schema_invalid_handler_output", func(t *testing.T) {
+		before := count(t)
+		result := command(t, "b", "invalid_output", "a/invalid_output")
+		if result.Code != pb.ErrorCode_ERROR_CODE_INTERNAL {
+			t.Fatalf("invalid output reply=%+v", result)
+		}
+		if after := count(t); after != before+1 {
+			t.Fatalf("output handler calls=%d, want %d", after, before+1)
+		}
+		found := false
+		for _, line := range strings.Split(logs.String(), "\n") {
+			var record map[string]any
+			if err := json.Unmarshal([]byte(line), &record); err != nil {
+				continue
+			}
+			if record["msg"] != "service output schema validation failed" {
+				continue
+			}
+			found = true
+			if record["level"] != "ERROR" || record["schema_id"] != "main.invalidOutput" || record["error"] == nil {
+				t.Errorf("schema error diagnostic=%v", record)
+			}
+			if strings.Contains(line, "output-payload-must-not-be-logged") || strings.Contains(line, `"payload"`) || strings.Contains(line, `"Secret"`) {
+				t.Errorf("schema diagnostic contains payload: %s", line)
+			}
+		}
+		if !found {
+			t.Fatal("missing SDK output Schema ERROR diagnostic")
+		}
+	})
 }
