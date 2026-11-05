@@ -80,7 +80,8 @@ func JSON[In, Out any](r *ServiceRegistry, name string) *JSONService[In, Out] {
 		if err != nil {
 			return serviceRoute{}, err
 		}
-		if s.handler == nil {
+		handler := s.handler // 收集后冻结 Handler，保持 Session 注册固定。
+		if handler == nil {
 			return serviceRoute{}, fmt.Errorf("handler is nil")
 		}
 		return b.route(inputID, outputID, inputVersion, outputVersion, pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, func(c *Context, data []byte) ([]byte, error) {
@@ -91,7 +92,7 @@ func JSON[In, Out any](r *ServiceRegistry, name string) *JSONService[In, Out] {
 			if err := json.Unmarshal(data, &input); err != nil {
 				return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "decode service input: " + err.Error()}
 			}
-			out, err := s.handler(c, input)
+			out, err := handler(c, input)
 			if err != nil {
 				return nil, err
 			}
@@ -133,7 +134,8 @@ func Proto[In, Out proto.Message](r *ServiceRegistry, name string) *ProtoService
 	b := &serviceBuilder{name: name}
 	s := &ProtoService[In, Out]{builder: b}
 	b.prepare = func() (serviceRoute, error) {
-		if s.handler == nil {
+		handler := s.handler // 收集后冻结 Handler，保持 Session 注册固定。
+		if handler == nil {
 			return serviceRoute{}, fmt.Errorf("handler is nil")
 		}
 		input, output := newServiceMessage[In](), newServiceMessage[Out]()
@@ -142,7 +144,7 @@ func Proto[In, Out proto.Message](r *ServiceRegistry, name string) *ProtoService
 			if err := proto.Unmarshal(data, input); err != nil {
 				return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "decode service input: " + err.Error()}
 			}
-			output, err := s.handler(c, input)
+			output, err := handler(c, input)
 			if err != nil {
 				return nil, err
 			}
