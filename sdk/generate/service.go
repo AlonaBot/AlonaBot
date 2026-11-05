@@ -330,7 +330,8 @@ func (b *serviceBuilder) structure(typ *types.Struct) *jsonschema.Schema {
 	for index := range typ.NumFields() {
 		field := typ.Field(index)
 		underlying := types.Unalias(field.Type()).Underlying()
-		if pointer, ok := underlying.(*types.Pointer); ok {
+		pointer, indirect := underlying.(*types.Pointer)
+		if indirect {
 			underlying = pointer.Elem().Underlying()
 		}
 		_, embeddedStruct := underlying.(*types.Struct)
@@ -361,7 +362,10 @@ func (b *serviceBuilder) structure(typ *types.Struct) *jsonschema.Schema {
 			for _, key := range child.PropertyOrder {
 				b.property(schema, key, child.Properties[key], field.Pos())
 			}
-			schema.Required = append(schema.Required, child.Required...)
+			// nil 匿名指针会省略整个展开字段集合。
+			if !indirect {
+				schema.Required = append(schema.Required, child.Required...)
+			}
 			continue
 		}
 		if name == "" {
