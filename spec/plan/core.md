@@ -75,7 +75,7 @@
 | T-09.13 | goal-92 | 管理页所需的会话与上传接口：已登录会话取回 csrf_token、multipart 上传安装包与更新包、总览的 Core 版本与监听地址，追加到 `spec/ADMIN-API.md` | T-09 步骤 7（管理页） | T-09.1、T-09.4、T-09.12 | V-40、V-47 的 API 分项 | 未开始 |
 | T-09.14 | goal-93 | 配置、权限、工具策略与会话的管理 API：配置 raw JSON/PATCH/base_generation/secret、命令权限、发信许可、Core 设置（Core Admin 列表、默认 locale、命令前缀、全局禁止表）、工具调用策略、Agent 会话、插件页面票据、secret 明文查看的再认证 | T-09 步骤 7（配置与插件页） | T-07.6、T-08.8、T-08.11、T-08.12、T-09.6、T-09.12、T-11.1、T-11.3 | V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56 的管理 API 分项 | 未开始 |
 | T-09.16 | goal-100 | manifest 拆分：工程 `plugin.yaml` 只含作者信息（name、description、author 等），构建与打包补上协议、平台、入口、迁移方式与配置版本，包内 manifest 照常严格校验；`i18n/` 中 `metadata` 的翻译（D-78） | T-09 步骤 2 | T-03.8、T-09.2 | V-01 | 未开始 |
-| T-11.1 | goal-54 | 工具描述与目录：Service 描述的 `tool` 字段、注册校验、`core.tool.list`、调用策略的持久化与管理服务层 | T-11 步骤 1、2 | T-04.4、T-06.1 | V-55 的目录与策略分项 | 未开始 |
+| T-11.1 | goal-54 | 工具描述与目录：Service 描述的 `tool` 字段、注册校验、`core.tool.list`、调用策略的持久化与管理服务层 | T-11 步骤 1、2 | T-04.4、T-04.7、T-06.1 | V-55 的目录与策略分项 | 未开始 |
 | T-11.2 | goal-55 | 工具调用与用户确认：`core.tool.invoke`、`core.tool.confirm`、Core 内部的确认记录与按钮、同一 Actor 与 5 分钟限时、确认文案 | T-11 步骤 3、4 | T-03.8、T-06.2、T-08.8、T-11.1 | V-55 | 未开始 |
 | T-11.3 | goal-56 | Agent 会话存储：状态库表、`core.conversation.*`、管理服务层的列出与清除、purge | T-11 步骤 5 | T-03.1 | V-56 | 已完成（PR #35；TEST-MATRIX §3.2） |
 | T-11.4 | goal-57 | 工具与会话的多进程验收，汇总证据 | T-11 步骤 6 | T-11.2、T-11.3 | V-55、V-56 的 T-11 分项 | 未开始 |
