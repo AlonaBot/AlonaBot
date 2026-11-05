@@ -3,7 +3,6 @@ package policy
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -128,9 +127,8 @@ func scopeKey(s Scope) string {
 	case ScopePlugin:
 		return pluginScopeKey
 	case ScopeGroup:
-		// JSON 数组保留 token 边界，即使 token 内带有分隔符也不会产生相同主键。
-		encoded, _ := json.Marshal(s.Group) // []string 的 JSON 编码不会失败
-		return groupScopePrefix + string(encoded)
+		// 合法 token 不含空白，空格分隔可保留原始字节与 token 边界。
+		return groupScopePrefix + strings.Join(s.Group, " ")
 	default:
 		return routeScopePrefix + s.RouteID
 	}
@@ -141,11 +139,7 @@ func storedScope(key string) (Scope, error) {
 	case key == pluginScopeKey:
 		return Scope{Kind: ScopePlugin}, nil
 	case strings.HasPrefix(key, groupScopePrefix):
-		var group []string
-		if err := json.Unmarshal([]byte(strings.TrimPrefix(key, groupScopePrefix)), &group); err != nil {
-			return Scope{}, fmt.Errorf("decode command group scope: %w", err)
-		}
-		return Scope{Kind: ScopeGroup, Group: group}, nil
+		return Scope{Kind: ScopeGroup, Group: strings.Split(strings.TrimPrefix(key, groupScopePrefix), " ")}, nil
 	case strings.HasPrefix(key, routeScopePrefix):
 		return Scope{Kind: ScopeRoute, RouteID: strings.TrimPrefix(key, routeScopePrefix)}, nil
 	default:
