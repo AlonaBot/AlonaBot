@@ -158,7 +158,7 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 
 Core→插件与 Core→Adapter 方向另有 `sdk.log.set_level`：新的生效级别 → 空结果，SDK 收到后立即按新级别过滤（CONTRACTS §14.3）。
 
-注册描述的追加字段：Service 描述增加可选的 `tool`（description、default_policy）；CommandMatch 追加 KEYWORD、STARTSWITH、ENDSWITH、FULLMATCH，CommandSpec 增加模式列表与 `ignore_case`；Actor 增加可选 `locale`；message.created 的载荷增加 `to_me`；Bootstrap 追加 `log_level`（字段号 10）与 `session_limits`（字段号 11），字段分配与切片顺序见 §3.2；CommandSpec 增加可选的说明键（插件 `messages` 中的键，供 `core.command.list` 翻译）；BeforeSend/AfterSend 的输入增加操作类型与被编辑的 platform_message_id。这些都是追加，不改变 `contracts/wirespec_test.go` 固定的枚举。
+注册描述的追加字段：Service 描述增加可选的 `tool`（description、default_policy、input_schema_json：该 Service 输入 Schema 的原文，Core 只从注册中得到 schema 标识，列出工具时需要 Schema 正文）；CommandMatch 追加 KEYWORD、STARTSWITH、ENDSWITH、FULLMATCH，CommandSpec 增加模式列表与 `ignore_case`；Actor 增加可选 `locale`；message.created 的载荷增加 `to_me`；Bootstrap 追加 `log_level`（字段号 10）与 `session_limits`（字段号 11），字段分配与切片顺序见 §3.2；CommandSpec 增加可选的说明键（插件 `messages` 中的键，供 `core.command.list` 翻译）；BeforeSend/AfterSend 的输入增加操作类型与被编辑的 platform_message_id。这些都是追加，不改变 `contracts/wirespec_test.go` 固定的枚举。
 
 ## 4. 调用上下文、读写与取消
 

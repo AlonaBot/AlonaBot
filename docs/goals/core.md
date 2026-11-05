@@ -43,12 +43,12 @@
 | goal-100 | T-09.16 | manifest 拆分为作者信息与构建信息 | T-03.8、T-09.2 | 等待前置 |
 | goal-91 | T-04.8 | SDK 自有类型与事件常量 | T-04.7 | 等待前置 |
 | goal-96 | T-04.9 | 删除构建期标记 | T-04.7 | 等待前置 |
-| goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 等待前置 |
+| goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 待派发 |
 | goal-98 | T-07.7 | 插件页面的沙箱隔离 | T-07.4、T-07.6、T-09.1 | 等待前置 |
 | goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 待派发 |
 | goal-95 | T-08.11 | 配置改由 config_schema.json 声明 | T-04.7、T-08.3、T-08.4、T-08.10 | 等待前置 |
 | goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-07.6、T-08.4、T-09.1、T-09.2、T-13.1 | 等待前置 |
-| goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-06.1 | 等待前置 |
+| goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-04.7、T-06.1 | 等待前置 |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 等待前置 |
@@ -2872,7 +2872,24 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-15 · T-05.1 可信上下文与有界分发
 
-状态：等待前置。前置 T-03.3、T-04.3、T-04.4（PR #88）均已合并；审查者按合入代码核对策略接口与语句后改为待派发。当前 `router.New` 为 queueEvents、adapters、send、prepare、prefixes、policy 六个参数。下方 Options 保留现有账号名、发送与策略能力。
+状态：待派发。前置 T-03.3、T-04.3、T-04.4（PR #88，合并提交 `c8dd516`）均已合并。本 goal 此前已派发：草稿 PR #67（分支 goal-15）只有两个 fixture，内容与语句一致，继续时在该分支先 `git merge origin/main`，不另开分支。符号已按合入代码核对：
+- `router.New(queueEvents int, adapters *adapter.Registry, send ServiceFunc, prepare func(*pb.Event, Caller) (*pb.Event, error), prefixes func(adapterInstanceID string) []string, policy CommandPolicy) *Router`。调用点只在 `internal/core/adapter/remote/remote_test.go` 与 `internal/core/supervisor` 的 bus、command、conversation、echo、index、media_in、policy、service 测试中；`cmd/alonabot` 还没有装配 Router。
+- `Router.Start()` 启动唯一的 worker；`Router.Close()` 取消 `r.ctx` 并等待 worker，没有参数和返回值，调用点同上。`HasInFlight` 在 `r.ctx` 取消后返回 false。
+- `dispatch` step 1 在链开始时计算 `actor.Permissions`：{user} ∪（来源权限中除 user、admin 以外的名字），经 `CommandPolicy.IsAdmin` 加入 admin。`call` 的顺序是 `prepare` → `bind` → 构造 HandlerRequest，`Invocation{PluginID, Event: prepared, DefaultTarget: ev.GetTarget()}`。
+- `CommandPolicy` 有 `CheckCommand` 与 `IsAdmin`；Actor 为 nil 时 `IsAdmin` 返回 false，非空权限集合不满足。命令层只处理 `message.created`，`scheduled` 不进入命令层。
+- `wire.Budget` 的 `acquire`、`release` 是包私有方法，调用方只有 `internal/wire/session.go`；nil 表示不限额。
+- `tune.Values` 已有 `DispatchConcurrency`、`DispatchQueueEvents`、`DispatchQueueBytes` 与 `CoreMaxPayload`。
+- `message.proto` 注明 PreEventResult 只能改写 `event_payload`，不能改写 Event 的其余字段。
+- SDK 的事件路由目前不写 `required_permissions`；`command_test.go` 在 Attach 前直接修改路由描述来声明权限。T-04.7（#89）未合并，它会重写注册 API 并迁移测试插件：本切片的测试插件用合并时 main 上的 API，后合并者同步。
+
+核对时修订了原语句：
+- Options 补上 goal-7 的 Prepare 与 goal-87 的 Prefixes，保留 nil 语义。
+- `trusted_roles`、`TrustedRoles`、USER/ADMIN 改为 D-69 的权限名集合。权限沿用链开始时计算，不提前到 Deliver：事件可能排队，策略修改在下一次派发时生效。
+- 导出 `wire.Budget` 的预留与释放，范围加入 `internal/wire`。
+- `Close` 写明签名、排队事件与期限到期后的处理。
+- 保留字段按 `message.proto` 写全：除 `event_payload` 外都保留，原语句漏了 `occurred_at_unix_ms`、`capabilities`、`platform_payload` 与 payload 内的平台消息 ID。
+- 写明重建与 `prepare` 的先后。
+- 测试分开覆盖条数、字节与 Global 三种限额（原语句用一组 Options 无法区分）；scheduled 改为验证事件路由的权限，并写明它没有默认 Target。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-15（切片 T-05.1：可信上下文与有界分发）。goal 目录 goal-15，分支 goal-15，worktree .worktrees/goal-15，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -2882,9 +2899,10 @@ goal-28、goal-29 的符号已按合入代码核对：
 依据：PLAN T-05 步骤 1、2；CONTRACTS §2.1、§2.3 第 1 条、§1.2；MESSAGE-MODEL §1、§1.1；TEST-MATRIX V-13、V-16 的 fixture 分项。
 
 范围（只新增或修改这些）：
-- internal/core/router/：新增 dispatch.go（并发链与等待队列）、trusted.go（可信信息的保留与重建）；router.go 的 New、Deliver 与 worker 改用它们，删除 goal-2 的单 worker shortcut 注释
-- 更新 router.New 的全部调用者（含测试与 cmd/alonabot 之外的装配代码；cmd/alonabot 若已装配 Router 也一并更新）
-- 新增 contracts/testdata/events/：button.clicked 与 scheduled 的规范 fixture（JSON 形式的 pb.Event）
+- internal/core/router/：新增 dispatch.go（并发链与等待队列）、trusted.go（可信信息的保留与重建）；router.go 的 New、Start、Close、Deliver、dispatch、call 改用它们，删除 Start 中的单 worker shortcut 注释
+- internal/wire/：budget.go 导出预留与释放，session.go 同步调用点
+- 更新 router.New 与 Router.Close 的全部调用者（remote_test.go 与 internal/core/supervisor 的测试；cmd/alonabot 若已装配 Router 也一并更新）。依赖事件先后顺序的现有测试传 Concurrency: 1
+- contracts/testdata/events/：button.clicked 与 scheduled 的规范 fixture（JSON 形式的 pb.Event，PR #67 已提交）
 - 上述包的测试文件
 允许的新跨模块边：无。
 
@@ -2894,32 +2912,40 @@ internal/core/router
        Concurrency int          // DISPATCH_CONCURRENCY
        QueueEvents int          // DISPATCH_QUEUE_EVENTS
        QueueBytes  int64        // DISPATCH_QUEUE_BYTES
-       Global      *wire.Budget // Core 全局 payload 预算；排队中的事件占用它
-       Adapters    *adapter.Registry // 沿用账号用户名查询
-       Send        ServiceFunc // 沿用 usage 与自动回复发送
-       Policy      CommandPolicy // 沿用 goal-13 的策略注入，待其合并核对
+       Global      *wire.Budget // Core 全局 payload 预算，排队中的事件占用它；nil 时不限额
+       Adapters    *adapter.Registry // 账号用户名查询
+       Send        ServiceFunc // usage 与自动回复发送
+       Prepare     func(*pb.Event, Caller) (*pb.Event, error) // 为接收 Session 改写事件；nil 时原样派发
+       Prefixes    func(adapterInstanceID string) []string // 实例的命令前缀；nil 时所有实例使用 ["/"]
+       Policy      CommandPolicy // 动态命令策略与管理员身份；nil 时仅按声明权限判定且不赋予 admin
    }
-   func New(opt Options) *Router // 取代带 adapters、send 与策略参数的 New，保留这些能力
+   func New(opt Options) *Router // 取代位置参数的 New，不留旧签名
    type Stats struct { Accepted, DroppedQueueFull, DroppedBudget uint64; Running, Queued int }
    func (r *Router) Stats() Stats
+   func (r *Router) Close(ctx context.Context) error // 取代无参数的 Close，不留旧签名
+internal/wire
+   func (b *Budget) Acquire(n int64) bool // 由 acquire 改名，不等待，超过上限时不占用并返回 false；接受 nil
+   func (b *Budget) Release(n int64)      // 由 release 改名；接受 nil
 
 行为：
-- Deliver：事件编码后的大小计入 QueueBytes 与 Global；等待中的事件数达到 QueueEvents、字节超过 QueueBytes 或 Global 无法预留时，立即返回 adapter.ErrQueueFull 并计数（分别计入 DroppedQueueFull、DroppedBudget），不阻塞调用方。事件开始执行时释放它在队列与 Global 中的占用。
+- Deliver：所有事件先入队，按进入顺序开始执行。事件编码后的大小（proto.Size）计入 QueueBytes 与 Global。等待中的事件数已达 QueueEvents 或字节将超过 QueueBytes 时计入 DroppedQueueFull，Global 无法预留时计入 DroppedBudget，都立即返回 adapter.ErrQueueFull，不阻塞调用方。事件开始执行时释放它在队列与 Global 中的占用。Start 之前接纳的事件留在队列中；Close 之后 Deliver 照旧返回错误。
 - 并发：最多 Concurrency 个事件同时执行；同一事件的全部候选（命令层与事件路由）在一条链内按 (priority, plugin_id, route_id) 顺序执行，不同事件互不等待。链执行在独立 goroutine 中，不在任何 Session 的读循环里运行；慢 Handler 不影响其他 Session 的 Response、Cancel 与控制帧。
-- 可信信息：Deliver 时把 Event 拆成 Core 保留部分（event_id、event_type、source_kind、adapter_id、adapter_instance_id、account_id、target、actor、message 的 platform_message_id、source_event_id，以及 button.clicked 的 action_id/action_schema_version/value、scheduled 的 job_id/run_id/scheduled_at）与业务 payload。每次构造 HandlerRequest 时用保留部分重建这些字段，业务 payload 只来自当前（后续 PreEvent 可改写的）副本；InvocationContext 的 actor 与 default_target 只取保留部分。T-05.3 的 PreEvent 只能改写业务副本。
-- 身份：Actor 的 trusted_roles 在 Deliver 时按 T-04.4 的 TrustedRoles 计算一次并保留；没有 Actor 的事件（例如 scheduled 与 bot.online）不补用户，命令的 USER/ADMIN 检查一律不满足。
-- Router.Close：停止接收新事件，等待运行中的链在调用方给出的 ctx 内结束，然后释放全部队列占用。
+- 可信信息：Deliver 时把 Event 拆成 Core 保留部分与业务副本。保留部分是 event_payload 以外的全部字段（event_id、event_type、source_kind、occurred_at_unix_ms、adapter_id、adapter_instance_id、account_id、target、actor、message、capabilities、platform_payload、source_event_id），以及 event_payload 中的路由与来源绑定：button_clicked 的全部字段；scheduled 的全部字段；message_created、message_edited、reaction_added 的 platform_message_id；message_deleted 的 platform_message_ids。业务副本是其余的 event_payload。每次调用 Handler 时先用保留部分和当前业务副本（后续 PreEvent 可改写的副本）重建事件，再交给 Prepare 与参数绑定；Prepare 只替换入站媒体 ID。InvocationContext 的 actor、default_target 与 Invocation.DefaultTarget 只取保留部分。T-05.3 的 PreEvent 只能改写业务副本。
+- 身份：Actor 的权限集合沿用 dispatch step 1 的计算，在链开始时算一次并写入保留部分，来源带的 user、admin 不生效；没有 Actor 的事件（例如 scheduled 与 bot.online）不补用户，只满足空的 required_permissions。
+- Router.Close：停止接纳新事件；丢弃等待中的事件并释放它们在队列与 Global 中的占用；等待运行中的链结束。链全部结束时返回 nil。ctx 先到期时取消链内的调用，等链退出后返回 ctx.Err()。未 Start 或重复调用时同样安全。链结束之前 HasInFlight 仍按原规则返回。
 - 本切片不改变命令层与事件路由的匹配规则，也不实现 PreEvent、Rule 与传播的新语义。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/supervisor/dispatch_test.go（//go:build unix）：构建一个测试插件，其事件路由按收到文本睡眠指定时长后回复，可用不同 priority 以三个插件 ID 启动。用 memory Adapter 与 Options{Concurrency: 2, QueueEvents: 3, QueueBytes: 很小的值} 装配：
+- 提交：internal/core/supervisor/dispatch_test.go（//go:build unix）：构建一个测试插件，其事件路由按收到文本睡眠指定时长后回复，可用不同 priority 以三个插件 ID 启动。用 memory Adapter 装配，每项按需要给出 Options，等 Stats().Running 达到预期后再投递下一个事件：
   - 三个插件以不同顺序启动时，同一事件的调用顺序都是 (priority, plugin_id, route_id)。
-  - 两个慢事件执行期间，第三个事件进入队列，再多的事件得到 ErrQueueFull，Stats 计数正确；慢事件结束后排队事件被执行。
+  - 条数：Options{Concurrency: 2, QueueEvents: 1}，QueueBytes 取 tune 缺省值。两个慢事件执行期间，第三个事件进入队列，第四个得到 ErrQueueFull，DroppedQueueFull 为 1；慢事件结束后排队事件被执行。
+  - 字节：Options{Concurrency: 1, QueueEvents: 3}，QueueBytes 等于一个事件的 proto.Size。一个慢事件执行期间，第二个进入队列，第三个得到 ErrQueueFull，DroppedQueueFull 为 1。
+  - 全局预算：QueueBytes 取 tune 缺省值，Global 为 wire.NewBudget(一个事件的 proto.Size)。一个慢事件执行期间，第二个进入队列，第三个得到 ErrQueueFull，DroppedBudget 为 1；队列清空后 Global.Used() 为 0。
   - 慢 Handler 执行期间，同一插件的 Session 仍能完成另一条 core.send 的 Response（读循环未被占住）。
-  - 读入 contracts/testdata/events 的 button.clicked 与 scheduled fixture 并 Deliver：插件收到的 action_id/value、job_id/run_id 与 fixture 一致；scheduled 事件没有 Actor，需要 USER 的命令不可用。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：QueueBytes 与 Global 的预留与释放在并发下正确（-race）；Close 时排队事件的占用被释放；trusted_roles 不能被插件自报的值改变；可信字段在重建时覆盖业务副本中的同名值。
+  - 读入 contracts/testdata/events 的 button.clicked 与 scheduled fixture 并 Deliver：插件收到的 action_id/value、job_id/run_id 与 fixture 一致。scheduled 没有默认 Target，测试插件把收到的字段写入测试给出的文件，不用回复上报。scheduled 没有 Actor：Attach 前把一条 scheduled 事件路由的 RequiredPermissions 改为 {"user"}（沿用 command_test.go 的做法），它不被调用，同一事件上权限为空的路由被调用。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：QueueBytes 与 Global 的预留与释放在并发下正确（-race）；Close 时排队事件的占用被释放；Close 在 ctx 到期后取消运行中的链并返回 ctx.Err()；事件自带的 admin 权限不生效；可信字段在重建时覆盖业务副本中的同名值。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./sdk/...；go build ./...。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./internal/wire/... ./sdk/...；go build ./...。
 
 不做：PreEvent 与出站 Hook（T-05.3）；Rule 与 HandlerOutcome 新语义（T-05.2）；延续调用（T-05.4）；实际的 scheduled tick（T-07.2）；按钮 token（T-03.8）。
 ```
@@ -3217,14 +3243,22 @@ internal/core/router
 
 ### goal-54 · T-11.1 工具描述、目录与策略
 
-状态：等待前置。前置 T-04.4（PR #88）与 T-06.1（PR #45）均已合并；审查者按合入代码核对后改为待派发。语句中 goal-13、goal-19 提供的符号（policy.Policy、broker.Broker、sdk.JSONService、ServiceOption、router.Mux）只写名字；合并后由审查者核对签名，再改为待派发。jsonschema-go 已由 goal-28（PR #54）引入。
+状态：等待前置（T-04.7）。T-04.4（PR #88，合并提交 `c8dd516`）与 T-06.1（PR #45）已合并。原语句未列 T-04.7，但它依赖的写法与 goal-88 冲突：goal-88 删除 `ServiceOption`，JSON Service 的 Schema 由生成器产生（D-70、CONTRACTS §3），`jsonschema.For[In]` 得到的 Schema 可能与 Service 实际校验用的不一致，不符合 §13.1「输入 Schema 即该 Service 的输入 Schema」。因此前置加入 T-04.7（波次 8，早于本切片，波次不变）。下面的 sdk 段按 goal-88 语句的接口编写，T-04.7 合并后由审查者按合入代码核对，再改为待派发。
+
+Core 一侧已按合入代码核对并修订：
+- `route.proto` 的 `ServiceSpec` 已用到字段号 4，`tool = 5` 可用；`schema.sql` 有 `install(plugin_id)`；`internal/wire/services.go` 末尾可追加。jsonschema-go v0.4.3 已在 go.mod，删除原语句的 go.mod 范围。
+- `Router` 只有按 ID 查询的 `Plugin(pluginID)`，不能遍历，范围加入 `Plugins()`。
+- Service 访问规则写在 `broker.Call` step 2 内，抽为 `router.ServiceCallable` 由 Broker 与 Catalog 共用，不复制。
+- `(*Mux).Handle(name string, fn ServiceFunc)` 用于注册 `core.tool.list`。
+- 写明 `Effective` 与 `Policies` 在插件未 Attach 时的结果，修正 `SetPolicy` 的表述。
+- 生成的 Schema 无法从 SDK 写入远程 `$ref`，该用例移到 `validate.Register` 的本地自测。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-54（切片 T-11.1：工具描述、目录与策略）。goal 目录 goal-54，分支 goal-54，worktree .worktrees/goal-54，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：JSON Service 可以声明为工具（给模型的说明、缺省策略 allow 或 confirm，输入 Schema 为该服务的输入 JSON Schema）；Core 校验工具描述，提供 core.tool.list 返回调用插件可以调用、且生效策略不是 deny 的工具；工具策略按 plugin_id/service_name 持久化，提供管理服务层的查询与修改，下一次调用生效。
 
-依据：PLAN T-11 步骤 1、2；CONTRACTS §13.1、§13.2（策略段）、§3；WIRE-FORMAT §3.5（core.tool.list 与 Service 描述的 tool）；DECISIONS D-43；TEST-MATRIX V-55 的目录与策略分项。
+依据：PLAN T-11 步骤 1、2；CONTRACTS §13.1、§13.2（策略段）、§3；WIRE-FORMAT §3.5（core.tool.list 与 Service 描述的 tool）；DECISIONS D-43、D-70；TEST-MATRIX V-55 的目录与策略分项。
 
 范围（只新增或修改这些）：
 - contracts/proto/alonabot/v1/：route.proto 的 ServiceSpec 追加 ToolSpec tool = 5；新增 tool.proto（ToolPolicy、ToolInfo、ToolListRequest/Response）。随后 go generate ./...（本切片获授权只追加这些）
@@ -3233,8 +3267,9 @@ internal/core/router
 - internal/wire/services.go：末尾追加 ServiceToolList = "core.tool.list"
 - internal/core/state/schema.sql：在唯一的初始迁移末尾加入新表；新增 internal/core/state/tool.go
 - 新增 internal/core/tool/
-- sdk/：services.go 增加 Tool 选项与工具输入 Schema 的生成；新增 tool.go（ListTools）
-- go.mod、go.sum：仅在 jsonschema-go 尚未引入时新增（D-43）
+- internal/core/router/：新增 Plugins 与 ServiceCallable
+- internal/core/broker/broker.go：访问判定改用 router.ServiceCallable，行为不变
+- sdk/：services.go 的 JSONService 增加 Tool；新增 tool.go（ListTools）
 - 上述包的测试文件
 允许的新跨模块边：无。
 
@@ -3248,31 +3283,34 @@ internal/core/router
 2. internal/core/state
    迁移：CREATE TABLE tool_policy (plugin_id TEXT NOT NULL REFERENCES install(plugin_id), service_name TEXT NOT NULL, policy INTEGER NOT NULL, PRIMARY KEY (plugin_id, service_name));
    读写方法自定（放在 tool.go），按主键幂等。
-3. internal/core/tool
+3. internal/core/router
+   func (r *Router) Plugins() []Plugin // 当前已 Attach 的插件快照，激活状态由调用方检查
+   func ServiceCallable(spec *pb.ServiceSpec, callerPluginID, targetPluginID string) bool // callerPluginID 为空（Core）或等于目标时为 true，其余按 PUBLIC 与 ALLOWLIST 判定
+4. internal/core/tool
    type Catalog struct{ ... }
    func New(store *state.Store, r *router.Router) *Catalog
    func (c *Catalog) Register(m *router.Mux)                                  // 注册 core.tool.list
    func (c *Catalog) Effective(ctx context.Context, pluginID, service string) (pb.ToolPolicy, error) // 覆盖优先，否则缺省策略；供 T-11.2 的 invoke
    func (c *Catalog) SetPolicy(ctx context.Context, pluginID, service string, p pb.ToolPolicy) error // UNSPECIFIED 表示删除覆盖
    func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error) // type ToolPolicyEntry struct { PluginID, Service string; Default, Override pb.ToolPolicy }
-4. sdk
-   func Tool(description string, defaultPolicy ToolDefault) ServiceOption // type ToolDefault int：ToolAllow、ToolConfirm；只用于 JSONService
+5. sdk（T-04.7 合并后核对）
+   func (s *JSONService[In, Out]) Tool(description string, defaultPolicy ToolDefault) *JSONService[In, Out] // type ToolDefault int：ToolAllow、ToolConfirm；ProtoService 没有此方法
    type ToolInfo struct { Name, Description string; InputSchema json.RawMessage; Policy string } // Policy 为 "allow" 或 "confirm"
    func ListTools(ctx context.Context) ([]ToolInfo, error)
 
 行为：
-- SDK：JSONService 带 Tool 选项时，输入 Schema 由 jsonschema.For[In] 生成（工具输入可以拒绝未知键，与配置 Schema 不同，D-43 只约束配置），序列化为 input_schema_json；Tool 用于 ProtoService 是 Collect 错误。
+- SDK：声明了 Tool 的 JSONService，input_schema_json 取 Generated.ServiceSchemas 中 In 的 schema_id 对应的 Schema 原文，与该 Service 校验输入用的是同一份，不另外生成；链式规则与 goal-88 相同（Handle 之后调用 Tool 在 Collect 时报错）。
 - 注册校验：tool 只允许出现在 encoding 为 JSON 的服务上；description 非空且不超过 1024 字节（命名常量）；default_policy 为 ALLOW 或 CONFIRM；input_schema_json 必须能被 jsonschema 解析并 Resolve（不加载远程 $ref，ResolveOptions.Loader 为 nil），根类型为 object。任一失败整体拒绝注册。
-- core.tool.list：遍历 Router 中已激活插件的工具服务，按 goal-19 的访问规则只保留调用插件可以调用的，再去掉生效策略为 DENY 的；按 name 字典序返回。调用者自己的工具同样按规则出现。每次调用都读取当前策略，不缓存。
-- 策略：覆盖可为 ALLOW、CONFIRM、DENY；生效策略 = 覆盖或缺省。SetPolicy 在事务提交成功后才返回；插件或服务不存在时仍可设置（安装记录必须存在，否则 NOT_FOUND）。修改在下一次 list 与 invoke 时生效。
+- core.tool.list：遍历 Router.Plugins() 中已激活插件的工具服务，按 ServiceCallable 只保留调用插件可以调用的，再去掉生效策略为 DENY 的；按 name 字典序返回。调用者自己的工具同样按规则出现。每次调用都读取当前策略，不缓存。
+- 策略：覆盖可为 ALLOW、CONFIRM、DENY；生效策略 = 覆盖或缺省。SetPolicy 在事务提交成功后才返回；安装记录不存在时返回 NOT_FOUND，安装记录存在而插件未激活或服务尚未声明时仍可设置。Effective：有覆盖时返回覆盖；没有覆盖且插件未 Attach 或该服务不是工具时返回 NOT_FOUND。Policies 列出已 Attach 插件的全部工具与全部已保存的覆盖，取不到声明时 Default 为 UNSPECIFIED。修改在下一次 list 与 invoke 时生效。
 - 工具调用（core.tool.invoke）与确认在 T-11.2。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/supervisor/tool_test.go（//go:build unix）：沿用 goal-19 的 svcplugin，增加带 Tool 选项的服务（PUBLIC 的 a/search 为 allow，ALLOWLIST: b 的 a/admin 为 confirm）；b 与 c 收到消息时调用 sdk.ListTools 并回复结果：
+- 提交：internal/core/supervisor/tool_test.go（//go:build unix）：沿用 goal-19 的 svcplugin，增加声明了 Tool 的服务（PUBLIC 的 a/search 为 allow，ALLOWLIST: b 的 a/admin 为 confirm）；b 与 c 收到消息时调用 sdk.ListTools 并回复结果：
   - b 看到 a/admin 与 a/search，c 只看到 a/search；input_schema 与 In 的类型一致，policy 正确。
   - SetPolicy(a, search, DENY) 后两者都看不到 a/search；删除覆盖后恢复；关闭并重新打开状态库后覆盖仍在。
-  - 注册一个 description 为空或 input schema 含远程 $ref 的工具时 REGISTER 失败。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Tool 用于 Protobuf 服务的 Collect 错误；description 长度边界；Policies 的输出；未知 ToolPolicy 被拒。
+  - description 为空的工具使插件启动失败。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：validate.Register 拒绝 Protobuf 服务上的 tool、含远程 $ref 或根类型不是 object 的 input_schema_json；description 长度边界；Policies 的输出；未知 ToolPolicy 被拒；Effective 的 NOT_FOUND。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go mod tidy 后无差异；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
 
