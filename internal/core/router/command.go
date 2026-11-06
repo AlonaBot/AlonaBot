@@ -62,7 +62,7 @@ func (r *Router) dispatchCommands(ev *pb.Event) bool {
 				if route.pluginID != entry.PluginID || route.route.GetRouteId() != entry.RouteID {
 					continue
 				}
-				if !route.plugin.Activated() || !r.permitted(route.candidate, ev) {
+				if !route.plugin.Activated() || !r.commandPermitted(route.candidate, ev) {
 					return false
 				}
 				tail := strings.TrimPrefix(head, prefix)
@@ -124,11 +124,22 @@ func (r *Router) dispatchCommands(ev *pb.Event) bool {
 				}
 			}
 		}
-		if matched && r.permitted(route.candidate, ev) && r.invokeCommand(route.candidate, ev, func(*pb.Event) (*pb.CommandInvocation, error) { return invocation, nil }, "") {
+		if matched && r.commandPermitted(route.candidate, ev) && r.invokeCommand(route.candidate, ev, func(*pb.Event) (*pb.CommandInvocation, error) { return invocation, nil }, "") {
 			return true
 		}
 	}
 	return false
+}
+
+func (r *Router) commandPermitted(c candidate, ev *pb.Event) bool {
+	if r.policy == nil {
+		return r.permitted(c, ev)
+	}
+	if failure := r.policy.CheckCommand(r.ctx, c.pluginID, c.route, ev.GetActor(), ev.GetTarget()); failure != nil {
+		slog.Debug("command policy denied", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "code", failure.GetCode())
+		return false
+	}
+	return true
 }
 
 func commandPhase(route commandRoute) int {
