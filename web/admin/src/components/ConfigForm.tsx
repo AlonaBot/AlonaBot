@@ -365,6 +365,7 @@ function TemplateControl(props: FieldProps & { id: string }) {
     let field: Field | undefined;
     for (const part of parts) {
       field = children.find(child => child.key === part)!;
+      if (field.secret) return text.name;
       current = current && Object.hasOwn(current, part) ? current[part] as Record<string, unknown> : undefined;
       children = field.children ?? [];
     }
