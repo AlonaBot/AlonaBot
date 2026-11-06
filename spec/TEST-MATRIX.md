@@ -111,7 +111,7 @@
 | V-21、V-37 | T-01 类型/上限，T-02 基础阶段/激活门；T-07 停止集成，T-08 配置/DB 回调 | T-09 与正式候选提交前后失败恢复组合 |
 | V-22、V-47 | T-07 Listener/代理、Host/凭证边界、插件响应的沙箱头与测试会话组件 | T-09 真实首次 token、reset、login/CLI 与经 WebUI 桥访问的插件页面 |
 | V-23～V-25、V-38 | T-08 raw JSON、Secret、候选 DB、表单/i18 组件 | T-09 真实 reload/WebUI/API 和 Journal 崩溃恢复 |
-| V-88 | T-07.6 读取、写回、重新读取与首次 token 文件；T-08.12 实例配置与 `core_config.json` 的迁移与备份 | T-09 管理服务的写回、Core 装配对命令前缀与 Core Admin 的接入、Adapter 更新时的实例配置迁移 |
+| V-88 | T-07.6 读取、写回、重新读取与首次 token 文件；T-08.12 实例配置与 `core_config.json` 的迁移与备份 | T-09 管理服务的写回、Core 装配对命令前缀、Core Admin 与默认 locale 的接入、Adapter 更新时的实例配置迁移 |
 | V-26 | T-01 驱动 CRUD/事务验证 | T-08 两个入口的 Session 连接、迁移声明互斥与不链接 GORM 的验证 |
 | V-36 | T-02 双 Core/操作串行/进程锁，T-08 DB 锁与候选资源 | T-09 正式 enable/update、Core 突退且旧进程仍写入 |
 | V-39 | T-01 驱动/事务小验证，T-08 迁移及许可检查 | T-09 首装/resume/更新及显式维护的真实管理入口 |

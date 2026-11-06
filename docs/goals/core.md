@@ -47,7 +47,7 @@
 | goal-98 | T-07.7 | 插件页面的沙箱隔离 | T-07.4、T-07.6、T-09.1 | 等待前置 |
 | goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 待派发 |
 | goal-95 | T-08.11 | 配置改由 config_schema.json 声明 | T-04.7、T-08.3、T-08.4、T-08.10 | 等待前置 |
-| goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-07.6、T-08.4、T-09.1、T-09.2、T-13.1 | 等待前置 |
+| goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 等待前置 |
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-04.7、T-06.1 | 等待前置 |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
@@ -1785,7 +1785,7 @@ internal/core/webhost
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./... ；go build ./...。
 
-不做：config.json 直读、dev.sqlite 与拒绝 update/rollback（T-13.2）；热部署与 Reload（T-13.3）；alonabot run（T-09.4，复用本切片的装配）；HTTP 与设置文件的装配（随 T-07.5、T-09.4 接入；本切片 Router 的 prefixes 传 nil，所有实例使用 ["/"]，Core Admin 列表为空，两者由 T-09.4 接入）。
+不做：config.json 直读、dev.sqlite 与拒绝 update/rollback（T-13.2）；热部署与 Reload（T-13.3）；alonabot run（T-09.4，复用本切片的装配）；HTTP 与设置文件的装配（随 T-07.5、T-09.4 接入；本切片 Router 的 prefixes 传 nil，所有实例使用 ["/"]，Core Admin 列表为空，默认 locale 按 en-US，三者由 T-09.4 接入）。
 ```
 
 ## 第 7 波
@@ -2629,7 +2629,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 - ${环境变量}：只有整个字符串值等于 `${NAME}`（NAME 为字母、数字与下划线，不以数字开头）时展开；变量不存在时 Load 失败并指出键路径。Update 在原文上修改，写回时保留原来的 `${...}`，不把展开后的值写回。
 - 写回：键保持文件中的原有顺序，新键追加在所在对象末尾，缩进两个空格，末尾换行。
 - 命令行参数 `--listen`、`--log-level`、`--log-format` 照旧只覆盖本次运行，不写回文件。
-- 装配：main.go 用 Settings 设置日志、日志文件、代理、webhost 与 Listener。`run` 没有 Router 与 Policy，本切片不接入命令前缀与 Core Admin 列表，两者由 goal-39 接入根包的 Core 装配（执行顺序的共享文件规则）。LogSources、DefaultLocale 与 Adapters 只解析与保存，由后续切片使用（T-09.10、T-08.8、T-09.4、T-13.3）。
+- 装配：main.go 用 Settings 设置日志、日志文件、代理、webhost 与 Listener。`run` 没有 Router 与 Policy，本切片不接入命令前缀与 Core Admin 列表，两者由 goal-39 接入根包的 Core 装配（执行顺序的共享文件规则）。LogSources、DefaultLocale 与 Adapters 只解析与保存，由后续切片使用（T-09.10、T-09.4、T-13.3）。
 - 首次启动：Core 打开状态库后调用 FirstToken；stdin 与 stderr 都是终端时把返回的 token 只写一次到 stderr；否则写入 admin_token，并在日志中以 INFO 输出该文件的路径（不输出 token）。admin-token init 与 reset 的行为不变。
 
 测试（按编码规范「测试提交规则」）：
@@ -2640,7 +2640,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/settings/... ./internal/core/adminauth/... ./cmd/alonabot/...；go build ./...。
 
-不做：把命令前缀与 Core Admin 列表接入 Router 和 Policy（T-09.4）；合并两个 Base URL 与删除插件 host（T-07.7）；core_config.json 与 Adapter 实例配置的版本迁移和备份（T-08.12）；Admin API 与 CLI 对这些设置的修改入口（T-09.4、T-09.14）；`alonabot run --reload` 对该文件的监视（T-13.3）；日志级别的运行时修改（T-09.10）。
+不做：把命令前缀、Core Admin 列表与默认 locale 接入 Router、Policy 和组件启动（T-09.4）；合并两个 Base URL 与删除插件 host（T-07.7）；core_config.json 与 Adapter 实例配置的版本迁移和备份（T-08.12）；Admin API 与 CLI 对这些设置的修改入口（T-09.4、T-09.14）；`alonabot run --reload` 对该文件的监视（T-13.3）；日志级别的运行时修改（T-09.10）。
 ```
 
 ### goal-32 · T-08.5 受管 SQLite 连接与迁移
@@ -2728,7 +2728,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-53 · T-08.8 用户可见文案目录
 
-状态：待派发。前置 T-04.1、T-04.3、T-04.6（PR #78，合并提交 `0a320c5`）、T-08.1、T-08.10（PR #77）均已合并。2026-11-04 按 D-69～D-74 改写，符号已按合入代码核对；同日按 D-76 修订 config 根节点的格式（与 config_schema.json 同形），与 schema 的核对归 goal-95；按 D-80 改用 `i18n/` 目录并允许顶层的 `metadata`（D-78）；按 D-82 修订：默认 locale 写在 `core_config.json` 的 `default_locale`，由装配处从 goal-97 的 settings 取得，本切片不建 `core_setting` 表：
+状态：待派发。前置 T-04.1、T-04.3、T-04.6（PR #78，合并提交 `0a320c5`）、T-08.1、T-08.10（PR #77）均已合并。2026-11-04 按 D-69～D-74 改写，符号已按合入代码核对；同日按 D-76 修订 config 根节点的格式（与 config_schema.json 同形），与 schema 的核对归 goal-95；按 D-80 改用 `i18n/` 目录并允许顶层的 `metadata`（D-78）；按 D-82 修订：默认 locale 写在 `core_config.json` 的 `default_locale`，由 goal-39 在装配处从 goal-97 的 settings 取得，本切片不建 `core_setting` 表：
 - 命令 usage：`router/command.go` 的 `commandUsage(spec *pb.CommandSpec, prefix string) *pb.MessageChain` 以英文 "Usage: " 加本次匹配到的前缀、规范路径、别名与参数标注拼出缺省 usage；USAGE_MODE_CUSTOM 时也按缺省 usage 发送，函数开头有一条 `shortcut:` 注释，说明待 T-08.8 查找 usage_key。usage 经注入的发送回调（message.Service.Send）发出。
 - `CommandSpec.usage_key = 12` 是插件 i18n/ 中 messages 的键；`sdk.UsageKey(key) RouteOption` 写入 USAGE_MODE_CUSTOM 与 usage_key；`Usage(text)` 已删除。`sdk.Collect(root) (*Registration, error)` 在启动时合并生成项与注册。
 - `sdk.Generated{ConfigSchema, Commands, Events}`，由生成代码在 init 中经 `sdk.UseGenerated` 登记。`sdk/generate` 只做静态扫描，看不到运行时注册的 UsageKey 参数。
@@ -2781,7 +2781,7 @@ goal-28、goal-29 的符号已按合入代码核对：
    Instance 增加 Messages *i18n.Catalog // 当前包的用户可见文案；没有 i18 资源时为 nil，激活后只读
 5. internal/core/supervisor
    Spec 增加 I18n map[string][]byte // 当前包的 i18n/*.json 原文，来自安装包或库模式的嵌入副本；nil 表示没有文案资源
-   Spec 增加 DefaultLocale string // 写入 Bootstrap.default_locale；装配处由 core_config.json 的 default_locale 取得（goal-97），空值按 "en-US"
+   Spec 增加 DefaultLocale string // 写入 Bootstrap.default_locale；装配处由 core_config.json 的 default_locale 取得（goal-97 提供读取，goal-39 接入），空值按 "en-US"
 6. internal/core/router
    Plugin 接口增加 Messages() *i18n.Catalog；instancePlugin 返回 instance.Messages
 
@@ -2821,7 +2821,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/...；go build ./...。
 
-不做：WebUI 文案、语言切换与配置字段翻译的渲染（T-08.7）；确认消息的文案（T-11.2 使用本目录）；修改默认 locale 的管理 API（T-09.14）；从安装包与库模式读取 i18n/ 并填入 Spec.I18n 与 Spec.DefaultLocale 的装配（T-09.5、T-13.1）；Adapter 权限的 label_key 显示（T-09.9）。
+不做：WebUI 文案、语言切换与配置字段翻译的渲染（T-08.7）；确认消息的文案（T-11.2 使用本目录）；修改默认 locale 的管理 API（T-09.14）；从安装包与库模式读取 i18n/ 并填入 Spec.I18n 的装配（T-09.5、T-13.1）；把 default_locale 填入 Spec.DefaultLocale 的装配（T-09.4）；Adapter 权限的 label_key 显示（T-09.9）。
 ```
 
 ### goal-100 · T-09.16 manifest 拆分为作者信息与构建信息
@@ -3154,19 +3154,19 @@ internal/wire
 
 ### goal-39 · T-09.4 管理服务、安装记录与 serve
 
-状态：等待前置（T-03.8、T-07.6、T-13.1）。语句中 goal-8、goal-31、goal-36、goal-37（packages）、goal-67 提供的符号（manifest.CheckDependencies、secret.Store、adminauth.Auth、packages.Preflight、根包的 assembly、remote.Process、policy 的 Admin 方法）只写名字；合并后由审查者核对签名，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：`alonabot serve` 改为 `alonabot run`（D-77）；Adapter 实例与 Core Admin 的增删经 goal-97 的 settings 写回 `core_config.json`，实例凭证不再存为 Secret 引用（D-82）；首次 token 由 goal-97 实现；install 接受未签名的仓库来源并要求管理员确认（D-81）。前置合并后由审查者改写。2026-11-05：goal-67 首次装配 Router 时 prefixes 传 nil，goal-97 只提供 settings，命令前缀与 Core Admin 列表由本切片接入（见范围、行为与测试）。
+状态：等待前置（T-03.8、T-07.6、T-08.8、T-13.1）。语句中 goal-8、goal-31、goal-36、goal-37（packages）、goal-53、goal-67 提供的符号（manifest.CheckDependencies、secret.Store、adminauth.Auth、packages.Preflight、supervisor.Spec.DefaultLocale、根包的 assembly、remote.Process、policy 的 Admin 方法）只写名字；合并后由审查者核对签名，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：`alonabot serve` 改为 `alonabot run`（D-77）；Adapter 实例与 Core Admin 的增删经 goal-97 的 settings 写回 `core_config.json`，实例凭证不再存为 Secret 引用（D-82）；首次 token 由 goal-97 实现；install 接受未签名的仓库来源并要求管理员确认（D-81）。前置合并后由审查者改写。2026-11-05：goal-67 首次装配 Router 时 prefixes 传 nil，goal-97 只提供 settings，命令前缀与 Core Admin 列表由本切片接入（见范围、行为与测试）。2026-11-06：默认 locale 也由本切片接入，前置加入提供 Spec.DefaultLocale 的 T-08.8；Router 取默认 locale 的方式由 goal-53 自定，改写语句时按合入代码核对。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-39（切片 T-09.4：管理服务、安装记录与 serve）。goal 目录 goal-39，分支 goal-39，worktree .worktrees/goal-39，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：建立唯一的管理服务，CLI 与（之后的）WebUI 都经它的 HTTP API 操作；四种角色的组件使用同一套 install、list、enable、disable、restart、uninstall（含 --purge）、pin 流程，所有变更按包串行；install 按角色执行同类唯一，`--source` 指定并持久化来源，`--replace` 显式替换同类组件；Adapter 实例的创建、启停与删除经此服务，凭证存为 Secret 引用；启用时检查必需依赖，停用、卸载被依赖的包时列出受影响者并要求显式确认；admin add/remove/list；alonabot run（不带子命令时相同）复用根包的 Core 装配，按安装记录启动全部已启用的包。reload、update、rollback 的入口与校验在此定义，候选编排由 T-09.5 起接入。
 
-依据：PLAN T-09 步骤 3；CONTRACTS §2.2、§2.3、§9.1～§9.3、§8（依赖段）、§15.1、§15.2、§7.4、§5.3；DECISIONS D-26、D-42、D-59、D-82；TEST-MATRIX V-40、V-48、V-52、V-82、V-01 的安装分项、V-88 的接入分项。
+依据：PLAN T-09 步骤 3；CONTRACTS §2.2、§2.3、§9.1～§9.3、§8（依赖段）、§15.1、§15.2、§7.4、§5.3、§5.4；DECISIONS D-26、D-42、D-59、D-82；TEST-MATRIX V-40、V-48、V-52、V-82、V-01 的安装分项、V-88 的接入分项。
 
 范围（只新增或修改这些）：
 - internal/core/state/schema.sql：在唯一的初始迁移的 install 表定义中加入新列、末尾加入新表，安装记录的写入与读取方法同步新列；新增 internal/core/state/installs_admin.go（安装记录的扩展字段与 Adapter 实例表）
 - 新增 internal/core/manage/（管理服务与 HTTP API）
-- 根包 assembly.go：增加按安装记录启动全部已启用包、挂载管理 API 的步骤，读取 core_config.json 并接入命令前缀与 Core Admin 列表；新增导出的 Serve 供 cmd 使用
+- 根包 assembly.go：增加按安装记录启动全部已启用包、挂载管理 API 的步骤，读取 core_config.json 并接入命令前缀、Core Admin 列表与默认 locale；新增导出的 Serve 供 cmd 使用
 - cmd/alonabot/：serve（以及不带子命令时）调用根包 Serve；新增 install、list、enable、disable、restart、reload、update、rollback、uninstall、pin、adapter instance、admin 命令（经管理 API 访问）
 - internal/core/buttons、conversation、policy、tool、secret：在卸载与 purge 中调用其已有的清理方法（只加调用点）
 - 上述包的测试文件
@@ -3219,7 +3219,7 @@ internal/wire
 - pin：持久化版本约束（SemVer 范围，manifest 的语法规则），update 只接受满足 pin 的候选。
 - reload/update/rollback：完成输入与前置校验（来源绑定、pin、版本不低于被依赖的 min_version 时需要 confirm），然后交给 Candidates；缺省实现返回 UNSUPPORTED。
 - Adapter 实例：CreateInstance 用该 Adapter 包的配置 Schema（安装包中的 Schema 资源）经 secret.Extract 存快照；Start 时 Resolve 后经 remote.Process 启动；同一 adapter_id 下账号唯一由 remote 检查。实例配置与凭证不出现在 List 或日志中，读取只返回 Redact 后的结果。
-- Core 设置接入（assembly，Run 与 Serve 共用）：settings.Load 取得 *settings.File（goal-68 或 goal-69 已加入这一步时复用）；Router 的 prefixes（goal-15 合并后为 Options.Prefixes）传 File.CommandPrefixes，policy 传与 message.Service 相同的 *policy.Policy；启动任何包之前把 Settings().Admins 转为 []policy.Admin 并调用 SetAdmins。
+- Core 设置接入（assembly，Run 与 Serve 共用）：settings.Load 取得 *settings.File（goal-68 或 goal-69 已加入这一步时复用）；Router 的 prefixes（goal-15 合并后为 Options.Prefixes）传 File.CommandPrefixes，policy 传与 message.Service 相同的 *policy.Policy；启动任何包之前把 Settings().Admins 转为 []policy.Admin 并调用 SetAdmins。经 supervisor.Launch 启动组件时 Spec.DefaultLocale 取 Settings().DefaultLocale，同进程开发组件的 Bootstrap.default_locale 取同一个值；每次启动都读当前设置，修改后在之后建立的 Session 生效。Core 自己的文案（缺省 usage）用 goal-53 在 Router 内取得的默认 locale，需要注入时同样接当前设置。
 - admin add/remove 经 File.Update 写回 admins，成功后调用 SetAdmins。两步在同一把锁内执行，SetAdmins 用这次写回之后的列表。这两个操作没有包 ID，按包串行保护不到它们，不加锁时并发的 add 与 remove 会让内存列表与文件不一致。admin list 读 Policy.Admins。
 - HTTP API（在 Core 的主机名下，全部经 adminauth.Require）：每个方法一个 JSON 端点，需要确认时返回 409 与 {"affected": [...]}；错误返回 {"code", "safe_message"}。CLI 命令从 --admin-url（缺省取设置文件的 admin_base_url）与 ALONABOT_ADMIN_TOKEN 环境变量（或 --token-file）取得 Bearer token，不读取插件环境；确认通过 --yes 显式给出。CLI 不直接写状态库。
 - WebUI 组件没有进程：enable/disable 只改记录，restart 返回 FAILED_PRECONDITION；文件的提供在 T-09.12。list 返回 role。
@@ -3236,6 +3236,7 @@ internal/wire
   - 创建 Adapter 实例：状态库中的配置只有 secret 引用；list 与日志中没有 token；实例可启停。
   - 插件依赖成环的包在安装时被拒。
   - core_config.json 用 command_prefixes_by_instance 覆盖一个实例：该实例的消息按新前缀匹配命令，另一个实例仍用 command_prefixes；admins 中的用户发命令时插件收到的 Actor.permissions 含 admin，admin add 写回后新用户的下一条命令也含 admin。
+  - core_config.json 的 default_locale 设为 zh-CN：没有 locale 的 Actor 触发命令时，插件的 Context.T 回复中文，参数错误的缺省 usage 也是中文。
   - reload、update、rollback 返回 UNSUPPORTED（等待 T-09.5）。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：串行化（同一包的并发操作排队）；ErrNeedsConfirm 的 Affected 内容；API 的错误格式；没有管理凭证且非终端时 serve 拒绝启动；Package.State 的取值。
 
@@ -3332,7 +3333,7 @@ Core 一侧已按合入代码核对并修订：
 - 组件身份取自目录中的工程 plugin.yaml（goal-100 的解析）；构建失败或 ID、adapter_id 与已安装的包冲突时，在启动任何组件前报错退出。
 - 构建复用生成器与 `go build`，提供供 goal-38 的 `alonabot build` 复用的内部函数，不另写一套。
 - 开发组件使用 goal-67 的 dev 来源安装记录与固定代次；进程的启动、停止与有限重启沿用 supervisor，与已安装组件相同。
-- 轮询：每 DEV_RELOAD_POLL 用标准库检查每个组件目录中的 `.go` 文件、`//go:embed` 引用的文件、go.mod、go.sum、plugin.yaml、config_schema.json、instance_schema.json 与 i18n/（排除数据目录、vendor、以 . 或 _ 开头的目录与 testdata），以及插件的 config.json 与 core_config.json 中该 Adapter 的实例；源码或资源变化时重新构建，成功后依次重启变化的组件；只有配置变化时只重启该组件，Adapter 只重启变化的实例；core_config.json 的其他变化交给 goal-97 的 Reload：返回的键含 admins 时调用 policy.SetAdmins，命令前缀经 File.CommandPrefixes 读当前设置，不需要额外处理。
+- 轮询：每 DEV_RELOAD_POLL 用标准库检查每个组件目录中的 `.go` 文件、`//go:embed` 引用的文件、go.mod、go.sum、plugin.yaml、config_schema.json、instance_schema.json 与 i18n/（排除数据目录、vendor、以 . 或 _ 开头的目录与 testdata），以及插件的 config.json 与 core_config.json 中该 Adapter 的实例；源码或资源变化时重新构建，成功后依次重启变化的组件；只有配置变化时只重启该组件，Adapter 只重启变化的实例；core_config.json 的其他变化交给 goal-97 的 Reload：返回的键含 admins 时调用 policy.SetAdmins，命令前缀经 File.CommandPrefixes 读当前设置，不需要额外处理；开发组件的 Spec.DefaultLocale 在每次启动时取当前设置，default_locale 变化后在之后建立的 Session 生效，不为此重启运行中的组件。
 - 删除现在 `run` 的 `--plugin-id`、`--entry` 参数，不留兼容；`--data-dir`、`--stdio`、`--listen` 与 `--args` 保留。
 - 提交的集成测试（//go:build unix）在临时目录用 `alonabot init` 生成插件工程并以 `--reload` 运行：改动回复文本后插件重启并回复新文本、Core 与回环 Adapter 不重启；写入语法错误时旧插件继续回复；只改 config.json 时不重新构建但新配置生效；改动 config_schema.json 后重新构建。
 
@@ -4368,7 +4369,7 @@ broker、bus、router 的 Options 增加 Metrics *metrics.Counters（可为 nil�
 2) 写入 Journal（phase=started，expected_old=当前 Active，new_generation 为新 ID）。
 3) 冻结：Router/Broker/Bus/Scheduler/HTTP 停止向该插件派发新的根调用（沿用 goal-22 与 goal-27 的 Drain），按停止流程停止旧进程并等待进程树退出；phase=stopped_old。进程树没有在停止预算内清空时失败（不 sleep 猜测）。
 4) candidate.PrepareDatabase（取得 runtime.lock 后复制，完成后释放）；AddGeneration(new, 未提交)；phase=candidate_ready。
-5) 启动候选：supervisor.Launch（NewCandidate=true，Bootstrap 带 activation_reason（first_install/reload/update）、manual_migration_approved（只有管理员为本次 Session/Generation 显式授予时为 true）、阶段预算、Pending 解析后的配置），REGISTER 校验与 secret 抽取后得到快照；SetGenerationConfig 写入快照与 secret 路径；phase=prepared。此时不提交 Active、不发 ACTIVATE。
+5) 启动候选：supervisor.Launch（NewCandidate=true，Bootstrap 带 activation_reason（first_install/reload/update）、manual_migration_approved（只有管理员为本次 Session/Generation 显式授予时为 true）、阶段预算、Pending 解析后的配置；Spec.DefaultLocale 取当前设置，同 goal-39），REGISTER 校验与 secret 抽取后得到快照；SetGenerationConfig 写入快照与 secret 路径；phase=prepared。此时不提交 Active、不发 ACTIVATE。
 6) manifest 声明 prepare_effects=external 的插件，已有安装的 reload 与 update 在步骤 2 之前检查：没有本次操作的维护许可时返回 FAILED_PRECONDITION（safe_message "NEEDS_MANUAL_MIGRATION"），不写 Journal、不停止旧版；有许可时 Bootstrap 的 manual_migration_approved=true，其余照常。first_install 不受此门槛限制。
 - 普通 resume（restart、Core 重启后的恢复）不经过本编排，不写新 Journal。
 - Abort：phase 改为 failed → 停止候选进程并确认退出 → candidate.Discard（只删未受保护的候选资源）→ 以旧 Active 启动旧版的新 Session（first_install 时保持未启用）→ phase=cleaned。Abort 本身失败时保留 Journal 供 T-09.7 恢复。

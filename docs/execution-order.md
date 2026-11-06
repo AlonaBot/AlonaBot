@@ -62,7 +62,7 @@
 | 日志 | 按[编码规范「日志用默认 Logger，依赖显式传递」](coding-standards.md#日志用默认-logger依赖显式传递)取用默认 Logger，并遵循 CONTRACTS §14 的字段；不另建日志封装，不用 fmt 直接写 stderr/stdout（CLI 给用户的输出除外）。 |
 | `internal/inproc/harness.go` | 只由 goal-81、goal-82 修改，只用标准库类型；字段只追加。 |
 | `internal/tune/params.go` | 只追加参数，不改已合并参数的名称与缺省值；新增参数同时追加到 CONTRACTS §16 的表，由审查者在合并前同步。 |
-| 根包 `alonabot` 的 Core 装配 | 只有 goal 语句写明负责装配的切片才能改，与 `cmd/alonabot/main.go` 相同。goal-67 建立装配并首次调用 `router.New`，prefixes 传 nil，不读设置文件；goal-97 不改根包。命令前缀与 Core Admin 列表由 goal-39 接入。goal-39、goal-68、goal-69 都要在装配中读取 `core_config.json`：先合并者加入 `settings.Load` 这一步，后合并者复用同一个 `*settings.File`，不重复加载。 |
+| 根包 `alonabot` 的 Core 装配 | 只有 goal 语句写明负责装配的切片才能改，与 `cmd/alonabot/main.go` 相同。goal-67 建立装配并首次调用 `router.New`，prefixes 传 nil，不读设置文件；goal-97 不改根包。命令前缀、Core Admin 列表与默认 locale 由 goal-39 接入。goal-39、goal-68、goal-69 都要在装配中读取 `core_config.json`：先合并者加入 `settings.Load` 这一步，后合并者复用同一个 `*settings.File`，不重复加载。 |
 | 包文档 | 只在包的职责确实变化时更新，不顺手重写。 |
 | `ARCHITECTURE.md`、`README.md`、`spec/` | 执行者不改，需要同步的内容在 PR 正文「文档同步」一节列出，由审查者在合并前补上。例外是 goal 语句明确要求的证据记录。 |
 | `docs/goals/`、`docs/execution-order.md` | 只由审查者维护。 |

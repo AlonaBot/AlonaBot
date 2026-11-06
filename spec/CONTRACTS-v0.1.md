@@ -588,7 +588,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | `adapters` | 空 | 按 adapter_id 分组的 Adapter 实例：`{"telegram": {"$version": 1, "instances": {"main": {"token": "${TELEGRAM_BOT_TOKEN}"}}}}`；实例配置按该 Adapter 的 `instance_schema.json` 补缺失值并校验（§5.5、§8） |
 
 - 任何字符串值都可以写成 `${环境变量}`，启动时展开；变量不存在时 Core 拒绝启动并指出键的路径。敏感值也可以直接写明文，文件权限保护它们。手写时可以省略 `$version`，Core 启动时按当前版本补上并写回。
-- WebUI 与 CLI 修改这些设置时写回该文件（先写临时文件再替换），保留原有的 `${...}` 写法，不把展开后的值写回。手动修改后重启 Core 生效；`alonabot run --reload` 时 Core 监视该文件：`admins`、`command_prefixes`、`command_prefixes_by_instance`、`default_locale`、`log.level`、`log.sources` 与 `adapters` 立即生效（Adapter 只重启变化的实例），其他键输出 WARN 提示需要重启。启动时文件不合法则拒绝启动并指出位置；运行中重新读取失败时保留当前设置并记 ERROR。
+- WebUI 与 CLI 修改这些设置时写回该文件（先写临时文件再替换），保留原有的 `${...}` 写法，不把展开后的值写回。手动修改后重启 Core 生效；`alonabot run --reload` 时 Core 监视该文件：`admins`、`command_prefixes`、`command_prefixes_by_instance`、`default_locale`、`log.level`、`log.sources` 与 `adapters` 立即生效（Adapter 只重启变化的实例；`default_locale` 对运行中的插件从它的下一个 Session 起生效），其他键输出 WARN 提示需要重启。启动时文件不合法则拒绝启动并指出位置；运行中重新读取失败时保留当前设置并记 ERROR。
 - 调优参数用 `--args` 覆盖（§16）。命令行参数覆盖 `core_config.json` 中的同名项，只对本次运行有效。Core 全局禁止表、插件的命令策略与发信许可等按插件或按用户记录的管理数据仍在状态库，经管理服务修改。缺省只监听本机地址。远程管理有两种方式：经 SSH 隧道访问本机地址，或改为非本机地址并满足 §7.3、§7.4 的 Host、HTTPS 与可信反代要求；容器镜像的例外见 §15.3。
 - 首次启动且尚无管理凭证时按 §7.4 生成管理 token：stdin 与 stderr 都是终端时只在该终端显示一次；不是终端时写入 `<data_dir>/admin_token`，日志只输出该文件的路径。
 
