@@ -656,3 +656,70 @@ func TestAdminAuthRun(t *testing.T) {
 		})
 	}
 }
+
+// TestFirstAdminToken 联验非终端首次启动、show 读取与登录后删除凭证文件（V-47、V-88）。
+func TestFirstAdminToken(t *testing.T) {
+	dir := t.TempDir()
+	c := startCore(t, dir, "--listen", "127.0.0.1:0")
+	c.waitFor(activatedRe)
+	address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
+	name := filepath.Join(dir, firstTokenFile)
+	stat, err := os.Stat(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stat.Mode().Perm() != 0o600 {
+		t.Fatalf("first token file mode = %v", stat.Mode())
+	}
+
+	binary := filepath.Join(binDir, "alonabot")
+	command := exec.Command(binary, "admin-token", "show", "--data-dir", dir)
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("show first token: %v; stderr=%s", err, stderr.String())
+	}
+	token := strings.TrimSpace(string(output))
+	if token == "" {
+		t.Fatal("show returned an empty token")
+	}
+	input, err := json.Marshal(map[string]string{"token": token})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequest(http.MethodPost, "http://"+address+"/api/auth/login", bytes.NewReader(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = "127.0.0.1"
+	request.Header.Set("Origin", "http://127.0.0.1:7650")
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, readErr := io.ReadAll(response.Body)
+	closeErr := response.Body.Close()
+	if readErr != nil || closeErr != nil {
+		t.Fatalf("read login response: %v; close: %v", readErr, closeErr)
+	}
+	if response.StatusCode != http.StatusOK || len(response.Cookies()) != 1 {
+		t.Fatalf("login: status=%d body=%s", response.StatusCode, content)
+	}
+	if _, err := os.Stat(name); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("first token file after login: %v", err)
+	}
+
+	command = exec.Command(binary, "admin-token", "show", "--data-dir", dir)
+	output, err = command.CombinedOutput()
+	if err == nil || command.ProcessState.ExitCode() != exitFailure || !strings.Contains(string(output), "read first admin token file") {
+		t.Fatalf("show after login: err=%v output=%s", err, output)
+	}
+	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := c.wait(15 * time.Second); code != 0 {
+		t.Fatalf("Core exit %d: %s", code, c.log())
+	}
+}
