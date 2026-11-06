@@ -99,7 +99,7 @@ func (p *incomingMediaPlugin) Events(r *sdk.EventRegistry) {
 		// b 先返回，a 的授权必须依靠实例许可，避免被同事件在途关联放行。
 		priority = -1
 	}
-	r.On("incoming-media", "message.created", func(c *sdk.Context) error {
+	r.On("incoming-media", "message.created").Priority(priority).Handle(func(c *sdk.Context) error {
 		chain := c.Event().GetEventPayload().GetMessageCreated().GetChain()
 		incoming := chain.GetSegments()[0].GetImage().GetSource().GetIncomingRef()
 		if incoming.GetReadability() != pb.MediaReadability_MEDIA_READABILITY_READABLE {
@@ -150,7 +150,7 @@ func (p *incomingMediaPlugin) Events(r *sdk.EventRegistry) {
 		}
 		_, err = c.Send(sdkmessage.Chain{sdkmessage.Text(string(encoded))})
 		return err
-	}, sdk.Priority(priority))
+	})
 }
 
 func main() {

@@ -157,10 +157,15 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 				if route.GetKind() == pb.RouteKind_ROUTE_KIND_COMMAND {
 					want = []string{"user"}
 				}
+				switch route.GetRouteId() {
+				case "cmd.permission.restricted", "cmd.permission.inherited":
+					want = []string{"admin", "chat_admin"}
+				case "cmd.permission.open":
+					want = nil
+				}
 				if !reflect.DeepEqual(route.GetRequiredPermissions(), want) {
 					t.Errorf("route %s permissions=%v, want %v", route.GetRouteId(), route.GetRequiredPermissions(), want)
 				}
-				// SDK 的按路由权限 API 尚待接入；这里为 Core 提供对应的静态描述。
 				switch route.GetRouteId() {
 				case "cmd.rss.guarded", "restricted.event", "restricted.text", "restricted.raw":
 					route.RequiredPermissions = []string{"memory.admin"}
@@ -193,6 +198,12 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 				"permissions_normalized": {ExternalUserId: "privileged", AdapterInstanceId: "instance", Permissions: []string{"user", "admin", "memory.admin", "chat_admin", "memory.admin"}},
 			}
 			permissionActors["text_raw_allowed"] = permissionActors["permissions_allowed"]
+			permissionActors["group_allowed"] = &pb.Actor{ExternalUserId: "chat-admin", AdapterInstanceId: "instance", Permissions: []string{"chat_admin"}}
+			permissionActors["group_inherited"] = permissionActors["group_allowed"]
+			permissionActors["group_open_actor"] = permissionActors["group_allowed"]
+			permissionActors["group_no_actor"] = nil
+			permissionActors["group_open_no_actor"] = nil
+
 			inputEvents := map[string]*pb.Event{
 				"event_permissions_denied":   {EventType: "member.joined", Actor: actor},
 				"event_permissions_allowed":  {EventType: "member.joined", Actor: permissionActors["permissions_allowed"]},
@@ -248,6 +259,13 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 				calls   []string
 				replies []string
 			}{
+				{"group_denied", []string{"/permission restricted"}, []string{"event"}, nil},
+				{"group_allowed", []string{"/permission restricted"}, []string{"group.restricted", "event"}, []string{"true"}},
+				{"group_inherited", []string{"/permission inherited"}, []string{"group.inherited", "event"}, []string{"true"}},
+				{"group_no_actor", []string{"/permission restricted"}, []string{"event"}, nil},
+				{"group_open_actor", []string{"/permission open"}, []string{"group.open", "event"}, []string{"true"}},
+				{"group_open_user", []string{"/permission open"}, []string{"group.open", "event"}, []string{"false"}},
+				{"group_open_no_actor", []string{"/permission open"}, []string{"group.open", "event"}, []string{"false"}},
 				{"adapter_event", nil, []string{`adapter.poke:1:{"command":"/rss hello"}`}, nil},
 				{"text_raw_denied", []string{"protected"}, []string{"allowed.text", "raw", "event"}, nil},
 				{"text_raw_allowed", []string{"protected"}, []string{"restricted.text", "allowed.text", "restricted.raw", "raw", "event"}, nil},
@@ -297,7 +315,7 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 				{"trailing_escape", []string{`/quote a b\`}, []string{"event"}, []string{"Usage: /quote <a> <b>"}},
 				{"default", []string{"/optional"}, []string{"optional", "event"}, []string{"9"}},
 				{"custom_usage_key", []string{"/custom x"}, []string{"event"}, []string{"Usage: /custom <arg1:int>"}},
-				{"auto_send_guard", []string{"/sendguard"}, []string{"sendguard", "event"}, nil},
+				{"auto_send_order", []string{"/sendguard"}, []string{"sendguard", "event"}, []string{"explicit", "automatic"}},
 				{"consume_text_matches", []string{"/say hello"}, []string{"say:hello", "event"}, []string{"hello"}},
 				{"mixed_text_order", []string{"hel", "lo"}, []string{"regex:hello|hello", "full", "keyword", "raw", "event"}, nil},
 				{"stop", []string{"hello stop"}, []string{"regex:hello|hello", "keyword"}, nil},
@@ -398,9 +416,6 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 						default:
 							t.Error("command did not call Service Broker")
 						}
-					}
-					if tc.name == "auto_send_guard" && !strings.Contains(logs.String(), "ERROR_CODE_FAILED_PRECONDITION") {
-						t.Error("missing auto-reply Send rejection diagnostic")
 					}
 				})
 			}

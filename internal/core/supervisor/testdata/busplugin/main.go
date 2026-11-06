@@ -14,13 +14,17 @@ import (
 
 const (
 	pluginIDEnv    = "ALONABOT_TEST_BUS_ID"
-	controlSchema  = "test.bus.control.v1"
-	replySchema    = "test.bus.reply.v1"
-	eventSchema    = "test.bus.number.v1"
+	eventSchema    = "main.busNumber"
 	publishService = "core.bus.publish"
 	schemaVersion  = 1
 	exitFailure    = 1
 )
+
+type busNumber int
+type busNumberV2 int
+
+// SchemaVersion 声明第二版事件载荷。
+func (busNumberV2) SchemaVersion() uint32 { return 2 }
 
 type control struct {
 	Operation string
@@ -31,8 +35,8 @@ type control struct {
 
 type reply struct {
 	EventID   string
-	Seen      []int
-	Versioned []int
+	Seen      []int `json:",omitempty"`
+	Versioned []int `json:",omitempty"`
 	Entered   bool
 	Code      pb.ErrorCode
 	Error     string
@@ -53,7 +57,7 @@ func (p *plugin) Subscriptions(r *sdk.SubscriptionRegistry) {
 	if p.id == "pub" {
 		return
 	}
-	sdk.Subscribe(r, "number", "pub/x", eventSchema, schemaVersion, func(c *sdk.Context, n int) error {
+	sdk.Subscribe[busNumber](r, "number", "pub/x").Handle(func(c *sdk.Context, n busNumber) error {
 		if p.id == "stuck" {
 			p.mu.Lock()
 			p.entered = true
@@ -66,32 +70,41 @@ func (p *plugin) Subscriptions(r *sdk.SubscriptionRegistry) {
 			}
 		}
 		p.mu.Lock()
-		p.seen = append(p.seen, n)
+		p.seen = append(p.seen, int(n))
 		p.mu.Unlock()
 		return nil
 	})
 	if p.id == "fast" || p.id == "slow" {
-		version := uint32(schemaVersion)
+		record := func(n int) error { p.mu.Lock(); p.versioned = append(p.versioned, n); p.mu.Unlock(); return nil }
 		if p.id == "fast" {
-			version++
+			sdk.Subscribe[busNumberV2](r, "versioned", "pub/version").Handle(func(_ *sdk.Context, n busNumberV2) error { return record(int(n)) })
+		} else {
+			sdk.Subscribe[busNumber](r, "versioned", "pub/version").Handle(func(_ *sdk.Context, n busNumber) error { return record(int(n)) })
 		}
-		sdk.Subscribe(r, "versioned", "pub/version", eventSchema, version, func(_ *sdk.Context, n int) error {
-			p.mu.Lock()
-			p.versioned = append(p.versioned, n)
-			p.mu.Unlock()
-			return nil
-		})
 	}
 }
 
 // Services 暴露测试控制入口；发布仍经过插件到 Core 的真实 Publish RPC。
 func (p *plugin) Services(r *sdk.ServiceRegistry) {
-	sdk.JSONService(r, "control", controlSchema, replySchema, schemaVersion, func(c *sdk.Context, in control) (reply, error) {
+	sdk.JSON[control, reply](r, "control").Handle(func(c *sdk.Context, in control) (reply, error) {
 		out := reply{}
 		var err error
 		switch in.Operation {
 		case "publish":
-			out.EventID, err = sdk.Publish(c.Context(), in.Event, eventSchema, in.Version, in.Number)
+			if in.Version == 2 {
+				out.EventID, err = sdk.Publish(c.Context(), in.Event, busNumberV2(in.Number))
+			} else {
+				out.EventID, err = sdk.Publish(c.Context(), in.Event, busNumber(in.Number))
+			}
+		case "mismatched_version":
+			// 保持相同 schema_id，仅改变版本，独立验证 Core 的版本隔离。
+			result, callError := sdk.CallProto[*pb.PublishResponse](c.Context(), publishService, &pb.PublishRequest{
+				EventName: "pub/x", SchemaId: eventSchema, SchemaVersion: 2, Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, Payload: []byte(`0`),
+			})
+			err = callError
+			if err == nil {
+				out.EventID = result.GetEventId()
+			}
 		case "foreign":
 			// 绕过 Publish 的自动前缀，实际请求 Core 检查越权命名空间。
 			var result *pb.PublishResponse

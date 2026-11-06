@@ -36,7 +36,7 @@
 | goal-90 | T-08.10 | 配置标签统一 | T-08.1 | 已完成 |
 | goal-36 | T-09.1 | 首次管理认证 | T-02.3、T-07.4 | 已完成 |
 | goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1、T-04.6 | 已完成 |
-| goal-88 | T-04.7 | SDK 链式注册 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | 待派发 |
+| goal-88 | T-04.7 | SDK 链式注册 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | 已完成 |
 | goal-97 | T-07.6 | Core 设置与首次启动 | T-07.3、T-09.1 | 待派发 |
 | goal-32 | T-08.5 | 受管 SQLite 连接与迁移 | T-08.3 | 已完成 |
 | goal-53 | T-08.8 | 用户可见文案目录 | T-04.1、T-04.3、T-04.6、T-08.1、T-08.10 | 待派发 |
@@ -2424,7 +2424,9 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-88 · T-04.7 SDK 链式注册
 
-状态：待派发。前置 T-04.2、T-04.6（PR #78，合并提交 `0a320c5`）、T-06.1、T-06.3、T-08.1 均已合并。依据 D-70 新增；2026-11-04 经维护者同意，把原切片拆为两部分：本切片只做链式注册，SDK 自有类型、事件常量与 `sdk.AdapterEvent` 移到 T-04.8（goal-91）。符号已按合入代码核对：
+状态：已完成（PR #89）。链式注册、`Permission`、`Generated.ServiceSchemas` 与生成器的 Service Schema 已合入，示例与测试插件已迁移。语句按维护者对审查意见的裁决修订了三处：类型约束由生成器检查、切片与 map 接受 null、校验详情不出 SDK。验证证据见 TEST-MATRIX §3.2。
+
+派发时的核对：前置 T-04.2、T-04.6（PR #78，合并提交 `0a320c5`）、T-06.1、T-06.3、T-08.1 均已合并。依据 D-70 新增；2026-11-04 经维护者同意，把原切片拆为两部分：本切片只做链式注册，SDK 自有类型、事件常量与 `sdk.AdapterEvent` 移到 T-04.8（goal-91）。符号已按合入代码核对：
 - `sdk/registry.go`：
   - 命令：`CommandRegistry.Command(name, handler any, opts ...RouteOption)`、`Group(name string, fn func(*CommandGroup))`（`CommandGroup = CommandRegistry`）。
   - 文本匹配与 Raw：`Regex(routeID, expr, handler, opts...)`；`Keyword`、`StartsWith`、`EndsWith`、`FullMatch` 为 `(routeID string, patterns []string, handler, opts...)`；`Raw(routeID, handler, opts...)`。
@@ -2519,7 +2521,7 @@ goal-28、goal-29 的符号已按合入代码核对：
    func CallJSON[In, Out any](ctx context.Context, target string, in In) (Out, error)
    func Publish[T any](ctx context.Context, eventName string, payload T) (eventID string, err error)
    删除 JSONService、ProtoService、ServiceOption、WithAccess 与旧的 Subscribe、Publish、CallJSON 签名；CallProto 不变。
-   JSON 类型的 schema_id 为 Go 类型的「包路径.类型名」（reflect 的 PkgPath() + "." + Name()）；版本取类型的 SchemaVersion() uint32 方法（值接收者），没有该方法时为 1。In、Out、T 必须是包级的具名非泛型类型，否则 Collect 报错（CallJSON 与 Publish 返回 INVALID_ARGUMENT）。
+   JSON 类型的 schema_id 为 Go 类型的「包路径.类型名」（reflect 的 PkgPath() + "." + Name()）；版本取类型的 SchemaVersion() uint32 方法（值接收者），没有该方法时为 1。In、Out、T 必须是包级的具名非泛型类型：生成器对 sdk.JSON、sdk.Subscribe、sdk.CallJSON、sdk.Publish 的实例统一检查，不满足时给出带位置的诊断；运行期只检查反射能判定的部分（Collect 报错，CallJSON 与 Publish 返回 INVALID_ARGUMENT），不判断词法作用域。
 5. 生成项（sdk/generated.go）
    Generated 增加 ServiceSchemas map[string][]byte // schema_id → 规范 JSON Schema，覆盖本插件全部 JSON Service 的输入与输出类型
 
@@ -2535,10 +2537,10 @@ goal-28、goal-29 的符号已按合入代码核对：
 - 分组：Group(name) 返回的子注册器与父注册器共享冲突检查与错误收集；在不同位置对同名组多次调用 Group 时，得到同一组路径下的路由，冲突照常报告。
 - JSON Service：
   - 生成器在构建入口所在 module 的已扫描包中，找出 sdk.JSON 的全部实例化（go/types 的 Instances），为每个 In 与 Out 类型生成 JSON Schema，按 schema_id 写入 Generated.ServiceSchemas。
-  - Schema 只依据 json 标签与 Go 类型，不读取 config 标签，支持的类型与配置 Schema 相同；不支持的类型给出带位置的诊断。
+  - Schema 只依据 json 标签与 Go 类型，不读取 config 标签，支持的类型与配置 Schema 相同；不支持的类型给出带位置的诊断。切片生成 `"type":["array","null"]`，map 生成 `"type":["object","null"]`，与 encoding/json 对 nil 的编码一致。
   - In 或 Out 不是具名类型时报告诊断；两个不同类型得到同一 schema_id 时也报告。
   - Collect 时 Generated.ServiceSchemas 缺少某个 JSON Service 的 schema_id，报错 "service schema for <id> is not generated; run alonabot plugin generate"。
-  - 调用时，SDK 先用 jsonschema-go 把输入 JSON 按 Schema 校验，失败返回 INVALID_ARGUMENT 且不调用 Handler；Handler 返回后，输出按 Schema 校验，失败返回 INTERNAL 并记 ERROR（只记 schema_id 与校验错误，不记载荷）。
+  - 调用时，SDK 先用 jsonschema-go 把输入 JSON 按 Schema 校验，失败返回 INVALID_ARGUMENT 与固定文本 `invalid service input`，不调用 Handler；Handler 返回后，输出按 Schema 校验，失败返回 INTERNAL 并记 ERROR（只记 schema_id，校验错误的文本带载荷，不写入响应和日志）。
 - Proto Service：schema_id 与版本仍取自消息类型，只改为链式。
 - 自动回复：删除 Context.Send 在自动回复型 Handler 中的限制。Handler 内的 c.Send 与手动型相同；Handler 返回的非空 Chain 照旧由 Core 在 Handler 返回后发送，因此排在本次调用的全部显式发送之后。
 - 生成器：source.go 为标记生成的命令与事件输出链式调用（r.Group(...).Command(...).Alias(...).Priority(...).Handle(fn)、r.On(id, type).Priority(n).Handle(fn)），输出保持稳定；`alonabot plugin check` 照常比较。

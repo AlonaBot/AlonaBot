@@ -45,14 +45,27 @@ func (s *scan) source() ([]byte, error) {
 	if len(s.result.ConfigSchema) != 0 {
 		fmt.Fprintf(&out, "ConfigSchema: []byte(%q),\n", s.result.ConfigSchema)
 	}
+	if len(s.serviceSchemas) != 0 {
+		out.WriteString("ServiceSchemas: map[string][]byte{\n")
+		ids := make([]string, 0, len(s.serviceSchemas))
+		for id := range s.serviceSchemas {
+			ids = append(ids, id)
+		}
+		slices.Sort(ids)
+		for _, id := range ids {
+			fmt.Fprintf(&out, "%q: []byte(%q),\n", id, s.serviceSchemas[id])
+		}
+		out.WriteString("},\n")
+	}
 	fmt.Fprintf(&out, "Commands: func(r *%s.CommandRegistry) {\n", sdk)
 	for _, command := range s.result.Commands {
+		out.WriteString("r")
 		for _, group := range command.Path[:len(command.Path)-1] {
-			fmt.Fprintf(&out, "r.Group(%q, func(r *%s.CommandGroup) {\n", group, sdk)
+			fmt.Fprintf(&out, ".Group(%q)", group)
 		}
-		fmt.Fprintf(&out, "r.Command(%q, %s", command.Path[len(command.Path)-1], reference(command.Package, command.Func))
+		fmt.Fprintf(&out, ".Command(%q)", command.Path[len(command.Path)-1])
 		for _, alias := range command.Aliases {
-			fmt.Fprintf(&out, ", %s.Alias(", sdk)
+			out.WriteString(".Alias(")
 			for i, value := range alias {
 				if i > 0 {
 					out.WriteString(", ")
@@ -61,14 +74,11 @@ func (s *scan) source() ([]byte, error) {
 			}
 			out.WriteString(")")
 		}
-		fmt.Fprintf(&out, ", %s.Priority(%d))\n", sdk, command.Priority)
-		for range len(command.Path) - 1 {
-			out.WriteString("})\n")
-		}
+		fmt.Fprintf(&out, ".Priority(%d).Handle(%s)\n", command.Priority, reference(command.Package, command.Func))
 	}
 	fmt.Fprintf(&out, "},\nEvents: func(r *%s.EventRegistry) {\n", sdk)
 	for _, event := range s.result.Events {
-		fmt.Fprintf(&out, "r.On(%q, %q, %s, %s.Priority(%d))\n", event.RouteID, event.EventType, reference(event.Package, event.Func), sdk, event.Priority)
+		fmt.Fprintf(&out, "r.On(%q, %q).Priority(%d).Handle(%s)\n", event.RouteID, event.EventType, event.Priority, reference(event.Package, event.Func))
 	}
 	out.WriteString("},\n})\n}\n")
 	source, err := format.Source(out.Bytes())
