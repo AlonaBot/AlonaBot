@@ -98,14 +98,14 @@ func handle(route string, c *sdk.Context) error {
 // Events 逆注册同优先级路由，排序由 Core 决定；任务事件只记录文件，不假设默认目标。
 func (p *plugin) Events(r *sdk.EventRegistry) {
 	for _, route := range []string{"z", "a"} {
-		r.On(route, "message.created", func(c *sdk.Context) error { return handle(route, c) }, sdk.Priority(p.priority))
+		r.On(route, "message.created").Priority(p.priority).Handle(func(c *sdk.Context) error { return handle(route, c) })
 	}
 	for _, route := range []string{"button", "scheduled.open", "scheduled.user"} {
 		eventType := "scheduled"
 		if route == "button" {
 			eventType = "button.clicked"
 		}
-		r.On(route, eventType, func(c *sdk.Context) error { return record(route, "entered", c.Event()) })
+		r.On(route, eventType).Handle(func(c *sdk.Context) error { return record(route, "entered", c.Event()) })
 	}
 }
 
