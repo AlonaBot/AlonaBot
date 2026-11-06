@@ -64,10 +64,11 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 		return err
 	}
 	defer store.Close()
-	configuration, err := settings.Load(dataDir)
+	settingsFile, err := settings.Load(dataDir)
 	if err != nil {
 		return &usageError{err}
 	}
+	configuration := settingsFile.Settings()
 	adminURL, err := url.Parse(configuration.AdminBaseURL)
 	if err != nil {
 		return fmt.Errorf("parse admin_base_url: %w", err)

@@ -350,7 +350,7 @@ func TestSettingsAndListenOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(loaded, settings.Defaults()) {
+	if !reflect.DeepEqual(loaded.Settings(), settings.Defaults()) {
 		t.Fatalf("default settings changed by override: %+v", loaded)
 	}
 	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
@@ -379,7 +379,7 @@ func TestSettingsAndListenOverride(t *testing.T) {
 // 设置文件中的日志设置可由显式参数覆盖，日志文件开关仍按文件生效。
 func TestConfiguredLogOverrides(t *testing.T) {
 	dir := t.TempDir()
-	original := []byte("listen: 127.0.0.1:0\nlog:\n  level: warn\n  format: json\n  file:\n    enabled: false\n")
+	original := []byte(`{"listen":"127.0.0.1:0","log":{"level":"warn","format":"json","file":{"enabled":false}}}`)
 	name := filepath.Join(dir, settings.FileName)
 	if err := os.WriteFile(name, original, 0o600); err != nil {
 		t.Fatal(err)
@@ -403,7 +403,7 @@ func TestConfiguredLogOverrides(t *testing.T) {
 		t.Fatal("log overrides rewrote settings")
 	}
 	// 未显式给参数时，日志格式取自文件，而非 Cobra 旗标的缺省值。
-	configured := bytes.Replace(original, []byte("level: warn"), []byte("level: info"), 1)
+	configured := bytes.Replace(original, []byte(`"level":"warn"`), []byte(`"level":"info"`), 1)
 	if err := os.WriteFile(name, configured, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -421,7 +421,7 @@ func TestConfiguredLogOverrides(t *testing.T) {
 // 未知设置必须以 usage 退出码返回，并指明完整键名与行号。
 func TestUnknownSettingUsage(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte("log:\n  unknown: true\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte("{\n  \"log\": {\"unknown\": true}\n}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	command := exec.Command(filepath.Join(binDir, "alonabot"), "run", "--data-dir", dir, "--plugin-id", "demo", "--entry", filepath.Join(binDir, "lifecycle"))
@@ -449,7 +449,7 @@ func TestHTTPPluginSettings(t *testing.T) {
 				t.Setenv(key, value)
 			}
 			dir := t.TempDir()
-			configuration := "listen: 127.0.0.1:0\nproxy: \"" + test.proxy + "\"\n"
+			configuration := `{"listen":"127.0.0.1:0","proxy":"` + test.proxy + `"}`
 			if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte(configuration), 0o600); err != nil {
 				t.Fatal(err)
 			}
@@ -565,7 +565,7 @@ func TestAdminAuthRun(t *testing.T) {
 				}
 			}
 			const origin = "http://admin.test:7650"
-			if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte("listen: 127.0.0.1:0\nadmin_base_url: "+origin+"\nplugin_base_url: http://plugin.test:7650\n"), 0o600); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte(`{"listen":"127.0.0.1:0","admin_base_url":"`+origin+`","plugin_base_url":"http://plugin.test:7650"}`), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			c := startCore(t, dir)

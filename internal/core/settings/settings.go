@@ -1,59 +1,92 @@
-// Package settings 读取 Core 启动设置，并在首次启动时创建缺省 alonabot.yaml。
+// Package settings 读取 Core 的 core_config.json，并在首次启动时创建缺省文件。
 //
-// 调用 [Load] 前由装配方取得 data_dir 的 core.lock；命令行覆盖由装配方应用，文件内容保持不变。
-// [Settings] 与 [Defaults] 遵循 CONTRACTS §15.1，日志文件上限遵循 §14.6。
+// 调用 [Load] 前由装配方取得 data_dir 的 core.lock；命令行覆盖由装配方应用。
+// [File] 持有未展开的 [Document] 和有效 [Settings]，副本中的环境变量已展开。
+// 设置遵循 CONTRACTS §15.1，日志文件上限遵循 §14.6。
 package settings
 
 import (
-	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
-	"go.yaml.in/yaml/v3"
 )
 
 // FileName 指定 data_dir 中的 Core 设置文件名。
-const FileName = "alonabot.yaml"
+const FileName = "core_config.json"
 
-const defaultPort = "7650"
-const defaultListen = "127.0.0.1:" + defaultPort
+const (
+	defaultPort    = "7650"
+	defaultListen  = "127.0.0.1:" + defaultPort
+	currentVersion = 1
+	defaultLocale  = "en-US"
+)
 
-// DNS文本长度扣除可选的终止点，遵循net解析器采用的RFC 1035线格式上限。
+// DNS 文本长度扣除可选的终止点，遵循 net 解析器采用的 RFC 1035 线格式上限。
 const (
 	maxDNSNameBytes  = 253
 	maxDNSLabelBytes = 63
 )
 
-// Settings 保存本次运行的启动设置；大小以字节计，TrustedProxies 保存可信反代的 CIDR 范围。
+// Admin 按 Adapter 实例与外部用户 ID 绑定 Core Admin。
+type Admin struct {
+	InstanceID string `json:"instance"`
+	UserID     string `json:"user"`
+}
+
+// AdapterSettings 保存配置版本和已展开环境变量的实例配置。
+type AdapterSettings struct {
+	Version   int
+	Instances map[string]json.RawMessage
+}
+
+// Settings 保存有效的 Core 设置；日志文件大小以字节计。
 type Settings struct {
-	Listen         string
-	AdminBaseURL   string
-	PluginBaseURL  string
-	TrustedProxies []netip.Prefix
-	LogLevel       slog.Level
-	LogFormat      string
-	LogFile        struct {
+	Listen, AdminBaseURL, PluginBaseURL string
+	TrustedProxies                      []netip.Prefix
+	LogLevel                            slog.Level
+	LogFormat                           string
+	LogFile                             struct {
 		Enabled           bool
 		MaxSize, MaxTotal int64 // 字节
 		MaxAgeDays        int
 	}
-	Proxy string
+	LogSources                map[string]string
+	Proxy                     string
+	Admins                    []Admin
+	CommandPrefixes           []string
+	CommandPrefixesByInstance map[string][]string
+	DefaultLocale             string
+	Adapters                  map[string]AdapterSettings
 }
 
-// Defaults 返回 CONTRACTS §15.1 的启动缺省值。
+// File 持有设置文档及当前有效快照；方法可并发调用。
+// mu 保护文档与快照的成对访问，返回给调用者的 Settings 单独复制。
+type File struct {
+	mu       sync.RWMutex
+	name     string
+	document *Document
+	current  Settings
+}
+
+// Defaults 返回 CONTRACTS §15.1 的缺省设置。
 func Defaults() Settings {
-	s := Settings{Listen: defaultListen, AdminBaseURL: "http://" + defaultListen, PluginBaseURL: "http://localhost:" + defaultPort, LogLevel: slog.LevelInfo, LogFormat: string(logging.FormatText)}
+	s := Settings{Listen: defaultListen, AdminBaseURL: "http://" + defaultListen,
+		PluginBaseURL: "http://localhost:" + defaultPort, LogLevel: slog.LevelInfo,
+		LogFormat: string(logging.FormatText), CommandPrefixes: []string{"/"}, DefaultLocale: defaultLocale}
 	s.LogFile.Enabled = true
 	s.LogFile.MaxSize = logging.DefaultMaxFileSize
 	s.LogFile.MaxTotal = logging.DefaultMaxTotalSize
@@ -61,245 +94,285 @@ func Defaults() Settings {
 	return s
 }
 
-// ValidateListen 校验 host:port 形式的监听地址；host 可以为空，端口可以是 0。
-// 返回的规则错误不含设置键名、行号或命令行参数名，由调用方添加来源。
-func ValidateListen(address string) error {
-	host, port, err := net.SplitHostPort(address)
-	if err != nil {
-		return err
+// Settings 返回当前设置的深副本，调用方的修改不会影响 File。
+func (f *File) Settings() Settings {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	s := f.current
+	s.TrustedProxies = slices.Clone(s.TrustedProxies)
+	s.LogSources = maps.Clone(s.LogSources)
+	s.Admins = slices.Clone(s.Admins)
+	s.CommandPrefixes = slices.Clone(s.CommandPrefixes)
+	s.CommandPrefixesByInstance = maps.Clone(s.CommandPrefixesByInstance)
+	for id, prefixes := range s.CommandPrefixesByInstance {
+		s.CommandPrefixesByInstance[id] = slices.Clone(prefixes)
 	}
-	if err := validPort(port, true); err != nil {
-		return err
+	s.Adapters = maps.Clone(s.Adapters)
+	for id, adapter := range s.Adapters {
+		adapter.Instances = maps.Clone(adapter.Instances)
+		for instance, raw := range adapter.Instances {
+			adapter.Instances[instance] = slices.Clone(raw)
+		}
+		s.Adapters[id] = adapter
 	}
-	if host != "" && !validHost(host) {
-		return errors.New("invalid hostname or IP address")
-	}
-	return nil
+	return s
 }
 
-// Load 读取启动设置；文件不存在时以 0600 权限创建缺省内容。
-// 未知键、类型与值错误包含完整键名和 YAML 行号。
-func Load(dataDir string) (Settings, error) {
+// Load 读取并校验全部设置；文件缺失时以 0600 权限创建缺省内容。
+// 配置错误包含完整键路径与 JSON 行列号，环境变量只展开整个 ${NAME} 字符串。
+func Load(dataDir string) (*File, error) {
 	name := filepath.Join(dataDir, FileName)
 	content, err := os.ReadFile(name)
 	if errors.Is(err, os.ErrNotExist) {
-		s := Defaults()
-		content, err = yaml.Marshal(map[string]any{
-			"listen": s.Listen, "admin_base_url": s.AdminBaseURL, "plugin_base_url": s.PluginBaseURL,
-			"trusted_proxies": []string{}, "proxy": s.Proxy,
-			"log": map[string]any{"level": strings.ToLower(s.LogLevel.String()), "format": s.LogFormat,
-				"file": map[string]any{"enabled": s.LogFile.Enabled, "max_size": fmt.Sprintf("%dMiB", s.LogFile.MaxSize>>20), "max_total": fmt.Sprintf("%dGiB", s.LogFile.MaxTotal>>30), "max_age_days": s.LogFile.MaxAgeDays}},
-		})
+		content, err = defaultDocument()
 		if err != nil {
-			return Settings{}, fmt.Errorf("encode default settings: %w", err)
+			return nil, fmt.Errorf("encode default settings: %w", err)
 		}
 		if err := os.WriteFile(name, content, 0o600); err != nil {
-			return Settings{}, fmt.Errorf("create %s: %w", name, err)
+			return nil, fmt.Errorf("create %s: %w", name, err)
 		}
-		return s, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("read %s: %w", name, err)
 	}
+	document, err := parseDocument(content)
 	if err != nil {
-		return Settings{}, fmt.Errorf("read %s: %w", name, err)
+		return nil, fmt.Errorf("%s: %w", name, err)
 	}
-	// 1. 保留 YAML 节点的位置，类型与语义错误都指向用户填写的键。
-	var document yaml.Node
-	decoder := yaml.NewDecoder(bytes.NewReader(content))
-	if err := decoder.Decode(&document); err != nil {
-		return Settings{}, fmt.Errorf("%s: %w", name, err)
+	current, err := document.settings()
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", name, err)
 	}
-	if len(document.Content) == 0 {
-		return Settings{}, fmt.Errorf("%s: settings: line 1: expected a mapping", name)
+	return &File{name: name, document: document, current: current}, nil
+}
+
+func defaultDocument() ([]byte, error) {
+	s := Defaults()
+	content, err := json.MarshalIndent(map[string]any{
+		"$version": currentVersion, "listen": s.Listen, "admin_base_url": s.AdminBaseURL, "plugin_base_url": s.PluginBaseURL,
+		"trusted_proxies": []string{}, "proxy": s.Proxy, "admins": []Admin{},
+		"command_prefixes": s.CommandPrefixes, "command_prefixes_by_instance": map[string][]string{},
+		"default_locale": s.DefaultLocale, "adapters": map[string]any{},
+		"log": map[string]any{"level": strings.ToLower(s.LogLevel.String()), "format": s.LogFormat, "sources": map[string]string{},
+			"file": map[string]any{"enabled": s.LogFile.Enabled, "max_size": fmt.Sprintf("%dMiB", s.LogFile.MaxSize>>20),
+				"max_total": fmt.Sprintf("%dGiB", s.LogFile.MaxTotal>>30), "max_age_days": s.LogFile.MaxAgeDays}},
+	}, "", "  ")
+	if err != nil {
+		return nil, err
 	}
-	var extra yaml.Node
-	if err := decoder.Decode(&extra); err != io.EOF {
-		if err != nil {
-			return Settings{}, fmt.Errorf("%s: %w", name, err)
-		}
-		return Settings{}, fmt.Errorf("%s: settings: line %d: expected a single YAML document", name, extra.Content[0].Line)
+	return append(content, '\n'), nil
+}
+
+func (d *Document) settings() (Settings, error) {
+	// 1. 保留原文，另建展开后的树以校验所有字符串，包括 Adapter 实例内部。
+	root, err := d.root.expanded()
+	if err != nil {
+		return Settings{}, err
 	}
 	s := Defaults()
-	locations := map[string]*yaml.Node{"": document.Content[0]}
-	if err := readMapping(document.Content[0], "", &s, locations); err != nil {
-		return Settings{}, fmt.Errorf("%s: %w", name, err)
+	if err := readMapping(root, "", &s); err != nil {
+		return Settings{}, err
 	}
 	// 2. 联合校验 Base URL、监听安全边界与日志文件限额。
-	admin, err := baseURL(s.AdminBaseURL)
-	if err != nil {
-		return Settings{}, fmt.Errorf("%s: %w", name, at(locations, "admin_base_url", err))
+	locations := map[string]*node{"": root}
+	var locate func(*node)
+	locate = func(parent *node) {
+		for _, field := range parent.members {
+			locations[field.value.path] = field.value
+			locate(field.value)
+		}
 	}
-	plugin, err := baseURL(s.PluginBaseURL)
-	if err != nil {
-		return Settings{}, fmt.Errorf("%s: %w", name, at(locations, "plugin_base_url", err))
-	}
-	if admin.Scheme != plugin.Scheme || effectivePort(admin) != effectivePort(plugin) {
-		return Settings{}, fmt.Errorf("%s: %w", name, at(locations, "plugin_base_url", errors.New("must use the same scheme and effective port as admin_base_url")))
-	}
-	if strings.EqualFold(admin.Hostname(), plugin.Hostname()) {
-		return Settings{}, fmt.Errorf("%s: %w", name, at(locations, "plugin_base_url", errors.New("must use a different hostname from admin_base_url")))
-	}
-	host, _, _ := net.SplitHostPort(s.Listen) // listen 的语法已在 readValue 中校验。
-	ip, _ := netip.ParseAddr(host)
-	if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && admin.Scheme != "https" && len(s.TrustedProxies) == 0 {
-		return Settings{}, fmt.Errorf("%s: %w", name, at(locations, "listen", errors.New("non-loopback listen requires HTTPS admin_base_url or trusted_proxies")))
-	}
-	if s.LogFile.MaxSize > s.LogFile.MaxTotal {
-		return Settings{}, fmt.Errorf("%s: %w", name, at(locations, "log.file.max_size", errors.New("exceeds log.file.max_total")))
-	}
-	return s, nil
+	locate(root)
+	return s, validateSettings(s, locations)
 }
 
-func readMapping(n *yaml.Node, prefix string, s *Settings, locations map[string]*yaml.Node) error {
-	if n.Kind != yaml.MappingNode {
-		return at(locations, prefix, errors.New("expected a mapping"))
-	}
-	seen := make(map[string]bool)
-	for i := 0; i < len(n.Content); i += 2 {
-		key, value := n.Content[i], n.Content[i+1]
-		name := key.Value
-		if prefix != "" {
-			name = prefix + "." + name
+func readMapping(n *node, path string, s *Settings) error {
+	return n.object(func(key string, value *node) error {
+		if strings.Contains(key, ".") {
+			return value.fail(errors.New("unknown key; use nested JSON objects"))
 		}
-		locations[name] = key
-		if key.Tag != "!!str" {
-			return at(locations, name, errors.New("expected a string key"))
+		name := key
+		if path != "" {
+			name = path + "." + key
 		}
-		if strings.Contains(key.Value, ".") {
-			return at(locations, name, errors.New("unknown key; use nested YAML mappings"))
-		}
-		if seen[name] {
-			return at(locations, name, errors.New("duplicate key"))
-		}
-		seen[name] = true
 		if name == "log" || name == "log.file" {
-			if err := readMapping(value, name, s, locations); err != nil {
-				return err
-			}
-			continue
+			return readMapping(value, name, s)
 		}
-		if err := readValue(value, name, s); err != nil {
-			return at(locations, name, err)
-		}
-	}
-	return nil
+		return readValue(value, name, s)
+	})
 }
 
-func readValue(n *yaml.Node, key string, s *Settings) error {
+func readValue(n *node, key string, s *Settings) error {
 	switch key {
-	case "listen", "admin_base_url", "plugin_base_url", "log.level", "log.format", "log.file.max_size", "log.file.max_total", "proxy":
-		if n.Kind != yaml.ScalarNode || n.Tag != "!!str" {
-			return errors.New("expected a string")
-		}
-	case "log.file.enabled":
-		if n.Tag != "!!bool" {
-			return errors.New("expected a boolean")
-		}
-		return n.Decode(&s.LogFile.Enabled)
-	case "log.file.max_age_days":
-		if n.Tag != "!!int" {
-			return errors.New("expected an integer")
-		}
-		if err := n.Decode(&s.LogFile.MaxAgeDays); err != nil {
+	case "$version":
+		return readVersion(n)
+	case "trusted_proxies":
+		values, err := n.strings()
+		if err != nil {
 			return err
 		}
-		if s.LogFile.MaxAgeDays <= 0 {
-			return errors.New("must be positive")
-		}
-		return nil
-	case "trusted_proxies":
-		if n.Kind != yaml.SequenceNode {
-			return errors.New("expected a sequence of CIDR strings")
-		}
-		s.TrustedProxies = nil
-		for _, item := range n.Content {
-			if item.Tag != "!!str" {
-				return fmt.Errorf("line %d: expected a CIDR string", item.Line)
-			}
-			prefix, err := netip.ParsePrefix(item.Value)
+		for i, value := range values {
+			prefix, err := netip.ParsePrefix(value)
 			if err != nil {
-				return fmt.Errorf("line %d: invalid CIDR: %w", item.Line, err)
+				return n.elements[i].fail(fmt.Errorf("invalid CIDR: %w", err))
 			}
 			s.TrustedProxies = append(s.TrustedProxies, prefix)
 		}
 		return nil
-	default:
-		return errors.New("unknown key")
-	}
-	switch key {
-	case "listen":
-		if err := ValidateListen(n.Value); err != nil {
-			return err
+	case "command_prefixes":
+		prefixes, err := readPrefixes(n)
+		if err == nil {
+			s.CommandPrefixes = prefixes
 		}
-		s.Listen = n.Value
-	case "admin_base_url":
-		s.AdminBaseURL = n.Value
-	case "plugin_base_url":
-		s.PluginBaseURL = n.Value
-	case "log.level":
-		switch n.Value {
-		case "debug":
-			s.LogLevel = slog.LevelDebug
-		case "info":
-			s.LogLevel = slog.LevelInfo
-		case "warn":
-			s.LogLevel = slog.LevelWarn
-		case "error":
-			s.LogLevel = slog.LevelError
-		default:
-			return errors.New("expected debug, info, warn or error")
-		}
-	case "log.format":
-		if n.Value != string(logging.FormatText) && n.Value != string(logging.FormatJSON) {
-			return errors.New("expected text or json")
-		}
-		s.LogFormat = n.Value
-	case "log.file.max_size", "log.file.max_total":
-		size, err := tune.ParseSize(n.Value)
-		if err != nil {
-			return err
-		}
-		if size <= 0 {
-			return errors.New("must be positive")
-		}
-		if key == "log.file.max_size" {
-			s.LogFile.MaxSize = size
-		} else {
-			s.LogFile.MaxTotal = size
-		}
-	case "proxy":
-		if n.Value != "" {
-			u, err := url.Parse(n.Value)
+		return err
+	case "command_prefixes_by_instance":
+		return n.object(func(id string, value *node) error {
+			prefixes, err := readPrefixes(value)
 			if err != nil {
 				return err
 			}
-			if u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "socks5" {
-				return errors.New("expected an http, https or socks5 URL")
+			if s.CommandPrefixesByInstance == nil {
+				s.CommandPrefixesByInstance = make(map[string][]string)
 			}
-			if !validHost(u.Hostname()) {
-				return errors.New("proxy URL requires a valid hostname or IP address")
+			s.CommandPrefixesByInstance[id] = prefixes
+			return nil
+		})
+	case "log.sources":
+		return n.object(func(id string, value *node) error {
+			level, err := value.text()
+			if err != nil {
+				return err
 			}
-			if strings.HasSuffix(u.Host, ":") {
-				return errors.New("port must not be empty")
+			switch level {
+			case "debug", "info", "warn", "error", "off", "inherit":
+			default:
+				return value.fail(errors.New("expected debug, info, warn, error, off or inherit"))
 			}
-			if u.Port() != "" {
-				if err := validPort(u.Port(), false); err != nil {
-					return err
-				}
+			if s.LogSources == nil {
+				s.LogSources = make(map[string]string)
 			}
+			s.LogSources[id] = level
+			return nil
+		})
+	case "admins":
+		return readAdmins(n, s)
+	case "adapters":
+		return readAdapters(n, s)
+	case "log.file.enabled":
+		enabled, ok := n.value.(bool)
+		if !ok {
+			return n.fail(errors.New("expected a boolean"))
 		}
-		s.Proxy = n.Value
+		s.LogFile.Enabled = enabled
+		return nil
+	case "log.file.max_age_days":
+		days, err := n.integer()
+		if err != nil {
+			return err
+		}
+		if days <= 0 {
+			return n.fail(errors.New("must be positive"))
+		}
+		s.LogFile.MaxAgeDays = days
+		return nil
+	case "listen", "admin_base_url", "plugin_base_url", "log.level", "log.format", "log.file.max_size", "log.file.max_total", "proxy", "default_locale":
+		value, err := n.text()
+		if err != nil {
+			return err
+		}
+		if err := readString(value, key, s); err != nil {
+			return n.fail(err)
+		}
+		return nil
+	default:
+		return n.fail(errors.New("unknown key"))
+	}
+}
+
+func readVersion(n *node) error {
+	version, err := n.integer()
+	if err != nil {
+		return err
+	}
+	if version != currentVersion {
+		return n.fail(fmt.Errorf("unsupported version %d; expected %d", version, currentVersion))
 	}
 	return nil
 }
 
-func at(locations map[string]*yaml.Node, key string, err error) error {
-	node, ok := locations[key]
-	if !ok {
-		node = locations[""]
+func readPrefixes(n *node) ([]string, error) {
+	prefixes, err := n.strings()
+	if err != nil {
+		return nil, err
 	}
-	if key == "" {
-		key = "settings"
+	if len(prefixes) == 0 {
+		return nil, n.fail(errors.New("prefix list must not be empty; use [\"\"] for commands without a prefix"))
 	}
-	return fmt.Errorf("%s: line %d: %w", key, node.Line, err)
+	return prefixes, nil
+}
+
+func readAdmins(n *node, s *Settings) error {
+	if n.delimiter != '[' {
+		return n.fail(errors.New("expected an array"))
+	}
+	for _, child := range n.elements {
+		var admin Admin
+		if err := child.object(func(key string, value *node) error {
+			switch key {
+			case "instance", "user":
+				text, err := value.text()
+				if err != nil {
+					return err
+				}
+				if key == "instance" {
+					admin.InstanceID = text
+				} else {
+					admin.UserID = text
+				}
+				return nil
+			default:
+				return value.fail(errors.New("unknown key"))
+			}
+		}); err != nil {
+			return err
+		}
+		if admin.InstanceID == "" || admin.UserID == "" {
+			return child.fail(errors.New("instance and user must be nonempty strings"))
+		}
+		s.Admins = append(s.Admins, admin)
+	}
+	return nil
+}
+
+func readAdapters(n *node, s *Settings) error {
+	return n.object(func(id string, value *node) error {
+		adapter := AdapterSettings{Version: currentVersion}
+		if err := value.object(func(key string, value *node) error {
+			switch key {
+			case "$version":
+				return readVersion(value)
+			case "instances":
+				return value.object(func(instance string, configuration *node) error {
+					if configuration.delimiter != '{' {
+						return configuration.fail(errors.New("expected an object"))
+					}
+					if adapter.Instances == nil {
+						adapter.Instances = make(map[string]json.RawMessage)
+					}
+					adapter.Instances[instance] = configuration.encode()
+					return nil
+				})
+			default:
+				return value.fail(errors.New("unknown key"))
+			}
+		}); err != nil {
+			return err
+		}
+		if s.Adapters == nil {
+			s.Adapters = make(map[string]AdapterSettings)
+		}
+		s.Adapters[id] = adapter
+		return nil
+	})
 }
 
 func baseURL(raw string) (*url.URL, error) {
@@ -362,4 +435,129 @@ func validHost(host string) bool {
 		}
 	}
 	return true
+}
+
+func readString(value, key string, s *Settings) error {
+	switch key {
+	case "listen":
+		if err := ValidateListen(value); err != nil {
+			return err
+		}
+		s.Listen = value
+	case "admin_base_url":
+		s.AdminBaseURL = value
+	case "plugin_base_url":
+		s.PluginBaseURL = value
+	case "log.level":
+		switch value {
+		case "debug":
+			s.LogLevel = slog.LevelDebug
+		case "info":
+			s.LogLevel = slog.LevelInfo
+		case "warn":
+			s.LogLevel = slog.LevelWarn
+		case "error":
+			s.LogLevel = slog.LevelError
+		default:
+			return errors.New("expected debug, info, warn or error")
+		}
+	case "log.format":
+		if value != string(logging.FormatText) && value != string(logging.FormatJSON) {
+			return errors.New("expected text or json")
+		}
+		s.LogFormat = value
+	case "log.file.max_size", "log.file.max_total":
+		size, err := tune.ParseSize(value)
+		if err != nil {
+			return err
+		}
+		if size <= 0 {
+			return errors.New("must be positive")
+		}
+		if key == "log.file.max_size" {
+			s.LogFile.MaxSize = size
+		} else {
+			s.LogFile.MaxTotal = size
+		}
+	case "default_locale":
+		if value == "" {
+			return errors.New("must not be empty")
+		}
+		s.DefaultLocale = value
+	case "proxy":
+		if value != "" {
+			u, err := url.Parse(value)
+			if err != nil {
+				return err
+			}
+			if u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "socks5" {
+				return errors.New("expected an http, https or socks5 URL")
+			}
+			if !validHost(u.Hostname()) {
+				return errors.New("proxy URL requires a valid hostname or IP address")
+			}
+			if strings.HasSuffix(u.Host, ":") {
+				return errors.New("port must not be empty")
+			}
+			if u.Port() != "" {
+				if err := validPort(u.Port(), false); err != nil {
+					return err
+				}
+			}
+		}
+		s.Proxy = value
+	}
+	return nil
+}
+
+func validateSettings(s Settings, locations map[string]*node) error {
+	admin, err := baseURL(s.AdminBaseURL)
+	if err != nil {
+		return at(locations, "admin_base_url", err)
+	}
+	plugin, err := baseURL(s.PluginBaseURL)
+	if err != nil {
+		return at(locations, "plugin_base_url", err)
+	}
+	if admin.Scheme != plugin.Scheme || effectivePort(admin) != effectivePort(plugin) {
+		return at(locations, "plugin_base_url", errors.New("must use the same scheme and effective port as admin_base_url"))
+	}
+	if strings.EqualFold(admin.Hostname(), plugin.Hostname()) {
+		return at(locations, "plugin_base_url", errors.New("must use a different hostname from admin_base_url"))
+	}
+	host, _, _ := net.SplitHostPort(s.Listen) // listen 的语法已在 readString 中校验。
+	ip, _ := netip.ParseAddr(host)
+	if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && admin.Scheme != "https" && len(s.TrustedProxies) == 0 {
+		return at(locations, "listen", errors.New("non-loopback listen requires HTTPS admin_base_url or trusted_proxies"))
+	}
+	if s.LogFile.MaxSize > s.LogFile.MaxTotal {
+		return at(locations, "log.file.max_size", errors.New("exceeds log.file.max_total"))
+	}
+	return nil
+}
+
+func at(locations map[string]*node, key string, err error) error {
+	n, ok := locations[key]
+	if !ok {
+		n = locations[""]
+	}
+	copy := *n
+	copy.path = key
+	return copy.fail(err)
+}
+
+// ValidateListen 校验 host:port 形式的监听地址；host 可以为空，端口可以是 0。
+// 返回的规则错误不含设置键名、行号或命令行参数名，由调用方添加来源。
+func ValidateListen(address string) error {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	if err := validPort(port, true); err != nil {
+		return err
+	}
+	if host != "" && !validHost(host) {
+		return errors.New("invalid hostname or IP address")
+	}
+	return nil
 }
