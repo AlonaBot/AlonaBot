@@ -23,8 +23,9 @@ function submissionFields(value: Record<string, unknown>, fields: Field[], repla
   const result: Record<string, unknown> = Object.assign(Object.create(null), replacing ? original : value);
   for (const field of fields) {
     if (field.invisible || (field.condition && !Object.entries(field.condition)
-      .every(([key, expected]) => JSON.stringify(value[key]) === JSON.stringify(expected)))) continue;
-    if (Object.hasOwn(value, field.key)) result[field.key] = submissionValue(value[field.key], field, replacing, original?.[field.key]);
+      .every(([key, expected]) => Object.hasOwn(value, key) && JSON.stringify(value[key]) === JSON.stringify(expected)))) continue;
+    const previous = original && Object.hasOwn(original, field.key) ? original[field.key] : undefined;
+    if (Object.hasOwn(value, field.key)) result[field.key] = submissionValue(value[field.key], field, replacing, previous);
     else delete result[field.key];
   }
   return result;
@@ -34,7 +35,8 @@ function submissionTemplate(value: Record<string, unknown>, field: Field, replac
   const result: Record<string, unknown> = Object.assign(Object.create(null), replacing ? original : value);
   for (const template of field.templates!) {
     delete result[template.key];
-    if (Object.hasOwn(value, template.key)) result[template.key] = submissionFields(value[template.key] as Record<string, unknown>, template.children, replacing, original?.[template.key] as Record<string, unknown> | undefined);
+    const previous = original && Object.hasOwn(original, template.key) ? original[template.key] : undefined;
+    if (Object.hasOwn(value, template.key)) result[template.key] = submissionFields(value[template.key] as Record<string, unknown>, template.children, replacing, previous as Record<string, unknown> | undefined);
   }
   return result;
 }
@@ -167,8 +169,9 @@ function Fields({ fields, value = {}, original, path, messages, missing, onChang
   onChange: (value: unknown) => void;
 }) {
   return <>{fields.filter(field => !field.invisible && (!field.condition || Object.entries(field.condition)
-    .every(([key, expected]) => JSON.stringify(value[key]) === JSON.stringify(expected))))
-    .map(field => <FieldControl key={field.key} field={field} value={value[field.key]} original={original?.[field.key]}
+    .every(([key, expected]) => Object.hasOwn(value, key) && JSON.stringify(value[key]) === JSON.stringify(expected))))
+    .map(field => <FieldControl key={field.key} field={field} value={Object.hasOwn(value, field.key) ? value[field.key] : undefined}
+      original={original && Object.hasOwn(original, field.key) ? original[field.key] : undefined}
       path={[...path, field.key]} messages={messages} missing={missing}
       onChange={next => {
         const updated = { ...value, [field.key]: next };
@@ -351,18 +354,19 @@ function TemplateControl(props: FieldProps & { id: string }) {
     const text = templateText(props.messages, template);
     if (!template.displayItem) return text.name;
     const parts = template.displayItem.split('.');
-    let current = value[template.key] as Record<string, unknown>;
+    let current = value[template.key] as Record<string, unknown> | undefined;
     let children = template.children;
     let field: Field | undefined;
     for (const part of parts) {
       field = children.find(child => child.key === part)!;
-      current = current?.[part] as Record<string, unknown>;
+      current = current && Object.hasOwn(current, part) ? current[part] as Record<string, unknown> : undefined;
       children = field.children ?? [];
     }
     return current ? `${text.name} · ${fieldText(props.messages, field!).description}: ${String(current)}` : text.name;
   }
   function editor(value: Record<string, unknown> | undefined, index: number) {
     const template = selection(value);
+    const original = value && originalValues.get(value);
     const text = template && templateText(props.messages, template);
     const rowPath = many ? [...props.path, String(index)] : props.path;
     return <>
@@ -377,7 +381,7 @@ function TemplateControl(props: FieldProps & { id: string }) {
       </select>
       {text?.hint && <p className="field-hint">{text.hint}</p>}
       {template && <Fields key={template.key} fields={template.children} value={value![template.key] as Record<string, unknown>}
-        original={(originalValues.get(value!) as Record<string, unknown> | undefined)?.[template.key] as Record<string, unknown>}
+        original={(original && Object.hasOwn(original, template.key) ? original[template.key] : undefined) as Record<string, unknown>}
         path={[...rowPath, template.key]} messages={props.messages} missing={props.missing}
         onChange={next => edit(index, { [template.key]: next })} />}
     </>;

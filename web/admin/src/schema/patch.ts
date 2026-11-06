@@ -58,7 +58,8 @@ function diff(original: unknown, edited: unknown, path: string[], missing: strin
     const before = isObject(original) ? original : {};
     const entries: [string, unknown][] = [];
     for (const key of new Set([...Object.keys(before), ...Object.keys(edited)])) {
-      const change = Object.hasOwn(edited, key) ? diff(before[key], edited[key], [...path, key], missing) : null;
+      const previous = Object.hasOwn(before, key) ? before[key] : undefined;
+      const change = Object.hasOwn(edited, key) ? diff(previous, edited[key], [...path, key], missing) : null;
       if (change !== undefined) entries.push([key, change]);
     }
     const patch = Object.fromEntries(entries);
@@ -130,7 +131,8 @@ function fieldDiff(original: unknown, edited: unknown, field: Field, path: strin
     for (const template of field.templates!) {
       const key = template.key;
       if (Object.hasOwn(after, key)) {
-        const change = fieldsDiff(isObject(before[key]) ? before[key] : {}, after[key] as Record<string, unknown>, template.children, [...path, key], missing);
+        const previous = Object.hasOwn(before, key) && isObject(before[key]) ? before[key] : {};
+        const change = fieldsDiff(previous, after[key] as Record<string, unknown>, template.children, [...path, key], missing);
         if (Object.keys(change).length || !Object.hasOwn(before, key)) entries.push([key, change]);
       } else if (Object.hasOwn(before, key)) entries.push([key, null]);
     }
@@ -143,8 +145,9 @@ function fieldsDiff(original: Record<string, unknown>, edited: Record<string, un
   const entries: [string, unknown][] = [];
   for (const field of fields) {
     if (field.invisible || !Object.hasOwn(edited, field.key)) continue;
-    if (field.condition && !Object.entries(field.condition).every(([key, expected]) => equal(edited[key], expected))) continue;
-    const change = fieldDiff(original[field.key], edited[field.key], field, [...path, field.key], missing);
+    if (field.condition && !Object.entries(field.condition).every(([key, expected]) => Object.hasOwn(edited, key) && equal(edited[key], expected))) continue;
+    const previous = Object.hasOwn(original, field.key) ? original[field.key] : undefined;
+    const change = fieldDiff(previous, edited[field.key], field, [...path, field.key], missing);
     if (change !== undefined && !(field.type === 'object' && isObject(change) && Object.keys(change).length === 0)) {
       entries.push([field.key, change]);
     }

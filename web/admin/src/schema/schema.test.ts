@@ -112,6 +112,32 @@ describe('form Merge Patch contract (V-25)', () => {
     });
   });
 
+  it.each(['{"__proto__":{}}', '{"nested":{"__proto__":{}}}'])('preserves new empty dict objects with own data keys: %s', json => {
+    const original = { headers: {} };
+    const edited = { headers: JSON.parse(json) };
+    const snapshot = JSON.stringify({ original, edited });
+    expect(JSON.stringify(buildPatch(original, edited, fieldsFromSchema(collections)))).toBe(JSON.stringify(edited));
+    expect(JSON.stringify({ original, edited })).toBe(snapshot);
+  });
+
+  it('preserves and changes existing own dict data keys', () => {
+    const original = JSON.parse('{"headers":{"__proto__":{"before":1},"constructor":"keep"}}');
+    const edited = JSON.parse('{"headers":{"__proto__":{},"constructor":"keep"}}');
+    const snapshot = JSON.stringify({ original, edited });
+    const fields = fieldsFromSchema(collections);
+    expect(buildPatch(original, structuredClone(original), fields)).toEqual({});
+    expect(JSON.stringify(buildPatch(original, edited, fields)))
+      .toBe('{"headers":{"__proto__":{"before":null}}}');
+    expect(JSON.stringify({ original, edited })).toBe(snapshot);
+  });
+
+  it('treats missing Schema data keys as absent when creating dict values', () => {
+    const fields = fieldsFromSchema({ ['__proto__']: collections.headers });
+    const edited = JSON.parse('{"__proto__":{}}');
+    expect(JSON.stringify(buildPatch({}, edited, fields))).toBe('{"__proto__":{}}');
+    expect(JSON.stringify(edited)).toBe('{"__proto__":{}}');
+  });
+
   it('omits restored Schema fields in replacement rows while retaining dict JSON nulls', () => {
     const original = { sources: [{ rss: { url: 'https://feed.example', every_minutes: 15 } }] };
     const edited = { sources: [{ rss: { url: 'https://feed.example', every_minutes: null } }] };
