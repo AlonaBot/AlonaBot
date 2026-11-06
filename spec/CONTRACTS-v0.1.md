@@ -120,7 +120,8 @@ SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 contex
 
 - 停止从 t0 起冻结新入站派发、Scheduler tick 和该插件的新根业务调用；最多 **6s** 排空。已接纳 Request 的响应和合法子调用仍可在原 deadline 与停止 deadline 内完成，避免一冻结就破坏整个在途调用链。
 - 排空完成或 6s 到期后，Core Cancel 剩余请求并发送唯一 STOPPING，携带 `min(t0+10s, STOPPING发送时刻+4s)` 的绝对截止时间；Core 终止进程树的总截止仍为 `t0+10s`。SDK 取消 lifetime、使 Session 调用门禁失效并停止 HTTP 接单，再用独立的剩余停止 context 执行 OnStop、关闭 DB/连接并退出；OnStop 及其资源关闭合计最多 **4s**，不复用已经取消的 lifetime context。Core Shutdown 中各插件并行停止，共享同一个总截止时间，不能逐插件串行累加 10s。
-- 主 RPC EOF、协议不可恢复错误或 Core 消失时，SDK 立即使 Session 失效、停止新工作并取消 lifetime，按同一总停止预算退出；不把旧 Session 重新接回新 Core。Core 先撤销 Session 的所有路由/HTTP 映射，再处理恢复；在途业务 UNAVAILABLE，不重放。
+- STOPPING 可以紧跟 ACTIVATED 到达：SDK 先发布 ready，再按上一条处理 STOPPING，这种情况按正常停止退出，不算激活失败。
+- 主 RPC EOF、协议不可恢复错误或 Core 消失时，SDK 立即使 Session 失效、停止新工作并取消 lifetime，按同一总停止预算退出；此时写 stdout 或 stderr 只返回错误，不能因 SIGPIPE 终止进程而跳过 OnStop；不把旧 Session 重新接回新 Core。Core 先撤销 Session 的所有路由/HTTP 映射，再处理恢复；在途业务 UNAVAILABLE，不重放。
 - 正常服务中的异常退出按已确认规则有限恢复：5 分钟窗口内第三次非正常退出自动禁用并保留诊断；前两次在确认旧进程退出后启动新 Session。用户主动停用、正常退出不自动重启；手动启用重置失败窗口。候选配置/升级失败按 §6 回退，不把坏候选当作普通崩溃无限重启；已提交代次的 OnReady 失败为 Degraded，不自动选择旧数据继续服务。
 
 ### 4.3 Scheduler
@@ -520,6 +521,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 - 插件与 Adapter 的 SDK 把记录以每行一个 JSON 对象写到 stderr，字段为 time、level、msg、source（file、line）与键值字段。Core 逐行解析，补上来源类别、来源 ID、session 与 generation 后输出；插件给出的同名字段不能覆盖 Core 补充的值。
 - 不是合法记录的行（直接写到 stderr 或 TCP 模式下 stdout 的文本、未被捕获的 panic 输出）作为 WARN 原样保留，消息为 `unstructured output`，带 stream 字段，原文在 output 字段，不丢弃。SDK 在调用边界捕获的 panic 记为一条 ERROR，堆栈放在 `stack` 字段。
+- 插件或 Adapter 进程退出后，Core 先读完它的日志管道再结束这次回收，最后的输出不因 Core 随后退出而丢失；停止时这段等待受 §4.2 的总截止约束，到期仍未读完（例如脱离进程树的进程持有管道）时记一条 WARN 后继续。
 
 ### 14.2 输出格式
 

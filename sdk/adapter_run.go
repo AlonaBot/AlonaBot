@@ -84,16 +84,10 @@ func RunAdapter(a adapter.Adapter) error {
 	runtime.session = active.sess
 	activeSession.Store(active)
 	active.sess.Start() // 回调使用的 Session 指针先发布，再启动读循环。
-	select {
-	case <-active.readyCh:
-		return serve(active.sess, active)
-	case err := <-active.failErr:
-		active.stopLifetime()
+	if err := active.waitReady(); err != nil {
 		return err
-	case <-active.sess.Done():
-		active.stopLifetime()
-		return fmt.Errorf("adapter session closed before activation: %w", active.sess.Err())
 	}
+	return serve(active.sess, active)
 }
 
 func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, a adapter.Adapter) error {

@@ -5,7 +5,9 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"os/signal"
 	"runtime/debug"
+	"syscall"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
@@ -18,7 +20,11 @@ var logLevel slog.LevelVar
 
 // setupLogging 把默认 Logger 换成以 JSON 行写 stderr、带源码位置的 Logger（CONTRACTS §14.1），
 // 插件用 log/slog 或 log 包写的日志都经由它交给 Core。stdio 传输时 stdout 专用于协议帧。
+//
+// Core 消失后再写 stdout 或 stderr 时，Go 运行时默认以 SIGPIPE 终止进程，来不及执行 OnStop（CONTRACTS §4.2）。
+// 接收该信号后这些写入只返回 EPIPE；不用 signal.Ignore，因为忽略状态会被插件启动的子进程继承。
 func setupLogging() {
+	signal.Notify(make(chan os.Signal, 1), syscall.SIGPIPE)
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{AddSource: true, Level: &logLevel})))
 }
 
