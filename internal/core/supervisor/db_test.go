@@ -44,7 +44,8 @@ func (*plugin) Migrations() []sqlitedb.Migration {
 func (*plugin) OnStart(ctx context.Context) error {
  db,err:=sqlitedb.Open(ctx); if err!=nil{return err}
  if err:=checkDatabase(ctx,db);err!=nil{return err}
- _,err=db.ExecContext(ctx,"INSERT INTO activity VALUES ('start')");return err
+ _,err=db.ExecContext(ctx,"INSERT INTO activity VALUES ('start')");if err!=nil{return err}
+ if os.Getenv("DB_FAIL_START")=="1" { return fmt.Errorf("start failed after database write") };return nil
 }
 func databaseRoot() sdk.Root { return &plugin{} }
 `
