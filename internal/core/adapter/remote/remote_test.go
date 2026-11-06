@@ -86,13 +86,13 @@ func observe(route string, c *sdk.Context) error {
 // Events 记录真实插件收到的权限和扩展载荷，barrier 用于确定完整派发已结束。
 func (*loopPlugin) Events(r *sdk.EventRegistry) {
 	for _, route := range []struct{ id, event string }{{"loop", "message.created"}, {"extension", "loop.poke"}, {"uninstalled", "other.poke"}, {"barrier", "scheduled"}} {
-		r.On(route.id, route.event, func(c *sdk.Context) error { return observe(route.id, c) })
+		r.On(route.id, route.event).Handle(func(c *sdk.Context) error { return observe(route.id, c) })
 	}
 }
 
 // Commands 让扩展事件误入命令层时留下可观察记录。
 func (*loopPlugin) Commands(r *sdk.CommandRegistry) {
-	r.Raw("raw", func(c *sdk.Context) error { return observe("raw", c) })
+	r.Raw("raw").Handle(func(c *sdk.Context) error { return observe("raw", c) })
 }
 
 type loopAdapter struct{}
@@ -639,9 +639,9 @@ func TestRemoteMediaRead(t *testing.T) {
 	p := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: sink, RegisterIncoming: mediaStore.RegisterIncoming})
 	mux := router.NewMux()
 	p.Services(mux)
-	dispatch := router.New(1, registry, nil, mediaStore.PrepareIncoming, nil)
+	dispatch := router.New(1, registry, nil, mediaStore.PrepareIncoming, nil, nil)
 	t.Cleanup(dispatch.Close)
-	mediaStore.AddReadServices(mux, registry, dispatch, store.AllowedAdapterInstances)
+	mediaStore.AddReadServices(mux, registry, dispatch, store.AdapterInstanceAllowed)
 	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
 	spec.Handler = mux.For(caller)
 	running, err := supervisor.Launch(ctx, store, spec)
@@ -873,7 +873,7 @@ func TestRemotePermissionsAndEvents(t *testing.T) {
 			store, spec, logs := setup(t)
 			spec.Stdio = stdio
 			registry := adapter.NewRegistry()
-			dispatch := router.New(tune.Defaults().DispatchQueueEvents, registry, nil, nil, nil)
+			dispatch := router.New(tune.Defaults().DispatchQueueEvents, registry, nil, nil, nil, nil)
 			dispatch.Start()
 			defer dispatch.Close()
 			process := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: dispatch, RegisterIncoming: openMediaStore(t).RegisterIncoming})

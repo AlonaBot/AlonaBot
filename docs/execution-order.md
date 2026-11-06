@@ -23,20 +23,21 @@
 | 6 | T-03.6、T-03.7、T-06.3、T-07.4、T-08.1、T-13.1 |
 | 7 | T-03.8、T-03.9、T-04.6、T-08.3、T-08.4、T-08.10、T-09.1 |
 | 8 | T-03.11、T-04.4、T-04.7、T-07.6、T-08.5、T-08.7、T-08.8、T-09.16、T-15.1 |
-| 9 | T-04.8、T-04.9、T-05.1、T-07.7、T-08.6、T-08.11、T-09.4、T-11.1、T-13.3、T-15.2 |
-| 10 | T-03.10、T-05.2、T-07.2、T-08.9、T-08.12、T-09.12、T-13.2 |
-| 11 | T-04.5、T-05.3、T-05.4、T-07.5、T-09.10、T-09.13、T-13.4、T-14.1、T-14.2、T-15.3、T-16.1 |
-| 12 | T-05.5、T-06.2、T-09.3、T-12.2、T-16.2 |
-| 13 | T-06.4、T-11.2、T-12.8 |
-| 14 | T-09.5、T-11.4、T-12.3、T-12.4、T-16.3 |
-| 15 | T-09.6、T-12.5、T-12.6 |
-| 16 | T-09.7、T-09.8、T-09.14、T-12.7 |
-| 17 | T-09.9、T-09.15、T-14.3 |
-| 18 | T-09.11、T-14.4、T-14.5、T-14.7 |
-| 19 | T-14.6 |
-| 20 | T-10.1 |
-| 21 | T-10.2、T-10.3 |
-| 22 | T-10.4 |
+| 9 | T-04.9、T-05.1、T-07.7、T-08.6、T-08.11、T-09.4、T-11.1、T-13.3、T-15.2 |
+| 10 | T-03.10、T-04.8、T-07.2、T-08.9、T-08.12、T-09.12、T-13.2 |
+| 11 | T-04.5、T-05.2、T-07.5、T-09.10、T-09.13、T-13.4、T-15.3 |
+| 12 | T-05.3、T-05.4、T-09.3、T-14.1、T-14.2、T-16.1 |
+| 13 | T-05.5、T-06.2、T-12.2、T-16.2 |
+| 14 | T-06.4、T-11.2、T-12.8 |
+| 15 | T-09.5、T-11.4、T-12.3、T-12.4、T-16.3 |
+| 16 | T-09.6、T-12.5、T-12.6 |
+| 17 | T-09.7、T-09.8、T-09.14、T-12.7 |
+| 18 | T-09.9、T-09.15、T-14.3 |
+| 19 | T-09.11、T-14.4、T-14.5、T-14.7 |
+| 20 | T-14.6 |
+| 21 | T-10.1 |
+| 22 | T-10.2、T-10.3 |
+| 23 | T-10.4 |
 
 ## 3. 共享文件与冲突规则
 
@@ -48,8 +49,8 @@
 | `internal/core/state/schema.sql`（唯一的初始迁移） | 首次发布前只有一条初始迁移（[编码规范](coding-standards.md)「首次发布前不写兼容层」）：新表和新列直接写进 `schema.sql`，不新增迁移文件，不用 `ALTER TABLE`；新表的 GORM 模型和访问方法一起放在 `internal/core/state/` 下按主题新建的文件里，不改 `models.go`；读写遵守[编码规范](coding-standards.md)「Core 状态库不写 SQL」。同步 main 后如果和别的切片在初始迁移末尾冲突，两边的表都保留，把自己的表放在最后，再重跑 state 测试。`schema.sql` 与 GORM 模型由 T-02.3（goal-86，PR #63）引入；给已有表加列的切片同步修改 `models.go` 中对应的模型。 |
 | `internal/core/adapter` 的 `Instance`、`Sink` 接口 | T-03.1 合并后不再修改。之后的切片需要更多 Adapter 能力时，在同一个包里新增可选接口，调用方用类型断言获取，不改已有接口。 |
 | `internal/wire/services.go` | 固定服务名只追加常量，不重排、不改已有值。多个切片并行追加时，由先合并者保留；后合并者同步最新 main 后把自己的常量追加到文件末尾，再运行 `go test ./internal/wire/...` 和本切片服务测试。 |
-| `router.New` 与 `Router.Attach` 的签名 | goal-7 给 `New` 追加 prepare、给 `Attach` 追加 Caller，goal-87 给 `New` 追加 prefixes，goal-13 给 `New` 追加 CommandPolicy。后合并的一方在先合并者的签名末尾追加自己的参数，并同步 supervisor 测试与装配处的全部调用点，不重排已有参数。 |
-| `sdk/generated.go` 的 `Generated`、`sdk.Collect` 与 `sdk/generate` | goal-53 只做三处追加：给 `Generated` 加 `I18n` 字段，在 `Collect` 中检查 usage_key，在生成器中检查并嵌入 i18。goal-88 重写注册 API，并为 Service 生成 Schema。goal-95 在 goal-88 合并之后进行，删除配置专用的标签解析与 Config 类型发现、改为检查并嵌入 `config_schema.json`，保留 goal-88 用于 Service Schema 的 go/types 类型推导；i18n/ 中 `config` 的结构检查属于 goal-53，与 schema 的核对属于 goal-95。goal-96 在 goal-88 合并之后删除构建期标记的扫描与生成，不改其他生成内容。先合并者的代码保留；后合并者同步 main 后在新代码上重做自己的改动，不回退对方的修改。 |
+| `router.New` 与 `Router.Attach` 的签名 | goal-7 给 `New` 追加 prepare、给 `Attach` 追加 Caller，goal-87 给 `New` 追加 prefixes，goal-13 给 `New` 追加 CommandPolicy。后合并的一方在先合并者的签名末尾追加自己的参数，并同步 supervisor 测试与装配处的全部调用点，不重排已有参数。goal-15 把 `New` 改为 `New(opt Options)`、`Close` 改为 `Close(ctx) error`：它合并后，新的注入项只追加 `Options` 字段，其他语句中 `router.New` 的位置参数写法按同名字段理解。 |
+| `sdk/generated.go` 的 `Generated`、`sdk.Collect` 与 `sdk/generate` | goal-53 只做三处追加：给 `Generated` 加 `I18n` 字段，在 `Collect` 中检查 usage_key，在生成器中检查并嵌入 i18。goal-88 重写注册 API，并为 Service 生成 Schema。goal-95 在 goal-88 合并之后进行，删除配置专用的标签解析与 Config 类型发现、改为检查并嵌入 `config_schema.json`，`service.go` 的 Service Schema 生成不依赖配置部分，保持不变；i18n/ 中 `config` 的结构检查属于 goal-53，与 schema 的核对属于 goal-95。goal-96 在 goal-88 合并之后删除构建期标记的扫描与生成，不改其他生成内容。先合并者的代码保留；后合并者同步 main 后在新代码上重做自己的改动，不回退对方的修改。 goal-91 排在 goal-96 之后：生成器的标记事件输出用字符串事件类型，与事件常量不兼容。 |
 | `router.Plugin` 接口 | goal-53 追加 `Messages()`。之后需要更多插件信息的切片同样只追加方法，并同步 `instancePlugin` 与测试中嵌入该接口的包装类型。 |
 | `spec/ADMIN-API.md` 与管理服务的 HTTP 路由 | goal-84 新建 `spec/ADMIN-API.md`，goal-39 建立管理服务的 HTTP 路由。之后新增 Admin API 的切片（goal-66、goal-92、goal-93）在自己的新文件里实现端点，只在路由注册处和 `spec/ADMIN-API.md` 末尾追加，不改已有条目；并行时由先合并者保留，后合并者同步 main 后追加。 |
 | `web/admin/src/api/` 与 `web/admin/i18n/*.json` | goal-43 建立 Admin API 客户端与页面文案；goal-44、goal-94 只追加自己的客户端函数与文案键，冲突时两边都保留，en-US 与 zh-CN 的键集合保持一致。 |
@@ -62,7 +63,7 @@
 | 日志 | 按[编码规范「日志用默认 Logger，依赖显式传递」](coding-standards.md#日志用默认-logger依赖显式传递)取用默认 Logger，并遵循 CONTRACTS §14 的字段；不另建日志封装，不用 fmt 直接写 stderr/stdout（CLI 给用户的输出除外）。 |
 | `internal/inproc/harness.go` | 只由 goal-81、goal-82 修改，只用标准库类型；字段只追加。 |
 | `internal/tune/params.go` | 只追加参数，不改已合并参数的名称与缺省值；新增参数同时追加到 CONTRACTS §16 的表，由审查者在合并前同步。 |
-| 根包 `alonabot` 的 Core 装配 | 只有 goal 语句写明负责装配的切片才能改，与 `cmd/alonabot/main.go` 相同。 |
+| 根包 `alonabot` 的 Core 装配 | 只有 goal 语句写明负责装配的切片才能改，与 `cmd/alonabot/main.go` 相同。goal-67 建立装配并首次调用 `router.New`，prefixes 传 nil，不读设置文件；goal-97 不改根包。命令前缀、Core Admin 列表与默认 locale 由 goal-39 接入。goal-39、goal-68、goal-69 都要在装配中读取 `core_config.json`：先合并者加入 `settings.Load` 这一步，后合并者复用同一个 `*settings.File`，不重复加载。 |
 | 包文档 | 只在包的职责确实变化时更新，不顺手重写。 |
 | `ARCHITECTURE.md`、`README.md`、`spec/` | 执行者不改，需要同步的内容在 PR 正文「文档同步」一节列出，由审查者在合并前补上。例外是 goal 语句明确要求的证据记录。 |
 | `docs/goals/`、`docs/execution-order.md` | 只由审查者维护。 |

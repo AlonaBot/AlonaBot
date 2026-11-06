@@ -5,11 +5,12 @@ import (
 	"reflect"
 )
 
-// Generated 提供构建期生成的配置 Schema、命令与事件注册函数；nil 字段表示没有对应项。
+// Generated 提供构建期生成的配置/Service Schema、命令与事件注册函数；nil 字段表示没有对应项。
 type Generated struct {
-	ConfigSchema []byte // 规范 JSON；没有 Config 时为 nil。
-	Commands     func(*CommandRegistry)
-	Events       func(*EventRegistry)
+	ServiceSchemas map[string][]byte // schema_id 对应的规范 JSON Service Schema。
+	ConfigSchema   []byte            // 规范 JSON；没有 Config 时为 nil。
+	Commands       func(*CommandRegistry)
+	Events         func(*EventRegistry)
 }
 
 // generatedRegistrations 仅在生成代码的 init 中写入，初始化完成后由 Collect 和准备阶段读取。

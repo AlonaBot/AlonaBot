@@ -32,7 +32,7 @@ type reply struct {
 
 // Events 注册命令入口；前缀指定插件，便于验证同键隔离。
 func (*plugin) Events(r *sdk.EventRegistry) {
-	r.On("conversation", "message.created", func(c *sdk.Context) error {
+	r.On("conversation", "message.created").Handle(func(c *sdk.Context) error {
 		text := c.Event().GetEventPayload().GetMessageCreated().GetChain().GetSegments()[0].GetText().GetText()
 		id, command, _ := strings.Cut(text, " ")
 		if id != os.Getenv("CONV_PLUGIN_ID") {

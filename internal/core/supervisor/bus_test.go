@@ -28,8 +28,8 @@ import (
 )
 
 const (
-	busControlSchema = "test.bus.control.v1"
-	busReplySchema   = "test.bus.reply.v1"
+	busControlSchema = "main.control"
+	busReplySchema   = "main.reply"
 	busTestTimeout   = 5 * time.Second
 )
 
@@ -104,7 +104,7 @@ func testBusProcesses(t *testing.T, binary string, stdio bool) {
 		}
 	}()
 	values := tune.Defaults()
-	routes := router.New(values.DispatchQueueEvents, nil, nil, nil, nil)
+	routes := router.New(values.DispatchQueueEvents, nil, nil, nil, nil, nil)
 	defer routes.Close()
 	services := broker.New(routes, values.RequestTimeout)
 	mux := router.NewMux()
@@ -227,6 +227,9 @@ func testBusProcesses(t *testing.T, binary string, stdio bool) {
 	}
 	if got := broadcast.Stats("pub").Published; got != 10 {
 		t.Fatalf("published=%d, want 10", got)
+	}
+	if result := control("pub", busControl{Operation: "mismatched_version"}); result.Code != 0 || result.EventID == "" {
+		t.Fatalf("version probe rejected: %+v", result)
 	}
 	close(gate.release)
 	control("stuck", busControl{Operation: "release"})

@@ -17,13 +17,13 @@ import (
 )
 
 // AddReadServices 注册媒体读取与授权入口，绑定可信实例、派发关联与当前实例许可查询。
-func (s *Store) AddReadServices(m *router.Mux, readers *adapter.Registry, dispatch *router.Router, allowedInstances func(context.Context, string) ([]string, error)) {
+func (s *Store) AddReadServices(m *router.Mux, readers *adapter.Registry, dispatch *router.Router, allowed func(ctx context.Context, pluginID, instanceID string) (bool, error)) {
 	s.mu.Lock()
 	s.readers = readers
 	s.mu.Unlock()
 	m.Handle(wire.ServiceMediaRead, s.read)
 	m.Handle(wire.ServiceMediaGrant, func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
-		return s.grant(ctx, c, in, dispatch, allowedInstances)
+		return s.grant(ctx, c, in, dispatch, allowed)
 	})
 }
 

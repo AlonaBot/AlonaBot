@@ -12,28 +12,45 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
+type subscriptionBudgetPayload string
+
+type subscriptionBudgetPlugin struct {
+	Base
+	handler func(*Context, subscriptionBudgetPayload) error
+}
+
+func (p *subscriptionBudgetPlugin) Subscriptions(r *SubscriptionRegistry) {
+	Subscribe[subscriptionBudgetPayload](r, "sub", "pub/x").Handle(p.handler)
+}
+
 // TestSubscriptionBudgetPreservesRequests 验证阻塞回调的积压受限，同 Session 的业务请求仍能准入，放行后按序处理保留事件。
 func TestSubscriptionBudgetPreservesRequests(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	entered, unblock := make(chan struct{}), make(chan struct{})
 	seen := make(chan string, 20)
-	r := &SubscriptionRegistry{}
-	Subscribe(r, "sub", "pub/x", "test.string", 1, func(_ *Context, value string) error {
+	reg, err := Collect(&subscriptionBudgetPlugin{handler: func(_ *Context, value subscriptionBudgetPayload) error {
 		if value[0] == 'a' {
 			close(entered)
 			<-unblock
 		}
-		seen <- value[:1]
+		seen <- string(value[:1])
 		return nil
-	})
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	schemaID, _, err := jsonType[subscriptionBudgetPayload]()
+	if err != nil {
+		t.Fatal(err)
+	}
 	a := &activation{lifetime: ctx}
 	a.ready.Store(true)
 	x, y := net.Pipe()
 	sid := make([]byte, validate.SessionIDLen)
 	plugin := wire.New(wire.NewStreamConn(y), wire.Options{
 		Local: pb.InitiatorSide_INITIATOR_SIDE_PLUGIN, SessionID: sid, SourcePluginID: "sub",
-		Event: subscriptionEvents(a, &Registration{subscriptions: r.subscriptions}),
+		Event: subscriptionEvents(a, reg),
 		Handler: func(context.Context, *wire.Inbound) wire.Response {
 			return wire.Response{Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: "test.reply", SchemaVersion: 1, Bytes: []byte(`{}`)}}
 		},
@@ -52,7 +69,7 @@ func TestSubscriptionBudgetPreservesRequests(t *testing.T) {
 	core.Start()
 	for i := range 20 {
 		payload := []byte(`"` + strings.Repeat(string(rune('a'+i)), 1<<20) + `"`)
-		ev := &pb.BusEvent{EventName: "pub/x", SchemaId: "test.string", SchemaVersion: 1, Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, Payload: payload}
+		ev := &pb.BusEvent{EventName: "pub/x", SchemaId: schemaID, SchemaVersion: 1, Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, Payload: payload}
 		if err := core.SendEvent(ctx, "sub", ev); err != nil {
 			t.Fatal(err)
 		}
@@ -84,7 +101,7 @@ func TestSubscriptionBudgetPreservesRequests(t *testing.T) {
 		}
 	}
 	// 顺序屏障：后续小事件证明溢出事件已丢弃，预算也已经归还。
-	if err := core.SendEvent(ctx, "sub", &pb.BusEvent{EventName: "pub/x", SchemaId: "test.string", SchemaVersion: 1, Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, Payload: []byte(`"z"`)}); err != nil {
+	if err := core.SendEvent(ctx, "sub", &pb.BusEvent{EventName: "pub/x", SchemaId: schemaID, SchemaVersion: 1, Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, Payload: []byte(`"z"`)}); err != nil {
 		t.Fatal(err)
 	}
 	select {
