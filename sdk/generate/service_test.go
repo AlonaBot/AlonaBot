@@ -30,6 +30,12 @@ type Request struct {
  Count *int32 ` + "`json:\"count,omitempty\"`" + `
 }
 type Result struct { OK bool ` + "`json:\"ok\"`" + ` }
+type BusPayload chan int
+func typeReferences() {
+ _ = sdk.Subscribe[BusPayload]
+ _ = sdk.CallJSON[Result,Result]
+ _ = sdk.Publish[BusPayload]
+}
 func (*Plugin) Services(r *sdk.ServiceRegistry) {
  sdk.JSON[Request,Result](r,"first").Handle(func(*sdk.Context,Request)(Result,error){return Result{OK:true},nil})
  handlers.Register(r)
@@ -135,6 +141,14 @@ func TestServiceSchemaDiagnosticsIntegration(t *testing.T) {
 	for _, test := range []struct{ name, declaration, register, diagnostic string }{
 		{"anonymous", "", `sdk.JSON[struct{},Result](r,"bad").Handle(func(*sdk.Context,struct{})(Result,error){return Result{},nil})`, "package-level named non-generic"},
 		{"unsupported", `type Input struct { Stream chan int }`, `sdk.JSON[Input,Result](r,"bad").Handle(func(*sdk.Context,Input)(Result,error){return Result{},nil})`, "unsupported service type chan int"},
+		{"json_local", "", `type Local string; _ = sdk.JSON[Local,Result]`, "package-level named non-generic"},
+		{"subscribe_local", "", `type Local string; _ = sdk.Subscribe[Local]`, "package-level named non-generic"},
+		{"call_input_local", "", `type Local string; _ = sdk.CallJSON[Local,Result]`, "package-level named non-generic"},
+		{"call_output_local", "", `type Local string; _ = sdk.CallJSON[Result,Local]`, "package-level named non-generic"},
+		{"publish_local", "", `type Local string; _ = sdk.Publish[Local]`, "package-level named non-generic"},
+		{"subscribe_anonymous", "", `_ = sdk.Subscribe[struct{}]`, "package-level named non-generic"},
+		{"call_pointer", "", `_ = sdk.CallJSON[*Result,Result]`, "package-level named non-generic"},
+		{"publish_generic", `type Box[T any] struct { Value T }`, `_ = sdk.Publish[Box[string]]`, "package-level named non-generic"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			dir := pluginModuleDir(t)
