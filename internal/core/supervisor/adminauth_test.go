@@ -53,7 +53,7 @@ func TestAdminAuthProcesses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	auth := adminauth.New(store, func() time.Time { return now }, adminURL)
+	auth := adminauth.New(store, func() time.Time { return now }, adminURL, filepath.Join(spec.PluginDir, "..", "..", "data"))
 	mux := http.NewServeMux()
 	auth.Routes(mux)
 	mux.Handle("POST /api/change", auth.Require(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })))

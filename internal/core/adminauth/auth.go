@@ -6,11 +6,14 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -28,16 +31,18 @@ const (
 // Auth 校验管理凭证、持久会话与浏览器 CSRF；同时提供派生授权的原会话检查。
 // 构造后只读取配置，数据库操作由 state.Store 串行化。
 type Auth struct {
-	store   *state.Store
-	now     func() time.Time
-	baseURL url.URL
-	secure  bool
+	store          *state.Store
+	now            func() time.Time
+	baseURL        url.URL
+	secure         bool
+	firstTokenPath string
 }
 
 // New 使用已校验的管理 Base URL 构造认证入口。
-// HTTPS 同时决定 Cookie 的 Secure 属性与 __Host- 前缀；now 提供会话时钟。
-func New(st *state.Store, now func() time.Time, adminBaseURL *url.URL) *Auth {
-	return &Auth{store: st, now: now, baseURL: *adminBaseURL, secure: adminBaseURL.Scheme == "https"}
+// HTTPS 决定 Cookie 的 Secure 属性与 __Host- 前缀；now 提供会话时钟。
+// 登录成功时删除 dataDir 下的首次 token 文件。
+func New(st *state.Store, now func() time.Time, adminBaseURL *url.URL, dataDir string) *Auth {
+	return &Auth{store: st, now: now, baseURL: *adminBaseURL, secure: adminBaseURL.Scheme == "https", firstTokenPath: filepath.Join(dataDir, firstTokenFile)}
 }
 
 // Routes 注册登录与需认证的登出接口；装配方只在 admin host 调用这些路由。
@@ -164,6 +169,12 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 	if err := a.store.CreateAdminSession(r.Context(), session, now.UnixMilli()); err != nil {
 		a.loginFailed(r)
 		a.respondError(w, err)
+		return
+	}
+	// 3. 文件删除失败时撤销尚未交付的会话，保留 token 以便修复后重新登录。
+	if err := os.Remove(a.firstTokenPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		a.loginFailed(r)
+		a.respondError(w, errors.Join(fmt.Errorf("remove first admin token file: %w", err), a.store.DeleteAdminSession(r.Context(), session.SessionID)))
 		return
 	}
 	cookie := a.cookie(session.SessionID)

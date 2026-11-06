@@ -124,7 +124,7 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 	if err != nil {
 		return fmt.Errorf("parse plugin_base_url: %w", err)
 	}
-	authentication := adminauth.New(store, time.Now, adminURL)
+	authentication := adminauth.New(store, time.Now, adminURL, dataDir)
 	adminMux := http.NewServeMux()
 	authentication.Routes(adminMux)
 	adminMux.Handle("/", authentication.Require(http.NotFoundHandler()))
