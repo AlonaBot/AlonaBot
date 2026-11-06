@@ -220,8 +220,11 @@ func testServiceProcesses(t *testing.T, binary, staleBinary string, stdio, badOu
 					continue
 				}
 				found = true
-				if record["level"] != "ERROR" || record["schema_id"] != "main.invalidOutput" || record["error"] == nil {
+				if record["level"] != "ERROR" || record["schema_id"] != "main.invalidOutput" {
 					t.Errorf("schema error diagnostic=%v", record)
+				}
+				if _, ok := record["error"]; ok {
+					t.Errorf("schema diagnostic contains validation error: %s", line)
 				}
 				if strings.Contains(line, "output-payload-must-not-be-logged") || strings.Contains(line, `"payload"`) || strings.Contains(line, `"Secret"`) {
 					t.Errorf("schema diagnostic contains payload: %s", line)
@@ -301,6 +304,7 @@ func testServiceProcesses(t *testing.T, binary, staleBinary string, stdio, badOu
 	for _, test := range []struct{ name, target, schemaID, payload string }{
 		{"schema_missing_required", "a/pub", "main.input", `{}`},
 		{"schema_wrong_field_type", "a/pub", "main.input", `{"Text":42}`},
+		{"schema_payload_redacted", "a/pub", "main.input", `{"Text":{"secret":"` + strings.Repeat("input-payload-must-not-be-returned", 2048) + `"}}`},
 		{"container_wrong_element_type", "a/containers", "main.containers", `{"Values":[42],"Labels":null}`},
 		{"container_wrong_map_value_type", "a/containers", "main.containers", `{"Values":null,"Labels":{"key":42}}`},
 	} {
@@ -312,8 +316,15 @@ func testServiceProcesses(t *testing.T, binary, staleBinary string, stdio, badOu
 			if response.Err.GetCode() != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT {
 				t.Fatalf("input schema error=%v, want INVALID_ARGUMENT", response.Err)
 			}
+			if got := response.Err.GetSafeMessage(); got != "invalid service input" {
+				t.Fatalf("input schema message=%q, want fixed diagnostic", got)
+			}
 			if after := count(t); after != before {
 				t.Fatalf("invalid input invoked handler: before=%d after=%d", before, after)
+			}
+			result := command(t, "b", "json", "a/pub")
+			if result.Code != 0 || result.Text != "hello 世界" || result.Calls != before+1 {
+				t.Fatalf("service call after invalid input=%+v", result)
 			}
 		})
 	}

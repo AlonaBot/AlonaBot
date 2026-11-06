@@ -86,7 +86,7 @@ func JSON[In, Out any](r *ServiceRegistry, name string) *JSONService[In, Out] {
 		}
 		return b.route(inputID, outputID, inputVersion, outputVersion, pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, func(c *Context, data []byte) ([]byte, error) {
 			if err := validateServiceJSON(inputSchema, data); err != nil {
-				return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "invalid service input: " + err.Error()}
+				return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "invalid service input"}
 			}
 			var input In
 			if err := json.Unmarshal(data, &input); err != nil {
@@ -101,7 +101,7 @@ func JSON[In, Out any](r *ServiceRegistry, name string) *JSONService[In, Out] {
 				return nil, fmt.Errorf("encode service output: %w", err)
 			}
 			if err := validateServiceJSON(outputSchema, encoded); err != nil {
-				c.Logger().Error("service output schema validation failed", "schema_id", outputID, "error", err)
+				c.Logger().Error("service output schema validation failed", "schema_id", outputID)
 				return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, Message: "invalid service output"}
 			}
 			return encoded, nil
