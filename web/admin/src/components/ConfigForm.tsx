@@ -219,7 +219,13 @@ function FormEditor(props: ConfigFormProps) {
     props.onSubmit(patch);
   }
 
-  return <form onSubmit={submit}>
+  return <form onSubmit={submit} onInvalidCapture={event => {
+    let details = (event.target as HTMLElement).closest('details');
+    while (details) {
+      details.open = true;
+      details = details.parentElement?.closest('details') ?? null;
+    }
+  }}>
     <Fields fields={fields} value={edited} original={props.value as Record<string, unknown>}
       path={[]} messages={props.messages} missing={missing} onChange={next => { setEdited(next as Record<string, unknown>); setError(null); }} />
     {error && <div role="alert" className="form-error">
