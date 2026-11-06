@@ -85,9 +85,13 @@ func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
 		return &pb.SendResult{Status: pb.SendStatus_SEND_STATUS_ACCEPTED, Target: target}, nil
 	})
 	sender := message.New(registry, policy.New(store), nil, values.RequestTimeout)
-	events := router.New(values.DispatchQueueEvents, registry, sender.Send, nil, nil, nil)
+	events := router.New(router.Options{Concurrency: 1, QueueBytes: values.DispatchQueueBytes, QueueEvents: values.DispatchQueueEvents, Adapters: registry, Send: sender.Send})
 	events.Start()
-	defer events.Close()
+	defer func() {
+		if err := events.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	}()
 	if err := platform.Start(ctx, events); err != nil {
 		t.Fatal(err)
 	}

@@ -639,8 +639,12 @@ func TestRemoteMediaRead(t *testing.T) {
 	p := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: sink, RegisterIncoming: mediaStore.RegisterIncoming})
 	mux := router.NewMux()
 	p.Services(mux)
-	dispatch := router.New(1, registry, nil, mediaStore.PrepareIncoming, nil, nil)
-	t.Cleanup(dispatch.Close)
+	dispatch := router.New(router.Options{Concurrency: 1, QueueBytes: tune.Defaults().DispatchQueueBytes, QueueEvents: 1, Adapters: registry, Prepare: mediaStore.PrepareIncoming})
+	t.Cleanup(func() {
+		if err := dispatch.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
 	mediaStore.AddReadServices(mux, registry, dispatch, store.AdapterInstanceAllowed)
 	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
 	spec.Handler = mux.For(caller)
@@ -873,9 +877,13 @@ func TestRemotePermissionsAndEvents(t *testing.T) {
 			store, spec, logs := setup(t)
 			spec.Stdio = stdio
 			registry := adapter.NewRegistry()
-			dispatch := router.New(tune.Defaults().DispatchQueueEvents, registry, nil, nil, nil, nil)
+			dispatch := router.New(router.Options{Concurrency: 1, QueueBytes: tune.Defaults().DispatchQueueBytes, QueueEvents: tune.Defaults().DispatchQueueEvents, Adapters: registry})
 			dispatch.Start()
-			defer dispatch.Close()
+			defer func() {
+				if err := dispatch.Close(context.Background()); err != nil {
+					t.Error(err)
+				}
+			}()
 			process := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: dispatch, RegisterIncoming: openMediaStore(t).RegisterIncoming})
 			mux := router.NewMux()
 			process.Services(mux)

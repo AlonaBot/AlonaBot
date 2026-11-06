@@ -66,39 +66,46 @@ type CommandPolicy interface {
 	IsAdmin(ctx context.Context, actor *pb.Actor) (bool, error)
 }
 
-// Router 按顺序派发已接纳事件；New 创建，Start 启动，Close 取消在途派发并等待 worker 退出。
-// 队列接纳与插件注册由 mu 串行化，worker 调用插件时不持锁；队列不关闭，避免并发投递遇到已关闭 channel。
+// Router 并发执行有界的事件链；每条链内按稳定次序调用候选。
+// mu 串行化接纳、出队和注册；链调用插件期间不持锁。
 type Router struct {
-	adapters *adapter.Registry
-	send     ServiceFunc
-	prepare  func(*pb.Event, Caller) (*pb.Event, error)
-	prefixes func(adapterInstanceID string) []string
-	policy   CommandPolicy
-	matches  map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
-	queue    chan *trustedEvent
-	ctx      context.Context
-	cancel   context.CancelFunc
-	mu       sync.Mutex // 保护注册、在途调用、命令索引与 worker 的启动
-	plugins  map[string]*pluginSession
-	inFlight map[inFlightKey]struct{} // 仅覆盖 Plugin.Call；排队与 prepare 期间不登记
-	commands *CommandIndex            // 在 mu 下发布；已发布快照只读
-	started  bool
-	closed   bool
-	worker   sync.WaitGroup
+	adapters    *adapter.Registry
+	send        ServiceFunc
+	prepare     func(*pb.Event, Caller) (*pb.Event, error)
+	prefixes    func(adapterInstanceID string) []string
+	policy      CommandPolicy
+	matches     map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
+	queue       []queuedEvent
+	concurrency int
+	queueEvents int
+	queueBytes  int64 // 等待队列上限，单位为编码后的字节数
+	global      *wire.Budget
+	queuedBytes int64         // 等待中的事件占用，由 mu 保护
+	stats       Stats         // 计数及运行状态，由 mu 保护
+	drained     chan struct{} // 关闭接纳且全部运行链退出时关闭
+	ctx         context.Context
+	cancel      context.CancelFunc
+	mu          sync.Mutex // 保护注册、在途调用、命令索引与分发状态
+	plugins     map[string]*pluginSession
+	inFlight    map[inFlightKey]struct{} // 仅覆盖 Plugin.Call；排队与 prepare 期间不登记
+	commands    *CommandIndex            // 在 mu 下发布；已发布快照只读
+	started     bool
+	closed      bool
 }
 
-// New 创建容量为 queueEvents 的事件队列。
-// queueEvents 由装配处传入 tune.Values.DispatchQueueEvents。
-// adapters 提供账号用户名，send 接入 message.Service.Send 处理 usage 与自动回复。
-// prepare 在每次 Handler 调用前改写接收 Session 的事件；nil 时原样派发。
-// prefixes 按实例提供非空的前缀列表；nil 时所有实例使用 ["/"]。
-// policy 提供动态命令策略与管理员身份；nil 时仅按声明权限判定且不赋予 admin。
-func New(queueEvents int, adapters *adapter.Registry, send ServiceFunc, prepare func(*pb.Event, Caller) (*pb.Event, error), prefixes func(adapterInstanceID string) []string, policy CommandPolicy) *Router {
-	if prefixes == nil {
-		prefixes = func(string) []string { return []string{"/"} }
+// New 按显式的并发和队列限额创建路由器；限额由装配处从 tune.Values 传入。
+func New(opt Options) *Router {
+	if opt.Prefixes == nil {
+		opt.Prefixes = func(string) []string { return []string{"/"} }
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Router{adapters: adapters, send: send, prepare: prepare, prefixes: prefixes, policy: policy, matches: make(map[string][]commandRoute), queue: make(chan *trustedEvent, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]*pluginSession), inFlight: make(map[inFlightKey]struct{}), commands: &CommandIndex{}}
+	return &Router{
+		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy,
+		concurrency: opt.Concurrency, queueEvents: opt.QueueEvents, queueBytes: opt.QueueBytes, global: opt.Global,
+		ctx: ctx, cancel: cancel, drained: make(chan struct{}),
+		matches: make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
+		inFlight: make(map[inFlightKey]struct{}), commands: &CommandIndex{},
+	}
 }
 
 // Attach 注册一个接收派发的插件并重建命令索引；相同插件 ID 替换为新实例。
@@ -155,57 +162,6 @@ func (r *Router) Detach(pluginID string) {
 	delete(r.plugins, pluginID)
 	delete(r.matches, pluginID)
 	r.rebuildCommands()
-}
-
-// Start 启动唯一的派发 worker；重复启动或关闭后的启动不产生 worker。
-func (r *Router) Start() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.started || r.closed {
-		return
-	}
-	r.started = true
-	r.worker.Add(1)
-	// shortcut: 单 worker 且仅按条数限额，有界并发派发（DISPATCH_CONCURRENCY、DISPATCH_QUEUE_BYTES）接入后替换。
-	go func() {
-		defer r.worker.Done()
-		for {
-			select {
-			case <-r.ctx.Done():
-				return
-			case ev := <-r.queue:
-				r.dispatch(ev)
-			}
-		}
-	}()
-}
-
-// Close 停止接纳、取消在途调用，并等待派发 worker 退出；未派发事件不再处理。
-func (r *Router) Close() {
-	r.mu.Lock()
-	r.closed = true
-	r.cancel()
-	r.mu.Unlock()
-	// 不持注册锁等待，派发中的 worker 仍可完成状态读取并退出。
-	r.worker.Wait()
-}
-
-// Deliver 接纳事件快照，不等待 Handler；满队列立即返回 adapter.ErrQueueFull。
-func (r *Router) Deliver(ctx context.Context, ev *pb.Event) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.closed {
-		return errors.New("event router is closed")
-	}
-	select {
-	case r.queue <- retainEvent(ev):
-		return nil
-	default:
-		return adapter.ErrQueueFull
-	}
 }
 
 type candidate struct {
