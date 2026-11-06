@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,17 +25,23 @@ type Command struct {
 	Mode     pb.HandlerMode // 由签名推出的 Handler 形态
 	Params   []pb.ParamType // Context 之后各参数的类型
 
-	routeID string          // 文本匹配与 Raw 的显式路由 ID
-	spec    *pb.CommandSpec // 已通过注册边界校验的命令描述
+	permission Permission
+	routeID    string          // 文本匹配与 Raw 的显式路由 ID
+	spec       *pb.CommandSpec // 已通过注册边界校验的命令描述
 }
 
 // CommandRegistry 收集命令；实例方法以方法值显式传入，不做自动 DI。
+// 子组共享根注册器的构建链和冲突索引；Collect 在全部声明结束后解析继承权限。
 type CommandRegistry struct {
-	prefix   []string          // 本分组的公共路径前缀
-	commands []Command         // 已收集的命令，按注册顺序排列
-	errs     []error           // 收集过程中发现的错误，由 Collect 一并返回
-	seen     map[string]string // 路径或别名对应的 route_id；惰性创建
-	routeIDs map[string]bool   // 命令路径生成的 route_id，跨分组检查重复
+	parent     *CommandRegistry
+	groups     map[string]*CommandRegistry
+	permission *Permission
+	builders   []*CommandBuilder
+	prefix     []string          // 本分组的公共路径前缀
+	commands   []Command         // 已收集的命令，按注册顺序排列
+	errs       []error           // 收集过程中发现的错误，由 Collect 一并返回
+	seen       map[string]string // 路径或别名对应的 route_id；惰性创建
+	routeIDs   map[string]bool   // 命令路径生成的 route_id，跨分组检查重复
 }
 
 type routeOptions struct {
@@ -53,108 +60,178 @@ type optionalArgument struct {
 	defaults []string
 }
 
-// RouteOption 调整命令或事件路由的静态声明。
-type RouteOption func(*routeOptions)
-
-// Alias 添加命令的完整别名路径，不附加命令组前缀；可多次使用。
-func Alias(path ...string) RouteOption {
-	snapshot := append([]string(nil), path...)
-	return func(o *routeOptions) { o.aliases = append(o.aliases, snapshot) }
+// Group 返回共享注册状态的子组；同名调用返回同一组。
+func (r *CommandRegistry) Group(name string) *CommandRegistry {
+	if r.groups == nil {
+		r.groups = make(map[string]*CommandRegistry)
+	}
+	if r.groups[name] == nil {
+		r.groups[name] = &CommandRegistry{parent: r, prefix: append(slices.Clone(r.prefix), name)}
+	}
+	return r.groups[name]
 }
 
-// Priority 设置路由优先级，数值越小越先；多次设置时取最后一次。
-func Priority(p int32) RouteOption {
-	return func(o *routeOptions) { o.priority = p }
+// Permission 设置本组及未显式覆盖的后代路由权限。
+func (r *CommandRegistry) Permission(p Permission) *CommandRegistry { r.permission = &p; return r }
+
+func (r *CommandRegistry) owner() *CommandRegistry {
+	for r.parent != nil {
+		r = r.parent
+	}
+	return r
 }
 
-// Args 依次指定参数名，未指定的位置沿用 arg1、arg2 等名称。
-func Args(names ...string) RouteOption {
-	snapshot := append([]string(nil), names...)
-	return func(o *routeOptions) { o.names = snapshot }
+// Command 开始构建相对于本组路径的命令。
+func (r *CommandRegistry) Command(path ...string) *CommandBuilder {
+	return r.start(Command{Path: append(slices.Clone(r.prefix), path...), spec: &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_PATH}}, len(path) == 0)
 }
 
-// Optional 允许省略命名参数；def 最多给出一个缺失位置的默认值。
-func Optional(name string, def ...string) RouteOption {
-	snapshot := append([]string(nil), def...)
-	return func(o *routeOptions) {
-		o.optional = append(o.optional, optionalArgument{name: name, defaults: snapshot})
+// Regex 开始构建 Go regexp 文本匹配。
+func (r *CommandRegistry) Regex(routeID, expr string) *CommandBuilder {
+	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_REGEX, Regex: expr})
+}
+
+// Keyword 开始构建包含文本匹配。
+func (r *CommandRegistry) Keyword(routeID string, patterns ...string) *CommandBuilder {
+	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_KEYWORD, Patterns: slices.Clone(patterns)})
+}
+
+// StartsWith 开始构建开头文本匹配。
+func (r *CommandRegistry) StartsWith(routeID string, patterns ...string) *CommandBuilder {
+	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_STARTSWITH, Patterns: slices.Clone(patterns)})
+}
+
+// EndsWith 开始构建结尾文本匹配。
+func (r *CommandRegistry) EndsWith(routeID string, patterns ...string) *CommandBuilder {
+	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_ENDSWITH, Patterns: slices.Clone(patterns)})
+}
+
+// FullMatch 开始构建完整文本匹配。
+func (r *CommandRegistry) FullMatch(routeID string, patterns ...string) *CommandBuilder {
+	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_FULLMATCH, Patterns: slices.Clone(patterns)})
+}
+
+// Raw 开始构建最后执行的原始消息路由。
+func (r *CommandRegistry) Raw(routeID string) *CommandBuilder {
+	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_RAW})
+}
+
+func (r *CommandRegistry) text(routeID string, spec *pb.CommandSpec) *CommandBuilder {
+	return r.start(Command{routeID: routeID, spec: spec}, routeID == "" || strings.HasPrefix(routeID, commandRoutePrefix))
+}
+
+func (r *CommandRegistry) start(c Command, invalid bool) *CommandBuilder {
+	b := &CommandBuilder{registry: r, command: c, invalid: invalid, options: routeOptions{usageMode: pb.UsageMode_USAGE_MODE_DEFAULT}}
+	r.owner().builders = append(r.owner().builders, b)
+	return b
+}
+
+// CommandBuilder 收集一条路由；Handle 结束构建，Collect 统一验证。
+type CommandBuilder struct {
+	registry    *CommandRegistry
+	command     Command
+	options     routeOptions
+	permission  *Permission
+	handles     int
+	afterHandle bool
+	invalid     bool
+}
+
+func (b *CommandBuilder) touch() {
+	if b.handles != 0 {
+		b.afterHandle = true
 	}
 }
 
-// RawTail 让最后一个 string 参数接收剩余原文。
-func RawTail() RouteOption { return func(o *routeOptions) { o.raw = true } }
-
-// UsageKey 设置参数错误时使用的插件 messages 文案键。
-func UsageKey(key string) RouteOption {
-	return func(o *routeOptions) { o.usageMode, o.usageKey = pb.UsageMode_USAGE_MODE_CUSTOM, key }
+// Alias 追加完整别名路径。
+func (b *CommandBuilder) Alias(path ...string) *CommandBuilder {
+	b.touch()
+	b.options.aliases = append(b.options.aliases, slices.Clone(path))
+	return b
 }
 
-// Silent 设置参数错误时保持沉默。
-func Silent() RouteOption {
-	return func(o *routeOptions) { o.usageMode = pb.UsageMode_USAGE_MODE_SILENT }
+// Args 设置参数名。
+func (b *CommandBuilder) Args(names ...string) *CommandBuilder {
+	b.touch()
+	b.options.names = slices.Clone(names)
+	return b
 }
 
-// IgnoreCase 对文本模式采用 Unicode 简单大小写折叠比较。
-func IgnoreCase() RouteOption { return func(o *routeOptions) { o.ignoreCase = true } }
-
-// CommandGroup 用公共路径前缀组织一组子命令。
-type CommandGroup = CommandRegistry
-
-// Group 在 name 下注册一组子命令。
-func (r *CommandRegistry) Group(name string, fn func(*CommandGroup)) {
-	sub := &CommandRegistry{prefix: append(append([]string{}, r.prefix...), name)}
-	fn(sub)
-	r.merge(sub)
+// Optional 追加可选参数及默认值。
+func (b *CommandBuilder) Optional(name string, def ...string) *CommandBuilder {
+	b.touch()
+	b.options.optional = append(b.options.optional, optionalArgument{name: name, defaults: slices.Clone(def)})
+	return b
 }
 
-// Command 注册一条命令。handler 必须是以下两种签名之一，参数类型支持 string、int64、float64、bool、UserID、*pb.ImageSegment 和末位 *pb.MessageChain：
-//
-//	func(*sdk.Context, ...参数) (message.Chain, error)  // 自动回复
-//	func(*sdk.Context, ...参数) error                   // 主动发送
-func (r *CommandRegistry) Command(name string, handler any, opts ...RouteOption) {
-	path := append(append([]string{}, r.prefix...), name)
-	r.register(Command{Path: path, Handler: handler, spec: &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_PATH}}, opts)
+// RawTail 保留末位参数原文。
+func (b *CommandBuilder) RawTail() *CommandBuilder { b.touch(); b.options.raw = true; return b }
+
+// UsageKey 设置 usage 文案键。
+func (b *CommandBuilder) UsageKey(key string) *CommandBuilder {
+	b.touch()
+	b.options.usageMode = pb.UsageMode_USAGE_MODE_CUSTOM
+	b.options.usageKey = key
+	return b
 }
 
-// Regex 注册 Go regexp 文本匹配，捕获组通过 Context.Match 获取。
-func (r *CommandRegistry) Regex(routeID, expr string, handler any, opts ...RouteOption) {
-	r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_REGEX, Regex: expr}, handler, opts)
+// Silent 关闭参数错误回复。
+func (b *CommandBuilder) Silent() *CommandBuilder {
+	b.touch()
+	b.options.usageMode = pb.UsageMode_USAGE_MODE_SILENT
+	b.options.usageKey = ""
+	return b
 }
 
-// Keyword 注册包含任一模式的文本匹配。
-func (r *CommandRegistry) Keyword(routeID string, patterns []string, handler any, opts ...RouteOption) {
-	r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_KEYWORD, Patterns: append([]string(nil), patterns...)}, handler, opts)
+// IgnoreCase 启用 Unicode 大小写折叠。
+func (b *CommandBuilder) IgnoreCase() *CommandBuilder {
+	b.touch()
+	b.options.ignoreCase = true
+	return b
 }
 
-// StartsWith 注册以任一模式开头的文本匹配。
-func (r *CommandRegistry) StartsWith(routeID string, patterns []string, handler any, opts ...RouteOption) {
-	r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_STARTSWITH, Patterns: append([]string(nil), patterns...)}, handler, opts)
+// Priority 设置路由优先级。
+func (b *CommandBuilder) Priority(p int32) *CommandBuilder {
+	b.touch()
+	b.options.priority = p
+	return b
 }
 
-// EndsWith 注册以任一模式结尾的文本匹配。
-func (r *CommandRegistry) EndsWith(routeID string, patterns []string, handler any, opts ...RouteOption) {
-	r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_ENDSWITH, Patterns: append([]string(nil), patterns...)}, handler, opts)
+// Permission 覆盖本路由权限。
+func (b *CommandBuilder) Permission(p Permission) *CommandBuilder {
+	b.touch()
+	b.permission = &p
+	return b
 }
 
-// FullMatch 注册与任一模式完全相同的文本匹配。
-func (r *CommandRegistry) FullMatch(routeID string, patterns []string, handler any, opts ...RouteOption) {
-	r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_FULLMATCH, Patterns: append([]string(nil), patterns...)}, handler, opts)
-}
+// Handle 结束路由构建，签名规则由 Collect 检查。
+func (b *CommandBuilder) Handle(handler any) { b.handles++; b.command.Handler = handler }
 
-// Raw 注册普通命令与文本匹配之后执行的原始消息 Handler。
-func (r *CommandRegistry) Raw(routeID string, handler any, opts ...RouteOption) {
-	r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_RAW}, handler, opts)
-}
-
-func (r *CommandRegistry) text(routeID string, spec *pb.CommandSpec, handler any, opts []RouteOption) {
-	if routeID == "" || strings.HasPrefix(routeID, commandRoutePrefix) {
-		r.errs = append(r.errs, invalidCommand("text or raw route_id %q is empty or uses reserved %s prefix", routeID, commandRoutePrefix))
-		return
+func (r *CommandRegistry) collect() {
+	for _, b := range r.builders {
+		c := b.command
+		id := commandRouteID(c)
+		if b.invalid || b.handles != 1 || b.afterHandle {
+			r.errs = append(r.errs, invalidCommand("route %q (path %q) has invalid path/route_id or Handle sequence", id, strings.Join(c.Path, " ")))
+			continue
+		}
+		p := b.permission
+		for g := b.registry; p == nil && g != nil; g = g.parent {
+			p = g.permission
+		}
+		if p == nil {
+			p = &User
+		}
+		if err := checkPermission(*p); err != nil {
+			r.errs = append(r.errs, invalidCommand("route %q: %v", id, err))
+			continue
+		}
+		c.permission = *p
+		r.register(c, b.options)
 	}
-	r.register(Command{routeID: routeID, Handler: handler, spec: spec}, opts)
 }
 
-func (r *CommandRegistry) register(c Command, opts []RouteOption) {
+func (r *CommandRegistry) register(c Command, options routeOptions) {
 	// 1. 从真实函数签名取得参数类型，选项仅描述名称与缺失时的行为。
 	mode, params, err := checkHandler(c.Handler)
 	if err != nil {
@@ -162,11 +239,6 @@ func (r *CommandRegistry) register(c Command, opts []RouteOption) {
 		return
 	}
 	c.Mode, c.Params = mode, params
-	var options routeOptions
-	options.usageMode = pb.UsageMode_USAGE_MODE_DEFAULT
-	for _, option := range opts {
-		option(&options)
-	}
 	c.Aliases, c.Priority = options.aliases, options.priority
 	spec := c.spec
 	spec.Path, spec.HandlerMode = c.Path, mode
@@ -254,7 +326,7 @@ func (r *CommandRegistry) add(c Command) {
 		r.errs = append(r.errs, invalidCommand("route %q registered twice", id))
 		return
 	}
-	// 2. 全部通过后统一登记，分组合并也走相同检查。
+	// 2. 全部通过后统一登记，所有分组共用根注册器的冲突索引。
 	if r.seen == nil {
 		r.seen = make(map[string]string)
 	}
@@ -266,14 +338,6 @@ func (r *CommandRegistry) add(c Command) {
 	}
 	r.routeIDs[id] = true
 	r.commands = append(r.commands, c)
-}
-
-// merge 把子分组的命令与错误并入本注册器，重复检查跨分组生效。
-func (r *CommandRegistry) merge(sub *CommandRegistry) {
-	r.errs = append(r.errs, sub.errs...)
-	for _, c := range sub.commands {
-		r.add(c)
-	}
 }
 
 // Handler 签名检查使用的反射类型，以及参数类型到协议参数类型的映射。

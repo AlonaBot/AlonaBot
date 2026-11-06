@@ -66,10 +66,11 @@ func (p *Demo) Config() config.Config { return &p.config }
 
 // Commands 在 demo 分组下注册两个命令，行尾注释是各自的触发路径。
 func (p *Demo) Commands(r *sdk.CommandRegistry) {
-	r.Group("demo", func(g *sdk.CommandGroup) {
-		g.Command("hello", p.Hello) // /demo hello
-		g.Command("echo", p.Echo)   // /demo echo <text> <times>，例如 /demo echo hi 3
-	})
+	{
+		g := r.Group("demo")
+		g.Command("hello").Handle(p.Hello) // /demo hello
+		g.Command("echo").Handle(p.Echo)   // /demo echo <text> <times>，例如 /demo echo hi 3
+	}
 }
 
 // Hello 响应 /demo hello，返回要自动回复的 Chain；成功且非空时由 Core 发送一次。

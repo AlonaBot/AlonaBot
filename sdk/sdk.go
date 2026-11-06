@@ -53,7 +53,8 @@ type Context struct {
 	stopped   atomic.Bool     // 锁存的停止传播标记，一经设置不能清除
 	active    atomic.Bool     // Handler 返回时关闭，阻止继续使用父调用
 	inbound   *wire.Inbound
-	caller    string // Core 下发的服务直接调用方
+	caller    string    // Core 下发的服务直接调用方
+	actor     *pb.Actor // Service 继承的可信 Actor；事件调用从 event 读取。
 	event     *pb.Event
 	match     []string // 本次 Regex 的捕获组
 	autoReply bool     // 自动回复 Handler 通过返回 Chain 发送
@@ -86,9 +87,6 @@ func To(t *pb.Target) SendOption { return func(o *sendOptions) { o.to = t } }
 
 // Send 发起一次逻辑发送。出错时仍可能返回已确认的部分结果（MESSAGE-MODEL §4）。
 func (c *Context) Send(chain message.Chain, opts ...SendOption) (*pb.SendResult, error) {
-	if c.autoReply {
-		return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "auto-reply handler cannot call Send"}
-	}
 	// 1. Handler 有效期与 Session 就绪状态均满足时才允许发起子请求。
 	if !c.active.Load() {
 		return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "handler context has expired"}
@@ -193,12 +191,14 @@ func Collect(root Root) (*Registration, error) {
 	generated := generatedFor(root)
 	generated.registerCommands(cmds)
 	root.Commands(cmds)
+	cmds.collect()
 	events := &EventRegistry{seen: make(map[string]bool)}
 	for _, command := range cmds.commands {
 		events.seen[commandRouteID(command)] = true
 	}
 	generated.registerEvents(events)
 	root.Events(events)
+	events.collect()
 	root.HTTP(routes)
 	root.Schedules(jobs)
 	// HTTP Listener 尚未创建，此处只核对跨注册器的 route_id。

@@ -36,19 +36,19 @@
 | goal-90 | T-08.10 | 配置标签统一 | T-08.1 | 已完成 |
 | goal-36 | T-09.1 | 首次管理认证 | T-02.3、T-07.4 | 已完成 |
 | goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1、T-04.6 | 已完成 |
-| goal-88 | T-04.7 | SDK 链式注册 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | 待派发 |
+| goal-88 | T-04.7 | SDK 链式注册 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | 已完成 |
 | goal-97 | T-07.6 | Core 设置与首次启动 | T-07.3、T-09.1 | 待派发 |
 | goal-32 | T-08.5 | 受管 SQLite 连接与迁移 | T-08.3 | 已完成 |
 | goal-53 | T-08.8 | 用户可见文案目录 | T-04.1、T-04.3、T-04.6、T-08.1、T-08.10 | 待派发 |
 | goal-100 | T-09.16 | manifest 拆分为作者信息与构建信息 | T-03.8、T-09.2 | 等待前置 |
-| goal-91 | T-04.8 | SDK 自有类型与事件常量 | T-04.7 | 等待前置 |
-| goal-96 | T-04.9 | 删除构建期标记 | T-04.7 | 等待前置 |
+| goal-91 | T-04.8 | SDK 自有类型与事件常量 | T-04.7、T-04.9 | 等待前置 |
+| goal-96 | T-04.9 | 删除构建期标记 | T-04.7 | 待派发 |
 | goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 待派发 |
 | goal-98 | T-07.7 | 插件页面的沙箱隔离 | T-07.4、T-07.6、T-09.1 | 等待前置 |
-| goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 待派发 |
-| goal-95 | T-08.11 | 配置改由 config_schema.json 声明 | T-04.7、T-08.3、T-08.4、T-08.10 | 等待前置 |
+| goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 已完成 |
+| goal-95 | T-08.11 | 配置改由 config_schema.json 声明 | T-04.7、T-08.3、T-08.4、T-08.10 | 待派发 |
 | goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 等待前置 |
-| goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-04.7、T-06.1 | 等待前置 |
+| goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-04.7、T-06.1 | 待派发 |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 等待前置 |
@@ -2424,7 +2424,9 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-88 · T-04.7 SDK 链式注册
 
-状态：待派发。前置 T-04.2、T-04.6（PR #78，合并提交 `0a320c5`）、T-06.1、T-06.3、T-08.1 均已合并。依据 D-70 新增；2026-11-04 经维护者同意，把原切片拆为两部分：本切片只做链式注册，SDK 自有类型、事件常量与 `sdk.AdapterEvent` 移到 T-04.8（goal-91）。符号已按合入代码核对：
+状态：已完成（PR #89）。链式注册、`Permission`、`Generated.ServiceSchemas` 与生成器的 Service Schema 已合入，示例与测试插件已迁移。语句按维护者对审查意见的裁决修订了三处：类型约束由生成器检查、切片与 map 接受 null、校验详情不出 SDK。验证证据见 TEST-MATRIX §3.2。
+
+派发时的核对：前置 T-04.2、T-04.6（PR #78，合并提交 `0a320c5`）、T-06.1、T-06.3、T-08.1 均已合并。依据 D-70 新增；2026-11-04 经维护者同意，把原切片拆为两部分：本切片只做链式注册，SDK 自有类型、事件常量与 `sdk.AdapterEvent` 移到 T-04.8（goal-91）。符号已按合入代码核对：
 - `sdk/registry.go`：
   - 命令：`CommandRegistry.Command(name, handler any, opts ...RouteOption)`、`Group(name string, fn func(*CommandGroup))`（`CommandGroup = CommandRegistry`）。
   - 文本匹配与 Raw：`Regex(routeID, expr, handler, opts...)`；`Keyword`、`StartsWith`、`EndsWith`、`FullMatch` 为 `(routeID string, patterns []string, handler, opts...)`；`Raw(routeID, handler, opts...)`。
@@ -2519,7 +2521,7 @@ goal-28、goal-29 的符号已按合入代码核对：
    func CallJSON[In, Out any](ctx context.Context, target string, in In) (Out, error)
    func Publish[T any](ctx context.Context, eventName string, payload T) (eventID string, err error)
    删除 JSONService、ProtoService、ServiceOption、WithAccess 与旧的 Subscribe、Publish、CallJSON 签名；CallProto 不变。
-   JSON 类型的 schema_id 为 Go 类型的「包路径.类型名」（reflect 的 PkgPath() + "." + Name()）；版本取类型的 SchemaVersion() uint32 方法（值接收者），没有该方法时为 1。In、Out、T 必须是包级的具名非泛型类型，否则 Collect 报错（CallJSON 与 Publish 返回 INVALID_ARGUMENT）。
+   JSON 类型的 schema_id 为 Go 类型的「包路径.类型名」（reflect 的 PkgPath() + "." + Name()）；版本取类型的 SchemaVersion() uint32 方法（值接收者），没有该方法时为 1。In、Out、T 必须是包级的具名非泛型类型：生成器对 sdk.JSON、sdk.Subscribe、sdk.CallJSON、sdk.Publish 的实例统一检查，不满足时给出带位置的诊断；运行期只检查反射能判定的部分（Collect 报错，CallJSON 与 Publish 返回 INVALID_ARGUMENT），不判断词法作用域。
 5. 生成项（sdk/generated.go）
    Generated 增加 ServiceSchemas map[string][]byte // schema_id → 规范 JSON Schema，覆盖本插件全部 JSON Service 的输入与输出类型
 
@@ -2535,10 +2537,10 @@ goal-28、goal-29 的符号已按合入代码核对：
 - 分组：Group(name) 返回的子注册器与父注册器共享冲突检查与错误收集；在不同位置对同名组多次调用 Group 时，得到同一组路径下的路由，冲突照常报告。
 - JSON Service：
   - 生成器在构建入口所在 module 的已扫描包中，找出 sdk.JSON 的全部实例化（go/types 的 Instances），为每个 In 与 Out 类型生成 JSON Schema，按 schema_id 写入 Generated.ServiceSchemas。
-  - Schema 只依据 json 标签与 Go 类型，不读取 config 标签，支持的类型与配置 Schema 相同；不支持的类型给出带位置的诊断。
+  - Schema 只依据 json 标签与 Go 类型，不读取 config 标签，支持的类型与配置 Schema 相同；不支持的类型给出带位置的诊断。切片生成 `"type":["array","null"]`，map 生成 `"type":["object","null"]`，与 encoding/json 对 nil 的编码一致。
   - In 或 Out 不是具名类型时报告诊断；两个不同类型得到同一 schema_id 时也报告。
   - Collect 时 Generated.ServiceSchemas 缺少某个 JSON Service 的 schema_id，报错 "service schema for <id> is not generated; run alonabot plugin generate"。
-  - 调用时，SDK 先用 jsonschema-go 把输入 JSON 按 Schema 校验，失败返回 INVALID_ARGUMENT 且不调用 Handler；Handler 返回后，输出按 Schema 校验，失败返回 INTERNAL 并记 ERROR（只记 schema_id 与校验错误，不记载荷）。
+  - 调用时，SDK 先用 jsonschema-go 把输入 JSON 按 Schema 校验，失败返回 INVALID_ARGUMENT 与固定文本 `invalid service input`，不调用 Handler；Handler 返回后，输出按 Schema 校验，失败返回 INTERNAL 并记 ERROR（只记 schema_id，校验错误的文本带载荷，不写入响应和日志）。
 - Proto Service：schema_id 与版本仍取自消息类型，只改为链式。
 - 自动回复：删除 Context.Send 在自动回复型 Handler 中的限制。Handler 内的 c.Send 与手动型相同；Handler 返回的非空 Chain 照旧由 Core 在 Handler 返回后发送，因此排在本次调用的全部显式发送之后。
 - 生成器：source.go 为标记生成的命令与事件输出链式调用（r.Group(...).Command(...).Alias(...).Priority(...).Handle(fn)、r.On(id, type).Priority(n).Handle(fn)），输出保持稳定；`alonabot plugin check` 照常比较。
@@ -2842,34 +2844,195 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-91 · T-04.8 SDK 自有类型与事件常量
 
-状态：等待前置（T-04.7）。依据 D-70，2026-11-04 从 T-04.7 拆出。语句只写了目标、依据和要点，T-04.7 合并后由审查者按合入代码写出接口、行为与测试段。
+状态：等待前置（T-04.9）。依据 D-70，2026-11-04 从 T-04.7 拆出。T-04.7（PR #89，合并提交 `3e37cd6`）已合并，接口、行为与测试段已按合入代码写出。前置加入 T-04.9：`sdk/generate/source.go` 为标记事件生成 `r.On(id, "类型字符串")`，本切片把 `On` 改为事件常量后，这段生成代码会编译失败，而标记本身由 T-04.9 删除；T-04.9 合并后不需要再核对接口，直接改为待派发。
+
+符号已按合入代码核对：
+- 公开 API 中的 pb 类型：`Context.Event() *pb.Event`、`To(*pb.Target)`、`Context.Send` 与 `sdk.Send` 的 `*pb.SendResult` 和 `*pb.Target`、`Upload` 的 `*pb.MediaRef`、`GrantMedia` 的 `...*pb.Target`、`Error.Code pb.ErrorCode`、`Public(pb.HttpAuthMode)` 与 `HTTPRoute.AuthMode`、`Command.Mode` 与 `Command.Params`；`message.Chain.Proto() *pb.MessageChain`；`sdk/adapter` 的 `Core.Deliver`、`Core.ReportFailure`、`Instance.Capabilities`、`Instance.Send`、`Adapter.Descriptor`。
+- 命令参数：`sdk/registry.go` 的 `paramTypes` 把 `*pb.ImageSegment`、`*pb.MessageChain` 映射到 `ParamType`；`sdk/dispatch.go` 把 `ArgValue` 直接传给 Handler。
+- `sdk` 导入 `sdk/adapter`（`sdk/adapter_run.go`），`sdk/adapter` 不能反向导入 `sdk`，所以两边共用的类型放在更底层的包。`sdk/message` 已被两边依赖。
+- `sdk/message` 的 `Segment` 是带未导出 `toProto` 的接口，目前只有 `Text`。
+- 调用方：`adapters/telegram`、`internal/core/adapter/remote/remote_test.go` 的回环 Adapter、`examples/plugins/`、`internal/core/supervisor/testdata/` 的测试插件。goal-89、goal-78 或 goal-15 先合并时，它们的 Adapter 与测试插件也算调用方。
+- 不暴露 pb 不包括用户自己的 Protobuf 消息：`sdk.Proto`、`sdk.CallProto` 的类型参数仍是 `proto.Message`。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-91（切片 T-04.8：SDK 自有类型与事件常量）。goal 目录 goal-91，分支 goal-91，worktree .worktrees/goal-91，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：
-- 插件与 Adapter 的公共 API 不再暴露生成的 pb 类型：SDK 自己定义 Message（入站消息与片段）、Target、Actor、SendResult 与错误码，pb 只留在 SDK 内部。
+- 插件与 Adapter 的公共 API 不再暴露生成的 pb 类型：SDK 自己定义消息、事件、Target、Actor、SendResult 与错误码，pb 只留在 SDK 内部。
 - 新增标准事件常量（带 payload 的 Go 类型）与 sdk.AdapterEvent；事件注册改用常量，Collect 核对事件 Handler 的 payload 参数类型。
-- 命令参数类型 *pb.ImageSegment、*pb.MessageChain 改为 SDK 自有类型。
-- sdk/adapter 的 Adapter、Instance、Core 接口改用 SDK 类型，官方 Telegram Adapter 与已合并的全部调用方同步。
+- 命令参数类型改为 SDK 自有类型。
+- sdk/adapter 的接口改用 SDK 类型，官方 Telegram Adapter 与已合并的全部调用方同步。
+- 不改协议：proto 与 Core 侧不变，SDK 在边界内转换。
 
 依据：PLAN T-04 步骤 9（自有类型部分）；CONTRACTS §2.1、§8；MESSAGE-MODEL §1～§3；DESIGN §D；DECISIONS D-70、D-71；TEST-MATRIX V-14 的类型分项、V-86 的 SDK 分项。
 
-要点：
-- 涉及 Context.Event、Context.Send 与 sdk.Send 的返回值、Upload 与 GrantMedia 的 Target 与 MediaRef、HTTP 的 Public(mode)、sdk.Error.Code，以及 sdk/message 的入站表示。
-- 事件常量放在 sdk 中（标准事件），Adapter 的常量包（例如 adapters/onebot11/event、adapters/onebot11/perm）只含常量与数据类型，由 T-03.11、T-15.1 提供；扩展事件的 Handler 以 sdk.AdapterEvent 声明 payload 类型，SDK 按 adapter_event 的 payload_json 解码。
-- 不改协议：proto 与 Core 侧不变，SDK 在边界内转换。
+范围（只新增或修改这些）：
+- 新增 sdk/errcode/
+- sdk/message/：扩展为下面的类型，删除 Chain.Proto
+- 新增 sdk/internal/convert/：pb 与 SDK 类型的双向转换，只有 sdk 与 sdk/adapter 的实现使用
+- sdk/：sdk.go、send.go、media.go、registry.go、events.go、dispatch.go、adapter_run.go、session.go（只改转换的调用点）；其余构造 sdk.Error 的文件只把错误码改为 errcode
+- sdk/adapter/adapter.go
+- 调用方：adapters/telegram/（含测试）、examples/plugins/、internal/core/supervisor/testdata/、internal/core/adapter/remote/remote_test.go，以及测试中以字符串嵌入的插件源码
+- 上述包的测试文件
+允许的新跨模块边：无（都在 sdk 模块内；Core 与 contracts 不变）。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. sdk/errcode
+   type Code int32 // 数值与协议的错误码相同
+   const ( InvalidArgument Code = 1; Unauthenticated; PermissionDenied; NotFound; AlreadyExists; FailedPrecondition; Unsupported; ResourceExhausted; DeadlineExceeded; Cancelled; Unavailable; Internal; ProtocolError; CallCycle; PluginNotReady; NoDefaultTarget; NeedsManualMigration )
+   func (c Code) String() string // 与现在的 pb 枚举名相同，如 ERROR_CODE_INVALID_ARGUMENT
+   type Error struct { Code Code; Message string }
+   func (e *Error) Error() string // 「错误码: 说明」，与现在的 sdk.Error 相同
+2. sdk/message（可选字段的零值表示 absent，转换时对应未设置的 optional 字段）
+   身份：
+   type Target struct { AdapterID, AdapterInstanceID, AccountID, ChatID, ThreadID string }
+   type Actor struct { ExternalUserID, AdapterInstanceID, DisplayName, Locale string; Permissions []string }
+   type Capability struct { Name string; Version uint32; Supported bool }
+   片段（Chain 中的片段都是值类型，type switch 按值匹配）：
+   type Segment interface{ segment() }
+   type Chain []Segment
+   func (c Chain) Text() string // 依次拼接全部 TextSegment 的文本
+   func Text(s string) Segment  // 保留，返回 TextSegment
+   type TextFormat int; const ( FormatPlain TextFormat = iota + 1; FormatMarkdown ) // 零值表示未指定
+   type EntityType int; const ( EntityBold EntityType = iota + 1; EntityItalic; EntityUnderline; EntityStrikethrough; EntitySpoiler; EntityCode; EntityPre; EntityTextLink; EntityTextMention )
+   type TextEntity struct { Type EntityType; OffsetUTF16, LengthUTF16 uint32; URL, Language, ExternalUserID string }
+   type TextSegment struct { Text string; Format TextFormat; Entities []TextEntity }
+   type Readability int; const ( Readable Readability = iota + 1; Unreadable )
+   type IncomingMedia struct { Token string; Size uint64; MIME string; Readability Readability; ExpiresAtUnixMS int64 } // Size 为 0 表示未知
+   type MediaSource struct { MediaRef string; Incoming *IncomingMedia; HTTPSURL string } // 恰有一个
+   type MediaRef struct { Token string; Size uint64; MIME string; SHA256 []byte; ExpiresAtUnixMS int64; ConsumerPluginIDs []string; Targets []Target }
+   type ImageSegment struct { Source MediaSource; Alt, Caption string }
+   type VideoSegment struct { Source MediaSource; DurationMS uint64; Caption string }
+   type FileSegment struct { Source MediaSource; Filename, MIME, Caption string }
+   type MentionSegment struct { ExternalUserID, Display string }
+   type ReferenceSegment struct { OriginalPlatformMessageID string; Target *Target }
+   type Button struct { ActionID, Label, Value string }
+   type ButtonsSegment struct { Rows [][]Button }
+   type ForwardSource struct { DisplayName, ExternalUserID string }
+   type ForwardItem struct { Source *ForwardSource; Chain Chain }
+   type ForwardSegment struct { Items []ForwardItem }
+   事件：
+   type SourceKind int; const ( SourceAdapter SourceKind = iota + 1; SourceScheduler )
+   type PlatformMessage struct { PlatformMessageID string; Chain Chain; MediaGroupID string }
+   type Payload interface{ payload() } // 下面的载荷类型以指针实现
+   type Event struct { ID, Type string; Source SourceKind; OccurredAtUnixMS int64; AdapterID, AdapterInstanceID, AccountID string; Target *Target; Actor *Actor; Message *PlatformMessage; Payload Payload; Capabilities []Capability; PlatformPayload []byte; SourceEventID string }
+   type CreatedPayload struct { PlatformMessageID string; Chain Chain; ToMe bool }
+   type EditedPayload struct { PlatformMessageID string; Chain, OldChain Chain }
+   type DeletedPayload struct { PlatformMessageIDs []string }
+   type ButtonClickedPayload struct { ActionID string; ActionSchemaVersion uint32; Value, CallbackQueryID, OriginPlatformMessageID string }
+   type MemberPayload struct { MemberExternalUserID string } // member.joined 与 member.left 共用，由 Event.Type 区分
+   type ReactionAddedPayload struct { PlatformMessageID, Reaction string }
+   type ScheduledPayload struct { JobID, RunID string; ScheduledAtUnixMS int64 }
+   type BotOnlinePayload struct { AdapterID, AdapterInstanceID, AccountID, AccountDisplayName string }
+   type OfflineReason int; const ( OfflineStopped OfflineReason = iota + 1; OfflineAdapterExited; OfflineInstanceFailed )
+   type BotOfflinePayload struct { AdapterID, AdapterInstanceID, AccountID string; Reason OfflineReason; SafeError *errcode.Error }
+   type AdapterEventPayload struct { Version uint32; PayloadJSON string }
+   发送结果：
+   type SendStatus int; const ( SendAccepted SendStatus = iota + 1; SendPartial; SendRejected; SendUnknown )
+   type PartStatus int; const ( PartAccepted PartStatus = iota + 1; PartRejected; PartUnknown; PartNotAttempted )
+   type PartResult struct { PartIndex uint32; SegmentIndexes []uint32; Status PartStatus; PlatformMessageIDs []string; MessageIDsUnavailable bool; Error *errcode.Error }
+   type SendResult struct { Status SendStatus; Target *Target; PlatformMessageIDs []string; PrimaryPlatformMessageID string; ProviderAcceptedTimeUnixMS int64; CapabilitiesUsed []Capability; PartResults []PartResult }
+3. sdk
+   type Error = errcode.Error // 插件继续用 errors.As 取 *sdk.Error
+   func (c *Context) Event() *message.Event
+   func To(t *message.Target) SendOption
+   func (c *Context) Send(chain message.Chain, opts ...SendOption) (*message.SendResult, error)
+   func Send(ctx context.Context, to *message.Target, chain message.Chain) (*message.SendResult, error)
+   func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []byte) (*message.MediaRef, error)
+   func GrantMedia(ctx context.Context, token, granteePluginID string, targets ...*message.Target) (string, error)
+   type HTTPAuth int; const ( AuthCoreSession HTTPAuth = iota + 1; AuthCallbackState; AuthCallbackSignature; AuthCallbackNonce )
+   func Public(mode HTTPAuth) HTTPOption // HTTPRoute.AuthMode 同步改为 HTTPAuth
+   Command 的 Mode 与 Params 改为不导出的字段
+   type EventType struct{ ... } // 事件名与 payload 类型；零值在 Collect 时报错
+   var ( MessageCreated, MessageEdited, MessageDeleted, ButtonClicked, MemberJoined, MemberLeft, ReactionAdded, Scheduled, BotOnline, BotOffline EventType ) // 分别对应 MESSAGE-MODEL §1.1 的 event_type 与上面的载荷类型
+   func AdapterEvent[T any](name string, version uint32) EventType // name 为 <adapter_id>.<name>；T 必须是结构体，Handler 的参数为 *T
+   func (r *EventRegistry) On(routeID string, event EventType) *EventBuilder
+   func (b *EventBuilder) Handle(h any) // func(*Context) error，或 func(*Context, P) error；EventRoute.Handler 同步改为 any
+4. sdk/adapter
+   type ExtensionDeclaration struct { Name string; Version uint32; SchemaJSON string }
+   type PermissionDeclaration struct { Name string; Implies []string; LabelKey string }
+   type EventDeclaration struct { Name string; Version uint32; SchemaJSON string }
+   type Descriptor struct { AdapterID string; Capabilities []message.Capability; Extensions []ExtensionDeclaration; Permissions []PermissionDeclaration; Events []EventDeclaration }
+   Core.Deliver(ctx context.Context, ev *message.Event, cursor []byte) (accepted bool, err error)
+   Core.ReportFailure(ctx context.Context, safe *errcode.Error) error
+   Instance.Capabilities() []message.Capability
+   Instance.Send(ctx context.Context, target *message.Target, chain message.Chain) (*message.SendResult, *errcode.Error)
+   Adapter.Descriptor() *Descriptor
+
+行为：
+- 转换集中在 sdk/internal/convert：入站事件与命令参数从 pb 转为 SDK 类型，出站 Chain、Target、错误与 Adapter 描述反向转换。每个字段双向保持，空串与零值对应未设置的 optional。message 与 sdk/adapter 的公开 API 不出现 pb。wire、Session、Core 不变。
+- Context：Event 每次调用只转换一次，返回值只供本次 Handler 读取，修改它不影响 Send 的默认目标与权限判定。Service 调用的 Event 仍为 nil。Has 与默认 Target 继续使用 SDK 内部的 pb 值。
+- 命令参数：`*message.ImageSegment` 对应 image，`message.Chain` 对应 message，其余不变；可选参数缺失时为 nil，与现在相同。checkHandler 的错误文案同步。
+- 事件路由：
+  - Handle 的签名只能是 func(*Context) error，或第二个参数为该事件的 payload 类型（标准事件是上面的指针类型，AdapterEvent[T] 是 *T）。其他签名在 Collect 时报错，错误中带 route_id、期望的类型与实际的类型。
+  - 标准事件：SDK 把 Event.Payload 传给 Handler。实际载荷与路由的类型不符时返回 INTERNAL 并记 ERROR，不调用 Handler。
+  - AdapterEvent：Collect 检查 validate.IsAdapterEventType(name)、version 不为 0、T 是结构体。调用时 SDK 比较 version，并把 payload_json 解码为 *T；版本不符或解码失败时记 WARN（只记 route_id 与版本或错误，不记载荷），不调用 Handler，正常结束本次调用。func(*Context) error 形式不解码，Handler 用 c.Event().Payload 读取。
+  - 注册未安装 Adapter 的扩展事件照常成功，诊断由 Core 负责（goal-87 已实现）。
+- 错误：SDK 向调用者返回的 *sdk.Error 与现在的错误码和文案相同；validate.PublicCode 的映射留在转换之前。
+- Telegram Adapter 只换类型，行为不变。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：
+  - internal/core/supervisor/command_test.go（commanddispatch 插件，TCP 与 stdio）：事件路由写成 `r.On("typed", sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error {...})`，插件回复 e.Chain.Text()、e.ToMe、c.Event().Actor.Permissions 与 c.Event().Target.ChatID，与 Adapter 交付的值一致。Handler 的第二个参数写成 *message.ReactionAddedPayload 时（环境变量控制）插件启动失败，日志带 route_id。
+  - 现有命令参数用例改用 *message.ImageSegment 与 message.Chain，断言不变。
+  - internal/core/adapter/remote/remote_test.go 的 TestRemotePermissionsAndEvents（TCP 与 stdio，回环 Adapter 改用 sdk/adapter 的新类型）：插件以 `sdk.AdapterEvent[poke]("loop.poke", 1)` 注册，Handler 收到解码后的 *poke；未安装的 other.poke 路由注册成功且不触发；原有断言保持。
+  - adapters/telegram 的现有测试改用 SDK 类型，断言不变。
+  - 其余已有集成测试改用新 API，断言不变。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：
+  - 转换的往返：全部片段类型、全部载荷类型（含 member.joined 与 member.left）、contracts/testdata/events 的 fixture，pb → SDK → pb 后 proto.Equal；空串与未设置的 optional 相互对应。
+  - errcode 的数值与 pb.ErrorCode 逐个一致，String 与 pb 枚举名相同。
+  - 版本不符与 payload_json 解码失败时：不调用 Handler、记 WARN、日志没有载荷。
+  - AdapterEvent 的名称不合法、version 为 0、T 不是结构体；Handle 的各种错误签名；零值 EventType。
+  - Chain.Text 跳过非文本片段；修改 c.Event() 的返回值不影响 c.Send 的默认目标。
+  - `go doc -all` 查看 ./sdk、./sdk/message、./sdk/adapter、./sdk/errcode，输出中没有 pb 类型。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./...；go build ./...。
+
+不做：Rule（T-05.2）；扩展片段 ExtensionSegment（T-03.8 合并后追加）；Text 以外的片段构造函数，片段用结构体字面量构造；Context.T（T-08.8）；Adapter 的常量包（T-03.11、T-15.1）；docs/plugin-guide.md 的更新（由审查者在合并前同步）。
+```
 
 ### goal-96 · T-04.9 删除构建期标记
 
-状态：等待前置（T-04.7）。依据 D-79 新增。goal-88（T-04.7）正在把注册改为链式，并让生成器为标记输出链式调用；本切片在它合并后删除标记本身。语句只写了目标、依据和要点，前置合并后由审查者按实际代码写出接口与测试段。
+状态：待派发。前置 T-04.7（PR #89，合并提交 `3e37cd6`）已合并。依据 D-79 新增。符号已按合入代码核对：
+- 标记只出现在 `sdk/generate/generate_test.go` 的临时 module 源码和 `generate.go` 的包文档。`examples/plugins/` 与 `internal/core/supervisor/testdata/` 不用标记，原语句的「示例、测试插件改写」没有对象。
+- `sdk/generate/marker.go`：`scan.marker`、`checkTokens`、路径与 route_id 的重复检查。`generate.go`：`Command`、`Event` 类型，`Result.Commands`、`Result.Events`，`scan.paths`、`scan.routes`，`readFile` 的 step 3 与收集 `handlers` 的部分，`Scan` 中对两个切片的排序。`source.go`：imports 中为标记函数加的别名、`Commands:` 与 `Events:` 两段。`cmd/alonabot/plugin.go` 只读 `Result.Diagnostics` 与 `Source`，不用改。
+- `sdk/generated.go`：`Generated.Commands`、`Generated.Events`，`registerCommands`、`registerEvents`；`Collect` 调用这两个方法。
+- `go generate ./...` 不进 testdata，`internal/core/supervisor/testdata/` 的三个 `alonabot_gen.go` 要用 `alonabot plugin generate --dir` 逐个重新生成。
 
-目标：删除 `//alonabot:command`、`//alonabot:event` 构建期标记。命令、文本匹配与事件只在根插件的注册方法中链式注册，包级函数也这样注册；生成器不再扫描注册，只检查并嵌入 manifest、配置 schema、i18n 与 Service Schema。
+```text
+/goal 使用 $alonabot-execute 推进 goal-96（切片 T-04.9：删除构建期标记）。goal 目录 goal-96，分支 goal-96，worktree .worktrees/goal-96，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：删除 //alonabot:command、//alonabot:event 构建期标记。命令、文本匹配与事件只在根插件的注册方法中链式注册，包级函数也这样注册；生成器不再扫描注册，生成文件只有配置 Schema 与 Service Schema。
 
 依据：PLAN T-04 步骤 2；CONTRACTS §9.1；DESIGN §D；DECISIONS D-70、D-79；TEST-MATRIX V-10。
 
-要点：
-- sdk/generate 删除 marker.go 与标记的扫描、诊断和生成的注册代码；`sdk.Generated` 中只为标记服务的字段与 `UseGenerated` 中对应的登记一并删除，不留兼容读取（编码规范「首次发布前不写兼容层」）。
-- 仓库中使用标记的示例、测试插件与 testdata 改为在注册方法中链式注册，行为不变。
-- 残留的标记注释只是普通注释，不产生注册，也不报错。
-- 提交的集成测试覆盖：包级函数经链式注册后照常派发；残留标记不再产生路由；生成两次的输出逐字节相同。
+范围（只新增或修改这些）：
+- sdk/generate/：删除 marker.go；generate.go 与 source.go 删除标记的扫描、诊断、Result 字段与生成代码，同步包文档；generate_test.go
+- sdk/generated.go：删除 Commands、Events、registerCommands、registerEvents，同步 Generated 的注释；sdk/sdk.go 的 Collect 删除对应调用
+- internal/core/supervisor/testdata/ 的 alonabot_gen.go：重新生成
+- internal/core/supervisor/command_test.go 与 testdata/commanddispatch/main.go
+允许的新跨模块边：无。
+
+接口：
+- 删除 generate.Command、generate.Event、Result.Commands、Result.Events。
+- 删除 sdk.Generated 的 Commands、Events。其余公开符号不变；Generated 只剩 ServiceSchemas 与 ConfigSchema（goal-53 合并后还有 I18n）。
+
+行为：
+- 生成器的根类型检查、Config 检查、构建标签与扫描范围不变。
+- 以 //alonabot: 开头的注释不再有任何含义：写在函数、方法、类型或变量上都不产生路由，也不产生诊断。
+- 生成文件仍然调用 UseGenerated，没有 Schema 时 Generated 为空字面量。imports 只有 sdk。
+- 不留兼容读取。旧的生成文件引用已删除的字段，编译失败；alonabot plugin check 报告过期。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：
+  - sdk/generate/generate_test.go：临时 module 的源码改为在 Commands、Events 方法中链式注册，保留原有的根类型、构建标签与外部依赖扫描的断言。源码中留一条写在函数上和一条写在方法上的 //alonabot:command：Diagnostics 为空，生成文件没有注册代码。两次生成逐字节相同。原来只针对标记语法的诊断用例删除。
+  - internal/core/supervisor/command_test.go（commanddispatch 插件，TCP 与 stdio）：插件增加一个包级函数 Handler，上方留一条 //alonabot:command stale 注释，并在 Commands 中以 r.Command("pkg").Handle(pkgHandler) 注册：/pkg 照常回复，/stale 不产生路由。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：旧的生成文件经 alonabot plugin check 报告过期；testdata 的三个生成文件重新生成后 plugin check 通过。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./sdk/... ./internal/core/... ./cmd/...；go build ./...。
+
+不做：config_schema.json（T-08.11）；i18n 的嵌入（T-08.8）；alonabot build 与 check 命令（goal-38）。
+```
 
 ### goal-15 · T-05.1 可信上下文与有界分发
 
@@ -2881,7 +3044,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 - `wire.Budget` 的 `acquire`、`release` 是包私有方法，调用方只有 `internal/wire/session.go`；nil 表示不限额。
 - `tune.Values` 已有 `DispatchConcurrency`、`DispatchQueueEvents`、`DispatchQueueBytes` 与 `CoreMaxPayload`。
 - `message.proto` 注明 PreEventResult 只能改写 `event_payload`，不能改写 Event 的其余字段。
-- SDK 的事件路由目前不写 `required_permissions`；`command_test.go` 在 Attach 前直接修改路由描述来声明权限。T-04.7（#89）未合并，它会重写注册 API 并迁移测试插件：本切片的测试插件用合并时 main 上的 API，后合并者同步。
+- SDK 的事件路由目前不写 `required_permissions`；`command_test.go` 在 Attach 前直接修改路由描述来声明权限。T-04.7 已由 #89 合并（`3e37cd6`）并重写了注册 API：本切片的测试插件按新 API 迁移，见 PR #67 的审查评论。
 
 核对时修订了原语句：
 - Options 补上 goal-7 的 Prepare 与 goal-87 的 Prefixes，保留 nil 语义。
@@ -2967,7 +3130,9 @@ internal/wire
 
 ### goal-33 · T-08.6 SQLite 候选与资源交接
 
-状态：待派发。前置 T-08.4（PR #74）与 T-08.5（PR #79，合并提交 `75c16d3`）均已合并。符号已按合入代码核对：
+状态：已完成（PR #85）。`candidate.PrepareDatabase`、`Discard` 与 state 的两个方法已合入，调用顺序写在包文档；生产装配尚未调用。Windows 只做了交叉构建，实际运行留给 T-10。验证证据见 TEST-MATRIX §3.2。
+
+派发时的核对：前置 T-08.4（PR #74）与 T-08.5（PR #79，合并提交 `75c16d3`）均已合并。符号已按合入代码核对：
 - `internal/oslock`：`TryLock(path string) (*Lock, error)`，文件不存在时以 0600 创建，已被占用时返回包装了 `oslock.ErrLocked` 的错误；`(*Lock).Unlock() error`。锁文件为 `<PluginDir>/runtime.lock`（`wire.RuntimeLockFile`）。
 - `state.Store`：`LockPlugin(pluginID) (unlock func())`、`AddGeneration(ctx, pluginID, generationID, configSnapshot string, configVersion uint32)`、`Active(ctx, pluginID)`、`GenerationConfig(ctx, generationID)`、`SetGenerationConfig`、`GenerationSecretPaths`、`GetPendingConfig(ctx, pluginID) (PendingConfig, error)`（没有记录时为 `state.ErrNotFound`）。`schema.sql` 的 `generation` 表有 `plugin_id`、`config_snapshot`、`committed_at`；`generation_secret_path` 以外键引用 `generation`。状态库不存数据库路径，也没有列出某插件全部代次的方法。
 - `secret.Store`：`secret.New(st)`、`Collect(ctx, pluginID string, protected [][]byte) (int, error)` 删除该插件中未被 protected 快照引用的版本。
@@ -3066,13 +3231,16 @@ internal/wire
 
 ### goal-95 · T-08.11 配置改由 config_schema.json 声明
 
-状态：等待前置（T-04.7）。依据 D-76 新增，同日按 D-85 补充 `$version` 与 `$migrations` 的声明式迁移，按 D-80 改用 `i18n/`；T-08.3、T-08.4、T-08.10 已合并。goal-88（T-04.7）正在重写 `sdk/generate` 与注册 API，并为 JSON Service 生成 Schema，用的是现有配置 Schema 的 go/types 类型推导；本切片在它合并后的代码上删除配置专用部分，保留这项推导。语句中涉及生成器内部结构的部分只写职责，goal-88 合并后由审查者按实际代码核对，再改为待派发。
+状态：待派发。前置 T-04.7（PR #89，合并提交 `3e37cd6`）、T-08.3、T-08.4、T-08.10 均已合并。依据 D-76 新增，同日按 D-85 补充 `$version` 与 `$migrations` 的声明式迁移，按 D-80 改用 `i18n/`。
 
-已核对现有实现（main `1c07284`）：
+T-04.7 合并后核对时修订了原语句：T-04.7 没有复用配置的类型推导，`sdk/generate/service.go` 有自己的 `serviceBuilder` 与 `schemaImporter`，不依赖 `config.go`。因此 `config.go` 整个删除，不需要拆分或保留。
+
+已核对现有实现（main `3e37cd6`）：
 - `sdk.Root` 有 Hook `Config() config.Config`，`sdk.Base` 默认返回 nil；`sdk/config` 的 `Config` 接口只有 `OnLoad`，`config.Base` 提供原样返回 raw 的默认实现。
 - `sdk/session.go` 的 `prepare` 调用 `config.Prepare(ctx, root.Config(), generatedFor(root).ConfigSchema, raw, boot.PreviousConfigVersion, boot.GetTargetConfigVersion(), restart)`，失败一律是 `*validate.Error`；`buildRegister` 用 `config.SchemaHash` 计算 `config_schema_hash`。
 - `sdk/config/prepare.go` 用 jsonschema-go 补默认值与校验，再按 Go 类型逐层检查；`sdk/config/schema.go` 定义 `KeywordSecret`、`KeywordHidden`、`KeywordForm` 与 `MarshalSchema`、`SchemaHash`。
-- `sdk/generate/config.go` 的 `scan.configSchema` 经 go/types 从 Config 声明构造 JSON Schema 并解析 `config` 标签，结果写入 `Result.ConfigSchema` 与生成代码中的 `Generated.ConfigSchema`。
+- `sdk/generate/config.go` 的 `scan.configSchema` 经 go/types 从 Config 声明构造 JSON Schema 并解析 `config` 标签，结果写入 `Result.ConfigSchema` 与生成代码中的 `Generated.ConfigSchema`。`generate.go` 的 `readFile` 把嵌入 `config.Base` 的类型记入 `scan.configs`，`checkTypes` 检查至多一个并写入 `Result.ConfigType`；`service.go` 的 `scan.schemas` 在有 Config 时调用 `configSchema`，这一分支随之删除，其余的 Service Schema 生成不变。
+- `sdk/services.go` 与 `internal/core/adapter/remote/declarations.go` 仍用 jsonschema-go，go.mod 不变。
 - `internal/core/secret` 的 `Extract` 沿 JSON Schema 的 `properties`、`items`、`additionalProperties` 查找 `x-alonabot-secret`（`path.go` 的 `schemaPaths`，`*` 表示任意下标或键）；`supervisor.Spec.ConfigSchema` 由调用方传入当前包的 Schema。Core 不按 Schema 校验配置。
 - 使用旧写法的代码：`examples/plugins/showcase`；`internal/core/supervisor` 的 `config_prepare_test.go`、`secret_test.go`、`db_test.go`；`sdk/generate` 的 `config_test.go`、`generate_test.go`。
 
@@ -3087,7 +3255,7 @@ internal/wire
 - 新增 contracts/configschema/：config_schema.json 的解析与检查、规范 JSON 与摘要、补缺失值与校验、secret 路径、i18n/ 中 config 覆盖与 schema 的核对；生成器、SDK 与 Core 共用
 - sdk/config/：删除 Config、Base、Keyword*、MarshalSchema、SchemaHash 与基于 jsonschema-go 的准备；Prepare 改用 contracts/configschema 并返回取值对象；新增 Values 与 Template
 - sdk/base.go、sdk/session.go、sdk/generated.go：Root 删除 Config Hook、增加 OnConfigLoad；Base 提供 OnConfigLoad 的默认实现与 Config() 取值方法；Generated.ConfigSchema 的注释
-- sdk/generate/：删除 Config 类型发现与 config 标签解析，改为读取、检查并嵌入 config_schema.json，核对 i18n/ 的 config 覆盖；Service Schema 使用的 go/types 类型推导保留
+- sdk/generate/：删除 config.go、Config 类型发现（readFile、checkTypes、Result.ConfigType）与 scan.schemas 中的配置分支，改为读取、检查并嵌入 config_schema.json，核对 i18n/ 的 config 覆盖；service.go 的 Service Schema 生成不变
 - internal/core/secret/：secret 路径改由 contracts/configschema 给出
 - 使用旧写法的代码与测试：examples/plugins/showcase、internal/core/supervisor 的测试插件、sdk/generate 的测试
 - docs/plugin-guide.md §7；ARCHITECTURE.md 中 sdk/、contracts/ 与 internal/core/ 的实现状态
@@ -3247,7 +3415,12 @@ internal/wire
 
 ### goal-54 · T-11.1 工具描述、目录与策略
 
-状态：等待前置（T-04.7）。T-04.4（PR #88，合并提交 `c8dd516`）与 T-06.1（PR #45）已合并。原语句未列 T-04.7，但它依赖的写法与 goal-88 冲突：goal-88 删除 `ServiceOption`，JSON Service 的 Schema 由生成器产生（D-70、CONTRACTS §3），`jsonschema.For[In]` 得到的 Schema 可能与 Service 实际校验用的不一致，不符合 §13.1「输入 Schema 即该 Service 的输入 Schema」。因此前置加入 T-04.7（波次 8，早于本切片，波次不变）。下面的 sdk 段按 goal-88 语句的接口编写，T-04.7 合并后由审查者按合入代码核对，再改为待派发。
+状态：待派发。前置 T-04.4（PR #88，合并提交 `c8dd516`）、T-04.7（PR #89，合并提交 `3e37cd6`）与 T-06.1（PR #45）均已合并。原语句未列 T-04.7，但它依赖的写法与 goal-88 冲突：goal-88 删除 `ServiceOption`，JSON Service 的 Schema 由生成器产生（D-70、CONTRACTS §3），`jsonschema.For[In]` 得到的 Schema 可能与 Service 实际校验用的不一致，不符合 §13.1「输入 Schema 即该 Service 的输入 Schema」。
+
+sdk 段已按合入代码核对：
+- `sdk.JSON` 的 `prepare` 闭包里有 `inputID` 与 `r.schemas`（`Generated.ServiceSchemas`），`b.route` 构造 `ServiceSpec`；`setAccess` 在 `handles != 0` 时置 `afterHandle`，`Tool` 用同样的写法。
+- 生成器对切片和 map 生成 `"type":["array","null"]`、`"type":["object","null"]`，结构体生成 `"type":"object"`。In 是具名 map 或切片时，根类型不是单一的 object，注册校验要明确拒绝，语句已写明。
+- svcplugin 的 `input`、`reply` 已在 `alonabot_gen.go` 中；新工具沿用这两个类型时生成文件不变。
 
 Core 一侧已按合入代码核对并修订：
 - `route.proto` 的 `ServiceSpec` 已用到字段号 4，`tool = 5` 可用；`schema.sql` 有 `install(plugin_id)`；`internal/wire/services.go` 末尾可追加。jsonschema-go v0.4.3 已在 go.mod，删除原语句的 go.mod 范围。
@@ -3297,14 +3470,14 @@ Core 一侧已按合入代码核对并修订：
    func (c *Catalog) Effective(ctx context.Context, pluginID, service string) (pb.ToolPolicy, error) // 覆盖优先，否则缺省策略；供 T-11.2 的 invoke
    func (c *Catalog) SetPolicy(ctx context.Context, pluginID, service string, p pb.ToolPolicy) error // UNSPECIFIED 表示删除覆盖
    func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error) // type ToolPolicyEntry struct { PluginID, Service string; Default, Override pb.ToolPolicy }
-5. sdk（T-04.7 合并后核对）
+5. sdk
    func (s *JSONService[In, Out]) Tool(description string, defaultPolicy ToolDefault) *JSONService[In, Out] // type ToolDefault int：ToolAllow、ToolConfirm；ProtoService 没有此方法
    type ToolInfo struct { Name, Description string; InputSchema json.RawMessage; Policy string } // Policy 为 "allow" 或 "confirm"
    func ListTools(ctx context.Context) ([]ToolInfo, error)
 
 行为：
 - SDK：声明了 Tool 的 JSONService，input_schema_json 取 Generated.ServiceSchemas 中 In 的 schema_id 对应的 Schema 原文，与该 Service 校验输入用的是同一份，不另外生成；链式规则与 goal-88 相同（Handle 之后调用 Tool 在 Collect 时报错）。
-- 注册校验：tool 只允许出现在 encoding 为 JSON 的服务上；description 非空且不超过 1024 字节（命名常量）；default_policy 为 ALLOW 或 CONFIRM；input_schema_json 必须能被 jsonschema 解析并 Resolve（不加载远程 $ref，ResolveOptions.Loader 为 nil），根类型为 object。任一失败整体拒绝注册。
+- 注册校验：tool 只允许出现在 encoding 为 JSON 的服务上；description 非空且不超过 1024 字节（命名常量）；default_policy 为 ALLOW 或 CONFIRM；input_schema_json 必须能被 jsonschema 解析并 Resolve（不加载远程 $ref，ResolveOptions.Loader 为 nil），根的 type 恰好是 object（In 是结构体时如此；具名 map 生成的 ["object","null"] 与切片都被拒绝）。任一失败整体拒绝注册。
 - core.tool.list：遍历 Router.Plugins() 中已激活插件的工具服务，按 ServiceCallable 只保留调用插件可以调用的，再去掉生效策略为 DENY 的；按 name 字典序返回。调用者自己的工具同样按规则出现。每次调用都读取当前策略，不缓存。
 - 策略：覆盖可为 ALLOW、CONFIRM、DENY；生效策略 = 覆盖或缺省。SetPolicy 在事务提交成功后才返回；安装记录不存在时返回 NOT_FOUND，安装记录存在而插件未激活或服务尚未声明时仍可设置。Effective：有覆盖时返回覆盖；没有覆盖且插件未 Attach 或该服务不是工具时返回 NOT_FOUND。Policies 列出已 Attach 插件的全部工具与全部已保存的覆盖，取不到声明时 Default 为 UNSPECIFIED。修改在下一次 list 与 invoke 时生效。
 - 工具调用（core.tool.invoke）与确认在 T-11.2。
@@ -3314,7 +3487,7 @@ Core 一侧已按合入代码核对并修订：
   - b 看到 a/admin 与 a/search，c 只看到 a/search；input_schema 与 In 的类型一致，policy 正确。
   - SetPolicy(a, search, DENY) 后两者都看不到 a/search；删除覆盖后恢复；关闭并重新打开状态库后覆盖仍在。
   - description 为空的工具使插件启动失败。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：validate.Register 拒绝 Protobuf 服务上的 tool、含远程 $ref 或根类型不是 object 的 input_schema_json；description 长度边界；Policies 的输出；未知 ToolPolicy 被拒；Effective 的 NOT_FOUND。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：validate.Register 拒绝 Protobuf 服务上的 tool、含远程 $ref 或根类型不是 object 的 input_schema_json（含 ["object","null"]）；description 长度边界；Policies 的输出；未知 ToolPolicy 被拒；Effective 的 NOT_FOUND。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go mod tidy 后无差异；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
 

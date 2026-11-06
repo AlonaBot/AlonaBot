@@ -8,7 +8,8 @@
 // alias 可以重复，使用 / 分隔路径 token。方法、类型和变量上的标记产生诊断；
 // 实例方法通过 Commands/Events 显式注册。生成器用嵌套 Group 注册多 token 命令。
 // 扫描遵守 GOOS/GOARCH 和 build tags，排除外部依赖、vendor 与测试文件。
-// 配置类型经 go/types 分析为 Schema，字段契约见 CONTRACTS §5.1；注册规则见 §9、§2.2。
+// 配置与 JSON Service 类型经统一的 go/types 检查生成 Schema；配置字段见 CONTRACTS §5.1，
+// Service 字段见 §3；注册规则见 §9、§2.2。
 //
 // 包的组成：[Scan] 接收 [Options]，返回描述、源码与 [Diagnostic] 汇总的 [Result]。
 package generate
@@ -102,6 +103,7 @@ type scan struct {
 	entry          listedPackage
 	roots, configs []declaration
 	paths, routes  map[string]string // 键对应首次声明的位置
+	serviceSchemas map[string][]byte
 	syntax         map[string][]*ast.File
 }
 
@@ -191,8 +193,8 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 		}
 	}
 	s.checkTypes()
-	if len(s.configs) == 1 {
-		if err := s.configSchema(ctx, cmd); err != nil {
+	if len(s.result.Diagnostics) == 0 {
+		if err := s.schemas(ctx, cmd); err != nil {
 			return nil, err
 		}
 	}
