@@ -59,7 +59,8 @@ func Subscribe[T any](r *SubscriptionRegistry, routeID, eventName string) *Subsc
 		}, invoke: func(c *Context, payload []byte) error {
 			var input T
 			if err := json.Unmarshal(payload, &input); err != nil {
-				return fmt.Errorf("decode bus event payload: %w", err)
+				c.Logger().Warn("decode bus event payload failed", "error", err)
+				return nil
 			}
 			return handler(c, input)
 		}})
