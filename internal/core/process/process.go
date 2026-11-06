@@ -247,6 +247,21 @@ func (p *Process) ExitState() *os.ProcessState {
 // WaitLogs 等待日志管道读完（所有持有写端的进程都已退出或关闭了输出）。
 func (p *Process) WaitLogs() { p.logs.Wait() }
 
+// WaitLogsUntil 与 WaitLogs 相同，但最多等到 deadline，到期仍未读完时返回 false：
+// 脱离进程树的进程可能一直持有写端，不能让它拖住 Core 的停止。
+func (p *Process) WaitLogsUntil(deadline time.Time) bool {
+	done := make(chan struct{})
+	go func() { p.logs.Wait(); close(done) }()
+	timer := time.NewTimer(time.Until(deadline))
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	}
+}
+
 // treePoll 控制确认进程树清空时的轮询间隔：Unix 无法等待非子进程退出，Windows Job 也只提供进程计数查询。
 const treePoll = 10 * time.Millisecond
 

@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -192,6 +193,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		kerr := proc.KillTree()
 		if kerr == nil {
 			<-proc.Exited()
+			drainLogs(proc, time.Now().Add(spec.Stop.Total))
 		}
 		_ = proc.Release()
 		closeListener(ln)
@@ -308,7 +310,8 @@ func (r *Running) Stop(t0 time.Time, reason pb.StopReason) host.StopResult {
 	// 2. 冻结、排空、STOPPING，并等待整棵进程树清空或在总截止终止它。
 	res := r.Instance.Stop(t0, reason, r.Process, r.timing)
 
-	// 3. 进程树处理完后才释放 Listener 与进程资源。
+	// 3. 进程树处理完后读完插件的最后输出，再释放 Listener 与进程资源；读取受同一总截止约束。
+	drainLogs(r.Process, t0.Add(r.timing.Total))
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.release()
@@ -334,8 +337,16 @@ func (r *Running) WaitExit() (abnormal bool, state string, err error) {
 	} else if !empty {
 		r.cleanupErr = r.Process.KillTree()
 	}
+	drainLogs(r.Process, time.Now().Add(r.timing.Total))
 	r.release()
 	return !st.Success(), fmt.Sprint(st), r.cleanupErr
+}
+
+// drainLogs 等待进程的日志管道读完，插件最后的输出才不会因 Core 随后退出而丢失（CONTRACTS §14.1）。
+func drainLogs(proc *process.Process, deadline time.Time) {
+	if !proc.WaitLogsUntil(deadline) {
+		slog.Warn("plugin output was not fully read before the deadline", "plugin_id", proc.PluginID)
+	}
 }
 
 // release 关闭 Listener 并释放进程资源；调用方持有 r.mu，重复调用无副作用。

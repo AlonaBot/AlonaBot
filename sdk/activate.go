@@ -78,7 +78,11 @@ func (a *activation) control(env *pb.Envelope) error {
 			return errors.New("duplicate STOPPING")
 		}
 		// 在读循环中同步关闭 ready gate：此后到达的业务请求一律被拒绝。
+		// STOPPING 可能紧跟 ACTIVATED 到达：持 readyMu 等 ready 发布完成，否则发布会重新打开 gate，
+		// shutdown 也可能抢在发布前关闭 Session，使已激活的插件被当作激活失败。
+		a.readyMu.Lock()
 		a.ready.Store(false)
+		a.readyMu.Unlock()
 		go a.shutdown(time.UnixMilli(m.GetDeadlineUnixMs()))
 		return nil
 	case *pb.Heartbeat:
@@ -240,19 +244,31 @@ func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regis
 	}
 	activeSession.Store(a)
 	a.sess.Start() // a.sess 赋值之后再启动，回调中使用的指针一定有效
+	if err := a.waitReady(); err != nil {
+		return nil, nil, err
+	}
+	return a.sess, a, nil
+}
+
+// waitReady 等待激活结果。激活后立刻停止时 Session 关闭与 ready 可能同时就绪，
+// 这时已写出 ACTIVATED，按激活成功返回，由 serve 走正常的停止路径。
+func (a *activation) waitReady() error {
 	select {
 	case <-a.readyCh:
-		return a.sess, a, nil
+		return nil
 	case err := <-a.failErr:
 		a.stopLifetime()
-		return nil, nil, err
+		return err
 	case <-a.sess.Done():
-		a.stopLifetime()
-		select {
-		case err := <-a.failErr:
-			return nil, nil, err
-		default:
-		}
-		return nil, nil, fmt.Errorf("session closed before activation: %w", a.sess.Err())
 	}
+	select {
+	case <-a.readyCh:
+		return nil
+	case err := <-a.failErr:
+		a.stopLifetime()
+		return err
+	default:
+	}
+	a.stopLifetime()
+	return fmt.Errorf("session closed before activation: %w", a.sess.Err())
 }
