@@ -65,6 +65,36 @@ function diff(original: unknown, edited: unknown, path: string[], missing: strin
   return edited;
 }
 
+// 数组整体替换时只移除 Schema 字段的恢复默认标记，dict 的任意 JSON 保持原样。
+function replacementFields(value: Record<string, unknown>, fields: Field[]): Record<string, unknown> {
+  const result = { ...value };
+  for (const field of fields) {
+    if (!Object.hasOwn(value, field.key)) continue;
+    if (value[field.key] === null) delete result[field.key];
+    else result[field.key] = replacementValue(value[field.key], field);
+  }
+  return result;
+}
+
+function replacementTemplate(value: Record<string, unknown>, field: Field): Record<string, unknown> {
+  const result = { ...value };
+  for (const template of field.templates!) {
+    if (Object.hasOwn(value, template.key)) result[template.key] = replacementFields(value[template.key] as Record<string, unknown>, template.children);
+  }
+  return result;
+}
+
+function replacementValue(value: unknown, field: Field): unknown {
+  if (value === undefined || field.secret) return value;
+  switch (field.type) {
+    case 'object': return replacementFields(value as Record<string, unknown>, field.children!);
+    case 'list': return field.children ? (value as Record<string, unknown>[]).map(row => replacementFields(row, field.children!)) : value;
+    case 'template': return replacementTemplate(value as Record<string, unknown>, field);
+    case 'template_list': return (value as Record<string, unknown>[]).map(row => replacementTemplate(row, field));
+    default: return value;
+  }
+}
+
 function fieldDiff(original: unknown, edited: unknown, field: Field, path: string[], missing: string[]): unknown {
   if (edited === null || isSecretSet(edited) || equal(original, edited)) {
     return diff(original, edited, path, missing);
@@ -72,6 +102,9 @@ function fieldDiff(original: unknown, edited: unknown, field: Field, path: strin
   if (field.secret) {
     if (typeof edited !== 'string') throw new Error(`${pointer(path)}: expected a secret string`);
     return edited;
+  }
+  if (field.type === 'list' || field.type === 'template_list') {
+    return diff(original, replacementValue(edited, field), path, missing);
   }
   if (field.type === 'object') {
     return fieldsDiff(isObject(original) ? original : {}, edited as Record<string, unknown>, field.children!, path, missing);

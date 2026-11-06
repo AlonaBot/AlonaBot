@@ -112,6 +112,27 @@ describe('form Merge Patch contract (V-25)', () => {
     });
   });
 
+  it('omits restored Schema fields in replacement rows while retaining dict JSON nulls', () => {
+    const original = { sources: [{ rss: { url: 'https://feed.example', every_minutes: 15 } }] };
+    const edited = { sources: [{ rss: { url: 'https://feed.example', every_minutes: null } }] };
+    expect(buildPatch(original, edited, fieldsFromSchema(templates)))
+      .toEqual({ sources: [{ rss: { url: 'https://feed.example' } }] });
+    expect(edited.sources[0].rss.every_minutes).toBeNull();
+
+    const schema = fieldsFromSchema({ rows: { type: 'list', items: {
+      ...collections, ...nested, choice: templates.music, sources: templates.sources,
+    } } });
+    const row = { ratio: null, reply: { prefix: null, mode: 'safe' },
+      accounts: [{ name: null, api_key: 'new' }], headers: { arbitrary: { keep: null } },
+      choice: { local: { dir: null } }, sources: [{ rss: { url: 'https://feed.example', every_minutes: null } }],
+      unknown: { keep: null } };
+    expect(buildPatch({ rows: [] }, { rows: [row] }, schema)).toEqual({ rows: [{
+      reply: { mode: 'safe' }, accounts: [{ api_key: 'new' }], headers: { arbitrary: { keep: null } },
+      choice: { local: {} }, sources: [{ rss: { url: 'https://feed.example' } }], unknown: { keep: null },
+    }] });
+    expect(row.ratio).toBeNull();
+  });
+
   it('omits conditionally hidden edits while preserving explicit scalar values', () => {
     const original = { advanced: true, template: 'old', welcome: 'Hello', reply: { prefix: '> ', mode: 'fast', unknown: true } };
     expect(buildPatch(original, { ...original, advanced: false, template: 'edited', welcome: '', reply: { ...original.reply, prefix: '', unknown: false } }, fieldsFromSchema(nested)))

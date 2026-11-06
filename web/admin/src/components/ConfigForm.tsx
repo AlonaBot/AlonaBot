@@ -6,6 +6,50 @@ import { buildPatch, isSecretSet, MissingSecretsError } from '../schema/patch';
 import { fieldText, templateText } from '../i18n/catalog';
 import { useUI } from '../i18n/UI';
 
+// 原值跟随编辑对象身份，数组删行或控件隐藏重挂载后仍能找到同一行。
+const originalValues = new WeakMap<object, Record<string, unknown> | undefined>();
+
+function editableValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(editableValue);
+  if (value !== null && typeof value === 'object') {
+    const copy = Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, editableValue(entry)]));
+    originalValues.set(copy, value as Record<string, unknown>);
+    return copy;
+  }
+  return value;
+}
+
+function submissionFields(value: Record<string, unknown>, fields: Field[], replacing: boolean, original = originalValues.get(value)): Record<string, unknown> {
+  const result = { ...(replacing ? original : value) };
+  for (const field of fields) {
+    if (field.invisible || (field.condition && !Object.entries(field.condition)
+      .every(([key, expected]) => JSON.stringify(value[key]) === JSON.stringify(expected)))) continue;
+    if (Object.hasOwn(value, field.key)) result[field.key] = submissionValue(value[field.key], field, replacing, original?.[field.key]);
+    else delete result[field.key];
+  }
+  return result;
+}
+
+function submissionTemplate(value: Record<string, unknown>, field: Field, replacing: boolean, original = originalValues.get(value)): Record<string, unknown> {
+  const result = { ...(replacing ? original : value) };
+  for (const template of field.templates!) {
+    delete result[template.key];
+    if (Object.hasOwn(value, template.key)) result[template.key] = submissionFields(value[template.key] as Record<string, unknown>, template.children, replacing, original?.[template.key] as Record<string, unknown> | undefined);
+  }
+  return result;
+}
+
+function submissionValue(value: unknown, field: Field, replacing: boolean, original: unknown): unknown {
+  if (value === null || value === undefined || field.secret) return value;
+  switch (field.type) {
+    case 'object': return submissionFields(value as Record<string, unknown>, field.children!, replacing, original as Record<string, unknown> | undefined);
+    case 'list': return field.children ? (value as Record<string, unknown>[]).map(row => submissionFields(row, field.children!, true)) : value;
+    case 'template': return submissionTemplate(value as Record<string, unknown>, field, replacing, original as Record<string, unknown> | undefined);
+    case 'template_list': return (value as Record<string, unknown>[]).map(row => submissionTemplate(row, field, true));
+    default: return value;
+  }
+}
+
 function valuePath(path: string[]): string {
   return '/' + path.map(part => part.replaceAll('~', '~0').replaceAll('/', '~1')).join('/');
 }
@@ -32,7 +76,7 @@ function FieldControl({ field, value, original, path, messages, missing, onChang
   if (value === null) {
     control = <div className="default-pending" role="status">
       <p>{ui.defaultPending}</p>
-      <button type="button" onClick={() => onChange(original)}>{ui.undoReset}</button>
+      <button type="button" onClick={() => onChange(editableValue(original))}>{ui.undoReset}</button>
     </div>;
   } else if (field.secret) {
     const set = isSecretSet(value) || (typeof value === 'string' && value.length > 0);
@@ -126,7 +170,11 @@ function Fields({ fields, value, original, path, messages, missing, onChange }: 
     .every(([key, expected]) => JSON.stringify(value[key]) === JSON.stringify(expected))))
     .map(field => <FieldControl key={field.key} field={field} value={value[field.key]} original={original?.[field.key]}
       path={[...path, field.key]} messages={messages} missing={missing}
-      onChange={next => onChange({ ...value, [field.key]: next })} />)}</>;
+      onChange={next => {
+        const updated = { ...value, [field.key]: next };
+        originalValues.set(updated, original);
+        onChange(updated);
+      }} />)}</>;
 }
 
 type ConfigFormProps = {
@@ -149,7 +197,7 @@ export function ConfigForm(props: ConfigFormProps) {
 function FormEditor(props: ConfigFormProps) {
   const ui = useUI();
   const fields = useMemo(() => fieldsFromSchema(props.schema), [props.schema]);
-  const [edited, setEdited] = useState(() => structuredClone(props.value) as Record<string, unknown>);
+  const [edited, setEdited] = useState(() => editableValue(props.value) as Record<string, unknown>);
   const [error, setError] = useState<Error | null>(null);
   const missing = error instanceof MissingSecretsError ? error.paths : [];
 
@@ -158,7 +206,7 @@ function FormEditor(props: ConfigFormProps) {
     if (!event.currentTarget.reportValidity()) return;
     let patch: Record<string, unknown>;
     try {
-      patch = buildPatch(props.value, edited, fields);
+      patch = buildPatch(props.value, submissionFields(edited, fields, false), fields);
     } catch (caught) {
       if (!(caught instanceof Error)) throw caught;
       setError(caught);
@@ -183,7 +231,7 @@ function ListControl(props: FieldProps & { id: string }) {
   const ui = useUI();
   const values = props.value as unknown[];
   const serial = useRef(0);
-  const rows = useRef(values.map(value => ({ id: serial.current++, original: value })));
+  const rows = useRef(values.map(() => ({ id: serial.current++ })));
   const text = fieldText(props.messages, props.field);
   if (props.field.options) return <select id={props.id} multiple required={props.field.required} value={values as string[]}
     onChange={(event: ChangeEvent<HTMLSelectElement>) => props.onChange(Array.from<HTMLOptionElement, string>(event.currentTarget.selectedOptions, option => option.value))}>
@@ -192,7 +240,7 @@ function ListControl(props: FieldProps & { id: string }) {
   return <div id={props.id} className="list-control">
     {values.map((value, index) => <div key={rows.current[index].id} className="collection-row">
       {props.field.children ? <Fields fields={props.field.children} value={value as Record<string, unknown>}
-        original={rows.current[index].original as Record<string, unknown>} path={[...props.path, String(index)]}
+        original={originalValues.get(value as object)!} path={[...props.path, String(index)]}
         messages={props.messages} missing={props.missing} onChange={next => props.onChange(values.map((entry, at) => at === index ? next : entry))} />
         : <input aria-label={`${text.description} ${index + 1}`} value={value as string}
           onChange={(event: ChangeEvent<HTMLInputElement>) => { const next = event.currentTarget.value; props.onChange(values.map((entry, at) => at === index ? next : entry)); }} />}
@@ -201,7 +249,7 @@ function ListControl(props: FieldProps & { id: string }) {
     {props.field.required && values.length === 0 && <input required value="" aria-label={ui.emptyCollection} onChange={() => {}} />}
     <button type="button" onClick={() => {
       const value = props.field.children ? {} : '';
-      rows.current.push({ id: serial.current++, original: value }); props.onChange([...values, value]);
+      rows.current.push({ id: serial.current++ }); props.onChange([...values, value]);
     }}>{ui.addRow}</button>
   </div>;
 }
@@ -289,11 +337,14 @@ function TemplateControl(props: FieldProps & { id: string }) {
   const many = props.field.type === 'template_list';
   const values = many ? props.value as Record<string, unknown>[] : [props.value as Record<string, unknown> | undefined];
   const serial = useRef(0);
-  const rows = useRef(values.map(value => ({ id: serial.current++, original: value })));
+  const rows = useRef(values.map(() => ({ id: serial.current++ })));
   function selection(value: Record<string, unknown> | undefined) {
     return props.field.templates!.find(template => value && Object.hasOwn(value, template.key));
   }
   function edit(index: number, next: unknown) {
+    if (next !== null && typeof next === 'object') {
+      originalValues.set(next, originalValues.get(values[index]!));
+    }
     props.onChange(many ? values.map((value, at) => at === index ? next : value) : next);
   }
   function label(template: Template, value: Record<string, unknown>) {
@@ -326,7 +377,7 @@ function TemplateControl(props: FieldProps & { id: string }) {
       </select>
       {text?.hint && <p className="field-hint">{text.hint}</p>}
       {template && <Fields key={template.key} fields={template.children} value={value![template.key] as Record<string, unknown>}
-        original={((many ? rows.current[index].original : props.original) as Record<string, unknown> | undefined)?.[template.key] as Record<string, unknown>}
+        original={(originalValues.get(value!) as Record<string, unknown> | undefined)?.[template.key] as Record<string, unknown>}
         path={[...rowPath, template.key]} messages={props.messages} missing={props.missing}
         onChange={next => edit(index, { [template.key]: next })} />}
     </>;
@@ -347,6 +398,6 @@ function TemplateControl(props: FieldProps & { id: string }) {
       </div>;
     })}
     {props.field.required && values.length === 0 && <input required value="" aria-label={ui.emptyCollection} onChange={() => {}} />}
-    <button type="button" onClick={() => { rows.current.push({ id: serial.current++, original: {} }); props.onChange([...values, {}]); }}>{ui.addRow}</button>
+    <button type="button" onClick={() => { rows.current.push({ id: serial.current++ }); props.onChange([...values, {}]); }}>{ui.addRow}</button>
   </div>;
 }
