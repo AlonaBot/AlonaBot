@@ -11,7 +11,7 @@
 | goal-23 | T-07.1 | 调度触发计算 | — | 已完成 |
 | goal-29 | T-08.2 | 配置 JSON 语义与 Pending | — | 已完成 |
 | goal-37 | T-09.2 | 安装包预检与安全解压 | — | 已完成 |
-| goal-103 | T-02.4 | 移除绑定 SDK API 的提交测试 | — | 待派发 |
+| goal-103 | T-02.4 | 移除绑定 SDK API 的提交测试 | — | 已完成 |
 | goal-76 | T-02.2 | 调优参数 | T-02.1 | 已完成（PR #28） |
 | goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 已完成（PR #29） |
 | goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 已完成（PR #31） |
@@ -342,7 +342,7 @@ func (c *Candidate) Discard() error                            // 删除暂存�
 
 ### goal-103 · T-02.4 移除绑定 SDK API 的提交测试
 
-状态：待派发。没有前置，按 D-86 新增，并按[共享文件规则](../execution-order.md#3-共享文件与冲突规则)排在 goal-96、goal-95、goal-54 之前。PR #67（goal-15，合并提交 `c6778be`）已合并，它带入的测试一并删除。已在 PR #67 合并前的 main `dbf5664` 上试删并运行：34 个文件、净减 6733 行，`go.mod` 不变，`supervisor`、`cmd/alonabot` 的测试通过。
+状态：已完成（PR #99，合并提交 `892227b`）。按 D-86 删除 SDK 全部测试、supervisor 除 `supervisor_test.go` 外的测试与全部测试插件；两个保留测试文件只做派发指定的引用清理。产品代码、依赖与 `contracts/testdata` 保持原文，验证证据见 TEST-MATRIX §3.2。goal-96、goal-95、goal-54 已按删除后的代码清除旧测试迁移要求，可按共享文件规则派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-103（切片 T-02.4：移除绑定 SDK API 的提交测试）。goal 目录 goal-103，分支 goal-103，worktree .worktrees/goal-103，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -3012,11 +3012,11 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-96 · T-04.9 删除构建期标记
 
-状态：待派发，goal-103 合并后才派发（D-86）：语句中涉及 `sdk/` 与 `internal/core/supervisor/` 测试和 testdata 的部分届时不再适用。前置 T-04.7（PR #89，合并提交 `3e37cd6`）已合并。依据 D-79 新增。符号已按合入代码核对：
-- 标记只出现在 `sdk/generate/generate_test.go` 的临时 module 源码和 `generate.go` 的包文档。`examples/plugins/` 与 `internal/core/supervisor/testdata/` 不用标记，原语句的「示例、测试插件改写」没有对象。
+状态：待派发。goal-103（PR #99）已合并；按 D-86 清除已删除测试与 testdata 的迁移要求，跨进程自测由本地测试在临时目录生成插件源码与二进制。前置 T-04.7（PR #89，合并提交 `3e37cd6`）已合并。依据 D-79 新增。符号已按合入代码核对：
+- 删除测试后，标记示例只剩 `generate.go` 的包文档；`examples/plugins/` 不用标记。
 - `sdk/generate/marker.go`：`scan.marker`、`checkTokens`、路径与 route_id 的重复检查。`generate.go`：`Command`、`Event` 类型，`Result.Commands`、`Result.Events`，`scan.paths`、`scan.routes`，`readFile` 的 step 3 与收集 `handlers` 的部分，`Scan` 中对两个切片的排序。`source.go`：imports 中为标记函数加的别名、`Commands:` 与 `Events:` 两段。`cmd/alonabot/plugin.go` 只读 `Result.Diagnostics` 与 `Source`，不用改。
 - `sdk/generated.go`：`Generated.Commands`、`Generated.Events`，`registerCommands`、`registerEvents`；`Collect` 调用这两个方法。
-- `go generate ./...` 不进 testdata，`internal/core/supervisor/testdata/` 的三个 `alonabot_gen.go` 要用 `alonabot plugin generate --dir` 逐个重新生成。
+- supervisor 测试插件与三个生成文件已由 PR #99 删除；本切片只为本地临时插件运行 `alonabot plugin generate` 与 `check`。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-96（切片 T-04.9：删除构建期标记）。goal 目录 goal-96，分支 goal-96，worktree .worktrees/goal-96，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -3026,10 +3026,8 @@ goal-28、goal-29 的符号已按合入代码核对：
 依据：PLAN T-04 步骤 2；CONTRACTS §9.1；DESIGN §D；DECISIONS D-70、D-79；TEST-MATRIX V-10。
 
 范围（只新增或修改这些）：
-- sdk/generate/：删除 marker.go；generate.go 与 source.go 删除标记的扫描、诊断、Result 字段与生成代码，同步包文档；generate_test.go
+- sdk/generate/：删除 marker.go；generate.go 与 source.go 删除标记的扫描、诊断、Result 字段与生成代码，同步包文档
 - sdk/generated.go：删除 Commands、Events、registerCommands、registerEvents，同步 Generated 的注释；sdk/sdk.go 的 Collect 删除对应调用
-- internal/core/supervisor/testdata/ 的 alonabot_gen.go：重新生成
-- internal/core/supervisor/command_test.go 与 testdata/commanddispatch/main.go
 允许的新跨模块边：无。
 
 接口：
@@ -3044,7 +3042,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 测试（按编码规范「测试提交规则」）：
 - 提交：无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：旧的生成文件经 alonabot plugin check 报告过期；testdata 的三个生成文件重新生成后 plugin check 通过；sdk/generate/generate_local_test.go：临时 module 的源码改为在 Commands、Events 方法中链式注册，保留原有的根类型、构建标签与外部依赖扫描的断言。源码中留一条写在函数上和一条写在方法上的 //alonabot:command：Diagnostics 为空，生成文件没有注册代码。两次生成逐字节相同。原来只针对标记语法的诊断用例删除；internal/core/supervisor/command_local_test.go（commanddispatch 插件，TCP 与 stdio）：插件增加一个包级函数 Handler，上方留一条 //alonabot:command stale 注释，并在 Commands 中以 r.Command("pkg").Handle(pkgHandler) 注册：/pkg 照常回复，/stale 不产生路由。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：在临时 module 构造引用旧 Generated.Commands/Events 的生成文件，alonabot plugin check 报告过期，重新生成后 check 通过；新增 sdk/generate/generate_local_test.go：临时 module 的源码在 Commands、Events 方法中链式注册，覆盖根类型、构建标签与外部依赖扫描。源码中留一条写在函数上和一条写在方法上的 //alonabot:command：Diagnostics 为空，生成文件没有注册代码。两次生成逐字节相同。internal/core/supervisor/command_local_test.go（TCP 与 stdio；由本地测试在临时目录生成并构建最小命令插件）：插件声明一个包级函数 Handler，上方留一条 //alonabot:command stale 注释，并在 Commands 中以 r.Command("pkg").Handle(pkgHandler) 注册：/pkg 照常回复，/stale 不产生路由。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./sdk/... ./internal/core/... ./cmd/...；go build ./...。
 
@@ -3248,7 +3246,7 @@ internal/wire
 
 ### goal-95 · T-08.11 配置改由 config_schema.json 声明
 
-状态：待派发，goal-103 合并后才派发（D-86）：语句中涉及 `sdk/` 与 `internal/core/supervisor/` 测试和 testdata 的部分届时不再适用。前置 T-04.7（PR #89，合并提交 `3e37cd6`）、T-08.3、T-08.4、T-08.10 均已合并。依据 D-76 新增，同日按 D-85 补充 `$version` 与 `$migrations` 的声明式迁移，按 D-80 改用 `i18n/`。
+状态：待派发。goal-103（PR #99）已合并；按 D-86 清除已删除测试与 testdata 的迁移要求，跨进程自测由本地测试在临时目录生成插件源码与二进制。前置 T-04.7（PR #89，合并提交 `3e37cd6`）、T-08.3、T-08.4、T-08.10 均已合并。依据 D-76 新增，同日按 D-85 补充 `$version` 与 `$migrations` 的声明式迁移，按 D-80 改用 `i18n/`。
 
 T-04.7 合并后核对时修订了原语句：T-04.7 没有复用配置的类型推导，`sdk/generate/service.go` 有自己的 `serviceBuilder` 与 `schemaImporter`，不依赖 `config.go`。因此 `config.go` 整个删除，不需要拆分或保留。
 
@@ -3259,7 +3257,7 @@ T-04.7 合并后核对时修订了原语句：T-04.7 没有复用配置的类型
 - `sdk/generate/config.go` 的 `scan.configSchema` 经 go/types 从 Config 声明构造 JSON Schema 并解析 `config` 标签，结果写入 `Result.ConfigSchema` 与生成代码中的 `Generated.ConfigSchema`。`generate.go` 的 `readFile` 把嵌入 `config.Base` 的类型记入 `scan.configs`，`checkTypes` 检查至多一个并写入 `Result.ConfigType`；`service.go` 的 `scan.schemas` 在有 Config 时调用 `configSchema`，这一分支随之删除，其余的 Service Schema 生成不变。
 - `sdk/services.go` 与 `internal/core/adapter/remote/declarations.go` 仍用 jsonschema-go，go.mod 不变。
 - `internal/core/secret` 的 `Extract` 沿 JSON Schema 的 `properties`、`items`、`additionalProperties` 查找 `x-alonabot-secret`（`path.go` 的 `schemaPaths`，`*` 表示任意下标或键）；`supervisor.Spec.ConfigSchema` 由调用方传入当前包的 Schema。Core 不按 Schema 校验配置。
-- 使用旧写法的代码：`examples/plugins/showcase`；`internal/core/supervisor` 的 `config_prepare_test.go`、`secret_test.go`、`db_test.go`；`sdk/generate` 的 `config_test.go`、`generate_test.go`。
+- 使用旧写法的存活代码为 `examples/plugins/showcase`；原 SDK 与 supervisor 测试已由 PR #99 删除。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-95（切片 T-08.11：配置改由 config_schema.json 声明）。goal 目录 goal-95，分支 goal-95，worktree .worktrees/goal-95，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -3274,7 +3272,7 @@ T-04.7 合并后核对时修订了原语句：T-04.7 没有复用配置的类型
 - sdk/base.go、sdk/session.go、sdk/generated.go：Root 删除 Config Hook、增加 OnConfigLoad；Base 提供 OnConfigLoad 的默认实现与 Config() 取值方法；Generated.ConfigSchema 的注释
 - sdk/generate/：删除 config.go、Config 类型发现（readFile、checkTypes、Result.ConfigType）与 scan.schemas 中的配置分支，改为读取、检查并嵌入 config_schema.json，核对 i18n/ 的 config 覆盖；service.go 的 Service Schema 生成不变
 - internal/core/secret/：secret 路径改由 contracts/configschema 给出
-- 使用旧写法的代码与测试：examples/plugins/showcase、internal/core/supervisor 的测试插件、sdk/generate 的测试
+- 使用旧写法的示例：examples/plugins/showcase；本地验证新建 *_local_test.go，测试插件由本地测试在临时目录生成并构建
 - docs/plugin-guide.md §7；ARCHITECTURE.md 中 sdk/、contracts/ 与 internal/core/ 的实现状态
 允许的新跨模块边：无（sdk/... 与 internal/core/... 到 contracts 已允许）。
 
@@ -3325,7 +3323,7 @@ T-04.7 合并后核对时修订了原语句：T-04.7 没有复用配置的类型
 
 测试（按编码规范「测试提交规则」）：
 - 提交：无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Values 各方法对未声明键与类型不符的 panic 消息；Canonical 保留键顺序与数字原文；int64 边界与非有限数字；display_item 的嵌套路径；Merge Patch 删除键后重新准备得到默认值；web/admin/fixtures/ 中已有的 *.config_schema.json 都能通过 Parse（goal-34 未合并时跳过并写明）；sdk/generate/config_local_test.go 改写：临时 module 带 config_schema.json（覆盖十种 type、options 与 labels、slider、condition、editor_mode、invisible、secret、required、template 与 template_list 的 display_item）与 i18n/zh-CN.json；两次生成逐字节相同，Generated.ConfigSchema 等于 Canonical，REGISTER 的 config_schema_hash 等于 Hash。诊断各一例：未知键、AstrBot 的 file 类型、`$migrations` 版本不连续、`rename` 的目标不在 schema 中、labels 多于 options、slider 缺 max、condition 引用不存在的字段、display_item 指向非 string 字段、secret 带 default、required 用于 int、字段键含 "."、i18 覆盖不存在的字段、i18 字段覆盖中出现 name；internal/core/supervisor/config_prepare_local_test.go 的场景改用 config_schema.json：缺失键补 default 与零值；显式 false、0、"" 与空数组保留；null 被拒绝；options 之外的值；slider 越界；template 含两个模板键；required 的空串；从版本 1 经 `rename`、`map`、`wrap`、`remove` 迁移到版本 3 后再校验，删除的字段之外的未知键保留；配置版本高于 schema 时失败；OnConfigLoad 在声明式迁移之后执行；restart 时改变配置失败。测试插件在 OnStart 中用 Config() 取值并经日志或回复报告，核对取到的是补齐后的值；internal/core/supervisor/secret_local_test.go：secret 位于 template 与 template_list 内时，快照只存引用、Bootstrap 收到明文；空串不生成引用。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Values 各方法对未声明键与类型不符的 panic 消息；Canonical 保留键顺序与数字原文；int64 边界与非有限数字；display_item 的嵌套路径；Merge Patch 删除键后重新准备得到默认值；web/admin/fixtures/ 中已有的 *.config_schema.json 都能通过 Parse（goal-34 未合并时跳过并写明）；新建 sdk/generate/config_local_test.go：临时 module 带 config_schema.json（覆盖十种 type、options 与 labels、slider、condition、editor_mode、invisible、secret、required、template 与 template_list 的 display_item）与 i18n/zh-CN.json；两次生成逐字节相同，Generated.ConfigSchema 等于 Canonical，REGISTER 的 config_schema_hash 等于 Hash。诊断各一例：未知键、AstrBot 的 file 类型、`$migrations` 版本不连续、`rename` 的目标不在 schema 中、labels 多于 options、slider 缺 max、condition 引用不存在的字段、display_item 指向非 string 字段、secret 带 default、required 用于 int、字段键含 "."、i18 覆盖不存在的字段、i18 字段覆盖中出现 name；新建 internal/core/supervisor/config_prepare_local_test.go，在临时目录生成使用 config_schema.json 的测试插件并构建：缺失键补 default 与零值；显式 false、0、"" 与空数组保留；null 被拒绝；options 之外的值；slider 越界；template 含两个模板键；required 的空串；从版本 1 经 `rename`、`map`、`wrap`、`remove` 迁移到版本 3 后再校验，删除的字段之外的未知键保留；配置版本高于 schema 时失败；OnConfigLoad 在声明式迁移之后执行；restart 时改变配置失败。测试插件在 OnStart 中用 Config() 取值并经日志或回复报告，核对取到的是补齐后的值；新建 internal/core/supervisor/secret_local_test.go（插件同样在临时目录生成并构建）：secret 位于 template 与 template_list 内时，快照只存引用、Bootstrap 收到明文；空串不生成引用。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./contracts/... ./sdk/... ./internal/core/...；go build ./...。
 
@@ -3425,12 +3423,12 @@ T-04.7 合并后核对时修订了原语句：T-04.7 没有复用配置的类型
 
 ### goal-54 · T-11.1 工具描述、目录与策略
 
-状态：待派发，goal-103 合并后才派发（D-86）：语句中涉及 `sdk/` 与 `internal/core/supervisor/` 测试和 testdata 的部分届时不再适用。前置 T-04.4（PR #88，合并提交 `c8dd516`）、T-04.7（PR #89，合并提交 `3e37cd6`）与 T-06.1（PR #45）均已合并。原语句未列 T-04.7，但它依赖的写法与 goal-88 冲突：goal-88 删除 `ServiceOption`，JSON Service 的 Schema 由生成器产生（D-70、CONTRACTS §3），`jsonschema.For[In]` 得到的 Schema 可能与 Service 实际校验用的不一致，不符合 §13.1「输入 Schema 即该 Service 的输入 Schema」。
+状态：待派发。goal-103（PR #99）已合并；按 D-86 清除已删除测试与 testdata 的迁移要求，跨进程自测由本地测试在临时目录生成插件源码与二进制。前置 T-04.4（PR #88，合并提交 `c8dd516`）、T-04.7（PR #89，合并提交 `3e37cd6`）与 T-06.1（PR #45）均已合并。原语句未列 T-04.7，但它依赖的写法与 goal-88 冲突：goal-88 删除 `ServiceOption`，JSON Service 的 Schema 由生成器产生（D-70、CONTRACTS §3），`jsonschema.For[In]` 得到的 Schema 可能与 Service 实际校验用的不一致，不符合 §13.1「输入 Schema 即该 Service 的输入 Schema」。
 
 sdk 段已按合入代码核对：
 - `sdk.JSON` 的 `prepare` 闭包里有 `inputID` 与 `r.schemas`（`Generated.ServiceSchemas`），`b.route` 构造 `ServiceSpec`；`setAccess` 在 `handles != 0` 时置 `afterHandle`，`Tool` 用同样的写法。
 - 生成器对切片和 map 生成 `"type":["array","null"]`、`"type":["object","null"]`，结构体生成 `"type":"object"`。In 是具名 map 或切片时，根类型不是单一的 object，注册校验要明确拒绝，语句已写明。
-- svcplugin 的 `input`、`reply` 已在 `alonabot_gen.go` 中；新工具沿用这两个类型时生成文件不变。
+- 原 svcplugin 已由 PR #99 删除；工具验证由本地测试在临时目录生成插件源码、经正式生成器产生 Service Schema 后构建。
 
 Core 一侧已按合入代码核对并修订：
 - `route.proto` 的 `ServiceSpec` 已用到字段号 4，`tool = 5` 可用；`schema.sql` 有 `install(plugin_id)`；`internal/wire/services.go` 末尾可追加。jsonschema-go v0.4.3 已在 go.mod，删除原语句的 go.mod 范围。
@@ -3457,7 +3455,7 @@ Core 一侧已按合入代码核对并修订：
 - internal/core/router/：新增 Plugins 与 ServiceCallable
 - internal/core/broker/broker.go：访问判定改用 router.ServiceCallable，行为不变
 - sdk/：services.go 的 JSONService 增加 Tool；新增 tool.go（ListTools）
-- 上述包的测试文件
+- 上述包的本地 *_local_test.go（不提交），真实插件源码与生成文件放在测试临时目录
 允许的新跨模块边：无。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
@@ -3494,7 +3492,7 @@ Core 一侧已按合入代码核对并修订：
 
 测试（按编码规范「测试提交规则」）：
 - 提交：无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：validate.Register 拒绝 Protobuf 服务上的 tool、含远程 $ref 或根类型不是 object 的 input_schema_json（含 ["object","null"]）；description 长度边界；Policies 的输出；未知 ToolPolicy 被拒；Effective 的 NOT_FOUND；internal/core/supervisor/tool_local_test.go（//go:build unix）：沿用 goal-19 的 svcplugin，增加声明了 Tool 的服务（PUBLIC 的 a/search 为 allow，ALLOWLIST: b 的 a/admin 为 confirm）；b 与 c 收到消息时调用 sdk.ListTools 并回复结果：b 看到 a/admin 与 a/search，c 只看到 a/search；input_schema 与 In 的类型一致，policy 正确；SetPolicy(a, search, DENY) 后两者都看不到 a/search；删除覆盖后恢复；关闭并重新打开状态库后覆盖仍在；description 为空的工具使插件启动失败。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：validate.Register 拒绝 Protobuf 服务上的 tool、含远程 $ref 或根类型不是 object 的 input_schema_json（含 ["object","null"]）；description 长度边界；Policies 的输出；未知 ToolPolicy 被拒；Effective 的 NOT_FOUND；internal/core/supervisor/tool_local_test.go（//go:build unix）：在临时目录生成并构建 a、b、c 三个最小服务插件，a 声明 Tool 服务（PUBLIC 的 a/search 为 allow，ALLOWLIST: b 的 a/admin 为 confirm）；b 与 c 收到消息时调用 sdk.ListTools 并回复结果：b 看到 a/admin 与 a/search，c 只看到 a/search；input_schema 与 In 的类型一致，policy 正确；SetPolicy(a, search, DENY) 后两者都看不到 a/search；删除覆盖后恢复；关闭并重新打开状态库后覆盖仍在；description 为空的工具使插件启动失败。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go mod tidy 后无差异；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
 
