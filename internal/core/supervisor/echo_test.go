@@ -53,6 +53,7 @@ func TestEchoBothTransports(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			setDefaultLogger(t, output.Logger())
 			defer output.Close()
 			defer func() {
 				if t.Failed() {
@@ -70,10 +71,11 @@ func TestEchoBothTransports(t *testing.T) {
 				t.Fatal(err)
 			}
 			mux := router.NewMux()
-			sender := message.New(registry, policy.New(store))
+			sender := message.New(registry, policy.New(store), nil, values.RequestTimeout)
 			mux.Handle(wire.ServiceSend, sender.Send)
-			spec.Handler = mux.For(router.NewCaller(spec.PluginID, spec.GenerationID))
-			events := router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send)
+			caller := router.NewCaller(spec.PluginID, spec.GenerationID)
+			spec.Handler = mux.For(caller)
+			events := router.New(values.DispatchQueueEvents, registry, sender.Send, nil, nil, nil)
 			events.Start()
 			defer events.Close()
 			if err := platform.Start(ctx, events); err != nil {
@@ -90,7 +92,7 @@ func TestEchoBothTransports(t *testing.T) {
 					t.Errorf("echo did not stop cleanly: %+v", stopped)
 				}
 			}()
-			events.Attach(router.FromInstance(running.Instance))
+			events.Attach(router.FromInstance(running.Instance), caller)
 			target := &pb.Target{AdapterId: "memory", AdapterInstanceId: "instance", AccountId: "account", ChatId: "chat", ThreadId: proto.String("topic")}
 			original := &pb.MessageChain{Segments: []*pb.Segment{
 				{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: "hello 世界"}}},

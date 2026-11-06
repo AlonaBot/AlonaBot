@@ -2,6 +2,7 @@ package router
 
 import (
 	"cmp"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -67,7 +68,8 @@ func (r *Router) Commands() *CommandIndex {
 func (r *Router) rebuildCommands() {
 	// 1. 只收集已激活插件，命令 path 与各 alias 分别参与选择。
 	next := &CommandIndex{paths: make(map[string][]CommandEntry)}
-	for _, plugin := range r.plugins {
+	for _, session := range r.plugins {
+		plugin := session.plugin
 		if !plugin.Activated() {
 			continue
 		}
@@ -104,7 +106,7 @@ func (r *Router) rebuildCommands() {
 			if len(previous) > 1 && sameRoute(previous[0], shadow.Winner) && slices.ContainsFunc(previous[1:], func(old CommandEntry) bool { return sameRoute(old, entry) }) {
 				continue
 			}
-			r.log.Info("command route shadowed", "path", strings.Join(shadow.Path, " "), "winner_plugin_id", shadow.Winner.PluginID, "winner_route_id", shadow.Winner.RouteID, "shadowed_plugin_id", entry.PluginID, "shadowed_route_id", entry.RouteID)
+			slog.Info("command route shadowed", "path", strings.Join(shadow.Path, " "), "winner_plugin_id", shadow.Winner.PluginID, "winner_route_id", shadow.Winner.RouteID, "shadowed_plugin_id", entry.PluginID, "shadowed_route_id", entry.RouteID)
 		}
 	}
 	r.commands = next

@@ -18,6 +18,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
+	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
@@ -30,21 +31,23 @@ const (
 
 // Options 绑定一个安装包的进程身份、状态库与事件接纳入口。
 type Options struct {
-	AdapterID string // 平台类型
-	PluginID  string // Adapter 包的安装 ID，用于核对调用者与写游标
-	Store     *state.Store
-	Registry  *adapter.Registry
-	Sink      adapter.Sink
-	Log       *slog.Logger
+	AdapterID        string // 平台类型
+	PluginID         string // Adapter 包的安装 ID，用于核对调用者与写游标
+	Store            *state.Store
+	Registry         *adapter.Registry
+	Sink             adapter.Sink
+	RegisterIncoming func(instanceID, fileID string, size *uint64, mime *string) string // 装配处必须提供媒体 Store 的入站登记入口
 }
 
 // Process 并发安全地管理一个 Adapter 包进程及其账号实例。
 type Process struct {
-	opt        Options
-	operations sync.Mutex // 串行化 Bind、Unbind 与实例启停
-	mu         sync.Mutex // 保护 session、instances 与实例状态；RPC 期间释放
-	session    *host.Instance
-	instances  map[string]*instance
+	opt          Options
+	operations   sync.Mutex // 串行化 Bind、Unbind 与实例启停
+	mu           sync.Mutex // 保护 session、instances 与实例状态；RPC 期间释放
+	session      *host.Instance
+	caller       router.Caller // 与当前 Session 的 Mux.For 使用相同身份，由 mu 保护
+	instances    map[string]*instance
+	declarations declarations // 当前绑定 Session 的声明缓存，由 mu 保护
 }
 
 // instance 保存远端账号身份与启停状态；可变字段统一由 Process.mu 保护。
@@ -61,17 +64,25 @@ type instance struct {
 	capabilities []*pb.Capability
 	dropped      uint64        // 事件队列满时累计丢弃数
 	session      *wire.Session // 本次运行所属 Session，旧 Registry 引用不得切到新 Session
+	sessionKey   string        // 实例创建时绑定，Session 更换后旧实例仍保留旧值
 }
 
 // New 创建尚未绑定 Session 的 Adapter 包进程管理器。
 func New(opt Options) *Process { return &Process{opt: opt, instances: make(map[string]*instance)} }
 
 // Bind 绑定已激活的新 Session，并按保存的配置恢复全部已启用实例。
-func (p *Process) Bind(ctx context.Context, in *host.Instance) error {
+// caller 必须与为该 Session 装配 Mux.For 时使用的身份相同。
+func (p *Process) Bind(ctx context.Context, in *host.Instance, caller router.Caller) error {
 	p.operations.Lock()
 	defer p.operations.Unlock()
+	declarations, err := compileDeclarations(in.Adapter)
+	if err != nil {
+		return err
+	}
 	p.mu.Lock()
 	p.session = in
+	p.caller = caller
+	p.declarations = declarations
 	var enabled []*instance
 	for _, entry := range p.instances {
 		if entry.enabled {
@@ -93,10 +104,11 @@ func (p *Process) Unbind() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.session = nil
+	p.declarations = declarations{}
 	for _, entry := range p.instances {
 		if entry.running {
 			if err := p.offline(context.Background(), entry, pb.BotOfflineReason_BOT_OFFLINE_REASON_ADAPTER_EXITED, nil); err != nil {
-				p.opt.Log.Error("deliver adapter offline event failed", "plugin_id", p.opt.PluginID, "instance_id", entry.id, "error", err)
+				slog.Error("deliver adapter offline event failed", "plugin_id", p.opt.PluginID, "instance_id", entry.id, "error", err)
 			}
 		}
 	}
@@ -163,7 +175,15 @@ func (p *Process) start(ctx context.Context, id string, config []byte) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	entry := &instance{needsStop: true, process: p, id: id, config: append([]byte(nil), config...), enabled: true, running: true, account: response.AccountId, displayName: response.AccountDisplayName, username: response.GetAccountUsername(), capabilities: response.Capabilities, session: bound.Session}
-	if err := p.opt.Registry.Add(entry); err != nil {
+	entry.sessionKey = p.caller.SessionKey
+	var registered adapter.Instance = entry
+	for _, capability := range entry.capabilities {
+		if capability.GetName() == mediaReadCapability && capability.GetVersion() == 1 && capability.GetSupported() {
+			registered = &mediaInstance{instance: entry}
+			break
+		}
+	}
+	if err := p.opt.Registry.Add(registered); err != nil {
 		p.mu.Unlock()
 		stopErr := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: id}, &pb.AdapterInstanceStopResponse{})
 		p.mu.Lock()
@@ -227,10 +247,11 @@ func (p *Process) event(entry *instance, eventType string) *pb.Event {
 
 // deliver 在调用方持有状态锁时投递，队列满只记丢弃；其他错误保留给调用方。
 func (p *Process) deliver(ctx context.Context, entry *instance, ev *pb.Event) error {
+	p.registerIncoming(entry.id, ev)
 	err := p.opt.Sink.Deliver(ctx, ev)
 	if errors.Is(err, adapter.ErrQueueFull) {
 		entry.dropped++
-		p.opt.Log.Warn("adapter event dropped", "plugin_id", p.opt.PluginID, "instance_id", entry.id, "dropped", entry.dropped)
+		slog.Warn("adapter event dropped", "plugin_id", p.opt.PluginID, "instance_id", entry.id, "dropped", entry.dropped)
 		return adapter.ErrQueueFull
 	}
 	return err

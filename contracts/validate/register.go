@@ -72,6 +72,13 @@ func Register(r *pb.Register) error {
 		case routeKindOf(rd) != rd.GetKind():
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q has kind %s, which does not match its spec", id, rd.GetKind())
 		}
+		permissions := make(map[string]bool, len(rd.GetRequiredPermissions()))
+		for _, permission := range rd.GetRequiredPermissions() {
+			if !IsPermissionName(permission) || permissions[permission] {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q has invalid or duplicate required permission %q", id, permission)
+			}
+			permissions[permission] = true
+		}
 		seen[id] = true
 		hasHTTP = hasHTTP || rd.GetKind() == pb.RouteKind_ROUTE_KIND_HTTP
 	}
@@ -138,7 +145,7 @@ func Register(r *pb.Register) error {
 			}
 			seenEvents := make(map[string]bool, len(filters))
 			for _, eventType := range filters {
-				if !IsEventType(eventType) {
+				if !IsEventType(eventType) && !IsAdapterEventType(eventType) {
 					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "event route %q has unknown event type %q", route.GetRouteId(), eventType)
 				}
 				if seenEvents[eventType] {
@@ -203,6 +210,10 @@ func registerCommand(command *pb.CommandSpec, routeID string) error {
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "text or raw route %q contains command parameters", routeID)
 	}
 
+	if command.GetUsageMode() == pb.UsageMode_USAGE_MODE_CUSTOM && command.GetUsageKey() == "" {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q has no usage_key for custom usage", routeID)
+	}
+
 	// 2. 参数名对应调用载荷中的绑定键，顺序、类型与缺失值均须可执行。
 	names := make(map[string]bool, len(command.GetParams()))
 	optional := false
@@ -222,6 +233,9 @@ func registerCommand(command *pb.CommandSpec, routeID string) error {
 		if param.GetRaw() && (param.GetType() != pb.ParamType_PARAM_TYPE_STRING || i != len(command.GetParams())-1) {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q raw parameter %q must be the last string parameter", routeID, name)
 		}
+		if param.GetType() == pb.ParamType_PARAM_TYPE_MESSAGE && i != len(command.GetParams())-1 {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q message parameter %q must be last", routeID, name)
+		}
 		if param.DefaultValue != nil {
 			if err := commandDefault(param); err != nil {
 				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "command route %q parameter %q has invalid default: %v", routeID, name, err)
@@ -234,6 +248,8 @@ func registerCommand(command *pb.CommandSpec, routeID string) error {
 func commandDefault(param *pb.CommandParam) error {
 	value := param.GetDefaultValue()
 	switch param.GetType() {
+	case pb.ParamType_PARAM_TYPE_USER, pb.ParamType_PARAM_TYPE_IMAGE, pb.ParamType_PARAM_TYPE_MESSAGE:
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "parameter type %s does not accept a default", param.GetType())
 	case pb.ParamType_PARAM_TYPE_INT:
 		_, err := strconv.ParseInt(value, 10, 64)
 		return err

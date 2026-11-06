@@ -48,11 +48,24 @@
 - 限额、超时、重试、截断和降级必须有契约要求或可复现的故障依据。新依赖要先说明必要性和替代方案，取得维护者同意后才加。
 - `cmd/alonabot` 只负责解析参数和装配；协议、数据库和进程逻辑留在各自的包里。
 
+## 日志用默认 Logger，依赖显式传递
+
+Core 进程只有一个日志出口，使用 Go 标准库 `log/slog`，字段、格式和级别遵循 CONTRACTS §14。
+
+- `cmd/alonabot` 在 `logging.Open` 成功后立即调用 `slog.SetDefault(out.Logger())`，然后再构造 Core 组件。`internal/core` 下的包在记录处调用 `slog.Info`、`slog.Warn`、`slog.Error`、`slog.With` 等包函数；不在构造函数、结构字段或包级变量里保存 `slog.Default()` 或它的 `With` 结果。
+- 不为日志新增构造参数、Options 字段、结构字段或 context 值。组件进程的日志使用 SDK 设置的默认 Logger。
+- 以下依赖继续显式传递：
+  - 有状态、按 `data_dir` 区分的 `*state.Store`、`*adapter.Registry`、`*router.Router`、`*policy.Policy` 及各包的 Limits：它们属于具体的 Core 实例，状态与限额需要随该实例装配。
+  - `*wire.Budget`：`internal/wire` 由 Core 与 SDK 共用，插件侧为 nil，库模式下两边在同一进程，显式参数区分各自的预算归属。
+  - 需要在测试中推进时间的时钟（构造参数 `now` 或 `Options.Now`）：测试需要控制同一被测实例的时间。
+  - `supervisor.Spec.Log`：它接收单个插件进程的输出，按该进程绑定来源与会话，保留独立的输出回调。
+- 测试需要读取 Core 日志时，在构造被测对象之前用 `slog.SetDefault` 指向捕获用的 Handler，并用 `t.Cleanup` 恢复原值；这类测试不调用 `t.Parallel`。
+
 ## 首次发布前不写兼容层
 
 v0.1 首次发布前，没有需要兼容的旧状态库、旧调用方或旧插件。改动直接写成最终形态，不为开发中的旧状态留过渡代码。
 
-- Core 状态库（`state.sqlite`）只有一条初始迁移。新表、新列和约束直接写进 `internal/core/state` 中 `migrations` 的第一条；不追加迁移，不用 `ALTER TABLE` 加列，不为旧行补默认值或回填。本地的开发状态库在 schema 变化后删除重建。
+- Core 状态库（`state.sqlite`）只有一条初始迁移。新表、新列和约束直接写进 `internal/core/state/schema.sql`；不追加迁移，不用 `ALTER TABLE` 加列，不为旧行补默认值或回填。本地的开发状态库在 schema 变化后删除重建。
 - 修改函数签名、结构字段或其语义时，同一次改动更新全部调用方。不为了让已有调用方免改，把新字段的零值解释为旧行为（例如「空值沿用插件角色」）；不保留旧名的别名、包装函数或 `Deprecated` 标记。
 - 只约束仓库自身的代码与状态库。插件受管 SQLite 的迁移接口、配置的 `config_version` 转换是面向插件作者的产品功能，照契约实现；protoc-gen-go 在生成文件里写的 `Deprecated: Use ... Descriptor instead` 是生成器样板，不属于兼容层。
 - 首次发布时再规定状态库只追加迁移的规则，并在此处更新。
@@ -67,7 +80,8 @@ Core 状态库（`internal/core/state`）经 GORM 读写，业务的增删改查
 - 按主键覆盖写入用 `clause.OnConflict{UpdateAll: true}`，重复插入时不做事用 `clause.OnConflict{DoNothing: true}`，不列出冲突列和更新列。
 - 更新在事务内按主键读出行，在 Go 中检查条件（例如「尚未提交」），修改字段后 `Save`；不用结构体 `Updates` 写 false、0 等零值。全表更新用 `Session(&gorm.Session{AllowGlobalUpdate: true})`，不写 `Where("1 = 1")`。
 - 范围条件、排序与取最大值用 `clause` 结构（`clause.Gte`、`clause.OrderByColumn` 等），列名写成包内常量；取最大值按该列降序取一行，不写 `max()`、`coalesce()`。能在 Go 中完成的排序与聚合不写进查询。不引入 GORM CLI 等查询代码生成工具。
-- 初始迁移的建表语句、PRAGMA 回读与打开前的只读预检属于 schema 与连接管理，可以写 SQL。
+- DDL 不写在 Go 代码里。建表、索引等语句放在包内的 `*.sql` 文件中，用 `//go:embed` 读入后执行；初始迁移即 `internal/core/state/schema.sql`。测试为构造异常文件临时建的表不在此列。
+- PRAGMA 回读与打开前的只读预检属于连接管理，可以在 Go 代码里写 SQL。
 - 只约束 Core。插件经 `sdk/sqlitedb` 使用 `database/sql` 是面向插件作者的产品功能（D-49），官方插件按[插件开发规范](plugin-guide.md)选择入口。
 
 ## 程序输出用英文

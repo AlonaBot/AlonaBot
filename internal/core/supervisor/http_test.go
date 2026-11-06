@@ -45,8 +45,8 @@ func TestHTTPProcesses(t *testing.T) {
 	store, spec := setup(t, binary)
 	spec.Stop = host.StopTiming{Drain: 100 * time.Millisecond, Total: 2 * time.Second, OnStopAt: 1500 * time.Millisecond}
 	spec.ExtraEnv = map[string]string{"HTTP_PROXY": "http://proxy.example:8080", "HTTPS_PROXY": "http://proxy.example:8080", "NO_PROXY": "localhost"}
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	proxy := httpproxy.New(log, nil)
+	setDefaultLogger(t, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	proxy := httpproxy.New(nil)
 	launch := func() *Running {
 		t.Helper()
 		running, err := Launch(context.Background(), store, spec)
@@ -110,7 +110,7 @@ func TestHTTPProcesses(t *testing.T) {
 	for _, path := range []string{"/static/file", "/static/../hello", "/static/%2e%2e/hello"} {
 		send(proxy, "GET", path, 200)
 	}
-	allowed := httpproxy.New(log, allowHTTP{})
+	allowed := httpproxy.New(allowHTTP{})
 	bind(allowed, first)
 	before := send(allowed, "GET", "/hello", 200).Calls
 	address := net.JoinHostPort(first.Instance.HTTPListener.Host, fmt.Sprint(first.Instance.HTTPListener.Port))

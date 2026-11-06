@@ -314,6 +314,9 @@ type ArgValue struct {
 	//	*ArgValue_IntValue
 	//	*ArgValue_FloatValue
 	//	*ArgValue_BoolValue
+	//	*ArgValue_UserId
+	//	*ArgValue_Image
+	//	*ArgValue_Message
 	Value         isArgValue_Value `protobuf_oneof:"value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -399,6 +402,33 @@ func (x *ArgValue) GetBoolValue() bool {
 	return false
 }
 
+func (x *ArgValue) GetUserId() string {
+	if x != nil {
+		if x, ok := x.Value.(*ArgValue_UserId); ok {
+			return x.UserId
+		}
+	}
+	return ""
+}
+
+func (x *ArgValue) GetImage() *ImageSegment {
+	if x != nil {
+		if x, ok := x.Value.(*ArgValue_Image); ok {
+			return x.Image
+		}
+	}
+	return nil
+}
+
+func (x *ArgValue) GetMessage() *MessageChain {
+	if x != nil {
+		if x, ok := x.Value.(*ArgValue_Message); ok {
+			return x.Message
+		}
+	}
+	return nil
+}
+
 type isArgValue_Value interface {
 	isArgValue_Value()
 }
@@ -423,6 +453,21 @@ type ArgValue_BoolValue struct {
 	BoolValue bool `protobuf:"varint,5,opt,name=bool_value,json=boolValue,proto3,oneof"`
 }
 
+type ArgValue_UserId struct {
+	// USER 参数的 external_user_id。
+	UserId string `protobuf:"bytes,6,opt,name=user_id,json=userId,proto3,oneof"`
+}
+
+type ArgValue_Image struct {
+	// IMAGE 参数，保留原片段的媒体来源。
+	Image *ImageSegment `protobuf:"bytes,7,opt,name=image,proto3,oneof"`
+}
+
+type ArgValue_Message struct {
+	// MESSAGE 参数保留剩余片段的顺序。
+	Message *MessageChain `protobuf:"bytes,8,opt,name=message,proto3,oneof"`
+}
+
 func (*ArgValue_StringValue) isArgValue_Value() {}
 
 func (*ArgValue_IntValue) isArgValue_Value() {}
@@ -430,6 +475,12 @@ func (*ArgValue_IntValue) isArgValue_Value() {}
 func (*ArgValue_FloatValue) isArgValue_Value() {}
 
 func (*ArgValue_BoolValue) isArgValue_Value() {}
+
+func (*ArgValue_UserId) isArgValue_Value() {}
+
+func (*ArgValue_Image) isArgValue_Value() {}
+
+func (*ArgValue_Message) isArgValue_Value() {}
 
 // ServiceInvocation 描述 Core→目标插件的 Service 调用载荷：可信上下文与业务载荷分开，业务载荷按服务声明的编码与
 // input schema 解释。服务响应直接把业务载荷放进 Envelope（output schema）。
@@ -974,7 +1025,7 @@ const file_alonabot_v1_invocation_proto_rawDesc = "" +
 	"\x04args\x18\x02 \x03(\v2\x15.alonabot.v1.ArgValueR\x04args\x12\x1e\n" +
 	"\braw_tail\x18\x03 \x01(\tH\x00R\arawTail\x88\x01\x01\x12!\n" +
 	"\fregex_groups\x18\x04 \x03(\tR\vregexGroupsB\v\n" +
-	"\t_raw_tail\"\xaf\x01\n" +
+	"\t_raw_tail\"\xb4\x02\n" +
 	"\bArgValue\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12#\n" +
 	"\fstring_value\x18\x02 \x01(\tH\x00R\vstringValue\x12\x1d\n" +
@@ -982,7 +1033,10 @@ const file_alonabot_v1_invocation_proto_rawDesc = "" +
 	"\vfloat_value\x18\x04 \x01(\x01H\x00R\n" +
 	"floatValue\x12\x1f\n" +
 	"\n" +
-	"bool_value\x18\x05 \x01(\bH\x00R\tboolValueB\a\n" +
+	"bool_value\x18\x05 \x01(\bH\x00R\tboolValue\x12\x19\n" +
+	"\auser_id\x18\x06 \x01(\tH\x00R\x06userId\x121\n" +
+	"\x05image\x18\a \x01(\v2\x19.alonabot.v1.ImageSegmentH\x00R\x05image\x125\n" +
+	"\amessage\x18\b \x01(\v2\x19.alonabot.v1.MessageChainH\x00R\amessageB\a\n" +
 	"\x05value\"\x80\x02\n" +
 	"\x11ServiceInvocation\x12\x19\n" +
 	"\broute_id\x18\x01 \x01(\tR\arouteId\x128\n" +
@@ -1053,11 +1107,12 @@ var file_alonabot_v1_invocation_proto_goTypes = []any{
 	(*Actor)(nil),             // 13: alonabot.v1.Actor
 	(*Target)(nil),            // 14: alonabot.v1.Target
 	(*Event)(nil),             // 15: alonabot.v1.Event
-	(PayloadEncoding)(0),      // 16: alonabot.v1.PayloadEncoding
+	(*ImageSegment)(nil),      // 16: alonabot.v1.ImageSegment
 	(*MessageChain)(nil),      // 17: alonabot.v1.MessageChain
-	(*EventPayload)(nil),      // 18: alonabot.v1.EventPayload
-	(*SendResult)(nil),        // 19: alonabot.v1.SendResult
-	(*ErrorInfo)(nil),         // 20: alonabot.v1.ErrorInfo
+	(PayloadEncoding)(0),      // 18: alonabot.v1.PayloadEncoding
+	(*EventPayload)(nil),      // 19: alonabot.v1.EventPayload
+	(*SendResult)(nil),        // 20: alonabot.v1.SendResult
+	(*ErrorInfo)(nil),         // 21: alonabot.v1.ErrorInfo
 }
 var file_alonabot_v1_invocation_proto_depIdxs = []int32{
 	13, // 0: alonabot.v1.InvocationContext.actor:type_name -> alonabot.v1.Actor
@@ -1066,28 +1121,30 @@ var file_alonabot_v1_invocation_proto_depIdxs = []int32{
 	15, // 3: alonabot.v1.HandlerRequest.event:type_name -> alonabot.v1.Event
 	3,  // 4: alonabot.v1.HandlerRequest.command:type_name -> alonabot.v1.CommandInvocation
 	4,  // 5: alonabot.v1.CommandInvocation.args:type_name -> alonabot.v1.ArgValue
-	1,  // 6: alonabot.v1.ServiceInvocation.context:type_name -> alonabot.v1.InvocationContext
-	16, // 7: alonabot.v1.ServiceInvocation.encoding:type_name -> alonabot.v1.PayloadEncoding
-	0,  // 8: alonabot.v1.HandlerOutcome.propagation:type_name -> alonabot.v1.Propagation
-	17, // 9: alonabot.v1.HandlerOutcome.chain:type_name -> alonabot.v1.MessageChain
-	1,  // 10: alonabot.v1.PreEventRequest.context:type_name -> alonabot.v1.InvocationContext
-	15, // 11: alonabot.v1.PreEventRequest.event:type_name -> alonabot.v1.Event
-	18, // 12: alonabot.v1.PreEventResult.event_payload:type_name -> alonabot.v1.EventPayload
-	0,  // 13: alonabot.v1.PreEventResult.propagation:type_name -> alonabot.v1.Propagation
-	1,  // 14: alonabot.v1.BeforeSendRequest.context:type_name -> alonabot.v1.InvocationContext
-	14, // 15: alonabot.v1.BeforeSendRequest.target:type_name -> alonabot.v1.Target
-	17, // 16: alonabot.v1.BeforeSendRequest.chain:type_name -> alonabot.v1.MessageChain
-	17, // 17: alonabot.v1.BeforeSendResult.chain:type_name -> alonabot.v1.MessageChain
-	1,  // 18: alonabot.v1.AfterSendRequest.context:type_name -> alonabot.v1.InvocationContext
-	14, // 19: alonabot.v1.AfterSendRequest.target:type_name -> alonabot.v1.Target
-	17, // 20: alonabot.v1.AfterSendRequest.chain:type_name -> alonabot.v1.MessageChain
-	19, // 21: alonabot.v1.AfterSendRequest.result:type_name -> alonabot.v1.SendResult
-	20, // 22: alonabot.v1.AfterSendRequest.error:type_name -> alonabot.v1.ErrorInfo
-	23, // [23:23] is the sub-list for method output_type
-	23, // [23:23] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	16, // 6: alonabot.v1.ArgValue.image:type_name -> alonabot.v1.ImageSegment
+	17, // 7: alonabot.v1.ArgValue.message:type_name -> alonabot.v1.MessageChain
+	1,  // 8: alonabot.v1.ServiceInvocation.context:type_name -> alonabot.v1.InvocationContext
+	18, // 9: alonabot.v1.ServiceInvocation.encoding:type_name -> alonabot.v1.PayloadEncoding
+	0,  // 10: alonabot.v1.HandlerOutcome.propagation:type_name -> alonabot.v1.Propagation
+	17, // 11: alonabot.v1.HandlerOutcome.chain:type_name -> alonabot.v1.MessageChain
+	1,  // 12: alonabot.v1.PreEventRequest.context:type_name -> alonabot.v1.InvocationContext
+	15, // 13: alonabot.v1.PreEventRequest.event:type_name -> alonabot.v1.Event
+	19, // 14: alonabot.v1.PreEventResult.event_payload:type_name -> alonabot.v1.EventPayload
+	0,  // 15: alonabot.v1.PreEventResult.propagation:type_name -> alonabot.v1.Propagation
+	1,  // 16: alonabot.v1.BeforeSendRequest.context:type_name -> alonabot.v1.InvocationContext
+	14, // 17: alonabot.v1.BeforeSendRequest.target:type_name -> alonabot.v1.Target
+	17, // 18: alonabot.v1.BeforeSendRequest.chain:type_name -> alonabot.v1.MessageChain
+	17, // 19: alonabot.v1.BeforeSendResult.chain:type_name -> alonabot.v1.MessageChain
+	1,  // 20: alonabot.v1.AfterSendRequest.context:type_name -> alonabot.v1.InvocationContext
+	14, // 21: alonabot.v1.AfterSendRequest.target:type_name -> alonabot.v1.Target
+	17, // 22: alonabot.v1.AfterSendRequest.chain:type_name -> alonabot.v1.MessageChain
+	20, // 23: alonabot.v1.AfterSendRequest.result:type_name -> alonabot.v1.SendResult
+	21, // 24: alonabot.v1.AfterSendRequest.error:type_name -> alonabot.v1.ErrorInfo
+	25, // [25:25] is the sub-list for method output_type
+	25, // [25:25] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_invocation_proto_init() }
@@ -1105,6 +1162,9 @@ func file_alonabot_v1_invocation_proto_init() {
 		(*ArgValue_IntValue)(nil),
 		(*ArgValue_FloatValue)(nil),
 		(*ArgValue_BoolValue)(nil),
+		(*ArgValue_UserId)(nil),
+		(*ArgValue_Image)(nil),
+		(*ArgValue_Message)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

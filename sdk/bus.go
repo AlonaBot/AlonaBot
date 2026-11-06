@@ -36,7 +36,7 @@ func Subscribe[T any](r *SubscriptionRegistry, routeID, eventName, schemaID stri
 		return
 	}
 	r.subscriptions = append(r.subscriptions, subscriptionRoute{descriptor: &pb.RouteDescriptor{
-		RouteId: routeID, Kind: pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION, DefaultEnabled: true, RequiredPermission: pb.Permission_PERMISSION_ANY,
+		RouteId: routeID, Kind: pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION, DefaultEnabled: true,
 		Spec: &pb.RouteDescriptor_BusSubscription{BusSubscription: &pb.BusSubscriptionSpec{EventName: eventName, SchemaId: schemaID, SchemaVersion: version, CallbackRouteId: routeID}},
 	}, invoke: func(c *Context, payload []byte) error {
 		var input T
@@ -60,7 +60,7 @@ func collectSubscriptions(root Root, reg *Registration) error {
 	r.errs = append(r.errs, validate.Register(registration))
 	// 复用实际 REGISTER 的 route_id 生成规则，核对与其他注册器的冲突；HTTP Listener 此时尚未创建。
 	seen := make(map[string]bool)
-	for _, route := range buildRegister(reg, "{}", 0).GetRoutes() {
+	for _, route := range buildRegister(reg, "{}", 0, nil).GetRoutes() {
 		if route.GetKind() != pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION {
 			seen[route.GetRouteId()] = true
 		}

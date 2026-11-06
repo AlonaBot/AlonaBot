@@ -122,7 +122,7 @@ func (r *ServiceRegistry) add(name, schemaIn, schemaOut string, version uint32, 
 		access = pb.ServiceAccess_SERVICE_ACCESS_PUBLIC
 	}
 	r.services = append(r.services, serviceRoute{descriptor: &pb.RouteDescriptor{
-		RouteId: serviceRoutePrefix + name, Kind: pb.RouteKind_ROUTE_KIND_SERVICE, DefaultEnabled: true, RequiredPermission: pb.Permission_PERMISSION_ANY,
+		RouteId: serviceRoutePrefix + name, Kind: pb.RouteKind_ROUTE_KIND_SERVICE, DefaultEnabled: true,
 		InputSchemaId: schemaIn, InputSchemaVersion: version, OutputSchemaId: schemaOut, OutputSchemaVersion: version,
 		Spec: &pb.RouteDescriptor_Service{Service: &pb.ServiceSpec{ServiceName: name, Access: access, AllowlistPluginIds: options.allowlist, Encoding: encoding}},
 	}, invoke: invoke})

@@ -49,19 +49,10 @@ enum RouteKind {
   ROUTE_KIND_BUS_SUBSCRIPTION = 7;
 }
 
-// Permission 列出调用路由所需的最低权限。
-enum Permission {
-  PERMISSION_UNSPECIFIED = 0;
-  // 不要求 Actor（例如非用户触发的事件）。
-  PERMISSION_ANY = 1;
-  // 具有可信 Actor 的普通用户。
-  PERMISSION_USER = 2;
-  // Core 配置的机器人管理员。
-  PERMISSION_ADMIN = 3;
-}
-
 // RouteDescriptor 描述一条路由的公共描述；target 为 plugin_id/route_id，kind 必须与 spec 分支一致。
 message RouteDescriptor {
+  reserved 5;
+  reserved "required_permission";
   // 插件内唯一、跨版本保持业务含义稳定的路由 ID。
   string route_id = 1;
   // 路由类别。
@@ -70,8 +61,6 @@ message RouteDescriptor {
   int32 priority = 3;
   // 安装后默认是否启用。
   bool default_enabled = 4;
-  // 调用所需的最低权限。
-  Permission required_permission = 5;
   // 请求载荷的契约 ID。
   string input_schema_id = 6;
   // 请求载荷的契约版本。
@@ -97,6 +86,8 @@ message RouteDescriptor {
     // BUS_SUBSCRIPTION。
     BusSubscriptionSpec bus_subscription = 16;
   }
+  // 触发者满足其中任一权限即可；空集合不要求 Actor。
+  repeated string required_permissions = 17;
 }
 
 // HandlerMode 列出 Handler 的签名形态。
@@ -110,16 +101,16 @@ enum HandlerMode {
 
 // RuleDescriptor 描述路由的匹配条件：Core 可表达的条件先执行，自定义 Go Rule 在同一 Handler REQUEST 内由 SDK 执行。
 message RuleDescriptor {
+  reserved 2;
+  reserved "require_chat_admin";
   // 是否有需要 SDK 执行的自定义 Rule。
   bool has_custom_rule = 1;
-  // 是否要求触发者是平台群管理员。
-  bool require_chat_admin = 2;
 }
 
 // CommandMatch 列出命令的匹配方式。
 enum CommandMatch {
   COMMAND_MATCH_UNSPECIFIED = 0;
-  // `/` 前缀完整 token 路径。
+  // 按实例配置的前缀与完整 token 路径。
   COMMAND_MATCH_PATH = 1;
   // 按正则匹配整条消息。
   COMMAND_MATCH_REGEX = 2;
@@ -142,12 +133,14 @@ enum UsageMode {
   USAGE_MODE_DEFAULT = 1;
   // 不提示。
   USAGE_MODE_SILENT = 2;
-  // 发送 custom_usage。
+  // 使用 usage_key 指向的文案。
   USAGE_MODE_CUSTOM = 3;
 }
 
 // CommandSpec 描述命令路由的专属描述。
 message CommandSpec {
+  reserved 9;
+  reserved "custom_usage";
   // 匹配方式。
   CommandMatch match = 1;
   // PATH：规范命令路径 token，大小写敏感。
@@ -164,12 +157,12 @@ message CommandSpec {
   string regex = 7;
   // 参数错误时的用法提示方式。
   UsageMode usage_mode = 8;
-  // USAGE_MODE_CUSTOM 时发送的文本。
-  string custom_usage = 9;
   // KEYWORD、STARTSWITH、ENDSWITH、FULLMATCH：非空模式列表。
   repeated string patterns = 10;
   // 文本模式比较采用 Unicode 简单大小写折叠。
   bool ignore_case = 11;
+  // USAGE_MODE_CUSTOM：插件 i18/ 中 messages 的文案键。
+  string usage_key = 12;
 }
 
 // CommandAlias 描述命令的一条别名路径。
@@ -188,6 +181,12 @@ enum ParamType {
   PARAM_TYPE_FLOAT = 3;
   // 只接受 true/false。
   PARAM_TYPE_BOOL = 4;
+  // mention 或 text_mention 实体指向的用户。
+  PARAM_TYPE_USER = 5;
+  // 图片片段，保留 incoming_ref。
+  PARAM_TYPE_IMAGE = 6;
+  // 末位参数接收剩余的完整消息片段，与 raw 互斥。
+  PARAM_TYPE_MESSAGE = 7;
 }
 
 // CommandParam 描述一个命令参数；必需参数在可选参数之前，raw 只能是最后一个 string 参数。

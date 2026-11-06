@@ -23,62 +23,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// TrustedRole 列出 Core 认定的可信角色。
-type TrustedRole int32
-
-const (
-	TrustedRole_TRUSTED_ROLE_UNSPECIFIED TrustedRole = 0
-	// 具有可信个人身份的普通用户。
-	TrustedRole_TRUSTED_ROLE_USER TrustedRole = 1
-	// Core 按 adapter_instance_id/external_user_id 配置的机器人管理员。
-	TrustedRole_TRUSTED_ROLE_ADMIN TrustedRole = 2
-	// 平台群管理员，只用于 chat_admin Rule，不赋予 Core 管理权。
-	TrustedRole_TRUSTED_ROLE_CHAT_ADMIN TrustedRole = 3
-)
-
-// Enum value maps for TrustedRole.
-var (
-	TrustedRole_name = map[int32]string{
-		0: "TRUSTED_ROLE_UNSPECIFIED",
-		1: "TRUSTED_ROLE_USER",
-		2: "TRUSTED_ROLE_ADMIN",
-		3: "TRUSTED_ROLE_CHAT_ADMIN",
-	}
-	TrustedRole_value = map[string]int32{
-		"TRUSTED_ROLE_UNSPECIFIED": 0,
-		"TRUSTED_ROLE_USER":        1,
-		"TRUSTED_ROLE_ADMIN":       2,
-		"TRUSTED_ROLE_CHAT_ADMIN":  3,
-	}
-)
-
-func (x TrustedRole) Enum() *TrustedRole {
-	p := new(TrustedRole)
-	*p = x
-	return p
-}
-
-func (x TrustedRole) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (TrustedRole) Descriptor() protoreflect.EnumDescriptor {
-	return file_alonabot_v1_identity_proto_enumTypes[0].Descriptor()
-}
-
-func (TrustedRole) Type() protoreflect.EnumType {
-	return &file_alonabot_v1_identity_proto_enumTypes[0]
-}
-
-func (x TrustedRole) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use TrustedRole.Descriptor instead.
-func (TrustedRole) EnumDescriptor() ([]byte, []int) {
-	return file_alonabot_v1_identity_proto_rawDescGZIP(), []int{0}
-}
-
 // Target 描述一次发送的平台目标，唯一定位到某个 Adapter 实例下的会话或话题。
 type Target struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -170,10 +114,10 @@ type Actor struct {
 	AdapterInstanceId string `protobuf:"bytes,2,opt,name=adapter_instance_id,json=adapterInstanceId,proto3" json:"adapter_instance_id,omitempty"`
 	// 展示名；平台没有提供时缺省。
 	DisplayName *string `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
-	// Core 认定的角色集合。
-	TrustedRoles []TrustedRole `protobuf:"varint,4,rep,packed,name=trusted_roles,json=trustedRoles,proto3,enum=alonabot.v1.TrustedRole" json:"trusted_roles,omitempty"`
 	// 平台提供的语言，按 BCP 47 规范化；未提供时缺省。
-	Locale        *string `protobuf:"bytes,5,opt,name=locale,proto3,oneof" json:"locale,omitempty"`
+	Locale *string `protobuf:"bytes,5,opt,name=locale,proto3,oneof" json:"locale,omitempty"`
+	// Core 计算的权限名集合；Adapter 只提供已声明的平台权限。
+	Permissions   []string `protobuf:"bytes,6,rep,name=permissions,proto3" json:"permissions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -229,18 +173,18 @@ func (x *Actor) GetDisplayName() string {
 	return ""
 }
 
-func (x *Actor) GetTrustedRoles() []TrustedRole {
-	if x != nil {
-		return x.TrustedRoles
-	}
-	return nil
-}
-
 func (x *Actor) GetLocale() string {
 	if x != nil && x.Locale != nil {
 		return *x.Locale
 	}
 	return ""
+}
+
+func (x *Actor) GetPermissions() []string {
+	if x != nil {
+		return x.Permissions
+	}
+	return nil
 }
 
 // Capability 描述 Adapter 公布的一项平台能力；未知能力不推定支持。
@@ -321,25 +265,20 @@ const file_alonabot_v1_identity_proto_rawDesc = "" +
 	"\achat_id\x18\x04 \x01(\tR\x06chatId\x12 \n" +
 	"\tthread_id\x18\x05 \x01(\tH\x00R\bthreadId\x88\x01\x01B\f\n" +
 	"\n" +
-	"_thread_id\"\x81\x02\n" +
+	"_thread_id\"\xf9\x01\n" +
 	"\x05Actor\x12(\n" +
 	"\x10external_user_id\x18\x01 \x01(\tR\x0eexternalUserId\x12.\n" +
 	"\x13adapter_instance_id\x18\x02 \x01(\tR\x11adapterInstanceId\x12&\n" +
-	"\fdisplay_name\x18\x03 \x01(\tH\x00R\vdisplayName\x88\x01\x01\x12=\n" +
-	"\rtrusted_roles\x18\x04 \x03(\x0e2\x18.alonabot.v1.TrustedRoleR\ftrustedRoles\x12\x1b\n" +
-	"\x06locale\x18\x05 \x01(\tH\x01R\x06locale\x88\x01\x01B\x0f\n" +
+	"\fdisplay_name\x18\x03 \x01(\tH\x00R\vdisplayName\x88\x01\x01\x12\x1b\n" +
+	"\x06locale\x18\x05 \x01(\tH\x01R\x06locale\x88\x01\x01\x12 \n" +
+	"\vpermissions\x18\x06 \x03(\tR\vpermissionsB\x0f\n" +
 	"\r_display_nameB\t\n" +
-	"\a_locale\"X\n" +
+	"\a_localeJ\x04\b\x04\x10\x05R\rtrusted_roles\"X\n" +
 	"\n" +
 	"Capability\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\rR\aversion\x12\x1c\n" +
-	"\tsupported\x18\x03 \x01(\bR\tsupported*w\n" +
-	"\vTrustedRole\x12\x1c\n" +
-	"\x18TRUSTED_ROLE_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11TRUSTED_ROLE_USER\x10\x01\x12\x16\n" +
-	"\x12TRUSTED_ROLE_ADMIN\x10\x02\x12\x1b\n" +
-	"\x17TRUSTED_ROLE_CHAT_ADMIN\x10\x03B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
+	"\tsupported\x18\x03 \x01(\bR\tsupportedB6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
 
 var (
 	file_alonabot_v1_identity_proto_rawDescOnce sync.Once
@@ -353,21 +292,18 @@ func file_alonabot_v1_identity_proto_rawDescGZIP() []byte {
 	return file_alonabot_v1_identity_proto_rawDescData
 }
 
-var file_alonabot_v1_identity_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_alonabot_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_alonabot_v1_identity_proto_goTypes = []any{
-	(TrustedRole)(0),   // 0: alonabot.v1.TrustedRole
-	(*Target)(nil),     // 1: alonabot.v1.Target
-	(*Actor)(nil),      // 2: alonabot.v1.Actor
-	(*Capability)(nil), // 3: alonabot.v1.Capability
+	(*Target)(nil),     // 0: alonabot.v1.Target
+	(*Actor)(nil),      // 1: alonabot.v1.Actor
+	(*Capability)(nil), // 2: alonabot.v1.Capability
 }
 var file_alonabot_v1_identity_proto_depIdxs = []int32{
-	0, // 0: alonabot.v1.Actor.trusted_roles:type_name -> alonabot.v1.TrustedRole
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	0, // [0:0] is the sub-list for method output_type
+	0, // [0:0] is the sub-list for method input_type
+	0, // [0:0] is the sub-list for extension type_name
+	0, // [0:0] is the sub-list for extension extendee
+	0, // [0:0] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_identity_proto_init() }
@@ -382,14 +318,13 @@ func file_alonabot_v1_identity_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_identity_proto_rawDesc), len(file_alonabot_v1_identity_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      0,
 			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_alonabot_v1_identity_proto_goTypes,
 		DependencyIndexes: file_alonabot_v1_identity_proto_depIdxs,
-		EnumInfos:         file_alonabot_v1_identity_proto_enumTypes,
 		MessageInfos:      file_alonabot_v1_identity_proto_msgTypes,
 	}.Build()
 	File_alonabot_v1_identity_proto = out.File

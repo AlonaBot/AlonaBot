@@ -84,6 +84,7 @@ func TestEnumValues(t *testing.T) {
 		{pb.RouteKind(0).Descriptor(), "ROUTE_KIND_", []string{
 			"UNSPECIFIED", "COMMAND", "EVENT", "HOOK", "SERVICE", "SCHEDULE", "HTTP", "BUS_SUBSCRIPTION"}},
 		{pb.HookPhase(0).Descriptor(), "HOOK_PHASE_", []string{"UNSPECIFIED", "PRE_EVENT", "BEFORE_SEND", "AFTER_SEND"}},
+		{pb.ParamType(0).Descriptor(), "PARAM_TYPE_", []string{"UNSPECIFIED", "STRING", "INT", "FLOAT", "BOOL", "USER", "IMAGE", "MESSAGE"}},
 		{pb.CommandMatch(0).Descriptor(), "COMMAND_MATCH_", []string{"UNSPECIFIED", "PATH", "REGEX", "RAW", "KEYWORD", "STARTSWITH", "ENDSWITH", "FULLMATCH"}},
 		// WIRE §3.2 的 log_level。
 		{pb.LogLevel(0).Descriptor(), "LOG_LEVEL_", []string{"UNSPECIFIED", "DEBUG", "INFO", "WARN", "ERROR", "OFF"}},
@@ -104,14 +105,20 @@ func TestEnumValues(t *testing.T) {
 
 // TestCommandSpecFieldNumbers 固定命令描述及追加文本匹配字段的编号、类型与重复性。
 func TestCommandSpecFieldNumbers(t *testing.T) {
-	names := []protoreflect.Name{"match", "path", "aliases", "params", "handler_mode", "rule", "regex", "usage_mode", "custom_usage", "patterns", "ignore_case"}
-	kinds := []protoreflect.Kind{protoreflect.EnumKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.MessageKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.BoolKind}
+	names := []protoreflect.Name{"match", "path", "aliases", "params", "handler_mode", "rule", "regex", "usage_mode", "", "patterns", "ignore_case", "usage_key"}
+	kinds := []protoreflect.Kind{protoreflect.EnumKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.MessageKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.BoolKind, protoreflect.StringKind}
 	fields := (&pb.CommandSpec{}).ProtoReflect().Descriptor().Fields()
-	if fields.Len() != len(names) {
-		t.Fatalf("CommandSpec has %d fields, want %d", fields.Len(), len(names))
+	if fields.Len() != len(names)-1 {
+		t.Fatalf("CommandSpec has %d fields, want %d", fields.Len(), len(names)-1)
 	}
 	for i, name := range names {
 		f := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+		if name == "" {
+			if f != nil {
+				t.Errorf("CommandSpec field %d must be absent, got %v", i+1, f)
+			}
+			continue
+		}
 		if f == nil || f.Name() != name || f.Kind() != kinds[i] {
 			t.Errorf("CommandSpec field %d should be %s %s, got %v", i+1, kinds[i], name, f)
 			continue
@@ -219,7 +226,10 @@ func TestBootstrapSessionLimitsFieldNumber(t *testing.T) {
 // TestAdapterFieldNumbers 固定 Adapter 载荷与追加字段的线上编号。
 func TestAdapterFieldNumbers(t *testing.T) {
 	cases := map[string][]string{
-		"AdapterDescriptor":            {"adapter_id", "capabilities", "extensions"},
+		"AdapterDescriptor":            {"adapter_id", "capabilities", "extensions", "permissions", "events"},
+		"PermissionDeclaration":        {"name", "implies", "label_key"},
+		"EventDeclaration":             {"name", "version", "schema_json"},
+		"AdapterEventPayload":          {"version", "payload_json"},
 		"ExtensionDeclaration":         {"name", "version", "schema_json"},
 		"AdapterInstanceStartRequest":  {"instance_id", "config_json", "cursor"},
 		"AdapterInstanceStartResponse": {"account_id", "account_display_name", "capabilities", "account_username"},
@@ -232,6 +242,8 @@ func TestAdapterFieldNumbers(t *testing.T) {
 		"AdapterCursorResponse":        {},
 		"AdapterStatusRequest":         {"instance_id", "state", "safe_error"},
 		"AdapterStatusResponse":        {},
+		"AdapterMediaReadRequest":      {"instance_id", "file_id", "offset", "length"},
+		"AdapterMediaReadResponse":     {"data", "next_offset", "eof"},
 		"BotOnlinePayload":             {"adapter_id", "adapter_instance_id", "account_id", "account_display_name"},
 		"BotOfflinePayload":            {"adapter_id", "adapter_instance_id", "account_id", "reason", "safe_error"},
 	}
@@ -351,6 +363,79 @@ func TestEnvelopeSchemaVersions(t *testing.T) {
 			if (err == nil) != wantValid {
 				t.Errorf("kind=%s version=%d: error=%v want_valid=%v", kind, version, err, wantValid)
 			}
+		}
+	}
+}
+
+// TestPermissionProtocolFields 固定权限、扩展事件和片段参数字段的编号、类型与 oneof 归属。
+func TestPermissionProtocolFields(t *testing.T) {
+	for _, c := range []struct {
+		message     proto.Message
+		number      protoreflect.FieldNumber
+		name        protoreflect.Name
+		kind        protoreflect.Kind
+		repeated    bool
+		oneof       protoreflect.Name
+		messageName protoreflect.FullName
+	}{
+		{&pb.Actor{}, 6, "permissions", protoreflect.StringKind, true, "", ""},
+		{&pb.RouteDescriptor{}, 17, "required_permissions", protoreflect.StringKind, true, "", ""},
+		{&pb.CommandSpec{}, 12, "usage_key", protoreflect.StringKind, false, "", ""},
+		{&pb.AdapterDescriptor{}, 4, "permissions", protoreflect.MessageKind, true, "", "alonabot.v1.PermissionDeclaration"},
+		{&pb.AdapterDescriptor{}, 5, "events", protoreflect.MessageKind, true, "", "alonabot.v1.EventDeclaration"},
+		{&pb.PermissionDeclaration{}, 1, "name", protoreflect.StringKind, false, "", ""},
+		{&pb.PermissionDeclaration{}, 2, "implies", protoreflect.StringKind, true, "", ""},
+		{&pb.PermissionDeclaration{}, 3, "label_key", protoreflect.StringKind, false, "", ""},
+		{&pb.EventDeclaration{}, 1, "name", protoreflect.StringKind, false, "", ""},
+		{&pb.EventDeclaration{}, 2, "version", protoreflect.Uint32Kind, false, "", ""},
+		{&pb.EventDeclaration{}, 3, "schema_json", protoreflect.StringKind, false, "", ""},
+		{&pb.EventPayload{}, 11, "adapter_event", protoreflect.MessageKind, false, "kind", "alonabot.v1.AdapterEventPayload"},
+		{&pb.AdapterEventPayload{}, 1, "version", protoreflect.Uint32Kind, false, "", ""},
+		{&pb.AdapterEventPayload{}, 2, "payload_json", protoreflect.StringKind, false, "", ""},
+		{&pb.ArgValue{}, 6, "user_id", protoreflect.StringKind, false, "value", ""},
+		{&pb.ArgValue{}, 7, "image", protoreflect.MessageKind, false, "value", "alonabot.v1.ImageSegment"},
+		{&pb.ArgValue{}, 8, "message", protoreflect.MessageKind, false, "value", "alonabot.v1.MessageChain"},
+	} {
+		d := c.message.ProtoReflect().Descriptor()
+		t.Run(string(d.Name())+"."+string(c.name), func(t *testing.T) {
+			f := d.Fields().ByNumber(c.number)
+			if f == nil || f.Name() != c.name || f.Kind() != c.kind || f.IsList() != c.repeated {
+				t.Fatalf("field %d = %v, want %s (%s, repeated=%v)", c.number, f, c.name, c.kind, c.repeated)
+			}
+			var oneof protoreflect.Name
+			if o := f.ContainingOneof(); o != nil {
+				oneof = o.Name()
+			}
+			if oneof != c.oneof {
+				t.Errorf("oneof = %q, want %q", oneof, c.oneof)
+			}
+			if c.messageName != "" && f.Message().FullName() != c.messageName {
+				t.Errorf("message type = %s, want %s", f.Message().FullName(), c.messageName)
+			}
+		})
+	}
+}
+
+// TestRemovedPermissionFieldsReserved 固定已删除字段的编号与名称保留，检查旧枚举已删除。
+func TestRemovedPermissionFieldsReserved(t *testing.T) {
+	for _, c := range []struct {
+		message proto.Message
+		number  protoreflect.FieldNumber
+		name    protoreflect.Name
+	}{
+		{&pb.Actor{}, 4, "trusted_roles"},
+		{&pb.RouteDescriptor{}, 5, "required_permission"},
+		{&pb.RuleDescriptor{}, 2, "require_chat_admin"},
+		{&pb.CommandSpec{}, 9, "custom_usage"},
+	} {
+		d := c.message.ProtoReflect().Descriptor()
+		if d.Fields().ByNumber(c.number) != nil || d.Fields().ByName(c.name) != nil || !d.ReservedRanges().Has(c.number) || !d.ReservedNames().Has(c.name) {
+			t.Errorf("%s field %s (%d) must be removed and reserved", d.Name(), c.name, c.number)
+		}
+	}
+	for _, name := range []protoreflect.FullName{"alonabot.v1.TrustedRole", "alonabot.v1.Permission"} {
+		if _, err := protoregistry.GlobalFiles.FindDescriptorByName(name); err != protoregistry.NotFound {
+			t.Errorf("removed enum %s: descriptor lookup error = %v, want NotFound", name, err)
 		}
 	}
 }

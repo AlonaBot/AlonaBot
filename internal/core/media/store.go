@@ -21,6 +21,7 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
@@ -56,27 +57,36 @@ type File struct {
 }
 
 type entry struct {
-	file   File
-	owner  string // owner Session 的 SessionKey
-	offset uint64 // 已确认写入的长度，单位为字节
+	file    File
+	owner   string       // owner Session 的 SessionKey
+	offset  uint64       // 已确认写入的长度，单位为字节
+	leases  int          // 此上传对象的在途发送租约数，由 Store.mu 保护
+	grants  int          // 此上传对象尚存的委托令牌数，由 Store.mu 保护
+	retired bool         // 原引用已撤销或到期，最后一个消费者负责回收文件
+	lease   *mediaLease  // 非 nil 表示绑定 Adapter Session 的只读消费令牌
+	grant   *entry       // 非 nil 表示委托令牌，指向原上传对象
+	targets []*pb.Target // 委托令牌的发送范围；原上传引用沿用 owner 权利
 }
 
 // Store 串行管理文件变更与配额；上传提交后只转移索引，保留原有占用。
 // 上传文件每块写入后关闭，Store 无需持有长期文件描述符。
 type Store struct {
-	mu      sync.Mutex // 同时保护文件、索引与配额，避免释放和写入交错
-	log     *slog.Logger
-	dir     string
-	lim     Limits
-	now     func() time.Time
-	uploads map[string]*entry
-	refs    map[string]*entry
-	used    map[string]int64 // SessionKey 到预留与引用占用字节数之和，由 mu 保护
-	total   int64
+	mu             sync.Mutex // 同时保护文件、索引与配额，避免释放和写入交错
+	dir            string
+	lim            Limits
+	now            func() time.Time
+	uploads        map[string]*entry
+	refs           map[string]*entry
+	used           map[string]int64 // SessionKey 到预留与引用占用字节数之和，由 mu 保护
+	total          int64
+	readers        *adapter.Registry
+	incoming       map[string]*incomingObject
+	bySource       map[platformFile]string
+	incomingTokens map[string]*incomingAccess
 }
 
 // Open 清空独占媒体目录中的遗留文件；清理失败直接返回原错误。
-func Open(log *slog.Logger, dir string, lim Limits, now func() time.Time) (*Store, error) {
+func Open(dir string, lim Limits, now func() time.Time) (*Store, error) {
 	if err := os.MkdirAll(dir, directoryMode); err != nil {
 		return nil, fmt.Errorf("create media directory: %w", err)
 	}
@@ -89,7 +99,7 @@ func Open(log *slog.Logger, dir string, lim Limits, now func() time.Time) (*Stor
 			return nil, fmt.Errorf("clean media directory: %w", err)
 		}
 	}
-	return &Store{log: log, dir: dir, lim: lim, now: now, uploads: make(map[string]*entry), refs: make(map[string]*entry), used: make(map[string]int64)}, nil
+	return &Store{dir: dir, lim: lim, now: now, uploads: make(map[string]*entry), refs: make(map[string]*entry), used: make(map[string]int64)}, nil
 }
 
 // AddServices 注册三个 Core 固定上传服务。
@@ -259,6 +269,7 @@ func (s *Store) ReleaseSession(sessionKey string) {
 			}
 		}
 	}
+	s.releaseIncomingSession(sessionKey)
 }
 
 // Sweep 回收全部到期上传与引用。
@@ -277,11 +288,27 @@ func (s *Store) sweep() {
 			}
 		}
 	}
+	s.sweepIncoming()
 }
 
 func (s *Store) release(entries map[string]*entry, id string, e *entry) {
-	s.remove(e.file.Path)
 	delete(entries, id)
+	if e.lease != nil {
+		s.releaseLease(e.lease)
+		return
+	}
+	if e.grant != nil {
+		e.grant.grants--
+		if e.grant.retired && e.grant.grants == 0 && e.grant.leases == 0 {
+			s.release(nil, "", e.grant)
+		}
+		return
+	}
+	if e.leases > 0 || e.grants > 0 {
+		e.retired = true
+		return
+	}
+	s.remove(e.file.Path)
 	s.total -= int64(e.file.Size)
 	s.used[e.owner] -= int64(e.file.Size)
 	if s.used[e.owner] == 0 {
@@ -291,11 +318,11 @@ func (s *Store) release(entries map[string]*entry, id string, e *entry) {
 
 func (s *Store) remove(path string) {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		s.log.Warn("remove media file failed", "path", path, "err", err)
+		slog.Warn("remove media file failed", "path", path, "err", err)
 	}
 }
 
 func (s *Store) storageFailure(path string, err error) wire.Response {
-	s.log.Error("media storage failed", "path", path, "err", err)
+	slog.Error("media storage failed", "path", path, "err", err)
 	return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, errors.New("media storage failed"))
 }

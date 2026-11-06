@@ -1,6 +1,12 @@
 package validate
 
-import pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+import (
+	"encoding/json"
+	"strings"
+
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/google/jsonschema-go/jsonschema"
+)
 
 // AdapterRegister 原子校验 Adapter 身份与角色互斥的注册集（WIRE §3.4）。
 func AdapterRegister(r *pb.Register, adapterID string) error {
@@ -39,5 +45,109 @@ func AdapterRegister(r *pb.Register, adapterID string) error {
 		}
 		extensions[key] = true
 	}
+	// 3. 权限先建立完整名称表，再校验引用与无环关系，允许声明顺序任意。
+	if err := adapterPermissions(descriptor); err != nil {
+		return err
+	}
+	// 4. 扩展事件按名称唯一注册，并在接纳前解析 Schema 的引用。
+	events := make(map[string]bool)
+	for _, event := range descriptor.GetEvents() {
+		name := event.GetName()
+		if !strings.HasPrefix(name, adapterID+".") || !IsAdapterEventType(name) {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid adapter event name %q", name)
+		}
+		if events[name] {
+			return errf(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "duplicate adapter event %q", name)
+		}
+		events[name] = true
+		if event.GetVersion() == 0 {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "adapter event %q has no version", name)
+		}
+		if !IsJSONObject([]byte(event.GetSchemaJson())) {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "adapter event %q schema_json is not a JSON object", name)
+		}
+		var schema jsonschema.Schema
+		if err := json.Unmarshal([]byte(event.GetSchemaJson()), &schema); err != nil {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "parse adapter event %q schema: %v", name, err)
+		}
+		if _, err := schema.Resolve(nil); err != nil {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "resolve adapter event %q schema: %v", name, err)
+		}
+	}
 	return nil
+}
+
+func adapterPermissions(descriptor *pb.AdapterDescriptor) error {
+	permissions := make(map[string]*pb.PermissionDeclaration)
+	for _, permission := range descriptor.GetPermissions() {
+		name := permission.GetName()
+		if !strings.HasPrefix(name, descriptor.GetAdapterId()+".") || !IsAdapterEventType(name) {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid adapter permission name %q", name)
+		}
+		if _, exists := permissions[name]; exists {
+			return errf(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "duplicate adapter permission %q", name)
+		}
+		if permission.GetLabelKey() == "" {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "adapter permission %q has no label_key", name)
+		}
+		permissions[name] = permission
+	}
+	for _, permission := range descriptor.GetPermissions() {
+		for _, implied := range permission.GetImplies() {
+			if implied == permission.GetName() || (implied != "chat_admin" && permissions[implied] == nil) {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "adapter permission %q implies invalid permission %q", permission.GetName(), implied)
+			}
+		}
+	}
+	visiting := make(map[string]bool)
+	visited := make(map[string]bool)
+	var visit func(string) error
+	visit = func(name string) error {
+		if visiting[name] {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "adapter permission implication cycle at %q", name)
+		}
+		if visited[name] {
+			return nil
+		}
+		visiting[name] = true
+		for _, implied := range permissions[name].GetImplies() {
+			if implied != "chat_admin" {
+				if err := visit(implied); err != nil {
+					return err
+				}
+			}
+		}
+		delete(visiting, name)
+		visited[name] = true
+		return nil
+	}
+	for _, permission := range descriptor.GetPermissions() {
+		if err := visit(permission.GetName()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// IsPermissionName 检查 Core 内置权限名或 Adapter 权限完整名。
+func IsPermissionName(name string) bool {
+	return name == "user" || name == "admin" || name == "chat_admin" || IsAdapterEventType(name)
+}
+
+// IsAdapterEventType 检查由本地 Adapter ID 和小写字母、数字、下划线组成的完整扩展事件名。
+func IsAdapterEventType(eventType string) bool {
+	separator := strings.LastIndexByte(eventType, '.')
+	if separator < 0 {
+		return false
+	}
+	adapterID, name := eventType[:separator], eventType[separator+1:]
+	if _, err := PluginID(adapterID); err != nil || strings.HasPrefix(adapterID, MarketPrefix) || name == "" {
+		return false
+	}
+	for _, c := range name {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_') {
+			return false
+		}
+	}
+	return true
 }

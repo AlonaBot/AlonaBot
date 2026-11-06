@@ -1,37 +1,88 @@
 package state
 
-import "context"
+import (
+	"context"
+	"errors"
+	"fmt"
+	"slices"
 
-// AllowedAdapterInstances 按字典序读取插件当前获准发送的 Adapter 实例。
-func (s *Store) AllowedAdapterInstances(ctx context.Context, pluginID string) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx,
-		"SELECT adapter_instance_id FROM plugin_adapter_permissions WHERE plugin_id = ? ORDER BY adapter_instance_id", pluginID)
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+)
+
+type adapterRestriction struct {
+	PluginID string `gorm:"column:plugin_id;primaryKey"`
+}
+
+func (adapterRestriction) TableName() string { return "plugin_adapter_restriction" }
+
+// AdapterInstanceAllowed 按当前许可判定目标实例；插件未收紧时允许全部实例。
+func (s *Store) AdapterInstanceAllowed(ctx context.Context, pluginID, instanceID string) (bool, error) {
+	all, instances, err := s.AdapterInstanceAccess(ctx, pluginID)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	defer rows.Close()
-	var instances []string
-	for rows.Next() {
-		var instanceID string
-		if err := rows.Scan(&instanceID); err != nil {
-			return instances, err
+	return all || slices.Contains(instances, instanceID), nil
+}
+
+// AdapterInstanceAccess 在同一快照中读取插件的许可；全部实例时返回 nil 集合，否则按字典序。
+func (s *Store) AdapterInstanceAccess(ctx context.Context, pluginID string) (all bool, instances []string, err error) {
+	if pluginID == "" {
+		return false, nil, errEmptyPluginID
+	}
+	err = s.tx(ctx, func(tx *gorm.DB) error {
+		var restriction adapterRestriction
+		err := tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&restriction).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			all = true
+			return nil
 		}
-		instances = append(instances, instanceID)
+		if err != nil {
+			return err
+		}
+		var rows []adapterPermission
+		if err := tx.Where(&adapterPermission{PluginID: pluginID}).Find(&rows).Error; err != nil {
+			return err
+		}
+		for _, row := range rows {
+			instances = append(instances, row.AdapterInstanceID)
+		}
+		slices.Sort(instances)
+		return nil
+	})
+	return all, instances, err
+}
+
+// SetAdapterInstanceAccess 在一个事务中整体替换已安装插件的许可。
+// all 为 true 时清除收紧与实例行；false 配合空集合时拒绝全部实例。
+func (s *Store) SetAdapterInstanceAccess(ctx context.Context, pluginID string, all bool, instances []string) error {
+	if pluginID == "" {
+		return errEmptyPluginID
 	}
-	return instances, rows.Err()
-}
-
-// GrantAdapterInstance 幂等地授予插件向指定 Adapter 实例发送的许可。
-func (s *Store) GrantAdapterInstance(ctx context.Context, pluginID, instanceID string) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO plugin_adapter_permissions (plugin_id, adapter_instance_id) VALUES (?, ?)
-		 ON CONFLICT (plugin_id, adapter_instance_id) DO NOTHING`, pluginID, instanceID)
-	return err
-}
-
-// RevokeAdapterInstance 幂等地撤销插件向指定 Adapter 实例发送的许可。
-func (s *Store) RevokeAdapterInstance(ctx context.Context, pluginID, instanceID string) error {
-	_, err := s.db.ExecContext(ctx,
-		"DELETE FROM plugin_adapter_permissions WHERE plugin_id = ? AND adapter_instance_id = ?", pluginID, instanceID)
-	return err
+	return s.tx(ctx, func(tx *gorm.DB) error {
+		// 1. 确认安装记录，使恢复全部实例的操作同样拒绝未知插件。
+		var installed installation
+		if err := tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&installed).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
+			}
+			return err
+		}
+		// 2. 清除旧集合并写入新许可，任一步失败均回滚整次替换。
+		if err := tx.Where(&adapterPermission{PluginID: pluginID}).Delete(&adapterPermission{}).Error; err != nil {
+			return err
+		}
+		if all {
+			return tx.Delete(&adapterRestriction{PluginID: pluginID}).Error
+		}
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&adapterRestriction{PluginID: pluginID}).Error; err != nil {
+			return err
+		}
+		for _, instanceID := range instances {
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&adapterPermission{PluginID: pluginID, AdapterInstanceID: instanceID}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

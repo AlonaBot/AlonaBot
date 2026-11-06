@@ -44,7 +44,7 @@ func (r *EventRegistry) On(routeID, eventType string, handler func(*Context) err
 	case r.seen[routeID]:
 		r.errs = append(r.errs, fmt.Errorf("route %q registered twice", routeID))
 		return
-	case !validate.IsEventType(eventType):
+	case !validate.IsEventType(eventType) && !validate.IsAdapterEventType(eventType):
 		r.errs = append(r.errs, fmt.Errorf("event route %q has unknown event type %q", routeID, eventType))
 		return
 	case handler == nil:

@@ -64,6 +64,7 @@ func TestConversationProcesses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	setDefaultLogger(t, output.Logger())
 	defer output.Close()
 	defer func() {
 		if t.Failed() {
@@ -98,7 +99,7 @@ func TestConversationProcesses(t *testing.T) {
 			t.Fatal(err)
 		}
 		specs[i] = Spec{PluginID: id, Role: state.RolePlugin, GenerationID: gen, PluginDir: dir, Executable: binary, BuildDigest: digest, NewCandidate: true,
-			Bootstrap: &pb.Bootstrap{GenerationId: gen, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE}},
+			Bootstrap: &pb.Bootstrap{GenerationId: gen, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}},
 			Limits:    host.NewLimits(values), Stop: fastStop, Log: output.Plugin(id, gen), ExtraEnv: map[string]string{"CONV_PLUGIN_ID": id}}
 	}
 	var events *router.Router
@@ -109,21 +110,22 @@ func TestConversationProcesses(t *testing.T) {
 		service = conversation.New(store)
 		mux := router.NewMux()
 		service.Register(mux)
-		sender := message.New(registry, policy.New(store))
+		sender := message.New(registry, policy.New(store), nil, values.RequestTimeout)
 		mux.Handle(wire.ServiceSend, sender.Send)
-		events = router.New(output.Logger(), values.DispatchQueueEvents, registry, sender.Send)
+		events = router.New(values.DispatchQueueEvents, registry, sender.Send, nil, nil, nil)
 		events.Start()
 		if err := platform.Start(ctx, events); err != nil {
 			t.Fatal(err)
 		}
 		for i := range specs {
-			specs[i].Handler = mux.For(router.NewCaller(specs[i].PluginID, specs[i].GenerationID))
+			caller := router.NewCaller(specs[i].PluginID, specs[i].GenerationID)
+			specs[i].Handler = mux.For(caller)
 			instance, err := Launch(ctx, store, specs[i])
 			if err != nil {
 				t.Fatal(err)
 			}
 			running = append(running, instance)
-			events.Attach(router.FromInstance(instance.Instance))
+			events.Attach(router.FromInstance(instance.Instance), caller)
 			specs[i].NewCandidate = false
 		}
 	}

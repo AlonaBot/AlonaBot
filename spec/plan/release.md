@@ -16,7 +16,7 @@
 | T-10.4 | goal-49 | 发布资产、签名与发布说明 | T-10 步骤 7、8 | T-10.2、T-10.3 | V-28、V-41 的发布复验 | 未开始 |
 | T-14.3 | goal-73 | 发行归档：构建与打包全部官方组件、签名、内置官方发布者公钥、`SHA256SUMS` | T-14 步骤 3 | T-03.10、T-09.3、T-12.7、T-14.1、T-14.2、T-15.2 | V-66 的归档分项 | 未开始 |
 | T-14.4 | goal-74 | 首次运行：预装与默认启用（help 与 WebUI）、首次管理 token、内置包的可用更新 | T-14 步骤 4 | T-09.6、T-14.3 | V-66 | 未开始 |
-| T-14.5 | goal-77 | 容器镜像：`Dockerfile` 多阶段构建、linux/amd64 与 linux/arm64、非 root、`/data` 卷、`ALONABOT_CONTAINER` 的监听规则、作为官方整合包入口的 `deploy/compose.yaml` | T-14 步骤 5 | T-07.3、T-14.3 | V-70 的镜像分项 | 未开始 |
+| T-14.5 | goal-77 | 容器镜像：`Dockerfile` 多阶段构建、linux/amd64 与 linux/arm64、非 root、`/data` 卷、`ALONABOT_CONTAINER` 的监听规则、作为官方整合包入口的 `deploy/compose.yaml` | T-14 步骤 5 | T-07.6、T-14.3 | V-70 的镜像分项 | 未开始 |
 | T-14.6 | goal-75 | 从发行归档与容器镜像到 Agent 对话的端到端验收，汇总证据 | T-14 步骤 6 | T-09.11、T-14.4、T-14.5 | V-66、V-67、V-70 | 未开始 |
 | T-14.7 | goal-85 | `install.sh`：Linux（systemd）与 macOS（launchd）的安装、`SHA256SUMS` 校验、管理 token 初始化、服务注册、升级与 `--uninstall` | T-14 步骤 7 | T-14.3 | V-84 | 未开始 |
 
@@ -60,7 +60,7 @@
 
 #### 前置输入
 
-- T-09 的安装、启用、更新、`serve` 与 WebUI 组件；T-12 的 Agent 组件；T-03 的 Telegram Adapter 包与 T-15 的 OneBot 11 Adapter 包；T-05、T-07、T-08 的事件、调度、配置、文案与数据库。
+- T-09 的安装、启用、更新、`alonabot run` 与 WebUI 组件；T-07.6 的 `core_config.json` 与首次 token 文件；T-12 的 Agent 组件；T-03 的 Telegram Adapter 包与 T-15 的 OneBot 11 Adapter 包；T-05、T-07、T-08 的事件、调度、配置、文案与数据库。
 - 读取 CONTRACTS §9、§15.2、§15.3、§15.6。签名私钥由维护者保管，不进入仓库、构建日志或发行归档。
 
 #### 实施步骤
@@ -70,11 +70,11 @@
    - `plugins/welcome/` 在 member.joined 时向该聊天发送欢迎语，欢迎语中的 `{name}` 替换为新成员的显示名。欢迎语按聊天配置，缺省使用插件文案；`/welcome on|off|set <文案>` 的权限为 `admin` 或 `chat_admin`，默认关闭。
    - `plugins/rss/` 提供 `/rss add|list|remove`，订阅经 `sqlitedb` 保存在插件数据库，不链接 GORM；add 与 remove 的权限为 `admin` 或 `chat_admin`，list 不限。一个固定 interval 的 schedule 检查订阅，间隔是配置项（缺省 10 分钟）。用标准库解析 RSS 2.0 与 Atom，按 guid 或链接去重，只推送新条目；后台推送需要 `allowed_adapter_instances`。
    - rss 抓取只允许 http 与 https；解析出的地址以及每次重定向后的地址都不能是 loopback、私网、链路本地、组播或未指定地址。响应大小上限 5 MiB、抓取超时 30s，均为命名常量，超过时本次抓取失败并记 WARN。
-3. **发行归档。** `scripts/dist/` 为每个目标平台构建 Core 与全部官方组件（含构建 `web/admin/` 得到的 WebUI 包），用 `plugin pack` 生成安装包与外部 `release.json`，签名后放入 `packages/`，再打成 zip（Windows）或 tar.gz，并生成列出全部发行归档 SHA256 的 `SHA256SUMS`。发行版 Core 在构建时嵌入官方发布者公钥。
+3. **发行归档。** `scripts/dist/` 为每个目标平台构建 Core 与全部官方组件（含构建 `web/admin/` 得到的 WebUI 包），用 `alonabot pack` 生成安装包与外部 `release.json`，签名后放入 `packages/`，再打成 zip（Windows）或 tar.gz，并生成列出全部发行归档 SHA256 的 `SHA256SUMS`。发行版 Core 在构建时嵌入官方发布者公钥。
 4. **首次运行。** 数据目录首次初始化时，按普通安装流程安装 `packages/` 中的包，只启用 help 与官方 WebUI，Agent 只安装不启用（D-50、D-62）；Telegram 与 OneBot 11 Adapter 在管理员为它添加第一个实例时启用。交互终端下按 CONTRACTS §15.1 初始化管理 token。之后不再自动安装；新版本发行包中版本更高的内置包作为可用更新列出。
-5. **容器镜像。** 仓库根目录的 `Dockerfile` 用多阶段构建：在 Go 构建阶段以 `CGO_ENABLED=0` 构建 Core 与全部官方包，最终镜像只含 `alonabot`、`packages/` 与 CA 证书，以 UID 10001 运行，`/data` 为卷，设置 `ALONABOT_CONTAINER=1`。Core 在该环境变量下才允许 `0.0.0.0` 的 listen 搭配本机 http 的 Base URL，并在启动时输出 WARN 提醒端口只发布到宿主本机。`deploy/compose.yaml` 是官方整合包的 compose 入口，随 Release 发布，固定对应版本的镜像，给出卷、`init: true`、`127.0.0.1:7650:7650` 与首次 `docker compose run --rm alonabot admin-token init` 的用法。镜像构建 linux/amd64 与 linux/arm64 两个平台。
+5. **容器镜像。** 仓库根目录的 `Dockerfile` 用多阶段构建：在 Go 构建阶段以 `CGO_ENABLED=0` 构建 Core 与全部官方包，最终镜像只含 `alonabot`、`packages/` 与 CA 证书，以 UID 10001 运行，`/data` 为卷，设置 `ALONABOT_CONTAINER=1`。Core 在该环境变量下才允许 `0.0.0.0` 的 listen 搭配本机 http 的 `base_url`，并在启动时输出 WARN 提醒端口只发布到宿主本机。`deploy/compose.yaml` 是官方整合包的 compose 入口，随 Release 发布，固定对应版本的镜像，给出卷、`init: true`、`127.0.0.1:7650:7650`，以及首次启动后用 `docker compose exec alonabot alonabot admin-token show` 读出一次性 token 的用法（CONTRACTS §15.3）。镜像构建 linux/amd64 与 linux/arm64 两个平台。
 6. **端到端验收。** 在干净的数据目录上，分别从发行归档与容器镜像依次完成：首次运行、登录 WebUI、添加 Telegram 实例（本地 Bot API 模拟服务）、启用 Agent 并配置 Provider（本地模拟服务）、`/ask` 对话、`/help`、启用 rss 并收到推送。真实 Telegram 与真实 Provider 没有凭证时记为未运行。
-7. **install.sh。** `deploy/install.sh` 按 CONTRACTS §15.6 实现：只依赖 POSIX sh、curl、tar 与 sha256sum/shasum；不支持的系统与没有 systemd 的 Linux 在改动前退出；按 `SHA256SUMS` 校验后才停止旧服务、替换程序；尚无管理凭证时经 `/dev/tty` 运行 `admin-token init`，没有终端时不启动服务并输出初始化命令；写入 systemd 单元（系统用户 `alonabot`）或用户 LaunchAgent 并启动；再次运行即升级，`--uninstall` 保留数据目录。Release 流程把它与 `SHA256SUMS` 一起上传。用 `shellcheck` 检查（未安装时记为未运行）；在真实的 systemd Linux 与 macOS 上各完成一次安装、升级与卸载，模拟环境与容器内的 systemd 不能代替。
+7. **install.sh。** `deploy/install.sh` 按 CONTRACTS §15.6 实现：只依赖 POSIX sh、curl、tar 与 sha256sum/shasum；不支持的系统与没有 systemd 的 Linux 在改动前退出；按 `SHA256SUMS` 校验后才停止旧服务、替换程序；尚无管理凭证时经 `/dev/tty` 运行 `admin-token init`，没有终端时跳过初始化，启动服务后输出 `admin-token show` 的命令；服务运行 `alonabot run --data-dir <数据目录>`；写入 systemd 单元（系统用户 `alonabot`）或用户 LaunchAgent 并启动；再次运行即升级，`--uninstall` 保留数据目录。Release 流程把它与 `SHA256SUMS` 一起上传。用 `shellcheck` 检查（未安装时记为未运行）；在真实的 systemd Linux 与 macOS 上各完成一次安装、升级与卸载，模拟环境与容器内的 systemd 不能代替。
 
 #### 拟目录与交付
 

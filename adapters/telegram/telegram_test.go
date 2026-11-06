@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -66,6 +67,22 @@ func (c *recordingCore) SaveCursor(_ context.Context, raw []byte) error {
 func (c *recordingCore) ReportFailure(_ context.Context, e *pb.ErrorInfo) error {
 	c.failures <- e
 	return nil
+}
+
+func (c *recordingCore) ReadMedia(context.Context, string, uint64, uint32) ([]byte, uint64, bool, error) {
+	return nil, 0, false, &sdk.Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "outbound media is not configured in this receiving fixture"}
+}
+
+// SetDefault 会同时修改 log 包的输出与标志，清理时一并恢复。
+func setDefaultLogger(t *testing.T, logger *slog.Logger) {
+	t.Helper()
+	previous, writer, flags := slog.Default(), log.Writer(), log.Flags()
+	slog.SetDefault(logger)
+	t.Cleanup(func() {
+		slog.SetDefault(previous)
+		log.SetOutput(writer)
+		log.SetFlags(flags)
+	})
 }
 
 func newRecordingCore() *recordingCore {
@@ -285,7 +302,7 @@ func TestMessageMetadata(t *testing.T) {
 		if (e.Actor != nil) != c.actor {
 			t.Errorf("message %d actor=%v", n, e.Actor)
 		}
-		if e.Actor != nil && (e.Actor.GetLocale() != "en-US" || e.Actor.GetExternalUserId() != "7" || e.Actor.GetAdapterInstanceId() != "test-instance" || len(e.Actor.TrustedRoles) != 0) {
+		if e.Actor != nil && (e.Actor.GetLocale() != "en-US" || e.Actor.GetExternalUserId() != "7" || e.Actor.GetAdapterInstanceId() != "test-instance" || len(e.Actor.Permissions) != 0) {
 			t.Errorf("actor: %v", e.Actor)
 		}
 		if e.GetAdapterId() != e.Target.AdapterId || e.GetAdapterInstanceId() != e.Target.AdapterInstanceId || e.GetAccountId() != e.Target.AccountId || e.EventId != "" || e.SourceKind != 0 || len(e.Capabilities) != 0 || e.GetSourceEventId() != strconv.Itoa(n+1) || !json.Valid(e.PlatformPayload) {
@@ -379,27 +396,28 @@ func TestInstanceProxy(t *testing.T) {
 	if err := instance.Stop(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	// Stop 可能取消一次已被代理记录、却未到达假服务器的长轮询，所以两边计数允许差 1。
+	// 先读服务器计数：代理在转发前记录，服务器已计入的请求此时一定已在代理记录里。
+	serverPolls := len(server.Offsets())
 	mu.Lock()
 	defer mu.Unlock()
 	if len(methods) < 3 || methods[0] != "getMe" || methods[1] != "getWebhookInfo" {
 		t.Fatalf("proxy methods: %v", methods)
 	}
-	polls := 0
+	proxyPolls := 0
 	for _, method := range methods {
 		if method == "getUpdates" {
-			polls++
+			proxyPolls++
 		}
 	}
-	if polls != len(server.Offsets()) {
-		t.Fatalf("proxy polls=%d server polls=%d", polls, len(server.Offsets()))
+	if proxyPolls < serverPolls || proxyPolls > serverPolls+1 {
+		t.Fatalf("proxy polls=%d server polls=%d", proxyPolls, serverPolls)
 	}
 }
 
 func TestCredentialsStayRedacted(t *testing.T) {
 	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	defer slog.SetDefault(previous)
+	setDefaultLogger(t, slog.New(slog.NewTextHandler(&logs, nil)))
 	server := telegramtest.NewServer(t, "local-secret-token")
 	server.Push(json.RawMessage(`{"update_id":1,"message":{"message_id":1,"date":123,"chat":{"id":9,"type":"private"},"text":"hello"}}`))
 	core := newRecordingCore()

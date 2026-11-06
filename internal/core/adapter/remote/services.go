@@ -3,8 +3,10 @@ package remote
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
@@ -59,38 +61,47 @@ func (p *Process) service(ctx context.Context, caller router.Caller, in *wire.In
 	defer p.mu.Unlock()
 	entry := p.instances[id]
 	invalid := func() wire.Response {
-		p.opt.Log.Warn("invalid adapter instance event", "plugin_id", p.opt.PluginID, "instance_id", id)
+		slog.Warn("invalid adapter instance event", "plugin_id", p.opt.PluginID, "instance_id", id)
 		return serviceError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "adapter instance or event identity mismatch")
 	}
-	if ctx.Err() != nil || p.session == nil || entry == nil || !entry.running || entry.session != p.session.Session {
+	if ctx.Err() != nil || p.session == nil || caller != p.caller || entry == nil || !entry.running || entry.session != p.session.Session {
 		return invalid()
 	}
 	// 2. 所有归属检查必须先于游标持久化。
 	switch r := request.(type) {
 	case *pb.AdapterDeliverRequest:
 		ev := r.Event
-		if ev == nil || !adapterEventPayload(ev) || ev.GetAdapterId() != p.opt.AdapterID || ev.GetAdapterInstanceId() != id || ev.GetAccountId() != entry.account {
+		if ev == nil || ev.GetAdapterId() != p.opt.AdapterID || ev.GetAdapterInstanceId() != id || ev.GetAccountId() != entry.account {
 			return invalid()
 		}
+		if !adapterEventPayload(ev) {
+			var err error
+			if validate.IsEventType(ev.GetEventType()) {
+				err = errors.New("unsupported adapter event type or mismatched payload")
+			} else {
+				err = p.declarations.validateEvent(ev)
+			}
+			if err != nil {
+				slog.Warn("invalid adapter instance event", "plugin_id", p.opt.PluginID, "instance_id", id, "error", err)
+				return serviceError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+			}
+		}
 		if target := ev.Target; target != nil && (target.AdapterId != p.opt.AdapterID || target.AdapterInstanceId != id || target.AccountId != entry.account) {
+			return invalid()
+		}
+		if actor := ev.Actor; actor != nil && actor.GetAdapterInstanceId() != id {
 			return invalid()
 		}
 		if err := p.opt.Store.PutAdapterCursor(ctx, p.opt.PluginID, id, r.Cursor); err != nil {
 			return serviceError(pb.ErrorCode_ERROR_CODE_INTERNAL, err.Error())
 		}
-		// 3. Core 重建可信事件字段，Adapter 只保留平台群管理员事实。
+		// 3. Core 重建可信事件字段，只保留本 Session 声明的平台权限及其展开结果。
 		ev = proto.Clone(ev).(*pb.Event)
 		ev.EventId = p.event(entry, ev.EventType).EventId
 		ev.SourceKind = pb.EventSourceKind_EVENT_SOURCE_KIND_ADAPTER
 		ev.Capabilities = entry.capabilities
 		if ev.Actor != nil {
-			roles := ev.Actor.TrustedRoles
-			ev.Actor.TrustedRoles = nil
-			for _, role := range roles {
-				if role == pb.TrustedRole_TRUSTED_ROLE_CHAT_ADMIN {
-					ev.Actor.TrustedRoles = append(ev.Actor.TrustedRoles, role)
-				}
-			}
+			ev.Actor.Permissions = p.platformPermissions(id, ev.Actor.Permissions)
 		}
 		err := p.deliver(ctx, entry, ev)
 		if err != nil && !errors.Is(err, adapter.ErrQueueFull) {

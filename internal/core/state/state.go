@@ -4,12 +4,14 @@
 // 保证同一个 data_dir 只有一个 Core；已有但无法读取的状态库会报错，不会被重建成空库。
 // 提交 ActiveGeneration 时核对预期的旧值，拒绝陈旧候选。规则见 spec/CONTRACTS-v0.1.md §6.1 与 §12.2。
 //
-// 尚不含候选资源引用、完整的 Journal 与恢复编排。
+// Secret 与配置路径随代次保存；正式 Journal 与恢复编排由管理层负责。
+// Unix 核对数据库及 WAL/SHM 的 0600 权限，Windows 为 data_dir 设置当前账号专用的可继承 DACL。
 package state
 
 import (
 	"context"
 	"database/sql"
+	_ "embed"
 	"errors"
 	"fmt"
 	"net/url"
@@ -21,6 +23,10 @@ import (
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/internal/oslock"
+	"github.com/libtnb/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	"gorm.io/gorm/logger"
 	_ "modernc.org/sqlite" // 注册 "sqlite" 驱动
 )
 
@@ -41,6 +47,9 @@ const (
 var pragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(" + strconv.Itoa(busyTimeoutMillis) + ")"
 
 var (
+	errEmptyPluginID        = errors.New("plugin_id is required")
+	errEmptyConversationKey = errors.New("conversation key is required")
+
 	// ErrDataDirLocked 表示同一 data_dir 已有另一个 Core 在运行。
 	ErrDataDirLocked = errors.New("data_dir is locked by another Core")
 	// ErrStaleGeneration 表示提交时 ActiveGeneration 已不是调用方预期的旧值。
@@ -51,7 +60,7 @@ var (
 
 // Store 持有 core.lock 并访问状态库；同一进程内只应有一个。
 type Store struct {
-	db   *sql.DB      // 单连接的状态库句柄
+	db   *gorm.DB     // 单连接的状态库句柄
 	lock *oslock.Lock // core.lock，Close 时释放
 
 	// mu 保护 pluginM。
@@ -69,6 +78,9 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	}
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create data_dir: %w", err)
+	}
+	if err := protectStateDirectory(dataDir); err != nil {
+		return nil, err
 	}
 	// 2. 先取 core.lock，确保同一 data_dir 只有一个 Core 打开状态库。
 	lock, err := oslock.TryLock(filepath.Join(dataDir, lockFile))
@@ -104,24 +116,44 @@ func open(ctx context.Context, path string) (*Store, error) {
 		if err := preflight(ctx, path); err != nil {
 			return nil, err
 		}
+	} else {
+		// 主库先以仅当前账号可读写的权限创建，WAL/SHM 由 SQLite 继承保护。
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err != nil {
+			return nil, fmt.Errorf("create state database %q: %w", path, err)
+		}
+		if err := file.Close(); err != nil {
+			return nil, fmt.Errorf("close new state database %q: %w", path, err)
+		}
 	}
-	db, err := sql.Open("sqlite", path+"?"+pragmas)
+	db, err := gorm.Open(sqlite.Open(path+"?"+pragmas), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+	connection, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+	connection.SetMaxOpenConns(1)
+	connection.SetMaxIdleConns(1)
 	s := &Store{db: db, pluginM: map[string]*sync.Mutex{}}
 	if err := s.verify(ctx, fresh); err != nil {
-		_ = db.Close()
+		_ = connection.Close()
 		return nil, err
+	}
+	if err := checkStatePermissions(path); err != nil {
+		return nil, errors.Join(err, connection.Close())
 	}
 	return s, nil
 }
 
 // Close 关闭状态库并释放 core.lock。
 func (s *Store) Close() error {
-	return errors.Join(s.db.Close(), s.lock.Unlock())
+	connection, err := s.db.DB()
+	if err != nil {
+		return errors.Join(err, s.lock.Unlock())
+	}
+	return errors.Join(connection.Close(), s.lock.Unlock())
 }
 
 // Pragmas 记录状态库连接上实际生效的设置。
@@ -139,10 +171,10 @@ type Pragmas struct {
 func (s *Store) ReadPragmas(ctx context.Context) (Pragmas, error) {
 	var p Pragmas
 	err := errors.Join(
-		s.db.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&p.JournalMode),
-		s.db.QueryRowContext(ctx, "PRAGMA synchronous").Scan(&p.Synchronous),
-		s.db.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&p.ForeignKeys),
-		s.db.QueryRowContext(ctx, "PRAGMA busy_timeout").Scan(&p.BusyTimeout),
+		s.db.WithContext(ctx).Raw("PRAGMA journal_mode").Scan(&p.JournalMode).Error,
+		s.db.WithContext(ctx).Raw("PRAGMA synchronous").Scan(&p.Synchronous).Error,
+		s.db.WithContext(ctx).Raw("PRAGMA foreign_keys").Scan(&p.ForeignKeys).Error,
+		s.db.WithContext(ctx).Raw("PRAGMA busy_timeout").Scan(&p.BusyTimeout).Error,
 	)
 	return p, err
 }
@@ -186,79 +218,32 @@ func preflight(ctx context.Context, path string) error {
 	return nil
 }
 
+//go:embed schema.sql
+var initialSchema string
+
 // migrations 按顺序执行，版本号即下标加 1。首次发布前只有初始这一条，schema 改动直接写在其中，
 // 不追加迁移（编码规范「首次发布前不写兼容层」）。
-var migrations = []string{
-	`CREATE TABLE schema_version (version INTEGER NOT NULL);
-	 INSERT INTO schema_version (version) VALUES (0);
-	 CREATE TABLE installs (
-	   plugin_id    TEXT PRIMARY KEY,
-	   install_seq  INTEGER NOT NULL UNIQUE,
-	   source       TEXT NOT NULL,
-	   entrypoint   TEXT NOT NULL,
-	   build_digest BLOB NOT NULL,
-	   created_at   INTEGER NOT NULL,
-	   role TEXT NOT NULL,
-	   adapter_id TEXT NOT NULL
-	 );
-	 CREATE TABLE generations (
-	   generation_id   TEXT PRIMARY KEY,
-	   plugin_id       TEXT NOT NULL REFERENCES installs(plugin_id),
-	   config_snapshot TEXT NOT NULL,
-	   config_version  INTEGER NOT NULL,
-	   created_at      INTEGER NOT NULL,
-	   committed_at    INTEGER
-	 );
-	 CREATE TABLE plugin_state (
-	   plugin_id         TEXT PRIMARY KEY REFERENCES installs(plugin_id),
-	   active_generation TEXT REFERENCES generations(generation_id),
-	   enabled           INTEGER NOT NULL DEFAULT 0
-	 );
-	 CREATE TABLE pending_configs (
-	   plugin_id       TEXT PRIMARY KEY REFERENCES installs(plugin_id),
-	   base_generation TEXT NOT NULL,
-	   config_json     TEXT NOT NULL,
-	   updated_at      INTEGER NOT NULL
-	 );
-	 CREATE TABLE adapter_cursors (
-	   instance_id TEXT PRIMARY KEY,
-	   plugin_id TEXT NOT NULL REFERENCES installs(plugin_id),
-	   cursor BLOB NOT NULL,
-	   updated_at INTEGER NOT NULL
-	 );
-	 CREATE TABLE plugin_adapter_permissions (
-	   plugin_id TEXT NOT NULL REFERENCES installs(plugin_id),
-	   adapter_instance_id TEXT NOT NULL,
-	   PRIMARY KEY (plugin_id, adapter_instance_id)
-	 );
-	 CREATE TABLE conversation_entries (
-	   plugin_id        TEXT NOT NULL REFERENCES installs(plugin_id),
-	   conversation_key TEXT NOT NULL,
-	   seq              INTEGER NOT NULL,
-	   entry_json       TEXT NOT NULL,
-	   created_at       INTEGER NOT NULL,
-	   PRIMARY KEY (plugin_id, conversation_key, seq)
-	 );`,
-}
+var migrations = []string{initialSchema}
 
 // migrate 只在全新文件上从版本 0 开始；已有文件的 schema_version 表已由 verify 确认存在。
 func (s *Store) migrate(ctx context.Context, fresh bool) error {
 	current := 0
 	if !fresh {
-		if err := s.db.QueryRowContext(ctx, "SELECT version FROM schema_version").Scan(&current); err != nil {
+		var version schemaVersion
+		if err := s.db.WithContext(ctx).Take(&version).Error; err != nil {
 			return fmt.Errorf("read schema version: %w", err)
 		}
+		current = version.Version
 	}
 	if current > len(migrations) {
 		return fmt.Errorf("state database schema version %d is newer than supported version %d", current, len(migrations))
 	}
 	for v := current; v < len(migrations); v++ {
-		err := s.tx(ctx, func(tx *sql.Tx) error {
-			if _, err := tx.ExecContext(ctx, migrations[v]); err != nil {
+		err := s.tx(ctx, func(tx *gorm.DB) error {
+			if err := tx.Exec(migrations[v]).Error; err != nil {
 				return err
 			}
-			_, err := tx.ExecContext(ctx, "UPDATE schema_version SET version = ?", v+1)
-			return err
+			return tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Model(&schemaVersion{}).Updates(&schemaVersion{Version: v + 1}).Error
 		})
 		if err != nil {
 			return fmt.Errorf("migrate state database to version %d: %w", v+1, err)
@@ -268,16 +253,8 @@ func (s *Store) migrate(ctx context.Context, fresh bool) error {
 }
 
 // tx 在一个事务中执行 fn：fn 返回错误时回滚，否则提交。
-func (s *Store) tx(ctx context.Context, fn func(*sql.Tx) error) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	if err := fn(tx); err != nil {
-		_ = tx.Rollback()
-		return err
-	}
-	return tx.Commit()
+func (s *Store) tx(ctx context.Context, fn func(*gorm.DB) error) error {
+	return s.db.WithContext(ctx).Transaction(fn)
 }
 
 // LockPlugin 串行化同一插件的管理操作（install/enable/disable/reload/update/rollback/uninstall），
@@ -306,12 +283,12 @@ const (
 
 // Install 记录插件的最小安装信息；尚不含来源绑定、pin、卸载保留等内容。
 type Install struct {
-	Role        Role   // 必填的安装角色
-	AdapterID   string // RoleAdapter 必填的平台类型
-	PluginID    string // 插件 ID，主键
-	Source      string // 安装来源（开发模式为 dev-local）
-	Entrypoint  string // 入口可执行文件的路径
-	BuildDigest []byte // 安装时已验证的归档摘要，经启动上下文交给 SDK 回显
+	Role        Role   `gorm:"column:role"`                 // 必填的安装角色
+	AdapterID   string `gorm:"column:adapter_id"`           // RoleAdapter 必填的平台类型
+	PluginID    string `gorm:"column:plugin_id;primaryKey"` // 插件 ID，主键
+	Source      string `gorm:"column:source"`               // 安装来源（开发模式为 dev-local）
+	Entrypoint  string `gorm:"column:entrypoint"`           // 入口可执行文件的路径
+	BuildDigest []byte `gorm:"column:build_digest"`         // 安装时已验证的归档摘要，经启动上下文交给 SDK 回显
 }
 
 // AddInstall 登记安装记录，install_seq 按登记顺序递增（first-wins 的依据）。
@@ -324,106 +301,117 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 	if in.Role == RoleAdapter && in.AdapterID == "" {
 		return errors.New("adapter installation requires adapter_id")
 	}
-	return s.tx(ctx, func(tx *sql.Tx) error {
+	return s.tx(ctx, func(tx *gorm.DB) error {
 		// 2. 在单连接事务内核对平台类型唯一性并写入安装与启用状态。
 		if in.Role == RoleAdapter {
-			var exists bool
-			if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM installs WHERE role = ? AND adapter_id = ?)", RoleAdapter, in.AdapterID).Scan(&exists); err != nil {
+			var count int64
+			if err := tx.Model(&installation{}).Where(&installation{Install: Install{Role: RoleAdapter, AdapterID: in.AdapterID}}).Count(&count).Error; err != nil {
 				return err
 			}
-			if exists {
+			if count > 0 {
 				return fmt.Errorf("adapter %q is already installed", in.AdapterID)
 			}
 		}
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO installs (plugin_id, install_seq, source, entrypoint, build_digest, created_at, role, adapter_id)
-			 VALUES (?, (SELECT coalesce(max(install_seq), 0) + 1 FROM installs), ?, ?, ?, ?, ?, ?)`,
-			in.PluginID, in.Source, in.Entrypoint, in.BuildDigest, time.Now().UnixMilli(), in.Role, in.AdapterID); err != nil {
+		var last installation
+		err := tx.Order(clause.OrderByColumn{Column: clause.Column{Name: columnInstallSeq}, Desc: true}).Take(&last).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, "INSERT INTO plugin_state (plugin_id) VALUES (?)", in.PluginID)
-		return err
+		sequence := last.InstallSeq + 1
+		row := installation{Install: in, InstallSeq: sequence, CreatedAt: time.Now().UnixMilli()}
+		if err := tx.Create(&row).Error; err != nil {
+			return err
+		}
+		return tx.Create(&pluginState{PluginID: in.PluginID}).Error
 	})
 }
 
 // GetInstall 读取安装记录。
 func (s *Store) GetInstall(ctx context.Context, pluginID string) (Install, error) {
-	in := Install{PluginID: pluginID}
-	err := s.db.QueryRowContext(ctx, "SELECT source, entrypoint, build_digest, role, adapter_id FROM installs WHERE plugin_id = ?", pluginID).
-		Scan(&in.Source, &in.Entrypoint, &in.BuildDigest, &in.Role, &in.AdapterID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return in, fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
+	var row installation
+	err := s.db.WithContext(ctx).Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&row).Error
+	row.Install.PluginID = pluginID
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return row.Install, fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 	}
-	return in, err
+	return row.Install, err
 }
 
 // AddGeneration 持久化一个候选代次（尚未提交）。配置快照只能含 secret 引用，不含明文。
 func (s *Store) AddGeneration(ctx context.Context, pluginID, generationID, configSnapshot string, configVersion uint32) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO generations (generation_id, plugin_id, config_snapshot, config_version, created_at) VALUES (?, ?, ?, ?, ?)`,
-		generationID, pluginID, configSnapshot, configVersion, time.Now().UnixMilli())
-	return err
+	return s.db.WithContext(ctx).Create(&generation{
+		GenerationID: generationID, PluginID: pluginID, ConfigSnapshot: configSnapshot,
+		ConfigVersion: configVersion, CreatedAt: time.Now().UnixMilli(),
+	}).Error
 }
 
 // CommitActive 在一个事务内把 ActiveGeneration 从 expectedOld 切换为 newGen，并写入 COMMITTED 标记。
 // expectedOld 为空表示首次激活。实际旧值不同返回 ErrStaleGeneration；事务内只操作元数据，不等待插件 RPC。
 func (s *Store) CommitActive(ctx context.Context, pluginID, expectedOld, newGen string) error {
-	return s.tx(ctx, func(tx *sql.Tx) error {
+	return s.tx(ctx, func(tx *gorm.DB) error {
 		// 1. 核对当前 Active 等于调用方预期的旧值。
-		var current sql.NullString
-		err := tx.QueryRowContext(ctx, "SELECT active_generation FROM plugin_state WHERE plugin_id = ?", pluginID).Scan(&current)
-		if errors.Is(err, sql.ErrNoRows) {
+		var current pluginState
+		err := tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&current).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 		} else if err != nil {
 			return err
 		}
-		if current.String != expectedOld {
-			return fmt.Errorf("%w: expected %q, got %q", ErrStaleGeneration, expectedOld, current.String)
+		if current.ActiveGeneration.String != expectedOld {
+			return fmt.Errorf("%w: expected %q, got %q", ErrStaleGeneration, expectedOld, current.ActiveGeneration.String)
 		}
-		// 2. 给新代次写入 COMMITTED 标记；它必须存在、属于该插件且从未提交过。
-		res, err := tx.ExecContext(ctx,
-			"UPDATE generations SET committed_at = ? WHERE generation_id = ? AND plugin_id = ? AND committed_at IS NULL",
-			time.Now().UnixMilli(), newGen, pluginID)
-		if err != nil {
+		// 2. 给属于该插件且尚未提交的新代次写入 COMMITTED 标记。
+		var candidate generation
+		err = tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: newGen}).Take(&candidate).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		if n, _ := res.RowsAffected(); n != 1 {
+		if errors.Is(err, gorm.ErrRecordNotFound) || candidate.PluginID != pluginID || candidate.CommittedAt != nil {
 			return fmt.Errorf("generation %s does not exist, does not belong to plugin %s, or was already committed", newGen, pluginID)
 		}
-		// 3. 切换 Active。
-		_, err = tx.ExecContext(ctx, "UPDATE plugin_state SET active_generation = ? WHERE plugin_id = ?", newGen, pluginID)
-		return err
+		committedAt := time.Now().UnixMilli()
+		candidate.CommittedAt = &committedAt
+		if err := tx.Save(&candidate).Error; err != nil {
+			return err
+		}
+		// 3. 切换 Active；事务内保留其余状态字段。
+		current.ActiveGeneration = sql.NullString{String: newGen, Valid: true}
+		return tx.Save(&current).Error
 	})
 }
 
 // Active 返回插件当前的 ActiveGeneration（未激活时为空）。只有已 COMMITTED 的代次能成为 Active。
 func (s *Store) Active(ctx context.Context, pluginID string) (string, error) {
-	var g sql.NullString
-	err := s.db.QueryRowContext(ctx, "SELECT active_generation FROM plugin_state WHERE plugin_id = ?", pluginID).Scan(&g)
-	if errors.Is(err, sql.ErrNoRows) {
+	var row pluginState
+	err := s.db.WithContext(ctx).Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 	}
-	return g.String, err
+	return row.ActiveGeneration.String, err
 }
 
 // SetEnabled 持久化启用状态。
 func (s *Store) SetEnabled(ctx context.Context, pluginID string, enabled bool) error {
-	res, err := s.db.ExecContext(ctx, "UPDATE plugin_state SET enabled = ? WHERE plugin_id = ?", enabled, pluginID)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n != 1 {
-		return fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
-	}
-	return nil
+	return s.tx(ctx, func(tx *gorm.DB) error {
+		var row pluginState
+		err := tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&row).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
+		}
+		if err != nil {
+			return err
+		}
+		row.Enabled = enabled
+		return tx.Save(&row).Error
+	})
 }
 
 // Enabled 读取启用状态。
 func (s *Store) Enabled(ctx context.Context, pluginID string) (bool, error) {
-	var e bool
-	err := s.db.QueryRowContext(ctx, "SELECT enabled FROM plugin_state WHERE plugin_id = ?", pluginID).Scan(&e)
-	if errors.Is(err, sql.ErrNoRows) {
+	var row pluginState
+	err := s.db.WithContext(ctx).Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 	}
-	return e, err
+	return row.Enabled, err
 }

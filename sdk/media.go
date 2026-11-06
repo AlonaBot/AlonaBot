@@ -11,6 +11,25 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// ReadMedia 通过当前 Session 的有效令牌分块读取媒体，length 为 1～1 MiB。
+// Handler 中传入 Context.Context() 以沿用父调用的期限与取消。
+func ReadMedia(ctx context.Context, token string, offset uint64, length uint32) (data []byte, next uint64, eof bool, err error) {
+	result, err := CallProto[*pb.ReadResponse](ctx, wire.ServiceMediaRead, &pb.ReadRequest{Token: token, Offset: offset, Length: length})
+	if err != nil {
+		return nil, 0, false, err
+	}
+	return result.Data, result.NextOffset, result.Eof, nil
+}
+
+// GrantMedia 为已激活的接收插件申请范围受限的新令牌，保留原令牌的有效期。
+func GrantMedia(ctx context.Context, token, granteePluginID string, targets ...*pb.Target) (string, error) {
+	result, err := CallProto[*pb.GrantResponse](ctx, wire.ServiceMediaGrant, &pb.GrantRequest{Token: token, GranteePluginId: granteePluginID, Targets: targets})
+	if err != nil {
+		return "", err
+	}
+	return result.Token, nil
+}
+
 // Upload 顺序上传 r 的全部内容，由 Core 校验声明的大小、MIME 和摘要后签发引用。
 // Session 未就绪或已停止时返回 FAILED_PRECONDITION；读取失败保留原始错误。
 // 中断的上传由 Core 在期限到达或 Session 结束时回收。

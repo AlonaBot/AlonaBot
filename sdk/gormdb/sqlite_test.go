@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AlonaBot/AlonaBot/sdk/sqlitedb"
 	"gorm.io/gorm"
 	moderncsqlite "modernc.org/sqlite"
 )
@@ -41,7 +42,11 @@ func openTemp(t *testing.T, name string) (*gorm.DB, string) {
 // 打开后 WAL、FULL、外键与 busy timeout 实际生效。
 func TestOpenSQLitePragmas(t *testing.T) {
 	db, _ := openTemp(t, "p.sqlite")
-	v, err := ReadPragmas(context.Background(), db)
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := sqlitedb.ReadPragmas(context.Background(), sqlDB)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +54,6 @@ func TestOpenSQLitePragmas(t *testing.T) {
 	if v.JournalMode != "wal" || v.Synchronous != 2 || v.ForeignKeys != 1 || v.BusyTimeout != 5000 {
 		t.Fatalf("PRAGMA values %+v", v)
 	}
-	sqlDB, _ := db.DB()
 	if got := sqlDB.Stats().MaxOpenConnections; got != 1 {
 		t.Fatalf("connection pool limit = %d, want 1", got)
 	}

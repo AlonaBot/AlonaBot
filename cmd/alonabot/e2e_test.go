@@ -5,14 +5,18 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,7 +24,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/internal/core/adminauth"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
+	"github.com/AlonaBot/AlonaBot/internal/core/state"
 )
 
 // binDir 存放 TestMain 构建的 Core 与真实插件二进制。
@@ -486,6 +492,166 @@ func TestHTTPPluginSettings(t *testing.T) {
 			}
 			if code := c.wait(15 * time.Second); code != 0 {
 				t.Fatalf("exit %d: %s", code, c.log())
+			}
+		})
+	}
+}
+
+// TestAdminTokenRequiresTerminal 验证非终端命令以 usage 退出且没有初始化凭证。
+func TestAdminTokenRequiresTerminal(t *testing.T) {
+	for _, action := range []string{"init", "reset"} {
+		t.Run(action, func(t *testing.T) {
+			dir := t.TempDir()
+			command := exec.Command(filepath.Join(binDir, "alonabot"), "admin-token", action, "--data-dir", dir)
+			output, err := command.CombinedOutput()
+			if err == nil || command.ProcessState.ExitCode() != exitUsage || !strings.Contains(string(output), "stdin and stderr to be terminals") {
+				t.Fatalf("non-terminal %s: err=%v, output=%s", action, err, output)
+			}
+			store, err := state.Open(context.Background(), dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, readErr := store.AdminCredential(context.Background())
+			closeErr := store.Close()
+			if !errors.Is(readErr, state.ErrNotFound) || closeErr != nil {
+				t.Fatalf("credential after non-terminal %s: read=%v, close=%v", action, readErr, closeErr)
+			}
+		})
+	}
+}
+
+// TestAdminTokenResetWhileCoreRunning 通过真实伪终端越过终端门禁，验证 core.lock 拒绝离线 reset。
+func TestAdminTokenResetWhileCoreRunning(t *testing.T) {
+	dir := t.TempDir()
+	c := startCore(t, dir, "--listen", "127.0.0.1:0")
+	c.waitFor(activatedRe)
+	binary := filepath.Join(binDir, "alonabot")
+	var command *exec.Cmd
+	if runtime.GOOS == "linux" {
+		// util-linux script 接受单个 shell 命令，用环境传参以保留路径原文。
+		command = exec.Command("script", "-q", "-e", "-c", `exec "$ALONABOT_TEST_BINARY" admin-token reset --data-dir "$ALONABOT_TEST_DATA_DIR"`, os.DevNull)
+		command.Env = append(os.Environ(), "ALONABOT_TEST_BINARY="+binary, "ALONABOT_TEST_DATA_DIR="+dir)
+	} else {
+		command = exec.Command("script", "-q", os.DevNull, binary, "admin-token", "reset", "--data-dir", dir)
+	}
+	output, err := command.CombinedOutput()
+	if err == nil || command.ProcessState.ExitCode() != exitFailure || !strings.Contains(string(output), state.ErrDataDirLocked.Error()) || !strings.Contains(string(output), "stop Core") {
+		t.Fatalf("reset with Core holding core.lock: err=%v, output=%s", err, output)
+	}
+	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := c.wait(15 * time.Second); code != 0 {
+		t.Fatalf("Core exit %d: %s", code, c.log())
+	}
+}
+
+// TestAdminAuthRun 通过真实 Core 公开入口验证管理认证装配与 Host 隔离。
+func TestAdminAuthRun(t *testing.T) {
+	for _, initialized := range []bool{false, true} {
+		t.Run(fmt.Sprintf("initialized=%t", initialized), func(t *testing.T) {
+			dir := t.TempDir()
+			var token string
+			var credentials []string
+			if initialized {
+				store, err := state.Open(context.Background(), dir)
+				if err != nil {
+					t.Fatal(err)
+				}
+				token, err = adminauth.InitToken(context.Background(), store)
+				closeErr := store.Close()
+				if err != nil || closeErr != nil {
+					t.Fatalf("prepare credential: %v; close: %v", err, closeErr)
+				}
+			}
+			const origin = "http://admin.test:7650"
+			if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte("listen: 127.0.0.1:0\nadmin_base_url: "+origin+"\nplugin_base_url: http://plugin.test:7650\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			c := startCore(t, dir)
+			c.waitFor(activatedRe)
+			address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
+			send := func(method, path, host, source, body string, cookie *http.Cookie, csrf, bearer string, want int) (*http.Response, []byte) {
+				t.Helper()
+				req, err := http.NewRequest(method, "http://"+address+path, strings.NewReader(body))
+				if err != nil {
+					t.Fatal(err)
+				}
+				req.Host = host
+				req.Header.Set("Content-Type", "application/json")
+				if source != "" {
+					req.Header.Set("Origin", source)
+				}
+				if cookie != nil {
+					req.AddCookie(cookie)
+				}
+				if csrf != "" {
+					req.Header.Set("X-Alonabot-CSRF", csrf)
+				}
+				if bearer != "" {
+					req.Header.Set("Authorization", "Bearer "+bearer)
+				}
+				response, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				content, readErr := io.ReadAll(response.Body)
+				closeErr := response.Body.Close()
+				if readErr != nil || closeErr != nil {
+					t.Fatalf("read HTTP response: %v; close: %v", readErr, closeErr)
+				}
+				if response.StatusCode != want {
+					t.Fatalf("%s %s Host=%s: got %d want %d", method, path, host, response.StatusCode, want)
+				}
+				return response, content
+			}
+			send("POST", "/api/auth/login", "plugin.test", origin, `{"token":"wrong"}`, nil, "", "", 404)
+			send("POST", "/api/auth/login", "unknown.test", origin, `{"token":"wrong"}`, nil, "", "", 421)
+			if !initialized {
+				_, content := send("POST", "/api/auth/login", "admin.test", origin, `{"token":"wrong"}`, nil, "", "", 503)
+				if strings.TrimSpace(string(content)) != adminauth.ErrNotInitialized.Error() {
+					t.Fatal("uninitialized login did not return its safe error")
+				}
+				send("GET", "/api/probe", "admin.test", "", "", nil, "", "", 503)
+			} else {
+				send("POST", "/api/auth/login", "admin.test", origin, `{"token":"wrong"}`, nil, "", "", 401)
+				body, err := json.Marshal(map[string]string{"token": token})
+				if err != nil {
+					t.Fatal(err)
+				}
+				send("POST", "/api/auth/login", "admin.test", "http://admin.test:7651", string(body), nil, "", "", 403)
+				response, content := send("POST", "/api/auth/login", "admin.test", origin, string(body), nil, "", "", 200)
+				var reply struct {
+					CSRFToken string `json:"csrf_token"`
+				}
+				if err := json.Unmarshal(content, &reply); err != nil {
+					t.Fatal(err)
+				}
+				cookies := response.Cookies()
+				if len(cookies) != 1 || reply.CSRFToken == "" {
+					t.Fatal("login did not return one cookie and CSRF token")
+				}
+				cookie := cookies[0]
+				// 业务路由尚未注册；通过认证后到达404，未认证时被入口拒绝。
+				send("GET", "/api/probe", "admin.test", "", "", nil, "", "", 401)
+				send("GET", "/api/probe", "admin.test", "", "", cookie, "", "", 404)
+				send("GET", "/api/probe", "admin.test", "", "", nil, "", token, 404)
+				send("POST", "/api/probe", "admin.test", origin, "", cookie, "", "", 401)
+				send("POST", "/api/probe", "admin.test", origin, "", cookie, reply.CSRFToken, "", 404)
+				send("POST", "/api/auth/logout", "admin.test", origin, "", cookie, reply.CSRFToken, "", 204)
+				send("GET", "/api/probe", "admin.test", "", "", cookie, "", "", 401)
+				credentials = []string{token, cookie.Value, reply.CSRFToken}
+			}
+			if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+				t.Fatal(err)
+			}
+			if code := c.wait(15 * time.Second); code != 0 {
+				t.Fatalf("Core exit %d: %s", code, c.log())
+			}
+			for _, credential := range credentials {
+				if strings.Contains(c.log(), credential) {
+					t.Fatal("Core log contains management credentials")
+				}
 			}
 		})
 	}

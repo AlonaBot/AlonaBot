@@ -34,7 +34,7 @@ SDK 公开三个可选进程 Hook：`OnStart(context.Context) error`、`OnReady(
 
 首发目标为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64。市场预构建优先，本地源码构建可选；Native 进程只要求协议兼容，不要求 Core 与插件使用相同 Go patch。
 
-`plugin.yaml` 是插件 ID/版本真源，生成产物包含静态描述、Schema、i18/ 和可执行程序。市场 ID 使用 `alonabot_plugin_` 规范；本地允许安全 slug 并警告缺前缀。ID 不直接当作数据库标识符或主机名。
+工程中的 `plugin.yaml` 只写 ID、显示名、版本、描述、作者与来源等作者信息，是 ID/版本真源；`build` 与 `pack` 补上协议、平台、入口与迁移方式等构建信息（D-78），安装包包含 manifest、`config_schema.json`、`i18n/` 和可执行程序。市场 ID 使用 `alonabot_plugin_` 规范；本地允许安全 slug 并警告缺前缀。ID 不直接当作数据库标识符或主机名。
 
 不同包 ID 冲突保留持久化安装记录中的首个，拒绝后来的冲突来源；同一插件内部重复 route ID、命令路径/别名或 HTTP method+path 报错。已有插件更新必须校验原来源/发布者，不能借 first-wins 绕过更新身份校验。
 
@@ -50,9 +50,9 @@ TCP 为默认，Core 持有 loopback 端口 0 分配的 Listener；stdio 可选�
 
 ## D. Go SDK 与 Handler 注册
 
-一个插件包恰好一个根类，嵌入 `sdk.Base`，最多一个 Config 类型。`sdk.Base` 为根插件的全部 Hook（`OnStart`/`OnReady`/`OnStop`、`Config`、`Commands`/`HTTP`/`Schedules`）提供空的默认实现，根插件只覆盖需要的方法，SDK 原样调用，不区分是否覆盖；这样编辑器能补全出全部 Hook。`sdk.Root` 接口列出全部 Hook，覆盖时签名不符（或根插件有与 Hook 同名的字段）会使根插件不再满足 `sdk.Root`，在调用 `sdk.Run` 处编译失败，不会静默跳过。`Config` 返回 `config.Config`，配置类型嵌入 `config.Base`（默认 `OnLoad` 原样返回 raw），覆盖 `OnLoad` 时签名不符同样在编译期失败。元数据 ID 只来自 plugin.yaml；辅助 Handler 可以显式接收根类指针，不引入自动 DI。包级函数可用 `//alonabot:command`、`//alonabot:event` 构建期标记发现；实例方法必须提供实例显式注册。
+一个插件包恰好一个根类，嵌入 `sdk.Base`；配置由包内的 `config_schema.json` 声明，不定义 Go 配置类型（D-76）。`sdk.Base` 为根插件的全部 Hook（`OnStart`/`OnReady`/`OnStop`、`OnConfigLoad`、`Commands`/`HTTP`/`Schedules`）提供空的默认实现，并提供读取本 Session 配置的 `Config()`，根插件只覆盖需要的方法，SDK 原样调用，不区分是否覆盖；这样编辑器能补全出全部 Hook。`sdk.Root` 接口列出全部 Hook，覆盖时签名不符（或根插件有与 Hook 同名的字段）会使根插件不再满足 `sdk.Root`，在调用 `sdk.Run` 处编译失败，不会静默跳过。默认的 `OnConfigLoad` 原样返回 raw，覆盖时签名不符同样在编译期失败。元数据 ID 只来自 plugin.yaml；辅助 Handler 可以显式接收根类指针，不引入自动 DI。命令、文本匹配与事件只在根插件的注册方法中链式注册（D-79），包级函数也这样注册，没有第二种写法。
 
-生成器只扫描当前模块的目标构建包，遵守 Go build tags/GOOS/GOARCH，排除外部依赖、vendor 和测试文件；用生成 Go 代码让编译器检查签名。路由、配置 Schema 和 i18/ 的构建检查在 T-01/T-04 落地；不在运行时从磁盘扫描任意包。单次 Session 注册描述固定，Core 动态修改权限/开关，不重建插件对象。
+`alonabot build` 只处理当前模块的目标构建包，遵守 Go build tags/GOOS/GOARCH，排除外部依赖、vendor 和测试文件；生成的 Go 代码嵌入 manifest、配置 schema、`i18n/` 与 Service Schema，并生成正式入口；不在运行时从磁盘扫描任意包。单次 Session 注册描述固定，Core 动态修改权限/开关，不重建插件对象。
 
 以下是接口用法示意，需随 SDK 实现编译验证：
 
@@ -152,7 +152,7 @@ Service 以 `plugin_id/service_name` 注册，使用显式 schema/version 的 JS
 
 外部统一 `/plugins/{id}/...`，SDK Handler 接收去掉插件前缀的路径。Core 校验路由/权限，清理外部内部认证头、Core Cookie/Authorization，再注入 Session 认证；用标准库 ReverseProxy.Rewrite，不能由请求指定代理目标。
 
-Admin 与插件内容采用两个全局主机名，使用同一公开 Listener/端口。插件内容 host 不提供 Admin API，采用独立受控会话；Admin 不允许插件 Origin 访问管理 API。所有插件页面共享插件 Origin 信任域，不声称插件页面彼此隔离。未配置内容 host 时 API/Webhook 可用，但不得在 Admin Origin 直接执行插件 HTML/JS/SVG。
+管理界面与插件路由使用同一个主机名、同一公开 Listener/端口（D-84）。Core 给插件路由的全部响应加上不含 allow-same-origin 的 CSP sandbox，插件页面运行在不透明源中，读不到管理 Cookie 与 WebUI 的存储；WebUI 用 iframe 嵌入插件页面，页面只经 postMessage 桥请求本插件的路由，由 WebUI 以管理员会话转发（CONTRACTS §7.3）。部署时不需要第二个域名。
 
 ### 数据库
 
@@ -162,32 +162,50 @@ Core 管理状态库与插件业务库分开。框架只托管 SQLite（D-48）�
 
 `Migrate(ctx, db)` 与 `Migrations() []Migration` 可选且互斥，由 `sqlitedb` 与 `gormdb` 各定义一组，回调在插件 SDK 内执行，Core 负责调度与代次门槛。辅助迁移的 Up 与成功记录在插件 DB 的同一事务；没有迁移接口就不主动迁移。维护许可和启动原因在 Bootstrap 明确下发。
 
-## J. Config、Schema 与 i18/
+## J. Config、Schema 与 i18n/
 
-运行配置为普通 JSON 对象，无外层 config；i18/ 翻译才以 config 为顶层。Go Config 的 json/form/description/secret/hidden tag 生成 Schema 与表单，字段按声明顺序，保留未知键、显式 false/0/空串与隐藏字段。
+运行配置为普通 JSON 对象，无外层 config；i18n/ 翻译才以 config 为顶层。字段由包内手写的 `config_schema.json` 声明（D-76），键名沿用 AstrBot 的 `_conf_schema.json`，另有 `secret`、`required` 与只能选一个模板的 `template`；键的顺序就是表单顺序。每个字段都有值：缺失键补 default 或类型零值，显式 false/0/空串与 invisible 字段保留，未知键保留。
 
-`OnLoad` 是配置回调，区别于三个进程 Hook，也负责拒绝不合法的业务取值，SDK 不另设 Validate 回调。流程为原始对象→配置版本迁移（OnLoad）→仅补缺键默认→typed decode/Schema 校验→Candidate；不能先用新 Schema 拒绝仍需迁移的旧字段。持久化保留原始完整对象，不能用 typed marshal 丢掉未知键。
+`OnConfigLoad` 是配置回调，区别于三个进程 Hook，也负责拒绝不合法的业务取值，SDK 不另设 Validate 回调。流程为原始对象→配置版本迁移（OnConfigLoad）→补缺失值→schema 校验→Candidate；不能先用新 schema 拒绝仍需迁移的旧字段。持久化保留原始完整对象，不能用只含已声明字段的结果丢掉未知键。插件经 `Config()` 按类型取值，键未声明或类型不符直接 panic，这类错误在开发时就会暴露。
+
+配置会随版本演进：`config_schema.json` 用 `$version` 与 `$migrations` 声明改名、选项改值、单值改列表与删除，由框架按存储的版本依次迁移；新增字段自动补默认值，删除的字段作为未知键保留。插件不必为常见变更写迁移代码，`OnConfigLoad` 只处理声明表达不了的情况。Adapter 实例配置与 Core 的 `core_config.json` 用同一套规则，Core 写回前先备份，迁移失败或遇到更新的版本时明确报错，不丢配置（D-85、CONTRACTS §5.5）。
 
 Core 状态库的 ActiveGeneration 是权威，`config.json` 是用户编辑快照。直接编辑不热生效，`plugin reload` 导入 Pending 后走候选流程。新 secret 产生新不可变引用，候选失败不修改旧凭证；普通配置 API 不返回明文。表单 PATCH 采用明确操作，掩码不当作真实值。
 
 ```json
 {
+  "interval": {"description": "Refresh interval", "hint": "Polling interval in seconds", "type": "int", "default": 10, "slider": {"min": 1, "max": 600}},
+  "mode": {"description": "Mode", "type": "string", "options": ["fast", "safe"], "labels": ["Fast", "Safe"], "default": "fast"},
+  "music": {"description": "Music source", "type": "template", "templates": {
+    "netease": {"name": "NetEase Cloud Music", "items": {"cookie": {"description": "Cookie", "type": "string", "secret": true, "required": true}}}
+  }}
+}
+```
+
+```go
+interval := p.Config().Int("interval")
+if m := p.Config().Template("music"); m.Key() == "netease" {
+    cookie := m.String("cookie")
+}
+```
+
+```json
+{
   "config": {
-    "interval": {
-      "label": "Refresh interval",
-      "description": "Polling interval"
-    }
+    "interval": { "description": "刷新间隔", "hint": "轮询间隔（秒）" },
+    "mode": { "description": "模式", "labels": ["快速", "安全"] },
+    "music": { "templates": { "netease": { "name": "网易云音乐" } } }
   }
 }
 ```
 
-以上是 i18/en-US.json 示例；语言仅影响文案，查找为当前 locale→en-US→默认 tag。选项显示名可翻译，值和配置 JSON 路径保持不变。
+以上依次是 `config_schema.json`、插件取值与 i18n/zh-CN.json 示例：源文案写在 schema 中，翻译文件与 schema 同形覆盖（保留 items、templates 两层）。语言仅影响文案，查找为当前 locale→schema 中的源文案→字段键。选项的存储值不翻译，显示文案由 labels 提供。
 
 同一文件的顶层 `messages` 存放机器人回复的文案，例如 `{"messages": {"quiz.got": "You answered {answer}."}}`。SDK 的 `c.T` 按用户的 locale、Core 默认 locale、en-US 的顺序选择语言；日志与错误只用英文，不进入文案目录（CONTRACTS §5.4）。
 
 ## K. WebUI、安装与运行安全
 
-WebUI 是可替换的组件（§T），只含静态文件，由 Core 在 Admin 主机上提供，只经带主版本号的 Admin API 管理 Core（CONTRACTS §7.5）。官方 WebUI 提供状态/日志、安装启停、更新/恢复、配置表单与命令权限。管理 API 采用 Core 的管理员认证、CSRF 与独立 Session；首次本机 admin-token init/reset、浏览器登录与 CLI Bearer 按 CONTRACTS §7.4 实现；插件页面不会收到管理 Cookie。没有可信来源/合法归档就不执行程序，首次信任与后续更新绑定持久化。
+WebUI 是可替换的组件（§T），只含静态文件，由 Core 提供，只经带主版本号的 Admin API 管理 Core（CONTRACTS §7.5）。官方 WebUI 提供状态/日志、安装启停、更新/恢复、配置表单与命令权限。管理 API 采用 Core 的管理员认证、CSRF 与独立 Session；首次启动生成管理 token（终端中显示一次，非终端时写入数据目录的 `admin_token`）、admin-token init/show/reset、浏览器登录与 CLI Bearer 按 CONTRACTS §7.4 实现；插件页面不会收到管理 Cookie。没有可信来源/合法归档就不执行程序，首次信任与后续更新绑定持久化。
 
 环境变量只传该插件所需信息，SDK 将日志标记 plugin/session/route/call；secret 原文不进入普通日志。工作目录与进程隔离不是 OS 权限隔离，首发只支持可信 Native 插件。进程树按 Linux/macOS/Windows 的合作型子进程机制回收，验证不涵盖恶意 detach。
 
@@ -239,7 +257,7 @@ v0.1 只支持 Telegram long polling，先确定实际 bot 身份并校验 accou
 
 ## O. SDK 分层、CLI 与可观测性
 
-最小逻辑分层为 contracts、plugin SDK、Core 和 plugin CLI；contracts 不依赖具体平台 SDK/GORM，数据库作为按需 SDK 包。使用标准 Go 编译、Protocol Buffers、标准 HTTP 代理及选定驱动，不引入额外容器运行时、服务发现或迁移平台。
+最小逻辑分层为 contracts、SDK、Core 和 CLI；contracts 不依赖具体平台 SDK/GORM，数据库作为按需 SDK 包。使用标准 Go 编译、Protocol Buffers、标准 HTTP 代理及选定驱动，不引入额外容器运行时、服务发现或迁移平台。
 
 **按需付费**（D-52）：Core 与 SDK 根包只链接允许清单中的模块，模型 SDK、Provider 客户端、MCP 与外部数据库驱动一律放在需要它们的插件或按需 SDK 包里；GORM 由 Core 状态库使用（D-68），插件仍只在导入 `sdk/gormdb` 时链接；没有安装或没有启用的组件不运行进程。Core 与示例插件的空闲常驻内存有预算（TEST-MATRIX V-74），依赖由审查用 `go list -deps` 核对（V-75）。插件作者的对应规则见 [插件开发规范](../docs/plugin-guide.md)。
 
@@ -262,11 +280,11 @@ Target 与凭证按 Adapter 实例/账号区分，不把特定 X/Twitter 多账�
 Agent 分为 Core 基础与 Agent 组件两层（D-27）。Core 负责必须可信的部分：工具目录与按工具的调用策略、调用前的用户确认、会话存储；它们复用 Service Broker、按钮 token 与 Target 准入的实现（CONTRACTS §13）。Agent 组件（`role: agent`，全局至多一个，D-59）只经 SDK 访问 Core。官方 Agent 组件位于 `agent/`，可以被社区 Agent 替换；其他插件经 `@agent` 调用 `llm.generate`，替换后不用修改（D-61）。官方 Agent 组件：
 
 - **一轮对话**：`/ask` 在任何聊天中触发；Admin 为某个聊天开启自由对话后，该聊天中 `to_me` 的非命令消息也触发（私聊的消息都是 `to_me`）。触发的 Handler 请求延续调用，在其中读取会话历史，按人格组装系统提示，调用 Provider 并流式接收。目标实例支持 `message.edit` 时，先发送一条消息，再按固定间隔编辑它，显示已生成的内容，生成结束后用完整内容做最后一次编辑；不支持时生成结束后一次发送。会话按 Adapter 实例、聊天与话题区分。
-- **Provider**：官方 OpenAI（`openai`）、OpenAI 兼容（`openai-compatible`）的 Chat Completions 与 Anthropic Messages，用标准库 net/http 与 SSE 实现；api_key 使用 Secret 引用。两种 OpenAI 协议只差输出上限的参数名（D-64）。Provider 条目可以选择预设（例如 openai、anthropic、deepseek），预设给出缺省的协议与 base_url，在配置表单中带各自的图标（D-63）。流结束时得到停止原因与用量。
+- **Provider**：官方 OpenAI（`openai`）、OpenAI 兼容（`openai-compatible`）的 Chat Completions 与 Anthropic Messages，用标准库 net/http 与 SSE 实现；api_key 使用 Secret 引用。两种 OpenAI 协议只差输出上限的参数名（D-64）。Provider 条目可以选择预设（例如 openai、anthropic、deepseek），预设给出缺省的协议与 base_url。流结束时得到停止原因与用量。
 - **工具**：模型请求的 Core 工具经 `core.tool.invoke` 调用；MCP 工具（stdio、streamable HTTP，经 `github.com/modelcontextprotocol/go-sdk`）执行前先经 `core.tool.confirm`。单轮的工具步数有上限。
 - **技能**：管理员放进技能目录的 `SKILL.md`，包含名称、描述与正文。系统提示只列出描述，模型经 `load_skill` 按需读取正文。
 - **定时任务**：用户让 Agent 创建的任务保存在 Agent 的数据库，由一个固定的 schedule 触发，在该回调内运行；没有 Actor，因此需要确认的工具一律拒绝。
-- **文本生成服务**：`llm.generate` 让其他插件复用已配置的 Provider（CONTRACTS §13.5），调用方以 `@agent` 为目标。只有管理员列入 `llm_service_allowed_plugins` 的插件能调用；一次调用就是一次完整的 Provider 请求，不涉及会话、记忆、人格与工具。
+- **文本生成服务**：`llm.generate` 让其他插件复用已配置的 Provider（CONTRACTS §13.5），调用方以 `@agent` 为目标。`llm_service_allowed_plugins` 缺省为全部插件，管理员可以收紧为名单（D-83）；一次调用就是一次完整的 Provider 请求，不涉及会话、记忆、人格与工具。
 
 记忆由 Agent 自己实现（D-60，取代 D-28 的记忆插件）。官方 Agent 仿照 Hermes 的内置记忆，数据保存在 Agent 的受管 SQLite：
 
@@ -278,17 +296,17 @@ Agent 分为 Core 基础与 Agent 组件两层（D-27）。Core 负责必须可�
 
 ## S. 两种运行方式
 
-AlonaBot 同时面向直接使用机器人的用户和写插件的开发者（D-32），两者运行的是同一个 Core 和同一套协议，区别只在组件由谁启动：
+AlonaBot 同时面向直接使用机器人的用户和写插件的开发者（D-32），两者运行的是同一个 Core、同一个命令和同一套协议（D-77）：
 
-| | 发行包（用户） | 库模式（开发者） |
+| | 部署（用户） | 开发（开发者） |
 | --- | --- | --- |
-| 入口 | 从本仓库的 Release 用发行归档、`install.sh` 或 `docker compose` 安装（官方整合包），在 WebUI 中配置 | 在自己的 `main.go` 中调用 `alonabot.Run`，执行 `go run .` |
-| 包含 | Core、官方 Telegram 与 OneBot 11 Adapter、Agent、WebUI 与预装插件；首次运行自动安装，默认只启用 help 与 WebUI，Agent 由管理员按需启用（D-50、D-62） | 内嵌完整的 Core；开发中的插件、Adapter 或 Agent 由本进程运行，开发中的 WebUI 经 `alonabot.WebUI` 提供 |
-| 组件进程 | 每个已启用的包一个独立进程（WebUI 没有进程） | 开发中的组件与 Core 同进程，可直接打断点；已安装的其他包仍是独立进程 |
+| 入口 | 从本仓库的 Release 用发行归档、`install.sh` 或 `docker compose` 安装（官方整合包），`alonabot run` 启动，在 `core_config.json` 或 WebUI 中配置 | `alonabot init` 创建组件工程，`alonabot run --reload` 在工程目录中运行 |
+| 包含 | Core、官方 Telegram 与 OneBot 11 Adapter、Agent、WebUI 与预装插件；首次运行自动安装，默认只启用 help 与 WebUI，Adapter 在 `core_config.json` 写了实例时启用，Agent 由管理员按需启用（D-50、D-62、D-82） | 与部署相同的 Core 与已安装组件，外加当前工程（或给出的多个目录）中开发的组件 |
+| 组件进程 | 每个已启用的包一个独立进程（WebUI 没有进程） | 开发中的组件也是独立进程；改动源码后自动重新构建，只重启该组件 |
 
-库模式下开发者只写插件包和一个调试用的 `main.go`，发布时 `alonabot plugin build` 自动生成正式入口。开发时与生产时的行为只差进程隔离与崩溃重启。启用热部署后 Core 常驻，开发中的组件改为子进程：源码改动后重新编译，只重启这些组件，Adapter 连接、其他插件与按钮都不受影响；编译失败时旧版本继续运行（CONTRACTS §15）。
+开发者只写组件本身，不写 `main.go`：`alonabot build` 生成正式入口，`run` 每次启动前都会构建。开发时与生产时的行为只差安装来源（dev）与固定代次。热部署时 Core 常驻，源码改动后重新编译，只重启变化的组件，Adapter 连接、其他插件与按钮都不受影响；编译失败时旧版本继续运行；只改配置时不重新编译（CONTRACTS §15.4）。
 
-Go 不能在进程内替换已加载的代码，所以热部署通过重启子进程实现，断点调试与热部署不能同时使用。
+Go 不能在进程内替换已加载的代码，所以热部署通过重启子进程实现。需要断点调试时把调试器附加到组件进程，或改用库模式：在自己的 Go 程序中调用 `alonabot.Run` 或 `alonabot.Start`，组件与 Core 同进程运行。库模式也用于把 Core 嵌入其他 Go 服务与插件测试套件（CONTRACTS §15.5、§17）。
 
 官方组件只经 SDK 或 Admin API 与 Core 通信，`adapters/`、`agent/`、`plugins/` 与 `web/admin/` 不被本仓库其他包 import；v0.1 协议冻结后迁到独立仓库。
 

@@ -14,6 +14,8 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/sdk/config"
+	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
 )
 
 // handshakeTimeout 与 CONTRACTS §4.2 的 Hello/HelloAck 预算一致。
@@ -138,18 +140,21 @@ func sessionFailure(conn *wire.Conn, sid []byte, minor uint32, pluginID string, 
 
 // buildRegister 把收集到的注册项转成 REGISTER。
 // shortcut: route_id 暂用 "cmd.<路径以 . 连接>"，有稳定 route_id 生成器后替换。
-func buildRegister(reg *Registration, configJSON string, configVersion uint32) *pb.Register {
+func buildRegister(reg *Registration, configJSON string, configVersion uint32, configSchema []byte) *pb.Register {
 	r := &pb.Register{CandidateConfigJson: configJSON, CandidateConfigVersion: configVersion,
 		Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	if len(configSchema) != 0 {
+		r.ConfigSchemaHash = config.SchemaHash(configSchema)
+	}
 	for _, c := range reg.Commands {
 		spec := c.spec
 		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: commandRouteID(c), Priority: c.Priority, Kind: pb.RouteKind_ROUTE_KIND_COMMAND,
-			DefaultEnabled: true, RequiredPermission: pb.Permission_PERMISSION_ANY, Spec: &pb.RouteDescriptor_Command{Command: spec}})
+			DefaultEnabled: true, RequiredPermissions: []string{"user"}, Spec: &pb.RouteDescriptor_Command{Command: spec}})
 	}
 	for _, event := range reg.Events {
 		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: event.RouteID, Priority: event.Priority, Kind: pb.RouteKind_ROUTE_KIND_EVENT,
-			DefaultEnabled: true, RequiredPermission: pb.Permission_PERMISSION_ANY,
-			Spec: &pb.RouteDescriptor_Event{Event: &pb.EventSpec{EventTypeFilter: []string{event.EventType}, HandlerMode: pb.HandlerMode_HANDLER_MODE_MANUAL}}})
+			DefaultEnabled: true,
+			Spec:           &pb.RouteDescriptor_Event{Event: &pb.EventSpec{EventTypeFilter: []string{event.EventType}, HandlerMode: pb.HandlerMode_HANDLER_MODE_MANUAL}}})
 	}
 	appendHTTPRoutes(r, reg.HTTP)
 	appendServiceRoutes(reg, r)
@@ -157,13 +162,13 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32) *
 	return r
 }
 
-// prepare 执行准备阶段：配置准备（目前原样透传）→ OnStart（独立 watchdog）→ REGISTER → 等待 PREPARED。
+// prepare 执行准备阶段：配置准备 → 迁移 → OnStart（各有独立预算）→ REGISTER → 等待 PREPARED。
 // 准备期不能发起业务 RPC。失败时已向 Core 报告 SESSION_ERROR 并关闭连接。
-func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Registration) (*pb.Prepared, error) {
+func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Registration) (prepared *pb.Prepared, err error) {
 	sid, boot, minor := ack.GetSessionId(), ack.GetBootstrap(), ack.GetChosenMinor()
 	limits := boot.GetPhaseLimits()
 	// 1. Core 必须下发阶段预算与准备截止时间；缺失时报协议错误，而不是把预算当作 0 误报超时。
-	if limits == nil || limits.GetOnStartMs() == 0 || boot.GetPreparationDeadlineUnixMs() == 0 {
+	if limits == nil || limits.GetConfigMs() == 0 || limits.GetMigrationMs() == 0 || limits.GetOnStartMs() == 0 || boot.GetPreparationDeadlineUnixMs() == 0 {
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_HELLO_ACK,
 			pb.ErrorCode_ERROR_CODE_PROTOCOL_ERROR, "Bootstrap is missing phase limits or the preparation deadline", nil)
 	}
@@ -174,11 +179,47 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 			pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "Bootstrap is missing valid session limits", nil)
 	}
 
+	// 2. 在 OnStart 之前完成配置迁移、默认值与校验；restart 与恢复均使用 RESUME。
+	configContext, cancelConfig := context.WithTimeout(context.Background(), time.Duration(limits.GetConfigMs())*time.Millisecond)
+	preparedConfig, err := config.Prepare(configContext, root.Config(), generatedFor(root).ConfigSchema,
+		[]byte(boot.GetCandidateConfigJson()), boot.PreviousConfigVersion, boot.GetTargetConfigVersion(),
+		boot.GetDatabaseDescriptor().GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME)
+	cancelConfig()
+	if err != nil {
+		failure := err.(*validate.Error) // Prepare 的失败均携带协议错误码和安全消息。
+		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
+			failure.Code, failure.Message, err)
+	}
+
+	// 3. 数据库从迁移阶段开始可用；后续任何准备失败都由这里关闭连接。
+	dbhook.Begin(boot.GetDatabaseDescriptor())
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, dbhook.Close())
+		}
+	}()
+	migrationContext, cancelMigration := context.WithTimeout(context.Background(), time.Duration(limits.GetMigrationMs())*time.Millisecond)
+	migration, migrationError := prepareMigrations(migrationContext, root, boot.GetDatabaseDescriptor())
+	cancelMigration()
+	if migrationError != nil {
+		code := pb.ErrorCode_ERROR_CODE_INTERNAL
+		var failure *validate.Error
+		if errors.As(migrationError, &failure) {
+			code = failure.Code
+		}
+		if errors.Is(migrationError, context.DeadlineExceeded) {
+			code = pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED
+		}
+		slog.Error("database migration failed", "err", migrationError)
+		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_MIGRATION, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
+			code, "database migration failed", migrationError)
+	}
+
 	if err := l.http.start(boot); err != nil {
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER, pb.ErrorCode_ERROR_CODE_INTERNAL, "prepare HTTP listener failed", err)
 	}
 
-	// 2. OnStart：用户函数不响应 context 时，由 watchdog 判定失败（Run 随后退出进程）。
+	// 4. OnStart：用户函数不响应 context 时，由 watchdog 判定失败（Run 随后退出进程）。
 	budget := time.Duration(limits.GetOnStartMs()) * time.Millisecond
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	errc := make(chan error, 1)
@@ -208,8 +249,9 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 			pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnStart exceeded its budget", nil)
 	}
 
-	// 3. 发送完整 REGISTER；超过 4 MiB 时报告 RESOURCE_EXHAUSTED。
-	registration := buildRegister(reg, boot.GetCandidateConfigJson(), boot.GetTargetConfigVersion())
+	// 5. 发送完整 REGISTER；超过 4 MiB 时报告 RESOURCE_EXHAUSTED。
+	registration := buildRegister(reg, string(preparedConfig.JSON), preparedConfig.Version, generatedFor(root).ConfigSchema)
+	registration.Migration = migration
 	l.http.report(registration)
 	regEnv, err := wire.ControlEnvelope(sid, minor, l.pluginID, pb.FrameKind_FRAME_KIND_REGISTER, registration)
 	if err != nil {
@@ -223,7 +265,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 		return nil, fmt.Errorf("send REGISTER: %w", err)
 	}
 
-	// 4. 在准备截止前等待 PREPARED 或 Core 的 SESSION_ERROR。
+	// 6. 在准备截止前等待 PREPARED 或 Core 的 SESSION_ERROR。
 	deadline := time.UnixMilli(boot.GetPreparationDeadlineUnixMs())
 	stop := withWatchdog(conn, time.Until(deadline))
 	defer stop()
@@ -247,4 +289,40 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 		return nil, &Error{Code: validate.PublicCode(env.GetError().GetCode()), Message: "Core rejected the registration: " + env.GetError().GetSafeMessage()}
 	}
 	return nil, fmt.Errorf("unexpected %s during preparation", env.GetKind())
+}
+
+func prepareMigrations(ctx context.Context, root Root, descriptor *pb.DatabaseDescriptor) (*pb.MigrationState, error) {
+	type result struct {
+		state *pb.MigrationState
+		err   error
+	}
+	completed := make(chan result, 1) // 超时后用户回调仍可返回，避免结果发送阻塞。
+	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				logPanic("migration", p)
+				completed <- result{err: fmt.Errorf("migration panic: %v", p)}
+			}
+		}()
+		migrators := dbhook.Recognize(root)
+		if len(migrators) > 1 {
+			completed <- result{err: &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "root plugin implements multiple migration interfaces"}}
+			return
+		}
+		if descriptor.GetBackend() == pb.DatabaseBackend_DATABASE_BACKEND_NONE || len(migrators) == 0 {
+			completed <- result{state: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+			return
+		}
+		state, err := migrators[0].Run(ctx)
+		completed <- result{state: state, err: err}
+	}()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case result := <-completed:
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		return result.state, result.err
+	}
 }
