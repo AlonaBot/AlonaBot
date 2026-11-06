@@ -112,12 +112,12 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 			caller := router.NewCaller(spec.PluginID, spec.GenerationID)
 			defer mediaStore.ReleaseSession(caller.SessionKey)
 			spec.Handler = mux.For(caller)
-			events := router.New(values.DispatchQueueEvents, registry, sender.Send, mediaStore.PrepareIncoming, func(instanceID string) []string {
+			events := router.New(router.Options{Concurrency: 1, QueueBytes: values.DispatchQueueBytes, QueueEvents: values.DispatchQueueEvents, Adapters: registry, Send: sender.Send, Prepare: mediaStore.PrepareIncoming, Prefixes: func(instanceID string) []string {
 				if instanceID == "custom" {
 					return []string{"!", "!!", ""}
 				}
 				return []string{"/"}
-			}, nil)
+			}})
 			mediaStore.AddReadServices(mux, registry, events, store.AdapterInstanceAllowed)
 			services := broker.New(events, values.RequestTimeout)
 			serviceParents := make(chan uint64, 1)
@@ -132,7 +132,11 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 				return services.Call(ctx, caller, in)
 			})
 			events.Start()
-			defer events.Close()
+			defer func() {
+				if err := events.Close(context.Background()); err != nil {
+					t.Error(err)
+				}
+			}()
 			if err := platform.Start(ctx, events); err != nil {
 				t.Fatal(err)
 			}

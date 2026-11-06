@@ -165,8 +165,8 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 - 安全：所有修改请求带 X-Alonabot-CSRF；页面不读取或展示 token、secret 明文；组件图标只用 `<img>` 引用（D-63）。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：无。CI 不跑前端，下面的纯函数测试写在本地。
-- 本地自测（不提交，PR 中写明结果）：npm run build 与 typecheck；用 goal-84 的 `alonabot.WebUI` 选项或安装构建出的 WebUI 包，在真实 Core 上用浏览器手动走一遍：登录 → 安装 → 启用 → 创建实例 → 停用 → rollback（写明浏览器与版本，属于手动验证）；web/admin/src/api/api.local.test.ts（vitest，不依赖 DOM）：用 fetch 的测试替身验证 API 客户端的 CSRF 头、会话取回、409 确认流程的数据结构、错误格式解析。
+- 提交：web/admin/src/api/api.test.ts（vitest，不依赖 DOM）：用 fetch 的测试替身验证 API 客户端的 CSRF 头、会话取回、409 确认流程的数据结构、错误格式解析。
+- 本地自测（不提交，PR 中写明结果）：npm run build 与 typecheck；用 goal-84 的 `alonabot.WebUI` 选项或安装构建出的 WebUI 包，在真实 Core 上用浏览器手动走一遍：登录 → 安装 → 启用 → 创建实例 → 停用 → rollback（写明浏览器与版本，属于手动验证）。
 
 完成条件：web/admin 下 npm ci、npm run typecheck、npm run test、npm run build 成功。
 
@@ -206,8 +206,8 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 - 所有修改请求带 CSRF 头。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：无。CI 不跑前端，下面的纯函数测试写在本地。
-- 本地自测（不提交，PR 中写明结果）：npm run build 与 typecheck；在真实 Core 上用浏览器手动走一遍各页面并切换语言（写明浏览器与版本，属于手动验证）；web/admin 的 *.local.test.ts（vitest，不依赖 DOM）：API 客户端对 goal-93 端点的请求格式、base_generation 与 409 处理。
+- 提交：web/admin 的 vitest（不依赖 DOM）：API 客户端对 goal-93 端点的请求格式、base_generation 与 409 处理。
+- 本地自测（不提交，PR 中写明结果）：npm run build 与 typecheck；在真实 Core 上用浏览器手动走一遍各页面并切换语言（写明浏览器与版本，属于手动验证）。
 
 完成条件：web/admin 下 npm ci、npm run typecheck、npm run test、npm run build 成功。
 
@@ -238,8 +238,8 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 - 级别设置区域：经 GET/PUT /logs/levels 读取和修改全局与按来源的级别。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：无。CI 不跑前端，下面的纯函数测试写在本地。
-- 本地自测（不提交，PR 中写明结果）：npm run build 与 typecheck；在真实 Core 上用浏览器手动验证实时订阅、历史查询与级别修改（写明浏览器与版本，属于手动验证）；web/admin 的 *.local.test.ts（vitest，不依赖 DOM）：日志接口客户端的请求格式；SSE 记录的解析与按时间去重；筛选条件的保存与恢复。
+- 提交：web/admin 的 vitest（不依赖 DOM）：日志接口客户端的请求格式；SSE 记录的解析与按时间去重；筛选条件的保存与恢复。
+- 本地自测（不提交，PR 中写明结果）：npm run build 与 typecheck；在真实 Core 上用浏览器手动验证实时订阅、历史查询与级别修改（写明浏览器与版本，属于手动验证）。
 
 完成条件：web/admin 下 npm ci、npm run typecheck、npm run test、npm run build 成功。
 

@@ -190,6 +190,7 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 
 - **集成测试**通过组件的公开入口驱动真实的协作方，例如真实的插件进程、两端都是真实代码的 Session 连接、真实的 SQLite、真实的文件系统和系统锁。外部平台可以用仓库提供的模拟服务替代（例如内存 Adapter、本地 Bot API 模拟服务），但不能用假实现替换仓库里的其他组件。
 - **协议编号检查**只有 `contracts/wirespec_test.go`，用来防止误改协议字段号和枚举值。
+- **不提交绑定 SDK API 的测试**（D-86）：`sdk/` 不提交测试；`internal/core/supervisor/` 只保留 `supervisor_test.go`，其中不依赖 SDK API；不新增 `testdata` 测试插件。这些验证写在 `*_local_test.go`，结果写进 PR。
 - **数量**：一个切片或 PR 默认只提交一个覆盖主路径的集成测试，场景只放规格要求的主路径和只有跨进程才会暴露的失败。多列测试时，在 goal 语句或 PR 正文写明理由。V 编号的其余分项用本地测试取证，按 [TEST-MATRIX §3](../spec/TEST-MATRIX.md#3-证据和失败门槛) 记录。
 - 单元测试、边界穷举、回归复现和临时测试，写在包目录下以 `_local_test.go` 结尾的文件里。这类文件已被 `.gitignore` 忽略，写多少都可以，不会被提交。不在 Go 包内的一次性脚本放在 `tmp/test/`。
 - **前端**：CI 不跑前端，提交的前端测试没有门禁。纯函数的测试（Schema 解析、patch 构造、API 客户端的请求格式）写在以 `.local.test.ts` 或 `.local.test.tsx` 结尾的文件里，它们已被 `.gitignore` 忽略，vitest 的默认匹配也能运行它们。`npm run test` 使用 `vitest run --passWithNoTests`，没有本地测试的检出也能通过。

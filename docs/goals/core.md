@@ -11,6 +11,7 @@
 | goal-23 | T-07.1 | 调度触发计算 | — | 已完成 |
 | goal-29 | T-08.2 | 配置 JSON 语义与 Pending | — | 已完成 |
 | goal-37 | T-09.2 | 安装包预检与安全解压 | — | 已完成 |
+| goal-103 | T-02.4 | 移除绑定 SDK API 的提交测试 | — | 待派发 |
 | goal-76 | T-02.2 | 调优参数 | T-02.1 | 已完成（PR #28） |
 | goal-2 | T-03.1 | 首个可用 SDK 切片 | T-02.1、T-02.2 | 已完成（PR #29） |
 | goal-3 | T-03.2 | Target 与发信许可 | T-03.1 | 已完成（PR #31） |
@@ -43,7 +44,7 @@
 | goal-100 | T-09.16 | manifest 拆分为作者信息与构建信息 | T-03.8、T-09.2 | 等待前置 |
 | goal-91 | T-04.8 | SDK 自有类型与事件常量 | T-04.7、T-04.9 | 等待前置 |
 | goal-96 | T-04.9 | 删除构建期标记 | T-04.7 | 待派发 |
-| goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 待派发 |
+| goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 已完成（PR #67） |
 | goal-98 | T-07.7 | 插件页面的沙箱隔离 | T-07.4、T-07.6、T-09.1 | 等待前置 |
 | goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 已完成 |
 | goal-95 | T-08.11 | 配置改由 config_schema.json 声明 | T-04.7、T-08.3、T-08.4、T-08.10 | 待派发 |
@@ -337,6 +338,41 @@ func (c *Candidate) Discard() error                            // 删除暂存�
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/packages/；go build ./...。
 
 不做：下载、首次来源信任的持久化、安装记录、ID 占用检查、CLI、pack。
+```
+
+### goal-103 · T-02.4 移除绑定 SDK API 的提交测试
+
+状态：待派发。没有前置，按 D-86 新增，并按[共享文件规则](../execution-order.md#3-共享文件与冲突规则)排在 goal-96、goal-95、goal-54 之前。PR #67（goal-15，合并提交 `c6778be`）已合并，它带入的测试一并删除。已在 PR #67 合并前的 main `dbf5664` 上试删并运行：34 个文件、净减 6733 行，`go.mod` 不变，`supervisor`、`cmd/alonabot` 的测试通过。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-103（切片 T-02.4：移除绑定 SDK API 的提交测试）。goal 目录 goal-103，分支 goal-103，worktree .worktrees/goal-103，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：删除绑定 SDK API 和测试插件的提交测试。这些 API 与结构还在变动，每次改动都要同步这些测试，维护成本大于收益（D-86）。只删除，不改产品行为，不写替代测试。
+
+依据：DECISIONS D-86；编码规范「测试提交规则」。
+
+范围（只修改这些）：
+- 删除 sdk/ 下全部 *_test.go：sdk/bus_test.go、sdk/runtimelock_test.go、sdk/generate/config_test.go、sdk/generate/generate_test.go、sdk/generate/service_test.go、sdk/gormdb/sqlite_test.go；派发时新增的也一并删除。
+- 删除 internal/core/supervisor/ 下除 supervisor_test.go 以外的全部 *_test.go，包括 PR #67 带入的 dispatch_test.go。
+- 删除整个 internal/core/supervisor/testdata/ 目录。
+- internal/core/supervisor/supervisor_test.go：去掉 `rawPlugin` 中引用 `commandConflictFault` 的分支（`if fault == commandConflictFault { registration = conflictingCommands() }`），它们定义在被删的 index_test.go。其余用例不改。
+- cmd/alonabot/e2e_test.go：从 `TestMain` 的构建表中去掉 httpplugin，删除只有它在用的 `TestHTTPPluginSettings`，以及因此不再使用的 import 与辅助函数。其余用例不改。
+
+接口：不新增、不修改任何非测试代码的符号。
+
+行为：产品代码零改动。`git diff --stat origin/main...HEAD` 中出现 *_test.go、testdata 以外的文件时停下来标阻塞。
+
+测试：
+- 提交：不新增。
+- 本地自测（不提交，PR 中写明结果）：go vet ./...、go test -race ./...、go build ./...、go generate ./... 后无差异、go mod tidy 后无差异。
+
+完成条件：
+- `git ls-files 'sdk/*_test.go' 'sdk/**/*_test.go'` 输出为空。
+- `git ls-files 'internal/core/supervisor/*_test.go'` 只有 supervisor_test.go。
+- `git ls-files internal/core/supervisor/testdata` 输出为空。
+- 上述本地检查全部通过，PR 正文写明删除的文件数与行数。
+
+不做：修改 spec、docs（TEST-MATRIX 与切片状态由审查者在合并前同步）；删除 contracts/testdata（goal-91 的语句要用其中的事件 fixture）；改动 internal/core/adapter/remote、cmd/alonabot 的其他用例、internal/core/state、internal/core/process、internal/wire、contracts/wirespec_test.go 等范围外的测试；把被删的测试搬到别的目录；修复不稳定测试。
 ```
 
 ## 第 2 波
@@ -1778,8 +1814,10 @@ internal/core/webhost
 - 提交：alonabot_test.go（根包，//go:build unix）。测试构建 examples/devbot 并以子进程运行（临时 data_dir，预先写入一个回环 Adapter 实例文件），只通过日志、状态库与进程退出码断言：
   - 启动后日志中依次出现开发插件与开发 Adapter 的激活记录，代次为 dev，状态库中两条 source=dev 的安装记录。
   - 回环实例启动后交付一条 "ping" 的 message.created；开发插件的事件路由用 Context.Send 回复 "pong"（回复原 Target，不需要许可），回环 Adapter 收到发送后记录日志；测试从日志断言这次往返完成。
+  - 再次启动复用同一 dev 代次，不新增代次。
   - 发送 SIGTERM：进程在 STOP_TOTAL 内以 0 退出。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：缺少 Generated 或 Manifest 时的错误；Plugin 传入 Adapter 角色；同一 ID 登记两次；与已安装包 ID 冲突；ALONABOT_ARGS 与 Args 的先后；instances 目录不存在时没有实例；inproc.Launch 为 nil；开发插件 OnStart 返回错误时 Start 返回错误，且同一 data_dir 能立即再次 Start（core.lock 已释放）；Start 成功后取消 ctx，Wait 在 STOP_TOTAL 内返回 nil；再次启动复用同一 dev 代次，不新增代次；用 Args 把 STOP_TOTAL 设得很小、开发插件的 OnStop 阻塞：SIGTERM 后 Run 返回错误、进程以非 0 退出，日志有该插件的 ERROR。
+  - 用 Args 把 STOP_TOTAL 设得很小、开发插件的 OnStop 阻塞：SIGTERM 后 Run 返回错误、进程以非 0 退出，日志有该插件的 ERROR。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：缺少 Generated 或 Manifest 时的错误；Plugin 传入 Adapter 角色；同一 ID 登记两次；与已安装包 ID 冲突；ALONABOT_ARGS 与 Args 的先后；instances 目录不存在时没有实例；inproc.Launch 为 nil；开发插件 OnStart 返回错误时 Start 返回错误，且同一 data_dir 能立即再次 Start（core.lock 已释放）；Start 成功后取消 ctx，Wait 在 STOP_TOTAL 内返回 nil。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./... ；go build ./...。
 
@@ -1852,7 +1890,12 @@ internal/core/webhost
     - 发送后 memory 收到的按钮都有 43 字节的 core_token，状态库有映射；插件伪造的 core_token 被替换。
     - 注入以该 token 为 callback_data 的 button.clicked：插件的 OnButton 被调用，ButtonValue 为原 value；两个不同用户点击各调用一次。
     - 未知 token、过期 token（注入时钟）、另一个 chat 中的点击都不调用插件，也不进入 Raw。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：manifest 新字段的每种非法值；CheckDependencies 的判定表；token 的编码长度与唯一性；value 长度边界；Purge；Resolve 对 generation 的判断；按钮指向未注册的 action 时发送被拒，memory 没有收到；插件产生新的 Active 代次后，旧 token 失效；extension 片段发往不声明它的 Adapter 返回 UNSUPPORTED；发往声明了它的 memory Adapter 时 payload 不符合 Schema 返回 INVALID_ARGUMENT，符合时发出；adapters/telegram 的回调：telegramtest 推入 callback_query：先有 answerCallbackQuery 调用，再交付 button.clicked；没有 message 的 inline 回调不交付但推进游标；contracts/manifest 对四种 role、icon、WebUI 字段与依赖字段的解析。
+    - 按钮指向未注册的 action 时发送被拒，memory 没有收到。
+    - 插件产生新的 Active 代次后，旧 token 失效。
+    - extension 片段发往不声明它的 Adapter 返回 UNSUPPORTED；发往声明了它的 memory Adapter 时 payload 不符合 Schema 返回 INVALID_ARGUMENT，符合时发出。
+  - adapters/telegram/callback_test.go：telegramtest 推入 callback_query：先有 answerCallbackQuery 调用，再交付 button.clicked；没有 message 的 inline 回调不交付但推进游标。
+  - contracts/manifest 的现有集成测试（若有）追加四种 role、icon、WebUI 字段与依赖字段的解析。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：manifest 新字段的每种非法值；CheckDependencies 的判定表；token 的编码长度与唯一性；value 长度边界；Purge；Resolve 对 generation 的判断。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/... ./adapters/... ./cmd/...；go build ./...。
 
@@ -1902,9 +1945,10 @@ internal/core/webhost
 
 测试（按编码规范「测试提交规则」）：
 - 提交：
+  - adapters/telegram/edit_test.go：telegramtest 驱动：编辑成功的参数正确；"message is not modified" 为 REJECTED；带 buttons 时 reply_markup 正确；Calls() 中没有任何 send 方法。
   - internal/core/supervisor/edit_test.go（//go:build unix）：memory Adapter 实现 Editor 并声明 message.edit；测试插件收到消息后发送一条再编辑它：memory 先收到发送、再收到编辑，ID 一致；Chain 含图片时被拒；memory 不声明 message.edit 时返回 UNSUPPORTED；编辑其他会话（没有许可）返回 PERMISSION_DENIED。
   - contracts/wirespec_test.go：新消息的编号检查。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Edit Chain 的每种非法组合；后台 Edit 缺少 to；adapter.edit 在实例不实现 Editor 时的 UNSUPPORTED；Telegram 编辑的实体 UTF-16 偏移；adapters/telegram 的编辑（跨 Adapter 的 Edit 由 V-72 的矩阵提交覆盖）：telegramtest 驱动：编辑成功的参数正确；"message is not modified" 为 REJECTED；带 buttons 时 reply_markup 正确；Calls() 中没有任何 send 方法。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Edit Chain 的每种非法组合；后台 Edit 缺少 to；adapter.edit 在实例不实现 Editor 时的 UNSUPPORTED；Telegram 编辑的实体 UTF-16 偏移。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/... ./adapters/...；go build ./...。
 
@@ -2628,8 +2672,9 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 测试（按编码规范「测试提交规则」）：
 - 提交：
+  - internal/core/settings/settings_test.go：缺省创建与 0600 权限；${NAME} 展开与缺失时的键路径；未知键与重复键的位置；Update 修改一个键后其他键的顺序与 ${...} 原写法不变，校验失败时文件不变；Reload 返回变化的顶层键；`$version` 为 2 时报错；CommandPrefixes 在有覆盖的实例上取覆盖、其他实例取 command_prefixes、缺省为 ["/"]，Update 与 Reload 后下一次调用返回新值；前缀列表为空时 Load 失败并给出键路径。
   - cmd/alonabot 的集成测试（//go:build unix）：非终端首次启动后数据目录出现 0600 的 admin_token，`admin-token show` 输出的 token 能登录，登录后文件被删除、再次 show 报错。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：终端首次启动只向 stderr 写一次；写回中途失败时原文件不变；Update、Reload 与 CommandPrefixes 并发（-race）；Windows 上的文件权限（交叉编译检查，不在 Windows 运行）；internal/core/settings 的本地测试：缺省创建与 0600 权限；${NAME} 展开与缺失时的键路径；未知键与重复键的位置；Update 修改一个键后其他键的顺序与 ${...} 原写法不变，校验失败时文件不变；Reload 返回变化的顶层键；`$version` 为 2 时报错；CommandPrefixes 在有覆盖的实例上取覆盖、其他实例取 command_prefixes、缺省为 ["/"]，Update 与 Reload 后下一次调用返回新值；前缀列表为空时 Load 失败并给出键路径。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：终端首次启动只向 stderr 写一次；写回中途失败时原文件不变；Update、Reload 与 CommandPrefixes 并发（-race）；Windows 上的文件权限（交叉编译检查，不在 Windows 运行）。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/settings/... ./internal/core/adminauth/... ./cmd/alonabot/...；go build ./...。
 
@@ -2799,9 +2844,11 @@ goal-28、goal-29 的符号已按合入代码核对：
 - 提交：
   - internal/core/supervisor/i18n_test.go（//go:build unix），测试插件带 en-US、zh-CN、zh-TW 三个文件，收到消息时用 Context.T 回复：
     - Actor.locale 为 zh-CN 时得到中文；zh-HK 回落到主语言 zh 中字典序最小的 zh-CN；ja 与没有 Actor 时用默认 locale。
+    - 把默认 locale 设为 zh-CN 并重启插件后，ja 得到中文。
     - 参数错误时的缺省 usage：zh-CN 用户收到中文，en-US 用户收到英文。
+    - 带 UsageKey 的命令参数错误时，按调用者语言发送插件的自定义 usage。
     - Spec.I18n 有问题（如 zh-CN 多出键）时 Launch 返回 INVALID_ARGUMENT，且没有启动进程。
-  - sdk/generate/i18n_test.go（多列理由：构建期检查不经过 Core，i18n_test.go 覆盖不到）：沿用 generate_test.go 的临时 module 辅助函数。缺少 en-US、占位符集合不同时各产生一条诊断；合法时 Generated.I18n 被嵌入。
+  - sdk/generate/i18n_test.go：沿用 generate_test.go 的临时 module 辅助函数。缺少 en-US、zh-CN 多出的键、占位符集合不同、非法 JSON、多余的顶层键、config 根节点中出现不允许的键或类型不对时各产生诊断；合法时 Generated.I18n 被嵌入。
   - contracts/wirespec_test.go：Bootstrap.default_locale = 12。
 - 已有集成测试中断言英文缺省 usage 原文的地方（如 command_test.go）按 en-US 目录的文案同步，覆盖的场景不变。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：
@@ -2809,9 +2856,6 @@ goal-28、goal-29 的符号已按合入代码核对：
   - BCP 47 规范化。
   - Core 目录的 en-US 与 zh-CN 键集合一致。
   - Collect 拒绝未知的 usage_key；Messages 为 nil 时回落到缺省 usage 并记 WARN。
-  - sdk/generate 的 i18n 诊断：zh-CN 多出的键、非法 JSON、多余的顶层键、config 根节点中出现不允许的键或类型不对。
-  - 把默认 locale 设为 zh-CN 并重启插件后，ja 得到中文。
-  - 带 UsageKey 的命令参数错误时，按调用者语言发送插件的自定义 usage。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/...；go build ./...。
 
@@ -2985,7 +3029,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-96 · T-04.9 删除构建期标记
 
-状态：待派发。前置 T-04.7（PR #89，合并提交 `3e37cd6`）已合并。依据 D-79 新增。符号已按合入代码核对：
+状态：待派发，goal-103 合并后才派发（D-86）：语句中涉及 `sdk/` 与 `internal/core/supervisor/` 测试和 testdata 的部分届时不再适用。前置 T-04.7（PR #89，合并提交 `3e37cd6`）已合并。依据 D-79 新增。符号已按合入代码核对：
 - 标记只出现在 `sdk/generate/generate_test.go` 的临时 module 源码和 `generate.go` 的包文档。`examples/plugins/` 与 `internal/core/supervisor/testdata/` 不用标记，原语句的「示例、测试插件改写」没有对象。
 - `sdk/generate/marker.go`：`scan.marker`、`checkTokens`、路径与 route_id 的重复检查。`generate.go`：`Command`、`Event` 类型，`Result.Commands`、`Result.Events`，`scan.paths`、`scan.routes`，`readFile` 的 step 3 与收集 `handlers` 的部分，`Scan` 中对两个切片的排序。`source.go`：imports 中为标记函数加的别名、`Commands:` 与 `Events:` 两段。`cmd/alonabot/plugin.go` 只读 `Result.Diagnostics` 与 `Source`，不用改。
 - `sdk/generated.go`：`Generated.Commands`、`Generated.Events`，`registerCommands`、`registerEvents`；`Collect` 调用这两个方法。
@@ -3028,7 +3072,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-15 · T-05.1 可信上下文与有界分发
 
-状态：待派发。前置 T-03.3、T-04.3、T-04.4（PR #88，合并提交 `c8dd516`）均已合并。本 goal 此前已派发：草稿 PR #67（分支 goal-15）只有两个 fixture，内容与语句一致，继续时在该分支先 `git merge origin/main`，不另开分支。符号已按合入代码核对：
+状态：已完成（PR #67）。`router.New(Options)`、`Router.Close(ctx) error` 与导出的 `wire.Budget.Acquire`/`Release` 已合入；后继 goal 中 `router.New` 的旧写法在各自改写时按 Options 调整。派发前核对的符号：
 - `router.New(queueEvents int, adapters *adapter.Registry, send ServiceFunc, prepare func(*pb.Event, Caller) (*pb.Event, error), prefixes func(adapterInstanceID string) []string, policy CommandPolicy) *Router`。调用点只在 `internal/core/adapter/remote/remote_test.go` 与 `internal/core/supervisor` 的 bus、command、conversation、echo、index、media_in、policy、service 测试中；`cmd/alonabot` 还没有装配 Router。
 - `Router.Start()` 启动唯一的 worker；`Router.Close()` 取消 `r.ctx` 并等待 worker，没有参数和返回值，调用点同上。`HasInFlight` 在 `r.ctx` 取消后返回 false。
 - `dispatch` step 1 在链开始时计算 `actor.Permissions`：{user} ∪（来源权限中除 user、admin 以外的名字），经 `CommandPolicy.IsAdmin` 加入 admin。`call` 的顺序是 `prepare` → `bind` → 构造 HandlerRequest，`Invocation{PluginID, Event: prepared, DefaultTarget: ev.GetTarget()}`。
@@ -3223,7 +3267,7 @@ internal/wire
 
 ### goal-95 · T-08.11 配置改由 config_schema.json 声明
 
-状态：待派发。前置 T-04.7（PR #89，合并提交 `3e37cd6`）、T-08.3、T-08.4、T-08.10 均已合并。依据 D-76 新增，同日按 D-85 补充 `$version` 与 `$migrations` 的声明式迁移，按 D-80 改用 `i18n/`。
+状态：待派发，goal-103 合并后才派发（D-86）：语句中涉及 `sdk/` 与 `internal/core/supervisor/` 测试和 testdata 的部分届时不再适用。前置 T-04.7（PR #89，合并提交 `3e37cd6`）、T-08.3、T-08.4、T-08.10 均已合并。依据 D-76 新增，同日按 D-85 补充 `$version` 与 `$migrations` 的声明式迁移，按 D-80 改用 `i18n/`。
 
 T-04.7 合并后核对时修订了原语句：T-04.7 没有复用配置的类型推导，`sdk/generate/service.go` 有自己的 `serviceBuilder` 与 `schemaImporter`，不依赖 `config.go`。因此 `config.go` 整个删除，不需要拆分或保留。
 
@@ -3300,10 +3344,10 @@ T-04.7 合并后核对时修订了原语句：T-04.7 没有复用配置的类型
 
 测试（按编码规范「测试提交规则」）：
 - 提交：
-  - sdk/generate/config_test.go 改写（多列理由：三个文件都是改写既有测试，不新增文件）：临时 module 带 config_schema.json（覆盖十种 type、options 与 labels、slider、condition、editor_mode、invisible、secret、required、template 与 template_list 的 display_item）与 i18n/zh-CN.json；两次生成逐字节相同，Generated.ConfigSchema 等于 Canonical，REGISTER 的 config_schema_hash 等于 Hash。诊断只留三例：未知键、`$migrations` 版本不连续、secret 带 default。现有 TestConfigDiagnosticsIntegration 的标签诊断表随标签一起删除，不迁移到新表。
-  - internal/core/supervisor/config_prepare_test.go 的场景改用 config_schema.json，只留四组：缺失键补 default 与零值，显式 false、0、"" 与空数组保留；options 之外的值被拒且带路径；从版本 1 经 `rename`、`map`、`wrap`、`remove` 迁移到版本 3 后再校验，删除的字段之外的未知键保留，OnConfigLoad 在声明式迁移之后执行；restart 时改变配置失败。测试插件在 OnStart 中用 Config() 取值并经日志或回复报告，核对取到的是补齐后的值。
+  - sdk/generate/config_test.go 改写：临时 module 带 config_schema.json（覆盖十种 type、options 与 labels、slider、condition、editor_mode、invisible、secret、required、template 与 template_list 的 display_item）与 i18n/zh-CN.json；两次生成逐字节相同，Generated.ConfigSchema 等于 Canonical，REGISTER 的 config_schema_hash 等于 Hash。诊断各一例：未知键、AstrBot 的 file 类型、`$migrations` 版本不连续、`rename` 的目标不在 schema 中、labels 多于 options、slider 缺 max、condition 引用不存在的字段、display_item 指向非 string 字段、secret 带 default、required 用于 int、字段键含 "."、i18 覆盖不存在的字段、i18 字段覆盖中出现 name。
+  - internal/core/supervisor/config_prepare_test.go 的场景改用 config_schema.json：缺失键补 default 与零值；显式 false、0、"" 与空数组保留；null 被拒绝；options 之外的值；slider 越界；template 含两个模板键；required 的空串；从版本 1 经 `rename`、`map`、`wrap`、`remove` 迁移到版本 3 后再校验，删除的字段之外的未知键保留；配置版本高于 schema 时失败；OnConfigLoad 在声明式迁移之后执行；restart 时改变配置失败。测试插件在 OnStart 中用 Config() 取值并经日志或回复报告，核对取到的是补齐后的值。
   - internal/core/supervisor/secret_test.go：secret 位于 template 与 template_list 内时，快照只存引用、Bootstrap 收到明文；空串不生成引用。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Values 各方法对未声明键与类型不符的 panic 消息；Canonical 保留键顺序与数字原文；int64 边界与非有限数字；display_item 的嵌套路径；Merge Patch 删除键后重新准备得到默认值；web/admin/fixtures/ 中已有的 *.config_schema.json 都能通过 Parse（goal-34 未合并时跳过并写明）；config_test 的诊断：AstrBot 的 file 类型、`rename` 的目标不在 schema 中、labels 多于 options、slider 缺 max、condition 引用不存在的字段、display_item 指向非 string 字段、required 用于 int、字段键含 "."、i18 覆盖不存在的字段、i18 字段覆盖中出现 name；config_prepare 的场景：null 被拒绝；slider 越界；template 含两个模板键；required 的空串；配置版本高于 schema 时失败。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Values 各方法对未声明键与类型不符的 panic 消息；Canonical 保留键顺序与数字原文；int64 边界与非有限数字；display_item 的嵌套路径；Merge Patch 删除键后重新准备得到默认值；web/admin/fixtures/ 中已有的 *.config_schema.json 都能通过 Parse（goal-34 未合并时跳过并写明）。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./contracts/... ./sdk/... ./internal/core/...；go build ./...。
 
@@ -3386,15 +3430,19 @@ T-04.7 合并后核对时修订了原语句：T-04.7 没有复用配置的类型
 - serve：取得 core.lock；没有管理凭证时，stdin 与 stderr 都是终端则按 admin-token init 生成并显示一次后继续，否则拒绝启动并提示先运行 admin-token init；装配 Core（与 Run 共用 assembly），启动 HTTP Listener、webhost、管理 API，按 install_seq 顺序启动全部已启用的包。不带子命令运行 alonabot 等同 serve。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/manage_e2e_test.go（//go:build unix；多列理由：本切片首次接通管理 CLI、依赖、替换与设置写回，没有其他端到端入口）。测试中用 goal-37 的测试工具生成签名的插件包、Adapter 包与依赖它们的插件包，在临时 data_dir 运行 alonabot run（预先用测试钩子初始化管理 token），再用 CLI 命令操作：
+- 提交：cmd/alonabot/manage_e2e_test.go（//go:build unix）。测试中用 goal-37 的测试工具生成签名的插件包、Adapter 包与依赖它们的插件包，在临时 data_dir 运行 alonabot run（预先用测试钩子初始化管理 token），再用 CLI 命令操作：
   - install 后 list 显示未启用；enable 产生第一个 Active；restart 只换 Session（代次不变）。
   - 依赖 Adapter 的插件在 Adapter 未安装时 enable 失败并列出缺失项；安装 Adapter 后成功；disable Adapter 未加 --yes 时被拒并列出受影响插件，加 --yes 后执行，插件继续运行。
   - uninstall 后同来源重装复用数据；不同来源重装被拒；--purge 列出对象并在 --yes 后删除。
   - 已安装 Agent 测试组件时安装另一个 Agent：不带 --replace 返回 ALREADY_EXISTS；带 --replace 与 --yes 后旧组件已卸载、新组件已安装并沿用旧组件的启用状态；替换 Adapter 时旧实例不出现在新 Adapter 下；不同 adapter_id 的两个 Adapter 可以并存。
+  - --source 指向本地 Release 模拟服务：安装成功且来源被持久化；模拟服务上的签名被篡改时安装失败，已有组件不受影响。
+  - pin 持久化，重启 serve 后仍在。
   - 创建 Adapter 实例：状态库中的配置只有 secret 引用；list 与日志中没有 token；实例可启停。
+  - 插件依赖成环的包在安装时被拒。
   - core_config.json 用 command_prefixes_by_instance 覆盖一个实例：该实例的消息按新前缀匹配命令，另一个实例仍用 command_prefixes；admins 中的用户发命令时插件收到的 Actor.permissions 含 admin，admin add 写回后新用户的下一条命令也含 admin。
   - core_config.json 的 default_locale 设为 zh-CN：没有 locale 的 Actor 触发命令时，插件的 Context.T 回复中文，参数错误的缺省 usage 也是中文。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：串行化（同一包的并发操作排队）；ErrNeedsConfirm 的 Affected 内容；API 的错误格式；没有管理凭证且非终端时 serve 拒绝启动；Package.State 的取值；--source 指向本地 Release 模拟服务：安装成功且来源被持久化；模拟服务上的签名被篡改时安装失败，已有组件不受影响；pin 持久化，重启 serve 后仍在；插件依赖成环的包在安装时被拒；reload、update、rollback 返回 UNSUPPORTED（等待 T-09.5）。
+  - reload、update、rollback 返回 UNSUPPORTED（等待 T-09.5）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：串行化（同一包的并发操作排队）；ErrNeedsConfirm 的 Affected 内容；API 的错误格式；没有管理凭证且非终端时 serve 拒绝启动；Package.State 的取值。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
@@ -3403,7 +3451,7 @@ T-04.7 合并后核对时修订了原语句：T-04.7 没有复用配置的类型
 
 ### goal-54 · T-11.1 工具描述、目录与策略
 
-状态：待派发。前置 T-04.4（PR #88，合并提交 `c8dd516`）、T-04.7（PR #89，合并提交 `3e37cd6`）与 T-06.1（PR #45）均已合并。原语句未列 T-04.7，但它依赖的写法与 goal-88 冲突：goal-88 删除 `ServiceOption`，JSON Service 的 Schema 由生成器产生（D-70、CONTRACTS §3），`jsonschema.For[In]` 得到的 Schema 可能与 Service 实际校验用的不一致，不符合 §13.1「输入 Schema 即该 Service 的输入 Schema」。
+状态：待派发，goal-103 合并后才派发（D-86）：语句中涉及 `sdk/` 与 `internal/core/supervisor/` 测试和 testdata 的部分届时不再适用。前置 T-04.4（PR #88，合并提交 `c8dd516`）、T-04.7（PR #89，合并提交 `3e37cd6`）与 T-06.1（PR #45）均已合并。原语句未列 T-04.7，但它依赖的写法与 goal-88 冲突：goal-88 删除 `ServiceOption`，JSON Service 的 Schema 由生成器产生（D-70、CONTRACTS §3），`jsonschema.For[In]` 得到的 Schema 可能与 Service 实际校验用的不一致，不符合 §13.1「输入 Schema 即该 Service 的输入 Schema」。
 
 sdk 段已按合入代码核对：
 - `sdk.JSON` 的 `prepare` 闭包里有 `inputID` 与 `r.schemas`（`Generated.ServiceSchemas`），`b.route` 构造 `ServiceSpec`；`setAccess` 在 `handles != 0` 时置 `afterHandle`，`Tool` 用同样的写法。
@@ -3594,7 +3642,8 @@ sdk
   - to_me=false 的群消息不触发 ToMe 路由，私聊触发。
   - 非 chat_admin 用户的命令被消费：不回 usage、不进入 Raw，插件目标函数未运行。
   - Rule 出错的 keyword 路由不运行，后续候选继续；先 Stop 再出错的路由使后续候选不再调用。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Any 的短路与错误；WithRule 多次使用的 AND；RuleDescriptor 的两个字段；Rule panic；Stop 在 Rule 中调用的锁存；手动命令的两条消息都已送达，之后没有任何补发或错误回复；自动型里的 Send 失败且只有返回的 Chain 被发出一次；返回后的后台 Send 返回 FAILED_PRECONDITION。
+  - 手动命令的两条消息都已送达，之后没有任何补发或错误回复；自动型里的 Send 失败且只有返回的 Chain 被发出一次；返回后的后台 Send 返回 FAILED_PRECONDITION。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Any 的短路与错误；WithRule 多次使用的 AND；RuleDescriptor 的两个字段；Rule panic；Stop 在 Rule 中调用的锁存。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/... ./sdk/...；go build ./...。
 
@@ -3668,7 +3717,7 @@ sdk
 
 范围（只新增或修改这些）：
 - 新增 examples/plugins/configdb/（含 plugin.yaml、i18n/、Config 与 versioned 迁移）
-- web/admin/fixtures/：加入由 configdb 的 Config 生成的 Schema fixture
+- web/admin/fixtures/：加入由 configdb 的 Config 生成的 Schema fixture，并在 schema.test.ts 中追加对应用例
 - 新增 cmd/alonabot/t08_e2e_test.go（//go:build unix）
 - spec/TEST-MATRIX.md §3.2：追加 T-08 的证据行（本切片获授权修改这一处）
 - 上述包的测试文件
@@ -3684,12 +3733,12 @@ sdk
 5) 候选：reload 后 OnStart 写入候选库再失败：Discard，Active 的数据与配置不变，旧版重启正常；新旧进程没有同时写同一个库（runtime.lock 证明）。
 6) 两个入口：同一插件同时用 sqlitedb.Open 与 gormdb.Open 时共用同一连接，一边写入另一边立即可读；只用 sqlitedb 的示例变体不链接 gorm.io/gorm。
 7) i18n：Context.T 的语言选择与回退；alonabot check 拒绝缺少 en-US 与占位符不一致。
-8) 表单（本地 web/admin/src/schema/configdb.local.test.ts，不提交，PR 中写明结果）：configdb 的 Schema 字段顺序与声明一致；hidden 不进 patch；未修改的 secret 不进 patch；i18 标签回退。
+8) 表单（web/admin 的 vitest，非 DOM）：configdb 的 Schema 字段顺序与声明一致；hidden 不进 patch；未修改的 secret 不进 patch；i18 标签回退。
 - 证据：TEST-MATRIX §3.2 追加 T-08 一行；需要 T-09 正式 reload、WebUI/API 与 Journal 崩溃恢复才能关闭的 V-23～V-25、V-38 场景单独列为「未闭合」，不标成通过。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/t08_e2e_test.go。
-- 本地自测（不提交，PR 中写明结果）：npm run build；示例的 alonabot check；。
+- 提交：cmd/alonabot/t08_e2e_test.go；web/admin 的 schema.test.ts 追加用例。
+- 本地自测（不提交，PR 中写明结果）：npm run build；示例的 alonabot check。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；web/admin 下 npm run test 通过。
 
@@ -3757,7 +3806,8 @@ sdk
   - 没有 config.json 时以默认值启动；写入合法的 config.json 后重启，插件看到新值；写入缺少 required 的配置时 Run 返回错误。
   - 两次启动之间 dev.sqlite 中的数据保留，没有 generations/ 目录与候选副本。
   - 经管理服务（或装配入口）对 dev 组件执行 update 与 rollback 被拒。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：config.json 非对象；dev.sqlite 不存在时的 activation_reason；显式设置级别时不被覆盖；日志中有该组件的 DEBUG 记录。
+  - 日志中有该组件的 DEBUG 记录。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：config.json 非对象；dev.sqlite 不存在时的 activation_reason；显式设置级别时不被覆盖。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
@@ -3861,9 +3911,12 @@ sdk
 测试（按编码规范「测试提交规则」）：
 - 提交：internal/core/supervisor/hook_test.go（//go:build unix）。两个测试插件：h 注册 PreEvent（把 text 改成大写）、BeforeSend（在 Chain 末尾追加一段文本；遇到含 "deny" 的 Chain 返回错误；尝试在 Hook 内 Send）、AfterSend（记录结果后返回错误）；e 注册 echo 事件路由与一个命令：
   - 入站 "hi" 被 PreEvent 改为 "HI" 后到达 e；e 回复时 memory 收到追加了文本的 Chain；AfterSend 收到 ACCEPTED 的结果，它返回的错误不影响 e 收到的 SendResult。
+  - 一次 Handler 内两次 Send：BeforeSend 与 AfterSend 各执行两次。
   - 含 "deny" 的回复被拒，memory 没有收到，e 收到 REJECTED 与错误；AfterSend 未执行。
   - BeforeSend 内的 Send 返回 FAILED_PRECONDITION。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：PreEvent 返回不匹配分支的 payload；BeforeSend 修改后 Chain 预检失败；排序的稳定性；插件自报 send_forbidden 被忽略；InvocationContext 中的标记在派生请求中保留（接口 fixture）；一次 Handler 内两次 Send：BeforeSend 与 AfterSend 各执行两次；PreEvent 返回错误时 e 的路由与命令都没有被调用；Edit 时出站 Hook 收到 operation=EDIT 与被编辑的消息 ID。
+  - PreEvent 返回错误时 e 的路由与命令都没有被调用。
+  - Edit 时出站 Hook 收到 operation=EDIT 与被编辑的消息 ID。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：PreEvent 返回不匹配分支的 payload；BeforeSend 修改后 Chain 预检失败；排序的稳定性；插件自报 send_forbidden 被忽略；InvocationContext 中的标记在派生请求中保留（接口 fixture）。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
 
@@ -3923,7 +3976,11 @@ sdk
   - 用户 A 发 /quiz 后，A 的下两条消息被 quiz 收到并回答，它们没有到达 echo；原命令的 HandlerOutcome 决定的传播不受影响。
   - 同一群里 A 与 B 同时 /quiz，各自只收到自己的回答；不同 thread 的消息不命中。
   - Wait 超时返回 DEADLINE_EXCEEDED；同键第二个 Wait 返回 ALREADY_EXISTS。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：原调用返回错误时不发出；父调用带 send_forbidden 时被拒；timeout_ms 边界；Release 与超时的并发；SDK 中按 continuation_of 找不到 fn 时返回 NOT_FOUND；延续调用中再次 Continue 返回 FAILED_PRECONDITION；没有 Actor 的 scheduled 事件 fixture 中请求 Continue 返回 FAILED_PRECONDITION；用很小的 Max：超过的 Continue 返回 RESOURCE_EXHAUSTED；等待期间停止插件：等待结束，重启后不补发；延续调用执行期间，其他事件照常派发（不占分发链）。
+  - 延续调用中再次 Continue 返回 FAILED_PRECONDITION；没有 Actor 的 scheduled 事件 fixture 中请求 Continue 返回 FAILED_PRECONDITION。
+  - 用很小的 Max：超过的 Continue 返回 RESOURCE_EXHAUSTED。
+  - 等待期间停止插件：等待结束，重启后不补发。
+  - 延续调用执行期间，其他事件照常派发（不占分发链）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：原调用返回错误时不发出；父调用带 send_forbidden 时被拒；timeout_ms 边界；Release 与超时的并发；SDK 中按 continuation_of 找不到 fn 时返回 NOT_FOUND。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
 
@@ -4033,8 +4090,9 @@ sdk
 - 提交：cmd/alonabot/logs_e2e_test.go（//go:build unix）：运行 serve 与一个持续输出日志的测试插件：
   - log-level 把该插件设为 debug 后，SDK 输出 DEBUG 记录且 logs 能读到；设为 off 后插件记录消失，Core 关于它的记录仍在；重启 serve 后按来源的设置保留，全局级别的运行时修改恢复为启动值。
   - logs --follow 收到新记录；未带 token 时 401。
+  - 每个来源最多保留 LOG_BUFFER_RECORDS 条（用很小的值）。
   - 写入前一天日期的日志文件后，logs --date 能查到。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：环形缓冲的边界；历史文件解析（多行值、转义）；SSE 的断开；每个来源最多保留 LOG_BUFFER_RECORDS 条（用很小的值）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：环形缓冲的边界；历史文件解析（多行值、转义）；SSE 的断开。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交差异；go vet ./...；go test -race ./...；go build ./...。
 
@@ -4169,8 +4227,11 @@ sdk
   - /ping 的结果恰好一条 Sent，Text() 为 "pong"，Target 为原会话。
   - /admin：普通用户被拒（没有 Sent，命令被消费），Admin 选项给出的用户成功。/mod：ChatAdmin 为 false 时没有回复，为 true 时回复。
   - 缺省能力下按钮消息 ACCEPTED；Capabilities 去掉 message.buttons 后，结果中第一条为 REJECTED/UNSUPPORTED、第二条为纯文本。
+  - Config 选项的值经 /config 返回；/count 连续两次回复 1 与 2。
+  - /edit 产生 Op 为 send 与 edit 的两条记录；去掉 message.edit 后 edit 被 Core 以 UNSUPPORTED 拒绝。
+  - 两个使用 t.Parallel 的测试各自 Start，计数互不影响。
   - 用 go test -race -count=2 ./plugintest/... 运行两遍都通过。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有 Generated 的根类型；同一 Harness 并发 Message；Start 失败（probe 的 OnStart 返回错误）后数据目录可以再次 Start；Dispatched 只在自动回复发送之后调用；Config 选项的值经 /config 返回；/count 连续两次回复 1 与 2；/edit 产生 Op 为 send 与 edit 的两条记录；去掉 message.edit 后 edit 被 Core 以 UNSUPPORTED 拒绝；两个使用 t.Parallel 的测试各自 Start，计数互不影响。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有 Generated 的根类型；同一 Harness 并发 Message；Start 失败（probe 的 OnStart 返回错误）后数据目录可以再次 Start；Dispatched 只在自动回复发送之后调用。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./plugintest/... ./internal/core/router/... ./internal/inproc/...；go test -race . ；go build ./...。
 
@@ -4256,9 +4317,12 @@ sdk
 - 提交：internal/core/supervisor/chain_test.go（//go:build unix）。构建 testdata/chainplugin（按环境变量决定收到调用后转调哪个插件、睡眠多久、是否在 BeforeSend 中调用 Service），以 a、b、c 启动：
   - A→B→C 正确返回，C 看到的 Actor 与 Target 是原事件的，Chain 为 [a, b]。
   - A→B→A 返回 CALL_CYCLE，A 的第二次函数未运行；两条同时进行的独立链 A→B 与 C→B 都成功。
+  - 把 MaxDepth 设为 2：A→B→C 返回 FAILED_PRECONDITION。
   - A 的父事件 Handler 到期：B、C 的未完成调用被取消（C 收到取消，日志可见），A 得到错误；没有重试。
-  - 出站 Hook 中经 Service 再 Send 被拒（FAILED_PRECONDITION）。多列理由：这是 TEST-MATRIX §2 中 V-15 的闭合点。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：期限取最小值；没有父请求的后台调用只有插件身份；插件载荷中伪造的 actor 被忽略；Cancel 不越过其 Request；把 MaxDepth 设为 2：A→B→C 返回 FAILED_PRECONDITION；杀掉 B 的进程：A 立即得到 UNAVAILABLE；用很小的 wire 预算使转发请求额满：立即 RESOURCE_EXHAUSTED，期间其他 Session 的 Response 照常完成。
+  - 杀掉 B 的进程：A 立即得到 UNAVAILABLE。
+  - 出站 Hook 中经 Service 再 Send 被拒（FAILED_PRECONDITION）。
+  - 用很小的 wire 预算使转发请求额满：立即 RESOURCE_EXHAUSTED，期间其他 Session 的 Response 照常完成。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：期限取最小值；没有父请求的后台调用只有插件身份；插件载荷中伪造的 actor 被忽略；Cancel 不越过其 Request。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/... ./sdk/...；go build ./...。
 
@@ -4352,9 +4416,10 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
   - 按钮：/menu 发送带两个按钮的消息；Click 第一个按钮得到对应回复；另一个用户 Click 同一按钮也得到回复（按点击者鉴权）；按钮对应的 action 要求 Core Admin 时，普通用户 Click 没有回复。
   - 多轮等待：/ask 询问后 Message 立即返回，Outcomes 中有 Waiting；同一用户回答后得到确认回复；另一个用户的消息不被等待中的 Handler 消费。
   - schedule：probe 注册的 job 发送到 Allow 过的测试实例，Trigger 返回一条 Sent；未 Allow 时该发送为 PERMISSION_DENIED。
+  - 后台：probe 的 OnReady 启动的后台发送出现在 Background 中，读取后清空。
   - go test -race -count=2 ./plugintest/... ./examples/... 两遍都通过。
 - 证据：TEST-MATRIX §3.2 追加一行，写明覆盖的场景、命令、平台与 Go 版本。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Click 找不到 action_id；同 job 重叠时的 Trigger；等待超时后再次注入按普通消息处理；后台：probe 的 OnReady 启动的后台发送出现在 Background 中，读取后清空。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Click 找不到 action_id；同 job 重叠时的 Trigger；等待超时后再次注入按普通消息处理。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./plugintest/... ./examples/... ./internal/core/... ./internal/inproc/...；go test -race . ；go build ./...。
 
@@ -4464,8 +4529,11 @@ broker、bus、router 的 Options 增加 Metrics *metrics.Counters（可为 nil�
 - 提交：internal/core/supervisor/tool_invoke_test.go（//go:build unix）。沿用 goal-54 的工具服务与测试插件（收到消息时调用 InvokeTool 或 ConfirmOperation 并回复结果），memory Adapter 支持 buttons 与 Editor：
   - allow 工具直接返回结果；deny 工具返回 PERMISSION_DENIED 且工具未执行。
   - confirm 工具：memory 收到带两个按钮的确认消息，内容含实际 JSON 参数；同一用户点「允许」后工具执行并返回结果；另一用户先点击被拒、不影响结果；点「拒绝」返回 PERMISSION_DENIED 且工具未执行；超时（注入较短的 TOOL_CONFIRM_TIMEOUT）返回 DEADLINE_EXCEEDED。
+  - 确认消息没有经过插件的 BeforeSend Hook（测试插件注册了会改链的 BeforeSend，确认消息不受影响）。
   - 没有 Actor 的调用（scheduled fixture）遇到 confirm 返回 PERMISSION_DENIED，没有发消息；不支持 buttons 的实例返回 UNSUPPORTED。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：参数截断；token 只能用一次；父调用结束时记录作废；zh-CN 文案；策略在两次调用之间修改；确认消息没有经过插件的 BeforeSend Hook（测试插件注册了会改链的 BeforeSend，确认消息不受影响）；arguments 不符合 input schema 时 INVALID_ARGUMENT；ConfirmOperation 展示 summary 而不是参数。
+  - arguments 不符合 input schema 时 INVALID_ARGUMENT。
+  - ConfirmOperation 展示 summary 而不是参数。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：参数截断；token 只能用一次；父调用结束时记录作废；zh-CN 文案；策略在两次调用之间修改。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/...；go build ./...。
 
@@ -4522,7 +4590,9 @@ broker、bus、router 的 Options 增加 Metrics *metrics.Counters（可为 nil�
   - reload 成功运行到 PREPARED：Journal phase 依次前进，候选数据库是独立副本，旧进程已退出，Active 未变。
   - 候选 OnStart 失败：Abort 后旧版以新 Session 运行，旧库不含候选写入，候选目录已删除，phase=cleaned。
   - 旧进程不退出（忽略 STOPPING 且持有 runtime.lock 的测试插件）：编排在停止预算内失败，没有复制数据库，旧版状态可诊断。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：phase 只能前进；expected_old 与写入一致；manual_migration_approved 只在显式授予时为 true；resume 不写 Journal；磁盘空间不足（用测试钩子使备份失败）：不激活，候选目录被清理；first_install：成功到 PREPARED；失败时插件保持未启用。
+  - 磁盘空间不足（用测试钩子使备份失败）：不激活，候选目录被清理。
+  - first_install：成功到 PREPARED；失败时插件保持未启用。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：phase 只能前进；expected_old 与写入一致；manual_migration_approved 只在显式授予时为 true；resume 不写 Journal。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/...；go build ./...。
 
@@ -4618,7 +4688,8 @@ internal/core/journal
   - reload 成功：Active 改为新代次，COMMITTED 存在，Journal 为 committed；ACTIVATED 之前发送的消息没有派发给候选（候选的事件路由调用计数为 0，消息被旧版处理或因冻结被丢弃并计数），之后由新代次处理。
   - 提交前把 Active 改成别的值（模拟并发）：CommitCandidate 失败，候选被 Abort，旧版恢复。
   - 提交后 OnReady 失败：Active 仍为新代次，插件 Degraded，没有启动旧代次；HTTP 返回 503。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：CommitCandidate 的每个前置条件；事务中没有文件与 RPC 操作（代码审查加测试钩子）；Degraded 状态下 Scheduler 不触发；提交后旧代次的按钮点击不调用插件。
+  - 提交后旧代次的按钮点击不调用插件。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：CommitCandidate 的每个前置条件；事务中没有文件与 RPC 操作（代码审查加测试钩子）；Degraded 状态下 Scheduler 不触发。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/...；go build ./...。
 
@@ -4670,8 +4741,10 @@ internal/core/state
   - 提交前崩溃：只恢复旧版，候选目录被清理，Journal 为 cleaned。
   - 提交后崩溃：只恢复新代次。
   - 崩溃时旧插件进程仍存活并持有 runtime.lock（测试插件忽略断链）：重启后该插件为 Degraded，没有启动第二个写入者；旧进程退出后 restart 恢复。
-  - rollback 到上一代次：产生新代次与新的数据库副本，内容等于旧代次的数据；旧代次签发的按钮仍无效。多列理由：回退是本切片的主路径之一。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Recover 对每个 Journal 阶段的分支；保留代次的淘汰顺序；Collect 对 Pending 引用的保护；声明 prepare_effects=external 的测试插件 rollback 返回 NEEDS_MANUAL_MIGRATION；Collect 不删除保留代次与 Active，删除失败候选的残留。
+  - rollback 到上一代次：产生新代次与新的数据库副本，内容等于旧代次的数据；旧代次签发的按钮仍无效。
+  - 声明 prepare_effects=external 的测试插件 rollback 返回 NEEDS_MANUAL_MIGRATION。
+  - Collect 不删除保留代次与 Active，删除失败候选的残留。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Recover 对每个 Journal 阶段的分支；保留代次的淘汰顺序；Collect 对 Pending 引用的保护。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
@@ -4715,8 +4788,8 @@ internal/core/state
 - 所有修改请求经 CSRF 检查；修改后的策略在下一次派发时生效，不需要重启插件。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/supervisor/admin_api_test.go（//go:build unix）：经管理 API 完成：PATCH 配置（未修改的 secret 保持原引用、新 secret 生成新引用、invisible 不被删除）、陈旧 base 409、reload 后 Active 改变；设置命令覆盖后下一条消息按新权限处理；reveal 需要再认证。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：各端点的错误格式与 409；读取结果中没有 secret 明文；把发信许可收紧为其他实例后插件后台 Send 被拒、恢复为全部实例后成功；Core 设置写回后 core_config.json 中的 ${...} 原写法保留；设置默认 locale 后新 Session 使用；工具策略改为 deny 后 ListTools 不含它；清除会话；开发组件的配置写回 config.json 并重启。
+- 提交：internal/core/supervisor/admin_api_test.go（//go:build unix）：经管理 API 完成：PATCH 配置（未修改的 secret 保持原引用、新 secret 生成新引用、invisible 不被删除）、陈旧 base 409、reload 后 Active 改变；设置命令覆盖后下一条消息按新权限处理；把发信许可收紧为其他实例后插件后台 Send 被拒、恢复为全部实例后成功；Core 设置写回后 core_config.json 中的 ${...} 原写法保留；设置默认 locale 后新 Session 使用；工具策略改为 deny 后 ListTools 不含它；清除会话；开发组件的配置写回 config.json 并重启；reveal 需要再认证。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：各端点的错误格式与 409；读取结果中没有 secret 明文。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/... ./cmd/...；go build ./...。
 

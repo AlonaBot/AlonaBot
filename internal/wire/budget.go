@@ -2,8 +2,8 @@ package wire
 
 import "sync"
 
-// Budget 限制所有 Session 合计的在途载荷字节数（Core 合计 64 MiB）。
-// acquire/release 接受 nil *Budget，表示不限额（插件侧没有全局预算）；Used 需要非 nil。
+// Budget 限制 Core 的共享载荷预算，覆盖 Session 在途载荷与事件等待队列。
+// Acquire/Release 接受 nil *Budget，表示不限额（插件侧没有全局预算）；Used 需要非 nil。
 type Budget struct {
 	// mu 保护 used。
 	mu    sync.Mutex
@@ -14,8 +14,8 @@ type Budget struct {
 // NewBudget 创建上限为 limit 字节的预算。
 func NewBudget(limit int64) *Budget { return &Budget{limit: limit} }
 
-// acquire 尝试占用 n 字节，超过上限时不占用并返回 false；不等待。
-func (b *Budget) acquire(n int64) bool {
+// Acquire 尝试占用 n 字节，超过上限时不占用并返回 false；不等待。
+func (b *Budget) Acquire(n int64) bool {
 	if b == nil {
 		return true
 	}
@@ -28,8 +28,8 @@ func (b *Budget) acquire(n int64) bool {
 	return true
 }
 
-// release 归还 n 字节；调用方保证每次占用只归还一次。
-func (b *Budget) release(n int64) {
+// Release 归还 n 字节；调用方保证每次占用只归还一次。
+func (b *Budget) Release(n int64) {
 	if b == nil {
 		return
 	}

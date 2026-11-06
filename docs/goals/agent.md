@@ -99,9 +99,13 @@ agent
 测试（按编码规范「测试提交规则」）：
 - 提交：agent/agent_test.go（//go:build unix）。用本仓库 Core 的测试装配（supervisor、memory Adapter，实现 Editor 与 Named）、真实状态库与 agent/provider 的本地模拟 Provider（三种协议各一次）：
   - /ask hello：memory 先收到一条发送，随后收到若干次编辑，最后一次编辑是完整回复；编辑间隔不小于 1s（用注入时钟或计时断言）。
+  - 回复超过 message_limit（测试中设为 256）时分成多条消息，切分点在段落边界。
   - 实例不声明 message.edit 时：memory 只收到完整回复的发送（超过 message_limit 时为多条），没有占位消息与编辑。
   - 模拟 Provider 中途断开：已显示内容保留，最后有错误说明，会话中没有 assistant 条目，Provider 只收到一次请求。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：段落切分函数；OnLoad 的校验；限流推迟；会话条目格式；配置 Schema 由生成器生成且 api_key 为 secret；回复超过 message_limit（测试中设为 256）时分成多条消息，切分点在段落边界；自由对话关闭时群聊中的 to_me 消息不触发；Admin /agent on 后触发；非 to_me 的消息不触发；/persona 切换后请求的 system 消息改变；/reset 后历史为空；普通用户执行 /agent 被拒（不回复）。
+  - 自由对话关闭时群聊中的 to_me 消息不触发；Admin /agent on 后触发；非 to_me 的消息不触发。
+  - /persona 切换后请求的 system 消息改变；/reset 后历史为空。
+  - 普通用户执行 /agent 被拒（不回复）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：段落切分函数；OnLoad 的校验；限流推迟；会话条目格式；配置 Schema 由生成器生成且 api_key 为 secret。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./agent/... ./internal/core/...；go build ./...；在 agent 运行 alonabot check 通过。
 
@@ -155,8 +159,11 @@ agent
 - 提交：agent/generate_test.go（//go:build unix）。用 goal-59 的测试装配、本地模拟 Provider 与一个调用 llm.Generate 的测试插件：
   - 调用方未列入时 PERMISSION_DENIED，模拟 Provider 没有收到请求；列入后返回 text、provider、model 与模拟服务给出的用量，会话存储没有新增条目。
   - 测试插件只经 llm.Generate（`@agent`）调用，不知道 Agent 的组件 ID；把 Agent 组件换成另一个 ID 的测试 Agent 后同一调用到达新组件。
+  - provider 不存在为 INVALID_ARGUMENT；Agent 配置中没有 Provider 为 FAILED_PRECONDITION。
   - 模拟 Provider 出错与中途断开为 UNAVAILABLE，模拟服务只收到一次请求，safe_message 不含 API Key。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：校验分支；三种协议各一次；provider 不存在为 INVALID_ARGUMENT；Agent 配置中没有 Provider 为 FAILED_PRECONDITION；调用方期限短于模拟 Provider 的延迟时，调用方得到 DEADLINE_EXCEEDED，模拟服务看到请求被取消；Agent 组件未启用或未安装时调用返回 UNAVAILABLE。
+  - 调用方期限短于模拟 Provider 的延迟时，调用方得到 DEADLINE_EXCEEDED，模拟服务看到请求被取消。
+  - Agent 组件未启用或未安装时调用返回 UNAVAILABLE。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：校验分支；三种协议各一次。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./agent/... ./sdk/... ./internal/core/...；go build ./...；`go list -deps` 列出的 Core 可执行文件与 SDK 根包模块都在 docs/development.md 的允许清单中。
 
@@ -198,8 +205,11 @@ agent
 - 提交：agent/tools_test.go（//go:build unix）。用 goal-59 的测试装配、模拟 Provider（脚本化地返回工具调用）、goal-54/55 的工具插件与 mcptest 的两种服务器：
   - 模型连续调用一个 Core 工具与一个 MCP 工具：两者都执行，结果交回模型，最终回复显示。
   - Core 工具为 confirm 策略且用户拒绝：结果为错误文本交回模型，工具未执行；MCP 工具的确认被拒同样如此。
+  - 工具出错：错误作为结果交回，不重试。
+  - 模型持续请求工具超过 20 步：本轮结束并回复步数上限文案。
   - 停止插件后 stdio MCP 子进程已退出（按 PID 检查）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：名称映射函数；MCP 连接失败时对话继续；secret 值不出现在日志中；HTTP 服务器的 headers；工具出错：错误作为结果交回，不重试；模型持续请求工具超过 20 步：本轮结束并回复步数上限文案；名称映射对含 / 与 . 的名字、冲突名字的结果稳定。
+  - 名称映射对含 / 与 . 的名字、冲突名字的结果稳定。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：名称映射函数；MCP 连接失败时对话继续；secret 值不出现在日志中；HTTP 服务器的 headers。
 
 完成条件：gofmt -l 无输出；go mod tidy 后无差异；go vet ./...；go test -race ./plugins/...；go build ./...。
 
@@ -310,8 +320,10 @@ agent
 - 提交：agent/tasks_test.go（//go:build unix）：用模拟 Provider（脚本化调用 schedule_task 等工具）与注入时钟的 Scheduler：
   - 非 Admin 调用 schedule_task 得到错误结果，任务表为空；Admin 经确认后创建 interval 与 cron 任务各一个。
   - 时钟推进到到期：任务运行一轮，回复发往任务 Target；没有发信许可时没有发送并记 WARN，授予许可后下一次运行发送。
+  - 后台一轮中模型调用 confirm 策略的工具得到拒绝结果；没有注入记忆（请求中没有快照与档案）。
   - 停止插件、推进时钟越过多次触发、再启动：不补跑，只在下一次未来时刻运行。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：interval 下限；一次回调中同一任务只运行一次；会话键隔离；JOB_TIMEOUT 内未结束时跳过；后台一轮中模型调用 confirm 策略的工具得到拒绝结果；没有注入记忆（请求中没有快照与档案）；其他用户 list_tasks 只看到本聊天的任务；cancel_task 需要 Admin 与确认。
+  - 其他用户 list_tasks 只看到本聊天的任务；cancel_task 需要 Admin 与确认。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：interval 下限；一次回调中同一任务只运行一次；会话键隔离；JOB_TIMEOUT 内未结束时跳过。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./plugins/...；go build ./...。
 

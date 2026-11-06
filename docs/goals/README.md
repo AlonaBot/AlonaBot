@@ -51,6 +51,7 @@
 5. 遇到执行技能列出的阻塞情况时标 `[!]`，不要自行决定。特别是：需要改 `.proto`、加依赖、改范围外文件、发现契约冲突。
 6. Go 代码遵循 Google Go Style Guide，可用时加载 `go-google-style-guide`、`go-google-style-decisions`、`go-google-best-practices` 技能。包文档、命名、注释和测试按 [编码规范](../coding-standards.md) 执行，与 Google 风格冲突时以编码规范为准：每个新包在一个文件里写标准库风格的包文档，其他文件开头不写注释；名字用规格术语，不用含糊词和缩写；注释用简体中文，只写现状和原因，不写 T、goal 或 task 编号。
    - 只提交语句列出的集成测试，不自行增加。单元测试、回归和临时测试写在 `*_local_test.go`（前端纯函数写在 `*.local.test.ts`），它们被 git 忽略，不提交。
+   - 语句的「测试」段要求向 `sdk/` 或 `internal/core/supervisor/` 提交测试，或新增 `testdata` 测试插件时，一律改为本地自测，PR 写明结果；本条优先于语句（D-86）。
    - 只在信任边界做校验，不写防御性的重复检查和兜底分支。
    - 日志、错误字符串、CLI 输出和协议 safe_message 一律用英文；有含义的数值和字符串写成命名常量。
    - 日志按[编码规范「日志用默认 Logger，依赖显式传递」](../coding-standards.md#日志用默认-logger依赖显式传递)取用默认 Logger，字段遵循 CONTRACTS §14，不用 fmt 直接输出。

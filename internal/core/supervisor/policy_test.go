@@ -81,9 +81,13 @@ func TestCommandPolicyBothTransports(t *testing.T) {
 			})
 			caller := router.NewCaller(spec.PluginID, spec.GenerationID)
 			spec.Handler = mux.For(caller)
-			events := router.New(values.DispatchQueueEvents, registry, sender.Send, nil, nil, p)
+			events := router.New(router.Options{Concurrency: 1, QueueBytes: values.DispatchQueueBytes, QueueEvents: values.DispatchQueueEvents, Adapters: registry, Send: sender.Send, Policy: p})
 			events.Start()
-			defer events.Close()
+			defer func() {
+				if err := events.Close(context.Background()); err != nil {
+					t.Error(err)
+				}
+			}()
 			services := broker.New(events, values.RequestTimeout)
 			var denyDuringService atomic.Bool
 			mux.Forward(func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
@@ -260,7 +264,9 @@ func TestCommandPolicyBothTransports(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			events.Close()
+			if err := events.Close(context.Background()); err != nil {
+				t.Error(err)
+			}
 			stop()
 			if err := store.Close(); err != nil {
 				t.Fatal(err)

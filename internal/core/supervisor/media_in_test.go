@@ -214,9 +214,13 @@ func testIncomingMedia(t *testing.T, binary string, stdio bool) {
 		t.Fatal(err)
 	}
 	sender := message.New(registry, policy.New(store), mediaStore.LeaseForSend, values.RequestTimeout)
-	events := router.New(values.DispatchQueueEvents, registry, sender.Send, mediaStore.PrepareIncoming, nil, nil)
+	events := router.New(router.Options{Concurrency: 1, QueueBytes: values.DispatchQueueBytes, QueueEvents: values.DispatchQueueEvents, Adapters: registry, Send: sender.Send, Prepare: mediaStore.PrepareIncoming})
 	events.Start()
-	defer events.Close()
+	defer func() {
+		if err := events.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	}()
 	if err := platform.Start(ctx, events); err != nil {
 		t.Fatal(err)
 	}

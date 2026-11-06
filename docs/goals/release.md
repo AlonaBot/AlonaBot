@@ -87,9 +87,12 @@
 测试（按编码规范「测试提交规则」）：
 - 提交：cmd/alonabot/firstrun_e2e_test.go（//go:build unix）：用 goal-73 的 dist 工具以临时密钥为当前平台构建发行归档并解压到临时目录，运行其中的 alonabot run（干净 data_dir，测试钩子模拟交互终端）：
   - 全部预装包已安装；只有 help 已启用并有进程；Agent、记忆、welcome、rss、Telegram 与 OneBot 11 Adapter 未启用，没有对应进程。
+  - 非终端运行时拒绝启动并提示 admin-token init。
   - 把其中一个包的签名改坏：该包未安装并有 ERROR，其余正常。
   - 卸载 rss 后重启 serve：不重新安装。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有 packages/ 时跳过；preinstalled 标记在部分失败时仍写入；非终端运行时拒绝启动并提示 admin-token init；用版本号更高的发行归档替换 packages/ 后重启：list 显示可用更新，没有自动更新；创建 Telegram 实例时 Adapter 被启用。
+  - 用版本号更高的发行归档替换 packages/ 后重启：list 显示可用更新，没有自动更新。
+  - 创建 Telegram 实例时 Adapter 被启用。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有 packages/ 时跳过；preinstalled 标记在部分失败时仍写入。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
@@ -121,8 +124,8 @@
 - docs：写明构建命令（docker buildx build --platform linux/amd64,linux/arm64 --secret id=release_key,src=...）、首次初始化、端口只发布到宿主本机、远程访问用 SSH 隧道或 HTTPS 反代、MCP stdio 需要 shell 或其他运行时时须自建镜像。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：无。
-- 本地自测（不提交，PR 中写明结果）：在有 Docker 的机器上 buildx 构建两个平台（写明 Docker 版本）；干净卷无 TTY 启动被拒；-it admin-token init 后正常启动并能访问 http://127.0.0.1:7650；容器内进程的 UID 为 10001；镜像文件列表只有 alonabot、packages/ 与 CA 证书；出站 HTTPS 可用；docker stop 后插件进程全部退出。没有 Docker 环境时以上各项写「未运行」；internal/core/settings 的本地测试：有与没有 ALONABOT_CONTAINER 时 listen 缺省值与校验的差异，以及 WARN。
+- 提交：internal/core/settings 的测试追加：有与没有 ALONABOT_CONTAINER 时 listen 缺省值与校验的差异，以及 WARN。
+- 本地自测（不提交，PR 中写明结果）：在有 Docker 的机器上 buildx 构建两个平台（写明 Docker 版本）；干净卷无 TTY 启动被拒；-it admin-token init 后正常启动并能访问 http://127.0.0.1:7650；容器内进程的 UID 为 10001；镜像文件列表只有 alonabot、packages/ 与 CA 证书；出站 HTTPS 可用；docker stop 后插件进程全部退出。没有 Docker 环境时以上各项写「未运行」。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/...；go build ./...。
 

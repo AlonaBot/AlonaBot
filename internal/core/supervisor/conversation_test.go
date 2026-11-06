@@ -112,7 +112,7 @@ func TestConversationProcesses(t *testing.T) {
 		service.Register(mux)
 		sender := message.New(registry, policy.New(store), nil, values.RequestTimeout)
 		mux.Handle(wire.ServiceSend, sender.Send)
-		events = router.New(values.DispatchQueueEvents, registry, sender.Send, nil, nil, nil)
+		events = router.New(router.Options{Concurrency: 1, QueueBytes: values.DispatchQueueBytes, QueueEvents: values.DispatchQueueEvents, Adapters: registry, Send: sender.Send})
 		events.Start()
 		if err := platform.Start(ctx, events); err != nil {
 			t.Fatal(err)
@@ -140,7 +140,9 @@ func TestConversationProcesses(t *testing.T) {
 		}
 		running = nil
 		if events != nil {
-			events.Close()
+			if err := events.Close(context.Background()); err != nil {
+				t.Error(err)
+			}
 			events = nil
 		}
 		if err := platform.Stop(ctx); err != nil {

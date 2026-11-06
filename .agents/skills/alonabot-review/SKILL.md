@@ -15,7 +15,7 @@ description: 审查 AlonaBot 工作区、commit 范围或 PR 时使用；分别�
 
 **Spec：**追踪输入到输出、提交与副作用；检查身份、代次、注册/就绪门、调用预算、取消因果、有效部分结果、进程树、锁与恢复。以当前工作包的停止条件判断缺陷，不把后续批次未承诺的能力当作本批次遗漏。
 
-**Standards：**以 Google Go Style Guide（可用时加载 `go-google-style-*` 技能）和 [编码规范](../../../docs/coding-standards.md) 为准，检查语义所有者、允许的 import 边、接口是否减少调用者负担、类型/常量是否就近、错误链和资源生命周期。按 [编码规范](../../../docs/coding-standards.md) 和 [注释技能](../alonabot-code-commenting/SKILL.md) 逐文件核查包文档、命名术语、文档注释、step 注释、防御性的多余检查、首次发布前的兼容层（追加的状态库迁移、零值沿用旧语义、旧名别名），以及提交的测试是否只有集成测试、是否超出 goal 语句列出的范围；判断性建议不能冒充硬规则。
+**Standards：**以 Google Go Style Guide（可用时加载 `go-google-style-*` 技能）和 [编码规范](../../../docs/coding-standards.md) 为准，检查语义所有者、允许的 import 边、接口是否减少调用者负担、类型/常量是否就近、错误链和资源生命周期。按 [编码规范](../../../docs/coding-standards.md) 和 [注释技能](../alonabot-code-commenting/SKILL.md) 逐文件核查包文档、命名术语、文档注释、step 注释、防御性的多余检查、首次发布前的兼容层（追加的状态库迁移、零值沿用旧语义、旧名别名），以及提交的测试是否只有集成测试、是否超出 goal 语句列出的范围、有没有违反 `sdk/` 与 `internal/core/supervisor/` 的限制（D-86）；判断性建议不能冒充硬规则。
 
 核对生成源、调用者、fixture、文档和 [验收证据](../../../spec/TEST-MATRIX.md)。已有检查可覆盖的内容不重复索要测试；跨平台或外部环境缺失要明确，不能用 fixture 顶替。
 

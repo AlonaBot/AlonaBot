@@ -19,6 +19,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
 
 const commandTestEnv = "ALONABOT_TEST_COMMANDS"
@@ -76,8 +77,12 @@ func TestCommandIndexProcesses(t *testing.T) {
 		for _, order := range [][]string{{"a", "b", "c"}, {"a", "c", "b"}, {"b", "a", "c"}, {"b", "c", "a"}, {"c", "a", "b"}, {"c", "b", "a"}} {
 			t.Run(fmt.Sprintf("stdio=%v/order=%v", stdio, order), func(t *testing.T) {
 				setDefaultLogger(t, slog.New(slog.NewTextHandler(io.Discard, nil)))
-				r := router.New(1, nil, nil, nil, nil, nil)
-				defer r.Close()
+				r := router.New(router.Options{Concurrency: 1, QueueBytes: tune.Defaults().DispatchQueueBytes, QueueEvents: 1})
+				defer func() {
+					if err := r.Close(context.Background()); err != nil {
+						t.Error(err)
+					}
+				}()
 				for _, id := range order {
 					store, spec := commandSpec(t, binary, id, definitions[id])
 					spec.Stdio = stdio
