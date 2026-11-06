@@ -156,8 +156,7 @@ func generationName(name string) bool {
 }
 
 func backupDatabase(ctx context.Context, source, destination string) (err error) {
-	uri := url.URL{Scheme: "file", Path: source, RawQuery: "mode=rw"}
-	db, err := sql.Open("sqlite", uri.String())
+	db, err := sql.Open("sqlite", databaseURI(source))
 	if err != nil {
 		return err
 	}
@@ -179,7 +178,7 @@ func backupDatabase(ctx context.Context, source, destination string) (err error)
 		// 驱动固定为 modernc；Raw 保持物理连接独占，直到备份结束。
 		backup, err := driverConnection.(interface {
 			NewBackup(string) (*sqlite.Backup, error)
-		}).NewBackup(destination)
+		}).NewBackup(databaseURI(destination))
 		if err != nil {
 			return err
 		}
@@ -196,8 +195,7 @@ func backupDatabase(ctx context.Context, source, destination string) (err error)
 }
 
 func checkIntegrity(ctx context.Context, path string) (err error) {
-	uri := url.URL{Scheme: "file", Path: path, RawQuery: "mode=rw"}
-	db, err := sql.Open("sqlite", uri.String())
+	db, err := sql.Open("sqlite", databaseURI(path))
 	if err != nil {
 		return err
 	}
@@ -230,6 +228,14 @@ func checkIntegrity(ctx context.Context, path string) (err error) {
 		return fmt.Errorf("candidate integrity_check: %s", strings.Join(results, "\n"))
 	}
 	return nil
+}
+
+func databaseURI(path string) string {
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p // Windows 盘符需写为 file:///C:/...。
+	}
+	return (&url.URL{Scheme: "file", Path: p, RawQuery: "mode=rw"}).String()
 }
 
 func syncFile(path string) (err error) {
