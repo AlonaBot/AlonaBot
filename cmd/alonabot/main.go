@@ -4,6 +4,7 @@
 // 收到 SIGINT 或 SIGTERM 时停止它；插件异常退出时按有限重启策略重启或禁用。
 // Core 与插件的日志写到 stderr，并写入 <data_dir>/logs/ 下按日期轮转的文件（CONTRACTS §14）。
 // tune list 列出调优参数；全局 --args 在启动前覆盖并校验参数。
+// 首次启动生成管理 token：交互终端只显示一次，非终端写入 admin_token，show 可在本机读出。
 // admin-token init/reset 在 Core 停止后离线更新管理凭证，仅向本机终端显示一次。
 package main
 
@@ -57,7 +58,7 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 	if v.CoreMemorySoftLimit > 0 {
 		debug.SetMemoryLimit(v.CoreMemorySoftLimit)
 	}
-	// 1. 打开状态库（取得 core.lock）后才开始写日志文件，再定位入口并计算摘要。
+	// 1. 取得 core.lock，加载设置与日志，交付首次凭证并装配公开入口。
 	ctx := context.Background()
 	store, err := state.Open(ctx, dataDir)
 	if err != nil {
@@ -105,6 +106,23 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 	if configuration.LogFile.Enabled {
 		if err := out.EnableFile(logging.FileOptions{Dir: filepath.Join(dataDir, logsDir), MaxSize: configuration.LogFile.MaxSize, MaxTotal: configuration.LogFile.MaxTotal, MaxAgeDays: configuration.LogFile.MaxAgeDays}); err != nil {
 			return err
+		}
+	}
+	interactive := terminal(os.Stdin) && terminal(os.Stderr)
+	token, err := adminauth.FirstToken(ctx, store, dataDir, interactive)
+	if err != nil {
+		return err
+	}
+	if token != "" {
+		if _, err := fmt.Fprintln(os.Stderr, token); err != nil {
+			return fmt.Errorf("write admin token: %w", err)
+		}
+	} else if !interactive {
+		name := filepath.Join(dataDir, firstTokenFile)
+		if _, err := os.Stat(name); err == nil {
+			slog.Info("first admin token is available", "path", name)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("stat first admin token file: %w", err)
 		}
 	}
 	if configuration.Proxy != "" {

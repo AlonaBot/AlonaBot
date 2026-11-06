@@ -608,11 +608,11 @@ func TestAdminAuthRun(t *testing.T) {
 			send("POST", "/api/auth/login", "plugin.test", origin, `{"token":"wrong"}`, nil, "", "", 404)
 			send("POST", "/api/auth/login", "unknown.test", origin, `{"token":"wrong"}`, nil, "", "", 421)
 			if !initialized {
-				_, content := send("POST", "/api/auth/login", "admin.test", origin, `{"token":"wrong"}`, nil, "", "", 503)
-				if strings.TrimSpace(string(content)) != adminauth.ErrNotInitialized.Error() {
-					t.Fatal("uninitialized login did not return its safe error")
+				_, content := send("POST", "/api/auth/login", "admin.test", origin, `{"token":"wrong"}`, nil, "", "", 401)
+				if strings.TrimSpace(string(content)) != "unauthorized" {
+					t.Fatal("automatically initialized login did not reject an invalid token")
 				}
-				send("GET", "/api/probe", "admin.test", "", "", nil, "", "", 503)
+				send("GET", "/api/probe", "admin.test", "", "", nil, "", "", 401)
 			} else {
 				send("POST", "/api/auth/login", "admin.test", origin, `{"token":"wrong"}`, nil, "", "", 401)
 				body, err := json.Marshal(map[string]string{"token": token})

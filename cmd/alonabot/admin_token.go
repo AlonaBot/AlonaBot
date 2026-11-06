@@ -5,22 +5,26 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/AlonaBot/AlonaBot/internal/core/adminauth"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/spf13/cobra"
 )
 
+// firstTokenFile 指定首次启动后可由 show 读取的文件名（CONTRACTS §7.4）。
+const firstTokenFile = "admin_token"
+
 // terminal 可由本地自测替换；生产使用平台的终端查询，避免把 /dev/null 当作终端。
 var terminal = isTerminal
 
 func adminTokenCommand(code *int) *cobra.Command {
 	var dataDir string
-	group := &cobra.Command{Use: "admin-token", Short: "Initialize or reset the offline admin token", Args: cobra.NoArgs,
+	group := &cobra.Command{Use: "admin-token", Short: "Show, initialize or reset the admin token", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error { return cmd.Help() }}
-	group.PersistentFlags().StringVar(&dataDir, "data-dir", "", "Core data directory (Core must be stopped)")
+	group.PersistentFlags().StringVar(&dataDir, "data-dir", "", "Core data directory")
 	for _, action := range []string{"init", "reset"} {
-		command := &cobra.Command{Use: action, Short: action + " the admin token", Args: cobra.NoArgs}
+		command := &cobra.Command{Use: action, Short: action + " the offline admin token (Core must be stopped)", Args: cobra.NoArgs}
 		command.RunE = func(cmd *cobra.Command, args []string) error {
 			if dataDir == "" {
 				return errors.New("--data-dir is required")
@@ -33,6 +37,22 @@ func adminTokenCommand(code *int) *cobra.Command {
 		}
 		group.AddCommand(command)
 	}
+	show := &cobra.Command{Use: "show", Short: "Show the first admin token file", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if dataDir == "" {
+				return errors.New("--data-dir is required")
+			}
+			*code = exitFailure
+			token, err := os.ReadFile(filepath.Join(dataDir, firstTokenFile))
+			if err != nil {
+				return fmt.Errorf("read first admin token file: %w", err)
+			}
+			if _, err := cmd.OutOrStdout().Write(token); err != nil {
+				return fmt.Errorf("write admin token: %w", err)
+			}
+			return nil
+		}}
+	group.AddCommand(show)
 	return group
 }
 
