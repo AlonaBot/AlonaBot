@@ -58,7 +58,17 @@ function diff(original: unknown, edited: unknown, path: string[], missing: strin
       if (change !== undefined) entries.push([key, change]);
     }
     const patch = Object.fromEntries(entries);
-    if (isSecretSet(patch)) throw new Error(`${pointer(path)}: patch would contain a reserved secret marker`);
+    if (isSecretSet(patch)) {
+      for (const [key, value] of Object.entries(edited)) {
+        if (key === '$secret_set' || !Object.hasOwn(before, key) || !equal(before[key], value) || value === null || isSecretSet(value)) continue;
+        // 空对象补丁保留已有对象，包括其中的 null 与 secret；原样重发会改变其含义。
+        const preserved = isObject(value) ? {} : value;
+        const masked: string[] = [];
+        missingSecrets(preserved, [...path, key], masked);
+        if (!masked.length) return Object.fromEntries([...entries, [key, preserved]]);
+      }
+      throw new Error(`${pointer(path)}: patch would contain a reserved secret marker`);
+    }
     // 新的空对象也要写入；已有对象无变化时省略整个节点。
     return entries.length || !isObject(original) ? patch : undefined;
   }

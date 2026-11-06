@@ -192,12 +192,27 @@ describe('form Merge Patch contract (V-25)', () => {
       .toThrow('missing secret values at /headers/rows/0/a~1b~0c');
   });
 
-  it('rejects object differences that would synthesize a secret marker', () => {
-    const original = { headers: { nested: { keep: 'value' } } };
-    const edited = { headers: { nested: { keep: 'value', $secret_set: true } } };
-    expect(() => buildPatch(original, edited, fieldsFromSchema(collections)))
-      .toThrow('/headers/nested: patch would contain a reserved secret marker');
-    expect(original).toEqual({ headers: { nested: { keep: 'value' } } });
-    expect(edited).toEqual({ headers: { nested: { keep: 'value', $secret_set: true } } });
+  it.each([
+    ['value', 'value'], [false, false], [0, 0], ['', ''],
+    [[null, { keep: null }], [null, { keep: null }]],
+    [{ token: setSecret, keep: null }, {}],
+  ])('disambiguates a marker-shaped dict difference with an unchanged key', (keep, preserved) => {
+    const original = { headers: { nested: { keep } } };
+    const edited = { headers: { nested: { keep, $secret_set: true } } };
+    expect(buildPatch(original, edited, fieldsFromSchema(collections)))
+      .toEqual({ headers: { nested: { $secret_set: true, keep: preserved } } });
+    expect(original).toEqual({ headers: { nested: { keep } } });
+    expect(edited).toEqual({ headers: { nested: { keep, $secret_set: true } } });
+  });
+
+  it('rejects marker-shaped differences when every unchanged key requires a masked value or deletion', () => {
+    for (const keep of [setSecret, [setSecret], null]) {
+      const original = { headers: { nested: { keep } } };
+      const edited = { headers: { nested: { keep, $secret_set: true } } };
+      expect(() => buildPatch(original, edited, fieldsFromSchema(collections)))
+        .toThrow('/headers/nested: patch would contain a reserved secret marker');
+      expect(original).toEqual({ headers: { nested: { keep } } });
+      expect(edited).toEqual({ headers: { nested: { keep, $secret_set: true } } });
+    }
   });
 });
