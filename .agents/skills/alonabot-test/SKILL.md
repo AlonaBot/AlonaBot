@@ -19,7 +19,7 @@ description: 为 AlonaBot 变更选择测试、决定哪些测试提交、复现
 ## 哪些测试提交
 
 - **提交**：集成测试，即通过公开入口驱动真实协作方（插件进程、两端都是真实代码的 Session、SQLite、文件系统、系统锁）的测试；外部平台可以用仓库的模拟服务替代。另外还有 `contracts/wirespec_test.go` 协议编号检查。
-- **不提交**：单元测试、边界穷举和复现用的测试。写在包目录下的 `*_local_test.go` 中（已被 `.gitignore` 忽略），写多少都可以。不属于任何 Go 包的一次性脚本放在 `tmp/test/`。
+- **不提交**：单元测试、边界穷举和复现用的测试；绑定 SDK API 的测试，即 `sdk/` 的测试、`internal/core/supervisor/` 中 `supervisor_test.go` 以外的测试和 `testdata` 测试插件（D-86）。写在包目录下的 `*_local_test.go` 中（已被 `.gitignore` 忽略），写多少都可以。不属于任何 Go 包的一次性脚本放在 `tmp/test/`。
 - 提交的集成测试要对应规格中的行为，同类情况合并成表驱动测试；不为 getter、构造函数或显而易见的分支写测试。
 - 不为了测试而导出私有符号，也不为测试建注入框架。
 
