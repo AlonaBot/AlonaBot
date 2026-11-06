@@ -44,7 +44,6 @@ output { font-variant-numeric: tabular-nums; color: var(--accent); }
 .collection-row > button { margin-top: 10px; color: #9a3838; font-size: 13px; }
 .dict-row label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
 .dict-row input, .dict-row textarea, .dict-row select { display: block; margin-top: 4px; }
-.collection-required { position: absolute; width: 1px; height: 1px; opacity: 0; }
 summary { cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
 .summary-hint { display: block; margin-left: 18px; color: var(--muted); font-size: 13px; font-weight: 400; }
 details[open] summary { margin-bottom: 14px; }
