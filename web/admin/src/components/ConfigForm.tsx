@@ -20,7 +20,7 @@ function editableValue(value: unknown): unknown {
 }
 
 function submissionFields(value: Record<string, unknown>, fields: Field[], replacing: boolean, original = originalValues.get(value)): Record<string, unknown> {
-  const result = { ...(replacing ? original : value) };
+  const result: Record<string, unknown> = Object.assign(Object.create(null), replacing ? original : value);
   for (const field of fields) {
     if (field.invisible || (field.condition && !Object.entries(field.condition)
       .every(([key, expected]) => JSON.stringify(value[key]) === JSON.stringify(expected)))) continue;
@@ -31,7 +31,7 @@ function submissionFields(value: Record<string, unknown>, fields: Field[], repla
 }
 
 function submissionTemplate(value: Record<string, unknown>, field: Field, replacing: boolean, original = originalValues.get(value)): Record<string, unknown> {
-  const result = { ...(replacing ? original : value) };
+  const result: Record<string, unknown> = Object.assign(Object.create(null), replacing ? original : value);
   for (const template of field.templates!) {
     delete result[template.key];
     if (Object.hasOwn(value, template.key)) result[template.key] = submissionFields(value[template.key] as Record<string, unknown>, template.children, replacing, original?.[template.key] as Record<string, unknown> | undefined);
