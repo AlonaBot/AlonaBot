@@ -8,7 +8,9 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
+	"strings"
 )
 
 // Document 保存未展开的 JSON 文档；对象成员的顺序与文件一致。
@@ -31,22 +33,30 @@ type node struct {
 var environmentReference = regexp.MustCompile(`^\$\{[A-Za-z_][A-Za-z0-9_]*\}$`)
 
 func parseDocument(content []byte) (*Document, error) {
-	decoder := json.NewDecoder(bytes.NewReader(content))
-	decoder.UseNumber()
-	root, err := readNode(decoder, content, "")
+	root, err := parseNode(content, "")
 	if err != nil {
 		return nil, err
-	}
-	if _, err := decoder.Token(); err != io.EOF {
-		if err == nil {
-			err = errors.New("expected a single JSON object")
-		}
-		return nil, jsonLocation(content, decoder.InputOffset(), "", err)
 	}
 	if root.delimiter != '{' {
 		return nil, root.fail(errors.New("expected an object"))
 	}
 	return &Document{root: root}, nil
+}
+
+func parseNode(content []byte, path string) (*node, error) {
+	decoder := json.NewDecoder(bytes.NewReader(content))
+	decoder.UseNumber()
+	root, err := readNode(decoder, content, path)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		if err == nil {
+			err = errors.New("expected a single JSON value")
+		}
+		return nil, jsonLocation(content, decoder.InputOffset(), path, err)
+	}
+	return root, nil
 }
 
 func readNode(decoder *json.Decoder, content []byte, path string) (*node, error) {
@@ -242,4 +252,82 @@ func (n *node) encode() []byte {
 		output.Write(scalar)
 	}
 	return output.Bytes()
+}
+
+// Set 设置路径末尾的键；缺失的父对象逐层创建，新键追加在对象末尾。
+// path 中的每一项都表示对象键，数组通过设置整个值修改。
+func (d *Document) Set(path []string, value any) error {
+	content, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("%s: encode value: %w", strings.Join(path, "."), err)
+	}
+	replacement, err := parseNode(content, strings.Join(path, "."))
+	if err != nil {
+		return err
+	}
+	parent, err := d.parent(path, true)
+	if err != nil {
+		return err
+	}
+	key := path[len(path)-1]
+	index := parent.index(key)
+	if index < 0 {
+		parent.members = append(parent.members, member{key: key, value: replacement})
+	} else {
+		parent.members[index].value = replacement
+	}
+	return nil
+}
+
+// Delete 删除路径末尾的键；路径缺失时保持原文，经过非对象值时返回错误。
+func (d *Document) Delete(path []string) error {
+	parent, err := d.parent(path, false)
+	if err != nil {
+		return err
+	}
+	if parent == nil {
+		return nil
+	}
+	if index := parent.index(path[len(path)-1]); index >= 0 {
+		parent.members = slices.Delete(parent.members, index, index+1)
+	}
+	return nil
+}
+
+func (d *Document) parent(path []string, create bool) (*node, error) {
+	if len(path) == 0 {
+		return nil, errors.New("settings: path must contain a key")
+	}
+	parent := d.root
+	for i, key := range path[:len(path)-1] {
+		if parent.delimiter != '{' {
+			return nil, parent.fail(errors.New("expected an object in key path"))
+		}
+		index := parent.index(key)
+		if index < 0 {
+			if !create {
+				return nil, nil
+			}
+			parent.members = append(parent.members, member{key: key, value: &node{delimiter: '{', path: strings.Join(path[:i+1], "."), line: parent.line, column: parent.column}})
+			index = len(parent.members) - 1
+		}
+		parent = parent.members[index].value
+	}
+	if parent.delimiter != '{' {
+		return nil, parent.fail(errors.New("expected an object in key path"))
+	}
+	return parent, nil
+}
+
+func (n *node) index(key string) int {
+	return slices.IndexFunc(n.members, func(field member) bool { return field.key == key })
+}
+
+func (d *Document) formatted() ([]byte, error) {
+	var content bytes.Buffer
+	if err := json.Indent(&content, d.root.encode(), "", "  "); err != nil {
+		return nil, err
+	}
+	content.WriteByte('\n')
+	return content.Bytes(), nil
 }
