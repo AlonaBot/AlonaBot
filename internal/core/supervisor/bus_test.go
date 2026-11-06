@@ -104,14 +104,18 @@ func testBusProcesses(t *testing.T, binary string, stdio bool) {
 		}
 	}()
 	values := tune.Defaults()
-	routes := router.New(values.DispatchQueueEvents, nil, nil, nil, nil, nil)
-	defer routes.Close()
+	budget := wire.NewBudget(values.CoreMaxPayload)
+	routes := router.New(router.Options{Global: budget, Concurrency: 1, QueueBytes: values.DispatchQueueBytes, QueueEvents: values.DispatchQueueEvents})
+	defer func() {
+		if err := routes.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	}()
 	services := broker.New(routes, values.RequestTimeout)
 	mux := router.NewMux()
 	mux.Forward(services.Call)
 	broadcast := bus.New(bus.Options{QueueEvents: 3, QueueBytes: values.BusQueueBytes})
 	broadcast.Register(mux)
-	budget := wire.NewBudget(values.CoreMaxPayload)
 	running := make(map[string]*Running)
 	specs := make(map[string]Spec)
 	defer func() {
