@@ -41,7 +41,7 @@ func (r *Router) cacheCommands(session *pluginSession) {
 	r.matches[p.PluginID()] = routes
 }
 
-func (r *Router) dispatchCommands(ev *pb.Event) bool {
+func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 	// 1. 同时读取路径索引和插件路由快照，插件调用期间不持注册锁。
 	r.mu.Lock()
 	index := r.commands
@@ -86,7 +86,7 @@ func (r *Router) dispatchCommands(ev *pb.Event) bool {
 					invocation.Path = entry.Path
 					return invocation, nil
 				}
-				return r.invokeCommand(route.candidate, ev, bind, prefix)
+				return r.invokeCommand(route.candidate, ev, event, bind, prefix)
 			}
 			return false
 		}
@@ -124,7 +124,7 @@ func (r *Router) dispatchCommands(ev *pb.Event) bool {
 				}
 			}
 		}
-		if matched && r.commandPermitted(route.candidate, ev) && r.invokeCommand(route.candidate, ev, func(*pb.Event) (*pb.CommandInvocation, error) { return invocation, nil }, "") {
+		if matched && r.commandPermitted(route.candidate, ev) && r.invokeCommand(route.candidate, ev, event, func(*pb.Event) (*pb.CommandInvocation, error) { return invocation, nil }, "") {
 			return true
 		}
 	}
@@ -242,13 +242,13 @@ func foldText(text string) string {
 	}, text)
 }
 
-func (r *Router) invokeCommand(c candidate, ev *pb.Event, bind func(*pb.Event) (*pb.CommandInvocation, error), prefix string) bool {
+func (r *Router) invokeCommand(c candidate, ev *pb.Event, event *trustedEvent, bind func(*pb.Event) (*pb.CommandInvocation, error), prefix string) bool {
 	if r.ctx.Err() != nil || !c.plugin.Activated() {
 		return false
 	}
 	trace := make([]byte, traceIDBytes)
 	rand.Read(trace)
-	response, callError := r.call(c, ev, bind, trace)
+	response, callError := r.call(c, event, bind, trace)
 	if errors.Is(callError, errCommandArguments) {
 		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Debug("command arguments rejected", "error", callError)
 		if c.route.GetCommand().GetUsageMode() != pb.UsageMode_USAGE_MODE_SILENT {

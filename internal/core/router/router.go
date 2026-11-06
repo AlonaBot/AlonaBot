@@ -75,7 +75,7 @@ type Router struct {
 	prefixes func(adapterInstanceID string) []string
 	policy   CommandPolicy
 	matches  map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
-	queue    chan *pb.Event
+	queue    chan *trustedEvent
 	ctx      context.Context
 	cancel   context.CancelFunc
 	mu       sync.Mutex // 保护注册、在途调用、命令索引与 worker 的启动
@@ -98,7 +98,7 @@ func New(queueEvents int, adapters *adapter.Registry, send ServiceFunc, prepare 
 		prefixes = func(string) []string { return []string{"/"} }
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Router{adapters: adapters, send: send, prepare: prepare, prefixes: prefixes, policy: policy, matches: make(map[string][]commandRoute), queue: make(chan *pb.Event, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]*pluginSession), inFlight: make(map[inFlightKey]struct{}), commands: &CommandIndex{}}
+	return &Router{adapters: adapters, send: send, prepare: prepare, prefixes: prefixes, policy: policy, matches: make(map[string][]commandRoute), queue: make(chan *trustedEvent, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]*pluginSession), inFlight: make(map[inFlightKey]struct{}), commands: &CommandIndex{}}
 }
 
 // Attach 注册一个接收派发的插件并重建命令索引；相同插件 ID 替换为新实例。
@@ -201,7 +201,7 @@ func (r *Router) Deliver(ctx context.Context, ev *pb.Event) error {
 		return errors.New("event router is closed")
 	}
 	select {
-	case r.queue <- proto.CloneOf(ev):
+	case r.queue <- retainEvent(ev):
 		return nil
 	default:
 		return adapter.ErrQueueFull
@@ -244,7 +244,8 @@ func (r *Router) candidates(ev *pb.Event) []candidate {
 	return candidates
 }
 
-func (r *Router) dispatch(ev *pb.Event) {
+func (r *Router) dispatch(event *trustedEvent) {
+	ev := event.retained
 	// 1. Core 权限在进入任一路由前统一计算，来源只提供平台权限及其展开结果。
 	if actor := ev.GetActor(); actor != nil {
 		permissions := []string{"user"}
@@ -264,8 +265,9 @@ func (r *Router) dispatch(ev *pb.Event) {
 		slices.Sort(permissions)
 		actor.Permissions = slices.Compact(permissions)
 	}
+	ev = event.rebuild()
 	// 2. 命令层的 STOP 终止整条分发链；消费但继续的命令仍进入事件层。
-	if ev.GetEventType() == "message.created" && r.dispatchCommands(ev) {
+	if ev.GetEventType() == "message.created" && r.dispatchCommands(ev, event) {
 		return
 	}
 	// 3. 事件路由独立判断权限，拒绝当前候选后继续后继路由。
@@ -279,7 +281,7 @@ func (r *Router) dispatch(ev *pb.Event) {
 		trace := make([]byte, traceIDBytes)
 		rand.Read(trace)
 		routeID := candidate.route.GetRouteId()
-		response, err := r.call(candidate, ev, nil, trace)
+		response, err := r.call(candidate, event, nil, trace)
 		if err != nil {
 			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("event handler call failed", "error", err)
 		}
@@ -316,8 +318,9 @@ func (r *Router) current(c candidate) bool {
 	return r.ctx.Err() == nil && r.plugins[c.pluginID] == c.pluginSession && c.plugin.Activated()
 }
 
-func (r *Router) call(c candidate, ev *pb.Event, bind func(*pb.Event) (*pb.CommandInvocation, error), trace []byte) (wire.Response, error) {
-	// 1. prepare 在锁外执行，仍使用原始事件给各接收 Session 分别签发。
+func (r *Router) call(c candidate, event *trustedEvent, bind func(*pb.Event) (*pb.CommandInvocation, error), trace []byte) (wire.Response, error) {
+	// 1. 每次调用先重建可信字段，再在锁外为接收 Session 签发媒体。
+	ev := event.rebuild()
 	r.mu.Lock()
 	current := r.current(c)
 	r.mu.Unlock()
@@ -341,13 +344,13 @@ func (r *Router) call(c candidate, ev *pb.Event, bind func(*pb.Event) (*pb.Comma
 			return wire.Response{}, fmt.Errorf("%w: %w", errCommandArguments, err)
 		}
 	}
-	request := &pb.HandlerRequest{RouteId: c.route.GetRouteId(), Event: prepared, Command: command, Context: &pb.InvocationContext{Actor: ev.GetActor(), DefaultTarget: ev.GetTarget()}}
+	request := &pb.HandlerRequest{RouteId: c.route.GetRouteId(), Event: prepared, Command: command, Context: &pb.InvocationContext{Actor: proto.CloneOf(event.retained.GetActor()), DefaultTarget: proto.CloneOf(event.retained.GetTarget())}}
 	encoded, err := proto.Marshal(request)
 	if err != nil {
 		return wire.Response{}, fmt.Errorf("encode handler request: %w", err)
 	}
 	// 2. prepare 期间可能发生替换或移除；实际调用前再核对，并只为本次 Call 登记关联。
-	key := inFlightKey{caller: c.caller, eventID: ev.GetEventId()}
+	key := inFlightKey{caller: c.caller, eventID: event.retained.GetEventId()}
 	r.mu.Lock()
 	if !r.current(c) {
 		r.mu.Unlock()
@@ -362,7 +365,7 @@ func (r *Router) call(c candidate, ev *pb.Event, bind func(*pb.Event) (*pb.Comma
 	}()
 	return c.plugin.Call(r.ctx, wire.Request{
 		Target: request.RouteId, TraceID: trace,
-		Attach:  &Invocation{PluginID: c.pluginID, Event: prepared, DefaultTarget: ev.GetTarget()},
+		Attach:  &Invocation{PluginID: c.pluginID, Event: prepared, DefaultTarget: proto.CloneOf(event.retained.GetTarget())},
 		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
 	})
 }
