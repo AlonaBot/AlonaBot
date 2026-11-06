@@ -157,7 +157,7 @@ function FieldControl({ field, value, original, path, messages, missing, onChang
   return field.type === 'object' ? <fieldset className="config-group">{body}</fieldset> : <div className="config-field">{body}</div>;
 }
 
-function Fields({ fields, value, original, path, messages, missing, onChange }: {
+function Fields({ fields, value = {}, original, path, messages, missing, onChange }: {
   fields: Field[];
   value: Record<string, unknown>;
   original: Record<string, unknown>;
@@ -229,7 +229,7 @@ function FormEditor(props: ConfigFormProps) {
 
 function ListControl(props: FieldProps & { id: string }) {
   const ui = useUI();
-  const values = props.value as unknown[];
+  const values = (props.value ?? []) as unknown[];
   const serial = useRef(0);
   const rows = useRef(values.map(() => ({ id: serial.current++ })));
   const text = fieldText(props.messages, props.field);
@@ -272,7 +272,7 @@ function dictValue(row: DictRow): unknown {
     case 'json': return JSON.parse(row.text);
   }
 }
-function DictControl({ value, onChange, id, required }: { value: Record<string, unknown>; onChange: (value: unknown) => void; id: string; required: boolean }) {
+function DictControl({ value = {}, onChange, id, required }: { value: Record<string, unknown>; onChange: (value: unknown) => void; id: string; required: boolean }) {
   const ui = useUI();
   const serial = useRef(0);
   const [rows, setRows] = useState<DictRow[]>(() => Object.entries(value).map(([key, entry]) => dictRow(key, entry, serial.current++)));
@@ -335,7 +335,7 @@ function templateDefaults(fields: Field[]): Record<string, unknown> {
 function TemplateControl(props: FieldProps & { id: string }) {
   const ui = useUI();
   const many = props.field.type === 'template_list';
-  const values = many ? props.value as Record<string, unknown>[] : [props.value as Record<string, unknown> | undefined];
+  const values = many ? (props.value ?? []) as Record<string, unknown>[] : [props.value as Record<string, unknown> | undefined];
   const serial = useRef(0);
   const rows = useRef(values.map(() => ({ id: serial.current++ })));
   function selection(value: Record<string, unknown> | undefined) {
