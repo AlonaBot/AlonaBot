@@ -45,7 +45,7 @@
 | goal-96 | T-04.9 | 删除构建期标记 | T-04.7 | 等待前置 |
 | goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 待派发 |
 | goal-98 | T-07.7 | 插件页面的沙箱隔离 | T-07.4、T-07.6、T-09.1 | 等待前置 |
-| goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 待派发 |
+| goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 已完成 |
 | goal-95 | T-08.11 | 配置改由 config_schema.json 声明 | T-04.7、T-08.3、T-08.4、T-08.10 | 等待前置 |
 | goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 等待前置 |
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-04.7、T-06.1 | 等待前置 |
@@ -2967,7 +2967,9 @@ internal/wire
 
 ### goal-33 · T-08.6 SQLite 候选与资源交接
 
-状态：待派发。前置 T-08.4（PR #74）与 T-08.5（PR #79，合并提交 `75c16d3`）均已合并。符号已按合入代码核对：
+状态：已完成（PR #85）。`candidate.PrepareDatabase`、`Discard` 与 state 的两个方法已合入，调用顺序写在包文档；生产装配尚未调用。Windows 只做了交叉构建，实际运行留给 T-10。验证证据见 TEST-MATRIX §3.2。
+
+派发时的核对：前置 T-08.4（PR #74）与 T-08.5（PR #79，合并提交 `75c16d3`）均已合并。符号已按合入代码核对：
 - `internal/oslock`：`TryLock(path string) (*Lock, error)`，文件不存在时以 0600 创建，已被占用时返回包装了 `oslock.ErrLocked` 的错误；`(*Lock).Unlock() error`。锁文件为 `<PluginDir>/runtime.lock`（`wire.RuntimeLockFile`）。
 - `state.Store`：`LockPlugin(pluginID) (unlock func())`、`AddGeneration(ctx, pluginID, generationID, configSnapshot string, configVersion uint32)`、`Active(ctx, pluginID)`、`GenerationConfig(ctx, generationID)`、`SetGenerationConfig`、`GenerationSecretPaths`、`GetPendingConfig(ctx, pluginID) (PendingConfig, error)`（没有记录时为 `state.ErrNotFound`）。`schema.sql` 的 `generation` 表有 `plugin_id`、`config_snapshot`、`committed_at`；`generation_secret_path` 以外键引用 `generation`。状态库不存数据库路径，也没有列出某插件全部代次的方法。
 - `secret.Store`：`secret.New(st)`、`Collect(ctx, pluginID string, protected [][]byte) (int, error)` 删除该插件中未被 protected 快照引用的版本。
