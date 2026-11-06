@@ -17,8 +17,8 @@ What changed and why. Link an issue with `Closes #123` (closes on merge). For ba
 ## 验证 / Verification
 
 <!--
-实际运行的命令、平台和结果。未运行的检查说明原因；跳过、fixture 和交叉编译分别标注。
-Commands, platform, and results actually run. Explain any check not run; mark skips, fixtures, and cross-compiles separately.
+实际运行的命令、平台和结果。未运行的检查说明原因；跳过、fixture 和交叉编译分别标注。写明提交的测试新增了多少行，以及本地跑过但未提交的测试。
+Commands, platform, and results actually run. Explain any check not run; mark skips, fixtures, and cross-compiles separately. State how many lines of committed tests were added, and which local tests ran without being committed.
 -->
 
 ## 兼容性与风险 / Compatibility and risks
