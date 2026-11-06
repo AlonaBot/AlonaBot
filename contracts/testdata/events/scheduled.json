@@ -1,0 +1,13 @@
+{
+  "eventId": "scheduled-event-1",
+  "eventType": "scheduled",
+  "sourceKind": "EVENT_SOURCE_KIND_SCHEDULER",
+  "occurredAtUnixMs": "1793491200000",
+  "eventPayload": {
+    "scheduled": {
+      "jobId": "daily-summary",
+      "runId": "daily-summary-run-1",
+      "scheduledAtUnixMs": "1793491200000"
+    }
+  }
+}

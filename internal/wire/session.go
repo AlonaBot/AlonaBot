@@ -416,7 +416,7 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 		s.mu.Unlock()
 		return Response{}, callErr(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "deadline already passed; request not sent")
 	}
-	if !s.opt.Global.acquire(n) {
+	if !s.opt.Global.Acquire(n) {
 		s.mu.Unlock()
 		return Response{}, callErr(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "Core global payload budget is full")
 	}
@@ -476,7 +476,7 @@ func (s *Session) SendEvent(ctx context.Context, target string, ev *pb.BusEvent)
 		s.mu.Unlock()
 		return callErr(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "session is closed")
 	}
-	if s.outBytes+n > s.opt.MaxBytes || !s.opt.Global.acquire(n) {
+	if s.outBytes+n > s.opt.MaxBytes || !s.opt.Global.Acquire(n) {
 		s.mu.Unlock()
 		return callErr(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "event payload budget is full")
 	}
@@ -529,7 +529,7 @@ func (s *Session) writeEvent(c *outCall, env *pb.Envelope) {
 func (s *Session) receiveEvent(env *pb.Envelope) {
 	n := int64(len(env.Payload))
 	s.mu.Lock()
-	if s.inBytes+n > s.opt.MaxBytes || !s.opt.Global.acquire(n) {
+	if s.inBytes+n > s.opt.MaxBytes || !s.opt.Global.Acquire(n) {
 		s.mu.Unlock()
 		s.droppedEvents.Add(1)
 		return
@@ -542,7 +542,7 @@ func (s *Session) receiveEvent(env *pb.Envelope) {
 			s.mu.Lock()
 			s.inBytes -= n
 			s.mu.Unlock()
-			s.opt.Global.release(n)
+			s.opt.Global.Release(n)
 		})
 	})
 }
@@ -671,7 +671,7 @@ func (s *Session) unqueueLocked(c *outCall) {
 // releaseLocked 归还调用占用的本方向与全局预算，重复调用无副作用；调用方持有 s.mu。
 func (s *Session) releaseLocked(c *outCall) {
 	s.outBytes -= c.bytes
-	s.opt.Global.release(c.bytes)
+	s.opt.Global.Release(c.bytes)
 	c.bytes = 0
 }
 
@@ -861,7 +861,7 @@ func (s *Session) onRequest(env *pb.Envelope, payloadError *validate.Error) erro
 		return s.respondErr(id, payloadError.Code, payloadError.Message)
 	}
 	// 4. 对端方向的准入预算；通过后登记在途，另起 goroutine 执行 Handler，读循环不等待它。
-	if len(s.inbound) >= s.opt.MaxInflight || s.inBytes+n > s.opt.MaxBytes || !s.opt.Global.acquire(n) {
+	if len(s.inbound) >= s.opt.MaxInflight || s.inBytes+n > s.opt.MaxBytes || !s.opt.Global.Acquire(n) {
 		s.mu.Unlock()
 		return s.respondErr(id, pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "in-flight request count or byte budget for this direction is full")
 	}
@@ -888,7 +888,7 @@ func (s *Session) serve(ctx context.Context, cancel context.CancelFunc, in *Inbo
 	s.inBytes -= n
 	s.notifyChange()
 	s.mu.Unlock()
-	s.opt.Global.release(n)
+	s.opt.Global.Release(n)
 	env := s.envelope(pb.FrameKind_FRAME_KIND_RESPONSE)
 	env.InitiatorSide, env.CallId, env.Error = s.peer, in.CallID, r.Err
 	setPayload(env, r.Payload)
