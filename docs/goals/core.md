@@ -3220,7 +3220,7 @@ internal/wire
 - reload/update/rollback：完成输入与前置校验（来源绑定、pin、版本不低于被依赖的 min_version 时需要 confirm），然后交给 Candidates；缺省实现返回 UNSUPPORTED。
 - Adapter 实例：CreateInstance 用该 Adapter 包的配置 Schema（安装包中的 Schema 资源）经 secret.Extract 存快照；Start 时 Resolve 后经 remote.Process 启动；同一 adapter_id 下账号唯一由 remote 检查。实例配置与凭证不出现在 List 或日志中，读取只返回 Redact 后的结果。
 - Core 设置接入（assembly，Run 与 Serve 共用）：settings.Load 取得 *settings.File（goal-68 或 goal-69 已加入这一步时复用）；Router 的 prefixes（goal-15 合并后为 Options.Prefixes）传 File.CommandPrefixes，policy 传与 message.Service 相同的 *policy.Policy；启动任何包之前把 Settings().Admins 转为 []policy.Admin 并调用 SetAdmins。
-- admin add/remove 经 File.Update 写回 admins，成功后再调用 SetAdmins；admin list 读 Policy.Admins。
+- admin add/remove 经 File.Update 写回 admins，成功后调用 SetAdmins。两步在同一把锁内执行，SetAdmins 用这次写回之后的列表。这两个操作没有包 ID，按包串行保护不到它们，不加锁时并发的 add 与 remove 会让内存列表与文件不一致。admin list 读 Policy.Admins。
 - HTTP API（在 Core 的主机名下，全部经 adminauth.Require）：每个方法一个 JSON 端点，需要确认时返回 409 与 {"affected": [...]}；错误返回 {"code", "safe_message"}。CLI 命令从 --admin-url（缺省取设置文件的 admin_base_url）与 ALONABOT_ADMIN_TOKEN 环境变量（或 --token-file）取得 Bearer token，不读取插件环境；确认通过 --yes 显式给出。CLI 不直接写状态库。
 - WebUI 组件没有进程：enable/disable 只改记录，restart 返回 FAILED_PRECONDITION；文件的提供在 T-09.12。list 返回 role。
 - serve：取得 core.lock；没有管理凭证时，stdin 与 stderr 都是终端则按 admin-token init 生成并显示一次后继续，否则拒绝启动并提示先运行 admin-token init；装配 Core（与 Run 共用 assembly），启动 HTTP Listener、webhost、管理 API，按 install_seq 顺序启动全部已启用的包。不带子命令运行 alonabot 等同 serve。
