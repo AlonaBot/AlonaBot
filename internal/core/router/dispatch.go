@@ -106,6 +106,7 @@ func (r *Router) run(event *trustedEvent) {
 
 // Close 停止接纳并释放排队事件，等待运行链；ctx 到期则取消调用并等链退出，返回 ctx.Err()。
 func (r *Router) Close(ctx context.Context) error {
+	// 1. 在接纳锁下丢弃等待事件，并记录本次调用是否需要等运行链。
 	r.mu.Lock()
 	if !r.closed {
 		r.closed = true
@@ -117,18 +118,17 @@ func (r *Router) Close(ctx context.Context) error {
 			close(r.drained)
 		}
 	}
+	drained := r.stats.Running == 0
 	r.mu.Unlock()
-	// 已排空时直接成功；等待期间保留在途关联，允许合法子调用完成。
-	select {
-	case <-r.drained:
+	if drained {
 		r.cancel()
 		return nil
-	default:
 	}
+	// 2. 等待期间保留在途关联；排空与取消同时就绪时仍保留 ctx 错误。
 	select {
 	case <-r.drained:
 		r.cancel()
-		return nil
+		return ctx.Err()
 	case <-ctx.Done():
 		r.cancel()
 		<-r.drained // 取消后仍等链退出，归还运行槽与在途关联。
