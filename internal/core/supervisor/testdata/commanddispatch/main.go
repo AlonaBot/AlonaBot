@@ -42,7 +42,7 @@ func reply(entry, text string) (message.Chain, error) {
 	if err := record(entry); err != nil {
 		return nil, err
 	}
-	return message.Chain{message.Text(string(text))}, nil
+	return message.Chain{message.Text(text)}, nil
 }
 
 // readImage 同时检查参数与 prepared Event 的同源内容，并用当前 Session 读取实际媒体。

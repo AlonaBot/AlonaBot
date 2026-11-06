@@ -166,7 +166,6 @@ func TestCommandDispatchBothTransports(t *testing.T) {
 				if !reflect.DeepEqual(route.GetRequiredPermissions(), want) {
 					t.Errorf("route %s permissions=%v, want %v", route.GetRouteId(), route.GetRequiredPermissions(), want)
 				}
-				// SDK 的按路由权限 API 尚待接入；这里为 Core 提供对应的静态描述。
 				switch route.GetRouteId() {
 				case "cmd.rss.guarded", "restricted.event", "restricted.text", "restricted.raw":
 					route.RequiredPermissions = []string{"memory.admin"}
