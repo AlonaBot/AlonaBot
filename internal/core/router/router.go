@@ -60,6 +60,12 @@ func (p *instancePlugin) SendEvent(ctx context.Context, target string, ev *pb.Bu
 	return p.instance.Session.SendEvent(ctx, target, ev)
 }
 
+// CommandPolicy 提供命令准入与 Core 管理员身份判定。
+type CommandPolicy interface {
+	CheckCommand(ctx context.Context, pluginID string, route *pb.RouteDescriptor, actor *pb.Actor, target *pb.Target) *pb.ErrorInfo
+	IsAdmin(ctx context.Context, actor *pb.Actor) (bool, error)
+}
+
 // Router 按顺序派发已接纳事件；New 创建，Start 启动，Close 取消在途派发并等待 worker 退出。
 // 队列接纳与插件注册由 mu 串行化，worker 调用插件时不持锁；队列不关闭，避免并发投递遇到已关闭 channel。
 type Router struct {
@@ -67,6 +73,7 @@ type Router struct {
 	send     ServiceFunc
 	prepare  func(*pb.Event, Caller) (*pb.Event, error)
 	prefixes func(adapterInstanceID string) []string
+	policy   CommandPolicy
 	matches  map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
 	queue    chan *pb.Event
 	ctx      context.Context
@@ -85,12 +92,13 @@ type Router struct {
 // adapters 提供账号用户名，send 接入 message.Service.Send 处理 usage 与自动回复。
 // prepare 在每次 Handler 调用前改写接收 Session 的事件；nil 时原样派发。
 // prefixes 按实例提供非空的前缀列表；nil 时所有实例使用 ["/"]。
-func New(queueEvents int, adapters *adapter.Registry, send ServiceFunc, prepare func(*pb.Event, Caller) (*pb.Event, error), prefixes func(adapterInstanceID string) []string) *Router {
+// policy 提供动态命令策略与管理员身份；nil 时仅按声明权限判定且不赋予 admin。
+func New(queueEvents int, adapters *adapter.Registry, send ServiceFunc, prepare func(*pb.Event, Caller) (*pb.Event, error), prefixes func(adapterInstanceID string) []string, policy CommandPolicy) *Router {
 	if prefixes == nil {
 		prefixes = func(string) []string { return []string{"/"} }
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Router{adapters: adapters, send: send, prepare: prepare, prefixes: prefixes, matches: make(map[string][]commandRoute), queue: make(chan *pb.Event, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]*pluginSession), inFlight: make(map[inFlightKey]struct{}), commands: &CommandIndex{}}
+	return &Router{adapters: adapters, send: send, prepare: prepare, prefixes: prefixes, policy: policy, matches: make(map[string][]commandRoute), queue: make(chan *pb.Event, queueEvents), ctx: ctx, cancel: cancel, plugins: make(map[string]*pluginSession), inFlight: make(map[inFlightKey]struct{}), commands: &CommandIndex{}}
 }
 
 // Attach 注册一个接收派发的插件并重建命令索引；相同插件 ID 替换为新实例。
@@ -243,6 +251,14 @@ func (r *Router) dispatch(ev *pb.Event) {
 		for _, permission := range actor.GetPermissions() {
 			if permission != "user" && permission != "admin" {
 				permissions = append(permissions, permission)
+			}
+		}
+		if r.policy != nil {
+			admin, err := r.policy.IsAdmin(r.ctx, actor)
+			if err != nil {
+				slog.Warn("read Core Admin status failed", "adapter_instance_id", actor.GetAdapterInstanceId(), "error", err)
+			} else if admin {
+				permissions = append(permissions, "admin")
 			}
 		}
 		slices.Sort(permissions)
