@@ -182,6 +182,27 @@ describe('form Merge Patch contract (V-25)', () => {
       .toEqual({ headers: { nested: { plain: 'after' } } });
   });
 
+  it.each([
+    { before: { auth: setSecret }, after: { authorization: setSecret }, path: '/headers/authorization',
+      resolved: { authorization: 'new value' }, patch: { auth: null, authorization: 'new value' } },
+    { before: {}, after: { nested: { 'a/b~c': setSecret } }, path: '/headers/nested/a~1b~0c',
+      resolved: { nested: { 'a/b~c': 'new value' } }, patch: { nested: { 'a/b~c': 'new value' } } },
+  ])('requires a new secret value at a new dict path: $path', ({ before, after, path, resolved, patch }) => {
+    const original = { headers: before };
+    const edited = { headers: after };
+    const snapshot = structuredClone({ original, edited });
+    const fields = fieldsFromSchema(collections);
+    try {
+      buildPatch(original, edited, fields);
+      throw new Error('expected MissingSecretsError');
+    } catch (error) {
+      expect(error).toBeInstanceOf(MissingSecretsError);
+      expect((error as MissingSecretsError).paths).toEqual([path]);
+    }
+    expect({ original, edited }).toEqual(snapshot);
+    expect(buildPatch(original, { headers: resolved }, fields)).toEqual({ headers: patch });
+  });
+
   it('recognizes only the exact secret marker and escapes missing value paths', () => {
     expect(isSecretSet(setSecret)).toBe(true);
     for (const value of [null, true, '$secret_set', { $secret_set: false }, { $secret_set: true, other: 1 }]) {

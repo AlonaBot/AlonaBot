@@ -1,6 +1,6 @@
 import type { Field } from './model';
 
-/** MissingSecretsError 列出整体替换数组时必须重新输入的 secret 值路径（JSON Pointer）。 */
+/** MissingSecretsError 列出提交时必须重新输入的 secret 值路径（JSON Pointer）。 */
 export class MissingSecretsError extends Error {
   constructor(public readonly paths: string[]) {
     super(`missing secret values at ${paths.join(', ')}`);
@@ -45,7 +45,11 @@ function missingSecrets(value: unknown, path: string[], missing: string[]) {
 
 // undefined 只表示此节点无需补丁，null 保留 RFC 7396 的删除含义。
 function diff(original: unknown, edited: unknown, path: string[], missing: string[]): unknown {
-  if (equal(original, edited) || isSecretSet(edited)) return undefined;
+  if (equal(original, edited)) return undefined;
+  if (isSecretSet(edited)) {
+    missing.push(pointer(path));
+    return undefined;
+  }
   if (Array.isArray(edited)) {
     missingSecrets(edited, path, missing);
     return edited;
@@ -148,7 +152,7 @@ function fieldsDiff(original: Record<string, unknown>, edited: Record<string, un
   return Object.fromEntries(entries);
 }
 
-/** buildPatch 生成已知可见字段的 RFC 7396 补丁，数组有残留 secret 状态时抛错。 */
+/** buildPatch 生成已知可见字段的 RFC 7396 补丁，缺少必要的 secret 明文时抛错。 */
 export function buildPatch(original: unknown, edited: unknown, fields: Field[]): Record<string, unknown> {
   if (!isObject(original) || !isObject(edited)) throw new Error('configuration must be an object');
   const missing: string[] = [];

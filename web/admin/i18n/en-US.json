@@ -10,7 +10,7 @@
     "modify": "Modify",
     "clear": "Clear",
     "patchError": "Review the configuration before saving.",
-    "missingSecrets": "Enter new values for these secrets to replace the list:",
+    "missingSecrets": "Enter new values for these secrets before saving:",
     "codeLanguage": "Code language",
     "addRow": "Add row",
     "removeRow": "Remove row",
