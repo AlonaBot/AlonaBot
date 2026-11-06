@@ -190,6 +190,7 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 
 - **集成测试**通过组件的公开入口驱动真实的协作方，例如真实的插件进程、两端都是真实代码的 Session 连接、真实的 SQLite、真实的文件系统和系统锁。外部平台可以用仓库提供的模拟服务替代（例如内存 Adapter、本地 Bot API 模拟服务），但不能用假实现替换仓库里的其他组件。
 - **协议编号检查**只有 `contracts/wirespec_test.go`，用来防止误改协议字段号和枚举值。
+- **不提交绑定 SDK API 的测试**（D-86）：`sdk/` 不提交测试；`internal/core/supervisor/` 只保留 `supervisor_test.go`，其中不依赖 SDK API；不新增 `testdata` 测试插件。这些验证写在 `*_local_test.go`，结果写进 PR。
 - 单元测试、边界穷举、复现用的临时测试，写在包目录下以 `_local_test.go` 结尾的文件里。这类文件已被 `.gitignore` 忽略，写多少都可以，不会被提交。不在 Go 包内的一次性脚本放在 `tmp/test/`。
 - 提交的集成测试要对应规格中的行为或 V 编号：同类情况合并成表驱动测试，不为 getter、构造函数或显而易见的分支写测试。
 - PR 正文写明本地还跑了哪些测试和结果；它们不提交，但结论要能复述。
