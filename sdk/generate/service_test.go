@@ -46,9 +46,12 @@ func main(){if _,err:=sdk.Collect(&Plugin{});err!=nil{panic(err)};fmt.Println("r
 	writePluginFile(t, dir, "handlers/services.go", `package handlers
 import "github.com/AlonaBot/AlonaBot/sdk"
 type Input struct { Name string `+"`json:\"name\"`"+` }
-type Output struct { Values []string `+"`json:\"values\"`"+` }
+type Output struct {
+ Values []string `+"`json:\"values\"`"+`
+ Labels map[string]string `+"`json:\"labels\"`"+`
+}
 func Register(r *sdk.ServiceRegistry) {
- sdk.JSON[Input,Output](r,"second").Handle(func(*sdk.Context,Input)(Output,error){return Output{Values:[]string{}},nil})
+ sdk.JSON[Input,Output](r,"second").Handle(func(*sdk.Context,Input)(Output,error){return Output{},nil})
 }
 `)
 	first := scanPlugin(t, generate.Options{Dir: dir})
@@ -59,7 +62,7 @@ func Register(r *sdk.ServiceRegistry) {
 		"main.Request":                    `{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"count":{"maximum":2147483647,"minimum":-2147483648,"type":["integer","null"]},"name":{"type":"string"}},"required":["name"],"type":"object"}`,
 		"main.Result":                     `{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"}`,
 		pluginModule + "/handlers.Input":  `{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"name":{"type":"string"}},"required":["name"],"type":"object"}`,
-		pluginModule + "/handlers.Output": `{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"values":{"items":{"type":"string"},"type":"array"}},"required":["values"],"type":"object"}`,
+		pluginModule + "/handlers.Output": `{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"labels":{"additionalProperties":{"type":"string"},"type":["object","null"]},"values":{"items":{"type":"string"},"type":["array","null"]}},"required":["values","labels"],"type":"object"}`,
 	}
 	actual := generatedServiceSchemas(t, first.Source)
 	if len(actual) != len(expected) {

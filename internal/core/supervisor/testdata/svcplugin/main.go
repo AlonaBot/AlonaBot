@@ -35,11 +35,14 @@ type reply struct {
 	Calls  int64
 	Code   pb.ErrorCode
 	Error  string
-}
-type invalidOutput struct {
-	Secret string
 	Values []string
+	Labels map[string]string
 }
+type containers struct {
+	Values []string
+	Labels map[string]string
+}
+type invalidOutput struct{ Secret string }
 
 type plugin struct {
 	sdk.Base
@@ -59,9 +62,9 @@ func (p *plugin) Services(r *sdk.ServiceRegistry) {
 	sdk.JSON[inputV2, reply](r, "v2").Access(sdk.AccessPublic).Handle(func(c *sdk.Context, in inputV2) (reply, error) { return echo(c, input(in)) })
 	sdk.JSON[input, reply](r, "allow").Access(sdk.AccessAllowlist, "b").Handle(echo)
 	sdk.JSON[input, reply](r, "count").Access(sdk.AccessPublic).Handle(func(*sdk.Context, input) (reply, error) { return reply{Calls: p.calls.Load()}, nil })
-	sdk.JSON[input, invalidOutput](r, "invalid_output").Access(sdk.AccessPublic).Handle(func(*sdk.Context, input) (invalidOutput, error) {
+	sdk.JSON[containers, containers](r, "containers").Access(sdk.AccessPublic).Handle(func(_ *sdk.Context, in containers) (containers, error) {
 		p.calls.Add(1)
-		return invalidOutput{Secret: "output-payload-must-not-be-logged"}, nil
+		return in, nil
 	})
 	sdk.Proto[*pb.ConversationClearRequest, *pb.ConversationClearRequest](r, "proto").Access(sdk.AccessPublic).Handle(func(_ *sdk.Context, in *pb.ConversationClearRequest) (*pb.ConversationClearRequest, error) {
 		p.calls.Add(1)
@@ -96,6 +99,16 @@ func (*plugin) Events(r *sdk.EventRegistry) {
 			out, err = sdk.CallJSON[json.RawMessage, reply](c.Context(), target, json.RawMessage(`{`))
 		case "invalid_output":
 			_, err = sdk.CallJSON[input, invalidOutput](c.Context(), target, input{Text: "hello 世界"})
+		case "containers_nil", "containers_empty", "containers_values":
+			var in containers
+			if operation == "containers_empty" {
+				in = containers{Values: []string{}, Labels: map[string]string{}}
+			} else if operation == "containers_values" {
+				in = containers{Values: []string{"hello"}, Labels: map[string]string{"key": "value"}}
+			}
+			var result containers
+			result, err = sdk.CallJSON[containers, containers](c.Context(), target, in)
+			out.Values, out.Labels = result.Values, result.Labels
 		case "encoding", "proto":
 			var result *pb.ConversationClearRequest
 			result, err = sdk.CallProto[*pb.ConversationClearRequest](c.Context(), target, &pb.ConversationClearRequest{ConversationKey: "hello 世界"})

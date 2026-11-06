@@ -303,7 +303,7 @@ func (b *serviceBuilder) schema(typ types.Type, pos token.Pos) *jsonschema.Schem
 			break
 		}
 		if items := b.schema(u.Elem(), pos); items != nil {
-			return &jsonschema.Schema{Type: "array", Items: items}
+			return &jsonschema.Schema{Types: []string{"array", "null"}, Items: items}
 		}
 		return nil
 	case *types.Map:
@@ -319,7 +319,7 @@ func (b *serviceBuilder) schema(typ types.Type, pos token.Pos) *jsonschema.Schem
 			}
 		}
 		if value := b.schema(u.Elem(), pos); value != nil {
-			return &jsonschema.Schema{Type: "object", AdditionalProperties: value}
+			return &jsonschema.Schema{Types: []string{"object", "null"}, AdditionalProperties: value}
 		}
 		return nil
 	case *types.Struct:

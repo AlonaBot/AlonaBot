@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +35,8 @@ type serviceReply struct {
 	Calls  int64
 	Code   pb.ErrorCode
 	Error  string
+	Values []string
+	Labels map[string]string
 }
 
 // TestServiceProcesses 验证真实 a/b/c 进程的访问准入、类型化往返和目标函数调用次数。
@@ -42,14 +45,19 @@ func TestServiceProcesses(t *testing.T) {
 	if output, err := exec.Command("go", "build", "-o", binary, "./testdata/svcplugin").CombinedOutput(); err != nil {
 		t.Fatalf("build service plugin: %v\n%s", err, output)
 	}
+	staleBinary := filepath.Join(t.TempDir(), "stalesvcplugin")
+	if output, err := exec.Command("go", "build", "-o", staleBinary, "./testdata/stalesvcplugin").CombinedOutput(); err != nil {
+		t.Fatalf("build stale service plugin: %v\n%s", err, output)
+	}
 	for _, stdio := range []bool{false, true} {
 		for _, badOutput := range []bool{false, true} {
-			t.Run(fmt.Sprintf("stdio=%v/bad_output=%v", stdio, badOutput), func(t *testing.T) { testServiceProcesses(t, binary, stdio, badOutput) })
+			t.Run(fmt.Sprintf("stdio=%v/bad_output=%v", stdio, badOutput), func(t *testing.T) { testServiceProcesses(t, binary, "", stdio, badOutput) })
 		}
+		t.Run(fmt.Sprintf("stdio=%v/stale_schema", stdio), func(t *testing.T) { testServiceProcesses(t, binary, staleBinary, stdio, false) })
 	}
 }
 
-func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
+func testServiceProcesses(t *testing.T, binary, staleBinary string, stdio, badOutput bool) {
 	t.Helper()
 	ctx := context.Background()
 	store, err := state.Open(ctx, t.TempDir())
@@ -108,8 +116,12 @@ func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
 		}
 	}()
 	for _, id := range []string{"a", "b", "c"} {
+		executable := binary
+		if id == "a" && staleBinary != "" {
+			executable = staleBinary
+		}
 		digest := []byte("service integration fixture")
-		if err := store.AddInstall(ctx, state.Install{Role: state.RolePlugin, PluginID: id, Source: "test", Entrypoint: binary, BuildDigest: digest}); err != nil {
+		if err := store.AddInstall(ctx, state.Install{Role: state.RolePlugin, PluginID: id, Source: "test", Entrypoint: executable, BuildDigest: digest}); err != nil {
 			t.Fatal(err)
 		}
 		generation := "generation-" + id
@@ -125,7 +137,7 @@ func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
 			env["ALONABOT_TEST_BAD_SERVICE_OUTPUT"] = "1"
 		}
 		caller := router.NewCaller(id, generation)
-		spec := Spec{PluginID: id, Role: state.RolePlugin, GenerationID: generation, PluginDir: dir, Executable: binary, BuildDigest: digest, NewCandidate: true, Stdio: stdio, ExtraEnv: env,
+		spec := Spec{PluginID: id, Role: state.RolePlugin, GenerationID: generation, PluginDir: dir, Executable: executable, BuildDigest: digest, NewCandidate: true, Stdio: stdio, ExtraEnv: env,
 			Bootstrap: &pb.Bootstrap{GenerationId: generation, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}},
 			Limits:    host.NewLimits(values), Stop: host.NewStopTiming(values), Log: output.Plugin(id, generation), Handler: mux.For(caller),
 		}
@@ -134,7 +146,7 @@ func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
 			t.Fatalf("launch %s: %v", id, err)
 		}
 		running = append(running, instance)
-		if id == "a" && !badOutput {
+		if id == "a" && !badOutput && staleBinary == "" {
 			found := false
 			for _, route := range instance.Instance.Routes {
 				if route.GetService().GetServiceName() == "v2" {
@@ -188,6 +200,40 @@ func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
 		}
 		return reply.Calls
 	}
+	if staleBinary != "" {
+		t.Run("schema_invalid_handler_output", func(t *testing.T) {
+			before := count(t)
+			result := command(t, "b", "invalid_output", "a/invalid_output")
+			if result.Code != pb.ErrorCode_ERROR_CODE_INTERNAL {
+				t.Fatalf("invalid output reply=%+v", result)
+			}
+			if after := count(t); after != before+1 {
+				t.Fatalf("output handler calls=%d, want %d", after, before+1)
+			}
+			found := false
+			for _, line := range strings.Split(logs.String(), "\n") {
+				var record map[string]any
+				if err := json.Unmarshal([]byte(line), &record); err != nil {
+					continue
+				}
+				if record["msg"] != "service output schema validation failed" {
+					continue
+				}
+				found = true
+				if record["level"] != "ERROR" || record["schema_id"] != "main.invalidOutput" || record["error"] == nil {
+					t.Errorf("schema error diagnostic=%v", record)
+				}
+				if strings.Contains(line, "output-payload-must-not-be-logged") || strings.Contains(line, `"payload"`) || strings.Contains(line, `"Secret"`) {
+					t.Errorf("schema diagnostic contains payload: %s", line)
+				}
+			}
+			if !found {
+				t.Fatal("missing SDK output Schema ERROR diagnostic")
+			}
+		})
+		return
+	}
+
 	var expectedCalls int64
 	tests := []struct {
 		name, id, operation, target string
@@ -230,15 +276,38 @@ func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
 			}
 		})
 	}
+	for _, test := range []struct {
+		operation string
+		values    []string
+		labels    map[string]string
+	}{
+		{"containers_nil", nil, nil},
+		{"containers_empty", []string{}, map[string]string{}},
+		{"containers_values", []string{"hello"}, map[string]string{"key": "value"}},
+	} {
+		t.Run(test.operation, func(t *testing.T) {
+			before := count(t)
+			result := command(t, "b", test.operation, "a/containers")
+			if result.Code != 0 || !reflect.DeepEqual(result.Values, test.values) || !reflect.DeepEqual(result.Labels, test.labels) {
+				t.Fatalf("container round trip=%+v, want values=%v labels=%v", result, test.values, test.labels)
+			}
+			if after := count(t); after != before+1 {
+				t.Fatalf("container handler calls=%d, want %d", after, before+1)
+			}
+		})
+	}
+
 	// 通过真实 Broker 和 Service Session 注入合法 JSON，隔离业务字段 Schema 的准入。
-	for _, test := range []struct{ name, payload string }{
-		{"schema_missing_required", `{}`},
-		{"schema_wrong_field_type", `{"Text":42}`},
+	for _, test := range []struct{ name, target, schemaID, payload string }{
+		{"schema_missing_required", "a/pub", "main.input", `{}`},
+		{"schema_wrong_field_type", "a/pub", "main.input", `{"Text":42}`},
+		{"container_wrong_element_type", "a/containers", "main.containers", `{"Values":[42],"Labels":null}`},
+		{"container_wrong_map_value_type", "a/containers", "main.containers", `{"Values":null,"Labels":{"key":42}}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			before := count(t)
-			response := services.Call(ctx, router.Caller{}, &wire.Inbound{Target: "a/pub", Payload: wire.Payload{
-				Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: "main.input", SchemaVersion: 1, Bytes: []byte(test.payload),
+			response := services.Call(ctx, router.Caller{}, &wire.Inbound{Target: test.target, Payload: wire.Payload{
+				Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: test.schemaID, SchemaVersion: 1, Bytes: []byte(test.payload),
 			}})
 			if response.Err.GetCode() != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT {
 				t.Fatalf("input schema error=%v, want INVALID_ARGUMENT", response.Err)
@@ -248,34 +317,4 @@ func testServiceProcesses(t *testing.T, binary string, stdio, badOutput bool) {
 			}
 		})
 	}
-	t.Run("schema_invalid_handler_output", func(t *testing.T) {
-		before := count(t)
-		result := command(t, "b", "invalid_output", "a/invalid_output")
-		if result.Code != pb.ErrorCode_ERROR_CODE_INTERNAL {
-			t.Fatalf("invalid output reply=%+v", result)
-		}
-		if after := count(t); after != before+1 {
-			t.Fatalf("output handler calls=%d, want %d", after, before+1)
-		}
-		found := false
-		for _, line := range strings.Split(logs.String(), "\n") {
-			var record map[string]any
-			if err := json.Unmarshal([]byte(line), &record); err != nil {
-				continue
-			}
-			if record["msg"] != "service output schema validation failed" {
-				continue
-			}
-			found = true
-			if record["level"] != "ERROR" || record["schema_id"] != "main.invalidOutput" || record["error"] == nil {
-				t.Errorf("schema error diagnostic=%v", record)
-			}
-			if strings.Contains(line, "output-payload-must-not-be-logged") || strings.Contains(line, `"payload"`) || strings.Contains(line, `"Secret"`) {
-				t.Errorf("schema diagnostic contains payload: %s", line)
-			}
-		}
-		if !found {
-			t.Fatal("missing SDK output Schema ERROR diagnostic")
-		}
-	})
 }
