@@ -53,8 +53,44 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 
 ## 7. 配置与 secret
 
-- 根插件嵌入 `sdk.Base`，至多一个配置类型并嵌入 `config.Base`；校验写在 OnLoad 中（D-39、D-40、CONTRACTS §5）。
-- secret 字段在 `config` 标签中加 `secret` 标志（例如 `config:"secret"`），不写进日志、错误或数据库明文（CONTRACTS §5.3）。
+在 `plugin.yaml` 同目录编写 `config_schema.json`，按字段键声明类型与英文源文案。运行 `alonabot plugin generate` 检查声明并把规范 JSON 嵌入生成文件；`alonabot plugin check` 执行同样的检查。声明格式见 [CONTRACTS §5.1](../spec/CONTRACTS-v0.1.md#51-配置真源缺失值与编辑)，例如：
+
+```json
+{
+  "$version": 2,
+  "$migrations": [{"to": 2, "rename": {"hello": "greeting"}}],
+  "greeting": {"type": "string", "description": "Greeting", "default": "Hello"},
+  "enabled": {"type": "bool", "default": true},
+  "token": {"type": "string", "description": "Access token", "secret": true}
+}
+```
+
+- `$version` 是配置格式版本，缺省为 1。SDK 从已保存的版本依次执行 `$migrations`，首装跳过迁移；上例把版本 1 的 `hello` 移到 `greeting`。每步按 `rename` → `map` → `wrap` → `remove` 执行，路径不存在时跳过，rename 目标已存在时失败；迁移路径与版本检查见 [CONTRACTS §5.5](../spec/CONTRACTS-v0.1.md#55-配置版本与迁移)。
+- 声明式迁移后调用根插件的 `OnConfigLoad(ctx context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`。`raw` 是完整的迁移结果，`fromVersion` 保留迁移前的版本，首装时为目标版本；`sdk.Base` 默认原样返回。需要额外转换或业务取值检查时覆盖此方法，保留未知键，响应 ctx，只做可重复的纯配置变换；数据库、文件、网络与发信操作放在对应生命周期中。示例见 [showcase](../examples/plugins/showcase/main.go)。普通 restart 与恢复时，回调改变配置会返回 FAILED_PRECONDITION。
+- 回调之后，SDK 只给缺失键补 `default` 或类型零值，递归进入对象、列表与已选择的模板，再校验。显式 `false`、`0`、空串与空集合保持，未知键和数字原文保留。声明字段为 `null`、类型不符或违反 options、slider、required 等约束时，准备失败，错误只含 JSON 路径和错误类别。
+
+根插件以值嵌入 `sdk.Base`，从 OnStart 开始通过 `p.Config()` 取得 `config.Values`；在 OnConfigLoad 中或更早调用会 panic。例如 `p.Config().String("greeting")` 读取上例的问候语。取值对象在同一 Session 内保持不变，可并发读取；集合 getter 返回可独立修改的副本。
+
+| 声明类型 | 取值方法 |
+| --- | --- |
+| `string`、`text` | `String(key)` |
+| `int`、`float`、`bool` | 分别为 `Int(key)`（int64）、`Float(key)`（float64）、`Bool(key)` |
+| 没有 `items` 的 `list` | `Strings(key)` |
+| `object`、有 `items` 的 `list` | `Object(key)`、`Objects(key)`，再按子字段键读取 |
+| `dict` | `Dict(key)`，返回 `map[string]json.RawMessage` |
+| `template`、`template_list` | `Template(key)`、`TemplateList(key)`，通过 `Key()` 取选中的模板键，嵌入的 `Values` 读取模板字段 |
+
+可选 `template` 缺失时表示未选择，`Key()` 返回空串；选中时值须恰好包含一个已声明的模板键。读取未声明键或使用与声明类型不符的方法会 panic，消息指明字段路径。
+
+secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `default` 与 `options`。Core 按 schema 抽取对象、列表与模板中的秘密值：非空值生成不可变引用保存到配置快照，Bootstrap 解析为明文，`Config()` 取到明文；空串表示未设置。插件对秘密值保密，日志、错误和业务数据库中均禁止明文存放（[CONTRACTS §5.3](../spec/CONTRACTS-v0.1.md#53-secret-与翻译)）。
+
+配置翻译写在 `i18n/<locale>.json` 的 `config` 根节点，按 schema 的字段层级覆盖文案，例如：
+
+```json
+{"config": {"greeting": {"description": "问候语"}, "token": {"description": "访问令牌"}}}
+```
+
+字段可覆盖 `description`、`hint`、`labels`；子字段放在 `items`，模板放在 `templates`，模板文案可覆盖 `name`、`hint`。options 的存储值保持原文，翻译写在 labels 中。生成器核对覆盖键与 schema 的字段、模板和选项是否对应，问题诊断带文件名与路径。
 
 ## 8. 测试
 
