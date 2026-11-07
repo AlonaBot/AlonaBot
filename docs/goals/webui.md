@@ -15,7 +15,7 @@
 
 ### goal-34 · T-08.7 web/admin 骨架、配置表单组件与界面文案
 
-状态：已完成（PR #91）。审查中维护者确认三项（PR 评论）：批准 `@types/react@19`、`@types/react-dom@19`；数组行与 secret 掩码形状的补丁规则写进 CONTRACTS §5.1；下文「测试」中提交的 `schema.test.ts` 改为被忽略的 `schema.local.test.ts`，npm 的 test 改为 `vitest run --passWithNoTests`，本切片没有提交的测试。以下为派发时的记录：前置 T-08.1（PR #54，合并提交 `021e972`）与 T-08.10（PR #77，合并提交 `f34b1e8`）均已合并。2026-11-04 按 D-76 改写：配置改由手写的 `config_schema.json` 声明（CONTRACTS §5.1），表单直接读取这种格式，fixture 按契约手写，不再用生成器从 Go 类型生成。SDK 侧的解析与校验由 T-08.11（goal-95）实现，本切片只依赖契约，不等待它；goal-95 会用自己的解析器检查本切片的 fixture。
+状态：已完成（PR #91，合并提交 `9789fc8`）。审查中维护者确认三项（PR 评论）：批准 `@types/react@19`、`@types/react-dom@19`；数组行与 secret 掩码形状的补丁规则写进 CONTRACTS §5.1；下文「测试」中提交的 `schema.test.ts` 改为被忽略的 `schema.local.test.ts`，npm 的 test 改为 `vitest run --passWithNoTests`，本切片没有提交的测试。以下为派发时的记录：前置 T-08.1（PR #54，合并提交 `021e972`）与 T-08.10（PR #77，合并提交 `f34b1e8`）均已合并。2026-11-04 按 D-76 改写：配置改由手写的 `config_schema.json` 声明（CONTRACTS §5.1），表单直接读取这种格式，fixture 按契约手写，不再用生成器从 Go 类型生成。SDK 侧的解析与校验由 T-08.11（goal-95）实现，本切片只依赖契约，不等待它；goal-95 会用自己的解析器检查本切片的 fixture。
 
 改写时沿用的已核对事实：
 - 管理读取经 `secret.Store.Redact` 把每个已设置的 secret 原位替换为 `{"$secret_set": true}`，数组元素、模板对象与 dict 值中的 secret 也是如此。
@@ -141,7 +141,7 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 
 ### goal-43 · T-09.8 Admin 管理页
 
-状态：等待前置（T-08.7、T-09.6、T-09.12、T-09.13）。语句中 goal-34、goal-36、goal-39～goal-41、goal-84、goal-92 提供的符号（web/admin 的工程与组件、登录接口、管理服务的 HTTP API、Admin API 参考、会话取回与上传接口）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按前后端拆分改写：会话取回与 multipart 上传移到 goal-92（T-09.13）；原语句中嵌入 dist 的 `internal/core/adminui` 与 D-62「Core 不内嵌任何前端」冲突，已删去，静态文件由 goal-84（T-09.12）以 WebUI 组件的方式提供。2026-11-04 按 D-77～D-85 修订计划：Adapter 实例管理的表单按 goal-101 的 `instance_schema.json` 生成，增删改经 goal-93 写回 `core_config.json`（D-82、D-85）。前置合并后由审查者改写。
+状态：等待前置（T-09.6、T-09.12、T-09.13）。goal-34（PR #91，合并提交 `9789fc8`）已合并，合入的符号：`src/schema/model.ts` 的 `fieldsFromSchema`、`Field`、`Template`；`src/schema/patch.ts` 的 `buildPatch(original, edited, fields)`、`MissingSecretsError`、`isSecretSet`；`src/i18n/catalog.ts` 的 `pickLocale`、`fieldText`、`templateText`；`src/i18n/UI.tsx` 的 `UIContext`、`useUI`；`src/components` 的 `ConfigForm`（props 为 `schema`、`value`、`messages`、`onSubmit(patch)`）与 `LanguageSwitch`；四个手写 fixture 在 `web/admin/fixtures/`。前端纯函数测试只写在被忽略的 `*.local.test.ts`，`npm run test` 为 `vitest run --passWithNoTests`。语句中 goal-36、goal-39～goal-41、goal-84、goal-92 提供的符号（web/admin 的工程与组件、登录接口、管理服务的 HTTP API、Admin API 参考、会话取回与上传接口）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按前后端拆分改写：会话取回与 multipart 上传移到 goal-92（T-09.13）；原语句中嵌入 dist 的 `internal/core/adminui` 与 D-62「Core 不内嵌任何前端」冲突，已删去，静态文件由 goal-84（T-09.12）以 WebUI 组件的方式提供。2026-11-04 按 D-77～D-85 修订计划：Adapter 实例管理的表单按 goal-101 的 `instance_schema.json` 生成，增删改经 goal-93 写回 `core_config.json`（D-82、D-85）。前置合并后由审查者改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-43（切片 T-09.8：Admin 管理页）。goal 目录 goal-43，分支 goal-43，worktree .worktrees/goal-43，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -177,7 +177,7 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 
 ### goal-44 · T-09.9 Admin 配置、权限、工具策略与插件页
 
-状态：等待前置（T-09.8、T-09.14）。语句中 goal-34、goal-43、goal-93 提供的符号（ConfigForm、LanguageSwitch、web/admin 的页面框架与 API 客户端、T-09.14 的 HTTP 接口）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按前后端拆分改写：原语句中的管理 API（internal/core/manage 的 *_api.go 与 admin_api_test.go）移到 goal-93（T-09.14）；嵌入构建产物的 `internal/core/adminui` 与 D-62 冲突，已删去。同日按 D-83、D-84 修订：发信许可改为「全部实例」或指定实例；插件页面改为在 WebUI 内用沙箱 iframe 打开，并由本切片实现 postMessage 桥，不再使用页面票据。
+状态：等待前置（T-09.8、T-09.14）。goal-34（PR #91，合并提交 `9789fc8`）的 `ConfigForm` 与 `LanguageSwitch` 已合并，接口见 goal-43 的状态段。语句中 goal-43、goal-93 提供的符号（web/admin 的页面框架与 API 客户端、T-09.14 的 HTTP 接口）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按前后端拆分改写：原语句中的管理 API（internal/core/manage 的 *_api.go 与 admin_api_test.go）移到 goal-93（T-09.14）；嵌入构建产物的 `internal/core/adminui` 与 D-62 冲突，已删去。同日按 D-83、D-84 修订：发信许可改为「全部实例」或指定实例；插件页面改为在 WebUI 内用沙箱 iframe 打开，并由本切片实现 postMessage 桥，不再使用页面票据。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-44（切片 T-09.9：Admin 配置、权限、工具策略与插件页）。goal 目录 goal-44，分支 goal-44，worktree .worktrees/goal-44，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
