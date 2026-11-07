@@ -48,3 +48,6 @@ const ServiceMediaRead = "core.media.read"
 
 // ServiceMediaGrant 指定 Core 媒体读取权限的受限授权服务。
 const ServiceMediaGrant = "core.media.grant"
+
+// ServiceToolList 指定调用插件可调用的工具目录服务。
+const ServiceToolList = "core.tool.list"

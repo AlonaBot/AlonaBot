@@ -88,6 +88,8 @@ func TestEnumValues(t *testing.T) {
 		{pb.CommandMatch(0).Descriptor(), "COMMAND_MATCH_", []string{"UNSPECIFIED", "PATH", "REGEX", "RAW", "KEYWORD", "STARTSWITH", "ENDSWITH", "FULLMATCH"}},
 		// WIRE §3.2 的 log_level。
 		{pb.LogLevel(0).Descriptor(), "LOG_LEVEL_", []string{"UNSPECIFIED", "DEBUG", "INFO", "WARN", "ERROR", "OFF"}},
+		// CONTRACTS §13.1、WIRE §3.5 的工具策略。
+		{pb.ToolPolicy(0).Descriptor(), "TOOL_POLICY_", []string{"UNSPECIFIED", "ALLOW", "CONFIRM", "DENY"}},
 	}
 	for _, c := range cases {
 		vals := c.enum.Values()
@@ -437,5 +439,48 @@ func TestRemovedPermissionFieldsReserved(t *testing.T) {
 		if _, err := protoregistry.GlobalFiles.FindDescriptorByName(name); err != protoregistry.NotFound {
 			t.Errorf("removed enum %s: descriptor lookup error = %v, want NotFound", name, err)
 		}
+	}
+}
+
+// TestToolFieldNumbers 固定 Service 工具描述与目录载荷的编号、类型和重复性。
+func TestToolFieldNumbers(t *testing.T) {
+	for _, c := range []struct {
+		message proto.Message
+		names   []protoreflect.Name
+		kinds   []protoreflect.Kind
+	}{
+		{&pb.ServiceSpec{}, []protoreflect.Name{"service_name", "access", "allowlist_plugin_ids", "encoding", "tool"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.MessageKind}},
+		{&pb.ToolSpec{}, []protoreflect.Name{"description", "default_policy", "input_schema_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind}},
+		{&pb.ToolInfo{}, []protoreflect.Name{"name", "description", "input_schema_json", "policy"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.EnumKind}},
+		{&pb.ToolListRequest{}, nil, nil},
+		{&pb.ToolListResponse{}, []protoreflect.Name{"tools"}, []protoreflect.Kind{protoreflect.MessageKind}},
+	} {
+		t.Run(string(c.message.ProtoReflect().Descriptor().Name()), func(t *testing.T) {
+			fields := c.message.ProtoReflect().Descriptor().Fields()
+			if fields.Len() != len(c.names) {
+				t.Fatalf("field count = %d, want %d", fields.Len(), len(c.names))
+			}
+			for i, name := range c.names {
+				f := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+				repeated := name == "tools" || name == "allowlist_plugin_ids"
+				if f == nil || f.Name() != name || f.Kind() != c.kinds[i] || f.IsList() != repeated {
+					t.Fatalf("field %d = %v, want %s (%s, repeated=%v)", i+1, f, name, c.kinds[i], repeated)
+				}
+				switch name {
+				case "tool", "tools":
+					want := protoreflect.FullName("alonabot.v1.ToolSpec")
+					if name == "tools" {
+						want = "alonabot.v1.ToolInfo"
+					}
+					if f.Message().FullName() != want {
+						t.Errorf("%s message = %s, want %s", name, f.Message().FullName(), want)
+					}
+				case "default_policy", "policy":
+					if f.Enum().FullName() != "alonabot.v1.ToolPolicy" {
+						t.Errorf("%s enum = %s, want ToolPolicy", name, f.Enum().FullName())
+					}
+				}
+			}
+		})
 	}
 }
