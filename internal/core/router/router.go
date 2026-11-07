@@ -138,6 +138,24 @@ func (r *Router) Plugin(pluginID string) (Plugin, bool) {
 	return session.plugin, true
 }
 
+// Plugins 返回当前已 Attach 的插件快照；激活状态由调用方即时检查。
+func (r *Router) Plugins() []Plugin {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	plugins := make([]Plugin, 0, len(r.plugins))
+	for _, session := range r.plugins {
+		plugins = append(plugins, session.plugin)
+	}
+	return plugins
+}
+
+// ServiceCallable 按直接调用插件身份判断服务访问；Core 与目标自身始终允许。
+func ServiceCallable(spec *pb.ServiceSpec, callerPluginID, targetPluginID string) bool {
+	return callerPluginID == "" || callerPluginID == targetPluginID ||
+		spec.GetAccess() == pb.ServiceAccess_SERVICE_ACCESS_PUBLIC ||
+		spec.GetAccess() == pb.ServiceAccess_SERVICE_ACCESS_ALLOWLIST && slices.Contains(spec.GetAllowlistPluginIds(), callerPluginID)
+}
+
 // Caller 返回当前已激活绑定的可信身份；替换、移除或退出后的身份不再返回。
 func (r *Router) Caller(pluginID string) (Caller, bool) {
 	r.mu.Lock()
