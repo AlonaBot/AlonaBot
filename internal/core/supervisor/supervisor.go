@@ -53,7 +53,7 @@ type Spec struct {
 	GenerationID string // 要激活的代次
 	// Bootstrap 携带 generation_id 与候选配置等；阶段预算由 host 填写。
 	Bootstrap       *pb.Bootstrap
-	ConfigSchema    []byte        // 当前安装包生成的配置 Schema
+	ConfigSchema    []byte        // 当前安装包 config_schema.json 的规范 JSON；没有配置时为 nil
 	Secrets         *secret.Store // nil 时绑定本次 Launch 使用的状态库
 	KeptSecretPaths []string      // 调用方额外提供的旧 secret 路径模式
 	// NewCandidate 为 true 时在 ACTIVATE 前提交 ActiveGeneration（期望旧值 ExpectedOld）；

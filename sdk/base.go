@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/AlonaBot/AlonaBot/sdk/config"
 )
@@ -14,11 +15,12 @@ import (
 // 覆盖时签名必须与默认实现一致，否则根插件不再满足 Root，调用 [Run] 处编译失败。根插件也不能有与
 // Hook 同名的字段（例如 HTTP），字段会遮住默认实现，同样导致编译失败。
 type Base struct {
-	_ struct{} // 保留给 SDK 注入的运行时状态，禁止插件依赖其字段
+	config      config.Values
+	configReady bool // 准备成功后写入，生命周期 Hook 与 Handler 启动前完成。
 }
 
-// Root 是传给 [Run] 的根插件，列出 SDK 会调用的全部 Hook；嵌入 [Base] 即满足它。
-// 进程生命周期 Hook 见 CONTRACTS §4.1，配置回调 OnLoad 由配置类型实现（见 sdk/config）。
+// Root 列出 SDK 会调用的全部根插件 Hook，供 [Run] 使用；嵌入 [Base] 即满足它。
+// 进程生命周期 Hook 见 CONTRACTS §4.1，配置回调 OnConfigLoad 见 §5.2。
 type Root interface {
 	// OnStart 在配置准备之后、REGISTER 之前执行，不能发起业务调用；失败时本次启动失败。
 	OnStart(context.Context) error
@@ -26,8 +28,8 @@ type Root interface {
 	OnReady(context.Context) error
 	// OnStop 在 STOPPING 或断链后执行，最多使用 STOPPING 给出的期限关闭资源。
 	OnStop(context.Context) error
-	// Config 返回供 SDK 解码配置的结构体指针（嵌入 config.Base）；没有配置时返回 nil。每个插件包至多一个 Config。
-	Config() config.Config
+	// OnConfigLoad 接收声明式迁移后的完整 JSON 和原始版本号；只做纯配置变换，此时 Config 尚未就绪。
+	OnConfigLoad(ctx context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)
 	// Commands 在 Collect 时调用一次，注册命令。
 	Commands(*CommandRegistry)
 	// Events 在 Collect 时调用一次，注册事件路由。
@@ -41,7 +43,7 @@ type Root interface {
 	// Schedules 在 Collect 时调用一次，注册定时任务。
 	Schedules(*ScheduleRegistry)
 
-	alonabotRoot() // 标记方法，只由 Base 实现
+	setConfig(config.Values) // 只由 Base 实现，注入本 Session 的配置并约束根插件嵌入 Base。
 }
 
 // OnStart 默认什么也不做。
@@ -53,8 +55,18 @@ func (*Base) OnReady(context.Context) error { return nil }
 // OnStop 默认什么也不做。
 func (*Base) OnStop(context.Context) error { return nil }
 
-// Config 默认返回 nil，表示插件没有配置。
-func (*Base) Config() config.Config { return nil }
+// OnConfigLoad 默认原样返回 raw。
+func (*Base) OnConfigLoad(_ context.Context, _ uint32, raw json.RawMessage) (json.RawMessage, error) {
+	return raw, nil
+}
+
+// Config 返回本 Session 的只读配置；配置准备完成前调用会 panic。
+func (b *Base) Config() config.Values {
+	if !b.configReady {
+		panic("config is not prepared")
+	}
+	return b.config
+}
 
 // Commands 默认不注册命令。
 func (*Base) Commands(*CommandRegistry) {}
@@ -74,5 +86,7 @@ func (*Base) HTTP(*HTTPRegistry) {}
 // Schedules 默认不注册定时任务。
 func (*Base) Schedules(*ScheduleRegistry) {}
 
-// alonabotRoot 使嵌入 Base 的类型满足 Root。
-func (*Base) alonabotRoot() {}
+func (b *Base) setConfig(values config.Values) {
+	b.config = values
+	b.configReady = true
+}

@@ -47,7 +47,7 @@
 | goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 已完成（PR #67） |
 | goal-98 | T-07.7 | 插件页面的沙箱隔离 | T-07.4、T-07.6、T-09.1 | 等待前置 |
 | goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 已完成 |
-| goal-95 | T-08.11 | 配置改由 config_schema.json 声明 | T-04.7、T-08.3、T-08.4、T-08.10 | 待派发 |
+| goal-95 | T-08.11 | 配置改由 config_schema.json 声明 | T-04.7、T-08.3、T-08.4、T-08.10 | 已完成（PR #103） |
 | goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 等待前置 |
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-04.7、T-06.1 | 已完成 |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1 | 等待前置 |
@@ -3246,7 +3246,7 @@ internal/wire
 
 ### goal-95 · T-08.11 配置改由 config_schema.json 声明
 
-状态：待派发。goal-103（PR #99）已合并；按 D-86 清除已删除测试与 testdata 的迁移要求，跨进程自测由本地测试在临时目录生成插件源码与二进制。前置 T-04.7（PR #89，合并提交 `3e37cd6`）、T-08.3、T-08.4、T-08.10 均已合并。依据 D-76 新增，同日按 D-85 补充 `$version` 与 `$migrations` 的声明式迁移，按 D-80 改用 `i18n/`。
+状态：已完成（[PR #103](https://github.com/AlonaBot/AlonaBot/pull/103)），证据见 TEST-MATRIX §3.2。审查中经审查者授权超出语句两处：showcase 的 `hello → greeting` 改名改用 `$migrations` 声明，`OnConfigLoad` 只保留 `interval_seconds` 非负检查（FIX-01）；`supervisor.Spec.ConfigSchema` 的字段注释改为 config_schema.json 的规范 JSON（FIX-02）。派发时：goal-103（PR #99）已合并；按 D-86 清除已删除测试与 testdata 的迁移要求，跨进程自测由本地测试在临时目录生成插件源码与二进制。前置 T-04.7（PR #89，合并提交 `3e37cd6`）、T-08.3、T-08.4、T-08.10 均已合并。依据 D-76 新增，同日按 D-85 补充 `$version` 与 `$migrations` 的声明式迁移，按 D-80 改用 `i18n/`。
 
 T-04.7 合并后核对时修订了原语句：T-04.7 没有复用配置的类型推导，`sdk/generate/service.go` 有自己的 `serviceBuilder` 与 `schemaImporter`，不依赖 `config.go`。因此 `config.go` 整个删除，不需要拆分或保留。
 
