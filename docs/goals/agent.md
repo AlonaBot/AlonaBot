@@ -167,7 +167,7 @@ agent
 
 ### goal-60 · T-12.3 工具循环与 MCP
 
-状态：等待前置（T-11.2、T-12.2）。语句中 goal-54、goal-55、goal-58、goal-59 提供的符号（sdk.ListTools、sdk.InvokeTool、sdk.ConfirmOperation、provider 的 Tool/ToolCall/ToolResult、agent 的一轮对话与 Config.MCPServers）只写名字；合并后由审查者核对，再改为待派发。本切片获授权引入已批准的 github.com/modelcontextprotocol/go-sdk（docs/development.md 只授权给 goal-60）。
+状态：等待前置（T-11.2、T-12.2）。sdk.ListTools 已由 goal-54（PR #101，合并提交 `de48f26`）合入。语句中 goal-55、goal-58、goal-59 提供的符号（sdk.InvokeTool、sdk.ConfirmOperation、provider 的 Tool/ToolCall/ToolResult、agent 的一轮对话与 Config.MCPServers）只写名字；合并后由审查者核对，再改为待派发。本切片获授权引入已批准的 github.com/modelcontextprotocol/go-sdk（docs/development.md 只授权给 goal-60）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-60（切片 T-12.3：工具循环与 MCP）。goal 目录 goal-60，分支 goal-60，worktree .worktrees/goal-60，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -195,7 +195,7 @@ agent
 - 安全：MCP 的 env 与 headers 中的值不写日志、不进入工具结果。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：agent/tools_test.go（//go:build unix）。用 goal-59 的测试装配、模拟 Provider（脚本化地返回工具调用）、goal-54/55 的工具插件与 mcptest 的两种服务器：
+- 提交：agent/tools_test.go（//go:build unix）。用 goal-59 的测试装配、模拟 Provider（脚本化地返回工具调用）、在测试临时目录生成的工具插件（goal-54、goal-55 的同类插件只在执行者本地）与 mcptest 的两种服务器：
   - 模型连续调用一个 Core 工具与一个 MCP 工具：两者都执行，结果交回模型，最终回复显示。
   - Core 工具为 confirm 策略且用户拒绝：结果为错误文本交回模型，工具未执行；MCP 工具的确认被拒同样如此。
   - 停止插件后 stdio MCP 子进程已退出（按 PID 检查）。
@@ -208,7 +208,7 @@ agent
 
 ### goal-61 · T-12.4 Agent 的记忆
 
-状态：等待前置（T-08.5、T-11.2、T-12.2）。语句中 goal-19、goal-32、goal-54、goal-59 提供的符号（sdk.JSONService 与 Tool 选项、gormdb.Open、agent 的一轮对话）只写名字；合并后由审查者核对，再改为待派发。2026-10-28 按 D-60 改写：记忆并入 Agent，不再有 sdk/memory 与记忆插件。
+状态：等待前置（T-08.5、T-11.2、T-12.2）。`sdk.JSONService` 的 `Tool` 方法已由 goal-54（PR #101，合并提交 `de48f26`）合入。语句中 goal-19、goal-32、goal-59 提供的符号（sdk.JSONService、gormdb.Open、agent 的一轮对话）只写名字；合并后由审查者核对，再改为待派发。2026-10-28 按 D-60 改写：记忆并入 Agent，不再有 sdk/memory 与记忆插件。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-61（切片 T-12.4：Agent 的记忆）。goal 目录 goal-61，分支 goal-61，worktree .worktrees/goal-61，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
