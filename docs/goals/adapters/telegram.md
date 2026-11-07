@@ -14,7 +14,7 @@
 
 ### goal-5 · T-03.4 官方 Telegram Adapter 的接收
 
-状态：已完成（PR #39，squash commit `604dc65`）。接收与标准化、`telegramtest.Server`、命令入口已合入；`Actor.locale = 5` 与 `MessageCreatedPayload.to_me = 3` 已追加，现有编号保持不变。模拟、真实私聊接收及未运行项见 TEST-MATRIX §3.2。
+状态：已完成（[PR #39](https://github.com/AlonaBot/AlonaBot/pull/39)，合并提交 `604dc65`）。接收与标准化、`telegramtest.Server`、命令入口已合入；`Actor.locale = 5` 与 `MessageCreatedPayload.to_me = 3` 已追加，现有编号保持不变。模拟、真实私聊接收及未运行项见 TEST-MATRIX §3.2。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-5（切片 T-03.4：官方 Telegram Adapter 的接收）。goal 目录 goal-5，分支 goal-5，worktree .worktrees/goal-5，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

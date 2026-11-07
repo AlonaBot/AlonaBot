@@ -89,7 +89,7 @@
 
 ### goal-79 · T-15.2 官方 OneBot 11 Adapter 的发送、媒体与 extension
 
-状态：等待前置（T-03.6、T-03.8、T-15.1）。语句中 goal-7、goal-8、goal-78 提供的符号（sdk/adapter 的 Core.ReadMedia 与实例可选实现的平台文件读取接口、ExtensionDeclaration 的校验、adapters/onebot11 的实例与 API 调用、onebottest.Server）只写名字；合并后由审查者核对签名，再改为待派发。
+状态：等待前置（T-03.8、T-15.1）。T-03.6（PR #55）已合并。语句中 goal-7、goal-8、goal-78 提供的符号（sdk/adapter 的 Core.ReadMedia 与实例可选实现的平台文件读取接口、ExtensionDeclaration 的校验、adapters/onebot11 的实例与 API 调用、onebottest.Server）只写名字；合并后由审查者核对签名，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-79（切片 T-15.2：官方 OneBot 11 Adapter 的发送、媒体与 extension）。goal 目录 goal-79，分支 goal-79，worktree .worktrees/goal-79，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
