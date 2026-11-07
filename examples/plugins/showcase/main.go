@@ -20,24 +20,8 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
-// OnConfigLoad 把版本 1 的 {"hello": "..."} 迁移为当前格式，并拒绝负数的 interval_seconds。
-func (*Demo) OnConfigLoad(_ context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error) {
-	// 1. 版本 1 的 hello 改名为 greeting；值保持原始 JSON，不经 float64 转换。
-	if fromVersion == 1 {
-		var doc map[string]json.RawMessage
-		if err := json.Unmarshal(raw, &doc); err != nil {
-			return nil, fmt.Errorf("decode config: %w", err)
-		}
-		if v, ok := doc["hello"]; ok {
-			doc["greeting"] = v
-			delete(doc, "hello")
-		}
-		var err error
-		if raw, err = json.Marshal(doc); err != nil {
-			return nil, fmt.Errorf("encode config: %w", err)
-		}
-	}
-	// 2. 解码到局部变量检查取值，raw 原样返回，保留未知键。
+// OnConfigLoad 检查 interval_seconds 非负，原样返回完整配置。
+func (*Demo) OnConfigLoad(_ context.Context, _ uint32, raw json.RawMessage) (json.RawMessage, error) {
 	var c struct {
 		Interval int64 `json:"interval_seconds"`
 	}

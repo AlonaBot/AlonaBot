@@ -8,7 +8,7 @@ import (
 
 func init() {
 	alonabotgen0.UseGenerated((*Demo)(nil), alonabotgen0.Generated{
-		ConfigSchema: []byte("{\"$version\":2,\"greeting\":{\"type\":\"string\",\"description\":\"Greeting\"},\"interval_seconds\":{\"type\":\"int\",\"description\":\"Interval in seconds\"}}"),
+		ConfigSchema: []byte("{\"$version\":2,\"$migrations\":[{\"to\":2,\"rename\":{\"hello\":\"greeting\"}}],\"greeting\":{\"type\":\"string\",\"description\":\"Greeting\"},\"interval_seconds\":{\"type\":\"int\",\"description\":\"Interval in seconds\"}}"),
 		Commands: func(r *alonabotgen0.CommandRegistry) {
 		},
 		Events: func(r *alonabotgen0.EventRegistry) {
