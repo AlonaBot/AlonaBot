@@ -83,9 +83,6 @@ func rawPlugin(fault string) int {
 	ack := msg.(*pb.HelloAck)
 	sid := ack.GetSessionId()
 	registration := &pb.Register{CandidateConfigJson: "{}"}
-	if fault == commandConflictFault {
-		registration = conflictingCommands()
-	}
 	registration.Migration = &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}
 	reg, _ := wire.ControlEnvelope(sid, 0, id, pb.FrameKind_FRAME_KIND_REGISTER, registration)
 	_ = conn.WriteFrame(reg)

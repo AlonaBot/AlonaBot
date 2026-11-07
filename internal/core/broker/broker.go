@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -68,7 +67,7 @@ func (b *Broker) Call(ctx context.Context, c router.Caller, in *wire.Inbound) wi
 	}
 	// 2. Caller 来自认证 Session；Core 与本插件始终满足缺省访问规则。
 	spec := service.GetService()
-	if c.PluginID != "" && c.PluginID != pluginID && spec.GetAccess() != pb.ServiceAccess_SERVICE_ACCESS_PUBLIC && !(spec.GetAccess() == pb.ServiceAccess_SERVICE_ACCESS_ALLOWLIST && slices.Contains(spec.GetAllowlistPluginIds(), c.PluginID)) {
+	if !router.ServiceCallable(spec, c.PluginID, pluginID) {
 		return failure(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "service access denied")
 	}
 	payload := in.Payload

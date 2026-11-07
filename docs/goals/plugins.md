@@ -60,12 +60,8 @@
   - 所有回复都用 Context.Send 回复原 Target；用户可见文案只来自 i18n（en-US 与 zh-CN）。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：internal/core/supervisor/help_test.go（//go:build unix）：构建 plugins/help 与两个测试插件（一个有 ADMIN 权限的命令，一个与另一插件同路径且 priority 较低的命令），用 memory Adapter 装配：
-  - 普通用户的 /help 不包含 ADMIN 命令与被遮蔽的命令；Core Admin 能看到 ADMIN 命令。
-  - zh-CN 用户看到中文说明，en-US 用户看到英文；说明键缺失的命令没有说明。
-  - 禁用的命令不出现；/help 某命令显示 usage。
-  - /whoami 回复正确的实例 ID 与用户 ID。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有父调用链时 core.command.list 返回 FAILED_PRECONDITION；没有 Actor 时只列 ANY；排序；help 的 i18n 文件在 alonabot check 中通过。
+- 提交：无（D-86）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有父调用链时 core.command.list 返回 FAILED_PRECONDITION；没有 Actor 时只列 ANY；排序；help 的 i18n 文件在 alonabot check 中通过；internal/core/supervisor/help_local_test.go（//go:build unix）：构建 plugins/help 与两个测试插件（一个有 ADMIN 权限的命令，一个与另一插件同路径且 priority 较低的命令），用 memory Adapter 装配：普通用户的 /help 不包含 ADMIN 命令与被遮蔽的命令；Core Admin 能看到 ADMIN 命令；zh-CN 用户看到中文说明，en-US 用户看到英文；说明键缺失的命令没有说明；禁用的命令不出现；/help 某命令显示 usage；/whoami 回复正确的实例 ID 与用户 ID。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./...；go build ./...。
 
@@ -103,15 +99,13 @@
   - 抓取：只允许 http 与 https；自定义 http.Client 的 DialContext 在连接前解析地址并拒绝 IsLoopback、IsPrivate、IsLinkLocalUnicast、IsLinkLocalMulticast、IsMulticast、IsUnspecified 的地址；CheckRedirect 对每次重定向的 URL 同样检查 scheme，连接时再检查地址；响应体以 io.LimitReader 读取 5 MiB 加一字节，超过即失败；整个抓取超时 30s（命名常量）。失败记 WARN（订阅 URL 与原因），不推送、不重试到下一个周期之前。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：
+- 提交（多列理由：rss 与 welcome 是两个独立的插件）：
   - plugins/rss/rss_test.go（//go:build unix）：用 memory Adapter 与真实 Core 装配，httptest 提供订阅源。注意 httptest 监听 loopback，测试通过包内的测试钩子把「允许 loopback」打开（钩子只在测试中设置，生产默认关闭），并另有子测试在钩子关闭时验证 loopback 被拒：
     - 普通用户 /rss add 被拒；chat_admin 成功；list 显示订阅。
     - 首次抓取不推送；源中新增两个条目后下一次定时任务推送两条，顺序正确；再次运行不重复推送。
-    - 没有发信许可时不推送并记 WARN；授予许可后推送。
     - 响应超过 5 MiB、超过 30s（注入更短的超时）、重定向到 127.0.0.1（钩子关闭）、file:// 与 ftp:// 都失败。
-    - Atom 与 RSS 2.0 各一个源。
   - plugins/welcome/welcome_test.go（//go:build unix）：开关权限、自定义文案与 {name} 替换、关闭时不发送、只响应 member.joined。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：地址检查函数（IPv4/IPv6 私网、链路本地、映射地址 ::ffff:127.0.0.1）；条目标识的优先级；XML 中缺少字段的条目。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：地址检查函数（IPv4/IPv6 私网、链路本地、映射地址 ::ffff:127.0.0.1）；条目标识的优先级；XML 中缺少字段的条目；没有发信许可时不推送并记 WARN；授予许可后推送；Atom 与 RSS 2.0 各一个源。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./plugins/...；go build ./...；两个插件目录运行 alonabot check 通过。
 

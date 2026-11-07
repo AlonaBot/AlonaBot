@@ -1,0 +1,171 @@
+// Package tool 提供工具目录与按插件、服务名持久化的调用策略。
+//
+// [Catalog] 从 Router 的已 Attach 声明取得工具，并在每次查询时读取状态库覆盖。
+// 固定服务只列出已激活且调用者可访问的工具；管理查询同时保留未声明工具的覆盖（CONTRACTS §13.1）。
+package tool
+
+import (
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/core/router"
+	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"google.golang.org/protobuf/proto"
+)
+
+const schemaVersion = 1
+
+// Catalog 合并插件工具声明与状态库中的策略覆盖。
+type Catalog struct {
+	store  *state.Store
+	router *router.Router
+}
+
+// ToolPolicyEntry 列出工具声明的缺省策略与已保存的覆盖。
+type ToolPolicyEntry struct {
+	PluginID, Service string
+	Default           pb.ToolPolicy // UNSPECIFIED 表示当前没有工具声明
+	Override          pb.ToolPolicy // UNSPECIFIED 表示没有覆盖
+}
+
+// New 创建从 r 读取工具声明、从 store 读取策略的目录。
+func New(store *state.Store, r *router.Router) *Catalog {
+	return &Catalog{store: store, router: r}
+}
+
+// Register 将 core.tool.list 注册到固定服务分流器。
+func (c *Catalog) Register(m *router.Mux) { m.Handle(wire.ServiceToolList, c.list) }
+
+// Effective 优先返回持久化覆盖，否则读取已 Attach 工具的缺省策略。
+// 没有覆盖且缺少工具声明时返回 NOT_FOUND；激活与访问检查由调用方负责。
+func (c *Catalog) Effective(ctx context.Context, pluginID, service string) (pb.ToolPolicy, error) {
+	// 1. 覆盖独立于当前声明与激活状态，读取失败保留原始错误。
+	p, err := c.store.GetToolPolicy(ctx, pluginID, service)
+	if !errors.Is(err, state.ErrNotFound) {
+		return p, err
+	}
+	// 2. 缺少覆盖时才从当前 Attach 的服务声明取得缺省策略。
+	if plugin, ok := c.router.Plugin(pluginID); ok {
+		for _, route := range plugin.Routes() {
+			spec := route.GetService()
+			if route.GetKind() == pb.RouteKind_ROUTE_KIND_SERVICE && spec.GetServiceName() == service && spec.GetTool() != nil {
+				return spec.GetTool().GetDefaultPolicy(), nil
+			}
+		}
+	}
+	return pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED, policyError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, fmt.Sprintf("tool %s/%s not found", pluginID, service))
+}
+
+// SetPolicy 保存 ALLOW、CONFIRM 或 DENY 覆盖；UNSPECIFIED 删除覆盖。
+// 安装记录缺失返回 NOT_FOUND，未知策略返回 INVALID_ARGUMENT；成功返回前已提交事务。
+func (c *Catalog) SetPolicy(ctx context.Context, pluginID, service string, p pb.ToolPolicy) error {
+	switch p {
+	case pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED, pb.ToolPolicy_TOOL_POLICY_ALLOW, pb.ToolPolicy_TOOL_POLICY_CONFIRM, pb.ToolPolicy_TOOL_POLICY_DENY:
+	default:
+		return policyError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("unknown tool policy %d", p))
+	}
+	err := c.store.SetToolPolicy(ctx, state.ToolPolicy{PluginID: pluginID, Service: service, Policy: p})
+	if errors.Is(err, state.ErrNotFound) {
+		return policyError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, err.Error())
+	}
+	return err
+}
+
+// Policies 按完整工具名字典序列出全部已 Attach 工具与保存覆盖的并集。
+func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error) {
+	// 1. 保存的覆盖先占位，使未 Attach 或已移除的声明仍可被管理。
+	entries, err := c.overrides(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// 2. 声明补全缺省策略；未激活的 Attach 声明也包含在查询中。
+	for _, plugin := range c.router.Plugins() {
+		for _, route := range plugin.Routes() {
+			spec := route.GetService()
+			if route.GetKind() != pb.RouteKind_ROUTE_KIND_SERVICE || spec.GetTool() == nil {
+				continue
+			}
+			entry := entries[plugin.PluginID()+"/"+spec.GetServiceName()]
+			entry.PluginID, entry.Service = plugin.PluginID(), spec.GetServiceName()
+			entry.Default = spec.GetTool().GetDefaultPolicy()
+			entries[entry.PluginID+"/"+entry.Service] = entry
+		}
+	}
+	result := make([]ToolPolicyEntry, 0, len(entries))
+	for _, entry := range entries {
+		result = append(result, entry)
+	}
+	slices.SortFunc(result, func(a, b ToolPolicyEntry) int {
+		return cmp.Compare(a.PluginID+"/"+a.Service, b.PluginID+"/"+b.Service)
+	})
+	return result, nil
+}
+
+func (c *Catalog) overrides(ctx context.Context) (map[string]ToolPolicyEntry, error) {
+	rows, err := c.store.ToolPolicies(ctx)
+	if err != nil {
+		return nil, err
+	}
+	entries := make(map[string]ToolPolicyEntry, len(rows))
+	for _, row := range rows {
+		entries[row.PluginID+"/"+row.Service] = ToolPolicyEntry{PluginID: row.PluginID, Service: row.Service, Override: row.Policy}
+	}
+	return entries, nil
+}
+
+func (c *Catalog) list(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response {
+	// 1. 固定服务按声明的 Protobuf Schema 校验请求，并读取本次调用的策略快照。
+	request := &pb.ToolListRequest{}
+	if in.Payload.Encoding != pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF || in.Payload.SchemaID != validate.SchemaID(request) || in.Payload.SchemaVersion != schemaVersion {
+		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "expected ToolListRequest protobuf schema version 1")
+	}
+	if err := proto.Unmarshal(in.Payload.Bytes, request); err != nil {
+		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid tool list request protobuf: "+err.Error())
+	}
+	entries, err := c.overrides(ctx)
+	if err != nil {
+		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "read tool policies: "+err.Error())
+	}
+	// 2. 只列出当前激活、访问规则允许且生效策略非 DENY 的工具，包括调用者自身。
+	result := &pb.ToolListResponse{}
+	for _, plugin := range c.router.Plugins() {
+		if !plugin.Activated() {
+			continue
+		}
+		for _, route := range plugin.Routes() {
+			spec := route.GetService()
+			if route.GetKind() != pb.RouteKind_ROUTE_KIND_SERVICE || spec.GetTool() == nil || !router.ServiceCallable(spec, caller.PluginID, plugin.PluginID()) {
+				continue
+			}
+			name := plugin.PluginID() + "/" + spec.GetServiceName()
+			p := entries[name].Override
+			if p == pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED {
+				p = spec.GetTool().GetDefaultPolicy()
+			}
+			if p == pb.ToolPolicy_TOOL_POLICY_DENY {
+				continue
+			}
+			result.Tools = append(result.Tools, &pb.ToolInfo{Name: name, Description: spec.GetTool().GetDescription(), InputSchemaJson: spec.GetTool().GetInputSchemaJson(), Policy: p})
+		}
+	}
+	slices.SortFunc(result.Tools, func(a, b *pb.ToolInfo) int { return cmp.Compare(a.GetName(), b.GetName()) })
+	encoded, err := proto.Marshal(result)
+	if err != nil {
+		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "encode tool list response: "+err.Error())
+	}
+	return wire.Response{Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(result), SchemaVersion: schemaVersion, Bytes: encoded}}
+}
+
+func failure(code pb.ErrorCode, message string) wire.Response {
+	return wire.Response{Err: &pb.ErrorInfo{Code: code, SafeMessage: message}}
+}
+
+func policyError(code pb.ErrorCode, message string) error {
+	return &wire.CallError{ErrorInfo: &pb.ErrorInfo{Code: code, SafeMessage: message}}
+}
