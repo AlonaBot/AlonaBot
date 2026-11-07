@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/google/jsonschema-go/jsonschema"
 )
 
 // HTTP Listener 只接受这两个 loopback 地址（WIRE-FORMAT §3.3）。
@@ -23,6 +24,9 @@ const (
 
 // Service 名称长度遵循 Service 描述约定。
 const maxServiceNameLength = 64
+
+// maxToolDescriptionBytes 固定工具说明的注册字节上限。
+const maxToolDescriptionBytes = 1024
 
 // routeKindOf 给出 RouteDescriptor 的 spec 分支对应的 kind。
 func routeKindOf(r *pb.RouteDescriptor) pb.RouteKind {
@@ -343,6 +347,28 @@ func registerService(route *pb.RouteDescriptor) error {
 		}
 	default:
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q has invalid access", name)
+	}
+	if tool := service.GetTool(); tool != nil {
+		if service.GetEncoding() != pb.PayloadEncoding_PAYLOAD_ENCODING_JSON {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q tool requires JSON encoding", name)
+		}
+		if len(tool.GetDescription()) == 0 || len(tool.GetDescription()) > maxToolDescriptionBytes {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q tool description must be 1 to %d bytes", name, maxToolDescriptionBytes)
+		}
+		if tool.GetDefaultPolicy() != pb.ToolPolicy_TOOL_POLICY_ALLOW && tool.GetDefaultPolicy() != pb.ToolPolicy_TOOL_POLICY_CONFIRM {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q tool has invalid default policy", name)
+		}
+		var schema jsonschema.Schema
+		if err := json.Unmarshal([]byte(tool.GetInputSchemaJson()), &schema); err != nil {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "parse service %q tool input schema: %v", name, err)
+		}
+		if schema.Type != "object" {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q tool input schema root type must be object", name)
+		}
+		// nil options 保持 Loader 未配置，远程引用由 Resolve 拒绝。
+		if _, err := schema.Resolve(nil); err != nil {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "resolve service %q tool input schema: %v", name, err)
+		}
 	}
 	return nil
 }
