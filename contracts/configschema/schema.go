@@ -2,7 +2,8 @@
 //
 // Schema 保留 JSON 键顺序与数字原文，供生成器、SDK 和 Core 共用。
 // Parse 检查声明，Canonical 与 Hash 提供构建和 REGISTER 使用的规范内容及摘要。
-// Complete 与 Validate 处理运行配置，SecretPaths 与 CheckI18n 分别提供秘密字段路径与翻译核对。
+// Migrate 按声明版本转换旧配置，Complete 与 Validate 随后补值和校验。
+// SecretPaths 与 CheckI18n 分别提供秘密字段路径与翻译核对。
 // 配置格式见 spec/CONTRACTS-v0.1.md §5.1、§5.3 与 §5.5。
 package configschema
 
@@ -31,10 +32,11 @@ const (
 
 // Schema 保存已检查的配置声明；所有字段均由 Parse 初始化。
 type Schema struct {
-	root      orderedObject
-	fields    []*field
-	canonical []byte
-	version   int
+	root       orderedObject
+	fields     []*field
+	canonical  []byte
+	version    int
+	migrations []migration
 }
 
 // Problem 定位 schema 中的一项错误，Message 使用英文。
@@ -91,6 +93,7 @@ func Parse(raw []byte) (*Schema, []Problem) {
 	schema.fields = parseFields(root, "", true, &problems)
 	if len(problems) == 0 {
 		checkFields(schema.fields, "", &problems)
+		schema.parseMigrations(&problems)
 	}
 	if len(problems) != 0 {
 		return nil, problems

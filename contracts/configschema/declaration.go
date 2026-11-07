@@ -250,9 +250,15 @@ func findField(fields []*field, name string) *field {
 	return nil
 }
 
-// plainValue 将声明中的有序对象转成配置值；原声明顺序仍保留在 Schema 中。
+// plainValue 复制 JSON 集合，并将声明中的有序对象转成配置值。
 func plainValue(value any) any {
 	switch value := value.(type) {
+	case map[string]any:
+		object := make(map[string]any, len(value))
+		for key, child := range value {
+			object[key] = plainValue(child)
+		}
+		return object
 	case orderedObject:
 		object := make(map[string]any, len(value))
 		for _, p := range value {
