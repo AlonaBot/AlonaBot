@@ -14,9 +14,12 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
+	corei18n "github.com/AlonaBot/AlonaBot/internal/core/i18n"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
+
+const commandUsageKey = "core.usage.command"
 
 type commandRoute struct {
 	candidate
@@ -252,7 +255,12 @@ func (r *Router) invokeCommand(c candidate, ev *pb.Event, event *trustedEvent, b
 	if errors.Is(callError, errCommandArguments) {
 		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Debug("command arguments rejected", "error", callError)
 		if c.route.GetCommand().GetUsageMode() != pb.UsageMode_USAGE_MODE_SILENT {
-			r.sendReply(c, ev, commandUsage(c.route.GetCommand(), prefix), trace)
+			usage, err := commandUsage(c, ev, prefix)
+			if err != nil {
+				slog.Warn("format command usage failed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", err)
+			} else {
+				r.sendReply(c, ev, &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: usage}}}}}, trace)
+			}
 		}
 		return false
 	}
@@ -292,11 +300,26 @@ func (r *Router) sendReply(c candidate, ev *pb.Event, chain *pb.MessageChain, tr
 	}
 }
 
-func commandUsage(spec *pb.CommandSpec, prefix string) *pb.MessageChain {
-	// shortcut: usage_key 暂按缺省 usage 发送，T-08.8 文案目录接入后查找该键。
-	text := "Usage: " + prefix + strings.Join(spec.GetPath(), " ")
+func commandUsage(c candidate, ev *pb.Event, prefix string) (string, error) {
+	spec := c.route.GetCommand()
+	locales := []string{ev.GetActor().GetLocale(), c.plugin.DefaultLocale()}
+	command := strings.Join(spec.GetPath(), " ")
+	if spec.GetUsageMode() == pb.UsageMode_USAGE_MODE_CUSTOM {
+		var text string
+		var err error
+		if catalog := c.plugin.Messages(); catalog == nil {
+			err = errors.New("plugin has no message catalog")
+		} else {
+			text, err = catalog.Format(locales, spec.GetUsageKey(), map[string]string{"prefix": prefix, "command": prefix + command})
+		}
+		if err == nil {
+			return text, nil
+		}
+		slog.Warn("format custom command usage failed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", err)
+	}
+	var aliases, arguments string
 	for _, alias := range spec.GetAliases() {
-		text += " | " + prefix + strings.Join(alias.GetPath(), " ")
+		aliases += " | " + prefix + strings.Join(alias.GetPath(), " ")
 	}
 	for _, param := range spec.GetParams() {
 		label := param.GetName()
@@ -318,10 +341,10 @@ func commandUsage(spec *pb.CommandSpec, prefix string) *pb.MessageChain {
 			label += "..."
 		}
 		if param.GetRequired() {
-			text += " <" + label + ">"
+			arguments += " <" + label + ">"
 		} else {
-			text += " [" + label + "]"
+			arguments += " [" + label + "]"
 		}
 	}
-	return &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: text}}}}}
+	return corei18n.Messages().Format(locales, commandUsageKey, map[string]string{"prefix": prefix, "command": command, "aliases": aliases, "arguments": arguments})
 }

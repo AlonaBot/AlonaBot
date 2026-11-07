@@ -107,6 +107,7 @@ type Prepared struct {
 	// PREPARED 中的 candidate_config_digest，对 ConfigSnapshot 计算。
 	ConfigDigest   []byte
 	httpProxyToken []byte // 本 Session 的内部代理凭证；仅交给 Instance，不进入日志
+	defaultLocale  string // 本 Session 下发的 Bootstrap 默认语言快照
 }
 
 // Prepare 在一条刚建立的连接上完成 HELLO → HELLO_ACK(Bootstrap) → REGISTER → PREPARED。
@@ -298,7 +299,7 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 			}
 		}
 		p := &Prepared{SessionID: sid, Minor: agree.Minor, Capabilities: agree.Intersection, Register: m,
-			RouteHash: routeHash(m), ConfigSnapshot: snapshot, ConfigDigest: digest(snapshot), httpProxyToken: boot.GetHttpProxyAuth().GetToken()}
+			RouteHash: routeHash(m), ConfigSnapshot: snapshot, ConfigDigest: digest(snapshot), httpProxyToken: boot.GetHttpProxyAuth().GetToken(), defaultLocale: boot.GetDefaultLocale()}
 		prep, err := wire.ControlEnvelope(sid, agree.Minor, "", pb.FrameKind_FRAME_KIND_PREPARED, &pb.Prepared{RouteDescriptorHash: p.RouteHash, CandidateConfigDigest: p.ConfigDigest})
 		if err == nil {
 			err = conn.WriteFrame(prep)
