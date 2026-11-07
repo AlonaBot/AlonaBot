@@ -3,7 +3,6 @@ package configschema
 import (
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"slices"
 	"strconv"
 	"strings"
@@ -250,7 +249,9 @@ func matchesOldValue(value any, key string) bool {
 	if !ok || !json.Valid([]byte(key)) {
 		return false
 	}
-	current, currentOK := new(big.Rat).SetString(string(number))
-	old, oldOK := new(big.Rat).SetString(key)
-	return currentOK && oldOK && current.Cmp(old) == 0
+	decoder := json.NewDecoder(strings.NewReader(key))
+	decoder.UseNumber()
+	token, _ := decoder.Token() // json.Valid 已检查完整文档；只有数字 token 参与数值匹配。
+	old, ok := token.(json.Number)
+	return ok && compareNumbers(number, old) == 0
 }

@@ -312,9 +312,47 @@ func validNumber(value any, typ string) bool {
 func compareNumbers(a, b any) int {
 	aNumber, _ := numberValue(a)
 	bNumber, _ := numberValue(b)
-	left, _ := new(big.Rat).SetString(string(aNumber))
-	right, _ := new(big.Rat).SetString(string(bNumber))
-	return left.Cmp(right)
+	leftSign, leftDigits, leftOrder := decimalParts(aNumber)
+	rightSign, rightDigits, rightOrder := decimalParts(bNumber)
+	if leftSign != rightSign {
+		return leftSign - rightSign
+	}
+	if leftSign == 0 {
+		return 0
+	}
+	if order := leftOrder.Cmp(rightOrder); order != 0 {
+		return leftSign * order
+	}
+	// 有效数字已去掉尾零；数量级相同时按字典序比较，相当于在短串后补零。
+	return leftSign * strings.Compare(leftDigits, rightDigits)
+}
+
+// decimalParts 拆分合法 JSON 数字；order 是小数点相对有效数字首位的位置。
+// 指数单独存储，避免极小数展开成巨大的十进制分母。
+func decimalParts(number json.Number) (sign int, digits string, order *big.Int) {
+	// 1. 分离符号与指数，指数的长度只取决于输入文本。
+	text := string(number)
+	sign = 1
+	if strings.HasPrefix(text, "-") {
+		sign, text = -1, text[1:]
+	}
+	order = new(big.Int)
+	if exponent := strings.IndexAny(text, "eE"); exponent >= 0 {
+		order.SetString(text[exponent+1:], 10) // 输入已通过 JSON 数字语法检查。
+		text = text[:exponent]
+	}
+	// 2. 去掉小数点和无效的零，用有效数字长度修正数量级。
+	fraction := 0
+	if point := strings.IndexByte(text, '.'); point >= 0 {
+		fraction = len(text) - point - 1
+		text = text[:point] + text[point+1:]
+	}
+	digits = strings.TrimLeft(text, "0")
+	if digits == "" {
+		return 0, "", order
+	}
+	order.Add(order, big.NewInt(int64(len(digits)-fraction)))
+	return sign, strings.TrimRight(digits, "0"), order
 }
 
 // numberValue 接受 JSON Decoder.UseNumber 与 json.Unmarshal 的两种数字表示。
