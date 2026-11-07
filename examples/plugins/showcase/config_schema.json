@@ -1,0 +1,11 @@
+{
+  "$version": 2,
+  "greeting": {
+    "type": "string",
+    "description": "Greeting"
+  },
+  "interval_seconds": {
+    "type": "int",
+    "description": "Interval in seconds"
+  }
+}

@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
@@ -144,7 +145,8 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32, c
 	r := &pb.Register{CandidateConfigJson: configJSON, CandidateConfigVersion: configVersion,
 		Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 	if len(configSchema) != 0 {
-		r.ConfigSchemaHash = config.SchemaHash(configSchema)
+		schema, _ := configschema.Parse(configSchema) // 配置准备已检查生成项，收集注册项时此参数为 nil。
+		r.ConfigSchemaHash = schema.Hash()
 	}
 	for _, c := range reg.Commands {
 		spec := c.spec
@@ -181,7 +183,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 
 	// 2. 在 OnStart 之前完成配置迁移、默认值与校验；restart 与恢复均使用 RESUME。
 	configContext, cancelConfig := context.WithTimeout(context.Background(), time.Duration(limits.GetConfigMs())*time.Millisecond)
-	preparedConfig, err := config.Prepare(configContext, root.Config(), generatedFor(root).ConfigSchema,
+	preparedConfig, err := config.Prepare(configContext, root.OnConfigLoad, generatedFor(root).ConfigSchema,
 		[]byte(boot.GetCandidateConfigJson()), boot.PreviousConfigVersion, boot.GetTargetConfigVersion(),
 		boot.GetDatabaseDescriptor().GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME)
 	cancelConfig()
@@ -190,6 +192,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
 			failure.Code, failure.Message, err)
 	}
+	root.setConfig(preparedConfig.Values)
 
 	// 3. 数据库从迁移阶段开始可用；后续任何准备失败都由这里关闭连接。
 	dbhook.Begin(boot.GetDatabaseDescriptor())
