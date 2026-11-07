@@ -8,8 +8,8 @@
 // alias 可以重复，使用 / 分隔路径 token。方法、类型和变量上的标记产生诊断；
 // 实例方法通过 Commands/Events 显式注册。生成器用嵌套 Group 注册多 token 命令。
 // 扫描遵守 GOOS/GOARCH 和 build tags，排除外部依赖、vendor 与测试文件。
-// 配置与 JSON Service 类型经统一的 go/types 检查生成 Schema；配置字段见 CONTRACTS §5.1，
-// Service 字段见 §3；注册规则见 §9、§2.2。
+// 配置从 config_schema.json 检查并嵌入，翻译覆盖按声明核对（CONTRACTS §5.1、§5.3）。
+// JSON Service 类型经 go/types 检查生成 Schema（§3）；注册规则见 §9、§2.2。
 //
 // 包的组成：[Scan] 接收 [Options]，返回描述、源码与 [Diagnostic] 汇总的 [Result]。
 package generate
@@ -33,7 +33,6 @@ import (
 )
 
 const sdkPath = "github.com/AlonaBot/AlonaBot/sdk"
-const configPath = sdkPath + "/config"
 
 // FileName 指定在构建入口包目录中写入的生成文件名。
 const FileName = "alonabot_gen.go"
@@ -45,9 +44,9 @@ type Options struct {
 	Tags         []string
 }
 
-// Diagnostic 携带一条源码问题的位置和说明。
+// Diagnostic 携带一条源码或组件资源问题的位置和说明。
 type Diagnostic struct {
-	Pos     string // 相对 Dir 的文件:行:列
+	Pos     string // 相对 Dir 的文件:行:列；JSON 资源使用文件:JSON 路径。
 	Message string
 }
 
@@ -66,11 +65,10 @@ type Event struct {
 	Package, Func      string
 }
 
-// Result 保存扫描描述、生成源码和全部源码诊断。
+// Result 保存扫描描述、生成源码和全部诊断。
 type Result struct {
 	RootType     string    // 导入路径.类型名
-	ConfigType   string    // 没有 Config 时为空
-	ConfigSchema []byte    // 规范 JSON；没有 Config 时为 nil
+	ConfigSchema []byte    // config_schema.json 的规范 JSON；没有该文件时为 nil
 	Commands     []Command // 按规范路径排序
 	Events       []Event   // 按 route_id 排序
 	Source       []byte    // 完整 gofmt 源码；有诊断时为 nil
@@ -101,7 +99,7 @@ type scan struct {
 	files          *token.FileSet
 	dir            string
 	entry          listedPackage
-	roots, configs []declaration
+	roots          []declaration
 	paths, routes  map[string]string // 键对应首次声明的位置
 	serviceSchemas map[string][]byte
 	syntax         map[string][]*ast.File
@@ -193,6 +191,9 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 		}
 	}
 	s.checkTypes()
+	if err := s.configSchema(); err != nil {
+		return nil, err
+	}
 	if len(s.result.Diagnostics) == 0 {
 		if err := s.schemas(ctx, cmd); err != nil {
 			return nil, err
@@ -268,7 +269,7 @@ func (s *scan) readFile(pkg listedPackage, path string, names map[string]string)
 		}
 		imports[name] = path
 	}
-	// 2. 识别根与配置的嵌入类型，同时记录包级函数的文档注释。
+	// 2. 识别根的嵌入类型，同时记录包级函数的文档注释。
 	handlers := make(map[*ast.CommentGroup]*ast.FuncDecl)
 	for _, decl := range file.Decls {
 		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Doc != nil {
@@ -304,11 +305,8 @@ func (s *scan) readFile(pkg listedPackage, path string, names map[string]string)
 					continue
 				}
 				d := declaration{typ.Name.Name, typ.Name.Pos(), pkg.ImportPath}
-				switch imports[name.Name] {
-				case sdkPath:
+				if imports[name.Name] == sdkPath {
 					s.roots = append(s.roots, d)
-				case configPath:
-					s.configs = append(s.configs, d)
 				}
 			}
 		}
@@ -365,14 +363,5 @@ func (s *scan) checkTypes() {
 		if root.pkg != s.entry.ImportPath {
 			s.diagnostic(root.pos, "root type must be declared in entry package")
 		}
-	}
-	if len(s.configs) > 1 {
-		var positions []string
-		for _, config := range s.configs {
-			positions = append(positions, s.position(config.pos))
-		}
-		s.diagnostic(s.configs[0].pos, "expected at most one Config type, found "+strconv.Itoa(len(s.configs))+" at "+strings.Join(positions, ", "))
-	} else if len(s.configs) == 1 {
-		s.result.ConfigType = s.configs[0].pkg + "." + s.configs[0].name
 	}
 }

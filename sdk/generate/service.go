@@ -151,11 +151,6 @@ func (s *scan) schemas(ctx context.Context, list *exec.Cmd) error {
 			return nil
 		}
 	}
-	if len(s.configs) == 1 {
-		if err := s.configSchema(importer); err != nil {
-			return err
-		}
-	}
 	return s.serviceSchemasFrom(importer, paths)
 }
 
