@@ -208,8 +208,9 @@ func checkFields(fields []*field, path string, problems *[]Problem) {
 					continue
 				}
 				value := plainValue(expected.value)
-				completeValue(sibling, value)
-				if problem := valueProblem(sibling, value, conditionPath); problem != nil {
+				typed := conditionField(sibling)
+				completeValue(typed, value)
+				if problem := valueProblem(typed, value, conditionPath); problem != nil {
 					*problems = append(*problems, *problem)
 				}
 			}
@@ -239,6 +240,25 @@ func checkFields(fields []*field, path string, problems *[]Problem) {
 			}
 		}
 	}
+}
+
+// conditionField 只保留类型和嵌套形状，让显示条件复用类型检查而不继承取值约束。
+func conditionField(f *field) *field {
+	typed := &field{name: f.name, typ: f.typ}
+	if f.attributes.has("items") {
+		typed.attributes = orderedObject{{"items", f.attributes.get("items")}}
+	}
+	for _, child := range f.items {
+		typed.items = append(typed.items, conditionField(child))
+	}
+	for _, template := range f.templates {
+		projection := schemaTemplate{name: template.name}
+		for _, child := range template.items {
+			projection.items = append(projection.items, conditionField(child))
+		}
+		typed.templates = append(typed.templates, projection)
+	}
+	return typed
 }
 
 func findField(fields []*field, name string) *field {
