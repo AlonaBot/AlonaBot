@@ -116,7 +116,7 @@ function FieldControl({ field, value, original, path, messages, missing, onChang
           <input {...attributes} type={field.slider ? 'range' : 'number'} required={value !== undefined} value={value === undefined ? '' : value as number | string}
             min={field.slider?.min} max={field.slider?.max} step={field.slider?.step ?? (field.type === 'int' ? 1 : 'any')}
             onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.currentTarget.value === '' ? '' : event.currentTarget.valueAsNumber)} />
-          {field.slider && <output htmlFor={id}>{String(value)}</output>}
+          {field.slider && <output htmlFor={id}>{value === undefined ? '' : String(value)}</output>}
         </div>;
         break;
       case 'string':
@@ -132,6 +132,7 @@ function FieldControl({ field, value, original, path, messages, missing, onChang
         } else if (field.options) {
           control = <select {...attributes} required={field.required} value={typeof value === 'string' ? value : ''}
             onChange={(event: ChangeEvent<HTMLSelectElement>) => onChange(event.currentTarget.value)}>
+            {!field.options.includes(value as string) && <option value="" />}
             {field.options.map((option, index) => <option key={option} value={option}>{text.labels?.[index] ?? option}</option>)}
           </select>;
         } else {
@@ -257,7 +258,7 @@ function ListControl(props: FieldProps & { id: string }) {
     </div>)}
     {props.field.required && values.length === 0 && <input required value="" aria-label={ui.emptyCollection} onChange={() => {}} />}
     <button type="button" onClick={() => {
-      const value = props.field.children ? {} : '';
+      const value = props.field.children ? templateDefaults(props.field.children) : '';
       rows.current.push({ id: serial.current++ }); props.onChange([...values, value]);
     }}>{ui.addRow}</button>
   </div>;
@@ -335,7 +336,7 @@ function DictControl({ value = {}, onChange, id, required }: { value: Record<str
   </div>;
 }
 
-// 仅在新选模板时预填声明过的默认值，读取的配置仍由 SDK 补齐。
+// 新行与新选模板预填声明过的默认值，读取的配置仍由 SDK 补齐。
 function templateDefaults(fields: Field[]): Record<string, unknown> {
   return Object.fromEntries(fields.flatMap(field => Object.hasOwn(field, 'defaultValue') ? [[field.key, structuredClone(field.defaultValue)]]
     : field.type === 'object' ? [[field.key, templateDefaults(field.children!)]] : []));
