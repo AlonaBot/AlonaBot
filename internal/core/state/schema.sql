@@ -104,3 +104,10 @@ CREATE TABLE global_deny (
   subject_id          TEXT NOT NULL,
   PRIMARY KEY (kind, adapter_instance_id, subject_id)
 );
+
+CREATE TABLE tool_policy (
+  plugin_id    TEXT NOT NULL REFERENCES install(plugin_id),
+  service_name TEXT NOT NULL,
+  policy       INTEGER NOT NULL,
+  PRIMARY KEY (plugin_id, service_name)
+);

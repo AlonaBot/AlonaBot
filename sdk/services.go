@@ -55,8 +55,10 @@ type serviceBuilder struct {
 
 // JSONService 构建具名输入/输出类型的 JSON 服务；Handle 结束声明。
 type JSONService[In, Out any] struct {
-	builder *serviceBuilder
-	handler func(*Context, In) (Out, error)
+	builder         *serviceBuilder
+	handler         func(*Context, In) (Out, error)
+	toolDescription *string // nil 表示未声明为工具，空说明留给注册校验拒绝
+	toolDefault     ToolDefault
 }
 
 // JSON 开始构建 JSON 服务，Schema 由生成器提供。
@@ -64,6 +66,7 @@ func JSON[In, Out any](r *ServiceRegistry, name string) *JSONService[In, Out] {
 	b := &serviceBuilder{name: name}
 	s := &JSONService[In, Out]{builder: b}
 	b.prepare = func() (serviceRoute, error) {
+		// 1. 解析输入输出 Schema 并冻结 Handler，调用时复用校验器。
 		inputID, inputVersion, err := jsonType[In]()
 		if err != nil {
 			return serviceRoute{}, err
@@ -84,7 +87,7 @@ func JSON[In, Out any](r *ServiceRegistry, name string) *JSONService[In, Out] {
 		if handler == nil {
 			return serviceRoute{}, fmt.Errorf("handler is nil")
 		}
-		return b.route(inputID, outputID, inputVersion, outputVersion, pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, func(c *Context, data []byte) ([]byte, error) {
+		route := b.route(inputID, outputID, inputVersion, outputVersion, pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, func(c *Context, data []byte) ([]byte, error) {
 			if err := validateServiceJSON(inputSchema, data); err != nil {
 				return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "invalid service input"}
 			}
@@ -105,7 +108,21 @@ func JSON[In, Out any](r *ServiceRegistry, name string) *JSONService[In, Out] {
 				return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, Message: "invalid service output"}
 			}
 			return encoded, nil
-		}), nil
+		})
+		// 2. 工具描述携带同一输入 Schema 原文，完整注册校验交给 Collect。
+		if s.toolDescription != nil {
+			var policy pb.ToolPolicy
+			switch s.toolDefault {
+			case ToolAllow:
+				policy = pb.ToolPolicy_TOOL_POLICY_ALLOW
+			case ToolConfirm:
+				policy = pb.ToolPolicy_TOOL_POLICY_CONFIRM
+			default:
+				return serviceRoute{}, fmt.Errorf("unknown tool default policy %d", s.toolDefault)
+			}
+			route.descriptor.GetService().Tool = &pb.ToolSpec{Description: *s.toolDescription, DefaultPolicy: policy, InputSchemaJson: string(r.schemas[inputID])}
+		}
+		return route, nil
 	}
 	r.builders = append(r.builders, b)
 	return s
@@ -114,6 +131,16 @@ func JSON[In, Out any](r *ServiceRegistry, name string) *JSONService[In, Out] {
 // Access 设置直接调用方规则，重复调用采用最后一次。
 func (s *JSONService[In, Out]) Access(a Access, allowlist ...string) *JSONService[In, Out] {
 	s.builder.setAccess(a, allowlist)
+	return s
+}
+
+// Tool 声明给模型的说明与缺省调用策略，输入 Schema 复用生成的 Service Schema 原文。
+// 重复调用采用最后一次；Handle 之后调用由 Collect 报错。
+func (s *JSONService[In, Out]) Tool(description string, defaultPolicy ToolDefault) *JSONService[In, Out] {
+	if s.builder.handles != 0 {
+		s.builder.afterHandle = true
+	}
+	s.toolDescription, s.toolDefault = &description, defaultPolicy
 	return s
 }
 

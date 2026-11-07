@@ -6,6 +6,7 @@ package alonabot.v1;
 import "alonabot/v1/control.proto";
 import "alonabot/v1/adapter.proto";
 import "alonabot/v1/envelope.proto";
+import "alonabot/v1/tool.proto";
 
 option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 
@@ -252,6 +253,8 @@ message ServiceSpec {
   repeated string allowlist_plugin_ids = 3;
   // 请求与响应载荷的编码。
   PayloadEncoding encoding = 4;
+  // JSON 服务可选的工具声明。
+  ToolSpec tool = 5;
 }
 
 // ScheduleSpec 描述定时任务的专属描述；interval 与 cron 互斥，cron 固定五字段，timezone 为 IANA 名称，省略为 UTC。

@@ -1373,7 +1373,9 @@ type ServiceSpec struct {
 	// ALLOWLIST 时允许调用的插件。
 	AllowlistPluginIds []string `protobuf:"bytes,3,rep,name=allowlist_plugin_ids,json=allowlistPluginIds,proto3" json:"allowlist_plugin_ids,omitempty"`
 	// 请求与响应载荷的编码。
-	Encoding      PayloadEncoding `protobuf:"varint,4,opt,name=encoding,proto3,enum=alonabot.v1.PayloadEncoding" json:"encoding,omitempty"`
+	Encoding PayloadEncoding `protobuf:"varint,4,opt,name=encoding,proto3,enum=alonabot.v1.PayloadEncoding" json:"encoding,omitempty"`
+	// JSON 服务可选的工具声明。
+	Tool          *ToolSpec `protobuf:"bytes,5,opt,name=tool,proto3" json:"tool,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1434,6 +1436,13 @@ func (x *ServiceSpec) GetEncoding() PayloadEncoding {
 		return x.Encoding
 	}
 	return PayloadEncoding_PAYLOAD_ENCODING_UNSPECIFIED
+}
+
+func (x *ServiceSpec) GetTool() *ToolSpec {
+	if x != nil {
+		return x.Tool
+	}
+	return nil
 }
 
 // ScheduleSpec 描述定时任务的专属描述；interval 与 cron 互斥，cron 固定五字段，timezone 为 IANA 名称，省略为 UTC。
@@ -1700,7 +1709,7 @@ var File_alonabot_v1_route_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\n" +
-	"\x17alonabot/v1/route.proto\x12\valonabot.v1\x1a\x19alonabot/v1/control.proto\x1a\x19alonabot/v1/adapter.proto\x1a\x1aalonabot/v1/envelope.proto\"\x91\x03\n" +
+	"\x17alonabot/v1/route.proto\x12\valonabot.v1\x1a\x19alonabot/v1/control.proto\x1a\x19alonabot/v1/adapter.proto\x1a\x1aalonabot/v1/envelope.proto\x1a\x16alonabot/v1/tool.proto\"\x91\x03\n" +
 	"\bRegister\x124\n" +
 	"\x06routes\x18\x01 \x03(\v2\x1c.alonabot.v1.RouteDescriptorR\x06routes\x12,\n" +
 	"\x12config_schema_hash\x18\x02 \x01(\fR\x10configSchemaHash\x122\n" +
@@ -1766,12 +1775,13 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\taction_id\x18\x04 \x01(\tR\bactionId\x122\n" +
 	"\x15action_schema_version\x18\x05 \x01(\rR\x13actionSchemaVersion\"8\n" +
 	"\bHookSpec\x12,\n" +
-	"\x05phase\x18\x01 \x01(\x0e2\x16.alonabot.v1.HookPhaseR\x05phase\"\xd0\x01\n" +
+	"\x05phase\x18\x01 \x01(\x0e2\x16.alonabot.v1.HookPhaseR\x05phase\"\xfb\x01\n" +
 	"\vServiceSpec\x12!\n" +
 	"\fservice_name\x18\x01 \x01(\tR\vserviceName\x122\n" +
 	"\x06access\x18\x02 \x01(\x0e2\x1a.alonabot.v1.ServiceAccessR\x06access\x120\n" +
 	"\x14allowlist_plugin_ids\x18\x03 \x03(\tR\x12allowlistPluginIds\x128\n" +
-	"\bencoding\x18\x04 \x01(\x0e2\x1c.alonabot.v1.PayloadEncodingR\bencoding\"\xad\x01\n" +
+	"\bencoding\x18\x04 \x01(\x0e2\x1c.alonabot.v1.PayloadEncodingR\bencoding\x12)\n" +
+	"\x04tool\x18\x05 \x01(\v2\x15.alonabot.v1.ToolSpecR\x04tool\"\xad\x01\n" +
 	"\fScheduleSpec\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x14\n" +
 	"\x04cron\x18\x02 \x01(\tH\x00R\x04cron\x12!\n" +
@@ -1884,6 +1894,7 @@ var file_alonabot_v1_route_proto_goTypes = []any{
 	(*AdapterDescriptor)(nil),   // 22: alonabot.v1.AdapterDescriptor
 	(MigrationMode)(0),          // 23: alonabot.v1.MigrationMode
 	(PayloadEncoding)(0),        // 24: alonabot.v1.PayloadEncoding
+	(*ToolSpec)(nil),            // 25: alonabot.v1.ToolSpec
 }
 var file_alonabot_v1_route_proto_depIdxs = []int32{
 	10, // 0: alonabot.v1.Register.routes:type_name -> alonabot.v1.RouteDescriptor
@@ -1911,12 +1922,13 @@ var file_alonabot_v1_route_proto_depIdxs = []int32{
 	5,  // 22: alonabot.v1.HookSpec.phase:type_name -> alonabot.v1.HookPhase
 	6,  // 23: alonabot.v1.ServiceSpec.access:type_name -> alonabot.v1.ServiceAccess
 	24, // 24: alonabot.v1.ServiceSpec.encoding:type_name -> alonabot.v1.PayloadEncoding
-	7,  // 25: alonabot.v1.HttpRouteSpec.auth_mode:type_name -> alonabot.v1.HttpAuthMode
-	26, // [26:26] is the sub-list for method output_type
-	26, // [26:26] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	25, // 25: alonabot.v1.ServiceSpec.tool:type_name -> alonabot.v1.ToolSpec
+	7,  // 26: alonabot.v1.HttpRouteSpec.auth_mode:type_name -> alonabot.v1.HttpAuthMode
+	27, // [27:27] is the sub-list for method output_type
+	27, // [27:27] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_route_proto_init() }
@@ -1927,6 +1939,7 @@ func file_alonabot_v1_route_proto_init() {
 	file_alonabot_v1_control_proto_init()
 	file_alonabot_v1_adapter_proto_init()
 	file_alonabot_v1_envelope_proto_init()
+	file_alonabot_v1_tool_proto_init()
 	file_alonabot_v1_route_proto_msgTypes[2].OneofWrappers = []any{
 		(*RouteDescriptor_Command)(nil),
 		(*RouteDescriptor_Event)(nil),
