@@ -7,7 +7,7 @@ import (
 
 const zeroNumber = json.Number("0")
 
-// valueProblem 同时用于 default 和 condition 的合法值检查，错误不包含配置取值。
+// valueProblem 共用于配置值、default 与 condition 的检查，错误不包含配置取值。
 func valueProblem(f *field, value any, path string) *Problem {
 	valid := false
 	empty := false
@@ -113,32 +113,16 @@ func templateProblem(f *field, value any, path string) *Problem {
 	return nil
 }
 
-// objectProblem 按准备后的缺失值语义检查组合默认值，避免误拒绝可由子字段默认值补齐的对象。
+// objectProblem 检查已补齐的对象；只有可选 template 允许保持缺失。
 func objectProblem(fields []*field, object map[string]any, path string) *Problem {
 	for _, f := range fields {
 		value, present := object[f.name]
 		if !present {
-			if f.attributes.has("default") {
-				value = plainValue(f.attributes.get("default"))
-			} else {
-				switch f.typ {
-				case typeString, typeText:
-					value = ""
-				case typeInt, typeFloat:
-					value = zeroNumber
-				case typeBool:
-					value = false
-				case typeObject, typeDict:
-					value = map[string]any{}
-				case typeList, typeTemplateList:
-					value = []any{}
-				case typeTemplate:
-					if required, _ := f.attributes.get("required").(bool); required {
-						return &Problem{joinPath(path, f.name), "required template must be selected"}
-					}
-					continue
-				}
+			required, _ := f.attributes.get("required").(bool)
+			if f.typ == typeTemplate && !required {
+				continue
 			}
+			return &Problem{joinPath(path, f.name), "missing declared field"}
 		}
 		if problem := valueProblem(f, value, joinPath(path, f.name)); problem != nil {
 			return problem

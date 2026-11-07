@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/big"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -192,7 +193,9 @@ func checkFields(fields []*field, path string, problems *[]Problem) {
 	for _, f := range fields {
 		fieldPath := joinPath(path, f.name)
 		if f.attributes.has("default") {
-			if problem := valueProblem(f, plainValue(f.attributes.get("default")), joinPath(fieldPath, "default")); problem != nil {
+			value := plainValue(f.attributes.get("default"))
+			completeValue(f, value)
+			if problem := valueProblem(f, value, joinPath(fieldPath, "default")); problem != nil {
 				*problems = append(*problems, *problem)
 			}
 		}
@@ -204,7 +207,9 @@ func checkFields(fields []*field, path string, problems *[]Problem) {
 					*problems = append(*problems, Problem{conditionPath, "condition references an undeclared sibling field"})
 					continue
 				}
-				if problem := valueProblem(sibling, plainValue(expected.value), conditionPath); problem != nil {
+				value := plainValue(expected.value)
+				completeValue(sibling, value)
+				if problem := valueProblem(sibling, value, conditionPath); problem != nil {
 					*problems = append(*problems, *problem)
 				}
 			}
@@ -266,7 +271,7 @@ func plainValue(value any) any {
 }
 
 func validNumber(value any, typ string) bool {
-	number, ok := value.(json.Number)
+	number, ok := numberValue(value)
 	if !ok {
 		return false
 	}
@@ -279,7 +284,21 @@ func validNumber(value any, typ string) bool {
 }
 
 func compareNumbers(a, b any) int {
-	left, _ := new(big.Rat).SetString(string(a.(json.Number)))
-	right, _ := new(big.Rat).SetString(string(b.(json.Number)))
+	aNumber, _ := numberValue(a)
+	bNumber, _ := numberValue(b)
+	left, _ := new(big.Rat).SetString(string(aNumber))
+	right, _ := new(big.Rat).SetString(string(bNumber))
 	return left.Cmp(right)
+}
+
+// numberValue 接受 JSON Decoder.UseNumber 与 json.Unmarshal 的两种数字表示。
+func numberValue(value any) (json.Number, bool) {
+	switch value := value.(type) {
+	case json.Number:
+		return value, true
+	case float64:
+		return json.Number(strconv.FormatFloat(value, 'g', -1, 64)), true
+	default:
+		return "", false
+	}
 }

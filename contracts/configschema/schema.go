@@ -1,7 +1,8 @@
 // Package configschema 解析并检查组件的手写配置声明。
 //
 // Schema 保留 JSON 键顺序与数字原文，供生成器、SDK 和 Core 共用。
-// Parse 检查字段、模板与显示元数据，Canonical 与 Hash 提供构建和 REGISTER 使用的规范内容及摘要。
+// Parse 检查声明，Canonical 与 Hash 提供构建和 REGISTER 使用的规范内容及摘要。
+// Complete 与 Validate 处理运行配置，SecretPaths 与 CheckI18n 分别提供秘密字段路径与翻译核对。
 // 配置格式见 spec/CONTRACTS-v0.1.md §5.1、§5.3 与 §5.5。
 package configschema
 
@@ -224,4 +225,33 @@ func validKey(key string) bool {
 		}
 	}
 	return true
+}
+
+// SecretPaths 返回配置中的 secret 路径模式；* 匹配任意数组下标，模板键占一段。
+func (s *Schema) SecretPaths() [][]string {
+	var paths [][]string
+	secretPaths(s.fields, nil, &paths)
+	return paths
+}
+
+func secretPaths(fields []*field, parent []string, paths *[][]string) {
+	for _, f := range fields {
+		path := append(append([]string(nil), parent...), f.name)
+		if secret, _ := f.attributes.get("secret").(bool); secret {
+			*paths = append(*paths, path)
+		}
+		switch f.typ {
+		case typeObject:
+			secretPaths(f.items, path, paths)
+		case typeList:
+			secretPaths(f.items, append(path, "*"), paths)
+		case typeTemplate, typeTemplateList:
+			if f.typ == typeTemplateList {
+				path = append(path, "*")
+			}
+			for _, template := range f.templates {
+				secretPaths(template.items, append(path, template.name), paths)
+			}
+		}
+	}
 }
