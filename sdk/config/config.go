@@ -1,4 +1,4 @@
-// Package config 提供插件配置回调及配置 Schema 的规范序列化与摘要。
+// Package config 提供插件配置回调、配置 Schema 的规范序列化与摘要，以及配置的只读取值。
 //
 // 配置类型嵌入 Base，根插件的 Config 方法返回它的指针：
 //
@@ -53,6 +53,7 @@
 // 包的组成：[Base] 提供 [Config] 的默认回调；[Prepare] 依次执行 OnLoad、补缺失键默认值、
 // typed decode 与 Schema 校验，将保留未知键的完整规范 JSON 和目标版本写入 [Prepared]，供 REGISTER 回传。
 // [MarshalSchema] 保留字段顺序并规范序列化，[SchemaHash] 计算 REGISTER 使用的 Schema 摘要。
+// [Values] 按字段类型读取已准备的配置，[Template] 提供选中的模板键及其 items。
 // 字段与准备流程契约见 spec/CONTRACTS-v0.1.md §5.1～§5.3。
 package config
 
