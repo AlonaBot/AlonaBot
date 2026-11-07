@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"go/format"
+	"maps"
 	"slices"
 	"strconv"
 )
@@ -40,10 +41,17 @@ func (s *scan) source() ([]byte, error) {
 		}
 		return imports[pkg] + "." + name
 	}
-	// 2. 嵌入配置 Schema 并沿描述顺序注册，命令的父 token 通过 Group 逐层表达。
+	// 2. 嵌入 Schema 与文案原文，并沿描述顺序注册，命令的父 token 通过 Group 逐层表达。
 	fmt.Fprintf(&out, ")\n\nfunc init() {\n%s.UseGenerated((*%s)(nil), %s.Generated{\n", sdk, s.roots[0].name, sdk)
 	if len(s.result.ConfigSchema) != 0 {
 		fmt.Fprintf(&out, "ConfigSchema: []byte(%q),\n", s.result.ConfigSchema)
+	}
+	if len(s.i18nFiles) != 0 {
+		out.WriteString("I18n: map[string][]byte{\n")
+		for _, file := range slices.Sorted(maps.Keys(s.i18nFiles)) {
+			fmt.Fprintf(&out, "%q: []byte(%q),\n", file, s.i18nFiles[file])
+		}
+		out.WriteString("},\n")
 	}
 	if len(s.serviceSchemas) != 0 {
 		out.WriteString("ServiceSchemas: map[string][]byte{\n")

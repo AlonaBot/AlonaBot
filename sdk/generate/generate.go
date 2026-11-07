@@ -10,6 +10,7 @@
 // 扫描遵守 GOOS/GOARCH 和 build tags，排除外部依赖、vendor 与测试文件。
 // 配置与 JSON Service 类型经统一的 go/types 检查生成 Schema；配置字段见 CONTRACTS §5.1，
 // Service 字段见 §3；注册规则见 §9、§2.2。
+// 构建入口的 i18n/*.json 按 §5.3、§5.4 检查并将原文嵌入注册代码。
 //
 // 包的组成：[Scan] 接收 [Options]，返回描述、源码与 [Diagnostic] 汇总的 [Result]。
 package generate
@@ -45,9 +46,9 @@ type Options struct {
 	Tags         []string
 }
 
-// Diagnostic 携带一条源码问题的位置和说明。
+// Diagnostic 携带一条源码或资源问题的位置和说明。
 type Diagnostic struct {
-	Pos     string // 相对 Dir 的文件:行:列
+	Pos     string // 相对 Dir 的源码文件:行:列，或文案文件:键路径。
 	Message string
 }
 
@@ -66,7 +67,7 @@ type Event struct {
 	Package, Func      string
 }
 
-// Result 保存扫描描述、生成源码和全部源码诊断。
+// Result 保存扫描描述、生成源码和全部构建诊断。
 type Result struct {
 	RootType     string    // 导入路径.类型名
 	ConfigType   string    // 没有 Config 时为空
@@ -104,10 +105,11 @@ type scan struct {
 	roots, configs []declaration
 	paths, routes  map[string]string // 键对应首次声明的位置
 	serviceSchemas map[string][]byte
+	i18nFiles      map[string][]byte // 校验通过的文案原文；没有资源时为 nil。
 	syntax         map[string][]*ast.File
 }
 
-// Scan 按目标环境扫描源码并生成注册代码。源码问题记入 Diagnostics；
+// Scan 按目标环境扫描源码与文案资源并生成注册代码。输入问题记入 Diagnostics；
 // 工具链或 IO 失败返回 error，go list 失败时保留 stderr。
 func Scan(ctx context.Context, opt Options) (*Result, error) {
 	// 1. 由 Go 工具链确定依赖与实际参与构建的文件。
@@ -197,6 +199,9 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 		if err := s.schemas(ctx, cmd); err != nil {
 			return nil, err
 		}
+	}
+	if err := s.readI18n(); err != nil {
+		return nil, err
 	}
 	slices.SortFunc(s.result.Commands, func(a, b Command) int { return strings.Compare(strings.Join(a.Path, " "), strings.Join(b.Path, " ")) })
 	slices.SortFunc(s.result.Events, func(a, b Event) int { return strings.Compare(a.RouteID, b.RouteID) })
