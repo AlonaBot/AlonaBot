@@ -27,7 +27,7 @@
 | `plugintest/` | 插件测试套件（D-47）：在 `go test` 中用 `alonabot.Start` 启动真实 Core、测试 Adapter 与被测插件，注入事件并取得发送 | Core 的检查与派发（照常由 Core 执行，不另建路径） | 拟建 |
 | `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） | 部分实现：开发用 `alonabot run`（单插件启停、有限重启；读取 `alonabot.yaml`，`--listen`、`--log-level`、`--log-format` 只覆盖本次运行；启动唯一的公开 HTTP Listener 并接入插件 HTTP 路由）、全局 `--args`、`tune list`，以及生成并检查插件注册代码的 `plugin generate`/`plugin check`；`admin-token init`/`reset` 在持有 core.lock 时离线生成管理 token，只写一次到本机终端；`run` 在 admin host 上挂载认证路由并把 Auth 作为管理会话来源；尚无其他管理 CLI |
 | `examples/plugins/` | 随 SDK 编译的示例与集成样例 | 生产代码依赖 | 部分实现：`showcase`（签名组合示例）、`lifecycle`（可真实运行的生命周期示例）、`echo`（真实 Session 的手动事件回复） |
-| `web/admin/` | 官方 WebUI 组件（`role: webui`，D-62）的源码：Vite + TypeScript + React 19 管理界面，构建产物打成静态组件包 | 管理逻辑本身（只调用带主版本号的 Admin API，CONTRACTS §7.5） | 拟建 |
+| `web/admin/` | 官方 WebUI 组件（`role: webui`，D-62）的源码：Vite + TypeScript + React 19 管理界面，构建产物打成静态组件包 | 管理逻辑本身（只调用带主版本号的 Admin API，CONTRACTS §7.5） | 部分实现：工程骨架与组件声明 `plugin.yaml`（`role: webui`、`assets: dist`、Admin API 主版本 1）；`src/schema`（`fieldsFromSchema` 把 `config_schema.json` 解析为有序字段模型，`buildPatch` 生成 JSON Merge Patch，含 secret 掩码与数组行的规则，CONTRACTS §5.1）；`src/components` 的 `ConfigForm` 与 `LanguageSwitch`；`src/i18n` 的界面文案 en-US/zh-CN 目录、语言选择与字段翻译回退；`fixtures/` 是开发预览页用的手写 Schema。真实 Admin API、登录与页面路由尚未实现 |
 | `Dockerfile`、`deploy/` | 官方容器镜像、compose 整合包入口与 `install.sh`（CONTRACTS §15.3、§15.6，D-64） | Core 行为（镜像与脚本只安装发行归档的内容） | 拟建 |
 | `spec/` | 现行规格与 ADR | — | 现行 |
 

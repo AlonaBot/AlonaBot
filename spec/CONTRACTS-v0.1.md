@@ -166,7 +166,7 @@ SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 contex
 - 每个字段都有值。缺失的键用 `default` 补齐；没有 default 时取类型的零值：`string`、`text` 为 `""`，`int`、`float` 为 0，`bool` 为 false，`list`、`template_list` 为 `[]`，`dict` 为 `{}`，`object` 递归补齐 items；`template` 没有零值，缺失表示未选择模板。只补**缺失键**，显式的 `false`、`0`、`""`、空数组与空对象都保留；list 与 template_list 的元素、template 的模板对象内同样补齐。补齐后按 schema 校验，不接受 `null`：类型不符、超出 int64 或 slider 范围、不在 options 中、template 不是恰好一个已声明的模板键、required 不满足，均返回 INVALID_ARGUMENT，错误指明 JSON 路径，不含取值。
 - 未知键默认保留，包括 object、list 元素与模板对象中的未知键；SDK 以完整原始 JSON 对象维护配置，不能用只含已声明字段的结果覆盖整个文档。
 - 插件经 `sdk.Base` 的 `Config()` 读取本 Session 的只读配置：它在 OnConfigLoad 之后、OnStart 之前就绪，Session 内不变，配置修改由新 Session 应用（§4.1）。按字段类型取值：`String`（string、text）、`Int`、`Float`、`Bool`、`Strings`（没有 items 的 list）、`Object`（object）、`Objects`（有 items 的 list）、`Dict`（dict，值保持 JSON 原样）、`Template`（template，返回模板键与该模板的对象，未选择时模板键为空串）、`TemplateList`（template_list）。`Object`、`Objects` 与模板返回的对象用同样的方法读取其 items。键未在该层声明，或方法与字段类型不符时 panic，消息为英文并指明键的路径；secret 字段返回解析后的明文。
-- WebUI 的字段 PATCH 使用 JSON Merge Patch：对象递归合并、数组整体替换、未提交键保持、`null` 表示删除键；删除的键随后按默认值补齐，因此清空字段等于恢复默认值，再经必需字段校验。提交携带所基于的 `base_generation`；旧代次提交返回 FAILED_PRECONDITION，不能覆盖另一项已完成的配置修改。`invisible` 字段不出现在表单中，PATCH 不能因未显示就删除它。
+- WebUI 的字段 PATCH 使用 JSON Merge Patch：对象递归合并、数组整体替换、未提交键保持、`null` 表示删除键；删除的键随后按默认值补齐，因此清空字段等于恢复默认值，再经必需字段校验。提交携带所基于的 `base_generation`；旧代次提交返回 FAILED_PRECONDITION，不能覆盖另一项已完成的配置修改。`invisible` 字段不出现在表单中，PATCH 不能因未显示就删除它。因为数组整体替换，WebUI 提交 `list` 与 `template_list` 的行时：行中隐藏（`invisible` 或 `condition` 不满足）的字段与未知字段提交该行未编辑的原值，编辑后又被隐藏的字段也提交原值，新行没有原值时省略该键；行内恢复默认是从该行移除键，由补齐默认值处理（对象差量仍用 `null`）；行中的 secret 须全部重新输入（§5.3）。只按 Schema 字段处理，`dict` 值中用户写的 `null` 原样提交。对象差量恰好形成已设置 secret 的掩码形状时，WebUI 一并提交该对象中未变的键以消除歧义；没有可带的非掩码键时拒绝提交，不能把掩码放进补丁。
 
 ### 5.2 配置回调与激活次序
 
