@@ -109,7 +109,13 @@ func (c *connectionConfig) dial(ctx context.Context) (*websocket.Conn, error) {
 
 // safeError 保留取消等错误判断，文本先移除 URL 凭证和 access_token。
 func (c *connectionConfig) safeError(err error) error {
-	return &sanitizedError{message: c.redact.Replace(err.Error()), cause: err}
+	message := err.Error()
+	var requestError *url.Error
+	if errors.As(err, &requestError) {
+		// net/http 会先把密码改成 ***；直接替换其带引号的 URL，避免依赖密码表示。
+		message = strings.ReplaceAll(message, strconv.Quote(requestError.URL), strconv.Quote(c.safeURL))
+	}
+	return &sanitizedError{message: c.redact.Replace(message), cause: err}
 }
 
 type sanitizedError struct {
