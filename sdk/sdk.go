@@ -141,9 +141,6 @@ func Run(root Root) error {
 	if err != nil {
 		return err
 	}
-	if len(reg.Schedules) > 0 {
-		return &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "this SDK version does not support scheduled jobs yet"}
-	}
 
 	// 3. 连接 Core 并依次完成握手、准备与激活，然后进入服务循环。
 	l, err := readLaunch()
