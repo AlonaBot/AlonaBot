@@ -70,16 +70,17 @@ func (*onebotAdapter) Start(ctx context.Context, request adapter.StartRequest, c
 		ctx: lifetime, cancel: cancel, done: make(chan struct{}),
 		events: make(chan json.RawMessage, eventQueueCapacity),
 	}
-	go func() {
-		defer close(i.done) // Stop 等待读取和在途调用的收尾。
-		i.readConnection(conn)
-	}()
+	readDone := i.startRead(conn)
 	account, err := i.login(ctx)
 	if err != nil {
-		i.Stop(context.Background())
+		cancel()
+		conn.CloseNow()
+		<-readDone // Start 失败不启动重连，先收回唯一的读取循环。
 		return nil, &sdk.Error{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, Message: config.safeError(err).Error()}
 	}
 	i.account = account
+	// 3. 登录成功后才启动生命周期管理，Start 失败始终不重试。
+	go i.maintainConnection(readDone)
 	slog.Debug("connected onebot websocket", "adapter_instance_id", i.id, "url", config.safeURL)
 	return i, nil
 }
@@ -114,7 +115,7 @@ func (*instance) Send(context.Context, *pb.Target, *pb.MessageChain) (*pb.SendRe
 	return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, SafeMessage: "onebot sending is unsupported"}
 }
 
-// Stop 取消读取并关闭连接，等待全部在途调用完成断线通知后返回。
+// Stop 取消退避、握手和读取，关闭连接并等待生命周期循环退出后返回。
 func (i *instance) Stop(context.Context) error {
 	i.cancel()
 	i.mu.Lock()
@@ -123,7 +124,7 @@ func (i *instance) Stop(context.Context) error {
 	if conn != nil {
 		conn.CloseNow()
 	}
-	<-i.done // 读取循环退出后才确认该实例停止。
+	<-i.done // 生命周期循环收回全部读取 goroutine 后才确认停止。
 	return nil
 }
 
