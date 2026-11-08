@@ -8,7 +8,7 @@ Module：`github.com/AlonaBot/AlonaBot`。
 
 最小事件回复示例见 [echo](examples/plugins/echo/main.go)：注册 `message.created`，在 Handler 中调用 `Context.Send`。真实 TCP/stdio 装配和验证见 [echo 集成测试](internal/core/supervisor/echo_test.go)；原 Target 回复无需额外实例许可；显式其他目标和后台发送按 Core 持久化的实例许可逐次准入，撤销在下一次 Send 时生效。许可读写入口当前供 Core 内部使用，CLI 装配与管理入口留给后继切片。许可分项证据见 [TEST-MATRIX §3.3](spec/TEST-MATRIX.md#33-target-与发信许可分项证据)。
 
-Telegram Adapter 接收入口见 [alonabot-adapter-telegram](adapters/telegram/cmd/alonabot-adapter-telegram/main.go)，本地 Bot API 模拟服务见 [telegramtest](adapters/telegram/telegramtest/server.go)。已在 darwin/arm64 验证真实私聊消息接收；完整 Core 装配与其他真实平台场景由后继切片联验。
+Telegram Adapter 接收入口见 [alonabot-adapter-telegram](adapters/telegram/cmd/alonabot-adapter-telegram/main.go)，本地 Bot API 模拟服务见 [telegramtest](adapters/telegram/telegramtest/server.go)。OneBot 11 Adapter 已实现正向 WebSocket 连接与接收（发送与媒体随后继切片），入口见 [alonabot-adapter-onebot11](adapters/onebot11/cmd/alonabot-adapter-onebot11/main.go)，本地模拟服务见 [onebottest](adapters/onebot11/onebottest/server.go)。已在 darwin/arm64 验证真实私聊消息接收；完整 Core 装配与其他真实平台场景由后继切片联验。
 
 按 [spec/PLAN.md](spec/PLAN.md) 的工作包继续实施；规格索引见 [spec/README.md](spec/README.md)，决策与历史依据见 [spec/adr/README.md](spec/adr/README.md)。开发环境与命令见 [docs/development.md](docs/development.md)，插件作者的规则见 [docs/plugin-guide.md](docs/plugin-guide.md)，模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)，代理工作约定见 [AGENTS.md](AGENTS.md)。
 
