@@ -140,6 +140,14 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, method stri
 		s.respond(w, http.StatusBadRequest, nil)
 		return
 	}
+	chatID := request.Params["chat_id"]
+	if value, ok := chatID.(string); ok {
+		chatID, err = strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			s.respond(w, http.StatusBadRequest, nil)
+			return
+		}
+	}
 	count := 1
 	var editID int64
 	if method == "sendMediaGroup" {
@@ -183,7 +191,7 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, method stri
 			if fault.zero {
 				id = 0
 			}
-			messages[i] = map[string]any{"message_id": id, "date": 0, "chat": map[string]any{"id": request.Params["chat_id"], "type": "private"}}
+			messages[i] = map[string]any{"message_id": id, "date": 0, "chat": map[string]any{"id": chatID, "type": "private"}}
 		}
 		if method == "sendMediaGroup" {
 			result = messages
