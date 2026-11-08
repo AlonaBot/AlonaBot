@@ -47,7 +47,7 @@
 | goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 已完成（PR #85） |
 | goal-95 | T-08.11 | 配置改由 config_schema.json 声明 | T-04.7、T-08.3、T-08.4、T-08.10 | 已完成（PR #103） |
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-04.7、T-06.1 | 已完成（PR #101） |
-| goal-91 | T-04.8 | SDK 自有类型与事件常量 | T-04.7、T-04.9 | 等待前置 |
+| goal-91 | T-04.8 | SDK 自有类型与事件常量 | T-04.7、T-04.9 | 待派发 |
 | goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 待派发 |
 | goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8、T-08.11 | 等待前置 |
 | goal-101 | T-08.12 | Adapter 实例配置与 Core 设置的版本迁移 | T-07.6、T-08.11 | 等待前置 |
@@ -2797,7 +2797,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-96 · T-04.9 删除构建期标记
 
-状态：已完成（[PR #110](https://github.com/AlonaBot/AlonaBot/pull/110)），证据见 TEST-MATRIX §3.2。派发时：goal-103（PR #99）已合并；按 D-86 清除已删除测试与 testdata 的迁移要求，跨进程自测由本地测试在临时目录生成插件源码与二进制。前置 T-04.7（PR #89，合并提交 `3e37cd6`）已合并。依据 D-79 新增。符号已按合入代码核对：
+状态：已完成（[PR #110](https://github.com/AlonaBot/AlonaBot/pull/110)，合并提交 `6aed25d`），证据见 TEST-MATRIX §3.2。派发时：goal-103（PR #99）已合并；按 D-86 清除已删除测试与 testdata 的迁移要求，跨进程自测由本地测试在临时目录生成插件源码与二进制。前置 T-04.7（PR #89，合并提交 `3e37cd6`）已合并。依据 D-79 新增。符号已按合入代码核对：
 - 删除测试后，标记示例只剩 `generate.go` 的包文档；`examples/plugins/` 不用标记。
 - `sdk/generate/marker.go`：`scan.marker`、`checkTokens`、路径与 route_id 的重复检查。`generate.go`：`Command`、`Event` 类型，`Result.Commands`、`Result.Events`，`scan.paths`、`scan.routes`，`readFile` 的 step 3 与收集 `handlers` 的部分，`Scan` 中对两个切片的排序。`source.go`：imports 中为标记函数加的别名、`Commands:` 与 `Events:` 两段。`cmd/alonabot/plugin.go` 只读 `Result.Diagnostics` 与 `Source`，不用改。
 - `sdk/generated.go`：`Generated.Commands`、`Generated.Events`，`registerCommands`、`registerEvents`；`Collect` 调用这两个方法。
@@ -3199,7 +3199,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-91 · T-04.8 SDK 自有类型与事件常量
 
-状态：等待前置（T-04.9）。依据 D-70，2026-11-04 从 T-04.7 拆出。T-04.7（PR #89，合并提交 `3e37cd6`）已合并，接口、行为与测试段已按合入代码写出。前置加入 T-04.9：`sdk/generate/source.go` 为标记事件生成 `r.On(id, "类型字符串")`，本切片把 `On` 改为事件常量后，这段生成代码会编译失败，而标记本身由 T-04.9 删除；T-04.9 合并后不需要再核对接口，直接改为待派发。
+状态：待派发。T-04.9（PR #110，合并提交 `6aed25d`）已合并：生成器不再输出注册代码，`sdk.Generated` 只剩 `ServiceSchemas` 与 `ConfigSchema`，按原计划不需要再核对接口。T-03.11（PR #106，合并提交 `3913d5a`）与 T-15.1（PR #109，合并提交 `1b226a2`）已合并，`adapters/telegram/perm`、`adapters/onebot11/`（含 `onebottest` 与测试）随之成为调用方，已加入语句「范围」的调用方一项。依据 D-70，2026-11-04 从 T-04.7 拆出。T-04.7（PR #89，合并提交 `3e37cd6`）已合并，接口、行为与测试段已按合入代码写出。前置加入 T-04.9：`sdk/generate/source.go` 为标记事件生成 `r.On(id, "类型字符串")`，本切片把 `On` 改为事件常量后，这段生成代码会编译失败，而标记本身由 T-04.9 删除；T-04.9 合并后不需要再核对接口，直接改为待派发。
 
 符号已按合入代码核对：
 - 公开 API 中的 pb 类型：`Context.Event() *pb.Event`、`To(*pb.Target)`、`Context.Send` 与 `sdk.Send` 的 `*pb.SendResult` 和 `*pb.Target`、`Upload` 的 `*pb.MediaRef`、`GrantMedia` 的 `...*pb.Target`、`Error.Code pb.ErrorCode`、`Public(pb.HttpAuthMode)` 与 `HTTPRoute.AuthMode`、`Command.Mode` 与 `Command.Params`；`message.Chain.Proto() *pb.MessageChain`；`sdk/adapter` 的 `Core.Deliver`、`Core.ReportFailure`、`Instance.Capabilities`、`Instance.Send`、`Adapter.Descriptor`。
@@ -3227,7 +3227,7 @@ Core 一侧已按合入代码核对并修订：
 - 新增 sdk/internal/convert/：pb 与 SDK 类型的双向转换，只有 sdk 与 sdk/adapter 的实现使用
 - sdk/：sdk.go、send.go、media.go、registry.go、events.go、dispatch.go、adapter_run.go、session.go（只改转换的调用点）；其余构造 sdk.Error 的文件只把错误码改为 errcode
 - sdk/adapter/adapter.go
-- 调用方：adapters/telegram/（含测试）、examples/plugins/、internal/core/supervisor/testdata/、internal/core/adapter/remote/remote_test.go，以及测试中以字符串嵌入的插件源码
+- 调用方：adapters/telegram/（含测试）、adapters/onebot11/（含 onebottest 与测试）、examples/plugins/、internal/core/supervisor/testdata/、internal/core/adapter/remote/remote_test.go，以及测试中以字符串嵌入的插件源码
 - 上述包的测试文件
 允许的新跨模块边：无（都在 sdk 模块内；Core 与 contracts 不变）。
 
@@ -3461,7 +3461,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-67 · T-13.1 库模式入口与同进程组件
 
-状态：等待前置（T-04.9、T-08.8）。原前置 T-02.1、T-03.3、T-04.2 均已合并，状态中等待的 `router.New(Options)`（PR #67）与 `remote.Process.Bind` 的 Caller 参数（PR #55）也已合入。2026-11-08 核对时发现两处尚未稳定，因此前置加入 T-04.9 与 T-08.8：本切片要给 `sdk.Generated` 加 Manifest、改生成器，而 goal-96（T-04.9）要删除 `Generated.Commands`/`Events` 与标记扫描，goal-53（T-08.8，PR #102 审查中）要给 `Generated` 加 I18n 并在生成器中嵌入 `i18n/`，在两者合并前写接口段只能按即将删除或改动的代码写。T-13.1 随之从第 6 波移到第 10 波，后继的 T-13.2、T-13.3、T-09.4 等依次顺延（见执行顺序 §2）。前置合并后由审查者按新代码改写，届时还要定下 Adapter 包的组件身份：官方 Adapter 目前没有 `plugin.yaml`，生成器也只处理有根类型的插件，语句中的 `alonabot.Adapter(telegram.New())` 无法取得 manifest；在此之前语句中的 `//alonabot:adapter` 标记（D-79 已删除构建期标记）、`.alonabot/` 缺省目录（D-77 改为 `data/`）与读取 `instances/` 目录（D-82 改为 `core_config.json`）都是旧写法。
+状态：等待前置（T-08.8）。T-04.9（PR #110，合并提交 `6aed25d`）已合并。原前置 T-02.1、T-03.3、T-04.2 均已合并，状态中等待的 `router.New(Options)`（PR #67）与 `remote.Process.Bind` 的 Caller 参数（PR #55）也已合入。2026-11-08 核对时发现两处尚未稳定，因此前置加入 T-04.9 与 T-08.8：本切片要给 `sdk.Generated` 加 Manifest、改生成器，而 goal-96（T-04.9）要删除 `Generated.Commands`/`Events` 与标记扫描，goal-53（T-08.8，PR #102 审查中）要给 `Generated` 加 I18n 并在生成器中嵌入 `i18n/`，在两者合并前写接口段只能按即将删除或改动的代码写。T-13.1 随之从第 6 波移到第 10 波，后继的 T-13.2、T-13.3、T-09.4 等依次顺延（见执行顺序 §2）。前置合并后由审查者按新代码改写，届时还要定下 Adapter 包的组件身份：官方 Adapter 目前没有 `plugin.yaml`，生成器也只处理有根类型的插件，语句中的 `alonabot.Adapter(telegram.New())` 无法取得 manifest；在此之前语句中的 `//alonabot:adapter` 标记（D-79 已删除构建期标记）、`.alonabot/` 缺省目录（D-77 改为 `data/`）与读取 `instances/` 目录（D-82 改为 `core_config.json`）都是旧写法。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-67（切片 T-13.1：库模式入口与同进程组件）。goal 目录 goal-67，分支 goal-67，worktree .worktrees/goal-67，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -4041,7 +4041,7 @@ sdk
 
 ### goal-14 · T-04.5 示例升级与 T-04 验收
 
-状态：等待前置（T-03.10、T-04.8、T-04.9）。T-04.4（PR #88）、T-04.7（PR #89）已合并。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.2、T-04.3 已合并；已核对 `CommandRegistry.Command`、`Regex`、`Keyword`、`Raw`，以及 Args、Optional、RawTail、Usage、Silent、IgnoreCase 和 Context.Match。策略与 Adapter 开发入口的实际接口仍待前置合并后核对。2026-11-04 按 D-77～D-85 修订计划：示例只用链式注册（D-79，goal-96 删除标记），用 `alonabot check`、`build` 检查与构建，经 `alonabot run <目录>` 运行（D-77）。前置合并后由审查者改写。
+状态：等待前置（T-03.10、T-04.8）。T-04.9（PR #110，合并提交 `6aed25d`）已合并。T-04.4（PR #88）、T-04.7（PR #89）已合并。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.2、T-04.3 已合并；已核对 `CommandRegistry.Command`、`Regex`、`Keyword`、`Raw`，以及 Args、Optional、RawTail、Usage、Silent、IgnoreCase 和 Context.Match。策略与 Adapter 开发入口的实际接口仍待前置合并后核对。2026-11-04 按 D-77～D-85 修订计划：示例只用链式注册（D-79，goal-96 删除标记），用 `alonabot check`、`build` 检查与构建，经 `alonabot run <目录>` 运行（D-77）。前置合并后由审查者改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-14（切片 T-04.5：示例升级与 T-04 验收）。goal 目录 goal-14，分支 goal-14，worktree .worktrees/goal-14，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

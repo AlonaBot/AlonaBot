@@ -155,7 +155,7 @@
 
 ### goal-89 · T-03.11 官方 Telegram Adapter 的平台权限
 
-状态：已完成（[PR #106](https://github.com/AlonaBot/AlonaBot/pull/106)），证据见 TEST-MATRIX §3.2。派发时：前置 T-04.6（PR #78，合并提交 `0a320c5`）已合并。依据 D-69 新增，2026-11-08 按合入代码写出接口、行为与测试段。已核对：`adapters/telegram` 的 `Descriptor()`（目前只声明接收能力）、`instance.processUpdate` → `normalize` → `Core.Deliver` 的逐条交付、`baseEvent`/`actor` 构造 Actor 的位置、`botClient.call(ctx, method, request, result)`、`telegramtest.Server` 的方法分派；`pb.PermissionDeclaration{name, implies, label_key}` 与 `validate.AdapterRegister` 对权限声明的检查（名称带 `telegram.` 前缀、label_key 非空、隐含不成环）；`Actor.permissions` 由 Core 按声明过滤并展开。
+状态：已完成（[PR #106](https://github.com/AlonaBot/AlonaBot/pull/106)，合并提交 `3913d5a`），证据见 TEST-MATRIX §3.2。派发时：前置 T-04.6（PR #78，合并提交 `0a320c5`）已合并。依据 D-69 新增，2026-11-08 按合入代码写出接口、行为与测试段。已核对：`adapters/telegram` 的 `Descriptor()`（目前只声明接收能力）、`instance.processUpdate` → `normalize` → `Core.Deliver` 的逐条交付、`baseEvent`/`actor` 构造 Actor 的位置、`botClient.call(ctx, method, request, result)`、`telegramtest.Server` 的方法分派；`pb.PermissionDeclaration{name, implies, label_key}` 与 `validate.AdapterRegister` 对权限声明的检查（名称带 `telegram.` 前缀、label_key 非空、隐含不成环）；`Actor.permissions` 由 Core 按声明过滤并展开。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-89（切片 T-03.11：官方 Telegram Adapter 的平台权限）。goal 目录 goal-89，分支 goal-89，worktree .worktrees/goal-89，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
