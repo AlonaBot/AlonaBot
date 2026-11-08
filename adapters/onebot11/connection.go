@@ -213,8 +213,12 @@ func (i *instance) readConnection(source *receiveConnection) (readError error) {
 			return err
 		}
 		var fields map[string]json.RawMessage
-		if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
-			slog.Warn("skip malformed onebot frame", "adapter_instance_id", i.id)
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			slog.Warn("skip malformed onebot frame", "adapter_instance_id", i.id, "error", i.config.safeError(err))
+			continue
+		}
+		if fields == nil {
+			slog.Warn("skip malformed onebot frame", "adapter_instance_id", i.id, "error", "onebot frame must be a JSON object")
 			continue
 		}
 		if echo, exists := fields["echo"]; exists {
@@ -223,7 +227,7 @@ func (i *instance) readConnection(source *receiveConnection) (readError error) {
 		}
 		var postType string
 		if err := json.Unmarshal(fields["post_type"], &postType); err != nil {
-			slog.Warn("skip malformed onebot post_type", "adapter_instance_id", i.id)
+			slog.Warn("skip malformed onebot post_type", "adapter_instance_id", i.id, "error", i.config.safeError(err))
 			continue
 		}
 		if postType == "meta_event" {
@@ -232,7 +236,7 @@ func (i *instance) readConnection(source *receiveConnection) (readError error) {
 				SubType string `json:"sub_type"`
 			}
 			if err := json.Unmarshal(raw, &meta); err != nil {
-				slog.Warn("skip malformed onebot meta_event", "adapter_instance_id", i.id)
+				slog.Warn("skip malformed onebot meta_event", "adapter_instance_id", i.id, "error", i.config.safeError(err))
 				continue
 			}
 			if meta.Event == "lifecycle" && meta.SubType == "connect" {
@@ -252,7 +256,7 @@ func (i *instance) readConnection(source *receiveConnection) (readError error) {
 func (i *instance) respond(rawEcho, raw json.RawMessage) {
 	var echo string
 	if err := json.Unmarshal(rawEcho, &echo); err != nil {
-		slog.Warn("skip invalid onebot response echo", "adapter_instance_id", i.id)
+		slog.Warn("skip invalid onebot response echo", "adapter_instance_id", i.id, "error", i.config.safeError(err))
 		return
 	}
 	var result apiResult
