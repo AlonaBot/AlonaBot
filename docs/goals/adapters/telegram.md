@@ -7,7 +7,7 @@
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 已完成（PR #39） |
-| goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 等待前置 |
+| goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 待派发 |
 | goal-89 | T-03.11 | 官方 Telegram Adapter 的平台权限 | T-04.6 | 待派发 |
 
 ## 第 5 波
@@ -96,54 +96,59 @@
 
 ### goal-50 · T-03.7 官方 Telegram Adapter 的发送计划与回执
 
-状态：等待前置。T-03.4 已由 PR #39 合并，已核对 `telegram.New() adapter.Adapter`、私有 `instance` 与 `botClient.call(ctx context.Context, method string, request any, result any) error`、`telegramtest.NewServer(t testing.TB, token string) *Server`，以及 `Instance.Send(ctx context.Context, target *pb.Target, chain *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo)`。媒体发送依赖本语句中的 `Core.ReadMedia`，该接口由 goal-7 / T-03.6 追加，当前 `sdk/adapter.Core` 尚未提供；待 T-03.6 合并并核对 ReadMedia 后再改为待派发。
+状态：待派发。前置 T-03.4（PR #39，合并提交 `604dc65`）已合并；语句原先等待的 `Core.ReadMedia` 由 T-03.6（PR #55，合并提交 `b023130`）合入。2026-11-08 按合入代码核对并改写：`sdk/adapter.Core.ReadMedia(ctx, token, offset uint64, length uint32) ([]byte, uint64, bool, error)`；`internal/core/message` 的 Send 在调用实例前已把 media_ref 与 incoming_ref 都换成该 Adapter Session 的只读令牌并写回 media_ref，https_url 原样交给 Adapter，并已用 `validate.Chain` 做过结构校验（reference、buttons 各至多一个等）；`botClient.call` 只发 JSON，`apiError{status, description, retryAfter}` 已脱敏；实例的 `Capabilities()` 与 `Descriptor()` 共用 `receiveCapabilities()`，`media.read` 由 SDK 按实例是否实现 `adapter.MediaSource` 自动声明；`telegramtest.Server` 现有 `FailNext` 只作用于 getUpdates。`Segment` 还没有 extension 分支（随 T-03.8 加入），本切片不处理。goal-89 也修改 `telegram.go` 与 `telegramtest/server.go`，并在 telegramtest 增加 `Calls(method string) int`；本切片的请求记录用 `Requests` 命名以免冲突，后合并的一方按先合并的代码变基。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-50（切片 T-03.7：官方 Telegram Adapter 的发送计划与回执）。goal 目录 goal-50，分支 goal-50，worktree .worktrees/goal-50，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：Telegram 实例的 Send 先对整条 Chain 做完整预检并生成确定的物理操作计划，再依次调用 Bot API；文本实体按 UTF-16 渲染，连续图片/视频组成媒体组，引用作用于第一条物理消息，按钮作用于最后一条；每个物理操作一个 PartResult，汇总为 ACCEPTED、PARTIAL、REJECTED 或 UNKNOWN，已发生的结果不丢失。
 
-依据：PLAN T-03 步骤 6（发送）；CONTRACTS §8（Send、Chain 与计划段）；MESSAGE-MODEL §2、§4、§6.2；TEST-MATRIX V-08、V-35。
+依据：PLAN T-03 步骤 6（发送）；CONTRACTS §1.3（媒体分块）、§8（Send、Chain 与计划段）；MESSAGE-MODEL §2、§4、§6.2；TEST-MATRIX V-08、V-35；Telegram Bot API 的 sendMessage、sendPhoto、sendVideo、sendDocument、sendMediaGroup、editMessageReplyMarkup 与 MessageEntity（字段名与限制以官方文档为准）。
 
 范围（只新增或修改这些）：
 - contracts/proto/alonabot/v1/message.proto：Button 追加 optional string core_token = 4（由 Core 填写，T-03.8 接入；插件填写的值由 Core 清除）。随后 go generate ./...（本切片获授权只追加这一字段）
-- contracts/wirespec_test.go：追加编号检查
-- adapters/telegram/：新增 plan.go、send.go、render.go；实例的 Send 与 Capabilities 补全
-- adapters/telegram/telegramtest/：增加 sendMessage、sendPhoto、sendVideo、sendDocument、sendMediaGroup、editMessageReplyMarkup 与故障注入
-- 上述包的测试文件
+- contracts/wirespec_test.go：追加该字段的编号检查
+- adapters/telegram/：新增 plan.go（预检与物理计划）、send.go（执行与回执）、render.go（文本、实体与按钮渲染）；client.go 增加 multipart 请求（复用 call 的响应解析与脱敏）；telegram.go 的实例 Send、Capabilities 与 Descriptor 的能力表
+- adapters/telegram/telegramtest/：新增 send.go（发送类方法、请求记录与故障注入）；server.go 的方法分派只加这些方法
+- adapters/telegram/send_test.go；其他 *_local_test.go（不提交）
 允许的新跨模块边：无。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 1. adapters/telegram：实例实现 sdk/adapter 的 Instance.Send；不新增导出符号。
-2. adapters/telegram/telegramtest（在 goal-5 的 Server 上追加）
-   type Call struct { Method string; Params map[string]any } // 每次 Bot API 调用的方法与解析后的参数
-   func (s *Server) Calls() []Call
-   func (s *Server) FailMethod(method string, nth int, status int, description string) // 第 nth 次调用该方法时返回指定错误
-   func (s *Server) ZeroMessageID(method string, nth int)                              // 第 nth 次调用成功但 message_id 为 0
-   func (s *Server) Timeout(method string, nth int)                                    // 第 nth 次调用在响应前断开（结果未知）
+2. adapters/telegram/telegramtest（在现有 Server 上追加）
+   type Request struct { Method string; Params map[string]any; Files map[string][]byte } // 一次发送类调用；Params 为 JSON 或 multipart 的非文件字段（multipart 中的 JSON 字段如 media、reply_markup 解析为对象），Files 为 multipart 文件字段名到内容
+   func (s *Server) Requests() []Request // 按到达顺序返回发送类方法（上述六个）的请求副本；不含 getMe、getWebhookInfo、getUpdates、getFile
+   func (s *Server) FailMethod(method string, nth int, status int, description string) // 该方法的第 nth 次调用（从 1 起）返回指定 HTTP 状态与 Bot API 错误体
+   func (s *Server) ZeroMessageID(method string, nth int)                              // 第 nth 次调用成功，但返回的 message_id 为 0（sendMediaGroup 为该组全部消息）
+   func (s *Server) Drop(method string, nth int)                                       // 第 nth 次调用在写出响应前断开连接（结果未知）
+   成功的发送类调用返回 Message 对象（sendMediaGroup 返回数组），message_id 在一个 Server 内从 1 递增；editMessageReplyMarkup 返回 Message。
 
 行为：
-- 预检（任何 Bot API 调用之前，任一失败都返回 REJECTED 的 SendResult 加 ErrorInfo，part_results 为空）：
-  - 片段类型只支持 text、image、video、file、reference、buttons、mention；forward 与其他类型 → UNSUPPORTED。extension 由 T-03.8 处理，本切片 → UNSUPPORTED。
-  - text：format 为 markdown 时按 MarkdownV2 发送且不得同时带 entities；plain 时 entities 按 UTF-16 偏移校验（越界或重叠方式不被 Telegram 接受 → INVALID_ARGUMENT）。单条文本超过 4096 个字符、caption 超过 1024 个字符（以 UTF-16 计，命名常量）→ INVALID_ARGUMENT，不截断。
-  - 媒体来源：media_ref 与 incoming_ref 由 Core 换成的只读 token 经 Core.ReadMedia 读取后上传（multipart）；https_url 只接受 https，原样交给 Telegram。
-  - reference 只能出现一次且位于第一个物理操作；buttons 只能出现一次且位于末尾；每个按钮必须有 core_token（≤ 64 字节，命名常量），否则 INVALID_ARGUMENT。mention 只能渲染为 text_mention（需要 external_user_id），否则 UNSUPPORTED。
-  - target.chat_id 必须是十进制整数；thread_id 存在时作为 message_thread_id。
-- 物理计划（MESSAGE-MODEL §6.2）：相邻 text 片段可合并为一条消息，不改变顺序；独立 text 不改为 caption，caption 只取媒体片段自身的 caption；连续 image/video 每组 2～10 项用 sendMediaGroup，单项用 sendPhoto/sendVideo，file 用 sendDocument，不放进媒体组；文本穿插时结束当前媒体组。reference 转为第一条物理请求的 reply_parameters；buttons 转为最后一条物理消息的 reply_markup（inline_keyboard，callback_data 为 core_token），最后一步是 sendMediaGroup 时追加一次 editMessageReplyMarkup 作用于该组已确认的最后一条消息。
-- 执行与回执：按计划顺序执行；每个物理操作一个 PartResult（part_index 从 0 起，segment_indexes 为它覆盖的片段）。成功时记录 message_id；message_id 为 0 时 message_ids_unavailable=true，0 不进入 platform_message_ids，依赖该 ID 的 markup 步骤为 NOT_ATTEMPTED。某一步被拒（4xx）后，后续步骤全部 NOT_ATTEMPTED；网络断开或超时使该步为 UNKNOWN，后续 NOT_ATTEMPTED。整体：全部 ACCEPTED → ACCEPTED；第一步就被拒 → REJECTED；第一步就未知 → UNKNOWN；其余 → PARTIAL，并同时返回 ErrorInfo。primary_platform_message_id 为第一条确认的消息 ID。发送不自动重试，429 也直接作为该步的错误返回（safe_message 带 retry_after）。
-- Capabilities：本切片起声明 message.send、message.markdown、message.album、message.reference、message.buttons（version 1，supported=true）。
-- 脱敏沿用 goal-5：任何错误与日志不含 token。
+- 预检（任何 Bot API 调用与媒体读取之前，任一失败都返回 status 为 REJECTED、part_results 为空的 SendResult 与 ErrorInfo）：
+  - 片段类型只支持 text、image、video、file、mention、reference、buttons；forward → UNSUPPORTED。
+  - text：format 为 MARKDOWN 时按 MarkdownV2（parse_mode）发送，且不得同时带 entities；PLAIN 或缺省时 entities 按 UTF-16 偏移检查（越界、长度为 0、TEXT_LINK 缺 url、TEXT_MENTION 缺 external_user_id → INVALID_ARGUMENT），按 Bot API 的 MessageEntity 输出。合并后的单条文本超过 4096、caption 超过 1024 个 UTF-16 码元（命名常量）→ INVALID_ARGUMENT，不截断。
+  - 媒体来源：media_ref 是 Core 换成的只读令牌，执行到该步时经 Core.ReadMedia 分块读取（每块至多 1 MiB，命名常量注明 CONTRACTS §1.3）后以 multipart 上传；https_url 只接受 https 方案，原样作为 photo/video/document 参数；incoming_ref 不应到达 Adapter → INVALID_ARGUMENT。
+  - reference：original_platform_message_id 与 target.chat_id 必须是十进制整数，reference.target 若存在须与本次 target 的 chat 一致（否则 UNSUPPORTED，Telegram 本切片不做跨会话回复）。
+  - buttons：每个按钮必须有 core_token（1～64 字节，命名常量），否则 INVALID_ARGUMENT；按钮作用于最后一条物理消息。
+  - mention：渲染为该位置的 text_mention 实体（显示 display，缺省为 external_user_id），并入相邻文本；external_user_id 不是十进制整数 → UNSUPPORTED。
+  - target：chat_id 必须是十进制整数；thread_id 存在时须为十进制整数，作为 message_thread_id。
+- 物理计划（MESSAGE-MODEL §6.2）：相邻 text 与 mention 合并为一条 sendMessage，不改变顺序；独立 text 不改为 caption，caption 只取媒体片段自身的 caption；连续 image/video 每组 2～10 项用 sendMediaGroup，单项用 sendPhoto/sendVideo；file 用 sendDocument，不放进媒体组；文本或文件穿插时结束当前媒体组。reference 转为第一条物理请求的 reply_parameters；buttons 转为最后一条物理消息的 reply_markup（inline_keyboard，callback_data 为 core_token）；最后一步是 sendMediaGroup 时追加一次 editMessageReplyMarkup，作用于该组最后一条已确认的消息。
+- 执行与回执：按计划顺序执行；每个物理操作一个 PartResult（part_index 从 0 起，segment_indexes 为它覆盖的原片段下标，reference 与 buttons 计入它们作用的那一步）。成功时记录 message_id；message_id 为 0 时 message_ids_unavailable=true，0 不进入 platform_message_ids，依赖该 ID 的 markup 步骤为 NOT_ATTEMPTED 并带 ErrorInfo。Bot API 返回错误体（apiError）时该步 REJECTED；连接断开、超时或响应无法解析时该步 UNKNOWN；ReadMedia 失败时该步 REJECTED（ErrorInfo 取 Core 返回的错误），不发起该步请求。任一步非 ACCEPTED 后，后续步骤全部 NOT_ATTEMPTED。整体：全部 ACCEPTED → ACCEPTED（不带 ErrorInfo）；第一步 REJECTED → REJECTED；第一步 UNKNOWN → UNKNOWN；其余 → PARTIAL；非 ACCEPTED 时同时返回该步的 ErrorInfo。platform_message_ids 按物理顺序保留全部已确认 ID，markup 更新不重复添加；primary_platform_message_id 为第一条确认的消息 ID；capabilities_used 列出本次用到的已声明能力。
+- 错误码：apiError 的 400 → INVALID_ARGUMENT，401 → UNAUTHENTICATED，403 → PERMISSION_DENIED，429 → RESOURCE_EXHAUSTED（safe_message 带 retry_after 秒数），其余 → UNAVAILABLE；safe_message 用已脱敏的描述。发送不自动重试，429 也不等待重发。
+- Capabilities：在接收能力之外声明 message.send、message.markdown、message.album、message.reference、message.buttons（version 1，supported=true）；实例的 Capabilities 与 Descriptor 共用同一张表（media.read 仍由 SDK 自动声明，不写进表）。
+- 脱敏沿用 goal-5：任何错误与日志不含 token；multipart 请求的错误同样经 safeError。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：adapters/telegram/send_test.go。用 telegramtest.Server 与 Core 测试替身（ReadMedia 返回内存字节）驱动真实实例：
-  - text+image+image+text+file+buttons 的计划为 sendMessage、sendMediaGroup（2 项）、sendMessage、sendDocument（带 reply_markup），参数与顺序正确；reference 只出现在第一个请求。
-  - 第二步 FailMethod(400)：第一步 ACCEPTED、第二步 REJECTED、其余 NOT_ATTEMPTED，整体 PARTIAL 并带 ErrorInfo；第一步 Timeout：整体 UNKNOWN。
-  - 预检失败（超长文本、forward、缺 core_token 的按钮、markdown 与 entities 同时出现）时 Calls() 为空。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：媒体组 10 项与 11 项的拆分；文本合并规则；caption 长度边界；mention 的渲染；429 的 safe_message；thread_id；multipart 上传的字段；末尾为相册且带 buttons：追加 editMessageReplyMarkup；该步失败时整体 PARTIAL，媒体组的消息 ID 保留在结果中；ZeroMessageID 作用于相册末条：markup 步骤为 NOT_ATTEMPTED，整体 PARTIAL，platform_message_ids 不含 0；含 emoji 与组合字符的文本，entities 的 UTF-16 偏移在请求中正确。
+- 提交：adapters/telegram/send_test.go 的 TestSendPlan。用 telegramtest.Server 与包内的 Core 测试替身（ReadMedia 按令牌返回内存字节，分块读取）驱动真实实例：
+  - text + image + image + text + file + buttons（另带一个 reference）：Requests() 依次为 sendMessage（带 reply_parameters）、sendMediaGroup（2 项，multipart 文件内容与替身一致）、sendMessage、sendDocument（带 reply_markup，callback_data 为 core_token）；整体 ACCEPTED，platform_message_ids 与 part_results 的 segment_indexes 正确。
+  - FailMethod 使第二步返回 400：第一步 ACCEPTED、第二步 REJECTED、其余 NOT_ATTEMPTED，整体 PARTIAL 并带 INVALID_ARGUMENT。
+  - Drop 使第一步断开：整体 UNKNOWN，其余 NOT_ATTEMPTED。
+  - 预检失败（超长文本、forward、缺 core_token 的按钮、markdown 与 entities 同时出现）：整体 REJECTED，Requests() 为空，ReadMedia 未被调用。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：媒体组 10 项与 11 项的拆分；文本与 mention 的合并规则；caption 与文本长度边界（以 UTF-16 计）；含 emoji 与组合字符的文本，entities 偏移在请求中正确；429 的错误码与 safe_message；thread_id；https_url 直传与非 https 拒绝；末尾为相册且带 buttons：追加 editMessageReplyMarkup，该步失败时整体 PARTIAL、媒体组的消息 ID 保留；ZeroMessageID 作用于相册：markup 步骤 NOT_ATTEMPTED、整体 PARTIAL、platform_message_ids 不含 0；ReadMedia 失败；错误与日志不含 token。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./adapters/... ./contracts/...；go build ./...。
 
-不做：按钮 token 的签发与 callback_query（T-03.8）；extension（T-03.8）；编辑（T-03.9）；入站媒体与 getFile（T-03.6 之后在 T-03.10 补 MediaSource）；BeforeSend/AfterSend Hook（T-05.3）。
+不做：按钮 token 的签发与 callback_query（T-03.8）；extension 片段（T-03.8）；编辑（T-03.9）；平台权限（T-03.11）；BeforeSend/AfterSend Hook（T-05.3）；故障矩阵与真实 Telegram 验证（T-03.10）。
 ```
 
 ## 第 8 波
