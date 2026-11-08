@@ -28,8 +28,7 @@ type sendOperation struct {
 }
 
 type sendPlan struct {
-	operations   []sendOperation
-	capabilities []string
+	operations []sendOperation
 }
 
 func buildSendPlan(target *pb.Target, chain *pb.MessageChain) (*sendPlan, *pb.ErrorInfo) {
@@ -46,7 +45,7 @@ func buildSendPlan(target *pb.Target, chain *pb.MessageChain) (*sendPlan, *pb.Er
 		}
 		common["message_thread_id"] = threadID
 	}
-	plan := &sendPlan{capabilities: []string{"message.send"}}
+	plan := &sendPlan{}
 	var content []*pb.Segment
 	var indexes []uint32
 	referenceIndex, buttonsIndex := -1, -1
@@ -112,9 +111,6 @@ func buildSendPlan(target *pb.Target, chain *pb.MessageChain) (*sendPlan, *pb.Er
 			}
 			operation.method = "sendMessage"
 			operation.params = rendered
-			if rendered["parse_mode"] == markdownMode {
-				plan.use("message.markdown")
-			}
 		case content[start].GetImage() != nil || content[start].GetVideo() != nil:
 			for end < len(content) && end-start < maxAlbumMedia && (content[end].GetImage() != nil || content[end].GetVideo() != nil) {
 				end++
@@ -133,7 +129,6 @@ func buildSendPlan(target *pb.Target, chain *pb.MessageChain) (*sendPlan, *pb.Er
 			if len(media) > 1 {
 				operation.method = "sendMediaGroup"
 				operation.params["media"] = media
-				plan.use("message.album")
 			} else {
 				kind := media[0]["type"].(string)
 				if kind == "photo" {
@@ -176,7 +171,6 @@ func buildSendPlan(target *pb.Target, chain *pb.MessageChain) (*sendPlan, *pb.Er
 	if referenceIndex >= 0 {
 		plan.operations[0].params["reply_parameters"] = reply
 		plan.operations[0].segmentIndexes = append(plan.operations[0].segmentIndexes, uint32(referenceIndex))
-		plan.use("message.reference")
 	}
 	if buttonsIndex >= 0 {
 		last := &plan.operations[len(plan.operations)-1]
@@ -186,18 +180,11 @@ func buildSendPlan(target *pb.Target, chain *pb.MessageChain) (*sendPlan, *pb.Er
 			last.params["reply_markup"] = markup
 			last.segmentIndexes = append(last.segmentIndexes, uint32(buttonsIndex))
 		}
-		plan.use("message.buttons")
 	}
 	for index := range plan.operations {
 		slices.Sort(plan.operations[index].segmentIndexes)
 	}
 	return plan, nil
-}
-
-func (p *sendPlan) use(name string) {
-	if !slices.Contains(p.capabilities, name) {
-		p.capabilities = append(p.capabilities, name)
-	}
 }
 
 func renderMedia(segment *pb.Segment, index uint32) (map[string]any, *plannedUpload, *pb.ErrorInfo) {
