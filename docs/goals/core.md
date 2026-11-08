@@ -53,7 +53,7 @@
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 等待前置 |
-| goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 等待前置 |
+| goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 待派发 |
 | goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8、T-08.11 | 等待前置 |
 | goal-101 | T-08.12 | Adapter 实例配置与 Core 设置的版本迁移 | T-07.6、T-08.11 | 等待前置 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
@@ -3617,53 +3617,58 @@ sdk
 
 ### goal-24 · T-07.2 schedule 注册与运行槽
 
-状态：等待前置（T-05.1、T-07.1）。语句中 goal-2、goal-15、goal-23（contracts/schedule）、goal-76 提供的符号（router.Router、router.Plugin、wire.Session 的 Call、schedule.Trigger、tune.Values、sdk 的 ScheduleRegistry 与分发）只写名字；合并后由审查者核对签名，再改为待派发。
+状态：待派发。前置 T-05.1（PR #67，合并提交 `c6778be`）与 T-07.1（PR #17，合并提交 `0271377`）均已合并。2026-11-08 按合入代码核对并改写：`contracts/schedule` 的 `FromSpec`/`Trigger.Next`、`wire.Request`（已有 `Attach`，本切片只加 `Late`）、`router.Plugin` 与 `router.Invocation`（定时调用经 `Attach` 绑定可信上下文，子调用 `core.send` 按无 Actor 的后台调用准入）、`tune.Values.JobTimeout`、SDK 已有的 `ScheduleRegistry.Every`/`Cron` 与 `Registration.Schedules`；按 D-86 去掉 testdata 测试插件，真实进程的验证在本地测试的临时目录中生成插件。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-24（切片 T-07.2：schedule 注册与运行槽）。goal 目录 goal-24，分支 goal-24，worktree .worktrees/goal-24，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：插件注册的 interval/cron 定时任务经 REGISTER 校验后由 Core Scheduler 按 contracts/schedule 计算触发：每次触发以 Core→插件 REQUEST 调用任务（独立 run_id、JOB_TIMEOUT 期限、无 Actor、不默认 Admin），同一 job 有运行中的调用时跳过本次；到期只结束调用结果并取消，运行槽保留到插件真正返回（迟到响应只释放槽）或旧进程确认退出；不补跑错过的 tick。
+目标：插件注册的 interval/cron 定时任务经 REGISTER 校验后，由 Core Scheduler 按 contracts/schedule 计算触发：每次触发以 Core→插件 REQUEST 调用任务（独立 run_id、JOB_TIMEOUT 期限、无 Actor、不默认 Admin），同一 job 有运行中的调用时跳过本次；到期只结束调用结果并取消，运行槽保留到插件真正返回（迟到响应只释放槽）或旧进程确认退出；不补跑错过的 tick。
 
-依据：PLAN T-07 步骤 1（schedule）、3；CONTRACTS §4.3、§1.2；MESSAGE-MODEL §1.1（scheduled）、§1 末段；WIRE-FORMAT §4；TEST-MATRIX V-20、V-46、V-16 与 V-05 的 scheduled 分项。
+依据：PLAN T-07 步骤 1（schedule）、3；CONTRACTS §4.3、§8（scheduled 的 Send 必须显式 To）；MESSAGE-MODEL §1.1（scheduled）；WIRE-FORMAT §4；TEST-MATRIX V-20、V-46、V-16 与 V-05 的 scheduled 分项。
 
 范围（只新增或修改这些）：
 - contracts/validate/register.go：SCHEDULE 路由的注册校验（调用 schedule.FromSpec）
 - internal/wire/session.go：Request 增加迟到响应回调（只加字段与触发点）
 - 新增 internal/core/scheduler/
-- sdk/：sdk.go 去掉「不支持 scheduled jobs」的拒绝（只改该处）；dispatch.go 分发 SCHEDULE 路由；session.go 的 buildRegister 输出 SCHEDULE 路由
-- 新增 internal/core/supervisor/testdata/jobplugin/
-- 上述包的测试文件
-允许的新跨模块边：internal/core/... -> contracts/schedule、contracts/validate -> contracts/schedule（同属 contracts 与已允许的 internal/core -> contracts）。
+- sdk/sdk.go：删除 Run 中「this SDK version does not support scheduled jobs yet」的拒绝（只改该处）
+- sdk/session.go：buildRegister 输出 SCHEDULE 路由
+- sdk/dispatch.go：businessHandler 分发 SCHEDULE 路由
+- 上述包的 *_local_test.go（不提交）
+允许的新跨模块边：internal/core/scheduler -> contracts/schedule、internal/core/router、internal/wire；contracts/validate -> contracts/schedule（同属 contracts，与已允许的 internal/core -> contracts 一致）。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 1. internal/wire
-   Request 增加字段：Late func(Response) // 非 nil 时，若响应在调用方期限之后才到达，读循环调用一次；期限内到达时不调用
+   Request 增加字段：Late func(Response) // 非 nil 时，若响应在调用方已因期限结束之后才到达，读循环调用一次；期限内到达时不调用。Stats.LateResponses 照常计数。
 2. internal/core/scheduler
    type Scheduler struct{ ... }
-   type Options struct { JobTimeout time.Duration; Now func() time.Time } // JobTimeout 取 tune.Values.JobTimeout
+   type Options struct { JobTimeout time.Duration; Now func() time.Time } // JobTimeout 取 tune.Values.JobTimeout；Now 为 nil 时用 time.Now
    func New(opt Options) *Scheduler
-   func (s *Scheduler) Attach(p router.Plugin, activatedAt time.Time) // 为插件的 SCHEDULE 路由安排下一次触发；anchor 为激活时刻
+   func (s *Scheduler) Attach(p router.Plugin, activatedAt time.Time) // 为插件的 SCHEDULE 路由安排下一次触发；anchor 为激活时刻；同一插件 ID 再次 Attach 时替换为新实例，旧实例仍占用的槽保留
    func (s *Scheduler) Detach(pluginID string)                        // 停止安排新的触发；运行槽保持，直到 Released
    func (s *Scheduler) Released(pluginID string)                       // 旧进程确认退出后调用：释放该插件的全部运行槽
-   func (s *Scheduler) Close()
+   func (s *Scheduler) Close()                                         // 停止全部定时器；不等待在途调用
    type JobStats struct { Runs, Skipped, TimedOut, Late uint64; Running bool }
    func (s *Scheduler) Stats(pluginID, jobID string) JobStats
 
 行为：
-- 注册校验：SCHEDULE 路由的 route_id 为 "job." + job_id；job_id 同插件内唯一；ScheduleSpec 必须恰有 interval_ms 或 cron 之一，经 schedule.FromSpec 校验（interval 至少 1s、cron 五字段、时区合法）；SDK 的 Every/Cron 生成对应描述。
-- 触发：每个 job 用 Trigger.Next(anchor, now) 得到下一次时刻并设定定时器；到点时若该 job 的运行槽空闲则发起一次调用，否则 Skipped 加一、不排队；之后再按 Next 安排（不补跑，跳过的 tick 不累积）。
-- 调用：Request{Target: route_id, Payload: HandlerRequest{route_id, context:{actor 为空, default_target 为空}, event: scheduled 事件（event_id 由 Core 生成、source_kind=SCHEDULER、payload 为 job_id、run_id（16 字节随机值的十六进制）、scheduled_at_unix_ms）}, Deadline: 触发时刻 + JobTimeout, Late: 释放运行槽}。直接调用插件 Session，不经事件队列与派发链。
-- 期限：到期时调用方得到 DEADLINE_EXCEEDED、Cancel 已发出，TimedOut 加一，但运行槽保留；迟到响应（Late 回调）到达时释放槽并计入 Late。期限内的响应（成功或错误）立即释放槽。Session 断开时不释放槽，直到 Released 被调用。
-- SDK：收到 SCHEDULE 路由的请求时以 Context（没有 Actor 与默认 Target，Send 必须显式 To）调用任务函数；ctx 被取消时仍等用户函数真正返回后才发送唯一的 Response。
+- 注册校验：SCHEDULE 路由的 route_id 为 "job." + job_id；job_id 非空且同插件内唯一；ScheduleSpec 必须恰有 interval_ms 或 cron 之一，经 schedule.FromSpec 校验（interval 至少 1s、cron 五字段、时区合法）；job_deadline_ms 必须为 0，期限统一取 JOB_TIMEOUT（SDK 不提供逐任务期限）。任一项不合法时整次注册失败。
+- SDK：buildRegister 为 Registration.Schedules 中每个任务输出 Kind 为 ROUTE_KIND_SCHEDULE、DefaultEnabled 为 true 的路由，Every 填 interval_ms，Cron 填 cron 与 timezone。businessHandler 收到 SCHEDULE 路由的请求时，以 invokeHandler 构造的 Context（没有 Actor 与默认 Target，Send 必须显式 To）调用 Schedule.Handler；ctx 被取消时仍等用户函数真正返回后才发送唯一的 Response。
+- 触发：每个 job 用 Trigger.Next(anchor, now) 得到下一次时刻并设定定时器；到点时若该 job 的运行槽空闲则发起一次调用、Runs 加一，否则 Skipped 加一、不排队；之后再按 Next 安排（不补跑，跳过的 tick 不累积）。不同 job 并发运行。插件 Activated() 为 false 时跳过本次且不计 Skipped。
+- 调用：直接调用插件 Session，不经事件队列与派发链。Request 为：
+  - Target：route_id。
+  - Payload：HandlerRequest{route_id, context: InvocationContext{actor 为空, default_target 为空}, event}；event 由 Core 生成：event_id 为新的随机 ID，event_type 为 "scheduled"，source_kind 为 EVENT_SOURCE_KIND_SCHEDULER，payload 为 ScheduledPayload{job_id, run_id（16 字节随机值的十六进制）, scheduled_at_unix_ms}，没有 Actor、Target 与 adapter 字段。编码与 router 的 Handler 调用相同（PROTOBUF、validate.SchemaID、schema 版本 1）。
+  - Attach：&router.Invocation{PluginID, Event: 上述 event, DefaultTarget: nil}，使任务内的 core.send 等子调用得到可信上下文，并按后台调用要求显式 To 与发信许可。
+  - Deadline：触发时刻 + JobTimeout；Late：释放运行槽。
+- 期限：到期时调用方得到 DEADLINE_EXCEEDED、Cancel 已发出，TimedOut 加一，但运行槽保留；迟到响应（Late 回调）到达时释放槽并计入 Late。期限内的响应（成功或错误）立即释放槽；HandlerOutcome 与错误只记日志，不重试。Session 断开时不释放槽，直到 Released 被调用。
 - 本切片不接统一启停（Draining 时停止新 tick 等属于 T-07.5），也不改 cmd/alonabot 的装配。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：注册校验的各条拒绝；wire 的 Late 回调只在期限后触发且只一次；cron 任务用注入时钟的 Next；Detach 后不再触发；Close 释放定时器；internal/core/supervisor/scheduler_local_test.go（//go:build unix）。构建 testdata/jobplugin（一个每 1s 的 interval 任务，按环境变量决定执行时长并以日志记录 run_id），Launch 后 Attach 到 Scheduler（JobTimeout 设为 2s）：执行 0.2s 时，若干秒内有相应次数的调用，run_id 各不相同，事件没有 Actor；执行 5s 时：第 2s 到期后 TimedOut=1、Running 仍为 true，期间到点的 tick 被 Skipped；第 5s 迟到响应到达后 Late=1、槽释放，下一次 tick 正常调用；任务执行中杀掉插件进程：槽不释放；调用 Released 后释放，新进程 Attach 后从未来的 tick 开始，不补跑。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：注册校验的各条拒绝（route_id 前缀、重复 job_id、两种触发都有或都没有、interval 不足 1s、非法 cron 与时区、非零 job_deadline_ms）；wire 的 Late 回调只在期限后触发且只一次；cron 任务用注入时钟的 Next；Detach 后不再触发；Close 释放定时器；internal/core/supervisor/scheduler_local_test.go（//go:build unix）：在临时目录生成并构建一个插件（每 1s 的 interval 任务，按环境变量决定执行时长，以日志记录 run_id；另一个任务在执行中对显式 To 调用 Send），Launch 后 Attach 到 Scheduler（JobTimeout 设为 2s）：执行 0.2s 时，若干秒内有相应次数的调用，run_id 各不相同，事件没有 Actor；不带 To 的 Send 得到 NO_DEFAULT_TARGET；执行 5s 时：第 2s 到期后 TimedOut=1、Running 仍为 true，期间到点的 tick 被 Skipped；第 5s 迟到响应到达后 Late=1、槽释放，下一次 tick 正常调用；任务执行中杀掉插件进程：槽不释放；调用 Released 后释放，新进程 Attach 后从未来的 tick 开始，不补跑。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/...；go build ./...。
 
-不做：Scheduler 与 HTTP 的统一启停、Draining 与停止预算（T-07.5）；Agent 的定时任务（T-12.6）；持久化的运行记录。
+不做：Scheduler 与 HTTP 的统一启停、Draining 与停止预算（T-07.5）；生产装配（cmd/alonabot）；Agent 的定时任务（T-12.6）；持久化的运行记录；逐任务的期限。
 ```
 
 ### goal-35 · T-08.9 configdb 示例与 T-08 验收
