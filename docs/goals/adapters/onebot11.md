@@ -144,7 +144,7 @@
 不做：Core 侧装配、alonabot run 联验与一致性验收（T-15.3）；消息编辑（OneBot 11 不支持，由 Core 按未声明的 message.edit 拒绝）；合并转发与文件上传（v0.1 不支持）。
 ```
 
-## 第 11 波
+## 第 13 波
 
 ### goal-80 · T-15.3 跨 Adapter 一致性验收
 

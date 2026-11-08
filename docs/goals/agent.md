@@ -45,7 +45,7 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 // Stream 不重发请求；已交给 emit 的文本增量由调用方保留；错误不含 API key 与认证头，附带的 Provider 说明中回显的 key 替换为 [REDACTED]。
 ```
 
-## 第 12 波
+## 第 13 波
 
 ### goal-59 · T-12.2 Agent 对话与流式显示
 
@@ -108,7 +108,7 @@ agent
 不做：工具循环与 MCP（T-12.3）；记忆（T-12.4）；技能（T-12.5）；定时任务（T-12.6）；打包（T-12.7）；真实 Provider（T-10）。
 ```
 
-## 第 13 波
+## 第 14 波
 
 ### goal-83 · T-12.8 文本生成服务
 
@@ -163,7 +163,7 @@ agent
 不做：流式输出与工具调用（契约不提供）；llm_service_allowed_plugins 的专用管理页（配置表单随 T-09 由 Schema 生成）。
 ```
 
-## 第 14 波
+## 第 15 波
 
 ### goal-60 · T-12.3 工具循环与 MCP
 
@@ -244,7 +244,7 @@ agent
 不做：技能（T-12.5）；定时任务（T-12.6）；向量检索或外部记忆后端。
 ```
 
-## 第 15 波
+## 第 16 波
 
 ### goal-62 · T-12.5 技能
 
@@ -318,7 +318,7 @@ agent
 不做：打包与 T-12 验收（T-12.7）；任务的管理页面。
 ```
 
-## 第 16 波
+## 第 17 波
 
 ### goal-64 · T-12.7 官方 Agent 组件打包与 T-12 验收
 
