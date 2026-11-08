@@ -35,6 +35,7 @@ type Server struct {
 	changed       chan struct{}
 	closed        bool
 	files         map[string]platformFile
+	send          sendState // 发送记录、计数和故障同样由 mu 保护。
 }
 
 type queuedUpdate struct {
@@ -181,6 +182,8 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		s.getUpdates(w, r)
 	case "getFile":
 		s.getFile(w, r)
+	case "sendMessage", "sendPhoto", "sendVideo", "sendDocument", "sendMediaGroup", "editMessageReplyMarkup":
+		s.sendMessage(w, r, method)
 	default:
 		s.respond(w, http.StatusNotFound, nil)
 	}
