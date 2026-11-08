@@ -1,4 +1,4 @@
-// Package telegram 实现官方 Telegram Adapter 的账号检查、long polling 接收与媒体取件。
+// Package telegram 实现官方 Telegram Adapter 的账号检查、long polling 接收、媒体取件与发送。
 //
 // [New] 创建供 sdk.RunAdapter 使用的 Adapter。每个实例独占 HTTP 客户端和接收循环；
 // Core 持久化逐条游标，实例仅在收到应答后推进内存状态（MESSAGE-MODEL §6.1）。
@@ -41,13 +41,13 @@ func New() adapter.Adapter {
 	return &telegramAdapter{instances: make(map[string]*instance), now: time.Now}
 }
 
-func receiveCapabilities() []*pb.Capability {
-	return []*pb.Capability{{Name: "message.created", Version: 1, Supported: true}, {Name: "message.edited", Version: 1, Supported: true}, {Name: "member.joined", Version: 1, Supported: true}, {Name: "member.left", Version: 1, Supported: true}, {Name: "reaction.added", Version: 1, Supported: true}}
+func platformCapabilities() []*pb.Capability {
+	return []*pb.Capability{{Name: "message.send", Version: 1, Supported: true}, {Name: "message.markdown", Version: 1, Supported: true}, {Name: "message.album", Version: 1, Supported: true}, {Name: "message.reference", Version: 1, Supported: true}, {Name: "message.buttons", Version: 1, Supported: true}, {Name: "message.created", Version: 1, Supported: true}, {Name: "message.edited", Version: 1, Supported: true}, {Name: "member.joined", Version: 1, Supported: true}, {Name: "member.left", Version: 1, Supported: true}, {Name: "reaction.added", Version: 1, Supported: true}}
 }
 
-// Descriptor 声明接收能力，不声明发送或平台 extension。
+// Descriptor 声明本 Adapter 的接收与发送能力。
 func (*telegramAdapter) Descriptor() *pb.AdapterDescriptor {
-	return &pb.AdapterDescriptor{AdapterId: AdapterID, Capabilities: receiveCapabilities()}
+	return &pb.AdapterDescriptor{AdapterId: AdapterID, Capabilities: platformCapabilities()}
 }
 
 // Start 验证账号和 webhook 后启动该实例唯一的接收循环。
@@ -164,13 +164,8 @@ type instance struct {
 // Account 返回 getMe 验证过的机器人身份。
 func (i *instance) Account() adapter.Account { return i.account }
 
-// Capabilities 返回本实例的接收能力。
-func (*instance) Capabilities() []*pb.Capability { return receiveCapabilities() }
-
-// Send 返回 UNSUPPORTED，且不会发起平台请求。
-func (*instance) Send(context.Context, *pb.Target, *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo) {
-	return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, SafeMessage: "telegram sending is unsupported"}
-}
+// Capabilities 返回与 Adapter 描述共用的能力表。
+func (*instance) Capabilities() []*pb.Capability { return platformCapabilities() }
 
 // Stop 取消在途请求，等待全部接收回调退出后返回。
 func (i *instance) Stop(_ context.Context) error {
