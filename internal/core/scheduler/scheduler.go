@@ -201,6 +201,12 @@ func (s *Scheduler) tick(pluginID string, reg *registration, job *registeredJob,
 	}
 	now := s.now()
 	s.arm(pluginID, reg, job, now)
+	// 后续轮次已到或本轮期限已过时，旧回调只安排未来 tick，避免补跑和空占槽。
+	next := job.trigger.Next(reg.anchor, scheduledAt)
+	if (!next.IsZero() && !now.Before(next)) || !now.Before(scheduledAt.Add(s.jobTimeout)) {
+		s.mu.Unlock()
+		return
+	}
 	if !reg.plugin.Activated() {
 		s.mu.Unlock()
 		return
