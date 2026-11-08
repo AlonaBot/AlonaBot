@@ -35,7 +35,7 @@
 | T-04.6 | goal-87 | 权限、扩展事件与命令解析的协议和 Core 侧：proto 修改与生成；Adapter 权限与扩展事件声明的校验；平台权限的保留与隐含展开、按权限名集合判定；扩展事件的交付校验；`command_prefixes` 与按实例覆盖、去掉开头的 reference 与本账号 mention、非文本 token 与 `user`/`image`/`message` 参数、usage 文案键 | T-04 步骤 8 | T-03.3、T-03.6、T-04.3 | V-85、V-86、V-87 的 Core 分项 | 已完成（PR #78；TEST-MATRIX §3.2） |
 | T-04.7 | goal-88 | SDK 链式注册：命令、文本匹配、事件、Service 与 Event Bus 订阅的 builder，Permission 值对象与 `c.Has`，Service Schema 由生成器生成且 schema_id 由 Go 类型决定，自动回复型可 `c.Send`；生成器、示例与已合并调用方同步 | T-04 步骤 9 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | V-10、V-14 的 SDK 分项 | 已完成（PR #89；TEST-MATRIX §3.2） |
 | T-04.8 | goal-91 | SDK 自有类型与事件常量：Message/Target/Actor/SendResult/错误码与入站片段，标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对事件 Handler 的 payload 类型，`sdk/adapter` 的公共类型；Telegram Adapter、示例与已合并调用方同步 | T-04 步骤 9 | T-04.7、T-04.9 | V-14 的类型分项、V-86 的 SDK 分项 | 未开始 |
-| T-04.9 | goal-96 | 删除构建期标记：去掉 `//alonabot:command`、`//alonabot:event` 的扫描、诊断与生成，命令与事件只经链式注册，示例与测试随之改写（D-79） | T-04 步骤 2 | T-04.7 | V-10 | 未开始 |
+| T-04.9 | goal-96 | 删除构建期标记：去掉 `//alonabot:command`、`//alonabot:event` 的扫描、诊断与生成，命令与事件只经链式注册，示例与测试随之改写（D-79） | T-04 步骤 2 | T-04.7 | V-10 | 已完成（[PR #110](https://github.com/AlonaBot/AlonaBot/pull/110)） |
 | T-05.1 | goal-15 | 可信事件上下文与有界同事件分发：64 条并发链、256 条/8 MiB 等待队列、稳定候选排序、链执行与读循环分离；经回环测试 Adapter 运行，按钮与 scheduled 绑定先用规范 fixture | T-05 步骤 1、2 | T-03.3、T-04.3、T-04.4 | V-13、V-16 的 fixture 分项 | 已完成（PR #67；TEST-MATRIX §3.2） |
 | T-05.2 | goal-16 | SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支 | T-05 步骤 3、4 | T-05.1、T-04.7、T-04.8 | V-14、V-11 的 Rule 分项 | 未开始 |
 | T-05.3 | goal-17 | PreEvent/BeforeSend/AfterSend 三阶段 Hook，send_forbidden 的保存与继承 | T-05 步骤 5、6 | T-05.2 | V-15 的直接路径分项 | 未开始 |
