@@ -321,6 +321,8 @@ message Button {
   string label = 2;
   // 按该 action Schema 校验的 JSON 文本。
   optional string value = 3;
+  // Core 填写的回调令牌；插件填写的值由 Core 清除。
+  optional string core_token = 4;
 }
 
 // ForwardSegment 描述合并转发；仅平台明确支持合并转发时发送。

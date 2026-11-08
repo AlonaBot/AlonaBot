@@ -55,6 +55,14 @@ func TestErrorInfoFieldNumbers(t *testing.T) {
 	}
 }
 
+// TestButtonCoreTokenFieldNumber 固定 Core 回调令牌的字段编号、类型与 optional presence。
+func TestButtonCoreTokenFieldNumber(t *testing.T) {
+	field := (&pb.Button{}).ProtoReflect().Descriptor().Fields().ByNumber(4)
+	if field == nil || field.Name() != "core_token" || field.Kind() != protoreflect.StringKind || !field.HasOptionalKeyword() || !field.HasPresence() || field.IsList() {
+		t.Errorf("Button field 4 should be optional string core_token, got %v", field)
+	}
+}
+
 // 规格列出取值的枚举逐项一致；全部已注册枚举的零值都是 *_UNSPECIFIED。
 func TestEnumValues(t *testing.T) {
 	cases := []struct {
