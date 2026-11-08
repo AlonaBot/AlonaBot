@@ -112,6 +112,7 @@ func (s *Server) Push(events ...json.RawMessage) {
 func (s *Server) Disconnect() {
 	s.mu.Lock()
 	conn := s.conn
+	s.conn = nil // 先撤下连接，避免旧推送循环取走随后排队的离线上报。
 	s.mu.Unlock()
 	if conn != nil {
 		conn.CloseNow()
