@@ -8,7 +8,7 @@
 | --- | --- | --- | --- | --- |
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 已完成（PR #39） |
 | goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 等待前置 |
-| goal-89 | T-03.11 | 官方 Telegram Adapter 的平台权限 | T-04.6 | 等待前置 |
+| goal-89 | T-03.11 | 官方 Telegram Adapter 的平台权限 | T-04.6 | 待派发 |
 
 ## 第 5 波
 
@@ -150,8 +150,49 @@
 
 ### goal-89 · T-03.11 官方 Telegram Adapter 的平台权限
 
-状态：等待前置（T-04.6）。语句只写了目标、依据和要点。依据 D-69 新增。
+状态：待派发。前置 T-04.6（PR #78，合并提交 `0a320c5`）已合并。依据 D-69 新增，2026-11-08 按合入代码写出接口、行为与测试段。已核对：`adapters/telegram` 的 `Descriptor()`（目前只声明接收能力）、`instance.processUpdate` → `normalize` → `Core.Deliver` 的逐条交付、`baseEvent`/`actor` 构造 Actor 的位置、`botClient.call(ctx, method, request, result)`、`telegramtest.Server` 的方法分派；`pb.PermissionDeclaration{name, implies, label_key}` 与 `validate.AdapterRegister` 对权限声明的检查（名称带 `telegram.` 前缀、label_key 非空、隐含不成环）；`Actor.permissions` 由 Core 按声明过滤并展开。
 
-目标：Adapter 描述声明 `telegram.chat_owner` 与 `telegram.chat_admin`；群与超级群中的事件按 `getChatAdministrators` 的会话缓存给出 Actor 的平台权限，缓存 10 分钟，`chat_member`、`my_chat_member` 使缓存作废，获取失败时不带平台权限并记诊断；发布只含常量的 `adapters/telegram/perm`。
+```text
+/goal 使用 $alonabot-execute 推进 goal-89（切片 T-03.11：官方 Telegram Adapter 的平台权限）。goal 目录 goal-89，分支 goal-89，worktree .worktrees/goal-89，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-依据：PLAN T-03 步骤 9；MESSAGE-MODEL §6.1；CONTRACTS §2.3、§8；DECISIONS D-69；TEST-MATRIX V-85。
+目标：官方 Telegram Adapter 在描述中声明 telegram.chat_owner 与 telegram.chat_admin；群与超级群中带 Actor 的事件按 getChatAdministrators 的会话缓存给出 Actor 的平台权限，缓存 10 分钟，该会话的 chat_member、my_chat_member update 使缓存作废，获取失败时本事件不带平台权限并记诊断；发布只含常量的 adapters/telegram/perm。
+
+依据：PLAN T-03 步骤 9（Telegram 实施计划）；MESSAGE-MODEL §6.1；CONTRACTS §2.3、§8（Adapter 权限声明）；DECISIONS D-69；TEST-MATRIX V-85 的 Telegram 分项；Telegram Bot API 的 getChatAdministrators 与 ChatMember（字段名以官方文档为准）。
+
+范围（只新增或修改这些）：
+- adapters/telegram/telegram.go：Descriptor 增加权限声明；processUpdate 在交付前补上平台权限
+- 新增 adapters/telegram/permissions.go：会话缓存与 getChatAdministrators 调用
+- 新增 adapters/telegram/perm/（只含常量）
+- adapters/telegram/telegramtest/server.go：增加 getChatAdministrators 的响应与调用计数
+- adapters/telegram/telegram_test.go：增加一个测试；其他 *_local_test.go（不提交）
+没有新的跨模块边；perm 不 import 任何包。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. adapters/telegram/perm
+   const ChatOwner = "telegram.chat_owner"
+   const ChatAdmin = "telegram.chat_admin"
+   包文档说明插件以 sdk.PermissionName(perm.ChatAdmin) 等方式引用，本包不链接 Adapter 运行时代码。
+2. adapters/telegram
+   Descriptor() 在现有能力之外依次声明 permissions：
+     {name: perm.ChatOwner, implies: [perm.ChatAdmin], label_key: "permission.chat_owner"}
+     {name: perm.ChatAdmin, implies: ["chat_admin"], label_key: "permission.chat_admin"}
+   缓存有效期为命名常量 10 分钟，经实例已有的 now 计时。
+3. adapters/telegram/telegramtest
+   func (s *Server) SetChatAdministrators(chatID int64, status int, members ...json.RawMessage) // status 为 200 时返回 members（ChatMember 对象）；其他值返回该 HTTP 状态与 Bot API 错误体；未设置的 chat 返回 400
+   func (s *Server) Calls(method string) int // 某个 Bot API 方法累计被调用的次数
+
+行为：
+- 适用范围：chat.type 为 group 或 supergroup、且事件有 Actor 的事件（message.created、message.edited、member.joined/left 的操作人、reaction.added）。私聊、频道、没有 Actor 的事件（含 sender_chat 发送的消息）不带平台权限，也不调用 getChatAdministrators。
+- 取值：在 processUpdate 中、normalize 之后、Deliver 之前，按 chat_id 取会话缓存的管理员列表；缓存缺失或超过 10 分钟时调用 getChatAdministrators（以接收循环的 ctx 为期限）并写入缓存。Actor.external_user_id 对应的成员 status 为 creator 时 Actor.permissions 为 [perm.ChatOwner]，为 administrator 时为 [perm.ChatAdmin]，不在列表中时为空。只给平台事实，隐含关系由 Core 展开。
+- 作废：update 为 chat_member 或 my_chat_member 时，先作废该 chat 的缓存，再为本 update 的事件取值（因此成员变更事件使用变更后的列表）。
+- 失败：getChatAdministrators 失败（网络错误、非 200、无法解析）时，本次 update 的事件照常交付但不带平台权限，记 WARN（adapter_instance_id、chat_id 与经 safeError 脱敏的错误，不含 token）；失败结果不写入缓存，下一个事件重新获取。401 等凭证失效不在此处改变实例状态，由接收循环原有的处理负责。
+- 不改变游标推进、交付顺序与现有事件字段；一次 update 产生多个事件（reaction）时只获取一次。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：adapters/telegram/telegram_test.go 的 TestPlatformPermissions。用 telegramtest.Server 与现有的 Core 测试替身驱动实例：超级群中 creator、administrator 与普通成员各发一条消息，依次交付的 Actor.permissions 为 [telegram.chat_owner]、[telegram.chat_admin]、[]；三条消息只调用一次 getChatAdministrators；私聊消息不带平台权限且不增加调用次数；推入该群的 chat_member update 后，再发消息会重新获取；getChatAdministrators 返回 500 时消息照常交付且不带平台权限。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Descriptor 经 validate.AdapterRegister 检查通过，隐含关系为 telegram.chat_owner → telegram.chat_admin → chat_admin；注入时钟后 10 分钟内不重复获取、超过后重新获取；my_chat_member 作废；不同 chat 的缓存互不影响；sender_chat 消息与频道消息不调用；一次 reaction update 产生两个事件时只获取一次；失败的 WARN 日志不含 token；失败后下一个事件重新获取。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./adapters/...；go build ./...。
+
+不做：Core 侧的权限过滤与展开（T-04.6 已完成）；按钮点击 Actor 的平台权限（随 T-03.8 的 callback_query 处理）；权限文案的 i18n 文件（label_key 的文案随 Adapter 包的 i18n 目录由打包切片加入）；OneBot 11 的平台权限（T-15.1）。
+```
