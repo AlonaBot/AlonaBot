@@ -1,6 +1,7 @@
 package onebot11
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -57,7 +58,7 @@ func (i *instance) deliverEvents() {
 		if !received.source.valid || i.receiveCtx.Err() != nil {
 			continue
 		}
-		event, err := i.normalize(received.raw)
+		event, err := i.normalize(i.receiveCtx, received.raw)
 		if errors.Is(err, errStringMessage) {
 			i.fail(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, errStringMessage.Error())
 			return
@@ -84,7 +85,7 @@ func (i *instance) deliverEvents() {
 	}
 }
 
-func (i *instance) normalize(raw json.RawMessage) (*pb.Event, error) {
+func (i *instance) normalize(ctx context.Context, raw json.RawMessage) (*pb.Event, error) {
 	// 1. 身份来自已复核的登录账号，错误账号的上报不进入 Core。
 	var post onebotPost
 	if err := json.Unmarshal(raw, &post); err != nil {
@@ -135,7 +136,7 @@ func (i *instance) normalize(raw json.RawMessage) (*pb.Event, error) {
 
 	// 3. 消息与通知分别构造对应的 payload，Core 保留字段留空。
 	if post.PostType == "message" {
-		return i.messageEvent(post, event)
+		return i.messageEvent(ctx, post, event)
 	}
 	return i.noticeEvent(post, event)
 }
@@ -146,7 +147,7 @@ func (i *instance) ignore(post onebotPost) {
 		"post_type", i.config.redact.Replace(post.PostType), "notice_type", i.config.redact.Replace(post.NoticeType), "ignored", i.ignored)
 }
 
-func (i *instance) messageEvent(post onebotPost, event *pb.Event) (*pb.Event, error) {
+func (i *instance) messageEvent(ctx context.Context, post onebotPost, event *pb.Event) (*pb.Event, error) {
 	// 1. 先检查来源标识与数组片段，避免向 Core 交付不完整的消息。
 	if post.MessageID == nil || (post.SubType != "anonymous" && post.UserID == nil) {
 		return nil, errors.New("missing onebot message_id or user_id")
@@ -181,8 +182,44 @@ func (i *instance) messageEvent(post onebotPost, event *pb.Event) (*pb.Event, er
 	event.EventType = "message.created"
 	event.SourceEventId = proto.String(platformID)
 	event.Message = &pb.PlatformMessage{PlatformMessageId: platformID, Chain: chain}
-	event.EventPayload = &pb.EventPayload{Kind: &pb.EventPayload_MessageCreated{MessageCreated: &pb.MessageCreatedPayload{PlatformMessageId: platformID, Chain: chain}}}
+	event.EventPayload = &pb.EventPayload{Kind: &pb.EventPayload_MessageCreated{MessageCreated: &pb.MessageCreatedPayload{PlatformMessageId: platformID, Chain: chain, ToMe: i.toMe(ctx, post.MessageType == "private", chain)}}}
 	return event, nil
+}
+
+func (i *instance) toMe(ctx context.Context, private bool, chain *pb.MessageChain) bool {
+	// 1. 私聊和显式提及已足够判断，无需查询引用消息。
+	if private {
+		return true
+	}
+	for _, segment := range chain.Segments {
+		if segment.GetMention().GetExternalUserId() == i.account.ID {
+			return true
+		}
+	}
+	// 2. 引用只按 get_msg 的实际发送者判断，单次查询失败仍可检查后续引用。
+	for _, segment := range chain.Segments {
+		reference := segment.GetReference()
+		if reference == nil {
+			continue
+		}
+		var message struct {
+			Sender struct {
+				UserID *int64 `json:"user_id"`
+			} `json:"sender"`
+		}
+		if err := i.call(ctx, "get_msg", map[string]any{"message_id": json.Number(reference.OriginalPlatformMessageId)}, &message); err != nil {
+			slog.Debug("onebot get_msg failed", "adapter_instance_id", i.id, "error", i.config.safeError(err))
+			continue
+		}
+		if message.Sender.UserID == nil {
+			slog.Debug("onebot get_msg response has no sender user_id", "adapter_instance_id", i.id)
+			continue
+		}
+		if strconv.FormatInt(*message.Sender.UserID, 10) == i.account.ID {
+			return true
+		}
+	}
+	return false
 }
 
 func (i *instance) noticeEvent(post onebotPost, event *pb.Event) (*pb.Event, error) {
