@@ -144,7 +144,7 @@ func (i *instance) call(ctx context.Context, action string, params any, result a
 	// 1. 在写出请求前登记 echo，响应先到也能保留在独立的缓冲 channel。
 	i.mu.Lock()
 	conn := i.conn
-	if conn == nil || i.ctx.Err() != nil {
+	if conn == nil || i.receiveCtx.Err() != nil {
 		i.mu.Unlock()
 		return &sdk.Error{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, Message: "onebot connection is closed"}
 	}
@@ -200,13 +200,14 @@ func (i *instance) call(ctx context.Context, action string, params any, result a
 	}
 }
 
-func (i *instance) readConnection(conn *websocket.Conn) (readError error) {
+func (i *instance) readConnection(source *receiveConnection) (readError error) {
+	conn := source.conn
 	defer conn.CloseNow()
 	defer func() { i.disconnect(conn, readError) }()
 	for {
-		_, raw, err := conn.Read(i.ctx)
+		_, raw, err := conn.Read(i.receiveCtx)
 		if err != nil {
-			if i.ctx.Err() == nil {
+			if i.receiveCtx.Err() == nil {
 				slog.Warn("onebot websocket read failed", "adapter_instance_id", i.id, "error", i.config.safeError(err))
 			}
 			return err
@@ -240,7 +241,7 @@ func (i *instance) readConnection(conn *websocket.Conn) (readError error) {
 			continue
 		}
 		select { // 上报排队不得阻塞读取 API 响应；队列满时丢弃新上报。
-		case i.events <- raw:
+		case i.events <- receivedEvent{raw: raw, source: source}:
 		default:
 			i.dropped++
 			slog.Warn("onebot event queue full", "adapter_instance_id", i.id, "dropped", i.dropped)

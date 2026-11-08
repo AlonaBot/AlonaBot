@@ -1,12 +1,11 @@
-// Package onebot11 实现官方 OneBot 11 Adapter 的正向 WebSocket 连接与账号检查。
+// Package onebot11 实现官方 OneBot 11 Adapter 的正向 WebSocket 连接与事件接收。
 //
-// [New] 创建供 sdk.RunAdapter 使用的 Adapter。每个实例独占连接和读取循环；
-// API 请求通过实例内递增的 echo 配对，实例生命周期由 Stop 管理。
+// [New] 创建供 sdk.RunAdapter 使用的 Adapter。每个实例独占连接、读取循环和
+// 逐条交付循环；API 请求通过实例内递增的 echo 配对，生命周期由 Stop 管理。
 package onebot11
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"strconv"
 	"sync"
@@ -50,7 +49,7 @@ func (*onebotAdapter) Descriptor() *pb.AdapterDescriptor {
 	}
 }
 
-// Start 验证配置、连接和账号，成功后将实例的读取循环交给 Stop 管理。
+// Start 验证配置、连接和账号，成功后将读取与交付循环交给 Stop 管理。
 func (*onebotAdapter) Start(ctx context.Context, request adapter.StartRequest, core adapter.Core) (adapter.Instance, error) {
 	// 1. 配置原文含凭证，校验错误只返回字段名。
 	config, err := parseConfig(request.ConfigJSON)
@@ -64,39 +63,51 @@ func (*onebotAdapter) Start(ctx context.Context, request adapter.StartRequest, c
 
 	// 2. 读取循环先就绪，才能在同一连接上等待登录 API 的 echo 响应。
 	lifetime, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	receiveCtx, cancelReceive := context.WithCancel(lifetime)
 	i := &instance{
 		config: config, core: core, id: request.InstanceID,
 		conn: conn, pending: make(map[string]chan apiResult),
 		ctx: lifetime, cancel: cancel, done: make(chan struct{}),
-		events: make(chan json.RawMessage, eventQueueCapacity),
+		receiveCtx: receiveCtx, cancelReceive: cancelReceive,
+		deliveryDone: make(chan struct{}), failures: make(chan *pb.ErrorInfo, 1),
+		events: make(chan receivedEvent, eventQueueCapacity),
 	}
-	readDone := i.startRead(conn)
+	source := i.startRead(conn)
 	account, err := i.login(ctx)
 	if err != nil {
 		cancel()
 		conn.CloseNow()
-		<-readDone // Start 失败不启动重连，先收回唯一的读取循环。
+		<-source.readDone // Start 失败不启动交付与重连，先收回唯一的读取循环。
 		return nil, &sdk.Error{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, Message: config.safeError(err).Error()}
 	}
 	i.account = account
+	source.valid = true
+	close(source.checked) // 先发布账号复核结果，再让交付循环消费该连接的上报。
 	// 3. 登录成功后才启动生命周期管理，Start 失败始终不重试。
-	go i.maintainConnection(readDone)
+	go i.deliverEvents()
+	go i.maintainConnection(source)
 	slog.Debug("connected onebot websocket", "adapter_instance_id", i.id, "url", config.safeURL)
 	return i, nil
 }
 
 // instance 由 mu 保护连接、echo 序号和在途调用；account 在 Start 返回前写入，之后只读。
-// 读取循环唯一写入 events；等待调用结果的 goroutine 通过缓冲 channel 接收响应或断线错误。
+// 读取循环唯一写入 events；交付循环按连接的账号复核结果消费上报。
+// receiveCtx 控制平台读写与交付；致命故障先结束这些操作，再用 ctx 报告故障，Stop 可取消两者。
 type instance struct {
-	config  connectionConfig
-	core    adapter.Core
-	id      string
-	account adapter.Account
-	ctx     context.Context
-	cancel  context.CancelFunc
-	done    chan struct{}
-	events  chan json.RawMessage
-	dropped uint64 // 仅由读取循环累加。
+	config        connectionConfig
+	core          adapter.Core
+	id            string
+	account       adapter.Account
+	ctx           context.Context
+	cancel        context.CancelFunc
+	receiveCtx    context.Context
+	cancelReceive context.CancelFunc
+	done          chan struct{} // 生命周期循环回收读与交付循环并完成故障报告后关闭。
+	deliveryDone  chan struct{}
+	failures      chan *pb.ErrorInfo // 容量为 1，保留首个致命故障供生命周期循环报告。
+	events        chan receivedEvent
+	dropped       uint64 // 仅由读取循环累加。
+	ignored       uint64 // 仅由交付循环累加。
 
 	mu       sync.Mutex
 	conn     *websocket.Conn
@@ -115,17 +126,22 @@ func (*instance) Send(context.Context, *pb.Target, *pb.MessageChain) (*pb.SendRe
 	return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, SafeMessage: "onebot sending is unsupported"}
 }
 
-// Stop 取消退避、握手和读取，关闭连接并等待生命周期循环退出后返回。
+// Stop 取消退避、握手、读取和交付，等待全部循环与故障报告结束后返回。
 func (i *instance) Stop(context.Context) error {
 	i.cancel()
+	i.stopReceive()
+	<-i.done
+	return nil
+}
+
+func (i *instance) stopReceive() {
+	i.cancelReceive()
 	i.mu.Lock()
 	conn := i.conn
 	i.mu.Unlock()
 	if conn != nil {
 		conn.CloseNow()
 	}
-	<-i.done // 生命周期循环收回全部读取 goroutine 后才确认停止。
-	return nil
 }
 
 func (i *instance) login(ctx context.Context) (adapter.Account, error) {
