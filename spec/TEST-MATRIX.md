@@ -113,6 +113,7 @@
 | V-103 | T-04 | 管理员与封禁按 Adapter 登记（D-105）：admins 的用户字符串（含 `:` 的用户 ID）、旧的对象写法、不合法的 adapter_id 与重复项；同一 Adapter 两个实例中的 Core Admin、用户禁止与会话禁止；另一个 Adapter 中相同的 external_user_id；写回后的格式 | 用户字符串往返；问题项使 Core 拒绝启动并指出下标；两个实例都得到 admin，都受禁止约束；另一个 Adapter 的同号用户不受影响；写回为字符串数组且保留其他键的写法 |
 | V-104 | T-08 | 文案函数只返回字符串（D-106）：c.T 与 sdk.T 的常量键与参数名在 check 与 build 中的检查（缺键、参数不成对、名字不是常量、名字集合不符；键不是常量时不检查）；运行时的未知键、缺少参数与多余参数；没有 i18n 资源的插件 | 构建期问题带文件、行、列并使构建失败；运行时返回键名或保留占位符原文，同一问题在一个 Session 内只记一条 WARN，日志不含参数值 |
 | V-105 | T-03 | 带类型的按钮动作（D-107）：Action 的版本（有与没有 SchemaVersion）与不合法的动作名、Button 的 value 编码失败、OnButton 的路由 ID 与 `button.` 保留前缀、点击后 Handler 收到的值、value 解码失败 | 编码失败的按钮在发出请求前返回 INVALID_ARGUMENT；文本匹配或事件路由使用 `button.` 前缀时注册失败；Handler 收到与发送时相同的值；解码失败时记 WARN（不含 value）且不调用 Handler |
+| V-106 | T-04 | 片段构造函数与单片段发送（D-108）：各构造函数与对应的结构体字面量；c.Send、sdk.Send、编辑与自动回复分别收单个片段、Chain、nil 与空 Chain；自动回复写成 (message.Chain, error) | 构造结果与字面量相同；单个片段与只含它的 Chain 发出的请求相同；nil 与空 Chain 不自动回复，显式 Send 时为 INVALID_ARGUMENT；旧签名在 Collect 时报错并带 route_id |
 
 ## 2. 跨任务验收的最终闭合点
 

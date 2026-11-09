@@ -335,7 +335,7 @@ type VersionedMigrator interface {
 - 上传、读取自己拥有的媒体不要求发信许可；Core 对真实事件签发的 IncomingMedia token 本身授予该 Session 的对象读取权。Read 只认有效 token/read 范围，Send 另行检查上述目标授权。Grant 不扩大对象、操作、Target 或有效期，只向当前已激活且满足原对象消费范围的 Session 签发受限 read token；入站对象及其派生对象的接收者还须与该事件有合法在途调用关联，或已获源实例许可；插件自己上传的对象可由 owner 显式委托当前 Activated 接收 Session 只读使用，Core 记录委托且保持原对象/有效期/Target 限制。上述关联由 Core 验证，接收者再次 Send 仍须通过自己的发信准入。
 - MessageChain 为一次逻辑 Send 的有序片段。平台可能调用多次 API，必须保留所有确认 ID。接受、部分成功、明确拒绝、结果未知与未尝试部分按 MESSAGE-MODEL 处理；RPC 可同时返回 SendResult 和 ErrorInfo，错误不丢失已经发生的结果。
 - Edit 修改一条已发送的平台消息，输入为 Target、platform_message_id 和新的 Chain，Target 准入与 Send 相同。v0.1 的 Edit Chain 只能包含一个 text 片段和至多一个 buttons 片段。每次 Edit 同样执行 BeforeSend → Adapter.Edit → AfterSend，Hook 输入标明本次操作为 edit。目标 Adapter 未声明 `message.edit` 能力时返回 UNSUPPORTED；平台拒绝（例如消息不可编辑或内容未变化）按 MESSAGE-MODEL §4 报告，不改为发送新消息。
-- 自动回复 Handler `(Chain,error)` 成功且 Chain 非空时，Core 在 Handler 返回后发送一次，排在该 Handler 内的显式 Send 之后；两种 Handler 都可以显式多次 Send（D-70）。StopPropagation 通过 Context/HandlerOutcome 表达。返回空 Chain 是无自动回复，显式 Send 空 Chain 是参数错误。
+- 自动回复 Handler `(Content,error)`（Content 是 Chain 或单个片段，D-108）成功且内容非空时，Core 在 Handler 返回后发送一次，排在该 Handler 内的显式 Send 之后；两种 Handler 都可以显式多次 Send（D-70）。StopPropagation 通过 Context/HandlerOutcome 表达。返回空 Chain 是无自动回复，显式 Send 空 Chain 是参数错误。
 - 整条 Chain 先验证并生成有序物理操作计划，再开始平台调用；无法表达的组合在首个副作用前返回 UNSUPPORTED。Reference、按钮、相册和文本不能静默丢弃/重排。Telegram 按钮使用 Core token 关联真实点击 Actor、当前权限、路由代次与目标，协议确认不等于业务成功。
 - 通用能力的范围（D-87）：通用的 Segment、Core 服务与 SDK 方法只收两个官方 Adapter 都支持且语义一致的能力；只有一个平台具备的能力由该 Adapter 以 extension 片段、扩展事件或平台动作提供，不新增通用接口。
 - 撤回（D-93）：`core.delete` 的 Target 准入与 Edit 相同，Core 经 `adapter.delete` 交给目标实例；实例未声明 `message.delete` 时 Core 在调用 Adapter 前返回 UNSUPPORTED。撤回不带消息内容，不执行出站 Hook，但与 Send 一样不能在出站 Hook 中调用，也不自动重试。语义见 MESSAGE-MODEL §4A。

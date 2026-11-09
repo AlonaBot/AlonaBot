@@ -74,39 +74,39 @@ func (p *RSS) Events(r *sdk.EventRegistry) {
         Handle(p.Poke)
 }
 
-func (p *RSS) List(c *sdk.Context) (message.Chain, error) {
+func (p *RSS) List(c *sdk.Context) (message.Content, error) {
     c.StopPropagation()
-    return message.Chain{message.Text("订阅列表")}, nil
+    return message.Text("订阅列表"), nil
 }
 
 func (p *RSS) Add(c *sdk.Context, url string) error {
-    _, err := c.Send(message.Chain{message.Text("已收到订阅请求")})
+    _, err := c.Send(message.Text("已收到订阅请求"))
     return err
 }
 
 func (p *RSS) Poke(c *sdk.Context, e *obevent.PokePayload) error {
-    _, err := c.Send(message.Chain{message.Text("别戳啦")})
+    _, err := c.Send(message.Text("别戳啦"))
     return err
 }
 ```
 
 注册采用链式构建（D-70）：命令、文本匹配、事件与 Service 各由注册器的方法开始，`Handle` 结束；漏写 `Handle` 是注册错误。分组上设置的权限由组内路由继承。Permission 是不可变的值，用 `Or` 组合，满足其中任一即可（D-69）；Rule 是在 SDK 内执行的 Go 函数，`Rule(...)` 多个时全部满足，`sdk.Any` 表示任一。事件常量带 payload 的 Go 类型，`Collect` 核对 Handler 的参数类型；Adapter 的常量包（例如 `adapters/onebot11/perm`、`adapters/onebot11/event`）只含常量与数据类型，插件导入它们不链接 Adapter 的运行时。插件 API 不暴露生成的 pb 类型，Message、Target、Actor、SendResult 与错误码由 SDK 自己定义。
 
-两类 Handler 保留：返回 `(Chain,error)` 的自动回复型成功时由 Core 在 Handler 返回后发一次非空 Chain；两种 Handler 都可以在内部多次 `c.Send`（D-70）。包级 `sdk.Send` 只供没有 Handler 上下文的后台任务使用。`c.StopPropagation()` 锁存传播结果，由 SDK 统一编码到 HandlerOutcome；不会给开发者增加第三套 Handler 签名。
+两类 Handler 保留：返回 `(Content,error)` 的自动回复型成功时由 Core 在 Handler 返回后发一次非空内容，Content 是 Chain 或单个片段，每种片段都有构造函数（D-108）；两种 Handler 都可以在内部多次 `c.Send`（D-70）。包级 `sdk.Send` 只供没有 Handler 上下文的后台任务使用。`c.StopPropagation()` 锁存传播结果，由 SDK 统一编码到 HandlerOutcome；不会给开发者增加第三套 Handler 签名。
 
 Handler 调用受普通请求期限约束，返回后不能再以原上下文工作。需要等待用户回复或较长时间生成时，Handler 请求一次延续调用：Core 在本次调用结束后，以原可信上下文另发一个独立期限的调用，它不占用分发链（CONTRACTS §2.4）。多轮等待只在延续调用内使用：
 
 ```go
 func (p *Quiz) Start(c *sdk.Context) error {
     return c.Continue(func(c *sdk.Context) error {
-        if _, err := c.Send(message.Chain{message.Text(c.T("quiz.ask"))}); err != nil {
+        if _, err := c.Send(message.Text(c.T("quiz.ask"))); err != nil {
             return err
         }
         reply, err := c.Wait(2 * time.Minute) // 同一用户在同一会话的下一条消息
         if err != nil {
             return err
         }
-        _, err = c.Send(message.Chain{message.Text(c.T("quiz.got", "answer", reply.Text()))})
+        _, err = c.Send(message.Text(c.T("quiz.got", "answer", reply.Text())))
         return err
     })
 }

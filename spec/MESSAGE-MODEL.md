@@ -64,7 +64,7 @@ Core/Adapter 先验证整个 Chain 的结构、顺序、片段数、媒体租约
 
 保留两种开发者 Handler 形式：
 
-- `func(c *Context, ...) (Chain, error)`：自动回复模式；成功返回非空 Chain 后由 Core 自动 Send 一次，排在 Handler 内显式 `c.Send` 之后。返回空 Chain 且无错误代表不回复（D-70）。
+- `func(c *Context, ...) (Content, error)`：自动回复模式，Content 是 Chain 或单个片段（D-108）；成功返回非空内容后由 Core 自动 Send 一次，排在 Handler 内显式 `c.Send` 之后。返回空 Chain 且无错误代表不回复（D-70）。
 - `func(c *Context, ...) error`：主动发送模式；Handler 可在内部调用一次或多次 `c.Send`，每次独立形成 SendResult。自动回复模式内的显式 Send 规则相同。
 
 两个签名都通过 `c.StopPropagation()` 锁存本次 Handler 的停止标记；默认 Continue，不增加第三套返回签名。SDK 把本次执行结果转为统一的 `HandlerOutcome`：

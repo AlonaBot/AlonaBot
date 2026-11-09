@@ -42,7 +42,7 @@
 | T-04.5 | goal-14 | 用同一 SDK 升级示例，完成构建与策略验收，汇总证据 | T-04 步骤 6、7 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9 | V-10、V-11、V-12、V-43、V-49 的 T-04 分项 | 未开始 |
 | T-04.6 | goal-87 | 权限、扩展事件与命令解析的协议和 Core 侧：proto 修改与生成；Adapter 权限与扩展事件声明的校验；平台权限的保留与隐含展开、按权限名集合判定；扩展事件的交付校验；`command_prefixes` 与按实例覆盖、去掉开头的 reference 与本账号 mention、非文本 token 与 `user`/`image`/`message` 参数、usage 文案键 | T-04 步骤 8 | T-03.3、T-03.6、T-04.3 | V-85、V-86、V-87 的 Core 分项 | 已完成（PR #78；TEST-MATRIX §3.2） |
 | T-04.7 | goal-88 | SDK 链式注册：命令、文本匹配、事件、Service 与 Event Bus 订阅的 builder，Permission 值对象与 `c.Has`，Service Schema 由生成器生成且 schema_id 由 Go 类型决定，自动回复型可 `c.Send`；生成器、示例与已合并调用方同步 | T-04 步骤 9 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | V-10、V-14 的 SDK 分项 | 已完成（PR #89；TEST-MATRIX §3.2） |
-| T-04.8 | goal-91 | SDK 自有类型与事件常量：Message/会话字符串与可选的 `sdk.Via`（D-102）/消息句柄（D-104）/Actor/SendResult/错误码与入站片段，标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对事件 Handler 的 payload 类型，`sdk/adapter` 的公共类型；Telegram Adapter、示例与已合并调用方同步 | T-04 步骤 9 | T-03.9、T-03.24、T-04.7、T-04.9 | V-14 的类型分项、V-86 的 SDK 分项，V-101、V-102 的 SDK 分项 | 未开始 |
+| T-04.8 | goal-91 | SDK 自有类型与事件常量：Message/会话字符串与可选的 `sdk.Via`（D-102）/消息句柄（D-104）/片段构造函数与单片段发送（D-108）/Actor/SendResult/错误码与入站片段，标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对事件 Handler 的 payload 类型，`sdk/adapter` 的公共类型；Telegram Adapter、示例与已合并调用方同步 | T-04 步骤 9 | T-03.9、T-03.24、T-04.7、T-04.9 | V-14 的类型分项、V-86 的 SDK 分项，V-101、V-102 的 SDK 分项，V-106 | 未开始 |
 | T-04.9 | goal-96 | 删除构建期标记：去掉 `//alonabot:command`、`//alonabot:event` 的扫描、诊断与生成，命令与事件只经链式注册，示例与测试随之改写（D-79） | T-04 步骤 2 | T-04.7 | V-10 | 已完成（[PR #110](https://github.com/AlonaBot/AlonaBot/pull/110)） |
 | T-04.10 | goal-122 | 管理员与封禁按 Adapter 登记：`admins` 改用用户字符串，禁止表按 adapter_id，对该 Adapter 的全部实例生效（D-105） | T-04 步骤 10 | T-04.4、T-07.6 | V-103 | 未开始 |
 | T-05.1 | goal-15 | 可信事件上下文与有界同事件分发：64 条并发链、256 条/8 MiB 等待队列、稳定候选排序、链执行与读循环分离；经回环测试 Adapter 运行，按钮与 scheduled 绑定先用规范 fixture | T-05 步骤 1、2 | T-03.3、T-04.3、T-04.4 | V-13、V-16 的 fixture 分项 | 已完成（PR #67；TEST-MATRIX §3.2） |
@@ -310,7 +310,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 
 8. **改造权限、扩展事件与命令解析的协议和 Core 侧。** 按 WIRE-FORMAT §5A 的 2026-11-01 条目修改 proto 并重新生成。Core 校验 Adapter 的权限与扩展事件声明（前缀、名称、隐含关系无环、Schema 可编译）；交付事件时只保留已声明的平台权限并展开隐含关系，按声明校验扩展事件；路由按权限名集合判定（CONTRACTS §2.3）。按 CONTRACTS §2.2 实现 `command_prefixes` 与按实例覆盖、去掉开头的 reference 与指向本账号的 mention、非文本 token、`user`/`image`/`message` 参数与 usage 文案键。同步修改已合并的 router、remote Adapter、`sdk/adapter`、Telegram Adapter 与集成测试（D-69、D-71、D-72）。
 
-9. **SDK 改为链式注册并使用自有类型。** 按 D-70 把命令、文本匹配、事件、Service 与 Event Bus 订阅的注册改为链式构建，删除 `RouteOption`、`ServiceOption` 与位置参数形式；新增 Permission 值对象（`Or`）与 `c.Has`、标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对 Handler 的参数类型；Service 的 Schema 由生成器从 Go 类型生成；Context、Send、事件 payload 与错误码改用 SDK 自有类型，发送目标用会话字符串，机器人用可选的 `sdk.Via`（D-102），编辑与引用用消息句柄（D-104），自动回复型 Handler 可以 `c.Send`。构建期生成器、示例、`sdk/adapter` 的公共类型与已合并调用方同步修改。链式注册（含 Permission 与 Service Schema）为 T-04.7，自有类型、事件常量与 `sdk/adapter` 的公共类型为 T-04.8（2026-11-04 拆分）。
+9. **SDK 改为链式注册并使用自有类型。** 按 D-70 把命令、文本匹配、事件、Service 与 Event Bus 订阅的注册改为链式构建，删除 `RouteOption`、`ServiceOption` 与位置参数形式；新增 Permission 值对象（`Or`）与 `c.Has`、标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对 Handler 的参数类型；Service 的 Schema 由生成器从 Go 类型生成；Context、Send、事件 payload 与错误码改用 SDK 自有类型，发送目标用会话字符串，机器人用可选的 `sdk.Via`（D-102），编辑与引用用消息句柄（D-104），每种片段都有构造函数，Send、编辑与自动回复收 Chain 或单个片段（D-108），自动回复型 Handler 可以 `c.Send`。构建期生成器、示例、`sdk/adapter` 的公共类型与已合并调用方同步修改。链式注册（含 Permission 与 Service Schema）为 T-04.7，自有类型、事件常量与 `sdk/adapter` 的公共类型为 T-04.8（2026-11-04 拆分）。
 
 10. **管理员与封禁按 Adapter 登记（D-105）。** `core_config.json` 的 `admins` 与状态库的禁止表改用用户字符串 `<adapter_id>:<external_user_id>`，会话禁止按 `<adapter_id>:<chat_id>`；Router 按事件的 adapter_id 判定 admin，CheckCommand 与 CheckSend 按 adapter_id 判定禁止，同一 Adapter 的全部实例共用。同步已合并的 policy、router 与 settings；管理入口（T-09.4、T-09.14）与 /whoami（T-14.1）按新格式实现。
 
@@ -336,6 +336,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 | V-85～V-87 | Adapter 权限与扩展事件的声明校验、平台权限的保留与展开、命令前缀与非文本参数；Telegram 的平台权限由 T-03.11、OneBot 11 的由 T-15.1 提供 |
 | V-102 | 消息句柄的格式与往返，SendResult 与 Event 给出句柄，编辑与引用只收句柄；撤回分项由 T-03.16 提供 |
 | V-103 | 同一 Adapter 的多个实例共用 Core Admin 与禁止名单；用户字符串的解析、校验与写回 |
+| V-106 | 片段构造函数与 `message.Content`：单个片段、Chain 与 nil 经 Send、编辑与自动回复的结果 |
 
 V-12 是跨任务验收：T-04 不依赖尚不存在的 WebUI，但必须交付后续 UI 实际调用的策略服务层。矩阵中保存分项证据；只有 T-09 的鉴权后浏览器操作也完成，才将整项 V-12 标为通过。T-04 完成后，T-05 和 T-08 可以分别使用同一注册器继续实施。
 
@@ -362,7 +363,7 @@ V-12 是跨任务验收：T-04 不依赖尚不存在的 WebUI，但必须交付�
 
 2. **实现有界的同事件分发。** 接收入口统一执行 Normalize→PreEvent→命令/类型匹配与 Core 权限→SDK Rule/Handler。普通事件每条链顺序执行，跨事件最多 64 条并发；等待队列不超过 256 条且 8 MiB，并计入已有 Core payload 总预算。候选按 priority/plugin_id/route_id 稳定排序；入站超额明确拒绝/丢弃并计数，接收游标依 T-03 规则处理。链执行从 Session 读循环分离，慢 Handler 不能停止 Response/Cancel/控制帧处理。
 
-3. **完成 SDK Rule 与 HandlerOutcome。** 自定义 Rule 与目标 Handler 在同一 RPC 中执行；默认 AND，显式 OR 通过 SDK 组合，false/error 均不运行目标函数。SDK 提供按 message.created 的 `to_me` 判断的 `ToMe` Rule。适配 `error` 与 `(Chain,error)` 两个签名，返回明确 matched/propagation；只有自动模式成功返回非空 Chain 时触发一次 Send，自动模式中的显式 Send 拒绝。手动模式允许多次 Send。panic 转 INTERNAL 并保留诊断，不吞成成功；Context 返回后失效。
+3. **完成 SDK Rule 与 HandlerOutcome。** 自定义 Rule 与目标 Handler 在同一 RPC 中执行；默认 AND，显式 OR 通过 SDK 组合，false/error 均不运行目标函数。SDK 提供按 message.created 的 `to_me` 判断的 `ToMe` Rule。适配 `error` 与 `(Content,error)` 两个签名（D-108），返回明确 matched/propagation；只有自动模式成功返回非空 Chain 时触发一次 Send，自动模式中的显式 Send 拒绝。手动模式允许多次 Send。panic 转 INTERNAL 并保留诊断，不吞成成功；Context 返回后失效。
 
 4. **固定传播与错误分支。** c.StopPropagation() 在 SDK 锁存，结果即使同时携带 ErrorInfo 也保留 Stop；普通事件 Rule false 跳过、业务错误默认继续，显式 Stop 终止后续候选。已识别命令则沿用 T-04 的消费状态，不因 Rule false/error 回落。测试 Handler 已发送后失败的情况，确保不会补发、撤销已确认消息或自动发送错误回复；后台 goroutine 不得修改已返回结果或继续借用失效父调用。
 
