@@ -1,0 +1,5 @@
+{
+  "messages": {
+    "core.usage.command": "Usage: {prefix}{command}{aliases}{arguments}"
+  }
+}

@@ -4,6 +4,7 @@
 // 扫描遵守 GOOS/GOARCH 和 build tags，排除外部依赖、vendor 与测试文件。
 // 配置从 config_schema.json 检查并嵌入，翻译覆盖按声明核对（CONTRACTS §5.1、§5.3）。
 // JSON Service 类型经 go/types 检查生成 Schema（§3）；注册规则见 §9、§2.2。
+// 构建入口的 i18n/*.json 按 §5.3、§5.4 检查并将原文嵌入生成代码。
 //
 // 包的组成：[Scan] 接收 [Options]，返回描述、源码与 [Diagnostic] 汇总的 [Result]。
 package generate
@@ -44,7 +45,7 @@ type Diagnostic struct {
 	Message string
 }
 
-// Result 保存扫描描述、生成源码和全部诊断。
+// Result 保存扫描描述、生成源码和全部构建诊断。
 type Result struct {
 	RootType     string // 导入路径.类型名
 	ConfigSchema []byte // config_schema.json 的规范 JSON；没有该文件时为 nil
@@ -78,10 +79,11 @@ type scan struct {
 	entry          listedPackage
 	roots          []declaration
 	serviceSchemas map[string][]byte
+	i18nFiles      map[string][]byte // 已读文案原文；全量诊断通过后才嵌入，没有资源时为 nil。
 	syntax         map[string][]*ast.File
 }
 
-// Scan 按目标环境扫描源码并生成 Schema 嵌入代码。源码问题记入 Diagnostics；
+// Scan 按目标环境扫描源码与文案资源并生成嵌入代码。输入问题记入 Diagnostics；
 // 工具链或 IO 失败返回 error，go list 失败时保留 stderr。
 func Scan(ctx context.Context, opt Options) (*Result, error) {
 	// 1. 由 Go 工具链确定依赖与实际参与构建的文件。
@@ -167,6 +169,9 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 		}
 	}
 	s.checkTypes()
+	if err := s.readI18n(); err != nil {
+		return nil, err
+	}
 	if err := s.configSchema(); err != nil {
 		return nil, err
 	}

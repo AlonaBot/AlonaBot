@@ -5,9 +5,10 @@ import (
 	"reflect"
 )
 
-// Generated 提供构建期生成的配置与 Service Schema；nil 字段表示没有对应项。
+// Generated 提供构建期生成的配置/Service Schema 与文案原文；nil 字段表示没有对应项。
 type Generated struct {
 	ServiceSchemas map[string][]byte // schema_id 对应的规范 JSON Service Schema。
+	I18n           map[string][]byte // i18n 文件名对应的原文；无文案资源时为 nil。
 	ConfigSchema   []byte            // config_schema.json 的规范 JSON；没有该文件时为 nil。
 }
 
