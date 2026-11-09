@@ -8,7 +8,7 @@
 // 命令与事件 Handler 可通过 Context.Send 回复原事件目标；自动回复型命令返回 Chain，由 Core 发送一次。
 // 文本匹配与 Raw 共用 Handler 调用上下文；HTTP 路由由 SDK 托管 Listener 并校验 Session 凭证。
 // [Context.T] 按 Actor 与 Core 默认语言格式化文案；后台调用 [T] 使用 Core 默认语言。
-// 定时任务尚未实现。
+// 定时任务随 REGISTER 声明，由 Core Scheduler 触发；其 Handler 没有 Actor 与默认 Target，Send 须显式 To。
 //
 // 包的组成：
 //   - 插件的 main 调用 [Run]；[Collect] 单独收集注册项，供检查与测试使用。
@@ -138,7 +138,7 @@ func Run(root Root) error {
 	}
 	defer lock.Unlock()
 
-	// 2. 收集静态注册项；HTTP 需要真实 Listener、调度需要 Core Scheduler，不静默丢弃这些声明。
+	// 2. 收集静态注册项；HTTP 路由与定时任务随 REGISTER 一并声明。
 	reg, err := Collect(root)
 	if err != nil {
 		return err
