@@ -3,6 +3,7 @@
 // 命令、文本匹配与事件由根插件的注册方法链式注册（CONTRACTS §9.1）。
 // 扫描遵守 GOOS/GOARCH 和 build tags，排除外部依赖、vendor 与测试文件。
 // 配置从 config_schema.json 检查并嵌入，翻译覆盖按声明核对（CONTRACTS §5.1、§5.3）。
+// instance_schema.json 按同样规则检查，无插件根类型时只返回实例声明的检查结果。
 // JSON Service 类型经 go/types 检查生成 Schema（§3）；注册规则见 §9、§2.2。
 // 构建入口的 i18n/*.json 按 §5.3、§5.4 检查并将原文嵌入生成代码。
 //
@@ -47,9 +48,9 @@ type Diagnostic struct {
 
 // Result 保存扫描描述、生成源码和全部构建诊断。
 type Result struct {
-	RootType     string // 导入路径.类型名
+	RootType     string // 导入路径.类型名；只有实例声明时为空。
 	ConfigSchema []byte // config_schema.json 的规范 JSON；没有该文件时为 nil
-	Source       []byte // 完整 gofmt 源码；有诊断时为 nil
+	Source       []byte // 完整 gofmt 源码；有诊断或只有实例声明时为 nil。
 	Diagnostics  []Diagnostic
 }
 
@@ -85,8 +86,9 @@ type scan struct {
 
 // Scan 按目标环境扫描源码与文案资源并生成嵌入代码。输入问题记入 Diagnostics；
 // 工具链或 IO 失败返回 error，go list 失败时保留 stderr。
+// 有实例声明且没有插件根类型时仅检查实例声明，返回的 RootType 为空、Source 为 nil。
 func Scan(ctx context.Context, opt Options) (*Result, error) {
-	// 1. 由 Go 工具链确定依赖与实际参与构建的文件。
+	// 1. 检查实例声明，再由 Go 工具链确定依赖与实际参与构建的文件。
 	dir, err := filepath.Abs(opt.Dir)
 	if err != nil {
 		return nil, fmt.Errorf("resolve plugin directory: %w", err)
@@ -95,6 +97,20 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 	dir, err = filepath.EvalSymlinks(dir)
 	if err != nil {
 		return nil, fmt.Errorf("resolve plugin directory links: %w", err)
+	}
+	s := &scan{files: token.NewFileSet(), dir: dir, syntax: make(map[string][]*ast.File)}
+	instanceSchema, err := s.instanceSchema()
+	if err != nil {
+		return nil, err
+	}
+	if instanceSchema {
+		hasSource, err := hasBuildSource(dir)
+		if err != nil {
+			return nil, err
+		}
+		if !hasSource {
+			return &s.result, nil
+		}
 	}
 	// 生成文件中的旧 import 不参与依赖闭包，文件本身保持原样。
 	overlay, err := os.CreateTemp("", "alonabot-scan-*.json")
@@ -149,7 +165,6 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 			packages = append(packages, pkg)
 		}
 	}
-	s := &scan{files: token.NewFileSet(), dir: dir, syntax: make(map[string][]*ast.File)}
 	for _, pkg := range packages {
 		if filepath.Clean(pkg.Dir) == dir {
 			s.entry = pkg
@@ -167,6 +182,9 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 				return nil, err
 			}
 		}
+	}
+	if instanceSchema && len(s.roots) == 0 {
+		return &s.result, nil
 	}
 	s.checkTypes()
 	if err := s.readI18n(); err != nil {
