@@ -28,7 +28,7 @@
 | T-03.10 | goal-9 | 开发入口：用 `alonabot run` 运行 Telegram Adapter 与示例插件（实例写在 `core_config.json`），echo/media 示例与发送接收故障矩阵，汇总证据 | T-03 步骤 8 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | V-07、V-08、V-09、V-35、V-44、V-45、V-48、V-51～V-54 的 T-03 分项；真实 Telegram 需要测试账号 | 未开始 |
 | T-03.12 | goal-99 | 后台发信许可缺省为全部实例：`allowed_adapter_instances` 改为「全部实例」或管理员收紧后的实例集合，准入与撤销语义不变（D-83） | T-03 步骤 3 | T-03.2 | V-07 | 已完成（PR #90；TEST-MATRIX §3.2） |
 | T-03.13 | goal-104 | 媒体按来源传递：MediaSource 的 `inline_base64` 与只在 Core→Adapter 方向出现的 `platform_file`，同一实例的入站对象复用平台文件标识，`core.media.url` 与统一端口上的临时媒体 URL，SDK 字节构造函数的内联与上传选择（D-88） | T-03 步骤 10 | T-03.6、T-04.8、T-07.7 | V-89 的 Core 分项 | 未开始 |
-| T-03.14 | goal-105 | 新增片段与字段：voice 片段、forward 的 platform_message_id 与 platform_forward_id、Button 的 url；Chain 校验与能力判定，按钮签发跳过 url 按钮，SDK 构造函数与入站类型（D-89、D-91、D-97） | T-03 步骤 11 | T-03.8、T-04.8 | V-90 的 Core 分项 | 未开始 |
+| T-03.14 | goal-105 | 新增片段与字段：voice 片段、forward 的 platform_message_id 与 platform_forward_id、Button 的 url、Event 的 chat_type；Chain 校验与能力判定，按钮签发跳过 url 按钮，入站事件的 chat_type 校验，SDK 构造函数、入站类型与会话类型方法（D-89、D-91、D-97、D-100） | T-03 步骤 11 | T-03.8、T-04.8 | V-90、V-98 的 Core 分项 | 未开始 |
 | T-03.15 | goal-106 | 平台动作：Adapter 描述的动作声明与校验，`core.action` 与 `adapter.action`，目标准入与参数、结果 Schema 校验，`adapter_dependencies` 的动作检查，SDK 的底层动作调用方法、供 Adapter 包带类型函数使用的调用者接口与 `sdk/adapter` 的可选接口（D-92） | T-03 步骤 12 | T-03.8、T-04.8 | V-91 的 Core 分项 | 未开始 |
 | T-03.16 | goal-107 | 撤回：`core.delete` 与 `adapter.delete`，`message.delete` 能力判定与准入，每个 ID 的结果汇总，SDK 方法（D-93） | T-03 步骤 13 | T-03.9、T-04.8 | V-92 的 Core 分项 | 未开始 |
 | T-03.17 | goal-108 | 命令菜单同步：`adapter.commands.sync`，按实例筛选命令与翻译说明，2 秒合并与失败诊断（D-96） | T-03 步骤 14 | T-04.6、T-04.7、T-04.8、T-08.8 | V-93 的 Core 分项 | 未开始 |
@@ -214,7 +214,7 @@ Adapter 以安装包和独立进程运行（CONTRACTS §8）。以下步骤中�
 
 10. **媒体按来源传递（D-88）。** MediaSource 追加 `inline_base64`：Core 校验标准 base64 与解码后 1 B～1 MiB，拒绝宿主路径与其他 scheme；追加只由 Core 填写的 `platform_file`，插件给出时 INVALID_ARGUMENT。Send 的目标实例就是 incoming_ref 的来源实例时，Core 把 Adapter 原先提供的平台文件标识作为 `platform_file` 交给 Adapter，不取件。实现 Adapter 调用的 `core.media.url`：为本次发送的只读 token 签发 32 字节随机 url_token，到期不晚于消费租约；Core 在统一端口以 GET、HEAD 提供 `/media/<url_token>`，支持 Range，到期或租约结束后 404，日志只记录 url_token 的前缀。SDK 的字节构造函数在 1 MiB 内生成 inline_base64，超出时先上传为 media_ref。
 
-11. **新增片段与字段（D-89、D-91、D-97）。** 在 proto 中追加 voice 片段、ForwardItem 的 `platform_message_id`、ForwardSegment 的 `platform_forward_id`、Button 的 `url`，按 MESSAGE-MODEL §2 校验：来源恰有一个、chain 与 platform_message_id 恰有一个、嵌套 forward、platform_forward_id 只能出现在入站、url 与 action_id 恰有一个且 url 按钮不带 value。Core 在调用 Adapter 前按 `message.voice`、`message.forward` 判定能力；按钮签发跳过 url 按钮。SDK 追加构造函数与入站类型。只有一个平台具备的片段（例如全体提及）由该 Adapter 的 extension 提供，不在此追加（D-87）。
+11. **新增片段与字段（D-89、D-91、D-97）。** 在 proto 中追加 voice 片段、ForwardItem 的 `platform_message_id`、ForwardSegment 的 `platform_forward_id`、Button 的 `url`，按 MESSAGE-MODEL §2 校验：来源恰有一个、chain 与 platform_message_id 恰有一个、嵌套 forward、platform_forward_id 只能出现在入站、url 与 action_id 恰有一个且 url 按钮不带 value。Core 在调用 Adapter 前按 `message.voice`、`message.forward` 判定能力；按钮签发跳过 url 按钮。SDK 追加构造函数与入站类型。只有一个平台具备的片段（例如全体提及）由该 Adapter 的 extension 提供，不在此追加（D-87）。Event 追加 `chat_type`（新增枚举 ChatType，D-100）：Core 在入站标准化时拒绝没有 target 却不是 UNSPECIFIED 的事件，chat_type 不参与 Target 的比较与准入；SDK 的 Context 提供 `ChatType()` 与 `IsPrivate`、`IsGroup`、`IsChannel`，UNSPECIFIED 时都为 false。
 
 12. **平台动作（D-92）。** Adapter 描述追加动作声明，Core 在注册时校验名称、版本、Schema 与作用范围。实现 `core.action`：按 CONTRACTS §8 的发信准入检查目标，核对动作声明、版本与参数 Schema，经 `adapter.action` 交给实例，再按结果 Schema 校验；结果未知时返回 UNAVAILABLE 或 DEADLINE_EXCEEDED，不重试。manifest 的 `adapter_dependencies` 追加所需动作，启用检查与 extension 相同。SDK 提供底层动作调用方法，以及 Context 与后台客户端共同实现的调用者接口，供 Adapter 包的带类型函数使用；`sdk/adapter` 以可选接口让实例实现动作。
 
@@ -231,6 +231,8 @@ Adapter 以安装包和独立进程运行（CONTRACTS §8）。以下步骤中�
 18. **Telegram 的平台动作（含输入状态、表情回应与草稿）与撤回。** 在[Telegram 实施计划](adapters/telegram.md#t-03-的-telegram-步骤)中实施。
 
 19. **Telegram 的命令菜单。** 在[Telegram 实施计划](adapters/telegram.md#t-03-的-telegram-步骤)中实施。
+
+20. **Telegram 的代理模式与话题判定。** 在[Telegram 实施计划](adapters/telegram.md#t-03-的-telegram-步骤)中实施。
 
 #### 拟目录与交付
 
@@ -257,6 +259,8 @@ Adapter 以安装包和独立进程运行（CONTRACTS §8）。以下步骤中�
 | V-53 | 编辑成功、平台拒绝、不支持与不合规的 Chain、每次编辑的出站 Hook |
 | V-54 | Telegram language_code 到 Actor.locale 的映射；文案选择由 T-08 实现 |
 | V-89～V-95 | 步骤 10～16 的协议与 Core 侧分项；两个官方 Adapter 的分项由 T-03.20～T-03.22 与 T-15.4～T-15.6 提供 |
+| V-98 | 步骤 11 中 chat_type 的 Core 与 SDK 分项；两个官方 Adapter 的填写由 T-03.20 与 T-15.5 提供 |
+| V-99、V-100 | Telegram 的代理模式与话题判定（步骤 20） |
 
 T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求本包的 Telegram 部分先完成；T-04.5 的示例升级在本包示例完成后进行。真实平台验证尚未运行的部分继续保持未完成，由 T-10 汇总补齐。完整普通事件排序、自动回复、Hook 和命令策略组合分别在 T-04/T-05 闭合。
 

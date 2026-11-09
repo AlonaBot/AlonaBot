@@ -328,7 +328,7 @@ type VersionedMigrator interface {
 - Core 只接受 Adapter 为它在本 Session 中已启动的实例交付的事件：Target 与事件中的 adapter_id、adapter_instance_id、account_id 必须与该实例一致，否则拒绝并记诊断。event_id 由 Core 生成；Actor 的权限集合由 Core 按 §2.3 计算，Adapter 只提供平台给出的身份与平台权限；平台权限中未声明的名字由 Core 丢弃并记诊断。同一 `adapter_id` 下的同一平台账号只能有一个已启动实例（唯一入站 owner），由 Core 依据 `adapter.instance.start` 返回的 account_id 检查。
 - 接收游标由 Core 持久化：Adapter 每交付一条事件都附带交付后的不透明游标，Core 先写状态库，再接纳事件并应答；Adapter 收到应答后才处理下一条。没有事件时的游标变化（例如空闲轮次重建）使用单独的游标保存调用。实例启动时，Core 把已保存的游标交给 Adapter。
 - 平台凭证只在 `adapter.instance.start` 中下发给所属 Adapter 进程，不进入插件进程、日志或普通响应。入站媒体的平台文件标识留在 Adapter，Core 以 IncomingMedia token 映射，首次 Read 时经 `adapter.media.read` 取件；出站媒体由 Core 为该次发送向 Adapter Session 签发只读 token，Adapter 经 `core.media.read` 读取。
-- 官方 Telegram Adapter 用 getMe 验证真实账号与实例配置。v0.1 只支持 long polling 接收，已有 webhook 时明确报错，不自行删除。实例配置为 `token`（Secret，必填）、`api_base_url`（缺省 `https://api.telegram.org`，用于本地 Bot API 服务或模拟服务）、`file_base_url`（可选，文件下载地址的前缀，缺省由 api_base_url 推出，D-99）与 `proxy`（Secret，可选，http、https 或 socks5 URL，可含用户名与密码）。实例设置了 `proxy` 时，该实例的全部 Bot API 请求（含 getFile 与文件下载）经它发出，优先于 §15.1 的全局代理；未设置时使用全局代理。代理连接失败按网络错误处理，接收退避重连，不改为直连。
+- 官方 Telegram Adapter 用 getMe 验证真实账号与实例配置。v0.1 只支持 long polling 接收，已有 webhook 时明确报错，不自行删除。实例配置为 `token`（Secret，必填）、`api_base_url`（缺省 `https://api.telegram.org`，用于本地 Bot API 服务或模拟服务）、`file_base_url`（可选，文件下载地址的前缀，缺省由 api_base_url 推出，D-99）、`proxy_mode`（`none`、`core` 或 `custom`，缺省 `none`，D-101）与 `proxy`（Secret，http、https 或 socks5 URL，可含用户名与密码，只在 custom 时使用并且必填）。代理模式决定该实例的全部 Bot API 请求（含 getFile 与文件下载）如何发出：none 直连，不读取代理环境变量，也不使用 §15.1 的全局代理；core 使用 Core 为子进程设置的代理环境（§15.1）；custom 经实例的 `proxy` 发出，`proxy` 为空或不合法时实例启动返回 INVALID_ARGUMENT。非 custom 模式下 `proxy` 不生效，原值保留。代理连接失败按网络错误处理，接收退避重连，不改为直连。
 - 官方 OneBot 11 Adapter（D-46、D-94）有两种连接方式，同一连接都承载 API 调用与事件上报（通用端点）：`forward` 由 Adapter 主动连接实现端，`reverse` 由实现端经 Core 统一端口连入 Adapter 注册的 HTTP 路由（§7.2），外部地址为 `<base_url>/plugins/<Adapter 包 ID>/ws/<instance_id>`。实例配置为 `mode`（缺省 `forward`，可选 `reverse`）、`ws_url`（forward 必填，`ws://` 或 `wss://`）、`access_token`（Secret；forward 可选，握手时以 `Authorization: Bearer` 发送；reverse 必填，Adapter 以恒时比较校验实现端的 `Authorization: Bearer` 或 `access_token` 查询参数）、`self_id`（reverse 必填，十进制 QQ 号）、`media_url_base`（可选，实现端访问 Core 媒体 URL 时使用的前缀，缺省为 `base_url`，§1.3）与 `media_dir`（可选，`local` 为 Adapter 可写的共享目录，`remote` 为实现端看到的同一目录，缺省与 local 相同）。forward 模式用 `get_login_info` 取得账号；握手被拒（401、403）时实例致命失败；连接断开按与 Telegram 相同的有界退避重连。reverse 模式的 account_id 取 `self_id`，实例启动时不等待连入；握手的 `X-Self-ID` 不等于 self_id 或 `X-Client-Role` 不是 Universal 时返回 403，已有连接时返回 409；连入后调用 `get_login_info` 核对账号并取得展示名，不符时关闭连接并记诊断；断开后实例继续等待，不报告致命错误，未连接期间 Send 返回 UNAVAILABLE。两种模式重连都不重放已提交的 Send。上报事件的 `self_id` 必须等于该实例的账号，否则丢弃并记诊断。OneBot 11 没有事件重放：断线期间的事件不补收，游标保持为空。只接受数组格式的消息上报，收到字符串（CQ 码）格式时实例致命失败，并在 safe_error 中提示修改实现端的上报格式。映射、能力、发送计划与动作见 MESSAGE-MODEL §7。
 - Target 为 adapter_id/adapter_instance_id/account_id/chat_id/thread_id?。默认目标仅来自入站真实事件；无默认目标且未指定 To 返回 NO_DEFAULT_TARGET，不能由回执 message ID 猜测凭证。
 - Core 为每个 plugin_id 持久化后台发信许可 `allowed_adapter_instances`：缺省允许全部实例（D-83），管理员可以经既有插件权限配置把它收紧为指定实例的集合；协议 required_capabilities 不等于发信许可。持有仍在途的可信平台事件调用链时，插件及其合法 Service 子调用可向 Core 保留的原始完整 Target 回复，无需额外实例许可。独立后台、scheduled 或不同 Target 的 Send 必须显式 To，且目标实例在该插件许可集合中；再检查实例启用、account 绑定和 Core 全局禁止。许可覆盖该实例显式 chat/thread 目标，不赋予 User/Admin 或其他实例权限；无许可返回 PERMISSION_DENIED，动态撤销在下一次 Send 准入时生效。
@@ -435,7 +435,7 @@ Core 可执行文件与 SDK 根包只链接 [docs/development.md](../docs/develo
 | §15 运行方式 | T-07.6 `core_config.json` 与首次 token；T-09.4 `alonabot run` 与管理服务；T-13 开发运行、热部署与库模式；T-14 发行包、容器镜像、install.sh 与预装插件 |
 | §17 插件测试套件 | T-13.1 根包 `Start`；T-16 `plugintest` 与示例插件的测试；T-16.3 LLM 替身 |
 | §16 调优参数 | T-02.2 参数表、`--args` 与 Bootstrap 下发；之后的切片把新增的可调值登记到同一参数表 |
-| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-76、V-82～V-97 和五目标运行结果 |
+| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-76、V-82～V-100 和五目标运行结果 |
 
 ## 12. 跨层状态机与恢复不变量
 
@@ -590,7 +590,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | `log.level`、`log.format` | `info`、`text` | §14.2、§14.3 |
 | `log.file.enabled`、`log.file.max_size`、`log.file.max_total`、`log.file.max_age_days` | `true`、`100MiB`、`1GiB`、`30` | §14.6 |
 | `log.sources` | 空 | 按插件或 Adapter 包设置的日志级别（§14.3） |
-| `proxy` | 空 | 出站代理 URL（http、https 或 socks5），Telegram 实例自己的 `proxy` 优先（§8）；非空时 Core 为自身与所有子进程设置 `HTTP_PROXY`、`HTTPS_PROXY`。为空时，Core 把自身环境中的 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY` 原样传给子进程 |
+| `proxy` | 空 | 出站代理 URL（http、https 或 socks5）；Telegram 实例只在 `proxy_mode` 为 core 时使用这里的代理环境（§8，D-101）；非空时 Core 为自身与所有子进程设置 `HTTP_PROXY`、`HTTPS_PROXY`。为空时，Core 把自身环境中的 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY` 原样传给子进程 |
 | `admins` | 空 | Core Admin 列表，元素为 `{"instance": "<adapter_instance_id>", "user": "<external_user_id>"}`（§2.3） |
 | `command_prefixes` | `["/"]` | 命令前缀（§2.2）；`command_prefixes_by_instance` 按 Adapter 实例覆盖；列表不能为空，不带前缀的命令写 `[""]` |
 | `default_locale` | `en-US` | 机器人回复的缺省语言（§5.4） |

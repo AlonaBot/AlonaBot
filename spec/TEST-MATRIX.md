@@ -105,6 +105,9 @@
 | V-95 | T-03、T-15 | Adapter HTTP 路由与 OneBot 11 反向 WebSocket（D-94）：Adapter REGISTER 携带 HTTP 路由；统一端口代理 WebSocket Upgrade；路由撤销时关闭已升级的连接；反向连接的 access_token 错误、X-Self-ID 不符、X-Client-Role 不是 Universal、重复连接、未知 instance_id；连入后账号不符；断开后重连；未连接时 Send；日志脱敏 | 依次返回 401、403、403、409、404；账号不符时关闭连接并记诊断；断开期间实例不失败、不生成 bot.offline，Send 为 UNAVAILABLE；重连后照常收发；access_token 不出现在日志、错误与响应中 |
 | V-96 | T-15 | OneBot 11 扩展事件与入站片段（D-95）：十种 notice 与 request 的映射（含 NapCat 的 input_status）、Target 与 Actor、Schema 校验；用 set_friend_add_request 处理好友请求；入站 face、record、file（有与没有 url）、forward、at all | 每种上报得到声明的扩展事件且 payload 符合 Schema；未声明的 notice 与 request 仍只计数；入站片段按 MESSAGE-MODEL §7.1 映射，file 没有 url 时 readability 为 UNSUPPORTED |
 | V-97 | T-03 | Telegram 媒体小项（D-99）：GIF 位于连续图片中间、inline_base64 的 GIF、https_url 的 GIF；入站 animation、video_note、静态与动态贴纸；`file_base_url` 指向自建 Bot API 服务 | GIF 用 sendAnimation 并把前后图片分成两组，顺序不变；入站映射与 MESSAGE-MODEL §6.4 一致；文件下载使用 file_base_url |
+| V-98 | T-03、T-15 | 会话类型（D-100）：两个官方 Adapter 的私聊、群聊、超级群、频道、群临时会话与好友通知的 chat_type；没有 target 却给出 chat_type 的事件；SDK 的会话类型方法 | Telegram 的 private、group 与 supergroup、channel 分别为 PRIVATE、GROUP、CHANNEL，OneBot 11 的 `private:` 与 `group:` 分别为 PRIVATE、GROUP；无 target 的事件带 chat_type 时 Core 拒绝；UNSPECIFIED 时三个判断方法都为 false；chat_type 不影响 Target 的比较与准入 |
+| V-99 | T-03 | Telegram 实例的代理模式（D-101）：缺省、none 且设置了代理环境变量、core、custom、custom 缺少或给出非法 proxy、非 custom 时 proxy 为非法值、代理不可达 | 缺省与 none 直连且不读取环境变量；core 使用 Core 为子进程设置的代理环境；custom 的全部请求（含 getFile 与文件下载）经实例的 proxy；custom 缺少或非法 proxy 时启动返回 INVALID_ARGUMENT，非 custom 时 proxy 不校验；代理不可达按网络错误退避，不改为直连 |
+| V-100 | T-03 | Telegram 的话题判定（D-100）：论坛话题内的消息、论坛的 General 话题、非论坛超级群的回复串、插件给出 thread_id 发往指定话题 | 只有 is_topic_message 为 true 的消息带 thread_id；General 话题与回复串没有 thread_id；出站的 thread_id 作为 message_thread_id |
 
 ## 2. 跨任务验收的最终闭合点
 
@@ -138,7 +141,7 @@
 | V-82 | T-03.8 manifest 角色解析；T-12.8 `@agent` 解析 | T-09.4 同类唯一、`--source` 与 `--replace` 的正式管理流程 |
 | V-83 | T-08.1 表单选项图标的构建检查（已由 D-74 取消，T-08.10 删除） | T-09.12 WebUI 文件与图标的提供、Admin API 版本检查 |
 | V-85～V-87 | T-04.6 Core 侧校验、展开与命令解析；T-04.8 SDK 事件常量与类型核对；T-03.11、T-15.1 两个官方 Adapter 的平台权限 | T-16 用 `plugintest.Adapter` 覆盖依赖平台权限与扩展事件的路由；V-87 的 usage 语言选择随 T-08.8 完成 |
-| V-89～V-97 | T-03.13～T-03.19 的协议与 Core 侧；T-03.20～T-03.22 的 Telegram 实现；T-15.4～T-15.6 的 OneBot 11 实现 | T-10.1 汇总两个 Adapter 的模拟服务证据；真实 Telegram 与 QQ 端只记录维护者的手测，没有时为未运行 |
+| V-89～V-100 | T-03.13～T-03.19 的协议与 Core 侧；T-03.20～T-03.23 的 Telegram 实现；T-15.4～T-15.6 的 OneBot 11 实现 | T-10.1 汇总两个 Adapter 的模拟服务证据；真实 Telegram 与 QQ 端只记录维护者的手测，没有时为未运行 |
 
 T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前者可支持后续开发，真实平台部分仍由 T-10 查证。测试会话、无配置/无 DB 最小插件和 payload fixture 的范围必须写明，不可据此关闭生产认证或数据恢复用例。
 

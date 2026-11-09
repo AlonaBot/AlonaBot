@@ -53,7 +53,7 @@
 | goal-101 | T-08.12 | Adapter 实例配置与 Core 设置的版本迁移 | T-07.6、T-08.11 | 待派发 |
 | goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2、T-04.9、T-08.8 | 等待前置 |
 | goal-104 | T-03.13 | 媒体按来源传递 | T-03.6、T-04.8、T-07.7 | 等待前置 |
-| goal-105 | T-03.14 | 新增片段与字段 | T-03.8、T-04.8 | 等待前置 |
+| goal-105 | T-03.14 | 新增片段与字段（含会话类型） | T-03.8、T-04.8 | 等待前置 |
 | goal-106 | T-03.15 | 平台动作 | T-03.8、T-04.8 | 等待前置 |
 | goal-107 | T-03.16 | 撤回 | T-03.9、T-04.8 | 等待前置 |
 | goal-108 | T-03.17 | 命令菜单同步 | T-04.6、T-04.7、T-04.8、T-08.8 | 等待前置 |
@@ -3489,7 +3489,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-101 · T-08.12 Adapter 实例配置与 Core 设置的版本迁移
 
-状态：待派发。前置 T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）与 T-08.11（goal-95，PR #103，合并提交 `c840af7`）均已合并。依据 D-85 新增；2026-11-09 审查者按 main `3dec9a0` 的代码写出接口、行为与测试段。已核对：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)`（同时检查 `$version` 与 `$migrations`）、`Schema.Version() int`、`Migrate(config map[string]any, from int) error`、`Complete(config map[string]any)`、`Validate(config map[string]any) error`、`SecretPaths() [][]string`；`internal/core/settings` 的 `Settings.Adapters map[string]AdapterSettings{Version int; Instances map[string]json.RawMessage}`（实例配置已展开 `${...}`）、`File.Update(edit func(*Document) error)` 以磁盘原文为底稿并保留 `${...}` 原写法、`readVersion` 只接受 `currentVersion = 1`；`remote.Process.StartInstance(ctx, instanceID, configJSON)` 启动实例，但目前没有装配处从 `Settings.Adapters` 启动实例（归 goal-39 与 goal-9）；Telegram 在 `New().Start` 中解析 `token`（必填）、`api_base_url`（缺省 `https://api.telegram.org`）与 `proxy`；`alonabot plugin generate`/`check`（`sdk/generate.Scan`）只处理插件工程，`alonabot build`/`pack` 尚未实现。
+状态：待派发。前置 T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）与 T-08.11（goal-95，PR #103，合并提交 `c840af7`）均已合并。依据 D-85 新增；2026-11-09 审查者按 main `3dec9a0` 的代码写出接口、行为与测试段。已核对：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)`（同时检查 `$version` 与 `$migrations`）、`Schema.Version() int`、`Migrate(config map[string]any, from int) error`、`Complete(config map[string]any)`、`Validate(config map[string]any) error`、`SecretPaths() [][]string`；`internal/core/settings` 的 `Settings.Adapters map[string]AdapterSettings{Version int; Instances map[string]json.RawMessage}`（实例配置已展开 `${...}`）、`File.Update(edit func(*Document) error)` 以磁盘原文为底稿并保留 `${...}` 原写法、`readVersion` 只接受 `currentVersion = 1`；`remote.Process.StartInstance(ctx, instanceID, configJSON)` 启动实例，但目前没有装配处从 `Settings.Adapters` 启动实例（归 goal-39 与 goal-9）；Telegram 在 `New().Start` 中解析 `token`（必填）、`api_base_url`（缺省 `https://api.telegram.org`）与 `proxy`；`alonabot plugin generate`/`check`（`sdk/generate.Scan`）只处理插件工程，`alonabot build`/`pack` 尚未实现。2026-11-09 新增的 goal-117（D-101）给 Telegram 实例配置追加 `proxy_mode`：goal-117 先合并时，本切片的 Telegram instance_schema.json 按执行顺序 §3 一并声明它（options none、core、custom，缺省 none，proxy 带 condition）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-101（切片 T-08.12：Adapter 实例配置与 Core 设置的版本迁移）。goal 目录 goal-101，分支 goal-101，worktree .worktrees/goal-101，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -3619,19 +3619,20 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-105 · T-03.14 新增片段与字段
 
-状态：等待前置（T-03.8、T-04.8）。2026-11-09 按 D-87、D-89、D-91、D-97 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+状态：等待前置（T-03.8、T-04.8）。2026-11-09 按 D-87、D-89、D-91、D-97 新增，同日按 D-100 追加 Event 的 chat_type。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
 
-目标：在通用消息模型中追加两个官方 Adapter 都支持的语音片段 voice、合并转发的引用节点与入站转发标识、URL 按钮，Core 在调用 Adapter 前完成结构校验与能力判定，SDK 提供对应的构造函数与入站类型。只有一个平台具备的片段（例如全体提及）不在此追加（D-87）。
+目标：在通用消息模型中追加两个官方 Adapter 都支持的语音片段 voice、合并转发的引用节点与入站转发标识、URL 按钮，Core 在调用 Adapter 前完成结构校验与能力判定，SDK 提供对应的构造函数与入站类型；Event 追加会话类型 chat_type，SDK 提供会话类型的判断方法。只有一个平台具备的片段（例如全体提及）不在此追加（D-87）。
 
-依据：PLAN T-03 步骤 11；CONTRACTS §8（通用能力的范围）；WIRE §3.5 末段；MESSAGE-MODEL §2、§6.3；DECISIONS D-87、D-89、D-91、D-97；TEST-MATRIX V-90 的 Core 分项。
+依据：PLAN T-03 步骤 11；CONTRACTS §8（通用能力的范围）；WIRE §3.4、§3.5 末段；MESSAGE-MODEL §1、§2、§6.3；DECISIONS D-87、D-89、D-91、D-97、D-100；TEST-MATRIX V-90、V-98 的 Core 分项。
 
 要点：
 - proto 只追加：Segment 的 voice（VoiceSegment：source、duration_ms?、caption?）、ForwardItem 的 `platform_message_id`、ForwardSegment 的 `platform_forward_id`、Button 的 `url`；同步 `contracts/wirespec_test.go` 的编号检查。
 - 校验（`contracts/validate`）：voice 来源恰有一个；ForwardItem 的 chain 与 platform_message_id 恰有一个，节点 chain 不能含 forward；出站 Chain 带 platform_forward_id 为 INVALID_ARGUMENT；Button 的 url 与 action_id 恰有一个，url 只接受 https 与 tg scheme，url 按钮带 value 为 INVALID_ARGUMENT。
 - 能力：Core 在调用 Adapter 前按目标实例的 `message.voice`、`message.forward` 判定，未声明时 UNSUPPORTED。
 - 按钮签发跳过 url 按钮，不生成 token，也不要求对应的 button.clicked 路由。
-- SDK：在 T-04.8 的自有类型上追加构造函数与入站类型。
-- 测试：提交一个经回环 Adapter 的集成测试，覆盖带 voice 与 url 按钮的 Chain 在声明能力的实例上原样到达、未声明能力的实例收不到请求；其余进本地自测。
+- 会话类型（D-100）：proto 新增枚举 ChatType（CHAT_TYPE_UNSPECIFIED = 0、PRIVATE、GROUP、CHANNEL），Event 追加 `ChatType chat_type`；Core 在入站标准化时拒绝没有 target 却不是 UNSPECIFIED 的事件（INVALID_ARGUMENT），chat_type 不参与 Target 的比较、默认回复目标与发信准入，Core 生成的 bot.online/bot.offline 与 scheduled 事件为 UNSPECIFIED。
+- SDK：在 T-04.8 的自有类型上追加构造函数与入站类型；Context 追加 `ChatType()` 与 `IsPrivate()`、`IsGroup()`、`IsChannel()`，UNSPECIFIED 时三者都为 false。
+- 测试：提交一个经回环 Adapter 的集成测试，覆盖带 voice 与 url 按钮的 Chain 在声明能力的实例上原样到达、未声明能力的实例收不到请求，以及 chat_type 为 GROUP 的事件原样到达插件；其余进本地自测。
 
 ### goal-106 · T-03.15 平台动作
 

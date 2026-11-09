@@ -8,7 +8,7 @@
 
 | 类型 | 字段 | 来源与验证 |
 | --- | --- | --- |
-| Event | event_id、event_type、source_kind、occurred_at_unix_ms、adapter_id?、adapter_instance_id?、account_id?、target?、actor?、message?、event_payload、capabilities、platform_payload? | event_id 由 Core 在入站标准化时产生；source_kind 为 ADAPTER/SCHEDULER，Core 为实例状态生成的 bot.online/bot.offline 也记为 ADAPTER。平台字段只对相应来源存在；原平台事件标识另存 source_event_id |
+| Event | event_id、event_type、source_kind、occurred_at_unix_ms、adapter_id?、adapter_instance_id?、account_id?、target?、chat_type、actor?、message?、event_payload、capabilities、platform_payload? | event_id 由 Core 在入站标准化时产生；source_kind 为 ADAPTER/SCHEDULER，Core 为实例状态生成的 bot.online/bot.offline 也记为 ADAPTER。平台字段只对相应来源存在；原平台事件标识另存 source_event_id。chat_type 是事件所在会话的类型（PRIVATE、GROUP、CHANNEL，平台未给出时 UNSPECIFIED，D-100），由 Adapter 在事件带 target 时填写，没有 target 的事件必须为 UNSPECIFIED；它不属于 Target，不参与 Target 的比较与准入，出站时 Adapter 不读取 |
 | Actor | external_user_id、adapter_instance_id、display_name?、locale?、permissions | permissions 是 Core 按 CONTRACTS §2.3 计算的权限名集合，Adapter 只给出本会话的平台权限；来源必须为可信 Adapter 元数据及 Core policy；用户身份按实例作用域绑定；插件/外部 webhook 的 is_admin 不是身份依据。locale 是平台给出的用户语言（规范化的 BCP 47 标签），平台未提供时 absent，用于 CONTRACTS §5.4 的文案选择 |
 | Target | adapter_id、adapter_instance_id、account_id、chat_id、thread_id? | Adapter 验证 account 与实例绑定；默认 Target 仅来自当前实际入站事件；主动任务须显式 To，按 CONTRACTS §8 的 allowed_adapter_instances 与原事件回复范围准入 |
 | Capability | name、version、supported | 使用 Adapter 明确公布的能力；未知能力不推定支持 |
@@ -127,13 +127,14 @@ SDK 的 `c.Stream` 是不新增协议的辅助函数（D-98）：目标实例声
 
 ## 6. 官方 Telegram Adapter 映射
 
-官方 Telegram Adapter 是可安装的 Adapter 包（CONTRACTS §8），一个进程承载全部已配置实例，实例可单独启停；以下映射在 Adapter 进程内实现，游标持久化、按钮 token 与派发仍在 Core。每实例绑定一个 Bot 账号，使用 getMe 得到的身份校验目标账号，凭证不跨实例复用。chat_id 与 thread_id 精确映射到 chat_id/message_thread_id；首发普通私聊、群、频道及论坛话题之外的专属会话形式需显式能力支持，否则 UNSUPPORTED。
+官方 Telegram Adapter 是可安装的 Adapter 包（CONTRACTS §8），一个进程承载全部已配置实例，实例可单独启停；以下映射在 Adapter 进程内实现，游标持久化、按钮 token 与派发仍在 Core。每实例绑定一个 Bot 账号，使用 getMe 得到的身份校验目标账号，凭证不跨实例复用。chat_id 与 thread_id 精确映射到 chat_id/message_thread_id；首发普通私聊、群、频道及论坛话题之外的专属会话形式需显式能力支持，否则 UNSUPPORTED。chat_type 按 chat.type 映射：private 为 PRIVATE，group 与 supergroup 为 GROUP，channel 为 CHANNEL（D-100）。
 
 ### 6.1 接收、游标和实例故障
 
 - 首发使用 long polling；getMe 固定该实例 account_id/username：`username` 为 account_username，`first_name` 为 account_display_name（D-67），同一个 Bot 账号只允许一个 Core 入站 owner。启动发现已有 webhook 时返回 FAILED_PRECONDITION，由管理员处理冲突，不擅自调用 deleteWebhook。
 - 每次 getUpdates 显式传 `allowed_updates=["message","edited_message","channel_post","edited_channel_post","callback_query","my_chat_member","chat_member","message_reaction"]`，不依赖服务器旧设置或空列表默认值。成员/Reaction 事件还受 Bot 群管理员等平台权限限制，能力状态按实际权限呈现；遗留的未订阅 update 明确忽略并推进游标，不伪造支持。
 - Message 带 sender_chat 时，不用兼容性的 fake from 构造个人 User/Admin；保留发送聊天的原始信息，缺少真实个人身份就让 Actor absent。button Actor 始终取本次 CallbackQuery.from。群与超级群中的 Actor 带平台权限（D-69）：Adapter 声明 `telegram.chat_owner`（隐含 `telegram.chat_admin`）与 `telegram.chat_admin`（隐含 `chat_admin`）；chat member 状态为 creator 时给出前者，为 administrator 时给出后者。Adapter 按会话缓存 `getChatAdministrators` 的结果，首次需要时获取，缓存 10 分钟（固定常量），收到该会话的 `chat_member` 或 `my_chat_member` update 时作废；获取失败时本事件不带平台权限并记诊断，不按成功处理。私聊不带平台权限。入站 text 中的 `text_mention` 实体保留在 entities 中，命令参数的 `user` 类型按 CONTRACTS §2.2 第 4 条从中取值。Actor.locale 取 from.language_code（平台给出时），按 BCP 47 规范化大小写。to_me 在以下情况为 true：chat.type 为 private；reply_to_message.from 是本机器人；文本实体中有指向本机器人用户名的 mention 或指向其用户 ID 的 text_mention。
+- 论坛话题只按 `is_topic_message` 判定（D-100）：它为 true 时 Target 的 thread_id 取 message_thread_id；非论坛超级群的回复串也带 message_thread_id，但 is_topic_message 不为 true，这时不产生 thread_id，回复照常发往该会话，需要关联原消息时用 reference。论坛的 General 话题没有 message_thread_id，同样不产生 thread_id。按钮回调与其他由 Message 派生的事件按其 Message 使用同一规则。插件发往指定话题时在 Target 中给出 thread_id，出站照常作为 message_thread_id。
 - Adapter.Start 完成凭证/冲突检查和接收循环初始化后返回；循环在后台运行。401/409 等凭证失效/并发 owner 冲突终止实例接收并上报管理状态，不伪装为正常空闲。短暂读网络错误可按 Core 固定、带上限的退避重连；此接收恢复不允许重试已提交的 Send。
 - getUpdates 每个 update 按返回顺序单独接纳：先在 Core 状态库持久化该实例的已接收游标，再交给非持久事件队列；重启从已持久化游标的下一个 offset 拉取，不重放已接纳业务。因此在持久化后、Handler 完成前崩溃，允许该事件丢失。首发交付的是尽力投递，不承诺 durable inbox 或完整补处理。
 - Telegram 在至少一周没有新 update 后可能随机选择后续 ID，不能假定 ID 永久递增。Core 记录最后接纳时间与当前接收轮次起点；从两者较晚者起连续 7 天没有接纳新 update 时，在当前 long-poll 结束且无接收请求在途的边界持久化新接收轮次/起点、清除 offset，再开始拉取，避免旧高游标永远屏蔽新序列，也避免空闲时每次轮询都重置。平台更新最长仅保存 24h，该重建不承诺恢复空闲期早已过期的事件。
@@ -183,7 +184,7 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 ### 7.1 接收与标准化
 
 - 实例启动时建立连接并调用 `get_login_info`：`user_id` 的十进制字符串为 account_id，`nickname` 为 account_display_name；OneBot 11 没有可寻址的账号用户名，account_username absent，命令不接受 `/cmd@name` 形式（D-67）。同账号唯一 owner 按 CONTRACTS §8 由 Core 检查。
-- 私聊的用户号与群号是不同的命名空间，chat_id 写作 `private:<user_id>` 与 `group:<group_id>`，不产生 thread_id。数字 ID 一律转为十进制字符串。
+- 私聊的用户号与群号是不同的命名空间，chat_id 写作 `private:<user_id>` 与 `group:<group_id>`，不产生 thread_id。数字 ID 一律转为十进制字符串。chat_type 与 chat_id 的前缀一致：`private:` 为 PRIVATE（含群临时会话），`group:` 为 GROUP（D-100）。群临时会话的 chat_id 不含来源群号，主动向非好友发起临时会话不在 v0.1。
 - Adapter 一边读连接一边把事件放进实例内的有界队列（固定常量 256 条），按到达顺序经 `core.adapter.deliver` 逐条交付，收到应答后才交付下一条；队列满时丢弃新事件并计数。API 响应与心跳不进这个队列，读循环不因等待交付而停下。
 
 | OneBot 11 上报 | 标准事件 | 规则 |
@@ -245,6 +246,6 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 
 ## 8. 验收与依据
 
-对应 [TEST-MATRIX.md](TEST-MATRIX.md)：Target/话题/多实例；Handler 两签名及停止传播；Rule false；空 Chain；按钮 token/过期/代次/多用户权限；相册多 ID；发送前拒绝、平台明确失败、先成功再超时；AfterSend 失败不改写平台结果；缺少 actor 和平台不支持事件；消息编辑；bot 上下线事件；Actor.locale 映射；OneBot 11 的接收映射、发送计划与跨 Adapter 一致性（V-71、V-72）；D-87 补齐的媒体传递、新片段、平台动作、撤回与输入状态、命令菜单、流式输出、反向 WebSocket、扩展事件与 Telegram 媒体小项（V-89～V-97）。实际编译、平台调用和故障注入均留在实施阶段记录。
+对应 [TEST-MATRIX.md](TEST-MATRIX.md)：Target/话题/多实例；Handler 两签名及停止传播；Rule false；空 Chain；按钮 token/过期/代次/多用户权限；相册多 ID；发送前拒绝、平台明确失败、先成功再超时；AfterSend 失败不改写平台结果；缺少 actor 和平台不支持事件；消息编辑；bot 上下线事件；Actor.locale 映射；OneBot 11 的接收映射、发送计划与跨 Adapter 一致性（V-71、V-72）；D-87 补齐的媒体传递、新片段、平台动作、撤回与输入状态、命令菜单、流式输出、反向 WebSocket、扩展事件与 Telegram 媒体小项（V-89～V-97）；会话类型、Telegram 的代理模式与话题判定（V-98～V-100）。实际编译、平台调用和故障注入均留在实施阶段记录。
 
 平台约束核对依据（2026-10-21）：[Telegram Bot API](https://core.telegram.org/bots/api)、[sendMediaGroup](https://core.telegram.org/bots/api#sendmediagroup)、[InlineKeyboardButton](https://core.telegram.org/bots/api#inlinekeyboardbutton)、[CallbackQuery](https://core.telegram.org/bots/api#callbackquery)。相册返回 Message 数组、每组 2～10 项、按钮载荷限额和回调确认来自官方接口；上面的拆分、token 生命周期和错误汇总属于 AlonaBot 首发选择。
