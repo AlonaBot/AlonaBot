@@ -18,9 +18,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
@@ -33,6 +35,9 @@ import (
 
 // memoryLimitEnv 指定 Go 运行时读取插件内存软上限的环境变量。
 const memoryLimitEnv = "GOMEMLIMIT"
+
+// Core 全局默认语言的缺省值见 CONTRACTS §5.4。
+const defaultLocale = "en-US"
 
 // 受管 SQLite 的代次路径与权限见 CONTRACTS §6.1。
 const (
@@ -53,9 +58,11 @@ type Spec struct {
 	GenerationID string // 要激活的代次
 	// Bootstrap 携带 generation_id 与候选配置等；阶段预算由 host 填写。
 	Bootstrap       *pb.Bootstrap
-	ConfigSchema    []byte        // 当前安装包生成的配置 Schema
-	Secrets         *secret.Store // nil 时绑定本次 Launch 使用的状态库
-	KeptSecretPaths []string      // 调用方额外提供的旧 secret 路径模式
+	ConfigSchema    []byte            // 当前安装包 config_schema.json 的规范 JSON；没有配置时为 nil
+	I18n            map[string][]byte // 当前包 i18n/*.json 原文；无资源时为 nil
+	DefaultLocale   string            // 本次 Session 的 Core 默认语言；空值使用 en-US
+	Secrets         *secret.Store     // nil 时绑定本次 Launch 使用的状态库
+	KeptSecretPaths []string          // 调用方额外提供的旧 secret 路径模式
 	// NewCandidate 为 true 时在 ACTIVATE 前提交 ActiveGeneration（期望旧值 ExpectedOld）；
 	// false 表示普通 restart，复用已提交的代次。
 	NewCandidate bool
@@ -106,6 +113,16 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	unlock := store.LockPlugin(spec.PluginID)
 	defer unlock()
 
+	// 启动前检查包内文案，失败时尚未读取候选资源或创建进程。
+	messages, problems := i18n.Parse(spec.I18n)
+	if len(problems) != 0 {
+		details := make([]string, 0, len(problems))
+		for _, problem := range problems {
+			details = append(details, fmt.Sprintf("%s:%s: %s", problem.File, problem.Key, problem.Message))
+		}
+		return nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "invalid message catalog: " + strings.Join(details, "; ")}
+	}
+
 	// 1. 读取上一快照和路径；restart 的配置以已提交代次为准，新候选使用调用方提供的 Pending 快照。
 	secrets := spec.Secrets
 	if secrets == nil {
@@ -130,6 +147,10 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		keptPaths = append(keptPaths, paths...)
 	}
 	boot := proto.Clone(spec.Bootstrap).(*pb.Bootstrap)
+	boot.DefaultLocale = spec.DefaultLocale
+	if boot.DefaultLocale == "" {
+		boot.DefaultLocale = defaultLocale
+	}
 	input := []byte(boot.GetCandidateConfigJson())
 	if !spec.NewCandidate {
 		input = previous
@@ -230,7 +251,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		return fail(err)
 	}
 	spec.Log.SetSession(prep.SessionID)
-	opt := host.ActivateOptions{PluginID: spec.PluginID, GenerationID: spec.GenerationID, Handler: spec.Handler, Global: spec.Global, Limits: spec.Limits}
+	opt := host.ActivateOptions{PluginID: spec.PluginID, GenerationID: spec.GenerationID, Handler: spec.Handler, Global: spec.Global, Limits: spec.Limits, Messages: messages}
 	if spec.NewCandidate {
 		opt.Commit = func(ctx context.Context) error {
 			return store.CommitActive(ctx, spec.PluginID, spec.ExpectedOld, spec.GenerationID)

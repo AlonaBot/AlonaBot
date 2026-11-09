@@ -1,0 +1,42 @@
+// 工具描述、调用策略与工具目录载荷（CONTRACTS §13.1、WIRE-FORMAT §3.5）。
+syntax = "proto3";
+
+package alonabot.v1;
+
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
+
+// ToolPolicy 列出工具的调用策略。
+enum ToolPolicy {
+  TOOL_POLICY_UNSPECIFIED = 0;
+  TOOL_POLICY_ALLOW = 1;
+  TOOL_POLICY_CONFIRM = 2;
+  TOOL_POLICY_DENY = 3;
+}
+
+// ToolSpec 声明 JSON Service 的工具说明、缺省策略与输入 Schema。
+message ToolSpec {
+  // 给模型的说明。
+  string description = 1;
+  // 仅允许 ALLOW 或 CONFIRM。
+  ToolPolicy default_policy = 2;
+  // 与该 Service 输入校验使用的 JSON Schema 原文相同。
+  string input_schema_json = 3;
+}
+
+// ToolInfo 返回调用者可见工具的描述与生效策略。
+message ToolInfo {
+  // plugin_id/service_name。
+  string name = 1;
+  string description = 2;
+  string input_schema_json = 3;
+  // 目录中仅返回 ALLOW 或 CONFIRM。
+  ToolPolicy policy = 4;
+}
+
+// ToolListRequest 请求调用插件可调用的工具目录。
+message ToolListRequest {}
+
+// ToolListResponse 按工具名的字典序返回工具。
+message ToolListResponse {
+  repeated ToolInfo tools = 1;
+}

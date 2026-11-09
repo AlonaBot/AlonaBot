@@ -6,7 +6,7 @@
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
-| goal-58 | T-12.1 | Provider 客户端 | — | 已完成 |
+| goal-58 | T-12.1 | Provider 客户端 | — | 已完成（PR #16） |
 | goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1 | 等待前置 |
 | goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-12.2 | 等待前置 |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 等待前置 |
@@ -19,7 +19,7 @@
 
 ### goal-58 · T-12.1 Provider 客户端
 
-状态：已完成（PR #16 已合并；2026-10-28 按 D-64 修正：增加 `openai` 协议、停止原因与用量，包移到 `agent/provider`）。本 goal 的原始语句未保留；下面记录当前的实际接口，供后继切片引用。
+状态：已完成（[PR #16](https://github.com/AlonaBot/AlonaBot/pull/16)，合并提交 `354c5b6`；2026-10-28 按 D-64 修正：增加 `openai` 协议、停止原因与用量，包移到 `agent/provider`）。本 goal 的原始语句未保留；下面记录当前的实际接口，供后继切片引用。
 
 目标：Provider 客户端：OpenAI、OpenAI 兼容与 Anthropic Messages 的流式请求、SSE 解析、工具调用解析、停止原因与用量、本地模拟服务
 前置：T-02。
@@ -45,11 +45,11 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 // Stream 不重发请求；已交给 emit 的文本增量由调用方保留；错误不含 API key 与认证头，附带的 Provider 说明中回显的 key 替换为 [REDACTED]。
 ```
 
-## 第 12 波
+## 第 13 波
 
 ### goal-59 · T-12.2 Agent 对话与流式显示
 
-状态：等待前置（T-03.9、T-05.4、T-08.4、T-08.11）。T-04.3、T-11.3、T-12.1 已合并；命令注册、Args/Optional、Context.Match 与自动回复接口已按 PR #47 核对。Context.Edit、Continue、配置及数据库入口仍待相关前置合并后核对。语句中的配置按 D-74 的 Go 配置类型与 `config` 标签编写；D-76 改为手写 `config_schema.json` 与 `Config()` 取值后，由审查者在 T-08.11 合并后改写，providers 可以写成 template_list，每个预设一个模板，由模板 items 的 default 给出 protocol 与 base_url。
+状态：等待前置（T-03.9、T-05.4）。T-08.4（PR #74）已合并。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。T-04.3、T-11.3、T-12.1 已合并；命令注册、Args/Optional、Context.Match 与自动回复接口已按 PR #47 核对。Context.Edit、Continue、配置及数据库入口仍待相关前置合并后核对。语句中的配置按 D-74 的 Go 配置类型与 `config` 标签编写；D-76 改为手写 `config_schema.json` 与 `Config()` 取值后，由审查者在 T-08.11 合并后改写，providers 可以写成 template_list，每个预设一个模板，由模板 items 的 default 给出 protocol 与 base_url。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-59（切片 T-12.2：Agent 对话与流式显示）。goal 目录 goal-59，分支 goal-59，worktree .worktrees/goal-59，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -108,11 +108,11 @@ agent
 不做：工具循环与 MCP（T-12.3）；记忆（T-12.4）；技能（T-12.5）；定时任务（T-12.6）；打包（T-12.7）；真实 Provider（T-10）。
 ```
 
-## 第 13 波
+## 第 14 波
 
 ### goal-83 · T-12.8 文本生成服务
 
-状态：等待前置（T-03.8、T-06.1、T-12.2）。语句中 goal-8、goal-19、goal-59 提供的符号（manifest 的 role 解析、Service Broker 的目标定位、sdk.JSONService、sdk.CallJSON、sdk.WithAccess、Context.Caller、agent 的 Config 与 Provider 装配）只写名字；合并后由审查者核对，再改为待派发。2026-10-28 按 D-61 改为以 `@agent` 为目标。2026-11-04 按 D-77～D-85 修订计划：llm_service_allowed_plugins 缺省为 `["*"]`，表示全部插件（D-83）；Agent 的配置改由 `config_schema.json` 声明（D-76）。
+状态：等待前置（T-03.8、T-12.2）。T-06.1（PR #45）已合并。语句中 goal-8、goal-19、goal-59 提供的符号（manifest 的 role 解析、Service Broker 的目标定位、sdk.JSONService、sdk.CallJSON、sdk.WithAccess、Context.Caller、agent 的 Config 与 Provider 装配）只写名字；合并后由审查者核对，再改为待派发。2026-10-28 按 D-61 改为以 `@agent` 为目标。2026-11-04 按 D-77～D-85 修订计划：llm_service_allowed_plugins 缺省为 `["*"]`，表示全部插件（D-83）；Agent 的配置改由 `config_schema.json` 声明（D-76）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-83（切片 T-12.8：文本生成服务）。goal 目录 goal-83，分支 goal-83，worktree .worktrees/goal-83，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -163,11 +163,11 @@ agent
 不做：流式输出与工具调用（契约不提供）；llm_service_allowed_plugins 的专用管理页（配置表单随 T-09 由 Schema 生成）。
 ```
 
-## 第 14 波
+## 第 15 波
 
 ### goal-60 · T-12.3 工具循环与 MCP
 
-状态：等待前置（T-11.2、T-12.2）。语句中 goal-54、goal-55、goal-58、goal-59 提供的符号（sdk.ListTools、sdk.InvokeTool、sdk.ConfirmOperation、provider 的 Tool/ToolCall/ToolResult、agent 的一轮对话与 Config.MCPServers）只写名字；合并后由审查者核对，再改为待派发。本切片获授权引入已批准的 github.com/modelcontextprotocol/go-sdk（docs/development.md 只授权给 goal-60）。
+状态：等待前置（T-11.2、T-12.2）。sdk.ListTools 已由 goal-54（PR #101，合并提交 `de48f26`）合入。语句中 goal-55、goal-58、goal-59 提供的符号（sdk.InvokeTool、sdk.ConfirmOperation、provider 的 Tool/ToolCall/ToolResult、agent 的一轮对话与 Config.MCPServers）只写名字；合并后由审查者核对，再改为待派发。本切片获授权引入已批准的 github.com/modelcontextprotocol/go-sdk（docs/development.md 只授权给 goal-60）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-60（切片 T-12.3：工具循环与 MCP）。goal 目录 goal-60，分支 goal-60，worktree .worktrees/goal-60，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -195,7 +195,7 @@ agent
 - 安全：MCP 的 env 与 headers 中的值不写日志、不进入工具结果。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：agent/tools_test.go（//go:build unix）。用 goal-59 的测试装配、模拟 Provider（脚本化地返回工具调用）、goal-54/55 的工具插件与 mcptest 的两种服务器：
+- 提交：agent/tools_test.go（//go:build unix）。用 goal-59 的测试装配、模拟 Provider（脚本化地返回工具调用）、在测试临时目录生成的工具插件（goal-54、goal-55 的同类插件只在执行者本地）与 mcptest 的两种服务器：
   - 模型连续调用一个 Core 工具与一个 MCP 工具：两者都执行，结果交回模型，最终回复显示。
   - Core 工具为 confirm 策略且用户拒绝：结果为错误文本交回模型，工具未执行；MCP 工具的确认被拒同样如此。
   - 停止插件后 stdio MCP 子进程已退出（按 PID 检查）。
@@ -208,7 +208,7 @@ agent
 
 ### goal-61 · T-12.4 Agent 的记忆
 
-状态：等待前置（T-08.5、T-11.2、T-12.2）。语句中 goal-19、goal-32、goal-54、goal-59 提供的符号（sdk.JSONService 与 Tool 选项、gormdb.Open、agent 的一轮对话）只写名字；合并后由审查者核对，再改为待派发。2026-10-28 按 D-60 改写：记忆并入 Agent，不再有 sdk/memory 与记忆插件。
+状态：等待前置（T-11.2、T-12.2）。T-08.5（PR #79）已合并。`sdk.JSONService` 的 `Tool` 方法已由 goal-54（PR #101，合并提交 `de48f26`）合入。语句中 goal-19、goal-32、goal-59 提供的符号（sdk.JSONService、gormdb.Open、agent 的一轮对话）只写名字；合并后由审查者核对，再改为待派发。2026-10-28 按 D-60 改写：记忆并入 Agent，不再有 sdk/memory 与记忆插件。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-61（切片 T-12.4：Agent 的记忆）。goal 目录 goal-61，分支 goal-61，worktree .worktrees/goal-61，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -244,7 +244,7 @@ agent
 不做：技能（T-12.5）；定时任务（T-12.6）；向量检索或外部记忆后端。
 ```
 
-## 第 15 波
+## 第 16 波
 
 ### goal-62 · T-12.5 技能
 
@@ -280,7 +280,7 @@ agent
 
 ### goal-63 · T-12.6 定时 Agent 任务
 
-状态：等待前置（T-07.2、T-08.5、T-12.3）。语句中 goal-24、goal-32、goal-55、goal-59、goal-60 提供的符号（ScheduleRegistry.Every、gormdb.Open、sdk.ConfirmOperation、Agent 的一轮对话与工具循环、contracts/schedule）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：定时任务的后台发送按发信许可缺省允许全部实例（D-83）。
+状态：等待前置（T-07.2、T-12.3）。T-08.5（PR #79）已合并。语句中 goal-24、goal-32、goal-55、goal-59、goal-60 提供的符号（ScheduleRegistry.Every、gormdb.Open、sdk.ConfirmOperation、Agent 的一轮对话与工具循环、contracts/schedule）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：定时任务的后台发送按发信许可缺省允许全部实例（D-83）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-63（切片 T-12.6：定时 Agent 任务）。goal 目录 goal-63，分支 goal-63，worktree .worktrees/goal-63，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -318,7 +318,7 @@ agent
 不做：打包与 T-12 验收（T-12.7）；任务的管理页面。
 ```
 
-## 第 16 波
+## 第 17 波
 
 ### goal-64 · T-12.7 官方 Agent 组件打包与 T-12 验收
 

@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
@@ -24,11 +25,15 @@ const (
 	handlerSchemaVersion = 1
 )
 
-// Plugin 提供派发所需的插件身份、激活状态、静态路由与 Session 调用。
+// Plugin 提供派发所需的插件身份、激活状态、静态路由、文案与 Session 调用。
 type Plugin interface {
 	PluginID() string
 	Activated() bool
 	Routes() []*pb.RouteDescriptor
+	// Messages 返回当前包的只读文案目录；无资源时为 nil。
+	Messages() *i18n.Catalog
+	// DefaultLocale 返回当前 Session 的 Bootstrap 默认语言快照。
+	DefaultLocale() string
 	Call(ctx context.Context, req wire.Request) (wire.Response, error)
 	// SendEvent 等待 EVENT 帧写出，不等待订阅回调。
 	SendEvent(ctx context.Context, target string, ev *pb.BusEvent) error
@@ -52,6 +57,8 @@ func FromInstance(in *host.Instance) Plugin { return &instancePlugin{instance: i
 func (p *instancePlugin) PluginID() string              { return p.instance.PluginID }
 func (p *instancePlugin) Activated() bool               { return p.instance.State() == host.StateActivated }
 func (p *instancePlugin) Routes() []*pb.RouteDescriptor { return p.instance.Routes }
+func (p *instancePlugin) Messages() *i18n.Catalog       { return p.instance.Messages }
+func (p *instancePlugin) DefaultLocale() string         { return p.instance.DefaultLocale }
 func (p *instancePlugin) Call(ctx context.Context, req wire.Request) (wire.Response, error) {
 	return p.instance.Session.Call(ctx, req)
 }
@@ -129,6 +136,24 @@ func (r *Router) Plugin(pluginID string) (Plugin, bool) {
 		return nil, false
 	}
 	return session.plugin, true
+}
+
+// Plugins 返回当前已 Attach 的插件快照；激活状态由调用方即时检查。
+func (r *Router) Plugins() []Plugin {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	plugins := make([]Plugin, 0, len(r.plugins))
+	for _, session := range r.plugins {
+		plugins = append(plugins, session.plugin)
+	}
+	return plugins
+}
+
+// ServiceCallable 按直接调用插件身份判断服务访问；Core 与目标自身始终允许。
+func ServiceCallable(spec *pb.ServiceSpec, callerPluginID, targetPluginID string) bool {
+	return callerPluginID == "" || callerPluginID == targetPluginID ||
+		spec.GetAccess() == pb.ServiceAccess_SERVICE_ACCESS_PUBLIC ||
+		spec.GetAccess() == pb.ServiceAccess_SERVICE_ACCESS_ALLOWLIST && slices.Contains(spec.GetAllowlistPluginIds(), callerPluginID)
 }
 
 // Caller 返回当前已激活绑定的可信身份；替换、移除或退出后的身份不再返回。

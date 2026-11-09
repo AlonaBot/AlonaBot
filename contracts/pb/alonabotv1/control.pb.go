@@ -688,6 +688,8 @@ type Bootstrap struct {
 	LogLevel LogLevel `protobuf:"varint,10,opt,name=log_level,json=logLevel,proto3,enum=alonabot.v1.LogLevel" json:"log_level,omitempty"`
 	// 本次运行生效的 Session 限额，由 Core 填写（CONTRACTS §16）。
 	SessionLimits *SessionLimits `protobuf:"bytes,11,opt,name=session_limits,json=sessionLimits,proto3" json:"session_limits,omitempty"`
+	// Core 的全局默认语言，在本 Session 生命周期内保持不变（CONTRACTS §5.4）。
+	DefaultLocale string `protobuf:"bytes,12,opt,name=default_locale,json=defaultLocale,proto3" json:"default_locale,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -797,6 +799,13 @@ func (x *Bootstrap) GetSessionLimits() *SessionLimits {
 		return x.SessionLimits
 	}
 	return nil
+}
+
+func (x *Bootstrap) GetDefaultLocale() string {
+	if x != nil {
+		return x.DefaultLocale
+	}
+	return ""
 }
 
 // SessionLimits 描述 Core 与 SDK 共同执行的 Session 限额（WIRE-FORMAT §3.2）。
@@ -1552,7 +1561,7 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"session_id\x18\x01 \x01(\fR\tsessionId\x12!\n" +
 	"\fchosen_minor\x18\x02 \x01(\rR\vchosenMinor\x12X\n" +
 	"\x17capability_intersection\x18\x03 \x03(\v2\x1f.alonabot.v1.ProtocolCapabilityR\x16capabilityIntersection\x124\n" +
-	"\tbootstrap\x18\x04 \x01(\v2\x16.alonabot.v1.BootstrapR\tbootstrap\"\xaa\x05\n" +
+	"\tbootstrap\x18\x04 \x01(\v2\x16.alonabot.v1.BootstrapR\tbootstrap\"\xd1\x05\n" +
 	"\tBootstrap\x12#\n" +
 	"\rgeneration_id\x18\x01 \x01(\tR\fgenerationId\x122\n" +
 	"\x15candidate_config_json\x18\x02 \x01(\tR\x13candidateConfigJson\x12,\n" +
@@ -1565,7 +1574,8 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"\x1cpreparation_deadline_unix_ms\x18\t \x01(\x03R\x19preparationDeadlineUnixMs\x122\n" +
 	"\tlog_level\x18\n" +
 	" \x01(\x0e2\x15.alonabot.v1.LogLevelR\blogLevel\x12A\n" +
-	"\x0esession_limits\x18\v \x01(\v2\x1a.alonabot.v1.SessionLimitsR\rsessionLimitsB\x1a\n" +
+	"\x0esession_limits\x18\v \x01(\v2\x1a.alonabot.v1.SessionLimitsR\rsessionLimits\x12%\n" +
+	"\x0edefault_locale\x18\f \x01(\tR\rdefaultLocaleB\x1a\n" +
 	"\x18_previous_config_version\"\x8c\x01\n" +
 	"\rSessionLimits\x12!\n" +
 	"\fmax_inflight\x18\x01 \x01(\rR\vmaxInflight\x12*\n" +

@@ -1,15 +1,10 @@
-// Package generate 扫描插件构建入口及其本 module 依赖，生成静态路由注册代码。
+// Package generate 扫描插件构建入口及其本 module 依赖，生成配置与 Service Schema 的嵌入代码。
 //
-// 紧贴包级函数声明的注释行支持以下标记：
-//
-//	//alonabot:command <路径 token...> [alias=<token[/token...]>]... [priority=<int32>]
-//	//alonabot:event <route_id> <event_type> [priority=<int32>]
-//
-// alias 可以重复，使用 / 分隔路径 token。方法、类型和变量上的标记产生诊断；
-// 实例方法通过 Commands/Events 显式注册。生成器用嵌套 Group 注册多 token 命令。
+// 命令、文本匹配与事件由根插件的注册方法链式注册（CONTRACTS §9.1）。
 // 扫描遵守 GOOS/GOARCH 和 build tags，排除外部依赖、vendor 与测试文件。
-// 配置与 JSON Service 类型经统一的 go/types 检查生成 Schema；配置字段见 CONTRACTS §5.1，
-// Service 字段见 §3；注册规则见 §9、§2.2。
+// 配置从 config_schema.json 检查并嵌入，翻译覆盖按声明核对（CONTRACTS §5.1、§5.3）。
+// JSON Service 类型经 go/types 检查生成 Schema（§3）；注册规则见 §9、§2.2。
+// 构建入口的 i18n/*.json 按 §5.3、§5.4 检查并将原文嵌入生成代码。
 //
 // 包的组成：[Scan] 接收 [Options]，返回描述、源码与 [Diagnostic] 汇总的 [Result]。
 package generate
@@ -33,7 +28,6 @@ import (
 )
 
 const sdkPath = "github.com/AlonaBot/AlonaBot/sdk"
-const configPath = sdkPath + "/config"
 
 // FileName 指定在构建入口包目录中写入的生成文件名。
 const FileName = "alonabot_gen.go"
@@ -45,35 +39,17 @@ type Options struct {
 	Tags         []string
 }
 
-// Diagnostic 携带一条源码问题的位置和说明。
+// Diagnostic 携带一条源码或组件资源问题的位置和说明。
 type Diagnostic struct {
-	Pos     string // 相对 Dir 的文件:行:列
+	Pos     string // 相对 Dir 的文件:行:列；JSON 资源使用文件:JSON 路径。
 	Message string
 }
 
-// Command 描述带标记的命令函数与完整路径。
-type Command struct {
-	Path          []string
-	Aliases       [][]string
-	Priority      int32
-	Package, Func string
-}
-
-// Event 描述带标记的事件函数。
-type Event struct {
-	RouteID, EventType string
-	Priority           int32
-	Package, Func      string
-}
-
-// Result 保存扫描描述、生成源码和全部源码诊断。
+// Result 保存扫描描述、生成源码和全部构建诊断。
 type Result struct {
-	RootType     string    // 导入路径.类型名
-	ConfigType   string    // 没有 Config 时为空
-	ConfigSchema []byte    // 规范 JSON；没有 Config 时为 nil
-	Commands     []Command // 按规范路径排序
-	Events       []Event   // 按 route_id 排序
-	Source       []byte    // 完整 gofmt 源码；有诊断时为 nil
+	RootType     string // 导入路径.类型名
+	ConfigSchema []byte // config_schema.json 的规范 JSON；没有该文件时为 nil
+	Source       []byte // 完整 gofmt 源码；有诊断时为 nil
 	Diagnostics  []Diagnostic
 }
 
@@ -101,13 +77,13 @@ type scan struct {
 	files          *token.FileSet
 	dir            string
 	entry          listedPackage
-	roots, configs []declaration
-	paths, routes  map[string]string // 键对应首次声明的位置
+	roots          []declaration
 	serviceSchemas map[string][]byte
+	i18nFiles      map[string][]byte // 已读文案原文；全量诊断通过后才嵌入，没有资源时为 nil。
 	syntax         map[string][]*ast.File
 }
 
-// Scan 按目标环境扫描源码并生成注册代码。源码问题记入 Diagnostics；
+// Scan 按目标环境扫描源码与文案资源并生成嵌入代码。输入问题记入 Diagnostics；
 // 工具链或 IO 失败返回 error，go list 失败时保留 stderr。
 func Scan(ctx context.Context, opt Options) (*Result, error) {
 	// 1. 由 Go 工具链确定依赖与实际参与构建的文件。
@@ -173,7 +149,7 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 			packages = append(packages, pkg)
 		}
 	}
-	s := &scan{files: token.NewFileSet(), dir: dir, paths: make(map[string]string), routes: make(map[string]string), syntax: make(map[string][]*ast.File)}
+	s := &scan{files: token.NewFileSet(), dir: dir, syntax: make(map[string][]*ast.File)}
 	for _, pkg := range packages {
 		if filepath.Clean(pkg.Dir) == dir {
 			s.entry = pkg
@@ -183,7 +159,7 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 		return nil, fmt.Errorf("go list did not return an entry package in %s", dir)
 	}
 	slices.SortFunc(packages, func(a, b listedPackage) int { return strings.Compare(a.ImportPath, b.ImportPath) })
-	// 2. 解析源码、聚合标记和类型声明；每个文件的问题独立保留。
+	// 2. 解析源码、聚合类型声明；每个文件的问题独立保留。
 	for _, pkg := range packages {
 		slices.Sort(pkg.GoFiles)
 		for _, name := range pkg.GoFiles {
@@ -193,20 +169,24 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 		}
 	}
 	s.checkTypes()
+	if err := s.readI18n(); err != nil {
+		return nil, err
+	}
+	if err := s.configSchema(); err != nil {
+		return nil, err
+	}
 	if len(s.result.Diagnostics) == 0 {
 		if err := s.schemas(ctx, cmd); err != nil {
 			return nil, err
 		}
 	}
-	slices.SortFunc(s.result.Commands, func(a, b Command) int { return strings.Compare(strings.Join(a.Path, " "), strings.Join(b.Path, " ")) })
-	slices.SortFunc(s.result.Events, func(a, b Event) int { return strings.Compare(a.RouteID, b.RouteID) })
 	slices.SortFunc(s.result.Diagnostics, func(a, b Diagnostic) int {
 		if n := strings.Compare(a.Pos, b.Pos); n != 0 {
 			return n
 		}
 		return strings.Compare(a.Message, b.Message)
 	})
-	// 3. 诊断阻止生成；成功时统一格式化完整注册源码。
+	// 3. 诊断阻止生成；成功时统一格式化完整嵌入源码。
 	if len(s.result.Diagnostics) == 0 {
 		s.result.Source, err = s.source()
 		if err != nil {
@@ -268,12 +248,8 @@ func (s *scan) readFile(pkg listedPackage, path string, names map[string]string)
 		}
 		imports[name] = path
 	}
-	// 2. 识别根与配置的嵌入类型，同时记录包级函数的文档注释。
-	handlers := make(map[*ast.CommentGroup]*ast.FuncDecl)
+	// 2. 识别根的嵌入类型。
 	for _, decl := range file.Decls {
-		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Doc != nil {
-			handlers[fn.Doc] = fn
-		}
 		gen, ok := decl.(*ast.GenDecl)
 		if !ok {
 			continue
@@ -304,31 +280,10 @@ func (s *scan) readFile(pkg listedPackage, path string, names map[string]string)
 					continue
 				}
 				d := declaration{typ.Name.Name, typ.Name.Pos(), pkg.ImportPath}
-				switch imports[name.Name] {
-				case sdkPath:
+				if imports[name.Name] == sdkPath {
 					s.roots = append(s.roots, d)
-				case configPath:
-					s.configs = append(s.configs, d)
 				}
 			}
-		}
-	}
-	// 3. 所有标记都参与检查，包含误写在方法、类型或变量上的标记。
-	for _, group := range file.Comments {
-		for _, comment := range group.List {
-			if !strings.HasPrefix(comment.Text, "//alonabot:") {
-				continue
-			}
-			fn := handlers[group]
-			if fn == nil {
-				s.diagnostic(comment.Pos(), "alonabot marker requires a package-level function")
-				continue
-			}
-			if pkg.ImportPath != s.entry.ImportPath && !ast.IsExported(fn.Name.Name) {
-				s.diagnostic(comment.Pos(), "marked function outside entry package must be exported")
-				continue
-			}
-			s.marker(comment, fn.Name.Name, pkg.ImportPath)
 		}
 	}
 	return nil
@@ -365,14 +320,5 @@ func (s *scan) checkTypes() {
 		if root.pkg != s.entry.ImportPath {
 			s.diagnostic(root.pos, "root type must be declared in entry package")
 		}
-	}
-	if len(s.configs) > 1 {
-		var positions []string
-		for _, config := range s.configs {
-			positions = append(positions, s.position(config.pos))
-		}
-		s.diagnostic(s.configs[0].pos, "expected at most one Config type, found "+strconv.Itoa(len(s.configs))+" at "+strings.Join(positions, ", "))
-	} else if len(s.configs) == 1 {
-		s.result.ConfigType = s.configs[0].pkg + "." + s.configs[0].name
 	}
 }

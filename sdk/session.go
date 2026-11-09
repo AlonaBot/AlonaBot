@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
@@ -20,6 +21,8 @@ import (
 
 // handshakeTimeout 与 CONTRACTS §4.2 的 Hello/HelloAck 预算一致。
 var handshakeTimeout = 10 * time.Second
+
+const scheduleRoutePrefix = "job."
 
 // launch 保存 Core 通过环境变量下发的启动参数（见 internal/wire/env.go）。
 type launch struct {
@@ -144,7 +147,8 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32, c
 	r := &pb.Register{CandidateConfigJson: configJSON, CandidateConfigVersion: configVersion,
 		Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 	if len(configSchema) != 0 {
-		r.ConfigSchemaHash = config.SchemaHash(configSchema)
+		schema, _ := configschema.Parse(configSchema) // 配置准备已检查生成项，收集注册项时此参数为 nil。
+		r.ConfigSchemaHash = schema.Hash()
 	}
 	for _, c := range reg.Commands {
 		spec := c.spec
@@ -156,6 +160,16 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32, c
 			DefaultEnabled: true, RequiredPermissions: event.permission.Names(),
 			Spec: &pb.RouteDescriptor_Event{Event: &pb.EventSpec{EventTypeFilter: []string{event.EventType}, HandlerMode: pb.HandlerMode_HANDLER_MODE_MANUAL}}})
 	}
+	for _, job := range reg.Schedules {
+		spec := &pb.ScheduleSpec{JobId: job.JobID, Timezone: job.Timezone}
+		if job.Interval != 0 {
+			spec.Trigger = &pb.ScheduleSpec_IntervalMs{IntervalMs: uint64(job.Interval / time.Millisecond)}
+		} else {
+			spec.Trigger = &pb.ScheduleSpec_Cron{Cron: job.Cron}
+		}
+		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: scheduleRoutePrefix + job.JobID, Kind: pb.RouteKind_ROUTE_KIND_SCHEDULE,
+			DefaultEnabled: true, Spec: &pb.RouteDescriptor_Schedule{Schedule: spec}})
+	}
 	appendHTTPRoutes(r, reg.HTTP)
 	appendServiceRoutes(reg, r)
 	appendSubscriptionRoutes(reg, r)
@@ -166,6 +180,7 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32, c
 // 准备期不能发起业务 RPC。失败时已向 Core 报告 SESSION_ERROR 并关闭连接。
 func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Registration) (prepared *pb.Prepared, err error) {
 	sid, boot, minor := ack.GetSessionId(), ack.GetBootstrap(), ack.GetChosenMinor()
+	setI18n(reg.messages, boot.GetDefaultLocale())
 	limits := boot.GetPhaseLimits()
 	// 1. Core 必须下发阶段预算与准备截止时间；缺失时报协议错误，而不是把预算当作 0 误报超时。
 	if limits == nil || limits.GetConfigMs() == 0 || limits.GetMigrationMs() == 0 || limits.GetOnStartMs() == 0 || boot.GetPreparationDeadlineUnixMs() == 0 {
@@ -181,7 +196,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 
 	// 2. 在 OnStart 之前完成配置迁移、默认值与校验；restart 与恢复均使用 RESUME。
 	configContext, cancelConfig := context.WithTimeout(context.Background(), time.Duration(limits.GetConfigMs())*time.Millisecond)
-	preparedConfig, err := config.Prepare(configContext, root.Config(), generatedFor(root).ConfigSchema,
+	preparedConfig, err := config.Prepare(configContext, root.OnConfigLoad, generatedFor(root).ConfigSchema,
 		[]byte(boot.GetCandidateConfigJson()), boot.PreviousConfigVersion, boot.GetTargetConfigVersion(),
 		boot.GetDatabaseDescriptor().GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME)
 	cancelConfig()
@@ -190,6 +205,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
 			failure.Code, failure.Message, err)
 	}
+	root.setConfig(preparedConfig.Values)
 
 	// 3. 数据库从迁移阶段开始可用；后续任何准备失败都由这里关闭连接。
 	dbhook.Begin(boot.GetDatabaseDescriptor())
