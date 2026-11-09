@@ -114,6 +114,9 @@ func replaceFile(name string, content []byte) (err error) {
 		}
 	}()
 	_, writeErr := temporary.Write(content)
+	if writeErr == nil {
+		writeErr = temporary.Sync() // 内容落盘后才允许重命名。
+	}
 	closeErr := temporary.Close()
 	if err := errors.Join(writeErr, closeErr); err != nil {
 		return fmt.Errorf("write temporary settings: %w", err)
