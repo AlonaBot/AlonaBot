@@ -262,18 +262,18 @@ agent
 
 ### goal-83 · T-12.8 文本生成服务
 
-状态：等待前置（T-03.8、T-12.2）。T-06.1（PR #45）已合并。语句中 goal-8、goal-19、goal-59 提供的符号（manifest 的 role 解析、Service Broker 的目标定位、sdk.JSONService、sdk.CallJSON、sdk.WithAccess、Context.Caller、agent 的 Config 与 Provider 装配）只写名字；合并后由审查者核对，再改为待派发。2026-10-28 按 D-61 改为以 `@agent` 为目标。2026-11-04 按 D-77～D-85 修订计划：llm_service_allowed_plugins 缺省为 `["*"]`，表示全部插件（D-83）；Agent 的配置改由 `config_schema.json` 声明（D-76）。
+状态：等待前置（T-03.8、T-12.2）。T-06.1（PR #45）已合并。语句中 goal-8、goal-19、goal-59 提供的符号（manifest 的 role 解析、Service Broker 的目标定位、sdk.JSONService、sdk.CallJSON、sdk.WithAccess、Context.Caller、agent 的 Config 与 Provider 装配）只写名字；合并后由审查者核对，再改为待派发。2026-10-28 按 D-61 改为以 `@agent` 为目标。2026-11-04 按 D-77～D-85 修订计划：llm_service_allowed_plugins 缺省为 `["*"]`，表示全部插件（D-83）；Agent 的配置改由 `config_schema.json` 声明（D-76）。2026-11-09 按 D-111 在 sdk/llm 增加一问一答的 `llm.Ask`。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-83（切片 T-12.8：文本生成服务）。goal 目录 goal-83，分支 goal-83，worktree .worktrees/goal-83，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：Core 的 Service Broker 把目标 `@agent` 解析为已安装的 Agent 组件；新建 sdk/llm，提供 CONTRACTS §13.5 llm.generate 的请求/响应类型、Schema 标识与以 `@agent` 为目标的调用辅助；官方 Agent 组件注册该服务（public），只接受配置项 llm_service_allowed_plugins 中的直接调用方，用已配置的 Provider 完成一次非流式请求，并返回 Provider 给出的用量。
+目标：Core 的 Service Broker 把目标 `@agent` 解析为已安装的 Agent 组件；新建 sdk/llm，提供 CONTRACTS §13.5 llm.generate 的请求/响应类型、Schema 标识、以 `@agent` 为目标的调用辅助与一问一答的 llm.Ask；官方 Agent 组件注册该服务（public），只接受配置项 llm_service_allowed_plugins 中的直接调用方，用已配置的 Provider 完成一次非流式请求，并返回 Provider 给出的用量。
 
-依据：PLAN T-12 步骤 9；CONTRACTS §13.5、§3、§9.1；DECISIONS D-38、D-51、D-61；TEST-MATRIX V-76、V-82。
+依据：PLAN T-12 步骤 9；CONTRACTS §13.5、§3、§9.1；DECISIONS D-38、D-51、D-61、D-111；TEST-MATRIX V-76、V-82、V-109。
 
 范围（只新增或修改这些）：
 - internal/core/ 的 Service Broker：目标定位处解析 `@agent`（只改定位处，新增解析函数放在新文件）
-- sdk/llm/：新建包（类型、Schema 标识、Generate）
+- sdk/llm/：新建包（类型、Schema 标识、Generate、Ask）
 - agent/：Config 增加字段；新增 generate.go（服务注册与处理）；provider 包不改
 - 上述包的测试文件
 允许的新跨模块边：无（agent -> sdk/... 已允许）。sdk/llm 只 import sdk 与标准库。
@@ -288,11 +288,13 @@ agent
    type Request struct { Messages []Message `json:"messages"`; System string `json:"system,omitempty"`; Provider string `json:"provider,omitempty"`; MaxOutputTokens int `json:"max_output_tokens,omitempty"` }
    type Response struct { Text string `json:"text"`; Provider string `json:"provider"`; Model string `json:"model"`; InputTokens int `json:"input_tokens,omitempty"`; OutputTokens int `json:"output_tokens,omitempty"` }
    func Generate(ctx context.Context, req Request) (Response, error) // 经 sdk.CallJSON 调用 AgentTarget + "/" + ServiceName
+   func Ask(ctx context.Context, prompt string) (string, error) // 等于 Generate(ctx, Request{Messages: []Message{{Role: "user", Text: prompt}}}) 后取 Text（D-111）
 2. agent
    Config 增加字段：LLMServiceAllowedPlugins []string `json:"llm_service_allowed_plugins"`
 
 行为：
 - `@agent`：Broker 定位目标时，`@agent` 解析为当前安装记录（或库模式的 dev 组件）中 role 为 agent 的组件 ID，之后的访问规则、调用链、CALL_CYCLE 与激活检查按解析后的 ID 执行；没有 Agent 组件时与目标未激活相同。
+- Ask：prompt 为空串或只含空白时返回 INVALID_ARGUMENT，不发出调用；否则按接口段的等价写法调用 Generate，只返回 Response.Text，错误原样返回。
 - 注册：在 Services Hook 中以 JSONService 注册 ServiceName，WithAccess(sdk.AccessPublic)。
 - 许可：Context.Caller() 为空或不在 LLMServiceAllowedPlugins 中时返回 PERMISSION_DENIED，不请求 Provider。
 - 校验：messages 为空、role 不是 user 或 assistant、max_output_tokens 小于 0 时返回 INVALID_ARGUMENT；provider 非空且不存在时返回 INVALID_ARGUMENT；为空时使用 default_provider，没有任何可用 Provider 时返回 FAILED_PRECONDITION。
@@ -305,8 +307,9 @@ agent
 - 提交：agent/generate_test.go（//go:build unix）。用 goal-59 的测试装配、本地模拟 Provider 与一个调用 llm.Generate 的测试插件：
   - 调用方未列入时 PERMISSION_DENIED，模拟 Provider 没有收到请求；列入后返回 text、provider、model 与模拟服务给出的用量，会话存储没有新增条目。
   - 测试插件只经 llm.Generate（`@agent`）调用，不知道 Agent 的组件 ID；把 Agent 组件换成另一个 ID 的测试 Agent 后同一调用到达新组件。
+  - 测试插件以 llm.Ask 调用一次：模拟 Provider 收到只含一条 user 消息、没有 system 的请求，使用 default_provider，Ask 返回模拟服务给出的文本。
   - 模拟 Provider 出错与中途断开为 UNAVAILABLE，模拟服务只收到一次请求，safe_message 不含 API Key。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：校验分支；三种协议各一次；provider 不存在为 INVALID_ARGUMENT；Agent 配置中没有 Provider 为 FAILED_PRECONDITION；调用方期限短于模拟 Provider 的延迟时，调用方得到 DEADLINE_EXCEEDED，模拟服务看到请求被取消；Agent 组件未启用或未安装时调用返回 UNAVAILABLE。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：校验分支；Ask 的 prompt 为空串与只含空白时不发出调用；三种协议各一次；provider 不存在为 INVALID_ARGUMENT；Agent 配置中没有 Provider 为 FAILED_PRECONDITION；调用方期限短于模拟 Provider 的延迟时，调用方得到 DEADLINE_EXCEEDED，模拟服务看到请求被取消；Agent 组件未启用或未安装时调用返回 UNAVAILABLE。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./agent/... ./sdk/... ./internal/core/...；go build ./...；`go list -deps` 列出的 Core 可执行文件与 SDK 根包模块都在 docs/development.md 的允许清单中。
 
