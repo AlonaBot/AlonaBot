@@ -28,7 +28,7 @@ const (
 	csrfHeader        = "X-Alonabot-CSRF"
 )
 
-// Auth 校验管理凭证、持久会话与浏览器 CSRF；同时提供派生授权的原会话检查。
+// Auth 校验管理与插件路由请求的凭证、持久会话与浏览器 CSRF。
 // 构造后只读取配置，数据库操作由 state.Store 串行化。
 type Auth struct {
 	store          *state.Store
@@ -45,7 +45,7 @@ func New(st *state.Store, now func() time.Time, adminBaseURL *url.URL, dataDir s
 	return &Auth{store: st, now: now, baseURL: *adminBaseURL, secure: adminBaseURL.Scheme == "https", firstTokenPath: filepath.Join(dataDir, FirstTokenFile)}
 }
 
-// Routes 注册登录与需认证的登出接口；装配方只在 admin host 调用这些路由。
+// Routes 注册受控主机上的登录与需认证的登出接口。
 func (a *Auth) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auth/login", a.login)
 	mux.Handle("POST /api/auth/logout", a.Require(http.HandlerFunc(a.logout)))
@@ -89,7 +89,7 @@ func (a *Auth) Authorize(r *http.Request, pluginID string) bool {
 	return ok && err == nil
 }
 
-// Lookup 返回当前 Cookie 会话及其到期时刻，供 webhost 绑定派生授权。
+// Lookup 返回当前有效 Cookie 会话及其到期时刻。
 // 无效凭证返回 ok=false，状态库故障用 slog 记录。
 func (a *Auth) Lookup(r *http.Request) (sessionID string, expiresAt time.Time, ok bool) {
 	credential, err := a.credential(r.Context())
@@ -107,7 +107,7 @@ func (a *Auth) Lookup(r *http.Request) (sessionID string, expiresAt time.Time, o
 	return session.SessionID, time.UnixMilli(session.ExpiresAt), true
 }
 
-// Valid 检查会话存在、尚未到期且认证代次仍匹配，供 webhost 即时撤销派生授权。
+// Valid 检查会话存在、尚未到期且认证代次仍匹配。
 func (a *Auth) Valid(sessionID string) bool {
 	if sessionID == "" {
 		return false

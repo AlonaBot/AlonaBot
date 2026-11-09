@@ -325,7 +325,7 @@ func TestSettingsAndListenOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.Host = "localhost"
+	request.Host = "127.0.0.1"
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
@@ -502,7 +502,7 @@ func TestAdminAuthRun(t *testing.T) {
 				}
 			}
 			const origin = "http://admin.test:7650"
-			if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte(`{"listen":"127.0.0.1:0","admin_base_url":"`+origin+`","plugin_base_url":"http://plugin.test:7650"}`), 0o600); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte(`{"listen":"127.0.0.1:0","base_url":"`+origin+`"}`), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			c := startCore(t, dir)
@@ -542,7 +542,7 @@ func TestAdminAuthRun(t *testing.T) {
 				}
 				return response, content
 			}
-			send("POST", "/api/auth/login", "plugin.test", origin, `{"token":"wrong"}`, nil, "", "", 404)
+			send("POST", "/api/auth/login", "plugin.test", origin, `{"token":"wrong"}`, nil, "", "", 421)
 			send("POST", "/api/auth/login", "unknown.test", origin, `{"token":"wrong"}`, nil, "", "", 421)
 			if !initialized {
 				_, content := send("POST", "/api/auth/login", "admin.test", origin, `{"token":"wrong"}`, nil, "", "", 401)
