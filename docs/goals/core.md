@@ -3362,7 +3362,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-91 · T-04.8 SDK 自有类型与事件常量
 
-状态：等待前置（T-03.9、T-03.24）。2026-11-09 按 D-104 加入消息句柄：编辑、撤回与引用只收 `message.MessageRef`，本切片把 T-03.9（goal-51，PR #118）新增的 `c.Edit` 与 `sdk.Edit` 改为句柄形式，因此前置加入 T-03.9，合并后由审查者按合入的文件补全范围。同日按 D-108 加入片段构造函数与 `message.Content`，Send、编辑与自动回复收 Chain 或单个片段；按 D-109 把插件的媒体读取改为 `sdk.OpenMedia`、上传改为 `Upload(ctx, r, mime)`，goal-7 合入的 `internal/core/supervisor/media_in_test.go` 随之成为调用方；按 D-102 改写插件侧的目标：`message.Target` 结构改为会话字符串 `message.Session`，新增可选的 `sdk.Via`，account_id 由 T-03.24（goal-121）在 Core 补齐，因此前置加入 T-03.24；T-03.24 合并后由审查者核对 `Registry.Complete` 的签名再改为待派发。T-04.9（PR #110，合并提交 `6aed25d`）已合并：生成器不再输出注册代码，`sdk.Generated` 只剩 `ServiceSchemas` 与 `ConfigSchema`，按原计划不需要再核对接口。T-03.11（PR #106，合并提交 `3913d5a`）与 T-15.1（PR #109，合并提交 `1b226a2`）已合并，`adapters/telegram/perm`、`adapters/onebot11/`（含 `onebottest` 与测试）随之成为调用方，已加入语句「范围」的调用方一项。依据 D-70，2026-11-04 从 T-04.7 拆出。T-04.7（PR #89，合并提交 `3e37cd6`）已合并，接口、行为与测试段已按合入代码写出。前置加入 T-04.9：`sdk/generate/source.go` 为标记事件生成 `r.On(id, "类型字符串")`，本切片把 `On` 改为事件常量后，这段生成代码会编译失败，而标记本身由 T-04.9 删除；T-04.9 合并后不需要再核对接口，直接改为待派发。
+状态：等待前置（T-03.9、T-03.24）。2026-11-09 按 D-104 加入消息句柄：编辑、撤回与引用只收 `message.MessageRef`，本切片把 T-03.9（goal-51，PR #118）新增的 `c.Edit` 与 `sdk.Edit` 改为句柄形式，因此前置加入 T-03.9，合并后由审查者按合入的文件补全范围。同日按 D-108 加入片段构造函数与 `message.Content`，Send、编辑与自动回复收 Chain 或单个片段；按 D-109 把插件的媒体读取改为 `sdk.OpenMedia`、上传改为 `Upload(ctx, r, mime)`，goal-7 合入的 `internal/core/supervisor/media_in_test.go` 随之成为调用方；按 D-110 把时间与时长字段改为 `time.Time` 与 `time.Duration`；按 D-102 改写插件侧的目标：`message.Target` 结构改为会话字符串 `message.Session`，新增可选的 `sdk.Via`，account_id 由 T-03.24（goal-121）在 Core 补齐，因此前置加入 T-03.24；T-03.24 合并后由审查者核对 `Registry.Complete` 的签名再改为待派发。T-04.9（PR #110，合并提交 `6aed25d`）已合并：生成器不再输出注册代码，`sdk.Generated` 只剩 `ServiceSchemas` 与 `ConfigSchema`，按原计划不需要再核对接口。T-03.11（PR #106，合并提交 `3913d5a`）与 T-15.1（PR #109，合并提交 `1b226a2`）已合并，`adapters/telegram/perm`、`adapters/onebot11/`（含 `onebottest` 与测试）随之成为调用方，已加入语句「范围」的调用方一项。依据 D-70，2026-11-04 从 T-04.7 拆出。T-04.7（PR #89，合并提交 `3e37cd6`）已合并，接口、行为与测试段已按合入代码写出。前置加入 T-04.9：`sdk/generate/source.go` 为标记事件生成 `r.On(id, "类型字符串")`，本切片把 `On` 改为事件常量后，这段生成代码会编译失败，而标记本身由 T-04.9 删除；T-04.9 合并后不需要再核对接口，直接改为待派发。
 
 符号已按合入代码核对：
 - 公开 API 中的 pb 类型：`Context.Event() *pb.Event`、`To(*pb.Target)`、`Context.Send` 与 `sdk.Send` 的 `*pb.SendResult` 和 `*pb.Target`、`Upload` 的 `*pb.MediaRef`、`GrantMedia` 的 `...*pb.Target`、`Error.Code pb.ErrorCode`、`Public(pb.HttpAuthMode)` 与 `HTTPRoute.AuthMode`、`Command.Mode` 与 `Command.Params`；`message.Chain.Proto() *pb.MessageChain`；`sdk/adapter` 的 `Core.Deliver`、`Core.ReportFailure`、`Instance.Capabilities`、`Instance.Send`、`Adapter.Descriptor`。
@@ -3379,12 +3379,13 @@ Core 一侧已按合入代码核对并修订：
 - 插件与 Adapter 的公共 API 不再暴露生成的 pb 类型：SDK 自己定义消息、事件、会话字符串、Actor、SendResult 与错误码，pb 只留在 SDK 内部。发送目标是会话字符串，机器人是可选参数 sdk.Via（D-102）；编辑、撤回与引用所指的消息是消息句柄 message.MessageRef（D-104）。
 - 每种片段都有构造函数；Send、编辑与自动回复收 message.Content，即 Chain 或单个片段（D-108）。
 - 插件经 sdk.OpenMedia 顺序读取媒体；Upload 只收内容与 MIME，大小与 SHA-256 由 SDK 计算（D-109）。
+- SDK 类型中的时间用 time.Time，时长用 time.Duration（D-110）。
 - 新增标准事件常量（带 payload 的 Go 类型）与 sdk.AdapterEvent；事件注册改用常量，Collect 核对事件 Handler 的 payload 参数类型。
 - 命令参数类型改为 SDK 自有类型。
 - sdk/adapter 的接口改用 SDK 类型，官方 Telegram Adapter 与已合并的全部调用方同步。
 - 不改协议：proto 与 Core 侧不变，SDK 在边界内转换。
 
-依据：PLAN T-04 步骤 9（自有类型部分）；CONTRACTS §1.3、§1.4、§2.1、§8；MESSAGE-MODEL §1～§3；DESIGN §D；DECISIONS D-70、D-71、D-102、D-104、D-108、D-109；TEST-MATRIX V-14 的类型分项、V-86 的 SDK 分项、V-101 与 V-102 的 SDK 分项、V-106、V-107。
+依据：PLAN T-04 步骤 9（自有类型部分）；CONTRACTS §1.3、§1.4、§2.1、§8；MESSAGE-MODEL §1～§3；DESIGN §D；DECISIONS D-70、D-71、D-102、D-104、D-108～D-110；TEST-MATRIX V-14 的类型分项、V-86 的 SDK 分项、V-101 与 V-102 的 SDK 分项、V-106～V-108。
 
 范围（只新增或修改这些）：
 - 新增 sdk/errcode/
@@ -3403,7 +3404,7 @@ Core 一侧已按合入代码核对并修订：
    func (c Code) String() string // 与现在的 pb 枚举名相同，如 ERROR_CODE_INVALID_ARGUMENT
    type Error struct { Code Code; Message string }
    func (e *Error) Error() string // 「错误码: 说明」，与现在的 sdk.Error 相同
-2. sdk/message（可选字段的零值表示 absent，转换时对应未设置的 optional 字段）
+2. sdk/message（可选字段的零值表示 absent，转换时对应未设置的 optional 字段；时间为 time.Time，时长为 time.Duration，D-110）
    身份：
    type Session string // 会话字符串 <adapter_id>:<chat_id>[#<thread_id>]（MESSAGE-MODEL §1，D-102）；插件可以直接写字面量
    func NewSession(adapterID, chatID, threadID string) Session // chat_id 与 thread_id 中的 % 与 # 写作 %25、%23；threadID 为空表示会话本身
@@ -3424,9 +3425,9 @@ Core 一侧已按合入代码核对并修订：
    type TextEntity struct { Type EntityType; OffsetUTF16, LengthUTF16 uint32; URL, Language, ExternalUserID string }
    type TextSegment struct { Text string; Format TextFormat; Entities []TextEntity }
    type Readability int; const ( Readable Readability = iota + 1; Unreadable )
-   type IncomingMedia struct { Token string; Size uint64; MIME string; Readability Readability; ExpiresAtUnixMS int64 } // Size 为 0 表示未知
+   type IncomingMedia struct { Token string; Size uint64; MIME string; Readability Readability; ExpiresAt time.Time } // Size 为 0 表示未知
    type MediaSource struct { MediaRef string; Incoming *IncomingMedia; HTTPSURL string } // 恰有一个
-   type MediaRef struct { Token string; Size uint64; MIME string; SHA256 []byte; ExpiresAtUnixMS int64; ConsumerPluginIDs []string; Sessions []Session }
+   type MediaRef struct { Token string; Size uint64; MIME string; SHA256 []byte; ExpiresAt time.Time; ConsumerPluginIDs []string; Sessions []Session }
    func (m *MediaRef) Source() MediaSource       // 以该 MediaRef 为来源
    func (m *IncomingMedia) Source() MediaSource  // 以该入站对象为来源
    func ImageURL(httpsURL string) Segment        // 以下构造函数都返回对应的值类型片段（D-108）
@@ -3437,7 +3438,7 @@ Core 一侧已按合入代码核对并修订：
    func File(src MediaSource, filename string) Segment
    func Mention(externalUserID string) Segment
    type ImageSegment struct { Source MediaSource; Alt, Caption string }
-   type VideoSegment struct { Source MediaSource; DurationMS uint64; Caption string }
+   type VideoSegment struct { Source MediaSource; Duration time.Duration; Caption string }
    type FileSegment struct { Source MediaSource; Filename, MIME, Caption string }
    type MentionSegment struct { ExternalUserID, Display string }
    type ReferenceSegment struct { Ref MessageRef } // 句柄省略实例时，Core 以补齐后的发送目标为在途目标补齐（CONTRACTS §8）
@@ -3451,7 +3452,7 @@ Core 一侧已按合入代码核对并修订：
    type SourceKind int; const ( SourceAdapter SourceKind = iota + 1; SourceScheduler )
    type PlatformMessage struct { PlatformMessageID string; Chain Chain; MediaGroupID string }
    type Payload interface{ payload() } // 下面的载荷类型以指针实现
-   type Event struct { ID, Type string; Source SourceKind; OccurredAtUnixMS int64; AdapterID, AdapterInstanceID, AccountID string; Session Session; Actor *Actor; Message *PlatformMessage; Payload Payload; Capabilities []Capability; PlatformPayload []byte; SourceEventID string }
+   type Event struct { ID, Type string; Source SourceKind; OccurredAt time.Time; AdapterID, AdapterInstanceID, AccountID string; Session Session; Actor *Actor; Message *PlatformMessage; Payload Payload; Capabilities []Capability; PlatformPayload []byte; SourceEventID string }
    func (e *Event) Ref() MessageRef // 本事件所指的消息：message.created 与 message.edited 的消息、reaction.added 被回应的消息、button.clicked 按钮所在的消息（有 origin_platform_message_id 时）；其他事件为空
    type CreatedPayload struct { PlatformMessageID string; Chain Chain; ToMe bool }
    type EditedPayload struct { PlatformMessageID string; Chain, OldChain Chain }
@@ -3459,7 +3460,7 @@ Core 一侧已按合入代码核对并修订：
    type ButtonClickedPayload struct { ActionID string; ActionSchemaVersion uint32; Value, CallbackQueryID, OriginPlatformMessageID string }
    type MemberPayload struct { MemberExternalUserID string } // member.joined 与 member.left 共用，由 Event.Type 区分
    type ReactionAddedPayload struct { PlatformMessageID, Reaction string }
-   type ScheduledPayload struct { JobID, RunID string; ScheduledAtUnixMS int64 }
+   type ScheduledPayload struct { JobID, RunID string; ScheduledAt time.Time }
    type BotOnlinePayload struct { AdapterID, AdapterInstanceID, AccountID, AccountDisplayName string }
    type OfflineReason int; const ( OfflineStopped OfflineReason = iota + 1; OfflineAdapterExited; OfflineInstanceFailed )
    type BotOfflinePayload struct { AdapterID, AdapterInstanceID, AccountID string; Reason OfflineReason; SafeError *errcode.Error }
@@ -3468,7 +3469,7 @@ Core 一侧已按合入代码核对并修订：
    type SendStatus int; const ( SendAccepted SendStatus = iota + 1; SendPartial; SendRejected; SendUnknown )
    type PartStatus int; const ( PartAccepted PartStatus = iota + 1; PartRejected; PartUnknown; PartNotAttempted )
    type PartResult struct { PartIndex uint32; SegmentIndexes []uint32; Status PartStatus; PlatformMessageIDs []string; MessageIDsUnavailable bool; Error *errcode.Error }
-   type SendResult struct { Status SendStatus; Session Session; AdapterInstanceID string; PlatformMessageIDs []string; PrimaryPlatformMessageID string; ProviderAcceptedTimeUnixMS int64; CapabilitiesUsed []Capability; PartResults []PartResult }
+   type SendResult struct { Status SendStatus; Session Session; AdapterInstanceID string; PlatformMessageIDs []string; PrimaryPlatformMessageID string; ProviderAcceptedAt time.Time; CapabilitiesUsed []Capability; PartResults []PartResult }
    func (r *SendResult) Ref() MessageRef    // PrimaryPlatformMessageID 与 AdapterInstanceID 的句柄；没有确认的消息时为空
    func (r *SendResult) Refs() []MessageRef // PlatformMessageIDs 依次的句柄
 3. sdk
@@ -3504,6 +3505,7 @@ Core 一侧已按合入代码核对并修订：
 
 行为：
 - 转换集中在 sdk/internal/convert：入站事件与命令参数从 pb 转为 SDK 类型，出站 Chain、目标、错误与 Adapter 描述反向转换。每个字段双向保持，空串与零值对应未设置的 optional。message 与 sdk/adapter 的公开 API 不出现 pb。wire 与 Core 不变（Core 侧的补齐由 T-03.24 提供）。
+- 时间与时长（D-110）：协议的毫秒值不为 0 时转为 time.UnixMilli(ms) 与 time.Duration(ms)*time.Millisecond，0 与未设置转为零值；反向用 UnixMilli() 与 Milliseconds()，零值转为 0 或未设置，亚毫秒部分舍去。出站的负 Duration 在发出请求前返回 INVALID_ARGUMENT。
 - 会话字符串（D-102）：
   - pb.Target → Session 为 NewSession(adapter_id, chat_id, thread_id)；接收或发送的实例由 Event、SendResult 的 AdapterInstanceID 给出，account_id 由 Event 的 AccountID 给出。
   - Session → pb.Target：Parts 得到 adapter_id、chat_id、thread_id；Via 给出时填 adapter_instance_id；account_id 留空，由 Core 补齐。格式不合法时在发出请求前返回 INVALID_ARGUMENT。
@@ -3535,6 +3537,7 @@ Core 一侧已按合入代码核对并修订：
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：
   - 转换的往返：全部片段类型、全部载荷类型（含 member.joined 与 member.left）、contracts/testdata/events 的 fixture，pb → SDK → pb 后 proto.Equal；空串与未设置的 optional 相互对应。
   - errcode 的数值与 pb.ErrorCode 逐个一致，String 与 pb 枚举名相同。
+  - 时间与时长：各字段的毫秒值往返不变；0 与未设置对应零值；亚毫秒部分舍去；负的 VideoSegment.Duration 在发出请求前返回 INVALID_ARGUMENT。
   - 版本不符与 payload_json 解码失败时：不调用 Handler、记 WARN、日志没有载荷。
   - AdapterEvent 的名称不合法、version 为 0、T 不是结构体；Handle 的各种错误签名；零值 EventType。
   - Chain.Text 跳过非文本片段；修改 c.Event() 的返回值不影响 c.Send 的默认目标。
@@ -3826,7 +3829,7 @@ Core 一侧已按合入代码核对并修订：
 
 目标：在通用消息模型中追加两个官方 Adapter 都支持的语音片段 voice、合并转发的引用节点与入站转发标识、URL 按钮，Core 在调用 Adapter 前完成结构校验与能力判定，SDK 提供对应的构造函数与入站类型；Event 追加会话类型 chat_type，SDK 提供会话类型的判断方法。只有一个平台具备的片段（例如全体提及）不在此追加（D-87）。
 
-依据：PLAN T-03 步骤 11；CONTRACTS §8（通用能力的范围）；WIRE §3.4、§3.5 末段；MESSAGE-MODEL §1、§2、§6.3；DECISIONS D-87、D-89、D-91、D-97、D-100；TEST-MATRIX V-90、V-98 的 Core 分项。
+依据：PLAN T-03 步骤 11；CONTRACTS §8（通用能力的范围）；WIRE §3.4、§3.5 末段；MESSAGE-MODEL §1、§2、§6.3；DECISIONS D-87、D-89、D-91、D-97、D-100、D-110；TEST-MATRIX V-90、V-98 的 Core 分项、V-108 的语音分项。
 
 要点：
 - proto 只追加：Segment 的 voice（VoiceSegment：source、duration_ms?、caption?）、ForwardItem 的 `platform_message_id`、ForwardSegment 的 `platform_forward_id`、Button 的 `url`；同步 `contracts/wirespec_test.go` 的编号检查。
@@ -3834,7 +3837,7 @@ Core 一侧已按合入代码核对并修订：
 - 能力：Core 在调用 Adapter 前按目标实例的 `message.voice`、`message.forward` 判定，未声明时 UNSUPPORTED。
 - 按钮签发跳过 url 按钮，不生成 token，也不要求对应的 button.clicked 路由。
 - 会话类型（D-100）：proto 新增枚举 ChatType（CHAT_TYPE_UNSPECIFIED = 0、PRIVATE、GROUP、CHANNEL），Event 追加 `ChatType chat_type`；Core 在入站标准化时拒绝没有 target 却不是 UNSPECIFIED 的事件（INVALID_ARGUMENT），chat_type 不参与 Target 的比较、默认回复目标与发信准入，Core 生成的 bot.online/bot.offline 与 scheduled 事件为 UNSPECIFIED。
-- SDK：在 T-04.8 的自有类型上追加构造函数与入站类型，写法与 D-108 一致（`message.Voice(src)`、`message.VoiceURL(url)`、`message.URLButton(label, url)`）；Context 追加 `ChatType()` 与 `IsPrivate()`、`IsGroup()`、`IsChannel()`，UNSPECIFIED 时三者都为 false。
+- SDK：在 T-04.8 的自有类型上追加构造函数与入站类型，写法与 D-108 一致（`message.Voice(src)`、`message.VoiceURL(url)`、`message.URLButton(label, url)`），VoiceSegment 的时长为 `time.Duration`（D-110）；Context 追加 `ChatType()` 与 `IsPrivate()`、`IsGroup()`、`IsChannel()`，UNSPECIFIED 时三者都为 false。
 - 测试：提交一个经回环 Adapter 的集成测试，覆盖带 voice 与 url 按钮的 Chain 在声明能力的实例上原样到达、未声明能力的实例收不到请求，以及 chat_type 为 GROUP 的事件原样到达插件；其余进本地自测。
 
 ### goal-106 · T-03.15 平台动作
