@@ -17,10 +17,14 @@ import (
 const invocationSchemaVersion = 1
 
 func businessHandler(reg *Registration) wire.Handler {
-	routes := make(map[string]EventRoute, len(reg.Events))
+	handlers := make(map[string]func(*Context) error, len(reg.Events)+len(reg.Schedules))
 	commands := make(map[string]Command, len(reg.Commands))
 	for _, route := range reg.Events {
-		routes[route.RouteID] = route
+		handlers[route.RouteID] = route.Handler
+	}
+	// 定时任务与事件共用手动 Handler 路径，取消后仍等待用户函数实际返回。
+	for _, job := range reg.Schedules {
+		handlers[scheduleRoutePrefix+job.JobID] = job.Handler
 	}
 	for _, command := range reg.Commands {
 		commands[commandRouteID(command)] = command
@@ -30,9 +34,9 @@ func businessHandler(reg *Registration) wire.Handler {
 		if response, ok := services(ctx, in); ok {
 			return response
 		}
-		route, eventRoute := routes[in.Target]
+		handler, manualRoute := handlers[in.Target]
 		command, commandRoute := commands[in.Target]
-		if !eventRoute && !commandRoute {
+		if !manualRoute && !commandRoute {
 			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "handler route not found")
 		}
 		request := &pb.HandlerRequest{}
@@ -64,7 +68,7 @@ func businessHandler(reg *Registration) wire.Handler {
 				return result, nil
 			})
 		}
-		return invokeHandler(ctx, in, request.GetEvent(), false, nil, func(c *Context) (message.Chain, error) { return nil, route.Handler(c) })
+		return invokeHandler(ctx, in, request.GetEvent(), false, nil, func(c *Context) (message.Chain, error) { return nil, handler(c) })
 	}
 }
 
