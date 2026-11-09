@@ -23,7 +23,8 @@ func (f *File) CommandPrefixes(adapterInstanceID string) []string {
 }
 
 // Update 在未展开的文档副本上编辑，校验通过后以 0600 临时文件替换原文件。
-// 失败时文件与当前快照保持原状；edit 执行期间持有写锁，应只操作传入的 Document。
+// Rename 为提交点：此前失败保留文件与快照；此后目录同步失败仍发布新快照，
+// 并返回设置已写入但持久化尚未确认的错误。edit 执行期间持有写锁，应只操作传入的 Document。
 func (f *File) Update(edit func(doc *Document) error) error {
 	// 1. 持锁读取磁盘原文，与 Reload 串行，保留运行期间的手动修改。
 	f.mu.Lock()
@@ -65,6 +66,9 @@ func (f *File) Update(edit func(doc *Document) error) error {
 		return err
 	}
 	f.document, f.current = document, current
+	if err := syncDirectory(filepath.Dir(f.name)); err != nil {
+		return fmt.Errorf("settings saved but directory sync failed: %w", err)
+	}
 	return nil
 }
 
