@@ -109,6 +109,8 @@ Context 的传播/默认 Target/用户调用链仅在本次调用期间有效；
 
 Edit（CONTRACTS §8）同样返回 SendResult：part_results 恰有一项，status 只取 ACCEPTED / REJECTED / UNKNOWN，成功时 platform_message_ids 与 primary_platform_message_id 为被编辑消息的 ID。Edit 失败不改为发送新消息。
 
+插件 API 用消息句柄指向一条消息（D-104）：`<会话字符串>/<platform_message_id>[@<实例名>]`，platform_message_id 中的 `%`、`/`、`@` 写作 `%25`、`%2F`、`%40`。SendResult 与事件给出带实例的句柄；编辑、撤回、引用片段与 Telegram 中指向某条消息的平台动作只收句柄，省略实例时 Core 按 CONTRACTS §8 选择。协议不变，SDK 把句柄拆成 Target 与 platform_message_id。
+
 ACCEPTED 只表示平台 API 确认接受，不保证用户阅读。跨多条平台请求无事务性；发送中的媒体租约保护到消费完成/失败/超时，不能因原插件退出就提前删除平台仍在读取的文件。
 
 ## 4A. 撤回与流式输出

@@ -18,7 +18,7 @@
 | T-03.7 | goal-50 | 官方 Telegram Adapter 的发送计划与回执：Chain 完整预检、物理操作计划、UTF-16 实体、相册/引用/按钮渲染、PartResult 汇总 | T-03 步骤 6（发送） | T-03.4 | V-08、V-35 | 已完成（[PR #108](https://github.com/AlonaBot/AlonaBot/pull/108)） |
 | T-03.11 | goal-89 | 官方 Telegram Adapter 的平台权限：`telegram.chat_owner`/`telegram.chat_admin` 的声明、`getChatAdministrators` 的会话缓存与作废、获取失败时不带权限，`adapters/telegram/perm` 常量包 | T-03 步骤 9 | T-04.6 | V-85 的 Telegram 分项 | 已完成（[PR #106](https://github.com/AlonaBot/AlonaBot/pull/106)） |
 | T-03.20 | goal-111 | 官方 Telegram Adapter 的媒体与新增片段：按来源传递与流式 multipart、`platform_file` 复用 file_id、voice 的收发、动图、贴纸与 video_note、url 按钮、`file_base_url`、入站事件的 chat_type | T-03 步骤 17 | T-03.13、T-03.14 | V-89、V-90、V-98 的 Telegram 分项，V-97 | 未开始 |
-| T-03.21 | goal-112 | 官方 Telegram Adapter 的平台动作与撤回：动作声明（含 sendChatAction、setMessageReaction、sendMessageDraft）与 `adapters/telegram/action` 的带类型函数及输入状态、草稿两个辅助函数，deleteMessages | T-03 步骤 18 | T-03.11、T-03.15、T-03.16 | V-91、V-92、V-94 的 Telegram 分项 | 未开始 |
+| T-03.21 | goal-112 | 官方 Telegram Adapter 的平台动作与撤回：动作声明（含 sendChatAction、setMessageReaction、sendMessageDraft）与 `adapters/telegram/action` 的带类型函数（指向消息的动作收消息句柄，D-104）及输入状态、草稿两个辅助函数，deleteMessages | T-03 步骤 18 | T-03.11、T-03.15、T-03.16 | V-91、V-92、V-94 的 Telegram 分项、V-102 的动作分项 | 未开始 |
 | T-03.22 | goal-113 | 官方 Telegram Adapter 的命令菜单：setMyCommands 同步 | T-03 步骤 19 | T-03.17 | V-93 的 Telegram 分项 | 未开始 |
 | T-03.23 | goal-117 | 官方 Telegram Adapter 的代理模式与话题判定：实例配置 `proxy_mode`（none 缺省、core、custom），thread_id 只认 `is_topic_message` | T-03 步骤 20 | T-03.4 | V-99、V-100 | 未开始 |
 
@@ -36,7 +36,7 @@
 
 17. **媒体与新增片段（D-88、D-89、D-97、D-99）。** 按 MESSAGE-MODEL §6.4 改写发送计划与执行：multipart 请求体改为边经 `core.media.read` 分块读取边写出，不在内存中拼出整份请求；inline_base64 解码后上传，`platform_file` 直接作为 file_id。voice 用 sendVoice，单独成一个物理操作；image/gif 用 sendAnimation 并结束当前媒体组；url 按钮映射为 InlineKeyboardButton 的 url。入站 voice、animation、video_note 与静态贴纸按 §6.4 映射，入站 audio 仍为 file。实例配置追加 `file_base_url`，文件下载经它发出，代理规则不变。入站事件按 MESSAGE-MODEL §6 由 chat.type 填写 chat_type（D-100）。在 Capabilities 中追加 `message.voice`；`telegramtest` 追加对应方法的记录与响应。
 
-18. **平台动作与撤回（D-92、D-93、D-98）。** 在 Adapter 描述中声明 MESSAGE-MODEL §6.5 的动作及其参数、结果 Schema（含 send_chat_action、set_message_reaction、send_message_draft），在 `adapters/telegram/action` 为每个动作发布带类型的 Go 函数（只依赖 `sdk` 根包），并提供输入状态与草稿流式两个辅助函数；实现 deleteMessages（同一会话每次最多 100 个），追加 `message.delete` 能力。限权相关动作执行后作废该会话的管理员缓存（T-03.11）。sendMessageDraft 的参数在实施时按 Bot API 原文核对，与本计划不符时标阻塞。
+18. **平台动作与撤回（D-92、D-93、D-98）。** 在 Adapter 描述中声明 MESSAGE-MODEL §6.5 的动作及其参数、结果 Schema（含 send_chat_action、set_message_reaction、send_message_draft），在 `adapters/telegram/action` 为每个动作发布带类型的 Go 函数（只依赖 `sdk` 根包；pin、unpin 与 set_message_reaction 以消息句柄指定消息，D-104），并提供输入状态与草稿流式两个辅助函数；实现 deleteMessages（同一会话每次最多 100 个），追加 `message.delete` 能力。限权相关动作执行后作废该会话的管理员缓存（T-03.11）。sendMessageDraft 的参数在实施时按 Bot API 原文核对，与本计划不符时标阻塞。
 
 19. **命令菜单（D-96）。** `adapter.commands.sync` 按 MESSAGE-MODEL §6.5 调用 setMyCommands，记住上一次成功同步的内容，相同时不调用平台；追加 `commands.sync` 能力。
 

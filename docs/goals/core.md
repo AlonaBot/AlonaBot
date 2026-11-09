@@ -47,7 +47,7 @@
 | goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 已完成（PR #85） |
 | goal-95 | T-08.11 | 配置改由 config_schema.json 声明 | T-04.7、T-08.3、T-08.4、T-08.10 | 已完成（PR #103） |
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-04.7、T-06.1 | 已完成（PR #101） |
-| goal-91 | T-04.8 | SDK 自有类型与事件常量 | T-03.24、T-04.7、T-04.9 | 等待前置 |
+| goal-91 | T-04.8 | SDK 自有类型与事件常量 | T-03.9、T-03.24、T-04.7、T-04.9 | 等待前置 |
 | goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 已完成（PR #107） |
 | goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8、T-08.11 | 待派发 |
 | goal-101 | T-08.12 | Adapter 实例配置与 Core 设置的版本迁移 | T-07.6、T-08.11 | 待派发 |
@@ -3303,7 +3303,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-91 · T-04.8 SDK 自有类型与事件常量
 
-状态：等待前置（T-03.24）。2026-11-09 按 D-102 改写插件侧的目标：`message.Target` 结构改为会话字符串 `message.Session`，新增可选的 `sdk.Via`，account_id 由 T-03.24（goal-121）在 Core 补齐，因此前置加入 T-03.24；T-03.24 合并后由审查者核对 `Registry.Complete` 的签名再改为待派发。T-04.9（PR #110，合并提交 `6aed25d`）已合并：生成器不再输出注册代码，`sdk.Generated` 只剩 `ServiceSchemas` 与 `ConfigSchema`，按原计划不需要再核对接口。T-03.11（PR #106，合并提交 `3913d5a`）与 T-15.1（PR #109，合并提交 `1b226a2`）已合并，`adapters/telegram/perm`、`adapters/onebot11/`（含 `onebottest` 与测试）随之成为调用方，已加入语句「范围」的调用方一项。依据 D-70，2026-11-04 从 T-04.7 拆出。T-04.7（PR #89，合并提交 `3e37cd6`）已合并，接口、行为与测试段已按合入代码写出。前置加入 T-04.9：`sdk/generate/source.go` 为标记事件生成 `r.On(id, "类型字符串")`，本切片把 `On` 改为事件常量后，这段生成代码会编译失败，而标记本身由 T-04.9 删除；T-04.9 合并后不需要再核对接口，直接改为待派发。
+状态：等待前置（T-03.9、T-03.24）。2026-11-09 按 D-104 加入消息句柄：编辑、撤回与引用只收 `message.MessageRef`，本切片把 T-03.9（goal-51，PR #118）新增的 `c.Edit` 与 `sdk.Edit` 改为句柄形式，因此前置加入 T-03.9，合并后由审查者按合入的文件补全范围。同日按 D-102 改写插件侧的目标：`message.Target` 结构改为会话字符串 `message.Session`，新增可选的 `sdk.Via`，account_id 由 T-03.24（goal-121）在 Core 补齐，因此前置加入 T-03.24；T-03.24 合并后由审查者核对 `Registry.Complete` 的签名再改为待派发。T-04.9（PR #110，合并提交 `6aed25d`）已合并：生成器不再输出注册代码，`sdk.Generated` 只剩 `ServiceSchemas` 与 `ConfigSchema`，按原计划不需要再核对接口。T-03.11（PR #106，合并提交 `3913d5a`）与 T-15.1（PR #109，合并提交 `1b226a2`）已合并，`adapters/telegram/perm`、`adapters/onebot11/`（含 `onebottest` 与测试）随之成为调用方，已加入语句「范围」的调用方一项。依据 D-70，2026-11-04 从 T-04.7 拆出。T-04.7（PR #89，合并提交 `3e37cd6`）已合并，接口、行为与测试段已按合入代码写出。前置加入 T-04.9：`sdk/generate/source.go` 为标记事件生成 `r.On(id, "类型字符串")`，本切片把 `On` 改为事件常量后，这段生成代码会编译失败，而标记本身由 T-04.9 删除；T-04.9 合并后不需要再核对接口，直接改为待派发。
 
 符号已按合入代码核对：
 - 公开 API 中的 pb 类型：`Context.Event() *pb.Event`、`To(*pb.Target)`、`Context.Send` 与 `sdk.Send` 的 `*pb.SendResult` 和 `*pb.Target`、`Upload` 的 `*pb.MediaRef`、`GrantMedia` 的 `...*pb.Target`、`Error.Code pb.ErrorCode`、`Public(pb.HttpAuthMode)` 与 `HTTPRoute.AuthMode`、`Command.Mode` 与 `Command.Params`；`message.Chain.Proto() *pb.MessageChain`；`sdk/adapter` 的 `Core.Deliver`、`Core.ReportFailure`、`Instance.Capabilities`、`Instance.Send`、`Adapter.Descriptor`。
@@ -3317,19 +3317,19 @@ Core 一侧已按合入代码核对并修订：
 /goal 使用 $alonabot-execute 推进 goal-91（切片 T-04.8：SDK 自有类型与事件常量）。goal 目录 goal-91，分支 goal-91，worktree .worktrees/goal-91，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：
-- 插件与 Adapter 的公共 API 不再暴露生成的 pb 类型：SDK 自己定义消息、事件、会话字符串、Actor、SendResult 与错误码，pb 只留在 SDK 内部。发送目标是会话字符串，机器人是可选参数 sdk.Via（D-102）。
+- 插件与 Adapter 的公共 API 不再暴露生成的 pb 类型：SDK 自己定义消息、事件、会话字符串、Actor、SendResult 与错误码，pb 只留在 SDK 内部。发送目标是会话字符串，机器人是可选参数 sdk.Via（D-102）；编辑、撤回与引用所指的消息是消息句柄 message.MessageRef（D-104）。
 - 新增标准事件常量（带 payload 的 Go 类型）与 sdk.AdapterEvent；事件注册改用常量，Collect 核对事件 Handler 的 payload 参数类型。
 - 命令参数类型改为 SDK 自有类型。
 - sdk/adapter 的接口改用 SDK 类型，官方 Telegram Adapter 与已合并的全部调用方同步。
 - 不改协议：proto 与 Core 侧不变，SDK 在边界内转换。
 
-依据：PLAN T-04 步骤 9（自有类型部分）；CONTRACTS §2.1、§8；MESSAGE-MODEL §1～§3；DESIGN §D；DECISIONS D-70、D-71、D-102；TEST-MATRIX V-14 的类型分项、V-86 的 SDK 分项、V-101 的 SDK 分项。
+依据：PLAN T-04 步骤 9（自有类型部分）；CONTRACTS §2.1、§8；MESSAGE-MODEL §1～§3；DESIGN §D；DECISIONS D-70、D-71、D-102、D-104；TEST-MATRIX V-14 的类型分项、V-86 的 SDK 分项、V-101 与 V-102 的 SDK 分项。
 
 范围（只新增或修改这些）：
 - 新增 sdk/errcode/
 - sdk/message/：扩展为下面的类型，删除 Chain.Proto
 - 新增 sdk/internal/convert/：pb 与 SDK 类型的双向转换，只有 sdk 与 sdk/adapter 的实现使用
-- sdk/：sdk.go、send.go、media.go、registry.go、events.go、dispatch.go、adapter_run.go、session.go（只改转换的调用点）；其余构造 sdk.Error 的文件只把错误码改为 errcode
+- sdk/：sdk.go、send.go、media.go、registry.go、events.go、dispatch.go、adapter_run.go、session.go（只改转换的调用点），以及 T-03.9 新增 Edit 的文件；其余构造 sdk.Error 的文件只把错误码改为 errcode
 - sdk/adapter/adapter.go
 - 调用方：adapters/telegram/（含测试）、adapters/onebot11/（含 onebottest 与测试）、examples/plugins/、internal/core/supervisor/testdata/、internal/core/adapter/remote/remote_test.go，以及测试中以字符串嵌入的插件源码
 - 上述包的测试文件
@@ -3347,6 +3347,9 @@ Core 一侧已按合入代码核对并修订：
    type Session string // 会话字符串 <adapter_id>:<chat_id>[#<thread_id>]（MESSAGE-MODEL §1，D-102）；插件可以直接写字面量
    func NewSession(adapterID, chatID, threadID string) Session // chat_id 与 thread_id 中的 % 与 # 写作 %25、%23；threadID 为空表示会话本身
    func (s Session) Parts() (adapterID, chatID, threadID string, ok bool) // 格式不合法时 ok 为 false
+   type MessageRef string // 消息句柄 <会话字符串>/<platform_message_id>[@<实例名>]（MESSAGE-MODEL §4，D-104）；可以原样存储
+   func NewMessageRef(s Session, platformMessageID, instanceID string) MessageRef // platform_message_id 中的 %、/、@ 写作 %25、%2F、%40；instanceID 为空时省略 @ 部分
+   func (r MessageRef) Parts() (s Session, platformMessageID, instanceID string, ok bool) // 句柄或其中的会话字符串不合法时 ok 为 false
    type Actor struct { ExternalUserID, AdapterInstanceID, DisplayName, Locale string; Permissions []string }
    type Capability struct { Name string; Version uint32; Supported bool }
    片段（Chain 中的片段都是值类型，type switch 按值匹配）：
@@ -3366,7 +3369,8 @@ Core 一侧已按合入代码核对并修订：
    type VideoSegment struct { Source MediaSource; DurationMS uint64; Caption string }
    type FileSegment struct { Source MediaSource; Filename, MIME, Caption string }
    type MentionSegment struct { ExternalUserID, Display string }
-   type ReferenceSegment struct { OriginalPlatformMessageID string; Session Session } // Session 为空表示与本次发送同一会话
+   type ReferenceSegment struct { Ref MessageRef } // 句柄省略实例时，Core 以补齐后的发送目标为在途目标补齐（CONTRACTS §8）
+   func Quote(ref MessageRef) Segment // 返回 ReferenceSegment
    type Button struct { ActionID, Label, Value string }
    type ButtonsSegment struct { Rows [][]Button }
    type ForwardSource struct { DisplayName, ExternalUserID string }
@@ -3377,6 +3381,7 @@ Core 一侧已按合入代码核对并修订：
    type PlatformMessage struct { PlatformMessageID string; Chain Chain; MediaGroupID string }
    type Payload interface{ payload() } // 下面的载荷类型以指针实现
    type Event struct { ID, Type string; Source SourceKind; OccurredAtUnixMS int64; AdapterID, AdapterInstanceID, AccountID string; Session Session; Actor *Actor; Message *PlatformMessage; Payload Payload; Capabilities []Capability; PlatformPayload []byte; SourceEventID string }
+   func (e *Event) Ref() MessageRef // 本事件所指的消息：message.created 与 message.edited 的消息、reaction.added 被回应的消息、button.clicked 按钮所在的消息（有 origin_platform_message_id 时）；其他事件为空
    type CreatedPayload struct { PlatformMessageID string; Chain Chain; ToMe bool }
    type EditedPayload struct { PlatformMessageID string; Chain, OldChain Chain }
    type DeletedPayload struct { PlatformMessageIDs []string }
@@ -3393,6 +3398,8 @@ Core 一侧已按合入代码核对并修订：
    type PartStatus int; const ( PartAccepted PartStatus = iota + 1; PartRejected; PartUnknown; PartNotAttempted )
    type PartResult struct { PartIndex uint32; SegmentIndexes []uint32; Status PartStatus; PlatformMessageIDs []string; MessageIDsUnavailable bool; Error *errcode.Error }
    type SendResult struct { Status SendStatus; Session Session; AdapterInstanceID string; PlatformMessageIDs []string; PrimaryPlatformMessageID string; ProviderAcceptedTimeUnixMS int64; CapabilitiesUsed []Capability; PartResults []PartResult }
+   func (r *SendResult) Ref() MessageRef    // PrimaryPlatformMessageID 与 AdapterInstanceID 的句柄；没有确认的消息时为空
+   func (r *SendResult) Refs() []MessageRef // PlatformMessageIDs 依次的句柄
 3. sdk
    type Error = errcode.Error // 插件继续用 errors.As 取 *sdk.Error
    func (c *Context) Event() *message.Event
@@ -3400,6 +3407,8 @@ Core 一侧已按合入代码核对并修订：
    func Via(instanceID string) SendOption // 指定发送的机器人（实例）；缺省由 Core 选择（CONTRACTS §8）
    func (c *Context) Send(chain message.Chain, opts ...SendOption) (*message.SendResult, error)
    func Send(ctx context.Context, to message.Session, chain message.Chain, opts ...SendOption) (*message.SendResult, error) // opts 只接受 Via
+   func (c *Context) Edit(ref message.MessageRef, chain message.Chain) (*message.SendResult, error) // 取代 T-03.9 的 Edit(platformMessageID, chain, opts...)
+   func Edit(ctx context.Context, ref message.MessageRef, chain message.Chain) (*message.SendResult, error) // 后台编辑；取代 Edit(ctx, to, platformMessageID, chain)
    func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []byte) (*message.MediaRef, error)
    func GrantMedia(ctx context.Context, token, granteePluginID string, sessions ...message.Session) (string, error)
    type HTTPAuth int; const ( AuthCoreSession HTTPAuth = iota + 1; AuthCallbackState; AuthCallbackSignature; AuthCallbackNonce )
@@ -3428,6 +3437,10 @@ Core 一侧已按合入代码核对并修订：
   - Session → pb.Target：Parts 得到 adapter_id、chat_id、thread_id；Via 给出时填 adapter_instance_id；account_id 留空，由 Core 补齐。格式不合法时在发出请求前返回 INVALID_ARGUMENT。
   - c.Send：To 与 Via 都没有时照旧发往默认目标；只有 Via 时发往默认目标的会话（含 thread），经指定实例发出；只有 To 时由 Core 选择实例。
   - Adapter 交付的 Event 由 Session 与 Event 的 AdapterID、AdapterInstanceID、AccountID 组成完整的 pb.Target；Core 交给 Adapter 的完整 Target 转为 Session。
+- 消息句柄（D-104）：
+  - SendResult 与 Event 转换后，由 Session、AdapterInstanceID 与消息 ID 组成句柄；Event.Ref 按载荷取消息 ID。
+  - Edit：句柄拆成 EditRequest 的 to 与 platform_message_id，to 的 adapter_instance_id 取句柄中的实例，省略时留空由 Core 补齐；c.Edit 带本次调用的父调用，sdk.Edit 不带。句柄不合法时在发出请求前返回 INVALID_ARGUMENT。
+  - ReferenceSegment：Ref 拆成引用的 target（adapter_id、chat_id、thread_id 与可选的 adapter_instance_id）与 original_platform_message_id；入站的引用反向组成句柄。
 - Context：Event 每次调用只转换一次，返回值只供本次 Handler 读取，修改它不影响 Send 的默认目标与权限判定。Service 调用的 Event 仍为 nil。Has 与默认 Target 继续使用 SDK 内部的 pb 值。
 - 命令参数：`*message.ImageSegment` 对应 image，`message.Chain` 对应 message，其余不变；可选参数缺失时为 nil，与现在相同。checkHandler 的错误文案同步。
 - 事件路由：
@@ -3450,6 +3463,7 @@ Core 一侧已按合入代码核对并修订：
   - AdapterEvent 的名称不合法、version 为 0、T 不是结构体；Handle 的各种错误签名；零值 EventType。
   - Chain.Text 跳过非文本片段；修改 c.Event() 的返回值不影响 c.Send 的默认目标。
   - Session：Telegram 与 OneBot 11 形式的往返、话题、chat_id 中的 `%` 与 `#`、各种不合法格式；To、Via 的四种组合对应的 SendRequest.to。
+  - MessageRef：带与不带实例、话题、消息 ID 中的 `%`、`/`、`@` 的往返与各种不合法格式；SendResult.Ref、Refs 与各类事件的 Event.Ref；c.Edit 与 sdk.Edit 的 EditRequest 带句柄中的实例；Quote 与入站引用的往返。
   - `go doc -all` 查看 ./sdk、./sdk/message、./sdk/adapter、./sdk/errcode，输出中没有 pb 类型。
   - internal/core/supervisor/command_local_test.go（commanddispatch 插件，TCP 与 stdio）：事件路由写成 `r.On("typed", sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error {...})`，插件回复 e.Chain.Text()、e.ToMe、c.Event().Actor.Permissions 与 c.Event().Session，与 Adapter 交付的值一致。Handler 的第二个参数写成 *message.ReactionAddedPayload 时（环境变量控制）插件启动失败，日志带 route_id。
   - 现有命令参数用例改用 *message.ImageSegment 与 message.Chain，断言不变。
@@ -3721,17 +3735,17 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-107 · T-03.16 撤回
 
-状态：等待前置（T-03.9、T-04.8）。2026-11-09 按 D-87、D-93 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+状态：等待前置（T-03.9、T-04.8）。2026-11-09 按 D-87、D-93 新增，同日按 D-104 改为只收消息句柄。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
 
 目标：实现 Core 固定服务 `core.delete` 与 `adapter.delete`，按 `message.delete` 能力判定，准入与 Edit 相同，按输入顺序汇总每个 ID 的结果；SDK 提供撤回方法。输入状态与表情回应只有 Telegram 提供，是它的平台动作（goal-112），不在此实现。
 
-依据：PLAN T-03 步骤 13；CONTRACTS §8（撤回）；WIRE §3.4、§3.5；MESSAGE-MODEL §4A；DECISIONS D-87、D-93；TEST-MATRIX V-92 的 Core 分项。
+依据：PLAN T-03 步骤 13；CONTRACTS §8（撤回）；WIRE §3.4、§3.5；MESSAGE-MODEL §4A；DECISIONS D-87、D-93、D-104；TEST-MATRIX V-92 的 Core 分项、V-102 的撤回分项。
 
 要点：
 - proto 只追加 `core.delete`、`adapter.delete` 的请求与响应；服务名常量追加在 `internal/wire/services.go` 末尾。
 - 1～100 个 ID，超出为 INVALID_ARGUMENT；结果按输入顺序，每项为 ACCEPTED、REJECTED、UNKNOWN 或 NOT_ATTEMPTED 与安全错误；Adapter 返回的项数不符时为 INTERNAL。
 - 不执行出站 Hook；出站 Hook 中禁止调用：T-05.3 已合并时把 `core.delete` 加入其禁止名单，否则由 T-05.3 一并加入。
-- SDK 提供撤回方法；`sdk/adapter` 以可选接口让实例实现。
+- SDK（D-104）：`func (c *Context) Delete(refs ...message.MessageRef) (*message.DeleteResult, error)` 与后台用的 `func Delete(ctx context.Context, refs ...message.MessageRef) (*message.DeleteResult, error)`；全部句柄的会话与实例部分须相同，否则在发出请求前返回 INVALID_ARGUMENT；结果按输入顺序与句柄一一对应。`sdk/adapter` 以可选接口让实例实现。
 - 测试：提交一个经回环 Adapter 的集成测试，覆盖撤回的部分失败汇总与未声明能力时 Adapter 收不到请求；其余进本地自测。
 
 ### goal-108 · T-03.17 命令菜单同步

@@ -109,6 +109,7 @@
 | V-99 | T-03 | Telegram 实例的代理模式（D-101）：缺省、none 且设置了代理环境变量、core、custom、custom 缺少或给出非法 proxy、非 custom 时 proxy 为非法值、代理不可达 | 缺省与 none 直连且不读取环境变量；core 使用 Core 为子进程设置的代理环境；custom 的全部请求（含 getFile 与文件下载）经实例的 proxy；custom 缺少或非法 proxy 时启动返回 INVALID_ARGUMENT，非 custom 时 proxy 不校验；代理不可达按网络错误退避，不改为直连 |
 | V-100 | T-03 | Telegram 的话题判定（D-100）：论坛话题内的消息、论坛的 General 话题、非论坛超级群的回复串、插件给出 thread_id 发往指定话题 | 只有 is_topic_message 为 true 的消息带 thread_id；General 话题与回复串没有 thread_id；出站的 thread_id 作为 message_thread_id |
 | V-101 | T-03、T-04、T-07 | 会话字符串与可选的机器人（D-102）：Telegram 与 OneBot 11 的会话字符串往返（含话题、chat_id 中的 `%` 与 `#`）与格式不合法；Handler 中发往同一会话的另一话题与另一会话、后台发送；一个实例、多个实例有与没有 `default_instance`、`sdk.Via` 指定未登记或未许可的实例；插件给出不符的 account_id；实例换账号后再发送；引用片段与媒体授权的目标；实例名不合规与跨 Adapter 重名 | 往返不变，格式不合法时 SDK 在发出请求前返回 INVALID_ARGUMENT；同一会话由收到事件的实例发出，同一话题适用原 Target 豁免；后台发送用唯一实例或 default_instance，多个实例且没有设置时 FAILED_PRECONDITION，不调用 Adapter；不符的 account_id 为 INVALID_ARGUMENT；换账号后经新账号发出；实例名问题使 Core 拒绝启动并指出键 |
+| V-102 | T-03、T-04 | 消息句柄（D-104）：SendResult 的 Ref、Refs 与 Event 的 Ref 给出带实例的句柄；句柄字符串往返（含话题、消息 ID 中的 `%`、`/`、`@`，省略实例）与格式不合法；c.Edit、sdk.Edit、c.Delete、sdk.Delete 与 message.Quote 只用句柄完成；同一会话有两个实例时经句柄编辑与撤回；一次撤回含不同会话或实例的句柄；Telegram 的 pin、unpin 与 set_message_reaction 用句柄 | 往返后各部分不变；编辑与撤回的请求带句柄中的实例，由发出该消息的实例执行；不同会话或实例的撤回与不合法的句柄在发出请求前返回 INVALID_ARGUMENT |
 
 ## 2. 跨任务验收的最终闭合点
 
