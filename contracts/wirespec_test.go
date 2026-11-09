@@ -442,6 +442,14 @@ func TestRemovedPermissionFieldsReserved(t *testing.T) {
 	}
 }
 
+// TestBootstrapDefaultLocaleFieldNumber 固定默认语言字段的线上编号与类型。
+func TestBootstrapDefaultLocaleFieldNumber(t *testing.T) {
+	field := (&pb.Bootstrap{}).ProtoReflect().Descriptor().Fields().ByNumber(12)
+	if field == nil || field.Name() != "default_locale" || field.Kind() != protoreflect.StringKind {
+		t.Errorf("Bootstrap field 12 should be string default_locale, got %v", field)
+	}
+}
+
 // TestToolFieldNumbers 固定 Service 工具描述与目录载荷的编号、类型和重复性。
 func TestToolFieldNumbers(t *testing.T) {
 	for _, c := range []struct {

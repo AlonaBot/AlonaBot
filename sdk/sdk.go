@@ -7,6 +7,7 @@
 //
 // 命令与事件 Handler 可通过 Context.Send 回复原事件目标；自动回复型命令返回 Chain，由 Core 发送一次。
 // 文本匹配与 Raw 共用 Handler 调用上下文；HTTP 路由由 SDK 托管 Listener 并校验 Session 凭证。
+// [Context.T] 按 Actor 与 Core 默认语言格式化文案；后台调用 [T] 使用 Core 默认语言。
 // 定时任务尚未实现。
 //
 // 包的组成：
@@ -28,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
@@ -180,9 +182,10 @@ type Registration struct {
 	Schedules     []Schedule
 	services      []serviceRoute
 	subscriptions []subscriptionRoute
+	messages      *i18n.Catalog // 收集时解析，供本次 Session 只读使用。
 }
 
-// Collect 调用根插件的注册入口，检查 Handler 签名与同插件内的重复项（D-20：同插件重复即报错）。
+// Collect 调用根插件的注册入口，检查 Handler 签名、usage 文案键与同插件内的重复项（D-20：同插件重复即报错）。
 func Collect(root Root) (*Registration, error) {
 	if root == nil {
 		return nil, errors.New("root plugin is nil")
@@ -208,7 +211,7 @@ func Collect(root Root) (*Registration, error) {
 	}
 	reg := &Registration{Commands: cmds.commands, Events: events.events, HTTP: routes.routes, Schedules: jobs.jobs}
 	errs := append(slices.Concat(cmds.errs, events.errs, routes.errs, jobs.errs), collectServices(root, reg))
-	errs = append(errs, collectSubscriptions(root, reg))
+	errs = append(errs, collectSubscriptions(root, reg), collectI18n(root, reg))
 	if err := errors.Join(errs...); err != nil {
 		return nil, fmt.Errorf("invalid registration of %T: %w", root, err)
 	}

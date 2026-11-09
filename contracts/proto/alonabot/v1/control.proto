@@ -69,6 +69,8 @@ message Bootstrap {
   LogLevel log_level = 10;
   // 本次运行生效的 Session 限额，由 Core 填写（CONTRACTS §16）。
   SessionLimits session_limits = 11;
+  // Core 的全局默认语言，在本 Session 生命周期内保持不变（CONTRACTS §5.4）。
+  string default_locale = 12;
 }
 
 // SessionLimits 描述 Core 与 SDK 共同执行的 Session 限额（WIRE-FORMAT §3.2）。
