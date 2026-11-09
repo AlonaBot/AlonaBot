@@ -176,19 +176,19 @@
 - 合并转发的 node：platform_message_id 为 `id`，chain 为 `content`（节点内的 media_ref 同样按本 goal 的来源规则），source 给出时为 `user_id`、`nickname`，否则为本账号与展示名。
 - 媒体来源：只有插件给出 inline_base64 时请求中才出现 `base64://`；media_dir 优先于媒体 URL；媒体 URL 的前缀取实例的 `media_url_base`，缺省时不传前缀由 Core 取 base_url。
 - chat_type：`private:` 的事件（含群临时会话与好友通知）为 PRIVATE，`group:` 的事件为 GROUP。
-- Capabilities 追加 `message.voice`、`message.forward`，Descriptor 的 extensions 追加 {name "at_all", version 1, schema_json 为不允许任何属性的空对象}；`onebottest` 追加 upload_*_file 与 send_*_forward_msg 的缺省响应。
+- Capabilities 追加 `message.voice`、`message.forward`，Descriptor 的 extensions 追加以 `adapter.Extension[AtAll]("at_all", 1)` 声明的 at_all（AtAll 为空结构体，推导出的 Schema 不允许任何属性，D-113）；`onebottest` 追加 upload_*_file 与 send_*_forward_msg 的缺省响应。
 - 测试：提交在既有 `send_test.go` 中追加的用例：一条 Chain 依次含语音、合并转发与文件时的三次请求参数，以及 media_ref 以媒体 URL 传递且请求中没有 base64；其余进本地自测。
 
 ### goal-116 · T-15.6 官方 OneBot 11 Adapter 的扩展事件、平台动作与撤回
 
 状态：等待前置（T-03.15、T-03.16、T-15.2）。2026-11-09 按 D-87、D-92、D-93、D-95 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
 
-目标：在 Adapter 描述中声明 MESSAGE-MODEL §7.1 的十种扩展事件（含 NapCat 的 input_status）及 Schema 并完成映射；声明 §7.4 的平台动作（含群信息与成员查询）及参数、结果 Schema，在 `adapters/onebot11/action` 为每个动作发布带类型的 Go 函数（第一个参数为 goal-106 的调用者接口，只依赖 `sdk` 根包），扩展事件常量发布在新增的 `adapters/onebot11/event`；`adapter.delete` 逐个调用 delete_msg，声明 `message.delete`。
+目标：在 Adapter 描述中以 Go 类型声明 MESSAGE-MODEL §7.1 的十种扩展事件（含 NapCat 的 input_status）并完成映射；以参数与结果的 Go 类型声明 §7.4 的平台动作（含群信息与成员查询），Schema 都由 SDK 推导（D-113），在 `adapters/onebot11/action` 为每个动作发布带类型的 Go 函数（第一个参数为 goal-106 的调用者接口，只依赖 `sdk` 根包），扩展事件常量发布在新增的 `adapters/onebot11/event`；`adapter.delete` 逐个调用 delete_msg，声明 `message.delete`。
 
-依据：PLAN T-15 步骤 8；CONTRACTS §8（平台动作，撤回、输入状态、表情回应与草稿，扩展事件）；MESSAGE-MODEL §1.2、§4A、§7.1、§7.4；DECISIONS D-92、D-93、D-95；TEST-MATRIX V-91、V-92 的 OneBot 11 分项，V-96 的扩展事件分项。
+依据：PLAN T-15 步骤 8；CONTRACTS §8（平台动作，撤回、输入状态、表情回应与草稿，扩展事件）；MESSAGE-MODEL §1.2、§4A、§7.1、§7.4；DECISIONS D-92、D-93、D-95、D-113；TEST-MATRIX V-91、V-92 的 OneBot 11 分项，V-96 的扩展事件分项。
 
 要点：
-- 扩展事件的 payload 只含 MESSAGE-MODEL §7.1 表中的字段，数字 ID 为十进制字符串，Schema 不允许其他属性；Target 与 Actor 按 §7.1 的规则；未声明的 notice 与 request 仍只计数。
+- 扩展事件的 payload 类型只含 MESSAGE-MODEL §7.1 表中的字段，数字 ID 为十进制字符串，放在 `adapters/onebot11/event`：Adapter 以 `adapter.Event[T]` 声明，插件以 `sdk.AdapterEvent[T]` 引用同一类型，推导出的 Schema 不允许其他属性（D-113）；Target 与 Actor 按 §7.1 的规则；未声明的 notice 与 request 仍只计数。
 - 动作参数中可由 Target 推出的 group_id、user_id 不重复出现；结果为响应 data 原文；failed 为 FAILED_PRECONDITION 并带 retcode；实现端扩展的动作不探测实现端类型。
 - 撤回逐个 delete_msg，失败或结果未知后其余为 NOT_ATTEMPTED。
 - 测试：提交在既有测试文件中追加的用例：推入好友请求得到 onebot11.friend_request，再用 set_friend_add_request 动作处理，断言请求参数；其余进本地自测。

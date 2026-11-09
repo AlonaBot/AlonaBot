@@ -118,6 +118,7 @@
 | V-108 | T-03、T-04 | SDK 类型中的时间与时长（D-110）：Event 的 OccurredAt、MediaRef 与 IncomingMedia 的 ExpiresAt、ScheduledPayload 的 ScheduledAt、SendResult 的 ProviderAcceptedAt、VideoSegment 与 T-03.14 语音片段的 Duration 与协议毫秒值的往返；协议值为 0 或未设置；亚毫秒精度；出站的负时长 | 毫秒值往返不变；0 与未设置对应零值，零值转回 0 或未设置；亚毫秒部分舍去；负时长在发出请求前返回 INVALID_ARGUMENT |
 | V-109 | T-12 | 一问一答的 `llm.Ask`（D-111）：测试插件以 `llm.Ask` 调用模拟 Provider；prompt 为空串或只含空白；Agent 拒绝调用方或 Provider 出错 | 模拟 Provider 收到只含一条 user 消息、没有 system、使用默认 Provider 的请求，Ask 返回其文本；空白 prompt 在发出请求前返回 INVALID_ARGUMENT；其余错误与 Generate 相同 |
 | V-110 | T-04、T-05 | 注册写法统一（D-112）：PreEvent、BeforeSend、AfterSend 的链式注册与 Handler 签名（含错误签名、返回 nil、编辑时的 c.Editing）；Every、Cron（含 Timezone）与 HTTP 路由（含 Public）的链式注册与漏写 Handle；命令省略 Args 时的参数名（方法值、包级函数、函数字面量、查不到参数名）与写了 Args 时；Subscribe 省略与给出 ID、同一事件订阅两次 | REGISTER 中的路由与旧写法等价；错误签名与漏写 Handle 在 Collect 时报错并带 route_id；返回 nil 时 payload 与 Chain 不变；编辑时 c.Editing 为被编辑消息的句柄，发送时为空；省略 Args 时参数名等于 Handler 的参数名，查不到时为 arg1、arg2；Subscribe 的路由 ID 缺省为事件名，同一事件两次订阅都未给 ID 时 Collect 报错 |
+| V-111 | T-03、T-04 | Adapter 声明用 Go 类型（D-113）：adapter.Event、adapter.Extension 与 adapter.Action 从类型推导的 Schema（必需字段、omitempty、嵌套结构与切片、空结构体）；T 或 P 不是结构体、类型无法推导；Adapter 交付带多余字段或缺少必需字段的扩展事件；插件发送不符的 extension 与动作参数；动作结果带 R 未声明的字段 | 事件、extension 与动作参数的 Schema 不允许未声明的属性，没有 omitempty 的字段为必需；类型问题使 RunAdapter 在 REGISTER 之前返回错误并带声明名；不符的事件、片段与参数被 Core 拒绝；结果中多出的字段照常通过 |
 
 ## 2. 跨任务验收的最终闭合点
 

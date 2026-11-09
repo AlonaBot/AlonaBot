@@ -279,10 +279,10 @@
 
 目标：Telegram 实例声明并实现 MESSAGE-MODEL §6.5 的平台动作（含群信息与成员查询、send_chat_action、set_message_reaction、send_message_draft），在 `adapters/telegram/action` 为每个动作发布带类型的 Go 函数，并提供输入状态与草稿流式两个辅助函数；实现撤回（deleteMessages），声明 `message.delete`。
 
-依据：PLAN T-03 步骤 18；CONTRACTS §8（通用能力的范围、平台动作、撤回）；MESSAGE-MODEL §4A、§6.5；DECISIONS D-87、D-92、D-93、D-98、D-104；TEST-MATRIX V-91、V-92、V-94 的 Telegram 分项、V-102 的动作分项；Bot API 原文的 sendMessageDraft。
+依据：PLAN T-03 步骤 18；CONTRACTS §8（通用能力的范围、平台动作、撤回）；MESSAGE-MODEL §4A、§6.5；DECISIONS D-87、D-92、D-93、D-98、D-104、D-113；TEST-MATRIX V-91、V-92、V-94 的 Telegram 分项、V-102 的动作分项；Bot API 原文的 sendMessageDraft。
 
 要点：
-- 动作的参数沿用 Bot API 字段名，数字 ID 为十进制字符串，chat_id 与 message_thread_id 取自 Target；Schema 不允许其他属性；结果为 Bot API 的 `result` 原文。ban、unban、restrict 成功后作废该会话的管理员缓存。
+- 动作的参数沿用 Bot API 字段名，数字 ID 为十进制字符串，chat_id 与 message_thread_id 取自 Target；参数与结果用 Go 类型声明（`adapter.Action[P, R]`，D-113），参数 Schema 不允许其他属性；结果为 Bot API 的 `result` 原文。ban、unban、restrict 成功后作废该会话的管理员缓存。
 - `adapters/telegram/action`：每个动作一个带类型的函数，第一个参数为 goal-106 的调用者接口，参数与结果为 Go 类型；pin_chat_message、unpin_chat_message 与 set_message_reaction 以 message.MessageRef 指定消息，会话与实例取自句柄（D-104）；只依赖 `sdk` 根包，不 import Adapter 运行时代码。输入状态辅助函数立即发送一次、之后每 4 秒一次，ctx 结束即停止；草稿辅助函数以 send_message_draft 流式显示，结束后经普通 Send 发出正式消息，群聊目标在发请求前返回 UNSUPPORTED。sendMessageDraft 的参数与本语句不符时标 [!]。
 - 撤回：同一 Target 的 ID 每 100 个一次 deleteMessages，同一请求的 ID 共享结果；平台返回 400 时该请求的 ID 为 REJECTED，其余 NOT_ATTEMPTED。
 - 测试：提交在既有测试文件中追加的用例（经 telegramtest.Server）：ban_chat_member 的参数与管理员缓存作废，以及 101 个 ID 的撤回分为两次请求；其余进本地自测。

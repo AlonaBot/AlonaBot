@@ -3363,7 +3363,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-91 · T-04.8 SDK 自有类型与事件常量
 
-状态：等待前置（T-03.9、T-03.24）。2026-11-09 按 D-104 加入消息句柄：编辑、撤回与引用只收 `message.MessageRef`，本切片把 T-03.9（goal-51，PR #118）新增的 `c.Edit` 与 `sdk.Edit` 改为句柄形式，因此前置加入 T-03.9，合并后由审查者按合入的文件补全范围。同日按 D-108 加入片段构造函数与 `message.Content`，Send、编辑与自动回复收 Chain 或单个片段；按 D-109 把插件的媒体读取改为 `sdk.OpenMedia`、上传改为 `Upload(ctx, r, mime)`，goal-7 合入的 `internal/core/supervisor/media_in_test.go` 随之成为调用方；按 D-110 把时间与时长字段改为 `time.Time` 与 `time.Duration`；按 D-102 改写插件侧的目标：`message.Target` 结构改为会话字符串 `message.Session`，新增可选的 `sdk.Via`，account_id 由 T-03.24（goal-121）在 Core 补齐，因此前置加入 T-03.24；T-03.24 合并后由审查者核对 `Registry.Complete` 的签名再改为待派发。T-04.9（PR #110，合并提交 `6aed25d`）已合并：生成器不再输出注册代码，`sdk.Generated` 只剩 `ServiceSchemas` 与 `ConfigSchema`，按原计划不需要再核对接口。T-03.11（PR #106，合并提交 `3913d5a`）与 T-15.1（PR #109，合并提交 `1b226a2`）已合并，`adapters/telegram/perm`、`adapters/onebot11/`（含 `onebottest` 与测试）随之成为调用方，已加入语句「范围」的调用方一项。依据 D-70，2026-11-04 从 T-04.7 拆出。T-04.7（PR #89，合并提交 `3e37cd6`）已合并，接口、行为与测试段已按合入代码写出。前置加入 T-04.9：`sdk/generate/source.go` 为标记事件生成 `r.On(id, "类型字符串")`，本切片把 `On` 改为事件常量后，这段生成代码会编译失败，而标记本身由 T-04.9 删除；T-04.9 合并后不需要再核对接口，直接改为待派发。
+状态：等待前置（T-03.9、T-03.24）。2026-11-09 按 D-104 加入消息句柄：编辑、撤回与引用只收 `message.MessageRef`，本切片把 T-03.9（goal-51，PR #118）新增的 `c.Edit` 与 `sdk.Edit` 改为句柄形式，因此前置加入 T-03.9，合并后由审查者按合入的文件补全范围。同日按 D-108 加入片段构造函数与 `message.Content`，Send、编辑与自动回复收 Chain 或单个片段；按 D-109 把插件的媒体读取改为 `sdk.OpenMedia`、上传改为 `Upload(ctx, r, mime)`，goal-7 合入的 `internal/core/supervisor/media_in_test.go` 随之成为调用方；按 D-110 把时间与时长字段改为 `time.Time` 与 `time.Duration`；按 D-113 让 sdk/adapter 的扩展事件与 extension 用 Go 类型声明，Schema 由 SDK 推导；按 D-102 改写插件侧的目标：`message.Target` 结构改为会话字符串 `message.Session`，新增可选的 `sdk.Via`，account_id 由 T-03.24（goal-121）在 Core 补齐，因此前置加入 T-03.24；T-03.24 合并后由审查者核对 `Registry.Complete` 的签名再改为待派发。T-04.9（PR #110，合并提交 `6aed25d`）已合并：生成器不再输出注册代码，`sdk.Generated` 只剩 `ServiceSchemas` 与 `ConfigSchema`，按原计划不需要再核对接口。T-03.11（PR #106，合并提交 `3913d5a`）与 T-15.1（PR #109，合并提交 `1b226a2`）已合并，`adapters/telegram/perm`、`adapters/onebot11/`（含 `onebottest` 与测试）随之成为调用方，已加入语句「范围」的调用方一项。依据 D-70，2026-11-04 从 T-04.7 拆出。T-04.7（PR #89，合并提交 `3e37cd6`）已合并，接口、行为与测试段已按合入代码写出。前置加入 T-04.9：`sdk/generate/source.go` 为标记事件生成 `r.On(id, "类型字符串")`，本切片把 `On` 改为事件常量后，这段生成代码会编译失败，而标记本身由 T-04.9 删除；T-04.9 合并后不需要再核对接口，直接改为待派发。
 
 符号已按合入代码核对：
 - 公开 API 中的 pb 类型：`Context.Event() *pb.Event`、`To(*pb.Target)`、`Context.Send` 与 `sdk.Send` 的 `*pb.SendResult` 和 `*pb.Target`、`Upload` 的 `*pb.MediaRef`、`GrantMedia` 的 `...*pb.Target`、`Error.Code pb.ErrorCode`、`Public(pb.HttpAuthMode)` 与 `HTTPRoute.AuthMode`、`Command.Mode` 与 `Command.Params`；`message.Chain.Proto() *pb.MessageChain`；`sdk/adapter` 的 `Core.Deliver`、`Core.ReportFailure`、`Instance.Capabilities`、`Instance.Send`、`Adapter.Descriptor`。
@@ -3383,10 +3383,10 @@ Core 一侧已按合入代码核对并修订：
 - SDK 类型中的时间用 time.Time，时长用 time.Duration（D-110）。
 - 新增标准事件常量（带 payload 的 Go 类型）与 sdk.AdapterEvent；事件注册改用常量，Collect 核对事件 Handler 的 payload 参数类型。
 - 命令参数类型改为 SDK 自有类型。
-- sdk/adapter 的接口改用 SDK 类型，官方 Telegram Adapter 与已合并的全部调用方同步。
+- sdk/adapter 的接口改用 SDK 类型，扩展事件与 extension 用 Go 类型声明、Schema 由 SDK 推导（D-113）；官方 Telegram Adapter 与已合并的全部调用方同步。
 - 不改协议：proto 与 Core 侧不变，SDK 在边界内转换。
 
-依据：PLAN T-04 步骤 9（自有类型部分）；CONTRACTS §1.3、§1.4、§2.1、§8；MESSAGE-MODEL §1～§3；DESIGN §D；DECISIONS D-70、D-71、D-102、D-104、D-108～D-110；TEST-MATRIX V-14 的类型分项、V-86 的 SDK 分项、V-101 与 V-102 的 SDK 分项、V-106～V-108。
+依据：PLAN T-04 步骤 9（自有类型部分）；CONTRACTS §1.3、§1.4、§2.1、§8；MESSAGE-MODEL §1～§3；DESIGN §D；DECISIONS D-70、D-71、D-102、D-104、D-108～D-110、D-113；TEST-MATRIX V-14 的类型分项、V-86 的 SDK 分项、V-101 与 V-102 的 SDK 分项、V-106～V-108、V-111 的事件与 extension 分项。
 
 范围（只新增或修改这些）：
 - 新增 sdk/errcode/
@@ -3494,9 +3494,11 @@ Core 一侧已按合入代码核对并修订：
    func (r *EventRegistry) On(routeID string, event EventType) *EventBuilder
    func (b *EventBuilder) Handle(h any) // func(*Context) error，或 func(*Context, P) error；EventRoute.Handler 同步改为 any
 4. sdk/adapter
-   type ExtensionDeclaration struct { Name string; Version uint32; SchemaJSON string }
+   type ExtensionDeclaration struct{ ... } // 只能由 Extension 构造（D-113）
+   func Extension[T any](name string, version uint32) ExtensionDeclaration // T 为该 extension 的 payload 类型，必须是结构体
    type PermissionDeclaration struct { Name string; Implies []string; LabelKey string }
-   type EventDeclaration struct { Name string; Version uint32; SchemaJSON string }
+   type EventDeclaration struct{ ... } // 只能由 Event 构造（D-113）
+   func Event[T any](name string, version uint32) EventDeclaration // name 为完整名；T 为 payload 类型，必须是结构体，与插件侧 sdk.AdapterEvent[T] 用同一类型
    type Descriptor struct { AdapterID string; Capabilities []message.Capability; Extensions []ExtensionDeclaration; Permissions []PermissionDeclaration; Events []EventDeclaration }
    Core.Deliver(ctx context.Context, ev *message.Event, cursor []byte) (accepted bool, err error)
    Core.ReportFailure(ctx context.Context, safe *errcode.Error) error
@@ -3528,6 +3530,7 @@ Core 一侧已按合入代码核对并修订：
   - AdapterEvent：Collect 检查 validate.IsAdapterEventType(name)、version 不为 0、T 是结构体。调用时 SDK 比较 version，并把 payload_json 解码为 *T；版本不符或解码失败时记 WARN（只记 route_id 与版本或错误，不记载荷），不调用 Handler，正常结束本次调用。func(*Context) error 形式不解码，Handler 用 c.Event().Payload 读取。
   - 注册未安装 Adapter 的扩展事件照常成功，诊断由 Core 负责（goal-87 已实现）。
 - 错误：SDK 向调用者返回的 *sdk.Error 与现在的错误码和文案相同；validate.PublicCode 的映射留在转换之前。
+- Adapter 声明（D-113）：Event 与 Extension 用 jsonschema-go 的 For（缺省选项）从 T 推导 Schema，即不允许未声明的属性、没有 omitempty 的字段为必需，与 encoding/json 对同一类型的编码一致；RunAdapter 组装注册描述时把它序列化为 schema_json。T 不是结构体或推导失败时，RunAdapter 在发出 REGISTER 之前返回错误，错误中带声明名。已合并的声明改用这两个函数：remote_test 回环 Adapter 的 loop.poke，以及 OneBot 11 的 face extension（goal-79 已合并时）；face 的 id 只含数字这一约束改由 OneBot 11 Adapter 在发送预检中检查（INVALID_ARGUMENT）。
 - Telegram Adapter 只换类型，行为不变。
 
 测试（按编码规范「测试提交规则」）：
@@ -3541,6 +3544,7 @@ Core 一侧已按合入代码核对并修订：
   - 时间与时长：各字段的毫秒值往返不变；0 与未设置对应零值；亚毫秒部分舍去；负的 VideoSegment.Duration 在发出请求前返回 INVALID_ARGUMENT。
   - 版本不符与 payload_json 解码失败时：不调用 Handler、记 WARN、日志没有载荷。
   - AdapterEvent 的名称不合法、version 为 0、T 不是结构体；Handle 的各种错误签名；零值 EventType。
+  - Event 与 Extension 推导的 Schema：必需字段、omitempty、嵌套结构与切片、空结构体；T 不是结构体或类型无法推导时 RunAdapter 返回错误；回环 Adapter 交付带多余字段的 loop.poke 被 Core 拒绝。
   - Chain.Text 跳过非文本片段；修改 c.Event() 的返回值不影响 c.Send 的默认目标。
   - Session：Telegram 与 OneBot 11 形式的往返、话题、chat_id 中的 `%` 与 `#`、各种不合法格式；To、Via 的四种组合对应的 SendRequest.to。
   - MessageRef：带与不带实例、话题、消息 ID 中的 `%`、`/`、`@` 的往返与各种不合法格式；SendResult.Ref、Refs 与各类事件的 Event.Ref；c.Edit 与 sdk.Edit 的 EditRequest 带句柄中的实例；Quote 与入站引用的往返。
@@ -3843,16 +3847,17 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-106 · T-03.15 平台动作
 
-状态：等待前置（T-03.8、T-04.8）。2026-11-09 按 D-87、D-92 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+状态：等待前置（T-03.8、T-04.8）。2026-11-09 按 D-87、D-92 新增，同日按 D-113 让动作以参数与结果的 Go 类型声明。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
 
-目标：Adapter 在注册描述中声明平台动作，插件经 `core.action` 调用；Core 按发信准入检查目标、核对声明与参数 Schema 后经 `adapter.action` 交给实例，并按结果 Schema 校验返回值。
+目标：Adapter 在注册描述中声明平台动作，插件经 `core.action` 调用；Core 按发信准入检查目标、核对声明与参数 Schema 后经 `adapter.action` 交给实例，并按结果 Schema 校验返回值。动作以参数与结果的 Go 类型声明，Schema 由 SDK 推导（D-113）。
 
-依据：PLAN T-03 步骤 12；CONTRACTS §8（平台动作、发信准入、adapter_dependencies）；WIRE §3.4、§3.5；DECISIONS D-92；TEST-MATRIX V-91 的 Core 分项。
+依据：PLAN T-03 步骤 12；CONTRACTS §8（平台动作、发信准入、adapter_dependencies）；WIRE §3.4、§3.5；DECISIONS D-92、D-113；TEST-MATRIX V-91 的 Core 分项、V-111 的动作分项。
 
 要点：
 - proto 只追加：AdapterDescriptor 的动作声明（name、version、scope：CHAT/ACCOUNT、params_schema_json、result_schema_json），`core.action` 与 `adapter.action` 的请求与响应；scope 枚举保留 UNSPECIFIED。
 - 注册校验与扩展事件相同（名称规则、Schema 可编译、同名同版本不重复），失败按注册失败处理。
 - 调用：scope 为 chat 时必须给出 Target，为 account 时只给 adapter_instance_id；准入复用 Send 的实现（在途事件的原 Target 免实例许可，其余检查 allowed_adapter_instances、实例启用与 account 绑定）；参数与结果用同一套 JSON Schema 校验实现；结果不符为 INTERNAL 并记诊断；不重试，结果未知时返回 UNAVAILABLE 或 DEADLINE_EXCEEDED。
+- 动作声明（D-113）：sdk/adapter 增加 `Action[P, R any](name string, version uint32, scope ActionScope) ActionDeclaration`，P 必须是结构体，Schema 按 T-04.8 的 Event 与 Extension 的方式推导；结果是平台原文，结果 Schema 允许未声明的属性。P 与 R 放在 Adapter 的常量包中，与该包的带类型动作函数共用。
 - 出站 Hook 中禁止调用：T-05.3 已合并时把 `core.action` 加入其禁止名单，否则由 T-05.3 一并加入。
 - manifest 的 `adapter_dependencies` 追加 `actions`（名称与版本），启用检查与 extension 相同，缺失时列出。
 - SDK：底层动作调用方法返回 JSON 结果与错误；Context 与后台客户端共同实现一个调用者接口，供 Adapter 包的带类型函数作为第一个参数使用（开发者经这些函数调用动作，不书写动作名与 JSON）；`sdk/adapter` 增加可选接口供实例实现动作，未实现时 Adapter 返回 UNSUPPORTED。

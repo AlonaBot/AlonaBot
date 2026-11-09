@@ -29,7 +29,7 @@
 | T-03.12 | goal-99 | 后台发信许可缺省为全部实例：`allowed_adapter_instances` 改为「全部实例」或管理员收紧后的实例集合，准入与撤销语义不变（D-83） | T-03 步骤 3 | T-03.2 | V-07 | 已完成（PR #90；TEST-MATRIX §3.2） |
 | T-03.13 | goal-104 | 媒体按来源传递：MediaSource 的 `inline_base64` 与只在 Core→Adapter 方向出现的 `platform_file`，同一实例的入站对象复用平台文件标识，`core.media.url` 与统一端口上的临时媒体 URL，SDK 字节构造函数的内联与上传选择（D-88） | T-03 步骤 10 | T-03.6、T-04.8、T-07.7 | V-89 的 Core 分项 | 未开始 |
 | T-03.14 | goal-105 | 新增片段与字段：voice 片段、forward 的 platform_message_id 与 platform_forward_id、Button 的 url、Event 的 chat_type；Chain 校验与能力判定，按钮签发跳过 url 按钮，入站事件的 chat_type 校验，SDK 构造函数、入站类型与会话类型方法（D-89、D-91、D-97、D-100、D-110） | T-03 步骤 11 | T-03.8、T-04.8 | V-90、V-98 的 Core 分项，V-108 的语音分项 | 未开始 |
-| T-03.15 | goal-106 | 平台动作：Adapter 描述的动作声明与校验，`core.action` 与 `adapter.action`，目标准入与参数、结果 Schema 校验，`adapter_dependencies` 的动作检查，SDK 的底层动作调用方法、供 Adapter 包带类型函数使用的调用者接口与 `sdk/adapter` 的可选接口（D-92） | T-03 步骤 12 | T-03.8、T-04.8 | V-91 的 Core 分项 | 未开始 |
+| T-03.15 | goal-106 | 平台动作：Adapter 描述的动作声明与校验，`core.action` 与 `adapter.action`，目标准入与参数、结果 Schema 校验，`adapter_dependencies` 的动作检查，SDK 的底层动作调用方法、供 Adapter 包带类型函数使用的调用者接口与 `sdk/adapter` 的可选接口（D-92），动作以参数与结果的 Go 类型声明（D-113） | T-03 步骤 12 | T-03.8、T-04.8 | V-91 的 Core 分项，V-111 的动作分项 | 未开始 |
 | T-03.16 | goal-107 | 撤回：`core.delete` 与 `adapter.delete`，`message.delete` 能力判定与准入，每个 ID 的结果汇总，SDK 方法只收消息句柄（D-93、D-104） | T-03 步骤 13 | T-03.9、T-04.8 | V-92 的 Core 分项、V-102 的撤回分项 | 未开始 |
 | T-03.17 | goal-108 | 命令菜单同步：`adapter.commands.sync`，按实例筛选命令与翻译说明，2 秒合并与失败诊断（D-96） | T-03 步骤 14 | T-04.6、T-04.7、T-04.8、T-08.8 | V-93 的 Core 分项 | 未开始 |
 | T-03.18 | goal-109 | SDK 的流式输出辅助函数 `c.Stream`：按 `message.edit` 选择节流编辑或缓冲后发送一次，超长换条，失败即停止；不新增协议（D-98） | T-03 步骤 15 | T-03.9、T-04.8 | V-94 的 Core 分项 | 未开始 |
@@ -42,7 +42,7 @@
 | T-04.5 | goal-14 | 用同一 SDK 升级示例，完成构建与策略验收，汇总证据 | T-04 步骤 6、7 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11 | V-10、V-11、V-12、V-43、V-49 的 T-04 分项 | 未开始 |
 | T-04.6 | goal-87 | 权限、扩展事件与命令解析的协议和 Core 侧：proto 修改与生成；Adapter 权限与扩展事件声明的校验；平台权限的保留与隐含展开、按权限名集合判定；扩展事件的交付校验；`command_prefixes` 与按实例覆盖、去掉开头的 reference 与本账号 mention、非文本 token 与 `user`/`image`/`message` 参数、usage 文案键 | T-04 步骤 8 | T-03.3、T-03.6、T-04.3 | V-85、V-86、V-87 的 Core 分项 | 已完成（PR #78；TEST-MATRIX §3.2） |
 | T-04.7 | goal-88 | SDK 链式注册：命令、文本匹配、事件、Service 与 Event Bus 订阅的 builder，Permission 值对象与 `c.Has`，Service Schema 由生成器生成且 schema_id 由 Go 类型决定，自动回复型可 `c.Send`；生成器、示例与已合并调用方同步 | T-04 步骤 9 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | V-10、V-14 的 SDK 分项 | 已完成（PR #89；TEST-MATRIX §3.2） |
-| T-04.8 | goal-91 | SDK 自有类型与事件常量：Message/会话字符串与可选的 `sdk.Via`（D-102）/消息句柄（D-104）/片段构造函数与单片段发送（D-108）/媒体读取与上传助手（D-109）/时间与时长用 `time.Time`、`time.Duration`（D-110）/Actor/SendResult/错误码与入站片段，标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对事件 Handler 的 payload 类型，`sdk/adapter` 的公共类型；Telegram Adapter、示例与已合并调用方同步 | T-04 步骤 9 | T-03.9、T-03.24、T-04.7、T-04.9 | V-14 的类型分项、V-86 的 SDK 分项，V-101、V-102 的 SDK 分项，V-106～V-108 | 未开始 |
+| T-04.8 | goal-91 | SDK 自有类型与事件常量：Message/会话字符串与可选的 `sdk.Via`（D-102）/消息句柄（D-104）/片段构造函数与单片段发送（D-108）/媒体读取与上传助手（D-109）/时间与时长用 `time.Time`、`time.Duration`（D-110）/Adapter 声明用 Go 类型（D-113）/Actor/SendResult/错误码与入站片段，标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对事件 Handler 的 payload 类型，`sdk/adapter` 的公共类型；Telegram Adapter、示例与已合并调用方同步 | T-04 步骤 9 | T-03.9、T-03.24、T-04.7、T-04.9 | V-14 的类型分项、V-86 的 SDK 分项，V-101、V-102 的 SDK 分项，V-106～V-108，V-111 的事件与 extension 分项 | 未开始 |
 | T-04.9 | goal-96 | 删除构建期标记：去掉 `//alonabot:command`、`//alonabot:event` 的扫描、诊断与生成，命令与事件只经链式注册，示例与测试随之改写（D-79） | T-04 步骤 2 | T-04.7 | V-10 | 已完成（[PR #110](https://github.com/AlonaBot/AlonaBot/pull/110)） |
 | T-04.10 | goal-122 | 管理员与封禁按 Adapter 登记：`admins` 改用用户字符串，禁止表按 adapter_id，对该 Adapter 的全部实例生效（D-105） | T-04 步骤 10 | T-04.4、T-07.6 | V-103 | 未开始 |
 | T-04.11 | goal-124 | 注册写法统一：定时任务与 HTTP 路由的链式注册，命令省略 `Args` 时参数名取 Handler 的参数名（生成器记录），Event Bus 订阅的路由 ID 缺省为事件名（D-112） | T-04 步骤 11 | T-04.8、T-07.5 | V-110 的 SDK 分项 | 未开始 |
@@ -220,7 +220,7 @@ Adapter 以安装包和独立进程运行（CONTRACTS §8）。以下步骤中�
 
 11. **新增片段与字段（D-89、D-91、D-97）。** 在 proto 中追加 voice 片段、ForwardItem 的 `platform_message_id`、ForwardSegment 的 `platform_forward_id`、Button 的 `url`，按 MESSAGE-MODEL §2 校验：来源恰有一个、chain 与 platform_message_id 恰有一个、嵌套 forward、platform_forward_id 只能出现在入站、url 与 action_id 恰有一个且 url 按钮不带 value。Core 在调用 Adapter 前按 `message.voice`、`message.forward` 判定能力；按钮签发跳过 url 按钮。SDK 追加构造函数与入站类型，语音片段的时长为 `time.Duration`（D-110）。只有一个平台具备的片段（例如全体提及）由该 Adapter 的 extension 提供，不在此追加（D-87）。Event 追加 `chat_type`（新增枚举 ChatType，D-100）：Core 在入站标准化时拒绝没有 target 却不是 UNSPECIFIED 的事件，chat_type 不参与 Target 的比较与准入；SDK 的 Context 提供 `ChatType()` 与 `IsPrivate`、`IsGroup`、`IsChannel`，UNSPECIFIED 时都为 false。
 
-12. **平台动作（D-92）。** Adapter 描述追加动作声明，Core 在注册时校验名称、版本、Schema 与作用范围。实现 `core.action`：按 CONTRACTS §8 的发信准入检查目标，核对动作声明、版本与参数 Schema，经 `adapter.action` 交给实例，再按结果 Schema 校验；结果未知时返回 UNAVAILABLE 或 DEADLINE_EXCEEDED，不重试。manifest 的 `adapter_dependencies` 追加所需动作，启用检查与 extension 相同。SDK 提供底层动作调用方法，以及 Context 与后台客户端共同实现的调用者接口，供 Adapter 包的带类型函数使用；`sdk/adapter` 以可选接口让实例实现动作。
+12. **平台动作（D-92）。** Adapter 描述追加动作声明，Core 在注册时校验名称、版本、Schema 与作用范围。实现 `core.action`：按 CONTRACTS §8 的发信准入检查目标，核对动作声明、版本与参数 Schema，经 `adapter.action` 交给实例，再按结果 Schema 校验；结果未知时返回 UNAVAILABLE 或 DEADLINE_EXCEEDED，不重试。manifest 的 `adapter_dependencies` 追加所需动作，启用检查与 extension 相同。SDK 提供底层动作调用方法，以及 Context 与后台客户端共同实现的调用者接口，供 Adapter 包的带类型函数使用；`sdk/adapter` 以可选接口让实例实现动作，动作以 `adapter.Action[P, R]` 声明，参数与结果的 Schema 由 SDK 从类型推导（D-113）。
 
 13. **撤回（D-93）。** 实现 `core.delete` 与 `adapter.delete`，Target 准入与 Edit 相同，目标实例未声明 `message.delete` 时在调用 Adapter 前返回 UNSUPPORTED；按 MESSAGE-MODEL §4A 汇总每个 ID 的结果。撤回不执行出站 Hook。SDK 提供对应方法，只收消息句柄，一次撤回的句柄须属于同一会话与实例（D-104）；`sdk/adapter` 以可选接口让实例实现。输入状态与表情回应只有 Telegram 提供，是它的平台动作（步骤 18）。
 
@@ -271,6 +271,7 @@ Adapter 以安装包和独立进程运行（CONTRACTS §8）。以下步骤中�
 | V-102 | 步骤 13 中撤回只收消息句柄的 SDK 分项；句柄本身与编辑、引用由 T-04.8 提供，Telegram 中指向消息的平台动作由 T-03.21 提供 |
 | V-105 | 步骤 7 中带类型的按钮动作：注册、按钮的编码与 Handler 收到的解码值 |
 | V-108 | 步骤 11 中语音片段的 Duration 与协议毫秒值的往返；其余字段由 T-04.8 提供 |
+| V-111 | 步骤 12 中动作的 Go 类型声明：参数 Schema 不允许未声明的属性，结果 Schema 允许；事件与 extension 分项由 T-04.8 提供 |
 
 T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求本包的 Telegram 部分先完成；T-04.5 的示例升级在本包示例完成后进行。真实平台验证尚未运行的部分继续保持未完成，由 T-10 汇总补齐。完整普通事件排序、自动回复、Hook 和命令策略组合分别在 T-04/T-05 闭合。
 
@@ -312,7 +313,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 
 8. **改造权限、扩展事件与命令解析的协议和 Core 侧。** 按 WIRE-FORMAT §5A 的 2026-11-01 条目修改 proto 并重新生成。Core 校验 Adapter 的权限与扩展事件声明（前缀、名称、隐含关系无环、Schema 可编译）；交付事件时只保留已声明的平台权限并展开隐含关系，按声明校验扩展事件；路由按权限名集合判定（CONTRACTS §2.3）。按 CONTRACTS §2.2 实现 `command_prefixes` 与按实例覆盖、去掉开头的 reference 与指向本账号的 mention、非文本 token、`user`/`image`/`message` 参数与 usage 文案键。同步修改已合并的 router、remote Adapter、`sdk/adapter`、Telegram Adapter 与集成测试（D-69、D-71、D-72）。
 
-9. **SDK 改为链式注册并使用自有类型。** 按 D-70 把命令、文本匹配、事件、Service 与 Event Bus 订阅的注册改为链式构建，删除 `RouteOption`、`ServiceOption` 与位置参数形式；新增 Permission 值对象（`Or`）与 `c.Has`、标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对 Handler 的参数类型；Service 的 Schema 由生成器从 Go 类型生成；Context、Send、事件 payload 与错误码改用 SDK 自有类型，发送目标用会话字符串，机器人用可选的 `sdk.Via`（D-102），编辑与引用用消息句柄（D-104），每种片段都有构造函数，Send、编辑与自动回复收 Chain 或单个片段（D-108），插件以 `sdk.OpenMedia` 顺序读取媒体，`sdk.Upload` 自行计算大小与 SHA-256（D-109），时间与时长用 `time.Time` 与 `time.Duration`（D-110），自动回复型 Handler 可以 `c.Send`。构建期生成器、示例、`sdk/adapter` 的公共类型与已合并调用方同步修改。链式注册（含 Permission 与 Service Schema）为 T-04.7，自有类型、事件常量与 `sdk/adapter` 的公共类型为 T-04.8（2026-11-04 拆分）。
+9. **SDK 改为链式注册并使用自有类型。** 按 D-70 把命令、文本匹配、事件、Service 与 Event Bus 订阅的注册改为链式构建，删除 `RouteOption`、`ServiceOption` 与位置参数形式；新增 Permission 值对象（`Or`）与 `c.Has`、标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对 Handler 的参数类型；Service 的 Schema 由生成器从 Go 类型生成；Context、Send、事件 payload 与错误码改用 SDK 自有类型，发送目标用会话字符串，机器人用可选的 `sdk.Via`（D-102），编辑与引用用消息句柄（D-104），每种片段都有构造函数，Send、编辑与自动回复收 Chain 或单个片段（D-108），插件以 `sdk.OpenMedia` 顺序读取媒体，`sdk.Upload` 自行计算大小与 SHA-256（D-109），时间与时长用 `time.Time` 与 `time.Duration`（D-110），`sdk/adapter` 的扩展事件与 extension 声明给出 Go 类型、Schema 由 SDK 推导（D-113），自动回复型 Handler 可以 `c.Send`。构建期生成器、示例、`sdk/adapter` 的公共类型与已合并调用方同步修改。链式注册（含 Permission 与 Service Schema）为 T-04.7，自有类型、事件常量与 `sdk/adapter` 的公共类型为 T-04.8（2026-11-04 拆分）。
 
 10. **管理员与封禁按 Adapter 登记（D-105）。** `core_config.json` 的 `admins` 与状态库的禁止表改用用户字符串 `<adapter_id>:<external_user_id>`，会话禁止按 `<adapter_id>:<chat_id>`；Router 按事件的 adapter_id 判定 admin，CheckCommand 与 CheckSend 按 adapter_id 判定禁止，同一 Adapter 的全部实例共用。同步已合并的 policy、router 与 settings；管理入口（T-09.4、T-09.14）与 /whoami（T-14.1）按新格式实现。
 
@@ -344,6 +345,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 | V-107 | 插件的媒体读取与上传：OpenMedia 顺序读取，Upload 自行计算大小与 SHA-256 |
 | V-108 | SDK 类型中的时间与时长：与协议毫秒值的往返，零值对应 absent |
 | V-110 | 步骤 11 中定时任务与 HTTP 路由的链式注册、命令参数名的缺省与订阅路由 ID 的缺省；Hook 分项由 T-05.3 提供 |
+| V-111 | 步骤 9 中扩展事件与 extension 的 Go 类型声明与推导的 Schema；动作分项由 T-03.15 提供 |
 
 V-12 是跨任务验收：T-04 不依赖尚不存在的 WebUI，但必须交付后续 UI 实际调用的策略服务层。矩阵中保存分项证据；只有 T-09 的鉴权后浏览器操作也完成，才将整项 V-12 标为通过。T-04 完成后，T-05 和 T-08 可以分别使用同一注册器继续实施。
 
