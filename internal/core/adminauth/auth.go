@@ -72,6 +72,23 @@ func (a *Auth) Require(next http.Handler) http.Handler {
 	})
 }
 
+// Authorize 按管理认证规则检查插件请求；Cookie 的非 GET/HEAD 请求须通过 CSRF 与 Origin 校验。
+// pluginID 仅在状态库故障日志中标识请求目标。
+func (a *Auth) Authorize(r *http.Request, pluginID string) bool {
+	credential, err := a.credential(r.Context())
+	if err != nil {
+		if !errors.Is(err, ErrNotInitialized) {
+			slog.Error("read plugin request authentication", "plugin_id", pluginID, "err", err)
+		}
+		return false
+	}
+	ok, err := a.authorized(r, credential)
+	if err != nil {
+		slog.Error("authorize plugin request", "plugin_id", pluginID, "err", err)
+	}
+	return ok && err == nil
+}
+
 // Lookup 返回当前 Cookie 会话及其到期时刻，供 webhost 绑定派生授权。
 // 无效凭证返回 ok=false，状态库故障用 slog 记录。
 func (a *Auth) Lookup(r *http.Request) (sessionID string, expiresAt time.Time, ok bool) {
