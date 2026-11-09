@@ -39,7 +39,7 @@
 | goal-88 | T-04.7 | SDK 链式注册 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | 已完成（PR #89） |
 | goal-97 | T-07.6 | Core 设置与首次启动 | T-07.3、T-09.1 | 待派发 |
 | goal-32 | T-08.5 | 受管 SQLite 连接与迁移 | T-08.3 | 已完成（PR #79） |
-| goal-53 | T-08.8 | 用户可见文案目录 | T-04.1、T-04.3、T-04.6、T-08.1、T-08.10 | 待派发 |
+| goal-53 | T-08.8 | 用户可见文案目录 | T-04.1、T-04.3、T-04.6、T-08.1、T-08.10 | 已完成（PR #102） |
 | goal-100 | T-09.16 | manifest 拆分为作者信息与构建信息 | T-03.8、T-09.2 | 等待前置 |
 | goal-96 | T-04.9 | 删除构建期标记 | T-04.7 | 已完成（PR #110） |
 | goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 已完成（PR #67） |
@@ -2688,7 +2688,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-53 · T-08.8 用户可见文案目录
 
-状态：待派发。前置 T-04.1、T-04.3、T-04.6（PR #78，合并提交 `0a320c5`）、T-08.1、T-08.10（PR #77）均已合并。2026-11-04 按 D-69～D-74 改写，符号已按合入代码核对；同日按 D-76 修订 config 根节点的格式（与 config_schema.json 同形），与 schema 的核对归 goal-95；按 D-80 改用 `i18n/` 目录并允许顶层的 `metadata`（D-78）；按 D-82 修订：默认 locale 写在 `core_config.json` 的 `default_locale`，由 goal-39 在装配处从 goal-97 的 settings 取得，本切片不建 `core_setting` 表：
+状态：已完成（[PR #102](https://github.com/AlonaBot/AlonaBot/pull/102)），证据见 TEST-MATRIX §3.2。2026-11-07 维护者在 PR #102 [裁决](https://github.com/AlonaBot/AlonaBot/pull/102#issuecomment-6707514440) Router 取默认 locale 的方式，下面语句的范围、接口第 4、6 项与 Core 行为已按裁决修订。派发时：前置 T-04.1、T-04.3、T-04.6（PR #78，合并提交 `0a320c5`）、T-08.1、T-08.10（PR #77）均已合并。2026-11-04 按 D-69～D-74 改写，符号已按合入代码核对；同日按 D-76 修订 config 根节点的格式（与 config_schema.json 同形），与 schema 的核对归 goal-95；按 D-80 改用 `i18n/` 目录并允许顶层的 `metadata`（D-78）；按 D-82 修订：默认 locale 写在 `core_config.json` 的 `default_locale`，由 goal-39 在装配处从 goal-97 的 settings 取得，本切片不建 `core_setting` 表：
 - 命令 usage：`router/command.go` 的 `commandUsage(spec *pb.CommandSpec, prefix string) *pb.MessageChain` 以英文 "Usage: " 加本次匹配到的前缀、规范路径、别名与参数标注拼出缺省 usage；USAGE_MODE_CUSTOM 时也按缺省 usage 发送，函数开头有一条 `shortcut:` 注释，说明待 T-08.8 查找 usage_key。usage 经注入的发送回调（message.Service.Send）发出。
 - `CommandSpec.usage_key = 12` 是插件 i18n/ 中 messages 的键；`sdk.UsageKey(key) RouteOption` 写入 USAGE_MODE_CUSTOM 与 usage_key；`Usage(text)` 已删除。`sdk.Collect(root) (*Registration, error)` 在启动时合并生成项与注册。
 - `sdk.Generated{ConfigSchema, Commands, Events}`，由生成代码在 init 中经 `sdk.UseGenerated` 登记。`sdk/generate` 只做静态扫描，看不到运行时注册的 UsageKey 参数。
@@ -2716,9 +2716,9 @@ goal-28、goal-29 的符号已按合入代码核对：
 - sdk/generate/：检查并嵌入 i18n/*.json；sdk/generated.go 的 Generated 增加 I18n
 - sdk/：新增 i18n.go（Context.T 与后台 T）；Collect 检查 usage_key；session.go 读取 Bootstrap.default_locale（只加读取）
 - 新增 internal/core/i18n/：Core 内置目录与 en-US.json、zh-CN.json
-- internal/core/host/：ActivateOptions 与 Instance 增加 Messages；Bootstrap 写入 default_locale 的调用点
+- internal/core/host/：ActivateOptions 与 Instance 增加 Messages，Instance 增加 DefaultLocale；Bootstrap 写入 default_locale 的调用点，Prepare 保存该值的快照
 - internal/core/supervisor/supervisor.go：Spec 增加 I18n 与 DefaultLocale，Launch 解析 I18n 并传给 Activate（只加这一段）
-- internal/core/router/：Plugin 接口与 instancePlugin 增加 Messages；commandUsage 改用目录，删除其中的 shortcut 注释
+- internal/core/router/：Plugin 接口与 instancePlugin 增加 Messages 与 DefaultLocale；commandUsage 改用目录，删除其中的 shortcut 注释
 - 上述包的测试文件
 允许的新跨模块边：无（contracts/i18n 在 contracts 内；sdk/... -> contracts、internal/core/... -> contracts 已允许）。
 
@@ -2739,11 +2739,12 @@ goal-28、goal-29 的符号已按合入代码核对：
 4. internal/core/host
    ActivateOptions 增加 Messages *i18n.Catalog
    Instance 增加 Messages *i18n.Catalog // 当前包的用户可见文案；没有 i18 资源时为 nil，激活后只读
+   Instance 增加 DefaultLocale string // 本次 Session 的 Bootstrap.default_locale 快照；Prepare 存进 Prepared 的私有字段，Activate 复制，激活后只读
 5. internal/core/supervisor
    Spec 增加 I18n map[string][]byte // 当前包的 i18n/*.json 原文，来自安装包或库模式的嵌入副本；nil 表示没有文案资源
    Spec 增加 DefaultLocale string // 写入 Bootstrap.default_locale；装配处由 core_config.json 的 default_locale 取得（goal-97 提供读取，goal-39 接入），空值按 "en-US"
 6. internal/core/router
-   Plugin 接口增加 Messages() *i18n.Catalog；instancePlugin 返回 instance.Messages
+   Plugin 接口增加 Messages() *i18n.Catalog 与 DefaultLocale() string；instancePlugin 返回 instance.Messages 与 instance.DefaultLocale。Router 经接口读取，不做类型断言
 
 行为：
 - 文件格式（Parse 校验，问题以 Problem 报告）：
@@ -2758,7 +2759,7 @@ goal-28、goal-29 的符号已按合入代码核对：
   - Collect：USAGE_MODE_CUSTOM 的路由，其 usage_key 不在 en-US messages 中（或插件没有 i18 资源）时返回错误。
 - Core：
   - Launch 用 contracts/i18n.Parse 解析 Spec.I18n，有 Problem 时在启动进程前返回 INVALID_ARGUMENT 的错误；Bootstrap.default_locale 取 Spec.DefaultLocale。修改默认 locale 后，新值在之后建立的 Session 生效（已运行的插件在下次启动时看到新值）。
-  - 缺省 usage：文案键为 core.usage.*（en-US 与 zh-CN 两份），占位符为本次匹配到的前缀、命令路径、别名与参数用法（参数类型标注 :int、:float、:bool、:user、:image、:message 保持不变）。语言按 [事件 Actor 的 locale, 默认 locale] 选择；Router 取默认 locale 的方式由执行者在 Router 内部自定，不改 router.New。
+  - 缺省 usage：文案键为 core.usage.*（en-US 与 zh-CN 两份），占位符为本次匹配到的前缀、命令路径、别名与参数用法（参数类型标注 :int、:float、:bool、:user、:image、:message 保持不变）。语言按 [事件 Actor 的 locale, 接收插件的 Plugin.DefaultLocale()] 选择，最后回落到 en-US，与该插件 Context.T 使用的 Bootstrap 快照一致；修改默认 locale 后，运行中的插件仍用旧值，下一个 Session 才用新值，Router 不读取当前设置。router.New、router.Options 与 supervisor.Spec 不因此改动。
   - 自定义 usage（USAGE_MODE_CUSTOM）：用 Plugin.Messages() 的 usage_key 按同一候选格式化，参数为 prefix（本次匹配到的前缀）与 command（前缀加规范路径），多余参数照常忽略。Messages 为 nil、缺少该键或格式化失败时，记 WARN（plugin_id、route_id、错误），改发缺省 usage。
 - 日志、错误字符串与 safe_message 仍只用英文。
 
