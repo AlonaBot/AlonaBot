@@ -54,7 +54,7 @@ MessageChain 是一次**逻辑 Send** 的有序 Segment 列表。Segment JSON �
 
 `entities` 使用 `type、offset_utf16、length_utf16` 及类型需要的 url/language/external_user_id；偏移相对于本 text，必须落在完整字符边界，不能截断代理对。首发公共类型为 bold/italic/underline/strikethrough/spoiler/code/pre/text_link/text_mention；不支持的类型明确拒绝。SDK 从 Go 字符串创建实体时须转换 UTF-8/rune 索引，不能直接把字节索引交给 Telegram。
 
-`inline_base64` 是插件直接给出的标准 base64 数据，解码后 1 B～1 MiB；Adapter 按 D-88 原样或解码后交给平台，不把其他来源转成它。`incoming_ref` 表示尚未取件的入站对象授权，与已校验的 MediaRef 分开；描述包含 token、声明 size/MIME 与 readability。SDK media.Read 按需取件、读取和共享缓存的规则见 CONTRACTS §1.4。入站元数据不泄漏 Bot Token 或任意宿主路径。
+`inline_base64` 是插件直接给出的标准 base64 数据，解码后 1 B～1 MiB；Adapter 按 D-88 原样或解码后交给平台，不把其他来源转成它。`incoming_ref` 表示尚未取件的入站对象授权，与已校验的 MediaRef 分开；描述包含 token、声明 size/MIME 与 readability。插件经 `sdk.OpenMedia` 读取（D-109），按需取件、读取和共享缓存的规则见 CONTRACTS §1.4。入站元数据不泄漏 Bot Token 或任意宿主路径。
 
 Core/Adapter 先验证整个 Chain 的结构、顺序、片段数、媒体租约及目标能力，再发出第一条平台请求。结构错误返回 INVALID_ARGUMENT；合法但平台无法表示返回 UNSUPPORTED；不能先发送已知可用前半段，再因已知不支持的末尾丢失内容。
 

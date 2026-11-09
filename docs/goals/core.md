@@ -3362,7 +3362,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-91 · T-04.8 SDK 自有类型与事件常量
 
-状态：等待前置（T-03.9、T-03.24）。2026-11-09 按 D-104 加入消息句柄：编辑、撤回与引用只收 `message.MessageRef`，本切片把 T-03.9（goal-51，PR #118）新增的 `c.Edit` 与 `sdk.Edit` 改为句柄形式，因此前置加入 T-03.9，合并后由审查者按合入的文件补全范围。同日按 D-108 加入片段构造函数与 `message.Content`，Send、编辑与自动回复收 Chain 或单个片段；按 D-102 改写插件侧的目标：`message.Target` 结构改为会话字符串 `message.Session`，新增可选的 `sdk.Via`，account_id 由 T-03.24（goal-121）在 Core 补齐，因此前置加入 T-03.24；T-03.24 合并后由审查者核对 `Registry.Complete` 的签名再改为待派发。T-04.9（PR #110，合并提交 `6aed25d`）已合并：生成器不再输出注册代码，`sdk.Generated` 只剩 `ServiceSchemas` 与 `ConfigSchema`，按原计划不需要再核对接口。T-03.11（PR #106，合并提交 `3913d5a`）与 T-15.1（PR #109，合并提交 `1b226a2`）已合并，`adapters/telegram/perm`、`adapters/onebot11/`（含 `onebottest` 与测试）随之成为调用方，已加入语句「范围」的调用方一项。依据 D-70，2026-11-04 从 T-04.7 拆出。T-04.7（PR #89，合并提交 `3e37cd6`）已合并，接口、行为与测试段已按合入代码写出。前置加入 T-04.9：`sdk/generate/source.go` 为标记事件生成 `r.On(id, "类型字符串")`，本切片把 `On` 改为事件常量后，这段生成代码会编译失败，而标记本身由 T-04.9 删除；T-04.9 合并后不需要再核对接口，直接改为待派发。
+状态：等待前置（T-03.9、T-03.24）。2026-11-09 按 D-104 加入消息句柄：编辑、撤回与引用只收 `message.MessageRef`，本切片把 T-03.9（goal-51，PR #118）新增的 `c.Edit` 与 `sdk.Edit` 改为句柄形式，因此前置加入 T-03.9，合并后由审查者按合入的文件补全范围。同日按 D-108 加入片段构造函数与 `message.Content`，Send、编辑与自动回复收 Chain 或单个片段；按 D-109 把插件的媒体读取改为 `sdk.OpenMedia`、上传改为 `Upload(ctx, r, mime)`，goal-7 合入的 `internal/core/supervisor/media_in_test.go` 随之成为调用方；按 D-102 改写插件侧的目标：`message.Target` 结构改为会话字符串 `message.Session`，新增可选的 `sdk.Via`，account_id 由 T-03.24（goal-121）在 Core 补齐，因此前置加入 T-03.24；T-03.24 合并后由审查者核对 `Registry.Complete` 的签名再改为待派发。T-04.9（PR #110，合并提交 `6aed25d`）已合并：生成器不再输出注册代码，`sdk.Generated` 只剩 `ServiceSchemas` 与 `ConfigSchema`，按原计划不需要再核对接口。T-03.11（PR #106，合并提交 `3913d5a`）与 T-15.1（PR #109，合并提交 `1b226a2`）已合并，`adapters/telegram/perm`、`adapters/onebot11/`（含 `onebottest` 与测试）随之成为调用方，已加入语句「范围」的调用方一项。依据 D-70，2026-11-04 从 T-04.7 拆出。T-04.7（PR #89，合并提交 `3e37cd6`）已合并，接口、行为与测试段已按合入代码写出。前置加入 T-04.9：`sdk/generate/source.go` 为标记事件生成 `r.On(id, "类型字符串")`，本切片把 `On` 改为事件常量后，这段生成代码会编译失败，而标记本身由 T-04.9 删除；T-04.9 合并后不需要再核对接口，直接改为待派发。
 
 符号已按合入代码核对：
 - 公开 API 中的 pb 类型：`Context.Event() *pb.Event`、`To(*pb.Target)`、`Context.Send` 与 `sdk.Send` 的 `*pb.SendResult` 和 `*pb.Target`、`Upload` 的 `*pb.MediaRef`、`GrantMedia` 的 `...*pb.Target`、`Error.Code pb.ErrorCode`、`Public(pb.HttpAuthMode)` 与 `HTTPRoute.AuthMode`、`Command.Mode` 与 `Command.Params`；`message.Chain.Proto() *pb.MessageChain`；`sdk/adapter` 的 `Core.Deliver`、`Core.ReportFailure`、`Instance.Capabilities`、`Instance.Send`、`Adapter.Descriptor`。
@@ -3378,12 +3378,13 @@ Core 一侧已按合入代码核对并修订：
 目标：
 - 插件与 Adapter 的公共 API 不再暴露生成的 pb 类型：SDK 自己定义消息、事件、会话字符串、Actor、SendResult 与错误码，pb 只留在 SDK 内部。发送目标是会话字符串，机器人是可选参数 sdk.Via（D-102）；编辑、撤回与引用所指的消息是消息句柄 message.MessageRef（D-104）。
 - 每种片段都有构造函数；Send、编辑与自动回复收 message.Content，即 Chain 或单个片段（D-108）。
+- 插件经 sdk.OpenMedia 顺序读取媒体；Upload 只收内容与 MIME，大小与 SHA-256 由 SDK 计算（D-109）。
 - 新增标准事件常量（带 payload 的 Go 类型）与 sdk.AdapterEvent；事件注册改用常量，Collect 核对事件 Handler 的 payload 参数类型。
 - 命令参数类型改为 SDK 自有类型。
 - sdk/adapter 的接口改用 SDK 类型，官方 Telegram Adapter 与已合并的全部调用方同步。
 - 不改协议：proto 与 Core 侧不变，SDK 在边界内转换。
 
-依据：PLAN T-04 步骤 9（自有类型部分）；CONTRACTS §2.1、§8；MESSAGE-MODEL §1～§3；DESIGN §D；DECISIONS D-70、D-71、D-102、D-104、D-108；TEST-MATRIX V-14 的类型分项、V-86 的 SDK 分项、V-101 与 V-102 的 SDK 分项、V-106。
+依据：PLAN T-04 步骤 9（自有类型部分）；CONTRACTS §1.3、§1.4、§2.1、§8；MESSAGE-MODEL §1～§3；DESIGN §D；DECISIONS D-70、D-71、D-102、D-104、D-108、D-109；TEST-MATRIX V-14 的类型分项、V-86 的 SDK 分项、V-101 与 V-102 的 SDK 分项、V-106、V-107。
 
 范围（只新增或修改这些）：
 - 新增 sdk/errcode/
@@ -3391,7 +3392,7 @@ Core 一侧已按合入代码核对并修订：
 - 新增 sdk/internal/convert/：pb 与 SDK 类型的双向转换，只有 sdk 与 sdk/adapter 的实现使用
 - sdk/：sdk.go、send.go、media.go、registry.go、events.go、dispatch.go、adapter_run.go、session.go（只改转换的调用点），以及 T-03.9 新增 Edit 的文件；其余构造 sdk.Error 的文件只把错误码改为 errcode
 - sdk/adapter/adapter.go
-- 调用方：adapters/telegram/（含测试）、adapters/onebot11/（含 onebottest 与测试）、examples/plugins/、internal/core/supervisor/testdata/、internal/core/adapter/remote/remote_test.go，以及测试中以字符串嵌入的插件源码
+- 调用方：adapters/telegram/（含测试）、adapters/onebot11/（含 onebottest 与测试）、examples/plugins/、internal/core/supervisor/testdata/、internal/core/adapter/remote/remote_test.go、internal/core/supervisor/media_in_test.go（只改测试插件读取媒体的调用），以及测试中以字符串嵌入的插件源码
 - 上述包的测试文件
 允许的新跨模块边：无（都在 sdk 模块内；Core 与 contracts 不变）。
 
@@ -3479,7 +3480,8 @@ Core 一侧已按合入代码核对并修订：
    func Send(ctx context.Context, to message.Session, m message.Content, opts ...SendOption) (*message.SendResult, error) // opts 只接受 Via
    func (c *Context) Edit(ref message.MessageRef, m message.Content) (*message.SendResult, error) // 取代 T-03.9 的 Edit(platformMessageID, chain, opts...)
    func Edit(ctx context.Context, ref message.MessageRef, m message.Content) (*message.SendResult, error) // 后台编辑；取代 Edit(ctx, to, platformMessageID, chain)
-   func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []byte) (*message.MediaRef, error)
+   func Upload(ctx context.Context, r io.Reader, mime string) (*message.MediaRef, error) // 大小与 SHA-256 由 SDK 计算；mime 为空时按内容判断（D-109）
+   func OpenMedia(ctx context.Context, token string) (io.ReadCloser, error) // 顺序读取入站媒体或获授权的媒体；取代 ReadMedia(ctx, token, offset, length)，后者删除（D-109）
    func GrantMedia(ctx context.Context, token, granteePluginID string, sessions ...message.Session) (string, error)
    type HTTPAuth int; const ( AuthCoreSession HTTPAuth = iota + 1; AuthCallbackState; AuthCallbackSignature; AuthCallbackNonce )
    func Public(mode HTTPAuth) HTTPOption // HTTPRoute.AuthMode 同步改为 HTTPAuth
@@ -3512,6 +3514,9 @@ Core 一侧已按合入代码核对并修订：
   - Edit：句柄拆成 EditRequest 的 to 与 platform_message_id，to 的 adapter_instance_id 取句柄中的实例，省略时留空由 Core 补齐；c.Edit 带本次调用的父调用，sdk.Edit 不带。句柄不合法时在发出请求前返回 INVALID_ARGUMENT。
   - ReferenceSegment：Ref 拆成引用的 target（adapter_id、chat_id、thread_id 与可选的 adapter_instance_id）与 original_platform_message_id；入站的引用反向组成句柄。
 - Content（D-108）：单个片段按只含它的 Chain 处理。自动回复型 Handler 的返回类型为 (message.Content, error)，nil 与空 Chain 表示不回复；checkHandler 不再接受 (message.Chain, error)，报错带 route_id 与期望的签名。显式 Send 与 Edit 收到 nil 或空 Chain 时返回 INVALID_ARGUMENT，与现在相同。
+- 媒体（D-109）：
+  - OpenMedia 以 offset 0 读取第一块（入站对象在此时取件），失败时返回该错误，不返回 reader。之后 Read 用 OpenMedia 的 ctx 按 next_offset 依次读取，每次至多 1 MiB（wire.MaxMediaChunk），eof 后返回 io.EOF；错误为 *sdk.Error，ctx 取消后返回 ctx 的错误；不自动重试（CONTRACTS §1.4）。Close 只停止读取，不撤销 token。
+  - Upload：r 实现 io.Seeker 时先读一遍计算大小与 SHA-256，再回到起始位置分块上传；否则边读边写入 os.CreateTemp 的临时文件（0600）并计算，上传结束（含失败）后删除。不整份读入内存。mime 为空时取开头至多 512 字节经 http.DetectContentType 判断。配额与 CommitUpload 的摘要校验照旧由 Core 负责：内容在两遍之间改变时上传失败并返回 Core 的错误。
 - Context：Event 每次调用只转换一次，返回值只供本次 Handler 读取，修改它不影响 Send 的默认目标与权限判定。Service 调用的 Event 仍为 nil。Has 与默认 Target 继续使用 SDK 内部的 pb 值。
 - 命令参数：`*message.ImageSegment` 对应 image，`message.Chain` 对应 message，其余不变；可选参数缺失时为 nil，与现在相同。checkHandler 的错误文案同步。
 - 事件路由：
@@ -3536,6 +3541,7 @@ Core 一侧已按合入代码核对并修订：
   - Session：Telegram 与 OneBot 11 形式的往返、话题、chat_id 中的 `%` 与 `#`、各种不合法格式；To、Via 的四种组合对应的 SendRequest.to。
   - MessageRef：带与不带实例、话题、消息 ID 中的 `%`、`/`、`@` 的往返与各种不合法格式；SendResult.Ref、Refs 与各类事件的 Event.Ref；c.Edit 与 sdk.Edit 的 EditRequest 带句柄中的实例；Quote 与入站引用的往返。
   - 构造函数生成的片段与对应的结构体字面量相同；单个片段、Chain 与 nil 经 c.Send、sdk.Send、Edit 与自动回复得到的请求；DESIGN §D 的示例代码能编译。
+  - OpenMedia 与 Upload：可 Seek 与不可 Seek 的 r 上传后经 OpenMedia 读回的字节相同（恰好 1 MiB、1 MiB+1 与跨多块）；MediaRef 的 Size 与 SHA256 与内容一致；mime 为空时的判断；无效 token 时 OpenMedia 返回错误；读取中取消 ctx；不可 Seek 时临时文件在上传结束与失败后都已删除。
   - `go doc -all` 查看 ./sdk、./sdk/message、./sdk/adapter、./sdk/errcode，输出中没有 pb 类型。
   - internal/core/supervisor/command_local_test.go（commanddispatch 插件，TCP 与 stdio）：事件路由写成 `r.On("typed", sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error {...})`，插件回复 e.Chain.Text()、e.ToMe、c.Event().Actor.Permissions 与 c.Event().Session，与 Adapter 交付的值一致。Handler 的第二个参数写成 *message.ReactionAddedPayload 时（环境变量控制）插件启动失败，日志带 route_id。
   - 现有命令参数用例改用 *message.ImageSegment 与 message.Chain，断言不变。

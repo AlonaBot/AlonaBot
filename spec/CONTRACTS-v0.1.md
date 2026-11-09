@@ -34,7 +34,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 
 ### 1.3 媒体上传与租约
 
-- 普通 RPC 不内嵌大媒体；插件通过 Core 的分块上传 API 得到 `MediaRef`。Begin 声明总大小、MIME 和 SHA-256，Core 检查配额并签发不可预测 `upload_id`；Chunk 必须带当前期望 offset，按顺序追加，每块最多 **1 MiB**。重复、越界、错序的 offset 明确拒绝并终止该上传，不提供同 upload_id 的自动重传或断点续传。
+- 普通 RPC 不内嵌大媒体；插件通过 Core 的分块上传 API 得到 `MediaRef`。Begin 声明总大小、MIME 和 SHA-256，Core 检查配额并签发不可预测 `upload_id`；Chunk 必须带当前期望 offset，按顺序追加，每块最多 **1 MiB**。重复、越界、错序的 offset 明确拒绝并终止该上传，不提供同 upload_id 的自动重传或断点续传。插件 SDK 的 `sdk.Upload(ctx, r, mime)` 自行计算总大小与 SHA-256 并分块，插件只给出内容与 MIME；MIME 为空时由 SDK 按内容判断（D-109）。
 - Commit 核对实际字节数、声明大小、SHA-256 和 MIME 后才签发引用。MediaRef 绑定 owner Session、允许的消费方/目标范围、size、mime、sha256 和 expires_at；不能用任意本地路径代替。转给其他插件时由 Core 签发新的范围受限 token，不直接放宽原 token。
 - 内部首发限额：单对象 **100 MiB**；每 Session 最多 **4 个未完成上传**，其所有未回收的上传和引用对象合计最多 **256 MiB**；Core 临时媒体磁盘总预算 **2 GiB**。配额在接收字节前预留，释放时扣回；磁盘写入失败明确中止，不能产生可用 MediaRef。限额的缺省值登记为调优参数（§16），不增加 WebUI 调参。
 - 未完成上传自 Begin 起 **15 分钟**到期，分块请求不延长期限；已提交引用自 Commit 起 **15 分钟**到期。失败、取消、过期或 owner Session 失效时回收无消费者租约的临时对象；正在发送且已被 Adapter 接管的对象由有截止时间的消费租约保护，直到发送结束或操作 deadline 到达。租约仍计入磁盘预算，不能无限延长引用。
@@ -45,7 +45,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 ### 1.4 入站媒体与读取
 
 - 入站图片/文件先使用 `IncomingMedia` 描述符：Core opaque token、声明 size/MIME、readability；Core 私下保存对应 Adapter 实例的 file_id。未知 MIME/大小为 absent，不能伪造已计算的 SHA256。首发不为每个入站媒体预先下载，也不把未取件对象当已提交 MediaRef。readability 只在来源实例的启动响应声明了能力 `media.read` v1 且 supported 时为 READABLE；Adapter 交付时把某个来源标为 UNSUPPORTED 的，Core 保留（D-73）。
-- SDK `media.Read(ctx, token, offset, length)` 返回 bytes、next_offset、eof，单次 length 为 1～1 MiB，offset 为非负字节偏移；offset 等于实际大小时返回空 bytes、原 offset、eof=true，大于实际大小时返回 INVALID_ARGUMENT，不产生空成功。错误返回明确 code。首次 Read 由 Core 内置 Adapter 使用受信平台文件 API 按需取件，写入 §1.3 的同一暂存区并校验实际大小/计算摘要后才返回内容；随后按 offset 读取。首次取件截止取调用者/父链与 15 分钟预算的较早者，不能绕过上游 deadline。一次取件失败（包括发起取件的读取者被取消或到期）只返回给这一轮等待的读取者，不记为对象状态；下一次 Read 重新取件，同一次调用内不自动重试（D-73）。
+- 媒体服务的 Read(token, offset, length) 返回 bytes、next_offset、eof，单次 length 为 1～1 MiB，offset 为非负字节偏移；offset 等于实际大小时返回空 bytes、原 offset、eof=true，大于实际大小时返回 INVALID_ARGUMENT，不产生空成功。错误返回明确 code。首次 Read 由 Core 内置 Adapter 使用受信平台文件 API 按需取件，写入 §1.3 的同一暂存区并校验实际大小/计算摘要后才返回内容；随后按 offset 读取。首次取件截止取调用者/父链与 15 分钟预算的较早者，不能绕过上游 deadline。一次取件失败（包括发起取件的读取者被取消或到期）只返回给这一轮等待的读取者，不记为对象状态；下一次 Read 重新取件，同一次调用内不自动重试（D-73）。插件 SDK 只提供 `sdk.OpenMedia(ctx, token)`：打开时读取第一块，失败时直接返回错误；返回的 `io.ReadCloser` 按 next_offset 依次读取，每次至多 1 MiB（D-109）。
 - 同一入站对象由 Core 持有，向接收它的各 Handler Session 签独立的目标受限 token，缓存仅保存一份。token 自签发 15 分钟有效，发送/读取期间用有截止时间的租约保护；一个 Session 失效只撤销其授权，不能删除其他有效消费者仍使用的对象。取件前预留实际可接受的容量，计入 Core 2 GiB 总预算与每个消费 Session 256 MiB 引用预算；未知长度最多按单对象 100 MiB 接收，超限立即失败。
 - 超平台下载能力返回 UNSUPPORTED，超配额返回 RESOURCE_EXHAUSTED，事件仍保留不可读取的元数据。Token 仅映射可信 Adapter 已提供的文件标识，不接受用户指定的任意下载地址，不下发 Bot Token/宿主路径。平台文件标识不是插件可用的读取凭证：插件只能用 Core 签发的 token 读取或发送；Adapter 的 platform_payload 原样保留，其中出现的平台标识没有授权作用，Core 也不接受它作为媒体来源（D-73）。
 - Segment 可用 `incoming_ref` 作为与 media_ref/https_url 互斥的来源；Send 重新验证目标授权，并核对本次发送的 Target 在原 token 的范围内；目标实例就是该对象的来源实例时，Core 把 Adapter 原先提供的平台文件标识作为 `platform_file` 来源交给 Adapter 直接复用，不取件（D-88），其他情况按需取件为已校验 MediaRef，再执行发送计划。`platform_file` 只出现在 Core 发往 Adapter 的请求中，插件给出时 INVALID_ARGUMENT。取件失败发生在平台发送前，不自动重试业务发送；共享对象到期且无租约后回收。
