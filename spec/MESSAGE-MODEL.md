@@ -8,12 +8,12 @@
 
 | 类型 | 字段 | 来源与验证 |
 | --- | --- | --- |
-| Event | event_id、event_type、source_kind、occurred_at_unix_ms、adapter_id?、adapter_instance_id?、account_id?、target?、actor?、message?、event_payload、capabilities、platform_payload? | event_id 由 Core 在入站标准化时产生；source_kind 为 ADAPTER/SCHEDULER，Core 为实例状态生成的 bot.online/bot.offline 也记为 ADAPTER。平台字段只对相应来源存在；原平台事件标识另存 source_event_id |
-| Actor | external_user_id、adapter_instance_id、display_name?、locale?、permissions | permissions 是 Core 按 CONTRACTS §2.3 计算的权限名集合，Adapter 只给出本会话的平台权限；来源必须为可信 Adapter 元数据及 Core policy；用户身份按实例作用域绑定；插件/外部 webhook 的 is_admin 不是身份依据。locale 是平台给出的用户语言（规范化的 BCP 47 标签），平台未提供时 absent，用于 CONTRACTS §5.4 的文案选择 |
-| Target | adapter_id、adapter_instance_id、account_id、chat_id、thread_id? | Adapter 验证 account 与实例绑定；默认 Target 仅来自当前实际入站事件；主动任务须显式 To，按 CONTRACTS §8 的 allowed_adapter_instances 与原事件回复范围准入 |
+| Event | event_id、event_type、source_kind、occurred_at_unix_ms、adapter_id?、adapter_instance_id?、account_id?、target?、chat_type、actor?、message?、event_payload、capabilities、platform_payload? | event_id 由 Core 在入站标准化时产生；source_kind 为 ADAPTER/SCHEDULER，Core 为实例状态生成的 bot.online/bot.offline 也记为 ADAPTER。平台字段只对相应来源存在；原平台事件标识另存 source_event_id。chat_type 是事件所在会话的类型（PRIVATE、GROUP、CHANNEL，平台未给出时 UNSPECIFIED，D-100），由 Adapter 在事件带 target 时填写，没有 target 的事件必须为 UNSPECIFIED；它不属于 Target，不参与 Target 的比较与准入，出站时 Adapter 不读取 |
+| Actor | external_user_id、adapter_instance_id、display_name?、locale?、permissions | permissions 是 Core 按 CONTRACTS §2.3 计算的权限名集合，Adapter 只给出本会话的平台权限；来源必须为可信 Adapter 元数据及 Core policy；用户身份以 adapter_id 为作用域（D-105）：同一 Adapter 的各实例给出的同一 external_user_id 必须是同一个平台用户，平台按机器人分配用户 ID 时由 Adapter 把区分范围写进 external_user_id；插件/外部 webhook 的 is_admin 不是身份依据。locale 是平台给出的用户语言（规范化的 BCP 47 标签），平台未提供时 absent，用于 CONTRACTS §5.4 的文案选择 |
+| Target | adapter_id、adapter_instance_id、account_id、chat_id、thread_id? | Adapter 验证 account 与实例绑定；默认 Target 仅来自当前实际入站事件；主动任务须显式 To，按 CONTRACTS §8 的 allowed_adapter_instances 与原事件回复范围准入。插件 API 把 Target 写成会话字符串 `<adapter_id>:<chat_id>`，话题为 `<adapter_id>:<chat_id>#<thread_id>`，chat_id 与 thread_id 中的 `%`、`#` 写作 `%25`、`%23`；实例是可选参数，account_id 由 Core 按实例补齐（CONTRACTS §8，D-102） |
 | Capability | name、version、supported | 使用 Adapter 明确公布的能力；未知能力不推定支持 |
 
-命令权限按权限名判定（CONTRACTS §2.3，D-69）：`user` 指具有可信 Actor 的用户；`admin` 指 Core 配置的、以 adapter_instance_id/external_user_id 标识的机器人管理员；`chat_admin` 与 Adapter 声明的平台权限（例如 `onebot11.group_owner`）只在该会话有效，不因此取得 Core 管理、插件安装或其他会话权限。Core 全局禁止规则始终生效，动态策略在每次派发前重新检查。
+命令权限按权限名判定（CONTRACTS §2.3，D-69）：`user` 指具有可信 Actor 的用户；`admin` 指 Core 配置的、以用户字符串 `<adapter_id>:<external_user_id>` 标识的机器人管理员，同一 Adapter 的全部实例通用（D-105）；`chat_admin` 与 Adapter 声明的平台权限（例如 `onebot11.group_owner`）只在该会话有效，不因此取得 Core 管理、插件安装或其他会话权限。Core 全局禁止规则始终生效，动态策略在每次派发前重新检查。
 
 ### 1.1 按事件类型区分的 payload
 
@@ -42,18 +42,19 @@ MessageChain 是一次**逻辑 Send** 的有序 Segment 列表。Segment JSON �
 | type | data 字段 | 约束 |
 | --- | --- | --- |
 | text | text、format?（plain/markdown）、entities? | 默认为 plain；format 与 entities 不同时指定。markdown 支持范围由 Adapter 公布，不能把未知 HTML 直接转交平台 |
-| image | media_ref、incoming_ref 或 https_url、alt?、caption? | 三种来源恰有一个；引用/URL/大小/MIME 在发送前验证 |
-| video | media_ref、incoming_ref 或 https_url、duration_ms?、caption? | 来源恰有一个；未知时长为 absent |
-| file | media_ref、incoming_ref 或 https_url、filename?、mime?、caption? | filename 仅为无路径展示名称，不作为宿主文件访问路径 |
-| mention | external_user_id、display? | 按目标平台实例解释，不能猜测跨实例身份；Adapter 无法表示时 UNSUPPORTED |
+| image | media_ref、incoming_ref、https_url 或 inline_base64、alt?、caption? | 来源恰有一个（CONTRACTS §1.3，D-88）；引用/URL/大小/MIME 在发送前验证 |
+| video | 来源同 image、duration_ms?、caption? | 来源恰有一个；未知时长为 absent |
+| voice | 来源同 image、duration_ms?、caption? | 语音消息（D-89），需要目标实例声明 `message.voice`；音乐等其他音频作为 file；Adapter 不转码 |
+| file | 来源同 image、filename?、mime?、caption? | filename 仅为无路径展示名称，不作为宿主文件访问路径 |
+| mention | external_user_id、display? | 按目标平台实例解释，不能猜测跨实例身份；Adapter 无法表示时 UNSUPPORTED。全体提及只有 OneBot 11 提供，用其 extension（D-90） |
 | reference | original_platform_message_id、target? | 一条 Chain 最多一个；目标必须与本次发送兼容，否则 UNSUPPORTED |
-| buttons | rows[[{action_id,label,value?}]] | 一条 Chain 最多一个；action_id 指向当前插件已注册的 button.clicked 路由，value 通过该 action Schema 校验 |
-| forward | items[{source?,chain}] | 仅平台明确支持合并转发时发送；不支持返回 UNSUPPORTED，不默默转成多次 Send |
-| extension | adapter_id、name、version、payload（JSON 对象） | 平台专有能力，只能发往该 adapter_id 的实例；name/version 必须在 Adapter 注册的 extension 声明中，payload 按其 Schema 校验；不支持时 UNSUPPORTED，不降级为其他片段（CONTRACTS §8） |
+| buttons | rows[[{action_id 或 url,label,value?}]] | 一条 Chain 最多一个；action_id 指向当前插件已注册的 button.clicked 路由，value 通过该 action Schema 校验；url 按钮（https 或 tg 链接，D-97）不签发 token、不产生 button.clicked，不能带 value |
+| forward | items[{source?,chain 或 platform_message_id}]，或只在入站出现的 platform_forward_id | 仅平台明确支持合并转发（`message.forward`）时发送；platform_message_id 引用同一会话中的已有消息；节点 chain 不能嵌套 forward（D-91）；不支持返回 UNSUPPORTED，不默默转成多次 Send |
+| extension | adapter_id、name、version、payload（JSON 对象） | 平台专有能力，只能发往该 adapter_id 的实例；name/version 必须在 Adapter 注册的 extension 声明中，payload 按其 Schema 校验；不支持时 UNSUPPORTED，不降级为其他片段（CONTRACTS §8）。入站 chain 可以含本实例所属 Adapter 已声明的 extension（D-95） |
 
 `entities` 使用 `type、offset_utf16、length_utf16` 及类型需要的 url/language/external_user_id；偏移相对于本 text，必须落在完整字符边界，不能截断代理对。首发公共类型为 bold/italic/underline/strikethrough/spoiler/code/pre/text_link/text_mention；不支持的类型明确拒绝。SDK 从 Go 字符串创建实体时须转换 UTF-8/rune 索引，不能直接把字节索引交给 Telegram。
 
-`incoming_ref` 表示尚未取件的入站对象授权，与已校验的 MediaRef 分开；描述包含 token、声明 size/MIME 与 readability。SDK media.Read 按需取件、读取和共享缓存的规则见 CONTRACTS §1.4。入站元数据不泄漏 Bot Token 或任意宿主路径。
+`inline_base64` 是插件直接给出的标准 base64 数据，解码后 1 B～1 MiB；Adapter 按 D-88 原样或解码后交给平台，不把其他来源转成它。`incoming_ref` 表示尚未取件的入站对象授权，与已校验的 MediaRef 分开；描述包含 token、声明 size/MIME 与 readability。插件经 `sdk.OpenMedia` 读取（D-109），按需取件、读取和共享缓存的规则见 CONTRACTS §1.4。入站元数据不泄漏 Bot Token 或任意宿主路径。
 
 Core/Adapter 先验证整个 Chain 的结构、顺序、片段数、媒体租约及目标能力，再发出第一条平台请求。结构错误返回 INVALID_ARGUMENT；合法但平台无法表示返回 UNSUPPORTED；不能先发送已知可用前半段，再因已知不支持的末尾丢失内容。
 
@@ -63,7 +64,7 @@ Core/Adapter 先验证整个 Chain 的结构、顺序、片段数、媒体租约
 
 保留两种开发者 Handler 形式：
 
-- `func(c *Context, ...) (Chain, error)`：自动回复模式；成功返回非空 Chain 后由 Core 自动 Send 一次，排在 Handler 内显式 `c.Send` 之后。返回空 Chain 且无错误代表不回复（D-70）。
+- `func(c *Context, ...) (Content, error)`：自动回复模式，Content 是 Chain 或单个片段（D-108）；成功返回非空内容后由 Core 自动 Send 一次，排在 Handler 内显式 `c.Send` 之后。返回空 Chain 且无错误代表不回复（D-70）。
 - `func(c *Context, ...) error`：主动发送模式；Handler 可在内部调用一次或多次 `c.Send`，每次独立形成 SendResult。自动回复模式内的显式 Send 规则相同。
 
 两个签名都通过 `c.StopPropagation()` 锁存本次 Handler 的停止标记；默认 Continue，不增加第三套返回签名。SDK 把本次执行结果转为统一的 `HandlerOutcome`：
@@ -108,7 +109,15 @@ Context 的传播/默认 Target/用户调用链仅在本次调用期间有效；
 
 Edit（CONTRACTS §8）同样返回 SendResult：part_results 恰有一项，status 只取 ACCEPTED / REJECTED / UNKNOWN，成功时 platform_message_ids 与 primary_platform_message_id 为被编辑消息的 ID。Edit 失败不改为发送新消息。
 
+插件 API 用消息句柄指向一条消息（D-104）：`<会话字符串>/<platform_message_id>[@<实例名>]`，platform_message_id 中的 `%`、`/`、`@` 写作 `%25`、`%2F`、`%40`。SendResult 与事件给出带实例的句柄；编辑、撤回、引用片段与 Telegram 中指向某条消息的平台动作只收句柄，省略实例时 Core 按 CONTRACTS §8 选择。协议不变，SDK 把句柄拆成 Target 与 platform_message_id。
+
 ACCEPTED 只表示平台 API 确认接受，不保证用户阅读。跨多条平台请求无事务性；发送中的媒体租约保护到消费完成/失败/超时，不能因原插件退出就提前删除平台仍在读取的文件。
+
+## 4A. 撤回与流式输出
+
+`core.delete` 撤回本机器人或平台允许撤回的消息（D-93）：Target 准入与 Edit 相同，目标实例未声明 `message.delete` 时 Core 在调用 Adapter 前返回 UNSUPPORTED，不自动重试，不执行出站 Hook，但不能在出站 Hook 中调用。输入为 1～100 个 platform_message_id；结果为每个 ID 的状态 ACCEPTED / REJECTED / UNKNOWN / NOT_ATTEMPTED 与安全错误，按输入顺序。Adapter 可以把同一会话的多个 ID 合成一次平台请求，此时它们共享该请求的结果；请求明确失败或结果未知后停止，其余 ID 为 NOT_ATTEMPTED。消息已不存在或超过平台的撤回期限为 REJECTED。
+
+SDK 的 `c.Stream` 是不新增协议的辅助函数（D-98）：目标实例声明了 `message.edit` 时先发送再编辑，同一 Target 两次编辑至少间隔 1 秒，文本超过平台上限时开始下一条消息；否则缓冲到结束后发送一次。每次发送与编辑照常执行出站 Hook，任一请求失败即停止并返回已有的结果。只有一个平台具备的输入状态、表情回应与草稿是该 Adapter 的平台动作（§6.5）。
 
 ## 5. Hook 的明确边界
 
@@ -120,13 +129,14 @@ ACCEPTED 只表示平台 API 确认接受，不保证用户阅读。跨多条平
 
 ## 6. 官方 Telegram Adapter 映射
 
-官方 Telegram Adapter 是可安装的 Adapter 包（CONTRACTS §8），一个进程承载全部已配置实例，实例可单独启停；以下映射在 Adapter 进程内实现，游标持久化、按钮 token 与派发仍在 Core。每实例绑定一个 Bot 账号，使用 getMe 得到的身份校验目标账号，凭证不跨实例复用。chat_id 与 thread_id 精确映射到 chat_id/message_thread_id；首发普通私聊、群、频道及论坛话题之外的专属会话形式需显式能力支持，否则 UNSUPPORTED。
+官方 Telegram Adapter 是可安装的 Adapter 包（CONTRACTS §8），一个进程承载全部已配置实例，实例可单独启停；以下映射在 Adapter 进程内实现，游标持久化、按钮 token 与派发仍在 Core。每实例绑定一个 Bot 账号，使用 getMe 得到的身份校验目标账号，凭证不跨实例复用。chat_id 与 thread_id 精确映射到 chat_id/message_thread_id；首发普通私聊、群、频道及论坛话题之外的专属会话形式需显式能力支持，否则 UNSUPPORTED。chat_type 按 chat.type 映射：private 为 PRIVATE，group 与 supergroup 为 GROUP，channel 为 CHANNEL（D-100）。
 
 ### 6.1 接收、游标和实例故障
 
 - 首发使用 long polling；getMe 固定该实例 account_id/username：`username` 为 account_username，`first_name` 为 account_display_name（D-67），同一个 Bot 账号只允许一个 Core 入站 owner。启动发现已有 webhook 时返回 FAILED_PRECONDITION，由管理员处理冲突，不擅自调用 deleteWebhook。
 - 每次 getUpdates 显式传 `allowed_updates=["message","edited_message","channel_post","edited_channel_post","callback_query","my_chat_member","chat_member","message_reaction"]`，不依赖服务器旧设置或空列表默认值。成员/Reaction 事件还受 Bot 群管理员等平台权限限制，能力状态按实际权限呈现；遗留的未订阅 update 明确忽略并推进游标，不伪造支持。
 - Message 带 sender_chat 时，不用兼容性的 fake from 构造个人 User/Admin；保留发送聊天的原始信息，缺少真实个人身份就让 Actor absent。button Actor 始终取本次 CallbackQuery.from。群与超级群中的 Actor 带平台权限（D-69）：Adapter 声明 `telegram.chat_owner`（隐含 `telegram.chat_admin`）与 `telegram.chat_admin`（隐含 `chat_admin`）；chat member 状态为 creator 时给出前者，为 administrator 时给出后者。Adapter 按会话缓存 `getChatAdministrators` 的结果，首次需要时获取，缓存 10 分钟（固定常量），收到该会话的 `chat_member` 或 `my_chat_member` update 时作废；获取失败时本事件不带平台权限并记诊断，不按成功处理。私聊不带平台权限。入站 text 中的 `text_mention` 实体保留在 entities 中，命令参数的 `user` 类型按 CONTRACTS §2.2 第 4 条从中取值。Actor.locale 取 from.language_code（平台给出时），按 BCP 47 规范化大小写。to_me 在以下情况为 true：chat.type 为 private；reply_to_message.from 是本机器人；文本实体中有指向本机器人用户名的 mention 或指向其用户 ID 的 text_mention。
+- 论坛话题只按 `is_topic_message` 判定（D-100）：它为 true 时 Target 的 thread_id 取 message_thread_id；非论坛超级群的回复串也带 message_thread_id，但 is_topic_message 不为 true，这时不产生 thread_id，回复照常发往该会话，需要关联原消息时用 reference。论坛的 General 话题没有 message_thread_id，同样不产生 thread_id。按钮回调与其他由 Message 派生的事件按其 Message 使用同一规则。插件发往指定话题时在 Target 中给出 thread_id，出站照常作为 message_thread_id。
 - Adapter.Start 完成凭证/冲突检查和接收循环初始化后返回；循环在后台运行。401/409 等凭证失效/并发 owner 冲突终止实例接收并上报管理状态，不伪装为正常空闲。短暂读网络错误可按 Core 固定、带上限的退避重连；此接收恢复不允许重试已提交的 Send。
 - getUpdates 每个 update 按返回顺序单独接纳：先在 Core 状态库持久化该实例的已接收游标，再交给非持久事件队列；重启从已持久化游标的下一个 offset 拉取，不重放已接纳业务。因此在持久化后、Handler 完成前崩溃，允许该事件丢失。首发交付的是尽力投递，不承诺 durable inbox 或完整补处理。
 - Telegram 在至少一周没有新 update 后可能随机选择后续 ID，不能假定 ID 永久递增。Core 记录最后接纳时间与当前接收轮次起点；从两者较晚者起连续 7 天没有接纳新 update 时，在当前 long-poll 结束且无接收请求在途的边界持久化新接收轮次/起点、清除 offset，再开始拉取，避免旧高游标永远屏蔽新序列，也避免空闲时每次轮询都重置。平台更新最长仅保存 24h，该重建不承诺恢复空闲期早已过期的事件。
@@ -155,14 +165,28 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 - 业务派发通过普通 REQUEST/RESPONSE，事件携 callback_query_id 便于诊断；actor 来自 CallbackQuery.from。首发不支持缺少可核验普通 Target 的 inline-mode 回调，明确拒绝而不是补造 chat_id。
 - 相同 update_id 遵循实例接收游标去重；不同用户点击或同用户再次点击作为独立事件处理。callback_query_id 用于这次平台确认与诊断，此入站接收策略不构成对外 Send 的可靠重试机制。
 
+### 6.4 媒体来源与新增片段
+
+- 媒体来源（D-88）：https_url 原样作为 URL 参数；inline_base64 解码后以 multipart 上传；media_ref 以 multipart 上传，请求体边经 `core.media.read` 分块读取边写出，不在内存中拼出整份请求体；`platform_file` 直接作为 file_id 参数，不重新上传。
+- voice（D-89）：用 sendVoice，每个 voice 片段单独成一个物理操作，不与相册合并。入站 `voice` 映射为带 incoming_ref 的 voice，不再作为 file；入站 `audio` 仍为 file。
+- 动图（D-99）：mime 为 image/gif 的 image 用 sendAnimation 发送，并结束当前连续媒体组；mime 取 MediaRef 的值，inline_base64 按开头字节 `GIF8` 判断，https_url 不判断，按普通 image 发送。入站 `animation` 与 `video_note` 映射为 video；`sticker` 中 is_animated 与 is_video 都为 false 的映射为 image，其余贴纸只留在 platform_payload。
+- 按钮中的 url 按钮映射为 InlineKeyboardButton 的 url（D-97）。forward 不声明，发送返回 UNSUPPORTED。
+- 实例在原有能力之外声明 `message.voice`、`message.delete` 与 `commands.sync`。
+
+### 6.5 平台动作、撤回与命令菜单
+
+- 平台动作（D-92）：参数沿用 Bot API 的字段名，数字 ID 写作十进制字符串，chat_id 与 message_thread_id 取自 Target，不在参数中重复；结果为 Bot API 的 `result` 原文。官方动作（版本 1，作用范围都为 chat）：`telegram.ban_chat_member`、`telegram.unban_chat_member`、`telegram.restrict_chat_member`、`telegram.pin_chat_message`、`telegram.unpin_chat_message`、`telegram.get_chat`、`telegram.get_chat_member`、`telegram.get_chat_member_count`、`telegram.get_chat_administrators`、`telegram.set_chat_title`、`telegram.leave_chat`、`telegram.send_chat_action`、`telegram.set_message_reaction`、`telegram.send_message_draft`。`adapters/telegram/action` 为每个动作发布带类型的 Go 函数，只依赖 `sdk` 根包；另提供两个辅助函数：输入状态每 4 秒刷新一次、ctx 结束即停止；草稿流式显示，结束后经普通 Send 发出正式消息（草稿经平台动作发出，不执行出站 Hook，正式消息执行，D-98）。
+- 撤回用 deleteMessages，每次最多 100 个同一会话的 ID，它们共享该请求的结果。`telegram.send_chat_action` 带 message_thread_id；`telegram.set_message_reaction` 把本机器人在该消息上的回应设为给出的列表（空列表为撤销）；`telegram.send_message_draft` 只用于私聊，其他会话在调用平台前返回 UNSUPPORTED，参数在实施时按 Bot API 原文核对。
+- 命令菜单（D-96）：`adapter.commands.sync` 用 setMyCommands 设置 default scope，并为命令说明有翻译的每个语言各设置一次 language_code；名字不匹配 `^[a-z0-9_]{1,32}$` 的跳过，说明超过 256 字符时截断，两者都记诊断；与上一次成功同步的内容相同时不调用平台，实例停止时不删除菜单。
+
 ## 7. 官方 OneBot 11 Adapter 映射
 
-官方 OneBot 11 Adapter 是可安装的 Adapter 包（CONTRACTS §8，D-46），一个进程承载全部实例，每个实例一条正向 WebSocket 连接、绑定一个 QQ 账号；游标、按钮 token 与派发仍在 Core。每次 API 调用带唯一的 `echo`，响应按 `echo` 配对。字段名以 [OneBot 11 标准](https://github.com/botuniverse/onebot-11) 为准，实施时逐项核对原文；各实现端的差异以模拟服务与手测记录为准。
+官方 OneBot 11 Adapter 是可安装的 Adapter 包（CONTRACTS §8，D-46），一个进程承载全部实例，每个实例一条 WebSocket 连接（forward 由 Adapter 连出，reverse 由实现端连入，§7.3）、绑定一个 QQ 账号；游标、按钮 token 与派发仍在 Core。每次 API 调用带唯一的 `echo`，响应按 `echo` 配对。字段名以 [OneBot 11 标准](https://github.com/botuniverse/onebot-11) 为准，实施时逐项核对原文；各实现端的差异以模拟服务与手测记录为准。
 
 ### 7.1 接收与标准化
 
 - 实例启动时建立连接并调用 `get_login_info`：`user_id` 的十进制字符串为 account_id，`nickname` 为 account_display_name；OneBot 11 没有可寻址的账号用户名，account_username absent，命令不接受 `/cmd@name` 形式（D-67）。同账号唯一 owner 按 CONTRACTS §8 由 Core 检查。
-- 私聊的用户号与群号是不同的命名空间，chat_id 写作 `private:<user_id>` 与 `group:<group_id>`，不产生 thread_id。数字 ID 一律转为十进制字符串。
+- 私聊的用户号与群号是不同的命名空间，chat_id 写作 `private:<user_id>` 与 `group:<group_id>`，不产生 thread_id。数字 ID 一律转为十进制字符串。chat_type 与 chat_id 的前缀一致：`private:` 为 PRIVATE（含群临时会话），`group:` 为 GROUP（D-100）。群临时会话的 chat_id 不含来源群号，主动向非好友发起临时会话不在 v0.1。
 - Adapter 一边读连接一边把事件放进实例内的有界队列（固定常量 256 条），按到达顺序经 `core.adapter.deliver` 逐条交付，收到应答后才交付下一条；队列满时丢弃新事件并计数。API 响应与心跳不进这个队列，读循环不因等待交付而停下。
 
 | OneBot 11 上报 | 标准事件 | 规则 |
@@ -171,21 +195,59 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 | `notice.group_recall`、`notice.friend_recall` | message.deleted | platform_message_ids 只含该 message_id；actor 取 operator_id（存在时） |
 | `notice.group_increase`、`notice.group_decrease` | member.joined、member.left | member_external_user_id 为 user_id；operator_id 非 0 且与 user_id 不同时作为 actor |
 | `meta_event`（lifecycle、heartbeat） | 不交付 | 只用于连接状态 |
-| 其他 `notice` 与全部 `request` | 不交付 | 明确忽略并计数，不伪造事件；需要交付时按 §1.2 声明为扩展事件，v0.1 的官方 OneBot 11 Adapter 不声明扩展事件 |
+| `notice.notify`（poke、lucky_king、honor） | `onebot11.poke`、`onebot11.lucky_king`、`onebot11.honor` | 扩展事件（D-95），见下表 |
+| `notice.group_admin`、`notice.group_ban`、`notice.group_upload`、`notice.friend_add` | `onebot11.group_admin`、`onebot11.group_ban`、`onebot11.group_upload`、`onebot11.friend_add` | 扩展事件（D-95），见下表 |
+| `request.friend`、`request.group` | `onebot11.friend_request`、`onebot11.group_request` | 扩展事件（D-95），见下表 |
+| `notice.notify`（input_status，NapCat 等实现端扩展） | `onebot11.input_status` | 扩展事件（D-95），只在私聊；标准实现端不上报时插件收不到，不伪造 |
+| 其他 `notice` 与 `request` | 不交付 | 明确忽略并计数，不伪造事件 |
 
-- 入站 Chain：`text` 为 plain 的 text；`at` 为 mention（`qq` 为 all 时没有通用对应）；`reply` 为 reference；`image`、`video` 为带 incoming_ref 的 image、video。没有通用对应的段（`at` all、`face`、`record`、`forward`、`json` 等）不进入 chain，原始消息数组完整保存在 platform_payload 中；因此 chain 可以为空。
+扩展事件的 version 都为 1；payload 沿用 OneBot 11 原字段名，数字 ID 写作十进制字符串，不含 time、self_id、post_type 等公共字段，Schema 不允许其他属性。Target 取事件所属的会话：带 group_id 的为 `group:<group_id>`，其余为 `private:<user_id>`；Actor 为 user_id 对应的用户（群事件中带 operator_id 时 Actor 为操作人）。
+
+| 扩展事件 | payload |
+| --- | --- |
+| `onebot11.poke` | target_id（被戳的号码） |
+| `onebot11.lucky_king` | target_id（运气王的号码） |
+| `onebot11.honor` | honor_type |
+| `onebot11.group_admin` | sub_type（set、unset）、user_id |
+| `onebot11.group_ban` | sub_type（ban、lift_ban）、user_id、duration（秒） |
+| `onebot11.group_upload` | file：id、name、size、busid |
+| `onebot11.friend_add` | 空对象 |
+| `onebot11.friend_request` | comment、flag |
+| `onebot11.group_request` | sub_type（add、invite）、comment、flag |
+| `onebot11.input_status` | status_text、event_type；字段在实施时按 NapCat 文档核对 |
+
+- 入站 Chain：`text` 为 plain 的 text；`at` 为 mention，`qq` 为 all 时为 `onebot11.at_all` extension 片段（D-90）；`reply` 为 reference；`image`、`video` 为带 incoming_ref 的 image、video；`record` 为 voice，`file` 为 file，二者都带 incoming_ref（D-89）；`face` 为 `onebot11.face` extension 片段；`forward` 为只带 platform_forward_id 的 forward（D-91，展开用动作 `onebot11.get_forward_msg`）。其余没有通用对应的段（`json`、`xml`、`music`、`share` 等）不进入 chain，原始消息数组完整保存在 platform_payload 中；因此 chain 可以为空。
 - to_me 在以下情况为 true：私聊；chain 中有指向本账号的 mention；`reply` 引用的消息经 `get_msg` 查得发送者是本账号。`get_msg` 失败时按 false 处理并记诊断。
-- 入站媒体：实例声明 `media.read` v1；`adapter.media.read` 时 Adapter 用段中的 `url` 经 HTTP GET 取件，只允许 http 与 https；段中没有 `url` 时 Adapter 把该来源的 readability 标为 UNSUPPORTED。
+- 入站媒体：实例声明 `media.read` v1；`adapter.media.read` 时 Adapter 用段中的 `url` 经 HTTP GET 取件，只允许 http 与 https；段中没有 `url` 时 Adapter 把该来源的 readability 标为 UNSUPPORTED。段中的 `url` 同时是该对象的平台文件标识，发回同一实例时原样作为 `file` 复用（D-88）。
 
 ### 7.2 能力与发送计划
 
-- 支持的片段：plain 的 text、image、video、mention、reference，以及 extension `onebot11.face` v1（payload 为 `{"id": "<数字字符串>"}`，发送为 `face` 段）。实例声明 `message.send` 与 `message.reference`，不声明 `message.markdown`、`message.album`、`message.buttons` 与 `message.edit`。带 markdown 或 entities 的 text、buttons、forward 与 file 由 Adapter 在首个平台请求前返回 UNSUPPORTED；Edit 由 Core 按未声明的 `message.edit` 返回 UNSUPPORTED。
-- 发送用 `send_msg`，`message_type` 与目标号码由 chat_id 决定。连续的 text、mention、image 与 extension 片段合成一条消息的段数组，按原顺序排列；video 单独成一条消息。reference 只加在第一条消息最前面的 `reply` 段上。每条消息是一个物理操作，对应一项 PartResult。
-- 媒体来源：https_url 原样作为段的 `file`；media_ref 与 incoming_ref 由 Adapter 经 `core.media.read` 读出后以 `base64://` 传给实现端。
+- 支持的片段：plain 的 text、image、video、mention、reference、voice、file、forward，以及 extension `onebot11.face` v1（payload 为 `{"id": "<数字字符串>"}`，发送为 `face` 段）与 `onebot11.at_all` v1（payload 为空对象，发送为 `at` 的 `qq=all`）。实例声明 `message.send`、`message.reference`、`message.voice`、`message.forward` 与 `message.delete`，不声明 `message.markdown`、`message.album`、`message.buttons`、`message.edit` 与 `commands.sync`。带 markdown 或 entities 的 text 与 buttons 由 Adapter 在首个平台请求前返回 UNSUPPORTED；Edit 等未声明能力的操作由 Core 返回 UNSUPPORTED。
+- 发送用 `send_msg`，`message_type` 与目标号码由 chat_id 决定。连续的 text、mention、image 与 extension 片段合成一条消息的段数组，按原顺序排列；video 与语音（`record` 段）各自单独成一条消息。file 用 `upload_group_file` 或 `upload_private_file`（go-cqhttp 系实现端的扩展）单独成一个物理操作，平台不返回 message_id，成功时为 ACCEPTED 并标记 message_ids_unavailable。forward 用 `send_group_forward_msg` 或 `send_private_forward_msg` 单独成一条消息，每个 item 为一个 `node` 段：platform_message_id 对应 node 的 `id`，chain 对应 node 的 `content`，source 给出时作为 `user_id` 与 `nickname`，否则用本账号（D-91）。reference 只加在第一条消息最前面的 `reply` 段上（第一条为 file 或 forward 时 UNSUPPORTED）。每条消息是一个物理操作，对应一项 PartResult。
+- 媒体来源（D-88），不把来源统一转为 base64：https_url 原样作为段的 `file`；inline_base64 原样以 `base64://` 传递；`platform_file`（同一实例的入站对象）原样作为 `file`；media_ref 按以下顺序选择：实例配置了 `media_dir` 时，Adapter 经 `core.media.read` 把对象写入 `media_dir.local` 下的随机文件名，以 `file://<media_dir.remote>/<文件名>` 传递，该物理操作结束（含 UNKNOWN）后删除；否则经 `core.media.url` 取得临时媒体 URL（前缀取实例的 `media_url_base`，缺省为 `base_url`）作为 `file`。实现端在其他主机或容器中而前缀不可达时，实现端取件失败按平台的明确拒绝报告，不改用 base64；部署文档提示配置 `media_url_base` 或 `media_dir`。
 - 结果：响应 `status` 为 ok 时该部分 ACCEPTED，`data.message_id` 为平台消息 ID；为 async 时 ACCEPTED 并标记 message_ids_unavailable；为 failed 时 REJECTED，safe_message 带 retcode。请求帧已写出后连接断开，或到调用期限仍无响应，该部分为 UNKNOWN。连接未建立时在首个请求前返回 UNAVAILABLE。任一部分不是 ACCEPTED 后停止，其余部分 NOT_ATTEMPTED，按 §4 汇总。
+- 撤回：`adapter.delete` 对每个 ID 调用一次 `delete_msg`，按 §4A 汇总。
+
+### 7.3 反向 WebSocket
+
+- `mode` 为 reverse 时（D-94），Adapter 在 REGISTER 中注册公开的前缀路由 `/ws/`，实现端连接 `<base_url>/plugins/<Adapter 包 ID>/ws/<instance_id>`。未知或未启动的 instance_id 返回 404；`access_token` 不符返回 401；`X-Self-ID` 不等于实例的 `self_id` 或 `X-Client-Role` 不是 Universal 返回 403；该实例已有连接时返回 409。access_token 不进入日志、错误或普通响应。
+- 实例启动时不等待连入，account_id 为 `self_id`，账号展示名在连入后经 `get_login_info` 取得；`get_login_info` 的 user_id 不等于 self_id 时关闭连接并记诊断。连接断开后实例保持运行、等待实现端重连，不报告致命错误，也不生成 bot.offline；未连接期间 Send 与动作返回 UNAVAILABLE。
+- 连入后的事件队列、交付、API 调用按 echo 配对、心跳与格式检查与 forward 模式相同。
+
+### 7.4 平台动作
+
+参数沿用 OneBot 11 的字段名，数字 ID 写作十进制字符串，group_id 或 user_id 取自 Target 时不在参数中重复；结果为响应 `data` 的原文，`status` 为 failed 时返回 FAILED_PRECONDITION，safe_message 带 retcode。官方动作（版本 1，D-92）：
+
+| 作用范围 | 动作 |
+| --- | --- |
+| chat（群） | `onebot11.set_group_ban`、`onebot11.set_group_whole_ban`、`onebot11.set_group_kick`、`onebot11.set_group_card`、`onebot11.set_group_admin`、`onebot11.set_group_name`、`onebot11.set_group_leave`、`onebot11.get_group_info`、`onebot11.get_group_member_info`、`onebot11.get_group_member_list` |
+| chat（群或私聊） | `onebot11.get_msg`、`onebot11.get_forward_msg`、`onebot11.poke`（`group_poke` 或 `friend_poke`，实现端扩展） |
+| account | `onebot11.set_friend_add_request`、`onebot11.set_group_add_request`、`onebot11.get_stranger_info`、`onebot11.get_friend_list`、`onebot11.get_group_list`、`onebot11.send_like` |
+
+实现端扩展的动作在实现端不支持时按其返回的 failed 报告，Adapter 不探测实现端类型。`adapters/onebot11/action` 为每个动作发布带类型的 Go 函数，只依赖 `sdk` 根包。
 
 ## 8. 验收与依据
 
-对应 [TEST-MATRIX.md](TEST-MATRIX.md)：Target/话题/多实例；Handler 两签名及停止传播；Rule false；空 Chain；按钮 token/过期/代次/多用户权限；相册多 ID；发送前拒绝、平台明确失败、先成功再超时；AfterSend 失败不改写平台结果；缺少 actor 和平台不支持事件；消息编辑；bot 上下线事件；Actor.locale 映射；OneBot 11 的接收映射、发送计划与跨 Adapter 一致性（V-71、V-72）。实际编译、平台调用和故障注入均留在实施阶段记录。
+对应 [TEST-MATRIX.md](TEST-MATRIX.md)：Target/话题/多实例；Handler 两签名及停止传播；Rule false；空 Chain；按钮 token/过期/代次/多用户权限；相册多 ID；发送前拒绝、平台明确失败、先成功再超时；AfterSend 失败不改写平台结果；缺少 actor 和平台不支持事件；消息编辑；bot 上下线事件；Actor.locale 映射；OneBot 11 的接收映射、发送计划与跨 Adapter 一致性（V-71、V-72）；D-87 补齐的媒体传递、新片段、平台动作、撤回与输入状态、命令菜单、流式输出、反向 WebSocket、扩展事件与 Telegram 媒体小项（V-89～V-97）；会话类型、Telegram 的代理模式与话题判定（V-98～V-100）；会话字符串与可选的机器人（V-101）；插件 API 的简化：消息句柄、管理员按 Adapter 登记、带类型的按钮动作、片段构造函数、媒体读取与上传助手、时间与时长、Hook 的链式注册与 Adapter 声明的 Go 类型（V-102、V-103、V-105～V-108、V-110、V-111）。实际编译、平台调用和故障注入均留在实施阶段记录。
 
 平台约束核对依据（2026-10-21）：[Telegram Bot API](https://core.telegram.org/bots/api)、[sendMediaGroup](https://core.telegram.org/bots/api#sendmediagroup)、[InlineKeyboardButton](https://core.telegram.org/bots/api#inlinekeyboardbutton)、[CallbackQuery](https://core.telegram.org/bots/api#callbackquery)。相册返回 Message 数组、每组 2～10 项、按钮载荷限额和回调确认来自官方接口；上面的拆分、token 生命周期和错误汇总属于 AlonaBot 首发选择。
