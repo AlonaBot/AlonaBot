@@ -48,6 +48,7 @@
 | goal-95 | T-08.11 | 配置改由 config_schema.json 声明 | T-04.7、T-08.3、T-08.4、T-08.10 | 已完成（PR #103） |
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-04.7、T-06.1 | 已完成（PR #101） |
 | goal-91 | T-04.8 | SDK 自有类型与事件常量 | T-03.9、T-03.24、T-04.7、T-04.9 | 等待前置 |
+| goal-123 | T-08.13 | 文案函数只返回字符串 | T-04.9、T-08.8 | 待派发 |
 | goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 已完成（PR #107） |
 | goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8、T-08.11 | 待派发 |
 | goal-101 | T-08.12 | Adapter 实例配置与 Core 设置的版本迁移 | T-07.6、T-08.11 | 待派发 |
@@ -3732,6 +3733,49 @@ Core 一侧已按合入代码核对并修订：
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./... ；go build ./...。
 
 不做：config.json 直读、dev.sqlite 与拒绝 update/rollback（T-13.2）；热部署与 Reload（T-13.3）；alonabot run（T-09.4，复用本切片的装配）；HTTP 与设置文件的装配（随 T-07.5、T-09.4 接入；本切片 Router 的 prefixes 传 nil，所有实例使用 ["/"]，Core Admin 列表为空，默认 locale 按 en-US，三者由 T-09.4 接入）。
+```
+
+### goal-123 · T-08.13 文案函数只返回字符串
+
+状态：待派发。前置 T-04.9（[PR #110](https://github.com/AlonaBot/AlonaBot/pull/110)，合并提交 `6aed25d`）与 T-08.8（[PR #102](https://github.com/AlonaBot/AlonaBot/pull/102)，合并提交 `f685c92`）均已合并。2026-11-09 按 D-106 新增，接口按 goal-53 语句中合入的符号写出。与同在第 10 波的 goal-101 都会修改 `sdk/generate`，按执行顺序 §3 的生成器一行处理。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-123（切片 T-08.13：文案函数只返回字符串）。goal 目录 goal-123，分支 goal-123，worktree .worktrees/goal-123，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：插件取文案时不再处理错误，`c.T` 与 `sdk.T` 只返回字符串。代码里以常量写出的键与参数名改在 `alonabot check` 与 `build` 时检查；运行时仍有问题的，返回键名或保留占位符原文，并在插件日志记 WARN（D-106）。
+
+依据：PLAN T-08 步骤 10；CONTRACTS §5.4；DECISIONS D-106；TEST-MATRIX V-104。
+
+范围（只新增或修改这些）：
+- contracts/i18n/：增加不返回 error 的取文案函数
+- sdk/：T 所在的文件（goal-53 合入）
+- sdk/generate/：新增对 T 调用的检查，接入 check 与 build 已有的诊断输出
+- 调用方：仓库内全部 c.T 与 sdk.T 的调用（示例、测试插件与以字符串嵌入的插件源码）
+- 上述包的测试文件
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. contracts/i18n
+   func (c *Catalog) Text(locales []string, key string, args map[string]string) (text string, problems []string) // 未知键时 text 为键名；缺少的参数保留占位符原文；多余的参数忽略；problems 依次用英文描述问题，不含参数值，没有问题时为 nil
+2. sdk
+   func (c *Context) T(key string, args ...any) string // 取代 (string, error)；args 仍为成对的名字与值，值用 fmt.Sprint 格式化
+   func T(ctx context.Context, key string, args ...any) string // 取代 (string, error)；没有 Actor 时从 Core 默认 locale 开始
+
+行为：
+- 运行时：T 经 Catalog.Text 取文案，语言选择顺序不变（CONTRACTS §5.4）。problems 非空或 args 不成对时（忽略最后一个落单的名字），在插件日志记 WARN（key 与问题，不记参数值），仍返回取到的文本；同一 key 的同一问题在一个 Session 内只记一次。插件没有 i18n 资源时返回键名，同样记 WARN。
+- 构建期：生成器在类型检查后找出对 `(*sdk.Context).T` 与 `sdk.T` 的调用；key 是字符串常量时检查：
+  - en-US 中有该键；
+  - 其余参数个数为偶数，名字位置上都是字符串常量，名字集合与该键的占位符集合相同。
+  问题按 `文件:行:列: 说明` 输出，check 与 build 失败。key 不是常量的调用不检查，留给运行时。
+- Core 自己的文案目录（internal/core/i18n）仍用严格的 Format，不变。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：不新增；已有调用 T 的集成测试改为单返回值，断言不变。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Catalog.Text 的未知键、缺少参数、多余参数与语言回落；生成器对缺键、参数不成对、名字不是常量、名字集合不符的诊断与位置，key 不是常量时不报；运行时 WARN 的去重且不含参数值；没有 i18n 资源的插件调用 T。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./contracts/... ./sdk/...；go build ./...。
+
+不做：Core 文案目录的行为；check 已有的目录检查（goal-53）；docs/plugin-guide.md 的更新（由审查者在合并前同步）。
 ```
 
 ## 第 11 波

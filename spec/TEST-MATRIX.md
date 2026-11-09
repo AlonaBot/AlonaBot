@@ -111,6 +111,7 @@
 | V-101 | T-03、T-04、T-07 | 会话字符串与可选的机器人（D-102）：Telegram 与 OneBot 11 的会话字符串往返（含话题、chat_id 中的 `%` 与 `#`）与格式不合法；Handler 中发往同一会话的另一话题与另一会话、后台发送；一个实例、多个实例有与没有 `default_instance`、`sdk.Via` 指定未登记或未许可的实例；插件给出不符的 account_id；实例换账号后再发送；引用片段与媒体授权的目标；实例名不合规与跨 Adapter 重名 | 往返不变，格式不合法时 SDK 在发出请求前返回 INVALID_ARGUMENT；同一会话由收到事件的实例发出，同一话题适用原 Target 豁免；后台发送用唯一实例或 default_instance，多个实例且没有设置时 FAILED_PRECONDITION，不调用 Adapter；不符的 account_id 为 INVALID_ARGUMENT；换账号后经新账号发出；实例名问题使 Core 拒绝启动并指出键 |
 | V-102 | T-03、T-04 | 消息句柄（D-104）：SendResult 的 Ref、Refs 与 Event 的 Ref 给出带实例的句柄；句柄字符串往返（含话题、消息 ID 中的 `%`、`/`、`@`，省略实例）与格式不合法；c.Edit、sdk.Edit、c.Delete、sdk.Delete 与 message.Quote 只用句柄完成；同一会话有两个实例时经句柄编辑与撤回；一次撤回含不同会话或实例的句柄；Telegram 的 pin、unpin 与 set_message_reaction 用句柄 | 往返后各部分不变；编辑与撤回的请求带句柄中的实例，由发出该消息的实例执行；不同会话或实例的撤回与不合法的句柄在发出请求前返回 INVALID_ARGUMENT |
 | V-103 | T-04 | 管理员与封禁按 Adapter 登记（D-105）：admins 的用户字符串（含 `:` 的用户 ID）、旧的对象写法、不合法的 adapter_id 与重复项；同一 Adapter 两个实例中的 Core Admin、用户禁止与会话禁止；另一个 Adapter 中相同的 external_user_id；写回后的格式 | 用户字符串往返；问题项使 Core 拒绝启动并指出下标；两个实例都得到 admin，都受禁止约束；另一个 Adapter 的同号用户不受影响；写回为字符串数组且保留其他键的写法 |
+| V-104 | T-08 | 文案函数只返回字符串（D-106）：c.T 与 sdk.T 的常量键与参数名在 check 与 build 中的检查（缺键、参数不成对、名字不是常量、名字集合不符；键不是常量时不检查）；运行时的未知键、缺少参数与多余参数；没有 i18n 资源的插件 | 构建期问题带文件、行、列并使构建失败；运行时返回键名或保留占位符原文，同一问题在一个 Session 内只记一条 WARN，日志不含参数值 |
 
 ## 2. 跨任务验收的最终闭合点
 
