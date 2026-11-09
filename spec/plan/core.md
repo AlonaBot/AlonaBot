@@ -28,11 +28,11 @@
 | T-03.10 | goal-9 | 开发入口：用 `alonabot run` 运行 Telegram Adapter 与示例插件（实例写在 `core_config.json`），echo/media 示例与发送接收故障矩阵，汇总证据 | T-03 步骤 8 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | V-07、V-08、V-09、V-35、V-44、V-45、V-48、V-51～V-54 的 T-03 分项；真实 Telegram 需要测试账号 | 未开始 |
 | T-03.12 | goal-99 | 后台发信许可缺省为全部实例：`allowed_adapter_instances` 改为「全部实例」或管理员收紧后的实例集合，准入与撤销语义不变（D-83） | T-03 步骤 3 | T-03.2 | V-07 | 已完成（PR #90；TEST-MATRIX §3.2） |
 | T-03.13 | goal-104 | 媒体按来源传递：MediaSource 的 `inline_base64` 与只在 Core→Adapter 方向出现的 `platform_file`，同一实例的入站对象复用平台文件标识，`core.media.url` 与统一端口上的临时媒体 URL，SDK 字节构造函数的内联与上传选择（D-88） | T-03 步骤 10 | T-03.6、T-04.8、T-07.7 | V-89 的 Core 分项 | 未开始 |
-| T-03.14 | goal-105 | 新增片段与字段：audio、mention 的 all、forward 的 platform_message_id 与 platform_forward_id、Button 的 url；Chain 校验与能力判定，按钮签发跳过 url 按钮，SDK 构造函数与入站类型（D-89、D-90、D-91、D-97） | T-03 步骤 11 | T-03.8、T-04.8 | V-90 的 Core 分项 | 未开始 |
-| T-03.15 | goal-106 | 平台动作：Adapter 描述的动作声明与校验，`core.action` 与 `adapter.action`，目标准入与参数、结果 Schema 校验，`adapter_dependencies` 的动作检查，SDK 的动作调用与 `sdk/adapter` 的可选接口（D-92） | T-03 步骤 12 | T-03.8、T-04.8 | V-91 的 Core 分项 | 未开始 |
-| T-03.16 | goal-107 | 撤回、输入状态与表情回应：`core.delete`、`core.typing`、`core.react` 与对应的 `adapter.*`，能力判定与准入，SDK 方法与输入状态的刷新辅助函数（D-93） | T-03 步骤 13 | T-03.9、T-04.8 | V-92 的 Core 分项 | 未开始 |
+| T-03.14 | goal-105 | 新增片段与字段：voice 片段、forward 的 platform_message_id 与 platform_forward_id、Button 的 url；Chain 校验与能力判定，按钮签发跳过 url 按钮，SDK 构造函数与入站类型（D-89、D-91、D-97） | T-03 步骤 11 | T-03.8、T-04.8 | V-90 的 Core 分项 | 未开始 |
+| T-03.15 | goal-106 | 平台动作：Adapter 描述的动作声明与校验，`core.action` 与 `adapter.action`，目标准入与参数、结果 Schema 校验，`adapter_dependencies` 的动作检查，SDK 的底层动作调用方法、供 Adapter 包带类型函数使用的调用者接口与 `sdk/adapter` 的可选接口（D-92） | T-03 步骤 12 | T-03.8、T-04.8 | V-91 的 Core 分项 | 未开始 |
+| T-03.16 | goal-107 | 撤回：`core.delete` 与 `adapter.delete`，`message.delete` 能力判定与准入，每个 ID 的结果汇总，SDK 方法（D-93） | T-03 步骤 13 | T-03.9、T-04.8 | V-92 的 Core 分项 | 未开始 |
 | T-03.17 | goal-108 | 命令菜单同步：`adapter.commands.sync`，按实例筛选命令与翻译说明，2 秒合并与失败诊断（D-96） | T-03 步骤 14 | T-04.6、T-04.7、T-04.8、T-08.8 | V-93 的 Core 分项 | 未开始 |
-| T-03.18 | goal-109 | 流式输出：`core.draft` 与 `adapter.draft`、`message.draft` 能力，SDK 的 `c.Stream` 三种方式与回退，出站 Hook 的 draft 操作类型（D-98） | T-03 步骤 15 | T-03.9、T-04.8 | V-94 的 Core 分项 | 未开始 |
+| T-03.18 | goal-109 | SDK 的流式输出辅助函数 `c.Stream`：按 `message.edit` 选择节流编辑或缓冲后发送一次，超长换条，失败即停止；不新增协议（D-98） | T-03 步骤 15 | T-03.9、T-04.8 | V-94 的 Core 分项 | 未开始 |
 | T-03.19 | goal-110 | Adapter 的 HTTP 路由：Adapter 的 REGISTER 携带 HTTP 路由与 endpoint，`sdk.RunAdapter` 托管 Listener，统一端口代理 WebSocket Upgrade 并在路由撤销时关闭连接（D-94） | T-03 步骤 16 | T-03.3、T-04.8、T-07.7 | V-95 的 Core 分项 | 未开始 |
 | T-04.1 | goal-10 | 根插件 API 与显式注册；静态注册索引、重复拒绝、跨插件遮蔽的稳定选择 | T-04 步骤 1、3 | T-03.1 | V-10 的注册分项、V-02 的注册原子性 | 已完成（PR #34；TEST-MATRIX §3.2） |
 | T-04.2 | goal-11 | 构建期生成器 `sdk/generate`：限定扫描范围、build tags、生成注册代码、稳定输出；`cmd/alonabot` 的构建检查入口 | T-04 步骤 2 | T-04.1 | V-10 | 已完成（PR #42；TEST-MATRIX §3.2） |
@@ -214,23 +214,23 @@ Adapter 以安装包和独立进程运行（CONTRACTS §8）。以下步骤中�
 
 10. **媒体按来源传递（D-88）。** MediaSource 追加 `inline_base64`：Core 校验标准 base64 与解码后 1 B～1 MiB，拒绝宿主路径与其他 scheme；追加只由 Core 填写的 `platform_file`，插件给出时 INVALID_ARGUMENT。Send 的目标实例就是 incoming_ref 的来源实例时，Core 把 Adapter 原先提供的平台文件标识作为 `platform_file` 交给 Adapter，不取件。实现 Adapter 调用的 `core.media.url`：为本次发送的只读 token 签发 32 字节随机 url_token，到期不晚于消费租约；Core 在统一端口以 GET、HEAD 提供 `/media/<url_token>`，支持 Range，到期或租约结束后 404，日志只记录 url_token 的前缀。SDK 的字节构造函数在 1 MiB 内生成 inline_base64，超出时先上传为 media_ref。
 
-11. **新增片段与字段（D-89、D-90、D-91、D-97）。** 在 proto 中追加 audio 片段、MentionSegment 的 `all`、ForwardItem 的 `platform_message_id`、ForwardSegment 的 `platform_forward_id`、Button 的 `url`，按 MESSAGE-MODEL §2 校验：来源恰有一个、all 与 external_user_id 互斥、chain 与 platform_message_id 恰有一个、嵌套 forward、platform_forward_id 只能出现在入站、url 与 action_id 恰有一个且 url 按钮不带 value。Core 在调用 Adapter 前按 `message.voice`、`message.audio`、`message.mention_all`、`message.forward` 判定能力；按钮签发跳过 url 按钮。SDK 追加构造函数与入站类型。
+11. **新增片段与字段（D-89、D-91、D-97）。** 在 proto 中追加 voice 片段、ForwardItem 的 `platform_message_id`、ForwardSegment 的 `platform_forward_id`、Button 的 `url`，按 MESSAGE-MODEL §2 校验：来源恰有一个、chain 与 platform_message_id 恰有一个、嵌套 forward、platform_forward_id 只能出现在入站、url 与 action_id 恰有一个且 url 按钮不带 value。Core 在调用 Adapter 前按 `message.voice`、`message.forward` 判定能力；按钮签发跳过 url 按钮。SDK 追加构造函数与入站类型。只有一个平台具备的片段（例如全体提及）由该 Adapter 的 extension 提供，不在此追加（D-87）。
 
-12. **平台动作（D-92）。** Adapter 描述追加动作声明，Core 在注册时校验名称、版本、Schema 与作用范围。实现 `core.action`：按 CONTRACTS §8 的发信准入检查目标，核对动作声明、版本与参数 Schema，经 `adapter.action` 交给实例，再按结果 Schema 校验；结果未知时返回 UNAVAILABLE 或 DEADLINE_EXCEEDED，不重试。manifest 的 `adapter_dependencies` 追加所需动作，启用检查与 extension 相同。SDK 提供动作调用方法，`sdk/adapter` 以可选接口让实例实现动作。
+12. **平台动作（D-92）。** Adapter 描述追加动作声明，Core 在注册时校验名称、版本、Schema 与作用范围。实现 `core.action`：按 CONTRACTS §8 的发信准入检查目标，核对动作声明、版本与参数 Schema，经 `adapter.action` 交给实例，再按结果 Schema 校验；结果未知时返回 UNAVAILABLE 或 DEADLINE_EXCEEDED，不重试。manifest 的 `adapter_dependencies` 追加所需动作，启用检查与 extension 相同。SDK 提供底层动作调用方法，以及 Context 与后台客户端共同实现的调用者接口，供 Adapter 包的带类型函数使用；`sdk/adapter` 以可选接口让实例实现动作。
 
-13. **撤回、输入状态与表情回应（D-93）。** 实现 `core.delete`、`core.typing`、`core.react` 与 `adapter.delete`、`adapter.typing`、`adapter.react`，Target 准入与 Edit 相同，目标实例未声明 `message.delete`、`chat.typing`、`message.react` 时在调用 Adapter 前返回 UNSUPPORTED；撤回按 MESSAGE-MODEL §4A 汇总每个 ID 的结果。三者不执行出站 Hook。SDK 提供对应方法，以及每 4 秒刷新一次输入状态、ctx 结束即停止的辅助函数；`sdk/adapter` 以可选接口让实例实现。
+13. **撤回（D-93）。** 实现 `core.delete` 与 `adapter.delete`，Target 准入与 Edit 相同，目标实例未声明 `message.delete` 时在调用 Adapter 前返回 UNSUPPORTED；按 MESSAGE-MODEL §4A 汇总每个 ID 的结果。撤回不执行出站 Hook。SDK 提供对应方法，`sdk/adapter` 以可选接口让实例实现。输入状态与表情回应只有 Telegram 提供，是它的平台动作（步骤 18）。
 
 14. **命令菜单同步（D-96）。** 实例声明 `commands.sync` 时，Core 在实例启动成功后与路由表或命令策略变化后，合并 2 秒内的变化，经 `adapter.commands.sync` 交给它可用的命令：只含该实例命令前缀含 `/`、权限只要求 `user` 且未被禁用的根命令，说明按 CommandSpec 的说明键对 Core 已知的每个 locale 翻译，缺少翻译时用默认 locale。同步失败只记诊断。
 
-15. **流式输出（D-98）。** 实现 `core.draft` 与 `adapter.draft`，能力 `message.draft`；草稿与编辑一样执行出站 Hook，操作类型为 draft。SDK 的 `c.Stream` 按 MESSAGE-MODEL §4A 选择草稿、编辑或缓冲，首个草稿 UNSUPPORTED 时回退，编辑节流 1 秒，超长换条，失败即停止。
+15. **流式输出（D-98）。** SDK 的 `c.Stream` 按 MESSAGE-MODEL §4A 选择节流编辑或缓冲后发送一次，编辑间隔 1 秒，超长换条，失败即停止；每次发送与编辑照常执行出站 Hook。不新增协议；Telegram 的草稿是它的平台动作（步骤 18）。
 
 16. **Adapter 的 HTTP 路由（D-94）。** Adapter 的 REGISTER 可以携带 HTTP 路由与实际监听的 loopback endpoint，校验与插件相同；`sdk.RunAdapter` 在 Adapter 声明了路由时托管 Listener。统一端口代理转发 WebSocket Upgrade，升级后的连接不受普通请求期限限制，路由撤销、Session 失效或代次变化时关闭。
 
 17. **Telegram 的媒体与新增片段。** 在[Telegram 实施计划](adapters/telegram.md#t-03-的-telegram-步骤)中实施。
 
-18. **Telegram 的动作、撤回、输入状态与表情回应。** 在[Telegram 实施计划](adapters/telegram.md#t-03-的-telegram-步骤)中实施。
+18. **Telegram 的平台动作（含输入状态、表情回应与草稿）与撤回。** 在[Telegram 实施计划](adapters/telegram.md#t-03-的-telegram-步骤)中实施。
 
-19. **Telegram 的命令菜单与草稿。** 在[Telegram 实施计划](adapters/telegram.md#t-03-的-telegram-步骤)中实施。
+19. **Telegram 的命令菜单。** 在[Telegram 实施计划](adapters/telegram.md#t-03-的-telegram-步骤)中实施。
 
 #### 拟目录与交付
 
@@ -268,6 +268,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 - 单个 Handler 阻塞 Session 读写、媒体缓存/队列超过固定预算、接收游标可能重放已接纳业务或重复启动 owner，停止主链路集成并回查 T-02/T-03 的所有权与准入实现。
 - 碰到平台无法表达的既定能力，记录 UNSUPPORTED 和具体受影响验收；不能用静默降级替代通过，也不能在本包扩展 D-87 之外的平台功能。
 - 任何来源被统一转成 base64 发送、平台动作可以绕过发信准入或透传未声明的动作、`platform_file` 能由插件给出，阻止合入。
+- 为只有一个官方 Adapter 支持的能力新增通用片段、服务或 SDK 方法，先回到契约讨论（D-87）。
 
 ### T-04：根插件、构建期注册与命令策略
 

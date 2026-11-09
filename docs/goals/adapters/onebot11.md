@@ -167,7 +167,7 @@
 
 状态：等待前置（T-03.13、T-03.14、T-15.2）。2026-11-09 按 D-87～D-91、D-95 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
 
-目标：OneBot 11 实例收发语音（record）、全体提及、文件（upload_group_file、upload_private_file）与合并转发（send_group_forward_msg、send_private_forward_msg），入站 face 映射为 extension 片段、forward 映射为只带 platform_forward_id 的 forward；media_ref 在没有 `media_dir` 时经 `core.media.url` 取得临时媒体 URL，inline_base64 原样传递，`platform_file` 原样作为 file。
+目标：OneBot 11 实例收发语音（record）、文件（upload_group_file、upload_private_file）与合并转发（send_group_forward_msg、send_private_forward_msg），注册 extension `onebot11.at_all` 并收发全体提及（入站 `at qq=all` 映射为该 extension），入站 face 映射为 extension 片段、forward 映射为只带 platform_forward_id 的 forward；media_ref 在没有 `media_dir` 时经 `core.media.url` 取得临时媒体 URL，inline_base64 原样传递，`platform_file` 原样作为 file。
 
 依据：PLAN T-15 步骤 7；CONTRACTS §1.3、§8（OneBot 11 段）；MESSAGE-MODEL §2、§7.1、§7.2；DECISIONS D-88、D-89、D-90、D-91、D-95；TEST-MATRIX V-89、V-90 的 OneBot 11 分项，V-96 的入站片段分项。
 
@@ -175,14 +175,14 @@
 - 物理计划在 goal-79 的基础上追加：语音、文件、合并转发各自单独一个物理操作；文件的平台响应没有 message_id，ACCEPTED 时标记 message_ids_unavailable；第一项为文件或合并转发时 reference 返回 UNSUPPORTED。
 - 合并转发的 node：platform_message_id 为 `id`，chain 为 `content`（节点内的 media_ref 同样按本 goal 的来源规则），source 给出时为 `user_id`、`nickname`，否则为本账号与展示名。
 - 媒体来源：只有插件给出 inline_base64 时请求中才出现 `base64://`；media_dir 优先于媒体 URL；媒体 URL 的前缀取实例的 `media_url_base`，缺省时不传前缀由 Core 取 base_url。
-- Capabilities 追加 `message.voice`、`message.mention_all`、`message.forward`；`onebottest` 追加 upload_*_file 与 send_*_forward_msg 的缺省响应。
+- Capabilities 追加 `message.voice`、`message.forward`，Descriptor 的 extensions 追加 {name "at_all", version 1, schema_json 为不允许任何属性的空对象}；`onebottest` 追加 upload_*_file 与 send_*_forward_msg 的缺省响应。
 - 测试：提交在既有 `send_test.go` 中追加的用例：一条 Chain 依次含语音、合并转发与文件时的三次请求参数，以及 media_ref 以媒体 URL 传递且请求中没有 base64；其余进本地自测。
 
 ### goal-116 · T-15.6 官方 OneBot 11 Adapter 的扩展事件、平台动作与撤回
 
 状态：等待前置（T-03.15、T-03.16、T-15.2）。2026-11-09 按 D-87、D-92、D-93、D-95 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
 
-目标：在 Adapter 描述中声明 MESSAGE-MODEL §7.1 的九种扩展事件及 Schema 并完成映射；声明 §7.4 的平台动作及参数、结果 Schema，发布只含常量与参数类型的 `adapters/onebot11/action`，扩展事件常量发布在新增的 `adapters/onebot11/event`；`adapter.delete` 逐个调用 delete_msg，声明 `message.delete`。
+目标：在 Adapter 描述中声明 MESSAGE-MODEL §7.1 的十种扩展事件（含 NapCat 的 input_status）及 Schema 并完成映射；声明 §7.4 的平台动作（含群信息与成员查询）及参数、结果 Schema，在 `adapters/onebot11/action` 为每个动作发布带类型的 Go 函数（第一个参数为 goal-106 的调用者接口，只依赖 `sdk` 根包），扩展事件常量发布在新增的 `adapters/onebot11/event`；`adapter.delete` 逐个调用 delete_msg，声明 `message.delete`。
 
 依据：PLAN T-15 步骤 8；CONTRACTS §8（平台动作，撤回、输入状态、表情回应与草稿，扩展事件）；MESSAGE-MODEL §1.2、§4A、§7.1、§7.4；DECISIONS D-92、D-93、D-95；TEST-MATRIX V-91、V-92 的 OneBot 11 分项，V-96 的扩展事件分项。
 

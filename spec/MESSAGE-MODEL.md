@@ -44,9 +44,9 @@ MessageChain 是一次**逻辑 Send** 的有序 Segment 列表。Segment JSON �
 | text | text、format?（plain/markdown）、entities? | 默认为 plain；format 与 entities 不同时指定。markdown 支持范围由 Adapter 公布，不能把未知 HTML 直接转交平台 |
 | image | media_ref、incoming_ref、https_url 或 inline_base64、alt?、caption? | 来源恰有一个（CONTRACTS §1.3，D-88）；引用/URL/大小/MIME 在发送前验证 |
 | video | 来源同 image、duration_ms?、caption? | 来源恰有一个；未知时长为 absent |
-| audio | 来源同 image、voice、duration_ms?、caption?、filename? | voice 为 true 表示语音消息，false 表示音乐等音频文件（D-89）；分别需要目标实例声明 `message.voice` 与 `message.audio`；Adapter 不转码 |
+| voice | 来源同 image、duration_ms?、caption? | 语音消息（D-89），需要目标实例声明 `message.voice`；音乐等其他音频作为 file；Adapter 不转码 |
 | file | 来源同 image、filename?、mime?、caption? | filename 仅为无路径展示名称，不作为宿主文件访问路径 |
-| mention | external_user_id 或 all、display? | 按目标平台实例解释，不能猜测跨实例身份；all=true 表示全体提及（D-90），此时 external_user_id 必须 absent，需要 `message.mention_all`；Adapter 无法表示时 UNSUPPORTED |
+| mention | external_user_id、display? | 按目标平台实例解释，不能猜测跨实例身份；Adapter 无法表示时 UNSUPPORTED。全体提及只有 OneBot 11 提供，用其 extension（D-90） |
 | reference | original_platform_message_id、target? | 一条 Chain 最多一个；目标必须与本次发送兼容，否则 UNSUPPORTED |
 | buttons | rows[[{action_id 或 url,label,value?}]] | 一条 Chain 最多一个；action_id 指向当前插件已注册的 button.clicked 路由，value 通过该 action Schema 校验；url 按钮（https 或 tg 链接，D-97）不签发 token、不产生 button.clicked，不能带 value |
 | forward | items[{source?,chain 或 platform_message_id}]，或只在入站出现的 platform_forward_id | 仅平台明确支持合并转发（`message.forward`）时发送；platform_message_id 引用同一会话中的已有消息；节点 chain 不能嵌套 forward（D-91）；不支持返回 UNSUPPORTED，不默默转成多次 Send |
@@ -111,20 +111,11 @@ Edit（CONTRACTS §8）同样返回 SendResult：part_results 恰有一项，sta
 
 ACCEPTED 只表示平台 API 确认接受，不保证用户阅读。跨多条平台请求无事务性；发送中的媒体租约保护到消费完成/失败/超时，不能因原插件退出就提前删除平台仍在读取的文件。
 
-## 4A. 撤回、输入状态、表情回应与草稿
+## 4A. 撤回与流式输出
 
-以下操作的 Target 准入与 Edit 相同（CONTRACTS §8），目标实例未声明对应能力时 Core 在调用 Adapter 前返回 UNSUPPORTED，都不自动重试（D-93、D-98）。
+`core.delete` 撤回本机器人或平台允许撤回的消息（D-93）：Target 准入与 Edit 相同，目标实例未声明 `message.delete` 时 Core 在调用 Adapter 前返回 UNSUPPORTED，不自动重试，不执行出站 Hook，但不能在出站 Hook 中调用。输入为 1～100 个 platform_message_id；结果为每个 ID 的状态 ACCEPTED / REJECTED / UNKNOWN / NOT_ATTEMPTED 与安全错误，按输入顺序。Adapter 可以把同一会话的多个 ID 合成一次平台请求，此时它们共享该请求的结果；请求明确失败或结果未知后停止，其余 ID 为 NOT_ATTEMPTED。消息已不存在或超过平台的撤回期限为 REJECTED。
 
-| 服务 | 能力 | 输入与结果 |
-| --- | --- | --- |
-| `core.delete` | `message.delete` | 1～100 个 platform_message_id；结果为每个 ID 的状态 ACCEPTED / REJECTED / UNKNOWN / NOT_ATTEMPTED 与安全错误，按输入顺序。Adapter 可以把同一会话的多个 ID 合成一次平台请求，此时它们共享该请求的结果；请求明确失败或结果未知后停止，其余 ID 为 NOT_ATTEMPTED。消息已不存在或超过平台的撤回期限为 REJECTED |
-| `core.typing` | `chat.typing` | kind 为 typing、upload_photo、upload_video、upload_voice、upload_document 之一；平台的提示持续数秒，SDK 的辅助函数每 4 秒刷新一次直到 ctx 结束 |
-| `core.react` | `message.react` | platform_message_id、reaction（Unicode emoji，或 `custom:<平台 ID>`）、remove；remove=true 撤销本机器人在该消息上的这一回应。Adapter 不支持的 reaction 返回 UNSUPPORTED |
-| `core.draft` | `message.draft` | draft_id（同一 Target 内由 SDK 分配的正整数）与只含一个 text 的 Chain，内容为当前全文；草稿不产生 platform_message_id，结束时由调用者发送正式消息 |
-
-撤回、输入状态与表情回应不执行出站 Hook；草稿每次执行 BeforeSend 与 AfterSend，操作类型为 draft。四者都与 Send 一样不能在出站 Hook 中调用。
-
-SDK 的 `c.Stream` 按目标实例能力选择流式方式：有 `message.draft` 时用草稿，结束后发送正式消息，首个草稿在调用平台前返回 UNSUPPORTED（例如平台只在私聊支持草稿）时改用下一种方式；否则有 `message.edit` 时先发送再编辑，同一 Target 两次编辑至少间隔 1 秒，文本超过平台上限时开始下一条消息；两者都没有时缓冲到结束后发送一次。任一物理请求失败即停止并返回已有的结果。
+SDK 的 `c.Stream` 是不新增协议的辅助函数（D-98）：目标实例声明了 `message.edit` 时先发送再编辑，同一 Target 两次编辑至少间隔 1 秒，文本超过平台上限时开始下一条消息；否则缓冲到结束后发送一次。每次发送与编辑照常执行出站 Hook，任一请求失败即停止并返回已有的结果。只有一个平台具备的输入状态、表情回应与草稿是该 Adapter 的平台动作（§6.5）。
 
 ## 5. Hook 的明确边界
 
@@ -174,16 +165,15 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 ### 6.4 媒体来源与新增片段
 
 - 媒体来源（D-88）：https_url 原样作为 URL 参数；inline_base64 解码后以 multipart 上传；media_ref 以 multipart 上传，请求体边经 `core.media.read` 分块读取边写出，不在内存中拼出整份请求体；`platform_file` 直接作为 file_id 参数，不重新上传。
-- audio（D-89）：voice=true 用 sendVoice，否则用 sendAudio，每个 audio 片段单独成一个物理操作，不与相册合并。入站 `voice` 与 `audio` 分别映射为 voice=true 与 voice=false 的 audio（带 incoming_ref），不再作为 file。
+- voice（D-89）：用 sendVoice，每个 voice 片段单独成一个物理操作，不与相册合并。入站 `voice` 映射为带 incoming_ref 的 voice，不再作为 file；入站 `audio` 仍为 file。
 - 动图（D-99）：mime 为 image/gif 的 image 用 sendAnimation 发送，并结束当前连续媒体组；mime 取 MediaRef 的值，inline_base64 按开头字节 `GIF8` 判断，https_url 不判断，按普通 image 发送。入站 `animation` 与 `video_note` 映射为 video；`sticker` 中 is_animated 与 is_video 都为 false 的映射为 image，其余贴纸只留在 platform_payload。
-- 按钮中的 url 按钮映射为 InlineKeyboardButton 的 url（D-97）。全体提及与 forward 不声明，发送返回 UNSUPPORTED。
-- 实例在原有能力之外声明 `message.voice`、`message.audio`、`message.delete`、`chat.typing`、`message.react`、`message.draft` 与 `commands.sync`。
+- 按钮中的 url 按钮映射为 InlineKeyboardButton 的 url（D-97）。forward 不声明，发送返回 UNSUPPORTED。
+- 实例在原有能力之外声明 `message.voice`、`message.delete` 与 `commands.sync`。
 
-### 6.5 动作、撤回、输入状态、表情回应、草稿与命令菜单
+### 6.5 平台动作、撤回与命令菜单
 
-- 平台动作（D-92）：参数沿用 Bot API 的字段名，数字 ID 写作十进制字符串，chat_id 与 message_thread_id 取自 Target，不在参数中重复；结果为 Bot API 的 `result` 原文。官方动作（版本 1，作用范围都为 chat）：`telegram.ban_chat_member`、`telegram.unban_chat_member`、`telegram.restrict_chat_member`、`telegram.pin_chat_message`、`telegram.unpin_chat_message`、`telegram.get_chat`、`telegram.get_chat_member`、`telegram.get_chat_member_count`、`telegram.get_chat_administrators`、`telegram.set_chat_title`、`telegram.leave_chat`。常量与参数类型发布在 `adapters/telegram/action`。
-- 撤回用 deleteMessages，每次最多 100 个同一会话的 ID，它们共享该请求的结果；输入状态用 sendChatAction（带 message_thread_id）；表情回应用 setMessageReaction，把本机器人在该消息上的回应设为该 reaction，remove=true 时设为空列表，`custom:<ID>` 对应 custom_emoji。
-- 草稿用 sendMessageDraft，只用于私聊，其他会话在调用平台前返回 UNSUPPORTED；文本与实体规则同发送。参数在实施时按 Bot API 原文核对。
+- 平台动作（D-92）：参数沿用 Bot API 的字段名，数字 ID 写作十进制字符串，chat_id 与 message_thread_id 取自 Target，不在参数中重复；结果为 Bot API 的 `result` 原文。官方动作（版本 1，作用范围都为 chat）：`telegram.ban_chat_member`、`telegram.unban_chat_member`、`telegram.restrict_chat_member`、`telegram.pin_chat_message`、`telegram.unpin_chat_message`、`telegram.get_chat`、`telegram.get_chat_member`、`telegram.get_chat_member_count`、`telegram.get_chat_administrators`、`telegram.set_chat_title`、`telegram.leave_chat`、`telegram.send_chat_action`、`telegram.set_message_reaction`、`telegram.send_message_draft`。`adapters/telegram/action` 为每个动作发布带类型的 Go 函数，只依赖 `sdk` 根包；另提供两个辅助函数：输入状态每 4 秒刷新一次、ctx 结束即停止；草稿流式显示，结束后经普通 Send 发出正式消息（草稿经平台动作发出，不执行出站 Hook，正式消息执行，D-98）。
+- 撤回用 deleteMessages，每次最多 100 个同一会话的 ID，它们共享该请求的结果。`telegram.send_chat_action` 带 message_thread_id；`telegram.set_message_reaction` 把本机器人在该消息上的回应设为给出的列表（空列表为撤销）；`telegram.send_message_draft` 只用于私聊，其他会话在调用平台前返回 UNSUPPORTED，参数在实施时按 Bot API 原文核对。
 - 命令菜单（D-96）：`adapter.commands.sync` 用 setMyCommands 设置 default scope，并为命令说明有翻译的每个语言各设置一次 language_code；名字不匹配 `^[a-z0-9_]{1,32}$` 的跳过，说明超过 256 字符时截断，两者都记诊断；与上一次成功同步的内容相同时不调用平台，实例停止时不删除菜单。
 
 ## 7. 官方 OneBot 11 Adapter 映射
@@ -205,6 +195,7 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 | `notice.notify`（poke、lucky_king、honor） | `onebot11.poke`、`onebot11.lucky_king`、`onebot11.honor` | 扩展事件（D-95），见下表 |
 | `notice.group_admin`、`notice.group_ban`、`notice.group_upload`、`notice.friend_add` | `onebot11.group_admin`、`onebot11.group_ban`、`onebot11.group_upload`、`onebot11.friend_add` | 扩展事件（D-95），见下表 |
 | `request.friend`、`request.group` | `onebot11.friend_request`、`onebot11.group_request` | 扩展事件（D-95），见下表 |
+| `notice.notify`（input_status，NapCat 等实现端扩展） | `onebot11.input_status` | 扩展事件（D-95），只在私聊；标准实现端不上报时插件收不到，不伪造 |
 | 其他 `notice` 与 `request` | 不交付 | 明确忽略并计数，不伪造事件 |
 
 扩展事件的 version 都为 1；payload 沿用 OneBot 11 原字段名，数字 ID 写作十进制字符串，不含 time、self_id、post_type 等公共字段，Schema 不允许其他属性。Target 取事件所属的会话：带 group_id 的为 `group:<group_id>`，其余为 `private:<user_id>`；Actor 为 user_id 对应的用户（群事件中带 operator_id 时 Actor 为操作人）。
@@ -220,14 +211,15 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 | `onebot11.friend_add` | 空对象 |
 | `onebot11.friend_request` | comment、flag |
 | `onebot11.group_request` | sub_type（add、invite）、comment、flag |
+| `onebot11.input_status` | status_text、event_type；字段在实施时按 NapCat 文档核对 |
 
-- 入站 Chain：`text` 为 plain 的 text；`at` 为 mention，`qq` 为 all 时为 all=true 的 mention（D-90）；`reply` 为 reference；`image`、`video` 为带 incoming_ref 的 image、video；`record` 为 voice=true 的 audio，`file` 为 file，二者都带 incoming_ref（D-89）；`face` 为 `onebot11.face` extension 片段；`forward` 为只带 platform_forward_id 的 forward（D-91，展开用动作 `onebot11.get_forward_msg`）。其余没有通用对应的段（`json`、`xml`、`music`、`share` 等）不进入 chain，原始消息数组完整保存在 platform_payload 中；因此 chain 可以为空。
+- 入站 Chain：`text` 为 plain 的 text；`at` 为 mention，`qq` 为 all 时为 `onebot11.at_all` extension 片段（D-90）；`reply` 为 reference；`image`、`video` 为带 incoming_ref 的 image、video；`record` 为 voice，`file` 为 file，二者都带 incoming_ref（D-89）；`face` 为 `onebot11.face` extension 片段；`forward` 为只带 platform_forward_id 的 forward（D-91，展开用动作 `onebot11.get_forward_msg`）。其余没有通用对应的段（`json`、`xml`、`music`、`share` 等）不进入 chain，原始消息数组完整保存在 platform_payload 中；因此 chain 可以为空。
 - to_me 在以下情况为 true：私聊；chain 中有指向本账号的 mention；`reply` 引用的消息经 `get_msg` 查得发送者是本账号。`get_msg` 失败时按 false 处理并记诊断。
 - 入站媒体：实例声明 `media.read` v1；`adapter.media.read` 时 Adapter 用段中的 `url` 经 HTTP GET 取件，只允许 http 与 https；段中没有 `url` 时 Adapter 把该来源的 readability 标为 UNSUPPORTED。段中的 `url` 同时是该对象的平台文件标识，发回同一实例时原样作为 `file` 复用（D-88）。
 
 ### 7.2 能力与发送计划
 
-- 支持的片段：plain 的 text、image、video、mention（含 all）、reference、voice=true 的 audio、file、forward，以及 extension `onebot11.face` v1（payload 为 `{"id": "<数字字符串>"}`，发送为 `face` 段）。实例声明 `message.send`、`message.reference`、`message.voice`、`message.mention_all`、`message.forward` 与 `message.delete`，不声明 `message.markdown`、`message.album`、`message.buttons`、`message.edit`、`message.audio`、`chat.typing`、`message.react`、`message.draft` 与 `commands.sync`。带 markdown 或 entities 的 text、buttons 与 voice=false 的 audio 由 Adapter 在首个平台请求前返回 UNSUPPORTED；Edit 等未声明能力的操作由 Core 返回 UNSUPPORTED。
+- 支持的片段：plain 的 text、image、video、mention、reference、voice、file、forward，以及 extension `onebot11.face` v1（payload 为 `{"id": "<数字字符串>"}`，发送为 `face` 段）与 `onebot11.at_all` v1（payload 为空对象，发送为 `at` 的 `qq=all`）。实例声明 `message.send`、`message.reference`、`message.voice`、`message.forward` 与 `message.delete`，不声明 `message.markdown`、`message.album`、`message.buttons`、`message.edit` 与 `commands.sync`。带 markdown 或 entities 的 text 与 buttons 由 Adapter 在首个平台请求前返回 UNSUPPORTED；Edit 等未声明能力的操作由 Core 返回 UNSUPPORTED。
 - 发送用 `send_msg`，`message_type` 与目标号码由 chat_id 决定。连续的 text、mention、image 与 extension 片段合成一条消息的段数组，按原顺序排列；video 与语音（`record` 段）各自单独成一条消息。file 用 `upload_group_file` 或 `upload_private_file`（go-cqhttp 系实现端的扩展）单独成一个物理操作，平台不返回 message_id，成功时为 ACCEPTED 并标记 message_ids_unavailable。forward 用 `send_group_forward_msg` 或 `send_private_forward_msg` 单独成一条消息，每个 item 为一个 `node` 段：platform_message_id 对应 node 的 `id`，chain 对应 node 的 `content`，source 给出时作为 `user_id` 与 `nickname`，否则用本账号（D-91）。reference 只加在第一条消息最前面的 `reply` 段上（第一条为 file 或 forward 时 UNSUPPORTED）。每条消息是一个物理操作，对应一项 PartResult。
 - 媒体来源（D-88），不把来源统一转为 base64：https_url 原样作为段的 `file`；inline_base64 原样以 `base64://` 传递；`platform_file`（同一实例的入站对象）原样作为 `file`；media_ref 按以下顺序选择：实例配置了 `media_dir` 时，Adapter 经 `core.media.read` 把对象写入 `media_dir.local` 下的随机文件名，以 `file://<media_dir.remote>/<文件名>` 传递，该物理操作结束（含 UNKNOWN）后删除；否则经 `core.media.url` 取得临时媒体 URL（前缀取实例的 `media_url_base`，缺省为 `base_url`）作为 `file`。实现端在其他主机或容器中而前缀不可达时，实现端取件失败按平台的明确拒绝报告，不改用 base64；部署文档提示配置 `media_url_base` 或 `media_dir`。
 - 结果：响应 `status` 为 ok 时该部分 ACCEPTED，`data.message_id` 为平台消息 ID；为 async 时 ACCEPTED 并标记 message_ids_unavailable；为 failed 时 REJECTED，safe_message 带 retcode。请求帧已写出后连接断开，或到调用期限仍无响应，该部分为 UNKNOWN。连接未建立时在首个请求前返回 UNAVAILABLE。任一部分不是 ACCEPTED 后停止，其余部分 NOT_ATTEMPTED，按 §4 汇总。
@@ -249,7 +241,7 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 | chat（群或私聊） | `onebot11.get_msg`、`onebot11.get_forward_msg`、`onebot11.poke`（`group_poke` 或 `friend_poke`，实现端扩展） |
 | account | `onebot11.set_friend_add_request`、`onebot11.set_group_add_request`、`onebot11.get_stranger_info`、`onebot11.get_friend_list`、`onebot11.get_group_list`、`onebot11.send_like` |
 
-实现端扩展的动作在实现端不支持时按其返回的 failed 报告，Adapter 不探测实现端类型。常量与参数类型发布在 `adapters/onebot11/action`。
+实现端扩展的动作在实现端不支持时按其返回的 failed 报告，Adapter 不探测实现端类型。`adapters/onebot11/action` 为每个动作发布带类型的 Go 函数，只依赖 `sdk` 根包。
 
 ## 8. 验收与依据
 
