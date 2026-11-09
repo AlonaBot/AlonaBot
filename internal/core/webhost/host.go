@@ -33,7 +33,10 @@ func New(opt Options) *Host { return &Host{opt: opt} }
 // ServeHTTP 按受控主机名分派管理入口与插件路由，其他 Host 返回 421。
 func (h *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, pluginPrefix) {
-		w = h.pluginWriter(w, r)
+		plugin := h.pluginWriter(w, r)
+		w = plugin
+		// ReverseProxy 在正文结束后才复制 trailer，返回前还需清理一次。
+		defer plugin.after(plugin.Header())
 	}
 	if !strings.EqualFold(requestHostname(r.Host), h.opt.BaseURL.Hostname()) {
 		http.Error(w, http.StatusText(http.StatusMisdirectedRequest), http.StatusMisdirectedRequest)

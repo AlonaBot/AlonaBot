@@ -15,29 +15,16 @@ func (h *Host) pluginWriter(w http.ResponseWriter, r *http.Request) *responseWri
 	rest := strings.TrimPrefix(r.URL.Path, pluginPrefix)
 	pluginID, _, _ := strings.Cut(rest, "/")
 	apply := func(header http.Header) { h.pluginHeaders(header, pluginID) }
-	return &responseWriter{ResponseWriter: w, before: apply, modify: func(response *http.Response) error {
+	return &responseWriter{ResponseWriter: w, before: apply, after: func(header http.Header) {
+		h.stripPluginHeaders(header, pluginID)
+	}, modify: func(response *http.Response) error {
 		apply(response.Header)
 		return nil
 	}}
 }
 
 func (h *Host) pluginHeaders(header http.Header, pluginID string) {
-	// 遍历原始键，同时清除插件直接写入 map 的非规范大小写。
-	for key, values := range header {
-		switch {
-		case strings.EqualFold(key, "Content-Security-Policy"), strings.EqualFold(key, "X-Content-Type-Options"):
-			delete(header, key)
-		case strings.EqualFold(key, "Access-Control-Allow-Credentials"):
-			delete(header, key)
-			slog.Warn("removed plugin credential CORS header", "plugin_id", pluginID)
-		case strings.EqualFold(key, "Set-Cookie"):
-			delete(header, key)
-			for _, value := range values {
-				name, _, _ := strings.Cut(value, "=")
-				slog.Warn("removed plugin cookie", "plugin_id", pluginID, "cookie_name", strings.TrimSpace(name))
-			}
-		}
-	}
+	h.stripPluginHeaders(header, pluginID)
 	header.Set("Content-Security-Policy", sandboxCSP)
 	header.Set("X-Content-Type-Options", "nosniff")
 	if header.Get("Content-Type") == "" {
@@ -46,11 +33,32 @@ func (h *Host) pluginHeaders(header http.Header, pluginID string) {
 	}
 }
 
+func (h *Host) stripPluginHeaders(header http.Header, pluginID string) {
+	// 遍历原始键，同时清除插件直接写入 map 的非规范大小写。
+	for key, values := range header {
+		name := strings.TrimPrefix(strings.ToLower(key), strings.ToLower(http.TrailerPrefix))
+		switch name {
+		case "content-security-policy", "x-content-type-options":
+			delete(header, key)
+		case "access-control-allow-credentials":
+			delete(header, key)
+			slog.Warn("removed plugin credential CORS header", "plugin_id", pluginID)
+		case "set-cookie":
+			delete(header, key)
+			for _, value := range values {
+				name, _, _ := strings.Cut(value, "=")
+				slog.Warn("removed plugin cookie", "plugin_id", pluginID, "cookie_name", strings.TrimSpace(name))
+			}
+		}
+	}
+}
+
 // responseWriter 在写头前执行策略，Unwrap 保留 ResponseController 的流式能力。
 // ModifyResponse 由代理在上游响应写出前调用，也覆盖协议升级直接写头的路径。
 type responseWriter struct {
 	http.ResponseWriter
 	before func(http.Header)
+	after  func(http.Header)
 	modify func(*http.Response) error
 	wrote  bool
 }
