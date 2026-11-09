@@ -89,7 +89,7 @@ func (p *RSS) Poke(c *sdk.Context, e *obevent.PokePayload) error {
 }
 ```
 
-注册采用链式构建（D-70、D-112）：命令、文本匹配、事件、Service、Event Bus 订阅、Hook、定时任务与 HTTP 路由都由注册器的方法开始，`Handle` 结束；漏写 `Handle` 是注册错误。命令参数名缺省取 Handler 的参数名，由生成器记录（Go 运行时取不到参数名），只在需要另起名字时写 `Args`；订阅的路由 ID 缺省为事件名。分组上设置的权限由组内路由继承。Permission 是不可变的值，用 `Or` 组合，满足其中任一即可（D-69）；Rule 是在 SDK 内执行的 Go 函数，`Rule(...)` 多个时全部满足，`sdk.Any` 表示任一。事件常量带 payload 的 Go 类型，`Collect` 核对 Handler 的参数类型；Adapter 的常量包（例如 `adapters/onebot11/perm`、`adapters/onebot11/event`）只含常量与数据类型，插件导入它们不链接 Adapter 的运行时。插件 API 不暴露生成的 pb 类型，Message、Target、Actor、SendResult 与错误码由 SDK 自己定义。
+注册采用链式构建（D-70、D-112）：命令、文本匹配、事件、Service、Event Bus 订阅、Hook、定时任务与 HTTP 路由都由注册器的方法开始，`Handle` 结束；漏写 `Handle` 是注册错误。命令参数名缺省取 Handler 的参数名，由生成器记录（Go 运行时取不到参数名），只在需要另起名字时写 `Args`；订阅的路由 ID 缺省为事件名。分组上设置的权限由组内路由继承。Permission 是不可变的值，用 `Or` 组合，满足其中任一即可（D-69）；Rule 是在 SDK 内执行的 Go 函数，`Rule(...)` 多个时全部满足，`sdk.Any` 表示任一。事件常量带 payload 的 Go 类型，`Collect` 核对 Handler 的参数类型；Adapter 的常量包（例如 `adapters/onebot11/perm`、`adapters/onebot11/event`）只含常量与数据类型，插件导入它们不链接 Adapter 的运行时。插件 API 不暴露生成的 pb 类型，Message、会话字符串与消息句柄（D-102、D-104）、Actor、SendResult 与错误码由 SDK 自己定义。
 
 两类 Handler 保留：返回 `(Content,error)` 的自动回复型成功时由 Core 在 Handler 返回后发一次非空内容，Content 是 Chain 或单个片段，每种片段都有构造函数（D-108）；两种 Handler 都可以在内部多次 `c.Send`（D-70）。包级 `sdk.Send` 只供没有 Handler 上下文的后台任务使用。`c.StopPropagation()` 锁存传播结果，由 SDK 统一编码到 HandlerOutcome；不会给开发者增加第三套 Handler 签名。
 
@@ -119,7 +119,7 @@ Target 明确 Adapter、实例、账号、聊天和可选话题；没有真实�
 
 普通命令按完整 token 路径最长匹配，再以 priority/plugin_id/route_id 选稳定胜出者；已识别的禁用、无权限、参数错误命令不回落 Regex/Raw/短路径。没有普通命令才按文本匹配（Regex、keyword、startswith、endswith、fullmatch）→Raw 处理，支持停止传播。跨插件同名命令在诊断中显示遮蔽关系，不由启动顺序决定。
 
-路由权限是一组权限名，满足任一即可（D-69）：Core 内置 `user`、`admin`（按 Adapter 实例与外部用户 ID 配置的机器人管理员）与 `chat_admin`，Adapter 另行声明自己的平台权限，例如 QQ 的群主与群管理员。平台权限只在该会话有效，不自动取得 Core 管理权限。命令树取最近显式权限策略，允许子命令放宽或收紧，但所有层的禁用和 Core 全局禁止始终生效。每次派发前读取当前策略，已开始调用不宣称可撤销。
+路由权限是一组权限名，满足任一即可（D-69）：Core 内置 `user`、`admin`（按 Adapter 与外部用户 ID 配置的机器人管理员，同一 Adapter 的全部实例共用，D-105）与 `chat_admin`，Adapter 另行声明自己的平台权限，例如 QQ 的群主与群管理员。平台权限只在该会话有效，不自动取得 Core 管理权限。命令树取最近显式权限策略，允许子命令放宽或收紧，但所有层的禁用和 Core 全局禁止始终生效。每次派发前读取当前策略，已开始调用不宣称可撤销。
 
 ## F. 事件管道：Hook、Rule 和传播
 
