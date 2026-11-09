@@ -73,7 +73,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 
 ### 2.3 权限与 Hook
 
-- 路由所需的权限是一组权限名，触发者满足其中任一即可；空集合表示不要求 Actor。权限名包括 Core 内置的 `user`（具有可信 Actor 的用户）、`admin`（`core_config.json` 的 `admins` 中按 adapter_instance_id/external_user_id 绑定的机器人管理员，§15.1）、`chat_admin`（任一 Adapter 的会话管理员），以及 Adapter 声明的 `<adapter_id>.<name>`（§8，D-69）。Core 为每个事件计算 Actor 的权限集合：可信 Actor 含 `user`；位于 Core Admin 列表时含 `admin`；Adapter 在事件中给出的平台权限只保留该 Adapter 声明过的名字，并展开声明的隐含关系。`admin` 不自动满足其他权限名，需要 Core Admin 也能执行时显式列出 `admin`。SDK 的缺省权限为 `{user}`。平台权限与 `chat_admin` 只对该事件所在的会话有效，不取得 Core 安装、配置或跨会话权限。没有 Actor 的 job/后台调用只满足空集合。Core 全局禁止由状态库中的两张禁止表组成：按 adapter_instance_id/external_user_id 禁止用户，按 adapter_instance_id/chat_id 禁止会话；被禁止的用户触发的命令、发往被禁止会话的 Send 一律拒绝，任何策略覆盖与 Admin 身份都不能绕过（D-45）。
+- 路由所需的权限是一组权限名，触发者满足其中任一即可；空集合表示不要求 Actor。权限名包括 Core 内置的 `user`（具有可信 Actor 的用户）、`admin`（`core_config.json` 的 `admins` 中以用户字符串 `<adapter_id>:<external_user_id>` 登记的机器人管理员，§15.1，D-105）、`chat_admin`（任一 Adapter 的会话管理员），以及 Adapter 声明的 `<adapter_id>.<name>`（§8，D-69）。Core 为每个事件计算 Actor 的权限集合：可信 Actor 含 `user`；位于 Core Admin 列表时含 `admin`；Adapter 在事件中给出的平台权限只保留该 Adapter 声明过的名字，并展开声明的隐含关系。`admin` 不自动满足其他权限名，需要 Core Admin 也能执行时显式列出 `admin`。SDK 的缺省权限为 `{user}`。平台权限与 `chat_admin` 只对该事件所在的会话有效，不取得 Core 安装、配置或跨会话权限。没有 Actor 的 job/后台调用只满足空集合。Core 全局禁止由状态库中的两张禁止表组成：按用户字符串禁止用户，按不含话题的会话字符串 `<adapter_id>:<chat_id>` 禁止会话，Core Admin 与两张表都对该 Adapter 的全部实例生效（MESSAGE-MODEL §1，D-105）；被禁止的用户触发的命令、发往被禁止会话的 Send 一律拒绝，任何策略覆盖与 Admin 身份都不能绕过（D-45）。
 - 命令策略以稳定 plugin_id/route_id 持久化，权限使用最近显式子项覆盖，否则继承父项。策略中的权限同样是权限名集合，可以引用任一权限名；引用的 Adapter 未安装或未声明该名时保留设置并在管理诊断中标出，这个名字不被任何事件满足；插件/父组/当前项任一 disabled 均拒绝，再与 Core 全局安全限制 AND。运行时修改在下一次派发检查时生效，不承诺撤销已开始的调用。
 - Hook 注册为独立 route kind，phase 仅 PreEvent/BeforeSend/AfterSend，沿用 priority 与稳定排序。PreEvent 只可改变业务 payload 或 Stop，Core 保留的 Actor、Target、来源与 trace 不可改；button.clicked 的 action_id/action_schema_version/value、scheduled 的 job_id/run_id 及平台原消息 ID 也属于不可修改的路由/来源字段，后续匹配使用 Core 保留的原绑定；Hook error 终止本次入站链并记录，不在失去预处理条件时继续。
 - 每次显式 Send 或自动返回非空 Chain 都执行 `BeforeSend → Adapter.Send → AfterSend`。BeforeSend 只修改 Chain 或拒绝，禁止修改 Target；变更后重新校验完整 Chain。BeforeSend 错误视为拒绝发送。AfterSend 只观察最终回执，错误记日志，不能改变已确认的发送事实。
@@ -396,7 +396,7 @@ Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行�
 | `update` | 仅从绑定来源选择符合 pin 的候选版本并执行受控更新；不把 install 同 ID 当更新。 |
 | `uninstall` | 停止、解除运行注册并删除未引用程序包；默认保留数据、secret 与来源绑定，以便同来源重装。`--purge` 为显式删除框架受管数据/绑定的动作，须展示并确认准确对象；不擅自删除插件自管的外部数据库或任意插件自管目录。 |
 | `pin` | 固定允许的更新版本；解除固定须显式操作，不能被自动更新忽略。 |
-| `admin add` / `admin remove` / `admin list` | 管理 Core Admin 列表（按 adapter_instance_id 与 external_user_id），与 WebUI 的 Core 设置页使用同一管理服务，写回 `core_config.json` 的 `admins`。 |
+| `admin add` / `admin remove` / `admin list` | 管理 Core Admin 列表（按用户字符串 `<adapter_id>:<external_user_id>`），与 WebUI 的 Core 设置页使用同一管理服务，写回 `core_config.json` 的 `admins`。 |
 | `logs` | 按来源、级别与 trace_id 读取最近记录，`--follow` 时持续输出（§14.4）。 |
 | `log-level` | 修改全局或某个插件、Adapter 的日志级别，立即生效（§14.3）。 |
 | `rollback` | 明确选择保留代次为输入，停机建立新的恢复候选 Generation；SQLite 从所选快照复制独立 DB，复用对应程序/配置/secret，走同一 Prepared/提交流程，不复用历史 Generation ID 或直接写保留快照；在执行前列明将舍弃该快照之后的本地写入，要求显式确认。声明 `prepare_effects=external` 的插件返回 NEEDS_MANUAL_MIGRATION，外部已发送消息不会撤回。 |
@@ -591,7 +591,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | `log.file.enabled`、`log.file.max_size`、`log.file.max_total`、`log.file.max_age_days` | `true`、`100MiB`、`1GiB`、`30` | §14.6 |
 | `log.sources` | 空 | 按插件或 Adapter 包设置的日志级别（§14.3） |
 | `proxy` | 空 | 出站代理 URL（http、https 或 socks5）；Telegram 实例只在 `proxy_mode` 为 core 时使用这里的代理环境（§8，D-101）；非空时 Core 为自身与所有子进程设置 `HTTP_PROXY`、`HTTPS_PROXY`。为空时，Core 把自身环境中的 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY` 原样传给子进程 |
-| `admins` | 空 | Core Admin 列表，元素为 `{"instance": "<adapter_instance_id>", "user": "<external_user_id>"}`（§2.3） |
+| `admins` | 空 | Core Admin 列表，元素为用户字符串 `"<adapter_id>:<external_user_id>"`，例如 `"telegram:123456789"`、`"onebot11:10001"`（§2.3，D-105） |
 | `command_prefixes` | `["/"]` | 命令前缀（§2.2）；`command_prefixes_by_instance` 按 Adapter 实例覆盖；列表不能为空，不带前缀的命令写 `[""]` |
 | `default_locale` | `en-US` | 机器人回复的缺省语言（§5.4） |
 | `adapters` | 空 | 按 adapter_id 分组的 Adapter 实例：`{"telegram": {"$version": 1, "instances": {"main": {"token": "${TELEGRAM_BOT_TOKEN}"}}}}`；实例配置按该 Adapter 的 `instance_schema.json` 补缺失值并校验（§5.5、§8）。实例名为 `^[A-Za-z0-9_-]{1,64}$`，跨 Adapter 也不能重名；每个 Adapter 可以写 `default_instance`（该 Adapter 的一个实例名），作为插件没有指定实例时的缺省发送实例（§8，D-102） |
@@ -609,8 +609,8 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，只启用 help 插件与官方 WebUI；Agent 组件与 help 以外的预装插件只安装不启用，不使用 AI 对话的部署不运行它们的进程（D-50、D-62）。官方 Telegram 与 OneBot 11 Adapter 只安装，`core_config.json` 的 `adapters` 中有它的实例时自动启用；某个 Adapter 写了实例却尚未安装时，Core 从 `packages/` 安装，没有发行包（例如经 `go install` 取得的 `alonabot`）时从官方 Release 安装（D-82）。需要 AI 对话时，管理员在 WebUI 或 CLI 启用 Agent；Agent 在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。
 - 管理员可以用 `install --source <来源> --replace` 把任一官方 Adapter、Agent 或 WebUI 换成社区组件（§9.3）；之后不再从官方来源更新该组件。卸载或损坏 WebUI 后，用 `alonabot install` 从 `packages/` 重装官方 WebUI。
 - 之后不再自动安装，已卸载的预装包不会在下次启动时重新安装。新版本发行包中的包版本高于已安装版本时，作为可用更新列在管理界面与 `alonabot list` 中，由管理员确认后按 `update` 流程更新。Core 本身通过替换可执行文件升级，新版本按 §5.5 迁移 `core_config.json`。
-- 首批预装插件为 help（按调用者权限列出可用命令与用法，`/whoami` 回复调用者的实例与用户 ID）、welcome（新成员入群时发送欢迎语）与 rss（订阅 RSS/Atom 并推送到聊天）。
-- 第一个 Core Admin 的产生：用户在聊天中发送 `/whoami` 取得自己的实例与用户 ID，管理员把它写入 `core_config.json` 的 `admins`，或在 WebUI 的 Core 设置页、`alonabot admin add` 中添加。预装插件与第三方插件一样以独立进程运行，只有启用的才运行。
+- 首批预装插件为 help（按调用者权限列出可用命令与用法，`/whoami` 回复调用者的用户字符串与收到消息的实例名）、welcome（新成员入群时发送欢迎语）与 rss（订阅 RSS/Atom 并推送到聊天）。
+- 第一个 Core Admin 的产生：用户在聊天中发送 `/whoami` 取得自己的用户字符串，管理员把它写入 `core_config.json` 的 `admins`，或在 WebUI 的 Core 设置页、`alonabot admin add` 中添加。预装插件与第三方插件一样以独立进程运行，只有启用的才运行。
 
 ### 15.3 容器镜像
 

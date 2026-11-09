@@ -56,12 +56,12 @@
 - help 插件：
   - /help：调用 ListCommands，按插件分组列出路径与说明，文案经 Context.T（键 help.list.header 等）。
   - /help <路径>：只显示匹配命令的 usage、别名与说明；没有可用的匹配命令时回复 help.not_found。
-  - /whoami：回复调用者的 adapter_instance_id 与 external_user_id（文案键 help.whoami，参数 instance 与 user）；没有 Actor 时回复 help.whoami.no_actor。
+  - /whoami：回复调用者的用户字符串 `<adapter_id>:<external_user_id>`（可以直接写进 admins，D-105）与收到消息的实例名（文案键 help.whoami，参数 user 与 instance）；没有 Actor 时回复 help.whoami.no_actor。
   - 所有回复都用 Context.Send 回复原 Target；用户可见文案只来自 i18n（en-US 与 zh-CN）。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有父调用链时 core.command.list 返回 FAILED_PRECONDITION；没有 Actor 时只列 ANY；排序；help 的 i18n 文件在 alonabot check 中通过；internal/core/supervisor/help_local_test.go（//go:build unix）：构建 plugins/help 与两个测试插件（一个有 ADMIN 权限的命令，一个与另一插件同路径且 priority 较低的命令），用 memory Adapter 装配：普通用户的 /help 不包含 ADMIN 命令与被遮蔽的命令；Core Admin 能看到 ADMIN 命令；zh-CN 用户看到中文说明，en-US 用户看到英文；说明键缺失的命令没有说明；禁用的命令不出现；/help 某命令显示 usage；/whoami 回复正确的实例 ID 与用户 ID。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有父调用链时 core.command.list 返回 FAILED_PRECONDITION；没有 Actor 时只列 ANY；排序；help 的 i18n 文件在 alonabot check 中通过；internal/core/supervisor/help_local_test.go（//go:build unix）：构建 plugins/help 与两个测试插件（一个有 ADMIN 权限的命令，一个与另一插件同路径且 priority 较低的命令），用 memory Adapter 装配：普通用户的 /help 不包含 ADMIN 命令与被遮蔽的命令；Core Admin 能看到 ADMIN 命令；zh-CN 用户看到中文说明，en-US 用户看到英文；说明键缺失的命令没有说明；禁用的命令不出现；/help 某命令显示 usage；/whoami 回复正确的用户字符串与实例名。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./...；go build ./...。
 
