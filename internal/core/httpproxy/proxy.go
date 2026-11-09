@@ -1,6 +1,6 @@
 // Package httpproxy 将 Core 的插件 HTTP 入口代理到当前已激活 Session 的 loopback Listener。
 //
-// 装配方在激活后调用 [Server.Bind]，停止或 Session 失效时调用 [Server.Unbind]；
+// 装配方在激活后调用 [Server.Bind]，排空时调用 [Server.Drain]，停止或 Session 失效时调用 [Server.Unbind]；
 // 每次请求读取一个不可变路由快照，网络转发期间不持有映射锁。代理身份隔离见 CONTRACTS §7.2。
 package httpproxy
 
@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
@@ -25,11 +26,11 @@ type Authorizer interface {
 	Authorize(r *http.Request, pluginID string) bool
 }
 
-// Server 保存当前已激活 Session 的代理映射；Bind、Unbind 与 ServeHTTP 可并发调用。
-// 映射撤销阻止新的请求；已经取得快照的在途请求由 SDK 的门禁与停止预算收尾。
+// Server 保存当前已激活 Session 的代理映射；Bind、Drain、Unbind 与 ServeHTTP 可并发调用。
+// Drain 冻结新派发并按停止截止等待在途请求；Unbind 撤销当前代次的映射。
 type Server struct {
 	auth     Authorizer   // nil 时拒绝全部私有路由
-	mu       sync.RWMutex // 保护 mappings；调用授权方与网络转发前释放
+	mu       sync.RWMutex // 保护 mappings 及 binding 的排空状态；调用授权方与网络转发前释放
 	mappings map[string]*binding
 }
 
@@ -37,6 +38,9 @@ type binding struct {
 	generationID string
 	routes       []route
 	proxy        *httputil.ReverseProxy
+	draining     bool
+	inflight     int
+	drained      chan struct{} // 冻结后最后一个在途请求返回时关闭，由 Server.mu 保护
 }
 
 type route struct {
@@ -56,7 +60,7 @@ func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, 
 	host := net.JoinHostPort(endpoint.GetHost(), strconv.FormatUint(uint64(endpoint.GetPort()), 10))
 	auth := hex.EncodeToString(token)
 	prefix := pluginPrefix + pluginID
-	current := &binding{generationID: generationID}
+	current := &binding{generationID: generationID, drained: make(chan struct{})}
 	for _, descriptor := range routes {
 		if descriptor.GetKind() == pb.RouteKind_ROUTE_KIND_HTTP {
 			spec := descriptor.GetHttp()
@@ -88,6 +92,33 @@ func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, 
 	s.mu.Unlock()
 }
 
+// Drain 拒绝该插件的新请求，并等待已经派发的请求结束，最多等到 deadline。
+// 截止后由装配方继续 Unbind 和停止进程，余留请求随插件 Listener 关闭而结束。
+func (s *Server) Drain(pluginID string, deadline time.Time) {
+	// 1. 冻结与派发共用映射锁，保证冻结后不再增加在途请求。
+	s.mu.Lock()
+	current := s.mappings[pluginID]
+	if current == nil {
+		s.mu.Unlock()
+		return
+	}
+	if !current.draining {
+		current.draining = true
+		if current.inflight == 0 {
+			close(current.drained)
+		}
+	}
+	s.mu.Unlock()
+
+	// 2. 等待期间释放锁，让请求完成和其他插件的启停继续推进。
+	timer := time.NewTimer(time.Until(deadline))
+	defer timer.Stop()
+	select {
+	case <-current.drained:
+	case <-timer.C:
+	}
+}
+
 // Unbind 仅撤销 generationID 仍与当前映射一致的插件，旧代次清理不会删除新映射。
 func (s *Server) Unbind(pluginID, generationID string) {
 	s.mu.Lock()
@@ -113,8 +144,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path = "/" + path
 	s.mu.RLock()
 	current := s.mappings[pluginID]
+	unavailable := current == nil || current.draining
 	s.mu.RUnlock()
-	if current == nil {
+	if unavailable {
 		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 		return
 	}
@@ -144,6 +176,23 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
+	// 4. 授权期间可能已冻结或换代；在同一锁内复核映射并登记实际派发。
+	s.mu.Lock()
+	if s.mappings[pluginID] != current || current.draining {
+		s.mu.Unlock()
+		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+		return
+	}
+	current.inflight++
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		current.inflight--
+		if current.draining && current.inflight == 0 {
+			close(current.drained) // 唤醒 Drain，完成路径始终操作本次派发的 Session 快照。
+		}
+	}()
 	// 每次请求复制代理配置，响应策略不会改写其他并发请求的快照。
 	proxy := *current.proxy
 	if policy, ok := w.(interface{ ModifyResponse(*http.Response) error }); ok {

@@ -3,7 +3,7 @@
 // [Scheduler] 用 plugin_id/job_id 保存统计与实际运行槽，用本次 Attach 的注册保存定时器。
 // 超时结束 RPC 结果后仍保留槽，直到迟到响应或 [Scheduler.Released] 确认进程退出；
 // 插件恢复或定时器落后时只安排未来 tick（CONTRACTS §4.3）。
-// 装配处负责激活后 [Scheduler.Attach]、撤销时 [Scheduler.Detach] 与退出后的 Released。
+// 装配处负责激活后 [Scheduler.Attach]、排空时 [Scheduler.Drain]、撤销时 [Scheduler.Detach] 与退出后的 Released。
 package scheduler
 
 import (
@@ -125,6 +125,11 @@ func (s *Scheduler) Attach(p router.Plugin, activatedAt time.Time) {
 		job.state = state
 		s.arm(pluginID, reg, job, now)
 	}
+}
+
+// Drain 停止该插件的新 tick，已经触发的调用继续等待实际响应或进程退出。
+func (s *Scheduler) Drain(pluginID string) {
+	s.Detach(pluginID)
 }
 
 // Detach 停止该插件的新触发，保留运行槽与统计。
