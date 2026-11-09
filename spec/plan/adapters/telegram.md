@@ -15,7 +15,7 @@
 | 切片 | goal | 内容 | 工作包步骤 | 前置 | 主要验收 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
 | T-03.4 | goal-5 | 官方 Telegram Adapter 的接收：Bot API 客户端、本地 Bot API 模拟服务、getMe、webhook 冲突、long polling、逐条交付与游标、7 天轮次重建、401/409、媒体组、Actor.locale、`to_me`、实例代理 | T-03 步骤 4 | T-03.3 | V-45、V-54 的 locale 分项，V-62 的 Bot Token URL 分项 | 已完成（PR #39；TEST-MATRIX §3.2） |
-| T-03.7 | goal-50 | 官方 Telegram Adapter 的发送计划与回执：Chain 完整预检、物理操作计划、UTF-16 实体、相册/引用/按钮渲染、PartResult 汇总 | T-03 步骤 6（发送） | T-03.4 | V-08、V-35 | 未开始 |
+| T-03.7 | goal-50 | 官方 Telegram Adapter 的发送计划与回执：Chain 完整预检、物理操作计划、UTF-16 实体、相册/引用/按钮渲染、PartResult 汇总 | T-03 步骤 6（发送） | T-03.4 | V-08、V-35 | 已完成（[PR #108](https://github.com/AlonaBot/AlonaBot/pull/108)） |
 | T-03.11 | goal-89 | 官方 Telegram Adapter 的平台权限：`telegram.chat_owner`/`telegram.chat_admin` 的声明、`getChatAdministrators` 的会话缓存与作废、获取失败时不带权限，`adapters/telegram/perm` 常量包 | T-03 步骤 9 | T-04.6 | V-85 的 Telegram 分项 | 已完成（[PR #106](https://github.com/AlonaBot/AlonaBot/pull/106)） |
 
 ## 3. 工作包
@@ -26,6 +26,6 @@
 
 4. **接通 Telegram 接收与生命周期。** 在官方 Telegram Adapter 程序中实现 getMe 的账号/用户名绑定、已有 webhook 冲突检查、后台 long polling 和经 `core.adapter.status` 的状态上报；同账号唯一 owner 由 Core 检查。显式设置规定的 allowed_updates；只生成平台实际给出的事件，`sender_chat` 的兼容 fake sender 不构造个人 Actor。每条 update 经 `core.adapter.deliver` 交给 Core，Core 先持久化游标再投入非持久队列，Adapter 收到应答后才处理下一条；满队列丢弃计数且继续推进，不能提前提交整个 batch 的最大 ID。实现契约规定的连续 7 天空闲接收轮次重建。短暂读失败使用有界退避，401/409 停止该实例并报告故障；Start、Stop 和重连均不得创建重复接收 owner。入站媒体组保留 media_group_id，逐 Message 派发。Actor.locale 取 from.language_code，message.created 的 `to_me` 按 MESSAGE-MODEL §6.1 计算。实例配置的 `proxy` 优先于全局代理，作用于该实例的全部 Bot API 请求与文件下载；代理失败按网络错误退避，不改为直连。Adapter 实现放在可导入的包中（`telegram.New()`），程序入口只调用 `sdk/adapter` 的运行函数，供库模式直接引用。
 
-6. **实现可预测的发送计划及回执。** 在官方 Telegram Adapter 中，每条 Chain 先完成全部结构、目标能力、媒体可用性与平台限制检查，再生成按顺序执行的物理操作列表。落实文本/实体 UTF-16 偏移、单媒体/2～10 项相册、首条引用、末条按钮以及相册后的 markup 更新；不静默截断、重排或降级。每个操作记录 PartResult，明确 ACCEPTED、REJECTED、UNKNOWN、NOT_ATTEMPTED，并据事实汇总逻辑状态。遇明确拒绝或结果未知停止后续操作；保留已确认 ID，同时通过 Envelope 返回有效 payload 和错误。平台确认但 message_id=0 时不伪造可编辑 ID；依赖该 ID 的步骤未尝试并报告 PARTIAL。显式空 Chain 和仅有元数据的 Chain 在调用平台前拒绝。
+6. **实现可预测的发送计划及回执。** 在官方 Telegram Adapter 中，每条 Chain 先完成全部结构、目标能力、媒体可用性与平台限制检查，再生成按顺序执行的物理操作列表。落实文本/实体 UTF-16 偏移、单媒体/2～10 项相册、首条引用、末条按钮（末条为相册时按钮无法表达，首发前返回 UNSUPPORTED）；不静默截断、重排或降级。每个操作记录 PartResult，明确 ACCEPTED、REJECTED、UNKNOWN、NOT_ATTEMPTED，并据事实汇总逻辑状态。遇明确拒绝或结果未知停止后续操作；保留已确认 ID，同时通过 Envelope 返回有效 payload 和错误。平台确认但 message_id=0 时不伪造可编辑 ID。显式空 Chain 和仅有元数据的 Chain 在调用平台前拒绝。
 
 9. **接通 Telegram 的平台权限。** 按 MESSAGE-MODEL §6.1 在 Adapter 描述中声明 `telegram.chat_owner` 与 `telegram.chat_admin`；群与超级群中的事件按 `getChatAdministrators` 的会话缓存给出 Actor 的平台权限，缓存 10 分钟，收到该会话的 `chat_member`、`my_chat_member` 时作废；获取失败时本事件不带平台权限并记诊断。发布只含常量的 `adapters/telegram/perm`。

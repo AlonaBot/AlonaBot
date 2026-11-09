@@ -2209,7 +2209,9 @@ type Button struct {
 	// 按钮上显示的文字。
 	Label string `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
 	// 按该 action Schema 校验的 JSON 文本。
-	Value         *string `protobuf:"bytes,3,opt,name=value,proto3,oneof" json:"value,omitempty"`
+	Value *string `protobuf:"bytes,3,opt,name=value,proto3,oneof" json:"value,omitempty"`
+	// Core 填写的回调令牌；插件填写的值由 Core 清除。
+	CoreToken     *string `protobuf:"bytes,4,opt,name=core_token,json=coreToken,proto3,oneof" json:"core_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2261,6 +2263,13 @@ func (x *Button) GetLabel() string {
 func (x *Button) GetValue() string {
 	if x != nil && x.Value != nil {
 		return *x.Value
+	}
+	return ""
+}
+
+func (x *Button) GetCoreToken() string {
+	if x != nil && x.CoreToken != nil {
+		return *x.CoreToken
 	}
 	return ""
 }
@@ -2961,12 +2970,15 @@ const file_alonabot_v1_message_proto_rawDesc = "" +
 	"\x0eButtonsSegment\x12*\n" +
 	"\x04rows\x18\x01 \x03(\v2\x16.alonabot.v1.ButtonRowR\x04rows\":\n" +
 	"\tButtonRow\x12-\n" +
-	"\abuttons\x18\x01 \x03(\v2\x13.alonabot.v1.ButtonR\abuttons\"`\n" +
+	"\abuttons\x18\x01 \x03(\v2\x13.alonabot.v1.ButtonR\abuttons\"\x93\x01\n" +
 	"\x06Button\x12\x1b\n" +
 	"\taction_id\x18\x01 \x01(\tR\bactionId\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x19\n" +
-	"\x05value\x18\x03 \x01(\tH\x00R\x05value\x88\x01\x01B\b\n" +
-	"\x06_value\"@\n" +
+	"\x05value\x18\x03 \x01(\tH\x00R\x05value\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"core_token\x18\x04 \x01(\tH\x01R\tcoreToken\x88\x01\x01B\b\n" +
+	"\x06_valueB\r\n" +
+	"\v_core_token\"@\n" +
 	"\x0eForwardSegment\x12.\n" +
 	"\x05items\x18\x01 \x03(\v2\x18.alonabot.v1.ForwardItemR\x05items\"r\n" +
 	"\vForwardItem\x122\n" +
