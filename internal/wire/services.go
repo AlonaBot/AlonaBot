@@ -51,3 +51,9 @@ const ServiceMediaGrant = "core.media.grant"
 
 // ServiceToolList 指定调用插件可调用的工具目录服务。
 const ServiceToolList = "core.tool.list"
+
+// ServiceEdit 指定 Core 的消息编辑服务。
+const ServiceEdit = "core.edit"
+
+// ServiceAdapterEdit 向账号实例提交消息编辑。
+const ServiceAdapterEdit = "adapter.edit"
