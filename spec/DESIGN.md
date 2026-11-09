@@ -280,7 +280,7 @@ Target 与凭证按 Adapter 实例/账号区分，不把特定 X/Twitter 多账�
 Agent 分为 Core 基础与 Agent 组件两层（D-27）。Core 负责必须可信的部分：工具目录与按工具的调用策略、调用前的用户确认、会话存储；它们复用 Service Broker、按钮 token 与 Target 准入的实现（CONTRACTS §13）。Agent 组件（`role: agent`，全局至多一个，D-59）只经 SDK 访问 Core。官方 Agent 组件位于 `agent/`，可以被社区 Agent 替换；其他插件经 `@agent` 调用 `llm.generate`，替换后不用修改（D-61）。官方 Agent 组件：
 
 - **一轮对话**：`/ask` 在任何聊天中触发；Admin 为某个聊天开启自由对话后，该聊天中 `to_me` 的非命令消息也触发（私聊的消息都是 `to_me`）。触发的 Handler 请求延续调用，在其中读取会话历史，按人格组装系统提示，调用 Provider 并流式接收。目标实例支持 `message.edit` 时，先发送一条消息，再按固定间隔编辑它，显示已生成的内容，生成结束后用完整内容做最后一次编辑；不支持时生成结束后一次发送。会话按 Adapter 实例、聊天与话题区分。
-- **Provider**：官方 OpenAI（`openai`）、OpenAI 兼容（`openai-compatible`）的 Chat Completions 与 Anthropic Messages，用标准库 net/http 与 SSE 实现；api_key 使用 Secret 引用。两种 OpenAI 协议只差输出上限的参数名（D-64）。Provider 条目可以选择预设（例如 openai、anthropic、deepseek），预设给出缺省的协议与 base_url。流结束时得到停止原因与用量。
+- **Provider**：官方 OpenAI（`openai`）、OpenAI 兼容（`openai-compatible`）的 Chat Completions，OpenAI Responses（`openai-responses`），Anthropic Messages（`anthropic-messages`），Gemini 原生的 `streamGenerateContent`（`gemini-generate-content`）与 Ollama 原生的 `/api/chat`（`ollama-chat`），用标准库 net/http 实现，流格式按协议为 SSE 或 NDJSON；api_key 使用 Secret 引用，只有 `ollama-chat` 允许为空。两种 OpenAI Chat Completions 协议只差输出上限的参数名（D-64）。请求都是无状态的，完整历史由 Agent 每次发送；协议要求随工具调用回传的数据（Responses 的 reasoning 项、Gemini 的 thoughtSignature）在一轮的工具循环内原样回传（D-103）。Provider 条目可以选择预设（例如 openai、anthropic、gemini、deepseek、ollama），预设给出缺省的协议与 base_url。流结束时得到停止原因与用量。
 - **工具**：模型请求的 Core 工具经 `core.tool.invoke` 调用；MCP 工具（stdio、streamable HTTP，经 `github.com/modelcontextprotocol/go-sdk`）执行前先经 `core.tool.confirm`。单轮的工具步数有上限。
 - **技能**：管理员放进技能目录的 `SKILL.md`，包含名称、描述与正文。系统提示只列出描述，模型经 `load_skill` 按需读取正文。
 - **定时任务**：用户让 Agent 创建的任务保存在 Agent 的数据库，由一个固定的 schedule 触发，在该回调内运行；没有 Actor，因此需要确认的工具一律拒绝。
