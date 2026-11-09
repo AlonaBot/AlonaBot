@@ -7,9 +7,9 @@
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
 | goal-58 | T-12.1 | Provider 客户端 | — | 已完成（PR #16） |
-| goal-104 | T-12.9 | Provider：OpenAI Responses | T-12.1 | 待派发 |
-| goal-105 | T-12.10 | Provider：Gemini 原生协议 | T-12.1 | 待派发 |
-| goal-106 | T-12.11 | Provider：Ollama 原生协议 | T-12.1 | 待派发 |
+| goal-118 | T-12.9 | Provider：OpenAI Responses | T-12.1 | 待派发 |
+| goal-119 | T-12.10 | Provider：Gemini 原生协议 | T-12.1 | 待派发 |
+| goal-120 | T-12.11 | Provider：Ollama 原生协议 | T-12.1 | 待派发 |
 | goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1、T-12.9、T-12.10、T-12.11 | 等待前置 |
 | goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-12.2 | 等待前置 |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 等待前置 |
@@ -50,16 +50,16 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 
 ## 第 2 波
 
-### goal-104 · T-12.9 Provider：OpenAI Responses
+### goal-118 · T-12.9 Provider：OpenAI Responses
 
-状态：待派发。前置 T-12.1（[PR #16](https://github.com/AlonaBot/AlonaBot/pull/16)，合并提交 `354c5b6`）已合并。2026-11-09 审查者按 main `3f7a380` 的 `agent/provider` 编写：`provider.go` 有 `Protocol` 常量 `OpenAI`、`OpenAICompatible`、`AnthropicMessages`，`New` 逐个比较协议值，`Stream` 用 `anthropic` 布尔值在 `openAIBody`/`anthropicBody` 与 `streamOpenAI`/`streamAnthropic` 之间分派，`readSSE`、`describeError`、`validateRequest`、`isJSONObject` 可以直接复用；`provider_test.go` 的 `TestStream` 是表驱动的集成测试，`mockProvider` 按协议校验路径、认证头与请求体，`testRequest` 含两条 system、带两个工具调用的 assistant 与带两个工具结果的 user 消息。可以与 goal-105、goal-106 并行，共享文件按[执行顺序 §3](../execution-order.md#3-共享文件与冲突规则)「`agent/provider/` 的新协议」一行处理。
+状态：待派发。前置 T-12.1（[PR #16](https://github.com/AlonaBot/AlonaBot/pull/16)，合并提交 `354c5b6`）已合并。2026-11-09 审查者按 main `3f7a380` 的 `agent/provider` 编写：`provider.go` 有 `Protocol` 常量 `OpenAI`、`OpenAICompatible`、`AnthropicMessages`，`New` 逐个比较协议值，`Stream` 用 `anthropic` 布尔值在 `openAIBody`/`anthropicBody` 与 `streamOpenAI`/`streamAnthropic` 之间分派，`readSSE`、`describeError`、`validateRequest`、`isJSONObject` 可以直接复用；`provider_test.go` 的 `TestStream` 是表驱动的集成测试，`mockProvider` 按协议校验路径、认证头与请求体，`testRequest` 含两条 system、带两个工具调用的 assistant 与带两个工具结果的 user 消息。可以与 goal-119、goal-120 并行，共享文件按[执行顺序 §3](../execution-order.md#3-共享文件与冲突规则)「`agent/provider/` 的新协议」一行处理。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-104（切片 T-12.9：Provider：OpenAI Responses）。goal 目录 goal-104，分支 goal-104，worktree .worktrees/goal-104，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-118（切片 T-12.9：Provider：OpenAI Responses）。goal 目录 goal-118，分支 goal-118，worktree .worktrees/goal-118，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：agent/provider 增加 openai-responses 协议：按无状态方式编码 Responses API 请求（store: false、完整历史放进 input），解析 SSE 事件得到文本增量、完整的工具调用、停止原因与用量；reasoning 项随它之后的工具调用写入新增的 ToolCall.Replay，并在后续请求中原样放回对应的 function_call 之前。语义与已有协议相同：只有终止事件才算成功，不自动重试，错误不含 API key。
 
-依据：PLAN T-12 步骤 1（共同语义）与步骤 10「OpenAI Responses」；DECISIONS D-38、D-87；TEST-MATRIX V-57 的 Provider 分项。
+依据：PLAN T-12 步骤 1（共同语义）与步骤 10「OpenAI Responses」；DECISIONS D-38、D-103；TEST-MATRIX V-57 的 Provider 分项。
 
 范围（只新增或修改这些）：
 - agent/provider/provider.go：追加常量 OpenAIResponses；New 的协议校验与 Stream 的分派各加一个分支；ToolCall 追加 Replay 字段；包文档的协议列表
@@ -76,7 +76,7 @@ type ToolCall struct {
     Arguments json.RawMessage
     Replay    json.RawMessage // 协议要求随这次调用原样回传的不透明 JSON，由流解析写入；调用方把整个 ToolCall 原样放回 assistant 消息，不解析。openai、openai-compatible 与 anthropic-messages 不产生也不读取它
 }
-（goal-105 先合并时 Replay 已存在，同步 main 后复用，不重复定义。）
+（goal-119 先合并时 Replay 已存在，同步 main 后复用，不重复定义。）
 
 行为：
 - 请求：POST <BaseURL>/responses，Authorization: Bearer <APIKey>，Accept: text/event-stream。请求体为 model、input、stream: true、store: false、max_output_tokens（取 Request.MaxTokens）、include: ["reasoning.encrypted_content"]；有 system 消息时按输入顺序以 "\n\n" 连接写入 instructions（与 Anthropic 相同）；不发 previous_response_id。
@@ -104,28 +104,28 @@ type ToolCall struct {
 不做：Agent 的配置与预设（T-12.2）；工具名映射（T-12.3）；previous_response_id 与服务端会话；内置工具（web_search 等）；图片与文件输入。
 ```
 
-### goal-105 · T-12.10 Provider：Gemini 原生协议
+### goal-119 · T-12.10 Provider：Gemini 原生协议
 
-状态：待派发。前置 T-12.1（[PR #16](https://github.com/AlonaBot/AlonaBot/pull/16)，合并提交 `354c5b6`）已合并。main `3f7a380` 的 `agent/provider` 现状见 goal-104 的状态段。可以与 goal-104、goal-106 并行，共享文件按[执行顺序 §3](../execution-order.md#3-共享文件与冲突规则)「`agent/provider/` 的新协议」一行处理。
+状态：待派发。前置 T-12.1（[PR #16](https://github.com/AlonaBot/AlonaBot/pull/16)，合并提交 `354c5b6`）已合并。main `3f7a380` 的 `agent/provider` 现状见 goal-118 的状态段。可以与 goal-118、goal-120 并行，共享文件按[执行顺序 §3](../execution-order.md#3-共享文件与冲突规则)「`agent/provider/` 的新协议」一行处理。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-105（切片 T-12.10：Provider：Gemini 原生协议）。goal 目录 goal-105，分支 goal-105，worktree .worktrees/goal-105，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-119（切片 T-12.10：Provider：Gemini 原生协议）。goal 目录 goal-119，分支 goal-119，worktree .worktrees/goal-119，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：agent/provider 增加 gemini-generate-content 协议：编码 streamGenerateContent 请求（systemInstruction、user/model 内容、functionCall 与 functionResponse part、parametersJsonSchema），解析 SSE 中的 GenerateContentResponse 得到文本增量、完整的工具调用、停止原因与用量；functionCall part 的 thoughtSignature 写入 ToolCall.Replay 并在后续请求中写回；工具结果按 ID 查回调用的工具名。
 
-依据：PLAN T-12 步骤 1（共同语义）与步骤 10「Gemini」；DECISIONS D-38、D-87；TEST-MATRIX V-57 的 Provider 分项。
+依据：PLAN T-12 步骤 1（共同语义）与步骤 10「Gemini」；DECISIONS D-38、D-103；TEST-MATRIX V-57 的 Provider 分项。
 
 范围（只新增或修改这些）：
-- agent/provider/provider.go：追加常量 GeminiGenerateContent；New 的协议校验与 Stream 的分派各加一个分支；ToolCall 追加 Replay 字段（goal-104 已合并时复用）；包文档的协议列表
+- agent/provider/provider.go：追加常量 GeminiGenerateContent；New 的协议校验与 Stream 的分派各加一个分支；ToolCall 追加 Replay 字段（goal-118 已合并时复用）；包文档的协议列表
 - 新增 agent/provider/gemini.go：请求编码与流解析
-- 新增 agent/provider/toolcall.go：按 ToolCallID 查找工具名、生成调用 ID（goal-106 已合并时复用）
+- 新增 agent/provider/toolcall.go：按 ToolCallID 查找工具名、生成调用 ID（goal-120 已合并时复用）
 - agent/provider/provider_test.go：TestStream 的用例表、mockProvider 与 testRequest 只追加
 允许的新跨模块边：无。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 // agent/provider
 const GeminiGenerateContent Protocol = "gemini-generate-content"
-ToolCall.Replay json.RawMessage 的定义与 goal-104 相同（见 PLAN T-12 步骤 1 的代码块）。本协议写入的 Replay 是 JSON 字符串形式的 thoughtSignature。
+ToolCall.Replay json.RawMessage 的定义与 goal-118 相同（见 PLAN T-12 步骤 1 的代码块）。本协议写入的 Replay 是 JSON 字符串形式的 thoughtSignature。
 
 行为：
 - 请求：POST <BaseURL>/models/<Model>:streamGenerateContent?alt=sse（BaseURL 例如 https://generativelanguage.googleapis.com/v1beta；Model 不含 models/ 前缀，用 url.PathEscape 转义后作为一个路径段），请求头 x-goog-api-key: <APIKey>，不发 Authorization。错误文本不含完整 URL。
@@ -150,21 +150,21 @@ ToolCall.Replay json.RawMessage 的定义与 goal-104 相同（见 PLAN T-12 步
 不做：Agent 的配置与预设（T-12.2）；工具名映射（T-12.3）；Vertex AI 的认证与端点；cachedContents、代码执行与 Google 搜索等内置工具；图片与文件输入；text part 的 thoughtSignature（只有 functionCall 的签名要求回传）。
 ```
 
-### goal-106 · T-12.11 Provider：Ollama 原生协议
+### goal-120 · T-12.11 Provider：Ollama 原生协议
 
-状态：待派发。前置 T-12.1（[PR #16](https://github.com/AlonaBot/AlonaBot/pull/16)，合并提交 `354c5b6`）已合并。main `3f7a380` 的 `agent/provider` 现状见 goal-104 的状态段；`New` 目前要求 APIKey 非空，`readSSE` 只适用于 SSE。可以与 goal-104、goal-105 并行，共享文件按[执行顺序 §3](../execution-order.md#3-共享文件与冲突规则)「`agent/provider/` 的新协议」一行处理。
+状态：待派发。前置 T-12.1（[PR #16](https://github.com/AlonaBot/AlonaBot/pull/16)，合并提交 `354c5b6`）已合并。main `3f7a380` 的 `agent/provider` 现状见 goal-118 的状态段；`New` 目前要求 APIKey 非空，`readSSE` 只适用于 SSE。可以与 goal-118、goal-119 并行，共享文件按[执行顺序 §3](../execution-order.md#3-共享文件与冲突规则)「`agent/provider/` 的新协议」一行处理。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-106（切片 T-12.11：Provider：Ollama 原生协议）。goal 目录 goal-106，分支 goal-106，worktree .worktrees/goal-106，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-120（切片 T-12.11：Provider：Ollama 原生协议）。goal 目录 goal-120，分支 goal-120，worktree .worktrees/goal-120，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：agent/provider 增加 ollama-chat 协议：编码 /api/chat 请求（消息、tool 角色的工具结果、对象形式的工具参数、options.num_predict），逐行解析 NDJSON 流得到文本增量、完整的工具调用、停止原因与用量；API key 可以为空，非空时用 Bearer 认证；工具调用没有 ID，由客户端生成，工具结果按 ID 查回工具名。
 
-依据：PLAN T-12 步骤 1（共同语义）与步骤 10「Ollama」；DECISIONS D-38、D-87；TEST-MATRIX V-57 的 Provider 分项。
+依据：PLAN T-12 步骤 1（共同语义）与步骤 10「Ollama」；DECISIONS D-38、D-103；TEST-MATRIX V-57 的 Provider 分项。
 
 范围（只新增或修改这些）：
 - agent/provider/provider.go：追加常量 OllamaChat；New 的协议校验与 Stream 的分派各加一个分支，New 对 ollama-chat 允许空 APIKey；包文档的协议列表
 - 新增 agent/provider/ollama.go：请求编码与 NDJSON 流解析
-- 新增 agent/provider/toolcall.go：按 ToolCallID 查找工具名、生成调用 ID（goal-105 已合并时复用）
+- 新增 agent/provider/toolcall.go：按 ToolCallID 查找工具名、生成调用 ID（goal-119 已合并时复用）
 - agent/provider/provider_test.go：TestStream 的用例表、mockProvider 与 testRequest 只追加；已有断言中工具调用 ID 为 "c1" 的检查对本协议改为非空（改写既有断言）
 允许的新跨模块边：无。
 
@@ -199,7 +199,7 @@ const OllamaChat Protocol = "ollama-chat"
 
 ### goal-59 · T-12.2 Agent 对话与流式显示
 
-状态：等待前置（T-03.9、T-05.4、T-12.9、T-12.10、T-12.11）。2026-11-09 按 D-87 加入 T-12.9～T-12.11 为前置，预设增加 gemini、ollama 改用 ollama-chat，OnLoad 接受六种协议。T-08.4（PR #74）已合并。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。T-04.3、T-11.3、T-12.1 已合并；命令注册、Args/Optional、Context.Match 与自动回复接口已按 PR #47 核对。Context.Edit、Continue、配置及数据库入口仍待相关前置合并后核对。语句中的配置按 D-74 的 Go 配置类型与 `config` 标签编写；D-76 改为手写 `config_schema.json` 与 `Config()` 取值后，由审查者在 T-08.11 合并后改写，providers 可以写成 template_list，每个预设一个模板，由模板 items 的 default 给出 protocol 与 base_url。
+状态：等待前置（T-03.9、T-05.4、T-12.9、T-12.10、T-12.11）。2026-11-09 按 D-103 加入 T-12.9～T-12.11 为前置，预设增加 gemini、ollama 改用 ollama-chat，OnLoad 接受六种协议。T-08.4（PR #74）已合并。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。T-04.3、T-11.3、T-12.1 已合并；命令注册、Args/Optional、Context.Match 与自动回复接口已按 PR #47 核对。Context.Edit、Continue、配置及数据库入口仍待相关前置合并后核对。语句中的配置按 D-74 的 Go 配置类型与 `config` 标签编写；D-76 改为手写 `config_schema.json` 与 `Config()` 取值后，由审查者在 T-08.11 合并后改写，providers 可以写成 template_list，每个预设一个模板，由模板 items 的 default 给出 protocol 与 base_url。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-59（切片 T-12.2：Agent 对话与流式显示）。goal 目录 goal-59，分支 goal-59，worktree .worktrees/goal-59，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
