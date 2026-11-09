@@ -14,7 +14,7 @@
 
 ### goal-78 · T-15.1 官方 OneBot 11 Adapter 的连接与接收
 
-状态：已完成（[PR #109](https://github.com/AlonaBot/AlonaBot/pull/109)），证据见 TEST-MATRIX §3.2。派发时：前置 T-03.3（PR #32，合并提交 `db3c1c7`）、T-03.4（PR #39，合并提交 `604dc65`）与 T-04.6（PR #78，合并提交 `0a320c5`）均已合并。2026-11-08 按 D-69 改写：删去 TrustedRole/CHAT_ADMIN 的旧写法，Actor 改为给出平台权限（`Actor.permissions`），描述声明 `onebot11.group_owner`、`onebot11.group_admin`、`onebot11.private_friend` 及隐含关系，新增只含常量的 `adapters/onebot11/perm`；按 D-85 提供 `instance_schema.json`（Core 侧的读取与补值由 T-08.12 实现）。已核对：`sdk/adapter` 的 `Adapter`（`Descriptor`、`Start`）、`Instance`、`Core`（`Deliver(ctx, ev, cursor) (accepted bool, err error)`、`SaveCursor`、`ReportFailure(ctx, *pb.ErrorInfo)`、`ReadMedia`）、`StartRequest`、`Account`；`pb.PermissionDeclaration{name, implies, label_key}` 与 `validate.AdapterRegister` 对权限声明的检查；`sdk.RunAdapter(adapter.Adapter) error`；`MessageCreatedPayload.to_me`、`Actor.locale` 已有，无需修改 proto；`github.com/coder/websocket` 已于 2026-10-27 批准（docs/development.md）。
+状态：已完成（[PR #109](https://github.com/AlonaBot/AlonaBot/pull/109)，合并提交 `1b226a2`），证据见 TEST-MATRIX §3.2。派发时：前置 T-03.3（PR #32，合并提交 `db3c1c7`）、T-03.4（PR #39，合并提交 `604dc65`）与 T-04.6（PR #78，合并提交 `0a320c5`）均已合并。2026-11-08 按 D-69 改写：删去 TrustedRole/CHAT_ADMIN 的旧写法，Actor 改为给出平台权限（`Actor.permissions`），描述声明 `onebot11.group_owner`、`onebot11.group_admin`、`onebot11.private_friend` 及隐含关系，新增只含常量的 `adapters/onebot11/perm`；按 D-85 提供 `instance_schema.json`（Core 侧的读取与补值由 T-08.12 实现）。已核对：`sdk/adapter` 的 `Adapter`（`Descriptor`、`Start`）、`Instance`、`Core`（`Deliver(ctx, ev, cursor) (accepted bool, err error)`、`SaveCursor`、`ReportFailure(ctx, *pb.ErrorInfo)`、`ReadMedia`）、`StartRequest`、`Account`；`pb.PermissionDeclaration{name, implies, label_key}` 与 `validate.AdapterRegister` 对权限声明的检查；`sdk.RunAdapter(adapter.Adapter) error`；`MessageCreatedPayload.to_me`、`Actor.locale` 已有，无需修改 proto；`github.com/coder/websocket` 已于 2026-10-27 批准（docs/development.md）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-78（切片 T-15.1：官方 OneBot 11 Adapter 的连接与接收）。goal 目录 goal-78，分支 goal-78，worktree .worktrees/goal-78，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -101,7 +101,7 @@
 
 ### goal-79 · T-15.2 官方 OneBot 11 Adapter 的发送、媒体与 extension
 
-状态：等待前置（T-03.8、T-15.1）。T-03.6（PR #55）已合并。语句中 goal-7、goal-8、goal-78 提供的符号（sdk/adapter 的 Core.ReadMedia 与实例可选实现的平台文件读取接口、ExtensionDeclaration 的校验、adapters/onebot11 的实例与 API 调用、onebottest.Server）只写名字；合并后由审查者核对签名，再改为待派发。
+状态：等待前置（T-03.8）。T-15.1（PR #109，合并提交 `1b226a2`）已合并，合入 `onebot11.New`、实例的 echo 调用与 `onebottest.Server`（`NewServer`、`URL`、`SetLogin`、`Push`、`Disconnect`、`Connections`、`Calls`、`Respond`），T-03.8 合并后由审查者按合入代码写出接口段。T-03.6（PR #55）已合并。语句中 goal-7、goal-8、goal-78 提供的符号（sdk/adapter 的 Core.ReadMedia 与实例可选实现的平台文件读取接口、ExtensionDeclaration 的校验、adapters/onebot11 的实例与 API 调用、onebottest.Server）只写名字；合并后由审查者核对签名，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-79（切片 T-15.2：官方 OneBot 11 Adapter 的发送、媒体与 extension）。goal 目录 goal-79，分支 goal-79，worktree .worktrees/goal-79，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

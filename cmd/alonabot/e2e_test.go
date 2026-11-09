@@ -350,7 +350,7 @@ func TestSettingsAndListenOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(loaded, settings.Defaults()) {
+	if !reflect.DeepEqual(loaded.Settings(), settings.Defaults()) {
 		t.Fatalf("default settings changed by override: %+v", loaded)
 	}
 	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
@@ -379,7 +379,7 @@ func TestSettingsAndListenOverride(t *testing.T) {
 // 设置文件中的日志设置可由显式参数覆盖，日志文件开关仍按文件生效。
 func TestConfiguredLogOverrides(t *testing.T) {
 	dir := t.TempDir()
-	original := []byte("listen: 127.0.0.1:0\nlog:\n  level: warn\n  format: json\n  file:\n    enabled: false\n")
+	original := []byte(`{"listen":"127.0.0.1:0","log":{"level":"warn","format":"json","file":{"enabled":false}}}`)
 	name := filepath.Join(dir, settings.FileName)
 	if err := os.WriteFile(name, original, 0o600); err != nil {
 		t.Fatal(err)
@@ -403,7 +403,7 @@ func TestConfiguredLogOverrides(t *testing.T) {
 		t.Fatal("log overrides rewrote settings")
 	}
 	// 未显式给参数时，日志格式取自文件，而非 Cobra 旗标的缺省值。
-	configured := bytes.Replace(original, []byte("level: warn"), []byte("level: info"), 1)
+	configured := bytes.Replace(original, []byte(`"level":"warn"`), []byte(`"level":"info"`), 1)
 	if err := os.WriteFile(name, configured, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -421,7 +421,7 @@ func TestConfiguredLogOverrides(t *testing.T) {
 // 未知设置必须以 usage 退出码返回，并指明完整键名与行号。
 func TestUnknownSettingUsage(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte("log:\n  unknown: true\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte("{\n  \"log\": {\"unknown\": true}\n}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	command := exec.Command(filepath.Join(binDir, "alonabot"), "run", "--data-dir", dir, "--plugin-id", "demo", "--entry", filepath.Join(binDir, "lifecycle"))
@@ -502,7 +502,7 @@ func TestAdminAuthRun(t *testing.T) {
 				}
 			}
 			const origin = "http://admin.test:7650"
-			if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte("listen: 127.0.0.1:0\nadmin_base_url: "+origin+"\nplugin_base_url: http://plugin.test:7650\n"), 0o600); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte(`{"listen":"127.0.0.1:0","admin_base_url":"`+origin+`","plugin_base_url":"http://plugin.test:7650"}`), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			c := startCore(t, dir)
@@ -545,11 +545,11 @@ func TestAdminAuthRun(t *testing.T) {
 			send("POST", "/api/auth/login", "plugin.test", origin, `{"token":"wrong"}`, nil, "", "", 404)
 			send("POST", "/api/auth/login", "unknown.test", origin, `{"token":"wrong"}`, nil, "", "", 421)
 			if !initialized {
-				_, content := send("POST", "/api/auth/login", "admin.test", origin, `{"token":"wrong"}`, nil, "", "", 503)
-				if strings.TrimSpace(string(content)) != adminauth.ErrNotInitialized.Error() {
-					t.Fatal("uninitialized login did not return its safe error")
+				_, content := send("POST", "/api/auth/login", "admin.test", origin, `{"token":"wrong"}`, nil, "", "", 401)
+				if strings.TrimSpace(string(content)) != "unauthorized" {
+					t.Fatal("automatically initialized login did not reject an invalid token")
 				}
-				send("GET", "/api/probe", "admin.test", "", "", nil, "", "", 503)
+				send("GET", "/api/probe", "admin.test", "", "", nil, "", "", 401)
 			} else {
 				send("POST", "/api/auth/login", "admin.test", origin, `{"token":"wrong"}`, nil, "", "", 401)
 				body, err := json.Marshal(map[string]string{"token": token})
@@ -591,5 +591,72 @@ func TestAdminAuthRun(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestFirstAdminToken 联验非终端首次启动、show 读取与登录后删除凭证文件（V-47、V-88）。
+func TestFirstAdminToken(t *testing.T) {
+	dir := t.TempDir()
+	c := startCore(t, dir, "--listen", "127.0.0.1:0")
+	c.waitFor(activatedRe)
+	address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
+	name := filepath.Join(dir, adminauth.FirstTokenFile)
+	stat, err := os.Stat(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stat.Mode().Perm() != 0o600 {
+		t.Fatalf("first token file mode = %v", stat.Mode())
+	}
+
+	binary := filepath.Join(binDir, "alonabot")
+	command := exec.Command(binary, "admin-token", "show", "--data-dir", dir)
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("show first token: %v; stderr=%s", err, stderr.String())
+	}
+	token := strings.TrimSpace(string(output))
+	if token == "" {
+		t.Fatal("show returned an empty token")
+	}
+	input, err := json.Marshal(map[string]string{"token": token})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequest(http.MethodPost, "http://"+address+"/api/auth/login", bytes.NewReader(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = "127.0.0.1"
+	request.Header.Set("Origin", "http://127.0.0.1:7650")
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, readErr := io.ReadAll(response.Body)
+	closeErr := response.Body.Close()
+	if readErr != nil || closeErr != nil {
+		t.Fatalf("read login response: %v; close: %v", readErr, closeErr)
+	}
+	if response.StatusCode != http.StatusOK || len(response.Cookies()) != 1 {
+		t.Fatalf("login: status=%d body=%s", response.StatusCode, content)
+	}
+	if _, err := os.Stat(name); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("first token file after login: %v", err)
+	}
+
+	command = exec.Command(binary, "admin-token", "show", "--data-dir", dir)
+	output, err = command.CombinedOutput()
+	if err == nil || command.ProcessState.ExitCode() != exitFailure || !strings.Contains(string(output), "read first admin token file") {
+		t.Fatalf("show after login: err=%v output=%s", err, output)
+	}
+	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := c.wait(15 * time.Second); code != 0 {
+		t.Fatalf("Core exit %d: %s", code, c.log())
 	}
 }
