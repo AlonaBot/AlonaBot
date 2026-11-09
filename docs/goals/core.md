@@ -1770,14 +1770,14 @@ internal/core/webhost
 
 ### goal-8 · T-03.8 按钮、extension 片段与依赖解析
 
-状态：待派发。前置 T-03.2（PR #31）与 T-03.7（[PR #108](https://github.com/AlonaBot/AlonaBot/pull/108)，合并提交 `d89e9b7`）均已合并。2026-11-09 审查者按 main `3dec9a0` 的代码核对并改写：SDK 的事件路由已改为链式注册（`EventRegistry.On(routeID, eventType) *EventBuilder`，以 `Handle` 结束，`sdk/session.go` 由 `EventRoute` 生成只含 event_type_filter 与 handler_mode 的 EventSpec），按钮路由相应改为返回 `*EventBuilder` 的 `OnButton`；`message.Service` 还没有 BeforeSend（T-05.3），签发放在 `validate.Chain` 之后、媒体租约之前；`message.New` 与 `router.Options` 以注入函数接入 buttons，不让 message、router 反向依赖 buttons；`policy.CheckCommand(ctx, pluginID, route, actor, target)`、`router.Router.Caller(pluginID)`（当前 Active 代次）与 `Router.Plugin(pluginID).Routes()` 已存在；`validate.Chain` 已要求按钮有 action_id 与 label、value 为合法 JSON；T-03.7 合入的 `Button.core_token = 4` 已由 Telegram 渲染为 callback_data（缺 token 时 INVALID_ARGUMENT），callback_query 已在 allowed_updates 中但尚未处理；`Segment` oneof 已用到 forward = 8；`AdapterDescriptor.extensions = 3`（ExtensionDeclaration）已在协议中；`cmd/alonabot run` 只启动单个开发插件（`--data-dir`、`--plugin-id`、`--entry`），没有 Router 与 Adapter 装配（归 goal-67），依赖检查的 Installed 只来自状态库。
+状态：待派发，宜在 PR #115 合并后派出。2026-11-09 按 D-107 改为带类型的按钮动作 `sdk.Action[T]` 与 `sdk.OnButton`，删除 `ButtonValue`。前置 T-03.2（PR #31）与 T-03.7（[PR #108](https://github.com/AlonaBot/AlonaBot/pull/108)，合并提交 `d89e9b7`）均已合并。2026-11-09 审查者按 main `3dec9a0` 的代码核对并改写：SDK 的事件路由已改为链式注册（`EventRegistry.On(routeID, eventType) *EventBuilder`，以 `Handle` 结束，`sdk/session.go` 由 `EventRoute` 生成只含 event_type_filter 与 handler_mode 的 EventSpec），按钮路由相应改为返回 `*EventBuilder` 的 `OnButton`；`message.Service` 还没有 BeforeSend（T-05.3），签发放在 `validate.Chain` 之后、媒体租约之前；`message.New` 与 `router.Options` 以注入函数接入 buttons，不让 message、router 反向依赖 buttons；`policy.CheckCommand(ctx, pluginID, route, actor, target)`、`router.Router.Caller(pluginID)`（当前 Active 代次）与 `Router.Plugin(pluginID).Routes()` 已存在；`validate.Chain` 已要求按钮有 action_id 与 label、value 为合法 JSON；T-03.7 合入的 `Button.core_token = 4` 已由 Telegram 渲染为 callback_data（缺 token 时 INVALID_ARGUMENT），callback_query 已在 allowed_updates 中但尚未处理；`Segment` oneof 已用到 forward = 8；`AdapterDescriptor.extensions = 3`（ExtensionDeclaration）已在协议中；`cmd/alonabot run` 只启动单个开发插件（`--data-dir`、`--plugin-id`、`--entry`），没有 Router 与 Adapter 装配（归 goal-67），依赖检查的 Installed 只来自状态库。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-8（切片 T-03.8：按钮、extension 片段与依赖解析）。goal 目录 goal-8，分支 goal-8，worktree .worktrees/goal-8，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：Core 为发送中的每个按钮签发持久化的 token（绑定插件、button.clicked 路由、代次、Target、value 与 24h 期限），Telegram 点击先 answerCallbackQuery，再由 Core 验证 token、当前 Actor 与策略后以普通请求调用正确的 Session；extension 片段按目标 Adapter 注册时声明的 Schema 在发送前校验；manifest 解析 role（plugin/adapter/agent/webui）、adapter_id、icon、WebUI 的 assets 与 Admin API 主版本范围、adapter_dependencies 与 plugin_dependencies，开发入口启用插件时检查必需依赖。
 
-依据：PLAN T-03 步骤 7；CONTRACTS §8（extension、依赖与按钮段）、§9（manifest）、§7.5（图标与 WebUI）；MESSAGE-MODEL §1.1、§6.3；DECISIONS D-26、D-43、D-59、D-62、D-63；TEST-MATRIX V-08 的按钮分项、V-48 的依赖分项、V-52 的解析分项。
+依据：PLAN T-03 步骤 7；CONTRACTS §8（extension、依赖与按钮段）、§9（manifest）、§7.5（图标与 WebUI）；MESSAGE-MODEL §1.1、§6.3；DECISIONS D-26、D-43、D-59、D-62、D-63、D-107；TEST-MATRIX V-08 的按钮分项、V-48 的依赖分项、V-52 的解析分项、V-105。
 
 范围（只新增或修改这些）：
 - contracts/proto/alonabot/v1/message.proto：Segment 的 oneof 追加 ExtensionSegment extension = 9。随后 go generate ./...（本切片获授权只追加这一分支与消息）
@@ -1789,7 +1789,7 @@ internal/core/webhost
 - internal/core/message/：New 增加按钮签发的注入函数，Send 在结构校验后签发按钮并校验 extension（只加调用点）；同步全部 message.New 调用方
 - internal/core/adapter/：新增 extension.go（可选接口 ExtensionChecker）；remote 在已有的 declarations 中缓存 extension 声明并实现它；memory 增加可配置的 extension 声明并实现它
 - internal/core/router/：Options 增加 Buttons 解析函数，button.clicked 改由它解析后派发（只加调用点）
-- sdk/：events.go 增加 OnButton，session.go 为按钮路由写入 EventSpec 的 action_id 与 action_schema_version，dispatch.go 增加 ButtonValue；sdk/message 增加 Buttons 与 Extension 片段构造
+- sdk/：新增 buttons.go（Action、ButtonAction、OnButton、ButtonBuilder），session.go 为按钮路由写入 EventSpec 的 action_id 与 action_schema_version，dispatch.go 把 value 解码后交给 Handler；sdk/message 增加 Buttons 与 Extension 片段构造
 - adapters/telegram/：callback_query 的处理与 answerCallbackQuery；extension 声明为空
 - cmd/alonabot/：run 在启动插件前读取 --entry 所在目录的 plugin.yaml（存在时）并执行依赖检查
 - 上述包的测试文件
@@ -1817,12 +1817,17 @@ internal/core/webhost
    adapter.ExtensionChecker interface { CheckExtension(name string, version uint32, payloadJSON string) *pb.ErrorInfo } // 实例可选实现；未声明为 UNSUPPORTED，不符合 Schema 为 INVALID_ARGUMENT
    router.Options 增加 Buttons func(ctx context.Context, ev *pb.Event) (pluginID, routeID string, err error) // nil 时 button.clicked 一律丢弃并以 INFO 记录
 5. sdk
-   func (r *EventRegistry) OnButton(routeID, actionID string, schemaVersion uint32) *EventBuilder // 事件类型为 button.clicked；同样以 Handle 结束，可链 Priority 与 Permission
-   func (c *Context) ButtonValue() string // button.clicked 的 value；其他事件为空
-   sdk/message：func Buttons(rows ...[]Button) Segment；type Button struct { ActionID, Label, Value string }；func Extension(adapterID, name string, version uint32, payload any) Segment // payload 用 encoding/json 编码；编码失败的片段由 sdk 的 Send 在发出请求前返回 INVALID_ARGUMENT
+   type ButtonAction[T any] struct{ ... } // 按钮动作：动作名与 value 的 Go 类型（D-107）
+   func Action[T any](name string) ButtonAction[T] // name 即 action_id；版本取 T 的 SchemaVersion() uint32（值接收者），没有该方法时为 1
+   func (a ButtonAction[T]) Button(label string, value T) message.Button // value 用 encoding/json 编码为 Button.Value
+   func OnButton[T any](r *EventRegistry, a ButtonAction[T]) *ButtonBuilder[T] // 事件类型为 button.clicked，route_id 为 "button." 加动作名
+   type ButtonBuilder[T any] struct{ ... } // 可链的方法与 EventBuilder 相同（Priority、Permission 等），返回 *ButtonBuilder[T]
+   func (b *ButtonBuilder[T]) Handle(h func(*Context, T) error) // 链的终点；漏写时注册失败
+   sdk/message：func Buttons(rows ...[]Button) Segment；type Button struct { ActionID, Label, Value string }（另有不导出的编码错误，由 ButtonAction.Button 设置）；func Extension(adapterID, name string, version uint32, payload any) Segment // payload 用 encoding/json 编码；编码失败的片段由 sdk 的 Send 在发出请求前返回 INVALID_ARGUMENT
 
 行为：
 - 按钮签发（message.Service 在 validate.Chain 之后、媒体租约与实例 Send 之前；T-05.3 加入 BeforeSend 后仍在其之前）：插件给出的 core_token 一律清除；每个按钮的 action_id 必须对应发送插件当前注册的 button.clicked 路由（EventSpec.action_id），否则 INVALID_ARGUMENT。token 为 32 字节随机值的无 padding base64url（43 字节），持久化 (token, plugin_id, route_id, action_id, action_schema_version, generation_id, target 的 instance/chat/thread, value, expires_at=签发起 BUTTON_TOKEN_TTL)。value 不超过 1024 字节（命名常量）。持久化成功后才把 token 写入 core_token 并继续发送。
+- SDK 的按钮动作（D-107）：Collect 检查动作名（与 action_id 的规则相同）；route_id 为 `button.` 加动作名，同插件内重复时注册失败；`button.` 是保留前缀，文本匹配与事件路由不能使用。ButtonAction.Button 编码失败时，sdk 的 Send 在发出请求前返回 INVALID_ARGUMENT。点击时 SDK 把 value 解码为 T 再调用 Handler；解码失败时记 WARN（只记 route_id 与错误，不记 value），不调用 Handler，正常结束本次调用。
 - Telegram 点击：callback_query 先调用 answerCallbackQuery（失败只记日志），再交付 button.clicked：Target 取 callback_query.message 的 chat 与 thread（没有 message 的 inline 回调不交付，推进游标并以 INFO 记录），Actor 取 from，payload 的 value 暂放 callback_data，origin_platform_message_id 为消息 ID，callback_query_id 原样。
 - Core 解析（Router 在派发 button.clicked 前调用 Resolve）：token 不存在、过期、generation 已不是该插件的当前 Active、或 Target 与签发时不同 → 丢弃并以 INFO 记录，不派发、不回复、不进入 Raw 或文本匹配。有效时把 payload 改写为签发时的 action_id、action_schema_version 与 value，只派发给该插件的该路由；派发前执行 T-04.4 的 CheckCommand 等价检查（全局禁止与路由启用、权限），每次点击都按本次 Actor 重新检查；同一 token 可被多人、多次点击。token 不带任何角色。
 - extension：remote 的 `compileDeclarations` 已缓存权限闭包与扩展事件的已解析 Schema，同样在注册时解析每个 ExtensionDeclaration（jsonschema-go 的 Resolve，Loader 为 nil；解析失败按注册失败），实例实现 ExtensionChecker。发送前对每个 extension 片段：目标实例的 AdapterID() 必须等于片段的 adapter_id，实例必须实现 ExtensionChecker 且 (name, version) 已声明，payload_json 必须通过该声明的 Schema；否则 UNSUPPORTED（Adapter 不符、未实现或未声明）或 INVALID_ARGUMENT（不符合 Schema），在媒体租约与调用 Adapter 之前返回。Telegram 本切片不声明 extension，所有 extension 片段发往 Telegram 都是 UNSUPPORTED。
@@ -1833,7 +1838,7 @@ internal/core/webhost
 测试（按编码规范「测试提交规则」）：
 - 提交：
   - adapters/telegram/callback_test.go：telegramtest 推入 callback_query：先有 answerCallbackQuery 调用，再交付 button.clicked；没有 message 的 inline 回调不交付但推进游标。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：manifest 新字段的每种非法值；CheckDependencies 的判定表；token 的编码长度与唯一性；value 长度边界；Purge；Resolve 对 generation 的判断；internal/core/supervisor/buttons_local_test.go（//go:build unix）：memory Adapter 与测试插件（注册 `OnButton("vote", "vote", 1).Handle(...)`，收到 /poll 时发送两个按钮），用真实状态库装配：发送后 memory 收到的按钮都有 43 字节的 core_token，状态库有映射；插件伪造的 core_token 被替换；注入以该 token 为 callback_data 的 button.clicked：插件的 OnButton 被调用，ButtonValue 为原 value；两个不同用户点击各调用一次；未知 token、过期 token（注入时钟）、另一个 chat 中的点击都不调用插件，也不进入 Raw；按钮指向未注册的 action 时发送被拒，memory 没有收到；插件产生新的 Active 代次后，旧 token 失效；extension 片段发往不声明它的 Adapter 返回 UNSUPPORTED；发往声明了它的 memory Adapter 时 payload 不符合 Schema 返回 INVALID_ARGUMENT，符合时发出；contracts/manifest 对四种 role、icon、WebUI 字段与依赖字段的解析。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：manifest 新字段的每种非法值；CheckDependencies 的判定表；Action 的版本与动作名检查、编码失败的按钮、解码失败的点击、`button.` 前缀的注册冲突；token 的编码长度与唯一性；value 长度边界；Purge；Resolve 对 generation 的判断；internal/core/supervisor/buttons_local_test.go（//go:build unix）：memory Adapter 与测试插件（以 `vote := sdk.Action[voteValue]("vote")` 与 `sdk.OnButton(r, vote).Handle(...)` 注册，收到 /poll 时发送 `vote.Button` 生成的两个按钮），用真实状态库装配：发送后 memory 收到的按钮都有 43 字节的 core_token，状态库有映射；插件伪造的 core_token 被替换；注入以该 token 为 callback_data 的 button.clicked：插件的 Handler 被调用，收到的值与发送时相同；两个不同用户点击各调用一次；未知 token、过期 token（注入时钟）、另一个 chat 中的点击都不调用插件，也不进入 Raw；按钮指向未注册的 action 时发送被拒，memory 没有收到；插件产生新的 Active 代次后，旧 token 失效；extension 片段发往不声明它的 Adapter 返回 UNSUPPORTED；发往声明了它的 memory Adapter 时 payload 不符合 Schema 返回 INVALID_ARGUMENT，符合时发出；contracts/manifest 对四种 role、icon、WebUI 字段与依赖字段的解析。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/... ./adapters/... ./cmd/...；go build ./...。
 
