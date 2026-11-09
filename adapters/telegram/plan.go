@@ -23,8 +23,6 @@ type sendOperation struct {
 	params         map[string]any
 	uploads        []plannedUpload
 	segmentIndexes []uint32
-	// markup 更新依赖上一相册末条消息的 ID，执行时填写 message_id。
-	markup bool
 }
 
 type sendPlan struct {
@@ -167,7 +165,7 @@ func buildSendPlan(target *pb.Target, chain *pb.MessageChain) (*sendPlan, *pb.Er
 		plan.operations = append(plan.operations, operation)
 		start = end
 	}
-	// 3. 引用归首步，按钮归末步；相册按钮更新单独计入物理操作。
+	// 3. 引用归首步，按钮归末步；相册按钮在首发前拒绝。
 	if referenceIndex >= 0 {
 		plan.operations[0].params["reply_parameters"] = reply
 		plan.operations[0].segmentIndexes = append(plan.operations[0].segmentIndexes, uint32(referenceIndex))
@@ -175,11 +173,10 @@ func buildSendPlan(target *pb.Target, chain *pb.MessageChain) (*sendPlan, *pb.Er
 	if buttonsIndex >= 0 {
 		last := &plan.operations[len(plan.operations)-1]
 		if last.method == "sendMediaGroup" {
-			plan.operations = append(plan.operations, sendOperation{method: "editMessageReplyMarkup", params: map[string]any{"chat_id": chatID, "reply_markup": markup}, segmentIndexes: []uint32{uint32(buttonsIndex)}, markup: true})
-		} else {
-			last.params["reply_markup"] = markup
-			last.segmentIndexes = append(last.segmentIndexes, uint32(buttonsIndex))
+			return nil, planError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "telegram cannot attach buttons to an album")
 		}
+		last.params["reply_markup"] = markup
+		last.segmentIndexes = append(last.segmentIndexes, uint32(buttonsIndex))
 	}
 	for index := range plan.operations {
 		slices.Sort(plan.operations[index].segmentIndexes)

@@ -31,17 +31,8 @@ func (i *instance) Send(ctx context.Context, target *pb.Target, chain *pb.Messag
 	for index, operation := range plan.operations {
 		result.PartResults = append(result.PartResults, &pb.PartResult{PartIndex: uint32(index), SegmentIndexes: operation.segmentIndexes, Status: pb.PartStatus_PART_STATUS_NOT_ATTEMPTED})
 	}
-	var lastID int64
 	for index, operation := range plan.operations {
 		part := result.PartResults[index]
-		if operation.markup {
-			if lastID == 0 {
-				safe = planError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "telegram album returned no usable last message ID for markup")
-				part.Error = safe
-				break
-			}
-			operation.params["message_id"] = lastID
-		}
 		// 2. 到达当前操作才读取媒体；读取失败时不发起该步平台请求。
 		files := make([][]byte, 0, len(operation.uploads))
 		for _, upload := range operation.uploads {
@@ -94,19 +85,15 @@ func (i *instance) Send(ctx context.Context, target *pb.Target, chain *pb.Messag
 			part.Error = safe
 			break
 		}
-		// 3. 保留所有已确认 ID；markup 更新只在本步记录，逻辑列表不重复添加。
+		// 3. 保留所有已确认 ID；零 ID 只记录平台已接受的事实。
 		part.Status = pb.PartStatus_PART_STATUS_ACCEPTED
 		for _, message := range messages {
-			lastID = *message.ID
-			if lastID == 0 {
+			if *message.ID == 0 {
 				part.MessageIdsUnavailable = true
 				continue
 			}
-			id := strconv.FormatInt(lastID, 10)
+			id := strconv.FormatInt(*message.ID, 10)
 			part.PlatformMessageIds = append(part.PlatformMessageIds, id)
-			if operation.markup {
-				continue
-			}
 			result.PlatformMessageIds = append(result.PlatformMessageIds, id)
 			if result.PrimaryPlatformMessageId == nil {
 				result.PrimaryPlatformMessageId = proto.String(id)
