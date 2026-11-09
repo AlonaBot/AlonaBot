@@ -37,7 +37,7 @@
 | goal-36 | T-09.1 | 首次管理认证 | T-02.3、T-07.4 | 已完成（PR #72） |
 | goal-13 | T-04.4 | 持久化命令策略 | T-03.2、T-04.1、T-04.6 | 已完成（PR #88） |
 | goal-88 | T-04.7 | SDK 链式注册 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | 已完成（PR #89） |
-| goal-97 | T-07.6 | Core 设置与首次启动 | T-07.3、T-09.1 | 待派发 |
+| goal-97 | T-07.6 | Core 设置与首次启动 | T-07.3、T-09.1 | 已完成（PR #100） |
 | goal-32 | T-08.5 | 受管 SQLite 连接与迁移 | T-08.3 | 已完成（PR #79） |
 | goal-53 | T-08.8 | 用户可见文案目录 | T-04.1、T-04.3、T-04.6、T-08.1、T-08.10 | 已完成（PR #102） |
 | goal-100 | T-09.16 | manifest 拆分为作者信息与构建信息 | T-03.8、T-09.2 | 等待前置 |
@@ -2528,7 +2528,7 @@ goal-28、goal-29 的符号已按合入代码核对：
 
 ### goal-97 · T-07.6 Core 设置与首次启动
 
-状态：待派发。前置 T-07.3（PR #46）与 T-09.1（PR #72）均已合并。依据 D-82 新增。2026-11-05 修订：`cmd/alonabot` 没有装配 Router，命令前缀与 Core Admin 列表改由 goal-39 接入 goal-67 建立的根包 Core 装配，本切片只提供读取设置的函数。
+状态：已完成（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)），证据见 TEST-MATRIX §3.2。审查中经审查者授权超出语句两处：导出 `adminauth.FirstTokenFile`；`Update` 以 Rename 为提交点，之后目录同步失败时仍发布新快照并返回 `settings saved but directory sync failed` 错误。派发时：前置 T-07.3（PR #46）与 T-09.1（PR #72）均已合并。依据 D-82 新增。2026-11-05 修订：`cmd/alonabot` 没有装配 Router，命令前缀与 Core Admin 列表改由 goal-39 接入 goal-67 建立的根包 Core 装配，本切片只提供读取设置的函数。
 
 已核对现有实现（main `fb1000d`）：
 - `internal/core/settings` 读取 `<data_dir>/alonabot.yaml`（`FileName`），`Settings` 有 `Listen`、`AdminBaseURL`、`PluginBaseURL`、`TrustedProxies`、`LogLevel`、`LogFormat`、`LogFile{Enabled, MaxSize, MaxTotal, MaxAgeDays}`、`Proxy`；`Load` 严格解析（未知键、重复键与类型错误带完整键名和行号），文件不存在时以 0600 创建缺省内容；`Defaults`、`ValidateListen` 供调用方使用。
