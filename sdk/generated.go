@@ -5,13 +5,11 @@ import (
 	"reflect"
 )
 
-// Generated 提供构建期生成的配置/Service Schema、文案原文、命令与事件注册函数；nil 字段表示没有对应项。
+// Generated 提供构建期生成的配置/Service Schema 与文案原文；nil 字段表示没有对应项。
 type Generated struct {
 	ServiceSchemas map[string][]byte // schema_id 对应的规范 JSON Service Schema。
-	ConfigSchema   []byte            // 规范 JSON；没有 Config 时为 nil。
-	Commands       func(*CommandRegistry)
-	Events         func(*EventRegistry)
 	I18n           map[string][]byte // i18n 文件名对应的原文；无文案资源时为 nil。
+	ConfigSchema   []byte            // config_schema.json 的规范 JSON；没有该文件时为 nil。
 }
 
 // generatedRegistrations 仅在生成代码的 init 中写入，初始化完成后由 Collect 和准备阶段读取。
@@ -29,16 +27,4 @@ func UseGenerated(root Root, g Generated) {
 
 func generatedFor(root Root) Generated {
 	return generatedRegistrations[reflect.TypeOf(root)]
-}
-
-func (g Generated) registerCommands(r *CommandRegistry) {
-	if g.Commands != nil {
-		g.Commands(r)
-	}
-}
-
-func (g Generated) registerEvents(r *EventRegistry) {
-	if g.Events != nil {
-		g.Events(r)
-	}
 }

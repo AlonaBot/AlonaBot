@@ -40,6 +40,7 @@ func (s *scan) readI18n() error {
 		})
 		return nil
 	}
+	s.i18nFiles = files
 	_, problems := i18n.Parse(files)
 	for _, problem := range problems {
 		position := i18nDirectory + "/" + problem.File
@@ -47,9 +48,6 @@ func (s *scan) readI18n() error {
 			position += ":" + problem.Key
 		}
 		s.result.Diagnostics = append(s.result.Diagnostics, Diagnostic{Pos: position, Message: problem.Message})
-	}
-	if len(problems) == 0 {
-		s.i18nFiles = files
 	}
 	return nil
 }

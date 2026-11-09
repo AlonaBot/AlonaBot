@@ -6,7 +6,7 @@
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
-| goal-34 | T-08.7 | web/admin 骨架、配置表单组件与界面文案 | T-08.1、T-08.10 | 已完成 |
+| goal-34 | T-08.7 | web/admin 骨架、配置表单组件与界面文案 | T-08.1、T-08.10 | 已完成（PR #91） |
 | goal-43 | T-09.8 | Admin 管理页 | T-08.7、T-09.6、T-09.12、T-09.13 | 等待前置 |
 | goal-44 | T-09.9 | Admin 配置、权限、工具策略与插件页 | T-09.8、T-09.14 | 等待前置 |
 | goal-94 | T-09.15 | 日志页 | T-09.8、T-09.10 | 等待前置 |
@@ -15,7 +15,7 @@
 
 ### goal-34 · T-08.7 web/admin 骨架、配置表单组件与界面文案
 
-状态：已完成（PR #91，合并提交 `9789fc8`）。审查中维护者确认三项（PR 评论）：批准 `@types/react@19`、`@types/react-dom@19`；数组行与 secret 掩码形状的补丁规则写进 CONTRACTS §5.1；下文「测试」中提交的 `schema.test.ts` 改为被忽略的 `schema.local.test.ts`，npm 的 test 改为 `vitest run --passWithNoTests`，本切片没有提交的测试。以下为派发时的记录：前置 T-08.1（PR #54，合并提交 `021e972`）与 T-08.10（PR #77，合并提交 `f34b1e8`）均已合并。2026-11-04 按 D-76 改写：配置改由手写的 `config_schema.json` 声明（CONTRACTS §5.1），表单直接读取这种格式，fixture 按契约手写，不再用生成器从 Go 类型生成。SDK 侧的解析与校验由 T-08.11（goal-95）实现，本切片只依赖契约，不等待它；goal-95 会用自己的解析器检查本切片的 fixture。
+状态：已完成（[PR #91](https://github.com/AlonaBot/AlonaBot/pull/91)，合并提交 `9789fc8`）。审查中维护者确认三项（PR 评论）：批准 `@types/react@19`、`@types/react-dom@19`；数组行与 secret 掩码形状的补丁规则写进 CONTRACTS §5.1；下文「测试」中提交的 `schema.test.ts` 改为被忽略的 `schema.local.test.ts`，npm 的 test 改为 `vitest run --passWithNoTests`，本切片没有提交的测试。以下为派发时的记录：前置 T-08.1（PR #54，合并提交 `021e972`）与 T-08.10（PR #77，合并提交 `f34b1e8`）均已合并。2026-11-04 按 D-76 改写：配置改由手写的 `config_schema.json` 声明（CONTRACTS §5.1），表单直接读取这种格式，fixture 按契约手写，不再用生成器从 Go 类型生成。SDK 侧的解析与校验由 T-08.11（goal-95）实现，本切片只依赖契约，不等待它；goal-95 会用自己的解析器检查本切片的 fixture。
 
 改写时沿用的已核对事实：
 - 管理读取经 `secret.Store.Redact` 把每个已设置的 secret 原位替换为 `{"$secret_set": true}`，数组元素、模板对象与 dict 值中的 secret 也是如此。
@@ -137,7 +137,7 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 不做：真实管理 API、登录与页面路由（T-09.1、T-09.8）；CI 中的前端任务（另由维护者决定是否加入）；DOM 渲染测试（需要新依赖）；超出 JavaScript 安全整数范围的整数值的编辑（这类字段未修改时不进 patch，不受影响）；AstrBot 的 file 类型、_special 与 dict 的 template_schema（D-76 不支持）。
 ```
 
-## 第 16 波
+## 第 17 波
 
 ### goal-43 · T-09.8 Admin 管理页
 
@@ -173,7 +173,7 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 不做：Admin API、会话取回与上传接口（T-09.4、T-09.13）；WebUI 静态文件的提供（T-09.12）；配置、命令权限、发信许可、工具策略、会话与插件页（T-09.9）；日志页（T-09.15）；Core 设置页（T-09.9）。
 ```
 
-## 第 17 波
+## 第 18 波
 
 ### goal-44 · T-09.9 Admin 配置、权限、工具策略与插件页
 
