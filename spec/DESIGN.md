@@ -62,8 +62,7 @@ type RSS struct { sdk.Base }
 func (p *RSS) Commands(r *sdk.CommandRegistry) {
     g := r.Group("rss")
     g.Command("list").Handle(p.List)
-    g.Command("add").
-        Args("url").
+    g.Command("add"). // 参数名取自 Add 的参数 url（D-112）
         Permission(sdk.Admin.Or(sdk.ChatAdmin)).
         Handle(p.Add)
 }
@@ -90,7 +89,7 @@ func (p *RSS) Poke(c *sdk.Context, e *obevent.PokePayload) error {
 }
 ```
 
-注册采用链式构建（D-70）：命令、文本匹配、事件与 Service 各由注册器的方法开始，`Handle` 结束；漏写 `Handle` 是注册错误。分组上设置的权限由组内路由继承。Permission 是不可变的值，用 `Or` 组合，满足其中任一即可（D-69）；Rule 是在 SDK 内执行的 Go 函数，`Rule(...)` 多个时全部满足，`sdk.Any` 表示任一。事件常量带 payload 的 Go 类型，`Collect` 核对 Handler 的参数类型；Adapter 的常量包（例如 `adapters/onebot11/perm`、`adapters/onebot11/event`）只含常量与数据类型，插件导入它们不链接 Adapter 的运行时。插件 API 不暴露生成的 pb 类型，Message、Target、Actor、SendResult 与错误码由 SDK 自己定义。
+注册采用链式构建（D-70、D-112）：命令、文本匹配、事件、Service、Event Bus 订阅、Hook、定时任务与 HTTP 路由都由注册器的方法开始，`Handle` 结束；漏写 `Handle` 是注册错误。命令参数名缺省取 Handler 的参数名，由生成器记录（Go 运行时取不到参数名），只在需要另起名字时写 `Args`；订阅的路由 ID 缺省为事件名。分组上设置的权限由组内路由继承。Permission 是不可变的值，用 `Or` 组合，满足其中任一即可（D-69）；Rule 是在 SDK 内执行的 Go 函数，`Rule(...)` 多个时全部满足，`sdk.Any` 表示任一。事件常量带 payload 的 Go 类型，`Collect` 核对 Handler 的参数类型；Adapter 的常量包（例如 `adapters/onebot11/perm`、`adapters/onebot11/event`）只含常量与数据类型，插件导入它们不链接 Adapter 的运行时。插件 API 不暴露生成的 pb 类型，Message、Target、Actor、SendResult 与错误码由 SDK 自己定义。
 
 两类 Handler 保留：返回 `(Content,error)` 的自动回复型成功时由 Core 在 Handler 返回后发一次非空内容，Content 是 Chain 或单个片段，每种片段都有构造函数（D-108）；两种 Handler 都可以在内部多次 `c.Send`（D-70）。包级 `sdk.Send` 只供没有 Handler 上下文的后台任务使用。`c.StopPropagation()` 锁存传播结果，由 SDK 统一编码到 HandlerOutcome；不会给开发者增加第三套 Handler 签名。
 

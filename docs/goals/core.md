@@ -70,9 +70,10 @@
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 等待前置 |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 等待前置 |
+| goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-07.5 | 等待前置 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
-| goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9 | 等待前置 |
+| goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11 | 等待前置 |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 等待前置 |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 等待前置 |
 | goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 等待前置 |
@@ -4211,14 +4212,14 @@ sdk
 
 ### goal-17 · T-05.3 三阶段 Hook 与 send_forbidden
 
-状态：等待前置（T-05.2）。2026-11-09 按 D-92、D-93 补充：出站 Hook 中禁止调用的服务除 Send、Edit 外还有 `core.action` 与 `core.delete`；其中已合并的（goal-106、goal-107）由本切片一并加入禁止名单，未合并的由它们自己加入，审查者改写语句时按合并情况写入。语句中 goal-2、goal-12、goal-15、goal-16、goal-51 提供的符号（router 的派发链与可信信息、message.Service 的 Send 与 Edit、sdk 的分发与 RouteOption）只写名字；合并后由审查者核对签名，再改为待派发。
+状态：等待前置（T-05.2）。2026-11-09 按 D-112 把 SDK 接口段改为链式注册与 goal-91 的 SDK 类型（位置参数与 `RouteOption` 已由 D-70 删除），AfterSend 的 Handler 增加 error 返回值，与 MESSAGE-MODEL §5「Handler 只返回成功或 ErrorInfo」一致；T-05.2 排在 T-04.8 之后，这些类型届时已合入。同日按 D-92、D-93 补充：出站 Hook 中禁止调用的服务除 Send、Edit 外还有 `core.action` 与 `core.delete`；其中已合并的（goal-106、goal-107）由本切片一并加入禁止名单，未合并的由它们自己加入，审查者改写语句时按合并情况写入。语句中 goal-2、goal-12、goal-15、goal-16、goal-51、goal-91 提供的符号（router 的派发链与可信信息、message.Service 的 Send 与 Edit、sdk 的分发、事件常量与 SDK 类型）只写名字；合并后由审查者核对签名，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-17（切片 T-05.3：三阶段 Hook 与 send_forbidden）。goal 目录 goal-17，分支 goal-17，worktree .worktrees/goal-17，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：运行 PreEvent、BeforeSend、AfterSend 三类 Hook：PreEvent 只能改写业务 payload 或 Stop，失败时结束本次入站链；每次显式或自动 Send（以及 Edit）独立执行一组 BeforeSend → Adapter.Send → AfterSend，BeforeSend 只能改 Chain 或拒绝，改后重新预检；AfterSend 只观察。出站 Hook 的执行上下文带 send_forbidden，该标记保存在 Core 的父调用记录中并随派生调用继承，Hook 内直接 Send 被拒。
 
-依据：PLAN T-05 步骤 5、6；CONTRACTS §2.3 第 3～5 条、§8（Edit 的 Hook 段）；WIRE-FORMAT §3.5（Hook 输入的追加）；TEST-MATRIX V-15 的直接路径分项。
+依据：PLAN T-05 步骤 5、6；CONTRACTS §2.3 第 3～5 条、§8（Edit 的 Hook 段）；WIRE-FORMAT §3.5（Hook 输入的追加）；MESSAGE-MODEL §5；DECISIONS D-70、D-104、D-112；TEST-MATRIX V-15 的直接路径分项、V-110 的 Hook 分项。
 
 范围（只新增或修改这些）：
 - contracts/proto/alonabot/v1/invocation.proto：BeforeSendRequest 与 AfterSendRequest 各追加 SendOperation operation 与 optional string edited_platform_message_id，并新增 enum SendOperation。随后 go generate ./...（本切片获授权只追加这些）
@@ -4237,13 +4238,22 @@ sdk
    enum SendOperation { SEND_OPERATION_UNSPECIFIED = 0; SEND_OPERATION_SEND = 1; SEND_OPERATION_EDIT = 2; }
    BeforeSendRequest 追加 SendOperation operation = 5; optional string edited_platform_message_id = 6;
    AfterSendRequest 追加 SendOperation operation = 7; optional string edited_platform_message_id = 8;
-2. sdk
+2. sdk（链式注册与 SDK 类型，D-70、D-112）
    Root 增加 Hook：Hooks(*HookRegistry) // func (*Base) Hooks(*HookRegistry) 默认不注册
    type HookRegistry struct{ ... }
-   func (r *HookRegistry) PreEvent(routeID string, eventTypes []string, h func(*Context, *pb.EventPayload) (*pb.EventPayload, error), opts ...RouteOption)
-   func (r *HookRegistry) BeforeSend(routeID string, h func(*Context, *pb.Target, *pb.MessageChain) (*pb.MessageChain, error), opts ...RouteOption)
-   func (r *HookRegistry) AfterSend(routeID string, h func(*Context, *pb.Target, *pb.SendResult, error), opts ...RouteOption)
-   func (c *Context) Operation() pb.SendOperation // 出站 Hook 中可用
+   func (r *HookRegistry) PreEvent(routeID string, event EventType) *PreEventBuilder // 一条路由对应一种事件，event_type_filter 只含该事件名
+   type PreEventBuilder struct{ ... }
+   func (b *PreEventBuilder) Priority(p int32) *PreEventBuilder
+   func (b *PreEventBuilder) Handle(h any) // func(*Context, P) (P, error)；P 为该事件的 payload 类型，规则与事件路由相同（标准事件为 goal-91 的载荷指针，AdapterEvent[T] 为 *T）；返回 nil 表示不改写
+   func (r *HookRegistry) BeforeSend(routeID string) *BeforeSendBuilder
+   type BeforeSendBuilder struct{ ... }
+   func (b *BeforeSendBuilder) Priority(p int32) *BeforeSendBuilder
+   func (b *BeforeSendBuilder) Handle(h func(c *Context, to message.Session, m message.Chain) (message.Chain, error)) // 返回 nil 表示不改写
+   func (r *HookRegistry) AfterSend(routeID string) *AfterSendBuilder
+   type AfterSendBuilder struct{ ... }
+   func (b *AfterSendBuilder) Priority(p int32) *AfterSendBuilder
+   func (b *AfterSendBuilder) Handle(h func(c *Context, to message.Session, res *message.SendResult, sendErr error) error) // sendErr 为本次发送的错误；返回的错误只记日志
+   func (c *Context) Editing() message.MessageRef // 出站 Hook 中：本次是编辑时为被编辑消息的句柄（D-104），发送时为空；其他 Handler 中为空
 3. internal/core/hook
    type Runner struct{ ... }
    func New(r *router.Router) *Runner
@@ -4261,11 +4271,11 @@ sdk
   3) 调用 Adapter；4) 依次调用 AfterSend，传入最终的 SendResult 与 ErrorInfo，错误只记日志，不改变返回给调用方的结果。
   每次 Send 是独立的一组，不合并。
 - send_forbidden：Core 调用出站 Hook 时，在该次调用的 Invocation 中设置 send_forbidden=true，并经 InvocationContext.send_forbidden 下发；Hook 内（及以该调用为父请求的任何子请求，Broker 转发时沿用父调用的标记）调用 core.send 或 core.edit 返回 FAILED_PRECONDITION。标记只来自 Core 的调用记录，插件自报的值被忽略。
-- SDK：按 route_id 分发 Hook；PreEvent 的 h 返回 nil payload 表示不改写；Context.StopPropagation 在 PreEvent 中使 propagation=STOP；出站 Hook 的 Context 中 Send/Edit 由 Core 拒绝。
+- SDK：按 route_id 分发 Hook。Handle 的签名在 Collect 时核对，不符或漏写 Handle 时报错并带 route_id 与期望的签名。PreEvent 的 P 由 SDK 从 event_payload 解码、改写后编码回同一分支（AdapterEvent 的 *T 重新编码为 payload_json），返回 nil 表示不改写；BeforeSend 返回 nil 表示不改写；AfterSend 返回的错误以 ErrorInfo 回报。to 由请求的 target 转为会话字符串；c.Editing() 在 operation 为 EDIT 时由 target 与 edited_platform_message_id 组成句柄。Context.StopPropagation 在 PreEvent 中使 propagation=STOP；出站 Hook 的 Context 中 Send/Edit 由 Core 拒绝。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：PreEvent 返回不匹配分支的 payload；BeforeSend 修改后 Chain 预检失败；排序的稳定性；插件自报 send_forbidden 被忽略；InvocationContext 中的标记在派生请求中保留（接口 fixture）；internal/core/supervisor/hook_local_test.go（//go:build unix）。两个测试插件：h 注册 PreEvent（把 text 改成大写）、BeforeSend（在 Chain 末尾追加一段文本；遇到含 "deny" 的 Chain 返回错误；尝试在 Hook 内 Send）、AfterSend（记录结果后返回错误）；e 注册 echo 事件路由与一个命令：入站 "hi" 被 PreEvent 改为 "HI" 后到达 e；e 回复时 memory 收到追加了文本的 Chain；AfterSend 收到 ACCEPTED 的结果，它返回的错误不影响 e 收到的 SendResult；一次 Handler 内两次 Send：BeforeSend 与 AfterSend 各执行两次；含 "deny" 的回复被拒，memory 没有收到，e 收到 REJECTED 与错误；AfterSend 未执行；BeforeSend 内的 Send 返回 FAILED_PRECONDITION；PreEvent 返回错误时 e 的路由与命令都没有被调用；Edit 时出站 Hook 收到 operation=EDIT 与被编辑的消息 ID。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Handle 的错误签名与漏写 Handle 在 Collect 时报错（PreEvent 的 P 与事件不符、BeforeSend 与 AfterSend 的参数不符）；PreEvent 返回不匹配分支的 payload（fixture）；BeforeSend 修改后 Chain 预检失败；排序的稳定性；插件自报 send_forbidden 被忽略；InvocationContext 中的标记在派生请求中保留（接口 fixture）；internal/core/supervisor/hook_local_test.go（//go:build unix）。两个测试插件：h 注册 PreEvent（把 text 改成大写）、BeforeSend（在 Chain 末尾追加一段文本；遇到含 "deny" 的 Chain 返回错误；尝试在 Hook 内 Send）、AfterSend（记录结果后返回错误）；e 注册 echo 事件路由与一个命令：入站 "hi" 被 PreEvent 改为 "HI" 后到达 e；e 回复时 memory 收到追加了文本的 Chain；AfterSend 收到 ACCEPTED 的结果，它返回的错误不影响 e 收到的 SendResult；一次 Handler 内两次 Send：BeforeSend 与 AfterSend 各执行两次；含 "deny" 的回复被拒，memory 没有收到，e 收到 REJECTED 与错误；AfterSend 未执行；BeforeSend 内的 Send 返回 FAILED_PRECONDITION；PreEvent 返回错误时 e 的路由与命令都没有被调用；Edit 时出站 Hook 的 c.Editing() 为被编辑消息的句柄，Send 时为空。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
 
@@ -4328,6 +4338,23 @@ sdk
 
 不做：持久化的等待与延续调用（契约不提供）；Agent 的流式对话（T-12.2 使用本切片）。
 ```
+
+### goal-124 · T-04.11 注册写法统一
+
+状态：等待前置（T-04.8、T-07.5）。2026-11-09 按 D-112 新增。T-04.8（goal-91）改写 sdk 的注册与类型（含 `Public(mode HTTPAuth) HTTPOption`），T-07.5（goal-27，PR #119）修改定时任务与 HTTP 的启停，两者合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-101、goal-123 都修改 sdk/generate，按执行顺序 §3 的生成器一行处理。
+
+目标：定时任务与 HTTP 路由改为与 D-70 相同的链式注册；命令省略 Args 时参数名取 Handler 的参数名；Event Bus 订阅的路由 ID 缺省为事件名。协议不变。Hook 的同样改写由 T-05.3（goal-17）完成。
+
+依据：PLAN T-04 步骤 11；DESIGN §D；DECISIONS D-70、D-79、D-112；TEST-MATRIX V-110 的 SDK 分项。
+
+要点：
+- 定时任务：`r.Every(jobID string, d time.Duration)` 与 `r.Cron(jobID, expr string)` 返回同一种 builder，Cron 可选 `.Timezone(name)`（缺省 UTC），以 `.Handle(func(*sdk.Context) error)` 结束；路由 ID 仍为 "job." 加 jobID。删除现有的位置参数形式。
+- HTTP：`r.Route(method, path string)` 返回 builder，可选 `.Public(mode sdk.HTTPAuth)`，以 `.Handle(http.Handler)` 或 `.HandleFunc(func(http.ResponseWriter, *http.Request))` 结束；删除 `HTTPOption` 与包级的 `Public`。注册校验、路由 ID 与 Listener 的行为不变。
+- 漏写 Handle 时 Collect 报错并带 route_id，与命令相同。
+- 命令参数名：省略 `.Args` 时取 Handler 中 `*sdk.Context` 之后的参数名。Go 运行时取不到参数名，由生成器为插件包中第一个参数是 `*sdk.Context` 的包级函数、方法与函数字面量记录参数名，嵌入 Generated；SDK 按 Handler 的函数名（方法值去掉 `-fm` 后缀）或函数字面量的源码位置查找。写了 `Args` 时以它为准，个数仍须与参数一致；查不到时保持 arg1、arg2。`Optional` 的 name 指同一套名字。
+- 订阅：`sdk.Subscribe[T](r, eventName)` 的路由 ID 缺省为事件名，`.ID(routeID)` 可以另给；同一事件订阅两次且都没有给 ID 时，Collect 报重复的 route_id。
+- 调用方：examples/plugins 与测试中以字符串嵌入的插件源码按新写法修改，与参数名相同的 Args 删去。
+- 测试：注册描述与旧写法的等价性、参数名的各种来源与查不到时的回退进本地自测；已有调用定时任务、HTTP 注册与 Subscribe 的集成测试改用新写法，断言不变。
 
 ### goal-84 · T-09.12 WebUI 组件与组件图标
 
@@ -4430,7 +4457,7 @@ sdk
 
 ### goal-14 · T-04.5 示例升级与 T-04 验收
 
-状态：等待前置（T-03.10、T-04.8）。T-04.9（PR #110，合并提交 `6aed25d`）已合并。T-04.4（PR #88）、T-04.7（PR #89）已合并。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.2、T-04.3 已合并；已核对 `CommandRegistry.Command`、`Regex`、`Keyword`、`Raw`，以及 Args、Optional、RawTail、Usage、Silent、IgnoreCase 和 Context.Match。策略与 Adapter 开发入口的实际接口仍待前置合并后核对。2026-11-04 按 D-77～D-85 修订计划：示例只用链式注册（D-79，goal-96 删除标记），用 `alonabot check`、`build` 检查与构建，经 `alonabot run <目录>` 运行（D-77）。前置合并后由审查者改写。
+状态：等待前置（T-03.10、T-04.8、T-04.11）。2026-11-09 按 D-112 前置加入 T-04.11，示例按统一后的注册写法升级。T-04.9（PR #110，合并提交 `6aed25d`）已合并。T-04.4（PR #88）、T-04.7（PR #89）已合并。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.2、T-04.3 已合并；已核对 `CommandRegistry.Command`、`Regex`、`Keyword`、`Raw`，以及 Args、Optional、RawTail、Usage、Silent、IgnoreCase 和 Context.Match。策略与 Adapter 开发入口的实际接口仍待前置合并后核对。2026-11-04 按 D-77～D-85 修订计划：示例只用链式注册（D-79，goal-96 删除标记），用 `alonabot check`、`build` 检查与构建，经 `alonabot run <目录>` 运行（D-77）。前置合并后由审查者改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-14（切片 T-04.5：示例升级与 T-04 验收）。goal 目录 goal-14，分支 goal-14，worktree .worktrees/goal-14，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

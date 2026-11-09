@@ -117,6 +117,7 @@
 | V-107 | T-04 | 插件的媒体读取与上传助手（D-109）：OpenMedia 读取入站媒体与获授权的媒体（恰好 1 MiB、跨多块）、无效与不可读的 token、读取中取消 ctx；Upload 收可 Seek 与不可 Seek 的 r、mime 为空、两遍读取之间内容改变 | 读出的字节与原内容相同；无效或不可读的 token 由 OpenMedia 直接返回错误，不返回 reader；取消后 Read 返回错误；MediaRef 的大小与 SHA-256 与内容一致，mime 按内容判断；内容在两遍之间改变时上传失败；临时文件在上传结束后（含失败）删除 |
 | V-108 | T-03、T-04 | SDK 类型中的时间与时长（D-110）：Event 的 OccurredAt、MediaRef 与 IncomingMedia 的 ExpiresAt、ScheduledPayload 的 ScheduledAt、SendResult 的 ProviderAcceptedAt、VideoSegment 与 T-03.14 语音片段的 Duration 与协议毫秒值的往返；协议值为 0 或未设置；亚毫秒精度；出站的负时长 | 毫秒值往返不变；0 与未设置对应零值，零值转回 0 或未设置；亚毫秒部分舍去；负时长在发出请求前返回 INVALID_ARGUMENT |
 | V-109 | T-12 | 一问一答的 `llm.Ask`（D-111）：测试插件以 `llm.Ask` 调用模拟 Provider；prompt 为空串或只含空白；Agent 拒绝调用方或 Provider 出错 | 模拟 Provider 收到只含一条 user 消息、没有 system、使用默认 Provider 的请求，Ask 返回其文本；空白 prompt 在发出请求前返回 INVALID_ARGUMENT；其余错误与 Generate 相同 |
+| V-110 | T-04、T-05 | 注册写法统一（D-112）：PreEvent、BeforeSend、AfterSend 的链式注册与 Handler 签名（含错误签名、返回 nil、编辑时的 c.Editing）；Every、Cron（含 Timezone）与 HTTP 路由（含 Public）的链式注册与漏写 Handle；命令省略 Args 时的参数名（方法值、包级函数、函数字面量、查不到参数名）与写了 Args 时；Subscribe 省略与给出 ID、同一事件订阅两次 | REGISTER 中的路由与旧写法等价；错误签名与漏写 Handle 在 Collect 时报错并带 route_id；返回 nil 时 payload 与 Chain 不变；编辑时 c.Editing 为被编辑消息的句柄，发送时为空；省略 Args 时参数名等于 Handler 的参数名，查不到时为 arg1、arg2；Subscribe 的路由 ID 缺省为事件名，同一事件两次订阅都未给 ID 时 Collect 报错 |
 
 ## 2. 跨任务验收的最终闭合点
 
