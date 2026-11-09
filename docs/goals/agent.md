@@ -7,7 +7,10 @@
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
 | goal-58 | T-12.1 | Provider 客户端 | — | 已完成（PR #16） |
-| goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1 | 等待前置 |
+| goal-104 | T-12.9 | Provider：OpenAI Responses | T-12.1 | 待派发 |
+| goal-105 | T-12.10 | Provider：Gemini 原生协议 | T-12.1 | 待派发 |
+| goal-106 | T-12.11 | Provider：Ollama 原生协议 | T-12.1 | 待派发 |
+| goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1、T-12.9、T-12.10、T-12.11 | 等待前置 |
 | goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-12.2 | 等待前置 |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 等待前置 |
 | goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 等待前置 |
@@ -45,11 +48,158 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 // Stream 不重发请求；已交给 emit 的文本增量由调用方保留；错误不含 API key 与认证头，附带的 Provider 说明中回显的 key 替换为 [REDACTED]。
 ```
 
+## 第 2 波
+
+### goal-104 · T-12.9 Provider：OpenAI Responses
+
+状态：待派发。前置 T-12.1（[PR #16](https://github.com/AlonaBot/AlonaBot/pull/16)，合并提交 `354c5b6`）已合并。2026-11-09 审查者按 main `3f7a380` 的 `agent/provider` 编写：`provider.go` 有 `Protocol` 常量 `OpenAI`、`OpenAICompatible`、`AnthropicMessages`，`New` 逐个比较协议值，`Stream` 用 `anthropic` 布尔值在 `openAIBody`/`anthropicBody` 与 `streamOpenAI`/`streamAnthropic` 之间分派，`readSSE`、`describeError`、`validateRequest`、`isJSONObject` 可以直接复用；`provider_test.go` 的 `TestStream` 是表驱动的集成测试，`mockProvider` 按协议校验路径、认证头与请求体，`testRequest` 含两条 system、带两个工具调用的 assistant 与带两个工具结果的 user 消息。可以与 goal-105、goal-106 并行，共享文件按[执行顺序 §3](../execution-order.md#3-共享文件与冲突规则)「`agent/provider/` 的新协议」一行处理。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-104（切片 T-12.9：Provider：OpenAI Responses）。goal 目录 goal-104，分支 goal-104，worktree .worktrees/goal-104，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：agent/provider 增加 openai-responses 协议：按无状态方式编码 Responses API 请求（store: false、完整历史放进 input），解析 SSE 事件得到文本增量、完整的工具调用、停止原因与用量；reasoning 项随它之后的工具调用写入新增的 ToolCall.Replay，并在后续请求中原样放回对应的 function_call 之前。语义与已有协议相同：只有终止事件才算成功，不自动重试，错误不含 API key。
+
+依据：PLAN T-12 步骤 1（共同语义）与步骤 10「OpenAI Responses」；DECISIONS D-38、D-87；TEST-MATRIX V-57 的 Provider 分项。
+
+范围（只新增或修改这些）：
+- agent/provider/provider.go：追加常量 OpenAIResponses；New 的协议校验与 Stream 的分派各加一个分支；ToolCall 追加 Replay 字段；包文档的协议列表
+- 新增 agent/provider/responses.go：请求编码与流解析
+- agent/provider/provider_test.go：TestStream 的用例表、mockProvider 与 testRequest 只追加
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+// agent/provider
+const OpenAIResponses Protocol = "openai-responses"
+type ToolCall struct {
+    ID        string
+    Name      string
+    Arguments json.RawMessage
+    Replay    json.RawMessage // 协议要求随这次调用原样回传的不透明 JSON，由流解析写入；调用方把整个 ToolCall 原样放回 assistant 消息，不解析。openai、openai-compatible 与 anthropic-messages 不产生也不读取它
+}
+（goal-105 先合并时 Replay 已存在，同步 main 后复用，不重复定义。）
+
+行为：
+- 请求：POST <BaseURL>/responses，Authorization: Bearer <APIKey>，Accept: text/event-stream。请求体为 model、input、stream: true、store: false、max_output_tokens（取 Request.MaxTokens）、include: ["reasoning.encrypted_content"]；有 system 消息时按输入顺序以 "\n\n" 连接写入 instructions（与 Anthropic 相同）；不发 previous_response_id。
+- input：按消息顺序展开。user 消息先放每个 ToolResult 的 {"type": "function_call_output", "call_id", "output": Content}，再放非空文本 {"role": "user", "content"}；assistant 消息先放非空文本 {"role": "assistant", "content"}，再对每个 ToolCall 先放 Replay 中的 reasoning 项（Replay 为 JSON 数组时逐项展开），后放 {"type": "function_call", "call_id": ID, "name", "arguments": Arguments 的字符串形式}。function_call 不带 id 字段（store: false 时服务端没有保存这些项）。
+- tools：每个 Tool 编码为 {"type": "function", "name", "description", "parameters": InputSchema, "strict": false}。必须显式发 strict: false：Core 与 MCP 工具的 Schema 不满足严格模式的要求。
+- 流解析（复用 readSSE，按 data 中的 type 字段分派）：
+  - response.output_text.delta：delta 非空时 emit 文本增量。
+  - response.output_item.done：item.type 为 reasoning 时，去掉 item 的 id 后暂存；item.type 为 function_call 时，以 call_id 为 ID、name 与 arguments（字符串，必须是 JSON 对象）组成 ToolCall，暂存的 reasoning 项作为 JSON 数组写入其 Replay 并清空暂存，然后 emit。call_id 或 name 为空、arguments 不是对象时返回错误。不使用 response.function_call_arguments.delta，也不从 message 项重复发出文本。
+  - response.completed：终止。本次流发出过工具调用时 StopReason 为 tool_use，否则为 end。
+  - response.incomplete：终止。response.incomplete_details.reason 为 max_output_tokens 时为 max_tokens，其他取值原样保留。
+  - 两种终止事件的 Usage 取 response.usage 的 input_tokens 与 output_tokens（usage 缺失时为 nil）。
+  - response.failed 返回错误，说明取 response.error（经 describeError 脱敏）；type 为 error 的事件返回错误，说明取顶层 message（同样脱敏）。
+  - 其他事件类型（created、in_progress、reasoning summary、refusal、内置工具等）忽略。
+  - 流在终止事件之前结束返回错误；终止事件之后的数据忽略。
+- 非 2xx 状态的处理与已有协议相同（describeError 读取 error 字段）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：agent/provider/provider_test.go 的 TestStream 追加 openai-responses 用例（改写既有测试，不新增测试函数）：
+  - 主路径：两段文本增量、一个 reasoning 项后跟一个 function_call，结果为 tool_use、用量 5 输入 7 输出，交出的 ToolCall 为 c1/lookup/{"q":"x"}，Replay 是去掉 id 的 reasoning 项数组。mockProvider 校验路径 /v1/responses、Bearer 认证、store 为 false、instructions 为 "one\n\ntwo"、input 中 function_call_output 在 user 文本之前、function_call 不带 id、strict 为 false、max_output_tokens 为 20；用例中给 testRequest 副本的一个工具调用加上 Replay，校验对应的 reasoning 项出现在该 function_call 之前。
+  - 缺少终止事件：流在 response.completed 之前结束返回错误，已交出的文本保留。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：response.incomplete 的 max_tokens 与其他原因；response.failed 与 error 事件的说明及 API key 脱敏；未知事件忽略；arguments 不是对象；emit 返回错误；多个工具调用各自带上之前的 reasoning 项；openai 与 anthropic-messages 编码时忽略 Replay。有 OpenAI API key 时，用推理模型对真实 API 跑一次「工具调用 → 带工具结果的第二次请求」，确认第二次请求被接受；没有时在 PR 中写「真实 Provider 未运行」。
+
+完成条件：gofmt -l 无输出；go vet ./agent/...；go test -race -count=1 ./agent/provider/；go build ./...。
+
+不做：Agent 的配置与预设（T-12.2）；工具名映射（T-12.3）；previous_response_id 与服务端会话；内置工具（web_search 等）；图片与文件输入。
+```
+
+### goal-105 · T-12.10 Provider：Gemini 原生协议
+
+状态：待派发。前置 T-12.1（[PR #16](https://github.com/AlonaBot/AlonaBot/pull/16)，合并提交 `354c5b6`）已合并。main `3f7a380` 的 `agent/provider` 现状见 goal-104 的状态段。可以与 goal-104、goal-106 并行，共享文件按[执行顺序 §3](../execution-order.md#3-共享文件与冲突规则)「`agent/provider/` 的新协议」一行处理。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-105（切片 T-12.10：Provider：Gemini 原生协议）。goal 目录 goal-105，分支 goal-105，worktree .worktrees/goal-105，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：agent/provider 增加 gemini-generate-content 协议：编码 streamGenerateContent 请求（systemInstruction、user/model 内容、functionCall 与 functionResponse part、parametersJsonSchema），解析 SSE 中的 GenerateContentResponse 得到文本增量、完整的工具调用、停止原因与用量；functionCall part 的 thoughtSignature 写入 ToolCall.Replay 并在后续请求中写回；工具结果按 ID 查回调用的工具名。
+
+依据：PLAN T-12 步骤 1（共同语义）与步骤 10「Gemini」；DECISIONS D-38、D-87；TEST-MATRIX V-57 的 Provider 分项。
+
+范围（只新增或修改这些）：
+- agent/provider/provider.go：追加常量 GeminiGenerateContent；New 的协议校验与 Stream 的分派各加一个分支；ToolCall 追加 Replay 字段（goal-104 已合并时复用）；包文档的协议列表
+- 新增 agent/provider/gemini.go：请求编码与流解析
+- 新增 agent/provider/toolcall.go：按 ToolCallID 查找工具名、生成调用 ID（goal-106 已合并时复用）
+- agent/provider/provider_test.go：TestStream 的用例表、mockProvider 与 testRequest 只追加
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+// agent/provider
+const GeminiGenerateContent Protocol = "gemini-generate-content"
+ToolCall.Replay json.RawMessage 的定义与 goal-104 相同（见 PLAN T-12 步骤 1 的代码块）。本协议写入的 Replay 是 JSON 字符串形式的 thoughtSignature。
+
+行为：
+- 请求：POST <BaseURL>/models/<Model>:streamGenerateContent?alt=sse（BaseURL 例如 https://generativelanguage.googleapis.com/v1beta；Model 不含 models/ 前缀，用 url.PathEscape 转义后作为一个路径段），请求头 x-goog-api-key: <APIKey>，不发 Authorization。错误文本不含完整 URL。
+- 请求体：system 消息按输入顺序以 "\n\n" 连接，写入 systemInstruction: {"parts": [{"text"}]}；contents 按消息顺序：user 为 role "user"，parts 先放每个 ToolResult 的 {"functionResponse": {"id": ToolCallID, "name", "response": {"output": Content}}}，再放非空文本 {"text"}；assistant 为 role "model"，parts 先放非空文本，再放每个 ToolCall 的 {"functionCall": {"id", "name", "args": Arguments}}，Replay 非空时同一 part 加 "thoughtSignature": Replay 中的字符串。tools 为 [{"functionDeclarations": [{"name", "description", "parametersJsonSchema": InputSchema}]}]（没有工具时省略）；generationConfig.maxOutputTokens 取 Request.MaxTokens。
+- 工具名查找（toolcall.go）：functionResponse 的 name 取同一 Request 中、该 ToolResult 所在消息之前最近的 assistant 消息里 ID 相同的 ToolCall 的 Name；找不到时 Stream 在发请求前返回错误。
+- 流解析（复用 readSSE）：每个 data 是一个 GenerateContentResponse。带 error 字段时返回错误（经 describeError 脱敏）。只读 candidates[0]：
+  - content.parts 中 thought 为 true 的 part 忽略；text 非空时 emit 文本增量；functionCall 为一次完整的工具调用：id 为空时由 toolcall.go 生成（crypto/rand，同一 Client 内不重复），name 必须非空，args 必须是 JSON 对象（缺失按 {} 处理），part 的 thoughtSignature 非空时以 JSON 字符串写入 Replay，然后 emit。
+  - finishReason 非空时记下：STOP 在本次流发出过工具调用时为 tool_use，否则为 end；MAX_TOKENS 为 max_tokens；其他取值（SAFETY、MALFORMED_FUNCTION_CALL 等）原样保留。
+  - usageMetadata 取最后一次出现的值：InputTokens 为 promptTokenCount（已含缓存命中的 token），OutputTokens 为 candidatesTokenCount 与 thoughtsTokenCount 之和。
+  - 没有候选且 promptFeedback.blockReason 非空时返回错误，说明为该原因。
+- 流在两个事件之间结束（EOF）且此前收到过 finishReason 才算成功；否则返回错误。
+- 非 2xx 状态的处理与已有协议相同（Gemini 的错误体为 {"error": {"code", "message", "status"}}，describeError 取 message）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：agent/provider/provider_test.go 的 TestStream 追加 gemini-generate-content 用例（改写既有测试，不新增测试函数）：
+  - 主路径：两段文本、一个带 id "c1" 与 thoughtSignature 的 functionCall、finishReason STOP、usageMetadata（promptTokenCount 5，candidatesTokenCount 4，thoughtsTokenCount 3），结果为 tool_use、用量 5/7，ToolCall 为 c1/lookup/{"q":"x"} 且 Replay 为该签名。mockProvider 校验路径 /v1/models/test-model:streamGenerateContent、查询 alt=sse、x-goog-api-key、systemInstruction 为 "one\n\ntwo"、model 角色的文本在 functionCall 之前、user 的 functionResponse 在文本之前且 name 为 lookup、parametersJsonSchema 与 maxOutputTokens；用例中给 testRequest 副本的一个工具调用加上 Replay，校验对应 part 的 thoughtSignature。
+  - 缺少 finishReason：流结束前没有 finishReason 返回错误，已交出的文本保留。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：functionCall 不带 id 时生成不重复的 ID；ToolResult 找不到对应调用；只有 blockReason；MAX_TOKENS 与 SAFETY；thought part 不交出；data 中的 error 及 API key 脱敏；args 不是对象；emit 返回错误；Model 含需要转义的字符。有 Gemini API key 时，用 Gemini 3 模型对真实 API 跑一次「工具调用 → 带工具结果的第二次请求」，确认带回 thoughtSignature 的请求被接受；没有时在 PR 中写「真实 Provider 未运行」。
+
+完成条件：gofmt -l 无输出；go vet ./agent/...；go test -race -count=1 ./agent/provider/；go build ./...。
+
+不做：Agent 的配置与预设（T-12.2）；工具名映射（T-12.3）；Vertex AI 的认证与端点；cachedContents、代码执行与 Google 搜索等内置工具；图片与文件输入；text part 的 thoughtSignature（只有 functionCall 的签名要求回传）。
+```
+
+### goal-106 · T-12.11 Provider：Ollama 原生协议
+
+状态：待派发。前置 T-12.1（[PR #16](https://github.com/AlonaBot/AlonaBot/pull/16)，合并提交 `354c5b6`）已合并。main `3f7a380` 的 `agent/provider` 现状见 goal-104 的状态段；`New` 目前要求 APIKey 非空，`readSSE` 只适用于 SSE。可以与 goal-104、goal-105 并行，共享文件按[执行顺序 §3](../execution-order.md#3-共享文件与冲突规则)「`agent/provider/` 的新协议」一行处理。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-106（切片 T-12.11：Provider：Ollama 原生协议）。goal 目录 goal-106，分支 goal-106，worktree .worktrees/goal-106，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：agent/provider 增加 ollama-chat 协议：编码 /api/chat 请求（消息、tool 角色的工具结果、对象形式的工具参数、options.num_predict），逐行解析 NDJSON 流得到文本增量、完整的工具调用、停止原因与用量；API key 可以为空，非空时用 Bearer 认证；工具调用没有 ID，由客户端生成，工具结果按 ID 查回工具名。
+
+依据：PLAN T-12 步骤 1（共同语义）与步骤 10「Ollama」；DECISIONS D-38、D-87；TEST-MATRIX V-57 的 Provider 分项。
+
+范围（只新增或修改这些）：
+- agent/provider/provider.go：追加常量 OllamaChat；New 的协议校验与 Stream 的分派各加一个分支，New 对 ollama-chat 允许空 APIKey；包文档的协议列表
+- 新增 agent/provider/ollama.go：请求编码与 NDJSON 流解析
+- 新增 agent/provider/toolcall.go：按 ToolCallID 查找工具名、生成调用 ID（goal-105 已合并时复用）
+- agent/provider/provider_test.go：TestStream 的用例表、mockProvider 与 testRequest 只追加；已有断言中工具调用 ID 为 "c1" 的检查对本协议改为非空（改写既有断言）
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+// agent/provider
+const OllamaChat Protocol = "ollama-chat"
+// New：Protocol 为 OllamaChat 时 APIKey 可以为空，其他协议仍要求非空；Model 始终必填。
+
+行为：
+- 请求：POST <BaseURL>/api/chat（BaseURL 为服务根地址，例如 http://localhost:11434），Accept: application/x-ndjson；APIKey 非空时加 Authorization: Bearer <APIKey>，为空时不发认证头。
+- 请求体：model、stream: true、options: {"num_predict": Request.MaxTokens}、messages、tools（没有工具时省略）。messages 按顺序：system 为 {"role": "system", "content"}；user 先放每个 ToolResult 的 {"role": "tool", "content": Content, "tool_name": 查到的工具名}，再放非空文本 {"role": "user", "content"}；assistant 为 {"role": "assistant", "content", "tool_calls": [{"function": {"name", "arguments": Arguments 原样作为 JSON 对象}}]}（没有工具调用时省略 tool_calls）。tools 每项为 {"type": "function", "function": {"name", "description", "parameters": InputSchema}}。
+- 工具名查找（toolcall.go）：tool_name 取同一 Request 中、该 ToolResult 所在消息之前最近的 assistant 消息里 ID 相同的 ToolCall 的 Name；找不到时 Stream 在发请求前返回错误。
+- 流解析：响应是逐行的 JSON，不是 SSE（不使用 readSSE）。空行忽略；每行解码为一个对象，不是合法 JSON 时返回错误：
+  - 带 error 字段（字符串）时返回错误，说明经 describeError 脱敏。
+  - message.content 非空时 emit 文本增量；message.thinking 忽略；message.tool_calls 中每项为一次完整的工具调用：ID 由 toolcall.go 生成（crypto/rand，同一 Client 内不重复），function.name 必须非空，function.arguments 必须是 JSON 对象，然后 emit。
+  - done 为 true 的行是终止行：done_reason 为 stop 时，本次流发出过工具调用为 tool_use，否则为 end；length 为 max_tokens；其他取值原样保留，缺失为空。Usage 在终止行带 eval_count 时为 {InputTokens: prompt_eval_count（缺失为 0）, OutputTokens: eval_count}，否则为 nil。终止行之后的内容忽略。
+  - 流在终止行之前结束，或最后一行没有换行且不是合法 JSON，返回错误。
+- 非 2xx 状态的处理与已有协议相同（Ollama 的错误体为 {"error": "说明"}，describeError 已支持字符串）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：agent/provider/provider_test.go 的 TestStream 追加 ollama-chat 用例（改写既有测试，不新增测试函数）：
+  - 主路径：两行文本增量、一行带一个工具调用（lookup、{"q":"x"}）、终止行 done_reason stop、prompt_eval_count 5、eval_count 7，结果为 tool_use、用量 5/7，ToolCall 的 ID 非空、name 与 arguments 正确。mockProvider 校验路径 /v1/api/chat（测试的 BaseURL 带 /v1）、Bearer 认证、options.num_predict 为 20、tool 角色消息在 user 文本之前且 tool_name 为 lookup、assistant 的 arguments 是对象。
+  - 缺少终止行：流在 done 之前结束返回错误，已交出的文本保留。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：空 APIKey 时 New 成功且不发 Authorization（其他协议空 APIKey 仍被拒）；ToolResult 找不到对应调用；生成的 ID 不重复；done_reason length；错误行及 API key 脱敏；畸形行；arguments 不是对象；emit 返回错误；message.thinking 不交出。本机有 Ollama 时对一个支持工具的模型跑一次「工具调用 → 带工具结果的第二次请求」；没有时在 PR 中写「真实 Provider 未运行」。
+
+完成条件：gofmt -l 无输出；go vet ./agent/...；go test -race -count=1 ./agent/provider/；go build ./...。
+
+不做：Agent 的配置与预设（T-12.2）；工具名映射（T-12.3）；/api/generate、模型拉取与管理接口；think 与 format 参数；图片输入。
+```
+
 ## 第 13 波
 
 ### goal-59 · T-12.2 Agent 对话与流式显示
 
-状态：等待前置（T-03.9、T-05.4）。T-08.4（PR #74）已合并。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。T-04.3、T-11.3、T-12.1 已合并；命令注册、Args/Optional、Context.Match 与自动回复接口已按 PR #47 核对。Context.Edit、Continue、配置及数据库入口仍待相关前置合并后核对。语句中的配置按 D-74 的 Go 配置类型与 `config` 标签编写；D-76 改为手写 `config_schema.json` 与 `Config()` 取值后，由审查者在 T-08.11 合并后改写，providers 可以写成 template_list，每个预设一个模板，由模板 items 的 default 给出 protocol 与 base_url。
+状态：等待前置（T-03.9、T-05.4、T-12.9、T-12.10、T-12.11）。2026-11-09 按 D-87 加入 T-12.9～T-12.11 为前置，预设增加 gemini、ollama 改用 ollama-chat，OnLoad 接受六种协议。T-08.4（PR #74）已合并。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。T-04.3、T-11.3、T-12.1 已合并；命令注册、Args/Optional、Context.Match 与自动回复接口已按 PR #47 核对。Context.Edit、Continue、配置及数据库入口仍待相关前置合并后核对。语句中的配置按 D-74 的 Go 配置类型与 `config` 标签编写；D-76 改为手写 `config_schema.json` 与 `Config()` 取值后，由审查者在 T-08.11 合并后改写，providers 可以写成 template_list，每个预设一个模板，由模板 items 的 default 给出 protocol 与 base_url。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-59（切片 T-12.2：Agent 对话与流式显示）。goal 目录 goal-59，分支 goal-59，worktree .worktrees/goal-59，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -82,7 +232,7 @@ agent
    type SecretPair struct { Name string `json:"name"`; Value string `json:"value" config:"secret"` }
 
 行为：
-- 配置：preset 的表单选项为 openai、anthropic、deepseek、ollama 与 custom，下拉框显示名称（config 标签写成 `options:openai|anthropic|deepseek|ollama|custom;labels:OpenAI|Anthropic|DeepSeek|Ollama|Custom`，D-74）；preset 给出 protocol 与 base_url 的缺省值，配置中显式给出的值优先。OnLoad 校验 providers 的 name 唯一、protocol 为 openai、openai-compatible 或 anthropic-messages、default_provider 与 default_persona 指向存在的项（列表为空时允许为空）；错误时返回 OnLoad 错误。
+- 配置：preset 的表单选项为 openai、anthropic、gemini、deepseek、ollama 与 custom，下拉框显示名称（config 标签写成 `options:openai|anthropic|gemini|deepseek|ollama|custom;labels:OpenAI|Anthropic|Gemini|DeepSeek|Ollama|Custom`，D-74）；preset 给出 protocol 与 base_url 的缺省值（gemini 为 gemini-generate-content 与 https://generativelanguage.googleapis.com/v1beta，ollama 为 ollama-chat 与 http://localhost:11434），配置中显式给出的值优先。OnLoad 校验 providers 的 name 唯一、protocol 为 openai、openai-compatible、openai-responses、anthropic-messages、gemini-generate-content 或 ollama-chat、api_key 只在 ollama-chat 时可以为空、default_provider 与 default_persona 指向存在的项（列表为空时允许为空）；错误时返回 OnLoad 错误。
 - 数据：每个聊天（adapter_instance_id、chat_id、thread_id）当前的人格、Provider 与自由对话开关保存在 Agent 的数据库（gormdb.Open，versioned 迁移）。
 - 命令：/ask <text:raw>（缺省 USER）、/agent on|off（ADMIN）、/persona [name]（ADMIN，无参数时列出）、/provider [name]（ADMIN）、/reset（USER），说明用 sdk.Description 指向 messages。自由对话开启时，该聊天中 to_me 的非命令 message.created 也触发一轮（message 事件路由带 ToMe Rule，并检查开关）；私聊的消息都是 to_me。默认关闭。
 - 一轮对话（Handler 调用 Continue，在延续调用中执行）：
@@ -97,7 +247,7 @@ agent
 - 工具、MCP、记忆与技能分别在 T-12.3、T-12.4、T-12.5 接入；本切片不调用它们。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：agent/agent_test.go（//go:build unix）。用本仓库 Core 的测试装配（supervisor、memory Adapter，实现 Editor 与 Named）、真实状态库与 agent/provider 的本地模拟 Provider（三种协议各一次）：
+- 提交：agent/agent_test.go（//go:build unix）。用本仓库 Core 的测试装配（supervisor、memory Adapter，实现 Editor 与 Named）、真实状态库与本地模拟 Provider（openai、openai-compatible 与 anthropic-messages 各一次；其他协议的流解析由 TestStream 覆盖）：
   - /ask hello：memory 先收到一条发送，随后收到若干次编辑，最后一次编辑是完整回复；编辑间隔不小于 1s（用注入时钟或计时断言）。
   - 实例不声明 message.edit 时：memory 只收到完整回复的发送（超过 message_limit 时为多条），没有占位消息与编辑。
   - 模拟 Provider 中途断开：已显示内容保留，最后有错误说明，会话中没有 assistant 条目，Provider 只收到一次请求。
@@ -172,7 +322,7 @@ agent
 ```text
 /goal 使用 $alonabot-execute 推进 goal-60（切片 T-12.3：工具循环与 MCP）。goal 目录 goal-60，分支 goal-60，worktree .worktrees/goal-60，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：Agent 组件每轮把 core.tool.list 返回的工具与已连接 MCP 服务器的工具交给模型；工具名按 Provider 的命名规则映射且一轮内稳定；Core 工具经 core.tool.invoke 调用，MCP 工具先经 core.tool.confirm（操作名 mcp/<server>/<tool>）再调用；拒绝、超时与工具错误作为工具结果交回模型；单轮工具步数达到上限时结束本轮并告知用户；MCP 服务器首次使用时连接、随插件停止关闭，stdio 子进程属于插件的进程树。
+目标：Agent 组件每轮把 core.tool.list 返回的工具与已连接 MCP 服务器的工具交给模型；工具名按 Provider 的命名规则映射且一轮内稳定（六种协议都要覆盖，Gemini 的函数名规则最严）；模型交出的 provider.ToolCall 原样（含 Replay）放回下一次请求的 assistant 消息；Core 工具经 core.tool.invoke 调用，MCP 工具先经 core.tool.confirm（操作名 mcp/<server>/<tool>）再调用；拒绝、超时与工具错误作为工具结果交回模型；单轮工具步数达到上限时结束本轮并告知用户；MCP 服务器首次使用时连接、随插件停止关闭，stdio 子进程属于插件的进程树。
 
 依据：PLAN T-12 步骤 4；CONTRACTS §13.1、§13.2、§7.1（进程树）；DECISIONS D-27、D-38；docs/development.md（MCP go-sdk 的批准范围）；TEST-MATRIX V-58。
 
@@ -339,7 +489,7 @@ agent
 允许的新跨模块边：无。
 
 验收矩阵（以 alonabot pack 产生的安装包经 alonabot run 与管理 API 安装、启用后运行；各为一个子测试）：
-- V-57：三种协议的流式文本、工具调用、停止原因与用量；/ask 与自由对话开关；群聊非 to_me；/provider 与人格切换；/reset；超长回复分段；Provider 出错或中途断开。
+- V-57：openai、openai-compatible 与 anthropic-messages 三种协议的流式文本、工具调用、停止原因与用量（其他协议的流解析由 TestStream 覆盖）；/ask 与自由对话开关；群聊非 to_me；/provider 与人格切换；/reset；超长回复分段；Provider 出错或中途断开。
 - V-58：连续调用 Core 工具与 MCP 工具（stdio、streamable HTTP）；确认拒绝；工具出错；超过单轮步数上限；MCP 进程随 Agent 停止。
 - V-59：记忆 add/patch/remove、超限、重复、不可见字符、群聊多用户、会话中写入与 /reset、memory 工具设为 confirm 与 deny。
 - V-60：合法与不合法的 SKILL.md、load_skill 不存在的技能。
