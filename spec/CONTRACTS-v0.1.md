@@ -7,7 +7,7 @@
 
 ## 0. 范围和明确取舍
 
-v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Adapter 包、Native Go 插件与 Adapter SDK/子进程、双传输 RPC、命令/文本匹配/事件/权限、延续调用与基础多轮等待、Event Bus、Service Call、调度、插件 HTTP、受管 SQLite（`database/sql` 与 GORM 两种入口）、配置/WebUI、用户可见文案的 i18n、预构建安装/更新与有明确边界的回退，组件的四种角色与同类替换（§9.1、§9.3）、可替换的 WebUI 组件与组件图标（§7.5），Agent 基础（§13）与官方 Agent 组件，统一日志（§14），发行包、容器镜像、install.sh、预装插件、开发运行与库模式（§15），调优参数（§16），以及插件测试套件（§17）。保留 D-01～D-36；Telegram 与 OneBot 11 之外的官方 Adapter、OneBot 11 反向 WebSocket、WebUI 交互沙盒、TUI、WASM、插件实例池、蓝绿零停机、持久化的多轮会话状态与暂停 DSL、动态跨插件命令 Router、复杂表单、Telegram webhook 接收，以及由框架托管的 PostgreSQL 等外部数据库（插件可自带驱动自行管理，§6.1）均不在 v0.1 范围内。
+v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Adapter 包（含 D-87 对标补齐的平台能力）、Native Go 插件与 Adapter SDK/子进程、双传输 RPC、命令/文本匹配/事件/权限、延续调用与基础多轮等待、Event Bus、Service Call、调度、插件 HTTP、受管 SQLite（`database/sql` 与 GORM 两种入口）、配置/WebUI、用户可见文案的 i18n、预构建安装/更新与有明确边界的回退，组件的四种角色与同类替换（§9.1、§9.3）、可替换的 WebUI 组件与组件图标（§7.5），Agent 基础（§13）与官方 Agent 组件，统一日志（§14），发行包、容器镜像、install.sh、预装插件、开发运行与库模式（§15），调优参数（§16），以及插件测试套件（§17）。保留 D-01～D-36；Telegram 与 OneBot 11 之外的官方 Adapter、WebUI 交互沙盒、TUI、WASM、插件实例池、蓝绿零停机、持久化的多轮会话状态与暂停 DSL、动态跨插件命令 Router、复杂表单、Telegram webhook 接收，以及由框架托管的 PostgreSQL 等外部数据库（插件可自带驱动自行管理，§6.1）均不在 v0.1 范围内。
 
 运行时容量、期限和配额有固定的缺省值，统一登记为调优参数（§16）。缺省值是初始实现边界，须通过 TEST-MATRIX 实测后调整，不是性能保证；运维与测试可以在启动时覆盖，不提供 WebUI 或逐插件的调参。现行技术细节按本轮用户授权完成，保留 v0.6-review 编号。
 
@@ -38,6 +38,8 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 - Commit 核对实际字节数、声明大小、SHA-256 和 MIME 后才签发引用。MediaRef 绑定 owner Session、允许的消费方/目标范围、size、mime、sha256 和 expires_at；不能用任意本地路径代替。转给其他插件时由 Core 签发新的范围受限 token，不直接放宽原 token。
 - 内部首发限额：单对象 **100 MiB**；每 Session 最多 **4 个未完成上传**，其所有未回收的上传和引用对象合计最多 **256 MiB**；Core 临时媒体磁盘总预算 **2 GiB**。配额在接收字节前预留，释放时扣回；磁盘写入失败明确中止，不能产生可用 MediaRef。限额的缺省值登记为调优参数（§16），不增加 WebUI 调参。
 - 未完成上传自 Begin 起 **15 分钟**到期，分块请求不延长期限；已提交引用自 Commit 起 **15 分钟**到期。失败、取消、过期或 owner Session 失效时回收无消费者租约的临时对象；正在发送且已被 Adapter 接管的对象由有截止时间的消费租约保护，直到发送结束或操作 deadline 到达。租约仍计入磁盘预算，不能无限延长引用。
+- 出站媒体按来源传递，不统一转码（D-88）。Segment 的媒体来源恰有一个：`media_ref`、`incoming_ref`、`https_url`，或插件直接给出的 `inline_base64`（标准 base64，解码后 1 B～1 MiB，超出时 INVALID_ARGUMENT；它随 Send 请求计入 §1.2 的 payload 预算）。插件不能以宿主路径、`file://` 或其他 scheme 作为来源。Adapter 为各平台选择最合适的传递方式：https_url 与 inline_base64 原样交给平台支持的对应形式，media_ref 用平台的流式上传，或由平台端经 Core 签发的临时媒体 URL 拉取；Adapter 不把所有来源统一读成 base64 再发送。
+- 临时媒体 URL：Adapter 可以对 Core 为本次发送签发的只读 token 调用 `core.media.url`，得到 `<媒体 URL 前缀>/media/<url_token>` 与到期时间；url_token 为 32 字节随机值的无 padding base64url，只对应这一个对象，到期时间不晚于该次发送的消费租约。Core 在统一端口上只以 GET 与 HEAD 提供该路径，支持 Range，Content-Type 取对象的 MIME，不要求管理认证，不记录完整 url_token；租约结束或到期后返回 404。媒体 URL 前缀缺省为 `base_url`（§15.1），Adapter 可以按实例配置传入另一个前缀（平台端经另一地址访问 Core 时，例如容器网络）。
 - Core 不提供任意 HTTPS URL 下载代理。Native 插件可自行获取媒体再上传；Adapter 仅在其公布的平台能力和 URL 策略内使用平台支持的 URL 发送方式。若 Adapter 自己执行下载，必须明确允许的协议、重定向和目标范围，不能默认允许访问宿主私网。此约束不扩展为对 Native 插件网络访问的沙箱。
 
 ### 1.4 入站媒体与读取
@@ -46,7 +48,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 - SDK `media.Read(ctx, token, offset, length)` 返回 bytes、next_offset、eof，单次 length 为 1～1 MiB，offset 为非负字节偏移；offset 等于实际大小时返回空 bytes、原 offset、eof=true，大于实际大小时返回 INVALID_ARGUMENT，不产生空成功。错误返回明确 code。首次 Read 由 Core 内置 Adapter 使用受信平台文件 API 按需取件，写入 §1.3 的同一暂存区并校验实际大小/计算摘要后才返回内容；随后按 offset 读取。首次取件截止取调用者/父链与 15 分钟预算的较早者，不能绕过上游 deadline。一次取件失败（包括发起取件的读取者被取消或到期）只返回给这一轮等待的读取者，不记为对象状态；下一次 Read 重新取件，同一次调用内不自动重试（D-73）。
 - 同一入站对象由 Core 持有，向接收它的各 Handler Session 签独立的目标受限 token，缓存仅保存一份。token 自签发 15 分钟有效，发送/读取期间用有截止时间的租约保护；一个 Session 失效只撤销其授权，不能删除其他有效消费者仍使用的对象。取件前预留实际可接受的容量，计入 Core 2 GiB 总预算与每个消费 Session 256 MiB 引用预算；未知长度最多按单对象 100 MiB 接收，超限立即失败。
 - 超平台下载能力返回 UNSUPPORTED，超配额返回 RESOURCE_EXHAUSTED，事件仍保留不可读取的元数据。Token 仅映射可信 Adapter 已提供的文件标识，不接受用户指定的任意下载地址，不下发 Bot Token/宿主路径。平台文件标识不是插件可用的读取凭证：插件只能用 Core 签发的 token 读取或发送；Adapter 的 platform_payload 原样保留，其中出现的平台标识没有授权作用，Core 也不接受它作为媒体来源（D-73）。
-- Segment 可用 `incoming_ref` 作为与 media_ref/https_url 互斥的来源；Send 重新验证目标授权，并核对本次发送的 Target 在原 token 的范围内，必要时按需取件为已校验 MediaRef，再执行发送计划。取件失败发生在平台发送前，不自动重试业务发送；共享对象到期且无租约后回收。
+- Segment 可用 `incoming_ref` 作为与 media_ref/https_url 互斥的来源；Send 重新验证目标授权，并核对本次发送的 Target 在原 token 的范围内；目标实例就是该对象的来源实例时，Core 把 Adapter 原先提供的平台文件标识作为 `platform_file` 来源交给 Adapter 直接复用，不取件（D-88），其他情况按需取件为已校验 MediaRef，再执行发送计划。`platform_file` 只出现在 Core 发往 Adapter 的请求中，插件给出时 INVALID_ARGUMENT。取件失败发生在平台发送前，不自动重试业务发送；共享对象到期且无租约后回收。
 
 ## 2. 事件、命令、Rule、Hook 和传播
 
@@ -294,6 +296,7 @@ type VersionedMigrator interface {
 - Core 只接受当前 Session 注册的 loopback endpoint，使用标准 `httputil.ReverseProxy` 和 `Rewrite` 构造转发；不接受外部请求指定代理目标。外部路径固定 `/plugins/{id}/...`，Core 完成 ID、method、route 和权限匹配后去掉 `/plugins/{id}` 前缀，插件收到以 `/` 开头的相对应用路径。路由 path 以 `/` 开头且为规范形式：`path.Clean` 的结果，原路径以 `/` 结尾时保留一个尾斜杠并表示前缀路由（`/` 匹配全部路径），其余为精确路由；Core 与 SDK 用同一份未清理的请求路径匹配，两侧选出同一条路由（D-65）。Core 保留 Admin/API/healthz 和内部认证路径，不让插件覆盖。
 - Bootstrap 中的 HTTP 凭证与 Session/Generation 绑定。Core 删除外部可伪造的内部身份/认证头，并在 Rewrite 阶段注入受信凭证；SDK 在进入用户 Handler 前校验。Core 不向插件转发 admin Cookie、admin Authorization 或未验证的 Forwarded/X-Forwarded 身份信息；路由停止、Session 失效或代次变化时撤销代理映射，SDK 关闭 Listener。
 - 框架托管 HTTP 默认要求 Core 授权。公开 OAuth/Webhook 在描述中显式声明；插件必须验证对应 state、签名或 nonce，不能把“public”理解为免除业务来源验证。回调地址由已配置 Base URL 生成，不以任意 Host 或 Forwarded 请求头拼接；允许的 Host 与可信反代来源由 Core 全局设置验证。
+- Adapter 包也可以注册 HTTP 路由（D-94），规则与插件相同，外部路径同样为 `/plugins/{Adapter 包 ID}/...`；用于平台端主动连入，例如 OneBot 11 反向 WebSocket。代理转发 WebSocket Upgrade 请求并在升级后双向转发字节，连接寿命不受普通请求期限限制，路由撤销或 Session 失效时 Core 关闭已升级的连接。
 - HTTP 代理与普通命令/事件/Service 的 Protobuf RPC 分工不变；Native 插件自行建立的框架外 Listener 不享受统一入口和生命周期托管承诺。
 
 ### 7.3 管理界面与插件页面的浏览器边界
@@ -325,8 +328,8 @@ type VersionedMigrator interface {
 - Core 只接受 Adapter 为它在本 Session 中已启动的实例交付的事件：Target 与事件中的 adapter_id、adapter_instance_id、account_id 必须与该实例一致，否则拒绝并记诊断。event_id 由 Core 生成；Actor 的权限集合由 Core 按 §2.3 计算，Adapter 只提供平台给出的身份与平台权限；平台权限中未声明的名字由 Core 丢弃并记诊断。同一 `adapter_id` 下的同一平台账号只能有一个已启动实例（唯一入站 owner），由 Core 依据 `adapter.instance.start` 返回的 account_id 检查。
 - 接收游标由 Core 持久化：Adapter 每交付一条事件都附带交付后的不透明游标，Core 先写状态库，再接纳事件并应答；Adapter 收到应答后才处理下一条。没有事件时的游标变化（例如空闲轮次重建）使用单独的游标保存调用。实例启动时，Core 把已保存的游标交给 Adapter。
 - 平台凭证只在 `adapter.instance.start` 中下发给所属 Adapter 进程，不进入插件进程、日志或普通响应。入站媒体的平台文件标识留在 Adapter，Core 以 IncomingMedia token 映射，首次 Read 时经 `adapter.media.read` 取件；出站媒体由 Core 为该次发送向 Adapter Session 签发只读 token，Adapter 经 `core.media.read` 读取。
-- 官方 Telegram Adapter 用 getMe 验证真实账号与实例配置。v0.1 只支持 long polling 接收，已有 webhook 时明确报错，不自行删除。实例配置为 `token`（Secret，必填）、`api_base_url`（缺省 `https://api.telegram.org`，用于本地 Bot API 服务或模拟服务）与 `proxy`（Secret，可选，http、https 或 socks5 URL，可含用户名与密码）。实例设置了 `proxy` 时，该实例的全部 Bot API 请求（含 getFile 与文件下载）经它发出，优先于 §15.1 的全局代理；未设置时使用全局代理。代理连接失败按网络错误处理，接收退避重连，不改为直连。
-- 官方 OneBot 11 Adapter（D-46）以正向 WebSocket 连接 OneBot 11 实现端的通用端点（同一连接承载 API 调用与事件上报），用 `get_login_info` 取得账号。实例配置为 `ws_url`（必填，`ws://` 或 `wss://`）、`access_token`（Secret，可选，握手时以 `Authorization: Bearer` 发送）与 `mode`（缺省 `forward`，v0.1 只接受 `forward`）。握手被拒（401、403）时实例致命失败；连接断开按与 Telegram 相同的有界退避重连，重连不重放已提交的 Send。上报事件的 `self_id` 必须等于该实例的账号，否则丢弃并记诊断。OneBot 11 没有事件重放：断线期间的事件不补收，游标保持为空。只接受数组格式的消息上报，收到字符串（CQ 码）格式时实例致命失败，并在 safe_error 中提示修改实现端的上报格式。映射、能力与发送计划见 MESSAGE-MODEL §7。
+- 官方 Telegram Adapter 用 getMe 验证真实账号与实例配置。v0.1 只支持 long polling 接收，已有 webhook 时明确报错，不自行删除。实例配置为 `token`（Secret，必填）、`api_base_url`（缺省 `https://api.telegram.org`，用于本地 Bot API 服务或模拟服务）、`file_base_url`（可选，文件下载地址的前缀，缺省由 api_base_url 推出，D-99）与 `proxy`（Secret，可选，http、https 或 socks5 URL，可含用户名与密码）。实例设置了 `proxy` 时，该实例的全部 Bot API 请求（含 getFile 与文件下载）经它发出，优先于 §15.1 的全局代理；未设置时使用全局代理。代理连接失败按网络错误处理，接收退避重连，不改为直连。
+- 官方 OneBot 11 Adapter（D-46、D-94）有两种连接方式，同一连接都承载 API 调用与事件上报（通用端点）：`forward` 由 Adapter 主动连接实现端，`reverse` 由实现端经 Core 统一端口连入 Adapter 注册的 HTTP 路由（§7.2），外部地址为 `<base_url>/plugins/<Adapter 包 ID>/ws/<instance_id>`。实例配置为 `mode`（缺省 `forward`，可选 `reverse`）、`ws_url`（forward 必填，`ws://` 或 `wss://`）、`access_token`（Secret；forward 可选，握手时以 `Authorization: Bearer` 发送；reverse 必填，Adapter 以恒时比较校验实现端的 `Authorization: Bearer` 或 `access_token` 查询参数）、`self_id`（reverse 必填，十进制 QQ 号）、`media_url_base`（可选，实现端访问 Core 媒体 URL 时使用的前缀，缺省为 `base_url`，§1.3）与 `media_dir`（可选，`local` 为 Adapter 可写的共享目录，`remote` 为实现端看到的同一目录，缺省与 local 相同）。forward 模式用 `get_login_info` 取得账号；握手被拒（401、403）时实例致命失败；连接断开按与 Telegram 相同的有界退避重连。reverse 模式的 account_id 取 `self_id`，实例启动时不等待连入；握手的 `X-Self-ID` 不等于 self_id 或 `X-Client-Role` 不是 Universal 时返回 403，已有连接时返回 409；连入后调用 `get_login_info` 核对账号并取得展示名，不符时关闭连接并记诊断；断开后实例继续等待，不报告致命错误，未连接期间 Send 返回 UNAVAILABLE。两种模式重连都不重放已提交的 Send。上报事件的 `self_id` 必须等于该实例的账号，否则丢弃并记诊断。OneBot 11 没有事件重放：断线期间的事件不补收，游标保持为空。只接受数组格式的消息上报，收到字符串（CQ 码）格式时实例致命失败，并在 safe_error 中提示修改实现端的上报格式。映射、能力、发送计划与动作见 MESSAGE-MODEL §7。
 - Target 为 adapter_id/adapter_instance_id/account_id/chat_id/thread_id?。默认目标仅来自入站真实事件；无默认目标且未指定 To 返回 NO_DEFAULT_TARGET，不能由回执 message ID 猜测凭证。
 - Core 为每个 plugin_id 持久化后台发信许可 `allowed_adapter_instances`：缺省允许全部实例（D-83），管理员可以经既有插件权限配置把它收紧为指定实例的集合；协议 required_capabilities 不等于发信许可。持有仍在途的可信平台事件调用链时，插件及其合法 Service 子调用可向 Core 保留的原始完整 Target 回复，无需额外实例许可。独立后台、scheduled 或不同 Target 的 Send 必须显式 To，且目标实例在该插件许可集合中；再检查实例启用、account 绑定和 Core 全局禁止。许可覆盖该实例显式 chat/thread 目标，不赋予 User/Admin 或其他实例权限；无许可返回 PERMISSION_DENIED，动态撤销在下一次 Send 准入时生效。
 - 上传、读取自己拥有的媒体不要求发信许可；Core 对真实事件签发的 IncomingMedia token 本身授予该 Session 的对象读取权。Read 只认有效 token/read 范围，Send 另行检查上述目标授权。Grant 不扩大对象、操作、Target 或有效期，只向当前已激活且满足原对象消费范围的 Session 签发受限 read token；入站对象及其派生对象的接收者还须与该事件有合法在途调用关联，或已获源实例许可；插件自己上传的对象可由 owner 显式委托当前 Activated 接收 Session 只读使用，Core 记录委托且保持原对象/有效期/Target 限制。上述关联由 Core 验证，接收者再次 Send 仍须通过自己的发信准入。
@@ -334,6 +337,9 @@ type VersionedMigrator interface {
 - Edit 修改一条已发送的平台消息，输入为 Target、platform_message_id 和新的 Chain，Target 准入与 Send 相同。v0.1 的 Edit Chain 只能包含一个 text 片段和至多一个 buttons 片段。每次 Edit 同样执行 BeforeSend → Adapter.Edit → AfterSend，Hook 输入标明本次操作为 edit。目标 Adapter 未声明 `message.edit` 能力时返回 UNSUPPORTED；平台拒绝（例如消息不可编辑或内容未变化）按 MESSAGE-MODEL §4 报告，不改为发送新消息。
 - 自动回复 Handler `(Chain,error)` 成功且 Chain 非空时，Core 在 Handler 返回后发送一次，排在该 Handler 内的显式 Send 之后；两种 Handler 都可以显式多次 Send（D-70）。StopPropagation 通过 Context/HandlerOutcome 表达。返回空 Chain 是无自动回复，显式 Send 空 Chain 是参数错误。
 - 整条 Chain 先验证并生成有序物理操作计划，再开始平台调用；无法表达的组合在首个副作用前返回 UNSUPPORTED。Reference、按钮、相册和文本不能静默丢弃/重排。Telegram 按钮使用 Core token 关联真实点击 Actor、当前权限、路由代次与目标，协议确认不等于业务成功。
+- 撤回、输入状态、表情回应与草稿（D-93、D-98）：`core.delete`、`core.typing`、`core.react`、`core.draft` 的 Target 准入与 Edit 相同，Core 分别经 `adapter.delete`、`adapter.typing`、`adapter.react`、`adapter.draft` 交给目标实例；实例未声明对应能力（`message.delete`、`chat.typing`、`message.react`、`message.draft`）时 Core 在调用 Adapter 前返回 UNSUPPORTED。撤回、输入状态与表情回应不带消息内容，不执行出站 Hook；草稿每次执行 `BeforeSend → Adapter.Draft → AfterSend`，操作类型为 draft。四者都与 Send 一样不能在出站 Hook 中调用，也不自动重试。语义见 MESSAGE-MODEL §4A。
+- 平台动作（D-92）：Adapter 在注册描述中声明动作，含名称（规则与扩展事件相同，完整名带 `<adapter_id>.` 前缀）、版本、参数与结果的 JSON Schema、作用范围（`chat` 需要 Target，`account` 只需要 adapter_instance_id）。插件经 `core.action` 调用：Core 先按本节的发信准入检查目标（持有在途可信事件调用链时，原 Target 及其实例无需额外许可；其余要求实例在该插件的 allowed_adapter_instances 中，并检查实例启用与 account 绑定），再核对动作已在目标实例所属 Adapter 中声明、版本一致、参数符合 Schema，然后经 `adapter.action` 交给实例；结果不符合结果 Schema 时返回 INTERNAL 并记诊断。Core 不提供未声明动作的透传，不按 Actor 检查动作（由插件为命令设置 Permission），不自动重试；结果未知时返回 UNAVAILABLE 或 DEADLINE_EXCEEDED。动作不能在出站 Hook 中调用。manifest 的 `adapter_dependencies` 可以列出所需动作及版本，启用检查与 extension 相同。
+- 命令菜单（D-96）：实例声明 `commands.sync` 能力时，Core 在该实例启动成功后与路由表或命令策略变化后（2 秒内的多次变化合并为一次）经 `adapter.commands.sync` 交给它当前可用的命令列表：只含该实例命令前缀含 `/`、权限只要求 `user` 且未被禁用的根命令，每项为命令名与按 locale 翻译的说明。同步失败只记诊断，不影响实例运行，下一次变化时重新同步。
 - 通用 Segment 在所有 Adapter 上语义一致，是否支持按 Adapter 公布的 Capability 判定。平台专有能力使用 `extension` 片段（adapter_id、name、version、JSON payload），其 Schema 由 Adapter 在注册时声明；Core 在发送前按目标实例所属 Adapter 的声明校验，目标不属于该 Adapter 或版本未声明时返回 UNSUPPORTED，不降级为其他片段。Adapter 包可以另行发布只含数据构造函数的 Go 模块供插件编译时使用，插件不链接 Adapter 的运行时代码。
 - Adapter 在注册描述中声明本 Adapter 的权限与扩展事件（D-69、D-71）。权限声明含名称、隐含的权限（同一 Adapter 已声明的权限或 `chat_admin`，不能隐含 `user` 与 `admin`，不能成环）与供 WebUI 显示的文案键（Adapter 包 `i18n/` 中的 messages 键）。扩展事件声明含名称、版本与 payload 的 JSON Schema。名称只用小写字母、数字与下划线，完整名带 `<adapter_id>.` 前缀。Core 接受扩展事件前核对名称已声明、版本一致、payload 符合 Schema，不符时拒绝该事件并记诊断。Adapter 包按上一条的方式发布只含常量与数据类型的 Go 包，供插件引用这些权限与事件。
 - 插件在 manifest 的 `adapter_dependencies` 中声明依赖的 `adapter_id`、所需 extension 及版本、是否必需。启用插件时，必需依赖的 Adapter 必须已安装且已声明所需 extension，否则拒绝启用并列出缺失项。Adapter 停用或卸载后，依赖它的插件继续运行，发往该 Adapter 的 Send 返回 UNAVAILABLE；卸载被必需依赖的 Adapter 时，须列出受影响的插件并要求显式确认。
@@ -428,7 +434,7 @@ Core 可执行文件与 SDK 根包只链接 [docs/development.md](../docs/develo
 | §15 运行方式 | T-07.6 `core_config.json` 与首次 token；T-09.4 `alonabot run` 与管理服务；T-13 开发运行、热部署与库模式；T-14 发行包、容器镜像、install.sh 与预装插件 |
 | §17 插件测试套件 | T-13.1 根包 `Start`；T-16 `plugintest` 与示例插件的测试；T-16.3 LLM 替身 |
 | §16 调优参数 | T-02.2 参数表、`--args` 与 Bootstrap 下发；之后的切片把新增的可调值登记到同一参数表 |
-| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-76、V-82～V-87 和五目标运行结果 |
+| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-76、V-82～V-97 和五目标运行结果 |
 
 ## 12. 跨层状态机与恢复不变量
 

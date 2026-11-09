@@ -6,7 +6,7 @@
 
 本子章节覆盖官方 Telegram Adapter `adapters/telegram/` 的平台实现：Bot API 客户端、接收与标准化、发送计划与回执、平台权限，以及本地 Bot API 模拟服务 `adapters/telegram/telegramtest/`。章节总述与扩展约定见[适配器实施计划](README.md)。
 
-- 本子章节的切片：T-03.4、T-03.7、T-03.11。
+- 本子章节的切片：T-03.4、T-03.7、T-03.11，以及 D-87 对标补齐的 T-03.20～T-03.22（协议与 Core 侧在核心切片 T-03.13～T-03.18）。
 - 核心切片中的 Telegram 部分：T-03.6（入站媒体的 getFile 取件）、T-03.8（callback_query 与 answerCallbackQuery）、T-03.9（editMessageText 与 `message.edit` 能力）、T-03.10（模拟服务上的发送与接收故障矩阵）。这些切片随 Core 功能一起交付，进度记在[核心实施计划](../core.md)。
 - 跨章节依赖：核心切片 T-03.8、T-03.9 以 T-03.7 为前置，需要用 Telegram 的发送计划渲染按钮与编辑。
 
@@ -17,6 +17,9 @@
 | T-03.4 | goal-5 | 官方 Telegram Adapter 的接收：Bot API 客户端、本地 Bot API 模拟服务、getMe、webhook 冲突、long polling、逐条交付与游标、7 天轮次重建、401/409、媒体组、Actor.locale、`to_me`、实例代理 | T-03 步骤 4 | T-03.3 | V-45、V-54 的 locale 分项，V-62 的 Bot Token URL 分项 | 已完成（PR #39；TEST-MATRIX §3.2） |
 | T-03.7 | goal-50 | 官方 Telegram Adapter 的发送计划与回执：Chain 完整预检、物理操作计划、UTF-16 实体、相册/引用/按钮渲染、PartResult 汇总 | T-03 步骤 6（发送） | T-03.4 | V-08、V-35 | 已完成（[PR #108](https://github.com/AlonaBot/AlonaBot/pull/108)） |
 | T-03.11 | goal-89 | 官方 Telegram Adapter 的平台权限：`telegram.chat_owner`/`telegram.chat_admin` 的声明、`getChatAdministrators` 的会话缓存与作废、获取失败时不带权限，`adapters/telegram/perm` 常量包 | T-03 步骤 9 | T-04.6 | V-85 的 Telegram 分项 | 已完成（[PR #106](https://github.com/AlonaBot/AlonaBot/pull/106)） |
+| T-03.20 | goal-111 | 官方 Telegram Adapter 的媒体与新增片段：按来源传递与流式 multipart、`platform_file` 复用 file_id、audio 的收发、动图、贴纸与 video_note、url 按钮、`file_base_url` | T-03 步骤 17 | T-03.13、T-03.14 | V-89、V-90 的 Telegram 分项，V-97 | 未开始 |
+| T-03.21 | goal-112 | 官方 Telegram Adapter 的平台动作、撤回、输入状态与表情回应：动作声明与 `adapters/telegram/action` 常量包，deleteMessages、sendChatAction、setMessageReaction | T-03 步骤 18 | T-03.11、T-03.15、T-03.16 | V-91、V-92 的 Telegram 分项 | 未开始 |
+| T-03.22 | goal-113 | 官方 Telegram Adapter 的命令菜单与草稿：setMyCommands 同步、sendMessageDraft | T-03 步骤 19 | T-03.17、T-03.18 | V-93、V-94 的 Telegram 分项 | 未开始 |
 
 ## 3. 工作包
 
@@ -29,3 +32,9 @@
 6. **实现可预测的发送计划及回执。** 在官方 Telegram Adapter 中，每条 Chain 先完成全部结构、目标能力、媒体可用性与平台限制检查，再生成按顺序执行的物理操作列表。落实文本/实体 UTF-16 偏移、单媒体/2～10 项相册、首条引用、末条按钮（末条为相册时按钮无法表达，首发前返回 UNSUPPORTED）；不静默截断、重排或降级。每个操作记录 PartResult，明确 ACCEPTED、REJECTED、UNKNOWN、NOT_ATTEMPTED，并据事实汇总逻辑状态。遇明确拒绝或结果未知停止后续操作；保留已确认 ID，同时通过 Envelope 返回有效 payload 和错误。平台确认但 message_id=0 时不伪造可编辑 ID。显式空 Chain 和仅有元数据的 Chain 在调用平台前拒绝。
 
 9. **接通 Telegram 的平台权限。** 按 MESSAGE-MODEL §6.1 在 Adapter 描述中声明 `telegram.chat_owner` 与 `telegram.chat_admin`；群与超级群中的事件按 `getChatAdministrators` 的会话缓存给出 Actor 的平台权限，缓存 10 分钟，收到该会话的 `chat_member`、`my_chat_member` 时作废；获取失败时本事件不带平台权限并记诊断。发布只含常量的 `adapters/telegram/perm`。
+
+17. **媒体与新增片段（D-88、D-89、D-97、D-99）。** 按 MESSAGE-MODEL §6.4 改写发送计划与执行：multipart 请求体改为边经 `core.media.read` 分块读取边写出，不在内存中拼出整份请求；inline_base64 解码后上传，`platform_file` 直接作为 file_id。audio 按 voice 用 sendVoice 或 sendAudio，单独成一个物理操作；image/gif 用 sendAnimation 并结束当前媒体组；url 按钮映射为 InlineKeyboardButton 的 url。入站 voice、audio、animation、video_note 与静态贴纸按 §6.4 映射。实例配置追加 `file_base_url`，文件下载经它发出，代理规则不变。在 Capabilities 中追加 `message.voice` 与 `message.audio`；`telegramtest` 追加对应方法的记录与响应。
+
+18. **平台动作、撤回、输入状态与表情回应（D-92、D-93）。** 在 Adapter 描述中声明 MESSAGE-MODEL §6.5 的动作及其参数、结果 Schema，发布只含常量与参数类型的 `adapters/telegram/action`；实现 deleteMessages（同一会话每次最多 100 个）、sendChatAction（带 message_thread_id）与 setMessageReaction；追加 `message.delete`、`chat.typing`、`message.react` 能力。限权相关动作执行后作废该会话的管理员缓存（T-03.11）。
+
+19. **命令菜单与草稿（D-96、D-98）。** `adapter.commands.sync` 按 MESSAGE-MODEL §6.5 调用 setMyCommands，记住上一次成功同步的内容，相同时不调用平台；`adapter.draft` 用 sendMessageDraft，非私聊目标在调用平台前返回 UNSUPPORTED。追加 `commands.sync` 与 `message.draft` 能力。sendMessageDraft 的参数在实施时按 Bot API 原文核对，与本计划不符时标阻塞。

@@ -15,7 +15,7 @@
 
 ## 2. v0.1 的范围与扩展约定
 
-v0.1 按各子章节已列的切片交付，不扩充平台功能（CONTRACTS §0 已把 Telegram webhook 接收、OneBot 11 反向 WebSocket 等排除在 v0.1 外）。v0.1 只要求两个 Adapter 具备继续开发的结构：
+v0.1 按各子章节已列的切片交付。2026-11-09 维护者要求补齐与 AstrBot 适配器的功能差距（D-87），对标的切片已追加到核心与两个子章节；除此之外不扩充平台功能，CONTRACTS §0 仍把 Telegram webhook 接收与其他平台排除在 v0.1 外。v0.1 只要求两个 Adapter 具备继续开发的结构：
 
 - 实现放在可导入的包中（`telegram.New()`、`onebot11.New()`），程序入口只调用 `sdk.RunAdapter`，库模式可以直接引用；实例配置的 schema 写在包内的 `instance_schema.json`（D-85）。
 - 每个平台有可控故障的本地模拟服务（`telegramtest`、`onebottest`），新功能的测试在其上追加。

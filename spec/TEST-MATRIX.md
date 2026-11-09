@@ -96,6 +96,15 @@
 | V-86 | T-04、T-16 | Adapter 扩展事件：声明与 Schema、未声明的名称、版本不符、payload 不符合 Schema；插件注册未安装 Adapter 的扩展事件路由；SDK 的事件常量与 Handler 参数类型不符；扩展事件遇到命令层与多轮等待 | 不符的事件被拒绝并记诊断；未安装时注册成功、诊断标出且不触发；参数类型不符在 `Collect` 时报错；扩展事件只进入事件路由 |
 | V-87 | T-04、T-08 | `command_prefixes` 的缺省值、多个前缀、空前缀与按实例覆盖；开头的 reference 与本账号 mention；`/kick @某人` 的 `user` 参数（OneBot 的 mention 与 Telegram 的 `text_mention`）、`image` 参数、末位 `message` 参数、非文本 token 出现在 string 位置；自定义 usage 文案键的语言选择 | 前缀按最长匹配，覆盖只作用于该实例；开头片段不影响命令匹配；参数按片段顺序绑定，类型不符时发一次 usage；usage 按调用者 locale 选择语言，未知键在构建检查中失败 |
 | V-88 | T-07、T-08、T-09 | `core_config.json`：缺省创建、`${环境变量}` 展开与缺失、WebUI 与 CLI 修改后写回、手动修改后重启、`run --reload` 时重新读取、文件不合法；Core 升级迁移 `$version`、迁移失败、文件版本高于程序；Adapter 更新时实例配置的迁移 | 写回保留原有 `${...}` 与未修改的键；缺失的环境变量与不合法的文件使 Core 拒绝启动并指出键或位置；运行设置与 Adapter 实例在重新读取后生效，启动设置提示重启；迁移前备份原文件，失败与降级时拒绝启动且原文件不变；实例配置迁移失败时在停止旧版本前拒绝更新（D-82、D-85） |
+| V-89 | T-03、T-15 | 出站媒体按来源传递（D-88）：插件给出的 inline_base64（解码后 1 MiB 边界、非法 base64、宿主路径与 `file://` 来源）；SDK 字节构造函数超过 1 MiB 时上传；同一实例的入站对象再发送；临时媒体 URL 的 GET、HEAD、Range、过期与租约结束；Telegram 发送 100 MiB 的 media_ref；OneBot 11 的 https_url、inline_base64、platform_file、media_dir 与媒体 URL | 来源恰有一个，非法来源在首个平台请求前 INVALID_ARGUMENT；同一实例的入站对象不经取件，Telegram 以 file_id、OneBot 11 以原 url 发送；媒体 URL 只对应一个对象，租约结束或到期后 404，日志不含完整 url_token；Telegram 上传的常驻内存不随对象大小线性增长；OneBot 11 的请求中只有插件给出 inline_base64 时出现 `base64://` |
+| V-90 | T-03、T-15 | 新增片段与字段（D-89、D-90、D-91、D-97）：voice 与非语音 audio、全体提及、forward 的内联节点与引用节点、嵌套 forward、url 按钮与 action 按钮混排、url 按钮带 value；两个 Adapter 的入站语音、全体提及与合并转发 | 未声明对应能力的目标在首个平台请求前 UNSUPPORTED；all=true 且带 external_user_id、url 与 action_id 同时存在或都缺失为 INVALID_ARGUMENT；url 按钮不签发 token；Telegram 的 sendVoice/sendAudio 与 OneBot 11 的 record、`at qq=all`、send_*_forward_msg 参数正确；入站映射与 MESSAGE-MODEL §6.4、§7.1 一致 |
+| V-91 | T-03、T-15 | 平台动作（D-92）：动作声明的名称、版本与 Schema 错误；调用未声明的动作、版本不符、参数不符合 Schema；在途事件的原 Target、后台调用的实例许可与撤销；Adapter 返回不符合结果 Schema 的结果；写出后断线；`adapter_dependencies` 缺少所需动作；两个官方 Adapter 的动作清单 | 声明错误使注册失败；校验失败不调用 Adapter；无许可为 PERMISSION_DENIED，撤销在下一次调用生效；结果不符为 INTERNAL 并记诊断；结果未知不报告为未执行、不重试；缺少必需动作时拒绝启用并列出缺失项 |
+| V-92 | T-03、T-15 | 撤回、输入状态与表情回应（D-93）：未声明能力、撤回 1 个与 101 个 ID、部分 ID 失败与结果未知、已过撤回期限、Telegram 的 typing kind 与话题、reaction 设置与撤销、custom reaction、出站 Hook 中调用；SDK 输入状态辅助函数在 ctx 结束后停止 | 未声明能力时 Adapter 收不到请求；超过 100 个为 INVALID_ARGUMENT；每个 ID 的结果按输入顺序，失败或未知后其余为 NOT_ATTEMPTED；Hook 中调用被拒绝；输入状态每 4 秒刷新一次，ctx 结束后不再请求平台 |
+| V-93 | T-03 | 命令菜单（D-96）：实例启动、插件启停与策略禁用后的同步，2 秒内多次变化，命令前缀不含 `/` 的实例，管理员命令，名字不合规与说明超长，有翻译的多个语言，内容未变化，同步失败 | 只列出规则允许的根命令；多次变化合并为一次；内容未变化时不调用 setMyCommands；按语言分别设置；不合规与截断记诊断；同步失败不影响实例运行，下一次变化重新同步 |
+| V-94 | T-03 | 流式输出（D-98）：Telegram 私聊用草稿，群聊回退到编辑，未声明草稿与编辑的 OneBot 11 实例缓冲后发送一次；编辑节流与超长换条；中途平台拒绝；每次草稿与编辑的出站 Hook | 三种方式按能力与首个 UNSUPPORTED 正确选择；同一 Target 两次编辑间隔不少于 1 秒；失败后停止并返回已有结果，不重试；BeforeSend 的操作类型为 draft 或 edit |
+| V-95 | T-03、T-15 | Adapter HTTP 路由与 OneBot 11 反向 WebSocket（D-94）：Adapter REGISTER 携带 HTTP 路由；统一端口代理 WebSocket Upgrade；路由撤销时关闭已升级的连接；反向连接的 access_token 错误、X-Self-ID 不符、X-Client-Role 不是 Universal、重复连接、未知 instance_id；连入后账号不符；断开后重连；未连接时 Send；日志脱敏 | 依次返回 401、403、403、409、404；账号不符时关闭连接并记诊断；断开期间实例不失败、不生成 bot.offline，Send 为 UNAVAILABLE；重连后照常收发；access_token 不出现在日志、错误与响应中 |
+| V-96 | T-15 | OneBot 11 扩展事件与入站片段（D-95）：九种 notice 与 request 的映射、Target 与 Actor、Schema 校验；用 set_friend_add_request 处理好友请求；入站 face、record、file（有与没有 url）、forward、at all | 每种上报得到声明的扩展事件且 payload 符合 Schema；未声明的 notice 与 request 仍只计数；入站片段按 MESSAGE-MODEL §7.1 映射，file 没有 url 时 readability 为 UNSUPPORTED |
+| V-97 | T-03 | Telegram 媒体小项（D-99）：GIF 位于连续图片中间、inline_base64 的 GIF、https_url 的 GIF；入站 animation、video_note、静态与动态贴纸；`file_base_url` 指向自建 Bot API 服务 | GIF 用 sendAnimation 并把前后图片分成两组，顺序不变；入站映射与 MESSAGE-MODEL §6.4 一致；文件下载使用 file_base_url |
 
 ## 2. 跨任务验收的最终闭合点
 
@@ -129,6 +138,7 @@
 | V-82 | T-03.8 manifest 角色解析；T-12.8 `@agent` 解析 | T-09.4 同类唯一、`--source` 与 `--replace` 的正式管理流程 |
 | V-83 | T-08.1 表单选项图标的构建检查（已由 D-74 取消，T-08.10 删除） | T-09.12 WebUI 文件与图标的提供、Admin API 版本检查 |
 | V-85～V-87 | T-04.6 Core 侧校验、展开与命令解析；T-04.8 SDK 事件常量与类型核对；T-03.11、T-15.1 两个官方 Adapter 的平台权限 | T-16 用 `plugintest.Adapter` 覆盖依赖平台权限与扩展事件的路由；V-87 的 usage 语言选择随 T-08.8 完成 |
+| V-89～V-97 | T-03.13～T-03.19 的协议与 Core 侧；T-03.20～T-03.22 的 Telegram 实现；T-15.4～T-15.6 的 OneBot 11 实现 | T-10.1 汇总两个 Adapter 的模拟服务证据；真实 Telegram 与 QQ 端只记录维护者的手测，没有时为未运行 |
 
 T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前者可支持后续开发，真实平台部分仍由 T-10 查证。测试会话、无配置/无 DB 最小插件和 payload fixture 的范围必须写明，不可据此关闭生产认证或数据恢复用例。
 

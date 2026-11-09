@@ -9,6 +9,9 @@
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 已完成（PR #39） |
 | goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 已完成 |
 | goal-89 | T-03.11 | 官方 Telegram Adapter 的平台权限 | T-04.6 | 已完成（PR #106） |
+| goal-111 | T-03.20 | 官方 Telegram Adapter 的媒体与新增片段 | T-03.13、T-03.14 | 等待前置 |
+| goal-112 | T-03.21 | 官方 Telegram Adapter 的平台动作、撤回、输入状态与表情回应 | T-03.11、T-03.15、T-03.16 | 等待前置 |
+| goal-113 | T-03.22 | 官方 Telegram Adapter 的命令菜单与草稿 | T-03.17、T-03.18 | 等待前置 |
 
 ## 第 5 波
 
@@ -201,3 +204,49 @@
 
 不做：Core 侧的权限过滤与展开（T-04.6 已完成）；按钮点击 Actor 的平台权限（随 T-03.8 的 callback_query 处理）；权限文案的 i18n 文件（label_key 的文案随 Adapter 包的 i18n 目录由打包切片加入）；OneBot 11 的平台权限（T-15.1）。
 ```
+
+## 第 12 波
+
+### goal-111 · T-03.20 官方 Telegram Adapter 的媒体与新增片段
+
+状态：等待前置（T-03.13、T-03.14）。2026-11-09 按 D-87、D-88、D-89、D-97、D-99 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+
+目标：Telegram 实例按来源传递出站媒体：multipart 请求体边读边写、inline_base64 解码上传、`platform_file` 直接作为 file_id；收发 audio（sendVoice、sendAudio）；动图用 sendAnimation；入站 voice、audio、animation、video_note 与静态贴纸按新映射交付；url 按钮；实例配置追加 `file_base_url`。
+
+依据：PLAN T-03 步骤 17；CONTRACTS §1.3、§8（Telegram 段）；MESSAGE-MODEL §6.2、§6.3、§6.4；DECISIONS D-88、D-89、D-97、D-99；TEST-MATRIX V-89、V-90 的 Telegram 分项，V-97。
+
+要点：
+- 流式 multipart：用 `io.Pipe` 与 `mime/multipart`，写端按发送计划顺序写字段与文件，文件内容经 Core.ReadMedia 每次最多 1 MiB 读取后立即写出；读取失败时以该错误关闭管道，该物理操作按请求是否已开始写出判为 REJECTED 或 UNKNOWN。现有一次读完的实现删除，不保留。
+- 计划：audio 每个片段单独一个物理操作；image/gif（MediaRef 的 MIME，或 inline_base64 解码后以 `GIF8` 开头）用 sendAnimation 并结束当前媒体组；caption 与 reference、按钮的规则不变；mention 的 all 与 forward 返回 UNSUPPORTED。
+- 入站：voice 与 audio 为 audio（voice 为 true 与 false），animation 与 video_note 为 video，is_animated 与 is_video 都为 false 的 sticker 为 image，都带 incoming_ref；其余贴纸不进 chain。
+- `file_base_url`：缺省为 `<api_base_url>/file/bot<token>`，写进 instance_schema.json；文件下载经它发出，代理规则不变，token 仍不进日志。
+- Capabilities 追加 `message.voice`、`message.audio`；`telegramtest` 追加 sendVoice、sendAudio、sendAnimation 的记录与缺省响应。
+- 测试：提交在既有 `send_test.go` 中追加的用例（经 telegramtest.Server）：一次发送 32 MiB 的 media_ref，断言请求体正确且常驻内存不超过数 MiB，以及 voice 与 GIF 的计划；其余进本地自测。
+
+### goal-112 · T-03.21 官方 Telegram Adapter 的平台动作、撤回、输入状态与表情回应
+
+状态：等待前置（T-03.15、T-03.16）。T-03.11（PR #106）已合并。2026-11-09 按 D-87、D-92、D-93 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+
+目标：Telegram 实例声明并实现 MESSAGE-MODEL §6.5 的平台动作，发布只含常量与参数类型的 `adapters/telegram/action`；实现撤回（deleteMessages）、输入状态（sendChatAction）与表情回应（setMessageReaction），声明对应能力。
+
+依据：PLAN T-03 步骤 18；CONTRACTS §8（平台动作，撤回、输入状态、表情回应与草稿）；MESSAGE-MODEL §4A、§6.5；DECISIONS D-92、D-93；TEST-MATRIX V-91、V-92 的 Telegram 分项。
+
+要点：
+- 动作的参数沿用 Bot API 字段名，数字 ID 为十进制字符串，chat_id 与 message_thread_id 取自 Target；Schema 不允许其他属性；结果为 Bot API 的 `result` 原文，结果 Schema 只约束顶层类型。ban、unban、restrict 成功后作废该会话的管理员缓存。
+- `adapters/telegram/action` 只含动作名常量与参数结构体，不 import 运行时代码。
+- 撤回：同一 Target 的 ID 每 100 个一次 deleteMessages，同一请求的 ID 共享结果；平台返回 400 时该请求的 ID 为 REJECTED，其余 NOT_ATTEMPTED。
+- 表情回应：把本机器人的回应设为 [reaction]，remove 时设为空列表；`custom:<ID>` 对应 custom_emoji。
+- 测试：提交在既有测试文件中追加的用例（经 telegramtest.Server）：ban_chat_member 的参数与管理员缓存作废，以及 101 个 ID 的撤回分为两次请求；其余进本地自测。
+
+### goal-113 · T-03.22 官方 Telegram Adapter 的命令菜单与草稿
+
+状态：等待前置（T-03.17、T-03.18）。2026-11-09 按 D-87、D-96、D-98 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+
+目标：Telegram 实例实现 `adapter.commands.sync`（setMyCommands，default scope 加每个 language_code）与 `adapter.draft`（私聊的 sendMessageDraft），声明 `commands.sync` 与 `message.draft`。
+
+依据：PLAN T-03 步骤 19；CONTRACTS §8（命令菜单，撤回、输入状态、表情回应与草稿）；MESSAGE-MODEL §4A、§6.5；DECISIONS D-96、D-98；TEST-MATRIX V-93、V-94 的 Telegram 分项；Bot API 原文的 setMyCommands 与 sendMessageDraft。
+
+要点：
+- 命令名不匹配 `^[a-z0-9_]{1,32}$` 时跳过，说明超过 256 字符时截断，都记诊断；记住每个 language_code 上一次成功同步的内容，相同时不调用；某个语言失败不影响其他语言，返回第一个错误。
+- 草稿只用于私聊（chat_id 为正数），其他目标在调用平台前返回 UNSUPPORTED；文本与实体规则同发送。sendMessageDraft 的参数与本语句不符时标 [!]。
+- 测试：提交在既有测试文件中追加的用例（经 telegramtest.Server）：两次相同的同步只调用一次 setMyCommands，以及群聊目标的草稿不产生请求；其余进本地自测。

@@ -52,6 +52,13 @@
 | goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8、T-08.11 | 待派发 |
 | goal-101 | T-08.12 | Adapter 实例配置与 Core 设置的版本迁移 | T-07.6、T-08.11 | 待派发 |
 | goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2、T-04.9、T-08.8 | 等待前置 |
+| goal-104 | T-03.13 | 媒体按来源传递 | T-03.6、T-04.8、T-07.7 | 等待前置 |
+| goal-105 | T-03.14 | 新增片段与字段 | T-03.8、T-04.8 | 等待前置 |
+| goal-106 | T-03.15 | 平台动作 | T-03.8、T-04.8 | 等待前置 |
+| goal-107 | T-03.16 | 撤回、输入状态与表情回应 | T-03.9、T-04.8 | 等待前置 |
+| goal-108 | T-03.17 | 命令菜单同步 | T-04.6、T-04.7、T-04.8、T-08.8 | 等待前置 |
+| goal-109 | T-03.18 | 流式输出 | T-03.9、T-04.8 | 等待前置 |
+| goal-110 | T-03.19 | Adapter 的 HTTP 路由 | T-03.3、T-04.8、T-07.7 | 等待前置 |
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 等待前置 |
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 待派发 |
 | goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 等待前置 |
@@ -3594,6 +3601,114 @@ Core 一侧已按合入代码核对并修订：
 
 ## 第 11 波
 
+### goal-104 · T-03.13 媒体按来源传递
+
+状态：等待前置（T-04.8、T-07.7）。T-03.6（PR #55）已合并。2026-11-09 按 D-87、D-88 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+
+目标：出站媒体按来源传递，不统一转为 base64。MediaSource 追加插件可用的 `inline_base64` 与只由 Core 填写的 `platform_file`；Send 的目标实例就是入站对象的来源实例时，Core 把平台文件标识交给 Adapter 复用，不取件；Adapter 可以经 `core.media.url` 为本次发送的媒体取得临时 URL，由平台端从 Core 统一端口拉取；SDK 的字节构造函数在 1 MiB 内用内联数据，超出时先上传。
+
+依据：PLAN T-03 步骤 10；CONTRACTS §1.2、§1.3、§1.4、§7.2、§15.1（base_url）；WIRE §3.4、§3.5 末段；MESSAGE-MODEL §2；DECISIONS D-87、D-88；TEST-MATRIX V-89 的 Core 分项。
+
+要点：
+- proto 只追加：MediaSource 的 `inline_base64`（string）与 `platform_file`（string），`core.media.url` 的请求与响应；校验放在 `contracts/validate`：标准 base64、解码后 1 B～1 MiB，否则 INVALID_ARGUMENT；插件给出 platform_file 时 INVALID_ARGUMENT。
+- Send 流程：incoming_ref 的来源实例等于目标实例时改写为 platform_file（取 Core 私下保存的平台文件标识），否则沿用现有取件为 MediaRef 的路径；inline_base64 原样交给 Adapter。
+- 媒体 URL：url_token 为 32 字节随机值的无 padding base64url，绑定一个对象与本次发送的消费租约，到期时间不晚于租约；`/media/<url_token>` 只接受 GET、HEAD，支持 Range，Content-Type 取对象 MIME，租约结束或到期后 404；该路径在统一端口中保留给 Core，插件路由不能覆盖；日志只记 url_token 前 8 个字符。前缀取请求给出的值，缺省为 base_url。
+- SDK：媒体片段的字节构造函数在解码后不超过 1 MiB 时生成 inline_base64，超出时经现有上传 API 得到 media_ref；不提供以路径构造的函数。
+- 出站 Hook 之后的 Chain 修改同样按上述规则重新校验。
+- 测试：提交一个经真实 Adapter 进程（回环 Adapter）的集成测试，覆盖 inline_base64 原样到达、同实例入站对象以 platform_file 到达且没有取件、媒体 URL 的 GET 与租约结束后 404；其余进本地自测。
+
+### goal-105 · T-03.14 新增片段与字段
+
+状态：等待前置（T-03.8、T-04.8）。2026-11-09 按 D-87、D-89、D-90、D-91、D-97 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+
+目标：在通用消息模型中追加语音与音频片段 audio、全体提及、合并转发的引用节点与入站转发标识、URL 按钮，Core 在调用 Adapter 前完成结构校验与能力判定，SDK 提供对应的构造函数与入站类型。
+
+依据：PLAN T-03 步骤 11；CONTRACTS §8；WIRE §3.5 末段；MESSAGE-MODEL §2、§6.3；DECISIONS D-89、D-90、D-91、D-97；TEST-MATRIX V-90 的 Core 分项。
+
+要点：
+- proto 只追加：Segment 的 audio（AudioSegment：source、voice、duration_ms?、caption?、filename?）、MentionSegment 的 `all`、ForwardItem 的 `platform_message_id`、ForwardSegment 的 `platform_forward_id`、Button 的 `url`；同步 `contracts/wirespec_test.go` 的编号检查。
+- 校验（`contracts/validate`）：audio 来源恰有一个；all=true 时 external_user_id 必须 absent；ForwardItem 的 chain 与 platform_message_id 恰有一个，节点 chain 不能含 forward；出站 Chain 带 platform_forward_id 为 INVALID_ARGUMENT；Button 的 url 与 action_id 恰有一个，url 只接受 https 与 tg scheme，url 按钮带 value 为 INVALID_ARGUMENT。
+- 能力：Core 在调用 Adapter 前按目标实例的 `message.voice`（voice=true 的 audio）、`message.audio`（voice=false）、`message.mention_all`、`message.forward` 判定，未声明时 UNSUPPORTED。
+- 按钮签发跳过 url 按钮，不生成 token，也不要求对应的 button.clicked 路由。
+- SDK：在 T-04.8 的自有类型上追加构造函数与入站类型；命令参数的 `user` 类型遇到 all=true 的 mention 时按参数不匹配处理。
+- 测试：提交一个经回环 Adapter 的集成测试，覆盖带 audio、全体提及与 url 按钮的 Chain 在声明能力的实例上原样到达、未声明能力的实例收不到请求；其余进本地自测。
+
+### goal-106 · T-03.15 平台动作
+
+状态：等待前置（T-03.8、T-04.8）。2026-11-09 按 D-87、D-92 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+
+目标：Adapter 在注册描述中声明平台动作，插件经 `core.action` 调用；Core 按发信准入检查目标、核对声明与参数 Schema 后经 `adapter.action` 交给实例，并按结果 Schema 校验返回值。
+
+依据：PLAN T-03 步骤 12；CONTRACTS §8（平台动作、发信准入、adapter_dependencies）；WIRE §3.4、§3.5；DECISIONS D-92；TEST-MATRIX V-91 的 Core 分项。
+
+要点：
+- proto 只追加：AdapterDescriptor 的动作声明（name、version、scope：CHAT/ACCOUNT、params_schema_json、result_schema_json），`core.action` 与 `adapter.action` 的请求与响应；scope 枚举保留 UNSPECIFIED。
+- 注册校验与扩展事件相同（名称规则、Schema 可编译、同名同版本不重复），失败按注册失败处理。
+- 调用：scope 为 chat 时必须给出 Target，为 account 时只给 adapter_instance_id；准入复用 Send 的实现（在途事件的原 Target 免实例许可，其余检查 allowed_adapter_instances、实例启用与 account 绑定）；参数与结果用同一套 JSON Schema 校验实现；结果不符为 INTERNAL 并记诊断；不重试，结果未知时返回 UNAVAILABLE 或 DEADLINE_EXCEEDED。
+- 出站 Hook 中禁止调用：T-05.3 已合并时把 `core.action` 加入其禁止名单，否则由 T-05.3 一并加入。
+- manifest 的 `adapter_dependencies` 追加 `actions`（名称与版本），启用检查与 extension 相同，缺失时列出。
+- SDK：动作调用方法返回 JSON 结果与错误；`sdk/adapter` 增加可选接口供实例实现动作，未实现时 Adapter 返回 UNSUPPORTED。
+- 测试：提交一个经回环 Adapter 的集成测试，覆盖已声明动作的成功调用、参数不符合 Schema 时 Adapter 收不到请求、无许可的后台调用为 PERMISSION_DENIED；其余进本地自测。
+
+### goal-107 · T-03.16 撤回、输入状态与表情回应
+
+状态：等待前置（T-03.9、T-04.8）。2026-11-09 按 D-87、D-93 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+
+目标：实现 `core.delete`、`core.typing`、`core.react` 三个 Core 固定服务与对应的 `adapter.*`，按 `message.delete`、`chat.typing`、`message.react` 能力判定，准入与 Edit 相同；SDK 提供方法与输入状态的刷新辅助函数。
+
+依据：PLAN T-03 步骤 13；CONTRACTS §8（撤回、输入状态、表情回应与草稿）；WIRE §3.4、§3.5；MESSAGE-MODEL §4A；DECISIONS D-93；TEST-MATRIX V-92 的 Core 分项。
+
+要点：
+- proto 只追加三组请求与响应；服务名常量追加在 `internal/wire/services.go` 末尾。
+- 撤回：1～100 个 ID，超出为 INVALID_ARGUMENT；结果按输入顺序，每项为 ACCEPTED、REJECTED、UNKNOWN 或 NOT_ATTEMPTED 与安全错误；Adapter 返回的项数或顺序不符时为 INTERNAL。
+- 输入状态的 kind 枚举保留 UNSPECIFIED；表情回应的 reaction 为 Unicode emoji 或 `custom:<ID>`，格式错误为 INVALID_ARGUMENT。
+- 三者不执行出站 Hook；出站 Hook 中禁止调用，按 goal-106 同样的方式与 T-05.3 衔接。
+- SDK：三个方法与输入状态辅助函数（立即发送一次，之后每 4 秒一次，ctx 结束即停止，失败时停止并返回错误）；`sdk/adapter` 以三个可选接口让实例实现。
+- 测试：提交一个经回环 Adapter 的集成测试，覆盖撤回的部分失败汇总与未声明能力时 Adapter 收不到请求；其余进本地自测。
+
+### goal-108 · T-03.17 命令菜单同步
+
+状态：等待前置（T-04.8）。T-04.6（PR #78）、T-04.7（PR #89）、T-08.8（PR #102）已合并。2026-11-09 按 D-87、D-96 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+
+目标：实例声明 `commands.sync` 时，Core 在实例启动后与路由表或命令策略变化后，把该实例可用的命令名与按 locale 翻译的说明经 `adapter.commands.sync` 交给它。
+
+依据：PLAN T-03 步骤 14；CONTRACTS §2.2、§2.3、§5.4、§8（命令菜单）；WIRE §3.4；DECISIONS D-96；TEST-MATRIX V-93 的 Core 分项。
+
+要点：
+- proto 只追加 `adapter.commands.sync` 的请求（instance_id、命令列表：name、descriptions：locale → 文本）与空响应。
+- 筛选：该实例的生效命令前缀含 `/`；根命令（不含子命令路径）；Permission 只要求 `user`；未被命令策略禁用。别名不单独列出。
+- 说明：按 CommandSpec 的说明键对插件 messages 中出现的每个 locale 翻译，缺少翻译的 locale 用默认 locale 的文本；没有说明键的命令说明为命令名。
+- 触发：实例启动成功后一次；路由表或命令策略变化后，对受影响实例在 2 秒内合并为一次；同一实例的同步串行执行。失败只记诊断，不重试，下一次变化时重新同步。
+- 测试：提交一个经回环 Adapter 的集成测试，覆盖插件启用后同步一次且只含规则允许的命令；其余进本地自测。
+
+### goal-109 · T-03.18 流式输出
+
+状态：等待前置（T-03.9、T-04.8）。2026-11-09 按 D-87、D-98 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+
+目标：实现 `core.draft` 与 `adapter.draft`（能力 `message.draft`），并在 SDK 提供 `c.Stream`：按目标实例能力选择草稿、编辑或缓冲后发送一次，首个草稿 UNSUPPORTED 时回退，编辑节流，失败即停止。
+
+依据：PLAN T-03 步骤 15；CONTRACTS §8（撤回、输入状态、表情回应与草稿）；WIRE §3.4、§3.5；MESSAGE-MODEL §4A、§5；DECISIONS D-98；TEST-MATRIX V-94 的 Core 分项。
+
+要点：
+- proto 只追加 `core.draft`、`adapter.draft` 的请求与响应，以及出站 Hook 操作类型的 draft 枚举值。
+- 草稿 Chain 只能含一个 text，否则 INVALID_ARGUMENT；Target 准入与 Edit 相同；每次草稿执行出站 Hook（T-05.3 已合并时），操作类型为 draft；出站 Hook 中禁止调用，与 T-05.3 的衔接同 goal-106。
+- `c.Stream` 的输入为文本增量；草稿的 draft_id 在同一 Target 内由 SDK 分配；编辑方式下同一 Target 两次编辑至少间隔 1 秒，增量累积到下一次编辑；文本超过 Adapter 公布的上限时以新消息继续；结束时返回所有已发送消息的 SendResult。
+- 测试：提交一个经回环 Adapter 的集成测试，覆盖声明 message.draft 时只发草稿与最终消息、只声明 message.edit 时按节流编辑；其余进本地自测。
+
+### goal-110 · T-03.19 Adapter 的 HTTP 路由
+
+状态：等待前置（T-04.8、T-07.7）。T-03.3（PR #32）已合并。2026-11-09 按 D-87、D-94 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+
+目标：Adapter 的 REGISTER 可以携带 HTTP 路由与 loopback endpoint，`sdk.RunAdapter` 在声明了路由时托管 Listener；统一端口代理转发 WebSocket Upgrade，并在路由撤销、Session 失效或代次变化时关闭已升级的连接。
+
+依据：PLAN T-03 步骤 16；CONTRACTS §7.2、§8；WIRE §3.4；DECISIONS D-25、D-94；TEST-MATRIX V-95 的 Core 分项。
+
+要点：
+- 注册校验：Adapter 的 HTTP 路由规则与插件相同（D-65 的前缀与精确路由、公开声明、保留路径），外部路径为 `/plugins/<Adapter 包 ID>/...`；不改变插件的 REGISTER 规则。
+- `sdk/adapter`：Adapter 可选地提供 `http.Handler` 与路由描述；SDK 仅在有路由时创建 `127.0.0.1:0` Listener。
+- 代理：`httputil.ReverseProxy` 转发 Upgrade 请求，升级后的连接不受普通请求期限限制；Core 记录已升级的连接，撤销映射时关闭它们；内部凭证与 Session 校验同插件路由。
+- 测试：提交一个集成测试：测试 Adapter 注册公开路由，客户端经统一端口完成 WebSocket 往返，Adapter 停止后连接被关闭；其余进本地自测。
+
 ### goal-16 · T-05.2 Rule、HandlerOutcome 与传播
 
 状态：等待前置（T-04.8）。T-05.1（PR #67）、T-04.7（PR #89）已合并。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。语句中 goal-2、goal-12、goal-15 提供的符号（sdk 的分发、RouteOption、Context、HandlerOutcome 的处理、router 的命令层与事件路由派发）只写名字；合并后由审查者核对签名，再改为待派发。
@@ -3891,7 +4006,7 @@ sdk
 
 ### goal-17 · T-05.3 三阶段 Hook 与 send_forbidden
 
-状态：等待前置（T-05.2）。语句中 goal-2、goal-12、goal-15、goal-16、goal-51 提供的符号（router 的派发链与可信信息、message.Service 的 Send 与 Edit、sdk 的分发与 RouteOption）只写名字；合并后由审查者核对签名，再改为待派发。
+状态：等待前置（T-05.2）。2026-11-09 按 D-93、D-98 补充：出站 Hook 中禁止调用的服务除 Send、Edit 外还有 `core.action`、`core.delete`、`core.typing`、`core.react`、`core.draft`；其中已合并的（goal-106、goal-107、goal-109）由本切片一并加入禁止名单，未合并的由它们自己加入；草稿每次执行 BeforeSend/AfterSend，操作类型为 draft，审查者改写语句时按合并情况写入。语句中 goal-2、goal-12、goal-15、goal-16、goal-51 提供的符号（router 的派发链与可信信息、message.Service 的 Send 与 Edit、sdk 的分发与 RouteOption）只写名字；合并后由审查者核对签名，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-17（切片 T-05.3：三阶段 Hook 与 send_forbidden）。goal 目录 goal-17，分支 goal-17，worktree .worktrees/goal-17，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
