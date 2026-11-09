@@ -37,7 +37,7 @@ type Options struct {
 // JobStats 汇总同一 plugin_id/job_id 在本次 Core 运行期间的计数。
 type JobStats struct {
 	Runs, Skipped, TimedOut, Late uint64
-	Running                       bool // 包含结果已超时、实际执行尚未结束的调用
+	Running                       bool // 包含结果已超时或取消、实际执行尚未结束的调用
 }
 
 // Scheduler 并发安全地安排定时器、占用运行槽并记录任务统计。
@@ -260,11 +260,13 @@ func (s *Scheduler) call(pluginID string, reg *registration, job *registeredJob,
 				releaseRun(job.state, run)
 			}})
 	}
-	// 3. 对端已响应的错误也结束实际执行；仅本地超时与断链继续保留槽。
+	// 3. 对端已响应的错误也结束实际执行；本地超时、停止取消与断链继续保留槽。
+	// 停止取消没有 Late 回调，由 Released 在确认进程树清空后释放槽。
 	s.mu.Lock()
-	if response.RawErrorCode == pb.ErrorCode_ERROR_CODE_UNSPECIFIED && wire.CodeOf(err) == pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED {
+	code := wire.CodeOf(err)
+	if response.RawErrorCode == pb.ErrorCode_ERROR_CODE_UNSPECIFIED && code == pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED {
 		markTimeout(job.state, run)
-	} else if response.RawErrorCode != pb.ErrorCode_ERROR_CODE_UNSPECIFIED || wire.CodeOf(err) != pb.ErrorCode_ERROR_CODE_UNAVAILABLE {
+	} else if response.RawErrorCode != pb.ErrorCode_ERROR_CODE_UNSPECIFIED || (code != pb.ErrorCode_ERROR_CODE_UNAVAILABLE && code != pb.ErrorCode_ERROR_CODE_CANCELLED) {
 		releaseRun(job.state, run)
 	}
 	s.mu.Unlock()
