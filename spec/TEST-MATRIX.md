@@ -42,7 +42,7 @@
 | V-32 | T-10 | Linux amd64/arm64、Windows amd64、macOS amd64/arm64 编译、启动/退出 | 五个组合都有真实记录；CGO 插件在不兼容平台标不支持而非虚假发布 |
 | V-33 | T-10 | 同一台固定机器、同一个本地 Bot API 模拟服务；NoneBot2 使用其 Telegram Adapter 与功能相同的插件。四种负载：空闲（Core 与 echo、configdb、HTTP 示例三个插件运行 10 分钟）；消息（每秒 20 条文本、持续 10 分钟，echo 逐条回复）；数据库（每秒 20 条命令，每条在 SQLite 中写入并读取一行，持续 10 分钟）；HTTP（每秒 50 个请求访问插件路由，持续 10 分钟） | 每种负载报告 RSS/私有内存、Linux PSS、CPU 与回复或响应延迟的 P50/P95/P99，并记录版本、机器与负载参数；不借同 worker PoC 代替 |
 | V-34 | T-10 | 100 次启停、多次异常退出、普通子进程树、外部副作用重试 | 无 Core 崩溃/会话泄漏，合作型子进程按平台能力清理，业务副作用默认不自动重试 |
-| V-35 | T-03 | 多物理消息、平台明确拒绝、先成功再超时、相册按钮失败、成功message_id=0 | ACCEPTED/PARTIAL/REJECTED/UNKNOWN与每part一致；已确认ID保留、0不当可编辑ID；未尝试列出；payload+error同时返回，不自动补发 |
+| V-35 | T-03 | 多物理消息、平台明确拒绝、先成功再超时、末尾相册带按钮在首发前拒绝、成功message_id=0 | ACCEPTED/PARTIAL/REJECTED/UNKNOWN与每part一致；已确认ID保留、0不当可编辑ID；未尝试列出；payload+error同时返回，不自动补发 |
 | V-36 | T-02、T-08、T-09 | 同data_dir双Core、同插件并发enable/update、Core被kill而子进程仍写DB | 独占锁/管理串行及预期代次检查生效；SDK断链后走完OnStop再退出，写管道不因SIGPIPE终止；runtime.lock未释放不打开DB/启动替代实例 |
 | V-37 | T-01、T-02、T-08、T-09 | 旧配置需OnConfigLoad才能符合新Schema、Bootstrap/REGISTER超4MiB、阶段错误 | 旧JSON先迁移再验证；完整配置只经私有IPC；超限/失败用合法SESSION_ERROR且无半注册；ACTIVATED严格先于业务帧 |
 | V-38 | T-08、T-09 | 配置版本迁移（`$migrations` 的 rename、map、wrap、remove，schema 删除的字段）、nested未知键、null/缺失/false、Merge Patch、陈旧base_generation、选项/模板/slider/required 不合法、取未声明的键 | 声明式迁移/OnConfigLoad/补值/schema校验顺序固定；schema 删除的字段作为未知键保留（D-85）；Merge Patch的null删除键后按默认值补齐，存储的null被拒绝，显式空值保留；未知键保留；不合法的值返回INVALID_ARGUMENT且带路径；取值方法对未声明键或类型不符panic；陈旧提交拒绝；restart不偷改Active |

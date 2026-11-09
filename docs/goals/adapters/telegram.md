@@ -96,14 +96,14 @@
 
 ### goal-50 · T-03.7 官方 Telegram Adapter 的发送计划与回执
 
-状态：待派发。前置 T-03.4（PR #39，合并提交 `604dc65`）已合并；语句原先等待的 `Core.ReadMedia` 由 T-03.6（PR #55，合并提交 `b023130`）合入。2026-11-08 按合入代码核对并改写：`sdk/adapter.Core.ReadMedia(ctx, token, offset uint64, length uint32) ([]byte, uint64, bool, error)`；`internal/core/message` 的 Send 在调用实例前已把 media_ref 与 incoming_ref 都换成该 Adapter Session 的只读令牌并写回 media_ref，https_url 原样交给 Adapter，并已用 `validate.Chain` 做过结构校验（reference、buttons 各至多一个等）；`botClient.call` 只发 JSON，`apiError{status, description, retryAfter}` 已脱敏；实例的 `Capabilities()` 与 `Descriptor()` 共用 `receiveCapabilities()`，`media.read` 由 SDK 按实例是否实现 `adapter.MediaSource` 自动声明；`telegramtest.Server` 现有 `FailNext` 只作用于 getUpdates。`Segment` 还没有 extension 分支（随 T-03.8 加入），本切片不处理。goal-89 也修改 `telegram.go` 与 `telegramtest/server.go`，并在 telegramtest 增加 `Calls(method string) int`；本切片的请求记录用 `Requests` 命名以免冲突，后合并的一方按先合并的代码变基。
+状态：待派发。2026-11-09 维护者在 PR #108 确认：最后一条物理消息是相册时，按钮在首个平台请求前返回 UNSUPPORTED（见 DECISIONS），语句的按钮、物理计划、回执与本地自测段已按此修订。前置 T-03.4（PR #39，合并提交 `604dc65`）已合并；语句原先等待的 `Core.ReadMedia` 由 T-03.6（PR #55，合并提交 `b023130`）合入。2026-11-08 按合入代码核对并改写：`sdk/adapter.Core.ReadMedia(ctx, token, offset uint64, length uint32) ([]byte, uint64, bool, error)`；`internal/core/message` 的 Send 在调用实例前已把 media_ref 与 incoming_ref 都换成该 Adapter Session 的只读令牌并写回 media_ref，https_url 原样交给 Adapter，并已用 `validate.Chain` 做过结构校验（reference、buttons 各至多一个等）；`botClient.call` 只发 JSON，`apiError{status, description, retryAfter}` 已脱敏；实例的 `Capabilities()` 与 `Descriptor()` 共用 `receiveCapabilities()`，`media.read` 由 SDK 按实例是否实现 `adapter.MediaSource` 自动声明；`telegramtest.Server` 现有 `FailNext` 只作用于 getUpdates。`Segment` 还没有 extension 分支（随 T-03.8 加入），本切片不处理。goal-89 也修改 `telegram.go` 与 `telegramtest/server.go`，并在 telegramtest 增加 `Calls(method string) int`；本切片的请求记录用 `Requests` 命名以免冲突，后合并的一方按先合并的代码变基。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-50（切片 T-03.7：官方 Telegram Adapter 的发送计划与回执）。goal 目录 goal-50，分支 goal-50，worktree .worktrees/goal-50，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：Telegram 实例的 Send 先对整条 Chain 做完整预检并生成确定的物理操作计划，再依次调用 Bot API；文本实体按 UTF-16 渲染，连续图片/视频组成媒体组，引用作用于第一条物理消息，按钮作用于最后一条；每个物理操作一个 PartResult，汇总为 ACCEPTED、PARTIAL、REJECTED 或 UNKNOWN，已发生的结果不丢失。
 
-依据：PLAN T-03 步骤 6（发送）；CONTRACTS §1.3（媒体分块）、§8（Send、Chain 与计划段）；MESSAGE-MODEL §2、§4、§6.2；TEST-MATRIX V-08、V-35；Telegram Bot API 的 sendMessage、sendPhoto、sendVideo、sendDocument、sendMediaGroup、editMessageReplyMarkup 与 MessageEntity（字段名与限制以官方文档为准）。
+依据：PLAN T-03 步骤 6（发送）；CONTRACTS §1.3（媒体分块）、§8（Send、Chain 与计划段）；MESSAGE-MODEL §2、§4、§6.2；TEST-MATRIX V-08、V-35；Telegram Bot API 的 sendMessage、sendPhoto、sendVideo、sendDocument、sendMediaGroup 与 MessageEntity（字段名与限制以官方文档为准）。
 
 范围（只新增或修改这些）：
 - contracts/proto/alonabot/v1/message.proto：Button 追加 optional string core_token = 4（由 Core 填写，T-03.8 接入；插件填写的值由 Core 清除）。随后 go generate ./...（本切片获授权只追加这一字段）
@@ -129,11 +129,11 @@
   - text：format 为 MARKDOWN 时按 MarkdownV2（parse_mode）发送，且不得同时带 entities；PLAIN 或缺省时 entities 按 UTF-16 偏移检查（越界、长度为 0、TEXT_LINK 缺 url、TEXT_MENTION 缺 external_user_id → INVALID_ARGUMENT），按 Bot API 的 MessageEntity 输出。合并后的单条文本超过 4096、caption 超过 1024 个 UTF-16 码元（命名常量）→ INVALID_ARGUMENT，不截断。
   - 媒体来源：media_ref 是 Core 换成的只读令牌，执行到该步时经 Core.ReadMedia 分块读取（每块至多 1 MiB，命名常量注明 CONTRACTS §1.3）后以 multipart 上传；https_url 只接受 https 方案，原样作为 photo/video/document 参数；incoming_ref 不应到达 Adapter → INVALID_ARGUMENT。
   - reference：original_platform_message_id 与 target.chat_id 必须是十进制整数，reference.target 若存在须与本次 target 的 chat 一致（否则 UNSUPPORTED，Telegram 本切片不做跨会话回复）。
-  - buttons：每个按钮必须有 core_token（1～64 字节，命名常量），否则 INVALID_ARGUMENT；按钮作用于最后一条物理消息。
+  - buttons：每个按钮必须有 core_token（1～64 字节，命名常量），否则 INVALID_ARGUMENT；按钮作用于最后一条物理消息，最后一条物理消息是相册（sendMediaGroup）时 → UNSUPPORTED（媒体组不能携带或事后加上内联按钮）。
   - mention：渲染为该位置的 text_mention 实体（显示 display，缺省为 external_user_id），并入相邻文本；external_user_id 不是十进制整数 → UNSUPPORTED。
   - target：chat_id 必须是十进制整数；thread_id 存在时须为十进制整数，作为 message_thread_id。
-- 物理计划（MESSAGE-MODEL §6.2）：相邻 text 与 mention 合并为一条 sendMessage，不改变顺序；独立 text 不改为 caption，caption 只取媒体片段自身的 caption；连续 image/video 每组 2～10 项用 sendMediaGroup，单项用 sendPhoto/sendVideo；file 用 sendDocument，不放进媒体组；文本或文件穿插时结束当前媒体组。reference 转为第一条物理请求的 reply_parameters；buttons 转为最后一条物理消息的 reply_markup（inline_keyboard，callback_data 为 core_token）；最后一步是 sendMediaGroup 时追加一次 editMessageReplyMarkup，作用于该组最后一条已确认的消息。
-- 执行与回执：按计划顺序执行；每个物理操作一个 PartResult（part_index 从 0 起，segment_indexes 为它覆盖的原片段下标，reference 与 buttons 计入它们作用的那一步）。成功时记录 message_id；message_id 为 0 时 message_ids_unavailable=true，0 不进入 platform_message_ids，依赖该 ID 的 markup 步骤为 NOT_ATTEMPTED 并带 ErrorInfo。Bot API 返回错误体（apiError）时该步 REJECTED；连接断开、超时或响应无法解析时该步 UNKNOWN；ReadMedia 失败时该步 REJECTED（ErrorInfo 取 Core 返回的错误），不发起该步请求。任一步非 ACCEPTED 后，后续步骤全部 NOT_ATTEMPTED。整体：全部 ACCEPTED → ACCEPTED（不带 ErrorInfo）；第一步 REJECTED → REJECTED；第一步 UNKNOWN → UNKNOWN；其余 → PARTIAL；非 ACCEPTED 时同时返回该步的 ErrorInfo。platform_message_ids 按物理顺序保留全部已确认 ID，markup 更新不重复添加；primary_platform_message_id 为第一条确认的消息 ID；capabilities_used 列出本次用到的已声明能力。
+- 物理计划（MESSAGE-MODEL §6.2）：相邻 text 与 mention 合并为一条 sendMessage，不改变顺序；独立 text 不改为 caption，caption 只取媒体片段自身的 caption；连续 image/video 每组 2～10 项用 sendMediaGroup，单项用 sendPhoto/sendVideo；file 用 sendDocument，不放进媒体组；文本或文件穿插时结束当前媒体组。reference 转为第一条物理请求的 reply_parameters；buttons 转为最后一条物理消息的 reply_markup（inline_keyboard，callback_data 为 core_token）；计划中没有 markup 更新步骤。
+- 执行与回执：按计划顺序执行；每个物理操作一个 PartResult（part_index 从 0 起，segment_indexes 为它覆盖的原片段下标，reference 与 buttons 计入它们作用的那一步）。成功时记录 message_id；message_id 为 0 时 message_ids_unavailable=true，0 不进入 platform_message_ids。Bot API 返回错误体（apiError）时该步 REJECTED；连接断开、超时或响应无法解析时该步 UNKNOWN；ReadMedia 失败时该步 REJECTED（ErrorInfo 取 Core 返回的错误），不发起该步请求。任一步非 ACCEPTED 后，后续步骤全部 NOT_ATTEMPTED。整体：全部 ACCEPTED → ACCEPTED（不带 ErrorInfo）；第一步 REJECTED → REJECTED；第一步 UNKNOWN → UNKNOWN；其余 → PARTIAL；非 ACCEPTED 时同时返回该步的 ErrorInfo。platform_message_ids 按物理顺序保留全部已确认 ID；primary_platform_message_id 为第一条确认的消息 ID；capabilities_used 列出本次用到的已声明能力。
 - 错误码：apiError 的 400 → INVALID_ARGUMENT，401 → UNAUTHENTICATED，403 → PERMISSION_DENIED，429 → RESOURCE_EXHAUSTED（safe_message 带 retry_after 秒数），其余 → UNAVAILABLE；safe_message 用已脱敏的描述。发送不自动重试，429 也不等待重发。
 - Capabilities：在接收能力之外声明 message.send、message.markdown、message.album、message.reference、message.buttons（version 1，supported=true）；实例的 Capabilities 与 Descriptor 共用同一张表（media.read 仍由 SDK 自动声明，不写进表）。
 - 脱敏沿用 goal-5：任何错误与日志不含 token；multipart 请求的错误同样经 safeError。
@@ -144,7 +144,7 @@
   - FailMethod 使第二步返回 400：第一步 ACCEPTED、第二步 REJECTED、其余 NOT_ATTEMPTED，整体 PARTIAL 并带 INVALID_ARGUMENT。
   - Drop 使第一步断开：整体 UNKNOWN，其余 NOT_ATTEMPTED。
   - 预检失败（超长文本、forward、缺 core_token 的按钮、markdown 与 entities 同时出现）：整体 REJECTED，Requests() 为空，ReadMedia 未被调用。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：媒体组 10 项与 11 项的拆分；文本与 mention 的合并规则；caption 与文本长度边界（以 UTF-16 计）；含 emoji 与组合字符的文本，entities 偏移在请求中正确；429 的错误码与 safe_message；thread_id；https_url 直传与非 https 拒绝；末尾为相册且带 buttons：追加 editMessageReplyMarkup，该步失败时整体 PARTIAL、媒体组的消息 ID 保留；ZeroMessageID 作用于相册：markup 步骤 NOT_ATTEMPTED、整体 PARTIAL、platform_message_ids 不含 0；ReadMedia 失败；错误与日志不含 token。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：媒体组 10 项与 11 项的拆分；文本与 mention 的合并规则；caption 与文本长度边界（以 UTF-16 计）；含 emoji 与组合字符的文本，entities 偏移在请求中正确；429 的错误码与 safe_message；thread_id；https_url 直传与非 https 拒绝；末尾为相册且带 buttons：整体 REJECTED（UNSUPPORTED），Requests() 为空，ReadMedia 未被调用；按钮跟在相册后的文本或单张媒体上时照常发送；ZeroMessageID 作用于相册：message_ids_unavailable=true、platform_message_ids 不含 0；ReadMedia 失败；错误与日志不含 token。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./adapters/... ./contracts/...；go build ./...。
 

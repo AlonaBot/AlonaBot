@@ -137,10 +137,10 @@ ACCEPTED 只表示平台 API 确认接受，不保证用户阅读。跨多条平
 
 - 文本片段按原位置发送，邻接文本可合并但不改变顺序；首发不把独立 text 静默改成图片 caption。caption 只取媒体片段自身声明的 caption。
 - 连续 image/video 使用媒体组，按原顺序每组最多 10 项；单项使用对应单媒体方法，2～10 项用 sendMediaGroup。文件使用相应文件方法；不把不兼容类型强行塞进媒体组。文字穿插时结束当前连续媒体组。
-- Reference 作用于第一条物理消息/第一组媒体请求，后续部分不重复引用。Buttons 作用于最后一条物理消息；相册方法不能携带 reply_markup 时，计划中增加对已确认末条消息的 markup 更新，将该操作计入 part_results。更新失败为 PARTIAL，保留已发送媒体 IDs。
+- Reference 作用于第一条物理消息/第一组媒体请求，后续部分不重复引用。Buttons 作用于最后一条物理消息。Telegram 的媒体组既不能随 sendMediaGroup 携带 reply_markup，也不能事后用 editMessageReplyMarkup 加上内联按钮（真实平台返回 400），因此最后一条物理消息是相册时，按钮无法表达，在首个平台请求前返回 UNSUPPORTED；插件需在相册后放一段文本来携带按钮。
 - Adapter 在发出请求前建立确定的物理操作计划并校验当前平台限制。超长文本、超限 caption、无法表达的格式或片段组合在首发明确拒绝，不自动截断。无跨 API 回滚或静默降级。
 - Telegram 的 markdown 能力明确使用 MarkdownV2；实体采用平台要求的 UTF-16 单元偏移。原始输入须满足其格式规则，不能把任意 HTML 或其他 Markdown 方言当作已转换文本。
-- Telegram 可能确认接受发送但暂返 message_id=0；此时 PartResult 标明 message_ids_unavailable，0 不进入 platform_message_ids。若计划的后续 markup 操作依赖该 ID，则该步 NOT_ATTEMPTED 并返回明确下游错误，逻辑结果 PARTIAL；保留已接受事实，不补发相册或轮询猜测消息 ID。
+- Telegram 可能确认接受发送但暂返 message_id=0；此时 PartResult 标明 message_ids_unavailable，0 不进入 platform_message_ids。保留已接受事实，不补发相册或轮询猜测消息 ID。
 - Edit 使用 editMessageText，buttons 片段转为 reply_markup；文本与实体的规则同发送。v0.1 只编辑文本消息，不编辑媒体说明。平台返回内容未变化或消息不可编辑时为 REJECTED。实例启动时声明 `message.edit` 能力。实例同时声明 `media.read` v1，入站媒体经 getFile 按需取件（CONTRACTS §1.4）。
 - mention 仅在平台可按 external_user_id 正确表示时渲染；forward 合并转发无等价能力时返回 UNSUPPORTED。edited/deleted 等事件仅映射平台实际提供的 update；不能轮询猜测来制造平台未提供的删除事件。
 
