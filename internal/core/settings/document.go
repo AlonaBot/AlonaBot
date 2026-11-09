@@ -232,7 +232,7 @@ func (n *node) encode() []byte {
 			if i > 0 {
 				output.WriteByte(',')
 			}
-			key, _ := json.Marshal(field.key) // 字符串总能编码为 JSON。
+			key, _ := marshal(field.key) // 字符串总能编码为 JSON。
 			output.Write(key)
 			output.WriteByte(':')
 			output.Write(field.value.encode())
@@ -248,7 +248,7 @@ func (n *node) encode() []byte {
 		}
 		output.WriteByte(']')
 	default:
-		scalar, _ := json.Marshal(n.value) // 标量只来自 Decoder 接受的 JSON token。
+		scalar, _ := marshal(n.value) // 标量只来自 Decoder 接受的 JSON token。
 		output.Write(scalar)
 	}
 	return output.Bytes()
@@ -257,7 +257,7 @@ func (n *node) encode() []byte {
 // Set 设置路径末尾的键；缺失的父对象逐层创建，新键追加在对象末尾。
 // path 中的每一项都表示对象键，数组通过设置整个值修改。
 func (d *Document) Set(path []string, value any) error {
-	content, err := json.Marshal(value)
+	content, err := marshal(value)
 	if err != nil {
 		return fmt.Errorf("%s: encode value: %w", strings.Join(path, "."), err)
 	}
@@ -330,4 +330,14 @@ func (d *Document) formatted() ([]byte, error) {
 	}
 	content.WriteByte('\n')
 	return content.Bytes(), nil
+}
+
+func marshal(value any) ([]byte, error) {
+	var content bytes.Buffer
+	encoder := json.NewEncoder(&content)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(content.Bytes(), []byte{'\n'}), nil
 }
