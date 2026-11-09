@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/schedule"
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
@@ -27,6 +28,8 @@ const maxServiceNameLength = 64
 
 // maxToolDescriptionBytes 固定工具说明的注册字节上限。
 const maxToolDescriptionBytes = 1024
+
+const scheduleRoutePrefix = "job."
 
 // routeKindOf 给出 RouteDescriptor 的 spec 分支对应的 kind。
 func routeKindOf(r *pb.RouteDescriptor) pb.RouteKind {
@@ -56,7 +59,7 @@ func IsJSONObject(b []byte) bool {
 }
 
 // Register 原子校验整份注册集（WIRE §3.1/§3.3）：任一项不合法都整体拒绝，调用方不得保留部分注册。
-// 命令路径、别名、事件过滤器、HTTP 路由与 Listener、Service 与 Bus 订阅随整份描述一起检查。
+// 命令路径、别名、事件过滤器、定时任务、HTTP 路由与 Listener、Service 与 Bus 订阅随整份描述一起检查。
 func Register(r *pb.Register) error {
 	// 1. 先检查描述身份、分支与注册公共字段。
 	if r.GetAdapter() != nil {
@@ -130,6 +133,10 @@ func Register(r *pb.Register) error {
 			if err := registerService(route); err != nil {
 				return err
 			}
+		case pb.RouteKind_ROUTE_KIND_SCHEDULE:
+			if err := registerSchedule(route); err != nil {
+				return err
+			}
 		case pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION:
 			subscription := route.GetBusSubscription()
 			pluginID, eventName, ok := strings.Cut(subscription.GetEventName(), "/")
@@ -158,6 +165,20 @@ func Register(r *pb.Register) error {
 				seenEvents[eventType] = true
 			}
 		}
+	}
+	return nil
+}
+
+func registerSchedule(route *pb.RouteDescriptor) error {
+	spec := route.GetSchedule()
+	if spec.GetJobId() == "" || route.GetRouteId() != scheduleRoutePrefix+spec.GetJobId() {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "schedule route %q has invalid job_id or route_id", route.GetRouteId())
+	}
+	if spec.GetJobDeadlineMs() != 0 {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "schedule route %q must use JOB_TIMEOUT instead of job_deadline_ms", route.GetRouteId())
+	}
+	if _, err := schedule.FromSpec(spec); err != nil {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "schedule route %q has invalid trigger: %v", route.GetRouteId(), err)
 	}
 	return nil
 }

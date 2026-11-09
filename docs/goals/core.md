@@ -48,7 +48,7 @@
 | goal-95 | T-08.11 | 配置改由 config_schema.json 声明 | T-04.7、T-08.3、T-08.4、T-08.10 | 已完成（PR #103） |
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-04.7、T-06.1 | 已完成（PR #101） |
 | goal-91 | T-04.8 | SDK 自有类型与事件常量 | T-04.7、T-04.9 | 待派发 |
-| goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 待派发 |
+| goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 已完成（PR #107） |
 | goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8、T-08.11 | 等待前置 |
 | goal-101 | T-08.12 | Adapter 实例配置与 Core 设置的版本迁移 | T-07.6、T-08.11 | 等待前置 |
 | goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2、T-04.9、T-08.8 | 等待前置 |
@@ -3349,7 +3349,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-24 · T-07.2 schedule 注册与运行槽
 
-状态：待派发。前置 T-05.1（PR #67，合并提交 `c6778be`）与 T-07.1（PR #17，合并提交 `0271377`）均已合并。2026-11-08 按合入代码核对并改写：`contracts/schedule` 的 `FromSpec`/`Trigger.Next`、`wire.Request`（已有 `Attach`，本切片只加 `Late`）、`router.Plugin` 与 `router.Invocation`（定时调用经 `Attach` 绑定可信上下文，子调用 `core.send` 按无 Actor 的后台调用准入）、`tune.Values.JobTimeout`、SDK 已有的 `ScheduleRegistry.Every`/`Cron` 与 `Registration.Schedules`；按 D-86 去掉 testdata 测试插件，真实进程的验证在本地测试的临时目录中生成插件。
+状态：已完成（[PR #107](https://github.com/AlonaBot/AlonaBot/pull/107)），证据见 TEST-MATRIX §3.2。2026-11-09 维护者确认：原始 REGISTER 同时带 `cron` 与 `interval_ms` 时按解码后的 oneof 验收（见 DECISIONS），注册校验中「恰有 interval_ms 或 cron 之一」指解码后的 `ScheduleSpec.trigger`。派发时：前置 T-05.1（PR #67，合并提交 `c6778be`）与 T-07.1（PR #17，合并提交 `0271377`）均已合并。2026-11-08 按合入代码核对并改写：`contracts/schedule` 的 `FromSpec`/`Trigger.Next`、`wire.Request`（已有 `Attach`，本切片只加 `Late`）、`router.Plugin` 与 `router.Invocation`（定时调用经 `Attach` 绑定可信上下文，子调用 `core.send` 按无 Actor 的后台调用准入）、`tune.Values.JobTimeout`、SDK 已有的 `ScheduleRegistry.Every`/`Cron` 与 `Registration.Schedules`；按 D-86 去掉 testdata 测试插件，真实进程的验证在本地测试的临时目录中生成插件。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-24（切片 T-07.2：schedule 注册与运行槽）。goal 目录 goal-24，分支 goal-24，worktree .worktrees/goal-24，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
