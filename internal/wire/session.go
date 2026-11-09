@@ -37,6 +37,7 @@ type Request struct {
 	// Attach 只保存在本端；对端以本调用为父发起子请求时，交给子请求的 Handler（Core 借此派生可信上下文）。
 	Attach any
 	// Late 在本地期限结束后的首个响应到达时，由读循环在锁外调用；回调须及时返回。
+	// 请求尚在队列中就到期时，撤回后在锁外立即以本地 DEADLINE_EXCEEDED 响应调用一次。
 	Late func(Response)
 }
 
@@ -637,11 +638,16 @@ func (s *Session) complete(c *outCall, r Response, reason pb.CancelReason) bool 
 	delete(s.pending, c.id)
 	// 已写出或正在写出的超期调用仍可能返回；只保留回调，载荷与准入按原流程释放。
 	expired := reason != pb.CancelReason_CANCEL_REASON_UNSPECIFIED && r.Err.GetCode() == pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED
-	if expired && c.late != nil && c.state != queued && s.err == nil {
-		if s.lateCallbacks == nil {
-			s.lateCallbacks = make(map[uint64]func(Response))
+	var late func(Response)
+	if expired && c.late != nil && s.err == nil {
+		if c.state == queued {
+			late = c.late // 请求将被撤回，实际响应永远不会到达。
+		} else {
+			if s.lateCallbacks == nil {
+				s.lateCallbacks = make(map[uint64]func(Response))
+			}
+			s.lateCallbacks[c.id] = c.late
 		}
-		s.lateCallbacks[c.id] = c.late
 	}
 	s.notifyChange()
 	sendCancel := false
@@ -661,6 +667,9 @@ func (s *Session) complete(c *outCall, r Response, reason pb.CancelReason) bool 
 	// 2. 交付结果后再通知对端，调用者不等待 Cancel 入队。
 	c.cancel()
 	c.result <- r
+	if late != nil {
+		late(r)
+	}
 	if sendCancel {
 		s.sendCancel(c.id, reason)
 	}

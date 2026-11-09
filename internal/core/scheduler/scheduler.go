@@ -244,11 +244,14 @@ func (s *Scheduler) call(pluginID string, reg *registration, job *registeredJob,
 			Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF,
 				SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
 			Deadline: scheduledAt.Add(s.jobTimeout), Attach: &router.Invocation{PluginID: pluginID, Event: event},
-			Late: func(wire.Response) {
+			Late: func(response wire.Response) {
 				s.mu.Lock()
 				defer s.mu.Unlock()
 				markTimeout(job.state, run)
-				job.state.stats.Late++
+				// 本地排队撤回只有公开错误，成功或带原始错误码的实际响应才计迟到。
+				if response.Err == nil || response.RawErrorCode != pb.ErrorCode_ERROR_CODE_UNSPECIFIED {
+					job.state.stats.Late++
+				}
 				releaseRun(job.state, run)
 			}})
 	}
