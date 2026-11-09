@@ -25,11 +25,18 @@ func (f *File) CommandPrefixes(adapterInstanceID string) []string {
 // Update 在未展开的文档副本上编辑，校验通过后以 0600 临时文件替换原文件。
 // 失败时文件与当前快照保持原状；edit 执行期间持有写锁，应只操作传入的 Document。
 func (f *File) Update(edit func(doc *Document) error) error {
-	// 1. 持锁复制原文，与 Reload 串行；回调只接触独立的草稿。
+	// 1. 持锁读取磁盘原文，与 Reload 串行，保留运行期间的手动修改。
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	draft, err := parseDocument(f.document.root.encode())
+	content, err := os.ReadFile(f.name)
 	if err != nil {
+		return fmt.Errorf("read %s: %w", f.name, err)
+	}
+	draft, err := parseDocument(content)
+	if err != nil {
+		return fmt.Errorf("%s: %w", f.name, err)
+	}
+	if _, err := draft.settings(); err != nil {
 		return fmt.Errorf("%s: %w", f.name, err)
 	}
 	if err := edit(draft); err != nil {
@@ -41,7 +48,7 @@ func (f *File) Update(edit func(doc *Document) error) error {
 		}
 	}
 	// 2. 从最终格式重新解析，诊断中的行列对应将要保存的内容。
-	content, err := draft.formatted()
+	content, err = draft.formatted()
 	if err != nil {
 		return fmt.Errorf("format %s: %w", f.name, err)
 	}
