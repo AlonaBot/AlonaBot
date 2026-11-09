@@ -7,7 +7,8 @@
 //
 // 命令与事件 Handler 可通过 Context.Send 回复原事件目标；自动回复型命令返回 Chain，由 Core 发送一次。
 // 文本匹配与 Raw 共用 Handler 调用上下文；HTTP 路由由 SDK 托管 Listener 并校验 Session 凭证。
-// 定时任务尚未实现。
+// [Context.T] 按 Actor 与 Core 默认语言格式化文案；后台调用 [T] 使用 Core 默认语言。
+// 定时任务随 REGISTER 声明，由 Core Scheduler 触发；其 Handler 没有 Actor 与默认 Target，Send 须显式 To。
 //
 // 包的组成：
 //   - 插件的 main 调用 [Run]；[Collect] 单独收集注册项，供检查与测试使用。
@@ -28,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
@@ -136,13 +138,10 @@ func Run(root Root) error {
 	}
 	defer lock.Unlock()
 
-	// 2. 收集静态注册项；HTTP 需要真实 Listener、调度需要 Core Scheduler，不静默丢弃这些声明。
+	// 2. 收集静态注册项；HTTP 路由与定时任务随 REGISTER 一并声明。
 	reg, err := Collect(root)
 	if err != nil {
 		return err
-	}
-	if len(reg.Schedules) > 0 {
-		return &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "this SDK version does not support scheduled jobs yet"}
 	}
 
 	// 3. 连接 Core 并依次完成握手、准备与激活，然后进入服务循环。
@@ -180,23 +179,21 @@ type Registration struct {
 	Schedules     []Schedule
 	services      []serviceRoute
 	subscriptions []subscriptionRoute
+	messages      *i18n.Catalog // 收集时解析，供本次 Session 只读使用。
 }
 
-// Collect 调用根插件的注册入口，检查 Handler 签名与同插件内的重复项（D-20：同插件重复即报错）。
+// Collect 调用根插件的注册入口，检查 Handler 签名、usage 文案键与同插件内的重复项（D-20：同插件重复即报错）。
 func Collect(root Root) (*Registration, error) {
 	if root == nil {
 		return nil, errors.New("root plugin is nil")
 	}
 	cmds, routes, jobs := &CommandRegistry{}, &HTTPRegistry{}, &ScheduleRegistry{}
-	generated := generatedFor(root)
-	generated.registerCommands(cmds)
 	root.Commands(cmds)
 	cmds.collect()
 	events := &EventRegistry{seen: make(map[string]bool)}
 	for _, command := range cmds.commands {
 		events.seen[commandRouteID(command)] = true
 	}
-	generated.registerEvents(events)
 	root.Events(events)
 	events.collect()
 	root.HTTP(routes)
@@ -211,7 +208,7 @@ func Collect(root Root) (*Registration, error) {
 	}
 	reg := &Registration{Commands: cmds.commands, Events: events.events, HTTP: routes.routes, Schedules: jobs.jobs}
 	errs := append(slices.Concat(cmds.errs, events.errs, routes.errs, jobs.errs), collectServices(root, reg))
-	errs = append(errs, collectSubscriptions(root, reg))
+	errs = append(errs, collectSubscriptions(root, reg), collectI18n(root, reg))
 	if err := errors.Join(errs...); err != nil {
 		return nil, fmt.Errorf("invalid registration of %T: %w", root, err)
 	}

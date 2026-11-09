@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
@@ -41,8 +42,9 @@ type ActivateOptions struct {
 	// 事务内只操作元数据，不得等待插件 RPC。
 	Commit func(ctx context.Context) error
 	// Handler 处理 Activated 之后插件发起的业务调用。
-	Handler wire.Handler
-	Global  *wire.Budget // Core 全局载荷预算
+	Handler  wire.Handler
+	Global   *wire.Budget  // Core 全局载荷预算
+	Messages *i18n.Catalog // 当前包的文案目录；无资源时为 nil，激活后只读。
 	// Limits 提供 OnReady 预算与 Core 侧 Session 限额；与 Prepare 使用同一组值。
 	Limits Limits
 }
@@ -56,6 +58,8 @@ type Instance struct {
 	Adapter        *pb.AdapterDescriptor // 准备阶段已校验的 Adapter 描述，激活后只读
 	HTTPListener   *pb.HttpListener      // 当前 Session 已校验的 HTTP 端点；无 HTTP 路由时为 nil
 	HTTPProxyToken []byte                // 当前 Session 的敏感代理凭证，只供代理装配，禁止日志输出
+	Messages       *i18n.Catalog         // 当前包的文案目录；无资源时为 nil，激活后只读
+	DefaultLocale  string                // 本 Session 的 Bootstrap 默认语言快照，激活后只读
 
 	state atomic.Int32 // State，读循环与停止流程并发访问
 	// activated 在读循环应用 ACTIVATED 时关闭。
@@ -140,7 +144,7 @@ func Activate(ctx context.Context, conn *wire.Conn, prep *Prepared, opt Activate
 	}
 
 	// 2. 在 Activating 状态下启动 Session，并发出带 OnReady 截止时间的 ACTIVATE。
-	in := &Instance{PluginID: opt.PluginID, GenerationID: opt.GenerationID, Routes: prep.Register.GetRoutes(), Adapter: prep.Register.GetAdapter(), HTTPListener: prep.Register.GetHttpListener(), HTTPProxyToken: prep.httpProxyToken, activated: make(chan struct{})}
+	in := &Instance{PluginID: opt.PluginID, GenerationID: opt.GenerationID, Routes: prep.Register.GetRoutes(), Adapter: prep.Register.GetAdapter(), HTTPListener: prep.Register.GetHttpListener(), HTTPProxyToken: prep.httpProxyToken, Messages: opt.Messages, DefaultLocale: prep.defaultLocale, activated: make(chan struct{})}
 	in.state.Store(int32(StateActivating))
 	in.Session = wire.NewSession(conn, wire.Options{
 		Local: pb.InitiatorSide_INITIATOR_SIDE_CORE, SessionID: prep.SessionID, ProtocolMinor: prep.Minor,

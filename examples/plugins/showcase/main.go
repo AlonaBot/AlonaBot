@@ -2,7 +2,6 @@
 //
 // 示例包括一个根插件、两类 Handler、StopPropagation、配置回调、HTTP Handler 与一个定时任务。
 // 根插件的 Hook 都由 sdk.Base 提供默认实现，这里只覆盖用到的。
-// SDK 尚不支持定时任务，直接运行时 Run 返回 UNSUPPORTED。
 package main
 
 //go:generate go run ../../../cmd/alonabot plugin generate

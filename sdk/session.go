@@ -22,6 +22,8 @@ import (
 // handshakeTimeout 与 CONTRACTS §4.2 的 Hello/HelloAck 预算一致。
 var handshakeTimeout = 10 * time.Second
 
+const scheduleRoutePrefix = "job."
+
 // launch 保存 Core 通过环境变量下发的启动参数（见 internal/wire/env.go）。
 type launch struct {
 	pluginID  string
@@ -158,6 +160,16 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32, c
 			DefaultEnabled: true, RequiredPermissions: event.permission.Names(),
 			Spec: &pb.RouteDescriptor_Event{Event: &pb.EventSpec{EventTypeFilter: []string{event.EventType}, HandlerMode: pb.HandlerMode_HANDLER_MODE_MANUAL}}})
 	}
+	for _, job := range reg.Schedules {
+		spec := &pb.ScheduleSpec{JobId: job.JobID, Timezone: job.Timezone}
+		if job.Interval != 0 {
+			spec.Trigger = &pb.ScheduleSpec_IntervalMs{IntervalMs: uint64(job.Interval / time.Millisecond)}
+		} else {
+			spec.Trigger = &pb.ScheduleSpec_Cron{Cron: job.Cron}
+		}
+		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: scheduleRoutePrefix + job.JobID, Kind: pb.RouteKind_ROUTE_KIND_SCHEDULE,
+			DefaultEnabled: true, Spec: &pb.RouteDescriptor_Schedule{Schedule: spec}})
+	}
 	appendHTTPRoutes(r, reg.HTTP)
 	appendServiceRoutes(reg, r)
 	appendSubscriptionRoutes(reg, r)
@@ -168,6 +180,7 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32, c
 // 准备期不能发起业务 RPC。失败时已向 Core 报告 SESSION_ERROR 并关闭连接。
 func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Registration) (prepared *pb.Prepared, err error) {
 	sid, boot, minor := ack.GetSessionId(), ack.GetBootstrap(), ack.GetChosenMinor()
+	setI18n(reg.messages, boot.GetDefaultLocale())
 	limits := boot.GetPhaseLimits()
 	// 1. Core 必须下发阶段预算与准备截止时间；缺失时报协议错误，而不是把预算当作 0 误报超时。
 	if limits == nil || limits.GetConfigMs() == 0 || limits.GetMigrationMs() == 0 || limits.GetOnStartMs() == 0 || boot.GetPreparationDeadlineUnixMs() == 0 {

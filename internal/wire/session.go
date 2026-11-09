@@ -36,6 +36,9 @@ type Request struct {
 	ParentCallID uint64
 	// Attach 只保存在本端；对端以本调用为父发起子请求时，交给子请求的 Handler（Core 借此派生可信上下文）。
 	Attach any
+	// Late 在本地期限结束后的首个响应到达时，由读循环在锁外调用；回调须及时返回。
+	// 请求尚在队列中就到期时，撤回后在锁外立即以本地 DEADLINE_EXCEEDED 响应调用一次。
+	Late func(Response)
 }
 
 // Response 携带一次调用的结果；Payload 与 Err 可以同时存在（例如部分发送成功）。
@@ -147,6 +150,7 @@ type outCall struct {
 	deadline time.Time // 有效期限，子调用不能超过它
 	// Request.Attach，交给以本调用为父的子请求的 Handler。
 	attach any
+	late   func(Response) // Request.Late，只在本地期限结束后保留到首个响应或 Session 关闭
 	// result 容量 1，只写一次。
 	result chan Response
 	// eventResult 非 nil 表示无业务回执的 EVENT；只通知写出结果，不登记到 pending。
@@ -200,13 +204,14 @@ type Session struct {
 	nextID uint64 // 本端最近分配的调用编号
 	lastIn uint64 // 对端最近的调用编号，用于检查单调递增
 	// 等待写出的业务帧，按入队顺序排列，只含 queued 状态的发送。
-	biz      []*outCall
-	events   map[*outCall]struct{} // 尚未写完的 EVENT，由 mu 保护
-	pending  map[uint64]*outCall   // 本端发起、尚未完成的调用
-	inbound  map[uint64]*inCall    // 对端发起、尚未响应的调用
-	outBytes int64                 // 本方向仍计入预算的载荷字节
-	inBytes  int64                 // 对端方向在途的载荷字节
-	err      error                 // 关闭原因；非 nil 表示 Session 已关闭
+	biz           []*outCall
+	events        map[*outCall]struct{}     // 尚未写完的 EVENT，由 mu 保护
+	pending       map[uint64]*outCall       // 本端发起、尚未完成的调用
+	lateCallbacks map[uint64]func(Response) // 已因本地期限结束、仍等待实际响应的调用；不占业务准入
+	inbound       map[uint64]*inCall        // 对端发起、尚未响应的调用
+	outBytes      int64                     // 本方向仍计入预算的载荷字节
+	inBytes       int64                     // 对端方向在途的载荷字节
+	err           error                     // 关闭原因；非 nil 表示 Session 已关闭
 	// changed 在在途调用数变化时关闭并替换，唤醒 WaitIdle。
 	changed chan struct{}
 
@@ -431,7 +436,7 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 	}
 	setPayload(env, req.Payload)
 	cctx, cancel := context.WithCancel(context.Background())
-	c := &outCall{id: id, env: env, bytes: n, deadline: deadline, attach: req.Attach, result: make(chan Response, 1), ctx: cctx, cancel: cancel}
+	c := &outCall{id: id, env: env, bytes: n, deadline: deadline, attach: req.Attach, late: req.Late, result: make(chan Response, 1), ctx: cctx, cancel: cancel}
 	s.pending[id] = c
 	s.outBytes += n
 	s.biz = append(s.biz, c)
@@ -631,6 +636,19 @@ func (s *Session) complete(c *outCall, r Response, reason pb.CancelReason) bool 
 	}
 	c.finished = true
 	delete(s.pending, c.id)
+	// 已写出或正在写出的超期调用仍可能返回；只保留回调，载荷与准入按原流程释放。
+	expired := reason != pb.CancelReason_CANCEL_REASON_UNSPECIFIED && r.Err.GetCode() == pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED
+	var late func(Response)
+	if expired && c.late != nil && s.err == nil {
+		if c.state == queued {
+			late = c.late // 请求将被撤回，实际响应永远不会到达。
+		} else {
+			if s.lateCallbacks == nil {
+				s.lateCallbacks = make(map[uint64]func(Response))
+			}
+			s.lateCallbacks[c.id] = c.late
+		}
+	}
 	s.notifyChange()
 	sendCancel := false
 	switch c.state {
@@ -649,6 +667,9 @@ func (s *Session) complete(c *outCall, r Response, reason pb.CancelReason) bool 
 	// 2. 交付结果后再通知对端，调用者不等待 Cancel 入队。
 	c.cancel()
 	c.result <- r
+	if late != nil {
+		late(r)
+	}
 	if sendCancel {
 		s.sendCancel(c.id, reason)
 	}
@@ -916,7 +937,7 @@ func (s *Session) respondErr(id uint64, code pb.ErrorCode, msg string) error {
 	return s.enqueuePriority(env)
 }
 
-// onResponse 用 RESPONSE 完成对应的本端调用；迟到、重复或未知的响应只计数。
+// onResponse 用 RESPONSE 完成对应的本端调用；迟到响应计数并调用一次期限回调，重复或未知响应只计数。
 func (s *Session) onResponse(env *pb.Envelope) error {
 	if env.GetInitiatorSide() != s.opt.Local {
 		return errors.New("RESPONSE initiator_side is not this side")
@@ -924,8 +945,17 @@ func (s *Session) onResponse(env *pb.Envelope) error {
 	s.mu.Lock()
 	c := s.pending[env.GetCallId()]
 	s.mu.Unlock()
-	if c == nil || !s.complete(c, responseOf(env), pb.CancelReason_CANCEL_REASON_UNSPECIFIED) {
+	response := responseOf(env)
+	if c == nil || !s.complete(c, response, pb.CancelReason_CANCEL_REASON_UNSPECIFIED) {
 		s.late.Add(1) // 迟到、重复或未知：不第二次完成调用
+		s.mu.Lock()
+		late := s.lateCallbacks[env.GetCallId()]
+		delete(s.lateCallbacks, env.GetCallId())
+		s.mu.Unlock()
+		// 先取走回调再解锁执行，使重复响应和回调读取 Session 状态都安全。
+		if late != nil {
+			late(response)
+		}
 	}
 	return nil
 }
@@ -962,6 +992,7 @@ func (s *Session) fail(err error) {
 		// 1. 记录原因，并在 s.mu 下取出两个方向的在途调用快照。
 		s.mu.Lock()
 		s.err = err
+		s.lateCallbacks = nil // 断链后收不到实际响应；运行槽由外层等进程退出后释放。
 		pending := make([]*outCall, 0, len(s.pending))
 		for _, c := range s.pending {
 			pending = append(pending, c)
