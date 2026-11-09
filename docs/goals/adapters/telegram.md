@@ -7,7 +7,7 @@
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 已完成（PR #39） |
-| goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 待派发 |
+| goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 已完成 |
 | goal-89 | T-03.11 | 官方 Telegram Adapter 的平台权限 | T-04.6 | 已完成（PR #106） |
 
 ## 第 5 波
@@ -96,7 +96,7 @@
 
 ### goal-50 · T-03.7 官方 Telegram Adapter 的发送计划与回执
 
-状态：待派发。2026-11-09 维护者在 PR #108 确认：最后一条物理消息是相册时，按钮在首个平台请求前返回 UNSUPPORTED（见 DECISIONS），语句的按钮、物理计划、回执与本地自测段已按此修订。前置 T-03.4（PR #39，合并提交 `604dc65`）已合并；语句原先等待的 `Core.ReadMedia` 由 T-03.6（PR #55，合并提交 `b023130`）合入。2026-11-08 按合入代码核对并改写：`sdk/adapter.Core.ReadMedia(ctx, token, offset uint64, length uint32) ([]byte, uint64, bool, error)`；`internal/core/message` 的 Send 在调用实例前已把 media_ref 与 incoming_ref 都换成该 Adapter Session 的只读令牌并写回 media_ref，https_url 原样交给 Adapter，并已用 `validate.Chain` 做过结构校验（reference、buttons 各至多一个等）；`botClient.call` 只发 JSON，`apiError{status, description, retryAfter}` 已脱敏；实例的 `Capabilities()` 与 `Descriptor()` 共用 `receiveCapabilities()`，`media.read` 由 SDK 按实例是否实现 `adapter.MediaSource` 自动声明；`telegramtest.Server` 现有 `FailNext` 只作用于 getUpdates。`Segment` 还没有 extension 分支（随 T-03.8 加入），本切片不处理。goal-89 也修改 `telegram.go` 与 `telegramtest/server.go`，并在 telegramtest 增加 `Calls(method string) int`；本切片的请求记录用 `Requests` 命名以免冲突，后合并的一方按先合并的代码变基。
+状态：已完成（[PR #108](https://github.com/AlonaBot/AlonaBot/pull/108)），证据见 TEST-MATRIX §3.2；`Button.core_token = 4` 已追加，Core 签发与回调接入归 T-03.8。派发后 2026-11-09 维护者在 PR #108 确认：最后一条物理消息是相册时，按钮在首个平台请求前返回 UNSUPPORTED（见 DECISIONS），语句的按钮、物理计划、回执与本地自测段已按此修订。前置 T-03.4（PR #39，合并提交 `604dc65`）已合并；语句原先等待的 `Core.ReadMedia` 由 T-03.6（PR #55，合并提交 `b023130`）合入。2026-11-08 按合入代码核对并改写：`sdk/adapter.Core.ReadMedia(ctx, token, offset uint64, length uint32) ([]byte, uint64, bool, error)`；`internal/core/message` 的 Send 在调用实例前已把 media_ref 与 incoming_ref 都换成该 Adapter Session 的只读令牌并写回 media_ref，https_url 原样交给 Adapter，并已用 `validate.Chain` 做过结构校验（reference、buttons 各至多一个等）；`botClient.call` 只发 JSON，`apiError{status, description, retryAfter}` 已脱敏；实例的 `Capabilities()` 与 `Descriptor()` 共用 `receiveCapabilities()`，`media.read` 由 SDK 按实例是否实现 `adapter.MediaSource` 自动声明；`telegramtest.Server` 现有 `FailNext` 只作用于 getUpdates。`Segment` 还没有 extension 分支（随 T-03.8 加入），本切片不处理。goal-89 也修改 `telegram.go` 与 `telegramtest/server.go`，并在 telegramtest 增加 `Calls(method string) int`；本切片的请求记录用 `Requests` 命名以免冲突，后合并的一方按先合并的代码变基。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-50（切片 T-03.7：官方 Telegram Adapter 的发送计划与回执）。goal 目录 goal-50，分支 goal-50，worktree .worktrees/goal-50，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
