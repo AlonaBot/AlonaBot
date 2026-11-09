@@ -47,7 +47,7 @@
 | goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 已完成（PR #85） |
 | goal-95 | T-08.11 | 配置改由 config_schema.json 声明 | T-04.7、T-08.3、T-08.4、T-08.10 | 已完成（PR #103） |
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-04.7、T-06.1 | 已完成（PR #101） |
-| goal-91 | T-04.8 | SDK 自有类型与事件常量 | T-04.7、T-04.9 | 待派发 |
+| goal-91 | T-04.8 | SDK 自有类型与事件常量 | T-03.24、T-04.7、T-04.9 | 等待前置 |
 | goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 已完成（PR #107） |
 | goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8、T-08.11 | 待派发 |
 | goal-101 | T-08.12 | Adapter 实例配置与 Core 设置的版本迁移 | T-07.6、T-08.11 | 待派发 |
@@ -59,6 +59,7 @@
 | goal-108 | T-03.17 | 命令菜单同步 | T-04.6、T-04.7、T-04.8、T-08.8 | 等待前置 |
 | goal-109 | T-03.18 | 流式输出辅助函数 | T-03.9、T-04.8 | 等待前置 |
 | goal-110 | T-03.19 | Adapter 的 HTTP 路由 | T-03.3、T-04.8、T-07.7 | 等待前置 |
+| goal-121 | T-03.24 | 插件给出的目标由 Core 补齐 | T-03.6、T-07.6 | 待派发 |
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 等待前置 |
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 待派发 |
 | goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 等待前置 |
@@ -3240,11 +3241,69 @@ Core 一侧已按合入代码核对并修订：
 不做：core.tool.invoke、确认与确认按钮（T-11.2）；Agent 组件与 MCP（T-12）；管理 API 与页面（T-09.14、T-09.9）。
 ```
 
+### goal-121 · T-03.24 插件给出的目标由 Core 补齐
+
+状态：待派发。前置 T-03.6（PR #55，合并提交 `b023130`）与 T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）均已合并。2026-11-09 按 D-102 新增，接口与测试段按 main（`cbd22a8`）的代码写出：`internal/core/message.Service.Send` 先取 To 或父调用的 `DefaultTarget`，再依次 `policy.CheckSend`（原 Target 豁免用 `proto.Equal` 比较）、`validate.Chain`（引用片段的 target 要求四项标识齐全）、`adapters.Get` 与 adapter_id、account_id 的绑定检查；`internal/core/media` 的 `grant` 用 `targetSubset`（`proto.Equal`）比较 GrantRequest.targets 与原范围，补齐用 Store 的 `readers`（`AddReadServices` 传入的 `*adapter.Registry`）；`adapter.Registry` 按实例 ID 保存运行中的实例，重复的 ID 由 `Add` 拒绝；`settings.readAdapters` 只接受 `$version` 与 `instances`，`validateSettings` 不检查实例名。goal-101（T-08.12，进行中）也改 `readAdapters`，按执行顺序 §3 处理。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-121（切片 T-03.24：插件给出的目标由 Core 补齐）。goal 目录 goal-121，分支 goal-121，worktree .worktrees/goal-121，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：插件发出的 Target 可以只带 adapter_id、chat_id、thread_id 与可选的 adapter_instance_id。Core 在准入前补齐空字段：缺少实例时，调用链上在途事件的目标属于同一 Adapter 与 chat_id 则取其实例，否则取该 Adapter 的缺省实例，没有时 FAILED_PRECONDITION；实例已登记时补上 adapter_id 与 account_id。core_config.json 校验实例名并接受可选的 default_instance。SDK 的会话字符串由 T-04.8 提供，本切片只做 Core 侧。
+
+依据：PLAN T-03 步骤 21；CONTRACTS §8（Target 段）、§15.1（adapters）；MESSAGE-MODEL §1（Target）；DECISIONS D-102；TEST-MATRIX V-101 的 Core 分项。
+
+范围（只新增或修改这些）：
+- internal/core/adapter/adapter.go：Registry 追加缺省实例表与补齐方法
+- internal/core/message/send.go：To 与引用片段 target 的补齐调用点
+- internal/core/media/grant.go：GrantRequest.targets 的补齐调用点
+- internal/core/settings/settings.go：AdapterSettings 追加 DefaultInstance，readAdapters 接受 default_instance，validateSettings 末尾调用名称检查
+- 新增 internal/core/settings/names.go：实例名检查与 DefaultInstances
+- contracts/proto/alonabot/v1/identity.proto：只改 Target 的 adapter_instance_id 与 account_id 两行注释（插件发出时可以为空，由 Core 补齐）。随后 go generate ./...
+- internal/core/message/permissions_test.go：追加本语句的测试
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. internal/core/adapter
+   func (r *Registry) SetDefaults(defaults map[string]string) // adapter_id → 缺省实例 ID；整体替换并复制参数，可与其他方法并发调用
+   func (r *Registry) Complete(target, inflight *pb.Target) (*pb.Target, *pb.ErrorInfo) // 返回补齐后的副本，不修改参数；inflight 可以为 nil
+2. internal/core/settings
+   type AdapterSettings struct { Version int; Instances map[string]json.RawMessage; DefaultInstance string } // 在 goal-101 合并后的字段上追加
+   func (s Settings) DefaultInstances() map[string]string // adapter_id → 缺省实例：default_instance 优先，否则该 Adapter 恰有一个实例时为它，其余不列出
+
+行为：
+- Complete：
+  1) chat_id 为空，或 adapter_id 与 adapter_instance_id 都为空 → INVALID_ARGUMENT（safe_message 只写字段名）。
+  2) adapter_instance_id 为空：inflight 非 nil 且 adapter_id、chat_id 都与 target 相同 → 取 inflight 的实例（thread_id 不参与这条比较）；否则取缺省实例表中该 adapter_id 的实例；都没有 → FAILED_PRECONDITION，safe_message 为 "no adapter instance selected; specify one or set default_instance"。
+  3) 实例已登记：adapter_id 为空时补为实例的 AdapterID()，account_id 为空时补为实例的 AccountID()。已给出的字段一律不改，不符的值由调用方原有的绑定检查拒绝。实例未登记时不补，调用方按原有顺序返回 PERMISSION_DENIED 或 UNAVAILABLE，不因补齐泄露实例是否存在。
+- core.send（send.go）：
+  1) To 非 nil 时先调用 Complete(To, 父调用的 DefaultTarget)；失败时返回 REJECTED 回执（Target 为原 To）与该错误，不调用 CheckSend 与 Adapter。To 为 nil 时照旧使用 DefaultTarget，不调用 Complete。
+  2) Chain 中 reference 片段带 target 时，用 Complete(该 target, 补齐后的发送目标) 原位替换，再执行 validate.Chain；失败时返回 REJECTED 回执与该错误。
+  3) 之后的 CheckSend、validate.Chain、实例查找与绑定检查、媒体租约与发送顺序不变；原 Target 豁免对补齐后的目标生效。
+- core.media.grant（grant.go）：解码后、核对原 token 之前，逐个 Complete(target, 父调用的 DefaultTarget) 并替换；任一失败返回其错误，不签发 token。
+- 设置：
+  1) readAdapters 在 `$version`、`instances` 之外接受 `default_instance`（字符串），其他键仍报 unknown key。
+  2) validateSettings 末尾检查：实例名匹配 ^[A-Za-z0-9_-]{1,64}$；同一实例名出现在两个 Adapter 下 → 错误 "duplicate adapter instance name"；default_instance 非空时必须是该 Adapter 的实例。错误按现有方式指明键路径与行列号，不含配置内容。
+  3) 设置的重新读取沿用同一校验；DefaultInstances 返回新 map，调用方修改它不影响 Settings。
+- 装配不在本切片：goal-39 在读取设置后调用 Registry.SetDefaults(settings.DefaultInstances())，重新读取后同样调用（goal-69）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：在 internal/core/message/permissions_test.go 追加 TestSendTargetCompletion，复用 TestSendPermissions 的 state、memory Adapter（memory.New("memory", "a", "account-a") 与 memory.New("memory", "b", "account-b")）与 policy 装配：
+  - 父调用的 DefaultTarget 为实例 a 的 original 会话与话题；To 只带 adapter_id "memory"、chat_id "original" 与同一 thread_id：发送经实例 a，Adapter 记录的 Target 带 account-a，插件的实例许可为空集合时仍放行（原 Target 豁免）。
+  - To 只带 adapter_id 与 chat_id "other"：SetDefaults({"memory": "b"}) 时经实例 b 发出且带 account-b；SetDefaults(nil) 时返回 FAILED_PRECONDITION，两个 Adapter 都没有收到请求。
+  - To 带 adapter_instance_id "b" 而不带 account_id：补为 account-b；带错误的 account_id：照旧 INVALID_ARGUMENT。
+  - reference 片段的 target 只带 adapter_id 与 chat_id "original"：Adapter 收到的引用目标带实例 a 与 account-a。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Complete 的全部分支（inflight 为 nil、adapter_id 不同、chat_id 不同而 thread 相同、实例未登记、只给实例不给 adapter_id）；SetDefaults 与 Complete 在 -race 下并发；grant 的 targets 补齐后与原范围比较，以及补齐失败不签发 token；设置的实例名非法、跨 Adapter 重名、default_instance 指向不存在的实例、DefaultInstances 的三种情况与返回值隔离。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./internal/core/... ./contracts/...；go build ./...。
+
+不做：SDK 的会话字符串、`sdk.Via` 与类型转换（T-04.8，goal-91）；装配处调用 SetDefaults（goal-39、goal-69）；编辑、撤回与平台动作的补齐（goal-51、goal-107、goal-106 复用 Complete）；WebUI 与 Admin API 中 default_instance 的表单（T-09.14）；跨实例的事件去重。
+```
+
 ## 第 10 波
 
 ### goal-91 · T-04.8 SDK 自有类型与事件常量
 
-状态：待派发。T-04.9（PR #110，合并提交 `6aed25d`）已合并：生成器不再输出注册代码，`sdk.Generated` 只剩 `ServiceSchemas` 与 `ConfigSchema`，按原计划不需要再核对接口。T-03.11（PR #106，合并提交 `3913d5a`）与 T-15.1（PR #109，合并提交 `1b226a2`）已合并，`adapters/telegram/perm`、`adapters/onebot11/`（含 `onebottest` 与测试）随之成为调用方，已加入语句「范围」的调用方一项。依据 D-70，2026-11-04 从 T-04.7 拆出。T-04.7（PR #89，合并提交 `3e37cd6`）已合并，接口、行为与测试段已按合入代码写出。前置加入 T-04.9：`sdk/generate/source.go` 为标记事件生成 `r.On(id, "类型字符串")`，本切片把 `On` 改为事件常量后，这段生成代码会编译失败，而标记本身由 T-04.9 删除；T-04.9 合并后不需要再核对接口，直接改为待派发。
+状态：等待前置（T-03.24）。2026-11-09 按 D-102 改写插件侧的目标：`message.Target` 结构改为会话字符串 `message.Session`，新增可选的 `sdk.Via`，account_id 由 T-03.24（goal-121）在 Core 补齐，因此前置加入 T-03.24；T-03.24 合并后由审查者核对 `Registry.Complete` 的签名再改为待派发。T-04.9（PR #110，合并提交 `6aed25d`）已合并：生成器不再输出注册代码，`sdk.Generated` 只剩 `ServiceSchemas` 与 `ConfigSchema`，按原计划不需要再核对接口。T-03.11（PR #106，合并提交 `3913d5a`）与 T-15.1（PR #109，合并提交 `1b226a2`）已合并，`adapters/telegram/perm`、`adapters/onebot11/`（含 `onebottest` 与测试）随之成为调用方，已加入语句「范围」的调用方一项。依据 D-70，2026-11-04 从 T-04.7 拆出。T-04.7（PR #89，合并提交 `3e37cd6`）已合并，接口、行为与测试段已按合入代码写出。前置加入 T-04.9：`sdk/generate/source.go` 为标记事件生成 `r.On(id, "类型字符串")`，本切片把 `On` 改为事件常量后，这段生成代码会编译失败，而标记本身由 T-04.9 删除；T-04.9 合并后不需要再核对接口，直接改为待派发。
 
 符号已按合入代码核对：
 - 公开 API 中的 pb 类型：`Context.Event() *pb.Event`、`To(*pb.Target)`、`Context.Send` 与 `sdk.Send` 的 `*pb.SendResult` 和 `*pb.Target`、`Upload` 的 `*pb.MediaRef`、`GrantMedia` 的 `...*pb.Target`、`Error.Code pb.ErrorCode`、`Public(pb.HttpAuthMode)` 与 `HTTPRoute.AuthMode`、`Command.Mode` 与 `Command.Params`；`message.Chain.Proto() *pb.MessageChain`；`sdk/adapter` 的 `Core.Deliver`、`Core.ReportFailure`、`Instance.Capabilities`、`Instance.Send`、`Adapter.Descriptor`。
@@ -3258,13 +3317,13 @@ Core 一侧已按合入代码核对并修订：
 /goal 使用 $alonabot-execute 推进 goal-91（切片 T-04.8：SDK 自有类型与事件常量）。goal 目录 goal-91，分支 goal-91，worktree .worktrees/goal-91，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：
-- 插件与 Adapter 的公共 API 不再暴露生成的 pb 类型：SDK 自己定义消息、事件、Target、Actor、SendResult 与错误码，pb 只留在 SDK 内部。
+- 插件与 Adapter 的公共 API 不再暴露生成的 pb 类型：SDK 自己定义消息、事件、会话字符串、Actor、SendResult 与错误码，pb 只留在 SDK 内部。发送目标是会话字符串，机器人是可选参数 sdk.Via（D-102）。
 - 新增标准事件常量（带 payload 的 Go 类型）与 sdk.AdapterEvent；事件注册改用常量，Collect 核对事件 Handler 的 payload 参数类型。
 - 命令参数类型改为 SDK 自有类型。
 - sdk/adapter 的接口改用 SDK 类型，官方 Telegram Adapter 与已合并的全部调用方同步。
 - 不改协议：proto 与 Core 侧不变，SDK 在边界内转换。
 
-依据：PLAN T-04 步骤 9（自有类型部分）；CONTRACTS §2.1、§8；MESSAGE-MODEL §1～§3；DESIGN §D；DECISIONS D-70、D-71；TEST-MATRIX V-14 的类型分项、V-86 的 SDK 分项。
+依据：PLAN T-04 步骤 9（自有类型部分）；CONTRACTS §2.1、§8；MESSAGE-MODEL §1～§3；DESIGN §D；DECISIONS D-70、D-71、D-102；TEST-MATRIX V-14 的类型分项、V-86 的 SDK 分项、V-101 的 SDK 分项。
 
 范围（只新增或修改这些）：
 - 新增 sdk/errcode/
@@ -3285,7 +3344,9 @@ Core 一侧已按合入代码核对并修订：
    func (e *Error) Error() string // 「错误码: 说明」，与现在的 sdk.Error 相同
 2. sdk/message（可选字段的零值表示 absent，转换时对应未设置的 optional 字段）
    身份：
-   type Target struct { AdapterID, AdapterInstanceID, AccountID, ChatID, ThreadID string }
+   type Session string // 会话字符串 <adapter_id>:<chat_id>[#<thread_id>]（MESSAGE-MODEL §1，D-102）；插件可以直接写字面量
+   func NewSession(adapterID, chatID, threadID string) Session // chat_id 与 thread_id 中的 % 与 # 写作 %25、%23；threadID 为空表示会话本身
+   func (s Session) Parts() (adapterID, chatID, threadID string, ok bool) // 格式不合法时 ok 为 false
    type Actor struct { ExternalUserID, AdapterInstanceID, DisplayName, Locale string; Permissions []string }
    type Capability struct { Name string; Version uint32; Supported bool }
    片段（Chain 中的片段都是值类型，type switch 按值匹配）：
@@ -3300,12 +3361,12 @@ Core 一侧已按合入代码核对并修订：
    type Readability int; const ( Readable Readability = iota + 1; Unreadable )
    type IncomingMedia struct { Token string; Size uint64; MIME string; Readability Readability; ExpiresAtUnixMS int64 } // Size 为 0 表示未知
    type MediaSource struct { MediaRef string; Incoming *IncomingMedia; HTTPSURL string } // 恰有一个
-   type MediaRef struct { Token string; Size uint64; MIME string; SHA256 []byte; ExpiresAtUnixMS int64; ConsumerPluginIDs []string; Targets []Target }
+   type MediaRef struct { Token string; Size uint64; MIME string; SHA256 []byte; ExpiresAtUnixMS int64; ConsumerPluginIDs []string; Sessions []Session }
    type ImageSegment struct { Source MediaSource; Alt, Caption string }
    type VideoSegment struct { Source MediaSource; DurationMS uint64; Caption string }
    type FileSegment struct { Source MediaSource; Filename, MIME, Caption string }
    type MentionSegment struct { ExternalUserID, Display string }
-   type ReferenceSegment struct { OriginalPlatformMessageID string; Target *Target }
+   type ReferenceSegment struct { OriginalPlatformMessageID string; Session Session } // Session 为空表示与本次发送同一会话
    type Button struct { ActionID, Label, Value string }
    type ButtonsSegment struct { Rows [][]Button }
    type ForwardSource struct { DisplayName, ExternalUserID string }
@@ -3315,7 +3376,7 @@ Core 一侧已按合入代码核对并修订：
    type SourceKind int; const ( SourceAdapter SourceKind = iota + 1; SourceScheduler )
    type PlatformMessage struct { PlatformMessageID string; Chain Chain; MediaGroupID string }
    type Payload interface{ payload() } // 下面的载荷类型以指针实现
-   type Event struct { ID, Type string; Source SourceKind; OccurredAtUnixMS int64; AdapterID, AdapterInstanceID, AccountID string; Target *Target; Actor *Actor; Message *PlatformMessage; Payload Payload; Capabilities []Capability; PlatformPayload []byte; SourceEventID string }
+   type Event struct { ID, Type string; Source SourceKind; OccurredAtUnixMS int64; AdapterID, AdapterInstanceID, AccountID string; Session Session; Actor *Actor; Message *PlatformMessage; Payload Payload; Capabilities []Capability; PlatformPayload []byte; SourceEventID string }
    type CreatedPayload struct { PlatformMessageID string; Chain Chain; ToMe bool }
    type EditedPayload struct { PlatformMessageID string; Chain, OldChain Chain }
    type DeletedPayload struct { PlatformMessageIDs []string }
@@ -3331,15 +3392,16 @@ Core 一侧已按合入代码核对并修订：
    type SendStatus int; const ( SendAccepted SendStatus = iota + 1; SendPartial; SendRejected; SendUnknown )
    type PartStatus int; const ( PartAccepted PartStatus = iota + 1; PartRejected; PartUnknown; PartNotAttempted )
    type PartResult struct { PartIndex uint32; SegmentIndexes []uint32; Status PartStatus; PlatformMessageIDs []string; MessageIDsUnavailable bool; Error *errcode.Error }
-   type SendResult struct { Status SendStatus; Target *Target; PlatformMessageIDs []string; PrimaryPlatformMessageID string; ProviderAcceptedTimeUnixMS int64; CapabilitiesUsed []Capability; PartResults []PartResult }
+   type SendResult struct { Status SendStatus; Session Session; AdapterInstanceID string; PlatformMessageIDs []string; PrimaryPlatformMessageID string; ProviderAcceptedTimeUnixMS int64; CapabilitiesUsed []Capability; PartResults []PartResult }
 3. sdk
    type Error = errcode.Error // 插件继续用 errors.As 取 *sdk.Error
    func (c *Context) Event() *message.Event
-   func To(t *message.Target) SendOption
+   func To(s message.Session) SendOption
+   func Via(instanceID string) SendOption // 指定发送的机器人（实例）；缺省由 Core 选择（CONTRACTS §8）
    func (c *Context) Send(chain message.Chain, opts ...SendOption) (*message.SendResult, error)
-   func Send(ctx context.Context, to *message.Target, chain message.Chain) (*message.SendResult, error)
+   func Send(ctx context.Context, to message.Session, chain message.Chain, opts ...SendOption) (*message.SendResult, error) // opts 只接受 Via
    func Upload(ctx context.Context, r io.Reader, size uint64, mime string, sum []byte) (*message.MediaRef, error)
-   func GrantMedia(ctx context.Context, token, granteePluginID string, targets ...*message.Target) (string, error)
+   func GrantMedia(ctx context.Context, token, granteePluginID string, sessions ...message.Session) (string, error)
    type HTTPAuth int; const ( AuthCoreSession HTTPAuth = iota + 1; AuthCallbackState; AuthCallbackSignature; AuthCallbackNonce )
    func Public(mode HTTPAuth) HTTPOption // HTTPRoute.AuthMode 同步改为 HTTPAuth
    Command 的 Mode 与 Params 改为不导出的字段
@@ -3356,11 +3418,16 @@ Core 一侧已按合入代码核对并修订：
    Core.Deliver(ctx context.Context, ev *message.Event, cursor []byte) (accepted bool, err error)
    Core.ReportFailure(ctx context.Context, safe *errcode.Error) error
    Instance.Capabilities() []message.Capability
-   Instance.Send(ctx context.Context, target *message.Target, chain message.Chain) (*message.SendResult, *errcode.Error)
+   Instance.Send(ctx context.Context, to message.Session, chain message.Chain) (*message.SendResult, *errcode.Error) // Adapter 用 to.Parts() 取 chat_id 与 thread_id
    Adapter.Descriptor() *Descriptor
 
 行为：
-- 转换集中在 sdk/internal/convert：入站事件与命令参数从 pb 转为 SDK 类型，出站 Chain、Target、错误与 Adapter 描述反向转换。每个字段双向保持，空串与零值对应未设置的 optional。message 与 sdk/adapter 的公开 API 不出现 pb。wire、Session、Core 不变。
+- 转换集中在 sdk/internal/convert：入站事件与命令参数从 pb 转为 SDK 类型，出站 Chain、目标、错误与 Adapter 描述反向转换。每个字段双向保持，空串与零值对应未设置的 optional。message 与 sdk/adapter 的公开 API 不出现 pb。wire 与 Core 不变（Core 侧的补齐由 T-03.24 提供）。
+- 会话字符串（D-102）：
+  - pb.Target → Session 为 NewSession(adapter_id, chat_id, thread_id)；接收或发送的实例由 Event、SendResult 的 AdapterInstanceID 给出，account_id 由 Event 的 AccountID 给出。
+  - Session → pb.Target：Parts 得到 adapter_id、chat_id、thread_id；Via 给出时填 adapter_instance_id；account_id 留空，由 Core 补齐。格式不合法时在发出请求前返回 INVALID_ARGUMENT。
+  - c.Send：To 与 Via 都没有时照旧发往默认目标；只有 Via 时发往默认目标的会话（含 thread），经指定实例发出；只有 To 时由 Core 选择实例。
+  - Adapter 交付的 Event 由 Session 与 Event 的 AdapterID、AdapterInstanceID、AccountID 组成完整的 pb.Target；Core 交给 Adapter 的完整 Target 转为 Session。
 - Context：Event 每次调用只转换一次，返回值只供本次 Handler 读取，修改它不影响 Send 的默认目标与权限判定。Service 调用的 Event 仍为 nil。Has 与默认 Target 继续使用 SDK 内部的 pb 值。
 - 命令参数：`*message.ImageSegment` 对应 image，`message.Chain` 对应 message，其余不变；可选参数缺失时为 nil，与现在相同。checkHandler 的错误文案同步。
 - 事件路由：
@@ -3382,8 +3449,9 @@ Core 一侧已按合入代码核对并修订：
   - 版本不符与 payload_json 解码失败时：不调用 Handler、记 WARN、日志没有载荷。
   - AdapterEvent 的名称不合法、version 为 0、T 不是结构体；Handle 的各种错误签名；零值 EventType。
   - Chain.Text 跳过非文本片段；修改 c.Event() 的返回值不影响 c.Send 的默认目标。
+  - Session：Telegram 与 OneBot 11 形式的往返、话题、chat_id 中的 `%` 与 `#`、各种不合法格式；To、Via 的四种组合对应的 SendRequest.to。
   - `go doc -all` 查看 ./sdk、./sdk/message、./sdk/adapter、./sdk/errcode，输出中没有 pb 类型。
-  - internal/core/supervisor/command_local_test.go（commanddispatch 插件，TCP 与 stdio）：事件路由写成 `r.On("typed", sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error {...})`，插件回复 e.Chain.Text()、e.ToMe、c.Event().Actor.Permissions 与 c.Event().Target.ChatID，与 Adapter 交付的值一致。Handler 的第二个参数写成 *message.ReactionAddedPayload 时（环境变量控制）插件启动失败，日志带 route_id。
+  - internal/core/supervisor/command_local_test.go（commanddispatch 插件，TCP 与 stdio）：事件路由写成 `r.On("typed", sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error {...})`，插件回复 e.Chain.Text()、e.ToMe、c.Event().Actor.Permissions 与 c.Event().Session，与 Adapter 交付的值一致。Handler 的第二个参数写成 *message.ReactionAddedPayload 时（环境变量控制）插件启动失败，日志带 route_id。
   - 现有命令参数用例改用 *message.ImageSegment 与 message.Chain，断言不变。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./...；go build ./...。
@@ -3808,7 +3876,7 @@ sdk
 
 ### goal-39 · T-09.4 管理服务、安装记录与 serve
 
-状态：等待前置（T-03.8、T-13.1）。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin{InstanceID, UserID}`；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。语句中 goal-8、goal-31、goal-36、goal-37（packages）、goal-53、goal-67 提供的符号（manifest.CheckDependencies、secret.Store、adminauth.Auth、packages.Preflight、supervisor.Spec.DefaultLocale、根包的 assembly、remote.Process、policy 的 Admin 方法）只写名字；合并后由审查者核对签名，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：`alonabot serve` 改为 `alonabot run`（D-77）；Adapter 实例与 Core Admin 的增删经 goal-97 的 settings 写回 `core_config.json`，实例凭证不再存为 Secret 引用（D-82）；首次 token 由 goal-97 实现；install 接受未签名的仓库来源并要求管理员确认（D-81）。前置合并后由审查者改写。2026-11-05：goal-67 首次装配 Router 时 prefixes 传 nil，goal-97 只提供 settings，命令前缀与 Core Admin 列表由本切片接入（见范围、行为与测试）。2026-11-06：默认 locale 也由本切片接入，前置加入提供 Spec.DefaultLocale 的 T-08.8；Router 经 `Plugin.DefaultLocale()` 读取该插件 Session 的 Bootstrap 快照（goal-53 已合入），装配处只需填好 Spec.DefaultLocale。
+状态：等待前置（T-03.8、T-13.1）。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin{InstanceID, UserID}`；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。语句中 goal-8、goal-31、goal-36、goal-37（packages）、goal-53、goal-67 提供的符号（manifest.CheckDependencies、secret.Store、adminauth.Auth、packages.Preflight、supervisor.Spec.DefaultLocale、根包的 assembly、remote.Process、policy 的 Admin 方法）只写名字；合并后由审查者核对签名，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：`alonabot serve` 改为 `alonabot run`（D-77）；Adapter 实例与 Core Admin 的增删经 goal-97 的 settings 写回 `core_config.json`，实例凭证不再存为 Secret 引用（D-82）；首次 token 由 goal-97 实现；install 接受未签名的仓库来源并要求管理员确认（D-81）。前置合并后由审查者改写。2026-11-05：goal-67 首次装配 Router 时 prefixes 传 nil，goal-97 只提供 settings，命令前缀与 Core Admin 列表由本切片接入（见范围、行为与测试）。2026-11-06：默认 locale 也由本切片接入，前置加入提供 Spec.DefaultLocale 的 T-08.8；Router 经 `Plugin.DefaultLocale()` 读取该插件 Session 的 Bootstrap 快照（goal-53 已合入），装配处只需填好 Spec.DefaultLocale。2026-11-09 按 D-102 追加一项装配：goal-121（T-03.24）合并后，装配在读取设置后调用 `Registry.SetDefaults(settings.DefaultInstances())`，设置重新读取后（goal-69）同样调用；goal-121 先于本切片合并时，审查者把这一步写进接口与行为段。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-39（切片 T-09.4：管理服务、安装记录与 serve）。goal 目录 goal-39，分支 goal-39，worktree .worktrees/goal-39，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

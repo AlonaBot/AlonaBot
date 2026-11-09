@@ -34,6 +34,7 @@
 | T-03.17 | goal-108 | 命令菜单同步：`adapter.commands.sync`，按实例筛选命令与翻译说明，2 秒合并与失败诊断（D-96） | T-03 步骤 14 | T-04.6、T-04.7、T-04.8、T-08.8 | V-93 的 Core 分项 | 未开始 |
 | T-03.18 | goal-109 | SDK 的流式输出辅助函数 `c.Stream`：按 `message.edit` 选择节流编辑或缓冲后发送一次，超长换条，失败即停止；不新增协议（D-98） | T-03 步骤 15 | T-03.9、T-04.8 | V-94 的 Core 分项 | 未开始 |
 | T-03.19 | goal-110 | Adapter 的 HTTP 路由：Adapter 的 REGISTER 携带 HTTP 路由与 endpoint，`sdk.RunAdapter` 托管 Listener，统一端口代理 WebSocket Upgrade 并在路由撤销时关闭连接（D-94） | T-03 步骤 16 | T-03.3、T-04.8、T-07.7 | V-95 的 Core 分项 | 未开始 |
+| T-03.24 | goal-121 | 插件给出的目标由 Core 补齐：缺少实例时按在途事件的同一会话或 Adapter 的缺省实例选择，account_id 按实例补上；`core.send` 的 To 与引用片段、`core.media.grant` 的 targets 在准入前补齐；`core_config.json` 的实例名规则与 `default_instance`（D-102） | T-03 步骤 21 | T-03.6、T-07.6 | V-101 的 Core 分项 | 未开始 |
 | T-04.1 | goal-10 | 根插件 API 与显式注册；静态注册索引、重复拒绝、跨插件遮蔽的稳定选择 | T-04 步骤 1、3 | T-03.1 | V-10 的注册分项、V-02 的注册原子性 | 已完成（PR #34；TEST-MATRIX §3.2） |
 | T-04.2 | goal-11 | 构建期生成器 `sdk/generate`：限定扫描范围、build tags、生成注册代码、稳定输出；`cmd/alonabot` 的构建检查入口 | T-04 步骤 2 | T-04.1 | V-10 | 已完成（PR #42；TEST-MATRIX §3.2） |
 | T-04.3 | goal-12 | 命令选择与参数绑定：完整 token、@username、最长路径/别名→文本匹配（Regex、keyword、startswith、endswith、fullmatch）→Raw、消费状态、参数语法、usage/silent | T-04 步骤 4 | T-04.1 | V-11 的命令分项、V-49 | 已完成（PR #47；TEST-MATRIX §3.2） |
@@ -41,7 +42,7 @@
 | T-04.5 | goal-14 | 用同一 SDK 升级示例，完成构建与策略验收，汇总证据 | T-04 步骤 6、7 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9 | V-10、V-11、V-12、V-43、V-49 的 T-04 分项 | 未开始 |
 | T-04.6 | goal-87 | 权限、扩展事件与命令解析的协议和 Core 侧：proto 修改与生成；Adapter 权限与扩展事件声明的校验；平台权限的保留与隐含展开、按权限名集合判定；扩展事件的交付校验；`command_prefixes` 与按实例覆盖、去掉开头的 reference 与本账号 mention、非文本 token 与 `user`/`image`/`message` 参数、usage 文案键 | T-04 步骤 8 | T-03.3、T-03.6、T-04.3 | V-85、V-86、V-87 的 Core 分项 | 已完成（PR #78；TEST-MATRIX §3.2） |
 | T-04.7 | goal-88 | SDK 链式注册：命令、文本匹配、事件、Service 与 Event Bus 订阅的 builder，Permission 值对象与 `c.Has`，Service Schema 由生成器生成且 schema_id 由 Go 类型决定，自动回复型可 `c.Send`；生成器、示例与已合并调用方同步 | T-04 步骤 9 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | V-10、V-14 的 SDK 分项 | 已完成（PR #89；TEST-MATRIX §3.2） |
-| T-04.8 | goal-91 | SDK 自有类型与事件常量：Message/Target/Actor/SendResult/错误码与入站片段，标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对事件 Handler 的 payload 类型，`sdk/adapter` 的公共类型；Telegram Adapter、示例与已合并调用方同步 | T-04 步骤 9 | T-04.7、T-04.9 | V-14 的类型分项、V-86 的 SDK 分项 | 未开始 |
+| T-04.8 | goal-91 | SDK 自有类型与事件常量：Message/会话字符串与可选的 `sdk.Via`（D-102）/Actor/SendResult/错误码与入站片段，标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对事件 Handler 的 payload 类型，`sdk/adapter` 的公共类型；Telegram Adapter、示例与已合并调用方同步 | T-04 步骤 9 | T-03.24、T-04.7、T-04.9 | V-14 的类型分项、V-86 的 SDK 分项，V-101 的 SDK 分项 | 未开始 |
 | T-04.9 | goal-96 | 删除构建期标记：去掉 `//alonabot:command`、`//alonabot:event` 的扫描、诊断与生成，命令与事件只经链式注册，示例与测试随之改写（D-79） | T-04 步骤 2 | T-04.7 | V-10 | 已完成（[PR #110](https://github.com/AlonaBot/AlonaBot/pull/110)） |
 | T-05.1 | goal-15 | 可信事件上下文与有界同事件分发：64 条并发链、256 条/8 MiB 等待队列、稳定候选排序、链执行与读循环分离；经回环测试 Adapter 运行，按钮与 scheduled 绑定先用规范 fixture | T-05 步骤 1、2 | T-03.3、T-04.3、T-04.4 | V-13、V-16 的 fixture 分项 | 已完成（PR #67；TEST-MATRIX §3.2） |
 | T-05.2 | goal-16 | SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支 | T-05 步骤 3、4 | T-05.1、T-04.7、T-04.8 | V-14、V-11 的 Rule 分项 | 未开始 |
@@ -234,6 +235,8 @@ Adapter 以安装包和独立进程运行（CONTRACTS §8）。以下步骤中�
 
 20. **Telegram 的代理模式与话题判定。** 在[Telegram 实施计划](adapters/telegram.md#t-03-的-telegram-步骤)中实施。
 
+21. **插件给出的目标由 Core 补齐（D-102）。** 在 `internal/core/adapter` 的实例表中实现目标补齐：只补空字段；缺少 adapter_instance_id 时，调用链上在途事件的目标属于同一 Adapter 与 chat_id 则取其实例，否则取该 Adapter 的缺省实例，没有时 FAILED_PRECONDITION；实例已登记时补上 adapter_id 与 account_id。`core.send` 的 To 与引用片段的 target、`core.media.grant` 的 targets 在准入前补齐，之后的编辑、撤回与平台动作复用同一函数；补齐后的目标照常经过原 Target 豁免、实例许可、会话禁止与实例绑定检查。`internal/core/settings` 校验实例名的字符集与跨 Adapter 唯一，读取可选的 `default_instance` 并给出各 Adapter 的缺省实例，由装配处在读取与重新读取设置后交给实例表。
+
 #### 拟目录与交付
 
 | 拟目录 | 本工作包交付 |
@@ -261,6 +264,7 @@ Adapter 以安装包和独立进程运行（CONTRACTS §8）。以下步骤中�
 | V-89～V-95 | 步骤 10～16 的协议与 Core 侧分项；两个官方 Adapter 的分项由 T-03.20～T-03.22 与 T-15.4～T-15.6 提供 |
 | V-98 | 步骤 11 中 chat_type 的 Core 与 SDK 分项；两个官方 Adapter 的填写由 T-03.20 与 T-15.5 提供 |
 | V-99、V-100 | Telegram 的代理模式与话题判定（步骤 20） |
+| V-101 | 步骤 21 的 Core 分项；SDK 的会话字符串与 `sdk.Via` 由 T-04.8 提供 |
 
 T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求本包的 Telegram 部分先完成；T-04.5 的示例升级在本包示例完成后进行。真实平台验证尚未运行的部分继续保持未完成，由 T-10 汇总补齐。完整普通事件排序、自动回复、Hook 和命令策略组合分别在 T-04/T-05 闭合。
 
@@ -302,7 +306,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 
 8. **改造权限、扩展事件与命令解析的协议和 Core 侧。** 按 WIRE-FORMAT §5A 的 2026-11-01 条目修改 proto 并重新生成。Core 校验 Adapter 的权限与扩展事件声明（前缀、名称、隐含关系无环、Schema 可编译）；交付事件时只保留已声明的平台权限并展开隐含关系，按声明校验扩展事件；路由按权限名集合判定（CONTRACTS §2.3）。按 CONTRACTS §2.2 实现 `command_prefixes` 与按实例覆盖、去掉开头的 reference 与指向本账号的 mention、非文本 token、`user`/`image`/`message` 参数与 usage 文案键。同步修改已合并的 router、remote Adapter、`sdk/adapter`、Telegram Adapter 与集成测试（D-69、D-71、D-72）。
 
-9. **SDK 改为链式注册并使用自有类型。** 按 D-70 把命令、文本匹配、事件、Service 与 Event Bus 订阅的注册改为链式构建，删除 `RouteOption`、`ServiceOption` 与位置参数形式；新增 Permission 值对象（`Or`）与 `c.Has`、标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对 Handler 的参数类型；Service 的 Schema 由生成器从 Go 类型生成；Context、Send、事件 payload 与错误码改用 SDK 自有类型，自动回复型 Handler 可以 `c.Send`。构建期生成器、示例、`sdk/adapter` 的公共类型与已合并调用方同步修改。链式注册（含 Permission 与 Service Schema）为 T-04.7，自有类型、事件常量与 `sdk/adapter` 的公共类型为 T-04.8（2026-11-04 拆分）。
+9. **SDK 改为链式注册并使用自有类型。** 按 D-70 把命令、文本匹配、事件、Service 与 Event Bus 订阅的注册改为链式构建，删除 `RouteOption`、`ServiceOption` 与位置参数形式；新增 Permission 值对象（`Or`）与 `c.Has`、标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对 Handler 的参数类型；Service 的 Schema 由生成器从 Go 类型生成；Context、Send、事件 payload 与错误码改用 SDK 自有类型，发送目标用会话字符串，机器人用可选的 `sdk.Via`（D-102），自动回复型 Handler 可以 `c.Send`。构建期生成器、示例、`sdk/adapter` 的公共类型与已合并调用方同步修改。链式注册（含 Permission 与 Service Schema）为 T-04.7，自有类型、事件常量与 `sdk/adapter` 的公共类型为 T-04.8（2026-11-04 拆分）。
 
 #### 拟目录与交付
 

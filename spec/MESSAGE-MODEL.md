@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | Event | event_id、event_type、source_kind、occurred_at_unix_ms、adapter_id?、adapter_instance_id?、account_id?、target?、chat_type、actor?、message?、event_payload、capabilities、platform_payload? | event_id 由 Core 在入站标准化时产生；source_kind 为 ADAPTER/SCHEDULER，Core 为实例状态生成的 bot.online/bot.offline 也记为 ADAPTER。平台字段只对相应来源存在；原平台事件标识另存 source_event_id。chat_type 是事件所在会话的类型（PRIVATE、GROUP、CHANNEL，平台未给出时 UNSPECIFIED，D-100），由 Adapter 在事件带 target 时填写，没有 target 的事件必须为 UNSPECIFIED；它不属于 Target，不参与 Target 的比较与准入，出站时 Adapter 不读取 |
 | Actor | external_user_id、adapter_instance_id、display_name?、locale?、permissions | permissions 是 Core 按 CONTRACTS §2.3 计算的权限名集合，Adapter 只给出本会话的平台权限；来源必须为可信 Adapter 元数据及 Core policy；用户身份按实例作用域绑定；插件/外部 webhook 的 is_admin 不是身份依据。locale 是平台给出的用户语言（规范化的 BCP 47 标签），平台未提供时 absent，用于 CONTRACTS §5.4 的文案选择 |
-| Target | adapter_id、adapter_instance_id、account_id、chat_id、thread_id? | Adapter 验证 account 与实例绑定；默认 Target 仅来自当前实际入站事件；主动任务须显式 To，按 CONTRACTS §8 的 allowed_adapter_instances 与原事件回复范围准入 |
+| Target | adapter_id、adapter_instance_id、account_id、chat_id、thread_id? | Adapter 验证 account 与实例绑定；默认 Target 仅来自当前实际入站事件；主动任务须显式 To，按 CONTRACTS §8 的 allowed_adapter_instances 与原事件回复范围准入。插件 API 把 Target 写成会话字符串 `<adapter_id>:<chat_id>`，话题为 `<adapter_id>:<chat_id>#<thread_id>`，chat_id 与 thread_id 中的 `%`、`#` 写作 `%25`、`%23`；实例是可选参数，account_id 由 Core 按实例补齐（CONTRACTS §8，D-102） |
 | Capability | name、version、supported | 使用 Adapter 明确公布的能力；未知能力不推定支持 |
 
 命令权限按权限名判定（CONTRACTS §2.3，D-69）：`user` 指具有可信 Actor 的用户；`admin` 指 Core 配置的、以 adapter_instance_id/external_user_id 标识的机器人管理员；`chat_admin` 与 Adapter 声明的平台权限（例如 `onebot11.group_owner`）只在该会话有效，不因此取得 Core 管理、插件安装或其他会话权限。Core 全局禁止规则始终生效，动态策略在每次派发前重新检查。
@@ -246,6 +246,6 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 
 ## 8. 验收与依据
 
-对应 [TEST-MATRIX.md](TEST-MATRIX.md)：Target/话题/多实例；Handler 两签名及停止传播；Rule false；空 Chain；按钮 token/过期/代次/多用户权限；相册多 ID；发送前拒绝、平台明确失败、先成功再超时；AfterSend 失败不改写平台结果；缺少 actor 和平台不支持事件；消息编辑；bot 上下线事件；Actor.locale 映射；OneBot 11 的接收映射、发送计划与跨 Adapter 一致性（V-71、V-72）；D-87 补齐的媒体传递、新片段、平台动作、撤回与输入状态、命令菜单、流式输出、反向 WebSocket、扩展事件与 Telegram 媒体小项（V-89～V-97）；会话类型、Telegram 的代理模式与话题判定（V-98～V-100）。实际编译、平台调用和故障注入均留在实施阶段记录。
+对应 [TEST-MATRIX.md](TEST-MATRIX.md)：Target/话题/多实例；Handler 两签名及停止传播；Rule false；空 Chain；按钮 token/过期/代次/多用户权限；相册多 ID；发送前拒绝、平台明确失败、先成功再超时；AfterSend 失败不改写平台结果；缺少 actor 和平台不支持事件；消息编辑；bot 上下线事件；Actor.locale 映射；OneBot 11 的接收映射、发送计划与跨 Adapter 一致性（V-71、V-72）；D-87 补齐的媒体传递、新片段、平台动作、撤回与输入状态、命令菜单、流式输出、反向 WebSocket、扩展事件与 Telegram 媒体小项（V-89～V-97）；会话类型、Telegram 的代理模式与话题判定（V-98～V-100）；会话字符串与可选的机器人（V-101）。实际编译、平台调用和故障注入均留在实施阶段记录。
 
 平台约束核对依据（2026-10-21）：[Telegram Bot API](https://core.telegram.org/bots/api)、[sendMediaGroup](https://core.telegram.org/bots/api#sendmediagroup)、[InlineKeyboardButton](https://core.telegram.org/bots/api#inlinekeyboardbutton)、[CallbackQuery](https://core.telegram.org/bots/api#callbackquery)。相册返回 Message 数组、每组 2～10 项、按钮载荷限额和回调确认来自官方接口；上面的拆分、token 生命周期和错误汇总属于 AlonaBot 首发选择。
