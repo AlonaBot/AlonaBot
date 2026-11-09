@@ -4,15 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"strings"
+	"slices"
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 )
 
 const configSchemaFileName = "config_schema.json"
-const translationsDirectory = "i18n"
 
 func (s *scan) configSchema() error {
 	// 1. 未声明 schema 时使用空字段集核对翻译，生成项保持 nil。
@@ -31,29 +31,13 @@ func (s *scan) configSchema() error {
 	if present {
 		s.result.ConfigSchema = schema.Canonical()
 	}
-	// 2. 只提取 config 根节点核对字段与模板，翻译目录的其他检查由其所有者负责。
-	directory := filepath.Join(s.dir, translationsDirectory)
-	files, err := os.ReadDir(directory)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read config translations: %w", err)
-	}
-	for _, file := range files {
-		if file.IsDir() || !strings.HasSuffix(file.Name(), ".json") {
-			continue
-		}
-		relative := filepath.ToSlash(filepath.Join(translationsDirectory, file.Name()))
-		raw, err := os.ReadFile(filepath.Join(directory, file.Name()))
-		if err != nil {
-			return fmt.Errorf("read config translation %s: %w", relative, err)
-		}
+	// 2. 复用已读原文核对 config 字段与模板；JSON 解析问题由 readI18n 报告。
+	for _, file := range slices.Sorted(maps.Keys(s.i18nFiles)) {
+		relative := filepath.ToSlash(filepath.Join(i18nDirectory, file))
 		var translation struct {
 			Config json.RawMessage `json:"config"`
 		}
-		if err := json.Unmarshal(raw, &translation); err != nil {
-			s.result.Diagnostics = append(s.result.Diagnostics, Diagnostic{relative, err.Error()})
+		if err := json.Unmarshal(s.i18nFiles[file], &translation); err != nil {
 			continue
 		}
 		s.schemaProblems(relative, schema.CheckI18n(translation.Config))

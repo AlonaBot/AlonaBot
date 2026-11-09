@@ -5,6 +5,7 @@ go 1.27.1
 tool google.golang.org/protobuf/cmd/protoc-gen-go
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/google/jsonschema-go v0.4.3
 	github.com/libtnb/sqlite v1.2.2
 	github.com/spf13/cobra v1.10.2
