@@ -589,9 +589,9 @@ func waitLifecycle(t *testing.T, logs *logBuf, condition func() bool) {
 	}
 }
 
-func lifecycleHTTP(proxy *httpproxy.Server, path string) *httptest.ResponseRecorder {
+func lifecycleHTTP(proxy *httpproxy.Server, pluginID, path string) *httptest.ResponseRecorder {
 	response := httptest.NewRecorder()
-	proxy.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/plugins/demo/"+path, nil))
+	proxy.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/plugins/"+pluginID+"/"+path, nil))
 	return response
 }
 
@@ -639,7 +639,7 @@ func TestScheduleAndHTTPLifecycle(t *testing.T) {
 		if got := spec.Scheduler.Stats("demo", "probe"); got != (scheduler.JobStats{}) || len(scheduledTicks(logs)) != 0 {
 			t.Fatalf("scheduler ran before ACTIVATED: %+v; log:\n%s", got, logs.String())
 		}
-		if got := lifecycleHTTP(spec.HTTP, "").Code; got != http.StatusServiceUnavailable {
+		if got := lifecycleHTTP(spec.HTTP, "demo", "").Code; got != http.StatusServiceUnavailable {
 			t.Fatalf("HTTP before ACTIVATED = %d, want 503", got)
 		}
 		activatedAfter := time.Now()
@@ -655,7 +655,7 @@ func TestScheduleAndHTTPLifecycle(t *testing.T) {
 		if launchErr != nil {
 			t.Fatal(launchErr)
 		}
-		if got := lifecycleHTTP(spec.HTTP, "").Code; got != http.StatusOK {
+		if got := lifecycleHTTP(spec.HTTP, "demo", "").Code; got != http.StatusOK {
 			t.Fatalf("HTTP after ACTIVATED = %d, want 200", got)
 		}
 
@@ -703,7 +703,7 @@ func TestScheduleAndHTTPLifecycle(t *testing.T) {
 
 		// 1. 同时保留 RPC 与 HTTP 在途请求，让两个排空步骤共享绝对截止。
 		heldHTTP := make(chan int, 1)
-		go func() { heldHTTP <- lifecycleHTTP(spec.HTTP, "?hold=1").Code }()
+		go func() { heldHTTP <- lifecycleHTTP(spec.HTTP, "demo", "?hold=1").Code }()
 		waitLifecycle(t, logs, func() bool { return strings.Contains(logs.String(), "HTTP request held") })
 		t0 := time.Now()
 		type stopped struct {
@@ -715,7 +715,7 @@ func TestScheduleAndHTTPLifecycle(t *testing.T) {
 			result := running.Stop(t0, pb.StopReason_STOP_REASON_DISABLE)
 			finished <- stopped{result, time.Now()}
 		}()
-		waitLifecycle(t, logs, func() bool { return lifecycleHTTP(spec.HTTP, "").Code == http.StatusServiceUnavailable })
+		waitLifecycle(t, logs, func() bool { return lifecycleHTTP(spec.HTTP, "demo", "").Code == http.StatusServiceUnavailable })
 		frozen := spec.Scheduler.Stats("demo", "probe")
 		if running.Instance.State() != host.StateDraining || !frozen.Running || frozen.Runs != 1 {
 			t.Fatalf("expected a draining live callback: state=%s stats=%+v", running.Instance.State(), frozen)
@@ -728,7 +728,7 @@ func TestScheduleAndHTTPLifecycle(t *testing.T) {
 		if got := spec.Scheduler.Stats("demo", "probe"); got != frozen || len(scheduledTicks(logs)) != 1 {
 			t.Fatalf("scheduler advanced after Drain: before=%+v after=%+v; log:\n%s", frozen, got, logs.String())
 		}
-		if got := lifecycleHTTP(spec.HTTP, "").Code; got != http.StatusServiceUnavailable {
+		if got := lifecycleHTTP(spec.HTTP, "demo", "").Code; got != http.StatusServiceUnavailable {
 			t.Fatalf("HTTP during Drain = %d, want 503", got)
 		}
 
@@ -764,9 +764,192 @@ func TestScheduleAndHTTPLifecycle(t *testing.T) {
 		if got := spec.Scheduler.Stats("demo", "probe"); got.Running || got.Runs != frozen.Runs || got.Skipped != frozen.Skipped {
 			t.Fatalf("job stats after process exit = %+v", got)
 		}
-		if got := lifecycleHTTP(spec.HTTP, "").Code; got != http.StatusServiceUnavailable {
+		if got := lifecycleHTTP(spec.HTTP, "demo", "").Code; got != http.StatusServiceUnavailable {
 			t.Fatalf("HTTP after Stop = %d, want 503", got)
 		}
 		t.Logf("RPC and HTTP drained against one deadline; Stop finished in %v of %v", done.at.Sub(t0), spec.Stop.Total)
+	})
+
+	t.Run("crash_and_new_session", func(t *testing.T) {
+		store, spec, logs := rawSpec(t, "schedule-http-drain", false)
+		setDefaultLogger(t, slog.New(slog.NewTextHandler(logs, nil)))
+		spec.HTTP = httpproxy.New(nil)
+		spec.Scheduler = scheduler.New(scheduler.Options{JobTimeout: 250 * time.Millisecond})
+		t.Cleanup(spec.Scheduler.Close)
+		old, err := Launch(context.Background(), store, spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { old.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE) })
+		oldHTTP := lifecycleHTTP(spec.HTTP, "demo", "")
+		if oldHTTP.Code != http.StatusOK {
+			t.Fatalf("HTTP before crash = %d, want 200", oldHTTP.Code)
+		}
+		waitLifecycle(t, logs, func() bool { return spec.Scheduler.Stats("demo", "probe").TimedOut == 1 })
+		if got := spec.Scheduler.Stats("demo", "probe"); !got.Running {
+			t.Fatalf("callback slot released before process crash: %+v", got)
+		}
+
+		// 1. 杀掉真实进程模拟崩溃，WaitExit 撤销映射并确认旧槽释放。
+		if err := old.Process.KillTree(); err != nil {
+			t.Fatal(err)
+		}
+		if abnormal, state, err := old.WaitExit(); err != nil || !abnormal {
+			t.Fatalf("crash cleanup: abnormal=%v state=%s err=%v", abnormal, state, err)
+		}
+		if got := lifecycleHTTP(spec.HTTP, "demo", "").Code; got != http.StatusServiceUnavailable {
+			t.Fatalf("HTTP after crash = %d, want 503", got)
+		}
+		endpoint := old.Instance.HTTPListener
+		address := net.JoinHostPort(endpoint.GetHost(), fmt.Sprint(endpoint.GetPort()))
+		if conn, err := net.DialTimeout("tcp", address, time.Second); err == nil {
+			conn.Close()
+			t.Fatal("old HTTP endpoint still accepts connections after crash")
+		}
+		select {
+		case <-old.Instance.Session.Done():
+		default:
+			t.Fatal("old RPC Session survived crash cleanup")
+		}
+		beforeRestart := spec.Scheduler.Stats("demo", "probe")
+		if beforeRestart.Running {
+			t.Fatalf("old running slot survived process cleanup: %+v", beforeRestart)
+		}
+		<-time.After(observation)
+		if got := spec.Scheduler.Stats("demo", "probe"); got != beforeRestart {
+			t.Fatalf("old registration advanced after crash: before=%+v after=%+v", beforeRestart, got)
+		}
+
+		// 2. 同代次重启使用新 Session/token，代理成功而旧凭证被新端点拒绝。
+		spec.NewCandidate = false
+		spec.ExtraEnv[faultEnv] = "schedule-http-live"
+		restartLogs := &logBuf{}
+		spec.Log = restartLogs
+		restartedAt := time.Now()
+		current, err := Launch(context.Background(), store, spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { current.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE) })
+		response := lifecycleHTTP(spec.HTTP, "demo", "")
+		if response.Code != http.StatusOK || response.Body.String() == oldHTTP.Body.String() {
+			t.Fatalf("new Session route unavailable or stale: status=%d", response.Code)
+		}
+		if bytes.Equal(current.Instance.HTTPProxyToken, old.Instance.HTTPProxyToken) {
+			t.Fatal("HTTP proxy token was reused across Sessions")
+		}
+		endpoint = current.Instance.HTTPListener
+		request, err := http.NewRequest(http.MethodGet, "http://"+net.JoinHostPort(endpoint.GetHost(), fmt.Sprint(endpoint.GetPort()))+"/", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set(wire.HeaderProxyAuth, hex.EncodeToString(old.Instance.HTTPProxyToken))
+		client := &http.Client{Timeout: lifecycleWait}
+		rejected, err := client.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := rejected.Body.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if rejected.StatusCode != http.StatusForbidden {
+			t.Fatalf("old token at new endpoint = %d, want 403", rejected.StatusCode)
+		}
+		waitLifecycle(t, restartLogs, func() bool {
+			stats := spec.Scheduler.Stats("demo", "probe")
+			return stats.Runs == beforeRestart.Runs+1 && !stats.Running && len(scheduledTicks(restartLogs)) == 1
+		})
+		if tick := scheduledTicks(restartLogs)[0][0]; tick < restartedAt.Add(scheduleInterval).UnixMilli() {
+			t.Fatalf("restart replayed an old tick: scheduled_at=%d", tick)
+		}
+		if got := spec.Scheduler.Stats("demo", "probe"); got.TimedOut != beforeRestart.TimedOut || got.Late != beforeRestart.Late {
+			t.Fatalf("old execution affected the new Session: before=%+v after=%+v", beforeRestart, got)
+		}
+		t.Log("crash removed the old endpoint and slot; restart used a new Session token and future tick")
+	})
+
+	t.Run("parallel_stop_shared_budget", func(t *testing.T) {
+		store, spec, logs := rawSpec(t, "schedule-http-drain", false)
+		setDefaultLogger(t, slog.New(slog.NewTextHandler(logs, nil)))
+		spec.HTTP = httpproxy.New(nil)
+		spec.Scheduler = scheduler.New(scheduler.Options{JobTimeout: time.Minute})
+		t.Cleanup(spec.Scheduler.Close)
+		spec.Stop = host.StopTiming{Drain: 1500 * time.Millisecond, Total: 2500 * time.Millisecond, OnStopAt: time.Second}
+		next := spec
+		next.PluginID, next.GenerationID = "other", "gen-2"
+		next.PluginDir = filepath.Join(filepath.Dir(spec.PluginDir), next.PluginID)
+		next.Bootstrap = proto.Clone(spec.Bootstrap).(*pb.Bootstrap)
+		next.Bootstrap.GenerationId = next.GenerationID
+		if err := os.MkdirAll(next.PluginDir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.AddInstall(context.Background(), state.Install{Role: state.RolePlugin, PluginID: next.PluginID,
+			Source: "test", Entrypoint: next.Executable, BuildDigest: next.BuildDigest}); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.AddGeneration(context.Background(), next.PluginID, next.GenerationID, "{}", 1); err != nil {
+			t.Fatal(err)
+		}
+
+		// 1. 两个插件共用状态库、Scheduler 与代理，各保留一个真实 RPC 和 HTTP 请求。
+		var targets []*Running
+		heldHTTP := make(chan int, 2)
+		for _, description := range []Spec{spec, next} {
+			running, err := Launch(context.Background(), store, description)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE) })
+			targets = append(targets, running)
+		}
+		for _, running := range targets {
+			id := running.pluginID
+			waitLifecycle(t, logs, func() bool { return spec.Scheduler.Stats(id, "probe").Runs == 1 })
+			go func() { heldHTTP <- lifecycleHTTP(spec.HTTP, id, "?hold=1").Code }()
+			waitLifecycle(t, logs, func() bool { return strings.Contains(logs.String(), id+"|stderr|HTTP request held") })
+		}
+
+		// 2. 同一 t0 并行停止；完整排空耗时若逐插件累加就会超出共同总预算。
+		type stopped struct {
+			id      string
+			result  host.StopResult
+			elapsed time.Duration
+		}
+		finished := make(chan stopped, len(targets))
+		t0 := time.Now()
+		for _, running := range targets {
+			go func() {
+				result := running.Stop(t0, pb.StopReason_STOP_REASON_DISABLE)
+				finished <- stopped{running.pluginID, result, time.Since(t0)}
+			}()
+		}
+		for range targets {
+			select {
+			case done := <-finished:
+				if done.result.Err != nil || done.result.Killed || done.result.Drained || done.elapsed > spec.Stop.Total ||
+					done.result.StoppingSentAt.Before(t0.Add(spec.Stop.Drain)) || done.result.StopDeadline.After(t0.Add(spec.Stop.Total)) {
+					t.Fatalf("plugin %s exceeded shared stop budget: elapsed=%v result=%+v", done.id, done.elapsed, done.result)
+				}
+				t.Logf("plugin %s stopped %v after shared t0 (total budget %v)", done.id, done.elapsed, spec.Stop.Total)
+			case <-time.After(lifecycleWait):
+				t.Fatal("parallel Stop did not finish")
+			}
+		}
+		for _, running := range targets {
+			if alive(running.Process.Pid()) || spec.Scheduler.Stats(running.pluginID, "probe").Running {
+				t.Fatalf("plugin %s retained its process or running slot", running.pluginID)
+			}
+			if got := lifecycleHTTP(spec.HTTP, running.pluginID, "").Code; got != http.StatusServiceUnavailable {
+				t.Fatalf("plugin %s HTTP after Stop = %d, want 503", running.pluginID, got)
+			}
+			select {
+			case status := <-heldHTTP:
+				if status != http.StatusBadGateway {
+					t.Fatalf("inflight HTTP after Stop = %d, want 502", status)
+				}
+			case <-time.After(lifecycleWait):
+				t.Fatal("inflight HTTP survived parallel Stop")
+			}
+		}
 	})
 }
