@@ -1,7 +1,8 @@
 // Package supervisor 把状态库、进程、传输与 Session 生命周期组装成启动和停止一个插件的完整流程。
 //
 // Launch 启动进程并完成握手、准备、提交与激活，任何一步失败都会结束整个进程树后再返回；
-// Stop 停用插件，WaitExit 处理进程的意外退出。同一插件的这些操作由状态库的逐插件锁串行执行。
+// Stop 排空并停用插件，WaitExit 在断链或退出时撤销业务入口，确认旧进程树清空后释放调度运行槽。
+// Launch 与 Stop 由状态库的逐插件锁串行执行，Stop 与 WaitExit 由 Running 的锁交接清理所有权。
 //
 // 尚不含正式的安装、Journal 与恢复编排。
 package supervisor
@@ -26,7 +27,10 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
+	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 	"github.com/AlonaBot/AlonaBot/internal/core/process"
+	"github.com/AlonaBot/AlonaBot/internal/core/router"
+	"github.com/AlonaBot/AlonaBot/internal/core/scheduler"
 	"github.com/AlonaBot/AlonaBot/internal/core/secret"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
@@ -76,8 +80,10 @@ type Spec struct {
 	Log      PluginLog // 接收插件进程的输出，必须设置
 	// Handler 处理插件激活后发起的业务调用。
 	Handler         wire.Handler
-	Global          *wire.Budget // Core 全局载荷预算
-	MemorySoftLimit int64        // 字节；大于 0 时为插件进程设置 GOMEMLIMIT
+	Global          *wire.Budget         // Core 全局载荷预算
+	MemorySoftLimit int64                // 字节；大于 0 时为插件进程设置 GOMEMLIMIT
+	Scheduler       *scheduler.Scheduler // 可选；激活后接入，排空时冻结，进程树清空后释放槽
+	HTTP            *httpproxy.Server    // 可选；只绑定已激活 Session 的端点
 }
 
 // PluginLog 接收一个插件进程的输出行；Launch 在 Session 建立后调用 SetSession，之后的行带上 session_id。
@@ -95,8 +101,10 @@ type Running struct {
 	store    *state.Store
 	pluginID string
 	// TCP 传输的 loopback Listener；stdio 时为 nil。
-	listener net.Listener
-	timing   host.StopTiming
+	listener  net.Listener
+	timing    host.StopTiming
+	scheduler *scheduler.Scheduler
+	http      *httpproxy.Server
 
 	// mu 串行化 Stop 与 WaitExit 的清理，保护 stopping、released 与 cleanupErr。
 	mu sync.Mutex
@@ -104,7 +112,7 @@ type Running struct {
 	stopping bool
 	// released 为 true 表示进程树已处理完、Listener 与进程资源已释放；只设置一次。
 	released   bool
-	cleanupErr error // WaitExit 终止剩余进程树时的错误，供随后的 Stop 返回
+	cleanupErr error // Stop 或 WaitExit 清理进程树时的错误，供随后的 Stop 返回
 }
 
 // Launch 启动插件进程并完成握手、准备、提交与激活。任何一步失败都会终止进程树、确认清空后返回；无法确认清空时把原因并入返回的错误。
@@ -261,7 +269,16 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	if err != nil {
 		return fail(err)
 	}
-	return &Running{Instance: in, Process: proc, store: store, pluginID: spec.PluginID, listener: ln, timing: spec.Stop}, nil
+	// 6. ACTIVATED 已应用后才开放 HTTP 与定时任务，绑定顺序保证首个 tick 可以访问 HTTP。
+	activatedAt := time.Now()
+	if spec.HTTP != nil && in.HTTPListener != nil {
+		spec.HTTP.Bind(spec.PluginID, in.GenerationID, in.HTTPListener, in.HTTPProxyToken, in.Routes)
+	}
+	if spec.Scheduler != nil {
+		spec.Scheduler.Attach(router.FromInstance(in), activatedAt)
+	}
+	return &Running{Instance: in, Process: proc, store: store, pluginID: spec.PluginID, listener: ln, timing: spec.Stop,
+		scheduler: spec.Scheduler, http: spec.HTTP}, nil
 }
 
 // connect 在握手期限内建立与插件的连接：TCP 等待插件拨入（进程提前退出则放弃），stdio 直接使用管道。
@@ -329,38 +346,78 @@ func (r *Running) Stop(t0 time.Time, reason pb.StopReason) host.StopResult {
 	r.mu.Unlock()
 
 	// 2. 冻结、排空、STOPPING，并等待整棵进程树清空或在总截止终止它。
-	res := r.Instance.Stop(t0, reason, r.Process, r.timing)
+	res := r.Instance.Stop(t0, reason, r.Process, r.timing, host.StopHooks{
+		Frozen: func(deadline time.Time) {
+			if r.scheduler != nil {
+				r.scheduler.Drain(r.pluginID)
+			}
+			if r.http != nil {
+				r.http.Drain(r.pluginID, deadline)
+			}
+		},
+		Stopping: r.detach,
+	})
 
 	// 3. 进程树处理完后读完插件的最后输出，再释放 Listener 与进程资源；读取受同一总截止约束。
 	drainLogs(r.Process, t0.Add(r.timing.Total))
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.cleanupErr = res.Err
 	r.release()
 	return res
 }
 
-// WaitExit 等待领头进程退出，报告退出状态与是否异常：未经 Stop 且退出码非 0 才算异常。
-// 未经 Stop 的退出由这里终止树内剩余进程并释放资源；err 非 nil 表示旧进程树未确认清空，
-// 调用方不能启动替代实例。
+// WaitExit 在 Session 断开或进程退出时撤销业务入口，再等待并清理旧进程树。
+// 未经 Stop 且退出码非 0 才算异常；err 非 nil 表示旧进程树未确认清空，调用方不能启动替代实例。
 func (r *Running) WaitExit() (abnormal bool, state string, err error) {
-	<-r.Process.Exited()
-	st := r.Process.ExitState()
+	// 1. 断链立即撤销入口，保留尚存进程的运行槽，不等待进程先自行退出。
+	select {
+	case <-r.Instance.Session.Done():
+	case <-r.Process.Exited():
+	}
+	total := time.Now().Add(r.timing.Total)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.stopping || r.released {
-		return false, fmt.Sprint(st), nil // Stop 负责清理与结果
+	if r.released {
+		return false, fmt.Sprint(r.Process.ExitState()), r.cleanupErr
 	}
+	if r.stopping {
+		// Stop 持有清理权；释放锁等待领头进程退出，让 Stop 可以完成资源释放。
+		r.mu.Unlock()
+		<-r.Process.Exited()
+		r.mu.Lock()
+		return false, fmt.Sprint(r.Process.ExitState()), nil
+	}
+	r.detach()
 	_ = r.Instance.Session.Close() // 旧 Session 立即失效
+	// 2. 合作退出与日志收尾共用同一个总截止；到期仍存活才终止树内余留进程。
 	// 组内已没有进程时不再发信号，避免进程组号被复用后误杀无关进程。
-	if empty, err := r.Process.WaitTree(time.Now()); err != nil {
+	if empty, err := r.Process.WaitTree(total); err != nil {
 		r.cleanupErr = err
 	} else if !empty {
 		r.cleanupErr = r.Process.KillTree()
 	}
-	drainLogs(r.Process, time.Now().Add(r.timing.Total))
+	if r.cleanupErr == nil {
+		<-r.Process.Exited() // 树清空后仍要取得 cmd.Wait 发布的真实退出状态。
+	}
+	drainLogs(r.Process, total)
 	r.release()
+	st := r.Process.ExitState()
+	if r.cleanupErr != nil {
+		return true, fmt.Sprint(st), r.cleanupErr
+	}
 	return !st.Success(), fmt.Sprint(st), r.cleanupErr
+}
+
+// detach 撤销本实例的注册；由 Stop 或 WaitExit 中取得清理权的一方调用。
+func (r *Running) detach() {
+	if r.http != nil {
+		r.http.Unbind(r.pluginID, r.Instance.GenerationID)
+	}
+	if r.scheduler != nil {
+		r.scheduler.Detach(r.pluginID)
+	}
 }
 
 // drainLogs 等待进程的日志管道读完，插件最后的输出才不会因 Core 随后退出而丢失（CONTRACTS §14.1）。
@@ -376,6 +433,9 @@ func (r *Running) release() {
 		return
 	}
 	r.released = true
+	if r.cleanupErr == nil && r.scheduler != nil {
+		r.scheduler.Released(r.pluginID)
+	}
 	closeListener(r.listener)
 	_ = r.Process.Release()
 }
