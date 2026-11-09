@@ -42,7 +42,7 @@ type Auth struct {
 // HTTPS 决定 Cookie 的 Secure 属性与 __Host- 前缀；now 提供会话时钟。
 // 登录成功时删除 dataDir 下的首次 token 文件。
 func New(st *state.Store, now func() time.Time, adminBaseURL *url.URL, dataDir string) *Auth {
-	return &Auth{store: st, now: now, baseURL: *adminBaseURL, secure: adminBaseURL.Scheme == "https", firstTokenPath: filepath.Join(dataDir, firstTokenFile)}
+	return &Auth{store: st, now: now, baseURL: *adminBaseURL, secure: adminBaseURL.Scheme == "https", firstTokenPath: filepath.Join(dataDir, FirstTokenFile)}
 }
 
 // Routes 注册登录与需认证的登出接口；装配方只在 admin host 调用这些路由。

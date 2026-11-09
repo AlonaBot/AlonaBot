@@ -600,7 +600,7 @@ func TestFirstAdminToken(t *testing.T) {
 	c := startCore(t, dir, "--listen", "127.0.0.1:0")
 	c.waitFor(activatedRe)
 	address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
-	name := filepath.Join(dir, firstTokenFile)
+	name := filepath.Join(dir, adminauth.FirstTokenFile)
 	stat, err := os.Stat(name)
 	if err != nil {
 		t.Fatal(err)

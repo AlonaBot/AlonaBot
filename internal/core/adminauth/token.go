@@ -24,8 +24,8 @@ import (
 // tokenBytes 采用 CONTRACTS §7.4 规定的 32 字节随机凭证长度。
 const tokenBytes = 32
 
-// firstTokenFile 指定首次非终端启动的凭证文件（CONTRACTS §7.4）。
-const firstTokenFile = "admin_token"
+// FirstTokenFile 指定首次非终端启动的凭证文件（CONTRACTS §7.4）。
+const FirstTokenFile = "admin_token"
 
 // ErrNotInitialized 表示管理凭证尚未初始化。
 var ErrNotInitialized = errors.New("admin token is not initialized")
@@ -57,7 +57,7 @@ func FirstToken(ctx context.Context, st *state.Store, dataDir string, interactiv
 
 	// 2. 先完成文件交付再提交摘要，文件写入失败时仍可在下次启动初始化。
 	token = randomToken()
-	name := filepath.Join(dataDir, firstTokenFile)
+	name := filepath.Join(dataDir, FirstTokenFile)
 	file, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return "", fmt.Errorf("create first admin token file: %w", err)

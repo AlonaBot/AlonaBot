@@ -12,9 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// firstTokenFile 指定首次启动后可由 show 读取的文件名（CONTRACTS §7.4）。
-const firstTokenFile = "admin_token"
-
 // terminal 可由本地自测替换；生产使用平台的终端查询，避免把 /dev/null 当作终端。
 var terminal = isTerminal
 
@@ -43,7 +40,7 @@ func adminTokenCommand(code *int) *cobra.Command {
 				return errors.New("--data-dir is required")
 			}
 			*code = exitFailure
-			token, err := os.ReadFile(filepath.Join(dataDir, firstTokenFile))
+			token, err := os.ReadFile(filepath.Join(dataDir, adminauth.FirstTokenFile))
 			if err != nil {
 				return fmt.Errorf("read first admin token file: %w", err)
 			}

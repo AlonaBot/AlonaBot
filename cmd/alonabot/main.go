@@ -118,7 +118,7 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 			return fmt.Errorf("write admin token: %w", err)
 		}
 	} else if !interactive {
-		name := filepath.Join(dataDir, firstTokenFile)
+		name := filepath.Join(dataDir, adminauth.FirstTokenFile)
 		if _, err := os.Stat(name); err == nil {
 			slog.Info("first admin token is available", "path", name)
 		} else if !errors.Is(err, os.ErrNotExist) {
