@@ -62,6 +62,7 @@
 | goal-110 | T-03.19 | Adapter 的 HTTP 路由 | T-03.3、T-04.8、T-07.7 | 等待前置 |
 | goal-121 | T-03.24 | 插件给出的目标由 Core 补齐 | T-03.6、T-07.6 | 待派发 |
 | goal-122 | T-04.10 | 管理员与封禁按 Adapter 登记 | T-04.4、T-07.6 | 待派发 |
+| goal-125 | T-04.12 | 插件对象、结构体参数与子插件 | T-04.8 | 等待前置 |
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 等待前置 |
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 待派发 |
 | goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 等待前置 |
@@ -70,10 +71,11 @@
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 等待前置 |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 等待前置 |
-| goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-07.5 | 等待前置 |
+| goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 等待前置 |
+| goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 等待前置 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
-| goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11 | 等待前置 |
+| goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 等待前置 |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 等待前置 |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 等待前置 |
 | goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 等待前置 |
@@ -3363,7 +3365,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-91 · T-04.8 SDK 自有类型与事件常量
 
-状态：等待前置（T-03.9、T-03.24）。2026-11-09 按 D-104 加入消息句柄：编辑、撤回与引用只收 `message.MessageRef`，本切片把 T-03.9（goal-51，PR #118）新增的 `c.Edit` 与 `sdk.Edit` 改为句柄形式，因此前置加入 T-03.9，合并后由审查者按合入的文件补全范围。同日按 D-108 加入片段构造函数与 `message.Content`，Send、编辑与自动回复收 Chain 或单个片段；按 D-109 把插件的媒体读取改为 `sdk.OpenMedia`、上传改为 `Upload(ctx, r, mime)`，goal-7 合入的 `internal/core/supervisor/media_in_test.go` 随之成为调用方；按 D-110 把时间与时长字段改为 `time.Time` 与 `time.Duration`；按 D-113 让 sdk/adapter 的扩展事件与 extension 用 Go 类型声明，Schema 由 SDK 推导；按 D-102 改写插件侧的目标：`message.Target` 结构改为会话字符串 `message.Session`，新增可选的 `sdk.Via`，account_id 由 T-03.24（goal-121）在 Core 补齐，因此前置加入 T-03.24；T-03.24 合并后由审查者核对 `Registry.Complete` 的签名再改为待派发。T-04.9（PR #110，合并提交 `6aed25d`）已合并：生成器不再输出注册代码，`sdk.Generated` 只剩 `ServiceSchemas` 与 `ConfigSchema`，按原计划不需要再核对接口。T-03.11（PR #106，合并提交 `3913d5a`）与 T-15.1（PR #109，合并提交 `1b226a2`）已合并，`adapters/telegram/perm`、`adapters/onebot11/`（含 `onebottest` 与测试）随之成为调用方，已加入语句「范围」的调用方一项。依据 D-70，2026-11-04 从 T-04.7 拆出。T-04.7（PR #89，合并提交 `3e37cd6`）已合并，接口、行为与测试段已按合入代码写出。前置加入 T-04.9：`sdk/generate/source.go` 为标记事件生成 `r.On(id, "类型字符串")`，本切片把 `On` 改为事件常量后，这段生成代码会编译失败，而标记本身由 T-04.9 删除；T-04.9 合并后不需要再核对接口，直接改为待派发。
+状态：等待前置（T-03.9、T-03.24）。2026-11-10 按 D-118、D-120、D-121、D-123 加入 `c.Reply` 与后台用的 `sdk.SendText`、用户字符串 `message.User` 与 `c.User`、`c.Session`、收媒体来源的 `sdk.OpenMedia`、`errcode` 的 `New`、`Errorf` 与 `Of`；`internal/core/supervisor/media_in_test.go` 等调用方按新的 OpenMedia 签名修改。2026-11-09 按 D-104 加入消息句柄：编辑、撤回与引用只收 `message.MessageRef`，本切片把 T-03.9（goal-51，PR #118）新增的 `c.Edit` 与 `sdk.Edit` 改为句柄形式，因此前置加入 T-03.9，合并后由审查者按合入的文件补全范围。同日按 D-108 加入片段构造函数与 `message.Content`，Send、编辑与自动回复收 Chain 或单个片段；按 D-109 把插件的媒体读取改为 `sdk.OpenMedia`、上传改为 `Upload(ctx, r, mime)`，goal-7 合入的 `internal/core/supervisor/media_in_test.go` 随之成为调用方；按 D-110 把时间与时长字段改为 `time.Time` 与 `time.Duration`；按 D-113 让 sdk/adapter 的扩展事件与 extension 用 Go 类型声明，Schema 由 SDK 推导；按 D-102 改写插件侧的目标：`message.Target` 结构改为会话字符串 `message.Session`，新增可选的 `sdk.Via`，account_id 由 T-03.24（goal-121）在 Core 补齐，因此前置加入 T-03.24；T-03.24 合并后由审查者核对 `Registry.Complete` 的签名再改为待派发。T-04.9（PR #110，合并提交 `6aed25d`）已合并：生成器不再输出注册代码，`sdk.Generated` 只剩 `ServiceSchemas` 与 `ConfigSchema`，按原计划不需要再核对接口。T-03.11（PR #106，合并提交 `3913d5a`）与 T-15.1（PR #109，合并提交 `1b226a2`）已合并，`adapters/telegram/perm`、`adapters/onebot11/`（含 `onebottest` 与测试）随之成为调用方，已加入语句「范围」的调用方一项。依据 D-70，2026-11-04 从 T-04.7 拆出。T-04.7（PR #89，合并提交 `3e37cd6`）已合并，接口、行为与测试段已按合入代码写出。前置加入 T-04.9：`sdk/generate/source.go` 为标记事件生成 `r.On(id, "类型字符串")`，本切片把 `On` 改为事件常量后，这段生成代码会编译失败，而标记本身由 T-04.9 删除；T-04.9 合并后不需要再核对接口，直接改为待派发。
 
 符号已按合入代码核对：
 - 公开 API 中的 pb 类型：`Context.Event() *pb.Event`、`To(*pb.Target)`、`Context.Send` 与 `sdk.Send` 的 `*pb.SendResult` 和 `*pb.Target`、`Upload` 的 `*pb.MediaRef`、`GrantMedia` 的 `...*pb.Target`、`Error.Code pb.ErrorCode`、`Public(pb.HttpAuthMode)` 与 `HTTPRoute.AuthMode`、`Command.Mode` 与 `Command.Params`；`message.Chain.Proto() *pb.MessageChain`；`sdk/adapter` 的 `Core.Deliver`、`Core.ReportFailure`、`Instance.Capabilities`、`Instance.Send`、`Adapter.Descriptor`。
@@ -3381,12 +3383,13 @@ Core 一侧已按合入代码核对并修订：
 - 每种片段都有构造函数；Send、编辑与自动回复收 message.Content，即 Chain 或单个片段（D-108）。
 - 插件经 sdk.OpenMedia 顺序读取媒体；Upload 只收内容与 MIME，大小与 SHA-256 由 SDK 计算（D-109）。
 - SDK 类型中的时间用 time.Time，时长用 time.Duration（D-110）。
+- 常用操作的简写：c.Reply 回一段文本，c.User 与 c.Session 给出用户字符串与会话字符串，OpenMedia 直接收片段的媒体来源，errcode 提供构造与判断的辅助函数（D-118、D-120、D-121、D-123）。
 - 新增标准事件常量（带 payload 的 Go 类型）与 sdk.AdapterEvent；事件注册改用常量，Collect 核对事件 Handler 的 payload 参数类型。
 - 命令参数类型改为 SDK 自有类型。
 - sdk/adapter 的接口改用 SDK 类型，扩展事件与 extension 用 Go 类型声明、Schema 由 SDK 推导（D-113）；官方 Telegram Adapter 与已合并的全部调用方同步。
 - 不改协议：proto 与 Core 侧不变，SDK 在边界内转换。
 
-依据：PLAN T-04 步骤 9（自有类型部分）；CONTRACTS §1.3、§1.4、§2.1、§8；MESSAGE-MODEL §1～§3；DESIGN §D；DECISIONS D-70、D-71、D-102、D-104、D-108～D-110、D-113；TEST-MATRIX V-14 的类型分项、V-86 的 SDK 分项、V-101 与 V-102 的 SDK 分项、V-106～V-108、V-111 的事件与 extension 分项。
+依据：PLAN T-04 步骤 9（自有类型部分）；CONTRACTS §1.3、§1.4、§2.1、§8；MESSAGE-MODEL §1～§3；DESIGN §D；DECISIONS D-70、D-71、D-102、D-104、D-108～D-110、D-113、D-118、D-120、D-121、D-123；TEST-MATRIX V-14 的类型分项、V-86 的 SDK 分项、V-101 与 V-102 的 SDK 分项、V-106～V-108、V-111 的事件与 extension 分项、V-113 的 SDK 类型分项。
 
 范围（只新增或修改这些）：
 - 新增 sdk/errcode/
@@ -3405,6 +3408,9 @@ Core 一侧已按合入代码核对并修订：
    func (c Code) String() string // 与现在的 pb 枚举名相同，如 ERROR_CODE_INVALID_ARGUMENT
    type Error struct { Code Code; Message string }
    func (e *Error) Error() string // 「错误码: 说明」，与现在的 sdk.Error 相同
+   func (c Code) New(message string) *Error                 // D-123
+   func (c Code) Errorf(format string, args ...any) *Error  // D-123
+   func Of(err error) Code // err 的链中有 *Error 时返回它的 Code，否则（含 nil）返回 0（D-123）
 2. sdk/message（可选字段的零值表示 absent，转换时对应未设置的 optional 字段；时间为 time.Time，时长为 time.Duration，D-110）
    身份：
    type Session string // 会话字符串 <adapter_id>:<chat_id>[#<thread_id>]（MESSAGE-MODEL §1，D-102）；插件可以直接写字面量
@@ -3413,6 +3419,9 @@ Core 一侧已按合入代码核对并修订：
    type MessageRef string // 消息句柄 <会话字符串>/<platform_message_id>[@<实例名>]（MESSAGE-MODEL §4，D-104）；可以原样存储
    func NewMessageRef(s Session, platformMessageID, instanceID string) MessageRef // platform_message_id 中的 %、/、@ 写作 %25、%2F、%40；instanceID 为空时省略 @ 部分
    func (r MessageRef) Parts() (s Session, platformMessageID, instanceID string, ok bool) // 句柄或其中的会话字符串不合法时 ok 为 false
+   type User string // 用户字符串 <adapter_id>:<external_user_id>，格式与 core_config.json 的 admins 相同（D-105、D-120）；第一个 : 之前是 adapter_id，之后原样
+   func NewUser(adapterID, externalUserID string) User
+   func (u User) Parts() (adapterID, externalUserID string, ok bool) // 没有 : 或任一部分为空时 ok 为 false
    type Actor struct { ExternalUserID, AdapterInstanceID, DisplayName, Locale string; Permissions []string }
    type Capability struct { Name string; Version uint32; Supported bool }
    片段（Chain 中的片段都是值类型，type switch 按值匹配）：
@@ -3479,11 +3488,15 @@ Core 一侧已按合入代码核对并修订：
    func To(s message.Session) SendOption
    func Via(instanceID string) SendOption // 指定发送的机器人（实例）；缺省由 Core 选择（CONTRACTS §8）
    func (c *Context) Send(m message.Content, opts ...SendOption) (*message.SendResult, error)
+   func (c *Context) Reply(text string) error // 等于 c.Send(message.Text(text)) 并丢弃发送结果（D-118）
+   func (c *Context) User() message.User       // 触发者的用户字符串；没有 Actor 时为空串（D-120）
+   func (c *Context) Session() message.Session // 本次调用的默认会话；没有默认目标时为空串（D-120）
    func Send(ctx context.Context, to message.Session, m message.Content, opts ...SendOption) (*message.SendResult, error) // opts 只接受 Via
+   func SendText(ctx context.Context, to message.Session, text string, opts ...SendOption) error // 等于 Send(ctx, to, message.Text(text), opts...) 并丢弃发送结果（D-118）
    func (c *Context) Edit(ref message.MessageRef, m message.Content) (*message.SendResult, error) // 取代 T-03.9 的 Edit(platformMessageID, chain, opts...)
    func Edit(ctx context.Context, ref message.MessageRef, m message.Content) (*message.SendResult, error) // 后台编辑；取代 Edit(ctx, to, platformMessageID, chain)
    func Upload(ctx context.Context, r io.Reader, mime string) (*message.MediaRef, error) // 大小与 SHA-256 由 SDK 计算；mime 为空时按内容判断（D-109）
-   func OpenMedia(ctx context.Context, token string) (io.ReadCloser, error) // 顺序读取入站媒体或获授权的媒体；取代 ReadMedia(ctx, token, offset, length)，后者删除（D-109）
+   func OpenMedia(ctx context.Context, src message.MediaSource) (io.ReadCloser, error) // 顺序读取入站媒体或获授权的媒体，参数是片段的 Source（D-121）；取代 ReadMedia(ctx, token, offset, length)，后者删除（D-109）
    func GrantMedia(ctx context.Context, token, granteePluginID string, sessions ...message.Session) (string, error)
    type HTTPAuth int; const ( AuthCoreSession HTTPAuth = iota + 1; AuthCallbackState; AuthCallbackSignature; AuthCallbackNonce )
    func Public(mode HTTPAuth) HTTPOption // HTTPRoute.AuthMode 同步改为 HTTPAuth
@@ -3520,6 +3533,7 @@ Core 一侧已按合入代码核对并修订：
   - ReferenceSegment：Ref 拆成引用的 target（adapter_id、chat_id、thread_id 与可选的 adapter_instance_id）与 original_platform_message_id；入站的引用反向组成句柄。
 - Content（D-108）：单个片段按只含它的 Chain 处理。自动回复型 Handler 的返回类型为 (message.Content, error)，nil 与空 Chain 表示不回复；checkHandler 不再接受 (message.Chain, error)，报错带 route_id 与期望的签名。显式 Send 与 Edit 收到 nil 或空 Chain 时返回 INVALID_ARGUMENT，与现在相同。
 - 媒体（D-109）：
+  - OpenMedia 的 token 取自来源（D-121）：src.Incoming 不为 nil 时用它的 Token，否则用 src.MediaRef；两者都没有（https_url 等其他来源）时在发出请求前返回 INVALID_ARGUMENT。只持有 token 的调用方传 message.MediaSource{MediaRef: token}。
   - OpenMedia 以 offset 0 读取第一块（入站对象在此时取件），失败时返回该错误，不返回 reader。之后 Read 用 OpenMedia 的 ctx 按 next_offset 依次读取，每次至多 1 MiB（wire.MaxMediaChunk），eof 后返回 io.EOF；错误为 *sdk.Error，ctx 取消后返回 ctx 的错误；不自动重试（CONTRACTS §1.4）。Close 只停止读取，不撤销 token。
   - Upload：r 实现 io.Seeker 时先读一遍计算大小与 SHA-256，再回到起始位置分块上传；否则边读边写入 os.CreateTemp 的临时文件（0600）并计算，上传结束（含失败）后删除。不整份读入内存。mime 为空时取开头至多 512 字节经 http.DetectContentType 判断。配额与 CommitUpload 的摘要校验照旧由 Core 负责：内容在两遍之间改变时上传失败并返回 Core 的错误。
 - Context：Event 每次调用只转换一次，返回值只供本次 Handler 读取，修改它不影响 Send 的默认目标与权限判定。Service 调用的 Event 仍为 nil。Has 与默认 Target 继续使用 SDK 内部的 pb 值。
@@ -3551,6 +3565,7 @@ Core 一侧已按合入代码核对并修订：
   - 构造函数生成的片段与对应的结构体字面量相同；单个片段、Chain 与 nil 经 c.Send、sdk.Send、Edit 与自动回复得到的请求；DESIGN §D 的示例代码能编译。
   - OpenMedia 与 Upload：可 Seek 与不可 Seek 的 r 上传后经 OpenMedia 读回的字节相同（恰好 1 MiB、1 MiB+1 与跨多块）；MediaRef 的 Size 与 SHA256 与内容一致；mime 为空时的判断；无效 token 时 OpenMedia 返回错误；读取中取消 ctx；不可 Seek 时临时文件在上传结束与失败后都已删除。
   - `go doc -all` 查看 ./sdk、./sdk/message、./sdk/adapter、./sdk/errcode，输出中没有 pb 类型。
+  - 简写（D-118、D-120、D-121、D-123）：c.Reply 的 SendRequest 与 c.Send(message.Text(text)) 相同，没有默认目标时返回 NO_DEFAULT_TARGET；sdk.SendText 的 SendRequest 与 sdk.Send(ctx, to, message.Text(text), opts...) 相同（含 Via），会话字符串不合法时在发出请求前返回 INVALID_ARGUMENT；c.User 与 c.Session 在消息事件、没有 Actor 的事件与 Service 调用中的值；NewUser 与 Parts 的往返，external_user_id 含 `:`，各种不合法格式；OpenMedia 收入站片段的 Source、MediaRef.Source() 与只含 token 的来源读到相同字节，https_url 来源在发出请求前返回 INVALID_ARGUMENT；errcode 的 New 与 Errorf 得到的 *Error，Of 对直接、经 fmt.Errorf("%w") 包装、非 *Error 与 nil 的结果。
   - internal/core/supervisor/command_local_test.go（commanddispatch 插件，TCP 与 stdio）：事件路由写成 `r.On("typed", sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error {...})`，插件回复 e.Chain.Text()、e.ToMe、c.Event().Actor.Permissions 与 c.Event().Session，与 Adapter 交付的值一致。Handler 的第二个参数写成 *message.ReactionAddedPayload 时（环境变量控制）插件启动失败，日志带 route_id。
   - 现有命令参数用例改用 *message.ImageSegment 与 message.Chain，断言不变。
 
@@ -3919,6 +3934,26 @@ Core 一侧已按合入代码核对并修订：
 - `sdk/adapter`：Adapter 可选地提供 `http.Handler` 与路由描述；SDK 仅在有路由时创建 `127.0.0.1:0` Listener。
 - 代理：`httputil.ReverseProxy` 转发 Upgrade 请求，升级后的连接不受普通请求期限限制；Core 记录已升级的连接，撤销映射时关闭它们；内部凭证与 Session 校验同插件路由。
 - 测试：提交一个集成测试：测试 Adapter 注册公开路由，客户端经统一端口完成 WebSocket 往返，Adapter 停止后连接被关闭；其余进本地自测。
+
+### goal-125 · T-04.12 插件对象、结构体参数与子插件
+
+状态：等待前置（T-04.8）。2026-11-10 按 D-114～D-116 新增。T-04.8（goal-91）改写 sdk 的注册与类型，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-101、goal-123、goal-124 都修改 sdk/generate，按执行顺序 §3 的生成器一行处理；与 goal-16、goal-68 并行时都会改 sdk 的注册与装配，后合并者同步 main 后按对方的写法重做自己的改动。
+
+目标：插件入口改为 `func New() *sdk.Plugin`，路由、生命周期回调、OnConfigLoad 与数据库迁移登记在插件对象上；删除 sdk.Base、sdk.Root、根插件的六个注册方法（Commands、Events、Services、Subscriptions、HTTP、Schedules）与对应的注册器类型；命令 Handler 可以用一个结构体接收参数；插件可以分成一层逻辑子插件。协议与 Core 不变。
+
+依据：PLAN T-04 步骤 12；DESIGN §D、§I、§J；CONTRACTS §2.2 第 5 条、§4.1、§5.1、§5.2、§6.2、§9.1、§14.1、§15.5；DECISIONS D-114、D-115、D-116；TEST-MATRIX V-112。
+
+要点：
+- 插件对象：`sdk.NewPlugin() *sdk.Plugin`。现有 CommandRegistry、EventRegistry、ServiceRegistry、SubscriptionRegistry、HTTPRegistry、ScheduleRegistry 上开始注册的方法原样移到 `*sdk.Plugin`，builder 类型与 Collect 的检查不变；删除 `sdk.Base`、`sdk.Root`、`sdk.Root` 所列的六个注册方法 `Commands`、`Events`、`Services`、`Subscriptions`、`HTTP`、`Schedules`（连同 `sdk.Base` 上的空实现，SDK 不再调用）以及这六个注册器类型，不留别名。`sdk.JSON`、`sdk.Proto`、`sdk.Subscribe` 的第一个参数改为接口 `sdk.Registrar`（未导出的方法，只由 `*sdk.Plugin` 与 `*sdk.SubPlugin` 实现）。
+- 回调：`p.OnStart`、`p.OnReady`、`p.OnStop` 收 `func(context.Context) error`，`p.OnConfigLoad` 收 CONTRACTS §5.2 的函数类型；各至多登记一次，重复登记由 Collect 报错；没有登记的不执行。
+- 配置：`p.Config()` 与 `c.Config()` 返回 `config.Values`，就绪前读取照旧 panic。
+- 迁移：`sqlitedb.Migrate(p, fn)`、`sqlitedb.Migrations(p, list)` 与 `gormdb` 的同名函数取代 SelfMigrator、VersionedMigrator 接口与包被导入时的识别登记；四个函数合计调用多于一次由 Collect 报错。生成器按插件包及其本模块依赖中对这四个函数的调用写 `migration_mode`，两种都出现时构建报错；SDK 在准备阶段核对实际登记与 manifest 一致。
+- 入口：`sdk.Run`、`sdk.Collect` 与根包的 `alonabot.Plugin` 改收 `*sdk.Plugin`。生成器不再查找根类型，改为核对入口包声明 `func New() *sdk.Plugin`，缺少或签名不符时给出带位置的诊断；正式入口调用 `sdk.Run(New())`。`sdk.Run` 开始后调用注册或登记方法 panic，消息为英文。
+- 结构体参数：Collect 按 CONTRACTS §9.1 的条目检查并生成与位置参数相同的 CommandParam：字段顺序即参数位置；参数名取 `arg` 标签，否则取字段名并把开头的大写字母段转为小写；指针为可选，`default` 标签给默认值且不能用于指针；`arg:",raw"` 只能用于最后一个 string 字段；未导出、内嵌、结构体或不支持类型的字段报错并指明字段；Handler 收结构体时该路由调用 Args、Optional 或 RawTail 报错。分发时把 Core 解析好的值赋给字段，缺失的指针字段为 nil。两种形式都接受 `int` 与底层为 string、int64、int、float64、bool 的具名类型。
+- 子插件：`p.Sub(id string) *sdk.SubPlugin`，与 `*sdk.Plugin` 共用注册方法的实现，没有 `Sub` 与回调、迁移的登记。ID 不合法或重复由 Collect 报错。子插件中的路由照原规则生成 route_id、命令路径、Service 名、HTTP 路径与 job ID，并与整个插件一起查重；REGISTER 中不出现子插件。`s.Permission(perm)` 的解析次序为路由、由近到远的命令组、子插件、SDK 缺省。`s.Config()` 返回与 ID 同名的顶层 object 的视图，可以在注册时取得；调用过它的子插件在 schema 顶层没有同名 object 时 Collect 报错。子插件 Handler 的 `c.Logger()` 带 `sub_plugin` 字段。
+- 调用方：examples/plugins、测试中以字符串嵌入的插件源码与已合并的 Agent、官方插件代码按新写法修改；`alonabot init` 的模板尚未实现，由 goal-38 按本切片的入口编写。
+- 文档同步：docs/plugin-guide.md 第 5、7 节与 ARCHITECTURE 中对根插件、`sdk.Base` 的描述由审查者在合并前改写。
+- 测试：按 D-86 不向 sdk/ 提交测试。V-112 的各项进本地自测，由本地测试在临时目录生成插件源码与二进制后经真实 Core 运行；已有依赖根插件写法的集成测试改用新入口，断言不变。
 
 ### goal-16 · T-05.2 Rule、HandlerOutcome 与传播
 
@@ -4289,14 +4324,14 @@ sdk
 
 ### goal-52 · T-05.4 延续调用与多轮等待
 
-状态：等待前置（T-05.2）。语句中 goal-2、goal-15、goal-16、goal-76 提供的符号（router 的派发链与 Invocation、sdk 的 Context 与分发、tune.Values）只写名字；合并后由审查者核对签名，再改为待派发。
+状态：等待前置（T-05.2）。2026-11-10 按 D-119 加入 builder 的 `.Continue()`：接口、行为与本地自测各追加一条，`sdk/registry.go`、`sdk/events.go` 与按钮路由的 builder 加入范围；前置合并后由审查者按合入的 builder 类型核对。语句中 goal-2、goal-15、goal-16、goal-76 提供的符号（router 的派发链与 Invocation、sdk 的 Context 与分发、tune.Values）只写名字；合并后由审查者核对签名，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-52（切片 T-05.4：延续调用与多轮等待）。goal 目录 goal-52，分支 goal-52，worktree .worktrees/goal-52，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：由真实入站事件触发、具有 Actor 与默认 Target 的 Handler 可以经 core.continuation.start 请求一次延续调用：原调用成功结束后，Core 以同一插件、同一 route_id 与原可信上下文发出新的 Handler 请求（continuation_of 为原 call_id），使用独立的 CONTINUATION_TIMEOUT 期限，不占用分发链。延续调用内可以经 core.wait 等待同一 Actor 在同一 Target 的下一条消息，命中的消息不进入普通分发。SDK 提供 Context.Continue 与 Context.Wait。
 
-依据：PLAN T-05 步骤 7；CONTRACTS §2.4；WIRE-FORMAT §3.5；DESIGN（延续调用示例）；TEST-MATRIX V-50。
+依据：PLAN T-05 步骤 7；CONTRACTS §2.4；WIRE-FORMAT §3.5；DESIGN（延续调用示例）；DECISIONS D-119；TEST-MATRIX V-50、V-113 的延续调用分项。
 
 范围（只新增或修改这些）：
 - contracts/proto/alonabot/v1/invocation.proto：HandlerRequest 追加 optional uint64 continuation_of = 5；新增 ContinuationStartRequest/Response 与 WaitRequest/Response。随后 go generate ./...（本切片获授权只追加这些）
@@ -4324,6 +4359,8 @@ sdk
    func (m *Manager) Release(pluginID string) // Session 失效：结束该插件的全部等待与待发出的延续调用
 3. sdk
    func (c *Context) Continue(fn func(*Context) error) error // 只能在 Handler 中调用一次；fn 在延续调用中执行
+   func (b *CommandBuilder) Continue() *CommandBuilder // 命令、文本匹配与 Raw 路由：Handler 整体在延续调用中执行（D-119）
+   func (b *EventBuilder) Continue() *EventBuilder     // 事件路由同上；按钮路由的 builder 有同名方法
    func (c *Context) Wait(timeout time.Duration) (*Context, error) // 只能在延续调用中调用；返回命中消息的 Context（可用 Event()、Text() 等）
    func (c *Context) Text() string // message.created 的文本片段连接结果；其他事件为空
 
@@ -4333,11 +4370,12 @@ sdk
 - core.wait（必须带 parent_call_id，父调用必须是延续调用）：等待键为（adapter_instance_id、chat_id、thread_id（无则为空）、external_user_id），取自延续调用的默认 Target 与 Actor。同键已有等待 → ALREADY_EXISTS。timeout_ms 不在范围内 → INVALID_ARGUMENT。等待在 Core 内存中，不持久化。
 - 匹配：Router 对每个 message.created，在 PreEvent 之后、命令层之前调用 Match：Target 与 Actor 构成的键命中等待时，该事件作为 WaitResponse 返回给等待者，并且不再进入命令层与事件路由。不同 Actor 或不同 thread 不命中。
 - 结束：超时 → DEADLINE_EXCEEDED；父请求被取消 → CANCELLED；Release（插件停用或 Session 失效）→ 等待以 UNAVAILABLE 结束，待发出的延续调用丢弃，不补发。延续调用的期限到达时，其中的等待一并结束。
+- builder 的 Continue（D-119）：原调用中 SDK 照常执行 Rule，匹配后请求 core.continuation.start 并以 matched、Continue 成功结束，不调用 Handler；请求失败时原调用返回该错误。收到 continuation_of 的请求时调用该路由的 Handler，参数与原调用相同；自动回复型 Handler 返回的非空内容由 SDK 在延续调用结束前经 Send 发出一次。Handler 中的 StopPropagation 不起作用，再调用 c.Continue 返回 FAILED_PRECONDITION。
 - SDK：Continue 在 Handler 返回前请求 core.continuation.start，并登记 fn（按原 call_id）；收到 continuation_of 的请求时调用对应 fn。Continue 在延续调用中调用返回 FAILED_PRECONDITION。Wait 发起 core.wait，以本次延续调用为父请求。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：原调用返回错误时不发出；父调用带 send_forbidden 时被拒；timeout_ms 边界；Release 与超时的并发；SDK 中按 continuation_of 找不到 fn 时返回 NOT_FOUND；internal/core/supervisor/continuation_local_test.go（//go:build unix）。测试插件注册 /quiz 命令：Continue 中依次 Wait 两次并把收到的回答回复出来；另有一个 echo 事件路由用来证明消息是否进入普通分发：用户 A 发 /quiz 后，A 的下两条消息被 quiz 收到并回答，它们没有到达 echo；原命令的 HandlerOutcome 决定的传播不受影响；同一群里 A 与 B 同时 /quiz，各自只收到自己的回答；不同 thread 的消息不命中；Wait 超时返回 DEADLINE_EXCEEDED；同键第二个 Wait 返回 ALREADY_EXISTS；延续调用中再次 Continue 返回 FAILED_PRECONDITION；没有 Actor 的 scheduled 事件 fixture 中请求 Continue 返回 FAILED_PRECONDITION；用很小的 Max：超过的 Continue 返回 RESOURCE_EXHAUSTED；等待期间停止插件：等待结束，重启后不补发；延续调用执行期间，其他事件照常派发（不占分发链）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：用 `.Continue()` 注册的 /quiz2 与 Handler 内调用的 /quiz 行为相同，Rule 不匹配时不请求延续，自动回复型的返回内容只发出一次，Handler 中的 StopPropagation 不改变原调用的传播；原调用返回错误时不发出；父调用带 send_forbidden 时被拒；timeout_ms 边界；Release 与超时的并发；SDK 中按 continuation_of 找不到 fn 时返回 NOT_FOUND；internal/core/supervisor/continuation_local_test.go（//go:build unix）。测试插件注册 /quiz 命令：Continue 中依次 Wait 两次并把收到的回答回复出来；另有一个 echo 事件路由用来证明消息是否进入普通分发：用户 A 发 /quiz 后，A 的下两条消息被 quiz 收到并回答，它们没有到达 echo；原命令的 HandlerOutcome 决定的传播不受影响；同一群里 A 与 B 同时 /quiz，各自只收到自己的回答；不同 thread 的消息不命中；Wait 超时返回 DEADLINE_EXCEEDED；同键第二个 Wait 返回 ALREADY_EXISTS；延续调用中再次 Continue 返回 FAILED_PRECONDITION；没有 Actor 的 scheduled 事件 fixture 中请求 Continue 返回 FAILED_PRECONDITION；用很小的 Max：超过的 Continue 返回 RESOURCE_EXHAUSTED；等待期间停止插件：等待结束，重启后不补发；延续调用执行期间，其他事件照常派发（不占分发链）。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
 
@@ -4346,7 +4384,7 @@ sdk
 
 ### goal-124 · T-04.11 注册写法统一
 
-状态：等待前置（T-04.8、T-07.5）。2026-11-09 按 D-112 新增。T-04.8（goal-91）改写 sdk 的注册与类型（含 `Public(mode HTTPAuth) HTTPOption`），T-07.5（goal-27，PR #119）修改定时任务与 HTTP 的启停，两者合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-101、goal-123 都修改 sdk/generate，按执行顺序 §3 的生成器一行处理。
+状态：等待前置（T-04.8、T-04.12、T-07.5）。2026-11-09 按 D-112 新增。2026-11-10 按 D-114 前置加入 T-04.12：要点中的 `r` 指插件对象或子插件（`*sdk.Plugin`、`*sdk.SubPlugin`），`sdk.Subscribe` 的第一个参数是 `sdk.Registrar`；Handler 用结构体接收参数时不取参数名（D-115）。T-04.8（goal-91）改写 sdk 的注册与类型（含 `Public(mode HTTPAuth) HTTPOption`），T-07.5（goal-27，PR #119）修改定时任务与 HTTP 的启停，两者合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-101、goal-123 都修改 sdk/generate，按执行顺序 §3 的生成器一行处理。
 
 目标：定时任务与 HTTP 路由改为与 D-70 相同的链式注册；命令省略 Args 时参数名取 Handler 的参数名；Event Bus 订阅的路由 ID 缺省为事件名。协议不变。Hook 的同样改写由 T-05.3（goal-17）完成。
 
@@ -4360,6 +4398,26 @@ sdk
 - 订阅：`sdk.Subscribe[T](r, eventName)` 的路由 ID 缺省为事件名，`.ID(routeID)` 可以另给；同一事件订阅两次且都没有给 ID 时，Collect 报重复的 route_id。
 - 调用方：examples/plugins 与测试中以字符串嵌入的插件源码按新写法修改，与参数名相同的 Args 删去。
 - 测试：注册描述与旧写法的等价性、参数名的各种来源与查不到时的回退进本地自测；已有调用定时任务、HTTP 注册与 Subscribe 的集成测试改用新写法，断言不变。
+
+### goal-126 · T-04.13 Service 与 Event Bus 的带类型声明
+
+状态：等待前置（T-04.12）。2026-11-10 按 D-122 新增。T-04.12（goal-125）把注册的接收者改为 `sdk.Registrar`，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-124 都修改 `sdk.Subscribe`，与 goal-101、goal-123、goal-124、goal-125 都修改 sdk/generate，后合并者同步 main 后按对方的写法重做自己的改动。
+
+目标：Service 与 Event Bus 事件各用一个带类型的声明表示，注册、调用、发布与订阅都从声明出发，名字与 Go 类型只写一处；删除按字符串目标与类型参数直接调用、发布与订阅的函数。协议与 Core 不变。
+
+依据：PLAN T-04 步骤 13；DESIGN §D、§G；CONTRACTS §3、§9.1；DECISIONS D-70、D-107、D-112、D-114、D-122；TEST-MATRIX V-113 的声明分项。
+
+要点：
+- 声明：`sdk.JSON[In, Out any](target string) Service[In, Out]` 与 `sdk.Proto[In, Out proto.Message](target string) Service[In, Out]`，`Service[In, Out]` 是只含未导出字段的值类型，记录 target 与编码。target 为 `plugin_id/service_name` 或 `@agent/service_name`。
+- 注册：`sdk.Serve[In, Out any](r Registrar, s Service[In, Out])` 返回现有的 Service builder，`Access`、`Tool` 与 `Handle(func(*Context, In) (Out, error))` 不变；Protobuf 声明调用 `Tool` 照旧报错。Collect 核对 target 的组件部分等于 manifest 的插件 ID（`role: agent` 的组件为 `@agent`）、声明不是零值、同一 target 只注册一次，错误带 target。REGISTER 中的服务名仍是 service_name 部分，描述与原写法相同。
+- 调用：`func (s Service[In, Out]) Call(ctx context.Context, in In) (Out, error)`，请求与原 `sdk.CallJSON`、`sdk.CallProto` 相同；零值声明返回 INVALID_ARGUMENT，不发出请求。
+- Event Bus：`sdk.BusEvent[T any](name string) BusEventType[T]`，name 为 `plugin_id/event_name`；`func (e BusEventType[T]) Publish(ctx context.Context, payload T) (eventID string, err error)`；`sdk.Subscribe[T any](r Registrar, e BusEventType[T])` 返回现有的订阅 builder，路由 ID 缺省为事件名，`.ID(routeID)` 另给（goal-124 先合并时沿用它的缺省规则，后合并时由本切片实现）。
+- 删除：`sdk.CallJSON`、`sdk.CallProto`、`sdk.Publish`，以及第一个参数为注册器或 Registrar、第二个参数为名字的 `sdk.JSON`、`sdk.Proto`、`sdk.Subscribe`，不留别名。
+- 生成器：对类型参数的检查（包级的具名非泛型类型、Schema 生成）改为针对 `sdk.JSON`、`sdk.BusEvent` 的声明处，诊断位置随之变化；ServiceSchemas 的内容不变。
+- `sdk/llm`（goal-83 先合并时）：导出 `llm.GenerateService = sdk.JSON[Request, Response]("@agent/llm.generate")`，`llm.Generate` 与 `llm.Ask` 的签名不变，内部调用它；Agent 组件用 `sdk.Serve(p, llm.GenerateService)` 注册。goal-83 后合并时按本条书写。
+- 调用方：examples/plugins、测试中以字符串嵌入的插件源码与已合并的官方插件、Agent 代码按新写法修改。
+- 文档同步：docs/plugin-guide.md 第 6 节由审查者在合并前改写。
+- 测试：按 D-86 不向 sdk/ 提交测试。V-113 的声明分项进本地自测；已有调用 Service 与 Event Bus 的集成测试改用声明，断言不变。
 
 ### goal-84 · T-09.12 WebUI 组件与组件图标
 
@@ -4462,7 +4520,7 @@ sdk
 
 ### goal-14 · T-04.5 示例升级与 T-04 验收
 
-状态：等待前置（T-03.10、T-04.8、T-04.11）。2026-11-09 按 D-112 前置加入 T-04.11，示例按统一后的注册写法升级。T-04.9（PR #110，合并提交 `6aed25d`）已合并。T-04.4（PR #88）、T-04.7（PR #89）已合并。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.2、T-04.3 已合并；已核对 `CommandRegistry.Command`、`Regex`、`Keyword`、`Raw`，以及 Args、Optional、RawTail、Usage、Silent、IgnoreCase 和 Context.Match。策略与 Adapter 开发入口的实际接口仍待前置合并后核对。2026-11-04 按 D-77～D-85 修订计划：示例只用链式注册（D-79，goal-96 删除标记），用 `alonabot check`、`build` 检查与构建，经 `alonabot run <目录>` 运行（D-77）。前置合并后由审查者改写。
+状态：等待前置（T-03.10、T-04.8、T-04.11、T-04.12、T-04.13）。2026-11-10 按 D-118～D-123 前置加入 T-04.13：示例用 `c.Reply`、`.Continue()` 与带类型的 Service、Event Bus 声明，V-113 的证据在本切片汇总。2026-11-09 按 D-112 前置加入 T-04.11，示例按统一后的注册写法升级。2026-11-10 按 D-114～D-116 前置加入 T-04.12：示例以 `func New() *sdk.Plugin` 为入口，并各有一处结构体参数与子插件的用法，V-112 的证据在本切片汇总。T-04.9（PR #110，合并提交 `6aed25d`）已合并。T-04.4（PR #88）、T-04.7（PR #89）已合并。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.2、T-04.3 已合并；已核对 `CommandRegistry.Command`、`Regex`、`Keyword`、`Raw`，以及 Args、Optional、RawTail、Usage、Silent、IgnoreCase 和 Context.Match。策略与 Adapter 开发入口的实际接口仍待前置合并后核对。2026-11-04 按 D-77～D-85 修订计划：示例只用链式注册（D-79，goal-96 删除标记），用 `alonabot check`、`build` 检查与构建，经 `alonabot run <目录>` 运行（D-77）。前置合并后由审查者改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-14（切片 T-04.5：示例升级与 T-04 验收）。goal 目录 goal-14，分支 goal-14，worktree .worktrees/goal-14，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

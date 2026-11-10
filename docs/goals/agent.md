@@ -215,7 +215,7 @@ const OllamaChat Protocol = "ollama-chat"
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 agent
-   func New() sdk.Root
+   func New() *sdk.Plugin
    type Config struct {
        config.Base
        Providers       []ProviderConfig `json:"providers"`
