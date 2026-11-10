@@ -3674,20 +3674,20 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-101 · T-08.12 Adapter 实例配置与 Core 设置的版本迁移
 
-状态：待派发。前置 T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）与 T-08.11（goal-95，PR #103，合并提交 `c840af7`）均已合并。依据 D-85 新增；2026-11-09 审查者按 main `3dec9a0` 的代码写出接口、行为与测试段。已核对：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)`（同时检查 `$version` 与 `$migrations`）、`Schema.Version() int`、`Migrate(config map[string]any, from int) error`、`Complete(config map[string]any)`、`Validate(config map[string]any) error`、`SecretPaths() [][]string`；`internal/core/settings` 的 `Settings.Adapters map[string]AdapterSettings{Version int; Instances map[string]json.RawMessage}`（实例配置已展开 `${...}`）、`File.Update(edit func(*Document) error)` 以磁盘原文为底稿并保留 `${...}` 原写法、`readVersion` 只接受 `currentVersion = 1`；`remote.Process.StartInstance(ctx, instanceID, configJSON)` 启动实例，但目前没有装配处从 `Settings.Adapters` 启动实例（归 goal-39 与 goal-9）；Telegram 在 `New().Start` 中解析 `token`（必填）、`api_base_url`（缺省 `https://api.telegram.org`）与 `proxy`；`alonabot plugin generate`/`check`（`sdk/generate.Scan`）只处理插件工程，`alonabot build`/`pack` 尚未实现。2026-11-09 新增的 goal-117（D-101）给 Telegram 实例配置追加 `proxy_mode`：goal-117 先合并时，本切片的 Telegram instance_schema.json 按执行顺序 §3 一并声明它（options none、core、custom，缺省 none，proxy 带 condition）。
+状态：待派发。前置 T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）与 T-08.11（goal-95，PR #103，合并提交 `c840af7`）均已合并。依据 D-85 新增；2026-11-09 审查者按 main `3dec9a0` 的代码写出接口、行为与测试段。2026-11-10 按 D-117，文件名由 `instance_schema.json` 改为 `adapter_config_schema.json`，语句中的文件名已随之修改；PR #114 在合并前改用新名字。已核对：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)`（同时检查 `$version` 与 `$migrations`）、`Schema.Version() int`、`Migrate(config map[string]any, from int) error`、`Complete(config map[string]any)`、`Validate(config map[string]any) error`、`SecretPaths() [][]string`；`internal/core/settings` 的 `Settings.Adapters map[string]AdapterSettings{Version int; Instances map[string]json.RawMessage}`（实例配置已展开 `${...}`）、`File.Update(edit func(*Document) error)` 以磁盘原文为底稿并保留 `${...}` 原写法、`readVersion` 只接受 `currentVersion = 1`；`remote.Process.StartInstance(ctx, instanceID, configJSON)` 启动实例，但目前没有装配处从 `Settings.Adapters` 启动实例（归 goal-39 与 goal-9）；Telegram 在 `New().Start` 中解析 `token`（必填）、`api_base_url`（缺省 `https://api.telegram.org`）与 `proxy`；`alonabot plugin generate`/`check`（`sdk/generate.Scan`）只处理插件工程，`alonabot build`/`pack` 尚未实现。2026-11-09 新增的 goal-117（D-101）给 Telegram 实例配置追加 `proxy_mode`：goal-117 先合并时，本切片的 Telegram adapter_config_schema.json 按执行顺序 §3 一并声明它（options none、core、custom，缺省 none，proxy 带 condition）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-101（切片 T-08.12：Adapter 实例配置与 Core 设置的版本迁移）。goal 目录 goal-101，分支 goal-101，worktree .worktrees/goal-101，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：Adapter 包用 instance_schema.json 声明实例配置（格式与 config_schema.json 相同），Core 按它迁移、补缺失值并校验 core_config.json 中的实例；core_config.json 自身的 $version 由 Core 内置的迁移处理。写回前备份，失败与降级时报错，不丢配置。官方 Telegram Adapter 补上 instance_schema.json。
+目标：Adapter 包用 adapter_config_schema.json 声明实例配置（格式与 config_schema.json 相同），Core 按它迁移、补缺失值并校验 core_config.json 中的实例；core_config.json 自身的 $version 由 Core 内置的迁移处理。写回前备份，失败与降级时报错，不丢配置。官方 Telegram Adapter 补上 adapter_config_schema.json。
 
 依据：PLAN T-08 步骤 1；CONTRACTS §5.5、§8、§15.1；DECISIONS D-85；TEST-MATRIX V-38 的迁移分项、V-88。
 
 范围（只新增或修改这些）：
 - internal/core/settings/：新增 instances.go（实例配置的准备与试算）与 migrate.go（Core 设置的内置迁移与备份）；settings.go 的 readVersion 改为经 migrate.go 处理
-- sdk/generate/：新增 instance.go，Scan 在 --dir 中有 instance_schema.json 时检查它
-- cmd/alonabot/plugin.go：--dir 只有 instance_schema.json、没有插件根类型时 check 只做这一项检查
-- 新增 adapters/telegram/cmd/alonabot-adapter-telegram/instance_schema.json
+- sdk/generate/：新增 instance.go，Scan 在 --dir 中有 adapter_config_schema.json 时检查它
+- cmd/alonabot/plugin.go：--dir 只有 adapter_config_schema.json、没有插件根类型时 check 只做这一项检查
+- 新增 adapters/telegram/cmd/alonabot-adapter-telegram/adapter_config_schema.json
 - internal/core/settings/instances_test.go；其他 *_local_test.go（不提交）
 允许的新跨模块边：无（internal/core 引用 contracts 已在依赖表中）。
 
@@ -3700,22 +3700,22 @@ Core 一侧已按合入代码核对并修订：
    // 只读试算：不写回、不备份，供 Adapter 更新的预检在停止旧版本前调用（T-09.5 接入）。
    const BackupDir = "backups" // <data_dir>/backups/core_config.<旧的 Core $version>.<UTC 时间，20060102T150405.000Z>.json
 2. sdk/generate
-   Scan 对 instance_schema.json 调用 configschema.Parse，问题按 config_schema.json 相同的 Diagnostic 格式（文件:JSON 路径）报告；不嵌入生成代码。
+   Scan 对 adapter_config_schema.json 调用 configschema.Parse，问题按 config_schema.json 相同的 Diagnostic 格式（文件:JSON 路径）报告；不嵌入生成代码。
 
 行为：
 - 实例配置：core_config.json 中 `adapters.<adapter_id>.$version` 是实例配置的存储版本（缺省 1）。存储版本高于 schema 的 `$version` 时整组失败，problem 写明两个版本号；低于时对每个实例按 `$migrations` 迁移，再 Complete 与 Validate。secret 字段在写回时保留原写法，不在日志与 problem 中输出取值。
 - 备份：任一写回前先把磁盘上的原文件复制到 BackupDir（目录 0700、文件 0600，名称如上）；复制失败时不写回并返回 error。
 - Core 设置：settings 内置按版本排列的迁移列表（当前为空，`currentVersion` 仍为 1）。readVersion 对高于 currentVersion 的版本拒绝加载，错误写明两个版本号与文件路径；低于时按列表迁移、备份并写回。迁移失败时 Load 返回错误，原文件不变。
-- Telegram：instance_schema.json 声明 `token`（string、secret、required）、`api_base_url`（string，缺省 `https://api.telegram.org`）与 `proxy`（string，缺省空），`$version` 为 1；与 `New().Start` 的现有解析一致，不改 Adapter 代码。
-- CLI：`alonabot plugin check --dir adapters/telegram/cmd/alonabot-adapter-telegram` 只检查 instance_schema.json 并以 0 退出；有问题时逐行输出诊断并以 exitFailure 退出。generate 对没有插件根类型的目录照旧报错。
+- Telegram：adapter_config_schema.json 声明 `token`（string、secret、required）、`api_base_url`（string，缺省 `https://api.telegram.org`）与 `proxy`（string，缺省空），`$version` 为 1；与 `New().Start` 的现有解析一致，不改 Adapter 代码。
+- CLI：`alonabot plugin check --dir adapters/telegram/cmd/alonabot-adapter-telegram` 只检查 adapter_config_schema.json 并以 0 退出；有问题时逐行输出诊断并以 exitFailure 退出。generate 对没有插件根类型的目录照旧报错。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：internal/core/settings/instances_test.go（真实文件系统上的 core_config.json）：实例配置 v1 → v2 的 rename 迁移写回、$version 更新、`${...}` 原写法保留、backups/ 下生成备份；一个实例迁移后校验失败时文件与备份目录都不变、其余实例照常返回；存储版本高于 schema 时整组失败；core_config.json 的 $version 高于程序时 Load 失败且文件不变。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：map、wrap、remove 与 `*` 路径；secret 不进 problem；TrialInstances 不写文件；备份失败时不写回；sdk/generate 对 instance_schema.json 的各类诊断；Telegram 的 instance_schema.json 经 Parse 与 Complete 后与 Start 的缺省一致。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：map、wrap、remove 与 `*` 路径；secret 不进 problem；TrialInstances 不写文件；备份失败时不写回；sdk/generate 对 adapter_config_schema.json 的各类诊断；Telegram 的 adapter_config_schema.json 经 Parse 与 Complete 后与 Start 的缺省一致。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/settings/... ./sdk/... ./cmd/alonabot/... ./adapters/...；go build ./...。
 
-不做：从 Settings.Adapters 启动实例的装配（goal-39、goal-9）；Adapter 更新的预检与提交（T-09.5）；`alonabot build`/`pack` 与包内携带 instance_schema.json（T-14.3）；Admin API 的实例编辑（T-09.14）。
+不做：从 Settings.Adapters 启动实例的装配（goal-39、goal-9）；Adapter 更新的预检与提交（T-09.5）；`alonabot build`/`pack` 与包内携带 adapter_config_schema.json（T-14.3）；Admin API 的实例编辑（T-09.14）。
 ```
 
 ### goal-67 · T-13.1 库模式入口与同进程组件
@@ -4199,7 +4199,7 @@ sdk
 - 组件身份取自目录中的工程 plugin.yaml（goal-100 的解析）；构建失败或 ID、adapter_id 与已安装的包冲突时，在启动任何组件前报错退出。
 - 构建复用生成器与 `go build`，提供供 goal-38 的 `alonabot build` 复用的内部函数，不另写一套。
 - 开发组件使用 goal-67 的 dev 来源安装记录与固定代次；进程的启动、停止与有限重启沿用 supervisor，与已安装组件相同。
-- 轮询：每 DEV_RELOAD_POLL 用标准库检查每个组件目录中的 `.go` 文件、`//go:embed` 引用的文件、go.mod、go.sum、plugin.yaml、config_schema.json、instance_schema.json 与 i18n/（排除数据目录、vendor、以 . 或 _ 开头的目录与 testdata），以及插件的 config.json 与 core_config.json 中该 Adapter 的实例；源码或资源变化时重新构建，成功后依次重启变化的组件；只有配置变化时只重启该组件，Adapter 只重启变化的实例；core_config.json 的其他变化交给 goal-97 的 Reload：返回的键含 admins 时调用 policy.SetAdmins，命令前缀经 File.CommandPrefixes 读当前设置，不需要额外处理；开发组件的 Spec.DefaultLocale 在每次启动时取当前设置，default_locale 变化后在之后建立的 Session 生效，不为此重启运行中的组件。
+- 轮询：每 DEV_RELOAD_POLL 用标准库检查每个组件目录中的 `.go` 文件、`//go:embed` 引用的文件、go.mod、go.sum、plugin.yaml、config_schema.json、adapter_config_schema.json 与 i18n/（排除数据目录、vendor、以 . 或 _ 开头的目录与 testdata），以及插件的 config.json 与 core_config.json 中该 Adapter 的实例；源码或资源变化时重新构建，成功后依次重启变化的组件；只有配置变化时只重启该组件，Adapter 只重启变化的实例；core_config.json 的其他变化交给 goal-97 的 Reload：返回的键含 admins 时调用 policy.SetAdmins，命令前缀经 File.CommandPrefixes 读当前设置，不需要额外处理；开发组件的 Spec.DefaultLocale 在每次启动时取当前设置，default_locale 变化后在之后建立的 Session 生效，不为此重启运行中的组件。
 - 删除现在 `run` 的 `--plugin-id`、`--entry` 参数，不留兼容；`--data-dir`、`--stdio`、`--listen` 与 `--args` 保留。
 - 提交的集成测试（//go:build unix）在临时目录用 `alonabot init` 生成插件工程并以 `--reload` 运行：改动回复文本后插件重启并回复新文本、Core 与回环 Adapter 不重启；写入语法错误时旧插件继续回复；只改 config.json 时不重新构建但新配置生效；改动 config_schema.json 后重新构建。
 
@@ -5210,12 +5210,12 @@ internal/core/state
 
 ### goal-93 · T-09.14 配置、权限、工具策略与会话的管理 API
 
-状态：等待前置（T-08.12、T-09.6、T-09.12）。2026-11-09 按 D-105：/core/admins 的条目是用户字符串，/core/denies 的用户与会话分别是用户字符串与不含话题的会话字符串。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin{InstanceID, UserID}`；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。T-11.1（PR #101，合并提交 `de48f26`）已合并，工具策略端点经 `tool.Catalog` 的 `Policies` 与 `SetPolicy`。2026-11-04 按前后端拆分新增，内容取自原 goal-44（T-09.9）语句中的管理 API；页面留在 goal-44。原语句的明文查看接口写成 GET 并在请求体中带 token，浏览器的 fetch 不允许 GET 带请求体，这里改为 POST。同日按 D-77～D-85 修订：Core 设置经 goal-97 的 settings 写回 `core_config.json`，Core Admin 列表同时经 goal-13 的 `policy.SetAdmins` 生效；发信许可改为「全部实例」或指定实例（goal-99）；删除插件页面票据（D-84，页面经 WebUI 的桥访问插件路由）；开发组件的配置写回 `config.json` 并重启组件；Adapter 实例的增删改写回 `core_config.json` 并按 goal-101 的 instance_schema.json 校验。语句中 goal-13、goal-26、goal-29、goal-31、goal-36、goal-39～goal-41、goal-53～goal-56、goal-84、goal-87 提供的符号（policy 的覆盖与 Admin 方法、webhost 的票据、config.Service、secret.Store 与 Redact、adminauth.Reauthenticate、管理服务与 reload、i18n 的默认 locale、tool.Catalog、conversation.Service、spec/ADMIN-API.md、router.New 的 prefixes）只写名字；合并后由审查者核对，再改为待派发。
+状态：等待前置（T-08.12、T-09.6、T-09.12）。2026-11-09 按 D-105：/core/admins 的条目是用户字符串，/core/denies 的用户与会话分别是用户字符串与不含话题的会话字符串。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin{InstanceID, UserID}`；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。T-11.1（PR #101，合并提交 `de48f26`）已合并，工具策略端点经 `tool.Catalog` 的 `Policies` 与 `SetPolicy`。2026-11-04 按前后端拆分新增，内容取自原 goal-44（T-09.9）语句中的管理 API；页面留在 goal-44。原语句的明文查看接口写成 GET 并在请求体中带 token，浏览器的 fetch 不允许 GET 带请求体，这里改为 POST。同日按 D-77～D-85 修订：Core 设置经 goal-97 的 settings 写回 `core_config.json`，Core Admin 列表同时经 goal-13 的 `policy.SetAdmins` 生效；发信许可改为「全部实例」或指定实例（goal-99）；删除插件页面票据（D-84，页面经 WebUI 的桥访问插件路由）；开发组件的配置写回 `config.json` 并重启组件；Adapter 实例的增删改写回 `core_config.json` 并按 goal-101 的 adapter_config_schema.json 校验。语句中 goal-13、goal-26、goal-29、goal-31、goal-36、goal-39～goal-41、goal-53～goal-56、goal-84、goal-87 提供的符号（policy 的覆盖与 Admin 方法、webhost 的票据、config.Service、secret.Store 与 Redact、adminauth.Reauthenticate、管理服务与 reload、i18n 的默认 locale、tool.Catalog、conversation.Service、spec/ADMIN-API.md、router.New 的 prefixes）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-93（切片 T-09.14：配置、权限、工具策略与会话的管理 API）。goal 目录 goal-93，分支 goal-93，worktree .worktrees/goal-93，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：在管理服务中补齐 Admin API：插件配置（raw JSON、Merge Patch、base_generation 与 secret 语义，Pending 经 reload 激活）、命令权限与启用、发信许可（allowed_adapter_instances）、Core 设置（Core Admin 列表、默认 locale、命令前缀、全局禁止表）、工具调用策略、Adapter 实例（按 instance_schema.json 校验）、Agent 会话的列出与清除，以及 secret 明文查看的再认证与审计；Core 设置与 Adapter 实例写回 core_config.json。接口追加到 spec/ADMIN-API.md；页面由 WebUI 章节的 T-09.9 实现。
+目标：在管理服务中补齐 Admin API：插件配置（raw JSON、Merge Patch、base_generation 与 secret 语义，Pending 经 reload 激活）、命令权限与启用、发信许可（allowed_adapter_instances）、Core 设置（Core Admin 列表、默认 locale、命令前缀、全局禁止表）、工具调用策略、Adapter 实例（按 adapter_config_schema.json 校验）、Agent 会话的列出与清除，以及 secret 明文查看的再认证与审计；Core 设置与 Adapter 实例写回 core_config.json。接口追加到 spec/ADMIN-API.md；页面由 WebUI 章节的 T-09.9 实现。
 
 依据：PLAN T-09 步骤 7（配置与插件页）；CONTRACTS §5、§2.3、§8（allowed_adapter_instances）、§13、§7.3、§5.4；DECISIONS D-45、D-62；TEST-MATRIX V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56 的管理 API 分项。
 
@@ -5230,7 +5230,7 @@ internal/core/state
 - POST /plugins/{id}/reload：经 goal-40/41 激活 Pending。
 - GET/PUT /plugins/{id}/policies：命令覆盖（作用域、permission、enabled），以及 Router 的遮蔽诊断。
 - GET/PUT /plugins/{id}/allowed-instances：{all: bool, instances: [...]}，经 goal-99 的 AdapterInstanceAccess 与 SetAdapterInstanceAccess；缺省 all 为 true。
-- GET/PUT/DELETE /adapters/{adapter_id}/instances/{instance_id}：实例配置的读取（secret 只返回是否已设置）与写回 core_config.json，按 instance_schema.json 补缺失值并校验；GET /adapters/{adapter_id}/instance-schema 供页面生成表单。
+- GET/PUT/DELETE /adapters/{adapter_id}/instances/{instance_id}：实例配置的读取（secret 只返回是否已设置）与写回 core_config.json，按 adapter_config_schema.json 补缺失值并校验；GET /adapters/{adapter_id}/instance-schema 供页面生成表单。
 - GET/PUT/DELETE /core/admins、/core/denies，GET/PUT /core/default-locale，GET/PUT /core/command-prefixes（全局与按 Adapter 实例的覆盖）。
 - GET/PUT /tools/policies：工具策略（缺省与覆盖）。
 - GET /plugins/{id}/conversations、DELETE /plugins/{id}/conversations/{key}。
