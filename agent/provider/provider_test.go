@@ -37,7 +37,7 @@ const (
 		"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
 )
 
-// TestStream 用本地模拟 Provider 驱动各协议的完整请求与流解析（PLAN T-12 步骤 1，V-57 的 Provider 分项）。
+// TestStream 用本地模拟 Provider 驱动各协议的完整请求与流解析。
 func TestStream(t *testing.T) {
 	stopErr := errors.New("stop")
 	ollamaTextAndTool := `{"message":{"content":"hel"}}
