@@ -269,7 +269,7 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-11-09：**D-111 已确认**：`sdk/llm` 增加一问一答的 `llm.Ask`，Generate 保留。修订 goal-83 的接口、行为与测试。
 - 2026-11-09：**D-112 已确认**：Hook、定时任务与 HTTP 路由与其他路由一样链式注册；命令参数名缺省取 Handler 的参数名，订阅的路由 ID 缺省为事件名。改写 goal-17 的 SDK 接口段，新增 T-04.11（goal-124），T-04.5（goal-14）的前置加入 T-04.11。
 - 2026-11-09：**D-113 已确认**：Adapter 的扩展事件、extension 与平台动作用 Go 类型声明，Schema 由 SDK 从类型推导。修订 goal-91 的 sdk/adapter 接口与 goal-106 的要点，goal-112、goal-115、goal-116 的声明改用 Go 类型；goal-79 先于 goal-91 合并时照旧手写 face 的 Schema，由 goal-91 一并改写。
-- 2026-11-10：**D-114 已确认**：插件入口改为 `func New() *sdk.Plugin`，注册、生命周期回调、配置回调与数据库迁移都登记在插件对象上，删除 `sdk.Base`、`sdk.Root` 与各注册器。新增 T-04.12（goal-125），T-04.11（goal-124）与 T-04.5（goal-14）的前置加入 T-04.12，goal-124 的要点改按插件对象书写；插件与 Agent 章节语句中的 `func New() sdk.Root` 改为 `func New() *sdk.Plugin`。
+- 2026-11-10：**D-114 已确认**：插件入口改为 `func New() *sdk.Plugin`，注册、生命周期回调、配置回调与数据库迁移都登记在插件对象上，删除 `sdk.Base`、`sdk.Root`、六个注册方法（`Commands`、`Events`、`Services`、`Subscriptions`、`HTTP`、`Schedules`）与各注册器。新增 T-04.12（goal-125），T-04.11（goal-124）与 T-04.5（goal-14）的前置加入 T-04.12，goal-124 的要点改按插件对象书写；插件与 Agent 章节语句中的 `func New() sdk.Root` 改为 `func New() *sdk.Plugin`。
 - 2026-11-10：**D-115 已确认**：命令 Handler 可以用一个结构体接收参数，字段用 `arg` 与 `default` 标签，位置参数形式保留。由 T-04.12（goal-125）实现。
 - 2026-11-10：**D-116 已确认**：插件可以分成一层逻辑子插件，子插件只存在于 SDK 内，配置取 `config_schema.json` 中同名的顶层 object。由 T-04.12（goal-125）实现。
 - 2026-11-10：**D-118～D-123 已确认**：SDK 的第二轮简化。`c.Reply`（D-118）、用户字符串与 `c.User`、`c.Session`（D-120）、按媒体来源读取的 `sdk.OpenMedia`（D-121）与错误码的 `New`、`Errorf`、`Of`（D-123）修订 goal-91 的接口；builder 的 `.Continue()`（D-119）修订 goal-52；Service 与 Event Bus 的带类型声明（D-122）新增 T-04.13（goal-126），T-04.5（goal-14）的前置加入 T-04.13。D-117 的编号由同期的 Adapter 配置声明文件改名使用。

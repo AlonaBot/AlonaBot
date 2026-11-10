@@ -3938,12 +3938,12 @@ Core 一侧已按合入代码核对并修订：
 
 状态：等待前置（T-04.8）。2026-11-10 按 D-114～D-116 新增。T-04.8（goal-91）改写 sdk 的注册与类型，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-101、goal-123、goal-124 都修改 sdk/generate，按执行顺序 §3 的生成器一行处理；与 goal-16、goal-68 并行时都会改 sdk 的注册与装配，后合并者同步 main 后按对方的写法重做自己的改动。
 
-目标：插件入口改为 `func New() *sdk.Plugin`，路由、生命周期回调、OnConfigLoad 与数据库迁移登记在插件对象上，删除 sdk.Base、sdk.Root 与各注册器；命令 Handler 可以用一个结构体接收参数；插件可以分成一层逻辑子插件。协议与 Core 不变。
+目标：插件入口改为 `func New() *sdk.Plugin`，路由、生命周期回调、OnConfigLoad 与数据库迁移登记在插件对象上；删除 sdk.Base、sdk.Root、根插件的六个注册方法（Commands、Events、Services、Subscriptions、HTTP、Schedules）与对应的注册器类型；命令 Handler 可以用一个结构体接收参数；插件可以分成一层逻辑子插件。协议与 Core 不变。
 
 依据：PLAN T-04 步骤 12；DESIGN §D、§I、§J；CONTRACTS §2.2 第 5 条、§4.1、§5.1、§5.2、§6.2、§9.1、§14.1、§15.5；DECISIONS D-114、D-115、D-116；TEST-MATRIX V-112。
 
 要点：
-- 插件对象：`sdk.NewPlugin() *sdk.Plugin`。现有 CommandRegistry、EventRegistry、ServiceRegistry、SubscriptionRegistry、HTTPRegistry、ScheduleRegistry 上开始注册的方法原样移到 `*sdk.Plugin`，builder 类型与 Collect 的检查不变；删除这六个注册器类型、`sdk.Base`、`sdk.Root` 与六个注册 Hook，不留别名。`sdk.JSON`、`sdk.Proto`、`sdk.Subscribe` 的第一个参数改为接口 `sdk.Registrar`（未导出的方法，只由 `*sdk.Plugin` 与 `*sdk.SubPlugin` 实现）。
+- 插件对象：`sdk.NewPlugin() *sdk.Plugin`。现有 CommandRegistry、EventRegistry、ServiceRegistry、SubscriptionRegistry、HTTPRegistry、ScheduleRegistry 上开始注册的方法原样移到 `*sdk.Plugin`，builder 类型与 Collect 的检查不变；删除 `sdk.Base`、`sdk.Root`、`sdk.Root` 所列的六个注册方法 `Commands`、`Events`、`Services`、`Subscriptions`、`HTTP`、`Schedules`（连同 `sdk.Base` 上的空实现，SDK 不再调用）以及这六个注册器类型，不留别名。`sdk.JSON`、`sdk.Proto`、`sdk.Subscribe` 的第一个参数改为接口 `sdk.Registrar`（未导出的方法，只由 `*sdk.Plugin` 与 `*sdk.SubPlugin` 实现）。
 - 回调：`p.OnStart`、`p.OnReady`、`p.OnStop` 收 `func(context.Context) error`，`p.OnConfigLoad` 收 CONTRACTS §5.2 的函数类型；各至多登记一次，重复登记由 Collect 报错；没有登记的不执行。
 - 配置：`p.Config()` 与 `c.Config()` 返回 `config.Values`，就绪前读取照旧 panic。
 - 迁移：`sqlitedb.Migrate(p, fn)`、`sqlitedb.Migrations(p, list)` 与 `gormdb` 的同名函数取代 SelfMigrator、VersionedMigrator 接口与包被导入时的识别登记；四个函数合计调用多于一次由 Collect 报错。生成器按插件包及其本模块依赖中对这四个函数的调用写 `migration_mode`，两种都出现时构建报错；SDK 在准备阶段核对实际登记与 manifest 一致。
