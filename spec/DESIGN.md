@@ -183,6 +183,27 @@ sdk.Subscribe(p, weather.Updated).Handle(r.onUpdated)
 
 每次执行有独立 run_id、job deadline 与 lifetime context，不被 30s 普通 RPC 默认值截断。任务超时后若插件未确认协作结束，不释放同 job 的运行槽并再次重叠启动；恢复策略见运行时契约。定时身份是显式 job/plugin scope，不获得默认 Admin。
 
+定时任务有两种（D-124）。静态任务在 `New()` 中用 `p.Every`、`p.Cron` 声明，随插件一直存在，可以在运行时暂停与恢复（`sdk.PauseJob`、`sdk.ResumeJob`，D-126）。动态任务在运行时增删：处理函数仍然静态注册，创建的是带参数的任务实例，由 Core 保存。
+
+```go
+type RemindArgs struct {
+    Session message.Session
+    Text    string
+}
+
+var Remind = sdk.Task[RemindArgs]("remind")
+
+sdk.OnTask(p, Remind).Handle(func(c *sdk.Context, a RemindArgs) error {
+    return sdk.SendText(c.Context(), a.Session, a.Text)
+})
+
+// 在命令 Handler 中创建、取消
+key, err := Remind.At(c.Context(), time.Now().Add(10*time.Minute), RemindArgs{Session: c.Session(), Text: text})
+err = Remind.Cancel(c.Context(), key)
+```
+
+实例可以是一次性的（`At`）或周期的（`Every`、`Cron`），用 key 区分，同 key 再次创建即替换。任务触发时没有触发者身份，需要的会话与用户写在参数里。调度状态保存在 Core 状态库（D-125）：任务定义与周期任务的起点在 Core 与插件重启后保留，间隔任务不因重启重新计时。错过的触发一律跳过：Core 未运行、插件未激活或任务暂停时到期的触发作废，周期任务从下一次继续，一次性任务过期即删除。任务以 plugin_id 为键存在 Core 一侧，卸载时不经过插件进程就能清理，去留由卸载的清理范围决定（D-127，CONTRACTS §9.3）。
+
 ## I. HTTP 与 SQLite
 
 ### HTTP
