@@ -1,6 +1,13 @@
 package provider
 
-import "errors"
+import (
+	"crypto/rand"
+	"errors"
+)
+
+func newToolCallID() string {
+	return rand.Text()
+}
 
 // toolCallName 从结果消息之前的历史中查找最近一次匹配的 assistant 调用。
 func toolCallName(messages []Message, id string) (string, error) {

@@ -135,7 +135,7 @@ type Client struct {
 // New 校验 config 并返回 Client。httpClient 不能为 nil，由调用方注入以便复用代理设置。
 // BaseURL 必须是不含用户信息、查询串与片段的 HTTP(S) 地址。
 func New(config Config, httpClient *http.Client) (*Client, error) {
-	if config.Protocol != OpenAI && config.Protocol != OpenAICompatible && config.Protocol != AnthropicMessages {
+	if config.Protocol != OpenAI && config.Protocol != OpenAICompatible && config.Protocol != AnthropicMessages && config.Protocol != GeminiGenerateContent {
 		return nil, fmt.Errorf("unsupported provider protocol %q", config.Protocol)
 	}
 	if config.Model == "" || config.APIKey == "" {
@@ -168,11 +168,21 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 	if anthropic {
 		endpoint, body = anthropicEndpoint, anthropicBody(c.config.Model, req)
 	}
+	if c.config.Protocol == GeminiGenerateContent {
+		var err error
+		body, err = geminiBody(req)
+		if err != nil {
+			return Result{}, err
+		}
+	}
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return Result{}, fmt.Errorf("encode provider request: %w", err)
 	}
 	target := c.baseURL.JoinPath(endpoint)
+	if c.config.Protocol == GeminiGenerateContent {
+		target = c.geminiURL()
+	}
 	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, target.String(), bytes.NewReader(raw))
 	if err != nil {
 		return Result{}, fmt.Errorf("build provider request: %w", err)
@@ -182,6 +192,8 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 	if anthropic {
 		httpRequest.Header.Set("x-api-key", c.config.APIKey)
 		httpRequest.Header.Set("anthropic-version", anthropicVersion)
+	} else if c.config.Protocol == GeminiGenerateContent {
+		httpRequest.Header.Set("x-goog-api-key", c.config.APIKey)
 	} else {
 		httpRequest.Header.Set("Authorization", "Bearer "+c.config.APIKey)
 	}
@@ -189,6 +201,9 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 	// 3. 发出请求；非 2xx 时报告状态码与 Provider 的错误说明（其中回显的 API key 已替换）。
 	response, err := c.httpClient.Do(httpRequest)
 	if err != nil {
+		if c.config.Protocol == GeminiGenerateContent {
+			err = c.geminiRequestError(err)
+		}
 		return Result{}, fmt.Errorf("send provider request: %w", err)
 	}
 	defer response.Body.Close()
@@ -204,6 +219,9 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 	// 4. 逐事件解析响应流。
 	if anthropic {
 		return c.streamAnthropic(response.Body, emit)
+	}
+	if c.config.Protocol == GeminiGenerateContent {
+		return c.streamGemini(response.Body, emit)
 	}
 	return c.streamOpenAI(response.Body, emit)
 }
