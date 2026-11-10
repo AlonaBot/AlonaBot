@@ -135,7 +135,7 @@ type Client struct {
 // New 校验 config 并返回 Client。httpClient 不能为 nil，由调用方注入以便复用代理设置。
 // BaseURL 必须是不含用户信息、查询串与片段的 HTTP(S) 地址。
 func New(config Config, httpClient *http.Client) (*Client, error) {
-	if config.Protocol != OpenAI && config.Protocol != OpenAICompatible && config.Protocol != AnthropicMessages {
+	if config.Protocol != OpenAI && config.Protocol != OpenAICompatible && config.Protocol != AnthropicMessages && config.Protocol != OpenAIResponses {
 		return nil, fmt.Errorf("unsupported provider protocol %q", config.Protocol)
 	}
 	if config.Model == "" || config.APIKey == "" {
@@ -167,6 +167,14 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 	endpoint, body := openAIEndpoint, openAIBody(c.config.Protocol, c.config.Model, req)
 	if anthropic {
 		endpoint, body = anthropicEndpoint, anthropicBody(c.config.Model, req)
+	}
+	if c.config.Protocol == OpenAIResponses {
+		var err error
+		endpoint = responsesEndpoint
+		body, err = responsesBody(c.config.Model, req)
+		if err != nil {
+			return Result{}, err
+		}
 	}
 	raw, err := json.Marshal(body)
 	if err != nil {
@@ -204,6 +212,9 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 	// 4. 逐事件解析响应流。
 	if anthropic {
 		return c.streamAnthropic(response.Body, emit)
+	}
+	if c.config.Protocol == OpenAIResponses {
+		return c.streamResponses(response.Body, emit)
 	}
 	return c.streamOpenAI(response.Body, emit)
 }
