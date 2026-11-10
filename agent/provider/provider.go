@@ -1,5 +1,5 @@
 // Package provider 以流式方式调用 Agent 的模型服务（Provider），
-// 支持 OpenAI Chat Completions（官方与兼容实现）与 Anthropic Messages 两类协议。
+// 支持 OpenAI Chat Completions（官方与兼容实现）、Anthropic Messages 与 Ollama Chat 协议。
 //
 // [Client.Stream] 逐个解析 SSE 事件，按到达顺序把文本增量交给回调；
 // 工具调用的参数分段到达，组装完整且是 JSON 对象后才交出。流正常结束时返回停止原因与用量（[Result]）。
@@ -31,6 +31,7 @@ const (
 	OpenAI            Protocol = "openai"
 	OpenAICompatible  Protocol = "openai-compatible"
 	AnthropicMessages Protocol = "anthropic-messages"
+	OllamaChat        Protocol = "ollama-chat"
 )
 
 const (
