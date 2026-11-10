@@ -378,7 +378,7 @@ func TestInstanceProxy(t *testing.T) {
 		reverse.ServeHTTP(w, r)
 	}))
 	defer proxy.Close()
-	config, err := json.Marshal(map[string]string{"token": "local-secret-token", "api_base_url": server.URL(), "proxy": proxy.URL})
+	config, err := json.Marshal(map[string]string{"token": "local-secret-token", "api_base_url": server.URL(), "proxy_mode": "custom", "proxy": proxy.URL})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -409,6 +409,40 @@ func TestInstanceProxy(t *testing.T) {
 	}
 	if proxyPolls < serverPolls || proxyPolls > serverPolls+1 {
 		t.Fatalf("proxy polls=%d server polls=%d", proxyPolls, serverPolls)
+	}
+}
+
+func TestDirectProxyModeIgnoresEnvironment(t *testing.T) {
+	server := telegramtest.NewServer(t, "local-secret-token")
+	target, err := url.Parse(server.URL())
+	if err != nil {
+		t.Fatal(err)
+	}
+	reverse := httputil.NewSingleHostReverseProxy(target)
+	var requests atomic.Int64
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		reverse.ServeHTTP(w, r)
+	}))
+	t.Cleanup(proxy.Close)
+	t.Setenv("HTTP_PROXY", proxy.URL)
+	config, err := json.Marshal(map[string]string{
+		"token": "local-secret-token", "api_base_url": "http://telegram.invalid",
+		"proxy_mode": "none", "proxy": proxy.URL,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inst, err := New().Start(t.Context(), adapter.StartRequest{InstanceID: "direct", ConfigJSON: config}, newRecordingCore())
+	if inst != nil {
+		registerStop(t, inst)
+	}
+	var public *sdk.Error
+	if !errors.As(err, &public) || public.Code != pb.ErrorCode_ERROR_CODE_UNAVAILABLE {
+		t.Fatalf("Start error = %v, want UNAVAILABLE", err)
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("proxy requests = %d, want 0", got)
 	}
 }
 
