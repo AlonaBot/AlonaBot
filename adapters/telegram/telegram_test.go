@@ -272,7 +272,8 @@ func TestMessageMetadata(t *testing.T) {
 		{`"chat":{"id":-9,"type":"group"},"text":"bot","entities":[{"type":"text_mention","offset":0,"length":3,"user":{"id":42}}]`, true, true},
 		{`"chat":{"id":-9,"type":"group"},"text":"hello"`, false, true},
 		{`"chat":{"id":-9,"type":"channel"},"text":"anonymous","sender_chat":{"id":-9}`, false, false},
-		{`"chat":{"id":-9,"type":"group"},"caption":"😀 bold","caption_entities":[{"type":"bold","offset":3,"length":4}],"media_group_id":"album","message_thread_id":77`, false, true},
+		{`"chat":{"id":-9,"type":"supergroup"},"caption":"😀 bold","caption_entities":[{"type":"bold","offset":3,"length":4}],"media_group_id":"album","message_thread_id":77,"is_topic_message":true`, false, true},
+		{`"chat":{"id":-9,"type":"supergroup"},"text":"reply thread","message_thread_id":88`, false, true},
 	}
 	for n, c := range messages {
 		server.Push(json.RawMessage(fmt.Sprintf(`{"update_id":%d,"message":{"message_id":%d,"date":123,"from":{"id":7,"username":"reader","language_code":"en-us"},%s}}`, n+1, n+11, c.body)))
@@ -306,10 +307,13 @@ func TestMessageMetadata(t *testing.T) {
 			t.Errorf("event identity: %v", e)
 		}
 	}
-	last := core.events[len(messages)-1]
-	entity := last.Message.Chain.Segments[0].GetText().Entities[0]
-	if last.Message.GetMediaGroupId() != "album" || last.Target.GetThreadId() != "77" || entity.OffsetUtf16 != 3 || entity.LengthUtf16 != 4 || entity.Type != pb.EntityType_ENTITY_TYPE_BOLD {
-		t.Fatalf("album or entity: %v", last)
+	album := core.events[len(messages)-2]
+	entity := album.Message.Chain.Segments[0].GetText().Entities[0]
+	if album.Message.GetMediaGroupId() != "album" || album.Target.GetThreadId() != "77" || entity.OffsetUtf16 != 3 || entity.LengthUtf16 != 4 || entity.Type != pb.EntityType_ENTITY_TYPE_BOLD {
+		t.Fatalf("album or entity: %v", album)
+	}
+	if target := core.events[len(messages)-1].Target; target.ThreadId != nil {
+		t.Fatalf("reply thread target = %v, want no thread_id", target)
 	}
 }
 
