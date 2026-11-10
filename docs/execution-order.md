@@ -25,7 +25,7 @@
 | 8 | T-03.11、T-04.4、T-04.7、T-07.6、T-08.5、T-08.7、T-08.8、T-09.16、T-15.1 |
 | 9 | T-03.24、T-04.9、T-04.10、T-05.1、T-07.7、T-08.6、T-08.11、T-11.1、T-15.2 |
 | 10 | T-04.8、T-07.2、T-08.9、T-08.12、T-08.13、T-13.1 |
-| 11 | T-03.13、T-03.14、T-03.15、T-03.16、T-03.17、T-03.18、T-03.19、T-05.2、T-07.5、T-09.4、T-13.2、T-13.3 |
+| 11 | T-03.13、T-03.14、T-03.15、T-03.16、T-03.17、T-03.18、T-03.19、T-04.12、T-05.2、T-07.5、T-09.4、T-13.2、T-13.3 |
 | 12 | T-03.10、T-03.20、T-03.21、T-03.22、T-04.11、T-05.3、T-05.4、T-09.12、T-14.1、T-14.2、T-15.4、T-15.5、T-15.6、T-16.1 |
 | 13 | T-04.5、T-05.5、T-06.2、T-09.10、T-09.13、T-12.2、T-13.4、T-15.3、T-16.2 |
 | 14 | T-06.4、T-09.3、T-11.2、T-12.8 |
@@ -61,6 +61,7 @@
 | `sdk/` 与 `internal/core/supervisor/` 的测试和 testdata | goal-103 在 goal-96、goal-95、goal-54 之前合并，这样后者不必迁移即将删除的测试。goal-103 合并后，其他切片不再向这两处提交测试（`supervisor_test.go` 除外），也不新增 testdata 测试插件。 |
 | `internal/core/settings` 与 `core_config.json` | goal-97 用 `core_config.json` 取代 `alonabot.yaml`，并提供读取、写回与重新读取的函数。之后修改 Core 设置的切片（goal-39 的 Adapter 实例、goal-66 的日志级别、goal-69 的重新读取、goal-93 的 Core 设置 API、goal-101 的版本迁移、goal-121 的实例名规则与 `default_instance`、goal-122 的 admins 格式）只调用或追加这些函数，不在别处直接读写该文件。goal-101 与 goal-121 都改 `readAdapters`：goal-121 只在其中接受 `default_instance` 一个键，名称检查与 `DefaultInstances` 放在新文件里；冲突时后合并者保留两边的改动。goal-122 只改 `Admin` 类型与 admins 的读取、校验和写回，与 goal-121 同在第 9 波，后合并者同样保留两边的改动。 |
 | SDK 公共 API 中的发送目标 | goal-91 合并后，SDK 的公共签名不再有 `*pb.Target` 或目标结构：目标是会话字符串 `message.Session`，机器人用可选的 `sdk.Via`（D-102）。其他语句中 SDK 签名里的 `*pb.Target`（例如 goal-51 的 `sdk.Edit`）在 goal-91 合并后按此理解，由审查者在合并后改写语句；goal-17 的 Hook 已按 SDK 类型写出（D-112）。指向某条消息的参数一律用消息句柄 `message.MessageRef`（D-104），goal-51 的 `c.Edit` 与 `sdk.Edit` 由 goal-91 改写；Send 与编辑收 `message.Content`，自动回复型 Handler 返回 `(message.Content, error)`（D-108）。Core 与 SDK 的内部代码照旧使用 pb.Target。 |
+| 插件入口与注册的接收者 | goal-125 合并后，插件入口是 `func New() *sdk.Plugin`，注册方法在插件对象或子插件上，回调与迁移用登记函数（D-114～D-116）。其他语句中的 `sdk.Root`、`sdk.Base`、根插件的注册方法、`*sdk.CommandRegistry` 等注册器参数与迁移接口在 goal-125 合并后按此理解，由审查者在合并后改写语句；goal-124 的要点已按插件对象注明。goal-125 与 goal-16、goal-68 可以并行，都改 sdk 的注册与装配，后合并者同步 main 后重做自己的改动。 |
 | `cmd/alonabot` 的命令树 | goal-97 追加 `admin-token show`；goal-69 改写 `run` 的参数为组件目录与 `--reload`；goal-38 把 `plugin generate`、`plugin check` 改为顶层的 `build`、`check` 并追加 `init`、`test`、`pack`。各自在自己的命令文件中实现，只在命令注册处追加或替换自己的一行；并行时后合并者同步 main 后重做注册，不回退对方的修改。 |
 | `go.mod`、`go.sum` | 不加依赖。需要依赖时标阻塞，由维护者决定。goal 语句明确授权的已批准依赖除外（MCP go-sdk 只授权给 goal-60，只在 `agent/` 使用；cobra 由 goal-76 引入，之后的 CLI 切片直接使用，不再改 go.mod；coder/websocket 由 goal-78 引入，只在 adapters/onebot11 使用；jsonschema-go 由首个使用它的 goal 语句授权引入，用法遵守 D-43）。 |
 | 日志 | 按[编码规范「日志用默认 Logger，依赖显式传递」](coding-standards.md#日志用默认-logger依赖显式传递)取用默认 Logger，并遵循 CONTRACTS §14 的字段；不另建日志封装，不用 fmt 直接写 stderr/stdout（CLI 给用户的输出除外）。 |

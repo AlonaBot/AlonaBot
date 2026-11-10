@@ -39,13 +39,14 @@
 | T-04.2 | goal-11 | 构建期生成器 `sdk/generate`：限定扫描范围、build tags、生成注册代码、稳定输出；`cmd/alonabot` 的构建检查入口 | T-04 步骤 2 | T-04.1 | V-10 | 已完成（PR #42；TEST-MATRIX §3.2） |
 | T-04.3 | goal-12 | 命令选择与参数绑定：完整 token、@username、最长路径/别名→文本匹配（Regex、keyword、startswith、endswith、fullmatch）→Raw、消费状态、参数语法、usage/silent | T-04 步骤 4 | T-04.1 | V-11 的命令分项、V-49 | 已完成（PR #47；TEST-MATRIX §3.2） |
 | T-04.4 | goal-13 | 持久化命令策略与管理服务层：继承、禁用、全局禁止、下一次派发生效 | T-04 步骤 5 | T-03.2、T-04.1、T-04.6 | V-12、V-43 的服务层分项 | 已完成（PR #88；TEST-MATRIX §3.2） |
-| T-04.5 | goal-14 | 用同一 SDK 升级示例，完成构建与策略验收，汇总证据 | T-04 步骤 6、7 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11 | V-10、V-11、V-12、V-43、V-49 的 T-04 分项 | 未开始 |
+| T-04.5 | goal-14 | 用同一 SDK 升级示例，完成构建与策略验收，汇总证据 | T-04 步骤 6、7 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12 | V-10、V-11、V-12、V-43、V-49 的 T-04 分项 | 未开始 |
 | T-04.6 | goal-87 | 权限、扩展事件与命令解析的协议和 Core 侧：proto 修改与生成；Adapter 权限与扩展事件声明的校验；平台权限的保留与隐含展开、按权限名集合判定；扩展事件的交付校验；`command_prefixes` 与按实例覆盖、去掉开头的 reference 与本账号 mention、非文本 token 与 `user`/`image`/`message` 参数、usage 文案键 | T-04 步骤 8 | T-03.3、T-03.6、T-04.3 | V-85、V-86、V-87 的 Core 分项 | 已完成（PR #78；TEST-MATRIX §3.2） |
 | T-04.7 | goal-88 | SDK 链式注册：命令、文本匹配、事件、Service 与 Event Bus 订阅的 builder，Permission 值对象与 `c.Has`，Service Schema 由生成器生成且 schema_id 由 Go 类型决定，自动回复型可 `c.Send`；生成器、示例与已合并调用方同步 | T-04 步骤 9 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | V-10、V-14 的 SDK 分项 | 已完成（PR #89；TEST-MATRIX §3.2） |
 | T-04.8 | goal-91 | SDK 自有类型与事件常量：Message/会话字符串与可选的 `sdk.Via`（D-102）/消息句柄（D-104）/片段构造函数与单片段发送（D-108）/媒体读取与上传助手（D-109）/时间与时长用 `time.Time`、`time.Duration`（D-110）/Adapter 声明用 Go 类型（D-113）/Actor/SendResult/错误码与入站片段，标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对事件 Handler 的 payload 类型，`sdk/adapter` 的公共类型；Telegram Adapter、示例与已合并调用方同步 | T-04 步骤 9 | T-03.9、T-03.24、T-04.7、T-04.9 | V-14 的类型分项、V-86 的 SDK 分项，V-101、V-102 的 SDK 分项，V-106～V-108，V-111 的事件与 extension 分项 | 未开始 |
 | T-04.9 | goal-96 | 删除构建期标记：去掉 `//alonabot:command`、`//alonabot:event` 的扫描、诊断与生成，命令与事件只经链式注册，示例与测试随之改写（D-79） | T-04 步骤 2 | T-04.7 | V-10 | 已完成（[PR #110](https://github.com/AlonaBot/AlonaBot/pull/110)） |
 | T-04.10 | goal-122 | 管理员与封禁按 Adapter 登记：`admins` 改用用户字符串，禁止表按 adapter_id，对该 Adapter 的全部实例生效（D-105） | T-04 步骤 10 | T-04.4、T-07.6 | V-103 | 未开始 |
-| T-04.11 | goal-124 | 注册写法统一：定时任务与 HTTP 路由的链式注册，命令省略 `Args` 时参数名取 Handler 的参数名（生成器记录），Event Bus 订阅的路由 ID 缺省为事件名（D-112） | T-04 步骤 11 | T-04.8、T-07.5 | V-110 的 SDK 分项 | 未开始 |
+| T-04.11 | goal-124 | 注册写法统一：定时任务与 HTTP 路由的链式注册，命令省略 `Args` 时参数名取 Handler 的参数名（生成器记录），Event Bus 订阅的路由 ID 缺省为事件名（D-112） | T-04 步骤 11 | T-04.8、T-04.12、T-07.5 | V-110 的 SDK 分项 | 未开始 |
+| T-04.12 | goal-125 | 插件对象、结构体参数与子插件：入口改为 `func New() *sdk.Plugin`，路由、生命周期回调、`OnConfigLoad` 与数据库迁移登记在插件对象上，删除 `sdk.Base`、`sdk.Root` 与各注册器（D-114）；命令 Handler 可以用一个结构体接收参数（D-115）；一层逻辑子插件及其缺省权限、配置视图与日志字段（D-116）；生成器、示例与已合并的调用方同步 | T-04 步骤 12 | T-04.8 | V-112 | 未开始 |
 | T-05.1 | goal-15 | 可信事件上下文与有界同事件分发：64 条并发链、256 条/8 MiB 等待队列、稳定候选排序、链执行与读循环分离；经回环测试 Adapter 运行，按钮与 scheduled 绑定先用规范 fixture | T-05 步骤 1、2 | T-03.3、T-04.3、T-04.4 | V-13、V-16 的 fixture 分项 | 已完成（PR #67；TEST-MATRIX §3.2） |
 | T-05.2 | goal-16 | SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支 | T-05 步骤 3、4 | T-05.1、T-04.7、T-04.8 | V-14、V-11 的 Rule 分项 | 未开始 |
 | T-05.3 | goal-17 | PreEvent/BeforeSend/AfterSend 三阶段 Hook（链式注册与 SDK 类型，D-112），send_forbidden 的保存与继承 | T-05 步骤 5、6 | T-05.2 | V-15 的直接路径分项，V-110 的 Hook 分项 | 未开始 |
@@ -297,7 +298,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 
 #### 实施步骤
 
-1. **完成根插件 API 与实例绑定。** 在现有 SDK 上实现恰好一个根类、嵌入 sdk.Base、至多一个 Config 的发现/验证；插件 ID 只来自 plugin.yaml。保留显式传入根实例或辅助接收者的注册接口，不建立自动 DI。生成器与显式适配器校验两种 Handler 签名及参数类型；执行时的完整 Rule/传播/自动回复组合由 T-05 完成，不另造第二套 Handler 返回协议。
+1. **完成根插件 API 与实例绑定。** 在现有 SDK 上实现恰好一个根类、嵌入 sdk.Base、至多一个 Config 的发现/验证；插件 ID 只来自 plugin.yaml。保留显式传入根实例或辅助接收者的注册接口，不建立自动 DI。生成器与显式适配器校验两种 Handler 签名及参数类型；执行时的完整 Rule/传播/自动回复组合由 T-05 完成，不另造第二套 Handler 返回协议。D-114 以 `func New() *sdk.Plugin` 取代根类与 `sdk.Base`，由 T-04.12 修改。
 
 2. **实现限定范围的构建期生成。** 只扫描当前插件在所在 module 中选定的目标构建包及其本模块依赖包，遵守 build tags、GOOS/GOARCH，排除依赖、vendor、测试文件。包级 command/event 标记生成 Go 注册代码，由编译器检查函数类型；实例方法必须通过已提供的实例显式绑定。仓库内各示例以各自构建入口限定扫描范围，不能全仓库扫描所有示例后误报多个根插件。产出稳定描述、schema 引用和构建诊断；同输入重复生成结果一致。通过 `cmd/alonabot/` 的构建检查入口调用同一生成逻辑，避免 CLI 和 SDK 各自维护一份扫描器。D-79 删除构建期标记，命令与事件只经链式注册，标记的扫描与生成由 T-04.9 删除。
 
@@ -317,7 +318,13 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 
 10. **管理员与封禁按 Adapter 登记（D-105）。** `core_config.json` 的 `admins` 与状态库的禁止表改用用户字符串 `<adapter_id>:<external_user_id>`，会话禁止按 `<adapter_id>:<chat_id>`；Router 按事件的 adapter_id 判定 admin，CheckCommand 与 CheckSend 按 adapter_id 判定禁止，同一 Adapter 的全部实例共用。同步已合并的 policy、router 与 settings；管理入口（T-09.4、T-09.14）与 /whoami（T-14.1）按新格式实现。
 
-11. **注册写法统一（D-112）。** 定时任务与 HTTP 路由改为与 D-70 相同的链式构建：`r.Every(jobID, d)`、`r.Cron(jobID, expr)`（可选 `.Timezone(name)`）与 `r.Route(method, path)`（可选 `.Public(mode)`）开始，`Handle` 结束，删除 `HTTPOption` 与位置参数形式。命令省略 `Args` 时参数名取 Handler 的参数名：Go 运行时取不到参数名，由生成器为插件包中第一个参数是 `*sdk.Context` 的函数、方法与函数字面量记录参数名并嵌入 Generated，SDK 按 Handler 查找，查不到时仍为 arg1、arg2；写了 `Args` 时以它为准。Event Bus 订阅改为 `sdk.Subscribe[T](r, eventName)`，路由 ID 缺省为事件名，可用 `.ID(routeID)` 另给。协议不变，示例与已合并的调用方同步修改。Hook 的同样改写属于 T-05.3。
+11. **注册写法统一（D-112）。** 定时任务与 HTTP 路由改为与 D-70 相同的链式构建：`r.Every(jobID, d)`、`r.Cron(jobID, expr)`（可选 `.Timezone(name)`）与 `r.Route(method, path)`（可选 `.Public(mode)`）开始，`Handle` 结束，删除 `HTTPOption` 与位置参数形式。命令省略 `Args` 时参数名取 Handler 的参数名：Go 运行时取不到参数名，由生成器为插件包中第一个参数是 `*sdk.Context` 的函数、方法与函数字面量记录参数名并嵌入 Generated，SDK 按 Handler 查找，查不到时仍为 arg1、arg2；写了 `Args` 时以它为准。Event Bus 订阅改为 `sdk.Subscribe[T](r, eventName)`，路由 ID 缺省为事件名，可用 `.ID(routeID)` 另给。协议不变，示例与已合并的调用方同步修改。Hook 的同样改写属于 T-05.3。本步骤排在步骤 12 之后，`r` 指步骤 12 的插件对象或子插件。
+
+12. **插件对象、结构体参数与子插件（D-114～D-116）。** 协议不变，只改 SDK、生成器与调用方。
+    - 插件对象：新增 `sdk.NewPlugin()` 与 `*sdk.Plugin`，把各注册器的方法移到它上面，删除 `sdk.Base`、`sdk.Root`、六个注册 Hook 与注册器类型；`sdk.JSON`、`sdk.Proto`、`sdk.Subscribe` 的第一个参数改为 `sdk.Registrar`。生命周期与配置回调改为 `p.OnStart`、`p.OnReady`、`p.OnStop`、`p.OnConfigLoad` 登记，配置经 `p.Config()` 与 `c.Config()` 读取。`sqlitedb` 与 `gormdb` 的迁移接口改为登记函数 `Migrate(p, fn)` 与 `Migrations(p, list)`，生成器按对这四个函数的调用写入 `migration_mode`，SDK 在准备阶段核对。`sdk.Run`、`sdk.Collect` 与库模式的 `alonabot.Plugin` 改收 `*sdk.Plugin`；生成器从查找根类型改为核对入口包的 `func New() *sdk.Plugin`，正式入口调用 `sdk.Run(New())`。重复登记由 `Collect` 报错，`sdk.Run` 开始后的注册 panic。
+    - 结构体参数：`Collect` 按 CONTRACTS §9.1 检查 Handler 的结构体参数（字段类型与导出、`arg` 与 `default` 标签、名字的缺省规则、指针与 default 的可选语义、与 `Args`/`Optional`/`RawTail` 互斥），生成与位置参数相同的 CommandParam；分发时把 Core 解析好的值赋给字段。两种形式同时接受 `int` 与底层为标量的具名类型。
+    - 子插件：`p.Sub(id)` 与 `*sdk.SubPlugin`，ID 校验与重复检查；子插件中的路由照原规则生成 route_id 并与整个插件一起查重；`s.Permission` 进入缺省权限的解析次序；`s.Config()` 返回同名顶层 object 的视图，`Collect` 核对 schema 中有该字段；子插件 Handler 的 `c.Logger()` 带 `sub_plugin`。
+    - examples/plugins、`alonabot init` 的模板（尚未实现时只改语句）与已合并的调用方按新写法修改；docs/plugin-guide.md 与 ARCHITECTURE 中对根插件的描述由审查者在合并前同步。
 
 #### 拟目录与交付
 
@@ -346,6 +353,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 | V-108 | SDK 类型中的时间与时长：与协议毫秒值的往返，零值对应 absent |
 | V-110 | 步骤 11 中定时任务与 HTTP 路由的链式注册、命令参数名的缺省与订阅路由 ID 的缺省；Hook 分项由 T-05.3 提供 |
 | V-111 | 步骤 9 中扩展事件与 extension 的 Go 类型声明与推导的 Schema；动作分项由 T-03.15 提供 |
+| V-112 | 步骤 12 中插件对象的注册与回调登记、结构体参数的绑定与注册检查、子插件的路由标识、缺省权限与配置视图 |
 
 V-12 是跨任务验收：T-04 不依赖尚不存在的 WebUI，但必须交付后续 UI 实际调用的策略服务层。矩阵中保存分项证据；只有 T-09 的鉴权后浏览器操作也完成，才将整项 V-12 标为通过。T-04 完成后，T-05 和 T-08 可以分别使用同一注册器继续实施。
 
@@ -535,7 +543,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 3. **接入 SDK 配置准备顺序。** 使用 T-02 的私有 Bootstrap，按声明式迁移 → `OnConfigLoad(raw, fromVersion)` → 补缺失值 → schema 校验处理，再进入该启动原因允许的 DB 准备；补值、校验与 secret 路径的实现放在 `contracts/`，SDK 与 Core 共用。完整规范 JSON 随 REGISTER 回传，禁止用只含已声明字段的结果替换原始文档；新 schema 检查必须在 OnConfigLoad 之后。准备完成后由 `sdk.Base.Config()` 提供按类型取值的只读配置。普通 restart 重验原 Active，相同配置版本的 OnConfigLoad 若改变运行配置则失败；所有阶段错误、超限及超时走既有控制错误，准备期不能发普通业务 RPC。
 4. **实现不可变 Secret Store。** 新 secret 值生成新引用，Core 在所属 Session Bootstrap 前解引用，在 REGISTER 后按新 Schema 和保留的旧 secret 路径重新抽取；SDK 不计算持久化引用摘要。检查引用归属，管理读取返回引用/设置状态，掩码不成为保存值；日志、错误和普通响应不含明文 JSON、DSN 或 secret。实现运行账号权限/Windows ACL 与按引用清理能力；清理必须保护 Active、Pending、保留代次及恢复中操作引用，正式 Journal 引用由 T-09 接入。
 5. **实现受管 SQLite 的两个入口与连接生命周期。** 新建 `sdk/sqlitedb`：`sqlitedb.Open(ctx)` 按 Session 的 DB 描述打开受管 SQLite，同一 Session 复用同一个连接，SDK 停止时关闭；现有 `gormdb.OpenSQLite` 的连接设置与回读核对移入此包，按契约应用 WAL/FULL/外键/5s busy timeout 与单连接。`gormdb.Open(ctx)` 经 libtnb 的 `Conn` 包装同一个 `*sql.DB`，不另开连接。插件不可取得 Core 状态库连接，事务回调使用传入的 tx。连接或数据损坏时返回错误，不能创建空库掩盖问题。只导入 `sqlitedb` 的插件不链接 GORM，用 `go list -deps` 验证。
-6. **实现两组互斥迁移与维护门槛。** `sqlitedb` 与 `gormdb` 各定义 SelfMigrator 与 VersionedMigrator，被导入时向 SDK 登记识别方式，SDK 本身不 import GORM；根插件最多实现一个迁移接口。versioned 模式校验非零、唯一、递增 ID，每步 Up 与 `_alonabot_migrations` 完成记录使用插件 DB 的同一事务，失败不记成功，两个包共用同一账本格式。`prepare_effects=external` 的插件在已有安装的候选上没有维护许可时返回 NEEDS_MANUAL_MIGRATION；维护许可须匹配 Core 下发的本次 Session/Generation/DB；事务不支持的 SQL 不得偷偷转为事务外执行。
+6. **实现两组互斥迁移与维护门槛。** `sqlitedb` 与 `gormdb` 各定义 SelfMigrator 与 VersionedMigrator，被导入时向 SDK 登记识别方式，SDK 本身不 import GORM；根插件最多实现一个迁移接口（D-114 把迁移接口改为登记函数，由 T-04.12 修改）。versioned 模式校验非零、唯一、递增 ID，每步 Up 与 `_alonabot_migrations` 完成记录使用插件 DB 的同一事务，失败不记成功，两个包共用同一账本格式。`prepare_effects=external` 的插件在已有安装的候选上没有维护许可时返回 NEEDS_MANUAL_MIGRATION；维护许可须匹配 Core 下发的本次 Session/Generation/DB；事务不支持的 SQL 不得偷偷转为事务外执行。
 7. **形成可交接的候选资源结果。** 在已持逐插件操作锁、旧写入者退出且 Core 可取得 runtime.lock 的前提下，使用 Backup API 创建独立 SQLite 候选；首次安装创建空候选，reload/update 同样复制，普通 resume 复用 Active。复制完成后 Core 释放临时 runtime.lock，再由 SDK 取锁打开候选，避免互相等待。将准备好的程序/配置/secret/DB 引用、配置摘要、迁移完成状态与本次身份交给 T-09；本任务不写 Active 指针或伪造 COMMITTED。失败清理只处理未受保护的候选资源。
 8. **实现用户可见文案目录。** 在 `alonabot build` 与 `check` 中检查 `i18n/*.json` 的 `messages`：en-US 必须存在且包含全部键，其他语言不得有 en-US 没有的键，同一键的占位符集合一致。SDK 提供 `T(key, args)`，按 Actor locale → Core 默认 locale → en-US 选择语言，主语言回落按 CONTRACTS §5.4；未知键与缺少参数返回错误。Core 内置 en-US 与 zh-CN 的用户可见文案目录，命令 usage 改为经该目录生成；Core 默认 locale 是一项全局设置。
 9. **完成示例与分层验证。** 在临时 data_dir 上分别用 `sqlitedb` 与 `gormdb`，运行配置迁移、显式空值、未知 secret、CRUD/事务、迁移失败以及候选 OnStart 写 DB 后失败的案例。为自动表单提供字段顺序、invisible、模板、i18 回退、掩码和 PATCH 的组件/fixture 验证，并建立 WebUI 文案的 en-US/zh-CN 目录与语言切换组件；`web/admin/` 是官方 WebUI 组件的源码；真实管理页面在 T-09 接入。记录可独立通过的组件证据，以及仍需 T-09 正式管理入口和 Journal 才能关闭的场景，不把后者标成已通过。

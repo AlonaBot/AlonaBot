@@ -33,7 +33,7 @@
 | V-23 | T-08、T-09 | config.json 直接编辑、显式 reload、false/0/空串、未知键 | 编辑未激活前运行值不变；reload 创建 Pending；显式默认值不被覆盖；未知键保留 |
 | V-24 | T-08、T-09 | 仅改配置，候选OnStart写SQLite后失败；Core在候选阶段中断 | 候选使用独立DB，旧数据/配置/secret不变；新旧进程不同时写入；恢复只信Core状态库Active指针 |
 | V-25 | T-08、T-09 | secret修改后候选失败、旧secret字段转未知键、invisible/i18、掩码/PATCH | 新secret不覆盖旧引用；保留未知secret仍保密；掩码不成为保存值；invisible不意外删除；翻译不改键和值 |
-| V-26 | T-01、T-08 | 受管 SQLite 经 `sqlitedb`（database/sql）与 `gormdb` 的 CRUD/Tx、同一插件同时使用两个入口、根插件实现多于一个迁移接口、只导入 `sqlitedb` 的插件 | 两个入口都可用，共用同一连接并看到同一数据；实现多个迁移接口时检查失败；只导入 `sqlitedb` 的插件不链接 GORM |
+| V-26 | T-01、T-08 | 受管 SQLite 经 `sqlitedb`（database/sql）与 `gormdb` 的 CRUD/Tx、同一插件同时使用两个入口、迁移登记多于一次（D-114）、只导入 `sqlitedb` 的插件 | 两个入口都可用，共用同一连接并看到同一数据；迁移登记多于一次时检查失败；只导入 `sqlitedb` 的插件不链接 GORM |
 | V-27 | T-09 | 安装包归档含 ../、绝对路径、symlink 逃逸、来源 ID 冲突 | 解压前拒绝路径越界；首次注册 ID 保留；后来源不可静默替换 |
 | V-28 | T-09 | 下载损坏 digest、签名错误、错误 OS/arch、不受信来源更新 | 所有错误在停止旧版前发现并拒绝；SHA256 不当作来源身份签名 |
 | V-29 | T-09 | SQLite WAL候选备份；迁移/OnStart失败；空间不足与残存进程 | 确认runtime.lock可取后备份；旧DB不污染；候选失败旧程序新Session恢复；空间/锁失败不激活 |
@@ -119,6 +119,7 @@
 | V-109 | T-12 | 一问一答的 `llm.Ask`（D-111）：测试插件以 `llm.Ask` 调用模拟 Provider；prompt 为空串或只含空白；Agent 拒绝调用方或 Provider 出错 | 模拟 Provider 收到只含一条 user 消息、没有 system、使用默认 Provider 的请求，Ask 返回其文本；空白 prompt 在发出请求前返回 INVALID_ARGUMENT；其余错误与 Generate 相同 |
 | V-110 | T-04、T-05 | 注册写法统一（D-112）：PreEvent、BeforeSend、AfterSend 的链式注册与 Handler 签名（含错误签名、返回 nil、编辑时的 c.Editing）；Every、Cron（含 Timezone）与 HTTP 路由（含 Public）的链式注册与漏写 Handle；命令省略 Args 时的参数名（方法值、包级函数、函数字面量、查不到参数名）与写了 Args 时；Subscribe 省略与给出 ID、同一事件订阅两次 | REGISTER 中的路由与旧写法等价；错误签名与漏写 Handle 在 Collect 时报错并带 route_id；返回 nil 时 payload 与 Chain 不变；编辑时 c.Editing 为被编辑消息的句柄，发送时为空；省略 Args 时参数名等于 Handler 的参数名，查不到时为 arg1、arg2；Subscribe 的路由 ID 缺省为事件名，同一事件两次订阅都未给 ID 时 Collect 报错 |
 | V-111 | T-03、T-04 | Adapter 声明用 Go 类型（D-113）：adapter.Event、adapter.Extension 与 adapter.Action 从类型推导的 Schema（必需字段、omitempty、嵌套结构与切片、空结构体）；T 或 P 不是结构体、类型无法推导；Adapter 交付带多余字段或缺少必需字段的扩展事件；插件发送不符的 extension 与动作参数；动作结果带 R 未声明的字段 | 事件、extension 与动作参数的 Schema 不允许未声明的属性，没有 omitempty 的字段为必需；类型问题使 RunAdapter 在 REGISTER 之前返回错误并带声明名；不符的事件、片段与参数被 Core 拒绝；结果中多出的字段照常通过 |
+| V-112 | T-04 | 插件对象、结构体参数与子插件（D-114～D-116）：`New()` 中注册包级函数与方法值、生命周期与 OnConfigLoad 的登记、重复登记、`sdk.Run` 开始后注册、入口包缺少 `New`；迁移的登记、登记多于一次、登记方式与 manifest 的 `migration_mode` 不符；结构体参数的缺省名与 `arg` 名、指针与 default 的可选、raw 尾部、不支持的字段类型、未导出或内嵌字段、与 `Args`/`Optional`/`RawTail` 同用、`int` 与具名类型；子插件的 ID 校验与重复、路由在子插件之间移动、子插件的缺省权限、`s.Config()` 与缺少同名 object、日志字段 | 插件经 `sdk.Run(New())` 注册并激活，回调按 §4.1 的次序执行；重复登记与缺少 `New` 分别在 Collect 与构建时报错，`sdk.Run` 开始后注册 panic；迁移登记多于一次时 Collect 报错，与 manifest 不符时准备失败；结构体形式与等价的位置参数形式在 REGISTER 中的参数描述相同，Handler 收到的字段值与 Core 解析结果一致，各种不合法的结构体在 Collect 时报错并指明字段；子插件不出现在 REGISTER 中，移动路由前后 route_id 与命令路径不变，缺省权限按路由、命令组、子插件、SDK 缺省的次序解析；`s.Config()` 读到同名 object 的值，缺少该字段时 Collect 报错；子插件 Handler 的日志带 `sub_plugin` |
 
 ## 2. 跨任务验收的最终闭合点
 
@@ -154,6 +155,7 @@
 | V-85～V-87 | T-04.6 Core 侧校验、展开与命令解析；T-04.8 SDK 事件常量与类型核对；T-03.11、T-15.1 两个官方 Adapter 的平台权限 | T-16 用 `plugintest.Adapter` 覆盖依赖平台权限与扩展事件的路由；V-87 的 usage 语言选择随 T-08.8 完成 |
 | V-89～V-101 | T-03.13～T-03.19、T-03.24 的协议与 Core 侧，T-04.8 的 SDK 分项；T-03.20～T-03.23 的 Telegram 实现；T-15.4～T-15.6 的 OneBot 11 实现 | T-10.1 汇总两个 Adapter 的模拟服务证据；真实 Telegram 与 QQ 端只记录维护者的手测，没有时为未运行 |
 | V-102～V-111 | 插件 API 的简化（D-104～D-113）：T-04.8 的 SDK 分项；T-03.8（V-105）、T-03.14（V-108 的语音）、T-03.15（V-111 的动作）、T-03.16（V-102 的撤回）、T-04.10（V-103）、T-04.11 与 T-05.3（V-110）、T-08.13（V-104）、T-12.8（V-109） | T-10.1 汇总；V-102 中 Telegram 指向消息的平台动作由 T-03.21 提供 |
+| V-112 | 插件对象、结构体参数与子插件（D-114～D-116）：T-04.12 的 SDK、生成器与调用方 | T-04.5 的示例改用新写法后汇总；按 D-86 由本地自测与 PR 记录提供证据 |
 
 T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前者可支持后续开发，真实平台部分仍由 T-10 查证。测试会话、无配置/无 DB 最小插件和 payload fixture 的范围必须写明，不可据此关闭生产认证或数据恢复用例。
 

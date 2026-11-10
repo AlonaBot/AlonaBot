@@ -62,6 +62,7 @@
 | goal-110 | T-03.19 | Adapter 的 HTTP 路由 | T-03.3、T-04.8、T-07.7 | 等待前置 |
 | goal-121 | T-03.24 | 插件给出的目标由 Core 补齐 | T-03.6、T-07.6 | 待派发 |
 | goal-122 | T-04.10 | 管理员与封禁按 Adapter 登记 | T-04.4、T-07.6 | 待派发 |
+| goal-125 | T-04.12 | 插件对象、结构体参数与子插件 | T-04.8 | 等待前置 |
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 等待前置 |
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 待派发 |
 | goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 等待前置 |
@@ -70,10 +71,10 @@
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 等待前置 |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 等待前置 |
-| goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-07.5 | 等待前置 |
+| goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 等待前置 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
-| goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11 | 等待前置 |
+| goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12 | 等待前置 |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 等待前置 |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 等待前置 |
 | goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 等待前置 |
@@ -3920,6 +3921,26 @@ Core 一侧已按合入代码核对并修订：
 - 代理：`httputil.ReverseProxy` 转发 Upgrade 请求，升级后的连接不受普通请求期限限制；Core 记录已升级的连接，撤销映射时关闭它们；内部凭证与 Session 校验同插件路由。
 - 测试：提交一个集成测试：测试 Adapter 注册公开路由，客户端经统一端口完成 WebSocket 往返，Adapter 停止后连接被关闭；其余进本地自测。
 
+### goal-125 · T-04.12 插件对象、结构体参数与子插件
+
+状态：等待前置（T-04.8）。2026-11-10 按 D-114～D-116 新增。T-04.8（goal-91）改写 sdk 的注册与类型，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-101、goal-123、goal-124 都修改 sdk/generate，按执行顺序 §3 的生成器一行处理；与 goal-16、goal-68 并行时都会改 sdk 的注册与装配，后合并者同步 main 后按对方的写法重做自己的改动。
+
+目标：插件入口改为 `func New() *sdk.Plugin`，路由、生命周期回调、OnConfigLoad 与数据库迁移登记在插件对象上，删除 sdk.Base、sdk.Root 与各注册器；命令 Handler 可以用一个结构体接收参数；插件可以分成一层逻辑子插件。协议与 Core 不变。
+
+依据：PLAN T-04 步骤 12；DESIGN §D、§I、§J；CONTRACTS §2.2 第 5 条、§4.1、§5.1、§5.2、§6.2、§9.1、§14.1、§15.5；DECISIONS D-114、D-115、D-116；TEST-MATRIX V-112。
+
+要点：
+- 插件对象：`sdk.NewPlugin() *sdk.Plugin`。现有 CommandRegistry、EventRegistry、ServiceRegistry、SubscriptionRegistry、HTTPRegistry、ScheduleRegistry 上开始注册的方法原样移到 `*sdk.Plugin`，builder 类型与 Collect 的检查不变；删除这六个注册器类型、`sdk.Base`、`sdk.Root` 与六个注册 Hook，不留别名。`sdk.JSON`、`sdk.Proto`、`sdk.Subscribe` 的第一个参数改为接口 `sdk.Registrar`（未导出的方法，只由 `*sdk.Plugin` 与 `*sdk.SubPlugin` 实现）。
+- 回调：`p.OnStart`、`p.OnReady`、`p.OnStop` 收 `func(context.Context) error`，`p.OnConfigLoad` 收 CONTRACTS §5.2 的函数类型；各至多登记一次，重复登记由 Collect 报错；没有登记的不执行。
+- 配置：`p.Config()` 与 `c.Config()` 返回 `config.Values`，就绪前读取照旧 panic。
+- 迁移：`sqlitedb.Migrate(p, fn)`、`sqlitedb.Migrations(p, list)` 与 `gormdb` 的同名函数取代 SelfMigrator、VersionedMigrator 接口与包被导入时的识别登记；四个函数合计调用多于一次由 Collect 报错。生成器按插件包及其本模块依赖中对这四个函数的调用写 `migration_mode`，两种都出现时构建报错；SDK 在准备阶段核对实际登记与 manifest 一致。
+- 入口：`sdk.Run`、`sdk.Collect` 与根包的 `alonabot.Plugin` 改收 `*sdk.Plugin`。生成器不再查找根类型，改为核对入口包声明 `func New() *sdk.Plugin`，缺少或签名不符时给出带位置的诊断；正式入口调用 `sdk.Run(New())`。`sdk.Run` 开始后调用注册或登记方法 panic，消息为英文。
+- 结构体参数：Collect 按 CONTRACTS §9.1 的条目检查并生成与位置参数相同的 CommandParam：字段顺序即参数位置；参数名取 `arg` 标签，否则取字段名并把开头的大写字母段转为小写；指针为可选，`default` 标签给默认值且不能用于指针；`arg:",raw"` 只能用于最后一个 string 字段；未导出、内嵌、结构体或不支持类型的字段报错并指明字段；Handler 收结构体时该路由调用 Args、Optional 或 RawTail 报错。分发时把 Core 解析好的值赋给字段，缺失的指针字段为 nil。两种形式都接受 `int` 与底层为 string、int64、int、float64、bool 的具名类型。
+- 子插件：`p.Sub(id string) *sdk.SubPlugin`，与 `*sdk.Plugin` 共用注册方法的实现，没有 `Sub` 与回调、迁移的登记。ID 不合法或重复由 Collect 报错。子插件中的路由照原规则生成 route_id、命令路径、Service 名、HTTP 路径与 job ID，并与整个插件一起查重；REGISTER 中不出现子插件。`s.Permission(perm)` 的解析次序为路由、由近到远的命令组、子插件、SDK 缺省。`s.Config()` 返回与 ID 同名的顶层 object 的视图，可以在注册时取得；调用过它的子插件在 schema 顶层没有同名 object 时 Collect 报错。子插件 Handler 的 `c.Logger()` 带 `sub_plugin` 字段。
+- 调用方：examples/plugins、测试中以字符串嵌入的插件源码与已合并的 Agent、官方插件代码按新写法修改；`alonabot init` 的模板尚未实现，由 goal-38 按本切片的入口编写。
+- 文档同步：docs/plugin-guide.md 第 5、7 节与 ARCHITECTURE 中对根插件、`sdk.Base` 的描述由审查者在合并前改写。
+- 测试：按 D-86 不向 sdk/ 提交测试。V-112 的各项进本地自测，由本地测试在临时目录生成插件源码与二进制后经真实 Core 运行；已有依赖根插件写法的集成测试改用新入口，断言不变。
+
 ### goal-16 · T-05.2 Rule、HandlerOutcome 与传播
 
 状态：等待前置（T-04.8）。T-05.1（PR #67）、T-04.7（PR #89）已合并。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。语句中 goal-2、goal-12、goal-15 提供的符号（sdk 的分发、RouteOption、Context、HandlerOutcome 的处理、router 的命令层与事件路由派发）只写名字；合并后由审查者核对签名，再改为待派发。
@@ -4346,7 +4367,7 @@ sdk
 
 ### goal-124 · T-04.11 注册写法统一
 
-状态：等待前置（T-04.8、T-07.5）。2026-11-09 按 D-112 新增。T-04.8（goal-91）改写 sdk 的注册与类型（含 `Public(mode HTTPAuth) HTTPOption`），T-07.5（goal-27，PR #119）修改定时任务与 HTTP 的启停，两者合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-101、goal-123 都修改 sdk/generate，按执行顺序 §3 的生成器一行处理。
+状态：等待前置（T-04.8、T-04.12、T-07.5）。2026-11-09 按 D-112 新增。2026-11-10 按 D-114 前置加入 T-04.12：要点中的 `r` 指插件对象或子插件（`*sdk.Plugin`、`*sdk.SubPlugin`），`sdk.Subscribe` 的第一个参数是 `sdk.Registrar`；Handler 用结构体接收参数时不取参数名（D-115）。T-04.8（goal-91）改写 sdk 的注册与类型（含 `Public(mode HTTPAuth) HTTPOption`），T-07.5（goal-27，PR #119）修改定时任务与 HTTP 的启停，两者合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-101、goal-123 都修改 sdk/generate，按执行顺序 §3 的生成器一行处理。
 
 目标：定时任务与 HTTP 路由改为与 D-70 相同的链式注册；命令省略 Args 时参数名取 Handler 的参数名；Event Bus 订阅的路由 ID 缺省为事件名。协议不变。Hook 的同样改写由 T-05.3（goal-17）完成。
 
@@ -4462,7 +4483,7 @@ sdk
 
 ### goal-14 · T-04.5 示例升级与 T-04 验收
 
-状态：等待前置（T-03.10、T-04.8、T-04.11）。2026-11-09 按 D-112 前置加入 T-04.11，示例按统一后的注册写法升级。T-04.9（PR #110，合并提交 `6aed25d`）已合并。T-04.4（PR #88）、T-04.7（PR #89）已合并。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.2、T-04.3 已合并；已核对 `CommandRegistry.Command`、`Regex`、`Keyword`、`Raw`，以及 Args、Optional、RawTail、Usage、Silent、IgnoreCase 和 Context.Match。策略与 Adapter 开发入口的实际接口仍待前置合并后核对。2026-11-04 按 D-77～D-85 修订计划：示例只用链式注册（D-79，goal-96 删除标记），用 `alonabot check`、`build` 检查与构建，经 `alonabot run <目录>` 运行（D-77）。前置合并后由审查者改写。
+状态：等待前置（T-03.10、T-04.8、T-04.11、T-04.12）。2026-11-09 按 D-112 前置加入 T-04.11，示例按统一后的注册写法升级。2026-11-10 按 D-114～D-116 前置加入 T-04.12：示例以 `func New() *sdk.Plugin` 为入口，并各有一处结构体参数与子插件的用法，V-112 的证据在本切片汇总。T-04.9（PR #110，合并提交 `6aed25d`）已合并。T-04.4（PR #88）、T-04.7（PR #89）已合并。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。T-04.2、T-04.3 已合并；已核对 `CommandRegistry.Command`、`Regex`、`Keyword`、`Raw`，以及 Args、Optional、RawTail、Usage、Silent、IgnoreCase 和 Context.Match。策略与 Adapter 开发入口的实际接口仍待前置合并后核对。2026-11-04 按 D-77～D-85 修订计划：示例只用链式注册（D-79，goal-96 删除标记），用 `alonabot check`、`build` 检查与构建，经 `alonabot run <目录>` 运行（D-77）。前置合并后由审查者改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-14（切片 T-04.5：示例升级与 T-04 验收）。goal 目录 goal-14，分支 goal-14，worktree .worktrees/goal-14，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
