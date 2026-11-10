@@ -73,6 +73,7 @@
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 等待前置 |
 | goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 等待前置 |
 | goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 等待前置 |
+| goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 等待前置 |
 | goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 等待前置 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
@@ -92,7 +93,7 @@
 | goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 等待前置 |
 | goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 等待前置 |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 等待前置 |
-| goal-93 | T-09.14 | 配置、权限、工具策略与会话的管理 API | T-07.6、T-08.8、T-08.11、T-08.12、T-09.6、T-09.12、T-11.1、T-11.3 | 等待前置 |
+| goal-93 | T-09.14 | 配置、权限、工具策略与会话的管理 API | T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-09.6、T-09.12、T-11.1、T-11.3 | 等待前置 |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
 
 ## 第 1 波
@@ -3897,7 +3898,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-108 · T-03.17 命令菜单同步
 
-状态：等待前置（T-04.8）。T-04.6（PR #78）、T-04.7（PR #89）、T-08.8（PR #102）已合并。2026-11-09 按 D-87、D-96 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+状态：等待前置（T-04.8）。2026-11-10 按 D-128：菜单中的命令名改用生效的主名由 goal-129 在本切片合并后实现，本语句不变。T-04.6（PR #78）、T-04.7（PR #89）、T-08.8（PR #102）已合并。2026-11-09 按 D-87、D-96 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
 
 目标：实例声明 `commands.sync` 时，Core 在实例启动后与路由表或命令策略变化后，把该实例可用的命令名与按 locale 翻译的说明经 `adapter.commands.sync` 交给它。
 
@@ -4427,6 +4428,27 @@ sdk
 - 文档同步：docs/plugin-guide.md 第 6 节由审查者在合并前改写。
 - 测试：按 D-86 不向 sdk/ 提交测试。V-113 的声明分项进本地自测；已有调用 Service 与 Event Bus 的集成测试改用声明，断言不变。
 
+
+### goal-129 · T-04.14 命令名覆盖的 Core 侧
+
+状态：等待前置（T-03.17、T-04.10）。2026-11-10 按 D-128 新增。T-04.4（PR #88）已合并，合入的符号：`policy.Scope`（`ScopePlugin`、`ScopeGroup`、`ScopeRoute`）、`policy.Override{Permissions, Enabled}`、`Policy.SetOverride`、`Policy.Overrides`、`Policy.CheckCommand`，状态库的 `command_policy` 表；Router 的命令索引从注册描述读取路径与别名（`internal/core/router/index.go`）。T-04.10（goal-122）修改 policy，T-03.17（goal-108）提供命令菜单同步，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片修改 `internal/core/state/schema.sql`，按执行顺序的共享文件规则处理冲突；与 goal-71（T-14.1）都涉及 `core.command.list` 返回的命令名，后合并者同步。
+
+目标：管理员可以给一条按路径匹配的命令保存命令名覆盖，取代插件声明的路径与别名；Core 的匹配、遮蔽、usage 回复与命令菜单都使用生效的命令名，route_id、命令组与策略的作用域不变。本切片提供服务层与 Router 的行为，管理 API 由 goal-93 提供。
+
+依据：PLAN T-04 步骤 14；CONTRACTS §2.2、§2.3、§8（命令菜单）、§9.3；WIRE-FORMAT §3.5（`core.command.list`）；DECISIONS D-96、D-127、D-128；TEST-MATRIX V-115 的 Core 分项。
+
+要点：
+- 存储：`command_policy` 表增加保存命令名列表的列（写进唯一的初始迁移），只用于路由作用域；命令名是 token 列表，列表按保存的顺序保留，第一项为主名。
+- 服务层：在 policy 中增加按 plugin_id 与 route_id 设置、删除与读取命令名覆盖的方法，成功返回前已完成持久化。校验：列表非空；每个命令名按注册描述中命令路径的规则校验；列表内不重复；目标路由是按路径匹配的命令，文本匹配与 Raw 返回 INVALID_ARGUMENT；与本插件其他命令声明的路径或别名、或其他命令的覆盖相同时返回 ALREADY_EXISTS，safe_message 带冲突的 route_id。目标路由当前未注册时允许保存（插件可能未启用），只做格式与覆盖之间的检查，声明名的检查留到建索引时。
+- Router：建立命令索引时，有覆盖的命令只用覆盖的命令名参与匹配；与本插件其他命令声明的名字相同的覆盖项不进入索引并记入诊断，一项不剩时用声明的名字。覆盖变化后重建索引，下一次派发生效，不重启插件。禁用的命令占有的是它生效的命令名。
+- 不变的部分：route_id、参数、Handler、命令组归属；策略的命令组作用域仍按声明的规范路径；日志与策略中的标识不变。协议与 SDK 不改。
+- usage 回复：命令与别名部分取生效的命令名，主名在前。
+- 遮蔽诊断：按生效的命令名计算，并标出失效的覆盖项与指向未注册路由的覆盖。
+- 命令菜单（goal-108）：命令名取生效的主名，主名只有一个 token 的命令才算根命令；覆盖变化与命令策略变化一样触发受影响实例的同步。
+- 卸载：覆盖随命令策略归入配置，`--purge` 时删除（goal-39 的清理对象已含命令策略，本切片只核对新列随行删除）。
+- 测试：提交一个集成测试，覆盖保存覆盖后旧名不再匹配、新名匹配且 Handler 收到相同参数，删除覆盖后恢复；其余（重名拒绝、空列表、文本匹配路由、插件更新后覆盖项失效、跨插件遮蔽、usage 与菜单中的名字、Core 重启后保留）进本地自测。
+
+不做：管理 API（goal-93）；页面（goal-44）；按命令组整体改名；同一插件内两条命令互换名字；`core.command.list` 的实现（goal-71）。
 
 ### goal-127 · T-07.8 动态任务与调度持久化的协议和 Core 侧
 
@@ -5210,14 +5232,14 @@ internal/core/state
 
 ### goal-93 · T-09.14 配置、权限、工具策略与会话的管理 API
 
-状态：等待前置（T-08.12、T-09.6、T-09.12）。2026-11-09 按 D-105：/core/admins 的条目是用户字符串，/core/denies 的用户与会话分别是用户字符串与不含话题的会话字符串。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin{InstanceID, UserID}`；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。T-11.1（PR #101，合并提交 `de48f26`）已合并，工具策略端点经 `tool.Catalog` 的 `Policies` 与 `SetPolicy`。2026-11-04 按前后端拆分新增，内容取自原 goal-44（T-09.9）语句中的管理 API；页面留在 goal-44。原语句的明文查看接口写成 GET 并在请求体中带 token，浏览器的 fetch 不允许 GET 带请求体，这里改为 POST。同日按 D-77～D-85 修订：Core 设置经 goal-97 的 settings 写回 `core_config.json`，Core Admin 列表同时经 goal-13 的 `policy.SetAdmins` 生效；发信许可改为「全部实例」或指定实例（goal-99）；删除插件页面票据（D-84，页面经 WebUI 的桥访问插件路由）；开发组件的配置写回 `config.json` 并重启组件；Adapter 实例的增删改写回 `core_config.json` 并按 goal-101 的 instance_schema.json 校验。语句中 goal-13、goal-26、goal-29、goal-31、goal-36、goal-39～goal-41、goal-53～goal-56、goal-84、goal-87 提供的符号（policy 的覆盖与 Admin 方法、webhost 的票据、config.Service、secret.Store 与 Redact、adminauth.Reauthenticate、管理服务与 reload、i18n 的默认 locale、tool.Catalog、conversation.Service、spec/ADMIN-API.md、router.New 的 prefixes）只写名字；合并后由审查者核对，再改为待派发。
+状态：等待前置（T-04.14、T-08.12、T-09.6、T-09.12）。2026-11-10 按 D-128：增加命令名覆盖的接口，前置加入 T-04.14；语句中 goal-129 提供的 policy 方法只写名字，合并后由审查者核对。2026-11-09 按 D-105：/core/admins 的条目是用户字符串，/core/denies 的用户与会话分别是用户字符串与不含话题的会话字符串。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin{InstanceID, UserID}`；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。T-11.1（PR #101，合并提交 `de48f26`）已合并，工具策略端点经 `tool.Catalog` 的 `Policies` 与 `SetPolicy`。2026-11-04 按前后端拆分新增，内容取自原 goal-44（T-09.9）语句中的管理 API；页面留在 goal-44。原语句的明文查看接口写成 GET 并在请求体中带 token，浏览器的 fetch 不允许 GET 带请求体，这里改为 POST。同日按 D-77～D-85 修订：Core 设置经 goal-97 的 settings 写回 `core_config.json`，Core Admin 列表同时经 goal-13 的 `policy.SetAdmins` 生效；发信许可改为「全部实例」或指定实例（goal-99）；删除插件页面票据（D-84，页面经 WebUI 的桥访问插件路由）；开发组件的配置写回 `config.json` 并重启组件；Adapter 实例的增删改写回 `core_config.json` 并按 goal-101 的 instance_schema.json 校验。语句中 goal-13、goal-26、goal-29、goal-31、goal-36、goal-39～goal-41、goal-53～goal-56、goal-84、goal-87 提供的符号（policy 的覆盖与 Admin 方法、webhost 的票据、config.Service、secret.Store 与 Redact、adminauth.Reauthenticate、管理服务与 reload、i18n 的默认 locale、tool.Catalog、conversation.Service、spec/ADMIN-API.md、router.New 的 prefixes）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-93（切片 T-09.14：配置、权限、工具策略与会话的管理 API）。goal 目录 goal-93，分支 goal-93，worktree .worktrees/goal-93，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：在管理服务中补齐 Admin API：插件配置（raw JSON、Merge Patch、base_generation 与 secret 语义，Pending 经 reload 激活）、命令权限与启用、发信许可（allowed_adapter_instances）、Core 设置（Core Admin 列表、默认 locale、命令前缀、全局禁止表）、工具调用策略、Adapter 实例（按 instance_schema.json 校验）、Agent 会话的列出与清除，以及 secret 明文查看的再认证与审计；Core 设置与 Adapter 实例写回 core_config.json。接口追加到 spec/ADMIN-API.md；页面由 WebUI 章节的 T-09.9 实现。
+目标：在管理服务中补齐 Admin API：插件配置（raw JSON、Merge Patch、base_generation 与 secret 语义，Pending 经 reload 激活）、命令权限与启用、命令名覆盖、发信许可（allowed_adapter_instances）、Core 设置（Core Admin 列表、默认 locale、命令前缀、全局禁止表）、工具调用策略、Adapter 实例（按 instance_schema.json 校验）、Agent 会话的列出与清除，以及 secret 明文查看的再认证与审计；Core 设置与 Adapter 实例写回 core_config.json。接口追加到 spec/ADMIN-API.md；页面由 WebUI 章节的 T-09.9 实现。
 
-依据：PLAN T-09 步骤 7（配置与插件页）；CONTRACTS §5、§2.3、§8（allowed_adapter_instances）、§13、§7.3、§5.4；DECISIONS D-45、D-62；TEST-MATRIX V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56 的管理 API 分项。
+依据：PLAN T-09 步骤 7（配置与插件页）；CONTRACTS §5、§2.3、§8（allowed_adapter_instances）、§13、§7.3、§5.4；DECISIONS D-45、D-62、D-128；TEST-MATRIX V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56、V-115 的管理 API 分项。
 
 范围（只新增或修改这些）：
 - internal/core/manage/：新增 config_api.go、policy_api.go、settings_api.go、tool_api.go、conversation_api.go、pluginpage_api.go；在管理服务的 HTTP 路由中追加注册
@@ -5228,7 +5250,8 @@ internal/core/state
 - GET /plugins/{id}/config：{active_generation, active: Redact 后的快照, pending: {base_generation, config: Redact 后}|null, schema, i18n}；schema 是当前安装包中 config_schema.json 的规范内容（D-76，没有时为 null），i18n 是包内 i18n/*.json 的 config 根节点，按语言标签给出，供表单显示文案
 - PUT /plugins/{id}/config/pending：{base_generation, config}（完整替换）；PATCH /plugins/{id}/config/pending：{base_generation, patch}（RFC 7396）；DELETE 丢弃 Pending；POST /plugins/{id}/config/import 导入 config.json；secret 字段的新值在写入 Pending 前经 secret.Extract 存为引用，省略或未修改的 secret 保持原引用；base 不是当前 Active 时 409 并返回 FAILED_PRECONDITION。
 - POST /plugins/{id}/reload：经 goal-40/41 激活 Pending。
-- GET/PUT /plugins/{id}/policies：命令覆盖（作用域、permission、enabled），以及 Router 的遮蔽诊断。
+- GET/PUT /plugins/{id}/policies：命令覆盖（作用域、permission、enabled），以及 Router 的遮蔽诊断。GET 的每条命令另带声明的命令名、生效的命令名、是否有覆盖与失效的覆盖项（D-128）。
+- PUT /plugins/{id}/commands/{route_id}/names：{names: [[token, ...], ...]}，整份替换该命令的命令名覆盖，第一项为主名；DELETE 删除覆盖，恢复插件声明的命令名。空列表与格式错误返回 INVALID_ARGUMENT，同一插件内重名返回 409 与 ALREADY_EXISTS（safe_message 带冲突的 route_id），文本匹配与 Raw 路由返回 INVALID_ARGUMENT。追加与删除单个命令名由调用方在列表上完成后整份提交。
 - GET/PUT /plugins/{id}/allowed-instances：{all: bool, instances: [...]}，经 goal-99 的 AdapterInstanceAccess 与 SetAdapterInstanceAccess；缺省 all 为 true。
 - GET/PUT/DELETE /adapters/{adapter_id}/instances/{instance_id}：实例配置的读取（secret 只返回是否已设置）与写回 core_config.json，按 instance_schema.json 补缺失值并校验；GET /adapters/{adapter_id}/instance-schema 供页面生成表单。
 - GET/PUT/DELETE /core/admins、/core/denies，GET/PUT /core/default-locale，GET/PUT /core/command-prefixes（全局与按 Adapter 实例的覆盖）。
@@ -5239,6 +5262,7 @@ internal/core/state
 行为：
 - 配置：invisible 字段在读取中照常返回，是否展示由页面决定；PATCH 不会因为未提交 invisible 字段而删除它。
 - 命令权限：有效权限与启用状态按 policy.CheckCommand 的同一规则计算后返回，覆盖分插件、命令组、路由三层；同时返回遮蔽关系。
+- 命令名：保存与删除经 goal-129 的 policy 方法，校验与重名规则不在本切片重复实现；保存后下一次派发生效，遮蔽关系按生效的命令名返回。
 - Core 设置：Core Admin 列表、默认 locale、command_prefixes 与按实例的覆盖都经 goal-97 的 settings.Update 写回 core_config.json，保留原有的 ${...} 写法；写回成功后 Core Admin 列表调用 policy.SetAdmins，命令前缀在下一次派发生效，默认 locale 在之后建立的 Session 生效。alonabot admin add|remove|list 使用同一服务。全局禁止表仍在状态库。
 - 开发组件（dev 来源）：PUT/PATCH 配置时校验通过后写回 <data_dir>/plugins/<id>/config.json 并重启该组件，不建 Pending（CONTRACTS §15.4）。
 - 会话：只返回摘要（键、条目数、最后时间），不返回条目内容。
@@ -5246,7 +5270,7 @@ internal/core/state
 
 测试（按编码规范「测试提交规则」）：
 - 提交：无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：各端点的错误格式与 409；读取结果中没有 secret 明文；internal/core/supervisor/admin_api_local_test.go（//go:build unix）：经管理 API 完成：PATCH 配置（未修改的 secret 保持原引用、新 secret 生成新引用、invisible 不被删除）、陈旧 base 409、reload 后 Active 改变；设置命令覆盖后下一条消息按新权限处理；把发信许可收紧为其他实例后插件后台 Send 被拒、恢复为全部实例后成功；Core 设置写回后 core_config.json 中的 ${...} 原写法保留；设置默认 locale 后新 Session 使用；工具策略改为 deny 后 ListTools 不含它；清除会话；开发组件的配置写回 config.json 并重启；reveal 需要再认证。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：各端点的错误格式与 409；读取结果中没有 secret 明文；internal/core/supervisor/admin_api_local_test.go（//go:build unix）：经管理 API 完成：PATCH 配置（未修改的 secret 保持原引用、新 secret 生成新引用、invisible 不被删除）、陈旧 base 409、reload 后 Active 改变；设置命令覆盖后下一条消息按新权限处理；保存命令名覆盖后旧名不再触发、新名触发，空列表与同插件重名被拒，DELETE 后恢复声明的命令名；把发信许可收紧为其他实例后插件后台 Send 被拒、恢复为全部实例后成功；Core 设置写回后 core_config.json 中的 ${...} 原写法保留；设置默认 locale 后新 Session 使用；工具策略改为 deny 后 ListTools 不含它；清除会话；开发组件的配置写回 config.json 并重启；reveal 需要再认证。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/... ./cmd/...；go build ./...。
 

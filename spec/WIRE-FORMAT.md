@@ -161,7 +161,7 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 | `core.conversation.append` | 会话键、一条或多条 JSON 条目 → 最后一条的序号 | CONTRACTS §13.3 |
 | `core.conversation.list` | 会话键、起始序号 → 条目及序号、下一个序号 | CONTRACTS §13.3 |
 | `core.conversation.clear` | 会话键 → 空结果 | CONTRACTS §13.3 |
-| `core.command.list` | 必须带 parent_call_id → 调用者 Actor 在默认 Target 中可用的命令：路径、别名、参数用法、按 Actor locale 翻译的说明、所属插件 | CONTRACTS §15.2（help 插件） |
+| `core.command.list` | 必须带 parent_call_id → 调用者 Actor 在默认 Target 中可用的命令：路径、别名、参数用法、按 Actor locale 翻译的说明、所属插件；有命令名覆盖时路径为生效的主名，别名为其余生效的命令名（D-128） | CONTRACTS §15.2（help 插件） |
 | `core.task.set` | 任务名、key、触发规则（at_unix_ms、interval_ms 或 cron 加可选的 timezone，恰有一个）、参数 JSON → 下一次触发时刻 | CONTRACTS §4.3、D-124 |
 | `core.task.cancel` | 任务名、key → 空结果；实例正在执行时同时取消该次调用 | CONTRACTS §4.3、D-124 |
 | `core.task.list` | 任务名、分页游标 → 实例（key、触发规则、参数 JSON、下一次触发时刻）与下一页游标 | CONTRACTS §4.3、D-124 |
