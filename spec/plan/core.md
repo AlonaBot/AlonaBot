@@ -328,7 +328,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
     - examples/plugins、`alonabot init` 的模板（尚未实现时只改语句）与已合并的调用方按新写法修改；docs/plugin-guide.md 与 ARCHITECTURE 中对根插件的描述由审查者在合并前同步。
 
 13. **SDK 的第二轮简化（D-118～D-123）。** 协议不变。
-    - 属于 T-04.8 的部分：`c.Reply(text)`；`message.User`、`c.User()` 与 `c.Session()`；`sdk.OpenMedia` 改收 `message.MediaSource`；`errcode` 的 `New`、`Errorf` 与 `Of`。
+    - 属于 T-04.8 的部分：`c.Reply(text)` 与后台用的 `sdk.SendText(ctx, to, text)`；`message.User`、`c.User()` 与 `c.Session()`；`sdk.OpenMedia` 改收 `message.MediaSource`；`errcode` 的 `New`、`Errorf` 与 `Of`。
     - 属于 T-05.4 的部分：命令、文本匹配、Raw、事件与按钮路由 builder 的 `.Continue()`（T-05 步骤 7）。
     - 本步骤（T-04.13）：Service 与 Event Bus 改为带类型的声明。`sdk.JSON[In, Out](target)`、`sdk.Proto[In, Out](target)` 返回 `sdk.Service[In, Out]`，`sdk.Serve(r, s)` 开始注册，`s.Call(ctx, in)` 调用；`sdk.BusEvent[T](name)` 返回事件声明，`e.Publish(ctx, payload)` 发布，`sdk.Subscribe(r, e)` 订阅。`Collect` 核对 target 的组件部分是本插件（Agent 组件为 `@agent`）、声明不是零值、同一声明只注册一次。删除 `sdk.CallJSON`、`sdk.CallProto`、`sdk.Publish` 与旧形式的 `sdk.JSON(r, name)`、`sdk.Proto(r, name)`、`sdk.Subscribe[T](r, name)`；生成器对类型参数的检查改为针对声明处。`sdk/llm` 的 `Generate` 与 `Ask` 签名不变，内部改用声明并导出它；示例与已合并的调用方同步修改。
 
