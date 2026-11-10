@@ -15,7 +15,7 @@
 | T-12.3 | goal-60 | 工具循环与 MCP：Core 工具、MCP 客户端（stdio、streamable HTTP）、确认、单轮步数上限 | T-12 步骤 4 | T-11.2、T-12.2 | V-58 | 未开始 |
 | T-12.4 | goal-61 | 记忆：Agent 内的会话笔记与用户档案、`memory` 工具、会话快照与档案注入 | T-12 步骤 5 | T-08.5、T-11.2、T-12.2 | V-59 | 未开始 |
 | T-12.5 | goal-62 | 技能：技能目录、`SKILL.md` 解析、`load_skill` | T-12 步骤 6 | T-12.3 | V-60 | 未开始 |
-| T-12.6 | goal-63 | 定时 Agent 任务：任务工具、任务表、分钟级固定 schedule、后台运行 | T-12 步骤 7 | T-07.2、T-08.5、T-12.3 | V-61 | 未开始 |
+| T-12.6 | goal-63 | 定时 Agent 任务：任务工具、用动态任务（D-124）保存与触发、后台运行 | T-12 步骤 7 | T-07.9、T-08.5、T-12.3 | V-61 | 未开始 |
 | T-12.7 | goal-64 | 官方 Agent 组件的打包与多进程验收，汇总证据 | T-12 步骤 8 | T-12.4、T-12.5、T-12.6、T-12.8 | V-57～V-61、V-76 | 未开始 |
 | T-12.8 | goal-83 | 文本生成服务：Core Broker 的 `@agent` 目标解析，`sdk/llm` 的类型、Schema 与调用辅助（含一问一答的 `llm.Ask`，D-111），Agent 的 `llm.generate` 与调用方许可 | T-12 步骤 9 | T-03.8、T-06.1、T-12.2 | V-76、V-82 的 `@agent` 分项，V-109 | 未开始 |
 | T-12.9 | goal-118 | Provider 增加 OpenAI Responses（`openai-responses`）：请求编码、SSE 事件解析、reasoning item 的回传、停止原因与用量；`ToolCall.Replay` | T-12 步骤 10 | T-12.1 | V-57 的 Provider 分项 | 未开始 |
@@ -30,7 +30,7 @@
 
 #### 前置输入
 
-- T-05 的延续调用与多轮等待、T-03 的消息编辑、T-04 的命令选择、T-08 的配置准备、Secret 引用与 `gormdb`、T-07 的 schedule 注册与 `contracts/schedule`、T-11 的工具与会话服务。
+- T-05 的延续调用与多轮等待、T-03 的消息编辑、T-04 的命令选择、T-08 的配置准备、Secret 引用与 `gormdb`、T-07 的动态任务（D-124，T-07.9）、T-11 的工具与会话服务。
 - 读取 CONTRACTS §2.4、§3、§4.3、§5.4、§9.1、§13 与 DESIGN §R、§T。Provider 与 MCP 使用本地模拟服务测试；真实 Provider 需要 API key，没有时记为未运行。
 - Provider 只用标准库实现；MCP 客户端使用已批准的 `github.com/modelcontextprotocol/go-sdk`，版本在 T-12.3 实际验证后锁定。
 
@@ -122,12 +122,11 @@
    - 超限、完全重复的条目与含 Unicode Cf 类字符的内容返回错误，不丢弃已有条目。
 
 6. **技能。** 启动时读取技能目录下各子目录的 `SKILL.md`：YAML frontmatter 中的 name 与 description 必填，其余内容为正文。系统提示列出各技能的名称与描述，`load_skill` 工具返回正文。不合法的文件记诊断并跳过，不阻止插件启动。
-7. **定时 Agent 任务。** 提供 `schedule_task`、`list_tasks`、`cancel_task` 三个 Agent 内工具。只有 Core Admin 能创建与取消任务，其他用户只能列出本聊天的任务；创建与取消前先经 `core.tool.confirm`。任务保存创建者、Target、提示词与触发规则，触发规则用 `contracts/schedule` 校验与计算。一个每分钟一次的固定 schedule 检查到期任务，在该 schedule 的回调内运行一轮对话，没有 Actor，只有 job scope：
-   - 插件启动时把每个任务的下一次触发重算为未来时刻；一次回调中同一任务只运行一次；
+7. **定时 Agent 任务。** 提供 `schedule_task`、`list_tasks`、`cancel_task` 三个 Agent 内工具。只有 Core Admin 能创建与取消任务，其他用户只能列出本聊天的任务；创建与取消前先经 `core.tool.confirm`。任务用 SDK 的动态任务保存与触发（D-124，T-07.9）：Agent 声明一个任务 `sdk.Task[AgentTask]("agent")`，参数为创建者、Target 与提示词；`schedule_task` 按触发规则调用 `At`、`Every` 或 `Cron`，`list_tasks` 调用 `List` 后按聊天过滤，`cancel_task` 调用 `Cancel`。Agent 不自建任务表，不注册每分钟的固定任务，触发规则的校验、持久化与错过即跳过由 Core 负责（D-125）。任务的处理函数运行一轮对话，没有 Actor，只有 job scope：
    - 发送需要目标实例在 Agent 的 `allowed_adapter_instances` 中（缺省为全部实例，D-83）；
    - confirm 策略的工具一律拒绝；
    - 不注入记忆，会话键与聊天会话分开；
-   - 离线错过的触发不补跑。
+   - 一次性任务在派发时由 Core 删除，对话失败不重试，失败写日志。
 8. **打包与验收。** Agent 组件按 T-09 的打包流程生成可安装包。用本地 Provider 与 MCP 模拟服务、回环测试 Adapter 运行 V-57～V-61 与 V-76 的全部场景；真实 Provider 与真实 Telegram 没有凭证时记为未运行。
 9. **文本生成服务。** Core 的 Service Broker 按 CONTRACTS §3 把目标 `@agent` 解析为已安装的 Agent 组件（按 T-03.8 解析的 `role`），访问规则与调用链按解析后的 ID 执行，没有 Agent 组件时与目标未激活相同。`sdk/llm` 提供 CONTRACTS §13.5 `llm.generate` 的请求/响应类型、JSON Schema 与以 `@agent` 为目标的调用辅助，以及一问一答的 `llm.Ask(ctx, prompt)`（D-111）。Agent 注册该服务（public），配置增加 `llm_service_allowed_plugins`（缺省 `["*"]`，表示全部插件，D-83），按 Core 下发调用链中的上一跳插件检查许可；使用已有的 Provider 客户端完成一次非流式请求（流式接收后拼接），不调用工具、不读写会话与记忆、不套用人格。错误映射为 INVALID_ARGUMENT（Provider 不存在）与 UNAVAILABLE（Provider 出错或断开），Provider 客户端返回的错误说明只写日志，不进入 safe_message；不重试。
 10. **其他 Provider 协议（D-103）。** 在 `agent/provider/` 中增加三种原生协议，每种的编码与流解析放在自己的文件里，`Config`、`Request`、`Event`、`Result` 与 `Stream` 的语义不变：只收到协议的终止条件才算成功，请求失败不自动重试，错误不含 API key 与认证头、回显的 key 替换为 `[REDACTED]`，emit 返回错误时立即停止。`ToolCall.Replay` 是协议要求随工具调用原样回传的数据（不透明的 JSON），由流解析写入，调用方在后续请求中把整个 ToolCall 放回 assistant 消息；`openai`、`openai-compatible` 与 `anthropic-messages` 不产生也不读取它。

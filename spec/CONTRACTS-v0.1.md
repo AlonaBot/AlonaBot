@@ -137,9 +137,16 @@ SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 contex
 ### 4.3 Scheduler
 
 - Core 维护稳定 `plugin_id/job_id`、触发规则和当前运行状态；触发经 REQUEST/RESPONSE 执行 `scheduled` callback，不使用无响应的 Event Bus EVENT。job context 无用户 Actor、无默认 Admin，仅有明确 job scope。
-- 任务声明 interval 或 cron，两者互斥；cron 首发固定五字段（分、时、日、月、星期），timezone 为有效 IANA 名称，省略时 UTC。无效表达式在 REGISTER 时拒绝。interval 是至少 1s 的正时长，首个 tick 为激活时刻加间隔，按固定起点计算；睡眠或落后时跳过已错过 tick，只取下一未来触发。cron 的日与星期都受限时按 OR 匹配，其他字段按 AND；cron 求下一个真实时间点，夏令时不存在的本地时刻跳过，重复本地时刻对应的不同 UTC tick 可以分别触发。
+- 任务声明 interval 或 cron，两者互斥；cron 首发固定五字段（分、时、日、月、星期），timezone 为有效 IANA 名称，省略时 UTC。无效表达式在 REGISTER 时拒绝。interval 是至少 1s 的正时长，按固定起点计算，首个 tick 为起点加间隔：静态任务的起点是它首次激活的时刻，保存在 Core 状态库，不随重启改变，间隔在新版本中改变时重置为该次激活时刻（D-125）；睡眠或落后时跳过已错过 tick，只取下一未来触发。cron 的日与星期都受限时按 OR 匹配，其他字段按 AND；cron 求下一个真实时间点，夏令时不存在的本地时刻跳过，重复本地时刻对应的不同 UTC tick 可以分别触发。
 - **不同 job 默认并发，同一 job 上一轮未结束时跳过本轮**，不排队补跑。Core 或插件离线期间的 tick 不保存、不补执行；恢复后从未来的下一次触发开始。一个任务超时/失败不串行阻塞其他任务，失败有日志/计数而不自动重试有副作用的 callback。
 - job 的调用结果与实际执行结束分开：deadline 到达先返回 DEADLINE_EXCEEDED/Cancel，但 Scheduler 仍保留 running 槽与原调用键；SDK 等用户 callback 实际返回后才发唯一 Response。迟到 Response 只释放任务槽，不恢复业务成功；未收到结束响应时直到确认旧进程退出才释放。仅 RPC 断链不能证明 goroutine 已停止。下一轮只运行未来 tick，不补跑跳过项。
+- **动态任务（D-124）。** 插件在注册描述中声明任务名（路由 ID 为 `task.` 加任务名，kind 为 task），运行时经 Core 固定服务增删任务实例：
+  - `core.task.set` 创建或替换实例：任务名、key、触发规则（at、interval 或 cron 加可选的 timezone，三者恰有一个）与参数。key 为 1～128 字节的 UTF-8 字符串，在同一插件的同一任务名下唯一，已存在时整体替换并重新计算触发时刻。参数是 JSON 对象，至多 `TASK_PAYLOAD_BYTES`，Core 只校验它是合法的 JSON 对象。任务名未在本 Session 注册返回 NOT_FOUND；触发规则不合法、at 不晚于当前时间、参数超限返回 INVALID_ARGUMENT；该插件的实例数达到 `TASKS_PER_PLUGIN` 且 key 不存在时返回 RESOURCE_EXHAUSTED。interval 与 cron 的规则同上，interval 的起点是创建（或替换）时刻。
+  - `core.task.cancel` 按任务名与 key 删除实例，不存在返回 NOT_FOUND；实例正在执行时同时取消这一轮调用（协作式，§1.2），运行槽照上一条的规则释放。`core.task.list` 按任务名返回实例的 key、触发规则、参数与下一次触发时刻，受帧上限约束时分页。
+  - 这三个服务只在 Activated 之后可用，不需要父调用链；插件只能操作自己的任务。
+  - 触发与静态任务一样经 `scheduled` 的 REQUEST 执行，载荷另带任务名、key 与参数，没有 Actor。同一实例上一轮未结束时跳过本轮。同一插件同时执行的动态任务至多 `TASK_CONCURRENCY` 个，其余到期的实例按到期时间先后排队等待；排队中的周期实例到了下一个触发时刻仍未执行时，只保留一次。一次性实例在派发时删除，执行失败或超时不重试。
+- **持久化与错过的触发（D-125）。** 动态任务的定义与周期任务的起点保存在 Core 状态库，以 plugin_id 为键，Core 重启、插件重启与更新后保留，不属于插件数据库的候选与回退。到期时 Core 未运行、插件未处于 Activated 或任务被暂停的触发一律作废，不补执行：周期任务从下一个未来时刻继续；一次性实例过期即删除，记一条 WARN（plugin_id、任务名、key、原定时刻）并计数。排队等待并发名额不算错过，但插件离开 Activated 时队列清空，其中的触发按作废处理。新版本没有注册某个任务名时，该任务的实例保留但不触发，在管理诊断中标出。卸载时的去留见 §9.3。
+- **静态任务的暂停与恢复（D-126）。** `core.job.pause` 与 `core.job.resume` 按 job_id 暂停、恢复本插件的静态任务，`core.job.status` 返回是否暂停、上一次与下一次触发时刻；job_id 未注册返回 NOT_FOUND，重复暂停或恢复成功且不改变状态。暂停状态保存在 Core 状态库，跨重启与更新保持。暂停期间的触发作废，不打断正在执行的一轮；恢复后从下一个未来时刻继续，interval 的起点不变。
 
 ## 5. 配置、Schema、i18、Secrets
 
@@ -410,7 +417,7 @@ Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行�
 | `restart` | 以当前 Active 程序/配置/DB 启动新 Session，不导入编辑中的 config.json。 |
 | `reload` | 把编辑快照导入 Pending，走配置校验及候选激活；SQLite 同样复制 DB。 |
 | `update` | 仅从绑定来源选择符合 pin 的候选版本并执行受控更新；不把 install 同 ID 当更新。 |
-| `uninstall` | 停止、解除运行注册并删除未引用程序包；默认保留数据、secret 与来源绑定，以便同来源重装。`--purge` 为显式删除框架受管数据/绑定的动作，须展示并确认准确对象；不擅自删除插件自管的外部数据库或任意插件自管目录。 |
+| `uninstall` | 停止、解除运行注册并删除未引用程序包，清理范围有三种（D-127）。不带选项时只卸载：保留数据、配置与来源绑定，以便同来源重装。`--purge-data` 另外删除数据，保留配置与来源绑定。`--purge` 删除数据与配置，连同来源绑定与安装记录。数据是框架受管的运行数据：全部代次（受管 SQLite、代次目录与代次内的配置快照）、Agent 会话（§13.3）、按钮 token、动态任务以及静态任务的起点与暂停状态（§4.3）、Adapter 的游标。配置是管理员与作者给出的设置：编辑快照 `config.json`、Pending、secret、命令策略、工具策略、发信许可、Adapter 在 `core_config.json` 中的实例。`--purge-data` 之后重装，首个候选的配置取编辑快照；编辑快照与被删除的 Active 配置不同时，确认对象中写明。两种清理都须展示并确认准确对象；不擅自删除插件自管的外部数据库或任意插件自管目录。卸载先按停止流程摘除该组件的定时器、清空排队的到期任务并取消在途的任务调用；清理时在同一个状态库事务中删除它的任务与调度状态，不经过插件进程。只卸载时任务保留但不触发。 |
 | `pin` | 固定允许的更新版本；解除固定须显式操作，不能被自动更新忽略。 |
 | `admin add` / `admin remove` / `admin list` | 管理 Core Admin 列表（按用户字符串 `<adapter_id>:<external_user_id>`），与 WebUI 的 Core 设置页使用同一管理服务，写回 `core_config.json` 的 `admins`。 |
 | `logs` | 按来源、级别与 trace_id 读取最近记录，`--follow` 时持续输出（§14.4）。 |
@@ -451,7 +458,7 @@ Core 可执行文件与 SDK 根包只链接 [docs/development.md](../docs/develo
 | §15 运行方式 | T-07.6 `core_config.json` 与首次 token；T-09.4 `alonabot run` 与管理服务；T-13 开发运行、热部署与库模式；T-14 发行包、容器镜像、install.sh 与预装插件 |
 | §17 插件测试套件 | T-13.1 根包 `Start`；T-16 `plugintest` 与示例插件的测试；T-16.3 LLM 替身 |
 | §16 调优参数 | T-02.2 参数表、`--args` 与 Bootstrap 下发；之后的切片把新增的可调值登记到同一参数表 |
-| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-76、V-82～V-113 和五目标运行结果 |
+| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-76、V-82～V-114 和五目标运行结果 |
 
 ## 12. 跨层状态机与恢复不变量
 
@@ -512,7 +519,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 - Core 状态库按插件保存 Agent 会话。会话键由插件给出，为 1～256 字节的 UTF-8 字符串；条目是插件定义的 JSON 对象，按追加顺序编号，Core 只校验它是合法的 JSON 对象。
 - `core.conversation.append` 追加一条或多条条目，同一请求的条目原子写入，返回最后一条的序号。`core.conversation.list` 从给定序号起按顺序返回条目；响应受帧上限约束，Core 在超限前停止并返回下一个序号。`core.conversation.clear` 删除该会话的全部条目。插件只能访问自己的会话，这些服务不需要父调用链。
-- Core 不截断、不过期、不压缩会话。管理服务可以列出插件的会话并清除指定会话；卸载插件默认保留会话，`--purge` 时一并删除（§9.3）。
+- Core 不截断、不过期、不压缩会话。管理服务可以列出插件的会话并清除指定会话；卸载插件默认保留会话，`--purge-data` 或 `--purge` 时一并删除（§9.3，D-127）。
 
 ### 13.4 记忆
 
@@ -735,6 +742,9 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | `RESTART_WINDOW` | 5m | > 0 | §4.2 |
 | `RESTART_MAX_CRASHES` | 3 | ≥ 1 | §4.2 |
 | `JOB_TIMEOUT` | 15m | > 0 | §4.3 |
+| `TASKS_PER_PLUGIN` | 10000 | ≥ 1 | §4.3 |
+| `TASK_PAYLOAD_BYTES` | 64KiB | ≥ 1 且 ≤ 帧上限 4MiB | §4.3 |
+| `TASK_CONCURRENCY` | 16 | ≥ 1 且 ≤ `SESSION_MAX_INFLIGHT` | §4.3 |
 | `BUTTON_TOKEN_TTL` | 24h | > 0 | MESSAGE-MODEL §6.3 |
 | `TOOL_CONFIRM_TIMEOUT` | 5m | > 0 | §13.2 |
 | `LOG_BUFFER_RECORDS` | 1000 | ≥ 1 | §14.4 |

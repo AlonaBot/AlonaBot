@@ -159,7 +159,7 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 行为：
 - 登录：POST /api/auth/login，成功后把 csrf_token 保存在内存中；刷新页面后经 goal-92 的 GET /api/auth/session 取回。登出。未登录访问任何页面跳转到登录页。
 - Overview：Core 版本、监听地址（goal-92）、每个包的状态（未启用、运行、Pending、候选失败、Degraded 及原因、维护中）。
-- Packages：经 goal-92 的上传接口安装（archive、release.json、.sig 三个文件）；启用、停用、重启、卸载（含 purge）、pin；需要确认时展示受影响列表并要求再次确认（API 的 409）。
+- Packages：经 goal-92 的上传接口安装（archive、release.json、.sig 三个文件）；启用、停用、重启、卸载（只卸载、清理数据、清理数据与配置三种范围，D-127）、pin；需要确认时展示受影响列表并要求再次确认（API 的 409）。
 - Instances：列出 Adapter 实例（不显示凭证，只显示「已设置」）、创建（表单由该 Adapter 包的配置 Schema 经 goal-34 的 ConfigForm 生成）、启停、删除。
 - Updates：经 goal-92 的上传接口 update 新包、rollback 选择保留代次；显示操作结果与失败原因。
 - 安全：所有修改请求带 X-Alonabot-CSRF；页面不读取或展示 token、secret 明文；组件图标只用 `<img>` 引用（D-63）。

@@ -16,7 +16,7 @@
 | [WIRE-FORMAT.md](WIRE-FORMAT.md) | Protobuf 字段、枚举、控制帧、Bootstrap 与载荷定义 |
 | [MESSAGE-MODEL.md](MESSAGE-MODEL.md) | Event/Target/Chain、发送回执、媒体和 Telegram 映射 |
 | [DESIGN.md](DESIGN.md) | Core/SDK/Adapter 职责、模块关系与生命周期说明 |
-| [TEST-MATRIX.md](TEST-MATRIX.md) | V-01～V-113 的场景、通过条件、阶段分工与证据要求 |
+| [TEST-MATRIX.md](TEST-MATRIX.md) | V-01～V-114 的场景、通过条件、阶段分工与证据要求 |
 
 ## 决策与历史依据
 

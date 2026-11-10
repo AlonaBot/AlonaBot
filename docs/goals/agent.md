@@ -15,7 +15,7 @@
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 等待前置 |
 | goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 等待前置 |
 | goal-62 | T-12.5 | 技能 | T-12.3 | 等待前置 |
-| goal-63 | T-12.6 | 定时 Agent 任务 | T-07.2、T-08.5、T-12.3 | 等待前置 |
+| goal-63 | T-12.6 | 定时 Agent 任务 | T-07.9、T-08.5、T-12.3 | 等待前置 |
 | goal-64 | T-12.7 | 官方 Agent 组件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6、T-12.8 | 等待前置 |
 
 ## 第 1 波
@@ -433,38 +433,39 @@ agent
 
 ### goal-63 · T-12.6 定时 Agent 任务
 
-状态：等待前置（T-12.3）。T-07.2（PR #107，合并提交 `fc2c247`）已合并，合入的符号：`internal/core/scheduler` 的 `New(Options{JobTimeout, Now})`、`Scheduler.Attach(router.Plugin, activatedAt)`/`Detach`/`Released`/`Close`/`Stats(pluginID, jobID) JobStats`；`wire.Request.Late`；SDK 的 `ScheduleRegistry.Every`/`Cron` 已随 REGISTER 声明并分发到 Handler。T-08.5（PR #79）已合并。语句中 goal-24、goal-32、goal-55、goal-59、goal-60 提供的符号（ScheduleRegistry.Every、gormdb.Open、sdk.ConfirmOperation、Agent 的一轮对话与工具循环、contracts/schedule）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：定时任务的后台发送按发信许可缺省允许全部实例（D-83）。
+状态：等待前置（T-07.9、T-12.3）。T-08.5（PR #79）已合并。2026-11-10 按 D-124、D-125 修订：任务改用 SDK 的动态任务保存与触发，删去自建的任务表与每分钟的固定 schedule，前置由 T-07.2 改为 T-07.9，并增加一次性的 at。语句中 goal-128、goal-32、goal-55、goal-59、goal-60 提供的符号（sdk.Task、sdk.OnTask、Task 的 At/Every/Cron/Cancel/List、sdk.Key、sdk.Timezone、sdk.ConfirmOperation、Agent 的一轮对话与工具循环）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：定时任务的后台发送按发信许可缺省允许全部实例（D-83）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-63（切片 T-12.6：定时 Agent 任务）。goal 目录 goal-63，分支 goal-63，worktree .worktrees/goal-63，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：Agent 组件提供 schedule_task、list_tasks、cancel_task 三个 Agent 内工具：只有 Core Admin 能创建与取消（之前经 core.tool.confirm），其他用户只能列出本聊天的任务；任务保存创建者、Target、提示词与触发规则（contracts/schedule 校验与计算）。一个每分钟一次的固定 schedule 检查到期任务，在其回调内以没有 Actor、只有 job scope 的方式运行一轮对话；发送需要 allowed_adapter_instances，confirm 策略的工具一律拒绝，不注入记忆，会话键与聊天会话分开，离线错过的触发不补跑。
+目标：Agent 组件提供 schedule_task、list_tasks、cancel_task 三个 Agent 内工具：只有 Core Admin 能创建与取消（之前经 core.tool.confirm），其他用户只能列出本聊天的任务。任务用 SDK 的动态任务保存与触发（D-124）：参数为创建者、Target 与提示词，触发规则的校验、持久化与错过即跳过由 Core 负责（D-125），Agent 不自建任务表，不注册每分钟的固定任务。任务的处理函数以没有 Actor、只有 job scope 的方式运行一轮对话；发送需要 allowed_adapter_instances，confirm 策略的工具一律拒绝，不注入记忆，会话键与聊天会话分开。
 
-依据：PLAN T-12 步骤 7；CONTRACTS §4.3、§13；TEST-MATRIX V-61。
+依据：PLAN T-12 步骤 7；CONTRACTS §4.3、§13；DECISIONS D-124、D-125；TEST-MATRIX V-61。
 
 范围（只新增或修改这些）：
-- agent/：新增 tasks.go（工具与任务表）、scheduled.go（每分钟的 schedule 与后台一轮）；Agent 根插件注册 schedule（只改注册处）
+- agent/：新增 tasks.go（工具与任务声明）、scheduled.go（任务的处理函数与后台一轮）；Agent 根插件注册任务（只改注册处）
 - 上述包的测试文件
-允许的新跨模块边：plugins/... -> contracts/schedule（plugins -> contracts 已允许）。
+允许的新跨模块边：无。
 
 行为：
-- 任务表（gormdb，versioned 迁移）：id、creator（instance、user）、target（instance、chat、thread）、prompt、trigger（interval 秒数或 cron 与时区）、next_run_at、created_at。
-- schedule_task：输入 {"prompt", "interval_seconds"?, "cron"?, "timezone"?}，恰有 interval 或 cron 之一，经 contracts/schedule 校验（interval 至少 60s，命名常量；cron 为五字段）；调用者（工具循环的当前 Actor）必须含 ADMIN 角色，否则返回错误结果 "error: PERMISSION_DENIED"；先 ConfirmOperation("agent/schedule_task", 摘要)，允许后写入，next_run_at 为 Trigger.Next(创建时刻, 现在)。Target 为当前对话的默认 Target。
-- list_tasks：返回本聊天（当前默认 Target 的 instance、chat、thread）的任务；任何人可用。
-- cancel_task：输入 {"id"}；只有 ADMIN，先确认，再删除；只能取消本聊天的任务。
-- 每分钟的 schedule（Every 1 分钟）：插件激活时把每个任务的 next_run_at 重算为未来时刻（不补跑）；每次回调选出 next_run_at ≤ 现在的任务，每个任务本次只运行一次，然后用 Trigger.Next 更新 next_run_at。运行一轮对话：
-  - 没有 Actor，只有 job scope；会话键为 "task/<id>"，与聊天会话分开；不调用记忆服务。
-  - 回复经 sdk.Send 显式 To 任务的 Target，需要 allowed_adapter_instances，没有许可时 PERMISSION_DENIED 并记 WARN（任务保留）。
+- 任务声明：sdk.Task[AgentTask]("agent")，AgentTask 为 {creator（instance、user）、target（instance、chat、thread）、prompt、created_at}；sdk.OnTask 在 New() 中注册处理函数。
+- schedule_task：输入 {"prompt", "at"?, "interval_seconds"?, "cron"?, "timezone"?}，at（RFC 3339）、interval 与 cron 恰有一个，timezone 只随 cron；interval 至少 60s（命名常量），在调用 Core 之前检查。调用者（工具循环的当前 Actor）必须含 ADMIN 角色，否则返回错误结果 "error: PERMISSION_DENIED"；先 ConfirmOperation("agent/schedule_task", 摘要)，允许后按触发规则调用 At、Every 或 Cron（cron 带 sdk.Timezone），返回值中的 key 作为任务 ID 交回模型。Target 为当前对话的默认 Target。Core 返回的 INVALID_ARGUMENT（表达式不合法、at 不晚于当前时间）与 RESOURCE_EXHAUSTED 作为错误结果交回模型。
+- list_tasks：调用 List，只返回 target 与当前默认 Target（instance、chat、thread）相同的任务，含 ID、提示词、触发规则与下一次触发时刻；任何人可用。
+- cancel_task：输入 {"id"}；只有 ADMIN，先确认；先用 List 确认该 ID 属于本聊天，再调用 Cancel；不属于本聊天或不存在时返回错误结果 "error: NOT_FOUND"。
+- 处理函数运行一轮对话：
+  - 没有 Actor，只有 job scope；会话键为 "task/<key>"，与聊天会话分开；不调用记忆服务。
+  - 回复经 sdk.Send 显式 To 任务的 Target，需要 allowed_adapter_instances，没有许可时 PERMISSION_DENIED 并记 WARN（周期任务保留）。
   - 工具循环中 confirm 策略的 Core 工具与全部 MCP 工具一律拒绝（不发起确认，因为没有 Actor），作为错误结果交回模型。
-  - 一次回调的运行受 JOB_TIMEOUT 约束；同一任务在上一次运行未结束时跳过。
-- 插件离线期间到期的任务在重新激活后不补跑。
+  - 一次运行受 JOB_TIMEOUT 约束；同一任务上一轮未结束时由 Core 跳过本轮。
+  - 一次性任务在派发时已由 Core 删除，对话失败不重试，失败写日志。
+- 插件离线期间到期的触发由 Core 作废：周期任务从下一个未来时刻继续，一次性任务删除。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：agent/tasks_test.go（//go:build unix）：用模拟 Provider（脚本化调用 schedule_task 等工具）与注入时钟的 Scheduler：
-  - 非 Admin 调用 schedule_task 得到错误结果，任务表为空；Admin 经确认后创建 interval 与 cron 任务各一个。
-  - 时钟推进到到期：任务运行一轮，回复发往任务 Target；没有发信许可时没有发送并记 WARN，授予许可后下一次运行发送。
-  - 停止插件、推进时钟越过多次触发、再启动：不补跑，只在下一次未来时刻运行。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：interval 下限；一次回调中同一任务只运行一次；会话键隔离；JOB_TIMEOUT 内未结束时跳过；后台一轮中模型调用 confirm 策略的工具得到拒绝结果；没有注入记忆（请求中没有快照与档案）；其他用户 list_tasks 只看到本聊天的任务；cancel_task 需要 Admin 与确认。
+  - 非 Admin 调用 schedule_task 得到错误结果，List 为空；Admin 经确认后创建 at、interval 与 cron 任务各一个。
+  - 时钟推进到到期：任务运行一轮，回复发往任务 Target；没有发信许可时没有发送并记 WARN，授予许可后下一次运行发送；at 任务运行一次后 List 中不再出现。
+  - 停止插件、推进时钟越过多次触发、再启动：不补跑，周期任务只在下一次未来时刻运行。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：interval 下限；三种触发规则互斥；会话键隔离；后台一轮中模型调用 confirm 策略的工具得到拒绝结果；没有注入记忆（请求中没有快照与档案）；其他用户 list_tasks 只看到本聊天的任务；cancel_task 需要 Admin 与确认，不能取消其他聊天的任务；Agent 的数据库中没有任务表。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./plugins/...；go build ./...。
 
