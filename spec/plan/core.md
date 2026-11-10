@@ -39,18 +39,19 @@
 | T-04.2 | goal-11 | 构建期生成器 `sdk/generate`：限定扫描范围、build tags、生成注册代码、稳定输出；`cmd/alonabot` 的构建检查入口 | T-04 步骤 2 | T-04.1 | V-10 | 已完成（PR #42；TEST-MATRIX §3.2） |
 | T-04.3 | goal-12 | 命令选择与参数绑定：完整 token、@username、最长路径/别名→文本匹配（Regex、keyword、startswith、endswith、fullmatch）→Raw、消费状态、参数语法、usage/silent | T-04 步骤 4 | T-04.1 | V-11 的命令分项、V-49 | 已完成（PR #47；TEST-MATRIX §3.2） |
 | T-04.4 | goal-13 | 持久化命令策略与管理服务层：继承、禁用、全局禁止、下一次派发生效 | T-04 步骤 5 | T-03.2、T-04.1、T-04.6 | V-12、V-43 的服务层分项 | 已完成（PR #88；TEST-MATRIX §3.2） |
-| T-04.5 | goal-14 | 用同一 SDK 升级示例，完成构建与策略验收，汇总证据 | T-04 步骤 6、7 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12 | V-10、V-11、V-12、V-43、V-49 的 T-04 分项 | 未开始 |
+| T-04.5 | goal-14 | 用同一 SDK 升级示例，完成构建与策略验收，汇总证据 | T-04 步骤 6、7 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | V-10、V-11、V-12、V-43、V-49 的 T-04 分项 | 未开始 |
 | T-04.6 | goal-87 | 权限、扩展事件与命令解析的协议和 Core 侧：proto 修改与生成；Adapter 权限与扩展事件声明的校验；平台权限的保留与隐含展开、按权限名集合判定；扩展事件的交付校验；`command_prefixes` 与按实例覆盖、去掉开头的 reference 与本账号 mention、非文本 token 与 `user`/`image`/`message` 参数、usage 文案键 | T-04 步骤 8 | T-03.3、T-03.6、T-04.3 | V-85、V-86、V-87 的 Core 分项 | 已完成（PR #78；TEST-MATRIX §3.2） |
 | T-04.7 | goal-88 | SDK 链式注册：命令、文本匹配、事件、Service 与 Event Bus 订阅的 builder，Permission 值对象与 `c.Has`，Service Schema 由生成器生成且 schema_id 由 Go 类型决定，自动回复型可 `c.Send`；生成器、示例与已合并调用方同步 | T-04 步骤 9 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | V-10、V-14 的 SDK 分项 | 已完成（PR #89；TEST-MATRIX §3.2） |
-| T-04.8 | goal-91 | SDK 自有类型与事件常量：Message/会话字符串与可选的 `sdk.Via`（D-102）/消息句柄（D-104）/片段构造函数与单片段发送（D-108）/媒体读取与上传助手（D-109）/时间与时长用 `time.Time`、`time.Duration`（D-110）/Adapter 声明用 Go 类型（D-113）/Actor/SendResult/错误码与入站片段，标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对事件 Handler 的 payload 类型，`sdk/adapter` 的公共类型；Telegram Adapter、示例与已合并调用方同步 | T-04 步骤 9 | T-03.9、T-03.24、T-04.7、T-04.9 | V-14 的类型分项、V-86 的 SDK 分项，V-101、V-102 的 SDK 分项，V-106～V-108，V-111 的事件与 extension 分项 | 未开始 |
+| T-04.8 | goal-91 | SDK 自有类型与事件常量：Message/会话字符串与可选的 `sdk.Via`（D-102）/消息句柄（D-104）/片段构造函数与单片段发送（D-108）/媒体读取与上传助手（D-109）/时间与时长用 `time.Time`、`time.Duration`（D-110）/Adapter 声明用 Go 类型（D-113）/Actor/SendResult/错误码与入站片段，标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对事件 Handler 的 payload 类型，`sdk/adapter` 的公共类型；Telegram Adapter、示例与已合并调用方同步 | T-04 步骤 9 | T-03.9、T-03.24、T-04.7、T-04.9 | V-14 的类型分项、V-86 的 SDK 分项，V-101、V-102 的 SDK 分项，V-106～V-108，V-111 的事件与 extension 分项，V-113 的 SDK 类型分项（`c.Reply`、用户字符串、按来源读取与错误码辅助函数，D-118、D-120、D-121、D-123） | 未开始 |
 | T-04.9 | goal-96 | 删除构建期标记：去掉 `//alonabot:command`、`//alonabot:event` 的扫描、诊断与生成，命令与事件只经链式注册，示例与测试随之改写（D-79） | T-04 步骤 2 | T-04.7 | V-10 | 已完成（[PR #110](https://github.com/AlonaBot/AlonaBot/pull/110)） |
 | T-04.10 | goal-122 | 管理员与封禁按 Adapter 登记：`admins` 改用用户字符串，禁止表按 adapter_id，对该 Adapter 的全部实例生效（D-105） | T-04 步骤 10 | T-04.4、T-07.6 | V-103 | 未开始 |
 | T-04.11 | goal-124 | 注册写法统一：定时任务与 HTTP 路由的链式注册，命令省略 `Args` 时参数名取 Handler 的参数名（生成器记录），Event Bus 订阅的路由 ID 缺省为事件名（D-112） | T-04 步骤 11 | T-04.8、T-04.12、T-07.5 | V-110 的 SDK 分项 | 未开始 |
 | T-04.12 | goal-125 | 插件对象、结构体参数与子插件：入口改为 `func New() *sdk.Plugin`，路由、生命周期回调、`OnConfigLoad` 与数据库迁移登记在插件对象上，删除 `sdk.Base`、`sdk.Root` 与各注册器（D-114）；命令 Handler 可以用一个结构体接收参数（D-115）；一层逻辑子插件及其缺省权限、配置视图与日志字段（D-116）；生成器、示例与已合并的调用方同步 | T-04 步骤 12 | T-04.8 | V-112 | 未开始 |
+| T-04.13 | goal-126 | Service 与 Event Bus 的带类型声明：`sdk.JSON`、`sdk.Proto` 返回 `sdk.Service[In, Out]`，`sdk.Serve` 注册、`Call` 调用；`sdk.BusEvent[T]` 的 `Publish` 与 `sdk.Subscribe`；删除 `sdk.CallJSON`、`sdk.CallProto`、`sdk.Publish` 与旧形式的注册、订阅函数；`sdk/llm`、示例与已合并的调用方同步（D-122） | T-04 步骤 13 | T-04.12 | V-113 的声明分项 | 未开始 |
 | T-05.1 | goal-15 | 可信事件上下文与有界同事件分发：64 条并发链、256 条/8 MiB 等待队列、稳定候选排序、链执行与读循环分离；经回环测试 Adapter 运行，按钮与 scheduled 绑定先用规范 fixture | T-05 步骤 1、2 | T-03.3、T-04.3、T-04.4 | V-13、V-16 的 fixture 分项 | 已完成（PR #67；TEST-MATRIX §3.2） |
 | T-05.2 | goal-16 | SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支 | T-05 步骤 3、4 | T-05.1、T-04.7、T-04.8 | V-14、V-11 的 Rule 分项 | 未开始 |
 | T-05.3 | goal-17 | PreEvent/BeforeSend/AfterSend 三阶段 Hook（链式注册与 SDK 类型，D-112），send_forbidden 的保存与继承 | T-05 步骤 5、6 | T-05.2 | V-15 的直接路径分项，V-110 的 Hook 分项 | 未开始 |
-| T-05.4 | goal-52 | 延续调用与多轮等待：`core.continuation.start`、`core.wait`、等待键与消费、超时与 Session 失效；SDK 的 `Continue` 与 `Wait` | T-05 步骤 7 | T-05.2 | V-50 | 未开始 |
+| T-05.4 | goal-52 | 延续调用与多轮等待：`core.continuation.start`、`core.wait`、等待键与消费、超时与 Session 失效；SDK 的 `Continue`（Handler 内调用与 builder 的 `.Continue()`，D-119）与 `Wait` | T-05 步骤 7 | T-05.2 | V-50，V-113 的延续调用分项 | 未开始 |
 | T-05.5 | goal-18 | 多进程事件流水线验收（含真实按钮回调与多轮等待），汇总证据 | T-05 步骤 8 | T-03.8、T-05.3、T-05.4 | V-11、V-13～V-16、V-43、V-49、V-50 的 T-05 分项 | 未开始 |
 | T-06.1 | goal-19 | Service/Bus 描述与编码校验、SDK 入口；Broker 定位与准入 | T-06 步骤 1、2 | T-04.1 | V-19 | 已完成（PR #45；TEST-MATRIX §3.2） |
 | T-06.2 | goal-20 | 父调用链上下文传播、循环与深度检查、跨段取消与背压 | T-06 步骤 3、4 | T-03.6、T-05.3、T-06.1 | V-18、V-42 的嵌套分项 | 未开始 |
@@ -326,6 +327,11 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
     - 子插件：`p.Sub(id)` 与 `*sdk.SubPlugin`，ID 校验与重复检查；子插件中的路由照原规则生成 route_id 并与整个插件一起查重；`s.Permission` 进入缺省权限的解析次序；`s.Config()` 返回同名顶层 object 的视图，`Collect` 核对 schema 中有该字段；子插件 Handler 的 `c.Logger()` 带 `sub_plugin`。
     - examples/plugins、`alonabot init` 的模板（尚未实现时只改语句）与已合并的调用方按新写法修改；docs/plugin-guide.md 与 ARCHITECTURE 中对根插件的描述由审查者在合并前同步。
 
+13. **SDK 的第二轮简化（D-118～D-123）。** 协议不变。
+    - 属于 T-04.8 的部分：`c.Reply(text)`；`message.User`、`c.User()` 与 `c.Session()`；`sdk.OpenMedia` 改收 `message.MediaSource`；`errcode` 的 `New`、`Errorf` 与 `Of`。
+    - 属于 T-05.4 的部分：命令、文本匹配、Raw、事件与按钮路由 builder 的 `.Continue()`（T-05 步骤 7）。
+    - 本步骤（T-04.13）：Service 与 Event Bus 改为带类型的声明。`sdk.JSON[In, Out](target)`、`sdk.Proto[In, Out](target)` 返回 `sdk.Service[In, Out]`，`sdk.Serve(r, s)` 开始注册，`s.Call(ctx, in)` 调用；`sdk.BusEvent[T](name)` 返回事件声明，`e.Publish(ctx, payload)` 发布，`sdk.Subscribe(r, e)` 订阅。`Collect` 核对 target 的组件部分是本插件（Agent 组件为 `@agent`）、声明不是零值、同一声明只注册一次。删除 `sdk.CallJSON`、`sdk.CallProto`、`sdk.Publish` 与旧形式的 `sdk.JSON(r, name)`、`sdk.Proto(r, name)`、`sdk.Subscribe[T](r, name)`；生成器对类型参数的检查改为针对声明处。`sdk/llm` 的 `Generate` 与 `Ask` 签名不变，内部改用声明并导出它；示例与已合并的调用方同步修改。
+
 #### 拟目录与交付
 
 | 拟目录 | 本工作包交付 |
@@ -354,6 +360,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 | V-110 | 步骤 11 中定时任务与 HTTP 路由的链式注册、命令参数名的缺省与订阅路由 ID 的缺省；Hook 分项由 T-05.3 提供 |
 | V-111 | 步骤 9 中扩展事件与 extension 的 Go 类型声明与推导的 Schema；动作分项由 T-03.15 提供 |
 | V-112 | 步骤 12 中插件对象的注册与回调登记、结构体参数的绑定与注册检查、子插件的路由标识、缺省权限与配置视图 |
+| V-113 | 步骤 13 中 Service 与 Event Bus 的带类型声明；SDK 类型分项由 T-04.8 提供，延续调用分项由 T-05.4 提供 |
 
 V-12 是跨任务验收：T-04 不依赖尚不存在的 WebUI，但必须交付后续 UI 实际调用的策略服务层。矩阵中保存分项证据；只有 T-09 的鉴权后浏览器操作也完成，才将整项 V-12 标为通过。T-04 完成后，T-05 和 T-08 可以分别使用同一注册器继续实施。
 

@@ -45,10 +45,11 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 ### 1.4 入站媒体与读取
 
 - 入站图片/文件先使用 `IncomingMedia` 描述符：Core opaque token、声明 size/MIME、readability；Core 私下保存对应 Adapter 实例的 file_id。未知 MIME/大小为 absent，不能伪造已计算的 SHA256。首发不为每个入站媒体预先下载，也不把未取件对象当已提交 MediaRef。readability 只在来源实例的启动响应声明了能力 `media.read` v1 且 supported 时为 READABLE；Adapter 交付时把某个来源标为 UNSUPPORTED 的，Core 保留（D-73）。
-- 媒体服务的 Read(token, offset, length) 返回 bytes、next_offset、eof，单次 length 为 1～1 MiB，offset 为非负字节偏移；offset 等于实际大小时返回空 bytes、原 offset、eof=true，大于实际大小时返回 INVALID_ARGUMENT，不产生空成功。错误返回明确 code。首次 Read 由 Core 内置 Adapter 使用受信平台文件 API 按需取件，写入 §1.3 的同一暂存区并校验实际大小/计算摘要后才返回内容；随后按 offset 读取。首次取件截止取调用者/父链与 15 分钟预算的较早者，不能绕过上游 deadline。一次取件失败（包括发起取件的读取者被取消或到期）只返回给这一轮等待的读取者，不记为对象状态；下一次 Read 重新取件，同一次调用内不自动重试（D-73）。插件 SDK 只提供 `sdk.OpenMedia(ctx, token)`：打开时读取第一块，失败时直接返回错误；返回的 `io.ReadCloser` 按 next_offset 依次读取，每次至多 1 MiB（D-109）。
+- 媒体服务的 Read(token, offset, length) 返回 bytes、next_offset、eof，单次 length 为 1～1 MiB，offset 为非负字节偏移；offset 等于实际大小时返回空 bytes、原 offset、eof=true，大于实际大小时返回 INVALID_ARGUMENT，不产生空成功。错误返回明确 code。首次 Read 由 Core 内置 Adapter 使用受信平台文件 API 按需取件，写入 §1.3 的同一暂存区并校验实际大小/计算摘要后才返回内容；随后按 offset 读取。首次取件截止取调用者/父链与 15 分钟预算的较早者，不能绕过上游 deadline。一次取件失败（包括发起取件的读取者被取消或到期）只返回给这一轮等待的读取者，不记为对象状态；下一次 Read 重新取件，同一次调用内不自动重试（D-73）。插件 SDK 只提供 `sdk.OpenMedia(ctx, src)`（参数见本节末条）：打开时读取第一块，失败时直接返回错误；返回的 `io.ReadCloser` 按 next_offset 依次读取，每次至多 1 MiB（D-109）。
 - 同一入站对象由 Core 持有，向接收它的各 Handler Session 签独立的目标受限 token，缓存仅保存一份。token 自签发 15 分钟有效，发送/读取期间用有截止时间的租约保护；一个 Session 失效只撤销其授权，不能删除其他有效消费者仍使用的对象。取件前预留实际可接受的容量，计入 Core 2 GiB 总预算与每个消费 Session 256 MiB 引用预算；未知长度最多按单对象 100 MiB 接收，超限立即失败。
 - 超平台下载能力返回 UNSUPPORTED，超配额返回 RESOURCE_EXHAUSTED，事件仍保留不可读取的元数据。Token 仅映射可信 Adapter 已提供的文件标识，不接受用户指定的任意下载地址，不下发 Bot Token/宿主路径。平台文件标识不是插件可用的读取凭证：插件只能用 Core 签发的 token 读取或发送；Adapter 的 platform_payload 原样保留，其中出现的平台标识没有授权作用，Core 也不接受它作为媒体来源（D-73）。
 - Segment 可用 `incoming_ref` 作为与 media_ref/https_url 互斥的来源；Send 重新验证目标授权，并核对本次发送的 Target 在原 token 的范围内；目标实例就是该对象的来源实例时，Core 把 Adapter 原先提供的平台文件标识作为 `platform_file` 来源交给 Adapter 直接复用，不取件（D-88），其他情况按需取件为已校验 MediaRef，再执行发送计划。`platform_file` 只出现在 Core 发往 Adapter 的请求中，插件给出时 INVALID_ARGUMENT。取件失败发生在平台发送前，不自动重试业务发送；共享对象到期且无租约后回收。
+- 插件经 `sdk.OpenMedia(ctx, src)` 读取，参数是片段中的媒体来源 `message.MediaSource`（D-121）：来源是入站对象或 media_ref 时按其 token 顺序读取；其他来源（https_url、inline_base64）在发出请求前返回 INVALID_ARGUMENT，SDK 不代为下载。只持有 token 的调用方以该 token 作为 media_ref 来源。
 
 ## 2. 事件、命令、Rule、Hook 和传播
 
@@ -86,6 +87,9 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 - 延续调用内不能再请求延续调用；出站 Hook、send_forbidden 的调用链与没有 Actor 的调用也不能请求，均返回 FAILED_PRECONDITION。Session 失效、插件停用或代次变化时，尚未发出的延续调用丢弃，进行中的按 §4.2 取消；延续调用不持久化，不在新 Session 补发。
 - 延续调用内可以调用 `core.wait`，等待同一 Actor 在默认 Target（含 thread）中的下一条 message.created。等待键为（adapter_instance_id、chat_id、thread_id、external_user_id），同一键已有等待时返回 ALREADY_EXISTS。命中的事件先经过 PreEvent：PreEvent Stop 时不交给等待，等待继续；否则作为 `core.wait` 的结果返回，不再进入普通分发，包括命令匹配。
 - 等待的超时由调用方给出，不超过所在延续调用的剩余期限；超时返回 DEADLINE_EXCEEDED。等待也在调用取消或 Session 失效时结束。等待只保存在 Core 内存中，不持久化。
+- SDK 有两种请求延续调用的写法，协议相同（D-119）：
+  - 注册时声明：命令、文本匹配、Raw、事件与按钮路由的 builder 调用 `.Continue()`。SDK 在原调用中照常执行 Rule，匹配后请求延续调用并成功结束原调用，Handler 整体在延续调用中执行，签名不变。原调用的传播结果固定为 Continue，Handler 中的 `c.StopPropagation()` 不起作用。自动回复型 Handler 返回的非空内容由 SDK 在延续调用结束前经 Send 发出一次。请求延续调用失败时，原调用返回该错误，Handler 不执行。定时任务、Service、Event Bus 订阅、Hook 与 HTTP 路由没有这个方法。
+  - Handler 内调用：`c.Continue(fn)`，fn 在延续调用中执行，原调用的其余部分（含 `c.StopPropagation()`）照常决定传播。对已经用 `.Continue()` 注册的路由，Handler 本身就在延续调用中，再调用 `c.Continue` 返回 FAILED_PRECONDITION。
 
 ## 3. 跨插件调用、动态 Router 与权限
 
@@ -96,6 +100,10 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 - 每一跳由 Core 关联可信 Actor、权限 scope、trace、祖先插件链和执行限制。插件发起 Request 的 parent_call_id 只能引用**同一 Session 中仍在途的 Core→该插件 Request**；Core 从此记录派生上下文，不采信插件自报角色。父请求完成/超时/取消会取消未完成子调用；无父调用的后台/主动 Service 只有插件身份，不能沿用已结束用户权限。
 - 同一调用链重复插件 ID 返回 CALL_CYCLE，最大插件链深 16，独立并发链互不影响。子调用截止取父 deadline 与自身操作预算的较早者；取消/中断不自动重试。read loop、response 与 admission 规则必须使 Handler 内 Send、A→B→C 及出站 Hook 能完成或明确失败，不能等待自己占据的槽位。
 - Event Bus 发布使用带 CallID 的 Core Publish RPC，只确认 Core 已处理发布请求，不确认订阅者执行业务；实际分发使用无业务回执 EVENT。发布者只能使用自己的 `plugin_id/event_name`，订阅者明确注册事件名及 schema/version；离线或满队列丢弃并统计，慢订阅者不阻塞其他插件。payload 不能携带可信 Actor 权限，广播处理发起的业务默认使用订阅插件自身身份。SDK 对每个 Session 的订阅投递额外限制为 4 MiB（`BUS_QUEUE_BYTES` 缺省值），包含排队及正在处理的 EVENT protobuf 载荷；超出时 drop-newest、WARN 并立即 release wire 接收预算。Core 的 `BUS_QUEUE_BYTES` 覆盖仅调整 Core 等待队列，SDK 此上限保持 4 MiB，以给同 Session 的业务请求留出预算。
+- SDK 中 Service 与 Event Bus 事件用带类型的声明表示（D-122），协议不变：
+  - `sdk.JSON[In, Out](target)` 与 `sdk.Proto[In, Out](target)` 返回 `sdk.Service[In, Out]`，target 是完整的 `plugin_id/service_name`，或 Agent 组件的 `@agent/service_name`。`sdk.Serve(r, s)` 开始注册，之后照旧用 `Access`、`Tool` 与 `Handle`；target 的组件部分不是本插件的 ID（Agent 组件为 `@agent`）、声明为零值或同一声明注册两次时，`Collect` 报错。`s.Call(ctx, in)` 发起调用，返回 `(Out, error)`。
+  - `sdk.BusEvent[T](name)` 返回事件声明，name 是完整的 `plugin_id/event_name`。`e.Publish(ctx, payload)` 发布，命名空间不是本插件时照旧被 Core 拒绝；`sdk.Subscribe(r, e)` 开始订阅，路由 ID 缺省为事件名，可用 `.ID(routeID)` 另给。
+  - schema_id 与版本仍由 Go 类型决定。声明是普通的包级值，提供方导出后，调用方与订阅方导入同一个包使用；不提供按字符串目标与类型参数直接调用或订阅的函数。
 
 ## 4. 生命周期、Config Reload、调度
 
@@ -361,7 +369,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 - 任何角色都可以声明可选的 `icon`：包内图标文件的相对路径（§7.5）。插件可声明 `adapter_dependencies` 与 `plugin_dependencies`，语义见 §8。
 - `migration_mode` 取 `none/self/versioned`，由构建按代码中登记的迁移方式写入（§6.2）；`prepare_effects` 固定 `none/managed_db/external`，描述配置回调以外的迁移/OnStart 在准备期的副作用。`managed_db` 仅表示写所属的受管 SQLite，候选可隔离；`external` 表示会写框架外的数据（例如插件自管的外部数据库），不具备自动回退承诺，按 §6.3 的维护门槛更新。包内 manifest 缺失这两项或与实际不一致时拒绝安装与自动升级，不能把未知值解释成安全。它们是插件包静态声明，不是 WebUI 调参开关。
 - 命令、文本匹配与事件只在入口包的 `func New() *sdk.Plugin` 中对插件对象链式注册（D-79、D-114），生成器不扫描注册；`build` 检查并嵌入 manifest、`config_schema.json`、`i18n/`、Service Schema 与 Handler 的参数名（命令省略 `Args` 时使用，D-112），入口包必须声明 `func New() *sdk.Plugin`（缺少或签名不符时构建失败），配置 schema 只来自 `config_schema.json`（§5.1），重复 Handler/HTTP 路由失败。Schema/注册描述与 binary 来自同一构建，安装期检查能静态取得的 Schema/能力与自动注册项；实例方法显式注册的完整集合在本次启动 REGISTER 时校验，不要求静态推导任意 Go 控制流或重复手写整张路由表。最终路由在该 Session 固定，Schema/能力必须与包资源一致；Go 与 protoc 的版本已由 T-01 锁定，见 docs/development.md。
-- 插件对象（D-114）：`sdk.NewPlugin()` 返回 `*sdk.Plugin`，路由的注册方法、`OnStart`/`OnReady`/`OnStop`/`OnConfigLoad` 的登记与数据库迁移的登记（§6.2）都作用在它上面；带类型参数的 `sdk.JSON`、`sdk.Proto`、`sdk.Subscribe` 与 `sdk.OnButton` 的第一个参数是 `sdk.Registrar`，由 `*sdk.Plugin` 与 `*sdk.SubPlugin` 实现。注册在 `New()` 返回之前完成：同一回调登记两次由 `Collect` 报错；`sdk.Run` 开始之后调用注册或登记方法 panic，消息为英文。生成的正式入口调用 `sdk.Run(New())`；`New()` 可以被多次调用（例如测试），不得依赖包级的注册状态。
+- 插件对象（D-114）：`sdk.NewPlugin()` 返回 `*sdk.Plugin`，路由的注册方法、`OnStart`/`OnReady`/`OnStop`/`OnConfigLoad` 的登记与数据库迁移的登记（§6.2）都作用在它上面；带类型参数的 `sdk.Serve`、`sdk.Subscribe` 与 `sdk.OnButton`（§3，D-122）的第一个参数是 `sdk.Registrar`，由 `*sdk.Plugin` 与 `*sdk.SubPlugin` 实现。注册在 `New()` 返回之前完成：同一回调登记两次由 `Collect` 报错；`sdk.Run` 开始之后调用注册或登记方法 panic，消息为英文。生成的正式入口调用 `sdk.Run(New())`；`New()` 可以被多次调用（例如测试），不得依赖包级的注册状态。
 - 结构体参数（D-115）：命令 Handler 在 `*sdk.Context` 之后或者是零到多个位置参数，或者恰好是一个结构体值，不能混用。结构体的规则：
   - 字段按声明顺序对应参数位置；必须全部导出，类型为位置参数支持的类型或其指针，不能是结构体、内嵌字段或其他类型，否则 `Collect` 报错并指明字段。
   - 参数名取 `arg` 标签的名字；没有标签或名字为空时取字段名，并把开头的大写字母段转为小写，该段之后紧跟小写字母时保留段内最后一个字母（`URL` 为 `url`，`FeedURL` 为 `feedURL`，`URLPath` 为 `urlPath`）。同一结构体内参数名重复时报错。
@@ -443,7 +451,7 @@ Core 可执行文件与 SDK 根包只链接 [docs/development.md](../docs/develo
 | §15 运行方式 | T-07.6 `core_config.json` 与首次 token；T-09.4 `alonabot run` 与管理服务；T-13 开发运行、热部署与库模式；T-14 发行包、容器镜像、install.sh 与预装插件 |
 | §17 插件测试套件 | T-13.1 根包 `Start`；T-16 `plugintest` 与示例插件的测试；T-16.3 LLM 替身 |
 | §16 调优参数 | T-02.2 参数表、`--args` 与 Bootstrap 下发；之后的切片把新增的可调值登记到同一参数表 |
-| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-76、V-82～V-112 和五目标运行结果 |
+| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-76、V-82～V-113 和五目标运行结果 |
 
 ## 12. 跨层状态机与恢复不变量
 
