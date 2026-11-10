@@ -48,7 +48,7 @@
    type CommandInfo struct { PluginID, RouteID string; Path []string; Aliases [][]string; Usage string; Description string }
    func ListCommands(ctx context.Context) ([]CommandInfo, error) // 必须在 Handler 内调用（需要父调用链）
 4. plugins/help
-   func New() sdk.Root // 根插件
+   func New() *sdk.Plugin // 根插件
 
 行为：
 - core.command.list（必须带 parent_call_id；Actor 与默认 Target 取自父调用的可信上下文，没有 Actor 时只列出 ANY 权限的命令）：遍历 Router 的 CommandIndex，只保留每个规范路径的胜出者（被遮蔽者不列出）；对每条命令执行 policy.CheckCommand（全局禁止、启用、权限），通过的才列出；按路径字典序返回。usage 与 goal-12 的 usage 生成规则相同（按 Actor locale 使用 Core 文案目录）；description 在所属插件的 messages 中按 [Actor.locale, 默认 locale, en-US] 翻译，键不存在时 absent。
@@ -85,8 +85,8 @@
 允许的新跨模块边：plugins/... -> sdk/...、-> contracts（已允许）。只用标准库解析 XML（encoding/xml）与 HTTP。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
-- plugins/welcome：func New() sdk.Root
-- plugins/rss：func New() sdk.Root；plugins/rss/config_schema.json 声明 {"interval_minutes": {"description": "Check interval (minutes)", "type": "int", "default": 10, "slider": {"min": 1, "max": 1440}}}，以 Config().Int("interval_minutes") 读取（D-76）
+- plugins/welcome：func New() *sdk.Plugin
+- plugins/rss：func New() *sdk.Plugin；plugins/rss/config_schema.json 声明 {"interval_minutes": {"description": "Check interval (minutes)", "type": "int", "default": 10, "slider": {"min": 1, "max": 1440}}}，以 Config().Int("interval_minutes") 读取（D-76）
 
 行为：
 - welcome：

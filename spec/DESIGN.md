@@ -50,66 +50,91 @@ TCP 为默认，Core 持有 loopback 端口 0 分配的 Listener；stdio 可选�
 
 ## D. Go SDK 与 Handler 注册
 
-一个插件包恰好一个根类，嵌入 `sdk.Base`；配置由包内的 `config_schema.json` 声明，不定义 Go 配置类型（D-76）。`sdk.Base` 为根插件的全部 Hook（`OnStart`/`OnReady`/`OnStop`、`OnConfigLoad`、`Commands`/`HTTP`/`Schedules`）提供空的默认实现，并提供读取本 Session 配置的 `Config()`，根插件只覆盖需要的方法，SDK 原样调用，不区分是否覆盖；这样编辑器能补全出全部 Hook。`sdk.Root` 接口列出全部 Hook，覆盖时签名不符（或根插件有与 Hook 同名的字段）会使根插件不再满足 `sdk.Root`，在调用 `sdk.Run` 处编译失败，不会静默跳过。默认的 `OnConfigLoad` 原样返回 raw，覆盖时签名不符同样在编译期失败。元数据 ID 只来自 plugin.yaml；辅助 Handler 可以显式接收根类指针，不引入自动 DI。命令、文本匹配与事件只在根插件的注册方法中链式注册（D-79），包级函数也这样注册，没有第二种写法。
+一个插件包导出一个 `func New() *sdk.Plugin`（D-114）：`sdk.NewPlugin()` 创建插件对象，路由、生命周期回调（`p.OnStart`、`p.OnReady`、`p.OnStop`）、配置回调（`p.OnConfigLoad`）与数据库迁移都在 `New()` 返回之前登记在它上面，回调的签名由编译器检查，没有登记的回调不执行。配置由包内的 `config_schema.json` 声明，不定义 Go 配置类型（D-76），经 `p.Config()` 或 Handler 内的 `c.Config()` 读取。元数据 ID 只来自 plugin.yaml。插件自己的状态放在自己的类型中，以方法值注册；包级函数也这样注册，没有第二种写法（D-79），不引入自动 DI，也不在包级变量或 `init` 中注册。`sdk.Run` 开始后注册描述固定，之后再调用注册方法是编程错误。
 
 `alonabot build` 只处理当前模块的目标构建包，遵守 Go build tags/GOOS/GOARCH，排除外部依赖、vendor 和测试文件；生成的 Go 代码嵌入 manifest、配置 schema、`i18n/` 与 Service Schema，并生成正式入口；不在运行时从磁盘扫描任意包。单次 Session 注册描述固定，Core 动态修改权限/开关，不重建插件对象。
 
 以下是接口用法示意，需随 SDK 实现编译验证：
 
 ```go
-type RSS struct { sdk.Base }
+type RSS struct{ db *sql.DB } // 插件自己的状态
 
-func (p *RSS) Commands(r *sdk.CommandRegistry) {
-    g := r.Group("rss")
-    g.Command("list").Handle(p.List)
+func New() *sdk.Plugin {
+    p := sdk.NewPlugin()
+    r := &RSS{}
+
+    p.OnStart(r.Start)
+    p.Command("ping").Handle(Ping) // 包级函数
+
+    g := p.Group("rss")
+    g.Command("list").Handle(r.List)
     g.Command("add"). // 参数名取自 Add 的参数 url（D-112）
         Permission(sdk.Admin.Or(sdk.ChatAdmin)).
-        Handle(p.Add)
-}
+        Handle(r.Add)
+    g.Command("search").Handle(r.Search) // 参数来自结构体（D-115）
 
-func (p *RSS) Events(r *sdk.EventRegistry) {
-    r.On("poke", obevent.Poke). // OneBot 11 Adapter 声明的扩展事件
+    p.On("poke", obevent.Poke). // OneBot 11 Adapter 声明的扩展事件
         Rule(sdk.ToMe()).
-        Handle(p.Poke)
+        Handle(r.Poke)
+
+    digest.Register(p.Sub("digest")) // 逻辑子插件（D-116）
+    return p
 }
 
-func (p *RSS) List(c *sdk.Context) (message.Content, error) {
+func Ping(c *sdk.Context) (message.Content, error) {
+    return message.Text(c.Config().String("pong")), nil
+}
+
+func (r *RSS) List(c *sdk.Context) (message.Content, error) {
     c.StopPropagation()
     return message.Text("订阅列表"), nil
 }
 
-func (p *RSS) Add(c *sdk.Context, url string) error {
-    _, err := c.Send(message.Text("已收到订阅请求"))
-    return err
+func (r *RSS) Add(c *sdk.Context, url string) error {
+    return c.Reply("已收到订阅请求") // 纯文本回复（D-118）
 }
 
-func (p *RSS) Poke(c *sdk.Context, e *obevent.PokePayload) error {
-    _, err := c.Send(message.Text("别戳啦"))
-    return err
+type SearchArgs struct {
+    Keyword string                 // 没有标签：参数名为 keyword，必需
+    Limit   int     `default:"10"` // 可选，缺失时为 10
+    Source  *string `arg:"from"`   // 可选，缺失时为 nil
+}
+
+func (r *RSS) Search(c *sdk.Context, a SearchArgs) error {
+    return c.Reply("搜索：" + a.Keyword)
+}
+
+func (r *RSS) Poke(c *sdk.Context, e *obevent.PokePayload) error {
+    return c.Reply("别戳啦")
 }
 ```
 
-注册采用链式构建（D-70、D-112）：命令、文本匹配、事件、Service、Event Bus 订阅、Hook、定时任务与 HTTP 路由都由注册器的方法开始，`Handle` 结束；漏写 `Handle` 是注册错误。命令参数名缺省取 Handler 的参数名，由生成器记录（Go 运行时取不到参数名），只在需要另起名字时写 `Args`；订阅的路由 ID 缺省为事件名。分组上设置的权限由组内路由继承。Permission 是不可变的值，用 `Or` 组合，满足其中任一即可（D-69）；Rule 是在 SDK 内执行的 Go 函数，`Rule(...)` 多个时全部满足，`sdk.Any` 表示任一。事件常量带 payload 的 Go 类型，`Collect` 核对 Handler 的参数类型；Adapter 的常量包（例如 `adapters/onebot11/perm`、`adapters/onebot11/event`）只含常量与数据类型，插件导入它们不链接 Adapter 的运行时。插件 API 不暴露生成的 pb 类型，Message、会话字符串与消息句柄（D-102、D-104）、Actor、SendResult 与错误码由 SDK 自己定义。
+注册采用链式构建（D-70、D-112）：命令、文本匹配、事件、Service、Event Bus 订阅、Hook、定时任务与 HTTP 路由都由插件对象（或子插件）的方法开始，`Handle` 结束；漏写 `Handle` 是注册错误。带类型参数的 `sdk.Serve`、`sdk.Subscribe` 与 `sdk.OnButton` 是包级函数，第一个参数收 `sdk.Registrar`，即插件对象或子插件；Service 与 Event Bus 事件先用 `sdk.JSON`、`sdk.Proto`、`sdk.BusEvent` 声明成带类型的值，再注册或调用（§G，D-122）。命令参数名缺省取 Handler 的参数名，由生成器记录（Go 运行时取不到参数名），只在需要另起名字时写 `Args`；订阅的路由 ID 缺省为事件名。分组上设置的权限由组内路由继承。Permission 是不可变的值，用 `Or` 组合，满足其中任一即可（D-69）；Rule 是在 SDK 内执行的 Go 函数，`Rule(...)` 多个时全部满足，`sdk.Any` 表示任一。事件常量带 payload 的 Go 类型，`Collect` 核对 Handler 的参数类型；Adapter 的常量包（例如 `adapters/onebot11/perm`、`adapters/onebot11/event`）只含常量与数据类型，插件导入它们不链接 Adapter 的运行时。插件 API 不暴露生成的 pb 类型，Message、会话字符串与消息句柄（D-102、D-104）、Actor、SendResult 与错误码由 SDK 自己定义。
 
-两类 Handler 保留：返回 `(Content,error)` 的自动回复型成功时由 Core 在 Handler 返回后发一次非空内容，Content 是 Chain 或单个片段，每种片段都有构造函数（D-108）；两种 Handler 都可以在内部多次 `c.Send`（D-70）。包级 `sdk.Send` 只供没有 Handler 上下文的后台任务使用。`c.StopPropagation()` 锁存传播结果，由 SDK 统一编码到 HandlerOutcome；不会给开发者增加第三套 Handler 签名。
+两类 Handler 保留：返回 `(Content,error)` 的自动回复型成功时由 Core 在 Handler 返回后发一次非空内容，Content 是 Chain 或单个片段，每种片段都有构造函数（D-108）；两种 Handler 都可以在内部多次 `c.Send`（D-70）；只回一段文本时用 `c.Reply(text)`，它不返回发送结果（D-118）。包级 `sdk.Send` 只供没有 Handler 上下文的后台任务使用，只发一段文本时用 `sdk.SendText(ctx, to, text)`（D-118）。触发者与所在会话用 `c.User()`、`c.Session()` 取得，分别是用户字符串 `<adapter_id>:<external_user_id>` 与会话字符串，可以原样保存和比较（D-120）。带错误码的错误用 `errcode.NotFound.New("…")` 构造、`errcode.Of(err)` 判断（D-123）。`c.StopPropagation()` 锁存传播结果，由 SDK 统一编码到 HandlerOutcome；不会给开发者增加第三套 Handler 签名。
 
-Handler 调用受普通请求期限约束，返回后不能再以原上下文工作。需要等待用户回复或较长时间生成时，Handler 请求一次延续调用：Core 在本次调用结束后，以原可信上下文另发一个独立期限的调用，它不占用分发链（CONTRACTS §2.4）。多轮等待只在延续调用内使用：
+命令参数有两种接收方式（D-115）。常用的是位置参数：`*sdk.Context` 之后逐个写出，名字取参数名，可选、默认值与 raw 尾部用 `Optional`、`RawTail` 声明。参数较多时可以只收一个结构体：字段按声明顺序对应参数位置，名字取字段名（开头的大写字母段转为小写）或 `arg` 标签，指针字段与带 `default` 标签的字段是可选参数，`arg:",raw"` 是末位的 raw 尾部；此时名字、可选与默认值只有结构体一个来源，不能再写 `Args`、`Optional` 与 `RawTail`。两种方式不混用，生成的注册描述相同，分词、类型转换与 usage 仍由 Core 完成。结构体由 SDK 用反射绑定，字段类型、顺序与标签都在 `Collect` 时检查，问题在启动时报告，不会留到第一条消息。
+
+一个插件可以分成一层逻辑子插件来整理模块（D-116）：`p.Sub(id)` 返回 `*sdk.SubPlugin`，注册方法与插件对象相同，但没有 `Sub`，不能继续嵌套；通常每个子包导出 `func Register(s *sdk.SubPlugin)`。子插件只存在于 SDK 内，Core 不知道它，不能单独启停；它的 ID 不进入 route_id、命令路径、Service 名、HTTP 路径与 job ID，在子插件之间移动路由不影响管理员已保存的策略。子插件可以设置其中路由的缺省权限（`s.Permission`），读取自己的那一段配置（`s.Config()`，见 §J），日志带 `sub_plugin` 字段。生命周期回调、`OnConfigLoad` 与数据库迁移只登记在插件对象上。
+
+Handler 调用受普通请求期限约束，返回后不能再以原上下文工作。需要等待用户回复或较长时间生成时，Handler 请求一次延续调用：Core 在本次调用结束后，以原可信上下文另发一个独立期限的调用，它不占用分发链（CONTRACTS §2.4）。多轮等待只在延续调用内使用。通常在注册时用 `.Continue()` 声明，Handler 整体在延续调用中执行，写法与普通 Handler 相同（D-119）：
 
 ```go
-func (p *Quiz) Start(c *sdk.Context) error {
-    return c.Continue(func(c *sdk.Context) error {
-        if _, err := c.Send(message.Text(c.T("quiz.ask"))); err != nil {
-            return err
-        }
-        reply, err := c.Wait(2 * time.Minute) // 同一用户在同一会话的下一条消息
-        if err != nil {
-            return err
-        }
-        _, err = c.Send(message.Text(c.T("quiz.got", "answer", reply.Text())))
+p.Command("quiz").Continue().Handle(q.Start)
+
+func (q *Quiz) Start(c *sdk.Context) error {
+    if err := c.Reply(c.T("quiz.ask")); err != nil {
         return err
-    })
+    }
+    reply, err := c.Wait(2 * time.Minute) // 同一用户在同一会话的下一条消息
+    if err != nil {
+        return err
+    }
+    return c.Reply(c.T("quiz.got", "answer", reply.Text()))
 }
 ```
+
+用 `.Continue()` 注册的路由，原调用的传播结果固定为继续，Handler 中的 `c.StopPropagation()` 不起作用。需要先在原调用中判断条件、停止传播或只在部分情况下才进入延续调用时，不写 `.Continue()`，改在 Handler 内调用 `c.Continue(func(c *sdk.Context) error { … })`。
 
 ## E. 消息、命令和权限
 
@@ -135,6 +160,21 @@ Event Bus 使用 `plugin_id/event_name`，非持久化尽力广播，离线不�
 
 Service 以 `plugin_id/service_name` 注册，使用显式 schema/version 的 JSON 或 Protobuf 请求/响应。Core 检查目标状态和授权，继承父请求的 Actor/scope/deadline，A→B→C 可用；同调用链出现重复插件或超过深度上限明确拒绝。父请求结束后其未完成子调用取消，后台独立请求仅有插件身份。
 
+Service 与 Event Bus 事件各用一个带类型的声明表示，名字与 Go 类型只写一处（D-122）。提供方在自己的包里导出声明，注册与调用都从它出发；调用方导入这个包即可，不必再写目标字符串与类型参数：
+
+```go
+// 提供方包 weather
+var Search = sdk.JSON[SearchRequest, SearchResponse]("weather/search")
+var Updated = sdk.BusEvent[UpdatedPayload]("weather/updated")
+
+sdk.Serve(p, Search).Access(sdk.AccessPublic).Handle(w.search)
+Updated.Publish(ctx, UpdatedPayload{City: city})
+
+// 调用方
+resp, err := weather.Search.Call(c.Context(), weather.SearchRequest{City: city})
+sdk.Subscribe(p, weather.Updated).Handle(r.onUpdated)
+```
+
 通过 Core 动态调用其他插件命令/事件 Router 不在 v0.1 范围内（Q-15）；v0.1 不暴露该执行 API，只保留稳定 route ID。Go Modules 用于编译期复用，不能当作跨进程 Go 对象调用。
 
 ## H. Core Scheduler
@@ -159,13 +199,15 @@ Core 管理状态库与插件业务库分开。框架只托管 SQLite（D-48）�
 
 受管 SQLite 每插件、每候选代次独立文件。配置重载与版本更新统一先停止旧进程、备份候选副本，再迁移/初始化；不能复用旧可写 DB 来承诺提交前回退。准备期会改动外部数据的插件声明 `prepare_effects=external`，已有安装的升级按维护模式处理。
 
-`Migrate(ctx, db)` 与 `Migrations() []Migration` 可选且互斥，由 `sqlitedb` 与 `gormdb` 各定义一组，回调在插件 SDK 内执行，Core 负责调度与代次门槛。辅助迁移的 Up 与成功记录在插件 DB 的同一事务；没有迁移接口就不主动迁移。维护许可和启动原因在 Bootstrap 明确下发。
+自管迁移 `Migrate(p, fn)` 与辅助迁移 `Migrations(p, list)` 可选且互斥，由 `sqlitedb` 与 `gormdb` 各提供一组登记函数（D-114），回调在插件 SDK 内执行，Core 负责调度与代次门槛。辅助迁移的 Up 与成功记录在插件 DB 的同一事务；没有迁移接口就不主动迁移。维护许可和启动原因在 Bootstrap 明确下发。
 
 ## J. Config、Schema 与 i18n/
 
 运行配置为普通 JSON 对象，无外层 config；i18n/ 翻译才以 config 为顶层。字段由包内手写的 `config_schema.json` 声明（D-76），键名沿用 AstrBot 的 `_conf_schema.json`，另有 `secret`、`required` 与只能选一个模板的 `template`；键的顺序就是表单顺序。每个字段都有值：缺失键补 default 或类型零值，显式 false/0/空串与 invisible 字段保留，未知键保留。
 
-`OnConfigLoad` 是配置回调，区别于三个进程 Hook，也负责拒绝不合法的业务取值，SDK 不另设 Validate 回调。流程为原始对象→配置版本迁移（OnConfigLoad）→补缺失值→schema 校验→Candidate；不能先用新 schema 拒绝仍需迁移的旧字段。持久化保留原始完整对象，不能用只含已声明字段的结果丢掉未知键。插件经 `Config()` 按类型取值，键未声明或类型不符直接 panic，这类错误在开发时就会暴露。
+`OnConfigLoad` 是配置回调，区别于三个进程 Hook，也负责拒绝不合法的业务取值，SDK 不另设 Validate 回调。流程为原始对象→配置版本迁移（OnConfigLoad）→补缺失值→schema 校验→Candidate；不能先用新 schema 拒绝仍需迁移的旧字段。持久化保留原始完整对象，不能用只含已声明字段的结果丢掉未知键。插件经 `p.Config()` 或 `c.Config()` 按类型取值，键未声明或类型不符直接 panic，这类错误在开发时就会暴露。
+
+子插件的配置不另设文件（D-116）：它是 `config_schema.json` 中与子插件 ID 同名的顶层 `object` 字段，`s.Config()` 返回这个对象的只读视图，等于 `p.Config().Object(id)`；表单把它显示为一个分组，i18n 覆盖、secret 与迁移路径照 object 的现有规则。`c.Config()` 在子插件的 Handler 中仍是整个插件的配置，共用的配置项经它读取。配置版本与迁移每个插件只有一份，字段在根与子插件之间移动只是一条 `rename`。
 
 配置会随版本演进：`config_schema.json` 用 `$version` 与 `$migrations` 声明改名、选项改值、单值改列表与删除，由框架按存储的版本依次迁移；新增字段自动补默认值，删除的字段作为未知键保留。插件不必为常见变更写迁移代码，`OnConfigLoad` 只处理声明表达不了的情况。Adapter 实例配置与 Core 的 `core_config.json` 用同一套规则，Core 写回前先备份，迁移失败或遇到更新的版本时明确报错，不丢配置（D-85、CONTRACTS §5.5）。
 
