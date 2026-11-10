@@ -1,5 +1,5 @@
 // Package provider 以流式方式调用 Agent 的模型服务（Provider），
-// 支持 OpenAI Chat Completions（官方与兼容实现）与 Anthropic Messages 两类协议。
+// 支持 OpenAI Chat Completions（官方与兼容实现）、OpenAI Responses 与 Anthropic Messages 协议。
 //
 // [Client.Stream] 逐个解析 SSE 事件，按到达顺序把文本增量交给回调；
 // 工具调用的参数分段到达，组装完整且是 JSON 对象后才交出。流正常结束时返回停止原因与用量（[Result]）。
@@ -31,6 +31,7 @@ const (
 	OpenAI            Protocol = "openai"
 	OpenAICompatible  Protocol = "openai-compatible"
 	AnthropicMessages Protocol = "anthropic-messages"
+	OpenAIResponses   Protocol = "openai-responses"
 )
 
 const (
@@ -86,6 +87,7 @@ type ToolCall struct {
 	ID        string
 	Name      string
 	Arguments json.RawMessage // 完整的 JSON 对象
+	Replay    json.RawMessage // 协议要求随这次调用原样回传的不透明 JSON，由流解析写入；调用方把整个 ToolCall 原样放回 assistant 消息，不解析。openai、openai-compatible 与 anthropic-messages 不产生也不读取它
 }
 
 // ToolResult 是一次工具调用的结果，回传给模型。
