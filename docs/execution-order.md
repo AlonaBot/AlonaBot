@@ -17,8 +17,8 @@
 | --- | --- |
 | 1 | T-02.1、T-02.3、T-02.4、T-07.1、T-08.2、T-09.2、T-12.1 |
 | 2 | T-02.2、T-12.9、T-12.10、T-12.11 |
-| 3 | T-03.1 |
-| 4 | T-03.2、T-03.3、T-03.5、T-04.1、T-11.3 |
+| 3 | T-03.1、T-12.12 |
+| 4 | T-03.2、T-03.3、T-03.5、T-04.1、T-11.3、T-12.13 |
 | 5 | T-03.4、T-03.12、T-04.2、T-04.3、T-06.1、T-07.3 |
 | 6 | T-03.6、T-03.7、T-03.23、T-06.3、T-07.4、T-08.1 |
 | 7 | T-03.8、T-03.9、T-04.6、T-08.3、T-08.4、T-08.10、T-09.1 |
@@ -28,7 +28,7 @@
 | 11 | T-03.13、T-03.14、T-03.15、T-03.16、T-03.17、T-03.18、T-03.19、T-04.12、T-05.2、T-07.5、T-09.4、T-13.2、T-13.3 |
 | 12 | T-03.10、T-03.20、T-03.21、T-03.22、T-04.11、T-04.13、T-04.14、T-05.3、T-05.4、T-07.8、T-08.14、T-09.12、T-14.1、T-14.2、T-15.4、T-15.5、T-15.6、T-16.1 |
 | 13 | T-03.25、T-04.5、T-05.5、T-06.2、T-07.9、T-09.10、T-09.13、T-12.2、T-13.4、T-15.3 |
-| 14 | T-03.26、T-06.4、T-09.3、T-11.2、T-12.8、T-15.7、T-16.2 |
+| 14 | T-03.26、T-06.4、T-09.3、T-11.2、T-12.8、T-12.14、T-15.7、T-16.2 |
 | 15 | T-09.5、T-11.4、T-12.3、T-12.4、T-16.3 |
 | 16 | T-09.6、T-12.5、T-12.6 |
 | 17 | T-09.7、T-09.8、T-09.14、T-12.7 |
@@ -65,7 +65,8 @@
 | `cmd/alonabot` 的命令树 | goal-97 追加 `admin-token show`；goal-69 改写 `run` 的参数为组件目录与 `--reload`；goal-38 把 `plugin generate`、`plugin check` 改为顶层的 `build`、`check` 并追加 `init`、`test`、`pack`。各自在自己的命令文件中实现，只在命令注册处追加或替换自己的一行；并行时后合并者同步 main 后重做注册，不回退对方的修改。 |
 | `go.mod`、`go.sum` | 不加依赖。需要依赖时标阻塞，由维护者决定。goal 语句明确授权的已批准依赖除外（MCP go-sdk 只授权给 goal-60，只在 `agent/` 使用；cobra 由 goal-76 引入，之后的 CLI 切片直接使用，不再改 go.mod；coder/websocket 由 goal-78 引入，只在 adapters/onebot11 使用；jsonschema-go 由首个使用它的 goal 语句授权引入，用法遵守 D-43）。 |
 | 日志 | 按[编码规范「日志用默认 Logger，依赖显式传递」](coding-standards.md#日志用默认-logger依赖显式传递)取用默认 Logger，并遵循 CONTRACTS §14 的字段；不另建日志封装，不用 fmt 直接写 stderr/stdout（CLI 给用户的输出除外）。 |
-| `agent/provider/` 的新协议 | goal-118、goal-119、goal-120 可以并行。每个切片把自己协议的请求编码与流解析放在新文件（`responses.go`、`gemini.go`、`ollama.go`），`provider.go` 只追加 Protocol 常量，并在 `New` 的协议校验与 `Stream` 的分派中各加一个分支；`TestStream` 的用例表、`mockProvider` 与 `testRequest` 只追加。两处共用的代码由先合并者加入，后合并者同步 main 后复用、不重复定义：`ToolCall.Replay`（goal-118 与 goal-119）放在 `provider.go`；按 ToolCallID 查找工具名与生成调用 ID 的辅助（goal-119 与 goal-120）放在 `toolcall.go`。 |
+| `agent/provider/` 的新协议 | goal-118、goal-119、goal-120 可以并行。每个切片把自己协议的请求编码与流解析放在新文件（`responses.go`、`gemini.go`、`ollama.go`），`provider.go` 只追加 Protocol 常量，并在 `New` 的协议校验与 `Stream` 的分派中各加一个分支；`TestStream` 的用例表、`mockProvider` 与 `testRequest` 只追加。两处共用的代码由先合并者加入，后合并者同步 main 后复用、不重复定义：`ToolCall.Replay`（goal-118 与 goal-119）放在 `provider.go`；按 ToolCallID 查找工具名与生成调用 ID 的辅助（goal-119 与 goal-120）放在 `toolcall.go`。goal-134（改用 SDK）与 goal-135（图片输入）要改全部协议文件，按前置在三者都合并后依次进行，不与它们并行。 |
+| `agent/` 的配置（`config_schema.json` 与 i18n 的 `config`） | goal-83 与 goal-136 都在 goal-59 之后给 Agent 配置追加字段，可以并行：字段只追加，不重排已有字段；后合并者同步 main 后把自己的字段放在最后，再运行 `alonabot check`。 |
 | `internal/inproc/harness.go` | 只由 goal-81、goal-82 修改，只用标准库类型；字段只追加。 |
 | `internal/tune/params.go` | 只追加参数，不改已合并参数的名称与缺省值；新增参数同时追加到 CONTRACTS §16 的表，由审查者在合并前同步。 |
 | 根包 `alonabot` 的 Core 装配 | 只有 goal 语句写明负责装配的切片才能改，与 `cmd/alonabot/main.go` 相同。goal-67 建立装配并首次调用 `router.New`，prefixes 传 nil，不读设置文件；goal-97 不改根包。命令前缀、Core Admin 列表与默认 locale 由 goal-39 接入。goal-39、goal-68、goal-69 都要在装配中读取 `core_config.json`：先合并者加入 `settings.Load` 这一步，后合并者复用同一个 `*settings.File`，不重复加载。 |
