@@ -78,10 +78,21 @@ func (c *Client) streamOpenAI(ctx context.Context, req Request, emit func(Event)
 			return Result{}, err
 		}
 		chunk := stream.Current()
+		if !sdkFieldsValid[[]struct{}](chunk.JSON.Choices) || !sdkFieldsValid[struct{}](chunk.JSON.Usage) {
+			return Result{}, errors.New("invalid field type in OpenAI-compatible stream")
+		}
+
 		if chunk.JSON.Usage.Valid() {
+			if !sdkFieldsValid[int64](chunk.Usage.JSON.PromptTokens, chunk.Usage.JSON.CompletionTokens) {
+				return Result{}, errors.New("invalid field type in OpenAI-compatible stream")
+			}
 			result.Usage = &Usage{InputTokens: int(chunk.Usage.PromptTokens), OutputTokens: int(chunk.Usage.CompletionTokens)}
 		}
 		for _, choice := range chunk.Choices {
+			if !sdkFieldsValid[string](choice.JSON.FinishReason, choice.Delta.JSON.Content) || !sdkFieldsValid[struct{}](choice.JSON.Delta) || !sdkFieldsValid[[]struct{}](choice.Delta.JSON.ToolCalls) {
+				return Result{}, errors.New("invalid field type in OpenAI-compatible stream")
+			}
+
 			if choice.FinishReason != "" {
 				done = true
 				result.StopReason = openAIStopReason(choice.FinishReason)
@@ -92,6 +103,10 @@ func (c *Client) streamOpenAI(ctx context.Context, req Request, emit func(Event)
 				}
 			}
 			for _, part := range choice.Delta.ToolCalls {
+				if !sdkFieldsValid[int64](part.JSON.Index) || !sdkFieldsValid[string](part.JSON.ID, part.Function.JSON.Name, part.Function.JSON.Arguments) || !sdkFieldsValid[struct{}](part.JSON.Function) {
+					return Result{}, errors.New("invalid field type in OpenAI-compatible stream")
+				}
+
 				call := calls[part.Index]
 				if call == nil {
 					call = &ToolCall{}

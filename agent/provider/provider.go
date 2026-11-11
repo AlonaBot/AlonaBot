@@ -435,3 +435,21 @@ func (c *Client) errorMessage(message string) string {
 	}
 	return ": " + strings.ReplaceAll(message, c.config.APIKey, redactedAPIKey)
 }
+
+// sdkFieldsValid 核对 SDK 解码状态与原值类型；SDK 会把部分标量强转标为有效。
+func sdkFieldsValid[T any](fields ...interface {
+	Valid() bool
+	Raw() string
+}) bool {
+	for _, field := range fields {
+		raw := field.Raw()
+		if raw == "" || raw == "null" {
+			continue
+		}
+		var value T
+		if !field.Valid() || json.Unmarshal([]byte(raw), &value) != nil {
+			return false
+		}
+	}
+	return true
+}

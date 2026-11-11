@@ -95,14 +95,26 @@ func (c *Client) streamResponses(ctx context.Context, req Request, emit func(Eve
 			return Result{}, err
 		}
 		event := stream.Current()
+		if !sdkFieldsValid[string](event.JSON.Type) {
+			return Result{}, errors.New("invalid field type in Responses stream")
+		}
+
 		switch event.Type {
 		case "response.output_text.delta":
+			if !sdkFieldsValid[string](event.JSON.Delta) {
+				return Result{}, errors.New("invalid field type in Responses stream")
+			}
+
 			if event.Delta != "" {
 				if err := emit(Event{Text: event.Delta}); err != nil {
 					return Result{}, err
 				}
 			}
 		case "response.output_item.done":
+			if !sdkFieldsValid[struct{}](event.JSON.Item) || !sdkFieldsValid[string](event.Item.JSON.Type) {
+				return Result{}, errors.New("invalid field type in Responses stream")
+			}
+
 			switch event.Item.Type {
 			case "reasoning":
 				var fields map[string]json.RawMessage
@@ -116,7 +128,11 @@ func (c *Client) streamResponses(ctx context.Context, req Request, emit func(Eve
 				}
 				reasoning = append(reasoning, raw)
 			case "function_call":
-				call := &ToolCall{ID: event.Item.CallID, Name: event.Item.Name, Arguments: json.RawMessage(event.Item.Arguments.OfString)}
+				item := event.Item.AsFunctionCall()
+				if !sdkFieldsValid[string](item.JSON.CallID, item.JSON.Name, item.JSON.Arguments) {
+					return Result{}, errors.New("invalid field type in Responses stream")
+				}
+				call := &ToolCall{ID: item.CallID, Name: item.Name, Arguments: json.RawMessage(item.Arguments)}
 				if call.ID == "" || call.Name == "" || !isJSONObject(call.Arguments) {
 					return Result{}, errors.New("invalid tool call in Responses stream")
 				}
@@ -134,23 +150,41 @@ func (c *Client) streamResponses(ctx context.Context, req Request, emit func(Eve
 				hasToolCall = true
 			}
 		case "response.completed", "response.incomplete":
+			if !sdkFieldsValid[struct{}](event.JSON.Response, event.Response.JSON.Usage) {
+				return Result{}, errors.New("invalid field type in Responses stream")
+			}
+
 			result.StopReason = StopEnd
 			if hasToolCall {
 				result.StopReason = StopToolUse
 			}
 			if event.Type == "response.incomplete" {
+				if !sdkFieldsValid[struct{}](event.Response.JSON.IncompleteDetails) || !sdkFieldsValid[string](event.Response.IncompleteDetails.JSON.Reason) {
+					return Result{}, errors.New("invalid field type in Responses stream")
+				}
 				result.StopReason = StopReason(event.Response.IncompleteDetails.Reason)
 				if result.StopReason == "max_output_tokens" {
 					result.StopReason = StopMaxTokens
 				}
 			}
 			if usage := event.Response.Usage; event.Response.JSON.Usage.Valid() {
+				if !sdkFieldsValid[int64](usage.JSON.InputTokens, usage.JSON.OutputTokens) {
+					return Result{}, errors.New("invalid field type in Responses stream")
+				}
 				result.Usage = &Usage{InputTokens: int(usage.InputTokens), OutputTokens: int(usage.OutputTokens)}
 			}
 			return result, nil
 		case "response.failed":
+			if !sdkFieldsValid[struct{}](event.JSON.Response, event.Response.JSON.Error) || !sdkFieldsValid[string](event.Response.Error.JSON.Message) {
+				return Result{}, errors.New("invalid field type in Responses stream")
+			}
+
 			return Result{}, fmt.Errorf("Responses provider reported a failure%s", c.errorMessage(event.Response.Error.Message))
 		case "error":
+			if !sdkFieldsValid[string](event.JSON.Message) {
+				return Result{}, errors.New("invalid field type in Responses stream")
+			}
+
 			return Result{}, fmt.Errorf("Responses provider reported an error%s", c.errorMessage(event.Message))
 		}
 	}
