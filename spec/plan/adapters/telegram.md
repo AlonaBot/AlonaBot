@@ -20,7 +20,7 @@
 | T-03.20 | goal-111 | 官方 Telegram Adapter 的媒体与新增片段：按来源传递与流式 multipart、`platform_file` 复用 file_id、voice 的收发、动图、贴纸与 video_note、url 按钮、`file_base_url`、入站事件的 chat_type | T-03 步骤 17 | T-03.13、T-03.14 | V-89、V-90、V-98 的 Telegram 分项，V-97 | 未开始 |
 | T-03.21 | goal-112 | 官方 Telegram Adapter 的平台动作与撤回：动作声明（含 sendChatAction、setMessageReaction、sendMessageDraft）与 `adapters/telegram/action` 的带类型函数（指向消息的动作收消息句柄，D-104）及输入状态、草稿两个辅助函数，deleteMessages | T-03 步骤 18 | T-03.11、T-03.15、T-03.16 | V-91、V-92、V-94 的 Telegram 分项、V-102 的动作分项 | 未开始 |
 | T-03.22 | goal-113 | 官方 Telegram Adapter 的命令菜单：setMyCommands 同步 | T-03 步骤 19 | T-03.17 | V-93 的 Telegram 分项 | 未开始 |
-| T-03.23 | goal-117 | 官方 Telegram Adapter 的代理模式与话题判定：实例配置 `proxy_mode`（none 缺省、core、custom），thread_id 只认 `is_topic_message` | T-03 步骤 20 | T-03.4 | V-99、V-100 | 未开始 |
+| T-03.23 | goal-117 | 官方 Telegram Adapter 的代理模式与话题判定：实例配置 `proxy_mode`（none 缺省、core、custom），thread_id 只认 `is_topic_message` | T-03 步骤 20 | T-03.4 | V-99、V-100 | 已完成（PR #125；TEST-MATRIX §3.2） |
 | T-03.26 | goal-132 | 官方 Telegram Adapter 填写 `chat_title`：群、超级群与频道取 title，私聊取对方的姓名（D-130） | T-03 步骤 23 | T-03.4、T-03.25 | V-117 的 Telegram 分项 | 未开始 |
 
 ## 3. 工作包
