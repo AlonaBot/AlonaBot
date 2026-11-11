@@ -2,6 +2,7 @@
 //
 // 调用 [Load] 前由装配方取得 data_dir 的 core.lock；命令行覆盖由装配方应用。
 // [File] 持有未展开的 [Document] 和有效 [Settings]，副本中的环境变量已展开。
+// Core 格式迁移内置在本包，迁移写回前备份磁盘原文件。
 // 设置遵循 CONTRACTS §15.1，日志文件上限遵循 §14.6。
 package settings
 
@@ -29,10 +30,11 @@ import (
 const FileName = "core_config.json"
 
 const (
-	defaultPort    = "7650"
-	defaultListen  = "127.0.0.1:" + defaultPort
-	currentVersion = 1
-	defaultLocale  = "en-US"
+	defaultPort            = "7650"
+	defaultListen          = "127.0.0.1:" + defaultPort
+	currentVersion         = 1
+	defaultInstanceVersion = 1
+	defaultLocale          = "en-US"
 )
 
 // DNS 文本长度扣除可选的终止点，遵循 net 解析器采用的 RFC 1035 线格式上限。
@@ -55,11 +57,11 @@ type AdapterSettings struct {
 
 // Settings 保存有效的 Core 设置；日志文件大小以字节计。
 type Settings struct {
-	Listen, AdminBaseURL, PluginBaseURL string
-	TrustedProxies                      []netip.Prefix
-	LogLevel                            slog.Level
-	LogFormat                           string
-	LogFile                             struct {
+	Listen, BaseURL string
+	TrustedProxies  []netip.Prefix
+	LogLevel        slog.Level
+	LogFormat       string
+	LogFile         struct {
 		Enabled           bool
 		MaxSize, MaxTotal int64 // 字节
 		MaxAgeDays        int
@@ -84,8 +86,8 @@ type File struct {
 
 // Defaults 返回 CONTRACTS §15.1 的缺省设置。
 func Defaults() Settings {
-	s := Settings{Listen: defaultListen, AdminBaseURL: "http://" + defaultListen,
-		PluginBaseURL: "http://localhost:" + defaultPort, LogLevel: slog.LevelInfo,
+	s := Settings{Listen: defaultListen, BaseURL: "http://" + defaultListen,
+		LogLevel:  slog.LevelInfo,
 		LogFormat: string(logging.FormatText), CommandPrefixes: []string{"/"}, DefaultLocale: defaultLocale}
 	s.LogFile.Enabled = true
 	s.LogFile.MaxSize = logging.DefaultMaxFileSize
@@ -138,6 +140,9 @@ func Load(dataDir string) (*File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}
+	if err := migrateSettings(name, document); err != nil {
+		return nil, fmt.Errorf("%s: %w", name, err)
+	}
 	current, err := document.settings()
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", name, err)
@@ -148,7 +153,7 @@ func Load(dataDir string) (*File, error) {
 func defaultDocument() ([]byte, error) {
 	s := Defaults()
 	content, err := json.MarshalIndent(map[string]any{
-		"$version": currentVersion, "listen": s.Listen, "admin_base_url": s.AdminBaseURL, "plugin_base_url": s.PluginBaseURL,
+		"$version": currentVersion, "listen": s.Listen, "base_url": s.BaseURL,
 		"trusted_proxies": []string{}, "proxy": s.Proxy, "admins": []Admin{},
 		"command_prefixes": s.CommandPrefixes, "command_prefixes_by_instance": map[string][]string{},
 		"default_locale": s.DefaultLocale, "adapters": map[string]any{},
@@ -274,7 +279,7 @@ func readValue(n *node, key string, s *Settings) error {
 		}
 		s.LogFile.MaxAgeDays = days
 		return nil
-	case "listen", "admin_base_url", "plugin_base_url", "log.level", "log.format", "log.file.max_size", "log.file.max_total", "proxy", "default_locale":
+	case "listen", "base_url", "log.level", "log.format", "log.file.max_size", "log.file.max_total", "proxy", "default_locale":
 		value, err := n.text()
 		if err != nil {
 			return err
@@ -286,17 +291,6 @@ func readValue(n *node, key string, s *Settings) error {
 	default:
 		return n.fail(errors.New("unknown key"))
 	}
-}
-
-func readVersion(n *node) error {
-	version, err := n.integer()
-	if err != nil {
-		return err
-	}
-	if version != currentVersion {
-		return n.fail(fmt.Errorf("unsupported version %d; expected %d", version, currentVersion))
-	}
-	return nil
 }
 
 func readPrefixes(n *node) ([]string, error) {
@@ -345,11 +339,15 @@ func readAdmins(n *node, s *Settings) error {
 
 func readAdapters(n *node, s *Settings) error {
 	return n.object(func(id string, value *node) error {
-		adapter := AdapterSettings{Version: currentVersion}
+		adapter := AdapterSettings{Version: defaultInstanceVersion}
 		if err := value.object(func(key string, value *node) error {
 			switch key {
 			case "$version":
-				return readVersion(value)
+				version, err := positiveVersion(value)
+				if err == nil {
+					adapter.Version = version
+				}
+				return err
 			case "instances":
 				return value.object(func(instance string, configuration *node) error {
 					if configuration.delimiter != '{' {
@@ -394,17 +392,6 @@ func baseURL(raw string) (*url.URL, error) {
 	return u, nil
 }
 
-func effectivePort(u *url.URL) string {
-	if port := u.Port(); port != "" {
-		n, _ := strconv.Atoi(port)
-		return strconv.Itoa(n)
-	}
-	if u.Scheme == "https" {
-		return "443"
-	}
-	return "80"
-}
-
 func validPort(port string, allowZero bool) error {
 	n, err := strconv.ParseUint(port, 10, 16)
 	if err != nil {
@@ -444,10 +431,8 @@ func readString(value, key string, s *Settings) error {
 			return err
 		}
 		s.Listen = value
-	case "admin_base_url":
-		s.AdminBaseURL = value
-	case "plugin_base_url":
-		s.PluginBaseURL = value
+	case "base_url":
+		s.BaseURL = value
 	case "log.level":
 		switch value {
 		case "debug":
@@ -511,24 +496,14 @@ func readString(value, key string, s *Settings) error {
 }
 
 func validateSettings(s Settings, locations map[string]*node) error {
-	admin, err := baseURL(s.AdminBaseURL)
+	base, err := baseURL(s.BaseURL)
 	if err != nil {
-		return at(locations, "admin_base_url", err)
-	}
-	plugin, err := baseURL(s.PluginBaseURL)
-	if err != nil {
-		return at(locations, "plugin_base_url", err)
-	}
-	if admin.Scheme != plugin.Scheme || effectivePort(admin) != effectivePort(plugin) {
-		return at(locations, "plugin_base_url", errors.New("must use the same scheme and effective port as admin_base_url"))
-	}
-	if strings.EqualFold(admin.Hostname(), plugin.Hostname()) {
-		return at(locations, "plugin_base_url", errors.New("must use a different hostname from admin_base_url"))
+		return at(locations, "base_url", err)
 	}
 	host, _, _ := net.SplitHostPort(s.Listen) // listen 的语法已在 readString 中校验。
 	ip, _ := netip.ParseAddr(host)
-	if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && admin.Scheme != "https" && len(s.TrustedProxies) == 0 {
-		return at(locations, "listen", errors.New("non-loopback listen requires HTTPS admin_base_url or trusted_proxies"))
+	if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && base.Scheme != "https" && len(s.TrustedProxies) == 0 {
+		return at(locations, "listen", errors.New("non-loopback listen requires HTTPS base_url or trusted_proxies"))
 	}
 	if s.LogFile.MaxSize > s.LogFile.MaxTotal {
 		return at(locations, "log.file.max_size", errors.New("exceeds log.file.max_total"))

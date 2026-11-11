@@ -71,9 +71,9 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 		return &usageError{err}
 	}
 	configuration := settingsFile.Settings()
-	adminURL, err := url.Parse(configuration.AdminBaseURL)
+	baseURL, err := url.Parse(configuration.BaseURL)
 	if err != nil {
-		return fmt.Errorf("parse admin_base_url: %w", err)
+		return fmt.Errorf("parse base_url: %w", err)
 	}
 	if selected.listen != nil {
 		if err := settings.ValidateListen(*selected.listen); err != nil {
@@ -81,8 +81,8 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 		}
 		host, _, _ := net.SplitHostPort(*selected.listen) // 已通过 ValidateListen。
 		ip, _ := netip.ParseAddr(host)
-		if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && adminURL.Scheme != "https" && len(configuration.TrustedProxies) == 0 {
-			return &usageError{errors.New("--listen: non-loopback listen requires HTTPS admin_base_url or trusted_proxies")}
+		if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && baseURL.Scheme != "https" && len(configuration.TrustedProxies) == 0 {
+			return &usageError{errors.New("--listen: non-loopback listen requires HTTPS base_url or trusted_proxies")}
 		}
 		configuration.Listen = *selected.listen
 	}
@@ -139,21 +139,12 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 			environment[name] = value
 		}
 	}
-	pluginURL, err := url.Parse(configuration.PluginBaseURL)
-	if err != nil {
-		return fmt.Errorf("parse plugin_base_url: %w", err)
-	}
-	authentication := adminauth.New(store, time.Now, adminURL, dataDir)
+	authentication := adminauth.New(store, time.Now, baseURL, dataDir)
 	adminMux := http.NewServeMux()
 	authentication.Routes(adminMux)
 	adminMux.Handle("/", authentication.Require(http.NotFoundHandler()))
-	var publicHost *webhost.Host
-	proxy := httpproxy.New(pluginAuthorizer(func(r *http.Request, pluginID string) bool { return publicHost.Authorize(r, pluginID) }))
-	publicHost = webhost.New(webhost.Options{
-		AdminBaseURL: adminURL, PluginBaseURL: pluginURL,
-		SecondHost: !strings.EqualFold(adminURL.Hostname(), pluginURL.Hostname()), Proxy: proxy,
-		Admin: adminMux, Sessions: authentication,
-	})
+	proxy := httpproxy.New(authentication)
+	publicHost := webhost.New(webhost.Options{BaseURL: baseURL, Proxy: proxy, Admin: adminMux})
 	listener, err := net.Listen("tcp", configuration.Listen)
 	if err != nil {
 		return fmt.Errorf("listen HTTP: %w", err)
@@ -308,11 +299,4 @@ func fileDigest(path string) ([]byte, error) {
 		return nil, err
 	}
 	return h.Sum(nil), nil
-}
-
-// pluginAuthorizer 在公开 Listener 开始接单前接好 Host 与 Proxy 的双向装配。
-type pluginAuthorizer func(*http.Request, string) bool
-
-func (a pluginAuthorizer) Authorize(r *http.Request, pluginID string) bool {
-	return a(r, pluginID)
 }

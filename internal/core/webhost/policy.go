@@ -1,119 +1,56 @@
 package webhost
 
 import (
-	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
-	"strconv"
 	"strings"
 )
 
 const (
-	singleHostCSP       = "default-src 'none'; frame-ancestors 'none'"
-	configurePluginHost = "configure plugin_base_url to serve active plugin content\n"
-	untypedContentType  = "application/octet-stream"
+	sandboxCSP         = "sandbox allow-scripts allow-forms allow-popups"
+	untypedContentType = "application/octet-stream"
 )
 
 func (h *Host) pluginWriter(w http.ResponseWriter, r *http.Request) *responseWriter {
 	rest := strings.TrimPrefix(r.URL.Path, pluginPrefix)
 	pluginID, _, _ := strings.Cut(rest, "/")
 	apply := func(header http.Header) { h.pluginHeaders(header, pluginID) }
-	return &responseWriter{ResponseWriter: w, before: apply, modify: func(response *http.Response) error {
+	return &responseWriter{ResponseWriter: w, before: apply, after: func(header http.Header) {
+		h.stripPluginHeaders(header, pluginID)
+	}, modify: func(response *http.Response) error {
 		apply(response.Header)
-		if !h.opt.SecondHost && response.Header.Get("Content-Type") == "" {
-			// 阻止公开 Listener 在写出缺失 MIME 的正文时重新嗅探成 HTML。
-			response.Header.Set("Content-Type", untypedContentType)
-		}
-		if h.opt.SecondHost || !activeContent(response.Header.Get("Content-Type")) {
-			return nil
-		}
-		if err := response.Body.Close(); err != nil {
-			return fmt.Errorf("close blocked plugin response: %w", err)
-		}
-		response.StatusCode = http.StatusConflict
-		response.Status = fmt.Sprintf("%d %s", http.StatusConflict, http.StatusText(http.StatusConflict))
-		response.Body = io.NopCloser(strings.NewReader(configurePluginHost))
-		response.ContentLength = int64(len(configurePluginHost))
-		response.TransferEncoding = nil
-		response.Trailer = nil
-		response.Header.Del("Content-Encoding")
-		response.Header.Del("Transfer-Encoding")
-		response.Header.Del("Trailer")
-		response.Header.Set("Content-Type", "text/plain; charset=utf-8")
-		response.Header.Set("Content-Length", strconv.Itoa(len(configurePluginHost)))
 		return nil
 	}}
 }
 
 func (h *Host) pluginHeaders(header http.Header, pluginID string) {
+	h.stripPluginHeaders(header, pluginID)
+	header.Set("Content-Security-Policy", sandboxCSP)
 	header.Set("X-Content-Type-Options", "nosniff")
-	if !h.opt.SecondHost {
-		header.Set("Content-Security-Policy", singleHostCSP)
-	}
-	if header.Get("Access-Control-Allow-Credentials") != "" {
-		slog.Warn("removed plugin credential CORS header", "plugin_id", pluginID)
-	}
-	header.Del("Access-Control-Allow-Credentials")
-	cookies := header.Values("Set-Cookie")
-	header.Del("Set-Cookie")
-	for _, value := range cookies {
-		// 按原始属性检查 Domain，连浏览器可能容忍的非规范 Cookie 也遵守父域限制。
-		name, _, _ := strings.Cut(value, "=")
-		name = strings.TrimSpace(name)
-		domain := false
-		for _, attribute := range strings.Split(value, ";")[1:] {
-			key, _, _ := strings.Cut(attribute, "=")
-			if strings.EqualFold(strings.TrimSpace(key), "Domain") {
-				domain = true
-			}
-		}
-		if domain || strings.HasPrefix(name, "alonabot_") || strings.HasPrefix(name, "__Host-alonabot_") {
-			slog.Warn("removed plugin cookie", "plugin_id", pluginID, "cookie_name", name)
-			continue
-		}
-		header.Add("Set-Cookie", value)
+	if header.Get("Content-Type") == "" {
+		// 阻止公开 Listener 将缺失 MIME 的正文重新嗅探成 HTML。
+		header.Set("Content-Type", untypedContentType)
 	}
 }
 
-func activeContent(value string) bool {
-	media, _, _ := strings.Cut(value, ";")
-	media = strings.ToLower(strings.TrimSpace(media))
-	switch media {
-	case "text/html", "application/xhtml+xml", "image/svg+xml", "text/css", "text/javascript", "application/javascript", "application/x-javascript", "text/ecmascript", "application/ecmascript", "text/jscript", "text/livescript", "text/x-javascript", "text/x-ecmascript", "text/xml", "application/xml":
-		return true
-	}
-	return strings.HasSuffix(media, "+xml") || strings.HasPrefix(media, "text/javascript")
-}
-
-func activeAccept(header http.Header) bool {
-	for _, value := range header.Values("Accept") {
-		for _, media := range strings.Split(value, ",") {
-			if activeContent(media) {
-				return true
+func (h *Host) stripPluginHeaders(header http.Header, pluginID string) {
+	// 遍历原始键，同时清除插件直接写入 map 的非规范大小写。
+	for key, values := range header {
+		name := strings.TrimPrefix(strings.ToLower(key), strings.ToLower(http.TrailerPrefix))
+		switch name {
+		case "content-security-policy", "x-content-type-options":
+			delete(header, key)
+		case "access-control-allow-credentials":
+			delete(header, key)
+			slog.Warn("removed plugin credential CORS header", "plugin_id", pluginID)
+		case "set-cookie":
+			delete(header, key)
+			for _, value := range values {
+				name, _, _ := strings.Cut(value, "=")
+				slog.Warn("removed plugin cookie", "plugin_id", pluginID, "cookie_name", strings.TrimSpace(name))
 			}
 		}
 	}
-	return false
-}
-
-func pluginOrigin(origin string, base *url.URL) bool {
-	source, err := url.Parse(origin)
-	if err != nil || source.User != nil || source.Path != "" || source.RawQuery != "" || source.Fragment != "" {
-		return false
-	}
-	return source.Scheme == base.Scheme && strings.EqualFold(source.Hostname(), base.Hostname()) && originPort(source) == originPort(base)
-}
-
-func originPort(u *url.URL) string {
-	if port := u.Port(); port != "" {
-		return strings.TrimLeft(port, "0")
-	}
-	if u.Scheme == "https" {
-		return "443"
-	}
-	return "80"
 }
 
 // responseWriter 在写头前执行策略，Unwrap 保留 ResponseController 的流式能力。
@@ -121,6 +58,7 @@ func originPort(u *url.URL) string {
 type responseWriter struct {
 	http.ResponseWriter
 	before func(http.Header)
+	after  func(http.Header)
 	modify func(*http.Response) error
 	wrote  bool
 }
