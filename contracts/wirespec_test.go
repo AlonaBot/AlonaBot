@@ -246,6 +246,8 @@ func TestAdapterFieldNumbers(t *testing.T) {
 		"AdapterInstanceStopRequest":   {"instance_id"},
 		"AdapterInstanceStopResponse":  {},
 		"AdapterSendRequest":           {"instance_id", "target", "chain"},
+		"EditRequest":                  {"to", "platform_message_id", "chain"},
+		"AdapterEditRequest":           {"instance_id", "target", "platform_message_id", "chain"},
 		"AdapterDeliverRequest":        {"instance_id", "event", "cursor"},
 		"AdapterDeliverResponse":       {"accepted"},
 		"AdapterCursorRequest":         {"instance_id", "cursor"},

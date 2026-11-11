@@ -1,7 +1,8 @@
-// Package message 实现 Core 消息发送服务的目标准入与回执转发。
+// Package message 实现 Core 消息发送与编辑服务的目标准入和回执转发。
 //
 // [Service] 根据可信父调用的原目标或持久化的实例许可准入，先校验载荷、目标和消息链，
 // 再准备媒体消费租约并由注册的 Adapter 实例执行发送；结果与错误同时保留（CONTRACTS §8）。
+// 编辑仅接受文本及可选按钮，实例须声明能力并实现 adapter.Editor。
 package message
 
 import (
@@ -20,7 +21,7 @@ import (
 
 const schemaVersion = 1
 
-// Service 按插件发信许可准入目标，再由注册的 Adapter 实例执行发送。
+// Service 按插件发信许可准入目标，再由注册的 Adapter 实例执行发送或编辑。
 type Service struct {
 	requestTimeout time.Duration
 	adapters       *adapter.Registry
@@ -28,7 +29,7 @@ type Service struct {
 	lease          func(context.Context, router.Caller, string, *pb.Target, *pb.MediaSource, time.Time) (string, func(), error)
 }
 
-// New 创建消息发送服务；装配处将 Send 注册为 wire.ServiceSend。
+// New 创建消息服务；装配处将 Send、Edit 分别注册为 wire.ServiceSend、wire.ServiceEdit。
 // lease 由媒体 Store 提供，签发绑定目标 Adapter Session 的只读令牌；
 // requestTimeout 使用生效配置，在调用没有期限时提供媒体请求预算。
 func New(adapters *adapter.Registry, p *policy.Policy, lease func(ctx context.Context, c router.Caller, readerSessionKey string, target *pb.Target, source *pb.MediaSource, deadline time.Time) (string, func(), error), requestTimeout time.Duration) *Service {
