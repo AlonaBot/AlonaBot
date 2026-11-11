@@ -14,6 +14,7 @@
 | goal-113 | T-03.22 | 官方 Telegram Adapter 的命令菜单 | T-03.17 | 等待前置 |
 | goal-117 | T-03.23 | 官方 Telegram Adapter 的代理模式与话题判定 | T-03.4 | 已完成（PR #125） |
 | goal-132 | T-03.26 | 官方 Telegram Adapter 填写 chat_title | T-03.4、T-03.25 | 等待前置 |
+| goal-137 | T-03.27 | 官方 Telegram Adapter 的服务消息 | T-03.23 | 待派发 |
 
 ## 第 5 波
 
@@ -202,6 +203,59 @@
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./adapters/...；go build ./...。
 
 不做：入站事件的 chat_type（T-03.20，依赖 T-03.14 的 proto 字段）；file_base_url（T-03.20）；Core 全局代理的设置与子进程环境（cmd/alonabot 已实现，不改）；OneBot 11 的代理。
+```
+
+## 第 7 波
+
+### goal-137 · T-03.27 官方 Telegram Adapter 的服务消息
+
+状态：待派发。前置 T-03.23（[PR #125](https://github.com/AlonaBot/AlonaBot/pull/125)，合并提交 `f3af986`）已合并。2026-11-11 按 D-133 新增，接口与测试段按 main（`db6317a`）的代码写出：`instance.normalize` 把 message、channel_post 与两种 edited 都交给 `messageEvent`，带服务字段的 Message 因此成为 chain 为空的 message.created；`Descriptor` 只声明权限，没有 `Events`；Core 的 `internal/core/adapter/remote` 已按声明的 Schema 校验扩展事件。`inbound.go` 与 goal-111、goal-132 共用，处理方式见执行顺序 §3。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-137（切片 T-03.27：官方 Telegram Adapter 的服务消息）。goal 目录 goal-137，分支 goal-137，worktree .worktrees/goal-137，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：Telegram 的服务消息不再以 chain 为空的 message.created 交付：话题的创建、编辑、关闭与重开，置顶，修改群名，普通群升级为超级群映射为扩展事件；成员类与其他服务消息不交付，只推进游标。
+
+依据：PLAN T-03 步骤 24；MESSAGE-MODEL §1.2、§6.1、§6.6；CONTRACTS §8（扩展事件的声明）；DECISIONS D-133；TEST-MATRIX V-119；Bot API 原文的 Message（描述为 service message 的字段）、ForumTopicCreated、ForumTopicEdited。
+
+范围（只新增或修改这些）：
+- adapters/telegram/inbound.go：服务字段的解析与映射
+- adapters/telegram/telegram.go：Descriptor 追加 Events
+- adapters/telegram/telegram_test.go：本语句的测试
+- ARCHITECTURE.md：Telegram 行的实现说明追加一句
+没有新的跨模块边。不改 proto，不改 telegramtest，不新增公开包。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. Descriptor().Events 声明 7 个事件，Version 都为 1，SchemaJson 为 type object、additionalProperties false 的 JSON Schema：
+   - telegram.forum_topic_created：{"name": string, "icon_color": integer, "icon_custom_emoji_id": string}，required ["name", "icon_color"]
+   - telegram.forum_topic_edited：{"name": string, "icon_custom_emoji_id": string}，都不 required
+   - telegram.forum_topic_closed、telegram.forum_topic_reopened：没有属性
+   - telegram.message_pinned：{"message_id": string}，required
+   - telegram.chat_title_changed：{"new_chat_title": string}，required
+   - telegram.chat_migrated：{"migrate_from_chat_id": string}，required
+2. 事件：EventType 为上面的完整名，EventPayload 为 adapter_event{version: 1, payload_json: 对象}；payload 字段名照抄 Bot API，数字 ID 写作十进制字符串，平台没有给出的可选字段不写。
+
+行为：
+- 判定：message 与 channel_post 带任一服务字段时，在 messageEvent 之前分流，不再检查 text、caption 与媒体，也不产生 message.created。edited_message 与 edited_channel_post 不变。
+- 映射：forum_topic_created、forum_topic_edited、forum_topic_closed、forum_topic_reopened、pinned_message（取其 message_id）、new_chat_title、migrate_from_chat_id 各产生一个对应事件。事件经 baseEvent 构造：Target 为该 Message 的 chat，thread_id 沿用 is_topic_message 规则；Actor 为 from，带 sender_chat 时 absent；platform_payload 为原 update；群中的平台权限照常经 addPlatformPermissions 添加。
+- 不交付（只推进游标，不记 WARN）：new_chat_members、left_chat_member、migrate_to_chat_id，以及 Bot API 原文 Message 中其余描述为 service message 的字段（按原文逐项列出，例如 group_chat_created、supergroup_chat_created、channel_chat_created、new_chat_photo、delete_chat_photo、message_auto_delete_timer_changed、video_chat_scheduled、video_chat_started、video_chat_ended、video_chat_participants_invited、general_forum_topic_hidden、general_forum_topic_unhidden、write_access_allowed）。列表写在 inbound.go 的一处，注释写明来源与核对日期。
+- 一条 Message 同时带两个服务字段不会出现；只按第一个命中的映射字段处理，不另做校验。
+- 没有服务字段、也没有可映射内容的 Message（投票、位置等）不变，仍为 chain 为空的 message.created。
+- 其余接收、游标、权限与脱敏行为不变。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：在 TestNonMessageEvents 的 update 列表中追加用例（经 telegramtest.Server 与 recordingCore 驱动 New() 的实例），不新增测试函数：
+  - 超级群中带 is_topic_message 与 message_thread_id 5 的 forum_topic_created（name "Ideas"、icon_color 7322096）：EventType 为 telegram.forum_topic_created，Target 的 thread_id 为 "5"，payload_json 为 {"icon_color":7322096,"name":"Ideas"}（按 JSON 比较），Actor 为 from。
+  - pinned_message（被置顶消息 message_id 10）：telegram.message_pinned，payload {"message_id":"10"}。
+  - 新超级群中的 migrate_from_chat_id -123：telegram.chat_migrated，Target 的 chat_id 为新超级群，payload {"migrate_from_chat_id":"-123"}。
+  - 旧群中的 migrate_to_chat_id、new_chat_members 与 group_chat_created 各一条：不产生事件，游标仍推进（waitSaved 次数与 update 数一致，core.events 中没有它们）。
+  - 断言 Descriptor().Events 的 7 个名称与版本。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：forum_topic_edited（只有 name、只有空串 icon_custom_emoji_id）、forum_topic_closed 与 reopened、new_chat_title、频道中的 pinned_message（Actor absent）、left_chat_member；7 个 SchemaJson 能被 jsonschema-go 解析，且各事件的 payload 通过对应 Schema 的校验；投票消息仍为 chain 为空的 message.created。
+- 真实平台（可选）：维护者提供测试 Bot 与论坛超级群时，创建并关闭一个话题、置顶一条消息、修改群名，确认各产生一个对应事件且没有 message.created；没有条件时在 PR 中写「未运行」。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./adapters/... ./internal/core/adapter/...；go build ./...。
+
+不做：标准事件类型中的服务事件；事件名的常量包；OneBot 11 的对应处理；chat_type（goal-111）与 chat_title（goal-132）。
 ```
 
 ## 第 8 波

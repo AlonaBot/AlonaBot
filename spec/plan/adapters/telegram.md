@@ -22,6 +22,7 @@
 | T-03.22 | goal-113 | 官方 Telegram Adapter 的命令菜单：setMyCommands 同步 | T-03 步骤 19 | T-03.17 | V-93 的 Telegram 分项 | 未开始 |
 | T-03.23 | goal-117 | 官方 Telegram Adapter 的代理模式与话题判定：实例配置 `proxy_mode`（none 缺省、core、custom），thread_id 只认 `is_topic_message` | T-03 步骤 20 | T-03.4 | V-99、V-100 | 已完成（PR #125；TEST-MATRIX §3.2） |
 | T-03.26 | goal-132 | 官方 Telegram Adapter 填写 `chat_title`：群、超级群与频道取 title，私聊取对方的姓名（D-130） | T-03 步骤 23 | T-03.4、T-03.25 | V-117 的 Telegram 分项 | 未开始 |
+| T-03.27 | goal-137 | 官方 Telegram Adapter 的服务消息：话题、置顶、改名与升级映射为扩展事件，成员类与其他服务消息不交付（D-133） | T-03 步骤 24 | T-03.23 | V-119 | 未开始 |
 
 ## 3. 工作包
 
@@ -44,3 +45,5 @@
 20. **代理模式与话题判定（D-100、D-101）。** 实例配置追加 `proxy_mode`，按 CONTRACTS §8 为该实例的 HTTP 客户端选择直连、Core 的代理环境或实例的 `proxy`，缺省直连；custom 缺少或给出不合法的 `proxy` 时启动返回 INVALID_ARGUMENT。入站 Message 只在 `is_topic_message` 为 true 时把 message_thread_id 写入 Target 的 thread_id（MESSAGE-MODEL §6.1）。
 
 23. **聊天名称（D-130）。** 按 MESSAGE-MODEL §6 为每个带 target 的入站事件填写 `chat_title`：群、超级群与频道取 chat 的 `title`，私聊取 `first_name` 与 `last_name`，以一个空格连接，两者都没有时不带；不为取名称另外调用 Bot API。
+
+24. **服务消息（D-133）。** 按 MESSAGE-MODEL §6.6 在映射消息内容之前识别服务字段：表中 7 种映射为扩展事件，并在 Adapter 描述中声明名称、版本 1 与 payload Schema；成员类与其他服务字段不交付，只推进游标。Target、thread_id、Actor 与平台权限沿用 §6.1。

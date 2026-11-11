@@ -141,7 +141,7 @@ SDK 的 `c.Stream` 是不新增协议的辅助函数（D-98）：目标实例声
 - getUpdates 每个 update 按返回顺序单独接纳：先在 Core 状态库持久化该实例的已接收游标，再交给非持久事件队列；重启从已持久化游标的下一个 offset 拉取，不重放已接纳业务。因此在持久化后、Handler 完成前崩溃，允许该事件丢失。首发交付的是尽力投递，不承诺 durable inbox 或完整补处理。
 - Telegram 在至少一周没有新 update 后可能随机选择后续 ID，不能假定 ID 永久递增。Core 记录最后接纳时间与当前接收轮次起点；从两者较晚者起连续 7 天没有接纳新 update 时，在当前 long-poll 结束且无接收请求在途的边界持久化新接收轮次/起点、清除 offset，再开始拉取，避免旧高游标永远屏蔽新序列，也避免空闲时每次轮询都重置。平台更新最长仅保存 24h，该重建不承诺恢复空闲期早已过期的事件。
 - 同 batch 逐条推进游标，不得在接纳第一条前就保存全批最大 update_id。达到已声明的队列上限时，该条记录丢弃计数并继续推进游标，避免无界积压或下次拉取重复执行业务；具体队列容量采用主契约的 Core 固定常量。
-- 入站每个 Telegram Message 保持一个标准事件，保留 media_group_id 供插件使用；首发不等待媒体组聚合，不因迟到成员丢弃消息。出站相册能力独立于入站是否聚合。
+- 入站每个 Telegram Message 保持一个标准事件（服务消息按 §6.6 映射为扩展事件或不交付），保留 media_group_id 供插件使用；首发不等待媒体组聚合，不因迟到成员丢弃消息。出站相册能力独立于入站是否聚合。
 
 ### 6.2 顺序、相册和元数据
 
@@ -178,6 +178,26 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 - 平台动作（D-92）：参数沿用 Bot API 的字段名，数字 ID 写作十进制字符串，chat_id 与 message_thread_id 取自 Target，不在参数中重复；结果为 Bot API 的 `result` 原文。官方动作（版本 1，作用范围都为 chat）：`telegram.ban_chat_member`、`telegram.unban_chat_member`、`telegram.restrict_chat_member`、`telegram.pin_chat_message`、`telegram.unpin_chat_message`、`telegram.get_chat`、`telegram.get_chat_member`、`telegram.get_chat_member_count`、`telegram.get_chat_administrators`、`telegram.set_chat_title`、`telegram.leave_chat`、`telegram.send_chat_action`、`telegram.set_message_reaction`、`telegram.send_message_draft`。`adapters/telegram/action` 为每个动作发布带类型的 Go 函数，只依赖 `sdk` 根包；另提供两个辅助函数：输入状态每 4 秒刷新一次、ctx 结束即停止；草稿流式显示，结束后经普通 Send 发出正式消息（草稿经平台动作发出，不执行出站 Hook，正式消息执行，D-98）。
 - 撤回用 deleteMessages，每次最多 100 个同一会话的 ID，它们共享该请求的结果。`telegram.send_chat_action` 带 message_thread_id；`telegram.set_message_reaction` 把本机器人在该消息上的回应设为给出的列表（空列表为撤销）；`telegram.send_message_draft` 只用于私聊，其他会话在调用平台前返回 UNSUPPORTED，参数在实施时按 Bot API 原文核对。
 - 命令菜单（D-96）：`adapter.commands.sync` 用 setMyCommands 设置 default scope，并为命令说明有翻译的每个语言各设置一次 language_code；名字不匹配 `^[a-z0-9_]{1,32}$` 的跳过，说明超过 256 字符时截断，两者都记诊断；与上一次成功同步的内容相同时不调用平台，实例停止时不删除菜单。
+
+### 6.6 服务消息（D-133）
+
+Bot API 中描述为 service message 的 Message 字段（例如 `new_chat_members`、`forum_topic_created`、`pinned_message`）表示会话中发生的变化，不是用户发送的内容，不形成 message.created。判定先于内容映射：Message（含 channel_post）带任一服务字段时，不再检查 text、caption 与媒体。下表中的服务消息映射为 Telegram 扩展事件（版本 1），其余不交付，只推进游标。
+
+| 服务字段 | 扩展事件 | payload |
+| --- | --- | --- |
+| `forum_topic_created` | `telegram.forum_topic_created` | `name`、`icon_color`（整数）；平台给出时带 `icon_custom_emoji_id` |
+| `forum_topic_edited` | `telegram.forum_topic_edited` | 平台给出的 `name` 与 `icon_custom_emoji_id`（空串表示移除图标） |
+| `forum_topic_closed`、`forum_topic_reopened` | `telegram.forum_topic_closed`、`telegram.forum_topic_reopened` | 空对象 |
+| `pinned_message` | `telegram.message_pinned` | `message_id`：被置顶消息的 ID |
+| `new_chat_title` | `telegram.chat_title_changed` | `new_chat_title` |
+| `migrate_from_chat_id` | `telegram.chat_migrated` | `migrate_from_chat_id`：升级前普通群的 chat_id |
+
+- payload 沿用 Bot API 字段名，数字 ID 写作十进制字符串，Schema 不允许其他属性。Adapter 在注册描述中声明这 7 个事件（CONTRACTS §8）。
+- Target 取该 Message 的 chat，thread_id 按 §6.1 的话题规则：话题的创建、编辑、关闭与重开消息带 `is_topic_message`，因而带该话题的 thread_id。Actor 为 from，带 sender_chat 时 absent；平台权限与 chat_title 的规则与其他事件相同。
+- `telegram.chat_migrated` 的 Target 为升级后的超级群。旧群中带 `migrate_to_chat_id` 的那条不交付，一次升级只产生一个事件。
+- `new_chat_members` 与 `left_chat_member` 不交付：成员变化只由 `chat_member`、`my_chat_member` 产生 member.joined / member.left（§6.1），同一变化不交付两次。Bot 不是群管理员时平台不推送其他成员的 `chat_member`，这时其他成员的进出不产生事件。
+- 其他服务字段（如 `group_chat_created`、`supergroup_chat_created`、`new_chat_photo`、`delete_chat_photo`、`message_auto_delete_timer_changed`、`video_chat_started`、`general_forum_topic_hidden`）不交付；范围以 Bot API 原文 Message 中描述为 service message 的字段为准，实施时逐项列出。
+- 不属于服务消息、但没有可映射内容的 Message（例如投票、位置）不受本节影响，仍为 chain 为空的 message.created，内容只在 platform_payload 中。
 
 ## 7. 官方 OneBot 11 Adapter 映射
 

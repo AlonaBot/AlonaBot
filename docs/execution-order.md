@@ -21,7 +21,7 @@
 | 4 | T-03.2、T-03.3、T-03.5、T-04.1、T-11.3、T-12.13 |
 | 5 | T-03.4、T-03.12、T-04.2、T-04.3、T-06.1、T-07.3 |
 | 6 | T-03.6、T-03.7、T-03.23、T-06.3、T-07.4、T-08.1 |
-| 7 | T-03.8、T-03.9、T-04.6、T-08.3、T-08.4、T-08.10、T-09.1 |
+| 7 | T-03.8、T-03.9、T-03.27、T-04.6、T-08.3、T-08.4、T-08.10、T-09.1 |
 | 8 | T-03.11、T-04.4、T-04.7、T-07.6、T-08.5、T-08.7、T-08.8、T-09.16、T-15.1 |
 | 9 | T-03.24、T-04.9、T-04.10、T-05.1、T-07.7、T-08.6、T-08.11、T-11.1、T-15.2 |
 | 10 | T-04.8、T-07.2、T-08.9、T-08.12、T-08.13、T-13.1 |
@@ -48,6 +48,7 @@
 | `.proto` 与生成代码 | 只有 goal 语句明确授权的切片才能改；未授权却需要改时标阻塞。字段号和枚举值只能追加，不能改动已有编号。T-02.1 先追加 `Bootstrap.log_level = 10`；T-02.2 依赖 T-02.1 合并后再追加 `Bootstrap.session_limits = 11`，不得并行修改同一 proto 与生成文件。 T-03.13～T-03.19（D-87）都追加 proto 字段，可以并行开发：语句不预先指定字段号，后合并的一方同步最新 main 后在先合并者之后顺延编号、重新运行 `go generate ./...` 与 `contracts/wirespec_test.go`。 |
 | `internal/core/state/schema.sql`（唯一的初始迁移） | 首次发布前只有一条初始迁移（[编码规范](coding-standards.md)「首次发布前不写兼容层」）：新表和新列直接写进 `schema.sql`，不新增迁移文件，不用 `ALTER TABLE`；新表的 GORM 模型和访问方法一起放在 `internal/core/state/` 下按主题新建的文件里，不改 `models.go`；读写遵守[编码规范](coding-standards.md)「Core 状态库不写 SQL」。同步 main 后如果和别的切片在初始迁移末尾冲突，两边的表都保留，把自己的表放在最后，再重跑 state 测试。`schema.sql` 与 GORM 模型由 T-02.3（goal-86，PR #63）引入；给已有表加列的切片同步修改 `models.go` 中对应的模型。 |
 | `adapters/telegram/cmd/alonabot-adapter-telegram/adapter_config_schema.json` | goal-101（T-08.12）新建该文件；goal-117（T-03.23）追加 `proxy_mode` 并给 `proxy` 加 condition，goal-111（T-03.20）追加 `file_base_url`。字段只追加，不重排已有字段。goal-117 派发时该文件还不存在就不新建；goal-101 后合并时同步 main，按 CONTRACTS §8 声明 main 上 Start 已解析的全部字段（含 `proxy_mode`）。 |
+| `adapters/telegram/inbound.go` 的入站标准化 | goal-137 在映射消息内容之前分出服务消息；goal-111 填写 chat_type、goal-132 填写 chat_title，二者都在 `baseEvent` 中进行。服务消息的扩展事件同样经 `baseEvent` 构造，因而自动带上两者。三者可以并行，后合并者同步 main 后保留先合并者的改动。 |
 | `internal/core/adapter` 的 `Instance`、`Sink` 接口 | T-03.1 合并后不再修改。之后的切片需要更多 Adapter 能力时，在同一个包里新增可选接口，调用方用类型断言获取，不改已有接口。 |
 | `internal/wire/services.go` | 固定服务名只追加常量，不重排、不改已有值。多个切片并行追加时，由先合并者保留；后合并者同步最新 main 后把自己的常量追加到文件末尾，再运行 `go test ./internal/wire/...` 和本切片服务测试。 |
 | `router.New` 与 `Router.Attach` 的签名 | goal-7 给 `New` 追加 prepare、给 `Attach` 追加 Caller，goal-87 给 `New` 追加 prefixes，goal-13 给 `New` 追加 CommandPolicy。后合并的一方在先合并者的签名末尾追加自己的参数，并同步 supervisor 测试与装配处的全部调用点，不重排已有参数。goal-15 把 `New` 改为 `New(opt Options)`、`Close` 改为 `Close(ctx) error`：它合并后，新的注入项只追加 `Options` 字段，其他语句中 `router.New` 的位置参数写法按同名字段理解。 |
