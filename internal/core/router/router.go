@@ -80,6 +80,7 @@ type Router struct {
 	send        ServiceFunc
 	prepare     func(*pb.Event, Caller) (*pb.Event, error)
 	prefixes    func(adapterInstanceID string) []string
+	buttons     func(context.Context, *pb.Event) (string, string, error)
 	policy      CommandPolicy
 	matches     map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
 	queue       []queuedEvent
@@ -107,7 +108,7 @@ func New(opt Options) *Router {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Router{
-		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy,
+		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy, buttons: opt.Buttons,
 		concurrency: opt.Concurrency, queueEvents: opt.QueueEvents, queueBytes: opt.QueueBytes, global: opt.Global,
 		ctx: ctx, cancel: cancel, drained: make(chan struct{}),
 		matches: make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
@@ -227,6 +228,26 @@ func (r *Router) candidates(ev *pb.Event) []candidate {
 
 func (r *Router) dispatch(event *trustedEvent) {
 	ev := event.retained
+	var candidates []candidate
+	buttonClick := ev.GetEventType() == "button.clicked"
+	if buttonClick {
+		if r.buttons == nil {
+			slog.Info("discard button click without resolver")
+			return
+		}
+		// 先取 Session 快照再解析，解析后发生代次替换时 call 会拒绝旧快照。
+		snapshot := r.candidates(ev)
+		pluginID, routeID, err := r.buttons(r.ctx, ev)
+		if err != nil {
+			slog.Info("discard invalid button click", "error", err)
+			return
+		}
+		for _, c := range snapshot {
+			if c.pluginID == pluginID && c.route.GetRouteId() == routeID {
+				candidates = append(candidates, c)
+			}
+		}
+	}
 	// 1. Core 权限在进入任一路由前统一计算，来源只提供平台权限及其展开结果。
 	if actor := ev.GetActor(); actor != nil {
 		permissions := []string{"user"}
@@ -252,11 +273,21 @@ func (r *Router) dispatch(event *trustedEvent) {
 		return
 	}
 	// 3. 事件路由独立判断权限，拒绝当前候选后继续后继路由。
-	for _, candidate := range r.candidates(ev) {
+	if !buttonClick {
+		candidates = r.candidates(ev)
+	}
+	for _, candidate := range candidates {
 		if r.ctx.Err() != nil {
 			return
 		}
-		if !candidate.plugin.Activated() || !r.permitted(candidate, ev) {
+		if !candidate.plugin.Activated() {
+			continue
+		}
+		if buttonClick {
+			if (r.policy == nil && !candidate.route.GetDefaultEnabled()) || !r.commandPermitted(candidate, ev) {
+				continue
+			}
+		} else if !r.permitted(candidate, ev) {
 			continue
 		}
 		trace := make([]byte, traceIDBytes)

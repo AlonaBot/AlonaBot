@@ -117,7 +117,7 @@ func (r *CommandRegistry) Raw(routeID string) *CommandBuilder {
 }
 
 func (r *CommandRegistry) text(routeID string, spec *pb.CommandSpec) *CommandBuilder {
-	return r.start(Command{routeID: routeID, spec: spec}, routeID == "" || strings.HasPrefix(routeID, commandRoutePrefix))
+	return r.start(Command{routeID: routeID, spec: spec}, routeID == "" || strings.HasPrefix(routeID, commandRoutePrefix) || strings.HasPrefix(routeID, buttonRoutePrefix))
 }
 
 func (r *CommandRegistry) start(c Command, invalid bool) *CommandBuilder {

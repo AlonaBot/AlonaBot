@@ -82,7 +82,13 @@ func (s *Service) Edit(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if !supported || !ok {
 		return reject(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support message editing")
 	}
-	// 5. 执行唯一一次编辑，并完整返回平台回执与错误。
+	// 5. 复用发送的签发入口，为本次编辑的按钮生成新 token。
+	if s.issue != nil {
+		if err := s.issue(ctx, caller, target, request.Chain); err != nil {
+			return rejectError(target, err)
+		}
+	}
+	// 6. 执行唯一一次编辑，并完整返回平台回执与错误。
 	// shortcut: 编辑前后尚无出站 Hook，接入时以 edit 和 platform_message_id 标明操作并沿用 Send 的调用位置。
 	result, safe := editor.Edit(ctx, target, request.PlatformMessageId, request.Chain)
 	return response(result, safe)

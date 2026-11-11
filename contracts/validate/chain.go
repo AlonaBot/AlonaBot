@@ -61,6 +61,9 @@ func chain(c *pb.MessageChain, at string) error {
 		case *pb.Segment_Forward:
 			content++
 			err = forward(d.Forward, pos)
+		case *pb.Segment_Extension:
+			content++
+			err = extension(d.Extension)
 		default:
 			err = fmt.Errorf("segment has no type set")
 		}
@@ -79,6 +82,20 @@ func chain(c *pb.MessageChain, at string) error {
 		return fmt.Errorf("%sa chain allows at most one buttons segment, got %d", at, buttons)
 	case content == 0:
 		return fmt.Errorf("%schain has only metadata such as reference/buttons and nothing to send", at)
+	}
+	return nil
+}
+
+func extension(e *pb.ExtensionSegment) error {
+	switch {
+	case e.GetAdapterId() == "":
+		return fmt.Errorf("extension is missing adapter_id")
+	case e.GetName() == "":
+		return fmt.Errorf("extension is missing name")
+	case e.GetVersion() == 0:
+		return fmt.Errorf("extension is missing version")
+	case !IsJSONObject([]byte(e.GetPayloadJson())):
+		return fmt.Errorf("extension payload_json is not a JSON object")
 	}
 	return nil
 }

@@ -11,11 +11,15 @@ const commandRoutePrefix = "cmd."
 
 // EventRoute 保存一个手动发送事件 Handler 的静态注册。
 type EventRoute struct {
-	RouteID    string
-	EventType  string
-	Handler    func(*Context) error
-	permission Permission
-	Priority   int32 // 数值越小越先，缺省为 0
+	RouteID       string
+	EventType     string
+	Handler       func(*Context) error
+	permission    Permission
+	actionID      string
+	actionVersion uint32
+	decodeButton  func(string) (any, error)
+	handleButton  func(*Context, any) error
+	Priority      int32 // 数值越小越先，缺省为 0
 }
 
 // EventRegistry 按注册顺序收集事件路由，错误由 Collect 统一返回。
@@ -39,6 +43,7 @@ type EventBuilder struct {
 	route       EventRoute
 	handles     int
 	afterHandle bool
+	button      bool // 仅由 OnButton 开始的构建链可占用保留前缀
 }
 
 // Priority 设置路由优先级。
@@ -64,7 +69,7 @@ func (b *EventBuilder) Handle(h func(*Context) error) { b.handles++; b.route.Han
 
 func (r *EventRegistry) collect() {
 	for _, b := range r.builders {
-		if b.handles != 1 || b.afterHandle {
+		if b.handles != 1 || b.afterHandle || (strings.HasPrefix(b.route.RouteID, buttonRoutePrefix) && !b.button) || (b.button && (b.route.actionID == "" || b.route.actionVersion == 0)) {
 			r.errs = append(r.errs, fmt.Errorf("event route %q has invalid Handle sequence", b.route.RouteID))
 			continue
 		}

@@ -190,6 +190,8 @@ message Segment {
     ButtonsSegment buttons = 7;
     // 合并转发。
     ForwardSegment forward = 8;
+    // 由目标 Adapter 声明 Schema 的扩展片段。
+    ExtensionSegment extension = 9;
   }
 }
 
@@ -441,4 +443,16 @@ message EditRequest {
   string platform_message_id = 2;
   // 恰好一个 text 片段和至多一个 buttons 片段。
   MessageChain chain = 3;
+}
+
+// ExtensionSegment 承载目标 Adapter 已声明的版本化片段及其 JSON 载荷。
+message ExtensionSegment {
+  // 目标 Adapter 的平台类型。
+  string adapter_id = 1;
+  // Adapter 注册声明中的扩展名称。
+  string name = 2;
+  // 注册声明中的扩展版本。
+  uint32 version = 3;
+  // 按该声明的 Schema 校验的 JSON 文本。
+  string payload_json = 4;
 }

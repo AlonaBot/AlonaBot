@@ -111,3 +111,21 @@ CREATE TABLE tool_policy (
   policy       INTEGER NOT NULL,
   PRIMARY KEY (plugin_id, service_name)
 );
+
+CREATE TABLE button_token (
+  token                 TEXT PRIMARY KEY,
+  plugin_id             TEXT NOT NULL REFERENCES install(plugin_id),
+  route_id              TEXT NOT NULL,
+  action_id             TEXT NOT NULL,
+  action_schema_version INTEGER NOT NULL,
+  generation_id         TEXT NOT NULL REFERENCES generation(generation_id),
+  adapter_id            TEXT NOT NULL,
+  instance_id           TEXT NOT NULL,
+  account_id            TEXT NOT NULL,
+  chat_id               TEXT NOT NULL,
+  thread_id             TEXT NOT NULL,
+  value                 TEXT NOT NULL,
+  expires_at            INTEGER NOT NULL
+);
+
+CREATE INDEX button_token_plugin ON button_token(plugin_id);

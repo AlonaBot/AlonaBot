@@ -21,7 +21,7 @@ func AdapterRegister(r *pb.Register, adapterID string) error {
 	if !IsJSONObject([]byte(r.GetCandidateConfigJson())) {
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "candidate_config_json is not a JSON object")
 	}
-	// 2. 检查能力名称唯一性与 extension 声明的基本结构。
+	// 2. 检查能力名称唯一性，并在接纳 extension 声明前解析 Schema 的引用。
 	capabilities := make(map[string]bool)
 	for _, capability := range descriptor.GetCapabilities() {
 		name := capability.GetName()
@@ -37,11 +37,24 @@ func AdapterRegister(r *pb.Register, adapterID string) error {
 	extensions := make(map[extensionKey]bool)
 	for _, extension := range descriptor.GetExtensions() {
 		key := extensionKey{extension.GetName(), extension.GetVersion()}
+		if !strings.HasPrefix(key.name, adapterID+".") || !IsAdapterEventType(key.name) {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid adapter extension name %q", key.name)
+		}
 		if extensions[key] {
 			return errf(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "duplicate adapter extension %q version %d", key.name, key.version)
 		}
+		if key.version == 0 {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "adapter extension %q has no version", key.name)
+		}
 		if !IsJSONObject([]byte(extension.GetSchemaJson())) {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "extension schema_json is not a JSON object")
+		}
+		var schema jsonschema.Schema
+		if err := json.Unmarshal([]byte(extension.GetSchemaJson()), &schema); err != nil {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "parse adapter extension %q schema: %v", key.name, err)
+		}
+		if _, err := schema.Resolve(nil); err != nil {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "resolve adapter extension %q schema: %v", key.name, err)
 		}
 		extensions[key] = true
 	}

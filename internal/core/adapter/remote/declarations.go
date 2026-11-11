@@ -19,10 +19,11 @@ type declaredEvent struct {
 type declarations struct {
 	permissions map[string][]string // 每个已声明权限的传递闭包，含其自身
 	events      map[string]declaredEvent
+	extensions  map[extensionKey]*jsonschema.Resolved
 }
 
 func compileDeclarations(descriptor *pb.AdapterDescriptor) (declarations, error) {
-	result := declarations{permissions: make(map[string][]string), events: make(map[string]declaredEvent)}
+	result := declarations{permissions: make(map[string][]string), events: make(map[string]declaredEvent), extensions: make(map[extensionKey]*jsonschema.Resolved)}
 	graph := make(map[string][]string)
 	for _, permission := range descriptor.GetPermissions() {
 		graph[permission.GetName()] = permission.GetImplies()
@@ -56,6 +57,17 @@ func compileDeclarations(descriptor *pb.AdapterDescriptor) (declarations, error)
 			return declarations{}, fmt.Errorf("resolve adapter event %q schema: %w", event.GetName(), err)
 		}
 		result.events[event.GetName()] = declaredEvent{version: event.GetVersion(), schema: resolved}
+	}
+	for _, extension := range descriptor.GetExtensions() {
+		var schema jsonschema.Schema
+		if err := json.Unmarshal([]byte(extension.GetSchemaJson()), &schema); err != nil {
+			return declarations{}, fmt.Errorf("parse adapter extension %q schema: %w", extension.GetName(), err)
+		}
+		resolved, err := schema.Resolve(nil)
+		if err != nil {
+			return declarations{}, fmt.Errorf("resolve adapter extension %q schema: %w", extension.GetName(), err)
+		}
+		result.extensions[extensionKey{extension.GetName(), extension.GetVersion()}] = resolved
 	}
 	return result, nil
 }
