@@ -1,5 +1,5 @@
 // Package provider 以流式方式调用 Agent 的模型服务（Provider），
-// 支持 OpenAI Chat Completions（官方与兼容实现）、Anthropic Messages 与 Gemini GenerateContent 协议。
+// 支持 OpenAI Chat Completions（官方与兼容实现）、OpenAI Responses、Anthropic Messages 与 Gemini GenerateContent 协议。
 //
 // [Client.Stream] 逐个解析 SSE 事件，按到达顺序把文本增量交给回调；
 // 工具调用的参数分段到达，组装完整且是 JSON 对象后才交出。流正常结束时返回停止原因与用量（[Result]）。
@@ -31,6 +31,7 @@ const (
 	OpenAI                Protocol = "openai"
 	OpenAICompatible      Protocol = "openai-compatible"
 	AnthropicMessages     Protocol = "anthropic-messages"
+	OpenAIResponses       Protocol = "openai-responses"
 	GeminiGenerateContent Protocol = "gemini-generate-content"
 )
 
@@ -135,7 +136,7 @@ type Client struct {
 // New 校验 config 并返回 Client。httpClient 不能为 nil，由调用方注入以便复用代理设置。
 // BaseURL 必须是不含用户信息、查询串与片段的 HTTP(S) 地址。
 func New(config Config, httpClient *http.Client) (*Client, error) {
-	if config.Protocol != OpenAI && config.Protocol != OpenAICompatible && config.Protocol != AnthropicMessages && config.Protocol != GeminiGenerateContent {
+	if config.Protocol != OpenAI && config.Protocol != OpenAICompatible && config.Protocol != AnthropicMessages && config.Protocol != OpenAIResponses && config.Protocol != GeminiGenerateContent {
 		return nil, fmt.Errorf("unsupported provider protocol %q", config.Protocol)
 	}
 	if config.Model == "" || config.APIKey == "" {
@@ -167,6 +168,14 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 	endpoint, body := openAIEndpoint, openAIBody(c.config.Protocol, c.config.Model, req)
 	if anthropic {
 		endpoint, body = anthropicEndpoint, anthropicBody(c.config.Model, req)
+	}
+	if c.config.Protocol == OpenAIResponses {
+		var err error
+		endpoint = responsesEndpoint
+		body, err = responsesBody(c.config.Model, req)
+		if err != nil {
+			return Result{}, err
+		}
 	}
 	if c.config.Protocol == GeminiGenerateContent {
 		var err error
@@ -219,6 +228,9 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 	// 4. 逐事件解析响应流。
 	if anthropic {
 		return c.streamAnthropic(response.Body, emit)
+	}
+	if c.config.Protocol == OpenAIResponses {
+		return c.streamResponses(response.Body, emit)
 	}
 	if c.config.Protocol == GeminiGenerateContent {
 		return c.streamGemini(response.Body, emit)

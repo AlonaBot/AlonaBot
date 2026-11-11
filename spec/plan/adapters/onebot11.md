@@ -16,6 +16,7 @@
 | T-15.4 | goal-114 | 官方 OneBot 11 Adapter 的反向 WebSocket：`mode: reverse` 与 `self_id`，注册 `/ws/` 路由，握手鉴权、403 与 409，等待连入与账号核对，断开后等待重连；`onebottest` 的反向客户端 | T-15 步骤 6 | T-03.19、T-15.1 | V-95 的 OneBot 11 分项 | 未开始 |
 | T-15.5 | goal-115 | 官方 OneBot 11 Adapter 的新增片段与媒体 URL：语音、全体提及 extension、文件与合并转发的收发，入站 face 与 forward；media_ref 的临时媒体 URL、inline_base64 与 `platform_file`；入站事件的 chat_type | T-15 步骤 7 | T-03.13、T-03.14、T-15.2 | V-89、V-90、V-98 的 OneBot 11 分项，V-96 的入站片段分项 | 未开始 |
 | T-15.6 | goal-116 | 官方 OneBot 11 Adapter 的扩展事件、平台动作与撤回：十种扩展事件的声明与映射，动作声明与 `adapters/onebot11/action` 常量包，delete_msg | T-15 步骤 8 | T-03.15、T-03.16、T-15.2 | V-91、V-92 的 OneBot 11 分项，V-96 的扩展事件分项 | 未开始 |
+| T-15.7 | goal-133 | 官方 OneBot 11 Adapter 填写 `chat_title`：私聊取发送者昵称，群经 `get_group_info` 取得并在进程内缓存（D-130） | T-15 步骤 9 | T-03.25、T-15.1 | V-117 的 OneBot 11 分项 | 未开始 |
 
 ## 3. 工作包
 
@@ -38,6 +39,7 @@
 6. **反向 WebSocket（D-94）。** 按 CONTRACTS §8 与 MESSAGE-MODEL §7.3 实现 `mode: reverse`：实例配置校验 access_token 与 self_id 必填；Adapter 在 REGISTER 中注册公开的前缀路由 `/ws/`，按路径中的 instance_id 分派连接，依次检查实例存在、access_token、X-Self-ID 与 X-Client-Role、已有连接；连入后核对 get_login_info。断开后实例保持运行并等待重连，未连接时 Send 与动作返回 UNAVAILABLE。`onebottest` 增加以反向客户端身份连入的模式。
 7. **新增片段与媒体 URL（D-88～D-91、D-95 的入站片段）。** 按 MESSAGE-MODEL §7.1、§7.2 收发语音（record）、文件（upload_group_file、upload_private_file）与合并转发（send_group_forward_msg、send_private_forward_msg），注册 extension `onebot11.at_all` 并收发全体提及；入站 face 为 extension 片段、forward 为只带 platform_forward_id 的 forward；media_ref 在没有 `media_dir` 时经 `core.media.url` 取得临时媒体 URL，inline_base64 原样以 `base64://` 传递，`platform_file` 原样作为 file。入站事件按 chat_id 的前缀填写 chat_type（MESSAGE-MODEL §7.1，D-100）。追加 `message.voice`、`message.forward` 能力。
 8. **扩展事件、平台动作与撤回（D-92、D-93、D-95）。** 在 Adapter 描述中声明 MESSAGE-MODEL §7.1 的十种扩展事件及 Schema 并完成映射；声明 §7.4 的动作及参数、结果 Schema，在 `adapters/onebot11/action` 为每个动作发布带类型的 Go 函数（只依赖 `sdk` 根包）；`adapter.delete` 逐个调用 delete_msg，追加 `message.delete` 能力。
+9. **聊天名称（D-130）。** 按 MESSAGE-MODEL §7.1 为入站事件填写 `chat_title`：私聊取 `sender.nickname`；群在本进程首次见到时调用 `get_group_info` 取 `group_name` 并按群号缓存在实例内，调用失败或实现端不支持时不带名称，本进程内不再为该群重试。`onebottest` 追加 `get_group_info` 的响应与调用计数。
 
 #### 拟目录与交付
 
@@ -53,6 +55,7 @@
 | V-71 | 连接、鉴权、重连、格式检查、事件映射、to_me、队列上限、发送计划、媒体与各种响应的回执 |
 | V-72 | 同一组 Chain 与入站消息在两个 Adapter 上的结果对照，以及未声明能力在平台请求前被拒绝 |
 | V-89～V-92、V-95、V-96 | 步骤 6～8 的 OneBot 11 分项 |
+| V-117 | 步骤 9 中私聊与群的 `chat_title`、`get_group_info` 的缓存与失败后不重试 |
 
 反向 WebSocket 由 D-94 纳入 v0.1（步骤 6）。
 
