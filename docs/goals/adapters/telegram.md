@@ -13,6 +13,7 @@
 | goal-112 | T-03.21 | 官方 Telegram Adapter 的平台动作与撤回 | T-03.11、T-03.15、T-03.16 | 等待前置 |
 | goal-113 | T-03.22 | 官方 Telegram Adapter 的命令菜单 | T-03.17 | 等待前置 |
 | goal-117 | T-03.23 | 官方 Telegram Adapter 的代理模式与话题判定 | T-03.4 | 待派发 |
+| goal-132 | T-03.26 | 官方 Telegram Adapter 填写 chat_title | T-03.4、T-03.25 | 等待前置 |
 
 ## 第 5 波
 
@@ -298,3 +299,21 @@
 要点：
 - 命令名不匹配 `^[a-z0-9_]{1,32}$` 时跳过，说明超过 256 字符时截断，都记诊断；记住每个 language_code 上一次成功同步的内容，相同时不调用；某个语言失败不影响其他语言，返回第一个错误。
 - 测试：提交在既有测试文件中追加的用例（经 telegramtest.Server）：两次相同的同步只调用一次 setMyCommands；其余进本地自测。
+
+## 第 14 波
+
+### goal-132 · T-03.26 官方 Telegram Adapter 填写 chat_title
+
+状态：等待前置（T-03.25）。2026-11-10 按 D-130 新增。T-03.4（PR #39）已合并。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+
+目标：Telegram 实例为每个带 target 的入站事件填写 `chat_title`，让 Core 的聊天目录能显示群、频道与私聊对象的名称。
+
+依据：PLAN T-03 步骤 23；CONTRACTS §8（聊天目录）；MESSAGE-MODEL §1、§6；DECISIONS D-130；TEST-MATRIX V-117 的 Telegram 分项；Bot API 原文的 Chat。
+
+要点：
+- 群、超级群与频道取 chat 的 `title`。私聊取 chat 的 `first_name` 与 `last_name`，以一个空格连接；两者都没有时不带 `chat_title`。
+- 消息、编辑、成员变化、reaction 与按钮回调事件都取其所在 chat，规则相同。不为取名称另外调用 Bot API。
+- 名称不写入 Adapter 的日志。
+- 测试：提交在既有测试文件中追加的用例（经 telegramtest.Server）：超级群消息的 `chat_title` 为 title，私聊为姓名，没有姓名的私聊不带；其余进本地自测。
+
+不做：Core 的聊天目录（goal-131）；话题名称；getChat 查询。

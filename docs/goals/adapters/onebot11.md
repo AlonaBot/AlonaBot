@@ -11,6 +11,7 @@
 | goal-114 | T-15.4 | 官方 OneBot 11 Adapter 的反向 WebSocket | T-03.19、T-15.1 | 等待前置 |
 | goal-115 | T-15.5 | 官方 OneBot 11 Adapter 的新增片段与媒体 URL | T-03.13、T-03.14、T-15.2 | 等待前置 |
 | goal-116 | T-15.6 | 官方 OneBot 11 Adapter 的扩展事件、平台动作与撤回 | T-03.15、T-03.16、T-15.2 | 等待前置 |
+| goal-133 | T-15.7 | 官方 OneBot 11 Adapter 填写 chat_title | T-03.25、T-15.1 | 等待前置 |
 | goal-80 | T-15.3 | 跨 Adapter 一致性验收 | T-03.10、T-15.2 | 等待前置 |
 
 ## 第 8 波
@@ -237,3 +238,25 @@
 
 不做：修改两个 Adapter 的映射或 Core 的派发（发现不一致时标 [!] 并在 PR 中写明用例与差异，由审查者决定修契约还是修实现）；alonabot run 同时启动多个 Adapter；反向 WebSocket。
 ```
+
+## 第 14 波
+
+### goal-133 · T-15.7 官方 OneBot 11 Adapter 填写 chat_title
+
+状态：等待前置（T-03.25）。2026-11-10 按 D-130 新增。T-15.1 已合并。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+
+目标：OneBot 11 实例为私聊与群的入站事件填写 `chat_title`；群名经 `get_group_info` 取得并在进程内缓存。
+
+依据：PLAN T-15 步骤 9；CONTRACTS §8（聊天目录）；MESSAGE-MODEL §1、§7.1；DECISIONS D-130；TEST-MATRIX V-117 的 OneBot 11 分项；OneBot 11 标准的 `get_group_info` 与消息事件的 `sender`。
+
+要点：
+- 私聊（含群临时会话）取事件中 `sender.nickname`，为空时不带 `chat_title`。
+- 群：实例在本进程首次见到某个群时调用 `get_group_info`，把 `group_name` 按群号缓存在实例内，该群之后的事件直接使用缓存。调用失败、超时或实现端不支持时，本事件不带 `chat_title`，并把该群记为失败，本进程内不再重试；记一条 DEBUG 日志，只含 adapter_instance_id 与群号。
+- 取群名不能阻塞事件的顺序交付超过该调用的期限：调用在交付该事件之前完成或失败，期限为命名常量（初值 5 秒）；其他群的事件照常排队。
+- 群改名后在 Adapter 进程重启前不更新；实例停用再启动时清空该实例的缓存。
+- 没有 target 的事件与扩展事件中没有会话的，不带 `chat_title`。
+- 名称不写入 Adapter 的日志。
+- `onebottest` 追加 `get_group_info` 的响应与调用计数。
+- 测试：提交在既有测试文件中追加的用例（经 onebottest）：同一个群的两条消息只调用一次 `get_group_info` 且都带群名，私聊带昵称；其余（调用失败后不重试、实例重启后重新获取、不支持该 API 的实现端）进本地自测。
+
+不做：Core 的聊天目录（goal-131）；群成员与群列表的拉取；按时间刷新群名。
