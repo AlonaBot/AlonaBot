@@ -9,8 +9,14 @@
     "type": "string",
     "default": "https://api.telegram.org"
   },
+  "proxy_mode": {
+    "type": "string",
+    "options": ["none", "core", "custom"],
+    "default": "none"
+  },
   "proxy": {
     "type": "string",
-    "secret": true
+    "secret": true,
+    "condition": {"proxy_mode": "custom"}
   }
 }

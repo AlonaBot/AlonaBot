@@ -53,6 +53,7 @@ func pluginGeneration(cmd *cobra.Command, options generate.Options, check bool) 
 		return &reportedError{errors.New("plugin scan reported diagnostics")}
 	}
 	if result.RootType == "" {
+		// adapter_config_schema.json 已由 Scan 校验，check 无需生成插件代码。
 		if check {
 			return nil
 		}

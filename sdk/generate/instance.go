@@ -10,7 +10,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 )
 
-const instanceSchemaFileName = "instance_schema.json"
+const instanceSchemaFileName = "adapter_config_schema.json"
 
 func (s *scan) instanceSchema() (bool, error) {
 	raw, err := os.ReadFile(filepath.Join(s.dir, instanceSchemaFileName))
@@ -18,7 +18,7 @@ func (s *scan) instanceSchema() (bool, error) {
 		return false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("read instance schema: %w", err)
+		return false, fmt.Errorf("read adapter_config_schema.json: %w", err)
 	}
 	_, problems := configschema.Parse(raw)
 	s.schemaProblems(instanceSchemaFileName, problems)

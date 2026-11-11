@@ -3,7 +3,7 @@
 // 命令、文本匹配与事件由根插件的注册方法链式注册（CONTRACTS §9.1）。
 // 扫描遵守 GOOS/GOARCH 和 build tags，排除外部依赖、vendor 与测试文件。
 // 配置从 config_schema.json 检查并嵌入，翻译覆盖按声明核对（CONTRACTS §5.1、§5.3）。
-// instance_schema.json 按同样规则检查，无插件根类型时只返回实例声明的检查结果。
+// adapter_config_schema.json 按同样规则检查，无插件根类型时只返回实例声明的检查结果。
 // JSON Service 类型经 go/types 检查生成 Schema（§3）；注册规则见 §9、§2.2。
 // 构建入口的 i18n/*.json 按 §5.3、§5.4 检查并将原文嵌入生成代码。
 //
