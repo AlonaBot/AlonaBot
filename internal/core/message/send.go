@@ -67,7 +67,12 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 		return reject(nil, pb.ErrorCode_ERROR_CODE_NO_DEFAULT_TARGET, "no default target")
 	}
 	if sendError := s.policy.CheckSend(ctx, caller.PluginID, invocation, target); sendError != nil {
-		return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, sendError)
+		// 准入拒绝只回传调用方已知的目标，避免带出补齐的实例身份。
+		rejectedTarget := request.To
+		if rejectedTarget == nil {
+			rejectedTarget = defaultTarget
+		}
+		return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: rejectedTarget}, sendError)
 	}
 	// 3. 复用结构校验，空链和仅元数据均在产生副作用前拒绝。
 	if completionError := s.completeReferences(request.Chain, target); completionError != nil {
