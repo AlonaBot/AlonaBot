@@ -141,7 +141,7 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 
 ### goal-43 · T-09.8 Admin 管理页
 
-状态：等待前置（T-09.6、T-09.12、T-09.13）。goal-34（PR #91，合并提交 `9789fc8`）已合并，合入的符号：`src/schema/model.ts` 的 `fieldsFromSchema`、`Field`、`Template`；`src/schema/patch.ts` 的 `buildPatch(original, edited, fields)`、`MissingSecretsError`、`isSecretSet`；`src/i18n/catalog.ts` 的 `pickLocale`、`fieldText`、`templateText`；`src/i18n/UI.tsx` 的 `UIContext`、`useUI`；`src/components` 的 `ConfigForm`（props 为 `schema`、`value`、`messages`、`onSubmit(patch)`）与 `LanguageSwitch`；四个手写 fixture 在 `web/admin/fixtures/`。前端纯函数测试只写在被忽略的 `*.local.test.ts`，`npm run test` 为 `vitest run --passWithNoTests`。语句中 goal-36、goal-39～goal-41、goal-84、goal-92 提供的符号（web/admin 的工程与组件、登录接口、管理服务的 HTTP API、Admin API 参考、会话取回与上传接口）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按前后端拆分改写：会话取回与 multipart 上传移到 goal-92（T-09.13）；原语句中嵌入 dist 的 `internal/core/adminui` 与 D-62「Core 不内嵌任何前端」冲突，已删去，静态文件由 goal-84（T-09.12）以 WebUI 组件的方式提供。2026-11-04 按 D-77～D-85 修订计划：Adapter 实例管理的表单按 goal-101 的 `instance_schema.json` 生成，增删改经 goal-93 写回 `core_config.json`（D-82、D-85）。前置合并后由审查者改写。
+状态：等待前置（T-09.6、T-09.12、T-09.13）。goal-34（PR #91，合并提交 `9789fc8`）已合并，合入的符号：`src/schema/model.ts` 的 `fieldsFromSchema`、`Field`、`Template`；`src/schema/patch.ts` 的 `buildPatch(original, edited, fields)`、`MissingSecretsError`、`isSecretSet`；`src/i18n/catalog.ts` 的 `pickLocale`、`fieldText`、`templateText`；`src/i18n/UI.tsx` 的 `UIContext`、`useUI`；`src/components` 的 `ConfigForm`（props 为 `schema`、`value`、`messages`、`onSubmit(patch)`）与 `LanguageSwitch`；四个手写 fixture 在 `web/admin/fixtures/`。前端纯函数测试只写在被忽略的 `*.local.test.ts`，`npm run test` 为 `vitest run --passWithNoTests`。语句中 goal-36、goal-39～goal-41、goal-84、goal-92 提供的符号（web/admin 的工程与组件、登录接口、管理服务的 HTTP API、Admin API 参考、会话取回与上传接口）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按前后端拆分改写：会话取回与 multipart 上传移到 goal-92（T-09.13）；原语句中嵌入 dist 的 `internal/core/adminui` 与 D-62「Core 不内嵌任何前端」冲突，已删去，静态文件由 goal-84（T-09.12）以 WebUI 组件的方式提供。2026-11-04 按 D-77～D-85 修订计划：Adapter 实例管理的表单按 goal-101 的 `adapter_config_schema.json` 生成，增删改经 goal-93 写回 `core_config.json`（D-82、D-85）。前置合并后由审查者改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-43（切片 T-09.8：Admin 管理页）。goal 目录 goal-43，分支 goal-43，worktree .worktrees/goal-43，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -159,7 +159,7 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 行为：
 - 登录：POST /api/auth/login，成功后把 csrf_token 保存在内存中；刷新页面后经 goal-92 的 GET /api/auth/session 取回。登出。未登录访问任何页面跳转到登录页。
 - Overview：Core 版本、监听地址（goal-92）、每个包的状态（未启用、运行、Pending、候选失败、Degraded 及原因、维护中）。
-- Packages：经 goal-92 的上传接口安装（archive、release.json、.sig 三个文件）；启用、停用、重启、卸载（含 purge）、pin；需要确认时展示受影响列表并要求再次确认（API 的 409）。
+- Packages：经 goal-92 的上传接口安装（archive、release.json、.sig 三个文件）；启用、停用、重启、卸载（只卸载、清理数据、清理数据与配置三种范围，D-127）、pin；需要确认时展示受影响列表并要求再次确认（API 的 409）。
 - Instances：列出 Adapter 实例（不显示凭证，只显示「已设置」）、创建（表单由该 Adapter 包的配置 Schema 经 goal-34 的 ConfigForm 生成）、启停、删除。
 - Updates：经 goal-92 的上传接口 update 新包、rollback 选择保留代次；显示操作结果与失败原因。
 - 安全：所有修改请求带 X-Alonabot-CSRF；页面不读取或展示 token、secret 明文；组件图标只用 `<img>` 引用（D-63）。
@@ -177,14 +177,14 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 
 ### goal-44 · T-09.9 Admin 配置、权限、工具策略与插件页
 
-状态：等待前置（T-09.8、T-09.14）。goal-34（PR #91，合并提交 `9789fc8`）的 `ConfigForm` 与 `LanguageSwitch` 已合并，接口见 goal-43 的状态段。语句中 goal-43、goal-93 提供的符号（web/admin 的页面框架与 API 客户端、T-09.14 的 HTTP 接口）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按前后端拆分改写：原语句中的管理 API（internal/core/manage 的 *_api.go 与 admin_api_test.go）移到 goal-93（T-09.14）；嵌入构建产物的 `internal/core/adminui` 与 D-62 冲突，已删去。同日按 D-83、D-84 修订：发信许可改为「全部实例」或指定实例；插件页面改为在 WebUI 内用沙箱 iframe 打开，并由本切片实现 postMessage 桥，不再使用页面票据。
+状态：等待前置（T-09.8、T-09.14）。2026-11-10 按 D-129、D-130：配置表单中带 `options_from` 的字段显示为可搜索的选择，全局禁止表的会话可以从聊天目录选择。同日按 D-128：权限页增加命令名的替换、追加与删除。goal-34（PR #91，合并提交 `9789fc8`）的 `ConfigForm` 与 `LanguageSwitch` 已合并，接口见 goal-43 的状态段。语句中 goal-43、goal-93 提供的符号（web/admin 的页面框架与 API 客户端、T-09.14 的 HTTP 接口）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按前后端拆分改写：原语句中的管理 API（internal/core/manage 的 *_api.go 与 admin_api_test.go）移到 goal-93（T-09.14）；嵌入构建产物的 `internal/core/adminui` 与 D-62 冲突，已删去。同日按 D-83、D-84 修订：发信许可改为「全部实例」或指定实例；插件页面改为在 WebUI 内用沙箱 iframe 打开，并由本切片实现 postMessage 桥，不再使用页面票据。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-44（切片 T-09.9：Admin 配置、权限、工具策略与插件页）。goal 目录 goal-44，分支 goal-44，worktree .worktrees/goal-44，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：在官方 WebUI 组件 web/admin 中补齐页面：插件配置（表单与完整 JSON 编辑，显示 Pending 并经 reload 激活）、命令权限与启用、发信许可（allowed_adapter_instances）、Core 设置（Core Admin 列表、默认 locale、命令前缀、全局禁止表）、工具调用策略、Agent 会话的列出与清除、插件页面入口，以及界面语言切换。全部只调用 goal-93（T-09.14）写入 spec/ADMIN-API.md 的接口，本切片不改 Go 代码。
+目标：在官方 WebUI 组件 web/admin 中补齐页面：插件配置（表单与完整 JSON 编辑，带选项来源的字段可搜索选择，显示 Pending 并经 reload 激活）、命令权限与启用、命令名的修改、发信许可（allowed_adapter_instances）、Core 设置（Core Admin 列表、默认 locale、命令前缀、全局禁止表）、工具调用策略、Agent 会话的列出与清除、插件页面入口，以及界面语言切换。全部只调用 goal-93（T-09.14）写入 spec/ADMIN-API.md 的接口，本切片不改 Go 代码。
 
-依据：PLAN T-09 步骤 7（配置与插件页）；CONTRACTS §5、§2.3、§8（allowed_adapter_instances）、§13、§7.3、§5.4；DECISIONS D-45、D-62；TEST-MATRIX V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56 的页面分项。
+依据：PLAN T-09 步骤 7（配置与插件页）；CONTRACTS §5、§2.3、§8（allowed_adapter_instances）、§13、§7.3、§5.4；DECISIONS D-45、D-62、D-128、D-129、D-130；TEST-MATRIX V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56、V-115、V-116、V-117 的页面分项。
 
 范围（只新增或修改这些）：
 - web/admin/src/pages/：新增 Config、Permissions、CoreSettings、Tools、Conversations；Packages 页增加「打开插件页面」入口；新增 src/pluginpage/：iframe 容器与 postMessage 桥
@@ -196,6 +196,9 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 行为：
 - 配置页：用 ConfigForm 编辑（schema 与 messages 取自 GET /plugins/{id}/config 的 schema 与 i18n，messages 是按界面语言经 pickLocale 选出的文件；只提交 patch）或切换到完整 JSON 编辑（textarea，提交完整替换），都带 base_generation；显示 Pending 与 Active 的差异（按键列出，secret 只显示是否已设置）；「激活」调用 reload；候选失败与 Degraded 显示具体原因；409 时提示配置已被他处修改并重新读取。invisible 字段只在完整 JSON 编辑中可见。
 - 权限页：按命令树显示 API 返回的有效权限与启用状态（页面不自行推导），可设置插件、命令组、路由三层覆盖；显示遮蔽关系。
+- 命令名：按路径匹配的命令显示生效的命令名并可编辑，可以替换、追加与删除，第一项标为主名并可调整顺序；只剩一项时不能删除；保存时整份提交（PUT names），「恢复默认」调用 DELETE；有覆盖时同时显示插件声明的命令名，失效的覆盖项标出；409 时显示冲突的命令。文本匹配与 Raw 路由不显示编辑入口。命令名在页面中按用户输入的写法显示，token 之间用一个空格。
+- 选项来源（D-129）：`ConfigForm` 中带 `options_from` 的 `string` 字段显示为可搜索的单选，`list` 字段显示为可搜索的多选；输入搜索词后调用 goal-93 的 options 接口（输入停顿后再请求），列表显示显示名与说明，`more` 为真时提示继续输入以缩小范围。打开表单时用 resolve 接口取已保存值的显示名；取不到的值显示存储值并标出「已不存在」，可以保留或移除，不自动清除，也不阻止保存。任何时候都可以手动输入存储值。来源返回 UNAVAILABLE 时字段退化为文本输入（`list` 为增删行）并提示来源不可用。Adapter 实例配置的表单同样支持。保存的仍是存储值，提交方式与其他字段相同。
+- 全局禁止表（D-130）：会话一栏用同一个选择组件查询 `core.chats`，仍可手动输入会话字符串。
 - 发信许可：缺省选中「全部实例」；切换为「指定实例」后列出全部 Adapter 实例供勾选，保存为 {all, instances}。
 - Core 设置：Core Admin 列表、默认 locale、命令前缀 `command_prefixes` 与按 Adapter 实例的覆盖、全局禁止表。
 - 工具页：列出全部工具及缺省与覆盖策略。
