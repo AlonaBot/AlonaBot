@@ -52,8 +52,9 @@ func (a Admin) String() string { return a.AdapterID + ":" + a.UserID }
 
 // AdapterSettings 保存配置版本和已展开环境变量的实例配置。
 type AdapterSettings struct {
-	Version   int
-	Instances map[string]json.RawMessage
+	Version         int
+	Instances       map[string]json.RawMessage
+	DefaultInstance string // 为空时仅有一个实例的 Adapter 自动使用该实例。
 }
 
 // Settings 保存有效的 Core 设置；日志文件大小以字节计。
@@ -343,6 +344,12 @@ func readAdapters(n *node, s *Settings) error {
 					adapter.Version = version
 				}
 				return err
+			case "default_instance":
+				instance, err := value.text()
+				if err == nil {
+					adapter.DefaultInstance = instance
+				}
+				return err
 			case "instances":
 				return value.object(func(instance string, configuration *node) error {
 					if configuration.delimiter != '{' {
@@ -503,7 +510,7 @@ func validateSettings(s Settings, locations map[string]*node) error {
 	if s.LogFile.MaxSize > s.LogFile.MaxTotal {
 		return at(locations, "log.file.max_size", errors.New("exceeds log.file.max_total"))
 	}
-	return nil
+	return validateNames(s, locations)
 }
 
 func at(locations map[string]*node, key string, err error) error {
