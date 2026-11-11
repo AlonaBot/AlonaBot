@@ -25,7 +25,7 @@ func attachTree(cmd *exec.Cmd) (*tree, error) {
 
 // kill 向整个进程组发送 SIGKILL；组内已没有进程时视为成功。
 func (t *tree) kill() error {
-	err := syscall.Kill(-t.pgid, syscall.SIGKILL)
+	err := t.signal(syscall.SIGKILL)
 	if errors.Is(err, syscall.ESRCH) {
 		return nil // 组内已没有进程
 	}
@@ -34,11 +34,19 @@ func (t *tree) kill() error {
 
 // empty 报告进程组内是否已没有任何进程（尚未被回收的僵尸也算组内进程）。
 func (t *tree) empty() (bool, error) {
-	err := syscall.Kill(-t.pgid, 0)
+	err := t.signal(0)
 	if errors.Is(err, syscall.ESRCH) {
 		return true, nil
 	}
 	return false, err
+}
+
+func (t *tree) signal(sig syscall.Signal) error {
+	err := syscall.Kill(-t.pgid, sig)
+	if errors.Is(err, syscall.EPERM) {
+		return t.signalPermissionError(err)
+	}
+	return err
 }
 
 // reap 非阻塞地回收组内已过继给本进程的僵尸；没有可回收的子进程时立即返回。
