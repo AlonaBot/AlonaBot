@@ -8,7 +8,7 @@
 
 | 类型 | 字段 | 来源与验证 |
 | --- | --- | --- |
-| Event | event_id、event_type、source_kind、occurred_at_unix_ms、adapter_id?、adapter_instance_id?、account_id?、target?、chat_type、actor?、message?、event_payload、capabilities、platform_payload? | event_id 由 Core 在入站标准化时产生；source_kind 为 ADAPTER/SCHEDULER，Core 为实例状态生成的 bot.online/bot.offline 也记为 ADAPTER。平台字段只对相应来源存在；原平台事件标识另存 source_event_id。chat_type 是事件所在会话的类型（PRIVATE、GROUP、CHANNEL，平台未给出时 UNSPECIFIED，D-100），由 Adapter 在事件带 target 时填写，没有 target 的事件必须为 UNSPECIFIED；它不属于 Target，不参与 Target 的比较与准入，出站时 Adapter 不读取 |
+| Event | event_id、event_type、source_kind、occurred_at_unix_ms、adapter_id?、adapter_instance_id?、account_id?、target?、chat_type、chat_title?、actor?、message?、event_payload、capabilities、platform_payload? | event_id 由 Core 在入站标准化时产生；source_kind 为 ADAPTER/SCHEDULER，Core 为实例状态生成的 bot.online/bot.offline 也记为 ADAPTER。平台字段只对相应来源存在；原平台事件标识另存 source_event_id。chat_type 是事件所在会话的类型（PRIVATE、GROUP、CHANNEL，平台未给出时 UNSPECIFIED，D-100），由 Adapter 在事件带 target 时填写，没有 target 的事件必须为 UNSPECIFIED；它不属于 Target，不参与 Target 的比较与准入，出站时 Adapter 不读取。chat_title 是该会话的显示名（D-130），平台给出时由 Adapter 填写，没有 target 的事件不带；它同样不属于 Target，只供 Core 记录聊天目录（CONTRACTS §8），SDK 不提供读取方法 |
 | Actor | external_user_id、adapter_instance_id、display_name?、locale?、permissions | permissions 是 Core 按 CONTRACTS §2.3 计算的权限名集合，Adapter 只给出本会话的平台权限；来源必须为可信 Adapter 元数据及 Core policy；用户身份以 adapter_id 为作用域（D-105）：同一 Adapter 的各实例给出的同一 external_user_id 必须是同一个平台用户，平台按机器人分配用户 ID 时由 Adapter 把区分范围写进 external_user_id；插件/外部 webhook 的 is_admin 不是身份依据。locale 是平台给出的用户语言（规范化的 BCP 47 标签），平台未提供时 absent，用于 CONTRACTS §5.4 的文案选择 |
 | Target | adapter_id、adapter_instance_id、account_id、chat_id、thread_id? | Adapter 验证 account 与实例绑定；默认 Target 仅来自当前实际入站事件；主动任务须显式 To，按 CONTRACTS §8 的 allowed_adapter_instances 与原事件回复范围准入。插件 API 把 Target 写成会话字符串 `<adapter_id>:<chat_id>`，话题为 `<adapter_id>:<chat_id>#<thread_id>`，chat_id 与 thread_id 中的 `%`、`#` 写作 `%25`、`%23`；实例是可选参数，account_id 由 Core 按实例补齐（CONTRACTS §8，D-102） |
 | Capability | name、version、supported | 使用 Adapter 明确公布的能力；未知能力不推定支持 |
@@ -129,7 +129,7 @@ SDK 的 `c.Stream` 是不新增协议的辅助函数（D-98）：目标实例声
 
 ## 6. 官方 Telegram Adapter 映射
 
-官方 Telegram Adapter 是可安装的 Adapter 包（CONTRACTS §8），一个进程承载全部已配置实例，实例可单独启停；以下映射在 Adapter 进程内实现，游标持久化、按钮 token 与派发仍在 Core。每实例绑定一个 Bot 账号，使用 getMe 得到的身份校验目标账号，凭证不跨实例复用。chat_id 与 thread_id 精确映射到 chat_id/message_thread_id；首发普通私聊、群、频道及论坛话题之外的专属会话形式需显式能力支持，否则 UNSUPPORTED。chat_type 按 chat.type 映射：private 为 PRIVATE，group 与 supergroup 为 GROUP，channel 为 CHANNEL（D-100）。
+官方 Telegram Adapter 是可安装的 Adapter 包（CONTRACTS §8），一个进程承载全部已配置实例，实例可单独启停；以下映射在 Adapter 进程内实现，游标持久化、按钮 token 与派发仍在 Core。每实例绑定一个 Bot 账号，使用 getMe 得到的身份校验目标账号，凭证不跨实例复用。chat_id 与 thread_id 精确映射到 chat_id/message_thread_id；首发普通私聊、群、频道及论坛话题之外的专属会话形式需显式能力支持，否则 UNSUPPORTED。chat_type 按 chat.type 映射：private 为 PRIVATE，group 与 supergroup 为 GROUP，channel 为 CHANNEL（D-100）。chat_title（D-130）取 chat 的 `title`；私聊没有 title，取 `first_name` 与 `last_name` 以一个空格连接，两者都没有时不带。
 
 ### 6.1 接收、游标和实例故障
 
@@ -187,6 +187,7 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 
 - 实例启动时建立连接并调用 `get_login_info`：`user_id` 的十进制字符串为 account_id，`nickname` 为 account_display_name；OneBot 11 没有可寻址的账号用户名，account_username absent，命令不接受 `/cmd@name` 形式（D-67）。同账号唯一 owner 按 CONTRACTS §8 由 Core 检查。
 - 私聊的用户号与群号是不同的命名空间，chat_id 写作 `private:<user_id>` 与 `group:<group_id>`，不产生 thread_id。数字 ID 一律转为十进制字符串。chat_type 与 chat_id 的前缀一致：`private:` 为 PRIVATE（含群临时会话），`group:` 为 GROUP（D-100）。群临时会话的 chat_id 不含来源群号，主动向非好友发起临时会话不在 v0.1。
+- chat_title（D-130）：私聊取事件中 `sender.nickname`。群消息不带群名，Adapter 在本进程首次见到某个群时调用 `get_group_info`，把 `group_name` 缓存在进程内并用于该群之后的事件；调用失败或实现端不支持时不带 chat_title，本进程内不再为该群重试。群改名后在 Adapter 进程重启前不更新。
 - Adapter 一边读连接一边把事件放进实例内的有界队列（固定常量 256 条），按到达顺序经 `core.adapter.deliver` 逐条交付，收到应答后才交付下一条；队列满时丢弃新事件并计数。API 响应与心跳不进这个队列，读循环不因等待交付而停下。
 
 | OneBot 11 上报 | 标准事件 | 规则 |

@@ -21,6 +21,7 @@
 | T-03.21 | goal-112 | 官方 Telegram Adapter 的平台动作与撤回：动作声明（含 sendChatAction、setMessageReaction、sendMessageDraft）与 `adapters/telegram/action` 的带类型函数（指向消息的动作收消息句柄，D-104）及输入状态、草稿两个辅助函数，deleteMessages | T-03 步骤 18 | T-03.11、T-03.15、T-03.16 | V-91、V-92、V-94 的 Telegram 分项、V-102 的动作分项 | 未开始 |
 | T-03.22 | goal-113 | 官方 Telegram Adapter 的命令菜单：setMyCommands 同步 | T-03 步骤 19 | T-03.17 | V-93 的 Telegram 分项 | 未开始 |
 | T-03.23 | goal-117 | 官方 Telegram Adapter 的代理模式与话题判定：实例配置 `proxy_mode`（none 缺省、core、custom），thread_id 只认 `is_topic_message` | T-03 步骤 20 | T-03.4 | V-99、V-100 | 未开始 |
+| T-03.26 | goal-132 | 官方 Telegram Adapter 填写 `chat_title`：群、超级群与频道取 title，私聊取对方的姓名（D-130） | T-03 步骤 23 | T-03.4、T-03.25 | V-117 的 Telegram 分项 | 未开始 |
 
 ## 3. 工作包
 
@@ -41,3 +42,5 @@
 19. **命令菜单（D-96）。** `adapter.commands.sync` 按 MESSAGE-MODEL §6.5 调用 setMyCommands，记住上一次成功同步的内容，相同时不调用平台；追加 `commands.sync` 能力。
 
 20. **代理模式与话题判定（D-100、D-101）。** 实例配置追加 `proxy_mode`，按 CONTRACTS §8 为该实例的 HTTP 客户端选择直连、Core 的代理环境或实例的 `proxy`，缺省直连；custom 缺少或给出不合法的 `proxy` 时启动返回 INVALID_ARGUMENT。入站 Message 只在 `is_topic_message` 为 true 时把 message_thread_id 写入 Target 的 thread_id（MESSAGE-MODEL §6.1）。
+
+23. **聊天名称（D-130）。** 按 MESSAGE-MODEL §6 为每个带 target 的入站事件填写 `chat_title`：群、超级群与频道取 chat 的 `title`，私聊取 `first_name` 与 `last_name`，以一个空格连接，两者都没有时不带；不为取名称另外调用 Bot API。

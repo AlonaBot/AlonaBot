@@ -13,6 +13,8 @@
 
 ### goal-71 · T-14.1 help 插件与命令列表
 
+状态注记（2026-11-10，D-128）：`core.command.list` 返回的路径与别名取生效的命令名（有命令名覆盖时主名为路径，其余为别名）；goal-129 先合并时本切片按生效的命令名实现，后合并时由 goal-129 同步。
+
 状态：等待前置（T-05.2）。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。T-04.4（PR #88）已合并。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。语句中 goal-10、goal-12、goal-13、goal-16、goal-53 提供的符号（router.CommandIndex、policy.CheckCommand、contracts/i18n、sdk 的命令注册与 Context.T）只写名字；合并后由审查者核对签名，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：经 `alonabot run <目录>` 运行，不再用 `--plugin-id`、`--entry`（D-77）。前置合并后由审查者改写。
 
 ```text
@@ -48,7 +50,7 @@
    type CommandInfo struct { PluginID, RouteID string; Path []string; Aliases [][]string; Usage string; Description string }
    func ListCommands(ctx context.Context) ([]CommandInfo, error) // 必须在 Handler 内调用（需要父调用链）
 4. plugins/help
-   func New() sdk.Root // 根插件
+   func New() *sdk.Plugin // 根插件
 
 行为：
 - core.command.list（必须带 parent_call_id；Actor 与默认 Target 取自父调用的可信上下文，没有 Actor 时只列出 ANY 权限的命令）：遍历 Router 的 CommandIndex，只保留每个规范路径的胜出者（被遮蔽者不列出）；对每条命令执行 policy.CheckCommand（全局禁止、启用、权限），通过的才列出；按路径字典序返回。usage 与 goal-12 的 usage 生成规则相同（按 Actor locale 使用 Core 文案目录）；description 在所属插件的 messages 中按 [Actor.locale, 默认 locale, en-US] 翻译，键不存在时 absent。
@@ -85,8 +87,8 @@
 允许的新跨模块边：plugins/... -> sdk/...、-> contracts（已允许）。只用标准库解析 XML（encoding/xml）与 HTTP。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
-- plugins/welcome：func New() sdk.Root
-- plugins/rss：func New() sdk.Root；plugins/rss/config_schema.json 声明 {"interval_minutes": {"description": "Check interval (minutes)", "type": "int", "default": 10, "slider": {"min": 1, "max": 1440}}}，以 Config().Int("interval_minutes") 读取（D-76）
+- plugins/welcome：func New() *sdk.Plugin
+- plugins/rss：func New() *sdk.Plugin；plugins/rss/config_schema.json 声明 {"interval_minutes": {"description": "Check interval (minutes)", "type": "int", "default": 10, "slider": {"min": 1, "max": 1440}}}，以 Config().Int("interval_minutes") 读取（D-76）
 
 行为：
 - welcome：
