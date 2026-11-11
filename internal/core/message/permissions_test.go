@@ -157,3 +157,107 @@ func TestSendPermissions(t *testing.T) {
 		})
 	}
 }
+
+// TestSendTargetCompletion 验证目标补齐后的原目标豁免、缺省实例、绑定与引用（V-101）。
+func TestSendTargetCompletion(t *testing.T) {
+	ctx := context.Background()
+	store, err := state.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	const pluginID = "sender"
+	if err := store.AddInstall(ctx, state.Install{Role: state.RolePlugin, PluginID: pluginID, Source: "dev-local", Entrypoint: "unused", BuildDigest: []byte{1}}); err != nil {
+		t.Fatal(err)
+	}
+	registry := adapter.NewRegistry()
+	platforms := []*memory.Adapter{memory.New("memory", "a", "account-a"), memory.New("memory", "b", "account-b")}
+	for _, platform := range platforms {
+		if err := registry.Add(platform); err != nil {
+			t.Fatal(err)
+		}
+	}
+	service := message.New(registry, policy.New(store), nil, tune.Defaults().RequestTimeout)
+	original := &pb.Target{AdapterId: "memory", AdapterInstanceId: "a", AccountId: "account-a", ChatId: "original", ThreadId: proto.String("topic")}
+	invocation := &router.Invocation{PluginID: pluginID, DefaultTarget: original}
+	tests := []struct {
+		name           string
+		to             *pb.Target
+		defaults       map[string]string
+		restricted     bool
+		reference      bool
+		instance, chat string
+		code           pb.ErrorCode
+	}{
+		{name: "original_reply_without_permission", to: &pb.Target{AdapterId: "memory", ChatId: "original", ThreadId: proto.String("topic")}, restricted: true, instance: "a", chat: "original"},
+		{name: "default_instance", to: &pb.Target{AdapterId: "memory", ChatId: "other"}, defaults: map[string]string{"memory": "b"}, instance: "b", chat: "other"},
+		{name: "no_default_instance", to: &pb.Target{AdapterId: "memory", ChatId: "other"}, code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION},
+		{name: "explicit_instance", to: &pb.Target{AdapterId: "memory", AdapterInstanceId: "b", ChatId: "other"}, instance: "b", chat: "other"},
+		{name: "wrong_account", to: &pb.Target{AdapterId: "memory", AdapterInstanceId: "b", AccountId: "wrong", ChatId: "other"}, code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT},
+		{name: "reference", to: &pb.Target{AdapterId: "memory", ChatId: "original", ThreadId: proto.String("topic")}, reference: true, instance: "a", chat: "original"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			registry.SetDefaults(test.defaults)
+			if err := store.SetAdapterInstanceAccess(ctx, pluginID, !test.restricted, nil); err != nil {
+				t.Fatal(err)
+			}
+			chain := &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: "hello"}}}}}
+			if test.reference {
+				chain.Segments = append(chain.Segments, &pb.Segment{Data: &pb.Segment_Reference{Reference: &pb.ReferenceSegment{OriginalPlatformMessageId: "quoted", Target: &pb.Target{AdapterId: "memory", ChatId: "original"}}}})
+			}
+			beforeA, beforeB := len(platforms[0].Sent()), len(platforms[1].Sent())
+			request := &pb.SendRequest{To: test.to, Chain: chain}
+			encoded, err := proto.Marshal(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			in := &wire.Inbound{ParentAttach: invocation, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: 1, Bytes: encoded}}
+			response := service.Send(ctx, router.NewCaller(pluginID, "generation"), in)
+			if response.Err.GetCode() != test.code {
+				t.Fatalf("error = %v; want %v", response.Err, test.code)
+			}
+			result := &pb.SendResult{}
+			if err := proto.Unmarshal(response.Payload.Bytes, result); err != nil {
+				t.Fatal(err)
+			}
+			afterA, afterB := len(platforms[0].Sent()), len(platforms[1].Sent())
+			if test.code != pb.ErrorCode_ERROR_CODE_UNSPECIFIED {
+				if result.Status != pb.SendStatus_SEND_STATUS_REJECTED || beforeA != afterA || beforeB != afterB {
+					t.Fatalf("rejected send: result=%v, sends=%d/%d -> %d/%d", result, beforeA, beforeB, afterA, afterB)
+				}
+				if test.code == pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION && !proto.Equal(result.Target, test.to) {
+					t.Fatalf("completion failure target = %v; want %v", result.Target, test.to)
+				}
+				return
+			}
+			want := &pb.Target{AdapterId: "memory", AdapterInstanceId: test.instance, AccountId: "account-" + test.instance, ChatId: test.chat, ThreadId: test.to.ThreadId}
+			if result.Status != pb.SendStatus_SEND_STATUS_ACCEPTED || !proto.Equal(result.Target, want) {
+				t.Fatalf("result = %v; want accepted target %v", result, want)
+			}
+			index := 0
+			if test.instance == "b" {
+				index = 1
+			}
+			if afterA-beforeA != 1-index || afterB-beforeB != index {
+				t.Fatalf("sends = %d/%d -> %d/%d; want only %s", beforeA, beforeB, afterA, afterB, test.instance)
+			}
+			sent := platforms[index].Sent()
+			last := sent[len(sent)-1]
+			if !proto.Equal(last.Target, want) {
+				t.Fatalf("adapter target = %v; want %v", last.Target, want)
+			}
+			if test.reference {
+				quoted := last.Chain.Segments[1].GetReference().Target
+				wantReference := &pb.Target{AdapterId: "memory", AdapterInstanceId: "a", AccountId: "account-a", ChatId: "original"}
+				if !proto.Equal(quoted, wantReference) {
+					t.Fatalf("reference target = %v; want %v", quoted, wantReference)
+				}
+			}
+		})
+	}
+}

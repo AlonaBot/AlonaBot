@@ -29,7 +29,7 @@ func New(store *state.Store) *Policy { return &Policy{store: store} }
 // target 由发送服务选定；查询失败返回 INTERNAL，缺少许可返回 PERMISSION_DENIED。
 func (p *Policy) CheckSend(ctx context.Context, pluginID string, inv *router.Invocation, target *pb.Target) *pb.ErrorInfo {
 	// 1. 会话禁止先于所有实例许可与原目标回复豁免。
-	denied, err := p.store.HasGlobalDeny(ctx, state.GlobalDeny{Kind: string(DenyChat), InstanceID: target.GetAdapterInstanceId(), SubjectID: target.GetChatId()})
+	denied, err := p.store.HasGlobalDeny(ctx, state.GlobalDeny{Kind: string(DenyChat), AdapterID: target.GetAdapterId(), SubjectID: target.GetChatId()})
 	if err != nil {
 		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "read chat deny: " + err.Error()}
 	}

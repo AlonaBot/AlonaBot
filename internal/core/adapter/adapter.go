@@ -8,9 +8,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"sync"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"google.golang.org/protobuf/proto"
 )
 
 // ErrQueueFull 表示 Core 的事件接纳队列已满。
@@ -36,8 +38,9 @@ type Instance interface {
 
 // Registry 并发安全地按实例 ID 保存 Adapter 实例；使用 NewRegistry 创建。
 type Registry struct {
-	mu        sync.RWMutex // 保护 instances；不在锁内调用平台操作
+	mu        sync.RWMutex // 保护 instances 与 defaults；不在锁内调用平台操作
 	instances map[string]Instance
+	defaults  map[string]string
 }
 
 // NewRegistry 创建空的实例注册表。
@@ -61,6 +64,51 @@ func (r *Registry) Get(instanceID string) (Instance, bool) {
 	defer r.mu.RUnlock()
 	in, ok := r.instances[instanceID]
 	return in, ok
+}
+
+// SetDefaults 复制并整体替换各 Adapter 的缺省实例，可与其他方法并发调用。
+func (r *Registry) SetDefaults(defaults map[string]string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.defaults = maps.Clone(defaults)
+}
+
+// Complete 按在途会话或缺省实例补齐目标的空字段，返回副本且保留已有字段。
+// inflight 可以为空；未登记的实例留给调用方按原有准入顺序检查。
+func (r *Registry) Complete(target, inflight *pb.Target) (*pb.Target, *pb.ErrorInfo) {
+	// 1. 插件输入须包含会话及至少一种 Adapter 标识。
+	if target.GetChatId() == "" {
+		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, SafeMessage: "chat_id"}
+	}
+	if target.GetAdapterId() == "" && target.GetAdapterInstanceId() == "" {
+		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, SafeMessage: "adapter_id, adapter_instance_id"}
+	}
+	completed := proto.CloneOf(target)
+	// 2. 同一锁内选择实例并读取登记快照，避免默认表与实例表交错更新。
+	r.mu.RLock()
+	if completed.AdapterInstanceId == "" {
+		if inflight != nil && inflight.GetAdapterId() == completed.AdapterId && inflight.GetChatId() == completed.ChatId {
+			completed.AdapterInstanceId = inflight.GetAdapterInstanceId()
+		} else {
+			completed.AdapterInstanceId = r.defaults[completed.AdapterId]
+		}
+		if completed.AdapterInstanceId == "" {
+			r.mu.RUnlock()
+			return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "no adapter instance selected; specify one or set default_instance"}
+		}
+	}
+	instance, ok := r.instances[completed.AdapterInstanceId]
+	r.mu.RUnlock()
+	// 3. 身份由实例提供，锁外读取，已给出的字段由调用方执行绑定检查。
+	if ok {
+		if completed.AdapterId == "" {
+			completed.AdapterId = instance.AdapterID()
+		}
+		if completed.AccountId == "" {
+			completed.AccountId = instance.AccountID()
+		}
+	}
+	return completed, nil
 }
 
 // Remove 撤销实例登记；不存在的 ID 无副作用，可与 Add、Get 并发调用。

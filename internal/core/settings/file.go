@@ -145,7 +145,7 @@ func settingsValues(s Settings) (map[string]any, error) {
 			}
 			instances[instance] = value
 		}
-		adapters[id] = map[string]any{"$version": adapter.Version, "instances": instances}
+		adapters[id] = map[string]any{"$version": adapter.Version, "instances": instances, "default_instance": adapter.DefaultInstance}
 	}
 	return map[string]any{
 		"$version": currentVersion, "listen": s.Listen, "base_url": s.BaseURL,
