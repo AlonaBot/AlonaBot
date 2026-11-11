@@ -121,7 +121,10 @@ func (s *scan) schemaImporter(ctx context.Context, list *exec.Cmd) (*schemaImpor
 		return nil, fmt.Errorf("go env GOARCH: %w\n%s", err, output)
 	}
 	i := &schemaImporter{
-		info: &types.Info{Instances: make(map[*ast.Ident]types.Instance), Uses: make(map[*ast.Ident]types.Object)}, scan: s, sizes: types.SizesFor("gc", strings.TrimSpace(string(output))), checked: make(map[string]*types.Package),
+		info: &types.Info{
+			Instances: make(map[*ast.Ident]types.Instance), Uses: make(map[*ast.Ident]types.Object),
+			Types: make(map[ast.Expr]types.TypeAndValue), Selections: make(map[*ast.SelectorExpr]*types.Selection),
+		}, scan: s, sizes: types.SizesFor("gc", strings.TrimSpace(string(output))), checked: make(map[string]*types.Package),
 		compiled: importer.ForCompiler(s.files, "gc", func(path string) (io.ReadCloser, error) {
 			file, err := os.Open(exports[path])
 			if err != nil {
@@ -151,6 +154,7 @@ func (s *scan) schemas(ctx context.Context, list *exec.Cmd) error {
 			return nil
 		}
 	}
+	s.translationCalls(importer.info, paths)
 	return s.serviceSchemasFrom(importer, paths)
 }
 
