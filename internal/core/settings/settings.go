@@ -2,6 +2,7 @@
 //
 // 调用 [Load] 前由装配方取得 data_dir 的 core.lock；命令行覆盖由装配方应用。
 // [File] 持有未展开的 [Document] 和有效 [Settings]，副本中的环境变量已展开。
+// Core 格式迁移内置在本包，迁移写回前备份磁盘原文件。
 // 设置遵循 CONTRACTS §15.1，日志文件上限遵循 §14.6。
 package settings
 
@@ -29,10 +30,11 @@ import (
 const FileName = "core_config.json"
 
 const (
-	defaultPort    = "7650"
-	defaultListen  = "127.0.0.1:" + defaultPort
-	currentVersion = 1
-	defaultLocale  = "en-US"
+	defaultPort            = "7650"
+	defaultListen          = "127.0.0.1:" + defaultPort
+	currentVersion         = 1
+	defaultInstanceVersion = 1
+	defaultLocale          = "en-US"
 )
 
 // DNS 文本长度扣除可选的终止点，遵循 net 解析器采用的 RFC 1035 线格式上限。
@@ -136,6 +138,9 @@ func Load(dataDir string) (*File, error) {
 	}
 	document, err := parseDocument(content)
 	if err != nil {
+		return nil, fmt.Errorf("%s: %w", name, err)
+	}
+	if err := migrateSettings(name, document); err != nil {
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}
 	current, err := document.settings()
@@ -288,17 +293,6 @@ func readValue(n *node, key string, s *Settings) error {
 	}
 }
 
-func readVersion(n *node) error {
-	version, err := n.integer()
-	if err != nil {
-		return err
-	}
-	if version != currentVersion {
-		return n.fail(fmt.Errorf("unsupported version %d; expected %d", version, currentVersion))
-	}
-	return nil
-}
-
 func readPrefixes(n *node) ([]string, error) {
 	prefixes, err := n.strings()
 	if err != nil {
@@ -345,11 +339,15 @@ func readAdmins(n *node, s *Settings) error {
 
 func readAdapters(n *node, s *Settings) error {
 	return n.object(func(id string, value *node) error {
-		adapter := AdapterSettings{Version: currentVersion}
+		adapter := AdapterSettings{Version: defaultInstanceVersion}
 		if err := value.object(func(key string, value *node) error {
 			switch key {
 			case "$version":
-				return readVersion(value)
+				version, err := positiveVersion(value)
+				if err == nil {
+					adapter.Version = version
+				}
+				return err
 			case "instances":
 				return value.object(func(instance string, configuration *node) error {
 					if configuration.delimiter != '{' {
