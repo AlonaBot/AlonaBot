@@ -12,7 +12,7 @@
 | goal-111 | T-03.20 | 官方 Telegram Adapter 的媒体与新增片段 | T-03.13、T-03.14 | 等待前置 |
 | goal-112 | T-03.21 | 官方 Telegram Adapter 的平台动作与撤回 | T-03.11、T-03.15、T-03.16 | 等待前置 |
 | goal-113 | T-03.22 | 官方 Telegram Adapter 的命令菜单 | T-03.17 | 等待前置 |
-| goal-117 | T-03.23 | 官方 Telegram Adapter 的代理模式与话题判定 | T-03.4 | 待派发 |
+| goal-117 | T-03.23 | 官方 Telegram Adapter 的代理模式与话题判定 | T-03.4 | 已完成（PR #125） |
 | goal-132 | T-03.26 | 官方 Telegram Adapter 填写 chat_title | T-03.4、T-03.25 | 等待前置 |
 
 ## 第 5 波
@@ -158,7 +158,7 @@
 
 ### goal-117 · T-03.23 官方 Telegram Adapter 的代理模式与话题判定
 
-状态：待派发。前置 T-03.4（[PR #39](https://github.com/AlonaBot/AlonaBot/pull/39)，合并提交 `604dc65`）已合并。2026-11-09 按 D-100、D-101 新增，接口与测试段按 main（`3f7a380`）的代码写出：`newBotClient(token, base, proxy string)` 在 proxy 为空时使用 `http.ProxyFromEnvironment`；`instance.messageEvent` 只要 Message 带 `message_thread_id` 就写入 Target 的 thread_id；`TestInstanceProxy` 与 `TestIncomingMedia` 只配置了 `proxy`。实例配置的 `adapter_config_schema.json` 由 goal-101（T-08.12）新建，处理方式见执行顺序 §3。
+状态：已完成（[PR #125](https://github.com/AlonaBot/AlonaBot/pull/125)，合并提交 `f3af986`），证据见 TEST-MATRIX §3.2。`adapter_config_schema.json` 中的 `proxy_mode` 由 goal-101 补上。派发时：前置 T-03.4（[PR #39](https://github.com/AlonaBot/AlonaBot/pull/39)，合并提交 `604dc65`）已合并。2026-11-09 按 D-100、D-101 新增，接口与测试段按 main（`3f7a380`）的代码写出：`newBotClient(token, base, proxy string)` 在 proxy 为空时使用 `http.ProxyFromEnvironment`；`instance.messageEvent` 只要 Message 带 `message_thread_id` 就写入 Target 的 thread_id；`TestInstanceProxy` 与 `TestIncomingMedia` 只配置了 `proxy`。实例配置的 `adapter_config_schema.json` 由 goal-101（T-08.12）新建，处理方式见执行顺序 §3。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-117（切片 T-03.23：官方 Telegram Adapter 的代理模式与话题判定）。goal 目录 goal-117，分支 goal-117，worktree .worktrees/goal-117，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
