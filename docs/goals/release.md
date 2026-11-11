@@ -187,7 +187,7 @@
 
 ### goal-46 · T-10.1 证据汇总与跨组件联验
 
-状态：等待前置（T-03.20、T-03.21、T-03.22、T-03.26、T-04.10、T-04.11、T-05.5、T-08.9、T-08.13、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-15.3、T-15.4、T-15.5、T-15.6、T-15.7、T-16.2）。本切片只汇总与联验，不引入新接口。2026-11-10 按 D-129～D-131 把范围扩展到 V-117，前置加入 T-03.26 与 T-15.7。2026-11-09 按 D-87 追加 V-89～V-97 与对应的 Adapter 切片作为前置；同日按 D-102～D-113 把范围扩展到 V-111，前置加入不在其他前置之下的 T-04.10、T-04.11 与 T-08.13。2026-11-04 按 D-77～D-85 修订计划：首次 token 的取得见 D-82；插件页面经 WebUI 的 iframe 与桥访问，不再使用票据（D-84）。前置合并后由审查者改写。
+状态：等待前置（T-03.20、T-03.21、T-03.22、T-03.26、T-04.10、T-04.11、T-05.5、T-08.13、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-15.3、T-15.4、T-15.5、T-15.6、T-15.7、T-16.2）。T-08.9（[PR #117](https://github.com/AlonaBot/AlonaBot/pull/117)，合并提交 `2c1fdcc`）已合并。合并后由审查者按 main `2c1fdcc` 核对：`examples/plugins/configdb` 默认使用 sqlitedb，`configdb_gorm` 标签切换到 GORM；`OnConfigLoad` 转换 v1 问候词数组，两个变体的 `Migrations` 与 `OnStart` 覆盖迁移失败及启动写库后失败，启动记录位于 `configdb_startup`。声明字段 null 按维护者裁决以 CONFIG/INVALID_ARGUMENT 拒绝，未知字段 null 保留；组件证据与 T-09 正式入口、Journal 及真实页面的未闭合项见 TEST-MATRIX §3.2。插件 HTTP 入口已按 T-07.7（[PR #116](https://github.com/AlonaBot/AlonaBot/pull/116)，合并提交 `e65eb4d`）改为单一 `base_url` 与管理认证。本切片只汇总与联验，不引入新接口。2026-11-10 按 D-129～D-131 把范围扩展到 V-117，前置加入 T-03.26 与 T-15.7。2026-11-09 按 D-87 追加 V-89～V-97 与对应的 Adapter 切片作为前置；同日按 D-102～D-113 把范围扩展到 V-111，前置加入不在其他前置之下的 T-04.10、T-04.11 与 T-08.13。2026-11-04 按 D-77～D-85 修订计划：首次 token 的取得见 D-82；插件页面经 WebUI 的 iframe 与桥访问，不再使用票据（D-84）。前置合并后由审查者改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-46（切片 T-10.1：证据汇总与跨组件联验）。goal 目录 goal-46，分支 goal-46，worktree .worktrees/goal-46，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -203,7 +203,7 @@
 允许的新跨模块边：无。
 
 联验矩阵（各为一个子测试，TCP 与 stdio 各一遍）：
-1) 组件链路：admin-token init → 登录 → 安装并启用 echo、configdb、http 示例与官方插件 → 配置与权限 → Telegram 模拟服务的真实消息 → 插件 HTTP 页面（经票据）→ reload → update → rollback。
+1) 组件链路：admin-token init → 登录 → 安装并启用 echo、configdb、http 示例与官方插件 → 配置与权限 → Telegram 模拟服务的真实消息 → 插件 HTTP 页面（同一 base_url 下，经管理认证与 WebUI 的 iframe/postMessage 桥）→ reload → update → rollback。
 2) 能力组合（每个能力使用不同的插件二进制，不用同一个 worker 的多份进程代替）：命令、文本匹配、多轮等待、主动 Send、Service、Event Bus、Scheduler、HTTP、GORM（含迁移），以及 Agent 与 WebUI 组件；既有无配置无数据库的插件，也有实际写入与迁移的插件。
 3) 边界：伪造与过期 Session、命令遮蔽、无 Actor、实例许可、Hook 递归、媒体租约、满准入、Cancel 顺序、超时仍运行的 job；错误回执与已确认的外部结果一致。
 4) 恢复：停止与持锁、SQLite WAL 备份、候选 OnStart 写入后失败、PREPARED 与提交前后 Core 退出、不可变 secret、external 插件的维护许可与 resume、显式 rollback 的新代次；核对数据库内容与状态库的 Active 指针，不能只看日志里的「恢复成功」。

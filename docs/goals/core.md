@@ -43,7 +43,7 @@
 | goal-100 | T-09.16 | manifest 拆分为作者信息与构建信息 | T-03.8、T-09.2 | 等待前置 |
 | goal-96 | T-04.9 | 删除构建期标记 | T-04.7 | 已完成（PR #110） |
 | goal-15 | T-05.1 | 可信上下文与有界分发 | T-03.3、T-04.3、T-04.4 | 已完成（PR #67） |
-| goal-98 | T-07.7 | 插件页面的沙箱隔离 | T-07.4、T-07.6、T-09.1 | 待派发 |
+| goal-98 | T-07.7 | 插件页面的沙箱隔离 | T-07.4、T-07.6、T-09.1 | 已完成（PR #116） |
 | goal-33 | T-08.6 | SQLite 候选与资源交接 | T-08.4、T-08.5 | 已完成（PR #85） |
 | goal-95 | T-08.11 | 配置改由 config_schema.json 声明 | T-04.7、T-08.3、T-08.4、T-08.10 | 已完成（PR #103） |
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-04.7、T-06.1 | 已完成（PR #101） |
@@ -51,8 +51,8 @@
 | goal-123 | T-08.13 | 文案函数只返回字符串 | T-04.9、T-08.8 | 待派发 |
 | goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 等待前置 |
 | goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 已完成（PR #107） |
-| goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8、T-08.11 | 待派发 |
-| goal-101 | T-08.12 | Adapter 实例配置与 Core 设置的版本迁移 | T-07.6、T-08.11 | 待派发 |
+| goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8、T-08.11 | 已完成（PR #117） |
+| goal-101 | T-08.12 | Adapter 实例配置与 Core 设置的版本迁移 | T-07.6、T-08.11 | 已完成（PR #114） |
 | goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2、T-04.9、T-08.8、T-09.16 | 等待前置 |
 | goal-104 | T-03.13 | 媒体按来源传递 | T-03.6、T-04.8、T-07.7 | 等待前置 |
 | goal-105 | T-03.14 | 新增片段与字段（含会话类型） | T-03.8、T-04.8 | 等待前置 |
@@ -66,7 +66,7 @@
 | goal-122 | T-04.10 | 管理员与封禁按 Adapter 登记 | T-04.4、T-07.6 | 待派发 |
 | goal-125 | T-04.12 | 插件对象、结构体参数与子插件 | T-04.8 | 等待前置 |
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 等待前置 |
-| goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 待派发 |
+| goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 已完成（PR #119） |
 | goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 等待前置 |
 | goal-68 | T-13.2 | 开发组件的配置与数据库 | T-07.6、T-08.5、T-08.11、T-13.1 | 等待前置 |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1 | 等待前置 |
@@ -2944,7 +2944,7 @@ internal/wire
 
 ### goal-98 · T-07.7 插件页面的沙箱隔离
 
-状态：待派发。前置 T-07.4（PR #53）、T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）与 T-09.1（PR #72）均已合并。依据 D-84 新增；2026-11-09 审查者按 main `3dec9a0` 的代码写出接口、行为与测试段。已核对：`internal/core/webhost` 的 `Options{AdminBaseURL, PluginBaseURL, SecondHost, Admin, Proxy, Sessions, Now}`、`Host.ServeHTTP` 按 Host 分派、`IssueTicket`/`exchange`/`Authorize`（ticket.go，插件 Cookie 与派生会话）与 policy.go 的 `pluginHeaders`（单主机时 CSP 为 `default-src 'none'; frame-ancestors 'none'`，主动内容返回 409）；`httpproxy.Server` 的 `Authorizer` 接口、私有路由在 `s.auth == nil` 或未授权时返回 401、`stripIdentity` 去掉 Authorization、Forwarded、X-Forwarded-* 与 `alonabot_` 前缀 Cookie；`adminauth.Auth` 的 `Require`（Bearer 或管理 Cookie，Cookie 的变更请求校验 `X-Alonabot-CSRF` 与 Origin）、`Lookup`、`Valid`；`settings.Settings` 的 `AdminBaseURL`、`PluginBaseURL` 与 `admin_base_url`/`plugin_base_url` 的校验和写回；`cmd/alonabot/main.go` 以 `pluginAuthorizer` 把 `webhost.Host.Authorize` 接给代理；`cmd/alonabot/e2e_test.go` 的 `TestAdminAuthRun` 写入两个 Base URL。goal-27（T-07.5）把 HTTP 的 Bind/Unbind 从 main.go 移进 supervisor，两者可以并行，后合并的一方按先合并的代码变基。
+状态：已完成（[PR #116](https://github.com/AlonaBot/AlonaBot/pull/116)，合并提交 `e65eb4d`），证据见 TEST-MATRIX §3.2。审查中补齐正文结束后的响应 trailer 过滤，清除插件的 `Set-Cookie` 与凭证 CORS 头。派发时：前置 T-07.4（PR #53）、T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）与 T-09.1（PR #72）均已合并。依据 D-84 新增；2026-11-09 审查者按 main `3dec9a0` 的代码写出接口、行为与测试段。已核对：`internal/core/webhost` 的 `Options{AdminBaseURL, PluginBaseURL, SecondHost, Admin, Proxy, Sessions, Now}`、`Host.ServeHTTP` 按 Host 分派、`IssueTicket`/`exchange`/`Authorize`（ticket.go，插件 Cookie 与派生会话）与 policy.go 的 `pluginHeaders`（单主机时 CSP 为 `default-src 'none'; frame-ancestors 'none'`，主动内容返回 409）；`httpproxy.Server` 的 `Authorizer` 接口、私有路由在 `s.auth == nil` 或未授权时返回 401、`stripIdentity` 去掉 Authorization、Forwarded、X-Forwarded-* 与 `alonabot_` 前缀 Cookie；`adminauth.Auth` 的 `Require`（Bearer 或管理 Cookie，Cookie 的变更请求校验 `X-Alonabot-CSRF` 与 Origin）、`Lookup`、`Valid`；`settings.Settings` 的 `AdminBaseURL`、`PluginBaseURL` 与 `admin_base_url`/`plugin_base_url` 的校验和写回；`cmd/alonabot/main.go` 以 `pluginAuthorizer` 把 `webhost.Host.Authorize` 接给代理；`cmd/alonabot/e2e_test.go` 的 `TestAdminAuthRun` 写入两个 Base URL。goal-27（T-07.5）把 HTTP 的 Bind/Unbind 从 main.go 移进 supervisor，两者可以并行，后合并的一方按先合并的代码变基。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-98（切片 T-07.7：插件页面的沙箱隔离）。goal 目录 goal-98，分支 goal-98，worktree .worktrees/goal-98，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -3258,7 +3258,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-121 · T-03.24 插件给出的目标由 Core 补齐
 
-状态：待派发。前置 T-03.6（PR #55，合并提交 `b023130`）与 T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）均已合并。2026-11-09 按 D-102 新增，接口与测试段按 main（`cbd22a8`）的代码写出：`internal/core/message.Service.Send` 先取 To 或父调用的 `DefaultTarget`，再依次 `policy.CheckSend`（原 Target 豁免用 `proto.Equal` 比较）、`validate.Chain`（引用片段的 target 要求四项标识齐全）、`adapters.Get` 与 adapter_id、account_id 的绑定检查；`internal/core/media` 的 `grant` 用 `targetSubset`（`proto.Equal`）比较 GrantRequest.targets 与原范围，补齐用 Store 的 `readers`（`AddReadServices` 传入的 `*adapter.Registry`）；`adapter.Registry` 按实例 ID 保存运行中的实例，重复的 ID 由 `Add` 拒绝；`settings.readAdapters` 只接受 `$version` 与 `instances`，`validateSettings` 不检查实例名。goal-101（T-08.12，进行中）也改 `readAdapters`，按执行顺序 §3 处理。
+状态：待派发。T-08.12（[PR #114](https://github.com/AlonaBot/AlonaBot/pull/114)，合并提交 `a796766`）已合并。`settings.readAdapters` 的 `$version` 已经由 `positiveVersion` 校验；`PrepareInstances` 从原文迁移后再展开环境变量，`TrialInstances` 同用这一准备路径。追加 `default_instance` 时保留现有版本校验、迁移与备份行为。合并后由审查者按 main `2c1fdcc` 核对。前置 T-03.6（PR #55，合并提交 `b023130`）与 T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）均已合并。2026-11-09 按 D-102 新增，接口与测试段按 main（`cbd22a8`）的代码写出：`internal/core/message.Service.Send` 先取 To 或父调用的 `DefaultTarget`，再依次 `policy.CheckSend`（原 Target 豁免用 `proto.Equal` 比较）、`validate.Chain`（引用片段的 target 要求四项标识齐全）、`adapters.Get` 与 adapter_id、account_id 的绑定检查；`internal/core/media` 的 `grant` 用 `targetSubset`（`proto.Equal`）比较 GrantRequest.targets 与原范围，补齐用 Store 的 `readers`（`AddReadServices` 传入的 `*adapter.Registry`）；`adapter.Registry` 按实例 ID 保存运行中的实例，重复的 ID 由 `Add` 拒绝；`settings.readAdapters` 只接受 `$version` 与 `instances`，`validateSettings` 不检查实例名。与 goal-101 共享的 `readAdapters` 已按合入代码核对，按执行顺序 §3 保留两边的修改。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-121（切片 T-03.24：插件给出的目标由 Core 补齐）。goal 目录 goal-121，分支 goal-121，worktree .worktrees/goal-121，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -3637,7 +3637,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-35 · T-08.9 configdb 示例与 T-08 验收
 
-状态：待派发。前置 T-08.6（PR #85）、T-08.7（goal-34，PR #91）、T-08.8（PR #102）与 T-08.11（goal-95，PR #103）均已合并。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。T-08.6（PR #85）已合并。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。goal-34（PR #91，合并提交 `9789fc8`）已合并，合入的符号：`src/schema/model.ts` 的 `fieldsFromSchema`、`Field`、`Template`；`src/schema/patch.ts` 的 `buildPatch(original, edited, fields)`、`MissingSecretsError`、`isSecretSet`；`src/i18n/catalog.ts` 的 `pickLocale`、`fieldText`、`templateText`；`src/i18n/UI.tsx` 的 `UIContext`、`useUI`；`src/components` 的 `ConfigForm`（props 为 `schema`、`value`、`messages`、`onSubmit(patch)`）与 `LanguageSwitch`；四个手写 fixture 在 `web/admin/fixtures/`。前端纯函数测试只写在被忽略的 `*.local.test.ts`，`npm run test` 为 `vitest run --passWithNoTests`。2026-11-09 审查者按 main `3dec9a0` 的代码核对并改写：配置 Schema 是手写的 `config_schema.json`（D-85），不再由 Go 结构生成；CLI 为 `alonabot plugin generate`/`plugin check`；数据库入口为 `sqlitedb.Open(ctx)`、`sqlitedb.RunVersioned`、`gormdb.Open(ctx)` 与 `gormdb.RunVersioned`；候选的准备与丢弃为 `candidate.PrepareDatabase` 与 `candidate.Discard`，Core 侧经 `supervisor.Launch(ctx, store, Spec{..., ConfigSchema, I18n, NewCandidate, ExpectedOld, Secrets, KeptSecretPaths})` 启动真实插件进程；开发入口 `alonabot run` 只启动单个插件，候选配置固定为 `{}`、数据库为 NONE，不装配配置、Secret 与受管数据库（库模式与开发组件的配置归 T-13.1、T-13.2），因此本切片的跨进程验收只能经 `supervisor.Launch`，按 D-86 写在本地测试，不提交 `cmd/alonabot` 的 e2e。
+状态：已完成（[PR #117](https://github.com/AlonaBot/AlonaBot/pull/117)，合并提交 `2c1fdcc`），证据见 TEST-MATRIX §3.2。维护者裁决声明字段为 null 时按现行 CONTRACTS §5.1 拒绝（CONFIG/INVALID_ARGUMENT），原语句的「null（指针字段）全部保留」已改正，本地两项 `declared_null_contract_conflict` 保持 SKIP。BLOCK-02 的修复经维护者授权修改 `internal/core/process`：Darwin 上对只剩僵尸或正在退出的进程组返回 EPERM 时继续由 `WaitTree` 等待回收。启动记录改写独立表 `configdb_startup`，避免覆盖用户的同名笔记。派发时：前置 T-08.6（PR #85）、T-08.7（goal-34，PR #91）、T-08.8（PR #102）与 T-08.11（goal-95，PR #103）均已合并。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。T-08.6（PR #85）已合并。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。goal-34（PR #91，合并提交 `9789fc8`）已合并，合入的符号：`src/schema/model.ts` 的 `fieldsFromSchema`、`Field`、`Template`；`src/schema/patch.ts` 的 `buildPatch(original, edited, fields)`、`MissingSecretsError`、`isSecretSet`；`src/i18n/catalog.ts` 的 `pickLocale`、`fieldText`、`templateText`；`src/i18n/UI.tsx` 的 `UIContext`、`useUI`；`src/components` 的 `ConfigForm`（props 为 `schema`、`value`、`messages`、`onSubmit(patch)`）与 `LanguageSwitch`；四个手写 fixture 在 `web/admin/fixtures/`。前端纯函数测试只写在被忽略的 `*.local.test.ts`，`npm run test` 为 `vitest run --passWithNoTests`。2026-11-09 审查者按 main `3dec9a0` 的代码核对并改写：配置 Schema 是手写的 `config_schema.json`（D-85），不再由 Go 结构生成；CLI 为 `alonabot plugin generate`/`plugin check`；数据库入口为 `sqlitedb.Open(ctx)`、`sqlitedb.RunVersioned`、`gormdb.Open(ctx)` 与 `gormdb.RunVersioned`；候选的准备与丢弃为 `candidate.PrepareDatabase` 与 `candidate.Discard`，Core 侧经 `supervisor.Launch(ctx, store, Spec{..., ConfigSchema, I18n, NewCandidate, ExpectedOld, Secrets, KeptSecretPaths})` 启动真实插件进程；开发入口 `alonabot run` 只启动单个插件，候选配置固定为 `{}`、数据库为 NONE，不装配配置、Secret 与受管数据库（库模式与开发组件的配置归 T-13.1、T-13.2），因此本切片的跨进程验收只能经 `supervisor.Launch`，按 D-86 写在本地测试，不提交 `cmd/alonabot` 的 e2e。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-35（切片 T-08.9：configdb 示例与 T-08 验收）。goal 目录 goal-35，分支 goal-35，worktree .worktrees/goal-35，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -3657,7 +3657,7 @@ Core 一侧已按合入代码核对并修订：
 
 验收矩阵（各为一个子测试）：
 1) 配置迁移：config_version 1 的旧配置只有经 OnConfigLoad 才满足 2 的 Schema；先迁移再校验，结果写入候选快照。
-2) 显式空值：false、0、""、[]、{}、null（指针字段）全部保留；缺失键补默认值；未知键与嵌套未知键保留在快照中。
+2) 显式空值：false、0、""、[]、{} 全部保留；缺失键补默认值；未知键与嵌套未知键（含未知字段的 null）保留在快照中。声明字段为 null 时按 CONTRACTS §5.1 拒绝（CONFIG/INVALID_ARGUMENT；维护者裁决），原「null（指针字段）全部保留」不再作为要求。
 3) secret：快照只有引用；Schema 移除 secret 字段但候选保留该键时仍为引用；日志中没有明文。
 4) DB：CRUD 与事务（tx 回调）；versioned 两步迁移；第二步失败时账本只有第一步、候选失败、Active 不变。
 5) 候选：reload 后 OnStart 写入候选库再失败：Discard，Active 的数据与配置不变，旧版重启正常；新旧进程没有同时写同一个库（runtime.lock 证明）。
@@ -3677,7 +3677,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-101 · T-08.12 Adapter 实例配置与 Core 设置的版本迁移
 
-状态：待派发。前置 T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）与 T-08.11（goal-95，PR #103，合并提交 `c840af7`）均已合并。依据 D-85 新增；2026-11-09 审查者按 main `3dec9a0` 的代码写出接口、行为与测试段。2026-11-10 按 D-117，文件名由 `instance_schema.json` 改为 `adapter_config_schema.json`，语句中的文件名已随之修改；PR #114 在合并前改用新名字。已核对：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)`（同时检查 `$version` 与 `$migrations`）、`Schema.Version() int`、`Migrate(config map[string]any, from int) error`、`Complete(config map[string]any)`、`Validate(config map[string]any) error`、`SecretPaths() [][]string`；`internal/core/settings` 的 `Settings.Adapters map[string]AdapterSettings{Version int; Instances map[string]json.RawMessage}`（实例配置已展开 `${...}`）、`File.Update(edit func(*Document) error)` 以磁盘原文为底稿并保留 `${...}` 原写法、`readVersion` 只接受 `currentVersion = 1`；`remote.Process.StartInstance(ctx, instanceID, configJSON)` 启动实例，但目前没有装配处从 `Settings.Adapters` 启动实例（归 goal-39 与 goal-9）；Telegram 在 `New().Start` 中解析 `token`（必填）、`api_base_url`（缺省 `https://api.telegram.org`）与 `proxy`；`alonabot plugin generate`/`check`（`sdk/generate.Scan`）只处理插件工程，`alonabot build`/`pack` 尚未实现。goal-117 已于 [PR #125](https://github.com/AlonaBot/AlonaBot/pull/125)（合并提交 `f3af986`）合并，`Start` 现在解析 `proxy_mode`。2026-11-09 新增的 goal-117（D-101）给 Telegram 实例配置追加 `proxy_mode`：goal-117 先合并时，本切片的 Telegram adapter_config_schema.json 按执行顺序 §3 一并声明它（options none、core、custom，缺省 none，proxy 带 condition）。
+状态：已完成（[PR #114](https://github.com/AlonaBot/AlonaBot/pull/114)，合并提交 `a796766`），证据见 TEST-MATRIX §3.2。按 D-117 使用 `adapter_config_schema.json`；Telegram 声明按 goal-117 合并后的 `Start` 补了 `proxy_mode`（缺省 `none`，`proxy` 带 `custom` 条件）；CONTRACTS §8 列出的 `file_base_url` 当前 `Start` 未读取，暂未声明；审查中修复同毫秒备份重名，备份名同名时顺延 1 毫秒。派发时：前置 T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）与 T-08.11（goal-95，PR #103，合并提交 `c840af7`）均已合并。依据 D-85 新增；2026-11-09 审查者按 main `3dec9a0` 的代码写出接口、行为与测试段。2026-11-10 按 D-117，文件名由 `instance_schema.json` 改为 `adapter_config_schema.json`，语句中的文件名已随之修改；PR #114 在合并前改用新名字。已核对：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)`（同时检查 `$version` 与 `$migrations`）、`Schema.Version() int`、`Migrate(config map[string]any, from int) error`、`Complete(config map[string]any)`、`Validate(config map[string]any) error`、`SecretPaths() [][]string`；`internal/core/settings` 的 `Settings.Adapters map[string]AdapterSettings{Version int; Instances map[string]json.RawMessage}`（实例配置已展开 `${...}`）、`File.Update(edit func(*Document) error)` 以磁盘原文为底稿并保留 `${...}` 原写法、`readVersion` 只接受 `currentVersion = 1`；`remote.Process.StartInstance(ctx, instanceID, configJSON)` 启动实例，但目前没有装配处从 `Settings.Adapters` 启动实例（归 goal-39 与 goal-9）；Telegram 在 `New().Start` 中解析 `token`（必填）、`api_base_url`（缺省 `https://api.telegram.org`）与 `proxy`；`alonabot plugin generate`/`check`（`sdk/generate.Scan`）只处理插件工程，`alonabot build`/`pack` 尚未实现。goal-117 已于 [PR #125](https://github.com/AlonaBot/AlonaBot/pull/125)（合并提交 `f3af986`）合并，`Start` 现在解析 `proxy_mode`。2026-11-09 新增的 goal-117（D-101）给 Telegram 实例配置追加 `proxy_mode`：goal-117 先合并时，本切片的 Telegram adapter_config_schema.json 按执行顺序 §3 一并声明它（options none、core、custom，缺省 none，proxy 带 condition）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-101（切片 T-08.12：Adapter 实例配置与 Core 设置的版本迁移）。goal 目录 goal-101，分支 goal-101，worktree .worktrees/goal-101，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -3834,7 +3834,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-104 · T-03.13 媒体按来源传递
 
-状态：等待前置（T-04.8、T-07.7）。T-03.6（PR #55）已合并。2026-11-09 按 D-87、D-88 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+状态：等待前置（T-04.8）。T-07.7（[PR #116](https://github.com/AlonaBot/AlonaBot/pull/116)，合并提交 `e65eb4d`）已合并。已合入 `settings.Settings.BaseURL string`（键 `base_url`）与 `webhost.Options{BaseURL *url.URL; Admin http.Handler; Proxy *httpproxy.Server; Now func() time.Time}`；`Host.ServeHTTP` 把 `/plugins/` 交给 Proxy，其余路径交给 Admin，媒体入口应接入这一统一 Listener。合并后由审查者按 main `2c1fdcc` 核对。T-03.6（PR #55）已合并。2026-11-09 按 D-87、D-88 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
 
 目标：出站媒体按来源传递，不统一转为 base64。MediaSource 追加插件可用的 `inline_base64` 与只由 Core 填写的 `platform_file`；Send 的目标实例就是入站对象的来源实例时，Core 把平台文件标识交给 Adapter 复用，不取件；Adapter 可以经 `core.media.url` 为本次发送的媒体取得临时 URL，由平台端从 Core 统一端口拉取；SDK 的字节构造函数在 1 MiB 内用内联数据，超出时先上传。
 
@@ -3928,7 +3928,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-110 · T-03.19 Adapter 的 HTTP 路由
 
-状态：等待前置（T-04.8、T-07.7）。T-03.3（PR #32）已合并。2026-11-09 按 D-87、D-94 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+状态：等待前置（T-04.8）。T-07.7（[PR #116](https://github.com/AlonaBot/AlonaBot/pull/116)，合并提交 `e65eb4d`）已合并。已合入 `webhost.Options{BaseURL, Admin, Proxy, Now}`，`adminauth.Auth.Authorize(r *http.Request, pluginID string) bool` 经 `httpproxy.New(auth)` 接入私有路由；Cookie 的非 GET/HEAD 请求校验 CSRF 与 Origin。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。`supervisor.Spec.HTTP *httpproxy.Server` 在 ACTIVATED 后 Bind，`Server.Drain(pluginID string, deadline time.Time)` 冻结新请求并等待在途请求，STOPPING 或断链时按代次 Unbind；Adapter 路由须沿用这一授权与启停接入。合并后由审查者按 main `2c1fdcc` 核对。T-03.3（PR #32）已合并。2026-11-09 按 D-87、D-94 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
 
 目标：Adapter 的 REGISTER 可以携带 HTTP 路由与 loopback endpoint，`sdk.RunAdapter` 在声明了路由时托管 Listener；统一端口代理转发 WebSocket Upgrade，并在路由撤销、Session 失效或代次变化时关闭已升级的连接。
 
@@ -4007,7 +4007,7 @@ sdk
 
 ### goal-27 · T-07.5 调度与 HTTP 启停集成及验收
 
-状态：待派发。前置 T-07.2（[PR #107](https://github.com/AlonaBot/AlonaBot/pull/107)，合并提交 `fc2c247`）与 T-07.4（PR #53）均已合并。2026-11-04 按 D-77～D-85 修订计划：两个 Host 与单 Host 主动内容的边界改为插件响应的沙箱头与 Set-Cookie 过滤，归 goal-98（T-07.7），本切片不再验收 Host 边界。2026-11-09 审查者按 main `3dec9a0` 的代码核对并改写，已核对：`internal/core/scheduler` 的 `New(Options{JobTimeout, Now})`、`Attach(p router.Plugin, activatedAt time.Time)`、`Detach(pluginID)`、`Released(pluginID)`、`Close()`、`Stats(pluginID, jobID) JobStats`，`wire.Request.Late`；`httpproxy.Server` 的 `New(auth)`、`Bind(pluginID, generationID, endpoint, token, routes)`、`Unbind(pluginID, generationID)`，未绑定时返回 503；`host.Instance.Stop(t0, reason, tree, timing)` 在内部完成冻结、排空与 STOPPING，`host.StopTiming{Drain, Total, OnStopAt}`；`supervisor.Launch`/`Running.Stop`/`Running.WaitExit` 与 `Spec`（目前没有调度与 HTTP 依赖）；`cmd/alonabot/main.go` 现在在 Launch 返回后自行 `proxy.Bind`，并在 Session 结束时 `proxy.Unbind`，没有装配 Scheduler，也没有为插件调用设置 `Spec.Handler`。D-86 之后 `internal/core/supervisor` 只保留不依赖 SDK API 的 `supervisor_test.go`（用测试二进制以原始协议帧扮演插件），本切片的提交测试写在那里。goal-98（T-07.7）也修改 `cmd/alonabot/main.go` 的代理装配，两者可以并行，后合并的一方按先合并的代码变基。
+状态：已完成（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`），证据见 TEST-MATRIX §3.2。派发时：前置 T-07.2（[PR #107](https://github.com/AlonaBot/AlonaBot/pull/107)，合并提交 `fc2c247`）与 T-07.4（PR #53）均已合并。2026-11-04 按 D-77～D-85 修订计划：两个 Host 与单 Host 主动内容的边界改为插件响应的沙箱头与 Set-Cookie 过滤，归 goal-98（T-07.7），本切片不再验收 Host 边界。2026-11-09 审查者按 main `3dec9a0` 的代码核对并改写，已核对：`internal/core/scheduler` 的 `New(Options{JobTimeout, Now})`、`Attach(p router.Plugin, activatedAt time.Time)`、`Detach(pluginID)`、`Released(pluginID)`、`Close()`、`Stats(pluginID, jobID) JobStats`，`wire.Request.Late`；`httpproxy.Server` 的 `New(auth)`、`Bind(pluginID, generationID, endpoint, token, routes)`、`Unbind(pluginID, generationID)`，未绑定时返回 503；`host.Instance.Stop(t0, reason, tree, timing)` 在内部完成冻结、排空与 STOPPING，`host.StopTiming{Drain, Total, OnStopAt}`；`supervisor.Launch`/`Running.Stop`/`Running.WaitExit` 与 `Spec`（目前没有调度与 HTTP 依赖）；`cmd/alonabot/main.go` 现在在 Launch 返回后自行 `proxy.Bind`，并在 Session 结束时 `proxy.Unbind`，没有装配 Scheduler，也没有为插件调用设置 `Spec.Handler`。D-86 之后 `internal/core/supervisor` 只保留不依赖 SDK API 的 `supervisor_test.go`（用测试二进制以原始协议帧扮演插件），本切片的提交测试写在那里。goal-98（T-07.7）也修改 `cmd/alonabot/main.go` 的代理装配，两者可以并行，后合并的一方按先合并的代码变基。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-27（切片 T-07.5：调度与 HTTP 启停集成及验收）。goal 目录 goal-27，分支 goal-27，worktree .worktrees/goal-27，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -4060,17 +4060,17 @@ sdk
 
 ### goal-39 · T-09.4 管理服务、安装记录与 serve
 
-状态：等待前置（T-03.8、T-13.1）。2026-11-10 按 D-127：卸载分为只卸载、`--purge-data` 与 `--purge` 三种清理范围，`Uninstall` 的 purge 参数由 bool 改为 `PurgeScope`；动态任务与调度状态的表由 goal-127 加入清理对象，本切片不涉及。2026-11-09 按 D-105：admin add/remove 与禁止的参数是用户字符串 `<adapter_id>:<external_user_id>` 与会话字符串，下文合入符号中的 `Admin{InstanceID, UserID}` 由 goal-122 改为 `Admin{AdapterID, UserID}`，改写语句时按合入的代码核对。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin{InstanceID, UserID}`；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。语句中 goal-8、goal-31、goal-36、goal-37（packages）、goal-53、goal-67 提供的符号（manifest.CheckDependencies、secret.Store、adminauth.Auth、packages.Preflight、supervisor.Spec.DefaultLocale、根包的 assembly、remote.Process、policy 的 Admin 方法）只写名字；合并后由审查者核对签名，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：`alonabot serve` 改为 `alonabot run`（D-77）；Adapter 实例与 Core Admin 的增删经 goal-97 的 settings 写回 `core_config.json`，实例凭证不再存为 Secret 引用（D-82）；首次 token 由 goal-97 实现；install 接受未签名的仓库来源并要求管理员确认（D-81）。前置合并后由审查者改写。2026-11-05：goal-67 首次装配 Router 时 prefixes 传 nil，goal-97 只提供 settings，命令前缀与 Core Admin 列表由本切片接入（见范围、行为与测试）。2026-11-06：默认 locale 也由本切片接入，前置加入提供 Spec.DefaultLocale 的 T-08.8；Router 经 `Plugin.DefaultLocale()` 读取该插件 Session 的 Bootstrap 快照（goal-53 已合入），装配处只需填好 Spec.DefaultLocale。2026-11-09 按 D-102 追加一项装配：goal-121（T-03.24）合并后，装配在读取设置后调用 `Registry.SetDefaults(settings.DefaultInstances())`，设置重新读取后（goal-69）同样调用；goal-121 先于本切片合并时，审查者把这一步写进接口与行为段。
+状态：等待前置（T-03.8、T-13.1）。T-08.12（[PR #114](https://github.com/AlonaBot/AlonaBot/pull/114)，合并提交 `a796766`）已合并。实例启动复用 `settings.File.PrepareInstances(adapterID, schema)`，返回可启动配置、`[]settings.InstanceProblem` 与备份/写回错误；`settings.BackupDir = "backups"`。T-07.7（[PR #116](https://github.com/AlonaBot/AlonaBot/pull/116)，合并提交 `e65eb4d`）已合并。装配使用 `Settings.BaseURL`（键 `base_url`）、`webhost.Options{BaseURL, Admin, Proxy, Now}` 与 `httpproxy.New(auth)`，私有路由经 `adminauth.Auth.Authorize`。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。装配把 Scheduler 与代理传入 `supervisor.Spec.Scheduler`/`HTTP`，由 `Launch`、`Running.Stop` 与 `WaitExit` 管理 Bind/Attach、Drain、撤销与清空后的 Released。合并后由审查者按 main `2c1fdcc` 核对。2026-11-10 按 D-127：卸载分为只卸载、`--purge-data` 与 `--purge` 三种清理范围，`Uninstall` 的 purge 参数由 bool 改为 `PurgeScope`；动态任务与调度状态的表由 goal-127 加入清理对象，本切片不涉及。2026-11-09 按 D-105：admin add/remove 与禁止的参数是用户字符串 `<adapter_id>:<external_user_id>` 与会话字符串，下文合入符号中的 `Admin{InstanceID, UserID}` 由 goal-122 改为 `Admin{AdapterID, UserID}`，改写语句时按合入的代码核对。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin{InstanceID, UserID}`；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, baseURL, dataDir)`；`alonabot admin-token show`。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。语句中 goal-8、goal-31、goal-36、goal-37（packages）、goal-53、goal-67 提供的符号（manifest.CheckDependencies、secret.Store、adminauth.Auth、packages.Preflight、supervisor.Spec.DefaultLocale、根包的 assembly、remote.Process、policy 的 Admin 方法）只写名字；合并后由审查者核对签名，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：`alonabot serve` 改为 `alonabot run`（D-77）；Adapter 实例与 Core Admin 的增删经 goal-97 的 settings 写回 `core_config.json`，实例凭证不再存为 Secret 引用（D-82）；首次 token 由 goal-97 实现；install 接受未签名的仓库来源并要求管理员确认（D-81）。前置合并后由审查者改写。2026-11-05：goal-67 首次装配 Router 时 prefixes 传 nil，goal-97 只提供 settings，命令前缀与 Core Admin 列表由本切片接入（见范围、行为与测试）。2026-11-06：默认 locale 也由本切片接入，前置加入提供 Spec.DefaultLocale 的 T-08.8；Router 经 `Plugin.DefaultLocale()` 读取该插件 Session 的 Bootstrap 快照（goal-53 已合入），装配处只需填好 Spec.DefaultLocale。2026-11-09 按 D-102 追加一项装配：goal-121（T-03.24）合并后，装配在读取设置后调用 `Registry.SetDefaults(settings.DefaultInstances())`，设置重新读取后（goal-69）同样调用；goal-121 先于本切片合并时，审查者把这一步写进接口与行为段。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-39（切片 T-09.4：管理服务、安装记录与 serve）。goal 目录 goal-39，分支 goal-39，worktree .worktrees/goal-39，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：建立唯一的管理服务，CLI 与（之后的）WebUI 都经它的 HTTP API 操作；四种角色的组件使用同一套 install、list、enable、disable、restart、uninstall（含 --purge-data 与 --purge）、pin 流程，所有变更按包串行；install 按角色执行同类唯一，`--source` 指定并持久化来源，`--replace` 显式替换同类组件；Adapter 实例的创建、启停与删除经此服务，凭证存为 Secret 引用；启用时检查必需依赖，停用、卸载被依赖的包时列出受影响者并要求显式确认；admin add/remove/list；alonabot run（不带子命令时相同）复用根包的 Core 装配，按安装记录启动全部已启用的包。reload、update、rollback 的入口与校验在此定义，候选编排由 T-09.5 起接入。
+目标：建立唯一的管理服务，CLI 与（之后的）WebUI 都经它的 HTTP API 操作；四种角色的组件使用同一套 install、list、enable、disable、restart、uninstall（含 --purge-data 与 --purge）、pin 流程，所有变更按包串行；install 按角色执行同类唯一，`--source` 指定并持久化来源，`--replace` 显式替换同类组件；Adapter 实例的创建、启停与删除经此服务，配置与凭证写回 core_config.json 的 adapters；启用时检查必需依赖，停用、卸载被依赖的包时列出受影响者并要求显式确认；admin add/remove/list；alonabot run（不带子命令时相同）复用根包的 Core 装配，按安装记录启动全部已启用的包。reload、update、rollback 的入口与校验在此定义，候选编排由 T-09.5 起接入。
 
 依据：PLAN T-09 步骤 3；CONTRACTS §2.2、§2.3、§9.1～§9.3、§8（依赖段）、§15.1、§15.2、§7.4、§5.3、§5.4；DECISIONS D-26、D-42、D-59、D-82、D-127；TEST-MATRIX V-40、V-48、V-52、V-82、V-01 的安装分项、V-88 的接入分项。
 
 范围（只新增或修改这些）：
-- internal/core/state/schema.sql：在唯一的初始迁移的 install 表定义中加入新列、末尾加入新表，安装记录的写入与读取方法同步新列；新增 internal/core/state/installs_admin.go（安装记录的扩展字段与 Adapter 实例表）
+- internal/core/state/schema.sql：在唯一的初始迁移的 install 表定义中加入新列、末尾加入新表，安装记录的写入与读取方法同步新列；新增 internal/core/state/installs_admin.go（安装记录的扩展字段）
 - 新增 internal/core/manage/（管理服务与 HTTP API）
 - 根包 assembly.go：增加按安装记录启动全部已启用包、挂载管理 API 的步骤，读取 core_config.json 并接入命令前缀、Core Admin 列表与默认 locale；新增导出的 Serve 供 cmd 使用
 - cmd/alonabot/：serve（以及不带子命令时）调用根包 Serve；新增 install、list、enable、disable、restart、reload、update、rollback、uninstall、pin、adapter instance、admin 命令（经管理 API 访问）
@@ -4081,7 +4081,6 @@ sdk
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 1. internal/core/state
    迁移：install 表定义加入列 version TEXT NOT NULL, publisher_key_id TEXT NOT NULL, pin TEXT NOT NULL, uninstalled INTEGER NOT NULL（不设 DEFAULT，写入安装记录时给出全部列）；
-   CREATE TABLE adapter_instance (instance_id TEXT PRIMARY KEY, plugin_id TEXT NOT NULL REFERENCES install(plugin_id), config_snapshot TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL);
    读写方法自定。
 2. internal/core/manage
    type Service struct{ ... }
@@ -4112,7 +4111,7 @@ sdk
    func (s *Service) Reload(ctx context.Context, id string) error
    func (s *Service) Update(ctx context.Context, id, archive, releaseJSON, signature string, confirm bool) error
    func (s *Service) Rollback(ctx context.Context, id, generation string, confirm bool) error
-   func (s *Service) CreateInstance(ctx context.Context, adapterPackageID, instanceID string, config []byte) error // 配置中的 secret 字段经 Secret Store 存为引用
+   func (s *Service) CreateInstance(ctx context.Context, adapterPackageID, instanceID string, config []byte) error // 配置与凭证经 settings.File.Update 写回 core_config.json，保留 ${...} 原写法
    func (s *Service) StartInstance(ctx context.Context, instanceID string) error
    func (s *Service) StopInstance(ctx context.Context, instanceID string) error
    func (s *Service) DeleteInstance(ctx context.Context, instanceID string) error
@@ -4124,16 +4123,16 @@ sdk
 
 行为：
 - install：packages.Preflight（验签、来源、平台、大小、摘要）→ MoveTo 不可变目录 → 写安装记录（install_seq 递增、source、publisher_key_id、version、role、adapter_id）。仍处于已安装状态的同 ID 返回 ALREADY_EXISTS，不覆盖。同类组件（同一 adapter_id 的 adapter、任一 agent、任一 webui）已安装时：未带 Replace 返回 ALREADY_EXISTS，safe_message 列出已安装的组件 ID；带 Replace 未带 confirm 返回 ErrNeedsConfirm（Affected 为将被卸载的组件）；确认后先完成新组件的下载与 Preflight，再按 uninstall 的缺省语义卸载旧组件，最后写新安装记录；旧组件原来启用时按 Enable 启用新组件。被替换 Adapter 的实例记录留在旧组件名下，不转给新组件，Affected 中列出这些实例。新组件在卸载旧组件之后失败时旧组件保持已卸载。Source 持久化为来源，之后的 update 只从它取版本；已卸载的保留记录只允许来源与发布者公钥都相同的重装（复用数据），否则 PERMISSION_DENIED。安装时用全部安装记录的 plugin_dependencies 检查必需依赖成环，成环拒绝。首次信任新发布者公钥需要 confirm。
-- enable：检查 manifest 的必需依赖（CheckDependencies，Installed 来自已启用的包与运行中的 Adapter 描述），有缺失时 FAILED_PRECONDITION 并列出全部缺失项；可选依赖缺失只记诊断。已有 Active 时以该代次启动；首次安装没有 Active 时以「首个候选」启动（新代次、首装 SQLite、配置为 {} 或编辑快照，提交后激活；Journal 由 T-09.5 接入，本切片用一行 shortcut 注释写明）。Adapter 包启用后按 adapter_instance 中 enabled 的实例 StartInstance。
+- enable：检查 manifest 的必需依赖（CheckDependencies，Installed 来自已启用的包与运行中的 Adapter 描述），有缺失时 FAILED_PRECONDITION 并列出全部缺失项；可选依赖缺失只记诊断。已有 Active 时以该代次启动；首次安装没有 Active 时以「首个候选」启动（新代次、首装 SQLite、配置为 {} 或编辑快照，提交后激活；Journal 由 T-09.5 接入，本切片用一行 shortcut 注释写明）。Adapter 包启用后按 core_config.json 的 adapters 读取该 Adapter 的实例，经 File.PrepareInstances 准备后逐个 StartInstance。
 - disable：停止并保留安装与数据；被已启用包的必需依赖引用时，未带 confirm 返回 ErrNeedsConfirm（列出受影响者），确认后执行，依赖方继续运行，调用它返回 UNAVAILABLE。
 - restart：以当前 Active 启动新 Session（不导入编辑快照，不产生新代次）。
 - uninstall：同 disable 的确认规则；停止、解除运行注册、删除未被引用的程序包目录。清理范围按 CONTRACTS §9.3（D-127）：PurgeNone 保留数据、配置、来源绑定与 uninstalled=1 的记录。PurgeData（--purge-data）另外删除数据：全部代次（代次目录、SQLite 与代次内的配置快照）、会话、按钮 token、Adapter 的游标；保留配置、来源绑定与 uninstalled=1 的记录，之后同来源重装时首个候选的配置取编辑快照。PurgeAll（--purge）删除数据与配置（编辑快照、Pending、secret、策略、工具策略、发信许可、Adapter 实例）以及安装记录。两种清理都先列出将删除的对象，未带 confirm 返回 ErrNeedsConfirm（Affected 为对象列表；PurgeData 时编辑快照与 Active 的配置不同也列入），确认后删除，状态库中的对象在一个事务内删除；不删除插件自管的外部数据库与插件自管目录。清理对象的列表集中在一处，供之后的切片追加（goal-127 追加任务与调度状态）。
 - pin：持久化版本约束（SemVer 范围，manifest 的语法规则），update 只接受满足 pin 的候选。
 - reload/update/rollback：完成输入与前置校验（来源绑定、pin、版本不低于被依赖的 min_version 时需要 confirm），然后交给 Candidates；缺省实现返回 UNSUPPORTED。
-- Adapter 实例：CreateInstance 用该 Adapter 包的配置 Schema（安装包中的 Schema 资源）经 secret.Extract 存快照；Start 时 Resolve 后经 remote.Process 启动；同一 adapter_id 下账号唯一由 remote 检查。实例配置与凭证不出现在 List 或日志中，读取只返回 Redact 后的结果。
+- Adapter 实例：CreateInstance 按包内 adapter_config_schema.json 补缺失值并校验，经 File.Update 写回 adapters.<adapter_id>.instances，凭证保留原值或 ${...} 引用。启动前调用 File.PrepareInstances，逐个记录 InstanceProblem，返回的可启动配置交给 remote.Process.StartInstance(ctx, instanceID, configJSON)；备份或写回 error 原样返回。同一 adapter_id 下账号唯一由 remote 检查。DeleteInstance 经 File.Update 删除对应配置。实例配置与凭证不出现在 List 或日志中，管理读取按声明中的 secret 路径脱敏。
 - Core 设置接入（assembly，Run 与 Serve 共用）：settings.Load 取得 *settings.File（goal-68 或 goal-69 已加入这一步时复用）；Router 的 prefixes（goal-15 合并后为 Options.Prefixes）传 File.CommandPrefixes，policy 传与 message.Service 相同的 *policy.Policy；启动任何包之前把 Settings().Admins 转为 []policy.Admin 并调用 SetAdmins。经 supervisor.Launch 启动组件时 Spec.DefaultLocale 取 Settings().DefaultLocale，同进程开发组件的 Bootstrap.default_locale 取同一个值；每次启动都读当前设置，修改后在之后建立的 Session 生效。Core 自己的文案（缺省 usage）由 Router 经 Plugin.DefaultLocale() 取该插件 Session 的 Bootstrap 快照（goal-53 已合入），不另外注入。
 - admin add/remove 经 File.Update 写回 admins，成功后调用 SetAdmins。两步在同一把锁内执行，SetAdmins 用这次写回之后的列表。这两个操作没有包 ID，按包串行保护不到它们，不加锁时并发的 add 与 remove 会让内存列表与文件不一致。admin list 读 Policy.Admins。
-- HTTP API（在 Core 的主机名下，全部经 adminauth.Require）：每个方法一个 JSON 端点，需要确认时返回 409 与 {"affected": [...]}；错误返回 {"code", "safe_message"}。CLI 命令从 --admin-url（缺省取设置文件的 admin_base_url）与 ALONABOT_ADMIN_TOKEN 环境变量（或 --token-file）取得 Bearer token，不读取插件环境；确认通过 --yes 显式给出。CLI 不直接写状态库。
+- HTTP API（在 Core 的主机名下，全部经 adminauth.Require）：每个方法一个 JSON 端点，需要确认时返回 409 与 {"affected": [...]}；错误返回 {"code", "safe_message"}。CLI 命令从 --admin-url（缺省取设置文件的 base_url）与 ALONABOT_ADMIN_TOKEN 环境变量（或 --token-file）取得 Bearer token，不读取插件环境；确认通过 --yes 显式给出。CLI 不直接写状态库。
 - WebUI 组件没有进程：enable/disable 只改记录，restart 返回 FAILED_PRECONDITION；文件的提供在 T-09.12。list 返回 role。
 - serve：取得 core.lock；没有管理凭证时，stdin 与 stderr 都是终端则按 admin-token init 生成并显示一次后继续，否则拒绝启动并提示先运行 admin-token init；装配 Core（与 Run 共用 assembly），启动 HTTP Listener、webhost、管理 API，按 install_seq 顺序启动全部已启用的包。不带子命令运行 alonabot 等同 serve。
 
@@ -4143,7 +4142,7 @@ sdk
   - 依赖 Adapter 的插件在 Adapter 未安装时 enable 失败并列出缺失项；安装 Adapter 后成功；disable Adapter 未加 --yes 时被拒并列出受影响插件，加 --yes 后执行，插件继续运行。
   - uninstall 后同来源重装复用数据；不同来源重装被拒；--purge-data 列出对象并在 --yes 后删除数据，secret 与策略仍在，同来源重装后以编辑快照为配置启动；--purge 列出对象并在 --yes 后删除数据、配置与安装记录。
   - 已安装 Agent 测试组件时安装另一个 Agent：不带 --replace 返回 ALREADY_EXISTS；带 --replace 与 --yes 后旧组件已卸载、新组件已安装并沿用旧组件的启用状态；替换 Adapter 时旧实例不出现在新 Adapter 下；不同 adapter_id 的两个 Adapter 可以并存。
-  - 创建 Adapter 实例：状态库中的配置只有 secret 引用；list 与日志中没有 token；实例可启停。
+  - 创建 Adapter 实例：配置写入 core_config.json，${...} 原写法保留；经 PrepareInstances 迁移、补值与校验后启动，失败实例单列且其余实例可启动；list 与日志中没有 token；实例可启停。
   - core_config.json 用 command_prefixes_by_instance 覆盖一个实例：该实例的消息按新前缀匹配命令，另一个实例仍用 command_prefixes；admins 中的用户发命令时插件收到的 Actor.permissions 含 admin，admin add 写回后新用户的下一条命令也含 admin。
   - core_config.json 的 default_locale 设为 zh-CN：没有 locale 的 Actor 触发命令时，插件的 Context.T 回复中文，参数错误的缺省 usage 也是中文。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：串行化（同一包的并发操作排队）；ErrNeedsConfirm 的 Affected 内容；API 的错误格式；没有管理凭证且非终端时 serve 拒绝启动；Package.State 的取值；--source 指向本地 Release 模拟服务：安装成功且来源被持久化；模拟服务上的签名被篡改时安装失败，已有组件不受影响；pin 持久化，重启 serve 后仍在；插件依赖成环的包在安装时被拒；reload、update、rollback 返回 UNSUPPORTED（等待 T-09.5）。
@@ -4210,17 +4209,17 @@ sdk
 
 ### goal-9 · T-03.10 Telegram 接入开发入口与故障矩阵
 
-状态：等待前置（T-03.8、T-13.3）。T-03.9（[PR #118](https://github.com/AlonaBot/AlonaBot/pull/118)，合并提交 `1cbfb2e`）已合并。T-03.7（[PR #108](https://github.com/AlonaBot/AlonaBot/pull/108)，合并提交 `d89e9b7`）已合并，合入的符号：`Button.core_token = 4`（optional string，发送时校验 1～64 字节）；`adapters/telegram` 实例的 `Send`（整链预检、确定的物理计划、每个物理操作一个 PartResult；末条物理消息为相册且带按钮时首发前 UNSUPPORTED）与 message.send/markdown/album/reference/buttons 能力；`telegramtest` 的 `Request{Method, Params, Files}`、`Requests()`、`FailMethod`、`ZeroMessageID`、`Drop`，模拟服务已支持 editMessageReplyMarkup。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin{InstanceID, UserID}`；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。语句中 goal-4～goal-8、goal-50、goal-51 提供的符号（remote.Process、supervisor.Spec 的 Role、adapters/telegram、telegramtest、media.Store、buttons.Service、message 的 Send/Edit）只写名字；合并后由审查者核对签名，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：开发入口改由 goal-69 的 `alonabot run <目录>` 提供，本切片不再给 run 加 `--adapter-id` 等参数；Adapter 实例写在 `core_config.json` 的 `adapters` 中，不再读取 instances/ 目录。前置合并后由审查者改写。
+状态：等待前置（T-03.8、T-13.3）。T-08.12（[PR #114](https://github.com/AlonaBot/AlonaBot/pull/114)，合并提交 `a796766`）已合并。Telegram 实例声明已位于 `adapters/telegram/cmd/alonabot-adapter-telegram/adapter_config_schema.json`，含 `token`、`api_base_url`、`proxy_mode` 与 `proxy`；启动复用 `settings.File.PrepareInstances(adapterID, schema)` 的可启动配置与 `InstanceProblem`，再调用 `remote.Process.StartInstance(ctx, instanceID, configJSON)`。`sdk/generate.Scan` 与 `plugin check` 已检查实例声明。合并后由审查者按 main `2c1fdcc` 核对。T-03.9（[PR #118](https://github.com/AlonaBot/AlonaBot/pull/118)，合并提交 `1cbfb2e`）已合并。T-03.7（[PR #108](https://github.com/AlonaBot/AlonaBot/pull/108)，合并提交 `d89e9b7`）已合并，合入的符号：`Button.core_token = 4`（optional string，发送时校验 1～64 字节）；`adapters/telegram` 实例的 `Send`（整链预检、确定的物理计划、每个物理操作一个 PartResult；末条物理消息为相册且带按钮时首发前 UNSUPPORTED）与 message.send/markdown/album/reference/buttons 能力；`telegramtest` 的 `Request{Method, Params, Files}`、`Requests()`、`FailMethod`、`ZeroMessageID`、`Drop`，模拟服务已支持 editMessageReplyMarkup。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin{InstanceID, UserID}`；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, baseURL, dataDir)`；`alonabot admin-token show`。语句中 goal-4～goal-8、goal-50、goal-51 提供的符号（remote.Process、supervisor.Spec 的 Role、adapters/telegram、telegramtest、media.Store、buttons.Service、message 的 Send/Edit）只写名字；合并后由审查者核对签名，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：开发入口改由 goal-69 的 `alonabot run <目录>` 提供，本切片不再给 run 加 `--adapter-id` 等参数；Adapter 实例写在 `core_config.json` 的 `adapters` 中，不再读取 instances/ 目录。前置合并后由审查者改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-9（切片 T-03.10：Telegram 接入开发入口与故障矩阵）。goal 目录 goal-9，分支 goal-9，worktree .worktrees/goal-9，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：alonabot run 可以同时启动一个 Adapter 包与一个插件，Adapter 的实例配置取自 <data_dir>/adapters/<adapter_id>/instances/<instance_id>.json；提供 echo 与媒体示例；用本地 Bot API 模拟服务跑完 PLAN T-03 步骤 8 的发送与接收故障矩阵，并在 TEST-MATRIX §3.2 记录 T-03 的证据。真实 Telegram 没有测试账号时记为未运行。
+目标：alonabot run 可以同时启动一个 Adapter 包与一个插件，Adapter 的实例配置取自 <data_dir>/core_config.json 的 adapters.<adapter_id>.instances；提供 echo 与媒体示例；用本地 Bot API 模拟服务跑完 PLAN T-03 步骤 8 的发送与接收故障矩阵，并在 TEST-MATRIX §3.2 记录 T-03 的证据。真实 Telegram 没有测试账号时记为未运行。
 
 依据：PLAN T-03 步骤 8 与「停止和失败条件」；CONTRACTS §8、§15.1（`adapters`）、§15.4；MESSAGE-MODEL §4、§6；TEST-MATRIX V-07、V-08、V-09、V-35、V-44、V-45、V-48、V-51～V-54 的 T-03 分项。
 
 范围（只新增或修改这些）：
-- cmd/alonabot/：run 增加 --adapter-id、--adapter-entry、--adapter-dir（可选；给出时以 Adapter 角色启动该包，读取实例目录并启动全部实例，再启动插件）
+- cmd/alonabot/：复用 goal-69 的 alonabot run <目录...> 开发入口，读取 core_config.json，经 File.PrepareInstances 准备 Adapter 实例后启动
 - 新增 examples/plugins/echo/ 的媒体回送能力（收到图片时以 incoming_ref 原样回送）；新增 examples/plugins/media/（上传一个内置图片并发送相册与按钮）
 - adapters/telegram/telegramtest/：补齐矩阵所需的故障注入（getUpdates 409、提交后超时、相册后 markup 失败等）
 - 新增 cmd/alonabot/telegram_e2e_test.go（//go:build unix）
@@ -4229,12 +4228,12 @@ sdk
 允许的新跨模块边：cmd/alonabot 的测试 -> adapters/telegram/telegramtest（测试代码，审查者确认允许）。
 
 接口：
-- alonabot run 的新参数：--adapter-id ID --adapter-entry PATH [--adapter-dir DIR]。Adapter 的安装记录为 dev-local 来源、Role=adapter、AdapterID=ID；实例目录为 <data_dir>/adapters/<ID>/instances/，每个 *.json 是一个实例（文件名去掉 .json 为 instance_id），内容原样作为实例配置；目录不存在时没有实例并输出 WARN。
+- goal-69 合并后复用其 alonabot run <目录...> 入口与组件身份；实例读取使用 settings.Load 与 File.PrepareInstances，schema 取 Adapter 工程的 adapter_config_schema.json；返回的配置经 remote.Process.StartInstance 下发，失败实例按 InstanceProblem 定位。
 - 不新增公开 Go 符号。
 
 行为：
 - 启动顺序：取得 core.lock → 启动 Adapter 进程并 Bind → 启动全部实例 → 启动插件。插件停止与 Core 退出时先停插件、再停 Adapter。Adapter 进程异常退出按有限重启策略恢复，Bind 后恢复已启用的实例。
-- 实例文件中的 Secret 字段（token、proxy）在本切片按原样下发；它们只出现在 adapter.instance.start 请求中，不写日志。Secret Store 对实例配置的处理由 T-09.4 接入，用一行 shortcut 注释写明。
+- 实例配置的 token、proxy 在 core_config.json 保留原值或 ${...} 引用，PrepareInstances 在运行副本展开后下发；它们只出现在 adapter.instance.start 请求中，不写日志。
 - 故障矩阵（全部以 telegramtest 运行，在 telegram_e2e_test.go 中各为一个子测试，并以 telegramtest.Calls() 的实际请求数量为证据）：
   1) 同包两个实例单独启停；停一个不影响另一个，进程 PID 不变。
   2) Adapter 进程被杀后恢复：两条 ADAPTER_EXITED 的 bot.offline，恢复后各一条 bot.online，从已保存游标继续，不重复交付。
@@ -4253,12 +4252,12 @@ sdk
 
 测试（按编码规范「测试提交规则」）：
 - 提交：cmd/alonabot/telegram_e2e_test.go（上述矩阵）；构建 cmd/alonabot、adapters/telegram/cmd/alonabot-adapter-telegram、examples/plugins/echo 与 media 后以真实进程运行。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：实例目录的各种异常（非法 JSON、空目录、非 .json 文件被忽略）；--adapter-* 参数的组合错误。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：实例配置的非法 JSON、迁移与校验失败、空实例集，以及失败实例不影响其余可启动实例。
 - 若维护者提供了测试账号：在 PR 中另附一次真实 Telegram 的手动运行记录（命令、时间、结果），不写入提交的测试。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
-不做：正式安装与实例管理（T-09.4）；实例配置的 Secret Store（T-09.4）；其他平台的 Adapter。
+不做：正式安装与实例管理（T-09.4）；其他平台的 Adapter。
 ```
 
 ### goal-17 · T-05.3 三阶段 Hook 与 send_forbidden
@@ -4395,7 +4394,7 @@ sdk
 
 ### goal-124 · T-04.11 注册写法统一
 
-状态：等待前置（T-04.8、T-04.12、T-07.5）。2026-11-09 按 D-112 新增。2026-11-10 按 D-114 前置加入 T-04.12：要点中的 `r` 指插件对象或子插件（`*sdk.Plugin`、`*sdk.SubPlugin`），`sdk.Subscribe` 的第一个参数是 `sdk.Registrar`；Handler 用结构体接收参数时不取参数名（D-115）。T-04.8（goal-91）改写 sdk 的注册与类型（含 `Public(mode HTTPAuth) HTTPOption`），T-07.5（goal-27，PR #119）修改定时任务与 HTTP 的启停，两者合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-101、goal-123 都修改 sdk/generate，按执行顺序 §3 的生成器一行处理。
+状态：等待前置（T-04.8、T-04.12）。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。`supervisor.Spec` 已有 `Scheduler *scheduler.Scheduler` 与 `HTTP *httpproxy.Server`，激活成功后先 Bind 再 Attach；`host.StopHooks{Frozen, Stopping}` 把 Drain 与撤销接入停止流程。SDK 当前仍为 `ScheduleRegistry.Every(jobID, d, fn)`、`Cron(jobID, expr, timezone, fn)` 与 `HTTPRegistry.Handle(method, path string, h http.Handler, opts ...HTTPOption)` 的位置参数注册，本切片在保留既有生命周期行为的基础上改为 builder。合并后由审查者按 main `2c1fdcc` 核对。2026-11-09 按 D-112 新增。2026-11-10 按 D-114 前置加入 T-04.12：要点中的 `r` 指插件对象或子插件（`*sdk.Plugin`、`*sdk.SubPlugin`），`sdk.Subscribe` 的第一个参数是 `sdk.Registrar`；Handler 用结构体接收参数时不取参数名（D-115）。T-04.8（goal-91）改写 sdk 的注册与类型（含 `Public(mode HTTPAuth) HTTPOption`），T-04.12（goal-125）改写注册的接收者，待两者合并后补全接口段。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-101、goal-123 都修改 sdk/generate，按执行顺序 §3 的生成器一行处理。
 
 目标：定时任务与 HTTP 路由改为与 D-70 相同的链式注册；命令省略 Args 时参数名取 Handler 的参数名；Event Bus 订阅的路由 ID 缺省为事件名。协议不变。Hook 的同样改写由 T-05.3（goal-17）完成。
 
@@ -4474,7 +4473,7 @@ sdk
 
 ### goal-127 · T-07.8 动态任务与调度持久化的协议和 Core 侧
 
-状态：等待前置（T-07.5、T-09.4）。2026-11-10 按 D-124～D-127 新增。T-07.5（goal-27）接入调度器的启停与清理，T-09.4（goal-39）提供管理服务的卸载与清理对象列表，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片修改 `internal/core/state/schema.sql`，按执行顺序的共享文件规则处理冲突。
+状态：等待前置（T-09.4）。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。已合入 `Scheduler.Drain(pluginID string)`（停止新 tick，保留运行槽）、`Detach(pluginID)` 与 `Released(pluginID)`；`supervisor.Spec.Scheduler *scheduler.Scheduler` 在 ACTIVATED 后 Attach，`Running.Stop` 通过 `host.StopHooks.Frozen` Drain、`Stopping` Detach，停止或断链后只在确认进程树清空时 Released。合并后由审查者按 main `2c1fdcc` 核对。2026-11-10 按 D-124～D-127 新增。T-09.4（goal-39）将提供管理服务的卸载与清理对象列表，待其合并后补全接口段。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片修改 `internal/core/state/schema.sql`，按执行顺序的共享文件规则处理冲突。
 
 目标：Core 支持插件在运行时创建、替换、取消与列出带参数的定时任务实例，并能暂停、恢复静态任务；任务定义、周期任务的起点与暂停状态保存在 Core 状态库，Core 重启、插件重启与更新后仍在；错过的触发一律作废；卸载按清理范围删除或保留这些状态。SDK 的写法由 goal-128 提供。
 
@@ -4496,7 +4495,7 @@ sdk
 
 ### goal-84 · T-09.12 WebUI 组件与组件图标
 
-状态：等待前置（T-07.7、T-09.4、T-13.1）。语句只写了目标、依据和要点。依据 D-62、D-63 新增；前置合并后由审查者按实际的 webhost、adminauth、manage 与根包装配写出接口和测试段。2026-11-04 随前后端拆分从 WebUI 章节移入核心章节。2026-11-04 按 D-77～D-85 修订计划：Core 只有一个主机名（D-84），WebUI 与插件路由同在其下；spec/ADMIN-API.md 还要写出插件页面桥的消息格式。
+状态：等待前置（T-09.4、T-13.1）。T-07.7（[PR #116](https://github.com/AlonaBot/AlonaBot/pull/116)，合并提交 `e65eb4d`）已合并。已合入 `settings.Settings.BaseURL`（键 `base_url`）、`webhost.Options{BaseURL, Admin, Proxy, Now}` 与 `adminauth.Auth.Authorize`；装配用 `httpproxy.New(auth)`，WebUI 静态入口挂到 Admin，`/plugins/` 由 Proxy 提供统一沙箱响应。私有插件请求直接使用管理 Cookie/Bearer，Cookie 的非 GET/HEAD 请求校验 CSRF 与 Origin；页面的 iframe 与 postMessage 桥仍由后继实现。合并后由审查者按 main `2c1fdcc` 核对。语句只写了目标、依据和要点。依据 D-62、D-63 新增；前置合并后由审查者按实际的 webhost、adminauth、manage 与根包装配写出接口和测试段。2026-11-04 随前后端拆分从 WebUI 章节移入核心章节。2026-11-04 按 D-77～D-85 修订计划：Core 只有一个主机名（D-84），WebUI 与插件路由同在其下；spec/ADMIN-API.md 还要写出插件页面桥的消息格式。
 
 目标：Core 以组件方式提供 WebUI 与组件图标：已启用 WebUI 组件的静态文件（保留 `/api/` 与内部路径，无扩展名的不存在路径回退 index.html，未安装时 503 与英文提示），Admin API 主版本常量与 WebUI 声明范围的检查（不兼容时拒绝安装与启用并提示），只提供 manifest 声明的图标并带 sandbox CSP 与 nosniff、要求管理员会话；写出 spec/ADMIN-API.md（主版本、全部接口、认证与错误格式）；根包增加 `alonabot.WebUI(fsys fs.FS)` 选项。
 
@@ -5075,7 +5074,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 ### goal-40 · T-09.5 候选 Journal 与准备编排
 
-状态：等待前置（T-09.4、T-06.4）。T-08.6（PR #85）已合并。语句中 goal-22、goal-33、goal-39 提供的符号（manage.Service 与 Candidates 接口、candidate.PrepareDatabase/Discard 与交接约定、supervisor 的停止流程）只写名字；合并后由审查者核对，再改为待派发。
+状态：等待前置（T-09.4、T-06.4）。T-08.12（[PR #114](https://github.com/AlonaBot/AlonaBot/pull/114)，合并提交 `a796766`）已合并。Adapter 更新停止旧版本前调用 `settings.File.TrialInstances(adapterID string, schema *configschema.Schema) []settings.InstanceProblem`；它只读试算，不写回、不备份，成功提交后的迁移写回复用 `PrepareInstances` 与 `BackupDir`。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。冻结与停止沿用 `Running.Stop(t0, reason)`，经 `host.StopHooks{Frozen, Stopping}` 调用 `Scheduler.Drain(pluginID)` 与 `HTTP.Drain(pluginID, deadline)`，进入 STOPPING 后 Detach/Unbind，确认进程树清空后 Released。合并后由审查者按 main `2c1fdcc` 核对。T-08.6（PR #85）已合并。语句中 goal-22、goal-33、goal-39 提供的符号（manage.Service 与 Candidates 接口、candidate.PrepareDatabase/Discard 与交接约定）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-40（切片 T-09.5：候选 Journal 与准备编排）。goal 目录 goal-40，分支 goal-40，worktree .worktrees/goal-40，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -5105,9 +5104,9 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
    func (o *Orchestrator) Update(ctx context.Context, id, staged string) error
 
 行为（Prepare，调用方已持插件操作锁）：
-1) 预检：update 的包已经过 packages.Preflight（staged 目录）；reload 用 config.Service.ImportSnapshot 导入编辑快照为 Pending（base 为当前 Active）；first_install 没有旧 Active。所有静态错误在停止旧版之前返回。
+1) 预检：update 的包已经过 packages.Preflight（staged 目录）；reload 用 config.Service.ImportSnapshot 导入编辑快照为 Pending（base 为当前 Active）；first_install 没有旧 Active。Adapter update 先从新包读取 adapter_config_schema.json，经 configschema.Parse 后调用 settings.File.TrialInstances；有 InstanceProblem 时在停止旧版之前拒绝，保留完整 Path 与 Reason。所有静态错误在停止旧版之前返回。
 2) 写入 Journal（phase=started，expected_old=当前 Active，new_generation 为新 ID）。
-3) 冻结：Router/Broker/Bus/Scheduler/HTTP 停止向该插件派发新的根调用（沿用 goal-22 与 goal-27 的 Drain），按停止流程停止旧进程并等待进程树退出；phase=stopped_old。进程树没有在停止预算内清空时失败（不 sleep 猜测）。
+3) 冻结：Router/Broker/Bus/Scheduler/HTTP 停止向该插件派发新的根调用（Router/Broker/Bus 沿用 goal-22；Scheduler/HTTP 由 Running.Stop 的 Frozen 回调调用各自的 Drain），按停止流程停止旧进程并等待进程树退出；phase=stopped_old。进程树没有在停止预算内清空时失败（不 sleep 猜测）。
 4) candidate.PrepareDatabase（取得 runtime.lock 后复制，完成后释放）；AddGeneration(new, 未提交)；phase=candidate_ready。
 5) 启动候选：supervisor.Launch（NewCandidate=true，Bootstrap 带 activation_reason（first_install/reload/update）、manual_migration_approved（只有管理员为本次 Session/Generation 显式授予时为 true）、阶段预算、Pending 解析后的配置；Spec.DefaultLocale 取当前设置，同 goal-39），REGISTER 校验与 secret 抽取后得到快照；SetGenerationConfig 写入快照与 secret 路径；phase=prepared。此时不提交 Active、不发 ACTIVATE。
 6) manifest 声明 prepare_effects=external 的插件，已有安装的 reload 与 update 在步骤 2 之前检查：没有本次操作的维护许可时返回 FAILED_PRECONDITION（safe_message "NEEDS_MANUAL_MIGRATION"），不写 Journal、不停止旧版；有许可时 Bootstrap 的 manual_migration_approved=true，其余照常。first_install 不受此门槛限制。
@@ -5178,7 +5177,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 ### goal-41 · T-09.6 唯一提交点与激活门禁
 
-状态：等待前置（T-07.5、T-09.5）。语句中 goal-27、goal-40 提供的符号（journal.Orchestrator 与 Result、supervisor 的激活与接入点、host 的 Degraded）只写名字；合并后由审查者核对，再改为待派发。
+状态：等待前置（T-09.5）。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。已核对 `supervisor.Spec.Scheduler`/`HTTP`：`Launch` 在 `host.Activate` 成功后才 `HTTP.Bind`、`Scheduler.Attach(router.FromInstance(in), activatedAt)`；`host.Instance.Stop(t0, reason, tree, timing, hooks)` 接收 `StopHooks{Frozen, Stopping}`，分别接入 Scheduler/HTTP 的 Drain 与 Detach/Unbind。合并后由审查者按 main `2c1fdcc` 核对。`host.Instance.State()`、`Err()` 与 `StateDegraded` 已存在；`journal.Orchestrator` 与 `Result` 待 goal-40 合并后核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-41（切片 T-09.6：唯一提交点与激活门禁）。goal 目录 goal-41，分支 goal-41，worktree .worktrees/goal-41，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -5273,7 +5272,7 @@ internal/core/state
 
 ### goal-93 · T-09.14 配置、权限、工具策略与会话的管理 API
 
-状态：等待前置（T-03.25、T-04.14、T-08.12、T-08.14、T-09.6、T-09.12）。2026-11-10 按 D-129、D-130：增加配置字段的选项查询接口，前置加入 T-03.25 与 T-08.14；语句中 goal-130、goal-131 提供的查询入口与内置来源只写名字，合并后由审查者核对。同日按 D-128：增加命令名覆盖的接口，前置加入 T-04.14；语句中 goal-129 提供的 policy 方法只写名字，合并后由审查者核对。2026-11-09 按 D-105：/core/admins 的条目是用户字符串，/core/denies 的用户与会话分别是用户字符串与不含话题的会话字符串。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin{InstanceID, UserID}`；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。T-11.1（PR #101，合并提交 `de48f26`）已合并，工具策略端点经 `tool.Catalog` 的 `Policies` 与 `SetPolicy`。2026-11-04 按前后端拆分新增，内容取自原 goal-44（T-09.9）语句中的管理 API；页面留在 goal-44。原语句的明文查看接口写成 GET 并在请求体中带 token，浏览器的 fetch 不允许 GET 带请求体，这里改为 POST。同日按 D-77～D-85 修订：Core 设置经 goal-97 的 settings 写回 `core_config.json`，Core Admin 列表同时经 goal-13 的 `policy.SetAdmins` 生效；发信许可改为「全部实例」或指定实例（goal-99）；删除插件页面票据（D-84，页面经 WebUI 的桥访问插件路由）；开发组件的配置写回 `config.json` 并重启组件；Adapter 实例的增删改写回 `core_config.json` 并按 goal-101 的 adapter_config_schema.json 校验。语句中 goal-13、goal-26、goal-29、goal-31、goal-36、goal-39～goal-41、goal-53～goal-56、goal-84、goal-87 提供的符号（policy 的覆盖与 Admin 方法、webhost 的票据、config.Service、secret.Store 与 Redact、adminauth.Reauthenticate、管理服务与 reload、i18n 的默认 locale、tool.Catalog、conversation.Service、spec/ADMIN-API.md、router.New 的 prefixes）只写名字；合并后由审查者核对，再改为待派发。
+状态：等待前置（T-03.25、T-04.14、T-08.14、T-09.6、T-09.12）。T-08.12（[PR #114](https://github.com/AlonaBot/AlonaBot/pull/114)，合并提交 `a796766`）已合并。已合入 `settings.File.PrepareInstances(adapterID string, schema *configschema.Schema) (map[string]json.RawMessage, []settings.InstanceProblem, error)`、`TrialInstances(adapterID string, schema *configschema.Schema) []settings.InstanceProblem` 与 `InstanceProblem{InstanceID, Path, Reason}`；准备结果包含展开环境变量、补缺失值并校验后的可启动配置，迁移全部成功才备份并写回，失败实例单列且其余实例仍返回；`settings.BackupDir = "backups"`。`sdk/generate.Scan` 已检查 `adapter_config_schema.json`，仅有实例声明而没有插件根类型时 `plugin check` 只检查该声明，`generate` 仍报缺根。T-07.7（[PR #116](https://github.com/AlonaBot/AlonaBot/pull/116)，合并提交 `e65eb4d`）已合并。Core 地址取 `Settings.BaseURL`，插件私有路由经 `adminauth.Auth.Authorize` 与 `httpproxy.New(auth)` 授权。合并后由审查者按 main `2c1fdcc` 核对。2026-11-10 按 D-129、D-130：增加配置字段的选项查询接口，前置加入 T-03.25 与 T-08.14；语句中 goal-130、goal-131 提供的查询入口与内置来源只写名字，合并后由审查者核对。同日按 D-128：增加命令名覆盖的接口，前置加入 T-04.14；语句中 goal-129 提供的 policy 方法只写名字，合并后由审查者核对。2026-11-09 按 D-105：/core/admins 的条目是用户字符串，/core/denies 的用户与会话分别是用户字符串与不含话题的会话字符串。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin{InstanceID, UserID}`；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, baseURL, dataDir)`；`alonabot admin-token show`。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。T-11.1（PR #101，合并提交 `de48f26`）已合并，工具策略端点经 `tool.Catalog` 的 `Policies` 与 `SetPolicy`。2026-11-04 按前后端拆分新增，内容取自原 goal-44（T-09.9）语句中的管理 API；页面留在 goal-44。原语句的明文查看接口写成 GET 并在请求体中带 token，浏览器的 fetch 不允许 GET 带请求体，这里改为 POST。同日按 D-77～D-85 修订：Core 设置经 goal-97 的 settings 写回 `core_config.json`，Core Admin 列表同时经 goal-13 的 `policy.SetAdmins` 生效；发信许可改为「全部实例」或指定实例（goal-99）；删除插件页面票据（D-84，页面经 WebUI 的桥访问插件路由）；开发组件的配置写回 `config.json` 并重启组件；Adapter 实例的增删改写回 `core_config.json` 并按 goal-101 的 adapter_config_schema.json 校验。语句中 goal-13、goal-29、goal-31、goal-36、goal-39～goal-41、goal-53～goal-56、goal-84、goal-87 提供的符号（policy 的覆盖与 Admin 方法、config.Service、secret.Store 与 Redact、adminauth.Reauthenticate、管理服务与 reload、i18n 的默认 locale、tool.Catalog、conversation.Service、spec/ADMIN-API.md、router.New 的 prefixes）只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-93（切片 T-09.14：配置、权限、工具策略与会话的管理 API）。goal 目录 goal-93，分支 goal-93，worktree .worktrees/goal-93，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -5283,7 +5282,7 @@ internal/core/state
 依据：PLAN T-09 步骤 7（配置与插件页）；CONTRACTS §5、§2.3、§8（allowed_adapter_instances）、§13、§7.3、§5.4；DECISIONS D-45、D-62、D-128、D-129、D-130；TEST-MATRIX V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56、V-115、V-116、V-117 的管理 API 分项。
 
 范围（只新增或修改这些）：
-- internal/core/manage/：新增 config_api.go、policy_api.go、settings_api.go、tool_api.go、conversation_api.go、pluginpage_api.go；在管理服务的 HTTP 路由中追加注册
+- internal/core/manage/：新增 config_api.go、policy_api.go、settings_api.go、tool_api.go、conversation_api.go；在管理服务的 HTTP 路由中追加注册
 - spec/ADMIN-API.md：追加本切片的接口（本切片获授权修改该文件）
 - 上述包的测试文件
 
@@ -5294,7 +5293,7 @@ internal/core/state
 - GET/PUT /plugins/{id}/policies：命令覆盖（作用域、permission、enabled），以及 Router 的遮蔽诊断。GET 的每条命令另带声明的命令名、生效的命令名、是否有覆盖与失效的覆盖项（D-128）。
 - PUT /plugins/{id}/commands/{route_id}/names：{names: [[token, ...], ...]}，整份替换该命令的命令名覆盖，第一项为主名；DELETE 删除覆盖，恢复插件声明的命令名。空列表与格式错误返回 INVALID_ARGUMENT，同一插件内重名返回 409 与 ALREADY_EXISTS（safe_message 带冲突的 route_id），文本匹配与 Raw 路由返回 INVALID_ARGUMENT。追加与删除单个命令名由调用方在列表上完成后整份提交。
 - GET/PUT /plugins/{id}/allowed-instances：{all: bool, instances: [...]}，经 goal-99 的 AdapterInstanceAccess 与 SetAdapterInstanceAccess；缺省 all 为 true。
-- GET/PUT/DELETE /adapters/{adapter_id}/instances/{instance_id}：实例配置的读取（secret 只返回是否已设置）与写回 core_config.json，按 adapter_config_schema.json 补缺失值并校验；GET /adapters/{adapter_id}/instance-schema 供页面生成表单。
+- GET/PUT/DELETE /adapters/{adapter_id}/instances/{instance_id}：实例配置的读取（secret 只返回是否已设置）与写回 core_config.json，声明由 configschema.Parse 读取 adapter_config_schema.json；提交配置先经 Schema.Complete 与 Validate 检查，再经 File.Update 写回并保留 ${...} 原写法；启动前复用 File.PrepareInstances，problem 的 Path 与 Reason 原样用于错误定位；GET /adapters/{adapter_id}/instance-schema 供页面生成表单。
 - GET/PUT/DELETE /core/admins、/core/denies，GET/PUT /core/default-locale，GET/PUT /core/command-prefixes（全局与按 Adapter 实例的覆盖）。
 - GET/PUT /tools/policies：工具策略（缺省与覆盖）。
 - GET /plugins/{id}/conversations、DELETE /plugins/{id}/conversations/{key}。
