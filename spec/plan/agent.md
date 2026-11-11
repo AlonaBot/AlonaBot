@@ -18,7 +18,7 @@
 | T-12.6 | goal-63 | 定时 Agent 任务：任务工具、用动态任务（D-124）保存与触发、后台运行 | T-12 步骤 7 | T-07.9、T-08.5、T-12.3 | V-61 | 未开始 |
 | T-12.7 | goal-64 | 官方 Agent 组件的打包与多进程验收，汇总证据 | T-12 步骤 8 | T-12.4、T-12.5、T-12.6、T-12.8、T-12.14 | V-57～V-61、V-76、V-118 | 未开始 |
 | T-12.8 | goal-83 | 文本生成服务：Core Broker 的 `@agent` 目标解析，`sdk/llm` 的类型、Schema 与调用辅助（含一问一答的 `llm.Ask`，D-111），Agent 的 `llm.generate` 与调用方许可，选项来源 `llm.providers`（D-131） | T-12 步骤 9 | T-03.8、T-06.1、T-08.14、T-12.2 | V-76、V-82 的 `@agent` 分项，V-109，V-116 的 `llm.providers` 分项 | 未开始 |
-| T-12.9 | goal-118 | Provider 增加 OpenAI Responses（`openai-responses`）：请求编码、SSE 事件解析、reasoning item 的回传、停止原因与用量；`ToolCall.Replay` | T-12 步骤 10 | T-12.1 | V-57 的 Provider 分项 | 未开始 |
+| T-12.9 | goal-118 | Provider 增加 OpenAI Responses（`openai-responses`）：请求编码、SSE 事件解析、reasoning item 的回传、停止原因与用量；`ToolCall.Replay` | T-12 步骤 10 | T-12.1 | V-57 的 Provider 分项 | 已完成（PR #126；TEST-MATRIX §3.2） |
 | T-12.10 | goal-119 | Provider 增加 Gemini 原生协议（`gemini-generate-content`）：`streamGenerateContent` 的请求编码与 SSE 解析、thoughtSignature 的回传、工具结果按调用查名 | T-12 步骤 10 | T-12.1 | V-57 的 Provider 分项 | 未开始 |
 | T-12.11 | goal-120 | Provider 增加 Ollama 原生协议（`ollama-chat`）：`/api/chat` 的请求编码与 NDJSON 流解析、可选的 API key、工具结果按调用查名 | T-12 步骤 10 | T-12.1 | V-57 的 Provider 分项 | 未开始 |
 | T-12.12 | goal-134 | Provider 改用官方 SDK：`openai`、`openai-compatible` 与 `openai-responses` 经 openai-go，`anthropic-messages` 经 anthropic-sdk-go；不重试、不读环境变量、Chat Completions 的成功条件、Anthropic 的 BaseURL 改为服务根（D-132） | T-12 步骤 1、10 | T-12.9、T-12.10、T-12.11 | V-57 的 Provider 分项 | 未开始 |
