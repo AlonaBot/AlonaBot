@@ -65,7 +65,7 @@
 | T-07.4 | goal-26 | 两个 Host 的边界、插件兑换票据与插件会话 | T-07 步骤 6 | T-07.3 | V-47 的组件分项 | 已完成（PR #53） |
 | T-07.5 | goal-27 | 统一启停与清理，时间、进程和 HTTP 边界验收，汇总证据 | T-07 步骤 7、8 | T-07.2、T-07.4 | V-20、V-21、V-22、V-46、V-47 的 T-07 分项 | 未开始 |
 | T-07.6 | goal-97 | Core 设置与首次启动：`core_config.json` 取代 `alonabot.yaml`（启动设置、Core Admin、命令前缀、默认 locale、按来源的日志级别、Adapter 实例），`${环境变量}` 展开、保留原写法的写回与供开发运行调用的重新读取；非终端首次启动把管理 token 写入 `admin_token`，`admin-token show`（D-82） | T-07 步骤 5 | T-07.3、T-09.1 | V-22 的组件分项、V-47 的认证分项、V-88 | 已完成（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)） |
-| T-07.7 | goal-98 | 插件页面的沙箱隔离：删除插件 host、兑换票据与插件会话，插件路由响应的 CSP sandbox、nosniff 与 Set-Cookie 过滤，非公开路由的管理会话与 CSRF（D-84） | T-07 步骤 6 | T-07.4、T-07.6、T-09.1 | V-47 的组件分项 | 未开始 |
+| T-07.7 | goal-98 | 插件页面的沙箱隔离：删除插件 host、兑换票据与插件会话，插件路由响应的 CSP sandbox、nosniff 与 Set-Cookie 过滤，非公开路由的管理会话与 CSRF（D-84） | T-07 步骤 6 | T-07.4、T-07.6、T-09.1 | V-47 的组件分项 | 已完成（PR #116；TEST-MATRIX §3.2） |
 | T-07.8 | goal-127 | 动态任务与调度持久化的协议和 Core 侧：proto 追加与生成；状态库的任务表与调度状态表；调度器改为以状态库为准，interval 按保存的起点计算，错过的触发跳过；`core.task.set`/`cancel`/`list` 与 `core.job.pause`/`resume`/`status`；动态任务的并发队列与 Cancel 取消在途调用；卸载清理范围中的任务分项（D-124～D-127） | T-07 步骤 9 | T-07.5、T-09.4 | V-114 的 Core 分项 | 未开始 |
 | T-07.9 | goal-128 | 动态任务与暂停恢复的 SDK：`sdk.Task[T]`、`sdk.OnTask`，实例的 `At`、`Every`、`Cron`、`Cancel`、`List`，`sdk.Key` 与 `sdk.Timezone`；`sdk.PauseJob`、`sdk.ResumeJob`、`sdk.JobStatus`；示例与已合并的调用方同步（D-124、D-126） | T-07 步骤 10 | T-04.12、T-07.8 | V-114 的 SDK 分项 | 未开始 |
 | T-08.1 | goal-28 | 配置字段描述与构建检查（在 T-04 生成器上扩展），含表单选项的图标路径 | T-08 步骤 1 | T-04.2 | V-25 的描述分项 | 已完成（PR #54；TEST-MATRIX §3.2） |
