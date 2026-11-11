@@ -17,6 +17,12 @@ type note struct {
 	Value string
 }
 
+// startupRecord 是启动表的行，与用户笔记分开存放。
+type startupRecord struct {
+	Key   string `gorm:"primaryKey"`
+	Value string
+}
+
 // Migrations 返回 GORM 版本的两步迁移，回调始终使用传入的 tx。
 func (p *plugin) Migrations() []gormdb.Migration {
 	return []gormdb.Migration{
@@ -37,7 +43,7 @@ func (p *plugin) Migrations() []gormdb.Migration {
 
 // OnStart 经 GORM 写入，再经 sqlitedb 读取，核对两个入口共用连接与数据。
 func (p *plugin) OnStart(ctx context.Context) error {
-	if err := saveNote(ctx, startupKey, p.Config().String("greeting")); err != nil {
+	if err := saveStartup(ctx, p.Config().String("greeting")); err != nil {
 		return err
 	}
 	db, err := sqlitedb.Open(ctx)
@@ -56,13 +62,24 @@ func (p *plugin) OnStart(ctx context.Context) error {
 		return errors.New("database entry points use different connections")
 	}
 	var value string
-	if err := db.QueryRowContext(ctx, "SELECT value FROM "+notesTable+" WHERE key = ?", startupKey).Scan(&value); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT value FROM "+startupTable+" WHERE key = ?", startupKey).Scan(&value); err != nil {
 		return err
 	}
 	if value != p.Config().String("greeting") {
 		return errors.New("database entry points read different startup values")
 	}
 	return p.started()
+}
+
+// saveStartup 经 GORM 覆盖写入启动记录；它只写启动表，不占用用户的笔记键。
+func saveStartup(ctx context.Context, value string) error {
+	db, err := gormdb.Open(ctx)
+	if err != nil {
+		return err
+	}
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return tx.Table(startupTable).Clauses(clause.OnConflict{UpdateAll: true}).Create(&startupRecord{Key: startupKey, Value: value}).Error
+	})
 }
 
 func saveNote(ctx context.Context, key, value string) error {

@@ -26,6 +26,7 @@ const (
 	indexNotesMigration  = 2
 	startupKey           = "startup"
 	notesTable           = "configdb_note"
+	startupTable         = "configdb_startup"
 )
 
 //go:embed notes.sql

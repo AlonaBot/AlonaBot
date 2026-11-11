@@ -31,10 +31,20 @@ func (p *plugin) Migrations() []sqlitedb.Migration {
 
 // OnStart 在当前代次的数据库写入启动记录，然后执行可控失败点。
 func (p *plugin) OnStart(ctx context.Context) error {
-	if err := saveNote(ctx, startupKey, p.Config().String("greeting")); err != nil {
+	if err := saveStartup(ctx, p.Config().String("greeting")); err != nil {
 		return err
 	}
 	return p.started()
+}
+
+// saveStartup 覆盖写入启动记录；它只写启动表，不占用用户的笔记键。
+func saveStartup(ctx context.Context, value string) error {
+	db, err := sqlitedb.Open(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx, "INSERT INTO "+startupTable+" (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", startupKey, value)
+	return err
 }
 
 func saveNote(ctx context.Context, key, value string) error {
