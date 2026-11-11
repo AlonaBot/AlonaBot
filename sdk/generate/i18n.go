@@ -113,6 +113,11 @@ func (s *scan) translationCalls(info *types.Info, paths []string) {
 }
 
 func (s *scan) translationCall(info *types.Info, call *ast.CallExpr, keyIndex int, messages map[string]string) {
+	if len(call.Args) == 1 {
+		if _, tuple := info.Types[call.Args[0]].Type.(*types.Tuple); tuple {
+			return // 多返回值表达式中的键来自运行时，没有独立的常量 AST 实参。
+		}
+	}
 	key, ok := stringConstant(info, call.Args[keyIndex])
 	if !ok {
 		return
@@ -132,6 +137,11 @@ func (s *scan) translationCall(info *types.Info, call *ast.CallExpr, keyIndex in
 		name, ok := stringConstant(info, args[i])
 		if !ok {
 			s.diagnostic(args[i].Pos(), "translation argument name must be a string constant")
+			return
+		}
+		typ := info.Types[args[i]].Type
+		if !types.Identical(typ, types.Typ[types.String]) && !types.Identical(typ, types.Typ[types.UntypedString]) {
+			s.diagnostic(args[i].Pos(), "translation argument name must have type string")
 			return
 		}
 		names[name] = true
