@@ -153,10 +153,10 @@ func (p *Policy) CheckCommand(ctx context.Context, pluginID string, route *pb.Ro
 	// 1. 全局禁止优先，管理员身份与空权限集合都不能绕过。
 	var subjects []state.GlobalDeny
 	if actor != nil {
-		subjects = append(subjects, state.GlobalDeny{Kind: string(DenyUser), InstanceID: actor.GetAdapterInstanceId(), SubjectID: actor.GetExternalUserId()})
+		subjects = append(subjects, state.GlobalDeny{Kind: string(DenyUser), AdapterID: target.GetAdapterId(), SubjectID: actor.GetExternalUserId()})
 	}
 	if target != nil {
-		subjects = append(subjects, state.GlobalDeny{Kind: string(DenyChat), InstanceID: target.GetAdapterInstanceId(), SubjectID: target.GetChatId()})
+		subjects = append(subjects, state.GlobalDeny{Kind: string(DenyChat), AdapterID: target.GetAdapterId(), SubjectID: target.GetChatId()})
 	}
 	rows, denied, err := p.store.CommandPolicySnapshot(ctx, pluginID, subjects)
 	if err != nil {

@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
@@ -43,11 +44,11 @@ const (
 	maxDNSLabelBytes = 63
 )
 
-// Admin 按 Adapter 实例与外部用户 ID 绑定 Core Admin。
-type Admin struct {
-	InstanceID string `json:"instance"`
-	UserID     string `json:"user"`
-}
+// Admin 按 Adapter 与外部用户 ID 绑定 Core Admin。
+type Admin struct{ AdapterID, UserID string }
+
+// String 返回可写入 admins 的用户字符串，用户 ID 中的冒号保持原样。
+func (a Admin) String() string { return a.AdapterID + ":" + a.UserID }
 
 // AdapterSettings 保存配置版本和已展开环境变量的实例配置。
 type AdapterSettings struct {
@@ -155,7 +156,7 @@ func defaultDocument() ([]byte, error) {
 	s := Defaults()
 	content, err := json.MarshalIndent(map[string]any{
 		"$version": currentVersion, "listen": s.Listen, "base_url": s.BaseURL,
-		"trusted_proxies": []string{}, "proxy": s.Proxy, "admins": []Admin{},
+		"trusted_proxies": []string{}, "proxy": s.Proxy, "admins": []string{},
 		"command_prefixes": s.CommandPrefixes, "command_prefixes_by_instance": map[string][]string{},
 		"default_locale": s.DefaultLocale, "adapters": map[string]any{},
 		"log": map[string]any{"level": strings.ToLower(s.LogLevel.String()), "format": s.LogFormat, "sources": map[string]string{},
@@ -309,30 +310,24 @@ func readAdmins(n *node, s *Settings) error {
 	if n.delimiter != '[' {
 		return n.fail(errors.New("expected an array"))
 	}
+	seen := make(map[Admin]bool)
 	for _, child := range n.elements {
-		var admin Admin
-		if err := child.object(func(key string, value *node) error {
-			switch key {
-			case "instance", "user":
-				text, err := value.text()
-				if err != nil {
-					return err
-				}
-				if key == "instance" {
-					admin.InstanceID = text
-				} else {
-					admin.UserID = text
-				}
-				return nil
-			default:
-				return value.fail(errors.New("unknown key"))
-			}
-		}); err != nil {
+		value, err := child.text()
+		if err != nil {
 			return err
 		}
-		if admin.InstanceID == "" || admin.UserID == "" {
-			return child.fail(errors.New("instance and user must be nonempty strings"))
+		adapterID, userID, _ := strings.Cut(value, ":")
+		if _, err := validate.PluginID(adapterID); err != nil || strings.HasPrefix(adapterID, validate.MarketPrefix) {
+			return child.fail(fmt.Errorf("invalid adapter ID: %q", adapterID))
 		}
+		if userID == "" {
+			return child.fail(errors.New("external user ID must not be empty"))
+		}
+		admin := Admin{AdapterID: adapterID, UserID: userID}
+		if seen[admin] {
+			return child.fail(fmt.Errorf("duplicate admin: %q", value))
+		}
+		seen[admin] = true
 		s.Admins = append(s.Admins, admin)
 	}
 	return nil
