@@ -17,7 +17,7 @@
 
 v0.1 按各子章节已列的切片交付。2026-11-09 维护者要求补齐与 AstrBot 适配器的功能差距（D-87），对标的切片已追加到核心与两个子章节；除此之外不扩充平台功能，CONTRACTS §0 仍把 Telegram webhook 接收与其他平台排除在 v0.1 外。v0.1 只要求两个 Adapter 具备继续开发的结构：
 
-- 实现放在可导入的包中（`telegram.New()`、`onebot11.New()`），程序入口只调用 `sdk.RunAdapter`，库模式可以直接引用；实例配置的 schema 写在包内的 `instance_schema.json`（D-85）。
+- 实现放在可导入的包中（`telegram.New()`、`onebot11.New()`），程序入口只调用 `sdk.RunAdapter`，库模式可以直接引用；实例配置的 schema 写在包内的 `adapter_config_schema.json`（D-85）。
 - 每个平台有可控故障的本地模拟服务（`telegramtest`、`onebottest`），新功能的测试在其上追加。
 - 平台权限与扩展事件放在常量包（`adapters/<id>/perm`、`adapters/<id>/event`），能力与 extension 在 Adapter 描述中声明，新增时只追加。
 - 真实平台的验证单独记录；没有测试账号时记为未运行，不用模拟服务的结果代替。

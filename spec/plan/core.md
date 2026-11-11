@@ -35,21 +35,25 @@
 | T-03.18 | goal-109 | SDK 的流式输出辅助函数 `c.Stream`：按 `message.edit` 选择节流编辑或缓冲后发送一次，超长换条，失败即停止；不新增协议（D-98） | T-03 步骤 15 | T-03.9、T-04.8 | V-94 的 Core 分项 | 未开始 |
 | T-03.19 | goal-110 | Adapter 的 HTTP 路由：Adapter 的 REGISTER 携带 HTTP 路由与 endpoint，`sdk.RunAdapter` 托管 Listener，统一端口代理 WebSocket Upgrade 并在路由撤销时关闭连接（D-94） | T-03 步骤 16 | T-03.3、T-04.8、T-07.7 | V-95 的 Core 分项 | 未开始 |
 | T-03.24 | goal-121 | 插件给出的目标由 Core 补齐：缺少实例时按在途事件的同一会话或 Adapter 的缺省实例选择，account_id 按实例补上；`core.send` 的 To 与引用片段、`core.media.grant` 的 targets 在准入前补齐；`core_config.json` 的实例名规则与 `default_instance`（D-102） | T-03 步骤 21 | T-03.6、T-07.6 | V-101 的 Core 分项 | 未开始 |
+| T-03.25 | goal-131 | 聊天目录：Event 追加 `chat_title`，Core 在接纳入站事件时记录聊天（键、chat_type、名称、最近的实例与活跃时刻），内置选项来源 `core.chats`，随 Adapter 的数据清理（D-130） | T-03 步骤 22 | T-03.3、T-08.14、T-09.4 | V-117 的 Core 分项 | 未开始 |
 | T-04.1 | goal-10 | 根插件 API 与显式注册；静态注册索引、重复拒绝、跨插件遮蔽的稳定选择 | T-04 步骤 1、3 | T-03.1 | V-10 的注册分项、V-02 的注册原子性 | 已完成（PR #34；TEST-MATRIX §3.2） |
 | T-04.2 | goal-11 | 构建期生成器 `sdk/generate`：限定扫描范围、build tags、生成注册代码、稳定输出；`cmd/alonabot` 的构建检查入口 | T-04 步骤 2 | T-04.1 | V-10 | 已完成（PR #42；TEST-MATRIX §3.2） |
 | T-04.3 | goal-12 | 命令选择与参数绑定：完整 token、@username、最长路径/别名→文本匹配（Regex、keyword、startswith、endswith、fullmatch）→Raw、消费状态、参数语法、usage/silent | T-04 步骤 4 | T-04.1 | V-11 的命令分项、V-49 | 已完成（PR #47；TEST-MATRIX §3.2） |
 | T-04.4 | goal-13 | 持久化命令策略与管理服务层：继承、禁用、全局禁止、下一次派发生效 | T-04 步骤 5 | T-03.2、T-04.1、T-04.6 | V-12、V-43 的服务层分项 | 已完成（PR #88；TEST-MATRIX §3.2） |
-| T-04.5 | goal-14 | 用同一 SDK 升级示例，完成构建与策略验收，汇总证据 | T-04 步骤 6、7 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11 | V-10、V-11、V-12、V-43、V-49 的 T-04 分项 | 未开始 |
+| T-04.5 | goal-14 | 用同一 SDK 升级示例，完成构建与策略验收，汇总证据 | T-04 步骤 6、7 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | V-10、V-11、V-12、V-43、V-49 的 T-04 分项 | 未开始 |
 | T-04.6 | goal-87 | 权限、扩展事件与命令解析的协议和 Core 侧：proto 修改与生成；Adapter 权限与扩展事件声明的校验；平台权限的保留与隐含展开、按权限名集合判定；扩展事件的交付校验；`command_prefixes` 与按实例覆盖、去掉开头的 reference 与本账号 mention、非文本 token 与 `user`/`image`/`message` 参数、usage 文案键 | T-04 步骤 8 | T-03.3、T-03.6、T-04.3 | V-85、V-86、V-87 的 Core 分项 | 已完成（PR #78；TEST-MATRIX §3.2） |
 | T-04.7 | goal-88 | SDK 链式注册：命令、文本匹配、事件、Service 与 Event Bus 订阅的 builder，Permission 值对象与 `c.Has`，Service Schema 由生成器生成且 schema_id 由 Go 类型决定，自动回复型可 `c.Send`；生成器、示例与已合并调用方同步 | T-04 步骤 9 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | V-10、V-14 的 SDK 分项 | 已完成（PR #89；TEST-MATRIX §3.2） |
-| T-04.8 | goal-91 | SDK 自有类型与事件常量：Message/会话字符串与可选的 `sdk.Via`（D-102）/消息句柄（D-104）/片段构造函数与单片段发送（D-108）/媒体读取与上传助手（D-109）/时间与时长用 `time.Time`、`time.Duration`（D-110）/Adapter 声明用 Go 类型（D-113）/Actor/SendResult/错误码与入站片段，标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对事件 Handler 的 payload 类型，`sdk/adapter` 的公共类型；Telegram Adapter、示例与已合并调用方同步 | T-04 步骤 9 | T-03.9、T-03.24、T-04.7、T-04.9 | V-14 的类型分项、V-86 的 SDK 分项，V-101、V-102 的 SDK 分项，V-106～V-108，V-111 的事件与 extension 分项 | 未开始 |
+| T-04.8 | goal-91 | SDK 自有类型与事件常量：Message/会话字符串与可选的 `sdk.Via`（D-102）/消息句柄（D-104）/片段构造函数与单片段发送（D-108）/媒体读取与上传助手（D-109）/时间与时长用 `time.Time`、`time.Duration`（D-110）/Adapter 声明用 Go 类型（D-113）/Actor/SendResult/错误码与入站片段，标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对事件 Handler 的 payload 类型，`sdk/adapter` 的公共类型；Telegram Adapter、示例与已合并调用方同步 | T-04 步骤 9 | T-03.9、T-03.24、T-04.7、T-04.9 | V-14 的类型分项、V-86 的 SDK 分项，V-101、V-102 的 SDK 分项，V-106～V-108，V-111 的事件与 extension 分项，V-113 的 SDK 类型分项（`c.Reply`、用户字符串、按来源读取与错误码辅助函数，D-118、D-120、D-121、D-123） | 未开始 |
 | T-04.9 | goal-96 | 删除构建期标记：去掉 `//alonabot:command`、`//alonabot:event` 的扫描、诊断与生成，命令与事件只经链式注册，示例与测试随之改写（D-79） | T-04 步骤 2 | T-04.7 | V-10 | 已完成（[PR #110](https://github.com/AlonaBot/AlonaBot/pull/110)） |
 | T-04.10 | goal-122 | 管理员与封禁按 Adapter 登记：`admins` 改用用户字符串，禁止表按 adapter_id，对该 Adapter 的全部实例生效（D-105） | T-04 步骤 10 | T-04.4、T-07.6 | V-103 | 未开始 |
-| T-04.11 | goal-124 | 注册写法统一：定时任务与 HTTP 路由的链式注册，命令省略 `Args` 时参数名取 Handler 的参数名（生成器记录），Event Bus 订阅的路由 ID 缺省为事件名（D-112） | T-04 步骤 11 | T-04.8、T-07.5 | V-110 的 SDK 分项 | 未开始 |
+| T-04.11 | goal-124 | 注册写法统一：定时任务与 HTTP 路由的链式注册，命令省略 `Args` 时参数名取 Handler 的参数名（生成器记录），Event Bus 订阅的路由 ID 缺省为事件名（D-112） | T-04 步骤 11 | T-04.8、T-04.12、T-07.5 | V-110 的 SDK 分项 | 未开始 |
+| T-04.12 | goal-125 | 插件对象、结构体参数与子插件：入口改为 `func New() *sdk.Plugin`，路由、生命周期回调、`OnConfigLoad` 与数据库迁移登记在插件对象上，删除 `sdk.Base`、`sdk.Root`、根插件的六个注册方法（`Commands`、`Events`、`Services`、`Subscriptions`、`HTTP`、`Schedules`）与对应的注册器类型（D-114）；命令 Handler 可以用一个结构体接收参数（D-115）；一层逻辑子插件及其缺省权限、配置视图与日志字段（D-116）；生成器、示例与已合并的调用方同步 | T-04 步骤 12 | T-04.8 | V-112 | 未开始 |
+| T-04.13 | goal-126 | Service 与 Event Bus 的带类型声明：`sdk.JSON`、`sdk.Proto` 返回 `sdk.Service[In, Out]`，`sdk.Serve` 注册、`Call` 调用；`sdk.BusEvent[T]` 的 `Publish` 与 `sdk.Subscribe`；删除 `sdk.CallJSON`、`sdk.CallProto`、`sdk.Publish` 与旧形式的注册、订阅函数；`sdk/llm`、示例与已合并的调用方同步（D-122） | T-04 步骤 13 | T-04.12 | V-113 的声明分项 | 未开始 |
+| T-04.14 | goal-129 | 命令名覆盖的 Core 侧：命令策略保存按路由的命令名列表，Router 的索引、遮蔽诊断、usage 回复与命令菜单使用生效的命令名，保存时的格式与重名检查，插件更新后的失效处理（D-128） | T-04 步骤 14 | T-03.17、T-04.10 | V-115 的 Core 分项 | 未开始 |
 | T-05.1 | goal-15 | 可信事件上下文与有界同事件分发：64 条并发链、256 条/8 MiB 等待队列、稳定候选排序、链执行与读循环分离；经回环测试 Adapter 运行，按钮与 scheduled 绑定先用规范 fixture | T-05 步骤 1、2 | T-03.3、T-04.3、T-04.4 | V-13、V-16 的 fixture 分项 | 已完成（PR #67；TEST-MATRIX §3.2） |
 | T-05.2 | goal-16 | SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支 | T-05 步骤 3、4 | T-05.1、T-04.7、T-04.8 | V-14、V-11 的 Rule 分项 | 未开始 |
 | T-05.3 | goal-17 | PreEvent/BeforeSend/AfterSend 三阶段 Hook（链式注册与 SDK 类型，D-112），send_forbidden 的保存与继承 | T-05 步骤 5、6 | T-05.2 | V-15 的直接路径分项，V-110 的 Hook 分项 | 未开始 |
-| T-05.4 | goal-52 | 延续调用与多轮等待：`core.continuation.start`、`core.wait`、等待键与消费、超时与 Session 失效；SDK 的 `Continue` 与 `Wait` | T-05 步骤 7 | T-05.2 | V-50 | 未开始 |
+| T-05.4 | goal-52 | 延续调用与多轮等待：`core.continuation.start`、`core.wait`、等待键与消费、超时与 Session 失效；SDK 的 `Continue`（Handler 内调用与 builder 的 `.Continue()`，D-119）与 `Wait` | T-05 步骤 7 | T-05.2 | V-50，V-113 的延续调用分项 | 未开始 |
 | T-05.5 | goal-18 | 多进程事件流水线验收（含真实按钮回调与多轮等待），汇总证据 | T-05 步骤 8 | T-03.8、T-05.3、T-05.4 | V-11、V-13～V-16、V-43、V-49、V-50 的 T-05 分项 | 未开始 |
 | T-06.1 | goal-19 | Service/Bus 描述与编码校验、SDK 入口；Broker 定位与准入 | T-06 步骤 1、2 | T-04.1 | V-19 | 已完成（PR #45；TEST-MATRIX §3.2） |
 | T-06.2 | goal-20 | 父调用链上下文传播、循环与深度检查、跨段取消与背压 | T-06 步骤 3、4 | T-03.6、T-05.3、T-06.1 | V-18、V-42 的嵌套分项 | 未开始 |
@@ -62,6 +66,8 @@
 | T-07.5 | goal-27 | 统一启停与清理，时间、进程和 HTTP 边界验收，汇总证据 | T-07 步骤 7、8 | T-07.2、T-07.4 | V-20、V-21、V-22、V-46、V-47 的 T-07 分项 | 未开始 |
 | T-07.6 | goal-97 | Core 设置与首次启动：`core_config.json` 取代 `alonabot.yaml`（启动设置、Core Admin、命令前缀、默认 locale、按来源的日志级别、Adapter 实例），`${环境变量}` 展开、保留原写法的写回与供开发运行调用的重新读取；非终端首次启动把管理 token 写入 `admin_token`，`admin-token show`（D-82） | T-07 步骤 5 | T-07.3、T-09.1 | V-22 的组件分项、V-47 的认证分项、V-88 | 已完成（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)） |
 | T-07.7 | goal-98 | 插件页面的沙箱隔离：删除插件 host、兑换票据与插件会话，插件路由响应的 CSP sandbox、nosniff 与 Set-Cookie 过滤，非公开路由的管理会话与 CSRF（D-84） | T-07 步骤 6 | T-07.4、T-07.6、T-09.1 | V-47 的组件分项 | 未开始 |
+| T-07.8 | goal-127 | 动态任务与调度持久化的协议和 Core 侧：proto 追加与生成；状态库的任务表与调度状态表；调度器改为以状态库为准，interval 按保存的起点计算，错过的触发跳过；`core.task.set`/`cancel`/`list` 与 `core.job.pause`/`resume`/`status`；动态任务的并发队列与 Cancel 取消在途调用；卸载清理范围中的任务分项（D-124～D-127） | T-07 步骤 9 | T-07.5、T-09.4 | V-114 的 Core 分项 | 未开始 |
+| T-07.9 | goal-128 | 动态任务与暂停恢复的 SDK：`sdk.Task[T]`、`sdk.OnTask`，实例的 `At`、`Every`、`Cron`、`Cancel`、`List`，`sdk.Key` 与 `sdk.Timezone`；`sdk.PauseJob`、`sdk.ResumeJob`、`sdk.JobStatus`；示例与已合并的调用方同步（D-124、D-126） | T-07 步骤 10 | T-04.12、T-07.8 | V-114 的 SDK 分项 | 未开始 |
 | T-08.1 | goal-28 | 配置字段描述与构建检查（在 T-04 生成器上扩展），含表单选项的图标路径 | T-08 步骤 1 | T-04.2 | V-25 的描述分项 | 已完成（PR #54；TEST-MATRIX §3.2） |
 | T-08.2 | goal-29 | 配置 JSON 语义与 Pending：原始对象保留、完整替换、Merge Patch、编辑快照导入、base_generation | T-08 步骤 2 | T-02 | V-23、V-38 | 已完成（PR #23；TEST-MATRIX §3.2） |
 | T-08.3 | goal-30 | SDK 配置准备顺序：OnLoad→补缺键默认→typed decode/Schema | T-08 步骤 3 | T-08.1、T-08.2 | V-37、V-21 的配置分项 | 已完成（PR #73；TEST-MATRIX §3.2） |
@@ -72,12 +78,13 @@
 | T-08.9 | goal-35 | configdb 示例与分层验证，汇总证据 | T-08 步骤 9 | T-08.6、T-08.7、T-08.8、T-08.11 | V-23～V-26、V-38、V-39、V-54 的 T-08 分项 | 未开始 |
 | T-08.10 | goal-90 | 配置标签统一：表单与 secret 元数据收进 `config` 标签（语法同 GORM 标签），label 与 description 改为源文案，补齐 labels、subtitles、多选、slider、code 编辑器、obvious 与 when，取消选项图标；残留的旧标签给出诊断（D-74） | T-08 步骤 1 | T-08.1 | V-25 的描述分项 | 已完成（PR #77） |
 | T-08.11 | goal-95 | 配置改由 `config_schema.json` 声明：schema 的检查与嵌入、`$version` 与 `$migrations` 的声明式迁移、i18n/ 中 `config` 覆盖与 schema 的核对、SDK 与 Core 共用的补缺失值与 schema 校验、按 schema 抽取 secret、`sdk.Base.Config()` 按类型取值、根插件的 `OnConfigLoad`；删除 `config` 标签解析、Config 类型发现与 `config.Config`/`config.Base`，保留 go/types 类型推导供 Service Schema 使用（D-76、D-85） | T-08 步骤 1、3 | T-04.7、T-08.3、T-08.4、T-08.10 | V-25 的描述分项、V-37 与 V-38 的配置分项 | 已完成（PR #103；TEST-MATRIX §3.2） |
-| T-08.12 | goal-101 | Adapter 实例配置与 Core 设置的版本迁移：`instance_schema.json` 的构建检查、补缺失值与校验，实例配置与 `core_config.json` 的声明式迁移、写回前备份、降级与失败报错，官方 Telegram Adapter 补上 `instance_schema.json`（D-85） | T-08 步骤 1 | T-07.6、T-08.11 | V-38 的迁移分项、V-88 | 未开始 |
+| T-08.12 | goal-101 | Adapter 实例配置与 Core 设置的版本迁移：`adapter_config_schema.json` 的构建检查、补缺失值与校验，实例配置与 `core_config.json` 的声明式迁移、写回前备份、降级与失败报错，官方 Telegram Adapter 补上 `adapter_config_schema.json`（D-85） | T-08 步骤 1 | T-07.6、T-08.11 | V-38 的迁移分项、V-88 | 未开始 |
 | T-08.13 | goal-123 | 文案函数只返回字符串：`c.T` 与 `sdk.T` 去掉 error，check 与 build 检查代码中的常量键与参数名，运行时问题回落并记 WARN（D-106） | T-08 步骤 10 | T-04.9、T-08.8 | V-104 | 未开始 |
+| T-08.14 | goal-130 | 配置项的选项来源：schema 的 `options_from` 与检查，Service 描述的选项来源标记，`sdk.ServeOptions`，Core 按组件与字段路径查询来源，内置来源 `core.adapter_instances`，`OPTIONS_PAGE`（D-129） | T-08 步骤 11 | T-04.12、T-06.1、T-08.11 | V-116 的 schema、SDK 与 Core 分项 | 未开始 |
 | T-09.1 | goal-36 | 首次管理认证：admin-token init/reset、login、会话、CSRF、CLI Bearer | T-09 步骤 1 | T-02.3、T-07.4 | V-47 的认证分项 | 已完成（PR #72；TEST-MATRIX §3.2） |
 | T-09.2 | goal-37 | 安装包预检与安全解压：验签、来源、平台、长度/摘要、受控解压与上限、不可变包目录 | T-09 步骤 2（预检） | T-02 | V-27、V-28、V-41 的预检分项 | 已完成（PR #19；TEST-MATRIX §3.2） |
 | T-09.3 | goal-38 | 开发 CLI：顶层的 `init/build/check/test/pack`（D-77）；init 在当前目录创建只含作者信息的组件工程，build 生成嵌入代码与调用 `sdk.Run` 的正式入口并编译，取代 `plugin generate`；pack 支持四种角色，WebUI 包为 `any` 平台，签名可选 | T-09 步骤 2（CLI） | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | V-01、V-41、V-54 的打包分项 | 未开始 |
-| T-09.4 | goal-39 | 唯一管理服务与安装记录：逐包串行、来源/pin/卸载保留、各管理动作的区分；组件角色的同类唯一、`install --source` 与 `--replace`；Adapter 包与实例的管理（实例写回 `core_config.json`）；启用、停用、卸载与更新时的 Adapter 依赖和插件依赖检查；`alonabot run` 按安装记录启动全部已启用的包；Core 装配读取 `core_config.json`，接入命令前缀、Core Admin 列表与默认 locale | T-09 步骤 3 | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | V-40、V-48、V-52、V-82、V-01 的安装分项、V-88 的接入分项 | 未开始 |
+| T-09.4 | goal-39 | 唯一管理服务与安装记录：逐包串行、来源/pin/卸载保留、各管理动作的区分；卸载的三种清理范围（D-127）；组件角色的同类唯一、`install --source` 与 `--replace`；Adapter 包与实例的管理（实例写回 `core_config.json`）；启用、停用、卸载与更新时的 Adapter 依赖和插件依赖检查；`alonabot run` 按安装记录启动全部已启用的包；Core 装配读取 `core_config.json`，接入命令前缀、Core Admin 列表与默认 locale | T-09 步骤 3 | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | V-40、V-48、V-52、V-82、V-01 的安装分项、V-88 的接入分项 | 未开始 |
 | T-09.5 | goal-40 | 正式候选 Journal 与准备编排 | T-09 步骤 4 | T-09.4、T-08.6、T-06.4 | V-29 | 未开始 |
 | T-09.6 | goal-41 | 唯一提交点（ActiveGeneration+COMMITTED）与激活门禁 | T-09 步骤 5 | T-07.5、T-09.5 | V-30、V-21 的提交分项 | 未开始 |
 | T-09.7 | goal-42 | 崩溃恢复、显式回退与引用回收 | T-09 步骤 6 | T-09.6 | V-30、V-31、V-36 | 未开始 |
@@ -85,7 +92,7 @@
 | T-09.11 | goal-45 | 正式流程的故障注入，回填 T-08 待联验项，汇总证据 | T-09 步骤 8 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | V-23～V-25、V-27～V-31、V-39、V-40、V-52、V-54～V-56、V-62、V-63、V-82、V-83 | 未开始 |
 | T-09.12 | goal-84 | WebUI 组件与组件图标：Core 提供 WebUI 静态文件与单页路由回退、未安装与版本不兼容的提示、Admin API 主版本与 `spec/ADMIN-API.md` 参考（含插件页面桥的消息格式）、带 sandbox CSP 的图标、库模式的 `alonabot.WebUI` 选项 | T-09 步骤 9 | T-07.7、T-09.1、T-09.4、T-13.1 | V-83 | 未开始 |
 | T-09.13 | goal-92 | 管理页所需的会话与上传接口：已登录会话取回 csrf_token、multipart 上传安装包与更新包、总览的 Core 版本与监听地址，追加到 `spec/ADMIN-API.md` | T-09 步骤 7（管理页） | T-09.1、T-09.4、T-09.12 | V-40、V-47 的 API 分项 | 未开始 |
-| T-09.14 | goal-93 | 配置、权限、工具策略与会话的管理 API：配置 raw JSON/PATCH/base_generation/secret、命令权限、发信许可、Core 设置（Core Admin 列表、默认 locale、命令前缀、全局禁止表）、工具调用策略、Agent 会话、插件页面票据、secret 明文查看的再认证 | T-09 步骤 7（配置与插件页） | T-07.6、T-08.8、T-08.11、T-08.12、T-09.6、T-09.12、T-11.1、T-11.3 | V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56 的管理 API 分项 | 未开始 |
+| T-09.14 | goal-93 | 配置、权限、工具策略与会话的管理 API：配置 raw JSON/PATCH/base_generation/secret、命令权限、命令名覆盖（D-128）、配置字段的选项查询（D-129）、发信许可、Core 设置（Core Admin 列表、默认 locale、命令前缀、全局禁止表）、工具调用策略、Agent 会话、插件页面票据、secret 明文查看的再认证 | T-09 步骤 7（配置与插件页） | T-03.25、T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-08.14、T-09.6、T-09.12、T-11.1、T-11.3 | V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56、V-115、V-116、V-117 的管理 API 分项 | 未开始 |
 | T-09.16 | goal-100 | manifest 拆分：工程 `plugin.yaml` 只含作者信息（name、description、author 等），构建与打包补上协议、平台、入口、迁移方式与配置版本，包内 manifest 照常严格校验；`i18n/` 中 `metadata` 的翻译（D-78） | T-09 步骤 2 | T-03.8、T-09.2 | V-01 | 未开始 |
 | T-11.1 | goal-54 | 工具描述与目录：Service 描述的 `tool` 字段、注册校验、`core.tool.list`、调用策略的持久化与管理服务层 | T-11 步骤 1、2 | T-04.4、T-04.7、T-06.1 | V-55 的目录与策略分项 | 已完成（PR #101；TEST-MATRIX §3.2） |
 | T-11.2 | goal-55 | 工具调用与用户确认：`core.tool.invoke`、`core.tool.confirm`、Core 内部的确认记录与按钮、同一 Actor 与 5 分钟限时、确认文案 | T-11 步骤 3、4 | T-03.8、T-06.2、T-08.8、T-11.1 | V-55 | 未开始 |
@@ -96,7 +103,7 @@
 | T-13.3 | goal-69 | 开发运行与热部署：`alonabot run [目录...] [--reload]` 构建并以独立进程运行开发组件，轮询源码、资源与配置，只重启变化的组件（D-77） | T-13 步骤 4 | T-07.6、T-09.16、T-13.1 | V-65 | 未开始 |
 | T-13.4 | goal-70 | 开发运行示例与开发文档，汇总证据 | T-13 步骤 5 | T-03.10、T-13.2、T-13.3 | V-64、V-65 | 未开始 |
 | T-16.1 | goal-81 | 插件测试套件基础：`plugintest.Start`、测试 Adapter、会话与身份、Capability 子集、消息注入、`internal/inproc` 的分发结束通知、配置与数据库 | T-16 步骤 1、2 | T-05.2、T-13.2 | V-73 的基础分项 | 未开始 |
-| T-16.2 | goal-82 | 按钮点击、多轮等待、schedule 触发与后台发送；用套件测试示例插件，开发文档，汇总证据 | T-16 步骤 3、4 | T-03.8、T-05.4、T-07.2、T-16.1 | V-73 | 未开始 |
+| T-16.2 | goal-82 | 按钮点击、多轮等待、schedule 触发（含动态任务实例，D-124）与后台发送；用套件测试示例插件，开发文档，汇总证据 | T-16 步骤 3、4 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | V-73 | 未开始 |
 | T-16.3 | goal-102 | `plugintest.LLM`：登记只提供 `llm.generate` 的测试 Agent，被测插件经 `@agent` 的调用交给测试函数（D-77） | T-16 步骤 3 | T-12.8、T-16.1 | V-73 的 LLM 分项 | 未开始 |
 
 ## 3. 工作包
@@ -240,6 +247,8 @@ Adapter 以安装包和独立进程运行（CONTRACTS §8）。以下步骤中�
 
 21. **插件给出的目标由 Core 补齐（D-102）。** 在 `internal/core/adapter` 的实例表中实现目标补齐：只补空字段；缺少 adapter_instance_id 时，调用链上在途事件的目标属于同一 Adapter 与 chat_id 则取其实例，否则取该 Adapter 的缺省实例，没有时 FAILED_PRECONDITION；实例已登记时补上 adapter_id 与 account_id。`core.send` 的 To 与引用片段的 target、`core.media.grant` 的 targets 在准入前补齐，之后的编辑、撤回与平台动作复用同一函数；补齐后的目标照常经过原 Target 豁免、实例许可、会话禁止与实例绑定检查。`internal/core/settings` 校验实例名的字符集与跨 Adapter 唯一，读取可选的 `default_instance` 并给出各 Adapter 的缺省实例，由装配处在读取与重新读取设置后交给实例表。
 
+22. **聊天目录（D-130，T-03.25）。** Event 追加可选的 `chat_title`，`sdk/adapter` 的交付接口带上它；没有 target 的事件带名称时 Core 拒绝并记诊断。状态库增加聊天表（写进唯一的初始迁移），以 adapter_id 与 chat_id 为键，不含话题。Core 接纳带 target 的入站事件时，在保存游标的同一个事务中写入或更新该聊天的 chat_type、名称、最近交付它的实例与最近活跃时刻，事件不带名称时保留已有名称。向 T-08.14 的来源登记处登记内置来源 `core.chats`：搜索词不区分大小写地匹配名称与 chat_id，支持 `chat_type` 与 `adapter_id` 两个 filter，按最近活跃时刻从新到旧排列，存储值为不含话题的会话字符串。把聊天表加入 T-09.4 的清理对象：`--purge-data` 与 `--purge` 卸载 Adapter 时在同一个状态库事务中删除该 adapter_id 的行，只卸载与 `--replace` 时保留。名称不写入日志。两个官方 Adapter 的填写由 T-03.26 与 T-15.7 提供。
+
 #### 拟目录与交付
 
 | 拟目录 | 本工作包交付 |
@@ -272,6 +281,7 @@ Adapter 以安装包和独立进程运行（CONTRACTS §8）。以下步骤中�
 | V-105 | 步骤 7 中带类型的按钮动作：注册、按钮的编码与 Handler 收到的解码值 |
 | V-108 | 步骤 11 中语音片段的 Duration 与协议毫秒值的往返；其余字段由 T-04.8 提供 |
 | V-111 | 步骤 12 中动作的 Go 类型声明：参数 Schema 不允许未声明的属性，结果 Schema 允许；事件与 extension 分项由 T-04.8 提供 |
+| V-117 | 步骤 22 中聊天的记录、名称的保留、`core.chats` 的搜索与筛选、随 Adapter 的数据清理；两个官方 Adapter 的填写由 T-03.26 与 T-15.7 提供，管理 API 与页面分项由 T-09.14 与 T-09.9 提供 |
 
 T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求本包的 Telegram 部分先完成；T-04.5 的示例升级在本包示例完成后进行。真实平台验证尚未运行的部分继续保持未完成，由 T-10 汇总补齐。完整普通事件排序、自动回复、Hook 和命令策略组合分别在 T-04/T-05 闭合。
 
@@ -297,7 +307,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 
 #### 实施步骤
 
-1. **完成根插件 API 与实例绑定。** 在现有 SDK 上实现恰好一个根类、嵌入 sdk.Base、至多一个 Config 的发现/验证；插件 ID 只来自 plugin.yaml。保留显式传入根实例或辅助接收者的注册接口，不建立自动 DI。生成器与显式适配器校验两种 Handler 签名及参数类型；执行时的完整 Rule/传播/自动回复组合由 T-05 完成，不另造第二套 Handler 返回协议。
+1. **完成根插件 API 与实例绑定。** 在现有 SDK 上实现恰好一个根类、嵌入 sdk.Base、至多一个 Config 的发现/验证；插件 ID 只来自 plugin.yaml。保留显式传入根实例或辅助接收者的注册接口，不建立自动 DI。生成器与显式适配器校验两种 Handler 签名及参数类型；执行时的完整 Rule/传播/自动回复组合由 T-05 完成，不另造第二套 Handler 返回协议。D-114 以 `func New() *sdk.Plugin` 取代根类与 `sdk.Base`，由 T-04.12 修改。
 
 2. **实现限定范围的构建期生成。** 只扫描当前插件在所在 module 中选定的目标构建包及其本模块依赖包，遵守 build tags、GOOS/GOARCH，排除依赖、vendor、测试文件。包级 command/event 标记生成 Go 注册代码，由编译器检查函数类型；实例方法必须通过已提供的实例显式绑定。仓库内各示例以各自构建入口限定扫描范围，不能全仓库扫描所有示例后误报多个根插件。产出稳定描述、schema 引用和构建诊断；同输入重复生成结果一致。通过 `cmd/alonabot/` 的构建检查入口调用同一生成逻辑，避免 CLI 和 SDK 各自维护一份扫描器。D-79 删除构建期标记，命令与事件只经链式注册，标记的扫描与生成由 T-04.9 删除。
 
@@ -317,7 +327,19 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 
 10. **管理员与封禁按 Adapter 登记（D-105）。** `core_config.json` 的 `admins` 与状态库的禁止表改用用户字符串 `<adapter_id>:<external_user_id>`，会话禁止按 `<adapter_id>:<chat_id>`；Router 按事件的 adapter_id 判定 admin，CheckCommand 与 CheckSend 按 adapter_id 判定禁止，同一 Adapter 的全部实例共用。同步已合并的 policy、router 与 settings；管理入口（T-09.4、T-09.14）与 /whoami（T-14.1）按新格式实现。
 
-11. **注册写法统一（D-112）。** 定时任务与 HTTP 路由改为与 D-70 相同的链式构建：`r.Every(jobID, d)`、`r.Cron(jobID, expr)`（可选 `.Timezone(name)`）与 `r.Route(method, path)`（可选 `.Public(mode)`）开始，`Handle` 结束，删除 `HTTPOption` 与位置参数形式。命令省略 `Args` 时参数名取 Handler 的参数名：Go 运行时取不到参数名，由生成器为插件包中第一个参数是 `*sdk.Context` 的函数、方法与函数字面量记录参数名并嵌入 Generated，SDK 按 Handler 查找，查不到时仍为 arg1、arg2；写了 `Args` 时以它为准。Event Bus 订阅改为 `sdk.Subscribe[T](r, eventName)`，路由 ID 缺省为事件名，可用 `.ID(routeID)` 另给。协议不变，示例与已合并的调用方同步修改。Hook 的同样改写属于 T-05.3。
+11. **注册写法统一（D-112）。** 定时任务与 HTTP 路由改为与 D-70 相同的链式构建：`r.Every(jobID, d)`、`r.Cron(jobID, expr)`（可选 `.Timezone(name)`）与 `r.Route(method, path)`（可选 `.Public(mode)`）开始，`Handle` 结束，删除 `HTTPOption` 与位置参数形式。命令省略 `Args` 时参数名取 Handler 的参数名：Go 运行时取不到参数名，由生成器为插件包中第一个参数是 `*sdk.Context` 的函数、方法与函数字面量记录参数名并嵌入 Generated，SDK 按 Handler 查找，查不到时仍为 arg1、arg2；写了 `Args` 时以它为准。Event Bus 订阅改为 `sdk.Subscribe[T](r, eventName)`，路由 ID 缺省为事件名，可用 `.ID(routeID)` 另给。协议不变，示例与已合并的调用方同步修改。Hook 的同样改写属于 T-05.3。本步骤排在步骤 12 之后，`r` 指步骤 12 的插件对象或子插件。
+
+12. **插件对象、结构体参数与子插件（D-114～D-116）。** 协议不变，只改 SDK、生成器与调用方。
+    - 插件对象：新增 `sdk.NewPlugin()` 与 `*sdk.Plugin`，把各注册器的方法移到它上面。删除 `sdk.Base` 与 `sdk.Root`；删除根插件的六个注册方法 `Commands(*CommandRegistry)`、`Events(*EventRegistry)`、`Services(*ServiceRegistry)`、`Subscriptions(*SubscriptionRegistry)`、`HTTP(*HTTPRegistry)`、`Schedules(*ScheduleRegistry)`，SDK 不再调用它们；删除这六个注册器类型。都不留别名。`sdk.JSON`、`sdk.Proto`、`sdk.Subscribe` 的第一个参数改为 `sdk.Registrar`。生命周期与配置回调改为 `p.OnStart`、`p.OnReady`、`p.OnStop`、`p.OnConfigLoad` 登记，配置经 `p.Config()` 与 `c.Config()` 读取。`sqlitedb` 与 `gormdb` 的迁移接口改为登记函数 `Migrate(p, fn)` 与 `Migrations(p, list)`，生成器按对这四个函数的调用写入 `migration_mode`，SDK 在准备阶段核对。`sdk.Run`、`sdk.Collect` 与库模式的 `alonabot.Plugin` 改收 `*sdk.Plugin`；生成器从查找根类型改为核对入口包的 `func New() *sdk.Plugin`，正式入口调用 `sdk.Run(New())`。重复登记由 `Collect` 报错，`sdk.Run` 开始后的注册 panic。
+    - 结构体参数：`Collect` 按 CONTRACTS §9.1 检查 Handler 的结构体参数（字段类型与导出、`arg` 与 `default` 标签、名字的缺省规则、指针与 default 的可选语义、与 `Args`/`Optional`/`RawTail` 互斥），生成与位置参数相同的 CommandParam；分发时把 Core 解析好的值赋给字段。两种形式同时接受 `int` 与底层为标量的具名类型。
+    - 子插件：`p.Sub(id)` 与 `*sdk.SubPlugin`，ID 校验与重复检查；子插件中的路由照原规则生成 route_id 并与整个插件一起查重；`s.Permission` 进入缺省权限的解析次序；`s.Config()` 返回同名顶层 object 的视图，`Collect` 核对 schema 中有该字段；子插件 Handler 的 `c.Logger()` 带 `sub_plugin`。
+    - examples/plugins、`alonabot init` 的模板（尚未实现时只改语句）与已合并的调用方按新写法修改；docs/plugin-guide.md 与 ARCHITECTURE 中对根插件的描述由审查者在合并前同步。
+
+13. **SDK 的第二轮简化（D-118～D-123）。** 协议不变。
+    - 属于 T-04.8 的部分：`c.Reply(text)` 与后台用的 `sdk.SendText(ctx, to, text)`；`message.User`、`c.User()` 与 `c.Session()`；`sdk.OpenMedia` 改收 `message.MediaSource`；`errcode` 的 `New`、`Errorf` 与 `Of`。
+    - 属于 T-05.4 的部分：命令、文本匹配、Raw、事件与按钮路由 builder 的 `.Continue()`（T-05 步骤 7）。
+    - 本步骤（T-04.13）：Service 与 Event Bus 改为带类型的声明。`sdk.JSON[In, Out](target)`、`sdk.Proto[In, Out](target)` 返回 `sdk.Service[In, Out]`，`sdk.Serve(r, s)` 开始注册，`s.Call(ctx, in)` 调用；`sdk.BusEvent[T](name)` 返回事件声明，`e.Publish(ctx, payload)` 发布，`sdk.Subscribe(r, e)` 订阅。`Collect` 核对 target 的组件部分是本插件（Agent 组件为 `@agent`）、声明不是零值、同一声明只注册一次。删除 `sdk.CallJSON`、`sdk.CallProto`、`sdk.Publish` 与旧形式的 `sdk.JSON(r, name)`、`sdk.Proto(r, name)`、`sdk.Subscribe[T](r, name)`；生成器对类型参数的检查改为针对声明处。`sdk/llm` 的 `Generate` 与 `Ask` 签名不变，内部改用声明并导出它；示例与已合并的调用方同步修改。
+14. **命令名覆盖（D-128，T-04.14）。** 协议与 SDK 不变。命令策略的路由作用域增加命令名列表，写进状态库的命令策略表；保存时按注册描述中命令路径的规则校验每个命令名，拒绝空列表、列表内重复、文本匹配与 Raw 路由，并按 CONTRACTS §2.3 检查同一插件内的重名。Router 建立命令索引时，有覆盖的命令用覆盖的命令名代替声明的路径与别名；与本插件其他命令声明的名字相同的覆盖项不进入索引并记入诊断，一项不剩时用声明的名字；覆盖变化后重建索引，下一次派发生效。遮蔽诊断、usage 回复与命令菜单同步（T-03.17）改用生效的命令名，主名为列表第一项；覆盖变化触发受影响实例的菜单同步。命令组与策略的作用域仍按声明的规范路径。管理 API 由 T-09.14 提供，页面由 T-09.9 提供；`core.command.list`（T-14.1）返回生效的命令名，两者后合并者同步。
 
 #### 拟目录与交付
 
@@ -346,6 +368,9 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 | V-108 | SDK 类型中的时间与时长：与协议毫秒值的往返，零值对应 absent |
 | V-110 | 步骤 11 中定时任务与 HTTP 路由的链式注册、命令参数名的缺省与订阅路由 ID 的缺省；Hook 分项由 T-05.3 提供 |
 | V-111 | 步骤 9 中扩展事件与 extension 的 Go 类型声明与推导的 Schema；动作分项由 T-03.15 提供 |
+| V-112 | 步骤 12 中插件对象的注册与回调登记、结构体参数的绑定与注册检查、子插件的路由标识、缺省权限与配置视图 |
+| V-113 | 步骤 13 中 Service 与 Event Bus 的带类型声明；SDK 类型分项由 T-04.8 提供，延续调用分项由 T-05.4 提供 |
+| V-115 | 步骤 14 中命令名覆盖的保存检查、匹配、遮蔽、usage 与菜单同步；管理 API 分项由 T-09.14 提供，页面分项由 T-09.9 提供 |
 
 V-12 是跨任务验收：T-04 不依赖尚不存在的 WebUI，但必须交付后续 UI 实际调用的策略服务层。矩阵中保存分项证据；只有 T-09 的鉴权后浏览器操作也完成，才将整项 V-12 标为通过。T-04 完成后，T-05 和 T-08 可以分别使用同一注册器继续实施。
 
@@ -485,13 +510,15 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 #### 按顺序实施
 
 1. **接入并校验注册描述。** schedule 注册固定 job_id、interval/cron、timezone 和 job deadline，HTTP 注册 method、插件相对 path、公开/私有及回调验证模式。复用既有完整 REGISTER 校验；同插件重复 ID/HTTP 路由、无效表达式和不合法 endpoint 使整次注册失败。路由描述准备完成不代表任务已启动或代理已公开。
-2. **实现下一次触发计算。** interval 至少 1s，首个 tick 为激活时刻加间隔，后续沿固定起点计算；cron 固定五字段，默认 UTC，显式时区必须为有效 IANA 名称。按既有日/星期 OR、其他字段 AND 的规则求下一真实时间点，处理夏令时缺失和重复时刻。激活、恢复或落后时只安排下一未来 tick，不持久化漏 tick，不补跑。触发计算接受明确的当前时间，便于验证时间边界；它放在 `contracts/schedule`，供 Core Scheduler 与官方 Agent 组件的定时任务共用，不读当前时间、不持有状态。
+2. **实现下一次触发计算。** interval 至少 1s，首个 tick 为激活时刻加间隔，后续沿固定起点计算；cron 固定五字段，默认 UTC，显式时区必须为有效 IANA 名称。按既有日/星期 OR、其他字段 AND 的规则求下一真实时间点，处理夏令时缺失和重复时刻。激活、恢复或落后时只安排下一未来 tick，不持久化漏 tick，不补跑。D-125 起 interval 的起点保存在 Core 状态库，不再随每次激活重置（步骤 9）。触发计算接受明确的当前时间，便于验证时间边界；它放在 `contracts/schedule`，供 Core Scheduler 与官方 Agent 组件的定时任务共用，不读当前时间、不持有状态。
 3. **实现实际运行槽与调度调用。** tick 使用 Core→Plugin REQUEST 触发 callback，无用户 Actor、不默认 Admin；每次采用独立 run_id 和 15 分钟 job deadline。不同 job 可并发，同一 job 有实际运行记录时跳过本轮。超时先结束调用结果并取消，但保留运行槽和原调用键；SDK 在用户 callback 真正返回后才发送唯一 Response，迟到响应只释放槽。RPC 断链不能释放仍存活进程的槽，必须等真实完成响应或确认旧进程退出；恢复后仍从未来 tick 开始。
 4. **实现 SDK 托管 HTTP Listener。** 仅存在 HTTP 路由时绑定 `127.0.0.1:0`，保持 Listener 打开并在 REGISTER 上报实际端点；插件作者只提供 Handler。用户 Handler 外包 Session 认证检查和就绪门禁；准备阶段即使端口已监听也不执行业务。Listener 与 Session 生命周期绑定，停止、错误和激活失败均关闭，不增加插件端口配置。
 5. **实现 Core 的 Session 代理映射。** Core 从 `<data_dir>/alonabot.yaml` 读取 listen、两个 Base URL、可信反代与日志设置，文件不存在时按 CONTRACTS §15.1 的缺省值创建，命令行参数只覆盖本次运行。校验注册端点为合法 loopback 后保存，只有当前 Activated Session 能接单。公共前缀固定 `/plugins/{id}/...`，Core 匹配插件、method、route 和授权，剥掉插件前缀后交给标准库 ReverseProxy.Rewrite。覆盖内部认证头，清除 admin Cookie/Authorization 及未验证的转发身份信息，保留 Core 路径。公开 OAuth/Webhook 只对显式声明的路由生效，示例与测试覆盖插件执行 state/签名/nonce 验证；回调 URL 只从受控 Base URL 构造。D-82 起设置文件改为 `core_config.json`，并集中 Core Admin、命令前缀、默认 locale、按来源的日志级别与 Adapter 实例（T-07.6）。
 6. **完成两个 Host 的页面边界与插件授权。** 同一公开 Listener 按受控 Host 分配 Admin 和插件内容，两个 Base URL 使用同 scheme/有效端口、不同 host；插件 host 不提供 Admin API。实现 60s 一次性插件兑换票据、独立插件 Cookie、原管理会话失效后的派生授权撤销，以及票据 URL 清理和 no-referrer。管理会话校验接 T-09 的认证入口，T-07 测试注入的会话只存在于测试装配。禁止向 plugin Origin 开放管理凭证 CORS，限制插件 Set-Cookie；未配置第二 host 时保留 JSON API/Webhook，按契约拒绝主动页面并施加响应策略。D-84 改为单一主机名：删除插件 host、兑换票据与插件会话，插件路由的全部响应加不含 allow-same-origin 的 CSP sandbox 与 nosniff 并去掉 Set-Cookie，非公开路由用管理会话与 CSRF（T-07.7）。
 7. **接入统一启停和清理。** 在 T-02 的 Activated 转换后启用 Scheduler 和代理；Draining 时停止新 tick 和新 HTTP 派发，停止阶段取消余留调用、撤销映射、关闭 Listener。复用全局 10s 停止预算，不能为 Scheduler、HTTP 和每个插件另起一轮独立预算。Session/Generation 变化后，旧 endpoint、凭证和运行记录不能继续接收新业务；HTTP 失败不得触发自动业务重试。
 8. **执行时间、进程和 HTTP 边界验收。** 用给定时间验证 cron/interval/夏令时，用真实插件进程验证不合作 callback、迟到 Response 和断链后的运行槽；用定时与 HTTP 示例验证作者不管理端口。HTTP 测试覆盖未激活、停用后请求、伪造内部头、私有路由、公开回调，以及插件响应的沙箱头与 Set-Cookie 过滤。分别记录 T-07 组件结果与仍需 T-09 首次认证后完成的端到端结果。
+9. **动态任务与调度持久化的协议和 Core 侧（D-124～D-127，T-07.8）。** proto 按 WIRE-FORMAT §3.3、§3.5 追加 RouteKind 的 TASK、TaskSpec 与 ScheduledPayload 的任务字段并重新生成。状态库新增两张表：动态任务表以（plugin_id、任务名、key）为主键，保存触发规则、时区、参数、起点与创建时刻；调度状态表以（plugin_id、job_id）为主键，保存静态 interval 任务的起点、对应的间隔与暂停标记。调度器以状态库为准：Activated 时读出该插件的静态任务状态与动态任务实例，起点缺失或间隔变化时写入本次激活时刻，再按步骤 2 的计算安排下一未来触发；过期的一次性实例在这时删除并记 WARN 与计数，未注册任务名的实例保留、不安排。实现 `core.task.set`、`core.task.cancel`、`core.task.list` 与 `core.job.pause`、`core.job.resume`、`core.job.status`，按 CONTRACTS §4.3 校验 key、触发规则、参数大小与 `TASKS_PER_PLUGIN`，调用方只能操作自己的任务，写状态库成功后才更新内存中的定时器。动态任务的派发经每插件 `TASK_CONCURRENCY` 的名额，其余按到期时间排队，排队中的周期实例只保留一次；一次性实例在派发的同一事务中删除。`cancel` 删除行、摘除定时器与排队项，并取消该实例在途的调用；暂停只让触发作废，不打断在途的一轮。Draining 与停止时摘除该 Session 的全部定时器并清空队列（步骤 7）。把任务与调度状态加入管理服务（T-09.4）`--purge-data` 与 `--purge` 的清理对象：按 plugin_id 删除两张表中的行，与其余数据的删除在同一个状态库事务中完成，并列入确认对象；删除不依赖插件进程，也不要求 Session 存在。三项上限登记到 `contracts/limits`。
+10. **动态任务与暂停恢复的 SDK（D-124、D-126，T-07.9）。** `sdk.Task[T](name)` 声明任务，`sdk.OnTask(r, t).Handle(fn)` 在 `New()` 中注册处理函数（`r` 为 `sdk.Registrar`，D-114），Collect 时登记路由 `task.<name>`，同名重复、名称不合规与保留前缀冲突使收集失败。`t.At`、`t.Every`、`t.Cron` 把参数编码为 JSON 对象后调用 `core.task.set` 并返回 key；`sdk.Key` 指定 key，不指定时 SDK 生成随机 key；`sdk.Timezone` 只对 `Cron` 有效。`t.Cancel` 与 `t.List` 对应 `core.task.cancel` 与 `core.task.list`，List 返回带类型的参数、触发规则与下一次触发时刻。触发到达时 SDK 按任务名找到处理函数，把参数解码为 T 后调用，解码失败返回 INVALID_ARGUMENT 并记日志，不调用处理函数。`sdk.PauseJob`、`sdk.ResumeJob`、`sdk.JobStatus` 对应三个 `core.job.*` 服务。全部函数只在 Activated 之后可用，之前调用返回 FAILED_PRECONDITION。定时示例加入一个提醒命令，演示 At 与 Cancel；开发文档同步。
 
 #### 可审查交付
 
@@ -504,6 +531,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 | 现有条目 | T-07 要完成的验证 |
 | --- | --- |
 | V-20 | 不同 job 并发、同 job 跳过重叠、cron/interval/IANA 时区/夏令时、离线和落后不补跑 |
+| V-114 | 步骤 9、10 中动态任务的增删与触发、调度状态的持久化与错过即跳过、静态任务的暂停与恢复；`--purge-data` 与 `--purge` 删除任务与调度状态、只卸载时保留但不触发 |
 | V-46 | 超时后 callback 未结束、迟到 Response、断链但进程仍存活时，实际运行槽的保留与释放 |
 | V-21 | Scheduler/HTTP 服从就绪顺序、失败隔离与 Core 多插件共享的停止预算 |
 | V-22 | 自动 loopback Listener、无需插件端口配置、Session 代理、公开/私有路由和停止清理；私有页面与真实管理员登录的完整连通在 T-09 联验 |
@@ -530,16 +558,17 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 
 #### 实施动作
 
-1. **完成配置 schema 与构建检查。** 配置由与 `plugin.yaml` 同目录的手写 `config_schema.json` 声明（D-76，CONTRACTS §5.1）。`alonabot build` 与 `check` 按 §5.1 校验类型、字段键与模板键、各键的适用类型、default、options 与 labels、slider、condition、display_item、secret 与 required，错误带 JSON 路径；通过后把规范内容嵌入程序，`config_schema_hash` 按保留键顺序的规范 JSON 计算，必须与安装包中的文件一致。i18n/ 的 `config` 覆盖按 §5.3 与 schema 同形核对。生成器的 go/types 类型推导只供 Service Schema 使用（T-04.7），不再生成配置 Schema。`$version` 与 `$migrations` 的声明式迁移按 §5.5 实现（T-08.11）；Adapter 包的 `instance_schema.json` 以及实例配置与 `core_config.json` 的迁移、备份与降级报错由 T-08.12 实现（D-85）。
+1. **完成配置 schema 与构建检查。** 配置由与 `plugin.yaml` 同目录的手写 `config_schema.json` 声明（D-76，CONTRACTS §5.1）。`alonabot build` 与 `check` 按 §5.1 校验类型、字段键与模板键、各键的适用类型、default、options 与 labels、slider、condition、display_item、secret 与 required，错误带 JSON 路径；通过后把规范内容嵌入程序，`config_schema_hash` 按保留键顺序的规范 JSON 计算，必须与安装包中的文件一致。i18n/ 的 `config` 覆盖按 §5.3 与 schema 同形核对。生成器的 go/types 类型推导只供 Service Schema 使用（T-04.7），不再生成配置 Schema。`$version` 与 `$migrations` 的声明式迁移按 §5.5 实现（T-08.11）；Adapter 包的 `adapter_config_schema.json` 以及实例配置与 `core_config.json` 的迁移、备份与降级报错由 T-08.12 实现（D-85）。
 2. **实现完整 JSON 与 Pending 编辑能力。** 以原始对象保留嵌套未知键，区分缺失键与显式 `false/0/空串/空集合/null`；实现完整替换、RFC 7396 Merge Patch 和编辑快照导入。提交检查 `base_generation`，旧基线拒绝；直接编辑 `config.json` 不更改 Active。提供供 T-09 管理服务调用的应用层入口和结构化错误，不在此阶段开放未经认证的独立 HTTP 写接口。
 3. **接入 SDK 配置准备顺序。** 使用 T-02 的私有 Bootstrap，按声明式迁移 → `OnConfigLoad(raw, fromVersion)` → 补缺失值 → schema 校验处理，再进入该启动原因允许的 DB 准备；补值、校验与 secret 路径的实现放在 `contracts/`，SDK 与 Core 共用。完整规范 JSON 随 REGISTER 回传，禁止用只含已声明字段的结果替换原始文档；新 schema 检查必须在 OnConfigLoad 之后。准备完成后由 `sdk.Base.Config()` 提供按类型取值的只读配置。普通 restart 重验原 Active，相同配置版本的 OnConfigLoad 若改变运行配置则失败；所有阶段错误、超限及超时走既有控制错误，准备期不能发普通业务 RPC。
 4. **实现不可变 Secret Store。** 新 secret 值生成新引用，Core 在所属 Session Bootstrap 前解引用，在 REGISTER 后按新 Schema 和保留的旧 secret 路径重新抽取；SDK 不计算持久化引用摘要。检查引用归属，管理读取返回引用/设置状态，掩码不成为保存值；日志、错误和普通响应不含明文 JSON、DSN 或 secret。实现运行账号权限/Windows ACL 与按引用清理能力；清理必须保护 Active、Pending、保留代次及恢复中操作引用，正式 Journal 引用由 T-09 接入。
 5. **实现受管 SQLite 的两个入口与连接生命周期。** 新建 `sdk/sqlitedb`：`sqlitedb.Open(ctx)` 按 Session 的 DB 描述打开受管 SQLite，同一 Session 复用同一个连接，SDK 停止时关闭；现有 `gormdb.OpenSQLite` 的连接设置与回读核对移入此包，按契约应用 WAL/FULL/外键/5s busy timeout 与单连接。`gormdb.Open(ctx)` 经 libtnb 的 `Conn` 包装同一个 `*sql.DB`，不另开连接。插件不可取得 Core 状态库连接，事务回调使用传入的 tx。连接或数据损坏时返回错误，不能创建空库掩盖问题。只导入 `sqlitedb` 的插件不链接 GORM，用 `go list -deps` 验证。
-6. **实现两组互斥迁移与维护门槛。** `sqlitedb` 与 `gormdb` 各定义 SelfMigrator 与 VersionedMigrator，被导入时向 SDK 登记识别方式，SDK 本身不 import GORM；根插件最多实现一个迁移接口。versioned 模式校验非零、唯一、递增 ID，每步 Up 与 `_alonabot_migrations` 完成记录使用插件 DB 的同一事务，失败不记成功，两个包共用同一账本格式。`prepare_effects=external` 的插件在已有安装的候选上没有维护许可时返回 NEEDS_MANUAL_MIGRATION；维护许可须匹配 Core 下发的本次 Session/Generation/DB；事务不支持的 SQL 不得偷偷转为事务外执行。
+6. **实现两组互斥迁移与维护门槛。** `sqlitedb` 与 `gormdb` 各定义 SelfMigrator 与 VersionedMigrator，被导入时向 SDK 登记识别方式，SDK 本身不 import GORM；根插件最多实现一个迁移接口（D-114 把迁移接口改为登记函数，由 T-04.12 修改）。versioned 模式校验非零、唯一、递增 ID，每步 Up 与 `_alonabot_migrations` 完成记录使用插件 DB 的同一事务，失败不记成功，两个包共用同一账本格式。`prepare_effects=external` 的插件在已有安装的候选上没有维护许可时返回 NEEDS_MANUAL_MIGRATION；维护许可须匹配 Core 下发的本次 Session/Generation/DB；事务不支持的 SQL 不得偷偷转为事务外执行。
 7. **形成可交接的候选资源结果。** 在已持逐插件操作锁、旧写入者退出且 Core 可取得 runtime.lock 的前提下，使用 Backup API 创建独立 SQLite 候选；首次安装创建空候选，reload/update 同样复制，普通 resume 复用 Active。复制完成后 Core 释放临时 runtime.lock，再由 SDK 取锁打开候选，避免互相等待。将准备好的程序/配置/secret/DB 引用、配置摘要、迁移完成状态与本次身份交给 T-09；本任务不写 Active 指针或伪造 COMMITTED。失败清理只处理未受保护的候选资源。
 8. **实现用户可见文案目录。** 在 `alonabot build` 与 `check` 中检查 `i18n/*.json` 的 `messages`：en-US 必须存在且包含全部键，其他语言不得有 en-US 没有的键，同一键的占位符集合一致。SDK 提供 `T(key, args)`，按 Actor locale → Core 默认 locale → en-US 选择语言，主语言回落按 CONTRACTS §5.4；未知键与缺少参数返回错误。Core 内置 en-US 与 zh-CN 的用户可见文案目录，命令 usage 改为经该目录生成；Core 默认 locale 是一项全局设置。
 9. **完成示例与分层验证。** 在临时 data_dir 上分别用 `sqlitedb` 与 `gormdb`，运行配置迁移、显式空值、未知 secret、CRUD/事务、迁移失败以及候选 OnStart 写 DB 后失败的案例。为自动表单提供字段顺序、invisible、模板、i18 回退、掩码和 PATCH 的组件/fixture 验证，并建立 WebUI 文案的 en-US/zh-CN 目录与语言切换组件；`web/admin/` 是官方 WebUI 组件的源码；真实管理页面在 T-09 接入。记录可独立通过的组件证据，以及仍需 T-09 正式管理入口和 Journal 才能关闭的场景，不把后者标成已通过。
 10. **文案函数只返回字符串（D-106）。** `c.T` 与 `sdk.T` 改为只返回字符串；生成器在 `check` 与 `build` 中检查以常量写出的键与参数名，问题带位置并使构建失败；运行时仍未知的键返回键名，缺少的参数保留占位符原文，并在插件日志记 WARN。Core 自己的文案目录不变。同步仓库内的全部调用。
+11. **配置项的选项来源（D-129，T-08.14）。** 生成器的 schema 检查接受 `options_from` 并按 CONTRACTS §5.1 校验：只用于 `string` 与没有 `items` 的 `list`，不与 `options`、`labels`、`secret` 并存，来源名格式合法，内置来源的名称与 filter 的键已知。Service 描述追加选项来源标记；`sdk.ServeOptions(r, serviceName, fn)` 注册固定 Schema 的选项来源服务，访问规则固定为 Core 与本组件。Core 新增按组件与字段路径查询选项的入口：从 Active 代次的 schema 取来源名与 filter，内置来源在进程内查询，服务来源经 Service Broker 以 Core 的身份调用且只接受带标记的服务；条数上限取 `OPTIONS_PAGE`，多出的选项截去并标记还有更多；目标不可用时返回 UNAVAILABLE。内置来源由登记处管理，本切片登记 `core.adapter_instances`，`core.chats` 由 T-03.25 登记。配置的补值、校验与读取不变。管理 API 由 T-09.14 提供，页面由 T-09.9 提供。
 
 #### 拟目录与交付
 
@@ -566,6 +595,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 | V-21、V-37 的配置/迁移分支 | 使用 T-02 会话验证阶段错误/超限/超时无半注册、无准备期业务请求。 | T-09 验证与正式提交前后恢复门槛组合。 |
 | V-54 | 文案选择顺序与主语言回落、check 的键与占位符检查、Core usage 文案、WebUI 文案组件。 | 真实页面的语言切换在 T-09 复验。 |
 | V-104 | `c.T` 与 `sdk.T` 只返回字符串；check 与 build 检查常量键与参数名；运行时问题回落到键名或占位符原文并记 WARN。 | — |
+| V-116 | `options_from` 的检查；`sdk.ServeOptions` 的注册与访问规则；Core 按字段路径查询内置来源与服务来源，条数上限与来源不可用。 | 管理 API 与页面在 T-09 复验；`llm.providers` 由 T-12.8 提供。 |
 
 建立上述包后，后端验证入口至少包括 `go test ./sdk/... ./internal/core/config/... ./internal/core/secret/... ./internal/core/storage/...`。前端使用实际建立的组件测试入口，记录准确命令。所有结果按 TEST-MATRIX 记录代码位置、命令、版本、环境和日志；尚无环境时明确保持未运行。
 
@@ -590,11 +620,11 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 
 1. **落地首次管理认证与真实入口。** 实现 `admin-token init/reset` 的离线 core.lock 检查、32-byte token 一次终端输出、仅存 SHA256 和认证代次；reset 撤销旧管理会话。D-82 起非终端首次启动把 token 写入数据目录的 `admin_token` 并提供 `admin-token show`（T-07.6），D-84 删除派生票据与插件会话（T-07.7）。实现 POST login、Origin/登录 CSRF、恒时摘要比较、8h 会话、登出撤销与 token 再认证查看 secret；CLI 使用显式 Bearer token。接 T-07 的授权检查，未初始化或无有效认证时拒绝管理访问；纯 loopback 开发与非 loopback HTTPS 边界沿用契约。
 2. **实现开发 CLI 与安装预检。** 开发命令是对四种组件通用的顶层命令（D-77）：`init` 在当前目录创建只含作者信息的组件工程（`plugin.yaml`、根插件与示例命令、示例 `config_schema.json`、`i18n/en-US.json` 与忽略 `data/` 的 `.gitignore`，不生成 `main.go`）；`build` 生成嵌入代码与调用 `sdk.Run` 的正式入口并编译，取代 `plugin generate`，产物不包含 Core；`check` 只核对、不写文件；`test` 与 `pack` 接到同一构建。包内 manifest 由 build 与 pack 补上构建信息（D-78，T-09.16）。仓库内示例复用根 module，面向外部作者的脚手架沿用插件自身 Go Modules 的既有方式。pack 支持四种角色的组件，WebUI 包只含静态文件并以 `any` 为平台，生成 tar.gz 与归档外 release 清单，签名可选（D-81），有签名时对清单确切字节签名；安装预检有签名时先做 Ed25519 验签，再核对归档 SHA256/长度、来源、平台和 manifest。受控解压拒绝越界、链接、设备、重复及大小写冲突路径，并执行 256 MiB/1 GiB/10,000 条目上限；所有下载/身份/静态错误必须在停止旧版前拒绝。
-3. **建立唯一管理服务与安装记录。** CLI/WebUI/API 调同一管理服务，四种角色的组件使用同一套安装、启停、更新与卸载流程，所有变更按包串行；按 CONTRACTS §9.1 执行同类唯一：同类组件已安装时 install 返回 ALREADY_EXISTS，`--replace` 在新组件通过预检后按 uninstall 的缺省语义卸载旧组件再安装，旧组件原来启用时启用新组件，确认对象列出被替换的组件及不迁移的 Adapter 实例；`--source owner/repo` 从 GitHub Release 下载并持久化安装来源，不给时安装本地包，update 只从安装时的来源取版本；`alonabot run`（不带子命令时等同，D-77）复用 T-13 的 Core 装配，按安装记录启动全部已启用的包；Core 装配读取 `core_config.json`，把命令前缀与 Core Admin 列表接入 Router 与策略，启动组件时传入默认 locale（T-07.6 只提供读取）；Adapter 实例的创建、启停与删除也经此服务，写回 `core_config.json` 的 `adapters`（D-82，T-07.6）；启用插件时检查其必需的 Adapter 依赖与插件依赖；卸载被依赖的 Adapter，或停用、卸载被依赖的插件、把它更新或回退到低于 `min_version` 的版本时，须列出受影响插件并显式确认。持久化安装序号、来源/受信公钥、pin、安装/卸载保留状态。实现 install/list/enable/disable/restart/reload/update/uninstall/pin/rollback 的既定区分：重启原 Active 只换 Session，reload 导入编辑快照；卸载默认保留数据及绑定，仅原来源可显式重装，purge 只删除已列明的框架受管对象。首次信任（含未签名来源，D-81）、公钥变化、恢复丢弃新写入等确认只用于契约要求的具体操作，不增加一套通用审批系统。
+3. **建立唯一管理服务与安装记录。** CLI/WebUI/API 调同一管理服务，四种角色的组件使用同一套安装、启停、更新与卸载流程，所有变更按包串行；按 CONTRACTS §9.1 执行同类唯一：同类组件已安装时 install 返回 ALREADY_EXISTS，`--replace` 在新组件通过预检后按 uninstall 的缺省语义卸载旧组件再安装，旧组件原来启用时启用新组件，确认对象列出被替换的组件及不迁移的 Adapter 实例；`--source owner/repo` 从 GitHub Release 下载并持久化安装来源，不给时安装本地包，update 只从安装时的来源取版本；`alonabot run`（不带子命令时等同，D-77）复用 T-13 的 Core 装配，按安装记录启动全部已启用的包；Core 装配读取 `core_config.json`，把命令前缀与 Core Admin 列表接入 Router 与策略，启动组件时传入默认 locale（T-07.6 只提供读取）；Adapter 实例的创建、启停与删除也经此服务，写回 `core_config.json` 的 `adapters`（D-82，T-07.6）；启用插件时检查其必需的 Adapter 依赖与插件依赖；卸载被依赖的 Adapter，或停用、卸载被依赖的插件、把它更新或回退到低于 `min_version` 的版本时，须列出受影响插件并显式确认。持久化安装序号、来源/受信公钥、pin、安装/卸载保留状态。实现 install/list/enable/disable/restart/reload/update/uninstall/pin/rollback 的既定区分：重启原 Active 只换 Session，reload 导入编辑快照；卸载按 D-127 分三种清理范围：缺省只卸载，保留数据、配置及绑定，仅原来源可显式重装；`--purge-data` 删除数据，`--purge` 删除数据与配置，两者只删除 CONTRACTS §9.3 列明的框架受管对象，状态库中的对象在一个事务内删除；任务与调度状态的表由 T-07.8 加入清理对象。首次信任（含未签名来源，D-81）、公钥变化、恢复丢弃新写入等确认只用于契约要求的具体操作，不增加一套通用审批系统。
 4. **实现正式候选 Journal 与准备编排。** 通过预检后，以预期旧 ActiveGeneration 开始持久化管理操作记录及其资源引用；冻结新根派发，drain/停旧进程，确认树退出及 runtime.lock，再调用 T-08 复制 DB 和创建候选 Session。将启动原因、维护许可和阶段预算放入已有 Bootstrap；REGISTER 校验后持久化程序/配置/secret/DB 候选引用并形成 PREPARED。普通 resume 走原提交记录，不伪造新候选 Journal；`prepare_effects=external` 的候选在维护门槛停下。
 5. **实现唯一提交点与激活门禁。** 确认候选文件及引用已持久化后，在 Core 状态库的同一事务复核预期旧代次并提交 ActiveGeneration+COMMITTED；事务内不做下载、备份或等待 RPC。随后发送 Activate，只有 OnReady/Activated 完整成功才开放命令、事件、Service、Bus、任务与 HTTP；复用 T-06/T-07 门禁。旧按钮按 Generation 失效；提交后启动/OnReady 失败保持新代次权威并进入 Degraded，不自动倒退到旧 DB。
 6. **实现崩溃恢复、显式回退与引用回收。** Core 启动持锁后按状态库 Active/Journal 恢复：未提交的已有安装关闭候选后以旧程序启动新 Session，首次安装尚无 Active 则保持未激活；已提交只恢复当前代次。旧进程退出未确认时不启动新写入者。rollback 从选定保留代次复制新的 SQLite 恢复候选并使用新 Generation，继续走同一准备/提交路径；外部数据的恢复沿用显式维护。只有无人引用的失败候选/旧包/secret 才可回收，恢复中操作和保留快照受保护；备份说明覆盖整个 data_dir 与插件自管的外部数据。
-7. **完成最小 Admin 页面与 API 绑定。** 页面属于官方 WebUI 组件（`web/admin/`），只调用 Admin API。接入真实登录、状态/日志、安装启停、更新/恢复、配置表单/完整 JSON 编辑、命令权限、插件的发信许可（`allowed_adapter_instances`）、工具调用策略、Agent 会话的列出与清除，以及界面语言切换。Core 设置页管理 Core Admin 列表、命令前缀与默认 locale，与 `alonabot admin add|remove|list` 使用同一管理服务，修改写回 `core_config.json`。使用 T-08 的 raw JSON/PATCH/base_generation/secret 语义，显示 Pending、候选失败、Degraded 与维护原因；动态权限复用 T-04。插件页面由 WebUI 用沙箱 iframe 嵌入，经 postMessage 桥以管理员会话请求本插件的路由（D-84，T-07.7）；管理 Cookie/Authorization 不进入插件。页面只展示用户可操作状态和具体错误，不把内部协议步骤当作用户配置项。**日志：** 按来源的级别写在 `core_config.json` 的 `log.sources`，修改后经 `sdk.log.set_level` 通知 SDK 并立即生效；Core 为每个来源保留最近 1000 条记录，提供按来源、级别与 trace_id 的读取和 SSE 订阅，过去日期的记录从日志文件按日期查询；`alonabot logs`、`alonabot log-level` 与 WebUI 日志页使用同一 API，页面的筛选只在浏览器中进行（CONTRACTS §14.3、§14.4）。 Admin API 与日志管理在本章节（T-09.10、T-09.13、T-09.14），页面在 WebUI 章节（T-09.8、T-09.9、T-09.15）。
+7. **完成最小 Admin 页面与 API 绑定。** 页面属于官方 WebUI 组件（`web/admin/`），只调用 Admin API。接入真实登录、状态/日志、安装启停、更新/恢复、配置表单/完整 JSON 编辑、命令权限、命令名覆盖（D-128）、配置字段的选项查询与可搜索选择（D-129）、插件的发信许可（`allowed_adapter_instances`）、工具调用策略、Agent 会话的列出与清除，以及界面语言切换。Core 设置页管理 Core Admin 列表、命令前缀与默认 locale，与 `alonabot admin add|remove|list` 使用同一管理服务，修改写回 `core_config.json`。使用 T-08 的 raw JSON/PATCH/base_generation/secret 语义，显示 Pending、候选失败、Degraded 与维护原因；动态权限复用 T-04。插件页面由 WebUI 用沙箱 iframe 嵌入，经 postMessage 桥以管理员会话请求本插件的路由（D-84，T-07.7）；管理 Cookie/Authorization 不进入插件。页面只展示用户可操作状态和具体错误，不把内部协议步骤当作用户配置项。**日志：** 按来源的级别写在 `core_config.json` 的 `log.sources`，修改后经 `sdk.log.set_level` 通知 SDK 并立即生效；Core 为每个来源保留最近 1000 条记录，提供按来源、级别与 trace_id 的读取和 SSE 订阅，过去日期的记录从日志文件按日期查询；`alonabot logs`、`alonabot log-level` 与 WebUI 日志页使用同一 API，页面的筛选只在浏览器中进行（CONTRACTS §14.3、§14.4）。 Admin API 与日志管理在本章节（T-09.10、T-09.13、T-09.14），页面在 WebUI 章节（T-09.8、T-09.9、T-09.15）。
 8. **完成正式流程的故障注入与交付证据。** 通过真实 CLI/API 在临时目录跑首次安装→enable→restart→reload→update→pin→disable→同来源重装→显式 rollback，并以包损坏/签名变化/external 插件的维护错误验证拒绝路径。在 PREPARED、提交前后和 OnReady 失败点终止 Core，连同残存旧进程、空间不足、并发同插件操作一起验证无双写、无提前开放、无静默数据回滚。回填 T-08 留待集成的 V-23～V-25/V-39 证据，形成 T-10 可重复使用的发布产物与恢复场景；五平台真实发布结果仍由 T-10 完成。
 9. **WebUI 组件与组件图标。** 按 CONTRACTS §7.5 由 Core 提供已启用 WebUI 组件的静态文件：保留 `/api/` 与内部路径，不存在且无扩展名的路径回退 `index.html`，未安装时返回 503 与英文提示，Admin API 主版本不在 WebUI 声明的范围内时拒绝安装与启用并返回提示。Admin API 定义主版本号常量，并在 `spec/ADMIN-API.md` 写出全部接口、认证、错误格式与插件页面桥的消息格式，官方 WebUI 只使用其中的接口。图标只提供 manifest 的 `icon` 声明的路径（表单选项不带图标，D-74），带 sandbox CSP 与 nosniff，并要求管理员会话。库模式增加 `alonabot.WebUI(fsys fs.FS)` 选项，以 dev 来源提供开发中的 WebUI。
 
@@ -623,6 +653,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 | V-40、V-48，复验 V-23/V-25/V-38 | 所有管理命令有真实状态变化和持久记录；restart/reload 区分、同来源重装、pin、恢复新 Generation/DB 副本与旧按钮失效正确；配置/secret 语义在真实页面/API 保持。 |
 | V-62、V-63、V-68 | 按来源级别的持久化与运行时修改、最近记录与 SSE、按日期查询日志文件、CLI 与日志页、未认证拒绝。 |
 | V-52、V-54、V-55、V-56 | 启用、停用、卸载与更新时的插件依赖检查和确认；界面语言切换；工具策略修改在下一次调用生效；会话清除与 purge。 |
+| V-116、V-117 | 管理 API 按组件与字段路径查询选项、按存储值取显示名、来源不可用；`core.chats` 的搜索与筛选；页面的可搜索选择、手动输入与失效值的显示。 |
 | V-82、V-83 | 同类组件不能并存，`--replace` 与 `--source` 的替换与后续更新正确；WebUI 静态文件、单页回退、未安装与版本不兼容的提示，图标的 CSP 与路径限制。 |
 | V-47，复验 V-12/V-22/V-43 | 首次 init/login/CLI 可用，reset 撤销旧授权；管理状态变更经认证/CSRF；插件 host 不取得 Admin API/Cookie/凭证；真实页面修改权限在下一次准入生效。 |
 
@@ -643,7 +674,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 2. **调用策略与目录。** 以工具名持久化 allow/confirm/deny，未设置时取 default_policy；`core.tool.confirm` 的操作以「调用插件 ID + 操作名」为键，未设置时为 confirm。管理服务层提供查询与修改，修改在下一次调用生效。`core.tool.list` 只返回调用插件按 Service 访问规则可以调用、且生效策略不为 deny 的工具。
 3. **调用路径。** `core.tool.invoke` 校验 parent_call_id 后按策略分支：deny 直接拒绝；confirm 进入步骤 4；allow 或确认通过后经 Broker 以父调用链调用目标 Service，结果与错误原样返回。`core.tool.confirm` 只执行策略与确认。两者都不重试工具调用。
 4. **用户确认。** 父调用链没有可信 Actor 或默认 Target 时，confirm 直接返回 PERMISSION_DENIED。Core 创建确认记录和两个绑定该记录的按钮 token（沿用按钮 token 表），按 Actor locale 选择 Core 文案；invoke 展示实际的 JSON 参数，confirm 展示插件给出的摘要；确认消息直接经 Adapter 发送，不执行插件出站 Hook；目标不支持 buttons 时返回 UNSUPPORTED。只接受同一 Actor 在 5 分钟内的第一次点击；超时、父调用结束或 Session 失效时记录作废。
-5. **会话存储。** 在 Core 状态库建立以（plugin_id、会话键）为键的条目表。`core.conversation.append` 在一个事务内追加并返回最后一条的序号，`list` 按序号分页并受帧上限约束，`clear` 删除全部条目。管理服务层提供列出与清除；卸载时默认保留，purge 时删除。
+5. **会话存储。** 在 Core 状态库建立以（plugin_id、会话键）为键的条目表。`core.conversation.append` 在一个事务内追加并返回最后一条的序号，`list` 按序号分页并受帧上限约束，`clear` 删除全部条目。管理服务层提供列出与清除；卸载时默认保留，purge 时删除。D-127 起会话属于数据，`--purge-data` 与 `--purge` 都删除。
 6. **多进程验收。** 用一个提供工具的插件和一个调用工具的测试插件，经回环测试 Adapter 覆盖三种策略、确认的允许/拒绝/超时/他人点击、无 Actor、目标不支持按钮和策略的运行时修改；会话存储覆盖原子追加、分页、跨插件隔离与 Core 重启。
 
 #### 拟目录与交付
@@ -683,7 +714,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 1. **根包与 Core 装配。** 根包 `alonabot` 提供 `Run(opts ...Option) error`、`Start(ctx, opts ...Option) (*Core, error)` 与 `Plugin`、`Adapter`、`WebUI`、`DataDir`、`Args` 等选项，数据目录缺省为工作目录下的 `data/`。`Start` 装配与 `alonabot run` 相同的 Core，在全部组件激活后返回句柄，ctx 取消时按 CONTRACTS §4.2 停止，`Wait` 返回停止结果；`Run` 是 `Start` 后等待信号再停止。
 2. **开发组件的身份、来源与同进程运行。** SDK 与 `sdk/adapter` 的启动参数改为也可以由根包直接传入，外部模块不能构造这些参数。库模式的开发组件在 goroutine 中经 loopback TCP 连接 Core，走完整的握手、注册、激活与停止。`alonabot build` 生成的代码嵌入 manifest、schema 与 i18n 资源，根包从中读取组件身份。Core 为开发组件创建 dev 来源的安装记录与固定代次 `dev`；未捕获的 panic 使进程退出；停止预算到期组件仍未退出时，`Run` 返回错误。
 3. **开发组件的配置与数据库。** 每次启动以 `<data_dir>/plugins/<id>/config.json`（缺失时为空对象）为配置，经迁移、补值与校验后直接生效，不走候选与 Journal；WebUI 或 CLI 修改开发组件的配置时，校验通过后写回该文件并重启该组件。开发中的 Adapter 的实例与已安装的 Adapter 一样取自 `core_config.json` 的 `adapters`。受管 SQLite 为 `dev.sqlite`，不复制、不回退。dev 来源的组件拒绝 update、rollback 与 uninstall。
-4. **开发运行与热部署。** `alonabot run [目录...] [--reload]` 把给出的目录（缺省为当前目录）作为开发组件：按 `build` 构建到 `<data_dir>/dev/bin/`，插件、Adapter 与 Agent 以独立进程运行，WebUI 以目录中的 `assets` 代替已安装的 WebUI。`--reload` 时每 `DEV_RELOAD_POLL` 用标准库轮询组件目录中的源码、嵌入资源、`go.mod`、`go.sum`、`plugin.yaml`、`config_schema.json`、`instance_schema.json`、`i18n/` 与组件的配置：源码变化时重新构建，成功后只重启变化的组件，失败时输出编译器信息、旧组件继续运行；只有配置变化时不重新构建，只重启该组件或变化的 Adapter 实例；`core_config.json` 的其他变化交给 T-07.6 的重新读取。
+4. **开发运行与热部署。** `alonabot run [目录...] [--reload]` 把给出的目录（缺省为当前目录）作为开发组件：按 `build` 构建到 `<data_dir>/dev/bin/`，插件、Adapter 与 Agent 以独立进程运行，WebUI 以目录中的 `assets` 代替已安装的 WebUI。`--reload` 时每 `DEV_RELOAD_POLL` 用标准库轮询组件目录中的源码、嵌入资源、`go.mod`、`go.sum`、`plugin.yaml`、`config_schema.json`、`adapter_config_schema.json`、`i18n/` 与组件的配置：源码变化时重新构建，成功后只重启变化的组件，失败时输出编译器信息、旧组件继续运行；只有配置变化时不重新构建，只重启该组件或变化的 Adapter 实例；`core_config.json` 的其他变化交给 T-07.6 的重新读取。
 5. **示例与文档。** `examples/devbot/` 是一个用 `alonabot init` 生成的插件工程与回环测试 Adapter，覆盖开发运行、热部署、编译失败与同进程调试。docs/development.md 补充 `init`、`run --reload` 与库模式的用法。
 
 #### 拟目录与交付
