@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	columnPluginID          = "plugin_id"
-	columnScope             = "scope"
-	columnAdapterInstanceID = "adapter_instance_id"
-	columnDenyKind          = "kind"
-	columnSubjectID         = "subject_id"
+	columnPluginID  = "plugin_id"
+	columnScope     = "scope"
+	columnAdapterID = "adapter_id"
+	columnDenyKind  = "kind"
+	columnSubjectID = "subject_id"
 )
 
 // CommandPolicy 保存插件一个作用域的显式覆盖；Scope 的编码由策略服务定义。
@@ -27,11 +27,11 @@ type CommandPolicy struct {
 // TableName 指定命令策略表。
 func (CommandPolicy) TableName() string { return "command_policy" }
 
-// GlobalDeny 保存实例作用域中的用户或会话禁止；Kind 由策略服务校验。
+// GlobalDeny 保存 Adapter 作用域中的用户或会话禁止；Kind 由策略服务校验。
 type GlobalDeny struct {
-	Kind       string `gorm:"column:kind;primaryKey"`
-	InstanceID string `gorm:"column:adapter_instance_id;primaryKey"`
-	SubjectID  string `gorm:"column:subject_id;primaryKey"`
+	Kind      string `gorm:"column:kind;primaryKey"`
+	AdapterID string `gorm:"column:adapter_id;primaryKey"`
+	SubjectID string `gorm:"column:subject_id;primaryKey"`
 }
 
 // TableName 指定全局禁止表。
@@ -111,5 +111,5 @@ func commandPolicyKey(pluginID, scope string) clause.Expression {
 }
 
 func globalDenyKey(row GlobalDeny) clause.Expression {
-	return clause.And(clause.Eq{Column: columnDenyKind, Value: row.Kind}, clause.Eq{Column: columnAdapterInstanceID, Value: row.InstanceID}, clause.Eq{Column: columnSubjectID, Value: row.SubjectID})
+	return clause.And(clause.Eq{Column: columnDenyKind, Value: row.Kind}, clause.Eq{Column: columnAdapterID, Value: row.AdapterID}, clause.Eq{Column: columnSubjectID, Value: row.SubjectID})
 }
