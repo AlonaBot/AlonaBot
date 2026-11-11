@@ -70,7 +70,7 @@ func (p *instancePlugin) SendEvent(ctx context.Context, target string, ev *pb.Bu
 // CommandPolicy 提供命令准入与 Core 管理员身份判定。
 type CommandPolicy interface {
 	CheckCommand(ctx context.Context, pluginID string, route *pb.RouteDescriptor, actor *pb.Actor, target *pb.Target) *pb.ErrorInfo
-	IsAdmin(ctx context.Context, actor *pb.Actor) (bool, error)
+	IsAdmin(ctx context.Context, adapterID string, actor *pb.Actor) (bool, error)
 }
 
 // Router 并发执行有界的事件链；每条链内按稳定次序调用候选。
@@ -236,7 +236,7 @@ func (r *Router) dispatch(event *trustedEvent) {
 			}
 		}
 		if r.policy != nil {
-			admin, err := r.policy.IsAdmin(r.ctx, actor)
+			admin, err := r.policy.IsAdmin(r.ctx, ev.GetAdapterId(), actor)
 			if err != nil {
 				slog.Warn("read Core Admin status failed", "adapter_instance_id", actor.GetAdapterInstanceId(), "error", err)
 			} else if admin {
