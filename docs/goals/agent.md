@@ -10,8 +10,8 @@
 | goal-118 | T-12.9 | Provider：OpenAI Responses | T-12.1 | 已完成（PR #126） |
 | goal-119 | T-12.10 | Provider：Gemini 原生协议 | T-12.1 | 已完成（PR #127） |
 | goal-120 | T-12.11 | Provider：Ollama 原生协议 | T-12.1 | 已完成（PR #128） |
-| goal-134 | T-12.12 | Provider 改用官方 SDK | T-12.9、T-12.10、T-12.11 | 待派发 |
-| goal-135 | T-12.13 | Provider 图片输入 | T-12.12 | 等待前置 |
+| goal-134 | T-12.12 | Provider 改用官方 SDK | T-12.9、T-12.10、T-12.11 | 已完成（PR #134） |
+| goal-135 | T-12.13 | Provider 图片输入 | T-12.12 | 待派发 |
 | goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1、T-12.9、T-12.10、T-12.11 | 等待前置 |
 | goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-08.14、T-12.2 | 等待前置 |
 | goal-136 | T-12.14 | 对话中的图片输入 | T-04.8、T-12.2、T-12.13 | 等待前置 |
@@ -202,7 +202,7 @@ const OllamaChat Protocol = "ollama-chat"
 
 ### goal-134 · T-12.12 Provider 改用官方 SDK
 
-状态：待派发。前置 T-12.9（[PR #126](https://github.com/AlonaBot/AlonaBot/pull/126)，合并提交 `594bbac`）、T-12.10（[PR #127](https://github.com/AlonaBot/AlonaBot/pull/127)，合并提交 `4f1c39d`）与 T-12.11（[PR #128](https://github.com/AlonaBot/AlonaBot/pull/128)，合并提交 `47a0cd5`）均已合并。2026-11-10 按 D-132 编写，2026-11-11 审查者按 main `1cbfb2e` 核对：文件划分与范围一致（`responses.go`、`gemini.go`、`ollama.go`、`toolcall.go`，Chat Completions 与 Anthropic 的编码与流解析仍在 `provider.go`）；`Stream` 按协议依次覆盖端点与请求体，认证头为 anthropic 的 `x-api-key`、gemini 的 `x-goog-api-key`，其余协议在 APIKey 非空时发 Bearer（ollama-chat 允许空 key）；gemini 与 ollama 仍使用 `readSSE`（仅 gemini）、`describeError`、`isJSONObject`、`validateRequest`，`ollama.go` 另有 `describeOllamaError`（空 key 时不做替换），`toolcall.go` 的 `newToolCallID` 与 `toolCallName` 供两者使用，这些都保留；`ToolCall.Replay` 已在 `provider.go`。本切片获授权引入 openai-go 与 anthropic-sdk-go（docs/development.md 只授权给 goal-134），并在 docs/development.md 登记锁定的版本。
+状态：已完成（[PR #134](https://github.com/AlonaBot/AlonaBot/pull/134)，合并提交 `b679a15`），证据见 TEST-MATRIX §3.2。审查期间按 FIX-3 修改：SDK 解码到类型错误的字段时返回错误（`sdkFieldsValid` 核对 `respjson.Field` 的状态与原值类型）。合入后：Chat Completions 的编码与流解析在 `chat.go`（`chatParams`、`streamOpenAI`），Anthropic 在 `anthropic.go`（`anthropicParams`、`streamAnthropic`），Responses 在 `responses.go`（`responsesParams`、`streamResponses`）；锁定 openai-go v3.98.0、anthropic-sdk-go v2.9.0；anthropic-messages 的 BaseURL 为服务根。派发时：前置 T-12.9（[PR #126](https://github.com/AlonaBot/AlonaBot/pull/126)，合并提交 `594bbac`）、T-12.10（[PR #127](https://github.com/AlonaBot/AlonaBot/pull/127)，合并提交 `4f1c39d`）与 T-12.11（[PR #128](https://github.com/AlonaBot/AlonaBot/pull/128)，合并提交 `47a0cd5`）均已合并。2026-11-10 按 D-132 编写，2026-11-11 审查者按 main `1cbfb2e` 核对：文件划分与范围一致（`responses.go`、`gemini.go`、`ollama.go`、`toolcall.go`，Chat Completions 与 Anthropic 的编码与流解析仍在 `provider.go`）；`Stream` 按协议依次覆盖端点与请求体，认证头为 anthropic 的 `x-api-key`、gemini 的 `x-goog-api-key`，其余协议在 APIKey 非空时发 Bearer（ollama-chat 允许空 key）；gemini 与 ollama 仍使用 `readSSE`（仅 gemini）、`describeError`、`isJSONObject`、`validateRequest`，`ollama.go` 另有 `describeOllamaError`（空 key 时不做替换），`toolcall.go` 的 `newToolCallID` 与 `toolCallName` 供两者使用，这些都保留；`ToolCall.Replay` 已在 `provider.go`。本切片获授权引入 openai-go 与 anthropic-sdk-go（docs/development.md 只授权给 goal-134），并在 docs/development.md 登记锁定的版本。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-134（切片 T-12.12：Provider 改用官方 SDK）。goal 目录 goal-134，分支 goal-134，worktree .worktrees/goal-134，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -243,7 +243,7 @@ const OllamaChat Protocol = "ollama-chat"
 
 ### goal-135 · T-12.13 Provider 图片输入
 
-状态：等待前置（T-12.12）。2026-11-10 按 D-132 编写；各协议的编码所在的文件与函数名在 goal-134 合并后由审查者核对，再改为待派发。
+状态：待派发。前置 T-12.12（[PR #134](https://github.com/AlonaBot/AlonaBot/pull/134)，合并提交 `b679a15`）已合并。2026-11-10 按 D-132 编写，2026-11-11 审查者按 main `b679a15` 核对：openai 与 openai-compatible 的编码在 `chat.go` 的 `chatParams`（openai-go 的 `ChatCompletionNewParams`；带图片的 user 消息用 `openai.UserMessage` 的 part 数组形式，图片 part 用 `openai.ImageContentPart`、文本用 `openai.TextContentPart`）；openai-responses 在 `responses.go` 的 `responsesParams`（`responses.ResponseInputImageParam` 与 `ResponseInputTextParam`）；anthropic-messages 在 `anthropic.go` 的 `anthropicParams`（`anthropic.NewImageBlockBase64`）；gemini-generate-content 与 ollama-chat 仍为标准库，编码在 `gemini.go` 的 `geminiBody` 与 `ollama.go` 的 `ollamaBody`。四种 SDK 协议用 SDK 的参数类型表达图片，请求 JSON 与下文一致；SDK 没有对应字段时用它的额外字段机制。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-135（切片 T-12.13：Provider 图片输入）。goal 目录 goal-135，分支 goal-135，worktree .worktrees/goal-135，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -254,7 +254,7 @@ const OllamaChat Protocol = "ollama-chat"
 
 范围（只新增或修改这些）：
 - agent/provider/provider.go：Image 类型、Message.Images 字段与请求校验
-- 六种协议的编码所在文件（goal-134 合并后的 Chat Completions 与 Anthropic 编码、responses.go、gemini.go、ollama.go）：只改编码部分
+- 六种协议的编码函数：`chat.go` 的 `chatParams`、`responses.go` 的 `responsesParams`、`anthropic.go` 的 `anthropicParams`、`gemini.go` 的 `geminiBody`、`ollama.go` 的 `ollamaBody`；只改编码部分，流解析不改
 - agent/provider/provider_test.go：TestStream 的用例表、mockProvider 与 testRequest 只追加
 允许的新跨模块边：无。
 
