@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Button 指定动作名、显示标签与 JSON 编码的值。
+// Button 指定动作名、显示标签与 JSON 编码的值；Value 为空时省略该字段。
 type Button = messagecodec.Button
 
 type buttons struct {
@@ -34,7 +34,11 @@ func (b buttons) toProto() *pb.Segment {
 	for _, row := range b.rows {
 		out := &pb.ButtonRow{}
 		for _, button := range row {
-			out.Buttons = append(out.Buttons, &pb.Button{ActionId: button.ActionID, Label: button.Label, Value: proto.String(button.Value)})
+			encoded := &pb.Button{ActionId: button.ActionID, Label: button.Label}
+			if button.Value != "" {
+				encoded.Value = proto.String(button.Value)
+			}
+			out.Buttons = append(out.Buttons, encoded)
 		}
 		segment.Rows = append(segment.Rows, out)
 	}

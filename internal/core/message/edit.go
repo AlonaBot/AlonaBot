@@ -85,7 +85,7 @@ func (s *Service) Edit(ctx context.Context, caller router.Caller, in *wire.Inbou
 	// 5. 复用发送的签发入口，为本次编辑的按钮生成新 token。
 	if s.issue != nil {
 		if err := s.issue(ctx, caller, target, request.Chain); err != nil {
-			return rejectError(target, err)
+			return editRejected(target, rejectError(target, err).Err)
 		}
 	}
 	// 6. 执行唯一一次编辑，并完整返回平台回执与错误。
