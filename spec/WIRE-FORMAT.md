@@ -109,6 +109,7 @@ RouteDescriptor 公共字段为 `route_id`、`kind`、`priority`、`default_enab
 | hook | phase（PreEvent/BeforeSend/AfterSend）、优先级及固定 Hook 输入/输出 Schema |
 | service | service_name、公开/allowlist 能力、请求/响应 Schema |
 | schedule | 稳定 job_id、cron/interval、timezone、固定 job deadline |
+| task | 稳定任务名；实例的触发规则与参数不在注册描述中，由 `core.task.set` 在运行时给出（D-124） |
 | http | method、插件相对 path、is_public、认证/回调验证模式 |
 | bus_subscription | event_name、可接受的 Schema/版本、订阅回调 route_id |
 
@@ -122,8 +123,8 @@ REGISTER 的完整描述必须装入一帧；超限 RESOURCE_EXHAUSTED，不部�
 
 Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流程（CONTRACTS §8、D-26），区别如下：
 
-- 启动的是插件还是 Adapter 由 Core 依据安装记录决定，不采信进程自报。Adapter 的 REGISTER 必须携带 Adapter 描述（adapter_id、平台 Capability、extension 声明及其 Schema），且不得携带插件路由、HTTP Listener 或迁移信息；插件的 REGISTER 不得携带 Adapter 描述。不一致按注册失败处理。
-- Core 与 Adapter 之间的固定服务如下（共八个），服务名不含 `/`：
+- 启动的是插件还是 Adapter 由 Core 依据安装记录决定，不采信进程自报。Adapter 的 REGISTER 必须携带 Adapter 描述（adapter_id、平台 Capability、extension 声明及其 Schema、平台动作声明，D-92），可以携带 HTTP 路由与实际监听的 loopback endpoint（D-94，规则同插件，CONTRACTS §7.2），不得携带其他插件路由或迁移信息；插件的 REGISTER 不得携带 Adapter 描述。不一致按注册失败处理。
+- Core 与 Adapter 之间的固定服务如下（共十二个），服务名不含 `/`：
 
 | 服务 | 方向 | 请求 → 响应 |
 | --- | --- | --- |
@@ -132,9 +133,13 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 | `adapter.send` | Core→Adapter | instance_id、Target、MessageChain → SendResult 与/或 ErrorInfo，语义同 MESSAGE-MODEL §4 |
 | `adapter.edit` | Core→Adapter | instance_id、Target、platform_message_id、MessageChain → SendResult 与/或 ErrorInfo，语义同 MESSAGE-MODEL §4 的 Edit |
 | `adapter.media.read` | Core→Adapter | instance_id、平台文件标识、offset、length（1～1 MiB）→ bytes、next_offset、eof |
+| `adapter.action` | Core→Adapter | instance_id、Target?（作用范围为 chat 时必有）、动作完整名、版本、JSON 参数 → JSON 结果与/或 ErrorInfo（D-92） |
+| `adapter.delete` | Core→Adapter | instance_id、Target、platform_message_ids（1～100）→ 每个 ID 的状态（ACCEPTED / REJECTED / UNKNOWN / NOT_ATTEMPTED）与安全错误（MESSAGE-MODEL §4A） |
+| `adapter.commands.sync` | Core→Adapter | instance_id、命令列表（名称、按 locale 的说明）→ 空结果或 ErrorInfo（D-96） |
 | `core.adapter.deliver` | Adapter→Core | instance_id、Event、交付后的游标 → 是否接纳；Core 队列满时为未接纳并计数 |
 | `core.adapter.cursor` | Adapter→Core | instance_id、游标 → 空结果；用于没有事件时的游标变化 |
 | `core.adapter.status` | Adapter→Core | instance_id、实例状态、安全错误 → 空结果；用于 401/409 等使实例停止接收的错误 |
+| `core.media.url` | Adapter→Core | Core 为本次发送签发的只读 token、可选的 URL 前缀 → 临时媒体 URL 与到期时间（CONTRACTS §1.3，D-88） |
 
 - 出站媒体沿用 `core.media.read`；Core 在 `adapter.send` 之前为本次发送签发只读 token。
 - 这些载荷的 Protobuf 定义放在 `adapter.proto`，编号遵循 §5A 的只追加规则。
@@ -146,6 +151,8 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 | 服务 | 请求 → 响应 | 契约 |
 | --- | --- | --- |
 | `core.edit` | Target、platform_message_id、MessageChain → SendResult 与/或 ErrorInfo | CONTRACTS §8、MESSAGE-MODEL §4 |
+| `core.action` | Target 或 adapter_instance_id、动作完整名、版本、JSON 参数 → JSON 结果与/或 ErrorInfo | CONTRACTS §8（平台动作）、D-92 |
+| `core.delete` | Target、platform_message_ids（1～100）→ 每个 ID 的状态与安全错误 | CONTRACTS §8、MESSAGE-MODEL §4A |
 | `core.continuation.start` | 必须带 parent_call_id → 空结果，超过每 Session 128 个进行中的延续调用时 RESOURCE_EXHAUSTED；原调用成功结束后 Core 发出 Handler REQUEST，HandlerRequest 的 `continuation_of` 为原调用的 call_id，SDK 据此找到登记的延续函数 | CONTRACTS §2.4 |
 | `core.wait` | 必须带 parent_call_id（延续调用）、超时 → 命中的 Event | CONTRACTS §2.4 |
 | `core.tool.list` | 空 → 工具列表（名称、description、输入 Schema、生效策略） | CONTRACTS §13.1 |
@@ -154,11 +161,17 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 | `core.conversation.append` | 会话键、一条或多条 JSON 条目 → 最后一条的序号 | CONTRACTS §13.3 |
 | `core.conversation.list` | 会话键、起始序号 → 条目及序号、下一个序号 | CONTRACTS §13.3 |
 | `core.conversation.clear` | 会话键 → 空结果 | CONTRACTS §13.3 |
-| `core.command.list` | 必须带 parent_call_id → 调用者 Actor 在默认 Target 中可用的命令：路径、别名、参数用法、按 Actor locale 翻译的说明、所属插件 | CONTRACTS §15.2（help 插件） |
+| `core.command.list` | 必须带 parent_call_id → 调用者 Actor 在默认 Target 中可用的命令：路径、别名、参数用法、按 Actor locale 翻译的说明、所属插件；有命令名覆盖时路径为生效的主名，别名为其余生效的命令名（D-128） | CONTRACTS §15.2（help 插件） |
+| `core.task.set` | 任务名、key、触发规则（at_unix_ms、interval_ms 或 cron 加可选的 timezone，恰有一个）、参数 JSON → 下一次触发时刻 | CONTRACTS §4.3、D-124 |
+| `core.task.cancel` | 任务名、key → 空结果；实例正在执行时同时取消该次调用 | CONTRACTS §4.3、D-124 |
+| `core.task.list` | 任务名、分页游标 → 实例（key、触发规则、参数 JSON、下一次触发时刻）与下一页游标 | CONTRACTS §4.3、D-124 |
+| `core.job.pause` | job_id → 空结果 | CONTRACTS §4.3、D-126 |
+| `core.job.resume` | job_id → 空结果 | CONTRACTS §4.3、D-126 |
+| `core.job.status` | job_id → 是否暂停、上一次与下一次触发时刻 | CONTRACTS §4.3、D-126 |
 
 Core→插件与 Core→Adapter 方向另有 `sdk.log.set_level`：新的生效级别 → 空结果，SDK 收到后立即按新级别过滤（CONTRACTS §14.3）。
 
-注册描述的追加字段：Service 描述增加可选的 `tool`（description、default_policy、input_schema_json：该 Service 输入 Schema 的原文，Core 只从注册中得到 schema 标识，列出工具时需要 Schema 正文）；CommandMatch 追加 KEYWORD、STARTSWITH、ENDSWITH、FULLMATCH，CommandSpec 增加模式列表与 `ignore_case`；Actor 增加可选 `locale`；message.created 的载荷增加 `to_me`；Bootstrap 追加 `log_level`（字段号 10）与 `session_limits`（字段号 11），字段分配与切片顺序见 §3.2；CommandSpec 增加可选的说明键（插件 `messages` 中的键，供 `core.command.list` 翻译）；BeforeSend/AfterSend 的输入增加操作类型与被编辑的 platform_message_id。这些都是追加，不改变 `contracts/wirespec_test.go` 固定的枚举。
+注册描述的追加字段：Service 描述增加可选的 `tool`（description、default_policy、input_schema_json：该 Service 输入 Schema 的原文，Core 只从注册中得到 schema 标识，列出工具时需要 Schema 正文）；CommandMatch 追加 KEYWORD、STARTSWITH、ENDSWITH、FULLMATCH，CommandSpec 增加模式列表与 `ignore_case`；Actor 增加可选 `locale`；message.created 的载荷增加 `to_me`；Bootstrap 追加 `log_level`（字段号 10）与 `session_limits`（字段号 11），字段分配与切片顺序见 §3.2；CommandSpec 增加可选的说明键（插件 `messages` 中的键，供 `core.command.list` 翻译）；BeforeSend/AfterSend 的输入增加操作类型与被编辑的 platform_message_id；D-87 的追加：MediaSource 追加 `inline_base64` 与只在 Core→Adapter 方向出现的 `platform_file`（D-88），Segment 追加 voice（D-89），ForwardItem 追加 `platform_message_id`、ForwardSegment 追加 `platform_forward_id`（D-91），Button 追加 `url`（D-97），AdapterDescriptor 追加动作声明（D-92），Event 追加 `chat_type`（新增枚举 ChatType：UNSPECIFIED、PRIVATE、GROUP、CHANNEL，D-100）；D-124 的追加：RouteKind 追加 TASK，RouteDescriptor 追加 TaskSpec（任务名），ScheduledPayload 追加 `task_name`、`task_key` 与 `task_payload_json`，动态任务触发时 `job_id` 为该任务的 route_id（`task.` 加任务名），静态任务触发时这三个字段为空；D-129、D-130 的追加：Service 描述增加可选的选项来源标记（带标记的 Service 输入与输出为 SDK 固定的选项查询 Schema，访问规则只含 Core 与本组件），Event 追加可选的 `chat_title`。字段号由实现对应切片的 goal 授权分配。这些都是追加，不改变 `contracts/wirespec_test.go` 固定的枚举。
 
 ## 4. 调用上下文、读写与取消
 

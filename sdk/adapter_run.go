@@ -315,6 +315,32 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(code, adapterSafeError(errors.New(message), config))
 		}
 		return adapterResponse(&pb.AdapterMediaReadResponse{Data: data, NextOffset: next, Eof: eof}, nil)
+	case wire.ServiceAdapterEdit:
+		request := &pb.AdapterEditRequest{}
+		if err := decodeInvocation(in.Payload, request); err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		r.mu.Lock()
+		entry, ok := r.instances[request.InstanceId]
+		if !ok {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
+		}
+		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		editor, supported := entry.instance.(adapter.Editor)
+		r.mu.Unlock()
+		if !supported {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support message editing")
+		}
+		// 平台请求在锁外执行，停止和其他实例的操作可继续推进。
+		result, safe := editor.Edit(ctx, request.Target, request.PlatformMessageId, request.Chain)
+		if result == nil {
+			return wire.Response{Err: safe}
+		}
+		return adapterResponse(result, safe)
 	case wire.ServiceAdapterSend:
 		request := &pb.AdapterSendRequest{}
 		if err := decodeInvocation(in.Payload, request); err != nil {

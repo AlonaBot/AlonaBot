@@ -13,6 +13,8 @@
 
 ### goal-71 · T-14.1 help 插件与命令列表
 
+状态注记（2026-11-10，D-128）：`core.command.list` 返回的路径与别名取生效的命令名（有命令名覆盖时主名为路径，其余为别名）；goal-129 先合并时本切片按生效的命令名实现，后合并时由 goal-129 同步。
+
 状态：等待前置（T-05.2）。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。T-04.4（PR #88）已合并。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。语句中 goal-10、goal-12、goal-13、goal-16、goal-53 提供的符号（router.CommandIndex、policy.CheckCommand、contracts/i18n、sdk 的命令注册与 Context.T）只写名字；合并后由审查者核对签名，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：经 `alonabot run <目录>` 运行，不再用 `--plugin-id`、`--entry`（D-77）。前置合并后由审查者改写。
 
 ```text
@@ -48,7 +50,7 @@
    type CommandInfo struct { PluginID, RouteID string; Path []string; Aliases [][]string; Usage string; Description string }
    func ListCommands(ctx context.Context) ([]CommandInfo, error) // 必须在 Handler 内调用（需要父调用链）
 4. plugins/help
-   func New() sdk.Root // 根插件
+   func New() *sdk.Plugin // 根插件
 
 行为：
 - core.command.list（必须带 parent_call_id；Actor 与默认 Target 取自父调用的可信上下文，没有 Actor 时只列出 ANY 权限的命令）：遍历 Router 的 CommandIndex，只保留每个规范路径的胜出者（被遮蔽者不列出）；对每条命令执行 policy.CheckCommand（全局禁止、启用、权限），通过的才列出；按路径字典序返回。usage 与 goal-12 的 usage 生成规则相同（按 Actor locale 使用 Core 文案目录）；description 在所属插件的 messages 中按 [Actor.locale, 默认 locale, en-US] 翻译，键不存在时 absent。
@@ -56,12 +58,12 @@
 - help 插件：
   - /help：调用 ListCommands，按插件分组列出路径与说明，文案经 Context.T（键 help.list.header 等）。
   - /help <路径>：只显示匹配命令的 usage、别名与说明；没有可用的匹配命令时回复 help.not_found。
-  - /whoami：回复调用者的 adapter_instance_id 与 external_user_id（文案键 help.whoami，参数 instance 与 user）；没有 Actor 时回复 help.whoami.no_actor。
+  - /whoami：回复调用者的用户字符串 `<adapter_id>:<external_user_id>`（可以直接写进 admins，D-105）与收到消息的实例名（文案键 help.whoami，参数 user 与 instance）；没有 Actor 时回复 help.whoami.no_actor。
   - 所有回复都用 Context.Send 回复原 Target；用户可见文案只来自 i18n（en-US 与 zh-CN）。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有父调用链时 core.command.list 返回 FAILED_PRECONDITION；没有 Actor 时只列 ANY；排序；help 的 i18n 文件在 alonabot check 中通过；internal/core/supervisor/help_local_test.go（//go:build unix）：构建 plugins/help 与两个测试插件（一个有 ADMIN 权限的命令，一个与另一插件同路径且 priority 较低的命令），用 memory Adapter 装配：普通用户的 /help 不包含 ADMIN 命令与被遮蔽的命令；Core Admin 能看到 ADMIN 命令；zh-CN 用户看到中文说明，en-US 用户看到英文；说明键缺失的命令没有说明；禁用的命令不出现；/help 某命令显示 usage；/whoami 回复正确的实例 ID 与用户 ID。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有父调用链时 core.command.list 返回 FAILED_PRECONDITION；没有 Actor 时只列 ANY；排序；help 的 i18n 文件在 alonabot check 中通过；internal/core/supervisor/help_local_test.go（//go:build unix）：构建 plugins/help 与两个测试插件（一个有 ADMIN 权限的命令，一个与另一插件同路径且 priority 较低的命令），用 memory Adapter 装配：普通用户的 /help 不包含 ADMIN 命令与被遮蔽的命令；Core Admin 能看到 ADMIN 命令；zh-CN 用户看到中文说明，en-US 用户看到英文；说明键缺失的命令没有说明；禁用的命令不出现；/help 某命令显示 usage；/whoami 回复正确的用户字符串与实例名。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./...；go build ./...。
 
@@ -85,8 +87,8 @@
 允许的新跨模块边：plugins/... -> sdk/...、-> contracts（已允许）。只用标准库解析 XML（encoding/xml）与 HTTP。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
-- plugins/welcome：func New() sdk.Root
-- plugins/rss：func New() sdk.Root；plugins/rss/config_schema.json 声明 {"interval_minutes": {"description": "Check interval (minutes)", "type": "int", "default": 10, "slider": {"min": 1, "max": 1440}}}，以 Config().Int("interval_minutes") 读取（D-76）
+- plugins/welcome：func New() *sdk.Plugin
+- plugins/rss：func New() *sdk.Plugin；plugins/rss/config_schema.json 声明 {"interval_minutes": {"description": "Check interval (minutes)", "type": "int", "default": 10, "slider": {"min": 1, "max": 1440}}}，以 Config().Int("interval_minutes") 读取（D-76）
 
 行为：
 - welcome：

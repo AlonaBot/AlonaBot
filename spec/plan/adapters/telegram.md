@@ -6,7 +6,7 @@
 
 本子章节覆盖官方 Telegram Adapter `adapters/telegram/` 的平台实现：Bot API 客户端、接收与标准化、发送计划与回执、平台权限，以及本地 Bot API 模拟服务 `adapters/telegram/telegramtest/`。章节总述与扩展约定见[适配器实施计划](README.md)。
 
-- 本子章节的切片：T-03.4、T-03.7、T-03.11。
+- 本子章节的切片：T-03.4、T-03.7、T-03.11，D-87 对标补齐的 T-03.20～T-03.22（协议与 Core 侧在核心切片 T-03.13～T-03.17），以及代理模式与话题判定的 T-03.23（D-100、D-101）。
 - 核心切片中的 Telegram 部分：T-03.6（入站媒体的 getFile 取件）、T-03.8（callback_query 与 answerCallbackQuery）、T-03.9（editMessageText 与 `message.edit` 能力）、T-03.10（模拟服务上的发送与接收故障矩阵）。这些切片随 Core 功能一起交付，进度记在[核心实施计划](../core.md)。
 - 跨章节依赖：核心切片 T-03.8、T-03.9 以 T-03.7 为前置，需要用 Telegram 的发送计划渲染按钮与编辑。
 
@@ -17,6 +17,12 @@
 | T-03.4 | goal-5 | 官方 Telegram Adapter 的接收：Bot API 客户端、本地 Bot API 模拟服务、getMe、webhook 冲突、long polling、逐条交付与游标、7 天轮次重建、401/409、媒体组、Actor.locale、`to_me`、实例代理 | T-03 步骤 4 | T-03.3 | V-45、V-54 的 locale 分项，V-62 的 Bot Token URL 分项 | 已完成（PR #39；TEST-MATRIX §3.2） |
 | T-03.7 | goal-50 | 官方 Telegram Adapter 的发送计划与回执：Chain 完整预检、物理操作计划、UTF-16 实体、相册/引用/按钮渲染、PartResult 汇总 | T-03 步骤 6（发送） | T-03.4 | V-08、V-35 | 已完成（[PR #108](https://github.com/AlonaBot/AlonaBot/pull/108)） |
 | T-03.11 | goal-89 | 官方 Telegram Adapter 的平台权限：`telegram.chat_owner`/`telegram.chat_admin` 的声明、`getChatAdministrators` 的会话缓存与作废、获取失败时不带权限，`adapters/telegram/perm` 常量包 | T-03 步骤 9 | T-04.6 | V-85 的 Telegram 分项 | 已完成（[PR #106](https://github.com/AlonaBot/AlonaBot/pull/106)） |
+| T-03.20 | goal-111 | 官方 Telegram Adapter 的媒体与新增片段：按来源传递与流式 multipart、`platform_file` 复用 file_id、voice 的收发、动图、贴纸与 video_note、url 按钮、`file_base_url`、入站事件的 chat_type | T-03 步骤 17 | T-03.13、T-03.14 | V-89、V-90、V-98 的 Telegram 分项，V-97 | 未开始 |
+| T-03.21 | goal-112 | 官方 Telegram Adapter 的平台动作与撤回：动作声明（含 sendChatAction、setMessageReaction、sendMessageDraft）与 `adapters/telegram/action` 的带类型函数（指向消息的动作收消息句柄，D-104）及输入状态、草稿两个辅助函数，deleteMessages | T-03 步骤 18 | T-03.11、T-03.15、T-03.16 | V-91、V-92、V-94 的 Telegram 分项、V-102 的动作分项 | 未开始 |
+| T-03.22 | goal-113 | 官方 Telegram Adapter 的命令菜单：setMyCommands 同步 | T-03 步骤 19 | T-03.17 | V-93 的 Telegram 分项 | 未开始 |
+| T-03.23 | goal-117 | 官方 Telegram Adapter 的代理模式与话题判定：实例配置 `proxy_mode`（none 缺省、core、custom），thread_id 只认 `is_topic_message` | T-03 步骤 20 | T-03.4 | V-99、V-100 | 已完成（PR #125；TEST-MATRIX §3.2） |
+| T-03.26 | goal-132 | 官方 Telegram Adapter 填写 `chat_title`：群、超级群与频道取 title，私聊取对方的姓名（D-130） | T-03 步骤 23 | T-03.4、T-03.25 | V-117 的 Telegram 分项 | 未开始 |
+| T-03.27 | goal-137 | 官方 Telegram Adapter 的服务消息：话题、置顶、改名与升级映射为扩展事件，成员类与其他服务消息不交付（D-133） | T-03 步骤 24 | T-03.23 | V-119 | 未开始 |
 
 ## 3. 工作包
 
@@ -29,3 +35,15 @@
 6. **实现可预测的发送计划及回执。** 在官方 Telegram Adapter 中，每条 Chain 先完成全部结构、目标能力、媒体可用性与平台限制检查，再生成按顺序执行的物理操作列表。落实文本/实体 UTF-16 偏移、单媒体/2～10 项相册、首条引用、末条按钮（末条为相册时按钮无法表达，首发前返回 UNSUPPORTED）；不静默截断、重排或降级。每个操作记录 PartResult，明确 ACCEPTED、REJECTED、UNKNOWN、NOT_ATTEMPTED，并据事实汇总逻辑状态。遇明确拒绝或结果未知停止后续操作；保留已确认 ID，同时通过 Envelope 返回有效 payload 和错误。平台确认但 message_id=0 时不伪造可编辑 ID。显式空 Chain 和仅有元数据的 Chain 在调用平台前拒绝。
 
 9. **接通 Telegram 的平台权限。** 按 MESSAGE-MODEL §6.1 在 Adapter 描述中声明 `telegram.chat_owner` 与 `telegram.chat_admin`；群与超级群中的事件按 `getChatAdministrators` 的会话缓存给出 Actor 的平台权限，缓存 10 分钟，收到该会话的 `chat_member`、`my_chat_member` 时作废；获取失败时本事件不带平台权限并记诊断。发布只含常量的 `adapters/telegram/perm`。
+
+17. **媒体与新增片段（D-88、D-89、D-97、D-99）。** 按 MESSAGE-MODEL §6.4 改写发送计划与执行：multipart 请求体改为边经 `core.media.read` 分块读取边写出，不在内存中拼出整份请求；inline_base64 解码后上传，`platform_file` 直接作为 file_id。voice 用 sendVoice，单独成一个物理操作；image/gif 用 sendAnimation 并结束当前媒体组；url 按钮映射为 InlineKeyboardButton 的 url。入站 voice、animation、video_note 与静态贴纸按 §6.4 映射，入站 audio 仍为 file。实例配置追加 `file_base_url`，文件下载经它发出，代理规则不变。入站事件按 MESSAGE-MODEL §6 由 chat.type 填写 chat_type（D-100）。在 Capabilities 中追加 `message.voice`；`telegramtest` 追加对应方法的记录与响应。
+
+18. **平台动作与撤回（D-92、D-93、D-98）。** 在 Adapter 描述中声明 MESSAGE-MODEL §6.5 的动作及其参数、结果 Schema（含 send_chat_action、set_message_reaction、send_message_draft），在 `adapters/telegram/action` 为每个动作发布带类型的 Go 函数（只依赖 `sdk` 根包；pin、unpin 与 set_message_reaction 以消息句柄指定消息，D-104），并提供输入状态与草稿流式两个辅助函数；实现 deleteMessages（同一会话每次最多 100 个），追加 `message.delete` 能力。限权相关动作执行后作废该会话的管理员缓存（T-03.11）。sendMessageDraft 的参数在实施时按 Bot API 原文核对，与本计划不符时标阻塞。
+
+19. **命令菜单（D-96）。** `adapter.commands.sync` 按 MESSAGE-MODEL §6.5 调用 setMyCommands，记住上一次成功同步的内容，相同时不调用平台；追加 `commands.sync` 能力。
+
+20. **代理模式与话题判定（D-100、D-101）。** 实例配置追加 `proxy_mode`，按 CONTRACTS §8 为该实例的 HTTP 客户端选择直连、Core 的代理环境或实例的 `proxy`，缺省直连；custom 缺少或给出不合法的 `proxy` 时启动返回 INVALID_ARGUMENT。入站 Message 只在 `is_topic_message` 为 true 时把 message_thread_id 写入 Target 的 thread_id（MESSAGE-MODEL §6.1）。
+
+23. **聊天名称（D-130）。** 按 MESSAGE-MODEL §6 为每个带 target 的入站事件填写 `chat_title`：群、超级群与频道取 chat 的 `title`，私聊取 `first_name` 与 `last_name`，以一个空格连接，两者都没有时不带；不为取名称另外调用 Bot API。
+
+24. **服务消息（D-133）。** 按 MESSAGE-MODEL §6.6 在映射消息内容之前识别服务字段：表中 7 种映射为扩展事件，并在 Adapter 描述中声明名称、版本 1 与 payload Schema；成员类与其他服务字段不交付，只推进游标。Target、thread_id、Actor 与平台权限沿用 §6.1。

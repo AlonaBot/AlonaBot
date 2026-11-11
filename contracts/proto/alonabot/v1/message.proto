@@ -434,3 +434,11 @@ message BotOfflinePayload {
   BotOfflineReason reason = 4;
   ErrorInfo safe_error = 5;
 }
+
+// EditRequest 修改一条平台消息；to 缺省时使用调用链的默认 Target，响应为 SendResult。
+message EditRequest {
+  Target to = 1;
+  string platform_message_id = 2;
+  // 恰好一个 text 片段和至多一个 buttons 片段。
+  MessageChain chain = 3;
+}
