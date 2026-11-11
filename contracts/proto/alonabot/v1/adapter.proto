@@ -127,3 +127,12 @@ message AdapterMediaReadResponse {
   uint64 next_offset = 2;
   bool eof = 3;
 }
+
+// AdapterEditRequest 向指定实例提交消息编辑；响应为 SendResult。
+message AdapterEditRequest {
+  string instance_id = 1;
+  Target target = 2;
+  string platform_message_id = 3;
+  // 恰好一个 text 片段和至多一个 buttons 片段。
+  MessageChain chain = 4;
+}

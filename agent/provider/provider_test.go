@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -37,22 +38,37 @@ const (
 		"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
 )
 
-// TestStream 用本地模拟 Provider 驱动两种协议的完整请求与流解析（PLAN T-12 步骤 1，V-57 的 Provider 分项）。
+// TestStream 用本地模拟 Provider 验证各协议的完整请求与流解析。
 func TestStream(t *testing.T) {
 	stopErr := errors.New("stop")
+	ollamaTextAndTool := `{"message":{"content":"hel"}}
+{"message":{"content":"lo"}}
+{"message":{"tool_calls":[{"function":{"name":"lookup","arguments":{"q":"x"}}}]}}
+{"done":true,"done_reason":"stop","prompt_eval_count":5,"eval_count":7}
+`
 	for _, tc := range []struct {
-		name      string
-		protocol  Protocol
-		status    int
-		stream    string
-		emitErr   error // emit 返回的错误
-		cancel    bool  // 发请求前取消 context
-		wantText  string
-		wantCalls int
-		wantErr   error  // 非 nil 时要求 errors.Is 匹配；为 nil 且 failed 时只要求出错
-		errText   string // 非空时要求错误文本包含它
-		failed    bool
+		name       string
+		protocol   Protocol
+		status     int
+		stream     string
+		emitErr    error // emit 返回的错误
+		cancel     bool  // 发请求前取消 context
+		wantText   string
+		wantCalls  int
+		wantErr    error  // 非 nil 时要求 errors.Is 匹配；为 nil 且 failed 时只要求出错
+		errText    string // 非空时要求错误文本包含它
+		failed     bool
+		wantReplay string
 	}{
+		{name: "responses text and tool", protocol: OpenAIResponses, wantText: "hello", wantCalls: 1,
+			wantReplay: `[{"type":"reasoning","encrypted_content":"opaque","summary":[]}]`,
+			stream: "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hel\"}\n\n" +
+				"data: {\"type\":\"response.output_text.delta\",\"delta\":\"lo\"}\n\n" +
+				"data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"reasoning\",\"id\":\"r1\",\"encrypted_content\":\"opaque\",\"summary\":[]}}\n\n" +
+				"data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"function_call\",\"id\":\"fc1\",\"call_id\":\"c1\",\"name\":\"lookup\",\"arguments\":\"{\\\"q\\\":\\\"x\\\"}\"}}\n\n" +
+				"data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":5,\"output_tokens\":7}}}\n\n"},
+		{name: "responses missing completed", protocol: OpenAIResponses, wantText: "hello", failed: true,
+			stream: "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\n"},
 		{name: "openai text and tool", protocol: OpenAI, stream: openAITextAndTool, wantText: "hello", wantCalls: 1},
 		{name: "openai-compatible text and tool", protocol: OpenAICompatible, stream: openAITextAndTool, wantText: "hello", wantCalls: 1},
 		// 有的兼容实现在每个工具调用分段重复 id 与 name。
@@ -72,6 +88,16 @@ func TestStream(t *testing.T) {
 		{name: "anthropic tool arguments not object", protocol: AnthropicMessages, stream: strings.ReplaceAll(anthropicTextAndTool, `\"x\"}`, `\"x\"]`), wantText: "hello", failed: true},
 		{name: "emit error stops stream", protocol: OpenAICompatible, stream: openAITextAndTool, emitErr: stopErr, wantErr: stopErr, failed: true},
 		{name: "canceled context", protocol: AnthropicMessages, stream: anthropicTextAndTool, cancel: true, wantErr: context.Canceled, failed: true},
+		{name: "ollama text and tool", protocol: OllamaChat, stream: ollamaTextAndTool, wantText: "hello", wantCalls: 1},
+		{name: "ollama missing done", protocol: OllamaChat, stream: strings.Split(ollamaTextAndTool, `{"message":{"tool_calls"`)[0], wantText: "hello", failed: true},
+		{name: "gemini text and tool", protocol: GeminiGenerateContent, wantText: "hello", wantCalls: 1,
+			stream: "data: " + `{"candidates":[{"content":{"parts":[{"text":"hel"}]}}]}` + "\n\n" +
+				"data: " + `{"candidates":[{"content":{"parts":[{"text":"lo"}]}}]}` + "\n\n" +
+				"data: " + `{"candidates":[{"content":{"parts":[{"functionCall":{"id":"c1","name":"lookup","args":{"q":"x"}},"thoughtSignature":"response-signature"}]}}]}` + "\n\n" +
+				"data: " + `{"candidates":[{"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":4,"thoughtsTokenCount":3}}` + "\n\n"},
+		{name: "gemini missing finishReason", protocol: GeminiGenerateContent, wantText: "hello", failed: true, errText: "without finishReason",
+			stream: "data: " + `{"candidates":[{"content":{"parts":[{"text":"hel"}]}}]}` + "\n\n" +
+				"data: " + `{"candidates":[{"content":{"parts":[{"text":"lo"}]}}]}` + "\n\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(mockProvider(t, tc.protocol, tc.status, tc.stream))
@@ -88,7 +114,14 @@ func TestStream(t *testing.T) {
 
 			var text strings.Builder
 			var calls []ToolCall
-			result, err := client.Stream(ctx, testRequest(), func(e Event) error {
+			req := testRequest()
+			if tc.protocol == OpenAIResponses {
+				req.Messages[3].ToolCalls[0].Replay = json.RawMessage(`[{"type":"reasoning","encrypted_content":"history","summary":[]}]`)
+			}
+			if tc.protocol == GeminiGenerateContent {
+				req.Messages[3].ToolCalls[0].Replay = json.RawMessage(`"history-signature"`)
+			}
+			result, err := client.Stream(ctx, req, func(e Event) error {
 				if e.ToolCall != nil {
 					calls = append(calls, *e.ToolCall)
 				}
@@ -112,8 +145,24 @@ func TestStream(t *testing.T) {
 			if len(calls) != tc.wantCalls {
 				t.Fatalf("tool calls = %+v, want %d", calls, tc.wantCalls)
 			}
-			if tc.wantCalls > 0 && (calls[0].ID != "c1" || calls[0].Name != "lookup" || string(calls[0].Arguments) != `{"q":"x"}`) {
+			if tc.wantCalls > 0 && (calls[0].ID == "" || (tc.protocol != OllamaChat && calls[0].ID != "c1") ||
+				calls[0].Name != "lookup" || string(calls[0].Arguments) != `{"q":"x"}`) {
 				t.Fatalf("tool call = %+v", calls[0])
+			}
+			if tc.wantReplay != "" {
+				var got, want any
+				if err := json.Unmarshal(calls[0].Replay, &got); err != nil {
+					t.Fatal(err)
+				}
+				if err := json.Unmarshal([]byte(tc.wantReplay), &want); err != nil {
+					t.Fatal(err)
+				}
+				if !reflect.DeepEqual(got, want) {
+					t.Fatalf("Replay = %s, want %s", calls[0].Replay, tc.wantReplay)
+				}
+			}
+			if tc.protocol == GeminiGenerateContent && tc.wantCalls > 0 && string(calls[0].Replay) != `"response-signature"` {
+				t.Fatalf("Replay = %s", calls[0].Replay)
 			}
 		})
 	}
@@ -129,12 +178,56 @@ func mockProvider(t *testing.T, protocol Protocol, status int, stream string) ht
 			MaxTokens           int              `json:"max_tokens"`
 			MaxCompletionTokens int              `json:"max_completion_tokens"`
 			StreamOptions       map[string]any   `json:"stream_options"`
+			Options             struct {
+				NumPredict int `json:"num_predict"`
+			} `json:"options"`
+			Input           []map[string]any `json:"input"`
+			Instructions    string           `json:"instructions"`
+			Store           *bool            `json:"store"`
+			MaxOutputTokens int              `json:"max_output_tokens"`
+			Include         []string         `json:"include"`
 		}
 		raw, _ := io.ReadAll(r.Body)
 		if err := json.Unmarshal(raw, &body); err != nil {
 			t.Errorf("decode request: %v", err)
 		}
 		switch protocol {
+		case OpenAIResponses:
+			if r.Method != http.MethodPost || r.URL.Path != "/v1/responses" || r.Header.Get("Authorization") != "Bearer "+testAPIKey || r.Header.Get("Accept") != "text/event-stream" {
+				t.Errorf("method %s, path %s, headers %v", r.Method, r.URL.Path, r.Header)
+			}
+			if body.Store == nil || *body.Store || body.Instructions != "one\n\ntwo" || body.MaxOutputTokens != 20 || !reflect.DeepEqual(body.Include, []string{"reasoning.encrypted_content"}) {
+				t.Errorf("request = %s", raw)
+			}
+			var wantInput []map[string]any
+			if err := json.Unmarshal([]byte(`[
+				{"role":"user","content":"hi"},
+				{"role":"assistant","content":"checking"},
+				{"type":"reasoning","encrypted_content":"history","summary":[]},
+				{"type":"function_call","call_id":"c0","name":"lookup","arguments":"{\"q\":\"a\"}"},
+				{"type":"function_call","call_id":"c00","name":"lookup","arguments":"{\"q\":\"b\"}"},
+				{"type":"function_call_output","call_id":"c0","output":"A"},
+				{"type":"function_call_output","call_id":"c00","output":"B"},
+				{"role":"user","content":"continue"}
+			]`), &wantInput); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(body.Input, wantInput) {
+				t.Errorf("input = %s", raw)
+			}
+			if len(body.Tools) == 1 && (body.Tools[0]["strict"] != false || body.Tools[0]["type"] != "function" || body.Tools[0]["name"] != "lookup" || body.Tools[0]["description"] != "look up" || !reflect.DeepEqual(body.Tools[0]["parameters"], map[string]any{"type": "object"})) {
+				t.Errorf("tools = %s", raw)
+			}
+			var fields map[string]any
+			if err := json.Unmarshal(raw, &fields); err != nil {
+				t.Fatal(err)
+			}
+			if fields["model"] != "test-model" || fields["stream"] != true {
+				t.Errorf("request = %s", raw)
+			}
+			if _, exists := fields["previous_response_id"]; exists {
+				t.Errorf("unexpected previous_response_id: %s", raw)
+			}
 		case OpenAI, OpenAICompatible:
 			if r.URL.Path != "/v1/chat/completions" || r.Header.Get("Authorization") != "Bearer "+testAPIKey {
 				t.Errorf("path %s, Authorization %q", r.URL.Path, r.Header.Get("Authorization"))
@@ -158,6 +251,68 @@ func mockProvider(t *testing.T, protocol Protocol, status int, stream string) ht
 				blockTypes(body.Messages[1]) != "text,tool_use,tool_use" || blockTypes(body.Messages[2]) != "tool_result,tool_result,text" {
 				t.Errorf("request = %s", raw)
 			}
+		case OllamaChat:
+			if r.URL.Path != "/v1/api/chat" || r.Header.Get("Authorization") != "Bearer "+testAPIKey ||
+				r.Header.Get("Accept") != "application/x-ndjson" || body.Options.NumPredict != 20 {
+				t.Errorf("path %s, headers %v, request %s", r.URL.Path, r.Header, raw)
+			}
+			// system 原序保留，工具结果带名称且在同条消息的 user 文本之前。
+			if len(body.Messages) != 7 {
+				t.Errorf("messages = %s", raw)
+				break
+			}
+			if body.Messages[0]["role"] != "system" || body.Messages[0]["content"] != "one" ||
+				body.Messages[1]["role"] != "system" || body.Messages[1]["content"] != "two" ||
+				body.Messages[4]["role"] != "tool" || body.Messages[4]["tool_name"] != "lookup" || body.Messages[4]["content"] != "A" ||
+				body.Messages[5]["role"] != "tool" || body.Messages[5]["tool_name"] != "lookup" || body.Messages[5]["content"] != "B" ||
+				body.Messages[6]["role"] != "user" || body.Messages[6]["content"] != "continue" {
+				t.Errorf("messages = %s", raw)
+			}
+			calls, _ := body.Messages[3]["tool_calls"].([]any)
+			if body.Messages[3]["role"] != "assistant" || len(calls) != 2 {
+				t.Errorf("assistant calls = %s", raw)
+				break
+			}
+			for i, call := range calls {
+				function := call.(map[string]any)["function"].(map[string]any)
+				arguments, ok := function["arguments"].(map[string]any)
+				if function["name"] != "lookup" || !ok || arguments["q"] != []string{"a", "b"}[i] {
+					t.Errorf("tool arguments = %s", raw)
+				}
+			}
+		case GeminiGenerateContent:
+			if r.Method != http.MethodPost || r.URL.Path != "/v1/models/test-model:streamGenerateContent" || r.URL.RawQuery != "alt=sse" ||
+				r.Header.Get("x-goog-api-key") != testAPIKey || r.Header.Get("Authorization") != "" || r.Header.Get("Accept") != "text/event-stream" {
+				t.Errorf("request %s %s, headers %v", r.Method, r.URL, r.Header)
+			}
+			// 完整比对历史顺序、调用签名、结果关联的工具名与 Schema 原样编码。
+			var got, want any
+			if err := json.Unmarshal(raw, &got); err != nil {
+				t.Errorf("decode Gemini request: %v", err)
+			}
+			if err := json.Unmarshal([]byte(`{
+				"systemInstruction":{"parts":[{"text":"one\n\ntwo"}]},
+				"contents":[
+					{"role":"user","parts":[{"text":"hi"}]},
+					{"role":"model","parts":[
+						{"text":"checking"},
+						{"functionCall":{"id":"c0","name":"lookup","args":{"q":"a"}},"thoughtSignature":"history-signature"},
+						{"functionCall":{"id":"c00","name":"lookup","args":{"q":"b"}}}
+					]},
+					{"role":"user","parts":[
+						{"functionResponse":{"id":"c0","name":"lookup","response":{"output":"A"}}},
+						{"functionResponse":{"id":"c00","name":"lookup","response":{"output":"B"}}},
+						{"text":"continue"}
+					]}
+				],
+				"tools":[{"functionDeclarations":[{"name":"lookup","description":"look up","parametersJsonSchema":{"type":"object"}}]}],
+				"generationConfig":{"maxOutputTokens":20}
+			}`), &want); err != nil {
+				t.Errorf("decode expected Gemini request: %v", err)
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("Gemini request = %s", raw)
+			}
 		}
 		if len(body.Tools) != 1 {
 			t.Errorf("tools = %s", raw)
@@ -166,6 +321,9 @@ func mockProvider(t *testing.T, protocol Protocol, status int, stream string) ht
 			w.WriteHeader(status)
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
+		if protocol == OllamaChat {
+			w.Header().Set("Content-Type", "application/x-ndjson")
+		}
 		fmt.Fprint(w, stream)
 	}
 }
