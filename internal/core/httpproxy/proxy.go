@@ -139,7 +139,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	// 3. 私有路由经 Core 授权；公开回调的业务签名由插件检查。
+	// 3. 私有路由由管理认证检查会话与 CSRF；公开回调的业务签名由插件检查。
 	if !selected.public && (s.auth == nil || !s.auth.Authorize(r, pluginID)) {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
@@ -154,7 +154,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func stripIdentity(r *http.Request) {
 	for name := range r.Header {
-		if strings.EqualFold(name, wire.HeaderProxyAuth) || strings.EqualFold(name, "Authorization") || strings.EqualFold(name, "Forwarded") || strings.HasPrefix(strings.ToLower(name), "x-forwarded-") {
+		if strings.EqualFold(name, wire.HeaderProxyAuth) || strings.EqualFold(name, "Authorization") || strings.EqualFold(name, "X-Alonabot-CSRF") || strings.EqualFold(name, "Forwarded") || strings.HasPrefix(strings.ToLower(name), "x-forwarded-") {
 			delete(r.Header, name)
 		}
 	}

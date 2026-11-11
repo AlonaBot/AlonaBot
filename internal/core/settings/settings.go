@@ -57,11 +57,11 @@ type AdapterSettings struct {
 
 // Settings 保存有效的 Core 设置；日志文件大小以字节计。
 type Settings struct {
-	Listen, AdminBaseURL, PluginBaseURL string
-	TrustedProxies                      []netip.Prefix
-	LogLevel                            slog.Level
-	LogFormat                           string
-	LogFile                             struct {
+	Listen, BaseURL string
+	TrustedProxies  []netip.Prefix
+	LogLevel        slog.Level
+	LogFormat       string
+	LogFile         struct {
 		Enabled           bool
 		MaxSize, MaxTotal int64 // 字节
 		MaxAgeDays        int
@@ -86,8 +86,8 @@ type File struct {
 
 // Defaults 返回 CONTRACTS §15.1 的缺省设置。
 func Defaults() Settings {
-	s := Settings{Listen: defaultListen, AdminBaseURL: "http://" + defaultListen,
-		PluginBaseURL: "http://localhost:" + defaultPort, LogLevel: slog.LevelInfo,
+	s := Settings{Listen: defaultListen, BaseURL: "http://" + defaultListen,
+		LogLevel:  slog.LevelInfo,
 		LogFormat: string(logging.FormatText), CommandPrefixes: []string{"/"}, DefaultLocale: defaultLocale}
 	s.LogFile.Enabled = true
 	s.LogFile.MaxSize = logging.DefaultMaxFileSize
@@ -153,7 +153,7 @@ func Load(dataDir string) (*File, error) {
 func defaultDocument() ([]byte, error) {
 	s := Defaults()
 	content, err := json.MarshalIndent(map[string]any{
-		"$version": currentVersion, "listen": s.Listen, "admin_base_url": s.AdminBaseURL, "plugin_base_url": s.PluginBaseURL,
+		"$version": currentVersion, "listen": s.Listen, "base_url": s.BaseURL,
 		"trusted_proxies": []string{}, "proxy": s.Proxy, "admins": []Admin{},
 		"command_prefixes": s.CommandPrefixes, "command_prefixes_by_instance": map[string][]string{},
 		"default_locale": s.DefaultLocale, "adapters": map[string]any{},
@@ -279,7 +279,7 @@ func readValue(n *node, key string, s *Settings) error {
 		}
 		s.LogFile.MaxAgeDays = days
 		return nil
-	case "listen", "admin_base_url", "plugin_base_url", "log.level", "log.format", "log.file.max_size", "log.file.max_total", "proxy", "default_locale":
+	case "listen", "base_url", "log.level", "log.format", "log.file.max_size", "log.file.max_total", "proxy", "default_locale":
 		value, err := n.text()
 		if err != nil {
 			return err
@@ -392,17 +392,6 @@ func baseURL(raw string) (*url.URL, error) {
 	return u, nil
 }
 
-func effectivePort(u *url.URL) string {
-	if port := u.Port(); port != "" {
-		n, _ := strconv.Atoi(port)
-		return strconv.Itoa(n)
-	}
-	if u.Scheme == "https" {
-		return "443"
-	}
-	return "80"
-}
-
 func validPort(port string, allowZero bool) error {
 	n, err := strconv.ParseUint(port, 10, 16)
 	if err != nil {
@@ -442,10 +431,8 @@ func readString(value, key string, s *Settings) error {
 			return err
 		}
 		s.Listen = value
-	case "admin_base_url":
-		s.AdminBaseURL = value
-	case "plugin_base_url":
-		s.PluginBaseURL = value
+	case "base_url":
+		s.BaseURL = value
 	case "log.level":
 		switch value {
 		case "debug":
@@ -509,24 +496,14 @@ func readString(value, key string, s *Settings) error {
 }
 
 func validateSettings(s Settings, locations map[string]*node) error {
-	admin, err := baseURL(s.AdminBaseURL)
+	base, err := baseURL(s.BaseURL)
 	if err != nil {
-		return at(locations, "admin_base_url", err)
-	}
-	plugin, err := baseURL(s.PluginBaseURL)
-	if err != nil {
-		return at(locations, "plugin_base_url", err)
-	}
-	if admin.Scheme != plugin.Scheme || effectivePort(admin) != effectivePort(plugin) {
-		return at(locations, "plugin_base_url", errors.New("must use the same scheme and effective port as admin_base_url"))
-	}
-	if strings.EqualFold(admin.Hostname(), plugin.Hostname()) {
-		return at(locations, "plugin_base_url", errors.New("must use a different hostname from admin_base_url"))
+		return at(locations, "base_url", err)
 	}
 	host, _, _ := net.SplitHostPort(s.Listen) // listen 的语法已在 readString 中校验。
 	ip, _ := netip.ParseAddr(host)
-	if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && admin.Scheme != "https" && len(s.TrustedProxies) == 0 {
-		return at(locations, "listen", errors.New("non-loopback listen requires HTTPS admin_base_url or trusted_proxies"))
+	if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && base.Scheme != "https" && len(s.TrustedProxies) == 0 {
+		return at(locations, "listen", errors.New("non-loopback listen requires HTTPS base_url or trusted_proxies"))
 	}
 	if s.LogFile.MaxSize > s.LogFile.MaxTotal {
 		return at(locations, "log.file.max_size", errors.New("exceeds log.file.max_total"))

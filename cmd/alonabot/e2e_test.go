@@ -321,11 +321,11 @@ func TestSettingsAndListenOverride(t *testing.T) {
 	c := startCore(t, dir, "--listen", "127.0.0.1:0")
 	c.waitFor(activatedRe)
 	address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
-	request, err := http.NewRequest(http.MethodGet, "http://"+address+"/plugins/demo/unknown", nil)
+	request, err := http.NewRequest(http.MethodGet, "http://"+address+"/plugins/absent/unknown", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.Host = "localhost"
+	request.Host = "127.0.0.1"
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
@@ -502,7 +502,7 @@ func TestAdminAuthRun(t *testing.T) {
 				}
 			}
 			const origin = "http://admin.test:7650"
-			if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte(`{"listen":"127.0.0.1:0","admin_base_url":"`+origin+`","plugin_base_url":"http://plugin.test:7650"}`), 0o600); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte(`{"listen":"127.0.0.1:0","base_url":"`+origin+`"}`), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			c := startCore(t, dir)
@@ -542,7 +542,7 @@ func TestAdminAuthRun(t *testing.T) {
 				}
 				return response, content
 			}
-			send("POST", "/api/auth/login", "plugin.test", origin, `{"token":"wrong"}`, nil, "", "", 404)
+			send("POST", "/api/auth/login", "plugin.test", origin, `{"token":"wrong"}`, nil, "", "", 421)
 			send("POST", "/api/auth/login", "unknown.test", origin, `{"token":"wrong"}`, nil, "", "", 421)
 			if !initialized {
 				_, content := send("POST", "/api/auth/login", "admin.test", origin, `{"token":"wrong"}`, nil, "", "", 401)
@@ -591,6 +591,118 @@ func TestAdminAuthRun(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestPluginPageSandbox 通过真实 Core 与 lifecycle 子进程验证插件页面隔离和管理授权。
+func TestPluginPageSandbox(t *testing.T) {
+	// 1. 在单一受控主机上启动 Core 与 lifecycle 插件。
+	dir := t.TempDir()
+	const origin = "http://core.test:7650"
+	if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte(`{"listen":"127.0.0.1:0","base_url":"`+origin+`"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := startCore(t, dir)
+	c.waitFor(activatedRe)
+	address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
+	send := func(method, path, host string, headers http.Header, cookie *http.Cookie, body string, want int) (*http.Response, []byte) {
+		t.Helper()
+		r, err := http.NewRequest(method, "http://"+address+path, strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Host = host
+		r.Header = headers.Clone()
+		if cookie != nil {
+			r.AddCookie(cookie)
+		}
+		response, err := http.DefaultClient.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		content, readErr := io.ReadAll(response.Body)
+		closeErr := response.Body.Close()
+		if readErr != nil || closeErr != nil {
+			t.Fatalf("read response: %v; close: %v", readErr, closeErr)
+		}
+		if response.StatusCode != want {
+			t.Fatalf("%s %s Host=%s: status=%d, want %d", method, path, host, response.StatusCode, want)
+		}
+		if strings.HasPrefix(path, "/plugins/") {
+			if got := response.Header.Values("Content-Security-Policy"); !reflect.DeepEqual(got, []string{"sandbox allow-scripts allow-forms allow-popups"}) {
+				t.Errorf("sandbox CSP = %v", got)
+			}
+			if got := response.Header.Values("X-Content-Type-Options"); !reflect.DeepEqual(got, []string{"nosniff"}) {
+				t.Errorf("nosniff = %v", got)
+			}
+			if got := response.Header.Values("Set-Cookie"); len(got) != 0 {
+				t.Error("plugin response contains Set-Cookie")
+			}
+		}
+		return response, content
+	}
+	pageHeaders := http.Header{"Accept": {"text/html"}}
+	send(http.MethodGet, "/plugins/demo/page", "core.test", pageHeaders, nil, "", http.StatusUnauthorized)
+	// 2. 经真实登录取得 Cookie 和 CSRF token，核对页面的响应头被 Core 覆盖。
+	raw, err := os.ReadFile(filepath.Join(dir, adminauth.FirstTokenFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := strings.TrimSpace(string(raw))
+	input, err := json.Marshal(map[string]string{"token": token})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, content := send(http.MethodPost, "/api/auth/login", "core.test", http.Header{"Content-Type": {"application/json"}, "Origin": {origin}}, nil, string(input), http.StatusOK)
+	var login struct {
+		CSRFToken string `json:"csrf_token"`
+	}
+	if err := json.Unmarshal(content, &login); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Cookies()) != 1 || login.CSRFToken == "" {
+		t.Fatal("login did not return one cookie and a CSRF token")
+	}
+	cookie := response.Cookies()[0]
+	page, body := send(http.MethodGet, "/plugins/demo/page", "core.test", pageHeaders, cookie, "", http.StatusOK)
+	if !strings.HasPrefix(page.Header.Get("Content-Type"), "text/html") || !bytes.Contains(body, []byte("<!doctype html>")) {
+		t.Fatal("plugin HTML response was replaced")
+	}
+	callbackState := page.Header.Get("X-Lifecycle-Callback-State")
+	if callbackState == "" {
+		t.Fatal("private page did not provide callback state")
+	}
+	pageHeaders.Set("Authorization", "Bearer "+token)
+	send(http.MethodGet, "/plugins/demo/page", "core.test", pageHeaders, nil, "", http.StatusOK)
+	// 3. Cookie 写请求验证 CSRF，回显证明管理凭证未进入插件；Bearer 独立授权。
+	headers := http.Header{"Origin": {origin}, "X-Sandbox-Probe": {"preserved"}}
+	send(http.MethodPost, "/plugins/demo/echo", "core.test", headers, cookie, "", http.StatusUnauthorized)
+	headers.Set("X-Alonabot-CSRF", login.CSRFToken)
+	for _, bearer := range []bool{false, true} {
+		if bearer {
+			headers.Set("Authorization", "Bearer "+token)
+		}
+		_, content := send(http.MethodPost, "/plugins/demo/echo", "core.test", headers, cookie, "", http.StatusOK)
+		var received http.Header
+		if err := json.Unmarshal(content, &received); err != nil {
+			t.Fatal(err)
+		}
+		if received.Get("X-Sandbox-Probe") != "preserved" {
+			t.Fatal("plugin did not echo the forwarded request")
+		}
+		for _, name := range []string{"Cookie", "Authorization", "X-Alonabot-CSRF"} {
+			if received.Get(name) != "" {
+				t.Errorf("plugin received management header %s", name)
+			}
+		}
+	}
+	send(http.MethodPost, "/plugins/demo/callback", "core.test", http.Header{"X-Lifecycle-Callback-State": {callbackState}}, nil, "", http.StatusNoContent)
+	send(http.MethodGet, "/plugins/demo/page", "elsewhere.test", pageHeaders, nil, "", http.StatusMisdirectedRequest)
+	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := c.wait(15 * time.Second); code != 0 {
+		t.Fatalf("Core exit %d: %s", code, c.log())
 	}
 }
 
