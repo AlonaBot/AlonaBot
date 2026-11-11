@@ -5,17 +5,18 @@
 // Run 把 log/slog 的默认 Logger 换成写 stderr 的 JSON 行，按 Core 下发的级别过滤（CONTRACTS §14）。
 // Base 为 [Root] 的全部 Hook 提供空的默认实现，根插件只覆盖需要的方法。
 //
-// 命令与事件 Handler 可通过 Context.Send 回复原事件目标；自动回复型命令返回 Chain，由 Core 发送一次。
+// 命令与事件 Handler 可通过 [Context.Send] 回复原事件目标，通过 [Context.Edit] 编辑已发送的文本消息；
+// 自动回复型命令返回 Chain，由 Core 发送一次。后台 [Send] 与 [Edit] 须显式给出 Target。
 // 文本匹配与 Raw 共用 Handler 调用上下文；HTTP 路由由 SDK 托管 Listener 并校验 Session 凭证。
 // [Context.T] 按 Actor 与 Core 默认语言格式化文案；后台调用 [T] 使用 Core 默认语言。
-// 定时任务随 REGISTER 声明，由 Core Scheduler 触发；其 Handler 没有 Actor 与默认 Target，Send 须显式 To。
+// 定时任务随 REGISTER 声明，由 Core Scheduler 触发；其 Handler 没有 Actor 与默认 Target，Send 与 Edit 须显式 To。
 //
 // 包的组成：
 //   - 插件的 main 调用 [Run]；[Collect] 单独收集注册项，供检查与测试使用。
 //   - [CommandRegistry]、[EventRegistry]、[HTTPRegistry] 与 [ScheduleRegistry] 收集命令、事件、HTTP 路由和定时任务。
 //   - [ServiceRegistry] 收集类型化服务；[CallJSON] 与 [CallProto] 经 Core 调用目标插件。
 //   - [SubscriptionRegistry] 收集 Event Bus 订阅；[Publish] 发布本插件命名空间下的 JSON 事件。
-//   - [Context] 只在一次 Handler 调用期间有效，提供 [Context.Send] 与 [Context.StopPropagation]。
+//   - [Context] 只在一次 Handler 调用期间有效，提供 [Context.Send]、[Context.Edit] 与 [Context.StopPropagation]。
 //   - 根插件嵌入 [Base]，覆盖 [Root] 中需要的 Hook。
 package sdk
 
@@ -76,10 +77,10 @@ func (c *Context) Logger() *slog.Logger {
 // StopPropagation 锁存停止传播标记；一经设置不能重新打开传播，并且不受业务错误影响。
 func (c *Context) StopPropagation() { c.stopped.Store(true) }
 
-// SendOption 调整一次 Send。
+// SendOption 调整一次 Context.Send 或 Context.Edit。
 type SendOption func(*sendOptions)
 
-// sendOptions 汇总 SendOption 设置的发送参数。
+// sendOptions 汇总 SendOption 设置的发送或编辑参数。
 type sendOptions struct {
 	to *pb.Target // 显式目标；为 nil 时使用默认 Target
 }

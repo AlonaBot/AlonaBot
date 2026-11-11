@@ -3,7 +3,7 @@
 // [Scheduler] 用 plugin_id/job_id 保存统计与实际运行槽，用本次 Attach 的注册保存定时器。
 // 超时结束 RPC 结果后仍保留槽，直到迟到响应或 [Scheduler.Released] 确认进程退出；
 // 插件恢复或定时器落后时只安排未来 tick（CONTRACTS §4.3）。
-// 装配处负责激活后 [Scheduler.Attach]、撤销时 [Scheduler.Detach] 与退出后的 Released。
+// 装配处负责激活后 [Scheduler.Attach]、排空时 [Scheduler.Drain]、撤销时 [Scheduler.Detach] 与退出后的 Released。
 package scheduler
 
 import (
@@ -37,7 +37,7 @@ type Options struct {
 // JobStats 汇总同一 plugin_id/job_id 在本次 Core 运行期间的计数。
 type JobStats struct {
 	Runs, Skipped, TimedOut, Late uint64
-	Running                       bool // 包含结果已超时、实际执行尚未结束的调用
+	Running                       bool // 包含结果已超时或取消、实际执行尚未结束的调用
 }
 
 // Scheduler 并发安全地安排定时器、占用运行槽并记录任务统计。
@@ -125,6 +125,11 @@ func (s *Scheduler) Attach(p router.Plugin, activatedAt time.Time) {
 		job.state = state
 		s.arm(pluginID, reg, job, now)
 	}
+}
+
+// Drain 停止该插件的新 tick，已经触发的调用继续等待实际响应或进程退出。
+func (s *Scheduler) Drain(pluginID string) {
+	s.Detach(pluginID)
 }
 
 // Detach 停止该插件的新触发，保留运行槽与统计。
@@ -255,11 +260,13 @@ func (s *Scheduler) call(pluginID string, reg *registration, job *registeredJob,
 				releaseRun(job.state, run)
 			}})
 	}
-	// 3. 对端已响应的错误也结束实际执行；仅本地超时与断链继续保留槽。
+	// 3. 对端已响应的错误也结束实际执行；本地超时、停止取消与断链继续保留槽。
+	// 停止取消没有 Late 回调，由 Released 在确认进程树清空后释放槽。
 	s.mu.Lock()
-	if response.RawErrorCode == pb.ErrorCode_ERROR_CODE_UNSPECIFIED && wire.CodeOf(err) == pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED {
+	code := wire.CodeOf(err)
+	if response.RawErrorCode == pb.ErrorCode_ERROR_CODE_UNSPECIFIED && code == pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED {
 		markTimeout(job.state, run)
-	} else if response.RawErrorCode != pb.ErrorCode_ERROR_CODE_UNSPECIFIED || wire.CodeOf(err) != pb.ErrorCode_ERROR_CODE_UNAVAILABLE {
+	} else if response.RawErrorCode != pb.ErrorCode_ERROR_CODE_UNSPECIFIED || (code != pb.ErrorCode_ERROR_CODE_UNAVAILABLE && code != pb.ErrorCode_ERROR_CODE_CANCELLED) {
 		releaseRun(job.state, run)
 	}
 	s.mu.Unlock()

@@ -52,6 +52,13 @@ func pluginGeneration(cmd *cobra.Command, options generate.Options, check bool) 
 		}
 		return &reportedError{errors.New("plugin scan reported diagnostics")}
 	}
+	if result.RootType == "" {
+		// adapter_config_schema.json 已由 Scan 校验，check 无需生成插件代码。
+		if check {
+			return nil
+		}
+		return errors.New("expected exactly one root type, found 0")
+	}
 	// 2. 先比较完整内容；check 只读，generate 仅在内容改变时写入。
 	path := filepath.Join(options.Dir, generate.FileName)
 	current, err := os.ReadFile(path)

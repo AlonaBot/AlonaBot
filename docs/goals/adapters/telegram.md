@@ -9,6 +9,12 @@
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 已完成（PR #39） |
 | goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 已完成 |
 | goal-89 | T-03.11 | 官方 Telegram Adapter 的平台权限 | T-04.6 | 已完成（PR #106） |
+| goal-111 | T-03.20 | 官方 Telegram Adapter 的媒体与新增片段 | T-03.13、T-03.14 | 等待前置 |
+| goal-112 | T-03.21 | 官方 Telegram Adapter 的平台动作与撤回 | T-03.11、T-03.15、T-03.16 | 等待前置 |
+| goal-113 | T-03.22 | 官方 Telegram Adapter 的命令菜单 | T-03.17 | 等待前置 |
+| goal-117 | T-03.23 | 官方 Telegram Adapter 的代理模式与话题判定 | T-03.4 | 已完成（PR #125） |
+| goal-132 | T-03.26 | 官方 Telegram Adapter 填写 chat_title | T-03.4、T-03.25 | 等待前置 |
+| goal-137 | T-03.27 | 官方 Telegram Adapter 的服务消息 | T-03.23 | 待派发 |
 
 ## 第 5 波
 
@@ -151,6 +157,107 @@
 不做：按钮 token 的签发与 callback_query（T-03.8）；extension 片段（T-03.8）；编辑（T-03.9）；平台权限（T-03.11）；BeforeSend/AfterSend Hook（T-05.3）；故障矩阵与真实 Telegram 验证（T-03.10）。
 ```
 
+### goal-117 · T-03.23 官方 Telegram Adapter 的代理模式与话题判定
+
+状态：已完成（[PR #125](https://github.com/AlonaBot/AlonaBot/pull/125)，合并提交 `f3af986`），证据见 TEST-MATRIX §3.2。`adapter_config_schema.json` 中的 `proxy_mode` 由 goal-101 补上。派发时：前置 T-03.4（[PR #39](https://github.com/AlonaBot/AlonaBot/pull/39)，合并提交 `604dc65`）已合并。2026-11-09 按 D-100、D-101 新增，接口与测试段按 main（`3f7a380`）的代码写出：`newBotClient(token, base, proxy string)` 在 proxy 为空时使用 `http.ProxyFromEnvironment`；`instance.messageEvent` 只要 Message 带 `message_thread_id` 就写入 Target 的 thread_id；`TestInstanceProxy` 与 `TestIncomingMedia` 只配置了 `proxy`。实例配置的 `adapter_config_schema.json` 由 goal-101（T-08.12）新建，处理方式见执行顺序 §3。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-117（切片 T-03.23：官方 Telegram Adapter 的代理模式与话题判定）。goal 目录 goal-117，分支 goal-117，worktree .worktrees/goal-117，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：Telegram 实例配置追加 proxy_mode，代理可以不使用（缺省）、跟随 Core 或使用实例自己的 proxy；入站 Message 只在 is_topic_message 为 true 时把 message_thread_id 作为 Target 的 thread_id，非论坛超级群的回复串不再被当作话题。
+
+依据：PLAN T-03 步骤 20；CONTRACTS §8（Telegram 段）、§15.1（proxy）；MESSAGE-MODEL §6、§6.1；DECISIONS D-100、D-101；TEST-MATRIX V-99、V-100；Bot API 原文 Message 的 message_thread_id 与 is_topic_message。
+
+范围（只新增或修改这些）：
+- adapters/telegram/telegram.go：实例配置的解析
+- adapters/telegram/client.go：HTTP 客户端的代理选择
+- adapters/telegram/inbound.go：telegramMessage 追加 is_topic_message，thread_id 的判定
+- adapters/telegram/telegram_test.go、adapters/telegram/media_test.go：既有用例的配置与本语句的测试
+- adapters/telegram/cmd/alonabot-adapter-telegram/adapter_config_schema.json：只在派发时 main 已有该文件（goal-101 已合并）时修改；没有时不新建，在 PR 正文写明，由后合并的 goal-101 按执行顺序 §3 补上
+没有新的跨模块边。不改 proto，不改 telegramtest。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. 实例配置 JSON：{"token": string（必填）, "api_base_url": string（缺省 "https://api.telegram.org"）, "proxy_mode": "none" | "core" | "custom"（缺省 "none"）, "proxy": string（只在 custom 时使用，http/https/socks5 URL，可含用户名与密码）}
+2. adapter_config_schema.json（文件存在时）：在 proxy 之前追加
+   "proxy_mode": {"type": "string", "options": ["none", "core", "custom"], "labels": ["No proxy", "Follow Core", "Custom"], "default": "none"}
+   proxy 保留 secret，追加 "condition": {"proxy_mode": "custom"}；`$version` 不变（首次发布前不写迁移）。
+
+行为：
+- Start 解析配置：
+  1) proxy_mode 缺失或为空串时按 "none"；不是三者之一 → INVALID_ARGUMENT，错误只写字段名 proxy_mode。
+  2) none：Transport.Proxy 为 nil，直连，不读取 HTTP_PROXY、HTTPS_PROXY、NO_PROXY；proxy 有值也不使用、不校验。
+  3) core：Transport.Proxy 为 http.ProxyFromEnvironment（Core 按 CONTRACTS §15.1 为子进程设置的代理环境）；proxy 不使用、不校验。
+  4) custom：proxy 为空 → INVALID_ARGUMENT（错误只写字段名 proxy）；proxy 的校验、Transport.Proxy 固定为它、用户名与密码加入脱敏表的现有规则不变。
+  5) 三种模式都作用于该实例的全部请求（Bot API、getFile 与文件下载共用同一个 http.Client）。代理不可达按网络错误处理，接收退避重连，不改为直连。
+- 话题判定（inbound.go）：telegramMessage 追加字段 IsTopicMessage bool（JSON 键 is_topic_message）；messageEvent 只在 IsTopicMessage 为 true 且 message_thread_id 存在时设置 Target.thread_id。General 话题与非论坛超级群的回复串都不产生 thread_id。出站规则不变：Target 给出 thread_id 时照常作为 message_thread_id。
+- 其余接收、发送、权限与脱敏行为不变。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：修改既有用例并追加一个用例，都经 telegramtest.Server 与 recordingCore 驱动 New() 的实例：
+  - TestInstanceProxy 与 TestIncomingMedia 的配置追加 "proxy_mode": "custom"，断言不变（全部请求经实例的 proxy）。
+  - 新增 TestDirectProxyModeIgnoresEnvironment：t.Setenv("HTTP_PROXY", 记录请求的本地代理的 URL)，配置 proxy_mode 为 "none"、api_base_url 为 "http://telegram.invalid"、proxy 也指向该代理；Start 返回 UNAVAILABLE，代理没有收到任何请求。
+  - TestMessageMetadata：带 message_thread_id 77 的用例改为 chat.type "supergroup" 并带 "is_topic_message": true，断言 thread_id 仍为 "77"；追加一条 chat.type "supergroup"、只带 "message_thread_id": 88（回复串，没有 is_topic_message）的消息，断言其 Target 没有 thread_id。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：proxy_mode 的非法值、custom 缺少或给出非法 proxy、none 与 core 时 proxy 为非法值仍能启动；core 模式在单独的进程中先设置 HTTP_PROXY 再启动实例，请求经过该代理（net/http 在进程内只读取一次代理环境变量，测试中其他用例的 httputil.ReverseProxy 会先触发读取，因此不放进提交的测试）；General 话题（没有 message_thread_id）的消息没有 thread_id。
+- 真实平台（可选）：维护者提供论坛超级群与普通超级群时，各回复一次话题内消息与回复串消息，确认前者回到原话题、后者发到会话；没有条件时在 PR 中写「未运行」。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./adapters/...；go build ./...。
+
+不做：入站事件的 chat_type（T-03.20，依赖 T-03.14 的 proto 字段）；file_base_url（T-03.20）；Core 全局代理的设置与子进程环境（cmd/alonabot 已实现，不改）；OneBot 11 的代理。
+```
+
+## 第 7 波
+
+### goal-137 · T-03.27 官方 Telegram Adapter 的服务消息
+
+状态：待派发。前置 T-03.23（[PR #125](https://github.com/AlonaBot/AlonaBot/pull/125)，合并提交 `f3af986`）已合并。2026-11-11 按 D-133 新增，接口与测试段按 main（`db6317a`）的代码写出：`instance.normalize` 把 message、channel_post 与两种 edited 都交给 `messageEvent`，带服务字段的 Message 因此成为 chain 为空的 message.created；`Descriptor` 只声明权限，没有 `Events`；Core 的 `internal/core/adapter/remote` 已按声明的 Schema 校验扩展事件。`inbound.go` 与 goal-111、goal-132 共用，处理方式见执行顺序 §3。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-137（切片 T-03.27：官方 Telegram Adapter 的服务消息）。goal 目录 goal-137，分支 goal-137，worktree .worktrees/goal-137，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：Telegram 的服务消息不再以 chain 为空的 message.created 交付：话题的创建、编辑、关闭与重开，置顶，修改群名，普通群升级为超级群映射为扩展事件；成员类与其他服务消息不交付，只推进游标。
+
+依据：PLAN T-03 步骤 24；MESSAGE-MODEL §1.2、§6.1、§6.6；CONTRACTS §8（扩展事件的声明）；DECISIONS D-133；TEST-MATRIX V-119；Bot API 原文的 Message（描述为 service message 的字段）、ForumTopicCreated、ForumTopicEdited。
+
+范围（只新增或修改这些）：
+- adapters/telegram/inbound.go：服务字段的解析与映射
+- adapters/telegram/telegram.go：Descriptor 追加 Events
+- adapters/telegram/telegram_test.go：本语句的测试
+- ARCHITECTURE.md：Telegram 行的实现说明追加一句
+没有新的跨模块边。不改 proto，不改 telegramtest，不新增公开包。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. Descriptor().Events 声明 7 个事件，Version 都为 1，SchemaJson 为 type object、additionalProperties false 的 JSON Schema：
+   - telegram.forum_topic_created：{"name": string, "icon_color": integer, "icon_custom_emoji_id": string}，required ["name", "icon_color"]
+   - telegram.forum_topic_edited：{"name": string, "icon_custom_emoji_id": string}，都不 required
+   - telegram.forum_topic_closed、telegram.forum_topic_reopened：没有属性
+   - telegram.message_pinned：{"message_id": string}，required
+   - telegram.chat_title_changed：{"new_chat_title": string}，required
+   - telegram.chat_migrated：{"migrate_from_chat_id": string}，required
+2. 事件：EventType 为上面的完整名，EventPayload 为 adapter_event{version: 1, payload_json: 对象}；payload 字段名照抄 Bot API，数字 ID 写作十进制字符串，平台没有给出的可选字段不写。
+
+行为：
+- 判定：message 与 channel_post 带任一服务字段时，在 messageEvent 之前分流，不再检查 text、caption 与媒体，也不产生 message.created。edited_message 与 edited_channel_post 不变。
+- 映射：forum_topic_created、forum_topic_edited、forum_topic_closed、forum_topic_reopened、pinned_message（取其 message_id）、new_chat_title、migrate_from_chat_id 各产生一个对应事件。事件经 baseEvent 构造：Target 为该 Message 的 chat，thread_id 沿用 is_topic_message 规则；Actor 为 from，带 sender_chat 时 absent；platform_payload 为原 update；群中的平台权限照常经 addPlatformPermissions 添加。
+- 不交付（只推进游标，不记 WARN）：new_chat_members、left_chat_member、migrate_to_chat_id，以及 Bot API 原文 Message 中其余描述为 service message 的字段（按原文逐项列出，例如 group_chat_created、supergroup_chat_created、channel_chat_created、new_chat_photo、delete_chat_photo、message_auto_delete_timer_changed、video_chat_scheduled、video_chat_started、video_chat_ended、video_chat_participants_invited、general_forum_topic_hidden、general_forum_topic_unhidden、write_access_allowed）。列表写在 inbound.go 的一处，注释写明来源与核对日期。
+- 一条 Message 同时带两个服务字段不会出现；只按第一个命中的映射字段处理，不另做校验。
+- 没有服务字段、也没有可映射内容的 Message（投票、位置等）不变，仍为 chain 为空的 message.created。
+- 其余接收、游标、权限与脱敏行为不变。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：在 TestNonMessageEvents 的 update 列表中追加用例（经 telegramtest.Server 与 recordingCore 驱动 New() 的实例），不新增测试函数：
+  - 超级群中带 is_topic_message 与 message_thread_id 5 的 forum_topic_created（name "Ideas"、icon_color 7322096）：EventType 为 telegram.forum_topic_created，Target 的 thread_id 为 "5"，payload_json 为 {"icon_color":7322096,"name":"Ideas"}（按 JSON 比较），Actor 为 from。
+  - pinned_message（被置顶消息 message_id 10）：telegram.message_pinned，payload {"message_id":"10"}。
+  - 新超级群中的 migrate_from_chat_id -123：telegram.chat_migrated，Target 的 chat_id 为新超级群，payload {"migrate_from_chat_id":"-123"}。
+  - 旧群中的 migrate_to_chat_id、new_chat_members 与 group_chat_created 各一条：不产生事件，游标仍推进（waitSaved 次数与 update 数一致，core.events 中没有它们）。
+  - 断言 Descriptor().Events 的 7 个名称与版本。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：forum_topic_edited（只有 name、只有空串 icon_custom_emoji_id）、forum_topic_closed 与 reopened、new_chat_title、频道中的 pinned_message（Actor absent）、left_chat_member；7 个 SchemaJson 能被 jsonschema-go 解析，且各事件的 payload 通过对应 Schema 的校验；投票消息仍为 chain 为空的 message.created。
+- 真实平台（可选）：维护者提供测试 Bot 与论坛超级群时，创建并关闭一个话题、置顶一条消息、修改群名，确认各产生一个对应事件且没有 message.created；没有条件时在 PR 中写「未运行」。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./adapters/... ./internal/core/adapter/...；go build ./...。
+
+不做：标准事件类型中的服务事件；事件名的常量包；OneBot 11 的对应处理；chat_type（goal-111）与 chat_title（goal-132）。
+```
+
 ## 第 8 波
 
 ### goal-89 · T-03.11 官方 Telegram Adapter 的平台权限
@@ -201,3 +308,66 @@
 
 不做：Core 侧的权限过滤与展开（T-04.6 已完成）；按钮点击 Actor 的平台权限（随 T-03.8 的 callback_query 处理）；权限文案的 i18n 文件（label_key 的文案随 Adapter 包的 i18n 目录由打包切片加入）；OneBot 11 的平台权限（T-15.1）。
 ```
+
+## 第 12 波
+
+### goal-111 · T-03.20 官方 Telegram Adapter 的媒体与新增片段
+
+状态：等待前置（T-03.13、T-03.14）。2026-11-09 按 D-87、D-88、D-89、D-97、D-99 新增，同日按 D-100 追加入站事件的 chat_type。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+
+目标：Telegram 实例按来源传递出站媒体：multipart 请求体边读边写、inline_base64 解码上传、`platform_file` 直接作为 file_id；收发 voice（sendVoice）；动图用 sendAnimation；入站 voice、animation、video_note 与静态贴纸按新映射交付（入站 audio 仍为 file）；url 按钮；实例配置追加 `file_base_url`；入站事件填写 chat_type。
+
+依据：PLAN T-03 步骤 17；CONTRACTS §1.3、§8（Telegram 段）；MESSAGE-MODEL §6、§6.2、§6.3、§6.4；DECISIONS D-88、D-89、D-97、D-99、D-100；TEST-MATRIX V-89、V-90、V-98 的 Telegram 分项，V-97。
+
+要点：
+- 流式 multipart：用 `io.Pipe` 与 `mime/multipart`，写端按发送计划顺序写字段与文件，文件内容经 Core.ReadMedia 每次最多 1 MiB 读取后立即写出；读取失败时以该错误关闭管道，该物理操作按请求是否已开始写出判为 REJECTED 或 UNKNOWN。现有一次读完的实现删除，不保留。
+- 计划：voice 每个片段单独一个物理操作；image/gif（MediaRef 的 MIME，或 inline_base64 解码后以 `GIF8` 开头）用 sendAnimation 并结束当前媒体组；caption 与 reference、按钮的规则不变；forward 返回 UNSUPPORTED。
+- 入站：voice 为 voice，audio 仍为 file，animation 与 video_note 为 video，is_animated 与 is_video 都为 false 的 sticker 为 image，都带 incoming_ref；其余贴纸不进 chain。
+- `file_base_url`：缺省为 `<api_base_url>/file/bot<token>`，写进 adapter_config_schema.json；文件下载经它发出，代理规则不变，token 仍不进日志。
+- chat_type：每个带 target 的入站事件按 chat.type 填写，private 为 PRIVATE，group 与 supergroup 为 GROUP，channel 为 CHANNEL；成员与 reaction 事件同样取其 chat。
+- Capabilities 追加 `message.voice`；`telegramtest` 追加 sendVoice、sendAnimation 的记录与缺省响应。
+- 测试：提交在既有 `send_test.go` 中追加的用例（经 telegramtest.Server）：一次发送 32 MiB 的 media_ref，断言请求体正确且常驻内存不超过数 MiB，以及 voice 与 GIF 的计划；其余进本地自测。
+
+### goal-112 · T-03.21 官方 Telegram Adapter 的平台动作与撤回
+
+状态：等待前置（T-03.15、T-03.16）。T-03.11（PR #106）已合并。2026-11-09 按 D-87、D-92、D-93、D-98 新增，同日按 D-104 让指向消息的动作收消息句柄。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+
+目标：Telegram 实例声明并实现 MESSAGE-MODEL §6.5 的平台动作（含群信息与成员查询、send_chat_action、set_message_reaction、send_message_draft），在 `adapters/telegram/action` 为每个动作发布带类型的 Go 函数，并提供输入状态与草稿流式两个辅助函数；实现撤回（deleteMessages），声明 `message.delete`。
+
+依据：PLAN T-03 步骤 18；CONTRACTS §8（通用能力的范围、平台动作、撤回）；MESSAGE-MODEL §4A、§6.5；DECISIONS D-87、D-92、D-93、D-98、D-104、D-113；TEST-MATRIX V-91、V-92、V-94 的 Telegram 分项、V-102 的动作分项；Bot API 原文的 sendMessageDraft。
+
+要点：
+- 动作的参数沿用 Bot API 字段名，数字 ID 为十进制字符串，chat_id 与 message_thread_id 取自 Target；参数与结果用 Go 类型声明（`adapter.Action[P, R]`，D-113），参数 Schema 不允许其他属性；结果为 Bot API 的 `result` 原文。ban、unban、restrict 成功后作废该会话的管理员缓存。
+- `adapters/telegram/action`：每个动作一个带类型的函数，第一个参数为 goal-106 的调用者接口，参数与结果为 Go 类型；pin_chat_message、unpin_chat_message 与 set_message_reaction 以 message.MessageRef 指定消息，会话与实例取自句柄（D-104）；只依赖 `sdk` 根包，不 import Adapter 运行时代码。输入状态辅助函数立即发送一次、之后每 4 秒一次，ctx 结束即停止；草稿辅助函数以 send_message_draft 流式显示，结束后经普通 Send 发出正式消息，群聊目标在发请求前返回 UNSUPPORTED。sendMessageDraft 的参数与本语句不符时标 [!]。
+- 撤回：同一 Target 的 ID 每 100 个一次 deleteMessages，同一请求的 ID 共享结果；平台返回 400 时该请求的 ID 为 REJECTED，其余 NOT_ATTEMPTED。
+- 测试：提交在既有测试文件中追加的用例（经 telegramtest.Server）：ban_chat_member 的参数与管理员缓存作废，以及 101 个 ID 的撤回分为两次请求；其余进本地自测。
+
+### goal-113 · T-03.22 官方 Telegram Adapter 的命令菜单
+
+状态：等待前置（T-03.17）。2026-11-09 按 D-87、D-96 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+
+目标：Telegram 实例实现 `adapter.commands.sync`（setMyCommands，default scope 加每个 language_code），声明 `commands.sync`。
+
+依据：PLAN T-03 步骤 19；CONTRACTS §8（命令菜单）；MESSAGE-MODEL §6.5；DECISIONS D-96；TEST-MATRIX V-93 的 Telegram 分项；Bot API 原文的 setMyCommands。
+
+要点：
+- 命令名不匹配 `^[a-z0-9_]{1,32}$` 时跳过，说明超过 256 字符时截断，都记诊断；记住每个 language_code 上一次成功同步的内容，相同时不调用；某个语言失败不影响其他语言，返回第一个错误。
+- 测试：提交在既有测试文件中追加的用例（经 telegramtest.Server）：两次相同的同步只调用一次 setMyCommands；其余进本地自测。
+
+## 第 14 波
+
+### goal-132 · T-03.26 官方 Telegram Adapter 填写 chat_title
+
+状态：等待前置（T-03.25）。2026-11-10 按 D-130 新增。T-03.4（PR #39）已合并。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+
+目标：Telegram 实例为每个带 target 的入站事件填写 `chat_title`，让 Core 的聊天目录能显示群、频道与私聊对象的名称。
+
+依据：PLAN T-03 步骤 23；CONTRACTS §8（聊天目录）；MESSAGE-MODEL §1、§6；DECISIONS D-130；TEST-MATRIX V-117 的 Telegram 分项；Bot API 原文的 Chat。
+
+要点：
+- 群、超级群与频道取 chat 的 `title`。私聊取 chat 的 `first_name` 与 `last_name`，以一个空格连接；两者都没有时不带 `chat_title`。
+- 消息、编辑、成员变化、reaction 与按钮回调事件都取其所在 chat，规则相同。不为取名称另外调用 Bot API。
+- 名称不写入 Adapter 的日志。
+- 测试：提交在既有测试文件中追加的用例（经 telegramtest.Server）：超级群消息的 `chat_title` 为 title，私聊为姓名，没有姓名的私聊不带；其余进本地自测。
+
+不做：Core 的聊天目录（goal-131）；话题名称；getChat 查询。

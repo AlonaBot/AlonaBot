@@ -1,9 +1,7 @@
-// Package webhost 按受控主机名分派管理入口和插件入口，并签发受管理会话约束的插件授权。
+// Package webhost 按受控主机名分派管理入口和插件路由，并统一隔离插件响应。
 //
-// [Host] 在管理请求进入页面处理器前通过 [AdminSessions] 记录会话期限，
-// 页面调用 [Host.IssueTicket] 后，浏览器在插件主机兑换一次性票据。
-// 管理认证由装配方提供；插件响应在写出前经过 Cookie、CORS 与单 Host 主动内容策略，
-// 对应 CONTRACTS §7.3。
+// [Host] 将 /plugins/ 请求交给代理，其余交给管理处理器；认证由装配方接入。
+// 插件响应经过沙箱 CSP、Cookie 与凭证 CORS 过滤，规则见 CONTRACTS §7.3。
 package webhost
 
 import (
@@ -11,106 +9,48 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 )
 
-const (
-	pluginPrefix = "/plugins/"
-	ticketPath   = "/_alonabot/ticket"
-)
+const pluginPrefix = "/plugins/"
 
-// AdminSessions 校验管理请求及其派生授权依赖的原会话。
-type AdminSessions interface {
-	Lookup(r *http.Request) (sessionID string, expiresAt time.Time, ok bool) // 只在 admin host 上调用
-	Valid(sessionID string) bool
-}
-
-// Options 配置受控入口、代理和管理会话来源。
+// Options 配置受控入口、管理处理器与插件代理。
 type Options struct {
-	AdminBaseURL, PluginBaseURL *url.URL     // 来自已校验的 settings，构造后不再修改
-	SecondHost                  bool         // 两个 Base URL 的主机名不同时为 true
-	Admin                       http.Handler // nil 时管理入口返回 404
-	Proxy                       *httpproxy.Server
-	Sessions                    AdminSessions    // 未接入管理认证时为 nil，私有授权保持拒绝
-	Now                         func() time.Time // nil 时使用 time.Now
+	BaseURL *url.URL     // 来自已校验的 settings，构造后不再修改
+	Admin   http.Handler // nil 时管理入口返回 404
+	Proxy   *httpproxy.Server
+	Now     func() time.Time
 }
 
-// Host 持有主机分派和派生授权；方法可并发调用。
-// mu 保护管理期限、待兑换票据和插件会话，调用外部管理会话来源前释放。
-type Host struct {
-	opt          Options
-	mu           sync.Mutex
-	adminExpires map[string]time.Time
-	tickets      map[string]ticket
-	sessions     map[string]pluginSession
-}
+// Host 持有受控主机与响应策略；方法可并发调用。
+type Host struct{ opt Options }
 
 // New 构造受控 Host 入口；opt 的 Base URL 已由 settings 校验。
-func New(opt Options) *Host {
-	if opt.Now == nil {
-		opt.Now = time.Now
-	}
-	return &Host{opt: opt, adminExpires: make(map[string]time.Time), tickets: make(map[string]ticket), sessions: make(map[string]pluginSession)}
-}
+func New(opt Options) *Host { return &Host{opt: opt} }
 
-// ServeHTTP 仅使用请求 Host 分派管理入口、插件路由和票据兑换。
+// ServeHTTP 按受控主机名分派管理入口与插件路由，其他 Host 返回 421。
 func (h *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, pluginPrefix) {
-		w = h.pluginWriter(w, r)
+		plugin := h.pluginWriter(w, r)
+		w = plugin
+		// ReverseProxy 在正文结束后才复制 trailer，返回前还需清理一次。
+		defer plugin.after(plugin.Header())
 	}
-	hostname := requestHostname(r.Host)
-	if strings.EqualFold(hostname, h.opt.AdminBaseURL.Hostname()) {
-		if strings.HasPrefix(r.URL.Path, pluginPrefix) {
-			if h.opt.SecondHost {
-				http.NotFound(w, r)
-				return
-			}
-			if activeAccept(r.Header) {
-				http.Error(w, strings.TrimSpace(configurePluginHost), http.StatusConflict)
-				return
-			}
-			h.opt.Proxy.ServeHTTP(w, r)
-			return
-		}
-		if h.opt.Admin == nil {
-			http.NotFound(w, r)
-			return
-		}
-		if h.opt.Sessions != nil {
-			if id, expires, ok := h.opt.Sessions.Lookup(r); ok {
-				h.mu.Lock()
-				h.expire(h.opt.Now())
-				h.adminExpires[id] = expires
-				h.mu.Unlock()
-			}
-		}
-		if h.opt.SecondHost && pluginOrigin(r.Header.Get("Origin"), h.opt.PluginBaseURL) {
-			w = &responseWriter{ResponseWriter: w, before: func(header http.Header) {
-				header.Del("Access-Control-Allow-Origin")
-				header.Del("Access-Control-Allow-Credentials")
-			}}
-		}
-		h.opt.Admin.ServeHTTP(w, r)
-		if policy, ok := w.(*responseWriter); ok && !policy.wrote {
-			policy.before(policy.Header())
-		}
+	if !strings.EqualFold(requestHostname(r.Host), h.opt.BaseURL.Hostname()) {
+		http.Error(w, http.StatusText(http.StatusMisdirectedRequest), http.StatusMisdirectedRequest)
 		return
 	}
-	if h.opt.SecondHost && strings.EqualFold(hostname, h.opt.PluginBaseURL.Hostname()) {
-		switch {
-		case r.URL.Path == ticketPath:
-			h.exchange(w, r)
-		case strings.HasPrefix(r.URL.Path, pluginPrefix):
-			h.opt.Proxy.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
+	if strings.HasPrefix(r.URL.Path, pluginPrefix) {
+		h.opt.Proxy.ServeHTTP(w, r)
 		return
 	}
-	http.Error(w, http.StatusText(http.StatusMisdirectedRequest), http.StatusMisdirectedRequest)
+	if h.opt.Admin == nil {
+		http.NotFound(w, r)
+		return
+	}
+	h.opt.Admin.ServeHTTP(w, r)
 }
 
 func requestHostname(host string) string {

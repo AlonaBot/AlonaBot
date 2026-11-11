@@ -32,6 +32,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
+	"github.com/AlonaBot/AlonaBot/internal/core/scheduler"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
@@ -70,9 +71,9 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 		return &usageError{err}
 	}
 	configuration := settingsFile.Settings()
-	adminURL, err := url.Parse(configuration.AdminBaseURL)
+	baseURL, err := url.Parse(configuration.BaseURL)
 	if err != nil {
-		return fmt.Errorf("parse admin_base_url: %w", err)
+		return fmt.Errorf("parse base_url: %w", err)
 	}
 	if selected.listen != nil {
 		if err := settings.ValidateListen(*selected.listen); err != nil {
@@ -80,8 +81,8 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 		}
 		host, _, _ := net.SplitHostPort(*selected.listen) // 已通过 ValidateListen。
 		ip, _ := netip.ParseAddr(host)
-		if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && adminURL.Scheme != "https" && len(configuration.TrustedProxies) == 0 {
-			return &usageError{errors.New("--listen: non-loopback listen requires HTTPS admin_base_url or trusted_proxies")}
+		if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && baseURL.Scheme != "https" && len(configuration.TrustedProxies) == 0 {
+			return &usageError{errors.New("--listen: non-loopback listen requires HTTPS base_url or trusted_proxies")}
 		}
 		configuration.Listen = *selected.listen
 	}
@@ -138,21 +139,12 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 			environment[name] = value
 		}
 	}
-	pluginURL, err := url.Parse(configuration.PluginBaseURL)
-	if err != nil {
-		return fmt.Errorf("parse plugin_base_url: %w", err)
-	}
-	authentication := adminauth.New(store, time.Now, adminURL, dataDir)
+	authentication := adminauth.New(store, time.Now, baseURL, dataDir)
 	adminMux := http.NewServeMux()
 	authentication.Routes(adminMux)
 	adminMux.Handle("/", authentication.Require(http.NotFoundHandler()))
-	var publicHost *webhost.Host
-	proxy := httpproxy.New(pluginAuthorizer(func(r *http.Request, pluginID string) bool { return publicHost.Authorize(r, pluginID) }))
-	publicHost = webhost.New(webhost.Options{
-		AdminBaseURL: adminURL, PluginBaseURL: pluginURL,
-		SecondHost: !strings.EqualFold(adminURL.Hostname(), pluginURL.Hostname()), Proxy: proxy,
-		Admin: adminMux, Sessions: authentication,
-	})
+	proxy := httpproxy.New(authentication)
+	publicHost := webhost.New(webhost.Options{BaseURL: baseURL, Proxy: proxy, Admin: adminMux})
 	listener, err := net.Listen("tcp", configuration.Listen)
 	if err != nil {
 		return fmt.Errorf("listen HTTP: %w", err)
@@ -196,19 +188,18 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 	// 3. 启动插件并等待信号或进程退出；只有旧进程树确认清空后才重启。
 	policy := host.NewRestartPolicy(v)
 	global := wire.NewBudget(v.CoreMaxPayload)
+	jobs := scheduler.New(scheduler.Options{JobTimeout: v.JobTimeout})
+	defer jobs.Close()
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigc)
 	for {
-		r, err := launch(ctx, out, store, pluginID, pluginDir, exe, digest, stdio, v, global, environment, proxy)
+		r, err := launch(ctx, out, store, pluginID, pluginDir, exe, digest, stdio, v, global, environment, jobs, proxy)
 		if err != nil {
 			return err
 		}
-		unbound := make(chan struct{})
-		go func() { <-r.Instance.Session.Done(); proxy.Unbind(pluginID, r.Instance.GenerationID); close(unbound) }()
 		stop := func() error {
 			now := time.Now()
-			proxy.Unbind(pluginID, r.Instance.GenerationID)
 			stopContext, cancel := context.WithDeadline(context.Background(), now.Add(v.StopTotal))
 			defer cancel()
 			httpStopped := make(chan error, 1)
@@ -245,7 +236,6 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 		case err := <-httpErrors:
 			return errors.Join(fmt.Errorf("serve HTTP: %w", err), stop())
 		case e := <-exitc:
-			<-unbound // 旧代次可能被restart复用；先完成旧Session撤销，再发布新映射。
 			if e.err != nil {
 				return fmt.Errorf("process tree of plugin %s not confirmed empty, not starting a replacement: %w", pluginID, e.err)
 			}
@@ -265,8 +255,8 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 }
 
 // launch 首次运行时提交新代次；之后复用已提交的 Active 代次（普通 restart，不产生新 Generation）。
-// 插件有 HTTP 端点时，先把它绑定到 proxy，再记录激活。
-func launch(ctx context.Context, out *logging.Output, store *state.Store, pluginID, pluginDir, exe string, digest []byte, stdio bool, v tune.Values, global *wire.Budget, environment map[string]string, proxy *httpproxy.Server) (*supervisor.Running, error) {
+// Supervisor 发布 HTTP 映射并接入调度后，再记录激活。
+func launch(ctx context.Context, out *logging.Output, store *state.Store, pluginID, pluginDir, exe string, digest []byte, stdio bool, v tune.Values, global *wire.Budget, environment map[string]string, jobs *scheduler.Scheduler, proxy *httpproxy.Server) (*supervisor.Running, error) {
 	active, err := store.Active(ctx, pluginID)
 	if err != nil {
 		return nil, err
@@ -284,14 +274,10 @@ func launch(ctx context.Context, out *logging.Output, store *state.Store, plugin
 			DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE},
 			LogLevel:           logging.ProtoLevel(out.Levels().Source(pluginID))},
 		NewCandidate: isNew, Stdio: stdio, Limits: host.NewLimits(v), Stop: host.NewStopTiming(v), Log: out.Plugin(pluginID, gen),
-		Global: global, MemorySoftLimit: v.PluginMemorySoftLimit, ExtraEnv: environment,
+		Global: global, MemorySoftLimit: v.PluginMemorySoftLimit, ExtraEnv: environment, Scheduler: jobs, HTTP: proxy,
 	})
 	if err != nil {
 		return nil, err
-	}
-	// 先发布 HTTP 映射再记录激活：日志出现时插件路由已可经公开入口访问。
-	if endpoint := r.Instance.HTTPListener; endpoint != nil {
-		proxy.Bind(pluginID, r.Instance.GenerationID, endpoint, r.Instance.HTTPProxyToken, r.Instance.Routes)
 	}
 	mode := "restart"
 	if isNew {
@@ -313,11 +299,4 @@ func fileDigest(path string) ([]byte, error) {
 		return nil, err
 	}
 	return h.Sum(nil), nil
-}
-
-// pluginAuthorizer 在公开 Listener 开始接单前接好 Host 与 Proxy 的双向装配。
-type pluginAuthorizer func(*http.Request, string) bool
-
-func (a pluginAuthorizer) Authorize(r *http.Request, pluginID string) bool {
-	return a(r, pluginID)
 }

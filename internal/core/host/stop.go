@@ -41,25 +41,38 @@ type StopResult struct {
 	Err error
 }
 
+// StopHooks 把其他业务入口接入同一次冻结与停止，回调共用本次停止预算。
+type StopHooks struct {
+	Frozen   func(drainDeadline time.Time) // 可选；冻结新派发并在绝对排空截止前等待在途业务
+	Stopping func()                        // 可选；进入 STOPPING 时撤销映射与注册
+}
+
 // Stop 停用一个插件实例：从 t0 起冻结新根调用 → 最多排空 Drain → 取消剩余调用并发送唯一 STOPPING
 // （截止为 min(t0+Total, 发送时刻+OnStopAt)）→ 等待整棵进程树退出，到 t0+Total 仍未清空则终止进程树。
 // 只在确认进程树清空之后返回；无法确认时 StopResult.Err 非 nil。
-func (in *Instance) Stop(t0 time.Time, reason pb.StopReason, tree Tree, timing StopTiming) StopResult {
+func (in *Instance) Stop(t0 time.Time, reason pb.StopReason, tree Tree, timing StopTiming, hooks StopHooks) StopResult {
 	var res StopResult
 	// 1. 冻结：从 t0 起拒绝新根调用，已接纳调用链的子调用仍可完成。
 	if !in.state.CompareAndSwap(int32(StateActivated), int32(StateDraining)) {
 		in.state.Store(int32(StateDraining)) // Activating/Degraded 等状态同样不再接单
 	}
+	drainDeadline := t0.Add(timing.Drain)
+	if hooks.Frozen != nil {
+		hooks.Frozen(drainDeadline)
+	}
 
 	// 2. 最多排空 Drain，等待两个方向的在途调用完成。
 	total := t0.Add(timing.Total)
-	drainCtx, cancel := context.WithDeadline(context.Background(), t0.Add(timing.Drain))
+	drainCtx, cancel := context.WithDeadline(context.Background(), drainDeadline)
 	res.Drained = in.Session.WaitIdle(drainCtx) == nil
 	cancel()
 
 	// 3. 取消剩余调用，发送唯一 STOPPING，截止为 min(t0+Total, 发送时刻+OnStopAt)。
 	in.Session.CancelOutbound(pb.CancelReason_CANCEL_REASON_SESSION_STOPPING)
 	in.state.Store(int32(StateStopping))
+	if hooks.Stopping != nil {
+		hooks.Stopping()
+	}
 	now := time.Now()
 	deadline := now.Add(timing.OnStopAt)
 	if total.Before(deadline) {
@@ -100,7 +113,7 @@ func StopAll(t0 time.Time, reason pb.StopReason, targets map[*Instance]Tree, tim
 		wg.Add(1)
 		go func(in *Instance, tree Tree) {
 			defer wg.Done()
-			r := in.Stop(t0, reason, tree, timing)
+			r := in.Stop(t0, reason, tree, timing, StopHooks{})
 			mu.Lock()
 			out[in] = r
 			mu.Unlock()

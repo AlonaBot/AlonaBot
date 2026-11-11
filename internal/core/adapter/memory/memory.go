@@ -1,6 +1,6 @@
 // Package memory 提供测试和示例使用的内存 Adapter，不进入生产装配。
 //
-// [Adapter] 经 Start 接收事件接纳入口，Inject 投递事件，Sent 返回发送快照。
+// [Adapter] 经 Start 接收事件接纳入口，Inject 投递事件，Sent 返回发送与编辑快照。
 // 默认发送为每个片段生成已确认回执；SetSendFunc 可模拟部分成功与错误。
 package memory
 
@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Sent 保存一次逻辑发送的目标与消息链快照。
+// Sent 保存一次发送或编辑的目标与消息链快照。
 type Sent struct {
 	Target *pb.Target
 	Chain  *pb.MessageChain
@@ -58,8 +58,10 @@ func (a *Adapter) AccountID() string { return a.accountID }
 // MediaSessionKey 返回构造时固定的媒体消费 Session 身份。
 func (a *Adapter) MediaSessionKey() string { return a.sessionKey }
 
-// Capabilities 返回该内存接入的能力声明；当前没有额外平台能力。
-func (a *Adapter) Capabilities() []*pb.Capability { return nil }
+// Capabilities 返回该内存接入支持的消息编辑能力。
+func (a *Adapter) Capabilities() []*pb.Capability {
+	return []*pb.Capability{{Name: editCapability, Version: 1, Supported: true}}
+}
 
 // Start 保存事件接纳入口，之后 Inject 可投递事件。
 func (a *Adapter) Start(_ context.Context, sink adapter.Sink) error {
@@ -89,7 +91,7 @@ func (a *Adapter) Inject(ctx context.Context, ev *pb.Event) error {
 	return sink.Deliver(ctx, ev)
 }
 
-// Sent 返回发送记录的独立快照，调用方修改它不会影响内部记录。
+// Sent 返回发送与编辑记录的独立快照，调用方修改它不会影响内部记录。
 func (a *Adapter) Sent() []Sent {
 	a.mu.Lock()
 	defer a.mu.Unlock()

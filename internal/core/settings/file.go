@@ -148,7 +148,7 @@ func settingsValues(s Settings) (map[string]any, error) {
 		adapters[id] = map[string]any{"$version": adapter.Version, "instances": instances}
 	}
 	return map[string]any{
-		"$version": currentVersion, "listen": s.Listen, "admin_base_url": s.AdminBaseURL, "plugin_base_url": s.PluginBaseURL,
+		"$version": currentVersion, "listen": s.Listen, "base_url": s.BaseURL,
 		"trusted_proxies": s.TrustedProxies, "proxy": s.Proxy, "admins": s.Admins,
 		"command_prefixes": s.CommandPrefixes, "command_prefixes_by_instance": s.CommandPrefixesByInstance,
 		"default_locale": s.DefaultLocale, "adapters": adapters,

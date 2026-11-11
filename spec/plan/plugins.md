@@ -22,6 +22,6 @@
 
 以下步骤原属 T-14，编号保持不变。T-14 的前置输入、拟目录、验收（V-67）与失败停止条件见[集成与发布实施计划的 T-14](release.md#t-14官方整合包与预装组件)。
 
-1. **help 插件与 `core.command.list`。** Core 按调用者 Actor 与默认 Target 返回可用的命令：已启用、权限满足、未被遮蔽；说明按 CommandSpec 的说明键在所属插件 `messages` 中查找，并按 Actor locale 翻译。`plugins/help/` 注册 `/help [命令]`，列出全部命令或单个命令的用法；`/whoami` 回复调用者的实例 ID 与用户 ID，用于添加第一个 Core Admin（CONTRACTS §15.2）。
+1. **help 插件与 `core.command.list`。** Core 按调用者 Actor 与默认 Target 返回可用的命令：已启用、权限满足、未被遮蔽；说明按 CommandSpec 的说明键在所属插件 `messages` 中查找，并按 Actor locale 翻译。`plugins/help/` 注册 `/help [命令]`，列出全部命令或单个命令的用法；`/whoami` 回复调用者的用户字符串 `<adapter_id>:<external_user_id>` 与收到消息的实例名，用户字符串可以直接写进 `admins`，用于添加第一个 Core Admin（CONTRACTS §15.2，D-105）。
 
 2. **welcome 与 rss。**
