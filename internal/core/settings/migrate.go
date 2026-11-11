@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -110,10 +111,20 @@ func backupSettings(name string, version int) error {
 	if err := os.Chmod(dir, 0o700); err != nil {
 		return errors.Join(fmt.Errorf("restrict settings backup directory: %w", err), source.Close())
 	}
-	backupName := filepath.Join(dir, fmt.Sprintf("core_config.%d.%s.json", version, time.Now().UTC().Format(backupTimeFormat)))
-	backup, err := os.OpenFile(backupName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return errors.Join(fmt.Errorf("create settings backup: %w", err), source.Close())
+	stamp := time.Now().UTC()
+	var backupName string
+	var backup *os.File
+	for {
+		backupName = filepath.Join(dir, fmt.Sprintf("core_config.%d.%s.json", version, stamp.Format(backupTimeFormat)))
+		backup, err = os.OpenFile(backupName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if errors.Is(err, fs.ErrExist) {
+			stamp = stamp.Add(time.Millisecond)
+			continue
+		}
+		if err != nil {
+			return errors.Join(fmt.Errorf("create settings backup: %w", err), source.Close())
+		}
+		break
 	}
 	_, copyErr := io.Copy(backup, source)
 	if copyErr == nil {
