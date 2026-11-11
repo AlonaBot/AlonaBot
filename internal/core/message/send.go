@@ -52,10 +52,16 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if err := proto.Unmarshal(in.Payload.Bytes, request); err != nil {
 		return reject(defaultTarget, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid SendRequest protobuf: "+err.Error())
 	}
-	// 2. 显式目标优先，否则使用可信父调用的默认目标，再检查发送许可。
+	// 2. 显式目标先补齐实例与账号，否则沿用可信父调用的默认目标，再检查发送许可。
 	target := request.To
 	if target == nil {
 		target = defaultTarget
+	} else {
+		completed, completionError := s.adapters.Complete(target, defaultTarget)
+		if completionError != nil {
+			return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, completionError)
+		}
+		target = completed
 	}
 	if target == nil {
 		return reject(nil, pb.ErrorCode_ERROR_CODE_NO_DEFAULT_TARGET, "no default target")
@@ -64,6 +70,9 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 		return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, sendError)
 	}
 	// 3. 复用结构校验，空链和仅元数据均在产生副作用前拒绝。
+	if completionError := s.completeReferences(request.Chain, target); completionError != nil {
+		return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, completionError)
+	}
 	if err := validate.Chain(request.Chain); err != nil {
 		return reject(target, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 	}
@@ -108,6 +117,24 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 	// 6. 所有媒体已就绪后执行唯一一次发送，完整转发回执与错误。
 	result, sendError := instance.Send(ctx, target, request.Chain)
 	return response(result, sendError)
+}
+
+func (s *Service) completeReferences(chain *pb.MessageChain, target *pb.Target) *pb.ErrorInfo {
+	for _, segment := range chain.GetSegments() {
+		if reference := segment.GetReference(); reference.GetTarget() != nil {
+			completed, completionError := s.adapters.Complete(reference.Target, target)
+			if completionError != nil {
+				return completionError
+			}
+			reference.Target = completed
+		}
+		for _, item := range segment.GetForward().GetItems() {
+			if completionError := s.completeReferences(item.GetChain(), target); completionError != nil {
+				return completionError
+			}
+		}
+	}
+	return nil
 }
 
 // mediaSources 按消息顺序收集所有需租约的来源，HTTPS 保留给 Adapter 处理。

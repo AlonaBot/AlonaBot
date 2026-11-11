@@ -46,6 +46,17 @@ func (s *Store) grant(ctx context.Context, c router.Caller, in *wire.Inbound, di
 	if err := decode(in, request); err != nil {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err)
 	}
+	var defaultTarget *pb.Target
+	if invocation, ok := in.ParentAttach.(*router.Invocation); ok {
+		defaultTarget = invocation.DefaultTarget
+	}
+	for i, target := range request.Targets {
+		completed, completionError := s.readers.Complete(target, defaultTarget)
+		if completionError != nil {
+			return wire.Response{Err: completionError}
+		}
+		request.Targets[i] = completed
+	}
 	denied := failure(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, errors.New("media token does not allow grant"))
 	// 1. 先核对原 token，查询其他所有者的状态时释放媒体锁。
 	s.mu.Lock()
