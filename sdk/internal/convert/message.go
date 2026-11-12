@@ -108,22 +108,22 @@ func ContentChain(m message.Content) message.Chain {
 }
 
 // ContentToProto 在显式发送边界拒绝空内容。
-func ContentToProto(m message.Content) (*pb.MessageChain, error) {
+func ContentToProto(m message.Content, target *pb.Target) (*pb.MessageChain, error) {
 	c := ContentChain(m)
 	if len(c) == 0 {
 		return nil, errcode.InvalidArgument.New("message chain must not be empty")
 	}
-	return ChainToProto(c)
+	return ChainToProto(c, target)
 }
 
 // ChainToProto 保留空链与 absent 的区别，递归转换全部片段。
-func ChainToProto(c message.Chain) (*pb.MessageChain, error) {
+func ChainToProto(c message.Chain, target *pb.Target) (*pb.MessageChain, error) {
 	if c == nil {
 		return nil, nil
 	}
 	out := &pb.MessageChain{}
 	for _, s := range c {
-		encoded, err := segmentToProto(s)
+		encoded, err := segmentToProto(s, target)
 		if err != nil {
 			return nil, err
 		}
@@ -131,7 +131,7 @@ func ChainToProto(c message.Chain) (*pb.MessageChain, error) {
 	}
 	return out, nil
 }
-func segmentToProto(s message.Segment) (*pb.Segment, error) {
+func segmentToProto(s message.Segment, enclosingTarget *pb.Target) (*pb.Segment, error) {
 	if err := messagecodec.Error(s); err != nil {
 		return nil, errcode.InvalidArgument.New("encode message: " + err.Error())
 	}
@@ -171,6 +171,10 @@ func segmentToProto(s message.Segment) (*pb.Segment, error) {
 		if err != nil {
 			return nil, err
 		}
+		// 仅对原先省略目标且句柄未改动的引用恢复省略，跨目标发送仍保留原会话和实例。
+		if messagecodec.ImplicitReference(v) == string(v.Ref) && SessionFromProto(target) == SessionFromProto(enclosingTarget) && target.AdapterInstanceId == enclosingTarget.GetAdapterInstanceId() {
+			target = nil
+		}
 		out.Data = &pb.Segment_Reference{Reference: &pb.ReferenceSegment{Target: target, OriginalPlatformMessageId: id}}
 	case message.ButtonsSegment:
 		b := &pb.ButtonsSegment{}
@@ -190,7 +194,7 @@ func segmentToProto(s message.Segment) (*pb.Segment, error) {
 	case message.ForwardSegment:
 		f := &pb.ForwardSegment{}
 		for _, item := range v.Items {
-			chain, err := ChainToProto(item.Chain)
+			chain, err := ChainToProto(item.Chain, enclosingTarget)
 			if err != nil {
 				return nil, err
 			}
@@ -250,8 +254,8 @@ func ImageFromProto(p *pb.ImageSegment) *message.ImageSegment {
 	return &message.ImageSegment{Source: sourceFromProto(p.Source), Alt: p.GetAlt(), Caption: p.GetCaption()}
 }
 
-// ChainFromProto 将全部片段转为 SDK 值类型。
-func ChainFromProto(c *pb.MessageChain) message.Chain {
+// ChainFromProto 将全部片段转为 SDK 值类型，省略目标的引用继承所属目标。
+func ChainFromProto(c *pb.MessageChain, enclosingTarget *pb.Target) message.Chain {
 	if c == nil {
 		return nil
 	}
@@ -273,7 +277,15 @@ func ChainFromProto(c *pb.MessageChain) message.Chain {
 		case *pb.Segment_Mention:
 			out = append(out, message.MentionSegment{ExternalUserID: v.Mention.ExternalUserId, Display: v.Mention.GetDisplay()})
 		case *pb.Segment_Reference:
-			out = append(out, message.ReferenceSegment{Ref: message.NewMessageRef(SessionFromProto(v.Reference.Target), v.Reference.OriginalPlatformMessageId, v.Reference.Target.GetAdapterInstanceId())})
+			target := v.Reference.Target
+			if target == nil {
+				target = enclosingTarget
+			}
+			reference := message.ReferenceSegment{Ref: message.NewMessageRef(SessionFromProto(target), v.Reference.OriginalPlatformMessageId, target.GetAdapterInstanceId())}
+			if v.Reference.Target == nil {
+				messagecodec.SetImplicitReference(&reference, string(reference.Ref))
+			}
+			out = append(out, reference)
 		case *pb.Segment_Buttons:
 			buttons := message.ButtonsSegment{}
 			for _, row := range v.Buttons.Rows {
@@ -289,7 +301,7 @@ func ChainFromProto(c *pb.MessageChain) message.Chain {
 		case *pb.Segment_Forward:
 			f := message.ForwardSegment{}
 			for _, item := range v.Forward.Items {
-				next := message.ForwardItem{Chain: ChainFromProto(item.Chain)}
+				next := message.ForwardItem{Chain: ChainFromProto(item.Chain, enclosingTarget)}
 				if item.Source != nil {
 					next.Source = &message.ForwardSource{DisplayName: item.Source.GetDisplayName(), ExternalUserID: item.Source.GetExternalUserId()}
 				}

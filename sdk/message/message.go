@@ -8,6 +8,8 @@ package message
 import (
 	"strings"
 	"time"
+
+	"github.com/AlonaBot/AlonaBot/sdk/internal/messagecodec"
 )
 
 // Content 允许消息链或单个片段作为发送与自动回复内容。
@@ -94,8 +96,13 @@ type FileSegment struct {
 // MentionSegment 指定平台用户，Display 为空时由平台选择展示文本。
 type MentionSegment struct{ ExternalUserID, Display string }
 
+type referenceOrigin = messagecodec.ReferenceOrigin
+
 // ReferenceSegment 通过句柄引用消息，实例省略时由 Core 补齐。
-type ReferenceSegment struct{ Ref MessageRef }
+type ReferenceSegment struct {
+	referenceOrigin
+	Ref MessageRef
+}
 
 // ForwardSource 保存转发条目的可选来源展示信息。
 type ForwardSource struct{ DisplayName, ExternalUserID string }

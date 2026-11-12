@@ -1,6 +1,10 @@
 package message
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
+)
 
 // Session 保存平台会话及可选话题，可直接用字符串字面量声明。
 type Session string
@@ -19,7 +23,7 @@ func NewSession(adapterID, chatID, threadID string) Session {
 // Parts 拆出 Adapter、聊天与话题；格式不合法时 ok 为 false。
 func (s Session) Parts() (adapterID, chatID, threadID string, ok bool) {
 	adapterID, rest, found := strings.Cut(string(s), ":")
-	if !found || adapterID == "" || rest == "" || strings.ContainsAny(adapterID, "#%/@") {
+	if !found || !validAdapterID(adapterID) || rest == "" {
 		return "", "", "", false
 	}
 	chat, thread, topic := strings.Cut(rest, "#")
@@ -32,6 +36,15 @@ func (s Session) Parts() (adapterID, chatID, threadID string, ok bool) {
 	}
 	threadID, ok = unescape(thread, map[string]string{"25": "%", "23": "#"})
 	return adapterID, chatID, threadID, ok
+}
+
+func validAdapterID(id string) bool {
+	// Adapter ID 只采用本地规则；校验副本替换等长分隔符，跳过 PluginID 的市场前缀专用规则。
+	if strings.HasPrefix(id, validate.MarketPrefix) {
+		id = strings.Replace(id, "_", "-", 1)
+	}
+	_, err := validate.PluginID(id)
+	return err == nil
 }
 
 // MessageRef 保存一条消息的会话、平台消息 ID 与可选的机器人实例。
@@ -106,8 +119,8 @@ func NewUser(adapterID, externalUserID string) User {
 	return User(adapterID + ":" + externalUserID)
 }
 
-// Parts 按第一个冒号拆分身份，任一部分为空时 ok 为 false。
+// Parts 按第一个冒号拆分身份，校验 Adapter ID 并要求外部用户 ID 非空。
 func (u User) Parts() (adapterID, externalUserID string, ok bool) {
 	adapterID, externalUserID, ok = strings.Cut(string(u), ":")
-	return adapterID, externalUserID, ok && adapterID != "" && externalUserID != ""
+	return adapterID, externalUserID, ok && validAdapterID(adapterID) && externalUserID != ""
 }

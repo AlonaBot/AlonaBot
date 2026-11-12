@@ -86,11 +86,15 @@ func (c *Context) User() message.User {
 
 // Session 返回本次调用的默认会话，没有默认目标时为空。
 func (c *Context) Session() message.Session {
+	return convert.SessionFromProto(c.target())
+}
+
+func (c *Context) target() *pb.Target {
 	target := c.defaultTarget
 	if c.event != nil {
 		target = c.event.Target
 	}
-	return convert.SessionFromProto(target)
+	return target
 }
 
 // Reply 向当前默认会话回复一段文本。
@@ -143,7 +147,7 @@ func (c *Context) Send(m message.Content, opts ...SendOption) (*message.SendResu
 			return nil, err
 		}
 	}
-	return callSend(c.ctx, target, m, c.inbound)
+	return callSend(c.ctx, target, m, c.inbound, c.target())
 }
 
 // Run 作为插件 main 的入口：连接 Core、完成握手并处理请求，直到停止。

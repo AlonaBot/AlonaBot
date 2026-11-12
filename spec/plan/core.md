@@ -43,7 +43,7 @@
 | T-04.5 | goal-14 | 用同一 SDK 升级示例，完成构建与策略验收，汇总证据 | T-04 步骤 6、7 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | V-10、V-11、V-12、V-43、V-49 的 T-04 分项 | 未开始 |
 | T-04.6 | goal-87 | 权限、扩展事件与命令解析的协议和 Core 侧：proto 修改与生成；Adapter 权限与扩展事件声明的校验；平台权限的保留与隐含展开、按权限名集合判定；扩展事件的交付校验；`command_prefixes` 与按实例覆盖、去掉开头的 reference 与本账号 mention、非文本 token 与 `user`/`image`/`message` 参数、usage 文案键 | T-04 步骤 8 | T-03.3、T-03.6、T-04.3 | V-85、V-86、V-87 的 Core 分项 | 已完成（PR #78；TEST-MATRIX §3.2） |
 | T-04.7 | goal-88 | SDK 链式注册：命令、文本匹配、事件、Service 与 Event Bus 订阅的 builder，Permission 值对象与 `c.Has`，Service Schema 由生成器生成且 schema_id 由 Go 类型决定，自动回复型可 `c.Send`；生成器、示例与已合并调用方同步 | T-04 步骤 9 | T-04.2、T-04.6、T-06.1、T-06.3、T-08.1 | V-10、V-14 的 SDK 分项 | 已完成（PR #89；TEST-MATRIX §3.2） |
-| T-04.8 | goal-91 | SDK 自有类型与事件常量：Message/会话字符串与可选的 `sdk.Via`（D-102）/消息句柄（D-104）/片段构造函数与单片段发送（D-108）/媒体读取与上传助手（D-109）/时间与时长用 `time.Time`、`time.Duration`（D-110）/Adapter 声明用 Go 类型（D-113）/Actor/SendResult/错误码与入站片段，标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对事件 Handler 的 payload 类型，`sdk/adapter` 的公共类型；Telegram Adapter、示例与已合并调用方同步 | T-04 步骤 9 | T-03.9、T-03.24、T-04.7、T-04.9 | V-14 的类型分项、V-86 的 SDK 分项，V-101、V-102 的 SDK 分项，V-106～V-108，V-111 的事件与 extension 分项，V-113 的 SDK 类型分项（`c.Reply`、用户字符串、按来源读取与错误码辅助函数，D-118、D-120、D-121、D-123） | 未开始 |
+| T-04.8 | goal-91 | SDK 自有类型与事件常量：Message/会话字符串与可选的 `sdk.Via`（D-102）/消息句柄（D-104）/片段构造函数与单片段发送（D-108）/媒体读取与上传助手（D-109）/时间与时长用 `time.Time`、`time.Duration`（D-110）/Adapter 声明用 Go 类型（D-113）/Actor/SendResult/错误码与入站片段，标准事件常量与 `sdk.AdapterEvent`，`Collect` 核对事件 Handler 的 payload 类型，`sdk/adapter` 的公共类型；Telegram Adapter、示例与已合并调用方同步 | T-04 步骤 9 | T-03.9、T-03.24、T-04.7、T-04.9 | V-14 的类型分项、V-86 的 SDK 分项，V-101、V-102 的 SDK 分项，V-106～V-108，V-111 的事件与 extension 分项，V-113 的 SDK 类型分项（`c.Reply`、用户字符串、按来源读取与错误码辅助函数，D-118、D-120、D-121、D-123） | 已完成（PR #141；TEST-MATRIX §3.2） |
 | T-04.9 | goal-96 | 删除构建期标记：去掉 `//alonabot:command`、`//alonabot:event` 的扫描、诊断与生成，命令与事件只经链式注册，示例与测试随之改写（D-79） | T-04 步骤 2 | T-04.7 | V-10 | 已完成（[PR #110](https://github.com/AlonaBot/AlonaBot/pull/110)） |
 | T-04.10 | goal-122 | 管理员与封禁按 Adapter 登记：`admins` 改用用户字符串，禁止表按 adapter_id，对该 Adapter 的全部实例生效（D-105） | T-04 步骤 10 | T-04.4、T-07.6 | V-103 | 已完成（PR #133；TEST-MATRIX §3.2） |
 | T-04.11 | goal-124 | 注册写法统一：定时任务与 HTTP 路由的链式注册，命令省略 `Args` 时参数名取 Handler 的参数名（生成器记录），Event Bus 订阅的路由 ID 缺省为事件名（D-112） | T-04 步骤 11 | T-04.8、T-04.12、T-07.5 | V-110 的 SDK 分项 | 未开始 |
@@ -93,14 +93,14 @@
 | T-09.12 | goal-84 | WebUI 组件与组件图标：Core 提供 WebUI 静态文件与单页路由回退、未安装与版本不兼容的提示、Admin API 主版本与 `spec/ADMIN-API.md` 参考（含插件页面桥的消息格式）、带 sandbox CSP 的图标、库模式的 `alonabot.WebUI` 选项 | T-09 步骤 9 | T-07.7、T-09.1、T-09.4、T-13.1 | V-83 | 未开始 |
 | T-09.13 | goal-92 | 管理页所需的会话与上传接口：已登录会话取回 csrf_token、multipart 上传安装包与更新包、总览的 Core 版本与监听地址，追加到 `spec/ADMIN-API.md` | T-09 步骤 7（管理页） | T-09.1、T-09.4、T-09.12 | V-40、V-47 的 API 分项 | 未开始 |
 | T-09.14 | goal-93 | 配置、权限、工具策略与会话的管理 API：配置 raw JSON/PATCH/base_generation/secret、命令权限、命令名覆盖（D-128）、配置字段的选项查询（D-129）、发信许可、Core 设置（Core Admin 列表、默认 locale、命令前缀、全局禁止表）、工具调用策略、Agent 会话、插件页面票据、secret 明文查看的再认证 | T-09 步骤 7（配置与插件页） | T-03.25、T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-08.14、T-09.6、T-09.12、T-11.1、T-11.3 | V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56、V-115、V-116、V-117 的管理 API 分项 | 未开始 |
-| T-09.16 | goal-100 | manifest 拆分：工程 `plugin.yaml` 只含作者信息（name、description、author 等），构建与打包补上协议、平台、入口、迁移方式与配置版本，包内 manifest 照常严格校验；`i18n/` 中 `metadata` 的翻译（D-78） | T-09 步骤 2 | T-03.8、T-09.2 | V-01 | 未开始 |
+| T-09.16 | goal-100 | manifest 拆分：工程 `plugin.yaml` 只含作者信息（name、description、author 等），构建与打包补上协议、平台、入口、迁移方式与配置版本，包内 manifest 照常严格校验；`i18n/` 中 `metadata` 的翻译（D-78） | T-09 步骤 2 | T-03.8、T-09.2 | V-01 | 已完成（PR #140；TEST-MATRIX §3.2） |
 | T-11.1 | goal-54 | 工具描述与目录：Service 描述的 `tool` 字段、注册校验、`core.tool.list`、调用策略的持久化与管理服务层 | T-11 步骤 1、2 | T-04.4、T-04.7、T-06.1 | V-55 的目录与策略分项 | 已完成（PR #101；TEST-MATRIX §3.2） |
 | T-11.2 | goal-55 | 工具调用与用户确认：`core.tool.invoke`、`core.tool.confirm`、Core 内部的确认记录与按钮、同一 Actor 与 5 分钟限时、确认文案 | T-11 步骤 3、4 | T-03.8、T-06.2、T-08.8、T-11.1 | V-55 | 未开始 |
 | T-11.3 | goal-56 | Agent 会话存储：状态库表、`core.conversation.*`、管理服务层的列出与清除、purge | T-11 步骤 5 | T-03.1 | V-56 | 已完成（PR #35；TEST-MATRIX §3.2） |
 | T-11.4 | goal-57 | 工具与会话的多进程验收，汇总证据 | T-11 步骤 6 | T-11.2、T-11.3 | V-55、V-56 的 T-11 分项 | 未开始 |
-| T-13.1 | goal-67 | 库模式入口：根包 `alonabot.Run`、`alonabot.Start` 与选项、与 `alonabot run` 共用的 Core 装配、开发组件同进程经 loopback 连接、生成代码中嵌入的组件身份、dev 来源与固定代次 | T-13 步骤 1、2 | T-02.1、T-03.3、T-04.2、T-04.9、T-08.8、T-09.16 | V-64 的生命周期分项 | 未开始 |
-| T-13.2 | goal-68 | 开发组件的配置与数据库：`config.json` 直读、准备与写回（WebUI 修改时重启组件）、`dev.sqlite`、拒绝 update/rollback/uninstall | T-13 步骤 3 | T-07.6、T-08.5、T-08.11、T-13.1 | V-64 | 未开始 |
-| T-13.3 | goal-69 | 开发运行与热部署：`alonabot run [目录...] [--reload]` 构建并以独立进程运行开发组件，轮询源码、资源与配置，只重启变化的组件（D-77） | T-13 步骤 4 | T-07.6、T-09.16、T-13.1 | V-65 | 未开始 |
+| T-13.1 | goal-67 | 库模式入口：根包 `alonabot.Run`、`alonabot.Start` 与选项、与 `alonabot run` 共用的 Core 装配、开发组件同进程经 loopback 连接、生成代码中嵌入的工程 manifest 身份、可导入 Adapter 包的工程入口与资源登记、dev 来源与固定代次 `dev:<组件 ID>`（D-134） | T-13 步骤 1、2 | T-02.1、T-03.3、T-04.2、T-04.9、T-08.8、T-09.16 | V-64 的生命周期分项 | 未开始 |
+| T-13.2 | goal-68 | 开发组件的配置与数据库：`config.json` 直读、准备与写回（WebUI 修改时重启组件）、`dev.sqlite`、拒绝 update/rollback/uninstall；沿用固定代次 `dev:<组件 ID>`（D-134） | T-13 步骤 3 | T-07.6、T-08.5、T-08.11、T-13.1 | V-64 | 未开始 |
+| T-13.3 | goal-69 | 开发运行与热部署：`alonabot run [目录...] [--reload]` 构建并以独立进程运行开发组件，轮询源码、资源与配置，只重启变化的组件；Adapter 以可导入包为工程目录，沿用 `dev:<组件 ID>`（D-77、D-134） | T-13 步骤 4 | T-07.6、T-09.16、T-13.1 | V-65 | 未开始 |
 | T-13.4 | goal-70 | 开发运行示例与开发文档，汇总证据 | T-13 步骤 5 | T-03.10、T-13.2、T-13.3 | V-64、V-65 | 未开始 |
 | T-16.1 | goal-81 | 插件测试套件基础：`plugintest.Start`、测试 Adapter、会话与身份、Capability 子集、消息注入、`internal/inproc` 的分发结束通知、配置与数据库 | T-16 步骤 1、2 | T-05.2、T-13.2 | V-73 的基础分项 | 未开始 |
 | T-16.2 | goal-82 | 按钮点击、多轮等待、schedule 触发（含动态任务实例，D-124）与后台发送；用套件测试示例插件，开发文档，汇总证据 | T-16 步骤 3、4 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | V-73 | 未开始 |
@@ -712,9 +712,9 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 #### 实施步骤
 
 1. **根包与 Core 装配。** 根包 `alonabot` 提供 `Run(opts ...Option) error`、`Start(ctx, opts ...Option) (*Core, error)` 与 `Plugin`、`Adapter`、`WebUI`、`DataDir`、`Args` 等选项，数据目录缺省为工作目录下的 `data/`。`Start` 装配与 `alonabot run` 相同的 Core，在全部组件激活后返回句柄，ctx 取消时按 CONTRACTS §4.2 停止，`Wait` 返回停止结果；`Run` 是 `Start` 后等待信号再停止。
-2. **开发组件的身份、来源与同进程运行。** SDK 与 `sdk/adapter` 的启动参数改为也可以由根包直接传入，外部模块不能构造这些参数。库模式的开发组件在 goroutine 中经 loopback TCP 连接 Core，走完整的握手、注册、激活与停止。`alonabot build` 生成的代码嵌入 manifest、schema 与 i18n 资源，根包从中读取组件身份。Core 为开发组件创建 dev 来源的安装记录与固定代次 `dev`；未捕获的 panic 使进程退出；停止预算到期组件仍未退出时，`Run` 返回错误。
-3. **开发组件的配置与数据库。** 每次启动以 `<data_dir>/plugins/<id>/config.json`（缺失时为空对象）为配置，经迁移、补值与校验后直接生效，不走候选与 Journal；WebUI 或 CLI 修改开发组件的配置时，校验通过后写回该文件并重启该组件。开发中的 Adapter 的实例与已安装的 Adapter 一样取自 `core_config.json` 的 `adapters`。受管 SQLite 为 `dev.sqlite`，不复制、不回退。dev 来源的组件拒绝 update、rollback 与 uninstall。
-4. **开发运行与热部署。** `alonabot run [目录...] [--reload]` 把给出的目录（缺省为当前目录）作为开发组件：按 `build` 构建到 `<data_dir>/dev/bin/`，插件、Adapter 与 Agent 以独立进程运行，WebUI 以目录中的 `assets` 代替已安装的 WebUI。`--reload` 时每 `DEV_RELOAD_POLL` 用标准库轮询组件目录中的源码、嵌入资源、`go.mod`、`go.sum`、`plugin.yaml`、`config_schema.json`、`adapter_config_schema.json`、`i18n/` 与组件的配置：源码变化时重新构建，成功后只重启变化的组件，失败时输出编译器信息、旧组件继续运行；只有配置变化时不重新构建，只重启该组件或变化的 Adapter 实例；`core_config.json` 的其他变化交给 T-07.6 的重新读取。
+2. **开发组件的身份、来源与同进程运行。** SDK 与 `sdk/adapter` 的启动参数改为也可以由根包直接传入，外部模块不能构造这些参数。库模式的开发组件在 goroutine 中经 loopback TCP 连接 Core，走完整的握手、注册、激活与停止。生成器将工程入口目录的 `plugin.yaml` 原文嵌入 `sdk.Generated.Manifest`，并嵌入 schema 与 i18n 资源，根包通过 `manifest.ParseProject` 读取 id、role、adapter_id。Adapter 的工程入口是可导入的 Adapter 包，工程 `plugin.yaml`、`adapter_config_schema.json` 与生成登记都放在该包；生成器按 adapter 角色生成登记，`cmd/alonabot-adapter-<id>` 只保留调用 `sdk.RunAdapter` 的薄 main，库模式与独立进程共用身份（D-134）。T-13.1 在 `adapters/telegram` 新增工程 manifest，将 cmd 目录的实例声明移入该包并生成登记。Core 为开发组件创建 dev 来源的安装记录与固定代次 `dev:<组件 ID>`，组件 ID 为插件 ID 或 Adapter 包 ID；代次 ID 全局唯一、状态库结构不变，按钮 token 重启后仍有效（D-134）；未捕获的 panic 使进程退出；停止预算到期组件仍未退出时，`Run` 返回错误。
+3. **开发组件的配置与数据库。** 每次启动以 `<data_dir>/plugins/<id>/config.json`（缺失时为空对象）为配置，经迁移、补值与校验后直接生效，不走候选与 Journal；WebUI 或 CLI 修改开发组件的配置时，校验通过后写回该文件并重启该组件。开发中的 Adapter 的实例与已安装的 Adapter 一样取自 `core_config.json` 的 `adapters`，schema 取自可导入 Adapter 包的生成资源；复用 `dev:<组件 ID>`（D-134）。受管 SQLite 为 `dev.sqlite`，不复制、不回退。dev 来源的组件拒绝 update、rollback 与 uninstall。
+4. **开发运行与热部署。** `alonabot run [目录...] [--reload]` 把给出的目录（缺省为当前目录）作为开发组件；Adapter 目录为可导入的工程包，manifest 与实例声明从该包读取，构建 cmd 薄入口，代次沿用 `dev:<组件 ID>`（D-134）：按 `build` 构建到 `<data_dir>/dev/bin/`，插件、Adapter 与 Agent 以独立进程运行，WebUI 以目录中的 `assets` 代替已安装的 WebUI。`--reload` 时每 `DEV_RELOAD_POLL` 用标准库轮询组件目录中的源码、嵌入资源、`go.mod`、`go.sum`、`plugin.yaml`、`config_schema.json`、`adapter_config_schema.json`、`i18n/` 与组件的配置：源码变化时重新构建，成功后只重启变化的组件，失败时输出编译器信息、旧组件继续运行；只有配置变化时不重新构建，只重启该组件或变化的 Adapter 实例；`core_config.json` 的其他变化交给 T-07.6 的重新读取。
 5. **示例与文档。** `examples/devbot/` 是一个用 `alonabot init` 生成的插件工程与回环测试 Adapter，覆盖开发运行、热部署、编译失败与同进程调试。docs/development.md 补充 `init`、`run --reload` 与库模式的用法。
 
 #### 拟目录与交付
@@ -725,13 +725,14 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 | `internal/core/devrun/` | dev 来源记录、开发组件的构建与进程、同进程组件、源码与配置轮询、重启 |
 | `cmd/alonabot/` | `run` 的组件目录与 `--reload` |
 | `sdk/`、`sdk/adapter/`、`sdk/generate/` | 可直接传入的启动参数；生成代码嵌入组件身份与资源 |
+| `adapters/telegram/` 及其 cmd 薄入口 | 工程 manifest、实例声明与生成登记归可导入包，库模式与独立进程共享身份（D-134） |
 | `examples/devbot/` | 开发运行示例 |
 
 #### 验收与后续边界
 
 | 验收 | 本工作包必须提供的证据 |
 | --- | --- |
-| V-64 | 开发组件的完整生命周期（独立进程与同进程）、dev 来源的限制、`config.json` 的读取与写回、panic 与停止超时、与已安装包混合运行 |
+| V-64 | 开发组件的完整生命周期（独立进程与同进程）、Adapter 包资源生成登记与共用身份、多个组件的固定代次 `dev:<组件 ID>` 与重启后按钮有效、dev 来源的限制、`config.json` 的读取与写回、panic 与停止超时、与已安装包混合运行 |
 | V-65 | 改动源码后只重启变化的组件、编译失败旧组件继续、只改配置时不重新构建、已安装组件与 Adapter 连接不中断 |
 
 #### 失败停止条件

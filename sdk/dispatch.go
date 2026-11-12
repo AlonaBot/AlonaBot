@@ -49,7 +49,7 @@ func businessHandler(reg *Registration) wire.Handler {
 			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "handler route_id does not match target")
 		}
 		if commandRoute {
-			args, err := commandArguments(command, request.GetCommand())
+			args, err := commandArguments(command, request.GetCommand(), request.GetEvent().GetTarget())
 			if err != nil {
 				return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 			}
@@ -119,7 +119,7 @@ func invokeHandler(ctx context.Context, in *wire.Inbound, event *pb.Event, autoR
 		}
 	}
 	if err == nil && autoReply && len(convert.ContentChain(chain)) != 0 {
-		encoded, err := convert.ContentToProto(chain)
+		encoded, err := convert.ContentToProto(chain, event.GetTarget())
 		if err != nil {
 			failure := err.(*Error)
 			response.Err = convert.ErrorToProto(failure)
@@ -134,7 +134,7 @@ func invokeHandler(ctx context.Context, in *wire.Inbound, event *pb.Event, autoR
 // Match 返回本次 Regex 的捕获组，包含下标 0 的整体匹配；其他路由返回 nil。
 func (c *Context) Match() []string { return c.match }
 
-func commandArguments(command Command, invocation *pb.CommandInvocation) ([]reflect.Value, error) {
+func commandArguments(command Command, invocation *pb.CommandInvocation, target *pb.Target) ([]reflect.Value, error) {
 	// 1. 调用载荷与 Handler 必须对应注册时的同一份参数描述。
 	mode, types, err := checkHandler(command.Handler)
 	if err != nil {
@@ -173,7 +173,7 @@ func commandArguments(command Command, invocation *pb.CommandInvocation) ([]refl
 		case *pb.ArgValue_Image:
 			args[i+1] = reflect.ValueOf(convert.ImageFromProto(value.Image))
 		case *pb.ArgValue_Message:
-			args[i+1] = reflect.ValueOf(convert.ChainFromProto(value.Message))
+			args[i+1] = reflect.ValueOf(convert.ChainFromProto(value.Message, target))
 		}
 		if args[i+1].Type() != handlerType.In(i+1) {
 			return nil, fmt.Errorf("parameter %q value has an incorrect type", param.GetName())

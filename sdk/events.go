@@ -189,7 +189,7 @@ func invokeEvent(c *Context, route EventRoute) error {
 		}
 		value = reflect.New(event.payload.Elem())
 		if err := json.Unmarshal([]byte(raw.PayloadJSON), value.Interface()); err != nil {
-			c.Logger().Warn("decode adapter event", "route_id", route.RouteID, "error", err)
+			c.Logger().Warn("decode adapter event", "route_id", route.RouteID, "event_type", event.name, "error_type", fmt.Sprintf("%T", err))
 			return nil
 		}
 	} else {
