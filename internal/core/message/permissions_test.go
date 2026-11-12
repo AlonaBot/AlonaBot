@@ -181,7 +181,7 @@ func TestSendTargetCompletion(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	service := message.New(registry, policy.New(store), nil, tune.Defaults().RequestTimeout)
+	service := message.New(registry, policy.New(store), nil, nil, tune.Defaults().RequestTimeout)
 	original := &pb.Target{AdapterId: "memory", AdapterInstanceId: "a", AccountId: "account-a", ChatId: "original", ThreadId: proto.String("topic")}
 	invocation := &router.Invocation{PluginID: pluginID, DefaultTarget: original}
 	tests := []struct {
