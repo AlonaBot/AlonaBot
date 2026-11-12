@@ -4,6 +4,8 @@
 // 在每个生命周期 Hook 中用 log/slog 记录一条 INFO。SDK 把记录以 JSON 行写到 stderr，由 Core 输出。
 package main
 
+//go:generate go run ../../../cmd/alonabot plugin generate
+
 import (
 	"context"
 	"crypto/rand"
@@ -20,10 +22,20 @@ import (
 
 const callbackStateHeader = "X-Lifecycle-Callback-State"
 
-// Lifecycle 在每个生命周期 Hook 里记录一条日志。
-type Lifecycle struct {
-	// Base 提供根插件的默认实现。
-	sdk.Base
+// Lifecycle 保存示例的生命周期方法。
+type Lifecycle struct{}
+
+// New 构造插件并显式登记方法值和包内路由。
+func New() *sdk.Plugin {
+	p := sdk.NewPlugin()
+	sdk.UseGenerated(p, alonabotGenerated)
+	lifecycle := &Lifecycle{}
+	p.OnStart(lifecycle.OnStart)
+	p.OnReady(lifecycle.OnReady)
+	p.OnStop(lifecycle.OnStop)
+	registerCommands(p)
+	registerHTTP(p)
+	return p
 }
 
 // OnStart 记录 OnStart。
@@ -44,15 +56,15 @@ func (*Lifecycle) OnStop(context.Context) error {
 	return nil
 }
 
-// Commands 注册 /ping 命令，回复 pong。
-func (*Lifecycle) Commands(r *sdk.CommandRegistry) {
+// registerCommands 注册 /ping 命令，回复 pong。
+func registerCommands(r *sdk.Plugin) {
 	r.Command("ping").Handle(func(*sdk.Context) (message.Content, error) {
 		return message.Chain{message.Text("pong")}, nil
 	})
 }
 
-// HTTP 注册私有页面、请求头回显与以随机 state 校验的公开回调。
-func (*Lifecycle) HTTP(r *sdk.HTTPRegistry) {
+// registerHTTP 注册私有页面、请求头回显与以随机 state 校验的公开回调。
+func registerHTTP(r *sdk.Plugin) {
 	state := rand.Text()
 	r.Handle(http.MethodGet, "/page", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -82,7 +94,7 @@ func (*Lifecycle) HTTP(r *sdk.HTTPRegistry) {
 
 // main 运行插件；正常结束时记录 exiting normally，失败时记录错误并以 1 退出。
 func main() {
-	if err := sdk.Run(&Lifecycle{}); err != nil {
+	if err := sdk.Run(New()); err != nil {
 		slog.Error("plugin stopped with an error", "err", err)
 		os.Exit(1)
 	}

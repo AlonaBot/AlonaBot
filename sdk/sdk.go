@@ -1,24 +1,16 @@
 // Package sdk 提供 AlonaBot Native Go 插件的公共入口。
 //
-// 插件的 main 调用 Run，传入嵌入了 [Base] 的根插件。Run 取得 runtime.lock，
-// 收集根插件的注册项，与 Core 完成握手、准备和激活，然后一直运行到 Core 要求停止。
+// 插件的 New 构造 [Plugin]，显式绑定生成资源并登记路由和生命周期回调。
+// main 调用 Run(New())，取得 runtime.lock，与 Core 完成握手、准备和激活，再处理调用直到停止。
 // Run 把 log/slog 的默认 Logger 换成写 stderr 的 JSON 行，按 Core 下发的级别过滤（CONTRACTS §14）。
-// Base 为 [Root] 的全部 Hook 提供空的默认实现，根插件只覆盖需要的方法。
 //
+// 包的组成：[Plugin] 持有登记状态，[SubPlugin] 提供一层逻辑子插件，[CommandGroup] 组织命令路径与权限；
+// [Collect] 检查全部登记。[JSON]、[Proto] 与 [Subscribe] 登记类型化服务和 Event Bus 订阅。
+// [Context] 在一次 Rule 与 Handler 调用期间有效，提供配置、翻译、日志、发送、编辑和停止传播入口。
+// 自动回复型命令返回 [message.Content]，由 Core 在显式发送完成后发送一次。
 // [Context.Stream] 按当前事件实例的能力发送文本增量并节流编辑。
-// 命令与事件 Handler 可通过 [Context.Send] 回复原事件目标，通过 [Context.Edit] 编辑已发送的文本消息；
-// 自动回复型命令返回 Content，由 Core 发送一次。后台 [Send] 显式给出会话，[Edit] 给出消息句柄。
-// 文本匹配与 Raw 共用 Handler 调用上下文；HTTP 路由由 SDK 托管 Listener 并校验 Session 凭证。
-// [Context.T] 按 Actor 与 Core 默认语言格式化文案；后台调用 [T] 使用 Core 默认语言。
-// 定时任务随 REGISTER 声明，由 Core Scheduler 触发；其 Handler 没有 Actor 与默认 Target，Send 须显式 To。
-//
-// 包的组成：
-//   - 插件的 main 调用 [Run]；[Collect] 单独收集注册项，供检查与测试使用。
-//   - [CommandRegistry]、[EventRegistry]、[HTTPRegistry] 与 [ScheduleRegistry] 收集命令、事件、HTTP 路由和定时任务。
-//   - [ServiceRegistry] 收集类型化服务；[CallJSON] 与 [CallProto] 经 Core 调用目标插件。
-//   - [SubscriptionRegistry] 收集 Event Bus 订阅；[Publish] 发布本插件命名空间下的 JSON 事件。
-//   - [Context] 只在一次 Handler 调用期间有效，提供 [Context.Send]、[Context.Edit] 与 [Context.StopPropagation]。
-//   - 根插件嵌入 [Base]，覆盖 [Root] 中需要的 Hook。
+// HTTP 路由由 SDK 托管 Listener 并校验 Session 凭证；定时任务由 Core Scheduler 触发。
+// 进程生命周期、配置与迁移契约见 CONTRACTS §4～§6，路由与参数见 §9。
 package sdk
 
 import (
@@ -35,8 +27,10 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/sdk/config"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/convert"
+	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
@@ -48,6 +42,8 @@ var ErrNotImplemented = &Error{Code: errcode.Unsupported, Message: "SDK runtime 
 
 // Context 只在一次 Handler 调用期间有效。
 type Context struct {
+	plugin        *Plugin
+	subID         string
 	ctx           context.Context // 本次调用的 context
 	propagationMu sync.Mutex      // 串行化 StopPropagation 与调用结束的传播快照。
 	stopped       bool            // 由 propagationMu 保护，只在有效调用内锁存。
@@ -104,7 +100,11 @@ func (c *Context) Reply(text string) error { _, err := c.Send(message.Text(text)
 
 // Logger 返回附带本次调用 trace_id、route_id 和 call_id 的默认 Logger。
 func (c *Context) Logger() *slog.Logger {
-	return componentLogger(c.ctx).With("trace_id", hex.EncodeToString(c.inbound.TraceID), "route_id", c.inbound.Target, "call_id", c.inbound.CallID)
+	logger := componentLogger(c.ctx).With("trace_id", hex.EncodeToString(c.inbound.TraceID), "route_id", c.inbound.Target, "call_id", c.inbound.CallID)
+	if c.subID != "" {
+		logger = logger.With("sub_plugin", c.subID)
+	}
+	return logger
 }
 
 // StopPropagation 锁存停止传播标记；一经设置不能重新打开传播，并且不受业务错误影响。
@@ -160,7 +160,8 @@ func (c *Context) Send(m message.Content, opts ...SendOption) (*message.SendResu
 
 // Run 作为插件 main 的入口：连接 Core、完成握手并处理请求，直到停止。
 // 顺序：取得 runtime.lock → 收集注册项 → 握手 → 准备阶段 → 激活（OnReady/ACTIVATED）→ 服务。
-func Run(root Root) error {
+func Run(root *Plugin) error {
+	root.freeze()
 	setupLogging()
 	l, err := readLaunch()
 	if err != nil {
@@ -169,7 +170,7 @@ func Run(root Root) error {
 	return run(root, l)
 }
 
-func run(root Root, l launch) (err error) {
+func run(root *Plugin, l launch) (err error) {
 	// 1. 先取 runtime.lock，防止旧实例仍在执行用户代码。
 	lock, err := acquireRuntimeLock(l.runtimeLockPath)
 	if err != nil {
@@ -213,6 +214,8 @@ func run(root Root, l launch) (err error) {
 
 // Registration 汇总从根插件收集到的静态注册项。
 type Registration struct {
+	plugin        *Plugin
+	subPlugins    map[string]string
 	Commands      []Command
 	Events        []EventRoute
 	HTTP          []HTTPRoute
@@ -222,35 +225,44 @@ type Registration struct {
 	messages      *i18n.Catalog // 收集时解析，供本次 Session 只读使用。
 }
 
-// Collect 调用根插件的注册入口，检查 Handler 签名、usage 文案键与同插件内的重复项（D-20：同插件重复即报错）。
-func Collect(root Root) (*Registration, error) {
+// Collect 检查插件对象的全部登记、资源与跨路由冲突。
+func Collect(root *Plugin) (*Registration, error) {
 	if root == nil {
-		return nil, errors.New("root plugin is nil")
+		return nil, errors.New("plugin is nil")
 	}
-	cmds, routes, jobs := &CommandRegistry{}, &HTTPRegistry{}, &ScheduleRegistry{}
-	root.Commands(cmds)
+	cmds, events, routes, jobs := &root.commands, &root.events, &root.http, &root.schedules
 	cmds.collect()
-	events := &EventRegistry{seen: make(map[string]bool)}
+	events.seen = make(map[string]bool)
 	for _, command := range cmds.commands {
 		events.seen[commandRouteID(command)] = true
 	}
-	root.Events(events)
 	events.collect()
-	root.HTTP(routes)
-	root.Schedules(jobs)
-	// HTTP Listener 尚未创建，此处只核对跨注册器的 route_id。
-	httpRoutes := &pb.Register{}
-	appendHTTPRoutes(httpRoutes, routes.routes)
-	for _, route := range httpRoutes.Routes {
-		if events.seen[route.GetRouteId()] {
-			routes.errs = append(routes.errs, fmt.Errorf("HTTP route %q conflicts with another route", route.GetRouteId()))
+	reg := &Registration{plugin: root, subPlugins: make(map[string]string), Commands: cmds.commands, Events: events.events, HTTP: routes.routes, Schedules: jobs.jobs}
+	errs := slices.Concat(root.errs, cmds.errs, events.errs, routes.errs, jobs.errs)
+	errs = append(errs, root.checkSubPlugins(), dbhook.Validate(root), collectServices(root, reg), collectSubscriptions(root, reg), collectI18n(root, reg))
+	// HTTP Listener 在准备阶段创建；这里只核对所有种类共享的 route_id。
+	seen := make(map[string]bool)
+	for _, route := range buildRegister(reg, "{}", 0, nil).GetRoutes() {
+		id := route.GetRouteId()
+		if seen[id] {
+			errs = append(errs, fmt.Errorf("route %q registered twice", id))
 		}
+		seen[id] = true
 	}
-	reg := &Registration{Commands: cmds.commands, Events: events.events, HTTP: routes.routes, Schedules: jobs.jobs}
-	errs := append(slices.Concat(cmds.errs, events.errs, routes.errs, jobs.errs), collectServices(root, reg))
-	errs = append(errs, collectSubscriptions(root, reg), collectI18n(root, reg))
+	for _, c := range reg.Commands {
+		reg.subPlugins[commandRouteID(c)] = c.subID
+	}
+	for _, e := range reg.Events {
+		reg.subPlugins[e.RouteID] = e.subID
+	}
+	for _, job := range reg.Schedules {
+		reg.subPlugins[scheduleRoutePrefix+job.JobID] = root.jobSubPlugins[job.JobID]
+	}
 	if err := errors.Join(errs...); err != nil {
-		return nil, fmt.Errorf("invalid registration of %T: %w", root, err)
+		return nil, fmt.Errorf("invalid plugin registration: %w", err)
 	}
 	return reg, nil
 }
+
+// Config 返回整个插件的只读配置。
+func (c *Context) Config() config.Values { return c.plugin.Config() }
