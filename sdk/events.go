@@ -25,12 +25,14 @@ type EventRoute struct {
 	actionVersion uint32
 	decodeButton  func(string) (any, error)
 	handleButton  func(*Context, any) error
+	subID         string
 	Priority      int32 // 数值越小越先，缺省为 0
 }
 
-// EventRegistry 按注册顺序收集事件路由，错误由 Collect 统一返回。
+// eventRegistry 按注册顺序收集事件路由，错误由 Collect 统一返回。
 // 零值可用；Collect 另将命令的 route_id 登记到 seen，检查跨注册器冲突。
-type EventRegistry struct {
+type eventRegistry struct {
+	plugin   *Plugin
 	builders []*EventBuilder
 	events   []EventRoute
 	errs     []error
@@ -38,14 +40,16 @@ type EventRegistry struct {
 }
 
 // On 开始构建事件路由。
-func (r *EventRegistry) On(routeID string, eventType EventType) *EventBuilder {
-	b := &EventBuilder{route: EventRoute{RouteID: routeID, EventType: eventType}}
+func (r *eventRegistry) On(routeID string, eventType EventType) *EventBuilder {
+	r.plugin.checkRegistration()
+	b := &EventBuilder{plugin: r.plugin, route: EventRoute{RouteID: routeID, EventType: eventType}}
 	r.builders = append(r.builders, b)
 	return b
 }
 
 // EventBuilder 收集一个事件路由；Handle 结束构建。
 type EventBuilder struct {
+	plugin      *Plugin
 	route       EventRoute
 	handles     int
 	afterHandle bool
@@ -54,6 +58,7 @@ type EventBuilder struct {
 
 // Priority 设置路由优先级。
 func (b *EventBuilder) Priority(p int32) *EventBuilder {
+	b.plugin.checkRegistration()
 	if b.handles != 0 {
 		b.afterHandle = true
 	}
@@ -63,6 +68,7 @@ func (b *EventBuilder) Priority(p int32) *EventBuilder {
 
 // Permission 设置事件路由权限；缺省为空集合。
 func (b *EventBuilder) Permission(p Permission) *EventBuilder {
+	b.plugin.checkRegistration()
 	if b.handles != 0 {
 		b.afterHandle = true
 	}
@@ -71,10 +77,11 @@ func (b *EventBuilder) Permission(p Permission) *EventBuilder {
 }
 
 // Handle 结束事件路由构建。
-func (b *EventBuilder) Handle(h any) { b.handles++; b.route.Handler = h }
+func (b *EventBuilder) Handle(h any) { b.plugin.checkRegistration(); b.handles++; b.route.Handler = h }
 
 // Rule 按调用与参数顺序追加条件，全部匹配后执行 Handler。
 func (b *EventBuilder) Rule(rules ...Rule) *EventBuilder {
+	b.plugin.checkRegistration()
 	if b.handles != 0 {
 		b.afterHandle = true
 	}
@@ -82,7 +89,9 @@ func (b *EventBuilder) Rule(rules ...Rule) *EventBuilder {
 	return b
 }
 
-func (r *EventRegistry) collect() {
+func (r *eventRegistry) collect() {
+	r.events = nil
+	r.errs = nil
 	for _, b := range r.builders {
 		if b.handles != 1 || b.afterHandle || (strings.HasPrefix(b.route.RouteID, buttonRoutePrefix) && !b.button) || (b.button && (b.route.actionID == "" || b.route.actionVersion == 0)) {
 			r.errs = append(r.errs, fmt.Errorf("event route %q has invalid Handle sequence", b.route.RouteID))
@@ -102,7 +111,7 @@ func (r *EventRegistry) collect() {
 	}
 }
 
-func (r *EventRegistry) add(route EventRoute) {
+func (r *eventRegistry) add(route EventRoute) {
 	routeID, handler := route.RouteID, route.Handler
 	switch {
 	case routeID == "":

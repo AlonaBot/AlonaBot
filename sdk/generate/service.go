@@ -161,7 +161,10 @@ func (s *scan) schemas(ctx context.Context, list *exec.Cmd) error {
 		if err := s.checkAdapterType(importer); err != nil {
 			return err
 		}
+	} else {
+		s.checkConstructor(importer.checked[s.entry.ImportPath])
 	}
+	s.migrationCalls(importer.info, paths)
 	s.translationCalls(importer.info, paths)
 	return s.serviceSchemasFrom(importer, paths)
 }
@@ -430,5 +433,61 @@ func (b *serviceBuilder) exactBounds(schema *jsonschema.Schema, object map[strin
 	}
 	if child, ok := object["additionalProperties"].(map[string]any); ok {
 		b.exactBounds(schema.AdditionalProperties, child)
+	}
+}
+
+func (s *scan) checkConstructor(pkg *types.Package) {
+	object := pkg.Scope().Lookup("New")
+	fn, ok := object.(*types.Func)
+	valid := ok
+	if ok {
+		sig := fn.Type().(*types.Signature)
+		valid = sig.Recv() == nil && sig.Params().Len() == 0 && !sig.Variadic() && sig.Results().Len() == 1 && sig.TypeParams().Len() == 0
+		if valid {
+			pointer, ok := types.Unalias(sig.Results().At(0).Type()).(*types.Pointer)
+			valid = ok
+			if ok {
+				named, ok := types.Unalias(pointer.Elem()).(*types.Named)
+				valid = ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == sdkPath && named.Obj().Name() == "Plugin"
+			}
+		}
+	}
+	if !valid {
+		s.diagnostic(s.constructors[0], "entry constructor must have signature func New() *sdk.Plugin")
+	}
+}
+
+func (s *scan) migrationCalls(info *types.Info, paths []string) {
+	var self, versioned []token.Pos
+	for _, path := range paths {
+		for _, file := range s.syntax[path] {
+			ast.Inspect(file, func(node ast.Node) bool {
+				call, ok := node.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				var ident *ast.Ident
+				switch fun := ast.Unparen(call.Fun).(type) {
+				case *ast.SelectorExpr:
+					ident = fun.Sel
+				case *ast.Ident:
+					ident = fun
+				}
+				fn, ok := info.Uses[ident].(*types.Func)
+				if !ok || fn.Pkg() == nil || (fn.Pkg().Path() != sdkPath+"/sqlitedb" && fn.Pkg().Path() != sdkPath+"/gormdb") {
+					return true
+				}
+				switch fn.Name() {
+				case "Migrate":
+					self = append(self, call.Pos())
+				case "Migrations":
+					versioned = append(versioned, call.Pos())
+				}
+				return true
+			})
+		}
+	}
+	if len(self) > 0 && len(versioned) > 0 {
+		s.diagnostic(versioned[0], "Migrate and Migrations registrations are mutually exclusive (Migrate at "+s.position(self[0])+")")
 	}
 }

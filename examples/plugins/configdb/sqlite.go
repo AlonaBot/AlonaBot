@@ -7,12 +7,13 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/sqlitedb"
 )
 
-// Migrations 返回两步迁移；每步 DDL 与账本由 SDK 在同一事务内提交。
-func (p *plugin) Migrations() []sqlitedb.Migration {
-	return []sqlitedb.Migration{
+// registerMigrations 登记两步迁移；每步 DDL 与账本由 SDK 在同一事务内提交。
+func (p *plugin) registerMigrations(root *sdk.Plugin) {
+	sqlitedb.Migrations(root, []sqlitedb.Migration{
 		{ID: createNotesMigration, Up: func(ctx context.Context, tx *sql.Tx) error {
 			_, err := tx.ExecContext(ctx, notesDDL)
 			return err
@@ -21,17 +22,17 @@ func (p *plugin) Migrations() []sqlitedb.Migration {
 			if _, err := tx.ExecContext(ctx, noteIndexDDL); err != nil {
 				return err
 			}
-			if p.Config().Bool("fail_migration") {
+			if p.plugin.Config().Bool("fail_migration") {
 				return errors.New("requested failure in second migration")
 			}
 			return nil
 		}},
-	}
+	})
 }
 
 // OnStart 在当前代次的数据库写入启动记录，然后执行可控失败点。
 func (p *plugin) OnStart(ctx context.Context) error {
-	if err := saveStartup(ctx, p.Config().String("greeting")); err != nil {
+	if err := saveStartup(ctx, p.plugin.Config().String("greeting")); err != nil {
 		return err
 	}
 	return p.started()

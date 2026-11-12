@@ -54,7 +54,7 @@ const (
 )
 
 type component struct {
-	root      sdk.Root
+	root      *sdk.Plugin
 	adapter   adapter.Adapter
 	role      state.Role
 	manifest  *manifest.Manifest
@@ -73,8 +73,13 @@ func validateComponents(components []component, installs []state.Install) error 
 		if object == nil || (reflect.ValueOf(object).Kind() == reflect.Pointer && reflect.ValueOf(object).IsNil()) {
 			return fmt.Errorf("component %T is nil", object)
 		}
-		generated, ok := sdk.GeneratedFor(object)
-		if !ok || len(generated.Manifest) == 0 {
+		var generated sdk.Generated
+		if entry.role == state.RoleAdapter {
+			generated, _ = sdk.GeneratedFor(entry.adapter)
+		} else {
+			generated = entry.root.Generated()
+		}
+		if len(generated.Manifest) == 0 {
 			return fmt.Errorf("component %T has no generated project manifest", object)
 		}
 		parsed, err := manifest.ParseProject(generated.Manifest)

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/gormdb"
 	"github.com/AlonaBot/AlonaBot/sdk/sqlitedb"
 	"gorm.io/gorm"
@@ -23,9 +24,9 @@ type startupRecord struct {
 	Value string
 }
 
-// Migrations 返回 GORM 版本的两步迁移，回调始终使用传入的 tx。
-func (p *plugin) Migrations() []gormdb.Migration {
-	return []gormdb.Migration{
+// registerMigrations 登记 GORM 版本的两步迁移，回调始终使用传入的 tx。
+func (p *plugin) registerMigrations(root *sdk.Plugin) {
+	gormdb.Migrations(root, []gormdb.Migration{
 		{ID: createNotesMigration, Up: func(ctx context.Context, tx *gorm.DB) error {
 			return tx.WithContext(ctx).Exec(notesDDL).Error
 		}},
@@ -33,17 +34,17 @@ func (p *plugin) Migrations() []gormdb.Migration {
 			if err := tx.WithContext(ctx).Exec(noteIndexDDL).Error; err != nil {
 				return err
 			}
-			if p.Config().Bool("fail_migration") {
+			if p.plugin.Config().Bool("fail_migration") {
 				return errors.New("requested failure in second migration")
 			}
 			return nil
 		}},
-	}
+	})
 }
 
 // OnStart 经 GORM 写入，再经 sqlitedb 读取，核对两个入口共用连接与数据。
 func (p *plugin) OnStart(ctx context.Context) error {
-	if err := saveStartup(ctx, p.Config().String("greeting")); err != nil {
+	if err := saveStartup(ctx, p.plugin.Config().String("greeting")); err != nil {
 		return err
 	}
 	db, err := sqlitedb.Open(ctx)
@@ -65,7 +66,7 @@ func (p *plugin) OnStart(ctx context.Context) error {
 	if err := db.QueryRowContext(ctx, "SELECT value FROM "+startupTable+" WHERE key = ?", startupKey).Scan(&value); err != nil {
 		return err
 	}
-	if value != p.Config().String("greeting") {
+	if value != p.plugin.Config().String("greeting") {
 		return errors.New("database entry points read different startup values")
 	}
 	return p.started()

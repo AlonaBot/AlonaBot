@@ -40,8 +40,10 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 - 资源在 OnStart 中打开、在 OnStop 中关闭；后台 goroutine 随 OnStop 结束，并响应 ctx 取消（CONTRACTS §4）。
 - 普通请求的期限是 30s。需要更久的工作放进延续调用或 schedule 回调（CONTRACTS §1.2、§2.4、§4.3）。
 - 有副作用的业务调用不自动重试；超时与取消不代表对端没有执行（CONTRACTS §1.2）。
+- 插件包导出 `func New() *sdk.Plugin`：`p := sdk.NewPlugin()` 后先 `sdk.UseGenerated(p, alonabotGenerated)` 绑定生成资源，再在 p 上登记路由、`p.OnStart`/`OnReady`/`OnStop`、`p.OnConfigLoad` 与数据库迁移，最后返回 p；`New` 可以被多次调用，不依赖包级状态（D-114、D-137）。逻辑模块用 `p.Sub(id)` 分成一层子插件，通常由子包导出 `func Register(s *sdk.SubPlugin)`；子插件的 ID 不进入 route_id、命令路径与 Service 名，生命周期回调与迁移只登记在插件对象上（D-116）。
+- 参数较多或需要可选、默认值时，命令 Handler 在 `*sdk.Context` 之后只收一个结构体：字段按顺序对应参数，名字取 `arg` 标签或把字段名开头的大写段转小写（`FeedURL` 为 `feedURL`），指针字段可选、缺失为 nil，`default:"…"` 给出默认值，`arg:",raw"` 接收末位 raw 尾部；与位置参数及 `Args`/`Optional`/`RawTail` 不能混用，全部检查在 `Collect` 完成（D-115）。
 - 命令、文本匹配、事件、Service 与 Event Bus 订阅都链式注册，以 `Handle` 结束；漏写 `Handle`、重复调用或在它之后继续调用，都会让 `Collect` 报错（D-70）。
-- 命令说明在注册处写英文原文：`r.Command("set").Description("Set a value").Handle(Set)`。其他语言在 `i18n/<locale>.json` 的顶层 `commands` 中以完整规范路径（含 Group 前缀，token 用一个空格连接）覆盖，例如 `{"commands":{"rss add":{"description":"添加订阅"}}}`；只有 `commands` 的语言文件可以省略 en-US。`check`/`build` 只检查 `commands` 的结构，`Collect` 检查覆盖路径对应已注册且登记了英文说明的命令，否则注册失败（D-138）。
+- 命令说明在注册处写英文原文：`p.Command("set").Description("Set a value").Handle(Set)`。其他语言在 `i18n/<locale>.json` 的顶层 `commands` 中以完整规范路径（含 Group 前缀，token 用一个空格连接）覆盖，例如 `{"commands":{"rss add":{"description":"添加订阅"}}}`；只有 `commands` 的语言文件可以省略 en-US。`check`/`build` 只检查 `commands` 的结构，`Collect` 检查覆盖路径对应已注册且登记了英文说明的命令，否则注册失败（D-138）。
 - 权限写成 `sdk.Permission`：`sdk.Anyone`、`sdk.User`、`sdk.Admin`、`sdk.ChatAdmin`、`sdk.PermissionName`，用 `Or` 取并集。命令与文本匹配取最近一层显式设置（路由、最近的组、外层的组），都没有时要求 `user`；事件路由没有设置时为空集合。Handler 内用 `c.Has` 按当前 Actor 判断。
 - `c.Send`、`sdk.Send`、编辑与自动回复都接收 `message.Content`，可以直接传 `message.Text(...)`、`message.ImageURL(...)` 等单个片段，也可以传 `message.Chain{...}`。自动回复型 Handler 的返回类型为 `(message.Content, error)`，成功返回的非空内容由 Core 在 Handler 返回后发送，排在本次调用的全部显式发送之后；nil 与空 Chain 表示不回复，显式发送与编辑的空内容返回 INVALID_ARGUMENT（CONTRACTS §8，MESSAGE-MODEL §2～§3，D-108）。
 - 发送目标用会话字符串 `message.Session`：`<adapter_id>:<chat_id>[#<thread_id>]`，例如 `telegram:-100123#42` 或 `onebot11:group:123456`。用 `message.NewSession(adapterID, chatID, threadID)` 处理 chat_id 与 thread_id 中 `%`、`#` 的转义，用 `Parts()` 拆解；adapter_id 遵守 manifest 的本地 ID 规则。`c.Send(content)` 使用本次调用的默认会话，`sdk.To(session)` 覆盖会话，`sdk.Via(instanceID)` 指定机器人实例；只有 Via 时保留默认会话与话题。后台用 `sdk.Send(ctx, session, content, opts...)`，opts 只接受 Via。省略实例时由 Core 选择并补齐账号；非法会话在发出请求前返回 INVALID_ARGUMENT（CONTRACTS §8、§9.1，MESSAGE-MODEL §1，D-102）。
@@ -49,7 +51,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 - 流式输出用 `c.Stream(next)`：next 每次返回一段增量文本，返回 `io.EOF` 正常结束（可以同时带上末段）。实例声明 `message.edit` 时先发送再节流编辑，超过 `TextLimit` 时换条；没有编辑能力时在正常结束后发送一次，输入出错时不发布缓存。返回全部回执，失败时保留已有回执（D-135）。
 - 只回一段文本时用 `c.Reply(text)`；后台发文本用 `sdk.SendText(ctx, session, text, opts...)`，opts 只接受 Via。两者分别等于对应 Send 发送 `message.Text(text)` 并丢弃回执，错误原样返回（D-118）。
 - `c.User()` 返回 `message.User` 用户字符串 `<adapter_id>:<external_user_id>`，没有 Actor 时为空串；`message.NewUser` 与 `Parts()` 保留 external_user_id 中的冒号。`c.Session()` 返回默认会话，没有默认目标时为空串，未指定目标的发送返回 NO_DEFAULT_TARGET。Service 调用沿用调用上下文中的 Actor 与默认会话，`c.Event()` 为 nil（CONTRACTS §1.2、§3、§8，MESSAGE-MODEL §1，D-120）。
-- 事件用常量注册，例如 `r.On("created", sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error { return c.Reply(e.Chain.Text()) })`；也接受只收 `*sdk.Context` 的 Handler。其他标准事件同样使用对应常量与 payload 指针类型，`Collect` 检查签名并在错误中给出 route_id。扩展事件用 `sdk.AdapterEvent[T]("adapter.name", version)`，T 须为结构体，带载荷的 Handler 收 `*T`；版本不符或 JSON 解码失败时记 WARN 并跳过 Handler，日志只含路由、事件名与版本或安全错误类别（MESSAGE-MODEL §1.1～§1.2，CONTRACTS §8，D-70、D-71、D-113）。
+- 事件用常量注册，例如 `p.On("created", sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error { return c.Reply(e.Chain.Text()) })`；也接受只收 `*sdk.Context` 的 Handler。其他标准事件同样使用对应常量与 payload 指针类型，`Collect` 检查签名并在错误中给出 route_id。扩展事件用 `sdk.AdapterEvent[T]("adapter.name", version)`，T 须为结构体，带载荷的 Handler 收 `*T`；版本不符或 JSON 解码失败时记 WARN 并跳过 Handler，日志只含路由、事件名与版本或安全错误类别（MESSAGE-MODEL §1.1～§1.2，CONTRACTS §8，D-70、D-71、D-113）。
 - 上传用 `sdk.Upload(ctx, r, mime)` 得到 `*message.MediaRef`，SDK 计算大小与 SHA-256，mime 为空时按内容判断；r 可 Seek 时读两遍，否则使用临时文件，调用方应保持两遍读取的内容一致（CONTRACTS §1.3，D-109）。读取用 `sdk.OpenMedia(ctx, src)`，src 可以是片段的 `Source`、`MediaRef.Source()`、`IncomingMedia.Source()`，只持有 token 时用 `message.MediaSource{MediaRef: token}`。打开时先读第一块，失败直接返回错误；成功后顺序读取并关闭返回的 `io.ReadCloser`，读取响应 ctx 取消且不自动重试。HTTPS URL 来源在发出请求前返回 INVALID_ARGUMENT。向其他插件授权用 `sdk.GrantMedia(ctx, token, granteePluginID, sessions...)`，会话参数为 `message.Session`（CONTRACTS §1.3～§1.4，D-102、D-109、D-121）。
 - 错误码用 `errcode`，例如 `errcode.InvalidArgument.New("invalid input")`、`errcode.InvalidArgument.Errorf("invalid field %s", name)`；用 `errcode.Of(err)` 查询错误链中的 SDK 错误码，没有 SDK 错误时返回 0。`sdk.Error` 是 `errcode.Error` 的别名，仍可用 `errors.As` 取得错误并读取 Code 与 Message（CONTRACTS §1.2，D-123）。
 
@@ -81,10 +83,10 @@ Adapter 作者用 `adapter.Event[T](name, version)` 与 `adapter.Extension[T](na
 ```
 
 - `$version` 是配置格式版本，缺省为 1。SDK 从已保存的版本依次执行 `$migrations`，首装跳过迁移；上例把版本 1 的 `hello` 移到 `greeting`。每步按 `rename` → `map` → `wrap` → `remove` 执行，路径不存在时跳过，rename 目标已存在时失败；迁移路径与版本检查见 [CONTRACTS §5.5](../spec/CONTRACTS-v0.1.md#55-配置版本与迁移)。
-- 声明式迁移后调用根插件的 `OnConfigLoad(ctx context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`。`raw` 是完整的迁移结果，`fromVersion` 保留迁移前的版本，首装时为目标版本；`sdk.Base` 默认原样返回。需要额外转换或业务取值检查时覆盖此方法，保留未知键，响应 ctx，只做可重复的纯配置变换；数据库、文件、网络与发信操作放在对应生命周期中。示例见 [showcase](../examples/plugins/showcase/main.go)。普通 restart 与恢复时，回调改变配置会返回 FAILED_PRECONDITION。
+- 声明式迁移后调用 `p.OnConfigLoad(fn)` 登记的配置回调 `func(ctx context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`。`raw` 是完整的迁移结果，`fromVersion` 保留迁移前的版本，首装时为目标版本；没有登记时原样返回。需要额外转换或业务取值检查时登记此回调，保留未知键，响应 ctx，只做可重复的纯配置变换；数据库、文件、网络与发信操作放在对应生命周期中。示例见 [showcase](../examples/plugins/showcase/main.go)。普通 restart 与恢复时，回调改变配置会返回 FAILED_PRECONDITION。
 - 回调之后，SDK 只给缺失键补 `default` 或类型零值，递归进入对象、列表与已选择的模板，再校验。显式 `false`、`0`、空串与空集合保持，未知键和数字原文保留。声明字段为 `null`、类型不符或违反 options、slider、required 等约束时，准备失败，错误只含 JSON 路径和错误类别。
 
-根插件以值嵌入 `sdk.Base`，从 OnStart 开始通过 `p.Config()` 取得 `config.Values`；在 OnConfigLoad 中或更早调用会 panic。例如 `p.Config().String("greeting")` 读取上例的问候语。取值对象在同一 Session 内保持不变，可并发读取；集合 getter 返回可独立修改的副本。
+插件对象从 OnStart 开始通过 `p.Config()`（Handler 内为 `c.Config()`）取得 `config.Values`，子插件的 `s.Config()` 是 `config_schema.json` 中同名顶层 object 的只读视图；在 OnConfigLoad 中或更早调用会 panic。例如 `p.Config().String("greeting")` 读取上例的问候语。取值对象在同一 Session 内保持不变，可并发读取；集合 getter 返回可独立修改的副本。
 
 | 声明类型 | 取值方法 |
 | --- | --- |

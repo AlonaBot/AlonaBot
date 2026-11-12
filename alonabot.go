@@ -35,7 +35,7 @@ type options struct {
 }
 
 // Plugin 登记由生成资源确定身份的开发插件。
-func Plugin(root sdk.Root) Option {
+func Plugin(root *sdk.Plugin) Option {
 	return func(o *options) { o.components = append(o.components, component{root: root, role: state.RolePlugin}) }
 }
 

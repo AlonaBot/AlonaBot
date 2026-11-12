@@ -1,9 +1,9 @@
 // Package generate 扫描插件构建入口及其本 module 依赖，生成配置与 Service Schema 的嵌入代码。
 //
-// 命令、文本匹配与事件由根插件的注册方法链式注册（CONTRACTS §9.1）。
+// 命令、文本匹配与事件登记在插件对象上（CONTRACTS §9.1）。
 // 扫描遵守 GOOS/GOARCH 和 build tags，排除外部依赖、vendor 与测试文件。
 // 配置从 config_schema.json 检查并嵌入，翻译覆盖按声明核对（CONTRACTS §5.1、§5.3）。
-// 工程 plugin.yaml 声明 Adapter 时，按具体类型登记身份与实例 Schema；旧实例声明目录仍只检查。
+// 工程 plugin.yaml 声明 Adapter 时按具体类型登记身份与实例 Schema；旧实例声明目录仍只检查。
 // JSON Service 类型经 go/types 检查生成 Schema（§3）；注册规则见 §9、§2.2。
 // 构建入口的 i18n/*.json 按 §5.3、§5.4 检查并将原文嵌入生成代码。
 // commands 仅检查结构，覆盖路径与实际注册命令的对应由 SDK Collect 检查。
@@ -25,7 +25,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 )
 
@@ -49,11 +48,11 @@ type Diagnostic struct {
 
 // Result 保存扫描描述、生成源码和全部构建诊断。
 type Result struct {
-	RootType     string // 插件的导入路径.类型名；Adapter 或只有实例声明时为空。
-	AdapterType  string // Adapter 的导入路径.具体类型名；插件或只有实例声明时为空。
-	ConfigSchema []byte // config_schema.json 的规范 JSON；没有该文件时为 nil
-	Source       []byte // 完整 gofmt 源码；有诊断或只有实例声明时为 nil。
-	Diagnostics  []Diagnostic
+	PluginConstructor string // 插件的导入路径.New；Adapter 或只有实例声明时为空。
+	AdapterType       string // Adapter 的导入路径.具体类型名；插件或只有实例声明时为空。
+	ConfigSchema      []byte // config_schema.json 的规范 JSON；没有该文件时为 nil
+	Source            []byte // 完整 gofmt 源码；有诊断或只有实例声明时为 nil。
+	Diagnostics       []Diagnostic
 }
 
 type listedPackage struct {
@@ -80,7 +79,7 @@ type scan struct {
 	files           *token.FileSet
 	dir             string
 	entry           listedPackage
-	roots           []declaration
+	constructors    []token.Pos
 	adapterProject  bool
 	adapterRoot     declaration
 	projectManifest []byte
@@ -92,7 +91,7 @@ type scan struct {
 
 // Scan 按目标环境扫描源码与文案资源并生成嵌入代码。输入问题记入 Diagnostics；
 // 工具链或 IO 失败返回 error，go list 失败时保留 stderr。
-// 有实例声明且没有插件根类型时仅检查实例声明，返回的 RootType 为空、Source 为 nil。
+// 有实例声明且没有插件 New 时仅检查实例声明，返回的 PluginConstructor 为空、Source 为 nil。
 func Scan(ctx context.Context, opt Options) (*Result, error) {
 	// 1. 检查实例声明，再由 Go 工具链确定依赖与实际参与构建的文件。
 	dir, err := filepath.Abs(opt.Dir)
@@ -168,7 +167,6 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 		return nil, fmt.Errorf("go list: %w\n%s", err, stderr.String())
 	}
 	var packages []listedPackage
-	names := make(map[string]string)
 	decoder := json.NewDecoder(bytes.NewReader(output))
 	for {
 		var pkg listedPackage
@@ -179,7 +177,6 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 		if err != nil {
 			return nil, fmt.Errorf("decode go list: %w", err)
 		}
-		names[pkg.ImportPath] = pkg.Name
 		if pkg.Module != nil && pkg.Module.Main && !strings.Contains("/"+pkg.ImportPath+"/", "/vendor/") {
 			packages = append(packages, pkg)
 		}
@@ -197,17 +194,18 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 	for _, pkg := range packages {
 		slices.Sort(pkg.GoFiles)
 		for _, name := range pkg.GoFiles {
-			if err := s.readFile(pkg, filepath.Join(pkg.Dir, name), names); err != nil {
+			if err := s.readFile(pkg, filepath.Join(pkg.Dir, name)); err != nil {
 				return nil, err
 			}
 		}
 	}
-	if instanceSchema && len(s.roots) == 0 && !s.adapterProject {
+	if instanceSchema && len(s.constructors) == 0 && !s.adapterProject {
 		return &s.result, nil
 	}
 	if !s.adapterProject {
 		s.checkTypes()
 	}
+
 	if err := s.readI18n(); err != nil {
 		return nil, err
 	}
@@ -265,7 +263,7 @@ func (s *scan) parseFile(path string) (*ast.File, error) {
 	return file, nil
 }
 
-func (s *scan) readFile(pkg listedPackage, path string, names map[string]string) error {
+func (s *scan) readFile(pkg listedPackage, path string) error {
 	// 1. 在文件系统边界读取文件，解析器统一使用相对入口目录的文件名。
 	file, err := s.parseFile(path)
 	if err != nil {
@@ -275,53 +273,11 @@ func (s *scan) readFile(pkg listedPackage, path string, names map[string]string)
 		return nil
 	}
 	s.syntax[pkg.ImportPath] = append(s.syntax[pkg.ImportPath], file)
-	imports := make(map[string]string)
-	for _, imp := range file.Imports {
-		path, err := strconv.Unquote(imp.Path.Value)
-		if err != nil {
-			continue
-		} // parser 已报告非法字符串。
-		name := names[path]
-		if imp.Name != nil {
-			name = imp.Name.Name
-		}
-		imports[name] = path
-	}
-	// 2. 识别根的嵌入类型。
-	for _, decl := range file.Decls {
-		gen, ok := decl.(*ast.GenDecl)
-		if !ok {
-			continue
-		}
-		for _, spec := range gen.Specs {
-			typ, ok := spec.(*ast.TypeSpec)
-			if !ok {
-				continue
-			}
-			structure, ok := typ.Type.(*ast.StructType)
-			if !ok {
-				continue
-			}
-			for _, field := range structure.Fields.List {
-				if len(field.Names) > 0 {
-					continue
-				}
-				embedded := field.Type
-				if star, ok := embedded.(*ast.StarExpr); ok {
-					embedded = star.X
-				}
-				selector, ok := embedded.(*ast.SelectorExpr)
-				if !ok || selector.Sel.Name != "Base" {
-					continue
-				}
-				name, ok := selector.X.(*ast.Ident)
-				if !ok {
-					continue
-				}
-				d := declaration{typ.Name.Name, typ.Name.Pos(), pkg.ImportPath}
-				if imports[name.Name] == sdkPath {
-					s.roots = append(s.roots, d)
-				}
+	// 只识别入口包自己声明的 New；完整签名由 go/types 核对。
+	if pkg.ImportPath == s.entry.ImportPath {
+		for _, decl := range file.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Name.Name == "New" {
+				s.constructors = append(s.constructors, fn.Name.Pos())
 			}
 		}
 	}
@@ -329,35 +285,20 @@ func (s *scan) readFile(pkg listedPackage, path string, names map[string]string)
 }
 
 func (s *scan) checkTypes() {
-	if len(s.roots) != 1 {
-		var positions []string
-		for _, root := range s.roots {
-			positions = append(positions, s.position(root.pos))
+	if len(s.constructors) != 1 {
+		files := s.entry.GoFiles
+		if len(files) == 0 {
+			files = s.entry.CgoFiles
 		}
-		pos := token.NoPos
-		if len(s.roots) > 0 {
-			pos = s.roots[0].pos
-		}
-		// 无根类型时定位到入口文件起点，仍保持诊断位置可用。
-		message := fmt.Sprintf("expected exactly one root type, found %d", len(s.roots))
-		if len(positions) > 0 {
-			message += " at " + strings.Join(positions, ", ")
-		}
-		if pos == token.NoPos {
-			files := s.entry.GoFiles
-			if len(files) == 0 {
-				// go list 成功的纯 cgo 包在 CgoFiles 中提供源码文件名。
-				files = s.entry.CgoFiles
-			}
-			s.result.Diagnostics = append(s.result.Diagnostics, Diagnostic{filepath.ToSlash(files[0]) + ":1:1", message})
-		} else {
-			s.diagnostic(pos, message)
-		}
-	} else {
-		root := s.roots[0]
-		s.result.RootType = root.pkg + "." + root.name
-		if root.pkg != s.entry.ImportPath {
-			s.diagnostic(root.pos, "root type must be declared in entry package")
-		}
+		s.result.Diagnostics = append(s.result.Diagnostics, Diagnostic{filepath.ToSlash(files[0]) + ":1:1", "entry package must declare func New() *sdk.Plugin"})
+		return
 	}
+	s.result.PluginConstructor = s.entry.ImportPath + ".New"
+	// 旧生成项始终排除；扫描视图只注入资源变量的类型，支持首次生成。
+	source := fmt.Sprintf("package %s\nimport alonabotgen0 %q\nvar alonabotGenerated alonabotgen0.Generated\n", s.entry.Name, sdkPath)
+	file, err := parser.ParseFile(s.files, FileName, source, 0)
+	if err != nil {
+		panic(err)
+	} // 固定模板只替换 go list 确定的包名与路径。
+	s.syntax[s.entry.ImportPath] = append(s.syntax[s.entry.ImportPath], file)
 }
