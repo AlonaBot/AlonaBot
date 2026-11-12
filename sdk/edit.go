@@ -27,7 +27,7 @@ func callEdit(ctx context.Context, ref message.MessageRef, m message.Content, pa
 	if err != nil {
 		return nil, err
 	}
-	chain, err := convert.ContentToProto(m)
+	chain, err := convert.ContentToProto(m, target)
 	if err != nil {
 		return nil, err
 	}

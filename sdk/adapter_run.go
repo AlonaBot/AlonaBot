@@ -343,7 +343,7 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support message editing")
 		}
 		// 平台请求在锁外执行，停止和其他实例的操作可继续推进。
-		result, safe := editor.Edit(ctx, convert.SessionFromProto(request.Target), request.PlatformMessageId, convert.ChainFromProto(request.Chain))
+		result, safe := editor.Edit(ctx, convert.SessionFromProto(request.Target), request.PlatformMessageId, convert.ChainFromProto(request.Chain, request.Target))
 		if result == nil {
 			return wire.Response{Err: convert.ErrorToProto(safe)}
 		}
@@ -369,7 +369,7 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 		}
 		instance := entry.instance
 		r.mu.Unlock()
-		result, safe := instance.Send(ctx, convert.SessionFromProto(request.Target), convert.ChainFromProto(request.Chain))
+		result, safe := instance.Send(ctx, convert.SessionFromProto(request.Target), convert.ChainFromProto(request.Chain, request.Target))
 		if result == nil {
 			return wire.Response{Err: convert.ErrorToProto(safe)}
 		}

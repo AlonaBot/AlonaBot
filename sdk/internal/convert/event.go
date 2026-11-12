@@ -17,13 +17,13 @@ func EventFromProto(e *pb.Event) *message.Event {
 		out.Actor = &message.Actor{ExternalUserID: a.ExternalUserId, AdapterInstanceID: a.AdapterInstanceId, DisplayName: a.GetDisplayName(), Locale: a.GetLocale(), Permissions: slices.Clone(a.Permissions)}
 	}
 	if m := e.Message; m != nil {
-		out.Message = &message.PlatformMessage{PlatformMessageID: m.PlatformMessageId, Chain: ChainFromProto(m.Chain), MediaGroupID: m.GetMediaGroupId()}
+		out.Message = &message.PlatformMessage{PlatformMessageID: m.PlatformMessageId, Chain: ChainFromProto(m.Chain, e.Target), MediaGroupID: m.GetMediaGroupId()}
 	}
 	switch p := e.EventPayload.GetKind().(type) {
 	case *pb.EventPayload_MessageCreated:
-		out.Payload = &message.CreatedPayload{PlatformMessageID: p.MessageCreated.PlatformMessageId, Chain: ChainFromProto(p.MessageCreated.Chain), ToMe: p.MessageCreated.ToMe}
+		out.Payload = &message.CreatedPayload{PlatformMessageID: p.MessageCreated.PlatformMessageId, Chain: ChainFromProto(p.MessageCreated.Chain, e.Target), ToMe: p.MessageCreated.ToMe}
 	case *pb.EventPayload_MessageEdited:
-		out.Payload = &message.EditedPayload{PlatformMessageID: p.MessageEdited.PlatformMessageId, Chain: ChainFromProto(p.MessageEdited.Chain), OldChain: ChainFromProto(p.MessageEdited.OldChain)}
+		out.Payload = &message.EditedPayload{PlatformMessageID: p.MessageEdited.PlatformMessageId, Chain: ChainFromProto(p.MessageEdited.Chain, e.Target), OldChain: ChainFromProto(p.MessageEdited.OldChain, e.Target)}
 	case *pb.EventPayload_MessageDeleted:
 		out.Payload = &message.DeletedPayload{PlatformMessageIDs: slices.Clone(p.MessageDeleted.PlatformMessageIds)}
 	case *pb.EventPayload_ButtonClicked:
@@ -67,7 +67,7 @@ func EventToProto(e *message.Event) (*pb.Event, error) {
 		out.Actor = &pb.Actor{ExternalUserId: a.ExternalUserID, AdapterInstanceId: a.AdapterInstanceID, DisplayName: optional(a.DisplayName), Locale: optional(a.Locale), Permissions: slices.Clone(a.Permissions)}
 	}
 	if m := e.Message; m != nil {
-		chain, err := ChainToProto(m.Chain)
+		chain, err := ChainToProto(m.Chain, out.Target)
 		if err != nil {
 			return nil, err
 		}
@@ -76,17 +76,17 @@ func EventToProto(e *message.Event) (*pb.Event, error) {
 	payload := &pb.EventPayload{}
 	switch p := e.Payload.(type) {
 	case *message.CreatedPayload:
-		chain, err := ChainToProto(p.Chain)
+		chain, err := ChainToProto(p.Chain, out.Target)
 		if err != nil {
 			return nil, err
 		}
 		payload.Kind = &pb.EventPayload_MessageCreated{MessageCreated: &pb.MessageCreatedPayload{PlatformMessageId: p.PlatformMessageID, Chain: chain, ToMe: p.ToMe}}
 	case *message.EditedPayload:
-		chain, err := ChainToProto(p.Chain)
+		chain, err := ChainToProto(p.Chain, out.Target)
 		if err != nil {
 			return nil, err
 		}
-		old, err := ChainToProto(p.OldChain)
+		old, err := ChainToProto(p.OldChain, out.Target)
 		if err != nil {
 			return nil, err
 		}

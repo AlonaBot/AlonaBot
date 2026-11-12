@@ -25,7 +25,7 @@ func Send(ctx context.Context, to message.Session, m message.Content, opts ...Se
 	if err != nil {
 		return nil, err
 	}
-	return callSend(ctx, target, m, nil)
+	return callSend(ctx, target, m, nil, nil)
 }
 
 // SendText 独立发送一段文本，并丢弃发送回执。
@@ -33,8 +33,12 @@ func SendText(ctx context.Context, to message.Session, text string, opts ...Send
 	_, err := Send(ctx, to, message.Text(text), opts...)
 	return err
 }
-func callSend(ctx context.Context, to *pb.Target, m message.Content, parent *wire.Inbound) (*message.SendResult, error) {
-	chain, err := convert.ContentToProto(m)
+func callSend(ctx context.Context, to *pb.Target, m message.Content, parent *wire.Inbound, defaultTarget *pb.Target) (*message.SendResult, error) {
+	target := to
+	if target == nil {
+		target = defaultTarget
+	}
+	chain, err := convert.ContentToProto(m, target)
 	if err != nil {
 		return nil, err
 	}
