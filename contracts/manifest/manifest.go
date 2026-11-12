@@ -1,7 +1,8 @@
-// Package manifest 解析并校验组件包内的 plugin.yaml，并检查组件依赖。
+// Package manifest 解析工程与包内的 plugin.yaml、生成包内声明并检查组件依赖。
 //
 // 解析是严格的：未知字段、多个 YAML 文档、缺失必填项或非法取值都会失败。
-// [Parse] 校验 [Manifest] 的角色、ID、版本与包内相对路径，规则见 spec/CONTRACTS-v0.1.md §9.1。
+// [ParseProject] 读取作者信息，[Generate] 补入构建信息，[Parse] 校验包内声明。
+// 三个入口共用 [Manifest] 的角色、ID、版本与相对路径规则，见 spec/CONTRACTS-v0.1.md §9.1。
 // [CheckDependencies] 根据安装快照报告缺失或版本不足的依赖；本包不读取归档或安装记录。
 package manifest
 
@@ -76,10 +77,13 @@ const (
 
 // Manifest 对应 plugin.yaml。必填字段使用指针以区分「缺失」与零值。
 type Manifest struct {
-	Role                 string              `yaml:"role"`       // 缺省为 plugin
-	AdapterID            string              `yaml:"adapter_id"` // adapter 角色的平台类型
-	Icon                 string              `yaml:"icon"`       // 包内图标的相对路径，可选
-	Assets               string              `yaml:"assets"`     // webui 的包内静态根目录
+	Name                 string              `yaml:"name"`        // 英文源显示名，必填
+	Description          string              `yaml:"description"` // 英文源描述，可选
+	Author               string              `yaml:"author"`      // 作者，可选
+	Role                 string              `yaml:"role"`        // 缺省为 plugin
+	AdapterID            string              `yaml:"adapter_id"`  // adapter 角色的平台类型
+	Icon                 string              `yaml:"icon"`        // 包内图标的相对路径，可选
+	Assets               string              `yaml:"assets"`      // webui 的包内静态根目录
 	AdminAPIMinMajor     uint32              `yaml:"admin_api_min_major"`
 	AdminAPIMaxMajor     uint32              `yaml:"admin_api_max_major"`
 	AdapterDependencies  []AdapterDependency `yaml:"adapter_dependencies"`
@@ -106,9 +110,23 @@ type Result struct {
 	Warnings []string  // 不阻止安装、但需要告知用户的问题
 }
 
-// Parse 严格解析 plugin.yaml：未知字段、多个 YAML 文档、缺失必填项或非法值都会失败。
+// Parse 严格解析包内 plugin.yaml，要求完整构建信息及非空 name。
 func Parse(data []byte) (*Result, error) {
-	// 1. 严格解码单份 YAML 文档，先拒绝未知字段和额外文档。
+	return parse(data, false)
+}
+
+func parse(data []byte, project bool) (*Result, error) {
+	// 1. 按字段出现检查工程声明，避免零值、空串与 null 隐去构建字段。
+	var declared map[string]yaml.Node
+	if err := yaml.Unmarshal(data, &declared); err != nil {
+		return nil, fmt.Errorf("parse plugin.yaml fields: %w", err)
+	}
+	if project {
+		if err := checkProjectFields(declared); err != nil {
+			return nil, err
+		}
+	}
+	// 2. 严格解码单份 YAML 文档，拒绝未知字段和额外文档。
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	var m Manifest
@@ -119,12 +137,8 @@ func Parse(data []byte) (*Result, error) {
 	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		return nil, errors.New("plugin.yaml must contain exactly one YAML document")
 	}
-	// 2. 保留显式声明并按角色校验；空列表、零值与 null 同样属于声明。
-	var declared map[string]yaml.Node
-	if err := yaml.Unmarshal(data, &declared); err != nil {
-		return nil, fmt.Errorf("parse plugin.yaml fields: %w", err)
-	}
-	warnings, err := m.validate(declared)
+	// 3. 两种声明共用作者字段与角色校验。
+	warnings, err := m.validate(declared, project)
 	if err != nil {
 		return nil, err
 	}
@@ -132,9 +146,9 @@ func Parse(data []byte) (*Result, error) {
 }
 
 // validate 逐项校验字段，返回非致命警告；任一项不合法即返回错误。
-func (m *Manifest) validate(declared map[string]yaml.Node) ([]string, error) {
+func (m *Manifest) validate(declared map[string]yaml.Node, project bool) ([]string, error) {
 	// 1. 检查所有角色共用的身份、版本、来源与图标。
-	if m.ManifestVersion == nil || *m.ManifestVersion != 1 {
+	if !project && (m.ManifestVersion == nil || *m.ManifestVersion != 1) {
 		return nil, errors.New("manifest_version must be 1")
 	}
 	if _, present := declared["role"]; !present {
@@ -148,6 +162,9 @@ func (m *Manifest) validate(declared map[string]yaml.Node) ([]string, error) {
 	warnings, err := componentID(m.ID, m.Role)
 	if err != nil {
 		return nil, err
+	}
+	if m.Name == "" {
+		return nil, errors.New("missing name")
 	}
 	if !ValidVersion(m.Version) {
 		return nil, fmt.Errorf("version %q is not valid SemVer", m.Version)
@@ -170,7 +187,7 @@ func (m *Manifest) validate(declared map[string]yaml.Node) ([]string, error) {
 		if err := forbidFields(declared, m.Role, "adapter_id", "entrypoint", "protocol_min_major", "protocol_max_major", "required_capabilities", "config_version", "migration_mode", "prepare_effects", "adapter_dependencies", "plugin_dependencies"); err != nil {
 			return nil, err
 		}
-		if m.OS != "any" || m.Arch != "any" {
+		if !project && (m.OS != "any" || m.Arch != "any") {
 			return nil, errors.New("webui requires os and arch to be any")
 		}
 		if err := ValidateRelPath(m.Assets); err != nil {
@@ -195,28 +212,10 @@ func (m *Manifest) validate(declared map[string]yaml.Node) ([]string, error) {
 	} else if err := forbidFields(declared, m.Role, "adapter_id"); err != nil {
 		return nil, err
 	}
-	if m.ProtocolMinMajor == nil || m.ProtocolMaxMajor == nil {
-		return nil, errors.New("missing protocol_min_major or protocol_max_major")
-	}
-	if *m.ProtocolMinMajor == 0 || *m.ProtocolMinMajor > *m.ProtocolMaxMajor {
-		return nil, fmt.Errorf("invalid protocol major version range [%d, %d]", *m.ProtocolMinMajor, *m.ProtocolMaxMajor)
-	}
-	if m.RequiredCapabilities == nil {
-		return nil, errors.New("missing required_capabilities (use an empty list when there are none)")
-	}
-	for _, c := range *m.RequiredCapabilities {
-		if c.Name == "" || c.Version == 0 {
-			return nil, fmt.Errorf("required capability %+v is missing name or version", c)
+	if !project {
+		if err := m.validateProcess(); err != nil {
+			return nil, err
 		}
-	}
-	if !SupportedPlatform(m.OS, m.Arch) {
-		return nil, fmt.Errorf("unsupported platform %s/%s", m.OS, m.Arch)
-	}
-	if err := ValidateRelPath(m.Entrypoint); err != nil {
-		return nil, fmt.Errorf("entrypoint: %w", err)
-	}
-	if m.ConfigVersion == nil {
-		return nil, errors.New("missing config_version")
 	}
 	if m.Role == roleAdapter {
 		return warnings, nil
@@ -224,6 +223,9 @@ func (m *Manifest) validate(declared map[string]yaml.Node) ([]string, error) {
 	// 4. 插件与 Agent 还需校验依赖、迁移方式和准备期副作用。
 	if err := m.validateDependencies(); err != nil {
 		return nil, err
+	}
+	if project {
+		return warnings, nil
 	}
 	switch m.MigrationMode {
 	case "", MigrationNone, MigrationSelf, MigrationVersioned:
@@ -239,6 +241,33 @@ func (m *Manifest) validate(declared map[string]yaml.Node) ([]string, error) {
 		warnings = append(warnings, "migration_mode or prepare_effects not declared; automatic upgrades are not allowed for this package")
 	}
 	return warnings, nil
+}
+
+func (m *Manifest) validateProcess() error {
+	if m.ProtocolMinMajor == nil || m.ProtocolMaxMajor == nil {
+		return errors.New("missing protocol_min_major or protocol_max_major")
+	}
+	if *m.ProtocolMinMajor == 0 || *m.ProtocolMinMajor > *m.ProtocolMaxMajor {
+		return fmt.Errorf("invalid protocol major version range [%d, %d]", *m.ProtocolMinMajor, *m.ProtocolMaxMajor)
+	}
+	if m.RequiredCapabilities == nil {
+		return errors.New("missing required_capabilities (use an empty list when there are none)")
+	}
+	for _, c := range *m.RequiredCapabilities {
+		if c.Name == "" || c.Version == 0 {
+			return fmt.Errorf("required capability %+v is missing name or version", c)
+		}
+	}
+	if !SupportedPlatform(m.OS, m.Arch) {
+		return fmt.Errorf("unsupported platform %s/%s", m.OS, m.Arch)
+	}
+	if err := ValidateRelPath(m.Entrypoint); err != nil {
+		return fmt.Errorf("entrypoint: %w", err)
+	}
+	if m.ConfigVersion == nil {
+		return errors.New("missing config_version")
+	}
+	return nil
 }
 
 func componentID(id, role string) ([]string, error) {

@@ -1,5 +1,6 @@
 # 合法的市场插件 manifest 样例：manifest 测试以它为基准，逐处改动构造非法输入。
 manifest_version: 1
+name: Demo
 id: alonabot_plugin_rss_feed
 version: 1.2.0-rc.1+build.5
 protocol_min_major: 1

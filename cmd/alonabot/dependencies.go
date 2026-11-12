@@ -19,7 +19,7 @@ func checkPluginDependencies(pluginDir string) error {
 	if err != nil {
 		return fmt.Errorf("read plugin.yaml: %w", err)
 	}
-	parsed, err := manifest.Parse(data)
+	parsed, err := manifest.ParseProject(data)
 	if err != nil {
 		return err
 	}
