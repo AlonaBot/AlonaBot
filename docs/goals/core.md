@@ -56,7 +56,7 @@
 | goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2、T-04.9、T-08.8、T-09.16 | 待派发 |
 | goal-104 | T-03.13 | 媒体按来源传递 | T-03.6、T-04.8、T-07.7 | 待派发 |
 | goal-105 | T-03.14 | 新增片段与字段（含会话类型） | T-03.8、T-04.8 | 已完成（PR #143） |
-| goal-106 | T-03.15 | 平台动作 | T-03.8、T-04.8 | 待派发 |
+| goal-106 | T-03.15 | 平台动作 | T-03.8、T-04.8 | 已完成（PR #146） |
 | goal-107 | T-03.16 | 撤回 | T-03.9、T-04.8 | 已完成（PR #144） |
 | goal-108 | T-03.17 | 命令菜单同步 | T-04.6、T-04.7、T-04.8、T-08.8 | 待派发 |
 | goal-109 | T-03.18 | 流式输出辅助函数 | T-03.9、T-04.8 | 待派发 |
@@ -4033,7 +4033,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-106 · T-03.15 平台动作
 
-状态：待派发。前置均已合并（T-04.8 为 PR #141（合并提交 `ac4aded`））；审查者按 main 合入 PR #141 后的代码核对。T-03.8（PR #136，合并提交 `3621fc1`）提供 extension 校验与 `manifest.CheckDependencies(m *Manifest, in Installed) []Problem`；当前安装快照的 `Installed.Adapters` 是 `map[string][]ExtensionRequirement`。SDK 已有 `adapter.Event[T]`、`adapter.Extension[T]` 的类型推导与内部 convert.Descriptor；平台动作声明须同时扩展两个 Descriptor。`sdk.Action[T]` 是按钮动作，平台动作使用 `sdk/adapter.Action[P,R]`。2026-11-09 按 D-87、D-92 新增，同日按 D-113 追加类型推导。
+状态：已完成（[PR #146](https://github.com/AlonaBot/AlonaBot/pull/146)，合并提交 `ab5f8fb`），证据见 TEST-MATRIX §3.2。合入：`core.action` 与 `adapter.action`（`internal/core/message.Service.Action`：按 Adapter 声明的动作名、精确版本与 chat/account 范围准入，参数与结果 Schema 校验，`adapter.ActionExecutor` 可选接口，`Registry.CompleteAccount`，policy 的 `CheckInstance`）；协议 `ActionScope`、`ActionDeclaration`（`AdapterDescriptor.actions = 6`）、`ActionRequest`、`ActionResponse`、`AdapterActionRequest`；SDK 的 `adapter.Action[P,R]`、`ActionScope`、`ActionExecutor`、`ActionCaller`、`Context.CallAction` 与 `ActionClient`/`NewActionClient`；`AdapterDependency.Actions`。派发时：前置均已合并（T-04.8 为 PR #141（合并提交 `ac4aded`））；审查者按 main 合入 PR #141 后的代码核对。T-03.8（PR #136，合并提交 `3621fc1`）提供 extension 校验与 `manifest.CheckDependencies(m *Manifest, in Installed) []Problem`；当前安装快照的 `Installed.Adapters` 是 `map[string][]ExtensionRequirement`。SDK 已有 `adapter.Event[T]`、`adapter.Extension[T]` 的类型推导与内部 convert.Descriptor；平台动作声明须同时扩展两个 Descriptor。`sdk.Action[T]` 是按钮动作，平台动作使用 `sdk/adapter.Action[P,R]`。2026-11-09 按 D-87、D-92 新增，同日按 D-113 追加类型推导。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-106（切片 T-03.15：平台动作）。goal 目录 goal-106，分支 goal-106，worktree .worktrees/goal-106，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

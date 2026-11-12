@@ -41,7 +41,26 @@ func (p *Policy) CheckSend(ctx context.Context, pluginID string, inv *router.Inv
 		return nil
 	}
 	// 3. 每次准入重新读库，使撤销在下一次发送时生效。
-	allowed, err := p.store.AdapterInstanceAllowed(ctx, pluginID, target.GetAdapterInstanceId())
+	return p.checkInstance(ctx, pluginID, target.GetAdapterInstanceId())
+}
+
+// CheckInstance 按同插件可信在途事件的原实例豁免或当前实例许可准入账号动作。
+func (p *Policy) CheckInstance(ctx context.Context, pluginID string, inv *router.Invocation, instanceID string) *pb.ErrorInfo {
+	if inv != nil && inv.PluginID == pluginID {
+		// bot.online 等事件没有 Target，原实例身份仍保存在可信事件上。
+		originalInstanceID := inv.Event.GetAdapterInstanceId()
+		if originalInstanceID == "" {
+			originalInstanceID = inv.DefaultTarget.GetAdapterInstanceId()
+		}
+		if originalInstanceID != "" && originalInstanceID == instanceID {
+			return nil
+		}
+	}
+	return p.checkInstance(ctx, pluginID, instanceID)
+}
+
+func (p *Policy) checkInstance(ctx context.Context, pluginID, instanceID string) *pb.ErrorInfo {
+	allowed, err := p.store.AdapterInstanceAllowed(ctx, pluginID, instanceID)
 	if err != nil {
 		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "read allowed adapter instances: " + err.Error()}
 	}
