@@ -413,7 +413,7 @@ func (r *Running) WaitExit() (abnormal bool, state string, err error) {
 // detach 撤销本实例的注册；由 Stop 或 WaitExit 中取得清理权的一方调用。
 func (r *Running) detach() {
 	if r.http != nil {
-		r.http.Unbind(r.pluginID, r.Instance.GenerationID)
+		r.http.Unbind(r.pluginID, r.Instance.GenerationID, r.Instance.HTTPProxyToken)
 	}
 	if r.scheduler != nil {
 		r.scheduler.Detach(r.pluginID)

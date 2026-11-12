@@ -6,6 +6,7 @@ package httpproxy
 
 import (
 	"bufio"
+	"crypto/subtle"
 	"encoding/hex"
 	"log/slog"
 	"net"
@@ -28,7 +29,7 @@ type Authorizer interface {
 }
 
 // Server 保存当前已激活 Session 的代理映射；Bind、Drain、Unbind 与 ServeHTTP 可并发调用。
-// Drain 冻结新派发并按停止截止等待在途请求；Unbind 撤销当前代次的映射。
+// Drain 冻结新派发并按停止截止等待在途请求；Unbind 撤销匹配 Session 的映射。
 type Server struct {
 	auth     Authorizer   // nil 时拒绝全部私有路由
 	mu       sync.RWMutex // 保护 mappings 及 binding 的排空状态；调用授权方与网络转发前释放
@@ -37,6 +38,7 @@ type Server struct {
 
 type binding struct {
 	generationID string
+	token        []byte // Bind 时复制的 Session 内部代理凭证，后续只读。
 	routes       []route
 	proxy        *httputil.ReverseProxy
 	draining     bool
@@ -64,7 +66,7 @@ func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, 
 	host := net.JoinHostPort(endpoint.GetHost(), strconv.FormatUint(uint64(endpoint.GetPort()), 10))
 	auth := hex.EncodeToString(token)
 	prefix := pluginPrefix + pluginID
-	current := &binding{generationID: generationID, drained: make(chan struct{}), upgraded: make(map[*upgradedConnection]struct{})}
+	current := &binding{generationID: generationID, token: append([]byte(nil), token...), drained: make(chan struct{}), upgraded: make(map[*upgradedConnection]struct{})}
 	for _, descriptor := range routes {
 		if descriptor.GetKind() == pb.RouteKind_ROUTE_KIND_HTTP {
 			spec := descriptor.GetHttp()
@@ -127,11 +129,11 @@ func (s *Server) Drain(pluginID string, deadline time.Time) {
 	}
 }
 
-// Unbind 仅撤销 generationID 仍与当前映射一致的插件，旧代次清理不会删除新映射。
-func (s *Server) Unbind(pluginID, generationID string) {
+// Unbind 仅撤销代次与内部代理凭证均匹配的 Session 映射。
+func (s *Server) Unbind(pluginID, generationID string, token []byte) {
 	s.mu.Lock()
 	current := s.mappings[pluginID]
-	if current == nil || current.generationID != generationID {
+	if current == nil || current.generationID != generationID || subtle.ConstantTimeCompare(current.token, token) != 1 {
 		s.mu.Unlock()
 		return
 	}
