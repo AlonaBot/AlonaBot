@@ -170,7 +170,7 @@ func (s *streamOutput) flush(wait bool) error {
 		if s.ref == "" {
 			return errcode.FailedPrecondition.New("stream message has no editable ID")
 		}
-		session, sessionError := currentSession()
+		session, sessionError := currentSession(s.context.ctx)
 		if sessionError != nil {
 			return sessionError
 		}
