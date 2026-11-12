@@ -74,7 +74,7 @@
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 待派发 |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 待派发 |
 | goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 等待前置 |
-| goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 等待前置 |
+| goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 待派发 |
 | goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 待派发 |
 | goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 等待前置 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
@@ -5074,24 +5074,75 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-126 · T-04.13 Service 与 Event Bus 的带类型声明
 
-状态：等待前置（T-04.12）。T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并，待审查者按合并后的代码改写。2026-11-10 按 D-122 新增。T-04.12（goal-125）把注册的接收者改为 `sdk.Registrar`，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-124 都修改 `sdk.Subscribe`，与 goal-101、goal-123、goal-124、goal-125 都修改 sdk/generate，后合并者同步 main 后按对方的写法重做自己的改动。
+状态：待派发。前置 T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并。2026-11-12 审查者按 main `9983182` 的代码写出范围、接口与测试段，现有代码如下：
+
+- **Service 注册**：`sdk.JSON[In, Out any](owner Registrar, name string) *JSONService[In, Out]` 与 `sdk.Proto[In, Out proto.Message](owner Registrar, name string) *ProtoService[In, Out]`（`sdk/services.go`），builder 有 `Access`、`Tool`（仅 JSON）与 `Handle`。
+- **Service 调用**：`sdk.CallJSON[In, Out any](ctx, target string, in In) (Out, error)` 与 `sdk.CallProto[Out proto.Message](ctx, target string, in proto.Message) (Out, error)`。
+- **Event Bus**：`sdk.Subscribe[T any](owner Registrar, routeID, eventName string) *Subscription[T]` 与 `sdk.Publish[T any](ctx, eventName string, payload T) (string, error)`（`sdk/bus.go`）；Publish 由 SDK 补上 `plugin_id/` 前缀。
+- **`Registrar`**：由 `*sdk.Plugin` 与 `*sdk.SubPlugin` 实现，内部经 `owner.registrar()` 取得插件与子插件归属。
+- **生成器**：`sdk/generate/service.go` 只检查 `JSON`、`Subscribe`、`CallJSON`、`Publish` 四个泛型入口的类型参数，都必须是包级具名非泛型类型，其中 JSON 注册生成 ServiceSchemas。
+- **调用方**：main 上除 SDK 自身外，没有提交代码使用这些函数；`sdk/llm` 与 goal-83 均未合并。
+
+本切片与 goal-124（T-04.11）都修改 `sdk.Subscribe`，与 goal-101、goal-123、goal-124 都修改 `sdk/generate`，后合并者同步 main，按对方的写法重做自己的改动。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-126（切片 T-04.13：Service 与 Event Bus 的带类型声明）。goal 目录 goal-126，分支 goal-126，worktree .worktrees/goal-126，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：Service 与 Event Bus 事件各用一个带类型的声明表示，注册、调用、发布与订阅都从声明出发，名字与 Go 类型只写一处；删除按字符串目标与类型参数直接调用、发布与订阅的函数。协议与 Core 不变。
 
 依据：PLAN T-04 步骤 13；DESIGN §D、§G；CONTRACTS §3、§9.1；DECISIONS D-70、D-107、D-112、D-114、D-122；TEST-MATRIX V-113 的声明分项。
 
-要点：
-- 声明：`sdk.JSON[In, Out any](target string) Service[In, Out]` 与 `sdk.Proto[In, Out proto.Message](target string) Service[In, Out]`，`Service[In, Out]` 是只含未导出字段的值类型，记录 target 与编码。target 为 `plugin_id/service_name` 或 `@agent/service_name`。
-- 注册：`sdk.Serve[In, Out any](r Registrar, s Service[In, Out])` 返回现有的 Service builder，`Access`、`Tool` 与 `Handle(func(*Context, In) (Out, error))` 不变；Protobuf 声明调用 `Tool` 照旧报错。Collect 核对 target 的组件部分等于 manifest 的插件 ID（`role: agent` 的组件为 `@agent`）、声明不是零值、同一 target 只注册一次，错误带 target。REGISTER 中的服务名仍是 service_name 部分，描述与原写法相同。
-- 调用：`func (s Service[In, Out]) Call(ctx context.Context, in In) (Out, error)`，请求与原 `sdk.CallJSON`、`sdk.CallProto` 相同；零值声明返回 INVALID_ARGUMENT，不发出请求。
-- Event Bus：`sdk.BusEvent[T any](name string) BusEventType[T]`，name 为 `plugin_id/event_name`；`func (e BusEventType[T]) Publish(ctx context.Context, payload T) (eventID string, err error)`；`sdk.Subscribe[T any](r Registrar, e BusEventType[T])` 返回现有的订阅 builder，路由 ID 缺省为事件名，`.ID(routeID)` 另给（goal-124 先合并时沿用它的缺省规则，后合并时由本切片实现）。
-- 删除：`sdk.CallJSON`、`sdk.CallProto`、`sdk.Publish`，以及第一个参数为注册器或 Registrar、第二个参数为名字的 `sdk.JSON`、`sdk.Proto`、`sdk.Subscribe`，不留别名。
-- 生成器：对类型参数的检查（包级的具名非泛型类型、Schema 生成）改为针对 `sdk.JSON`、`sdk.BusEvent` 的声明处，诊断位置随之变化；ServiceSchemas 的内容不变。
-- `sdk/llm`（goal-83 先合并时）：导出 `llm.GenerateService = sdk.JSON[Request, Response]("@agent/llm.generate")`，`llm.Generate` 与 `llm.Ask` 的签名不变，内部调用它；Agent 组件用 `sdk.Serve(p, llm.GenerateService)` 注册。goal-83 后合并时按本条书写。
-- 调用方：examples/plugins、测试中以字符串嵌入的插件源码与已合并的官方插件、Agent 代码按新写法修改。
-- 文档同步：docs/plugin-guide.md 第 6 节由审查者在合并前改写。
-- 测试：按 D-86 不向 sdk/ 提交测试。V-113 的声明分项进本地自测；已有调用 Service 与 Event Bus 的集成测试改用声明，断言不变。
+范围（只新增或修改这些）：
+- sdk/services.go：声明类型 Service[In, Out]、JSON 与 Proto 声明、Serve、Call；删除旧的 JSON、Proto（以注册器开头的形式）、CallJSON、CallProto
+- sdk/bus.go：声明类型 BusEventType[T]、BusEvent、Publish 方法、新形式的 Subscribe；删除旧的 Subscribe 与 Publish
+- sdk/sdk.go 的 Collect 只加声明相关的检查调用点
+- sdk/generate/service.go：类型参数检查改为针对 JSON、Proto、BusEvent 的声明处；ServiceSchemas 内容不变
+- docs/plugin-guide.md 第 6 节由审查者在合并前改写，执行者不改
+- 上述 SDK 包的 *_local_test.go；sdk/generate 的 *_local_test.go
+允许的新跨模块边：无。
 
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+sdk（新增或替换）
+   type Service[In, Out any] struct{ /* 只含未导出字段：target、编码 */ } // 值类型，零值无效
+   func JSON[In, Out any](target string) Service[In, Out]                   // target 为 "plugin_id/service_name" 或 "@agent/service_name"
+   func Proto[In, Out proto.Message](target string) Service[In, Out]
+   func Serve[In, Out any](r Registrar, s Service[In, Out]) *ServiceBuilder[In, Out] // 返回服务 builder
+   type ServiceBuilder[In, Out any] struct{ ... } // 由原 JSONService/ProtoService 合并而来
+   func (b *ServiceBuilder[In, Out]) Access(a Access, allowlist ...string) *ServiceBuilder[In, Out]
+   func (b *ServiceBuilder[In, Out]) Tool(description string, defaultPolicy ToolDefault) *ServiceBuilder[In, Out] // Proto 声明调用时由 Collect 报错
+   func (b *ServiceBuilder[In, Out]) Handle(h func(*Context, In) (Out, error))
+   func (s Service[In, Out]) Call(ctx context.Context, in In) (Out, error)
+   type BusEventType[T any] struct{ /* 只含未导出字段：name */ }
+   func BusEvent[T any](name string) BusEventType[T]                         // name 为 "plugin_id/event_name"
+   func (e BusEventType[T]) Publish(ctx context.Context, payload T) (eventID string, err error)
+   func Subscribe[T any](r Registrar, e BusEventType[T]) *Subscription[T]    // 路由 ID 缺省为事件名
+   func (s *Subscription[T]) ID(routeID string) *Subscription[T]             // 另给路由 ID；Handle 之后调用时由 Collect 报错
+删除：CallJSON、CallProto、Publish 函数，以及原 JSON(owner, name)、Proto(owner, name)、Subscribe(owner, routeID, eventName)、JSONService、ProtoService，不留别名。
+
+行为：
+- 注册：
+  - Serve 对 Service 声明开始注册，Access、Tool、Handle 的语义与原 builder 相同，REGISTER 中的服务名是 target 的 service_name 部分，描述与原写法逐字段相同。
+  - Collect 核对：target 的组件部分等于本组件的插件 ID（`role: agent` 的组件为 `@agent`）；声明不是零值；同一 target 只 Serve 一次；Proto 声明调用 Tool 报错。错误为英文并带 target。
+- 调用：Call 发出的请求与原 CallJSON、CallProto 相同（JSON 时按 Schema 校验输入输出，Handler 内调用时关联父请求）。零值声明返回 INVALID_ARGUMENT，不发出请求。
+- Event Bus：
+  - Publish 核对 name 的组件部分等于本插件 ID，不一致时返回 INVALID_ARGUMENT，不发出请求；其余与原 Publish 相同，只是不再补前缀。
+  - Subscribe 的路由 ID 缺省为事件名（D-112），`.ID(routeID)` 另给；订阅描述与原写法相同。
+- 生成器：类型参数检查（包级具名非泛型类型）改为针对 `sdk.JSON`、`sdk.Proto`、`sdk.BusEvent` 的声明处，诊断位置落在声明处；JSON 声明照旧生成 ServiceSchemas，内容不变。
+- 调用方：main 上没有提交代码使用这些函数。若执行时已有新的调用方（goal-83 的 `sdk/llm`、官方插件、测试中以字符串嵌入的插件源码），按新写法迁移；`sdk/llm` 导出 `llm.GenerateService = sdk.JSON[Request, Response]("@agent/llm.generate")`，`llm.Generate` 与 `llm.Ask` 的签名不变。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：无（D-86：不向 sdk/ 提交测试）。已有调用 Service 与 Event Bus 的集成测试若存在，改用声明，断言不变。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：
+  - 声明与 Collect 的拒绝项：零值声明、组件部分不符、重复 Serve、Proto 调用 Tool；
+  - Call 的零值与真实 Session 往返（JSON 与 Proto），Handler 内调用关联父请求；
+  - Publish 的组件检查与发布载荷，Subscribe 的缺省与 `.ID` 路由 ID；
+  - 生成器诊断落在声明处、ServiceSchemas 与改写前逐字节相同；
+  - internal/core/supervisor 的本地集成（//go:build unix）：两个真实插件进程，一个 Serve 并 Publish，另一个以同一声明 Call 与 Subscribe。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race . ./internal/core/... ./sdk/...；go build ./...。
+
+不做：协议与 Core 的改动；`sdk/llm` 的新功能（goal-83）；HTTP、定时任务与 Hook 的注册写法（goal-124）。
+```
 
 ### goal-129 · T-04.14 命令名覆盖的 Core 侧
 
