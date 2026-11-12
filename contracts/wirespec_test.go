@@ -261,6 +261,9 @@ func TestBootstrapSessionLimitsFieldNumber(t *testing.T) {
 // TestAdapterFieldNumbers 固定 Adapter 载荷与追加字段的线上编号。
 func TestAdapterFieldNumbers(t *testing.T) {
 	cases := map[string][]string{
+		"MediaSource":                  {"media_ref", "incoming_ref", "https_url", "inline_base64", "platform_file"},
+		"MediaURLRequest":              {"token", "base_url"},
+		"MediaURLResponse":             {"url", "expires_at_unix_ms"},
 		"AdapterDescriptor":            {"adapter_id", "capabilities", "extensions", "permissions", "events", "actions"},
 		"PermissionDeclaration":        {"name", "implies", "label_key"},
 		"EventDeclaration":             {"name", "version", "schema_json"},

@@ -1790,7 +1790,7 @@ func (x *TextEntity) GetExternalUserId() string {
 	return ""
 }
 
-// MediaSource 描述媒体来源，三选一。
+// MediaSource 描述媒体来源；platform_file 只由 Core 发往 Adapter。
 type MediaSource struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 媒体来源，恰有一个分支。
@@ -1800,6 +1800,8 @@ type MediaSource struct {
 	//	*MediaSource_MediaRef
 	//	*MediaSource_IncomingRef
 	//	*MediaSource_HttpsUrl
+	//	*MediaSource_InlineBase64
+	//	*MediaSource_PlatformFile
 	Source        isMediaSource_Source `protobuf_oneof:"source"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1869,6 +1871,24 @@ func (x *MediaSource) GetHttpsUrl() string {
 	return ""
 }
 
+func (x *MediaSource) GetInlineBase64() string {
+	if x != nil {
+		if x, ok := x.Source.(*MediaSource_InlineBase64); ok {
+			return x.InlineBase64
+		}
+	}
+	return ""
+}
+
+func (x *MediaSource) GetPlatformFile() string {
+	if x != nil {
+		if x, ok := x.Source.(*MediaSource_PlatformFile); ok {
+			return x.PlatformFile
+		}
+	}
+	return ""
+}
+
 type isMediaSource_Source interface {
 	isMediaSource_Source()
 }
@@ -1879,7 +1899,7 @@ type MediaSource_MediaRef struct {
 }
 
 type MediaSource_IncomingRef struct {
-	// 入站媒体描述符，发送时由 Core 取件。
+	// 入站媒体描述符，发送时由 Core 准备来源。
 	IncomingRef *IncomingMedia `protobuf:"bytes,2,opt,name=incoming_ref,json=incomingRef,proto3,oneof"`
 }
 
@@ -1888,11 +1908,25 @@ type MediaSource_HttpsUrl struct {
 	HttpsUrl string `protobuf:"bytes,3,opt,name=https_url,json=httpsUrl,proto3,oneof"`
 }
 
+type MediaSource_InlineBase64 struct {
+	// 标准 base64，解码后为 1 B～1 MiB。
+	InlineBase64 string `protobuf:"bytes,4,opt,name=inline_base64,json=inlineBase64,proto3,oneof"`
+}
+
+type MediaSource_PlatformFile struct {
+	// Core 填写的来源实例平台文件标识，插件填写时拒绝。
+	PlatformFile string `protobuf:"bytes,5,opt,name=platform_file,json=platformFile,proto3,oneof"`
+}
+
 func (*MediaSource_MediaRef) isMediaSource_Source() {}
 
 func (*MediaSource_IncomingRef) isMediaSource_Source() {}
 
 func (*MediaSource_HttpsUrl) isMediaSource_Source() {}
+
+func (*MediaSource_InlineBase64) isMediaSource_Source() {}
+
+func (*MediaSource_PlatformFile) isMediaSource_Source() {}
 
 // ImageSegment 描述一张图片。
 type ImageSegment struct {
@@ -3422,11 +3456,13 @@ const file_alonabot_v1_message_proto_rawDesc = "" +
 	"\x10external_user_id\x18\x06 \x01(\tH\x02R\x0eexternalUserId\x88\x01\x01B\x06\n" +
 	"\x04_urlB\v\n" +
 	"\t_languageB\x13\n" +
-	"\x11_external_user_id\"\x96\x01\n" +
+	"\x11_external_user_id\"\xe4\x01\n" +
 	"\vMediaSource\x12\x1d\n" +
 	"\tmedia_ref\x18\x01 \x01(\tH\x00R\bmediaRef\x12?\n" +
 	"\fincoming_ref\x18\x02 \x01(\v2\x1a.alonabot.v1.IncomingMediaH\x00R\vincomingRef\x12\x1d\n" +
-	"\thttps_url\x18\x03 \x01(\tH\x00R\bhttpsUrlB\b\n" +
+	"\thttps_url\x18\x03 \x01(\tH\x00R\bhttpsUrl\x12%\n" +
+	"\rinline_base64\x18\x04 \x01(\tH\x00R\finlineBase64\x12%\n" +
+	"\rplatform_file\x18\x05 \x01(\tH\x00R\fplatformFileB\b\n" +
 	"\x06source\"\x8a\x01\n" +
 	"\fImageSegment\x120\n" +
 	"\x06source\x18\x01 \x01(\v2\x18.alonabot.v1.MediaSourceR\x06source\x12\x15\n" +
@@ -3782,6 +3818,8 @@ func file_alonabot_v1_message_proto_init() {
 		(*MediaSource_MediaRef)(nil),
 		(*MediaSource_IncomingRef)(nil),
 		(*MediaSource_HttpsUrl)(nil),
+		(*MediaSource_InlineBase64)(nil),
+		(*MediaSource_PlatformFile)(nil),
 	}
 	file_alonabot_v1_message_proto_msgTypes[16].OneofWrappers = []any{}
 	file_alonabot_v1_message_proto_msgTypes[17].OneofWrappers = []any{}

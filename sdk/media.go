@@ -21,6 +21,9 @@ import (
 // OpenMedia 立即读取来源令牌的第一块，成功后返回按顺序读取的 reader。
 // Read 沿用 ctx，Close 停止读取而保留令牌授权。
 func OpenMedia(ctx context.Context, src message.MediaSource) (io.ReadCloser, error) {
+	if src.InlineBase64 != "" || src.HTTPSURL != "" || src.PlatformFile != "" || (src.Incoming != nil && src.MediaRef != "") {
+		return nil, errcode.InvalidArgument.New("media source must contain only an incoming or media_ref token")
+	}
 	token := src.MediaRef
 	if src.Incoming != nil {
 		token = src.Incoming.Token
