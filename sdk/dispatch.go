@@ -35,6 +35,7 @@ func businessHandler(reg *Registration) wire.Handler {
 	}
 	services := serviceHandler(reg)
 	return func(ctx context.Context, in *wire.Inbound) wire.Response {
+		ctx = context.WithValue(ctx, pluginContextKey{}, pluginScope{plugin: reg.plugin, subID: reg.subPlugins[in.Target]})
 		if response, ok := services(ctx, in); ok {
 			return response
 		}
@@ -81,7 +82,8 @@ func businessHandler(reg *Registration) wire.Handler {
 func invokeHandler(ctx context.Context, in *wire.Inbound, event *pb.Event, autoReply bool, groups []string, rules []Rule, handler func(*Context) (message.Content, error)) (response wire.Response) {
 	// 1. 为 Handler 建立独立有效期，返回或 panic 后取消所有仍在使用 Context 的工作。
 	ctx, cancel := context.WithCancel(ctx)
-	c := &Context{ctx: ctx, inbound: in, event: event, autoReply: autoReply, match: groups}
+	scope, _ := ctx.Value(pluginContextKey{}).(pluginScope)
+	c := &Context{plugin: scope.plugin, subID: scope.subID, ctx: ctx, inbound: in, event: event, autoReply: autoReply, match: groups}
 	bindServiceContext(c)
 	outcome := &pb.HandlerOutcome{Propagation: pb.Propagation_PROPAGATION_CONTINUE}
 	c.active.Store(true)

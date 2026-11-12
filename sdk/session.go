@@ -180,7 +180,7 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32, c
 
 // prepare 执行准备阶段：配置准备 → 迁移 → OnStart（各有独立预算）→ REGISTER → 等待 PREPARED。
 // 准备期不能发起业务 RPC。失败时已向 Core 报告 SESSION_ERROR 并关闭连接。
-func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Registration) (prepared *pb.Prepared, err error) {
+func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Registration) (prepared *pb.Prepared, err error) {
 	sid, boot, minor := ack.GetSessionId(), ack.GetBootstrap(), ack.GetChosenMinor()
 	setI18n(reg.messages, boot.GetDefaultLocale())
 	limits := boot.GetPhaseLimits()
@@ -198,7 +198,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 
 	// 2. 在 OnStart 之前完成配置迁移、默认值与校验；restart 与恢复均使用 RESUME。
 	configContext, cancelConfig := context.WithTimeout(context.Background(), time.Duration(limits.GetConfigMs())*time.Millisecond)
-	preparedConfig, err := config.Prepare(configContext, root.OnConfigLoad, generatedFor(root).ConfigSchema,
+	preparedConfig, err := config.Prepare(configContext, root.onConfigLoad, generatedFor(root).ConfigSchema,
 		[]byte(boot.GetCandidateConfigJson()), boot.PreviousConfigVersion, boot.GetTargetConfigVersion(),
 		boot.GetDatabaseDescriptor().GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME)
 	cancelConfig()
@@ -248,7 +248,11 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 				errc <- fmt.Errorf("OnStart panic: %v", p)
 			}
 		}()
-		errc <- root.OnStart(ctx)
+		var err error
+		if root.onStart != nil {
+			err = root.onStart(ctx)
+		}
+		errc <- err
 	}()
 	timer := time.NewTimer(budget)
 	select {
@@ -309,7 +313,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 	return nil, fmt.Errorf("unexpected %s during preparation", env.GetKind())
 }
 
-func prepareMigrations(ctx context.Context, root Root, descriptor *pb.DatabaseDescriptor) (*pb.MigrationState, error) {
+func prepareMigrations(ctx context.Context, root *Plugin, descriptor *pb.DatabaseDescriptor) (*pb.MigrationState, error) {
 	type result struct {
 		state *pb.MigrationState
 		err   error
@@ -322,12 +326,24 @@ func prepareMigrations(ctx context.Context, root Root, descriptor *pb.DatabaseDe
 				completed <- result{err: fmt.Errorf("migration panic: %v", p)}
 			}
 		}()
-		migrators := dbhook.Recognize(root)
+		migrators := dbhook.Migrators(root)
 		if len(migrators) > 1 {
-			completed <- result{err: &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "root plugin implements multiple migration interfaces"}}
+			completed <- result{err: &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "plugin has multiple migration registrations"}}
 			return
 		}
-		if descriptor.GetBackend() == pb.DatabaseBackend_DATABASE_BACKEND_NONE || len(migrators) == 0 {
+		mode := pb.MigrationMode_MIGRATION_MODE_NONE
+		if len(migrators) != 0 {
+			mode = migrators[0].Mode
+		}
+		if mode != descriptor.GetMigrationMode() {
+			completed <- result{err: &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: fmt.Sprintf("registered migration mode %s does not match manifest mode %s", mode, descriptor.GetMigrationMode())}}
+			return
+		}
+		if descriptor.GetBackend() == pb.DatabaseBackend_DATABASE_BACKEND_NONE && mode != pb.MigrationMode_MIGRATION_MODE_NONE {
+			completed <- result{err: &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "database migrations require a database backend"}}
+			return
+		}
+		if len(migrators) == 0 {
 			completed <- result{state: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 			return
 		}

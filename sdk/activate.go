@@ -18,10 +18,11 @@ import (
 
 // activation 跟踪 ACTIVATE → OnReady → ACTIVATED 与本地 ready gate（CONTRACTS §4.1）。
 type activation struct {
-	l    launch
-	ack  *pb.HelloAck  // 握手结果，提供 Session ID、协商版本与 Bootstrap
-	root Root          // 用户的根插件
-	sess *wire.Session // 激活后使用的 Session
+	l       launch
+	ack     *pb.HelloAck // 握手结果，提供 Session ID、协商版本与 Bootstrap
+	onReady func(context.Context) error
+	onStop  func(context.Context) error
+	sess    *wire.Session // 激活后使用的 Session
 
 	readyMu sync.Mutex    // 同步 ACTIVATED 写出、ready 发布与首条业务准入
 	ready   atomic.Bool   // ready gate：ACTIVATED 完整写出后才为 true
@@ -106,7 +107,11 @@ func (a *activation) runOnReady(m *pb.Activate) {
 				errc <- fmt.Errorf("OnReady panic: %v", p)
 			}
 		}()
-		errc <- a.root.OnReady(ctx)
+		var err error
+		if a.onReady != nil {
+			err = a.onReady(ctx)
+		}
+		errc <- err
 	}()
 	timer := time.NewTimer(time.Until(deadline))
 	defer timer.Stop()
@@ -169,8 +174,10 @@ func (a *activation) shutdown(deadline time.Time) {
 					logPanic("OnStop", p)
 				}
 			}()
-			if err := a.root.OnStop(ctx); err != nil {
-				slog.Error("OnStop failed", "err", err)
+			if a.onStop != nil {
+				if err := a.onStop(ctx); err != nil {
+					slog.Error("OnStop failed", "err", err)
+				}
 			}
 		}()
 		timer := time.NewTimer(time.Until(deadline))
@@ -225,13 +232,13 @@ func currentSession() (*wire.Session, error) {
 
 // activate 在 PREPARED 之后启动 Session，等待 ACTIVATE、执行 OnReady 并写出 ACTIVATED。
 // 返回时 ready gate 已打开；失败时已向 Core 报告并关闭 Session。之后用 serve 等待停止。
-func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Registration) (session *wire.Session, active *activation, err error) {
+func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Registration) (session *wire.Session, active *activation, err error) {
 	defer func() {
 		if err != nil {
 			err = errors.Join(err, dbhook.Close())
 		}
 	}()
-	a := &activation{l: l, ack: ack, root: root, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
+	a := &activation{l: l, ack: ack, onReady: root.onReady, onStop: root.onStop, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
 	a.lifetime, a.stopLifetime = context.WithCancel(context.Background())
 	limits := ack.GetBootstrap().GetSessionLimits()
 	a.sess = wire.New(conn, wire.Options{

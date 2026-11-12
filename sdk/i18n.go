@@ -25,7 +25,7 @@ func setI18n(messages *i18n.Catalog, defaultLocale string) {
 	translations.Store(&translationSession{messages: messages, defaultLocale: defaultLocale})
 }
 
-func collectI18n(root Root, reg *Registration) error {
+func collectI18n(root *Plugin, reg *Registration) error {
 	catalog, problems := i18n.Parse(generatedFor(root).I18n)
 	var errs []error
 	for _, problem := range problems {

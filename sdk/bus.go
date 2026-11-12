@@ -18,20 +18,23 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// SubscriptionRegistry 收集静态 Event Bus 订阅；零值可用，Collect 统一返回描述错误。
-type SubscriptionRegistry struct {
+// subscriptionRegistry 收集静态 Event Bus 订阅；零值可用，Collect 统一返回描述错误。
+type subscriptionRegistry struct {
 	pending       []func() error
 	subscriptions []subscriptionRoute
 	errs          []error
 }
 
 type subscriptionRoute struct {
+	plugin     *Plugin
+	subID      string
 	descriptor *pb.RouteDescriptor
 	invoke     func(*Context, []byte) error
 }
 
 // Subscription 构建一条类型化订阅；Handle 结束声明。
 type Subscription[T any] struct {
+	plugin    *Plugin
 	routeID   string
 	eventName string
 	handles   int
@@ -40,8 +43,11 @@ type Subscription[T any] struct {
 
 // Subscribe 开始构建 eventName（plugin_id/event_name）的 JSON 订阅。
 // 回调按 Session 串行执行，Context 无 Actor 与默认 Target。
-func Subscribe[T any](r *SubscriptionRegistry, routeID, eventName string) *Subscription[T] {
-	s := &Subscription[T]{routeID: routeID, eventName: eventName}
+func Subscribe[T any](owner Registrar, routeID, eventName string) *Subscription[T] {
+	scope := owner.registrar()
+	scope.plugin.checkRegistration()
+	r := &scope.plugin.subscriptions
+	s := &Subscription[T]{plugin: scope.plugin, routeID: routeID, eventName: eventName}
 	r.pending = append(r.pending, func() error {
 		if s.handles != 1 {
 			return fmt.Errorf("subscription route %q has invalid Handle sequence", s.routeID)
@@ -54,7 +60,7 @@ func Subscribe[T any](r *SubscriptionRegistry, routeID, eventName string) *Subsc
 		if err != nil {
 			return fmt.Errorf("subscription route %q: %w", s.routeID, err)
 		}
-		r.subscriptions = append(r.subscriptions, subscriptionRoute{descriptor: &pb.RouteDescriptor{
+		r.subscriptions = append(r.subscriptions, subscriptionRoute{plugin: scope.plugin, subID: scope.subID, descriptor: &pb.RouteDescriptor{
 			RouteId: s.routeID, Kind: pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION, DefaultEnabled: true,
 			Spec: &pb.RouteDescriptor_BusSubscription{BusSubscription: &pb.BusSubscriptionSpec{EventName: s.eventName, SchemaId: id, SchemaVersion: version, CallbackRouteId: s.routeID}},
 		}, invoke: func(c *Context, payload []byte) error {
@@ -71,33 +77,23 @@ func Subscribe[T any](r *SubscriptionRegistry, routeID, eventName string) *Subsc
 }
 
 // Handle 结束订阅声明，签名由类型参数约束。
-func (s *Subscription[T]) Handle(h func(*Context, T) error) { s.handles++; s.handler = h }
+func (s *Subscription[T]) Handle(h func(*Context, T) error) {
+	s.plugin.checkRegistration()
+	s.handles++
+	s.handler = h
+}
 
-func collectSubscriptions(root Root, reg *Registration) error {
-	r := &SubscriptionRegistry{}
-	root.Subscriptions(r)
+func collectSubscriptions(root *Plugin, reg *Registration) error {
+	r := &root.subscriptions
+	r.subscriptions = nil
+	r.errs = nil
 	for _, finish := range r.pending {
 		r.errs = append(r.errs, finish())
 	}
 	reg.subscriptions = r.subscriptions
-	if len(r.subscriptions) == 0 {
-		return errors.Join(r.errs...)
-	}
 	registration := &pb.Register{CandidateConfigJson: "{}"}
 	appendSubscriptionRoutes(reg, registration)
 	r.errs = append(r.errs, validate.Register(registration))
-	// 复用实际 REGISTER 的 route_id 生成规则，核对与其他注册器的冲突；HTTP Listener 此时尚未创建。
-	seen := make(map[string]bool)
-	for _, route := range buildRegister(reg, "{}", 0, nil).GetRoutes() {
-		if route.GetKind() != pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION {
-			seen[route.GetRouteId()] = true
-		}
-	}
-	for _, sub := range r.subscriptions {
-		if seen[sub.descriptor.GetRouteId()] {
-			r.errs = append(r.errs, fmt.Errorf("subscription route %q conflicts with another route", sub.descriptor.GetRouteId()))
-		}
-	}
 	return errors.Join(r.errs...)
 }
 
@@ -263,7 +259,7 @@ func invokeSubscription(a *activation, routes map[string]subscriptionRoute, deli
 	}
 	// 2. 回调没有入站 Event/Actor、默认 Target 或父调用编号，后续调用仅带订阅插件身份。
 	ctx, cancel := context.WithCancel(a.lifetime)
-	c := &Context{ctx: ctx, inbound: &wire.Inbound{Target: env.GetTarget()}}
+	c := &Context{plugin: sub.plugin, subID: sub.subID, ctx: ctx, inbound: &wire.Inbound{Target: env.GetTarget()}}
 	bindServiceContext(c)
 	c.active.Store(true)
 	defer func() {

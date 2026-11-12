@@ -36,7 +36,19 @@ var notesDDL string
 var noteIndexDDL string
 
 type plugin struct {
-	sdk.Base
+	plugin *sdk.Plugin
+}
+
+// New 显式绑定资源、配置回调、命令和所选数据库入口的迁移。
+func New() *sdk.Plugin {
+	p := sdk.NewPlugin()
+	sdk.UseGenerated(p, alonabotGenerated)
+	state := &plugin{plugin: p}
+	p.OnConfigLoad(state.OnConfigLoad)
+	p.OnStart(state.OnStart)
+	state.Commands(p)
+	state.registerMigrations(p)
+	return p
 }
 
 // OnConfigLoad 将版本 1 的问候词数组拼接成版本 2 的字符串，保留完整原始对象。
@@ -66,7 +78,7 @@ func (*plugin) OnConfigLoad(ctx context.Context, fromVersion uint32, raw json.Ra
 }
 
 // Commands 注册 /note set、get、delete 与语言选择示例 /note hello。
-func (*plugin) Commands(r *sdk.CommandRegistry) {
+func (*plugin) Commands(r *sdk.Plugin) {
 	g := r.Group("note")
 	g.Command("set").Handle(func(c *sdk.Context, key, value string) (message.Content, error) {
 		if err := saveNote(c.Context(), key, value); err != nil {
@@ -97,7 +109,7 @@ func reply(c *sdk.Context, key string, args ...any) (message.Content, error) {
 }
 
 func (p *plugin) started() error {
-	if p.Config().Bool("fail_start") {
+	if p.plugin.Config().Bool("fail_start") {
 		return errors.New("requested failure after startup database write")
 	}
 	slog.Info("configdb started")
@@ -105,7 +117,7 @@ func (p *plugin) started() error {
 }
 
 func main() {
-	if err := sdk.Run(&plugin{}); err != nil {
+	if err := sdk.Run(New()); err != nil {
 		slog.Error("configdb stopped with an error", "err", err)
 		os.Exit(1)
 	}

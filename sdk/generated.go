@@ -1,30 +1,26 @@
 package sdk
 
-import (
-	"fmt"
-	"reflect"
-)
+import "fmt"
 
-// Generated 提供构建期生成的配置/Service Schema 与文案原文；nil 字段表示没有对应项。
+// Generated 提供构建期生成的配置、服务、翻译与 manifest 原文；nil 表示没有对应资源。
 type Generated struct {
 	ServiceSchemas map[string][]byte // schema_id 对应的规范 JSON Service Schema。
-	I18n           map[string][]byte // i18n 文件名对应的原文；无文案资源时为 nil。
-	ConfigSchema   []byte            // config_schema.json 的规范 JSON；没有该文件时为 nil。
+	I18n           map[string][]byte // i18n 文件名对应的原文。
+	ConfigSchema   []byte            // config_schema.json 的规范 JSON。
+	Manifest       []byte            // 入口包 plugin.yaml 原文。
 }
 
-// generatedRegistrations 仅在生成代码的 init 中写入，初始化完成后由 Collect 和准备阶段读取。
-var generatedRegistrations = make(map[reflect.Type]Generated)
-
-// UseGenerated 按根类型登记生成项，只供生成代码在 init 中调用。
-// root 传入根类型的 nil 指针；同一根类型重复登记会 panic。
-func UseGenerated(root Root, g Generated) {
-	rootType := reflect.TypeOf(root)
-	if _, exists := generatedRegistrations[rootType]; exists {
-		panic(fmt.Sprintf("generated registration for %s already exists", rootType))
+// UseGenerated 把只读构建资源显式绑定到插件对象；重复绑定在 Collect 时报错。
+func UseGenerated(p *Plugin, g Generated) {
+	p.checkRegistration()
+	p.generatedCount++
+	if p.generatedCount > 1 {
+		p.errs = append(p.errs, fmt.Errorf("generated resources bound more than once"))
 	}
-	generatedRegistrations[rootType] = g
+	p.generated = g
 }
 
-func generatedFor(root Root) Generated {
-	return generatedRegistrations[reflect.TypeOf(root)]
-}
+// Generated 返回当前插件绑定的只读构建资源。
+func (p *Plugin) Generated() Generated { return p.generated }
+
+func generatedFor(p *Plugin) Generated { return p.generated }

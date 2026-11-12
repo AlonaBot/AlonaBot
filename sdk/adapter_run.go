@@ -26,12 +26,11 @@ const adapterMediaReadCapability = "media.read"
 // Session 生命周期沿用 activation；每个实例 Core 客户端独立关闭交付入口。
 type adapterRuntime struct {
 	activation *activation // Session.Start 前发布，提供出站停止门禁
-	Base
-	adapter   adapter.Adapter
-	mu        sync.Mutex // 保护实例登记、状态与配置
-	stopping  bool       // 与停止快照一起在 mu 下发布，阻止已准入但尚未执行的 Start
-	instances map[string]*adapterEntry
-	session   *wire.Session // Session.Start 前赋值，此后保持不变
+	adapter    adapter.Adapter
+	mu         sync.Mutex // 保护实例登记、状态与配置
+	stopping   bool       // 与停止快照一起在 mu 下发布，阻止已准入但尚未执行的 Start
+	instances  map[string]*adapterEntry
+	session    *wire.Session // Session.Start 前赋值，此后保持不变
 }
 
 // adapterEntry 保留实例状态与脱敏配置，生命周期操作由本实例锁串行化。
@@ -78,7 +77,7 @@ func RunAdapter(a adapter.Adapter) error {
 	}
 	// 2. 复用激活与停止回调，仅将业务处理器替换成实例服务。
 	runtime := &adapterRuntime{adapter: a, instances: make(map[string]*adapterEntry)}
-	active := &activation{l: l, ack: ack, root: runtime, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
+	active := &activation{l: l, ack: ack, onStop: runtime.OnStop, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
 	active.lifetime, active.stopLifetime = context.WithCancel(context.Background())
 	limits := ack.GetBootstrap().GetSessionLimits()
 	active.sess = wire.New(conn, wire.Options{Local: pb.InitiatorSide_INITIATOR_SIDE_PLUGIN, SessionID: ack.GetSessionId(), ProtocolMinor: ack.GetChosenMinor(), SourcePluginID: l.pluginID,

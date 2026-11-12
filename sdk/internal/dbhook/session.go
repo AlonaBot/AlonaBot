@@ -1,8 +1,9 @@
-// Package dbhook 在 SDK 与按需导入的数据库入口之间保存迁移登记及 Session 连接。
+// Package dbhook 为 SDK 的配置与数据库准备提供私有状态接入。
 //
+// [ConfigView] 连接登记时取得的子插件视图与准备后的取值，保持公开配置 API 精简。
 // SDK 在配置准备完成后调用 [Begin]，在准备失败或停止时调用 [Close]。
 // [Connection] 串行化首次打开与关闭，使一个 Session 只有一个受管连接。
-// 数据库入口通过 [Register] 登记迁移识别函数，SDK 通过 [Recognize] 收集声明；
+// 数据库入口通过 [Register] 在插件对象上登记迁移，SDK 通过 [Migrators] 读取声明；
 // 本包只依赖标准库与 contracts，避免 SDK 根包链接数据库实现。
 package dbhook
 

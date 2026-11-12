@@ -12,6 +12,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
+	"google.golang.org/protobuf/proto"
 )
 
 // UserID 携带命令 user 参数所指向的 external_user_id。
@@ -27,16 +28,19 @@ type Command struct {
 	structure reflect.Type   // 结构体参数的值类型；位置参数形式为 nil。
 
 	permission Permission
+	subID      string
 	rules      []Rule          // Collect 固定的调用顺序，全部通过后执行 Handler。
 	routeID    string          // 文本匹配与 Raw 的显式路由 ID
 	spec       *pb.CommandSpec // 已通过注册边界校验的命令描述
 }
 
-// CommandRegistry 收集命令；实例方法以方法值显式传入，不做自动 DI。
+// CommandGroup 收集命令；实例方法以方法值显式传入，不做自动 DI。
 // 子组共享根注册器的构建链和冲突索引；Collect 在全部声明结束后解析继承权限。
-type CommandRegistry struct {
-	parent     *CommandRegistry
-	groups     map[string]*CommandRegistry
+type CommandGroup struct {
+	plugin     *Plugin
+	subID      string
+	parent     *CommandGroup
+	groups     map[string]*CommandGroup
 	permission *Permission
 	builders   []*CommandBuilder
 	prefix     []string          // 本分组的公共路径前缀
@@ -64,66 +68,70 @@ type optionalArgument struct {
 }
 
 // Group 返回共享注册状态的子组；同名调用返回同一组。
-func (r *CommandRegistry) Group(name string) *CommandRegistry {
+func (r *CommandGroup) Group(name string) *CommandGroup {
+	r.plugin.checkRegistration()
 	if r.groups == nil {
-		r.groups = make(map[string]*CommandRegistry)
+		r.groups = make(map[string]*CommandGroup)
 	}
 	if r.groups[name] == nil {
-		r.groups[name] = &CommandRegistry{parent: r, prefix: append(slices.Clone(r.prefix), name)}
+		r.groups[name] = &CommandGroup{plugin: r.plugin, subID: r.subID, parent: r, prefix: append(slices.Clone(r.prefix), name)}
 	}
 	return r.groups[name]
 }
 
 // Permission 设置本组及未显式覆盖的后代路由权限。
-func (r *CommandRegistry) Permission(p Permission) *CommandRegistry { r.permission = &p; return r }
-
-func (r *CommandRegistry) owner() *CommandRegistry {
-	for r.parent != nil {
-		r = r.parent
-	}
+func (r *CommandGroup) Permission(p Permission) *CommandGroup {
+	r.plugin.checkRegistration()
+	r.permission = &p
 	return r
 }
 
+func (r *CommandGroup) owner() *CommandGroup {
+	return &r.plugin.commands
+}
+
 // Command 开始构建相对于本组路径的命令。
-func (r *CommandRegistry) Command(path ...string) *CommandBuilder {
+func (r *CommandGroup) Command(path ...string) *CommandBuilder {
 	return r.start(Command{Path: append(slices.Clone(r.prefix), path...), spec: &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_PATH}}, len(path) == 0)
 }
 
 // Regex 开始构建 Go regexp 文本匹配。
-func (r *CommandRegistry) Regex(routeID, expr string) *CommandBuilder {
+func (r *CommandGroup) Regex(routeID, expr string) *CommandBuilder {
 	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_REGEX, Regex: expr})
 }
 
 // Keyword 开始构建包含文本匹配。
-func (r *CommandRegistry) Keyword(routeID string, patterns ...string) *CommandBuilder {
+func (r *CommandGroup) Keyword(routeID string, patterns ...string) *CommandBuilder {
 	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_KEYWORD, Patterns: slices.Clone(patterns)})
 }
 
 // StartsWith 开始构建开头文本匹配。
-func (r *CommandRegistry) StartsWith(routeID string, patterns ...string) *CommandBuilder {
+func (r *CommandGroup) StartsWith(routeID string, patterns ...string) *CommandBuilder {
 	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_STARTSWITH, Patterns: slices.Clone(patterns)})
 }
 
 // EndsWith 开始构建结尾文本匹配。
-func (r *CommandRegistry) EndsWith(routeID string, patterns ...string) *CommandBuilder {
+func (r *CommandGroup) EndsWith(routeID string, patterns ...string) *CommandBuilder {
 	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_ENDSWITH, Patterns: slices.Clone(patterns)})
 }
 
 // FullMatch 开始构建完整文本匹配。
-func (r *CommandRegistry) FullMatch(routeID string, patterns ...string) *CommandBuilder {
+func (r *CommandGroup) FullMatch(routeID string, patterns ...string) *CommandBuilder {
 	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_FULLMATCH, Patterns: slices.Clone(patterns)})
 }
 
 // Raw 开始构建最后执行的原始消息路由。
-func (r *CommandRegistry) Raw(routeID string) *CommandBuilder {
+func (r *CommandGroup) Raw(routeID string) *CommandBuilder {
 	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_RAW})
 }
 
-func (r *CommandRegistry) text(routeID string, spec *pb.CommandSpec) *CommandBuilder {
+func (r *CommandGroup) text(routeID string, spec *pb.CommandSpec) *CommandBuilder {
 	return r.start(Command{routeID: routeID, spec: spec}, routeID == "" || strings.HasPrefix(routeID, commandRoutePrefix) || strings.HasPrefix(routeID, buttonRoutePrefix))
 }
 
-func (r *CommandRegistry) start(c Command, invalid bool) *CommandBuilder {
+func (r *CommandGroup) start(c Command, invalid bool) *CommandBuilder {
+	r.plugin.checkRegistration()
+	c.subID = r.subID
 	b := &CommandBuilder{registry: r, command: c, invalid: invalid, options: routeOptions{usageMode: pb.UsageMode_USAGE_MODE_DEFAULT}}
 	r.owner().builders = append(r.owner().builders, b)
 	return b
@@ -131,7 +139,7 @@ func (r *CommandRegistry) start(c Command, invalid bool) *CommandBuilder {
 
 // CommandBuilder 收集一条路由；Handle 结束构建，Collect 统一验证。
 type CommandBuilder struct {
-	registry    *CommandRegistry
+	registry    *CommandGroup
 	command     Command
 	options     routeOptions
 	permission  *Permission
@@ -141,6 +149,7 @@ type CommandBuilder struct {
 }
 
 func (b *CommandBuilder) touch() {
+	b.registry.plugin.checkRegistration()
 	if b.handles != 0 {
 		b.afterHandle = true
 	}
@@ -209,7 +218,11 @@ func (b *CommandBuilder) Permission(p Permission) *CommandBuilder {
 }
 
 // Handle 结束路由构建，签名规则由 Collect 检查。
-func (b *CommandBuilder) Handle(handler any) { b.handles++; b.command.Handler = handler }
+func (b *CommandBuilder) Handle(handler any) {
+	b.registry.plugin.checkRegistration()
+	b.handles++
+	b.command.Handler = handler
+}
 
 // Rule 按调用与参数顺序追加条件，全部匹配后执行 Handler。
 func (b *CommandBuilder) Rule(rules ...Rule) *CommandBuilder {
@@ -218,7 +231,11 @@ func (b *CommandBuilder) Rule(rules ...Rule) *CommandBuilder {
 	return b
 }
 
-func (r *CommandRegistry) collect() {
+func (r *CommandGroup) collect() {
+	r.commands = nil
+	r.errs = nil
+	r.seen = nil
+	r.routeIDs = nil
 	for _, b := range r.builders {
 		c := b.command
 		id := commandRouteID(c)
@@ -247,7 +264,7 @@ func (r *CommandRegistry) collect() {
 	}
 }
 
-func (r *CommandRegistry) register(c Command, options routeOptions) {
+func (r *CommandGroup) register(c Command, options routeOptions) {
 	// 1. 从真实函数签名取得参数类型，选项仅描述名称与缺失时的行为。
 	mode, structure, params, err := checkHandler(c.Handler)
 	if err != nil {
@@ -256,7 +273,8 @@ func (r *CommandRegistry) register(c Command, options routeOptions) {
 	}
 	c.mode, c.structure = mode, structure
 	c.Aliases, c.Priority = options.aliases, options.priority
-	spec := c.spec
+	spec := proto.Clone(c.spec).(*pb.CommandSpec)
+	c.spec = spec
 	if structure != nil && (options.argsSet || len(options.optional) != 0 || options.raw) {
 		r.errs = append(r.errs, invalidCommand("command %q uses struct parameters with Args, Optional or RawTail", commandRouteID(c)))
 		return
@@ -312,6 +330,13 @@ func (r *CommandRegistry) register(c Command, options routeOptions) {
 	if err := validate.Register(&pb.Register{CandidateConfigJson: "{}", Routes: []*pb.RouteDescriptor{{
 		RouteId: commandRouteID(c), Kind: pb.RouteKind_ROUTE_KIND_COMMAND, Spec: &pb.RouteDescriptor_Command{Command: spec},
 	}}}); err != nil {
+		if structure != nil {
+			fields := make([]string, len(params))
+			for i, param := range params {
+				fields[i] = fmt.Sprintf("%s (arg %q)", structure.Field(i).Name, param.Name)
+			}
+			err = fmt.Errorf("struct fields [%s]: %w", strings.Join(fields, ", "), err)
+		}
 		r.errs = append(r.errs, err)
 		return
 	}
@@ -323,7 +348,7 @@ func invalidCommand(format string, args ...any) *Error {
 }
 
 // add 对已校验的命令检查跨注册项冲突；问题记入 errs。
-func (r *CommandRegistry) add(c Command) {
+func (r *CommandGroup) add(c Command) {
 	// 1. 全部路径与别名检查跨注册项冲突，失败时不登记部分路径。
 	var paths [][]string
 	if c.spec.GetMatch() == pb.CommandMatch_COMMAND_MATCH_PATH {
@@ -383,14 +408,16 @@ func Public(mode HTTPAuth) HTTPOption {
 	return func(r *HTTPRoute) { r.Public, r.AuthMode = true, mode }
 }
 
-// HTTPRegistry 收集 HTTP 路由；默认需要 Core 授权会话。
-type HTTPRegistry struct {
+// httpRegistry 收集 HTTP 路由；默认需要 Core 授权会话。
+type httpRegistry struct {
+	plugin *Plugin
 	routes []HTTPRoute
 	errs   []error
 }
 
 // Handle 注册 method+path 的 Handler；同插件内重复的 method+path 报错。
-func (r *HTTPRegistry) Handle(method, path string, h http.Handler, opts ...HTTPOption) {
+func (r *httpRegistry) Handle(method, path string, h http.Handler, opts ...HTTPOption) {
+	r.plugin.checkRegistration()
 	route := HTTPRoute{Method: strings.ToUpper(method), Path: path, Handler: h, AuthMode: AuthCoreSession}
 	for _, o := range opts {
 		o(&route)
@@ -426,14 +453,16 @@ type Schedule struct {
 	Handler  func(*Context) error // 每次触发时调用的函数
 }
 
-// ScheduleRegistry 收集定时任务。
-type ScheduleRegistry struct {
-	jobs []Schedule
-	errs []error
+// scheduleRegistry 收集定时任务。
+type scheduleRegistry struct {
+	plugin *Plugin
+	jobs   []Schedule
+	errs   []error
 }
 
 // Every 声明固定间隔任务（至少 1s）。
-func (r *ScheduleRegistry) Every(jobID string, d time.Duration, fn func(*Context) error) {
+func (r *scheduleRegistry) Every(jobID string, d time.Duration, fn func(*Context) error) {
+	r.plugin.checkRegistration()
 	if d < time.Second {
 		r.errs = append(r.errs, fmt.Errorf("interval %[2]s of job %[1]s is less than 1s", jobID, d))
 		return
@@ -442,7 +471,8 @@ func (r *ScheduleRegistry) Every(jobID string, d time.Duration, fn func(*Context
 }
 
 // Cron 声明五字段 cron 任务；timezone 为 IANA 名称，空串表示 UTC。表达式在 REGISTER 时由 Core 校验。
-func (r *ScheduleRegistry) Cron(jobID, expr, timezone string, fn func(*Context) error) {
+func (r *scheduleRegistry) Cron(jobID, expr, timezone string, fn func(*Context) error) {
+	r.plugin.checkRegistration()
 	if len(strings.Fields(expr)) != 5 {
 		r.errs = append(r.errs, fmt.Errorf("cron expression %[2]q of job %[1]s does not have five fields", jobID, expr))
 		return
@@ -451,7 +481,7 @@ func (r *ScheduleRegistry) Cron(jobID, expr, timezone string, fn func(*Context) 
 }
 
 // add 检查 job_id、Handler 并去重后登记任务；问题记入 errs。
-func (r *ScheduleRegistry) add(s Schedule) {
+func (r *scheduleRegistry) add(s Schedule) {
 	switch {
 	case s.JobID == "":
 		r.errs = append(r.errs, fmt.Errorf("scheduled job is missing job_id"))

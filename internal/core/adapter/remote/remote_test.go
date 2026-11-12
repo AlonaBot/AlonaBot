@@ -29,6 +29,8 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter/remote"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/media"
+	coremessage "github.com/AlonaBot/AlonaBot/internal/core/message"
+	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
@@ -53,7 +55,9 @@ func TestMain(m *testing.M) {
 	}
 	var err error
 	if mode == "plugin" {
-		err = sdk.Run(&loopPlugin{})
+		err = sdk.Run(newLoopPlugin())
+	} else if mode == "plugin-object" {
+		err = sdk.Run(newObjectPlugin())
 	} else if mode == "schema-parse" || mode == "schema-resolve" {
 		err = invalidSchemaAdapter(mode)
 	} else {
@@ -66,7 +70,12 @@ func TestMain(m *testing.M) {
 	os.Exit(0)
 }
 
-type loopPlugin struct{ sdk.Base }
+func newLoopPlugin() *sdk.Plugin {
+	p := sdk.NewPlugin()
+	registerLoopEvents(p)
+	registerLoopCommands(p)
+	return p
+}
 
 type observedEvent struct {
 	ChatType     message.ChatType
@@ -129,16 +138,16 @@ func observe(route string, c *sdk.Context, value *poke) error {
 	return errors.Join(err, file.Close())
 }
 
-// Events 记录真实插件收到的权限和扩展载荷，barrier 用于确定完整派发已结束。
-func (*loopPlugin) Events(r *sdk.EventRegistry) {
+// registerLoopEvents 记录真实插件收到的权限和扩展载荷，barrier 用于确定完整派发已结束。
+func registerLoopEvents(r *sdk.Plugin) {
 	r.On("loop", sdk.MessageCreated).Handle(func(c *sdk.Context) error { return observe("loop", c, nil) })
 	r.On("extension", sdk.AdapterEvent[poke]("loop.poke", 1)).Handle(func(c *sdk.Context, value *poke) error { return observe("extension", c, value) })
 	r.On("uninstalled", sdk.AdapterEvent[poke]("other.poke", 1)).Handle(func(c *sdk.Context, value *poke) error { return observe("uninstalled", c, value) })
 	r.On("barrier", sdk.Scheduled).Handle(func(c *sdk.Context) error { return observe("barrier", c, nil) })
 }
 
-// Commands 让扩展事件误入命令层时留下可观察记录。
-func (*loopPlugin) Commands(r *sdk.CommandRegistry) {
+// registerLoopCommands 让扩展事件误入命令层时留下可观察记录。
+func registerLoopCommands(r *sdk.Plugin) {
 	r.Raw("raw").Handle(func(c *sdk.Context) error { return observe("raw", c, nil) })
 }
 
@@ -1163,5 +1172,122 @@ func TestRemotePermissionsAndEvents(t *testing.T) {
 				t.Fatalf("missing rejection identity or level: %s", text)
 			}
 		})
+	}
+}
+
+const objectConfigSchema = `{"root":{"type":"string","default":"whole"},"part":{"type":"object","items":{"prefix":{"type":"string","default":"config"}}}}`
+
+func objectI18n() map[string][]byte {
+	return map[string][]byte{"en-US.json": []byte(`{"messages":{"object.reply":"{prefix}|{name}|{count}|{tail}"}}`)}
+}
+
+func newObjectPlugin() *sdk.Plugin {
+	p := sdk.NewPlugin()
+	sdk.UseGenerated(p, sdk.Generated{ConfigSchema: []byte(objectConfigSchema), I18n: objectI18n()})
+	sub := p.Sub("part").Permission(sdk.Anyone)
+	values := sub.Config()
+	sub.Command("object").Handle(func(c *sdk.Context, args struct {
+		Name  string
+		Count int
+		Tail  string `arg:",raw" default:"fallback"`
+	}) (message.Content, error) {
+		if c.Config().String("root") != "whole" {
+			return nil, errors.New("whole-plugin config is unavailable")
+		}
+		return message.Text(c.T("object.reply", "prefix", values.String("prefix"), "name", args.Name, "count", args.Count, "tail", args.Tail)), nil
+	})
+	return p
+}
+
+type objectLoopSink struct {
+	router *router.Router
+	events chan *pb.Event
+}
+
+func (s *objectLoopSink) Deliver(ctx context.Context, ev *pb.Event) error {
+	select {
+	case s.events <- proto.CloneOf(ev):
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return s.router.Deliver(ctx, ev)
+}
+
+// TestPluginObjectCommand 经真实 SDK 插件、Router 与回环 Adapter 验证对象资源、子插件配置和结构体命令。
+func TestPluginObjectCommand(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	store, spec, logs := setup(t)
+	registry := adapter.NewRegistry()
+	sender := coremessage.New(registry, policy.New(store), nil, nil, tune.Defaults().RequestTimeout)
+	dispatch := router.New(router.Options{Concurrency: 1, QueueBytes: tune.Defaults().DispatchQueueBytes, QueueEvents: tune.Defaults().DispatchQueueEvents, Adapters: registry, Send: sender.Send})
+	dispatch.Start()
+	defer func() {
+		if err := dispatch.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	}()
+	sink := &objectLoopSink{router: dispatch, events: make(chan *pb.Event, 4)}
+	process := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: sink, RegisterIncoming: openMediaStore(t).RegisterIncoming})
+	mux := router.NewMux()
+	process.Services(mux)
+	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
+	spec.Handler = mux.For(caller)
+	running, err := supervisor.Launch(ctx, store, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
+	if err := process.Bind(ctx, running.Instance, caller); err != nil {
+		t.Fatal(err)
+	}
+	if err := process.StartInstance(ctx, "one", []byte(`{"account":"a"}`)); err != nil {
+		t.Fatal(err)
+	}
+	observer := spec
+	observer.PluginID = "object-plugin"
+	observer.Role = state.RolePlugin
+	observer.AdapterID = ""
+	observer.GenerationID = "object-gen"
+	observer.PluginDir = t.TempDir()
+	observer.ConfigSchema = []byte(objectConfigSchema)
+	observer.I18n = objectI18n()
+	observer.Bootstrap = &pb.Bootstrap{GenerationId: observer.GenerationID, CandidateConfigJson: `{"part":{"prefix":"prepared"}}`, TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	observer.ExtraEnv = map[string]string{helperEnv: "plugin-object", "GORACE": "atexit_sleep_ms=0"}
+	pluginCaller := router.NewCaller(observer.PluginID, observer.GenerationID)
+	pluginMux := router.NewMux()
+	pluginMux.Handle(wire.ServiceSend, sender.Send)
+	observer.Handler = pluginMux.For(pluginCaller)
+	if err := store.AddInstall(ctx, state.Install{PluginID: observer.PluginID, Role: state.RolePlugin, BuildDigest: observer.BuildDigest}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddGeneration(ctx, observer.PluginID, observer.GenerationID, observer.Bootstrap.CandidateConfigJson, 1); err != nil {
+		t.Fatal(err)
+	}
+	plugin, err := supervisor.Launch(ctx, store, observer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer plugin.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
+	dispatch.Attach(router.FromInstance(plugin.Instance), pluginCaller)
+	instance, _ := registry.Get("one")
+	target := &pb.Target{AdapterId: "loop", AdapterInstanceId: "one", AccountId: "a", ChatId: "chat"}
+	input := &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: "/object Ada 3 raw tail"}}}}}
+	if _, safe := instance.Send(ctx, target, input); safe != nil {
+		t.Fatal(safe)
+	}
+	for {
+		select {
+		case ev := <-sink.events:
+			chain := ev.GetEventPayload().GetMessageCreated().GetChain()
+			if len(chain.GetSegments()) == 1 && chain.Segments[0].GetText().GetText() == "prepared|Ada|3|raw tail" {
+				return
+			}
+		case <-ctx.Done():
+			logs.mu.Lock()
+			text := logs.b.String()
+			logs.mu.Unlock()
+			t.Fatalf("translated command reply not received: %v\n%s", ctx.Err(), text)
+		}
 	}
 }

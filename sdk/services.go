@@ -32,8 +32,8 @@ const (
 	AccessPublic
 )
 
-// ServiceRegistry 收集静态服务；零值可用，Collect 统一返回描述错误。
-type ServiceRegistry struct {
+// serviceRegistry 收集静态服务；零值可用，Collect 统一返回描述错误。
+type serviceRegistry struct {
 	services []serviceRoute
 	builders []*serviceBuilder
 	schemas  map[string][]byte
@@ -41,11 +41,15 @@ type ServiceRegistry struct {
 }
 
 type serviceRoute struct {
+	plugin     *Plugin
+	subID      string
 	descriptor *pb.RouteDescriptor
 	invoke     func(*Context, []byte) ([]byte, error)
 }
 
 type serviceBuilder struct {
+	plugin      *Plugin
+	subID       string
 	name        string
 	access      Access
 	allowlist   []string
@@ -63,8 +67,11 @@ type JSONService[In, Out any] struct {
 }
 
 // JSON 开始构建 JSON 服务，Schema 由生成器提供。
-func JSON[In, Out any](r *ServiceRegistry, name string) *JSONService[In, Out] {
-	b := &serviceBuilder{name: name}
+func JSON[In, Out any](owner Registrar, name string) *JSONService[In, Out] {
+	scope := owner.registrar()
+	scope.plugin.checkRegistration()
+	r := &scope.plugin.services
+	b := &serviceBuilder{plugin: scope.plugin, subID: scope.subID, name: name}
 	s := &JSONService[In, Out]{builder: b}
 	b.prepare = func() (serviceRoute, error) {
 		// 1. 解析输入输出 Schema 并冻结 Handler，调用时复用校验器。
@@ -138,6 +145,7 @@ func (s *JSONService[In, Out]) Access(a Access, allowlist ...string) *JSONServic
 // Tool 声明给模型的说明与缺省调用策略，输入 Schema 复用生成的 Service Schema 原文。
 // 重复调用采用最后一次；Handle 之后调用由 Collect 报错。
 func (s *JSONService[In, Out]) Tool(description string, defaultPolicy ToolDefault) *JSONService[In, Out] {
+	s.builder.plugin.checkRegistration()
 	if s.builder.handles != 0 {
 		s.builder.afterHandle = true
 	}
@@ -147,6 +155,7 @@ func (s *JSONService[In, Out]) Tool(description string, defaultPolicy ToolDefaul
 
 // Handle 结束 JSON 服务声明。
 func (s *JSONService[In, Out]) Handle(h func(*Context, In) (Out, error)) {
+	s.builder.plugin.checkRegistration()
 	s.builder.handles++
 	s.handler = h
 }
@@ -158,8 +167,11 @@ type ProtoService[In, Out proto.Message] struct {
 }
 
 // Proto 开始构建 Protobuf 服务，版本保持为 1。
-func Proto[In, Out proto.Message](r *ServiceRegistry, name string) *ProtoService[In, Out] {
-	b := &serviceBuilder{name: name}
+func Proto[In, Out proto.Message](owner Registrar, name string) *ProtoService[In, Out] {
+	scope := owner.registrar()
+	scope.plugin.checkRegistration()
+	r := &scope.plugin.services
+	b := &serviceBuilder{plugin: scope.plugin, subID: scope.subID, name: name}
 	s := &ProtoService[In, Out]{builder: b}
 	b.prepare = func() (serviceRoute, error) {
 		handler := s.handler // 收集后冻结 Handler，保持 Session 注册固定。
@@ -195,11 +207,13 @@ func (s *ProtoService[In, Out]) Access(a Access, allowlist ...string) *ProtoServ
 
 // Handle 结束 Protobuf 服务声明。
 func (s *ProtoService[In, Out]) Handle(h func(*Context, In) (Out, error)) {
+	s.builder.plugin.checkRegistration()
 	s.builder.handles++
 	s.handler = h
 }
 
 func (b *serviceBuilder) setAccess(a Access, allowlist []string) {
+	b.plugin.checkRegistration()
 	if b.handles != 0 {
 		b.afterHandle = true
 	}
@@ -221,7 +235,7 @@ func (b *serviceBuilder) route(inputID, outputID string, inputVersion, outputVer
 	case AccessPublic:
 		access = pb.ServiceAccess_SERVICE_ACCESS_PUBLIC
 	}
-	return serviceRoute{descriptor: &pb.RouteDescriptor{
+	return serviceRoute{plugin: b.plugin, subID: b.subID, descriptor: &pb.RouteDescriptor{
 		RouteId: serviceRoutePrefix + b.name, Kind: pb.RouteKind_ROUTE_KIND_SERVICE, DefaultEnabled: true,
 		InputSchemaId: inputID, InputSchemaVersion: inputVersion, OutputSchemaId: outputID, OutputSchemaVersion: outputVersion,
 		Spec: &pb.RouteDescriptor_Service{Service: &pb.ServiceSpec{ServiceName: b.name, Access: access, AllowlistPluginIds: b.allowlist, Encoding: encoding}},
@@ -265,9 +279,11 @@ func validateServiceJSON(schema *jsonschema.Resolved, data []byte) error {
 	return schema.Validate(value)
 }
 
-func collectServices(root Root, reg *Registration) error {
-	r := &ServiceRegistry{schemas: generatedFor(root).ServiceSchemas}
-	root.Services(r)
+func collectServices(root *Plugin, reg *Registration) error {
+	r := &root.services
+	r.schemas = generatedFor(root).ServiceSchemas
+	r.services = nil
+	r.errs = nil
 	for _, b := range r.builders {
 		if b.handles != 1 || b.afterHandle {
 			r.errs = append(r.errs, fmt.Errorf("service route %q has invalid Handle sequence", serviceRoutePrefix+b.name))
@@ -283,21 +299,7 @@ func collectServices(root Root, reg *Registration) error {
 	reg.services = r.services
 	registration := &pb.Register{CandidateConfigJson: "{}"}
 	appendServiceRoutes(reg, registration)
-	// Collect 尚未创建 HTTP Listener，仅校验 Services Hook 的描述。
 	r.errs = append(r.errs, validate.Register(registration))
-	seen := make(map[string]bool)
-	for _, command := range reg.Commands {
-		seen[commandRouteID(command)] = true
-	}
-	for _, event := range reg.Events {
-		seen[event.RouteID] = true
-	}
-	for _, service := range r.services {
-		id := service.descriptor.GetRouteId()
-		if seen[id] {
-			r.errs = append(r.errs, fmt.Errorf("service route %q conflicts with another route", id))
-		}
-	}
 	return errors.Join(r.errs...)
 }
 
@@ -340,7 +342,7 @@ func invokeService(ctx context.Context, in *wire.Inbound, service serviceRoute) 
 	}
 	// 2. 将父请求绑定到 Handler 有效期；恢复 panic 时记录完整堆栈。
 	ctx, cancel := context.WithCancel(ctx)
-	c := &Context{ctx: ctx, inbound: in, actor: request.GetContext().GetActor(), defaultTarget: request.GetContext().GetDefaultTarget()}
+	c := &Context{plugin: service.plugin, subID: service.subID, ctx: ctx, inbound: in, actor: request.GetContext().GetActor(), defaultTarget: request.GetContext().GetDefaultTarget()}
 	chain := request.GetContext().GetPluginChain()
 	if len(chain) > 0 {
 		c.caller = chain[len(chain)-1]
