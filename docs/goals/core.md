@@ -65,7 +65,7 @@
 | goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 等待前置 |
 | goal-122 | T-04.10 | 管理员与封禁按 Adapter 登记 | T-04.4、T-07.6 | 已完成（PR #133） |
 | goal-125 | T-04.12 | 插件对象、结构体参数与子插件 | T-04.8 | 待派发 |
-| goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 待派发 |
+| goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 已完成（PR #145） |
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 已完成（PR #119） |
 | goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 等待前置 |
 | goal-68 | T-13.2 | 开发组件的配置与数据库 | T-07.6、T-08.5、T-08.11、T-13.1 | 等待前置 |
@@ -4480,7 +4480,7 @@ sdk/generate
 
 ### goal-16 · T-05.2 Rule、HandlerOutcome 与传播
 
-状态：待派发。前置均已合并（T-04.8 为 PR #141（合并提交 `ac4aded`））；审查者按 main 合入 PR #141 后的代码核对。T-05.1（PR #67）、T-04.7（PR #89）已合并。2026-11-12 按当前 builder、SDK 自有类型、Permission 与 HandlerOutcome 改写，自动型显式 Send 沿用 D-70 和 MESSAGE-MODEL §3；PLAN T-05 步骤 3 中旧的自动型 Send 限制按 T-04.7 已完成行、同章 V-14 与现行消息契约执行。与 goal-125、goal-68 并行时，后合并者同步 main，在已有注册与装配上保留本切片的 Rule 和调用生命周期语义。
+状态：已完成（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)，合并提交 `0f860a9`），证据见 TEST-MATRIX §3.2。合入：`sdk.Rule`、`sdk.Any`、`sdk.ToMe` 与命令、事件、按钮 builder 的 `Rule` 方法（Collect 校验 nil 与 Handle 顺序，REGISTER 写 `RuleDescriptor.HasCustomRule`）；Rule 与目标 Handler 在同一 RPC、同一 Context 中依次执行，Rule false/error/panic 为 matched=false；`StopPropagation` 在有效调用内锁存，调用结束时固定传播结果、使 Context 失效并取消派生 context；Core 自动回复要求调用成功、matched=true、自动模式且内容非空，排在显式发送之后。派发时：前置均已合并（T-04.8 为 PR #141（合并提交 `ac4aded`））；审查者按 main 合入 PR #141 后的代码核对。T-05.1（PR #67）、T-04.7（PR #89）已合并。2026-11-12 按当前 builder、SDK 自有类型、Permission 与 HandlerOutcome 改写，自动型显式 Send 沿用 D-70 和 MESSAGE-MODEL §3；PLAN T-05 步骤 3 中旧的自动型 Send 限制按 T-04.7 已完成行、同章 V-14 与现行消息契约执行。与 goal-125、goal-68 并行时，后合并者同步 main，在已有注册与装配上保留本切片的 Rule 和调用生命周期语义。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-16（切片 T-05.2：Rule、HandlerOutcome 与传播）。goal 目录 goal-16，分支 goal-16，worktree .worktrees/goal-16，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -4805,7 +4805,7 @@ goal-125 若先合并，Collect 改为收 *Plugin，命令、事件与 OnButton 
 
 ### goal-17 · T-05.3 三阶段 Hook 与 send_forbidden
 
-状态：等待前置（T-05.2）。2026-11-09 按 D-112 把 SDK 接口段改为链式注册与 goal-91 的 SDK 类型（位置参数与 `RouteOption` 已由 D-70 删除），AfterSend 的 Handler 增加 error 返回值，与 MESSAGE-MODEL §5「Handler 只返回成功或 ErrorInfo」一致；T-05.2 排在 T-04.8 之后，这些类型届时已合入。同日按 D-92、D-93 补充：出站 Hook 中禁止调用的服务除 Send、Edit 外还有 `core.action` 与 `core.delete`；其中已合并的（goal-106、goal-107）由本切片一并加入禁止名单，未合并的由它们自己加入，审查者改写语句时按合并情况写入。语句中 goal-2、goal-12、goal-15、goal-16、goal-51、goal-91 提供的符号（router 的派发链与可信信息、message.Service 的 Send 与 Edit、sdk 的分发、事件常量与 SDK 类型）只写名字；合并后由审查者核对签名，再改为待派发。
+状态：等待前置（T-05.2 已合并，待审查者按合并后的代码改写）。T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)，合并提交 `0f860a9`）已合并。2026-11-09 按 D-112 把 SDK 接口段改为链式注册与 goal-91 的 SDK 类型（位置参数与 `RouteOption` 已由 D-70 删除），AfterSend 的 Handler 增加 error 返回值，与 MESSAGE-MODEL §5「Handler 只返回成功或 ErrorInfo」一致；T-05.2 排在 T-04.8 之后，这些类型届时已合入。同日按 D-92、D-93 补充：出站 Hook 中禁止调用的服务除 Send、Edit 外还有 `core.action` 与 `core.delete`；其中已合并的（goal-106、goal-107）由本切片一并加入禁止名单，未合并的由它们自己加入，审查者改写语句时按合并情况写入。语句中 goal-2、goal-12、goal-15、goal-16、goal-51、goal-91 提供的符号（router 的派发链与可信信息、message.Service 的 Send 与 Edit、sdk 的分发、事件常量与 SDK 类型）只写名字；合并后由审查者核对签名，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-17（切片 T-05.3：三阶段 Hook 与 send_forbidden）。goal 目录 goal-17，分支 goal-17，worktree .worktrees/goal-17，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -4877,7 +4877,7 @@ goal-125 若先合并，Collect 改为收 *Plugin，命令、事件与 OnButton 
 
 ### goal-52 · T-05.4 延续调用与多轮等待
 
-状态：等待前置（T-05.2）。2026-11-10 按 D-119 加入 builder 的 `.Continue()`：接口、行为与本地自测各追加一条，`sdk/registry.go`、`sdk/events.go` 与按钮路由的 builder 加入范围；前置合并后由审查者按合入的 builder 类型核对。语句中 goal-2、goal-15、goal-16、goal-76 提供的符号（router 的派发链与 Invocation、sdk 的 Context 与分发、tune.Values）只写名字；合并后由审查者核对签名，再改为待派发。
+状态：等待前置（T-05.2 已合并，待审查者按合并后的代码改写）。T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)，合并提交 `0f860a9`）已合并。2026-11-10 按 D-119 加入 builder 的 `.Continue()`：接口、行为与本地自测各追加一条，`sdk/registry.go`、`sdk/events.go` 与按钮路由的 builder 加入范围；前置合并后由审查者按合入的 builder 类型核对。语句中 goal-2、goal-15、goal-16、goal-76 提供的符号（router 的派发链与 Invocation、sdk 的 Context 与分发、tune.Values）只写名字；合并后由审查者核对签名，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-52（切片 T-05.4：延续调用与多轮等待）。goal 目录 goal-52，分支 goal-52，worktree .worktrees/goal-52，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
