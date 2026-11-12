@@ -211,7 +211,8 @@ func (a *assembly) handler(r *runningComponent, install state.Install) wire.Hand
 	if install.Role != state.RoleAdapter {
 		return a.mux.For(r.caller)
 	}
-	r.remote = remote.New(remote.Options{AdapterID: install.AdapterID, PluginID: install.PluginID, Store: a.store, Registry: a.adapters, Sink: a.router, RegisterIncoming: a.media.RegisterIncoming})
+	r.remote = remote.New(remote.Options{AdapterID: install.AdapterID, PluginID: install.PluginID, Store: a.store, Registry: a.adapters, Sink: a.router, RegisterIncoming: a.media.RegisterIncoming,
+		StartCommandSync: a.router.StartCommandSync, StopCommandSync: a.router.StopCommandSync})
 	// Adapter 私有服务按 Session 建独立 Mux，多个 Adapter 不会重复登记固定服务名。
 	local := router.NewMux()
 	r.remote.Services(local)
