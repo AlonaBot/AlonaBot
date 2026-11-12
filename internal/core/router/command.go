@@ -275,7 +275,7 @@ func (r *Router) invokeCommand(c candidate, ev *pb.Event, event *trustedEvent, b
 		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn("decode command handler outcome failed", "error", err)
 		return false
 	}
-	if callError == nil && response.Err == nil && len(outcome.GetChain().GetSegments()) != 0 {
+	if callError == nil && response.Err == nil && outcome.GetMatched() && c.route.GetCommand().GetHandlerMode() == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY && len(outcome.GetChain().GetSegments()) != 0 {
 		r.sendReply(c, ev, outcome.Chain, trace)
 	}
 	return outcome.GetPropagation() == pb.Propagation_PROPAGATION_STOP
