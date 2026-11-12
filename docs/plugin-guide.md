@@ -17,6 +17,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 - 包级变量与 `init` 不做重活：不加载大文件、不建大表、不批量编译正则，推迟到 OnStart 或首次使用。所有被链接的包的 `init` 都会在启动时执行，分配的内存会一直常驻。
 - 优先纯 Go。确需 CGO 时，必须为每个声明支持的平台提供真实可运行的二进制，不支持的平台在 manifest 中不声明（CONTRACTS §7.1、§9.1）。
 - 插件的依赖由它自己的 `go.mod` 管理，与其他插件和 Core 互不影响；代价是每个依赖都完整地进入这个插件的进程。
+- 消息、事件、会话、消息句柄、发送回执与媒体使用 `sdk/message`，错误码使用 `sdk/errcode`；公共 API 的协议转换由 SDK 内部完成。自有 Protobuf 服务仍以自己的 `proto.Message` 类型配合 `sdk.Proto`、`sdk.CallProto` 使用（CONTRACTS §3、§8，D-70、D-71）。
 
 ## 3. 存储
 
@@ -41,14 +42,23 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 - 有副作用的业务调用不自动重试；超时与取消不代表对端没有执行（CONTRACTS §1.2）。
 - 命令、文本匹配、事件、Service 与 Event Bus 订阅都链式注册，以 `Handle` 结束；漏写 `Handle`、重复调用或在它之后继续调用，都会让 `Collect` 报错（D-70）。
 - 权限写成 `sdk.Permission`：`sdk.Anyone`、`sdk.User`、`sdk.Admin`、`sdk.ChatAdmin`、`sdk.PermissionName`，用 `Or` 取并集。命令与文本匹配取最近一层显式设置（路由、最近的组、外层的组），都没有时要求 `user`；事件路由没有设置时为空集合。Handler 内用 `c.Has` 按当前 Actor 判断。
-- 两种 Handler 都可以 `c.Send`。自动回复型 Handler 返回的非空 Chain 由 Core 在 Handler 返回后发送，排在本次调用的全部显式发送之后。
+- `c.Send`、`sdk.Send`、编辑与自动回复都接收 `message.Content`，可以直接传 `message.Text(...)`、`message.ImageURL(...)` 等单个片段，也可以传 `message.Chain{...}`。自动回复型 Handler 的返回类型为 `(message.Content, error)`，成功返回的非空内容由 Core 在 Handler 返回后发送，排在本次调用的全部显式发送之后；nil 与空 Chain 表示不回复，显式发送与编辑的空内容返回 INVALID_ARGUMENT（CONTRACTS §8，MESSAGE-MODEL §2～§3，D-108）。
+- 发送目标用会话字符串 `message.Session`：`<adapter_id>:<chat_id>[#<thread_id>]`，例如 `telegram:-100123#42` 或 `onebot11:group:123456`。用 `message.NewSession(adapterID, chatID, threadID)` 处理 chat_id 与 thread_id 中 `%`、`#` 的转义，用 `Parts()` 拆解；adapter_id 遵守 manifest 的本地 ID 规则。`c.Send(content)` 使用本次调用的默认会话，`sdk.To(session)` 覆盖会话，`sdk.Via(instanceID)` 指定机器人实例；只有 Via 时保留默认会话与话题。后台用 `sdk.Send(ctx, session, content, opts...)`，opts 只接受 Via。省略实例时由 Core 选择并补齐账号；非法会话在发出请求前返回 INVALID_ARGUMENT（CONTRACTS §8、§9.1，MESSAGE-MODEL §1，D-102）。
+- 编辑、撤回与引用所指的消息统一用 `message.MessageRef`，格式为 `<会话字符串>/<platform_message_id>[@<实例名>]`，可以原样保存。用发送回执的 `Ref()`、`Refs()` 或 `c.Event().Ref()` 取得句柄，手工构造用 `message.NewMessageRef`，它负责消息 ID 中 `%`、`/`、`@` 的转义。编辑用 `c.Edit(ref, content)` 或后台的 `sdk.Edit(ctx, ref, content)`，引用用 `message.Quote(ref)`；省略实例时由 Core 按目标选择规则补齐（CONTRACTS §8，MESSAGE-MODEL §4，D-104）。
+- 只回一段文本时用 `c.Reply(text)`；后台发文本用 `sdk.SendText(ctx, session, text, opts...)`，opts 只接受 Via。两者分别等于对应 Send 发送 `message.Text(text)` 并丢弃回执，错误原样返回（D-118）。
+- `c.User()` 返回 `message.User` 用户字符串 `<adapter_id>:<external_user_id>`，没有 Actor 时为空串；`message.NewUser` 与 `Parts()` 保留 external_user_id 中的冒号。`c.Session()` 返回默认会话，没有默认目标时为空串，未指定目标的发送返回 NO_DEFAULT_TARGET。Service 调用沿用调用上下文中的 Actor 与默认会话，`c.Event()` 为 nil（CONTRACTS §1.2、§3、§8，MESSAGE-MODEL §1，D-120）。
+- 事件用常量注册，例如 `r.On("created", sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error { return c.Reply(e.Chain.Text()) })`；也接受只收 `*sdk.Context` 的 Handler。其他标准事件同样使用对应常量与 payload 指针类型，`Collect` 检查签名并在错误中给出 route_id。扩展事件用 `sdk.AdapterEvent[T]("adapter.name", version)`，T 须为结构体，带载荷的 Handler 收 `*T`；版本不符或 JSON 解码失败时记 WARN 并跳过 Handler，日志只含路由、事件名与版本或安全错误类别（MESSAGE-MODEL §1.1～§1.2，CONTRACTS §8，D-70、D-71、D-113）。
+- 上传用 `sdk.Upload(ctx, r, mime)` 得到 `*message.MediaRef`，SDK 计算大小与 SHA-256，mime 为空时按内容判断；r 可 Seek 时读两遍，否则使用临时文件，调用方应保持两遍读取的内容一致（CONTRACTS §1.3，D-109）。读取用 `sdk.OpenMedia(ctx, src)`，src 可以是片段的 `Source`、`MediaRef.Source()`、`IncomingMedia.Source()`，只持有 token 时用 `message.MediaSource{MediaRef: token}`。打开时先读第一块，失败直接返回错误；成功后顺序读取并关闭返回的 `io.ReadCloser`，读取响应 ctx 取消且不自动重试。HTTPS URL 来源在发出请求前返回 INVALID_ARGUMENT。向其他插件授权用 `sdk.GrantMedia(ctx, token, granteePluginID, sessions...)`，会话参数为 `message.Session`（CONTRACTS §1.3～§1.4，D-102、D-109、D-121）。
+- 错误码用 `errcode`，例如 `errcode.InvalidArgument.New("invalid input")`、`errcode.InvalidArgument.Errorf("invalid field %s", name)`；用 `errcode.Of(err)` 查询错误链中的 SDK 错误码，没有 SDK 错误时返回 0。`sdk.Error` 是 `errcode.Error` 的别名，仍可用 `errors.As` 取得错误并读取 Code 与 Message（CONTRACTS §1.2，D-123）。
 
 发送带回调的按钮时，用 `a := sdk.Action[T](name)` 声明动作，通过 `sdk.OnButton(r, a).Handle(...)` 注册签名为 `func(*sdk.Context, T) error` 的 Handler，再将 `a.Button(label, value)` 放入 `message.Buttons` 发送。`button.` 是按钮路由的保留前缀，注册其他路由时避开该前缀。value 用 `encoding/json` 编码，Core 限制编码结果最多 1024 字节；编码失败的按钮在发送前返回 INVALID_ARGUMENT。点击时 value 解码失败记 WARN，跳过 Handler 并正常结束本次调用。直接构造 `message.Button` 时，空的 `Value` 会省略该字段，省略值的点击同样按解码失败处理。`message.Extension(adapterID, name, version, payload)` 只能发往所属 Adapter 声明了对应 extension 名称与版本的实例，payload 按声明的 Schema 校验（[CONTRACTS §8](../spec/CONTRACTS-v0.1.md)、[MESSAGE-MODEL §6.3](../spec/MESSAGE-MODEL.md#63-按钮与回调)）。
+
+Adapter 作者用 `adapter.Event[T](name, version)` 与 `adapter.Extension[T](name, version)` 声明扩展事件与 extension；T 须为结构体，放在 Adapter 的常量与数据类型包中，供插件共用。SDK 从 Go 类型推导 Schema：没有 `omitempty` 的字段为必需，不允许未声明的属性；类型不符或推导失败时，`RunAdapter` 在 REGISTER 前返回带声明名的错误（CONTRACTS §8，MESSAGE-MODEL §1.2、§2，D-113）。
 
 ## 6. 跨插件协作
 
 - 用 Service Call 与 Event Bus 协作，不直接读写其他插件的文件或数据库（CONTRACTS §3）。
-- Event Bus 是非持久广播：`sdk.Publish` 只能发布到本插件的命名空间，返回成功只表示 Core 准入，不代表有人收到；订阅方队列满、预算不足或离线时事件会丢失，也不会补发。需要回执或可靠送达时改用 Service Call。订阅回调串行执行，不要在其中阻塞：积压的事件占用本插件的接收预算，会让命令请求也被拒绝。回调里没有 Actor 与默认 Target，发消息时要显式指定 To。
+- Event Bus 是非持久广播：`sdk.Publish` 只能发布到本插件的命名空间，返回成功只表示 Core 准入，不代表有人收到；订阅方队列满、预算不足或离线时事件会丢失，也不会补发。需要回执或可靠送达时改用 Service Call。订阅回调串行执行，不要在其中阻塞：积压的事件占用本插件的接收预算，会让命令请求也被拒绝。回调里没有 Actor 与默认会话，发消息时用 `sdk.Send(ctx, session, content, ...)` 或 `sdk.SendText(ctx, session, text, ...)` 显式给出会话（CONTRACTS §3、§8，D-102、D-118）。
 - `sdk.JSON`、`sdk.Subscribe`、`sdk.CallJSON`、`sdk.Publish` 的类型参数必须是包级的具名非泛型类型，由生成器检查并给出带位置的诊断。schema_id 由类型决定，版本取类型的 `SchemaVersion() uint32`，没有该方法时为 1；改动类型后运行 `alonabot plugin generate`。切片与 map 接受 null，与 `encoding/json` 对 nil 的编码一致。
 - JSON Service 的输入不符合 Schema 时，调用方收到 INVALID_ARGUMENT 和固定文本 `invalid service input`，Handler 不被调用；输出不符合时调用方收到 INTERNAL，日志只记 `schema_id`。校验详情可能带业务载荷，不写入响应和日志。
 - 需要模型能力时调用 Agent 组件的 `llm.generate`：`sdk/llm` 提供类型与以 `@agent` 为目标的调用辅助，官方 Agent 被替换后也不用修改；请管理员把插件加入 `llm_service_allowed_plugins`；一次调用是一次非流式请求，期限受调用方约束（CONTRACTS §13.5）。
