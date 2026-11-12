@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   triage:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, linux, x64, alonabot]
     steps:
       - name: 建立路径标签
         env:
