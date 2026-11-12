@@ -18,10 +18,11 @@ const editCapability = "message.edit"
 func (s *Service) Edit(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response {
 	// 1. 取得可信默认目标，校验协议载荷。
 	invocation, _ := in.ParentAttach.(*router.Invocation)
-	var target *pb.Target
+	var defaultTarget *pb.Target
 	if invocation != nil {
-		target = invocation.DefaultTarget
+		defaultTarget = invocation.DefaultTarget
 	}
+	target := defaultTarget
 	reject := func(code pb.ErrorCode, message string) wire.Response {
 		return editRejected(target, &pb.ErrorInfo{Code: code, SafeMessage: message})
 	}
@@ -32,15 +33,24 @@ func (s *Service) Edit(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if err := proto.Unmarshal(in.Payload.Bytes, request); err != nil {
 		return reject(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid EditRequest protobuf: "+err.Error())
 	}
-	// 2. 显式目标优先，随后使用与 Send 相同的许可检查。
+	// 2. 显式目标先补齐实例与账号，再按与 Send 相同的规则检查许可。
 	if request.To != nil {
-		target = request.To
+		completed, completionError := s.adapters.Complete(request.To, defaultTarget)
+		if completionError != nil {
+			return editRejected(request.To, completionError)
+		}
+		target = completed
 	}
 	if target == nil {
 		return reject(pb.ErrorCode_ERROR_CODE_NO_DEFAULT_TARGET, "no default target")
 	}
 	if safe := s.policy.CheckSend(ctx, caller.PluginID, invocation, target); safe != nil {
-		return editRejected(target, safe)
+		// 准入拒绝只回传调用方已知的目标，避免带出补齐的实例身份。
+		rejectedTarget := request.To
+		if rejectedTarget == nil {
+			rejectedTarget = defaultTarget
+		}
+		return editRejected(rejectedTarget, safe)
 	}
 	// 3. 校验原消息 ID、片段结构以及编辑专属的组合限制。
 	if request.PlatformMessageId == "" {

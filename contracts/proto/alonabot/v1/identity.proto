@@ -43,4 +43,20 @@ message Capability {
   uint32 version = 2;
   // 该实例当前是否支持。
   bool supported = 3;
+  // 单条文本限额；未声明时缺省，仅 supported=true 的 message.send 可携带。
+  TextLimit text_limit = 4;
+}
+
+// TextLimit 声明单条文本的正整数上限与计量单位。
+message TextLimit {
+  uint64 max = 1;
+  TextUnit unit = 2;
+}
+
+// TextUnit 指定文本限额的计量单位，bytes 按 UTF-8 编码计数。
+enum TextUnit {
+  TEXT_UNIT_UNSPECIFIED = 0;
+  TEXT_UNIT_UTF16_CODE_UNITS = 1;
+  TEXT_UNIT_UNICODE_CODE_POINTS = 2;
+  TEXT_UNIT_BYTES = 3;
 }

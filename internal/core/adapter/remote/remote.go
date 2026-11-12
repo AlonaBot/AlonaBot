@@ -152,7 +152,11 @@ func (p *Process) start(ctx context.Context, id string, config []byte) error {
 	if err != nil {
 		return err
 	}
-	// 2. 账号唯一性由 Core 核对，冲突时停止刚启动的实例。
+	// 2. 实例能力与账号均在发布前校验，失败时停止刚启动的实例。
+	if err := validate.Capabilities(response.Capabilities); err != nil {
+		stopErr := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: id}, &pb.AdapterInstanceStopResponse{})
+		return errors.Join(err, stopErr)
+	}
 	p.mu.Lock()
 	var conflict bool
 	for _, entry := range p.instances {
