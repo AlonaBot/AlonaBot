@@ -58,6 +58,12 @@ const ServiceEdit = "core.edit"
 // ServiceAdapterEdit 向账号实例提交消息编辑。
 const ServiceAdapterEdit = "adapter.edit"
 
+// ServiceDelete 指定 Core 的消息撤回服务。
+const ServiceDelete = "core.delete"
+
+// ServiceAdapterDelete 向账号实例提交消息撤回。
+const ServiceAdapterDelete = "adapter.delete"
+
 // ServiceAction 指定 Core 的平台动作服务。
 const ServiceAction = "core.action"
 

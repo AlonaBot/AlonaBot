@@ -1159,6 +1159,67 @@ func (x *AdapterEditRequest) GetChain() *MessageChain {
 	return nil
 }
 
+// AdapterDeleteRequest 向指定实例提交撤回，响应为 DeleteResult。
+type AdapterDeleteRequest struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	InstanceId         string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	Target             *Target                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	PlatformMessageIds []string               `protobuf:"bytes,3,rep,name=platform_message_ids,json=platformMessageIds,proto3" json:"platform_message_ids,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *AdapterDeleteRequest) Reset() {
+	*x = AdapterDeleteRequest{}
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdapterDeleteRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdapterDeleteRequest) ProtoMessage() {}
+
+func (x *AdapterDeleteRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdapterDeleteRequest.ProtoReflect.Descriptor instead.
+func (*AdapterDeleteRequest) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *AdapterDeleteRequest) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
+func (x *AdapterDeleteRequest) GetTarget() *Target {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *AdapterDeleteRequest) GetPlatformMessageIds() []string {
+	if x != nil {
+		return x.PlatformMessageIds
+	}
+	return nil
+}
+
 // ActionDeclaration 声明平台动作的版本、作用范围与参数和结果 Schema。
 type ActionDeclaration struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
@@ -1173,7 +1234,7 @@ type ActionDeclaration struct {
 
 func (x *ActionDeclaration) Reset() {
 	*x = ActionDeclaration{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[18]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1185,7 +1246,7 @@ func (x *ActionDeclaration) String() string {
 func (*ActionDeclaration) ProtoMessage() {}
 
 func (x *ActionDeclaration) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[18]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1198,7 +1259,7 @@ func (x *ActionDeclaration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActionDeclaration.ProtoReflect.Descriptor instead.
 func (*ActionDeclaration) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{18}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ActionDeclaration) GetName() string {
@@ -1250,7 +1311,7 @@ type ActionRequest struct {
 
 func (x *ActionRequest) Reset() {
 	*x = ActionRequest{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[19]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1262,7 +1323,7 @@ func (x *ActionRequest) String() string {
 func (*ActionRequest) ProtoMessage() {}
 
 func (x *ActionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[19]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1275,7 +1336,7 @@ func (x *ActionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActionRequest.ProtoReflect.Descriptor instead.
 func (*ActionRequest) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{19}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ActionRequest) GetTo() *Target {
@@ -1323,7 +1384,7 @@ type ActionResponse struct {
 
 func (x *ActionResponse) Reset() {
 	*x = ActionResponse{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[20]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1335,7 +1396,7 @@ func (x *ActionResponse) String() string {
 func (*ActionResponse) ProtoMessage() {}
 
 func (x *ActionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[20]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1348,7 +1409,7 @@ func (x *ActionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActionResponse.ProtoReflect.Descriptor instead.
 func (*ActionResponse) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{20}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ActionResponse) GetResultJson() string {
@@ -1372,7 +1433,7 @@ type AdapterActionRequest struct {
 
 func (x *AdapterActionRequest) Reset() {
 	*x = AdapterActionRequest{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[21]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1384,7 +1445,7 @@ func (x *AdapterActionRequest) String() string {
 func (*AdapterActionRequest) ProtoMessage() {}
 
 func (x *AdapterActionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[21]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1397,7 +1458,7 @@ func (x *AdapterActionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterActionRequest.ProtoReflect.Descriptor instead.
 func (*AdapterActionRequest) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{21}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *AdapterActionRequest) GetInstanceId() string {
@@ -1522,7 +1583,12 @@ const file_alonabot_v1_adapter_proto_rawDesc = "" +
 	"instanceId\x12+\n" +
 	"\x06target\x18\x02 \x01(\v2\x13.alonabot.v1.TargetR\x06target\x12.\n" +
 	"\x13platform_message_id\x18\x03 \x01(\tR\x11platformMessageId\x12/\n" +
-	"\x05chain\x18\x04 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\"\xcd\x01\n" +
+	"\x05chain\x18\x04 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\"\x96\x01\n" +
+	"\x14AdapterDeleteRequest\x12\x1f\n" +
+	"\vinstance_id\x18\x01 \x01(\tR\n" +
+	"instanceId\x12+\n" +
+	"\x06target\x18\x02 \x01(\v2\x13.alonabot.v1.TargetR\x06target\x120\n" +
+	"\x14platform_message_ids\x18\x03 \x03(\tR\x12platformMessageIds\"\xcd\x01\n" +
 	"\x11ActionDeclaration\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\rR\aversion\x12.\n" +
@@ -1568,7 +1634,7 @@ func file_alonabot_v1_adapter_proto_rawDescGZIP() []byte {
 }
 
 var file_alonabot_v1_adapter_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_alonabot_v1_adapter_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_alonabot_v1_adapter_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_alonabot_v1_adapter_proto_goTypes = []any{
 	(AdapterInstanceState)(0),            // 0: alonabot.v1.AdapterInstanceState
 	(ActionScope)(0),                     // 1: alonabot.v1.ActionScope
@@ -1590,38 +1656,40 @@ var file_alonabot_v1_adapter_proto_goTypes = []any{
 	(*AdapterMediaReadRequest)(nil),      // 17: alonabot.v1.AdapterMediaReadRequest
 	(*AdapterMediaReadResponse)(nil),     // 18: alonabot.v1.AdapterMediaReadResponse
 	(*AdapterEditRequest)(nil),           // 19: alonabot.v1.AdapterEditRequest
-	(*ActionDeclaration)(nil),            // 20: alonabot.v1.ActionDeclaration
-	(*ActionRequest)(nil),                // 21: alonabot.v1.ActionRequest
-	(*ActionResponse)(nil),               // 22: alonabot.v1.ActionResponse
-	(*AdapterActionRequest)(nil),         // 23: alonabot.v1.AdapterActionRequest
-	(*Capability)(nil),                   // 24: alonabot.v1.Capability
-	(*Target)(nil),                       // 25: alonabot.v1.Target
-	(*MessageChain)(nil),                 // 26: alonabot.v1.MessageChain
-	(*Event)(nil),                        // 27: alonabot.v1.Event
-	(*ErrorInfo)(nil),                    // 28: alonabot.v1.ErrorInfo
+	(*AdapterDeleteRequest)(nil),         // 20: alonabot.v1.AdapterDeleteRequest
+	(*ActionDeclaration)(nil),            // 21: alonabot.v1.ActionDeclaration
+	(*ActionRequest)(nil),                // 22: alonabot.v1.ActionRequest
+	(*ActionResponse)(nil),               // 23: alonabot.v1.ActionResponse
+	(*AdapterActionRequest)(nil),         // 24: alonabot.v1.AdapterActionRequest
+	(*Capability)(nil),                   // 25: alonabot.v1.Capability
+	(*Target)(nil),                       // 26: alonabot.v1.Target
+	(*MessageChain)(nil),                 // 27: alonabot.v1.MessageChain
+	(*Event)(nil),                        // 28: alonabot.v1.Event
+	(*ErrorInfo)(nil),                    // 29: alonabot.v1.ErrorInfo
 }
 var file_alonabot_v1_adapter_proto_depIdxs = []int32{
-	24, // 0: alonabot.v1.AdapterDescriptor.capabilities:type_name -> alonabot.v1.Capability
+	25, // 0: alonabot.v1.AdapterDescriptor.capabilities:type_name -> alonabot.v1.Capability
 	3,  // 1: alonabot.v1.AdapterDescriptor.extensions:type_name -> alonabot.v1.ExtensionDeclaration
 	4,  // 2: alonabot.v1.AdapterDescriptor.permissions:type_name -> alonabot.v1.PermissionDeclaration
 	5,  // 3: alonabot.v1.AdapterDescriptor.events:type_name -> alonabot.v1.EventDeclaration
-	20, // 4: alonabot.v1.AdapterDescriptor.actions:type_name -> alonabot.v1.ActionDeclaration
-	24, // 5: alonabot.v1.AdapterInstanceStartResponse.capabilities:type_name -> alonabot.v1.Capability
-	25, // 6: alonabot.v1.AdapterSendRequest.target:type_name -> alonabot.v1.Target
-	26, // 7: alonabot.v1.AdapterSendRequest.chain:type_name -> alonabot.v1.MessageChain
-	27, // 8: alonabot.v1.AdapterDeliverRequest.event:type_name -> alonabot.v1.Event
+	21, // 4: alonabot.v1.AdapterDescriptor.actions:type_name -> alonabot.v1.ActionDeclaration
+	25, // 5: alonabot.v1.AdapterInstanceStartResponse.capabilities:type_name -> alonabot.v1.Capability
+	26, // 6: alonabot.v1.AdapterSendRequest.target:type_name -> alonabot.v1.Target
+	27, // 7: alonabot.v1.AdapterSendRequest.chain:type_name -> alonabot.v1.MessageChain
+	28, // 8: alonabot.v1.AdapterDeliverRequest.event:type_name -> alonabot.v1.Event
 	0,  // 9: alonabot.v1.AdapterStatusRequest.state:type_name -> alonabot.v1.AdapterInstanceState
-	28, // 10: alonabot.v1.AdapterStatusRequest.safe_error:type_name -> alonabot.v1.ErrorInfo
-	25, // 11: alonabot.v1.AdapterEditRequest.target:type_name -> alonabot.v1.Target
-	26, // 12: alonabot.v1.AdapterEditRequest.chain:type_name -> alonabot.v1.MessageChain
-	1,  // 13: alonabot.v1.ActionDeclaration.scope:type_name -> alonabot.v1.ActionScope
-	25, // 14: alonabot.v1.ActionRequest.to:type_name -> alonabot.v1.Target
-	25, // 15: alonabot.v1.AdapterActionRequest.target:type_name -> alonabot.v1.Target
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	29, // 10: alonabot.v1.AdapterStatusRequest.safe_error:type_name -> alonabot.v1.ErrorInfo
+	26, // 11: alonabot.v1.AdapterEditRequest.target:type_name -> alonabot.v1.Target
+	27, // 12: alonabot.v1.AdapterEditRequest.chain:type_name -> alonabot.v1.MessageChain
+	26, // 13: alonabot.v1.AdapterDeleteRequest.target:type_name -> alonabot.v1.Target
+	1,  // 14: alonabot.v1.ActionDeclaration.scope:type_name -> alonabot.v1.ActionScope
+	26, // 15: alonabot.v1.ActionRequest.to:type_name -> alonabot.v1.Target
+	26, // 16: alonabot.v1.AdapterActionRequest.target:type_name -> alonabot.v1.Target
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_adapter_proto_init() }
@@ -1639,7 +1707,7 @@ func file_alonabot_v1_adapter_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_adapter_proto_rawDesc), len(file_alonabot_v1_adapter_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   22,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

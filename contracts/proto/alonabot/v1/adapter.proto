@@ -138,6 +138,13 @@ message AdapterEditRequest {
   MessageChain chain = 4;
 }
 
+// AdapterDeleteRequest 向指定实例提交撤回，响应为 DeleteResult。
+message AdapterDeleteRequest {
+  string instance_id = 1;
+  Target target = 2;
+  repeated string platform_message_ids = 3;
+}
+
 // ActionScope 指定动作需要会话还是只需要账号实例。
 enum ActionScope {
   ACTION_SCOPE_UNSPECIFIED = 0;
