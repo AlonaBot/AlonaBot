@@ -57,7 +57,7 @@
 | goal-104 | T-03.13 | 媒体按来源传递 | T-03.6、T-04.8、T-07.7 | 待派发 |
 | goal-105 | T-03.14 | 新增片段与字段（含会话类型） | T-03.8、T-04.8 | 已完成（PR #143） |
 | goal-106 | T-03.15 | 平台动作 | T-03.8、T-04.8 | 待派发 |
-| goal-107 | T-03.16 | 撤回 | T-03.9、T-04.8 | 待派发 |
+| goal-107 | T-03.16 | 撤回 | T-03.9、T-04.8 | 已完成（PR #144） |
 | goal-108 | T-03.17 | 命令菜单同步 | T-04.6、T-04.7、T-04.8、T-08.8 | 待派发 |
 | goal-109 | T-03.18 | 流式输出辅助函数 | T-03.9、T-04.8 | 待派发 |
 | goal-110 | T-03.19 | Adapter 的 HTTP 路由 | T-03.3、T-04.8、T-07.7 | 待派发 |
@@ -4110,7 +4110,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-107 · T-03.16 撤回
 
-状态：待派发。前置均已合并（T-04.8 为 PR #141（合并提交 `ac4aded`））；审查者按 main 合入 PR #141 后的代码核对。T-03.9（PR #118，合并提交 `1cbfb2e`）提供 Core 与 SDK 两侧可选的 `adapter.Editor`；SDK 的 `c.Edit`、`sdk.Edit` 已收 `message.MessageRef`，句柄拆分复用 `MessageRef.Parts` 与内部 `convert.RefToProto`。Core 新增撤回仍须先调用已合入的 `Registry.Complete` 补齐省略的实例与账号，再复用准入。2026-11-09 按 D-87、D-93 新增，同日按 D-104 改为只收句柄。
+状态：已完成（[PR #144](https://github.com/AlonaBot/AlonaBot/pull/144)，合并提交 `707b74c`），证据见 TEST-MATRIX §3.2。合入：`core.delete` 与 `adapter.delete`（`internal/core/message.Service.Delete`，Core 补齐目标并按 Send 的准入检查，实例须声明 `message.delete` 并实现可选的 `adapter.Deleter`，按输入顺序返回逐项结果与顶层安全错误）；SDK 的 `c.Delete(refs ...message.MessageRef)`、`sdk.Delete(ctx, refs...)`、`sdk/message.DeleteResult`/`DeleteItemResult` 与 `sdk/adapter.Deleter`；协议 `DeleteRequest`、`DeleteResult`、`DeleteItemResult`、`AdapterDeleteRequest`。派发时：前置均已合并（T-04.8 为 PR #141（合并提交 `ac4aded`））；审查者按 main 合入 PR #141 后的代码核对。T-03.9（PR #118，合并提交 `1cbfb2e`）提供 Core 与 SDK 两侧可选的 `adapter.Editor`；SDK 的 `c.Edit`、`sdk.Edit` 已收 `message.MessageRef`，句柄拆分复用 `MessageRef.Parts` 与内部 `convert.RefToProto`。Core 新增撤回仍须先调用已合入的 `Registry.Complete` 补齐省略的实例与账号，再复用准入。2026-11-09 按 D-87、D-93 新增，同日按 D-104 改为只收句柄。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-107（切片 T-03.16：撤回）。goal 目录 goal-107，分支 goal-107，worktree .worktrees/goal-107，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -4310,7 +4310,7 @@ contracts/validate（新增，由 AdapterRegister 与实例启动结果接纳共
 
 ### goal-110 · T-03.19 Adapter 的 HTTP 路由
 
-状态：待派发。2026-11-12 依据维护者决定 D-136（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`） 统一 Adapter 角色规则与平台凭证转交；前置均已合并：T-03.3（PR #32）、T-04.8（PR #141）、T-07.7（PR #116，合并提交 `e65eb4d`）。生命周期接入 T-07.5（PR #119，合并提交 `cc19e99`）也已合并。按 main `c04b2ca` 的代码核对；T-03.13～T-03.19 的 proto 追加按执行顺序 §3，SDK HTTP 注册器后续由 T-04.11 改为 builder，本切片沿用现有 Handle/Public。若 goal-67 先合并，沿其同进程入口复用同一 Adapter HTTP 生命周期。
+状态：待派发。2026-11-12 依据维护者决定 D-136（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`） 统一 Adapter 角色规则与平台凭证转交；前置均已合并：T-03.3（PR #32）、T-04.8（PR #141）、T-07.7（PR #116，合并提交 `e65eb4d`）。生命周期接入 T-07.5（PR #119，合并提交 `cc19e99`）也已合并。按 main `c04b2ca` 的代码核对；T-03.13～T-03.19 的 proto 追加按执行顺序 §3，SDK HTTP 注册器后续由 T-04.11 改为 builder，本切片沿用现有 Handle/Public。若 goal-67 先合并，沿其同进程入口复用同一 Adapter HTTP 生命周期。范围修订（2026-11-12，审查者补充）：执行者报告 `sdk/registry.go` 的 HTTPRegistry.Handle 拒绝 `Public(AuthPlatformToken)`，语句漏列该文件；授权该校验接受公开平台 token 模式，插件注册路径（sdk.Run）与 Core 的 `validate.Register` 拒绝此模式，`RunAdapter` 与 `validate.AdapterRegister` 接受，其他 HTTP 校验与错误文本不变。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-110（切片 T-03.19：Adapter 的 HTTP 路由）。goal 目录 goal-110，分支 goal-110，worktree .worktrees/goal-110，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
