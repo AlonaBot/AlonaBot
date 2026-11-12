@@ -18,6 +18,14 @@ enum EventSourceKind {
   EVENT_SOURCE_KIND_SCHEDULER = 2;
 }
 
+// ChatType 列出事件所在会话的类型。
+enum ChatType {
+  CHAT_TYPE_UNSPECIFIED = 0;
+  CHAT_TYPE_PRIVATE = 1;
+  CHAT_TYPE_GROUP = 2;
+  CHAT_TYPE_CHANNEL = 3;
+}
+
 // Event 描述 Core 标准化后的入站事件。
 // event_type 取值：message.created、message.edited、message.deleted、button.clicked、
 // member.joined、member.left、reaction.added、scheduled、bot.online、bot.offline，或 Adapter 声明的完整扩展事件名。
@@ -51,6 +59,8 @@ message Event {
   bytes platform_payload = 13;
   // 原平台事件标识。
   optional string source_event_id = 14;
+  // 会话类型；没有 target 时必须为 UNSPECIFIED。
+  ChatType chat_type = 15;
 }
 
 // PlatformMessage 描述一条已存在的平台消息。
@@ -192,6 +202,8 @@ message Segment {
     ForwardSegment forward = 8;
     // 由目标 Adapter 声明 Schema 的扩展片段。
     ExtensionSegment extension = 9;
+    // 语音。
+    VoiceSegment voice = 10;
   }
 }
 
@@ -275,6 +287,16 @@ message VideoSegment {
   optional string caption = 3;
 }
 
+// VoiceSegment 描述一段语音。
+message VoiceSegment {
+  // 语音来源。
+  MediaSource source = 1;
+  // 时长（毫秒）；未知时 absent。
+  optional uint64 duration_ms = 2;
+  // 附带说明。
+  optional string caption = 3;
+}
+
 // FileSegment 描述一个文件。
 message FileSegment {
   // 文件来源。
@@ -315,7 +337,7 @@ message ButtonRow {
   repeated Button buttons = 1;
 }
 
-// Button 描述一个回调按钮。
+// Button 描述一个回调或链接按钮。
 message Button {
   // 指向当前插件已注册的 button.clicked 路由。
   string action_id = 1;
@@ -325,12 +347,16 @@ message Button {
   optional string value = 3;
   // Core 填写的回调令牌；插件填写的值由 Core 清除。
   optional string core_token = 4;
+  // 与 action_id 恰有一个，https 或 tg 绝对链接。
+  optional string url = 5;
 }
 
 // ForwardSegment 描述合并转发；仅平台明确支持合并转发时发送。
 message ForwardSegment {
   // 被转发的条目。
   repeated ForwardItem items = 1;
+  // 只在入站出现的平台合并转发标识。
+  optional string platform_forward_id = 2;
 }
 
 // ForwardItem 描述合并转发中的一条。
@@ -339,6 +365,8 @@ message ForwardItem {
   ForwardSource source = 1;
   // 条目内容。
   MessageChain chain = 2;
+  // 引用同一会话的已有消息，与 chain 恰有一个。
+  optional string platform_message_id = 3;
 }
 
 // ForwardSource 描述转发条目的来源展示信息。
