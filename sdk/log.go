@@ -1,6 +1,8 @@
 package sdk
 
 import (
+	"context"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"math"
@@ -29,23 +31,35 @@ func setupLogging() {
 }
 
 // setLogLevel 按 Core 下发的级别在进程内过滤；UNSPECIFIED 按 INFO 处理（WIRE-FORMAT §3.2）。
-func setLogLevel(lv pb.LogLevel) {
+func setLogLevel(level *slog.LevelVar, lv pb.LogLevel) {
 	switch lv {
 	case pb.LogLevel_LOG_LEVEL_DEBUG:
-		logLevel.Set(slog.LevelDebug)
+		level.Set(slog.LevelDebug)
 	case pb.LogLevel_LOG_LEVEL_WARN:
-		logLevel.Set(slog.LevelWarn)
+		level.Set(slog.LevelWarn)
 	case pb.LogLevel_LOG_LEVEL_ERROR:
-		logLevel.Set(slog.LevelError)
+		level.Set(slog.LevelError)
 	case pb.LogLevel_LOG_LEVEL_OFF:
-		logLevel.Set(levelOff)
+		level.Set(levelOff)
 	default:
-		logLevel.Set(slog.LevelInfo)
+		level.Set(slog.LevelInfo)
 	}
 }
 
 // logPanic 把调用边界捕获的 panic 记为一条 ERROR，堆栈放在 stack 字段（CONTRACTS §14.1）；
 // 只能在 recover 所在的 defer 中调用，堆栈才包含 panic 的位置。
-func logPanic(boundary string, p any) {
-	slog.Error(boundary+" panic", "panic", fmt.Sprint(p), "stack", string(debug.Stack()))
+func logPanic(ctx context.Context, boundary string, p any) {
+	componentLogger(ctx).ErrorContext(ctx, boundary+" panic", "panic", fmt.Sprint(p), "stack", string(debug.Stack()))
+}
+
+func (s *componentSession) configure(l launch, ack *pb.HelloAck, component string) {
+	setLogLevel(&s.level, ack.GetBootstrap().GetLogLevel())
+	if !s.inProcess {
+		setLogLevel(&logLevel, ack.GetBootstrap().GetLogLevel())
+	}
+	s.source = []slog.Attr{
+		slog.String("component", component), slog.String("plugin_id", l.pluginID),
+		slog.String("session_id", hex.EncodeToString(ack.GetSessionId())),
+		slog.String("generation_id", ack.GetBootstrap().GetGenerationId()),
+	}
 }

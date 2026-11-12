@@ -25,6 +25,7 @@ const httpCapabilityVersion = 1
 // httpListener 持有一次 Run 的 HTTP 资源；准备期创建端点，激活后复用 activation 的 ready gate。
 // routes/token 在 Serve 启动前写入；activation 通过原子指针发布，关闭按首次停止的截止执行一次。
 type httpListener struct {
+	runtime    *componentSession
 	routes     []HTTPRoute
 	listener   net.Listener
 	server     *http.Server
@@ -58,10 +59,10 @@ func (h *httpListener) start(boot *pb.Bootstrap) error {
 	h.listener = listener
 	h.hijacked = make(map[*httpConnection]struct{})
 	h.token = []byte(hex.EncodeToString(token))
-	h.server = &http.Server{Handler: http.HandlerFunc(h.serveHTTP), ErrorLog: slog.NewLogLogger(slog.Default().Handler(), slog.LevelError), ConnState: h.connectionState}
+	h.server = &http.Server{Handler: http.HandlerFunc(h.serveHTTP), ErrorLog: slog.NewLogLogger(componentLogger(h.runtime.ctx).Handler(), slog.LevelError), ConnState: h.connectionState}
 	go func() {
 		if err := h.server.Serve(&httpNetworkListener{Listener: listener, owner: h}); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("plugin HTTP listener failed", "err", err)
+			componentLogger(h.runtime.ctx).Error("plugin HTTP listener failed", "err", err)
 		}
 	}()
 	return nil
@@ -91,12 +92,12 @@ func (h *httpListener) close(deadline time.Time) {
 		for _, conn := range connections {
 			_ = conn.Close()
 		}
-		ctx, cancel := context.WithDeadline(context.Background(), deadline)
+		ctx, cancel := context.WithDeadline(h.runtime.ctx, deadline)
 		defer cancel()
 		if err := h.server.Shutdown(ctx); err != nil {
-			slog.Error("stop plugin HTTP listener failed", "err", err)
+			componentLogger(h.runtime.ctx).Error("stop plugin HTTP listener failed", "err", err)
 			if closeErr := h.server.Close(); closeErr != nil {
-				slog.Error("close plugin HTTP connections failed", "err", closeErr)
+				componentLogger(h.runtime.ctx).Error("close plugin HTTP connections failed", "err", closeErr)
 			}
 		}
 	})
@@ -147,8 +148,13 @@ func (h *httpListener) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	if !h.runtime.beginCallback() {
+		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+		return
+	}
+	defer h.runtime.callbacks.Done()
 	r.Header.Del(wire.HeaderProxyAuth)
-	selected.Handler.ServeHTTP(w, r)
+	selected.Handler.ServeHTTP(w, r.WithContext(a.l.runtime.context(r.Context())))
 }
 
 func appendHTTPRoutes(r *pb.Register, routes []HTTPRoute) {
