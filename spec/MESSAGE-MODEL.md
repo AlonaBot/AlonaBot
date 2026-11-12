@@ -117,7 +117,11 @@ ACCEPTED 只表示平台 API 确认接受，不保证用户阅读。跨多条平
 
 `core.delete` 撤回本机器人或平台允许撤回的消息（D-93）：Target 准入与 Edit 相同，目标实例未声明 `message.delete` 时 Core 在调用 Adapter 前返回 UNSUPPORTED，不自动重试，不执行出站 Hook，但不能在出站 Hook 中调用。输入为 1～100 个 platform_message_id；结果为每个 ID 的状态 ACCEPTED / REJECTED / UNKNOWN / NOT_ATTEMPTED 与安全错误，按输入顺序。Adapter 可以把同一会话的多个 ID 合成一次平台请求，此时它们共享该请求的结果；请求明确失败或结果未知后停止，其余 ID 为 NOT_ATTEMPTED。消息已不存在或超过平台的撤回期限为 REJECTED。
 
-SDK 的 `c.Stream` 是不新增协议的辅助函数（D-98）：目标实例声明了 `message.edit` 时先发送再编辑，同一 Target 两次编辑至少间隔 1 秒，文本超过平台上限时开始下一条消息；否则缓冲到结束后发送一次。每次发送与编辑照常执行出站 Hook，任一请求失败即停止并返回已有的结果。只有一个平台具备的输入状态、表情回应与草稿是该 Adapter 的平台动作（§6.5）。
+SDK 的 `func (c *Context) Stream(next func(context.Context) (string, error)) ([]*message.SendResult, error)` 接收文本增量（D-98、D-135）：next 以 c.Context() 调用，返回的文本先处理，io.EOF 表示正常结束，其他错误或 Context 取消立即停止并保留已有结果。空增量不发请求；整个输入为空时不发消息。目标固定为当前事件的完整 Target（含实例与话题）；没有当前事件目标时返回 NO_DEFAULT_TARGET。
+
+目标实例声明了 `message.edit` 时先发送，再把累积文本节流编辑到当前消息；同一 SDK Session 内，同一完整 Target 的所有 Stream 共用编辑节流，两次实际 Edit 发起至少间隔 1 秒。结束时刷新尚未显示的文本，仍遵守间隔。`message.send` Capability 的可选 `text_limit{max, unit}` 指定单条文本上限，unit 为 UTF-16 码元、Unicode 码点或 UTF-8 字节（CONTRACTS §8，D-135）；SDK 在 Unicode 码点边界按单位计量，达到上限后以新消息继续，单个码点已超限时返回 INVALID_ARGUMENT。未声明上限时不自动换条。没有 `message.edit` 时缓冲到正常结束后调用 Send 一次。官方 Telegram Adapter 声明 `maxTextUTF16`（4096）与 UTF-16 码元单位；插件无需选择平台规则。所需能力字段由 T-03.18 追加，不新增流式 Core 服务。
+
+每次发送与编辑经现有 Send/Edit 执行出站 Hook；返回列表按请求顺序保留全部 Send 与 Edit 的完整回执，同一消息的多次 Edit 回执也各自保留。任一请求失败立即停止，连同该次可用回执返回错误，不重试。已接受却没有可编辑 ID 的 Send 保留原回执；后续需要 Edit 时返回 FAILED_PRECONDITION，不补发。只有一个平台具备的输入状态、表情回应与草稿是该 Adapter 的平台动作（§6.5）。
 
 ## 5. Hook 的明确边界
 
@@ -177,7 +181,7 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 
 - 平台动作（D-92）：参数沿用 Bot API 的字段名，数字 ID 写作十进制字符串，chat_id 与 message_thread_id 取自 Target，不在参数中重复；结果为 Bot API 的 `result` 原文。官方动作（版本 1，作用范围都为 chat）：`telegram.ban_chat_member`、`telegram.unban_chat_member`、`telegram.restrict_chat_member`、`telegram.pin_chat_message`、`telegram.unpin_chat_message`、`telegram.get_chat`、`telegram.get_chat_member`、`telegram.get_chat_member_count`、`telegram.get_chat_administrators`、`telegram.set_chat_title`、`telegram.leave_chat`、`telegram.send_chat_action`、`telegram.set_message_reaction`、`telegram.send_message_draft`。`adapters/telegram/action` 为每个动作发布带类型的 Go 函数，只依赖 `sdk` 根包；另提供两个辅助函数：输入状态每 4 秒刷新一次、ctx 结束即停止；草稿流式显示，结束后经普通 Send 发出正式消息（草稿经平台动作发出，不执行出站 Hook，正式消息执行，D-98）。
 - 撤回用 deleteMessages，每次最多 100 个同一会话的 ID，它们共享该请求的结果。`telegram.send_chat_action` 带 message_thread_id；`telegram.set_message_reaction` 把本机器人在该消息上的回应设为给出的列表（空列表为撤销）；`telegram.send_message_draft` 只用于私聊，其他会话在调用平台前返回 UNSUPPORTED，参数在实施时按 Bot API 原文核对。
-- 命令菜单（D-96）：`adapter.commands.sync` 用 setMyCommands 设置 default scope，并为命令说明有翻译的每个语言各设置一次 language_code；名字不匹配 `^[a-z0-9_]{1,32}$` 的跳过，说明超过 256 字符时截断，两者都记诊断；与上一次成功同步的内容相同时不调用平台，实例停止时不删除菜单。
+- 命令菜单（D-96、D-138）：Core 以 CommandBuilder.Description 登记的英文原文提供 en-US，其他语言按 CONTRACTS §8 的 commands 完整规范路径覆盖与回落规则选择；生成器不扫描注册，check/build 只检查顶层 commands 的结构（键为字符串，值为含字符串 description 的对象）；SDK 的 Collect 对没有对应已注册命令或命令未用 Description 登记英文原文的覆盖路径拒绝注册，错误为英文并带出路径。`adapter.commands.sync` 用 setMyCommands 设置 default scope，并为命令说明有翻译的每个语言各设置一次 language_code；名字不匹配 `^[a-z0-9_]{1,32}$` 的跳过，说明超过 256 字符时截断，两者都记诊断；与上一次成功同步的内容相同时不调用平台，实例停止时不删除菜单。
 
 ### 6.6 服务消息（D-133）
 

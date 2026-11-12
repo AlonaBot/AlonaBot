@@ -48,7 +48,8 @@ var ErrNotImplemented = &Error{Code: errcode.Unsupported, Message: "SDK runtime 
 // Context 只在一次 Handler 调用期间有效。
 type Context struct {
 	ctx           context.Context // 本次调用的 context
-	stopped       atomic.Bool     // 锁存的停止传播标记，一经设置不能清除
+	propagationMu sync.Mutex      // 串行化 StopPropagation 与调用结束的传播快照。
+	stopped       bool            // 由 propagationMu 保护，只在有效调用内锁存。
 	active        atomic.Bool     // Handler 返回时关闭，阻止继续使用父调用
 	inbound       *wire.Inbound
 	caller        string     // Core 下发的服务直接调用方
@@ -106,7 +107,13 @@ func (c *Context) Logger() *slog.Logger {
 }
 
 // StopPropagation 锁存停止传播标记；一经设置不能重新打开传播，并且不受业务错误影响。
-func (c *Context) StopPropagation() { c.stopped.Store(true) }
+func (c *Context) StopPropagation() {
+	c.propagationMu.Lock()
+	defer c.propagationMu.Unlock()
+	if c.active.Load() {
+		c.stopped = true
+	}
+}
 
 // SendOption 调整一次消息发送的会话或机器人实例。
 type SendOption func(*sendOptions)

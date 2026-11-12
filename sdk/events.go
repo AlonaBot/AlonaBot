@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
@@ -19,6 +20,7 @@ type EventRoute struct {
 	EventType     EventType
 	Handler       any
 	permission    Permission
+	rules         []Rule // Collect 固定的调用顺序，含按钮路由。
 	actionID      string
 	actionVersion uint32
 	decodeButton  func(string) (any, error)
@@ -71,6 +73,15 @@ func (b *EventBuilder) Permission(p Permission) *EventBuilder {
 // Handle 结束事件路由构建。
 func (b *EventBuilder) Handle(h any) { b.handles++; b.route.Handler = h }
 
+// Rule 按调用与参数顺序追加条件，全部匹配后执行 Handler。
+func (b *EventBuilder) Rule(rules ...Rule) *EventBuilder {
+	if b.handles != 0 {
+		b.afterHandle = true
+	}
+	b.route.rules = append(b.route.rules, rules...)
+	return b
+}
+
 func (r *EventRegistry) collect() {
 	for _, b := range r.builders {
 		if b.handles != 1 || b.afterHandle || (strings.HasPrefix(b.route.RouteID, buttonRoutePrefix) && !b.button) || (b.button && (b.route.actionID == "" || b.route.actionVersion == 0)) {
@@ -81,7 +92,13 @@ func (r *EventRegistry) collect() {
 			r.errs = append(r.errs, fmt.Errorf("event route %q: %w", b.route.RouteID, err))
 			continue
 		}
-		r.add(b.route)
+		if err := checkRules(b.route.rules); err != nil {
+			r.errs = append(r.errs, fmt.Errorf("event route %q: %w", b.route.RouteID, err))
+			continue
+		}
+		route := b.route
+		route.rules = slices.Clone(route.rules)
+		r.add(route)
 	}
 }
 

@@ -40,11 +40,16 @@ func New(store *state.Store, now func() time.Time, ttl time.Duration, current fu
 
 // Issue 清除插件提供的 token，验证动作并持久化整条链的映射，成功后才写回 token。
 func (s *Service) Issue(ctx context.Context, caller router.Caller, target *pb.Target, chain *pb.MessageChain) error {
-	// 1. 所有按钮先清除不可信 token；纯文本发送不要求按钮路由。
+	// 1. 所有按钮先清除不可信 token，只有动作按钮需要路由与持久化映射。
 	buttons := chainButtons(chain)
+	actionsOnly := buttons[:0]
 	for _, button := range buttons {
 		button.CoreToken = nil
+		if button.Url == nil {
+			actionsOnly = append(actionsOnly, button)
+		}
 	}
+	buttons = actionsOnly
 	if len(buttons) == 0 {
 		return nil
 	}
