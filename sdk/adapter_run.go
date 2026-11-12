@@ -322,6 +322,29 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(code, adapterSafeError(errors.New(message), config))
 		}
 		return adapterResponse(&pb.AdapterMediaReadResponse{Data: data, NextOffset: next, Eof: eof}, nil)
+	case wire.ServiceAdapterCommandsSync:
+		request := &pb.AdapterCommandsSyncRequest{}
+		if err := decodeInvocation(in.Payload, request); err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		r.mu.Lock()
+		entry, ok := r.instances[request.InstanceId]
+		if !ok {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
+		}
+		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		synchronizer, supported := entry.instance.(adapter.CommandSynchronizer)
+		r.mu.Unlock()
+		if !supported {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support command synchronization")
+		}
+		// 与其他固定服务共用请求 context，平台调用在状态锁外执行。
+		safe := synchronizer.SyncCommands(ctx, convert.CommandMenuFromProto(request.Commands))
+		return adapterResponse(&pb.AdapterCommandsSyncResponse{}, convert.ErrorToProto(safe))
 	case wire.ServiceAdapterEdit:
 		request := &pb.AdapterEditRequest{}
 		if err := decodeInvocation(in.Payload, request); err != nil {

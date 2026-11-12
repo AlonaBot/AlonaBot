@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -35,9 +36,18 @@ func collectI18n(root Root, reg *Registration) error {
 		return errors.Join(errs...)
 	}
 	reg.messages = catalog
+	commands := make(map[string]string)
 	for _, command := range reg.Commands {
+		if command.spec.GetMatch() == pb.CommandMatch_COMMAND_MATCH_PATH {
+			commands[strings.Join(command.Path, " ")] = command.spec.GetDescription()
+		}
 		if command.spec.GetUsageMode() == pb.UsageMode_USAGE_MODE_CUSTOM && (catalog == nil || !catalog.Has(command.spec.GetUsageKey())) {
 			errs = append(errs, fmt.Errorf("route %q uses unknown usage key %q", commandRouteID(command), command.spec.GetUsageKey()))
+		}
+	}
+	if catalog != nil {
+		for _, problem := range catalog.CheckCommands(commands) {
+			errs = append(errs, fmt.Errorf("%s:%s: %s", problem.File, problem.Key, problem.Message))
 		}
 	}
 	return errors.Join(errs...)

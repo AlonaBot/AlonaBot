@@ -136,3 +136,19 @@ message AdapterEditRequest {
   // 恰好一个 text 片段和至多一个 buttons 片段。
   MessageChain chain = 4;
 }
+
+// CommandMenuItem 提供一个可用根命令及各语言的说明。
+message CommandMenuItem {
+  string name = 1;
+  map<string, string> descriptions = 2;
+}
+
+// AdapterCommandsSyncRequest 替换指定实例的命令菜单，空列表清空菜单。
+message AdapterCommandsSyncRequest {
+  string instance_id = 1;
+  repeated CommandMenuItem commands = 2;
+}
+
+// AdapterCommandsSyncResponse 确认菜单同步完成，错误沿用 ErrorInfo。
+message AdapterCommandsSyncResponse {
+}

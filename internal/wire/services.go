@@ -57,3 +57,6 @@ const ServiceEdit = "core.edit"
 
 // ServiceAdapterEdit 向账号实例提交消息编辑。
 const ServiceAdapterEdit = "adapter.edit"
+
+// ServiceAdapterCommandsSync 替换账号实例的命令菜单。
+const ServiceAdapterCommandsSync = "adapter.commands.sync"

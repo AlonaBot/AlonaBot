@@ -6,6 +6,7 @@
 // adapter_config_schema.json 按同样规则检查，无插件根类型时只返回实例声明的检查结果。
 // JSON Service 类型经 go/types 检查生成 Schema（§3）；注册规则见 §9、§2.2。
 // 构建入口的 i18n/*.json 按 §5.3、§5.4 检查并将原文嵌入生成代码。
+// commands 仅检查结构，覆盖路径与实际注册命令的对应由 SDK Collect 检查。
 //
 // 包的组成：[Scan] 接收 [Options]，返回描述、源码与 [Diagnostic] 汇总的 [Result]。
 package generate

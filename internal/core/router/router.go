@@ -54,8 +54,18 @@ type inFlightKey struct {
 // FromInstance 把真实宿主实例接入路由器，激活状态从宿主实时读取。
 func FromInstance(in *host.Instance) Plugin { return &instancePlugin{instance: in} }
 
-func (p *instancePlugin) PluginID() string              { return p.instance.PluginID }
-func (p *instancePlugin) Activated() bool               { return p.instance.State() == host.StateActivated }
+func (p *instancePlugin) PluginID() string { return p.instance.PluginID }
+func (p *instancePlugin) Activated() bool {
+	if p.instance.State() != host.StateActivated {
+		return false
+	}
+	select {
+	case <-p.instance.Session.Done():
+		return false
+	default:
+		return true
+	}
+}
 func (p *instancePlugin) Routes() []*pb.RouteDescriptor { return p.instance.Routes }
 func (p *instancePlugin) Messages() *i18n.Catalog       { return p.instance.Messages }
 func (p *instancePlugin) DefaultLocale() string         { return p.instance.DefaultLocale }
@@ -76,29 +86,31 @@ type CommandPolicy interface {
 // Router 并发执行有界的事件链；每条链内按稳定次序调用候选。
 // mu 串行化接纳、出队和注册；链调用插件期间不持锁。
 type Router struct {
-	adapters    *adapter.Registry
-	send        ServiceFunc
-	prepare     func(*pb.Event, Caller) (*pb.Event, error)
-	prefixes    func(adapterInstanceID string) []string
-	buttons     func(context.Context, *pb.Event) (string, string, error)
-	policy      CommandPolicy
-	matches     map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
-	queue       []queuedEvent
-	concurrency int
-	queueEvents int
-	queueBytes  int64 // 等待队列上限，单位为编码后的字节数
-	global      *wire.Budget
-	queuedBytes int64         // 等待中的事件占用，由 mu 保护
-	stats       Stats         // 计数及运行状态，由 mu 保护
-	drained     chan struct{} // 关闭接纳且全部运行链退出时关闭
-	ctx         context.Context
-	cancel      context.CancelFunc
-	mu          sync.Mutex // 保护注册、在途调用、命令索引与分发状态
-	plugins     map[string]*pluginSession
-	inFlight    map[inFlightKey]struct{} // 仅覆盖 Plugin.Call；排队与 prepare 期间不登记
-	commands    *CommandIndex            // 在 mu 下发布；已发布快照只读
-	started     bool
-	closed      bool
+	adapters     *adapter.Registry
+	send         ServiceFunc
+	prepare      func(*pb.Event, Caller) (*pb.Event, error)
+	prefixes     func(adapterInstanceID string) []string
+	buttons      func(context.Context, *pb.Event) (string, string, error)
+	policy       CommandPolicy
+	commandState func(context.Context, string, *pb.RouteDescriptor) (bool, []string, error)
+	commandSyncs map[string]*commandSync   // 当前运行实例身份与任务，由 mu 保护。
+	matches      map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
+	queue        []queuedEvent
+	concurrency  int
+	queueEvents  int
+	queueBytes   int64 // 等待队列上限，单位为编码后的字节数
+	global       *wire.Budget
+	queuedBytes  int64         // 等待中的事件占用，由 mu 保护
+	stats        Stats         // 计数及运行状态，由 mu 保护
+	drained      chan struct{} // 关闭接纳且全部运行链退出时关闭
+	ctx          context.Context
+	cancel       context.CancelFunc
+	mu           sync.Mutex // 保护注册、在途调用、命令索引与分发状态
+	plugins      map[string]*pluginSession
+	inFlight     map[inFlightKey]struct{} // 仅覆盖 Plugin.Call；排队与 prepare 期间不登记
+	commands     *CommandIndex            // 在 mu 下发布；已发布快照只读
+	started      bool
+	closed       bool
 }
 
 // New 按显式的并发和队列限额创建路由器；限额由装配处从 tune.Values 传入。
@@ -113,19 +125,20 @@ func New(opt Options) *Router {
 		ctx: ctx, cancel: cancel, drained: make(chan struct{}),
 		matches: make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
 		inFlight: make(map[inFlightKey]struct{}), commands: &CommandIndex{},
+		commandState: opt.CommandState, commandSyncs: make(map[string]*commandSync),
 	}
 }
 
 // Attach 注册一个接收派发的插件并重建命令索引；相同插件 ID 替换为新实例。
 // c 必须与该 Session 的 Mux.For 使用同一个 Caller。
 func (r *Router) Attach(p Plugin, c Caller) {
+	defer r.CommandsChanged()
 	id := p.PluginID()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	session := &pluginSession{plugin: p, caller: c}
 	r.plugins[id] = session
 	r.cacheCommands(session)
-	r.rebuildCommands()
 }
 
 // Plugin 返回最近一次 Attach 的插件实例及查找结果；激活状态由调用方即时检查。
@@ -183,11 +196,11 @@ func (r *Router) HasInFlight(c Caller, ev *pb.Event) bool {
 
 // Detach 移除插件并重建命令索引，使其退出后续事件的候选集。
 func (r *Router) Detach(pluginID string) {
+	defer r.CommandsChanged()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.plugins, pluginID)
 	delete(r.matches, pluginID)
-	r.rebuildCommands()
 }
 
 type candidate struct {
