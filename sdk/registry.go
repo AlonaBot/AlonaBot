@@ -180,6 +180,16 @@ func (b *CommandBuilder) Optional(name string, def ...string) *CommandBuilder {
 // RawTail 保留末位参数原文。
 func (b *CommandBuilder) RawTail() *CommandBuilder { b.touch(); b.options.raw = true; return b }
 
+// Description 登记英文说明；空串表示未提供，其他语言按规范路径覆盖。
+func (b *CommandBuilder) Description(text string) *CommandBuilder {
+	b.touch()
+	b.command.spec.Description = nil
+	if text != "" {
+		b.command.spec.Description = &text
+	}
+	return b
+}
+
 // UsageKey 设置 usage 文案键。
 func (b *CommandBuilder) UsageKey(key string) *CommandBuilder {
 	b.touch()

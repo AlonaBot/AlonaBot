@@ -58,7 +58,7 @@
 | goal-105 | T-03.14 | 新增片段与字段（含会话类型） | T-03.8、T-04.8 | 已完成（PR #143） |
 | goal-106 | T-03.15 | 平台动作 | T-03.8、T-04.8 | 已完成（PR #146） |
 | goal-107 | T-03.16 | 撤回 | T-03.9、T-04.8 | 已完成（PR #144） |
-| goal-108 | T-03.17 | 命令菜单同步 | T-04.6、T-04.7、T-04.8、T-08.8 | 待派发 |
+| goal-108 | T-03.17 | 命令菜单同步 | T-04.6、T-04.7、T-04.8、T-08.8 | 已完成（PR #150） |
 | goal-109 | T-03.18 | 流式输出辅助函数 | T-03.9、T-04.8 | 已完成（PR #151） |
 | goal-110 | T-03.19 | Adapter 的 HTTP 路由 | T-03.3、T-04.8、T-07.7 | 待派发 |
 | goal-121 | T-03.24 | 插件给出的目标由 Core 补齐 | T-03.6、T-07.6 | 已完成（PR #135） |
@@ -4171,7 +4171,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-108 · T-03.17 命令菜单同步
 
-状态：待派发。2026-11-12 依据维护者决定 D-138（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`），把说明字段、SDK builder、Core 翻译、生成器结构检查与 Collect 覆盖检查纳入本切片；前置均已合并：T-04.6（PR #78）、T-04.7（PR #89）、T-04.8（PR #141，合并提交 `ac4aded`）、T-08.8（PR #102）。按 main `c04b2ca` 的代码核对。D-128 的命令名覆盖仍由后继 goal-129 接入；与 goal-125 同改 SDK 注册与生成器，后合并者同步 main 保留 Description 及覆盖检查，迁到插件对象上的同一 builder。
+状态：已完成（[PR #150](https://github.com/AlonaBot/AlonaBot/pull/150)，合并提交 `8eb7846`），证据见 TEST-MATRIX §3.2。合入：`CommandSpec.description`、`CommandMenuItem`、`AdapterCommandsSyncRequest/Response` 与 `wire.ServiceAdapterCommandsSync`；`contracts/i18n` 的 commands 覆盖（`Locales`、`CheckCommands`、`CommandDescription`）；SDK 的 `(*CommandBuilder).Description(text)` 与 Collect 的实际注册表检查；`sdk/adapter.CommandSynchronizer`；Router 的 `StartCommandSync`/`StopCommandSync`/`CommandsChanged` 与 `router.Options.CommandState`；`Policy.CommandState` 与 `SetCommandsChanged`；`supervisor.Spec.CommandsChanged`；`remote.Options.StartCommandSync`/`StopCommandSync`；库模式装配已接入。派发时：2026-11-12 依据维护者决定 D-138（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`），把说明字段、SDK builder、Core 翻译、生成器结构检查与 Collect 覆盖检查纳入本切片；前置均已合并：T-04.6（PR #78）、T-04.7（PR #89）、T-04.8（PR #141，合并提交 `ac4aded`）、T-08.8（PR #102）。按 main `c04b2ca` 的代码核对。D-128 的命令名覆盖仍由后继 goal-129 接入；与 goal-125 同改 SDK 注册与生成器，后合并者同步 main 保留 Description 及覆盖检查，迁到插件对象上的同一 builder。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-108（切片 T-03.17：命令菜单同步）。goal 目录 goal-108，分支 goal-108，worktree .worktrees/goal-108，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -5095,7 +5095,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-129 · T-04.14 命令名覆盖的 Core 侧
 
-状态：等待前置（T-03.17）。T-04.10（[PR #133](https://github.com/AlonaBot/AlonaBot/pull/133)，合并提交 `3d618cb`）已合并：policy 的 Admin 与全局禁止改为按 Adapter（`IsAdmin(ctx, adapterID, actor)`、`Deny`/`Undeny(ctx, kind, adapterID, subjectID)`），`global_deny` 按 `adapter_id`，`CheckCommand` 与 `CheckSend` 签名不变。2026-11-10 按 D-128 新增。T-04.4（PR #88）已合并，合入的符号：`policy.Scope`（`ScopePlugin`、`ScopeGroup`、`ScopeRoute`）、`policy.Override{Permissions, Enabled}`、`Policy.SetOverride`、`Policy.Overrides`、`Policy.CheckCommand`，状态库的 `command_policy` 表；Router 的命令索引从注册描述读取路径与别名（`internal/core/router/index.go`）。T-04.10（goal-122）修改 policy，T-03.17（goal-108）提供命令菜单同步，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片修改 `internal/core/state/schema.sql`，按执行顺序的共享文件规则处理冲突；与 goal-71（T-14.1）都涉及 `core.command.list` 返回的命令名，后合并者同步。
+状态：等待前置（T-03.17）。T-03.17（[PR #150](https://github.com/AlonaBot/AlonaBot/pull/150)，合并提交 `8eb7846`）已合并，前置均已合并，待审查者按合并后的代码写出范围、接口与测试段。T-04.10（[PR #133](https://github.com/AlonaBot/AlonaBot/pull/133)，合并提交 `3d618cb`）已合并：policy 的 Admin 与全局禁止改为按 Adapter（`IsAdmin(ctx, adapterID, actor)`、`Deny`/`Undeny(ctx, kind, adapterID, subjectID)`），`global_deny` 按 `adapter_id`，`CheckCommand` 与 `CheckSend` 签名不变。2026-11-10 按 D-128 新增。T-04.4（PR #88）已合并，合入的符号：`policy.Scope`（`ScopePlugin`、`ScopeGroup`、`ScopeRoute`）、`policy.Override{Permissions, Enabled}`、`Policy.SetOverride`、`Policy.Overrides`、`Policy.CheckCommand`，状态库的 `command_policy` 表；Router 的命令索引从注册描述读取路径与别名（`internal/core/router/index.go`）。T-04.10（goal-122）修改 policy，T-03.17（goal-108）提供命令菜单同步，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片修改 `internal/core/state/schema.sql`，按执行顺序的共享文件规则处理冲突；与 goal-71（T-14.1）都涉及 `core.command.list` 返回的命令名，后合并者同步。
 
 目标：管理员可以给一条按路径匹配的命令保存命令名覆盖，取代插件声明的路径与别名；Core 的匹配、遮蔽、usage 回复与命令菜单都使用生效的命令名，route_id、命令组与策略的作用域不变。本切片提供服务层与 Router 的行为，管理 API 由 goal-93 提供。
 
