@@ -215,6 +215,8 @@ func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core s
 		DisplayName string `json:"display_name"`
 		Username    string `json:"username"`
 		Media       bool   `json:"media"`
+		Delete      bool   `json:"delete"`
+		DeleteAudit string `json:"delete_audit"`
 	}
 	if err := json.Unmarshal(req.ConfigJSON, &config); err != nil {
 		return nil, err
@@ -231,6 +233,7 @@ func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core s
 		}
 	}
 	instance := &loopInstance{id: req.InstanceID, account: config.Account, displayName: config.DisplayName, username: config.Username, core: core, sequence: n, initial: string(req.Cursor), token: config.Token}
+	instance.deleteSupported, instance.deleteAudit = config.Delete, config.DeleteAudit
 	if config.Media {
 		return &mediaLoopInstance{loopInstance: instance}, nil
 	}
@@ -267,13 +270,59 @@ type loopInstance struct {
 	mu                    sync.Mutex
 	sequence              int
 	mediaReads            int
+	deleteSupported       bool
+	deleteAudit           string
 }
 
 func (i *loopInstance) Account() sdkadapter.Account {
 	return sdkadapter.Account{ID: i.account, DisplayName: i.displayName, Username: i.username}
 }
 func (i *loopInstance) Capabilities() []message.Capability {
-	return []message.Capability{{Name: "message.text", Version: 1, Supported: true}}
+	capabilities := []message.Capability{{Name: "message.text", Version: 1, Supported: true}}
+	if i.deleteSupported {
+		capabilities = append(capabilities, message.Capability{Name: "message.delete", Version: 1, Supported: true})
+	}
+	return capabilities
+}
+
+// Delete 记录真实 RPC 到达并模拟顺序平台操作，失败或未知后保留未尝试项。
+func (i *loopInstance) Delete(ctx context.Context, target message.Session, ids []string) (*message.DeleteResult, *errcode.Error) {
+	data, err := json.Marshal(struct {
+		Instance string
+		IDs      []string
+	}{Instance: i.id, IDs: ids})
+	if err != nil {
+		return nil, errcode.Internal.New(err.Error())
+	}
+	file, err := os.OpenFile(i.deleteAudit, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return nil, errcode.Internal.New(err.Error())
+	}
+	_, writeError := file.Write(append(data, '\n'))
+	if err := errors.Join(writeError, file.Close()); err != nil {
+		return nil, errcode.Internal.New(err.Error())
+	}
+	result := &message.DeleteResult{Session: target, AdapterInstanceID: i.id}
+	var safe *errcode.Error
+	for _, id := range ids {
+		item := message.DeleteItemResult{PlatformMessageID: id, Status: message.PartAccepted}
+		if safe != nil {
+			item.Status = message.PartNotAttempted
+		} else {
+			switch id {
+			case "reject":
+				item.Status, safe = message.PartRejected, errcode.PermissionDenied.New("message deletion rejected")
+			case "unknown":
+				item.Status, safe = message.PartUnknown, errcode.Unavailable.New("message deletion outcome unknown")
+			case "wait":
+				<-ctx.Done()
+				item.Status, safe = message.PartUnknown, errcode.DeadlineExceeded.New("message deletion outcome unknown")
+			}
+			item.Error = safe
+		}
+		result.Items = append(result.Items, item)
+	}
+	return result, safe
 }
 func (i *loopInstance) Stop(context.Context) error {
 	i.mu.Lock()

@@ -2974,6 +2974,173 @@ func (x *ExtensionSegment) GetPayloadJson() string {
 	return ""
 }
 
+// DeleteRequest 按输入顺序撤回同一目标的 1～100 个消息 ID。
+type DeleteRequest struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	To                 *Target                `protobuf:"bytes,1,opt,name=to,proto3" json:"to,omitempty"`
+	PlatformMessageIds []string               `protobuf:"bytes,2,rep,name=platform_message_ids,json=platformMessageIds,proto3" json:"platform_message_ids,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *DeleteRequest) Reset() {
+	*x = DeleteRequest{}
+	mi := &file_alonabot_v1_message_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteRequest) ProtoMessage() {}
+
+func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_message_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteRequest.ProtoReflect.Descriptor instead.
+func (*DeleteRequest) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *DeleteRequest) GetTo() *Target {
+	if x != nil {
+		return x.To
+	}
+	return nil
+}
+
+func (x *DeleteRequest) GetPlatformMessageIds() []string {
+	if x != nil {
+		return x.PlatformMessageIds
+	}
+	return nil
+}
+
+// DeleteItemResult 保留单个输入 ID 的撤回状态与安全错误。
+type DeleteItemResult struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	PlatformMessageId string                 `protobuf:"bytes,1,opt,name=platform_message_id,json=platformMessageId,proto3" json:"platform_message_id,omitempty"`
+	Status            PartStatus             `protobuf:"varint,2,opt,name=status,proto3,enum=alonabot.v1.PartStatus" json:"status,omitempty"`
+	Error             *ErrorInfo             `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *DeleteItemResult) Reset() {
+	*x = DeleteItemResult{}
+	mi := &file_alonabot_v1_message_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteItemResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteItemResult) ProtoMessage() {}
+
+func (x *DeleteItemResult) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_message_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteItemResult.ProtoReflect.Descriptor instead.
+func (*DeleteItemResult) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *DeleteItemResult) GetPlatformMessageId() string {
+	if x != nil {
+		return x.PlatformMessageId
+	}
+	return ""
+}
+
+func (x *DeleteItemResult) GetStatus() PartStatus {
+	if x != nil {
+		return x.Status
+	}
+	return PartStatus_PART_STATUS_UNSPECIFIED
+}
+
+func (x *DeleteItemResult) GetError() *ErrorInfo {
+	if x != nil {
+		return x.Error
+	}
+	return nil
+}
+
+// DeleteResult 按输入顺序保留全部逐项结果，包括重复 ID 与未尝试项。
+type DeleteResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Target        *Target                `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	Items         []*DeleteItemResult    `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteResult) Reset() {
+	*x = DeleteResult{}
+	mi := &file_alonabot_v1_message_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteResult) ProtoMessage() {}
+
+func (x *DeleteResult) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_message_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteResult.ProtoReflect.Descriptor instead.
+func (*DeleteResult) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *DeleteResult) GetTarget() *Target {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *DeleteResult) GetItems() []*DeleteItemResult {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
 var File_alonabot_v1_message_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_message_proto_rawDesc = "" +
@@ -3191,7 +3358,17 @@ const file_alonabot_v1_message_proto_rawDesc = "" +
 	"adapter_id\x18\x01 \x01(\tR\tadapterId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\rR\aversion\x12!\n" +
-	"\fpayload_json\x18\x04 \x01(\tR\vpayloadJson*t\n" +
+	"\fpayload_json\x18\x04 \x01(\tR\vpayloadJson\"f\n" +
+	"\rDeleteRequest\x12#\n" +
+	"\x02to\x18\x01 \x01(\v2\x13.alonabot.v1.TargetR\x02to\x120\n" +
+	"\x14platform_message_ids\x18\x02 \x03(\tR\x12platformMessageIds\"\xa1\x01\n" +
+	"\x10DeleteItemResult\x12.\n" +
+	"\x13platform_message_id\x18\x01 \x01(\tR\x11platformMessageId\x12/\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x17.alonabot.v1.PartStatusR\x06status\x12,\n" +
+	"\x05error\x18\x03 \x01(\v2\x16.alonabot.v1.ErrorInfoR\x05error\"p\n" +
+	"\fDeleteResult\x12+\n" +
+	"\x06target\x18\x01 \x01(\v2\x13.alonabot.v1.TargetR\x06target\x123\n" +
+	"\x05items\x18\x02 \x03(\v2\x1d.alonabot.v1.DeleteItemResultR\x05items*t\n" +
 	"\x0fEventSourceKind\x12!\n" +
 	"\x1dEVENT_SOURCE_KIND_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19EVENT_SOURCE_KIND_ADAPTER\x10\x01\x12\x1f\n" +
@@ -3246,7 +3423,7 @@ func file_alonabot_v1_message_proto_rawDescGZIP() []byte {
 }
 
 var file_alonabot_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_alonabot_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_alonabot_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_alonabot_v1_message_proto_goTypes = []any{
 	(EventSourceKind)(0),          // 0: alonabot.v1.EventSourceKind
 	(TextFormat)(0),               // 1: alonabot.v1.TextFormat
@@ -3288,19 +3465,22 @@ var file_alonabot_v1_message_proto_goTypes = []any{
 	(*BotOfflinePayload)(nil),     // 37: alonabot.v1.BotOfflinePayload
 	(*EditRequest)(nil),           // 38: alonabot.v1.EditRequest
 	(*ExtensionSegment)(nil),      // 39: alonabot.v1.ExtensionSegment
-	(*Target)(nil),                // 40: alonabot.v1.Target
-	(*Actor)(nil),                 // 41: alonabot.v1.Actor
-	(*Capability)(nil),            // 42: alonabot.v1.Capability
-	(*IncomingMedia)(nil),         // 43: alonabot.v1.IncomingMedia
-	(*ErrorInfo)(nil),             // 44: alonabot.v1.ErrorInfo
+	(*DeleteRequest)(nil),         // 40: alonabot.v1.DeleteRequest
+	(*DeleteItemResult)(nil),      // 41: alonabot.v1.DeleteItemResult
+	(*DeleteResult)(nil),          // 42: alonabot.v1.DeleteResult
+	(*Target)(nil),                // 43: alonabot.v1.Target
+	(*Actor)(nil),                 // 44: alonabot.v1.Actor
+	(*Capability)(nil),            // 45: alonabot.v1.Capability
+	(*IncomingMedia)(nil),         // 46: alonabot.v1.IncomingMedia
+	(*ErrorInfo)(nil),             // 47: alonabot.v1.ErrorInfo
 }
 var file_alonabot_v1_message_proto_depIdxs = []int32{
 	0,  // 0: alonabot.v1.Event.source_kind:type_name -> alonabot.v1.EventSourceKind
-	40, // 1: alonabot.v1.Event.target:type_name -> alonabot.v1.Target
-	41, // 2: alonabot.v1.Event.actor:type_name -> alonabot.v1.Actor
+	43, // 1: alonabot.v1.Event.target:type_name -> alonabot.v1.Target
+	44, // 2: alonabot.v1.Event.actor:type_name -> alonabot.v1.Actor
 	7,  // 3: alonabot.v1.Event.message:type_name -> alonabot.v1.PlatformMessage
 	8,  // 4: alonabot.v1.Event.event_payload:type_name -> alonabot.v1.EventPayload
-	42, // 5: alonabot.v1.Event.capabilities:type_name -> alonabot.v1.Capability
+	45, // 5: alonabot.v1.Event.capabilities:type_name -> alonabot.v1.Capability
 	17, // 6: alonabot.v1.PlatformMessage.chain:type_name -> alonabot.v1.MessageChain
 	10, // 7: alonabot.v1.EventPayload.message_created:type_name -> alonabot.v1.MessageCreatedPayload
 	11, // 8: alonabot.v1.EventPayload.message_edited:type_name -> alonabot.v1.MessageEditedPayload
@@ -3329,33 +3509,38 @@ var file_alonabot_v1_message_proto_depIdxs = []int32{
 	1,  // 31: alonabot.v1.TextSegment.format:type_name -> alonabot.v1.TextFormat
 	20, // 32: alonabot.v1.TextSegment.entities:type_name -> alonabot.v1.TextEntity
 	2,  // 33: alonabot.v1.TextEntity.type:type_name -> alonabot.v1.EntityType
-	43, // 34: alonabot.v1.MediaSource.incoming_ref:type_name -> alonabot.v1.IncomingMedia
+	46, // 34: alonabot.v1.MediaSource.incoming_ref:type_name -> alonabot.v1.IncomingMedia
 	21, // 35: alonabot.v1.ImageSegment.source:type_name -> alonabot.v1.MediaSource
 	21, // 36: alonabot.v1.VideoSegment.source:type_name -> alonabot.v1.MediaSource
 	21, // 37: alonabot.v1.FileSegment.source:type_name -> alonabot.v1.MediaSource
-	40, // 38: alonabot.v1.ReferenceSegment.target:type_name -> alonabot.v1.Target
+	43, // 38: alonabot.v1.ReferenceSegment.target:type_name -> alonabot.v1.Target
 	28, // 39: alonabot.v1.ButtonsSegment.rows:type_name -> alonabot.v1.ButtonRow
 	29, // 40: alonabot.v1.ButtonRow.buttons:type_name -> alonabot.v1.Button
 	31, // 41: alonabot.v1.ForwardSegment.items:type_name -> alonabot.v1.ForwardItem
 	32, // 42: alonabot.v1.ForwardItem.source:type_name -> alonabot.v1.ForwardSource
 	17, // 43: alonabot.v1.ForwardItem.chain:type_name -> alonabot.v1.MessageChain
-	40, // 44: alonabot.v1.SendRequest.to:type_name -> alonabot.v1.Target
+	43, // 44: alonabot.v1.SendRequest.to:type_name -> alonabot.v1.Target
 	17, // 45: alonabot.v1.SendRequest.chain:type_name -> alonabot.v1.MessageChain
 	3,  // 46: alonabot.v1.SendResult.status:type_name -> alonabot.v1.SendStatus
-	40, // 47: alonabot.v1.SendResult.target:type_name -> alonabot.v1.Target
-	42, // 48: alonabot.v1.SendResult.capabilities_used:type_name -> alonabot.v1.Capability
+	43, // 47: alonabot.v1.SendResult.target:type_name -> alonabot.v1.Target
+	45, // 48: alonabot.v1.SendResult.capabilities_used:type_name -> alonabot.v1.Capability
 	35, // 49: alonabot.v1.SendResult.part_results:type_name -> alonabot.v1.PartResult
 	4,  // 50: alonabot.v1.PartResult.status:type_name -> alonabot.v1.PartStatus
-	44, // 51: alonabot.v1.PartResult.error:type_name -> alonabot.v1.ErrorInfo
+	47, // 51: alonabot.v1.PartResult.error:type_name -> alonabot.v1.ErrorInfo
 	5,  // 52: alonabot.v1.BotOfflinePayload.reason:type_name -> alonabot.v1.BotOfflineReason
-	44, // 53: alonabot.v1.BotOfflinePayload.safe_error:type_name -> alonabot.v1.ErrorInfo
-	40, // 54: alonabot.v1.EditRequest.to:type_name -> alonabot.v1.Target
+	47, // 53: alonabot.v1.BotOfflinePayload.safe_error:type_name -> alonabot.v1.ErrorInfo
+	43, // 54: alonabot.v1.EditRequest.to:type_name -> alonabot.v1.Target
 	17, // 55: alonabot.v1.EditRequest.chain:type_name -> alonabot.v1.MessageChain
-	56, // [56:56] is the sub-list for method output_type
-	56, // [56:56] is the sub-list for method input_type
-	56, // [56:56] is the sub-list for extension type_name
-	56, // [56:56] is the sub-list for extension extendee
-	0,  // [0:56] is the sub-list for field type_name
+	43, // 56: alonabot.v1.DeleteRequest.to:type_name -> alonabot.v1.Target
+	4,  // 57: alonabot.v1.DeleteItemResult.status:type_name -> alonabot.v1.PartStatus
+	47, // 58: alonabot.v1.DeleteItemResult.error:type_name -> alonabot.v1.ErrorInfo
+	43, // 59: alonabot.v1.DeleteResult.target:type_name -> alonabot.v1.Target
+	41, // 60: alonabot.v1.DeleteResult.items:type_name -> alonabot.v1.DeleteItemResult
+	61, // [61:61] is the sub-list for method output_type
+	61, // [61:61] is the sub-list for method input_type
+	61, // [61:61] is the sub-list for extension type_name
+	61, // [61:61] is the sub-list for extension extendee
+	0,  // [0:61] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_message_proto_init() }
@@ -3414,7 +3599,7 @@ func file_alonabot_v1_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_message_proto_rawDesc), len(file_alonabot_v1_message_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   34,
+			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

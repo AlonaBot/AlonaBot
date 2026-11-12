@@ -456,3 +456,22 @@ message ExtensionSegment {
   // 按该声明的 Schema 校验的 JSON 文本。
   string payload_json = 4;
 }
+
+// DeleteRequest 按输入顺序撤回同一目标的 1～100 个消息 ID。
+message DeleteRequest {
+  Target to = 1;
+  repeated string platform_message_ids = 2;
+}
+
+// DeleteItemResult 保留单个输入 ID 的撤回状态与安全错误。
+message DeleteItemResult {
+  string platform_message_id = 1;
+  PartStatus status = 2;
+  ErrorInfo error = 3;
+}
+
+// DeleteResult 按输入顺序保留全部逐项结果，包括重复 ID 与未尝试项。
+message DeleteResult {
+  Target target = 1;
+  repeated DeleteItemResult items = 2;
+}

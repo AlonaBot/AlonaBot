@@ -352,6 +352,32 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 		}
 		return adapterResponse(encoded, convert.ErrorToProto(safe))
+	case wire.ServiceAdapterDelete:
+		request := &pb.AdapterDeleteRequest{}
+		if err := decodeInvocation(in.Payload, request); err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		r.mu.Lock()
+		entry, ok := r.instances[request.InstanceId]
+		if !ok {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
+		}
+		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		deleter, supported := entry.instance.(adapter.Deleter)
+		r.mu.Unlock()
+		if !supported {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support message deletion")
+		}
+		// 平台请求在锁外执行，停止和其他实例的操作可继续推进。
+		result, safe := deleter.Delete(ctx, convert.SessionFromProto(request.Target), request.PlatformMessageIds)
+		if result == nil {
+			return wire.Response{Err: convert.ErrorToProto(safe)}
+		}
+		return adapterResponse(convert.DeleteResultToProto(result, request.Target), convert.ErrorToProto(safe))
 	case wire.ServiceAdapterSend:
 		request := &pb.AdapterSendRequest{}
 		if err := decodeInvocation(in.Payload, request); err != nil {
