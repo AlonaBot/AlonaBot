@@ -8,7 +8,10 @@ import (
 	"time"
 	"unicode/utf8"
 
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
+	"github.com/AlonaBot/AlonaBot/sdk/internal/convert"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
@@ -177,7 +180,7 @@ func (s *streamOutput) flush(wait bool) error {
 			return acquireError
 		}
 		// 令牌跨 RPC 保持同目标的编辑顺序，状态 mutex 不跨网络调用。
-		result, err = s.context.Edit(s.ref, message.Text(s.text.String()))
+		result, err = s.edit()
 		throttle.release()
 	}
 	if result != nil {
@@ -190,6 +193,24 @@ func (s *streamOutput) flush(wait bool) error {
 		s.displayed = s.text.Len()
 	}
 	return err
+}
+
+func (s *streamOutput) edit() (*message.SendResult, error) {
+	c := s.context
+	if !c.active.Load() {
+		return nil, errcode.FailedPrecondition.New("handler context has expired")
+	}
+	_, id, err := convert.RefToProto(s.ref)
+	if err != nil {
+		return nil, err
+	}
+	// 句柄只提供实际消息 ID，完整目标保留原事件账号，避免同名实例换绑后串用账号。
+	target := c.event.Target
+	chain, err := convert.ContentToProto(message.Text(s.text.String()), target)
+	if err != nil {
+		return nil, err
+	}
+	return callMessage(c.ctx, wire.ServiceEdit, &pb.EditRequest{To: target, PlatformMessageId: id, Chain: chain}, c.inbound)
 }
 
 const streamEditInterval = time.Second // MESSAGE-MODEL §4A 的同目标最小编辑间隔。
