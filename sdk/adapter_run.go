@@ -367,8 +367,13 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			r.mu.Unlock()
 			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
 		}
-		deleter, supported := entry.instance.(adapter.Deleter)
+		instance := entry.instance
 		r.mu.Unlock()
+		// 核对账号与执行撤回使用同一实例，避免同名实例重启后串用账号。
+		if instance.Account().ID != request.Target.GetAccountId() {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "target adapter or account does not match instance")
+		}
+		deleter, supported := instance.(adapter.Deleter)
 		if !supported {
 			return dispatchError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support message deletion")
 		}

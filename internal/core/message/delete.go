@@ -98,6 +98,9 @@ func (s *Service) Delete(ctx context.Context, caller router.Caller, in *wire.Inb
 		default:
 			return reject(pb.ErrorCode_ERROR_CODE_INTERNAL, "adapter delete result has invalid status")
 		}
+		if item.Error != nil {
+			item.Error.Code = validate.PublicCode(item.Error.Code)
+		}
 	}
 	encoded, err := proto.Marshal(result)
 	if err != nil {
