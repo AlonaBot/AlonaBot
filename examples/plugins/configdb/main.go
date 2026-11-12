@@ -93,11 +93,7 @@ func (*plugin) Commands(r *sdk.CommandRegistry) {
 }
 
 func reply(c *sdk.Context, key string, args ...any) (message.Chain, error) {
-	text, err := c.T(key, args...)
-	if err != nil {
-		return nil, err
-	}
-	return message.Chain{message.Text(text)}, nil
+	return message.Chain{message.Text(c.T(key, args...))}, nil
 }
 
 func (p *plugin) started() error {
