@@ -27,6 +27,16 @@ const (
 	SourceScheduler                       // 调度器来源。
 )
 
+// ChatType 描述事件所在的会话类别。
+type ChatType int
+
+const (
+	ChatUnspecified ChatType = iota // 平台未提供会话类型。
+	ChatPrivate                     // 私聊。
+	ChatGroup                       // 群聊。
+	ChatChannel                     // 频道。
+)
+
 // PlatformMessage 保存与事件关联的平台消息。
 type PlatformMessage struct {
 	PlatformMessageID string
@@ -44,6 +54,7 @@ type Event struct {
 	OccurredAt                              time.Time
 	AdapterID, AdapterInstanceID, AccountID string
 	Session                                 Session
+	ChatType                                ChatType
 	Actor                                   *Actor
 	Message                                 *PlatformMessage
 	Payload                                 Payload
