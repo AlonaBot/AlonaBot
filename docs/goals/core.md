@@ -60,7 +60,7 @@
 | goal-107 | T-03.16 | 撤回 | T-03.9、T-04.8 | 已完成（PR #144） |
 | goal-108 | T-03.17 | 命令菜单同步 | T-04.6、T-04.7、T-04.8、T-08.8 | 已完成（PR #150） |
 | goal-109 | T-03.18 | 流式输出辅助函数 | T-03.9、T-04.8 | 已完成（PR #151） |
-| goal-110 | T-03.19 | Adapter 的 HTTP 路由 | T-03.3、T-04.8、T-07.7 | 待派发 |
+| goal-110 | T-03.19 | Adapter 的 HTTP 路由 | T-03.3、T-04.8、T-07.7 | 已完成（PR #152） |
 | goal-121 | T-03.24 | 插件给出的目标由 Core 补齐 | T-03.6、T-07.6 | 已完成（PR #135） |
 | goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 等待前置 |
 | goal-122 | T-04.10 | 管理员与封禁按 Adapter 登记 | T-04.4、T-07.6 | 已完成（PR #133） |
@@ -4310,7 +4310,7 @@ contracts/validate（新增，由 AdapterRegister 与实例启动结果接纳共
 
 ### goal-110 · T-03.19 Adapter 的 HTTP 路由
 
-状态：待派发。2026-11-12 依据维护者决定 D-136（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`） 统一 Adapter 角色规则与平台凭证转交；前置均已合并：T-03.3（PR #32）、T-04.8（PR #141）、T-07.7（PR #116，合并提交 `e65eb4d`）。生命周期接入 T-07.5（PR #119，合并提交 `cc19e99`）也已合并。按 main `c04b2ca` 的代码核对；T-03.13～T-03.19 的 proto 追加按执行顺序 §3，SDK HTTP 注册器后续由 T-04.11 改为 builder，本切片沿用现有 Handle/Public。若 goal-67 先合并，沿其同进程入口复用同一 Adapter HTTP 生命周期。范围修订（2026-11-12，审查者补充）：执行者报告 `sdk/registry.go` 的 HTTPRegistry.Handle 拒绝 `Public(AuthPlatformToken)`，语句漏列该文件；授权该校验接受公开平台 token 模式，插件注册路径（sdk.Run）与 Core 的 `validate.Register` 拒绝此模式，`RunAdapter` 与 `validate.AdapterRegister` 接受，其他 HTTP 校验与错误文本不变。
+状态：已完成（[PR #152](https://github.com/AlonaBot/AlonaBot/pull/152)，合并提交 `2f4284d`），证据见 TEST-MATRIX §3.2。合入：`HTTP_AUTH_MODE_PLATFORM_TOKEN` 与 `sdk.AuthPlatformToken`；`sdk.AdapterHTTP`（合入 main 时因 T-04.12 删除了导出的注册器类型，改为 `HTTP(handle func(method, path string, h http.Handler, opts ...HTTPOption))`，与插件对象的 `Handle` 同签名与同校验；T-04.11 会再迁到 HTTP builder）；`httpproxy.Server.Bind(pluginID, generationID, endpoint, token, routes, isAdapter)`、`Unbind(pluginID, generationID string, token []byte)` 与 WebSocket Upgrade 的转发与回收；`validate.AdapterRegister` 接受 HTTP 路由与端点；库模式装配按安装记录的角色调用 Bind。派发时：2026-11-12 依据维护者决定 D-136（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`） 统一 Adapter 角色规则与平台凭证转交；前置均已合并：T-03.3（PR #32）、T-04.8（PR #141）、T-07.7（PR #116，合并提交 `e65eb4d`）。生命周期接入 T-07.5（PR #119，合并提交 `cc19e99`）也已合并。按 main `c04b2ca` 的代码核对；T-03.13～T-03.19 的 proto 追加按执行顺序 §3，SDK HTTP 注册器后续由 T-04.11 改为 builder，本切片沿用现有 Handle/Public。若 goal-67 先合并，沿其同进程入口复用同一 Adapter HTTP 生命周期。范围修订（2026-11-12，审查者补充）：执行者报告 `sdk/registry.go` 的 HTTPRegistry.Handle 拒绝 `Public(AuthPlatformToken)`，语句漏列该文件；授权该校验接受公开平台 token 模式，插件注册路径（sdk.Run）与 Core 的 `validate.Register` 拒绝此模式，`RunAdapter` 与 `validate.AdapterRegister` 接受，其他 HTTP 校验与错误文本不变。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-110（切片 T-03.19：Adapter 的 HTTP 路由）。goal 目录 goal-110，分支 goal-110，worktree .worktrees/goal-110，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
