@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
@@ -185,7 +186,7 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32, c
 
 // prepare 执行准备阶段：配置准备 → 迁移 → OnStart（各有独立预算）→ REGISTER → 等待 PREPARED。
 // 准备期不能发起业务 RPC。失败时已向 Core 报告 SESSION_ERROR 并关闭连接。
-func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Registration) (prepared *pb.Prepared, err error) {
+func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Registration) (prepared *pb.Prepared, err error) {
 	sid, boot, minor := ack.GetSessionId(), ack.GetBootstrap(), ack.GetChosenMinor()
 	l.runtime.translations.Store(&translationSession{messages: reg.messages, defaultLocale: boot.GetDefaultLocale()})
 	limits := boot.GetPhaseLimits()
@@ -203,17 +204,21 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 
 	// 2. 在 OnStart 之前完成配置迁移、默认值与校验；restart 与恢复均使用 RESUME。
 	configContext, cancelConfig := context.WithTimeout(l.runtime.ctx, time.Duration(limits.GetConfigMs())*time.Millisecond)
-	preparedConfig, err := config.Prepare(configContext, func(ctx context.Context, from uint32, raw json.RawMessage) (json.RawMessage, error) {
-		if !l.runtime.beginCallback() {
-			return nil, errcode.FailedPrecondition.New("plugin session has stopped")
+	var loader config.Loader
+	if root.onConfigLoad != nil {
+		loader = func(ctx context.Context, from uint32, raw json.RawMessage) (json.RawMessage, error) {
+			if !l.runtime.beginCallback() {
+				return nil, errcode.FailedPrecondition.New("plugin session has stopped")
+			}
+			defer l.runtime.callbacks.Done()
+			loaded, err := root.onConfigLoad(ctx, from, raw)
+			if err != nil {
+				componentLogger(ctx).ErrorContext(ctx, "config OnConfigLoad rejected the configuration", "err", err)
+			}
+			return loaded, err
 		}
-		defer l.runtime.callbacks.Done()
-		loaded, err := root.OnConfigLoad(ctx, from, raw)
-		if err != nil {
-			componentLogger(ctx).ErrorContext(ctx, "config OnConfigLoad rejected the configuration", "err", err)
-		}
-		return loaded, err
-	}, generatedFor(root).ConfigSchema,
+	}
+	preparedConfig, err := config.Prepare(configContext, loader, generatedFor(root).ConfigSchema,
 		[]byte(boot.GetCandidateConfigJson()), boot.PreviousConfigVersion, boot.GetTargetConfigVersion(),
 		boot.GetDatabaseDescriptor().GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME)
 	cancelConfig()
@@ -265,7 +270,11 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 				errc <- fmt.Errorf("OnStart panic: %v", p)
 			}
 		}()
-		errc <- root.OnStart(ctx)
+		var err error
+		if root.onStart != nil {
+			err = root.onStart(ctx)
+		}
+		errc <- err
 	}()
 	timer := time.NewTimer(budget)
 	select {
@@ -326,7 +335,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 	return nil, fmt.Errorf("unexpected %s during preparation", env.GetKind())
 }
 
-func prepareMigrations(ctx context.Context, root Root, descriptor *pb.DatabaseDescriptor) (*pb.MigrationState, error) {
+func prepareMigrations(ctx context.Context, root *Plugin, descriptor *pb.DatabaseDescriptor) (*pb.MigrationState, error) {
 	type result struct {
 		state *pb.MigrationState
 		err   error
@@ -342,12 +351,24 @@ func prepareMigrations(ctx context.Context, root Root, descriptor *pb.DatabaseDe
 				completed <- result{err: fmt.Errorf("migration panic: %v", p)}
 			}
 		}()
-		migrators := dbhook.Recognize(root)
+		migrators := dbhook.Migrators(root)
 		if len(migrators) > 1 {
-			completed <- result{err: &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "root plugin implements multiple migration interfaces"}}
+			completed <- result{err: &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "plugin has multiple migration registrations"}}
 			return
 		}
-		if descriptor.GetBackend() == pb.DatabaseBackend_DATABASE_BACKEND_NONE || len(migrators) == 0 {
+		mode := pb.MigrationMode_MIGRATION_MODE_NONE
+		if len(migrators) != 0 {
+			mode = migrators[0].Mode
+		}
+		if mode != descriptor.GetMigrationMode() {
+			completed <- result{err: &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: fmt.Sprintf("registered migration mode %s does not match manifest mode %s", mode, descriptor.GetMigrationMode())}}
+			return
+		}
+		if descriptor.GetBackend() == pb.DatabaseBackend_DATABASE_BACKEND_NONE && mode != pb.MigrationMode_MIGRATION_MODE_NONE {
+			completed <- result{err: &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "database migrations require a database backend"}}
+			return
+		}
+		if len(migrators) == 0 {
 			completed <- result{state: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 			return
 		}
@@ -363,4 +384,100 @@ func prepareMigrations(ctx context.Context, root Root, descriptor *pb.DatabaseDe
 		}
 		return result.state, result.err
 	}
+}
+
+// streamTarget 保留完整 Target，话题缺省与显式值分别计入节流键。
+type streamTarget struct {
+	adapter, instance, account, chat, thread string
+	hasThread                                bool
+}
+
+// streamThrottle 用令牌串行化同目标的编辑；令牌持有者独占 last，无需跨 RPC 持锁。
+type streamThrottle struct {
+	token chan struct{}
+	last  time.Time
+}
+
+var streamSessions = struct {
+	sync.Mutex
+	targets map[*wire.Session]map[streamTarget]*streamThrottle
+}{targets: make(map[*wire.Session]map[streamTarget]*streamThrottle)}
+
+func sessionStreamThrottle(session *wire.Session, target *pb.Target) *streamThrottle {
+	key := streamTarget{target.AdapterId, target.AdapterInstanceId, target.AccountId, target.ChatId, target.GetThreadId(), target.ThreadId != nil}
+	streamSessions.Lock()
+	defer streamSessions.Unlock()
+	targets := streamSessions.targets[session]
+	if targets == nil {
+		targets = make(map[streamTarget]*streamThrottle)
+		streamSessions.targets[session] = targets
+		// 每个使用流的 Session 只有一个清理者，连接结束后释放全部目标状态。
+		go func() {
+			<-session.Done()
+			streamSessions.Lock()
+			delete(streamSessions.targets, session)
+			streamSessions.Unlock()
+		}()
+	}
+	throttle := targets[key]
+	if throttle == nil {
+		throttle = &streamThrottle{token: make(chan struct{}, 1)}
+		throttle.token <- struct{}{}
+		targets[key] = throttle
+	}
+	return throttle
+}
+
+func (s *streamThrottle) acquire(ctx context.Context, done <-chan struct{}, wait bool) (bool, error) {
+	// 排队与间隔等待都监听取消；未到刷新时机的增量留在调用者缓存中。
+	if wait {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-done:
+			return false, errcode.FailedPrecondition.New("plugin session has stopped")
+		case <-s.token:
+		}
+	} else {
+		select {
+		case <-s.token:
+		default:
+			return false, nil
+		}
+	}
+	release := func() { s.token <- struct{}{} }
+	if err := ctx.Err(); err != nil {
+		release()
+		return false, err
+	}
+	select {
+	case <-done:
+		release()
+		return false, errcode.FailedPrecondition.New("plugin session has stopped")
+	default:
+	}
+	if remaining := time.Until(s.last.Add(streamEditInterval)); remaining > 0 {
+		if !wait {
+			release()
+			return false, nil
+		}
+		timer := time.NewTimer(remaining)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			release()
+			return false, ctx.Err()
+		case <-done:
+			release()
+			return false, errcode.FailedPrecondition.New("plugin session has stopped")
+		case <-timer.C:
+		}
+	}
+	return true, nil
+}
+
+func (s *streamThrottle) release() {
+	// 从 RPC 完成时计时，确保阻塞或调度延迟也不会缩短实际 Edit 发起间隔。
+	s.last = time.Now()
+	s.token <- struct{}{}
 }

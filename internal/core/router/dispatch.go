@@ -22,6 +22,7 @@ type Options struct {
 	Prefixes      func(adapterInstanceID string) []string                                       // nil 时所有实例使用 ["/"]
 	Buttons       func(ctx context.Context, ev *pb.Event) (pluginID, routeID string, err error) // nil 时丢弃按钮点击
 	Policy        CommandPolicy                                                                 // nil 时仅按声明权限判定且不赋予 admin
+	CommandState  func(context.Context, string, *pb.RouteDescriptor) (bool, []string, error)    // 菜单读取完整策略；nil 时使用注册描述。
 	Continuations Continuations                                                                 // nil 时跳过延续与等待。
 }
 
@@ -119,6 +120,10 @@ func (r *Router) Close(ctx context.Context) error {
 	r.mu.Lock()
 	if !r.closed {
 		r.closed = true
+		for id, state := range r.commandSyncs {
+			state.cancel()
+			delete(r.commandSyncs, id)
+		}
 		r.global.Release(r.queuedBytes)
 		r.queue = nil
 		r.queuedBytes = 0

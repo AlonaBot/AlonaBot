@@ -16,14 +16,21 @@ type Generated struct {
 	ConfigSchema        []byte            // config_schema.json 的规范 JSON；没有该文件时为 nil。
 }
 
-// generatedRegistrations 仅在生成代码的 init 中写入，初始化完成后由 Collect 和准备阶段读取。
-var generatedRegistrations = make(map[reflect.Type]Generated)
+// adapterGeneratedRegistrations 仅由 Adapter 生成代码的 init 写入，初始化后只读。
+var adapterGeneratedRegistrations = make(map[reflect.Type]Generated)
 
-// UseGenerated 按根类型登记生成项，只供生成代码在 init 中调用。
-// root 传入根类型的 nil 指针；同一根类型重复登记会 panic。
-func UseGenerated(root Root, g Generated) {
-	registerGenerated(reflect.TypeOf(root), g)
+// UseGenerated 把只读构建资源显式绑定到插件对象；重复绑定在 Collect 时报错。
+func UseGenerated(p *Plugin, g Generated) {
+	p.checkRegistration()
+	p.generatedCount++
+	if p.generatedCount > 1 {
+		p.errs = append(p.errs, fmt.Errorf("generated resources bound more than once"))
+	}
+	p.generated = g
 }
+
+// Generated 返回插件对象绑定的只读构建资源。
+func (p *Plugin) Generated() Generated { return p.generated }
 
 // UseGeneratedAdapter 按 Adapter 的具名类型登记生成项，只供生成代码在 init 中调用。
 // a 传入具体类型的 nil 指针；同一类型的值和指针共用登记，重复登记会 panic。
@@ -32,10 +39,10 @@ func UseGeneratedAdapter(a adapter.Adapter, g Generated) {
 }
 
 func registerGenerated(component reflect.Type, g Generated) {
-	if _, exists := generatedRegistrations[component]; exists {
+	if _, exists := adapterGeneratedRegistrations[component]; exists {
 		panic(fmt.Sprintf("generated registration for %s already exists", component))
 	}
-	generatedRegistrations[component] = g
+	adapterGeneratedRegistrations[component] = g
 }
 
 func adapterType(component reflect.Type) reflect.Type {
@@ -45,18 +52,15 @@ func adapterType(component reflect.Type) reflect.Type {
 	return component
 }
 
-// GeneratedFor 按组件类型读取生成资源；bool 表示该类型是否已登记。
-// 插件沿用根类型键；Adapter 的值与指针读取同一登记。
+// GeneratedFor 按 Adapter 类型读取生成资源；值与指针读取同一登记。
+// 插件资源通过 Plugin.Generated 读取。
 func GeneratedFor(component any) (Generated, bool) {
 	typ := reflect.TypeOf(component)
-	generated, ok := generatedRegistrations[typ]
+	generated, ok := adapterGeneratedRegistrations[typ]
 	if !ok {
-		generated, ok = generatedRegistrations[adapterType(typ)]
+		generated, ok = adapterGeneratedRegistrations[adapterType(typ)]
 	}
 	return generated, ok
 }
 
-func generatedFor(root Root) Generated {
-	generated, _ := GeneratedFor(root)
-	return generated
-}
+func generatedFor(p *Plugin) Generated { return p.generated }

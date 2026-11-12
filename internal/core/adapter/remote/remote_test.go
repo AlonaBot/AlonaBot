@@ -29,6 +29,8 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter/remote"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/media"
+	coremessage "github.com/AlonaBot/AlonaBot/internal/core/message"
+	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
@@ -44,6 +46,7 @@ import (
 
 const helperEnv = "ALONABOT_LOOP_ADAPTER"
 const observerAuditEnv = "ALONABOT_LOOP_OBSERVER_AUDIT"
+const streamAuditEnv = "ALONABOT_LOOP_STREAM_AUDIT"
 
 // TestMain 将测试二进制切换为经真实 SDK 运行的回环 Adapter 或插件。
 func TestMain(m *testing.M) {
@@ -52,8 +55,10 @@ func TestMain(m *testing.M) {
 		os.Exit(m.Run())
 	}
 	var err error
-	if mode == "plugin" {
-		err = sdk.Run(&loopPlugin{})
+	if mode == "plugin" || mode == "command-plugin" || mode == "stream-plugin" {
+		err = sdk.Run(newLoopPlugin())
+	} else if mode == "plugin-object" {
+		err = sdk.Run(newObjectPlugin())
 	} else if mode == "schema-parse" || mode == "schema-resolve" {
 		err = invalidSchemaAdapter(mode)
 	} else {
@@ -66,7 +71,15 @@ func TestMain(m *testing.M) {
 	os.Exit(0)
 }
 
-type loopPlugin struct{ sdk.Base }
+func newLoopPlugin() *sdk.Plugin {
+	p := sdk.NewPlugin()
+	if os.Getenv(helperEnv) == "command-plugin" {
+		sdk.UseGenerated(p, sdk.Generated{I18n: commandCatalog()})
+	}
+	registerLoopEvents(p)
+	registerLoopCommands(p)
+	return p
+}
 
 type observedEvent struct {
 	ChatType     message.ChatType
@@ -137,16 +150,51 @@ func observe(route string, c *sdk.Context, value *poke) error {
 	return errors.Join(err, file.Close())
 }
 
-// Events 记录真实插件收到的权限和扩展载荷，barrier 用于确定完整派发已结束。
-func (*loopPlugin) Events(r *sdk.EventRegistry) {
+// registerLoopEvents 记录真实插件收到的权限和扩展载荷，barrier 用于确定完整派发已结束。
+func registerLoopEvents(r *sdk.Plugin) {
+	if os.Getenv(helperEnv) == "stream-plugin" {
+		r.On("stream", sdk.MessageCreated).Handle(func(c *sdk.Context) error {
+			parts := []string{"a😀", "b", "c", "d😀"}
+			index := 0
+			results, err := c.Stream(func(context.Context) (string, error) {
+				if index == len(parts) {
+					return "", io.EOF
+				}
+				text := parts[index]
+				index++
+				return text, nil
+			})
+			report := streamReport{Results: results, Capabilities: c.Event().Capabilities}
+			if err != nil {
+				report.Error = err.Error()
+			}
+			data, encodeError := json.Marshal(report)
+			if encodeError != nil {
+				return encodeError
+			}
+			return os.WriteFile(os.Getenv(observerAuditEnv), data, 0600)
+		})
+		return
+	}
 	r.On("loop", sdk.MessageCreated).Handle(func(c *sdk.Context) error { return observe("loop", c, nil) })
 	r.On("extension", sdk.AdapterEvent[poke]("loop.poke", 1)).Handle(func(c *sdk.Context, value *poke) error { return observe("extension", c, value) })
 	r.On("uninstalled", sdk.AdapterEvent[poke]("other.poke", 1)).Handle(func(c *sdk.Context, value *poke) error { return observe("uninstalled", c, value) })
 	r.On("barrier", sdk.Scheduled).Handle(func(c *sdk.Context) error { return observe("barrier", c, nil) })
 }
 
-// Commands 让扩展事件误入命令层时留下可观察记录。
-func (*loopPlugin) Commands(r *sdk.CommandRegistry) {
+// registerLoopCommands 让扩展事件误入命令层时留下可观察记录。
+func registerLoopCommands(r *sdk.Plugin) {
+	if os.Getenv(helperEnv) == "command-plugin" {
+		handler := func(*sdk.Context) error { return nil }
+		r.Command("ping").Description("Ping the bot").Alias("p").Handle(handler)
+		r.Command("bare").Handle(handler)
+		r.Command("admin").Description("Admin command").Permission(sdk.Admin).Handle(handler)
+		r.Group("rss").Command("add").Description("Add a feed").Handle(handler)
+		return
+	}
+	if os.Getenv(helperEnv) == "stream-plugin" {
+		return
+	}
 	r.Raw("raw").Handle(func(c *sdk.Context) error { return observe("raw", c, nil) })
 }
 
@@ -157,6 +205,9 @@ func (*loopAdapter) Descriptor() *sdkadapter.Descriptor {
 		{Name: "loop.owner", Implies: []string{"loop.admin"}, LabelKey: "permissions.owner"},
 		{Name: "loop.admin", Implies: []string{"chat_admin"}, LabelKey: "permissions.admin"},
 	}, Events: []sdkadapter.EventDeclaration{sdkadapter.Event[poke]("loop.poke", 1)}}
+	if os.Getenv(helperEnv) == "stream-adapter" {
+		descriptor.Capabilities = streamCapabilities()
+	}
 	if os.Getenv(helperEnv) == "actions" {
 		descriptor.Actions = []sdkadapter.ActionDeclaration{
 			sdkadapter.Action[loopActionParams, loopActionResult]("loop.echo", 1, sdkadapter.ActionScopeChat),
@@ -249,14 +300,16 @@ func expectedDescriptor(t *testing.T) *pb.AdapterDescriptor {
 }
 func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core sdkadapter.Core) (sdkadapter.Instance, error) {
 	var config struct {
-		Account     string `json:"account"`
-		Token       string `json:"token"`
-		DisplayName string `json:"display_name"`
-		Username    string `json:"username"`
-		Media       bool   `json:"media"`
-		Delete      bool   `json:"delete"`
-		DeleteAudit string `json:"delete_audit"`
-		Segments    bool   `json:"segments"`
+		Account       string `json:"account"`
+		Token         string `json:"token"`
+		DisplayName   string `json:"display_name"`
+		Username      string `json:"username"`
+		Media         bool   `json:"media"`
+		CommandsAudit string `json:"commands_audit"`
+		Stream        bool   `json:"stream"`
+		Delete        bool   `json:"delete"`
+		DeleteAudit   string `json:"delete_audit"`
+		Segments      bool   `json:"segments"`
 	}
 	if err := json.Unmarshal(req.ConfigJSON, &config); err != nil {
 		return nil, err
@@ -272,7 +325,7 @@ func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core s
 			return nil, err
 		}
 	}
-	instance := &loopInstance{id: req.InstanceID, account: config.Account, displayName: config.DisplayName, username: config.Username, core: core, sequence: n, initial: string(req.Cursor), token: config.Token, segments: config.Segments}
+	instance := &loopInstance{id: req.InstanceID, account: config.Account, displayName: config.DisplayName, username: config.Username, core: core, sequence: n, initial: string(req.Cursor), token: config.Token, commandsAudit: config.CommandsAudit, stream: config.Stream, segments: config.Segments}
 	instance.deleteSupported, instance.deleteAudit = config.Delete, config.DeleteAudit
 	if config.Media {
 		return &mediaLoopInstance{loopInstance: instance}, nil
@@ -302,6 +355,8 @@ func (i *mediaLoopInstance) ReadPlatformFile(_ context.Context, fileID string, o
 }
 
 type loopInstance struct {
+	commandsAudit         string
+	stream                bool
 	token                 string
 	stopFailed            bool
 	id, account, initial  string
@@ -320,7 +375,13 @@ func (i *loopInstance) Account() sdkadapter.Account {
 	return sdkadapter.Account{ID: i.account, DisplayName: i.displayName, Username: i.username}
 }
 func (i *loopInstance) Capabilities() []message.Capability {
+	if i.stream {
+		return streamCapabilities()
+	}
 	capabilities := []message.Capability{{Name: "message.text", Version: 1, Supported: true}}
+	if i.commandsAudit != "" {
+		capabilities = append(capabilities, message.Capability{Name: "commands.sync", Version: 1, Supported: true})
+	}
 	if i.deleteSupported {
 		capabilities = append(capabilities, message.Capability{Name: "message.delete", Version: 1, Supported: true})
 	}
@@ -382,6 +443,10 @@ func (i *loopInstance) Send(ctx context.Context, target message.Session, chain m
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	text := chain.Text()
+	if i.stream && text != "stream-trigger" {
+		i.sequence++
+		return i.streamReceipt("send", target, strconv.Itoa(i.sequence), text)
+	}
 	if text == "media-source" {
 		return i.inspectMediaSource(ctx, chain)
 	}
@@ -1235,6 +1300,335 @@ func TestRemotePermissionsAndEvents(t *testing.T) {
 	}
 }
 
+func commandCatalog() map[string][]byte {
+	return map[string][]byte{"zh-CN.json": []byte(`{"commands":{"ping":{"description":"测试机器人"},"rss add":{"description":"添加订阅"}}}`)}
+}
+
+func (i *loopInstance) SyncCommands(_ context.Context, commands []sdkadapter.CommandMenuItem) *errcode.Error {
+	encoded, err := json.Marshal(commands)
+	if err != nil {
+		return errcode.Internal.New(err.Error())
+	}
+	file, err := os.OpenFile(i.commandsAudit, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return errcode.Internal.New(err.Error())
+	}
+	_, writeErr := file.Write(append(encoded, '\n'))
+	if err := errors.Join(writeErr, file.Close()); err != nil {
+		return errcode.Internal.New(err.Error())
+	}
+	return nil
+}
+
+// TestRemoteCommandSync 验证真实 SDK 进程的命令说明、菜单筛选和持久化禁用后的更新。
+func TestRemoteCommandSync(t *testing.T) {
+	ctx := t.Context()
+	store, spec, logs := setup(t)
+	registry := adapter.NewRegistry()
+	commandPolicy := policy.New(store)
+	dispatch := router.New(router.Options{Concurrency: 1, QueueEvents: tune.Defaults().DispatchQueueEvents, QueueBytes: tune.Defaults().DispatchQueueBytes, Adapters: registry, Policy: commandPolicy, CommandState: commandPolicy.CommandState})
+	commandPolicy.SetCommandsChanged(dispatch.CommandsChanged)
+	dispatch.Start()
+	defer dispatch.Close(context.Background())
+	process := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: dispatch, RegisterIncoming: openMediaStore(t).RegisterIncoming, StartCommandSync: dispatch.StartCommandSync, StopCommandSync: dispatch.StopCommandSync})
+	mux := router.NewMux()
+	process.Services(mux)
+	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
+	spec.Handler = mux.For(caller)
+	running, err := supervisor.Launch(ctx, store, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		process.Unbind()
+		if result := running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE); result.Err != nil {
+			t.Error(result.Err)
+		}
+	}()
+	if err := process.Bind(ctx, running.Instance, caller); err != nil {
+		t.Fatal(err)
+	}
+	audit := filepath.Join(t.TempDir(), "commands.jsonl")
+	if err := os.WriteFile(audit, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	config, err := json.Marshal(map[string]string{"account": "commands-account", "commands_audit": audit})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := process.StartInstance(ctx, "menu", config); err != nil {
+		t.Fatal(err)
+	}
+	// 每条审计记录来自 Adapter 的实际 SyncCommands 调用，启动须先清空菜单。
+	awaitMenu := func(count int) []sdkadapter.CommandMenuItem {
+		t.Helper()
+		timer := time.NewTimer(5 * time.Second)
+		defer timer.Stop()
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			encoded, err := os.ReadFile(audit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			lines := bytes.Split(encoded, []byte{'\n'})
+			if len(lines)-1 >= count {
+				var menu []sdkadapter.CommandMenuItem
+				if err := json.Unmarshal(lines[count-1], &menu); err != nil {
+					t.Fatal(err)
+				}
+				return menu
+			}
+			select {
+			case <-ticker.C:
+			case <-timer.C:
+				logs.mu.Lock()
+				text := logs.b.String()
+				logs.mu.Unlock()
+				t.Fatalf("menu sync %d timed out; logs=%s", count, text)
+			}
+		}
+	}
+	if menu := awaitMenu(1); len(menu) != 0 {
+		t.Fatal(menu)
+	}
+	observer := spec
+	observer.PluginID = "command-observer"
+	observer.Role = state.RolePlugin
+	observer.AdapterID = ""
+	observer.GenerationID = "commands-gen"
+	observer.PluginDir = t.TempDir()
+	observer.Handler = nil
+	observer.Bootstrap = &pb.Bootstrap{GenerationId: observer.GenerationID, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	observer.ExtraEnv = map[string]string{helperEnv: "command-plugin", "GORACE": "atexit_sleep_ms=0"}
+	observer.I18n = commandCatalog()
+	observer.DefaultLocale = "zh-CN"
+	observer.CommandsChanged = dispatch.CommandsChanged
+	if err := store.AddInstall(ctx, state.Install{PluginID: observer.PluginID, Role: state.RolePlugin, BuildDigest: observer.BuildDigest}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddGeneration(ctx, observer.PluginID, observer.GenerationID, "{}", 1); err != nil {
+		t.Fatal(err)
+	}
+	plugin, err := supervisor.Launch(ctx, store, observer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if result := plugin.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE); result.Err != nil {
+			t.Error(result.Err)
+		}
+	}()
+	dispatch.Attach(router.FromInstance(plugin.Instance), router.NewCaller(observer.PluginID, observer.GenerationID))
+	want := []sdkadapter.CommandMenuItem{{Name: "bare", Descriptions: map[string]string{"en-US": "bare", "zh-CN": "bare"}}, {Name: "ping", Descriptions: map[string]string{"en-US": "Ping the bot", "zh-CN": "测试机器人"}}}
+	if got := awaitMenu(2); !reflect.DeepEqual(got, want) {
+		t.Fatalf("menu=%v want=%v", got, want)
+	}
+	disabled := false
+	if err := commandPolicy.SetOverride(ctx, observer.PluginID, policy.Scope{Kind: policy.ScopeRoute, RouteID: "cmd.ping"}, policy.Override{Enabled: &disabled}); err != nil {
+		t.Fatal(err)
+	}
+	if got := awaitMenu(3); !reflect.DeepEqual(got, want[:1]) {
+		t.Fatalf("disabled menu=%v want=%v", got, want[:1])
+	}
+}
+
+// streamCapabilities 让 REGISTER 与实例返回同一份 UTF-16 限额。
+func streamCapabilities() []message.Capability {
+	return []message.Capability{
+		{Name: "message.send", Version: 1, Supported: true, TextLimit: &message.TextLimit{Max: 6, Unit: message.TextUTF16CodeUnits}},
+		{Name: "message.edit", Version: 1, Supported: true},
+	}
+}
+
+type streamReport struct {
+	Results      []*message.SendResult
+	Capabilities []message.Capability
+	Error        string
+}
+
+type streamObservation struct {
+	Operation, Text, ID string
+	Session             message.Session
+	At                  time.Time
+}
+
+func (i *loopInstance) Edit(_ context.Context, target message.Session, id string, chain message.Chain) (*message.SendResult, *errcode.Error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.streamReceipt("edit", target, id, chain.Text())
+}
+
+// streamReceipt 在 Adapter 侧记录真实请求到达时间与消息 ID，返回完整回执。
+func (i *loopInstance) streamReceipt(operation string, target message.Session, id, text string) (*message.SendResult, *errcode.Error) {
+	observation := streamObservation{Operation: operation, Text: text, ID: id, Session: target, At: time.Now()}
+	data, err := json.Marshal(observation)
+	if err != nil {
+		return nil, errcode.Internal.New(err.Error())
+	}
+	file, err := os.OpenFile(os.Getenv(streamAuditEnv), os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return nil, errcode.Internal.New(err.Error())
+	}
+	_, err = file.Write(append(data, '\n'))
+	if err = errors.Join(err, file.Close()); err != nil {
+		return nil, errcode.Internal.New(err.Error())
+	}
+	return &message.SendResult{Status: message.SendAccepted, Session: target, AdapterInstanceID: i.id,
+		PrimaryPlatformMessageID: id, PlatformMessageIDs: []string{id}, ProviderAcceptedAt: time.UnixMilli(1234), CapabilitiesUsed: streamCapabilities(),
+		PartResults: []message.PartResult{{PartIndex: 0, SegmentIndexes: []uint32{0}, Status: message.PartAccepted, PlatformMessageIDs: []string{id}}}}, nil
+}
+
+// TestRemoteStream 经真实 SDK Adapter、插件、Session、Router 与消息服务验证流式换条和节流。
+func TestRemoteStream(t *testing.T) {
+	ctx := t.Context()
+	store, spec, _ := setup(t)
+	registry := adapter.NewRegistry()
+	dispatch := router.New(router.Options{Concurrency: 1, QueueBytes: tune.Defaults().DispatchQueueBytes, QueueEvents: tune.Defaults().DispatchQueueEvents, Adapters: registry})
+	dispatch.Start()
+	defer func() {
+		if err := dispatch.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	}()
+	process := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: dispatch, RegisterIncoming: openMediaStore(t).RegisterIncoming})
+	mux := router.NewMux()
+	process.Services(mux)
+	service := coremessage.New(registry, policy.New(store), nil, nil, tune.Defaults().RequestTimeout)
+	var requestsMu sync.Mutex
+	var parents []uint64
+	for name, handler := range map[string]router.ServiceFunc{wire.ServiceSend: service.Send, wire.ServiceEdit: service.Edit} {
+		mux.Handle(name, func(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response {
+			requestsMu.Lock()
+			parents = append(parents, in.ParentCallID)
+			requestsMu.Unlock()
+			if _, ok := in.ParentAttach.(*router.Invocation); !ok {
+				t.Error("stream request lost trusted parent invocation")
+			}
+			return handler(ctx, caller, in)
+		})
+	}
+	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
+	spec.Handler = mux.For(caller)
+	audit := filepath.Join(t.TempDir(), "requests.jsonl")
+	if err := os.WriteFile(audit, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	spec.ExtraEnv = map[string]string{helperEnv: "stream-adapter", streamAuditEnv: audit, "GORACE": "atexit_sleep_ms=0"}
+	running, err := supervisor.Launch(ctx, store, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
+	capabilities := running.Instance.Adapter.Capabilities
+	if len(capabilities) != 2 || capabilities[0].GetTextLimit().GetMax() != 6 || capabilities[0].GetTextLimit().GetUnit() != pb.TextUnit_TEXT_UNIT_UTF16_CODE_UNITS {
+		t.Fatalf("REGISTER capabilities=%v", capabilities)
+	}
+	if err := process.Bind(ctx, running.Instance, caller); err != nil {
+		t.Fatal(err)
+	}
+	if err := process.StartInstance(ctx, "one", []byte(`{"account":"a","stream":true}`)); err != nil {
+		t.Fatal(err)
+	}
+	reportPath := filepath.Join(t.TempDir(), "result.json")
+	observer := spec
+	observer.PluginID = "stream-observer"
+	observer.Role = state.RolePlugin
+	observer.AdapterID = ""
+	observer.GenerationID = "observer-gen"
+	observer.PluginDir = t.TempDir()
+	observer.Bootstrap = &pb.Bootstrap{GenerationId: observer.GenerationID, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	observerCaller := router.NewCaller(observer.PluginID, observer.GenerationID)
+	observer.Handler = mux.For(observerCaller)
+	observer.ExtraEnv = map[string]string{helperEnv: "stream-plugin", observerAuditEnv: reportPath, "GORACE": "atexit_sleep_ms=0"}
+	if err := store.AddInstall(ctx, state.Install{PluginID: observer.PluginID, Role: state.RolePlugin, BuildDigest: observer.BuildDigest}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddGeneration(ctx, observer.PluginID, observer.GenerationID, "{}", 1); err != nil {
+		t.Fatal(err)
+	}
+	plugin, err := supervisor.Launch(ctx, store, observer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer plugin.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
+	dispatch.Attach(router.FromInstance(plugin.Instance), observerCaller)
+	instance, _ := registry.Get("one")
+	target := &pb.Target{AdapterId: "loop", AdapterInstanceId: "one", AccountId: "a", ChatId: "chat", ThreadId: proto.String("topic")}
+	_, safe := instance.Send(ctx, target, &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: "stream-trigger"}}}}})
+	if safe != nil {
+		t.Fatal(safe)
+	}
+	// 关闭派发入口并等待真实 Handler 完成后再读取文件，避免把半条 JSON 当成结果。
+	closeContext, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := dispatch.Close(closeContext); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report streamReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Error != "" {
+		t.Fatalf("stream error=%s", report.Error)
+	}
+	if !reflect.DeepEqual(report.Capabilities, streamCapabilities()) {
+		t.Fatalf("event capabilities=%+v", report.Capabilities)
+	}
+	file, err := os.Open(audit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	decoder := json.NewDecoder(file)
+	var observed []streamObservation
+	for {
+		var call streamObservation
+		err := decoder.Decode(&call)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		observed = append(observed, call)
+	}
+	wantOperations := []string{"send", "edit", "edit", "send"}
+	wantText := []string{"a😀", "a😀b", "a😀bcd", "😀"}
+	if len(observed) != len(wantOperations) || len(report.Results) != len(observed) {
+		t.Fatalf("requests=%+v results=%+v", observed, report.Results)
+	}
+	for index, call := range observed {
+		result := report.Results[index]
+		if call.Operation != wantOperations[index] || call.Text != wantText[index] || call.Session != message.NewSession("loop", "chat", "topic") {
+			t.Fatalf("request %d=%+v", index, call)
+		}
+		if result.PrimaryPlatformMessageID != call.ID || !reflect.DeepEqual(result.PlatformMessageIDs, []string{call.ID}) || result.Ref() != message.NewMessageRef(call.Session, call.ID, "one") || result.ProviderAcceptedAt.UnixMilli() != 1234 || !reflect.DeepEqual(result.CapabilitiesUsed, streamCapabilities()) || len(result.PartResults) != 1 || result.PartResults[0].PlatformMessageIDs[0] != call.ID {
+			t.Fatalf("receipt %d=%+v", index, result)
+		}
+	}
+	if observed[2].At.Sub(observed[1].At) < time.Second {
+		t.Fatalf("edit interval=%v", observed[2].At.Sub(observed[1].At))
+	}
+	if observed[0].ID != observed[1].ID || observed[1].ID != observed[2].ID || observed[0].ID == observed[3].ID {
+		t.Fatalf("message IDs=%v", observed)
+	}
+	requestsMu.Lock()
+	defer requestsMu.Unlock()
+	if len(parents) != len(observed) {
+		t.Fatalf("parent requests=%v", parents)
+	}
+	for _, parent := range parents {
+		if parent == 0 {
+			t.Fatal("stream lost parent call ID")
+		}
+	}
+}
+
 // Action 记录真实跨进程调用次数，回传带平台额外字段的 JSON 原文。
 func (i *loopInstance) Action(_ context.Context, to message.Session, name string, version uint32, params json.RawMessage) (json.RawMessage, *errcode.Error) {
 	if version != 1 || (name != "loop.echo" && name != "loop.account") {
@@ -1255,4 +1649,121 @@ func (i *loopInstance) Action(_ context.Context, to message.Session, name string
 		return nil, errcode.Internal.New(err.Error())
 	}
 	return json.RawMessage(` {"value": ` + string(value) + `, "platform_extra": true} `), nil
+}
+
+const objectConfigSchema = `{"root":{"type":"string","default":"whole"},"part":{"type":"object","items":{"prefix":{"type":"string","default":"config"}}}}`
+
+func objectI18n() map[string][]byte {
+	return map[string][]byte{"en-US.json": []byte(`{"messages":{"object.reply":"{prefix}|{name}|{count}|{tail}"}}`)}
+}
+
+func newObjectPlugin() *sdk.Plugin {
+	p := sdk.NewPlugin()
+	sdk.UseGenerated(p, sdk.Generated{ConfigSchema: []byte(objectConfigSchema), I18n: objectI18n()})
+	sub := p.Sub("part").Permission(sdk.Anyone)
+	values := sub.Config()
+	sub.Command("object").Handle(func(c *sdk.Context, args struct {
+		Name  string
+		Count int
+		Tail  string `arg:",raw" default:"fallback"`
+	}) (message.Content, error) {
+		if c.Config().String("root") != "whole" {
+			return nil, errors.New("whole-plugin config is unavailable")
+		}
+		return message.Text(c.T("object.reply", "prefix", values.String("prefix"), "name", args.Name, "count", args.Count, "tail", args.Tail)), nil
+	})
+	return p
+}
+
+type objectLoopSink struct {
+	router *router.Router
+	events chan *pb.Event
+}
+
+func (s *objectLoopSink) Deliver(ctx context.Context, ev *pb.Event) error {
+	select {
+	case s.events <- proto.CloneOf(ev):
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return s.router.Deliver(ctx, ev)
+}
+
+// TestPluginObjectCommand 经真实 SDK 插件、Router 与回环 Adapter 验证对象资源、子插件配置和结构体命令。
+func TestPluginObjectCommand(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	store, spec, logs := setup(t)
+	registry := adapter.NewRegistry()
+	sender := coremessage.New(registry, policy.New(store), nil, nil, tune.Defaults().RequestTimeout)
+	dispatch := router.New(router.Options{Concurrency: 1, QueueBytes: tune.Defaults().DispatchQueueBytes, QueueEvents: tune.Defaults().DispatchQueueEvents, Adapters: registry, Send: sender.Send})
+	dispatch.Start()
+	defer func() {
+		if err := dispatch.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	}()
+	sink := &objectLoopSink{router: dispatch, events: make(chan *pb.Event, 4)}
+	process := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: sink, RegisterIncoming: openMediaStore(t).RegisterIncoming})
+	mux := router.NewMux()
+	process.Services(mux)
+	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
+	spec.Handler = mux.For(caller)
+	running, err := supervisor.Launch(ctx, store, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
+	if err := process.Bind(ctx, running.Instance, caller); err != nil {
+		t.Fatal(err)
+	}
+	if err := process.StartInstance(ctx, "one", []byte(`{"account":"a"}`)); err != nil {
+		t.Fatal(err)
+	}
+	observer := spec
+	observer.PluginID = "object-plugin"
+	observer.Role = state.RolePlugin
+	observer.AdapterID = ""
+	observer.GenerationID = "object-gen"
+	observer.PluginDir = t.TempDir()
+	observer.ConfigSchema = []byte(objectConfigSchema)
+	observer.I18n = objectI18n()
+	observer.Bootstrap = &pb.Bootstrap{GenerationId: observer.GenerationID, CandidateConfigJson: `{"part":{"prefix":"prepared"}}`, TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	observer.ExtraEnv = map[string]string{helperEnv: "plugin-object", "GORACE": "atexit_sleep_ms=0"}
+	pluginCaller := router.NewCaller(observer.PluginID, observer.GenerationID)
+	pluginMux := router.NewMux()
+	pluginMux.Handle(wire.ServiceSend, sender.Send)
+	observer.Handler = pluginMux.For(pluginCaller)
+	if err := store.AddInstall(ctx, state.Install{PluginID: observer.PluginID, Role: state.RolePlugin, BuildDigest: observer.BuildDigest}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddGeneration(ctx, observer.PluginID, observer.GenerationID, observer.Bootstrap.CandidateConfigJson, 1); err != nil {
+		t.Fatal(err)
+	}
+	plugin, err := supervisor.Launch(ctx, store, observer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer plugin.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
+	dispatch.Attach(router.FromInstance(plugin.Instance), pluginCaller)
+	instance, _ := registry.Get("one")
+	target := &pb.Target{AdapterId: "loop", AdapterInstanceId: "one", AccountId: "a", ChatId: "chat"}
+	input := &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: "/object Ada 3 raw tail"}}}}}
+	if _, safe := instance.Send(ctx, target, input); safe != nil {
+		t.Fatal(safe)
+	}
+	for {
+		select {
+		case ev := <-sink.events:
+			chain := ev.GetEventPayload().GetMessageCreated().GetChain()
+			if len(chain.GetSegments()) == 1 && chain.Segments[0].GetText().GetText() == "prepared|Ada|3|raw tail" {
+				return
+			}
+		case <-ctx.Done():
+			logs.mu.Lock()
+			text := logs.b.String()
+			logs.mu.Unlock()
+			t.Fatalf("translated command reply not received: %v\n%s", ctx.Err(), text)
+		}
+	}
 }

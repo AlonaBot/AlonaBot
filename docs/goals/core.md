@@ -58,13 +58,13 @@
 | goal-105 | T-03.14 | 新增片段与字段（含会话类型） | T-03.8、T-04.8 | 已完成（PR #143） |
 | goal-106 | T-03.15 | 平台动作 | T-03.8、T-04.8 | 已完成（PR #146） |
 | goal-107 | T-03.16 | 撤回 | T-03.9、T-04.8 | 已完成（PR #144） |
-| goal-108 | T-03.17 | 命令菜单同步 | T-04.6、T-04.7、T-04.8、T-08.8 | 待派发 |
-| goal-109 | T-03.18 | 流式输出辅助函数 | T-03.9、T-04.8 | 待派发 |
+| goal-108 | T-03.17 | 命令菜单同步 | T-04.6、T-04.7、T-04.8、T-08.8 | 已完成（PR #150） |
+| goal-109 | T-03.18 | 流式输出辅助函数 | T-03.9、T-04.8 | 已完成（PR #151） |
 | goal-110 | T-03.19 | Adapter 的 HTTP 路由 | T-03.3、T-04.8、T-07.7 | 待派发 |
 | goal-121 | T-03.24 | 插件给出的目标由 Core 补齐 | T-03.6、T-07.6 | 已完成（PR #135） |
 | goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 等待前置 |
 | goal-122 | T-04.10 | 管理员与封禁按 Adapter 登记 | T-04.4、T-07.6 | 已完成（PR #133） |
-| goal-125 | T-04.12 | 插件对象、结构体参数与子插件 | T-04.8 | 待派发 |
+| goal-125 | T-04.12 | 插件对象、结构体参数与子插件 | T-04.8 | 已完成（PR #154） |
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 已完成（PR #145） |
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 已完成（PR #119） |
 | goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 等待前置 |
@@ -75,7 +75,7 @@
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 待派发 |
 | goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 等待前置 |
 | goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 等待前置 |
-| goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 等待前置 |
+| goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 待派发 |
 | goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 等待前置 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
@@ -4171,7 +4171,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-108 · T-03.17 命令菜单同步
 
-状态：待派发。2026-11-12 依据维护者决定 D-138（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`），把说明字段、SDK builder、Core 翻译、生成器结构检查与 Collect 覆盖检查纳入本切片；前置均已合并：T-04.6（PR #78）、T-04.7（PR #89）、T-04.8（PR #141，合并提交 `ac4aded`）、T-08.8（PR #102）。按 main `c04b2ca` 的代码核对。D-128 的命令名覆盖仍由后继 goal-129 接入；与 goal-125 同改 SDK 注册与生成器，后合并者同步 main 保留 Description 及覆盖检查，迁到插件对象上的同一 builder。
+状态：已完成（[PR #150](https://github.com/AlonaBot/AlonaBot/pull/150)，合并提交 `8eb7846`），证据见 TEST-MATRIX §3.2。合入：`CommandSpec.description`、`CommandMenuItem`、`AdapterCommandsSyncRequest/Response` 与 `wire.ServiceAdapterCommandsSync`；`contracts/i18n` 的 commands 覆盖（`Locales`、`CheckCommands`、`CommandDescription`）；SDK 的 `(*CommandBuilder).Description(text)` 与 Collect 的实际注册表检查；`sdk/adapter.CommandSynchronizer`；Router 的 `StartCommandSync`/`StopCommandSync`/`CommandsChanged` 与 `router.Options.CommandState`；`Policy.CommandState` 与 `SetCommandsChanged`；`supervisor.Spec.CommandsChanged`；`remote.Options.StartCommandSync`/`StopCommandSync`；库模式装配已接入。派发时：2026-11-12 依据维护者决定 D-138（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`），把说明字段、SDK builder、Core 翻译、生成器结构检查与 Collect 覆盖检查纳入本切片；前置均已合并：T-04.6（PR #78）、T-04.7（PR #89）、T-04.8（PR #141，合并提交 `ac4aded`）、T-08.8（PR #102）。按 main `c04b2ca` 的代码核对。D-128 的命令名覆盖仍由后继 goal-129 接入；与 goal-125 同改 SDK 注册与生成器，后合并者同步 main 保留 Description 及覆盖检查，迁到插件对象上的同一 builder。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-108（切片 T-03.17：命令菜单同步）。goal 目录 goal-108，分支 goal-108，worktree .worktrees/goal-108，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -4249,7 +4249,7 @@ internal/core/supervisor（Spec 追加字段，由装配方传入 Router.Command
 
 ### goal-109 · T-03.18 流式输出辅助函数
 
-状态：待派发。2026-11-12 依据维护者决定 D-135（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`） 补齐能力元数据、SDK 接口与测试；前置均已合并：T-03.9（PR #118，合并提交 `1cbfb2e`）、T-04.8（PR #141）。按 main `c04b2ca` 的代码核对。与 T-03.13～T-03.19 的其他切片并行时按执行顺序 §3 追加 proto；与 goal-125 同改 SDK 的 Context/装配和 remote 测试 helper，后合并者同步 main 保留对方接口。范围修订（2026-11-12，审查者补充）：执行者发现 main 现有缺陷，Core 的 Edit 对显式目标未经 `Registry.Complete` 补齐账号，而 SDK 由 MessageRef 转出的目标不带 account_id，显式 Edit 一律被拒；授权修改 `internal/core/message/edit.go`，按 Send 的同一写法补齐显式目标，准入拒绝时只回传调用方已知的目标，由本切片的主路径集成测试证明。
+状态：已完成（[PR #151](https://github.com/AlonaBot/AlonaBot/pull/151)，合并提交 `ba14fd4`），证据见 TEST-MATRIX §3.2。合入：`Capability.text_limit`（`TextLimit{max, unit}`，三种计量单位）与注册校验，Telegram 的 `message.send` 声明 4096 UTF-16；SDK 的 `message.TextLimit` 与 `func (c *Context) Stream(next func(context.Context) (string, error)) ([]*message.SendResult, error)`；Core 的 `Edit` 对显式目标经 `Registry.Complete` 补齐实例与账号。派发时：2026-11-12 依据维护者决定 D-135（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`） 补齐能力元数据、SDK 接口与测试；前置均已合并：T-03.9（PR #118，合并提交 `1cbfb2e`）、T-04.8（PR #141）。按 main `c04b2ca` 的代码核对。与 T-03.13～T-03.19 的其他切片并行时按执行顺序 §3 追加 proto；与 goal-125 同改 SDK 的 Context/装配和 remote 测试 helper，后合并者同步 main 保留对方接口。范围修订（2026-11-12，审查者补充）：执行者发现 main 现有缺陷，Core 的 Edit 对显式目标未经 `Registry.Complete` 补齐账号，而 SDK 由 MessageRef 转出的目标不带 account_id，显式 Edit 一律被拒；授权修改 `internal/core/message/edit.go`，按 Send 的同一写法补齐显式目标，准入拒绝时只回传调用方已知的目标，由本切片的主路径集成测试证明。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-109（切片 T-03.18：流式输出辅助函数）。goal 目录 goal-109，分支 goal-109，worktree .worktrees/goal-109，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -4366,7 +4366,7 @@ isAdapter 由已认证安装记录决定，supervisor 传 spec.Role == state.Rol
 
 ### goal-125 · T-04.12 插件对象、结构体参数与子插件
 
-状态：待派发。2026-11-12 依据维护者决定 D-137（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`） 补齐生成资源与插件对象的显式绑定，承接 D-114～D-116；前置均已合并（T-04.8 为 PR #141），按 main `c04b2ca` 的代码核对。goal-67（T-13.1）正在按旧的类型登记实现：goal-125 合并后同步库模式的资源读取；若 goal-67 先合并，本切片范围已包含其插件选项、SDK 同进程入口与示例的同步迁移，Adapter 资源规则沿用 goal-67。与 goal-101、goal-123、goal-124 共改生成器时按执行顺序 §3；与 goal-16、goal-68 并行时，后合并者同步 main 保留对方的注册与装配语义。范围修订（2026-11-12，审查者补充）：执行者报告 `sdk/adapter_run.go` 嵌入 `Base` 并充当 activation 的 root，语句漏列该文件；授权只迁移 adapterRuntime 到新插件对象模型下的最小内部结构（Adapter 行为与既有测试断言不变），activation 可在 `sdk/activate.go` 内用未导出接口区分插件与 Adapter，`sdk/config/config.go` 与 sdk 包文档中的 `sdk.Base` 说明同步改写。
+状态：已完成（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`），证据见 TEST-MATRIX §3.2。合入：`sdk.NewPlugin() *Plugin` 与 `func New() *sdk.Plugin` 入口，`(*Plugin)` 的路由 builder、`OnStart`/`OnReady`/`OnStop`/`OnConfigLoad`、`Config()`、`Sub(id) *SubPlugin`、`Generated()`；`sdk.Registrar`（`*Plugin` 与 `*SubPlugin` 实现）；`sdk.UseGenerated(p *Plugin, g Generated)` 与生成的包内变量 `alonabotGenerated`；`sqlitedb`/`gormdb` 的 `Migrate(p, fn)` 与 `Migrations(p, list)`；结构体参数（`arg`、`default` 标签）；生成器的 `Result.PluginConstructor`；根包 `alonabot.Plugin(p *sdk.Plugin)` 与 `sdk/inproc.go` 的同进程入口；`sdk.Base`、`sdk.Root` 与旧注册器已删除。派发时：2026-11-12 依据维护者决定 D-137（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`） 补齐生成资源与插件对象的显式绑定，承接 D-114～D-116；前置均已合并（T-04.8 为 PR #141），按 main `c04b2ca` 的代码核对。goal-67（T-13.1）正在按旧的类型登记实现：goal-125 合并后同步库模式的资源读取；若 goal-67 先合并，本切片范围已包含其插件选项、SDK 同进程入口与示例的同步迁移，Adapter 资源规则沿用 goal-67。与 goal-101、goal-123、goal-124 共改生成器时按执行顺序 §3；与 goal-16、goal-68 并行时，后合并者同步 main 保留对方的注册与装配语义。范围修订（2026-11-12，审查者补充）：执行者报告 `sdk/adapter_run.go` 嵌入 `Base` 并充当 activation 的 root，语句漏列该文件；授权只迁移 adapterRuntime 到新插件对象模型下的最小内部结构（Adapter 行为与既有测试断言不变），activation 可在 `sdk/activate.go` 内用未导出接口区分插件与 Adapter，`sdk/config/config.go` 与 sdk 包文档中的 `sdk.Base` 说明同步改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-125（切片 T-04.12：插件对象、结构体参数与子插件）。goal 目录 goal-125，分支 goal-125，worktree .worktrees/goal-125，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -4603,7 +4603,7 @@ goal-125 若先合并，Collect 改为收 *Plugin，命令、事件与 OnButton 
 
 ### goal-39 · T-09.4 管理服务、安装记录与 serve
 
-状态：等待前置（T-13.1）。T-13.1（[PR #149](https://github.com/AlonaBot/AlonaBot/pull/149)，合并提交 `bc39361`）已合并，其余前置均已合并；待 T-04.12（PR #154）合并后由审查者按根包的插件对象选项改写。T-03.8（[PR #136](https://github.com/AlonaBot/AlonaBot/pull/136)，合并提交 `3621fc1`）已合并：`internal/core/buttons` 的 `New(store, now, current)` 与 `Service.Issue`、`Resolve`、`Purge`；`message.New(adapters, p, lease, issue, requestTimeout)`；`router.Options.Buttons`；可选接口 `adapter.ExtensionChecker`；`manifest.CheckDependencies(m, Installed)`；SDK 的 `sdk.Action[T]`、`sdk.OnButton(r, a).Handle(func(*Context, T) error)`、`message.Buttons`、`message.Extension`；`Segment` oneof 已用到 `extension = 9`。装配用 `buttons.New` 创建服务（current 由 `Router.Caller` 与 `Router.Plugin(pluginID).Routes()` 实现），把 `Service.Issue` 传给 `message.New`、`Service.Resolve` 传给 `router.Options.Buttons`，卸载时调用 `Service.Purge`，并让 `BUTTON_TOKEN_TTL` 取 `tune.Values` 的生效值（目前读 `tune.Defaults()`）；正式安装的依赖检查调用 `manifest.CheckDependencies`，环检测由本切片完成。T-04.10（[PR #133](https://github.com/AlonaBot/AlonaBot/pull/133)，合并提交 `3d618cb`）与 T-03.24（[PR #135](https://github.com/AlonaBot/AlonaBot/pull/135)，合并提交 `f83ad95`）已合并：装配把 `settings.Admin{AdapterID, UserID}` 转为 `policy.Admin{AdapterID, UserID}` 后调用 `Policy.SetAdmins`，写回 admins 用 `settings.Admin.String()`；读取设置后调用 `adapter.Registry.SetDefaults(settings.DefaultInstances())`。T-08.12（[PR #114](https://github.com/AlonaBot/AlonaBot/pull/114)，合并提交 `a796766`）已合并。实例启动复用 `settings.File.PrepareInstances(adapterID, schema)`，返回可启动配置、`[]settings.InstanceProblem` 与备份/写回错误；`settings.BackupDir = "backups"`。T-07.7（[PR #116](https://github.com/AlonaBot/AlonaBot/pull/116)，合并提交 `e65eb4d`）已合并。装配使用 `Settings.BaseURL`（键 `base_url`）、`webhost.Options{BaseURL, Admin, Proxy, Now}` 与 `httpproxy.New(auth)`，私有路由经 `adminauth.Auth.Authorize`。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。装配把 Scheduler 与代理传入 `supervisor.Spec.Scheduler`/`HTTP`，由 `Launch`、`Running.Stop` 与 `WaitExit` 管理 Bind/Attach、Drain、撤销与清空后的 Released。合并后由审查者按 main `2c1fdcc` 核对。2026-11-10 按 D-127：卸载分为只卸载、`--purge-data` 与 `--purge` 三种清理范围，`Uninstall` 的 purge 参数由 bool 改为 `PurgeScope`；动态任务与调度状态的表由 goal-127 加入清理对象，本切片不涉及。2026-11-09 按 D-105：admin add/remove 与禁止的参数是用户字符串 `<adapter_id>:<external_user_id>` 与会话字符串，下文合入符号中的 `Admin`（T-04.10 起为 `{AdapterID, UserID}`，admins 为用户字符串） 由 goal-122 改为 `Admin{AdapterID, UserID}`，改写语句时按合入的代码核对。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin`（T-04.10 起为 `{AdapterID, UserID}`，admins 为用户字符串）；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, baseURL, dataDir)`；`alonabot admin-token show`。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。语句中 goal-8、goal-31、goal-36、goal-37（packages）、goal-53、goal-67 提供的符号（manifest.CheckDependencies、secret.Store、adminauth.Auth、packages.Preflight、supervisor.Spec.DefaultLocale、根包的 assembly、remote.Process、policy 的 Admin 方法）只写名字；合并后由审查者核对签名，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：`alonabot serve` 改为 `alonabot run`（D-77）；Adapter 实例与 Core Admin 的增删经 goal-97 的 settings 写回 `core_config.json`，实例凭证不再存为 Secret 引用（D-82）；首次 token 由 goal-97 实现；install 接受未签名的仓库来源并要求管理员确认（D-81）。前置合并后由审查者改写。2026-11-05：goal-67 首次装配 Router 时 prefixes 传 nil，goal-97 只提供 settings，命令前缀与 Core Admin 列表由本切片接入（见范围、行为与测试）。2026-11-06：默认 locale 也由本切片接入，前置加入提供 Spec.DefaultLocale 的 T-08.8；Router 经 `Plugin.DefaultLocale()` 读取该插件 Session 的 Bootstrap 快照（goal-53 已合入），装配处只需填好 Spec.DefaultLocale。2026-11-09 按 D-102 追加一项装配：goal-121（T-03.24）合并后，装配在读取设置后调用 `Registry.SetDefaults(settings.DefaultInstances())`，设置重新读取后（goal-69）同样调用；goal-121 先于本切片合并时，审查者把这一步写进接口与行为段。
+状态：等待前置（T-13.1）。T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并，待审查者按合并后的代码改写。T-13.1（[PR #149](https://github.com/AlonaBot/AlonaBot/pull/149)，合并提交 `bc39361`）已合并，其余前置均已合并；待 T-04.12（PR #154）合并后由审查者按根包的插件对象选项改写。T-03.8（[PR #136](https://github.com/AlonaBot/AlonaBot/pull/136)，合并提交 `3621fc1`）已合并：`internal/core/buttons` 的 `New(store, now, current)` 与 `Service.Issue`、`Resolve`、`Purge`；`message.New(adapters, p, lease, issue, requestTimeout)`；`router.Options.Buttons`；可选接口 `adapter.ExtensionChecker`；`manifest.CheckDependencies(m, Installed)`；SDK 的 `sdk.Action[T]`、`sdk.OnButton(r, a).Handle(func(*Context, T) error)`、`message.Buttons`、`message.Extension`；`Segment` oneof 已用到 `extension = 9`。装配用 `buttons.New` 创建服务（current 由 `Router.Caller` 与 `Router.Plugin(pluginID).Routes()` 实现），把 `Service.Issue` 传给 `message.New`、`Service.Resolve` 传给 `router.Options.Buttons`，卸载时调用 `Service.Purge`，并让 `BUTTON_TOKEN_TTL` 取 `tune.Values` 的生效值（目前读 `tune.Defaults()`）；正式安装的依赖检查调用 `manifest.CheckDependencies`，环检测由本切片完成。T-04.10（[PR #133](https://github.com/AlonaBot/AlonaBot/pull/133)，合并提交 `3d618cb`）与 T-03.24（[PR #135](https://github.com/AlonaBot/AlonaBot/pull/135)，合并提交 `f83ad95`）已合并：装配把 `settings.Admin{AdapterID, UserID}` 转为 `policy.Admin{AdapterID, UserID}` 后调用 `Policy.SetAdmins`，写回 admins 用 `settings.Admin.String()`；读取设置后调用 `adapter.Registry.SetDefaults(settings.DefaultInstances())`。T-08.12（[PR #114](https://github.com/AlonaBot/AlonaBot/pull/114)，合并提交 `a796766`）已合并。实例启动复用 `settings.File.PrepareInstances(adapterID, schema)`，返回可启动配置、`[]settings.InstanceProblem` 与备份/写回错误；`settings.BackupDir = "backups"`。T-07.7（[PR #116](https://github.com/AlonaBot/AlonaBot/pull/116)，合并提交 `e65eb4d`）已合并。装配使用 `Settings.BaseURL`（键 `base_url`）、`webhost.Options{BaseURL, Admin, Proxy, Now}` 与 `httpproxy.New(auth)`，私有路由经 `adminauth.Auth.Authorize`。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。装配把 Scheduler 与代理传入 `supervisor.Spec.Scheduler`/`HTTP`，由 `Launch`、`Running.Stop` 与 `WaitExit` 管理 Bind/Attach、Drain、撤销与清空后的 Released。合并后由审查者按 main `2c1fdcc` 核对。2026-11-10 按 D-127：卸载分为只卸载、`--purge-data` 与 `--purge` 三种清理范围，`Uninstall` 的 purge 参数由 bool 改为 `PurgeScope`；动态任务与调度状态的表由 goal-127 加入清理对象，本切片不涉及。2026-11-09 按 D-105：admin add/remove 与禁止的参数是用户字符串 `<adapter_id>:<external_user_id>` 与会话字符串，下文合入符号中的 `Admin`（T-04.10 起为 `{AdapterID, UserID}`，admins 为用户字符串） 由 goal-122 改为 `Admin{AdapterID, UserID}`，改写语句时按合入的代码核对。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin`（T-04.10 起为 `{AdapterID, UserID}`，admins 为用户字符串）；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, baseURL, dataDir)`；`alonabot admin-token show`。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。语句中 goal-8、goal-31、goal-36、goal-37（packages）、goal-53、goal-67 提供的符号（manifest.CheckDependencies、secret.Store、adminauth.Auth、packages.Preflight、supervisor.Spec.DefaultLocale、根包的 assembly、remote.Process、policy 的 Admin 方法）只写名字；合并后由审查者核对签名，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：`alonabot serve` 改为 `alonabot run`（D-77）；Adapter 实例与 Core Admin 的增删经 goal-97 的 settings 写回 `core_config.json`，实例凭证不再存为 Secret 引用（D-82）；首次 token 由 goal-97 实现；install 接受未签名的仓库来源并要求管理员确认（D-81）。前置合并后由审查者改写。2026-11-05：goal-67 首次装配 Router 时 prefixes 传 nil，goal-97 只提供 settings，命令前缀与 Core Admin 列表由本切片接入（见范围、行为与测试）。2026-11-06：默认 locale 也由本切片接入，前置加入提供 Spec.DefaultLocale 的 T-08.8；Router 经 `Plugin.DefaultLocale()` 读取该插件 Session 的 Bootstrap 快照（goal-53 已合入），装配处只需填好 Spec.DefaultLocale。2026-11-09 按 D-102 追加一项装配：goal-121（T-03.24）合并后，装配在读取设置后调用 `Registry.SetDefaults(settings.DefaultInstances())`，设置重新读取后（goal-69）同样调用；goal-121 先于本切片合并时，审查者把这一步写进接口与行为段。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-39（切片 T-09.4：管理服务、安装记录与 serve）。goal 目录 goal-39，分支 goal-39，worktree .worktrees/goal-39，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -4697,7 +4697,7 @@ goal-125 若先合并，Collect 改为收 *Plugin，命令、事件与 OnButton 
 
 ### goal-68 · T-13.2 开发组件的配置与数据库
 
-状态：等待前置（T-13.1）。T-13.1（[PR #149](https://github.com/AlonaBot/AlonaBot/pull/149)，合并提交 `bc39361`）已合并，其余前置均已合并；待 T-04.12（PR #154）合并后由审查者按根包的插件对象选项改写。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin`（T-04.10 起为 `{AdapterID, UserID}`，admins 为用户字符串）；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。语句中 goal-30、goal-32、goal-67 提供的符号（sdk/config.Prepare、gormdb 的描述、根包 assembly 与 dev 安装记录）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：开发 Adapter 的实例取自 `core_config.json`（D-82）；WebUI 修改开发组件配置时写回 `config.json` 并重启该组件（Admin API 在 goal-93）；dev 来源同时拒绝 uninstall（D-77）。前置合并后由审查者改写。
+状态：等待前置（T-13.1）。T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并，待审查者按合并后的代码改写。T-13.1（[PR #149](https://github.com/AlonaBot/AlonaBot/pull/149)，合并提交 `bc39361`）已合并，其余前置均已合并；待 T-04.12（PR #154）合并后由审查者按根包的插件对象选项改写。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin`（T-04.10 起为 `{AdapterID, UserID}`，admins 为用户字符串）；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。语句中 goal-30、goal-32、goal-67 提供的符号（sdk/config.Prepare、gormdb 的描述、根包 assembly 与 dev 安装记录）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：开发 Adapter 的实例取自 `core_config.json`（D-82）；WebUI 修改开发组件配置时写回 `config.json` 并重启该组件（Admin API 在 goal-93）；dev 来源同时拒绝 uninstall（D-77）。前置合并后由审查者改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-68（切片 T-13.2：开发组件的配置与数据库）。goal 目录 goal-68，分支 goal-68，worktree .worktrees/goal-68，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -4734,7 +4734,7 @@ goal-125 若先合并，Collect 改为收 *Plugin，命令、事件与 OnButton 
 
 ### goal-69 · T-13.3 开发运行与热部署
 
-状态：等待前置（T-13.1）。T-13.1（[PR #149](https://github.com/AlonaBot/AlonaBot/pull/149)，合并提交 `bc39361`）已合并，其余前置均已合并；待 T-04.12（PR #154）合并后由审查者按根包的插件对象选项改写。T-09.16（[PR #140](https://github.com/AlonaBot/AlonaBot/pull/140)，合并提交 `896991b`）已合并：工程 manifest 用 `manifest.ParseProject`，包内 manifest 用 `Parse`，`Generate` 由工程 manifest 加 `BuildInfo` 生成包内 YAML。T-03.24（[PR #135](https://github.com/AlonaBot/AlonaBot/pull/135)，合并提交 `f83ad95`）已合并：重新读取设置后 `Reload` 的 changed 含 `adapters` 时调用 `adapter.Registry.SetDefaults(settings.DefaultInstances())`。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin`（T-04.10 起为 `{AdapterID, UserID}`，admins 为用户字符串）；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。2026-11-04 按 D-77 改写：热部署不再是库模式的 `Reload` 选项与 `ALONABOT_RELOAD`，而是 `alonabot run [目录...] --reload`，开发组件以独立进程运行。语句只写了目标、依据和要点，前置合并后由审查者按 goal-67 的装配、goal-97 的 settings 与 goal-100 的工程 manifest 写出接口与测试段。
+状态：等待前置（T-13.1）。T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并，待审查者按合并后的代码改写。T-13.1（[PR #149](https://github.com/AlonaBot/AlonaBot/pull/149)，合并提交 `bc39361`）已合并，其余前置均已合并；待 T-04.12（PR #154）合并后由审查者按根包的插件对象选项改写。T-09.16（[PR #140](https://github.com/AlonaBot/AlonaBot/pull/140)，合并提交 `896991b`）已合并：工程 manifest 用 `manifest.ParseProject`，包内 manifest 用 `Parse`，`Generate` 由工程 manifest 加 `BuildInfo` 生成包内 YAML。T-03.24（[PR #135](https://github.com/AlonaBot/AlonaBot/pull/135)，合并提交 `f83ad95`）已合并：重新读取设置后 `Reload` 的 changed 含 `adapters` 时调用 `adapter.Registry.SetDefaults(settings.DefaultInstances())`。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin`（T-04.10 起为 `{AdapterID, UserID}`，admins 为用户字符串）；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。2026-11-04 按 D-77 改写：热部署不再是库模式的 `Reload` 选项与 `ALONABOT_RELOAD`，而是 `alonabot run [目录...] --reload`，开发组件以独立进程运行。语句只写了目标、依据和要点，前置合并后由审查者按 goal-67 的装配、goal-97 的 settings 与 goal-100 的工程 manifest 写出接口与测试段。
 
 目标：`alonabot run [目录...] [--reload]` 把给出的目录（没有给出且当前目录有 plugin.yaml 时为当前目录）作为开发组件运行：按 `alonabot build` 的方式构建到 `<data_dir>/dev/bin/`，插件、Adapter 与 Agent 以独立进程运行，WebUI 以目录中的 assets 代替已安装的 WebUI。`--reload` 时轮询源码、资源与配置，源码变化时重新构建并只重启变化的组件，编译失败时旧组件继续运行，只有配置变化时不重新构建。
 
@@ -5057,7 +5057,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-124 · T-04.11 注册写法统一
 
-状态：等待前置（T-04.12）。T-04.8（[PR #141](https://github.com/AlonaBot/AlonaBot/pull/141)，合并提交 `ac4aded`）已合并：SDK 公共 API 改用自有类型（`message.Session`、`message.Content`、`message.MessageRef`、事件常量与带类型 payload、`errcode`），pb 只在 `sdk/internal/convert`。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。`supervisor.Spec` 已有 `Scheduler *scheduler.Scheduler` 与 `HTTP *httpproxy.Server`，激活成功后先 Bind 再 Attach；`host.StopHooks{Frozen, Stopping}` 把 Drain 与撤销接入停止流程。SDK 当前仍为 `ScheduleRegistry.Every(jobID, d, fn)`、`Cron(jobID, expr, timezone, fn)` 与 `HTTPRegistry.Handle(method, path string, h http.Handler, opts ...HTTPOption)` 的位置参数注册，本切片在保留既有生命周期行为的基础上改为 builder。合并后由审查者按 main `2c1fdcc` 核对。2026-11-09 按 D-112 新增。2026-11-10 按 D-114 前置加入 T-04.12：要点中的 `r` 指插件对象或子插件（`*sdk.Plugin`、`*sdk.SubPlugin`），`sdk.Subscribe` 的第一个参数是 `sdk.Registrar`；Handler 用结构体接收参数时不取参数名（D-115）。T-04.8（goal-91）改写 sdk 的注册与类型（含 `Public(mode HTTPAuth) HTTPOption`），T-04.12（goal-125）改写注册的接收者，待两者合并后补全接口段。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-101、goal-123 都修改 sdk/generate，按执行顺序 §3 的生成器一行处理。
+状态：等待前置（T-04.12）。T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并，待审查者按合并后的代码改写。T-04.8（[PR #141](https://github.com/AlonaBot/AlonaBot/pull/141)，合并提交 `ac4aded`）已合并：SDK 公共 API 改用自有类型（`message.Session`、`message.Content`、`message.MessageRef`、事件常量与带类型 payload、`errcode`），pb 只在 `sdk/internal/convert`。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。`supervisor.Spec` 已有 `Scheduler *scheduler.Scheduler` 与 `HTTP *httpproxy.Server`，激活成功后先 Bind 再 Attach；`host.StopHooks{Frozen, Stopping}` 把 Drain 与撤销接入停止流程。SDK 当前仍为 `ScheduleRegistry.Every(jobID, d, fn)`、`Cron(jobID, expr, timezone, fn)` 与 `HTTPRegistry.Handle(method, path string, h http.Handler, opts ...HTTPOption)` 的位置参数注册，本切片在保留既有生命周期行为的基础上改为 builder。合并后由审查者按 main `2c1fdcc` 核对。2026-11-09 按 D-112 新增。2026-11-10 按 D-114 前置加入 T-04.12：要点中的 `r` 指插件对象或子插件（`*sdk.Plugin`、`*sdk.SubPlugin`），`sdk.Subscribe` 的第一个参数是 `sdk.Registrar`；Handler 用结构体接收参数时不取参数名（D-115）。T-04.8（goal-91）改写 sdk 的注册与类型（含 `Public(mode HTTPAuth) HTTPOption`），T-04.12（goal-125）改写注册的接收者，待两者合并后补全接口段。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-101、goal-123 都修改 sdk/generate，按执行顺序 §3 的生成器一行处理。
 
 目标：定时任务与 HTTP 路由改为与 D-70 相同的链式注册；命令省略 Args 时参数名取 Handler 的参数名；Event Bus 订阅的路由 ID 缺省为事件名。协议不变。Hook 的同样改写由 T-05.3（goal-17）完成。
 
@@ -5074,7 +5074,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-126 · T-04.13 Service 与 Event Bus 的带类型声明
 
-状态：等待前置（T-04.12）。2026-11-10 按 D-122 新增。T-04.12（goal-125）把注册的接收者改为 `sdk.Registrar`，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-124 都修改 `sdk.Subscribe`，与 goal-101、goal-123、goal-124、goal-125 都修改 sdk/generate，后合并者同步 main 后按对方的写法重做自己的改动。
+状态：等待前置（T-04.12）。T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并，待审查者按合并后的代码改写。2026-11-10 按 D-122 新增。T-04.12（goal-125）把注册的接收者改为 `sdk.Registrar`，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-124 都修改 `sdk.Subscribe`，与 goal-101、goal-123、goal-124、goal-125 都修改 sdk/generate，后合并者同步 main 后按对方的写法重做自己的改动。
 
 目标：Service 与 Event Bus 事件各用一个带类型的声明表示，注册、调用、发布与订阅都从声明出发，名字与 Go 类型只写一处；删除按字符串目标与类型参数直接调用、发布与订阅的函数。协议与 Core 不变。
 
@@ -5095,28 +5095,97 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-129 · T-04.14 命令名覆盖的 Core 侧
 
-状态：等待前置（T-03.17）。T-04.10（[PR #133](https://github.com/AlonaBot/AlonaBot/pull/133)，合并提交 `3d618cb`）已合并：policy 的 Admin 与全局禁止改为按 Adapter（`IsAdmin(ctx, adapterID, actor)`、`Deny`/`Undeny(ctx, kind, adapterID, subjectID)`），`global_deny` 按 `adapter_id`，`CheckCommand` 与 `CheckSend` 签名不变。2026-11-10 按 D-128 新增。T-04.4（PR #88）已合并，合入的符号：`policy.Scope`（`ScopePlugin`、`ScopeGroup`、`ScopeRoute`）、`policy.Override{Permissions, Enabled}`、`Policy.SetOverride`、`Policy.Overrides`、`Policy.CheckCommand`，状态库的 `command_policy` 表；Router 的命令索引从注册描述读取路径与别名（`internal/core/router/index.go`）。T-04.10（goal-122）修改 policy，T-03.17（goal-108）提供命令菜单同步，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片修改 `internal/core/state/schema.sql`，按执行顺序的共享文件规则处理冲突；与 goal-71（T-14.1）都涉及 `core.command.list` 返回的命令名，后合并者同步。
+状态：待派发。前置均已合并：T-03.17（[PR #150](https://github.com/AlonaBot/AlonaBot/pull/150)，合并提交 `8eb7846`）、T-04.10（[PR #133](https://github.com/AlonaBot/AlonaBot/pull/133)，合并提交 `3d618cb`）、T-04.4（PR #88）。2026-11-12 审查者按 main `61bff90` 的代码写出范围、接口与测试段，要点如下：
 
-目标：管理员可以给一条按路径匹配的命令保存命令名覆盖，取代插件声明的路径与别名；Core 的匹配、遮蔽、usage 回复与命令菜单都使用生效的命令名，route_id、命令组与策略的作用域不变。本切片提供服务层与 Router 的行为，管理 API 由 goal-93 提供。
+- **状态库**：`command_policy` 表（`state.CommandPolicy{PluginID, Scope, Permissions, Enabled}`）现在由 `policy.SetOverride` 整行写入或删除（`PutCommandPolicy` 使用 `UpdateAll`，两项都为 nil 时 `DeleteCommandPolicy`）。按 PLAN 步骤 14，命令名写进同一张表的路由作用域行。为避免权限与启用的修改冲掉命令名，三个写入方法改为只更新各自的列，删除时只删三列都为 NULL 的行。
+- **Router**：`rebuildCommands` 在持有 `r.mu` 时从已激活插件的 `Routes()` 建立 `CommandIndex`。`CommandEntry{PluginID, RouteID, Priority, Path, Alias}` 记录命中的路径与是否为别名。`commandUsage` 从 `route.GetCommand()` 的 path 与 aliases 拼出 usage。`commandMenu` 以 `command.GetPath()` 作为菜单名，并用 `index.Lookup(path)` 确认胜出者。`CommandsChanged()` 由 `Policy.SetCommandsChanged` 注入，目前只调度菜单同步。
+- **索引读取不能做 I/O**：索引在锁内建立，所以命令名覆盖由 policy 保存在内存快照中，以注入函数交给 Router。
+- **路径校验**：命令路径的格式校验为 `validate.IsCommandToken`，同插件路径冲突在 `validate.Register` 中报 ALREADY_EXISTS。
+- **库模式装配**：`assembly.go` 已传入 `Policy`、`CommandState` 与 `SetCommandsChanged`。
+
+与 goal-71（T-14.1）都涉及 `core.command.list` 返回的命令名，后合并者同步。goal-39（T-09.4）的 `--purge` 删除命令策略行时，命令名随之删除。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-129（切片 T-04.14：命令名覆盖的 Core 侧）。goal 目录 goal-129，分支 goal-129，worktree .worktrees/goal-129，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：管理员可以给一条按路径匹配的命令保存命令名覆盖，取代插件声明的路径与别名。Core 的匹配、遮蔽、usage 回复与命令菜单都使用生效的命令名，route_id、命令组与策略的作用域不变。本切片提供服务层与 Router 的行为，管理 API 由 goal-93 提供。
 
 依据：PLAN T-04 步骤 14；CONTRACTS §2.2、§2.3、§8（命令菜单）、§9.3；WIRE-FORMAT §3.5（`core.command.list`）；DECISIONS D-96、D-127、D-128；TEST-MATRIX V-115 的 Core 分项。
 
-要点：
-- 存储：`command_policy` 表增加保存命令名列表的列（写进唯一的初始迁移），只用于路由作用域；命令名是 token 列表，列表按保存的顺序保留，第一项为主名。
-- 服务层：在 policy 中增加按 plugin_id 与 route_id 设置、删除与读取命令名覆盖的方法，成功返回前已完成持久化。校验：列表非空；每个命令名按注册描述中命令路径的规则校验；列表内不重复；目标路由是按路径匹配的命令，文本匹配与 Raw 返回 INVALID_ARGUMENT；与本插件其他命令声明的路径或别名、或其他命令的覆盖相同时返回 ALREADY_EXISTS，safe_message 带冲突的 route_id。目标路由当前未注册时允许保存（插件可能未启用），只做格式与覆盖之间的检查，声明名的检查留到建索引时。
-- Router：建立命令索引时，有覆盖的命令只用覆盖的命令名参与匹配；与本插件其他命令声明的名字相同的覆盖项不进入索引并记入诊断，一项不剩时用声明的名字。覆盖变化后重建索引，下一次派发生效，不重启插件。禁用的命令占有的是它生效的命令名。
-- 不变的部分：route_id、参数、Handler、命令组归属；策略的命令组作用域仍按声明的规范路径；日志与策略中的标识不变。协议与 SDK 不改。
-- usage 回复：命令与别名部分取生效的命令名，主名在前。
-- 遮蔽诊断：按生效的命令名计算，并标出失效的覆盖项与指向未注册路由的覆盖。
-- 命令菜单（goal-108）：命令名取生效的主名，主名只有一个 token 的命令才算根命令；覆盖变化与命令策略变化一样触发受影响实例的同步。
-- 卸载：覆盖随命令策略归入配置，`--purge` 时删除（goal-39 的清理对象已含命令策略，本切片只核对新列随行删除）。
-- 测试：提交一个集成测试，覆盖保存覆盖后旧名不再匹配、新名匹配且 Handler 收到相同参数，删除覆盖后恢复；其余（重名拒绝、空列表、文本匹配路由、插件更新后覆盖项失效、跨插件遮蔽、usage 与菜单中的名字、Core 重启后保留）进本地自测。
+范围（只新增或修改这些）：
+- internal/core/state/schema.sql：在唯一的初始迁移中给 command_policy 表加 names 列；internal/core/state/policy.go：行类型字段与读写方法
+- internal/core/policy/：新增 names.go（命令名覆盖的校验、持久化与内存快照）；policy.go 只给 Policy 加快照字段
+- internal/core/router/：
+  - dispatch.go：Options 追加 CommandNames；
+  - router.go：New 保存 CommandNames；
+  - index.go：rebuildCommands 使用生效的命令名，CommandEntry 追加 Names，新增失效覆盖的诊断；
+  - command.go：commandUsage 使用生效的命令名；
+  - commands.go：commandMenu 使用生效的主名；CommandsChanged 先重建命令索引，再调度菜单同步。
+- 根包 assembly.go：启动时载入命令名快照，并给 router.Options 传入 CommandNames
+- internal/core/adapter/remote/remote_test.go：新增一个主路径集成测试
+- 上述包的 *_local_test.go
+允许的新跨模块边：无。
 
-不做：管理 API（goal-93）；页面（goal-44）；按命令组整体改名；同一插件内两条命令互换名字；`core.command.list` 的实现（goal-71）。
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. internal/core/state
+   command_policy 表追加 names TEXT 列（NULL 表示没有命令名覆盖；只出现在路由作用域行）
+   CommandPolicy 追加 Names [][]string `gorm:"column:names;serializer:json"` // nil 为 NULL；非 nil 时至少一项，第一项为主名
+   func (s *Store) PutCommandPolicy(ctx context.Context, row CommandPolicy) error   // 改为只 upsert permissions 与 enabled 两列，保留 names
+   func (s *Store) PutCommandNames(ctx context.Context, pluginID, scope string, names [][]string) error // 只 upsert names 列；nil 时置 NULL
+   func (s *Store) DeleteCommandPolicy(ctx context.Context, pluginID, scope string) error // 改为只在 permissions、enabled 与 names 都为 NULL 时删除该行，幂等
+   func (s *Store) AllCommandNames(ctx context.Context) ([]CommandPolicy, error)     // names 非 NULL 的全部行
+   policy.SetOverride 两项都为 nil 时，先经 PutCommandPolicy 把两列置 NULL，再调用 DeleteCommandPolicy；其余行为与错误码不变
+2. internal/core/policy
+   func (p *Policy) LoadCommandNames(ctx context.Context) error // 从状态库载入内存快照；装配在创建 Router 之前调用
+   func (p *Policy) SetCommandNames(ctx context.Context, pluginID, routeID string, names [][]string, routes []*pb.RouteDescriptor) error
+   // routes 为该插件当前注册的路由（未注册时为 nil）；成功返回前已持久化并更新快照，随后调用 commandsChanged
+   func (p *Policy) DeleteCommandNames(ctx context.Context, pluginID, routeID string) error // 删除覆盖即恢复声明；成功后调用 commandsChanged
+   func (p *Policy) CommandNames(pluginID string) map[string][][]string // 内存快照的深副本，route_id → 命令名列表；不做 I/O
+3. internal/core/router
+   Options 追加 CommandNames func(pluginID string) map[string][][]string // nil 时只用声明的路径与别名；在持有 r.mu 时调用，实现不得做 I/O
+   CommandEntry 追加 Names [][]string // 该路由生效的全部命令名，主名在前；Path 与 Alias 的含义不变（Alias 表示 Path 不是主名）
+   type InvalidName struct {
+       PluginID, RouteID string
+       Name              []string // 失效的覆盖项；整条覆盖指向未注册路由时为 nil
+       Reason            string   // "declared"：与本插件其他命令声明的名字相同；"unregistered"：路由未注册或不是按路径匹配的命令
+   }
+   func (x *CommandIndex) InvalidNames() []InvalidName // 按 plugin_id、route_id 与名字排序，返回的切片只读
+
+行为：
+- 校验（SetCommandNames）：
+  - names 非空，否则 INVALID_ARGUMENT；每个命令名非空，每个 token 满足 validate.IsCommandToken；列表内不能重复（按完整 token 序列比较）。
+  - routes 非 nil 时：目标路由必须存在且是 COMMAND_MATCH_PATH 的命令，文本匹配与 Raw 返回 INVALID_ARGUMENT；任一命令名与本插件其他命令声明的路径或别名相同时，返回 ALREADY_EXISTS，safe_message 带冲突的 route_id（不论那条命令自己是否被覆盖）。
+  - routes 为 nil（插件未注册）时只做格式检查，以及与其他覆盖之间的检查。
+  - 与本插件其他路由的覆盖相同时返回 ALREADY_EXISTS，并带出冲突的 route_id。
+  - 校验失败时不触及状态库与快照。
+- 生效：rebuildCommands 对有覆盖的命令只用覆盖的命令名参与匹配。与本插件其他命令声明的名字相同的覆盖项不进入索引，记为 InvalidName{Reason: "declared"}，一项不剩时退回声明的名字。快照中指向未注册、或不是按路径匹配的路由的覆盖，记为 "unregistered"。
+- 不变的部分：route_id、参数、Handler、命令组归属不变；策略的命令组作用域仍按声明的规范路径。跨插件同名照旧按 priority、plugin_id、route_id 遮蔽，Shadows 按生效的名字计算。禁用的命令占有它生效的命令名。
+- 变化：SetCommandNames 与 DeleteCommandNames 成功后经 commandsChanged 通知 Router。CommandsChanged 先在锁内重建命令索引，再调度菜单同步；下一次派发生效，不重启插件。
+- usage 回复：命令与别名部分改用生效的命令名，主名在前，其余以「 | 」连接。自定义 usage 的 `command` 参数取生效的主名。
+- 命令菜单：菜单名取生效的主名，主名只有一个 token 时才算根命令，以主名 Lookup 确认胜出者。说明仍按声明的规范路径查找（D-138：别名与生效的命令名共用原规范路径的说明）。
+- 卸载：命令名随命令策略行保存，停用时不删除；`--purge` 由 goal-39 删除命令策略时一并删除，本切片只核对 DeleteCommandPolicy 的新语义不留下空行。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：只新增 internal/core/adapter/remote/remote_test.go 的 TestCommandNameOverride。复用测试二进制中的插件进程、真实 Session、Router、policy 与临时 SQLite：
+  - 保存覆盖后旧名不再匹配；新名匹配，Handler 收到相同的参数；
+  - 删除覆盖后恢复声明的名字；
+  - 全程不重启插件。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：
+  - 空列表、非法 token、列表内重复；文本匹配与 Raw 路由；
+  - 与其他命令声明名或覆盖重名时的 ALREADY_EXISTS 与 route_id；未注册路由时允许保存；
+  - 插件更新后声明名与覆盖相同时，覆盖项失效并出现在 InvalidNames 中，覆盖一项不剩时退回声明名；
+  - 跨插件遮蔽按生效名计算；usage 与菜单中的名字；
+  - LoadCommandNames 后 Core 重启仍然生效；CommandsChanged 触发的重建与菜单同步。
+  - SetOverride 与 SetCommandNames 交替写入同一路由作用域时互不覆盖，三者都清空后行被删除。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race . ./internal/core/... ./sdk/...；go build ./...。
+
+不做：管理 API（goal-93）；页面（goal-44）；按命令组整体改名；同一插件内两条命令互换名字；`core.command.list` 的实现（goal-71）；卸载清理（goal-39）。
+```
 
 ### goal-130 · T-08.14 配置项的选项来源
 
-状态：等待前置（T-04.12）。2026-11-10 按 D-129 新增。T-06.1（PR #45）与 T-08.11（PR #103）已合并；T-04.12（goal-125）提供插件对象与 `sdk.Registrar`，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片修改 Service 描述的 proto 与 `sdk/generate` 的 schema 检查，按执行顺序的共享文件规则处理冲突。
+状态：等待前置（T-04.12）。T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并，待审查者按合并后的代码改写。2026-11-10 按 D-129 新增。T-06.1（PR #45）与 T-08.11（PR #103）已合并；T-04.12（goal-125）提供插件对象与 `sdk.Registrar`，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片修改 Service 描述的 proto 与 `sdk/generate` 的 schema 检查，按执行顺序的共享文件规则处理冲突。
 
 目标：`config_schema.json` 的字段可以用 `options_from` 声明选项来自 Core 内置来源或某个组件的选项来源服务；组件用 `sdk.ServeOptions` 提供来源；Core 能按组件与字段路径查询选项。本切片提供 schema 检查、协议标记、SDK 注册、Core 的查询入口与内置来源 `core.adapter_instances`；管理 API 由 goal-93 提供，页面由 goal-44 提供。
 

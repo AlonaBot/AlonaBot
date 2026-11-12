@@ -38,6 +38,7 @@ func businessHandler(reg *Registration) wire.Handler {
 	}
 	services := serviceHandler(reg)
 	return func(ctx context.Context, in *wire.Inbound) wire.Response {
+		ctx = context.WithValue(ctx, pluginContextKey{}, pluginScope{plugin: reg.plugin, subID: reg.subPlugins[in.Target]})
 		if response, ok := services(ctx, in); ok {
 			return response
 		}
@@ -86,7 +87,8 @@ func invokeHandler(ctx context.Context, in *wire.Inbound, request *pb.HandlerReq
 	parentContext := ctx
 	ctx, cancel := context.WithCancel(ctx)
 	event := request.GetEvent()
-	c := &Context{ctx: ctx, inbound: in, event: event, autoReply: autoReply, match: groups, continuations: functions, continuation: request.ContinuationOf != nil}
+	scope, _ := ctx.Value(pluginContextKey{}).(pluginScope)
+	c := &Context{plugin: scope.plugin, subID: scope.subID, ctx: ctx, inbound: in, event: event, autoReply: autoReply, match: groups, continuations: functions, continuation: request.ContinuationOf != nil}
 	bindServiceContext(c)
 	outcome := &pb.HandlerOutcome{Propagation: pb.Propagation_PROPAGATION_CONTINUE}
 	c.active.Store(true)
@@ -189,51 +191,75 @@ func invokeHandler(ctx context.Context, in *wire.Inbound, request *pb.HandlerReq
 func (c *Context) Match() []string { return c.match }
 
 func commandArguments(command Command, invocation *pb.CommandInvocation, target *pb.Target) ([]reflect.Value, error) {
-	// 1. 调用载荷与 Handler 必须对应注册时的同一份参数描述。
-	mode, types, err := checkHandler(command.Handler)
-	if err != nil {
-		return nil, err
-	}
+	// 1. 在协议边界核对载荷与注册描述；Handler 签名已在 Collect 时检查。
 	params := command.spec.GetParams()
-	if invocation == nil || len(invocation.GetArgs()) != len(params) || len(types) != len(params) || mode != command.mode {
+	if invocation == nil || len(invocation.GetArgs()) != len(params) {
 		return nil, errors.New("command arguments or handler do not match the registered signature")
 	}
-	args := make([]reflect.Value, len(params)+1)
 	handlerType := reflect.TypeOf(command.Handler)
+	args := make([]reflect.Value, handlerType.NumIn())
+	if command.structure != nil {
+		args[1] = reflect.New(command.structure).Elem()
+	}
 	for i, param := range params {
 		arg := invocation.Args[i]
-		if arg.GetName() != param.GetName() || types[i] != param.GetType() {
+		if arg.GetName() != param.GetName() {
 			return nil, fmt.Errorf("parameter %q does not match the registered name or type", param.GetName())
 		}
-		// 2. 无 value 只表示缺失的无默认值可选参数；其 Go 值为声明类型零值。
-		if arg.GetValue() == nil {
-			if param.GetRequired() || param.DefaultValue != nil {
-				return nil, fmt.Errorf("parameter %q is missing a value", param.GetName())
-			}
-			args[i+1] = reflect.Zero(handlerType.In(i + 1))
-			continue
+		var typ reflect.Type
+		if command.structure != nil {
+			typ = command.structure.Field(i).Type
+		} else {
+			typ = handlerType.In(i + 1)
 		}
-		switch value := arg.GetValue().(type) {
-		case *pb.ArgValue_StringValue:
-			args[i+1] = reflect.ValueOf(value.StringValue)
-		case *pb.ArgValue_IntValue:
-			args[i+1] = reflect.ValueOf(value.IntValue)
-		case *pb.ArgValue_FloatValue:
-			args[i+1] = reflect.ValueOf(value.FloatValue)
-		case *pb.ArgValue_BoolValue:
-			args[i+1] = reflect.ValueOf(value.BoolValue)
-		case *pb.ArgValue_UserId:
-			args[i+1] = reflect.ValueOf(UserID(value.UserId))
-		case *pb.ArgValue_Image:
-			args[i+1] = reflect.ValueOf(convert.ImageFromProto(value.Image))
-		case *pb.ArgValue_Message:
-			args[i+1] = reflect.ValueOf(convert.ChainFromProto(value.Message, target))
+		// 2. 只赋入 Core 已解析的值；缺失的可选指针保持 nil。
+		value, err := commandArgument(arg, param, typ, target)
+		if err != nil {
+			return nil, err
 		}
-		if args[i+1].Type() != handlerType.In(i+1) {
-			return nil, fmt.Errorf("parameter %q value has an incorrect type", param.GetName())
+		if command.structure != nil {
+			args[1].Field(i).Set(value)
+		} else {
+			args[i+1] = value
 		}
 	}
 	return args, nil
+}
+
+func commandArgument(arg *pb.ArgValue, param *pb.CommandParam, typ reflect.Type, target *pb.Target) (reflect.Value, error) {
+	if arg.GetValue() == nil {
+		if param.GetRequired() || param.DefaultValue != nil {
+			return reflect.Value{}, fmt.Errorf("parameter %q is missing a value", param.GetName())
+		}
+		return reflect.Zero(typ), nil
+	}
+	var value reflect.Value
+	var paramType pb.ParamType
+	switch v := arg.GetValue().(type) {
+	case *pb.ArgValue_StringValue:
+		value, paramType = reflect.ValueOf(v.StringValue), pb.ParamType_PARAM_TYPE_STRING
+	case *pb.ArgValue_IntValue:
+		value, paramType = reflect.ValueOf(v.IntValue), pb.ParamType_PARAM_TYPE_INT
+	case *pb.ArgValue_FloatValue:
+		value, paramType = reflect.ValueOf(v.FloatValue), pb.ParamType_PARAM_TYPE_FLOAT
+	case *pb.ArgValue_BoolValue:
+		value, paramType = reflect.ValueOf(v.BoolValue), pb.ParamType_PARAM_TYPE_BOOL
+	case *pb.ArgValue_UserId:
+		value, paramType = reflect.ValueOf(UserID(v.UserId)), pb.ParamType_PARAM_TYPE_USER
+	case *pb.ArgValue_Image:
+		value, paramType = reflect.ValueOf(convert.ImageFromProto(v.Image)), pb.ParamType_PARAM_TYPE_IMAGE
+	case *pb.ArgValue_Message:
+		value, paramType = reflect.ValueOf(convert.ChainFromProto(v.Message, target)), pb.ParamType_PARAM_TYPE_MESSAGE
+	}
+	if paramType != param.GetType() {
+		return reflect.Value{}, fmt.Errorf("parameter %q value has an incorrect type", param.GetName())
+	}
+	if typ.Kind() == reflect.Pointer && value.Type() != typ {
+		pointer := reflect.New(typ.Elem())
+		pointer.Elem().Set(value.Convert(typ.Elem()))
+		return pointer.Convert(typ), nil
+	}
+	return value.Convert(typ), nil
 }
 
 func decodeInvocation(payload wire.Payload, message proto.Message) error {

@@ -4,8 +4,6 @@ package plugin
 
 import alonabotgen0 "github.com/AlonaBot/AlonaBot/sdk"
 
-func init() {
-	alonabotgen0.UseGenerated((*echo)(nil), alonabotgen0.Generated{
-		Manifest: []byte("id: alonabot_plugin_devbot\nname: Devbot Echo\nversion: 0.1.0\nauthor: AlonaBot\nsource: github.com/AlonaBot/AlonaBot\n"),
-	})
+var alonabotGenerated = alonabotgen0.Generated{
+	Manifest: []byte("id: alonabot_plugin_devbot\nname: Devbot Echo\nversion: 0.1.0\nauthor: AlonaBot\nsource: github.com/AlonaBot/AlonaBot\n"),
 }

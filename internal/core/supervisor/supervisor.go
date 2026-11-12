@@ -84,6 +84,7 @@ type Spec struct {
 	MemorySoftLimit int64                // 字节；大于 0 时为插件进程设置 GOMEMLIMIT
 	Scheduler       *scheduler.Scheduler // 可选；激活后接入，排空时冻结，进程树清空后释放槽
 	HTTP            *httpproxy.Server    // 可选；只绑定已激活 Session 的端点
+	CommandsChanged func()               // 可选；激活与撤销后在状态锁外通知命令菜单。
 }
 
 // PluginLog 接收一个插件进程的输出行；Launch 在 Session 建立后调用 SetSession，之后的行带上 session_id。
@@ -101,10 +102,11 @@ type Running struct {
 	store    *state.Store
 	pluginID string
 	// TCP 传输的 loopback Listener；stdio 时为 nil。
-	listener  net.Listener
-	timing    host.StopTiming
-	scheduler *scheduler.Scheduler
-	http      *httpproxy.Server
+	listener        net.Listener
+	timing          host.StopTiming
+	scheduler       *scheduler.Scheduler
+	http            *httpproxy.Server
+	commandsChanged func()
 
 	// mu 串行化 Stop 与 WaitExit 的清理，保护 stopping、released 与 cleanupErr。
 	mu sync.Mutex
@@ -277,8 +279,11 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	if spec.Scheduler != nil {
 		spec.Scheduler.Attach(router.FromInstance(in), activatedAt)
 	}
+	if spec.CommandsChanged != nil {
+		spec.CommandsChanged()
+	}
 	return &Running{Instance: in, Process: proc, store: store, pluginID: spec.PluginID, listener: ln, timing: spec.Stop,
-		scheduler: spec.Scheduler, http: spec.HTTP}, nil
+		scheduler: spec.Scheduler, http: spec.HTTP, commandsChanged: spec.CommandsChanged}, nil
 }
 
 // connect 在握手期限内建立与插件的连接：TCP 等待插件拨入（进程提前退出则放弃），stdio 直接使用管道。
@@ -355,7 +360,12 @@ func (r *Running) Stop(t0 time.Time, reason pb.StopReason) host.StopResult {
 				r.http.Drain(r.pluginID, deadline)
 			}
 		},
-		Stopping: r.detach,
+		Stopping: func() {
+			r.detach()
+			if r.commandsChanged != nil {
+				r.commandsChanged()
+			}
+		},
 	})
 
 	// 3. 进程树处理完后读完插件的最后输出，再释放 Listener 与进程资源；读取受同一总截止约束。
@@ -376,6 +386,10 @@ func (r *Running) WaitExit() (abnormal bool, state string, err error) {
 	case <-r.Process.Exited():
 	}
 	total := time.Now().Add(r.timing.Total)
+	_ = r.Instance.Session.Close() // 进程退出也立即撤销 Session，菜单与派发共用同一就绪状态。
+	if r.commandsChanged != nil {
+		r.commandsChanged()
+	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -390,7 +404,6 @@ func (r *Running) WaitExit() (abnormal bool, state string, err error) {
 		return false, fmt.Sprint(r.Process.ExitState()), nil
 	}
 	r.detach()
-	_ = r.Instance.Session.Close() // 旧 Session 立即失效
 	// 2. 合作退出与日志收尾共用同一个总截止；到期仍存活才终止树内余留进程。
 	// 组内已没有进程时不再发信号，避免进程组号被复用后误杀无关进程。
 	if empty, err := r.Process.WaitTree(total); err != nil {
