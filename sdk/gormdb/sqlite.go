@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
 	"github.com/AlonaBot/AlonaBot/sdk/sqlitedb"
 	"github.com/libtnb/sqlite"
 	"gorm.io/gorm"
@@ -16,7 +17,7 @@ import (
 // slowQueryThreshold 超过它的 SQL 会以慢查询记录。
 const slowQueryThreshold = 200 * time.Millisecond
 
-// newGormLogger 经 l 记录慢查询与错误 SQL；插件进程中传入 slog.Default()，由 SDK 交给 Core（CONTRACTS §14.1）。
+// newGormLogger 经所属 Session 的 Logger 记录慢查询与错误 SQL（CONTRACTS §14.1）。
 // ParameterizedQueries 使日志只含占位符 SQL，绑定参数（可能是业务数据或 secret）不进入日志（CONTRACTS §5.3）。
 func newGormLogger(l *slog.Logger) logger.Interface {
 	return logger.NewSlogLogger(l, logger.Config{
@@ -49,7 +50,7 @@ func wrap(ctx context.Context, db *sql.DB) (*gorm.DB, error) {
 		return nil, err
 	}
 	dialector := sqlite.New(sqlite.Config{Conn: conn})
-	wrapped, err := gorm.Open(dialector, &gorm.Config{Logger: newGormLogger(slog.Default())})
+	wrapped, err := gorm.Open(dialector, &gorm.Config{Logger: newGormLogger(dbhook.Logger(ctx))})
 	closeError := conn.Close()
 	if err != nil || closeError != nil {
 		return nil, errors.Join(err, closeError)

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -75,7 +74,6 @@ func Prepare(ctx context.Context, load Loader, schema []byte, raw []byte, fromVe
 				return Prepared{}, prepareContextError(err)
 			}
 			if result.err != nil {
-				slog.ErrorContext(ctx, "config OnConfigLoad rejected the configuration", "err", result.err)
 				return Prepared{}, prepareError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "config OnConfigLoad rejected the configuration")
 			}
 			transformed, err := prepareObject(result.raw)
