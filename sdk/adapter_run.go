@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -54,16 +55,23 @@ type adapterCore struct {
 // RunAdapter 作为 Adapter 进程的 main 入口，复用插件的锁、握手、激活与停止状态机。
 func RunAdapter(a adapter.Adapter) error {
 	setupLogging()
-	// 1. 先取得进程锁，再执行 Adapter 描述与启动流程。
-	lock, err := acquireRuntimeLock()
-	if err != nil {
-		return err
-	}
-	defer lock.Unlock()
 	l, err := readLaunch()
 	if err != nil {
 		return err
 	}
+	return runAdapter(a, l)
+}
+
+func runAdapter(a adapter.Adapter, l launch) (err error) {
+	// 1. 先取得运行锁，再执行 Adapter 描述与启动流程。
+	lock, err := acquireRuntimeLock(l.runtimeLockPath)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, lock.Unlock()) }()
+	l.runtime = newComponentSession(l.inProcess)
+	defer func() { err = errors.Join(err, l.runtime.close()) }()
+
 	conn, err := dial(l)
 	if err != nil {
 		return err
@@ -73,20 +81,20 @@ func RunAdapter(a adapter.Adapter) error {
 	if err != nil {
 		return err
 	}
-	setLogLevel(ack.GetBootstrap().GetLogLevel())
+	l.runtime.configure(l, ack, "adapter")
 	if err := prepareAdapter(conn, l, ack, a); err != nil {
 		return err
 	}
 	// 2. 复用激活与停止回调，仅将业务处理器替换成实例服务。
 	runtime := &adapterRuntime{adapter: a, instances: make(map[string]*adapterEntry)}
 	active := &activation{l: l, ack: ack, root: runtime, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
-	active.lifetime, active.stopLifetime = context.WithCancel(context.Background())
+	active.lifetime, active.stopLifetime = context.WithCancel(l.runtime.ctx)
 	limits := ack.GetBootstrap().GetSessionLimits()
 	active.sess = wire.New(conn, wire.Options{Local: pb.InitiatorSide_INITIATOR_SIDE_PLUGIN, SessionID: ack.GetSessionId(), ProtocolMinor: ack.GetChosenMinor(), SourcePluginID: l.pluginID,
-		Handler: runtime.handle, Admit: active.admit, Control: active.control, MaxInflight: int(limits.GetMaxInflight()), MaxBytes: int64(limits.GetMaxPayloadBytes()), DefaultDeadline: time.Duration(limits.GetRequestTimeoutMs()) * time.Millisecond})
+		Handler: l.runtime.handler(runtime.handle), Admit: active.admit, Control: active.control, MaxInflight: int(limits.GetMaxInflight()), MaxBytes: int64(limits.GetMaxPayloadBytes()), DefaultDeadline: time.Duration(limits.GetRequestTimeoutMs()) * time.Millisecond})
 	runtime.activation = active
 	runtime.session = active.sess
-	activeSession.Store(active)
+	l.runtime.active.Store(active)
 	active.sess.Start() // 回调使用的 Session 指针先发布，再启动读循环。
 	if err := active.waitReady(); err != nil {
 		return err
@@ -107,6 +115,7 @@ func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, a adapter.Adapt
 	if err != nil {
 		return err
 	}
+	l.runtime.source = append(l.runtime.source, slog.String("adapter_id", descriptor.GetAdapterId()))
 	reg := &pb.Register{Adapter: descriptor, CandidateConfigJson: boot.GetCandidateConfigJson(), CandidateConfigVersion: boot.GetTargetConfigVersion(), Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 	frame, err := wire.ControlEnvelope(ack.SessionId, ack.ChosenMinor, l.pluginID, pb.FrameKind_FRAME_KIND_REGISTER, reg)
 	if err != nil {

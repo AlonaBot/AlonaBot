@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -17,13 +15,6 @@ type translationSession struct {
 	messages      *i18n.Catalog
 	defaultLocale string   // Bootstrap 的快照；下一次启动重新下发。
 	warned        sync.Map // [2]string{key, problem}；同一 Session 内并发去重。
-}
-
-// Bootstrap 到达后一次发布文案快照，后台任务与 Handler 可以并发格式化。
-var translations atomic.Pointer[translationSession]
-
-func setI18n(messages *i18n.Catalog, defaultLocale string) {
-	translations.Store(&translationSession{messages: messages, defaultLocale: defaultLocale})
 }
 
 func collectI18n(root Root, reg *Registration) error {
@@ -70,11 +61,12 @@ func T(ctx context.Context, key string, args ...any) string {
 }
 
 func translate(ctx context.Context, actorLocale, key string, args []any) string {
-	// 1. Bootstrap 前的调用也共用去重记录，收到 Bootstrap 后换成新 Session。
-	session := translations.Load()
-	if session == nil {
-		translations.CompareAndSwap(nil, &translationSession{})
-		session = translations.Load()
+	// 1. 只读取所属组件的快照；缺失归属时保留键名并报告诊断。
+	session := &translationSession{}
+	if runtime := componentFor(ctx); runtime != nil {
+		if snapshot := runtime.translations.Load(); snapshot != nil {
+			session = snapshot
+		}
 	}
 	// 2. 只格式化成对参数；诊断中仅保留名字或位置。
 	var problems []string
@@ -101,7 +93,7 @@ func translate(ctx context.Context, actorLocale, key string, args []any) string 
 	// 3. LoadOrStore 保证并发调用同一问题时只产生一条日志。
 	for _, problem := range problems {
 		if _, loaded := session.warned.LoadOrStore([2]string{key, problem}, struct{}{}); !loaded {
-			slog.WarnContext(ctx, "translation problem", "key", key, "problem", problem)
+			componentLogger(ctx).WarnContext(ctx, "translation problem", "key", key, "problem", problem)
 		}
 	}
 	return text

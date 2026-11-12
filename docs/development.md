@@ -113,6 +113,25 @@ go test -race -count=3 ./internal/core/supervisor/
 
 文档改动用 `git diff --check` 检查空白错误，链接与技能元数据由审查核对。包文档、命名、注释与测试提交范围由 [编码规范](coding-standards.md) 与 [注释技能](../.agents/skills/alonabot-code-commenting/SKILL.md) 指导审查。
 
+## 库模式运行（同一进程）
+
+根包 `alonabot` 在当前进程中运行 Core 与开发中的组件，示例见 `examples/devbot`：
+
+```go
+core, err := alonabot.Start(ctx, alonabot.DataDir(dir), alonabot.Plugin(plugin.New()), alonabot.Adapter(adapter.New()))
+if err != nil {
+	return err
+}
+return core.Wait() // ctx 取消（例如 SIGTERM）后在 STOP_TOTAL 内停止全部组件
+```
+
+```sh
+go generate ./examples/devbot/...
+go run ./examples/devbot -data-dir ./data
+```
+
+组件以 source=dev 登记，代次固定为 `dev:<组件 ID>`；资源取自各组件包内生成并嵌入的副本。
+
 ## 外部测试环境
 
 - **Telegram：** 真实测试需要授权的测试 Bot，目前没有，相关项记为「未运行」；Adapter 测试改用本地 Bot API 模拟服务。

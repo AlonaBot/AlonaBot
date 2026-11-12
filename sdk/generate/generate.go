@@ -3,7 +3,7 @@
 // 命令、文本匹配与事件由根插件的注册方法链式注册（CONTRACTS §9.1）。
 // 扫描遵守 GOOS/GOARCH 和 build tags，排除外部依赖、vendor 与测试文件。
 // 配置从 config_schema.json 检查并嵌入，翻译覆盖按声明核对（CONTRACTS §5.1、§5.3）。
-// adapter_config_schema.json 按同样规则检查，无插件根类型时只返回实例声明的检查结果。
+// 工程 plugin.yaml 声明 Adapter 时，按具体类型登记身份与实例 Schema；旧实例声明目录仍只检查。
 // JSON Service 类型经 go/types 检查生成 Schema（§3）；注册规则见 §9、§2.2。
 // 构建入口的 i18n/*.json 按 §5.3、§5.4 检查并将原文嵌入生成代码。
 // commands 仅检查结构，覆盖路径与实际注册命令的对应由 SDK Collect 检查。
@@ -49,7 +49,8 @@ type Diagnostic struct {
 
 // Result 保存扫描描述、生成源码和全部构建诊断。
 type Result struct {
-	RootType     string // 导入路径.类型名；只有实例声明时为空。
+	RootType     string // 插件的导入路径.类型名；Adapter 或只有实例声明时为空。
+	AdapterType  string // Adapter 的导入路径.具体类型名；插件或只有实例声明时为空。
 	ConfigSchema []byte // config_schema.json 的规范 JSON；没有该文件时为 nil
 	Source       []byte // 完整 gofmt 源码；有诊断或只有实例声明时为 nil。
 	Diagnostics  []Diagnostic
@@ -75,14 +76,18 @@ type declaration struct {
 }
 
 type scan struct {
-	result         Result
-	files          *token.FileSet
-	dir            string
-	entry          listedPackage
-	roots          []declaration
-	serviceSchemas map[string][]byte
-	i18nFiles      map[string][]byte // 已读文案原文；全量诊断通过后才嵌入，没有资源时为 nil。
-	syntax         map[string][]*ast.File
+	result          Result
+	files           *token.FileSet
+	dir             string
+	entry           listedPackage
+	roots           []declaration
+	adapterProject  bool
+	adapterRoot     declaration
+	projectManifest []byte
+	instanceJSON    []byte
+	serviceSchemas  map[string][]byte
+	i18nFiles       map[string][]byte // 已读文案原文；全量诊断通过后才嵌入，没有资源时为 nil。
+	syntax          map[string][]*ast.File
 }
 
 // Scan 按目标环境扫描源码与文案资源并生成嵌入代码。输入问题记入 Diagnostics；
@@ -100,9 +105,19 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 		return nil, fmt.Errorf("resolve plugin directory links: %w", err)
 	}
 	s := &scan{files: token.NewFileSet(), dir: dir, syntax: make(map[string][]*ast.File)}
+	if err := s.readProject(); err != nil {
+		return nil, err
+	}
+	if len(s.result.Diagnostics) != 0 {
+		return &s.result, nil
+	}
 	instanceSchema, err := s.instanceSchema()
 	if err != nil {
 		return nil, err
+	}
+	if s.adapterProject && !instanceSchema {
+		s.result.Diagnostics = append(s.result.Diagnostics, Diagnostic{instanceSchemaFileName + ":1:1", "adapter project requires an instance schema"})
+		return &s.result, nil
 	}
 	if instanceSchema {
 		hasSource, err := hasBuildSource(dir)
@@ -110,6 +125,9 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 			return nil, err
 		}
 		if !hasSource {
+			if s.adapterProject {
+				s.result.Diagnostics = append(s.result.Diagnostics, Diagnostic{projectFileName + ":1:1", "expected exactly one concrete Adapter type, found 0"})
+			}
 			return &s.result, nil
 		}
 	}
@@ -184,10 +202,12 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 			}
 		}
 	}
-	if instanceSchema && len(s.roots) == 0 {
+	if instanceSchema && len(s.roots) == 0 && !s.adapterProject {
 		return &s.result, nil
 	}
-	s.checkTypes()
+	if !s.adapterProject {
+		s.checkTypes()
+	}
 	if err := s.readI18n(); err != nil {
 		return nil, err
 	}

@@ -20,7 +20,10 @@ func (s *scan) instanceSchema() (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("read adapter_config_schema.json: %w", err)
 	}
-	_, problems := configschema.Parse(raw)
+	schema, problems := configschema.Parse(raw)
+	if len(problems) == 0 {
+		s.instanceJSON = schema.Canonical()
+	}
 	s.schemaProblems(instanceSchemaFileName, problems)
 	return true, nil
 }

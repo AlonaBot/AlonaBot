@@ -1,0 +1,7 @@
+id: alonabot_adapter_devbot
+name: Devbot Loopback
+version: 0.1.0
+author: AlonaBot
+source: github.com/AlonaBot/AlonaBot
+role: adapter
+adapter_id: devloop
