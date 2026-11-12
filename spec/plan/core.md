@@ -32,7 +32,7 @@
 | T-03.15 | goal-106 | 平台动作：Adapter 描述的动作声明与校验，`core.action` 与 `adapter.action`，目标准入与参数、结果 Schema 校验，`adapter_dependencies` 的动作检查，SDK 的底层动作调用方法、供 Adapter 包带类型函数使用的调用者接口与 `sdk/adapter` 的可选接口（D-92），动作以参数与结果的 Go 类型声明（D-113） | T-03 步骤 12 | T-03.8、T-04.8 | V-91 的 Core 分项，V-111 的动作分项 | 已完成（PR #146；TEST-MATRIX §3.2） |
 | T-03.16 | goal-107 | 撤回：`core.delete` 与 `adapter.delete`，`message.delete` 能力判定与准入，每个 ID 的结果汇总，SDK 方法只收消息句柄（D-93、D-104） | T-03 步骤 13 | T-03.9、T-04.8 | V-92 的 Core 分项、V-102 的撤回分项 | 已完成（PR #144；TEST-MATRIX §3.2） |
 | T-03.17 | goal-108 | 命令菜单同步：`adapter.commands.sync`，按实例筛选命令与翻译说明，2 秒合并与失败诊断；本切片交付英文 description 的 proto 字段、SDK builder、commands 路径翻译、生成器结构检查与 Collect 覆盖检查，T-14.1 复用（D-96、D-138） | T-03 步骤 14 | T-04.6、T-04.7、T-04.8、T-08.8 | V-93 的 Core 分项 | 未开始 |
-| T-03.18 | goal-109 | SDK 的流式输出辅助函数 `c.Stream`：按 `message.edit` 选择节流编辑或缓冲后发送一次，按 `message.send` 声明的上限与单位换条，未声明时不换条，失败即停止；追加能力元数据与官方 Telegram 声明（D-98、D-135） | T-03 步骤 15 | T-03.9、T-04.8 | V-94 的 Core 分项 | 未开始 |
+| T-03.18 | goal-109 | SDK 的流式输出辅助函数 `c.Stream`：按 `message.edit` 选择节流编辑或缓冲后发送一次，按 `message.send` 声明的上限与单位换条，未声明时不换条，失败即停止；追加能力元数据与官方 Telegram 声明（D-98、D-135） | T-03 步骤 15 | T-03.9、T-04.8 | V-94 的 Core 分项 | 已完成（PR #151；TEST-MATRIX §3.2） |
 | T-03.19 | goal-110 | Adapter 的 HTTP 路由：Adapter 的 REGISTER 携带 HTTP 路由与 endpoint，`sdk.RunAdapter` 托管 Listener，统一端口代理 WebSocket Upgrade 并在路由撤销时关闭连接，Adapter 路由保留 Authorization 交 Adapter 校验（D-94、D-136） | T-03 步骤 16 | T-03.3、T-04.8、T-07.7 | V-95 的 Core 分项 | 未开始 |
 | T-03.24 | goal-121 | 插件给出的目标由 Core 补齐：缺少实例时按在途事件的同一会话或 Adapter 的缺省实例选择，account_id 按实例补上；`core.send` 的 To 与引用片段、`core.media.grant` 的 targets 在准入前补齐；`core_config.json` 的实例名规则与 `default_instance`（D-102） | T-03 步骤 21 | T-03.6、T-07.6 | V-101 的 Core 分项 | 已完成（PR #135；TEST-MATRIX §3.2） |
 | T-03.25 | goal-131 | 聊天目录：Event 追加 `chat_title`，Core 在接纳入站事件时记录聊天（键、chat_type、名称、最近的实例与活跃时刻），内置选项来源 `core.chats`，随 Adapter 的数据清理（D-130） | T-03 步骤 22 | T-03.3、T-08.14、T-09.4 | V-117 的 Core 分项 | 未开始 |
@@ -98,7 +98,7 @@
 | T-11.2 | goal-55 | 工具调用与用户确认：`core.tool.invoke`、`core.tool.confirm`、Core 内部的确认记录与按钮、同一 Actor 与 5 分钟限时、确认文案 | T-11 步骤 3、4 | T-03.8、T-06.2、T-08.8、T-11.1 | V-55 | 未开始 |
 | T-11.3 | goal-56 | Agent 会话存储：状态库表、`core.conversation.*`、管理服务层的列出与清除、purge | T-11 步骤 5 | T-03.1 | V-56 | 已完成（PR #35；TEST-MATRIX §3.2） |
 | T-11.4 | goal-57 | 工具与会话的多进程验收，汇总证据 | T-11 步骤 6 | T-11.2、T-11.3 | V-55、V-56 的 T-11 分项 | 未开始 |
-| T-13.1 | goal-67 | 库模式入口：根包 `alonabot.Run`、`alonabot.Start` 与选项、与 `alonabot run` 共用的 Core 装配、开发组件同进程经 loopback 连接、生成代码中嵌入的工程 manifest 身份、可导入 Adapter 包的工程入口与资源登记、dev 来源与固定代次 `dev:<组件 ID>`（D-134） | T-13 步骤 1、2 | T-02.1、T-03.3、T-04.2、T-04.9、T-08.8、T-09.16 | V-64 的生命周期分项 | 未开始 |
+| T-13.1 | goal-67 | 库模式入口：根包 `alonabot.Run`、`alonabot.Start` 与选项、与 `alonabot run` 共用的 Core 装配、开发组件同进程经 loopback 连接、生成代码中嵌入的工程 manifest 身份、可导入 Adapter 包的工程入口与资源登记、dev 来源与固定代次 `dev:<组件 ID>`（D-134） | T-13 步骤 1、2 | T-02.1、T-03.3、T-04.2、T-04.9、T-08.8、T-09.16 | V-64 的生命周期分项 | 已完成（PR #149；TEST-MATRIX §3.2） |
 | T-13.2 | goal-68 | 开发组件的配置与数据库：`config.json` 直读、准备与写回（WebUI 修改时重启组件）、`dev.sqlite`、拒绝 update/rollback/uninstall；沿用固定代次 `dev:<组件 ID>`（D-134） | T-13 步骤 3 | T-07.6、T-08.5、T-08.11、T-13.1 | V-64 | 未开始 |
 | T-13.3 | goal-69 | 开发运行与热部署：`alonabot run [目录...] [--reload]` 构建并以独立进程运行开发组件，轮询源码、资源与配置，只重启变化的组件；Adapter 以可导入包为工程目录，沿用 `dev:<组件 ID>`（D-77、D-134） | T-13 步骤 4 | T-07.6、T-09.16、T-13.1 | V-65 | 未开始 |
 | T-13.4 | goal-70 | 开发运行示例与开发文档，汇总证据 | T-13 步骤 5 | T-03.10、T-13.2、T-13.3 | V-64、V-65 | 未开始 |

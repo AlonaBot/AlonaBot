@@ -8,6 +8,7 @@
 // [Collect] 检查全部登记。[JSON]、[Proto] 与 [Subscribe] 登记类型化服务和 Event Bus 订阅。
 // [Context] 在一次 Rule 与 Handler 调用期间有效，提供配置、翻译、日志、发送、编辑和停止传播入口。
 // 自动回复型命令返回 [message.Content]，由 Core 在显式发送完成后发送一次。
+// [Context.Stream] 按当前事件实例的能力发送文本增量并节流编辑。
 // HTTP 路由由 SDK 托管 Listener 并校验 Session 凭证；定时任务由 Core Scheduler 触发。
 // 进程生命周期、配置与迁移契约见 CONTRACTS §4～§6，路由与参数见 §9。
 package sdk
@@ -99,7 +100,7 @@ func (c *Context) Reply(text string) error { _, err := c.Send(message.Text(text)
 
 // Logger 返回附带本次调用 trace_id、route_id 和 call_id 的默认 Logger。
 func (c *Context) Logger() *slog.Logger {
-	logger := slog.Default().With("trace_id", hex.EncodeToString(c.inbound.TraceID), "route_id", c.inbound.Target, "call_id", c.inbound.CallID)
+	logger := componentLogger(c.ctx).With("trace_id", hex.EncodeToString(c.inbound.TraceID), "route_id", c.inbound.Target, "call_id", c.inbound.CallID)
 	if c.subID != "" {
 		logger = logger.With("sub_plugin", c.subID)
 	}
@@ -160,17 +161,24 @@ func (c *Context) Send(m message.Content, opts ...SendOption) (*message.SendResu
 // Run 作为插件 main 的入口：连接 Core、完成握手并处理请求，直到停止。
 // 顺序：取得 runtime.lock → 收集注册项 → 握手 → 准备阶段 → 激活（OnReady/ACTIVATED）→ 服务。
 func Run(root *Plugin) error {
-	if root != nil {
-		root.running.Store(true)
-		dbhook.Freeze(root)
-	}
+	root.freeze()
 	setupLogging()
-	// 1. 先取 runtime.lock，旧实例仍在时不进入准备与生命周期回调（CONTRACTS §12.2）。
-	lock, err := acquireRuntimeLock()
+	l, err := readLaunch()
 	if err != nil {
 		return err
 	}
-	defer lock.Unlock()
+	return run(root, l)
+}
+
+func run(root *Plugin, l launch) (err error) {
+	// 1. 先取 runtime.lock，防止旧实例仍在执行用户代码。
+	lock, err := acquireRuntimeLock(l.runtimeLockPath)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, lock.Unlock()) }()
+	l.runtime = newComponentSession(l.inProcess)
+	defer func() { err = errors.Join(err, l.runtime.close()) }()
 
 	// 2. 收集静态注册项；HTTP 路由与定时任务随 REGISTER 一并声明。
 	reg, err := Collect(root)
@@ -179,11 +187,10 @@ func Run(root *Plugin) error {
 	}
 
 	// 3. 连接 Core 并依次完成握手、准备与激活，然后进入服务循环。
-	l, err := readLaunch()
-	if err != nil {
-		return err
-	}
 	l.http = newHTTPListener(reg.HTTP)
+	if l.http != nil {
+		l.http.runtime = l.runtime
+	}
 	defer func() { l.http.close(time.Now().Add(onStopBudget)) }()
 	conn, err := dial(l)
 	if err != nil {
@@ -194,7 +201,7 @@ func Run(root *Plugin) error {
 	if err != nil {
 		return err
 	}
-	setLogLevel(ack.GetBootstrap().GetLogLevel())
+	l.runtime.configure(l, ack, "plugin")
 	if _, err := prepare(conn, l, ack, root, reg); err != nil {
 		return err
 	}

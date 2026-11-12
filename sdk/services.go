@@ -382,7 +382,7 @@ func CallJSON[In, Out any](ctx context.Context, target string, in In) (Out, erro
 	if err != nil {
 		return out, err
 	}
-	session, err := currentSession()
+	session, err := currentSession(ctx)
 	if err != nil {
 		return out, err
 	}
@@ -407,7 +407,7 @@ func CallJSON[In, Out any](ctx context.Context, target string, in In) (Out, erro
 // Handler 中传入 Context.Context() 以关联父请求；后台工作使用独立 context。
 func CallProto[Out proto.Message](ctx context.Context, target string, in proto.Message) (Out, error) {
 	var zero Out
-	session, err := currentSession()
+	session, err := currentSession(ctx)
 	if err != nil {
 		return zero, err
 	}

@@ -64,6 +64,13 @@ func NewPlugin() *Plugin {
 
 func (p *Plugin) registrar() *pluginScope { return &p.scope }
 
+func (p *Plugin) freeze() {
+	if p != nil {
+		p.running.Store(true)
+		dbhook.Freeze(p)
+	}
+}
+
 func (p *Plugin) checkRegistration() {
 	if p.running.Load() {
 		panic("plugin registration is closed after Run starts")

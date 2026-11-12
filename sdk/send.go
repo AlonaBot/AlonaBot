@@ -47,7 +47,7 @@ func callSend(ctx context.Context, to *pb.Target, m message.Content, parent *wir
 }
 func callMessage(ctx context.Context, target string, request proto.Message, parent *wire.Inbound) (*message.SendResult, error) {
 	// 1. 取得已就绪的 Session，再发出已经校验过的消息请求。
-	session, err := currentSession()
+	session, err := currentSession(ctx)
 	if err != nil {
 		return nil, err
 	}

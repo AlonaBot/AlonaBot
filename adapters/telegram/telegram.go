@@ -4,6 +4,8 @@
 // Core 持久化逐条游标，实例仅在收到应答后推进内存状态（MESSAGE-MODEL §6.1）。
 package telegram
 
+//go:generate go run ../../cmd/alonabot plugin generate
+
 import (
 	"context"
 	"encoding/json"
@@ -44,7 +46,7 @@ func New() adapter.Adapter {
 }
 
 func platformCapabilities() []msg.Capability {
-	return []msg.Capability{{Name: "button.clicked", Version: 1, Supported: true}, {Name: "message.send", Version: 1, Supported: true}, {Name: "message.markdown", Version: 1, Supported: true}, {Name: "message.album", Version: 1, Supported: true}, {Name: "message.reference", Version: 1, Supported: true}, {Name: "message.buttons", Version: 1, Supported: true}, {Name: editCapability, Version: 1, Supported: true}, {Name: "message.created", Version: 1, Supported: true}, {Name: "message.edited", Version: 1, Supported: true}, {Name: "member.joined", Version: 1, Supported: true}, {Name: "member.left", Version: 1, Supported: true}, {Name: "reaction.added", Version: 1, Supported: true}}
+	return []msg.Capability{{Name: "button.clicked", Version: 1, Supported: true}, {Name: "message.send", Version: 1, Supported: true, TextLimit: &msg.TextLimit{Max: maxTextUTF16, Unit: msg.TextUTF16CodeUnits}}, {Name: "message.markdown", Version: 1, Supported: true}, {Name: "message.album", Version: 1, Supported: true}, {Name: "message.reference", Version: 1, Supported: true}, {Name: "message.buttons", Version: 1, Supported: true}, {Name: editCapability, Version: 1, Supported: true}, {Name: "message.created", Version: 1, Supported: true}, {Name: "message.edited", Version: 1, Supported: true}, {Name: "member.joined", Version: 1, Supported: true}, {Name: "member.left", Version: 1, Supported: true}, {Name: "reaction.added", Version: 1, Supported: true}}
 }
 
 // Descriptor 声明本 Adapter 的接收、发送、编辑能力与会话平台权限。

@@ -3,12 +3,13 @@ package sdk
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
@@ -23,28 +24,33 @@ import (
 // handshakeTimeout 与 CONTRACTS §4.2 的 Hello/HelloAck 预算一致。
 var handshakeTimeout = 10 * time.Second
 
+const sessionSecretBytes = 32
+
 const scheduleRoutePrefix = "job."
 
-// launch 保存 Core 通过环境变量下发的启动参数（见 internal/wire/env.go）。
+// launch 保存 Core 显式传入或通过环境变量下发的启动参数。
 type launch struct {
-	pluginID  string
-	transport string        // tcp 或 stdio
-	addr      string        // TCP 传输时 Core 的 loopback 地址
-	secret    []byte        // 32 字节 Session Secret
-	digest    []byte        // 安装时已验证的归档摘要，在 HELLO 中原样回显
-	http      *httpListener // 有HTTP路由时持有本Run的Listener，传给prepare与activation
+	runtimeLockPath string
+	inProcess       bool
+	runtime         *componentSession
+	pluginID        string
+	transport       string        // tcp 或 stdio
+	addr            string        // TCP 传输时 Core 的 loopback 地址
+	secret          []byte        // 32 字节 Session Secret
+	digest          []byte        // 安装时已验证的归档摘要，在 HELLO 中原样回显
+	http            *httpListener // 有HTTP路由时持有本Run的Listener，传给prepare与activation
 }
 
 // readLaunch 读取并校验 Core 下发的启动环境变量。
 func readLaunch() (launch, error) {
-	l := launch{pluginID: os.Getenv(wire.EnvPluginID), transport: os.Getenv(wire.EnvTransport), addr: os.Getenv(wire.EnvCoreAddr)}
+	l := launch{pluginID: os.Getenv(wire.EnvPluginID), transport: os.Getenv(wire.EnvTransport), addr: os.Getenv(wire.EnvCoreAddr), runtimeLockPath: os.Getenv(wire.EnvRuntimeLock)}
 	var err1, err2 error
 	l.secret, err1 = hex.DecodeString(os.Getenv(wire.EnvSecret))
 	l.digest, err2 = hex.DecodeString(os.Getenv(wire.EnvBuildDigest))
 	switch {
 	case l.pluginID == "":
 		return l, fmt.Errorf("missing %s (the plugin must be started by Core)", wire.EnvPluginID)
-	case err1 != nil || len(l.secret) != 32:
+	case err1 != nil || len(l.secret) != sessionSecretBytes:
 		return l, fmt.Errorf("%s is not 32 bytes of hex", wire.EnvSecret)
 	case err2 != nil:
 		return l, fmt.Errorf("%s is not hex", wire.EnvBuildDigest)
@@ -182,7 +188,7 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32, c
 // 准备期不能发起业务 RPC。失败时已向 Core 报告 SESSION_ERROR 并关闭连接。
 func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Registration) (prepared *pb.Prepared, err error) {
 	sid, boot, minor := ack.GetSessionId(), ack.GetBootstrap(), ack.GetChosenMinor()
-	setI18n(reg.messages, boot.GetDefaultLocale())
+	l.runtime.translations.Store(&translationSession{messages: reg.messages, defaultLocale: boot.GetDefaultLocale()})
 	limits := boot.GetPhaseLimits()
 	// 1. Core 必须下发阶段预算与准备截止时间；缺失时报协议错误，而不是把预算当作 0 误报超时。
 	if limits == nil || limits.GetConfigMs() == 0 || limits.GetMigrationMs() == 0 || limits.GetOnStartMs() == 0 || boot.GetPreparationDeadlineUnixMs() == 0 {
@@ -197,8 +203,22 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Reg
 	}
 
 	// 2. 在 OnStart 之前完成配置迁移、默认值与校验；restart 与恢复均使用 RESUME。
-	configContext, cancelConfig := context.WithTimeout(context.Background(), time.Duration(limits.GetConfigMs())*time.Millisecond)
-	preparedConfig, err := config.Prepare(configContext, root.onConfigLoad, generatedFor(root).ConfigSchema,
+	configContext, cancelConfig := context.WithTimeout(l.runtime.ctx, time.Duration(limits.GetConfigMs())*time.Millisecond)
+	var loader config.Loader
+	if root.onConfigLoad != nil {
+		loader = func(ctx context.Context, from uint32, raw json.RawMessage) (json.RawMessage, error) {
+			if !l.runtime.beginCallback() {
+				return nil, errcode.FailedPrecondition.New("plugin session has stopped")
+			}
+			defer l.runtime.callbacks.Done()
+			loaded, err := root.onConfigLoad(ctx, from, raw)
+			if err != nil {
+				componentLogger(ctx).ErrorContext(ctx, "config OnConfigLoad rejected the configuration", "err", err)
+			}
+			return loaded, err
+		}
+	}
+	preparedConfig, err := config.Prepare(configContext, loader, generatedFor(root).ConfigSchema,
 		[]byte(boot.GetCandidateConfigJson()), boot.PreviousConfigVersion, boot.GetTargetConfigVersion(),
 		boot.GetDatabaseDescriptor().GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME)
 	cancelConfig()
@@ -210,13 +230,13 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Reg
 	root.setConfig(preparedConfig.Values)
 
 	// 3. 数据库从迁移阶段开始可用；后续任何准备失败都由这里关闭连接。
-	dbhook.Begin(boot.GetDatabaseDescriptor())
+	l.runtime.database.Begin(boot.GetDatabaseDescriptor())
 	defer func() {
 		if err != nil {
-			err = errors.Join(err, dbhook.Close())
+			err = errors.Join(err, l.runtime.database.Close())
 		}
 	}()
-	migrationContext, cancelMigration := context.WithTimeout(context.Background(), time.Duration(limits.GetMigrationMs())*time.Millisecond)
+	migrationContext, cancelMigration := context.WithTimeout(l.runtime.ctx, time.Duration(limits.GetMigrationMs())*time.Millisecond)
 	migration, migrationError := prepareMigrations(migrationContext, root, boot.GetDatabaseDescriptor())
 	cancelMigration()
 	if migrationError != nil {
@@ -228,7 +248,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Reg
 		if errors.Is(migrationError, context.DeadlineExceeded) {
 			code = pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED
 		}
-		slog.Error("database migration failed", "err", migrationError)
+		componentLogger(l.runtime.ctx).Error("database migration failed", "err", migrationError)
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_MIGRATION, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
 			code, "database migration failed", migrationError)
 	}
@@ -239,12 +259,14 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Reg
 
 	// 4. OnStart：用户函数不响应 context 时，由 watchdog 判定失败（Run 随后退出进程）。
 	budget := time.Duration(limits.GetOnStartMs()) * time.Millisecond
-	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	ctx, cancel := context.WithTimeout(l.runtime.ctx, budget)
 	errc := make(chan error, 1)
+	l.runtime.callbacks.Add(1)
 	go func() {
+		defer l.runtime.callbacks.Done()
 		defer func() {
 			if p := recover(); p != nil {
-				logPanic("OnStart", p)
+				logPanic(ctx, "OnStart", p)
 				errc <- fmt.Errorf("OnStart panic: %v", p)
 			}
 		}()
@@ -261,7 +283,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Reg
 		cancel()
 		if err != nil {
 			// 用户错误原文可能含敏感信息：只写日志，SESSION_ERROR 中只放安全消息。
-			slog.Error("OnStart failed", "err", err)
+			componentLogger(l.runtime.ctx).Error("OnStart failed", "err", err)
 			return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_ON_START, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
 				pb.ErrorCode_ERROR_CODE_INTERNAL, "OnStart returned an error", err)
 		}
@@ -319,10 +341,13 @@ func prepareMigrations(ctx context.Context, root *Plugin, descriptor *pb.Databas
 		err   error
 	}
 	completed := make(chan result, 1) // 超时后用户回调仍可返回，避免结果发送阻塞。
+	runtime := componentFor(ctx)
+	runtime.callbacks.Add(1)
 	go func() {
+		defer runtime.callbacks.Done()
 		defer func() {
 			if p := recover(); p != nil {
-				logPanic("migration", p)
+				logPanic(ctx, "migration", p)
 				completed <- result{err: fmt.Errorf("migration panic: %v", p)}
 			}
 		}()
@@ -359,4 +384,100 @@ func prepareMigrations(ctx context.Context, root *Plugin, descriptor *pb.Databas
 		}
 		return result.state, result.err
 	}
+}
+
+// streamTarget 保留完整 Target，话题缺省与显式值分别计入节流键。
+type streamTarget struct {
+	adapter, instance, account, chat, thread string
+	hasThread                                bool
+}
+
+// streamThrottle 用令牌串行化同目标的编辑；令牌持有者独占 last，无需跨 RPC 持锁。
+type streamThrottle struct {
+	token chan struct{}
+	last  time.Time
+}
+
+var streamSessions = struct {
+	sync.Mutex
+	targets map[*wire.Session]map[streamTarget]*streamThrottle
+}{targets: make(map[*wire.Session]map[streamTarget]*streamThrottle)}
+
+func sessionStreamThrottle(session *wire.Session, target *pb.Target) *streamThrottle {
+	key := streamTarget{target.AdapterId, target.AdapterInstanceId, target.AccountId, target.ChatId, target.GetThreadId(), target.ThreadId != nil}
+	streamSessions.Lock()
+	defer streamSessions.Unlock()
+	targets := streamSessions.targets[session]
+	if targets == nil {
+		targets = make(map[streamTarget]*streamThrottle)
+		streamSessions.targets[session] = targets
+		// 每个使用流的 Session 只有一个清理者，连接结束后释放全部目标状态。
+		go func() {
+			<-session.Done()
+			streamSessions.Lock()
+			delete(streamSessions.targets, session)
+			streamSessions.Unlock()
+		}()
+	}
+	throttle := targets[key]
+	if throttle == nil {
+		throttle = &streamThrottle{token: make(chan struct{}, 1)}
+		throttle.token <- struct{}{}
+		targets[key] = throttle
+	}
+	return throttle
+}
+
+func (s *streamThrottle) acquire(ctx context.Context, done <-chan struct{}, wait bool) (bool, error) {
+	// 排队与间隔等待都监听取消；未到刷新时机的增量留在调用者缓存中。
+	if wait {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-done:
+			return false, errcode.FailedPrecondition.New("plugin session has stopped")
+		case <-s.token:
+		}
+	} else {
+		select {
+		case <-s.token:
+		default:
+			return false, nil
+		}
+	}
+	release := func() { s.token <- struct{}{} }
+	if err := ctx.Err(); err != nil {
+		release()
+		return false, err
+	}
+	select {
+	case <-done:
+		release()
+		return false, errcode.FailedPrecondition.New("plugin session has stopped")
+	default:
+	}
+	if remaining := time.Until(s.last.Add(streamEditInterval)); remaining > 0 {
+		if !wait {
+			release()
+			return false, nil
+		}
+		timer := time.NewTimer(remaining)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			release()
+			return false, ctx.Err()
+		case <-done:
+			release()
+			return false, errcode.FailedPrecondition.New("plugin session has stopped")
+		case <-timer.C:
+		}
+	}
+	return true, nil
+}
+
+func (s *streamThrottle) release() {
+	// 从 RPC 完成时计时，确保阻塞或调度延迟也不会缩短实际 Edit 发起间隔。
+	s.last = time.Now()
+	s.token <- struct{}{}
 }
