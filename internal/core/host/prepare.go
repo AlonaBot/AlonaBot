@@ -262,6 +262,9 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		var registerErr error
 		if exp.Role == state.RoleAdapter {
 			registerErr = validate.AdapterRegister(m, exp.AdapterID)
+			if registerErr == nil && boot.GetDatabaseDescriptor().GetBackend() != pb.DatabaseBackend_DATABASE_BACKEND_NONE {
+				registerErr = &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "adapter registration contains a business database"}
+			}
 		} else if exp.Role == state.RolePlugin {
 			registerErr = validate.Register(m)
 		} else {

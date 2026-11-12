@@ -239,7 +239,7 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) error {
 	a.bus.Attach(plugin)
 	if r.process == nil {
 		if r.instance.HTTPListener != nil {
-			a.http.Bind(r.id, r.instance.GenerationID, r.instance.HTTPListener, r.instance.HTTPProxyToken, r.instance.Routes)
+			a.http.Bind(r.id, r.instance.GenerationID, r.instance.HTTPListener, r.instance.HTTPProxyToken, r.instance.Routes, r.install.Role == state.RoleAdapter)
 		}
 		a.scheduler.Attach(plugin, time.Now())
 	}
@@ -343,7 +343,7 @@ func (a *assembly) detach(r *runningComponent) {
 	a.bus.Detach(r.id)
 	a.scheduler.Detach(r.id)
 	if r.instance != nil {
-		a.http.Unbind(r.id, r.instance.GenerationID)
+		a.http.Unbind(r.id, r.instance.GenerationID, r.instance.HTTPProxyToken)
 	}
 	if r.remote != nil {
 		r.remote.Unbind()

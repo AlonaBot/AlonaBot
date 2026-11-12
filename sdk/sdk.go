@@ -249,6 +249,9 @@ func Collect(root *Plugin) (*Registration, error) {
 	// HTTP Listener 在准备阶段创建；这里只核对所有种类共享的 route_id。
 	seen := make(map[string]bool)
 	for _, route := range buildRegister(reg, "{}", 0, nil).GetRoutes() {
+		if spec := route.GetHttp(); spec.GetAuthMode() == pb.HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN {
+			errs = append(errs, fmt.Errorf("HTTP route %s %s: platform token authentication is only available to adapters", spec.GetMethod(), spec.GetPath()))
+		}
 		id := route.GetRouteId()
 		if seen[id] {
 			errs = append(errs, fmt.Errorf("route %q registered twice", id))

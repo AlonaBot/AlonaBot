@@ -417,7 +417,7 @@ type HTTPRoute struct {
 	Handler http.Handler
 	// Public 为 true 时无需 Core 会话即可访问。
 	Public   bool
-	AuthMode HTTPAuth // 认证方式；公开路由必须是回调验证方式之一
+	AuthMode HTTPAuth // 认证方式；公开路由须校验回调凭证，Adapter 也可校验平台 token
 }
 
 // RouteBuilder 收集 HTTP 路由；Handle 或 HandleFunc 结束构建。
@@ -429,7 +429,7 @@ type RouteBuilder struct {
 	afterHandle bool
 }
 
-// Public 声明由插件验证 state、签名或 nonce 的公开回调。
+// Public 声明公开路由；插件自行验证 state、签名或 nonce，Adapter 也可验证平台 token。
 func (b *RouteBuilder) Public(mode HTTPAuth) *RouteBuilder {
 	b.registry.plugin.checkRegistration()
 	if b.handles != 0 {
@@ -491,7 +491,7 @@ func (r *httpRegistry) add(method string, route HTTPRoute) {
 		r.errs = append(r.errs, fmt.Errorf("HTTP method must be standard and uppercase: input %q, registered %q", method, route.Method))
 	case !canonicalHTTPPath(route.Path):
 		r.errs = append(r.errs, fmt.Errorf("HTTP path %q must start with / and be canonical", route.Path))
-	case route.Public && route.AuthMode != AuthCallbackState && route.AuthMode != AuthCallbackSignature && route.AuthMode != AuthCallbackNonce:
+	case route.Public && route.AuthMode != AuthCallbackState && route.AuthMode != AuthCallbackSignature && route.AuthMode != AuthCallbackNonce && route.AuthMode != AuthPlatformToken:
 		r.errs = append(r.errs, fmt.Errorf("public HTTP route %s %s must declare state, signature or nonce verification", method, path))
 	case !route.Public && route.AuthMode != AuthCoreSession:
 		r.errs = append(r.errs, fmt.Errorf("private HTTP route %s %s must use Core session authentication", method, path))
