@@ -322,6 +322,32 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(code, adapterSafeError(errors.New(message), config))
 		}
 		return adapterResponse(&pb.AdapterMediaReadResponse{Data: data, NextOffset: next, Eof: eof}, nil)
+	case wire.ServiceAdapterAction:
+		request := &pb.AdapterActionRequest{}
+		if err := decodeInvocation(in.Payload, request); err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		r.mu.Lock()
+		entry, ok := r.instances[request.InstanceId]
+		if !ok {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
+		}
+		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		executor, supported := entry.instance.(adapter.ActionExecutor)
+		r.mu.Unlock()
+		if !supported {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support platform actions")
+		}
+		// 平台调用在锁外执行，账号动作的空目标保留为空会话。
+		result, safe := executor.Action(ctx, convert.SessionFromProto(request.Target), request.Name, request.Version, json.RawMessage(request.ParamsJson))
+		if len(result) == 0 && safe != nil {
+			return wire.Response{Err: convert.ErrorToProto(safe)}
+		}
+		return adapterResponse(&pb.ActionResponse{ResultJson: string(result)}, convert.ErrorToProto(safe))
 	case wire.ServiceAdapterEdit:
 		request := &pb.AdapterEditRequest{}
 		if err := decodeInvocation(in.Payload, request); err != nil {
