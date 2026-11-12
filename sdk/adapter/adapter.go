@@ -8,6 +8,7 @@ package adapter
 
 import (
 	"context"
+	"time"
 
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
@@ -37,6 +38,8 @@ type Core interface {
 	ReportFailure(ctx context.Context, safe *errcode.Error) error
 	// ReadMedia 读取 Core 为当前 Adapter Session 签发的只读媒体令牌。
 	ReadMedia(ctx context.Context, token string, offset uint64, length uint32) ([]byte, uint64, bool, error)
+	// MediaURL 为本次发送的只读令牌取得临时 URL；baseURL 为空时使用 Core 配置。
+	MediaURL(ctx context.Context, token, baseURL string) (url string, expiresAt time.Time, err error)
 }
 
 // MediaSource 提供实例可选的平台文件读取能力，length 为 1～1 MiB。

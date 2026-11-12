@@ -254,16 +254,20 @@ message TextEntity {
   optional string external_user_id = 6;
 }
 
-// MediaSource 描述媒体来源，三选一。
+// MediaSource 描述媒体来源；platform_file 只由 Core 发往 Adapter。
 message MediaSource {
   // 媒体来源，恰有一个分支。
   oneof source {
     // 已提交 MediaRef 的 token。
     string media_ref = 1;
-    // 入站媒体描述符，发送时由 Core 取件。
+    // 入站媒体描述符，发送时由 Core 准备来源。
     IncomingMedia incoming_ref = 2;
     // 公网 HTTPS 地址，发送前验证。
     string https_url = 3;
+    // 标准 base64，解码后为 1 B～1 MiB。
+    string inline_base64 = 4;
+    // Core 填写的来源实例平台文件标识，插件填写时拒绝。
+    string platform_file = 5;
   }
 }
 
@@ -483,4 +487,23 @@ message ExtensionSegment {
   uint32 version = 3;
   // 按该声明的 Schema 校验的 JSON 文本。
   string payload_json = 4;
+}
+
+// DeleteRequest 按输入顺序撤回同一目标的 1～100 个消息 ID。
+message DeleteRequest {
+  Target to = 1;
+  repeated string platform_message_ids = 2;
+}
+
+// DeleteItemResult 保留单个输入 ID 的撤回状态与安全错误。
+message DeleteItemResult {
+  string platform_message_id = 1;
+  PartStatus status = 2;
+  ErrorInfo error = 3;
+}
+
+// DeleteResult 按输入顺序保留全部逐项结果，包括重复 ID 与未尝试项。
+message DeleteResult {
+  Target target = 1;
+  repeated DeleteItemResult items = 2;
 }
