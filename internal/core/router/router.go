@@ -132,13 +132,14 @@ func New(opt Options) *Router {
 // Attach 注册一个接收派发的插件并重建命令索引；相同插件 ID 替换为新实例。
 // c 必须与该 Session 的 Mux.For 使用同一个 Caller。
 func (r *Router) Attach(p Plugin, c Caller) {
-	defer r.CommandsChanged()
+	defer r.scheduleCommandSync()
 	id := p.PluginID()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	session := &pluginSession{plugin: p, caller: c}
 	r.plugins[id] = session
 	r.cacheCommands(session)
+	r.rebuildCommands()
 }
 
 // Plugin 返回最近一次 Attach 的插件实例及查找结果；激活状态由调用方即时检查。
@@ -196,11 +197,12 @@ func (r *Router) HasInFlight(c Caller, ev *pb.Event) bool {
 
 // Detach 移除插件并重建命令索引，使其退出后续事件的候选集。
 func (r *Router) Detach(pluginID string) {
-	defer r.CommandsChanged()
+	defer r.scheduleCommandSync()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.plugins, pluginID)
 	delete(r.matches, pluginID)
+	r.rebuildCommands()
 }
 
 type candidate struct {

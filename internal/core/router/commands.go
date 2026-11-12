@@ -67,12 +67,22 @@ func (r *Router) StopCommandSync(in adapter.Instance) {
 
 // CommandsChanged 在路由激活、撤销或命令策略变化后重新计算运行实例的菜单。
 func (r *Router) CommandsChanged() {
+	defer r.scheduleCommandSync()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
 		return
 	}
 	r.rebuildCommands()
+}
+
+// scheduleCommandSync 在注册更新解锁后通知菜单任务，沿用首次变化的截止时间。
+func (r *Router) scheduleCommandSync() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return
+	}
 	for _, state := range r.commandSyncs {
 		if state.due.IsZero() {
 			state.due = time.Now().Add(commandSyncWindow)

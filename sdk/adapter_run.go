@@ -45,9 +45,10 @@ type adapterEntry struct {
 }
 
 type adapterCore struct {
-	runtime    *adapterRuntime
-	instanceID string
-	stopped    atomic.Bool // 停止或报告失败后锁存，阻止新的交付
+	runtime     *adapterRuntime
+	instanceID  string
+	stopped     atomic.Bool // 停止或报告失败后锁存，阻止新的交付
+	commandSync sync.Mutex  // 覆盖本次运行的实际菜单回调，RPC 到期后仍持有。
 }
 
 // RunAdapter 作为 Adapter 进程的 main 入口，复用插件的锁、握手、激活与停止状态机。
@@ -334,6 +335,23 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
 		}
 		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		core := entry.core
+		r.mu.Unlock()
+		// RPC 取消后平台操作可能仍在执行，等待实际回调返回再处理下一份菜单。
+		core.commandSync.Lock()
+		defer core.commandSync.Unlock()
+		if err := ctx.Err(); err != nil {
+			code := pb.ErrorCode_ERROR_CODE_CANCELLED
+			if errors.Is(err, context.DeadlineExceeded) {
+				code = pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED
+			}
+			return dispatchError(code, err.Error())
+		}
+		r.mu.Lock()
+		if entry.core != core || entry.busy || entry.instance == nil || core.stopped.Load() {
 			r.mu.Unlock()
 			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
 		}
