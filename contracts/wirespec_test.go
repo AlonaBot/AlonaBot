@@ -63,6 +63,29 @@ func TestButtonCoreTokenFieldNumber(t *testing.T) {
 	}
 }
 
+// TestExtensionFieldNumbers 固定 extension 分支与载荷的编号、类型和 oneof 归属。
+func TestExtensionFieldNumbers(t *testing.T) {
+	field := (&pb.Segment{}).ProtoReflect().Descriptor().Fields().ByNumber(9)
+	if field == nil || field.Name() != "extension" || field.Kind() != protoreflect.MessageKind || field.IsList() || field.Message().FullName() != "alonabot.v1.ExtensionSegment" {
+		t.Fatalf("Segment field 9 should be ExtensionSegment extension, got %v", field)
+	}
+	if oneof := field.ContainingOneof(); oneof == nil || oneof.Name() != "data" {
+		t.Errorf("extension oneof = %v, want data", oneof)
+	}
+	names := []protoreflect.Name{"adapter_id", "name", "version", "payload_json"}
+	kinds := []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.Uint32Kind, protoreflect.StringKind}
+	fields := (&pb.ExtensionSegment{}).ProtoReflect().Descriptor().Fields()
+	if fields.Len() != len(names) {
+		t.Fatalf("ExtensionSegment has %d fields, want %d", fields.Len(), len(names))
+	}
+	for i, name := range names {
+		f := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+		if f == nil || f.Name() != name || f.Kind() != kinds[i] || f.IsList() || f.HasPresence() || f.ContainingOneof() != nil {
+			t.Errorf("ExtensionSegment field %d should be singular %s %s, got %v", i+1, kinds[i], name, f)
+		}
+	}
+}
+
 // 规格列出取值的枚举逐项一致；全部已注册枚举的零值都是 *_UNSPECIFIED。
 func TestEnumValues(t *testing.T) {
 	cases := []struct {

@@ -13,6 +13,7 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
+	"github.com/google/jsonschema-go/jsonschema"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -33,6 +34,7 @@ type Adapter struct {
 	sink       adapter.Sink
 	sent       []Sent
 	nextID     uint64
+	extensions map[extensionKey]*jsonschema.Resolved // 由 mu 保护发布，解析后只读
 	sendFunc   func(*pb.Target, *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo)
 }
 

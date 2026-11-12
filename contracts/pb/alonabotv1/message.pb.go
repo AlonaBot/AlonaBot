@@ -1365,6 +1365,7 @@ type Segment struct {
 	//	*Segment_Reference
 	//	*Segment_Buttons
 	//	*Segment_Forward
+	//	*Segment_Extension
 	Data          isSegment_Data `protobuf_oneof:"data"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1479,6 +1480,15 @@ func (x *Segment) GetForward() *ForwardSegment {
 	return nil
 }
 
+func (x *Segment) GetExtension() *ExtensionSegment {
+	if x != nil {
+		if x, ok := x.Data.(*Segment_Extension); ok {
+			return x.Extension
+		}
+	}
+	return nil
+}
+
 type isSegment_Data interface {
 	isSegment_Data()
 }
@@ -1523,6 +1533,11 @@ type Segment_Forward struct {
 	Forward *ForwardSegment `protobuf:"bytes,8,opt,name=forward,proto3,oneof"`
 }
 
+type Segment_Extension struct {
+	// 由目标 Adapter 声明 Schema 的扩展片段。
+	Extension *ExtensionSegment `protobuf:"bytes,9,opt,name=extension,proto3,oneof"`
+}
+
 func (*Segment_Text) isSegment_Data() {}
 
 func (*Segment_Image) isSegment_Data() {}
@@ -1538,6 +1553,8 @@ func (*Segment_Reference) isSegment_Data() {}
 func (*Segment_Buttons) isSegment_Data() {}
 
 func (*Segment_Forward) isSegment_Data() {}
+
+func (*Segment_Extension) isSegment_Data() {}
 
 // TextSegment 描述一段文本。
 type TextSegment struct {
@@ -2884,6 +2901,79 @@ func (x *EditRequest) GetChain() *MessageChain {
 	return nil
 }
 
+// ExtensionSegment 承载目标 Adapter 已声明的版本化片段及其 JSON 载荷。
+type ExtensionSegment struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 目标 Adapter 的平台类型。
+	AdapterId string `protobuf:"bytes,1,opt,name=adapter_id,json=adapterId,proto3" json:"adapter_id,omitempty"`
+	// Adapter 注册声明中的扩展名称。
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// 注册声明中的扩展版本。
+	Version uint32 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	// 按该声明的 Schema 校验的 JSON 文本。
+	PayloadJson   string `protobuf:"bytes,4,opt,name=payload_json,json=payloadJson,proto3" json:"payload_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExtensionSegment) Reset() {
+	*x = ExtensionSegment{}
+	mi := &file_alonabot_v1_message_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExtensionSegment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExtensionSegment) ProtoMessage() {}
+
+func (x *ExtensionSegment) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_message_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExtensionSegment.ProtoReflect.Descriptor instead.
+func (*ExtensionSegment) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *ExtensionSegment) GetAdapterId() string {
+	if x != nil {
+		return x.AdapterId
+	}
+	return ""
+}
+
+func (x *ExtensionSegment) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ExtensionSegment) GetVersion() uint32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *ExtensionSegment) GetPayloadJson() string {
+	if x != nil {
+		return x.PayloadJson
+	}
+	return ""
+}
+
 var File_alonabot_v1_message_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_message_proto_rawDesc = "" +
@@ -2965,7 +3055,7 @@ const file_alonabot_v1_message_proto_rawDesc = "" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12/\n" +
 	"\x14scheduled_at_unix_ms\x18\x03 \x01(\x03R\x11scheduledAtUnixMs\"@\n" +
 	"\fMessageChain\x120\n" +
-	"\bsegments\x18\x01 \x03(\v2\x14.alonabot.v1.SegmentR\bsegments\"\xc1\x03\n" +
+	"\bsegments\x18\x01 \x03(\v2\x14.alonabot.v1.SegmentR\bsegments\"\x80\x04\n" +
 	"\aSegment\x12.\n" +
 	"\x04text\x18\x01 \x01(\v2\x18.alonabot.v1.TextSegmentH\x00R\x04text\x121\n" +
 	"\x05image\x18\x02 \x01(\v2\x19.alonabot.v1.ImageSegmentH\x00R\x05image\x121\n" +
@@ -2974,7 +3064,8 @@ const file_alonabot_v1_message_proto_rawDesc = "" +
 	"\amention\x18\x05 \x01(\v2\x1b.alonabot.v1.MentionSegmentH\x00R\amention\x12=\n" +
 	"\treference\x18\x06 \x01(\v2\x1d.alonabot.v1.ReferenceSegmentH\x00R\treference\x127\n" +
 	"\abuttons\x18\a \x01(\v2\x1b.alonabot.v1.ButtonsSegmentH\x00R\abuttons\x127\n" +
-	"\aforward\x18\b \x01(\v2\x1b.alonabot.v1.ForwardSegmentH\x00R\aforwardB\x06\n" +
+	"\aforward\x18\b \x01(\v2\x1b.alonabot.v1.ForwardSegmentH\x00R\aforward\x12=\n" +
+	"\textension\x18\t \x01(\v2\x1d.alonabot.v1.ExtensionSegmentH\x00R\textensionB\x06\n" +
 	"\x04data\"\x97\x01\n" +
 	"\vTextSegment\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x124\n" +
@@ -3094,7 +3185,13 @@ const file_alonabot_v1_message_proto_rawDesc = "" +
 	"\vEditRequest\x12#\n" +
 	"\x02to\x18\x01 \x01(\v2\x13.alonabot.v1.TargetR\x02to\x12.\n" +
 	"\x13platform_message_id\x18\x02 \x01(\tR\x11platformMessageId\x12/\n" +
-	"\x05chain\x18\x03 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain*t\n" +
+	"\x05chain\x18\x03 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\"\x82\x01\n" +
+	"\x10ExtensionSegment\x12\x1d\n" +
+	"\n" +
+	"adapter_id\x18\x01 \x01(\tR\tadapterId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\rR\aversion\x12!\n" +
+	"\fpayload_json\x18\x04 \x01(\tR\vpayloadJson*t\n" +
 	"\x0fEventSourceKind\x12!\n" +
 	"\x1dEVENT_SOURCE_KIND_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19EVENT_SOURCE_KIND_ADAPTER\x10\x01\x12\x1f\n" +
@@ -3149,7 +3246,7 @@ func file_alonabot_v1_message_proto_rawDescGZIP() []byte {
 }
 
 var file_alonabot_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_alonabot_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_alonabot_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_alonabot_v1_message_proto_goTypes = []any{
 	(EventSourceKind)(0),          // 0: alonabot.v1.EventSourceKind
 	(TextFormat)(0),               // 1: alonabot.v1.TextFormat
@@ -3190,19 +3287,20 @@ var file_alonabot_v1_message_proto_goTypes = []any{
 	(*BotOnlinePayload)(nil),      // 36: alonabot.v1.BotOnlinePayload
 	(*BotOfflinePayload)(nil),     // 37: alonabot.v1.BotOfflinePayload
 	(*EditRequest)(nil),           // 38: alonabot.v1.EditRequest
-	(*Target)(nil),                // 39: alonabot.v1.Target
-	(*Actor)(nil),                 // 40: alonabot.v1.Actor
-	(*Capability)(nil),            // 41: alonabot.v1.Capability
-	(*IncomingMedia)(nil),         // 42: alonabot.v1.IncomingMedia
-	(*ErrorInfo)(nil),             // 43: alonabot.v1.ErrorInfo
+	(*ExtensionSegment)(nil),      // 39: alonabot.v1.ExtensionSegment
+	(*Target)(nil),                // 40: alonabot.v1.Target
+	(*Actor)(nil),                 // 41: alonabot.v1.Actor
+	(*Capability)(nil),            // 42: alonabot.v1.Capability
+	(*IncomingMedia)(nil),         // 43: alonabot.v1.IncomingMedia
+	(*ErrorInfo)(nil),             // 44: alonabot.v1.ErrorInfo
 }
 var file_alonabot_v1_message_proto_depIdxs = []int32{
 	0,  // 0: alonabot.v1.Event.source_kind:type_name -> alonabot.v1.EventSourceKind
-	39, // 1: alonabot.v1.Event.target:type_name -> alonabot.v1.Target
-	40, // 2: alonabot.v1.Event.actor:type_name -> alonabot.v1.Actor
+	40, // 1: alonabot.v1.Event.target:type_name -> alonabot.v1.Target
+	41, // 2: alonabot.v1.Event.actor:type_name -> alonabot.v1.Actor
 	7,  // 3: alonabot.v1.Event.message:type_name -> alonabot.v1.PlatformMessage
 	8,  // 4: alonabot.v1.Event.event_payload:type_name -> alonabot.v1.EventPayload
-	41, // 5: alonabot.v1.Event.capabilities:type_name -> alonabot.v1.Capability
+	42, // 5: alonabot.v1.Event.capabilities:type_name -> alonabot.v1.Capability
 	17, // 6: alonabot.v1.PlatformMessage.chain:type_name -> alonabot.v1.MessageChain
 	10, // 7: alonabot.v1.EventPayload.message_created:type_name -> alonabot.v1.MessageCreatedPayload
 	11, // 8: alonabot.v1.EventPayload.message_edited:type_name -> alonabot.v1.MessageEditedPayload
@@ -3227,36 +3325,37 @@ var file_alonabot_v1_message_proto_depIdxs = []int32{
 	26, // 27: alonabot.v1.Segment.reference:type_name -> alonabot.v1.ReferenceSegment
 	27, // 28: alonabot.v1.Segment.buttons:type_name -> alonabot.v1.ButtonsSegment
 	30, // 29: alonabot.v1.Segment.forward:type_name -> alonabot.v1.ForwardSegment
-	1,  // 30: alonabot.v1.TextSegment.format:type_name -> alonabot.v1.TextFormat
-	20, // 31: alonabot.v1.TextSegment.entities:type_name -> alonabot.v1.TextEntity
-	2,  // 32: alonabot.v1.TextEntity.type:type_name -> alonabot.v1.EntityType
-	42, // 33: alonabot.v1.MediaSource.incoming_ref:type_name -> alonabot.v1.IncomingMedia
-	21, // 34: alonabot.v1.ImageSegment.source:type_name -> alonabot.v1.MediaSource
-	21, // 35: alonabot.v1.VideoSegment.source:type_name -> alonabot.v1.MediaSource
-	21, // 36: alonabot.v1.FileSegment.source:type_name -> alonabot.v1.MediaSource
-	39, // 37: alonabot.v1.ReferenceSegment.target:type_name -> alonabot.v1.Target
-	28, // 38: alonabot.v1.ButtonsSegment.rows:type_name -> alonabot.v1.ButtonRow
-	29, // 39: alonabot.v1.ButtonRow.buttons:type_name -> alonabot.v1.Button
-	31, // 40: alonabot.v1.ForwardSegment.items:type_name -> alonabot.v1.ForwardItem
-	32, // 41: alonabot.v1.ForwardItem.source:type_name -> alonabot.v1.ForwardSource
-	17, // 42: alonabot.v1.ForwardItem.chain:type_name -> alonabot.v1.MessageChain
-	39, // 43: alonabot.v1.SendRequest.to:type_name -> alonabot.v1.Target
-	17, // 44: alonabot.v1.SendRequest.chain:type_name -> alonabot.v1.MessageChain
-	3,  // 45: alonabot.v1.SendResult.status:type_name -> alonabot.v1.SendStatus
-	39, // 46: alonabot.v1.SendResult.target:type_name -> alonabot.v1.Target
-	41, // 47: alonabot.v1.SendResult.capabilities_used:type_name -> alonabot.v1.Capability
-	35, // 48: alonabot.v1.SendResult.part_results:type_name -> alonabot.v1.PartResult
-	4,  // 49: alonabot.v1.PartResult.status:type_name -> alonabot.v1.PartStatus
-	43, // 50: alonabot.v1.PartResult.error:type_name -> alonabot.v1.ErrorInfo
-	5,  // 51: alonabot.v1.BotOfflinePayload.reason:type_name -> alonabot.v1.BotOfflineReason
-	43, // 52: alonabot.v1.BotOfflinePayload.safe_error:type_name -> alonabot.v1.ErrorInfo
-	39, // 53: alonabot.v1.EditRequest.to:type_name -> alonabot.v1.Target
-	17, // 54: alonabot.v1.EditRequest.chain:type_name -> alonabot.v1.MessageChain
-	55, // [55:55] is the sub-list for method output_type
-	55, // [55:55] is the sub-list for method input_type
-	55, // [55:55] is the sub-list for extension type_name
-	55, // [55:55] is the sub-list for extension extendee
-	0,  // [0:55] is the sub-list for field type_name
+	39, // 30: alonabot.v1.Segment.extension:type_name -> alonabot.v1.ExtensionSegment
+	1,  // 31: alonabot.v1.TextSegment.format:type_name -> alonabot.v1.TextFormat
+	20, // 32: alonabot.v1.TextSegment.entities:type_name -> alonabot.v1.TextEntity
+	2,  // 33: alonabot.v1.TextEntity.type:type_name -> alonabot.v1.EntityType
+	43, // 34: alonabot.v1.MediaSource.incoming_ref:type_name -> alonabot.v1.IncomingMedia
+	21, // 35: alonabot.v1.ImageSegment.source:type_name -> alonabot.v1.MediaSource
+	21, // 36: alonabot.v1.VideoSegment.source:type_name -> alonabot.v1.MediaSource
+	21, // 37: alonabot.v1.FileSegment.source:type_name -> alonabot.v1.MediaSource
+	40, // 38: alonabot.v1.ReferenceSegment.target:type_name -> alonabot.v1.Target
+	28, // 39: alonabot.v1.ButtonsSegment.rows:type_name -> alonabot.v1.ButtonRow
+	29, // 40: alonabot.v1.ButtonRow.buttons:type_name -> alonabot.v1.Button
+	31, // 41: alonabot.v1.ForwardSegment.items:type_name -> alonabot.v1.ForwardItem
+	32, // 42: alonabot.v1.ForwardItem.source:type_name -> alonabot.v1.ForwardSource
+	17, // 43: alonabot.v1.ForwardItem.chain:type_name -> alonabot.v1.MessageChain
+	40, // 44: alonabot.v1.SendRequest.to:type_name -> alonabot.v1.Target
+	17, // 45: alonabot.v1.SendRequest.chain:type_name -> alonabot.v1.MessageChain
+	3,  // 46: alonabot.v1.SendResult.status:type_name -> alonabot.v1.SendStatus
+	40, // 47: alonabot.v1.SendResult.target:type_name -> alonabot.v1.Target
+	42, // 48: alonabot.v1.SendResult.capabilities_used:type_name -> alonabot.v1.Capability
+	35, // 49: alonabot.v1.SendResult.part_results:type_name -> alonabot.v1.PartResult
+	4,  // 50: alonabot.v1.PartResult.status:type_name -> alonabot.v1.PartStatus
+	44, // 51: alonabot.v1.PartResult.error:type_name -> alonabot.v1.ErrorInfo
+	5,  // 52: alonabot.v1.BotOfflinePayload.reason:type_name -> alonabot.v1.BotOfflineReason
+	44, // 53: alonabot.v1.BotOfflinePayload.safe_error:type_name -> alonabot.v1.ErrorInfo
+	40, // 54: alonabot.v1.EditRequest.to:type_name -> alonabot.v1.Target
+	17, // 55: alonabot.v1.EditRequest.chain:type_name -> alonabot.v1.MessageChain
+	56, // [56:56] is the sub-list for method output_type
+	56, // [56:56] is the sub-list for method input_type
+	56, // [56:56] is the sub-list for extension type_name
+	56, // [56:56] is the sub-list for extension extendee
+	0,  // [0:56] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_message_proto_init() }
@@ -3292,6 +3391,7 @@ func file_alonabot_v1_message_proto_init() {
 		(*Segment_Reference)(nil),
 		(*Segment_Buttons)(nil),
 		(*Segment_Forward)(nil),
+		(*Segment_Extension)(nil),
 	}
 	file_alonabot_v1_message_proto_msgTypes[13].OneofWrappers = []any{}
 	file_alonabot_v1_message_proto_msgTypes[14].OneofWrappers = []any{}
@@ -3314,7 +3414,7 @@ func file_alonabot_v1_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_message_proto_rawDesc), len(file_alonabot_v1_message_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   33,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -98,6 +98,9 @@ func (c *Context) Send(chain message.Chain, opts ...SendOption) (*pb.SendResult,
 	if err != nil {
 		return nil, err
 	}
+	if err := checkMessageEncoding(chain); err != nil {
+		return nil, err
+	}
 	options := &sendOptions{}
 	for _, option := range opts {
 		option(options)

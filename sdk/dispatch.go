@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"runtime/debug"
 
@@ -19,8 +20,12 @@ const invocationSchemaVersion = 1
 func businessHandler(reg *Registration) wire.Handler {
 	handlers := make(map[string]func(*Context) error, len(reg.Events)+len(reg.Schedules))
 	commands := make(map[string]Command, len(reg.Commands))
+	buttons := make(map[string]EventRoute)
 	for _, route := range reg.Events {
 		handlers[route.RouteID] = route.Handler
+		if route.decodeButton != nil {
+			buttons[route.RouteID] = route
+		}
 	}
 	// 定时任务与事件共用手动 Handler 路径，取消后仍等待用户函数实际返回。
 	for _, job := range reg.Schedules {
@@ -67,6 +72,14 @@ func businessHandler(reg *Registration) wire.Handler {
 				}
 				return result, nil
 			})
+		}
+		if button, ok := buttons[in.Target]; ok {
+			value, err := button.decodeButton(request.GetEvent().GetEventPayload().GetButtonClicked().GetValue())
+			if err != nil {
+				slog.Warn("decode button value", "route_id", in.Target, "error", err)
+				return invokeHandler(ctx, in, request.GetEvent(), false, nil, func(*Context) (message.Chain, error) { return nil, nil })
+			}
+			handler = func(c *Context) error { return button.handleButton(c, value) }
 		}
 		return invokeHandler(ctx, in, request.GetEvent(), false, nil, func(c *Context) (message.Chain, error) { return nil, handler(c) })
 	}
@@ -115,7 +128,12 @@ func invokeHandler(ctx context.Context, in *wire.Inbound, event *pb.Event, autoR
 		}
 	}
 	if err == nil && autoReply && len(chain) != 0 {
-		outcome.Chain = chain.Proto()
+		if err := checkMessageEncoding(chain); err != nil {
+			failure := err.(*Error)
+			response.Err = &pb.ErrorInfo{Code: failure.Code, SafeMessage: failure.Message}
+		} else {
+			outcome.Chain = chain.Proto()
+		}
 	}
 
 	return response
