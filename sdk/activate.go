@@ -12,6 +12,7 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
 )
 
@@ -212,11 +213,11 @@ var activeSession atomic.Pointer[activation]
 func currentSession() (*wire.Session, error) {
 	a := activeSession.Load()
 	if a == nil || !a.ready.Load() || a.stopping.Load() {
-		return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "plugin session is not active"}
+		return nil, &Error{Code: errcode.FailedPrecondition, Message: "plugin session is not active"}
 	}
 	select {
 	case <-a.sess.Done():
-		return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "plugin session has stopped"}
+		return nil, &Error{Code: errcode.FailedPrecondition, Message: "plugin session has stopped"}
 	default:
 		return a.sess, nil
 	}

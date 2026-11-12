@@ -8,7 +8,9 @@ package adapter
 
 import (
 	"context"
-	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
+	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
 // Account 保存已经平台验证的账号身份。
@@ -28,11 +30,11 @@ type StartRequest struct {
 // Core 绑定一个实例，交付事件、推进游标、报告致命故障并读取出站媒体。
 type Core interface {
 	// Deliver 交付事件与游标；accepted=false 表示队列满而丢弃，游标已持久化，Adapter 不重放。
-	Deliver(ctx context.Context, ev *pb.Event, cursor []byte) (accepted bool, err error)
+	Deliver(ctx context.Context, ev *message.Event, cursor []byte) (accepted bool, err error)
 	// SaveCursor 保存没有事件时推进的接收游标。
 	SaveCursor(ctx context.Context, cursor []byte) error
 	// ReportFailure 关闭实例交付入口；调用后 Deliver 返回错误。
-	ReportFailure(ctx context.Context, safe *pb.ErrorInfo) error
+	ReportFailure(ctx context.Context, safe *errcode.Error) error
 	// ReadMedia 读取 Core 为当前 Adapter Session 签发的只读媒体令牌。
 	ReadMedia(ctx context.Context, token string, offset uint64, length uint32) ([]byte, uint64, bool, error)
 }
@@ -48,9 +50,9 @@ type Instance interface {
 	// Account 返回已经平台验证的账号身份。
 	Account() Account
 	// Capabilities 返回本实例声明的平台能力。
-	Capabilities() []*pb.Capability
+	Capabilities() []message.Capability
 	// Send 同时保留发送结果和安全错误，包括部分成功。
-	Send(ctx context.Context, target *pb.Target, chain *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo)
+	Send(ctx context.Context, to message.Session, chain message.Chain) (*message.SendResult, *errcode.Error)
 	// Stop 返回前停止接收；此后实例的 Deliver、SaveCursor 均返回 FAILED_PRECONDITION。
 	Stop(ctx context.Context) error
 }
@@ -58,7 +60,7 @@ type Instance interface {
 // Adapter 描述平台接入，并为每个账号创建独立实例。
 type Adapter interface {
 	// Descriptor 返回平台注册描述。
-	Descriptor() *pb.AdapterDescriptor
+	Descriptor() *Descriptor
 	// Start 完成凭证与账号检查、启动接收后返回；Core 在实例停止前一直有效。
 	Start(ctx context.Context, req StartRequest, core Core) (Instance, error)
 }

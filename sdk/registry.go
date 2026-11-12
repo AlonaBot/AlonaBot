@@ -10,6 +10,7 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
@@ -22,8 +23,8 @@ type Command struct {
 	Aliases  [][]string     // 完整别名路径，不附加分组前缀
 	Priority int32          // 数值越小越先，缺省为 0
 	Handler  any            // 已通过签名检查的处理函数
-	Mode     pb.HandlerMode // 由签名推出的 Handler 形态
-	Params   []pb.ParamType // Context 之后各参数的类型
+	mode     pb.HandlerMode // 由签名推出的 Handler 形态
+	params   []pb.ParamType // Context 之后各参数的类型
 
 	permission Permission
 	routeID    string          // 文本匹配与 Raw 的显式路由 ID
@@ -238,7 +239,7 @@ func (r *CommandRegistry) register(c Command, options routeOptions) {
 		r.errs = append(r.errs, invalidCommand("command %q: %v", commandRouteID(c), err))
 		return
 	}
-	c.Mode, c.Params = mode, params
+	c.mode, c.params = mode, params
 	c.Aliases, c.Priority = options.aliases, options.priority
 	spec := c.spec
 	spec.Path, spec.HandlerMode = c.Path, mode
@@ -302,7 +303,7 @@ func (r *CommandRegistry) register(c Command, options routeOptions) {
 }
 
 func invalidCommand(format string, args ...any) *Error {
-	return &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: fmt.Sprintf(format, args...)}
+	return &Error{Code: errcode.InvalidArgument, Message: fmt.Sprintf(format, args...)}
 }
 
 // add 对已校验的命令检查跨注册项冲突；问题记入 errs。
@@ -344,15 +345,15 @@ func (r *CommandRegistry) add(c Command) {
 var (
 	contextType = reflect.TypeOf((*Context)(nil))
 	errorType   = reflect.TypeOf((*error)(nil)).Elem()
-	chainType   = reflect.TypeOf(message.Chain(nil))
+	contentType = reflect.TypeFor[message.Content]()
 	paramTypes  = map[reflect.Type]pb.ParamType{
-		reflect.TypeOf(""):                      pb.ParamType_PARAM_TYPE_STRING,
-		reflect.TypeOf(int64(0)):                pb.ParamType_PARAM_TYPE_INT,
-		reflect.TypeOf(float64(0)):              pb.ParamType_PARAM_TYPE_FLOAT,
-		reflect.TypeOf(false):                   pb.ParamType_PARAM_TYPE_BOOL,
-		reflect.TypeOf(UserID("")):              pb.ParamType_PARAM_TYPE_USER,
-		reflect.TypeOf((*pb.ImageSegment)(nil)): pb.ParamType_PARAM_TYPE_IMAGE,
-		reflect.TypeOf((*pb.MessageChain)(nil)): pb.ParamType_PARAM_TYPE_MESSAGE,
+		reflect.TypeOf(""):                           pb.ParamType_PARAM_TYPE_STRING,
+		reflect.TypeOf(int64(0)):                     pb.ParamType_PARAM_TYPE_INT,
+		reflect.TypeOf(float64(0)):                   pb.ParamType_PARAM_TYPE_FLOAT,
+		reflect.TypeOf(false):                        pb.ParamType_PARAM_TYPE_BOOL,
+		reflect.TypeOf(UserID("")):                   pb.ParamType_PARAM_TYPE_USER,
+		reflect.TypeOf((*message.ImageSegment)(nil)): pb.ParamType_PARAM_TYPE_IMAGE,
+		reflect.TypeOf(message.Chain(nil)):           pb.ParamType_PARAM_TYPE_MESSAGE,
 	}
 )
 
@@ -369,17 +370,17 @@ func checkHandler(h any) (pb.HandlerMode, []pb.ParamType, error) {
 	for i := 1; i < t.NumIn(); i++ {
 		p, ok := paramTypes[t.In(i)]
 		if !ok {
-			return 0, nil, fmt.Errorf("type %[2]s of parameter %[1]d is not supported (expected string, int64, float64, bool, sdk.UserID, *pb.ImageSegment or *pb.MessageChain)", i, t.In(i))
+			return 0, nil, fmt.Errorf("type %[2]s of parameter %[1]d is not supported (expected string, int64, float64, bool, sdk.UserID, *message.ImageSegment or message.Chain)", i, t.In(i))
 		}
 		params = append(params, p)
 	}
 	switch {
 	case t.NumOut() == 1 && t.Out(0) == errorType:
 		return pb.HandlerMode_HANDLER_MODE_MANUAL, params, nil
-	case t.NumOut() == 2 && t.Out(0) == chainType && t.Out(1) == errorType:
+	case t.NumOut() == 2 && t.Out(0) == contentType && t.Out(1) == errorType:
 		return pb.HandlerMode_HANDLER_MODE_AUTO_REPLY, params, nil
 	}
-	return 0, nil, fmt.Errorf("handler may only return error or (message.Chain, error): %s", t)
+	return 0, nil, fmt.Errorf("handler may only return error or (message.Content, error): %s", t)
 }
 
 // HTTPRoute 记录一条插件 HTTP 路由；path 相对于 /plugins/{id}，端口由 SDK 托管（D-25）。
@@ -390,14 +391,14 @@ type HTTPRoute struct {
 	Handler http.Handler
 	// Public 为 true 时无需 Core 会话即可访问。
 	Public   bool
-	AuthMode pb.HttpAuthMode // 认证方式；公开路由必须是回调验证方式之一
+	AuthMode HTTPAuth // 认证方式；公开路由必须是回调验证方式之一
 }
 
 // HTTPOption 调整 HTTP 路由声明。
 type HTTPOption func(*HTTPRoute)
 
 // Public 声明公开回调路由；插件必须自行验证 state、签名或 nonce。
-func Public(mode pb.HttpAuthMode) HTTPOption {
+func Public(mode HTTPAuth) HTTPOption {
 	return func(r *HTTPRoute) { r.Public, r.AuthMode = true, mode }
 }
 
@@ -409,7 +410,7 @@ type HTTPRegistry struct {
 
 // Handle 注册 method+path 的 Handler；同插件内重复的 method+path 报错。
 func (r *HTTPRegistry) Handle(method, path string, h http.Handler, opts ...HTTPOption) {
-	route := HTTPRoute{Method: strings.ToUpper(method), Path: path, Handler: h, AuthMode: pb.HttpAuthMode_HTTP_AUTH_MODE_CORE_SESSION}
+	route := HTTPRoute{Method: strings.ToUpper(method), Path: path, Handler: h, AuthMode: AuthCoreSession}
 	for _, o := range opts {
 		o(&route)
 	}
@@ -420,9 +421,9 @@ func (r *HTTPRegistry) Handle(method, path string, h http.Handler, opts ...HTTPO
 		r.errs = append(r.errs, fmt.Errorf("HTTP method must be standard and uppercase: input %q, registered %q", method, route.Method))
 	case !canonicalHTTPPath(route.Path):
 		r.errs = append(r.errs, fmt.Errorf("HTTP path %q must start with / and be canonical", route.Path))
-	case route.Public && route.AuthMode != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_STATE && route.AuthMode != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_SIGNATURE:
-		r.errs = append(r.errs, fmt.Errorf("public HTTP route %s %s must declare state or signature verification", method, path))
-	case !route.Public && route.AuthMode != pb.HttpAuthMode_HTTP_AUTH_MODE_CORE_SESSION:
+	case route.Public && route.AuthMode != AuthCallbackState && route.AuthMode != AuthCallbackSignature && route.AuthMode != AuthCallbackNonce:
+		r.errs = append(r.errs, fmt.Errorf("public HTTP route %s %s must declare state, signature or nonce verification", method, path))
+	case !route.Public && route.AuthMode != AuthCoreSession:
 		r.errs = append(r.errs, fmt.Errorf("private HTTP route %s %s must use Core session authentication", method, path))
 	default:
 		for _, e := range r.routes {

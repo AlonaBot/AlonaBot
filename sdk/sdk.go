@@ -6,10 +6,10 @@
 // Base 为 [Root] 的全部 Hook 提供空的默认实现，根插件只覆盖需要的方法。
 //
 // 命令与事件 Handler 可通过 [Context.Send] 回复原事件目标，通过 [Context.Edit] 编辑已发送的文本消息；
-// 自动回复型命令返回 Chain，由 Core 发送一次。后台 [Send] 与 [Edit] 须显式给出 Target。
+// 自动回复型命令返回 Content，由 Core 发送一次。后台 [Send] 显式给出会话，[Edit] 给出消息句柄。
 // 文本匹配与 Raw 共用 Handler 调用上下文；HTTP 路由由 SDK 托管 Listener 并校验 Session 凭证。
 // [Context.T] 按 Actor 与 Core 默认语言格式化文案；后台调用 [T] 使用 Core 默认语言。
-// 定时任务随 REGISTER 声明，由 Core Scheduler 触发；其 Handler 没有 Actor 与默认 Target，Send 与 Edit 须显式 To。
+// 定时任务随 REGISTER 声明，由 Core Scheduler 触发；其 Handler 没有 Actor 与默认 Target，Send 须显式 To。
 //
 // 包的组成：
 //   - 插件的 main 调用 [Run]；[Collect] 单独收集注册项，供检查与测试使用。
@@ -27,47 +27,78 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
-	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
+	"github.com/AlonaBot/AlonaBot/sdk/internal/convert"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
-	"google.golang.org/protobuf/proto"
 )
 
 // Error 携带协议错误码，供插件判断失败原因。
-type Error struct {
-	Code    pb.ErrorCode
-	Message string
-}
-
-// Error 返回「错误码: 说明」。
-func (e *Error) Error() string { return e.Code.String() + ": " + e.Message }
+type Error = errcode.Error
 
 // ErrNotImplemented 表示该入口的运行行为尚未实现。
-var ErrNotImplemented = &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "SDK runtime is not implemented yet"}
+var ErrNotImplemented = &Error{Code: errcode.Unsupported, Message: "SDK runtime is not implemented yet"}
 
 // Context 只在一次 Handler 调用期间有效。
 type Context struct {
-	ctx       context.Context // 本次调用的 context
-	stopped   atomic.Bool     // 锁存的停止传播标记，一经设置不能清除
-	active    atomic.Bool     // Handler 返回时关闭，阻止继续使用父调用
-	inbound   *wire.Inbound
-	caller    string    // Core 下发的服务直接调用方
-	actor     *pb.Actor // Service 继承的可信 Actor；事件调用从 event 读取。
-	event     *pb.Event
-	match     []string // 本次 Regex 的捕获组
-	autoReply bool     // 自动回复 Handler 通过返回 Chain 发送
+	ctx           context.Context // 本次调用的 context
+	stopped       atomic.Bool     // 锁存的停止传播标记，一经设置不能清除
+	active        atomic.Bool     // Handler 返回时关闭，阻止继续使用父调用
+	inbound       *wire.Inbound
+	caller        string     // Core 下发的服务直接调用方
+	actor         *pb.Actor  // Service 继承的可信 Actor；事件调用从 event 读取。
+	defaultTarget *pb.Target // Service 继承的可信默认目标；事件调用从 event 读取。
+	event         *pb.Event
+	eventOnce     sync.Once
+	publicEvent   *message.Event
+	match         []string // 本次 Regex 的捕获组
+	autoReply     bool     // 自动回复 Handler 通过返回 Content 发送
 }
 
 // Context 返回本次调用的 context（含 deadline 与取消）。
 func (c *Context) Context() context.Context { return c.ctx }
 
 // Event 返回本次 Handler 接收的标准事件。
-func (c *Context) Event() *pb.Event { return c.event }
+func (c *Context) Event() *message.Event {
+	c.eventOnce.Do(func() { c.publicEvent = convert.EventFromProto(c.event) })
+	return c.publicEvent
+}
+
+// User 返回本次调用触发者的用户字符串，没有 Actor 时为空。
+func (c *Context) User() message.User {
+	actor := c.actor
+	adapterID := c.defaultTarget.GetAdapterId()
+	if c.event != nil {
+		actor = c.event.Actor
+		adapterID = c.event.GetAdapterId()
+	}
+	if actor == nil || (c.event == nil && c.defaultTarget == nil) {
+		return ""
+	}
+	return message.NewUser(adapterID, actor.ExternalUserId)
+}
+
+// Session 返回本次调用的默认会话，没有默认目标时为空。
+func (c *Context) Session() message.Session {
+	return convert.SessionFromProto(c.target())
+}
+
+func (c *Context) target() *pb.Target {
+	target := c.defaultTarget
+	if c.event != nil {
+		target = c.event.Target
+	}
+	return target
+}
+
+// Reply 向当前默认会话回复一段文本。
+func (c *Context) Reply(text string) error { _, err := c.Send(message.Text(text)); return err }
 
 // Logger 返回附带本次调用 trace_id、route_id 和 call_id 的默认 Logger。
 func (c *Context) Logger() *slog.Logger {
@@ -77,58 +108,46 @@ func (c *Context) Logger() *slog.Logger {
 // StopPropagation 锁存停止传播标记；一经设置不能重新打开传播，并且不受业务错误影响。
 func (c *Context) StopPropagation() { c.stopped.Store(true) }
 
-// SendOption 调整一次 Context.Send 或 Context.Edit。
+// SendOption 调整一次消息发送的会话或机器人实例。
 type SendOption func(*sendOptions)
 
-// sendOptions 汇总 SendOption 设置的发送或编辑参数。
 type sendOptions struct {
-	to *pb.Target // 显式目标；为 nil 时使用默认 Target
+	to       message.Session
+	explicit bool
+	via      string
 }
 
-// To 指定显式目标；没有真实入站默认目标时必须使用。
-func To(t *pb.Target) SendOption { return func(o *sendOptions) { o.to = t } }
+// To 指定发送会话，实例缺省由 Core 选择。
+func To(s message.Session) SendOption { return func(o *sendOptions) { o.to = s; o.explicit = true } }
 
-// Send 发起一次逻辑发送。出错时仍可能返回已确认的部分结果（MESSAGE-MODEL §4）。
-func (c *Context) Send(chain message.Chain, opts ...SendOption) (*pb.SendResult, error) {
-	// 1. Handler 有效期与 Session 就绪状态均满足时才允许发起子请求。
+// Via 指定发送的机器人实例。
+func Via(instanceID string) SendOption { return func(o *sendOptions) { o.via = instanceID } }
+
+// Send 向当前会话或显式目标发送内容，保留已确认的部分结果。
+func (c *Context) Send(m message.Content, opts ...SendOption) (*message.SendResult, error) {
 	if !c.active.Load() {
-		return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "handler context has expired"}
-	}
-	session, err := currentSession()
-	if err != nil {
-		return nil, err
-	}
-	if err := checkMessageEncoding(chain); err != nil {
-		return nil, err
+		return nil, errcode.FailedPrecondition.New("handler context has expired")
 	}
 	options := &sendOptions{}
 	for _, option := range opts {
 		option(options)
 	}
-	request := &pb.SendRequest{To: options.to, Chain: chain.Proto()}
-	encoded, err := proto.Marshal(request)
-	if err != nil {
-		return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "encode SendRequest: " + err.Error()}
-	}
-	// 2. 父调用编号绑定 Core 记录的真实 Target；不回传插件自报的调用身份。
-	response, callError := session.Call(c.ctx, wire.Request{Target: wire.ServiceSend,
-		ParentCallID: c.inbound.CallID, TraceID: c.inbound.TraceID,
-		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: invocationSchemaVersion, Bytes: encoded}})
-	// 3. 即使出现 ErrorInfo，仍先解码并保留有效的部分发送结果。
-	var result *pb.SendResult
-	if response.Payload.SchemaID != "" {
-		result = &pb.SendResult{}
-		if err := decodeInvocation(response.Payload, result); err != nil {
-			return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, Message: err.Error()}
+	var target *pb.Target
+	if options.explicit || options.via != "" {
+		to := options.to
+		if !options.explicit {
+			to = c.Session()
+			if to == "" {
+				return nil, errcode.NoDefaultTarget.New("no default target")
+			}
+		}
+		var err error
+		target, err = convert.TargetToProto(to, options.via)
+		if err != nil {
+			return nil, err
 		}
 	}
-	if response.Err != nil {
-		return result, &Error{Code: validate.PublicCode(response.Err.GetCode()), Message: response.Err.GetSafeMessage()}
-	}
-	if callError != nil {
-		return result, &Error{Code: validate.PublicCode(wire.CodeOf(callError)), Message: callError.Error()}
-	}
-	return result, nil
+	return callSend(c.ctx, target, m, c.inbound, c.target())
 }
 
 // Run 作为插件 main 的入口：连接 Core、完成握手并处理请求，直到停止。

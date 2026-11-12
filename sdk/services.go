@@ -13,6 +13,7 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/google/jsonschema-go/jsonschema"
 	"google.golang.org/protobuf/proto"
 )
@@ -89,11 +90,11 @@ func JSON[In, Out any](r *ServiceRegistry, name string) *JSONService[In, Out] {
 		}
 		route := b.route(inputID, outputID, inputVersion, outputVersion, pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, func(c *Context, data []byte) ([]byte, error) {
 			if err := validateServiceJSON(inputSchema, data); err != nil {
-				return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "invalid service input"}
+				return nil, &Error{Code: errcode.InvalidArgument, Message: "invalid service input"}
 			}
 			var input In
 			if err := json.Unmarshal(data, &input); err != nil {
-				return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "decode service input: " + err.Error()}
+				return nil, &Error{Code: errcode.InvalidArgument, Message: "decode service input: " + err.Error()}
 			}
 			out, err := handler(c, input)
 			if err != nil {
@@ -105,7 +106,7 @@ func JSON[In, Out any](r *ServiceRegistry, name string) *JSONService[In, Out] {
 			}
 			if err := validateServiceJSON(outputSchema, encoded); err != nil {
 				c.Logger().Error("service output schema validation failed", "schema_id", outputID)
-				return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, Message: "invalid service output"}
+				return nil, &Error{Code: errcode.Internal, Message: "invalid service output"}
 			}
 			return encoded, nil
 		})
@@ -169,7 +170,7 @@ func Proto[In, Out proto.Message](r *ServiceRegistry, name string) *ProtoService
 		return b.route(validate.SchemaID(input), validate.SchemaID(output), invocationSchemaVersion, invocationSchemaVersion, pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, func(c *Context, data []byte) ([]byte, error) {
 			input := newServiceMessage[In]()
 			if err := proto.Unmarshal(data, input); err != nil {
-				return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "decode service input: " + err.Error()}
+				return nil, &Error{Code: errcode.InvalidArgument, Message: "decode service input: " + err.Error()}
 			}
 			output, err := handler(c, input)
 			if err != nil {
@@ -230,7 +231,7 @@ func (b *serviceBuilder) route(inputID, outputID string, inputVersion, outputVer
 func jsonType[T any]() (string, uint32, error) {
 	typ := reflect.TypeFor[T]()
 	if typ.PkgPath() == "" || typ.Name() == "" || strings.Contains(typ.Name(), "[") {
-		return "", 0, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: fmt.Sprintf("JSON type must be a named non-generic value type: %s", typ)}
+		return "", 0, &Error{Code: errcode.InvalidArgument, Message: fmt.Sprintf("JSON type must be a named non-generic value type: %s", typ)}
 	}
 	version := uint32(1)
 	if value, ok := any(*new(T)).(interface{ SchemaVersion() uint32 }); ok {
@@ -339,7 +340,7 @@ func invokeService(ctx context.Context, in *wire.Inbound, service serviceRoute) 
 	}
 	// 2. 将父请求绑定到 Handler 有效期；恢复 panic 时记录完整堆栈。
 	ctx, cancel := context.WithCancel(ctx)
-	c := &Context{ctx: ctx, inbound: in, actor: request.GetContext().GetActor()}
+	c := &Context{ctx: ctx, inbound: in, actor: request.GetContext().GetActor(), defaultTarget: request.GetContext().GetDefaultTarget()}
 	chain := request.GetContext().GetPluginChain()
 	if len(chain) > 0 {
 		c.caller = chain[len(chain)-1]
@@ -358,7 +359,7 @@ func invokeService(ctx context.Context, in *wire.Inbound, service serviceRoute) 
 	if err != nil {
 		var public *Error
 		if errors.As(err, &public) {
-			return dispatchError(public.Code, public.Message)
+			return dispatchError(pb.ErrorCode(public.Code), public.Message)
 		}
 		c.Logger().Error("service returned an error", "error", err)
 		return dispatchError(pb.ErrorCode_ERROR_CODE_INTERNAL, "service returned an error")
@@ -385,17 +386,17 @@ func CallJSON[In, Out any](ctx context.Context, target string, in In) (Out, erro
 	}
 	encoded, err := json.Marshal(in)
 	if err != nil {
-		return out, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "encode service input: " + err.Error()}
+		return out, &Error{Code: errcode.InvalidArgument, Message: "encode service input: " + err.Error()}
 	}
 	response, err := callService(ctx, session, target, wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: inputID, SchemaVersion: inputVersion, Bytes: encoded})
 	if err != nil {
 		return out, err
 	}
 	if response.Encoding != pb.PayloadEncoding_PAYLOAD_ENCODING_JSON || response.SchemaID != outputID || response.SchemaVersion != outputVersion {
-		return out, &Error{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, Message: "expected JSON service output"}
+		return out, &Error{Code: errcode.Internal, Message: "expected JSON service output"}
 	}
 	if err := json.Unmarshal(response.Bytes, &out); err != nil {
-		return out, &Error{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, Message: "decode service output: " + err.Error()}
+		return out, &Error{Code: errcode.Internal, Message: "decode service output: " + err.Error()}
 	}
 	return out, nil
 }
@@ -410,7 +411,7 @@ func CallProto[Out proto.Message](ctx context.Context, target string, in proto.M
 	}
 	encoded, err := proto.Marshal(in)
 	if err != nil {
-		return zero, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "encode service input: " + err.Error()}
+		return zero, &Error{Code: errcode.InvalidArgument, Message: "encode service input: " + err.Error()}
 	}
 	response, err := callService(ctx, session, target, wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(in), SchemaVersion: invocationSchemaVersion, Bytes: encoded})
 	if err != nil {
@@ -418,7 +419,7 @@ func CallProto[Out proto.Message](ctx context.Context, target string, in proto.M
 	}
 	out := newServiceMessage[Out]()
 	if err := decodeInvocation(response, out); err != nil {
-		return zero, &Error{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, Message: "decode service output: " + err.Error()}
+		return zero, &Error{Code: errcode.Internal, Message: "decode service output: " + err.Error()}
 	}
 	return out, nil
 }
@@ -427,7 +428,7 @@ func callService(ctx context.Context, session *wire.Session, target string, payl
 	request := wire.Request{Target: target, Payload: payload}
 	if c, ok := ctx.Value(serviceContextKey{}).(*Context); ok {
 		if !c.active.Load() {
-			return wire.Payload{}, &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "handler context has expired"}
+			return wire.Payload{}, &Error{Code: errcode.FailedPrecondition, Message: "handler context has expired"}
 		}
 		request.ParentCallID = c.inbound.CallID
 		request.TraceID = c.inbound.TraceID
@@ -435,7 +436,7 @@ func callService(ctx context.Context, session *wire.Session, target string, payl
 	response, err := session.Call(ctx, request)
 	if err != nil {
 		info := err.(*wire.CallError).ErrorInfo
-		return response.Payload, &Error{Code: validate.PublicCode(info.GetCode()), Message: info.GetSafeMessage()}
+		return response.Payload, &Error{Code: errcode.Code(validate.PublicCode(info.GetCode())), Message: info.GetSafeMessage()}
 	}
 	return response.Payload, nil
 }

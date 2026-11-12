@@ -138,7 +138,7 @@ func (h *httpListener) serveHTTP(w http.ResponseWriter, r *http.Request) {
 
 func appendHTTPRoutes(r *pb.Register, routes []HTTPRoute) {
 	for _, route := range routes {
-		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: "http." + route.Method + "." + hex.EncodeToString([]byte(route.Path)), Kind: pb.RouteKind_ROUTE_KIND_HTTP, DefaultEnabled: true, Spec: &pb.RouteDescriptor_Http{Http: &pb.HttpRouteSpec{Method: route.Method, Path: route.Path, IsPublic: route.Public, AuthMode: route.AuthMode}}})
+		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: "http." + route.Method + "." + hex.EncodeToString([]byte(route.Path)), Kind: pb.RouteKind_ROUTE_KIND_HTTP, DefaultEnabled: true, Spec: &pb.RouteDescriptor_Http{Http: &pb.HttpRouteSpec{Method: route.Method, Path: route.Path, IsPublic: route.Public, AuthMode: pb.HttpAuthMode(route.AuthMode)}}})
 	}
 }
 
@@ -168,3 +168,13 @@ func canonicalHTTPPath(raw string) bool {
 	}
 	return strings.HasPrefix(raw, "/") && canonical == raw && !strings.ContainsAny(raw, "?#") && !strings.Contains(raw, "..")
 }
+
+// HTTPAuth 指定插件 HTTP 路由的认证方式。
+type HTTPAuth int
+
+const (
+	AuthCoreSession       HTTPAuth = iota + 1 // Core 会话认证。
+	AuthCallbackState                         // 插件校验 state。
+	AuthCallbackSignature                     // 插件校验签名。
+	AuthCallbackNonce                         // 插件校验 nonce。
+)

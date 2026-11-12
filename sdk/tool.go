@@ -7,6 +7,7 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 )
 
 // ToolDefault 指定工具未被管理策略覆盖时的调用方式。
@@ -42,7 +43,7 @@ func ListTools(ctx context.Context) ([]ToolInfo, error) {
 		case pb.ToolPolicy_TOOL_POLICY_CONFIRM:
 			policy = "confirm"
 		default:
-			return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, Message: fmt.Sprintf("unexpected tool policy %d for %q", entry.GetPolicy(), entry.GetName())}
+			return nil, &Error{Code: errcode.Internal, Message: fmt.Sprintf("unexpected tool policy %d for %q", entry.GetPolicy(), entry.GetName())}
 		}
 		tools = append(tools, ToolInfo{Name: entry.GetName(), Description: entry.GetDescription(), InputSchema: json.RawMessage(entry.GetInputSchemaJson()), Policy: policy})
 	}

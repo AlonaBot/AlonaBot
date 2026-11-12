@@ -14,6 +14,9 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk/adapter"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
+	"github.com/AlonaBot/AlonaBot/sdk/internal/convert"
+	"github.com/AlonaBot/AlonaBot/sdk/message"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -99,7 +102,11 @@ func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, a adapter.Adapt
 	}
 	stop := withWatchdog(conn, time.Until(time.UnixMilli(boot.GetPreparationDeadlineUnixMs())))
 	defer stop()
-	reg := &pb.Register{Adapter: a.Descriptor(), CandidateConfigJson: boot.GetCandidateConfigJson(), CandidateConfigVersion: boot.GetTargetConfigVersion(), Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	descriptor, err := convert.DescriptorToProto((*convert.Descriptor)(a.Descriptor()))
+	if err != nil {
+		return err
+	}
+	reg := &pb.Register{Adapter: descriptor, CandidateConfigJson: boot.GetCandidateConfigJson(), CandidateConfigVersion: boot.GetTargetConfigVersion(), Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 	frame, err := wire.ControlEnvelope(ack.SessionId, ack.ChosenMinor, l.pluginID, pb.FrameKind_FRAME_KIND_REGISTER, reg)
 	if err != nil {
 		return err
@@ -126,7 +133,7 @@ func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, a adapter.Adapt
 	case *pb.Prepared:
 		return nil
 	case *pb.SessionError:
-		return &Error{Code: validate.PublicCode(frame.GetError().GetCode()), Message: frame.GetError().GetSafeMessage()}
+		return &Error{Code: errcode.Code(validate.PublicCode(frame.GetError().GetCode())), Message: frame.GetError().GetSafeMessage()}
 	default:
 		return fmt.Errorf("unexpected %s during adapter preparation", frame.GetKind())
 	}
@@ -238,7 +245,7 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			code := pb.ErrorCode_ERROR_CODE_INTERNAL
 			var public *Error
 			if errors.As(err, &public) {
-				code = public.Code
+				code = pb.ErrorCode(public.Code)
 			}
 			return dispatchError(code, adapterSafeError(err, []byte(request.ConfigJson)))
 		}
@@ -247,7 +254,7 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 		account := instance.Account()
 		// 读取能力由实例接口决定，避免平台自报能力与实际 RPC 入口不一致。
 		var capabilities []*pb.Capability
-		for _, capability := range instance.Capabilities() {
+		for _, capability := range convert.CapabilitiesToProto(instance.Capabilities()) {
 			if capability.GetName() != adapterMediaReadCapability {
 				capabilities = append(capabilities, capability)
 			}
@@ -309,7 +316,7 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			message := err.Error()
 			var public *Error
 			if errors.As(err, &public) {
-				code = validate.PublicCode(public.Code)
+				code = validate.PublicCode(pb.ErrorCode(public.Code))
 				message = public.Message
 			}
 			return dispatchError(code, adapterSafeError(errors.New(message), config))
@@ -336,11 +343,15 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support message editing")
 		}
 		// 平台请求在锁外执行，停止和其他实例的操作可继续推进。
-		result, safe := editor.Edit(ctx, request.Target, request.PlatformMessageId, request.Chain)
+		result, safe := editor.Edit(ctx, convert.SessionFromProto(request.Target), request.PlatformMessageId, convert.ChainFromProto(request.Chain, request.Target))
 		if result == nil {
-			return wire.Response{Err: safe}
+			return wire.Response{Err: convert.ErrorToProto(safe)}
 		}
-		return adapterResponse(result, safe)
+		encoded, err := convert.SendResultToProto(result, request.Target)
+		if err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		return adapterResponse(encoded, convert.ErrorToProto(safe))
 	case wire.ServiceAdapterSend:
 		request := &pb.AdapterSendRequest{}
 		if err := decodeInvocation(in.Payload, request); err != nil {
@@ -358,11 +369,15 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 		}
 		instance := entry.instance
 		r.mu.Unlock()
-		result, safe := instance.Send(ctx, request.Target, request.Chain)
+		result, safe := instance.Send(ctx, convert.SessionFromProto(request.Target), convert.ChainFromProto(request.Chain, request.Target))
 		if result == nil {
-			return wire.Response{Err: safe}
+			return wire.Response{Err: convert.ErrorToProto(safe)}
 		}
-		return adapterResponse(result, safe)
+		encoded, err := convert.SendResultToProto(result, request.Target)
+		if err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		return adapterResponse(encoded, convert.ErrorToProto(safe))
 	default:
 		return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter service not found")
 	}
@@ -371,7 +386,7 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 func (c *adapterCore) call(ctx context.Context, target string, request, response proto.Message) error {
 	a := c.runtime.activation
 	if !a.ready.Load() || a.stopping.Load() {
-		return &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "adapter session is not active"}
+		return &Error{Code: errcode.FailedPrecondition, Message: "adapter session is not active"}
 	}
 
 	payload, err := adapterPayload(request)
@@ -380,7 +395,7 @@ func (c *adapterCore) call(ctx context.Context, target string, request, response
 	}
 	result, err := c.runtime.session.Call(ctx, wire.Request{Target: target, Payload: payload})
 	if result.Err != nil {
-		return &Error{Code: validate.PublicCode(result.Err.GetCode()), Message: result.Err.GetSafeMessage()}
+		return &Error{Code: errcode.Code(validate.PublicCode(result.Err.GetCode())), Message: result.Err.GetSafeMessage()}
 	}
 	if err != nil {
 		return err
@@ -388,25 +403,29 @@ func (c *adapterCore) call(ctx context.Context, target string, request, response
 	return decodeInvocation(result.Payload, response)
 }
 
-func (c *adapterCore) Deliver(ctx context.Context, ev *pb.Event, cursor []byte) (bool, error) {
+func (c *adapterCore) Deliver(ctx context.Context, ev *message.Event, cursor []byte) (bool, error) {
 	if c.stopped.Load() {
-		return false, &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "adapter instance has stopped"}
+		return false, &Error{Code: errcode.FailedPrecondition, Message: "adapter instance has stopped"}
+	}
+	event, err := convert.EventToProto(ev)
+	if err != nil {
+		return false, err
 	}
 	response := &pb.AdapterDeliverResponse{}
-	err := c.call(ctx, wire.ServiceCoreAdapterDeliver, &pb.AdapterDeliverRequest{InstanceId: c.instanceID, Event: ev, Cursor: cursor}, response)
+	err = c.call(ctx, wire.ServiceCoreAdapterDeliver, &pb.AdapterDeliverRequest{InstanceId: c.instanceID, Event: event, Cursor: cursor}, response)
 	return response.Accepted, err
 }
 
 func (c *adapterCore) SaveCursor(ctx context.Context, cursor []byte) error {
 	if c.stopped.Load() {
-		return &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "adapter instance has stopped"}
+		return &Error{Code: errcode.FailedPrecondition, Message: "adapter instance has stopped"}
 	}
 	return c.call(ctx, wire.ServiceCoreAdapterCursor, &pb.AdapterCursorRequest{InstanceId: c.instanceID, Cursor: cursor}, &pb.AdapterCursorResponse{})
 }
 
 func (c *adapterCore) ReadMedia(ctx context.Context, token string, offset uint64, length uint32) ([]byte, uint64, bool, error) {
 	if c.stopped.Load() {
-		return nil, 0, false, &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "adapter instance has stopped"}
+		return nil, 0, false, &Error{Code: errcode.FailedPrecondition, Message: "adapter instance has stopped"}
 	}
 	response := &pb.ReadResponse{}
 	if err := c.call(ctx, wire.ServiceMediaRead, &pb.ReadRequest{Token: token, Offset: offset, Length: length}, response); err != nil {
@@ -415,9 +434,9 @@ func (c *adapterCore) ReadMedia(ctx context.Context, token string, offset uint64
 	return response.Data, response.NextOffset, response.Eof, nil
 }
 
-func (c *adapterCore) ReportFailure(ctx context.Context, safe *pb.ErrorInfo) error {
+func (c *adapterCore) ReportFailure(ctx context.Context, safe *errcode.Error) error {
 	c.stopped.Store(true)
-	return c.call(ctx, wire.ServiceCoreAdapterStatus, &pb.AdapterStatusRequest{InstanceId: c.instanceID, State: pb.AdapterInstanceState_ADAPTER_INSTANCE_STATE_FAILED, SafeError: safe}, &pb.AdapterStatusResponse{})
+	return c.call(ctx, wire.ServiceCoreAdapterStatus, &pb.AdapterStatusRequest{InstanceId: c.instanceID, State: pb.AdapterInstanceState_ADAPTER_INSTANCE_STATE_FAILED, SafeError: convert.ErrorToProto(safe)}, &pb.AdapterStatusResponse{})
 }
 
 // adapterSafeError 保留错误上下文，移除实例配置全文与其中的字符串值。

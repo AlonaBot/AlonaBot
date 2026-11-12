@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"reflect"
 	"runtime/debug"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/sdk/internal/convert"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 	"google.golang.org/protobuf/proto"
 )
@@ -20,12 +20,9 @@ const invocationSchemaVersion = 1
 func businessHandler(reg *Registration) wire.Handler {
 	handlers := make(map[string]func(*Context) error, len(reg.Events)+len(reg.Schedules))
 	commands := make(map[string]Command, len(reg.Commands))
-	buttons := make(map[string]EventRoute)
 	for _, route := range reg.Events {
-		handlers[route.RouteID] = route.Handler
-		if route.decodeButton != nil {
-			buttons[route.RouteID] = route
-		}
+		route := route
+		handlers[route.RouteID] = func(c *Context) error { return invokeEvent(c, route) }
 	}
 	// 定时任务与事件共用手动 Handler 路径，取消后仍等待用户函数实际返回。
 	for _, job := range reg.Schedules {
@@ -52,7 +49,7 @@ func businessHandler(reg *Registration) wire.Handler {
 			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "handler route_id does not match target")
 		}
 		if commandRoute {
-			args, err := commandArguments(command, request.GetCommand())
+			args, err := commandArguments(command, request.GetCommand(), request.GetEvent().GetTarget())
 			if err != nil {
 				return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 			}
@@ -60,12 +57,14 @@ func businessHandler(reg *Registration) wire.Handler {
 			if command.spec.GetMatch() == pb.CommandMatch_COMMAND_MATCH_REGEX {
 				groups = request.GetCommand().GetRegexGroups()
 			}
-			return invokeHandler(ctx, in, request.GetEvent(), command.Mode == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY, groups, func(c *Context) (message.Chain, error) {
+			return invokeHandler(ctx, in, request.GetEvent(), command.mode == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY, groups, func(c *Context) (message.Content, error) {
 				args[0] = reflect.ValueOf(c)
 				values := reflect.ValueOf(command.Handler).Call(args)
-				var result message.Chain
+				var result message.Content
 				if c.autoReply {
-					result = values[0].Interface().(message.Chain)
+					if !values[0].IsNil() {
+						result = values[0].Interface().(message.Content)
+					}
 				}
 				if value := values[len(values)-1]; !value.IsNil() {
 					return result, value.Interface().(error)
@@ -73,19 +72,11 @@ func businessHandler(reg *Registration) wire.Handler {
 				return result, nil
 			})
 		}
-		if button, ok := buttons[in.Target]; ok {
-			value, err := button.decodeButton(request.GetEvent().GetEventPayload().GetButtonClicked().GetValue())
-			if err != nil {
-				slog.Warn("decode button value", "route_id", in.Target, "error", err)
-				return invokeHandler(ctx, in, request.GetEvent(), false, nil, func(*Context) (message.Chain, error) { return nil, nil })
-			}
-			handler = func(c *Context) error { return button.handleButton(c, value) }
-		}
-		return invokeHandler(ctx, in, request.GetEvent(), false, nil, func(c *Context) (message.Chain, error) { return nil, handler(c) })
+		return invokeHandler(ctx, in, request.GetEvent(), false, nil, func(c *Context) (message.Content, error) { return nil, handler(c) })
 	}
 }
 
-func invokeHandler(ctx context.Context, in *wire.Inbound, event *pb.Event, autoReply bool, groups []string, handler func(*Context) (message.Chain, error)) (response wire.Response) {
+func invokeHandler(ctx context.Context, in *wire.Inbound, event *pb.Event, autoReply bool, groups []string, handler func(*Context) (message.Content, error)) (response wire.Response) {
 	// 1. 为 Handler 建立独立有效期，返回或 panic 后取消所有仍在使用 Context 的工作。
 	ctx, cancel := context.WithCancel(ctx)
 	c := &Context{ctx: ctx, inbound: in, event: event, autoReply: autoReply, match: groups}
@@ -121,18 +112,19 @@ func invokeHandler(ctx context.Context, in *wire.Inbound, event *pb.Event, autoR
 	if err != nil {
 		var public *Error
 		if errors.As(err, &public) {
-			response.Err = &pb.ErrorInfo{Code: public.Code, SafeMessage: public.Message}
+			response.Err = &pb.ErrorInfo{Code: pb.ErrorCode(public.Code), SafeMessage: public.Message}
 		} else {
 			c.Logger().Error("handler returned an error", "error", err)
 			response.Err = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "handler returned an error"}
 		}
 	}
-	if err == nil && autoReply && len(chain) != 0 {
-		if err := checkMessageEncoding(chain); err != nil {
+	if err == nil && autoReply && len(convert.ContentChain(chain)) != 0 {
+		encoded, err := convert.ContentToProto(chain, event.GetTarget())
+		if err != nil {
 			failure := err.(*Error)
-			response.Err = &pb.ErrorInfo{Code: failure.Code, SafeMessage: failure.Message}
+			response.Err = convert.ErrorToProto(failure)
 		} else {
-			outcome.Chain = chain.Proto()
+			outcome.Chain = encoded
 		}
 	}
 
@@ -142,14 +134,14 @@ func invokeHandler(ctx context.Context, in *wire.Inbound, event *pb.Event, autoR
 // Match 返回本次 Regex 的捕获组，包含下标 0 的整体匹配；其他路由返回 nil。
 func (c *Context) Match() []string { return c.match }
 
-func commandArguments(command Command, invocation *pb.CommandInvocation) ([]reflect.Value, error) {
+func commandArguments(command Command, invocation *pb.CommandInvocation, target *pb.Target) ([]reflect.Value, error) {
 	// 1. 调用载荷与 Handler 必须对应注册时的同一份参数描述。
 	mode, types, err := checkHandler(command.Handler)
 	if err != nil {
 		return nil, err
 	}
 	params := command.spec.GetParams()
-	if invocation == nil || len(invocation.GetArgs()) != len(params) || len(types) != len(params) || mode != command.Mode {
+	if invocation == nil || len(invocation.GetArgs()) != len(params) || len(types) != len(params) || mode != command.mode {
 		return nil, errors.New("command arguments or handler do not match the registered signature")
 	}
 	args := make([]reflect.Value, len(params)+1)
@@ -179,9 +171,9 @@ func commandArguments(command Command, invocation *pb.CommandInvocation) ([]refl
 		case *pb.ArgValue_UserId:
 			args[i+1] = reflect.ValueOf(UserID(value.UserId))
 		case *pb.ArgValue_Image:
-			args[i+1] = reflect.ValueOf(value.Image)
+			args[i+1] = reflect.ValueOf(convert.ImageFromProto(value.Image))
 		case *pb.ArgValue_Message:
-			args[i+1] = reflect.ValueOf(value.Message)
+			args[i+1] = reflect.ValueOf(convert.ChainFromProto(value.Message, target))
 		}
 		if args[i+1].Type() != handlerType.In(i+1) {
 			return nil, fmt.Errorf("parameter %q value has an incorrect type", param.GetName())

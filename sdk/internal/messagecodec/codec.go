@@ -1,12 +1,12 @@
-// Package messagecodec 在 SDK 根包与消息构造包之间传递编码失败，保持消息公开接口精简。
+// Package messagecodec 在 SDK 根包与消息构造包之间传递消息的私有编码状态。
 //
-// Button 保存按钮的 JSON 编码结果；Failure 随片段保留错误，发起请求前由 Error 读取。
+// Button 保存按钮的 JSON 编码结果；Failure 保留编码错误；ReferenceOrigin 保留引用目标的省略信息。
 package messagecodec
 
 // Button 保存动作、标签、JSON 值与编码错误。
 type Button struct {
-	ActionID, Label, Value string
-	err                    error
+	ActionID, Label, Value, CoreToken string
+	err                               error
 }
 
 // NewButton 保留按钮编码的原始错误。
@@ -31,4 +31,20 @@ func Error(segment any) error {
 		return s.encodingError()
 	}
 	return nil
+}
+
+// ReferenceOrigin 保留入站引用省略目标时补全的句柄，以恢复原始可选字段。
+type ReferenceOrigin struct{ ref string }
+
+func (r *ReferenceOrigin) setImplicitReference(ref string) { r.ref = ref }
+func (r ReferenceOrigin) implicitReference() string        { return r.ref }
+
+// SetImplicitReference 将补全的句柄随引用片段保存。
+func SetImplicitReference(segment interface{ setImplicitReference(string) }, ref string) {
+	segment.setImplicitReference(ref)
+}
+
+// ImplicitReference 返回入站省略目标时补全的句柄，普通引用返回空串。
+func ImplicitReference(segment interface{ implicitReference() string }) string {
+	return segment.implicitReference()
 }

@@ -68,31 +68,31 @@ func (*plugin) OnConfigLoad(ctx context.Context, fromVersion uint32, raw json.Ra
 // Commands 注册 /note set、get、delete 与语言选择示例 /note hello。
 func (*plugin) Commands(r *sdk.CommandRegistry) {
 	g := r.Group("note")
-	g.Command("set").Handle(func(c *sdk.Context, key, value string) (message.Chain, error) {
+	g.Command("set").Handle(func(c *sdk.Context, key, value string) (message.Content, error) {
 		if err := saveNote(c.Context(), key, value); err != nil {
 			return nil, err
 		}
 		return reply(c, "note.saved", "key", key)
 	})
-	g.Command("get").Handle(func(c *sdk.Context, key string) (message.Chain, error) {
+	g.Command("get").Handle(func(c *sdk.Context, key string) (message.Content, error) {
 		value, err := readNote(c.Context(), key)
 		if err != nil {
 			return nil, err
 		}
 		return reply(c, "note.value", "key", key, "value", value)
 	})
-	g.Command("delete").Handle(func(c *sdk.Context, key string) (message.Chain, error) {
+	g.Command("delete").Handle(func(c *sdk.Context, key string) (message.Content, error) {
 		if err := deleteNote(c.Context(), key); err != nil {
 			return nil, err
 		}
 		return reply(c, "note.deleted", "key", key)
 	})
-	g.Command("hello").Handle(func(c *sdk.Context, name string) (message.Chain, error) {
+	g.Command("hello").Handle(func(c *sdk.Context, name string) (message.Content, error) {
 		return reply(c, "note.hello", "name", name)
 	})
 }
 
-func reply(c *sdk.Context, key string, args ...any) (message.Chain, error) {
+func reply(c *sdk.Context, key string, args ...any) (message.Content, error) {
 	return message.Chain{message.Text(c.T(key, args...))}, nil
 }
 

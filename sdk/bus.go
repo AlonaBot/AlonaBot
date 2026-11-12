@@ -14,6 +14,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -121,12 +122,12 @@ func Publish[T any](ctx context.Context, eventName string, payload T) (eventID s
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
-		return "", &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "encode bus event payload: " + err.Error()}
+		return "", &Error{Code: errcode.InvalidArgument, Message: "encode bus event payload: " + err.Error()}
 	}
 	request := &pb.PublishRequest{EventName: activeSession.Load().l.pluginID + "/" + eventName, SchemaId: schemaID, SchemaVersion: version, Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, Payload: encoded}
 	encoded, err = proto.Marshal(request)
 	if err != nil {
-		return "", &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "encode publish request: " + err.Error()}
+		return "", &Error{Code: errcode.InvalidArgument, Message: "encode publish request: " + err.Error()}
 	}
 	// 2. 独立请求不设置 parent_call_id、trace_id 或可信调用附件。
 	response, err := session.Call(ctx, wire.Request{Target: wire.ServiceBusPublish,
@@ -137,11 +138,11 @@ func Publish[T any](ctx context.Context, eventName string, payload T) (eventID s
 		if errors.As(err, &callError) {
 			message = callError.ErrorInfo.GetSafeMessage()
 		}
-		return "", &Error{Code: validate.PublicCode(wire.CodeOf(err)), Message: message}
+		return "", &Error{Code: errcode.Code(validate.PublicCode(wire.CodeOf(err))), Message: message}
 	}
 	result := &pb.PublishResponse{}
 	if err := decodeInvocation(response.Payload, result); err != nil {
-		return "", &Error{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, Message: err.Error()}
+		return "", &Error{Code: errcode.Internal, Message: err.Error()}
 	}
 	return result.GetEventId(), nil
 }

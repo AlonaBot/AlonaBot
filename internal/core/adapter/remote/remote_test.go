@@ -5,12 +5,14 @@ package remote_test
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -34,6 +36,9 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk"
 	sdkadapter "github.com/AlonaBot/AlonaBot/sdk/adapter"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
+	"github.com/AlonaBot/AlonaBot/sdk/message"
+	"github.com/google/jsonschema-go/jsonschema"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -49,6 +54,8 @@ func TestMain(m *testing.M) {
 	var err error
 	if mode == "plugin" {
 		err = sdk.Run(&loopPlugin{})
+	} else if mode == "schema-parse" || mode == "schema-resolve" {
+		err = invalidSchemaAdapter(mode)
 	} else {
 		err = sdk.RunAdapter(&loopAdapter{})
 	}
@@ -68,9 +75,23 @@ type observedEvent struct {
 	Payload     string
 }
 
-func observe(route string, c *sdk.Context) error {
-	payload := c.Event().GetEventPayload().GetAdapterEvent()
-	report := observedEvent{Route: route, Permissions: c.Event().GetActor().GetPermissions(), Version: payload.GetVersion(), Payload: payload.GetPayloadJson()}
+type poke struct {
+	User string `json:"user"`
+}
+
+func observe(route string, c *sdk.Context, value *poke) error {
+	report := observedEvent{Route: route}
+	if actor := c.Event().Actor; actor != nil {
+		report.Permissions = actor.Permissions
+	}
+	if value != nil {
+		data, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		report.Version = c.Event().Payload.(*message.AdapterEventPayload).Version
+		report.Payload = string(data)
+	}
 	data, err := json.Marshal(report)
 	if err != nil {
 		return err
@@ -85,23 +106,24 @@ func observe(route string, c *sdk.Context) error {
 
 // Events 记录真实插件收到的权限和扩展载荷，barrier 用于确定完整派发已结束。
 func (*loopPlugin) Events(r *sdk.EventRegistry) {
-	for _, route := range []struct{ id, event string }{{"loop", "message.created"}, {"extension", "loop.poke"}, {"uninstalled", "other.poke"}, {"barrier", "scheduled"}} {
-		r.On(route.id, route.event).Handle(func(c *sdk.Context) error { return observe(route.id, c) })
-	}
+	r.On("loop", sdk.MessageCreated).Handle(func(c *sdk.Context) error { return observe("loop", c, nil) })
+	r.On("extension", sdk.AdapterEvent[poke]("loop.poke", 1)).Handle(func(c *sdk.Context, value *poke) error { return observe("extension", c, value) })
+	r.On("uninstalled", sdk.AdapterEvent[poke]("other.poke", 1)).Handle(func(c *sdk.Context, value *poke) error { return observe("uninstalled", c, value) })
+	r.On("barrier", sdk.Scheduled).Handle(func(c *sdk.Context) error { return observe("barrier", c, nil) })
 }
 
 // Commands 让扩展事件误入命令层时留下可观察记录。
 func (*loopPlugin) Commands(r *sdk.CommandRegistry) {
-	r.Raw("raw").Handle(func(c *sdk.Context) error { return observe("raw", c) })
+	r.Raw("raw").Handle(func(c *sdk.Context) error { return observe("raw", c, nil) })
 }
 
 type loopAdapter struct{}
 
-func (*loopAdapter) Descriptor() *pb.AdapterDescriptor {
-	descriptor := &pb.AdapterDescriptor{AdapterId: "loop", Permissions: []*pb.PermissionDeclaration{
+func (*loopAdapter) Descriptor() *sdkadapter.Descriptor {
+	descriptor := &sdkadapter.Descriptor{AdapterID: "loop", Permissions: []sdkadapter.PermissionDeclaration{
 		{Name: "loop.owner", Implies: []string{"loop.admin"}, LabelKey: "permissions.owner"},
 		{Name: "loop.admin", Implies: []string{"chat_admin"}, LabelKey: "permissions.admin"},
-	}, Events: []*pb.EventDeclaration{{Name: "loop.poke", Version: 1, SchemaJson: `{"type":"object","properties":{"user":{"type":"string"}},"required":["user"]}`}}}
+	}, Events: []sdkadapter.EventDeclaration{sdkadapter.Event[poke]("loop.poke", 1)}}
 	switch os.Getenv(helperEnv) {
 	case "permission-prefix":
 		descriptor.Permissions[0].Name = "other.owner"
@@ -112,13 +134,79 @@ func (*loopAdapter) Descriptor() *pb.AdapterDescriptor {
 	case "permission-cycle":
 		descriptor.Permissions[1].Implies = []string{"loop.owner"}
 	case "event-prefix":
-		descriptor.Events[0].Name = "other.poke"
-	case "schema-parse":
-		descriptor.Events[0].SchemaJson = `{"type":1}`
-	case "schema-resolve":
-		descriptor.Events[0].SchemaJson = `{"$ref":"#/$defs/missing"}`
+		descriptor.Events[0] = sdkadapter.Event[poke]("other.poke", 1)
 	}
 	return descriptor
+}
+
+// invalidSchemaAdapter 直接发送非法 REGISTER，保留 Core 对恶意 wire Schema 的原有验收。
+func invalidSchemaAdapter(mode string) error {
+	var conn *wire.Conn
+	if os.Getenv(wire.EnvTransport) == wire.TransportStdio {
+		conn = wire.NewConn(os.Stdin, os.Stdout, os.Stdin)
+	} else {
+		stream, err := net.Dial("tcp", os.Getenv(wire.EnvCoreAddr))
+		if err != nil {
+			return err
+		}
+		conn = wire.NewStreamConn(stream)
+	}
+	defer conn.Close()
+	secret, err := hex.DecodeString(os.Getenv(wire.EnvSecret))
+	if err != nil {
+		return err
+	}
+	digest, err := hex.DecodeString(os.Getenv(wire.EnvBuildDigest))
+	if err != nil {
+		return err
+	}
+	id := os.Getenv(wire.EnvPluginID)
+	hello, err := wire.ControlEnvelope(nil, 0, id, pb.FrameKind_FRAME_KIND_HELLO, &pb.Hello{PluginId: id, Secret: secret, BuildDigest: digest, SupportedMajor: validate.ProtocolMajor, SupportedMinor: validate.ProtocolMinor})
+	if err != nil {
+		return err
+	}
+	if err := conn.WriteFrame(hello); err != nil {
+		return err
+	}
+	frame, err := conn.ReadFrame()
+	if err != nil {
+		return err
+	}
+	control, err := validate.DecodeControl(frame)
+	if err != nil {
+		return err
+	}
+	ack := control.(*pb.HelloAck)
+	schema := `{"type":1}`
+	if mode == "schema-resolve" {
+		schema = `{"$ref":"#/$defs/missing"}`
+	}
+	registration := &pb.Register{Adapter: &pb.AdapterDescriptor{AdapterId: "loop", Events: []*pb.EventDeclaration{{Name: "loop.poke", Version: 1, SchemaJson: schema}}}, CandidateConfigJson: ack.Bootstrap.CandidateConfigJson, CandidateConfigVersion: ack.Bootstrap.TargetConfigVersion, Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	frame, err = wire.ControlEnvelope(ack.SessionId, ack.ChosenMinor, id, pb.FrameKind_FRAME_KIND_REGISTER, registration)
+	if err != nil {
+		return err
+	}
+	if err := conn.WriteFrame(frame); err != nil {
+		return err
+	}
+	_, err = conn.ReadFrame()
+	return err
+}
+
+func expectedDescriptor(t *testing.T) *pb.AdapterDescriptor {
+	t.Helper()
+	schema, err := jsonschema.For[poke](nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &pb.AdapterDescriptor{AdapterId: "loop", Permissions: []*pb.PermissionDeclaration{
+		{Name: "loop.owner", Implies: []string{"loop.admin"}, LabelKey: "permissions.owner"},
+		{Name: "loop.admin", Implies: []string{"chat_admin"}, LabelKey: "permissions.admin"},
+	}, Events: []*pb.EventDeclaration{{Name: "loop.poke", Version: 1, SchemaJson: string(raw)}}}
 }
 func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core sdkadapter.Core) (sdkadapter.Instance, error) {
 	var config struct {
@@ -151,8 +239,8 @@ func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core s
 
 type mediaLoopInstance struct{ *loopInstance }
 
-func (i *mediaLoopInstance) Capabilities() []*pb.Capability {
-	return append(i.loopInstance.Capabilities(), &pb.Capability{Name: "media.read", Version: 2})
+func (i *mediaLoopInstance) Capabilities() []message.Capability {
+	return append(i.loopInstance.Capabilities(), message.Capability{Name: "media.read", Version: 2})
 }
 
 func (i *mediaLoopInstance) ReadPlatformFile(_ context.Context, fileID string, offset uint64, length uint32) ([]byte, uint64, bool, error) {
@@ -160,11 +248,11 @@ func (i *mediaLoopInstance) ReadPlatformFile(_ context.Context, fileID string, o
 	i.mediaReads++
 	i.mu.Unlock()
 	if fileID != "platform-file" {
-		return nil, 0, false, &sdk.Error{Code: pb.ErrorCode_ERROR_CODE_NOT_FOUND, Message: "platform file not found"}
+		return nil, 0, false, &sdk.Error{Code: errcode.NotFound, Message: "platform file not found"}
 	}
 	const content = "image bytes"
 	if offset > uint64(len(content)) {
-		return nil, 0, false, &sdk.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "media offset exceeds file size"}
+		return nil, 0, false, &sdk.Error{Code: errcode.InvalidArgument, Message: "media offset exceeds file size"}
 	}
 	end := min(offset+uint64(length), uint64(len(content)))
 	return []byte(content[offset:end]), end, end == uint64(len(content)), nil
@@ -184,8 +272,8 @@ type loopInstance struct {
 func (i *loopInstance) Account() sdkadapter.Account {
 	return sdkadapter.Account{ID: i.account, DisplayName: i.displayName, Username: i.username}
 }
-func (i *loopInstance) Capabilities() []*pb.Capability {
-	return []*pb.Capability{{Name: "message.text", Version: 1, Supported: true}}
+func (i *loopInstance) Capabilities() []message.Capability {
+	return []message.Capability{{Name: "message.text", Version: 1, Supported: true}}
 }
 func (i *loopInstance) Stop(context.Context) error {
 	i.mu.Lock()
@@ -196,82 +284,83 @@ func (i *loopInstance) Stop(context.Context) error {
 	}
 	return nil
 }
-func (i *loopInstance) Send(ctx context.Context, target *pb.Target, chain *pb.MessageChain) (*pb.SendResult, *pb.ErrorInfo) {
+func (i *loopInstance) Send(ctx context.Context, target message.Session, chain message.Chain) (*message.SendResult, *errcode.Error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	text := chain.GetSegments()[0].GetText().GetText()
+	text := chain.Text()
 	if text == "fail" {
-		if err := i.core.ReportFailure(ctx, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED, SafeMessage: "account rejected"}); err != nil {
-			return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}
+		if err := i.core.ReportFailure(ctx, errcode.Unauthenticated.New("account rejected")); err != nil {
+			return nil, errcode.Internal.New(err.Error())
 		}
-		if _, err := i.core.Deliver(ctx, &pb.Event{}, nil); err == nil {
-			return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "failed client accepted event"}
+		if _, err := i.core.Deliver(ctx, &message.Event{}, nil); err == nil {
+			return nil, errcode.Internal.New("failed client accepted event")
 		}
-		return &pb.SendResult{Status: pb.SendStatus_SEND_STATUS_ACCEPTED}, nil
+		return &message.SendResult{Status: message.SendAccepted}, nil
 	}
 	if text == "cursor" {
-		return &pb.SendResult{Status: pb.SendStatus_SEND_STATUS_ACCEPTED, PlatformMessageIds: []string{i.initial}}, nil
+		return &message.SendResult{Status: message.SendAccepted, PlatformMessageIDs: []string{i.initial}}, nil
 	}
 	if text == "media-read-count" {
-		return &pb.SendResult{Status: pb.SendStatus_SEND_STATUS_ACCEPTED, PlatformMessageIds: []string{strconv.Itoa(i.mediaReads)}}, nil
+		return &message.SendResult{Status: message.SendAccepted, PlatformMessageIDs: []string{strconv.Itoa(i.mediaReads)}}, nil
 	}
 	i.sequence++
 	id := i.id
 	if text == "forge" {
 		id = "other-instance"
 	}
-	ev := &pb.Event{EventId: "adapter-forged-id", EventType: "message.created", AdapterId: proto.String("loop"), AdapterInstanceId: proto.String(id), AccountId: proto.String(i.account), Target: target, EventPayload: &pb.EventPayload{Kind: &pb.EventPayload_MessageCreated{MessageCreated: &pb.MessageCreatedPayload{Chain: chain, PlatformMessageId: strconv.Itoa(i.sequence)}}}}
+	ev := &message.Event{ID: "adapter-forged-id", Type: "message.created", AdapterID: "loop", AdapterInstanceID: id, AccountID: i.account, Session: target, Payload: &message.CreatedPayload{Chain: chain, PlatformMessageID: strconv.Itoa(i.sequence)}}
 	switch text {
 	case "bot.online", "bot.offline", "scheduled":
-		ev.EventType = text
+		ev.Type = text
 	case "mismatched-payload":
-		ev.EventType = "message.edited"
+		ev.Type = "message.edited"
 	case "media-created":
-		ev.Message = &pb.PlatformMessage{Chain: chain}
+		ev.Message = &message.PlatformMessage{Chain: chain}
 	case "media-edited":
-		ev.Message = &pb.PlatformMessage{Chain: chain}
-		ev.EventType = "message.edited"
-		ev.EventPayload = &pb.EventPayload{Kind: &pb.EventPayload_MessageEdited{MessageEdited: &pb.MessageEditedPayload{Chain: chain, OldChain: chain}}}
+		ev.Message = &message.PlatformMessage{Chain: chain}
+		ev.Type = "message.edited"
+		ev.Payload = &message.EditedPayload{Chain: chain, OldChain: chain}
 	}
 	if text == "permissions" || strings.HasPrefix(text, "extension") || text == "actor-forge" || text == "target-forge" {
-		ev.Actor = &pb.Actor{ExternalUserId: "external-7", AdapterInstanceId: i.id, Permissions: []string{"loop.owner", "loop.unknown", "user", "admin", "chat_admin", "loop.owner"}}
+		ev.Actor = &message.Actor{ExternalUserID: "external-7", AdapterInstanceID: i.id, Permissions: []string{"loop.owner", "loop.unknown", "user", "admin", "chat_admin", "loop.owner"}}
 	}
 	if strings.HasPrefix(text, "extension") {
-		ev.EventType = "loop.poke"
-		payload := &pb.AdapterEventPayload{Version: 1, PayloadJson: `{"user":"external-7"}`}
-		ev.EventPayload = &pb.EventPayload{Kind: &pb.EventPayload_AdapterEvent{AdapterEvent: payload}}
+		ev.Type = "loop.poke"
+		payload := &message.AdapterEventPayload{Version: 1, PayloadJSON: `{"user":"external-7"}`}
+		ev.Payload = payload
 		switch text {
 		case "extension-unknown":
-			ev.EventType = "loop.unknown"
+			ev.Type = "loop.unknown"
 		case "extension-other":
-			ev.EventType = "other.poke"
+			ev.Type = "other.poke"
 		case "extension-version":
 			payload.Version = 2
 		case "extension-schema":
-			payload.PayloadJson = `{"user":7}`
+			payload.PayloadJSON = `{"user":7}`
 		case "extension-array":
-			payload.PayloadJson = `[]`
+			payload.PayloadJSON = `[]`
 		case "extension-json":
-			payload.PayloadJson = `{`
+			payload.PayloadJSON = `{`
+		case "extension-extra":
+			payload.PayloadJSON = `{"user":"external-7","extra":true}`
 		case "extension-branch":
-			ev.EventPayload = &pb.EventPayload{Kind: &pb.EventPayload_MessageCreated{MessageCreated: &pb.MessageCreatedPayload{Chain: chain}}}
+			ev.Payload = &message.CreatedPayload{Chain: chain}
 		}
 	}
 	if text == "actor-forge" {
-		ev.Actor.AdapterInstanceId = "other"
+		ev.Actor.AdapterInstanceID = "other"
 	}
 	if text == "target-forge" {
-		ev.Target = proto.CloneOf(target)
-		ev.Target.AccountId = "other"
+		ev.AccountID = "other"
 	}
 	accepted, err := i.core.Deliver(ctx, ev, []byte(strconv.Itoa(i.sequence)))
 	if err != nil {
-		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, SafeMessage: err.Error()}
+		return nil, errcode.InvalidArgument.New(err.Error())
 	}
 	if !accepted {
-		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, SafeMessage: "event queue full"}
+		return nil, errcode.ResourceExhausted.New("event queue full")
 	}
-	return &pb.SendResult{Status: pb.SendStatus_SEND_STATUS_ACCEPTED}, nil
+	return &message.SendResult{Status: message.SendAccepted}, nil
 }
 
 type eventSink struct {
@@ -894,7 +983,7 @@ func TestRemotePermissionsAndEvents(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
-			if !proto.Equal(running.Instance.Adapter, (&loopAdapter{}).Descriptor()) {
+			if !proto.Equal(running.Instance.Adapter, expectedDescriptor(t)) {
 				t.Fatalf("activated descriptor=%v", running.Instance.Adapter)
 			}
 			if err := process.Bind(ctx, running.Instance, caller); err != nil {
@@ -977,7 +1066,7 @@ func TestRemotePermissionsAndEvents(t *testing.T) {
 							t.Fatalf("rejected event advanced cursor: %q -> %q error=%v", cursor, after, err)
 						}
 					}
-					if err := dispatch.Deliver(ctx, &pb.Event{EventType: "scheduled", SourceKind: pb.EventSourceKind_EVENT_SOURCE_KIND_SCHEDULER}); err != nil {
+					if err := dispatch.Deliver(ctx, &pb.Event{EventType: "scheduled", SourceKind: pb.EventSourceKind_EVENT_SOURCE_KIND_SCHEDULER, EventPayload: &pb.EventPayload{Kind: &pb.EventPayload_Scheduled{Scheduled: &pb.ScheduledPayload{}}}}); err != nil {
 						t.Fatal(err)
 					}
 					deadline := time.Now().Add(5 * time.Second)
