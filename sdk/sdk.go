@@ -5,6 +5,7 @@
 // Run 把 log/slog 的默认 Logger 换成写 stderr 的 JSON 行，按 Core 下发的级别过滤（CONTRACTS §14）。
 // Base 为 [Root] 的全部 Hook 提供空的默认实现，根插件只覆盖需要的方法。
 //
+// [Context.Stream] 按当前事件实例的能力发送文本增量并节流编辑。
 // 命令与事件 Handler 可通过 [Context.Send] 回复原事件目标，通过 [Context.Edit] 编辑已发送的文本消息；
 // 自动回复型命令返回 Content，由 Core 发送一次。后台 [Send] 显式给出会话，[Edit] 给出消息句柄。
 // 文本匹配与 Raw 共用 Handler 调用上下文；HTTP 路由由 SDK 托管 Listener 并校验 Session 凭证。

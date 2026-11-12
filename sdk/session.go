@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
@@ -342,4 +343,100 @@ func prepareMigrations(ctx context.Context, root Root, descriptor *pb.DatabaseDe
 		}
 		return result.state, result.err
 	}
+}
+
+// streamTarget 保留完整 Target，话题缺省与显式值分别计入节流键。
+type streamTarget struct {
+	adapter, instance, account, chat, thread string
+	hasThread                                bool
+}
+
+// streamThrottle 用令牌串行化同目标的编辑；令牌持有者独占 last，无需跨 RPC 持锁。
+type streamThrottle struct {
+	token chan struct{}
+	last  time.Time
+}
+
+var streamSessions = struct {
+	sync.Mutex
+	targets map[*wire.Session]map[streamTarget]*streamThrottle
+}{targets: make(map[*wire.Session]map[streamTarget]*streamThrottle)}
+
+func sessionStreamThrottle(session *wire.Session, target *pb.Target) *streamThrottle {
+	key := streamTarget{target.AdapterId, target.AdapterInstanceId, target.AccountId, target.ChatId, target.GetThreadId(), target.ThreadId != nil}
+	streamSessions.Lock()
+	defer streamSessions.Unlock()
+	targets := streamSessions.targets[session]
+	if targets == nil {
+		targets = make(map[streamTarget]*streamThrottle)
+		streamSessions.targets[session] = targets
+		// 每个使用流的 Session 只有一个清理者，连接结束后释放全部目标状态。
+		go func() {
+			<-session.Done()
+			streamSessions.Lock()
+			delete(streamSessions.targets, session)
+			streamSessions.Unlock()
+		}()
+	}
+	throttle := targets[key]
+	if throttle == nil {
+		throttle = &streamThrottle{token: make(chan struct{}, 1)}
+		throttle.token <- struct{}{}
+		targets[key] = throttle
+	}
+	return throttle
+}
+
+func (s *streamThrottle) acquire(ctx context.Context, done <-chan struct{}, wait bool) (bool, error) {
+	// 排队与间隔等待都监听取消；未到刷新时机的增量留在调用者缓存中。
+	if wait {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-done:
+			return false, errcode.FailedPrecondition.New("plugin session has stopped")
+		case <-s.token:
+		}
+	} else {
+		select {
+		case <-s.token:
+		default:
+			return false, nil
+		}
+	}
+	release := func() { s.token <- struct{}{} }
+	if err := ctx.Err(); err != nil {
+		release()
+		return false, err
+	}
+	select {
+	case <-done:
+		release()
+		return false, errcode.FailedPrecondition.New("plugin session has stopped")
+	default:
+	}
+	if remaining := time.Until(s.last.Add(streamEditInterval)); remaining > 0 {
+		if !wait {
+			release()
+			return false, nil
+		}
+		timer := time.NewTimer(remaining)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			release()
+			return false, ctx.Err()
+		case <-done:
+			release()
+			return false, errcode.FailedPrecondition.New("plugin session has stopped")
+		case <-timer.C:
+		}
+	}
+	return true, nil
+}
+
+func (s *streamThrottle) release() {
+	// 从 RPC 完成时计时，确保阻塞或调度延迟也不会缩短实际 Edit 发起间隔。
+	s.last = time.Now()
+	s.token <- struct{}{}
 }

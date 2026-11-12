@@ -17,6 +17,22 @@ type Capability struct {
 	Name      string
 	Version   uint32
 	Supported bool
+	TextLimit *TextLimit // nil 表示未声明文本上限。
+}
+
+// TextUnit 指定文本限额的计量单位。
+type TextUnit int
+
+const (
+	TextUTF16CodeUnits    TextUnit = iota + 1 // TextUTF16CodeUnits 按 UTF-16 码元计数。
+	TextUnicodeCodePoints                     // TextUnicodeCodePoints 按 Unicode 码点计数。
+	TextBytes                                 // TextBytes 按 UTF-8 字节计数。
+)
+
+// TextLimit 声明单条文本的正整数上限与计量单位。
+type TextLimit struct {
+	Max  uint64
+	Unit TextUnit
 }
 
 // SourceKind 指定事件的来源类别。

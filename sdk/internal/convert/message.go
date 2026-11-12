@@ -81,7 +81,11 @@ func ErrorToProto(e *errcode.Error) *pb.ErrorInfo {
 func CapabilitiesFromProto(in []*pb.Capability) []message.Capability {
 	var out []message.Capability
 	for _, c := range in {
-		out = append(out, message.Capability{Name: c.Name, Version: c.Version, Supported: c.Supported})
+		capability := message.Capability{Name: c.Name, Version: c.Version, Supported: c.Supported}
+		if c.TextLimit != nil {
+			capability.TextLimit = &message.TextLimit{Max: c.TextLimit.Max, Unit: message.TextUnit(c.TextLimit.Unit)}
+		}
+		out = append(out, capability)
 	}
 	return out
 }
@@ -90,7 +94,11 @@ func CapabilitiesFromProto(in []*pb.Capability) []message.Capability {
 func CapabilitiesToProto(in []message.Capability) []*pb.Capability {
 	var out []*pb.Capability
 	for _, c := range in {
-		out = append(out, &pb.Capability{Name: c.Name, Version: c.Version, Supported: c.Supported})
+		capability := &pb.Capability{Name: c.Name, Version: c.Version, Supported: c.Supported}
+		if c.TextLimit != nil {
+			capability.TextLimit = &pb.TextLimit{Max: c.TextLimit.Max, Unit: pb.TextUnit(c.TextLimit.Unit)}
+		}
+		out = append(out, capability)
 	}
 	return out
 }

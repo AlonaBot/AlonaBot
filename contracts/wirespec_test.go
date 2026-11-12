@@ -107,6 +107,7 @@ func TestEnumValues(t *testing.T) {
 		// MESSAGE-MODEL §4。
 		{pb.AdapterInstanceState(0).Descriptor(), "ADAPTER_INSTANCE_STATE_", []string{"UNSPECIFIED", "FAILED"}},
 		{pb.BotOfflineReason(0).Descriptor(), "BOT_OFFLINE_REASON_", []string{"UNSPECIFIED", "STOPPED", "ADAPTER_EXITED", "INSTANCE_FAILED"}},
+		{pb.TextUnit(0).Descriptor(), "TEXT_UNIT_", []string{"UNSPECIFIED", "UTF16_CODE_UNITS", "UNICODE_CODE_POINTS", "BYTES"}},
 		{pb.SendStatus(0).Descriptor(), "SEND_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "PARTIAL", "REJECTED", "UNKNOWN"}},
 		{pb.PartStatus(0).Descriptor(), "PART_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "REJECTED", "UNKNOWN", "NOT_ATTEMPTED"}},
 		// MESSAGE-MODEL §3。
@@ -259,6 +260,8 @@ func TestBootstrapSessionLimitsFieldNumber(t *testing.T) {
 // TestAdapterFieldNumbers 固定 Adapter 载荷与追加字段的线上编号。
 func TestAdapterFieldNumbers(t *testing.T) {
 	cases := map[string][]string{
+		"Capability":                   {"name", "version", "supported", "text_limit"},
+		"TextLimit":                    {"max", "unit"},
 		"AdapterDescriptor":            {"adapter_id", "capabilities", "extensions", "permissions", "events"},
 		"PermissionDeclaration":        {"name", "implies", "label_key"},
 		"EventDeclaration":             {"name", "version", "schema_json"},
