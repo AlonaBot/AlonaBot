@@ -75,7 +75,7 @@
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 待派发 |
 | goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 等待前置 |
 | goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 等待前置 |
-| goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 等待前置 |
+| goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 待派发 |
 | goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 等待前置 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
@@ -5095,24 +5095,93 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-129 · T-04.14 命令名覆盖的 Core 侧
 
-状态：等待前置（T-03.17）。T-03.17（[PR #150](https://github.com/AlonaBot/AlonaBot/pull/150)，合并提交 `8eb7846`）已合并，前置均已合并，待审查者按合并后的代码写出范围、接口与测试段。T-04.10（[PR #133](https://github.com/AlonaBot/AlonaBot/pull/133)，合并提交 `3d618cb`）已合并：policy 的 Admin 与全局禁止改为按 Adapter（`IsAdmin(ctx, adapterID, actor)`、`Deny`/`Undeny(ctx, kind, adapterID, subjectID)`），`global_deny` 按 `adapter_id`，`CheckCommand` 与 `CheckSend` 签名不变。2026-11-10 按 D-128 新增。T-04.4（PR #88）已合并，合入的符号：`policy.Scope`（`ScopePlugin`、`ScopeGroup`、`ScopeRoute`）、`policy.Override{Permissions, Enabled}`、`Policy.SetOverride`、`Policy.Overrides`、`Policy.CheckCommand`，状态库的 `command_policy` 表；Router 的命令索引从注册描述读取路径与别名（`internal/core/router/index.go`）。T-04.10（goal-122）修改 policy，T-03.17（goal-108）提供命令菜单同步，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片修改 `internal/core/state/schema.sql`，按执行顺序的共享文件规则处理冲突；与 goal-71（T-14.1）都涉及 `core.command.list` 返回的命令名，后合并者同步。
+状态：待派发。前置均已合并：T-03.17（[PR #150](https://github.com/AlonaBot/AlonaBot/pull/150)，合并提交 `8eb7846`）、T-04.10（[PR #133](https://github.com/AlonaBot/AlonaBot/pull/133)，合并提交 `3d618cb`）、T-04.4（PR #88）。2026-11-12 审查者按 main `61bff90` 的代码写出范围、接口与测试段，要点如下：
 
-目标：管理员可以给一条按路径匹配的命令保存命令名覆盖，取代插件声明的路径与别名；Core 的匹配、遮蔽、usage 回复与命令菜单都使用生效的命令名，route_id、命令组与策略的作用域不变。本切片提供服务层与 Router 的行为，管理 API 由 goal-93 提供。
+- **状态库**：`command_policy` 表（`state.CommandPolicy{PluginID, Scope, Permissions, Enabled}`）现在由 `policy.SetOverride` 整行写入或删除（`PutCommandPolicy` 使用 `UpdateAll`，两项都为 nil 时 `DeleteCommandPolicy`）。按 PLAN 步骤 14，命令名写进同一张表的路由作用域行。为避免权限与启用的修改冲掉命令名，三个写入方法改为只更新各自的列，删除时只删三列都为 NULL 的行。
+- **Router**：`rebuildCommands` 在持有 `r.mu` 时从已激活插件的 `Routes()` 建立 `CommandIndex`。`CommandEntry{PluginID, RouteID, Priority, Path, Alias}` 记录命中的路径与是否为别名。`commandUsage` 从 `route.GetCommand()` 的 path 与 aliases 拼出 usage。`commandMenu` 以 `command.GetPath()` 作为菜单名，并用 `index.Lookup(path)` 确认胜出者。`CommandsChanged()` 由 `Policy.SetCommandsChanged` 注入，目前只调度菜单同步。
+- **索引读取不能做 I/O**：索引在锁内建立，所以命令名覆盖由 policy 保存在内存快照中，以注入函数交给 Router。
+- **路径校验**：命令路径的格式校验为 `validate.IsCommandToken`，同插件路径冲突在 `validate.Register` 中报 ALREADY_EXISTS。
+- **库模式装配**：`assembly.go` 已传入 `Policy`、`CommandState` 与 `SetCommandsChanged`。
+
+与 goal-71（T-14.1）都涉及 `core.command.list` 返回的命令名，后合并者同步。goal-39（T-09.4）的 `--purge` 删除命令策略行时，命令名随之删除。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-129（切片 T-04.14：命令名覆盖的 Core 侧）。goal 目录 goal-129，分支 goal-129，worktree .worktrees/goal-129，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：管理员可以给一条按路径匹配的命令保存命令名覆盖，取代插件声明的路径与别名。Core 的匹配、遮蔽、usage 回复与命令菜单都使用生效的命令名，route_id、命令组与策略的作用域不变。本切片提供服务层与 Router 的行为，管理 API 由 goal-93 提供。
 
 依据：PLAN T-04 步骤 14；CONTRACTS §2.2、§2.3、§8（命令菜单）、§9.3；WIRE-FORMAT §3.5（`core.command.list`）；DECISIONS D-96、D-127、D-128；TEST-MATRIX V-115 的 Core 分项。
 
-要点：
-- 存储：`command_policy` 表增加保存命令名列表的列（写进唯一的初始迁移），只用于路由作用域；命令名是 token 列表，列表按保存的顺序保留，第一项为主名。
-- 服务层：在 policy 中增加按 plugin_id 与 route_id 设置、删除与读取命令名覆盖的方法，成功返回前已完成持久化。校验：列表非空；每个命令名按注册描述中命令路径的规则校验；列表内不重复；目标路由是按路径匹配的命令，文本匹配与 Raw 返回 INVALID_ARGUMENT；与本插件其他命令声明的路径或别名、或其他命令的覆盖相同时返回 ALREADY_EXISTS，safe_message 带冲突的 route_id。目标路由当前未注册时允许保存（插件可能未启用），只做格式与覆盖之间的检查，声明名的检查留到建索引时。
-- Router：建立命令索引时，有覆盖的命令只用覆盖的命令名参与匹配；与本插件其他命令声明的名字相同的覆盖项不进入索引并记入诊断，一项不剩时用声明的名字。覆盖变化后重建索引，下一次派发生效，不重启插件。禁用的命令占有的是它生效的命令名。
-- 不变的部分：route_id、参数、Handler、命令组归属；策略的命令组作用域仍按声明的规范路径；日志与策略中的标识不变。协议与 SDK 不改。
-- usage 回复：命令与别名部分取生效的命令名，主名在前。
-- 遮蔽诊断：按生效的命令名计算，并标出失效的覆盖项与指向未注册路由的覆盖。
-- 命令菜单（goal-108）：命令名取生效的主名，主名只有一个 token 的命令才算根命令；覆盖变化与命令策略变化一样触发受影响实例的同步。
-- 卸载：覆盖随命令策略归入配置，`--purge` 时删除（goal-39 的清理对象已含命令策略，本切片只核对新列随行删除）。
-- 测试：提交一个集成测试，覆盖保存覆盖后旧名不再匹配、新名匹配且 Handler 收到相同参数，删除覆盖后恢复；其余（重名拒绝、空列表、文本匹配路由、插件更新后覆盖项失效、跨插件遮蔽、usage 与菜单中的名字、Core 重启后保留）进本地自测。
+范围（只新增或修改这些）：
+- internal/core/state/schema.sql：在唯一的初始迁移中给 command_policy 表加 names 列；internal/core/state/policy.go：行类型字段与读写方法
+- internal/core/policy/：新增 names.go（命令名覆盖的校验、持久化与内存快照）；policy.go 只给 Policy 加快照字段
+- internal/core/router/：
+  - dispatch.go：Options 追加 CommandNames；
+  - router.go：New 保存 CommandNames；
+  - index.go：rebuildCommands 使用生效的命令名，CommandEntry 追加 Names，新增失效覆盖的诊断；
+  - command.go：commandUsage 使用生效的命令名；
+  - commands.go：commandMenu 使用生效的主名；CommandsChanged 先重建命令索引，再调度菜单同步。
+- 根包 assembly.go：启动时载入命令名快照，并给 router.Options 传入 CommandNames
+- internal/core/adapter/remote/remote_test.go：新增一个主路径集成测试
+- 上述包的 *_local_test.go
+允许的新跨模块边：无。
 
-不做：管理 API（goal-93）；页面（goal-44）；按命令组整体改名；同一插件内两条命令互换名字；`core.command.list` 的实现（goal-71）。
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. internal/core/state
+   command_policy 表追加 names TEXT 列（NULL 表示没有命令名覆盖；只出现在路由作用域行）
+   CommandPolicy 追加 Names [][]string `gorm:"column:names;serializer:json"` // nil 为 NULL；非 nil 时至少一项，第一项为主名
+   func (s *Store) PutCommandPolicy(ctx context.Context, row CommandPolicy) error   // 改为只 upsert permissions 与 enabled 两列，保留 names
+   func (s *Store) PutCommandNames(ctx context.Context, pluginID, scope string, names [][]string) error // 只 upsert names 列；nil 时置 NULL
+   func (s *Store) DeleteCommandPolicy(ctx context.Context, pluginID, scope string) error // 改为只在 permissions、enabled 与 names 都为 NULL 时删除该行，幂等
+   func (s *Store) AllCommandNames(ctx context.Context) ([]CommandPolicy, error)     // names 非 NULL 的全部行
+   policy.SetOverride 两项都为 nil 时，先经 PutCommandPolicy 把两列置 NULL，再调用 DeleteCommandPolicy；其余行为与错误码不变
+2. internal/core/policy
+   func (p *Policy) LoadCommandNames(ctx context.Context) error // 从状态库载入内存快照；装配在创建 Router 之前调用
+   func (p *Policy) SetCommandNames(ctx context.Context, pluginID, routeID string, names [][]string, routes []*pb.RouteDescriptor) error
+   // routes 为该插件当前注册的路由（未注册时为 nil）；成功返回前已持久化并更新快照，随后调用 commandsChanged
+   func (p *Policy) DeleteCommandNames(ctx context.Context, pluginID, routeID string) error // 删除覆盖即恢复声明；成功后调用 commandsChanged
+   func (p *Policy) CommandNames(pluginID string) map[string][][]string // 内存快照的深副本，route_id → 命令名列表；不做 I/O
+3. internal/core/router
+   Options 追加 CommandNames func(pluginID string) map[string][][]string // nil 时只用声明的路径与别名；在持有 r.mu 时调用，实现不得做 I/O
+   CommandEntry 追加 Names [][]string // 该路由生效的全部命令名，主名在前；Path 与 Alias 的含义不变（Alias 表示 Path 不是主名）
+   type InvalidName struct {
+       PluginID, RouteID string
+       Name              []string // 失效的覆盖项；整条覆盖指向未注册路由时为 nil
+       Reason            string   // "declared"：与本插件其他命令声明的名字相同；"unregistered"：路由未注册或不是按路径匹配的命令
+   }
+   func (x *CommandIndex) InvalidNames() []InvalidName // 按 plugin_id、route_id 与名字排序，返回的切片只读
+
+行为：
+- 校验（SetCommandNames）：
+  - names 非空，否则 INVALID_ARGUMENT；每个命令名非空，每个 token 满足 validate.IsCommandToken；列表内不能重复（按完整 token 序列比较）。
+  - routes 非 nil 时：目标路由必须存在且是 COMMAND_MATCH_PATH 的命令，文本匹配与 Raw 返回 INVALID_ARGUMENT；任一命令名与本插件其他命令声明的路径或别名相同时，返回 ALREADY_EXISTS，safe_message 带冲突的 route_id（不论那条命令自己是否被覆盖）。
+  - routes 为 nil（插件未注册）时只做格式检查，以及与其他覆盖之间的检查。
+  - 与本插件其他路由的覆盖相同时返回 ALREADY_EXISTS，并带出冲突的 route_id。
+  - 校验失败时不触及状态库与快照。
+- 生效：rebuildCommands 对有覆盖的命令只用覆盖的命令名参与匹配。与本插件其他命令声明的名字相同的覆盖项不进入索引，记为 InvalidName{Reason: "declared"}，一项不剩时退回声明的名字。快照中指向未注册、或不是按路径匹配的路由的覆盖，记为 "unregistered"。
+- 不变的部分：route_id、参数、Handler、命令组归属不变；策略的命令组作用域仍按声明的规范路径。跨插件同名照旧按 priority、plugin_id、route_id 遮蔽，Shadows 按生效的名字计算。禁用的命令占有它生效的命令名。
+- 变化：SetCommandNames 与 DeleteCommandNames 成功后经 commandsChanged 通知 Router。CommandsChanged 先在锁内重建命令索引，再调度菜单同步；下一次派发生效，不重启插件。
+- usage 回复：命令与别名部分改用生效的命令名，主名在前，其余以「 | 」连接。自定义 usage 的 `command` 参数取生效的主名。
+- 命令菜单：菜单名取生效的主名，主名只有一个 token 时才算根命令，以主名 Lookup 确认胜出者。说明仍按声明的规范路径查找（D-138：别名与生效的命令名共用原规范路径的说明）。
+- 卸载：命令名随命令策略行保存，停用时不删除；`--purge` 由 goal-39 删除命令策略时一并删除，本切片只核对 DeleteCommandPolicy 的新语义不留下空行。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：只新增 internal/core/adapter/remote/remote_test.go 的 TestCommandNameOverride。复用测试二进制中的插件进程、真实 Session、Router、policy 与临时 SQLite：
+  - 保存覆盖后旧名不再匹配；新名匹配，Handler 收到相同的参数；
+  - 删除覆盖后恢复声明的名字；
+  - 全程不重启插件。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：
+  - 空列表、非法 token、列表内重复；文本匹配与 Raw 路由；
+  - 与其他命令声明名或覆盖重名时的 ALREADY_EXISTS 与 route_id；未注册路由时允许保存；
+  - 插件更新后声明名与覆盖相同时，覆盖项失效并出现在 InvalidNames 中，覆盖一项不剩时退回声明名；
+  - 跨插件遮蔽按生效名计算；usage 与菜单中的名字；
+  - LoadCommandNames 后 Core 重启仍然生效；CommandsChanged 触发的重建与菜单同步。
+  - SetOverride 与 SetCommandNames 交替写入同一路由作用域时互不覆盖，三者都清空后行被删除。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race . ./internal/core/... ./sdk/...；go build ./...。
+
+不做：管理 API（goal-93）；页面（goal-44）；按命令组整体改名；同一插件内两条命令互换名字；`core.command.list` 的实现（goal-71）；卸载清理（goal-39）。
+```
 
 ### goal-130 · T-08.14 配置项的选项来源
 
