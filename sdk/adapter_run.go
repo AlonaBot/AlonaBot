@@ -496,6 +496,17 @@ func (c *adapterCore) ReportFailure(ctx context.Context, safe *errcode.Error) er
 	return c.call(ctx, wire.ServiceCoreAdapterStatus, &pb.AdapterStatusRequest{InstanceId: c.instanceID, State: pb.AdapterInstanceState_ADAPTER_INSTANCE_STATE_FAILED, SafeError: convert.ErrorToProto(safe)}, &pb.AdapterStatusResponse{})
 }
 
+func (c *adapterCore) MediaURL(ctx context.Context, token, baseURL string) (string, time.Time, error) {
+	if c.stopped.Load() {
+		return "", time.Time{}, &Error{Code: errcode.FailedPrecondition, Message: "adapter instance has stopped"}
+	}
+	response := &pb.MediaURLResponse{}
+	if err := c.call(ctx, wire.ServiceMediaURL, &pb.MediaURLRequest{Token: token, BaseUrl: baseURL}, response); err != nil {
+		return "", time.Time{}, err
+	}
+	return response.Url, time.UnixMilli(response.ExpiresAtUnixMs), nil
+}
+
 // adapterSafeError 保留错误上下文，移除实例配置全文与其中的字符串值。
 func adapterSafeError(err error, config []byte) string {
 	safe := err.Error()

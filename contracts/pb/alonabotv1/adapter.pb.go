@@ -1496,6 +1496,113 @@ func (x *AdapterActionRequest) GetParamsJson() string {
 	return ""
 }
 
+// MediaURLRequest 为本次发送的只读令牌申请临时 URL，载荷版本为 1。
+type MediaURLRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Token string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	// 空值使用 Core 配置的 base_url。
+	BaseUrl       string `protobuf:"bytes,2,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MediaURLRequest) Reset() {
+	*x = MediaURLRequest{}
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MediaURLRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MediaURLRequest) ProtoMessage() {}
+
+func (x *MediaURLRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MediaURLRequest.ProtoReflect.Descriptor instead.
+func (*MediaURLRequest) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *MediaURLRequest) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *MediaURLRequest) GetBaseUrl() string {
+	if x != nil {
+		return x.BaseUrl
+	}
+	return ""
+}
+
+// MediaURLResponse 返回租约期限内有效的单对象 URL，载荷版本为 1。
+type MediaURLResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Url             string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	ExpiresAtUnixMs int64                  `protobuf:"varint,2,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *MediaURLResponse) Reset() {
+	*x = MediaURLResponse{}
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MediaURLResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MediaURLResponse) ProtoMessage() {}
+
+func (x *MediaURLResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MediaURLResponse.ProtoReflect.Descriptor instead.
+func (*MediaURLResponse) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *MediaURLResponse) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *MediaURLResponse) GetExpiresAtUnixMs() int64 {
+	if x != nil {
+		return x.ExpiresAtUnixMs
+	}
+	return 0
+}
+
 var File_alonabot_v1_adapter_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_adapter_proto_rawDesc = "" +
@@ -1612,7 +1719,13 @@ const file_alonabot_v1_adapter_proto_rawDesc = "" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x04 \x01(\rR\aversion\x12\x1f\n" +
 	"\vparams_json\x18\x05 \x01(\tR\n" +
-	"paramsJson*a\n" +
+	"paramsJson\"B\n" +
+	"\x0fMediaURLRequest\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x12\x19\n" +
+	"\bbase_url\x18\x02 \x01(\tR\abaseUrl\"Q\n" +
+	"\x10MediaURLResponse\x12\x10\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\x12+\n" +
+	"\x12expires_at_unix_ms\x18\x02 \x01(\x03R\x0fexpiresAtUnixMs*a\n" +
 	"\x14AdapterInstanceState\x12&\n" +
 	"\"ADAPTER_INSTANCE_STATE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dADAPTER_INSTANCE_STATE_FAILED\x10\x01*\\\n" +
@@ -1634,7 +1747,7 @@ func file_alonabot_v1_adapter_proto_rawDescGZIP() []byte {
 }
 
 var file_alonabot_v1_adapter_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_alonabot_v1_adapter_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_alonabot_v1_adapter_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_alonabot_v1_adapter_proto_goTypes = []any{
 	(AdapterInstanceState)(0),            // 0: alonabot.v1.AdapterInstanceState
 	(ActionScope)(0),                     // 1: alonabot.v1.ActionScope
@@ -1661,30 +1774,32 @@ var file_alonabot_v1_adapter_proto_goTypes = []any{
 	(*ActionRequest)(nil),                // 22: alonabot.v1.ActionRequest
 	(*ActionResponse)(nil),               // 23: alonabot.v1.ActionResponse
 	(*AdapterActionRequest)(nil),         // 24: alonabot.v1.AdapterActionRequest
-	(*Capability)(nil),                   // 25: alonabot.v1.Capability
-	(*Target)(nil),                       // 26: alonabot.v1.Target
-	(*MessageChain)(nil),                 // 27: alonabot.v1.MessageChain
-	(*Event)(nil),                        // 28: alonabot.v1.Event
-	(*ErrorInfo)(nil),                    // 29: alonabot.v1.ErrorInfo
+	(*MediaURLRequest)(nil),              // 25: alonabot.v1.MediaURLRequest
+	(*MediaURLResponse)(nil),             // 26: alonabot.v1.MediaURLResponse
+	(*Capability)(nil),                   // 27: alonabot.v1.Capability
+	(*Target)(nil),                       // 28: alonabot.v1.Target
+	(*MessageChain)(nil),                 // 29: alonabot.v1.MessageChain
+	(*Event)(nil),                        // 30: alonabot.v1.Event
+	(*ErrorInfo)(nil),                    // 31: alonabot.v1.ErrorInfo
 }
 var file_alonabot_v1_adapter_proto_depIdxs = []int32{
-	25, // 0: alonabot.v1.AdapterDescriptor.capabilities:type_name -> alonabot.v1.Capability
+	27, // 0: alonabot.v1.AdapterDescriptor.capabilities:type_name -> alonabot.v1.Capability
 	3,  // 1: alonabot.v1.AdapterDescriptor.extensions:type_name -> alonabot.v1.ExtensionDeclaration
 	4,  // 2: alonabot.v1.AdapterDescriptor.permissions:type_name -> alonabot.v1.PermissionDeclaration
 	5,  // 3: alonabot.v1.AdapterDescriptor.events:type_name -> alonabot.v1.EventDeclaration
 	21, // 4: alonabot.v1.AdapterDescriptor.actions:type_name -> alonabot.v1.ActionDeclaration
-	25, // 5: alonabot.v1.AdapterInstanceStartResponse.capabilities:type_name -> alonabot.v1.Capability
-	26, // 6: alonabot.v1.AdapterSendRequest.target:type_name -> alonabot.v1.Target
-	27, // 7: alonabot.v1.AdapterSendRequest.chain:type_name -> alonabot.v1.MessageChain
-	28, // 8: alonabot.v1.AdapterDeliverRequest.event:type_name -> alonabot.v1.Event
+	27, // 5: alonabot.v1.AdapterInstanceStartResponse.capabilities:type_name -> alonabot.v1.Capability
+	28, // 6: alonabot.v1.AdapterSendRequest.target:type_name -> alonabot.v1.Target
+	29, // 7: alonabot.v1.AdapterSendRequest.chain:type_name -> alonabot.v1.MessageChain
+	30, // 8: alonabot.v1.AdapterDeliverRequest.event:type_name -> alonabot.v1.Event
 	0,  // 9: alonabot.v1.AdapterStatusRequest.state:type_name -> alonabot.v1.AdapterInstanceState
-	29, // 10: alonabot.v1.AdapterStatusRequest.safe_error:type_name -> alonabot.v1.ErrorInfo
-	26, // 11: alonabot.v1.AdapterEditRequest.target:type_name -> alonabot.v1.Target
-	27, // 12: alonabot.v1.AdapterEditRequest.chain:type_name -> alonabot.v1.MessageChain
-	26, // 13: alonabot.v1.AdapterDeleteRequest.target:type_name -> alonabot.v1.Target
+	31, // 10: alonabot.v1.AdapterStatusRequest.safe_error:type_name -> alonabot.v1.ErrorInfo
+	28, // 11: alonabot.v1.AdapterEditRequest.target:type_name -> alonabot.v1.Target
+	29, // 12: alonabot.v1.AdapterEditRequest.chain:type_name -> alonabot.v1.MessageChain
+	28, // 13: alonabot.v1.AdapterDeleteRequest.target:type_name -> alonabot.v1.Target
 	1,  // 14: alonabot.v1.ActionDeclaration.scope:type_name -> alonabot.v1.ActionScope
-	26, // 15: alonabot.v1.ActionRequest.to:type_name -> alonabot.v1.Target
-	26, // 16: alonabot.v1.AdapterActionRequest.target:type_name -> alonabot.v1.Target
+	28, // 15: alonabot.v1.ActionRequest.to:type_name -> alonabot.v1.Target
+	28, // 16: alonabot.v1.AdapterActionRequest.target:type_name -> alonabot.v1.Target
 	17, // [17:17] is the sub-list for method output_type
 	17, // [17:17] is the sub-list for method input_type
 	17, // [17:17] is the sub-list for extension type_name
@@ -1707,7 +1822,7 @@ func file_alonabot_v1_adapter_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_adapter_proto_rawDesc), len(file_alonabot_v1_adapter_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   23,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
