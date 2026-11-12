@@ -41,7 +41,8 @@ var sqlitePragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma
 // sqliteTimeParameters 保留原 libtnb DSN 的时间语义，使共享连接上的 GORM 时间可供 SQLite 时间函数使用。
 const sqliteTimeParameters = "_texttotime=1&_inttotime=1&_time_format=sqlite"
 
-// Open 返回当前 Session 的受管连接，同一 Session 重复调用复用同一个 *sql.DB。
+// Open 返回 ctx 所属 Session 的受管连接，同一 Session 重复调用复用同一个 *sql.DB。
+// 同进程后台调用传入生命周期 ctx 或其派生 ctx；独立进程可使用默认 Session。
 // 迁移阶段开始前及 Session 停止后返回 FAILED_PRECONDITION；无数据库时返回 ErrNoDatabase。
 // 只有 first_install 允许创建文件；连接由 SDK 关闭，调用方须保持它打开。
 // 事务回调须使用传入的 tx，在事务内等待此单连接池的独立查询会自锁。

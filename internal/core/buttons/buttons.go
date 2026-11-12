@@ -15,7 +15,6 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
-	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
@@ -30,12 +29,13 @@ const (
 type Service struct {
 	store   *state.Store
 	now     func() time.Time
+	ttl     time.Duration
 	current func(string) (string, []*pb.RouteDescriptor, bool)
 }
 
-// New 创建按钮签发与解析服务；now 与 current 由装配处显式提供。
-func New(store *state.Store, now func() time.Time, current func(pluginID string) (generationID string, routes []*pb.RouteDescriptor, ok bool)) *Service {
-	return &Service{store: store, now: now, current: current}
+// New 创建按钮签发与解析服务；时钟、有效期与当前路由由装配处显式提供。
+func New(store *state.Store, now func() time.Time, ttl time.Duration, current func(pluginID string) (generationID string, routes []*pb.RouteDescriptor, ok bool)) *Service {
+	return &Service{store: store, now: now, ttl: ttl, current: current}
 }
 
 // Issue 清除插件提供的 token，验证动作并持久化整条链的映射，成功后才写回 token。
@@ -65,7 +65,7 @@ func (s *Service) Issue(ctx context.Context, caller router.Caller, target *pb.Ta
 	}
 	// 2. 先验证全部动作与值，随机 token 不携带角色和业务数据。
 	records := make([]state.ButtonToken, 0, len(buttons))
-	expires := s.now().Add(tune.Defaults().ButtonTokenTTL).UnixMilli()
+	expires := s.now().Add(s.ttl).UnixMilli()
 	for _, button := range buttons {
 		route, ok := actions[button.GetActionId()]
 		if !ok {

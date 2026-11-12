@@ -382,6 +382,9 @@ func (i *loopInstance) Send(ctx context.Context, target message.Session, chain m
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	text := chain.Text()
+	if text == "media-source" {
+		return i.inspectMediaSource(ctx, chain)
+	}
 	if text == "fail" {
 		if err := i.core.ReportFailure(ctx, errcode.Unauthenticated.New("account rejected")); err != nil {
 			return nil, errcode.Internal.New(err.Error())

@@ -286,7 +286,7 @@ type Install struct {
 	Role        Role   `gorm:"column:role"`                 // 必填的安装角色
 	AdapterID   string `gorm:"column:adapter_id"`           // RoleAdapter 必填的平台类型
 	PluginID    string `gorm:"column:plugin_id;primaryKey"` // 插件 ID，主键
-	Source      string `gorm:"column:source"`               // 安装来源（开发模式为 dev-local）
+	Source      string `gorm:"column:source"`               // 安装来源（库模式为 dev）
 	Entrypoint  string `gorm:"column:entrypoint"`           // 入口可执行文件的路径
 	BuildDigest []byte `gorm:"column:build_digest"`         // 安装时已验证的归档摘要，经启动上下文交给 SDK 回显
 }

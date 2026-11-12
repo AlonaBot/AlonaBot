@@ -1,6 +1,7 @@
-// Package media 实现 Session 所有的媒体上传、引用和暂存配额。
+// Package media 管理 Session 所有的媒体对象、授权、发送租约和暂存配额。
 //
 // [Store] 经 [Store.AddServices] 提供顺序上传，经 [Store.Lookup] 查询已提交文件。
+// [Store.LeaseForSend] 准备出站来源，[Store.AddURLService] 与 [Store.ServeHTTP] 提供租约内的临时 URL。
 // 调用方负责定期 Sweep 和在 Session 结束时 ReleaseSession（CONTRACTS §1.3）。
 package media
 
@@ -14,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -83,6 +85,8 @@ type Store struct {
 	incoming       map[string]*incomingObject
 	bySource       map[platformFile]string
 	incomingTokens map[string]*incomingAccess
+	baseURL        *url.URL          // AddURLService 保存的已校验配置
+	urls           map[string]*entry // 临时 URL 只指向消费租约，由 mu 保护
 }
 
 // Open 清空独占媒体目录中的遗留文件；清理失败直接返回原错误。

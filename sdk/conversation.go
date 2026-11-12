@@ -50,7 +50,7 @@ func ClearConversation(ctx context.Context, key string) error {
 
 func callConversation(ctx context.Context, target string, request, result proto.Message) error {
 	// 1. 复用就绪门禁；会话请求只需要插件身份，不设置父调用链。
-	session, err := currentSession()
+	session, err := currentSession(ctx)
 	if err != nil {
 		return err
 	}

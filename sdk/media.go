@@ -21,6 +21,9 @@ import (
 // OpenMedia 立即读取来源令牌的第一块，成功后返回按顺序读取的 reader。
 // Read 沿用 ctx，Close 停止读取而保留令牌授权。
 func OpenMedia(ctx context.Context, src message.MediaSource) (io.ReadCloser, error) {
+	if src.InlineBase64 != "" || src.HTTPSURL != "" || src.PlatformFile != "" || (src.Incoming != nil && src.MediaRef != "") {
+		return nil, errcode.InvalidArgument.New("media source must contain only an incoming or media_ref token")
+	}
 	token := src.MediaRef
 	if src.Incoming != nil {
 		token = src.Incoming.Token
@@ -102,7 +105,7 @@ func GrantMedia(ctx context.Context, token, granteePluginID string, sessions ...
 // 可 Seek 的来源回到当前起始位置；其他来源通过 0600 临时文件完成第二遍读取。
 func Upload(ctx context.Context, r io.Reader, mime string) (ref *message.MediaRef, err error) {
 	// 1. 先通过就绪门禁，再准备两遍读取的来源。
-	session, err := currentSession()
+	session, err := currentSession(ctx)
 	if err != nil {
 		return nil, err
 	}
