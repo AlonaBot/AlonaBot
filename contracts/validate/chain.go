@@ -3,6 +3,7 @@ package validate
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -16,10 +17,15 @@ const maxInlineMediaBytes = 1 << 20 // CONTRACTS §1.3：内联来源最多 1 Mi
 
 // Chain 检查 MessageChain 的结构（MESSAGE-MODEL §2）。只做与平台无关的结构检查；
 // 平台能力（UNSUPPORTED）、媒体租约与目标授权由 Core/Adapter 在发送前另行检查。
-// 失败返回 INVALID_ARGUMENT，消息指明出错的 segment 位置。
+// 结构错误返回 INVALID_ARGUMENT，转发节点中无法表达的片段返回 UNSUPPORTED；消息保留片段位置。
 func Chain(c *pb.MessageChain) error {
 	if err := chain(c, ""); err != nil {
-		return &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: err.Error()}
+		code := pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT
+		var validation *Error
+		if errors.As(err, &validation) {
+			code = validation.Code
+		}
+		return &Error{Code: code, Message: err.Error()}
 	}
 	return nil
 }
@@ -45,6 +51,9 @@ func chain(c *pb.MessageChain, at string) error {
 		case *pb.Segment_Video:
 			content++
 			err = media(d.Video.GetSource())
+		case *pb.Segment_Voice:
+			content++
+			err = media(d.Voice.GetSource())
 		case *pb.Segment_File:
 			content++
 			if err = media(d.File.GetSource()); err == nil && d.File.Filename != nil {
@@ -248,7 +257,7 @@ func reference(r *pb.ReferenceSegment) error {
 	return nil
 }
 
-// buttonRows 校验按钮键盘：至少一行，每行非空，每个按钮有 action_id 与 label，value 是合法 JSON。
+// buttonRows 校验键盘结构、动作与 URL 互斥，以及 JSON 值。
 func buttonRows(b *pb.ButtonsSegment) error {
 	if len(b.GetRows()) == 0 {
 		return fmt.Errorf("buttons has no rows")
@@ -259,10 +268,20 @@ func buttonRows(b *pb.ButtonsSegment) error {
 		}
 		for j, btn := range row.GetButtons() {
 			switch {
-			case btn.GetActionId() == "":
-				return fmt.Errorf("button [%d][%d] is missing action_id", i, j)
+			case btn == nil:
+				return fmt.Errorf("button [%d][%d] is missing", i, j)
+			case (btn.GetActionId() != "") == (btn.Url != nil):
+				return fmt.Errorf("button [%d][%d] must have exactly one action_id or url", i, j)
 			case btn.GetLabel() == "":
 				return fmt.Errorf("button [%d][%d] is missing label", i, j)
+			case btn.Url != nil:
+				u, err := url.Parse(btn.GetUrl())
+				if err != nil || !u.IsAbs() || u.Host == "" || (u.Scheme != "https" && u.Scheme != "tg") {
+					return fmt.Errorf("button [%d][%d] url must be an absolute https or tg link", i, j)
+				}
+				if btn.Value != nil {
+					return fmt.Errorf("URL button [%d][%d] cannot have value", i, j)
+				}
 			case btn.Value != nil && !json.Valid([]byte(btn.GetValue())):
 				return fmt.Errorf("value of button [%d][%d] is not valid JSON", i, j)
 			}
@@ -271,13 +290,36 @@ func buttonRows(b *pb.ButtonsSegment) error {
 	return nil
 }
 
-// forward 校验合并转发：至少一个条目，每个条目的 Chain 按嵌套位置递归校验。
+// forward 校验出站节点；平台转发标识只供入站读取。
 func forward(f *pb.ForwardSegment, pos string) error {
+	if f != nil && f.PlatformForwardId != nil {
+		return fmt.Errorf("platform_forward_id is only allowed inbound")
+	}
 	if len(f.GetItems()) == 0 {
 		return fmt.Errorf("forward has no items")
 	}
 	for i, item := range f.GetItems() {
-		if err := chain(item.GetChain(), fmt.Sprintf("%s.forward.items[%d].", pos, i)); err != nil {
+		at := fmt.Sprintf("%s.forward.items[%d].", pos, i)
+		if item == nil {
+			return fmt.Errorf("%snode is missing", at)
+		}
+		if (item.GetChain() != nil) == (item.PlatformMessageId != nil) {
+			return fmt.Errorf("%snode must have exactly one chain or platform_message_id", at)
+		}
+		if item.PlatformMessageId != nil {
+			if item.GetPlatformMessageId() == "" {
+				return fmt.Errorf("%splatform_message_id is empty", at)
+			}
+			continue
+		}
+		for j, segment := range item.GetChain().GetSegments() {
+			switch segment.GetData().(type) {
+			case *pb.Segment_Text, *pb.Segment_Mention, *pb.Segment_Image, *pb.Segment_Video, *pb.Segment_Voice, *pb.Segment_Extension:
+			case *pb.Segment_File, *pb.Segment_Reference, *pb.Segment_Buttons, *pb.Segment_Forward:
+				return &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: fmt.Sprintf("%ssegment[%d]: unsupported forward node segment", at, j)}
+			}
+		}
+		if err := chain(item.GetChain(), at); err != nil {
 			return err
 		}
 	}

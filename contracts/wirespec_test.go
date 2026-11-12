@@ -108,6 +108,7 @@ func TestEnumValues(t *testing.T) {
 		{pb.AdapterInstanceState(0).Descriptor(), "ADAPTER_INSTANCE_STATE_", []string{"UNSPECIFIED", "FAILED"}},
 		{pb.BotOfflineReason(0).Descriptor(), "BOT_OFFLINE_REASON_", []string{"UNSPECIFIED", "STOPPED", "ADAPTER_EXITED", "INSTANCE_FAILED"}},
 		{pb.SendStatus(0).Descriptor(), "SEND_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "PARTIAL", "REJECTED", "UNKNOWN"}},
+		{pb.ChatType(0).Descriptor(), "CHAT_TYPE_", []string{"UNSPECIFIED", "PRIVATE", "GROUP", "CHANNEL"}},
 		{pb.PartStatus(0).Descriptor(), "PART_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "REJECTED", "UNKNOWN", "NOT_ATTEMPTED"}},
 		// MESSAGE-MODEL §3。
 		{pb.Propagation(0).Descriptor(), "PROPAGATION_", []string{"UNSPECIFIED", "CONTINUE", "STOP"}},
@@ -526,5 +527,45 @@ func TestToolFieldNumbers(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestMessageSegmentFieldNumbers 固定语音、转发、URL 按钮与会话类型的追加编号。
+func TestMessageSegmentFieldNumbers(t *testing.T) {
+	for _, c := range []struct {
+		message  proto.Message
+		number   protoreflect.FieldNumber
+		name     protoreflect.Name
+		kind     protoreflect.Kind
+		optional bool
+		typeName protoreflect.FullName
+	}{
+		{&pb.Segment{}, 10, "voice", protoreflect.MessageKind, false, "alonabot.v1.VoiceSegment"},
+		{&pb.VoiceSegment{}, 1, "source", protoreflect.MessageKind, false, "alonabot.v1.MediaSource"},
+		{&pb.VoiceSegment{}, 2, "duration_ms", protoreflect.Uint64Kind, true, ""},
+		{&pb.VoiceSegment{}, 3, "caption", protoreflect.StringKind, true, ""},
+		{&pb.ForwardItem{}, 3, "platform_message_id", protoreflect.StringKind, true, ""},
+		{&pb.ForwardSegment{}, 2, "platform_forward_id", protoreflect.StringKind, true, ""},
+		{&pb.Button{}, 5, "url", protoreflect.StringKind, true, ""},
+		{&pb.Event{}, 15, "chat_type", protoreflect.EnumKind, false, "alonabot.v1.ChatType"},
+	} {
+		f := c.message.ProtoReflect().Descriptor().Fields().ByNumber(c.number)
+		if f == nil || f.Name() != c.name || f.Kind() != c.kind || f.HasOptionalKeyword() != c.optional || f.IsList() {
+			t.Errorf("%T field %d = %v", c.message, c.number, f)
+			continue
+		}
+		if c.kind == protoreflect.MessageKind && f.Message().FullName() != c.typeName || c.kind == protoreflect.EnumKind && f.Enum().FullName() != c.typeName {
+			t.Errorf("field type = %v", f)
+		}
+		if c.name == "voice" {
+			if f.ContainingOneof() == nil || f.ContainingOneof().Name() != "data" {
+				t.Errorf("voice oneof = %v", f.ContainingOneof())
+			}
+		} else if f.ContainingOneof() != nil && !f.ContainingOneof().IsSynthetic() {
+			t.Errorf("unexpected oneof = %v", f)
+		}
+		if f.HasPresence() != (c.kind == protoreflect.MessageKind || c.optional) {
+			t.Errorf("presence = %v", f)
+		}
 	}
 }

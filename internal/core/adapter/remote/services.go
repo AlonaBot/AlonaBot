@@ -74,6 +74,9 @@ func (p *Process) service(ctx context.Context, caller router.Caller, in *wire.In
 		if ev == nil || ev.GetAdapterId() != p.opt.AdapterID || ev.GetAdapterInstanceId() != id || ev.GetAccountId() != entry.account {
 			return invalid()
 		}
+		if _, known := pb.ChatType_name[int32(ev.ChatType)]; !known || (ev.Target == nil && ev.ChatType != pb.ChatType_CHAT_TYPE_UNSPECIFIED) {
+			return serviceError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "chat_type must be known and requires target")
+		}
 		if !adapterEventPayload(ev) {
 			var err error
 			if validate.IsEventType(ev.GetEventType()) {
