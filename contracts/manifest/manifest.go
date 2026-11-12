@@ -1,8 +1,8 @@
-// Package manifest 解析并校验插件包内的 plugin.yaml。
+// Package manifest 解析并校验组件包内的 plugin.yaml，并检查组件依赖。
 //
 // 解析是严格的：未知字段、多个 YAML 文档、缺失必填项或非法取值都会失败。
-// 插件 ID、版本号与包内相对路径的规则见 spec/CONTRACTS-v0.1.md §7.1 与 §9.1。
-// 本包只检查 manifest 本身，不读取归档，也不判断来源是否可信。
+// [Parse] 校验 [Manifest] 的角色、ID、版本与包内相对路径，规则见 spec/CONTRACTS-v0.1.md §9.1。
+// [CheckDependencies] 根据安装快照报告缺失或版本不足的依赖；本包不读取归档或安装记录。
 package manifest
 
 import (
@@ -41,7 +41,17 @@ func SupportedPlatform(os, arch string) bool {
 
 var (
 	// SemVer 2.0 官方正则。
-	semver = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
+	semver                = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
+	marketComponentSuffix = regexp.MustCompile(`^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`)
+	localAdapterID        = regexp.MustCompile(fmt.Sprintf(`^[a-z][a-z0-9_-]{0,%d}$`, validate.MaxPluginIDLen-1))
+	reservedAdapterID     = regexp.MustCompile(`^(con|prn|aux|nul|com[1-9]|lpt[1-9])$`)
+)
+
+const (
+	rolePlugin  = "plugin"
+	roleAdapter = "adapter"
+	roleAgent   = "agent"
+	roleWebUI   = "webui"
 )
 
 // ValidVersion 报告 v 是否为合法 SemVer 2.0。
@@ -66,16 +76,24 @@ const (
 
 // Manifest 对应 plugin.yaml。必填字段使用指针以区分「缺失」与零值。
 type Manifest struct {
-	ManifestVersion      *int          `yaml:"manifest_version"`      // manifest 格式版本，目前必须为 1
-	ID                   string        `yaml:"id"`                    // 插件 ID，规则见 validate.PluginID
-	Version              string        `yaml:"version"`               // 插件版本，SemVer 2.0
-	ProtocolMinMajor     *uint32       `yaml:"protocol_min_major"`    // 支持的最低协议主版本，不能为 0
-	ProtocolMaxMajor     *uint32       `yaml:"protocol_max_major"`    // 支持的最高协议主版本，不小于 ProtocolMinMajor
-	RequiredCapabilities *[]Capability `yaml:"required_capabilities"` // 必需的协议能力；没有时必须写空列表
-	OS                   string        `yaml:"os"`                    // 包的目标 GOOS
-	Arch                 string        `yaml:"arch"`                  // 包的目标 GOARCH
-	Entrypoint           string        `yaml:"entrypoint"`            // 包内可执行文件的相对路径，规则见 ValidateRelPath
-	ConfigVersion        *uint32       `yaml:"config_version"`        // 包内配置 Schema 的版本
+	Role                 string              `yaml:"role"`       // 缺省为 plugin
+	AdapterID            string              `yaml:"adapter_id"` // adapter 角色的平台类型
+	Icon                 string              `yaml:"icon"`       // 包内图标的相对路径，可选
+	Assets               string              `yaml:"assets"`     // webui 的包内静态根目录
+	AdminAPIMinMajor     uint32              `yaml:"admin_api_min_major"`
+	AdminAPIMaxMajor     uint32              `yaml:"admin_api_max_major"`
+	AdapterDependencies  []AdapterDependency `yaml:"adapter_dependencies"`
+	PluginDependencies   []PluginDependency  `yaml:"plugin_dependencies"`
+	ManifestVersion      *int                `yaml:"manifest_version"`      // manifest 格式版本，目前必须为 1
+	ID                   string              `yaml:"id"`                    // 组件 ID，市场前缀与 Role 一致
+	Version              string              `yaml:"version"`               // 组件版本，SemVer 2.0
+	ProtocolMinMajor     *uint32             `yaml:"protocol_min_major"`    // 支持的最低协议主版本，不能为 0
+	ProtocolMaxMajor     *uint32             `yaml:"protocol_max_major"`    // 支持的最高协议主版本，不小于 ProtocolMinMajor
+	RequiredCapabilities *[]Capability       `yaml:"required_capabilities"` // 必需的协议能力；没有时必须写空列表
+	OS                   string              `yaml:"os"`                    // 包的目标 GOOS
+	Arch                 string              `yaml:"arch"`                  // 包的目标 GOARCH
+	Entrypoint           string              `yaml:"entrypoint"`            // 包内可执行文件的相对路径，规则见 ValidateRelPath
+	ConfigVersion        *uint32             `yaml:"config_version"`        // 包内配置 Schema 的版本
 	// 包的来源（例如 github.com/owner/repo），不能为空。
 	Source         string `yaml:"source"`
 	MigrationMode  string `yaml:"migration_mode"`  // 数据库迁移方式（Migration*）；空串表示未声明
@@ -90,6 +108,7 @@ type Result struct {
 
 // Parse 严格解析 plugin.yaml：未知字段、多个 YAML 文档、缺失必填项或非法值都会失败。
 func Parse(data []byte) (*Result, error) {
+	// 1. 严格解码单份 YAML 文档，先拒绝未知字段和额外文档。
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	var m Manifest
@@ -100,7 +119,12 @@ func Parse(data []byte) (*Result, error) {
 	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		return nil, errors.New("plugin.yaml must contain exactly one YAML document")
 	}
-	warnings, err := m.validate()
+	// 2. 保留显式声明并按角色校验；空列表、零值与 null 同样属于声明。
+	var declared map[string]yaml.Node
+	if err := yaml.Unmarshal(data, &declared); err != nil {
+		return nil, fmt.Errorf("parse plugin.yaml fields: %w", err)
+	}
+	warnings, err := m.validate(declared)
 	if err != nil {
 		return nil, err
 	}
@@ -108,16 +132,68 @@ func Parse(data []byte) (*Result, error) {
 }
 
 // validate 逐项校验字段，返回非致命警告；任一项不合法即返回错误。
-func (m *Manifest) validate() ([]string, error) {
+func (m *Manifest) validate(declared map[string]yaml.Node) ([]string, error) {
+	// 1. 检查所有角色共用的身份、版本、来源与图标。
 	if m.ManifestVersion == nil || *m.ManifestVersion != 1 {
 		return nil, errors.New("manifest_version must be 1")
 	}
-	warnings, err := validate.PluginID(m.ID)
+	if _, present := declared["role"]; !present {
+		m.Role = rolePlugin
+	}
+	switch m.Role {
+	case rolePlugin, roleAdapter, roleAgent, roleWebUI:
+	default:
+		return nil, fmt.Errorf("unknown role %q", m.Role)
+	}
+	warnings, err := componentID(m.ID, m.Role)
 	if err != nil {
 		return nil, err
 	}
 	if !ValidVersion(m.Version) {
 		return nil, fmt.Errorf("version %q is not valid SemVer", m.Version)
+	}
+	if m.Source == "" {
+		return nil, errors.New("missing source")
+	}
+	if m.Icon != "" {
+		if err := ValidateRelPath(m.Icon); err != nil {
+			return nil, fmt.Errorf("icon: %w", err)
+		}
+		switch path.Ext(m.Icon) {
+		case ".svg", ".png", ".webp":
+		default:
+			return nil, fmt.Errorf("icon %q must have an .svg, .png or .webp extension", m.Icon)
+		}
+	}
+	// 2. 静态组件单独校验，通过后返回；其余角色继续检查进程字段。
+	if m.Role == roleWebUI {
+		if err := forbidFields(declared, m.Role, "adapter_id", "entrypoint", "protocol_min_major", "protocol_max_major", "required_capabilities", "config_version", "migration_mode", "prepare_effects", "adapter_dependencies", "plugin_dependencies"); err != nil {
+			return nil, err
+		}
+		if m.OS != "any" || m.Arch != "any" {
+			return nil, errors.New("webui requires os and arch to be any")
+		}
+		if err := ValidateRelPath(m.Assets); err != nil {
+			return nil, fmt.Errorf("assets: %w", err)
+		}
+		if m.AdminAPIMinMajor == 0 || m.AdminAPIMinMajor > m.AdminAPIMaxMajor {
+			return nil, fmt.Errorf("invalid Admin API major version range [%d, %d]", m.AdminAPIMinMajor, m.AdminAPIMaxMajor)
+		}
+		return warnings, nil
+	}
+	// 3. 检查进程角色的专用字段、协议能力、平台、入口与配置版本。
+	if err := forbidFields(declared, m.Role, "assets", "admin_api_min_major", "admin_api_max_major"); err != nil {
+		return nil, err
+	}
+	if m.Role == roleAdapter {
+		if err := checkAdapterID(m.AdapterID); err != nil {
+			return nil, fmt.Errorf("adapter_id: %w", err)
+		}
+		if err := forbidFields(declared, m.Role, "adapter_dependencies", "plugin_dependencies", "migration_mode", "prepare_effects"); err != nil {
+			return nil, err
+		}
+	} else if err := forbidFields(declared, m.Role, "adapter_id"); err != nil {
+		return nil, err
 	}
 	if m.ProtocolMinMajor == nil || m.ProtocolMaxMajor == nil {
 		return nil, errors.New("missing protocol_min_major or protocol_max_major")
@@ -142,8 +218,12 @@ func (m *Manifest) validate() ([]string, error) {
 	if m.ConfigVersion == nil {
 		return nil, errors.New("missing config_version")
 	}
-	if m.Source == "" {
-		return nil, errors.New("missing source")
+	if m.Role == roleAdapter {
+		return warnings, nil
+	}
+	// 4. 插件与 Agent 还需校验依赖、迁移方式和准备期副作用。
+	if err := m.validateDependencies(); err != nil {
+		return nil, err
 	}
 	switch m.MigrationMode {
 	case "", MigrationNone, MigrationSelf, MigrationVersioned:
@@ -159,6 +239,42 @@ func (m *Manifest) validate() ([]string, error) {
 		warnings = append(warnings, "migration_mode or prepare_effects not declared; automatic upgrades are not allowed for this package")
 	}
 	return warnings, nil
+}
+
+func componentID(id, role string) ([]string, error) {
+	warnings, err := validate.PluginID(id)
+	if err != nil {
+		return nil, err
+	}
+	for _, marketRole := range []string{rolePlugin, roleAdapter, roleAgent, roleWebUI} {
+		prefix := "alonabot_" + marketRole + "_"
+		if suffix, market := strings.CutPrefix(id, prefix); market {
+			if marketRole != role || !marketComponentSuffix.MatchString(suffix) {
+				return nil, fmt.Errorf("component ID %q must match the market prefix and ID rule for role %q", id, role)
+			}
+			return nil, nil
+		}
+	}
+	if role != rolePlugin {
+		warnings = []string{fmt.Sprintf("component ID %q lacks the market prefix alonabot_%s_ and can only be installed locally", id, role)}
+	}
+	return warnings, nil
+}
+
+func checkAdapterID(id string) error {
+	if !localAdapterID.MatchString(id) || reservedAdapterID.MatchString(id) {
+		return fmt.Errorf("invalid local Adapter ID %q", id)
+	}
+	return nil
+}
+
+func forbidFields(declared map[string]yaml.Node, role string, names ...string) error {
+	for _, name := range names {
+		if _, present := declared[name]; present {
+			return fmt.Errorf("role %q must not declare %s", role, name)
+		}
+	}
+	return nil
 }
 
 // ValidateRelPath 校验包内相对路径：使用 / 分隔，非空、非绝对、无 ..、无反斜杠或盘符，且已是规范形式。

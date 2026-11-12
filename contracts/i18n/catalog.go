@@ -168,6 +168,41 @@ func (c *Catalog) Format(locales []string, key string, args map[string]string) (
 	return output.String(), nil
 }
 
+// Text 按 locales 选择文案并替换参数，未知键返回键名，缺少参数保留占位符。
+// 多余参数忽略；problems 按文案顺序和多余参数名字顺序描述问题，不含参数值。
+func (c *Catalog) Text(locales []string, key string, args map[string]string) (text string, problems []string) {
+	message, exists := c.messages[sourceLocale][key]
+	if !exists {
+		return key, []string{fmt.Sprintf("unknown message key %q", key)}
+	}
+	if translated, exists := c.messages[c.selectLocale(locales)][key]; exists {
+		message = translated
+	}
+	var output strings.Builder
+	used := make(map[string]bool)
+	for _, fragment := range message {
+		if fragment.name == "" {
+			output.WriteString(fragment.text)
+			continue
+		}
+		value, exists := args[fragment.name]
+		if !exists {
+			value = "{" + fragment.name + "}"
+			if !used[fragment.name] {
+				problems = append(problems, fmt.Sprintf("missing argument %q", fragment.name))
+			}
+		}
+		used[fragment.name] = true
+		output.WriteString(value)
+	}
+	for _, name := range slices.Sorted(maps.Keys(args)) {
+		if !used[name] {
+			problems = append(problems, fmt.Sprintf("unexpected argument %q", name))
+		}
+	}
+	return output.String(), problems
+}
+
 func (c *Catalog) selectLocale(locales []string) string {
 	for _, candidate := range locales {
 		if _, exists := c.messages[candidate]; exists {

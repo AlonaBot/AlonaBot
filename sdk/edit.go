@@ -32,6 +32,9 @@ func Edit(ctx context.Context, to *pb.Target, platformMessageID string, chain me
 }
 
 func callEdit(ctx context.Context, to *pb.Target, platformMessageID string, chain message.Chain, parent *wire.Inbound) (*pb.SendResult, error) {
+	if err := checkMessageEncoding(chain); err != nil {
+		return nil, err
+	}
 	// 1. 复用 Session 就绪门禁，编码编辑请求。
 	session, err := currentSession()
 	if err != nil {

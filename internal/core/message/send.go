@@ -26,14 +26,16 @@ type Service struct {
 	requestTimeout time.Duration
 	adapters       *adapter.Registry
 	policy         *policy.Policy
+	issue          func(context.Context, router.Caller, *pb.Target, *pb.MessageChain) error
 	lease          func(context.Context, router.Caller, string, *pb.Target, *pb.MediaSource, time.Time) (string, func(), error)
 }
 
 // New 创建消息服务；装配处将 Send、Edit 分别注册为 wire.ServiceSend、wire.ServiceEdit。
 // lease 由媒体 Store 提供，签发绑定目标 Adapter Session 的只读令牌；
+// issue 在媒体租约前签发按钮；nil 仅供无按钮的测试。
 // requestTimeout 使用生效配置，在调用没有期限时提供媒体请求预算。
-func New(adapters *adapter.Registry, p *policy.Policy, lease func(ctx context.Context, c router.Caller, readerSessionKey string, target *pb.Target, source *pb.MediaSource, deadline time.Time) (string, func(), error), requestTimeout time.Duration) *Service {
-	return &Service{adapters: adapters, policy: p, lease: lease, requestTimeout: requestTimeout}
+func New(adapters *adapter.Registry, p *policy.Policy, lease func(ctx context.Context, c router.Caller, readerSessionKey string, target *pb.Target, source *pb.MediaSource, deadline time.Time) (string, func(), error), issue func(context.Context, router.Caller, *pb.Target, *pb.MessageChain) error, requestTimeout time.Duration) *Service {
+	return &Service{adapters: adapters, policy: p, lease: lease, issue: issue, requestTimeout: requestTimeout}
 }
 
 // Send 按载荷、可信目标、消息链和实例绑定依次准入，不自动重试平台发送。
@@ -89,7 +91,16 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if target.GetAdapterId() != instance.AdapterID() || target.GetAccountId() != instance.AccountID() {
 		return reject(target, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "target adapter or account does not match instance")
 	}
-	// 5. 全部来源先取得只读租约；任一失败或发送结束均释放本次已得租约。
+	// 5. 校验 Adapter 扩展并签发按钮，两者都先于媒体租约和平台副作用。
+	if safe := checkExtensions(instance, request.Chain); safe != nil {
+		return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, safe)
+	}
+	if s.issue != nil {
+		if err := s.issue(ctx, caller, target, request.Chain); err != nil {
+			return rejectError(target, err)
+		}
+	}
+	// 6. 全部来源先取得只读租约；任一失败或发送结束均释放本次已得租约。
 	sources := mediaSources(request.Chain)
 	if len(sources) > 0 {
 		reader, ok := instance.(adapter.MediaSession)
@@ -119,7 +130,7 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 			return rejectError(target, err)
 		}
 	}
-	// 6. 所有媒体已就绪后执行唯一一次发送，完整转发回执与错误。
+	// 7. 所有媒体已就绪后执行唯一一次发送，完整转发回执与错误。
 	result, sendError := instance.Send(ctx, target, request.Chain)
 	return response(result, sendError)
 }

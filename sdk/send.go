@@ -14,6 +14,9 @@ import (
 // Session 尚未就绪或已停止时返回 FAILED_PRECONDITION。
 // to 为 nil 时由 Core 返回 NO_DEFAULT_TARGET；出错时仍保留有效的部分发送结果。
 func Send(ctx context.Context, to *pb.Target, chain message.Chain) (*pb.SendResult, error) {
+	if err := checkMessageEncoding(chain); err != nil {
+		return nil, err
+	}
 	// 1. 取得已就绪的 Session 并编码 SendRequest。
 	session, err := currentSession()
 	if err != nil {

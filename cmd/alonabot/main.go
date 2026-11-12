@@ -168,6 +168,9 @@ func run(dataDir, pluginID, entry string, stdio bool, v tune.Values, overrides [
 	if err != nil {
 		return err
 	}
+	if err := checkPluginDependencies(filepath.Dir(exe)); err != nil {
+		return err
+	}
 	digest, err := fileDigest(exe)
 	if err != nil {
 		return err

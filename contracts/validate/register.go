@@ -59,7 +59,7 @@ func IsJSONObject(b []byte) bool {
 }
 
 // Register 原子校验整份注册集（WIRE §3.1/§3.3）：任一项不合法都整体拒绝，调用方不得保留部分注册。
-// 命令路径、别名、事件过滤器、定时任务、HTTP 路由与 Listener、Service 与 Bus 订阅随整份描述一起检查。
+// 命令路径、别名、事件过滤器与按钮 action、定时任务、HTTP 路由与 Listener、Service 与 Bus 订阅随整份描述一起检查。
 func Register(r *pb.Register) error {
 	// 1. 先检查描述身份、分支与注册公共字段。
 	if r.GetAdapter() != nil {
@@ -105,6 +105,7 @@ func Register(r *pb.Register) error {
 	// 2. 按路由类型检查描述；共享路径表覆盖全部命令及其别名，HTTP 按 method/path 检查冲突，Bus 回调可引用后面的路由。
 	paths := make(map[string]string)
 	httpRoutes := make(map[[2]string]string)
+	actions := make(map[string]string)
 	for _, route := range r.GetRoutes() {
 		switch route.GetKind() {
 		case pb.RouteKind_ROUTE_KIND_COMMAND:
@@ -150,7 +151,8 @@ func Register(r *pb.Register) error {
 				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "bus route %q refers to unknown callback %q", route.GetRouteId(), subscription.GetCallbackRouteId())
 			}
 		case pb.RouteKind_ROUTE_KIND_EVENT:
-			filters := route.GetEvent().GetEventTypeFilter()
+			event := route.GetEvent()
+			filters := event.GetEventTypeFilter()
 			if len(filters) == 0 {
 				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "event route %q has an empty event_type_filter", route.GetRouteId())
 			}
@@ -163,6 +165,17 @@ func Register(r *pb.Register) error {
 					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "event route %q repeats event type %q", route.GetRouteId(), eventType)
 				}
 				seenEvents[eventType] = true
+			}
+			if seenEvents["button.clicked"] {
+				action := event.GetActionId()
+				if action == "" || event.GetActionSchemaVersion() == 0 {
+					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "button route %q is missing action_id or action_schema_version", route.GetRouteId())
+				}
+				// 发送只携 action_id，同一插件的一个 action 必须唯一对应一个路由。
+				if previous, exists := actions[action]; exists {
+					return errf(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "button action %q conflicts between routes %q and %q", action, previous, route.GetRouteId())
+				}
+				actions[action] = route.GetRouteId()
 			}
 		}
 	}
