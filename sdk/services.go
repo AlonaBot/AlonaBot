@@ -51,6 +51,8 @@ type serviceBuilder struct {
 	plugin      *Plugin
 	subID       string
 	name        string
+	target      string
+	encoding    pb.PayloadEncoding
 	access      Access
 	allowlist   []string
 	handles     int
@@ -58,93 +60,146 @@ type serviceBuilder struct {
 	prepare     func() (serviceRoute, error)
 }
 
-// JSONService 构建具名输入/输出类型的 JSON 服务；Handle 结束声明。
-type JSONService[In, Out any] struct {
+// Service 绑定服务目标与输入输出类型；零值无效。
+type Service[In, Out any] struct {
+	target   string
+	encoding pb.PayloadEncoding
+}
+
+// JSON 声明完整目标的 JSON 服务，Schema 由生成器提供。
+func JSON[In, Out any](target string) Service[In, Out] {
+	return Service[In, Out]{target: target, encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON}
+}
+
+// Proto 声明完整目标的 Protobuf 服务，Schema 版本保持为 1。
+func Proto[In, Out proto.Message](target string) Service[In, Out] {
+	return Service[In, Out]{target: target, encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF}
+}
+
+// ServiceBuilder 构建声明的访问规则与 Handler；Handle 结束注册。
+type ServiceBuilder[In, Out any] struct {
 	builder         *serviceBuilder
 	handler         func(*Context, In) (Out, error)
-	toolDescription *string // nil 表示未声明为工具，空说明留给注册校验拒绝
+	toolDescription *string // nil 表示未声明为工具，空说明留给注册校验拒绝。
 	toolDefault     ToolDefault
 }
 
-// JSON 开始构建 JSON 服务，Schema 由生成器提供。
-func JSON[In, Out any](owner Registrar, name string) *JSONService[In, Out] {
+// Serve 开始在插件或子插件上注册声明，Collect 统一检查构建结果。
+func Serve[In, Out any](owner Registrar, declaration Service[In, Out]) *ServiceBuilder[In, Out] {
 	scope := owner.registrar()
 	scope.plugin.checkRegistration()
-	r := &scope.plugin.services
-	b := &serviceBuilder{plugin: scope.plugin, subID: scope.subID, name: name}
-	s := &JSONService[In, Out]{builder: b}
+	_, name, _ := strings.Cut(declaration.target, "/")
+	b := &serviceBuilder{plugin: scope.plugin, subID: scope.subID, target: declaration.target, name: name, encoding: declaration.encoding}
+	s := &ServiceBuilder[In, Out]{builder: b}
 	b.prepare = func() (serviceRoute, error) {
-		// 1. 解析输入输出 Schema 并冻结 Handler，调用时复用校验器。
-		inputID, inputVersion, err := jsonType[In]()
-		if err != nil {
-			return serviceRoute{}, err
-		}
-		outputID, outputVersion, err := jsonType[Out]()
-		if err != nil {
-			return serviceRoute{}, err
-		}
-		inputSchema, err := resolveServiceSchema(r.schemas, inputID)
-		if err != nil {
-			return serviceRoute{}, err
-		}
-		outputSchema, err := resolveServiceSchema(r.schemas, outputID)
-		if err != nil {
-			return serviceRoute{}, err
-		}
-		handler := s.handler // 收集后冻结 Handler，保持 Session 注册固定。
-		if handler == nil {
-			return serviceRoute{}, fmt.Errorf("handler is nil")
-		}
-		route := b.route(inputID, outputID, inputVersion, outputVersion, pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, func(c *Context, data []byte) ([]byte, error) {
-			if err := validateServiceJSON(inputSchema, data); err != nil {
-				return nil, &Error{Code: errcode.InvalidArgument, Message: "invalid service input"}
+		if b.encoding == pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF {
+			if s.toolDescription != nil {
+				return serviceRoute{}, fmt.Errorf("Protobuf service cannot be a tool")
 			}
-			var input In
-			if err := json.Unmarshal(data, &input); err != nil {
-				return nil, &Error{Code: errcode.InvalidArgument, Message: "decode service input: " + err.Error()}
-			}
-			out, err := handler(c, input)
-			if err != nil {
-				return nil, err
-			}
-			encoded, err := json.Marshal(out)
-			if err != nil {
-				return nil, fmt.Errorf("encode service output: %w", err)
-			}
-			if err := validateServiceJSON(outputSchema, encoded); err != nil {
-				c.Logger().Error("service output schema validation failed", "schema_id", outputID)
-				return nil, &Error{Code: errcode.Internal, Message: "invalid service output"}
-			}
-			return encoded, nil
-		})
-		// 2. 工具描述携带同一输入 Schema 原文，完整注册校验交给 Collect。
-		if s.toolDescription != nil {
-			var policy pb.ToolPolicy
-			switch s.toolDefault {
-			case ToolAllow:
-				policy = pb.ToolPolicy_TOOL_POLICY_ALLOW
-			case ToolConfirm:
-				policy = pb.ToolPolicy_TOOL_POLICY_CONFIRM
-			default:
-				return serviceRoute{}, fmt.Errorf("unknown tool default policy %d", s.toolDefault)
-			}
-			route.descriptor.GetService().Tool = &pb.ToolSpec{Description: *s.toolDescription, DefaultPolicy: policy, InputSchemaJson: string(r.schemas[inputID])}
+			return s.prepareProto()
 		}
-		return route, nil
+		return s.prepareJSON()
 	}
-	r.builders = append(r.builders, b)
+	scope.plugin.services.builders = append(scope.plugin.services.builders, b)
 	return s
 }
 
+func (s *ServiceBuilder[In, Out]) prepareJSON() (serviceRoute, error) {
+	b := s.builder
+	r := &b.plugin.services
+
+	// 1. 解析输入输出 Schema 并冻结 Handler，调用时复用校验器。
+	inputID, inputVersion, err := jsonType[In]()
+	if err != nil {
+		return serviceRoute{}, err
+	}
+	outputID, outputVersion, err := jsonType[Out]()
+	if err != nil {
+		return serviceRoute{}, err
+	}
+	inputSchema, err := resolveServiceSchema(r.schemas, inputID)
+	if err != nil {
+		return serviceRoute{}, err
+	}
+	outputSchema, err := resolveServiceSchema(r.schemas, outputID)
+	if err != nil {
+		return serviceRoute{}, err
+	}
+	handler := s.handler // 收集后冻结 Handler，保持 Session 注册固定。
+	if handler == nil {
+		return serviceRoute{}, fmt.Errorf("handler is nil")
+	}
+	route := b.route(inputID, outputID, inputVersion, outputVersion, pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, func(c *Context, data []byte) ([]byte, error) {
+		if err := validateServiceJSON(inputSchema, data); err != nil {
+			return nil, &Error{Code: errcode.InvalidArgument, Message: "invalid service input"}
+		}
+		var input In
+		if err := json.Unmarshal(data, &input); err != nil {
+			return nil, &Error{Code: errcode.InvalidArgument, Message: "decode service input: " + err.Error()}
+		}
+		out, err := handler(c, input)
+		if err != nil {
+			return nil, err
+		}
+		encoded, err := json.Marshal(out)
+		if err != nil {
+			return nil, fmt.Errorf("encode service output: %w", err)
+		}
+		if err := validateServiceJSON(outputSchema, encoded); err != nil {
+			c.Logger().Error("service output schema validation failed", "schema_id", outputID)
+			return nil, &Error{Code: errcode.Internal, Message: "invalid service output"}
+		}
+		return encoded, nil
+	})
+	// 2. 工具描述携带同一输入 Schema 原文，完整注册校验交给 Collect。
+	if s.toolDescription != nil {
+		var policy pb.ToolPolicy
+		switch s.toolDefault {
+		case ToolAllow:
+			policy = pb.ToolPolicy_TOOL_POLICY_ALLOW
+		case ToolConfirm:
+			policy = pb.ToolPolicy_TOOL_POLICY_CONFIRM
+		default:
+			return serviceRoute{}, fmt.Errorf("unknown tool default policy %d", s.toolDefault)
+		}
+		route.descriptor.GetService().Tool = &pb.ToolSpec{Description: *s.toolDescription, DefaultPolicy: policy, InputSchemaJson: string(r.schemas[inputID])}
+	}
+	return route, nil
+}
+
+func (s *ServiceBuilder[In, Out]) prepareProto() (serviceRoute, error) {
+	b := s.builder
+
+	handler := s.handler // 收集后冻结 Handler，保持 Session 注册固定。
+	if handler == nil {
+		return serviceRoute{}, fmt.Errorf("handler is nil")
+	}
+	input, output := newServiceMessage[In](), newServiceMessage[Out]()
+	return b.route(validate.SchemaID(input), validate.SchemaID(output), invocationSchemaVersion, invocationSchemaVersion, pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, func(c *Context, data []byte) ([]byte, error) {
+		input := newServiceMessage[In]()
+		if err := proto.Unmarshal(data, input); err != nil {
+			return nil, &Error{Code: errcode.InvalidArgument, Message: "decode service input: " + err.Error()}
+		}
+		output, err := handler(c, input.(In))
+		if err != nil {
+			return nil, err
+		}
+		encoded, err := proto.Marshal(any(output).(proto.Message))
+		if err != nil {
+			return nil, fmt.Errorf("encode service output: %w", err)
+		}
+		return encoded, nil
+	}), nil
+}
+
 // Access 设置直接调用方规则，重复调用采用最后一次。
-func (s *JSONService[In, Out]) Access(a Access, allowlist ...string) *JSONService[In, Out] {
+func (s *ServiceBuilder[In, Out]) Access(a Access, allowlist ...string) *ServiceBuilder[In, Out] {
 	s.builder.setAccess(a, allowlist)
 	return s
 }
 
-// Tool 声明给模型的说明与缺省调用策略，输入 Schema 复用生成的 Service Schema 原文。
-// 重复调用采用最后一次；Handle 之后调用由 Collect 报错。
-func (s *JSONService[In, Out]) Tool(description string, defaultPolicy ToolDefault) *JSONService[In, Out] {
+// Tool 设置工具说明与缺省策略；Proto 声明或 Handle 后调用由 Collect 报错。
+func (s *ServiceBuilder[In, Out]) Tool(description string, defaultPolicy ToolDefault) *ServiceBuilder[In, Out] {
 	s.builder.plugin.checkRegistration()
 	if s.builder.handles != 0 {
 		s.builder.afterHandle = true
@@ -153,60 +208,8 @@ func (s *JSONService[In, Out]) Tool(description string, defaultPolicy ToolDefaul
 	return s
 }
 
-// Handle 结束 JSON 服务声明。
-func (s *JSONService[In, Out]) Handle(h func(*Context, In) (Out, error)) {
-	s.builder.plugin.checkRegistration()
-	s.builder.handles++
-	s.handler = h
-}
-
-// ProtoService 构建 Protobuf 服务；消息类型提供 Schema 标识。
-type ProtoService[In, Out proto.Message] struct {
-	builder *serviceBuilder
-	handler func(*Context, In) (Out, error)
-}
-
-// Proto 开始构建 Protobuf 服务，版本保持为 1。
-func Proto[In, Out proto.Message](owner Registrar, name string) *ProtoService[In, Out] {
-	scope := owner.registrar()
-	scope.plugin.checkRegistration()
-	r := &scope.plugin.services
-	b := &serviceBuilder{plugin: scope.plugin, subID: scope.subID, name: name}
-	s := &ProtoService[In, Out]{builder: b}
-	b.prepare = func() (serviceRoute, error) {
-		handler := s.handler // 收集后冻结 Handler，保持 Session 注册固定。
-		if handler == nil {
-			return serviceRoute{}, fmt.Errorf("handler is nil")
-		}
-		input, output := newServiceMessage[In](), newServiceMessage[Out]()
-		return b.route(validate.SchemaID(input), validate.SchemaID(output), invocationSchemaVersion, invocationSchemaVersion, pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, func(c *Context, data []byte) ([]byte, error) {
-			input := newServiceMessage[In]()
-			if err := proto.Unmarshal(data, input); err != nil {
-				return nil, &Error{Code: errcode.InvalidArgument, Message: "decode service input: " + err.Error()}
-			}
-			output, err := handler(c, input)
-			if err != nil {
-				return nil, err
-			}
-			encoded, err := proto.Marshal(output)
-			if err != nil {
-				return nil, fmt.Errorf("encode service output: %w", err)
-			}
-			return encoded, nil
-		}), nil
-	}
-	r.builders = append(r.builders, b)
-	return s
-}
-
-// Access 设置直接调用方规则。
-func (s *ProtoService[In, Out]) Access(a Access, allowlist ...string) *ProtoService[In, Out] {
-	s.builder.setAccess(a, allowlist)
-	return s
-}
-
-// Handle 结束 Protobuf 服务声明。
-func (s *ProtoService[In, Out]) Handle(h func(*Context, In) (Out, error)) {
+// Handle 结束服务注册，冻结的 Handler 在 Session 内按声明类型调用。
+func (s *ServiceBuilder[In, Out]) Handle(h func(*Context, In) (Out, error)) {
 	s.builder.plugin.checkRegistration()
 	s.builder.handles++
 	s.handler = h
@@ -220,9 +223,10 @@ func (b *serviceBuilder) setAccess(a Access, allowlist []string) {
 	b.access, b.allowlist = a, slices.Clone(allowlist)
 }
 
-func newServiceMessage[T proto.Message]() T {
+// Proto 在声明处约束消息类型；统一的 builder 只在编解码边界恢复该消息接口。
+func newServiceMessage[T any]() proto.Message {
 	var message T
-	return message.ProtoReflect().Type().New().Interface().(T)
+	return any(message).(proto.Message).ProtoReflect().Type().New().Interface()
 }
 
 func (b *serviceBuilder) route(inputID, outputID string, inputVersion, outputVersion uint32, encoding pb.PayloadEncoding, invoke func(*Context, []byte) ([]byte, error)) serviceRoute {
@@ -284,14 +288,26 @@ func collectServices(root *Plugin, reg *Registration) error {
 	r.schemas = generatedFor(root).ServiceSchemas
 	r.services = nil
 	r.errs = nil
+	seen := make(map[string]bool)
 	for _, b := range r.builders {
+		component, name, ok := strings.Cut(b.target, "/")
+		_, componentError := validate.PluginID(component)
+		if !ok || !validate.IsServiceName(name) || component != "@agent" && componentError != nil || b.encoding == pb.PayloadEncoding_PAYLOAD_ENCODING_UNSPECIFIED {
+			r.errs = append(r.errs, fmt.Errorf("service %q has an invalid declaration", b.target))
+			continue
+		}
+		if seen[b.target] {
+			r.errs = append(r.errs, fmt.Errorf("service %q registered twice", b.target))
+			continue
+		}
+		seen[b.target] = true
 		if b.handles != 1 || b.afterHandle {
-			r.errs = append(r.errs, fmt.Errorf("service route %q has invalid Handle sequence", serviceRoutePrefix+b.name))
+			r.errs = append(r.errs, fmt.Errorf("service %q has invalid Handle sequence", b.target))
 			continue
 		}
 		route, err := b.prepare()
 		if err != nil {
-			r.errs = append(r.errs, fmt.Errorf("service route %q: %w", serviceRoutePrefix+b.name, err))
+			r.errs = append(r.errs, fmt.Errorf("service %q: %w", b.target, err))
 			continue
 		}
 		r.services = append(r.services, route)
@@ -301,6 +317,18 @@ func collectServices(root *Plugin, reg *Registration) error {
 	appendServiceRoutes(reg, registration)
 	r.errs = append(r.errs, validate.Register(registration))
 	return errors.Join(r.errs...)
+}
+
+// checkServiceTargets 使用启动身份检查归属；@agent 的角色解析留给 Broker。
+func checkServiceTargets(root *Plugin, pluginID string) error {
+	var errs []error
+	for _, b := range root.services.builders {
+		component, _, _ := strings.Cut(b.target, "/")
+		if component != pluginID && component != "@agent" {
+			errs = append(errs, fmt.Errorf("service %q does not belong to plugin %q", b.target, pluginID))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func appendServiceRoutes(reg *Registration, registration *pb.Register) {
@@ -370,9 +398,20 @@ func invokeService(ctx context.Context, in *wire.Inbound, service serviceRoute) 
 	return wire.Response{Payload: wire.Payload{Encoding: descriptor.GetService().GetEncoding(), SchemaID: descriptor.GetOutputSchemaId(), SchemaVersion: descriptor.GetOutputSchemaVersion(), Bytes: encoded}}
 }
 
-// CallJSON 按输入输出 Go 类型推导 Schema 标识及版本并调用服务。
+// Call 调用声明的服务，JSON 输入输出按生成的 Schema 校验。
 // Handler 中传入 Context.Context() 以关联父请求；后台工作使用独立 context。
-func CallJSON[In, Out any](ctx context.Context, target string, in In) (Out, error) {
+func (s Service[In, Out]) Call(ctx context.Context, in In) (Out, error) {
+	if s.target == "" || s.encoding == pb.PayloadEncoding_PAYLOAD_ENCODING_UNSPECIFIED {
+		var out Out
+		return out, errcode.InvalidArgument.Errorf("invalid service declaration %q", s.target)
+	}
+	if s.encoding == pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF {
+		return s.callProto(ctx, in)
+	}
+	return s.callJSON(ctx, in)
+}
+
+func (s Service[In, Out]) callJSON(ctx context.Context, in In) (Out, error) {
 	var out Out
 	inputID, inputVersion, err := jsonType[In]()
 	if err != nil {
@@ -386,16 +425,31 @@ func CallJSON[In, Out any](ctx context.Context, target string, in In) (Out, erro
 	if err != nil {
 		return out, err
 	}
+	schemas := componentFor(ctx).active.Load().l.serviceSchemas
+	inputSchema, err := resolveServiceSchema(schemas, inputID)
+	if err != nil {
+		return out, err
+	}
+	outputSchema, err := resolveServiceSchema(schemas, outputID)
+	if err != nil {
+		return out, err
+	}
 	encoded, err := json.Marshal(in)
 	if err != nil {
 		return out, &Error{Code: errcode.InvalidArgument, Message: "encode service input: " + err.Error()}
 	}
-	response, err := callService(ctx, session, target, wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: inputID, SchemaVersion: inputVersion, Bytes: encoded})
+	if err := validateServiceJSON(inputSchema, encoded); err != nil {
+		return out, errcode.InvalidArgument.Errorf("invalid service input for %q: %v", s.target, err)
+	}
+	response, err := callService(ctx, session, s.target, wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: inputID, SchemaVersion: inputVersion, Bytes: encoded})
 	if err != nil {
 		return out, err
 	}
 	if response.Encoding != pb.PayloadEncoding_PAYLOAD_ENCODING_JSON || response.SchemaID != outputID || response.SchemaVersion != outputVersion {
 		return out, &Error{Code: errcode.Internal, Message: "expected JSON service output"}
+	}
+	if err := validateServiceJSON(outputSchema, response.Bytes); err != nil {
+		return out, errcode.Internal.Errorf("invalid service output for %q: %v", s.target, err)
 	}
 	if err := json.Unmarshal(response.Bytes, &out); err != nil {
 		return out, &Error{Code: errcode.Internal, Message: "decode service output: " + err.Error()}
@@ -403,19 +457,18 @@ func CallJSON[In, Out any](ctx context.Context, target string, in In) (Out, erro
 	return out, nil
 }
 
-// CallProto 调用 plugin_id/service_name，按生成的 Out 消息类型解码结果。
-// Handler 中传入 Context.Context() 以关联父请求；后台工作使用独立 context。
-func CallProto[Out proto.Message](ctx context.Context, target string, in proto.Message) (Out, error) {
+func (s Service[In, Out]) callProto(ctx context.Context, in In) (Out, error) {
 	var zero Out
 	session, err := currentSession(ctx)
 	if err != nil {
 		return zero, err
 	}
-	encoded, err := proto.Marshal(in)
+	input := any(in).(proto.Message)
+	encoded, err := proto.Marshal(input)
 	if err != nil {
 		return zero, &Error{Code: errcode.InvalidArgument, Message: "encode service input: " + err.Error()}
 	}
-	response, err := callService(ctx, session, target, wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(in), SchemaVersion: invocationSchemaVersion, Bytes: encoded})
+	response, err := callService(ctx, session, s.target, wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(input), SchemaVersion: invocationSchemaVersion, Bytes: encoded})
 	if err != nil {
 		return zero, err
 	}
@@ -423,7 +476,7 @@ func CallProto[Out proto.Message](ctx context.Context, target string, in proto.M
 	if err := decodeInvocation(response, out); err != nil {
 		return zero, &Error{Code: errcode.Internal, Message: "decode service output: " + err.Error()}
 	}
-	return out, nil
+	return out.(Out), nil
 }
 
 func callService(ctx context.Context, session *wire.Session, target string, payload wire.Payload) (wire.Payload, error) {

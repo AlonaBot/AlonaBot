@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"unicode/utf8"
 
@@ -31,24 +32,33 @@ type subscriptionRoute struct {
 	invoke     func(*Context, []byte) error
 }
 
-// Subscription 构建一条类型化订阅；Handle 结束声明。
-type Subscription[T any] struct {
-	plugin    *Plugin
-	routeID   string
-	eventName string
-	handles   int
-	handler   func(*Context, T) error
+// BusEventType 绑定完整事件名与载荷类型，零值无效。
+type BusEventType[T any] struct {
+	name string
 }
 
-// Subscribe 开始构建 eventName（plugin_id/event_name）的 JSON 订阅。
+// BusEvent 声明 plugin_id/event_name 的 JSON 事件。
+func BusEvent[T any](name string) BusEventType[T] { return BusEventType[T]{name: name} }
+
+// Subscription 构建一条类型化订阅；Handle 结束声明。
+type Subscription[T any] struct {
+	plugin      *Plugin
+	routeID     string
+	eventName   string
+	handles     int
+	afterHandle bool
+	handler     func(*Context, T) error
+}
+
+// Subscribe 开始构建声明的 JSON 订阅，路由 ID 缺省为完整事件名。
 // 回调按 Session 串行执行，Context 无 Actor 与默认 Target。
-func Subscribe[T any](owner Registrar, routeID, eventName string) *Subscription[T] {
+func Subscribe[T any](owner Registrar, e BusEventType[T]) *Subscription[T] {
 	scope := owner.registrar()
 	scope.plugin.checkRegistration()
 	r := &scope.plugin.subscriptions
-	s := &Subscription[T]{plugin: scope.plugin, routeID: routeID, eventName: eventName}
+	s := &Subscription[T]{plugin: scope.plugin, routeID: e.name, eventName: e.name}
 	r.pending = append(r.pending, func() error {
-		if s.handles != 1 {
+		if s.handles != 1 || s.afterHandle {
 			return fmt.Errorf("subscription route %q has invalid Handle sequence", s.routeID)
 		}
 		if s.handler == nil {
@@ -72,6 +82,16 @@ func Subscribe[T any](owner Registrar, routeID, eventName string) *Subscription[
 		}})
 		return nil
 	})
+	return s
+}
+
+// ID 设置订阅路由 ID；Handle 之后调用由 Collect 报错。
+func (s *Subscription[T]) ID(routeID string) *Subscription[T] {
+	s.plugin.checkRegistration()
+	if s.handles != 0 {
+		s.afterHandle = true
+	}
+	s.routeID = routeID
 	return s
 }
 
@@ -102,10 +122,13 @@ func appendSubscriptionRoutes(reg *Registration, registration *pb.Register) {
 	}
 }
 
-// Publish 从具名载荷类型推导 Schema 标识与版本，再发布到本插件的 eventName。
-// SDK 补上 plugin_id/ 前缀。
+// Publish 从具名载荷类型推导 Schema 标识与版本，发布本插件命名空间内的事件。
 // 返回值只确认 Core 已完成发布准入。Handler 内外均可调用；ctx 只传递取消和期限，不继承用户权限。
-func Publish[T any](ctx context.Context, eventName string, payload T) (eventID string, err error) {
+func (e BusEventType[T]) Publish(ctx context.Context, payload T) (eventID string, err error) {
+	pluginID, eventName, ok := strings.Cut(e.name, "/")
+	if !ok || pluginID == "" || eventName == "" {
+		return "", errcode.InvalidArgument.Errorf("invalid bus event name %q", e.name)
+	}
 	schemaID, version, err := jsonType[T]()
 	if err != nil {
 		return "", err
@@ -115,11 +138,14 @@ func Publish[T any](ctx context.Context, eventName string, payload T) (eventID s
 	if err != nil {
 		return "", err
 	}
+	if pluginID != componentFor(ctx).active.Load().l.pluginID {
+		return "", errcode.InvalidArgument.Errorf("bus event %q does not belong to this plugin", e.name)
+	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return "", &Error{Code: errcode.InvalidArgument, Message: "encode bus event payload: " + err.Error()}
 	}
-	request := &pb.PublishRequest{EventName: componentFor(ctx).active.Load().l.pluginID + "/" + eventName, SchemaId: schemaID, SchemaVersion: version, Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, Payload: encoded}
+	request := &pb.PublishRequest{EventName: e.name, SchemaId: schemaID, SchemaVersion: version, Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, Payload: encoded}
 	encoded, err = proto.Marshal(request)
 	if err != nil {
 		return "", &Error{Code: errcode.InvalidArgument, Message: "encode publish request: " + err.Error()}

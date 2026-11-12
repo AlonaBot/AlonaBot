@@ -187,7 +187,7 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 	for _, ident := range instances {
 		object := importer.info.Uses[ident]
 		fn, ok := object.(*types.Func)
-		if !ok || fn.Pkg() == nil || fn.Pkg().Path() != sdkPath || !slices.Contains([]string{"JSON", "Subscribe", "CallJSON", "Publish"}, fn.Name()) {
+		if !ok || fn.Pkg() == nil || fn.Pkg().Path() != sdkPath || !slices.Contains([]string{"JSON", "Proto", "BusEvent"}, fn.Name()) {
 			continue
 		}
 		// 外部包可能为检查本模块引用而读入源码，生成范围仍限于原扫描包。
@@ -206,12 +206,16 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 		args := importer.info.Instances[ident].TypeArgs
 		for index := range args.Len() {
 			typ := types.Unalias(args.At(index))
+			// Protobuf 的指针参数绑定包级消息类型，JSON 与 BusEvent 仍要求值类型。
+			if pointer, ok := typ.(*types.Pointer); ok && fn.Name() == "Proto" {
+				typ = types.Unalias(pointer.Elem())
+			}
 			named, ok := typ.(*types.Named)
 			if !ok || named.Obj().Pkg() == nil || named.Obj().Parent() != named.Obj().Pkg().Scope() || named.TypeParams().Len() != 0 || named.TypeArgs().Len() != 0 {
 				s.diagnostic(ident.Pos(), "service type must be a package-level named non-generic type: "+typ.String())
 				continue
 			}
-			// 四个入口共用类型约束，只有 JSON 注册需要生成 Schema。
+			// 声明处共用类型检查，只有 JSON 声明需要生成 Schema。
 			if fn.Name() != "JSON" {
 				continue
 			}
