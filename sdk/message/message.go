@@ -87,6 +87,13 @@ type VideoSegment struct {
 	Caption  string
 }
 
+// VoiceSegment 保存语音来源，Duration 为零表示未知。
+type VoiceSegment struct {
+	Source   MediaSource
+	Duration time.Duration
+	Caption  string
+}
+
 // FileSegment 保存文件来源和展示元数据，Filename 不包含路径。
 type FileSegment struct {
 	Source                  MediaSource
@@ -109,12 +116,16 @@ type ForwardSource struct{ DisplayName, ExternalUserID string }
 
 // ForwardItem 保存一条转发的来源与消息内容。
 type ForwardItem struct {
-	Source *ForwardSource
-	Chain  Chain
+	Source            *ForwardSource
+	Chain             Chain
+	PlatformMessageID string // 与 Chain 恰有一个，引用同一会话的已有消息。
 }
 
-// ForwardSegment 按顺序保存合并转发的条目。
-type ForwardSegment struct{ Items []ForwardItem }
+// ForwardSegment 保存有序转发条目，或入站的平台转发标识。
+type ForwardSegment struct {
+	Items             []ForwardItem
+	PlatformForwardID string // 只在入站读取时出现。
+}
 
 // Text 构造普通文本片段。
 func Text(s string) Segment { return TextSegment{Text: s} }
@@ -173,3 +184,15 @@ func (s ButtonsSegment) content() Chain { return Chain{s} }
 
 func (s ExtensionSegment) segment()       {}
 func (s ExtensionSegment) content() Chain { return Chain{s} }
+
+// Voice 构造指定来源的语音片段。
+func Voice(src MediaSource) Segment { return VoiceSegment{Source: src} }
+
+// VoiceURL 构造 HTTPS 语音片段。
+func VoiceURL(httpsURL string) Segment { return Voice(MediaSource{HTTPSURL: httpsURL}) }
+
+// Forward 按顺序构造合并转发片段。
+func Forward(items ...ForwardItem) Segment { return ForwardSegment{Items: items} }
+
+func (s VoiceSegment) segment()       {}
+func (s VoiceSegment) content() Chain { return Chain{s} }

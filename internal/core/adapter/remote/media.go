@@ -30,6 +30,8 @@ func (p *Process) registerIncoming(instanceID string, ev *pb.Event) {
 				source = value.Image.GetSource()
 			case *pb.Segment_Video:
 				source = value.Video.GetSource()
+			case *pb.Segment_Voice:
+				source = value.Voice.GetSource()
 			case *pb.Segment_File:
 				source = value.File.GetSource()
 			}
