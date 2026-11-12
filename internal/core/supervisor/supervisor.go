@@ -272,7 +272,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	// 6. ACTIVATED 已应用后才开放 HTTP 与定时任务，绑定顺序保证首个 tick 可以访问 HTTP。
 	activatedAt := time.Now()
 	if spec.HTTP != nil && in.HTTPListener != nil {
-		spec.HTTP.Bind(spec.PluginID, in.GenerationID, in.HTTPListener, in.HTTPProxyToken, in.Routes)
+		spec.HTTP.Bind(spec.PluginID, in.GenerationID, in.HTTPListener, in.HTTPProxyToken, in.Routes, spec.Role == state.RoleAdapter)
 	}
 	if spec.Scheduler != nil {
 		spec.Scheduler.Attach(router.FromInstance(in), activatedAt)

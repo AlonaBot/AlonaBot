@@ -50,6 +50,11 @@ type adapterCore struct {
 	stopped    atomic.Bool // 停止或报告失败后锁存，阻止新的交付
 }
 
+// AdapterHTTP 提供 Adapter 可选的统一入口 HTTP 路由登记。
+type AdapterHTTP interface {
+	HTTP(r *HTTPRegistry)
+}
+
 // RunAdapter 作为 Adapter 进程的 main 入口，复用插件的锁、握手、激活与停止状态机。
 func RunAdapter(a adapter.Adapter) error {
 	setupLogging()
@@ -63,6 +68,15 @@ func RunAdapter(a adapter.Adapter) error {
 	if err != nil {
 		return err
 	}
+	routes := &HTTPRegistry{}
+	if provider, ok := a.(AdapterHTTP); ok {
+		provider.HTTP(routes)
+	}
+	if err := errors.Join(routes.errs...); err != nil {
+		return fmt.Errorf("invalid adapter HTTP registration: %w", err)
+	}
+	l.http = newHTTPListener(routes.routes)
+	defer func() { l.http.close(time.Now().Add(onStopBudget)) }()
 	conn, err := dial(l)
 	if err != nil {
 		return err
@@ -85,6 +99,9 @@ func RunAdapter(a adapter.Adapter) error {
 		Handler: runtime.handle, Admit: active.admit, Control: active.control, MaxInflight: int(limits.GetMaxInflight()), MaxBytes: int64(limits.GetMaxPayloadBytes()), DefaultDeadline: time.Duration(limits.GetRequestTimeoutMs()) * time.Millisecond})
 	runtime.activation = active
 	runtime.session = active.sess
+	if l.http != nil {
+		l.http.activation.Store(active)
+	}
 	activeSession.Store(active)
 	active.sess.Start() // 回调使用的 Session 指针先发布，再启动读循环。
 	if err := active.waitReady(); err != nil {
@@ -107,6 +124,13 @@ func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, a adapter.Adapt
 		return err
 	}
 	reg := &pb.Register{Adapter: descriptor, CandidateConfigJson: boot.GetCandidateConfigJson(), CandidateConfigVersion: boot.GetTargetConfigVersion(), Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	if err := l.http.start(boot); err != nil {
+		return sessionFailure(conn, ack.SessionId, ack.ChosenMinor, l.pluginID, pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER, pb.ErrorCode_ERROR_CODE_INTERNAL, "prepare HTTP listener failed", err)
+	}
+	if l.http != nil {
+		appendHTTPRoutes(reg, l.http.routes)
+		l.http.report(reg)
+	}
 	frame, err := wire.ControlEnvelope(ack.SessionId, ack.ChosenMinor, l.pluginID, pb.FrameKind_FRAME_KIND_REGISTER, reg)
 	if err != nil {
 		return err

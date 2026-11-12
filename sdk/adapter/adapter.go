@@ -4,6 +4,7 @@
 // [Editor] 提供可选的消息编辑入口。
 // [Core] 将事件与游标交给宿主，并读取出站媒体。
 // 实例配置只在启动请求中传递；生命周期由 sdk.RunAdapter 管理。
+// 包级 HTTP 路由可通过 sdk 根包的可选 AdapterHTTP 接口登记，Listener 随 Session 托管。
 package adapter
 
 import (

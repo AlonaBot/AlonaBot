@@ -30,6 +30,9 @@ type httpListener struct {
 	server     *http.Server
 	token      []byte // token 的十六进制，仅在进入用户 Handler 前比较
 	activation atomic.Pointer[activation]
+	mu         sync.Mutex // 保护 hijacked 与 closing；关闭连接时释放锁
+	hijacked   map[*httpConnection]struct{}
+	closing    bool
 	closeOnce  sync.Once
 }
 
@@ -53,10 +56,11 @@ func (h *httpListener) start(boot *pb.Bootstrap) error {
 		return fmt.Errorf("listen plugin HTTP: %w", err)
 	}
 	h.listener = listener
+	h.hijacked = make(map[*httpConnection]struct{})
 	h.token = []byte(hex.EncodeToString(token))
-	h.server = &http.Server{Handler: http.HandlerFunc(h.serveHTTP), ErrorLog: slog.NewLogLogger(slog.Default().Handler(), slog.LevelError)}
+	h.server = &http.Server{Handler: http.HandlerFunc(h.serveHTTP), ErrorLog: slog.NewLogLogger(slog.Default().Handler(), slog.LevelError), ConnState: h.connectionState}
 	go func() {
-		if err := h.server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := h.server.Serve(&httpNetworkListener{Listener: listener, owner: h}); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("plugin HTTP listener failed", "err", err)
 		}
 	}()
@@ -76,6 +80,17 @@ func (h *httpListener) close(deadline time.Time) {
 		return
 	}
 	h.closeOnce.Do(func() {
+		// Shutdown 不回收 Hijack 交给用户的连接；先冻结登记，再在锁外关闭快照。
+		h.mu.Lock()
+		h.closing = true
+		connections := make([]*httpConnection, 0, len(h.hijacked))
+		for conn := range h.hijacked {
+			connections = append(connections, conn)
+		}
+		h.mu.Unlock()
+		for _, conn := range connections {
+			_ = conn.Close()
+		}
 		ctx, cancel := context.WithDeadline(context.Background(), deadline)
 		defer cancel()
 		if err := h.server.Shutdown(ctx); err != nil {
@@ -169,7 +184,7 @@ func canonicalHTTPPath(raw string) bool {
 	return strings.HasPrefix(raw, "/") && canonical == raw && !strings.ContainsAny(raw, "?#") && !strings.Contains(raw, "..")
 }
 
-// HTTPAuth 指定插件 HTTP 路由的认证方式。
+// HTTPAuth 指定插件与 Adapter HTTP 路由的认证方式。
 type HTTPAuth int
 
 const (
@@ -178,3 +193,48 @@ const (
 	AuthCallbackSignature                     // 插件校验签名。
 	AuthCallbackNonce                         // 插件校验 nonce。
 )
+
+// AuthPlatformToken 声明由 Adapter 校验公开路由的平台凭证。
+const AuthPlatformToken HTTPAuth = HTTPAuth(pb.HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN)
+
+// httpNetworkListener 包装 SDK 接受的连接，使用户关闭 Hijack 连接时也能释放登记。
+type httpNetworkListener struct {
+	net.Listener
+	owner *httpListener
+}
+
+func (l *httpNetworkListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return &httpConnection{Conn: conn, owner: l.owner}, nil
+}
+
+type httpConnection struct {
+	net.Conn
+	owner *httpListener
+}
+
+func (c *httpConnection) Close() error {
+	c.owner.mu.Lock()
+	delete(c.owner.hijacked, c)
+	c.owner.mu.Unlock()
+	return c.Conn.Close()
+}
+
+func (h *httpListener) connectionState(conn net.Conn, state http.ConnState) {
+	if state != http.StateHijacked {
+		return
+	}
+	tracked := conn.(*httpConnection)
+	h.mu.Lock()
+	closing := h.closing
+	if !closing {
+		h.hijacked[tracked] = struct{}{}
+	}
+	h.mu.Unlock()
+	if closing {
+		_ = tracked.Close() // 停止快照之后才完成的 Hijack 同样回收。
+	}
+}

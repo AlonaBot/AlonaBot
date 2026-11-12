@@ -461,6 +461,8 @@ const (
 	HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_SIGNATURE HttpAuthMode = 3
 	// 公开回调，由插件验证 nonce。
 	HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_NONCE HttpAuthMode = 4
+	// Adapter 校验平台传入的凭证。
+	HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN HttpAuthMode = 5
 )
 
 // Enum value maps for HttpAuthMode.
@@ -471,6 +473,7 @@ var (
 		2: "HTTP_AUTH_MODE_CALLBACK_STATE",
 		3: "HTTP_AUTH_MODE_CALLBACK_SIGNATURE",
 		4: "HTTP_AUTH_MODE_CALLBACK_NONCE",
+		5: "HTTP_AUTH_MODE_PLATFORM_TOKEN",
 	}
 	HttpAuthMode_value = map[string]int32{
 		"HTTP_AUTH_MODE_UNSPECIFIED":        0,
@@ -478,6 +481,7 @@ var (
 		"HTTP_AUTH_MODE_CALLBACK_STATE":     2,
 		"HTTP_AUTH_MODE_CALLBACK_SIGNATURE": 3,
 		"HTTP_AUTH_MODE_CALLBACK_NONCE":     4,
+		"HTTP_AUTH_MODE_PLATFORM_TOKEN":     5,
 	}
 )
 
@@ -1846,13 +1850,14 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x1aSERVICE_ACCESS_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16SERVICE_ACCESS_PRIVATE\x10\x01\x12\x1c\n" +
 	"\x18SERVICE_ACCESS_ALLOWLIST\x10\x02\x12\x19\n" +
-	"\x15SERVICE_ACCESS_PUBLIC\x10\x03*\xbc\x01\n" +
+	"\x15SERVICE_ACCESS_PUBLIC\x10\x03*\xdf\x01\n" +
 	"\fHttpAuthMode\x12\x1e\n" +
 	"\x1aHTTP_AUTH_MODE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bHTTP_AUTH_MODE_CORE_SESSION\x10\x01\x12!\n" +
 	"\x1dHTTP_AUTH_MODE_CALLBACK_STATE\x10\x02\x12%\n" +
 	"!HTTP_AUTH_MODE_CALLBACK_SIGNATURE\x10\x03\x12!\n" +
-	"\x1dHTTP_AUTH_MODE_CALLBACK_NONCE\x10\x04B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
+	"\x1dHTTP_AUTH_MODE_CALLBACK_NONCE\x10\x04\x12!\n" +
+	"\x1dHTTP_AUTH_MODE_PLATFORM_TOKEN\x10\x05B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
 
 var (
 	file_alonabot_v1_route_proto_rawDescOnce sync.Once
