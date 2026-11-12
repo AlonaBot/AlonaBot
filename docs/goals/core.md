@@ -73,7 +73,7 @@
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 待派发 |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 待派发 |
-| goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 等待前置 |
+| goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 待派发 |
 | goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 待派发 |
 | goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 待派发 |
 | goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 等待前置 |
@@ -5057,20 +5057,78 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-124 · T-04.11 注册写法统一
 
-状态：等待前置（T-04.12）。T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并，待审查者按合并后的代码改写。T-04.8（[PR #141](https://github.com/AlonaBot/AlonaBot/pull/141)，合并提交 `ac4aded`）已合并：SDK 公共 API 改用自有类型（`message.Session`、`message.Content`、`message.MessageRef`、事件常量与带类型 payload、`errcode`），pb 只在 `sdk/internal/convert`。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。`supervisor.Spec` 已有 `Scheduler *scheduler.Scheduler` 与 `HTTP *httpproxy.Server`，激活成功后先 Bind 再 Attach；`host.StopHooks{Frozen, Stopping}` 把 Drain 与撤销接入停止流程。SDK 当前仍为 `ScheduleRegistry.Every(jobID, d, fn)`、`Cron(jobID, expr, timezone, fn)` 与 `HTTPRegistry.Handle(method, path string, h http.Handler, opts ...HTTPOption)` 的位置参数注册，本切片在保留既有生命周期行为的基础上改为 builder。合并后由审查者按 main `2c1fdcc` 核对。2026-11-09 按 D-112 新增。2026-11-10 按 D-114 前置加入 T-04.12：要点中的 `r` 指插件对象或子插件（`*sdk.Plugin`、`*sdk.SubPlugin`），`sdk.Subscribe` 的第一个参数是 `sdk.Registrar`；Handler 用结构体接收参数时不取参数名（D-115）。T-04.8（goal-91）改写 sdk 的注册与类型（含 `Public(mode HTTPAuth) HTTPOption`），T-04.12（goal-125）改写注册的接收者，待两者合并后补全接口段。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-101、goal-123 都修改 sdk/generate，按执行顺序 §3 的生成器一行处理。
+状态：待派发。前置均已合并：T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）、T-04.8（[PR #141](https://github.com/AlonaBot/AlonaBot/pull/141)，合并提交 `ac4aded`）、T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）。2026-11-12 审查者按 main `aa11454` 的代码写出范围、接口与测试段，现有代码如下：
 
-目标：定时任务与 HTTP 路由改为与 D-70 相同的链式注册；命令省略 Args 时参数名取 Handler 的参数名；Event Bus 订阅的路由 ID 缺省为事件名。协议不变。Hook 的同样改写由 T-05.3（goal-17）完成。
+- **插件对象与子插件**（`sdk/plugin.go`、`sdk/subplugin.go`）上，HTTP 与定时任务仍是位置参数形式：
+  - `Handle(method, path string, h http.Handler, opts ...HTTPOption)`，其中 `HTTPOption`、包级 `Public(mode HTTPAuth) HTTPOption` 与 `HTTPRoute` 在 `sdk/registry.go`，校验在未导出的 `httpRegistry.Handle`；
+  - `Every(jobID string, d time.Duration, fn func(*Context) error)`；
+  - `Cron(jobID, expr, timezone string, fn func(*Context) error)`。
+- **订阅**：`sdk.Subscribe[T](owner Registrar, routeID, eventName string)`，由 goal-126 改为接收 `BusEventType[T]`，并提供缺省路由 ID 与 `.ID(routeID)`。
+- **命令参数名**：省略 `Args` 时为 arg1、arg2；结构体参数（D-115）不需要参数名。
+- **生成资源**：`sdk.Generated` 经 `UseGenerated(p, alonabotGenerated)` 绑定到对象（D-137）。
+- **调用方**：`examples/plugins/lifecycle` 与 `showcase` 使用 Handle、Every 与 `sdk.Public`。T-03.19（goal-110，PR #152）给 Adapter 加了 `sdk.AdapterHTTP`，接收与 `Handle` 同签名的登记函数。
 
-依据：PLAN T-04 步骤 11；DESIGN §D；DECISIONS D-70、D-79、D-112；TEST-MATRIX V-110 的 SDK 分项。
+与 goal-126 都修改 `sdk.Subscribe`：goal-126 先合并时，本切片只核对其缺省路由 ID 与 `.ID` 符合下文；后合并时由 goal-126 沿用本切片的规则。与 goal-101、goal-123、goal-126 都修改 `sdk/generate`，按执行顺序 §3 的生成器一行处理。PR #152 先合并时，本切片一并迁移 `AdapterHTTP` 与其测试。
 
-要点：
-- 定时任务：`r.Every(jobID string, d time.Duration)` 与 `r.Cron(jobID, expr string)` 返回同一种 builder，Cron 可选 `.Timezone(name)`（缺省 UTC），以 `.Handle(func(*sdk.Context) error)` 结束；路由 ID 仍为 "job." 加 jobID。删除现有的位置参数形式。
-- HTTP：`r.Route(method, path string)` 返回 builder，可选 `.Public(mode sdk.HTTPAuth)`，以 `.Handle(http.Handler)` 或 `.HandleFunc(func(http.ResponseWriter, *http.Request))` 结束；删除 `HTTPOption` 与包级的 `Public`。注册校验、路由 ID 与 Listener 的行为不变。
-- 漏写 Handle 时 Collect 报错并带 route_id，与命令相同。
-- 命令参数名：省略 `.Args` 时取 Handler 中 `*sdk.Context` 之后的参数名。Go 运行时取不到参数名，由生成器为插件包中第一个参数是 `*sdk.Context` 的包级函数、方法与函数字面量记录参数名，嵌入 Generated；SDK 按 Handler 的函数名（方法值去掉 `-fm` 后缀）或函数字面量的源码位置查找。写了 `Args` 时以它为准，个数仍须与参数一致；查不到时保持 arg1、arg2。`Optional` 的 name 指同一套名字。
-- 订阅：`sdk.Subscribe[T](r, eventName)` 的路由 ID 缺省为事件名，`.ID(routeID)` 可以另给；同一事件订阅两次且都没有给 ID 时，Collect 报重复的 route_id。
+```text
+/goal 使用 $alonabot-execute 推进 goal-124（切片 T-04.11：注册写法统一）。goal 目录 goal-124，分支 goal-124，worktree .worktrees/goal-124，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：定时任务与 HTTP 路由改为与 D-70 相同的链式注册；命令省略 Args 时，参数名取 Handler 的参数名；Event Bus 订阅的路由 ID 缺省为事件名。协议不变。Hook 的同样改写由 T-05.3（goal-17）完成。
+
+依据：PLAN T-04 步骤 11；DESIGN §D；DECISIONS D-70、D-79、D-112、D-114；TEST-MATRIX V-110 的 SDK 分项。
+
+范围（只新增或修改这些）：
+- sdk/plugin.go、sdk/subplugin.go：HTTP 与定时任务的入口改为 builder；sdk/registry.go：HTTP 与定时任务的 builder、删除 HTTPOption 与包级 Public；sdk/sdk.go 的 Collect 只加漏写 Handle 的检查与参数名查找
+- sdk/generated.go：Generated 追加参数名表；sdk/dispatch.go 只在命令参数绑定处读取参数名
+- sdk/generate/：为 Handler 记录参数名并写入生成文件
+- sdk/adapter_run.go（PR #152 已合并时）：AdapterHTTP 迁到新的 HTTP builder
+- examples/plugins/{lifecycle,showcase}/ 的 Go 源文件；各处 alonabot_gen.go 只由生成器重新生成
+- 提交的测试中以字符串嵌入的插件源码与测试插件（internal/core/adapter/remote/remote_test.go 等）只迁移注册写法，断言不变
+- 上述 SDK 包的 *_local_test.go
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+sdk（替换与新增；*Plugin 与 *SubPlugin 各有一套同名方法）
+   func (r *Plugin) Route(method, path string) *RouteBuilder
+   type RouteBuilder struct{ ... }
+   func (b *RouteBuilder) Public(mode HTTPAuth) *RouteBuilder // 公开路由；不调用时需要 Core 会话
+   func (b *RouteBuilder) Handle(h http.Handler)
+   func (b *RouteBuilder) HandleFunc(f func(http.ResponseWriter, *http.Request))
+   func (r *Plugin) Every(jobID string, d time.Duration) *ScheduleBuilder
+   func (r *Plugin) Cron(jobID, expr string) *ScheduleBuilder
+   type ScheduleBuilder struct{ ... }
+   func (b *ScheduleBuilder) Timezone(name string) *ScheduleBuilder // 只用于 Cron，缺省 UTC；Every 调用时由 Collect 报错
+   func (b *ScheduleBuilder) Handle(fn func(*Context) error)
+   Generated 追加 ParamNames map[string][]string // 键见下文；值为 *sdk.Context 之后的参数名
+   AdapterHTTP（PR #152 已合并时）改为 HTTP(route func(method, path string) *RouteBuilder)
+删除：(*Plugin)/(*SubPlugin).Handle(method, path, h, opts...)、原 Every(jobID, d, fn) 与 Cron(jobID, expr, timezone, fn)、HTTPOption、包级 Public，不留别名。
+
+行为：
+- HTTP：
+  - Route 声明一条 method+path 路由，以 Handle 或 HandleFunc 结束。
+  - 注册校验、错误文本、route_id 与 Listener 行为都与原 Handle 相同：私有路由需要 Core 会话，公开路由必须声明回调验证方式，Adapter 另可使用 AuthPlatformToken，插件不能。
+- 定时任务：Every 与 Cron 返回同一种 builder，以 Handle 结束。路由 ID 仍为 "job." 加 jobID，描述与原写法逐字段相同。
+- 漏写或重复 Handle：Collect 报错并带 route_id，与命令相同。
+- 命令参数名：
+  - 生成器为插件包中第一个参数是 `*sdk.Context` 的包级函数、方法与函数字面量，记录其后参数的名字，写入 Generated.ParamNames。
+  - 键：函数与方法为 runtime 的函数全名（`importpath.Func`、`importpath.(*T).Method`、`importpath.T.Method`）；函数字面量为 `importpath:文件名:行号`，行号是 `func` 关键字所在行。
+  - SDK 在 Collect 时用 `runtime.FuncForPC` 取 Handler 的名字（方法值去掉 `-fm` 后缀）或字面量的文件与行，查找参数名。
+  - 写了 Args 时以 Args 为准，个数仍须与参数一致；查不到时保持 arg1、arg2；结构体参数不用参数名；Optional 的 name 指同一套名字。
+- 订阅：路由 ID 缺省为事件名，`.ID(routeID)` 另给；同一事件订阅两次且都没有给 ID 时，Collect 报重复的 route_id（goal-126 已合并时只核对）。
 - 调用方：examples/plugins 与测试中以字符串嵌入的插件源码按新写法修改，与参数名相同的 Args 删去。
-- 测试：注册描述与旧写法的等价性、参数名的各种来源与查不到时的回退进本地自测；已有调用定时任务、HTTP 注册与 Subscribe 的集成测试改用新写法，断言不变。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：无（D-86：不向 sdk/ 提交测试）。已有调用 HTTP、定时任务与 Subscribe 的集成测试（含 TestRemoteHTTPUpgrade、示例相关测试）只迁移写法，断言不变。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：
+  - 新旧写法注册描述的等价性（HTTP 的各认证模式、Every 与 Cron 含 Timezone）；漏写、重复 Handle 与 Every 调用 Timezone 的报错；
+  - 参数名的各种来源（包级函数、值与指针方法值、函数字面量）、Args 优先、查不到时的回退；
+  - 生成器重复生成一致；
+  - internal/core/supervisor 的本地集成（//go:build unix）：真实插件的 HTTP 路由、定时任务与按参数名绑定的命令。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race . ./cmd/... ./internal/core/... ./sdk/... ./adapters/...；go build ./...。
+
+不做：Hook 的注册写法（goal-17）；Service 与 Event Bus 的声明（goal-126）；协议与 Core 的改动。
+```
 
 ### goal-126 · T-04.13 Service 与 Event Bus 的带类型声明
 
