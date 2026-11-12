@@ -69,9 +69,6 @@ func (p *Policy) SetOverride(ctx context.Context, pluginID string, s Scope, o Ov
 	// 2. 只保存权限与启用，保留命令名以及 nil 与显式空集合的区别。
 	key := scopeKey(s)
 	err := p.store.PutCommandPolicy(ctx, state.CommandPolicy{PluginID: pluginID, Scope: key, Permissions: permissions, Enabled: o.Enabled})
-	if err == nil && o.Permissions == nil && o.Enabled == nil {
-		err = p.store.DeleteCommandPolicy(ctx, pluginID, key)
-	}
 	if err == nil && p.commandsChanged != nil {
 		p.commandsChanged()
 	}

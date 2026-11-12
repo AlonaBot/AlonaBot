@@ -42,6 +42,7 @@ type GlobalDeny struct {
 func (GlobalDeny) TableName() string { return "global_deny" }
 
 // PutCommandPolicy 保存权限与启用覆盖，保留命令名；调用方负责作用域和权限名校验。
+// 三列均为 nil 时在同一事务内删除空行，失败时整体回滚。
 func (s *Store) PutCommandPolicy(ctx context.Context, row CommandPolicy) error {
 	return s.updateCommandPolicy(ctx, row.PluginID, row.Scope, func(stored *CommandPolicy) {
 		stored.Permissions, stored.Enabled = row.Permissions, row.Enabled
@@ -49,6 +50,7 @@ func (s *Store) PutCommandPolicy(ctx context.Context, row CommandPolicy) error {
 }
 
 // PutCommandNames 只保存命令名覆盖；names 为 nil 时清空该列。
+// 三列均为 nil 时在同一事务内删除空行，失败时整体回滚。
 func (s *Store) PutCommandNames(ctx context.Context, pluginID, scope string, names [][]string) error {
 	return s.updateCommandPolicy(ctx, pluginID, scope, func(stored *CommandPolicy) { stored.Names = names })
 }
@@ -63,6 +65,9 @@ func (s *Store) updateCommandPolicy(ctx context.Context, pluginID, scope string,
 			return err
 		}
 		update(&row)
+		if row.Permissions == nil && row.Enabled == nil && row.Names == nil {
+			return tx.Where(commandPolicyKey(pluginID, scope)).Delete(&CommandPolicy{}).Error
+		}
 		return tx.Save(&row).Error
 	})
 }

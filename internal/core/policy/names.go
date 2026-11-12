@@ -128,9 +128,6 @@ func (p *Policy) saveCommandNames(ctx context.Context, pluginID, routeID string,
 		return err
 	}
 	if names == nil {
-		if err := p.store.DeleteCommandPolicy(ctx, pluginID, key); err != nil {
-			return err
-		}
 		delete(p.names[pluginID], routeID)
 		return nil
 	}
