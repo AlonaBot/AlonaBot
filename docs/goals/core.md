@@ -55,7 +55,7 @@
 | goal-101 | T-08.12 | Adapter 实例配置与 Core 设置的版本迁移 | T-07.6、T-08.11 | 已完成（PR #114） |
 | goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2、T-04.9、T-08.8、T-09.16 | 待派发 |
 | goal-104 | T-03.13 | 媒体按来源传递 | T-03.6、T-04.8、T-07.7 | 待派发 |
-| goal-105 | T-03.14 | 新增片段与字段（含会话类型） | T-03.8、T-04.8 | 待派发 |
+| goal-105 | T-03.14 | 新增片段与字段（含会话类型） | T-03.8、T-04.8 | 已完成（PR #143） |
 | goal-106 | T-03.15 | 平台动作 | T-03.8、T-04.8 | 待派发 |
 | goal-107 | T-03.16 | 撤回 | T-03.9、T-04.8 | 待派发 |
 | goal-108 | T-03.17 | 命令菜单同步 | T-04.6、T-04.7、T-04.8、T-08.8 | 待派发 |
@@ -3977,7 +3977,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-105 · T-03.14 新增片段与字段
 
-状态：待派发。前置均已合并（T-04.8 为 PR #141（合并提交 `ac4aded`））；审查者按 main 合入 PR #141 后的代码核对。T-03.8（PR #136，合并提交 `3621fc1`）已提供 `buttons.Service.Issue`、`adapter.ExtensionChecker` 与带类型的按钮动作。SDK 的 `message.Button` 是 `sdk/internal/messagecodec.Button` 的别名，新增 URL 字段须改其定义；SDK 的收发转换在 `sdk/internal/convert`。2026-11-09 按 D-87、D-89、D-91、D-97 新增，同日按 D-100 追加会话类型；字段编号按并行切片规则在实现时追加。
+状态：已完成（[PR #143](https://github.com/AlonaBot/AlonaBot/pull/143)，合并提交 `15682e8`），证据见 TEST-MATRIX §3.2。合入：voice 片段、转发引用节点与入站转发标识、URL 按钮、`Event.chat_type` 与 SDK 的会话类型判断；Core 在按钮签发与媒体取件前递归核对 message.voice、message.forward 能力，嵌套 forward 仍为 UNSUPPORTED，入站非法 chat_type 在游标持久化前拒绝；URL 按钮清除外来 token；voice 进入现有来源登记、Session token 与消费租约路径。派发时：前置均已合并（T-04.8 为 PR #141（合并提交 `ac4aded`））；审查者按 main 合入 PR #141 后的代码核对。T-03.8（PR #136，合并提交 `3621fc1`）已提供 `buttons.Service.Issue`、`adapter.ExtensionChecker` 与带类型的按钮动作。SDK 的 `message.Button` 是 `sdk/internal/messagecodec.Button` 的别名，新增 URL 字段须改其定义；SDK 的收发转换在 `sdk/internal/convert`。2026-11-09 按 D-87、D-89、D-91、D-97 新增，同日按 D-100 追加会话类型；字段编号按并行切片规则在实现时追加。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-105（切片 T-03.14：新增片段与字段）。goal 目录 goal-105，分支 goal-105，worktree .worktrees/goal-105，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
