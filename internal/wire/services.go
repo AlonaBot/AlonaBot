@@ -72,3 +72,6 @@ const ServiceAdapterAction = "adapter.action"
 
 // ServiceMediaURL 为本次发送的只读媒体令牌签发临时 URL。
 const ServiceMediaURL = "core.media.url"
+
+// ServiceAdapterCommandsSync 替换账号实例的命令菜单。
+const ServiceAdapterCommandsSync = "adapter.commands.sync"

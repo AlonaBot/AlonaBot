@@ -55,7 +55,10 @@ func TestMain(m *testing.M) {
 		os.Exit(m.Run())
 	}
 	var err error
-	if mode == "plugin" || mode == "stream-plugin" {
+	if mode == "plugin" || mode == "command-plugin" || mode == "stream-plugin" {
+		if mode == "command-plugin" {
+			sdk.UseGenerated((*loopPlugin)(nil), sdk.Generated{I18n: commandCatalog()})
+		}
 		err = sdk.Run(&loopPlugin{})
 	} else if mode == "schema-parse" || mode == "schema-resolve" {
 		err = invalidSchemaAdapter(mode)
@@ -174,6 +177,14 @@ func (*loopPlugin) Events(r *sdk.EventRegistry) {
 
 // Commands 让扩展事件误入命令层时留下可观察记录。
 func (*loopPlugin) Commands(r *sdk.CommandRegistry) {
+	if os.Getenv(helperEnv) == "command-plugin" {
+		handler := func(*sdk.Context) error { return nil }
+		r.Command("ping").Description("Ping the bot").Alias("p").Handle(handler)
+		r.Command("bare").Handle(handler)
+		r.Command("admin").Description("Admin command").Permission(sdk.Admin).Handle(handler)
+		r.Group("rss").Command("add").Description("Add a feed").Handle(handler)
+		return
+	}
 	if os.Getenv(helperEnv) == "stream-plugin" {
 		return
 	}
@@ -282,15 +293,16 @@ func expectedDescriptor(t *testing.T) *pb.AdapterDescriptor {
 }
 func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core sdkadapter.Core) (sdkadapter.Instance, error) {
 	var config struct {
-		Account     string `json:"account"`
-		Token       string `json:"token"`
-		DisplayName string `json:"display_name"`
-		Username    string `json:"username"`
-		Media       bool   `json:"media"`
-		Stream      bool   `json:"stream"`
-		Delete      bool   `json:"delete"`
-		DeleteAudit string `json:"delete_audit"`
-		Segments    bool   `json:"segments"`
+		Account       string `json:"account"`
+		Token         string `json:"token"`
+		DisplayName   string `json:"display_name"`
+		Username      string `json:"username"`
+		Media         bool   `json:"media"`
+		CommandsAudit string `json:"commands_audit"`
+		Stream        bool   `json:"stream"`
+		Delete        bool   `json:"delete"`
+		DeleteAudit   string `json:"delete_audit"`
+		Segments      bool   `json:"segments"`
 	}
 	if err := json.Unmarshal(req.ConfigJSON, &config); err != nil {
 		return nil, err
@@ -306,7 +318,7 @@ func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core s
 			return nil, err
 		}
 	}
-	instance := &loopInstance{id: req.InstanceID, account: config.Account, displayName: config.DisplayName, username: config.Username, core: core, sequence: n, initial: string(req.Cursor), token: config.Token, stream: config.Stream, segments: config.Segments}
+	instance := &loopInstance{id: req.InstanceID, account: config.Account, displayName: config.DisplayName, username: config.Username, core: core, sequence: n, initial: string(req.Cursor), token: config.Token, commandsAudit: config.CommandsAudit, stream: config.Stream, segments: config.Segments}
 	instance.deleteSupported, instance.deleteAudit = config.Delete, config.DeleteAudit
 	if config.Media {
 		return &mediaLoopInstance{loopInstance: instance}, nil
@@ -336,6 +348,7 @@ func (i *mediaLoopInstance) ReadPlatformFile(_ context.Context, fileID string, o
 }
 
 type loopInstance struct {
+	commandsAudit         string
 	stream                bool
 	token                 string
 	stopFailed            bool
@@ -359,6 +372,9 @@ func (i *loopInstance) Capabilities() []message.Capability {
 		return streamCapabilities()
 	}
 	capabilities := []message.Capability{{Name: "message.text", Version: 1, Supported: true}}
+	if i.commandsAudit != "" {
+		capabilities = append(capabilities, message.Capability{Name: "commands.sync", Version: 1, Supported: true})
+	}
 	if i.deleteSupported {
 		capabilities = append(capabilities, message.Capability{Name: "message.delete", Version: 1, Supported: true})
 	}
@@ -1274,6 +1290,139 @@ func TestRemotePermissionsAndEvents(t *testing.T) {
 				t.Fatalf("missing rejection identity or level: %s", text)
 			}
 		})
+	}
+}
+
+func commandCatalog() map[string][]byte {
+	return map[string][]byte{"zh-CN.json": []byte(`{"commands":{"ping":{"description":"测试机器人"},"rss add":{"description":"添加订阅"}}}`)}
+}
+
+func (i *loopInstance) SyncCommands(_ context.Context, commands []sdkadapter.CommandMenuItem) *errcode.Error {
+	encoded, err := json.Marshal(commands)
+	if err != nil {
+		return errcode.Internal.New(err.Error())
+	}
+	file, err := os.OpenFile(i.commandsAudit, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return errcode.Internal.New(err.Error())
+	}
+	_, writeErr := file.Write(append(encoded, '\n'))
+	if err := errors.Join(writeErr, file.Close()); err != nil {
+		return errcode.Internal.New(err.Error())
+	}
+	return nil
+}
+
+// TestRemoteCommandSync 验证真实 SDK 进程的命令说明、菜单筛选和持久化禁用后的更新。
+func TestRemoteCommandSync(t *testing.T) {
+	ctx := t.Context()
+	store, spec, logs := setup(t)
+	registry := adapter.NewRegistry()
+	commandPolicy := policy.New(store)
+	dispatch := router.New(router.Options{Concurrency: 1, QueueEvents: tune.Defaults().DispatchQueueEvents, QueueBytes: tune.Defaults().DispatchQueueBytes, Adapters: registry, Policy: commandPolicy, CommandState: commandPolicy.CommandState})
+	commandPolicy.SetCommandsChanged(dispatch.CommandsChanged)
+	dispatch.Start()
+	defer dispatch.Close(context.Background())
+	process := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: dispatch, RegisterIncoming: openMediaStore(t).RegisterIncoming, StartCommandSync: dispatch.StartCommandSync, StopCommandSync: dispatch.StopCommandSync})
+	mux := router.NewMux()
+	process.Services(mux)
+	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
+	spec.Handler = mux.For(caller)
+	running, err := supervisor.Launch(ctx, store, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		process.Unbind()
+		if result := running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE); result.Err != nil {
+			t.Error(result.Err)
+		}
+	}()
+	if err := process.Bind(ctx, running.Instance, caller); err != nil {
+		t.Fatal(err)
+	}
+	audit := filepath.Join(t.TempDir(), "commands.jsonl")
+	if err := os.WriteFile(audit, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	config, err := json.Marshal(map[string]string{"account": "commands-account", "commands_audit": audit})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := process.StartInstance(ctx, "menu", config); err != nil {
+		t.Fatal(err)
+	}
+	// 每条审计记录来自 Adapter 的实际 SyncCommands 调用，启动须先清空菜单。
+	awaitMenu := func(count int) []sdkadapter.CommandMenuItem {
+		t.Helper()
+		timer := time.NewTimer(5 * time.Second)
+		defer timer.Stop()
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			encoded, err := os.ReadFile(audit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			lines := bytes.Split(encoded, []byte{'\n'})
+			if len(lines)-1 >= count {
+				var menu []sdkadapter.CommandMenuItem
+				if err := json.Unmarshal(lines[count-1], &menu); err != nil {
+					t.Fatal(err)
+				}
+				return menu
+			}
+			select {
+			case <-ticker.C:
+			case <-timer.C:
+				logs.mu.Lock()
+				text := logs.b.String()
+				logs.mu.Unlock()
+				t.Fatalf("menu sync %d timed out; logs=%s", count, text)
+			}
+		}
+	}
+	if menu := awaitMenu(1); len(menu) != 0 {
+		t.Fatal(menu)
+	}
+	observer := spec
+	observer.PluginID = "command-observer"
+	observer.Role = state.RolePlugin
+	observer.AdapterID = ""
+	observer.GenerationID = "commands-gen"
+	observer.PluginDir = t.TempDir()
+	observer.Handler = nil
+	observer.Bootstrap = &pb.Bootstrap{GenerationId: observer.GenerationID, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	observer.ExtraEnv = map[string]string{helperEnv: "command-plugin", "GORACE": "atexit_sleep_ms=0"}
+	observer.I18n = commandCatalog()
+	observer.DefaultLocale = "zh-CN"
+	observer.CommandsChanged = dispatch.CommandsChanged
+	if err := store.AddInstall(ctx, state.Install{PluginID: observer.PluginID, Role: state.RolePlugin, BuildDigest: observer.BuildDigest}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddGeneration(ctx, observer.PluginID, observer.GenerationID, "{}", 1); err != nil {
+		t.Fatal(err)
+	}
+	plugin, err := supervisor.Launch(ctx, store, observer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if result := plugin.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE); result.Err != nil {
+			t.Error(result.Err)
+		}
+	}()
+	dispatch.Attach(router.FromInstance(plugin.Instance), router.NewCaller(observer.PluginID, observer.GenerationID))
+	want := []sdkadapter.CommandMenuItem{{Name: "bare", Descriptions: map[string]string{"en-US": "bare", "zh-CN": "bare"}}, {Name: "ping", Descriptions: map[string]string{"en-US": "Ping the bot", "zh-CN": "测试机器人"}}}
+	if got := awaitMenu(2); !reflect.DeepEqual(got, want) {
+		t.Fatalf("menu=%v want=%v", got, want)
+	}
+	disabled := false
+	if err := commandPolicy.SetOverride(ctx, observer.PluginID, policy.Scope{Kind: policy.ScopeRoute, RouteID: "cmd.ping"}, policy.Override{Enabled: &disabled}); err != nil {
+		t.Fatal(err)
+	}
+	if got := awaitMenu(3); !reflect.DeepEqual(got, want[:1]) {
+		t.Fatalf("disabled menu=%v want=%v", got, want[:1])
 	}
 }
 

@@ -147,7 +147,8 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 	})
 	messages := message.New(a.adapters, p, a.media.LeaseForSend, a.buttons.Issue, v.RequestTimeout)
 	a.router = router.New(router.Options{Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
-		Global: a.global, Adapters: a.adapters, Send: messages.Send, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, Prefixes: nil})
+		Global: a.global, Adapters: a.adapters, Send: messages.Send, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: nil})
+	p.SetCommandsChanged(a.router.CommandsChanged)
 	a.mux.Handle(wire.ServiceSend, messages.Send)
 	a.mux.Handle(wire.ServiceEdit, messages.Edit)
 	a.mux.Handle(wire.ServiceDelete, messages.Delete)
@@ -210,7 +211,8 @@ func (a *assembly) handler(r *runningComponent, install state.Install) wire.Hand
 	if install.Role != state.RoleAdapter {
 		return a.mux.For(r.caller)
 	}
-	r.remote = remote.New(remote.Options{AdapterID: install.AdapterID, PluginID: install.PluginID, Store: a.store, Registry: a.adapters, Sink: a.router, RegisterIncoming: a.media.RegisterIncoming})
+	r.remote = remote.New(remote.Options{AdapterID: install.AdapterID, PluginID: install.PluginID, Store: a.store, Registry: a.adapters, Sink: a.router, RegisterIncoming: a.media.RegisterIncoming,
+		StartCommandSync: a.router.StartCommandSync, StopCommandSync: a.router.StopCommandSync})
 	// Adapter 私有服务按 Session 建独立 Mux，多个 Adapter 不会重复登记固定服务名。
 	local := router.NewMux()
 	r.remote.Services(local)
