@@ -88,6 +88,14 @@ type poke struct {
 	User string `json:"user"`
 }
 
+type loopActionParams struct {
+	Value string `json:"value"`
+}
+
+type loopActionResult struct {
+	Value string `json:"value"`
+}
+
 func observe(route string, c *sdk.Context, value *poke) error {
 	report := observedEvent{Route: route, ChatType: c.ChatType()}
 	if payload, ok := c.Event().Payload.(*message.CreatedPayload); ok {
@@ -182,6 +190,12 @@ func (*loopAdapter) Descriptor() *sdkadapter.Descriptor {
 	if os.Getenv(helperEnv) == "stream-adapter" {
 		descriptor.Capabilities = streamCapabilities()
 	}
+	if os.Getenv(helperEnv) == "actions" {
+		descriptor.Actions = []sdkadapter.ActionDeclaration{
+			sdkadapter.Action[loopActionParams, loopActionResult]("loop.echo", 1, sdkadapter.ActionScopeChat),
+			sdkadapter.Action[loopActionParams, loopActionResult]("loop.account", 1, sdkadapter.ActionScopeAccount),
+		}
+	}
 	switch os.Getenv(helperEnv) {
 	case "permission-prefix":
 		descriptor.Permissions[0].Name = "other.owner"
@@ -274,6 +288,8 @@ func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core s
 		Username    string `json:"username"`
 		Media       bool   `json:"media"`
 		Stream      bool   `json:"stream"`
+		Delete      bool   `json:"delete"`
+		DeleteAudit string `json:"delete_audit"`
 		Segments    bool   `json:"segments"`
 	}
 	if err := json.Unmarshal(req.ConfigJSON, &config); err != nil {
@@ -291,6 +307,7 @@ func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core s
 		}
 	}
 	instance := &loopInstance{id: req.InstanceID, account: config.Account, displayName: config.DisplayName, username: config.Username, core: core, sequence: n, initial: string(req.Cursor), token: config.Token, stream: config.Stream, segments: config.Segments}
+	instance.deleteSupported, instance.deleteAudit = config.Delete, config.DeleteAudit
 	if config.Media {
 		return &mediaLoopInstance{loopInstance: instance}, nil
 	}
@@ -328,6 +345,9 @@ type loopInstance struct {
 	mu                    sync.Mutex
 	sequence              int
 	mediaReads            int
+	deleteSupported       bool
+	deleteAudit           string
+	actionCalls           int
 	segments              bool
 }
 
@@ -339,10 +359,53 @@ func (i *loopInstance) Capabilities() []message.Capability {
 		return streamCapabilities()
 	}
 	capabilities := []message.Capability{{Name: "message.text", Version: 1, Supported: true}}
+	if i.deleteSupported {
+		capabilities = append(capabilities, message.Capability{Name: "message.delete", Version: 1, Supported: true})
+	}
 	if i.segments {
 		capabilities = append(capabilities, message.Capability{Name: "message.voice", Version: 1, Supported: true})
 	}
 	return capabilities
+}
+
+// Delete 记录真实 RPC 到达并模拟顺序平台操作，失败或未知后保留未尝试项。
+func (i *loopInstance) Delete(ctx context.Context, target message.Session, ids []string) (*message.DeleteResult, *errcode.Error) {
+	data, err := json.Marshal(struct {
+		Instance string
+		IDs      []string
+	}{Instance: i.id, IDs: ids})
+	if err != nil {
+		return nil, errcode.Internal.New(err.Error())
+	}
+	file, err := os.OpenFile(i.deleteAudit, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return nil, errcode.Internal.New(err.Error())
+	}
+	_, writeError := file.Write(append(data, '\n'))
+	if err := errors.Join(writeError, file.Close()); err != nil {
+		return nil, errcode.Internal.New(err.Error())
+	}
+	result := &message.DeleteResult{Session: target, AdapterInstanceID: i.id}
+	var safe *errcode.Error
+	for _, id := range ids {
+		item := message.DeleteItemResult{PlatformMessageID: id, Status: message.PartAccepted}
+		if safe != nil {
+			item.Status = message.PartNotAttempted
+		} else {
+			switch id {
+			case "reject":
+				item.Status, safe = message.PartRejected, errcode.PermissionDenied.New("message deletion rejected")
+			case "unknown":
+				item.Status, safe = message.PartUnknown, errcode.Unavailable.New("message deletion outcome unknown")
+			case "wait":
+				<-ctx.Done()
+				item.Status, safe = message.PartUnknown, errcode.DeadlineExceeded.New("message deletion outcome unknown")
+			}
+			item.Error = safe
+		}
+		result.Items = append(result.Items, item)
+	}
+	return result, safe
 }
 func (i *loopInstance) Stop(context.Context) error {
 	i.mu.Lock()
@@ -361,6 +424,9 @@ func (i *loopInstance) Send(ctx context.Context, target message.Session, chain m
 		i.sequence++
 		return i.streamReceipt("send", target, strconv.Itoa(i.sequence), text)
 	}
+	if text == "media-source" {
+		return i.inspectMediaSource(ctx, chain)
+	}
 	if text == "fail" {
 		if err := i.core.ReportFailure(ctx, errcode.Unauthenticated.New("account rejected")); err != nil {
 			return nil, errcode.Internal.New(err.Error())
@@ -378,6 +444,9 @@ func (i *loopInstance) Send(ctx context.Context, target message.Session, chain m
 	}
 	if text == "media-read-count" {
 		return &message.SendResult{Status: message.SendAccepted, PlatformMessageIDs: []string{strconv.Itoa(i.mediaReads)}}, nil
+	}
+	if text == "action-count" {
+		return &message.SendResult{Status: message.SendAccepted, PlatformMessageIDs: []string{strconv.Itoa(i.actionCalls)}}, nil
 	}
 	i.sequence++
 	id := i.id
@@ -1402,4 +1471,26 @@ func TestRemoteStream(t *testing.T) {
 			t.Fatal("stream lost parent call ID")
 		}
 	}
+}
+
+// Action 记录真实跨进程调用次数，回传带平台额外字段的 JSON 原文。
+func (i *loopInstance) Action(_ context.Context, to message.Session, name string, version uint32, params json.RawMessage) (json.RawMessage, *errcode.Error) {
+	if version != 1 || (name != "loop.echo" && name != "loop.account") {
+		return nil, errcode.Unsupported.New("action is not declared")
+	}
+	if (name == "loop.account") != (to == "") {
+		return nil, errcode.InvalidArgument.New("action scope does not match session")
+	}
+	var input loopActionParams
+	if err := json.Unmarshal(params, &input); err != nil {
+		return nil, errcode.InvalidArgument.New(err.Error())
+	}
+	i.mu.Lock()
+	i.actionCalls++
+	i.mu.Unlock()
+	value, err := json.Marshal(input.Value)
+	if err != nil {
+		return nil, errcode.Internal.New(err.Error())
+	}
+	return json.RawMessage(` {"value": ` + string(value) + `, "platform_extra": true} `), nil
 }

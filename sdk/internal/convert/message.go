@@ -243,6 +243,9 @@ func segmentToProto(s message.Segment, enclosingTarget *pb.Target, outbound bool
 	return out, nil
 }
 func sourceToProto(s message.MediaSource) (*pb.MediaSource, error) {
+	if s.PlatformFile != "" {
+		return nil, errcode.InvalidArgument.New("platform_file is reserved for Core")
+	}
 	count := 0
 	out := &pb.MediaSource{}
 	if s.MediaRef != "" {
@@ -257,6 +260,10 @@ func sourceToProto(s message.MediaSource) (*pb.MediaSource, error) {
 		count++
 		out.Source = &pb.MediaSource_HttpsUrl{HttpsUrl: s.HTTPSURL}
 	}
+	if s.InlineBase64 != "" {
+		count++
+		out.Source = &pb.MediaSource_InlineBase64{InlineBase64: s.InlineBase64}
+	}
 	if count != 1 {
 		return nil, errcode.InvalidArgument.New("media source must have exactly one source")
 	}
@@ -266,7 +273,7 @@ func sourceFromProto(s *pb.MediaSource) message.MediaSource {
 	if s == nil {
 		return message.MediaSource{}
 	}
-	return message.MediaSource{MediaRef: s.GetMediaRef(), Incoming: incomingFromProto(s.GetIncomingRef()), HTTPSURL: s.GetHttpsUrl()}
+	return message.MediaSource{MediaRef: s.GetMediaRef(), Incoming: incomingFromProto(s.GetIncomingRef()), HTTPSURL: s.GetHttpsUrl(), InlineBase64: s.GetInlineBase64(), PlatformFile: s.GetPlatformFile()}
 }
 func incomingFromProto(m *pb.IncomingMedia) *message.IncomingMedia {
 	if m == nil {

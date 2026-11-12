@@ -90,6 +90,33 @@ func AdapterRegister(r *pb.Register, adapterID string) error {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "resolve adapter event %q schema: %v", name, err)
 		}
 	}
+	// 5. 动作按名称与版本唯一注册，参数和结果的引用都须在注册时解析。
+	actions := make(map[extensionKey]bool)
+	for _, action := range descriptor.GetActions() {
+		key := extensionKey{action.GetName(), action.GetVersion()}
+		if !strings.HasPrefix(key.name, adapterID+".") || !IsAdapterEventType(key.name) || key.version == 0 {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid adapter action %q version %d", key.name, key.version)
+		}
+		if actions[key] {
+			return errf(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "duplicate adapter action %q version %d", key.name, key.version)
+		}
+		actions[key] = true
+		if action.GetScope() != pb.ActionScope_ACTION_SCOPE_CHAT && action.GetScope() != pb.ActionScope_ACTION_SCOPE_ACCOUNT {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid adapter action %q scope", key.name)
+		}
+		for _, entry := range []struct{ name, raw string }{{"params", action.GetParamsSchemaJson()}, {"result", action.GetResultSchemaJson()}} {
+			var schema jsonschema.Schema
+			if !IsJSONObject([]byte(entry.raw)) {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "adapter action %q %s schema is not a JSON object", key.name, entry.name)
+			}
+			if err := json.Unmarshal([]byte(entry.raw), &schema); err != nil {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "parse adapter action %q %s schema: %v", key.name, entry.name, err)
+			}
+			if _, err := schema.Resolve(nil); err != nil {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "resolve adapter action %q %s schema: %v", key.name, entry.name, err)
+			}
+		}
+	}
 	return nil
 }
 
