@@ -19,12 +19,12 @@ type UserID string
 
 // Command 记录一条已收集的命令注册。
 type Command struct {
-	Path     []string       // 完整命令路径（含分组前缀），大小写敏感
-	Aliases  [][]string     // 完整别名路径，不附加分组前缀
-	Priority int32          // 数值越小越先，缺省为 0
-	Handler  any            // 已通过签名检查的处理函数
-	mode     pb.HandlerMode // 由签名推出的 Handler 形态
-	params   []pb.ParamType // Context 之后各参数的类型
+	Path      []string       // 完整命令路径（含分组前缀），大小写敏感
+	Aliases   [][]string     // 完整别名路径，不附加分组前缀
+	Priority  int32          // 数值越小越先，缺省为 0
+	Handler   any            // 已通过签名检查的处理函数
+	mode      pb.HandlerMode // 由签名推出的 Handler 形态
+	structure reflect.Type   // 结构体参数的值类型；位置参数形式为 nil。
 
 	permission Permission
 	routeID    string          // 文本匹配与 Raw 的显式路由 ID
@@ -49,6 +49,7 @@ type routeOptions struct {
 	aliases    [][]string
 	priority   int32
 	names      []string
+	argsSet    bool // 区分未调用 Args 与显式 Args()，结构体参数禁止后者。
 	optional   []optionalArgument
 	raw        bool
 	usageMode  pb.UsageMode
@@ -155,6 +156,7 @@ func (b *CommandBuilder) Alias(path ...string) *CommandBuilder {
 func (b *CommandBuilder) Args(names ...string) *CommandBuilder {
 	b.touch()
 	b.options.names = slices.Clone(names)
+	b.options.argsSet = true
 	return b
 }
 
@@ -234,26 +236,27 @@ func (r *CommandRegistry) collect() {
 
 func (r *CommandRegistry) register(c Command, options routeOptions) {
 	// 1. 从真实函数签名取得参数类型，选项仅描述名称与缺失时的行为。
-	mode, params, err := checkHandler(c.Handler)
+	mode, structure, params, err := checkHandler(c.Handler)
 	if err != nil {
 		r.errs = append(r.errs, invalidCommand("command %q: %v", commandRouteID(c), err))
 		return
 	}
-	c.mode, c.params = mode, params
+	c.mode, c.structure = mode, structure
 	c.Aliases, c.Priority = options.aliases, options.priority
 	spec := c.spec
+	if structure != nil && (options.argsSet || len(options.optional) != 0 || options.raw) {
+		r.errs = append(r.errs, invalidCommand("command %q uses struct parameters with Args, Optional or RawTail", commandRouteID(c)))
+		return
+	}
 	spec.Path, spec.HandlerMode = c.Path, mode
 	spec.UsageMode, spec.UsageKey, spec.IgnoreCase = options.usageMode, options.usageKey, options.ignoreCase
+	spec.Params = params
 	if len(options.names) > len(params) {
 		r.errs = append(r.errs, invalidCommand("command %q has more argument names than parameters", commandRouteID(c)))
 		return
 	}
-	for i, param := range params {
-		name := fmt.Sprintf("arg%d", i+1)
-		if i < len(options.names) {
-			name = options.names[i]
-		}
-		spec.Params = append(spec.Params, &pb.CommandParam{Name: name, Type: param, Required: true})
+	for i, name := range options.names {
+		spec.Params[i].Name = name
 	}
 	for _, optional := range options.optional {
 		if len(optional.defaults) > 1 {
@@ -341,47 +344,12 @@ func (r *CommandRegistry) add(c Command) {
 	r.commands = append(r.commands, c)
 }
 
-// Handler 签名检查使用的反射类型，以及参数类型到协议参数类型的映射。
+// Handler 签名检查使用的公共入口与返回值类型。
 var (
 	contextType = reflect.TypeOf((*Context)(nil))
 	errorType   = reflect.TypeOf((*error)(nil)).Elem()
 	contentType = reflect.TypeFor[message.Content]()
-	paramTypes  = map[reflect.Type]pb.ParamType{
-		reflect.TypeOf(""):                           pb.ParamType_PARAM_TYPE_STRING,
-		reflect.TypeOf(int64(0)):                     pb.ParamType_PARAM_TYPE_INT,
-		reflect.TypeOf(float64(0)):                   pb.ParamType_PARAM_TYPE_FLOAT,
-		reflect.TypeOf(false):                        pb.ParamType_PARAM_TYPE_BOOL,
-		reflect.TypeOf(UserID("")):                   pb.ParamType_PARAM_TYPE_USER,
-		reflect.TypeOf((*message.ImageSegment)(nil)): pb.ParamType_PARAM_TYPE_IMAGE,
-		reflect.TypeOf(message.Chain(nil)):           pb.ParamType_PARAM_TYPE_MESSAGE,
-	}
 )
-
-// checkHandler 校验两种 Handler 签名并返回模式与参数类型。
-func checkHandler(h any) (pb.HandlerMode, []pb.ParamType, error) {
-	t := reflect.TypeOf(h)
-	if t == nil || t.Kind() != reflect.Func || reflect.ValueOf(h).IsNil() {
-		return 0, nil, fmt.Errorf("handler must be a non-nil function, got %T", h)
-	}
-	if t.IsVariadic() || t.NumIn() == 0 || t.In(0) != contextType {
-		return 0, nil, fmt.Errorf("handler's first parameter must be *sdk.Context and it must not be variadic: %s", t)
-	}
-	var params []pb.ParamType
-	for i := 1; i < t.NumIn(); i++ {
-		p, ok := paramTypes[t.In(i)]
-		if !ok {
-			return 0, nil, fmt.Errorf("type %[2]s of parameter %[1]d is not supported (expected string, int64, float64, bool, sdk.UserID, *message.ImageSegment or message.Chain)", i, t.In(i))
-		}
-		params = append(params, p)
-	}
-	switch {
-	case t.NumOut() == 1 && t.Out(0) == errorType:
-		return pb.HandlerMode_HANDLER_MODE_MANUAL, params, nil
-	case t.NumOut() == 2 && t.Out(0) == contentType && t.Out(1) == errorType:
-		return pb.HandlerMode_HANDLER_MODE_AUTO_REPLY, params, nil
-	}
-	return 0, nil, fmt.Errorf("handler may only return error or (message.Content, error): %s", t)
-}
 
 // HTTPRoute 记录一条插件 HTTP 路由；path 相对于 /plugins/{id}，端口由 SDK 托管（D-25）。
 type HTTPRoute struct {
