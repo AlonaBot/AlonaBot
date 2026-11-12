@@ -7,6 +7,8 @@ import (
 	"math/big"
 	"slices"
 	"strconv"
+
+	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
 )
 
 const (
@@ -24,9 +26,12 @@ const (
 	valueTemplateListType = "template_list"
 )
 
+type valueView = dbhook.ConfigView[Values]
+
 // Values 提供已准备配置的只读取值；可并发读取，返回的集合可独立修改。
 // 键未声明或取值方法与字段类型不符时 panic，消息包含点分隔的配置路径。
 type Values struct {
+	valueView
 	fields      map[string]valueEntry
 	path        string
 	templateKey string // 选中模板的键；普通对象或未选择模板时为空。
@@ -102,6 +107,9 @@ func (v Values) TemplateList(key string) []Template {
 func (t Template) Key() string { return t.templateKey }
 
 func (v Values) entry(key string) valueEntry {
+	if resolved, ok := dbhook.ResolveConfig(&v); ok {
+		return resolved.entry(key)
+	}
 	entry, ok := v.fields[key]
 	if !ok {
 		panic(fmt.Sprintf("config key %q is not declared", valuePath(v.path, key)))
@@ -118,6 +126,10 @@ func (v Values) get(key, typ string) any {
 }
 
 func (v Values) wrongType(key, actual, want string) {
+	if resolved, ok := dbhook.ResolveConfig(&v); ok {
+		resolved.wrongType(key, actual, want)
+		return
+	}
 	panic(fmt.Sprintf("config key %q is %s, not %s", valuePath(v.path, key), actual, want))
 }
 

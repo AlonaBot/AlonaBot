@@ -150,6 +150,7 @@ func TestEnumValues(t *testing.T) {
 		{pb.AdapterInstanceState(0).Descriptor(), "ADAPTER_INSTANCE_STATE_", []string{"UNSPECIFIED", "FAILED"}},
 		{pb.ActionScope(0).Descriptor(), "ACTION_SCOPE_", []string{"UNSPECIFIED", "CHAT", "ACCOUNT"}},
 		{pb.BotOfflineReason(0).Descriptor(), "BOT_OFFLINE_REASON_", []string{"UNSPECIFIED", "STOPPED", "ADAPTER_EXITED", "INSTANCE_FAILED"}},
+		{pb.TextUnit(0).Descriptor(), "TEXT_UNIT_", []string{"UNSPECIFIED", "UTF16_CODE_UNITS", "UNICODE_CODE_POINTS", "BYTES"}},
 		{pb.SendStatus(0).Descriptor(), "SEND_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "PARTIAL", "REJECTED", "UNKNOWN"}},
 		{pb.SendOperation(0).Descriptor(), "SEND_OPERATION_", []string{"UNSPECIFIED", "SEND", "EDIT"}},
 		{pb.ChatType(0).Descriptor(), "CHAT_TYPE_", []string{"UNSPECIFIED", "PRIVATE", "GROUP", "CHANNEL"}},
@@ -183,8 +184,8 @@ func TestEnumValues(t *testing.T) {
 
 // TestCommandSpecFieldNumbers 固定命令描述及追加文本匹配字段的编号、类型与重复性。
 func TestCommandSpecFieldNumbers(t *testing.T) {
-	names := []protoreflect.Name{"match", "path", "aliases", "params", "handler_mode", "rule", "regex", "usage_mode", "", "patterns", "ignore_case", "usage_key"}
-	kinds := []protoreflect.Kind{protoreflect.EnumKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.MessageKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.BoolKind, protoreflect.StringKind}
+	names := []protoreflect.Name{"match", "path", "aliases", "params", "handler_mode", "rule", "regex", "usage_mode", "", "patterns", "ignore_case", "usage_key", "description"}
+	kinds := []protoreflect.Kind{protoreflect.EnumKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.MessageKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.BoolKind, protoreflect.StringKind, protoreflect.StringKind}
 	fields := (&pb.CommandSpec{}).ProtoReflect().Descriptor().Fields()
 	if fields.Len() != len(names)-1 {
 		t.Fatalf("CommandSpec has %d fields, want %d", fields.Len(), len(names)-1)
@@ -200,6 +201,9 @@ func TestCommandSpecFieldNumbers(t *testing.T) {
 		if f == nil || f.Name() != name || f.Kind() != kinds[i] {
 			t.Errorf("CommandSpec field %d should be %s %s, got %v", i+1, kinds[i], name, f)
 			continue
+		}
+		if name == "description" && !f.HasOptionalKeyword() {
+			t.Error("CommandSpec.description must be optional")
 		}
 		repeated := name == "path" || name == "aliases" || name == "params" || name == "patterns"
 		if f.IsList() != repeated {
@@ -304,6 +308,8 @@ func TestBootstrapSessionLimitsFieldNumber(t *testing.T) {
 // TestAdapterFieldNumbers 固定 Adapter 载荷与追加字段的线上编号。
 func TestAdapterFieldNumbers(t *testing.T) {
 	cases := map[string][]string{
+		"Capability":                   {"name", "version", "supported", "text_limit"},
+		"TextLimit":                    {"max", "unit"},
 		"MediaSource":                  {"media_ref", "incoming_ref", "https_url", "inline_base64", "platform_file"},
 		"MediaURLRequest":              {"token", "base_url"},
 		"MediaURLResponse":             {"url", "expires_at_unix_ms"},
@@ -318,6 +324,9 @@ func TestAdapterFieldNumbers(t *testing.T) {
 		"AdapterInstanceStopResponse":  {},
 		"AdapterSendRequest":           {"instance_id", "target", "chain"},
 		"EditRequest":                  {"to", "platform_message_id", "chain"},
+		"CommandMenuItem":              {"name", "descriptions"},
+		"AdapterCommandsSyncRequest":   {"instance_id", "commands"},
+		"AdapterCommandsSyncResponse":  {},
 		"AdapterEditRequest":           {"instance_id", "target", "platform_message_id", "chain"},
 		"DeleteRequest":                {"to", "platform_message_ids"},
 		"DeleteItemResult":             {"platform_message_id", "status", "error"},

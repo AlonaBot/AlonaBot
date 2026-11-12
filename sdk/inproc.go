@@ -15,7 +15,8 @@ import (
 )
 
 // RunInProcess 使用 Core 显式提供的参数运行插件；环境变量、工作目录与默认 Logger 保持进程级含义。
-func RunInProcess(root Root, l *inproc.Launch) error {
+func RunInProcess(root *Plugin, l *inproc.Launch) error {
+	root.freeze()
 	launch, err := inProcessLaunch(l)
 	if err != nil {
 		return err

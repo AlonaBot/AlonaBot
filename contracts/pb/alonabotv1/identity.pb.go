@@ -23,6 +23,59 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// TextUnit 指定文本限额的计量单位，bytes 按 UTF-8 编码计数。
+type TextUnit int32
+
+const (
+	TextUnit_TEXT_UNIT_UNSPECIFIED         TextUnit = 0
+	TextUnit_TEXT_UNIT_UTF16_CODE_UNITS    TextUnit = 1
+	TextUnit_TEXT_UNIT_UNICODE_CODE_POINTS TextUnit = 2
+	TextUnit_TEXT_UNIT_BYTES               TextUnit = 3
+)
+
+// Enum value maps for TextUnit.
+var (
+	TextUnit_name = map[int32]string{
+		0: "TEXT_UNIT_UNSPECIFIED",
+		1: "TEXT_UNIT_UTF16_CODE_UNITS",
+		2: "TEXT_UNIT_UNICODE_CODE_POINTS",
+		3: "TEXT_UNIT_BYTES",
+	}
+	TextUnit_value = map[string]int32{
+		"TEXT_UNIT_UNSPECIFIED":         0,
+		"TEXT_UNIT_UTF16_CODE_UNITS":    1,
+		"TEXT_UNIT_UNICODE_CODE_POINTS": 2,
+		"TEXT_UNIT_BYTES":               3,
+	}
+)
+
+func (x TextUnit) Enum() *TextUnit {
+	p := new(TextUnit)
+	*p = x
+	return p
+}
+
+func (x TextUnit) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TextUnit) Descriptor() protoreflect.EnumDescriptor {
+	return file_alonabot_v1_identity_proto_enumTypes[0].Descriptor()
+}
+
+func (TextUnit) Type() protoreflect.EnumType {
+	return &file_alonabot_v1_identity_proto_enumTypes[0]
+}
+
+func (x TextUnit) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TextUnit.Descriptor instead.
+func (TextUnit) EnumDescriptor() ([]byte, []int) {
+	return file_alonabot_v1_identity_proto_rawDescGZIP(), []int{0}
+}
+
 // Target 描述一次发送的平台目标，唯一定位到某个 Adapter 实例下的会话或话题。
 type Target struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -195,7 +248,9 @@ type Capability struct {
 	// 能力版本。
 	Version uint32 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
 	// 该实例当前是否支持。
-	Supported     bool `protobuf:"varint,3,opt,name=supported,proto3" json:"supported,omitempty"`
+	Supported bool `protobuf:"varint,3,opt,name=supported,proto3" json:"supported,omitempty"`
+	// 单条文本限额；未声明时缺省，仅 supported=true 的 message.send 可携带。
+	TextLimit     *TextLimit `protobuf:"bytes,4,opt,name=text_limit,json=textLimit,proto3" json:"text_limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -251,6 +306,66 @@ func (x *Capability) GetSupported() bool {
 	return false
 }
 
+func (x *Capability) GetTextLimit() *TextLimit {
+	if x != nil {
+		return x.TextLimit
+	}
+	return nil
+}
+
+// TextLimit 声明单条文本的正整数上限与计量单位。
+type TextLimit struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Max           uint64                 `protobuf:"varint,1,opt,name=max,proto3" json:"max,omitempty"`
+	Unit          TextUnit               `protobuf:"varint,2,opt,name=unit,proto3,enum=alonabot.v1.TextUnit" json:"unit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TextLimit) Reset() {
+	*x = TextLimit{}
+	mi := &file_alonabot_v1_identity_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TextLimit) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TextLimit) ProtoMessage() {}
+
+func (x *TextLimit) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_identity_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TextLimit.ProtoReflect.Descriptor instead.
+func (*TextLimit) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_identity_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *TextLimit) GetMax() uint64 {
+	if x != nil {
+		return x.Max
+	}
+	return 0
+}
+
+func (x *TextLimit) GetUnit() TextUnit {
+	if x != nil {
+		return x.Unit
+	}
+	return TextUnit_TEXT_UNIT_UNSPECIFIED
+}
+
 var File_alonabot_v1_identity_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_identity_proto_rawDesc = "" +
@@ -273,12 +388,22 @@ const file_alonabot_v1_identity_proto_rawDesc = "" +
 	"\x06locale\x18\x05 \x01(\tH\x01R\x06locale\x88\x01\x01\x12 \n" +
 	"\vpermissions\x18\x06 \x03(\tR\vpermissionsB\x0f\n" +
 	"\r_display_nameB\t\n" +
-	"\a_localeJ\x04\b\x04\x10\x05R\rtrusted_roles\"X\n" +
+	"\a_localeJ\x04\b\x04\x10\x05R\rtrusted_roles\"\x8f\x01\n" +
 	"\n" +
 	"Capability\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\rR\aversion\x12\x1c\n" +
-	"\tsupported\x18\x03 \x01(\bR\tsupportedB6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
+	"\tsupported\x18\x03 \x01(\bR\tsupported\x125\n" +
+	"\n" +
+	"text_limit\x18\x04 \x01(\v2\x16.alonabot.v1.TextLimitR\ttextLimit\"H\n" +
+	"\tTextLimit\x12\x10\n" +
+	"\x03max\x18\x01 \x01(\x04R\x03max\x12)\n" +
+	"\x04unit\x18\x02 \x01(\x0e2\x15.alonabot.v1.TextUnitR\x04unit*}\n" +
+	"\bTextUnit\x12\x19\n" +
+	"\x15TEXT_UNIT_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aTEXT_UNIT_UTF16_CODE_UNITS\x10\x01\x12!\n" +
+	"\x1dTEXT_UNIT_UNICODE_CODE_POINTS\x10\x02\x12\x13\n" +
+	"\x0fTEXT_UNIT_BYTES\x10\x03B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
 
 var (
 	file_alonabot_v1_identity_proto_rawDescOnce sync.Once
@@ -292,18 +417,23 @@ func file_alonabot_v1_identity_proto_rawDescGZIP() []byte {
 	return file_alonabot_v1_identity_proto_rawDescData
 }
 
-var file_alonabot_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_alonabot_v1_identity_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_alonabot_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_alonabot_v1_identity_proto_goTypes = []any{
-	(*Target)(nil),     // 0: alonabot.v1.Target
-	(*Actor)(nil),      // 1: alonabot.v1.Actor
-	(*Capability)(nil), // 2: alonabot.v1.Capability
+	(TextUnit)(0),      // 0: alonabot.v1.TextUnit
+	(*Target)(nil),     // 1: alonabot.v1.Target
+	(*Actor)(nil),      // 2: alonabot.v1.Actor
+	(*Capability)(nil), // 3: alonabot.v1.Capability
+	(*TextLimit)(nil),  // 4: alonabot.v1.TextLimit
 }
 var file_alonabot_v1_identity_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	4, // 0: alonabot.v1.Capability.text_limit:type_name -> alonabot.v1.TextLimit
+	0, // 1: alonabot.v1.TextLimit.unit:type_name -> alonabot.v1.TextUnit
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_identity_proto_init() }
@@ -318,13 +448,14 @@ func file_alonabot_v1_identity_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_identity_proto_rawDesc), len(file_alonabot_v1_identity_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   3,
+			NumEnums:      1,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_alonabot_v1_identity_proto_goTypes,
 		DependencyIndexes: file_alonabot_v1_identity_proto_depIdxs,
+		EnumInfos:         file_alonabot_v1_identity_proto_enumTypes,
 		MessageInfos:      file_alonabot_v1_identity_proto_msgTypes,
 	}.Build()
 	File_alonabot_v1_identity_proto = out.File

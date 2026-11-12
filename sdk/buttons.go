@@ -33,8 +33,8 @@ func (a ButtonAction[T]) Button(label string, value T) message.Button {
 }
 
 // OnButton 开始构建 button.clicked 路由，route_id 固定为 button. 加动作名。
-func OnButton[T any](r *EventRegistry, a ButtonAction[T]) *ButtonBuilder[T] {
-	b := r.On(buttonRoutePrefix+a.name, ButtonClicked)
+func OnButton[T any](r Registrar, a ButtonAction[T]) *ButtonBuilder[T] {
+	b := r.registrar().on(buttonRoutePrefix+a.name, ButtonClicked)
 	b.route.actionID, b.route.actionVersion = a.name, a.version
 	b.button = true
 	return &ButtonBuilder[T]{event: b}
@@ -63,6 +63,7 @@ func (b *ButtonBuilder[T]) Rule(rules ...Rule) *ButtonBuilder[T] {
 
 // Handle 登记接收解码后按钮值的处理函数。
 func (b *ButtonBuilder[T]) Handle(h func(*Context, T) error) {
+	b.event.plugin.checkRegistration()
 	b.event.route.decodeButton = func(raw string) (any, error) {
 		var value T
 		err := json.Unmarshal([]byte(raw), &value)

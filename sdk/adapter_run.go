@@ -27,12 +27,11 @@ const adapterMediaReadCapability = "media.read"
 // Session 生命周期沿用 activation；每个实例 Core 客户端独立关闭交付入口。
 type adapterRuntime struct {
 	activation *activation // Session.Start 前发布，提供出站停止门禁
-	Base
-	adapter   adapter.Adapter
-	mu        sync.Mutex // 保护实例登记、状态与配置
-	stopping  bool       // 与停止快照一起在 mu 下发布，阻止已准入但尚未执行的 Start
-	instances map[string]*adapterEntry
-	session   *wire.Session // Session.Start 前赋值，此后保持不变
+	adapter    adapter.Adapter
+	mu         sync.Mutex // 保护实例登记、状态与配置
+	stopping   bool       // 与停止快照一起在 mu 下发布，阻止已准入但尚未执行的 Start
+	instances  map[string]*adapterEntry
+	session    *wire.Session // Session.Start 前赋值，此后保持不变
 }
 
 // adapterEntry 保留实例状态与脱敏配置，生命周期操作由本实例锁串行化。
@@ -46,9 +45,10 @@ type adapterEntry struct {
 }
 
 type adapterCore struct {
-	runtime    *adapterRuntime
-	instanceID string
-	stopped    atomic.Bool // 停止或报告失败后锁存，阻止新的交付
+	runtime     *adapterRuntime
+	instanceID  string
+	stopped     atomic.Bool // 停止或报告失败后锁存，阻止新的交付
+	commandSync sync.Mutex  // 覆盖本次运行的实际菜单回调，RPC 到期后仍持有。
 }
 
 // RunAdapter 作为 Adapter 进程的 main 入口，复用插件的锁、握手、激活与停止状态机。
@@ -86,7 +86,7 @@ func runAdapter(a adapter.Adapter, l launch) (err error) {
 	}
 	// 2. 复用激活与停止回调，仅将业务处理器替换成实例服务。
 	runtime := &adapterRuntime{adapter: a, instances: make(map[string]*adapterEntry)}
-	active := &activation{l: l, ack: ack, root: runtime, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
+	active := &activation{l: l, ack: ack, onStop: runtime.OnStop, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
 	active.lifetime, active.stopLifetime = context.WithCancel(l.runtime.ctx)
 	limits := ack.GetBootstrap().GetSessionLimits()
 	active.sess = wire.New(conn, wire.Options{Local: pb.InitiatorSide_INITIATOR_SIDE_PLUGIN, SessionID: ack.GetSessionId(), ProtocolMinor: ack.GetChosenMinor(), SourcePluginID: l.pluginID,
@@ -331,6 +331,46 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(code, adapterSafeError(errors.New(message), config))
 		}
 		return adapterResponse(&pb.AdapterMediaReadResponse{Data: data, NextOffset: next, Eof: eof}, nil)
+	case wire.ServiceAdapterCommandsSync:
+		request := &pb.AdapterCommandsSyncRequest{}
+		if err := decodeInvocation(in.Payload, request); err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		r.mu.Lock()
+		entry, ok := r.instances[request.InstanceId]
+		if !ok {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
+		}
+		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		core := entry.core
+		r.mu.Unlock()
+		// RPC 取消后平台操作可能仍在执行，等待实际回调返回再处理下一份菜单。
+		core.commandSync.Lock()
+		defer core.commandSync.Unlock()
+		if err := ctx.Err(); err != nil {
+			code := pb.ErrorCode_ERROR_CODE_CANCELLED
+			if errors.Is(err, context.DeadlineExceeded) {
+				code = pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED
+			}
+			return dispatchError(code, err.Error())
+		}
+		r.mu.Lock()
+		if entry.core != core || entry.busy || entry.instance == nil || core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		synchronizer, supported := entry.instance.(adapter.CommandSynchronizer)
+		r.mu.Unlock()
+		if !supported {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support command synchronization")
+		}
+		// 与其他固定服务共用请求 context，平台调用在状态锁外执行。
+		safe := synchronizer.SyncCommands(ctx, convert.CommandMenuFromProto(request.Commands))
+		return adapterResponse(&pb.AdapterCommandsSyncResponse{}, convert.ErrorToProto(safe))
 	case wire.ServiceAdapterAction:
 		request := &pb.AdapterActionRequest{}
 		if err := decodeInvocation(in.Payload, request); err != nil {

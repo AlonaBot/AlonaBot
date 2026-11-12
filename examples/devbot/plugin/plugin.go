@@ -8,14 +8,13 @@ import (
 
 //go:generate go run ../../../cmd/alonabot plugin generate
 
-type echo struct{ sdk.Base }
-
-// New 创建独立的回声插件对象。
-func New() sdk.Root { return &echo{} }
-
-func (*echo) Events(r *sdk.EventRegistry) {
-	r.On("echo", sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error {
+// New 创建独立插件，绑定生成资源并登记回声路由。
+func New() *sdk.Plugin {
+	p := sdk.NewPlugin()
+	sdk.UseGenerated(p, alonabotGenerated)
+	p.On("echo", sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error {
 		_, err := c.Send(e.Chain)
 		return err
 	})
+	return p
 }

@@ -995,7 +995,9 @@ type CommandSpec struct {
 	// 文本模式比较采用 Unicode 简单大小写折叠。
 	IgnoreCase bool `protobuf:"varint,11,opt,name=ignore_case,json=ignoreCase,proto3" json:"ignore_case,omitempty"`
 	// USAGE_MODE_CUSTOM：插件 i18/ 中 messages 的文案键。
-	UsageKey      string `protobuf:"bytes,12,opt,name=usage_key,json=usageKey,proto3" json:"usage_key,omitempty"`
+	UsageKey string `protobuf:"bytes,12,opt,name=usage_key,json=usageKey,proto3" json:"usage_key,omitempty"`
+	// 英文说明原文；其他语言按完整规范路径覆盖。
+	Description   *string `protobuf:"bytes,13,opt,name=description,proto3,oneof" json:"description,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1103,6 +1105,13 @@ func (x *CommandSpec) GetIgnoreCase() bool {
 func (x *CommandSpec) GetUsageKey() string {
 	if x != nil {
 		return x.UsageKey
+	}
+	return ""
+}
+
+func (x *CommandSpec) GetDescription() string {
+	if x != nil && x.Description != nil {
+		return *x.Description
 	}
 	return ""
 }
@@ -1751,7 +1760,7 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x14required_permissions\x18\x11 \x03(\tR\x13requiredPermissionsB\x06\n" +
 	"\x04specJ\x04\b\x05\x10\x06R\x13required_permission\"R\n" +
 	"\x0eRuleDescriptor\x12&\n" +
-	"\x0fhas_custom_rule\x18\x01 \x01(\bR\rhasCustomRuleJ\x04\b\x02\x10\x03R\x12require_chat_admin\"\xe3\x03\n" +
+	"\x0fhas_custom_rule\x18\x01 \x01(\bR\rhasCustomRuleJ\x04\b\x02\x10\x03R\x12require_chat_admin\"\x9a\x04\n" +
 	"\vCommandSpec\x12/\n" +
 	"\x05match\x18\x01 \x01(\x0e2\x19.alonabot.v1.CommandMatchR\x05match\x12\x12\n" +
 	"\x04path\x18\x02 \x03(\tR\x04path\x123\n" +
@@ -1766,7 +1775,9 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	" \x03(\tR\bpatterns\x12\x1f\n" +
 	"\vignore_case\x18\v \x01(\bR\n" +
 	"ignoreCase\x12\x1b\n" +
-	"\tusage_key\x18\f \x01(\tR\busageKeyJ\x04\b\t\x10\n" +
+	"\tusage_key\x18\f \x01(\tR\busageKey\x12%\n" +
+	"\vdescription\x18\r \x01(\tH\x00R\vdescription\x88\x01\x01B\x0e\n" +
+	"\f_descriptionJ\x04\b\t\x10\n" +
 	"R\fcustom_usage\"\"\n" +
 	"\fCommandAlias\x12\x12\n" +
 	"\x04path\x18\x01 \x03(\tR\x04path\"\xb8\x01\n" +
@@ -1959,6 +1970,7 @@ func file_alonabot_v1_route_proto_init() {
 		(*RouteDescriptor_Http)(nil),
 		(*RouteDescriptor_BusSubscription)(nil),
 	}
+	file_alonabot_v1_route_proto_msgTypes[4].OneofWrappers = []any{}
 	file_alonabot_v1_route_proto_msgTypes[6].OneofWrappers = []any{}
 	file_alonabot_v1_route_proto_msgTypes[10].OneofWrappers = []any{
 		(*ScheduleSpec_Cron)(nil),
