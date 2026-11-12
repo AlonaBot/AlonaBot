@@ -55,6 +55,14 @@ func TestErrorInfoFieldNumbers(t *testing.T) {
 	}
 }
 
+// TestOptionsSourceFieldNumber 固定 Service 选项来源标记的字段编号和类型。
+func TestOptionsSourceFieldNumber(t *testing.T) {
+	field := (&pb.ServiceSpec{}).ProtoReflect().Descriptor().Fields().ByNumber(6)
+	if field == nil || field.Name() != "options_source" || field.Kind() != protoreflect.BoolKind || field.IsList() || field.HasPresence() || field.ContainingOneof() != nil {
+		t.Fatalf("ServiceSpec field 6 should be bool options_source, got %v", field)
+	}
+}
+
 // TestButtonCoreTokenFieldNumber 固定 Core 回调令牌的字段编号、类型与 optional presence。
 func TestButtonCoreTokenFieldNumber(t *testing.T) {
 	field := (&pb.Button{}).ProtoReflect().Descriptor().Fields().ByNumber(4)
@@ -508,7 +516,7 @@ func TestToolFieldNumbers(t *testing.T) {
 		names   []protoreflect.Name
 		kinds   []protoreflect.Kind
 	}{
-		{&pb.ServiceSpec{}, []protoreflect.Name{"service_name", "access", "allowlist_plugin_ids", "encoding", "tool"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.MessageKind}},
+		{&pb.ServiceSpec{}, []protoreflect.Name{"service_name", "access", "allowlist_plugin_ids", "encoding", "tool", "options_source"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.BoolKind}},
 		{&pb.ToolSpec{}, []protoreflect.Name{"description", "default_policy", "input_schema_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind}},
 		{&pb.ToolInfo{}, []protoreflect.Name{"name", "description", "input_schema_json", "policy"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.EnumKind}},
 		{&pb.ToolListRequest{}, nil, nil},

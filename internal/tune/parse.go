@@ -105,6 +105,7 @@ func Parse(args []string) (Values, []Override, error) {
 		names   []string
 		rule    string
 	}{
+		{v.OptionsPage > maxOptionsPage, []string{"OPTIONS_PAGE"}, "OPTIONS_PAGE must be <= 200"},
 		{v.CoreMaxPayload < v.SessionMaxPayload, []string{"CORE_MAX_PAYLOAD", "SESSION_MAX_PAYLOAD"}, "CORE_MAX_PAYLOAD must be >= SESSION_MAX_PAYLOAD"},
 		{v.ContinuationMax >= v.SessionMaxInflight, []string{"CONTINUATION_MAX", "SESSION_MAX_INFLIGHT"}, "CONTINUATION_MAX must be < SESSION_MAX_INFLIGHT"},
 		{v.MediaMaxObject > v.MediaSessionBudget, []string{"MEDIA_MAX_OBJECT", "MEDIA_SESSION_BUDGET"}, "MEDIA_MAX_OBJECT must be <= MEDIA_SESSION_BUDGET"},

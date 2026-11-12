@@ -1388,7 +1388,9 @@ type ServiceSpec struct {
 	// 请求与响应载荷的编码。
 	Encoding PayloadEncoding `protobuf:"varint,4,opt,name=encoding,proto3,enum=alonabot.v1.PayloadEncoding" json:"encoding,omitempty"`
 	// JSON 服务可选的工具声明。
-	Tool          *ToolSpec `protobuf:"bytes,5,opt,name=tool,proto3" json:"tool,omitempty"`
+	Tool *ToolSpec `protobuf:"bytes,5,opt,name=tool,proto3" json:"tool,omitempty"`
+	// 固定 Schema、仅 Core 与本组件可调用的配置选项来源。
+	OptionsSource bool `protobuf:"varint,6,opt,name=options_source,json=optionsSource,proto3" json:"options_source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1456,6 +1458,13 @@ func (x *ServiceSpec) GetTool() *ToolSpec {
 		return x.Tool
 	}
 	return nil
+}
+
+func (x *ServiceSpec) GetOptionsSource() bool {
+	if x != nil {
+		return x.OptionsSource
+	}
+	return false
 }
 
 // ScheduleSpec 描述定时任务的专属描述；interval 与 cron 互斥，cron 固定五字段，timezone 为 IANA 名称，省略为 UTC。
@@ -1790,13 +1799,14 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\taction_id\x18\x04 \x01(\tR\bactionId\x122\n" +
 	"\x15action_schema_version\x18\x05 \x01(\rR\x13actionSchemaVersion\"8\n" +
 	"\bHookSpec\x12,\n" +
-	"\x05phase\x18\x01 \x01(\x0e2\x16.alonabot.v1.HookPhaseR\x05phase\"\xfb\x01\n" +
+	"\x05phase\x18\x01 \x01(\x0e2\x16.alonabot.v1.HookPhaseR\x05phase\"\xa2\x02\n" +
 	"\vServiceSpec\x12!\n" +
 	"\fservice_name\x18\x01 \x01(\tR\vserviceName\x122\n" +
 	"\x06access\x18\x02 \x01(\x0e2\x1a.alonabot.v1.ServiceAccessR\x06access\x120\n" +
 	"\x14allowlist_plugin_ids\x18\x03 \x03(\tR\x12allowlistPluginIds\x128\n" +
 	"\bencoding\x18\x04 \x01(\x0e2\x1c.alonabot.v1.PayloadEncodingR\bencoding\x12)\n" +
-	"\x04tool\x18\x05 \x01(\v2\x15.alonabot.v1.ToolSpecR\x04tool\"\xad\x01\n" +
+	"\x04tool\x18\x05 \x01(\v2\x15.alonabot.v1.ToolSpecR\x04tool\x12%\n" +
+	"\x0eoptions_source\x18\x06 \x01(\bR\roptionsSource\"\xad\x01\n" +
 	"\fScheduleSpec\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x14\n" +
 	"\x04cron\x18\x02 \x01(\tH\x00R\x04cron\x12!\n" +
