@@ -57,3 +57,9 @@ const ServiceEdit = "core.edit"
 
 // ServiceAdapterEdit 向账号实例提交消息编辑。
 const ServiceAdapterEdit = "adapter.edit"
+
+// ServiceAction 指定 Core 的平台动作服务。
+const ServiceAction = "core.action"
+
+// ServiceAdapterAction 向账号实例提交已声明的平台动作。
+const ServiceAdapterAction = "adapter.action"

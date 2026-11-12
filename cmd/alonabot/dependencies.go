@@ -24,7 +24,7 @@ func checkPluginDependencies(pluginDir string) error {
 		return err
 	}
 	// run 只启动当前开发插件，没有可满足依赖的其他已启用组件。
-	installed := manifest.Installed{Plugins: map[string]string{}, Adapters: map[string][]manifest.ExtensionRequirement{}}
+	installed := manifest.Installed{Plugins: map[string]string{}, Adapters: map[string][]manifest.ExtensionRequirement{}, Actions: map[string][]manifest.ActionRequirement{}}
 	var required []string
 	for _, problem := range manifest.CheckDependencies(parsed.Manifest, installed) {
 		if problem.Required {

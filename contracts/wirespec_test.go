@@ -106,6 +106,7 @@ func TestEnumValues(t *testing.T) {
 			"CALL_CYCLE", "PLUGIN_NOT_READY", "NO_DEFAULT_TARGET", "NEEDS_MANUAL_MIGRATION"}},
 		// MESSAGE-MODEL §4。
 		{pb.AdapterInstanceState(0).Descriptor(), "ADAPTER_INSTANCE_STATE_", []string{"UNSPECIFIED", "FAILED"}},
+		{pb.ActionScope(0).Descriptor(), "ACTION_SCOPE_", []string{"UNSPECIFIED", "CHAT", "ACCOUNT"}},
 		{pb.BotOfflineReason(0).Descriptor(), "BOT_OFFLINE_REASON_", []string{"UNSPECIFIED", "STOPPED", "ADAPTER_EXITED", "INSTANCE_FAILED"}},
 		{pb.SendStatus(0).Descriptor(), "SEND_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "PARTIAL", "REJECTED", "UNKNOWN"}},
 		{pb.PartStatus(0).Descriptor(), "PART_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "REJECTED", "UNKNOWN", "NOT_ATTEMPTED"}},
@@ -259,7 +260,7 @@ func TestBootstrapSessionLimitsFieldNumber(t *testing.T) {
 // TestAdapterFieldNumbers 固定 Adapter 载荷与追加字段的线上编号。
 func TestAdapterFieldNumbers(t *testing.T) {
 	cases := map[string][]string{
-		"AdapterDescriptor":            {"adapter_id", "capabilities", "extensions", "permissions", "events"},
+		"AdapterDescriptor":            {"adapter_id", "capabilities", "extensions", "permissions", "events", "actions"},
 		"PermissionDeclaration":        {"name", "implies", "label_key"},
 		"EventDeclaration":             {"name", "version", "schema_json"},
 		"AdapterEventPayload":          {"version", "payload_json"},
@@ -523,5 +524,41 @@ func TestToolFieldNumbers(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestActionFieldNumbers 固定动作声明与两段服务载荷的编号、类型和重复性。
+func TestActionFieldNumbers(t *testing.T) {
+	for _, tc := range []struct {
+		message proto.Message
+		names   []protoreflect.Name
+		kinds   []protoreflect.Kind
+	}{
+		{&pb.ActionDeclaration{}, []protoreflect.Name{"name", "version", "scope", "params_schema_json", "result_schema_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.Uint32Kind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.StringKind}},
+		{&pb.ActionRequest{}, []protoreflect.Name{"to", "adapter_instance_id", "name", "version", "params_json"}, []protoreflect.Kind{protoreflect.MessageKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.Uint32Kind, protoreflect.StringKind}},
+		{&pb.AdapterActionRequest{}, []protoreflect.Name{"instance_id", "target", "name", "version", "params_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.Uint32Kind, protoreflect.StringKind}},
+		{&pb.ActionResponse{}, []protoreflect.Name{"result_json"}, []protoreflect.Kind{protoreflect.StringKind}},
+	} {
+		descriptor := tc.message.ProtoReflect().Descriptor()
+		fields := descriptor.Fields()
+		if fields.Len() != len(tc.names) {
+			t.Errorf("%s field count = %d", descriptor.Name(), fields.Len())
+		}
+		for i, name := range tc.names {
+			f := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+			if f == nil || f.Name() != name || f.Kind() != tc.kinds[i] || f.IsList() || f.HasPresence() != (tc.kinds[i] == protoreflect.MessageKind) || f.ContainingOneof() != nil {
+				t.Errorf("%s field %d should be singular %s %s, got %v", descriptor.Name(), i+1, tc.kinds[i], name, f)
+			}
+			if f != nil && f.Kind() == protoreflect.MessageKind && f.Message().FullName() != "alonabot.v1.Target" {
+				t.Errorf("%s.%s target type = %v", descriptor.Name(), name, f.Message().FullName())
+			}
+			if f != nil && f.Kind() == protoreflect.EnumKind && f.Enum().FullName() != "alonabot.v1.ActionScope" {
+				t.Errorf("%s.%s scope type = %v", descriptor.Name(), name, f.Enum().FullName())
+			}
+		}
+	}
+	field := (&pb.AdapterDescriptor{}).ProtoReflect().Descriptor().Fields().ByNumber(6)
+	if field == nil || field.Name() != "actions" || field.Kind() != protoreflect.MessageKind || !field.IsList() || field.Message().FullName() != "alonabot.v1.ActionDeclaration" {
+		t.Errorf("AdapterDescriptor field 6 should be repeated ActionDeclaration actions, got %v", field)
 	}
 }
