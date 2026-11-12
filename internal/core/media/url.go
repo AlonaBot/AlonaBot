@@ -64,6 +64,8 @@ func (s *Store) mediaURL(_ context.Context, c router.Caller, in *wire.Inbound) w
 
 // ServeHTTP 提供消费租约内的临时媒体，支持 GET、HEAD 和 Range。
 func (s *Store) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	id, ok := strings.CutPrefix(r.URL.Path, mediaPrefix)
 	if !ok {
 		http.NotFound(w, r)
