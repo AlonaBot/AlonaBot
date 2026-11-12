@@ -57,3 +57,9 @@ const ServiceEdit = "core.edit"
 
 // ServiceAdapterEdit 向账号实例提交消息编辑。
 const ServiceAdapterEdit = "adapter.edit"
+
+// ServiceContinuationStart 登记父 Handler 成功结束后的延续调用。
+const ServiceContinuationStart = "core.continuation.start"
+
+// ServiceWait 等待延续调用所属用户在原会话的下一条消息。
+const ServiceWait = "core.wait"

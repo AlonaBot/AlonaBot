@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -76,29 +77,30 @@ type CommandPolicy interface {
 // Router 并发执行有界的事件链；每条链内按稳定次序调用候选。
 // mu 串行化接纳、出队和注册；链调用插件期间不持锁。
 type Router struct {
-	adapters    *adapter.Registry
-	send        ServiceFunc
-	prepare     func(*pb.Event, Caller) (*pb.Event, error)
-	prefixes    func(adapterInstanceID string) []string
-	buttons     func(context.Context, *pb.Event) (string, string, error)
-	policy      CommandPolicy
-	matches     map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
-	queue       []queuedEvent
-	concurrency int
-	queueEvents int
-	queueBytes  int64 // 等待队列上限，单位为编码后的字节数
-	global      *wire.Budget
-	queuedBytes int64         // 等待中的事件占用，由 mu 保护
-	stats       Stats         // 计数及运行状态，由 mu 保护
-	drained     chan struct{} // 关闭接纳且全部运行链退出时关闭
-	ctx         context.Context
-	cancel      context.CancelFunc
-	mu          sync.Mutex // 保护注册、在途调用、命令索引与分发状态
-	plugins     map[string]*pluginSession
-	inFlight    map[inFlightKey]struct{} // 仅覆盖 Plugin.Call；排队与 prepare 期间不登记
-	commands    *CommandIndex            // 在 mu 下发布；已发布快照只读
-	started     bool
-	closed      bool
+	adapters      *adapter.Registry
+	send          ServiceFunc
+	prepare       func(*pb.Event, Caller) (*pb.Event, error)
+	prefixes      func(adapterInstanceID string) []string
+	buttons       func(context.Context, *pb.Event) (string, string, error)
+	policy        CommandPolicy
+	continuations Continuations
+	matches       map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
+	queue         []queuedEvent
+	concurrency   int
+	queueEvents   int
+	queueBytes    int64 // 等待队列上限，单位为编码后的字节数
+	global        *wire.Budget
+	queuedBytes   int64         // 等待中的事件占用，由 mu 保护
+	stats         Stats         // 计数及运行状态，由 mu 保护
+	drained       chan struct{} // 关闭接纳且全部运行链退出时关闭
+	ctx           context.Context
+	cancel        context.CancelFunc
+	mu            sync.Mutex // 保护注册、在途调用、命令索引与分发状态
+	plugins       map[string]*pluginSession
+	inFlight      map[inFlightKey]int // 同事件原调用与延续可短暂重叠；仅覆盖 Plugin.Call。
+	commands      *CommandIndex       // 在 mu 下发布；已发布快照只读
+	started       bool
+	closed        bool
 }
 
 // New 按显式的并发和队列限额创建路由器；限额由装配处从 tune.Values 传入。
@@ -111,8 +113,9 @@ func New(opt Options) *Router {
 		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy, buttons: opt.Buttons,
 		concurrency: opt.Concurrency, queueEvents: opt.QueueEvents, queueBytes: opt.QueueBytes, global: opt.Global,
 		ctx: ctx, cancel: cancel, drained: make(chan struct{}),
-		matches: make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
-		inFlight: make(map[inFlightKey]struct{}), commands: &CommandIndex{},
+		continuations: opt.Continuations,
+		matches:       make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
+		inFlight: make(map[inFlightKey]int), commands: &CommandIndex{},
 	}
 }
 
@@ -188,6 +191,9 @@ func (r *Router) Detach(pluginID string) {
 	delete(r.plugins, pluginID)
 	delete(r.matches, pluginID)
 	r.rebuildCommands()
+	if r.continuations != nil {
+		r.continuations.Release(pluginID)
+	}
 }
 
 type candidate struct {
@@ -268,6 +274,9 @@ func (r *Router) dispatch(event *trustedEvent) {
 		actor.Permissions = slices.Compact(permissions)
 	}
 	ev = event.rebuild()
+	if ev.GetEventType() == "message.created" && r.continuations != nil && r.continuations.Match(ev) {
+		return
+	}
 	// 2. 命令层的 STOP 终止整条分发链；消费但继续的命令仍进入事件层。
 	if ev.GetEventType() == "message.created" && r.dispatchCommands(ev, event) {
 		return
@@ -368,18 +377,62 @@ func (r *Router) call(c candidate, event *trustedEvent, bind func(*pb.Event) (*p
 		r.mu.Unlock()
 		return wire.Response{}, errors.New("plugin Session is no longer active")
 	}
-	r.inFlight[key] = struct{}{}
+	r.inFlight[key]++
 	r.mu.Unlock()
-	defer func() {
-		r.mu.Lock()
-		delete(r.inFlight, key)
-		r.mu.Unlock()
-	}()
-	return c.plugin.Call(r.ctx, wire.Request{
+	defer r.finishCall(key)
+	inv := &Invocation{PluginID: c.pluginID, Event: prepared, DefaultTarget: proto.CloneOf(event.retained.GetTarget()), RouteID: request.RouteId, candidate: c, request: request, trace: trace}
+	response, err := c.plugin.Call(r.ctx, wire.Request{
 		Target: request.RouteId, TraceID: trace,
-		Attach:  &Invocation{PluginID: c.pluginID, Event: prepared, DefaultTarget: proto.CloneOf(event.retained.GetTarget())},
+		Attach:  inv,
 		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
 	})
+	if r.continuations != nil {
+		r.continuations.Finished(inv, err == nil && response.Err == nil)
+	}
+	return response, err
+}
+
+// CallContinuation 向原 Session 重发 Handler，使用独立期限，结果不参与事件传播。
+func (r *Router) CallContinuation(ctx context.Context, inv *Invocation, continuationOf uint64, deadline time.Time) (wire.Response, error) {
+	r.mu.Lock()
+	current := r.current(inv.candidate)
+	r.mu.Unlock()
+	if !current {
+		return wire.Response{}, errors.New("plugin Session is no longer active")
+	}
+	request := proto.CloneOf(inv.request)
+	request.ContinuationOf = proto.Uint64(continuationOf)
+	encoded, err := proto.Marshal(request)
+	if err != nil {
+		return wire.Response{}, fmt.Errorf("encode continuation request: %w", err)
+	}
+	next := &Invocation{PluginID: inv.PluginID, Event: request.Event, DefaultTarget: proto.CloneOf(inv.DefaultTarget), RouteID: inv.RouteID, Continuation: true, candidate: inv.candidate, request: request, trace: inv.trace}
+	key := inFlightKey{caller: inv.candidate.caller, eventID: inv.Event.GetEventId()}
+	r.mu.Lock()
+	if !r.current(inv.candidate) {
+		r.mu.Unlock()
+		return wire.Response{}, errors.New("plugin Session is no longer active")
+	}
+	r.inFlight[key]++
+	r.mu.Unlock()
+	defer r.finishCall(key)
+	response, err := inv.candidate.plugin.Call(ctx, wire.Request{
+		Target: inv.RouteID, TraceID: inv.trace, Deadline: deadline, Attach: next,
+		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
+	})
+	if r.continuations != nil {
+		r.continuations.Finished(next, err == nil && response.Err == nil)
+	}
+	return response, err
+}
+
+func (r *Router) finishCall(key inFlightKey) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.inFlight[key]--
+	if r.inFlight[key] == 0 {
+		delete(r.inFlight, key)
+	}
 }
 
 func decodeOutcome(payload wire.Payload) (*pb.HandlerOutcome, error) {

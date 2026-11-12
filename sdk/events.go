@@ -22,6 +22,7 @@ type EventRoute struct {
 	Handler       any
 	permission    Permission
 	rules         []Rule // Collect 固定的调用顺序，含按钮路由。
+	continuation  bool
 	actionID      string
 	actionVersion uint32
 	decodeButton  func(string) (any, error)
@@ -80,6 +81,15 @@ func (b *EventBuilder) Rule(rules ...Rule) *EventBuilder {
 		b.afterHandle = true
 	}
 	b.route.rules = append(b.route.rules, rules...)
+	return b
+}
+
+// Continue 让事件 Handler 在独立的延续调用中执行。
+func (b *EventBuilder) Continue() *EventBuilder {
+	if b.handles != 0 {
+		b.afterHandle = true
+	}
+	b.route.continuation = true
 	return b
 }
 

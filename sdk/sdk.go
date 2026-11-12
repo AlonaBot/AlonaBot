@@ -58,8 +58,13 @@ type Context struct {
 	event         *pb.Event
 	eventOnce     sync.Once
 	publicEvent   *message.Event
-	match         []string // 本次 Regex 的捕获组
-	autoReply     bool     // 自动回复 Handler 通过返回 Content 发送
+	match         []string               // 本次 Regex 的捕获组
+	autoReply     bool                   // 自动回复 Handler 通过返回 Content 发送
+	continuations *continuationFunctions // 所属 Session 的延续函数登记表。
+	continuation  bool
+	inHandler     bool       // Rule 执行完成后开放 Continue。
+	continueMu    sync.Mutex // 串行化一次性登记。
+	continued     bool
 }
 
 // Context 返回本次调用的 context（含 deadline 与取消）。

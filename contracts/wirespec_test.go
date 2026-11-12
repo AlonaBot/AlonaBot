@@ -11,6 +11,39 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
+// TestContinuationFieldNumbers 固定延续调用与等待载荷的编号、类型及 presence。
+func TestContinuationFieldNumbers(t *testing.T) {
+	field := (&pb.HandlerRequest{}).ProtoReflect().Descriptor().Fields().ByNumber(5)
+	if field == nil || field.Name() != "continuation_of" || field.Kind() != protoreflect.Uint64Kind || !field.HasOptionalKeyword() || !field.HasPresence() || field.IsList() {
+		t.Fatalf("HandlerRequest field 5 should be optional uint64 continuation_of, got %v", field)
+	}
+	for _, c := range []struct {
+		message proto.Message
+		name    protoreflect.Name
+		kind    protoreflect.Kind
+	}{
+		{&pb.ContinuationStartRequest{}, "", 0},
+		{&pb.ContinuationStartResponse{}, "", 0},
+		{&pb.WaitRequest{}, "timeout_ms", protoreflect.Uint32Kind},
+		{&pb.WaitResponse{}, "event", protoreflect.MessageKind},
+	} {
+		fields := c.message.ProtoReflect().Descriptor().Fields()
+		if c.name == "" {
+			if fields.Len() != 0 {
+				t.Errorf("%T should be empty", c.message)
+			}
+			continue
+		}
+		f := fields.ByNumber(1)
+		if fields.Len() != 1 || f == nil || f.Name() != c.name || f.Kind() != c.kind || f.IsList() || f.HasPresence() != (c.kind == protoreflect.MessageKind) {
+			t.Fatalf("%T field 1 should be %s %s, got %v", c.message, c.kind, c.name, f)
+		}
+		if c.name == "event" && f.Message().FullName() != "alonabot.v1.Event" {
+			t.Errorf("WaitResponse.event type = %s", f.Message().FullName())
+		}
+	}
+}
+
 // 以下期望值逐字取自 spec/WIRE-FORMAT.md §1/§2；改动这里等于改动线上协议。
 
 // Envelope 字段 1～16 的编号与名称和 WIRE §1 一致，且没有多余字段。
