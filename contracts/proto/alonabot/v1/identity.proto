@@ -9,9 +9,9 @@ option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 message Target {
   // Adapter 类型，例如 telegram。
   string adapter_id = 1;
-  // 该 Adapter 的已配置实例。
+  // 该 Adapter 的已配置实例；插件发出时可以为空，由 Core 补齐。
   string adapter_instance_id = 2;
-  // 实例下用于发送的平台账号。
+  // 实例下用于发送的平台账号；插件发出时可以为空，由 Core 补齐。
   string account_id = 3;
   // 平台会话 ID。
   string chat_id = 4;

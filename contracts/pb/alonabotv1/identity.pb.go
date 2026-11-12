@@ -28,9 +28,9 @@ type Target struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Adapter 类型，例如 telegram。
 	AdapterId string `protobuf:"bytes,1,opt,name=adapter_id,json=adapterId,proto3" json:"adapter_id,omitempty"`
-	// 该 Adapter 的已配置实例。
+	// 该 Adapter 的已配置实例；插件发出时可以为空，由 Core 补齐。
 	AdapterInstanceId string `protobuf:"bytes,2,opt,name=adapter_instance_id,json=adapterInstanceId,proto3" json:"adapter_instance_id,omitempty"`
-	// 实例下用于发送的平台账号。
+	// 实例下用于发送的平台账号；插件发出时可以为空，由 Core 补齐。
 	AccountId string `protobuf:"bytes,3,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
 	// 平台会话 ID。
 	ChatId string `protobuf:"bytes,4,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
