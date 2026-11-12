@@ -51,7 +51,7 @@
 | T-04.13 | goal-126 | Service 与 Event Bus 的带类型声明：`sdk.JSON`、`sdk.Proto` 返回 `sdk.Service[In, Out]`，`sdk.Serve` 注册、`Call` 调用；`sdk.BusEvent[T]` 的 `Publish` 与 `sdk.Subscribe`；删除 `sdk.CallJSON`、`sdk.CallProto`、`sdk.Publish` 与旧形式的注册、订阅函数；`sdk/llm`、示例与已合并的调用方同步（D-122） | T-04 步骤 13 | T-04.12 | V-113 的声明分项 | 未开始 |
 | T-04.14 | goal-129 | 命令名覆盖的 Core 侧：命令策略保存按路由的命令名列表，Router 的索引、遮蔽诊断、usage 回复与命令菜单使用生效的命令名，保存时的格式与重名检查，插件更新后的失效处理（D-128） | T-04 步骤 14 | T-03.17、T-04.10 | V-115 的 Core 分项 | 未开始 |
 | T-05.1 | goal-15 | 可信事件上下文与有界同事件分发：64 条并发链、256 条/8 MiB 等待队列、稳定候选排序、链执行与读循环分离；经回环测试 Adapter 运行，按钮与 scheduled 绑定先用规范 fixture | T-05 步骤 1、2 | T-03.3、T-04.3、T-04.4 | V-13、V-16 的 fixture 分项 | 已完成（PR #67；TEST-MATRIX §3.2） |
-| T-05.2 | goal-16 | SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支 | T-05 步骤 3、4 | T-05.1、T-04.7、T-04.8 | V-14、V-11 的 Rule 分项 | 未开始 |
+| T-05.2 | goal-16 | SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支 | T-05 步骤 3、4 | T-05.1、T-04.7、T-04.8 | V-14、V-11 的 Rule 分项 | 已完成（PR #145；TEST-MATRIX §3.2） |
 | T-05.3 | goal-17 | PreEvent/BeforeSend/AfterSend 三阶段 Hook（链式注册与 SDK 类型，D-112），send_forbidden 的保存与继承 | T-05 步骤 5、6 | T-05.2 | V-15 的直接路径分项，V-110 的 Hook 分项 | 未开始 |
 | T-05.4 | goal-52 | 延续调用与多轮等待：`core.continuation.start`、`core.wait`、等待键与消费、超时与 Session 失效；SDK 的 `Continue`（Handler 内调用与 builder 的 `.Continue()`，D-119）与 `Wait` | T-05 步骤 7 | T-05.2 | V-50，V-113 的延续调用分项 | 未开始 |
 | T-05.5 | goal-18 | 多进程事件流水线验收（含真实按钮回调与多轮等待），汇总证据 | T-05 步骤 8 | T-03.8、T-05.3、T-05.4 | V-11、V-13～V-16、V-43、V-49、V-50 的 T-05 分项 | 未开始 |
@@ -398,7 +398,7 @@ V-12 是跨任务验收：T-04 不依赖尚不存在的 WebUI，但必须交付�
 
 2. **实现有界的同事件分发。** 接收入口统一执行 Normalize→PreEvent→命令/类型匹配与 Core 权限→SDK Rule/Handler。普通事件每条链顺序执行，跨事件最多 64 条并发；等待队列不超过 256 条且 8 MiB，并计入已有 Core payload 总预算。候选按 priority/plugin_id/route_id 稳定排序；入站超额明确拒绝/丢弃并计数，接收游标依 T-03 规则处理。链执行从 Session 读循环分离，慢 Handler 不能停止 Response/Cancel/控制帧处理。
 
-3. **完成 SDK Rule 与 HandlerOutcome。** 自定义 Rule 与目标 Handler 在同一 RPC 中执行；默认 AND，显式 OR 通过 SDK 组合，false/error 均不运行目标函数。SDK 提供按 message.created 的 `to_me` 判断的 `ToMe` Rule。适配 `error` 与 `(Content,error)` 两个签名（D-108），返回明确 matched/propagation；只有自动模式成功返回非空 Chain 时触发一次 Send，自动模式中的显式 Send 拒绝。手动模式允许多次 Send。panic 转 INTERNAL 并保留诊断，不吞成成功；Context 返回后失效。
+3. **完成 SDK Rule 与 HandlerOutcome。** 自定义 Rule 与目标 Handler 在同一 RPC 中执行；默认 AND，显式 OR 通过 SDK 组合，false/error 均不运行目标函数。SDK 提供按 message.created 的 `to_me` 判断的 `ToMe` Rule。适配 `error` 与 `(Content,error)` 两个签名（D-108），返回明确 matched/propagation；只有自动模式成功返回非空内容时触发一次 Send，排在 Handler 内的显式 Send 之后；自动型也可以显式 Send（D-70）。手动模式允许多次 Send。panic 转 INTERNAL 并保留诊断，不吞成成功；Context 返回后失效。
 
 4. **固定传播与错误分支。** c.StopPropagation() 在 SDK 锁存，结果即使同时携带 ErrorInfo 也保留 Stop；普通事件 Rule false 跳过、业务错误默认继续，显式 Stop 终止后续候选。已识别命令则沿用 T-04 的消费状态，不因 Rule false/error 回落。测试 Handler 已发送后失败的情况，确保不会补发、撤销已确认消息或自动发送错误回复；后台 goroutine 不得修改已返回结果或继续借用失效父调用。
 
