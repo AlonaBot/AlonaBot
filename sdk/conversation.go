@@ -7,6 +7,7 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -55,17 +56,17 @@ func callConversation(ctx context.Context, target string, request, result proto.
 	}
 	encoded, err := proto.Marshal(request)
 	if err != nil {
-		return &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "encode conversation request: " + err.Error()}
+		return &Error{Code: errcode.InvalidArgument, Message: "encode conversation request: " + err.Error()}
 	}
 	out, callError := session.Call(ctx, wire.Request{Target: target,
 		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: invocationSchemaVersion, Bytes: encoded}})
 	// 2. Core 错误保留安全消息，协议码统一转为公开错误码。
 	if callError != nil {
 		info := callError.(*wire.CallError).ErrorInfo
-		return &Error{Code: validate.PublicCode(info.GetCode()), Message: info.GetSafeMessage()}
+		return &Error{Code: errcode.Code(validate.PublicCode(info.GetCode())), Message: info.GetSafeMessage()}
 	}
 	if err := decodeInvocation(out.Payload, result); err != nil {
-		return &Error{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, Message: err.Error()}
+		return &Error{Code: errcode.Internal, Message: err.Error()}
 	}
 	return nil
 }

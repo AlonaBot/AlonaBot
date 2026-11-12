@@ -1,10 +1,15 @@
 package sdk
 
 import (
+	"encoding/json"
 	"fmt"
+	"log/slog"
+	"reflect"
 	"strings"
 
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
+	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
 const commandRoutePrefix = "cmd."
@@ -12,8 +17,8 @@ const commandRoutePrefix = "cmd."
 // EventRoute 保存一个手动发送事件 Handler 的静态注册。
 type EventRoute struct {
 	RouteID       string
-	EventType     string
-	Handler       func(*Context) error
+	EventType     EventType
+	Handler       any
 	permission    Permission
 	actionID      string
 	actionVersion uint32
@@ -32,7 +37,7 @@ type EventRegistry struct {
 }
 
 // On 开始构建事件路由。
-func (r *EventRegistry) On(routeID, eventType string) *EventBuilder {
+func (r *EventRegistry) On(routeID string, eventType EventType) *EventBuilder {
 	b := &EventBuilder{route: EventRoute{RouteID: routeID, EventType: eventType}}
 	r.builders = append(r.builders, b)
 	return b
@@ -65,7 +70,7 @@ func (b *EventBuilder) Permission(p Permission) *EventBuilder {
 }
 
 // Handle 结束事件路由构建。
-func (b *EventBuilder) Handle(h func(*Context) error) { b.handles++; b.route.Handler = h }
+func (b *EventBuilder) Handle(h any) { b.handles++; b.route.Handler = h }
 
 func (r *EventRegistry) collect() {
 	for _, b := range r.builders {
@@ -82,7 +87,7 @@ func (r *EventRegistry) collect() {
 }
 
 func (r *EventRegistry) add(route EventRoute) {
-	routeID, eventType, handler := route.RouteID, route.EventType, route.Handler
+	routeID, handler := route.RouteID, route.Handler
 	switch {
 	case routeID == "":
 		r.errs = append(r.errs, fmt.Errorf("event route is missing route_id"))
@@ -93,11 +98,12 @@ func (r *EventRegistry) add(route EventRoute) {
 	case r.seen[routeID]:
 		r.errs = append(r.errs, fmt.Errorf("route %q registered twice", routeID))
 		return
-	case !validate.IsEventType(eventType) && !validate.IsAdapterEventType(eventType):
-		r.errs = append(r.errs, fmt.Errorf("event route %q has unknown event type %q", routeID, eventType))
-		return
 	case handler == nil:
 		r.errs = append(r.errs, fmt.Errorf("handler for event route %q is nil", routeID))
+		return
+	}
+	if err := checkEventHandler(route); err != nil {
+		r.errs = append(r.errs, err)
 		return
 	}
 	if r.seen == nil {
@@ -112,4 +118,105 @@ func commandRouteID(command Command) string {
 		return command.routeID
 	}
 	return commandRoutePrefix + strings.Join(command.Path, ".")
+}
+
+// EventType 绑定事件名及 Handler 的载荷类型，零值由 Collect 拒绝。
+type EventType struct {
+	name    string
+	payload reflect.Type
+	version uint32
+	adapter bool
+}
+
+var (
+	MessageCreated = EventType{name: "message.created", payload: reflect.TypeFor[*message.CreatedPayload]()}      // 新消息。
+	MessageEdited  = EventType{name: "message.edited", payload: reflect.TypeFor[*message.EditedPayload]()}        // 消息编辑。
+	MessageDeleted = EventType{name: "message.deleted", payload: reflect.TypeFor[*message.DeletedPayload]()}      // 消息删除。
+	ButtonClicked  = EventType{name: "button.clicked", payload: reflect.TypeFor[*message.ButtonClickedPayload]()} // 按钮点击。
+	MemberJoined   = EventType{name: "member.joined", payload: reflect.TypeFor[*message.MemberPayload]()}         // 成员加入。
+	MemberLeft     = EventType{name: "member.left", payload: reflect.TypeFor[*message.MemberPayload]()}           // 成员离开。
+	ReactionAdded  = EventType{name: "reaction.added", payload: reflect.TypeFor[*message.ReactionAddedPayload]()} // 消息回应。
+	Scheduled      = EventType{name: "scheduled", payload: reflect.TypeFor[*message.ScheduledPayload]()}          // 定时任务。
+	BotOnline      = EventType{name: "bot.online", payload: reflect.TypeFor[*message.BotOnlinePayload]()}         // 机器人上线。
+	BotOffline     = EventType{name: "bot.offline", payload: reflect.TypeFor[*message.BotOfflinePayload]()}       // 机器人离线。
+)
+
+// AdapterEvent 声明 Adapter 扩展事件，T 须为结构体，Handler 接收 *T。
+func AdapterEvent[T any](name string, version uint32) EventType {
+	return EventType{name: name, payload: reflect.TypeFor[*T](), version: version, adapter: true}
+}
+func (e EventType) check() error {
+	if e.payload == nil {
+		return fmt.Errorf("zero EventType")
+	}
+	if e.adapter {
+		if !validate.IsAdapterEventType(e.name) || e.version == 0 || e.payload.Elem().Kind() != reflect.Struct {
+			return fmt.Errorf("invalid AdapterEvent %q: expected a valid name, nonzero version and struct payload", e.name)
+		}
+	} else if !validate.IsEventType(e.name) {
+		return fmt.Errorf("unknown event type %q", e.name)
+	}
+	return nil
+}
+func checkEventHandler(route EventRoute) error {
+	event := route.EventType
+	if err := event.check(); err != nil {
+		return fmt.Errorf("event route %q: %w", route.RouteID, err)
+	}
+	t := reflect.TypeOf(route.Handler)
+	expected := fmt.Sprintf("func(*sdk.Context) error or func(*sdk.Context, %s) error", event.payload)
+	if t != nil && t.Kind() == reflect.Func && !reflect.ValueOf(route.Handler).IsNil() && !t.IsVariadic() && t.NumIn() >= 1 && t.In(0) == contextType && t.NumOut() == 1 && t.Out(0) == errorType && (t.NumIn() == 1 || (t.NumIn() == 2 && t.In(1) == event.payload)) {
+		return nil
+	}
+	return fmt.Errorf("event route %q: expected %s; got %T", route.RouteID, expected, route.Handler)
+}
+func invokeEvent(c *Context, route EventRoute) error {
+	handler := reflect.ValueOf(route.Handler)
+	event := route.EventType
+	payload := c.Event().Payload
+	var value reflect.Value
+	if event.adapter {
+		if handler.Type().NumIn() == 1 {
+			return eventResult(handler.Call([]reflect.Value{reflect.ValueOf(c)}))
+		}
+		raw, ok := payload.(*message.AdapterEventPayload)
+		if !ok {
+			c.Logger().Error("event payload type mismatch")
+			return errcode.Internal.New("event payload type mismatch")
+		}
+		if raw.Version != event.version {
+			slog.Warn("adapter event version mismatch", "route_id", route.RouteID, "version", raw.Version, "expected_version", event.version)
+			return nil
+		}
+		value = reflect.New(event.payload.Elem())
+		if err := json.Unmarshal([]byte(raw.PayloadJSON), value.Interface()); err != nil {
+			slog.Warn("decode adapter event", "route_id", route.RouteID, "error", err)
+			return nil
+		}
+	} else {
+		value = reflect.ValueOf(payload)
+		if !value.IsValid() || value.Type() != event.payload || value.IsNil() {
+			c.Logger().Error("event payload type mismatch")
+			return errcode.Internal.New("event payload type mismatch")
+		}
+	}
+	if route.decodeButton != nil {
+		button := payload.(*message.ButtonClickedPayload)
+		decoded, err := route.decodeButton(button.Value)
+		if err != nil {
+			slog.Warn("decode button value", "route_id", route.RouteID, "error", err)
+			return nil
+		}
+		return route.handleButton(c, decoded)
+	}
+	if handler.Type().NumIn() == 1 {
+		return eventResult(handler.Call([]reflect.Value{reflect.ValueOf(c)}))
+	}
+	return eventResult(handler.Call([]reflect.Value{reflect.ValueOf(c), value}))
+}
+func eventResult(values []reflect.Value) error {
+	if values[0].IsNil() {
+		return nil
+	}
+	return values[0].Interface().(error)
 }

@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"os"
 
-	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
@@ -47,7 +46,7 @@ func (*Lifecycle) OnStop(context.Context) error {
 
 // Commands 注册 /ping 命令，回复 pong。
 func (*Lifecycle) Commands(r *sdk.CommandRegistry) {
-	r.Command("ping").Handle(func(*sdk.Context) (message.Chain, error) {
+	r.Command("ping").Handle(func(*sdk.Context) (message.Content, error) {
 		return message.Chain{message.Text("pong")}, nil
 	})
 }
@@ -78,7 +77,7 @@ func (*Lifecycle) HTTP(r *sdk.HTTPRegistry) {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
-	}), sdk.Public(pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_STATE))
+	}), sdk.Public(sdk.AuthCallbackState))
 }
 
 // main 运行插件；正常结束时记录 exiting normally，失败时记录错误并以 1 退出。

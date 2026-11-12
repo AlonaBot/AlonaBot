@@ -49,7 +49,7 @@ func (p *Demo) Commands(r *sdk.CommandRegistry) {
 }
 
 // Hello 响应 /demo hello，返回要自动回复的 Chain；成功且非空时由 Core 发送一次。
-func (p *Demo) Hello(c *sdk.Context) (message.Chain, error) {
+func (p *Demo) Hello(c *sdk.Context) (message.Content, error) {
 	c.StopPropagation()
 	return message.Chain{message.Text(p.Config().String("greeting"))}, nil
 }

@@ -5,8 +5,8 @@ package messagecodec
 
 // Button 保存动作、标签、JSON 值与编码错误。
 type Button struct {
-	ActionID, Label, Value string
-	err                    error
+	ActionID, Label, Value, CoreToken string
+	err                               error
 }
 
 // NewButton 保留按钮编码的原始错误。

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"reflect"
 
-	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/messagecodec"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
@@ -35,7 +34,7 @@ func (a ButtonAction[T]) Button(label string, value T) message.Button {
 
 // OnButton 开始构建 button.clicked 路由，route_id 固定为 button. 加动作名。
 func OnButton[T any](r *EventRegistry, a ButtonAction[T]) *ButtonBuilder[T] {
-	b := r.On(buttonRoutePrefix+a.name, "button.clicked")
+	b := r.On(buttonRoutePrefix+a.name, ButtonClicked)
 	b.route.actionID, b.route.actionVersion = a.name, a.version
 	b.button = true
 	return &ButtonBuilder[T]{event: b}
@@ -69,13 +68,4 @@ func (b *ButtonBuilder[T]) Handle(h func(*Context, T) error) {
 	}
 	b.event.route.handleButton = func(c *Context, value any) error { return h(c, value.(T)) }
 	b.event.Handle(func(*Context) error { return nil })
-}
-
-func checkMessageEncoding(chain message.Chain) error {
-	for _, segment := range chain {
-		if err := messagecodec.Error(segment); err != nil {
-			return &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "encode message: " + err.Error()}
-		}
-	}
-	return nil
 }

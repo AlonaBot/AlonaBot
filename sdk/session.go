@@ -16,6 +16,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk/config"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
 )
 
@@ -122,7 +123,7 @@ func clientHandshake(conn *wire.Conn, l launch) (*pb.HelloAck, error) {
 		}
 		return m, nil
 	case *pb.SessionError:
-		return nil, &Error{Code: validate.PublicCode(env.GetError().GetCode()), Message: "Core rejected the handshake: " + env.GetError().GetSafeMessage()}
+		return nil, &Error{Code: errcode.Code(validate.PublicCode(env.GetError().GetCode())), Message: "Core rejected the handshake: " + env.GetError().GetSafeMessage()}
 	}
 	return nil, fmt.Errorf("unexpected %s during handshake", env.GetKind())
 }
@@ -158,7 +159,7 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32, c
 	for _, event := range reg.Events {
 		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: event.RouteID, Priority: event.Priority, Kind: pb.RouteKind_ROUTE_KIND_EVENT,
 			DefaultEnabled: true, RequiredPermissions: event.permission.Names(),
-			Spec: &pb.RouteDescriptor_Event{Event: &pb.EventSpec{EventTypeFilter: []string{event.EventType}, ActionId: event.actionID, ActionSchemaVersion: event.actionVersion, HandlerMode: pb.HandlerMode_HANDLER_MODE_MANUAL}}})
+			Spec: &pb.RouteDescriptor_Event{Event: &pb.EventSpec{EventTypeFilter: []string{event.EventType.name}, ActionId: event.actionID, ActionSchemaVersion: event.actionVersion, HandlerMode: pb.HandlerMode_HANDLER_MODE_MANUAL}}})
 	}
 	for _, job := range reg.Schedules {
 		spec := &pb.ScheduleSpec{JobId: job.JobID, Timezone: job.Timezone}
@@ -302,7 +303,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 		return m, nil
 	case *pb.SessionError:
 		_ = conn.Close()
-		return nil, &Error{Code: validate.PublicCode(env.GetError().GetCode()), Message: "Core rejected the registration: " + env.GetError().GetSafeMessage()}
+		return nil, &Error{Code: errcode.Code(validate.PublicCode(env.GetError().GetCode())), Message: "Core rejected the registration: " + env.GetError().GetSafeMessage()}
 	}
 	return nil, fmt.Errorf("unexpected %s during preparation", env.GetKind())
 }
