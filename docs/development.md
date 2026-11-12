@@ -51,6 +51,8 @@ bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle --stdi
 
 首次运行会登记开发用安装记录并提交新代次（`mode=new`），之后复用已提交代次（`mode=restart`）。正式的组件安装与来源校验入口尚未提供。
 
+插件目录（`--entry` 所在目录）有 `plugin.yaml` 时，`run` 解析它并检查依赖；当前 `run` 只启动这一个插件、不启动 Adapter，必需依赖都会报告缺失并以失败退出，可选依赖逐条记 WARN 后继续。
+
 `run` 取得 core.lock 后读取 `<data_dir>/core_config.json`，Core 设置统一从这个 JSON 对象读取；文件不存在时以 0600 权限写入缺省内容。未知键、重复键、类型或取值错误时，以 usage 退出码报告完整键路径与行列号。
 
 键与缺省值见 CONTRACTS §15.1；`base_url` 缺省为 `http://127.0.0.1:7650`，管理入口与插件路由共用这个地址。旧键 `admin_base_url` 与 `plugin_base_url` 按未知键报错；已有配置需改用 `base_url`。`admins`、`command_prefixes`、`command_prefixes_by_instance`、`default_locale`、`log.sources` 与 `adapters` 已支持解析与保存；本地 `run` 按监听、日志、代理与 Base URL 装配。

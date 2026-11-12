@@ -42,6 +42,8 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 - 权限写成 `sdk.Permission`：`sdk.Anyone`、`sdk.User`、`sdk.Admin`、`sdk.ChatAdmin`、`sdk.PermissionName`，用 `Or` 取并集。命令与文本匹配取最近一层显式设置（路由、最近的组、外层的组），都没有时要求 `user`；事件路由没有设置时为空集合。Handler 内用 `c.Has` 按当前 Actor 判断。
 - 两种 Handler 都可以 `c.Send`。自动回复型 Handler 返回的非空 Chain 由 Core 在 Handler 返回后发送，排在本次调用的全部显式发送之后。
 
+发送带回调的按钮时，用 `a := sdk.Action[T](name)` 声明动作，通过 `sdk.OnButton(r, a).Handle(...)` 注册签名为 `func(*sdk.Context, T) error` 的 Handler，再将 `a.Button(label, value)` 放入 `message.Buttons` 发送。`button.` 是按钮路由的保留前缀，注册其他路由时避开该前缀。value 用 `encoding/json` 编码，Core 限制编码结果最多 1024 字节；编码失败的按钮在发送前返回 INVALID_ARGUMENT。点击时 value 解码失败记 WARN，跳过 Handler 并正常结束本次调用。直接构造 `message.Button` 时，空的 `Value` 会省略该字段，省略值的点击同样按解码失败处理。`message.Extension(adapterID, name, version, payload)` 只能发往所属 Adapter 声明了对应 extension 名称与版本的实例，payload 按声明的 Schema 校验（[CONTRACTS §8](../spec/CONTRACTS-v0.1.md)、[MESSAGE-MODEL §6.3](../spec/MESSAGE-MODEL.md#63-按钮与回调)）。
+
 ## 6. 跨插件协作
 
 - 用 Service Call 与 Event Bus 协作，不直接读写其他插件的文件或数据库（CONTRACTS §3）。
