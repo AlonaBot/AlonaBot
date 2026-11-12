@@ -339,7 +339,9 @@ func registerHTTPRoute(routes map[[2]string]string, route *pb.RouteDescriptor) e
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "HTTP route %q has invalid path %q", route.GetRouteId(), rawPath)
 	}
 	if spec.GetIsPublic() {
-		if spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_STATE && spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_SIGNATURE {
+		switch spec.GetAuthMode() {
+		case pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_STATE, pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_SIGNATURE, pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_NONCE:
+		default:
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "public HTTP route %q must declare callback verification", route.GetRouteId())
 		}
 	} else if spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CORE_SESSION {

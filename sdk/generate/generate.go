@@ -84,6 +84,7 @@ type scan struct {
 	adapterRoot     declaration
 	projectManifest []byte
 	instanceJSON    []byte
+	paramNames      map[string][]string
 	serviceSchemas  map[string][]byte
 	i18nFiles       map[string][]byte // 已读文案原文；全量诊断通过后才嵌入，没有资源时为 nil。
 	syntax          map[string][]*ast.File

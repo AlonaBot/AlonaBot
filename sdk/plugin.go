@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"sync/atomic"
 	"time"
 
@@ -116,14 +115,16 @@ func (r *pluginScope) on(routeID string, eventType EventType) *EventBuilder {
 	return b
 }
 
-func (r *pluginScope) every(jobID string, d time.Duration, fn func(*Context) error) {
-	r.plugin.schedules.Every(jobID, d, fn)
+func (r *pluginScope) every(jobID string, d time.Duration) *ScheduleBuilder {
+	b := r.plugin.schedules.Every(jobID, d)
 	r.plugin.jobSubPlugins[jobID] = r.subID
+	return b
 }
 
-func (r *pluginScope) cron(jobID, expr, timezone string, fn func(*Context) error) {
-	r.plugin.schedules.Cron(jobID, expr, timezone, fn)
+func (r *pluginScope) cron(jobID, expr string) *ScheduleBuilder {
+	b := r.plugin.schedules.Cron(jobID, expr)
 	r.plugin.jobSubPlugins[jobID] = r.subID
+	return b
 }
 
 // Group 返回本作用域下共享路径与权限的命令组。
@@ -165,17 +166,17 @@ func (r *Plugin) On(routeID string, eventType EventType) *EventBuilder {
 	return r.scope.on(routeID, eventType)
 }
 
-// Handle 登记 HTTP 路由。
-func (r *Plugin) Handle(method, path string, h http.Handler, opts ...HTTPOption) {
-	r.scope.plugin.http.Handle(method, path, h, opts...)
+// Route 开始构建 method+path 的 HTTP 路由。
+func (r *Plugin) Route(method, path string) *RouteBuilder {
+	return r.scope.plugin.http.Route(method, path)
 }
 
-// Every 登记固定间隔任务。
-func (r *Plugin) Every(jobID string, d time.Duration, fn func(*Context) error) {
-	r.scope.every(jobID, d, fn)
+// Every 开始构建固定间隔任务。
+func (r *Plugin) Every(jobID string, d time.Duration) *ScheduleBuilder {
+	return r.scope.every(jobID, d)
 }
 
-// Cron 登记 cron 任务。
-func (r *Plugin) Cron(jobID, expr, timezone string, fn func(*Context) error) {
-	r.scope.cron(jobID, expr, timezone, fn)
+// Cron 开始构建五字段 cron 任务。
+func (r *Plugin) Cron(jobID, expr string) *ScheduleBuilder {
+	return r.scope.cron(jobID, expr)
 }

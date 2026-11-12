@@ -19,7 +19,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
+	"reflect"
+	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -231,6 +235,8 @@ func Collect(root *Plugin) (*Registration, error) {
 		return nil, errors.New("plugin is nil")
 	}
 	cmds, events, routes, jobs := &root.commands, &root.events, &root.http, &root.schedules
+	routes.collect()
+	jobs.collect()
 	cmds.collect()
 	events.seen = make(map[string]bool)
 	for _, command := range cmds.commands {
@@ -266,3 +272,23 @@ func Collect(root *Plugin) (*Registration, error) {
 
 // Config 返回整个插件的只读配置。
 func (c *Context) Config() config.Values { return c.plugin.Config() }
+
+// handlerParamNames 在注册时解析函数身份，运行时绑定只读已收集的 CommandSpec。
+func handlerParamNames(g Generated, handler any) []string {
+	if len(g.ParamNames) == 0 {
+		return nil
+	}
+	fn := runtime.FuncForPC(reflect.ValueOf(handler).Pointer())
+	name := strings.TrimSuffix(fn.Name(), "-fm")
+	if names, ok := g.ParamNames[name]; ok {
+		return names
+	}
+	file, line := fn.FileLine(fn.Entry())
+	suffix := fmt.Sprintf(":%s:%d", filepath.Base(file), line)
+	for key, names := range g.ParamNames {
+		if path, ok := strings.CutSuffix(key, suffix); ok && strings.HasPrefix(name, path+".") {
+			return names
+		}
+	}
+	return nil
+}
