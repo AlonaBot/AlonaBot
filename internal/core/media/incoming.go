@@ -140,6 +140,8 @@ func (s *Store) PrepareIncoming(ev *pb.Event, c router.Caller) (prepared *pb.Eve
 				source = value.Image.GetSource()
 			case *pb.Segment_Video:
 				source = value.Video.GetSource()
+			case *pb.Segment_Voice:
+				source = value.Voice.GetSource()
 			case *pb.Segment_File:
 				source = value.File.GetSource()
 			}

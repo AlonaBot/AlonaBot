@@ -8,7 +8,7 @@ import (
 
 type encodingFailure = messagecodec.Failure
 
-// Button 保存动作、展示标签、JSON 值与 Core 签发的回调令牌。
+// Button 保存动作或 URL、展示标签、JSON 值与 Core 签发的回调令牌。
 type Button = messagecodec.Button
 
 // ButtonsSegment 按行保存按钮及构造时的编码错误。
@@ -43,3 +43,6 @@ func Extension(adapterID, name string, version uint32, payload any) Segment {
 	encoded, err := json.Marshal(payload)
 	return ExtensionSegment{encodingFailure: messagecodec.NewFailure(err), AdapterID: adapterID, Name: name, Version: version, PayloadJSON: string(encoded)}
 }
+
+// URLButton 构造无需回调令牌的链接按钮。
+func URLButton(label, url string) Button { return Button{Label: label, URL: url} }
