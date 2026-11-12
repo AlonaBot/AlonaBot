@@ -137,6 +137,13 @@ message AdapterEditRequest {
   MessageChain chain = 4;
 }
 
+// AdapterDeleteRequest 向指定实例提交撤回，响应为 DeleteResult。
+message AdapterDeleteRequest {
+  string instance_id = 1;
+  Target target = 2;
+  repeated string platform_message_ids = 3;
+}
+
 // MediaURLRequest 为本次发送的只读令牌申请临时 URL，载荷版本为 1。
 message MediaURLRequest {
   string token = 1;

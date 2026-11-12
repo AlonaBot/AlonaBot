@@ -27,6 +27,7 @@ type Command struct {
 	params   []pb.ParamType // Context 之后各参数的类型
 
 	permission Permission
+	rules      []Rule          // Collect 固定的调用顺序，全部通过后执行 Handler。
 	routeID    string          // 文本匹配与 Raw 的显式路由 ID
 	spec       *pb.CommandSpec // 已通过注册边界校验的命令描述
 }
@@ -208,6 +209,13 @@ func (b *CommandBuilder) Permission(p Permission) *CommandBuilder {
 // Handle 结束路由构建，签名规则由 Collect 检查。
 func (b *CommandBuilder) Handle(handler any) { b.handles++; b.command.Handler = handler }
 
+// Rule 按调用与参数顺序追加条件，全部匹配后执行 Handler。
+func (b *CommandBuilder) Rule(rules ...Rule) *CommandBuilder {
+	b.touch()
+	b.command.rules = append(b.command.rules, rules...)
+	return b
+}
+
 func (r *CommandRegistry) collect() {
 	for _, b := range r.builders {
 		c := b.command
@@ -228,6 +236,11 @@ func (r *CommandRegistry) collect() {
 			continue
 		}
 		c.permission = *p
+		if err := checkRules(c.rules); err != nil {
+			r.errs = append(r.errs, invalidCommand("route %q: %v", id, err))
+			continue
+		}
+		c.rules = slices.Clone(c.rules)
 		r.register(c, b.options)
 	}
 }

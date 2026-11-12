@@ -55,6 +55,12 @@ func (b *ButtonBuilder[T]) Permission(p Permission) *ButtonBuilder[T] {
 	return b
 }
 
+// Rule 按调用与参数顺序追加按钮回调条件。
+func (b *ButtonBuilder[T]) Rule(rules ...Rule) *ButtonBuilder[T] {
+	b.event.Rule(rules...)
+	return b
+}
+
 // Handle 登记接收解码后按钮值的处理函数。
 func (b *ButtonBuilder[T]) Handle(h func(*Context, T) error) {
 	b.event.route.decodeButton = func(raw string) (any, error) {

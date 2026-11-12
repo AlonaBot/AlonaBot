@@ -58,5 +58,11 @@ const ServiceEdit = "core.edit"
 // ServiceAdapterEdit 向账号实例提交消息编辑。
 const ServiceAdapterEdit = "adapter.edit"
 
+// ServiceDelete 指定 Core 的消息撤回服务。
+const ServiceDelete = "core.delete"
+
+// ServiceAdapterDelete 向账号实例提交消息撤回。
+const ServiceAdapterDelete = "adapter.delete"
+
 // ServiceMediaURL 为本次发送的只读媒体令牌签发临时 URL。
 const ServiceMediaURL = "core.media.url"
