@@ -31,7 +31,7 @@ func callDelete(ctx context.Context, refs []message.MessageRef, parent *wire.Inb
 	if err != nil {
 		return nil, err
 	}
-	session, err := currentSession()
+	session, err := currentSession(ctx)
 	if err != nil {
 		return nil, err
 	}

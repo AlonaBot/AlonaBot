@@ -43,7 +43,7 @@ func TestMessageSegments(t *testing.T) {
 	process := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: dispatch, RegisterIncoming: mediaStore.RegisterIncoming})
 	mux := router.NewMux()
 	process.Services(mux)
-	tokens := buttons.New(store, time.Now, func(string) (string, []*pb.RouteDescriptor, bool) {
+	tokens := buttons.New(store, time.Now, tune.Defaults().ButtonTokenTTL, func(string) (string, []*pb.RouteDescriptor, bool) {
 		t.Error("URL buttons queried action routes")
 		return "", nil, false
 	})
