@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,7 +12,6 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
-	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
 )
 
 // activation 跟踪 ACTIVATE → OnReady → ACTIVATED 与本地 ready gate（CONTRACTS §4.1）。
@@ -96,13 +94,18 @@ func (a *activation) control(env *pb.Envelope) error {
 func (a *activation) runOnReady(m *pb.Activate) {
 	// 1. 在 ACTIVATE 给出的截止前执行 OnReady（如有）；失败或超时报告 SESSION_ERROR。
 	deadline := time.UnixMilli(m.GetOnReadyDeadlineUnixMs())
-	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	ctx, cancel := context.WithDeadline(a.l.runtime.ctx, deadline)
 	defer cancel()
 	errc := make(chan error, 1)
+	if !a.l.runtime.beginCallback() {
+		a.fail(errcode.FailedPrecondition.New("plugin session has stopped"))
+		return
+	}
 	go func() {
+		defer a.l.runtime.callbacks.Done()
 		defer func() {
 			if p := recover(); p != nil {
-				logPanic("OnReady", p)
+				logPanic(ctx, "OnReady", p)
 				errc <- fmt.Errorf("OnReady panic: %v", p)
 			}
 		}()
@@ -113,7 +116,7 @@ func (a *activation) runOnReady(m *pb.Activate) {
 	select {
 	case err := <-errc:
 		if err != nil {
-			slog.Error("OnReady failed", "err", err)
+			componentLogger(a.l.runtime.ctx).Error("OnReady failed", "err", err)
 			a.reportFailure(pb.ErrorCode_ERROR_CODE_PLUGIN_NOT_READY, "OnReady returned an error", err)
 			return
 		}
@@ -160,30 +163,37 @@ func (a *activation) shutdown(deadline time.Time) {
 		a.stopLifetime()
 		go a.l.http.close(deadline)
 		// 2. 用独立的截止 context 执行 OnStop，最多等到 deadline。
-		ctx, cancel := context.WithDeadline(context.Background(), deadline)
+		ctx, cancel := context.WithDeadline(a.l.runtime.ctx, deadline)
 		done := make(chan struct{})
+		if !a.l.runtime.beginCallback() {
+			cancel()
+			_ = a.sess.Close()
+			close(a.finished)
+			return
+		}
 		go func() {
+			defer a.l.runtime.callbacks.Done()
 			defer close(done)
 			defer func() {
 				if p := recover(); p != nil {
-					logPanic("OnStop", p)
+					logPanic(ctx, "OnStop", p)
 				}
 			}()
 			if err := a.root.OnStop(ctx); err != nil {
-				slog.Error("OnStop failed", "err", err)
+				componentLogger(a.l.runtime.ctx).Error("OnStop failed", "err", err)
 			}
 		}()
 		timer := time.NewTimer(time.Until(deadline))
 		select {
 		case <-done:
 		case <-timer.C:
-			slog.Warn("OnStop exceeded the stop deadline; giving up waiting")
+			componentLogger(a.l.runtime.ctx).Warn("OnStop exceeded the stop deadline; giving up waiting")
 		}
 		timer.Stop()
 		cancel()
 		a.l.http.close(deadline)
-		if err := dbhook.Close(); err != nil {
-			slog.Error("close plugin database failed", "err", err)
+		if err := a.l.runtime.database.Close(); err != nil {
+			componentLogger(a.l.runtime.ctx).Error("close plugin database failed", "err", err)
 		}
 		// 3. 关闭 Session 并通知 serve 返回。
 		_ = a.sess.Close()
@@ -207,11 +217,12 @@ func serve(sess *wire.Session, a *activation) error {
 	return fmt.Errorf("connection to Core lost: %w", sess.Err())
 }
 
-// activeSession 只发布已构造的 activation；ready、stopping 和 Session.Done 决定当前是否可用。
-var activeSession atomic.Pointer[activation]
-
-func currentSession() (*wire.Session, error) {
-	a := activeSession.Load()
+func currentSession(ctx context.Context) (*wire.Session, error) {
+	runtime := componentFor(ctx)
+	if runtime == nil {
+		return nil, &Error{Code: errcode.FailedPrecondition, Message: "plugin session is not active"}
+	}
+	a := runtime.active.Load()
 	if a == nil || !a.ready.Load() || a.stopping.Load() {
 		return nil, &Error{Code: errcode.FailedPrecondition, Message: "plugin session is not active"}
 	}
@@ -228,22 +239,22 @@ func currentSession() (*wire.Session, error) {
 func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Registration) (session *wire.Session, active *activation, err error) {
 	defer func() {
 		if err != nil {
-			err = errors.Join(err, dbhook.Close())
+			err = errors.Join(err, l.runtime.database.Close())
 		}
 	}()
 	a := &activation{l: l, ack: ack, root: root, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
-	a.lifetime, a.stopLifetime = context.WithCancel(context.Background())
+	a.lifetime, a.stopLifetime = context.WithCancel(l.runtime.ctx)
 	limits := ack.GetBootstrap().GetSessionLimits()
 	a.sess = wire.New(conn, wire.Options{
 		Local: pb.InitiatorSide_INITIATOR_SIDE_PLUGIN, SessionID: ack.GetSessionId(), ProtocolMinor: ack.GetChosenMinor(),
-		SourcePluginID: l.pluginID, Handler: businessHandler(reg), Admit: a.admit, Control: a.control,
+		SourcePluginID: l.pluginID, Handler: l.runtime.handler(businessHandler(reg)), Admit: a.admit, Control: a.control,
 		Event:       subscriptionEvents(a, reg),
 		MaxInflight: int(limits.GetMaxInflight()), MaxBytes: int64(limits.GetMaxPayloadBytes()), DefaultDeadline: time.Duration(limits.GetRequestTimeoutMs()) * time.Millisecond,
 	})
 	if l.http != nil {
 		l.http.activation.Store(a)
 	}
-	activeSession.Store(a)
+	l.runtime.active.Store(a)
 	a.sess.Start() // a.sess 赋值之后再启动，回调中使用的指针一定有效
 	if err := a.waitReady(); err != nil {
 		return nil, nil, err

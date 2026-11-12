@@ -57,6 +57,9 @@ func (i *schemaImporter) Import(path string) (*types.Package, error) {
 func (s *scan) schemaImporter(ctx context.Context, list *exec.Cmd) (*schemaImporter, error) {
 	// 1. 在相同 GOOS/GOARCH、tags 与 overlay 下取得依赖构建视图和目标位宽。
 	external := map[string]bool{"encoding": true, "encoding/json": true}
+	if s.adapterProject {
+		external[adapterPath] = true
+	}
 	for _, files := range s.syntax {
 		for _, file := range files {
 			for _, spec := range file.Imports {
@@ -152,6 +155,11 @@ func (s *scan) schemas(ctx context.Context, list *exec.Cmd) error {
 	for _, path := range paths {
 		if _, err := importer.Import(path); err != nil {
 			return nil
+		}
+	}
+	if s.adapterProject {
+		if err := s.checkAdapterType(importer); err != nil {
+			return err
 		}
 	}
 	s.translationCalls(importer.info, paths)
