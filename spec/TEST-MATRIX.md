@@ -8,7 +8,7 @@
 
 | 测试 ID | 任务 | 场景/方法 | 通过条件 |
 | --- | --- | --- | --- |
-| V-01 | T-01、T-04、T-09 | 解析 manifest，市场与本地 ID、缺失/重复 ID、OS/arch 不匹配；工程 manifest 写了构建字段、包内 manifest 缺少构建字段、`metadata` 翻译 | 市场规范 ID 可用；本地非前缀安全 slug 仅警告；路径穿越与缺失 ID 拒绝；重复 ID 的先后顺序稳定；工程 manifest 只接受作者信息，构建字段由 build 与 pack 写入，包内 manifest 仍严格校验（D-78） |
+| V-01 | T-01、T-04、T-09、T-14 | 解析 manifest，市场与本地 ID、缺失/重复 ID、OS/arch 不匹配；工程 manifest 写了构建字段、包内 manifest 缺少构建字段、`metadata` 翻译 | 市场规范 ID 可用；本地非前缀安全 slug 仅警告；路径穿越与缺失 ID 拒绝；重复 ID 的先后顺序稳定；工程 manifest 只接受作者信息，构建字段由 build 与 pack 写入，包内 manifest 仍严格校验（D-78）；Adapter 的工程 manifest 与实例声明从可导入包读取，构建 cmd 薄入口，打包后资源位于归档根目录（D-134，T-09.3/T-14.3） |
 | V-02 | T-01、T-02、T-04 | Protocol 1.0、枚举零值、Major/Minor、未知必需能力、Schema 缺失 | Major/required 不兼容明确拒绝；UNSPECIFIED/未知kind不视为成功；Minor正确取交集，无注册残留 |
 | V-03 | T-02 | TCP 和 stdio 使用同样的 Length-Prefixed Protobuf fixture | 双传输序列化语义一致；4 MiB 限额、零帧及错帧正确拒绝；没有 TCP 独占功能 |
 | V-04 | T-02 | 伪造 Session Secret、跨插件 Session、旧 Generation 请求 | 校验失败不激活；旧代次不接受请求；身份错误不会泄漏 Secret |
@@ -71,8 +71,8 @@
 | V-61 | T-12 | 非 Admin 尝试创建任务、创建 interval/cron 定时 Agent 任务、到期运行、无发信许可、需要确认的工具、插件离线错过 | 只有 Core Admin 能创建与取消任务；任务按 CONTRACTS §4.3 的触发规则运行且不补跑；无许可时 PERMISSION_DENIED；confirm 工具一律拒绝；后台运行不注入记忆 |
 | V-62 | T-02、T-09 | Core/插件/Adapter 三类来源、插件写合法 JSON 行与非 JSON 行、插件伪造来源字段、Handler panic、text 与 json 格式、终端与非终端输出、含 Bot Token 的 URL 错误 | 控制台格式与来源标签符合 CONTRACTS §14.2；非结构化行原样保留为 WARN；插件不能覆盖来源字段；panic 为一条带 stack 的 ERROR；非终端或设置 NO_COLOR 时不着色；日志中没有 token、Secret 与配置明文 |
 | V-63 | T-02、T-09 | 全局与按来源的级别、off、运行时修改、Core 重启、最近记录上限、SSE 订阅、`alonabot logs`、WebUI 筛选 | 修改立即生效；按来源的设置重启后保留，全局级别的运行时修改重启后恢复；off 时 SDK 不输出而 Core 关于它的记录仍在；每个来源最多保留 1000 条；未认证无法读取；WebUI 筛选不改变输出 |
-| V-64 | T-13 | 开发组件（`alonabot run` 的独立进程与库模式的同进程）的完整生命周期、同一插件 ID 或 adapter_id 登记两次及与已安装包同 ID、开发 Adapter 的实例取自 `core_config.json`、dev 来源尝试 update/rollback/uninstall、WebUI 修改开发组件配置、未捕获的 panic（库模式）、停止超时、已安装包与开发组件混合运行、两次启动之间的配置与 dev.sqlite | 握手、注册、权限与已安装组件一致；dev 组件使用固定代次，重启后按钮仍有效；update/rollback/uninstall 被拒绝；WebUI 的修改校验后写回 `config.json` 并重启该组件；重复或冲突的 ID 在启动任何组件前报错；库模式中 panic 使进程退出且不重启；停止超时时返回错误 |
-| V-65 | T-13 | `alonabot run --reload` 下改动插件源码、`config_schema.json`、`i18n/` 与 `config.json`，编译失败，同时开发插件与 Adapter 两个目录 | 只重启变化的组件，Core、已安装组件与 Adapter 连接不中断；编译失败时旧组件继续运行；只改配置时不重新构建；改动 schema 或 i18n 后重新构建并生效（D-77） |
+| V-64 | T-13 | 开发组件（`alonabot run` 的独立进程与库模式的同进程）的完整生命周期、同一插件 ID 或 adapter_id 登记两次及与已安装包同 ID、开发 Adapter 的实例取自 `core_config.json`、dev 来源尝试 update/rollback/uninstall、WebUI 修改开发组件配置、未捕获的 panic（库模式）、停止超时、已安装包与开发组件混合运行、两次启动之间的配置与 dev.sqlite、可导入 Adapter 包的工程资源生成登记与独立进程共用身份 | 握手、注册、权限与已安装组件一致；dev 组件分别使用全局唯一的固定代次 `dev:<组件 ID>`（插件 ID 或 Adapter 包 ID），状态库结构不变，重启后按钮仍有效；Adapter 的工程 manifest、实例声明与生成登记位于可导入包，库模式经 ParseProject 读取嵌入身份（D-134）；update/rollback/uninstall 被拒绝；WebUI 的修改校验后写回 `config.json` 并重启该组件；重复或冲突的 ID 在启动任何组件前报错；库模式中 panic 使进程退出且不重启；停止超时时返回错误 |
+| V-65 | T-13 | `alonabot run --reload` 下改动插件源码、`config_schema.json`、`i18n/` 与 `config.json`，编译失败，同时开发插件与 Adapter 两个目录（Adapter 为含工程 manifest 与实例声明的可导入包，D-134） | 只重启变化的组件，Core、已安装组件与 Adapter 连接不中断；编译失败时旧组件继续运行；只改配置时不重新构建；改动 schema 或 i18n 后重新构建并生效，代次仍为该组件的 `dev:<组件 ID>`（D-77、D-134） |
 | V-66 | T-14 | 干净数据目录首次运行、交互终端与非终端、`core_config.json` 中写了 Adapter 实例、预装包签名错误、卸载预装包后重启、新版本发行包 | 预装包全部安装，只启用 help；help 与官方 WebUI 已启用；Agent 未启用；没写实例的 Telegram、OneBot 11 Adapter 未启用，写了实例的自动启用；终端下 token 只显示一次，非终端写入 `admin_token`；签名错误的包不安装并记 ERROR；已卸载的不重新安装；新版本只作为可用更新列出 |
 | V-67 | T-14 | help 的权限过滤与翻译、`/whoami`、welcome 的入群欢迎与开关权限、rss 的订阅权限/去重/推送/私网地址/超大响应 | help 只列出调用者可用的命令；`/whoami` 返回调用者的实例与用户 ID；welcome 只响应 member.joined，只有 chat_admin 或 Core Admin 能开关；rss 的增删只有 chat_admin 或 Core Admin 能执行，超过 5 MiB 或 30s 的抓取失败，不重复推送同一条目，拒绝 loopback、私网与链路本地地址（含重定向之后），后台推送需要 allowed_adapter_instances |
 | V-68 | T-02、T-09 | 跨过零点、同日写满单文件上限、合计超过 1 GiB、超过 30 天、max_size 大于 max_total、磁盘写满、按日期查询 | 跨日换到新日期的文件；同日续写编号文件；从最旧的文件开始删除且不删正在写入的文件；配置矛盾时拒绝启动；写入失败时 Core 继续运行并只报告一次；`alonabot logs --date` 与 WebUI 能查到前一天的记录 |
