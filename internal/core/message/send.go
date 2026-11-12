@@ -27,14 +27,14 @@ type Service struct {
 	adapters       *adapter.Registry
 	policy         *policy.Policy
 	issue          func(context.Context, router.Caller, *pb.Target, *pb.MessageChain) error
-	lease          func(context.Context, router.Caller, string, *pb.Target, *pb.MediaSource, time.Time) (string, func(), error)
+	lease          func(context.Context, router.Caller, string, *pb.Target, *pb.MediaSource, time.Time) (*pb.MediaSource, func(), error)
 }
 
 // New 创建消息服务；装配处将 Send、Edit 分别注册为 wire.ServiceSend、wire.ServiceEdit。
-// lease 由媒体 Store 提供，签发绑定目标 Adapter Session 的只读令牌；
+// lease 由媒体 Store 提供，准备平台文件标识或绑定目标 Adapter Session 的只读令牌；
 // issue 在媒体租约前签发按钮；nil 仅供无按钮的测试。
 // requestTimeout 使用生效配置，在调用没有期限时提供媒体请求预算。
-func New(adapters *adapter.Registry, p *policy.Policy, lease func(ctx context.Context, c router.Caller, readerSessionKey string, target *pb.Target, source *pb.MediaSource, deadline time.Time) (string, func(), error), issue func(context.Context, router.Caller, *pb.Target, *pb.MessageChain) error, requestTimeout time.Duration) *Service {
+func New(adapters *adapter.Registry, p *policy.Policy, lease func(context.Context, router.Caller, string, *pb.Target, *pb.MediaSource, time.Time) (*pb.MediaSource, func(), error), issue func(context.Context, router.Caller, *pb.Target, *pb.MessageChain) error, requestTimeout time.Duration) *Service {
 	return &Service{adapters: adapters, policy: p, lease: lease, issue: issue, requestTimeout: requestTimeout}
 }
 
@@ -100,7 +100,7 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 			return rejectError(target, err)
 		}
 	}
-	// 6. 全部来源先取得只读租约；任一失败或发送结束均释放本次已得租约。
+	// 6. 准备引用来源；任一失败或发送结束均释放本次已得租约。
 	sources := mediaSources(request.Chain)
 	if len(sources) > 0 {
 		reader, ok := instance.(adapter.MediaSession)
@@ -119,12 +119,12 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 		ctx, cancel = context.WithDeadline(ctx, deadline)
 		defer cancel()
 		for _, source := range sources {
-			token, release, err := s.lease(ctx, caller, reader.MediaSessionKey(), target, source, deadline)
+			prepared, release, err := s.lease(ctx, caller, reader.MediaSessionKey(), target, source, deadline)
 			if err != nil {
 				return rejectError(target, err)
 			}
 			defer release()
-			source.Source = &pb.MediaSource_MediaRef{MediaRef: token}
+			source.Source = prepared.Source
 		}
 		if err := ctx.Err(); err != nil {
 			return rejectError(target, err)
@@ -153,7 +153,7 @@ func (s *Service) completeReferences(chain *pb.MessageChain, target *pb.Target) 
 	return nil
 }
 
-// mediaSources 按消息顺序收集所有需租约的来源，HTTPS 保留给 Adapter 处理。
+// mediaSources 按消息顺序收集所有需租约的来源，HTTPS 与内联数据原样交给 Adapter。
 func mediaSources(chain *pb.MessageChain) []*pb.MediaSource {
 	var sources []*pb.MediaSource
 	for _, segment := range chain.GetSegments() {

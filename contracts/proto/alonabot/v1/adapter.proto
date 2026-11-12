@@ -136,3 +136,16 @@ message AdapterEditRequest {
   // 恰好一个 text 片段和至多一个 buttons 片段。
   MessageChain chain = 4;
 }
+
+// MediaURLRequest 为本次发送的只读令牌申请临时 URL，载荷版本为 1。
+message MediaURLRequest {
+  string token = 1;
+  // 空值使用 Core 配置的 base_url。
+  string base_url = 2;
+}
+
+// MediaURLResponse 返回租约期限内有效的单对象 URL，载荷版本为 1。
+message MediaURLResponse {
+  string url = 1;
+  int64 expires_at_unix_ms = 2;
+}

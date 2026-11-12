@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -10,6 +11,8 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
+
+const maxInlineMediaBytes = 1 << 20 // CONTRACTS §1.3：内联来源最多 1 MiB。
 
 // Chain 检查 MessageChain 的结构（MESSAGE-MODEL §2）。只做与平台无关的结构检查；
 // 平台能力（UNSUPPORTED）、媒体租约与目标授权由 Core/Adapter 在发送前另行检查。
@@ -197,8 +200,15 @@ func media(src *pb.MediaSource) error {
 		if !absoluteURL(s.HttpsUrl, "https") {
 			return fmt.Errorf("https_url is not an absolute https URL")
 		}
+	case *pb.MediaSource_InlineBase64:
+		data, err := base64.StdEncoding.Strict().DecodeString(s.InlineBase64)
+		if err != nil || len(data) == 0 || len(data) > maxInlineMediaBytes || base64.StdEncoding.EncodeToString(data) != s.InlineBase64 {
+			return fmt.Errorf("inline_base64 must be standard base64 encoding of 1 B to 1 MiB")
+		}
+	case *pb.MediaSource_PlatformFile:
+		return fmt.Errorf("platform_file is reserved for Core")
 	default:
-		return fmt.Errorf("media must have exactly one source (media_ref, incoming_ref or https_url)")
+		return fmt.Errorf("media must have exactly one source (media_ref, incoming_ref, https_url or inline_base64)")
 	}
 	return nil
 }

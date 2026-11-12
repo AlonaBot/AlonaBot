@@ -57,3 +57,6 @@ const ServiceEdit = "core.edit"
 
 // ServiceAdapterEdit 向账号实例提交消息编辑。
 const ServiceAdapterEdit = "adapter.edit"
+
+// ServiceMediaURL 为本次发送的只读媒体令牌签发临时 URL。
+const ServiceMediaURL = "core.media.url"
