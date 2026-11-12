@@ -55,7 +55,7 @@
 | goal-101 | T-08.12 | Adapter 实例配置与 Core 设置的版本迁移 | T-07.6、T-08.11 | 已完成（PR #114） |
 | goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2、T-04.9、T-08.8、T-09.16 | 待派发 |
 | goal-104 | T-03.13 | 媒体按来源传递 | T-03.6、T-04.8、T-07.7 | 待派发 |
-| goal-105 | T-03.14 | 新增片段与字段（含会话类型） | T-03.8、T-04.8 | 待派发 |
+| goal-105 | T-03.14 | 新增片段与字段（含会话类型） | T-03.8、T-04.8 | 已完成（PR #143） |
 | goal-106 | T-03.15 | 平台动作 | T-03.8、T-04.8 | 待派发 |
 | goal-107 | T-03.16 | 撤回 | T-03.9、T-04.8 | 待派发 |
 | goal-108 | T-03.17 | 命令菜单同步 | T-04.6、T-04.7、T-04.8、T-08.8 | 待派发 |
@@ -65,14 +65,14 @@
 | goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 等待前置 |
 | goal-122 | T-04.10 | 管理员与封禁按 Adapter 登记 | T-04.4、T-07.6 | 已完成（PR #133） |
 | goal-125 | T-04.12 | 插件对象、结构体参数与子插件 | T-04.8 | 待派发 |
-| goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 待派发 |
+| goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 已完成（PR #145） |
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 已完成（PR #119） |
 | goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 等待前置 |
 | goal-68 | T-13.2 | 开发组件的配置与数据库 | T-07.6、T-08.5、T-08.11、T-13.1 | 等待前置 |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
-| goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 等待前置 |
-| goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 等待前置 |
+| goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 待派发 |
+| goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 待派发 |
 | goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 等待前置 |
 | goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 等待前置 |
 | goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 等待前置 |
@@ -3977,7 +3977,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-105 · T-03.14 新增片段与字段
 
-状态：待派发。前置均已合并（T-04.8 为 PR #141（合并提交 `ac4aded`））；审查者按 main 合入 PR #141 后的代码核对。T-03.8（PR #136，合并提交 `3621fc1`）已提供 `buttons.Service.Issue`、`adapter.ExtensionChecker` 与带类型的按钮动作。SDK 的 `message.Button` 是 `sdk/internal/messagecodec.Button` 的别名，新增 URL 字段须改其定义；SDK 的收发转换在 `sdk/internal/convert`。2026-11-09 按 D-87、D-89、D-91、D-97 新增，同日按 D-100 追加会话类型；字段编号按并行切片规则在实现时追加。
+状态：已完成（[PR #143](https://github.com/AlonaBot/AlonaBot/pull/143)，合并提交 `15682e8`），证据见 TEST-MATRIX §3.2。合入：voice 片段、转发引用节点与入站转发标识、URL 按钮、`Event.chat_type` 与 SDK 的会话类型判断；Core 在按钮签发与媒体取件前递归核对 message.voice、message.forward 能力，嵌套 forward 仍为 UNSUPPORTED，入站非法 chat_type 在游标持久化前拒绝；URL 按钮清除外来 token；voice 进入现有来源登记、Session token 与消费租约路径。派发时：前置均已合并（T-04.8 为 PR #141（合并提交 `ac4aded`））；审查者按 main 合入 PR #141 后的代码核对。T-03.8（PR #136，合并提交 `3621fc1`）已提供 `buttons.Service.Issue`、`adapter.ExtensionChecker` 与带类型的按钮动作。SDK 的 `message.Button` 是 `sdk/internal/messagecodec.Button` 的别名，新增 URL 字段须改其定义；SDK 的收发转换在 `sdk/internal/convert`。2026-11-09 按 D-87、D-89、D-91、D-97 新增，同日按 D-100 追加会话类型；字段编号按并行切片规则在实现时追加。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-105（切片 T-03.14：新增片段与字段）。goal 目录 goal-105，分支 goal-105，worktree .worktrees/goal-105，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -4249,7 +4249,7 @@ internal/core/supervisor（Spec 追加字段，由装配方传入 Router.Command
 
 ### goal-109 · T-03.18 流式输出辅助函数
 
-状态：待派发。2026-11-12 依据维护者决定 D-135（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`） 补齐能力元数据、SDK 接口与测试；前置均已合并：T-03.9（PR #118，合并提交 `1cbfb2e`）、T-04.8（PR #141）。按 main `c04b2ca` 的代码核对。与 T-03.13～T-03.19 的其他切片并行时按执行顺序 §3 追加 proto；与 goal-125 同改 SDK 的 Context/装配和 remote 测试 helper，后合并者同步 main 保留对方接口。
+状态：待派发。2026-11-12 依据维护者决定 D-135（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`） 补齐能力元数据、SDK 接口与测试；前置均已合并：T-03.9（PR #118，合并提交 `1cbfb2e`）、T-04.8（PR #141）。按 main `c04b2ca` 的代码核对。与 T-03.13～T-03.19 的其他切片并行时按执行顺序 §3 追加 proto；与 goal-125 同改 SDK 的 Context/装配和 remote 测试 helper，后合并者同步 main 保留对方接口。范围修订（2026-11-12，审查者补充）：执行者发现 main 现有缺陷，Core 的 Edit 对显式目标未经 `Registry.Complete` 补齐账号，而 SDK 由 MessageRef 转出的目标不带 account_id，显式 Edit 一律被拒；授权修改 `internal/core/message/edit.go`，按 Send 的同一写法补齐显式目标，准入拒绝时只回传调用方已知的目标，由本切片的主路径集成测试证明。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-109（切片 T-03.18：流式输出辅助函数）。goal 目录 goal-109，分支 goal-109，worktree .worktrees/goal-109，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -4366,7 +4366,7 @@ isAdapter 由已认证安装记录决定，supervisor 传 spec.Role == state.Rol
 
 ### goal-125 · T-04.12 插件对象、结构体参数与子插件
 
-状态：待派发。2026-11-12 依据维护者决定 D-137（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`） 补齐生成资源与插件对象的显式绑定，承接 D-114～D-116；前置均已合并（T-04.8 为 PR #141），按 main `c04b2ca` 的代码核对。goal-67（T-13.1）正在按旧的类型登记实现：goal-125 合并后同步库模式的资源读取；若 goal-67 先合并，本切片范围已包含其插件选项、SDK 同进程入口与示例的同步迁移，Adapter 资源规则沿用 goal-67。与 goal-101、goal-123、goal-124 共改生成器时按执行顺序 §3；与 goal-16、goal-68 并行时，后合并者同步 main 保留对方的注册与装配语义。
+状态：待派发。2026-11-12 依据维护者决定 D-137（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`） 补齐生成资源与插件对象的显式绑定，承接 D-114～D-116；前置均已合并（T-04.8 为 PR #141），按 main `c04b2ca` 的代码核对。goal-67（T-13.1）正在按旧的类型登记实现：goal-125 合并后同步库模式的资源读取；若 goal-67 先合并，本切片范围已包含其插件选项、SDK 同进程入口与示例的同步迁移，Adapter 资源规则沿用 goal-67。与 goal-101、goal-123、goal-124 共改生成器时按执行顺序 §3；与 goal-16、goal-68 并行时，后合并者同步 main 保留对方的注册与装配语义。范围修订（2026-11-12，审查者补充）：执行者报告 `sdk/adapter_run.go` 嵌入 `Base` 并充当 activation 的 root，语句漏列该文件；授权只迁移 adapterRuntime 到新插件对象模型下的最小内部结构（Adapter 行为与既有测试断言不变），activation 可在 `sdk/activate.go` 内用未导出接口区分插件与 Adapter，`sdk/config/config.go` 与 sdk 包文档中的 `sdk.Base` 说明同步改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-125（切片 T-04.12：插件对象、结构体参数与子插件）。goal 目录 goal-125，分支 goal-125，worktree .worktrees/goal-125，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -4480,7 +4480,7 @@ sdk/generate
 
 ### goal-16 · T-05.2 Rule、HandlerOutcome 与传播
 
-状态：待派发。前置均已合并（T-04.8 为 PR #141（合并提交 `ac4aded`））；审查者按 main 合入 PR #141 后的代码核对。T-05.1（PR #67）、T-04.7（PR #89）已合并。2026-11-12 按当前 builder、SDK 自有类型、Permission 与 HandlerOutcome 改写，自动型显式 Send 沿用 D-70 和 MESSAGE-MODEL §3；PLAN T-05 步骤 3 中旧的自动型 Send 限制按 T-04.7 已完成行、同章 V-14 与现行消息契约执行。与 goal-125、goal-68 并行时，后合并者同步 main，在已有注册与装配上保留本切片的 Rule 和调用生命周期语义。
+状态：已完成（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)，合并提交 `0f860a9`），证据见 TEST-MATRIX §3.2。合入：`sdk.Rule`、`sdk.Any`、`sdk.ToMe` 与命令、事件、按钮 builder 的 `Rule` 方法（Collect 校验 nil 与 Handle 顺序，REGISTER 写 `RuleDescriptor.HasCustomRule`）；Rule 与目标 Handler 在同一 RPC、同一 Context 中依次执行，Rule false/error/panic 为 matched=false；`StopPropagation` 在有效调用内锁存，调用结束时固定传播结果、使 Context 失效并取消派生 context；Core 自动回复要求调用成功、matched=true、自动模式且内容非空，排在显式发送之后。派发时：前置均已合并（T-04.8 为 PR #141（合并提交 `ac4aded`））；审查者按 main 合入 PR #141 后的代码核对。T-05.1（PR #67）、T-04.7（PR #89）已合并。2026-11-12 按当前 builder、SDK 自有类型、Permission 与 HandlerOutcome 改写，自动型显式 Send 沿用 D-70 和 MESSAGE-MODEL §3；PLAN T-05 步骤 3 中旧的自动型 Send 限制按 T-04.7 已完成行、同章 V-14 与现行消息契约执行。与 goal-125、goal-68 并行时，后合并者同步 main，在已有注册与装配上保留本切片的 Rule 和调用生命周期语义。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-16（切片 T-05.2：Rule、HandlerOutcome 与传播）。goal 目录 goal-16，分支 goal-16，worktree .worktrees/goal-16，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -4805,39 +4805,79 @@ goal-125 若先合并，Collect 改为收 *Plugin，命令、事件与 OnButton 
 
 ### goal-17 · T-05.3 三阶段 Hook 与 send_forbidden
 
-状态：等待前置（T-05.2）。2026-11-09 按 D-112 把 SDK 接口段改为链式注册与 goal-91 的 SDK 类型（位置参数与 `RouteOption` 已由 D-70 删除），AfterSend 的 Handler 增加 error 返回值，与 MESSAGE-MODEL §5「Handler 只返回成功或 ErrorInfo」一致；T-05.2 排在 T-04.8 之后，这些类型届时已合入。同日按 D-92、D-93 补充：出站 Hook 中禁止调用的服务除 Send、Edit 外还有 `core.action` 与 `core.delete`；其中已合并的（goal-106、goal-107）由本切片一并加入禁止名单，未合并的由它们自己加入，审查者改写语句时按合并情况写入。语句中 goal-2、goal-12、goal-15、goal-16、goal-51、goal-91 提供的符号（router 的派发链与可信信息、message.Service 的 Send 与 Edit、sdk 的分发、事件常量与 SDK 类型）只写名字；合并后由审查者核对签名，再改为待派发。
+状态：待派发。前置 T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)，合并提交 `0f860a9`）已合并。2026-11-12 审查者按 main `3e4db62` 的代码改写接口段，要点如下：
+- router 不能 import hook，PreEvent 改为 `router.Options.PreEvent` 注入函数；没有 `router.Dispatch` 类型。
+- Router 的可信事件为 `trustedEvent{retained, payload}`：可改写的业务载荷只在 payload 中，`rebuild` 时与可信绑定合并。message.deleted、button.clicked 与 scheduled 没有业务载荷。
+- `router.Invocation` 现有 PluginID、Event、DefaultTarget，作为 `wire.Request.Attach` 传出，服务函数从 `wire.Inbound.ParentAttach` 取回。
+- `InvocationContext.send_forbidden = 5` 已在协议中；BeforeSendRequest 现用到字段 4，AfterSendRequest 现用到字段 6。`HookSpec{phase}` 与 `HookPhase` 已在 route.proto，`RouteDescriptor.event_type_filter` 为通用字段。
+- `message.New(adapters, p, lease, issue, requestTimeout)` 的现有调用方为 `internal/core/message/permissions_test.go` 与 `internal/core/adapter/remote/segments_test.go`。
+- SDK 事件类型为 `sdk.EventType`，标准事件为常量（例如 `sdk.MessageCreated`），Adapter 扩展事件为 `sdk.AdapterEvent[T]`，Handler 接收 *T。
+
+core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在 `internal/core/message` 中实现，派发时尚未合并：执行者交付前同步最新 main，main 上已有的一并加入禁止名单。
+
+与 goal-125 并行时，后合并者把 Hook 的注册迁到对应的写法：本切片先合并时，goal-125 把 `Hooks` 连同其余根插件注册方法一并删除，改为插件对象上的 `p.PreEvent`、`p.BeforeSend`、`p.AfterSend`，builder 与 Handler 签名不变；goal-125 先合并时，本切片直接在插件对象上提供这三个方法。与 goal-52 并行时，后合并者按「PreEvent → 等待匹配 → 命令层」的顺序接入调用点。与 goal-104、goal-109 同改 message.Service 的 Send 与 Edit，后合并者保留对方的来源准备与目标补齐。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-17（切片 T-05.3：三阶段 Hook 与 send_forbidden）。goal 目录 goal-17，分支 goal-17，worktree .worktrees/goal-17，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：运行 PreEvent、BeforeSend、AfterSend 三类 Hook：PreEvent 只能改写业务 payload 或 Stop，失败时结束本次入站链；每次显式或自动 Send（以及 Edit）独立执行一组 BeforeSend → Adapter.Send → AfterSend，BeforeSend 只能改 Chain 或拒绝，改后重新预检；AfterSend 只观察。出站 Hook 的执行上下文带 send_forbidden，该标记保存在 Core 的父调用记录中并随派生调用继承，Hook 内直接 Send 被拒。
+目标：运行 PreEvent、BeforeSend、AfterSend 三类 Hook。
+- PreEvent 只能改写业务 payload 或 Stop，失败时结束本次入站链。
+- 每次显式或自动 Send（以及 Edit）独立执行一组 BeforeSend → Adapter → AfterSend。BeforeSend 只能改 Chain 或拒绝，改后重新预检；AfterSend 只观察。
+- 出站 Hook 的调用带 send_forbidden，该标记保存在 Core 的调用记录（router.Invocation）中。Hook 内直接调用 core.send、core.edit（以及 main 上已有的 core.action、core.delete）被拒。
 
-依据：PLAN T-05 步骤 5、6；CONTRACTS §2.3 第 3～5 条、§8（Edit 的 Hook 段）；WIRE-FORMAT §3.5（Hook 输入的追加）；MESSAGE-MODEL §5；DECISIONS D-70、D-104、D-112；TEST-MATRIX V-15 的直接路径分项、V-110 的 Hook 分项。
+依据：PLAN T-05 步骤 5、6；CONTRACTS §2.3 第 3～5 条、§8（Edit 的 Hook 段）；WIRE-FORMAT §3.5（Hook 输入的追加）；MESSAGE-MODEL §5；DECISIONS D-70、D-92、D-93、D-104、D-112；TEST-MATRIX V-15 的直接路径分项、V-110 的 Hook 分项。
 
 范围（只新增或修改这些）：
-- contracts/proto/alonabot/v1/invocation.proto：BeforeSendRequest 与 AfterSendRequest 各追加 SendOperation operation 与 optional string edited_platform_message_id，并新增 enum SendOperation。随后 go generate ./...（本切片获授权只追加这些）
+- contracts/proto/alonabot/v1/invocation.proto：BeforeSendRequest 与 AfterSendRequest 各追加 SendOperation operation 与 optional string edited_platform_message_id，并新增 enum SendOperation。随后运行 go generate ./...。本切片获授权只追加这些。
 - contracts/wirespec_test.go：追加编号检查
 - contracts/validate/register.go：HOOK 路由的注册校验
 - 新增 internal/core/hook/
-- internal/core/router/：派发链在命令层之前执行 PreEvent（只加调用点）
-- internal/core/message/：Send 与 Edit 在调用 Adapter 前后执行出站 Hook；删除 goal-51 的 shortcut 注释
-- internal/core/router/：调用记录（Invocation）增加 send_forbidden，并在 InvocationContext 中下发
-- sdk/：新增 hooks.go（注册与分发）；base.go 的 Root 增加 Hooks Hook 与 Base 默认实现；session.go 的 buildRegister 输出 HOOK 路由
-- 上述包的测试文件
-允许的新跨模块边：无。
+- internal/core/router/：
+  - mux.go：Invocation 追加 SendForbidden；
+  - dispatch.go：Options 追加 PreEvent；
+  - router.go：New 保存 PreEvent，dispatch 在 Core 权限计算之后、命令层之前调用它。
+  - 不改其他派发逻辑。
+- internal/core/message/：
+  - send.go：New 追加 hooks 参数，Send 在调用 Adapter 前后执行出站 Hook；
+  - edit.go：Edit 同上，并删除 goal-51 的 shortcut 注释；
+  - Send、Edit 以及 main 上已有的 action.go、delete.go 拒绝 SendForbidden 的父调用；
+  - 同步 message.New 的全部调用方（permissions_test.go、remote/segments_test.go 及派发时 main 上的其他调用点），传 nil。
+- sdk/：
+  - 新增 hooks.go（注册、分发与 Context.Editing）；
+  - base.go 的 Root 增加 Hooks(*HookRegistry)，Base 提供默认实现；
+  - session.go 的 buildRegister 输出 HOOK 路由；
+  - dispatch.go 按 route_id 分发 Hook 请求。
+- 上述包的 *_local_test.go，以及 internal/core/supervisor/hook_local_test.go（//go:build unix）
+允许的新跨模块边：无（hook、message 与 router 同属 internal/core 模块；router 与 message 不 import hook）。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 1. proto
    enum SendOperation { SEND_OPERATION_UNSPECIFIED = 0; SEND_OPERATION_SEND = 1; SEND_OPERATION_EDIT = 2; }
    BeforeSendRequest 追加 SendOperation operation = 5; optional string edited_platform_message_id = 6;
    AfterSendRequest 追加 SendOperation operation = 7; optional string edited_platform_message_id = 8;
-2. sdk（链式注册与 SDK 类型，D-70、D-112）
-   Root 增加 Hook：Hooks(*HookRegistry) // func (*Base) Hooks(*HookRegistry) 默认不注册
+2. internal/core/router
+   Invocation 追加 SendForbidden bool // 出站 Hook 调用为 true；只由 Core 设置
+   Options 追加 PreEvent func(ctx context.Context, ev *pb.Event) (payload *pb.EventPayload, stop bool, err error) // nil 时不执行；ev 为 rebuild 后的事件，返回的 payload 替换 trustedEvent 的业务载荷
+3. internal/core/message
+   type Hooks interface {
+       BeforeSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, parent *router.Invocation) (*pb.MessageChain, *pb.ErrorInfo)
+       AfterSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, result *pb.SendResult, errInfo *pb.ErrorInfo, parent *router.Invocation)
+   }
+   func New(adapters *adapter.Registry, p *policy.Policy, lease ..., issue ..., requestTimeout time.Duration, hooks Hooks) *Service // 其余参数不变；hooks 为 nil 时不执行出站 Hook
+4. internal/core/hook（*Runner 实现 message.Hooks）
+   type Runner struct{ ... }
+   func New(r *router.Router) *Runner // 每次执行时从 r.Plugins() 读取已激活插件的 HOOK 路由，经 r.Caller 与 Plugin.Call 调用
+   func (h *Runner) PreEvent(ctx context.Context, ev *pb.Event) (*pb.EventPayload, bool, error)
+   func (h *Runner) BeforeSend(...)（同 message.Hooks）
+   func (h *Runner) AfterSend(...)（同 message.Hooks）
+   装配：Router 先于 Runner 创建，router.Options.PreEvent 传闭包调用之后创建的 Runner；message.New 的 hooks 传同一个 Runner。本切片在本地集成测试中装配，生产装配沿用 T-13 的 Core 装配。
+5. sdk（链式注册与 SDK 类型，D-70、D-112）
+   Root 增加 Hooks(*HookRegistry)；func (*Base) Hooks(*HookRegistry) 默认不注册
    type HookRegistry struct{ ... }
    func (r *HookRegistry) PreEvent(routeID string, event EventType) *PreEventBuilder // 一条路由对应一种事件，event_type_filter 只含该事件名
    type PreEventBuilder struct{ ... }
    func (b *PreEventBuilder) Priority(p int32) *PreEventBuilder
-   func (b *PreEventBuilder) Handle(h any) // func(*Context, P) (P, error)；P 为该事件的 payload 类型，规则与事件路由相同（标准事件为 goal-91 的载荷指针，AdapterEvent[T] 为 *T）；返回 nil 表示不改写
+   func (b *PreEventBuilder) Handle(h any) // func(*Context, P) (P, error)；P 与同一事件的事件路由 Handler 的载荷类型相同（标准事件为 message 包的载荷指针，AdapterEvent[T] 为 *T）；返回 nil 表示不改写
    func (r *HookRegistry) BeforeSend(routeID string) *BeforeSendBuilder
    type BeforeSendBuilder struct{ ... }
    func (b *BeforeSendBuilder) Priority(p int32) *BeforeSendBuilder
@@ -4847,92 +4887,172 @@ goal-125 若先合并，Collect 改为收 *Plugin，命令、事件与 OnButton 
    func (b *AfterSendBuilder) Priority(p int32) *AfterSendBuilder
    func (b *AfterSendBuilder) Handle(h func(c *Context, to message.Session, res *message.SendResult, sendErr error) error) // sendErr 为本次发送的错误；返回的错误只记日志
    func (c *Context) Editing() message.MessageRef // 出站 Hook 中：本次是编辑时为被编辑消息的句柄（D-104），发送时为空；其他 Handler 中为空
-3. internal/core/hook
-   type Runner struct{ ... }
-   func New(r *router.Router) *Runner
-   func (h *Runner) PreEvent(ctx context.Context, ev *router.Dispatch) (stop bool, err error) // router 的派发对象；只改写其业务副本
-   func (h *Runner) BeforeSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, parent *router.Invocation) (*pb.MessageChain, *pb.ErrorInfo)
-   func (h *Runner) AfterSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, result *pb.SendResult, errInfo *pb.ErrorInfo, parent *router.Invocation)
 
 行为：
-- 注册校验：HOOK 路由的 phase 必须是三者之一；PreEvent 的 event_type_filter 非空且为已知类型；BeforeSend/AfterSend 不带 event_type_filter。
-- 候选：同一阶段的 Hook 按 (priority, plugin_id, route_id) 稳定排序，只包含已激活插件；Hook 自己不受命令策略约束（插件启用即生效）。
-- PreEvent（Router 在可信信息保留之后、D-44 的命令层之前，按事件类型）：依次调用，每个 Hook 收到当前业务副本；返回的 event_payload 的分支必须与 event_type 一致，否则视为该 Hook 失败；可信字段（goal-15 列出的身份、Target、来源与按钮/任务绑定）不在 PreEventResult 中，无法改写。任一 Hook 返回错误或 panic：以 WARN 记录并结束本次入站链（不派发命令与事件路由）。propagation=STOP：结束本次入站链，此前改写保留。
-- 出站：message.Service 对每次 Send 与 Edit（包括 Core 代发的自动回复与 usage）：
-  1) 先完成 goal-2/goal-3/goal-51 的目标与准入、Chain 预检；
-  2) 依次调用 BeforeSend：返回新 Chain 时替换并对整条 Chain 重新做完整预检（失败视为拒绝）；返回错误即拒绝本次发送，返回 REJECTED 的 SendResult 加该 ErrorInfo，不调用 Adapter，也不执行 AfterSend；Hook 不能修改 Target（请求中没有可回写的 Target）。
-  3) 调用 Adapter；4) 依次调用 AfterSend，传入最终的 SendResult 与 ErrorInfo，错误只记日志，不改变返回给调用方的结果。
+- 注册校验：
+  - HOOK 路由的 phase 必须是三者之一。
+  - PreEvent 的 event_type_filter 恰好一项，且为已知标准事件或合法的 Adapter 扩展事件名；BeforeSend、AfterSend 不带 event_type_filter。
+- 候选：同一阶段的 Hook 按 (priority, plugin_id, route_id) 稳定排序，只包含已激活插件。Hook 不受命令策略约束（插件启用即生效）。
+- PreEvent：
+  - Router 在 Core 权限计算之后、命令层之前按事件类型依次调用，每个 Hook 收到当前业务副本（可信绑定已由 rebuild 合并，用于读取）。
+  - 返回的 event_payload 分支必须与 event_type 一致，没有业务载荷的事件（message.deleted、button.clicked、scheduled）不得返回 event_payload，否则视为该 Hook 失败。可信字段不在 PreEventResult 中，无法改写。
+  - 任一 Hook 返回错误、panic 或失败：以 WARN 记录并结束本次入站链（不派发命令与事件路由）。
+  - propagation=STOP：结束本次入站链，此前的改写保留。
+  - 正常结束时 Router 用最终 payload 替换业务副本，之后的命令与事件路由都收到改写后的载荷。
+- 出站：message.Service 对每次 Send 与 Edit（包括 Router 经 Options.Send 代发的自动回复与 usage）依次：
+  1) 完成现有的目标补齐、准入与 Chain 预检；
+  2) 依次调用 BeforeSend：
+     - 返回新 Chain 时替换，并对整条 Chain 重新做完整预检（Edit 还要满足编辑的片段限制），失败视为拒绝；
+     - 返回错误即拒绝本次发送：返回 REJECTED 的 SendResult 加该 ErrorInfo，不调用 Adapter，也不执行 AfterSend；
+     - Hook 不能修改 Target（请求中没有可回写的 Target）；
+  3) 按改写后的 Chain 准备媒体租约与按钮签发并调用 Adapter；
+  4) 依次调用 AfterSend，传入最终的 SendResult 与 ErrorInfo；错误只记日志，不改变返回给调用方的结果。
   每次 Send 是独立的一组，不合并。
-- send_forbidden：Core 调用出站 Hook 时，在该次调用的 Invocation 中设置 send_forbidden=true，并经 InvocationContext.send_forbidden 下发；Hook 内（及以该调用为父请求的任何子请求，Broker 转发时沿用父调用的标记）调用 core.send 或 core.edit 返回 FAILED_PRECONDITION。标记只来自 Core 的调用记录，插件自报的值被忽略。
-- SDK：按 route_id 分发 Hook。Handle 的签名在 Collect 时核对，不符或漏写 Handle 时报错并带 route_id 与期望的签名。PreEvent 的 P 由 SDK 从 event_payload 解码、改写后编码回同一分支（AdapterEvent 的 *T 重新编码为 payload_json），返回 nil 表示不改写；BeforeSend 返回 nil 表示不改写；AfterSend 返回的错误以 ErrorInfo 回报。to 由请求的 target 转为会话字符串；c.Editing() 在 operation 为 EDIT 时由 target 与 edited_platform_message_id 组成句柄。Context.StopPropagation 在 PreEvent 中使 propagation=STOP；出站 Hook 的 Context 中 Send/Edit 由 Core 拒绝。
+- send_forbidden：
+  - Runner 调用出站 Hook 时，Attach 的 Invocation 设置 SendForbidden=true，并在请求的 InvocationContext.send_forbidden 下发 true。
+  - Hook 内（ParentAttach 为该 Invocation）调用 core.send、core.edit、core.action、core.delete 返回 FAILED_PRECONDITION。
+  - 标记只来自 Core 的调用记录，插件自报的值被忽略。Broker 转发时继承标记由 T-06.2 负责。
+- SDK：
+  - 按 route_id 分发 Hook。Handle 的签名在 Collect 时核对，不符或漏写 Handle 时报错，并带 route_id 与期望的签名。
+  - PreEvent 的 P 由 SDK 从 event_payload 解码，改写后编码回同一分支（AdapterEvent 的 *T 重新编码为 payload_json）；返回 nil 表示不改写。BeforeSend 返回 nil 表示不改写；AfterSend 返回的错误以 ErrorInfo 回报。
+  - to 由请求的 target 转为会话字符串；c.Editing() 在 operation 为 EDIT 时由 target 与 edited_platform_message_id 组成句柄。
+  - Context.StopPropagation 在 PreEvent 中使 propagation=STOP；出站 Hook 的 Context 中 Send、Edit 由 Core 拒绝。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Handle 的错误签名与漏写 Handle 在 Collect 时报错（PreEvent 的 P 与事件不符、BeforeSend 与 AfterSend 的参数不符）；PreEvent 返回不匹配分支的 payload（fixture）；BeforeSend 修改后 Chain 预检失败；排序的稳定性；插件自报 send_forbidden 被忽略；InvocationContext 中的标记在派生请求中保留（接口 fixture）；internal/core/supervisor/hook_local_test.go（//go:build unix）。两个测试插件：h 注册 PreEvent（把 text 改成大写）、BeforeSend（在 Chain 末尾追加一段文本；遇到含 "deny" 的 Chain 返回错误；尝试在 Hook 内 Send）、AfterSend（记录结果后返回错误）；e 注册 echo 事件路由与一个命令：入站 "hi" 被 PreEvent 改为 "HI" 后到达 e；e 回复时 memory 收到追加了文本的 Chain；AfterSend 收到 ACCEPTED 的结果，它返回的错误不影响 e 收到的 SendResult；一次 Handler 内两次 Send：BeforeSend 与 AfterSend 各执行两次；含 "deny" 的回复被拒，memory 没有收到，e 收到 REJECTED 与错误；AfterSend 未执行；BeforeSend 内的 Send 返回 FAILED_PRECONDITION；PreEvent 返回错误时 e 的路由与命令都没有被调用；Edit 时出站 Hook 的 c.Editing() 为被编辑消息的句柄，Send 时为空。
+- 提交：无（D-86：SDK 与 supervisor 不提交测试；Core 侧由本地集成证明）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：
+  - Handle 的错误签名与漏写 Handle 在 Collect 时报错（PreEvent 的 P 与事件不符、BeforeSend 与 AfterSend 的参数不符）。
+  - PreEvent 返回不匹配分支的 payload，以及无业务载荷的事件返回 payload（fixture）；BeforeSend 修改后 Chain 预检失败；排序的稳定性；插件自报 send_forbidden 被忽略；core.action、core.delete 在 Hook 父调用中被拒（main 上已有时）。
+  - internal/core/supervisor/hook_local_test.go（//go:build unix）：在临时目录生成并编译两个测试插件，经 supervisor.Launch、router.New、Attach、memory Adapter 与真实 message.Service 运行。
+    - 插件 h 注册 PreEvent（把 text 改成大写）、BeforeSend（在 Chain 末尾追加一段文本；遇到含 "deny" 的 Chain 返回错误；尝试在 Hook 内 Send）、AfterSend（记录结果后返回错误）。
+    - 插件 e 注册 echo 事件路由与一个命令。
+    - 覆盖：入站 "hi" 被 PreEvent 改为 "HI" 后到达 e；e 回复时 memory 收到追加了文本的 Chain；AfterSend 收到 ACCEPTED 的结果，它返回的错误不影响 e 收到的 SendResult。
+    - 覆盖：一次 Handler 内两次 Send，BeforeSend 与 AfterSend 各执行两次；含 "deny" 的回复被拒，memory 没有收到，e 收到 REJECTED 与错误，AfterSend 未执行。
+    - 覆盖：BeforeSend 内的 Send 返回 FAILED_PRECONDITION；PreEvent 返回错误时 e 的路由与命令都没有被调用；Edit 时出站 Hook 的 c.Editing() 为被编辑消息的句柄，Send 时为空。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
 
-不做：Hook→Service→Send 的间接递归回归（T-06.2 的必交用例，本切片只保证标记随父调用记录保存）；延续调用（T-05.4）。
+不做：Hook→Service→Send 的间接递归回归（T-06.2 的必交用例，本切片只保证标记保存在调用记录中）；延续调用（T-05.4）；生产装配（T-13）。
 ```
 
 ### goal-52 · T-05.4 延续调用与多轮等待
 
-状态：等待前置（T-05.2）。2026-11-10 按 D-119 加入 builder 的 `.Continue()`：接口、行为与本地自测各追加一条，`sdk/registry.go`、`sdk/events.go` 与按钮路由的 builder 加入范围；前置合并后由审查者按合入的 builder 类型核对。语句中 goal-2、goal-15、goal-16、goal-76 提供的符号（router 的派发链与 Invocation、sdk 的 Context 与分发、tune.Values）只写名字；合并后由审查者核对签名，再改为待派发。
+状态：待派发。前置 T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)，合并提交 `0f860a9`）已合并：SDK 的 Rule 与目标 Handler 在同一调用、同一 Context 中执行，`StopPropagation` 锁存，调用结束时 Context 失效；Core 的自动回复排在显式发送之后。2026-11-12 审查者按 main `3e4db62` 的代码改写接口段，要点如下：
+- `router.Invocation` 现有 PluginID、Event、DefaultTarget 三个字段，由 `Router.call` 作为 `wire.Request.Attach` 传出，插件以该调用为父请求时，服务函数从 `wire.Inbound.ParentAttach` 取回同一指针。
+- 定时任务与 Service 调用的 ParentAttach 不是 `*router.Invocation`。
+- 没有 `router.Dispatch` 类型。router 不能 import continuation，所以改为由 router 声明接口、在 Options 中注入。
+- `CONTINUATION_MAX` 与 `CONTINUATION_TIMEOUT` 已在 `internal/tune`（`Values.ContinuationMax`、`ContinuationTimeout`）。
+- `HandlerRequest` 现用到字段 4。
+- SDK 的路由 builder 为 `*CommandBuilder`（Command、Regex、Keyword、StartsWith、EndsWith、FullMatch、Raw）、`*EventBuilder`（On）与 `*ButtonBuilder[T]`（OnButton），都已有 `Permission`、`Rule` 与 `Handle`；`message.Chain.Text()` 已存在。
+
+与 goal-17（T-05.3）并行时，后合并者按「PreEvent → 等待匹配 → 命令层」的顺序接入两者的调用点，父调用带 send_forbidden 时的拒绝以 goal-17 合入的标记为准。与 goal-125 并行时，后合并者保留 builder 的 `Continue` 方法，并迁到插件对象返回的同一 builder 上。与 goal-109 同改 `sdk/sdk.go` 与 `sdk/session.go`，后合并者同步 main 并保留对方的接口。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-52（切片 T-05.4：延续调用与多轮等待）。goal 目录 goal-52，分支 goal-52，worktree .worktrees/goal-52，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：由真实入站事件触发、具有 Actor 与默认 Target 的 Handler 可以经 core.continuation.start 请求一次延续调用：原调用成功结束后，Core 以同一插件、同一 route_id 与原可信上下文发出新的 Handler 请求（continuation_of 为原 call_id），使用独立的 CONTINUATION_TIMEOUT 期限，不占用分发链。延续调用内可以经 core.wait 等待同一 Actor 在同一 Target 的下一条消息，命中的消息不进入普通分发。SDK 提供 Context.Continue 与 Context.Wait。
+目标：由真实入站事件触发、具有 Actor 与默认 Target 的 Handler 可以经 core.continuation.start 请求一次延续调用。原调用成功结束后，Core 以同一插件 Session、同一 route_id 与原 HandlerRequest 发出新的 Handler 请求（continuation_of 为原 call_id）。该请求使用独立的 CONTINUATION_TIMEOUT 期限，不占用分发链。延续调用内可以经 core.wait 等待同一 Actor 在同一 Target 的下一条消息，命中的消息不进入普通分发。SDK 提供 Context.Continue、Context.Wait，以及路由 builder 的 Continue（D-119）。
 
 依据：PLAN T-05 步骤 7；CONTRACTS §2.4；WIRE-FORMAT §3.5；DESIGN（延续调用示例）；DECISIONS D-119；TEST-MATRIX V-50、V-113 的延续调用分项。
 
 范围（只新增或修改这些）：
-- contracts/proto/alonabot/v1/invocation.proto：HandlerRequest 追加 optional uint64 continuation_of = 5；新增 ContinuationStartRequest/Response 与 WaitRequest/Response。随后 go generate ./...（本切片获授权只追加这些）
+- contracts/proto/alonabot/v1/invocation.proto：HandlerRequest 追加 optional uint64 continuation_of = 5；新增 ContinuationStartRequest/Response 与 WaitRequest/Response。随后运行 go generate ./...。本切片获授权只追加这些。
 - contracts/wirespec_test.go：追加编号检查
 - internal/wire/services.go：末尾追加 ServiceContinuationStart = "core.continuation.start"、ServiceWait = "core.wait"
 - 新增 internal/core/continuation/
-- internal/core/router/：派发链在 PreEvent 之后、命令层之前检查等待（只加调用点）；Handler 调用结束时通知 continuation（只加调用点）
-- sdk/：新增 continuation.go（Continue 与 Wait）；dispatch.go 按 continuation_of 找到登记的延续函数
-- 上述包的测试文件
-允许的新跨模块边：无。
+- internal/core/router/：
+  - mux.go：Invocation 追加下列字段；
+  - dispatch.go：Options 追加 Continuations；
+  - router.go：New 保存 Continuations；dispatch 在命令层之前调用 Match；call 在 Handler 调用返回后调用 Finished，并为 CallContinuation 保存原 HandlerRequest；Detach 调用 Release；新增 CallContinuation。
+  - 不改其他派发逻辑。
+- sdk/：新增 continuation.go（Continue、Wait、Text）；registry.go、events.go、buttons.go 的 builder 各加 Continue；dispatch.go 处理 continuation_of 与 builder 的延续路由
+- 上述包的 *_local_test.go，以及 internal/core/supervisor/continuation_local_test.go（//go:build unix）
+允许的新跨模块边：无（continuation 与 router 同属 internal/core 模块；router 不 import continuation）。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 1. proto
    message ContinuationStartRequest {}
    message ContinuationStartResponse {}
-   message WaitRequest { uint32 timeout_ms = 1; } // 1～CONTINUATION_TIMEOUT
+   message WaitRequest { uint32 timeout_ms = 1; } // 1～CONTINUATION_TIMEOUT 的毫秒数
    message WaitResponse { Event event = 1; }
-2. internal/core/continuation
-   type Manager struct{ ... }
-   type Options struct { Max int; Timeout time.Duration } // CONTINUATION_MAX、CONTINUATION_TIMEOUT
-   func New(r *router.Router, opt Options) *Manager
-   func (m *Manager) Register(mux *router.Mux)
-   func (m *Manager) Finished(inv *router.Invocation, callID uint64, ok bool) // Router 在 Handler 调用结束后调用；ok 为原调用成功（没有 Err）
-   func (m *Manager) Match(ev *router.Dispatch) bool // Router 在命令层之前调用；命中等待时返回 true，事件不再进入普通分发
-   func (m *Manager) Release(pluginID string) // Session 失效：结束该插件的全部等待与待发出的延续调用
-3. sdk
+2. internal/core/router
+   type Invocation struct {
+       PluginID      string
+       Event         *pb.Event
+       DefaultTarget *pb.Target
+       RouteID       string // 被调用的 route_id
+       Continuation  bool   // 本调用为延续调用
+       // 未导出字段：所属候选（插件 Session）与原 HandlerRequest，供 CallContinuation 使用
+   }
+   type Continuations interface {
+       Finished(inv *Invocation, ok bool) // call 在 Handler 调用返回后调用；ok 为没有传输错误且 Response.Err 为 nil
+       Match(ev *pb.Event) bool           // dispatch 在命令层之前对 message.created 调用；true 时事件不再进入命令层与事件路由
+       Release(pluginID string)           // Detach 时调用
+   }
+   Options 追加 Continuations Continuations // nil 时不检查等待，也不调用 Finished
+   func (r *Router) CallContinuation(ctx context.Context, inv *Invocation, continuationOf uint64, deadline time.Time) (wire.Response, error)
+   // 以 inv 所属的插件 Session、route_id 与原 HandlerRequest（含 command 参数与已为该 Session 准备的事件）重发，HandlerRequest.continuation_of=continuationOf，Attach 为 Continuation=true 的新 Invocation，期限为 deadline；inv 所属 Session 已不是当前激活绑定时返回错误；不经事件队列，不计入 DISPATCH_CONCURRENCY，返回值不参与原事件的传播
+3. internal/core/continuation（*Manager 实现 router.Continuations）
+   type Options struct {
+       Max     int           // CONTINUATION_MAX：每个插件 Session 已登记待发出与正在运行的延续调用总数上限
+       Timeout time.Duration // CONTINUATION_TIMEOUT
+       Call    func(ctx context.Context, inv *router.Invocation, continuationOf uint64, deadline time.Time) (wire.Response, error) // 装配处传 Router.CallContinuation
+       Prepare func(*pb.Event, router.Caller) (*pb.Event, error) // 为等待者的 Session 准备命中事件，与 router.Options.Prepare 相同；nil 时原样返回
+   }
+   func New(opt Options) *Manager
+   func (m *Manager) Register(mux *router.Mux) // 注册 core.continuation.start 与 core.wait
+   func (m *Manager) Finished(inv *router.Invocation, ok bool)
+   func (m *Manager) Match(ev *pb.Event) bool
+   func (m *Manager) Release(pluginID string)
+   装配：先 New(Options{Call: 闭包调用之后创建的 Router.CallContinuation})，再把它作为 router.Options.Continuations 传入；本切片在本地集成测试中装配，生产装配沿用 T-13 的 Core 装配。
+4. sdk
    func (c *Context) Continue(fn func(*Context) error) error // 只能在 Handler 中调用一次；fn 在延续调用中执行
-   func (b *CommandBuilder) Continue() *CommandBuilder // 命令、文本匹配与 Raw 路由：Handler 整体在延续调用中执行（D-119）
-   func (b *EventBuilder) Continue() *EventBuilder     // 事件路由同上；按钮路由的 builder 有同名方法
+   func (b *CommandBuilder) Continue() *CommandBuilder       // 命令、文本匹配与 Raw 路由：Handler 整体在延续调用中执行（D-119）
+   func (b *EventBuilder) Continue() *EventBuilder           // 事件路由同上
+   func (b *ButtonBuilder[T]) Continue() *ButtonBuilder[T]   // 按钮路由同上
    func (c *Context) Wait(timeout time.Duration) (*Context, error) // 只能在延续调用中调用；返回命中消息的 Context（可用 Event()、Text() 等）
-   func (c *Context) Text() string // message.created 的文本片段连接结果；其他事件为空
+   func (c *Context) Text() string // message.created 时为消息 Chain 的 Text()；其他事件为空
 
 行为：
-- core.continuation.start（必须带 parent_call_id，指向本 Session 中仍在途的 Core→插件 Handler 调用）：以下情况返回 FAILED_PRECONDITION：父调用不是由真实入站事件触发（例如 scheduled、Bus、Service）、缺少 Actor 或默认 Target、父调用带 send_forbidden（出站 Hook 内）、父调用本身就是延续调用、同一父调用已请求过。本 Session 进行中的延续调用（已登记待发出与正在运行的）达到 Max 时返回 RESOURCE_EXHAUSTED。成功时只登记，返回空结果。
-- 发出：Finished(ok=true) 时为登记的父调用发出新的 Handler REQUEST：同一插件、同一 route_id，HandlerRequest.continuation_of=原 call_id，event 为原事件（Core 保留的可信信息重建），context 为原调用的 Actor、默认 Target、scope、trace 与插件链；期限为发出时刻起 Timeout。它不经事件队列与派发链，不计入 DISPATCH_CONCURRENCY；返回值不参与原事件的传播。Finished(ok=false) 时丢弃登记，不发出。
-- core.wait（必须带 parent_call_id，父调用必须是延续调用）：等待键为（adapter_instance_id、chat_id、thread_id（无则为空）、external_user_id），取自延续调用的默认 Target 与 Actor。同键已有等待 → ALREADY_EXISTS。timeout_ms 不在范围内 → INVALID_ARGUMENT。等待在 Core 内存中，不持久化。
-- 匹配：Router 对每个 message.created，在 PreEvent 之后、命令层之前调用 Match：Target 与 Actor 构成的键命中等待时，该事件作为 WaitResponse 返回给等待者，并且不再进入命令层与事件路由。不同 Actor 或不同 thread 不命中。
-- 结束：超时 → DEADLINE_EXCEEDED；父请求被取消 → CANCELLED；Release（插件停用或 Session 失效）→ 等待以 UNAVAILABLE 结束，待发出的延续调用丢弃，不补发。延续调用的期限到达时，其中的等待一并结束。
-- builder 的 Continue（D-119）：原调用中 SDK 照常执行 Rule，匹配后请求 core.continuation.start 并以 matched、Continue 成功结束，不调用 Handler；请求失败时原调用返回该错误。收到 continuation_of 的请求时调用该路由的 Handler，参数与原调用相同；自动回复型 Handler 返回的非空内容由 SDK 在延续调用结束前经 Send 发出一次。Handler 中的 StopPropagation 不起作用，再调用 c.Continue 返回 FAILED_PRECONDITION。
-- SDK：Continue 在 Handler 返回前请求 core.continuation.start，并登记 fn（按原 call_id）；收到 continuation_of 的请求时调用对应 fn。Continue 在延续调用中调用返回 FAILED_PRECONDITION。Wait 发起 core.wait，以本次延续调用为父请求。
+- core.continuation.start（必须带 parent_call_id，指向本 Session 中仍在途的 Core→插件 Handler 调用）：
+  - 以下情况返回 FAILED_PRECONDITION：in.ParentAttach 不是 *router.Invocation（scheduled、Bus、Service 等）；缺少 Actor 或默认 Target；父调用本身是延续调用（Continuation 为 true）；同一父调用已请求过。父调用带 send_forbidden 也拒绝，标记由 T-05.3 接入（见状态行）。
+  - 调用方 Session 进行中的延续调用达到 Max 时，返回 RESOURCE_EXHAUSTED。
+  - 成功时按父 Invocation 指针登记调用方 Caller 与 continuation_of（in.ParentCallID），返回空结果。
+- 发出：
+  - Finished(ok=true) 时，若该 Invocation 有登记，在新的 goroutine 中经 Options.Call 发出延续调用，期限为发出时刻起 Timeout，continuation_of 为登记的原 call_id。
+  - Caller 已不是该插件的当前 Session 时丢弃登记。返回错误只记日志（不含参数值），不重试。
+  - Finished(ok=false) 时丢弃登记，不发出。
+- core.wait（必须带 parent_call_id，父 Invocation 的 Continuation 为 true）：
+  - 等待键为（adapter_instance_id、chat_id、thread_id（无则为空）、Actor 的 external_user_id），取自父 Invocation 的默认 Target 与 Actor。
+  - 同键已有等待时返回 ALREADY_EXISTS；timeout_ms 不在 1～Timeout 内时返回 INVALID_ARGUMENT。
+  - 等待保存在 Core 内存中，不持久化。
+- 匹配：Router 对每个 message.created 在命令层之前调用 Match。Target 与 Actor 构成的键命中等待时，Match 摘除该等待，事件经 Options.Prepare 为等待者的 Session 准备后作为 WaitResponse 返回，并返回 true；该事件不再进入命令层与事件路由。不同 Actor 或不同 thread 不命中。
+- 结束：
+  - 超时返回 DEADLINE_EXCEEDED；core.wait 的请求被取消（包括作为父请求的延续调用结束或期限到达）时返回 CANCELLED。
+  - Release（插件停用或 Session 失效）时，该插件的等待以 UNAVAILABLE 结束，待发出的延续调用丢弃，不补发。
+- builder 的 Continue（D-119）：
+  - 原调用中 SDK 照常执行 Rule。匹配后请求 core.continuation.start，原调用以 matched、Continue 成功结束，不调用 Handler；请求失败时原调用返回该错误。
+  - 收到 continuation_of 的请求时调用该路由的 Handler，参数与原调用相同；自动回复型 Handler 返回的非空内容由 SDK 在延续调用结束前经 Send 发出一次。
+  - 这类路由中 StopPropagation 不起作用，再调用 c.Continue 返回 FAILED_PRECONDITION。
+- SDK 的 Context.Continue：
+  - 在 Handler 返回前请求 core.continuation.start（ParentCallID 为本次调用的 call_id），并按该 call_id 登记 fn；收到 continuation_of 的请求时调用对应 fn，找不到时返回 NOT_FOUND。
+  - 在延续调用中调用 Continue 返回 FAILED_PRECONDITION。
+  - Wait 以本次延续调用为父请求发起 core.wait。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：用 `.Continue()` 注册的 /quiz2 与 Handler 内调用的 /quiz 行为相同，Rule 不匹配时不请求延续，自动回复型的返回内容只发出一次，Handler 中的 StopPropagation 不改变原调用的传播；原调用返回错误时不发出；父调用带 send_forbidden 时被拒；timeout_ms 边界；Release 与超时的并发；SDK 中按 continuation_of 找不到 fn 时返回 NOT_FOUND；internal/core/supervisor/continuation_local_test.go（//go:build unix）。测试插件注册 /quiz 命令：Continue 中依次 Wait 两次并把收到的回答回复出来；另有一个 echo 事件路由用来证明消息是否进入普通分发：用户 A 发 /quiz 后，A 的下两条消息被 quiz 收到并回答，它们没有到达 echo；原命令的 HandlerOutcome 决定的传播不受影响；同一群里 A 与 B 同时 /quiz，各自只收到自己的回答；不同 thread 的消息不命中；Wait 超时返回 DEADLINE_EXCEEDED；同键第二个 Wait 返回 ALREADY_EXISTS；延续调用中再次 Continue 返回 FAILED_PRECONDITION；没有 Actor 的 scheduled 事件 fixture 中请求 Continue 返回 FAILED_PRECONDITION；用很小的 Max：超过的 Continue 返回 RESOURCE_EXHAUSTED；等待期间停止插件：等待结束，重启后不补发；延续调用执行期间，其他事件照常派发（不占分发链）。
+- 提交：无（D-86：SDK 与 supervisor 不提交测试；Core 侧由本地集成证明）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：
+  - 用 `.Continue()` 注册的 /quiz2 与 Handler 内调用的 /quiz 行为相同；Rule 不匹配时不请求延续；自动回复型的返回内容只发出一次；Handler 中的 StopPropagation 不改变原调用的传播。
+  - 原调用返回错误时不发出；ParentAttach 不是 Invocation 时被拒；timeout_ms 边界；Release 与超时的并发；SDK 中按 continuation_of 找不到 fn 时返回 NOT_FOUND。
+  - internal/core/supervisor/continuation_local_test.go（//go:build unix）：在临时目录生成并编译真实 SDK 插件，经 supervisor.Launch、router.New、Attach、memory Adapter 与真实 message.Service 运行。测试插件注册 /quiz 命令：Continue 中依次 Wait 两次，并把收到的回答回复出来；另有一个 echo 事件路由，用来证明消息是否进入普通分发。覆盖：
+    - 用户 A 发 /quiz 后，A 的下两条消息被 quiz 收到并回答，没有到达 echo；原命令的 HandlerOutcome 决定的传播不受影响。
+    - 同一群里 A 与 B 同时 /quiz，各自只收到自己的回答；不同 thread 的消息不命中。
+    - Wait 超时返回 DEADLINE_EXCEEDED；同键第二个 Wait 返回 ALREADY_EXISTS；延续调用中再次 Continue 返回 FAILED_PRECONDITION。
+    - 没有 Actor 的事件中请求 Continue 返回 FAILED_PRECONDITION；用很小的 Max 时，超过的 Continue 返回 RESOURCE_EXHAUSTED。
+    - 等待期间停止插件，等待结束，重启后不补发；延续调用执行期间，其他事件照常派发（不占分发链）。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
 
-不做：持久化的等待与延续调用（契约不提供）；Agent 的流式对话（T-12.2 使用本切片）。
+不做：持久化的等待与延续调用（契约不提供）；Agent 的流式对话（T-12.2 使用本切片）；生产装配（T-13）。
 ```
 
 ### goal-124 · T-04.11 注册写法统一

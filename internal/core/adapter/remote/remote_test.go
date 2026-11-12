@@ -73,6 +73,12 @@ func TestMain(m *testing.M) {
 type loopPlugin struct{ sdk.Base }
 
 type observedEvent struct {
+	ChatType     message.ChatType
+	Segments     []string
+	VoiceURL     string
+	ButtonURLs   []string
+	ButtonTokens []string
+
 	Route       string
 	Permissions []string
 	Version     uint32
@@ -84,7 +90,26 @@ type poke struct {
 }
 
 func observe(route string, c *sdk.Context, value *poke) error {
-	report := observedEvent{Route: route}
+	report := observedEvent{Route: route, ChatType: c.ChatType()}
+	if payload, ok := c.Event().Payload.(*message.CreatedPayload); ok {
+		for _, segment := range payload.Chain {
+			switch value := segment.(type) {
+			case message.TextSegment:
+				report.Segments = append(report.Segments, "text")
+			case message.VoiceSegment:
+				report.Segments = append(report.Segments, "voice")
+				report.VoiceURL = value.Source.HTTPSURL
+			case message.ButtonsSegment:
+				report.Segments = append(report.Segments, "buttons")
+				for _, row := range value.Rows {
+					for _, button := range row {
+						report.ButtonURLs = append(report.ButtonURLs, button.URL)
+						report.ButtonTokens = append(report.ButtonTokens, button.CoreToken)
+					}
+				}
+			}
+		}
+	}
 	if actor := c.Event().Actor; actor != nil {
 		report.Permissions = actor.Permissions
 	}
@@ -228,6 +253,7 @@ func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core s
 		Username      string `json:"username"`
 		Media         bool   `json:"media"`
 		CommandsAudit string `json:"commands_audit"`
+		Segments      bool   `json:"segments"`
 	}
 	if err := json.Unmarshal(req.ConfigJSON, &config); err != nil {
 		return nil, err
@@ -243,7 +269,7 @@ func (*loopAdapter) Start(_ context.Context, req sdkadapter.StartRequest, core s
 			return nil, err
 		}
 	}
-	instance := &loopInstance{id: req.InstanceID, account: config.Account, displayName: config.DisplayName, username: config.Username, core: core, sequence: n, initial: string(req.Cursor), token: config.Token, commandsAudit: config.CommandsAudit}
+	instance := &loopInstance{id: req.InstanceID, account: config.Account, displayName: config.DisplayName, username: config.Username, core: core, sequence: n, initial: string(req.Cursor), token: config.Token, commandsAudit: config.CommandsAudit, segments: config.Segments}
 	if config.Media {
 		return &mediaLoopInstance{loopInstance: instance}, nil
 	}
@@ -281,6 +307,7 @@ type loopInstance struct {
 	mu                    sync.Mutex
 	sequence              int
 	mediaReads            int
+	segments              bool
 }
 
 func (i *loopInstance) Account() sdkadapter.Account {
@@ -290,6 +317,9 @@ func (i *loopInstance) Capabilities() []message.Capability {
 	capabilities := []message.Capability{{Name: "message.text", Version: 1, Supported: true}}
 	if i.commandsAudit != "" {
 		capabilities = append(capabilities, message.Capability{Name: "commands.sync", Version: 1, Supported: true})
+	}
+	if i.segments {
+		capabilities = append(capabilities, message.Capability{Name: "message.voice", Version: 1, Supported: true})
 	}
 	return capabilities
 }
@@ -318,6 +348,9 @@ func (i *loopInstance) Send(ctx context.Context, target message.Session, chain m
 	if text == "cursor" {
 		return &message.SendResult{Status: message.SendAccepted, PlatformMessageIDs: []string{i.initial}}, nil
 	}
+	if text == "send-count" {
+		return &message.SendResult{Status: message.SendAccepted, PlatformMessageIDs: []string{strconv.Itoa(i.sequence)}}, nil
+	}
 	if text == "media-read-count" {
 		return &message.SendResult{Status: message.SendAccepted, PlatformMessageIDs: []string{strconv.Itoa(i.mediaReads)}}, nil
 	}
@@ -328,6 +361,8 @@ func (i *loopInstance) Send(ctx context.Context, target message.Session, chain m
 	}
 	ev := &message.Event{ID: "adapter-forged-id", Type: "message.created", AdapterID: "loop", AdapterInstanceID: id, AccountID: i.account, Session: target, Payload: &message.CreatedPayload{Chain: chain, PlatformMessageID: strconv.Itoa(i.sequence)}}
 	switch text {
+	case "segments":
+		ev.ChatType = message.ChatGroup
 	case "bot.online", "bot.offline", "scheduled":
 		ev.Type = text
 	case "mismatched-payload":
