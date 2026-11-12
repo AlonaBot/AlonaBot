@@ -6,6 +6,7 @@ import alonabotgen0 "github.com/AlonaBot/AlonaBot/sdk"
 
 func init() {
 	alonabotgen0.UseGenerated((*plugin)(nil), alonabotgen0.Generated{
+		Manifest:     []byte("# 受管 SQLite 与配置迁移示例的作者信息。\nid: alonabot_plugin_configdb\nname: ConfigDB\nversion: 0.1.0\nsource: github.com/AlonaBot/AlonaBot\ndescription: Managed SQLite notes and configuration migration\n"),
 		ConfigSchema: []byte("{\"$version\":2,\"greeting\":{\"type\":\"string\",\"description\":\"Greeting\",\"default\":\"Hello\"},\"enabled\":{\"type\":\"bool\",\"description\":\"Enabled\",\"default\":true},\"count\":{\"type\":\"int\",\"description\":\"Count\",\"default\":7},\"tags\":{\"type\":\"list\",\"description\":\"Tags\",\"default\":[\"example\"]},\"labels\":{\"type\":\"dict\",\"description\":\"Labels\",\"default\":{\"example\":\"value\"}},\"nested\":{\"type\":\"object\",\"description\":\"Nested settings\",\"items\":{\"enabled\":{\"type\":\"bool\",\"description\":\"Enabled\",\"default\":true}}},\"token\":{\"type\":\"string\",\"description\":\"Access token\",\"secret\":true},\"hidden\":{\"type\":\"string\",\"invisible\":true,\"default\":\"retained\"},\"fail_migration\":{\"type\":\"bool\",\"invisible\":true},\"fail_start\":{\"type\":\"bool\",\"invisible\":true}}"),
 		I18n: map[string][]byte{
 			"en-US.json": []byte("{\n  \"messages\": {\n    \"note.saved\": \"Saved {key}\",\n    \"note.value\": \"{key}: {value}\",\n    \"note.deleted\": \"Deleted {key}\",\n    \"note.hello\": \"Hello, {name}\"\n  }\n}\n"),

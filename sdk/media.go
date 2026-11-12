@@ -105,7 +105,7 @@ func GrantMedia(ctx context.Context, token, granteePluginID string, sessions ...
 // 可 Seek 的来源回到当前起始位置；其他来源通过 0600 临时文件完成第二遍读取。
 func Upload(ctx context.Context, r io.Reader, mime string) (ref *message.MediaRef, err error) {
 	// 1. 先通过就绪门禁，再准备两遍读取的来源。
-	session, err := currentSession()
+	session, err := currentSession(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -16,7 +16,11 @@ const configSchemaFileName = "config_schema.json"
 
 func (s *scan) configSchema() error {
 	// 1. 未声明 schema 时使用空字段集核对翻译，生成项保持 nil。
-	raw, err := os.ReadFile(filepath.Join(s.dir, configSchemaFileName))
+	fileName := configSchemaFileName
+	if s.adapterProject {
+		fileName = instanceSchemaFileName
+	}
+	raw, err := os.ReadFile(filepath.Join(s.dir, fileName))
 	present := err == nil
 	if errors.Is(err, os.ErrNotExist) {
 		raw = []byte(`{}`)
@@ -24,11 +28,11 @@ func (s *scan) configSchema() error {
 		return fmt.Errorf("read config schema: %w", err)
 	}
 	schema, problems := configschema.Parse(raw)
-	s.schemaProblems(configSchemaFileName, problems)
+	s.schemaProblems(fileName, problems)
 	if len(problems) != 0 {
 		return nil
 	}
-	if present {
+	if present && !s.adapterProject {
 		s.result.ConfigSchema = schema.Canonical()
 	}
 	// 2. 复用已读原文核对 config 字段与模板；JSON 解析问题由 readI18n 报告。
