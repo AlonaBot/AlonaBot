@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
@@ -39,7 +40,7 @@ type testEntry struct {
 }
 
 func manifestYAML(id, version, source, osName, arch, entrypoint string) string {
-	return "manifest_version: 1\nid: " + id + "\nversion: " + version +
+	return "manifest_version: 1\nname: Demo\nid: " + id + "\nversion: " + version +
 		"\nprotocol_min_major: 1\nprotocol_max_major: 1\nrequired_capabilities: []\nos: " + osName +
 		"\narch: " + arch + "\nentrypoint: " + entrypoint + "\nconfig_version: 1\nsource: " + source +
 		"\nmigration_mode: none\nprepare_effects: none\n"
@@ -250,5 +251,49 @@ func assertNoStaging(t *testing.T, staging string) {
 	}
 	if len(left) > 0 {
 		t.Fatalf("staging has leftovers: %v", left)
+	}
+}
+
+// TestProjectManifestPreflight 通过真实归档验证作者信息合成与包内必填字段的拒绝。
+func TestProjectManifestPreflight(t *testing.T) {
+	project := "id: " + testPluginID + "\nname: Demo\ndescription: Example component\nauthor: Example author\nversion: " + testVersion + "\nsource: " + testSource + "\n"
+	if _, err := manifest.ParseProject([]byte(project + "entrypoint: bin/plugin\n")); err == nil || !strings.Contains(err.Error(), "entrypoint") {
+		t.Fatalf("ParseProject() error = %v, want entrypoint", err)
+	}
+	parsed, err := manifest.ParseProject([]byte(project))
+	if err != nil {
+		t.Fatal(err)
+	}
+	one := uint32(1)
+	capabilities := []manifest.Capability{}
+	data, err := manifest.Generate(parsed.Manifest, manifest.BuildInfo{
+		ManifestVersion: 1, ProtocolMinMajor: &one, ProtocolMaxMajor: &one,
+		RequiredCapabilities: &capabilities, OS: testOS, Arch: testArch,
+		Entrypoint: "bin/plugin", ConfigVersion: &one,
+		MigrationMode: manifest.MigrationNone, PrepareEffects: manifest.EffectsNone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := validEntries()
+	entries[0].body = string(data)
+	p := newPackage(t, entries, nil)
+	candidate, err := Preflight(p.input, filepath.Join(p.root, "staging"), NewLimits(tune.Defaults()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := candidate.Manifest
+	if m.Name != parsed.Manifest.Name || m.Description != parsed.Manifest.Description || m.Author != parsed.Manifest.Author {
+		t.Errorf("candidate author fields = %q, %q, %q", m.Name, m.Description, m.Author)
+	}
+	if err := candidate.Discard(); err != nil {
+		t.Fatal(err)
+	}
+
+	entries[0].body = strings.Replace(string(data), "name: Demo\n", "", 1)
+	p = newPackage(t, entries, nil)
+	_, err = Preflight(p.input, filepath.Join(p.root, "staging"), NewLimits(tune.Defaults()))
+	if errorCode(err) != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT || !strings.Contains(err.Error(), "name") {
+		t.Fatalf("Preflight() error = %v, want INVALID_ARGUMENT containing name", err)
 	}
 }
