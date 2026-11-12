@@ -577,6 +577,21 @@ func TestToolFieldNumbers(t *testing.T) {
 	}
 }
 
+// TestHTTPAuthModeNumbers 固定 HTTP 认证模式的线上编号。
+func TestHTTPAuthModeNumbers(t *testing.T) {
+	values := pb.HttpAuthMode(0).Descriptor().Values()
+	names := []protoreflect.Name{"HTTP_AUTH_MODE_UNSPECIFIED", "HTTP_AUTH_MODE_CORE_SESSION", "HTTP_AUTH_MODE_CALLBACK_STATE", "HTTP_AUTH_MODE_CALLBACK_SIGNATURE", "HTTP_AUTH_MODE_CALLBACK_NONCE", "HTTP_AUTH_MODE_PLATFORM_TOKEN"}
+	if values.Len() != len(names) {
+		t.Fatalf("HttpAuthMode has %d values, want %d", values.Len(), len(names))
+	}
+	for i, name := range names {
+		value := values.ByNumber(protoreflect.EnumNumber(i))
+		if value == nil || value.Name() != name {
+			t.Errorf("HttpAuthMode value %d should be %s, got %v", i, name, value)
+		}
+	}
+}
+
 // TestActionFieldNumbers 固定动作声明与两段服务载荷的编号、类型和重复性。
 func TestActionFieldNumbers(t *testing.T) {
 	for _, tc := range []struct {
