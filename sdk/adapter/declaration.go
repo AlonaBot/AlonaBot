@@ -24,11 +24,12 @@ func Event[T any](name string, version uint32) EventDeclaration {
 // PermissionDeclaration 保存平台权限、隐含权限与展示文案键。
 type PermissionDeclaration = convert.PermissionDeclaration
 
-// Descriptor 保存 Adapter 的能力、片段、权限和事件声明。
+// Descriptor 保存 Adapter 的能力、片段、权限、事件与动作声明。
 type Descriptor struct {
 	AdapterID    string
 	Capabilities []message.Capability
 	Extensions   []ExtensionDeclaration
 	Permissions  []PermissionDeclaration
 	Events       []EventDeclaration
+	Actions      []ActionDeclaration
 }

@@ -7,15 +7,22 @@ import (
 	"strings"
 )
 
-// AdapterDependency 声明所依赖的平台类型与 extension 版本。
+// AdapterDependency 声明所依赖的平台类型、extension 与动作版本。
 type AdapterDependency struct {
 	AdapterID  string                 `yaml:"adapter_id"`
 	Extensions []ExtensionRequirement `yaml:"extensions"`
+	Actions    []ActionRequirement    `yaml:"actions"`
 	Required   bool                   `yaml:"required"` // false 表示可选依赖
 }
 
 // ExtensionRequirement 指定一个 extension 的名称与精确版本。
 type ExtensionRequirement struct {
+	Name    string `yaml:"name"`
+	Version uint32 `yaml:"version"`
+}
+
+// ActionRequirement 指定平台动作的完整名称与精确版本。
+type ActionRequirement struct {
 	Name    string `yaml:"name"`
 	Version uint32 `yaml:"version"`
 }
@@ -31,6 +38,7 @@ type PluginDependency struct {
 type Installed struct {
 	Plugins  map[string]string                 // 只含已启用插件的 ID 与版本
 	Adapters map[string][]ExtensionRequirement // 已安装的平台类型与已声明的 extension
+	Actions  map[string][]ActionRequirement    // 按 adapter_id 索引已声明的动作
 }
 
 // Problem 报告一项依赖缺失或版本不足。
@@ -41,7 +49,7 @@ type Problem struct {
 }
 
 func (m *Manifest) validateDependencies() error {
-	// 1. 校验 Adapter ID 与 extension 的名称、版本，并拒绝重复声明。
+	// 1. 校验 Adapter ID、extension 与动作的名称和版本，并拒绝重复声明。
 	adapters := make(map[string]bool)
 	for _, dependency := range m.AdapterDependencies {
 		if err := checkAdapterID(dependency.AdapterID); err != nil {
@@ -60,6 +68,16 @@ func (m *Manifest) validateDependencies() error {
 				return fmt.Errorf("adapter dependency %q repeats extension %q version %d", dependency.AdapterID, extension.Name, extension.Version)
 			}
 			extensions[extension] = true
+		}
+		actions := make(map[ActionRequirement]bool)
+		for _, action := range dependency.Actions {
+			if action.Name == "" || action.Version == 0 {
+				return fmt.Errorf("adapter dependency %q action is missing name or version", dependency.AdapterID)
+			}
+			if actions[action] {
+				return fmt.Errorf("adapter dependency %q repeats action %q version %d", dependency.AdapterID, action.Name, action.Version)
+			}
+			actions[action] = true
 		}
 	}
 	// 2. 校验插件 ID 与最低版本，并拒绝重复依赖和必需的直接自依赖。
@@ -86,7 +104,7 @@ func (m *Manifest) validateDependencies() error {
 // 插件版本使用 SemVer 比较；可选依赖的问题同样返回，由调用方记录诊断。
 func CheckDependencies(m *Manifest, in Installed) []Problem {
 	var problems []Problem
-	// 1. 检查 Adapter 已安装且声明了所需 extension 的精确版本。
+	// 1. 检查 Adapter 已安装且声明了所需 extension 与动作的精确版本。
 	for _, dependency := range m.AdapterDependencies {
 		extensions, installed := in.Adapters[dependency.AdapterID]
 		if !installed {
@@ -96,6 +114,11 @@ func CheckDependencies(m *Manifest, in Installed) []Problem {
 		for _, extension := range dependency.Extensions {
 			if !slices.Contains(extensions, extension) {
 				problems = append(problems, Problem{dependency.AdapterID, dependency.Required, fmt.Sprintf("extension %q version %d is not declared", extension.Name, extension.Version)})
+			}
+		}
+		for _, action := range dependency.Actions {
+			if !slices.Contains(in.Actions[dependency.AdapterID], action) {
+				problems = append(problems, Problem{dependency.AdapterID, dependency.Required, fmt.Sprintf("action %q version %d is not declared", action.Name, action.Version)})
 			}
 		}
 	}

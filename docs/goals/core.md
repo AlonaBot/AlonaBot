@@ -54,9 +54,9 @@
 | goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8、T-08.11 | 已完成（PR #117） |
 | goal-101 | T-08.12 | Adapter 实例配置与 Core 设置的版本迁移 | T-07.6、T-08.11 | 已完成（PR #114） |
 | goal-67 | T-13.1 | 库模式入口与同进程组件 | T-02.1、T-03.3、T-04.2、T-04.9、T-08.8、T-09.16 | 待派发 |
-| goal-104 | T-03.13 | 媒体按来源传递 | T-03.6、T-04.8、T-07.7 | 待派发 |
+| goal-104 | T-03.13 | 媒体按来源传递 | T-03.6、T-04.8、T-07.7 | 已完成（PR #148） |
 | goal-105 | T-03.14 | 新增片段与字段（含会话类型） | T-03.8、T-04.8 | 已完成（PR #143） |
-| goal-106 | T-03.15 | 平台动作 | T-03.8、T-04.8 | 待派发 |
+| goal-106 | T-03.15 | 平台动作 | T-03.8、T-04.8 | 已完成（PR #146） |
 | goal-107 | T-03.16 | 撤回 | T-03.9、T-04.8 | 已完成（PR #144） |
 | goal-108 | T-03.17 | 命令菜单同步 | T-04.6、T-04.7、T-04.8、T-08.8 | 待派发 |
 | goal-109 | T-03.18 | 流式输出辅助函数 | T-03.9、T-04.8 | 待派发 |
@@ -3917,7 +3917,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-104 · T-03.13 媒体按来源传递
 
-状态：待派发。前置均已合并（T-04.8 为 PR #141（合并提交 `ac4aded`））；审查者按 main 合入 PR #141 后的代码核对。T-03.6（PR #55）、T-07.7（PR #116，合并提交 `e65eb4d`）提供入站媒体与统一入口。2026-11-09 按 D-87、D-88 新增。当前 `media.Store.LeaseForSend` 返回只读 token，`message.New` 通过函数注入取得它；本切片把该返回值扩为准备好的媒体来源。`settings.Settings.BaseURL` 与 `webhost.Options.BaseURL` 已存在；`cmd/alonabot/main.go` 当前只装配认证、插件代理与调度，完整媒体装配由 T-13 接入下文的 Store 与 Host 接口。回环 Adapter 已在 `internal/core/adapter/remote/remote_test.go` 的 `TestMain` 中，无独立的 `examples/adapters/loopback/` 工程。
+状态：已完成（[PR #148](https://github.com/AlonaBot/AlonaBot/pull/148)，合并提交 `cf74fa9`），证据见 TEST-MATRIX §3.2。合入：MediaSource 的 `inline_base64` 与 `platform_file`；同实例入站对象复用平台文件标识；`core.media.url`（`media.Store.AddURLService(mux, baseURL)`）与公开 Listener 上的 `/media/<url_token>`（`webhost.Options.Media`，GET/HEAD/Range，sandbox CSP 与 nosniff）；SDK 的 `ImageBytes`、`VideoBytes`、`FileBytes` 与 Adapter 侧 `MediaURL`。T-13 的正式装配需对同一 Mux 调用 `AddURLService`，并给 webhost 注入 `Media`。派发时：前置均已合并（T-04.8 为 PR #141（合并提交 `ac4aded`））；审查者按 main 合入 PR #141 后的代码核对。T-03.6（PR #55）、T-07.7（PR #116，合并提交 `e65eb4d`）提供入站媒体与统一入口。2026-11-09 按 D-87、D-88 新增。当前 `media.Store.LeaseForSend` 返回只读 token，`message.New` 通过函数注入取得它；本切片把该返回值扩为准备好的媒体来源。`settings.Settings.BaseURL` 与 `webhost.Options.BaseURL` 已存在；`cmd/alonabot/main.go` 当前只装配认证、插件代理与调度，完整媒体装配由 T-13 接入下文的 Store 与 Host 接口。回环 Adapter 已在 `internal/core/adapter/remote/remote_test.go` 的 `TestMain` 中，无独立的 `examples/adapters/loopback/` 工程。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-104（切片 T-03.13：媒体按来源传递）。goal 目录 goal-104，分支 goal-104，worktree .worktrees/goal-104，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -4033,7 +4033,7 @@ Core 一侧已按合入代码核对并修订：
 
 ### goal-106 · T-03.15 平台动作
 
-状态：待派发。前置均已合并（T-04.8 为 PR #141（合并提交 `ac4aded`））；审查者按 main 合入 PR #141 后的代码核对。T-03.8（PR #136，合并提交 `3621fc1`）提供 extension 校验与 `manifest.CheckDependencies(m *Manifest, in Installed) []Problem`；当前安装快照的 `Installed.Adapters` 是 `map[string][]ExtensionRequirement`。SDK 已有 `adapter.Event[T]`、`adapter.Extension[T]` 的类型推导与内部 convert.Descriptor；平台动作声明须同时扩展两个 Descriptor。`sdk.Action[T]` 是按钮动作，平台动作使用 `sdk/adapter.Action[P,R]`。2026-11-09 按 D-87、D-92 新增，同日按 D-113 追加类型推导。
+状态：已完成（[PR #146](https://github.com/AlonaBot/AlonaBot/pull/146)，合并提交 `ab5f8fb`），证据见 TEST-MATRIX §3.2。合入：`core.action` 与 `adapter.action`（`internal/core/message.Service.Action`：按 Adapter 声明的动作名、精确版本与 chat/account 范围准入，参数与结果 Schema 校验，`adapter.ActionExecutor` 可选接口，`Registry.CompleteAccount`，policy 的 `CheckInstance`）；协议 `ActionScope`、`ActionDeclaration`（`AdapterDescriptor.actions = 6`）、`ActionRequest`、`ActionResponse`、`AdapterActionRequest`；SDK 的 `adapter.Action[P,R]`、`ActionScope`、`ActionExecutor`、`ActionCaller`、`Context.CallAction` 与 `ActionClient`/`NewActionClient`；`AdapterDependency.Actions`。派发时：前置均已合并（T-04.8 为 PR #141（合并提交 `ac4aded`））；审查者按 main 合入 PR #141 后的代码核对。T-03.8（PR #136，合并提交 `3621fc1`）提供 extension 校验与 `manifest.CheckDependencies(m *Manifest, in Installed) []Problem`；当前安装快照的 `Installed.Adapters` 是 `map[string][]ExtensionRequirement`。SDK 已有 `adapter.Event[T]`、`adapter.Extension[T]` 的类型推导与内部 convert.Descriptor；平台动作声明须同时扩展两个 Descriptor。`sdk.Action[T]` 是按钮动作，平台动作使用 `sdk/adapter.Action[P,R]`。2026-11-09 按 D-87、D-92 新增，同日按 D-113 追加类型推导。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-106（切片 T-03.15：平台动作）。goal 目录 goal-106，分支 goal-106，worktree .worktrees/goal-106，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
