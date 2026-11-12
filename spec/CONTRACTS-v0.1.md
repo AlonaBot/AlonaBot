@@ -231,7 +231,7 @@ PATCH 语义依据：[RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)。
   | 配置 | 声明 | 存储的版本 |
   | --- | --- | --- |
   | 插件配置 | 插件的 `config_schema.json` | Core 代次元数据（§5.2） |
-  | Adapter 实例配置 | Adapter 包内的 `adapter_config_schema.json`，格式与 `config_schema.json` 相同 | `core_config.json` 中该 Adapter 的 `$version` |
+  | Adapter 实例配置 | 可导入的 Adapter 工程包中与 `plugin.yaml` 同目录的 `adapter_config_schema.json`，打包后位于安装包根目录；格式与 `config_schema.json` 相同（D-134） | `core_config.json` 中该 Adapter 的 `$version` |
   | Core 设置 | Core 内置的 schema | `core_config.json` 的 `$version` |
 
 - `config_schema.json` 与 `adapter_config_schema.json` 的顶层可以写 `$version`（正整数，缺省 1）与 `$migrations`：按 `to` 递增排列的步骤，最后一步的 `to` 等于 `$version`。每步可以有以下操作，按此顺序执行：
@@ -346,6 +346,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 ## 8. Adapter、Target 与消息
 
 - Adapter 与插件一样以安装包分发，在 Core 之外以独立 Native 子进程运行，复用插件的握手、Session、准备/激活/停止状态机、代次、配置、Secret、安装与来源校验（D-26）。官方 Telegram Adapter 也是这样一个可卸载的安装包，Core 不静态链接任何平台实现。manifest 以 `role: adapter` 和 `adapter_id`（平台类型，例如 `telegram`）区分，同一 `adapter_id` 同时只能安装一个包；社区 Adapter 可以按 §9.3 的 `--replace` 替换同一 `adapter_id` 的官方 Adapter。
+- Adapter 的工程入口是可导入的 Go 包（例如 `adapters/telegram`），工程 `plugin.yaml`、`adapter_config_schema.json` 与生成的登记代码都位于该包目录（D-134）。`cmd/alonabot-adapter-<id>` 只保留调用 `sdk.RunAdapter` 的薄 main；独立进程与库模式（§15.5）共用该包的组件身份与资源。
 - 同一个 Adapter 包只运行一个进程，进程内承载该包的全部账号实例。实例配置（含凭证）写在 `core_config.json` 的 `adapters` 中（§15.1），由 Core 按 Adapter 包内 `adapter_config_schema.json` 迁移、补缺失值并校验（§5.5），经 `adapter.instance.start`/`adapter.instance.stop` 单独启停；启停一个实例不重启进程，也不影响同包的其他实例。停用整个 Adapter 即按插件的停止流程停止该进程，全部实例随之停止。进程异常退出按插件的有限重启策略处理，重启后 Core 只重新启动仍处于启用状态的实例。
 - Core 只接受 Adapter 为它在本 Session 中已启动的实例交付的事件：Target 与事件中的 adapter_id、adapter_instance_id、account_id 必须与该实例一致，否则拒绝并记诊断。event_id 由 Core 生成；Actor 的权限集合由 Core 按 §2.3 计算，Adapter 只提供平台给出的身份与平台权限；平台权限中未声明的名字由 Core 丢弃并记诊断。同一 `adapter_id` 下的同一平台账号只能有一个已启动实例（唯一入站 owner），由 Core 依据 `adapter.instance.start` 返回的 account_id 检查。
 - 接收游标由 Core 持久化：Adapter 每交付一条事件都附带交付后的不透明游标，Core 先写状态库，再接纳事件并应答；Adapter 收到应答后才处理下一条。没有事件时的游标变化（例如空闲轮次重建）使用单独的游标保存调用。实例启动时，Core 把已保存的游标交给 Adapter。
@@ -380,12 +381,13 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 - 组件工程中的 `plugin.yaml` 由作者编写，只写作者信息（D-78）：必填 `id`、`name`（显示名，英文源文案）、SemVer `version` 与 `source`；可选 `description`、`author`、`role`（缺省 `plugin`）、`icon`，以及下文按角色需要的字段；会写框架外数据时写 `prepare_effects: external`。`name` 与 `description` 可以在 `i18n/<locale>.json` 的顶层 `metadata` 中翻译（§5.4），WebUI、`list` 与 help 显示 name。
 - `alonabot build` 与 `pack` 在包内的 manifest 中补上构建信息：`manifest_version=1`、`protocol_min_major/protocol_max_major` 与 `required_capabilities`（由所链接的 SDK 决定）、`os/arch`、相对可执行文件路径 `entrypoint`、`config_version`（`config_schema.json` 的 `$version`，没有该文件时为 1）、`migration_mode`（按实际实现的迁移接口）与 `prepare_effects`（作者没写 external 时，按是否链接受管 SQLite 取 `managed_db` 或 `none`）。作者在工程的 `plugin.yaml` 中写这些字段时 `check` 报错。包校验严格解析包内 manifest，同时核对 `config_schema.json`、`adapter_config_schema.json`、注册描述、i18n 与 build-info；SDK 是编译依赖，不要求 Core 和插件 Go patch 相同，运行兼容以协议和能力协商为准。
 - 可安装的包统称组件，使用同一份 manifest，`role` 取 `plugin`（缺省）、`adapter`、`agent` 或 `webui`（D-59）。只有 `plugin` 是插件，可以安装任意多个；`adapter` 每个 `adapter_id` 至多安装一个，`agent` 与 `webui` 全局各至多安装一个，同类组件的替换见 §9.3。市场 ID 依次使用 `alonabot_plugin_`、`alonabot_adapter_`、`alonabot_agent_`、`alonabot_webui_` 前缀，其余部分与插件市场 ID 的规则相同。
-  - Adapter 另需 `adapter_id`（小写平台类型，规则同本地 ID），实例配置的 schema 写在包内的 `adapter_config_schema.json`（§5.5、§8），不得声明插件路由、HTTP、数据库或迁移。
+  - Adapter 另需 `adapter_id`（小写平台类型，规则同本地 ID）。工程 `plugin.yaml` 与实例配置声明 `adapter_config_schema.json` 位于可导入的 Adapter 包目录（§5.5、§8，D-134）；`build`/`pack` 从该目录读取资源，构建调用 `sdk.RunAdapter` 的 cmd 薄入口，归档内的 manifest 与实例声明仍放在根目录。Adapter 不得声明插件路由、HTTP、数据库或迁移。
   - Agent 的声明与插件相同，可以有路由、HTTP、数据库与 schedule；它额外承担 §13 的职责，并是 `@agent` 的解析目标（§3）。
   - WebUI 只含静态文件，没有进程、配置、数据库与路由：作者写 `id`、`name`、`version`、`role`、`source`、静态根目录 `assets`（包内相对目录，含 `index.html`）与 Admin API 主版本范围 `admin_api_min_major`/`admin_api_max_major`（§7.5）；`pack` 只补上 `manifest_version`，不写 `entrypoint`、协议主版本、`required_capabilities` 与 `config_version`。WebUI 与平台无关，`os/arch` 写 `any`，归档名为 `<id>-<version>-any.tar.gz`。
 - 任何角色都可以声明可选的 `icon`：包内图标文件的相对路径（§7.5）。插件可声明 `adapter_dependencies` 与 `plugin_dependencies`，语义见 §8。
 - `migration_mode` 取 `none/self/versioned`，由构建按代码中登记的迁移方式写入（§6.2）；`prepare_effects` 固定 `none/managed_db/external`，描述配置回调以外的迁移/OnStart 在准备期的副作用。`managed_db` 仅表示写所属的受管 SQLite，候选可隔离；`external` 表示会写框架外的数据（例如插件自管的外部数据库），不具备自动回退承诺，按 §6.3 的维护门槛更新。包内 manifest 缺失这两项或与实际不一致时拒绝安装与自动升级，不能把未知值解释成安全。它们是插件包静态声明，不是 WebUI 调参开关。
 - 命令、文本匹配与事件只在入口包的 `func New() *sdk.Plugin` 中对插件对象链式注册（D-79、D-114），生成器不扫描注册；`build` 检查并嵌入 manifest、`config_schema.json`、`i18n/`、Service Schema 与 Handler 的参数名（命令省略 `Args` 时使用，D-112），入口包必须声明 `func New() *sdk.Plugin`（缺少或签名不符时构建失败），配置 schema 只来自 `config_schema.json`（§5.1），重复 Handler/HTTP 路由失败。Schema/注册描述与 binary 来自同一构建，安装期检查能静态取得的 Schema/能力与自动注册项；实例方法显式注册的完整集合在本次启动 REGISTER 时校验，不要求静态推导任意 Go 控制流或重复手写整张路由表。最终路由在该 Session 固定，Schema/能力必须与包资源一致；Go 与 protoc 的版本已由 T-01 锁定，见 docs/development.md。
+- Adapter 的生成按工程 manifest 的 `role: adapter` 识别，在可导入的 Adapter 包中生成资源登记，嵌入工程 `plugin.yaml` 原文与经检查的 `adapter_config_schema.json`；Adapter 使用 `sdk/adapter.Adapter`，不要求插件的 `New() *sdk.Plugin` 入口（D-134）。库模式按 §15.5 读取同一份生成资源。
 - 插件对象（D-114）：`sdk.NewPlugin()` 返回 `*sdk.Plugin`，路由的注册方法、`OnStart`/`OnReady`/`OnStop`/`OnConfigLoad` 的登记与数据库迁移的登记（§6.2）都作用在它上面；带类型参数的 `sdk.Serve`、`sdk.Subscribe` 与 `sdk.OnButton`（§3，D-122）的第一个参数是 `sdk.Registrar`，由 `*sdk.Plugin` 与 `*sdk.SubPlugin` 实现。注册在 `New()` 返回之前完成：同一回调登记两次由 `Collect` 报错；`sdk.Run` 开始之后调用注册或登记方法 panic，消息为英文。生成的正式入口调用 `sdk.Run(New())`；`New()` 可以被多次调用（例如测试），不得依赖包级的注册状态。
 - 结构体参数（D-115）：命令 Handler 在 `*sdk.Context` 之后或者是零到多个位置参数，或者恰好是一个结构体值，不能混用。结构体的规则：
   - 字段按声明顺序对应参数位置；必须全部导出，类型为位置参数支持的类型或其指针，不能是结构体、内嵌字段或其他类型，否则 `Collect` 报错并指明字段。
@@ -660,7 +662,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 每个开发组件先按 `alonabot build` 构建到 `<data_dir>/dev/bin/`，再按 manifest 的 `role` 运行：插件、Adapter 与 Agent 以独立进程运行，进程、隔离与有限重启和已安装的组件相同；WebUI 以该目录的 `assets` 为静态根目录，代替已安装的 WebUI，按请求读取文件，不经安装与签名（Admin API 主版本检查照常进行）。构建失败或同一 ID、adapter_id 与已安装的包冲突时，`run` 在启动任何组件前报错退出。
 - 开发组件的规则（`alonabot run` 与库模式 §15.5 相同）：
   - Core 为它们创建 dev 来源的安装记录，不做来源、签名与归档摘要校验，Hello 的 build_digest 使用 Core 为本次运行生成的值；dev 来源的组件不能 update、rollback 或 uninstall。
-  - 它们使用固定代次 `dev`，不走候选与 Journal：配置取自 `<data_dir>/plugins/<id>/config.json`（缺失时为空对象），每次启动经迁移、补值与校验后直接生效（§5.2、§5.5）。WebUI 或 CLI 修改开发组件的配置时，校验通过后写回该文件并重启该组件。受管 SQLite 为 `<data_dir>/plugins/<id>/dev.sqlite`，不复制、不回退。按钮 token 因代次固定，重启后仍然有效。
+  - 它们使用固定代次 `dev:<组件 ID>`（D-134），组件 ID 为插件 ID 或 Adapter 包的 ID；代次 ID 全局唯一，状态库结构保持不变。不走候选与 Journal：配置取自 `<data_dir>/plugins/<id>/config.json`（缺失时为空对象），每次启动经迁移、补值与校验后直接生效（§5.2、§5.5）。WebUI 或 CLI 修改开发组件的配置时，校验通过后写回该文件并重启该组件。受管 SQLite 为 `<data_dir>/plugins/<id>/dev.sqlite`，不复制、不回退。按钮 token 因代次固定，重启后仍然有效。
   - 开发中的 Adapter 的实例与已安装的 Adapter 一样写在 `core_config.json` 的 `adapters` 中。
   - 日志级别缺省为 debug（§14.3）。
 - `--reload` 时每 `DEV_RELOAD_POLL`（§16）用标准库轮询每个组件目录中的 `.go` 文件、`//go:embed` 引用的文件、`go.mod`、`go.sum`、`plugin.yaml`、`config_schema.json`、`adapter_config_schema.json` 与 `i18n/`（排除数据目录、vendor、以 `.` 或 `_` 开头的目录与 testdata），以及该组件的配置（插件的 `config.json`，Adapter 在 `core_config.json` 中的实例）：
@@ -685,7 +687,8 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
   ```
 
 - `alonabot.Start(ctx, opts...)` 使用与 `Run` 相同的选项与装配，在全部已启用的包与开发组件激活后返回句柄 `*alonabot.Core`；任一组件在激活前失败时，停止已启动的部分并返回错误。ctx 取消时按 §4.2 停止，句柄的 `Wait()` 等待停止完成，返回与 `Run` 相同的错误。`Run` 等于 `Start` 后等待 SIGINT/SIGTERM 再停止；`Start` 不处理信号，供把 Core 嵌入其他 Go 服务与插件测试套件（§17）使用。同一数据目录仍只能运行一个 Core。
-- 组件的 manifest、schema 与 i18n 资源取自 `alonabot build` 生成并嵌入的副本。同一插件 ID 或 adapter_id 被登记两次，或与已安装的包相同时，`Start` 在启动任何组件前返回错误，不以后登记的覆盖。登记的组件按 §15.4 的开发组件规则运行，只是由本进程的 goroutine 经 loopback TCP 连接 Core，握手、Bootstrap、注册、激活、调用与停止都与独立进程相同；已安装的其他包照常以独立进程运行。与独立进程的区别只有两点：
+- 组件的 schema 与 i18n 资源取自构建生成并嵌入的副本；生成器将工程入口目录的 `plugin.yaml` 原文嵌入 `sdk.Generated.Manifest`，库模式用 `manifest.ParseProject` 解析其 `id`、`role` 与 `adapter_id`（D-134）。Adapter 的工程入口是可导入的 Adapter 包，身份与实例声明均来自该包内资源，与 cmd 薄入口运行的独立进程共用一份身份。
+- 同一插件 ID 或 adapter_id 被登记两次，或与已安装的包相同时，`Start` 在启动任何组件前返回错误，不以后登记的覆盖。登记的组件按 §15.4 的开发组件规则运行，使用全局唯一的固定代次 `dev:<组件 ID>`，状态库结构不变，按钮 token 在重启后仍有效；由本进程的 goroutine 经 loopback TCP 连接 Core，握手、Bootstrap、注册、激活、调用与停止都与独立进程相同；已安装的其他包照常以独立进程运行。与独立进程的区别只有两点：
   - 没有进程隔离：SDK 未捕获的 panic 会使整个进程退出，也不执行有限重启；
   - Core 无法强制结束 goroutine：停止预算到期后组件仍未退出时记 ERROR，`Run` 返回错误。
 - 库模式没有热部署，需要热部署时用 `alonabot run --reload`（§15.4）。
