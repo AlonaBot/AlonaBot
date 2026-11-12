@@ -46,8 +46,15 @@ func (p *Policy) CheckSend(ctx context.Context, pluginID string, inv *router.Inv
 
 // CheckInstance 按同插件可信在途事件的原实例豁免或当前实例许可准入账号动作。
 func (p *Policy) CheckInstance(ctx context.Context, pluginID string, inv *router.Invocation, instanceID string) *pb.ErrorInfo {
-	if inv != nil && inv.PluginID == pluginID && inv.DefaultTarget != nil && inv.DefaultTarget.GetAdapterInstanceId() == instanceID {
-		return nil
+	if inv != nil && inv.PluginID == pluginID {
+		// bot.online 等事件没有 Target，原实例身份仍保存在可信事件上。
+		originalInstanceID := inv.Event.GetAdapterInstanceId()
+		if originalInstanceID == "" {
+			originalInstanceID = inv.DefaultTarget.GetAdapterInstanceId()
+		}
+		if originalInstanceID != "" && originalInstanceID == instanceID {
+			return nil
+		}
 	}
 	return p.checkInstance(ctx, pluginID, instanceID)
 }
