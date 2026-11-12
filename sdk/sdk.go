@@ -232,6 +232,9 @@ func Collect(root Root) (*Registration, error) {
 	httpRoutes := &pb.Register{}
 	appendHTTPRoutes(httpRoutes, routes.routes)
 	for _, route := range httpRoutes.Routes {
+		if spec := route.GetHttp(); spec.GetAuthMode() == pb.HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN {
+			routes.errs = append(routes.errs, fmt.Errorf("HTTP route %s %s: platform token authentication is only available to adapters", spec.GetMethod(), spec.GetPath()))
+		}
 		if events.seen[route.GetRouteId()] {
 			routes.errs = append(routes.errs, fmt.Errorf("HTTP route %q conflicts with another route", route.GetRouteId()))
 		}
