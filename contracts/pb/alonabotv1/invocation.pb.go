@@ -73,6 +73,56 @@ func (Propagation) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_invocation_proto_rawDescGZIP(), []int{0}
 }
 
+// SendOperation 标明本次出站操作是发送还是编辑。
+type SendOperation int32
+
+const (
+	SendOperation_SEND_OPERATION_UNSPECIFIED SendOperation = 0
+	SendOperation_SEND_OPERATION_SEND        SendOperation = 1
+	SendOperation_SEND_OPERATION_EDIT        SendOperation = 2
+)
+
+// Enum value maps for SendOperation.
+var (
+	SendOperation_name = map[int32]string{
+		0: "SEND_OPERATION_UNSPECIFIED",
+		1: "SEND_OPERATION_SEND",
+		2: "SEND_OPERATION_EDIT",
+	}
+	SendOperation_value = map[string]int32{
+		"SEND_OPERATION_UNSPECIFIED": 0,
+		"SEND_OPERATION_SEND":        1,
+		"SEND_OPERATION_EDIT":        2,
+	}
+)
+
+func (x SendOperation) Enum() *SendOperation {
+	p := new(SendOperation)
+	*p = x
+	return p
+}
+
+func (x SendOperation) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SendOperation) Descriptor() protoreflect.EnumDescriptor {
+	return file_alonabot_v1_invocation_proto_enumTypes[1].Descriptor()
+}
+
+func (SendOperation) Type() protoreflect.EnumType {
+	return &file_alonabot_v1_invocation_proto_enumTypes[1]
+}
+
+func (x SendOperation) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SendOperation.Descriptor instead.
+func (SendOperation) EnumDescriptor() ([]byte, []int) {
+	return file_alonabot_v1_invocation_proto_rawDescGZIP(), []int{1}
+}
+
 // InvocationContext 描述 Core 记录并下发的可信上下文；插件回传的同名值不能覆盖 Core 记录。trace 取 Envelope.trace_id。
 type InvocationContext struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -767,9 +817,13 @@ type BeforeSendRequest struct {
 	// 本次发送的目标。
 	Target *Target `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
 	// 待发送的消息链。
-	Chain         *MessageChain `protobuf:"bytes,4,opt,name=chain,proto3" json:"chain,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Chain *MessageChain `protobuf:"bytes,4,opt,name=chain,proto3" json:"chain,omitempty"`
+	// 本次操作。
+	Operation SendOperation `protobuf:"varint,5,opt,name=operation,proto3,enum=alonabot.v1.SendOperation" json:"operation,omitempty"`
+	// 编辑时被修改的平台消息 ID；发送时 absent。
+	EditedPlatformMessageId *string `protobuf:"bytes,6,opt,name=edited_platform_message_id,json=editedPlatformMessageId,proto3,oneof" json:"edited_platform_message_id,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *BeforeSendRequest) Reset() {
@@ -828,6 +882,20 @@ func (x *BeforeSendRequest) GetChain() *MessageChain {
 		return x.Chain
 	}
 	return nil
+}
+
+func (x *BeforeSendRequest) GetOperation() SendOperation {
+	if x != nil {
+		return x.Operation
+	}
+	return SendOperation_SEND_OPERATION_UNSPECIFIED
+}
+
+func (x *BeforeSendRequest) GetEditedPlatformMessageId() string {
+	if x != nil && x.EditedPlatformMessageId != nil {
+		return *x.EditedPlatformMessageId
+	}
+	return ""
 }
 
 // BeforeSendResult 只能修改 Chain；拒绝通过 Envelope.error。修改后的 Chain 重新完整预检。
@@ -890,9 +958,13 @@ type AfterSendRequest struct {
 	// 已确认的发送结果，可能是部分成功。
 	Result *SendResult `protobuf:"bytes,5,opt,name=result,proto3" json:"result,omitempty"`
 	// 发送失败时的错误；与 result 可以并存。
-	Error         *ErrorInfo `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Error *ErrorInfo `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
+	// 本次操作。
+	Operation SendOperation `protobuf:"varint,7,opt,name=operation,proto3,enum=alonabot.v1.SendOperation" json:"operation,omitempty"`
+	// 编辑时被修改的平台消息 ID；发送时 absent。
+	EditedPlatformMessageId *string `protobuf:"bytes,8,opt,name=edited_platform_message_id,json=editedPlatformMessageId,proto3,oneof" json:"edited_platform_message_id,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *AfterSendRequest) Reset() {
@@ -965,6 +1037,20 @@ func (x *AfterSendRequest) GetError() *ErrorInfo {
 		return x.Error
 	}
 	return nil
+}
+
+func (x *AfterSendRequest) GetOperation() SendOperation {
+	if x != nil {
+		return x.Operation
+	}
+	return SendOperation_SEND_OPERATION_UNSPECIFIED
+}
+
+func (x *AfterSendRequest) GetEditedPlatformMessageId() string {
+	if x != nil && x.EditedPlatformMessageId != nil {
+		return *x.EditedPlatformMessageId
+	}
+	return ""
 }
 
 // AfterSendResult 描述 AfterSend 的结果：只返回成功或 Envelope.error，不能修改 SendResult。
@@ -1055,26 +1141,36 @@ const file_alonabot_v1_invocation_proto_rawDesc = "" +
 	"\x05event\x18\x03 \x01(\v2\x12.alonabot.v1.EventR\x05event\"\x8c\x01\n" +
 	"\x0ePreEventResult\x12>\n" +
 	"\revent_payload\x18\x01 \x01(\v2\x19.alonabot.v1.EventPayloadR\feventPayload\x12:\n" +
-	"\vpropagation\x18\x02 \x01(\x0e2\x18.alonabot.v1.PropagationR\vpropagation\"\xc6\x01\n" +
+	"\vpropagation\x18\x02 \x01(\x0e2\x18.alonabot.v1.PropagationR\vpropagation\"\xe1\x02\n" +
 	"\x11BeforeSendRequest\x12\x19\n" +
 	"\broute_id\x18\x01 \x01(\tR\arouteId\x128\n" +
 	"\acontext\x18\x02 \x01(\v2\x1e.alonabot.v1.InvocationContextR\acontext\x12+\n" +
 	"\x06target\x18\x03 \x01(\v2\x13.alonabot.v1.TargetR\x06target\x12/\n" +
-	"\x05chain\x18\x04 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\"C\n" +
+	"\x05chain\x18\x04 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\x128\n" +
+	"\toperation\x18\x05 \x01(\x0e2\x1a.alonabot.v1.SendOperationR\toperation\x12@\n" +
+	"\x1aedited_platform_message_id\x18\x06 \x01(\tH\x00R\x17editedPlatformMessageId\x88\x01\x01B\x1d\n" +
+	"\x1b_edited_platform_message_id\"C\n" +
 	"\x10BeforeSendResult\x12/\n" +
-	"\x05chain\x18\x01 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\"\xa4\x02\n" +
+	"\x05chain\x18\x01 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\"\xbf\x03\n" +
 	"\x10AfterSendRequest\x12\x19\n" +
 	"\broute_id\x18\x01 \x01(\tR\arouteId\x128\n" +
 	"\acontext\x18\x02 \x01(\v2\x1e.alonabot.v1.InvocationContextR\acontext\x12+\n" +
 	"\x06target\x18\x03 \x01(\v2\x13.alonabot.v1.TargetR\x06target\x12/\n" +
 	"\x05chain\x18\x04 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\x12/\n" +
 	"\x06result\x18\x05 \x01(\v2\x17.alonabot.v1.SendResultR\x06result\x12,\n" +
-	"\x05error\x18\x06 \x01(\v2\x16.alonabot.v1.ErrorInfoR\x05error\"\x11\n" +
+	"\x05error\x18\x06 \x01(\v2\x16.alonabot.v1.ErrorInfoR\x05error\x128\n" +
+	"\toperation\x18\a \x01(\x0e2\x1a.alonabot.v1.SendOperationR\toperation\x12@\n" +
+	"\x1aedited_platform_message_id\x18\b \x01(\tH\x00R\x17editedPlatformMessageId\x88\x01\x01B\x1d\n" +
+	"\x1b_edited_platform_message_id\"\x11\n" +
 	"\x0fAfterSendResult*Z\n" +
 	"\vPropagation\x12\x1b\n" +
 	"\x17PROPAGATION_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14PROPAGATION_CONTINUE\x10\x01\x12\x14\n" +
-	"\x10PROPAGATION_STOP\x10\x02B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
+	"\x10PROPAGATION_STOP\x10\x02*a\n" +
+	"\rSendOperation\x12\x1e\n" +
+	"\x1aSEND_OPERATION_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13SEND_OPERATION_SEND\x10\x01\x12\x17\n" +
+	"\x13SEND_OPERATION_EDIT\x10\x02B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
 
 var (
 	file_alonabot_v1_invocation_proto_rawDescOnce sync.Once
@@ -1088,63 +1184,66 @@ func file_alonabot_v1_invocation_proto_rawDescGZIP() []byte {
 	return file_alonabot_v1_invocation_proto_rawDescData
 }
 
-var file_alonabot_v1_invocation_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_alonabot_v1_invocation_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_alonabot_v1_invocation_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_alonabot_v1_invocation_proto_goTypes = []any{
 	(Propagation)(0),          // 0: alonabot.v1.Propagation
-	(*InvocationContext)(nil), // 1: alonabot.v1.InvocationContext
-	(*HandlerRequest)(nil),    // 2: alonabot.v1.HandlerRequest
-	(*CommandInvocation)(nil), // 3: alonabot.v1.CommandInvocation
-	(*ArgValue)(nil),          // 4: alonabot.v1.ArgValue
-	(*ServiceInvocation)(nil), // 5: alonabot.v1.ServiceInvocation
-	(*HandlerOutcome)(nil),    // 6: alonabot.v1.HandlerOutcome
-	(*PreEventRequest)(nil),   // 7: alonabot.v1.PreEventRequest
-	(*PreEventResult)(nil),    // 8: alonabot.v1.PreEventResult
-	(*BeforeSendRequest)(nil), // 9: alonabot.v1.BeforeSendRequest
-	(*BeforeSendResult)(nil),  // 10: alonabot.v1.BeforeSendResult
-	(*AfterSendRequest)(nil),  // 11: alonabot.v1.AfterSendRequest
-	(*AfterSendResult)(nil),   // 12: alonabot.v1.AfterSendResult
-	(*Actor)(nil),             // 13: alonabot.v1.Actor
-	(*Target)(nil),            // 14: alonabot.v1.Target
-	(*Event)(nil),             // 15: alonabot.v1.Event
-	(*ImageSegment)(nil),      // 16: alonabot.v1.ImageSegment
-	(*MessageChain)(nil),      // 17: alonabot.v1.MessageChain
-	(PayloadEncoding)(0),      // 18: alonabot.v1.PayloadEncoding
-	(*EventPayload)(nil),      // 19: alonabot.v1.EventPayload
-	(*SendResult)(nil),        // 20: alonabot.v1.SendResult
-	(*ErrorInfo)(nil),         // 21: alonabot.v1.ErrorInfo
+	(SendOperation)(0),        // 1: alonabot.v1.SendOperation
+	(*InvocationContext)(nil), // 2: alonabot.v1.InvocationContext
+	(*HandlerRequest)(nil),    // 3: alonabot.v1.HandlerRequest
+	(*CommandInvocation)(nil), // 4: alonabot.v1.CommandInvocation
+	(*ArgValue)(nil),          // 5: alonabot.v1.ArgValue
+	(*ServiceInvocation)(nil), // 6: alonabot.v1.ServiceInvocation
+	(*HandlerOutcome)(nil),    // 7: alonabot.v1.HandlerOutcome
+	(*PreEventRequest)(nil),   // 8: alonabot.v1.PreEventRequest
+	(*PreEventResult)(nil),    // 9: alonabot.v1.PreEventResult
+	(*BeforeSendRequest)(nil), // 10: alonabot.v1.BeforeSendRequest
+	(*BeforeSendResult)(nil),  // 11: alonabot.v1.BeforeSendResult
+	(*AfterSendRequest)(nil),  // 12: alonabot.v1.AfterSendRequest
+	(*AfterSendResult)(nil),   // 13: alonabot.v1.AfterSendResult
+	(*Actor)(nil),             // 14: alonabot.v1.Actor
+	(*Target)(nil),            // 15: alonabot.v1.Target
+	(*Event)(nil),             // 16: alonabot.v1.Event
+	(*ImageSegment)(nil),      // 17: alonabot.v1.ImageSegment
+	(*MessageChain)(nil),      // 18: alonabot.v1.MessageChain
+	(PayloadEncoding)(0),      // 19: alonabot.v1.PayloadEncoding
+	(*EventPayload)(nil),      // 20: alonabot.v1.EventPayload
+	(*SendResult)(nil),        // 21: alonabot.v1.SendResult
+	(*ErrorInfo)(nil),         // 22: alonabot.v1.ErrorInfo
 }
 var file_alonabot_v1_invocation_proto_depIdxs = []int32{
-	13, // 0: alonabot.v1.InvocationContext.actor:type_name -> alonabot.v1.Actor
-	14, // 1: alonabot.v1.InvocationContext.default_target:type_name -> alonabot.v1.Target
-	1,  // 2: alonabot.v1.HandlerRequest.context:type_name -> alonabot.v1.InvocationContext
-	15, // 3: alonabot.v1.HandlerRequest.event:type_name -> alonabot.v1.Event
-	3,  // 4: alonabot.v1.HandlerRequest.command:type_name -> alonabot.v1.CommandInvocation
-	4,  // 5: alonabot.v1.CommandInvocation.args:type_name -> alonabot.v1.ArgValue
-	16, // 6: alonabot.v1.ArgValue.image:type_name -> alonabot.v1.ImageSegment
-	17, // 7: alonabot.v1.ArgValue.message:type_name -> alonabot.v1.MessageChain
-	1,  // 8: alonabot.v1.ServiceInvocation.context:type_name -> alonabot.v1.InvocationContext
-	18, // 9: alonabot.v1.ServiceInvocation.encoding:type_name -> alonabot.v1.PayloadEncoding
+	14, // 0: alonabot.v1.InvocationContext.actor:type_name -> alonabot.v1.Actor
+	15, // 1: alonabot.v1.InvocationContext.default_target:type_name -> alonabot.v1.Target
+	2,  // 2: alonabot.v1.HandlerRequest.context:type_name -> alonabot.v1.InvocationContext
+	16, // 3: alonabot.v1.HandlerRequest.event:type_name -> alonabot.v1.Event
+	4,  // 4: alonabot.v1.HandlerRequest.command:type_name -> alonabot.v1.CommandInvocation
+	5,  // 5: alonabot.v1.CommandInvocation.args:type_name -> alonabot.v1.ArgValue
+	17, // 6: alonabot.v1.ArgValue.image:type_name -> alonabot.v1.ImageSegment
+	18, // 7: alonabot.v1.ArgValue.message:type_name -> alonabot.v1.MessageChain
+	2,  // 8: alonabot.v1.ServiceInvocation.context:type_name -> alonabot.v1.InvocationContext
+	19, // 9: alonabot.v1.ServiceInvocation.encoding:type_name -> alonabot.v1.PayloadEncoding
 	0,  // 10: alonabot.v1.HandlerOutcome.propagation:type_name -> alonabot.v1.Propagation
-	17, // 11: alonabot.v1.HandlerOutcome.chain:type_name -> alonabot.v1.MessageChain
-	1,  // 12: alonabot.v1.PreEventRequest.context:type_name -> alonabot.v1.InvocationContext
-	15, // 13: alonabot.v1.PreEventRequest.event:type_name -> alonabot.v1.Event
-	19, // 14: alonabot.v1.PreEventResult.event_payload:type_name -> alonabot.v1.EventPayload
+	18, // 11: alonabot.v1.HandlerOutcome.chain:type_name -> alonabot.v1.MessageChain
+	2,  // 12: alonabot.v1.PreEventRequest.context:type_name -> alonabot.v1.InvocationContext
+	16, // 13: alonabot.v1.PreEventRequest.event:type_name -> alonabot.v1.Event
+	20, // 14: alonabot.v1.PreEventResult.event_payload:type_name -> alonabot.v1.EventPayload
 	0,  // 15: alonabot.v1.PreEventResult.propagation:type_name -> alonabot.v1.Propagation
-	1,  // 16: alonabot.v1.BeforeSendRequest.context:type_name -> alonabot.v1.InvocationContext
-	14, // 17: alonabot.v1.BeforeSendRequest.target:type_name -> alonabot.v1.Target
-	17, // 18: alonabot.v1.BeforeSendRequest.chain:type_name -> alonabot.v1.MessageChain
-	17, // 19: alonabot.v1.BeforeSendResult.chain:type_name -> alonabot.v1.MessageChain
-	1,  // 20: alonabot.v1.AfterSendRequest.context:type_name -> alonabot.v1.InvocationContext
-	14, // 21: alonabot.v1.AfterSendRequest.target:type_name -> alonabot.v1.Target
-	17, // 22: alonabot.v1.AfterSendRequest.chain:type_name -> alonabot.v1.MessageChain
-	20, // 23: alonabot.v1.AfterSendRequest.result:type_name -> alonabot.v1.SendResult
-	21, // 24: alonabot.v1.AfterSendRequest.error:type_name -> alonabot.v1.ErrorInfo
-	25, // [25:25] is the sub-list for method output_type
-	25, // [25:25] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	2,  // 16: alonabot.v1.BeforeSendRequest.context:type_name -> alonabot.v1.InvocationContext
+	15, // 17: alonabot.v1.BeforeSendRequest.target:type_name -> alonabot.v1.Target
+	18, // 18: alonabot.v1.BeforeSendRequest.chain:type_name -> alonabot.v1.MessageChain
+	1,  // 19: alonabot.v1.BeforeSendRequest.operation:type_name -> alonabot.v1.SendOperation
+	18, // 20: alonabot.v1.BeforeSendResult.chain:type_name -> alonabot.v1.MessageChain
+	2,  // 21: alonabot.v1.AfterSendRequest.context:type_name -> alonabot.v1.InvocationContext
+	15, // 22: alonabot.v1.AfterSendRequest.target:type_name -> alonabot.v1.Target
+	18, // 23: alonabot.v1.AfterSendRequest.chain:type_name -> alonabot.v1.MessageChain
+	21, // 24: alonabot.v1.AfterSendRequest.result:type_name -> alonabot.v1.SendResult
+	22, // 25: alonabot.v1.AfterSendRequest.error:type_name -> alonabot.v1.ErrorInfo
+	1,  // 26: alonabot.v1.AfterSendRequest.operation:type_name -> alonabot.v1.SendOperation
+	27, // [27:27] is the sub-list for method output_type
+	27, // [27:27] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_invocation_proto_init() }
@@ -1166,12 +1265,14 @@ func file_alonabot_v1_invocation_proto_init() {
 		(*ArgValue_Image)(nil),
 		(*ArgValue_Message)(nil),
 	}
+	file_alonabot_v1_invocation_proto_msgTypes[8].OneofWrappers = []any{}
+	file_alonabot_v1_invocation_proto_msgTypes[10].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_invocation_proto_rawDesc), len(file_alonabot_v1_invocation_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,

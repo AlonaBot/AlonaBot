@@ -63,6 +63,39 @@ func TestButtonCoreTokenFieldNumber(t *testing.T) {
 	}
 }
 
+// TestOutboundHookFieldNumbers 固定出站操作字段的编号、类型和编辑消息 ID 的 presence。
+func TestOutboundHookFieldNumbers(t *testing.T) {
+	for _, c := range []struct {
+		message proto.Message
+		names   []protoreflect.Name
+	}{
+		{&pb.BeforeSendRequest{}, []protoreflect.Name{"route_id", "context", "target", "chain", "operation", "edited_platform_message_id"}},
+		{&pb.AfterSendRequest{}, []protoreflect.Name{"route_id", "context", "target", "chain", "result", "error", "operation", "edited_platform_message_id"}},
+	} {
+		d := c.message.ProtoReflect().Descriptor()
+		fields := d.Fields()
+		if fields.Len() != len(c.names) {
+			t.Fatalf("%s field count = %d, want %d", d.Name(), fields.Len(), len(c.names))
+		}
+		for i, name := range c.names {
+			f := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+			if f == nil || f.Name() != name || f.IsList() {
+				t.Fatalf("%s field %d = %v, want singular %s", d.Name(), i+1, f, name)
+			}
+			switch name {
+			case "operation":
+				if f.Kind() != protoreflect.EnumKind || f.Enum().FullName() != "alonabot.v1.SendOperation" || f.HasPresence() || f.ContainingOneof() != nil {
+					t.Errorf("%s.operation = %v, want SendOperation without presence", d.Name(), f)
+				}
+			case "edited_platform_message_id":
+				if f.Kind() != protoreflect.StringKind || !f.HasOptionalKeyword() || !f.HasPresence() || f.ContainingOneof() == nil || !f.ContainingOneof().IsSynthetic() {
+					t.Errorf("%s.edited_platform_message_id = %v, want optional string", d.Name(), f)
+				}
+			}
+		}
+	}
+}
+
 // TestExtensionFieldNumbers 固定 extension 分支与载荷的编号、类型和 oneof 归属。
 func TestExtensionFieldNumbers(t *testing.T) {
 	field := (&pb.Segment{}).ProtoReflect().Descriptor().Fields().ByNumber(9)
@@ -108,6 +141,7 @@ func TestEnumValues(t *testing.T) {
 		{pb.AdapterInstanceState(0).Descriptor(), "ADAPTER_INSTANCE_STATE_", []string{"UNSPECIFIED", "FAILED"}},
 		{pb.BotOfflineReason(0).Descriptor(), "BOT_OFFLINE_REASON_", []string{"UNSPECIFIED", "STOPPED", "ADAPTER_EXITED", "INSTANCE_FAILED"}},
 		{pb.SendStatus(0).Descriptor(), "SEND_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "PARTIAL", "REJECTED", "UNKNOWN"}},
+		{pb.SendOperation(0).Descriptor(), "SEND_OPERATION_", []string{"UNSPECIFIED", "SEND", "EDIT"}},
 		{pb.ChatType(0).Descriptor(), "CHAT_TYPE_", []string{"UNSPECIFIED", "PRIVATE", "GROUP", "CHANNEL"}},
 		{pb.PartStatus(0).Descriptor(), "PART_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "REJECTED", "UNKNOWN", "NOT_ATTEMPTED"}},
 		// MESSAGE-MODEL §3。

@@ -123,6 +123,13 @@ message PreEventResult {
   Propagation propagation = 2;
 }
 
+// SendOperation 标明本次出站操作是发送还是编辑。
+enum SendOperation {
+  SEND_OPERATION_UNSPECIFIED = 0;
+  SEND_OPERATION_SEND = 1;
+  SEND_OPERATION_EDIT = 2;
+}
+
 // BeforeSendRequest 描述 BeforeSend Hook 的请求。
 message BeforeSendRequest {
   // 被调用的 Hook 路由 ID。
@@ -133,6 +140,10 @@ message BeforeSendRequest {
   Target target = 3;
   // 待发送的消息链。
   MessageChain chain = 4;
+  // 本次操作。
+  SendOperation operation = 5;
+  // 编辑时被修改的平台消息 ID；发送时 absent。
+  optional string edited_platform_message_id = 6;
 }
 
 // BeforeSendResult 只能修改 Chain；拒绝通过 Envelope.error。修改后的 Chain 重新完整预检。
@@ -155,6 +166,10 @@ message AfterSendRequest {
   SendResult result = 5;
   // 发送失败时的错误；与 result 可以并存。
   ErrorInfo error = 6;
+  // 本次操作。
+  SendOperation operation = 7;
+  // 编辑时被修改的平台消息 ID；发送时 absent。
+  optional string edited_platform_message_id = 8;
 }
 
 // AfterSendResult 描述 AfterSend 的结果：只返回成功或 Envelope.error，不能修改 SendResult。

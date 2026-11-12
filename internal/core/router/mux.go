@@ -37,6 +37,7 @@ type Invocation struct {
 	PluginID      string
 	Event         *pb.Event
 	DefaultTarget *pb.Target
+	SendForbidden bool // 出站 Hook 调用为 true；只由 Core 设置
 }
 
 // ServiceFunc 接收固定 Caller 与经过 Session 校验的插件请求。

@@ -25,6 +25,9 @@ func (s *Service) Edit(ctx context.Context, caller router.Caller, in *wire.Inbou
 	reject := func(code pb.ErrorCode, message string) wire.Response {
 		return editRejected(target, &pb.ErrorInfo{Code: code, SafeMessage: message})
 	}
+	if invocation != nil && invocation.SendForbidden {
+		return reject(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "editing is forbidden in outbound hooks")
+	}
 	request := &pb.EditRequest{}
 	if in.Payload.Encoding != pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF || in.Payload.SchemaID != validate.SchemaID(request) || in.Payload.SchemaVersion != schemaVersion {
 		return reject(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "expected EditRequest protobuf schema version 1")
@@ -46,22 +49,8 @@ func (s *Service) Edit(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if request.PlatformMessageId == "" {
 		return reject(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "platform_message_id is empty")
 	}
-	if err := validate.Chain(request.Chain); err != nil {
-		return reject(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
-	}
-	texts := 0
-	for _, segment := range request.Chain.Segments {
-		switch segment.GetData().(type) {
-		case *pb.Segment_Text:
-			texts++
-		case *pb.Segment_Buttons:
-			// buttons 的数量和内容已由 validate.Chain 校验。
-		default:
-			return reject(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "edit chain allows only text and buttons segments")
-		}
-	}
-	if texts != 1 {
-		return reject(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "edit chain requires exactly one text segment")
+	if safe := checkEditChain(request.Chain); safe != nil {
+		return editRejected(target, safe)
 	}
 	// 4. 校验实例身份绑定与显式声明的编辑能力。
 	instance, ok := s.adapters.Get(target.GetAdapterInstanceId())
@@ -82,16 +71,55 @@ func (s *Service) Edit(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if !supported || !ok {
 		return reject(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support message editing")
 	}
-	// 5. 复用发送的签发入口，为本次编辑的按钮生成新 token。
+	// 5. 改写后仍须符合编辑片段限制，拒绝时不签发按钮、不调用平台。
+	if s.hooks != nil {
+		chain, safe := s.hooks.BeforeSend(ctx, pb.SendOperation_SEND_OPERATION_EDIT, request.PlatformMessageId, target, request.Chain, invocation)
+		if safe != nil {
+			return editRejected(target, safe)
+		}
+		if chain != nil {
+			request.Chain = chain
+			if safe := checkEditChain(chain); safe != nil {
+				return editRejected(target, safe)
+			}
+		}
+	}
+	// 6. 复用发送的签发入口，为本次编辑的按钮生成新 token。
 	if s.issue != nil {
 		if err := s.issue(ctx, caller, target, request.Chain); err != nil {
 			return editRejected(target, rejectError(target, err).Err)
 		}
 	}
-	// 6. 执行唯一一次编辑，并完整返回平台回执与错误。
-	// shortcut: 编辑前后尚无出站 Hook，接入时以 edit 和 platform_message_id 标明操作并沿用 Send 的调用位置。
+	// 7. 执行唯一一次编辑，观察 Hook 的结果不改变平台回执与错误。
 	result, safe := editor.Edit(ctx, target, request.PlatformMessageId, request.Chain)
+	if s.hooks != nil {
+		s.hooks.AfterSend(ctx, pb.SendOperation_SEND_OPERATION_EDIT, request.PlatformMessageId, target, request.Chain, result, safe, invocation)
+	}
 	return response(result, safe)
+}
+
+func checkEditChain(chain *pb.MessageChain) *pb.ErrorInfo {
+	invalid := func(message string) *pb.ErrorInfo {
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, SafeMessage: message}
+	}
+	if err := validate.Chain(chain); err != nil {
+		return invalid(err.Error())
+	}
+	texts := 0
+	for _, segment := range chain.Segments {
+		switch segment.GetData().(type) {
+		case *pb.Segment_Text:
+			texts++
+		case *pb.Segment_Buttons:
+			// buttons 的数量和内容已由 validate.Chain 校验。
+		default:
+			return invalid("edit chain allows only text and buttons segments")
+		}
+	}
+	if texts != 1 {
+		return invalid("edit chain requires exactly one text segment")
+	}
+	return nil
 }
 
 func editRejected(target *pb.Target, safe *pb.ErrorInfo) wire.Response {

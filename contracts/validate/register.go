@@ -138,6 +138,15 @@ func Register(r *pb.Register) error {
 			if err := registerSchedule(route); err != nil {
 				return err
 			}
+		case pb.RouteKind_ROUTE_KIND_HOOK:
+			switch route.GetHook().GetPhase() {
+			case pb.HookPhase_HOOK_PHASE_PRE_EVENT:
+				// 当前 HOOK 描述没有事件过滤字段，无法满足 PreEvent 恰好一项的约束。
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "pre-event hook route %q requires exactly one event_type_filter", route.GetRouteId())
+			case pb.HookPhase_HOOK_PHASE_BEFORE_SEND, pb.HookPhase_HOOK_PHASE_AFTER_SEND:
+			default:
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "hook route %q has an invalid phase", route.GetRouteId())
+			}
 		case pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION:
 			subscription := route.GetBusSubscription()
 			pluginID, eventName, ok := strings.Cut(subscription.GetEventName(), "/")

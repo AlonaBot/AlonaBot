@@ -82,6 +82,7 @@ type Router struct {
 	prefixes    func(adapterInstanceID string) []string
 	buttons     func(context.Context, *pb.Event) (string, string, error)
 	policy      CommandPolicy
+	preEvent    func(context.Context, *pb.Event) (*pb.EventPayload, bool, error)
 	matches     map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
 	queue       []queuedEvent
 	concurrency int
@@ -108,7 +109,7 @@ func New(opt Options) *Router {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Router{
-		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy, buttons: opt.Buttons,
+		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy, buttons: opt.Buttons, preEvent: opt.PreEvent,
 		concurrency: opt.Concurrency, queueEvents: opt.QueueEvents, queueBytes: opt.QueueBytes, global: opt.Global,
 		ctx: ctx, cancel: cancel, drained: make(chan struct{}),
 		matches: make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
@@ -268,11 +269,24 @@ func (r *Router) dispatch(event *trustedEvent) {
 		actor.Permissions = slices.Compact(permissions)
 	}
 	ev = event.rebuild()
-	// 2. 命令层的 STOP 终止整条分发链；消费但继续的命令仍进入事件层。
+	// 2. 预处理只回写业务载荷；后继路由从原绑定重建可信字段。
+	if r.preEvent != nil {
+		payload, stop, err := r.preEvent(r.ctx, ev)
+		if err != nil {
+			slog.Warn("pre-event hook failed", "event_id", event.retained.GetEventId(), "error", err)
+			return
+		}
+		event.payload = payload
+		if stop {
+			return
+		}
+		ev = event.rebuild()
+	}
+	// 3. 命令层的 STOP 终止整条分发链；消费但继续的命令仍进入事件层。
 	if ev.GetEventType() == "message.created" && r.dispatchCommands(ev, event) {
 		return
 	}
-	// 3. 事件路由独立判断权限，拒绝当前候选后继续后继路由。
+	// 4. 事件路由独立判断权限，拒绝当前候选后继续后继路由。
 	if !buttonClick {
 		candidates = r.candidates(ev)
 	}
