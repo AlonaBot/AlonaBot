@@ -11,7 +11,7 @@
 | goal-119 | T-12.10 | Provider：Gemini 原生协议 | T-12.1 | 已完成（PR #127） |
 | goal-120 | T-12.11 | Provider：Ollama 原生协议 | T-12.1 | 已完成（PR #128） |
 | goal-134 | T-12.12 | Provider 改用官方 SDK | T-12.9、T-12.10、T-12.11 | 已完成（PR #134） |
-| goal-135 | T-12.13 | Provider 图片输入 | T-12.12 | 待派发 |
+| goal-135 | T-12.13 | Provider 图片输入 | T-12.12 | 已完成（PR #138） |
 | goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1、T-12.9、T-12.10、T-12.11 | 等待前置 |
 | goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-08.14、T-12.2 | 等待前置 |
 | goal-136 | T-12.14 | 对话中的图片输入 | T-04.8、T-12.2、T-12.13 | 等待前置 |
@@ -243,7 +243,7 @@ const OllamaChat Protocol = "ollama-chat"
 
 ### goal-135 · T-12.13 Provider 图片输入
 
-状态：待派发。前置 T-12.12（[PR #134](https://github.com/AlonaBot/AlonaBot/pull/134)，合并提交 `b679a15`）已合并。2026-11-10 按 D-132 编写，2026-11-11 审查者按 main `b679a15` 核对：openai 与 openai-compatible 的编码在 `chat.go` 的 `chatParams`（openai-go 的 `ChatCompletionNewParams`；带图片的 user 消息用 `openai.UserMessage` 的 part 数组形式，图片 part 用 `openai.ImageContentPart`、文本用 `openai.TextContentPart`）；openai-responses 在 `responses.go` 的 `responsesParams`（`responses.ResponseInputImageParam` 与 `ResponseInputTextParam`）；anthropic-messages 在 `anthropic.go` 的 `anthropicParams`（`anthropic.NewImageBlockBase64`）；gemini-generate-content 与 ollama-chat 仍为标准库，编码在 `gemini.go` 的 `geminiBody` 与 `ollama.go` 的 `ollamaBody`。四种 SDK 协议用 SDK 的参数类型表达图片，请求 JSON 与下文一致；SDK 没有对应字段时用它的额外字段机制。
+状态：已完成（[PR #138](https://github.com/AlonaBot/AlonaBot/pull/138)，合并提交 `9b3bb86`），证据见 TEST-MATRIX §3.2。合入的符号：`provider.Image{MediaType string; Data []byte}`、`Message.Images []Image`；Stream 发请求前校验 Images 只在 user 消息、MediaType 为 image/jpeg、image/png、image/gif 或 image/webp、Data 非空；六种协议把图片按顺序内联在同一条消息的文本之前。派发时：前置 T-12.12（[PR #134](https://github.com/AlonaBot/AlonaBot/pull/134)，合并提交 `b679a15`）已合并。2026-11-10 按 D-132 编写，2026-11-11 审查者按 main `b679a15` 核对：openai 与 openai-compatible 的编码在 `chat.go` 的 `chatParams`（openai-go 的 `ChatCompletionNewParams`；带图片的 user 消息用 `openai.UserMessage` 的 part 数组形式，图片 part 用 `openai.ImageContentPart`、文本用 `openai.TextContentPart`）；openai-responses 在 `responses.go` 的 `responsesParams`（`responses.ResponseInputImageParam` 与 `ResponseInputTextParam`）；anthropic-messages 在 `anthropic.go` 的 `anthropicParams`（`anthropic.NewImageBlockBase64`）；gemini-generate-content 与 ollama-chat 仍为标准库，编码在 `gemini.go` 的 `geminiBody` 与 `ollama.go` 的 `ollamaBody`。四种 SDK 协议用 SDK 的参数类型表达图片，请求 JSON 与下文一致；SDK 没有对应字段时用它的额外字段机制。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-135（切片 T-12.13：Provider 图片输入）。goal 目录 goal-135，分支 goal-135，worktree .worktrees/goal-135，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -413,7 +413,7 @@ agent
 
 ### goal-136 · T-12.14 对话中的图片输入
 
-状态：等待前置（T-04.8、T-12.2、T-12.13）。2026-11-10 按 D-132 编写。语句中 goal-59、goal-91、goal-135 提供的符号（Agent 的配置、一轮对话与会话条目、Agent 的数据库迁移、`sdk.OpenMedia`、入站 image 片段与 `message.MediaSource`、`provider.Image`）只写名字；合并后由审查者核对，再改为待派发。与 goal-83 同在第 14 波，Agent 配置的追加按[执行顺序 §3](../execution-order.md#3-共享文件与冲突规则)「`agent/` 的配置」一行处理。
+状态：等待前置（T-04.8、T-12.2）。T-12.13（[PR #138](https://github.com/AlonaBot/AlonaBot/pull/138)，合并提交 `9b3bb86`）已合并：`provider.Image{MediaType, Data}` 与 `Message.Images` 只出现在 user 消息，MediaType 限四种，不检查大小与张数。2026-11-10 按 D-132 编写。语句中 goal-59、goal-91、goal-135 提供的符号（Agent 的配置、一轮对话与会话条目、Agent 的数据库迁移、`sdk.OpenMedia`、入站 image 片段与 `message.MediaSource`、`provider.Image`）只写名字；合并后由审查者核对，再改为待派发。与 goal-83 同在第 14 波，Agent 配置的追加按[执行顺序 §3](../execution-order.md#3-共享文件与冲突规则)「`agent/` 的配置」一行处理。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-136（切片 T-12.14：对话中的图片输入）。goal 目录 goal-136，分支 goal-136，worktree .worktrees/goal-136，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
