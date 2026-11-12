@@ -42,7 +42,7 @@ func AppliedMigrations(ctx context.Context, db *gorm.DB) ([]uint32, error) {
 // Up 须使用传入的 tx，在事务内等待此单连接池的独立查询会自锁。
 func RunVersioned(ctx context.Context, db *gorm.DB, migrations []Migration) ([]uint32, error) {
 	// 1. 校验迁移列表，确保账本存在并读出已完成的 ID。
-	if _, err := CheckMigrators(versionedList(migrations)); err != nil {
+	if err := checkMigrations(migrations); err != nil {
 		return nil, err
 	}
 	q := db.WithContext(ctx)
@@ -76,9 +76,3 @@ func RunVersioned(ctx context.Context, db *gorm.DB, migrations []Migration) ([]u
 	}
 	return ran, nil
 }
-
-// versionedList 把迁移列表适配为 VersionedMigrator，以复用 CheckMigrators 的校验。
-type versionedList []Migration
-
-// Migrations 返回列表本身。
-func (v versionedList) Migrations() []Migration { return v }

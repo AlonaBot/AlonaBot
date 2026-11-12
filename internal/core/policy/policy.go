@@ -17,9 +17,10 @@ import (
 
 // Policy 持有内存中的管理员列表，并逐次读取状态库中的命令策略与发信许可。
 type Policy struct {
-	store    *state.Store
-	adminsMu sync.RWMutex // 保护管理员列表的整体替换与读取
-	admins   []Admin
+	store           *state.Store
+	adminsMu        sync.RWMutex // 保护管理员列表的整体替换与读取
+	admins          []Admin
+	commandsChanged func() // 开始处理命令策略前装配一次，此后只读。
 }
 
 // New 创建使用指定状态库的策略，初始管理员列表为空。

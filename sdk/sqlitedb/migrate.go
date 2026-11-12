@@ -5,18 +5,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
 )
-
-// SelfMigrator 由自行管理版本与幂等迁移的根插件实现。
-type SelfMigrator interface {
-	// Migrate 将 db 迁移到本版本需要的结构，须可重复执行。
-	Migrate(ctx context.Context, db *sql.DB) error
-}
 
 // Migration 描述一个迁移步骤；ID 非零、唯一、严格递增，发布后保持含义不变。
 type Migration struct {
@@ -25,46 +21,8 @@ type Migration struct {
 	Up func(context.Context, *sql.Tx) error
 }
 
-// VersionedMigrator 返回按 ID 递增的全部步骤，SDK 执行尚未完成的步骤。
-type VersionedMigrator interface {
-	// Migrations 返回全部步骤，按 ID 严格递增排列。
-	Migrations() []Migration
-}
-
 // LedgerTable 指定框架保留的迁移完成表名。
 const LedgerTable = dbhook.LedgerTable
-
-func init() { dbhook.Register(recognize) }
-
-func recognize(root any) []dbhook.Migrator {
-	var migrators []dbhook.Migrator
-	if self, ok := root.(SelfMigrator); ok {
-		migrators = append(migrators, dbhook.Migrator{Run: func(ctx context.Context) (*pb.MigrationState, error) {
-			db, err := Open(ctx)
-			if err != nil {
-				return nil, err
-			}
-			if err := self.Migrate(ctx, db); err != nil {
-				return nil, err
-			}
-			return &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_SELF, SelfMigrateCompleted: true}, nil
-		}})
-	}
-	if versioned, ok := root.(VersionedMigrator); ok {
-		migrators = append(migrators, dbhook.Migrator{Run: func(ctx context.Context) (*pb.MigrationState, error) {
-			db, err := Open(ctx)
-			if err != nil {
-				return nil, err
-			}
-			if _, err := RunVersioned(ctx, db, versioned.Migrations()); err != nil {
-				return nil, err
-			}
-			ids, err := AppliedMigrations(ctx, db)
-			return &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_VERSIONED, CompletedMigrationIds: ids}, err
-		}})
-	}
-	return migrators
-}
 
 func checkMigrations(migrations []Migration) error {
 	var last uint32
@@ -153,4 +111,39 @@ func runMigration(ctx context.Context, db *sql.DB, migration Migration) (err err
 		return err
 	}
 	return tx.Commit()
+}
+
+// Migrate 登记自行管理版本与幂等性的数据库迁移。
+func Migrate(p *sdk.Plugin, fn func(context.Context, *sql.DB) error) {
+	dbhook.Register(p, dbhook.Migrator{Mode: pb.MigrationMode_MIGRATION_MODE_SELF, Check: func() error {
+		if fn == nil {
+			return fmt.Errorf("migration function is nil")
+		}
+		return nil
+	}, Run: func(ctx context.Context) (*pb.MigrationState, error) {
+		db, err := Open(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if err := fn(ctx, db); err != nil {
+			return nil, err
+		}
+		return &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_SELF, SelfMigrateCompleted: true}, nil
+	}})
+}
+
+// Migrations 登记按 ID 严格递增的迁移列表，Collect 时核对全部步骤。
+func Migrations(p *sdk.Plugin, list []Migration) {
+	list = slices.Clone(list)
+	dbhook.Register(p, dbhook.Migrator{Mode: pb.MigrationMode_MIGRATION_MODE_VERSIONED, Check: func() error { return checkMigrations(list) }, Run: func(ctx context.Context) (*pb.MigrationState, error) {
+		db, err := Open(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := RunVersioned(ctx, db, list); err != nil {
+			return nil, err
+		}
+		ids, err := AppliedMigrations(ctx, db)
+		return &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_VERSIONED, CompletedMigrationIds: ids}, err
+	}})
 }

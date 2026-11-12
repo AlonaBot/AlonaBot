@@ -95,7 +95,7 @@ bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle --args
 
 `--args` 可重复，放在子命令前后均生效，后出现的覆盖先出现的。直接参数支持逗号分隔的 `KEY=VALUE`；文件每行一项，空行和以 `#` 开头的注释行会被忽略。时长使用 `2s` 等 Go 时长格式；大小使用 `B`、`KiB`、`MiB`、`GiB`，`MB` 等十进制单位会报错。`run` 将最终覆盖值及出处记为 WARN。
 
-命令、文本匹配与事件只在根插件的注册方法中链式注册，包级函数也这样注册；构建期生成器不读取任何标记，只把配置 Schema 与 Service Schema 嵌入生成文件。在插件构建入口目录生成或检查 `alonabot_gen.go`：
+插件包导出 `func New() *sdk.Plugin`，命令、文本匹配与事件都在插件对象上链式注册，包级函数也这样注册；构建期生成器不读取任何标记，只生成包内变量 `alonabotGenerated`（配置 Schema、Service Schema、i18n 与 manifest），由 `New` 显式调用 `sdk.UseGenerated(p, alonabotGenerated)` 绑定。在插件构建入口目录生成或检查 `alonabot_gen.go`：
 
 ```sh
 bin/alonabot plugin generate --dir ./myplugin   # 内容不变时不改文件

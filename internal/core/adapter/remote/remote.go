@@ -37,6 +37,8 @@ type Options struct {
 	Registry         *adapter.Registry
 	Sink             adapter.Sink
 	RegisterIncoming func(instanceID, fileID string, size *uint64, mime *string) string // 装配处必须提供媒体 Store 的入站登记入口
+	StartCommandSync func(adapter.Instance)                                             // 登记成功后在状态锁外通知。
+	StopCommandSync  func(adapter.Instance)                                             // 停止或 Session 撤销后在状态锁外通知。
 }
 
 // Process 并发安全地管理一个 Adapter 包进程及其账号实例。
@@ -52,7 +54,8 @@ type Process struct {
 
 // instance 保存远端账号身份与启停状态；可变字段统一由 Process.mu 保护。
 type instance struct {
-	needsStop    bool // SDK 中仍有待回收的平台实例
+	syncMu       sync.Mutex // 串行化本次运行的菜单启停通知；不与 Process.mu 同时等待。
+	needsStop    bool       // SDK 中仍有待回收的平台实例
 	process      *Process
 	id           string
 	config       []byte // 只保留在内存中，恢复时重新下发
@@ -80,6 +83,12 @@ func (p *Process) Bind(ctx context.Context, in *host.Instance, caller router.Cal
 		return err
 	}
 	p.mu.Lock()
+	previous := p.session
+	p.mu.Unlock()
+	if previous != nil && previous != in {
+		p.unbind()
+	}
+	p.mu.Lock()
 	p.session = in
 	p.caller = caller
 	p.declarations = declarations
@@ -90,6 +99,9 @@ func (p *Process) Bind(ctx context.Context, in *host.Instance, caller router.Cal
 		}
 	}
 	p.mu.Unlock()
+	if previous != in {
+		go p.watchSession(in)
+	}
 	var errs []error
 	for _, entry := range enabled {
 		errs = append(errs, p.start(ctx, entry.id, entry.config))
@@ -101,6 +113,24 @@ func (p *Process) Bind(ctx context.Context, in *host.Instance, caller router.Cal
 func (p *Process) Unbind() {
 	p.operations.Lock()
 	defer p.operations.Unlock()
+	p.unbind()
+}
+
+// watchSession 只撤销自己仍持有的绑定；迟到的旧 Session 退出保留新实例。
+func (p *Process) watchSession(in *host.Instance) {
+	<-in.Session.Done()
+	p.operations.Lock()
+	defer p.operations.Unlock()
+	p.mu.Lock()
+	current := p.session == in
+	p.mu.Unlock()
+	if current {
+		p.unbind()
+	}
+}
+
+// unbind 由持有 operations 的调用方撤销运行状态，保持启用配置。
+func (p *Process) unbind() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.session = nil
@@ -152,7 +182,11 @@ func (p *Process) start(ctx context.Context, id string, config []byte) error {
 	if err != nil {
 		return err
 	}
-	// 2. 账号唯一性由 Core 核对，冲突时停止刚启动的实例。
+	// 2. 实例能力与账号均在发布前校验，失败时停止刚启动的实例。
+	if err := validate.Capabilities(response.Capabilities); err != nil {
+		stopErr := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: id}, &pb.AdapterInstanceStopResponse{})
+		return errors.Join(err, stopErr)
+	}
 	p.mu.Lock()
 	var conflict bool
 	for _, entry := range p.instances {
@@ -173,7 +207,6 @@ func (p *Process) start(ctx context.Context, id string, config []byte) error {
 	}
 	// 3. 运行登记与在线事件在状态锁内完成，服务只接纳已登记实例。
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	entry := &instance{needsStop: true, process: p, id: id, config: append([]byte(nil), config...), enabled: true, running: true, account: response.AccountId, displayName: response.AccountDisplayName, username: response.GetAccountUsername(), capabilities: response.Capabilities, session: bound.Session}
 	entry.sessionKey = p.caller.SessionKey
 	var registered adapter.Instance = entry
@@ -186,13 +219,14 @@ func (p *Process) start(ctx context.Context, id string, config []byte) error {
 	if err := p.opt.Registry.Add(registered); err != nil {
 		p.mu.Unlock()
 		stopErr := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: id}, &pb.AdapterInstanceStopResponse{})
-		p.mu.Lock()
 		return errors.Join(err, stopErr)
 	}
 	p.instances[id] = entry
 	ev := p.event(entry, "bot.online")
 	ev.EventPayload = &pb.EventPayload{Kind: &pb.EventPayload_BotOnline{BotOnline: &pb.BotOnlinePayload{AdapterId: p.opt.AdapterID, AdapterInstanceId: id, AccountId: entry.account, AccountDisplayName: entry.displayName}}}
 	err = p.deliver(ctx, entry, ev)
+	p.mu.Unlock()
+	p.startCommandSync(entry)
 	if errors.Is(err, adapter.ErrQueueFull) {
 		return nil
 	}
@@ -230,6 +264,14 @@ func (p *Process) StopInstance(ctx context.Context, instanceID string) error {
 func (p *Process) offline(ctx context.Context, entry *instance, reason pb.BotOfflineReason, safe *pb.ErrorInfo) error {
 	entry.running = false
 	p.opt.Registry.Remove(entry.id)
+	if p.opt.StopCommandSync != nil {
+		// 回调可重新读取实例状态，必须释放 Process.mu；停止只携带本次运行身份。
+		p.mu.Unlock()
+		entry.syncMu.Lock()
+		p.opt.StopCommandSync(entry)
+		entry.syncMu.Unlock()
+		p.mu.Lock()
+	}
 	ev := p.event(entry, "bot.offline")
 	ev.EventPayload = &pb.EventPayload{Kind: &pb.EventPayload_BotOffline{BotOffline: &pb.BotOfflinePayload{AdapterId: p.opt.AdapterID, AdapterInstanceId: entry.id, AccountId: entry.account, Reason: reason, SafeError: safe}}}
 	err := p.deliver(ctx, entry, ev)

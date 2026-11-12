@@ -1,7 +1,7 @@
 // showcase 演示 SDK 全部公共签名的组合方式；可以真实运行的最小插件见 examples/plugins/lifecycle。
 //
 // 示例包括一个根插件、两类 Handler、StopPropagation、配置回调、HTTP Handler 与一个定时任务。
-// 根插件的 Hook 都由 sdk.Base 提供默认实现，这里只覆盖用到的。
+// New 显式绑定生成资源、路由与生命周期回调。
 package main
 
 //go:generate go run ../../../cmd/alonabot plugin generate
@@ -35,12 +35,24 @@ func (*Demo) OnConfigLoad(_ context.Context, _ uint32, raw json.RawMessage) (jso
 
 // Demo 作为根插件注册命令、HTTP 路由与定时任务；插件 ID 来自 plugin.yaml。
 type Demo struct {
-	// Base 提供根插件的默认实现。
-	sdk.Base
+	plugin *sdk.Plugin
+}
+
+// New 每次创建独立的插件和示例状态。
+func New() *sdk.Plugin {
+	p := sdk.NewPlugin()
+	sdk.UseGenerated(p, alonabotGenerated)
+	demo := &Demo{plugin: p}
+	p.OnConfigLoad(demo.OnConfigLoad)
+	p.OnStart(demo.OnStart)
+	demo.Commands(p)
+	demo.HTTP(p)
+	demo.Schedules(p)
+	return p
 }
 
 // Commands 在 demo 分组下注册两个命令，行尾注释是各自的触发路径。
-func (p *Demo) Commands(r *sdk.CommandRegistry) {
+func (p *Demo) Commands(r *sdk.Plugin) {
 	{
 		g := r.Group("demo")
 		g.Command("hello").Handle(p.Hello) // /demo hello
@@ -51,7 +63,7 @@ func (p *Demo) Commands(r *sdk.CommandRegistry) {
 // Hello 响应 /demo hello，返回要自动回复的 Chain；成功且非空时由 Core 发送一次。
 func (p *Demo) Hello(c *sdk.Context) (message.Content, error) {
 	c.StopPropagation()
-	return message.Chain{message.Text(p.Config().String("greeting"))}, nil
+	return message.Chain{message.Text(p.plugin.Config().String("greeting"))}, nil
 }
 
 // Echo 响应 /demo echo <text> <times>，在 Handler 内主动发送 times 次 text。
@@ -65,14 +77,14 @@ func (p *Demo) Echo(c *sdk.Context, text string, times int64) error {
 }
 
 // HTTP 注册一个返回 ok 的 GET /status。
-func (p *Demo) HTTP(r *sdk.HTTPRegistry) {
+func (p *Demo) HTTP(r *sdk.Plugin) {
 	r.Handle(http.MethodGet, "/status", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	}))
 }
 
 // Schedules 注册每分钟运行一次的 tick 任务。
-func (p *Demo) Schedules(r *sdk.ScheduleRegistry) {
+func (p *Demo) Schedules(r *sdk.Plugin) {
 	r.Every("tick", time.Minute, func(*sdk.Context) error { return nil })
 }
 
@@ -81,7 +93,7 @@ func (p *Demo) OnStart(context.Context) error { return nil }
 
 // main 把根插件交给 SDK 运行，失败时打印原因并退出。
 func main() {
-	if err := sdk.Run(&Demo{}); err != nil {
+	if err := sdk.Run(New()); err != nil {
 		log.Fatal(err)
 	}
 }

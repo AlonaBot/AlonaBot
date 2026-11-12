@@ -26,7 +26,10 @@ func AdapterRegister(r *pb.Register, adapterID string) error {
 	if err := register(r, true); err != nil {
 		return err
 	}
-	// 2. 检查能力名称唯一性，并在接纳 extension 声明前解析 Schema 的引用。
+	// 2. 校验能力及名称唯一性，并在接纳 extension 声明前解析 Schema 的引用。
+	if err := Capabilities(descriptor.GetCapabilities()); err != nil {
+		return err
+	}
 	capabilities := make(map[string]bool)
 	for _, capability := range descriptor.GetCapabilities() {
 		name := capability.GetName()
@@ -195,4 +198,23 @@ func IsAdapterEventType(eventType string) bool {
 		}
 	}
 	return true
+}
+
+// Capabilities 校验 Adapter 在注册和实例启动时声明的文本限额。
+func Capabilities(capabilities []*pb.Capability) error {
+	for _, capability := range capabilities {
+		limit := capability.GetTextLimit()
+		if limit == nil {
+			continue
+		}
+		if capability.GetName() != "message.send" || !capability.GetSupported() || limit.Max == 0 {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "text_limit requires supported message.send and a positive max")
+		}
+		switch limit.Unit {
+		case pb.TextUnit_TEXT_UNIT_UTF16_CODE_UNITS, pb.TextUnit_TEXT_UNIT_UNICODE_CODE_POINTS, pb.TextUnit_TEXT_UNIT_BYTES:
+		default:
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid text_limit unit %d", limit.Unit)
+		}
+	}
+	return nil
 }
