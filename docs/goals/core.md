@@ -59,7 +59,7 @@
 | goal-106 | T-03.15 | 平台动作 | T-03.8、T-04.8 | 已完成（PR #146） |
 | goal-107 | T-03.16 | 撤回 | T-03.9、T-04.8 | 已完成（PR #144） |
 | goal-108 | T-03.17 | 命令菜单同步 | T-04.6、T-04.7、T-04.8、T-08.8 | 待派发 |
-| goal-109 | T-03.18 | 流式输出辅助函数 | T-03.9、T-04.8 | 待派发 |
+| goal-109 | T-03.18 | 流式输出辅助函数 | T-03.9、T-04.8 | 已完成（PR #151） |
 | goal-110 | T-03.19 | Adapter 的 HTTP 路由 | T-03.3、T-04.8、T-07.7 | 待派发 |
 | goal-121 | T-03.24 | 插件给出的目标由 Core 补齐 | T-03.6、T-07.6 | 已完成（PR #135） |
 | goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 等待前置 |
@@ -4249,7 +4249,7 @@ internal/core/supervisor（Spec 追加字段，由装配方传入 Router.Command
 
 ### goal-109 · T-03.18 流式输出辅助函数
 
-状态：待派发。2026-11-12 依据维护者决定 D-135（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`） 补齐能力元数据、SDK 接口与测试；前置均已合并：T-03.9（PR #118，合并提交 `1cbfb2e`）、T-04.8（PR #141）。按 main `c04b2ca` 的代码核对。与 T-03.13～T-03.19 的其他切片并行时按执行顺序 §3 追加 proto；与 goal-125 同改 SDK 的 Context/装配和 remote 测试 helper，后合并者同步 main 保留对方接口。范围修订（2026-11-12，审查者补充）：执行者发现 main 现有缺陷，Core 的 Edit 对显式目标未经 `Registry.Complete` 补齐账号，而 SDK 由 MessageRef 转出的目标不带 account_id，显式 Edit 一律被拒；授权修改 `internal/core/message/edit.go`，按 Send 的同一写法补齐显式目标，准入拒绝时只回传调用方已知的目标，由本切片的主路径集成测试证明。
+状态：已完成（[PR #151](https://github.com/AlonaBot/AlonaBot/pull/151)，合并提交 `ba14fd4`），证据见 TEST-MATRIX §3.2。合入：`Capability.text_limit`（`TextLimit{max, unit}`，三种计量单位）与注册校验，Telegram 的 `message.send` 声明 4096 UTF-16；SDK 的 `message.TextLimit` 与 `func (c *Context) Stream(next func(context.Context) (string, error)) ([]*message.SendResult, error)`；Core 的 `Edit` 对显式目标经 `Registry.Complete` 补齐实例与账号。派发时：2026-11-12 依据维护者决定 D-135（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`） 补齐能力元数据、SDK 接口与测试；前置均已合并：T-03.9（PR #118，合并提交 `1cbfb2e`）、T-04.8（PR #141）。按 main `c04b2ca` 的代码核对。与 T-03.13～T-03.19 的其他切片并行时按执行顺序 §3 追加 proto；与 goal-125 同改 SDK 的 Context/装配和 remote 测试 helper，后合并者同步 main 保留对方接口。范围修订（2026-11-12，审查者补充）：执行者发现 main 现有缺陷，Core 的 Edit 对显式目标未经 `Registry.Complete` 补齐账号，而 SDK 由 MessageRef 转出的目标不带 account_id，显式 Edit 一律被拒；授权修改 `internal/core/message/edit.go`，按 Send 的同一写法补齐显式目标，准入拒绝时只回传调用方已知的目标，由本切片的主路径集成测试证明。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-109（切片 T-03.18：流式输出辅助函数）。goal 目录 goal-109，分支 goal-109，worktree .worktrees/goal-109，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
