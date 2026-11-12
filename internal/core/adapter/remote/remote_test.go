@@ -55,7 +55,7 @@ func TestMain(m *testing.M) {
 		os.Exit(m.Run())
 	}
 	var err error
-	if mode == "plugin" || mode == "command-plugin" || mode == "stream-plugin" {
+	if mode == "plugin" || mode == "command-plugin" || mode == "stream-plugin" || mode == "names-plugin" {
 		if mode == "command-plugin" {
 			sdk.UseGenerated((*loopPlugin)(nil), sdk.Generated{I18n: commandCatalog()})
 		}
@@ -177,6 +177,12 @@ func (*loopPlugin) Events(r *sdk.EventRegistry) {
 
 // Commands 让扩展事件误入命令层时留下可观察记录。
 func (*loopPlugin) Commands(r *sdk.CommandRegistry) {
+	if os.Getenv(helperEnv) == "names-plugin" {
+		r.Command("echo").Alias("e").Args("value").Handle(func(c *sdk.Context, value string) error {
+			return observe("cmd.echo:"+value, c, nil)
+		})
+		return
+	}
 	if os.Getenv(helperEnv) == "command-plugin" {
 		handler := func(*sdk.Context) error { return nil }
 		r.Command("ping").Description("Ping the bot").Alias("p").Handle(handler)
@@ -1642,4 +1648,102 @@ func (i *loopInstance) Action(_ context.Context, to message.Session, name string
 		return nil, errcode.Internal.New(err.Error())
 	}
 	return json.RawMessage(` {"value": ` + string(value) + `, "platform_extra": true} `), nil
+}
+
+// TestCommandNameOverride 验证同一真实插件进程在保存和删除覆盖后按新名字派发，参数保持一致。
+func TestCommandNameOverride(t *testing.T) {
+	ctx := t.Context()
+	store, spec, _ := setup(t)
+	commandPolicy := policy.New(store)
+	dispatch := router.New(router.Options{Concurrency: 1, QueueEvents: tune.Defaults().DispatchQueueEvents, QueueBytes: tune.Defaults().DispatchQueueBytes, Policy: commandPolicy, CommandNames: commandPolicy.CommandNames})
+	commandPolicy.SetCommandsChanged(dispatch.CommandsChanged)
+	dispatch.Start()
+	defer func() {
+		if err := dispatch.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	}()
+	audit := filepath.Join(t.TempDir(), "names.jsonl")
+	if err := os.WriteFile(audit, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	spec.PluginID, spec.Role, spec.AdapterID = "names-observer", state.RolePlugin, ""
+	spec.GenerationID, spec.PluginDir = "names-gen", t.TempDir()
+	spec.Bootstrap = &pb.Bootstrap{GenerationId: spec.GenerationID, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	spec.ExtraEnv = map[string]string{helperEnv: "names-plugin", observerAuditEnv: audit, "GORACE": "atexit_sleep_ms=0"}
+	if err := store.AddInstall(ctx, state.Install{PluginID: spec.PluginID, Role: spec.Role, BuildDigest: spec.BuildDigest}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddGeneration(ctx, spec.PluginID, spec.GenerationID, "{}", 1); err != nil {
+		t.Fatal(err)
+	}
+	plugin, err := supervisor.Launch(ctx, store, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if result := plugin.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE); result.Err != nil {
+			t.Error(result.Err)
+		}
+	}()
+	dispatch.Attach(router.FromInstance(plugin.Instance), router.NewCaller(spec.PluginID, spec.GenerationID))
+	check := func(name string, matched bool) {
+		t.Helper()
+		before, err := os.ReadFile(audit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		entry, _, ok := dispatch.Commands().Lookup(strings.Fields(name))
+		if ok != matched || matched && entry.RouteID != "cmd.echo" {
+			t.Fatalf("lookup %s=%+v matched=%v", name, entry, ok)
+		}
+		event := &pb.Event{EventId: name, EventType: "message.created", SourceKind: pb.EventSourceKind_EVENT_SOURCE_KIND_ADAPTER, AdapterId: proto.String("loop"), AdapterInstanceId: proto.String("one"), AccountId: proto.String("a"), Actor: &pb.Actor{ExternalUserId: "user"}, Target: &pb.Target{AdapterId: "loop", AdapterInstanceId: "one", AccountId: "a", ChatId: "chat"}, EventPayload: &pb.EventPayload{Kind: &pb.EventPayload_MessageCreated{MessageCreated: &pb.MessageCreatedPayload{Chain: &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: "/" + name + ` "hello world"`}}}}}}}}}
+		if err := dispatch.Deliver(ctx, event); err != nil {
+			t.Fatal(err)
+		}
+		timer, ticker := time.NewTimer(5*time.Second), time.NewTicker(10*time.Millisecond)
+		defer timer.Stop()
+		defer ticker.Stop()
+		for stats := dispatch.Stats(); stats.Running != 0 || stats.Queued != 0; stats = dispatch.Stats() {
+			select {
+			case <-ticker.C:
+			case <-timer.C:
+				t.Fatal("command dispatch timed out")
+			}
+		}
+		after, err := os.ReadFile(audit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoder := json.NewDecoder(bytes.NewReader(after[len(before):]))
+		var commands []string
+		for {
+			var report observedEvent
+			if err := decoder.Decode(&report); err == io.EOF {
+				break
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			if strings.HasPrefix(report.Route, "cmd.") {
+				commands = append(commands, report.Route)
+			}
+		}
+		if matched && !reflect.DeepEqual(commands, []string{"cmd.echo:hello world"}) || !matched && len(commands) != 0 {
+			t.Fatalf("name=%s handler reports=%v matched=%v", name, commands, matched)
+		}
+	}
+	check("echo", true)
+	if err := commandPolicy.SetCommandNames(ctx, spec.PluginID, "cmd.echo", [][]string{{"renamed", "echo"}, {"another"}}, plugin.Instance.Routes); err != nil {
+		t.Fatal(err)
+	}
+	check("echo", false)
+	check("e", false)
+	check("renamed echo", true)
+	check("another", true)
+	if err := commandPolicy.DeleteCommandNames(ctx, spec.PluginID, "cmd.echo"); err != nil {
+		t.Fatal(err)
+	}
+	check("echo", true)
+	check("e", true)
+	check("renamed echo", false)
 }

@@ -9,19 +9,23 @@ import (
 )
 
 const (
-	columnPluginID  = "plugin_id"
-	columnScope     = "scope"
-	columnAdapterID = "adapter_id"
-	columnDenyKind  = "kind"
-	columnSubjectID = "subject_id"
+	columnPluginID    = "plugin_id"
+	columnScope       = "scope"
+	columnAdapterID   = "adapter_id"
+	columnDenyKind    = "kind"
+	columnSubjectID   = "subject_id"
+	columnNames       = "names"
+	columnPermissions = "permissions"
+	columnEnabled     = "enabled"
 )
 
 // CommandPolicy 保存插件一个作用域的显式覆盖；Scope 的编码由策略服务定义。
 type CommandPolicy struct {
-	PluginID    string   `gorm:"column:plugin_id;primaryKey"`
-	Scope       string   `gorm:"column:scope;primaryKey"`
-	Permissions []string `gorm:"column:permissions;serializer:json"` // nil 为 NULL，空切片为 []
-	Enabled     *bool    `gorm:"column:enabled"`                     // nil 表示没有覆盖
+	PluginID    string     `gorm:"column:plugin_id;primaryKey"`
+	Scope       string     `gorm:"column:scope;primaryKey"`
+	Permissions []string   `gorm:"column:permissions;serializer:json"` // nil 为 NULL，空切片为 []
+	Enabled     *bool      `gorm:"column:enabled"`                     // nil 表示没有覆盖
+	Names       [][]string `gorm:"column:names;serializer:json"`       // nil 为 NULL；第一项为主名，仅路由作用域使用
 }
 
 // TableName 指定命令策略表。
@@ -37,14 +41,46 @@ type GlobalDeny struct {
 // TableName 指定全局禁止表。
 func (GlobalDeny) TableName() string { return "global_deny" }
 
-// PutCommandPolicy 按主键覆盖保存策略；调用方负责作用域和权限名校验。
+// PutCommandPolicy 保存权限与启用覆盖，保留命令名；调用方负责作用域和权限名校验。
 func (s *Store) PutCommandPolicy(ctx context.Context, row CommandPolicy) error {
-	return s.db.WithContext(ctx).Clauses(clause.OnConflict{UpdateAll: true}).Create(&row).Error
+	return s.updateCommandPolicy(ctx, row.PluginID, row.Scope, func(stored *CommandPolicy) {
+		stored.Permissions, stored.Enabled = row.Permissions, row.Enabled
+	})
 }
 
-// DeleteCommandPolicy 按主键幂等删除策略。
+// PutCommandNames 只保存命令名覆盖；names 为 nil 时清空该列。
+func (s *Store) PutCommandNames(ctx context.Context, pluginID, scope string, names [][]string) error {
+	return s.updateCommandPolicy(ctx, pluginID, scope, func(stored *CommandPolicy) { stored.Names = names })
+}
+
+func (s *Store) updateCommandPolicy(ctx context.Context, pluginID, scope string, update func(*CommandPolicy)) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		row := CommandPolicy{PluginID: pluginID, Scope: scope}
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
+			return err
+		}
+		if err := tx.Where(commandPolicyKey(pluginID, scope)).Take(&row).Error; err != nil {
+			return err
+		}
+		update(&row)
+		return tx.Save(&row).Error
+	})
+}
+
+// DeleteCommandPolicy 按主键幂等删除权限、启用与命令名均未覆盖的行。
 func (s *Store) DeleteCommandPolicy(ctx context.Context, pluginID, scope string) error {
-	return s.db.WithContext(ctx).Where(commandPolicyKey(pluginID, scope)).Delete(&CommandPolicy{}).Error
+	return s.db.WithContext(ctx).Where(commandPolicyKey(pluginID, scope)).Where(clause.And(
+		clause.Eq{Column: columnPermissions, Value: nil},
+		clause.Eq{Column: columnEnabled, Value: nil},
+		clause.Eq{Column: columnNames, Value: nil},
+	)).Delete(&CommandPolicy{}).Error
+}
+
+// AllCommandNames 读取全部带命令名覆盖的策略行。
+func (s *Store) AllCommandNames(ctx context.Context) ([]CommandPolicy, error) {
+	var rows []CommandPolicy
+	err := s.db.WithContext(ctx).Where(clause.Neq{Column: columnNames, Value: nil}).Find(&rows).Error
+	return rows, err
 }
 
 // CommandPolicies 读取插件全部覆盖；排序由策略服务按作用域语义完成。

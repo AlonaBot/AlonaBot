@@ -137,6 +137,9 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 		return nil, err
 	}
 	p := policy.New(store)
+	if err := p.LoadCommandNames(context.Background()); err != nil {
+		return nil, fmt.Errorf("load command names: %w", err)
+	}
 	a.buttons = buttons.New(store, time.Now, v.ButtonTokenTTL, func(id string) (string, []*pb.RouteDescriptor, bool) {
 		plugin, ok := a.router.Plugin(id)
 		if !ok || !plugin.Activated() {
@@ -147,7 +150,7 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 	})
 	messages := message.New(a.adapters, p, a.media.LeaseForSend, a.buttons.Issue, v.RequestTimeout)
 	a.router = router.New(router.Options{Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
-		Global: a.global, Adapters: a.adapters, Send: messages.Send, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: nil})
+		Global: a.global, Adapters: a.adapters, Send: messages.Send, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: nil, CommandNames: p.CommandNames})
 	p.SetCommandsChanged(a.router.CommandsChanged)
 	a.mux.Handle(wire.ServiceSend, messages.Send)
 	a.mux.Handle(wire.ServiceEdit, messages.Edit)

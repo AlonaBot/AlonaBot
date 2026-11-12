@@ -161,10 +161,14 @@ func (r *Router) commandMenu(ctx context.Context, instanceID string) ([]*pb.Comm
 	var menu []*pb.CommandMenuItem
 	for _, route := range routes {
 		command := route.route.GetCommand()
-		path := command.GetPath()
-		if command.GetMatch() != pb.CommandMatch_COMMAND_MATCH_PATH || len(path) != 1 || !route.plugin.Activated() {
+		if command.GetMatch() != pb.CommandMatch_COMMAND_MATCH_PATH || !route.plugin.Activated() {
 			continue
 		}
+		names := index.names[route.pluginID][route.route.GetRouteId()]
+		if len(names) == 0 || len(names[0]) != 1 {
+			continue
+		}
+		path := names[0]
 		winner, _, ok := index.Lookup(path)
 		if !ok || winner.Alias || winner.PluginID != route.pluginID || winner.RouteID != route.route.GetRouteId() {
 			continue
@@ -192,7 +196,7 @@ func (r *Router) commandMenu(ctx context.Context, instanceID string) ([]*pb.Comm
 			for _, locale := range catalog.Locales() {
 				text := description
 				if source != "" {
-					text = catalog.CommandDescription([]string{locale, route.plugin.DefaultLocale()}, path, source)
+					text = catalog.CommandDescription([]string{locale, route.plugin.DefaultLocale()}, command.GetPath(), source)
 				}
 				descriptions[locale] = text
 			}
