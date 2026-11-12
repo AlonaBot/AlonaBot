@@ -3,7 +3,6 @@ package sdk
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"reflect"
 	"strings"
 
@@ -185,12 +184,12 @@ func invokeEvent(c *Context, route EventRoute) error {
 			return errcode.Internal.New("event payload type mismatch")
 		}
 		if raw.Version != event.version {
-			slog.Warn("adapter event version mismatch", "route_id", route.RouteID, "version", raw.Version, "expected_version", event.version)
+			c.Logger().Warn("adapter event version mismatch", "route_id", route.RouteID, "version", raw.Version, "expected_version", event.version)
 			return nil
 		}
 		value = reflect.New(event.payload.Elem())
 		if err := json.Unmarshal([]byte(raw.PayloadJSON), value.Interface()); err != nil {
-			slog.Warn("decode adapter event", "route_id", route.RouteID, "error", err)
+			c.Logger().Warn("decode adapter event", "route_id", route.RouteID, "error", err)
 			return nil
 		}
 	} else {
@@ -204,7 +203,7 @@ func invokeEvent(c *Context, route EventRoute) error {
 		button := payload.(*message.ButtonClickedPayload)
 		decoded, err := route.decodeButton(button.Value)
 		if err != nil {
-			slog.Warn("decode button value", "route_id", route.RouteID, "error", err)
+			c.Logger().Warn("decode button value", "route_id", route.RouteID, "error", err)
 			return nil
 		}
 		return route.handleButton(c, decoded)

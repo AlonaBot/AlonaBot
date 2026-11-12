@@ -98,7 +98,7 @@ func (c *Context) Reply(text string) error { _, err := c.Send(message.Text(text)
 
 // Logger 返回附带本次调用 trace_id、route_id 和 call_id 的默认 Logger。
 func (c *Context) Logger() *slog.Logger {
-	return slog.Default().With("trace_id", hex.EncodeToString(c.inbound.TraceID), "route_id", c.inbound.Target, "call_id", c.inbound.CallID)
+	return componentLogger(c.ctx).With("trace_id", hex.EncodeToString(c.inbound.TraceID), "route_id", c.inbound.Target, "call_id", c.inbound.CallID)
 }
 
 // StopPropagation 锁存停止传播标记；一经设置不能重新打开传播，并且不受业务错误影响。
@@ -150,12 +150,22 @@ func (c *Context) Send(m message.Content, opts ...SendOption) (*message.SendResu
 // 顺序：取得 runtime.lock → 收集注册项 → 握手 → 准备阶段 → 激活（OnReady/ACTIVATED）→ 服务。
 func Run(root Root) error {
 	setupLogging()
-	// 1. 先取 runtime.lock：注册入口（Commands 等）也是用户代码，旧实例仍在时不能执行（CONTRACTS §12.2）。
-	lock, err := acquireRuntimeLock()
+	l, err := readLaunch()
 	if err != nil {
 		return err
 	}
-	defer lock.Unlock()
+	return run(root, l)
+}
+
+func run(root Root, l launch) (err error) {
+	// 1. 先取 runtime.lock，防止旧实例仍在执行用户代码。
+	lock, err := acquireRuntimeLock(l.runtimeLockPath)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, lock.Unlock()) }()
+	l.runtime = newComponentSession(l.inProcess)
+	defer func() { err = errors.Join(err, l.runtime.close()) }()
 
 	// 2. 收集静态注册项；HTTP 路由与定时任务随 REGISTER 一并声明。
 	reg, err := Collect(root)
@@ -164,11 +174,10 @@ func Run(root Root) error {
 	}
 
 	// 3. 连接 Core 并依次完成握手、准备与激活，然后进入服务循环。
-	l, err := readLaunch()
-	if err != nil {
-		return err
-	}
 	l.http = newHTTPListener(reg.HTTP)
+	if l.http != nil {
+		l.http.runtime = l.runtime
+	}
 	defer func() { l.http.close(time.Now().Add(onStopBudget)) }()
 	conn, err := dial(l)
 	if err != nil {
@@ -179,7 +188,7 @@ func Run(root Root) error {
 	if err != nil {
 		return err
 	}
-	setLogLevel(ack.GetBootstrap().GetLogLevel())
+	l.runtime.configure(l, ack, "plugin")
 	if _, err := prepare(conn, l, ack, root, reg); err != nil {
 		return err
 	}
