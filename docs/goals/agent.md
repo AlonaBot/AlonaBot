@@ -413,7 +413,7 @@ agent
 
 ### goal-136 · T-12.14 对话中的图片输入
 
-状态：等待前置（T-04.8、T-12.2）。T-12.13（[PR #138](https://github.com/AlonaBot/AlonaBot/pull/138)，合并提交 `9b3bb86`）已合并：`provider.Image{MediaType, Data}` 与 `Message.Images` 只出现在 user 消息，MediaType 限四种，不检查大小与张数。2026-11-10 按 D-132 编写。语句中 goal-59、goal-91、goal-135 提供的符号（Agent 的配置、一轮对话与会话条目、Agent 的数据库迁移、`sdk.OpenMedia`、入站 image 片段与 `message.MediaSource`、`provider.Image`）只写名字；合并后由审查者核对，再改为待派发。与 goal-83 同在第 14 波，Agent 配置的追加按[执行顺序 §3](../execution-order.md#3-共享文件与冲突规则)「`agent/` 的配置」一行处理。
+状态：等待前置（T-12.2）。T-04.8（[PR #141](https://github.com/AlonaBot/AlonaBot/pull/141)，合并提交 `ac4aded`）已合并：SDK 公共 API 改用自有类型（`message.Session`、`message.Content`、`message.MessageRef`、事件常量与带类型 payload、`errcode`），pb 只在 `sdk/internal/convert`。T-12.13（[PR #138](https://github.com/AlonaBot/AlonaBot/pull/138)，合并提交 `9b3bb86`）已合并：`provider.Image{MediaType, Data}` 与 `Message.Images` 只出现在 user 消息，MediaType 限四种，不检查大小与张数。2026-11-10 按 D-132 编写。语句中 goal-59、goal-91、goal-135 提供的符号（Agent 的配置、一轮对话与会话条目、Agent 的数据库迁移、`sdk.OpenMedia`、入站 image 片段与 `message.MediaSource`、`provider.Image`）只写名字；合并后由审查者核对，再改为待派发。与 goal-83 同在第 14 波，Agent 配置的追加按[执行顺序 §3](../execution-order.md#3-共享文件与冲突规则)「`agent/` 的配置」一行处理。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-136（切片 T-12.14：对话中的图片输入）。goal 目录 goal-136，分支 goal-136，worktree .worktrees/goal-136，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
