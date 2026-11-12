@@ -73,15 +73,12 @@ func (s *Service) Edit(ctx context.Context, caller router.Caller, in *wire.Inbou
 	}
 	// 5. 改写后仍须符合编辑片段限制，拒绝时不签发按钮、不调用平台。
 	if s.hooks != nil {
-		chain, safe := s.hooks.BeforeSend(ctx, pb.SendOperation_SEND_OPERATION_EDIT, request.PlatformMessageId, target, request.Chain, invocation)
+		chain, safe := s.hooks.BeforeSend(ctx, pb.SendOperation_SEND_OPERATION_EDIT, request.PlatformMessageId, target, request.Chain, invocation, checkEditChain)
 		if safe != nil {
 			return editRejected(target, safe)
 		}
 		if chain != nil {
 			request.Chain = chain
-			if safe := checkEditChain(chain); safe != nil {
-				return editRejected(target, safe)
-			}
 		}
 	}
 	// 6. 复用发送的签发入口，为本次编辑的按钮生成新 token。

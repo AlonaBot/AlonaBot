@@ -24,8 +24,8 @@ const schemaVersion = 1
 
 // Hooks 在每次 Send/Edit 的预检后改写或拒绝消息，并在平台操作后观察完整结果。
 type Hooks interface {
-	// BeforeSend 返回的新 Chain 由 Service 重新预检；nil 表示保留原 Chain。
-	BeforeSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, parent *router.Invocation) (*pb.MessageChain, *pb.ErrorInfo)
+	// BeforeSend 每次改写后立即调用 check；nil 表示保留原 Chain，检查失败即终止。
+	BeforeSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, parent *router.Invocation, check func(*pb.MessageChain) *pb.ErrorInfo) (*pb.MessageChain, *pb.ErrorInfo)
 	// AfterSend 只观察本次平台操作的回执与错误。
 	AfterSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, result *pb.SendResult, errInfo *pb.ErrorInfo, parent *router.Invocation)
 }
@@ -107,18 +107,18 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 	}
 	// 6. Hook 只能改写消息链；复检通过后才允许按钮签发和媒体租约。
 	if s.hooks != nil {
-		chain, safe := s.hooks.BeforeSend(ctx, pb.SendOperation_SEND_OPERATION_SEND, "", target, request.Chain, invocation)
+		check := func(chain *pb.MessageChain) *pb.ErrorInfo {
+			if safe := s.checkChain(chain, target); safe != nil {
+				return safe
+			}
+			return checkExtensions(instance, chain)
+		}
+		chain, safe := s.hooks.BeforeSend(ctx, pb.SendOperation_SEND_OPERATION_SEND, "", target, request.Chain, invocation, check)
 		if safe != nil {
 			return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, safe)
 		}
 		if chain != nil {
 			request.Chain = chain
-			if safe := s.checkChain(chain, target); safe != nil {
-				return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, safe)
-			}
-			if safe := checkExtensions(instance, chain); safe != nil {
-				return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, safe)
-			}
 		}
 	}
 	if s.issue != nil {

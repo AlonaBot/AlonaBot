@@ -25,10 +25,18 @@ const schemaVersion = 1
 // Runner 通过 Router 的当前插件绑定执行 Hook；各次执行独立收集候选。
 type Runner struct {
 	router *router.Router
+	opt    Options
+}
+
+// Options 接入按接收 Session 准备事件和按 Adapter 声明复检改写的 Core 流程。
+type Options struct {
+	// Prepare 只替换媒体来源，保持链结构与遍历顺序；nil 时交付原业务副本。
+	Prepare    func(*pb.Event, router.Caller) (*pb.Event, error)
+	CheckEvent func(*pb.Event) error // 扩展事件改写必须提供当前实例的声明校验
 }
 
 // New 创建使用指定 Router 的 Hook 执行器。
-func New(r *router.Router) *Runner { return &Runner{router: r} }
+func New(r *router.Router, opt Options) *Runner { return &Runner{router: r, opt: opt} }
 
 type candidate struct {
 	plugin router.Plugin
@@ -77,35 +85,106 @@ func (h *Runner) PreEvent(ctx context.Context, ev *pb.Event) (*pb.EventPayload, 
 		if !h.current(candidate) || !slices.Contains(candidate.route.GetHook().GetEventTypeFilter(), ev.GetEventType()) {
 			continue
 		}
+		prepared := proto.CloneOf(current)
+		if h.opt.Prepare != nil {
+			var err error
+			prepared, err = h.opt.Prepare(prepared, candidate.caller)
+			if err != nil {
+				return current.EventPayload, false, preEventFailure(candidate, err)
+			}
+		}
+		// 准备流程只替换来源；按相同位置保存每个读取令牌对应的 Core 来源。
+		original := incomingMedia(current)
+		restore := make(map[string]*pb.IncomingMedia)
+		for i, incoming := range incomingMedia(prepared) {
+			restore[incoming.Token] = original[i]
+		}
 		parent := &router.Invocation{Event: current, DefaultTarget: current.Target}
-		request := &pb.PreEventRequest{RouteId: candidate.route.GetRouteId(), Context: invocationContext(parent, false), Event: current}
+		request := &pb.PreEventRequest{RouteId: candidate.route.GetRouteId(), Context: invocationContext(parent, false), Event: prepared}
 		result := &pb.PreEventResult{}
 		safe := call(ctx, candidate, request, result, parent, false)
 		if safe == nil && result.EventPayload != nil {
 			if !businessPayloadMatches(ev.GetEventType(), result.EventPayload) {
 				safe = failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "pre-event payload does not match event type "+ev.GetEventType())
 			} else {
-				current.EventPayload = result.EventPayload
+				rewritten := proto.CloneOf(current)
+				rewritten.EventPayload = result.EventPayload
+				for _, incoming := range incomingMedia(&pb.Event{EventPayload: rewritten.EventPayload}) {
+					source, ok := restore[incoming.Token]
+					if !ok {
+						return current.EventPayload, false, preEventFailure(candidate, errors.New("pre-event returned unknown incoming media source"))
+					}
+					proto.Reset(incoming)
+					proto.Merge(incoming, source)
+				}
 				// 消息 ID 属于来源绑定；每个后继 Hook 都读取原来的 ID。
 				switch ev.GetEventType() {
 				case "message.created":
-					current.EventPayload.GetMessageCreated().PlatformMessageId = ev.EventPayload.GetMessageCreated().GetPlatformMessageId()
+					rewritten.EventPayload.GetMessageCreated().PlatformMessageId = ev.EventPayload.GetMessageCreated().GetPlatformMessageId()
 				case "message.edited":
-					current.EventPayload.GetMessageEdited().PlatformMessageId = ev.EventPayload.GetMessageEdited().GetPlatformMessageId()
+					rewritten.EventPayload.GetMessageEdited().PlatformMessageId = ev.EventPayload.GetMessageEdited().GetPlatformMessageId()
 				case "reaction.added":
-					current.EventPayload.GetReactionAdded().PlatformMessageId = ev.EventPayload.GetReactionAdded().GetPlatformMessageId()
+					rewritten.EventPayload.GetReactionAdded().PlatformMessageId = ev.EventPayload.GetReactionAdded().GetPlatformMessageId()
 				}
+				if !validate.IsEventType(ev.GetEventType()) {
+					if rewritten.EventPayload.GetAdapterEvent().GetVersion() != ev.EventPayload.GetAdapterEvent().GetVersion() {
+						return current.EventPayload, false, preEventFailure(candidate, errors.New("pre-event changed adapter event version"))
+					}
+					if h.opt.CheckEvent == nil {
+						return current.EventPayload, false, preEventFailure(candidate, errors.New("adapter event validation is unavailable"))
+					}
+					if err := h.opt.CheckEvent(rewritten); err != nil {
+						return current.EventPayload, false, preEventFailure(candidate, err)
+					}
+				}
+				current = rewritten
 			}
 		}
 		if safe != nil {
-			slog.Warn("pre-event hook failed", "plugin_id", candidate.caller.PluginID, "route_id", request.RouteId, "code", safe.Code, "error", safe.SafeMessage)
-			return current.EventPayload, false, fmt.Errorf("pre-event hook %s/%s: %s", candidate.caller.PluginID, request.RouteId, safe.SafeMessage)
+			return current.EventPayload, false, preEventFailure(candidate, &wire.CallError{ErrorInfo: safe})
 		}
 		if result.Propagation == pb.Propagation_PROPAGATION_STOP {
 			return current.EventPayload, true, nil
 		}
 	}
 	return current.EventPayload, false, nil
+}
+
+func preEventFailure(candidate candidate, err error) error {
+	slog.Warn("pre-event hook failed", "plugin_id", candidate.caller.PluginID, "route_id", candidate.route.GetRouteId(), "error", err)
+	return fmt.Errorf("pre-event hook %s/%s: %w", candidate.caller.PluginID, candidate.route.GetRouteId(), err)
+}
+
+// incomingMedia 按 Prepare 的遍历顺序收集来源，包括转发与编辑前的消息链。
+func incomingMedia(ev *pb.Event) []*pb.IncomingMedia {
+	var incoming []*pb.IncomingMedia
+	var collect func(*pb.MessageChain)
+	collect = func(chain *pb.MessageChain) {
+		for _, segment := range chain.GetSegments() {
+			var source *pb.MediaSource
+			switch value := segment.GetData().(type) {
+			case *pb.Segment_Image:
+				source = value.Image.GetSource()
+			case *pb.Segment_Video:
+				source = value.Video.GetSource()
+			case *pb.Segment_Voice:
+				source = value.Voice.GetSource()
+			case *pb.Segment_File:
+				source = value.File.GetSource()
+			}
+			if ref := source.GetIncomingRef(); ref != nil {
+				incoming = append(incoming, ref)
+			}
+			for _, item := range segment.GetForward().GetItems() {
+				collect(item.GetChain())
+			}
+		}
+	}
+	payload := ev.GetEventPayload()
+	for _, chain := range []*pb.MessageChain{ev.GetMessage().GetChain(), payload.GetMessageCreated().GetChain(), payload.GetMessageEdited().GetChain(), payload.GetMessageEdited().GetOldChain()} {
+		collect(chain)
+	}
+	return incoming
 }
 
 func businessPayloadMatches(eventType string, payload *pb.EventPayload) bool {
@@ -123,7 +202,7 @@ func businessPayloadMatches(eventType string, payload *pb.EventPayload) bool {
 }
 
 // BeforeSend 顺序运行改写 Hook；nil Chain 表示沿用当前 Chain，错误立即拒绝本次发送。
-func (h *Runner) BeforeSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, parent *router.Invocation) (*pb.MessageChain, *pb.ErrorInfo) {
+func (h *Runner) BeforeSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, parent *router.Invocation, check func(*pb.MessageChain) *pb.ErrorInfo) (*pb.MessageChain, *pb.ErrorInfo) {
 	for _, candidate := range h.candidates(pb.HookPhase_HOOK_PHASE_BEFORE_SEND) {
 		if !h.current(candidate) {
 			continue
@@ -137,6 +216,9 @@ func (h *Runner) BeforeSend(ctx context.Context, op pb.SendOperation, edited str
 			return nil, safe
 		}
 		if result.Chain != nil {
+			if safe := check(result.Chain); safe != nil {
+				return nil, safe
+			}
 			chain = result.Chain
 		}
 	}
