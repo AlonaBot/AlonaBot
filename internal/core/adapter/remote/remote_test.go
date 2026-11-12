@@ -96,6 +96,14 @@ type poke struct {
 	User string `json:"user"`
 }
 
+type loopActionParams struct {
+	Value string `json:"value"`
+}
+
+type loopActionResult struct {
+	Value string `json:"value"`
+}
+
 func observe(route string, c *sdk.Context, value *poke) error {
 	report := observedEvent{Route: route, ChatType: c.ChatType()}
 	if payload, ok := c.Event().Payload.(*message.CreatedPayload); ok {
@@ -285,6 +293,12 @@ func (*loopAdapter) Descriptor() *sdkadapter.Descriptor {
 		{Name: "loop.owner", Implies: []string{"loop.admin"}, LabelKey: "permissions.owner"},
 		{Name: "loop.admin", Implies: []string{"chat_admin"}, LabelKey: "permissions.admin"},
 	}, Events: []sdkadapter.EventDeclaration{sdkadapter.Event[poke]("loop.poke", 1)}}
+	if os.Getenv(helperEnv) == "actions" {
+		descriptor.Actions = []sdkadapter.ActionDeclaration{
+			sdkadapter.Action[loopActionParams, loopActionResult]("loop.echo", 1, sdkadapter.ActionScopeChat),
+			sdkadapter.Action[loopActionParams, loopActionResult]("loop.account", 1, sdkadapter.ActionScopeAccount),
+		}
+	}
 	switch os.Getenv(helperEnv) {
 	case "permission-prefix":
 		descriptor.Permissions[0].Name = "other.owner"
@@ -434,6 +448,7 @@ type loopInstance struct {
 	mediaReads            int
 	deleteSupported       bool
 	deleteAudit           string
+	actionCalls           int
 	segments              bool
 }
 
@@ -503,6 +518,9 @@ func (i *loopInstance) Send(ctx context.Context, target message.Session, chain m
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	text := chain.Text()
+	if text == "media-source" {
+		return i.inspectMediaSource(ctx, chain)
+	}
 	if text == "fail" {
 		if err := i.core.ReportFailure(ctx, errcode.Unauthenticated.New("account rejected")); err != nil {
 			return nil, errcode.Internal.New(err.Error())
@@ -520,6 +538,9 @@ func (i *loopInstance) Send(ctx context.Context, target message.Session, chain m
 	}
 	if text == "media-read-count" {
 		return &message.SendResult{Status: message.SendAccepted, PlatformMessageIDs: []string{strconv.Itoa(i.mediaReads)}}, nil
+	}
+	if text == "action-count" {
+		return &message.SendResult{Status: message.SendAccepted, PlatformMessageIDs: []string{strconv.Itoa(i.actionCalls)}}, nil
 	}
 	i.sequence++
 	id := i.id
@@ -1348,4 +1369,26 @@ func TestRemotePermissionsAndEvents(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Action 记录真实跨进程调用次数，回传带平台额外字段的 JSON 原文。
+func (i *loopInstance) Action(_ context.Context, to message.Session, name string, version uint32, params json.RawMessage) (json.RawMessage, *errcode.Error) {
+	if version != 1 || (name != "loop.echo" && name != "loop.account") {
+		return nil, errcode.Unsupported.New("action is not declared")
+	}
+	if (name == "loop.account") != (to == "") {
+		return nil, errcode.InvalidArgument.New("action scope does not match session")
+	}
+	var input loopActionParams
+	if err := json.Unmarshal(params, &input); err != nil {
+		return nil, errcode.InvalidArgument.New(err.Error())
+	}
+	i.mu.Lock()
+	i.actionCalls++
+	i.mu.Unlock()
+	value, err := json.Marshal(input.Value)
+	if err != nil {
+		return nil, errcode.Internal.New(err.Error())
+	}
+	return json.RawMessage(` {"value": ` + string(value) + `, "platform_extra": true} `), nil
 }

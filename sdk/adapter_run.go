@@ -346,6 +346,32 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(code, adapterSafeError(errors.New(message), config))
 		}
 		return adapterResponse(&pb.AdapterMediaReadResponse{Data: data, NextOffset: next, Eof: eof}, nil)
+	case wire.ServiceAdapterAction:
+		request := &pb.AdapterActionRequest{}
+		if err := decodeInvocation(in.Payload, request); err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		r.mu.Lock()
+		entry, ok := r.instances[request.InstanceId]
+		if !ok {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
+		}
+		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		executor, supported := entry.instance.(adapter.ActionExecutor)
+		r.mu.Unlock()
+		if !supported {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support platform actions")
+		}
+		// 平台调用在锁外执行，账号动作的空目标保留为空会话。
+		result, safe := executor.Action(ctx, convert.SessionFromProto(request.Target), request.Name, request.Version, json.RawMessage(request.ParamsJson))
+		if len(result) == 0 && safe != nil {
+			return wire.Response{Err: convert.ErrorToProto(safe)}
+		}
+		return adapterResponse(&pb.ActionResponse{ResultJson: string(result)}, convert.ErrorToProto(safe))
 	case wire.ServiceAdapterEdit:
 		request := &pb.AdapterEditRequest{}
 		if err := decodeInvocation(in.Payload, request); err != nil {
@@ -492,6 +518,17 @@ func (c *adapterCore) ReadMedia(ctx context.Context, token string, offset uint64
 func (c *adapterCore) ReportFailure(ctx context.Context, safe *errcode.Error) error {
 	c.stopped.Store(true)
 	return c.call(ctx, wire.ServiceCoreAdapterStatus, &pb.AdapterStatusRequest{InstanceId: c.instanceID, State: pb.AdapterInstanceState_ADAPTER_INSTANCE_STATE_FAILED, SafeError: convert.ErrorToProto(safe)}, &pb.AdapterStatusResponse{})
+}
+
+func (c *adapterCore) MediaURL(ctx context.Context, token, baseURL string) (string, time.Time, error) {
+	if c.stopped.Load() {
+		return "", time.Time{}, &Error{Code: errcode.FailedPrecondition, Message: "adapter instance has stopped"}
+	}
+	response := &pb.MediaURLResponse{}
+	if err := c.call(ctx, wire.ServiceMediaURL, &pb.MediaURLRequest{Token: token, BaseUrl: baseURL}, response); err != nil {
+		return "", time.Time{}, err
+	}
+	return response.Url, time.UnixMilli(response.ExpiresAtUnixMs), nil
 }
 
 // adapterSafeError 保留错误上下文，移除实例配置全文与其中的字符串值。

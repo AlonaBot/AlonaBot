@@ -21,9 +21,11 @@ type IncomingMedia struct {
 
 // MediaSource 指定恰好一个媒体来源。
 type MediaSource struct {
-	MediaRef string
-	Incoming *IncomingMedia
-	HTTPSURL string
+	MediaRef     string
+	Incoming     *IncomingMedia
+	HTTPSURL     string
+	InlineBase64 string
+	PlatformFile string // 只供 Adapter 读取 Core 准备的来源，插件发送时拒绝
 }
 
 // MediaRef 保存已校验的媒体引用及消费范围。

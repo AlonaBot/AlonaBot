@@ -63,3 +63,12 @@ const ServiceDelete = "core.delete"
 
 // ServiceAdapterDelete 向账号实例提交消息撤回。
 const ServiceAdapterDelete = "adapter.delete"
+
+// ServiceAction 指定 Core 的平台动作服务。
+const ServiceAction = "core.action"
+
+// ServiceAdapterAction 向账号实例提交已声明的平台动作。
+const ServiceAdapterAction = "adapter.action"
+
+// ServiceMediaURL 为本次发送的只读媒体令牌签发临时 URL。
+const ServiceMediaURL = "core.media.url"
