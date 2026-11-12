@@ -84,7 +84,7 @@ func (c *Context) Text() string {
 }
 
 func (c *Context) callContinuation(target string, request, result proto.Message) error {
-	session, err := currentSession()
+	session, err := currentSession(c.ctx)
 	if err != nil {
 		return err
 	}
