@@ -60,11 +60,13 @@ type Core struct {
 	output     *logging.Output
 	values     tune.Values
 	components []*runningComponent
-	done       chan struct{} // err 写入后关闭，允许多个 Wait 读取同一结果。
+	dir        string
+	monitors   sync.WaitGroup // 停止后等待退出观察者交还清理权，再关闭共享资源。
+	done       chan struct{}  // err 写入后关闭，允许多个 Wait 读取同一结果。
 	err        error
 }
 
-// Run 启动 Core，并等待 SIGINT、SIGTERM 或组件异常后完成停止。
+// Run 启动 Core，并等待 SIGINT、SIGTERM 或开发组件异常后完成停止。
 func Run(opts ...Option) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -101,7 +103,7 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Core{store: store, values: values, done: make(chan struct{})}
+	c := &Core{store: store, values: values, dir: dir, done: make(chan struct{})}
 	fail := func(err error) (*Core, error) { return nil, errors.Join(err, c.shutdown()) }
 	installs, err := store.Installs(ctx)
 	if err != nil {
@@ -139,7 +141,11 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 			return fail(err)
 		}
 		if enabled {
-			if err := c.startInstalled(ctx, dir, install); err != nil {
+			running, err := c.startInstalled(ctx, dir, install)
+			if running != nil {
+				c.components = append(c.components, running)
+			}
+			if err != nil {
 				return fail(fmt.Errorf("start %s: %w", install.PluginID, err))
 			}
 		}
@@ -161,21 +167,42 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	return c, nil
 }
 
-// Wait 等待 Core 停止；组件超时或异常退出时返回含组件 ID 的错误。
+// Wait 等待 Core 停止；组件停止超时或开发组件异常退出时返回含组件 ID 的错误。
 func (c *Core) Wait() error { <-c.done; return c.err }
 
+// componentExit 在旧进程树的清理完成后交回退出结果，Core.run 独占替换组件列表。
+type componentExit struct {
+	index    int
+	abnormal bool
+	state    string
+	err      error
+}
+
+func (c *Core) watch(index int, exits chan<- componentExit) {
+	running := c.components[index]
+	c.monitors.Go(func() {
+		select {
+		case <-running.exited():
+		case <-running.instance.Session.Done():
+		}
+		result := componentExit{index: index}
+		if running.process != nil {
+			c.assembly.detach(running)
+			c.assembly.media.ReleaseSession(running.caller.SessionKey)
+			result.abnormal, result.state, result.err = running.process.WaitExit()
+		} else {
+			result.err = fmt.Errorf("component %s exited before Core shutdown", running.id)
+		}
+		// 每个槽位至多有一个待处理结果；缓冲使 shutdown 可以等待观察者结束。
+		exits <- result
+	})
+}
+
 func (c *Core) run(ctx context.Context) {
-	failed := make(chan error, len(c.components))
-	for _, running := range c.components {
-		go func() {
-			select {
-			case <-running.exited():
-			case <-running.instance.Session.Done():
-			case <-c.done:
-				return
-			}
-			failed <- fmt.Errorf("component %s exited before Core shutdown", running.id)
-		}()
+	exits := make(chan componentExit, len(c.components))
+	policy := host.NewRestartPolicy(c.values)
+	for index := range c.components {
+		c.watch(index, exits)
 	}
 	ticker := time.NewTicker(c.values.MediaTTL)
 	defer ticker.Stop()
@@ -184,9 +211,56 @@ running:
 		select {
 		case <-ctx.Done():
 			break running
-		case err := <-failed:
-			c.err = err
-			break running
+		case result := <-exits:
+			if ctx.Err() != nil {
+				break running
+			}
+			old := c.components[result.index]
+			if old.process == nil {
+				c.err = result.err
+				break running
+			}
+			if result.abnormal {
+				slog.Error("plugin exited abnormally", "plugin_id", old.id, "state", result.state)
+			} else {
+				slog.Info("plugin exited", "plugin_id", old.id, "state", result.state)
+			}
+			if result.err != nil {
+				slog.Error("process tree not confirmed empty, not starting a replacement", "plugin_id", old.id, "error", result.err)
+				continue
+			}
+			enabled, err := c.store.Enabled(ctx, old.id)
+			if err != nil {
+				slog.Error("read component enabled state failed", "plugin_id", old.id, "error", err)
+				continue
+			}
+			if !enabled {
+				continue
+			}
+			switch policy.OnExit(old.id, result.abnormal, time.Now()) {
+			case host.DecisionRestart:
+				slog.Info("restarting plugin", "plugin_id", old.id)
+				replacement, err := c.startInstalled(ctx, c.dir, old.install)
+				if replacement != nil {
+					c.components[result.index] = replacement
+				}
+				if err != nil {
+					slog.Error("restart plugin failed", "plugin_id", old.id, "error", err)
+					if replacement != nil {
+						if stopErr := c.stopComponent(replacement, time.Now(), host.NewStopTiming(c.values)); stopErr != nil {
+							slog.Error("cleanup failed restart", "plugin_id", old.id, "error", stopErr)
+						}
+					}
+					continue
+				}
+				c.watch(result.index, exits)
+			case host.DecisionDisable:
+				if err := c.store.SetEnabled(ctx, old.id, false); err != nil {
+					slog.Error("disable plugin failed", "plugin_id", old.id, "error", err)
+				} else {
+					slog.Error("plugin disabled after repeated abnormal exits", "plugin_id", old.id, "crashes", c.values.RestartMaxCrashes, "window", c.values.RestartWindow)
+				}
+			}
 		case <-ticker.C:
 			c.assembly.media.Sweep()
 		}
@@ -218,6 +292,7 @@ func (c *Core) shutdown() error {
 		})
 	}
 	wg.Wait()
+	c.monitors.Wait()
 	close(errs)
 	var result error
 	for err := range errs {

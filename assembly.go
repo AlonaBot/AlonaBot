@@ -137,7 +137,7 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 		return nil, err
 	}
 	p := policy.New(store)
-	a.buttons = buttons.New(store, time.Now, func(id string) (string, []*pb.RouteDescriptor, bool) {
+	a.buttons = buttons.New(store, time.Now, v.ButtonTokenTTL, func(id string) (string, []*pb.RouteDescriptor, bool) {
 		plugin, ok := a.router.Plugin(id)
 		if !ok || !plugin.Activated() {
 			return "", nil, false
@@ -162,9 +162,10 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 	return a, nil
 }
 
-// runningComponent 统一保存外部进程与同进程 Session；只在启动阶段追加并发布给停止所有者。
+// runningComponent 保存一次外部进程或同进程 Session，退出观察者结束后才由 Core 替换。
 type runningComponent struct {
 	id       string
+	install  state.Install // 独立进程恢复时复用安装身份与已提交代次。
 	caller   router.Caller
 	instance *host.Instance
 	process  *supervisor.Running // 仅独立进程设置。
@@ -328,20 +329,22 @@ func bootstrap(generation string, version uint32) *pb.Bootstrap {
 		DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}, LogLevel: pb.LogLevel_LOG_LEVEL_INFO}
 }
 
+func (a *assembly) detach(r *runningComponent) {
+	a.router.Detach(r.id)
+	a.bus.Detach(r.id)
+	a.scheduler.Detach(r.id)
+	if r.instance != nil {
+		a.http.Unbind(r.id, r.instance.GenerationID)
+	}
+	if r.remote != nil {
+		r.remote.Unbind()
+	}
+}
+
 func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.StopTiming) error {
 	a := c.assembly
 	frozen := func(deadline time.Time) { a.scheduler.Drain(r.id); a.http.Drain(r.id, deadline); a.bus.Detach(r.id) }
-	detach := func() {
-		a.router.Detach(r.id)
-		a.bus.Detach(r.id)
-		a.scheduler.Detach(r.id)
-		if r.instance != nil {
-			a.http.Unbind(r.id, r.instance.GenerationID)
-		}
-		if r.remote != nil {
-			r.remote.Unbind()
-		}
-	}
+	detach := func() { a.detach(r) }
 	var err error
 	if r.process != nil {
 		// supervisor 处理进程树、HTTP 与 Scheduler；其余映射由装配撤销。
@@ -383,55 +386,64 @@ func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.Stop
 	return nil
 }
 
-func (c *Core) startInstalled(ctx context.Context, dir string, install state.Install) error {
+func (c *Core) startInstalled(ctx context.Context, dir string, install state.Install) (*runningComponent, error) {
 	generation, err := c.store.Active(ctx, install.PluginID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if generation == "" {
-		return fmt.Errorf("enabled component %s has no committed generation", install.PluginID)
+		return nil, fmt.Errorf("enabled component %s has no committed generation", install.PluginID)
 	}
 	// MoveTo 已将版本与归档摘要前缀写入目录名；摘要绑定当前安装记录。
 	digest := hex.EncodeToString(install.BuildDigest)
 	if len(digest) < packageDigestPrefix {
-		return fmt.Errorf("component %s has invalid installed build digest", install.PluginID)
+		return nil, fmt.Errorf("component %s has invalid installed build digest", install.PluginID)
 	}
-	paths, err := filepath.Glob(filepath.Join(dir, "packages", install.PluginID, "*-"+digest[:packageDigestPrefix]))
+	parent := filepath.Join(dir, "packages", install.PluginID)
+	entries, err := os.ReadDir(parent)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	var paths []string
+	suffix := "-" + digest[:packageDigestPrefix]
+	for _, entry := range entries {
+		version, matches := strings.CutSuffix(entry.Name(), suffix)
+		if entry.IsDir() && matches && manifest.ValidVersion(version) {
+			paths = append(paths, filepath.Join(parent, entry.Name()))
+		}
 	}
 	if len(paths) != 1 {
-		return fmt.Errorf("component %s: expected one installed package for build digest, found %d", install.PluginID, len(paths))
+		return nil, fmt.Errorf("component %s: expected one installed package for build digest, found %d", install.PluginID, len(paths))
 	}
 	packageDir := paths[0]
 	raw, err := os.ReadFile(filepath.Join(packageDir, "plugin.yaml"))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	parsed, err := manifest.Parse(raw)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	m := parsed.Manifest
 	if m.ID != install.PluginID || state.Role(m.Role) != install.Role || m.AdapterID != install.AdapterID || m.Entrypoint != install.Entrypoint {
-		return fmt.Errorf("installed manifest identity differs from record for %s", install.PluginID)
+		return nil, fmt.Errorf("installed manifest identity differs from record for %s", install.PluginID)
 	}
 	for _, warning := range parsed.Warnings {
 		slog.Warn("installed manifest warning", "plugin_id", m.ID, "warning", warning)
 	}
 	executable, err := process.Entrypoint(packageDir, install.Entrypoint)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	resources, err := packageResources(packageDir)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	pluginDir := filepath.Join(dir, "plugins", install.PluginID)
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
-		return err
+		return nil, err
 	}
-	running := &runningComponent{id: install.PluginID, caller: router.NewCaller(install.PluginID, generation)}
+	running := &runningComponent{id: install.PluginID, install: install, caller: router.NewCaller(install.PluginID, generation)}
 	boot := bootstrap(generation, *m.ConfigVersion)
 	boot.DatabaseDescriptor.ActivationReason = pb.ActivationReason_ACTIVATION_REASON_RESUME
 	switch m.MigrationMode {
@@ -448,11 +460,10 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 		DefaultLocale: defaultLocale, Handler: c.assembly.handler(running, install), Global: c.assembly.global, Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values),
 		Log: c.output.Plugin(install.PluginID, generation), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	running.instance = running.process.Instance
-	c.components = append(c.components, running)
-	return c.assembly.attach(ctx, running)
+	return running, c.assembly.attach(ctx, running)
 }
 
 func packageResources(dir string) (sdk.Generated, error) {
