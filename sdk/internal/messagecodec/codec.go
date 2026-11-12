@@ -3,9 +3,10 @@
 // Button 保存按钮的 JSON 编码结果；Failure 保留编码错误；ReferenceOrigin 保留引用目标的省略信息。
 package messagecodec
 
-// Button 保存动作、标签、JSON 值与编码错误。
+// Button 保存动作或 URL、标签、JSON 值与编码错误。
 type Button struct {
 	ActionID, Label, Value, CoreToken string
+	URL                               string // 与 ActionID 恰有一个。
 	err                               error
 }
 

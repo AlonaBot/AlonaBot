@@ -81,6 +81,10 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 		return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, completionError)
 	}
 	if err := validate.Chain(request.Chain); err != nil {
+		var validation *validate.Error
+		if errors.As(err, &validation) {
+			return reject(target, validation.Code, validation.Message)
+		}
 		return reject(target, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 	}
 	// 4. 校验最终实例绑定，媒体来源准备也使用这一实例的 Session。
@@ -91,7 +95,7 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if target.GetAdapterId() != instance.AdapterID() || target.GetAccountId() != instance.AccountID() {
 		return reject(target, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "target adapter or account does not match instance")
 	}
-	// 5. 校验 Adapter 扩展并签发按钮，两者都先于媒体租约和平台副作用。
+	// 5. 整链能力与扩展校验先于按钮签发、媒体租约和平台副作用。
 	if safe := checkExtensions(instance, request.Chain); safe != nil {
 		return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, safe)
 	}
@@ -163,6 +167,8 @@ func mediaSources(chain *pb.MessageChain) []*pb.MediaSource {
 			source = value.Image.GetSource()
 		case *pb.Segment_Video:
 			source = value.Video.GetSource()
+		case *pb.Segment_Voice:
+			source = value.Voice.GetSource()
 		case *pb.Segment_File:
 			source = value.File.GetSource()
 		}

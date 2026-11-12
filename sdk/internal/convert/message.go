@@ -4,11 +4,13 @@
 package convert
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/messagecodec"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
@@ -113,17 +115,21 @@ func ContentToProto(m message.Content, target *pb.Target) (*pb.MessageChain, err
 	if len(c) == 0 {
 		return nil, errcode.InvalidArgument.New("message chain must not be empty")
 	}
-	return ChainToProto(c, target)
+	return chainToProto(c, target, true)
 }
 
 // ChainToProto 保留空链与 absent 的区别，递归转换全部片段。
 func ChainToProto(c message.Chain, target *pb.Target) (*pb.MessageChain, error) {
+	return chainToProto(c, target, false)
+}
+
+func chainToProto(c message.Chain, target *pb.Target, outbound bool) (*pb.MessageChain, error) {
 	if c == nil {
 		return nil, nil
 	}
 	out := &pb.MessageChain{}
 	for _, s := range c {
-		encoded, err := segmentToProto(s, target)
+		encoded, err := segmentToProto(s, target, outbound)
 		if err != nil {
 			return nil, err
 		}
@@ -131,7 +137,7 @@ func ChainToProto(c message.Chain, target *pb.Target) (*pb.MessageChain, error) 
 	}
 	return out, nil
 }
-func segmentToProto(s message.Segment, enclosingTarget *pb.Target) (*pb.Segment, error) {
+func segmentToProto(s message.Segment, enclosingTarget *pb.Target, outbound bool) (*pb.Segment, error) {
 	if err := messagecodec.Error(s); err != nil {
 		return nil, errcode.InvalidArgument.New("encode message: " + err.Error())
 	}
@@ -158,6 +164,15 @@ func segmentToProto(s message.Segment, enclosingTarget *pb.Target) (*pb.Segment,
 			return nil, err
 		}
 		out.Data = &pb.Segment_Video{Video: &pb.VideoSegment{Source: src, DurationMs: optional(uint64(v.Duration.Milliseconds())), Caption: optional(v.Caption)}}
+	case message.VoiceSegment:
+		if v.Duration < 0 {
+			return nil, errcode.InvalidArgument.New("voice duration must not be negative")
+		}
+		src, err := sourceToProto(v.Source)
+		if err != nil {
+			return nil, err
+		}
+		out.Data = &pb.Segment_Voice{Voice: &pb.VoiceSegment{Source: src, DurationMs: optional(uint64(v.Duration.Milliseconds())), Caption: optional(v.Caption)}}
 	case message.FileSegment:
 		src, err := sourceToProto(v.Source)
 		if err != nil {
@@ -184,7 +199,7 @@ func segmentToProto(s message.Segment, enclosingTarget *pb.Target) (*pb.Segment,
 				if err := messagecodec.ButtonError(button); err != nil {
 					return nil, errcode.InvalidArgument.New("encode message: " + err.Error())
 				}
-				r.Buttons = append(r.Buttons, &pb.Button{ActionId: button.ActionID, Label: button.Label, Value: optional(button.Value), CoreToken: optional(button.CoreToken)})
+				r.Buttons = append(r.Buttons, &pb.Button{ActionId: button.ActionID, Label: button.Label, Value: optional(button.Value), CoreToken: optional(button.CoreToken), Url: optional(button.URL)})
 			}
 			b.Rows = append(b.Rows, r)
 		}
@@ -192,19 +207,28 @@ func segmentToProto(s message.Segment, enclosingTarget *pb.Target) (*pb.Segment,
 	case message.ExtensionSegment:
 		out.Data = &pb.Segment_Extension{Extension: &pb.ExtensionSegment{AdapterId: v.AdapterID, Name: v.Name, Version: v.Version, PayloadJson: v.PayloadJSON}}
 	case message.ForwardSegment:
-		f := &pb.ForwardSegment{}
+		f := &pb.ForwardSegment{PlatformForwardId: optional(v.PlatformForwardID)}
 		for _, item := range v.Items {
-			chain, err := ChainToProto(item.Chain, enclosingTarget)
+			chain, err := chainToProto(item.Chain, enclosingTarget, outbound)
 			if err != nil {
 				return nil, err
 			}
-			next := &pb.ForwardItem{Chain: chain}
+			next := &pb.ForwardItem{Chain: chain, PlatformMessageId: optional(item.PlatformMessageID)}
 			if item.Source != nil {
 				next.Source = &pb.ForwardSource{DisplayName: optional(item.Source.DisplayName), ExternalUserId: optional(item.Source.ExternalUserID)}
 			}
 			f.Items = append(f.Items, next)
 		}
 		out.Data = &pb.Segment_Forward{Forward: f}
+		if outbound {
+			if err := validate.Chain(&pb.MessageChain{Segments: []*pb.Segment{out}}); err != nil {
+				var validation *validate.Error
+				if errors.As(err, &validation) {
+					return nil, errcode.Code(validation.Code).New(validation.Message)
+				}
+				return nil, err
+			}
+		}
 	default:
 		return nil, errcode.InvalidArgument.New("missing message segment")
 	}
@@ -272,6 +296,8 @@ func ChainFromProto(c *pb.MessageChain, enclosingTarget *pb.Target) message.Chai
 			out = append(out, *ImageFromProto(v.Image))
 		case *pb.Segment_Video:
 			out = append(out, message.VideoSegment{Source: sourceFromProto(v.Video.Source), Duration: time.Duration(v.Video.GetDurationMs()) * time.Millisecond, Caption: v.Video.GetCaption()})
+		case *pb.Segment_Voice:
+			out = append(out, message.VoiceSegment{Source: sourceFromProto(v.Voice.Source), Duration: time.Duration(v.Voice.GetDurationMs()) * time.Millisecond, Caption: v.Voice.GetCaption()})
 		case *pb.Segment_File:
 			out = append(out, message.FileSegment{Source: sourceFromProto(v.File.Source), Filename: v.File.GetFilename(), MIME: v.File.GetMime(), Caption: v.File.GetCaption()})
 		case *pb.Segment_Mention:
@@ -291,7 +317,7 @@ func ChainFromProto(c *pb.MessageChain, enclosingTarget *pb.Target) message.Chai
 			for _, row := range v.Buttons.Rows {
 				var r []message.Button
 				for _, b := range row.Buttons {
-					r = append(r, message.Button{ActionID: b.ActionId, Label: b.Label, Value: b.GetValue(), CoreToken: b.GetCoreToken()})
+					r = append(r, message.Button{ActionID: b.ActionId, Label: b.Label, Value: b.GetValue(), CoreToken: b.GetCoreToken(), URL: b.GetUrl()})
 				}
 				buttons.Rows = append(buttons.Rows, r)
 			}
@@ -299,9 +325,9 @@ func ChainFromProto(c *pb.MessageChain, enclosingTarget *pb.Target) message.Chai
 		case *pb.Segment_Extension:
 			out = append(out, message.ExtensionSegment{AdapterID: v.Extension.AdapterId, Name: v.Extension.Name, Version: v.Extension.Version, PayloadJSON: v.Extension.PayloadJson})
 		case *pb.Segment_Forward:
-			f := message.ForwardSegment{}
+			f := message.ForwardSegment{PlatformForwardID: v.Forward.GetPlatformForwardId()}
 			for _, item := range v.Forward.Items {
-				next := message.ForwardItem{Chain: ChainFromProto(item.Chain, enclosingTarget)}
+				next := message.ForwardItem{Chain: ChainFromProto(item.Chain, enclosingTarget), PlatformMessageID: item.GetPlatformMessageId()}
 				if item.Source != nil {
 					next.Source = &message.ForwardSource{DisplayName: item.Source.GetDisplayName(), ExternalUserID: item.Source.GetExternalUserId()}
 				}

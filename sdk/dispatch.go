@@ -19,10 +19,12 @@ const invocationSchemaVersion = 1
 
 func businessHandler(reg *Registration) wire.Handler {
 	handlers := make(map[string]func(*Context) error, len(reg.Events)+len(reg.Schedules))
+	rules := make(map[string][]Rule, len(reg.Events))
 	commands := make(map[string]Command, len(reg.Commands))
 	for _, route := range reg.Events {
 		route := route
 		handlers[route.RouteID] = func(c *Context) error { return invokeEvent(c, route) }
+		rules[route.RouteID] = route.rules
 	}
 	// 定时任务与事件共用手动 Handler 路径，取消后仍等待用户函数实际返回。
 	for _, job := range reg.Schedules {
@@ -57,7 +59,7 @@ func businessHandler(reg *Registration) wire.Handler {
 			if command.spec.GetMatch() == pb.CommandMatch_COMMAND_MATCH_REGEX {
 				groups = request.GetCommand().GetRegexGroups()
 			}
-			return invokeHandler(ctx, in, request.GetEvent(), command.mode == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY, groups, func(c *Context) (message.Content, error) {
+			return invokeHandler(ctx, in, request.GetEvent(), command.mode == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY, groups, command.rules, func(c *Context) (message.Content, error) {
 				args[0] = reflect.ValueOf(c)
 				values := reflect.ValueOf(command.Handler).Call(args)
 				var result message.Content
@@ -72,29 +74,35 @@ func businessHandler(reg *Registration) wire.Handler {
 				return result, nil
 			})
 		}
-		return invokeHandler(ctx, in, request.GetEvent(), false, nil, func(c *Context) (message.Content, error) { return nil, handler(c) })
+		return invokeHandler(ctx, in, request.GetEvent(), false, nil, rules[in.Target], func(c *Context) (message.Content, error) { return nil, handler(c) })
 	}
 }
 
-func invokeHandler(ctx context.Context, in *wire.Inbound, event *pb.Event, autoReply bool, groups []string, handler func(*Context) (message.Content, error)) (response wire.Response) {
+func invokeHandler(ctx context.Context, in *wire.Inbound, event *pb.Event, autoReply bool, groups []string, rules []Rule, handler func(*Context) (message.Content, error)) (response wire.Response) {
 	// 1. 为 Handler 建立独立有效期，返回或 panic 后取消所有仍在使用 Context 的工作。
 	ctx, cancel := context.WithCancel(ctx)
 	c := &Context{ctx: ctx, inbound: in, event: event, autoReply: autoReply, match: groups}
 	bindServiceContext(c)
-	outcome := &pb.HandlerOutcome{Matched: true, Propagation: pb.Propagation_PROPAGATION_CONTINUE}
+	outcome := &pb.HandlerOutcome{Propagation: pb.Propagation_PROPAGATION_CONTINUE}
 	c.active.Store(true)
-	defer func() {
+	finish := func() {
+		// 与 StopPropagation 共用锁，使失效与传播结果的快照成为同一步。
+		c.propagationMu.Lock()
 		c.active.Store(false)
+		if c.stopped {
+			outcome.Propagation = pb.Propagation_PROPAGATION_STOP
+		}
+		c.propagationMu.Unlock()
 		cancel()
+	}
+	defer func() {
+		finish()
 		if p := recover(); p != nil {
 			c.Logger().Error("handler panic", "panic", fmt.Sprint(p), "stack", string(debug.Stack()))
 			response.Err = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "handler panicked"}
 			outcome.Chain = nil
 		}
-		// 2. 出错仍输出传播标记，保留 Handler 已经设置的 STOP。
-		if c.stopped.Load() {
-			outcome.Propagation = pb.Propagation_PROPAGATION_STOP
-		}
+		// 出错仍输出传播标记，保留 Handler 已经设置的 STOP。
 		encoded, err := proto.Marshal(outcome)
 		if err != nil {
 			response.Err = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "encode HandlerOutcome: " + err.Error()}
@@ -108,7 +116,21 @@ func invokeHandler(ctx context.Context, in *wire.Inbound, event *pb.Event, autoR
 		}
 		response.Payload = wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(outcome), SchemaVersion: invocationSchemaVersion, Bytes: encoded}
 	}()
-	chain, err := handler(c)
+	// 2. Rule 与目标函数共享恢复、错误映射和生命周期；全部通过才标记匹配。
+	var chain message.Content
+	var err error
+	matched := true
+	for _, rule := range rules {
+		matched, err = rule(c)
+		if err != nil || !matched {
+			break
+		}
+	}
+	if matched && err == nil {
+		outcome.Matched = true
+		chain, err = handler(c)
+	}
+	finish()
 	if err != nil {
 		var public *Error
 		if errors.As(err, &public) {
