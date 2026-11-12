@@ -209,6 +209,7 @@ type Registration struct {
 	Schedules     []Schedule
 	services      []serviceRoute
 	subscriptions []subscriptionRoute
+	hooks         []hookRoute
 	messages      *i18n.Catalog // 收集时解析，供本次 Session 只读使用。
 }
 
@@ -239,6 +240,7 @@ func Collect(root Root) (*Registration, error) {
 	reg := &Registration{Commands: cmds.commands, Events: events.events, HTTP: routes.routes, Schedules: jobs.jobs}
 	errs := append(slices.Concat(cmds.errs, events.errs, routes.errs, jobs.errs), collectServices(root, reg))
 	errs = append(errs, collectSubscriptions(root, reg), collectI18n(root, reg))
+	errs = append(errs, collectHooks(root, reg))
 	if err := errors.Join(errs...); err != nil {
 		return nil, fmt.Errorf("invalid registration of %T: %w", root, err)
 	}

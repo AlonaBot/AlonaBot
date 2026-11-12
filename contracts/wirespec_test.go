@@ -63,6 +63,15 @@ func TestButtonCoreTokenFieldNumber(t *testing.T) {
 	}
 }
 
+// TestHookFilterFieldNumber 固定 PreEvent 事件过滤器的编号与 repeated string 类型。
+func TestHookFilterFieldNumber(t *testing.T) {
+	fields := (&pb.HookSpec{}).ProtoReflect().Descriptor().Fields()
+	field := fields.ByNumber(2)
+	if fields.Len() != 2 || field == nil || field.Name() != "event_type_filter" || field.Kind() != protoreflect.StringKind || !field.IsList() || field.HasPresence() || field.ContainingOneof() != nil {
+		t.Fatalf("HookSpec field 2 should be repeated string event_type_filter, got %v", field)
+	}
+}
+
 // TestOutboundHookFieldNumbers 固定出站操作字段的编号、类型和编辑消息 ID 的 presence。
 func TestOutboundHookFieldNumbers(t *testing.T) {
 	for _, c := range []struct {

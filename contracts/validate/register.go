@@ -139,11 +139,16 @@ func Register(r *pb.Register) error {
 				return err
 			}
 		case pb.RouteKind_ROUTE_KIND_HOOK:
+			filters := route.GetHook().GetEventTypeFilter()
 			switch route.GetHook().GetPhase() {
 			case pb.HookPhase_HOOK_PHASE_PRE_EVENT:
-				// 当前 HOOK 描述没有事件过滤字段，无法满足 PreEvent 恰好一项的约束。
-				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "pre-event hook route %q requires exactly one event_type_filter", route.GetRouteId())
+				if len(filters) != 1 || (!IsEventType(filters[0]) && !IsAdapterEventType(filters[0])) {
+					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "pre-event hook route %q requires exactly one valid event_type_filter", route.GetRouteId())
+				}
 			case pb.HookPhase_HOOK_PHASE_BEFORE_SEND, pb.HookPhase_HOOK_PHASE_AFTER_SEND:
+				if len(filters) != 0 {
+					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "outbound hook route %q must not contain event_type_filter", route.GetRouteId())
+				}
 			default:
 				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "hook route %q has an invalid phase", route.GetRouteId())
 			}

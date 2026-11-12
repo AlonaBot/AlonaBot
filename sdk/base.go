@@ -34,6 +34,8 @@ type Root interface {
 	Commands(*CommandRegistry)
 	// Events 在 Collect 时调用一次，注册事件路由。
 	Events(*EventRegistry)
+	// Hooks 在 Collect 时调用一次，注册三阶段 Hook。
+	Hooks(*HookRegistry)
 	// Services 在 Collect 时调用一次，注册服务。
 	Services(*ServiceRegistry)
 	// Subscriptions 在 Collect 时调用一次，注册 Event Bus 订阅。
@@ -73,6 +75,9 @@ func (*Base) Commands(*CommandRegistry) {}
 
 // Events 默认不注册事件路由。
 func (*Base) Events(*EventRegistry) {}
+
+// Hooks 默认不注册 Hook。
+func (*Base) Hooks(*HookRegistry) {}
 
 // Services 默认不注册服务。
 func (*Base) Services(*ServiceRegistry) {}
