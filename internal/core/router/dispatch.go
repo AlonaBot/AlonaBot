@@ -29,7 +29,7 @@ type Options struct {
 type Continuations interface {
 	Finished(inv *Invocation, ok bool)
 	Match(ev *pb.Event) bool
-	Release(pluginID string)
+	Release(c Caller)
 }
 
 // Stats 记录本次 Router 运行的准入计数与当前链、等待事件数。

@@ -26,6 +26,7 @@ type Options struct {
 	Timeout time.Duration // 独立调用的期限，取 CONTINUATION_TIMEOUT。
 	Call    func(ctx context.Context, inv *router.Invocation, continuationOf uint64, deadline time.Time) (wire.Response, error)
 	Prepare func(*pb.Event, router.Caller) (*pb.Event, error) // nil 时原样交付。
+	Caller  func(pluginID string) (router.Caller, bool)       // 由 Router.Caller 查询当前激活绑定。
 }
 
 // Manager 串行化登记、等待命中与释放；网络调用及事件准备在锁外进行。
@@ -74,6 +75,9 @@ func (m *Manager) start(ctx context.Context, caller router.Caller, in *wire.Inbo
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if !m.current(caller) {
+		return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "plugin Session released")
+	}
 	if ctx.Err() != nil {
 		return failure(pb.ErrorCode_ERROR_CODE_CANCELLED, "continuation request cancelled")
 	}
@@ -159,6 +163,10 @@ func (m *Manager) wait(ctx context.Context, caller router.Caller, in *wire.Inbou
 	k := key(inv.DefaultTarget, inv.Event.Actor)
 	w := &waiter{caller: caller, result: make(chan wire.Response, 1)}
 	m.mu.Lock()
+	if !m.current(caller) {
+		m.mu.Unlock()
+		return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "plugin Session released")
+	}
 	if ctx.Err() != nil {
 		m.mu.Unlock()
 		return failure(pb.ErrorCode_ERROR_CODE_CANCELLED, "wait request cancelled")
@@ -206,6 +214,11 @@ func (m *Manager) Match(ev *pb.Event) bool {
 	w := m.waits[k]
 	if w != nil {
 		delete(m.waits, k)
+		if !m.current(w.caller) {
+			w.result <- failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "plugin Session released")
+			m.mu.Unlock()
+			return false
+		}
 		m.delivering[w] = struct{}{}
 	}
 	m.mu.Unlock()
@@ -219,35 +232,43 @@ func (m *Manager) Match(ev *pb.Event) bool {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	current := m.current(w.caller) // Prepare 在锁外执行，交付前再次复核替换与 Release 的窗口。
 	if _, waiting := m.delivering[w]; waiting {
 		delete(m.delivering, w)
-		if prepareError != nil {
+		if !current {
+			w.result <- failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "plugin Session released")
+		} else if prepareError != nil {
 			w.result <- failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "prepare waiting event: "+prepareError.Error())
 		} else {
 			w.result <- response(&pb.WaitResponse{Event: prepared})
 		}
 	}
-	return true
+	return current
 }
 
-// Release 取消插件的延续调用，以 UNAVAILABLE 结束等待并丢弃待发登记。
-func (m *Manager) Release(pluginID string) {
+func (m *Manager) current(c router.Caller) bool {
+	current, ok := m.opt.Caller(c.PluginID)
+	return ok && current == c
+}
+
+// Release 取消指定 Session 的延续调用，以 UNAVAILABLE 结束等待并丢弃待发登记。
+func (m *Manager) Release(c router.Caller) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for inv, call := range m.calls {
-		if call.caller.PluginID == pluginID {
+		if call.caller == c {
 			call.cancel()
 			delete(m.calls, inv)
 		}
 	}
 	for k, w := range m.waits {
-		if w.caller.PluginID == pluginID {
+		if w.caller == c {
 			delete(m.waits, k)
 			w.result <- failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "plugin Session released")
 		}
 	}
 	for w := range m.delivering {
-		if w.caller.PluginID == pluginID {
+		if w.caller == c {
 			delete(m.delivering, w)
 			w.result <- failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "plugin Session released")
 		}

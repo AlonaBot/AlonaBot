@@ -124,11 +124,16 @@ func New(opt Options) *Router {
 func (r *Router) Attach(p Plugin, c Caller) {
 	id := p.PluginID()
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	previous := r.plugins[id]
 	session := &pluginSession{plugin: p, caller: c}
 	r.plugins[id] = session
 	r.cacheCommands(session)
 	r.rebuildCommands()
+	r.mu.Unlock()
+	// 先发布新绑定，再在锁外释放旧 Session，供等待匹配复核当前 Caller。
+	if previous != nil && previous.caller != c && r.continuations != nil {
+		r.continuations.Release(previous.caller)
+	}
 }
 
 // Plugin 返回最近一次 Attach 的插件实例及查找结果；激活状态由调用方即时检查。
@@ -187,12 +192,13 @@ func (r *Router) HasInFlight(c Caller, ev *pb.Event) bool {
 // Detach 移除插件并重建命令索引，使其退出后续事件的候选集。
 func (r *Router) Detach(pluginID string) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	previous := r.plugins[pluginID]
 	delete(r.plugins, pluginID)
 	delete(r.matches, pluginID)
 	r.rebuildCommands()
-	if r.continuations != nil {
-		r.continuations.Release(pluginID)
+	r.mu.Unlock()
+	if previous != nil && r.continuations != nil {
+		r.continuations.Release(previous.caller)
 	}
 }
 
