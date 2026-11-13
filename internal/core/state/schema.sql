@@ -115,6 +115,7 @@ CREATE TABLE tool_policy (
 
 CREATE TABLE button_token (
   token                 TEXT PRIMARY KEY,
+  purpose               TEXT NOT NULL CHECK (purpose IN ('plugin', 'confirm')),
   plugin_id             TEXT NOT NULL REFERENCES install(plugin_id),
   route_id              TEXT NOT NULL,
   action_id             TEXT NOT NULL,

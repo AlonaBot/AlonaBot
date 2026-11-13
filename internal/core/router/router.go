@@ -283,6 +283,9 @@ func (r *Router) dispatch(event *trustedEvent) {
 			slog.Info("discard invalid button click", "error", err)
 			return
 		}
+		if pluginID == "" {
+			return
+		}
 		for _, c := range snapshot {
 			if c.pluginID == pluginID && c.route.GetRouteId() == routeID {
 				candidates = append(candidates, c)

@@ -40,3 +40,25 @@ message ToolListRequest {}
 message ToolListResponse {
   repeated ToolInfo tools = 1;
 }
+
+// ToolInvokeRequest 请求在父调用链中执行工具。
+message ToolInvokeRequest {
+  // plugin_id/service_name。
+  string name = 1;
+  string arguments_json = 2;
+}
+
+// ToolInvokeResponse 保留工具返回的 JSON 原文。
+message ToolInvokeResponse {
+  string result_json = 1;
+}
+
+// ToolConfirmRequest 请求确认调用插件即将执行的操作。
+message ToolConfirmRequest {
+  // 调用插件内稳定的操作名，例如 mcp/<server>/<tool>。
+  string operation = 1;
+  string summary = 2;
+}
+
+// ToolConfirmResponse 表示用户允许本次操作。
+message ToolConfirmResponse {}
