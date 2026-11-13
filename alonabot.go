@@ -182,12 +182,8 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	c := &Core{store: store, values: values, dir: dir, logLevel: o.level, done: make(chan struct{}), stopping: make(chan struct{}), operations: make(chan coreOperation)}
 	fail := func(err error) (*Core, error) {
 		c.err = err
-		// 只沿单一错误链识别调用方取消，保留合并错误中的其他失败。
-		for cause := err; cause != nil; cause = errors.Unwrap(cause) {
-			if cause == context.Canceled && ctx.Err() == context.Canceled {
-				c.err = nil
-				break
-			}
+		if ctx.Err() == context.Canceled && startupCleanupError(err) == nil {
+			c.err = nil
 		}
 		shutdownErr := c.shutdown()
 		if c.err == nil && shutdownErr == nil {

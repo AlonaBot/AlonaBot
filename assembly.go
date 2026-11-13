@@ -672,7 +672,7 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	return c.store.SetEnabled(ctx, id, true)
 }
 
-// startupCleanupError 从 SDK 的合并错误中移除启动取消，保留各项资源清理失败。
+// startupCleanupError 从启动错误链中移除取消，保留真实的启动与资源清理失败。
 func startupCleanupError(err error) error {
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
 		var remaining []error
