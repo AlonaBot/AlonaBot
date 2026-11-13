@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -94,6 +96,8 @@ type mcpPeer struct {
 	gate       chan struct{}
 	session    *mcp.ClientSession // gate 保护；会话可并发 CallTool。
 	command    *exec.Cmd
+	stdin      io.WriteCloser // 停止预算到期时打断在途管道 I/O。
+	stdout     io.ReadCloser
 	exited     chan struct{} // 关闭发布 Wait 的结果，确保每个进程只 Wait 一次。
 	waitError  error
 	httpCancel context.CancelFunc
@@ -153,6 +157,7 @@ func (p *mcpPeer) connect(ctx context.Context) error {
 			return errors.Join(err, stdout.Close(), stdin.Close())
 		}
 		p.command, p.exited = command, make(chan struct{})
+		p.stdin, p.stdout = stdin, stdout
 		go func() { p.waitError = command.Wait(); close(p.exited) }() // 通道关闭后才读 waitError。
 		transport = &mcp.IOTransport{Reader: stdout, Writer: stdin}
 	case mcpHTTP:
@@ -203,7 +208,18 @@ func (p *mcpPeer) close(ctx context.Context) error {
 		defer p.httpCancel()
 	}
 	if p.session != nil {
-		errs = append(errs, p.session.Close())
+		closed := make(chan error, 1)
+		go func() { closed <- p.session.Close() }()
+		select { // Close 等待在途写入，停止预算必须覆盖这段等待。
+		case err := <-closed:
+			errs = append(errs, err)
+		case <-ctx.Done():
+			errs = append(errs, ctx.Err())
+			if p.command != nil {
+				errs = append(errs, p.stdin.Close(), p.stdout.Close(), p.killAndWait())
+			}
+			errs = append(errs, <-closed) // 管道中断后等待会话回收，再释放 gate。
+		}
 		p.session = nil
 	}
 	if p.command != nil {
@@ -262,12 +278,18 @@ func (t *mcpHeaders) RoundTrip(request *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 	if request.Method == http.MethodDelete {
-		// SDK 的会话关闭只检查 DELETE 状态，传输在这里释放它的响应体。
+		// SDK 不检查 DELETE 状态或关闭响应体，此处保留两类失败。
 		err := response.Body.Close()
 		stop()
 		cancel()
 		response.Body = http.NoBody
-		return response, err
+		if (response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices) && response.StatusCode != http.StatusMethodNotAllowed {
+			err = errors.Join(fmt.Errorf("terminate MCP session: HTTP %d %s", response.StatusCode, http.StatusText(response.StatusCode)), err)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return response, nil
 	}
 	response.Body = &mcpResponseBody{ReadCloser: response.Body, stop: stop, cancel: cancel}
 	return response, nil
@@ -301,25 +323,38 @@ func (s mcpServer) sanitize(text string) string {
 	if s.URL != "" {
 		secrets = append(secrets, s.URL)
 		if endpoint, err := url.Parse(s.URL); err == nil {
+			secrets = append(secrets, endpoint.Redacted())
 			if endpoint.User != nil {
-				secrets = append(secrets, endpoint.User.Username())
-				if password, ok := endpoint.User.Password(); ok {
-					secrets = append(secrets, password)
-				}
+				username := endpoint.User.Username()
+				password, _ := endpoint.User.Password()
+				secrets = append(secrets, username, password, base64.StdEncoding.EncodeToString([]byte(username+":"+password)))
 			}
 			for _, values := range endpoint.Query() {
-				secrets = append(secrets, values...)
+				for _, value := range values {
+					secrets = append(secrets, value, url.QueryEscape(value))
+				}
+			}
+			// 保留配置实际采用的编码形式，例如 %20 或小写百分号转义。
+			for _, pair := range strings.Split(endpoint.RawQuery, "&") {
+				if _, value, ok := strings.Cut(pair, "="); ok {
+					secrets = append(secrets, value)
+				}
 			}
 		}
 	}
+	var forms []string
 	for _, secret := range secrets {
 		if secret != "" {
 			encodedJSON, _ := json.Marshal(secret) // string 总能编码；匹配工具结果中的 HTML 转义形式。
-			text = strings.ReplaceAll(text, string(encodedJSON[1:len(encodedJSON)-1]), redacted)
 			encoded := strconv.Quote(secret)
-			text = strings.ReplaceAll(text, encoded[1:len(encoded)-1], redacted)
-			text = strings.ReplaceAll(text, secret, redacted)
+			forms = append(forms, secret, string(encodedJSON[1:len(encodedJSON)-1]), encoded[1:len(encoded)-1])
 		}
 	}
-	return text
+	// 先匹配完整 URL 和认证值，且替换后的占位符不再次参与匹配。
+	slices.SortFunc(forms, func(a, b string) int { return len(b) - len(a) })
+	var replacements []string
+	for _, form := range forms {
+		replacements = append(replacements, form, redacted)
+	}
+	return strings.NewReplacer(replacements...).Replace(text)
 }
