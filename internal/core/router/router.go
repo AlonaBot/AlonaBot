@@ -443,7 +443,7 @@ func (r *Router) call(c candidate, event *trustedEvent, bind func(*pb.Event) (*p
 	r.inFlight[key]++
 	r.mu.Unlock()
 	defer r.finishCall(key)
-	inv := &Invocation{PluginID: c.pluginID, Event: prepared, DefaultTarget: proto.CloneOf(event.retained.GetTarget()), Chain: slices.Clone(request.Context.PluginChain), Scopes: slices.Clone(request.Context.Scopes), RouteID: request.RouteId, candidate: c, request: request, TraceID: trace}
+	inv := &Invocation{Depth: 1, PluginID: c.pluginID, Event: prepared, DefaultTarget: proto.CloneOf(event.retained.GetTarget()), Chain: slices.Clone(request.Context.PluginChain), Scopes: slices.Clone(request.Context.Scopes), RouteID: request.RouteId, candidate: c, request: request, TraceID: trace}
 	r.observeInvocation(inv, event.dispatch)
 	response, err := c.plugin.Call(r.ctx, wire.Request{
 		Target: request.RouteId, TraceID: trace,
@@ -473,7 +473,7 @@ func (r *Router) CallContinuation(ctx context.Context, inv *Invocation, continua
 	if err != nil {
 		return wire.Response{}, fmt.Errorf("encode continuation request: %w", err)
 	}
-	next := &Invocation{PluginID: inv.PluginID, Event: request.Event, DefaultTarget: proto.CloneOf(inv.DefaultTarget), Chain: slices.Clone(inv.Chain), Scopes: slices.Clone(inv.Scopes), SendForbidden: inv.SendForbidden, RouteID: inv.RouteID, Continuation: true, candidate: inv.candidate, request: request, TraceID: inv.TraceID}
+	next := &Invocation{Depth: inv.Depth, PluginID: inv.PluginID, Event: request.Event, DefaultTarget: proto.CloneOf(inv.DefaultTarget), Chain: slices.Clone(inv.Chain), Scopes: slices.Clone(inv.Scopes), SendForbidden: inv.SendForbidden, RouteID: inv.RouteID, Continuation: true, candidate: inv.candidate, request: request, TraceID: inv.TraceID}
 	next.dispatch, next.OnWait, next.OnWaitMatch = inv.dispatch, inv.OnWait, inv.OnWaitMatch
 	key := inFlightKey{caller: inv.candidate.caller, eventID: inv.Event.GetEventId()}
 	r.mu.Lock()

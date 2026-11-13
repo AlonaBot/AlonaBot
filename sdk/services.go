@@ -55,6 +55,7 @@ type serviceBuilder struct {
 	encoding    pb.PayloadEncoding
 	access      Access
 	allowlist   []string
+	permission  Permission
 	handles     int
 	afterHandle bool
 	prepare     func() (serviceRoute, error)
@@ -198,6 +199,16 @@ func (s *ServiceBuilder[In, Out]) Access(a Access, allowlist ...string) *Service
 	return s
 }
 
+// Permission 覆盖服务要求的权限，满足其中任一权限名即可；缺省不要求权限。
+func (s *ServiceBuilder[In, Out]) Permission(p Permission) *ServiceBuilder[In, Out] {
+	s.builder.plugin.checkRegistration()
+	if s.builder.handles != 0 {
+		s.builder.afterHandle = true
+	}
+	s.builder.permission = p
+	return s
+}
+
 // Tool 设置工具说明与缺省策略；Proto 声明或 Handle 后调用由 Collect 报错。
 func (s *ServiceBuilder[In, Out]) Tool(description string, defaultPolicy ToolDefault) *ServiceBuilder[In, Out] {
 	s.builder.plugin.checkRegistration()
@@ -241,7 +252,8 @@ func (b *serviceBuilder) route(inputID, outputID string, inputVersion, outputVer
 	}
 	return serviceRoute{plugin: b.plugin, subID: b.subID, descriptor: &pb.RouteDescriptor{
 		RouteId: serviceRoutePrefix + b.name, Kind: pb.RouteKind_ROUTE_KIND_SERVICE, DefaultEnabled: true,
-		InputSchemaId: inputID, InputSchemaVersion: inputVersion, OutputSchemaId: outputID, OutputSchemaVersion: outputVersion,
+		RequiredPermissions: b.permission.Names(),
+		InputSchemaId:       inputID, InputSchemaVersion: inputVersion, OutputSchemaId: outputID, OutputSchemaVersion: outputVersion,
 		Spec: &pb.RouteDescriptor_Service{Service: &pb.ServiceSpec{ServiceName: b.name, Access: access, AllowlistPluginIds: b.allowlist, Encoding: encoding}},
 	}, invoke: invoke}
 }

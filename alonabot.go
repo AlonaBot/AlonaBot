@@ -312,6 +312,7 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	for _, entry := range o.components {
 		development[entry.manifest.ID] = entry.manifest
 	}
+	version := coreVersion()
 	management := manage.New(manage.Options{Logs: output, Stopping: c.stopping, NotifyLogLevel: func(ctx context.Context, id string, level pb.LogLevel) error {
 		return c.operation(ctx, func(ctx context.Context) error {
 			plugin, ok := c.assembly.router.Plugin(id)
@@ -337,9 +338,11 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 			return proto.Unmarshal(response.Payload.Bytes, reply)
 		})
 	}, Store: store, Settings: c.assembly.settings, Policy: c.assembly.policy,
+		CoreInfo: func() (string, string) { return version, c.http.Addr },
 		Adapters: c.assembly.adapters, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(o.components),
 		Packages: filepath.Join(dir, "packages"), Limits: packages.NewLimits(values), Development: development, DevelopmentWebUI: o.webUI,
 		Descriptor: c.assembly.componentDescriptor,
+		Candidates: managedCandidates{core: c},
 		Start: func(ctx context.Context, id string) error {
 			return c.operation(ctx, func(ctx context.Context) error { return c.startManaged(ctx, id) })
 		},
@@ -421,7 +424,7 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 			if running != nil {
 				c.components = append(c.components, running)
 			}
-			if err != nil {
+			if err != nil && (running == nil || running.instance.State() != host.StateDegraded) {
 				return fail(fmt.Errorf("start %s: %w", install.PluginID, err))
 			}
 		}
@@ -537,6 +540,14 @@ running:
 				continue
 			} // 管理停止的旧 Session 已移出，不再影响新 Session。
 			old := result.running
+			if old.instance.State() == host.StateDegraded {
+				// 已提交失败保留供管理员恢复；观察者已清理进程树，不触发自动重启。
+				c.assembly.media.ReleaseSession(old.caller.SessionKey)
+				if result.err != nil {
+					slog.Error("degraded process cleanup failed", "plugin_id", old.id, "error", result.err)
+				}
+				continue
+			}
 			c.assembly.detach(old)
 			c.assembly.media.ReleaseSession(old.caller.SessionKey)
 			if old.process == nil {
@@ -831,11 +842,10 @@ func (c *Core) operation(ctx context.Context, apply func(context.Context) error)
 	case <-c.stopping:
 		return errors.New("Core is stopping")
 	}
+	// 已接纳的操作在取消后仍须交还资源所有权，调用者才可清理暂存包。
 	select {
 	case err := <-op.result:
 		return err
-	case <-ctx.Done():
-		return ctx.Err()
 	case <-c.stopping:
 		return errors.New("Core is stopping")
 	}
@@ -866,7 +876,7 @@ func (c *Core) startManaged(ctx context.Context, id string) error {
 	if running != nil {
 		c.components = append(c.components, running)
 	}
-	if err != nil && running != nil {
+	if err != nil && running != nil && running.instance.State() != host.StateDegraded {
 		return errors.Join(err, c.stopManaged(id, pb.StopReason_STOP_REASON_DISABLE))
 	}
 	return err
