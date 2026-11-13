@@ -49,7 +49,7 @@
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-04.7、T-06.1 | 已完成（PR #101） |
 | goal-91 | T-04.8 | SDK 自有类型与事件常量 | T-03.9、T-03.24、T-04.7、T-04.9 | 已完成（PR #141） |
 | goal-123 | T-08.13 | 文案函数只返回字符串 | T-04.9、T-08.8 | 已完成（PR #137） |
-| goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 待派发 |
+| goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 已完成（PR #157） |
 | goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 已完成（PR #107） |
 | goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8、T-08.11 | 已完成（PR #117） |
 | goal-101 | T-08.12 | Adapter 实例配置与 Core 设置的版本迁移 | T-07.6、T-08.11 | 已完成（PR #114） |
@@ -5326,7 +5326,7 @@ sdk（新增或替换）
 
 ### goal-130 · T-08.14 配置项的选项来源
 
-状态：待派发。前置均已合并：T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）、T-06.1（PR #45）、T-08.11（PR #103）。2026-11-12 审查者按 main `2828864` 的代码写出范围、接口与测试段，现有代码如下：
+状态：已完成（[PR #157](https://github.com/AlonaBot/AlonaBot/pull/157)，合并提交 `e709135`），证据见 TEST-MATRIX §3.2。合入：`configschema.BuiltinOptionSources`、`Schema.OptionsFrom`；`ServiceSpec.options_source = 6`；`validate.OptionsQuerySchemaID`/`OptionsPageSchemaID`；tune 的 `OPTIONS_PAGE`；`sdk.ServeOptions(r, serviceName, fn)` 与 `OptionsQuery`、`OptionsPage`、`Option`（自有服务只声明名称，归属在注册时确定）；`internal/core/options` 的 `New(Options{Schema, Router, Broker, Instances, Page})` 与 `Query`；`Broker.CallSession(ctx, c, target, in)` 与 `Router.PluginFor(c)`；根包 assemble 加载 `settings.File` 并按 Session 发布选项 schema。范围修订：`@agent` 来源的解析归 T-12.8（goal-83），之前返回 UNAVAILABLE。派发时：前置均已合并：T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）、T-06.1（PR #45）、T-08.11（PR #103）。2026-11-12 审查者按 main `2828864` 的代码写出范围、接口与测试段，现有代码如下：
 
 - **配置 schema**：字段属性在 `contracts/configschema/declaration.go` 的属性 switch 中逐项校验。`options`、`labels` 只用于 string 与没有 items 的 list；secret 不能与 default、options 并存。
 - **ServiceSpec**：现用到字段 5（tool）；`ServiceAccess_SERVICE_ACCESS_PRIVATE` 表示只允许 Core 与本插件。
