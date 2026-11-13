@@ -698,7 +698,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 库模式用 `alonabot.Args(...)` 选项或环境变量 `ALONABOT_ARGS` 覆盖调优参数，语法与 `--args` 相同（§16）。
 - 官方 Adapter 与官方插件以可导入的 Go 包提供组件（例如 `telegram.New()`），程序入口只调用 SDK 的运行函数，库模式可以直接引用它们。
 - `alonabot.Plugin(p)` 登记工程 manifest 的 role 为 plugin 或 agent 的组件（agent 只能登记一个）。`alonabot.Listen(addr)`、`alonabot.LogLevel(level)` 与 `alonabot.LogFormat(format)` 覆盖本次运行的监听地址与日志设置，与 `alonabot run` 的 `--listen`、`--log-level`、`--log-format` 相同，不写回设置文件（D-139）。库模式与 `alonabot run` 共用同一套装配：读取 `core_config.json`，提供 HTTP 入口、管理认证与管理 API，启动已安装与开发中 Adapter 的实例。
-- 库模式与 `alonabot run` 一样提供已安装的 WebUI 组件。`alonabot.WebUI(fsys fs.FS)` 选项提供 dev 来源的 WebUI：fsys 的根目录即静态根目录，本次运行中它代替已安装的 WebUI，不经安装、签名与 Admin API 版本检查之外的校验。
+- 库模式与 `alonabot run` 一样提供已安装的 WebUI 组件。`alonabot.WebUI(fsys fs.FS)` 选项提供 dev 来源的 WebUI：fsys 的根目录即静态根目录，本次运行中它代替已安装的 WebUI，不经安装、签名与 Admin API 版本检查之外的校验。开发 WebUI 没有 manifest，不做 Admin API 版本检查，Core 启动时记一条 WARN；同一次 Start 登记两次该选项返回错误（D-140）。
 - 库模式也可以用于小规模部署，但不提供上述隔离与崩溃恢复；正式分发插件与 Adapter 仍使用安装包。
 
 ### 15.6 install.sh

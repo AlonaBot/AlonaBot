@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -51,6 +52,8 @@ type options struct {
 	listen     *string
 	level      *slog.Level
 	format     *string
+	webUI      fs.FS
+	webUICount int // 记录选项次数，重复登记在取得实例锁前报错。
 }
 
 // Plugin 登记由生成资源确定身份的开发插件或唯一 Agent。
@@ -61,6 +64,15 @@ func Plugin(root *sdk.Plugin) Option {
 // Adapter 登记由生成资源确定身份的开发 Adapter。
 func Adapter(a adapter.Adapter) Option {
 	return func(o *options) { o.components = append(o.components, component{adapter: a, role: state.RoleAdapter}) }
+}
+
+// WebUI 以 fsys 根目录作为本次运行的开发 WebUI，覆盖已安装组件的静态来源。
+// 开发文件系统没有 manifest，启动时记录跳过 Admin API 版本检查的警告。
+func WebUI(fsys fs.FS) Option {
+	return func(o *options) {
+		o.webUI = fsys
+		o.webUICount++
+	}
 }
 
 // DataDir 指定 Core 数据目录，缺省为当前工作目录下的 data。
@@ -121,6 +133,12 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	o := options{dir: "data"}
 	for _, apply := range opts {
 		apply(&o)
+	}
+	if o.webUICount > 1 {
+		return nil, startupUsage(errors.New("WebUI option may only be registered once"))
+	}
+	if o.webUICount == 1 && o.webUI == nil {
+		return nil, startupUsage(errors.New("WebUI file system is required"))
 	}
 	args := o.args
 	if env := os.Getenv("ALONABOT_ARGS"); env != "" {
@@ -184,6 +202,9 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	}
 	c.output = output
 	slog.SetDefault(output.Logger())
+	if o.webUI != nil {
+		slog.Warn("development WebUI has no manifest; Admin API version compatibility is not checked")
+	}
 	if configuration.LogFile.Enabled {
 		if err := output.EnableFile(logging.FileOptions{Dir: filepath.Join(dir, "logs"), MaxSize: configuration.LogFile.MaxSize, MaxTotal: configuration.LogFile.MaxTotal, MaxAgeDays: configuration.LogFile.MaxAgeDays}); err != nil {
 			return fail(err)
@@ -244,7 +265,7 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	}
 	management := manage.New(manage.Options{Store: store, Settings: c.assembly.settings, Policy: c.assembly.policy,
 		Adapters: c.assembly.adapters, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(o.components),
-		Packages: filepath.Join(dir, "packages"), Limits: packages.NewLimits(values), Development: development,
+		Packages: filepath.Join(dir, "packages"), Limits: packages.NewLimits(values), Development: development, DevelopmentWebUI: o.webUI,
 		Descriptor: c.assembly.componentDescriptor,
 		Start: func(ctx context.Context, id string) error {
 			return c.operation(ctx, func(ctx context.Context) error { return c.startManaged(ctx, id) })
@@ -284,9 +305,27 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 			})
 		},
 	})
-	adminMux.Handle("/", management.Handler(authentication))
+	administration := management.Handler(authentication)
+	adminMux.Handle("/api/v1/", administration)
+	adminMux.Handle("/api/", administration)
+	adminMux.Handle("/api", administration)
+	static := management.WebUI()
+	adminMux.Handle("/", static)
+	admin := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/"), "/")
+		// 让所属入口拒绝原始路径，避免 ServeMux 先清理再重定向到另一份资源。
+		if r.URL.Path != "/" && (!fs.ValidPath(name) || strings.ContainsAny(name, "\\:\x00")) {
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				administration.ServeHTTP(w, r)
+			} else {
+				static.ServeHTTP(w, r)
+			}
+			return
+		}
+		adminMux.ServeHTTP(w, r)
+	})
 	c.assembly.http = httpproxy.New(authentication)
-	publicHost := webhost.New(webhost.Options{BaseURL: baseURL, Proxy: c.assembly.http, Admin: adminMux})
+	publicHost := webhost.New(webhost.Options{BaseURL: baseURL, Proxy: c.assembly.http, Admin: admin})
 	listener, err := net.Listen("tcp", configuration.Listen)
 	if err != nil {
 		return fail(fmt.Errorf("listen HTTP: %w", err))
