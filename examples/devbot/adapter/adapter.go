@@ -52,7 +52,7 @@ func (a *loopback) HTTP(route func(string, string) *sdk.RouteBuilder) {
 		}
 		number := fmt.Sprint(a.sequence.Add(1))
 		chain := message.Chain{message.Text(text)}
-		_, err := core.Deliver(r.Context(), &message.Event{
+		accepted, err := core.Deliver(r.Context(), &message.Event{
 			ID: number, Type: "message.created", Source: message.SourceAdapter, OccurredAt: time.Now(),
 			AdapterID: adapterID, AdapterInstanceID: id, AccountID: id,
 			Session: message.NewSession(adapterID, "chat", ""), ChatType: message.ChatPrivate,
@@ -62,6 +62,10 @@ func (a *loopback) HTTP(route func(string, string) *sdk.RouteBuilder) {
 		}, nil)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !accepted {
+			http.Error(w, "event not accepted: dispatch queue full", http.StatusServiceUnavailable)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -81,10 +85,11 @@ func (a *loopback) Start(_ context.Context, req adapter.StartRequest, core adapt
 }
 
 type instance struct {
-	owner   *loopback
-	account string
-	output  string      // 配置非空时覆盖写入最后一条发送的文本。
-	stopped atomic.Bool // Stop 与 Send 可并发调用。
+	owner    *loopback
+	account  string
+	output   string      // 配置非空时覆盖写入最后一条发送的文本。
+	outputMu sync.Mutex  // 串行化同一实例的文件截断与写入，保留完整消息。
+	stopped  atomic.Bool // Stop 与 Send 可并发调用。
 }
 
 func (i *instance) Account() adapter.Account         { return adapter.Account{ID: i.account} }
@@ -95,6 +100,8 @@ func (i *instance) Send(_ context.Context, to message.Session, chain message.Cha
 	}
 	// 原有库模式调用者可以只使用回执，文件观察由实例配置显式启用。
 	if i.output != "" {
+		i.outputMu.Lock()
+		defer i.outputMu.Unlock()
 		if err := os.WriteFile(i.output, []byte(chain.Text()), 0o600); err != nil {
 			return nil, errcode.Internal.Errorf("write loopback output: %v", err)
 		}

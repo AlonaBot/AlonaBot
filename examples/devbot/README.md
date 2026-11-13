@@ -32,6 +32,16 @@ cat $DEVBOT_OUTPUT
 
 `/inject` 是私有路由，复用 Core 管理 Bearer token；Cookie 认证的 POST 还需要受控 Origin 与 `X-Alonabot-CSRF`。Host 必须匹配 `base_url`；样例的监听与 Base URL 均为 `127.0.0.1:7650`。停止已有 Core 后再复用此端口。
 
+注入接口的状态码：
+
+| 状态码 | 含义 |
+| --- | --- |
+| 204 | Core 已接纳事件，回复异步发送 |
+| 400 | 缺少 `instance` 或非空 `text` |
+| 401 | 缺少有效认证 |
+| 503 | 实例不可用，或 Core 分发队列已满、事件被丢弃；响应正文给出英文原因 |
+| 500 | `Deliver` 返回错误，响应正文保留错误说明 |
+
 ## 工程与配置
 
 ```text
