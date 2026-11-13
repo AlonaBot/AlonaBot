@@ -68,7 +68,7 @@
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 已完成（PR #145） |
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 已完成（PR #119） |
 | goal-39 | T-09.4 | 管理服务、安装记录与 run | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 待派发 |
-| goal-68 | T-13.2 | 开发组件的配置与数据库 | T-07.6、T-08.5、T-08.11、T-13.1 | 待派发 |
+| goal-68 | T-13.2 | 开发组件的配置与数据库 | T-07.6、T-08.5、T-08.11、T-13.1 | 已完成（PR #160） |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 已完成（PR #155） |
@@ -4720,7 +4720,7 @@ goal-125 若先合并，Collect 改为收 *Plugin，命令、事件与 OnButton 
 
 ### goal-68 · T-13.2 开发组件的配置与数据库
 
-状态：待派发。前置均已合并：T-13.1（[PR #149](https://github.com/AlonaBot/AlonaBot/pull/149)，合并提交 `bc39361`）、T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）、T-07.6（PR #100）、T-08.5（PR #79）、T-08.11（PR #103）。2026-11-12 审查者按 main `56550de` 的代码改写，现有代码如下：
+状态：已完成（[PR #160](https://github.com/AlonaBot/AlonaBot/pull/160)，合并提交 `65ebc5f`），证据见 TEST-MATRIX §3.2。合入：根包 startDevelopment 读取 `plugins/<id>/config.json`，Bootstrap 的数据库为 `dev.sqlite`（first_install/resume，migration_mode UNSPECIFIED），日志级别缺省 debug（settings 的来源级别优先，读取装配共用的 `settings.File`）；`state.Store.SetDevGenerationConfig(ctx, generationID, snapshot, configVersion, secretPaths)`；`internal/inproc.Launch.Log` 与 `logging.Output.Component(pluginID, generationID)`；host 在 Bootstrap 方式为 UNSPECIFIED 时接受明确回报；SDK 对 `dev:` 代次的 RESUME 允许 OnConfigLoad 变换配置。执行中审查者扩充授权（host、logging、inproc、state）。配置写回随 T-09.14；dev 来源拒绝 update/rollback/uninstall 与开发 Adapter 的实例在 goal-39。派发时：前置均已合并：T-13.1（[PR #149](https://github.com/AlonaBot/AlonaBot/pull/149)，合并提交 `bc39361`）、T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）、T-07.6（PR #100）、T-08.5（PR #79）、T-08.11（PR #103）。2026-11-12 审查者按 main `56550de` 的代码改写，现有代码如下：
 
 - **开发组件的 Bootstrap**：根包 `assembly.go` 的 `startDevelopment` 用 `bootstrap(generation, initialConfigVersion)` 构造，固定为 `CandidateConfigJson: "{}"`、`DatabaseDescriptor{Backend: NONE, MigrationMode: NONE}` 与 `LogLevel: INFO`；资源来自 `entry.resources`（插件对象的 `p.Generated()`）。
 - **代次与提交**：代次固定为 `dev:<id>`，首次以 `AddGeneration` 建快照，经 `host.Prepare`/`host.Activate` 激活并在首次 `CommitActive`；开发组件的数据目录为 `<data_dir>/plugins/<id>`。

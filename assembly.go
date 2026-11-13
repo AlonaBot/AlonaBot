@@ -30,6 +30,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/hook"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
+	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/media"
 	"github.com/AlonaBot/AlonaBot/internal/core/message"
 	coreoptions "github.com/AlonaBot/AlonaBot/internal/core/options"
@@ -347,10 +348,69 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) error {
 
 func (c *Core) startDevelopment(ctx context.Context, dir string, entry *component) error {
 	id := entry.manifest.ID
+	const configFile = "config.json"
+	const databaseFile = "dev.sqlite"
+	// 1. 每次启动读取原配置，SDK 随后按首装顺序准备；文件内容保持原样。
+	pluginDir := filepath.Join(dir, "plugins", id)
+	configPath := filepath.Join(pluginDir, configFile)
+	configJSON, err := os.ReadFile(configPath)
+	if errors.Is(err, os.ErrNotExist) {
+		configJSON = []byte(emptyConfig)
+	} else if err != nil {
+		return fmt.Errorf("read %s: %w", configPath, err)
+	}
+	if !validate.IsJSONObject(configJSON) {
+		return fmt.Errorf("config %s must be a JSON object", configPath)
+	}
+	version := uint32(initialConfigVersion)
+	var secretPaths []string
+	if len(entry.resources.ConfigSchema) != 0 {
+		schema, problems := configschema.Parse(entry.resources.ConfigSchema)
+		if len(problems) != 0 {
+			return fmt.Errorf("component %s config schema: %v", id, problems)
+		}
+		version = uint32(schema.Version())
+		for _, path := range schema.SecretPaths() {
+			secretPaths = append(secretPaths, strings.Join(path, "."))
+		}
+	}
+	generation := devGenerationPrefix + id
+	boot := bootstrap(generation, version)
+	boot.CandidateConfigJson = string(configJSON)
+	if entry.role != state.RoleAdapter {
+		path := filepath.Join(pluginDir, databaseFile)
+		reason := pb.ActivationReason_ACTIVATION_REASON_RESUME
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			reason = pb.ActivationReason_ACTIVATION_REASON_FIRST_INSTALL
+		} else if err != nil {
+			return fmt.Errorf("stat %s: %w", path, err)
+		}
+		boot.DatabaseDescriptor = &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_SQLITE,
+			SqlitePath: path, ActivationReason: reason, MigrationMode: pb.MigrationMode_MIGRATION_MODE_UNSPECIFIED}
+	}
+	current := c.assembly.settings.Settings()
+	level := slog.LevelDebug
+	if explicit, ok := current.LogSources[id]; ok {
+		switch explicit {
+		case "off":
+			level = logging.LevelOff
+		case "inherit":
+			level = current.LogLevel
+		default:
+			if err := level.UnmarshalText([]byte(explicit)); err != nil {
+				return err
+			}
+		}
+	}
+	boot.LogLevel = logging.ProtoLevel(level)
+	c.output.Levels().SetSource(id, level)
+
 	schemas, err := optionSchemas(entry.resources)
 	if err != nil {
 		return fmt.Errorf("component %s options schema: %w", id, err)
 	}
+
+	// 2. 保留固定代次与已有安装身份，本次启动只刷新构建摘要。
 	digest := make([]byte, launchRandomBytes)
 	rand.Read(digest)
 	install, err := c.store.GetInstall(ctx, id)
@@ -363,7 +423,6 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	if err != nil {
 		return err
 	}
-	generation := devGenerationPrefix + id
 	active, err := c.store.Active(ctx, id)
 	if err != nil {
 		return err
@@ -376,21 +435,21 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 		return err
 	}
 	if _, exists := snapshots[generation]; !exists {
-		if err := c.store.AddGeneration(ctx, id, generation, emptyConfig, initialConfigVersion); err != nil {
+		if err := c.store.AddGeneration(ctx, id, generation, emptyConfig, version); err != nil {
 			return err
 		}
 	}
-	pluginDir := filepath.Join(dir, "plugins", id)
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		return err
 	}
+	// 3. 走共用的握手、准备与激活流程。
 	listener, err := wire.ListenLoopback()
 	if err != nil {
 		return err
 	}
 	running := &runningComponent{id: id, caller: router.NewCaller(id, generation), listener: listener, finished: make(chan struct{}), schemas: schemas}
 	c.components = append(c.components, running)
-	l := &inproc.Launch{PluginID: id, Secret: make([]byte, launchRandomBytes), Addr: listener.Addr().String(), BuildDigest: digest, RuntimeLockPath: filepath.Join(pluginDir, wire.RuntimeLockFile)}
+	l := &inproc.Launch{PluginID: id, Secret: make([]byte, launchRandomBytes), Addr: listener.Addr().String(), BuildDigest: digest, RuntimeLockPath: filepath.Join(pluginDir, wire.RuntimeLockFile), Log: c.output.Component(id, generation)}
 	rand.Read(l.Secret)
 	go func() {
 		if entry.role == state.RoleAdapter {
@@ -412,7 +471,6 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	}
 	running.conn = wire.NewStreamConn(conn)
 	limits := host.NewLimits(c.values)
-	boot := bootstrap(generation, initialConfigVersion)
 	messages, problems := i18n.Parse(entry.resources.I18n)
 	if len(problems) != 0 {
 		return fmt.Errorf("component %s messages: %v", id, problems)
@@ -420,6 +478,9 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	prep, err := host.Prepare(ctx, running.conn, host.Expect{Role: entry.role, AdapterID: entry.manifest.AdapterID, PluginID: id, Secret: l.Secret, BuildDigest: digest,
 		Offer: validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}}, boot, limits)
 	if err != nil {
+		return err
+	}
+	if err := c.store.SetDevGenerationConfig(ctx, generation, string(prep.ConfigSnapshot), prep.Register.GetCandidateConfigVersion(), secretPaths); err != nil {
 		return err
 	}
 	activation := host.ActivateOptions{PluginID: id, GenerationID: generation, Handler: c.assembly.handler(running, install), Global: c.assembly.global, Limits: limits, Messages: messages}

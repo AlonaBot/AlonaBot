@@ -319,10 +319,15 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 }
 
 func checkMigration(migration *pb.MigrationState, database *pb.DatabaseDescriptor) error {
-	if migration.GetMode() != database.GetMigrationMode() {
+	switch migration.GetMode() {
+	case pb.MigrationMode_MIGRATION_MODE_NONE, pb.MigrationMode_MIGRATION_MODE_VERSIONED, pb.MigrationMode_MIGRATION_MODE_SELF:
+	default:
+		return fmt.Errorf("invalid registered migration mode %s", migration.GetMode())
+	}
+	if database.GetMigrationMode() != pb.MigrationMode_MIGRATION_MODE_UNSPECIFIED && migration.GetMode() != database.GetMigrationMode() {
 		return fmt.Errorf("registered migration mode %s does not match Bootstrap mode %s", migration.GetMode(), database.GetMigrationMode())
 	}
-	if database.GetMigrationMode() == pb.MigrationMode_MIGRATION_MODE_VERSIONED {
+	if migration.GetMode() == pb.MigrationMode_MIGRATION_MODE_VERSIONED {
 		completed := make(map[uint32]bool, len(migration.GetCompletedMigrationIds()))
 		for _, id := range migration.GetCompletedMigrationIds() {
 			completed[id] = true
