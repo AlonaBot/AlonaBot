@@ -228,10 +228,15 @@ var lifecycleLogRe = []string{
 // 完整生命周期：TCP 走完 OnStart → OnReady → 激活 → SIGTERM → STOPPING/OnStop → 正常退出；
 // 日志按控制台格式输出到 stderr（不是终端，不着色），并写入当天的日志文件。
 func TestLifecycleOverTCPAndStdio(t *testing.T) {
-	for _, transport := range []string{"tcp"} {
+	for _, transport := range []string{"tcp", "stdio"} {
 		t.Run(transport, func(t *testing.T) {
 			dir := t.TempDir()
-			c := startCore(t, dir)
+			var c *core
+			if transport == "stdio" {
+				c = startEmptyCore(t, dir, "../../examples/plugins/lifecycle", "--stdio")
+			} else {
+				c = startCore(t, dir)
+			}
 			m := c.waitFor(activatedRe)
 			pid, _ := strconv.Atoi(m[3])
 			if m[2] != "new" {

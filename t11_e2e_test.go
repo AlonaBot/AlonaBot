@@ -787,7 +787,7 @@ func t11PermissionProcess() error {
 		return err
 	}
 	// 2. 权限要求是任一满足；平台 owner 通过 Core 展开的 chat_admin 取得准入。
-	registration := &pb.Register{CandidateConfigJson: "{}", Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}, Routes: []*pb.RouteDescriptor{{
+	registration := &pb.Register{CandidateConfigJson: "{}", CandidateConfigVersion: ack.GetBootstrap().GetTargetConfigVersion(), ConfigSchemaHash: ack.GetBootstrap().GetConfigSchemaHash(), Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}, Routes: []*pb.RouteDescriptor{{
 		RouteId: "svc.run", Kind: pb.RouteKind_ROUTE_KIND_SERVICE, DefaultEnabled: true, RequiredPermissions: []string{"admin", "chat_admin"},
 		InputSchemaId: chainSchema[t11Arguments](), InputSchemaVersion: 1, OutputSchemaId: chainSchema[t11Arguments](), OutputSchemaVersion: 1,
 		Spec: &pb.RouteDescriptor_Service{Service: &pb.ServiceSpec{ServiceName: "run", Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, Access: pb.ServiceAccess_SERVICE_ACCESS_PUBLIC, Tool: &pb.ToolSpec{Description: t11Description, DefaultPolicy: pb.ToolPolicy_TOOL_POLICY_ALLOW, InputSchemaJson: t11InputSchema}}},

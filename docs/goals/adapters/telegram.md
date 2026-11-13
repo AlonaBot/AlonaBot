@@ -9,9 +9,9 @@
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 已完成（PR #39） |
 | goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 已完成 |
 | goal-89 | T-03.11 | 官方 Telegram Adapter 的平台权限 | T-04.6 | 已完成（PR #106） |
-| goal-111 | T-03.20 | 官方 Telegram Adapter 的媒体与新增片段 | T-03.13、T-03.14 | 等待前置 |
-| goal-112 | T-03.21 | 官方 Telegram Adapter 的平台动作与撤回 | T-03.11、T-03.15、T-03.16 | 等待前置 |
-| goal-113 | T-03.22 | 官方 Telegram Adapter 的命令菜单 | T-03.17 | 等待前置 |
+| goal-111 | T-03.20 | 官方 Telegram Adapter 的媒体与新增片段 | T-03.13、T-03.14 | 待派发 |
+| goal-112 | T-03.21 | 官方 Telegram Adapter 的平台动作与撤回 | T-03.11、T-03.15、T-03.16、T-03.20 | 等待前置（T-03.20） |
+| goal-113 | T-03.22 | 官方 Telegram Adapter 的命令菜单 | T-03.17 | 待派发 |
 | goal-117 | T-03.23 | 官方 Telegram Adapter 的代理模式与话题判定 | T-03.4 | 已完成（PR #125） |
 | goal-132 | T-03.26 | 官方 Telegram Adapter 填写 chat_title | T-03.4、T-03.25 | 等待前置 |
 | goal-137 | T-03.27 | 官方 Telegram Adapter 的服务消息 | T-03.23 | 待派发 |
@@ -313,46 +313,207 @@
 
 ### goal-111 · T-03.20 官方 Telegram Adapter 的媒体与新增片段
 
-状态：等待前置（T-03.13、T-03.14）。2026-11-09 按 D-87、D-88、D-89、D-97、D-99 新增，同日按 D-100 追加入站事件的 chat_type。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+状态：待派发；暂不派发（维护者指示只改写语句）。直接前置 T-03.13（PR #148，cf74fa9）、T-03.14（PR #143，15682e8）均已合并。2026-11-13 按 main 0af1255 重新核对。审查者补齐，待维护者确认：采用流式上传并隔离模拟端内存；file_base_url 的动态缺省在 Start 推导。按 DECISIONS 2026-11-13 变更记录，Telegram 对 Core 给出的 platform_file（同实例 incoming_ref）的发送消费已从本切片扣除，由 goal-9（T-03.10）以 renderMedia 最小分支交付。
 
-目标：Telegram 实例按来源传递出站媒体：multipart 请求体边读边写、inline_base64 解码上传、`platform_file` 直接作为 file_id；收发 voice（sendVoice）；动图用 sendAnimation；入站 voice、animation、video_note 与静态贴纸按新映射交付（入站 audio 仍为 file）；url 按钮；实例配置追加 `file_base_url`；入站事件填写 chat_type。
+- **需维护者决定：MediaRef MIME 的传递接口。** MESSAGE-MODEL §6.4/D-99 已要求按 MIME 选择 sendAnimation，但当前媒体来源仅传 token。建议先由 Core/SDK 的媒体所有者补齐「Core 从已校验对象取得 MIME 并随 Core→Adapter 来源传递」的最小协议前置；新增字段及具体编号须有明确契约授权，随后同步本 goal 的范围、接口、前置与 V-97 验收。当前语句保持 proto 原状，完整切片的派发与 MediaRef GIF 验收等待该决定；不撤销 D-99。
 
-依据：PLAN T-03 步骤 17；CONTRACTS §1.3、§8（Telegram 段）；MESSAGE-MODEL §6、§6.2、§6.3、§6.4；DECISIONS D-88、D-89、D-97、D-99、D-100；TEST-MATRIX V-89、V-90、V-98 的 Telegram 分项，V-97。
+已有接口与衔接：buildSendPlan(to message.Session, chain message.Chain) (*sendPlan, *errcode.Error)、renderMedia(message.Segment, uint32) (map[string]any, *plannedUpload, *errcode.Error)、instance.readSendMedia(context.Context, string) ([]byte, error) 及 botClient.multipart(ctx context.Context, method string, params map[string]any, uploads []plannedUpload, files [][]byte, result any) error 仍为 main 上的实现；后两者的全量积累在本切片移除。newBotClient(token, base, proxyMode, proxy string)、botClient.fileBase、实例 ReadPlatformFile 已存在。MediaRef.MIME 存在，但 MediaRef.Source()、MediaSource、proto MediaSource 和 ReadMedia 的返回值均未传 MIME。VoiceSegment、URLButton、Event.ChatType 已存在；能力列表包含 message.send 的 4096 UTF-16 TextLimit。资源位于可导入包 adapters/telegram/；与 goal-9/112/113 共享文件，后合入者保留已合入能力、方法和平台发送分支。
 
-要点：
-- 流式 multipart：用 `io.Pipe` 与 `mime/multipart`，写端按发送计划顺序写字段与文件，文件内容经 Core.ReadMedia 每次最多 1 MiB 读取后立即写出；读取失败时以该错误关闭管道，该物理操作按请求是否已开始写出判为 REJECTED 或 UNKNOWN。现有一次读完的实现删除，不保留。
-- 计划：voice 每个片段单独一个物理操作；image/gif（MediaRef 的 MIME，或 inline_base64 解码后以 `GIF8` 开头）用 sendAnimation 并结束当前媒体组；caption 与 reference、按钮的规则不变；forward 返回 UNSUPPORTED。
-- 入站：voice 为 voice，audio 仍为 file，animation 与 video_note 为 video，is_animated 与 is_video 都为 false 的 sticker 为 image，都带 incoming_ref；其余贴纸不进 chain。
-- `file_base_url`：缺省为 `<api_base_url>/file/bot<token>`，写进 adapter_config_schema.json；文件下载经它发出，代理规则不变，token 仍不进日志。
-- chat_type：每个带 target 的入站事件按 chat.type 填写，private 为 PRIVATE，group 与 supergroup 为 GROUP，channel 为 CHANNEL；成员与 reaction 事件同样取其 chat。
-- Capabilities 追加 `message.voice`；`telegramtest` 追加 sendVoice、sendAnimation 的记录与缺省响应。
-- 测试：提交在既有 `send_test.go` 中追加的用例（经 telegramtest.Server）：一次发送 32 MiB 的 media_ref，断言请求体正确且常驻内存不超过数 MiB，以及 voice 与 GIF 的计划；其余进本地自测。
+```text
+/goal 使用 $alonabot-execute 推进 goal-111（切片 T-03.20：官方 Telegram Adapter 的媒体与新增片段）。goal 目录 goal-111，分支 goal-111，worktree .worktrees/goal-111，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：Telegram 出站媒体按来源传递，media_ref 用流式 multipart、inline_base64 解码上传；收发 voice、处理 GIF 与入站 animation/video_note/静态贴纸，支持 URL 按钮，追加 file_base_url 并为入站事件填写 chat_type。
+
+依据：spec/PLAN.md §3.1；spec/plan/adapters/telegram.md T-03.20、T-03 步骤 17；spec/plan/core.md T-03「失败停止条件」；spec/CONTRACTS-v0.1.md §1.2～§1.4、§5.5、§8；spec/MESSAGE-MODEL.md §1、§2、§4、§6～§6.4；spec/WIRE-FORMAT.md §2、§3.4、§5；spec/adr/DECISIONS.md D-88、D-89、D-97、D-99、D-100、D-101、D-110、D-134；spec/TEST-MATRIX.md V-89、V-90、V-98 的 Telegram 分项与 V-97。
+
+范围（只新增或修改这些）：
+- adapters/telegram/telegram.go、client.go：file_base_url 解析与 HTTP 客户端、流式 multipart、message.voice 能力。
+- adapters/telegram/plan.go、send.go：来源预检、voice/GIF 物理计划、流式执行与回执；删除 readSendMedia 的全量积累。
+- adapters/telegram/render.go：URL 与 action 按钮渲染。
+- adapters/telegram/inbound.go、media.go、callback.go：入站媒体类型、chat_type；callback.go 仅在回调 Target 的会话类型需要传递时修改。
+- adapters/telegram/adapter_config_schema.json：追加 file_base_url；adapters/telegram/alonabot_gen.go 仅由该包既有生成命令更新。
+- adapters/telegram/telegramtest/server.go、send.go：sendVoice/sendAnimation、可流式消费上传的模拟端。
+- adapters/telegram/send_test.go：一个新增集成测试；media_test.go、telegram_test.go、edit_test.go、callback_test.go 仅调整受影响的共用替身或既有 API 调用，原断言保持；本地 *_local_test.go。
+
+允许的新跨模块边：无。沿用 adapters/... -> sdk/...、contracts；实现用 io.Pipe、mime/multipart、encoding/base64 等标准库。SDK、Core、proto 及新依赖的改动遇到时标 [!]。
+
+接口（照此实现；内部辅助函数自定）：
+- New() adapter.Adapter、Instance.Send(ctx context.Context,to message.Session,chain message.Chain) (*message.SendResult,*errcode.Error) 与 adapter.MediaSource.ReadPlatformFile 保持现有签名。
+- 配置 JSON 与 Schema 追加可选 file_base_url string，缺省语义为 <api_base_url>/file/bot<token>/；Schema 省略动态 default，由 Start 从同一实例的 api_base_url/token 推导。自定义前缀统一一个尾斜杠，然后连接 getFile 返回的 file_path；沿用 api_base_url 的 http/https URL 约束与实例代理、脱敏规则。Schema 的 $version 保持现值 1。
+- 内部 multipart 调用删除 files [][]byte 参数，由实例提供当前操作的按块读取/写入函数；JSON 字段仍按计划编码，inline_base64 可使用至多 1 MiB 解码结果；不新增公开生产符号，不留下整份 []byte 请求体路径。
+- telegramtest 增加
+  func (s *Server) ConsumeUploads(fn func(method, field, filename string, src io.Reader) error)
+  设置后逐个 multipart 文件 part 交给 fn 消费，Request.Files 不保存该文件的全量字节；未设置时 Requests() 的现有行为保持。回调错误通过模拟 HTTP 错误返回；用它验证大媒体内容和按块进展。
+- 复用已有 proto：MediaSource.media_ref=1、incoming_ref=2、https_url=3、inline_base64=4、platform_file=5，Segment.voice、Button.url、Event.chat_type；沿用现有编号。MIME 传递的协议方案须先由维护者决定，本语句不授权新增 proto 字段。
+
+行为：
+- 先对整条 Chain 生成物理计划并验证能力、组合、长度与来源，保留 text/实体/相册/首条引用/末条按钮的现有语义。voice 每段单独 sendVoice，Duration 从 time.Duration 转成 Bot API 秒值；caption 仍来自该段。forward 在首个平台请求前 UNSUPPORTED。
+- 来源：https_url 原样作为参数；platform_file 的发送消费由 T-03.10（goal-9）交付，本切片保留已合入分支且不实现该项；inline_base64 预检标准 base64 与大小，解码后上传；media_ref 用 Core.ReadMedia 每块至多 1 MiB 顺序读取，直接写入 multipart。一次只保留当前块及固定开销。
+- 流式 multipart 使用 io.Pipe，写 goroutine 按计划写字段和文件，读取失败 CloseWithError；HTTP 返回/取消时关闭两端并回收写 goroutine。首个平台请求前已知的结构、来源与组合错误先拒绝；运行期读取失败按该请求的实际写出阶段判 PartRejected 或 PartUnknown。保留已确认结果，后续 PartNotAttempted，按 MESSAGE-MODEL §4 汇总。禁止业务重试。
+- inline_base64 解码后以 GIF8 开头的 image 使用 sendAnimation，并切断前后连续媒体组；https_url 按普通 image，不额外下载探测。D-99 的 MediaRef MIME 判定保持原语义，但当前 MediaSource 与 ReadMedia 均无 MIME：该分项标 [!]，待状态段的协议决定及前置传递能力落地后补齐正式语句和验收，随后才派发完整切片。禁止以文件名、内容嗅探或额外 HTTP HEAD 代替已确认的 MIME 语义。
+- 入站 voice → VoiceSegment；audio 仍 FileSegment；animation、video_note → VideoSegment；sticker 在 is_animated=false 且 is_video=false 时 → ImageSegment，其余只留 platform_payload。来源都为 IncomingMedia，保留平台 file_id、已给出的大小/MIME/时长，不为映射提前取件。
+- URL 按钮输出 {text:label,url:URL}，无需 CoreToken；action 按钮继续输出 callback_data，并保留现有 token 检查。混排保持行列顺序，首发元数据限制不变。
+- file_base_url 只影响文件下载，getFile 与其他 Bot API 仍经 api_base_url；proxy_mode none/core/custom 的语义全部沿用，token 及代理凭证仍脱敏，重定向规则保持。
+- 每个带 Session 的入站 Event 按其 chat.type 写 ChatType：private=ChatPrivate、group/supergroup=ChatGroup、channel=ChatChannel；message、edited_message、channel_post、edited_channel_post、member、reaction、callback 同样处理。无 Session 保持 ChatUnspecified。thread_id 沿用 is_topic_message，ChatType 不写入会话字符串。
+- Descriptor 与实例能力在原列表中只追加 message.voice v1；message.delete 与 commands.sync 分别由 T-03.21/T-03.22 追加，合并时保留已有项及 message.send 的 TextLimit。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：send_test.go 追加一个集成测试 TestMediaSourcesAndNewSegments，经 telegramtest.Server 与真实 Adapter 实例；子场景验证 32 MiB media_ref multipart 的字节与块读取、voice 独立 sendVoice、可判定 GIF 独立 sendAnimation 且切断媒体组、URL/action 按钮混排。大媒体 Core 替身按 offset 生成每块，模拟端 ConsumeUploads 边读边比较，防止全量记录影响结果。流式内存证据同时用同一实现的隔离进程比较 32 MiB 与 100 MiB，对生产 Adapter 采样记录峰值与命令，验证额外常驻内存不随对象大小增长。多场景理由：来源与计划共用一次 Send 管道，V-89/V-97 要求同时验证流式与组合顺序。
+- 本地自测（*_local_test.go，PR 写明结果）：非法 base64 与 1 MiB 边界；中途 ReadMedia 失败/取消的完整回执与 goroutine 收尾；相册前后 GIF、https_url GIF 按普通图片；入站 voice/audio/animation/video_note/静态与动态贴纸；file_base_url 自定义服务与代理；所有事件 ChatType、thread_id；纯 URL 按钮无 token；文本编辑的 URL 按钮复用；跨实例由 Core 准备的 media_ref；在已含 goal-9 的基线上只回归同实例 file_id 零 ReadMedia，发现回归交该实现的所有者修复；100 MiB 流式测量。MediaRef MIME 缺口未解决时该分项保持阻塞，不记录通过。
+- 真实 Telegram：未运行（无凭证）。所有平台行为证据写明 telegramtest 本地模拟服务，附 OS/架构、Go 版本与命令；结果交审查者回写 TEST-MATRIX §3.2，区分 32 MiB 回归和 V-89 的 100 MiB 分项。
+
+完成条件：本切片各映射、来源与内存分项有证据，状态段的 MIME 协议决定已落实并重新核对接口，MediaRef GIF 分项有证据后方可完成；gofmt -l 本次改动 Go 文件无输出；在执行分支运行 go generate ./adapters/telegram/... 并核对生成内容；go vet ./...；go test -race ./adapters/telegram/...；go build ./...。T-03 的失败停止条件逐项满足，范围外修改与协议缺口标 [!]。
+
+不做：Telegram platform_file 发送消费（已移交 goal-9）、平台动作/撤回/命令菜单、Core 来源租约重写、通用流式 API（已有 c.Stream）、新媒体转码、chat_title、服务消息路由、OneBot 平台实现、真实平台验证。
+```
 
 ### goal-112 · T-03.21 官方 Telegram Adapter 的平台动作与撤回
 
-状态：等待前置（T-03.15、T-03.16）。T-03.11（PR #106）已合并。2026-11-09 按 D-87、D-92、D-93、D-98 新增，同日按 D-104 让指向消息的动作收消息句柄。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+状态：等待前置（T-03.20）；暂不派发（维护者指示只改写语句）。原前置 T-03.11（PR #106，3913d5a）、T-03.15（PR #146，ab5f8fb）、T-03.16（PR #144，707b74c）均已合并。2026-11-13 按 main 0af1255 重新核对。新增 T-03.20（goal-111）为直接前置：DraftStream 的 c.IsPrivate() 使用事件 ChatType，当前 Telegram 尚未填写它。以下裁决均记为「审查者补齐，待维护者确认」：保留单次 100 个 ID 上限；action 使用现成 sdk/message、sdk/errcode 公共类型；结果常用字段类型化、完整 JSON 保留；管理员缓存采用同一同步和失效代次。
 
-目标：Telegram 实例声明并实现 MESSAGE-MODEL §6.5 的平台动作（含群信息与成员查询、send_chat_action、set_message_reaction、send_message_draft），在 `adapters/telegram/action` 为每个动作发布带类型的 Go 函数，并提供输入状态与草稿流式两个辅助函数；实现撤回（deleteMessages），声明 `message.delete`。
+- **需维护者决定：Telegram Bot API 的原文基线及候选动作输入范围。** 本环境的网络和浏览器入口均未取得可用官方正文，详细证据见 adapters-decisions.md。当前 SendMessageDraftParams、ChatPermissions、MessageEntity/ReactionType 的候选字段未完成官方原文复核。建议按选定官方版本保留私聊限定、冻结下列最小输入字段并保留完整结果 Raw；审查者取得原文后逐字段核对和回写，维护者确认真实差异涉及的范围。原文齐备前保持本切片暂不派发，不把候选字段记成已验证的平台契约。
 
-依据：PLAN T-03 步骤 18；CONTRACTS §8（通用能力的范围、平台动作、撤回）；MESSAGE-MODEL §4A、§6.5；DECISIONS D-87、D-92、D-93、D-98、D-104、D-113；TEST-MATRIX V-91、V-92、V-94 的 Telegram 分项、V-102 的动作分项；Bot API 原文的 sendMessageDraft。
+已有接口与衔接：adapter.Action[P,R](name, version, scope)、ActionExecutor.Action、Deleter.Delete、sdk.ActionCaller.CallAction、sdk.NewActionClient 均可沿用。sdk 根包没有 Session/MessageRef/SendResult 别名，类型在 sdk/message；错误码在 sdk/errcode。sdk/internal/convert/delete.go 的 maxDeleteMessages=100。instance.administrators 当前仅由接收循环读写，新增 Action 并发写方须同步整个缓存。Context.Instance 当前尚未合并，本切片使用现有父调用的目标补齐。与 goal-111/113 共享 telegram.go、client.go、send.go 和 telegramtest；RespondMethod 使用相同签名，先合入的实现直接复用。工具调用、WebUI、plugintest、动态任务、Agent 对话、run/热部署与启动取消修复均已合并；测试继续驱动平台 Adapter 与临时 SDK 插件，无需改其装配。
 
-要点：
-- 动作的参数沿用 Bot API 字段名，数字 ID 为十进制字符串，chat_id 与 message_thread_id 取自 Target；参数与结果用 Go 类型声明（`adapter.Action[P, R]`，D-113），参数 Schema 不允许其他属性；结果为 Bot API 的 `result` 原文。ban、unban、restrict 成功后作废该会话的管理员缓存。
-- `adapters/telegram/action`：每个动作一个带类型的函数，第一个参数为 goal-106 的调用者接口，参数与结果为 Go 类型；pin_chat_message、unpin_chat_message 与 set_message_reaction 以 message.MessageRef 指定消息，会话与实例取自句柄（D-104）；只依赖 `sdk` 根包，不 import Adapter 运行时代码。输入状态辅助函数立即发送一次、之后每 4 秒一次，ctx 结束即停止；草稿辅助函数以 send_message_draft 流式显示，结束后经普通 Send 发出正式消息，群聊目标在发请求前返回 UNSUPPORTED。sendMessageDraft 的参数与本语句不符时标 [!]。
-- 撤回：同一 Target 的 ID 每 100 个一次 deleteMessages，同一请求的 ID 共享结果；平台返回 400 时该请求的 ID 为 REJECTED，其余 NOT_ATTEMPTED。
-- 测试：提交在既有测试文件中追加的用例（经 telegramtest.Server）：ban_chat_member 的参数与管理员缓存作废，以及 101 个 ID 的撤回分为两次请求；其余进本地自测。
+```text
+/goal 使用 $alonabot-execute 推进 goal-112（切片 T-03.21：官方 Telegram Adapter 的平台动作与撤回）。goal 目录 goal-112，分支 goal-112，worktree .worktrees/goal-112，从包含已合并 goal-111（T-03.20）的最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：Telegram 声明并实现 MESSAGE-MODEL §6.5 的十四个平台动作，发布带类型的 action 包与输入状态、草稿辅助函数；实现 deleteMessages 与 message.delete 能力，消息动作通过消息句柄选择原实例。
+
+依据：spec/PLAN.md §3.1；spec/plan/adapters/telegram.md T-03.21、T-03 步骤 18；spec/plan/core.md T-03「失败停止条件」；spec/CONTRACTS-v0.1.md §1.2、§2.3、§8（平台动作、撤回）；spec/MESSAGE-MODEL.md §4、§4A、§6.1、§6.5；spec/WIRE-FORMAT.md §2、§3.4、§3.5；spec/adr/DECISIONS.md D-87、D-92、D-93、D-98、D-104、D-113、D-137；spec/TEST-MATRIX.md V-91、V-92、V-94 的 Telegram 分项、V-102 的动作分项、V-111 的类型声明。Bot API 原文对应十四个方法；状态段指定的原文版本及候选字段必须在派发前核定，冲突交审查者修订语句。
+
+范围（只新增或修改这些）：
+- 新增 adapters/telegram/action/：参数与结果类型、十四个带类型函数、Typing 与 DraftStream；不导入 Adapter 运行时。
+- 新增 adapters/telegram/action.go、delete.go：动作调度、Bot API 转换与撤回回执。
+- adapters/telegram/client.go：私有调用路径保留 result 原文与请求写出事实；现有 call 的调用者沿用原签名和行为。adapters/telegram/send.go 仅补共用安全错误映射中的取消/到期，不改发送计划。
+- adapters/telegram/telegram.go：Descriptor.Actions、message.delete 能力、实例的管理员缓存同步字段。
+- adapters/telegram/permissions.go：让接收与动作作废同一缓存时安全并发，保留缓存获取和失效语义。
+- adapters/telegram/telegramtest/server.go、send.go 与新增 telegramtest/action.go：动作与 deleteMessages 的模拟响应、参数记录、故障注入。
+- adapters/telegram/telegram_test.go：一个新增平台集成测试；其他既有测试只同步受影响的辅助调用；本地 *_local_test.go。action 包的纯函数/辅助函数测试放本地自测。
+
+允许的新跨模块边：action 包使用 sdk、sdk/message 与 sdk/errcode（均为现有公共包），只用这些公共 API 与标准库，不 import telegram、sdk/adapter 或 Adapter 运行时。ARCHITECTURE 已有 adapters/... -> sdk/...，审查者需同步其中 action 常量包“只 import sdk 根包”的旧限制及 MESSAGE-MODEL §6.5/PLAN 的同句。其余方向不增加。
+
+接口（照此实现；以下签名按现有 SDK 固定；平台字段的原文复核门禁见状态段）：
+1. 实例实现
+   Action(ctx context.Context,to message.Session,name string,version uint32,params json.RawMessage) (json.RawMessage,*errcode.Error)
+   Delete(ctx context.Context,to message.Session,platformMessageIDs []string) (*message.DeleteResult,*errcode.Error)
+   Descriptor.Actions 全部用 adapter.Action[P,R]("telegram.<snake_name>",1,adapter.ActionScopeChat)；参数 Schema 从 Go struct 推导，禁止额外属性，结果允许平台附加字段。
+2. action 包的会话动作，保留 opts ...sdk.SendOption 供 sdk.Via：
+   func BanChatMember(c sdk.ActionCaller,to message.Session,p BanChatMemberParams,opts ...sdk.SendOption) (bool,error)
+   func UnbanChatMember(c sdk.ActionCaller,to message.Session,p UnbanChatMemberParams,opts ...sdk.SendOption) (bool,error)
+   func RestrictChatMember(c sdk.ActionCaller,to message.Session,p RestrictChatMemberParams,opts ...sdk.SendOption) (bool,error)
+   func GetChat(c sdk.ActionCaller,to message.Session,opts ...sdk.SendOption) (Chat,error)
+   func GetChatMember(c sdk.ActionCaller,to message.Session,p GetChatMemberParams,opts ...sdk.SendOption) (ChatMember,error)
+   func GetChatMemberCount(c sdk.ActionCaller,to message.Session,opts ...sdk.SendOption) (int64,error)
+   func GetChatAdministrators(c sdk.ActionCaller,to message.Session,opts ...sdk.SendOption) ([]ChatMember,error)
+   func SetChatTitle(c sdk.ActionCaller,to message.Session,p SetChatTitleParams,opts ...sdk.SendOption) (bool,error)
+   func LeaveChat(c sdk.ActionCaller,to message.Session,opts ...sdk.SendOption) (bool,error)
+   func SendChatAction(c sdk.ActionCaller,to message.Session,p SendChatActionParams,opts ...sdk.SendOption) (bool,error)
+   func SendMessageDraft(c sdk.ActionCaller,to message.Session,p SendMessageDraftParams,opts ...sdk.SendOption) (bool,error)
+3. 指向消息的动作从句柄取会话、消息与实例：
+   func PinChatMessage(c sdk.ActionCaller,ref message.MessageRef,p PinChatMessageParams) (bool,error)
+   func UnpinChatMessage(c sdk.ActionCaller,ref message.MessageRef) (bool,error)
+   func SetMessageReaction(c sdk.ActionCaller,ref message.MessageRef,p SetMessageReactionParams) (bool,error)
+   校验 ref.Parts()；调用 CallAction 时用句柄实例构造 sdk.Via，省略实例时交 Core 补齐。不另加可覆盖句柄实例的参数。
+4. 参数类型的 JSON 字段（沿用 Bot API 名称；下列字段映射到同名 Go 导出字段，ID 用 string；可选字段用指针或 omitempty，须保留显式 false）：
+   BanChatMemberParams：user_id string，until_date *int64,omitempty，revoke_messages *bool,omitempty。
+   UnbanChatMemberParams：user_id string，only_if_banned *bool,omitempty。
+   RestrictChatMemberParams：user_id string，permissions ChatPermissions，use_independent_chat_permissions *bool,omitempty，until_date *int64,omitempty。
+   GetChatMemberParams：user_id string。
+   SetChatTitleParams：title string。
+   PinChatMessageParams：disable_notification *bool,omitempty；其消息字段由句柄包装成平台动作参数。
+   SendChatActionParams：action string。
+   SetMessageReactionParams：reaction []ReactionType（允许空列表），is_big *bool,omitempty；其消息字段由句柄包装成平台动作参数。
+   SendMessageDraftParams（候选平台字段，派发前须按状态段复核）：draft_id string，text string，parse_mode string,omitempty，entities []MessageEntity,omitempty；draft_id 在平台编码处转十进制整数。
+   空参数的动作使用 struct{}；带消息 ID 的声明具体为 PinChatMessageActionParams{MessageID string `json:"message_id"`; DisableNotification *bool `json:"disable_notification,omitempty"`}、UnpinChatMessageActionParams{MessageID string `json:"message_id"`}、SetMessageReactionActionParams{MessageID string `json:"message_id"`; Reaction []ReactionType `json:"reaction"`; IsBig *bool `json:"is_big,omitempty"`}。包装函数从句柄构造这三个类型，插件侧不重复传消息 ID。chat_id、message_thread_id 不进入参数 struct。
+   ChatPermissions 是具体 struct，下列 Go 字段全部为 *bool，JSON 键为括号内名称并带 omitempty：CanSendMessages(can_send_messages)、CanSendAudios(can_send_audios)、CanSendDocuments(can_send_documents)、CanSendPhotos(can_send_photos)、CanSendVideos(can_send_videos)、CanSendVideoNotes(can_send_video_notes)、CanSendVoiceNotes(can_send_voice_notes)、CanSendPolls(can_send_polls)、CanSendOtherMessages(can_send_other_messages)、CanAddWebPagePreviews(can_add_web_page_previews)、CanChangeInfo(can_change_info)、CanInviteUsers(can_invite_users)、CanPinMessages(can_pin_messages)、CanManageTopics(can_manage_topics)。这些字段是当前草稿冻结的最小平台输入集合；完整支持范围和所选 Bot API 原文的核对结论须先写入状态段所述裁决，随后才派发。
+   type ReactionType struct { Type string `json:"type"`; Emoji string `json:"emoji,omitempty"`; CustomEmojiID string `json:"custom_emoji_id,omitempty"` }
+   type User struct { ID int64 `json:"id"`; IsBot bool `json:"is_bot"`; FirstName string `json:"first_name"`; LastName string `json:"last_name,omitempty"`; Username string `json:"username,omitempty"`; LanguageCode string `json:"language_code,omitempty"` }
+   type MessageEntity struct { Type string `json:"type"`; Offset uint64 `json:"offset"`; Length uint64 `json:"length"`; URL string `json:"url,omitempty"`; User *User `json:"user,omitempty"`; Language string `json:"language,omitempty"`; CustomEmojiID string `json:"custom_emoji_id,omitempty"` }
+   type Chat struct { ID int64 `json:"id"`; Type string `json:"type"`; Title string `json:"title,omitempty"`; Username string `json:"username,omitempty"`; FirstName string `json:"first_name,omitempty"`; LastName string `json:"last_name,omitempty"`; Raw json.RawMessage `json:"-"` }
+   type ChatMember struct { Status string `json:"status"`; User User `json:"user"`; Raw json.RawMessage `json:"-"` }
+   结果类型固定上述常用字段，完整对象由 Raw 保留；不按平台所有可选输出字段扩建 SDK 类型。Chat/ChatMember 的带类型函数同时保存各自完整的 result JSON 到 Raw；数组逐项保存各元素 JSON。Raw 由包装函数解码后复制，不给声明类型添加自定义 JSON 编码方法。平台数字结果 ID 保留 Bot API 原文的数值，动作输入 ID 使用字符串并在 Adapter 编码边界转换。不把未知平台结果字段丢弃；result Schema 允许附加字段。
+5. 辅助函数：
+   func Typing(c sdk.ActionCaller,ctx context.Context,to message.Session,action string,opts ...sdk.SendOption) error
+   func DraftStream(c *sdk.Context,draftID string,next func(context.Context) (string,error)) (*message.SendResult,error)
+   Typing 同步运行到 ctx 取消或首次错误，由调用者决定是否起 goroutine；DraftStream 固定当前 Handler 的会话与实例，最终调用 c.Send(message.Text(fullText))，保留返回回执与错误；草稿 CallAction 与最终 Send 均经当前 c 的父调用补齐原实例，无需尚未合并的 Context.Instance 方法。
+6. telegramtest：沿用 Requests、FailMethod、Drop；新增
+   func (s *Server) RespondMethod(method string,result json.RawMessage)
+   覆盖方法成功时的 Bot API result，参数照常记录；默认布尔动作/deleteMessages 返回 true，查询动作返回对应结构，getChatAdministrators 沿用 SetChatAdministrators 的响应。不另造生产测试插件。
+7. 沿用现有 ActionDeclaration、AdapterActionRequest、ActionResponse 与 AdapterDeleteRequest/DeleteResult proto；不改协议编号。
+
+行为：
+- 动作完整名称依次为 telegram.ban_chat_member、telegram.unban_chat_member、telegram.restrict_chat_member、telegram.pin_chat_message、telegram.unpin_chat_message、telegram.get_chat、telegram.get_chat_member、telegram.get_chat_member_count、telegram.get_chat_administrators、telegram.set_chat_title、telegram.leave_chat、telegram.send_chat_action、telegram.set_message_reaction、telegram.send_message_draft。每个均声明版本 1/chat 范围，并明确映射同名 Bot API 驼峰方法，禁止未声明动作透传。
+- 会话与话题从 message.Session.Parts() 拆出，经 Core 准入的实例绑定到当前 instance；需要消息的动作从 JSON 的 message_id 取值。参数中的十进制 ID 在平台请求编码处转成 API 所需数字形式，错误在平台请求前 INVALID_ARGUMENT；结果返回 Bot API result JSON 原文，带类型函数解析它且保留可用结果与同时发生的错误。
+- ban/unban/restrict 成功后作废该会话的 administrators 缓存，失败时保留；接收线程与动作并发访问统一同步，不在锁内发网络请求，读取、发布与失效共享同一把锁及每会话的失效代次：网络请求前记录代次，返回后仅在代次未变时发布和使用权限；代次已变时丢弃该次旧结果，本事件不附加旧权限，下个正常事件再获取。成功的 ban/unban/restrict 与成员变更都推进代次。权限仍由平台事实给出，Core 负责展开权限集合。包装函数沿用 ActionCaller 的父链与期限。
+- 动作的平台明确拒绝返回现有安全错误映射；写出后断线或超期分别 UNAVAILABLE/DEADLINE_EXCEEDED，保留 result 原文（若有），不重试。日志和错误沿用 Bot token 脱敏。
+- send_chat_action 带目标话题的 message_thread_id；Typing 立即调用一次，其后每 4 秒一次，每次调用前检查 ctx，ctx 结束停止后续请求，首个错误停止并返回。在途调用的取消/期限由传入 ActionCaller 的绑定 context 决定：Handler 传 c.Context()，后台传同一 ctx 创建的 sdk.NewActionClient(ctx)，保留父链；不创建脱离父链的后台客户端替换 c。不加入额外重试或可配置期限。
+- set_message_reaction 是设置完整列表，空列表用于清空；消息来自句柄，不从当前事件猜测。参数字段与所需 message_id 由同一声明类型对应。
+- send_message_draft 只用于私聊；Adapter 按合法 Telegram 数字 chat_id 的私聊语义（正值）判断，其他目标在请求前 UNSUPPORTED；不得调用 getChat 探测后才拒绝。draft_id 解析为非零十进制整数，text、parse_mode/entities 按已冻结的平台字段校验，parse_mode 与 entities 互斥。DraftStream 使用 T-03.20 已填写的可信 ChatType，c.IsPrivate() 为 false 时先返回 UNSUPPORTED；next 用 c.Context() 调用，累积文本发草稿，io.EOF 时处理最后增量并经普通 c.Send 正式发出一次；next 错误、取消或草稿请求失败停止并返回完整错误，不发伪成功正式消息。草稿走平台动作，正式发送走现有出站 Hook。该函数不调用 c.Stream，保留独立的草稿语义；空输入不发消息。
+- Delete 受现有接口的 1～100 输入约束，合法列表一次 deleteMessages；平台要求的 chat_id 来自同一会话，不附加 thread_id。一次请求共享成功/拒绝/UNKNOWN 结果，逐项按原输入顺序生成，ID 不去重；HTTP 400 对该次每项为 REJECTED，写出后结果未知为 UNKNOWN，确认尚未写出时为 REJECTED。本入口最多一个合法批次，不生成不存在的后续批次。平台 result=false 按 FAILED_PRECONDITION 拒绝，禁止作为 ACCEPTED。顶层错误与逐项错误、可用回执一起保留。
+- 追加 message.delete v1 能力，不改变原 message.send TextLimit、编辑、按钮、权限及其他切片新增能力。单次 101 个输入应由 SDK/Core 在平台请求前 INVALID_ARGUMENT；跨两次合法调用的 100+1 个 ID 产生两次平台请求。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：telegram_test.go 一个新增集成测试 TestPlatformActionsAndDelete，经 telegramtest.Server 和 New().Start 实例，复用记录 Core：先由群消息获取管理员缓存，调用 Action 的 ban_chat_member，断言 chat_id、user_id、参数和 true 原文；下一群消息重新 getChatAdministrators。成功场景以两次独立 Deleter 调用提交 100 个和 1 个 ID，断言两次 deleteMessages 的参数与逐项 ACCEPTED；独立故障场景令第二次合法调用返回 400，断言该次每项 REJECTED。多场景理由：本切片两条独立平台入口、缓存并发失效与撤回共享回执均需通过 HTTP 集成验证。单次 101 个输入由本地 SDK/Core 自测确认平台请求前 INVALID_ARGUMENT。
+- 本地自测（*_local_test.go，PR 写明结果）：十四个声明能类型推导、参数额外字段拒绝、result 额外字段保留；十四个动作参数与结果逐一对照原文；pin/unpin/reaction 的句柄含实例与话题、显式 false、回应设置与清空；Typing 立即一次/4 秒刷新/取消停止；DraftStream 私聊、群聊零请求、最终 Send 与 Hook、错误和取消；Delete 的 1/100 与 101 个前置拒绝、重复 ID、400、断线/超期及安全错误。辅助函数经 ActionCaller 记录替身自测；父链、最终 Hook 的集成使用临时 SDK 插件与既有 wire/Core 入口，测试文件仅本地，不新增 testdata 插件。
+- 真实 Telegram：未运行（无凭证）。Bot API 原文核对与 telegramtest 模拟服务行为分别记证据，给审查者 TEST-MATRIX §3.2 回写所需的 OS/架构、Go 版本、命令与结果。
+
+完成条件：状态段的平台原文复核已完成，T-03.20 的 ChatType 已合并，所有声明和主路径有证据；gofmt -l 本次改动 Go 文件无输出；go vet ./...；go test -race ./adapters/telegram/...；go build ./...。范围外修改、契约冲突、依赖新增与 Bot API 差异标 [!]，按 T-03「失败停止条件」处理。
+
+不做：Core 准入、权限模型和通用协议改动、SDK 根包类型别名、通用输入状态或草稿服务、通用 c.Stream 重写、重试、Telegram 媒体与命令菜单、真实平台验证。
+```
 
 ### goal-113 · T-03.22 官方 Telegram Adapter 的命令菜单
 
-状态：等待前置（T-03.17）。2026-11-09 按 D-87、D-96 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+状态：待派发；暂不派发（维护者指示只改写语句）。前置 T-03.17（PR #150，8eb7846）已合并。2026-11-13 按 main 0af1255 重新核对。以下裁决均记为「审查者补齐，待维护者确认」：主语言键优先、否则完整 locale 字典序选一个菜单语言；撤销语言用 deleteMyCommands；有效命令超 100 条或说明为空在请求前拒绝；诊断保留、平台调用按成功快照去重。
 
-目标：Telegram 实例实现 `adapter.commands.sync`（setMyCommands，default scope 加每个 language_code），声明 `commands.sync`。
+- **需维护者决定：与 goal-112 共用的 Bot API 原文版本基线。** 本环境未取得可用官方正文，100 条、说明 1～256、两字母语言码和 deleteMyCommands 的平台语义须由审查者据选定版本复核后回写。当前方案已落入正文供审阅，真实平台差异涉及已确认决策时交维护者裁决，原文复核完成前保持暂不派发。
 
-依据：PLAN T-03 步骤 19；CONTRACTS §8（命令菜单）；MESSAGE-MODEL §6.5；DECISIONS D-96；TEST-MATRIX V-93 的 Telegram 分项；Bot API 原文的 setMyCommands。
+已有接口与衔接：adapter.CommandMenuItem 为 convert.CommandMenuItem 的别名，字段 Name string、Descriptions map[string]string；CommandSynchronizer.SyncCommands(context.Context, []CommandMenuItem) *errcode.Error 已存在。SDK 对实际回调持有实例的 commandSync 锁。Core 的 router.commandMenu 已生成 en-US 及目录 locale 的说明，platformCapabilities() 同时用于 Descriptor 与实例。main 尚无 setMyCommands、菜单缓存。与 goal-111/112 共用 telegram.go 和 telegramtest 分派；RespondMethod 按同一接口复用，保留现有方法、权限和 TextLimit。
 
-要点：
-- 命令名不匹配 `^[a-z0-9_]{1,32}$` 时跳过，说明超过 256 字符时截断，都记诊断；记住每个 language_code 上一次成功同步的内容，相同时不调用；某个语言失败不影响其他语言，返回第一个错误。
-- 测试：提交在既有测试文件中追加的用例（经 telegramtest.Server）：两次相同的同步只调用一次 setMyCommands；其余进本地自测。
+```text
+/goal 使用 $alonabot-execute 推进 goal-113（切片 T-03.22：官方 Telegram Adapter 的命令菜单）。goal 目录 goal-113，分支 goal-113，worktree .worktrees/goal-113，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：Telegram 实例接收 adapter.commands.sync 的命令快照，以 setMyCommands 同步默认菜单与各语言说明，声明 commands.sync；按每个 language_code 记住成功内容并去重，失败保留错误且不阻断其他语言。
+
+依据：spec/PLAN.md §3.1；spec/plan/adapters/telegram.md T-03.22、T-03 步骤 19；spec/plan/core.md T-03「失败停止条件」；spec/CONTRACTS-v0.1.md §5.4、§8（命令菜单）；spec/MESSAGE-MODEL.md §6.5；spec/WIRE-FORMAT.md §2、§3.4 的 adapter.commands.sync；spec/adr/DECISIONS.md D-96、D-138；spec/TEST-MATRIX.md V-93 的 Telegram 分项；Bot API setMyCommands/BotCommand/BotCommandScopeDefault 的原文。
+
+范围（只新增或修改这些）：
+- 新增 adapters/telegram/commands.go：菜单转换、成功快照与去重。
+- adapters/telegram/telegram.go：commands.sync 能力与实例内缓存字段。
+- adapters/telegram/telegramtest/server.go、send.go：setMyCommands、deleteMyCommands 的参数记录、true/false 响应与 FailMethod 故障注入。
+- adapters/telegram/telegram_test.go：一个新增集成测试；本地 *_local_test.go。
+
+允许的新跨模块边：无。只用既有 sdk/adapter、sdk/message、sdk/errcode 与标准库；无需配置、proto、Core、i18n 生成器或插件注册 API 改动。
+
+接口（照此实现；内部辅助函数自定）：
+- 实例实现 sdk/adapter.CommandSynchronizer：
+  func (i *instance) SyncCommands(ctx context.Context,commands []adapter.CommandMenuItem) *errcode.Error
+- 输入项沿用 adapter.CommandMenuItem{Name string,Descriptions map[string]string}。输入是当前可用命令的完整替换快照，空列表用于清空。
+- Descriptor 与实例能力表追加 message.Capability{Name:"commands.sync",Version:1,Supported:true}；菜单成功缓存归实例，键为实际发出的 language_code（空串表示默认），值为上一次确认成功的完整 [{command,description}] 快照及存在标记。
+- setMyCommands 请求 JSON 为 {"scope":{"type":"default"},"commands":[{"command":string,"description":string}],"language_code":string（默认菜单省略）}；deleteMyCommands 请求只带同一 scope 与待撤销的 language_code；响应 result 均为 true。
+- telegramtest 沿用 Calls、Requests、FailMethod；setMyCommands 与 deleteMyCommands 进入 Requests 的顺序记录，默认返回 true；追加 func (s *Server) RespondMethod(method string, result json.RawMessage) 以注入 result=false，与 goal-112 同签名，只保留一份共用响应覆盖。无新增公开生产符号。
+- 复用既有 CommandMenuItem、AdapterCommandsSyncRequest/Response；不追加 proto 字段。
+
+行为：
+- Core 已筛选根命令、权限为 user、策略启用且实例前缀含 / 的命令，并按 D-138 提供语言说明；Adapter 按输入顺序转换，不重新读取路由或权限。名称不匹配 ^[a-z0-9_]{1,32}$ 时跳过并记诊断；说明超过 256 Unicode 字符时在字符边界截断并记诊断。保留实际成功发送的内容作为比较依据。
+- 默认 scope 的无 language_code 菜单使用输入 en-US 原文。从全部 Descriptions 键收集规范 locale，以主语言的小写两字母值作为 Telegram language_code；三字母、und、private-use 等无法映射的键跳过并记诊断。对同主语言的候选，优先无区域/脚本的主语言键；其余按完整 locale 的 ASCII 字典序取首个，整份菜单统一使用该 locale。某命令缺该 locale 时使用它的 en-US（Core 已做其已有 locale 的回落）；不重新执行 i18n。en-US 同时生成 language_code=en 的菜单，默认菜单始终存在。候选和实际语言排序后再处理，结果与 map 插入顺序无关。
+- 全量预检在任何平台请求前完成：过滤非法命令名后最多 100 条；超出返回 INVALID_ARGUMENT，保留实际数量且零平台请求。说明按 Unicode 码点截断至 256，截断后长度须为 1～256；缺少 en-US、空说明返回 INVALID_ARGUMENT，错误带命令/语言且不补占位文案。输入中的有效命令保持顺序。
+- 每个实际语言独立比较成功快照：相同内容跳过，不重复 setMyCommands；首次同步空列表仍须调用一次以清除可能残留的菜单，缓存存在标记与空内容分开。成功后复制保存，避免调用方随后修改切片/map 影响缓存。
+- 顺序确定：默认菜单先发，之后实际 language_code 排序处理；某语言的平台明确失败继续其余语言，返回按处理顺序遇到的第一个安全错误；ctx 取消时停止发起后续请求，未处理项保留原缓存。失败语言不更新成功快照，下一次相同输入仍会尝试它；已成功语言跳过。平台 result=false 返回 FAILED_PRECONDITION 并保留原缓存。诊断在每次实际同步收到非法名或超长说明时各记录一次，即使转换结果与成功快照相同也保留诊断；去重只控制平台调用。
+- 命令消失时以 setMyCommands 替换新的完整 commands 列表。对上次成功而本次完全消失的 language_code，用 deleteMyCommands（同一 default scope 和该语言码）撤销其旧菜单，使平台恢复语言回落；成功后移除该语言成功快照，失败保留以便下一次同步继续清理。新语言设置和旧语言撤销一起按 language_code 排序，默认菜单先处理；Stop 仍保持平台菜单。
+- 菜单同步无自动重试、无新增定时器；Core 的两秒合并、同步通知及失败后下次变化处理全部沿用。SyncCommands 失败不 ReportFailure、不停实例；Stop 不调用平台删除菜单。缓存仅随实例存活，不持久化。
+- 记录诊断时沿用默认 Logger 和 Bot token 脱敏，保留方法失败的安全错误；message.send 的 TextLimit、权限、其他切片能力保持。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：telegram_test.go 一个集成测试 TestCommandMenuSync，经 telegramtest.Server 驱动 New().Start 得到实例，再转为 adapter.CommandSynchronizer：同步两次相同的 en-US 快照，默认菜单实际只出现一次 setMyCommands；断言默认及 en 的 scope、command、description、language_code；修改说明后各更新一次；加入 zh-CN 后生成 zh，移除该 locale 时有 deleteMyCommands(language_code=zh)，其余成功快照不重发；清空时默认 setMyCommands(commands=[])，旧 en 菜单撤销；Descriptor 与实例均声明 commands.sync。测试调用模拟 HTTP，不采用纯函数测试代替集成主路径。
+- 本地自测（*_local_test.go，PR 写明结果）：en-US/zh-CN 等语言映射与冲突、旧语言移除；非法名称、256/257 字符与多字节文本；同内容不同 map 插入顺序；初次空列表；某语言失败后继续其他语言、下一次只重试失败内容；result=false、断线、ctx 取消；Stop 不删除菜单；不同实例缓存隔离、调用方修改原切片/map 不影响缓存。100/101 条有效命令、空说明和缺 en-US 的零平台请求；相同内容仍有非法/截断诊断；语言清理失败保留缓存并在下次同步再次清理。
+- 真实 Telegram：未运行（无凭证）。证据明确写 telegramtest 本地模拟服务，提供 OS/架构、Go 版本与实际命令，交审查者回写 TEST-MATRIX §3.2；Core 的 V-93 分项沿用 PR #150 的证据。
+
+完成条件：状态段的官方原文复核完成，上述语言映射、上限预检和撤销语义均有证据，菜单主路径与失败不污染缓存有证据；gofmt -l 本次改动 Go 文件无输出；go vet ./...；go test -race ./adapters/telegram/...；go build ./...。发生契约冲突、范围外修改或 T-03 失败停止条件时标 [!]。
+
+不做：Core 的根命令筛选、两秒通知合并与策略/i18n 规则改写、生成器扫描注册、插件生命周期装配、Telegram 动作/媒体/撤回、菜单持久化、停止删除菜单、自动重试、真实平台验证。
+```
 
 ## 第 14 波
 

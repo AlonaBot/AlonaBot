@@ -13,7 +13,7 @@
 | T-15.1 | goal-78 | 官方 OneBot 11 Adapter 的连接与接收：正向 WebSocket、access_token、get_login_info、有界退避重连、self_id 校验、数组格式检查、实例事件队列、私聊/群聊/撤回/成员事件的标准化、to_me、群主、群管理员与好友私聊的平台权限及 `adapters/onebot11/perm`、本地 OneBot 11 模拟服务 | T-15 步骤 1、2 | T-03.3、T-03.4、T-04.6 | V-71 的接收分项、V-85 的 OneBot 11 分项 | 已完成（[PR #109](https://github.com/AlonaBot/AlonaBot/pull/109)） |
 | T-15.2 | goal-79 | 官方 OneBot 11 Adapter 的发送计划与回执、入站与出站媒体（https_url 原样传递，media_ref 经共享目录 `media_dir`，D-88）、`onebot11.face` extension、能力声明 | T-15 步骤 3、4 | T-03.6、T-03.8、T-15.1 | V-71 的发送与媒体分项 | 未开始 |
 | T-15.3 | goal-80 | 跨 Adapter 一致性验收与 OneBot 11 手测记录，汇总证据 | T-15 步骤 5 | T-03.10、T-15.2 | V-71、V-72；真实 QQ 端只手测 | 未开始 |
-| T-15.4 | goal-114 | 官方 OneBot 11 Adapter 的反向 WebSocket：`mode: reverse` 与 `self_id`，注册 `/ws/` 路由，握手鉴权、403 与 409，等待连入与账号核对，断开后等待重连；`onebottest` 的反向客户端 | T-15 步骤 6 | T-03.19、T-15.1 | V-95 的 OneBot 11 分项 | 未开始 |
+| T-15.4 | goal-114 | 官方 OneBot 11 Adapter 的反向 WebSocket：`mode: reverse` 与 `self_id`，注册 `/ws/` 路由，握手鉴权、403 与 409，等待连入与账号核对，断开后等待重连；`onebottest` 的反向客户端 | T-15 步骤 6 | T-03.19、T-15.1、T-15.2 | V-95 的 OneBot 11 分项 | 未开始 |
 | T-15.5 | goal-115 | 官方 OneBot 11 Adapter 的新增片段与媒体 URL：语音、全体提及 extension、文件与合并转发的收发，入站 face 与 forward；media_ref 的临时媒体 URL、inline_base64 与 `platform_file`；入站事件的 chat_type | T-15 步骤 7 | T-03.13、T-03.14、T-15.2 | V-89、V-90、V-98 的 OneBot 11 分项，V-96 的入站片段分项 | 未开始 |
 | T-15.6 | goal-116 | 官方 OneBot 11 Adapter 的扩展事件、平台动作与撤回：十种扩展事件的声明与映射，动作声明与 `adapters/onebot11/action` 常量包，delete_msg | T-15 步骤 8 | T-03.15、T-03.16、T-15.2 | V-91、V-92 的 OneBot 11 分项，V-96 的扩展事件分项 | 未开始 |
 | T-15.7 | goal-133 | 官方 OneBot 11 Adapter 填写 `chat_title`：私聊取发送者昵称，群经 `get_group_info` 取得并在进程内缓存（D-130） | T-15 步骤 9 | T-03.25、T-15.1 | V-117 的 OneBot 11 分项 | 未开始 |

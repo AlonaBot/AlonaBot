@@ -3,7 +3,9 @@ package alonabot
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha512"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -31,15 +33,16 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/hook"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
+	"github.com/AlonaBot/AlonaBot/internal/core/journal"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/media"
 	"github.com/AlonaBot/AlonaBot/internal/core/message"
 	"github.com/AlonaBot/AlonaBot/internal/core/metrics"
 	coreoptions "github.com/AlonaBot/AlonaBot/internal/core/options"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
-	"github.com/AlonaBot/AlonaBot/internal/core/process"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/scheduler"
+	"github.com/AlonaBot/AlonaBot/internal/core/secret"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
@@ -62,11 +65,15 @@ const (
 )
 
 type component struct {
-	root      *sdk.Plugin
-	adapter   adapter.Adapter
-	role      state.Role
-	manifest  *manifest.Manifest
-	resources sdk.Generated
+	root            *sdk.Plugin
+	adapter         adapter.Adapter
+	role            state.Role
+	manifest        *manifest.Manifest
+	resources       sdk.Generated
+	executable      string
+	packageManifest []byte
+	digest          []byte
+	stdio           bool
 }
 
 func validateComponents(components []component, installs []state.Install) error {
@@ -75,31 +82,51 @@ func validateComponents(components []component, installs []state.Install) error 
 	agent := false
 	for i := range components {
 		entry := &components[i]
-		var object any = entry.root
-		if entry.role == state.RoleAdapter {
-			object = entry.adapter
-		}
-		if object == nil || (reflect.ValueOf(object).Kind() == reflect.Pointer && reflect.ValueOf(object).IsNil()) {
-			return fmt.Errorf("component %T is nil", object)
-		}
 		var generated sdk.Generated
-		if entry.role == state.RoleAdapter {
-			generated, _ = sdk.GeneratedFor(entry.adapter)
+		var m *manifest.Manifest
+		var warnings []string
+		if entry.executable != "" {
+			parsed, err := manifest.Parse(entry.packageManifest)
+			if err != nil {
+				return err
+			}
+			m = parsed.Manifest
+			warnings = parsed.Warnings
+			if m.Role == string(state.RoleWebUI) {
+				return fmt.Errorf("component %s has no executable role", m.ID)
+			}
+			entry.role, entry.manifest = state.Role(m.Role), m
+			if err := entry.loadExecutableResources(); err != nil {
+				return err
+			}
+			generated = entry.resources
 		} else {
-			generated = entry.root.Generated()
+			var object any = entry.root
+			if entry.role == state.RoleAdapter {
+				object = entry.adapter
+			}
+			if object == nil || (reflect.ValueOf(object).Kind() == reflect.Pointer && reflect.ValueOf(object).IsNil()) {
+				return fmt.Errorf("component %T is nil", object)
+			}
+			if entry.role == state.RoleAdapter {
+				generated, _ = sdk.GeneratedFor(entry.adapter)
+			} else {
+				generated = entry.root.Generated()
+			}
+			if len(generated.Manifest) == 0 {
+				return fmt.Errorf("component %T has no generated project manifest", object)
+			}
+			parsed, err := manifest.ParseProject(generated.Manifest)
+			if err != nil {
+				return fmt.Errorf("component %T: %w", object, err)
+			}
+			m = parsed.Manifest
+			warnings = parsed.Warnings
 		}
-		if len(generated.Manifest) == 0 {
-			return fmt.Errorf("component %T has no generated project manifest", object)
-		}
-		parsed, err := manifest.ParseProject(generated.Manifest)
-		if err != nil {
-			return fmt.Errorf("component %T: %w", object, err)
-		}
-		m := parsed.Manifest
 		if entry.role == state.RolePlugin && m.Role == string(state.RoleAgent) {
 			entry.role = state.RoleAgent
 		}
-		for _, warning := range parsed.Warnings {
+		for _, warning := range warnings {
 			slog.Warn("project manifest warning", "plugin_id", m.ID, "warning", warning)
 		}
 		if state.Role(m.Role) != entry.role {
@@ -145,6 +172,8 @@ func validateComponents(components []component, installs []state.Install) error 
 }
 
 type assembly struct {
+	core       *Core // assemble 返回后由 Start 绑定，候选回调在运行循环内读取。
+	journal    *journal.Orchestrator
 	adapters   *coreadapter.Registry
 	router     *router.Router
 	mux        *router.Mux
@@ -240,12 +269,12 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 	tools.Register(a.mux)
 	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes, Metrics: a.metrics})
 	a.bus.Register(a.mux)
-	a.broker = broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth, Metrics: a.metrics})
+	a.broker = broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth, Metrics: a.metrics, Agent: a.agentID})
 	tools.RegisterInvoke(a.mux, tool.InvokeOptions{Call: a.broker.Call, Adapters: a.adapters, Buttons: a.buttons,
 		ConfirmTimeout: v.ToolConfirmTimeout, DefaultLocale: func() string { return a.settings.Settings().DefaultLocale }})
 	a.mux.Forward(a.broker.Call)
 	a.schemas = make(map[string]componentOptionSchemas)
-	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: a.broker, Chats: store.Chats, Page: v.OptionsPage, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
+	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: a.broker, Chats: store.Chats, Page: v.OptionsPage, Agent: a.agentID, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
 		installed, err := store.Installs(ctx)
 		if err != nil {
 			return nil, err
@@ -270,6 +299,16 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 	}})
 	a.scheduler = scheduler.New(scheduler.Options{JobTimeout: v.JobTimeout, Store: store, TasksPerPlugin: v.TasksPerPlugin, TaskPayloadBytes: v.TaskPayloadBytes, TaskConcurrency: v.TaskConcurrency})
 	a.scheduler.Services(a.mux, a.router.PluginFor)
+	a.journal = journal.New(journal.Options{Store: store, Secrets: secret.New(store), Config: config.New(store, dir), Settings: file, DataDir: dir, State: a.componentState,
+		Spec: func(ctx context.Context, in state.Install, packageDir string, boot *pb.Bootstrap) (supervisor.Spec, error) {
+			spec, _, err := a.core.installedSpec(ctx, in, packageDir, boot)
+			return spec, err
+		},
+		Stop: func(ctx context.Context, id string, reason pb.StopReason) error {
+			return a.core.stopManaged(id, reason)
+		},
+		Resume: func(ctx context.Context, id string) error { return a.core.startManaged(ctx, id) },
+	})
 	return a, nil
 }
 
@@ -444,6 +483,9 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 		return fmt.Errorf("config %s must be a JSON object", configPath)
 	}
 	version := uint32(initialConfigVersion)
+	if entry.executable != "" {
+		version = *entry.manifest.ConfigVersion
+	}
 	var secretPaths []string
 	if len(entry.resources.ConfigSchema) != 0 {
 		schema, problems := configschema.Parse(entry.resources.ConfigSchema)
@@ -483,8 +525,11 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	}
 
 	// 2. 保留固定代次与已有安装身份，本次启动只刷新构建摘要。
-	digest := make([]byte, launchRandomBytes)
-	rand.Read(digest)
+	digest := entry.digest
+	if entry.executable == "" {
+		digest = make([]byte, launchRandomBytes)
+		rand.Read(digest)
+	}
 	install, err := c.store.GetInstall(ctx, id)
 	if errors.Is(err, state.ErrNotFound) {
 		install = state.Install{Role: entry.role, PluginID: id, AdapterID: entry.manifest.AdapterID, Source: devSource, BuildDigest: digest, Version: entry.manifest.Version}
@@ -521,7 +566,48 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		return err
 	}
-	// 3. 走共用的握手、准备与激活流程。
+	// 3. 独立进程与同进程共用开发配置、数据库和固定代次。
+	if entry.executable != "" {
+		boot.DatabaseDescriptor.MigrationMode = pb.MigrationMode_MIGRATION_MODE_NONE
+		switch entry.manifest.MigrationMode {
+		case manifest.MigrationSelf:
+			boot.DatabaseDescriptor.MigrationMode = pb.MigrationMode_MIGRATION_MODE_SELF
+		case manifest.MigrationVersioned:
+			boot.DatabaseDescriptor.MigrationMode = pb.MigrationMode_MIGRATION_MODE_VERSIONED
+		}
+		running := &runningComponent{id: id, install: install, caller: router.NewCaller(id, generation), schemas: schemas}
+		running.process, err = supervisor.Launch(ctx, c.store, supervisor.Spec{
+			Role: entry.role, AdapterID: entry.manifest.AdapterID, PluginID: id, PluginDir: pluginDir,
+			Executable: entry.executable, BuildDigest: digest, GenerationID: generation, Bootstrap: boot,
+			ConfigSchema: entry.resources.ConfigSchema, I18n: entry.resources.I18n,
+			Development: true, NewCandidate: active == "", Stdio: entry.stdio,
+			DefaultLocale: current.DefaultLocale, Handler: c.assembly.handler(running, install), Global: c.assembly.global,
+			Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values), Log: c.output.Plugin(id, generation, componentLogAttrs(install)...),
+			Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment,
+		})
+		if err != nil {
+			return err
+		}
+		running.instance = running.process.Instance
+		c.components = append(c.components, running)
+		if err := c.assembly.attach(ctx, running); err != nil {
+			return err
+		}
+		if err := c.startInstances(ctx, running, entry.resources.AdapterConfigSchema); err != nil {
+			return err
+		}
+		mode := "restart"
+		if active == "" {
+			mode = "new"
+		}
+		if err := c.store.SetEnabled(ctx, id, true); err != nil {
+			return err
+		}
+		slog.Info("plugin activated", "plugin_id", id, "generation_id", generation, "mode", mode, "pid", running.process.Process.Pid())
+		return nil
+	}
+	// 4. 同进程调用方保留原有 SDK 入口。
+
 	listener, err := wire.ListenLoopback()
 	if err != nil {
 		return err
@@ -660,33 +746,6 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	if err != nil {
 		return nil, err
 	}
-	raw, err := os.ReadFile(filepath.Join(packageDir, "plugin.yaml"))
-	if err != nil {
-		return nil, err
-	}
-	parsed, err := manifest.Parse(raw)
-	if err != nil {
-		return nil, err
-	}
-	m := parsed.Manifest
-	if m.ID != install.PluginID || state.Role(m.Role) != install.Role || m.AdapterID != install.AdapterID || m.Entrypoint != install.Entrypoint {
-		return nil, fmt.Errorf("installed manifest identity differs from record for %s", install.PluginID)
-	}
-	for _, warning := range parsed.Warnings {
-		slog.Warn("installed manifest warning", "plugin_id", m.ID, "warning", warning)
-	}
-	executable, err := process.Entrypoint(packageDir, install.Entrypoint)
-	if err != nil {
-		return nil, err
-	}
-	resources, err := packageResources(packageDir)
-	if err != nil {
-		return nil, err
-	}
-	schemas, err := optionSchemas(resources)
-	if err != nil {
-		return nil, err
-	}
 	pluginDir := filepath.Join(dir, "plugins", install.PluginID)
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		return nil, err
@@ -705,35 +764,32 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 			return nil, err
 		}
 		generation = "gen-" + rand.Text()
-		// shortcut: 首装候选直接交给 supervisor 提交，候选 Journal 接入后由编排器接管。
-		// 原文只交给 Bootstrap；supervisor 提取 secret 后才写最终快照。
-		if err := c.store.AddGeneration(ctx, install.PluginID, generation, emptyConfig, *m.ConfigVersion); err != nil {
-			return nil, err
-		}
 	}
-	running := &runningComponent{id: install.PluginID, install: install, caller: router.NewCaller(install.PluginID, generation), schemas: schemas}
-	boot := bootstrap(generation, *m.ConfigVersion)
-	boot.LogLevel = logging.ProtoLevel(c.output.Levels().Source(install.PluginID))
+	boot := bootstrap(generation, initialConfigVersion)
 	boot.DatabaseDescriptor.ActivationReason = pb.ActivationReason_ACTIVATION_REASON_RESUME
 	if isNew {
 		boot.CandidateConfigJson = string(configuration)
 		boot.DatabaseDescriptor.ActivationReason = pb.ActivationReason_ACTIVATION_REASON_FIRST_INSTALL
+	} else {
+		version, err := c.store.GenerationConfigVersion(ctx, generation)
+		if err != nil {
+			return nil, err
+		}
+		boot.PreviousConfigVersion = &version
 	}
-	switch m.MigrationMode {
-	case manifest.MigrationSelf:
-		boot.DatabaseDescriptor.MigrationMode = pb.MigrationMode_MIGRATION_MODE_SELF
-	case manifest.MigrationVersioned:
-		boot.DatabaseDescriptor.MigrationMode = pb.MigrationMode_MIGRATION_MODE_VERSIONED
+	spec, running, err := c.installedSpec(ctx, install, packageDir, boot)
+	if err != nil {
+		return nil, err
 	}
-	if (install.Role == state.RolePlugin || install.Role == state.RoleAgent) && (m.PrepareEffects == manifest.EffectsManagedDB || m.MigrationMode == manifest.MigrationSelf || m.MigrationMode == manifest.MigrationVersioned) {
-		boot.DatabaseDescriptor.Backend = pb.DatabaseBackend_DATABASE_BACKEND_SQLITE
+	spec.NewCandidate = isNew
+	if isNew {
+		// shortcut: 首装仍由 supervisor 提交，正式提交入口接管后替换。
+		// 原文只交给 Bootstrap；supervisor 提取 secret 后才写最终快照。
+		if err := c.store.AddGeneration(ctx, install.PluginID, generation, emptyConfig, boot.TargetConfigVersion); err != nil {
+			return nil, err
+		}
 	}
-	running.process, err = supervisor.Launch(ctx, c.store, supervisor.Spec{Role: install.Role, AdapterID: install.AdapterID, PluginID: install.PluginID, PluginDir: pluginDir,
-		Executable: executable, BuildDigest: install.BuildDigest, GenerationID: generation, Bootstrap: boot, ConfigSchema: resources.ConfigSchema, I18n: resources.I18n,
-		NewCandidate:  isNew,
-		DefaultLocale: c.assembly.settings.Settings().DefaultLocale, Handler: c.assembly.handler(running, install), Global: c.assembly.global, Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values),
-		Log: c.output.Plugin(install.PluginID, generation, componentLogAttrs(install)...), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment,
-		Detach: func() { c.assembly.detach(running) }})
+	running.process, err = supervisor.Launch(ctx, c.store, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -813,12 +869,14 @@ func (a *assembly) componentDescriptor(id string) *pb.AdapterDescriptor {
 func (c *Core) instanceSchema(components []component) func(context.Context, string) (*configschema.Schema, error) {
 	return func(ctx context.Context, id string) (*configschema.Schema, error) {
 		var raw []byte
+		c.developmentMu.RLock()
 		for _, entry := range components {
 			if entry.manifest.ID == id {
 				raw = entry.resources.AdapterConfigSchema
 				break
 			}
 		}
+		c.developmentMu.RUnlock()
 		if raw == nil {
 			install, err := c.store.GetInstall(ctx, id)
 			if err != nil {
@@ -927,6 +985,40 @@ func (a *assembly) checkAdapterEvent(ev *pb.Event) error {
 		return fmt.Errorf("adapter instance %q cannot validate extension events", ev.GetAdapterInstanceId())
 	}
 	return checker.CheckEvent(ev)
+}
+
+// loadExecutableResources 将资源与当前二进制摘要配对；重建改变身份时保留旧 Session。
+func (entry *component) loadExecutableResources() error {
+	path, err := filepath.Abs(entry.executable)
+	if err != nil {
+		return err
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	digest := sha512.Sum512_256(content)
+	raw, err := os.ReadFile(fmt.Sprintf("%s.%x.json", path, digest[:]))
+	resources := sdk.Generated{}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err == nil {
+		if err := json.Unmarshal(raw, &resources); err != nil {
+			return err
+		}
+		parsed, err := manifest.Parse(resources.Manifest)
+		if err != nil {
+			return err
+		}
+		m := parsed.Manifest
+		if m.ID != entry.manifest.ID || m.Role != entry.manifest.Role || m.AdapterID != entry.manifest.AdapterID {
+			return fmt.Errorf("development component identity changed: %s", entry.manifest.ID)
+		}
+		entry.manifest = m
+	}
+	entry.executable, entry.digest, entry.resources = path, digest[:], resources
+	return nil
 }
 
 // componentLogAttrs 从 Core 的安装记录绑定可信来源类别，Adapter 的实例字段由 SDK 记录携带。
