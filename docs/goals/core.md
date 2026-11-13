@@ -71,7 +71,7 @@
 | goal-68 | T-13.2 | 开发组件的配置与数据库 | T-07.6、T-08.5、T-08.11、T-13.1 | 待派发 |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
-| goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 待派发 |
+| goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 已完成（PR #155） |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 已完成（PR #153） |
 | goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 待派发 |
 | goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 待派发 |
@@ -81,7 +81,7 @@
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
 | goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 等待前置 |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 等待前置 |
-| goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 等待前置 |
+| goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 待派发 |
 | goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 等待前置 |
 | goal-92 | T-09.13 | 管理页所需的会话与上传接口 | T-09.1、T-09.4、T-09.12 | 等待前置 |
 | goal-70 | T-13.4 | 开发运行示例与验收 | T-03.10、T-13.2、T-13.3 | 等待前置 |
@@ -4836,7 +4836,7 @@ goal-125 若先合并，Collect 改为收 *Plugin，命令、事件与 OnButton 
 
 ### goal-17 · T-05.3 三阶段 Hook 与 send_forbidden
 
-状态：待派发。前置 T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)，合并提交 `0f860a9`）已合并。2026-11-12 审查者按 main `3e4db62` 的代码改写接口段，要点如下：
+状态：已完成（[PR #155](https://github.com/AlonaBot/AlonaBot/pull/155)，合并提交 `53393aa`），证据见 TEST-MATRIX §3.2。合入：SDK 的 `(*Plugin)`/`(*SubPlugin)` 的 `PreEvent(routeID, event EventType) *PreEventBuilder`、`BeforeSend(routeID) *BeforeSendBuilder`、`AfterSend(routeID) *AfterSendBuilder`，各 builder 的 `Priority` 与 `Handle`（BeforeSend 为 `func(*Context, message.Session, message.Chain) (message.Chain, error)`，AfterSend 为 `func(*Context, message.Session, *message.SendResult, error) error`），`(*Context).Editing() message.MessageRef`；`internal/core/hook` 的 `New(r *router.Router, Options{Prepare, CheckEvent}) *Runner` 与 `Runner.PreEvent`、`BeforeSend`（带改写复检的 check 回调）、`AfterSend`；`router.Options.PreEvent` 与 `Invocation.SendForbidden`；`message.New(..., hooks)`；HookSpec 的 `event_type_filter = 2`。审查中范围修订：BeforeSend 的改写结果复检、PreEvent 改写的事件按接收 Session 准备媒体、Adapter 扩展事件的改写经实例复检（`sdk/sdk.go` 与 remote 的复检出口一并修改）。合入 main 时按 CONTRACTS §2 的 PreEvent → 多轮等待 → 命令顺序接入 T-05.4。派发时：前置 T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)，合并提交 `0f860a9`）已合并。2026-11-12 审查者按 main `3e4db62` 的代码改写接口段，要点如下：
 - router 不能 import hook，PreEvent 改为 `router.Options.PreEvent` 注入函数；没有 `router.Dispatch` 类型。
 - Router 的可信事件为 `trustedEvent{retained, payload}`：可改写的业务载荷只在 payload 中，`rebuild` 时与可信绑定合并。message.deleted、button.clicked 与 scheduled 没有业务载荷。
 - `router.Invocation` 现有 PluginID、Event、DefaultTarget，作为 `wire.Request.Attach` 传出，服务函数从 `wire.Inbound.ParentAttach` 取回。
@@ -5619,7 +5619,11 @@ sdk（新增或替换）
 
 ### goal-20 · T-06.2 父调用链、取消与背压
 
-状态：等待前置（T-05.3）。T-03.6（PR #55）、T-06.1（PR #45）已合并。语句中 goal-7、goal-17、goal-19 提供的符号（broker.Broker、router.Invocation 与 send_forbidden、media 的 Grant、wire 的 ParentAttach 与预算）只写名字；合并后由审查者核对，再改为待派发。
+状态：待派发。T-05.3（[PR #155](https://github.com/AlonaBot/AlonaBot/pull/155)，合并提交 `53393aa`）、T-03.6（PR #55）、T-06.1（PR #45）已合并。2026-11-12 审查者按合并后的 main 核对：
+- `broker.New(r *router.Router, requestTimeout time.Duration)`，调用方为根包 assembly.go（goal-130 的选项查询也使用它）；`Broker.Call` 已从 `in.ParentAttach.(*router.Invocation)` 派生 Actor 与默认 Target，`InvocationContext.plugin_chain` 目前只有调用方一跳，`send_forbidden` 与 `scopes` 没有继承；期限已取 REQUEST_TIMEOUT、调用方期限与 ctx 期限中最早者；`b.calls` 以子调用的 Invocation 记录调用来源。
+- `router.Invocation{PluginID, Event, DefaultTarget, SendForbidden, RouteID, Continuation}`；`SendForbidden` 由 hook 包在出站 Hook 调用时设置，message 的 send、edit、delete、action 检查父附件的这个标记（goal-17）。
+- `tune.Values.CallChainMaxDepth`（CALL_CHAIN_MAX_DEPTH，缺省 16）已登记。
+- 测试插件按 main 上的插件对象写法（`sdk.NewPlugin`、Plugin.BeforeSend 等）编写；Service 的声明与调用使用合并时 main 上的写法（goal-126 先合并时为 `sdk.JSON[In, Out](target)` 与 `Call`）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-20（切片 T-06.2：父调用链、取消与背压）。goal 目录 goal-20，分支 goal-20，worktree .worktrees/goal-20，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -5630,18 +5634,21 @@ sdk（新增或替换）
 
 范围（只新增或修改这些）：
 - internal/core/broker/：调用链记录、循环与深度检查、期限与取消传播
-- internal/core/router/：Invocation 增加祖先插件链与 scope，并在 InvocationContext 中下发（只加字段与填写处）
+- internal/core/router/：Invocation 增加祖先插件链与 scopes（只加字段与填写处）
+- 根包 assembly.go：broker.New 的调用改为传 Options
 - internal/wire/：如需在父请求结束时通知子调用取消，只加回调字段与触发点（与 goal-24 的 Late 同样的方式）
 - 新增 internal/core/supervisor/testdata/chainplugin/
 - 上述包的测试文件
 允许的新跨模块边：无。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
-- internal/core/router：Invocation 增加字段 Chain []string（祖先插件链，最早者在前）、Scopes []string、SendForbidden bool（goal-17 已有时沿用）
-- internal/core/broker：Options 增加 MaxDepth int（tune.Values.CallChainMaxDepth）；New 的签名相应改为接收 Options，并更新全部调用者
+- internal/core/router：Invocation 增加字段 Chain []string（祖先插件链，最早者在前）与 Scopes []string；SendForbidden 沿用
+- internal/core/broker：
+   type Options struct { Router *router.Router; RequestTimeout time.Duration; MaxDepth int /* tune.Values.CallChainMaxDepth */ }
+   func New(opt Options) *Broker // 替换 New(r, requestTimeout)，同步全部调用者
 
 行为：
-- 父请求：插件发起的 Service 调用带 parent_call_id 时，必须指向同一 Session 中仍在途的 Core→该插件请求（wire 已保证属于同一 Session）；Broker 从该父请求的 Invocation 派生上下文：actor、default_target、scopes、trace_id、send_forbidden 原样继承，Chain = 父 Chain + [调用方]。插件载荷中的任何身份字段被忽略。没有父请求时只有插件身份：Chain = [调用方]，actor 与 target 为空。
+- 父请求：插件发起的 Service 调用带 parent_call_id 时，必须指向同一 Session 中仍在途的 Core→该插件请求（wire 已保证属于同一 Session）；Broker 从该父请求的 Invocation 派生上下文：actor、default_target、scopes、trace_id、send_forbidden 原样继承，写进 InvocationContext 与子调用的 Invocation，Chain = 父 Chain + [调用方]（InvocationContext.plugin_chain 下发同一列表）。插件载荷中的任何身份字段被忽略。没有父请求时只有插件身份：Chain = [调用方]，actor 与 target 为空。
 - 检查：目标插件已在 Chain 中 → CALL_CYCLE；len(Chain)+1 > MaxDepth → FAILED_PRECONDITION。在调用目标函数之前返回。不同的独立链互不影响（检查只看本链）。
 - 期限：子请求期限 = min(父请求期限, 调用方请求自带期限, REQUEST_TIMEOUT 起算的期限)。
 - 取消：父请求完成（成功或失败）、到期、被取消，或调用方 Session、目标 Session 断开时，Broker 取消尚未完成的转发请求（发送 Cancel），并使调用方得到 CANCELLED 或 UNAVAILABLE；不重放、不重试。普通迟到响应不会再次完成已结束的调用。
