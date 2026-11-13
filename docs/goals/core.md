@@ -5999,7 +5999,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-128 · T-07.9 动态任务与暂停恢复的 SDK
 
-状态：已完成（[PR #176](https://github.com/AlonaBot/AlonaBot/pull/176)，合并提交 `9785c22`），证据见 TEST-MATRIX §3.2。合入：`sdk.Task[T](name) TaskType[T]`、`TaskBuilder[T]` 与 `TaskInstance[T]`（经 core.task.set、cancel、list 创建、替换、取消与分页列出），`sdk.JobPause`、`sdk.JobResume`、`sdk.JobStatus(ctx, jobID) (JobState, error)`；生成器对动态任务参数类型的检查；showcase 提醒示例按可信用户与会话划分内部 key。以下为派发时的语句。
+状态：已完成（[PR #176](https://github.com/AlonaBot/AlonaBot/pull/176)，合并提交 `9785c22`），证据见 TEST-MATRIX §3.2。合入：`sdk.Task[T](name) TaskType[T]` 的 `At`、`Every`、`Cron`、`Cancel`、`List`（经 core.task.set、cancel、list 创建、替换、取消与分页列出，返回 `TaskInstance[T]`），`TaskBuilder[T]` 登记任务的 Handler，`sdk.JobPause`、`sdk.JobResume`、`sdk.JobStatus(ctx, jobID) (JobState, error)`；生成器对动态任务参数类型的检查；showcase 提醒示例按可信用户与会话划分内部 key。以下为派发时的语句。
 
 按 main 核对：
 
