@@ -172,6 +172,12 @@ message ScheduledPayload {
   string run_id = 2;
   // 计划触发时刻，UTC 毫秒。
   int64 scheduled_at_unix_ms = 3;
+  // 动态任务名；静态任务为空。
+  string task_name = 4;
+  // 动态实例键。
+  string task_key = 5;
+  // 创建时原样保存的 JSON 对象。
+  string task_payload_json = 6;
 }
 
 // ---------- MessageChain ----------

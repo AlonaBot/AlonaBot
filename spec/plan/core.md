@@ -66,7 +66,7 @@
 | T-07.5 | goal-27 | 统一启停与清理，时间、进程和 HTTP 边界验收，汇总证据 | T-07 步骤 7、8 | T-07.2、T-07.4 | V-20、V-21、V-22、V-46、V-47 的 T-07 分项 | 已完成（PR #119；TEST-MATRIX §3.2） |
 | T-07.6 | goal-97 | Core 设置与首次启动：`core_config.json` 取代 `alonabot.yaml`（启动设置、Core Admin、命令前缀、默认 locale、按来源的日志级别、Adapter 实例），`${环境变量}` 展开、保留原写法的写回与供开发运行调用的重新读取；非终端首次启动把管理 token 写入 `admin_token`，`admin-token show`（D-82） | T-07 步骤 5 | T-07.3、T-09.1 | V-22 的组件分项、V-47 的认证分项、V-88 | 已完成（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)） |
 | T-07.7 | goal-98 | 插件页面的沙箱隔离：删除插件 host、兑换票据与插件会话，插件路由响应的 CSP sandbox、nosniff 与 Set-Cookie 过滤，非公开路由的管理会话与 CSRF（D-84） | T-07 步骤 6 | T-07.4、T-07.6、T-09.1 | V-47 的组件分项 | 已完成（PR #116；TEST-MATRIX §3.2） |
-| T-07.8 | goal-127 | 动态任务与调度持久化的协议和 Core 侧：proto 追加与生成；状态库的任务表与调度状态表；调度器改为以状态库为准，interval 按保存的起点计算，错过的触发跳过；`core.task.set`/`cancel`/`list` 与 `core.job.pause`/`resume`/`status`；动态任务的并发队列与 Cancel 取消在途调用；卸载清理范围中的任务分项（D-124～D-127） | T-07 步骤 9 | T-07.5、T-09.4 | V-114 的 Core 分项 | 未开始 |
+| T-07.8 | goal-127 | 动态任务与调度持久化的协议和 Core 侧：proto 追加与生成；状态库的任务表与调度状态表；调度器改为以状态库为准，interval 按保存的起点计算，错过的触发跳过；`core.task.set`/`cancel`/`list` 与 `core.job.pause`/`resume`/`status`；动态任务的并发队列与 Cancel 取消在途调用；卸载清理范围中的任务分项（D-124～D-127） | T-07 步骤 9 | T-07.5、T-09.4 | V-114 的 Core 分项 | 已完成（PR #169；TEST-MATRIX §3.2） |
 | T-07.9 | goal-128 | 动态任务与暂停恢复的 SDK：`sdk.Task[T]`、`sdk.OnTask`，实例的 `At`、`Every`、`Cron`、`Cancel`、`List`，`sdk.Key` 与 `sdk.Timezone`；`sdk.PauseJob`、`sdk.ResumeJob`、`sdk.JobStatus`；示例与已合并的调用方同步（D-124、D-126） | T-07 步骤 10 | T-04.12、T-07.8 | V-114 的 SDK 分项 | 未开始 |
 | T-08.1 | goal-28 | 配置字段描述与构建检查（在 T-04 生成器上扩展），含表单选项的图标路径 | T-08 步骤 1 | T-04.2 | V-25 的描述分项 | 已完成（PR #54；TEST-MATRIX §3.2） |
 | T-08.2 | goal-29 | 配置 JSON 语义与 Pending：原始对象保留、完整替换、Merge Patch、编辑快照导入、base_generation | T-08 步骤 2 | T-02 | V-23、V-38 | 已完成（PR #23；TEST-MATRIX §3.2） |
@@ -97,10 +97,10 @@
 | T-11.1 | goal-54 | 工具描述与目录：Service 描述的 `tool` 字段、注册校验、`core.tool.list`、调用策略的持久化与管理服务层 | T-11 步骤 1、2 | T-04.4、T-04.7、T-06.1 | V-55 的目录与策略分项 | 已完成（PR #101；TEST-MATRIX §3.2） |
 | T-11.2 | goal-55 | 工具调用与用户确认：`core.tool.invoke`、`core.tool.confirm`、Core 内部的确认记录与按钮、同一 Actor 与 5 分钟限时、确认文案 | T-11 步骤 3、4 | T-03.8、T-06.2、T-08.8、T-11.1 | V-55 | 已完成（PR #165；TEST-MATRIX §3.2） |
 | T-11.3 | goal-56 | Agent 会话存储：状态库表、`core.conversation.*`、管理服务层的列出与清除、purge | T-11 步骤 5 | T-03.1 | V-56 | 已完成（PR #35；TEST-MATRIX §3.2） |
-| T-11.4 | goal-57 | 工具与会话的多进程验收，汇总证据 | T-11 步骤 6 | T-11.2、T-11.3 | V-55、V-56 的 T-11 分项 | 未开始 |
+| T-11.4 | goal-57 | 工具与会话的多进程验收，汇总证据 | T-11 步骤 6 | T-11.2、T-11.3 | V-55、V-56 的 T-11 分项 | 已完成（PR #172；TEST-MATRIX §3.2） |
 | T-13.1 | goal-67 | 库模式入口：根包 `alonabot.Run`、`alonabot.Start` 与选项、与 `alonabot run` 共用的 Core 装配、开发组件同进程经 loopback 连接、生成代码中嵌入的工程 manifest 身份、可导入 Adapter 包的工程入口与资源登记、dev 来源与固定代次 `dev:<组件 ID>`（D-134） | T-13 步骤 1、2 | T-02.1、T-03.3、T-04.2、T-04.9、T-08.8、T-09.16 | V-64 的生命周期分项 | 已完成（PR #149；TEST-MATRIX §3.2） |
 | T-13.2 | goal-68 | 开发组件的配置与数据库：`config.json` 直读、准备与写回（WebUI 修改时重启组件）、`dev.sqlite`、拒绝 update/rollback/uninstall；沿用固定代次 `dev:<组件 ID>`（D-134） | T-13 步骤 3 | T-07.6、T-08.5、T-08.11、T-13.1 | V-64 | 已完成（PR #160；TEST-MATRIX §3.2；配置写回随 T-09.14 的配置管理 API，dev 来源拒绝 update/rollback/uninstall 与开发 Adapter 的实例在 T-09.4） |
-| T-13.3 | goal-69 | 开发运行与热部署：`alonabot run [目录...] [--reload]` 构建并以独立进程运行开发组件，轮询源码、资源与配置，只重启变化的组件；Adapter 以可导入包为工程目录，沿用 `dev:<组件 ID>`（D-77、D-134） | T-13 步骤 4 | T-07.6、T-09.16、T-13.1、T-09.4 | V-65 | 未开始 |
+| T-13.3 | goal-69 | 开发运行与热部署：`alonabot run [目录...] [--reload]` 构建并以独立进程运行开发组件，轮询源码、资源与配置，只重启变化的组件；Adapter 以可导入包为工程目录，沿用 `dev:<组件 ID>`（D-77、D-134） | T-13 步骤 4 | T-07.6、T-09.16、T-13.1、T-09.4 | V-65 | 已完成（PR #171；TEST-MATRIX §3.2） |
 | T-13.4 | goal-70 | 开发运行示例与开发文档，汇总证据 | T-13 步骤 5 | T-03.10、T-13.2、T-13.3 | V-64、V-65 | 未开始 |
 | T-16.1 | goal-81 | 插件测试套件基础：`plugintest.Start`、测试 Adapter、会话与身份、Capability 子集、消息注入、`internal/inproc` 的分发结束通知、配置与数据库 | T-16 步骤 1、2 | T-05.2、T-13.2、T-09.4 | V-73 的基础分项 | 已完成（PR #168；TEST-MATRIX §3.2） |
 | T-16.2 | goal-82 | 按钮点击、多轮等待、schedule 触发（含动态任务实例，D-124）与后台发送；用套件测试示例插件，开发文档，汇总证据 | T-16 步骤 3、4 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | V-73 | 未开始 |

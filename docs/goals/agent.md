@@ -12,11 +12,11 @@
 | goal-120 | T-12.11 | Provider：Ollama 原生协议 | T-12.1 | 已完成（PR #128） |
 | goal-134 | T-12.12 | Provider 改用官方 SDK | T-12.9、T-12.10、T-12.11 | 已完成（PR #134） |
 | goal-135 | T-12.13 | Provider 图片输入 | T-12.12 | 已完成（PR #138） |
-| goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1、T-12.9、T-12.10、T-12.11、T-09.4 | 待派发 |
-| goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-08.14、T-12.2 | 等待前置 |
-| goal-136 | T-12.14 | 对话中的图片输入 | T-04.8、T-12.2、T-12.13 | 等待前置 |
-| goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 等待前置 |
-| goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 等待前置 |
+| goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1、T-12.9、T-12.10、T-12.11、T-09.4 | 已完成（PR #170） |
+| goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-08.14、T-12.2 | 待派发 |
+| goal-136 | T-12.14 | 对话中的图片输入 | T-04.8、T-12.2、T-12.13 | 待派发 |
+| goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 待派发 |
+| goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 待派发 |
 | goal-62 | T-12.5 | 技能 | T-12.3 | 等待前置 |
 | goal-63 | T-12.6 | 定时 Agent 任务 | T-07.9、T-08.5、T-12.3 | 等待前置 |
 | goal-64 | T-12.7 | 官方 Agent 组件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6、T-12.8、T-12.14 | 等待前置 |
@@ -294,7 +294,7 @@ type Message struct {
 
 ### goal-59 · T-12.2 Agent 对话与流式显示
 
-状态：待派发。前置均已合并：T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`）提供 `role: agent` 的运行与库模式的 Adapter 实例，T-05.4（PR #153）提供 `c.Continue`，T-13.2（PR #160）提供开发组件的 config.json 与 dev.sqlite，T-03.18（PR #151）提供 `c.Stream`。2026-11-12 审查者按 main 改写：流式显示按 D-135 交给 `c.Stream`（编辑节流、实例 text_limit 与换条），PLAN agent T-12 步骤 3 同步修订；配置按 D-76 写在 config_schema.json，providers 为每个预设一个模板的 template_list；SDK 写法为插件对象、`Command(...).RawTail().Permission(...)`、`On(routeID, sdk.MessageCreated).Rule(sdk.ToMe())`、`sdk.AppendConversation`/`ListConversation`/`ClearConversation`、`gormdb.Open` 与 `gormdb.Migrations`；Provider 客户端为 `provider.New(Config{Protocol, BaseURL, APIKey, Model}, *http.Client)` 与 `Client.Stream(ctx, req, emit)`。
+状态：已完成（[PR #170](https://github.com/AlonaBot/AlonaBot/pull/170)，合并提交 `eca6310`），证据见 TEST-MATRIX §3.2。合入：`agent.New() *sdk.Plugin`（`alonabot_agent_official`，薄入口 `agent/cmd/alonabot-agent`）与命令 /ask、/agent on|off、/persona、/provider、/reset；受管 SQLite 的 `chat_settings`（Provider、人格、自由对话开关与 reset 代次）；`InvocationContext.command_consumed = 6`、`sdk.NotCommand() Rule` 与 `(*sdk.Context).CommandConsumed() bool`（D-141，待维护者确认）；`c.Stream` 无编辑时按实例 text_limit 换条。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-59（切片 T-12.2：Agent 对话与流式显示）。goal 目录 goal-59，分支 goal-59，worktree .worktrees/goal-59，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -348,146 +348,295 @@ OnConfigLoad 之后的校验在 OnStart 中完成：providers 的 name 唯一、
 
 ### goal-83 · T-12.8 文本生成服务
 
-状态：等待前置（T-12.2）。2026-11-12：T-08.14（[PR #157](https://github.com/AlonaBot/AlonaBot/pull/157)，合并提交 `e709135`）已合并：`sdk.ServeOptions(r, serviceName, fn)`；`internal/core/options` 的 `service` 按组件部分经 `Router.Plugin` 查找，`@agent` 目前返回 UNAVAILABLE。本切片实现 Broker 的 `@agent` 解析时，把选项查询接到同一处解析，并补 `@agent/llm.providers` 的成功路径。T-03.8（[PR #136](https://github.com/AlonaBot/AlonaBot/pull/136)，合并提交 `3621fc1`）已合并：`internal/core/buttons` 的 `New(store, now, current)` 与 `Service.Issue`、`Resolve`、`Purge`；`message.New(adapters, p, lease, issue, requestTimeout)`；`router.Options.Buttons`；可选接口 `adapter.ExtensionChecker`；`manifest.CheckDependencies(m, Installed)`；SDK 的 `sdk.Action[T]`、`sdk.OnButton(r, a).Handle(func(*Context, T) error)`、`message.Buttons`、`message.Extension`；`Segment` oneof 已用到 `extension = 9`。2026-11-10 按 D-131：增加选项来源 `llm.providers`，前置加入 T-08.14；语句的接口与行为段尚未写入它，由审查者在 goal-130 合并后按合入的 `sdk.ServeOptions` 补写：每个 Provider 条目一个选项，存储值与显示名为名称，说明为协议与模型，搜索词不区分大小写地匹配名称，不返回 base_url 与 API key，不检查 llm_service_allowed_plugins；依据另加 CONTRACTS §13.5 的 `llm.providers`、DECISIONS D-129、D-131 与 TEST-MATRIX V-116 的 `llm.providers` 分项。T-06.1（PR #45）已合并。语句中 goal-8、goal-19、goal-59 提供的符号（manifest 的 role 解析、Service Broker 的目标定位、sdk.JSONService、sdk.CallJSON、sdk.WithAccess、Context.Caller、agent 的 Config 与 Provider 装配）只写名字；合并后由审查者核对，再改为待派发。2026-10-28 按 D-61 改为以 `@agent` 为目标。2026-11-04 按 D-77～D-85 修订计划：llm_service_allowed_plugins 缺省为 `["*"]`，表示全部插件（D-83）；Agent 的配置改由 `config_schema.json` 声明（D-76）。2026-11-09 按 D-111 在 sdk/llm 增加一问一答的 `llm.Ask`。
+状态：待派发。直接前置 T-03.8（PR #136，合并提交 `3621fc1`）、T-06.1（PR #45，`dcb4ec2`）、T-08.14（PR #157，`e709135`）、T-12.2（PR #170，`eca6310`）均已合并。相关装配以 T-09.4（PR #163，`cb8ae3d`）、T-06.4（PR #164，`039802f`）、T-11.2（PR #165，`330164f`）、T-09.12（PR #167，`3a9b4af`）、T-16.1（PR #168，`37b0ada`）、T-07.9（PR #169，`4dc4bcd`）合入后的 main `dbbb80b` 为基线。2026-11-13 起草者在本 worktree 用 `rg`、源码读取与 `go doc` 按 main 核对：2026-11-13 审查者裁决：采纳 `llm.GenerateService` 声明、Broker 与 options.Service 经 Options 注入的 Agent 定位函数、Response 用量字段为 `*int`（零用量也能表达）与逐调用 DEBUG 日志（CONTRACTS §14.1）；根包集成测试到 `agent/...` 的边只用于测试，本切片获授权登记进 ARCHITECTURE。
+
+- `agent/agent.go`：`func New() *sdk.Plugin`；组件 ID 为 `alonabot_agent_official`。配置通过 `readConfiguration(values config.Values) (configuration, error)` 读取，`configuration` 与 `configuredProvider{name string; client *provider.Client; maxTokens int}` 均为私有类型；当前没有公开 `Config`，也没有保存供服务响应使用的 model、protocol 元数据。`agent/config_schema.json` 已有六个 Provider 模板及 default_provider。
+- `sdk/services.go`：`func JSON[In, Out any](target string) Service[In, Out]`；`func Serve[In, Out any](owner Registrar, declaration Service[In, Out]) *ServiceBuilder[In, Out]`；`func (s *ServiceBuilder[In, Out]) Access(a Access, allowlist ...string) *ServiceBuilder[In, Out]`；`func (s *ServiceBuilder[In, Out]) Handle(h func(*Context, In) (Out, error))`；`func (s Service[In, Out]) Call(ctx context.Context, in In) (Out, error)`；`func (c *Context) Caller() string`。`AccessPublic` 为现有访问规则。类型的 schema_id 是 `<Go import path>.<type name>`，缺省版本为 1；Schema 原文来自生成器。旧 JSONService、CallJSON、WithAccess 和 Services Hook 的写法已过时。
+- `sdk/options.go`：`func ServeOptions(r Registrar, serviceName string, fn func(ctx context.Context, q OptionsQuery) (OptionsPage, error))`。OptionsQuery 含 Search、Filter、Locale、Limit、Values；OptionsPage 含 Options、More；Option 含 Value、Label、Description；访问规则固定为 private。`contracts/proto/alonabot/v1/route.proto` 已有 `ServiceSpec.options_source = 6`。
+- `internal/core/broker/broker.go`：`func New(opt Options) *Broker`；`func (b *Broker) Call(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response`；`func (b *Broker) CallSession(ctx context.Context, c, target router.Caller, in *wire.Inbound) wire.Response`。Options 已含 Router、RequestTimeout、MaxDepth、Metrics；定位处先用 validate.PluginID 校验，当前会拒绝 `@agent`。
+- `internal/core/router/router.go`：`func (r *Router) Caller(pluginID string) (Caller, bool)` 与 `func (r *Router) PluginFor(c Caller) (Plugin, bool)`；后者校验绑定的 Session。`internal/core/options/options.go`：`func (s *Service) Query(ctx context.Context, componentID string, kind SchemaKind, fieldPath string, q Query) (Page, error)`；其 service 当前直接以来源的组件部分调用 Router.Caller，再检查 options_source，通过 Broker.CallSession 调用同一个 Session，尚缺 `@agent` 解析。
+- `internal/core/state/installs.go`：`func (s *Store) Installs(ctx context.Context) ([]Install, error)`；`state/state.go` 的 Install 含 Role、PluginID、Source、Uninstalled，`RoleAgent Role = "agent"`。根包 `assembly.go` 的 `assemble(store *state.Store, dir string, v tune.Values, file *settings.File) (*assembly, error)` 同时构造 Broker 和 options.Service；库模式也创建 dev 来源、role agent 的安装记录。
+- `agent/provider/provider.go`：`func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error) (Result, error)`；Request 含 Messages、Tools、MaxTokens，Result 含 StopReason、Usage，Usage 为可空的 `*Usage`，其中 InputTokens、OutputTokens 为 int。`agent/conversation.go` 已在 c.Continue 中调用 c.Stream；`sdk.NotCommand() Rule`、`(*sdk.Context).CommandConsumed() bool` 和 `InvocationContext.command_consumed = 6` 已随 #170 合入。
+- 测试可用根包 Start 的真实装配；根包 `pipeline_test.go` 已有 `newPipeline(t *testing.T, stdio ...bool) *pipelineHarness`、install、launch、stop、deliver 等辅助，可供本地多进程自测借用。`sdk/generated.go` 已有 `func (p *Plugin) Generated() Generated` 与 ServiceSchemas 资源字段；Agent 当前尚未生成 llm 类型的 Schema，本切片增加声明并生成后，测试调用插件可复用其中同一组 Request/Response Schema。
+- 在途冲突：goal-40 涉及 `internal/core/state/`、`internal/core/supervisor/` 和根包装配；PR #171（goal-69）涉及 `alonabot.go`、`assembly.go`、`cmd/alonabot/`；PR #172（goal-57）涉及根包 `t11_e2e_test.go` 与 `pipeline_test.go`。本切片与前两者的直接共享点是 assembly.go；本地复用流水线时还须核对 #172 的辅助改动。goal-136 同改 agent.go、config_schema.json、i18n 和生成资源，按执行顺序 §3 的追加规则处理。#165、#167、#168、#169 和 goal-59 在本基线上均已合并。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-83（切片 T-12.8：文本生成服务）。goal 目录 goal-83，分支 goal-83，worktree .worktrees/goal-83，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：Core 的 Service Broker 把目标 `@agent` 解析为已安装的 Agent 组件；新建 sdk/llm，提供 CONTRACTS §13.5 llm.generate 的请求/响应类型、Schema 标识、以 `@agent` 为目标的调用辅助与一问一答的 llm.Ask；官方 Agent 组件注册该服务（public），只接受配置项 llm_service_allowed_plugins 中的直接调用方，用已配置的 Provider 完成一次非流式请求，并返回 Provider 给出的用量。
+目标：Core 的 Service Broker 将 @agent 解析为当前安装的 Agent；新增 sdk/llm 的共享服务声明、请求响应类型、Schema 标识、Generate 与 Ask；官方 Agent 提供 public 的 llm.generate，按直接调用方许可完成一次文本生成；同时提供私有选项来源 llm.providers，并接通 @agent/llm.providers 的 Core 查询。
 
-依据：PLAN T-12 步骤 9；CONTRACTS §13.5、§3、§9.1；DECISIONS D-38、D-51、D-61、D-111；TEST-MATRIX V-76、V-82、V-109。
+依据：spec/PLAN.md §3.1；spec/plan/agent.md §3 T-12 步骤 2、9 及「失败停止条件」，spec/plan/core.md T-06 步骤 2～4、6 的目标定位与 Session 约束、T-08 步骤 11 的选项查询；CONTRACTS §3、§5.1、§9.1、§13、§13.5、§14.1；WIRE-FORMAT §3.3、§4、§5A；MESSAGE-MODEL §4A（沿用现有对话流显示）；DECISIONS D-38、D-51、D-59、D-61、D-70、D-76、D-83、D-86、D-111、D-122、D-129、D-131；TEST-MATRIX V-76、V-82 的 @agent 分项、V-109、V-116 的 llm.providers 分项。
 
 范围（只新增或修改这些）：
-- internal/core/ 的 Service Broker：目标定位处解析 `@agent`（只改定位处，新增解析函数放在新文件）
-- sdk/llm/：新建包（类型、Schema 标识、Generate、Ask）
-- agent/：Config 增加字段；新增 generate.go（服务注册与处理）；provider 包不改
-- 上述包的测试文件
-允许的新跨模块边：无（agent -> sdk/... 已允许）。sdk/llm 只 import sdk 与标准库。
+- 新增 sdk/llm/llm.go：共享类型、声明、Schema 标识与调用辅助；该目录只增加本地 *_local_test.go，不提交测试。
+- internal/core/broker/broker.go：Options 注入 Agent 定位函数；只调整目标语法检查和定位接线；别名的专属辅助放在新增 internal/core/broker/agent.go。
+- internal/core/options/options.go：Options 注入同一个 Agent 定位函数；service 将别名归一化后沿用标记检查和 CallSession。
+- 新增根包 agent_target.go：从 state.Store 的可信安装记录定位当前 Agent；assembly.go 只向 Broker、options.Service 接入同一函数。
+- agent/agent.go：私有 configuration 增加调用方名单，configuredProvider 保留 protocol、model；readConfiguration 读取新增字段；New 登记服务。
+- 新增 agent/generate.go、agent/options.go：llm.generate 与 llm.providers 的处理和注册。
+- agent/config_schema.json、agent/i18n/en-US.json、agent/i18n/zh-CN.json：追加 llm_service_allowed_plugins 及 config 文案；default_provider 接上本组件的 llm.providers 选项来源。
+- agent/alonabot_gen.go：仅经现有生成器更新。
+- ARCHITECTURE.md：依赖表登记「根包测试 -> agent/...（仅集成测试）」这条边（本切片获授权修改这一处）。
+- 新增根包 agent_service_test.go（unix）：一个覆盖完整主路径的集成测试；本地自测放根包 agent_service_local_test.go 与上述包的 *_local_test.go。
+允许的新跨模块边：根包 agent_service_test.go -> agent/...（仅集成测试，用官方 Agent 与本地 Provider）；产品代码沿用根包 -> internal/core/...、agent/... -> sdk/...，sdk/llm 只依赖 sdk、sdk/errcode 与标准库。Agent 定位通过根包注入，Broker 无需新增对 state 的依赖。
 
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. sdk/llm
+接口（照此实现；以下新增接口与 main 已有接口分开列出）：
+1. 新增 sdk/llm：
    const ServiceName = "llm.generate"
-   const AgentTarget = "@agent" // CONTRACTS §3：由 Core 解析为已安装的 Agent 组件
-   const SchemaIn, SchemaOut = "...", "..." // 随包固定的 schema 标识，按 goal-19 的命名规则选定并写入包文档
+   const AgentTarget = "@agent"
+   const SchemaIn = "github.com/AlonaBot/AlonaBot/sdk/llm.Request"
+   const SchemaOut = "github.com/AlonaBot/AlonaBot/sdk/llm.Response"
    const SchemaVersion uint32 = 1
-   type Message struct { Role string `json:"role"`; Text string `json:"text"` } // Role 为 "user" 或 "assistant"
-   type Request struct { Messages []Message `json:"messages"`; System string `json:"system,omitempty"`; Provider string `json:"provider,omitempty"`; MaxOutputTokens int `json:"max_output_tokens,omitempty"` }
-   type Response struct { Text string `json:"text"`; Provider string `json:"provider"`; Model string `json:"model"`; InputTokens int `json:"input_tokens,omitempty"`; OutputTokens int `json:"output_tokens,omitempty"` }
-   func Generate(ctx context.Context, req Request) (Response, error) // 经 sdk.CallJSON 调用 AgentTarget + "/" + ServiceName
-   func Ask(ctx context.Context, prompt string) (string, error) // 等于 Generate(ctx, Request{Messages: []Message{{Role: "user", Text: prompt}}}) 后取 Text（D-111）
-2. agent
-   Config 增加字段：LLMServiceAllowedPlugins []string `json:"llm_service_allowed_plugins"`
+   type Message struct {
+       Role string `json:"role"`
+       Text string `json:"text"`
+   }
+   type Request struct {
+       Messages []Message `json:"messages"`
+       System string `json:"system,omitempty"`
+       Provider string `json:"provider,omitempty"`
+       MaxOutputTokens int `json:"max_output_tokens,omitempty"`
+   }
+   type Response struct {
+       Text string `json:"text"`
+       Provider string `json:"provider"`
+       Model string `json:"model"`
+       InputTokens *int `json:"input_tokens,omitempty"`
+       OutputTokens *int `json:"output_tokens,omitempty"`
+   }
+   var GenerateService = sdk.JSON[Request, Response](AgentTarget + "/" + ServiceName)
+   func Generate(ctx context.Context, req Request) (Response, error)
+   func Ask(ctx context.Context, prompt string) (string, error)
+   Generate 调用 GenerateService.Call；Ask 调用 Generate。Schema 原文由生成器按类型生成，两个 Schema 标识与 SDK 的类型规则一致，版本使用既有缺省 1。
+2. internal/core/broker.Options 与 internal/core/options.Options 各新增：
+   Agent func(ctx context.Context) (string, error)
+   生产装配由 assemble 显式注入同一个定位函数；其他装配要调用 @agent 时也须注入。已有仅处理普通组件 ID 或内置选项来源的构造方式继续可用，新字段仅在别名定位分支读取。根包的私有定位方法为：
+   func (a *assembly) agentID(ctx context.Context) (string, error)
+   它读取 a.store.Installs(ctx)，返回 RoleAgent 且 Uninstalled 为 false 的 PluginID；无记录为 "", nil；存储失败保留 error。
+3. agent 的新增字段均为私有：
+   configuration.llmServiceAllowedPlugins []string
+   configuredProvider.protocol provider.Protocol
+   configuredProvider.model string
+   New() *sdk.Plugin 的签名保留；在 New 中 sdk.Serve(p, llm.GenerateService).Access(sdk.AccessPublic).Handle(...)，并调用 sdk.ServeOptions(p, "llm.providers", fn)。
+4. 以下为 main 已有的 SDK 接口，直接复用：
+   // sdk/options.go，JSON 键分别为 search、filter,omitempty、locale、limit、values,omitempty。
+   type OptionsQuery struct { Search string; Filter map[string]string; Locale string; Limit int; Values []string }
+   type OptionsPage struct { Options []Option; More bool } // JSON 键 options、more。
+   type Option struct { Value string; Label string; Description string } // JSON 键 value、label、description,omitempty。
+   func ServeOptions(r Registrar, serviceName string, fn func(ctx context.Context, q OptionsQuery) (OptionsPage, error))
+   func (c *Context) Caller() string
+   // internal/core/broker/broker.go
+   func (b *Broker) Call(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response
+   func (b *Broker) CallSession(ctx context.Context, c, target router.Caller, in *wire.Inbound) wire.Response
+   // agent/provider/provider.go
+   func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error) (Result, error)
+   proto 字段沿用 ServiceSpec.options_source = 6 与 InvocationContext.plugin_chain = 4，不改 .proto；选项固定 Schema ID 沿用 contracts/validate 的 OptionsQuerySchemaID、OptionsPageSchemaID，均为对应 sdk 类型的 import path + 类型名，版本 1。
 
 行为：
-- `@agent`：Broker 定位目标时，`@agent` 解析为当前安装记录（或库模式的 dev 组件）中 role 为 agent 的组件 ID，之后的访问规则、调用链、CALL_CYCLE 与激活检查按解析后的 ID 执行；没有 Agent 组件时与目标未激活相同。
-- Ask：prompt 为空串或只含空白时返回 INVALID_ARGUMENT，不发出调用；否则按接口段的等价写法调用 Generate，只返回 Response.Text，错误原样返回。
-- 注册：在 Services Hook 中以 JSONService 注册 ServiceName，WithAccess(sdk.AccessPublic)。
-- 许可：Context.Caller() 为空或不在 LLMServiceAllowedPlugins 中时返回 PERMISSION_DENIED，不请求 Provider。
-- 校验：messages 为空、role 不是 user 或 assistant、max_output_tokens 小于 0 时返回 INVALID_ARGUMENT；provider 非空且不存在时返回 INVALID_ARGUMENT；为空时使用 default_provider，没有任何可用 Provider 时返回 FAILED_PRECONDITION。
-- 请求：把 system 与 messages 组装成 provider.Request，MaxTokens 取 max_output_tokens（为 0 时取该 Provider 配置的 max_tokens），不传工具；用 Provider 客户端的流式接口接收并拼接全部文本，收到终止标记才算成功；用量取自 provider.Result.Usage，为 nil 时不填写。
-- 错误：Provider 返回错误或中途断开时返回 UNAVAILABLE，safe_message 不含 API Key 与消息内容（provider 返回的错误说明只写日志，不放进 safe_message）；不自动重试（D-38）。调用方期限到达时取消 Provider 请求。
-- 不读写会话存储与记忆，不套用人格，不调用工具。
-- 日志：每次调用以 INFO 记录调用方插件、provider、model、耗时与用量；不记录消息文本。
+- 别名：先按完整目标分离组件与服务名，服务名继续校验；仅组件部分恰为 @agent 时调用 Agent 定位函数，再按真实 PluginID 执行现有 Session 定位、Activated、访问规则、输入输出准入、祖先链、CALL_CYCLE、深度和取消处理。普通组件 ID 继续使用既有规则；其他 @ 名称返回 INVALID_ARGUMENT。无 Agent、已卸载或未激活为 UNAVAILABLE。定位存储失败记录完整错误，Broker 返回安全的 INTERNAL；选项查询沿用来源不可用的 UNAVAILABLE，并保留内部错误原因。每次定位读取当前记录，使替换后的新 ID 生效；dev 来源的 Agent 同样适用。
+- 选项查询：service 先经同一个 Agent 函数把 @agent 变成真实 ID，再取得 router.Caller 与 PluginFor，核对该 Session 的 options_source。CallSession 的 target 参数与 in.Target 的组件部分都使用这一真实 ID，保持标记检查与调用绑定到同一 Session；替换期间旧绑定失效时返回 UNAVAILABLE。
+- 配置：llm_service_allowed_plugins 声明为 {"type":"list","description":"Plugins allowed to generate text","default":["*"]}（省略 items 的 list 为字符串列表），空列表允许表达无人获准；在私有 configuration 中读取。default_provider 的 string 字段增加 options_from: {"source":"@agent/llm.providers"}，保留原有配置读取和引用校验。
+- Generate/服务校验：messages 至少一条，role 仅 user 或 assistant，max_output_tokens 小于 0 为 INVALID_ARGUMENT；指定不存在的 Provider 为 INVALID_ARGUMENT；未配置任何 Provider 为 FAILED_PRECONDITION。provider 省略或为空时使用 default_provider；max_output_tokens 为 0 时取所选 Provider 的 maxTokens。校验在实际输入边界完成，错误采用 sdk/errcode。
+- Ask：prompt 为空串或仅空白时直接返回 INVALID_ARGUMENT；有效 prompt 原样作为唯一 user 消息，省略 system、provider、max_output_tokens，返回 Response.Text，保留 Generate 的错误。
+- 许可：llm.generate 为 public。可信直接调用方取 c.Caller()；为空时拒绝；名单含 "*" 或调用方的完整 ID 时允许，其余返回 PERMISSION_DENIED，且不请求 Provider。沿用 §3 的可信调用链，无需用户 Admin 或额外服务权限。
+- 请求：system 非空时作为 system 消息，其后按输入顺序转换 messages；不传 Tools。调用所选客户端的 Stream，拼接所有文本；成功条件沿用该协议现有实现（包括 Chat Completions 的 finish_reason 规则）。响应中的 provider、model 取所选配置；Usage 为 nil 时省略两项用量，有 Usage 时包含两项，数值为 0 时也保留。
+- Provider 错误或断流映射为 UNAVAILABLE，safe_message 使用固定英文说明，Provider 详情只写日志；不重试。传入 c.Context()，调用方取消或期限到达时取消上游请求，调用方期限按现有 wire/Broker 返回 DEADLINE_EXCEEDED。llm.generate 的处理独立于对话历史、记忆、人格和工具循环。
+- llm.providers：用 ServeOptions 的固定私有服务声明。每个已配置 Provider 一个 Option，Value 与 Label 都是 name，Description 为 protocol 与 model；不返回 base_url 或 api_key。Values 非空时只返回存在的这些名称，忽略 Search、Filter、Locale；否则 Search 不区分大小写地匹配 name，当前不设能力 filter；按配置顺序返回，遵守 Limit，剩余结果通过 More 表达。它按配置列出，省略 llm.generate 的调用方名单检查；外插件直接调用按 private 规则被拒。
+- 单次 Provider 调用的调用方、provider、model、耗时与用量使用 DEBUG，字段沿用日志契约，消息正文和密钥不写日志。配置、Schema 与 i18n 只追加必要内容，更新生成资源。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：agent/generate_test.go（//go:build unix）。用 goal-59 的测试装配、本地模拟 Provider 与一个调用 llm.Generate 的测试插件：
-  - 调用方未列入时 PERMISSION_DENIED，模拟 Provider 没有收到请求；列入后返回 text、provider、model 与模拟服务给出的用量，会话存储没有新增条目。
-  - 测试插件只经 llm.Generate（`@agent`）调用，不知道 Agent 的组件 ID；把 Agent 组件换成另一个 ID 的测试 Agent 后同一调用到达新组件。
-  - 测试插件以 llm.Ask 调用一次：模拟 Provider 收到只含一条 user 消息、没有 system 的请求，使用 default_provider，Ask 返回模拟服务给出的文本。
-  - 模拟 Provider 出错与中途断开为 UNAVAILABLE，模拟服务只收到一次请求，safe_message 不含 API Key。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：校验分支；Ask 的 prompt 为空串与只含空白时不发出调用；三种协议各一次；provider 不存在为 INVALID_ARGUMENT；Agent 配置中没有 Provider 为 FAILED_PRECONDITION；调用方期限短于模拟 Provider 的延迟时，调用方得到 DEADLINE_EXCEEDED，模拟服务看到请求被取消；Agent 组件未启用或未安装时调用返回 UNAVAILABLE。
+- 提交：根包 agent_service_test.go（//go:build unix）的一个 TestAgentServices 集成测试，分子场景复用真实 Start、临时 data_dir、真实 SDK Session、官方 agent.New() 与 httptest Provider；测试调用插件经 Handler 中的 llm.Generate、llm.Ask 调用。共用 llm.GenerateService 和官方 Agent 生成资源中的 Request/Response Schema；主路径不手写替代 Schema。测试位于根包以直接调用装配中的 options.Service.Query，管理 API 由后继切片提供。
+  - 缺省名单调用成功，响应带文本、实际 Provider、model 和用量；收紧为名单后，名单内成功、名单外 PERMISSION_DENIED 且 Provider 请求数不增加；会话存储没有新增条目。用拒绝与允许两个启动配置驱动真实 Session。
+  - Ask 的上游请求恰有一条 user 消息，无 system，使用默认 Provider，返回其文本。
+  - 从真实字段 options_from 经 Core Query 查询 @agent/llm.providers：返回名称、协议与模型；搜索和按值取回均正确，响应不含地址与密钥；llm.generate 名单收紧仍可查询。外插件直接调用该来源被拒。
+  - 停止并移除旧 Agent 的安装身份后，登记并启动另一个 ID、role agent 的测试 Agent（使用同一服务声明与生成 Schema），调用方继续使用 @agent，生成服务与选项查询都到达新 ID。沿用角色唯一性规则，避免同时登记两个 Agent；正式管理替换流程由 T-09.4 的 V-82 证据覆盖。
+- 本地自测（*_local_test.go，不提交，PR 写明命令、平台和结果）：空 messages、非法 role、负 max_output_tokens、未知 Provider、没有 Provider；Ask 空白不发调用；Usage 缺失与两项为 0；Provider 非 2xx 与缺少终止条件均为 UNAVAILABLE、一次请求、safe_message 脱敏；调用期限与取消；无 Agent、停用、已卸载、dev Agent；调用链按真实 ID 查循环和深度；选项检查后 Session 被替换；按值查询忽略搜索且缺失值不返回、分页 More；指定 Provider 与 max_tokens 选择；三种原有协议的服务转换。根包 agent_service_local_test.go 可复用 pipeline_test.go 的装配运行 TCP/stdio 的真实多进程调用，不增加 testdata 或修改共享流水线辅助。临时生成一个只调用 llm.Generate/Ask 的独立插件工程，运行现有生成器并启动，核对包装函数里的共享声明能生成调用方所需 Schema。本轮保留 main 的 D-141 路由行为。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./agent/... ./sdk/... ./internal/core/...；go build ./...；`go list -deps` 列出的 Core 可执行文件与 SDK 根包模块都在 docs/development.md 的允许清单中。
+完成条件：上述主路径集成通过；gofmt -l 对本次 Go 文件无输出；go vet ./...；go test -race ./agent/... ./sdk/... ./internal/core/... .；go build ./...；go run ./cmd/alonabot plugin check --dir ./agent 通过。用 go generate ./agent 更新生成资源，随后 check 应显示资源最新；go list -deps 核对 ./cmd/alonabot 与 ./sdk 的第三方模块仍在 docs/development.md 清单内。PR 附各 V 分项证据与真实 Provider 的实际运行情况；来源替换后生成和选项查询都使用新的组件 ID，错误路径保持现有取消与 Session 契约。
 
-不做：流式输出与工具调用（契约不提供）；llm_service_allowed_plugins 的专用管理页（配置表单随 T-09 由 Schema 生成）。
+不做：流式 llm.generate、工具与图片输入；llm_service_allowed_plugins 的专用管理页；plugintest.LLM（T-16.3）；Provider 客户端修改；新增 ServiceBuilder 权限 API；state/supervisor/管理服务重构；热部署、候选 Journal 与真实平台验收。
 ```
 
 ### goal-136 · T-12.14 对话中的图片输入
 
-状态：等待前置（T-12.2）。T-04.8（[PR #141](https://github.com/AlonaBot/AlonaBot/pull/141)，合并提交 `ac4aded`）已合并：SDK 公共 API 改用自有类型（`message.Session`、`message.Content`、`message.MessageRef`、事件常量与带类型 payload、`errcode`），pb 只在 `sdk/internal/convert`。T-12.13（[PR #138](https://github.com/AlonaBot/AlonaBot/pull/138)，合并提交 `9b3bb86`）已合并：`provider.Image{MediaType, Data}` 与 `Message.Images` 只出现在 user 消息，MediaType 限四种，不检查大小与张数。2026-11-10 按 D-132 编写。语句中 goal-59、goal-91、goal-135 提供的符号（Agent 的配置、一轮对话与会话条目、Agent 的数据库迁移、`sdk.OpenMedia`、入站 image 片段与 `message.MediaSource`、`provider.Image`）只写名字；合并后由审查者核对，再改为待派发。与 goal-83 同在第 14 波，Agent 配置的追加按[执行顺序 §3](../execution-order.md#3-共享文件与冲突规则)「`agent/` 的配置」一行处理。
+状态：待派发。直接前置 T-04.8（PR #141，合并提交 `ac4aded`）、T-12.2（PR #170，`eca6310`）、T-12.13（PR #138，`9b3bb86`）均已合并；媒体读取沿用 D-109、D-121 已合并的 SDK。相关装配以 PR #163（goal-39，`cb8ae3d`）、#164（goal-22，`039802f`）、#165（goal-55，`330164f`）、#167（goal-84，`3a9b4af`）、#168（goal-81，`37b0ada`）、#169（goal-127，`4dc4bcd`）合入后的 main `dbbb80b` 为基线。2026-11-13 起草者在本 worktree 用 `rg`、源码读取与 `go doc` 按 main 核对：2026-11-13 审查者裁决（DECISIONS 2026-11-13 变更记录）：图片表与计数字段并入 Agent 受管库的初始迁移 ID 1（与 goal-59 的 reset 代次一致，首次发布前不追加迁移）；回放只取 Core 会话中仍存在的条目对应的图片，Core 追加或清除与 Agent 图片写入或删除之间的失败按行为中的规则处理，不做跨库事务。派发顺序：在 goal-60 合并后从包含它的 main 派发（两者改 agent/conversation.go 中同一段请求生成逻辑）。
+
+- `agent/agent.go`：`func New() *sdk.Plugin`，私有 `configuration`、`configuredProvider` 与 `readConfiguration(values config.Values) (configuration, error)`；当前 configuredProvider 含 name、client、maxTokens。不存在公开 Config。New 通过 `gormdb.Migrations(p, []gormdb.Migration{{ID: 1, Up: ...}})` 对 chatSettings 执行 AutoMigrate；尚无图片表或图片计数。
+- `agent/settings.go`：私有 `chatSettings{Session string; Provider string; Persona string; Enabled bool; ResetGeneration uint64}`，表名 chat_settings；`func (a *component) sessionLock(session string) *sync.Mutex`；`func (a *component) resetConversation(c *sdk.Context) error` 在同一会话锁内递增 ResetGeneration，再 `sdk.ClearConversation`。当前轮次最终追加也持该锁并核对 reset 代次。
+- `agent/conversation.go`：`func (a *component) converse(c *sdk.Context, text string) error`；`func recentConversation(ctx context.Context, key string, count int) ([]conversationEntry, error)`；私有 conversationEntry 含 Role、Speaker、Content，对应 JSON role、speaker,omitempty、content。现有流是 provider.Client.Stream 经 iter.Pull2 接到 c.Stream；生成和显示成功后原子追加一组 user、assistant JSON，出错时跳过追加。/ask 与自由对话都在 c.Continue 内执行。
+- `sdk/media.go`：`func OpenMedia(ctx context.Context, src message.MediaSource) (io.ReadCloser, error)`，立即读取首块，只接受 incoming 或 media_ref token。`sdk/message/media.go` 的 `MediaSource` 含 `MediaRef string`、`Incoming *IncomingMedia` 等互斥来源；IncomingMedia 含 Token、Size、MIME、Readability、ExpiresAt，`message.Readable` 与 `message.Unreadable` 表示读取能力。
+- `sdk/message/message.go`：`type ImageSegment struct { Source MediaSource; Alt, Caption string }`；`func Image(src MediaSource) Segment`；`type Chain []Segment`；单个 Segment 与 Chain 均实现 message.Content。`sdk/sdk.go` 的 `func (c *Context) Event() *message.Event` 返回当前事件，`message.CreatedPayload{PlatformMessageID string; Chain message.Chain; ToMe bool}` 位于 `sdk/message/event.go`，当前图片应从该 Chain 取出。
+- `agent/provider/provider.go`：`type Image struct { MediaType string; Data []byte }`；`Message.Images []Image`，Message 另含 Role、Content、ToolCalls、ToolResults；`func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error) (Result, error)`。图片只在 user 消息出现，MediaType 限 image/jpeg、image/png、image/gif、image/webp，Data 非空；六种协议编码已实现。
+- `sdk/gormdb/open.go`：`func Open(ctx context.Context) (*gorm.DB, error)`；`sdk/gormdb/migrate.go`：`type Migration struct { ID uint32; Up func(context.Context, *gorm.DB) error }`、`func Migrations(p *sdk.Plugin, list []Migration)`。事务中须使用传入的 tx，避免在单连接池上再独立取连接。
+- `sdk/conversation.go`：`func AppendConversation(ctx context.Context, key string, entries ...json.RawMessage) (lastSeq uint64, err error)`、`func ListConversation(ctx context.Context, key string, fromSeq uint64) (entries []ConversationEntry, nextSeq uint64, more bool, err error)`、`func ClearConversation(ctx context.Context, key string) error`。该存储属于 Core，与 Agent 的 SQLite 分属两处。
+- `sdk/stream.go`：`func (c *Context) Stream(next func(context.Context) (string, error)) ([]*message.SendResult, error)`；编辑、节流、text_limit 与分段由 SDK 提供。`sdk/rule.go` 的 `func NotCommand() Rule`、`sdk/sdk.go` 的 `func (c *Context) CommandConsumed() bool` 与 proto `InvocationContext.command_consumed = 6` 已合入；沿用现有路由即可。
+- `agent/agent_test.go` 的 agent_test 包已有 `startAgent(t *testing.T, loop *loopback, configuration map[string]any, coreExtra map[string]any, plugins ...*sdk.Plugin) *harness`、`newLoop(edit bool, limit uint64) *loopback`、harness 的 deliver、waitEntries 与只读 Core DB。loopback 当前没有媒体读取接口，deliver 只接文本，entries 解码为 map[string]string，需要按图片集成调整这些辅助。`sdk/adapter/adapter.go` 的可选接口为 `ReadPlatformFile(ctx context.Context, fileID string, offset uint64, length uint32) ([]byte, uint64, bool, error)`；能力为 media.read v1。
+- 在途冲突：goal-40 涉及 state、supervisor 与根包装配；PR #171（goal-69）涉及根包和 cmd/alonabot；PR #172（goal-57）涉及根包 t11_e2e_test.go、pipeline_test.go。本切片的提交范围集中在 agent/，本地若借用根包 pipeline_test.go，则按其最新装配核对。goal-83 与本切片同改 agent.go、config_schema.json、i18n 和生成资源，后合并者同步 main、保留双方追加，再运行生成与检查。#165、#167、#168、#169、goal-59 已合并。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-136（切片 T-12.14：对话中的图片输入）。goal 目录 goal-136，分支 goal-136，worktree .worktrees/goal-136，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：Agent 的一轮对话接受图片：Provider 条目增加 image_input（缺省 false）；本轮消息中可读的图片经 sdk.OpenMedia 读入，开启 image_input 时随 user 消息发给模型，否则只留占位；图片字节保存在 Agent 的受管 SQLite，Core 会话条目只记录图片编号；之后的请求按 Hermes 式的批次边界回放之前最近的至多 3 张图片，边界之外的图片删除，/reset 一并删除。
+目标：Agent 的一轮对话读取入站图片，Provider 条目增加缺省 false 的 image_input；开启时本轮图片全部发送，历史图片按批大小 3 的边界回放，关闭时只留占位；图片字节与成功轮次的计数保存在 Agent 的受管 SQLite，Core 会话条目只保存文本与图片编号；删除越过边界的图片，/reset 清除图片并重新编号。
 
-依据：PLAN T-12 步骤 2、3、11；CONTRACTS §1.4（入站媒体与读取）、§13.3；DECISIONS D-121、D-132；TEST-MATRIX V-118。
+依据：spec/PLAN.md §3.1；spec/plan/agent.md §3 T-12 步骤 2、3、11 与「失败停止条件」；CONTRACTS §1.4、§2.4、§5.1、§6.1～§6.2、§13、§13.3；MESSAGE-MODEL §2、§4A（流显示）、§6.4（媒体来源）；WIRE-FORMAT §4、§5、§5A（既有入站媒体与会话协议）；DECISIONS D-49、D-60、D-76、D-86、D-109、D-121、D-132、D-135、D-141；TEST-MATRIX V-118 的对话分项，已有 V-57 的对话行为继续成立。
 
 范围（只新增或修改这些）：
-- agent/config_schema.json 与 i18n 中的 config：Provider 条目的模板追加 image_input（bool，缺省 false）
-- 新增 agent/image.go：图片的读取、保存、回放边界与清理
-- Agent 的数据库迁移：追加图片表（会话键、编号、MIME、字节）与每个会话的图片计数
-- 一轮对话与 /reset：只改组装请求、追加会话条目与清除会话的调用处
-- 上述包的测试文件
-允许的新跨模块边：无。
+- agent/config_schema.json、agent/i18n/en-US.json、agent/i18n/zh-CN.json：所有六个 Provider 模板的 items 与 config 文案追加 image_input。
+- agent/agent.go：configuredProvider 追加私有 imageInput bool 并读取；New 的受管迁移登记接入图片表和会话计数。
+- 新增 agent/image.go：私有图片模型、读取、保存、回放边界、占位与清理；迁移所需模型归此文件。
+- agent/conversation.go：conversationEntry 追加图片编号；在 converse 的历史/请求组装和成功轮次追加点接入图片处理，保留已有流和 reset 代次核对。
+- agent/settings.go：chatSettings 追加会话图片计数，resetConversation 接入清理；已有聊天设置及其更新保留。
+- agent/alonabot_gen.go：仅由现有生成器更新。
+- 新增 agent/image_test.go（unix）的一个主路径集成测试；agent/agent_test.go 只修改共用回环 Adapter、事件注入和会话条目读取辅助以支持真实图片。其余测试放 agent/*_local_test.go；多进程自测可放根包 agent_image_local_test.go。
+允许的新跨模块边：无；agent 产品代码沿用 sdk/...、gormdb 与 provider，agent_test 沿用根包库模式装配，不 import internal/core。根包本地自测可复用 pipeline_test.go 的生产装配。
 
-接口：agent 不新增导出符号。
+接口（不新增导出符号；按既有签名接入）：
+1. Agent 私有类型追加字段：
+   configuredProvider.imageInput bool
+   chatSettings.ImageCount uint64 `gorm:"not null;default:0"`
+   conversationEntry.Images []uint64 `json:"images,omitempty"`
+   保留 Role、Speaker、Content 及既有 JSON 键；Images 按该条 user 消息的到达顺序保存成功读取的图片编号。ImageCount 表示成功保存过的最大编号，删除旧字节后仍保留计数；/reset 归零。
+2. 图片模型为 agent/image.go 的私有类型，主键为（会话键、图片编号），保存 MIME 与原始字节；用 gormdb 的受管库。图片模型与 chatSettings 的计数字段并入 New 中已有的初始迁移 ID 1（首次发布前不追加迁移；已运行旧初始迁移的开发数据库需重建），Up 使用传入的 tx 执行 AutoMigrate。迁移登记仍只有一次；保留 chat_settings 的所有原字段，不另建 Core 表或业务数据库连接。
+3. image_input 的配置声明：每个 providers.templates.<预设>.items 增加 {"type":"bool","description":"Image input","default":false}；预设为 openai、anthropic、gemini、deepseek、ollama、custom。从 item.Bool("image_input") 读取到 configuredProvider；config 文案与模板同形追加。
+4. 从 c.Event().Payload.(*message.CreatedPayload).Chain 中按顺序读取 message.ImageSegment 的 Source；读取调用 sdk.OpenMedia(c.Context(), source)，用 io.ReadAll 取得完整字节并关闭 reader。保留现有 converse(c *sdk.Context, text string) error、recentConversation、resetConversation、New 的签名。
+5. 继续使用 provider.Image{MediaType: MIME, Data: bytes} 与 provider.Message.Images，调用现有 Client.Stream 和 c.Stream；Core 会话仍通过 AppendConversation/ListConversation/ClearConversation。proto 沿用 IncomingMedia.token = 1、mime = 3、readability = 4，MediaSource.incoming_ref = 2、ImageSegment.source = 1；无需改协议。
 
 行为：
-- 读取：本轮消息的 image 片段可读且 MIME 为 image/jpeg、image/png、image/gif 或 image/webp 时，用 sdk.OpenMedia(ctx, 片段的 Source) 读入全部字节；不可读、MIME 不支持或读取失败时，该图片按占位处理，写 warn 日志（字段含会话键与错误，不含图片内容），这一轮照常进行。
-- 编号与保存：每个会话的图片按到达顺序从 1 编号，计数保存在 Agent 的数据库。本轮成功结束、追加会话条目时，在一个数据库事务中写入本轮读到的图片与新的计数；user 条目增加 "images": [编号...]。本轮出错（不追加 assistant 条目的情况）时不保存图片，计数不变。
-- 组装：
-  1) 回放边界：设本轮之前的计数为 m、批大小 N 为 3（命名常量）；m 为 0 时没有可回放的图片，否则边界为 ⌊(m−1)/N⌋·N。
-  2) image_input 为 true：本轮读到的图片全部放进本轮 user 消息的 provider.Message.Images；历史 user 条目中编号大于边界、且仍保存着的图片放回该条目的 Images；其余图片在该条目文本之前各加一行 "[image]"（命名常量）。
-  3) image_input 为 false：所有图片（含本轮）都只加占位，不放进 Images。
-- 清理：保存本轮图片后，按新计数 m' 算出下一轮的边界 ⌊(m'−1)/N⌋·N，在同一事务中删除编号不大于它的图片，因此每个会话至多保存 N 张。/reset 清除 Core 会话后删除该会话的全部图片，计数归零。
-- 群聊中不同发言人的图片属于同一会话，共用一个计数。
+- 读取：本轮进入 converse 后，遍历原消息图片；Incoming 的 Readability 为 message.Readable 且 MIME 为 image/jpeg、image/png、image/gif、image/webp 之一时，用 OpenMedia 读取。不可读、MIME 不支持或读取失败的图片各留一个 [image] 占位，WARN 日志带会话键和实际原因，省略图片内容和凭证，这一轮继续。读取与关闭的错误保留；不改为直接下载 URL 或使用平台文件标识。image_input 为 false 的 Provider 也读取并保存合格图片，供之后切换 Provider 使用。
+- 会话：键为 string(c.Session())；群聊中不同用户共用该聊天的计数，Speaker 继续记录发言人的外部 ID。入轮次的设置、历史、图片与计数快照应与 /reset 共用既有 sessionLock，读取完快照即释放，Provider 请求沿用本轮 Context。
+- 回放：批大小 N 为命名常量 3；设本轮之前成功保存的最大编号为 m，m=0 时无历史图片，否则边界 b=((m-1)/N)*N。image_input 开启时，本轮成功读取的所有图片都放入当前 user 的 Images；历史 user 的编号大于 b 且字节仍保存时，按条目内编号顺序放回该条消息的 Images；其余历史图片逐张在所在条目文本前增加一行 [image]。关闭时，本轮和历史图片均只加占位，Images 为空。占位 [image] 用命名常量。
+- 历史条目：Core 保存 role、speaker、content 和 images 数字数组，保持原有文本及群聊发言人信息。不可读图片的占位保存在条目文本中；成功读取图片的临时占位按本次所选 Provider 与回放结果生成，避免下一轮重复叠加。Core 条目保留越过窗口的旧编号，以便重放时产生占位；原始图片、base64 和媒体读取 token 均由 Agent 自己处理。
+- 保存：生成与显示均成功、且最终持锁核对的 ResetGeneration 与入轮次一致时才追加本轮。在最终锁内读取最新 ImageCount，为本轮成功读取的图片连续分配编号，避免两个并发轮次复用编号；user、assistant 仍用一次 AppendConversation 追加。图片行、计数和越界删除在同一个 Agent DB 事务中写入；AppendConversation 返回错误时回滚该本地事务并保留错误。本轮 Provider、显示或读取以外的存储操作失败时返回实际错误；Provider/显示失败时不保存本轮图片、不推进计数，错误显示沿用当前逻辑。
+- 清理：保存后按新的计数 m' 算出 b'=((m'-1)/N)*N，删除该会话编号 <= b' 的图片字节；m'=0 时无图片可删。清理与本轮图片/计数写入同事务；持久保存的图片最多 3 张，本轮发送可多于 3 张。一条消息带多图时全部交给开启图片的 Provider，保存后仍按边界清理。
+- /reset：沿用同一会话锁及 ResetGeneration 递增机制；ClearConversation 成功后，在 Agent 受管 DB 事务内删除该会话全部图片并把 ImageCount 置零，保留 Provider、Persona、Enabled。旧轮次即使稍后完成也按代次跳过追加和图片保存；下一轮从 1 编号。清理错误完整返回，不静默报告已重置。
+- 跨库的失败（Core 会话与 Agent 图片在两个库，不做跨库事务）：每张图片记录它所属的 Core 会话条目序号；回放只取 Core 会话中仍存在的条目对应的图片，其余忽略，并在下一次 /reset 时清理。Core 追加成功而 Agent 写入图片失败：本轮保留文字历史，图片不回放，以 WARN 记录；/reset 中 ClearConversation 成功而删除图片失败：向用户返回错误，残留图片因对应条目已不存在而不会回放；管理服务直接清除 Core 会话时同理，残留图片在下一次 /reset 时清理。
+- 流显示、命令权限、自由对话开关、ToMe/NotCommand 规则、群聊 Speaker 和错误文案沿用 #170 的实现；超长输出继续交给 c.Stream 按实例的 text_limit 处理。
+- 任一 Core 会话条目写入图片字节，或成功清理后一个会话仍持有超过窗口的图片，按 T-12 的失败停止条件阻止合入。Agent 只经 SDK 访问 Core。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：agent/image_test.go（//go:build unix）。用 goal-59 的测试装配与本地模拟 Provider（openai 协议，开启 image_input）：同一会话依次发送 5 条各带 1 张图片的消息。第 1～4 轮的请求分别带 1、2、3、4 张图片（之前的图片全部回放，加本轮 1 张）；第 5 轮带 2 张（编号 4 与本轮的编号 5），编号 1～3 的位置为占位；第 5 轮之后 Agent 数据库只保存编号 4、5。/reset 后存储为空，下一轮请求不含历史图片。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：回放边界函数（m 为 0～7）；image_input 为 false 时只有占位，切换到开启的 Provider 后回放仍保存着的图片；一条消息带 5 张图片；不可读与 MIME 不支持的图片留占位且这一轮照常进行；Provider 出错的一轮不保存图片、计数不变；Core 会话条目不含图片字节；anthropic-messages 与 gemini-generate-content 各跑一次带历史图片的请求。
+- 提交：agent/image_test.go（//go:build unix）的一个 TestAgentImages 集成测试。复用 agent/agent_test.go 的 Start、真实 SDK Session、Core 和 Agent 的 SQLite 及 httptest Provider；回环实例声明 media.read v1，实现 sdk/adapter.MediaSource 的 ReadPlatformFile，按平台文件 ID 返回测试字节。经真实 Adapter.Core.Deliver 交付 image 片段（IncomingMedia 的 Token 在 Adapter 输入端为平台文件 ID，带 MIME 和可读标记，由 Core 登记并签发授权），由真实 OpenMedia 取件，避免直接注入 Agent 图片存储。
+  - 配置开启 image_input 的 openai Provider；同一会话依次交付五条各含一张 PNG 的自由对话消息（先由 Admin /agent on，消息带 ToMe；复用当前权限名集合）。逐轮等到会话追加完成再交付下一轮，验证请求图片数依次为 1、2、3、4、2；第 5 轮只发送编号 4 与本轮 5 的字节，编号 1～3 所在条目有占位。
+  - 只读查询 Agent 受管 DB，验证第 5 轮后仅保存编号 4、5，计数为 5；Core 条目含数字编号及原文本/群聊 Speaker，图片字节、base64 和令牌均未写入会话条目。
+  - /reset 后 Core 历史与 Agent 图片都为空、计数为 0；下一条带图消息的请求只有本轮图片，成功后编号为 1。
+  - 共用 harness 的条目读取从 map[string]string 调整为能保留数字数组的表示，已有 TestAgentConversation 的文本断言继续成立；不另增重复的测试函数。
+- 本地自测（*_local_test.go，不提交，PR 写明命令、平台和结果）：V-118 的 m=0～7 边界（b 依次 0、0、0、0、3、3、3、6，其中 m=0 单独处理）；关闭 image_input 只发送占位但照常保存，再经 /provider 切到开启的 Provider 后回放；一条消息 5 张图片全部发送、保存后最多 3 张；只有图片无文本的自由对话；不可读、未知/不支持 MIME、OpenMedia 打开或后续读取失败；Provider 非 2xx/断流与显示失败时图片/计数不变；不同会话隔离、群聊多用户共用计数；同一会话并发成功轮次编号不重复；/reset 与仍在生成的轮次交错后旧轮次无残留；Agent 重启后图片与计数仍可回放；历史条数为 0 时不回放历史；Core 追加失败时本地事务回滚，图片清理失败完整报错；anthropic-messages、gemini-generate-content 各一次带历史图片的请求。根包 agent_image_local_test.go 可复用 pipeline_test.go 的生产装配运行一次真实多进程媒体读取，测试源码与入口留在本地，无需修改共享流水线文件或新增 testdata。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./agent/...；go build ./...；在 agent 运行 alonabot check 通过。
+- 本地自测（不提交）：新库经初始迁移建立图片表与计数字段，再次启动跳过已完成迁移；Agent 图片写入失败时文字历史保留、图片不回放；删除图片失败时 /reset 返回错误且残留图片不回放；管理服务清除 Core 会话后旧图片不回放，下一次 /reset 清理。
 
-不做：Hermes 的 text 模式（用另一个 Provider 把图片描述成文字）；图片的压缩与缩放；工具结果中的图片；llm.generate 的图片输入；文件、语音与视频输入。
+完成条件：上述图片主路径与既有 TestAgentConversation 通过；gofmt -l 对本次 Go 文件无输出；go vet ./...；go test -race ./agent/...；go build ./...；go run ./cmd/alonabot plugin check --dir ./agent 通过。用 go generate ./agent 更新生成资源，随后 check 应显示资源最新。PR 对应 V-118 记录测试位置、命令、平台和结果，将模拟 Provider 与真实 Provider 的证据分开；达到 T-12 的图片存储与回放停止条件要求。
+
+不做：Hermes text 模式；图片压缩、缩放和额外张数/大小限制；工具结果及 llm.generate 的图片输入；文件、语音、视频输入；Provider 六种协议的编码修改；Core 会话协议或图片字节存储；候选 Journal、管理 API 和热部署。
 ```
 
 ## 第 15 波
 
 ### goal-60 · T-12.3 工具循环与 MCP
 
-状态：等待前置（T-11.2、T-12.2）。sdk.ListTools 已由 goal-54（PR #101，合并提交 `de48f26`）合入。语句中 goal-55、goal-58、goal-59 提供的符号（sdk.InvokeTool、sdk.ConfirmOperation、provider 的 Tool/ToolCall/ToolResult、agent 的一轮对话与 Config.MCPServers）只写名字；合并后由审查者核对，再改为待派发。本切片获授权引入已批准的 github.com/modelcontextprotocol/go-sdk（docs/development.md 只授权给 goal-60）。2026-11-10 按 D-132：goal-134 引入 anthropic-sdk-go 后，go.mod 中已有它要求的 MCP go-sdk 版本（indirect）；本切片把它改为直接依赖，取的版本不低于该版本。
+状态：待派发。前置 T-11.2（PR #165，合并提交 `330164f`）、T-12.2（PR #170，合并提交 `eca6310`）均已合并；同时复用 T-11.1（PR #101，`de48f26`）的工具目录、T-11.3（PR #35，`d0983f0`）的会话接口。2026-11-13 审查者按 main `dbbb80b` 改写（起草稿经审查者裁决）：单轮工具步数按实际执行的工具调用次数计，每轮最多执行 20 次，第 21 次不执行（DECISIONS 2026-11-13 变更记录）；MCP 的 go-sdk 已在 docs/development.md 批准，只用于 `agent/`，版本在本切片验证后锁定。
+
+已有接口（审查者按 main 核对）：
+
+- `agent/agent.go`：`func New() *sdk.Plugin`；内部对象为 `component`，配置为未导出的 `configuration`；`func readConfiguration(values config.Values) (configuration, error)` 在 `p.OnStart(func(context.Context) error)` 中调用。当前配置只有 providers、personas、defaultProvider、defaultPersona、historyEntries，MCP 配置由本切片加入。`sdk/plugin.go` 已有 `func (p *Plugin) OnStop(fn func(context.Context) error)`；应在同一组件对象上管理 MCP 资源。
+- `agent/conversation.go`：`func (a *component) converse(c *sdk.Context, text string) error`、`func recentConversation(ctx context.Context, key string, count int) ([]conversationEntry, error)`；`conversationEntry` 只有 `Role, Speaker, Content string`。当前通过 `c.Continue` 执行对话、`iter.Pull2` 衔接一次 Provider 请求与 `c.Stream`，Provider 的 ToolCall 尚未处理。`agent/settings.go` 的 `ResetGeneration`、`sessionLock` 已保护 reset 与成功轮次追加；接入循环须保留这些条件。
+- `sdk/tool.go`：`ListTools(ctx context.Context) ([]ToolInfo, error)`；`ToolInfo{Name, Description string; InputSchema json.RawMessage; Policy string}`，Policy 为 `allow` 或 `confirm`；`InvokeTool(ctx context.Context, name string, arguments json.RawMessage) (json.RawMessage, error)`；`ConfirmOperation(ctx context.Context, operation, summary string) error`。后两者绑定活跃 Handler/延续调用的父调用；InvokeTool 可同时返回结果与错误。
+- `agent/provider/provider.go`：`New(config Config, httpClient *http.Client) (*Client, error)`、`(*Client).Stream(ctx context.Context, req Request, emit func(Event) error) (Result, error)`。六种协议均已存在；`ToolCall` 的 `Replay json.RawMessage` 原样保留于本轮工具循环，D-103 要求其生命周期止于本轮。接口段列出实际载荷类型。
+- `sdk/sdk.go`、`sdk/continuation.go`、`sdk/stream.go`、`sdk/rule.go`：`(*Context).Context() context.Context`、`Continue(func(*Context) error) error`、`Stream(func(context.Context) (string, error)) ([]*message.SendResult, error)`、`Event() *message.Event`、`Session() message.Session`、`CommandConsumed() bool`、`NotCommand() Rule`。自由对话仍用 `sdk.ToMe(), sdk.NotCommand()`（D-141）。Send 接受 `message.Content`，平台权限为 `message.Actor.Permissions []string`。
+- `sdk/config/values.go`：`Values.Objects(key string) []Values`、`String(key string) string`、`Strings(key string) []string`；secret 的 String getter 取得已解析明文。secret 只适用于 string/text，MCP env、headers 应使用含 secret value 的对象列表，沿用 `docs/plugin-guide.md` §7，避免把整个 dict 标为 secret。
+- `go.mod` 当前没有 MCP 的直接 require；`go.sum` 已有 `github.com/modelcontextprotocol/go-sdk v1.3.1`，本机该版本源码与 anthropic-sdk-go/v2 v2.9.0 的 go.mod 均可读，后者要求 MCP v1.3.1。MCP 的 `NewClient`、`Client.Connect`、`ClientSession.ListTools/CallTool/Close`、`CommandTransport` 与 `StreamableClientTransport` 已按缓存源码核对，签名见接口段；正式版本在执行时验证并锁定，最低 v1.3.1。
+- `agent/agent_test.go`（外部包 `agent_test`，unix）：`startAgent(t *testing.T, loop *loopback, configuration map[string]any, coreExtra map[string]any, plugins ...*sdk.Plugin) *harness` 已经用 `alonabot.Start`、`agent.New()`、真实 Session、临时 SQLite 与回环 Adapter 验证对话，可直接复用。多进程本地补证据可复用根包 `pipeline_test.go` 的 `newPipeline(t *testing.T, stdio ...bool) *pipelineHarness`；其 `TestMain` 已有 tasks 模式分流。测试插件用 `sdk.NewPlugin`、`sdk.UseGenerated`、`sdk.Serve(p, sdk.JSON[In, Out](target)).Access(...).Tool(...).Handle(...)`；`ServiceBuilder` 的公开方法为 Access、Tool、Handle。
+- `alonabot.go` 的 `Start(ctx context.Context, opts ...Option) (*Core, error)`、`Plugin(root *sdk.Plugin) Option` 已接受 Agent；`internal/core/manage/static.go` 的 `(*Service).WebUI() http.Handler` 已合入，管理端点以 `spec/ADMIN-API.md` 为准。本切片使用 SDK 工具接口，测试策略通过既有 Core 工具服务层或临时状态准备设置。
+- 在途共享文件：goal-40 涉及 `internal/core/state/`、`internal/core/supervisor/`、`assembly.go` 等根包装配；PR #171（goal-69）涉及根包与 `cmd/alonabot/`；PR #172（goal-57）涉及根包 `t11_e2e_test.go`、`pipeline_test.go`。本切片仅本地多进程自测可能接触根包测试辅助，须读取最新分流后追加；正式测试放在 Agent 目录。goal-61 与本切片共享 `agent/{agent,conversation}.go`、生成物及 i18n；后合并者保留双方接入点。旧提示中的 #165/#167/#168/#169、goal-59 均按已合并处理，#169 的 `state/schema.sql` 与清理清单按现状复用。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-60（切片 T-12.3：工具循环与 MCP）。goal 目录 goal-60，分支 goal-60，worktree .worktrees/goal-60，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-60（切片 T-12.3：工具循环与 MCP）。goal 目录 goal-60，分支 goal-60，worktree .worktrees/goal-60，从最新 origin/main 创建（须已包含 PR #101、#165、#170）。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：Agent 组件每轮把 core.tool.list 返回的工具与已连接 MCP 服务器的工具交给模型；工具名按 Provider 的命名规则映射且一轮内稳定（六种协议都要覆盖，Gemini 的函数名规则最严）；模型交出的 provider.ToolCall 原样（含 Replay）放回下一次请求的 assistant 消息；Core 工具经 core.tool.invoke 调用，MCP 工具先经 core.tool.confirm（操作名 mcp/<server>/<tool>）再调用；拒绝、超时与工具错误作为工具结果交回模型；单轮工具步数达到上限时结束本轮并告知用户；MCP 服务器首次使用时连接、随插件停止关闭，stdio 子进程属于插件的进程树。
+目标：在官方 Agent 的每轮对话中接入 Core 工具和 MCP tools，依次执行模型返回的工具调用并把结果交回模型；按六种 Provider 协议映射工具名，保持本轮映射和 Replay；执行 Core 工具策略与 MCP 操作确认，达到单轮工具步数上限时结束本轮并告知用户；MCP 懒连接，插件停止时关闭会话并回收 stdio 子进程。
 
-依据：PLAN T-12 步骤 4；CONTRACTS §13.1、§13.2、§7.1（进程树）；DECISIONS D-27、D-38；docs/development.md（MCP go-sdk 的批准范围）；TEST-MATRIX V-58。
+依据：spec/PLAN.md §3.1、§5；spec/plan/agent.md T-12.3、T-12 步骤 2（MCP 配置）、3（对话显示）、4，以及「失败停止条件」；spec/plan/core.md T-11 步骤 1～4 与「失败停止条件」；spec/CONTRACTS-v0.1.md §2.4、§3、§4.1～§4.2、§5.1、§5.3～§5.4、§7.1、§13.1～§13.3；spec/MESSAGE-MODEL.md §1、§2（按钮）、§3、§4A、§6.3；spec/WIRE-FORMAT.md §3.3、§3.5、§4；spec/adr/DECISIONS.md D-27、D-38（按 D-132 修订）、D-86、D-98、D-103、D-132、D-135、D-141；docs/development.md 的已批准依赖范围；TEST-MATRIX V-58、§3，保留 V-57 的已实现对话行为。
 
 范围（只新增或修改这些）：
-- go.mod、go.sum：新增 github.com/modelcontextprotocol/go-sdk（取当前最新的 v1 版本，PR 中写明版本，并用 go mod why 说明它只被 agent 使用）
-- agent/：新增 tools.go（工具目录与名称映射）、mcp.go（MCP 客户端管理）、loop.go（工具循环）；一轮对话接入循环（只改调用处）
-- 新增 agent/mcptest/（stdio 与 streamable HTTP 的 MCP 模拟服务器，测试用）
-- i18n：en-US.json 与 zh-CN.json 增加步数上限与工具错误的文案
-- 上述包的测试文件
-允许的新跨模块边：只有 agent 可以 import MCP go-sdk。
+- go.mod、go.sum：把 github.com/modelcontextprotocol/go-sdk 显式列为直接依赖，版本不低于 v1.3.1，执行验证后锁定。
+- agent/agent.go：内部 configuration 增加 MCP 配置，component 持有连接；在已有 OnStart 中读取配置，在 New 的注册阶段另登记一个 OnStop 关闭资源；保留 agent.New 的签名与既有注册。
+- agent/config_schema.json：追加 mcp_servers；agent/i18n/en-US.json、agent/i18n/zh-CN.json：相应配置翻译、agent.tool_limit 及必要的用户错误文案。
+- 新增 agent/tools.go、agent/mcp.go、agent/loop.go：目录与名称映射、MCP 管理、工具循环；agent/conversation.go 只修改请求生成/流处理的接入处，保留历史提交与 reset 代次核对。
+- 新增 agent/mcptest/main.go：仅供测试启动的 stdio MCP 模拟服务器（命令包）；streamable HTTP 模拟服务放在测试辅助中。
+- 新增 agent/tools_test.go（//go:build unix，package agent_test）；agent/agent_test.go 只补充共用测试 Adapter 的确认按钮能力、点击交付和生命周期辅助，保留原测试断言。
+- agent/alonabot_gen.go：仅通过生成器更新上述源码与资源对应的生成内容。
+- 本地自测文件：agent/*_local_test.go；如需独立 Agent 进程与进程树证据，在根包 *_local_test.go 复用 pipeline_test.go 的装配与测试二进制，不改根包被跟踪的测试辅助。
+允许的新跨模块边：agent/... -> github.com/modelcontextprotocol/go-sdk/mcp（已批准）；其余沿用 agent/... -> sdk/...、contracts 的既有边。测试复用 agent/agent_test.go 已有的外部测试包 -> 根包库模式入口；产品代码只经 SDK 与 Core 通信。
 
-接口：agent 不新增导出符号（Config.MCPServers 已在 goal-59 声明）。mcptest 包导出测试所需的启动函数，由执行者在包文档列出。
+接口（已有公开符号照此调用，Agent 新增类型和辅助函数均不导出）：
+// agent
+func New() *sdk.Plugin
+// agent/provider 的现有类型与方法
+type Tool struct { Name, Description string; InputSchema json.RawMessage }
+type ToolCall struct { ID, Name string; Arguments, Replay json.RawMessage }
+type ToolResult struct { ToolCallID, Content string }
+type Message struct { Role, Content string; ToolCalls []ToolCall; ToolResults []ToolResult; Images []Image }
+type Request struct { Messages []Message; Tools []Tool; MaxTokens int }
+type Event struct { Text string; ToolCall *ToolCall }
+func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error) (Result, error)
+// sdk
+func ListTools(ctx context.Context) ([]ToolInfo, error)
+func InvokeTool(ctx context.Context, name string, arguments json.RawMessage) (json.RawMessage, error)
+func ConfirmOperation(ctx context.Context, operation, summary string) error
+func (c *Context) Continue(fn func(*Context) error) error
+func (c *Context) Stream(next func(context.Context) (string, error)) ([]*message.SendResult, error)
+func (p *Plugin) OnStop(fn func(context.Context) error)
+
+// 新增私有配置的字段含义，放进现有 configuration；名称可按周围代码整理。
+type secretPair struct { Name, Value string }
+type mcpServer struct {
+    Name, Transport, Command, URL string
+    Args []string
+    Env, Headers []secretPair
+}
+// mcp_servers：objects，name、transport、command、args、env、url、headers。
+// transport 为 stdio 或 streamable-http；env/headers 为 name、value 对象列表，value 为 secret string。
+// stdio 使用 command/args/env；streamable-http 使用 url/headers；名称须在配置中唯一。
+// 由 Config().Objects/String/Strings 读取，校验本传输实际使用的字段，秘密值来自已解析配置。
+
+// github.com/modelcontextprotocol/go-sdk/mcp，v1.3.1 已核对的入口；以下按 mcp 包内签名列出。
+// 采用其他版本时先核对实际签名。
+func NewClient(impl *Implementation, options *ClientOptions) *Client
+func (c *Client) Connect(ctx context.Context, t Transport, opts *ClientSessionOptions) (*ClientSession, error)
+func (cs *ClientSession) ListTools(ctx context.Context, params *ListToolsParams) (*ListToolsResult, error)
+func (cs *ClientSession) CallTool(ctx context.Context, params *CallToolParams) (*CallToolResult, error)
+func (cs *ClientSession) Close() error
+// mcp.CommandTransport{Command *exec.Cmd, TerminateDuration time.Duration}
+// mcp.StreamableClientTransport{Endpoint string, HTTPClient *http.Client, MaxRetries int, ...}
+
+协议复用（字段保持现状，无新增 proto）：
+ToolInvokeRequest{name = 1, arguments_json = 2} -> ToolInvokeResponse{result_json = 1}；
+ToolConfirmRequest{operation = 1, summary = 2} -> ToolConfirmResponse{}；
+两次请求均通过 sdk 关联活跃父调用。结果和 ErrorInfo 可以同时存在。
 
 行为：
-- 工具目录：每轮开始时调用 sdk.ListTools，并对已连接（或首次使用时连接）的 MCP 服务器调用 tools/list；合并为一个列表交给模型。名称映射：Provider 只接受 ^[a-zA-Z0-9_-]{1,64}$ 的名字（两种协议都按此规则，命名常量），把 "plugin_id/service_name" 与 "mcp/<server>/<tool>" 转为合规名字（非法字符替换为 _，冲突或超长时加 _ 与短哈希）；映射在一轮内固定，结果交回模型时用映射后的名字。
-- 循环：模型返回工具调用时依次执行，结果作为 ToolResult 交回，再继续请求；文本照常流式显示（沿用 goal-59）。单轮工具步数上限为命名常量（初值 20），达到时停止请求模型，回复 agent.tool_limit。
-- Core 工具：sdk.InvokeTool（在延续调用内，继承父调用链与 Actor）；错误（PERMISSION_DENIED、DEADLINE_EXCEEDED、工具错误等）转为文本结果交回模型（"error: <code>: <safe_message>"），不重试。
-- MCP 工具：先 sdk.ConfirmOperation("mcp/<server>/<tool>", 参数的 JSON 摘要)，允许后经 go-sdk 调用；拒绝与超时同样作为结果交回。MCP 工具的参数在交给模型前就以其 inputSchema 暴露，调用前不在 Agent 侧另做 Schema 校验（由服务器校验）。
-- MCP 连接：stdio 以 command 与 args 启动子进程，env 为配置中解析后的 secret 值（SecretPair），子进程在插件的进程组内（由 Core 的进程树管理回收）；streamable HTTP 以 url 与 headers 连接。首次使用时连接，失败时该服务器本轮不可用并以 WARN 记录（不阻止对话）；插件 OnStop 时关闭全部会话并等待 stdio 子进程退出。
-- 安全：MCP 的 env 与 headers 中的值不写日志、不进入工具结果。
+- 每轮开始经 sdk.ListTools(c.Context()) 取得 Core 目录；按配置对尚未连接的 MCP 服务器首次连接，取得 tools/list 的全部分页，与 Core 目录合并。本轮固定映射和来源信息，随后请求复用；连接失败的服务器本轮不可用，脱敏 WARN 后其余工具与对话继续。
+- 工具的来源名为 plugin_id/service_name 或 mcp/<server>/<tool>。映射为六种协议共同接受的名称：首字符为 ASCII 字母或下划线，后续只用 ASCII 字母、数字、下划线，长度至多 64；非法字符替换为下划线，首字符和超长/冲突按命名常量及稳定后缀处理，维护可逆的本轮查表。后缀算法使用标准库，保留每个工具的唯一映射。原始名用于执行与确认，模型侧名称随 ToolCall 原样回放。
+- 整轮仍在已有延续调用中运行，使用其 context、Actor、Target、deadline 与取消。Provider 返回的文本增量继续交给同一次 c.Stream；每次响应的文本与完整 ToolCall 组成 assistant 消息，ToolCall（含 ID、Name、Arguments、Replay）原样放回下一请求；工具结果组成 user 消息的 ToolResults，ToolCallID 精确对应调用 ID，再继续请求模型。最终无工具调用时结束。会话仅按既有成功提交规则保存本轮 user/assistant 文本；ToolCall、Replay 与 ToolResult 只保留在本轮请求链。
+- Core 工具只调用 sdk.InvokeTool。成功返回的 JSON 原文作为工具结果；失败保留 ErrorInfo 的 code、safe_message，编码为 error: <code>: <safe_message>，有同时返回的结果时一并交回模型。依次执行同一响应里的工具调用；不自动重试，不直接调用目标 Service。
+- MCP 每次执行前调用 sdk.ConfirmOperation(c.Context(), "mcp/<server>/<tool>", 参数 JSON 摘要)，摘要完整表达实际参数。成功后才 CallTool；拒绝、超时和工具失败都交回模型。服务器校验工具业务 Schema；Agent 不另写一套 Schema 校验。MCP 返回的 content、structuredContent、isError 保留为可供 ToolResult.Content 携带的文本表示，禁止悄悄丢掉错误或非文本块。
+- 单轮工具步数上限使用 Agent 的命名常量，初值 20，按实际执行的工具调用次数计（同一响应中的多个 ToolCall 各计一次，Core 工具与 MCP 工具合计）；模型请求第 21 次工具调用时不执行，停止继续工具与模型请求，按 Actor locale 回复 agent.tool_limit。父调用取消或结束时立即终止本轮，保留已有平台回执与显示内容；不继续请求模型处理已经失效的调用。
+- stdio 使用 exec.Cmd 的 command/args/env；凭证只来自本服务器配置，不把 Core 管理凭证或其他服务器凭证传入。子进程继承插件的受管进程树。streamable HTTP 使用注入 headers 的 HTTP client；禁止自动重放 tools/call，核对 go-sdk 自带重连行为并关闭会导致自动重发的设置。
+- 连接可跨轮复用，生存期归插件 Session；本轮 context 只控制本轮请求。OnStop 关闭全部 MCP 会话、等待 stdio 进程退出，服从 CONTRACTS §4.2 的剩余停止预算并保留关闭错误。v1.3.1 CommandTransport.Close 默认每阶段等待 5s，接入时须按实际剩余停止预算处理，避免直接套用该默认值。
+- env、headers、认证头与含凭证的 URL 不进入日志、用户错误或工具结果；保留脱敏后的错误类别与说明。沿用 Provider 不重发、显示失败立即结束、reset 之前的轮次跳过历史追加、NotCommand 过滤以及配置为空时提示管理员的现状。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：agent/tools_test.go（//go:build unix）。用 goal-59 的测试装配、模拟 Provider（脚本化地返回工具调用）、在测试临时目录生成的工具插件（goal-54、goal-55 的同类插件只在执行者本地）与 mcptest 的两种服务器：
-  - 模型连续调用一个 Core 工具与一个 MCP 工具：两者都执行，结果交回模型，最终回复显示。
-  - Core 工具为 confirm 策略且用户拒绝：结果为错误文本交回模型，工具未执行；MCP 工具的确认被拒同样如此。
-  - 停止插件后 stdio MCP 子进程已退出（按 PID 检查）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：名称映射函数；MCP 连接失败时对话继续；secret 值不出现在日志中；HTTP 服务器的 headers；工具出错：错误作为结果交回，不重试；模型持续请求工具超过 20 步：本轮结束并回复步数上限文案；名称映射对含 / 与 . 的名字、冲突名字的结果稳定。
+- 提交一个集成测试 agent/tools_test.go 的 TestAgentTools（unix，表驱动）。复用 startAgent 的真实 Core、Agent SDK Session、受管 SQLite 与回环 Adapter；工具提供方使用真实 sdk.Plugin、带类型 JSON 声明与 Generated.ServiceSchemas；Provider 用 httptest 脚本，MCP 用 stdio 真实子进程和 streamable HTTP 模拟服务器。主路径让模型先调用 Core 工具、再调用 MCP 工具、最后输出文本；分别覆盖两种 MCP 传输，核对确认的实际参数、同一 Actor 允许、执行次数、ToolCallID、后续请求中的结果与最终显示。再覆盖确认拒绝及工具错误交回模型且目标执行次数正确；停止 Agent 后核对 stdio 子进程退出。多个子场景理由：V-58 明列两种传输、确认拒绝与工具错误，且关闭子进程是本切片的资源交付条件。
+- 原 TestAgentConversation 只按必要的辅助签名改写，原断言保持；不向 sdk/、internal/core/supervisor/ 提交测试，不新增 testdata 插件。
+- 本地自测（*_local_test.go，不提交，PR 写明实际结果）：六种协议收到映射后的目录并完成工具往返；Responses 的 reasoning Replay、Gemini thoughtSignature 原样回传；非法字符、首字符、超长与同名碰撞；同响应多个工具的顺序与结果对应；Core/MCP 的 allow、confirm、deny、确认超时、无 Actor、无按钮、父调用取消；结果与错误同时返回；Provider/工具失败的请求次数；持续调用达到 20 次（同一响应含多个 ToolCall 时跨过上限的那一次不执行）；首次连接失败时其余对话继续；tools/list 分页；headers/env 的到达与日志/结果脱敏；并发首次使用同服务器、跨轮复用及停止预算。独立 Agent 进程的 stdio 子进程树退出证据可在根包本地测试复用 pipeline 装配。
+- 经 cpa 兼容网关的真实工具往返由审查者在合并前补跑（凭证只在审查者本机）。
+- 证据记入 goal-60/tasks.md 与 PR，按 TEST-MATRIX §3 写明位置、命令、OS/arch、Go 版本、传输、结果；T-12.7 负责最终汇总，真实 Provider/平台未运行项如实列出。
 
-完成条件：gofmt -l 无输出；go mod tidy 后无差异；go vet ./...；go test -race ./plugins/...；go build ./...。
+完成条件：生成资源前后对应源码一致；gofmt -l 对改动的 Go 文件无输出；go vet ./agent/...；go test -race -count=1 ./agent/...；go build ./...；在 agent 目录运行 go run ../cmd/alonabot plugin check 通过。依赖验证运行 go mod tidy、go mod why github.com/modelcontextprotocol/go-sdk/mcp，并核对 Core 与 SDK 根包的 go list -deps 未链接 MCP 包；在 PR 记明实际版本。通过上述检查并落实 V-58 的指定证据后完成；未经策略/确认执行、自动重放业务请求、丢失必需 Replay、子进程脱离管理或 Agent 产品代码访问 internal/core 时按工作包停止。
 
-不做：记忆（T-12.4）；技能（T-12.5）；MCP 的资源与提示词能力（只用 tools）；真实 Provider（T-10）。
+不做：记忆实现（T-12.4）、技能（T-12.5）、动态任务 SDK 与定时 Agent（T-07.9、T-12.6）、llm.generate、图片输入、MCP 资源与提示词、真实 Provider 汇总（T-10）、管理页面、Core/SDK/proto 改造、根包产品装配修改、SHA256。
 ```
 
 ### goal-61 · T-12.4 Agent 的记忆
 
-状态：等待前置（T-11.2、T-12.2）。T-08.5（PR #79）已合并。`sdk.JSONService` 的 `Tool` 方法已由 goal-54（PR #101，合并提交 `de48f26`）合入。语句中 goal-19、goal-32、goal-59 提供的符号（sdk.JSONService、gormdb.Open、agent 的一轮对话）只写名字；合并后由审查者核对，再改为待派发。2026-10-28 按 D-60 改写：记忆并入 Agent，不再有 sdk/memory 与记忆插件。
+状态：待派发。前置 T-08.5（PR #79）、T-11.2（PR #165，`330164f`）、T-12.2（PR #170，`eca6310`）均已合并；派发前须由维护者裁决三处契约缺口，审查者再按裁决改写本语句：(1) CONTRACTS §13.4 与 D-60 要求 memory 工具经 `core.tool.invoke` 调用，而 Broker 把调用方加入调用链后检查目标（`internal/core/broker/broker.go`），Agent 调用自己的工具必然 CALL_CYCLE；(2) SDK 的 Service Handler 读不到可信的 Actor 与默认 Target（`Event()` 为 nil，`Session()` 不含实例）；(3) 会话字符串不含实例，T-12.2 的 Agent 历史在同一聊天的两个实例间共用，与 V-57「不同实例的会话历史互不共用」及记忆范围含实例不一致。以下为前置合并前的语句，保留作记录。原状态：等待前置（T-11.2、T-12.2）。T-08.5（PR #79）已合并。`sdk.JSONService` 的 `Tool` 方法已由 goal-54（PR #101，合并提交 `de48f26`）合入。语句中 goal-19、goal-32、goal-59 提供的符号（sdk.JSONService、gormdb.Open、agent 的一轮对话）只写名字；合并后由审查者核对，再改为待派发。2026-10-28 按 D-60 改写：记忆并入 Agent，不再有 sdk/memory 与记忆插件。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-61（切片 T-12.4：Agent 的记忆）。goal 目录 goal-61，分支 goal-61，worktree .worktrees/goal-61，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

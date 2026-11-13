@@ -72,7 +72,7 @@
 | goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 已完成（PR #156） |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 已完成（PR #155） |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 已完成（PR #153） |
-| goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 待派发 |
+| goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 已完成（PR #169） |
 | goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 已完成（PR #157） |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 已完成（PR #167） |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 待派发 |
@@ -81,9 +81,9 @@
 | goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 已完成（PR #166） |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 已完成（PR #162） |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 已完成（PR #161） |
-| goal-128 | T-07.9 | 动态任务与暂停恢复的 SDK | T-04.12、T-07.8 | 等待前置 |
-| goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 等待前置 |
-| goal-92 | T-09.13 | 管理页所需的会话与上传接口 | T-09.1、T-09.4、T-09.12 | 等待前置 |
+| goal-128 | T-07.9 | 动态任务与暂停恢复的 SDK | T-04.12、T-07.8 | 待派发 |
+| goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 待派发 |
+| goal-92 | T-09.13 | 管理页所需的会话与上传接口 | T-09.1、T-09.4、T-09.12 | 待派发 |
 | goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 等待前置 |
 | goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 已完成（PR #164） |
 | goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 已完成（PR #165） |
@@ -5257,7 +5257,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-127 · T-07.8 动态任务与调度持久化的协议和 Core 侧
 
-状态：待派发。直接前置 T-07.5（PR #119，合并提交 `cc19e99`）、T-09.4（PR #163，合并提交 `cb8ae3d`）已合并；调度基础 T-07.2（PR #107，`fc2c247`）已合并。PR 与合并提交取自本地 `docs/goals/core.md` 的合并记录。下文新增接口为供审查者定稿的方案，契约缺口见末尾备注。
+状态：已完成（[PR #169](https://github.com/AlonaBot/AlonaBot/pull/169)，合并提交 `4dc4bcd`），证据见 TEST-MATRIX §3.2。合入：服务 `core.task.set`、`core.task.cancel`、`core.task.list`、`core.job.pause`、`core.job.resume`、`core.job.status` 与 proto `TaskTrigger`、`TaskSetRequest/Response`、`TaskCancelRequest/Response`、`TaskListRequest/Response`、`TaskInstance`、`JobPauseRequest/Response`、`JobResumeRequest/Response`、`JobStatusRequest/Response`、`TaskSpec`（`ROUTE_KIND_TASK`）；状态库 `dynamic_task` 与 `scheduled_job`；tune `TASKS_PER_PLUGIN`、`TASK_PAYLOAD_BYTES`、`TASK_CONCURRENCY`；`wire.Request.Late` 在准入前期限已过时同样调用一次；根包任务服务等待本 Session 装配完成后才处理请求。SDK 的作者 API 由 goal-128 提供。
 
 按 main 核对（2026-11-12，已用 rg 核对定义及调用者，并以离线 go doc 交叉核对 Scheduler.Options、manage.Service.Handler、state.Store.Uninstall）：
 
@@ -5902,98 +5902,270 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-128 · T-07.9 动态任务与暂停恢复的 SDK
 
-状态：等待前置（T-04.12、T-07.8）。2026-11-10 按 D-124、D-126 新增。T-04.12（goal-125）提供 `sdk.Registrar`，T-07.8（goal-127）提供协议与六个固定服务，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+状态：待派发。直接前置 T-04.12（goal-125，PR #154，合并提交 `43a6135`）、T-07.8（goal-127，PR #169，合并提交 `4dc4bcd`）均已合并。本稿于 2026-11-13 按本 worktree 的 main `dbbb80b` 核对；合并提交来自仓库 goal 的完成记录，符号定义及调用者用 `rg` 核对，`sdk.Registrar` 另用离线 `go doc` 交叉核对。末尾的 API 定名建议供审查者派发前确认。2026-11-13 审查者裁决：采纳 `JobState` 的命名（避免与函数 `JobStatus` 同名）、`TaskBuilder[T]`/`TaskInstance[T]` 的字段与 optional 时间为 `*time.Time`；参数类型检查纳入 `sdk/generate/service.go`，复用 Service 的类型检查并要求顶层为对象。
 
-目标：插件作者用一个带类型的声明表示动态任务，在 `New()` 中注册处理函数，运行时用声明创建、替换、取消与列出实例；静态任务可以暂停、恢复与查询。协议与 Core 的行为由 goal-127 提供，本切片不改。
+按 main 核对：
 
-依据：PLAN T-07 步骤 10；DESIGN §H；CONTRACTS §4.3；WIRE-FORMAT §3.3、§3.5；DECISIONS D-107、D-114、D-124、D-126；TEST-MATRIX V-114 的 SDK 分项。
+- `sdk/plugin.go`：`func NewPlugin() *Plugin`；`type Registrar interface { registrar() *pluginScope }`，`*Plugin` 与 `*SubPlugin` 实现该接口；作者入口为 `func New() *sdk.Plugin`。`sdk/sdk.go`：`func Run(root *Plugin) error`、`func Collect(root *Plugin) (*Registration, error)`；Registration 的任务部分目前只有 `Schedules []Schedule`，动态任务尚无 SDK 作者入口。
+- `sdk/plugin.go`、`sdk/subplugin.go`、`sdk/registry.go`：`Every(jobID string, d time.Duration) *ScheduleBuilder`、`Cron(jobID, expr string) *ScheduleBuilder`；`(*ScheduleBuilder).Timezone(name string) *ScheduleBuilder`、`Handle(fn func(*Context) error)`。静态 job ID 原样传给 `core.job.*`，其路由 ID 才加 `job.`。子插件 ID 只留在 SDK 的路由作用域与日志中。
+- `sdk/session.go` 的 `buildRegister(reg *Registration, configJSON string, configVersion uint32, configSchema []byte) *pb.Register` 生成注册；`sdk/dispatch.go` 的 `businessHandler(reg *Registration) wire.Handler` 包装静态任务；`sdk/activate.go` 的 `currentSession(ctx context.Context) (*wire.Session, error)` 实施 Activated/停止门禁。`sdk/services.go` 的 `Proto[In, Out proto.Message](target string) Service[In, Out]`、`(Service[In, Out]).Call(ctx context.Context, in In) (Out, error)` 可复用固定服务调用与错误转换。
+- `contracts/proto/alonabot/v1/route.proto` 已有 `ROUTE_KIND_TASK = 8`、`TaskSpec { string name = 1; }`、`RouteDescriptor.task = 18`、`required_permissions = 17`。`message.proto` 的 ScheduledPayload 字段为 `job_id = 1`、`run_id = 2`、`scheduled_at_unix_ms = 3`、`task_name = 4`、`task_key = 5`、`task_payload_json = 6`。`contracts/validate/register.go` 已校验任务名、`task.` 保留前缀和 task 路由。
+- `contracts/proto/alonabot/v1/task.proto` 与 `internal/wire/services.go` 已提供六个 task/job 服务及全部载荷；准确字段见下文接口段。List 使用可缺省的 `after_key`、`next_after_key`；TaskInstance.next_at、JobStatusResponse.last_at/next_at 均为 optional Unix 毫秒，缺失须保留。
+- `sdk/message/event.go` 的 `ScheduledPayload` 目前为 `{ JobID, RunID string; ScheduledAt time.Time }`；动态参数须在 SDK 的原始 HandlerRequest 边界解码后传给 T，沿用现有 Context 的调用有效期。`sdk/sdk.go` 已有 `(*Context).Context() context.Context`、`Session() message.Session`、`User() message.User`、`Reply(text string) error`、`Send(m message.Content, opts ...SendOption) (*message.SendResult, error)`；`sdk.To(s message.Session) SendOption`。任务无默认 Target，提醒须显式使用参数中保存的会话。
+- 当前定时示例位于 `examples/plugins/showcase/main.go` 的 `(*Demo).Schedules(r *sdk.Plugin)`，生成项为同目录 `alonabot_gen.go`，入口已使用 `sdk.UseGenerated(p, alonabotGenerated)`；`docs/development.md` 尚无独立的动态任务一节。根包 `pipeline_test.go` 已有 `newPipeline(t *testing.T, stdio ...bool) *pipelineHarness`、`(*pipelineHarness).launch(id, mode string, priority int) *runningComponent`；`scheduler_tasks_test.go` 的 `persistentTaskProcess(mode string) error` 当前以原始协议验证 Core，`TestPersistentTasks` 保留。
+- 旧状态快照中的 PR #165（goal-55，`330164f`）、#167（goal-84，`3a9b4af`）、#168（goal-81，`37b0ada`）、#169（goal-127，`4dc4bcd`）及 goal-59（PR #170，`eca6310`）均已合并。按用户提供的在途信息，goal-40 涉及 state、supervisor、根包装配，PR #171（goal-69）涉及根包与 `cmd/alonabot`，PR #172（goal-57）涉及 `pipeline_test.go`、`t11_e2e_test.go`。本切片与 #172 的潜在重叠是测试子进程分流；与 #171 的潜在重叠是 `docs/development.md`。#169 对 schema.sql、manage 清理清单的改动已在基线中，本切片复用其六个服务。
 
-要点：
-- 声明：`sdk.Task[T any](name string) TaskType[T]`，只含未导出字段的值类型；T 的要求与 Service 的 JSON 类型相同，编码为 JSON 对象。
-- 注册：`sdk.OnTask[T any](r Registrar, t TaskType[T])` 返回 builder，`Handle(func(*Context, T) error)`。Collect 时登记 kind 为 task 的路由 `task.<name>`；声明为零值、同名重复、名称不合规使收集失败，错误带任务名。处理函数的 Context 没有 Actor；处理函数需要自己的 key 时，由作者用 `sdk.Key` 指定并写进参数。
-- 创建：`t.At(ctx, when time.Time, args T, opts ...TaskOption) (key string, err error)`、`t.Every(ctx, d time.Duration, args T, opts ...TaskOption)`、`t.Cron(ctx, expr string, args T, opts ...TaskOption)`，调用 `core.task.set`。`sdk.Key(key)` 指定 key，相同 key 再次创建即替换；不指定时 SDK 生成随机 key。`sdk.Timezone(name)` 只对 Cron 有效，用在 At 或 Every 上返回 INVALID_ARGUMENT，不发出请求。
-- 取消与列出：`t.Cancel(ctx, key) error`；`t.List(ctx) ([]TaskInstance[T], error)`，每项含 key、参数、触发规则与下一次触发时刻，SDK 取完全部分页。
-- 触发到达时 SDK 按任务名找到处理函数，把参数解码为 T 后调用；解码失败返回 INVALID_ARGUMENT 并记日志，不调用处理函数。
-- 静态任务：`sdk.PauseJob(ctx, jobID) error`、`sdk.ResumeJob(ctx, jobID) error`、`sdk.JobStatus(ctx, jobID) (JobStatus, error)`（是否暂停、上一次与下一次触发时刻）。
-- 全部函数只在 Activated 之后可用，之前调用返回 FAILED_PRECONDITION；Core 返回的错误码原样交给调用方。
-- 示例与文档：定时示例加入一个提醒命令，用 At 创建、用 Cancel 取消；docs/development.md 的定时任务一节补充动态任务与暂停恢复。
-- 测试：SDK 与 Core 的集成测试覆盖 At、Every、Cron 各一次触发、相同 key 替换、Cancel、List 的带类型往返、参数解码失败、PauseJob 与 ResumeJob；选项的非法组合与 Collect 的失败情形进本地自测。
+```text
+/goal 使用 $alonabot-execute 推进 goal-128（切片 T-07.9：动态任务与暂停恢复的 SDK）。goal 目录 goal-128，分支 goal-128，worktree .worktrees/goal-128，从最新 origin/main 创建（包含 PR #154、#169）。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-不做：协议、状态库与调度器（goal-127）；plugintest 对动态任务的立即触发（goal-82）；官方 Agent 改用动态任务（goal-63）。
+目标：插件作者用带类型的任务声明，在 New() 中登记处理函数，Activated 后创建、替换、取消与列出带参数的实例；静态任务可暂停、恢复与查询。复用已合并的 Core 调度、持久化与六个固定服务，提供提醒示例和开发说明。
+
+依据：spec/PLAN.md §3.1；spec/plan/core.md T-07 步骤 10（T-07.9），关联步骤 3、7、9 与「停止和失败条件」；spec/DESIGN.md §H；spec/CONTRACTS-v0.1.md §1.2、§3 的 JSON Service、§4.3、§8 的主动发送、§14.5、§16；spec/MESSAGE-MODEL.md §1/§1.1 的 scheduled 无 Actor 与显式 Target、§3 的 HandlerOutcome；spec/WIRE-FORMAT.md §3.3、§3.5；spec/adr/DECISIONS.md D-70、D-86、D-107、D-114、D-116、D-124～D-126；spec/TEST-MATRIX.md V-114 的 SDK 分项，复验 V-20、V-46 的实际运行槽。
+
+范围（只新增或修改这些）：
+- sdk/ 新增 task.go、job.go；sdk/plugin.go、sdk/sdk.go、sdk/session.go、sdk/dispatch.go、sdk/subplugin.go：任务登记、Collect、REGISTER、派发与子插件作用域映射所需的相邻修改。新增登记状态保持私有。
+- sdk/generate/service.go：将 Task[T] 纳入既有 JSON 类型检查，复用 Service 的类型规则；任务参数顶层要求 JSON 对象。沿用现有生成结果结构，生成器公开 API 保持现状。
+- examples/plugins/showcase/main.go：保留 tick，增加提醒创建与取消命令及具名参数类型；由现有生成入口更新同目录 alonabot_gen.go。
+- docs/development.md：增加动态任务与静态任务暂停恢复的使用说明。
+- 根包新增 scheduler_sdk_test.go（unix）；pipeline_test.go 仅增加该项集成需要的子进程模式分流与注册入口，保留已有断言和其他模式。
+- 上述包的 *_local_test.go：本地自测，留在忽略文件中。
+
+允许的新跨模块边：无。SDK 复用 contracts、internal/wire 与现有 SDK 子包；示例通过 SDK；根包测试复用生产装配。
+
+接口（照此实现；内部辅助函数自定）：
+1. sdk 新增作者 API；TaskType、TaskBuilder、TaskOption 的实现字段私有：
+   type TaskType[T any] struct { /* 私有字段 */ }
+   func Task[T any](name string) TaskType[T]
+   type TaskBuilder[T any] struct { /* 私有字段 */ }
+   func OnTask[T any](r Registrar, t TaskType[T]) *TaskBuilder[T]
+   func (b *TaskBuilder[T]) Handle(fn func(*Context, T) error)
+   type TaskOption func(*taskOptions)
+   func Key(key string) TaskOption
+   func Timezone(name string) TaskOption
+   func (t TaskType[T]) At(ctx context.Context, when time.Time, args T, opts ...TaskOption) (string, error)
+   func (t TaskType[T]) Every(ctx context.Context, d time.Duration, args T, opts ...TaskOption) (string, error)
+   func (t TaskType[T]) Cron(ctx context.Context, expr string, args T, opts ...TaskOption) (string, error)
+   func (t TaskType[T]) Cancel(ctx context.Context, key string) error
+   func (t TaskType[T]) List(ctx context.Context) ([]TaskInstance[T], error)
+   type TaskInstance[T any] struct {
+       Key string
+       Args T
+       At time.Time
+       Interval time.Duration
+       Cron, Timezone string
+       NextAt *time.Time
+   }
+   At、Interval、Cron 对应协议的三种互斥触发；未选择的字段为零值，Timezone 仅用于 Cron；NextAt nil 表示协议字段缺失。
+   type JobState struct { Paused bool; LastAt, NextAt *time.Time }
+   func PauseJob(ctx context.Context, jobID string) error
+   func ResumeJob(ctx context.Context, jobID string) error
+   func JobStatus(ctx context.Context, jobID string) (JobState, error)
+   LastAt/NextAt nil 保留协议 absent；函数名 JobStatus 保留，结果类型使用 JobState 以满足 Go 的包级命名规则。
+2. 使用以下已合并协议；字段编号、服务名及 Core 语义保持现状：
+   ROUTE_KIND_TASK=8；RouteDescriptor.task=18；TaskSpec.name=1；route_id="task."+name。
+   TaskTrigger.oneof { int64 at_unix_ms=1; uint64 interval_ms=2; string cron=3; }; string timezone=4。
+   TaskSetRequest { string task_name=1; string key=2; TaskTrigger trigger=3; string payload_json=4; }
+   TaskSetResponse { int64 next_at_unix_ms=1; }
+   TaskCancelRequest { string task_name=1; string key=2; }; TaskCancelResponse {}。
+   TaskListRequest { string task_name=1; optional string after_key=2; }
+   TaskInstance（pb）{ string key=1; TaskTrigger trigger=2; string payload_json=3; optional int64 next_at_unix_ms=4; }
+   TaskListResponse { repeated TaskInstance instances=1; optional string next_after_key=2; }
+   JobPauseRequest/JobResumeRequest/JobStatusRequest 各只有 string job_id=1；Pause/Resume Response 为空。
+   JobStatusResponse { bool paused=1; optional int64 last_at_unix_ms=2; optional int64 next_at_unix_ms=3; }
+   ScheduledPayload 的任务字段为 task_name=4、task_key=5、task_payload_json=6；动态 job_id 与请求目标均为 task.<name>。
+   固定服务及常量：wire.ServiceTaskSet="core.task.set"、ServiceTaskCancel="core.task.cancel"、ServiceTaskList="core.task.list"、ServiceJobPause="core.job.pause"、ServiceJobResume="core.job.resume"、ServiceJobStatus="core.job.status"。请求与响应使用现有 Protobuf Schema ID/version=1。
+3. sdk.Registrar、Plugin/SubPlugin、Collect、Run 及既有静态任务 API 保持现有签名。示例通过 p.Command(...).Handle(...)、sdk.OnTask(p, declaration).Handle(...) 登记；自动回复用 message.Content，发送用 message.Text 与 sdk.To。
+
+行为：
+- Task 是带类型的声明值。T 遵循现有 Service JSON 类型规则，编码结果为 JSON 对象；声明零值、空或非法任务名、同名重复、缺失/重复 Handle、保留前缀冲突在 Collect 失败，错误带任务名。任务名沿用 Core 的 ^[a-z][a-z0-9_.-]{0,63}$。所有 route_id 在整个插件内唯一；子插件登记仍为 task.<name>，Handler 的日志保留 sub_plugin。
+- At/Every/Cron 将参数完整编码后调用 core.task.set。Key 指定原样 key；省略 Key 时以标准库的密码学随机源生成符合既有 1～128 UTF-8 字节约束的 key，随机源失败向调用者返回错误。相同 key 交由 Core 整体替换；成功返回实际使用的 key。Timezone 在 At/Every 上返回 INVALID_ARGUMENT，调用前结束。编码失败、非对象参数明确返回 INVALID_ARGUMENT。
+- 触发合法性、配额、并发、持久化与运行槽以 Core 为准：interval 至少 1s、五字段 cron、IANA 时区/缺省 UTC、at 晚于 Core 当前时间；替换保留在途旧一轮；一次性实例派发时删除，执行失败与超时沿既有行为结束。
+- List 按 next_after_key 读取全部分页，顺序与 Core 的 key 顺序一致。保留每个实例的 key、完整参数、触发规则及 next_at 的存在性；任一页调用或解码失败则返回错误，完整成功后才交付列表。取消与静态 job 操作保留 Core 的 NOT_FOUND 等错误码。
+- dynamic REQUEST 复用静态 scheduled 的 Context、panic/错误映射、取消与唯一 Response 路径。核对请求目标、任务名与载荷后将 task_payload_json 解码为 T；失败返回 INVALID_ARGUMENT 并记英文日志，Handler 未执行。Handler 没有 Actor 和默认 Target；需要 key、会话或用户时，作者写入 args。任务函数在取消后实际返回，才走既有 Response 完成与运行槽释放。
+- 所有运行期客户端函数通过 currentSession 检查 Activated；OnStart/OnReady、停止后以及已失效的 Handler context 调用返回 FAILED_PRECONDITION。使用 c.Context() 保留现有父调用关联；独立后台 context 只有组件身份。协议错误码通过 sdk/errcode 原样传播。
+- JobStatus 的 last_at 是本次 Core 运行最后一次实际派发；Core 重启后 absent。暂停时 next_at absent；暂停保持在途函数继续执行，恢复沿原 interval 起点安排未来触发。
+- showcase 增加一条创建提醒命令和一条取消命令：在 New 中登记一次声明/Handler，命令从 c.Session() 保存会话字符串，用 sdk.Key 使作者掌握取消键，At 创建后向用户返回 key；回调以 args 中的会话显式发送。保留静态 tick，文档展示 PauseJob、ResumeJob、JobStatus 及 NextAt/LastAt 的缺失语义。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：根包 scheduler_sdk_test.go 的一个 TestSchedulerSDK（//go:build unix）。复用 pipeline_test.go 的真实 Core 装配、SQLite、Session 与测试二进制子进程，插件使用本切片公开 SDK：At、Every、Cron 各验证一次真实触发及带类型参数；同 key 替换后 List 返回新规则/参数；Cancel 后停止后续触发；PauseJob/ResumeJob 配合 JobStatus 核对静态任务暂停与恢复。一次集成守住作者 API→协议→Core→typed Handler 的主路径。测试工程/子进程写在本测试或 t.TempDir()，沿用现有分流；sdk/、supervisor/ 和 testdata 不新增提交测试。
+- 本地自测（*_local_test.go，PR 中记录命令、平台与结果）：非法 Task 声明/类型、根与子插件重复、保留前缀、nil/重复 Handle；Timezone 非法组合且未发请求；零值声明；随机 key；编码失败及非对象；全部分页和中间页错误；造入错误参数 JSON 时 INVALID_ARGUMENT、英文日志与 Handler 未执行；Activated 前/停止后/失效 Context；无 Actor/Target、显式发送准入；取消在途回调后仍等实际返回；Core 错误码；JobStatus optional 时刻和静态任务重启后的缺失语义。真实插件多进程验证优先复用根包装配。
+
+完成条件：gofmt -l 对改动 Go 文件无输出；示例通过现有生成入口重建且重复生成内容一致；go vet ./...；go test -race ./...；go build ./...。逐项记录 V-114 的 SDK 证据、实际平台与未运行项；T-07 的同实例无重叠、取消/停止和无提前业务准入成立后结束。
+
+不做：Core 协议、状态表、调度器与卸载清理（goal-127）；Service 的权限 API；plugintest 的动态任务立即触发（goal-82）；官方 Agent 的定时任务（goal-63）；新增任务管理页面或持久化执行队列。
+```
 
 ### goal-66 · T-09.10 日志管理
 
-状态：等待前置（T-09.4、T-09.12）。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin`（T-04.10 起为 `{AdapterID, UserID}`，admins 为用户字符串）；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。语句中 goal-2、goal-39、goal-65（logging 的 Output、Levels、Source）、goal-84（spec/ADMIN-API.md）提供的符号只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按前后端拆分改写：日志页移到 goal-94（T-09.15），本切片不再等待 T-09.8。2026-11-04 按 D-77～D-85 修订计划：按来源的日志级别写在 `core_config.json` 的 `log.sources`，经 goal-97 的 settings 写回（D-82），不存状态库。前置合并后由审查者改写。
+状态：待派发。直接前置 T-09.4（goal-39，PR #163，合并提交 `cb8ae3d`）、T-09.12（goal-84，PR #167，合并提交 `3a9b4af`）均已合并；既有日志基线 T-02.1（goal-65，PR #13，`775f665`）、设置文件 T-07.6（goal-97，PR #100，`cb83eeb`）、首次认证 T-09.1（goal-36，PR #72，`1ba7e5b`）均可复用。2026-11-13 按本 worktree 的 main `dbbb80b` 用 `rg` 核对定义与调用者，`logging.Output` 另以离线 `go doc` 交叉核对。语句按现行 CONTRACTS §14.3 修正两种级别的持久化；末尾列出派发前须裁决的规格冲突。2026-11-13 审查者裁决（DECISIONS 2026-11-13 变更记录）：全局与来源级别都按 CONTRACTS §14.3 写回 core_config.json（TEST-MATRIX V-63 同步修正）；SSE 订阅的慢消费者规则见行为；历史查询按文件中实际存在的内容返回，精度登记进 ADMIN-API；实时 Source 以可信组件 ID 归组，来源类别取自 Core 的安装记录。采纳 `Options.BufferRecords`、`manage.Options.Logs`/`NotifyLogLevel` 与 Record 的 JSON 形状。
+
+按 main 核对：
+
+- `internal/core/logging/logging.go`：`type Options struct { Format Format; Level slog.Level; Stderr io.Writer }`；`Open(opt Options) (*Output, error)`；`(*Output).Logger() *slog.Logger`、`Levels() *Levels`、`EnableFile(opt FileOptions) error`、`Plugin(pluginID, generationID string) *Source`、`Component(pluginID, generationID string) slog.Handler`、`Close() error`。`Levels` 的 `SetGlobal(lv slog.Level)`、`SetSource(id string, lv slog.Level)`、`InheritSource(id string)`、`Source(id string) slog.Level` 已存在；`logging.ProtoLevel(lv slog.Level) pb.LogLevel` 与 `LevelOff` 可复用。目前没有 Recent、Subscribe 或 Query。
+- `internal/core/logging/source.go`：`(*Source).Line(_, stream string, line []byte)` 在解析并补来源后按来源级别过滤；`SetSession(sessionID []byte)` 补 Session。`console.go` 的 `consoleHandler.Handle(ctx context.Context, r slog.Record) error` 写 text；`traceDigits = 8`，Plugin/Adapter 的 session/generation 字段在文本中省略。`file.go` 的 `FileOptions{Dir string; MaxSize, MaxTotal int64; MaxAgeDays int}` 及文件命名已实现，历史查询复用本地日期和编号续写规则。
+- `internal/core/settings/settings.go`：`Load(dataDir string) (*File, error)`、`(*File).Settings() Settings`（深副本）；Settings 有 `LogLevel slog.Level`、`LogSources map[string]string`、`LogFile`。`file.go` 的 `(*File).Update(edit func(doc *Document) error) error` 以 Rename 为提交点，之后目录同步失败仍发布快照并返回错误；`document.go` 的 `Set(path []string, value any) error`、`Delete(path []string) error`。按来源级别允许 debug/info/warn/error/off/inherit，权威存储为 core_config.json。
+- `sdk/log.go`：`setLogLevel(level *slog.LevelVar, lv pb.LogLevel)`；`sdk/inproc.go`：私有 `componentSession` 持有 `level slog.LevelVar`，`(*componentSession).handler(next wire.Handler) wire.Handler` 同时用于插件与 Adapter 的 RPC。`sdk/activate.go` 的 `activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Registration) (session *wire.Session, active *activation, err error)` 和 `sdk/adapter_run.go` 的 `runAdapter(a adapter.Adapter, l launch) (err error)` 分别建立 Session。两条路径尚无 sdk.log.set_level 分派；`control.proto` 与 `internal/wire/services.go` 尚无 LogSetLevel 消息和服务常量。
+- `internal/core/router/router.go`：`(*Router).Plugin(pluginID string) (Plugin, bool)`、`Plugins() []Plugin`；Plugin 有 `PluginID() string`、`Activated() bool`、`Call(ctx context.Context, req wire.Request) (wire.Response, error)`。可对当前 Activated Session 通知，使用组件 ID，保持跨 Session 身份检查。
+- `internal/core/manage/service.go`：`New(opt Options) *Service`；Options 已持有 `Settings *settings.File`、`Store *state.Store`、`Development map[string]*manifest.Manifest` 等装配资源。`http.go` 的 `(*Service).Handler(auth *adminauth.Auth) http.Handler` 统一调用 `auth.Require`；私有 `respond(w http.ResponseWriter, result any, err error)` 处理确认与管理错误。`static.go` 的 `AdminAPIMajor uint32 = 1` 与 `(*Service).WebUI() http.Handler` 已合并。
+- 根包 `alonabot.go`：`Start(ctx context.Context, opts ...Option) (*Core, error)` 只加载一次 settings.File，构造 `logging.Output`、manage、公开 Listener；`LogLevel(level slog.Level) Option` 为本次启动覆盖。`assembly.go` 的 `startDevelopment` 明确实现开发来源缺省 debug、显式 inherit 使用全局；`startInstalled` 的 Bootstrap 使用 `c.output.Levels().Source(install.PluginID)`。现有持久化 LogSources 在正式组件启动前的完整加载须随本切片接入。
+- `cmd/alonabot/commands.go` 的 `execute(args []string) int` 注册命令；`manage.go` 的私有 `managementOptions`、`(*managementOptions).client() (*managementClient, error)`、`(*managementClient).request(ctx context.Context, method, path string, body any) (json.RawMessage, error)` 使用 Bearer 并拒绝重定向。request 当前对整段 path 赋 URL.Path，日志查询串须独立构造 RawQuery。`cmd/alonabot/manage_e2e_test.go` 已有真实安装包、Core 进程与管理 CLI 的装配。
+- 旧在途列表中的 #165（goal-55，`330164f`）、#167（goal-84，`3a9b4af`）、#168（goal-81，`37b0ada`）、#169（goal-127，`4dc4bcd`）及 goal-59（#170，`eca6310`）均已合并。按用户提供的在途信息，goal-40 改 state、supervisor、根包装配，#171（goal-69）改 `alonabot.go`、`assembly.go`、`cmd/alonabot/commands.go` 等，#172（goal-57）改根包的测试装配。此切片主要与 goal-40/#171 重叠于根包，与 #171 重叠于 CLI 注册；contracts/wirespec_test.go、control.proto、wire 服务常量的后续追加均须保留当前 #165/#169 的编号与服务。日志级别走 settings，本切片范围无需 schema.sql 或 manage 清理清单。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-66（切片 T-09.10：日志管理）。goal 目录 goal-66，分支 goal-66，worktree .worktrees/goal-66，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-66（切片 T-09.10：日志管理）。goal 目录 goal-66，分支 goal-66，worktree .worktrees/goal-66，从最新 origin/main 创建（包含 PR #163、#167）。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：按来源的日志级别持久化在状态库，经管理服务修改后通过 sdk.log.set_level 通知 SDK 并立即生效；全局级别可在运行时修改、Core 重启后恢复为启动设置；Core 为每个来源保留最近 LOG_BUFFER_RECORDS 条已输出的记录，提供按来源、级别与 trace_id 的读取和 SSE 订阅，过去日期从日志文件查询；alonabot logs 与 log-level 命令、WebUI 日志页（T-09.15）使用同一 API。
+目标：经唯一管理服务读取与修改全局及按来源的输出级别，写回 core_config.json 并向运行中 SDK 下发 sdk.log.set_level；Core 为每个来源保存最近 LOG_BUFFER_RECORDS 条已输出记录，提供带筛选的读取、SSE 与按日期的文件查询，alonabot logs/log-level 和后继 WebUI 日志页共用这些 API。
 
-依据：PLAN T-09 步骤 7（日志）；CONTRACTS §14.2～§14.6、§16（LOG_BUFFER_RECORDS）；WIRE-FORMAT §3.5（sdk.log.set_level）；TEST-MATRIX V-62、V-63、V-68。
+依据：spec/PLAN.md §3.1；spec/plan/core.md T-09 步骤 7 的日志部分及 V-62/V-63/V-68「对应 V 验收与停止条件」（T-09.10）；spec/CONTRACTS-v0.1.md §7.3～§7.5、§14.1～§14.6、§15.1/§15.4、§16 的 LOG_BUFFER_RECORDS；spec/MESSAGE-MODEL.md §1 的来源与可信身份；spec/WIRE-FORMAT.md §3.2 的 Bootstrap.log_level、§3.5 的固定服务与请求/响应元数据；spec/adr/DECISIONS.md D-62、D-82、D-86；spec/TEST-MATRIX.md V-62/V-63/V-68 的 T-09.10 分项；spec/ADMIN-API.md §1、§5 的认证与错误约定。
 
 范围（只新增或修改这些）：
-- contracts/proto/alonabot/v1/control.proto：新增 LogSetLevelRequest/Response。随后 go generate ./...（本切片获授权只追加这两个消息）
-- contracts/wirespec_test.go：追加编号检查
-- internal/wire/services.go：末尾追加 ServiceLogSetLevel = "sdk.log.set_level"
-- internal/core/logging/：新增 buffer.go（最近记录）、query.go（按日期查询日志文件）；Output 在输出时写入缓冲（只加调用点）
-- internal/core/state/schema.sql：在唯一的初始迁移末尾加入新表；新增 internal/core/state/loglevels.go
-- internal/core/manage/：新增 log_api.go（读取、SSE、级别修改）
-- sdk/：处理 sdk.log.set_level（新增文件；sdk/adapter 的 RunAdapter 同样处理）
-- cmd/alonabot/：新增 logs 与 log-level 命令
-- spec/ADMIN-API.md：追加日志接口（本切片获授权修改该文件）
-- 上述包的测试文件
-允许的新跨模块边：无。
+- contracts/proto/alonabot/v1/control.proto：只追加 LogSetLevelRequest/Response；运行 go generate ./... 更新对应 contracts/pb/alonabotv1/ 产物。
+- contracts/wirespec_test.go：追加上述两消息的协议编号检查。
+- internal/wire/services.go：追加 ServiceLogSetLevel 常量，保留现有 tool/task/job 常量。
+- internal/core/logging/：新增 buffer.go、query.go；logging.go、source.go 的最小输出接入点，console.go/file.go 仅复用或提取既有格式解析所需的私有格式逻辑。保留现有输出、轮转、脱敏及错误处理。
+- internal/core/manage/service.go、http.go；新增 log_api.go：同一管理服务内的读取、SSE 与级别修改。
+- sdk/log.go、sdk/inproc.go：共用的 sdk.log.set_level 分派、会话级与独立进程日志阈值更新。sdk/activate.go、sdk/adapter_run.go 仅在现有共用 handler 的接线确有需要时同步。
+- 根包 alonabot.go、assembly.go：传入有效缓冲上限、接入管理资源与当前 Session 通知、正式/开发组件启动级别。只修改日志相关装配。
+- cmd/alonabot/ 新增 logs.go；commands.go 只登记两个命令；manage.go 只复用客户端认证/错误解析并使日志请求正确携带 URL 查询串及流式读取。
+- spec/ADMIN-API.md：追加日志 API、JSON/SSE 字段及历史数据精度；本切片获授权修改该文件。
+- cmd/alonabot/logs_e2e_test.go（unix）；上述包 *_local_test.go；既有测试只同步增加的必填装配字段，原行为断言保留。
 
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. proto
+允许的新跨模块边：无。manage/logging/settings/router 属于 internal/core；根包、cmd、SDK 与协议的边均已登记。公开 SDK API 保持现有符号。
+
+接口（照此实现；内部辅助函数自定）：
+1. control.proto 追加：
    message LogSetLevelRequest { LogLevel level = 1; }
    message LogSetLevelResponse {}
-2. internal/core/state
-   迁移：CREATE TABLE log_level (source_id TEXT PRIMARY KEY, level TEXT NOT NULL); -- level 为 debug、info、warn、error、off；inherit 不存行
-3. internal/core/logging
-   type Record struct { Time time.Time; Level slog.Level; Source string; Message string; Attrs map[string]any; TraceID string }
-   type Buffer struct{ ... } // 每个来源一个固定容量的环形缓冲
+   internal/wire 追加 const ServiceLogSetLevel = "sdk.log.set_level"。
+   使用现有 LogLevel 的 DEBUG/INFO/WARN/ERROR/OFF；UNSPECIFIED 沿用 INFO。请求、响应为现有 Protobuf Schema ID、version=1；成功返回完整空消息元数据。
+2. internal/core/logging：
+   Options 追加 BufferRecords int，由 Core 的 tune.Values.LogBufferRecords 传入；同步 Open 的全部调用者。
+   type Record struct {
+       Time time.Time `json:"time"`
+       Level slog.Level `json:"level"`
+       Source string `json:"source"`
+       Message string `json:"message"`
+       Attrs map[string]any `json:"attrs"`
+       TraceID string `json:"trace_id"`
+   }
    func (o *Output) Recent(source string) []Record
-   func (o *Output) Subscribe(ctx context.Context) <-chan Record // ctx 结束时关闭
-   func Query(dir string, date time.Time, source string, level slog.Level, traceID string) ([]Record, error) // 读该日期的全部文件（含编号续写的文件）
-4. HTTP（/api/v1，经 adminauth.Require）
-   GET /logs/recent?source=；GET /logs/stream（SSE，事件为 JSON 的 Record）；GET /logs/history?date=YYYY-MM-DD&source=&level=&trace=；GET/PUT /logs/levels（全局与按来源）
-5. cmd/alonabot
-   alonabot logs [--source ID] [--level L] [--trace T] [--follow] [--date YYYY-MM-DD]；alonabot log-level [ID] [LEVEL]（不带参数时列出，ID 为 global 时修改全局）；都经管理 API 与 Bearer token
+   func (o *Output) Subscribe(ctx context.Context) <-chan Record
+   func Query(dir string, date time.Time, source string, level slog.Level, traceID string) ([]Record, error)
+   source 为空读取全部来源；实时 Source 为 core 或组件 ID（Adapter 使用包 ID）；Attrs 保留来源类别、平台/实例、Session/Generation、源码位置等实际存在的属性。Record.Time 的 JSON 为 RFC3339Nano 字符串，Level 使用 slog.Level 的标准 JSON 字符串。
+3. manage.Options 追加：
+   Logs *logging.Output
+   NotifyLogLevel func(ctx context.Context, id string, level pb.LogLevel) error
+   Logs 为同一 Core 的输出；日志目录取现有 Packages 父目录下 logs。NotifyLogLevel 由根包绑定当前 Router Session：未运行来源只保存设置，运行来源调用 sdk.log.set_level。保持 New、Handler、WebUI 的现有签名。
+4. HTTP，全部经已有 auth.Require：
+   GET /api/v1/logs/recent?source=&level=&trace= → 200，Record[]。
+   GET /api/v1/logs/stream?source=&level=&trace= → 200，text/event-stream；event: log，data: 为单个 Record JSON。
+   GET /api/v1/logs/history?date=YYYY-MM-DD&source=&level=&trace= → 200，Record[]。
+   GET /api/v1/logs/levels → 200，{"global":"info","sources":{"组件ID":"debug"}}。
+   PUT /api/v1/logs/levels 接收同形的部分更新；省略 global 或某个来源时保留当前值；sources 中某项为 inherit 时写入该来源的显式 inherit。成功返回与 GET 同形的当前有效全局值及文件中的来源设置。
+   global 取 debug/info/warn/error；sources 值再允许 off/inherit。GET 的 global 为本次 Core 的有效全局值（含启动覆盖），sources 为配置的来源覆盖；空 sources 编码为 {}。level 查询表示最低级别，缺省 debug；source 为空为全部；实时 trace 按完整 trace_id 精确匹配。日期以 Core 本地时区解释，非法日期/级别返回 400/INVALID_ARGUMENT。
+5. CLI：
+   alonabot logs [--source ID] [--level L] [--trace T] [--follow] [--date YYYY-MM-DD]
+   alonabot log-level [ID] [LEVEL]
+   使用现有 --data-dir、--admin-url、--token-file 及 Bearer 客户端。log-level 无参数列出设置，单独 ID 显示该项，ID=global 修改全局；按来源允许 inherit/off。logs 缺省读 recent，--date 读 history，--follow 消费 stream（含初始快照）；date 与 follow 组合返回明确用法错误。复用现有控制台格式输出完整记录，流由命令 context 取消时结束。
 
 行为：
-- 缓冲：只保存已经通过级别过滤并实际输出的记录；每个来源（core、每个插件、每个 Adapter 包）最多 LOG_BUFFER_RECORDS 条，满时丢弃最旧的；只在内存中，重启后清空。
-- 级别：按来源的设置持久化；修改后先写状态库，再对运行中的 Session 发 sdk.log.set_level（inherit 时下发解析后的全局级别），并更新 Core 侧的 Levels；SDK 收到后立即按新级别过滤。全局级别的运行时修改只在内存中，Core 重启后恢复为 --log-level 或设置文件的值；inherit 的来源随之变化（同样发 set_level）。来源为 off 时 SDK 不输出，Core 关于它的记录仍按全局级别输出。
-- 读取与订阅都要求管理员会话或 Bearer；SSE 先发送当前缓冲中的记录再推送新记录（与页面的「先读再订阅」配合，页面按时间去重）。
-- 历史查询：按 CONTRACTS §14.6 的文件命名读取该日期的文件，解析控制台格式的行（goal-65 的文件格式）为 Record；文件不存在返回空列表。
-- 日志内容中的脱敏规则不变（goal-65 与 CONTRACTS §14.5）。
+- 缓冲在级别过滤后的共用输出路径接入，含 Core、自有插件、Agent 与 Adapter 包；只记录已输出的内容。每个来源上限使用 LOG_BUFFER_RECORDS，缺省1000，满时覆盖最旧；Core 重启后清空。Core 关于某组件的故障记录仍属于 core，其缓冲与级别都按全局处理。保留现有脱敏、非结构化输出与日志文件失败处理。
+- 初始化时从同一个 settings.File 应用 log.sources，再构造组件 Bootstrap；已安装组件缺省 inherit，开发组件缺省 debug，显式 inherit 跟随本次有效全局值。安装进程、开发独立进程和同进程组件使用同一生效规则。
+- 修改级别先经 File.Update 写回 log.level/log.sources；保存成功后更新 Core Levels 并给当前 Activated Session 下发解析后的级别，SDK 同时更新该 componentSession.level 和其独立进程 logLevel。插件、Agent、RunAdapter 及同进程模式均覆盖；同进程更新只作用于对应组件。来源为 off 时 SDK 停止输出，Core 关于它的记录照常由全局控制。
+- 按现行 CONTRACTS §14.3，全局运行时修改也写回 log.level；重启取已保存设置，下一次显式 --log-level 仍只覆盖该次启动。改全局时通知显式 inherit 及已安装的缺省 inherit 来源，保留开发来源缺省 debug 和显式来源覆盖。
+- File.Update 在 Rename 后报告目录同步失败时，快照已经发布：读取实际已发布快照同步内存与通知，并返回保存/通知的实际错误；Rename 前失败保持旧值。保存成功但通知失败保留已提交设置，报告错误及受影响来源，详细原因进入 Core 日志。下一次组件启动从已保存设置取级别；本切片只执行当前一次通知。
+- SDK 在内部固定服务入口处理 set_level，使用现有 Session 准入与完整载荷校验，Handler 路由保持业务语义。SSE 写出前完成认证；Cookie 写级别需 Origin 与 X-Alonabot-CSRF；Bearer 沿用现状。未认证读取/订阅按既有规则返回401。
+- stream 在输出侧原子建立订阅及初始缓冲快照，先交付快照再交付后续记录；--follow 可直接使用该快照。WebUI 按 §14.4 可先读 recent 再订阅，重复快照由消费者处理。订阅随请求 context 关闭；网络写入在输出锁外执行。每个订阅有 LOG_BUFFER_RECORDS 条的发送队列，队列满时不阻塞日志写入，Core 结束该订阅：SSE 先发 `event: overflow`（data 为已交付的最后一条记录的时间），再关闭流；客户端重新连接后用 recent 补齐。--follow 遇到 overflow 时输出一行说明并以非零状态退出。
+- history 只读取选定日期的普通日志文件，按续写序号从主文件到 .1/.2... 读取；解析 §14.2 的来源标签、级别、位置、带引号字段、转义和多行值，保存文件中实际存在的内容。该日没有文件返回[]，读取或解析故障返回真实错误。文本中只有8位 trace 前缀及显示来源；历史 API 返回文件中的原始记录：source 按文件中实际的来源标签筛选（插件为去掉市场前缀后的显示名，Adapter 为 adapter_id/instance_id），trace 按 8 位前缀匹配，Record.Message 保留整行在来源标签之后的原文，Attrs 只含能可靠解析的字段；这些精度登记进 spec/ADMIN-API.md。完整 trace、包身份及已省略的 Session 字段仅由实时结构化记录提供。
+- 所有管理接口沿用主版本1、已有成功/错误 JSON 及认证错误格式；CLI 的查询参数使用 URL.RawQuery，保留拒绝重定向和服务端错误，SSE 按流读取。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/logs_e2e_test.go（//go:build unix）：运行 serve 与一个持续输出日志的测试插件：
-  - log-level 把该插件设为 debug 后，SDK 输出 DEBUG 记录且 logs 能读到；设为 off 后插件记录消失，Core 关于它的记录仍在；重启 serve 后按来源的设置保留，全局级别的运行时修改恢复为启动值。
-  - logs --follow 收到新记录；未带 token 时 401。
-  - 写入前一天日期的日志文件后，logs --date 能查到。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：环形缓冲的边界；历史文件解析（多行值、转义）；SSE 的断开；每个来源最多保留 LOG_BUFFER_RECORDS 条（用很小的值）。
+- 提交：cmd/alonabot/logs_e2e_test.go 的一个 TestLogManagement（//go:build unix），复用真实 Core/CLI/临时安装包和文件装配；临时构建的日志组件放 t.TempDir()。验证 log-level 改来源为 debug 后 SDK 发出 DEBUG 且 logs 读到、改为 off 后进程记录消失而 Core 关于它的记录仍能读到、改为 inherit 后跟随全局；全局与来源设置写回后重启仍按文件生效，另一次启动的 --log-level 只覆盖本次。--follow 收到初始快照和随后新记录，未认证 recent/stream 被拒；放置前一天同格式文件后 logs --date 读到原消息。理由：同一个集成入口守住管理写回、跨进程动态通知、CLI、SSE 与文件查询主路径。
+- contracts/wirespec_test.go 追加 LogSetLevelRequest.level=1 及空响应检查；多列理由：协议编号检查是编码规范允许的另一类提交，用于固定新消息布局。
+- 本地自测（*_local_test.go，PR 记录结果）：小 LogBufferRecords 的逐来源覆盖；只缓存已输出记录；Adapter 包与实例归组、Agent 与 Core 记录；全部来源合并及筛选；SSE 快照与并发追加、取消与断开；text/json 输出均保留完整实时 trace；历史的续写顺序、多行/转义、缺失日期、损坏行和实际 I/O 错误；Cookie/CSRF；设置提交前失败与提交后目录同步失败、一个 Session 通知失败；同进程两个组件的级别隔离；SDK 与 RunAdapter 的 set_level 完整元数据、OFF/UNSPECIFIED 与停止门禁。sdk/、supervisor/、testdata 按 D-86 留在本地验证。
 
-完成条件：gofmt -l 无输出；go generate ./... 后无未提交差异；go vet ./...；go test -race ./...；go build ./...。
+完成条件：gofmt -l 对改动 Go 文件无输出；go generate ./... 且生成结果与源定义一致；go vet ./...；go test -race ./...；go build ./...。记录 V-62/V-63/V-68 的本切片证据与实际未运行项。鉴权、日志敏感值或实时级别控制出现缺陷时修复后交付；历史精度与慢订阅行为按审查者裁决闭合后再声明验收完成。
 
-不做：日志页（T-09.15）；远程日志收集与外部格式；日志文件设置的运行时修改（启动设置，§15.1）。
+不做：WebUI 日志页（goal-94/T-09.15）；远程日志收集、额外日志存储格式；日志文件设置的运行时修改；状态库日志级别表、额外调优参数和业务自动重试。
 ```
 
 ### goal-92 · T-09.13 管理页所需的会话与上传接口
 
-状态：等待前置（T-09.4、T-09.12）。T-09.1（PR #72）已合并。2026-11-04 按前后端拆分新增，内容取自原 goal-43（T-09.8）语句中的后端部分：goal-36 合并的 adminauth 只有 login 与 logout，goal-39 的安装与更新只接受本地路径，浏览器中的 WebUI 用不了。语句只写了目标、依据和要点，前置合并后由审查者按实际的 adminauth、管理服务与 spec/ADMIN-API.md 写出接口和测试段。
+状态：待派发。既定前置 T-09.4（goal-39，PR #163，合并提交 `cb8ae3d`）、T-09.12（goal-84，PR #167，合并提交 `3a9b4af`）与 T-09.1（goal-36，PR #72，合并提交 `1ba7e5b`）均已合并。本稿于 2026-11-13 按本 worktree 的 main `dbbb80b` 用 `rg` 核对签名、路由及调用者，`manage.Service.Update` 与 `sdk.AdapterHTTP` 另以离线 `go doc` 交叉核对。真实更新成功另依赖尚待接线的 T-09.6（goal-41），派发时机见起草者备注。2026-11-13 审查者裁决：本切片交付 HTTP 层（会话取回、multipart 上传、签名材料与 Core 总览）；更新请求经 HTTP 正确交到 `manage.Service.Update` 即可（此时 Candidates 仍返回现有 UNSUPPORTED，原样传播），「经 HTTP 真实更新成功」的验收由 goal-41 在接通管理动作时完成（已写入 goal-41 的测试）。三文件上传另带文本 part `public_key`（release.pub 的标准 base64）；Core 版本取 `runtime/debug.ReadBuildInfo` 中 AlonaBot module 的版本（作为主 module 取 Main，作为库取对应依赖项），读不到时为 `(devel)`；采纳草稿的 HTTP 字段。派发顺序：在 goal-66 合并后从包含它的 main 派发（两者都改 internal/core/manage 的 HTTP 层与根包 alonabot.go）。
 
-目标：补齐浏览器中的 WebUI 需要、goal-36 与 goal-39 没有提供的 Admin API：已登录时取回当前会话的 csrf_token（GET /api/auth/session）；以 multipart 上传安装包与更新包（archive、release.json、.sig 三个文件），写入临时目录后调用管理服务的 Install 与 Update；总览页显示的 Core 版本与监听地址。新接口追加到 spec/ADMIN-API.md。
+按 main 核对：
 
-依据：PLAN T-09 步骤 7（管理页）；CONTRACTS §7.3、§7.4、§7.5、§9.3；DECISIONS D-62；TEST-MATRIX V-40、V-47 的 API 分项。
+- `internal/core/adminauth/auth.go`：`New(st *state.Store, now func() time.Time, adminBaseURL *url.URL, dataDir string) *Auth`；`(*Auth).Routes(mux *http.ServeMux)` 目前登记 POST `/api/auth/login`、POST `/api/auth/logout`；`Require(next http.Handler) http.Handler` 支持 Bearer 或有效 Cookie，Cookie 变更请求校验 Origin 和 `X-Alonabot-CSRF`；`Lookup(r *http.Request) (sessionID string, expiresAt time.Time, ok bool)` 只有会话ID/期限，并会把存储错误记录为日志。新增 session 端点可在同包直接复用私有 credential/cookieSession，保留存储错误语义。
+- `internal/core/state/admin.go`：`type AdminSession struct { SessionID, CSRFToken string; AuthGeneration, ExpiresAt int64 }`（ExpiresAt 为 Unix 毫秒）；`(*Store).AdminSession(ctx context.Context, sessionID string) (AdminSession, error)`、`DeleteAdminSession(ctx context.Context, sessionID string) error` 已存在。有效 Cookie 会话须校验当前认证代次和固定8h到期时间。
+- `internal/core/manage/install.go`：`type InstallRequest struct { Archive, ReleaseJSON, Signature string; PublicKey string; Source string; Replace, Confirm bool }`；Archive 是 Core 本机路径，ReleaseJSON/Signature 是文件原文，PublicKey 是 release.pub 的标准 base64 内容；`(*Service).Install(ctx context.Context, req InstallRequest) (Package, error)`。无签名包按 D-81 仍可确认安装；有签名时解码公钥并经 `release.Verify` 验证原始清单字节。
+- `internal/core/manage/candidates.go`：`(*Service).Update(ctx context.Context, id string, req InstallRequest) error`（源码使用命名 err 返回）；`type Candidates interface { Reload(ctx context.Context, id string) error; Update(ctx context.Context, id, staged string) error; Rollback(ctx context.Context, id, generation string) error }`。默认 unsupportedCandidates 返回 `UNSUPPORTED`。T-09.5 的 main 语句已明确：goal-40 只交付 Prepare/Abort，计划把内部 Candidates.Update 改为完整 Candidate；生产管理动作接线由 goal-41 在 Commit 可用后完成。上传层只调用公开 Service.Update，其签名保持当前约定。
+- `internal/core/manage/http.go`：`(*Service).Handler(auth *adminauth.Auth) http.Handler`，已有 POST `/api/v1/packages/install` 与 POST `/api/v1/packages/update`；JSON InstallRequest 使用 Go 导出名，update 外层为 `id`/`confirm`/`install`。私有 respond 统一成功结果、`ErrNeedsConfirm{Affected []string}` 的409和 `code/safe_message` 错误。认证错误沿用英文纯文本。
+- `internal/core/manage/static.go`：`const AdminAPIMajor uint32 = 1`；`(*Service).WebUI() http.Handler`。`service.go` 的 Options 包含 `Packages string`、`Limits packages.Limits`、`Settings *settings.File`；`install.go` 的 prepare 使用 Packages 父目录下 staging 及相同预检。`internal/core/packages/preflight.go`：`Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error)`、`(*Candidate).MoveTo(packagesRoot string) (string, error)`、`Discard() error`，保留完整验签、身份、解压和来源检查。
+- 根包 `alonabot.go` 的 `Start(ctx context.Context, opts ...Option) (*Core, error)` 创建真实管理服务和 Listener；`Listen(addr string) Option` 为启动覆盖，实际监听地址来自 `listener.Addr().String()` 并写入 `c.http.Addr`。目前未发现框架自身的版本常量/版本读取入口；`manage.AdminAPIMajor` 表示 Admin API 版本，Core 版本来源须另行确定。
+- 根包 `webui_test.go` 已通过真实 Start、管理服务、临时组件包与 Listener 验证 WebUI；`cmd/alonabot/manage_e2e_test.go` 已有带签名归档和真实 CLI/API 的辅助设施。SDK 构造测试组件时使用 `sdk.NewPlugin()`、`sdk.UseGenerated(p, generated)`、`func New() *sdk.Plugin`；命令回复类型用 message.Content。若复用 Adapter HTTP 夹具，实际签名为 `HTTP(route func(method, path string) *sdk.RouteBuilder)`，通过 `route(...).HandleFunc(...)` 注册；私有路由沿用管理认证。
+- 旧「在途」列表中的 #165（goal-55，`330164f`）、#167（goal-84，`3a9b4af`）、#168（goal-81，`37b0ada`）、#169（goal-127，`4dc4bcd`）与 goal-59（#170，`eca6310`）均已合并；#169 的 schema.sql 与 manage 清理对象已在基线。按用户提供的在途信息，goal-40 与本切片重叠 `manage/service.go`/`candidates.go` 和根包装配，#171（goal-69）重叠根包，#172（goal-57）重叠根包测试装配。本切片保持 Service.Update 的调用，保留 goal-40/41 的内部交接；与后继管理 API 切片共改 `manage/http.go`、`spec/ADMIN-API.md` 时按端点归属合并。
 
-要点：
-- GET /api/auth/session 只在已登录时可用，返回当前会话的 csrf_token 与过期时间；不签发新会话，不返回管理 token。
-- 上传端点经 adminauth.Require 与 CSRF 检查；预检、确认（409 与 affected）与错误格式和 goal-39 的 JSON 端点一致；临时文件在调用结束后删除，失败时不留残余。
-- Core 版本与监听地址不含任何 secret；Admin API 主版本沿用 goal-84 的常量。
-- 提交的集成测试经真实 Core 覆盖：未登录取会话返回 401；登录后取回的 csrf_token 可用于修改请求；multipart 安装与更新成功；缺少文件或签名错误时拒绝，已有组件不受影响，临时目录为空。
+```text
+/goal 使用 $alonabot-execute 推进 goal-92（切片 T-09.13：管理页所需的会话与上传接口）。goal 目录 goal-92，分支 goal-92，worktree .worktrees/goal-92，从最新 origin/main 创建（包含 PR #72、#163、#167）。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：WebUI 刷新后可取回当前已登录会话的 csrf_token 与到期时刻；浏览器可上传安装/更新包，复用同一管理服务的预检、确认与安装/更新流程；总览可读取真实 Core 版本和实际监听地址。全部新增接口与现有 JSON 入口一起登记在 spec/ADMIN-API.md。
+
+依据：spec/PLAN.md §3.1；spec/plan/core.md T-09 步骤 1、3、7 的管理页后端部分（T-09.13）及「对应 V 验收与停止条件」；spec/CONTRACTS-v0.1.md §7.3、§7.4、§7.5、§9.1～§9.3 的安装预检/来源/确认、§15.1 的监听与启动覆盖；spec/MESSAGE-MODEL.md §1 的可信 Actor/权限与 HTTP 管理身份的现行约定；spec/WIRE-FORMAT.md §3.3 的统一 HTTP Listener（仅在复用测试 Adapter 时涉及，管理上传沿用 HTTP JSON/multipart）；spec/adr/DECISIONS.md D-62、D-81、D-82、D-84、D-86；spec/TEST-MATRIX.md V-40、V-47 的 API 分项；spec/ADMIN-API.md §1～§3、§5。
+
+范围（只新增或修改这些）：
+- internal/core/adminauth/auth.go：Routes 新增 GET /api/auth/session；可新增 session.go 放私有 handler。复用现有会话模型/校验，保留 New/Require/Lookup 等签名。
+- internal/core/manage/http.go：install/update 根据 Content-Type 分派到既有 JSON 或新增 multipart 解码；service.go 的 Options 只追加总览所需的运行信息注入；新增 upload.go、info_api.go。
+- 根包 alonabot.go：向管理服务提供 Core 构建版本与实际监听地址；可新增 version.go 放私有版本读取。根包外部 Option、Start 与 Core 的现有公开签名保持现状。
+- spec/ADMIN-API.md：追加会话、multipart 与总览接口，明确大小写、认证、可选签名、公钥、确认、清理及真实更新依赖。本切片获授权修改该文件。
+- 根包新增 admin_upload_test.go（unix）：一个真实 Core 的会话/上传集成；webui_test.go 等已有测试仅复用辅助函数，若需要改动只同步装配参数，断言保留。
+- 上述包 *_local_test.go：本地自测；临时组件工程在 t.TempDir()，沿用已有测试二进制/包生成装配。
+
+允许的新跨模块边：无。管理端复用 adminauth、packages、settings 与现有服务；根包装配提供运行信息；SDK 测试组件通过既有公共 API。标准库 mime/multipart、os、runtime/debug 足够。
+
+接口（照此实现；HTTP 字段为本稿候选，派发前由审查者采纳；内部辅助函数自定）：
+1. GET /api/auth/session：仅有效管理 Cookie 会话可用，成功200、application/json：
+   {"csrf_token":"当前会话原有值","expires_at_unix_ms":1790000000000}
+   expiry 是已保存期限；沿用当前认证代次/到期校验及错误格式。只带 Bearer 且没有有效管理 Cookie 返回401。Cookie 无效/过期/已登出/旧认证代次返回401；存储错误为500并记录真实错误，凭证未初始化沿用503。成功响应 Cache-Control: no-store。
+   通过 Auth.Routes 登记，复用该包的私有 credential/cookieSession，完整取得 CSRFToken。此功能无需新增公开认证函数、状态字段或协议消息。
+2. 原有 POST /api/v1/packages/install、POST /api/v1/packages/update 增加 multipart/form-data 支持；application/json 保持原请求、字段大小写、成功与错误语义。
+   multipart 文件 part：
+   - archive：归档字节；文件名通常为 <id>-<version>-<platform>.tar.gz。
+   - release：release.json 原始字节。
+   - signature：release.json.sig 原始字节；已签名上传提供该 part。
+   multipart 文本 part：
+   - public_key：release.pub 的标准 base64 内容，映射 InstallRequest.PublicKey；签名路径须具备可验证的公钥。
+   - confirm：可选 true/false，省略 false。
+   - replace：install 可选 true/false，省略 false，映射 InstallRequest.Replace。
+   - id：update 必填的已安装组件 ID；其 confirm 映射 InstallRequest.Confirm。
+   archive/release 必填且各一份；signature 对无签名包可缺省，有签名的完整路径仍为三文件。未知/重复 part、必需 part 缺失、错误布尔值、截断 multipart 返回400/INVALID_ARGUMENT。已签名但公钥缺失/错误等验签失败交由既有服务返回403/PERMISSION_DENIED。
+   multipart 固定为本地上传候选；ReleaseJSON/Signature 保留精确字节转 string，Archive 指向服务器为本请求创建的临时文件；Source 留空，来源从清单与既有绑定校验。用户文件名只作展示，服务器自行选择临时路径。
+   install 成功200、Package（沿用导出字段）；update 成功200、{}。确认409：{"affected":[...]}；客户端展示后重新上传同一组文件并置 confirm=true；已有 JSON 客户端原样使用 Confirm 或外层 confirm。
+3. GET /api/v1/core：经现有 auth.Require，成功200、application/json：
+   {"version":"<Core构建版本>","listen":"127.0.0.1:7650","admin_api_major":1}
+   manage.Options 追加 CoreInfo func() (version, listen string)，在请求时取同一 Core 的只读运行信息；admin_api_major 使用现有 manage.AdminAPIMajor。version 的来源按起草者备注由审查者确认；listen 为 listener.Addr().String() 的实际值，含启动覆盖与端口0分配结果。
+4. 保持 internal/core/manage（package manage）的现有 Go 调用：
+   func (s *Service) Install(ctx context.Context, req InstallRequest) (result Package, err error)
+   func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (err error)
+   func (s *Service) Handler(auth *adminauth.Auth) http.Handler
+   上传层只构造现有 InstallRequest，候选编排继续由管理服务所有者实现。无新增 proto/SDK 公开声明。
+
+行为：
+- 会话取回只读取当前 Cookie 对应的原 CSRF 与固定期限；请求成功后会话ID、CSRF、过期时刻、认证代次及 Cookie 都保持原值。返回字段只含 CSRF 与期限；使用原 csrf_token 和同源 Origin 可完成既有 Cookie 变更请求。
+- 上传解码在现有 auth.Require 之后执行，Cookie 修改请求先验 Origin/CSRF，Bearer 沿用现有规则。所有文件字节经统一管理服务完成 release、签名、归档、manifest、来源、身份、平台与依赖检查；确认与预检全部发生在停止、卸载或修改原组件之前。
+- 使用标准库流式 multipart 读取，避免把整个归档读入内存。临时目录位于现有 data_dir/staging 下，权限0700，临时文件0600；文件名由服务端生成。archive 大小沿用 packages.Limits.MaxArchiveBytes，解压和条目上限交由既有 Preflight。新增解析仅施加契约已有的限制。
+- 临时目录生命周期覆盖整个 Install/Update 调用。成功、400/403/409、候选操作失败、客户端中断和文件写入失败均清理该请求目录；关闭文件与清理的实际错误保留在管理错误/日志中。JSON 上传确认重发规则与现有服务一致；处理结束后归档源可删除，已安装的不可变目录和由 Journal 接管的资源由各自所有者管理。
+- 有签名时对 release.json 原文验签；错误签名、公钥与来源绑定按服务原码失败。无签名包继续走 D-81 的显式确认与其他完整预检，文档分开说明两条路径。更新继续检查已绑定来源、组件身份、公钥、pin 和依赖影响。
+- GET /api/v1/core 经管理认证；返回实际运行元数据，字段中省略配置、token、secret、DSN、安装路径等无关信息。Admin API 主版本保持1；WebUI 静态入口与既有登录/管理分流保持现状。
+- multipart Update 与 JSON Update 进入同一个 manage.Service.Update；当前 Candidates 返回的 UNSUPPORTED 原样传播（HTTP 501）。经 HTTP 真实更新成功的验收由 goal-41 完成。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：根包 admin_upload_test.go 的一个 TestAdminSessionAndUploads（//go:build unix）。经真实 Start、公开 Listener、SQLite、签名组件包和文件系统：未登录 session 返回401；登录后取回的 CSRF 与原值/到期值一致且未续期，并能完成 Cookie 变更请求；带 Cookie/CSRF 上传安装包，遇首次信任409后重发确认成功，GET packages 返回真实安装；上传同一来源的新版本时预检与确认照常执行，更新请求返回现有的 UNSUPPORTED（501）且旧组件状态与数据保持；缺少必需文件或错误签名时拒绝且旧组件状态/数据保持，所有分支检查本请求上传临时目录已清理；GET core 的监听地址为实际分配地址。理由：同一集成守住浏览器凭证、文件暂存、管理预检/确认与真实更新的交接。根包复用已有包生成辅助函数；新增 SDK/测试插件源仅放 t.TempDir()，按 D-86 保持 sdk/、supervisor/ 与 testdata 的现有测试范围。
+- 本地自测（*_local_test.go，PR 中记录结果）：只有 Bearer 的 session、过期/登出/reset 代次、状态库故障；GET session 无 Set-Cookie/no-store；缺 CSRF/错误Origin在读取上传前拒绝；part 任意顺序、重复/未知part、缺 archive/release、unsigned确认路径、signed缺公钥/坏公钥、保留清单字节；边界大小沿用既有上限、请求中断/写入失败/清理失败；有害上传文件名；409 后重传；现有 JSON install/update 行为；缺少正式候选接线时完整返回501；总览的启动覆盖/端口0、版本值、未认证拒绝和响应字段检查。
+
+完成条件：gofmt -l 对改动 Go 文件无输出；go vet ./...；go test -race ./...；go build ./...。ADMIN-API 字段与实际 HTTP 响应一致；V-40/V-47 的 API 证据写明命令、真实 Core/组件进程、平台与结果。会话/CSRF、验签/来源、旧组件保护、临时文件清理成立，成立后完成本 goal。
+
+不做：WebUI 登录与上传页面（T-09.8）；候选 Journal/Commit/恢复实现（T-09.5～T-09.7）；管理 API 中配置、工具策略或 Agent 会话的列出/清除（T-09.14）；插件页面桥、额外认证体系、上传文件持久缓存及新增公开 SDK 权限 API。
+```
 
 ## 第 14 波
 
@@ -6654,7 +6826,7 @@ internal/core/journal
 
 测试（按编码规范「测试提交规则」）：
 - 提交：无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：CommitCandidate 的每个前置条件；事务中没有文件与 RPC 操作（代码审查加测试钩子）；Degraded 状态下 Scheduler 不触发；internal/core/supervisor/commit_local_test.go（//go:build unix）：reload 成功：Active 改为新代次，COMMITTED 存在，Journal 为 committed；ACTIVATED 之前发送的消息没有派发给候选（候选的事件路由调用计数为 0，消息被旧版处理或因冻结被丢弃并计数），之后由新代次处理；提交前把 Active 改成别的值（模拟并发）：CommitCandidate 失败，候选被 Abort，旧版恢复；提交后 OnReady 失败：Active 仍为新代次，插件 Degraded，没有启动旧代次；HTTP 返回 503；提交后旧代次的按钮点击不调用插件。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：CommitCandidate 的每个前置条件；事务中没有文件与 RPC 操作（代码审查加测试钩子）；Degraded 状态下 Scheduler 不触发；internal/core/supervisor/commit_local_test.go（//go:build unix）：reload 成功：Active 改为新代次，COMMITTED 存在，Journal 为 committed；ACTIVATED 之前发送的消息没有派发给候选（候选的事件路由调用计数为 0，消息被旧版处理或因冻结被丢弃并计数），之后由新代次处理；提交前把 Active 改成别的值（模拟并发）：CommitCandidate 失败，候选被 Abort，旧版恢复；提交后 OnReady 失败：Active 仍为新代次，插件 Degraded，没有启动旧代次；HTTP 返回 503；提交后旧代次的按钮点击不调用插件。另经管理 HTTP（goal-92 的 multipart 上传与现有 JSON 入口）上传同一来源的新版本，以新 Active、版本与运行结果证明更新成功。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/...；go build ./...。
 

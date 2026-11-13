@@ -35,6 +35,7 @@ const (
 	RouteKind_ROUTE_KIND_SCHEDULE         RouteKind = 5
 	RouteKind_ROUTE_KIND_HTTP             RouteKind = 6
 	RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION RouteKind = 7
+	RouteKind_ROUTE_KIND_TASK             RouteKind = 8
 )
 
 // Enum value maps for RouteKind.
@@ -48,6 +49,7 @@ var (
 		5: "ROUTE_KIND_SCHEDULE",
 		6: "ROUTE_KIND_HTTP",
 		7: "ROUTE_KIND_BUS_SUBSCRIPTION",
+		8: "ROUTE_KIND_TASK",
 	}
 	RouteKind_value = map[string]int32{
 		"ROUTE_KIND_UNSPECIFIED":      0,
@@ -58,6 +60,7 @@ var (
 		"ROUTE_KIND_SCHEDULE":         5,
 		"ROUTE_KIND_HTTP":             6,
 		"ROUTE_KIND_BUS_SUBSCRIPTION": 7,
+		"ROUTE_KIND_TASK":             8,
 	}
 )
 
@@ -706,6 +709,7 @@ type RouteDescriptor struct {
 	//	*RouteDescriptor_Schedule
 	//	*RouteDescriptor_Http
 	//	*RouteDescriptor_BusSubscription
+	//	*RouteDescriptor_Task
 	Spec isRouteDescriptor_Spec `protobuf_oneof:"spec"`
 	// 触发者满足其中任一权限即可；空集合不要求 Actor。
 	RequiredPermissions []string `protobuf:"bytes,17,rep,name=required_permissions,json=requiredPermissions,proto3" json:"required_permissions,omitempty"`
@@ -869,6 +873,15 @@ func (x *RouteDescriptor) GetBusSubscription() *BusSubscriptionSpec {
 	return nil
 }
 
+func (x *RouteDescriptor) GetTask() *TaskSpec {
+	if x != nil {
+		if x, ok := x.Spec.(*RouteDescriptor_Task); ok {
+			return x.Task
+		}
+	}
+	return nil
+}
+
 func (x *RouteDescriptor) GetRequiredPermissions() []string {
 	if x != nil {
 		return x.RequiredPermissions
@@ -915,6 +928,11 @@ type RouteDescriptor_BusSubscription struct {
 	BusSubscription *BusSubscriptionSpec `protobuf:"bytes,16,opt,name=bus_subscription,json=busSubscription,proto3,oneof"`
 }
 
+type RouteDescriptor_Task struct {
+	// TASK。
+	Task *TaskSpec `protobuf:"bytes,18,opt,name=task,proto3,oneof"`
+}
+
 func (*RouteDescriptor_Command) isRouteDescriptor_Spec() {}
 
 func (*RouteDescriptor_Event) isRouteDescriptor_Spec() {}
@@ -928,6 +946,8 @@ func (*RouteDescriptor_Schedule) isRouteDescriptor_Spec() {}
 func (*RouteDescriptor_Http) isRouteDescriptor_Spec() {}
 
 func (*RouteDescriptor_BusSubscription) isRouteDescriptor_Spec() {}
+
+func (*RouteDescriptor_Task) isRouteDescriptor_Spec() {}
 
 // RuleDescriptor 描述路由的匹配条件：Core 可表达的条件先执行，自定义 Go Rule 在同一 Handler REQUEST 内由 SDK 执行。
 type RuleDescriptor struct {
@@ -1736,6 +1756,52 @@ func (x *BusSubscriptionSpec) GetCallbackRouteId() string {
 	return ""
 }
 
+// TaskSpec 声明动态任务的处理函数；实例规则由 Core 保存。
+type TaskSpec struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 稳定的任务名。
+	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TaskSpec) Reset() {
+	*x = TaskSpec{}
+	mi := &file_alonabot_v1_route_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TaskSpec) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TaskSpec) ProtoMessage() {}
+
+func (x *TaskSpec) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_route_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TaskSpec.ProtoReflect.Descriptor instead.
+func (*TaskSpec) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_route_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *TaskSpec) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 var File_alonabot_v1_route_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_route_proto_rawDesc = "" +
@@ -1752,7 +1818,7 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x0eMigrationState\x12.\n" +
 	"\x04mode\x18\x01 \x01(\x0e2\x1a.alonabot.v1.MigrationModeR\x04mode\x126\n" +
 	"\x17completed_migration_ids\x18\x02 \x03(\rR\x15completedMigrationIds\x124\n" +
-	"\x16self_migrate_completed\x18\x03 \x01(\bR\x14selfMigrateCompleted\"\xae\x06\n" +
+	"\x16self_migrate_completed\x18\x03 \x01(\bR\x14selfMigrateCompleted\"\xdb\x06\n" +
 	"\x0fRouteDescriptor\x12\x19\n" +
 	"\broute_id\x18\x01 \x01(\tR\arouteId\x12*\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x16.alonabot.v1.RouteKindR\x04kind\x12\x1a\n" +
@@ -1769,7 +1835,8 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\aservice\x18\r \x01(\v2\x18.alonabot.v1.ServiceSpecH\x00R\aservice\x127\n" +
 	"\bschedule\x18\x0e \x01(\v2\x19.alonabot.v1.ScheduleSpecH\x00R\bschedule\x120\n" +
 	"\x04http\x18\x0f \x01(\v2\x1a.alonabot.v1.HttpRouteSpecH\x00R\x04http\x12M\n" +
-	"\x10bus_subscription\x18\x10 \x01(\v2 .alonabot.v1.BusSubscriptionSpecH\x00R\x0fbusSubscription\x121\n" +
+	"\x10bus_subscription\x18\x10 \x01(\v2 .alonabot.v1.BusSubscriptionSpecH\x00R\x0fbusSubscription\x12+\n" +
+	"\x04task\x18\x12 \x01(\v2\x15.alonabot.v1.TaskSpecH\x00R\x04task\x121\n" +
 	"\x14required_permissions\x18\x11 \x03(\tR\x13requiredPermissionsB\x06\n" +
 	"\x04specJ\x04\b\x05\x10\x06R\x13required_permission\"R\n" +
 	"\x0eRuleDescriptor\x12&\n" +
@@ -1835,7 +1902,9 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"event_name\x18\x01 \x01(\tR\teventName\x12\x1b\n" +
 	"\tschema_id\x18\x02 \x01(\tR\bschemaId\x12%\n" +
 	"\x0eschema_version\x18\x03 \x01(\rR\rschemaVersion\x12*\n" +
-	"\x11callback_route_id\x18\x04 \x01(\tR\x0fcallbackRouteId*\xd1\x01\n" +
+	"\x11callback_route_id\x18\x04 \x01(\tR\x0fcallbackRouteId\"\x1e\n" +
+	"\bTaskSpec\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name*\xe6\x01\n" +
 	"\tRouteKind\x12\x1a\n" +
 	"\x16ROUTE_KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12ROUTE_KIND_COMMAND\x10\x01\x12\x14\n" +
@@ -1844,7 +1913,8 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x12ROUTE_KIND_SERVICE\x10\x04\x12\x17\n" +
 	"\x13ROUTE_KIND_SCHEDULE\x10\x05\x12\x13\n" +
 	"\x0fROUTE_KIND_HTTP\x10\x06\x12\x1f\n" +
-	"\x1bROUTE_KIND_BUS_SUBSCRIPTION\x10\a*a\n" +
+	"\x1bROUTE_KIND_BUS_SUBSCRIPTION\x10\a\x12\x13\n" +
+	"\x0fROUTE_KIND_TASK\x10\b*a\n" +
 	"\vHandlerMode\x12\x1c\n" +
 	"\x18HANDLER_MODE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17HANDLER_MODE_AUTO_REPLY\x10\x01\x12\x17\n" +
@@ -1903,7 +1973,7 @@ func file_alonabot_v1_route_proto_rawDescGZIP() []byte {
 }
 
 var file_alonabot_v1_route_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_alonabot_v1_route_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_alonabot_v1_route_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_alonabot_v1_route_proto_goTypes = []any{
 	(RouteKind)(0),              // 0: alonabot.v1.RouteKind
 	(HandlerMode)(0),            // 1: alonabot.v1.HandlerMode
@@ -1926,18 +1996,19 @@ var file_alonabot_v1_route_proto_goTypes = []any{
 	(*ScheduleSpec)(nil),        // 18: alonabot.v1.ScheduleSpec
 	(*HttpRouteSpec)(nil),       // 19: alonabot.v1.HttpRouteSpec
 	(*BusSubscriptionSpec)(nil), // 20: alonabot.v1.BusSubscriptionSpec
-	(*HttpListener)(nil),        // 21: alonabot.v1.HttpListener
-	(*AdapterDescriptor)(nil),   // 22: alonabot.v1.AdapterDescriptor
-	(MigrationMode)(0),          // 23: alonabot.v1.MigrationMode
-	(PayloadEncoding)(0),        // 24: alonabot.v1.PayloadEncoding
-	(*ToolSpec)(nil),            // 25: alonabot.v1.ToolSpec
+	(*TaskSpec)(nil),            // 21: alonabot.v1.TaskSpec
+	(*HttpListener)(nil),        // 22: alonabot.v1.HttpListener
+	(*AdapterDescriptor)(nil),   // 23: alonabot.v1.AdapterDescriptor
+	(MigrationMode)(0),          // 24: alonabot.v1.MigrationMode
+	(PayloadEncoding)(0),        // 25: alonabot.v1.PayloadEncoding
+	(*ToolSpec)(nil),            // 26: alonabot.v1.ToolSpec
 }
 var file_alonabot_v1_route_proto_depIdxs = []int32{
 	10, // 0: alonabot.v1.Register.routes:type_name -> alonabot.v1.RouteDescriptor
-	21, // 1: alonabot.v1.Register.http_listener:type_name -> alonabot.v1.HttpListener
+	22, // 1: alonabot.v1.Register.http_listener:type_name -> alonabot.v1.HttpListener
 	9,  // 2: alonabot.v1.Register.migration:type_name -> alonabot.v1.MigrationState
-	22, // 3: alonabot.v1.Register.adapter:type_name -> alonabot.v1.AdapterDescriptor
-	23, // 4: alonabot.v1.MigrationState.mode:type_name -> alonabot.v1.MigrationMode
+	23, // 3: alonabot.v1.Register.adapter:type_name -> alonabot.v1.AdapterDescriptor
+	24, // 4: alonabot.v1.MigrationState.mode:type_name -> alonabot.v1.MigrationMode
 	0,  // 5: alonabot.v1.RouteDescriptor.kind:type_name -> alonabot.v1.RouteKind
 	12, // 6: alonabot.v1.RouteDescriptor.command:type_name -> alonabot.v1.CommandSpec
 	15, // 7: alonabot.v1.RouteDescriptor.event:type_name -> alonabot.v1.EventSpec
@@ -1946,25 +2017,26 @@ var file_alonabot_v1_route_proto_depIdxs = []int32{
 	18, // 10: alonabot.v1.RouteDescriptor.schedule:type_name -> alonabot.v1.ScheduleSpec
 	19, // 11: alonabot.v1.RouteDescriptor.http:type_name -> alonabot.v1.HttpRouteSpec
 	20, // 12: alonabot.v1.RouteDescriptor.bus_subscription:type_name -> alonabot.v1.BusSubscriptionSpec
-	2,  // 13: alonabot.v1.CommandSpec.match:type_name -> alonabot.v1.CommandMatch
-	13, // 14: alonabot.v1.CommandSpec.aliases:type_name -> alonabot.v1.CommandAlias
-	14, // 15: alonabot.v1.CommandSpec.params:type_name -> alonabot.v1.CommandParam
-	1,  // 16: alonabot.v1.CommandSpec.handler_mode:type_name -> alonabot.v1.HandlerMode
-	11, // 17: alonabot.v1.CommandSpec.rule:type_name -> alonabot.v1.RuleDescriptor
-	3,  // 18: alonabot.v1.CommandSpec.usage_mode:type_name -> alonabot.v1.UsageMode
-	4,  // 19: alonabot.v1.CommandParam.type:type_name -> alonabot.v1.ParamType
-	1,  // 20: alonabot.v1.EventSpec.handler_mode:type_name -> alonabot.v1.HandlerMode
-	11, // 21: alonabot.v1.EventSpec.rule:type_name -> alonabot.v1.RuleDescriptor
-	5,  // 22: alonabot.v1.HookSpec.phase:type_name -> alonabot.v1.HookPhase
-	6,  // 23: alonabot.v1.ServiceSpec.access:type_name -> alonabot.v1.ServiceAccess
-	24, // 24: alonabot.v1.ServiceSpec.encoding:type_name -> alonabot.v1.PayloadEncoding
-	25, // 25: alonabot.v1.ServiceSpec.tool:type_name -> alonabot.v1.ToolSpec
-	7,  // 26: alonabot.v1.HttpRouteSpec.auth_mode:type_name -> alonabot.v1.HttpAuthMode
-	27, // [27:27] is the sub-list for method output_type
-	27, // [27:27] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	21, // 13: alonabot.v1.RouteDescriptor.task:type_name -> alonabot.v1.TaskSpec
+	2,  // 14: alonabot.v1.CommandSpec.match:type_name -> alonabot.v1.CommandMatch
+	13, // 15: alonabot.v1.CommandSpec.aliases:type_name -> alonabot.v1.CommandAlias
+	14, // 16: alonabot.v1.CommandSpec.params:type_name -> alonabot.v1.CommandParam
+	1,  // 17: alonabot.v1.CommandSpec.handler_mode:type_name -> alonabot.v1.HandlerMode
+	11, // 18: alonabot.v1.CommandSpec.rule:type_name -> alonabot.v1.RuleDescriptor
+	3,  // 19: alonabot.v1.CommandSpec.usage_mode:type_name -> alonabot.v1.UsageMode
+	4,  // 20: alonabot.v1.CommandParam.type:type_name -> alonabot.v1.ParamType
+	1,  // 21: alonabot.v1.EventSpec.handler_mode:type_name -> alonabot.v1.HandlerMode
+	11, // 22: alonabot.v1.EventSpec.rule:type_name -> alonabot.v1.RuleDescriptor
+	5,  // 23: alonabot.v1.HookSpec.phase:type_name -> alonabot.v1.HookPhase
+	6,  // 24: alonabot.v1.ServiceSpec.access:type_name -> alonabot.v1.ServiceAccess
+	25, // 25: alonabot.v1.ServiceSpec.encoding:type_name -> alonabot.v1.PayloadEncoding
+	26, // 26: alonabot.v1.ServiceSpec.tool:type_name -> alonabot.v1.ToolSpec
+	7,  // 27: alonabot.v1.HttpRouteSpec.auth_mode:type_name -> alonabot.v1.HttpAuthMode
+	28, // [28:28] is the sub-list for method output_type
+	28, // [28:28] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_route_proto_init() }
@@ -1984,6 +2056,7 @@ func file_alonabot_v1_route_proto_init() {
 		(*RouteDescriptor_Schedule)(nil),
 		(*RouteDescriptor_Http)(nil),
 		(*RouteDescriptor_BusSubscription)(nil),
+		(*RouteDescriptor_Task)(nil),
 	}
 	file_alonabot_v1_route_proto_msgTypes[4].OneofWrappers = []any{}
 	file_alonabot_v1_route_proto_msgTypes[6].OneofWrappers = []any{}
@@ -1997,7 +2070,7 @@ func file_alonabot_v1_route_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_route_proto_rawDesc), len(file_alonabot_v1_route_proto_rawDesc)),
 			NumEnums:      8,
-			NumMessages:   13,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

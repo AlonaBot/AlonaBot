@@ -119,7 +119,7 @@ ACCEPTED 只表示平台 API 确认接受，不保证用户阅读。跨多条平
 
 SDK 的 `func (c *Context) Stream(next func(context.Context) (string, error)) ([]*message.SendResult, error)` 接收文本增量（D-98、D-135）：next 以 c.Context() 调用，返回的文本先处理，io.EOF 表示正常结束，其他错误或 Context 取消立即停止并保留已有结果。空增量不发请求；整个输入为空时不发消息。目标固定为当前事件的完整 Target（含实例与话题）；没有当前事件目标时返回 NO_DEFAULT_TARGET。
 
-目标实例声明了 `message.edit` 时先发送，再把累积文本节流编辑到当前消息；同一 SDK Session 内，同一完整 Target 的所有 Stream 共用编辑节流，两次实际 Edit 发起至少间隔 1 秒。结束时刷新尚未显示的文本，仍遵守间隔。`message.send` Capability 的可选 `text_limit{max, unit}` 指定单条文本上限，unit 为 UTF-16 码元、Unicode 码点或 UTF-8 字节（CONTRACTS §8，D-135）；SDK 在 Unicode 码点边界按单位计量，达到上限后以新消息继续，单个码点已超限时返回 INVALID_ARGUMENT。未声明上限时不自动换条。没有 `message.edit` 时缓冲到正常结束后调用 Send 一次。官方 Telegram Adapter 声明 `maxTextUTF16`（4096）与 UTF-16 码元单位；插件无需选择平台规则。所需能力字段由 T-03.18 追加，不新增流式 Core 服务。
+目标实例声明了 `message.edit` 时先发送，再把累积文本节流编辑到当前消息；同一 SDK Session 内，同一完整 Target 的所有 Stream 共用编辑节流，两次实际 Edit 发起至少间隔 1 秒。结束时刷新尚未显示的文本，仍遵守间隔。`message.send` Capability 的可选 `text_limit{max, unit}` 指定单条文本上限，unit 为 UTF-16 码元、Unicode 码点或 UTF-8 字节（CONTRACTS §8，D-135）；SDK 在 Unicode 码点边界按单位计量，达到上限后以新消息继续，单个码点已超限时返回 INVALID_ARGUMENT。未声明上限时不自动换条。没有 `message.edit` 时缓冲到正常结束，再按同一上限在码点边界依次 Send；未声明上限时 Send 一次。官方 Telegram Adapter 声明 `maxTextUTF16`（4096）与 UTF-16 码元单位；插件无需选择平台规则。所需能力字段由 T-03.18 追加，不新增流式 Core 服务。
 
 每次发送与编辑经现有 Send/Edit 执行出站 Hook；返回列表按请求顺序保留全部 Send 与 Edit 的完整回执，同一消息的多次 Edit 回执也各自保留。任一请求失败立即停止，连同该次可用回执返回错误，不重试。已接受却没有可编辑 ID 的 Send 保留原回执；后续需要 Edit 时返回 FAILED_PRECONDITION，不补发。只有一个平台具备的输入状态、表情回应与草稿是该 Adapter 的平台动作（§6.5）。
 

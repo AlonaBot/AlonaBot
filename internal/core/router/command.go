@@ -61,6 +61,7 @@ func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 	head := commandHead(ev.GetEventPayload().GetMessageCreated().GetChain(), ev.GetAccountId())
 	if tokens, prefix := r.commandTokens(head, ev); len(tokens) != 0 {
 		if entry, consumed, ok := index.Lookup(tokens); ok {
+			event.commandConsumed = true
 			for _, route := range routes {
 				if route.pluginID != entry.PluginID || route.route.GetRouteId() != entry.RouteID {
 					continue
@@ -277,6 +278,7 @@ func (r *Router) invokeCommand(c candidate, ev *pb.Event, event *trustedEvent, b
 		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn("decode command handler outcome failed", "error", err)
 		return false
 	}
+	event.commandConsumed = event.commandConsumed || outcome.GetMatched()
 	if callError == nil && response.Err == nil && outcome.GetMatched() && c.route.GetCommand().GetHandlerMode() == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY && len(outcome.GetChain().GetSegments()) != 0 {
 		r.sendReply(c, ev, outcome.Chain, trace)
 	}
