@@ -144,11 +144,11 @@ SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 contex
 - job 的调用结果与实际执行结束分开：deadline 到达先返回 DEADLINE_EXCEEDED/Cancel，但 Scheduler 仍保留 running 槽与原调用键；SDK 等用户 callback 实际返回后才发唯一 Response。迟到 Response 只释放任务槽，不恢复业务成功；未收到结束响应时直到确认旧进程退出才释放。仅 RPC 断链不能证明 goroutine 已停止。下一轮只运行未来 tick，不补跑跳过项。
 - **动态任务（D-124）。** 插件在注册描述中声明任务名（路由 ID 为 `task.` 加任务名，kind 为 task），运行时经 Core 固定服务增删任务实例：
   - `core.task.set` 创建或替换实例：任务名、key、触发规则（at、interval 或 cron 加可选的 timezone，三者恰有一个）与参数。key 为 1～128 字节的 UTF-8 字符串，在同一插件的同一任务名下唯一，已存在时整体替换并重新计算触发时刻。参数是 JSON 对象，至多 `TASK_PAYLOAD_BYTES`，Core 只校验它是合法的 JSON 对象。任务名未在本 Session 注册返回 NOT_FOUND；触发规则不合法、at 不晚于当前时间、参数超限返回 INVALID_ARGUMENT；该插件的实例数达到 `TASKS_PER_PLUGIN` 且 key 不存在时返回 RESOURCE_EXHAUSTED。interval 与 cron 的规则同上，interval 的起点是创建（或替换）时刻。
-  - `core.task.cancel` 按任务名与 key 删除实例，不存在返回 NOT_FOUND；实例正在执行时同时取消这一轮调用（协作式，§1.2），运行槽照上一条的规则释放。`core.task.list` 按任务名返回实例的 key、触发规则、参数与下一次触发时刻，受帧上限约束时分页。
+  - `core.task.cancel` 按任务名与 key 删除实例，持久实例与在途的同一实例都不存在时返回 NOT_FOUND（一次性任务派发后、仍在执行时也可以取消）；实例正在执行时同时取消这一轮调用（协作式，§1.2），运行槽照上一条的规则释放；`core.task.set` 替换实例不取消在途的旧一轮。动态任务的 JobTimeout 从实际派发时开始计算，事件中的 scheduled_at 仍为原到期时刻。`core.task.list` 按任务名返回实例的 key、触发规则、参数与下一次触发时刻，受帧上限约束时分页。
   - 这三个服务只在 Activated 之后可用，不需要父调用链；插件只能操作自己的任务。
   - 触发与静态任务一样经 `scheduled` 的 REQUEST 执行，载荷另带任务名、key 与参数，没有 Actor。同一实例上一轮未结束时跳过本轮。同一插件同时执行的动态任务至多 `TASK_CONCURRENCY` 个，其余到期的实例按到期时间先后排队等待；排队中的周期实例到了下一个触发时刻仍未执行时，只保留一次。一次性实例在派发时删除，执行失败或超时不重试。
 - **持久化与错过的触发（D-125）。** 动态任务的定义与周期任务的起点保存在 Core 状态库，以 plugin_id 为键，Core 重启、插件重启与更新后保留，不属于插件数据库的候选与回退。到期时 Core 未运行、插件未处于 Activated 或任务被暂停的触发一律作废，不补执行：周期任务从下一个未来时刻继续；一次性实例过期即删除，记一条 WARN（plugin_id、任务名、key、原定时刻）并计数。排队等待并发名额不算错过，但插件离开 Activated 时队列清空，其中的触发按作废处理。新版本没有注册某个任务名时，该任务的实例保留但不触发，在管理诊断中标出。卸载时的去留见 §9.3。
-- **静态任务的暂停与恢复（D-126）。** `core.job.pause` 与 `core.job.resume` 按 job_id 暂停、恢复本插件的静态任务，`core.job.status` 返回是否暂停、上一次与下一次触发时刻；job_id 未注册返回 NOT_FOUND，重复暂停或恢复成功且不改变状态。暂停状态保存在 Core 状态库，跨重启与更新保持。暂停期间的触发作废，不打断正在执行的一轮；恢复后从下一个未来时刻继续，interval 的起点不变。
+- **静态任务的暂停与恢复（D-126）。** `core.job.pause` 与 `core.job.resume` 按 job_id 暂停、恢复本插件的静态任务，`core.job.status` 返回是否暂停、上一次与下一次触发时刻（上一次为本次 Core 运行中最后一次实际派发的时刻，Core 重启后缺失；暂停时没有下一次）；job_id 未注册返回 NOT_FOUND，重复暂停或恢复成功且不改变状态。暂停状态保存在 Core 状态库，跨重启与更新保持。暂停期间的触发作废，不打断正在执行的一轮；恢复后从下一个未来时刻继续，interval 的起点不变。
 
 ## 5. 配置、Schema、i18、Secrets
 

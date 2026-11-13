@@ -229,7 +229,7 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 	serviceBroker := broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth})
 	a.mux.Forward(serviceBroker.Call)
 	a.schemas = make(map[string]componentOptionSchemas)
-	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: serviceBroker, Page: v.OptionsPage, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
+	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: serviceBroker, Chats: store.Chats, Page: v.OptionsPage, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
 		installed, err := store.Installs(ctx)
 		if err != nil {
 			return nil, err
