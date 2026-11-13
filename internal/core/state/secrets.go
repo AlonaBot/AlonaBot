@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -108,6 +109,46 @@ func (s *Store) SetGenerationConfig(ctx context.Context, generationID, snapshot 
 			return err
 		}
 		// 2. 整体替换路径集合；任何一条写入失败都回滚快照与路径。
+		if err := tx.Where(&generationSecretPath{GenerationID: generationID}).Delete(&generationSecretPath{}).Error; err != nil {
+			return err
+		}
+		for _, path := range secretPaths {
+			if err := tx.Create(&generationSecretPath{GenerationID: generationID, Path: path}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// SetDevGenerationConfig 在同一事务中覆盖开发代次的配置、版本与 secret 路径，允许刷新已提交代次。
+// 仅接受 dev: 前缀且安装来源为 dev 的代次；路径写入失败时回滚全部改动。
+func (s *Store) SetDevGenerationConfig(ctx context.Context, generationID, snapshot string, configVersion uint32, secretPaths []string) error {
+	if !strings.HasPrefix(generationID, "dev:") {
+		return errors.New("generation_id must have the dev: prefix")
+	}
+	return s.tx(ctx, func(tx *gorm.DB) error {
+		// 1. 核对代次所属安装来源，保留代次身份与提交标记。
+		var row generation
+		err := tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: generationID}).Take(&row).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("generation %s: %w", generationID, ErrNotFound)
+		}
+		if err != nil {
+			return err
+		}
+		var install installation
+		if err := tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: row.PluginID}).Take(&install).Error; err != nil {
+			return err
+		}
+		if install.Source != devSource {
+			return fmt.Errorf("plugin %s has source %q, expected dev", row.PluginID, install.Source)
+		}
+		row.ConfigSnapshot, row.ConfigVersion = snapshot, configVersion
+		if err := tx.Save(&row).Error; err != nil {
+			return err
+		}
+		// 2. 整体替换路径集合，和快照、版本一起提交。
 		if err := tx.Where(&generationSecretPath{GenerationID: generationID}).Delete(&generationSecretPath{}).Error; err != nil {
 			return err
 		}

@@ -1,0 +1,12 @@
+{
+  "$version": 2,
+  "greetings": {
+    "type": "list",
+    "description": "Startup greetings",
+    "required": true,
+    "default": [{"text": "Hello"}],
+    "items": {
+      "text": {"type": "string", "description": "Greeting text", "required": true}
+    }
+  }
+}
