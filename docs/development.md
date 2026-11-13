@@ -199,3 +199,78 @@ Adapter 可以实现 `sdk.AdapterHTTP`，在统一端口的 `/plugins/<Adapter �
 [PR metadata](../.github/workflows/pr-metadata.yml) 校验非草稿 PR 的实际说明和清单；[triage](../.github/workflows/pr-triage.yml) 同步标签与 assignee，[auto-assign](../.github/workflows/auto-assign.yml) 请求非作者维护者审阅。这些 `pull_request_target` 流程不 checkout/执行 PR 代码，新工作流合入默认分支后才开始处理后续事件。Issue 表单自带 assignee，不依赖工作流执行。
 
 远端合并保护由维护者单独管理，不能因存在这些 YAML 就声称检查不可绕过。本次建设不添加发布、真实 Telegram 调用或自动关闭 PR 的流程。
+
+## 动态提醒与静态任务暂停恢复
+
+需要十分钟后给当前会话发提醒时，先在 `New()` 中登记任务声明和处理函数，命令执行时再创建实例。完整示例见 [showcase](../examples/plugins/showcase/main.go)：`/demo remind meeting 600 开会` 创建当前用户在当前会话内的 `meeting` 提醒，`/demo cancel meeting` 取消。同用户、同会话、同 key 再次创建会替换提醒；不同用户或会话各自独立，回复始终使用用户输入的 key。
+
+```go
+type ReminderArgs struct {
+    Session message.Session `json:"session"`
+    Text    string          `json:"text"`
+}
+
+// 创建与取消共用编码，将可信身份与用户 key 一起放入内部 key。
+func reminderKey(c *sdk.Context, key string) (string, error) {
+    user, session := c.User(), c.Session()
+    internalKey := fmt.Sprintf("%d:%s/%d:%s/%s", len(user), user, len(session), session, key)
+    if len(internalKey) > 128 {
+        return "", errcode.InvalidArgument.New("reminder key with user and session scope exceeds 128 bytes")
+    }
+    return internalKey, nil
+}
+
+// New 中创建并登记一次，命令闭包持有同一个声明值。
+reminder := sdk.Task[ReminderArgs]("remind")
+sdk.OnTask(p, reminder).Handle(func(c *sdk.Context, args ReminderArgs) error {
+    _, err := c.Send(message.Text(args.Text), sdk.To(args.Session))
+    return err
+})
+p.Command("remind").Handle(func(c *sdk.Context, key, text string) (message.Content, error) {
+    internalKey, err := reminderKey(c, key)
+    if err != nil {
+        return nil, err
+    }
+    _, err = reminder.At(c.Context(), time.Now().Add(10*time.Minute),
+        ReminderArgs{Session: c.Session(), Text: text}, sdk.Key(internalKey))
+    if err != nil {
+        return nil, err
+    }
+    return message.Text(key), nil
+})
+p.Command("cancel").Handle(func(c *sdk.Context, key string) error {
+    internalKey, err := reminderKey(c, key)
+    if err != nil {
+        return err
+    }
+    return reminder.Cancel(c.Context(), internalKey)
+})
+```
+
+`reminderKey` 使用 `c.User()` 与 `c.Session()` 的可信身份，以长度前缀区分完整字段。128 字节上限包含身份作用域和用户 key；超长返回明确的 `INVALID_ARGUMENT`，保留输入原文。示例需导入标准库 `fmt` 与 `sdk/errcode`。
+
+任务回调没有 Actor 与默认会话；将所需会话、用户或取消键写入参数，并以 `sdk.To` 指定发送目标。主动发送遵循 Core 的 `allowed_adapter_instances` 准入。参数类型遵循 JSON Service 的类型规则，使用包级具名、非泛型的值类型，顶层编码为 JSON 对象；生成器检查嵌套字段与自定义编码限制。新增声明后运行 `go generate`。
+
+`reminder.Every(ctx, time.Hour, args, sdk.Key(internalKey))` 创建周期实例；`reminder.Cron(ctx, "0 9 * * *", args, sdk.Key(internalKey), sdk.Timezone("Asia/Shanghai"))` 按 IANA 时区运行，其中 `internalKey` 沿用上述身份作用域编码。`At`、`Every` 上设置 `Timezone` 返回 `INVALID_ARGUMENT`。省略 `Key` 时 SDK 生成随机 key，成功返回实际使用的 key；同任务名、同 key 再次创建会整体替换规则和参数，在途旧一轮继续执行。`Cancel` 删除实例并协作取消在途调用，函数实际返回后释放运行槽。未知实例保留 Core 的 `NOT_FOUND`。
+
+`reminder.List(ctx)` 读取全部分页，返回完整的 `TaskInstance[ReminderArgs]`。`At`、`Interval`、`Cron` 中仅对应触发规则的字段有值，`Timezone` 随 Cron 返回；`NextAt == nil` 表示协议没有下一次触发时刻。任一页读取或参数解码失败都会返回错误。
+
+所有任务客户端函数在 Activated 后可用；`OnStart`、`OnReady`、停止后与已失效的 Handler Context 返回 `FAILED_PRECONDITION`。在 Handler 中传 `c.Context()` 以保留父调用关联；独立后台 context 只有组件身份。Core 保存任务定义与 interval 起点，重启后安排下一未来触发；离线、未激活与暂停期间错过的触发作废，一次性过期实例删除。
+
+静态任务继续在 `New()` 中声明，例如 `p.Every("tick", time.Minute).Handle(tick)`。在已激活的 Handler 或后台工作中暂停、恢复与查询：
+
+```go
+if err := sdk.PauseJob(ctx, "tick"); err != nil {
+    return err
+}
+state, err := sdk.JobStatus(ctx, "tick")
+if err != nil {
+    return err
+}
+if state.LastAt != nil {
+    slog.Info("last tick", "at", *state.LastAt)
+}
+return sdk.ResumeJob(ctx, "tick")
+```
+
+`JobState.LastAt` 记录本次 Core 运行最后一次实际派发，首次派发前和 Core 重启后为 `nil`；暂停时 `Paused` 为 true、`NextAt` 为 `nil`。暂停保留在途函数继续执行，恢复沿保存的 interval 起点安排未来触发。暂停状态跨重启保存，重复暂停或恢复成功，未登记的 job ID 返回 `NOT_FOUND`。

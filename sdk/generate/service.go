@@ -187,7 +187,7 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 			localFiles[s.files.Position(file.Pos()).Filename] = true
 		}
 	}
-	// 被引用的 Service 值保留类型参数，用它们匹配依赖模块声明处的 JSON 实例。
+	// 声明值保留类型参数，用它们匹配依赖模块中的 JSON 与 Task 实例。
 	var referenced []types.Type
 	for expr, value := range importer.info.Types {
 		if !value.IsValue() {
@@ -202,7 +202,7 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 			}
 		}
 		named, ok := types.Unalias(value.Type).(*types.Named)
-		if ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == sdkPath && named.Obj().Name() == "Service" {
+		if ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == sdkPath && slices.Contains([]string{"Service", "TaskType"}, named.Obj().Name()) {
 			referenced = append(referenced, named)
 		}
 	}
@@ -214,11 +214,11 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 	for _, ident := range instances {
 		object := importer.info.Uses[ident]
 		fn, ok := object.(*types.Func)
-		if !ok || fn.Pkg() == nil || fn.Pkg().Path() != sdkPath || !slices.Contains([]string{"JSON", "Proto", "BusEvent"}, fn.Name()) {
+		if !ok || fn.Pkg() == nil || fn.Pkg().Path() != sdkPath || !slices.Contains([]string{"JSON", "Proto", "BusEvent", "Task"}, fn.Name()) {
 			continue
 		}
 		if !localFiles[s.files.Position(ident.Pos()).Filename] {
-			if fn.Name() != "JSON" {
+			if fn.Name() != "JSON" && fn.Name() != "Task" {
 				continue
 			}
 			result := importer.info.Instances[ident].Type.(*types.Signature).Results().At(0).Type()
@@ -236,6 +236,14 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 			named, ok := typ.(*types.Named)
 			if !ok || named.Obj().Pkg() == nil || named.Obj().Parent() != named.Obj().Pkg().Scope() || named.TypeParams().Len() != 0 || named.TypeArgs().Len() != 0 {
 				s.diagnostic(ident.Pos(), "service type must be a package-level named non-generic type: "+typ.String())
+				continue
+			}
+			// Task 复用完整 JSON 类型检查，但不增加生成结果或运行期 Schema 依赖。
+			if fn.Name() == "Task" {
+				schema := b.schema(typ, ident.Pos())
+				if schema != nil && schema.Type != "object" && !slices.Contains(schema.Types, "object") {
+					s.diagnostic(ident.Pos(), "task parameters must encode a JSON object: "+typ.String())
+				}
 				continue
 			}
 			// 声明处共用类型检查，只有 JSON 声明需要生成 Schema。

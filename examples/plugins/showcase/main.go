@@ -1,6 +1,6 @@
 // showcase 演示 SDK 全部公共签名的组合方式；可以真实运行的最小插件见 examples/plugins/lifecycle。
 //
-// 示例包括一个根插件、两类 Handler、StopPropagation、配置回调、HTTP Handler 与一个定时任务。
+// 示例包括一个根插件、两类 Handler、StopPropagation、配置回调、HTTP Handler 与静态及动态任务。
 // New 显式绑定生成资源、路由与生命周期回调。
 package main
 
@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/sdk"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
@@ -35,14 +36,22 @@ func (*Demo) OnConfigLoad(_ context.Context, _ uint32, raw json.RawMessage) (jso
 
 // Demo 作为根插件注册命令、HTTP 路由与定时任务；插件 ID 来自 plugin.yaml。
 type Demo struct {
-	plugin *sdk.Plugin
+	plugin   *sdk.Plugin
+	reminder sdk.TaskType[ReminderArgs]
+}
+
+// ReminderArgs 保存提醒发送所需的会话与完整文本。
+type ReminderArgs struct {
+	Session message.Session `json:"session"`
+	Text    string          `json:"text"`
 }
 
 // New 每次创建独立的插件和示例状态。
 func New() *sdk.Plugin {
 	p := sdk.NewPlugin()
 	sdk.UseGenerated(p, alonabotGenerated)
-	demo := &Demo{plugin: p}
+	demo := &Demo{plugin: p, reminder: sdk.Task[ReminderArgs]("remind")}
+	sdk.OnTask(p, demo.reminder).Handle(demo.Remind)
 	p.OnConfigLoad(demo.OnConfigLoad)
 	p.OnStart(demo.OnStart)
 	demo.Commands(p)
@@ -51,13 +60,57 @@ func New() *sdk.Plugin {
 	return p
 }
 
-// Commands 在 demo 分组下注册两个命令，行尾注释是各自的触发路径。
+// Commands 在 demo 分组下注册问候、回显和提醒命令。
 func (p *Demo) Commands(r *sdk.Plugin) {
 	{
 		g := r.Group("demo")
-		g.Command("hello").Handle(p.Hello) // /demo hello
-		g.Command("echo").Handle(p.Echo)   // /demo echo <text> <times>，例如 /demo echo hi 3
+		g.Command("hello").Handle(p.Hello)           // /demo hello
+		g.Command("echo").Handle(p.Echo)             // /demo echo <text> <times>，例如 /demo echo hi 3
+		g.Command("remind").Handle(p.CreateReminder) // /demo remind <key> <seconds> <text>
+		g.Command("cancel").Handle(p.CancelReminder) // /demo cancel <key>
 	}
+}
+
+// CreateReminder 在当前用户与会话内创建提醒，回复用户输入的 key。
+func (p *Demo) CreateReminder(c *sdk.Context, key string, seconds int64, text string) (message.Content, error) {
+	internalKey, err := reminderKey(c, key)
+	if err != nil {
+		return nil, err
+	}
+	_, err = p.reminder.At(c.Context(), time.Now().Add(time.Duration(seconds)*time.Second),
+		ReminderArgs{Session: c.Session(), Text: text}, sdk.Key(internalKey))
+	if err != nil {
+		return nil, err
+	}
+	return message.Text(key), nil
+}
+
+// CancelReminder 取消当前用户在当前会话的提醒，成功后回显用户输入的 key。
+func (p *Demo) CancelReminder(c *sdk.Context, key string) (message.Content, error) {
+	internalKey, err := reminderKey(c, key)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.reminder.Cancel(c.Context(), internalKey); err != nil {
+		return nil, err
+	}
+	return message.Text(key), nil
+}
+
+func reminderKey(c *sdk.Context, key string) (string, error) {
+	user, session := c.User(), c.Session()
+	// 长度前缀保留各段边界，用户 key 中的分隔符也无法改变身份作用域。
+	internalKey := fmt.Sprintf("%d:%s/%d:%s/%s", len(user), user, len(session), session, key)
+	if len(internalKey) > 128 { // CONTRACTS §4.3 按 UTF-8 字节限制完整内部 key。
+		return "", errcode.InvalidArgument.New("reminder key with user and session scope exceeds 128 bytes")
+	}
+	return internalKey, nil
+}
+
+// Remind 使用参数保存的会话显式发送提醒。
+func (*Demo) Remind(c *sdk.Context, args ReminderArgs) error {
+	_, err := c.Send(message.Text(args.Text), sdk.To(args.Session))
+	return err
 }
 
 // Hello 响应 /demo hello，返回要自动回复的 Chain；成功且非空时由 Core 发送一次。

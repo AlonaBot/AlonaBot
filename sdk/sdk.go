@@ -238,6 +238,7 @@ type Registration struct {
 	services      []serviceRoute
 	subscriptions []subscriptionRoute
 	hooks         []hookRoute
+	tasks         []taskRoute
 	messages      *i18n.Catalog // 收集时解析，供本次 Session 只读使用。
 }
 
@@ -259,6 +260,7 @@ func Collect(root *Plugin) (*Registration, error) {
 	errs := slices.Concat(root.errs, cmds.errs, events.errs, routes.errs, jobs.errs)
 	errs = append(errs, root.checkSubPlugins(), dbhook.Validate(root), collectServices(root, reg), collectSubscriptions(root, reg), collectI18n(root, reg))
 	errs = append(errs, collectHooks(root, reg))
+	errs = append(errs, collectTasks(root, reg))
 	// HTTP Listener 在准备阶段创建；这里只核对所有种类共享的 route_id。
 	seen := make(map[string]bool)
 	for _, route := range buildRegister(reg, "{}", 0, nil).GetRoutes() {
