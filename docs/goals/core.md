@@ -78,14 +78,14 @@
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 待派发 |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2、T-09.4 | 待派发 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
-| goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 待派发 |
+| goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 已完成（PR #166） |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 已完成（PR #162） |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 已完成（PR #161） |
 | goal-128 | T-07.9 | 动态任务与暂停恢复的 SDK | T-04.12、T-07.8 | 等待前置 |
 | goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 等待前置 |
 | goal-92 | T-09.13 | 管理页所需的会话与上传接口 | T-09.1、T-09.4、T-09.12 | 等待前置 |
 | goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 等待前置 |
-| goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 待派发 |
+| goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 已完成（PR #164） |
 | goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 待派发 |
 | goal-70 | T-13.4 | 开发运行示例与验收 | T-03.10、T-13.2、T-13.3 | 等待前置 |
 | goal-82 | T-16.2 | 按钮、多轮等待、schedule 与示例测试 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | 等待前置 |
@@ -5750,7 +5750,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-131 · T-03.25 聊天目录
 
-状态：待派发。前置 T-03.3（PR #32）、T-08.14（[PR #157](https://github.com/AlonaBot/AlonaBot/pull/157)，合并提交 `e709135`）与 T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`）已合并。2026-11-10 按 D-130 新增；2026-11-12 审查者按 main `d6eb381` 写出范围、接口与测试段，要点如下：
+状态：已完成（[PR #166](https://github.com/AlonaBot/AlonaBot/pull/166)，合并提交 `6f72fc8`），证据见 TEST-MATRIX §3.2。合入：Event 的 `chat_title = 16` 与 `message.Event.ChatTitle`；状态库 chat 表、`Store.PutAdapterCursor(ctx, pluginID, instanceID, cursor, chat)`、`Store.Chats(ctx, ChatQuery)`；`options.Options.Chats` 与内置来源 core.chats；Adapter 的清理对象加入聊天目录。派发时：前置 T-03.3（PR #32）、T-08.14（[PR #157](https://github.com/AlonaBot/AlonaBot/pull/157)，合并提交 `e709135`）与 T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`）已合并。2026-11-10 按 D-130 新增；2026-11-12 审查者按 main `d6eb381` 写出范围、接口与测试段，要点如下：
 - 协议：Event 在 `contracts/proto/alonabot/v1/message.proto`，最后一个字段为 `ChatType chat_type = 15`，`chat_title` 用 16；SDK 侧 `sdk/message.Event` 与 `sdk/internal/convert` 同步一个字段，`sdk/adapter` 的 `Core.Deliver(ctx, ev *message.Event, cursor)` 不变。
 - 交付：`internal/core/adapter/remote/services.go` 处理 `AdapterDeliverRequest` 时先校验 Target 与 Actor，再 `Store.PutAdapterCursor(ctx, pluginID, instanceID, cursor)`，之后重建可信字段并派发。聊天记录与游标写在同一个状态库事务中。
 - 选项来源：`configschema.BuiltinOptionSources` 已登记 `core.chats` 与 filter 键 `chat_type`、`adapter_id`；`internal/core/options` 的内置来源目前对它返回 UNAVAILABLE，本切片实现。
@@ -6037,7 +6037,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-22 · T-06.4 Session 清理与 Service 端到端
 
-状态：待派发。前置 T-06.2（[PR #161](https://github.com/AlonaBot/AlonaBot/pull/161)，合并提交 `b4610e1`）与 T-06.3（PR #56）已合并。2026-11-12 审查者按 main `96856ec` 改写，要点如下：
+状态：已完成（[PR #164](https://github.com/AlonaBot/AlonaBot/pull/164)，合并提交 `039802f`），证据见 TEST-MATRIX §3.2。合入：`internal/core/metrics` 的 `Counters.Add`/`Snapshot`（以已知身份为界）；broker、bus、router 的 Options 增加 Metrics；Broker 为每次转发保存取消入口，Session 进入 STOPPING、被替换或断链时取消相关转发并归还预算；根包 `service_chain_test.go` 的 TCP、stdio 矩阵。执行中审查者授权 supervisor 透传停止钩子。派发时：前置 T-06.2（[PR #161](https://github.com/AlonaBot/AlonaBot/pull/161)，合并提交 `b4610e1`）与 T-06.3（PR #56）已合并。2026-11-12 审查者按 main `96856ec` 改写，要点如下：
 - 已有的清理：根包 `assembly.detach` 在组件停止或 Session 替换时依次调用 `router.Detach`、`bus.Detach`、`scheduler.Detach`、`httpproxy.Server.Unbind` 与 Adapter 的 `remote.Unbind`；延续调用与等待随 `continuation.Manager.Release(caller)` 释放（T-05.4）；插件的入站请求在 Session 结束时由 wire 取消，Broker 转发时用的就是这个 ctx。
 - Broker（T-06.2）：`broker.New(broker.Options{Router, RequestTimeout, MaxDepth})`，`b.calls` 以子调用的 Invocation 记录来源；CALL_CYCLE 与深度在调用前返回；额满由 wire 立即返回 RESOURCE_EXHAUSTED。
 - Bus（T-06.3）：`bus.New(bus.Options{QueueEvents, QueueBytes})`、`Register`、`Attach`、`Detach`、`Stats(pluginID) Stats{Published, Delivered, Dropped}`（丢弃不分原因）；wire 的接收丢弃为 `wire.Stats.DroppedEvents`。

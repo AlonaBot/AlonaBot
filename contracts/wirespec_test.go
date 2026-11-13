@@ -683,7 +683,7 @@ func TestActionFieldNumbers(t *testing.T) {
 	}
 }
 
-// TestMessageSegmentFieldNumbers 固定语音、转发、URL 按钮与会话类型的追加编号。
+// TestMessageSegmentFieldNumbers 固定语音、转发、URL 按钮、会话类型与名称的追加编号。
 func TestMessageSegmentFieldNumbers(t *testing.T) {
 	for _, c := range []struct {
 		message  proto.Message
@@ -701,6 +701,7 @@ func TestMessageSegmentFieldNumbers(t *testing.T) {
 		{&pb.ForwardSegment{}, 2, "platform_forward_id", protoreflect.StringKind, true, ""},
 		{&pb.Button{}, 5, "url", protoreflect.StringKind, true, ""},
 		{&pb.Event{}, 15, "chat_type", protoreflect.EnumKind, false, "alonabot.v1.ChatType"},
+		{&pb.Event{}, 16, "chat_title", protoreflect.StringKind, true, ""},
 	} {
 		f := c.message.ProtoReflect().Descriptor().Fields().ByNumber(c.number)
 		if f == nil || f.Name() != c.name || f.Kind() != c.kind || f.HasOptionalKeyword() != c.optional || f.IsList() {

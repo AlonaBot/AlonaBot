@@ -9,6 +9,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
+	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
@@ -74,6 +75,10 @@ func (p *Process) service(ctx context.Context, caller router.Caller, in *wire.In
 		if ev == nil || ev.GetAdapterId() != p.opt.AdapterID || ev.GetAdapterInstanceId() != id || ev.GetAccountId() != entry.account {
 			return invalid()
 		}
+		if ev.Target == nil && ev.ChatTitle != nil {
+			slog.Warn("chat_title requires target", "adapter_id", p.opt.AdapterID, "chat_id", ev.GetTarget().GetChatId())
+			return serviceError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "chat_title requires target")
+		}
 		if _, known := pb.ChatType_name[int32(ev.ChatType)]; !known || (ev.Target == nil && ev.ChatType != pb.ChatType_CHAT_TYPE_UNSPECIFIED) {
 			return serviceError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "chat_type must be known and requires target")
 		}
@@ -95,7 +100,19 @@ func (p *Process) service(ctx context.Context, caller router.Caller, in *wire.In
 		if actor := ev.Actor; actor != nil && actor.GetAdapterInstanceId() != id {
 			return invalid()
 		}
-		if err := p.opt.Store.PutAdapterCursor(ctx, p.opt.PluginID, id, r.Cursor); err != nil {
+		var chat *state.Chat
+		if ev.Target != nil {
+			chat = &state.Chat{AdapterID: p.opt.AdapterID, ChatID: ev.Target.ChatId, Title: ev.GetChatTitle(), InstanceID: id}
+			switch ev.ChatType {
+			case pb.ChatType_CHAT_TYPE_PRIVATE:
+				chat.ChatType = "private"
+			case pb.ChatType_CHAT_TYPE_GROUP:
+				chat.ChatType = "group"
+			case pb.ChatType_CHAT_TYPE_CHANNEL:
+				chat.ChatType = "channel"
+			}
+		}
+		if err := p.opt.Store.PutAdapterCursor(ctx, p.opt.PluginID, id, r.Cursor, chat); err != nil {
 			return serviceError(pb.ErrorCode_ERROR_CODE_INTERNAL, err.Error())
 		}
 		// 3. Core 重建可信事件字段，只保留本 Session 声明的平台权限及其展开结果。
@@ -112,7 +129,7 @@ func (p *Process) service(ctx context.Context, caller router.Caller, in *wire.In
 		}
 		return serviceResponse(&pb.AdapterDeliverResponse{Accepted: err == nil})
 	case *pb.AdapterCursorRequest:
-		if err := p.opt.Store.PutAdapterCursor(ctx, p.opt.PluginID, id, r.Cursor); err != nil {
+		if err := p.opt.Store.PutAdapterCursor(ctx, p.opt.PluginID, id, r.Cursor, nil); err != nil {
 			return serviceError(pb.ErrorCode_ERROR_CODE_INTERNAL, err.Error())
 		}
 		return serviceResponse(&pb.AdapterCursorResponse{})

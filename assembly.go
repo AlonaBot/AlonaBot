@@ -34,6 +34,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/media"
 	"github.com/AlonaBot/AlonaBot/internal/core/message"
+	"github.com/AlonaBot/AlonaBot/internal/core/metrics"
 	coreoptions "github.com/AlonaBot/AlonaBot/internal/core/options"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/process"
@@ -150,9 +151,11 @@ type assembly struct {
 	media      *media.Store
 	buttons    *buttons.Service
 	bus        *bus.Bus
+	broker     *broker.Broker
 	scheduler  *scheduler.Scheduler
 	http       *httpproxy.Server
 	global     *wire.Budget
+	metrics    *metrics.Counters
 	store      *state.Store
 	policy     *policy.Policy
 	components sync.Map // 运行状态查询借用已激活的 host.Instance，退出时按同一指针撤销。
@@ -169,7 +172,7 @@ type componentOptionSchemas struct {
 }
 
 func assemble(store *state.Store, dir string, v tune.Values, file *settings.File) (*assembly, error) {
-	a := &assembly{store: store, settings: file, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload)}
+	a := &assembly{store: store, settings: file, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload), metrics: &metrics.Counters{}}
 	var err error
 	a.media, err = media.Open(filepath.Join(dir, "media"), media.NewLimits(v), time.Now)
 	if err != nil {
@@ -205,7 +208,7 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 		}})
 	a.router = router.New(router.Options{Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
 		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Intercept: a.buttons.InterceptConfirm, Policy: p, CommandState: p.CommandState, Prefixes: a.settings.CommandPrefixes, CommandNames: p.CommandNames,
-		Continuations: continuations,
+		Continuations: continuations, Metrics: a.metrics,
 		Send: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
 			return messages.Send(ctx, c, in)
 		},
@@ -225,14 +228,14 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 	conversation.New(store).Register(a.mux)
 	tools := tool.New(store, a.router)
 	tools.Register(a.mux)
-	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes})
+	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes, Metrics: a.metrics})
 	a.bus.Register(a.mux)
-	serviceBroker := broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth})
-	tools.RegisterInvoke(a.mux, tool.InvokeOptions{Call: serviceBroker.Call, Adapters: a.adapters, Buttons: a.buttons,
+	a.broker = broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth, Metrics: a.metrics})
+	tools.RegisterInvoke(a.mux, tool.InvokeOptions{Call: a.broker.Call, Adapters: a.adapters, Buttons: a.buttons,
 		ConfirmTimeout: v.ToolConfirmTimeout, DefaultLocale: func() string { return a.settings.Settings().DefaultLocale }})
-	a.mux.Forward(serviceBroker.Call)
+	a.mux.Forward(a.broker.Call)
 	a.schemas = make(map[string]componentOptionSchemas)
-	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: serviceBroker, Page: v.OptionsPage, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
+	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: a.broker, Chats: store.Chats, Page: v.OptionsPage, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
 		installed, err := store.Installs(ctx)
 		if err != nil {
 			return nil, err
@@ -545,19 +548,22 @@ func bootstrap(generation string, version uint32) *pb.Bootstrap {
 }
 
 func (a *assembly) detach(r *runningComponent) {
-	a.components.CompareAndDelete(r.id, r.instance)
-	a.router.Detach(r.id)
-	a.schemaMu.Lock()
-	delete(a.schemas, r.id)
-	a.schemaMu.Unlock()
-	a.bus.Detach(r.id)
-	a.scheduler.Detach(r.id)
-	if r.instance != nil {
-		a.http.Unbind(r.id, r.instance.GenerationID, r.instance.HTTPProxyToken)
+	// STOPPING 和退出收尾都可能到达；旧 Session 的迟到清理保留新绑定。
+	if a.components.CompareAndDelete(r.id, r.instance) {
+		a.router.Detach(r.id)
+		a.schemaMu.Lock()
+		delete(a.schemas, r.id)
+		a.schemaMu.Unlock()
+		a.bus.Detach(r.id)
+		a.scheduler.Detach(r.id)
+		if r.instance != nil {
+			a.http.Unbind(r.id, r.instance.GenerationID, r.instance.HTTPProxyToken)
+		}
+		if r.remote != nil {
+			r.remote.Unbind()
+		}
 	}
-	if r.remote != nil {
-		r.remote.Unbind()
-	}
+	a.broker.Release(r.caller)
 }
 
 func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.StopTiming, reason pb.StopReason) error {
@@ -688,7 +694,8 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 		Executable: executable, BuildDigest: install.BuildDigest, GenerationID: generation, Bootstrap: boot, ConfigSchema: resources.ConfigSchema, I18n: resources.I18n,
 		NewCandidate:  isNew,
 		DefaultLocale: c.assembly.settings.Settings().DefaultLocale, Handler: c.assembly.handler(running, install), Global: c.assembly.global, Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values),
-		Log: c.output.Plugin(install.PluginID, generation), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment})
+		Log: c.output.Plugin(install.PluginID, generation), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment,
+		Detach: func() { c.assembly.detach(running) }})
 	if err != nil {
 		return nil, err
 	}

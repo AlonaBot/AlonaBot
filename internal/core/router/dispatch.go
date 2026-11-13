@@ -6,6 +6,7 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
+	"github.com/AlonaBot/AlonaBot/internal/core/metrics"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
@@ -27,6 +28,7 @@ type Options struct {
 	CommandState  func(context.Context, string, *pb.RouteDescriptor) (bool, []string, error)               // 菜单读取完整策略；nil 时使用注册描述。
 	CommandNames  func(pluginID string) map[string][][]string                                              // nil 时使用声明；在 Router 锁内调用，不得做 I/O。
 	Continuations Continuations                                                                            // nil 时跳过延续与等待。
+	Metrics       *metrics.Counters                                                                        // nil 时关闭原因计数；全局接纳使用空插件 ID。
 }
 
 // Continuations 接入 Handler 结束通知、入站等待匹配及插件释放。
@@ -68,6 +70,7 @@ func (r *Router) Start() {
 // Deliver 立即尝试接纳事件，不等待空闲链；条数、字节或全局预算不足时返回 ErrQueueFull。
 func (r *Router) Deliver(ctx context.Context, ev *pb.Event) error {
 	if err := ctx.Err(); err != nil {
+		r.metrics.Add("", "event", "cancelled")
 		return err
 	}
 	if r.intercept != nil {
@@ -85,15 +88,22 @@ func (r *Router) Deliver(ctx context.Context, ev *pb.Event) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
+		r.metrics.Add("", "event", "offline")
 		return errors.New("event router is closed")
 	}
 	n := int64(proto.Size(ev))
 	if len(r.queue) >= r.queueEvents || r.queuedBytes+n > r.queueBytes {
 		r.stats.DroppedQueueFull++
+		reason := metrics.Reason("dropped_queue")
+		if len(r.queue) < r.queueEvents {
+			reason = "dropped_budget"
+		}
+		r.metrics.Add("", "event", reason)
 		return adapter.ErrQueueFull
 	}
 	if !r.global.Acquire(n) {
 		r.stats.DroppedBudget++
+		r.metrics.Add("", "event", "dropped_budget")
 		return adapter.ErrQueueFull
 	}
 	r.queue = append(r.queue, queuedEvent{event: retainEvent(ev), bytes: n})
@@ -140,6 +150,9 @@ func (r *Router) Close(ctx context.Context) error {
 			delete(r.commandSyncs, id)
 		}
 		r.global.Release(r.queuedBytes)
+		for range r.queue {
+			r.metrics.Add("", "event", "offline")
+		}
 		r.queue = nil
 		r.queuedBytes = 0
 		r.stats.Queued = 0
