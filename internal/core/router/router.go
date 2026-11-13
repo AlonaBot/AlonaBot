@@ -153,6 +153,17 @@ func (r *Router) Plugin(pluginID string) (Plugin, bool) {
 	return session.plugin, true
 }
 
+// PluginFor 原子核对 Caller 并返回该 Session 的插件；替换后的绑定查找失败。
+func (r *Router) PluginFor(c Caller) (Plugin, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	session, ok := r.plugins[c.PluginID]
+	if !ok || session.caller != c {
+		return nil, false
+	}
+	return session.plugin, true
+}
+
 // Plugins 返回当前已 Attach 的插件快照；激活状态由调用方即时检查。
 func (r *Router) Plugins() []Plugin {
 	r.mu.Lock()

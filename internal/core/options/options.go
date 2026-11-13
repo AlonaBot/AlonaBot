@@ -77,7 +77,7 @@ func (s *Service) Query(ctx context.Context, componentID string, kind SchemaKind
 	// 1. 来源与 filter 只由配置声明给出，调用方只控制查询条件。
 	schema, ok := s.opt.Schema(componentID, kind)
 	if !ok {
-		return Page{}, invalid("component schema is unavailable")
+		return Page{}, unavailable("component schema is unavailable")
 	}
 	from, ok := schema.OptionsFrom(fieldPath)
 	if !ok {
@@ -146,7 +146,11 @@ func (s *Service) instances(from configschema.OptionsFrom, q Query) Page {
 
 func (s *Service) service(ctx context.Context, from configschema.OptionsFrom, q Query) (Page, error) {
 	componentID, name, _ := strings.Cut(from.Source, "/")
-	plugin, ok := s.opt.Router.Plugin(componentID)
+	target, ok := s.opt.Router.Caller(componentID)
+	if !ok {
+		return Page{}, unavailable("options source component is not active: " + componentID)
+	}
+	plugin, ok := s.opt.Router.PluginFor(target)
 	if !ok || !plugin.Activated() {
 		return Page{}, unavailable("options source component is not active: " + componentID)
 	}
@@ -171,7 +175,7 @@ func (s *Service) service(ctx context.Context, from configschema.OptionsFrom, q 
 	if err != nil {
 		return Page{}, unavailable(fmt.Sprintf("encode options query: %v", err))
 	}
-	response := s.opt.Broker.Call(ctx, router.Caller{}, &wire.Inbound{Target: from.Source, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: validate.OptionsQuerySchemaID, SchemaVersion: optionsSchemaVersion, Bytes: data}})
+	response := s.opt.Broker.CallSession(ctx, router.Caller{}, target, &wire.Inbound{Target: from.Source, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: validate.OptionsQuerySchemaID, SchemaVersion: optionsSchemaVersion, Bytes: data}})
 	if response.Err != nil {
 		return Page{}, fmt.Errorf("query options source %s: %w: %w", from.Source, unavailable(response.Err.GetSafeMessage()), &wire.CallError{ErrorInfo: response.Err})
 	}
