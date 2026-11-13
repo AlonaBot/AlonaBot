@@ -37,9 +37,13 @@ func businessHandler(reg *Registration) wire.Handler {
 		commands[commandRouteID(command)] = command
 	}
 	services := serviceHandler(reg)
+	hooks := hookHandler(reg)
 	return func(ctx context.Context, in *wire.Inbound) wire.Response {
 		ctx = context.WithValue(ctx, pluginContextKey{}, pluginScope{plugin: reg.plugin, subID: reg.subPlugins[in.Target]})
 		if response, ok := services(ctx, in); ok {
+			return response
+		}
+		if response, ok := hooks(ctx, in); ok {
 			return response
 		}
 		handler, manualRoute := handlers[in.Target]

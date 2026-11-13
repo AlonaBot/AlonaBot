@@ -87,6 +87,7 @@ type CommandPolicy interface {
 // Router 并发执行有界的事件链；每条链内按稳定次序调用候选。
 // mu 串行化接纳、出队和注册；链调用插件期间不持锁。
 type Router struct {
+	preEvent      func(context.Context, *pb.Event) (*pb.EventPayload, bool, error)
 	adapters      *adapter.Registry
 	send          ServiceFunc
 	prepare       func(*pb.Event, Caller) (*pb.Event, error)
@@ -122,7 +123,7 @@ func New(opt Options) *Router {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Router{
-		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy, buttons: opt.Buttons,
+		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy, buttons: opt.Buttons, preEvent: opt.PreEvent,
 		concurrency: opt.Concurrency, queueEvents: opt.QueueEvents, queueBytes: opt.QueueBytes, global: opt.Global,
 		ctx: ctx, cancel: cancel, drained: make(chan struct{}),
 		continuations: opt.Continuations,
@@ -295,14 +296,28 @@ func (r *Router) dispatch(event *trustedEvent) {
 		actor.Permissions = slices.Compact(permissions)
 	}
 	ev = event.rebuild()
+	// 2. 预处理只回写业务载荷；后继路由从原绑定重建可信字段。
+	if r.preEvent != nil {
+		payload, stop, err := r.preEvent(r.ctx, ev)
+		if err != nil {
+			slog.Warn("pre-event hook failed", "event_id", event.retained.GetEventId(), "error", err)
+			return
+		}
+		event.payload = payload
+		if stop {
+			return
+		}
+		ev = event.rebuild()
+	}
+	// 3. 多轮等待先于命令匹配取走匹配的消息。
 	if ev.GetEventType() == "message.created" && r.continuations != nil && r.continuations.Match(ev) {
 		return
 	}
-	// 2. 命令层的 STOP 终止整条分发链；消费但继续的命令仍进入事件层。
+	// 4. 命令层的 STOP 终止整条分发链；消费但继续的命令仍进入事件层。
 	if ev.GetEventType() == "message.created" && r.dispatchCommands(ev, event) {
 		return
 	}
-	// 3. 事件路由独立判断权限，拒绝当前候选后继续后继路由。
+	// 5. 事件路由独立判断权限，拒绝当前候选后继续后继路由。
 	if !buttonClick {
 		candidates = r.candidates(ev)
 	}
