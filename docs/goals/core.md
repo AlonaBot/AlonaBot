@@ -80,7 +80,7 @@
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
 | goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 等待前置 |
-| goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 等待前置 |
+| goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 待派发 |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 待派发 |
 | goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 等待前置 |
 | goal-92 | T-09.13 | 管理页所需的会话与上传接口 | T-09.1、T-09.4、T-09.12 | 等待前置 |
@@ -5579,43 +5579,47 @@ sdk（新增或替换）
 
 ### goal-18 · T-05.5 多进程事件流水线验收
 
-状态：等待前置（T-05.3、T-05.4）。T-03.8（[PR #136](https://github.com/AlonaBot/AlonaBot/pull/136)，合并提交 `3621fc1`）已合并：`internal/core/buttons` 的 `New(store, now, current)` 与 `Service.Issue`、`Resolve`、`Purge`；`message.New(adapters, p, lease, issue, requestTimeout)`；`router.Options.Buttons`；可选接口 `adapter.ExtensionChecker`；`manifest.CheckDependencies(m, Installed)`；SDK 的 `sdk.Action[T]`、`sdk.OnButton(r, a).Handle(func(*Context, T) error)`、`message.Buttons`、`message.Extension`；`Segment` oneof 已用到 `extension = 9`。语句中 goal-8、goal-15～goal-17、goal-52 提供的符号（按钮、Rule、Hook、延续调用与等待、Router 的 Stats）只写名字；合并后由审查者核对，再改为待派发。
+状态：待派发。前置 T-03.8（[PR #136](https://github.com/AlonaBot/AlonaBot/pull/136)，合并提交 `3621fc1`）、T-05.3（[PR #155](https://github.com/AlonaBot/AlonaBot/pull/155)，合并提交 `53393aa`）与 T-05.4（[PR #153](https://github.com/AlonaBot/AlonaBot/pull/153)，合并提交 `f22b538`）已合并。2026-11-12 审查者按 main `2a1c504` 改写：
+- 测试装配：`cmd/alonabot` 的 run 目前不带 Router 与 Adapter（goal-39 改写），所以不经 cmd 与 Telegram 模拟服务。根包的 `assemble(store, dir, tune.Values)` 给出与生产相同的 Router、hook.Runner、continuation.Manager、buttons、policy 与 message 服务；插件与 Adapter 进程沿用 `internal/core/adapter/remote/remote_test.go` 的写法：测试二进制按环境变量以 `sdk.Run` 或 `sdk.RunAdapter` 运行，经 `supervisor.Launch` 启动，Adapter 用回环测试 Adapter。
+- T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)）已合并，scheduled 用真实 Scheduler 验收，不再只用 fixture。
+- 按钮点击前的 answerCallbackQuery 只在 Telegram Adapter 中，由 goal-9 的故障矩阵覆盖；本切片以回环 Adapter 交付 button.clicked。
+- SDK 写法：插件对象（`sdk.NewPlugin`、`Command`/`On`/`PreEvent`/`BeforeSend`/`AfterSend` builder）、`sdk.Action[T]` 与 `sdk.OnButton`、`Context.Continue` 与 `Context.Wait(timeout)`、`sdk.ToMe` 与自定义 Rule。
+- 与 goal-39 同改根包：本切片只新增测试文件，goal-39 先合并时按合并后的装配入口调整测试。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-18（切片 T-05.5：多进程事件流水线验收）。goal 目录 goal-18，分支 goal-18，worktree .worktrees/goal-18，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：用多个真实插件进程跑完整的事件流水线：多个 priority 与同优先级逆安装顺序、自定义 Rule、两种 Handler 签名、三个 Hook、真实按钮回调、两个用户在同一群同时等待、等待超时与等待期间停用插件；用恶意载荷尝试修改可信字段，用延迟 Handler 验证控制帧仍推进；在 TEST-MATRIX §3.2 记录 T-05 证据。
+目标：用多个真实插件进程与回环 Adapter 进程跑完整的事件流水线：多个 priority 与同优先级逆安装顺序、自定义 Rule、两种 Handler 签名、三个 Hook、按钮回调、两个用户在同一群同时等待、等待超时与等待期间停用插件、真实 Scheduler 触发；用恶意载荷尝试修改可信字段，用延迟 Handler 验证控制帧仍推进；在 TEST-MATRIX §3.2 记录 T-05 证据。
 
 依据：PLAN T-05 步骤 8 与「停止和失败条件」；CONTRACTS §2；MESSAGE-MODEL §1、§6.3；TEST-MATRIX V-11、V-13～V-16、V-43、V-49、V-50 的 T-05 分项。
 
 范围（只新增或修改这些）：
-- 新增 internal/core/supervisor/testdata/pipeline/（流水线测试插件，按环境变量配置 priority、Rule、Hook 与命令）
-- 新增 cmd/alonabot/t05_e2e_test.go（//go:build unix，经 Telegram 模拟服务运行）
+- 新增根包 pipeline_test.go（//go:build unix）：经 assemble 取得生产装配，测试二进制按环境变量运行流水线插件与回环 Adapter
 - spec/TEST-MATRIX.md §3.2：追加 T-05 的证据行（本切片获授权修改这一处）
 允许的新跨模块边：无。
 
-接口：不新增公开 Go 符号。
+接口：不新增公开 Go 符号；不修改产品代码。测试发现产品缺陷时按 alonabot-execute 的阻塞规则登记，不在本切片修。
 
-验收矩阵（各为一个子测试，以平台调用记录、候选调用次序日志与 HandlerOutcome 为证据）：
+验收矩阵（pipeline_test.go 中各为一个子测试，以 Adapter 收到的发送与编辑、插件写出的调用次序记录与 HandlerOutcome 为证据）：
 1) 三个插件 priority 为 0、0、-1，以两种不同的安装与启动顺序运行：调用顺序都是 (priority, plugin_id, route_id)。
-2) 自定义 Rule 为 false 与出错：事件路由跳过、已识别命令被消费且不回落（V-11 的真实 Rule 分项）。
-3) 两种 Handler：自动回复只发一次；手动多次 Send；自动型内 Send 被拒。
-4) Hook：PreEvent 改 payload、BeforeSend 改链与拒绝、AfterSend 出错不改结果；每次 Send 一组 Hook。
-5) 恶意载荷：Adapter 侧（经模拟服务）与插件侧（PreEvent 返回）尝试改 Actor、Target、button 的 action/value、scheduled 的 job_id：插件收到的仍是 Core 保留的值。
-6) 真实按钮：发送带按钮的消息后在模拟服务中点击：先有 answerCallbackQuery，再调用正确的插件；另一用户点击也调用一次；过期 token 不调用、不落入 Raw。
-7) 等待：两个用户在同一群同时进入 Wait，各自只收到自己的下一条消息，且这些消息不进入普通分发；超时为 DEADLINE_EXCEEDED；等待期间停用插件，重启后不补发。
+2) 自定义 Rule 为 false 与出错：事件路由跳过；已识别的命令被消费且不回落到 Raw 与事件路由（V-11 的真实 Rule 分项）。
+3) 两种 Handler：自动回复只发一次；手动多次 Send；自动回复型 Handler 内的 Send 被拒。
+4) Hook：PreEvent 改写载荷后后继路由看到改写结果；BeforeSend 改写链与拒绝发送；AfterSend 出错不改变发送结果；每次 Send 经过一组 Hook。
+5) 恶意载荷：回环 Adapter 交付的事件与 PreEvent 的返回尝试改 Actor、Target、button 的 action/value、scheduled 的 job_id：插件收到的仍是 Core 保留的值。
+6) 按钮：发送带 `sdk.Action` 按钮的消息后，回环 Adapter 交付点击：调用正确的插件与动作；另一用户点击也调用一次并按该用户鉴权；过期 token 不调用、不落入 Raw。
+7) 等待：两个用户在同一群同时 Wait，各自只收到自己的下一条消息，这些消息不进入普通分发；超时为 DEADLINE_EXCEEDED；等待期间停用插件，重新启动后不补发。
 8) 延迟 Handler（睡眠数秒）执行期间，同一插件 Session 的另一请求的 Response 与 Cancel 正常完成，其他事件照常派发。
 9) 权限组合（V-43）：chat_admin 不取得 Core Admin；组禁用优先于子项启用；最近显式权限覆盖父项；运行时修改在下一次派发生效，已开始的调用不被撤销。
-10) scheduled：只用规范 fixture，证据中标明尚未覆盖真实 Scheduler（T-07.5 覆盖）。
-- 证据：TEST-MATRIX §3.2 追加 T-05 一行，写明测试位置、命令、平台、结果与 fixture 覆盖的项。
+10) scheduled：插件声明 Every 短间隔任务，真实 Scheduler 触发后插件收到 Core 的 job_id；伪造的 job_id 不改变它。
+- 证据：TEST-MATRIX §3.2 追加 T-05 一行，写明测试位置、命令、平台与结果。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：上述矩阵测试。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：在 -race 下重复运行矩阵 10 次无偶发失败。
+- 提交：pipeline_test.go 的上述矩阵（多列理由：T-05 的验收矩阵本身，没有其他端到端入口）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：在 -race 下以 -count=10 运行矩阵无偶发失败。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
-不做：Service 嵌套与 Hook→Service→Send（T-06.2、T-06.4）；真实 Scheduler（T-07.5）。
+不做：Service 嵌套与 Hook→Service→Send（T-06.2、T-06.4）；Telegram 的 answerCallbackQuery 顺序（T-03.10）；修改产品代码。
 ```
 
 ### goal-20 · T-06.2 父调用链、取消与背压
