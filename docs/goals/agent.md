@@ -12,7 +12,7 @@
 | goal-120 | T-12.11 | Provider：Ollama 原生协议 | T-12.1 | 已完成（PR #128） |
 | goal-134 | T-12.12 | Provider 改用官方 SDK | T-12.9、T-12.10、T-12.11 | 已完成（PR #134） |
 | goal-135 | T-12.13 | Provider 图片输入 | T-12.12 | 已完成（PR #138） |
-| goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1、T-12.9、T-12.10、T-12.11、T-09.4 | 待派发 |
+| goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1、T-12.9、T-12.10、T-12.11、T-09.4 | 已完成（PR #170） |
 | goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-08.14、T-12.2 | 等待前置 |
 | goal-136 | T-12.14 | 对话中的图片输入 | T-04.8、T-12.2、T-12.13 | 等待前置 |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 等待前置 |
@@ -294,7 +294,7 @@ type Message struct {
 
 ### goal-59 · T-12.2 Agent 对话与流式显示
 
-状态：待派发。前置均已合并：T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`）提供 `role: agent` 的运行与库模式的 Adapter 实例，T-05.4（PR #153）提供 `c.Continue`，T-13.2（PR #160）提供开发组件的 config.json 与 dev.sqlite，T-03.18（PR #151）提供 `c.Stream`。2026-11-12 审查者按 main 改写：流式显示按 D-135 交给 `c.Stream`（编辑节流、实例 text_limit 与换条），PLAN agent T-12 步骤 3 同步修订；配置按 D-76 写在 config_schema.json，providers 为每个预设一个模板的 template_list；SDK 写法为插件对象、`Command(...).RawTail().Permission(...)`、`On(routeID, sdk.MessageCreated).Rule(sdk.ToMe())`、`sdk.AppendConversation`/`ListConversation`/`ClearConversation`、`gormdb.Open` 与 `gormdb.Migrations`；Provider 客户端为 `provider.New(Config{Protocol, BaseURL, APIKey, Model}, *http.Client)` 与 `Client.Stream(ctx, req, emit)`。
+状态：已完成（[PR #170](https://github.com/AlonaBot/AlonaBot/pull/170)，合并提交 `eca6310`），证据见 TEST-MATRIX §3.2。合入：`agent.New() *sdk.Plugin`（`alonabot_agent_official`，薄入口 `agent/cmd/alonabot-agent`）与命令 /ask、/agent on|off、/persona、/provider、/reset；受管 SQLite 的 `chat_settings`（Provider、人格、自由对话开关与 reset 代次）；`InvocationContext.command_consumed = 6`、`sdk.NotCommand() Rule` 与 `(*sdk.Context).CommandConsumed() bool`（D-141，待维护者确认）；`c.Stream` 无编辑时按实例 text_limit 换条。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-59（切片 T-12.2：Agent 对话与流式显示）。goal 目录 goal-59，分支 goal-59，worktree .worktrees/goal-59，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
