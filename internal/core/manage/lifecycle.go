@@ -145,6 +145,18 @@ func (s *Service) uninstall(ctx context.Context, id string, purge PurgeScope, co
 	pluginDir := filepath.Join(filepath.Dir(s.opt.Packages), "plugins", id)
 	group := s.opt.Settings.Settings().Adapters[in.AdapterID]
 	ownsInstances := in.Role == state.RoleAdapter && (group.Package == id || group.Package == "" && !in.Uninstalled)
+	packageDir := s.directory(in)
+	packagePaths := []string{packageDir}
+	journals, err := s.opt.Store.Journals(ctx, "")
+	if err != nil {
+		return err
+	}
+	for _, record := range journals {
+		if record.Phase != "committed" && record.Phase != "cleaned" && (record.PluginID == id || filepath.Clean(record.PackageDir) == filepath.Clean(packageDir)) {
+			packagePaths = nil // 恢复既需要候选引用，也需要安装记录中的旧程序。
+			break
+		}
+	}
 	var paths []string
 	if purge != PurgeNone {
 		objects, err := s.opt.Store.PurgeObjects(ctx, id, purge == PurgeAll)
@@ -165,7 +177,7 @@ func (s *Service) uninstall(ctx context.Context, id string, purge PurgeScope, co
 				}
 			}
 		}
-		for _, path := range paths {
+		for _, path := range slices.Concat(paths, packagePaths) {
 			if _, err := os.Stat(path); err == nil {
 				affected = append(affected, path)
 			} else if !errors.Is(err, os.ErrNotExist) {
@@ -204,7 +216,12 @@ func (s *Service) uninstall(ctx context.Context, id string, purge PurgeScope, co
 	if err := s.opt.Store.Uninstall(ctx, id, purge != PurgeNone, purge == PurgeAll); err != nil {
 		return err
 	}
-	return os.RemoveAll(s.directory(in))
+	for _, path := range packagePaths {
+		if err := os.RemoveAll(path); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Pin 持久化允许更新的精确 SemVer，空串解除。

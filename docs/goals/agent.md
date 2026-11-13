@@ -16,7 +16,7 @@
 | goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-08.14、T-12.2 | 待派发 |
 | goal-136 | T-12.14 | 对话中的图片输入 | T-04.8、T-12.2、T-12.13 | 待派发 |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 待派发 |
-| goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 等待前置 |
+| goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 待派发 |
 | goal-62 | T-12.5 | 技能 | T-12.3 | 等待前置 |
 | goal-63 | T-12.6 | 定时 Agent 任务 | T-07.9、T-08.5、T-12.3 | 等待前置 |
 | goal-64 | T-12.7 | 官方 Agent 组件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6、T-12.8、T-12.14 | 等待前置 |
@@ -459,7 +459,7 @@ OnConfigLoad 之后的校验在 OnStart 中完成：providers 的 name 唯一、
 
 ### goal-136 · T-12.14 对话中的图片输入
 
-状态：待派发。直接前置 T-04.8（PR #141，合并提交 `ac4aded`）、T-12.2（PR #170，`eca6310`）、T-12.13（PR #138，`9b3bb86`）均已合并；媒体读取沿用 D-109、D-121 已合并的 SDK。相关装配以 PR #163（goal-39，`cb8ae3d`）、#164（goal-22，`039802f`）、#165（goal-55，`330164f`）、#167（goal-84，`3a9b4af`）、#168（goal-81，`37b0ada`）、#169（goal-127，`4dc4bcd`）合入后的 main `dbbb80b` 为基线。2026-11-13 起草者在本 worktree 用 `rg`、源码读取与 `go doc` 按 main 核对：2026-11-13 审查者裁决（DECISIONS 2026-11-13 变更记录）：图片表与计数字段并入 Agent 受管库的初始迁移 ID 1（与 goal-59 的 reset 代次一致，首次发布前不追加迁移）；回放只取 Core 会话中仍存在的条目对应的图片，Core 追加或清除与 Agent 图片写入或删除之间的失败按行为中的规则处理，不做跨库事务。
+状态：待派发。直接前置 T-04.8（PR #141，合并提交 `ac4aded`）、T-12.2（PR #170，`eca6310`）、T-12.13（PR #138，`9b3bb86`）均已合并；媒体读取沿用 D-109、D-121 已合并的 SDK。相关装配以 PR #163（goal-39，`cb8ae3d`）、#164（goal-22，`039802f`）、#165（goal-55，`330164f`）、#167（goal-84，`3a9b4af`）、#168（goal-81，`37b0ada`）、#169（goal-127，`4dc4bcd`）合入后的 main `dbbb80b` 为基线。2026-11-13 起草者在本 worktree 用 `rg`、源码读取与 `go doc` 按 main 核对：2026-11-13 审查者裁决（DECISIONS 2026-11-13 变更记录）：图片表与计数字段并入 Agent 受管库的初始迁移 ID 1（与 goal-59 的 reset 代次一致，首次发布前不追加迁移）；回放只取 Core 会话中仍存在的条目对应的图片，Core 追加或清除与 Agent 图片写入或删除之间的失败按行为中的规则处理，不做跨库事务。派发顺序：在 goal-61 合并后从包含它的 main 派发（goal-60、goal-61 与本切片都改 agent/conversation.go 中同一段请求生成逻辑，且 goal-61 改变 Agent 的会话键）。
 
 - `agent/agent.go`：`func New() *sdk.Plugin`，私有 `configuration`、`configuredProvider` 与 `readConfiguration(values config.Values) (configuration, error)`；当前 configuredProvider 含 name、client、maxTokens。不存在公开 Config。New 通过 `gormdb.Migrations(p, []gormdb.Migration{{ID: 1, Up: ...}})` 对 chatSettings 执行 AutoMigrate；尚无图片表或图片计数。
 - `agent/settings.go`：私有 `chatSettings{Session string; Provider string; Persona string; Enabled bool; ResetGeneration uint64}`，表名 chat_settings；`func (a *component) sessionLock(session string) *sync.Mutex`；`func (a *component) resetConversation(c *sdk.Context) error` 在同一会话锁内递增 ResetGeneration，再 `sdk.ClearConversation`。当前轮次最终追加也持该锁并核对 reset 代次。
@@ -636,40 +636,109 @@ ToolConfirmRequest{operation = 1, summary = 2} -> ToolConfirmResponse{}；
 
 ### goal-61 · T-12.4 Agent 的记忆
 
-状态：等待前置（T-11.2、T-12.2）。T-08.5（PR #79）已合并。`sdk.JSONService` 的 `Tool` 方法已由 goal-54（PR #101，合并提交 `de48f26`）合入。语句中 goal-19、goal-32、goal-59 提供的符号（sdk.JSONService、gormdb.Open、agent 的一轮对话）只写名字；合并后由审查者核对，再改为待派发。2026-10-28 按 D-60 改写：记忆并入 Agent，不再有 sdk/memory 与记忆插件。
+状态：待派发，在 goal-60（PR #178）合并后从包含它的 main 派发（共享 agent/conversation.go 的请求生成与工具循环）。前置 T-08.5（PR #79，合并提交 `75c16d3`）、T-11.2（PR #165，`330164f`）、T-12.2（PR #170，`eca6310`）均已合并；同时复用 T-11.1（PR #101，`de48f26`）的工具声明、T-11.3（PR #35，`d0983f0`）的会话存储。2026-11-13 维护者同意按审查者方案补齐三处契约缺口（D-142，审查者补齐，待维护者确认），审查者据此改写：(1) Agent 经 `core.tool.invoke` 调用自己的工具时 Broker 不判 CALL_CYCLE、仍计深度；(2) SDK 新增 `(*Context).Instance() string` 与 `(*ServiceBuilder).Permission(p Permission)`；(3) Agent 的会话、聊天设置、reset 锁与会话笔记按 `<会话字符串>@<实例名>` 区分，同步改 T-12.2 已合并的键。
+
+已有接口（审查者按 main 核对）：
+
+- `agent/agent.go`：`func New() *sdk.Plugin`；通过 `sdk.NewPlugin()`、`sdk.UseGenerated(p, alonabotGenerated)` 注册；用 `gormdb.Migrations(p, []gormdb.Migration{{ID: 1, Up: ...}})` 创建 chat_settings。现有配置为未导出的 configuration，当前没有 memory 注册。保留一个根插件对象与现有生命周期回调。
+- `sdk/gormdb/open.go`：`func Open(ctx context.Context) (*gorm.DB, error)`；返回当前 Session 的受管连接包装，SDK 负责关闭。`sdk/gormdb/migrate.go`：`type Migration struct { ID uint32; Up func(context.Context, *gorm.DB) error }`、`func Migrations(p *sdk.Plugin, list []Migration)`；事务里使用传入的 tx，单连接事务中再次独立 Open/查询会等待自身。
+- `sdk/services.go`：`JSON[In, Out any](target string) Service[In, Out]`、`Serve[In, Out any](owner Registrar, declaration Service[In, Out]) *ServiceBuilder[In, Out]`；builder 的 `Access(a Access, allowlist ...string)`、`Tool(description string, defaultPolicy ToolDefault)` 返回同一 builder，`Handle(func(*Context, In) (Out, error))` 结束注册；使用现行 `sdk.ToolAllow`。旧名 JSONService 已删除。JSON Schema 由生成器根据包级具名值类型生成，默认版本 1；不要求业务 DTO 导出。
+- `sdk/tool.go`：`ListTools(ctx context.Context) ([]ToolInfo, error)`、`InvokeTool(ctx context.Context, name string, arguments json.RawMessage) (json.RawMessage, error)`、`ConfirmOperation(ctx context.Context, operation, summary string) error`；按 Core 的工具策略执行并继承活跃父调用。`contracts/proto/alonabot/v1/route.proto` 已有 `RouteDescriptor.required_permissions = 17`，公开 ServiceBuilder 只有 Access、Tool、Handle，尚无声明 required_permissions 的入口。
+- `sdk/conversation.go`：`AppendConversation(ctx context.Context, key string, entries ...json.RawMessage) (lastSeq uint64, err error)`；`ListConversation(ctx context.Context, key string, fromSeq uint64) (entries []ConversationEntry, nextSeq uint64, more bool, err error)`；`ClearConversation(ctx context.Context, key string) error`；`ConversationEntry{Seq uint64; Entry json.RawMessage}`，list 需处理分页。
+- `agent/conversation.go`：`func (a *component) converse(c *sdk.Context, text string) error`；`func recentConversation(ctx context.Context, key string, count int) ([]conversationEntry, error)`；私有 conversationEntry 只有 Role、Speaker、Content 字符串。recentConversation 在 history_entries=0 时直接返回；其余仅保留最近 N 条。快照初始化与读取须独立识别真实空会话并找回既存快照，保证 history_entries 截取后仍使用冻结值。
+- `agent/settings.go`：`func (a *component) resetConversation(c *sdk.Context) error` 以 `sessionLock(string(c.Session()))` 串行化 ResetGeneration 递增及 ClearConversation；converse 成功追加前核对相同代次。现有会话/设置键为 `string(c.Session())`。
+- `sdk/sdk.go`：`(*Context).Event() *message.Event`、`User() message.User`、`Session() message.Session`、`Caller() string`（后者位于 services.go）；Session/用户字符串都省略实例。事件 Handler 可以从 `Event().Actor`、`Event().AdapterInstanceID` 读取实例；Service 的 invokeService 只填私有 actor/defaultTarget，未填 event。`sdk/message/session.go` 的 `Session.Parts() (adapterID, chatID, threadID string, ok bool)` 提供聊天与话题，公开 Context 当前没有 Service 侧 Actor/defaultTarget 的完整读取入口。
+- `internal/core/broker/broker.go` 的 call：复制父链后追加 c.PluginID，只要目标 pluginID 已在链中便返回 CALL_CYCLE；`internal/core/tool/invoke.go` 的 invoke 最终仍转交同一个 Broker。Agent 延续调用经 InvokeTool 调用自己的 memory，会命中此规则；本稿保留 CONTRACTS §13.4 的规定路径，交审查者修定契约或前置能力。
+- `agent/agent_test.go`（unix，外部包 agent_test）的 `startAgent(t *testing.T, loop *loopback, configuration map[string]any, coreExtra map[string]any, plugins ...*sdk.Plugin) *harness` 经根包 Start 运行真实 Core、Agent Session、SQLite 与回环 Adapter，可复用为记忆集成装配；确认按钮能力需按实际合入顺序与 goal-60 合并。多进程本地自测可参考根包 `pipeline_test.go` 的 `newPipeline(t *testing.T, stdio ...bool) *pipelineHarness`。
+- 在途共享文件：goal-40 触及 state、supervisor 与根包装配；PR #171（goal-69）触及根包与 cmd/alonabot；PR #172（goal-57）触及 t11_e2e_test.go 与 pipeline_test.go。本切片产品范围均在 Agent；若审查者另派 Core/SDK 前置修复，应与这些所有者协调。goal-60 与本切片共享 agent.go、conversation.go、i18n、生成物及测试辅助；模型写记忆的联调依赖其工具循环。旧在途清单中的 #165/#167/#168/#169、goal-59 已合并，#169 的 schema 与卸载清理现状保持由 Core 所有者维护。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-61（切片 T-12.4：Agent 的记忆）。goal 目录 goal-61，分支 goal-61，worktree .worktrees/goal-61，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-61（切片 T-12.4：Agent 的记忆）。goal 目录 goal-61，分支 goal-61，worktree .worktrees/goal-61，从最新 origin/main 创建（须已包含 PR #79、#101、#35、#165、#170 与 goal-60 的 PR #178）。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：官方 Agent 组件 agent/ 实现 Hermes 式的记忆：用 gormdb 在 Agent 的受管 SQLite 中保存会话笔记（按默认 Target）与用户档案（按 Actor）；注册 memory 工具（allow）执行原子的 add/patch/remove；一轮对话在会话第一轮把会话笔记写为快照条目，每轮把当前 Actor 的档案附在用户消息之前。
+目标：在官方 Agent 的受管 SQLite 中保存按可信默认 Target 划分的会话笔记与按 Actor 划分的用户档案，注册 memory 工具并按 Core 策略执行原子的 add/patch/remove；会话第一轮冻结笔记快照，此后沿用该快照，/reset 后重新取；每轮只注入当前 Actor 的档案，群聊用户互相隔离。
 
-依据：PLAN T-12 步骤 3、5；CONTRACTS §13.1、§13.4、§3；DECISIONS D-60；TEST-MATRIX V-59。
+依据：spec/PLAN.md §3.1、§5；spec/plan/agent.md T-12.4、T-12 步骤 3、5 与「失败停止条件」；spec/plan/core.md T-11 步骤 1～5 与「失败停止条件」；spec/CONTRACTS-v0.1.md §2.4、§3、§6.1～§6.2、§13.1～§13.4；spec/MESSAGE-MODEL.md §1（Actor、Target 与实例）、§3、§4A；spec/WIRE-FORMAT.md §3.3、§3.5、§4；spec/DESIGN.md §R 的记忆；spec/adr/DECISIONS.md D-60、D-86、D-103（工具 Replay 只留本轮）、D-122（带类型声明）、D-135、D-141；TEST-MATRIX V-59、§3，保留已实现的 V-57 对话行为。
 
 范围（只新增或修改这些）：
-- agent/：新增 memory.go（存储、工具与注入）、迁移追加记忆表；一轮对话只在调用处加两处调用；根组件注册 memory 工具（只改注册处）
-- 上述包的测试文件
-允许的新跨模块边：无（agent/... -> sdk/... 已允许）。
+- 新增 agent/memory.go：私有记忆数据类型、GORM 存储、原子操作、memory 工具注册、读取与请求注入辅助。
+- agent/agent.go：在现有 gormdb.Migrations 登记中加入记忆表迁移，并在同一个 p 上注册 memory 工具；保留已有聊天设置与对话注册。
+- agent/conversation.go：conversationEntry 追加快照 kind；接入会话首轮快照、历史中的固定快照读取与本轮 Actor 档案注入，保留成功追加及 reset 代次检查。
+- agent/settings.go：快照的初始化、清除与 reset 代次共享现有锁；聊天设置、reset 锁与会话历史的键改为 `<会话字符串>@<实例名>`（D-142，首次发布前不写兼容层，已运行旧键的开发数据库需重建）。
+- internal/core/broker/、internal/core/tool/invoke.go：只供 core.tool.invoke 使用的自身工具调用放行（D-142），不新增 SDK 公开符号。
+- sdk/sdk.go：新增 `(*Context).Instance() string`；sdk/services.go：新增 `(*ServiceBuilder[In, Out]).Permission(p Permission)`，写入 RouteDescriptor.required_permissions。
+- agent/i18n/en-US.json、agent/i18n/zh-CN.json：增加 agent.memory_error，保持消息占位符一致。
+- 新增 agent/memory_test.go（//go:build unix，package agent_test）；agent/agent_test.go 只补必要的共用装配、确认点击与会话条目读取辅助，原断言随新增快照条目做精确适配，保留原有对话、显示和失败条件。
+- agent/alonabot_gen.go：仅由生成器更新，包含 memory 服务输入/输出 Schema 与 i18n。
+- 本地自测为 agent/*_local_test.go；若需多进程补证据，根包 *_local_test.go 复用已有 pipeline 装配，不改被跟踪的根包测试文件。
+允许的新跨模块边：无；沿用 agent/... -> sdk/...、contracts 与已批准的 GORM，internal/core 内部与 sdk 内部的现有边。外部测试包沿用 agent/agent_test.go 已有的根包库模式装配。
 
-接口：agent 不新增导出符号。
+接口（现有公开符号照此调用；Agent 不新增导出符号；SDK 只新增下面两个）：
+// sdk（D-142 新增）
+func (c *Context) Instance() string // 当前事件 Target 或继承的默认 Target 的 adapter_instance_id；都没有时为空
+func (s *ServiceBuilder[In, Out]) Permission(p Permission) *ServiceBuilder[In, Out] // 与 CommandBuilder.Permission 同语义：满足任一权限名即可，未调用时不要求
+// internal/core/broker 与 internal/core/tool：私有放行方式自定（例如 broker 调用参数中的标志），只由 core.tool.invoke 设置
+// agent
+func New() *sdk.Plugin
+// sdk/gormdb，以下按 gormdb 包内签名列出。
+func Open(ctx context.Context) (*gorm.DB, error)
+type Migration struct { ID uint32; Up func(context.Context, *gorm.DB) error }
+func Migrations(p *sdk.Plugin, list []Migration)
+// sdk，以下按 sdk 包内签名列出。
+func JSON[In, Out any](target string) Service[In, Out]
+func Serve[In, Out any](owner Registrar, declaration Service[In, Out]) *ServiceBuilder[In, Out]
+func (s *ServiceBuilder[In, Out]) Access(a Access, allowlist ...string) *ServiceBuilder[In, Out]
+func (s *ServiceBuilder[In, Out]) Tool(description string, defaultPolicy ToolDefault) *ServiceBuilder[In, Out]
+func (s *ServiceBuilder[In, Out]) Handle(h func(*Context, In) (Out, error))
+func InvokeTool(ctx context.Context, name string, arguments json.RawMessage) (json.RawMessage, error)
+func AppendConversation(ctx context.Context, key string, entries ...json.RawMessage) (lastSeq uint64, err error)
+func ListConversation(ctx context.Context, key string, fromSeq uint64) (entries []ConversationEntry, nextSeq uint64, more bool, err error)
+func ClearConversation(ctx context.Context, key string) error
+
+// 拟新增的私有 JSON DTO，输入/输出 Schema 由现有生成器产生，默认版本 1。
+type memoryOperation struct {
+    Op string `json:"op"`             // add、patch、remove
+    Target string `json:"target"`     // memory、user
+    Text string `json:"text,omitempty"`
+    OldText string `json:"old_text,omitempty"`
+}
+type memoryRequest struct { Operations []memoryOperation `json:"operations"` }
+type memoryResponse struct{}
+// 注册目标与调用名均为 alonabot_agent_official/memory：
+// sdk.Serve(p, sdk.JSON[memoryRequest, memoryResponse]("alonabot_agent_official/memory")).
+//     Access(sdk.AccessPrivate).Tool(英文说明, sdk.ToolAllow).Handle(私有处理函数)
+// AccessPrivate 为默认规则：Core 与本组件；普通第三方插件无法直接访问。
+// 成功响应为 {}；失败返回 sdk/errcode 中相应的公开错误。
+
+// 会话条目沿用已有结构，新增字段：
+// Kind string `json:"kind,omitempty"`
+// 笔记快照：{"role":"system","kind":"memory_snapshot","content":"..."}
+// 普通 user/assistant 的 role、speaker、content 含义保持。
+// 用户档案只进本轮 Provider 请求，不保存为聊天共享历史条目。
+
+协议复用（无新增 proto）：ToolInvokeRequest{name = 1, arguments_json = 2}、ToolInvokeResponse{result_json = 1}；ServiceInvocation.context 继承可信 Actor/default_target，InvocationContext.actor = 1、default_target = 2、plugin_chain = 4；RouteDescriptor.required_permissions = 17 已存在。所有读取只经审查者定稿后的公开 SDK 接口，当前缺口按停止条件处理。
 
 行为：
-- 范围：会话按默认 Target（adapter_instance_id、chat_id、thread_id），用户按 Actor（adapter_instance_id、external_user_id），都取自 Core 下发的可信上下文；memory 工具经 core.tool.invoke 调用时取工具调用的上下文，不采信参数中的范围。缺少所需的部分时返回 FAILED_PRECONDITION。
-- memory 工具（JSON 服务加 sdk.Tool，default_policy=allow，只允许本组件经 core.tool.invoke 调用）：输入 {"operations": [{"op": "add"|"patch"|"remove", "target": "memory"|"user", "text": "...", "old_text": "..."}]}；patch 与 remove 用唯一的 old_text 定位（找不到或不唯一 → INVALID_ARGUMENT）；整组按结果检查上限（会话笔记 2,200、用户档案 1,375 个 Unicode 码点，命名常量）后在一个事务中写入；超限、完全重复的条目、含 Unicode Cf 类字符的内容返回错误，已有条目不变。条目按写入顺序拼接为文本（每条一行）。
-- 一轮对话：
-  - 会话的第一轮（会话为空时）读取会话笔记，作为 {"role": "system", "kind": "memory_snapshot", "content": ...} 写入会话；之后的轮次使用会话中的快照，不再读取（会话内快照不变、/reset 后下一会话重新取）。
-  - 每轮读取当前 Actor 的档案，附在本轮用户消息之前。
-  - 读取记忆失败时本轮按 agent.memory_error 报错并结束，不跳过记忆继续。
-  - 模型的写入经工具循环调用 memory 工具（T-12.3 已接入工具循环；若本切片先于 goal-60 合并，工具调用留到 goal-60 之后验证）。
+- 业务数据归 Agent 受管 SQLite，使用 gormdb.Open(c.Context())；在现有 versioned 迁移列表中追加记忆表步骤，保留 ID 1 的 chat_settings 与账本。Core 的 schema、卸载清单和会话表由 Core 既有实现管理。
+- 会话笔记键为 `<会话字符串>@<实例名>`（`string(c.Session()) + "@" + c.Instance()`，即可信默认 Target 的 adapter、chat、thread 与实例），用户档案键为可信 Actor 的 (adapter_instance_id, external_user_id)。按工具 Service 收到的可信上下文（c.User()、c.Session()、c.Instance()）确定，输入不接受调用方自报范围。Agent 的会话历史、聊天设置与 reset 锁改用同一会话键，同一聊天的两个实例互不共用（V-57）。缺少所操作 target 必需的 Actor/默认 Target 时返回 FAILED_PRECONDITION；同一组中任一操作失败，整组回滚。
+- memory 工具默认 allow，访问规则只含 Core 与本组件；模型写入统一经 sdk.InvokeTool 的 Core 工具路径。管理员改为 confirm 时由 Core 展示实际参数并等待同一 Actor；改为 deny、用户拒绝或超时都保留既有条目，结果由工具循环交回模型。执行时沿用 Service 访问/权限、父链、期限与取消规则。
+- 输入是一组 operations，按顺序执行 add/patch/remove，target 为 memory/user。add 添加条目；patch 与 remove 的 old_text 是已有条目中的子串，恰好一个条目包含它时对该条目整条替换或删除，没有或多于一个条目包含时返回 INVALID_ARGUMENT；空操作组、add/patch 的空 text、patch/remove 的空 old_text、未知 op 或 target 都返回 INVALID_ARGUMENT。整组先在事务内得到最终结果，检查再写入；会话笔记上限 2,200、用户档案 1,375 个 Unicode 码点，均为命名常量。文本按写入顺序逐条以换行连接，码点计数包含实际保存/注入的文本；超限、完全重复的条目与 Unicode Cf 内容返回错误，原数据保持。
+- 首轮以 Core 会话实际为空为准，读取对应会话笔记，将快照条目写入会话并放进本轮系统上下文。后续轮次从会话找回同一快照，即使本轮历史截取未包含它也保持；history_entries=0 只影响普通历史，不把现有会话误判为空。并发首轮与 /reset 共用已有会话锁/代次约束，避免重复快照及 reset 后旧快照回写。
+- 每轮读取当前 Actor 档案，在本轮 user 消息之前注入 Provider 请求；档案随本轮用户而变，群聊中后续用户的请求不包含前一用户的私有档案。群聊普通 user 条目的 speaker 标记保持。记忆读取失败时，按 Actor locale 回复 agent.memory_error 并结束该轮，Provider 请求不继续。
+- 会话内写入的笔记不改变冻结快照；/reset 清除会话快照与历史，保留已写入的长期笔记与档案，下一会话重新读取。保留 ResetGeneration 对在途旧轮次的保护。模型工具联调在 goal-60 工具循环可用后完成；本切片交付前必须提供该证据。
+- 输出继续经 c.Stream 以纯文本发送；保留既有 Provider 错误时不自动重发、保留已显示内容、失败轮次不追加 user/assistant、NotCommand 过滤与人格/Provider 选择。
+- 自身工具调用（D-142）：core.tool.invoke 的目标插件等于调用方插件时，Broker 不判 CALL_CYCLE、不把调用方再次加入调用链，但仍计入深度上限；其他重复仍返回 CALL_CYCLE；不新增其他放宽。memory 工具仍经 Core 的策略、确认、Service 访问与权限检查。
+- ServiceBuilder.Permission 写入的 required_permissions 由 Core 现有的 invoke 检查执行；memory 工具本身不要求额外权限。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：agent/memory_test.go（//go:build unix）。经真实 Core 装配与模拟 Provider：
-  - 经 core.tool.invoke 调用 memory 工具：add、patch、remove 正确；超限时返回错误且已有条目不变；重复条目与含 U+200B 的内容被拒；群聊中两位用户各自只看到自己的档案；管理员把 memory 工具设为 deny 后调用返回 PERMISSION_DENIED。
-  - 第一轮会话写入快照条目，第二轮请求中的快照与第一轮相同（会话内写入不进入快照）；/reset 后重新取快照；模拟 Provider 收到的本轮用户消息前附有当前 Actor 的档案。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：码点计数（含组合字符与 emoji）；old_text 不唯一；空操作组；缺少 Actor 或默认 Target 的 FAILED_PRECONDITION。
+- 提交一个集成测试 agent/memory_test.go 的 TestAgentMemory（unix，表驱动）。复用真实 Core、Agent SDK Session、受管 SQLite、回环 Adapter 与脚本化 httptest Provider，通过模型 -> 工具循环 -> core.tool.invoke 驱动 memory。主路径在群聊中执行 add/patch/remove，验证数据库结果和模型收到的工具结果；本会话写笔记后第二轮仍见原快照，/reset 后重取新快照；两位用户的请求各自只带本人档案。追加 confirm 的允许/拒绝与 deny 子场景，核对实际写入次数与原数据保持。多子场景理由：V-59 同时要求快照、群聊用户隔离及管理员策略，需在真实 Session/存储/工具链中一起证明。
+- 原 TestAgentConversation 的会话条目断言适配明确的快照 kind，正常轮次仍按原顺序保存 user/assistant；断流仍不追加失败轮次的这两个条目。不得简单删除原断言。
+- 本地自测（*_local_test.go，不提交，PR 写明结果）：2,200/1,375 码点边界与 emoji/组合字符；换行计数；超限/重复/U+200B 拒绝且原数据不变；old_text 缺失/不唯一，操作顺序与整组回滚，memory/user 混合组；空操作组与非法 op/target；缺少可信 Actor/默认 Target；同聊天跨实例与跨 thread 隔离；history_entries=0、小于会话长度及分页仍保留快照；并发首轮、reset 与旧轮次交错；读取失败时 Provider 未调用；confirm 超时/取消无写入；Core 重启后笔记、档案及冻结快照保持。需要独立进程的场景可复用根包 pipeline 装配。
+- D-86：SDK、supervisor 和 testdata 测试插件的验证均留本地。goal-60 尚未合入时可先完成存储与通过 SDK 调用的独立验证，模型往返证据保持待完成；收尾时更新至含工具循环的 main 后完成同一集成测试。
+- 证据写入 goal-61/tasks.md 与 PR，按 TEST-MATRIX §3 写明位置、命令、OS/arch、Go 版本、结果及真实外部环境未运行项；T-12.7 负责最终汇总。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./agent/...；go build ./...；在 agent 运行 alonabot check 通过。
+完成条件：生成器输出与源码/资源一致；gofmt -l 对改动的 Go 文件无输出；go vet ./agent/...；go test -race -count=1 ./agent/...；go build ./...；在 agent 目录运行 go run ../cmd/alonabot plugin check 通过；V-59 的存储、快照、用户隔离与模型经 Core 工具链的策略证据完整。记忆超限导致已有数据丢失、用户档案串读、绕过策略/调用链、Agent 产品代码访问 internal/core，按工作包停止；前述契约/SDK 缺口未闭合时对应验收保持阻塞。
 
-不做：技能（T-12.5）；定时任务（T-12.6）；向量检索或外部记忆后端。
+不做：sdk/memory、独立记忆插件、向量检索、外部记忆后端、跨会话检索、技能、定时任务、图片输入、Core 管理 API/页面、D-142 之外的 SDK 公开符号或调用链放宽、修改 Core schema/清理清单、根包产品装配重构、新依赖。
 ```
 
 ## 第 16 波
