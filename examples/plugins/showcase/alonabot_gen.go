@@ -7,8 +7,12 @@ import alonabotgen0 "github.com/AlonaBot/AlonaBot/sdk"
 var alonabotGenerated = alonabotgen0.Generated{
 	ConfigSchema: []byte("{\"$version\":2,\"$migrations\":[{\"to\":2,\"rename\":{\"hello\":\"greeting\"}}],\"greeting\":{\"type\":\"string\",\"description\":\"Greeting\"},\"interval_seconds\":{\"type\":\"int\",\"description\":\"Interval in seconds\"}}"),
 	ParamNames: map[string][]string{
-		"main.(*Demo).Echo":  {"text", "times"},
-		"main.(*Demo).Hello": {},
-		"main:main.go:88":    {},
+		"main.(*Demo).CancelReminder": {"key"},
+		"main.(*Demo).CreateReminder": {"key", "seconds", "text"},
+		"main.(*Demo).Echo":           {"text", "times"},
+		"main.(*Demo).Hello":          {},
+		"main.(*Demo).Remind":         {"args"},
+		"main.reminderKey":            {"key"},
+		"main:main.go:141":            {},
 	},
 }

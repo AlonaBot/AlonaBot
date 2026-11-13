@@ -6,7 +6,7 @@
 // [Source] 逐行解析后转成同样的记录，插件给出的同名字段被丢弃，不能覆盖 Core 补充的来源字段。
 //
 // Core 自己的记录按全局级别过滤；插件的记录按该来源的生效级别过滤（[Levels]）。
-// 按来源的级别目前只保存在内存中。
+// 输出后的记录按来源缓存在内存中，并可订阅；级别设置由管理服务写回配置文件。
 //
 // 包的组成：
 //   - [Open] 按 [Options] 建立 [Output]；[Output.Logger] 是 Core 自己的 Logger，[Output.EnableFile] 开始写日志文件。
@@ -68,11 +68,13 @@ type Options struct {
 	Format Format
 	Level  slog.Level // 全局级别
 	// Stderr 是 Core 的 stderr。它是终端且未设置 NO_COLOR 时，控制台格式才着色。
-	Stderr io.Writer
+	Stderr        io.Writer
+	BufferRecords int // 每个来源的记录与每个订阅的后续发送队列上限，必须为正。
 }
 
 // Output 把 Core 与插件的记录写到 stderr 与日志文件；方法可以并发调用。
 type Output struct {
+	buffer  *recordBuffer
 	levels  *Levels
 	stderr  slog.Handler // 只写 stderr，不按级别过滤
 	file    *fileWriter  // EnableFile 之前丢弃写入
@@ -81,6 +83,9 @@ type Output struct {
 
 // Open 按 opt 建立日志输出；opt.Format 不是 text 或 json 时返回错误。
 func Open(opt Options) (*Output, error) {
+	if opt.BufferRecords <= 0 {
+		return nil, fmt.Errorf("log buffer records must be positive")
+	}
 	var stderr slog.Handler
 	switch opt.Format {
 	case FormatText:
@@ -90,10 +95,10 @@ func Open(opt Options) (*Output, error) {
 	default:
 		return nil, fmt.Errorf("unknown log format %q (want %s or %s)", opt.Format, FormatText, FormatJSON)
 	}
-	o := &Output{levels: &Levels{sources: map[string]slog.Level{}}, stderr: stderr}
+	o := &Output{levels: &Levels{sources: map[string]slog.Level{}}, stderr: stderr, buffer: &recordBuffer{limit: opt.BufferRecords, sources: map[string]*recordRing{}, subscribers: map[*subscription]struct{}{}}}
 	o.levels.global.Set(opt.Level)
 	o.file = &fileWriter{report: o.reportFileError}
-	o.handler = slog.NewMultiHandler(stderr, newConsoleHandler(o.file, false))
+	o.handler = &bufferedHandler{output: o, next: slog.NewMultiHandler(stderr, newConsoleHandler(o.file, false))}
 	return o, nil
 }
 
@@ -126,19 +131,19 @@ func (o *Output) Close() error { return o.file.close() }
 
 // reportFileError 把日志文件的错误只写到 stderr，避免再次写入出错的文件。
 func (o *Output) reportFileError(err error) {
-	slog.New(o.stderr).Error("log file unavailable", KeyComponent, ComponentCore, "err", err)
+	slog.New(&bufferedHandler{output: o, next: o.stderr}).Error("log file unavailable", KeyComponent, ComponentCore, "err", err)
 }
 
-// Plugin 为插件进程的一次启动建立 [Source]，记录带 component=plugin、plugin_id 与 generation_id。
-func (o *Output) Plugin(pluginID, generationID string) *Source {
-	return &Source{levels: o.levels, id: pluginID, h: o.Component(pluginID, generationID)}
+// Plugin 为一次组件启动建立 [Source]；attrs 由 Core 按可信安装记录补充 Adapter 的来源类别与 ID。
+func (o *Output) Plugin(pluginID, generationID string, attrs ...slog.Attr) *Source {
+	return &Source{levels: o.levels, id: pluginID, h: o.Component(pluginID, generationID, attrs...)}
 }
 
-// Component 返回带插件来源属性、不过滤级别的同进程日志目标；Adapter 的 SDK 补充 component=adapter。
-func (o *Output) Component(pluginID, generationID string) slog.Handler {
-	return o.handler.WithAttrs([]slog.Attr{
+// Component 返回同进程日志目标；attrs 由 Core 绑定可信安装身份，输出时复核当前来源级别。
+func (o *Output) Component(pluginID, generationID string, attrs ...slog.Attr) slog.Handler {
+	return o.handler.WithAttrs(append([]slog.Attr{
 		slog.String(KeyComponent, ComponentPlugin), slog.String(KeyPluginID, pluginID), slog.String(KeyGenerationID, generationID),
-	})
+	}, attrs...))
 }
 
 // Levels 保存全局级别与按来源单独设置的级别；方法可以并发调用。

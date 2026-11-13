@@ -14,7 +14,7 @@
 
 已锁定并经测试验证的版本：protobuf v1.36.12、go.yaml.in/yaml/v3 v3.0.5、gorm v1.31.2、libtnb/sqlite v1.2.2、modernc.org/sqlite v1.61.0（已验证 CRUD/Tx/WAL Backup/迁移账本）；golang.org/x/sys v0.49.0 为直接依赖，用于 internal/oslock 的 flock/LockFileEx，以及 internal/core/process 在 Darwin 上查询进程组成员；Cobra v1.10.2、pflag v1.0.9、仅 Windows 链接的 mousetrap v1.1.0。
 
-已批准的 Go 依赖（2026-10-21）：`google.golang.org/protobuf`、`gorm.io/gorm`、`github.com/libtnb/sqlite`、`modernc.org/sqlite`、`golang.org/x/sys`、`go.yaml.in/yaml/v3`（`gorm.io/driver/postgres` 的批准于 2026-10-27 随 D-48 撤销）；2026-10-25 批准 `github.com/modelcontextprotocol/go-sdk`，只用于官方 Agent 组件（`agent/`）的 MCP 客户端，版本在 T-12.3 验证后锁定；2026-10-26 批准 `github.com/spf13/cobra`（随之引入 `github.com/spf13/pflag`），只用于 `cmd/alonabot` 的命令树与全局参数，T-02.2 已锁定 Cobra v1.10.2、pflag v1.0.9 与仅 Windows 链接的 mousetrap v1.1.0；2026-10-26 批准 `github.com/google/jsonschema-go`（MCP go-sdk 也直接依赖它），用于 JSON Schema 的表示、序列化、`Resolve`、`ApplyDefaults` 与 `Validate`：配置 Schema（`sdk/config`、构建期生成器、Core 的配置与表单 Schema）、Service 与工具的输入 Schema、Adapter 声明的扩展事件、extension 与平台动作的 Schema（`sdk/adapter` 用 `For` 从 Go 类型推导，D-113）、`agent/`。配置 Schema 由生成器构造，不用 `For`/`ForType` 推导（D-43）；版本在首个使用它的切片引入时锁定。2026-10-27 批准 `github.com/coder/websocket`，只用于官方 OneBot 11 Adapter（`adapters/onebot11/`）的 WebSocket 连接，T-15.1 已锁定 v1.8.15（D-46）。2026-11-10 批准 `github.com/openai/openai-go/v3` 与 `github.com/anthropics/anthropic-sdk-go/v2`，只用于官方 Agent 组件的 Provider 客户端（`agent/provider`），不导入两者的 Azure、Bedrock、Vertex 等云厂商子包；T-12.12 锁定 openai-go v3.98.0、anthropic-sdk-go v2.9.0。实际链接的传递依赖为 bahlo/generic-list-go v0.2.0、buger/jsonparser v1.1.2、coder/websocket v1.8.15、go-logr/logr v1.4.2、go-logr/stdr v1.2.2、invopop/jsonschema v0.14.0、pb33f/ordered-map/v2 v2.3.1、standard-webhooks/standard-webhooks/libraries v0.0.1、tidwall/gjson v1.20.0、tidwall/match v1.1.1、tidwall/pretty v1.2.1、tidwall/sjson v1.2.5、go.opentelemetry.io/auto/sdk v1.1.0、go.opentelemetry.io/otel（含 metric、trace）v1.33.0、go.yaml.in/yaml/v4 v4.0.0-rc.2、golang.org/x/sync v0.24.0。MVS 将 x/text 从 v0.39.0 抬至 v0.42.0；coder/websocket 保持 v1.8.15；MCP go-sdk 的模块下限为 v1.3.1，当前 Provider 未链接 MCP 包。前端已批准：Vite（含 `@vitejs/plugin-react`）、TypeScript、React 19、vitest；2026-11-05 批准开发依赖 `@types/react@19`、`@types/react-dom@19`（PR #91），只用于类型检查。T-08.7 锁定 react 与 react-dom 19.3.1、@types/react 与 @types/react-dom 19.3.0、@vitejs/plugin-react 6.2.1、TypeScript 7.0.2、Vite 8.3.5、vitest 5.1.0；DOM 测试环境（jsdom、happy-dom）与 Testing Library 未批准。新增清单外依赖需要先征得维护者同意。
+已批准的 Go 依赖（2026-10-21）：`google.golang.org/protobuf`、`gorm.io/gorm`、`github.com/libtnb/sqlite`、`modernc.org/sqlite`、`golang.org/x/sys`、`go.yaml.in/yaml/v3`（`gorm.io/driver/postgres` 的批准于 2026-10-27 随 D-48 撤销）；2026-10-25 批准 `github.com/modelcontextprotocol/go-sdk`，只用于官方 Agent 组件（`agent/`）的 MCP 客户端，T-12.3 验证后锁定 v1.3.1；2026-10-26 批准 `github.com/spf13/cobra`（随之引入 `github.com/spf13/pflag`），只用于 `cmd/alonabot` 的命令树与全局参数，T-02.2 已锁定 Cobra v1.10.2、pflag v1.0.9 与仅 Windows 链接的 mousetrap v1.1.0；2026-10-26 批准 `github.com/google/jsonschema-go`（MCP go-sdk 也直接依赖它），用于 JSON Schema 的表示、序列化、`Resolve`、`ApplyDefaults` 与 `Validate`：配置 Schema（`sdk/config`、构建期生成器、Core 的配置与表单 Schema）、Service 与工具的输入 Schema、Adapter 声明的扩展事件、extension 与平台动作的 Schema（`sdk/adapter` 用 `For` 从 Go 类型推导，D-113）、`agent/`。配置 Schema 由生成器构造，不用 `For`/`ForType` 推导（D-43）；版本在首个使用它的切片引入时锁定。2026-10-27 批准 `github.com/coder/websocket`，只用于官方 OneBot 11 Adapter（`adapters/onebot11/`）的 WebSocket 连接，T-15.1 已锁定 v1.8.15（D-46）。2026-11-10 批准 `github.com/openai/openai-go/v3` 与 `github.com/anthropics/anthropic-sdk-go/v2`，只用于官方 Agent 组件的 Provider 客户端（`agent/provider`），不导入两者的 Azure、Bedrock、Vertex 等云厂商子包；T-12.12 锁定 openai-go v3.98.0、anthropic-sdk-go v2.9.0。实际链接的传递依赖为 bahlo/generic-list-go v0.2.0、buger/jsonparser v1.1.2、coder/websocket v1.8.15、go-logr/logr v1.4.2、go-logr/stdr v1.2.2、invopop/jsonschema v0.14.0、pb33f/ordered-map/v2 v2.3.1、standard-webhooks/standard-webhooks/libraries v0.0.1、tidwall/gjson v1.20.0、tidwall/match v1.1.1、tidwall/pretty v1.2.1、tidwall/sjson v1.2.5、go.opentelemetry.io/auto/sdk v1.1.0、go.opentelemetry.io/otel（含 metric、trace）v1.33.0、go.yaml.in/yaml/v4 v4.0.0-rc.2、golang.org/x/sync v0.24.0。MVS 将 x/text 从 v0.39.0 抬至 v0.42.0；coder/websocket 保持 v1.8.15；MCP go-sdk 的模块下限为 v1.3.1，当前 Provider 未链接 MCP 包。前端已批准：Vite（含 `@vitejs/plugin-react`）、TypeScript、React 19、vitest；2026-11-05 批准开发依赖 `@types/react@19`、`@types/react-dom@19`（PR #91），只用于类型检查。T-08.7 锁定 react 与 react-dom 19.3.1、@types/react 与 @types/react-dom 19.3.0、@vitejs/plugin-react 6.2.1、TypeScript 7.0.2、Vite 8.3.5、vitest 5.1.0；DOM 测试环境（jsdom、happy-dom）与 Testing Library 未批准。新增清单外依赖需要先征得维护者同意。
 
 Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）只能链接上述清单的一个子集（D-52，D-68 修订），由审查时用下方的 `go list -deps` 命令核对：Core 允许 protobuf、modernc SQLite 及其依赖、GORM 与 libtnb/sqlite 及其依赖（jinzhu/inflection、jinzhu/now、golang.org/x/text）、yaml、x/sys、cobra 与 pflag、仅 Windows 链接的 mousetrap、jsonschema-go；SDK 根包只允许 protobuf、x/sys 与 jsonschema-go。MCP go-sdk、coder/websocket 只出现在官方插件、Agent 或 Adapter 中，openai-go 与 anthropic-sdk-go 只出现在 Agent 中；插件只在导入 `sdk/gormdb` 时链接 GORM。修改子集与修改已批准清单一样，需要维护者同意。
 
@@ -199,3 +199,78 @@ Adapter 可以实现 `sdk.AdapterHTTP`，在统一端口的 `/plugins/<Adapter �
 [PR metadata](../.github/workflows/pr-metadata.yml) 校验非草稿 PR 的实际说明和清单；[triage](../.github/workflows/pr-triage.yml) 同步标签与 assignee，[auto-assign](../.github/workflows/auto-assign.yml) 请求非作者维护者审阅。这些 `pull_request_target` 流程不 checkout/执行 PR 代码，新工作流合入默认分支后才开始处理后续事件。Issue 表单自带 assignee，不依赖工作流执行。
 
 远端合并保护由维护者单独管理，不能因存在这些 YAML 就声称检查不可绕过。本次建设不添加发布、真实 Telegram 调用或自动关闭 PR 的流程。
+
+## 动态提醒与静态任务暂停恢复
+
+需要十分钟后给当前会话发提醒时，先在 `New()` 中登记任务声明和处理函数，命令执行时再创建实例。完整示例见 [showcase](../examples/plugins/showcase/main.go)：`/demo remind meeting 600 开会` 创建当前用户在当前会话内的 `meeting` 提醒，`/demo cancel meeting` 取消。同用户、同会话、同 key 再次创建会替换提醒；不同用户或会话各自独立，回复始终使用用户输入的 key。
+
+```go
+type ReminderArgs struct {
+    Session message.Session `json:"session"`
+    Text    string          `json:"text"`
+}
+
+// 创建与取消共用编码，将可信身份与用户 key 一起放入内部 key。
+func reminderKey(c *sdk.Context, key string) (string, error) {
+    user, session := c.User(), c.Session()
+    internalKey := fmt.Sprintf("%d:%s/%d:%s/%s", len(user), user, len(session), session, key)
+    if len(internalKey) > 128 {
+        return "", errcode.InvalidArgument.New("reminder key with user and session scope exceeds 128 bytes")
+    }
+    return internalKey, nil
+}
+
+// New 中创建并登记一次，命令闭包持有同一个声明值。
+reminder := sdk.Task[ReminderArgs]("remind")
+sdk.OnTask(p, reminder).Handle(func(c *sdk.Context, args ReminderArgs) error {
+    _, err := c.Send(message.Text(args.Text), sdk.To(args.Session))
+    return err
+})
+p.Command("remind").Handle(func(c *sdk.Context, key, text string) (message.Content, error) {
+    internalKey, err := reminderKey(c, key)
+    if err != nil {
+        return nil, err
+    }
+    _, err = reminder.At(c.Context(), time.Now().Add(10*time.Minute),
+        ReminderArgs{Session: c.Session(), Text: text}, sdk.Key(internalKey))
+    if err != nil {
+        return nil, err
+    }
+    return message.Text(key), nil
+})
+p.Command("cancel").Handle(func(c *sdk.Context, key string) error {
+    internalKey, err := reminderKey(c, key)
+    if err != nil {
+        return err
+    }
+    return reminder.Cancel(c.Context(), internalKey)
+})
+```
+
+`reminderKey` 使用 `c.User()` 与 `c.Session()` 的可信身份，以长度前缀区分完整字段。128 字节上限包含身份作用域和用户 key；超长返回明确的 `INVALID_ARGUMENT`，保留输入原文。示例需导入标准库 `fmt` 与 `sdk/errcode`。
+
+任务回调没有 Actor 与默认会话；将所需会话、用户或取消键写入参数，并以 `sdk.To` 指定发送目标。主动发送遵循 Core 的 `allowed_adapter_instances` 准入。参数类型遵循 JSON Service 的类型规则，使用包级具名、非泛型的值类型，顶层编码为 JSON 对象；生成器检查嵌套字段与自定义编码限制。新增声明后运行 `go generate`。
+
+`reminder.Every(ctx, time.Hour, args, sdk.Key(internalKey))` 创建周期实例；`reminder.Cron(ctx, "0 9 * * *", args, sdk.Key(internalKey), sdk.Timezone("Asia/Shanghai"))` 按 IANA 时区运行，其中 `internalKey` 沿用上述身份作用域编码。`At`、`Every` 上设置 `Timezone` 返回 `INVALID_ARGUMENT`。省略 `Key` 时 SDK 生成随机 key，成功返回实际使用的 key；同任务名、同 key 再次创建会整体替换规则和参数，在途旧一轮继续执行。`Cancel` 删除实例并协作取消在途调用，函数实际返回后释放运行槽。未知实例保留 Core 的 `NOT_FOUND`。
+
+`reminder.List(ctx)` 读取全部分页，返回完整的 `TaskInstance[ReminderArgs]`。`At`、`Interval`、`Cron` 中仅对应触发规则的字段有值，`Timezone` 随 Cron 返回；`NextAt == nil` 表示协议没有下一次触发时刻。任一页读取或参数解码失败都会返回错误。
+
+所有任务客户端函数在 Activated 后可用；`OnStart`、`OnReady`、停止后与已失效的 Handler Context 返回 `FAILED_PRECONDITION`。在 Handler 中传 `c.Context()` 以保留父调用关联；独立后台 context 只有组件身份。Core 保存任务定义与 interval 起点，重启后安排下一未来触发；离线、未激活与暂停期间错过的触发作废，一次性过期实例删除。
+
+静态任务继续在 `New()` 中声明，例如 `p.Every("tick", time.Minute).Handle(tick)`。在已激活的 Handler 或后台工作中暂停、恢复与查询：
+
+```go
+if err := sdk.PauseJob(ctx, "tick"); err != nil {
+    return err
+}
+state, err := sdk.JobStatus(ctx, "tick")
+if err != nil {
+    return err
+}
+if state.LastAt != nil {
+    slog.Info("last tick", "at", *state.LastAt)
+}
+return sdk.ResumeJob(ctx, "tick")
+```
+
+`JobState.LastAt` 记录本次 Core 运行最后一次实际派发，首次派发前和 Core 重启后为 `nil`；暂停时 `Paused` 为 true、`NextAt` 为 `nil`。暂停保留在途函数继续执行，恢复沿保存的 interval 起点安排未来触发。暂停状态跨重启保存，重复暂停或恢复成功，未登记的 job ID 返回 `NOT_FOUND`。

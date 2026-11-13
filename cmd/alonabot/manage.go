@@ -286,6 +286,21 @@ func (o *managementOptions) client() (*managementClient, error) {
 }
 
 func (c *managementClient) request(ctx context.Context, method, path string, body any) (json.RawMessage, error) {
+	response, err := c.open(ctx, method, path, body)
+	if err != nil {
+		return nil, err
+	}
+	raw, readErr := io.ReadAll(response.Body)
+	if err := errors.Join(readErr, response.Body.Close()); err != nil {
+		return nil, fmt.Errorf("read management response: %w", err)
+	}
+	if !json.Valid(raw) {
+		return nil, errors.New("management API returned invalid JSON")
+	}
+	return json.RawMessage(bytes.TrimSpace(raw)), nil
+}
+
+func (c *managementClient) open(ctx context.Context, method, path string, body any) (*http.Response, error) {
 	var reader io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
@@ -295,7 +310,12 @@ func (c *managementClient) request(ctx context.Context, method, path string, bod
 		reader = bytes.NewReader(raw)
 	}
 	address := *c.base
-	address.Path = strings.TrimSuffix(address.Path, "/") + path
+	endpoint, err := url.Parse(path)
+	if err != nil {
+		return nil, fmt.Errorf("parse management path: %w", err)
+	}
+	address.Path = strings.TrimSuffix(address.Path, "/") + endpoint.Path
+	address.RawQuery = endpoint.RawQuery
 	request, err := http.NewRequestWithContext(ctx, method, address.String(), reader)
 	if err != nil {
 		return nil, err
@@ -310,29 +330,26 @@ func (c *managementClient) request(ctx context.Context, method, path string, bod
 	if err != nil {
 		return nil, fmt.Errorf("request management API: %w", err)
 	}
+	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
+		return response, nil
+	}
 	raw, readErr := io.ReadAll(response.Body)
 	if err := errors.Join(readErr, response.Body.Close()); err != nil {
 		return nil, fmt.Errorf("read management response: %w", err)
 	}
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		if response.StatusCode >= http.StatusMultipleChoices && response.StatusCode < http.StatusBadRequest {
-			return nil, fmt.Errorf("management API %s: redirect to %q refused", response.Status, response.Header.Get("Location"))
-		}
-		var detail struct {
-			Code        string   `json:"code"`
-			SafeMessage string   `json:"safe_message"`
-			Affected    []string `json:"affected"`
-		}
-		if err := json.Unmarshal(raw, &detail); err != nil {
-			return nil, fmt.Errorf("management API %s: %s", response.Status, string(raw))
-		}
-		if detail.Affected != nil {
-			return nil, fmt.Errorf("confirmation required: %s; retry with --yes", strings.Join(detail.Affected, ", "))
-		}
-		return nil, fmt.Errorf("%s: %s", detail.Code, detail.SafeMessage)
+	if response.StatusCode >= http.StatusMultipleChoices && response.StatusCode < http.StatusBadRequest {
+		return nil, fmt.Errorf("management API %s: redirect to %q refused", response.Status, response.Header.Get("Location"))
 	}
-	if !json.Valid(raw) {
-		return nil, errors.New("management API returned invalid JSON")
+	var detail struct {
+		Code        string   `json:"code"`
+		SafeMessage string   `json:"safe_message"`
+		Affected    []string `json:"affected"`
 	}
-	return json.RawMessage(bytes.TrimSpace(raw)), nil
+	if err := json.Unmarshal(raw, &detail); err != nil {
+		return nil, fmt.Errorf("management API %s: %s", response.Status, string(raw))
+	}
+	if detail.Affected != nil {
+		return nil, fmt.Errorf("confirmation required: %s; retry with --yes", strings.Join(detail.Affected, ", "))
+	}
+	return nil, fmt.Errorf("%s: %s", detail.Code, detail.SafeMessage)
 }

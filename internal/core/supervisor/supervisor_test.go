@@ -99,7 +99,7 @@ func rawPlugin(fault string) int {
 	_, msg := recv()
 	ack := msg.(*pb.HelloAck)
 	sid := ack.GetSessionId()
-	registration := &pb.Register{CandidateConfigJson: "{}"}
+	registration := &pb.Register{CandidateConfigJson: "{}", CandidateConfigVersion: ack.GetBootstrap().GetTargetConfigVersion(), ConfigSchemaHash: ack.GetBootstrap().GetConfigSchemaHash()}
 	registration.Migration = &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}
 	if scheduleHTTP {
 		listener, err := net.Listen("tcp", "127.0.0.1:0")

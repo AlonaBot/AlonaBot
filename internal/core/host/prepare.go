@@ -14,6 +14,7 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -269,6 +270,12 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 			registerErr = validate.Register(m)
 		} else {
 			registerErr = fmt.Errorf("invalid expected role %q", exp.Role)
+		}
+		if registerErr == nil && len(boot.GetConfigSchemaHash()) != 0 && !bytes.Equal(m.GetConfigSchemaHash(), boot.GetConfigSchemaHash()) {
+			registerErr = &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "registered config schema hash differs from Bootstrap"}
+		}
+		if registerErr == nil && m.GetCandidateConfigVersion() != boot.GetTargetConfigVersion() {
+			registerErr = &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "registered config version differs from Bootstrap"}
 		}
 		if registerErr == nil {
 			registerErr = checkMigration(m.GetMigration(), boot.GetDatabaseDescriptor())

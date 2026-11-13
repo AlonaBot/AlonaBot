@@ -213,3 +213,79 @@ X-Content-Type-Options: nosniff
 3. 父页面将请求限定到所属组件已注册 method/path，Core 现有代理执行最终匹配。请求使用管理员会话，变更请求由父页面添加受控 Origin 与 CSRF。父页面拒绝插件自带的 `Cookie`、`Authorization`、`X-Alonabot-CSRF`、`X-Alonabot-Proxy-Auth` 等凭证/内部身份头，比较头名时忽略大小写。
 4. 父页面拒绝重定向，向插件返回响应前滤去 `Set-Cookie` 等凭证头。管理会话、CSRF 与内部代理凭证均留在父页面和 Core 之间。Core 代理继续按角色过滤请求头：私有 Adapter 路由也清除 Core 认证凭证；公开 Adapter 平台 token 路由按其独立声明处理平台凭证。
 5. 插件的 HTML 与全部插件路由响应继续带 `sandbox allow-scripts allow-forms allow-popups`（无 `allow-same-origin`）和 `nosniff`，清除插件设置的 Cookie；WebUI 自身继续使用第 6 节的静态规则。桥的运行代码和浏览器交互由后继 WebUI 切片实现。
+
+## 8. 日志读取与输出级别
+
+`alonabot logs`、`alonabot log-level` 与 WebUI 共用下列端点，均经第 1 节的管理认证。实时缓冲按 Core、组件 ID（Adapter 按包 ID）分别保留 `LOG_BUFFER_RECORDS` 条已输出记录，缺省每来源 1000 条；重启后清空。查询筛选只影响返回内容。
+
+| Method / path | 查询或请求 | 成功响应 |
+| --- | --- | --- |
+| `GET /api/v1/logs/recent` | `source`、`level`、`trace` | 200，`Record[]`，空结果为 `[]`，按记录时间升序 |
+| `GET /api/v1/logs/stream` | 同 recent | 200，`text/event-stream`，先交付初始快照，再交付新记录 |
+| `GET /api/v1/logs/history` | 必填 `date=YYYY-MM-DD`；其余同 recent | 200，`Record[]`，按该日本地文件的续写序号读取；该日无文件为 `[]` |
+| `GET /api/v1/logs/levels` | 无正文 | 200，`{"global":"info","sources":{}}` |
+| `PUT /api/v1/logs/levels` | 同形部分更新，例如 `{"sources":{"demo":"debug"}}` | 200，返回当前有效全局值与文件中的全部来源设置 |
+
+`source` 为空时返回全部来源，实时值为 `core` 或组件 ID。`level` 表示最低记录级别，允许 `debug/info/warn/error`，省略或空串取 `debug`；`trace` 为空时返回全部追踪记录，实时查询按完整 `trace_id` 精确匹配。非法级别、非法/缺失历史日期返回 400 / `INVALID_ARGUMENT`。读取与解析历史文件的实际故障返回 500 / `INTERNAL`，并保留具体错误。
+
+### 8.1 实时 Record 与 SSE
+
+```json
+{
+  "time": "2026-11-13T10:20:30.123456789-08:00",
+  "level": "DEBUG",
+  "source": "demo",
+  "message": "received event",
+  "attrs": {
+    "component": "plugin",
+    "plugin_id": "demo",
+    "session_id": "0123456789abcdef",
+    "generation_id": "gen-example",
+    "source": {"function":"example.handle","file":"/project/plugin.go","line":42},
+    "trace_id": "123456789abcdef0123456789abcdef0"
+  },
+  "trace_id": "123456789abcdef0123456789abcdef0"
+}
+```
+
+`time` 使用 RFC3339Nano，`level` 使用 `slog.Level` 的标准 JSON 字符串。`attrs` 保留实际存在的来源类别、平台/实例、Session/Generation、源码位置和调用字段。来源类别与组件身份由 Core 的安装记录绑定，Core 关于组件的故障记录仍归 `core`。实时结构化值保留完整 trace；stderr 采用 text 或 json 均相同。
+
+每个 SSE 记录按以下格式发送：
+
+```text
+event: log
+data: {"time":"...","level":"INFO","source":"core","message":"...","attrs":{},"trace_id":""}
+
+```
+
+订阅建立与初始快照在输出侧原子完成，快照之后的新记录进入该订阅独立的发送队列。网络写入在输出锁外进行，断开连接会取消订阅。Core 开始停机时先结束日志流并取消订阅，再等待 HTTP 请求排空；停机直接关闭流。每订阅的后续队列上限同为 `LOG_BUFFER_RECORDS`；队列满时结束该订阅，交付已在写出的记录后发送：
+
+```text
+event: overflow
+data: "2026-11-13T10:20:30.123456789-08:00"
+
+```
+
+`overflow.data` 为本次流最后交付记录的时间；尚无已交付记录时为 `"0001-01-01T00:00:00Z"`。随后关闭流。消费者重新连接并用 recent 补齐；`alonabot logs --follow` 会打印一行说明并以非零状态退出。WebUI 可先读 recent 再订阅，重复快照由消费者处理。筛选发生在交付时，共享订阅队列接收全部已输出记录。
+
+### 8.2 历史文件精度
+
+历史查询使用 Core 本地时区的日期，只读取普通日志文件：先 `alonabot-<日期>.log`，再按数字序号读取 `.1.log`、`.2.log` 等。记录时间保留文件中的毫秒精度，日期与时区取查询日期和 Core 本地时区。跨夏令时重复出现的本地钟点按标准库的本地时间解析规则解释。
+
+历史 `source` 与筛选值来自显示标签：Core 为 `core`，插件为去掉 `alonabot_plugin_` 的显示名，Adapter 为 `adapter_id` 或 `adapter_id/instance_id`。`trace_id` 保留文件中的最多 8 位前缀；传入完整 trace 时按其前 8 位匹配。文件已省略的完整包身份、Session 和 Generation 由实时结构化 API 提供。
+
+历史 `message` 原样保留来源标签之后的全部文本，包括级别、源码位置、消息、字段及缩进多行内容。`attrs` 包含可解析的显示来源、位置、带引号/转义的字段和多行值；普通字段保留文本值。正文与属性共享文本格式，含未闭合引号、非法转义或有歧义边界的字段候选只留在 `message`，其余可靠字段继续解析。读取、I/O 和损坏记录头等实际错误继续返回。CLI 按文件原有控制台格式显示历史记录。
+
+### 8.3 级别写回与运行时通知
+
+`global` 允许 `debug/info/warn/error`；`sources` 的值还允许 `off/inherit`。PUT 省略 global 或某个来源时保留当前值，来源设置为 `inherit` 时显式写入该值。空来源集合编码为 `{}`。GET 的 `global` 是本次 Core 的有效值，包含 `--log-level` 启动覆盖；`sources` 是设置文件中的覆盖项。
+
+全局及来源修改先通过同一个 `settings.File.Update` 写回 `core_config.json`，然后更新 Core 阈值并向当前 Activated Session 通知 `sdk.log.set_level`。已安装组件缺省继承，开发组件缺省 debug；开发组件显式 inherit 跟随本次有效全局值。未运行来源只保存设置，下次启动使用已保存值。同进程组件只更新自己的 Session 阈值。
+
+改全局时通知显式 inherit 与已安装的缺省继承来源，开发缺省 debug 及显式来源覆盖继续生效。来源 off 时 SDK 停止输出该进程日志，Core 关于它的记录仍由全局控制。重启沿用保存值，另一次显式 `--log-level` 只覆盖那次启动。
+
+Rename 前保存失败保留旧设置与内存阈值；Rename 后目录同步失败按已经发布的快照同步内存并尝试当前一次通知，同时返回实际保存错误。通知失败保留已提交设置，错误响应列出受影响来源和实际原因，详细原因写入 Core 日志；下次启动继续从保存值取级别。
+
+Cookie 写级别须同时提供受控 Origin 和 `X-Alonabot-CSRF`；Bearer 沿用管理客户端规则。认证在读取或开始 SSE 响应前完成，未认证的 recent/stream 返回 401。
+
+CLI 用法：`alonabot logs [--source ID] [--level L] [--trace T] [--follow] [--date YYYY-MM-DD]`；缺省 recent，date 读取 history，follow 直接消费含快照的 stream；date 与 follow 同时给出时返回用法错误。`alonabot log-level [ID] [LEVEL]` 无参数列出全部设置，单独 ID 显示该设置（文件未覆盖时显示 inherit），`ID=global` 选择全局。两个命令复用 `--data-dir`、`--admin-url`、`--token-file` 与 Bearer 客户端。

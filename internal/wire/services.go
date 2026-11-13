@@ -105,3 +105,6 @@ const ServiceJobResume = "core.job.resume"
 
 // ServiceJobStatus 查询静态任务状态。
 const ServiceJobStatus = "core.job.status"
+
+// ServiceLogSetLevel 更新当前 SDK Session 的日志级别。
+const ServiceLogSetLevel = "sdk.log.set_level"
