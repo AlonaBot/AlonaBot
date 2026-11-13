@@ -87,6 +87,8 @@ type CommandPolicy interface {
 // Router 并发执行有界的事件链；每条链内按稳定次序调用候选。
 // mu 串行化接纳、出队和注册；链调用插件期间不持锁。
 type Router struct {
+	dispatched    func(Dispatch)
+	dispatches    map[string]*dispatchState // 只在启用回调时分配，由 mu 保护。
 	preEvent      func(context.Context, *pb.Event) (*pb.EventPayload, bool, error)
 	adapters      *adapter.Registry
 	send          ServiceFunc
@@ -127,8 +129,8 @@ func New(opt Options) *Router {
 		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy, buttons: opt.Buttons, preEvent: opt.PreEvent,
 		concurrency: opt.Concurrency, queueEvents: opt.QueueEvents, queueBytes: opt.QueueBytes, global: opt.Global,
 		ctx: ctx, cancel: cancel, drained: make(chan struct{}),
-		continuations: opt.Continuations,
-		matches:       make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
+		continuations: opt.Continuations, dispatched: opt.Dispatched,
+		matches: make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
 		inFlight: make(map[inFlightKey]int), commands: &CommandIndex{},
 		commandState: opt.CommandState, commandNames: opt.CommandNames, commandSyncs: make(map[string]*commandSync),
 	}
@@ -430,11 +432,13 @@ func (r *Router) call(c candidate, event *trustedEvent, bind func(*pb.Event) (*p
 	r.mu.Unlock()
 	defer r.finishCall(key)
 	inv := &Invocation{PluginID: c.pluginID, Event: prepared, DefaultTarget: proto.CloneOf(event.retained.GetTarget()), Chain: slices.Clone(request.Context.PluginChain), Scopes: slices.Clone(request.Context.Scopes), RouteID: request.RouteId, candidate: c, request: request, TraceID: trace}
+	r.observeInvocation(inv, event.dispatch)
 	response, err := c.plugin.Call(r.ctx, wire.Request{
 		Target: request.RouteId, TraceID: trace,
 		Attach:  inv,
 		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
 	})
+	r.recordOutcome(inv, response, err)
 	if r.continuations != nil {
 		r.continuations.Finished(inv, err == nil && response.Err == nil)
 	}
@@ -456,6 +460,7 @@ func (r *Router) CallContinuation(ctx context.Context, inv *Invocation, continua
 		return wire.Response{}, fmt.Errorf("encode continuation request: %w", err)
 	}
 	next := &Invocation{PluginID: inv.PluginID, Event: request.Event, DefaultTarget: proto.CloneOf(inv.DefaultTarget), Chain: slices.Clone(inv.Chain), Scopes: slices.Clone(inv.Scopes), SendForbidden: inv.SendForbidden, RouteID: inv.RouteID, Continuation: true, candidate: inv.candidate, request: request, TraceID: inv.TraceID}
+	next.dispatch, next.OnWait, next.OnWaitMatch = inv.dispatch, inv.OnWait, inv.OnWaitMatch
 	key := inFlightKey{caller: inv.candidate.caller, eventID: inv.Event.GetEventId()}
 	r.mu.Lock()
 	if !r.current(inv.candidate) {
@@ -469,6 +474,7 @@ func (r *Router) CallContinuation(ctx context.Context, inv *Invocation, continua
 		Target: inv.RouteID, TraceID: inv.TraceID, Deadline: deadline, Attach: next,
 		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
 	})
+	r.recordOutcome(next, response, err)
 	if r.continuations != nil {
 		r.continuations.Finished(next, err == nil && response.Err == nil)
 	}
