@@ -55,7 +55,6 @@ type callOrigin struct {
 	callID uint64
 	target router.Caller
 	cancel context.CancelFunc
-	depth  int // 包含自身工具调用；这类调用不重复写入插件链。
 }
 
 type selfToolCallKey struct{}
@@ -158,6 +157,16 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		b.metrics.Add(pluginID, "service", "denied")
 		return failure(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "service access denied")
 	}
+	permitted := len(service.GetRequiredPermissions()) == 0
+	if parent, ok := in.ParentAttach.(*router.Invocation); ok {
+		for _, required := range service.GetRequiredPermissions() {
+			permitted = permitted || slices.Contains(parent.Event.GetActor().GetPermissions(), required)
+		}
+	}
+	if !permitted {
+		b.metrics.Add(pluginID, "service", "denied")
+		return failure(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "service permission denied")
+	}
 	payload := in.Payload
 	if payload.Encoding != spec.GetEncoding() || payload.SchemaID != service.GetInputSchemaId() || payload.SchemaVersion != service.GetInputSchemaVersion() {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service input does not match registered encoding or schema")
@@ -167,9 +176,8 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service input is not valid UTF-8 JSON")
 	}
 	// 3. 父附件由 Core 保留；每次复制祖先链，防止独立并发调用修改同一底层切片。
-	invocation := &router.Invocation{PluginID: pluginID, TraceID: in.TraceID}
+	invocation := &router.Invocation{PluginID: pluginID, TraceID: in.TraceID, Depth: 2}
 	trusted := &pb.InvocationContext{}
-	depth := 2
 	if parent, ok := in.ParentAttach.(*router.Invocation); ok {
 		trusted.Actor = parent.Event.GetActor()
 		trusted.DefaultTarget = parent.DefaultTarget
@@ -179,12 +187,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		invocation.Event = parent.Event
 		invocation.DefaultTarget = parent.DefaultTarget
 		invocation.TraceID = parent.TraceID
-		depth = len(parent.Chain) + 2
-		b.mu.Lock()
-		if origin, ok := b.calls[parent]; ok {
-			depth = origin.depth + 1
-		}
-		b.mu.Unlock()
+		invocation.Depth = parent.Depth + 1
 	}
 	if self, _ := ctx.Value(selfToolCallKey{}).(bool); !self || pluginID != c.PluginID {
 		invocation.Chain = append(invocation.Chain, c.PluginID)
@@ -193,7 +196,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		b.metrics.Add(pluginID, "service", "cycle")
 		return failure(pb.ErrorCode_ERROR_CODE_CALL_CYCLE, "service call chain contains target plugin")
 	}
-	if depth > b.maxDepth {
+	if invocation.Depth > b.maxDepth {
 		b.metrics.Add(pluginID, "service", "depth")
 		return failure(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "service call chain exceeds maximum depth")
 	}
@@ -234,7 +237,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		}
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	b.calls[invocation] = callOrigin{caller: c, callID: in.CallID, target: destination, cancel: cancel, depth: depth}
+	b.calls[invocation] = callOrigin{caller: c, callID: in.CallID, target: destination, cancel: cancel}
 	b.mu.Unlock()
 	defer func() {
 		cancel()

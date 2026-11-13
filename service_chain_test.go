@@ -495,7 +495,7 @@ func TestServiceChain(t *testing.T) {
 					for i := range chain {
 						chain[i] = fmt.Sprintf("ancestor%d", i)
 					}
-					req.ParentAttach = &router.Invocation{Chain: chain, TraceID: req.TraceID}
+					req.ParentAttach = &router.Invocation{Depth: ancestors + 1, Chain: chain, TraceID: req.TraceID}
 					response := h.assembly.mux.For(router.Caller{})(t.Context(), req)
 					if ancestors == 12 {
 						chainAssertValue(t, response, "a>b>c")
@@ -511,7 +511,7 @@ func TestServiceChain(t *testing.T) {
 				for _, key := range []string{"one", "two"} {
 					wg.Go(func() {
 						request := chainRequest(t, "a/run", chainInput{Path: []string{"b", "c"}, Mode: "barrier", Key: key})
-						request.ParentAttach = &router.Invocation{Event: &pb.Event{Actor: &pb.Actor{ExternalUserId: key}}, DefaultTarget: &pb.Target{AdapterId: "loop", ChatId: key}, Scopes: []string{key}, TraceID: bytes.Repeat([]byte{key[0]}, 16)}
+						request.ParentAttach = &router.Invocation{Depth: 1, Event: &pb.Event{Actor: &pb.Actor{ExternalUserId: key}}, DefaultTarget: &pb.Target{AdapterId: "loop", ChatId: key}, Scopes: []string{key}, TraceID: bytes.Repeat([]byte{key[0]}, 16)}
 						results <- h.assembly.mux.For(router.Caller{})(t.Context(), request)
 					})
 				}
