@@ -89,6 +89,7 @@ func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 					invocation.Path = entry.Path
 					return invocation, nil
 				}
+				route.names = entry.Names
 				return r.invokeCommand(route.candidate, ev, event, bind, prefix)
 			}
 			return false
@@ -303,7 +304,11 @@ func (r *Router) sendReply(c candidate, ev *pb.Event, chain *pb.MessageChain, tr
 func commandUsage(c candidate, ev *pb.Event, prefix string) (string, error) {
 	spec := c.route.GetCommand()
 	locales := []string{ev.GetActor().GetLocale(), c.plugin.DefaultLocale()}
-	command := strings.Join(spec.GetPath(), " ")
+	names := c.names
+	if names == nil {
+		names = declaredCommandNames(spec)
+	}
+	command := strings.Join(names[0], " ")
 	if spec.GetUsageMode() == pb.UsageMode_USAGE_MODE_CUSTOM {
 		var text string
 		var err error
@@ -318,8 +323,8 @@ func commandUsage(c candidate, ev *pb.Event, prefix string) (string, error) {
 		slog.Warn("format custom command usage failed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", err)
 	}
 	var aliases, arguments string
-	for _, alias := range spec.GetAliases() {
-		aliases += " | " + prefix + strings.Join(alias.GetPath(), " ")
+	for _, alias := range names[1:] {
+		aliases += " | " + prefix + strings.Join(alias, " ")
 	}
 	for _, param := range spec.GetParams() {
 		label := param.GetName()

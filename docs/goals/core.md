@@ -75,12 +75,12 @@
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 已完成（PR #153） |
 | goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 待派发 |
 | goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 待派发 |
-| goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 待派发 |
+| goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 已完成（PR #156） |
 | goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 等待前置 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
 | goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 等待前置 |
-| goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 等待前置 |
+| goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 待派发 |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 待派发 |
 | goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 等待前置 |
 | goal-92 | T-09.13 | 管理页所需的会话与上传接口 | T-09.1、T-09.4、T-09.12 | 等待前置 |
@@ -4611,6 +4611,7 @@ goal-125 若先合并，Collect 改为收 *Plugin，命令、事件与 OnButton 
 - 已有的接口：`state.Store` 的 `AddInstall`、`GetInstall`、`Installs`、`SetEnabled`、`Enabled`、`Active`、`AddGeneration`、`CommitActive`、`LockPlugin`、`PurgeButtonTokens`、`PurgeConversations`、`DeleteSecrets` 等；`packages.Preflight(Input{ReleaseJSON, Signature, PublicKey, Source, OS, Arch, ArchivePath}, stagingRoot, Limits)` 与 `Candidate.MoveTo`/`Discard`；`contracts/release` 的 `Verify`、`KeyID`；`manifest.CheckDependencies(m, Installed{Plugins, Adapters, Actions})`；`settings.Load`、`File.Settings`、`File.Update`、`File.CommandPrefixes`、`File.PrepareInstances`、`Settings.DefaultInstances`、`settings.ValidateListen`；`adminauth.New`、`Auth.Routes`、`Auth.Require`、`FirstToken`、`FirstTokenFile`；`webhost.New(Options{BaseURL, Proxy, Admin})`；`remote.Process.StartInstance(ctx, instanceID, configJSON)`；`policy.Policy.SetAdmins`；`adapter.Registry.SetDefaults`；`supervisor.Spec.DefaultLocale`。
 - 在途 PR：#157（goal-130）在 `assemble` 中加入 `settings.Load` 与按 Session 发布的选项 schema；goal-68 修改 `startDevelopment`、`internal/inproc` 与日志的同进程 Handler。后合并者同步 main，设置对象只加载一次、由装配共用。
 - goal-68 原来的「dev 来源拒绝 update 与 rollback」移到本切片的管理服务（见行为）。
+- PLAN T-13 步骤 3 的「开发中的 Adapter 的实例取自 core_config.json」也由本切片完成：它与已安装 Adapter 的实例启动共用设置对象与同一段代码（见行为 5）。
 - 2026-11-10 按 D-127：卸载分为只卸载、`--purge-data` 与 `--purge` 三种清理范围；动态任务与调度状态的表由 goal-127 加入清理对象。2026-11-09 按 D-105：admin 的参数是用户字符串 `<adapter_id>:<external_user_id>`。
 
 ```text
@@ -4684,7 +4685,7 @@ goal-125 若先合并，Collect 改为收 *Plugin，命令、事件与 OnButton 
   2) 首次管理凭证：adminauth.FirstToken，interactive 为 stdin 与 stderr 都是终端；交互时把 token 打印到 stderr，非交互时按现有写法提示 admin_token 文件。
   3) 装配 Core（assemble），Router 的 Prefixes 传 File.CommandPrefixes；启动任何包之前把 Settings().Admins 转为 []policy.Admin 并 SetAdmins，调用 Registry.SetDefaults(Settings().DefaultInstances())。经 supervisor.Launch 启动组件时 Spec.DefaultLocale 取 Settings().DefaultLocale，同进程开发组件的 Bootstrap.default_locale 取同一个值；每次启动读当前设置。
   4) HTTP：adminauth.New、管理 mux（Auth.Routes 与 manage 的 Handler）、httpproxy、webhost.New，监听 listen 并 Serve；Listener 失败时 Start 返回错误。停止时先 Shutdown HTTP，再按 §4.2 停止组件。
-  5) 按 install_seq 启动全部已启用的包（现有 startInstalled）；Adapter 包激活并 Bind 后，按 core_config.json 的 adapters.<adapter_id>.instances 经 File.PrepareInstances 准备，逐个 remote.Process.StartInstance；失败实例按 InstanceProblem 记 WARN 并跳过，其余照常启动。然后启动登记的开发组件。
+  5) 按 install_seq 启动全部已启用的包（现有 startInstalled）；Adapter 包激活并 Bind 后，按 core_config.json 的 adapters.<adapter_id>.instances 经 File.PrepareInstances 准备，逐个 remote.Process.StartInstance；失败实例按 InstanceProblem 记 WARN 并跳过，其余照常启动。然后启动登记的开发组件；开发 Adapter 激活后按同样的规则启动 core_config.json 中它的实例，schema 取自该 Adapter 包的生成资源。
 - cmd/alonabot run：`alonabot run [--data-dir DIR] [--listen ADDR] [--log-level L] [--log-format F] [--args ...]` 调用 alonabot.Run，DataDir 缺省为当前目录下的 data（与库模式相同），三个选项只在给出参数时传入。不带子命令运行 alonabot 等同 run。退出码沿用 exitUsage（参数与设置错误）与 exitFailure。
 - install：Preflight（有签名时验签；无签名时按 D-81 需要 confirm，Package.Signed 为 false；验证长度、SHA256、平台与内层 manifest）→ MoveTo 不可变目录 → 写安装记录（install_seq 递增、source、publisher_key_id、version、role、adapter_id）。仍处于已安装状态的同 ID 返回 ALREADY_EXISTS，不覆盖。同类组件（同一 adapter_id 的 adapter、任一 agent、任一 webui）已安装时：未带 Replace 返回 ALREADY_EXISTS，safe_message 列出已安装的组件 ID；带 Replace 未带 confirm 返回 ErrNeedsConfirm（Affected 为将被卸载的组件与不迁移的 Adapter 实例）；确认后先完成新组件的下载与 Preflight，再按 uninstall 的缺省语义卸载旧组件，最后写新安装记录；旧组件原来启用时启用新组件。被替换 Adapter 的实例记录留在 core_config.json 的旧 adapter_id 下，不转给新组件。新组件在卸载旧组件之后失败时旧组件保持已卸载。已卸载的保留记录只允许来源与发布者公钥都相同的重装（复用数据），否则 PERMISSION_DENIED。首次信任新来源与新发布者公钥需要 confirm（CONTRACTS §9.2）。安装时用全部安装记录的 plugin_dependencies 检查必需依赖成环，成环拒绝。
 - enable：CheckDependencies（Installed 来自已启用的包与运行中的 Adapter 描述），有缺失时 FAILED_PRECONDITION 并列出全部缺失项；可选依赖缺失只记诊断。已有 Active 时以该代次启动；首次安装没有 Active 时以「首个候选」启动（新代次、首装 SQLite、配置为编辑快照或 {}，提交后激活；Journal 由 T-09.5 接入，用一行 shortcut 注释写明）。Adapter 包启用后按上文启动它的实例。
@@ -5235,7 +5236,7 @@ sdk（新增或替换）
 
 ### goal-129 · T-04.14 命令名覆盖的 Core 侧
 
-状态：待派发。前置均已合并：T-03.17（[PR #150](https://github.com/AlonaBot/AlonaBot/pull/150)，合并提交 `8eb7846`）、T-04.10（[PR #133](https://github.com/AlonaBot/AlonaBot/pull/133)，合并提交 `3d618cb`）、T-04.4（PR #88）。2026-11-12 审查者按 main `61bff90` 的代码写出范围、接口与测试段，要点如下：
+状态：已完成（[PR #156](https://github.com/AlonaBot/AlonaBot/pull/156)，合并提交 `0726d66`），证据见 TEST-MATRIX §3.2。合入：`command_policy.names` 列；state 的 `PutCommandNames`、`AllCommandNames`，Put 与 Delete 各自只写自己的列，删除时名称清理与空行删除在一个事务内；policy 的 `LoadCommandNames`、`SetCommandNames(ctx, pluginID, routeID, names, routes)`、`DeleteCommandNames`、`CommandNames(pluginID)`；`router.Options.CommandNames`、`CommandEntry.Names`（主名在前）与 `CommandIndex.InvalidNames()`。goal-93 的管理 API 经 policy 的上述方法读写名称；goal-39 的 --purge 删除整行。派发时：前置均已合并：T-03.17（[PR #150](https://github.com/AlonaBot/AlonaBot/pull/150)，合并提交 `8eb7846`）、T-04.10（[PR #133](https://github.com/AlonaBot/AlonaBot/pull/133)，合并提交 `3d618cb`）、T-04.4（PR #88）。2026-11-12 审查者按 main `61bff90` 的代码写出范围、接口与测试段，要点如下：
 
 - **状态库**：`command_policy` 表（`state.CommandPolicy{PluginID, Scope, Permissions, Enabled}`）现在由 `policy.SetOverride` 整行写入或删除（`PutCommandPolicy` 使用 `UpdateAll`，两项都为 nil 时 `DeleteCommandPolicy`）。按 PLAN 步骤 14，命令名写进同一张表的路由作用域行。为避免权限与启用的修改冲掉命令名，三个写入方法改为只更新各自的列，删除时只删三列都为 NULL 的行。
 - **Router**：`rebuildCommands` 在持有 `r.mu` 时从已激活插件的 `Routes()` 建立 `CommandIndex`。`CommandEntry{PluginID, RouteID, Priority, Path, Alias}` 记录命中的路径与是否为别名。`commandUsage` 从 `route.GetCommand()` 的 path 与 aliases 拼出 usage。`commandMenu` 以 `command.GetPath()` 作为菜单名，并用 `index.Lookup(path)` 确认胜出者。`CommandsChanged()` 由 `Policy.SetCommandsChanged` 注入，目前只调度菜单同步。
@@ -5578,43 +5579,47 @@ sdk（新增或替换）
 
 ### goal-18 · T-05.5 多进程事件流水线验收
 
-状态：等待前置（T-05.3、T-05.4）。T-03.8（[PR #136](https://github.com/AlonaBot/AlonaBot/pull/136)，合并提交 `3621fc1`）已合并：`internal/core/buttons` 的 `New(store, now, current)` 与 `Service.Issue`、`Resolve`、`Purge`；`message.New(adapters, p, lease, issue, requestTimeout)`；`router.Options.Buttons`；可选接口 `adapter.ExtensionChecker`；`manifest.CheckDependencies(m, Installed)`；SDK 的 `sdk.Action[T]`、`sdk.OnButton(r, a).Handle(func(*Context, T) error)`、`message.Buttons`、`message.Extension`；`Segment` oneof 已用到 `extension = 9`。语句中 goal-8、goal-15～goal-17、goal-52 提供的符号（按钮、Rule、Hook、延续调用与等待、Router 的 Stats）只写名字；合并后由审查者核对，再改为待派发。
+状态：待派发。前置 T-03.8（[PR #136](https://github.com/AlonaBot/AlonaBot/pull/136)，合并提交 `3621fc1`）、T-05.3（[PR #155](https://github.com/AlonaBot/AlonaBot/pull/155)，合并提交 `53393aa`）与 T-05.4（[PR #153](https://github.com/AlonaBot/AlonaBot/pull/153)，合并提交 `f22b538`）已合并。2026-11-12 审查者按 main `2a1c504` 改写：
+- 测试装配：`cmd/alonabot` 的 run 目前不带 Router 与 Adapter（goal-39 改写），所以不经 cmd 与 Telegram 模拟服务。根包的 `assemble(store, dir, tune.Values)` 给出与生产相同的 Router、hook.Runner、continuation.Manager、buttons、policy 与 message 服务；插件与 Adapter 进程沿用 `internal/core/adapter/remote/remote_test.go` 的写法：测试二进制按环境变量以 `sdk.Run` 或 `sdk.RunAdapter` 运行，经 `supervisor.Launch` 启动，Adapter 用回环测试 Adapter。
+- T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)）已合并，scheduled 用真实 Scheduler 验收，不再只用 fixture。
+- 按钮点击前的 answerCallbackQuery 只在 Telegram Adapter 中，由 goal-9 的故障矩阵覆盖；本切片以回环 Adapter 交付 button.clicked。
+- SDK 写法：插件对象（`sdk.NewPlugin`、`Command`/`On`/`PreEvent`/`BeforeSend`/`AfterSend` builder）、`sdk.Action[T]` 与 `sdk.OnButton`、`Context.Continue` 与 `Context.Wait(timeout)`、`sdk.ToMe` 与自定义 Rule。
+- 与 goal-39 同改根包：本切片只新增测试文件，goal-39 先合并时按合并后的装配入口调整测试。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-18（切片 T-05.5：多进程事件流水线验收）。goal 目录 goal-18，分支 goal-18，worktree .worktrees/goal-18，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：用多个真实插件进程跑完整的事件流水线：多个 priority 与同优先级逆安装顺序、自定义 Rule、两种 Handler 签名、三个 Hook、真实按钮回调、两个用户在同一群同时等待、等待超时与等待期间停用插件；用恶意载荷尝试修改可信字段，用延迟 Handler 验证控制帧仍推进；在 TEST-MATRIX §3.2 记录 T-05 证据。
+目标：用多个真实插件进程与回环 Adapter 进程跑完整的事件流水线：多个 priority 与同优先级逆安装顺序、自定义 Rule、两种 Handler 签名、三个 Hook、按钮回调、两个用户在同一群同时等待、等待超时与等待期间停用插件、真实 Scheduler 触发；用恶意载荷尝试修改可信字段，用延迟 Handler 验证控制帧仍推进；在 TEST-MATRIX §3.2 记录 T-05 证据。
 
 依据：PLAN T-05 步骤 8 与「停止和失败条件」；CONTRACTS §2；MESSAGE-MODEL §1、§6.3；TEST-MATRIX V-11、V-13～V-16、V-43、V-49、V-50 的 T-05 分项。
 
 范围（只新增或修改这些）：
-- 新增 internal/core/supervisor/testdata/pipeline/（流水线测试插件，按环境变量配置 priority、Rule、Hook 与命令）
-- 新增 cmd/alonabot/t05_e2e_test.go（//go:build unix，经 Telegram 模拟服务运行）
+- 新增根包 pipeline_test.go（//go:build unix）：经 assemble 取得生产装配，测试二进制按环境变量运行流水线插件与回环 Adapter
 - spec/TEST-MATRIX.md §3.2：追加 T-05 的证据行（本切片获授权修改这一处）
 允许的新跨模块边：无。
 
-接口：不新增公开 Go 符号。
+接口：不新增公开 Go 符号；不修改产品代码。测试发现产品缺陷时按 alonabot-execute 的阻塞规则登记，不在本切片修。
 
-验收矩阵（各为一个子测试，以平台调用记录、候选调用次序日志与 HandlerOutcome 为证据）：
+验收矩阵（pipeline_test.go 中各为一个子测试，以 Adapter 收到的发送与编辑、插件写出的调用次序记录与 HandlerOutcome 为证据）：
 1) 三个插件 priority 为 0、0、-1，以两种不同的安装与启动顺序运行：调用顺序都是 (priority, plugin_id, route_id)。
-2) 自定义 Rule 为 false 与出错：事件路由跳过、已识别命令被消费且不回落（V-11 的真实 Rule 分项）。
-3) 两种 Handler：自动回复只发一次；手动多次 Send；自动型内 Send 被拒。
-4) Hook：PreEvent 改 payload、BeforeSend 改链与拒绝、AfterSend 出错不改结果；每次 Send 一组 Hook。
-5) 恶意载荷：Adapter 侧（经模拟服务）与插件侧（PreEvent 返回）尝试改 Actor、Target、button 的 action/value、scheduled 的 job_id：插件收到的仍是 Core 保留的值。
-6) 真实按钮：发送带按钮的消息后在模拟服务中点击：先有 answerCallbackQuery，再调用正确的插件；另一用户点击也调用一次；过期 token 不调用、不落入 Raw。
-7) 等待：两个用户在同一群同时进入 Wait，各自只收到自己的下一条消息，且这些消息不进入普通分发；超时为 DEADLINE_EXCEEDED；等待期间停用插件，重启后不补发。
+2) 自定义 Rule 为 false 与出错：事件路由跳过；已识别的命令被消费且不回落到 Raw 与事件路由（V-11 的真实 Rule 分项）。
+3) 两种 Handler：自动回复只发一次；手动多次 Send；自动回复型 Handler 内的 Send 被拒。
+4) Hook：PreEvent 改写载荷后后继路由看到改写结果；BeforeSend 改写链与拒绝发送；AfterSend 出错不改变发送结果；每次 Send 经过一组 Hook。
+5) 恶意载荷：回环 Adapter 交付的事件与 PreEvent 的返回尝试改 Actor、Target、button 的 action/value、scheduled 的 job_id：插件收到的仍是 Core 保留的值。
+6) 按钮：发送带 `sdk.Action` 按钮的消息后，回环 Adapter 交付点击：调用正确的插件与动作；另一用户点击也调用一次并按该用户鉴权；过期 token 不调用、不落入 Raw。
+7) 等待：两个用户在同一群同时 Wait，各自只收到自己的下一条消息，这些消息不进入普通分发；超时为 DEADLINE_EXCEEDED；等待期间停用插件，重新启动后不补发。
 8) 延迟 Handler（睡眠数秒）执行期间，同一插件 Session 的另一请求的 Response 与 Cancel 正常完成，其他事件照常派发。
 9) 权限组合（V-43）：chat_admin 不取得 Core Admin；组禁用优先于子项启用；最近显式权限覆盖父项；运行时修改在下一次派发生效，已开始的调用不被撤销。
-10) scheduled：只用规范 fixture，证据中标明尚未覆盖真实 Scheduler（T-07.5 覆盖）。
-- 证据：TEST-MATRIX §3.2 追加 T-05 一行，写明测试位置、命令、平台、结果与 fixture 覆盖的项。
+10) scheduled：插件声明 Every 短间隔任务，真实 Scheduler 触发后插件收到 Core 的 job_id；伪造的 job_id 不改变它。
+- 证据：TEST-MATRIX §3.2 追加 T-05 一行，写明测试位置、命令、平台与结果。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：上述矩阵测试。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：在 -race 下重复运行矩阵 10 次无偶发失败。
+- 提交：pipeline_test.go 的上述矩阵（多列理由：T-05 的验收矩阵本身，没有其他端到端入口）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：在 -race 下以 -count=10 运行矩阵无偶发失败。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
-不做：Service 嵌套与 Hook→Service→Send（T-06.2、T-06.4）；真实 Scheduler（T-07.5）。
+不做：Service 嵌套与 Hook→Service→Send（T-06.2、T-06.4）；Telegram 的 answerCallbackQuery 顺序（T-03.10）；修改产品代码。
 ```
 
 ### goal-20 · T-06.2 父调用链、取消与背压

@@ -24,6 +24,7 @@ type Options struct {
 	Buttons       func(ctx context.Context, ev *pb.Event) (pluginID, routeID string, err error)            // nil 时丢弃按钮点击
 	Policy        CommandPolicy                                                                            // nil 时仅按声明权限判定且不赋予 admin
 	CommandState  func(context.Context, string, *pb.RouteDescriptor) (bool, []string, error)               // 菜单读取完整策略；nil 时使用注册描述。
+	CommandNames  func(pluginID string) map[string][][]string                                              // nil 时使用声明；在 Router 锁内调用，不得做 I/O。
 	Continuations Continuations                                                                            // nil 时跳过延续与等待。
 }
 
