@@ -68,6 +68,9 @@ func runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval 
 		options = append(options, alonabot.Stdio())
 	}
 	core, err := alonabot.Start(ctx, options...)
+	if err == context.Canceled {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
