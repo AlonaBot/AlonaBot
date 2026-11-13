@@ -274,7 +274,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	// 6. ACTIVATED 已应用后才开放 HTTP 与定时任务，绑定顺序保证首个 tick 可以访问 HTTP。
 	activatedAt := time.Now()
 	if spec.HTTP != nil && in.HTTPListener != nil {
-		spec.HTTP.Bind(spec.PluginID, in.GenerationID, in.HTTPListener, in.HTTPProxyToken, in.Routes)
+		spec.HTTP.Bind(spec.PluginID, in.GenerationID, in.HTTPListener, in.HTTPProxyToken, in.Routes, spec.Role == state.RoleAdapter)
 	}
 	if spec.Scheduler != nil {
 		spec.Scheduler.Attach(router.FromInstance(in), activatedAt)
@@ -426,7 +426,7 @@ func (r *Running) WaitExit() (abnormal bool, state string, err error) {
 // detach 撤销本实例的注册；由 Stop 或 WaitExit 中取得清理权的一方调用。
 func (r *Running) detach() {
 	if r.http != nil {
-		r.http.Unbind(r.pluginID, r.Instance.GenerationID)
+		r.http.Unbind(r.pluginID, r.Instance.GenerationID, r.Instance.HTTPProxyToken)
 	}
 	if r.scheduler != nil {
 		r.scheduler.Detach(r.pluginID)

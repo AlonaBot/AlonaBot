@@ -27,11 +27,12 @@ type Command struct {
 	mode      pb.HandlerMode // 由签名推出的 Handler 形态
 	structure reflect.Type   // 结构体参数的值类型；位置参数形式为 nil。
 
-	permission Permission
-	subID      string
-	rules      []Rule          // Collect 固定的调用顺序，全部通过后执行 Handler。
-	routeID    string          // 文本匹配与 Raw 的显式路由 ID
-	spec       *pb.CommandSpec // 已通过注册边界校验的命令描述
+	permission   Permission
+	subID        string
+	rules        []Rule          // Collect 固定的调用顺序，全部通过后执行 Handler。
+	routeID      string          // 文本匹配与 Raw 的显式路由 ID
+	spec         *pb.CommandSpec // 已通过注册边界校验的命令描述
+	continuation bool
 }
 
 // CommandGroup 收集命令；实例方法以方法值显式传入，不做自动 DI。
@@ -241,6 +242,13 @@ func (b *CommandBuilder) Rule(rules ...Rule) *CommandBuilder {
 	return b
 }
 
+// Continue 让 Handler 整体在独立的延续调用中执行，原调用保持继续传播。
+func (b *CommandBuilder) Continue() *CommandBuilder {
+	b.touch()
+	b.command.continuation = true
+	return b
+}
+
 func (r *CommandGroup) collect() {
 	r.commands = nil
 	r.errs = nil
@@ -407,13 +415,13 @@ type HTTPRoute struct {
 	Handler http.Handler
 	// Public 为 true 时无需 Core 会话即可访问。
 	Public   bool
-	AuthMode HTTPAuth // 认证方式；公开路由必须是回调验证方式之一
+	AuthMode HTTPAuth // 认证方式；公开路由须校验回调凭证，Adapter 也可校验平台 token
 }
 
 // HTTPOption 调整 HTTP 路由声明。
 type HTTPOption func(*HTTPRoute)
 
-// Public 声明公开回调路由；插件必须自行验证 state、签名或 nonce。
+// Public 声明公开路由；插件自行验证 state、签名或 nonce，Adapter 也可验证平台 token。
 func Public(mode HTTPAuth) HTTPOption {
 	return func(r *HTTPRoute) { r.Public, r.AuthMode = true, mode }
 }
@@ -439,7 +447,7 @@ func (r *httpRegistry) Handle(method, path string, h http.Handler, opts ...HTTPO
 		r.errs = append(r.errs, fmt.Errorf("HTTP method must be standard and uppercase: input %q, registered %q", method, route.Method))
 	case !canonicalHTTPPath(route.Path):
 		r.errs = append(r.errs, fmt.Errorf("HTTP path %q must start with / and be canonical", route.Path))
-	case route.Public && route.AuthMode != AuthCallbackState && route.AuthMode != AuthCallbackSignature && route.AuthMode != AuthCallbackNonce:
+	case route.Public && route.AuthMode != AuthCallbackState && route.AuthMode != AuthCallbackSignature && route.AuthMode != AuthCallbackNonce && route.AuthMode != AuthPlatformToken:
 		r.errs = append(r.errs, fmt.Errorf("public HTTP route %s %s must declare state, signature or nonce verification", method, path))
 	case !route.Public && route.AuthMode != AuthCoreSession:
 		r.errs = append(r.errs, fmt.Errorf("private HTTP route %s %s must use Core session authentication", method, path))

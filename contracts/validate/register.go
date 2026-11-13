@@ -61,8 +61,12 @@ func IsJSONObject(b []byte) bool {
 // Register 原子校验整份注册集（WIRE §3.1/§3.3）：任一项不合法都整体拒绝，调用方不得保留部分注册。
 // 命令路径、别名、事件过滤器与按钮 action、定时任务、HTTP 路由与 Listener、Service 与 Bus 订阅随整份描述一起检查。
 func Register(r *pb.Register) error {
+	return register(r, false)
+}
+
+func register(r *pb.Register, isAdapter bool) error {
 	// 1. 先检查描述身份、分支与注册公共字段。
-	if r.GetAdapter() != nil {
+	if !isAdapter && r.GetAdapter() != nil {
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "plugin registration contains adapter descriptor")
 	}
 	seen := make(map[string]bool, len(r.GetRoutes()))
@@ -127,7 +131,7 @@ func Register(r *pb.Register) error {
 				}
 			}
 		case pb.RouteKind_ROUTE_KIND_HTTP:
-			if err := registerHTTPRoute(httpRoutes, route); err != nil {
+			if err := registerHTTPRoute(httpRoutes, route, isAdapter); err != nil {
 				return err
 			}
 		case pb.RouteKind_ROUTE_KIND_SERVICE:
@@ -336,7 +340,7 @@ func IsEventType(eventType string) bool {
 	return false
 }
 
-func registerHTTPRoute(routes map[[2]string]string, route *pb.RouteDescriptor) error {
+func registerHTTPRoute(routes map[[2]string]string, route *pb.RouteDescriptor, isAdapter bool) error {
 	spec := route.GetHttp()
 	method, rawPath := spec.GetMethod(), spec.GetPath()
 	switch method {
@@ -353,7 +357,7 @@ func registerHTTPRoute(routes map[[2]string]string, route *pb.RouteDescriptor) e
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "HTTP route %q has invalid path %q", route.GetRouteId(), rawPath)
 	}
 	if spec.GetIsPublic() {
-		if spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_STATE && spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_SIGNATURE {
+		if spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_STATE && spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_SIGNATURE && !(isAdapter && spec.GetAuthMode() == pb.HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN) {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "public HTTP route %q must declare callback verification", route.GetRouteId())
 		}
 	} else if spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CORE_SESSION {

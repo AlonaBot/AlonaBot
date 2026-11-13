@@ -106,7 +106,7 @@ RouteDescriptor 公共字段为 `route_id`、`kind`、`priority`、`default_enab
 | --- | --- |
 | command | 规范命令路径、aliases、参数列表与默认值、Handler 模式、Rule 描述 |
 | event | event_type_filter、Handler 模式、Rule 描述；button.clicked 路由含 action schema version |
-| hook | phase（PreEvent/BeforeSend/AfterSend）、优先级及固定 Hook 输入/输出 Schema |
+| hook | phase（PreEvent/BeforeSend/AfterSend）、event_type_filter（PreEvent 恰好一项，为已知标准事件或合法 Adapter 扩展事件名；BeforeSend/AfterSend 留空）、优先级及固定 Hook 输入/输出 Schema |
 | service | service_name、公开/allowlist 能力、请求/响应 Schema |
 | schedule | 稳定 job_id、cron/interval、timezone、固定 job deadline |
 | task | 稳定任务名；实例的触发规则与参数不在注册描述中，由 `core.task.set` 在运行时给出（D-124） |

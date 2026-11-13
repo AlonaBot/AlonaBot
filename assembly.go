@@ -24,6 +24,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/broker"
 	"github.com/AlonaBot/AlonaBot/internal/core/bus"
 	"github.com/AlonaBot/AlonaBot/internal/core/buttons"
+	"github.com/AlonaBot/AlonaBot/internal/core/continuation"
 	"github.com/AlonaBot/AlonaBot/internal/core/conversation"
 	"github.com/AlonaBot/AlonaBot/internal/core/hook"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
@@ -154,8 +155,15 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 	// Router、Hook Runner 与消息服务互相引用：Router 先建，Send 与 PreEvent 在调用时才读取之后赋值的变量。
 	var messages *message.Service
 	var hooks *hook.Runner
+	// 延续调用的 Manager 先于 Router 创建，回调在调用时才读取 a.router。
+	continuations := continuation.New(continuation.Options{Max: v.ContinuationMax, Timeout: v.ContinuationTimeout, Prepare: a.media.PrepareIncoming,
+		Caller: func(id string) (router.Caller, bool) { return a.router.Caller(id) },
+		Call: func(ctx context.Context, inv *router.Invocation, parent uint64, deadline time.Time) (wire.Response, error) {
+			return a.router.CallContinuation(ctx, inv, parent, deadline)
+		}})
 	a.router = router.New(router.Options{Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
 		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: nil,
+		Continuations: continuations,
 		Send: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
 			return messages.Send(ctx, c, in)
 		},
@@ -165,6 +173,7 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 	hooks = hook.New(a.router, hook.Options{Prepare: a.media.PrepareIncoming, CheckEvent: a.checkAdapterEvent})
 	messages = message.New(a.adapters, p, a.media.LeaseForSend, a.buttons.Issue, v.RequestTimeout, hooks)
 	p.SetCommandsChanged(a.router.CommandsChanged)
+	continuations.Register(a.mux)
 	a.mux.Handle(wire.ServiceSend, messages.Send)
 	a.mux.Handle(wire.ServiceEdit, messages.Edit)
 	a.mux.Handle(wire.ServiceDelete, messages.Delete)
@@ -250,7 +259,7 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) error {
 	a.bus.Attach(plugin)
 	if r.process == nil {
 		if r.instance.HTTPListener != nil {
-			a.http.Bind(r.id, r.instance.GenerationID, r.instance.HTTPListener, r.instance.HTTPProxyToken, r.instance.Routes)
+			a.http.Bind(r.id, r.instance.GenerationID, r.instance.HTTPListener, r.instance.HTTPProxyToken, r.instance.Routes, r.install.Role == state.RoleAdapter)
 		}
 		a.scheduler.Attach(plugin, time.Now())
 	}
@@ -354,7 +363,7 @@ func (a *assembly) detach(r *runningComponent) {
 	a.bus.Detach(r.id)
 	a.scheduler.Detach(r.id)
 	if r.instance != nil {
-		a.http.Unbind(r.id, r.instance.GenerationID)
+		a.http.Unbind(r.id, r.instance.GenerationID, r.instance.HTTPProxyToken)
 	}
 	if r.remote != nil {
 		r.remote.Unbind()

@@ -34,6 +34,25 @@ message HandlerRequest {
   Event event = 3;
   // 仅命令路由。
   CommandInvocation command = 4;
+  // 延续调用所对应的原 Handler call_id；普通调用 absent。
+  optional uint64 continuation_of = 5;
+}
+
+// ContinuationStartRequest 请求在父 Handler 成功结束后发出延续调用。
+message ContinuationStartRequest {}
+
+// ContinuationStartResponse 确认本次父调用已登记延续。
+message ContinuationStartResponse {}
+
+// WaitRequest 指定等待下一条消息的期限，单位为毫秒。
+message WaitRequest {
+  // 取值为 1～CONTINUATION_TIMEOUT 的毫秒数。
+  uint32 timeout_ms = 1;
+}
+
+// WaitResponse 返回为等待者 Session 准备的命中事件。
+message WaitResponse {
+  Event event = 1;
 }
 
 // CommandInvocation 描述命令匹配与参数解析的结果。

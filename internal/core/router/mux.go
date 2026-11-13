@@ -37,7 +37,12 @@ type Invocation struct {
 	PluginID      string
 	Event         *pb.Event
 	DefaultTarget *pb.Target
-	SendForbidden bool // 出站 Hook 调用为 true；只由 Core 设置
+	SendForbidden bool   // 出站 Hook 调用为 true；只由 Core 设置
+	RouteID       string // 被调用的 route_id。
+	Continuation  bool   // 本调用为延续调用。
+	candidate     candidate
+	request       *pb.HandlerRequest // 保留原参数与已为所属 Session 准备的事件。
+	trace         []byte
 }
 
 // ServiceFunc 接收固定 Caller 与经过 Session 校验的插件请求。

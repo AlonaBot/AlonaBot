@@ -49,7 +49,7 @@
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-04.7、T-06.1 | 已完成（PR #101） |
 | goal-91 | T-04.8 | SDK 自有类型与事件常量 | T-03.9、T-03.24、T-04.7、T-04.9 | 已完成（PR #141） |
 | goal-123 | T-08.13 | 文案函数只返回字符串 | T-04.9、T-08.8 | 已完成（PR #137） |
-| goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 等待前置 |
+| goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 待派发 |
 | goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 已完成（PR #107） |
 | goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8、T-08.11 | 已完成（PR #117） |
 | goal-101 | T-08.12 | Adapter 实例配置与 Core 设置的版本迁移 | T-07.6、T-08.11 | 已完成（PR #114） |
@@ -60,7 +60,7 @@
 | goal-107 | T-03.16 | 撤回 | T-03.9、T-04.8 | 已完成（PR #144） |
 | goal-108 | T-03.17 | 命令菜单同步 | T-04.6、T-04.7、T-04.8、T-08.8 | 已完成（PR #150） |
 | goal-109 | T-03.18 | 流式输出辅助函数 | T-03.9、T-04.8 | 已完成（PR #151） |
-| goal-110 | T-03.19 | Adapter 的 HTTP 路由 | T-03.3、T-04.8、T-07.7 | 待派发 |
+| goal-110 | T-03.19 | Adapter 的 HTTP 路由 | T-03.3、T-04.8、T-07.7 | 已完成（PR #152） |
 | goal-121 | T-03.24 | 插件给出的目标由 Core 补齐 | T-03.6、T-07.6 | 已完成（PR #135） |
 | goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 等待前置 |
 | goal-122 | T-04.10 | 管理员与封禁按 Adapter 登记 | T-04.4、T-07.6 | 已完成（PR #133） |
@@ -68,13 +68,13 @@
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 已完成（PR #145） |
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 已完成（PR #119） |
 | goal-39 | T-09.4 | 管理服务、安装记录与 serve | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 等待前置 |
-| goal-68 | T-13.2 | 开发组件的配置与数据库 | T-07.6、T-08.5、T-08.11、T-13.1 | 等待前置 |
+| goal-68 | T-13.2 | 开发组件的配置与数据库 | T-07.6、T-08.5、T-08.11、T-13.1 | 待派发 |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 待派发 |
-| goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 待派发 |
-| goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 等待前置 |
-| goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 等待前置 |
+| goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 已完成（PR #153） |
+| goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 待派发 |
+| goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 待派发 |
 | goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 待派发 |
 | goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 等待前置 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
@@ -4310,7 +4310,7 @@ contracts/validate（新增，由 AdapterRegister 与实例启动结果接纳共
 
 ### goal-110 · T-03.19 Adapter 的 HTTP 路由
 
-状态：待派发。2026-11-12 依据维护者决定 D-136（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`） 统一 Adapter 角色规则与平台凭证转交；前置均已合并：T-03.3（PR #32）、T-04.8（PR #141）、T-07.7（PR #116，合并提交 `e65eb4d`）。生命周期接入 T-07.5（PR #119，合并提交 `cc19e99`）也已合并。按 main `c04b2ca` 的代码核对；T-03.13～T-03.19 的 proto 追加按执行顺序 §3，SDK HTTP 注册器后续由 T-04.11 改为 builder，本切片沿用现有 Handle/Public。若 goal-67 先合并，沿其同进程入口复用同一 Adapter HTTP 生命周期。范围修订（2026-11-12，审查者补充）：执行者报告 `sdk/registry.go` 的 HTTPRegistry.Handle 拒绝 `Public(AuthPlatformToken)`，语句漏列该文件；授权该校验接受公开平台 token 模式，插件注册路径（sdk.Run）与 Core 的 `validate.Register` 拒绝此模式，`RunAdapter` 与 `validate.AdapterRegister` 接受，其他 HTTP 校验与错误文本不变。
+状态：已完成（[PR #152](https://github.com/AlonaBot/AlonaBot/pull/152)，合并提交 `2f4284d`），证据见 TEST-MATRIX §3.2。合入：`HTTP_AUTH_MODE_PLATFORM_TOKEN` 与 `sdk.AuthPlatformToken`；`sdk.AdapterHTTP`（合入 main 时因 T-04.12 删除了导出的注册器类型，改为 `HTTP(handle func(method, path string, h http.Handler, opts ...HTTPOption))`，与插件对象的 `Handle` 同签名与同校验；T-04.11 会再迁到 HTTP builder）；`httpproxy.Server.Bind(pluginID, generationID, endpoint, token, routes, isAdapter)`、`Unbind(pluginID, generationID string, token []byte)` 与 WebSocket Upgrade 的转发与回收；`validate.AdapterRegister` 接受 HTTP 路由与端点；库模式装配按安装记录的角色调用 Bind。派发时：2026-11-12 依据维护者决定 D-136（规格 [PR #147](https://github.com/AlonaBot/AlonaBot/pull/147)，合并提交 `c04b2ca`） 统一 Adapter 角色规则与平台凭证转交；前置均已合并：T-03.3（PR #32）、T-04.8（PR #141）、T-07.7（PR #116，合并提交 `e65eb4d`）。生命周期接入 T-07.5（PR #119，合并提交 `cc19e99`）也已合并。按 main `c04b2ca` 的代码核对；T-03.13～T-03.19 的 proto 追加按执行顺序 §3，SDK HTTP 注册器后续由 T-04.11 改为 builder，本切片沿用现有 Handle/Public。若 goal-67 先合并，沿其同进程入口复用同一 Adapter HTTP 生命周期。范围修订（2026-11-12，审查者补充）：执行者报告 `sdk/registry.go` 的 HTTPRegistry.Handle 拒绝 `Public(AuthPlatformToken)`，语句漏列该文件；授权该校验接受公开平台 token 模式，插件注册路径（sdk.Run）与 Core 的 `validate.Register` 拒绝此模式，`RunAdapter` 与 `validate.AdapterRegister` 接受，其他 HTTP 校验与错误文本不变。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-110（切片 T-03.19：Adapter 的 HTTP 路由）。goal 目录 goal-110，分支 goal-110，worktree .worktrees/goal-110，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -4697,39 +4697,48 @@ goal-125 若先合并，Collect 改为收 *Plugin，命令、事件与 OnButton 
 
 ### goal-68 · T-13.2 开发组件的配置与数据库
 
-状态：等待前置（T-13.1）。T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并，待审查者按合并后的代码改写。T-13.1（[PR #149](https://github.com/AlonaBot/AlonaBot/pull/149)，合并提交 `bc39361`）已合并，其余前置均已合并；待 T-04.12（PR #154）合并后由审查者按根包的插件对象选项改写。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin`（T-04.10 起为 `{AdapterID, UserID}`，admins 为用户字符串）；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。语句中 goal-30、goal-32、goal-67 提供的符号（sdk/config.Prepare、gormdb 的描述、根包 assembly 与 dev 安装记录）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：开发 Adapter 的实例取自 `core_config.json`（D-82）；WebUI 修改开发组件配置时写回 `config.json` 并重启该组件（Admin API 在 goal-93）；dev 来源同时拒绝 uninstall（D-77）。前置合并后由审查者改写。
+状态：待派发。前置均已合并：T-13.1（[PR #149](https://github.com/AlonaBot/AlonaBot/pull/149)，合并提交 `bc39361`）、T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）、T-07.6（PR #100）、T-08.5（PR #79）、T-08.11（PR #103）。2026-11-12 审查者按 main `56550de` 的代码改写，现有代码如下：
+
+- **开发组件的 Bootstrap**：根包 `assembly.go` 的 `startDevelopment` 用 `bootstrap(generation, initialConfigVersion)` 构造，固定为 `CandidateConfigJson: "{}"`、`DatabaseDescriptor{Backend: NONE, MigrationMode: NONE}` 与 `LogLevel: INFO`；资源来自 `entry.resources`（插件对象的 `p.Generated()`）。
+- **代次与提交**：代次固定为 `dev:<id>`，首次以 `AddGeneration` 建快照，经 `host.Prepare`/`host.Activate` 激活并在首次 `CommitActive`；开发组件的数据目录为 `<data_dir>/plugins/<id>`。
+- **迁移方式核对**：SDK 在 `prepareMigrations` 中要求实际登记的迁移方式等于 Bootstrap 的 `migration_mode`，该值本应来自构建写入的 manifest。库模式没有构建步骤，所以本切片规定库模式开发组件的 Bootstrap 填 `MIGRATION_MODE_UNSPECIFIED`，SDK 只在同进程启动（`launch.inProcess`）且收到 UNSPECIFIED 时接受实际登记的方式，REGISTER 照实回报。已安装组件与 `alonabot run` 不受影响，审查者在合并时把这一条补进 CONTRACTS §15.4。
+- **update 与 rollback**：现在没有这两个入口，dev 来源的拒绝由 goal-39（T-09.4）的管理服务实现。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-68（切片 T-13.2：开发组件的配置与数据库）。goal 目录 goal-68，分支 goal-68，worktree .worktrees/goal-68，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：库模式的开发组件每次启动以 <data_dir>/plugins/<id>/config.json（缺失时为空对象）为配置，经 SDK 准备与校验后直接生效，不走候选与 Journal；受管 SQLite 为 <data_dir>/plugins/<id>/dev.sqlite，不复制、不回退；dev 来源拒绝 update 与 rollback；开发组件的缺省日志级别为 debug。
+目标：库模式的开发组件每次启动以 <data_dir>/plugins/<id>/config.json（缺失时为空对象）为配置，经 SDK 准备与校验后直接生效，不走候选与 Journal；受管 SQLite 为 <data_dir>/plugins/<id>/dev.sqlite，不复制、不回退；开发组件的缺省日志级别为 debug。
 
 依据：PLAN T-13 步骤 3；CONTRACTS §15.4；TEST-MATRIX V-64。
 
 范围（只新增或修改这些）：
-- 根包 assembly.go：开发组件的 Bootstrap 配置与数据库描述（只改开发组件分支）
-- internal/core/manage/：dev 来源的 update 与 rollback 拒绝（若 goal-39 已合并；否则在 assembly 中拒绝对应入口）
-- 上述包的测试文件
+- 根包 assembly.go：开发组件的 Bootstrap 配置、数据库描述与日志级别（只改 startDevelopment 与 bootstrap 的开发分支）
+- sdk/session.go：prepareMigrations 在同进程启动且 migration_mode 为 UNSPECIFIED 时接受实际登记的方式
+- examples/devbot/plugin/：增加 config_schema.json 与 OnStart 中的 dev.sqlite 读写；alonabot_gen.go 只由生成器重新生成
+- 根包 alonabot_test.go：扩展 TestLibraryLifecycle；上述包的 *_local_test.go
 允许的新跨模块边：无。
 
 行为：
-- 配置：开发组件启动时读取 config.json；文件不存在时为 {}；内容不是 JSON 对象时 Run 返回错误并指明路径。candidate_config_json 为其内容，previous_config_version 为 nil（每次都按首装处理 OnConfigLoad），SDK 按 goal-95 准备与校验；校验失败时该组件启动失败，Run 返回错误。准备后的配置不回写 config.json，也不写入代次快照之外的地方（代次 dev 的快照每次覆盖）。
+- 配置：
+  - 开发组件启动时读取 config.json；文件不存在时为 {}；内容不是 JSON 对象时，Start 返回错误并指明路径。
+  - candidate_config_json 为其内容；target_config_version 为该组件 config_schema 的 $version（没有 schema 时为 1）；previous_config_version 为 nil，每次都按首装处理 OnConfigLoad。
+  - SDK 按 goal-95 准备与校验，校验失败时该组件启动失败，Start 返回错误。
+  - 准备后的配置不回写 config.json，只覆盖代次 `dev:<id>` 的快照。
 - Secret：配置中的 secret 字段在开发模式下原样下发，不经 Secret Store，代次快照中也保存原样（dev 来源不分发）；在包文档写明这一差异。
-- 数据库：数据库描述为 SQLite，路径 <data_dir>/plugins/<id>/dev.sqlite，activation_reason 为 first_install（文件不存在时）或 resume，迁移按 goal-32 执行；不创建候选副本，不回退。
-- dev 来源的 update、rollback 返回 FAILED_PRECONDITION（"dev components cannot be updated or rolled back"）。
-- 日志：开发组件的来源级别缺省为 debug（只在没有显式设置时）。
+- 数据库：数据库描述为 SQLite，路径 <data_dir>/plugins/<id>/dev.sqlite；activation_reason 在文件不存在时为 first_install，否则为 resume；migration_mode 为 UNSPECIFIED，由同进程的 SDK 按实际登记执行迁移（goal-32）并在 REGISTER 回报。不创建候选副本，不回退。插件没有登记迁移、也不打开数据库时，照常运行。
+- Adapter：开发中的 Adapter 不使用 dev.sqlite（Adapter 不得声明数据库），描述保持 NONE。
+- 日志：开发组件 Bootstrap 的 log_level 缺省为 DEBUG；settings 对该组件来源有显式级别时，用显式级别。
 - Adapter 实例目录已在 goal-67 中实现，本切片不改。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：alonabot_test.go（根包）追加：examples/devbot 的插件加一个带默认值与 required 字段的 Config 并在 OnStart 写 dev.sqlite：
   - 没有 config.json 时以默认值启动；写入合法的 config.json 后重启，插件看到新值；写入缺少 required 的配置时 Run 返回错误。
   - 两次启动之间 dev.sqlite 中的数据保留，没有 generations/ 目录与候选副本。
-  - 经管理服务（或装配入口）对 dev 组件执行 update 与 rollback 被拒。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：config.json 非对象；dev.sqlite 不存在时的 activation_reason；显式设置级别时不被覆盖；日志中有该组件的 DEBUG 记录。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：config.json 非对象；dev.sqlite 不存在时的 activation_reason；登记了 versioned 与 self 迁移时的回报；独立进程启动时 UNSPECIFIED 仍被拒；显式设置级别时不被覆盖；日志中有该组件的 DEBUG 记录。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
-不做：热部署（T-13.3）；库模式示例与验收汇总（T-13.4）。
+不做：dev 来源的 update 与 rollback 拒绝（goal-39 的管理服务）；热部署（T-13.3）；库模式示例与验收汇总（T-13.4）。
 ```
 
 ### goal-69 · T-13.3 开发运行与热部署
@@ -4937,7 +4946,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-52 · T-05.4 延续调用与多轮等待
 
-状态：待派发。前置 T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)，合并提交 `0f860a9`）已合并：SDK 的 Rule 与目标 Handler 在同一调用、同一 Context 中执行，`StopPropagation` 锁存，调用结束时 Context 失效；Core 的自动回复排在显式发送之后。2026-11-12 审查者按 main `3e4db62` 的代码改写接口段，要点如下：
+状态：已完成（[PR #153](https://github.com/AlonaBot/AlonaBot/pull/153)，合并提交 `f22b538`），证据见 TEST-MATRIX §3.2。合入：SDK 的 `(*Context).Continue(fn func(*Context) error) error`、`(*Context).Wait(timeout) (*Context, error)`、`(*Context).Text()` 与 `(*EventBuilder).Continue()`；`internal/core/continuation` 的 `New(Options{Max, Timeout, Prepare, Caller})`、`Manager.Register(mux)`，等待按 Caller 的当前绑定匹配，`Release(c router.Caller)` 在 Session 结束时释放该 Session 的等待；`router.Options.Continuations`（`Finished`、`Match`、`Release`）与 `Router.CallContinuation(ctx, inv, continuationOf, deadline)`；proto 的 `HandlerRequest.continuation_of`、`ContinuationStartRequest`/`Response`、`WaitRequest{timeout_ms}`/`WaitResponse{event}`。审查时接受 `sdk/sdk.go` 中 Context 字段的改动（范围修订）。派发时：SDK 的 Rule 与目标 Handler 在同一调用、同一 Context 中执行，`StopPropagation` 锁存，调用结束时 Context 失效；Core 的自动回复排在显式发送之后。2026-11-12 审查者按 main `3e4db62` 的代码改写接口段，要点如下：
 - `router.Invocation` 现有 PluginID、Event、DefaultTarget 三个字段，由 `Router.call` 作为 `wire.Request.Attach` 传出，插件以该调用为父请求时，服务函数从 `wire.Inbound.ParentAttach` 取回同一指针。
 - 定时任务与 Service 调用的 ParentAttach 不是 `*router.Invocation`。
 - 没有 `router.Dispatch` 类型。router 不能 import continuation，所以改为由 router 声明接口、在 Options 中注入。
@@ -5057,41 +5066,150 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-124 · T-04.11 注册写法统一
 
-状态：等待前置（T-04.12）。T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并，待审查者按合并后的代码改写。T-04.8（[PR #141](https://github.com/AlonaBot/AlonaBot/pull/141)，合并提交 `ac4aded`）已合并：SDK 公共 API 改用自有类型（`message.Session`、`message.Content`、`message.MessageRef`、事件常量与带类型 payload、`errcode`），pb 只在 `sdk/internal/convert`。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。`supervisor.Spec` 已有 `Scheduler *scheduler.Scheduler` 与 `HTTP *httpproxy.Server`，激活成功后先 Bind 再 Attach；`host.StopHooks{Frozen, Stopping}` 把 Drain 与撤销接入停止流程。SDK 当前仍为 `ScheduleRegistry.Every(jobID, d, fn)`、`Cron(jobID, expr, timezone, fn)` 与 `HTTPRegistry.Handle(method, path string, h http.Handler, opts ...HTTPOption)` 的位置参数注册，本切片在保留既有生命周期行为的基础上改为 builder。合并后由审查者按 main `2c1fdcc` 核对。2026-11-09 按 D-112 新增。2026-11-10 按 D-114 前置加入 T-04.12：要点中的 `r` 指插件对象或子插件（`*sdk.Plugin`、`*sdk.SubPlugin`），`sdk.Subscribe` 的第一个参数是 `sdk.Registrar`；Handler 用结构体接收参数时不取参数名（D-115）。T-04.8（goal-91）改写 sdk 的注册与类型（含 `Public(mode HTTPAuth) HTTPOption`），T-04.12（goal-125）改写注册的接收者，待两者合并后补全接口段。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-101、goal-123 都修改 sdk/generate，按执行顺序 §3 的生成器一行处理。
+状态：待派发。前置均已合并：T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）、T-04.8（[PR #141](https://github.com/AlonaBot/AlonaBot/pull/141)，合并提交 `ac4aded`）、T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）。2026-11-12 审查者按 main `aa11454` 的代码写出范围、接口与测试段，现有代码如下：
 
-目标：定时任务与 HTTP 路由改为与 D-70 相同的链式注册；命令省略 Args 时参数名取 Handler 的参数名；Event Bus 订阅的路由 ID 缺省为事件名。协议不变。Hook 的同样改写由 T-05.3（goal-17）完成。
+- **插件对象与子插件**（`sdk/plugin.go`、`sdk/subplugin.go`）上，HTTP 与定时任务仍是位置参数形式：
+  - `Handle(method, path string, h http.Handler, opts ...HTTPOption)`，其中 `HTTPOption`、包级 `Public(mode HTTPAuth) HTTPOption` 与 `HTTPRoute` 在 `sdk/registry.go`，校验在未导出的 `httpRegistry.Handle`；
+  - `Every(jobID string, d time.Duration, fn func(*Context) error)`；
+  - `Cron(jobID, expr, timezone string, fn func(*Context) error)`。
+- **订阅**：`sdk.Subscribe[T](owner Registrar, routeID, eventName string)`，由 goal-126 改为接收 `BusEventType[T]`，并提供缺省路由 ID 与 `.ID(routeID)`。
+- **命令参数名**：省略 `Args` 时为 arg1、arg2；结构体参数（D-115）不需要参数名。
+- **生成资源**：`sdk.Generated` 经 `UseGenerated(p, alonabotGenerated)` 绑定到对象（D-137）。
+- **调用方**：`examples/plugins/lifecycle` 与 `showcase` 使用 Handle、Every 与 `sdk.Public`。T-03.19（goal-110，PR #152）给 Adapter 加了 `sdk.AdapterHTTP`，接收与 `Handle` 同签名的登记函数。
 
-依据：PLAN T-04 步骤 11；DESIGN §D；DECISIONS D-70、D-79、D-112；TEST-MATRIX V-110 的 SDK 分项。
+与 goal-126 都修改 `sdk.Subscribe`：goal-126 先合并时，本切片只核对其缺省路由 ID 与 `.ID` 符合下文；后合并时由 goal-126 沿用本切片的规则。与 goal-101、goal-123、goal-126 都修改 `sdk/generate`，按执行顺序 §3 的生成器一行处理。PR #152 先合并时，本切片一并迁移 `AdapterHTTP` 与其测试。
 
-要点：
-- 定时任务：`r.Every(jobID string, d time.Duration)` 与 `r.Cron(jobID, expr string)` 返回同一种 builder，Cron 可选 `.Timezone(name)`（缺省 UTC），以 `.Handle(func(*sdk.Context) error)` 结束；路由 ID 仍为 "job." 加 jobID。删除现有的位置参数形式。
-- HTTP：`r.Route(method, path string)` 返回 builder，可选 `.Public(mode sdk.HTTPAuth)`，以 `.Handle(http.Handler)` 或 `.HandleFunc(func(http.ResponseWriter, *http.Request))` 结束；删除 `HTTPOption` 与包级的 `Public`。注册校验、路由 ID 与 Listener 的行为不变。
-- 漏写 Handle 时 Collect 报错并带 route_id，与命令相同。
-- 命令参数名：省略 `.Args` 时取 Handler 中 `*sdk.Context` 之后的参数名。Go 运行时取不到参数名，由生成器为插件包中第一个参数是 `*sdk.Context` 的包级函数、方法与函数字面量记录参数名，嵌入 Generated；SDK 按 Handler 的函数名（方法值去掉 `-fm` 后缀）或函数字面量的源码位置查找。写了 `Args` 时以它为准，个数仍须与参数一致；查不到时保持 arg1、arg2。`Optional` 的 name 指同一套名字。
-- 订阅：`sdk.Subscribe[T](r, eventName)` 的路由 ID 缺省为事件名，`.ID(routeID)` 可以另给；同一事件订阅两次且都没有给 ID 时，Collect 报重复的 route_id。
+```text
+/goal 使用 $alonabot-execute 推进 goal-124（切片 T-04.11：注册写法统一）。goal 目录 goal-124，分支 goal-124，worktree .worktrees/goal-124，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：定时任务与 HTTP 路由改为与 D-70 相同的链式注册；命令省略 Args 时，参数名取 Handler 的参数名；Event Bus 订阅的路由 ID 缺省为事件名。协议不变。Hook 的同样改写由 T-05.3（goal-17）完成。
+
+依据：PLAN T-04 步骤 11；DESIGN §D；DECISIONS D-70、D-79、D-112、D-114；TEST-MATRIX V-110 的 SDK 分项。
+
+范围（只新增或修改这些）：
+- sdk/plugin.go、sdk/subplugin.go：HTTP 与定时任务的入口改为 builder；sdk/registry.go：HTTP 与定时任务的 builder、删除 HTTPOption 与包级 Public；sdk/sdk.go 的 Collect 只加漏写 Handle 的检查与参数名查找
+- sdk/generated.go：Generated 追加参数名表；sdk/dispatch.go 只在命令参数绑定处读取参数名
+- sdk/generate/：为 Handler 记录参数名并写入生成文件
+- sdk/adapter_run.go（PR #152 已合并时）：AdapterHTTP 迁到新的 HTTP builder
+- examples/plugins/{lifecycle,showcase}/ 的 Go 源文件；各处 alonabot_gen.go 只由生成器重新生成
+- 提交的测试中以字符串嵌入的插件源码与测试插件（internal/core/adapter/remote/remote_test.go 等）只迁移注册写法，断言不变
+- 上述 SDK 包的 *_local_test.go
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+sdk（替换与新增；*Plugin 与 *SubPlugin 各有一套同名方法）
+   func (r *Plugin) Route(method, path string) *RouteBuilder
+   type RouteBuilder struct{ ... }
+   func (b *RouteBuilder) Public(mode HTTPAuth) *RouteBuilder // 公开路由；不调用时需要 Core 会话
+   func (b *RouteBuilder) Handle(h http.Handler)
+   func (b *RouteBuilder) HandleFunc(f func(http.ResponseWriter, *http.Request))
+   func (r *Plugin) Every(jobID string, d time.Duration) *ScheduleBuilder
+   func (r *Plugin) Cron(jobID, expr string) *ScheduleBuilder
+   type ScheduleBuilder struct{ ... }
+   func (b *ScheduleBuilder) Timezone(name string) *ScheduleBuilder // 只用于 Cron，缺省 UTC；Every 调用时由 Collect 报错
+   func (b *ScheduleBuilder) Handle(fn func(*Context) error)
+   Generated 追加 ParamNames map[string][]string // 键见下文；值为 *sdk.Context 之后的参数名
+   AdapterHTTP（PR #152 已合并时）改为 HTTP(route func(method, path string) *RouteBuilder)
+删除：(*Plugin)/(*SubPlugin).Handle(method, path, h, opts...)、原 Every(jobID, d, fn) 与 Cron(jobID, expr, timezone, fn)、HTTPOption、包级 Public，不留别名。
+
+行为：
+- HTTP：
+  - Route 声明一条 method+path 路由，以 Handle 或 HandleFunc 结束。
+  - 注册校验、错误文本、route_id 与 Listener 行为都与原 Handle 相同：私有路由需要 Core 会话，公开路由必须声明回调验证方式，Adapter 另可使用 AuthPlatformToken，插件不能。
+- 定时任务：Every 与 Cron 返回同一种 builder，以 Handle 结束。路由 ID 仍为 "job." 加 jobID，描述与原写法逐字段相同。
+- 漏写或重复 Handle：Collect 报错并带 route_id，与命令相同。
+- 命令参数名：
+  - 生成器为插件包中第一个参数是 `*sdk.Context` 的包级函数、方法与函数字面量，记录其后参数的名字，写入 Generated.ParamNames。
+  - 键：函数与方法为 runtime 的函数全名（`importpath.Func`、`importpath.(*T).Method`、`importpath.T.Method`）；函数字面量为 `importpath:文件名:行号`，行号是 `func` 关键字所在行。
+  - SDK 在 Collect 时用 `runtime.FuncForPC` 取 Handler 的名字（方法值去掉 `-fm` 后缀）或字面量的文件与行，查找参数名。
+  - 写了 Args 时以 Args 为准，个数仍须与参数一致；查不到时保持 arg1、arg2；结构体参数不用参数名；Optional 的 name 指同一套名字。
+- 订阅：路由 ID 缺省为事件名，`.ID(routeID)` 另给；同一事件订阅两次且都没有给 ID 时，Collect 报重复的 route_id（goal-126 已合并时只核对）。
 - 调用方：examples/plugins 与测试中以字符串嵌入的插件源码按新写法修改，与参数名相同的 Args 删去。
-- 测试：注册描述与旧写法的等价性、参数名的各种来源与查不到时的回退进本地自测；已有调用定时任务、HTTP 注册与 Subscribe 的集成测试改用新写法，断言不变。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：无（D-86：不向 sdk/ 提交测试）。已有调用 HTTP、定时任务与 Subscribe 的集成测试（含 TestRemoteHTTPUpgrade、示例相关测试）只迁移写法，断言不变。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：
+  - 新旧写法注册描述的等价性（HTTP 的各认证模式、Every 与 Cron 含 Timezone）；漏写、重复 Handle 与 Every 调用 Timezone 的报错；
+  - 参数名的各种来源（包级函数、值与指针方法值、函数字面量）、Args 优先、查不到时的回退；
+  - 生成器重复生成一致；
+  - internal/core/supervisor 的本地集成（//go:build unix）：真实插件的 HTTP 路由、定时任务与按参数名绑定的命令。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race . ./cmd/... ./internal/core/... ./sdk/... ./adapters/...；go build ./...。
+
+不做：Hook 的注册写法（goal-17）；Service 与 Event Bus 的声明（goal-126）；协议与 Core 的改动。
+```
 
 ### goal-126 · T-04.13 Service 与 Event Bus 的带类型声明
 
-状态：等待前置（T-04.12）。T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并，待审查者按合并后的代码改写。2026-11-10 按 D-122 新增。T-04.12（goal-125）把注册的接收者改为 `sdk.Registrar`，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片与 goal-124 都修改 `sdk.Subscribe`，与 goal-101、goal-123、goal-124、goal-125 都修改 sdk/generate，后合并者同步 main 后按对方的写法重做自己的改动。
+状态：待派发。前置 T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并。2026-11-12 审查者按 main `9983182` 的代码写出范围、接口与测试段，现有代码如下：
+
+- **Service 注册**：`sdk.JSON[In, Out any](owner Registrar, name string) *JSONService[In, Out]` 与 `sdk.Proto[In, Out proto.Message](owner Registrar, name string) *ProtoService[In, Out]`（`sdk/services.go`），builder 有 `Access`、`Tool`（仅 JSON）与 `Handle`。
+- **Service 调用**：`sdk.CallJSON[In, Out any](ctx, target string, in In) (Out, error)` 与 `sdk.CallProto[Out proto.Message](ctx, target string, in proto.Message) (Out, error)`。
+- **Event Bus**：`sdk.Subscribe[T any](owner Registrar, routeID, eventName string) *Subscription[T]` 与 `sdk.Publish[T any](ctx, eventName string, payload T) (string, error)`（`sdk/bus.go`）；Publish 由 SDK 补上 `plugin_id/` 前缀。
+- **`Registrar`**：由 `*sdk.Plugin` 与 `*sdk.SubPlugin` 实现，内部经 `owner.registrar()` 取得插件与子插件归属。
+- **生成器**：`sdk/generate/service.go` 只检查 `JSON`、`Subscribe`、`CallJSON`、`Publish` 四个泛型入口的类型参数，都必须是包级具名非泛型类型，其中 JSON 注册生成 ServiceSchemas。
+- **调用方**：main 上除 SDK 自身外，没有提交代码使用这些函数；`sdk/llm` 与 goal-83 均未合并。
+
+本切片与 goal-124（T-04.11）都修改 `sdk.Subscribe`，与 goal-101、goal-123、goal-124 都修改 `sdk/generate`，后合并者同步 main，按对方的写法重做自己的改动。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-126（切片 T-04.13：Service 与 Event Bus 的带类型声明）。goal 目录 goal-126，分支 goal-126，worktree .worktrees/goal-126，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：Service 与 Event Bus 事件各用一个带类型的声明表示，注册、调用、发布与订阅都从声明出发，名字与 Go 类型只写一处；删除按字符串目标与类型参数直接调用、发布与订阅的函数。协议与 Core 不变。
 
 依据：PLAN T-04 步骤 13；DESIGN §D、§G；CONTRACTS §3、§9.1；DECISIONS D-70、D-107、D-112、D-114、D-122；TEST-MATRIX V-113 的声明分项。
 
-要点：
-- 声明：`sdk.JSON[In, Out any](target string) Service[In, Out]` 与 `sdk.Proto[In, Out proto.Message](target string) Service[In, Out]`，`Service[In, Out]` 是只含未导出字段的值类型，记录 target 与编码。target 为 `plugin_id/service_name` 或 `@agent/service_name`。
-- 注册：`sdk.Serve[In, Out any](r Registrar, s Service[In, Out])` 返回现有的 Service builder，`Access`、`Tool` 与 `Handle(func(*Context, In) (Out, error))` 不变；Protobuf 声明调用 `Tool` 照旧报错。Collect 核对 target 的组件部分等于 manifest 的插件 ID（`role: agent` 的组件为 `@agent`）、声明不是零值、同一 target 只注册一次，错误带 target。REGISTER 中的服务名仍是 service_name 部分，描述与原写法相同。
-- 调用：`func (s Service[In, Out]) Call(ctx context.Context, in In) (Out, error)`，请求与原 `sdk.CallJSON`、`sdk.CallProto` 相同；零值声明返回 INVALID_ARGUMENT，不发出请求。
-- Event Bus：`sdk.BusEvent[T any](name string) BusEventType[T]`，name 为 `plugin_id/event_name`；`func (e BusEventType[T]) Publish(ctx context.Context, payload T) (eventID string, err error)`；`sdk.Subscribe[T any](r Registrar, e BusEventType[T])` 返回现有的订阅 builder，路由 ID 缺省为事件名，`.ID(routeID)` 另给（goal-124 先合并时沿用它的缺省规则，后合并时由本切片实现）。
-- 删除：`sdk.CallJSON`、`sdk.CallProto`、`sdk.Publish`，以及第一个参数为注册器或 Registrar、第二个参数为名字的 `sdk.JSON`、`sdk.Proto`、`sdk.Subscribe`，不留别名。
-- 生成器：对类型参数的检查（包级的具名非泛型类型、Schema 生成）改为针对 `sdk.JSON`、`sdk.BusEvent` 的声明处，诊断位置随之变化；ServiceSchemas 的内容不变。
-- `sdk/llm`（goal-83 先合并时）：导出 `llm.GenerateService = sdk.JSON[Request, Response]("@agent/llm.generate")`，`llm.Generate` 与 `llm.Ask` 的签名不变，内部调用它；Agent 组件用 `sdk.Serve(p, llm.GenerateService)` 注册。goal-83 后合并时按本条书写。
-- 调用方：examples/plugins、测试中以字符串嵌入的插件源码与已合并的官方插件、Agent 代码按新写法修改。
-- 文档同步：docs/plugin-guide.md 第 6 节由审查者在合并前改写。
-- 测试：按 D-86 不向 sdk/ 提交测试。V-113 的声明分项进本地自测；已有调用 Service 与 Event Bus 的集成测试改用声明，断言不变。
+范围（只新增或修改这些）：
+- sdk/services.go：声明类型 Service[In, Out]、JSON 与 Proto 声明、Serve、Call；删除旧的 JSON、Proto（以注册器开头的形式）、CallJSON、CallProto
+- sdk/bus.go：声明类型 BusEventType[T]、BusEvent、Publish 方法、新形式的 Subscribe；删除旧的 Subscribe 与 Publish
+- sdk/sdk.go 的 Collect 只加声明相关的检查调用点
+- sdk/generate/service.go：类型参数检查改为针对 JSON、Proto、BusEvent 的声明处；ServiceSchemas 内容不变
+- docs/plugin-guide.md 第 6 节由审查者在合并前改写，执行者不改
+- 上述 SDK 包的 *_local_test.go；sdk/generate 的 *_local_test.go
+允许的新跨模块边：无。
 
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+sdk（新增或替换）
+   type Service[In, Out any] struct{ /* 只含未导出字段：target、编码 */ } // 值类型，零值无效
+   func JSON[In, Out any](target string) Service[In, Out]                   // target 为 "plugin_id/service_name" 或 "@agent/service_name"
+   func Proto[In, Out proto.Message](target string) Service[In, Out]
+   func Serve[In, Out any](r Registrar, s Service[In, Out]) *ServiceBuilder[In, Out] // 返回服务 builder
+   type ServiceBuilder[In, Out any] struct{ ... } // 由原 JSONService/ProtoService 合并而来
+   func (b *ServiceBuilder[In, Out]) Access(a Access, allowlist ...string) *ServiceBuilder[In, Out]
+   func (b *ServiceBuilder[In, Out]) Tool(description string, defaultPolicy ToolDefault) *ServiceBuilder[In, Out] // Proto 声明调用时由 Collect 报错
+   func (b *ServiceBuilder[In, Out]) Handle(h func(*Context, In) (Out, error))
+   func (s Service[In, Out]) Call(ctx context.Context, in In) (Out, error)
+   type BusEventType[T any] struct{ /* 只含未导出字段：name */ }
+   func BusEvent[T any](name string) BusEventType[T]                         // name 为 "plugin_id/event_name"
+   func (e BusEventType[T]) Publish(ctx context.Context, payload T) (eventID string, err error)
+   func Subscribe[T any](r Registrar, e BusEventType[T]) *Subscription[T]    // 路由 ID 缺省为事件名
+   func (s *Subscription[T]) ID(routeID string) *Subscription[T]             // 另给路由 ID；Handle 之后调用时由 Collect 报错
+删除：CallJSON、CallProto、Publish 函数，以及原 JSON(owner, name)、Proto(owner, name)、Subscribe(owner, routeID, eventName)、JSONService、ProtoService，不留别名。
+
+行为：
+- 注册：
+  - Serve 对 Service 声明开始注册，Access、Tool、Handle 的语义与原 builder 相同，REGISTER 中的服务名是 target 的 service_name 部分，描述与原写法逐字段相同。
+  - Collect 核对：target 的组件部分等于本组件的插件 ID（`role: agent` 的组件为 `@agent`）；声明不是零值；同一 target 只 Serve 一次；Proto 声明调用 Tool 报错。错误为英文并带 target。
+- 调用：Call 发出的请求与原 CallJSON、CallProto 相同（JSON 时按 Schema 校验输入输出，Handler 内调用时关联父请求）。零值声明返回 INVALID_ARGUMENT，不发出请求。
+- Event Bus：
+  - Publish 核对 name 的组件部分等于本插件 ID，不一致时返回 INVALID_ARGUMENT，不发出请求；其余与原 Publish 相同，只是不再补前缀。
+  - Subscribe 的路由 ID 缺省为事件名（D-112），`.ID(routeID)` 另给；订阅描述与原写法相同。
+- 生成器：类型参数检查（包级具名非泛型类型）改为针对 `sdk.JSON`、`sdk.Proto`、`sdk.BusEvent` 的声明处，诊断位置落在声明处；JSON 声明照旧生成 ServiceSchemas，内容不变。
+- 调用方：main 上没有提交代码使用这些函数。若执行时已有新的调用方（goal-83 的 `sdk/llm`、官方插件、测试中以字符串嵌入的插件源码），按新写法迁移；`sdk/llm` 导出 `llm.GenerateService = sdk.JSON[Request, Response]("@agent/llm.generate")`，`llm.Generate` 与 `llm.Ask` 的签名不变。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：无（D-86：不向 sdk/ 提交测试）。已有调用 Service 与 Event Bus 的集成测试若存在，改用声明，断言不变。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：
+  - 声明与 Collect 的拒绝项：零值声明、组件部分不符、重复 Serve、Proto 调用 Tool；
+  - Call 的零值与真实 Session 往返（JSON 与 Proto），Handler 内调用关联父请求；
+  - Publish 的组件检查与发布载荷，Subscribe 的缺省与 `.ID` 路由 ID；
+  - 生成器诊断落在声明处、ServiceSchemas 与改写前逐字节相同；
+  - internal/core/supervisor 的本地集成（//go:build unix）：两个真实插件进程，一个 Serve 并 Publish，另一个以同一声明 Call 与 Subscribe。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race . ./internal/core/... ./sdk/...；go build ./...。
+
+不做：协议与 Core 的改动；`sdk/llm` 的新功能（goal-83）；HTTP、定时任务与 Hook 的注册写法（goal-124）。
+```
 
 ### goal-129 · T-04.14 命令名覆盖的 Core 侧
 
@@ -5185,23 +5303,97 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-130 · T-08.14 配置项的选项来源
 
-状态：等待前置（T-04.12）。T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并，待审查者按合并后的代码改写。2026-11-10 按 D-129 新增。T-06.1（PR #45）与 T-08.11（PR #103）已合并；T-04.12（goal-125）提供插件对象与 `sdk.Registrar`，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片修改 Service 描述的 proto 与 `sdk/generate` 的 schema 检查，按执行顺序的共享文件规则处理冲突。
+状态：待派发。前置均已合并：T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）、T-06.1（PR #45）、T-08.11（PR #103）。2026-11-12 审查者按 main `2828864` 的代码写出范围、接口与测试段，现有代码如下：
 
-目标：`config_schema.json` 的字段可以用 `options_from` 声明选项来自 Core 内置来源或某个组件的选项来源服务；组件用 `sdk.ServeOptions` 提供来源；Core 能按组件与字段路径查询选项。本切片提供 schema 检查、协议标记、SDK 注册、Core 的查询入口与内置来源 `core.adapter_instances`；管理 API 由 goal-93 提供，页面由 goal-44 提供。
+- **配置 schema**：字段属性在 `contracts/configschema/declaration.go` 的属性 switch 中逐项校验。`options`、`labels` 只用于 string 与没有 items 的 list；secret 不能与 default、options 并存。
+- **ServiceSpec**：现用到字段 5（tool）；`ServiceAccess_SERVICE_ACCESS_PRIVATE` 表示只允许 Core 与本插件。
+- **Service 转发**：`broker.Broker.Call(ctx, c router.Caller, in *wire.Inbound)` 按目标插件当前 Active Session 的路由定位 Service，校验访问规则（`router.ServiceCallable`）与输入的编码和 Schema 后转发。
+- **组件的配置 schema**：库模式装配按组件取得。开发组件来自 `p.Generated()`，已安装组件来自 `packageResources(dir)`，Adapter 来自 `Generated.AdapterConfigSchema`。
+- **tune**：`internal/tune` 尚无 `OPTIONS_PAGE`。
+- **并行切片**：goal-126（T-04.13）正在改写 `sdk/services.go` 的 Service 声明，本切片的 SDK 代码放在新文件中，复用其内部注册辅助，后合并者同步。
+
+本切片修改 Service 描述的 proto 与 `sdk/generate` 的 schema 检查，按执行顺序的共享文件规则处理冲突。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-130（切片 T-08.14：配置项的选项来源）。goal 目录 goal-130，分支 goal-130，worktree .worktrees/goal-130，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：`config_schema.json` 的字段可以用 `options_from` 声明选项来自 Core 内置来源，或来自某个组件的选项来源服务；组件用 `sdk.ServeOptions` 提供来源；Core 能按组件与字段路径查询选项。本切片提供 schema 检查、协议标记、SDK 注册、Core 的查询入口与内置来源 `core.adapter_instances`；管理 API 由 goal-93 提供，页面由 goal-44 提供。
 
 依据：PLAN T-08 步骤 11；CONTRACTS §3（选项来源）、§5.1（`options_from` 与「选项来源」）、§16（`OPTIONS_PAGE`）；WIRE-FORMAT §3.5 的追加字段；DECISIONS D-129；TEST-MATRIX V-116 的 schema、SDK 与 Core 分项。
 
-要点：
-- schema 检查：`options_from` 只用于 `string` 与没有 `items` 的 `list`；与 `options`、`labels`、`secret` 并存时报错；`source` 必须是 `core.<name>`、`<组件 ID>/<service_name>` 或 `@agent/<service_name>`；内置来源的名称与 filter 的键必须已知；`filter` 的值必须是字符串。错误带 JSON 路径。`adapter_config_schema.json` 走同一检查。
-- 配置的行为不变：补缺失值、校验、`Config()` 的读取、Merge Patch 与 secret 都不因 `options_from` 改变；不按来源校验取值。
-- 协议：Service 描述追加选项来源标记，字段号由本 goal 分配；Core 在 REGISTER 时核对带标记的服务使用 SDK 固定的选项查询 Schema，访问规则只含 Core 与本组件，不符时拒绝注册。
-- SDK：`sdk.ServeOptions(r, serviceName, fn)`、`sdk.OptionsQuery{Search, Filter, Locale, Limit, Values}`、`sdk.OptionsPage{Options, More}`、`sdk.Option{Value, Label, Description}`。同一服务名注册两次或 `fn` 为 nil 时 `Collect` 报错。`Values` 非空时按存储值返回，其余字段不用。
-- Core 的查询入口：输入组件 ID、字段路径与查询；从该组件 Active 代次的 schema 找到字段，取来源名与 filter。字段不存在或没有 `options_from` 返回 INVALID_ARGUMENT。内置来源在进程内查询；服务来源经 Service Broker 以 Core 的身份调用，不带用户 Actor，只接受带标记的服务。目标未安装、未激活、没有标记或调用失败返回 UNAVAILABLE。`Limit` 取 `OPTIONS_PAGE`；来源返回的选项多于上限时只取前面的并把 `More` 置为 true。
-- 内置来源的登记处：按来源名登记查询函数与允许的 filter 键，供 schema 检查与查询入口共用。本切片登记 `core.adapter_instances`（存储值为 adapter_instance_id，显示名为实例名，说明为 adapter_id，filter 可用 `adapter_id`）；`core.chats` 由 goal-131 登记，本切片的 schema 检查先接受这个名称及其两个 filter 键。
-- `internal/tune` 登记 `OPTIONS_PAGE`（缺省 50，范围 1～200）。
-- 测试：提交一个集成测试，覆盖一个插件为自己的配置字段提供来源、Core 按字段路径查到选项、按存储值取回显示名、目标未激活时返回 UNAVAILABLE；其余（schema 检查的各种拒绝、超出上限的截断、未带标记的服务被拒、`@agent` 目标、Adapter 的 schema）进本地自测。
+范围（只新增或修改这些）：
+- contracts/configschema/：options_from 的解析与检查，以及按字段路径读取 options_from 的方法；内置来源的名称与 filter 键登记在本包，供 schema 检查与 Core 共用
+- contracts/proto/alonabot/v1/route.proto：ServiceSpec 追加选项来源标记；随后运行 go generate ./...；contracts/wirespec_test.go 追加编号检查。本切片获授权只追加这一个字段
+- contracts/validate/register.go：带标记的服务的注册校验；固定 Schema 的标识常量放在 contracts/validate
+- internal/tune：登记 OPTIONS_PAGE
+- sdk/：新增 options.go（ServeOptions 与三个类型，Schema 由 SDK 固定提供），复用 services.go 的内部注册辅助；sdk/sdk.go 的 Collect 只加检查调用点
+- 新增 internal/core/options/：查询入口与内置来源 core.adapter_instances
+- 根包 assembly.go：构造查询入口并保存在装配中，供 T-09.14 的管理 API 使用
+- internal/core/adapter/remote/remote_test.go：新增一个主路径集成测试
+- 上述包的 *_local_test.go
+允许的新跨模块边：无（options 与 router、broker 同属 internal/core 模块）。
 
-不做：管理 API（goal-93）；页面（goal-44）；`core.chats`（goal-131）；`llm.providers`（goal-83）；选项之间的级联；按来源校验已保存的值；用户与插件列表的内置来源。
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. contracts/configschema
+   var BuiltinOptionSources = map[string][]string{"core.adapter_instances": {"adapter_id"}, "core.chats": {"chat_type", "adapter_id"}} // 来源名 → 允许的 filter 键；core.chats 由 goal-131 实现查询，本切片只登记名称
+   type OptionsFrom struct { Source string; Filter map[string]string }
+   func (s *Schema) OptionsFrom(fieldPath string) (OptionsFrom, bool) // fieldPath 规则同 CONTRACTS §5.1：以 . 连接，list 子字段不含下标，模板子字段为 <字段>.<模板键>.<子字段>
+2. proto：ServiceSpec 追加 bool options_source = 6;
+3. contracts/validate
+   const OptionsQuerySchemaID, OptionsPageSchemaID = ..., ... // 与 SDK 由 Go 类型推导出的 schema_id 相同，版本均为 1
+4. internal/tune：OPTIONS_PAGE，缺省 50，范围 1～200
+5. sdk
+   type OptionsQuery struct { Search string; Filter map[string]string; Locale string; Limit int; Values []string }
+   type OptionsPage struct { Options []Option; More bool }
+   type Option struct { Value, Label, Description string } // Description 可为空，JSON 中省略
+   func ServeOptions(r Registrar, serviceName string, fn func(ctx context.Context, q OptionsQuery) (OptionsPage, error))
+6. internal/core/options
+   type Query struct { Search string; Locale string; Limit int; Values []string } // filter 由入口取自 schema，调用方不能指定
+   type Page struct { Options []Option; More bool }
+   type Option struct { Value, Label, Description string }
+   type SchemaKind int // ConfigSchema、AdapterInstanceSchema
+   type Options struct {
+       Schema    func(componentID string, kind SchemaKind) (*configschema.Schema, bool) // 该组件 Active 代次的 schema
+       Router    *router.Router
+       Broker    *broker.Broker
+       Instances func() []AdapterInstance // 已配置的 Adapter 实例
+       Page      int                      // OPTIONS_PAGE
+   }
+   type AdapterInstance struct { InstanceID, AdapterID string }
+   func New(opt Options) *Service
+   func (s *Service) Query(ctx context.Context, componentID string, kind SchemaKind, fieldPath string, q Query) (Page, error)
+
+行为：
+- schema 检查：
+  - `options_from` 只用于 string 与没有 items 的 list；与 options、labels、secret 并存时报错。
+  - source 必须是 `core.<name>`、`<组件 ID>/<service_name>` 或 `@agent/<service_name>`；内置来源的名称与 filter 键必须在 BuiltinOptionSources 中；filter 的值必须是字符串。错误带 JSON 路径。
+  - `adapter_config_schema.json` 走同一检查，`plugin check` 与生成器共用。
+- 配置的行为不变：补缺失值、校验、`Config()` 的读取、Merge Patch 与 secret 都不因 options_from 改变，不按来源校验取值。
+- 注册：
+  - ServeOptions 注册一个 JSON Service，输入为 OptionsQuery、输出为 OptionsPage，访问规则固定为 PRIVATE，不可调用 Access 或 Tool，描述带 options_source=true。
+  - 同一服务名注册两次或 fn 为 nil 时，Collect 报错。
+  - Core 在 REGISTER 时核对带标记的服务：编码为 JSON，输入输出 schema_id 与版本等于 validate 的常量，访问为 PRIVATE 且没有 allowlist，没有 tool；不符时拒绝注册。
+- 查询入口（Query）：
+  - 从 Options.Schema 取该组件的 schema，按字段路径找到 options_from；字段不存在或没有 options_from 时返回 INVALID_ARGUMENT。
+  - Limit 为 0 时取 Page，超过 Page 时按 Page 处理。来源返回的选项多于 Limit 时只取前面的，并把 More 置为 true。Values 非空时按存储值查询，不存在的值不返回。
+  - 内置来源在进程内查询。`core.adapter_instances`：存储值为 adapter_instance_id，显示名为实例 ID，说明为 adapter_id，filter 的 adapter_id 按相等筛选。`core.chats` 尚未实现时返回 UNAVAILABLE。
+  - 服务来源：组件部分 `@agent` 时取 `role: agent` 的组件。经 Router 找到目标的 Active 路由，只接受 options_source 的服务，再经 Broker 以 Core 的身份（不带用户 Actor）调用，filter 取自 schema 原样传入。
+  - 目标未安装、未激活、没有标记、调用失败或响应不合法时，返回 UNAVAILABLE，不影响配置的读取与保存。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：只新增 internal/core/adapter/remote/remote_test.go 的 TestOptionSources，复用测试二进制中的插件进程、真实 Session、Router 与 Broker。覆盖：
+  - 一个插件为自己的配置字段提供来源，Core 按字段路径查到选项；
+  - 按存储值取回显示名；
+  - 目标未激活时返回 UNAVAILABLE。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：
+  - schema 检查的各种拒绝（类型、互斥、来源名格式、内置名称与 filter 键、filter 值类型、JSON 路径）；
+  - Collect 对重复与 nil 的拒绝，REGISTER 对标记服务的各项拒绝；
+  - 超出上限的截断与 More；未带标记的服务被拒；`@agent` 目标；Adapter 实例 schema；core.adapter_instances 的 filter。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race . ./contracts/... ./internal/core/... ./sdk/...；go build ./...。
+
+不做：管理 API（goal-93）；页面（goal-44）；`core.chats` 的查询（goal-131）；`llm.providers`（goal-83）；选项之间的级联；按来源校验已保存的值；用户与插件列表的内置来源。
+```
 
 ### goal-127 · T-07.8 动态任务与调度持久化的协议和 Core 侧
 
