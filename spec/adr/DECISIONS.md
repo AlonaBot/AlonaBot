@@ -311,3 +311,4 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-11-13：审查者调整 T-09.5 与 T-09.6 的分界：生产的管理动作接线（manage.Options.Candidates）、首次启用切换与没有 Active 的 Update 移到 T-09.6，与唯一提交点一并交付，T-09.5 只交付 Journal、两阶段 supervisor 入口与 Orchestrator 的 Prepare/Abort，避免出现「停旧版、准备、中止、返回 UNSUPPORTED」的过渡行为。T-09.5 同时补齐 WIRE-FORMAT §3.1 要求的 REGISTER 校验：Bootstrap 带可信的 config_schema_hash 时 REGISTER 必须相同，candidate_config_version 必须等于 target_config_version。
 - 2026-11-13：**D-141 审查者补齐，待维护者确认**：InvocationContext.command_consumed 与 SDK 的 CommandConsumed、NotCommand。按 D-135 修订 MESSAGE-MODEL 的 c.Stream：没有 message.edit 时缓冲到正常结束，再按实例 text_limit 换条发送（原文「Send 一次」与 D-135 的换条职责冲突）。
 - 2026-11-13：审查者补齐 T-12.3 的单轮工具步数口径（V-58 只写「20」）：按实际执行的工具调用次数计，同一响应中的多个 ToolCall 各计一次，Core 工具与 MCP 工具合计，第 21 次不执行并结束本轮。
+- 2026-11-13：审查者补齐 T-12.14 的跨库失败规则：Agent 的图片记录所属 Core 会话条目序号，回放只取 Core 中仍存在的条目对应的图片；Core 追加成功而图片写入失败时保留文字、不回放图片并记 WARN，/reset 删除图片失败时向用户返回错误，管理服务直接清除 Core 会话后残留图片不回放，下一次 /reset 清理。图片表并入 Agent 受管库的初始迁移。
