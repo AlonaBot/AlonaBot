@@ -112,6 +112,7 @@ type Core struct {
 	assembly      *assembly
 	store         *state.Store
 	output        *logging.Output
+	logLevel      *slog.Level // 本次显式覆盖；nil 时随 core_config.json 的 log.level 刷新。
 	values        tune.Values
 	components    []*runningComponent
 	development   []component
@@ -172,7 +173,7 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Core{store: store, values: values, dir: dir, done: make(chan struct{}), stopping: make(chan struct{}), operations: make(chan coreOperation)}
+	c := &Core{store: store, values: values, dir: dir, logLevel: o.level, done: make(chan struct{}), stopping: make(chan struct{}), operations: make(chan coreOperation)}
 	fail := func(err error) (*Core, error) {
 		c.err = err
 		return nil, errors.Join(err, c.shutdown())
@@ -561,26 +562,29 @@ func (c *Core) Restart(ctx context.Context, id string) error {
 	})
 }
 
-// ReloadSettings 重新读取 core_config.json，更新 Core Admin；命令前缀立即读取新值，
+// ReloadSettings 重新读取 core_config.json，更新 Core Admin、缺省实例和日志级别；命令前缀立即读取新值，
 // default_locale 在之后建立的 Session 生效。与其他管理操作串行，组件保持运行。
 func (c *Core) ReloadSettings(ctx context.Context) error {
 	return c.operation(ctx, func(context.Context) error { return c.reloadSettings() })
 }
 
 func (c *Core) reloadSettings() error {
-	changed, err := c.assembly.settings.Reload()
-	if err != nil {
+	if _, err := c.assembly.settings.Reload(); err != nil {
 		return err
 	}
-	for _, key := range changed {
-		if key == "admins" {
-			var admins []policy.Admin
-			for _, admin := range c.assembly.settings.Settings().Admins {
-				admins = append(admins, policy.Admin{AdapterID: admin.AdapterID, UserID: admin.UserID})
-			}
-			c.assembly.policy.SetAdmins(admins)
-		}
+	// 管理操作可能已通过 Settings.Update 发布快照，仍须同步实际权限。
+	configuration := c.assembly.settings.Settings()
+	var admins []policy.Admin
+	for _, admin := range configuration.Admins {
+		admins = append(admins, policy.Admin{AdapterID: admin.AdapterID, UserID: admin.UserID})
 	}
+	c.assembly.policy.SetAdmins(admins)
+	c.assembly.adapters.SetDefaults(configuration.DefaultInstances())
+	level := configuration.LogLevel
+	if c.logLevel != nil {
+		level = *c.logLevel
+	}
+	c.output.Levels().SetGlobal(level)
 	return nil
 }
 

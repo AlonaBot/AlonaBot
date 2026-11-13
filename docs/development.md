@@ -81,7 +81,7 @@ bin/alonabot run ./examples/plugins/lifecycle --stdio
 
 源码或资源变化后重新构建，成功时只重启变化的组件；编译失败保留编译器诊断，旧组件继续运行。只改组件 `config.json` 时直接重启该组件，只改 Adapter 的一个实例配置时只重启该实例，二进制保持原样。不带 `--reload` 时构建并运行一次。
 
-`--reload` 也监视 `core_config.json` 的其他设置：`admins` 更新后立即改变 Core Admin 权限，命令前缀从共享设置读取当前值，`default_locale` 对之后建立的 Session 生效。这些修改保持组件进程与实例运行；同时修改设置与开发 Adapter 实例时，先刷新设置，再重启变化的实例。重新读取失败时记录错误并保留旧设置。库模式可调用 `Core.ReloadSettings(ctx)`，与其他管理操作串行刷新同一份设置。
+`--reload` 也监视 `core_config.json` 的其他设置：`admins` 更新后立即改变 Core Admin 权限，命令前缀从共享设置读取当前值，`default_locale` 对之后建立的 Session 生效。修改 Adapter 的 `default_instance` 后，未指定实例的发送立即改选新的缺省实例；`log.level` 立即更新全局日志级别，本次运行显式给出的 `--log-level` 或库模式 `LogLevel` 选项持续优先。这些修改保持组件进程与实例运行；同时修改设置与开发 Adapter 实例时，先刷新设置，再重启变化的实例。重新读取失败时记录错误并保留旧设置。库模式可调用 `Core.ReloadSettings(ctx)`，与其他管理操作串行刷新同一份设置。
 
 `role: webui` 的工程直接以 manifest 中 `assets` 指定的目录为静态根目录，覆盖已安装的 WebUI，等同于 `alonabot.WebUI(os.DirFS(<assets 目录>))`。一次运行只接受一个 WebUI 目录，重复时在启动任何组件前报错。开发 WebUI 按 D-140 跳过 Admin API 主版本检查；静态文件按请求读取，修改后立即可见，无需构建或重启，也无需 `--reload`。
 

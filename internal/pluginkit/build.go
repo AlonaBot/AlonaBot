@@ -241,7 +241,7 @@ func BuildDev(ctx context.Context, dir, outDir string) (build Build, err error) 
 	return build, nil
 }
 
-// migrationMode 只检查参与构建的本 module 源码，沿用生成器支持的 SDK 注册方式。
+// migrationMode 检查参与构建的本 module 中的 SDK 函数引用，包含别名和传参。
 func migrationMode(ctx context.Context, dir, overlay, modFile string) (string, string, error) {
 	listed, err := goCommand(ctx, dir, "list", "-modfile", modFile, "-mod=mod", "-overlay", overlay, "-deps", "-json", ".")
 	if err != nil {
@@ -249,6 +249,7 @@ func migrationMode(ctx context.Context, dir, overlay, modFile string) (string, s
 	}
 	decoder := json.NewDecoder(bytes.NewReader(listed))
 	mode, effects := manifest.MigrationNone, manifest.EffectsNone
+	var self, versioned bool
 	for {
 		var pkg struct {
 			Dir     string
@@ -286,12 +287,8 @@ func migrationMode(ctx context.Context, dir, overlay, modFile string) (string, s
 				}
 			}
 			ast.Inspect(file, func(node ast.Node) bool {
-				call, ok := node.(*ast.CallExpr)
-				if !ok {
-					return true
-				}
 				var name string
-				switch fun := ast.Unparen(call.Fun).(type) {
+				switch fun := node.(type) {
 				case *ast.SelectorExpr:
 					if owner, ok := fun.X.(*ast.Ident); ok && aliases[owner.Name] {
 						name = fun.Sel.Name
@@ -303,8 +300,10 @@ func migrationMode(ctx context.Context, dir, overlay, modFile string) (string, s
 				}
 				switch name {
 				case "Migrate":
+					self = true
 					mode, effects = manifest.MigrationSelf, manifest.EffectsManagedDB
 				case "Migrations":
+					versioned = true
 					mode, effects = manifest.MigrationVersioned, manifest.EffectsManagedDB
 				case "Open":
 					effects = manifest.EffectsManagedDB
@@ -312,6 +311,9 @@ func migrationMode(ctx context.Context, dir, overlay, modFile string) (string, s
 				return true
 			})
 		}
+	}
+	if self && versioned {
+		return "", "", errors.New("Migrate and Migrations registrations are mutually exclusive")
 	}
 	return mode, effects, nil
 }
