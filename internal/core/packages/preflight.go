@@ -1,4 +1,4 @@
-// Package packages 在安装前检查插件安装包：校验签名发布清单，受控解压归档，
+// Package packages 在安装前检查组件安装包：校验发布清单及可选签名，受控解压归档，
 // 核对包内 manifest，并把通过检查的候选移入不可变的包目录。
 //
 // 包不下载归档、不登记安装、不持久化来源信任。检查顺序与上限见
@@ -72,7 +72,7 @@ type Candidate struct {
 	Asset    release.Asset // 本机平台对应的资产
 }
 
-// Preflight 校验签名发布清单与归档，并解压到 stagingRoot 下新建的唯一目录。
+// Preflight 校验发布清单、可选签名与归档，并解压到 stagingRoot 下新建的唯一目录。
 //
 // 任何一步失败都会删除已建的暂存目录。校验失败返回带协议错误码的 *validate.Error：
 // 签名或来源不符为 PERMISSION_DENIED，缺少本平台资产为 UNSUPPORTED，超出上限为
@@ -86,7 +86,10 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 	if r.Source != in.Source {
 		return nil, failure(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "release source does not match the bound source")
 	}
-	asset, ok := r.Asset(in.OS, in.Arch)
+	asset, ok := r.Asset("any", "any")
+	if !ok {
+		asset, ok = r.Asset(in.OS, in.Arch)
+	}
 	if !ok {
 		return nil, failure(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, fmt.Sprintf("release has no asset for %s/%s", in.OS, in.Arch))
 	}
@@ -153,13 +156,17 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "manifest version does not match the release")
 	case m.Source != r.Source:
 		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "manifest source does not match the release")
-	case m.OS != in.OS || m.Arch != in.Arch:
+	case m.OS != asset.OS || m.Arch != asset.Arch:
 		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "manifest platform does not match this host")
+	case m.Role != "webui" && (asset.OS != in.OS || asset.Arch != in.Arch):
+		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "only webui can use the any platform")
 	}
 	// Lstat 不跟随链接；解压只产生普通文件和目录，这里再确认一次 entrypoint 的类型。
-	entry, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(m.Entrypoint)))
-	if err != nil || !entry.Mode().IsRegular() {
-		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "manifest entrypoint is not a regular file in the archive")
+	if m.Role != "webui" {
+		entry, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(m.Entrypoint)))
+		if err != nil || !entry.Mode().IsRegular() {
+			return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "manifest entrypoint is not a regular file in the archive")
+		}
 	}
 	keep = true
 	return &Candidate{Dir: dir, Manifest: m, Release: r, Asset: asset}, nil

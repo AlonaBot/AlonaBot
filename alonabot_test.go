@@ -33,6 +33,12 @@ func TestLibraryLifecycle(t *testing.T) {
 	}
 	defer output.Close()
 	dir := filepath.Join(temp, "data")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "core_config.json"), []byte(`{"listen":"127.0.0.1:0"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	command := exec.CommandContext(ctx, executable, "-data-dir", dir)
 	command.Stdout, command.Stderr = output, output
 	// 子进程只使用契约缺省预算，避免开发者环境改变本测试的停止期限。
