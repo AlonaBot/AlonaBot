@@ -19,6 +19,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -29,12 +30,14 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/adminauth"
+	"github.com/AlonaBot/AlonaBot/internal/core/gc"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
+	"github.com/AlonaBot/AlonaBot/internal/core/secret"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/webhost"
@@ -304,6 +307,18 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 		return fail(err)
 	}
 	c.assembly.core = c
+	// 恢复只信 Journal 与 Active；先清理候选，再启动任一正式或开发组件。
+	recovery, err := store.Journals(ctx, "")
+	if err != nil {
+		return fail(err)
+	}
+	blocked, err := c.assembly.journal.Recover(ctx)
+	if err != nil {
+		return fail(err)
+	}
+	for _, id := range blocked {
+		slog.Error("old process may still be running", "plugin_id", id)
+	}
 	authentication := adminauth.New(store, time.Now, baseURL, dir)
 	adminMux := http.NewServeMux()
 	authentication.Routes(adminMux)
@@ -342,7 +357,16 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 		Descriptor: c.assembly.componentDescriptor,
 		Candidates: managedCandidates{core: c},
 		Start: func(ctx context.Context, id string) error {
-			return c.operation(ctx, func(ctx context.Context) error { return c.startManaged(ctx, id) })
+			return c.operation(ctx, func(ctx context.Context) error {
+				blocked, err := c.assembly.journal.Recover(ctx)
+				if err != nil {
+					return err
+				}
+				if slices.Contains(blocked, id) {
+					return fmt.Errorf("plugin %s: old process may still be running", id)
+				}
+				return c.startManaged(ctx, id)
+			})
 		},
 		Stop: func(ctx context.Context, id string, reason pb.StopReason) error {
 			return c.operation(ctx, func(context.Context) error { return c.stopManaged(id, reason) })
@@ -379,7 +403,31 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 			})
 		},
 	})
-	administration := management.Handler(authentication)
+	managementHandler := management.Handler(authentication)
+	var managementWrites sync.Mutex        // 覆盖元数据写入与随后的引用回收。
+	managementReady := make(chan struct{}) // 启动回收完成后才接受管理写入。
+	administration := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+			managementHandler.ServeHTTP(w, r)
+			return
+		}
+		select {
+		case <-managementReady:
+		case <-c.stopping:
+			http.Error(w, "Core is stopping", http.StatusServiceUnavailable)
+			return
+		}
+		managementWrites.Lock()
+		defer managementWrites.Unlock()
+		managementHandler.ServeHTTP(w, r)
+		// 元数据操作也需要回收；统一排入运行循环，避免和候选准备交错。
+		if err := c.operation(context.WithoutCancel(r.Context()), func(ctx context.Context) error {
+			_, err := gc.Collect(ctx, c.store, secret.New(c.store), filepath.Join(c.dir, "packages"))
+			return err
+		}); err != nil {
+			slog.Error("resource collection after management operation failed", "error", err)
+		}
+	})
 	adminMux.Handle("/api/v1/", administration)
 	adminMux.Handle("/api/", administration)
 	adminMux.Handle("/api", administration)
@@ -418,9 +466,39 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 			return fail(err)
 		}
 		if enabled {
+			if slices.Contains(blocked, install.PluginID) {
+				continue
+			}
+			active, err := store.Active(ctx, install.PluginID)
+			if err != nil {
+				return fail(err)
+			}
+			recovering := false
+			for _, record := range recovery {
+				if record.PluginID != install.PluginID || record.Phase == "cleaned" {
+					continue
+				}
+				if record.Phase != "committed" || record.NewGeneration == active {
+					recovering = true
+				}
+			}
+			if recovering && active == "" {
+				continue // 首装未提交时保留未激活状态。
+			}
 			running, err := c.startInstalled(ctx, dir, install)
 			if running != nil {
 				c.components = append(c.components, running)
+			}
+			if err != nil && recovering {
+				slog.Error("committed generation recovery failed", "plugin_id", install.PluginID, "generation_id", active, "error", err)
+				if running != nil && running.instance.State() != host.StateDegraded {
+					running.instance.Degrade(err)
+					c.assembly.detach(running)
+					if closeErr := running.instance.Session.Close(); closeErr != nil {
+						slog.Error("close degraded session failed", "plugin_id", install.PluginID, "error", closeErr)
+					}
+				}
+				continue
 			}
 			if err != nil && (running == nil || running.instance.State() != host.StateDegraded) {
 				return fail(fmt.Errorf("start %s: %w", install.PluginID, err))
@@ -466,7 +544,11 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	if err := ctx.Err(); err != nil {
 		return fail(err)
 	}
+	if _, err := gc.Collect(ctx, store, secret.New(store), filepath.Join(dir, "packages")); err != nil {
+		return fail(err)
+	}
 	c.assembly.router.Start()
+	close(managementReady) // 发布启动完成，使管理写入与启动回收互斥。
 	// 3. 一个所有者处理取消与异常，全部组件共用一次停止起点。
 	go c.run(ctx)
 	return c, nil

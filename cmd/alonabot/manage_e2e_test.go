@@ -115,6 +115,10 @@ func TestManagementUninstallScopes(t *testing.T) {
 	if err := store.AddSecret(context.Background(), state.Secret{PluginID: "demo", RefID: "fixture-secret", Value: []byte("fixture-value")}); err != nil {
 		t.Fatal(err)
 	}
+	// 保留配置引用该 secret，验证卸载范围时也适用正常引用回收规则。
+	if err := store.PutPendingConfig(context.Background(), state.PendingConfig{PluginID: "demo", BaseGeneration: active, ConfigJSON: `{"key":{"$secret_ref":"fixture-secret"}}`}); err != nil {
+		t.Fatal(err)
+	}
 	if err := store.PutCommandPolicy(context.Background(), state.CommandPolicy{PluginID: "demo", Scope: "command:ping", Permissions: []string{"user"}}); err != nil {
 		t.Fatal(err)
 	}
