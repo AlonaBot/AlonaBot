@@ -312,3 +312,4 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-11-13：**D-141 审查者补齐，待维护者确认**：InvocationContext.command_consumed 与 SDK 的 CommandConsumed、NotCommand。按 D-135 修订 MESSAGE-MODEL 的 c.Stream：没有 message.edit 时缓冲到正常结束，再按实例 text_limit 换条发送（原文「Send 一次」与 D-135 的换条职责冲突）。
 - 2026-11-13：审查者补齐 T-12.3 的单轮工具步数口径（V-58 只写「20」）：按实际执行的工具调用次数计，同一响应中的多个 ToolCall 各计一次，Core 工具与 MCP 工具合计，第 21 次不执行并结束本轮。
 - 2026-11-13：审查者补齐 T-12.14 的跨库失败规则：Agent 的图片记录所属 Core 会话条目序号，回放只取 Core 中仍存在的条目对应的图片；Core 追加成功而图片写入失败时保留文字、不回放图片并记 WARN，/reset 删除图片失败时向用户返回错误，管理服务直接清除 Core 会话后残留图片不回放，下一次 /reset 清理。图片表并入 Agent 受管库的初始迁移。
+- 2026-11-13：审查者补齐 T-09.10 的日志订阅规则：每个 SSE 订阅有 LOG_BUFFER_RECORDS 条的发送队列，满时不阻塞写入，Core 先发 `event: overflow` 再结束该订阅，客户端用 recent 补齐；历史查询按文件中实际的来源标签与 8 位 trace 前缀筛选。TEST-MATRIX V-63 按 CONTRACTS §14.3 改为全局级别的运行时修改也写回文件。T-09.13 只交付 HTTP 层，经 HTTP 真实更新成功的验收移到 T-09.6。
