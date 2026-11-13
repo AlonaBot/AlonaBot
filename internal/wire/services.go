@@ -82,6 +82,12 @@ const ServiceContinuationStart = "core.continuation.start"
 // ServiceWait 等待延续调用所属用户在原会话的下一条消息。
 const ServiceWait = "core.wait"
 
+// ServiceToolInvoke 指定沿父调用链执行工具的服务。
+const ServiceToolInvoke = "core.tool.invoke"
+
+// ServiceToolConfirm 指定操作的用户确认服务。
+const ServiceToolConfirm = "core.tool.confirm"
+
 // ServiceTaskSet 创建或替换动态实例。
 const ServiceTaskSet = "core.task.set"
 

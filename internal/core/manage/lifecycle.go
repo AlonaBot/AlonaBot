@@ -38,6 +38,9 @@ func (s *Service) enable(ctx context.Context, in state.Install) error {
 	if err != nil {
 		return err
 	}
+	if err := checkWebUIVersion(m); err != nil {
+		return err
+	}
 	if err := s.dependencies(ctx, m); err != nil {
 		return err
 	}

@@ -597,6 +597,10 @@ func TestToolFieldNumbers(t *testing.T) {
 		{&pb.ToolInfo{}, []protoreflect.Name{"name", "description", "input_schema_json", "policy"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.EnumKind}},
 		{&pb.ToolListRequest{}, nil, nil},
 		{&pb.ToolListResponse{}, []protoreflect.Name{"tools"}, []protoreflect.Kind{protoreflect.MessageKind}},
+		{&pb.ToolInvokeRequest{}, []protoreflect.Name{"name", "arguments_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind}},
+		{&pb.ToolInvokeResponse{}, []protoreflect.Name{"result_json"}, []protoreflect.Kind{protoreflect.StringKind}},
+		{&pb.ToolConfirmRequest{}, []protoreflect.Name{"operation", "summary"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind}},
+		{&pb.ToolConfirmResponse{}, nil, nil},
 	} {
 		t.Run(string(c.message.ProtoReflect().Descriptor().Name()), func(t *testing.T) {
 			fields := c.message.ProtoReflect().Descriptor().Fields()

@@ -6,12 +6,14 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
+	"github.com/AlonaBot/AlonaBot/internal/core/metrics"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
 
 // Options 提供事件分发限额与现有的路由依赖；限额使用 tune.Values 对应值。
 type Options struct {
+	Dispatched    func(Dispatch)                                                                           // nil 时不记录分发结果；仅库模式测试套件装配。
 	PreEvent      func(ctx context.Context, ev *pb.Event) (payload *pb.EventPayload, stop bool, err error) // nil 时跳过；返回载荷替换业务副本
 	Concurrency   int                                                                                      // DISPATCH_CONCURRENCY
 	QueueEvents   int                                                                                      // DISPATCH_QUEUE_EVENTS
@@ -22,10 +24,12 @@ type Options struct {
 	Prepare       func(*pb.Event, Caller) (*pb.Event, error)                                               // 按接收 Session 准备媒体；nil 时原样派发
 	Prefixes      func(adapterInstanceID string) []string                                                  // nil 时所有实例使用 ["/"]
 	Buttons       func(ctx context.Context, ev *pb.Event) (pluginID, routeID string, err error)            // nil 时丢弃按钮点击
+	Intercept     func(ctx context.Context, ev *pb.Event) (handled bool)                                   // 入队前在锁外消费 Core 事件；nil 时跳过
 	Policy        CommandPolicy                                                                            // nil 时仅按声明权限判定且不赋予 admin
 	CommandState  func(context.Context, string, *pb.RouteDescriptor) (bool, []string, error)               // 菜单读取完整策略；nil 时使用注册描述。
 	CommandNames  func(pluginID string) map[string][][]string                                              // nil 时使用声明；在 Router 锁内调用，不得做 I/O。
 	Continuations Continuations                                                                            // nil 时跳过延续与等待。
+	Metrics       *metrics.Counters                                                                        // nil 时关闭原因计数；全局接纳使用空插件 ID。
 }
 
 // Continuations 接入 Handler 结束通知、入站等待匹配及插件释放。
@@ -67,20 +71,40 @@ func (r *Router) Start() {
 // Deliver 立即尝试接纳事件，不等待空闲链；条数、字节或全局预算不足时返回 ErrQueueFull。
 func (r *Router) Deliver(ctx context.Context, ev *pb.Event) error {
 	if err := ctx.Err(); err != nil {
+		r.metrics.Add("", "event", "cancelled")
 		return err
+	}
+	if r.intercept != nil {
+		r.mu.Lock()
+		closed := r.closed
+		r.mu.Unlock()
+		if closed {
+			return errors.New("event router is closed")
+		}
+		// 确认解析会查询插件身份，必须在锁外执行且无需等待派发槽。
+		if r.intercept(ctx, ev) {
+			return nil
+		}
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
+		r.metrics.Add("", "event", "offline")
 		return errors.New("event router is closed")
 	}
 	n := int64(proto.Size(ev))
 	if len(r.queue) >= r.queueEvents || r.queuedBytes+n > r.queueBytes {
 		r.stats.DroppedQueueFull++
+		reason := metrics.Reason("dropped_queue")
+		if len(r.queue) < r.queueEvents {
+			reason = "dropped_budget"
+		}
+		r.metrics.Add("", "event", reason)
 		return adapter.ErrQueueFull
 	}
 	if !r.global.Acquire(n) {
 		r.stats.DroppedBudget++
+		r.metrics.Add("", "event", "dropped_budget")
 		return adapter.ErrQueueFull
 	}
 	r.queue = append(r.queue, queuedEvent{event: retainEvent(ev), bytes: n})
@@ -106,7 +130,9 @@ func (r *Router) startLocked() {
 }
 
 func (r *Router) run(event *trustedEvent) {
+	r.observe(event)
 	r.dispatch(event)
+	r.completeDispatch(event.dispatch)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.stats.Running--
@@ -127,6 +153,9 @@ func (r *Router) Close(ctx context.Context) error {
 			delete(r.commandSyncs, id)
 		}
 		r.global.Release(r.queuedBytes)
+		for range r.queue {
+			r.metrics.Add("", "event", "offline")
+		}
 		r.queue = nil
 		r.queuedBytes = 0
 		r.stats.Queued = 0

@@ -74,6 +74,7 @@ Adapter 作者用 `adapter.Event[T](name, version)` 与 `adapter.Extension[T](na
 - JSON Service 的输入不符合 Schema 时，调用方收到 INVALID_ARGUMENT 和固定文本 `invalid service input`，Handler 不被调用；输出不符合时调用方收到 INTERNAL，日志只记 `schema_id`；调用方的 `Call` 也按声明校验响应，不符合时返回 INTERNAL 与 `invalid service output for "<target>"`。校验详情可能带业务载荷，不写入响应和日志。
 - 需要模型能力时调用 Agent 组件的 `llm.generate`：`sdk/llm` 提供类型与以 `@agent` 为目标的调用辅助，官方 Agent 被替换后也不用修改；请管理员把插件加入 `llm_service_allowed_plugins`；一次调用是一次非流式请求，期限受调用方约束（CONTRACTS §13.5）。
 - 要把能力交给 Agent 使用时，注册带 `tool` 描述的 JSON Service（CONTRACTS §13.1）。
+- 在 Handler 或其延续调用中，`sdk.InvokeTool(ctx, "plugin_id/service_name", args)` 按当前生效的工具策略调用工具（deny 返回 PERMISSION_DENIED；confirm 时 Core 先向当前会话发送带「允许」「拒绝」按钮的确认，展示实际参数，拒绝返回 PERMISSION_DENIED，超时返回 DEADLINE_EXCEEDED）；`sdk.ConfirmOperation(ctx, operation, summary)` 只请求用户确认，展示插件给出的摘要，返回 nil 表示允许。两者都需要父调用链，后台任务中没有 Actor 时遇到确认返回 PERMISSION_DENIED；实例不支持按钮时返回 UNSUPPORTED（CONTRACTS §13.2）。
 
 ## 7. 配置与 secret
 

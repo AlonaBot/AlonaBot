@@ -1,7 +1,7 @@
-// Package buttons 签发持久化按钮 token，并将真实点击还原为当前插件的动作与值。
+// Package buttons 签发持久化按钮 token，将点击分流到插件动作或 Core 确认记录。
 //
-// Service 按插件当前 Active 代次与完整 Target 校验，签发的 token 可在同代次重启后使用。
-// 当前点击用户的权限由 Router 逐次检查，token 只绑定路由与目标（MESSAGE-MODEL §6.3）。
+// Service 按插件当前 Active 代次与完整 Target 校验，插件动作 token 可在同代次重启后使用。
+// 确认 token 由 Core 按父调用和 Actor 校验并作废；插件动作的点击权限由 Router 逐次检查（MESSAGE-MODEL §6.3）。
 package buttons
 
 import (
@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"slices"
 	"time"
 
@@ -21,8 +22,12 @@ import (
 
 // MESSAGE-MODEL §6.3 规定随机 token 大小，按钮值字节上限在 Core 签发边界执行。
 const (
-	tokenBytes    = 32
-	maxValueBytes = 1024
+	tokenBytes     = 32
+	maxValueBytes  = 1024
+	pluginPurpose  = "plugin"
+	confirmPurpose = "confirm"
+	allowAction    = "allow"
+	denyAction     = "deny"
 )
 
 // Service 使用状态库保留映射，以 current 读取当前 Active 代次与路由快照。
@@ -31,6 +36,7 @@ type Service struct {
 	now     func() time.Time
 	ttl     time.Duration
 	current func(string) (string, []*pb.RouteDescriptor, bool)
+	confirm func(context.Context, string, bool, *pb.Event) // 装配时注册，运行期间只读
 }
 
 // New 创建按钮签发与解析服务；时钟、有效期与当前路由由装配处显式提供。
@@ -77,7 +83,7 @@ func (s *Service) Issue(ctx context.Context, caller router.Caller, target *pb.Ta
 		random := make([]byte, tokenBytes)
 		rand.Read(random)
 		records = append(records, state.ButtonToken{
-			Token: base64.RawURLEncoding.EncodeToString(random), PluginID: caller.PluginID, RouteID: route.GetRouteId(),
+			Token: base64.RawURLEncoding.EncodeToString(random), Purpose: pluginPurpose, PluginID: caller.PluginID, RouteID: route.GetRouteId(),
 			ActionID: button.GetActionId(), ActionSchemaVersion: route.GetEvent().GetActionSchemaVersion(), GenerationID: generation,
 			AdapterID: target.GetAdapterId(), InstanceID: target.GetAdapterInstanceId(), AccountID: target.GetAccountId(), ChatID: target.GetChatId(), ThreadID: target.GetThreadId(),
 			Value: button.GetValue(), ExpiresAt: expires,
@@ -93,7 +99,23 @@ func (s *Service) Issue(ctx context.Context, caller router.Caller, target *pb.Ta
 	return nil
 }
 
-// Resolve 将有效点击改写为签发时的动作与值；无效点击返回错误，由 Router 记录并丢弃。
+// InterceptConfirm 在 Router 入队前消费确认点击；插件按钮继续排队派发。
+func (s *Service) InterceptConfirm(ctx context.Context, ev *pb.Event) bool {
+	if ev.GetEventType() != "button.clicked" || ev.GetEventPayload().GetButtonClicked() == nil {
+		return false
+	}
+	record, err := s.store.GetButtonToken(ctx, ev.GetEventPayload().GetButtonClicked().GetValue())
+	if err != nil || record.Purpose != confirmPurpose {
+		return false // 交回原解析路径处理未知 token 或存储错误。
+	}
+	if _, _, err := s.Resolve(ctx, ev); err != nil {
+		slog.Info("discard invalid confirmation click", "error", err)
+	}
+	return true
+}
+
+// Resolve 将插件点击还原为动作与值，将确认点击交给回调并返回空 pluginID 结束派发。
+// 无效点击返回错误，由 Router 记录并丢弃。
 func (s *Service) Resolve(ctx context.Context, ev *pb.Event) (pluginID, routeID string, err error) {
 	// 1. 点击来自真实平台 Actor，载荷中的 value 此时只携 callback_data。
 	payload := ev.GetEventPayload().GetButtonClicked()
@@ -116,6 +138,10 @@ func (s *Service) Resolve(ctx context.Context, ev *pb.Event) (pluginID, routeID 
 	if target.GetAdapterId() != record.AdapterID || target.GetAdapterInstanceId() != record.InstanceID || target.GetAccountId() != record.AccountID || target.GetChatId() != record.ChatID || target.GetThreadId() != record.ThreadID {
 		return "", "", errors.New("button token target does not match")
 	}
+	if record.Purpose == confirmPurpose {
+		s.confirm(ctx, record.Value, record.ActionID == allowAction, ev)
+		return "", "", nil
+	}
 	for _, route := range routes {
 		event := route.GetEvent()
 		if route.GetRouteId() == record.RouteID && slices.Contains(event.GetEventTypeFilter(), "button.clicked") && event.GetActionId() == record.ActionID && event.GetActionSchemaVersion() == record.ActionSchemaVersion {
@@ -124,6 +150,43 @@ func (s *Service) Resolve(ctx context.Context, ev *pb.Event) (pluginID, routeID 
 		}
 	}
 	return "", "", errors.New("button token route is no longer registered")
+}
+
+// IssueConfirm 签发绑定确认记录、调用插件代次和完整 Target 的允许与拒绝 token。
+func (s *Service) IssueConfirm(ctx context.Context, caller router.Caller, target *pb.Target, recordID string) (allow, deny string, err error) {
+	generation, _, ok := s.current(caller.PluginID)
+	if !ok || generation != caller.GenerationID {
+		return "", "", invalid("confirmation sender generation is no longer active")
+	}
+	expires := s.now().Add(s.ttl)
+	if deadline, ok := ctx.Deadline(); ok {
+		expires = deadline
+	}
+	records := make([]state.ButtonToken, 0, 2)
+	for _, action := range []string{allowAction, denyAction} {
+		random := make([]byte, tokenBytes)
+		rand.Read(random)
+		records = append(records, state.ButtonToken{
+			Token: base64.RawURLEncoding.EncodeToString(random), Purpose: confirmPurpose,
+			PluginID: caller.PluginID, GenerationID: generation, ActionID: action, Value: recordID,
+			AdapterID: target.GetAdapterId(), InstanceID: target.GetAdapterInstanceId(), AccountID: target.GetAccountId(),
+			ChatID: target.GetChatId(), ThreadID: target.GetThreadId(), ExpiresAt: expires.UnixMilli(),
+		})
+	}
+	if err := s.store.PutButtonTokens(ctx, records); err != nil {
+		return "", "", &wire.CallError{ErrorInfo: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}}
+	}
+	return records[0].Token, records[1].Token, nil
+}
+
+// RevokeConfirm 作废确认记录的全部按钮 token。
+func (s *Service) RevokeConfirm(ctx context.Context, recordID string) error {
+	return s.store.RevokeConfirmTokens(ctx, recordID)
+}
+
+// OnConfirm 在装配阶段设置确认点击的处理函数；运行期间不得替换。
+func (s *Service) OnConfirm(fn func(ctx context.Context, recordID string, allow bool, ev *pb.Event)) {
+	s.confirm = fn
 }
 
 // Purge 在卸载插件时删除其全部按钮映射。

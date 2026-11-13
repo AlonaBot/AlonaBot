@@ -1,0 +1,12 @@
+{
+  "messages": {
+    "pong": "pong",
+    "admin": "管理员",
+    "mod": "群管理员",
+    "buttons": "按钮",
+    "button_label": "打开",
+    "plain": "纯文本",
+    "before_edit": "编辑前",
+    "after_edit": "编辑后"
+  }
+}

@@ -24,6 +24,7 @@ func (e *ErrNeedsConfirm) Error() string {
 // Handler 将管理端点全部放在相同的 Bearer 或 Cookie/CSRF 认证之后。
 func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/packages/{id}/icon", s.icon)
 	mux.HandleFunc("POST /api/v1/packages/install", func(w http.ResponseWriter, r *http.Request) {
 		var request InstallRequest
 		if err := decode(r, &request); err != nil {
@@ -130,7 +131,14 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		respond(w, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_NOT_FOUND, Message: "management endpoint not found"})
 	})
-	return auth.Require(mux)
+	return auth.Require(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// ServeMux 会清理路径并重定向；在此之前拒绝原始的越界或非规范路径。
+		if !validStaticPath(strings.TrimPrefix(r.URL.Path, "/")) {
+			respond(w, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_NOT_FOUND, Message: "management endpoint not found"})
+			return
+		}
+		mux.ServeHTTP(w, r)
+	}))
 }
 
 func decode(r *http.Request, target any) error {
