@@ -60,7 +60,14 @@ func (a *testAdapter) record(op string, to message.Session, edited message.Messa
 	for i := range indexes {
 		indexes[i] = uint32(i)
 	}
-	if safe := a.checkCapabilities(chain, op == "edit"); safe != nil {
+	name := "message." + op
+	var safe *errcode.Error
+	if !slices.ContainsFunc(a.Capabilities(), func(c message.Capability) bool { return c.Name == name && c.Supported }) {
+		safe = errcode.Unsupported.New("adapter capability is not declared: " + name)
+	} else {
+		safe = a.checkCapabilities(chain)
+	}
+	if safe != nil {
 		return &message.SendResult{Status: message.SendRejected, Session: to, AdapterInstanceID: InstanceID,
 			PartResults: []message.PartResult{{PartIndex: 0, SegmentIndexes: indexes, Status: message.PartRejected, Error: safe}}}, safe
 	}
@@ -76,11 +83,8 @@ func (a *testAdapter) record(op string, to message.Session, edited message.Messa
 	return result, nil
 }
 
-func (a *testAdapter) checkCapabilities(chain message.Chain, editing bool) *errcode.Error {
+func (a *testAdapter) checkCapabilities(chain message.Chain) *errcode.Error {
 	var required []string
-	if editing {
-		required = append(required, "message.edit")
-	}
 	media := 0
 	for _, segment := range chain {
 		switch data := segment.(type) {
@@ -103,7 +107,7 @@ func (a *testAdapter) checkCapabilities(chain message.Chain, editing bool) *errc
 		case message.ForwardSegment:
 			required = append(required, "message.forward")
 			for _, item := range data.Items {
-				if safe := a.checkCapabilities(item.Chain, false); safe != nil {
+				if safe := a.checkCapabilities(item.Chain); safe != nil {
 					return safe
 				}
 			}
