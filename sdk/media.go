@@ -50,7 +50,7 @@ func (r *mediaReader) nextChunk() error {
 	if err := r.ctx.Err(); err != nil {
 		return err
 	}
-	result, err := CallProto[*pb.ReadResponse](r.ctx, wire.ServiceMediaRead, &pb.ReadRequest{Token: r.token, Offset: r.next, Length: wire.MaxMediaChunk})
+	result, err := Proto[*pb.ReadRequest, *pb.ReadResponse](wire.ServiceMediaRead).Call(r.ctx, &pb.ReadRequest{Token: r.token, Offset: r.next, Length: wire.MaxMediaChunk})
 	if err != nil {
 		if cancelled := r.ctx.Err(); cancelled != nil {
 			return cancelled
@@ -94,7 +94,7 @@ func GrantMedia(ctx context.Context, token, granteePluginID string, sessions ...
 		}
 		targets = append(targets, t)
 	}
-	result, err := CallProto[*pb.GrantResponse](ctx, wire.ServiceMediaGrant, &pb.GrantRequest{Token: token, GranteePluginId: granteePluginID, Targets: targets})
+	result, err := Proto[*pb.GrantRequest, *pb.GrantResponse](wire.ServiceMediaGrant).Call(ctx, &pb.GrantRequest{Token: token, GranteePluginId: granteePluginID, Targets: targets})
 	if err != nil {
 		return "", err
 	}

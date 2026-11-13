@@ -68,9 +68,10 @@ Adapter 作者用 `adapter.Event[T](name, version)` 与 `adapter.Extension[T](na
 ## 6. 跨插件协作
 
 - 用 Service Call 与 Event Bus 协作，不直接读写其他插件的文件或数据库（CONTRACTS §3）。
-- Event Bus 是非持久广播：`sdk.Publish` 只能发布到本插件的命名空间，返回成功只表示 Core 准入，不代表有人收到；订阅方队列满、预算不足或离线时事件会丢失，也不会补发。需要回执或可靠送达时改用 Service Call。订阅回调串行执行，不要在其中阻塞：积压的事件占用本插件的接收预算，会让命令请求也被拒绝。回调里没有 Actor 与默认会话，发消息时用 `sdk.Send(ctx, session, content, ...)` 或 `sdk.SendText(ctx, session, text, ...)` 显式给出会话（CONTRACTS §3、§8，D-102、D-118）。
-- `sdk.JSON`、`sdk.Subscribe`、`sdk.CallJSON`、`sdk.Publish` 的类型参数必须是包级的具名非泛型类型，由生成器检查并给出带位置的诊断。schema_id 由类型决定，版本取类型的 `SchemaVersion() uint32`，没有该方法时为 1；改动类型后运行 `alonabot plugin generate`。切片与 map 接受 null，与 `encoding/json` 对 nil 的编码一致。
-- JSON Service 的输入不符合 Schema 时，调用方收到 INVALID_ARGUMENT 和固定文本 `invalid service input`，Handler 不被调用；输出不符合时调用方收到 INTERNAL，日志只记 `schema_id`。校验详情可能带业务载荷，不写入响应和日志。
+- Service 与事件都先写成包级的声明，提供方与调用方共用同一个声明：`var Search = sdk.JSON[SearchIn, SearchOut]("weather/search")`（Protobuf 用 `sdk.Proto`），提供方在 `New()` 中 `sdk.Serve(p, Search).Handle(fn)`，调用方 `Search.Call(ctx, in)`；事件为 `var Updated = sdk.BusEvent[Update]("weather/updated")`，发布 `Updated.Publish(ctx, payload)`，订阅 `sdk.Subscribe(p, Updated).Handle(fn)`，订阅的路由 ID 缺省为完整事件名，同一事件订阅多次时用 `.ID(routeID)` 区分。target 与事件名的组件部分必须是本插件的 ID，SDK 在握手取得插件 ID 后、REGISTER 之前检查。`@agent/<name>` 只应由 Agent 组件 Serve：SDK 只检查它的格式，Broker 只把 `@agent` 的调用转给 `role: agent` 的组件，普通插件写了也不会被找到。声明可以从其他 Go module 导入后直接调用，调用方的生成器会嵌入该声明的输入与输出 Schema，经包装函数调用时同样适用。
+- Event Bus 是非持久广播：`Publish` 只能发布到本插件的命名空间，返回成功只表示 Core 准入，不代表有人收到；订阅方队列满、预算不足或离线时事件会丢失，也不会补发。需要回执或可靠送达时改用 Service Call。订阅回调串行执行，不要在其中阻塞：积压的事件占用本插件的接收预算，会让命令请求也被拒绝。回调里没有 Actor 与默认会话，发消息时用 `sdk.Send(ctx, session, content, ...)` 或 `sdk.SendText(ctx, session, text, ...)` 显式给出会话（CONTRACTS §3、§8，D-102、D-118）。
+- `sdk.JSON` 与 `sdk.BusEvent` 声明的类型参数必须是包级的具名非泛型类型，由生成器检查并给出带位置的诊断。schema_id 由类型决定，版本取类型的 `SchemaVersion() uint32`，没有该方法时为 1；改动类型后运行 `alonabot plugin generate`。切片与 map 接受 null，与 `encoding/json` 对 nil 的编码一致。
+- JSON Service 的输入不符合 Schema 时，调用方收到 INVALID_ARGUMENT 和固定文本 `invalid service input`，Handler 不被调用；输出不符合时调用方收到 INTERNAL，日志只记 `schema_id`；调用方的 `Call` 也按声明校验响应，不符合时返回 INTERNAL 与 `invalid service output for "<target>"`。校验详情可能带业务载荷，不写入响应和日志。
 - 需要模型能力时调用 Agent 组件的 `llm.generate`：`sdk/llm` 提供类型与以 `@agent` 为目标的调用辅助，官方 Agent 被替换后也不用修改；请管理员把插件加入 `llm_service_allowed_plugins`；一次调用是一次非流式请求，期限受调用方约束（CONTRACTS §13.5）。
 - 要把能力交给 Agent 使用时，注册带 `tool` 描述的 JSON Service（CONTRACTS §13.1）。
 
