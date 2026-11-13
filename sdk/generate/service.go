@@ -22,7 +22,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
-// schemaImporter 对扫描包及依赖它们的外部包检查源码，其他包读取同一构建环境的导出数据。
+// schemaImporter 对扫描包、SDK 声明所在包及回引它们的包检查源码，其他包读取导出数据。
 type schemaImporter struct {
 	scan     *scan
 	compiled types.Importer
@@ -102,7 +102,7 @@ func (s *scan) schemaImporter(ctx context.Context, list *exec.Cmd) (*schemaImpor
 			continue
 		}
 		// go list -deps 按依赖优先输出；回引源码包的整条链共用同一份类型身份。
-		if !slices.ContainsFunc(pkg.Imports, func(path string) bool { _, source := s.syntax[path]; return source }) {
+		if !slices.Contains(pkg.Imports, sdkPath) && !slices.ContainsFunc(pkg.Imports, func(path string) bool { _, source := s.syntax[path]; return source }) {
 			continue
 		}
 		for _, name := range pkg.CompiledGoFiles {
@@ -141,7 +141,7 @@ func (s *scan) schemaImporter(ctx context.Context, list *exec.Cmd) (*schemaImpor
 
 const serviceSchemaDraft = "https://json-schema.org/draft/2020-12/schema"
 
-// schemas 共用构建视图检查函数体，但仅为扫描闭包中的 JSON 实例生成 Service Schema。
+// schemas 共用构建视图检查函数体，为本模块及其引用的 JSON 声明生成 Service Schema。
 func (s *scan) schemas(ctx context.Context, list *exec.Cmd) error {
 	paths := make([]string, 0, len(s.syntax))
 	for path := range s.syntax {
@@ -179,6 +179,31 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 		b.codecs = append(b.codecs, serviceCodec{entry.path + "." + entry.name, pkg.Scope().Lookup(entry.name).Type().Underlying().(*types.Interface)})
 	}
 	ids := make(map[string]types.Type)
+	localFiles := make(map[string]bool)
+	for _, path := range paths {
+		for _, file := range s.syntax[path] {
+			localFiles[s.files.Position(file.Pos()).Filename] = true
+		}
+	}
+	// 被引用的 Service 值保留类型参数，用它们匹配依赖模块声明处的 JSON 实例。
+	var referenced []types.Type
+	for expr, value := range importer.info.Types {
+		if !value.IsValue() {
+			continue
+		}
+		if !localFiles[s.files.Position(expr.Pos()).Filename] {
+			// 包装函数中的变量引用也需要 Schema，未使用声明的初始化表达式不参与。
+			switch expr.(type) {
+			case *ast.Ident, *ast.SelectorExpr:
+			default:
+				continue
+			}
+		}
+		named, ok := types.Unalias(value.Type).(*types.Named)
+		if ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == sdkPath && named.Obj().Name() == "Service" {
+			referenced = append(referenced, named)
+		}
+	}
 	var instances []*ast.Ident
 	for ident := range importer.info.Instances {
 		instances = append(instances, ident)
@@ -190,18 +215,14 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 		if !ok || fn.Pkg() == nil || fn.Pkg().Path() != sdkPath || !slices.Contains([]string{"JSON", "Proto", "BusEvent"}, fn.Name()) {
 			continue
 		}
-		// 外部包可能为检查本模块引用而读入源码，生成范围仍限于原扫描包。
-		position := s.files.Position(ident.Pos())
-		local := false
-		for _, path := range paths {
-			for _, file := range s.syntax[path] {
-				if s.files.Position(file.Pos()).Filename == position.Filename {
-					local = true
-				}
+		if !localFiles[s.files.Position(ident.Pos()).Filename] {
+			if fn.Name() != "JSON" {
+				continue
 			}
-		}
-		if !local {
-			continue
+			result := importer.info.Instances[ident].Type.(*types.Signature).Results().At(0).Type()
+			if !slices.ContainsFunc(referenced, func(typ types.Type) bool { return types.Identical(typ, result) }) {
+				continue
+			}
 		}
 		args := importer.info.Instances[ident].TypeArgs
 		for index := range args.Len() {

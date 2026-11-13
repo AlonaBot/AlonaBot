@@ -439,7 +439,9 @@ func (s Service[In, Out]) callJSON(ctx context.Context, in In) (Out, error) {
 		return out, &Error{Code: errcode.InvalidArgument, Message: "encode service input: " + err.Error()}
 	}
 	if err := validateServiceJSON(inputSchema, encoded); err != nil {
-		return out, errcode.InvalidArgument.Errorf("invalid service input for %q: %v", s.target, err)
+		// 校验器错误包含载荷原值，公开错误与日志只保留声明信息。
+		componentLogger(ctx).DebugContext(ctx, "service input schema validation failed", "target", s.target, "schema_id", inputID)
+		return out, errcode.InvalidArgument.Errorf("invalid service input for %q", s.target)
 	}
 	response, err := callService(ctx, session, s.target, wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: inputID, SchemaVersion: inputVersion, Bytes: encoded})
 	if err != nil {
@@ -449,7 +451,8 @@ func (s Service[In, Out]) callJSON(ctx context.Context, in In) (Out, error) {
 		return out, &Error{Code: errcode.Internal, Message: "expected JSON service output"}
 	}
 	if err := validateServiceJSON(outputSchema, response.Bytes); err != nil {
-		return out, errcode.Internal.Errorf("invalid service output for %q: %v", s.target, err)
+		componentLogger(ctx).DebugContext(ctx, "service output schema validation failed", "target", s.target, "schema_id", outputID)
+		return out, errcode.Internal.Errorf("invalid service output for %q", s.target)
 	}
 	if err := json.Unmarshal(response.Bytes, &out); err != nil {
 		return out, &Error{Code: errcode.Internal, Message: "decode service output: " + err.Error()}
