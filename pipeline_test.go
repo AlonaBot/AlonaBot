@@ -63,6 +63,8 @@ func TestMain(m *testing.M) {
 	var err error
 	if strings.HasPrefix(mode, "t11-") {
 		err = t11Process(mode)
+	} else if strings.HasPrefix(mode, "tasks-sdk") {
+		err = sdk.Run(schedulerSDKPlugin(mode))
 	} else if strings.HasPrefix(mode, "tasks") {
 		err = persistentTaskProcess(mode)
 	} else if mode == "adapter" {

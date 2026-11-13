@@ -1540,6 +1540,88 @@ func (x *SessionError) GetFailedKind() FrameKind {
 	return FrameKind_FRAME_KIND_UNSPECIFIED
 }
 
+// LogSetLevelRequest 更新当前 SDK Session 的日志阈值（CONTRACTS §14.3）。
+type LogSetLevelRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Level         LogLevel               `protobuf:"varint,1,opt,name=level,proto3,enum=alonabot.v1.LogLevel" json:"level,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogSetLevelRequest) Reset() {
+	*x = LogSetLevelRequest{}
+	mi := &file_alonabot_v1_control_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogSetLevelRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogSetLevelRequest) ProtoMessage() {}
+
+func (x *LogSetLevelRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_control_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogSetLevelRequest.ProtoReflect.Descriptor instead.
+func (*LogSetLevelRequest) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *LogSetLevelRequest) GetLevel() LogLevel {
+	if x != nil {
+		return x.Level
+	}
+	return LogLevel_LOG_LEVEL_UNSPECIFIED
+}
+
+// LogSetLevelResponse 确认日志阈值已更新。
+type LogSetLevelResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogSetLevelResponse) Reset() {
+	*x = LogSetLevelResponse{}
+	mi := &file_alonabot_v1_control_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogSetLevelResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogSetLevelResponse) ProtoMessage() {}
+
+func (x *LogSetLevelResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_control_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogSetLevelResponse.ProtoReflect.Descriptor instead.
+func (*LogSetLevelResponse) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_control_proto_rawDescGZIP(), []int{17}
+}
+
 var File_alonabot_v1_control_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_control_proto_rawDesc = "" +
@@ -1622,7 +1704,10 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"\fSessionError\x12<\n" +
 	"\ffailed_phase\x18\x01 \x01(\x0e2\x19.alonabot.v1.SessionPhaseR\vfailedPhase\x127\n" +
 	"\vfailed_kind\x18\x02 \x01(\x0e2\x16.alonabot.v1.FrameKindR\n" +
-	"failedKind*\x8a\x01\n" +
+	"failedKind\"A\n" +
+	"\x12LogSetLevelRequest\x12+\n" +
+	"\x05level\x18\x01 \x01(\x0e2\x15.alonabot.v1.LogLevelR\x05level\"\x15\n" +
+	"\x13LogSetLevelResponse*\x8a\x01\n" +
 	"\bLogLevel\x12\x19\n" +
 	"\x15LOG_LEVEL_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fLOG_LEVEL_DEBUG\x10\x01\x12\x12\n" +
@@ -1685,32 +1770,34 @@ func file_alonabot_v1_control_proto_rawDescGZIP() []byte {
 }
 
 var file_alonabot_v1_control_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_alonabot_v1_control_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_alonabot_v1_control_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_alonabot_v1_control_proto_goTypes = []any{
-	(LogLevel)(0),              // 0: alonabot.v1.LogLevel
-	(DatabaseBackend)(0),       // 1: alonabot.v1.DatabaseBackend
-	(MigrationMode)(0),         // 2: alonabot.v1.MigrationMode
-	(ActivationReason)(0),      // 3: alonabot.v1.ActivationReason
-	(CancelReason)(0),          // 4: alonabot.v1.CancelReason
-	(StopReason)(0),            // 5: alonabot.v1.StopReason
-	(SessionPhase)(0),          // 6: alonabot.v1.SessionPhase
-	(*ProtocolCapability)(nil), // 7: alonabot.v1.ProtocolCapability
-	(*Hello)(nil),              // 8: alonabot.v1.Hello
-	(*HelloAck)(nil),           // 9: alonabot.v1.HelloAck
-	(*Bootstrap)(nil),          // 10: alonabot.v1.Bootstrap
-	(*SessionLimits)(nil),      // 11: alonabot.v1.SessionLimits
-	(*DatabaseDescriptor)(nil), // 12: alonabot.v1.DatabaseDescriptor
-	(*HttpProxyAuth)(nil),      // 13: alonabot.v1.HttpProxyAuth
-	(*PhaseLimits)(nil),        // 14: alonabot.v1.PhaseLimits
-	(*HttpListener)(nil),       // 15: alonabot.v1.HttpListener
-	(*Prepared)(nil),           // 16: alonabot.v1.Prepared
-	(*Activate)(nil),           // 17: alonabot.v1.Activate
-	(*Activated)(nil),          // 18: alonabot.v1.Activated
-	(*Cancel)(nil),             // 19: alonabot.v1.Cancel
-	(*Stopping)(nil),           // 20: alonabot.v1.Stopping
-	(*Heartbeat)(nil),          // 21: alonabot.v1.Heartbeat
-	(*SessionError)(nil),       // 22: alonabot.v1.SessionError
-	(FrameKind)(0),             // 23: alonabot.v1.FrameKind
+	(LogLevel)(0),               // 0: alonabot.v1.LogLevel
+	(DatabaseBackend)(0),        // 1: alonabot.v1.DatabaseBackend
+	(MigrationMode)(0),          // 2: alonabot.v1.MigrationMode
+	(ActivationReason)(0),       // 3: alonabot.v1.ActivationReason
+	(CancelReason)(0),           // 4: alonabot.v1.CancelReason
+	(StopReason)(0),             // 5: alonabot.v1.StopReason
+	(SessionPhase)(0),           // 6: alonabot.v1.SessionPhase
+	(*ProtocolCapability)(nil),  // 7: alonabot.v1.ProtocolCapability
+	(*Hello)(nil),               // 8: alonabot.v1.Hello
+	(*HelloAck)(nil),            // 9: alonabot.v1.HelloAck
+	(*Bootstrap)(nil),           // 10: alonabot.v1.Bootstrap
+	(*SessionLimits)(nil),       // 11: alonabot.v1.SessionLimits
+	(*DatabaseDescriptor)(nil),  // 12: alonabot.v1.DatabaseDescriptor
+	(*HttpProxyAuth)(nil),       // 13: alonabot.v1.HttpProxyAuth
+	(*PhaseLimits)(nil),         // 14: alonabot.v1.PhaseLimits
+	(*HttpListener)(nil),        // 15: alonabot.v1.HttpListener
+	(*Prepared)(nil),            // 16: alonabot.v1.Prepared
+	(*Activate)(nil),            // 17: alonabot.v1.Activate
+	(*Activated)(nil),           // 18: alonabot.v1.Activated
+	(*Cancel)(nil),              // 19: alonabot.v1.Cancel
+	(*Stopping)(nil),            // 20: alonabot.v1.Stopping
+	(*Heartbeat)(nil),           // 21: alonabot.v1.Heartbeat
+	(*SessionError)(nil),        // 22: alonabot.v1.SessionError
+	(*LogSetLevelRequest)(nil),  // 23: alonabot.v1.LogSetLevelRequest
+	(*LogSetLevelResponse)(nil), // 24: alonabot.v1.LogSetLevelResponse
+	(FrameKind)(0),              // 25: alonabot.v1.FrameKind
 }
 var file_alonabot_v1_control_proto_depIdxs = []int32{
 	7,  // 0: alonabot.v1.Hello.supported_capabilities:type_name -> alonabot.v1.ProtocolCapability
@@ -1728,12 +1815,13 @@ var file_alonabot_v1_control_proto_depIdxs = []int32{
 	4,  // 12: alonabot.v1.Cancel.reason:type_name -> alonabot.v1.CancelReason
 	5,  // 13: alonabot.v1.Stopping.reason:type_name -> alonabot.v1.StopReason
 	6,  // 14: alonabot.v1.SessionError.failed_phase:type_name -> alonabot.v1.SessionPhase
-	23, // 15: alonabot.v1.SessionError.failed_kind:type_name -> alonabot.v1.FrameKind
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	25, // 15: alonabot.v1.SessionError.failed_kind:type_name -> alonabot.v1.FrameKind
+	0,  // 16: alonabot.v1.LogSetLevelRequest.level:type_name -> alonabot.v1.LogLevel
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_control_proto_init() }
@@ -1749,7 +1837,7 @@ func file_alonabot_v1_control_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_control_proto_rawDesc), len(file_alonabot_v1_control_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   16,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

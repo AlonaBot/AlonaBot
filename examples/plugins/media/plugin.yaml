@@ -1,0 +1,7 @@
+# media 示例的开发工程身份。
+id: media
+name: Media
+version: 0.1.0
+author: AlonaBot
+source: github.com/AlonaBot/AlonaBot
+role: plugin

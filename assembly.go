@@ -271,12 +271,12 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 	tools.Register(a.mux)
 	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes, Metrics: a.metrics})
 	a.bus.Register(a.mux)
-	a.broker = broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth, Metrics: a.metrics})
+	a.broker = broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth, Metrics: a.metrics, Agent: a.agentID})
 	tools.RegisterInvoke(a.mux, tool.InvokeOptions{Call: a.broker.Call, Adapters: a.adapters, Buttons: a.buttons,
 		ConfirmTimeout: v.ToolConfirmTimeout, DefaultLocale: func() string { return a.settings.Settings().DefaultLocale }})
 	a.mux.Forward(a.broker.Call)
 	a.schemas = make(map[string]componentOptionSchemas)
-	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: a.broker, Chats: store.Chats, Page: v.OptionsPage, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
+	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: a.broker, Chats: store.Chats, Page: v.OptionsPage, Agent: a.agentID, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
 		installed, err := store.Installs(ctx)
 		if err != nil {
 			return nil, err
@@ -515,21 +515,12 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 			SqlitePath: path, ActivationReason: reason, MigrationMode: pb.MigrationMode_MIGRATION_MODE_UNSPECIFIED}
 	}
 	current := c.assembly.settings.Settings()
-	level := slog.LevelDebug
-	if explicit, ok := current.LogSources[id]; ok {
-		switch explicit {
-		case "off":
-			level = logging.LevelOff
-		case "inherit":
-			level = current.LogLevel
-		default:
-			if err := level.UnmarshalText([]byte(explicit)); err != nil {
-				return err
-			}
-		}
+	if _, explicit := current.LogSources[id]; !explicit {
+		c.output.Levels().SetSource(id, slog.LevelDebug)
+	} else if current.LogSources[id] == "inherit" {
+		c.output.Levels().InheritSource(id)
 	}
-	boot.LogLevel = logging.ProtoLevel(level)
-	c.output.Levels().SetSource(id, level)
+	boot.LogLevel = logging.ProtoLevel(c.output.Levels().Source(id))
 
 	schemas, err := optionSchemas(entry.resources)
 	if err != nil {
@@ -594,7 +585,7 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 			ConfigSchema: entry.resources.ConfigSchema, I18n: entry.resources.I18n,
 			Development: true, NewCandidate: active == "", Stdio: entry.stdio,
 			DefaultLocale: current.DefaultLocale, Handler: c.assembly.handler(running, install), Global: c.assembly.global,
-			Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values), Log: c.output.Plugin(id, generation),
+			Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values), Log: c.output.Plugin(id, generation, componentLogAttrs(install)...),
 			Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment,
 		})
 		if err != nil {
@@ -626,7 +617,7 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	}
 	running := &runningComponent{id: id, install: install, caller: router.NewCaller(id, generation), listener: listener, finished: make(chan struct{}), schemas: schemas}
 	c.components = append(c.components, running)
-	l := &inproc.Launch{PluginID: id, Secret: make([]byte, launchRandomBytes), Addr: listener.Addr().String(), BuildDigest: digest, RuntimeLockPath: filepath.Join(pluginDir, wire.RuntimeLockFile), Log: c.output.Component(id, generation)}
+	l := &inproc.Launch{PluginID: id, Secret: make([]byte, launchRandomBytes), Addr: listener.Addr().String(), BuildDigest: digest, RuntimeLockPath: filepath.Join(pluginDir, wire.RuntimeLockFile), Log: c.output.Component(id, generation, componentLogAttrs(install)...)}
 	rand.Read(l.Secret)
 	go func() {
 		if entry.role == state.RoleAdapter {
@@ -1117,5 +1108,13 @@ func (entry *component) loadExecutableResources() error {
 		entry.manifest = m
 	}
 	entry.executable, entry.digest, entry.resources = path, digest[:], resources
+	return nil
+}
+
+// componentLogAttrs 从 Core 的安装记录绑定可信来源类别，Adapter 的实例字段由 SDK 记录携带。
+func componentLogAttrs(install state.Install) []slog.Attr {
+	if install.Role == state.RoleAdapter {
+		return []slog.Attr{slog.String(logging.KeyComponent, logging.ComponentAdapter), slog.String(logging.KeyAdapterID, install.AdapterID)}
+	}
 	return nil
 }

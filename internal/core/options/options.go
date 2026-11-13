@@ -63,6 +63,7 @@ type Options struct {
 	Instances func(context.Context) ([]AdapterInstance, error)
 	Chats     func(ctx context.Context, q state.ChatQuery) ([]state.Chat, bool, error) // nil 时聊天来源不可用。
 	Page      int                                                                      // 传入 tune.Values.OptionsPage。
+	Agent     func(ctx context.Context) (string, error)                                // 仅 @agent 来源需要，空 ID 表示未安装。
 }
 
 // AdapterInstance 标识一个已配置的平台接入实例。
@@ -154,6 +155,19 @@ func (s *Service) instances(ctx context.Context, from configschema.OptionsFrom, 
 
 func (s *Service) service(ctx context.Context, from configschema.OptionsFrom, q Query) (Page, error) {
 	componentID, name, _ := strings.Cut(from.Source, "/")
+	if componentID == "@agent" {
+		if s.opt.Agent == nil {
+			return Page{}, unavailable("options source agent is unavailable")
+		}
+		var err error
+		componentID, err = s.opt.Agent(ctx)
+		if err != nil {
+			return Page{}, fmt.Errorf("resolve options source agent: %w: %w", unavailable("options source agent is unavailable"), err)
+		}
+		if componentID == "" {
+			return Page{}, unavailable("options source agent is unavailable")
+		}
+	}
 	target, ok := s.opt.Router.Caller(componentID)
 	if !ok {
 		return Page{}, unavailable("options source component is not active: " + componentID)
@@ -183,7 +197,7 @@ func (s *Service) service(ctx context.Context, from configschema.OptionsFrom, q 
 	if err != nil {
 		return Page{}, unavailable(fmt.Sprintf("encode options query: %v", err))
 	}
-	response := s.opt.Broker.CallSession(ctx, router.Caller{}, target, &wire.Inbound{Target: from.Source, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: validate.OptionsQuerySchemaID, SchemaVersion: optionsSchemaVersion, Bytes: data}})
+	response := s.opt.Broker.CallSession(ctx, router.Caller{}, target, &wire.Inbound{Target: componentID + "/" + name, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: validate.OptionsQuerySchemaID, SchemaVersion: optionsSchemaVersion, Bytes: data}})
 	if response.Err != nil {
 		return Page{}, fmt.Errorf("query options source %s: %w: %w", from.Source, unavailable(response.Err.GetSafeMessage()), &wire.CallError{ErrorInfo: response.Err})
 	}

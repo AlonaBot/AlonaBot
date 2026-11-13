@@ -39,9 +39,11 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/webhost"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/adapter"
 	"github.com/mattn/go-isatty"
+	"google.golang.org/protobuf/proto"
 )
 
 // Option 配置一次 Core 启动。
@@ -230,12 +232,24 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	for i := range c.development {
 		c.development[i].stdio = o.stdio
 	}
-	output, err := logging.Open(logging.Options{Format: logging.Format(configuration.LogFormat), Level: configuration.LogLevel, Stderr: os.Stderr})
+	output, err := logging.Open(logging.Options{Format: logging.Format(configuration.LogFormat), Level: configuration.LogLevel, Stderr: os.Stderr, BufferRecords: values.LogBufferRecords})
 	if err != nil {
 		return fail(startupUsage(err))
 	}
 	c.output = output
 	slog.SetDefault(output.Logger())
+	for id, value := range configuration.LogSources {
+		if value == "inherit" {
+			continue
+		}
+		level := logging.LevelOff
+		if value != "off" {
+			if err := level.UnmarshalText([]byte(value)); err != nil {
+				return fail(err)
+			}
+		}
+		output.Levels().SetSource(id, level)
+	}
 	if o.webUI != nil {
 		slog.Warn("development WebUI has no manifest; Admin API version compatibility is not checked")
 	}
@@ -298,7 +312,31 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	for _, entry := range o.components {
 		development[entry.manifest.ID] = entry.manifest
 	}
-	management := manage.New(manage.Options{Store: store, Settings: c.assembly.settings, Policy: c.assembly.policy,
+	management := manage.New(manage.Options{Logs: output, Stopping: c.stopping, NotifyLogLevel: func(ctx context.Context, id string, level pb.LogLevel) error {
+		return c.operation(ctx, func(ctx context.Context) error {
+			plugin, ok := c.assembly.router.Plugin(id)
+			if !ok || !plugin.Activated() {
+				return nil
+			}
+			request := &pb.LogSetLevelRequest{Level: level}
+			encoded, err := proto.Marshal(request)
+			if err != nil {
+				return err
+			}
+			response, err := plugin.Call(ctx, wire.Request{Target: wire.ServiceLogSetLevel, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: 1, Bytes: encoded}})
+			if err != nil {
+				return err
+			}
+			if response.Err != nil {
+				return &wire.CallError{ErrorInfo: response.Err}
+			}
+			reply := &pb.LogSetLevelResponse{}
+			if response.Payload.Encoding != pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF || response.Payload.SchemaID != validate.SchemaID(reply) || response.Payload.SchemaVersion != 1 {
+				return errors.New("invalid log level response metadata")
+			}
+			return proto.Unmarshal(response.Payload.Bytes, reply)
+		})
+	}, Store: store, Settings: c.assembly.settings, Policy: c.assembly.policy,
 		Adapters: c.assembly.adapters, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(o.components),
 		Packages: filepath.Join(dir, "packages"), Limits: packages.NewLimits(values), Development: development, DevelopmentWebUI: o.webUI,
 		Descriptor: c.assembly.componentDescriptor,
@@ -389,9 +427,37 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 			}
 		}
 	}
+	// 开发 Adapter 先完成 REGISTER，依赖检查才能读取真实的 extension 与动作声明。
 	for i := range o.components {
+		if o.components[i].role != state.RoleAdapter {
+			continue
+		}
 		if err := ctx.Err(); err != nil {
 			return fail(err)
+		}
+		if err := c.startDevelopment(ctx, dir, &o.components[i]); err != nil {
+			return fail(fmt.Errorf("start %s: %w", o.components[i].manifest.ID, err))
+		}
+	}
+	for i := range o.components {
+		if o.components[i].role == state.RoleAdapter {
+			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return fail(err)
+		}
+		snapshot, err := manage.DependencySnapshot(ctx, store, c.assembly.componentDescriptor)
+		if err != nil {
+			return fail(err)
+		}
+		// 同次运行的开发插件与 Agent 都参与版本检查，保留目录参数的先后自由。
+		for _, entry := range o.components {
+			if entry.role != state.RoleAdapter {
+				snapshot.Plugins[entry.manifest.ID] = entry.manifest.Version
+			}
+		}
+		if err := manage.CheckDependencies(o.components[i].manifest, snapshot); err != nil {
+			return fail(fmt.Errorf("start %s: %w", o.components[i].manifest.ID, err))
 		}
 		if err := c.startDevelopment(ctx, dir, &o.components[i]); err != nil {
 			return fail(fmt.Errorf("start %s: %w", o.components[i].manifest.ID, err))
@@ -561,7 +627,7 @@ running:
 	close(c.done)
 }
 
-// Restart 停止并重新启动一个本次登记的开发组件，沿用 dev:<id> 代次。
+// Restart 检查新资源的依赖后重新启动一个开发组件，沿用 dev:<id> 代次；依赖失败时保持旧进程运行。
 func (c *Core) Restart(ctx context.Context, id string) error {
 	return c.operation(ctx, func(ctx context.Context) error {
 		for i := range c.development {
@@ -574,6 +640,14 @@ func (c *Core) Restart(ctx context.Context, id string) error {
 				if err := next.loadExecutableResources(); err != nil {
 					return err
 				}
+			}
+			// 停止前用已启用组件的当前版本和运行中 Adapter 声明检查新资源。
+			snapshot, err := manage.DependencySnapshot(ctx, c.store, c.assembly.componentDescriptor)
+			if err != nil {
+				return err
+			}
+			if err := manage.CheckDependencies(next.manifest, snapshot); err != nil {
+				return err
 			}
 			if err := c.stopManaged(id, pb.StopReason_STOP_REASON_RESTART); err != nil {
 				return err

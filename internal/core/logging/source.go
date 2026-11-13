@@ -107,7 +107,7 @@ func parseRecord(line []byte) (slog.Record, bool) {
 				return slog.Record{}, false
 			}
 		default:
-			if !sourceKeys[key] {
+			if !sourceKeys[key] || key == KeyInstanceID {
 				attrs = append(attrs, jsonAttr(key, raw))
 			}
 		}

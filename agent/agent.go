@@ -14,6 +14,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/config"
 	"github.com/AlonaBot/AlonaBot/sdk/gormdb"
+	"github.com/AlonaBot/AlonaBot/sdk/llm"
 	"gorm.io/gorm"
 )
 
@@ -23,21 +24,26 @@ type configuredProvider struct {
 	name      string
 	client    *provider.Client
 	maxTokens int
+	protocol  provider.Protocol
+	model     string
 }
 
 type persona struct{ name, prompt string }
 
 type configuration struct {
-	providers       []configuredProvider
-	personas        []persona
-	defaultProvider string
-	defaultPersona  string
-	historyEntries  int
+	providers                []configuredProvider
+	personas                 []persona
+	defaultProvider          string
+	defaultPersona           string
+	historyEntries           int
+	mcpServers               []mcpServer
+	llmServiceAllowedPlugins []string
 }
 
 type component struct {
 	config       configuration
 	sessionLocks [sessionLockCount]sync.Mutex
+	mcp          []*mcpPeer // 当前插件 Session 拥有，连接在首次对话时建立。
 }
 
 // New 创建官方 Agent，绑定生成资源并登记命令、迁移和生命周期回调。
@@ -51,16 +57,25 @@ func New() *sdk.Plugin {
 	p.OnStart(func(ctx context.Context) error {
 		var err error
 		a.config, err = readConfiguration(p.Config())
+		if err == nil {
+			for _, server := range a.config.mcpServers {
+				a.mcp = append(a.mcp, newMCPPeer(server))
+			}
+		}
 		return err
 	})
+	p.OnStop(a.closeMCP)
 	a.registerCommands(p)
 	a.registerConversation(p)
+	sdk.Serve(p, llm.GenerateService).Access(sdk.AccessPublic).Handle(a.generate)
+	sdk.ServeOptions(p, providersServiceName, a.providers)
 	return p
 }
 
 func readConfiguration(values config.Values) (configuration, error) {
 	// 1. 在配置边界验证名称、密钥与连接参数，客户端复用进程的代理环境。
 	result := configuration{defaultProvider: values.String("default_provider"), defaultPersona: values.String("default_persona"), historyEntries: int(values.Int("history_entries"))}
+	result.llmServiceAllowedPlugins = values.Strings("llm_service_allowed_plugins")
 	names := make(map[string]bool)
 	for _, item := range values.TemplateList("providers") {
 		name := item.String("name")
@@ -75,7 +90,7 @@ func readConfiguration(values config.Values) (configuration, error) {
 		if err != nil {
 			return configuration{}, fmt.Errorf("configure provider: %w", err)
 		}
-		result.providers = append(result.providers, configuredProvider{name: name, client: client, maxTokens: int(item.Int("max_tokens"))})
+		result.providers = append(result.providers, configuredProvider{name: name, client: client, maxTokens: int(item.Int("max_tokens")), protocol: provider.Protocol(item.String("protocol")), model: item.String("model")})
 	}
 	if (result.defaultProvider != "" || len(names) > 0) && !names[result.defaultProvider] {
 		return configuration{}, fmt.Errorf("default_provider must name a configured provider")
@@ -87,6 +102,12 @@ func readConfiguration(values config.Values) (configuration, error) {
 	if (result.defaultPersona != "" || len(result.personas) > 0) && result.persona(result.defaultPersona) == nil {
 		return configuration{}, fmt.Errorf("default_persona must name a configured persona")
 	}
+	// 3. MCP 仅校验当前传输使用的字段；凭证已经过 SDK secret 解析。
+	servers, err := readMCPServers(values)
+	if err != nil {
+		return configuration{}, err
+	}
+	result.mcpServers = servers
 	return result, nil
 }
 
