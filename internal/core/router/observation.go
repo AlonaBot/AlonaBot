@@ -12,6 +12,7 @@ import (
 type Outcome struct {
 	PluginID, RouteID string
 	Err               *pb.ErrorInfo
+	Waiting           bool
 }
 
 // Dispatch 汇总事件到结束或首次等待时的 Handler 结果。
@@ -65,6 +66,9 @@ func (r *Router) observeInvocation(inv *Invocation, state *dispatchState) {
 	}
 	inv.OnWait = func() {
 		r.mu.Lock()
+		if !call.state.done {
+			call.state.result.Outcomes = append(call.state.result.Outcomes, Outcome{PluginID: inv.PluginID, RouteID: inv.RouteID, Waiting: true})
+		}
 		result, notify := r.finishDispatchLocked(call.state, true)
 		r.mu.Unlock()
 		if notify {

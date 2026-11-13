@@ -93,11 +93,12 @@ type jobState struct {
 }
 
 type jobRun struct {
-	cancel   context.CancelFunc
-	dynamic  bool
-	reg      *registration
-	timedOut bool // Late 可早于 Call 返回，两个路径在同一锁下只记一次超时
-	key      taskKey
+	cancel    context.CancelFunc
+	dynamic   bool
+	reg       *registration
+	timedOut  bool // Late 可早于 Call 返回，两个路径在同一锁下只记一次超时
+	key       taskKey
+	completed func(string, wire.Response, error) // 显式触发的 RPC 结果；在锁外调用一次。
 }
 
 // New 创建独立的 Scheduler。
@@ -291,6 +292,9 @@ func stopTimers(reg *registration) {
 		task.next = time.Time{}
 		task.queued = false
 	}
+	for _, queued := range reg.queue {
+		queued.reject(triggerError(pb.ErrorCode_ERROR_CODE_CANCELLED, "task registration stopped"))
+	}
 	reg.queue = nil
 	reg.tasks = nil
 }
@@ -401,6 +405,9 @@ func (s *Scheduler) call(ctx context.Context, pluginID string, reg *registration
 	}
 	s.mu.Unlock()
 	logResponse(pluginID, job.routeID, runID, event.GetEventId(), response, err)
+	if run.completed != nil {
+		run.completed(runID, response, err)
+	}
 }
 
 // markTimeout 与 releaseRun 都在 Scheduler.mu 下操作该次 run。

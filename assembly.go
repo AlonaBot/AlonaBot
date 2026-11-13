@@ -52,6 +52,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/adapter"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -240,7 +241,7 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 		dispatched = func(d router.Dispatch) {
 			result := inproc.Dispatch{InstanceID: d.InstanceID, SourceEventID: d.SourceEventID, Waiting: d.Waiting}
 			for _, outcome := range d.Outcomes {
-				result.Outcomes = append(result.Outcomes, inproc.Outcome{PluginID: outcome.PluginID, RouteID: outcome.RouteID, ErrorCode: int32(outcome.Err.GetCode()), SafeMessage: outcome.Err.GetSafeMessage()})
+				result.Outcomes = append(result.Outcomes, inproc.Outcome{PluginID: outcome.PluginID, RouteID: outcome.RouteID, ErrorCode: int32(outcome.Err.GetCode()), SafeMessage: outcome.Err.GetSafeMessage(), Waiting: outcome.Waiting})
 			}
 			harness.Dispatched(result)
 		}
@@ -299,6 +300,35 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 	}})
 	a.scheduler = scheduler.New(scheduler.Options{JobTimeout: v.JobTimeout, Store: store, TasksPerPlugin: v.TasksPerPlugin, TaskPayloadBytes: v.TaskPayloadBytes, TaskConcurrency: v.TaskConcurrency})
 	a.scheduler.Services(a.mux, a.router.PluginFor)
+	if harness := inproc.HarnessFor(dir); harness != nil {
+		completed := func(pluginID, routeID string, notify func(inproc.Dispatch)) func(string, wire.Response, error) {
+			return func(runID string, response wire.Response, err error) {
+				failure := response.Err
+				if err != nil {
+					var callError *wire.CallError
+					if errors.As(err, &callError) {
+						failure = callError.ErrorInfo
+					} else {
+						failure = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}
+					}
+				} else if failure == nil {
+					outcome := &pb.HandlerOutcome{}
+					if response.Payload.Encoding != pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF || response.Payload.SchemaID != validate.SchemaID(outcome) || response.Payload.SchemaVersion != 1 {
+						failure = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "invalid scheduled HandlerOutcome schema"}
+					} else if err := proto.Unmarshal(response.Payload.Bytes, outcome); err != nil {
+						failure = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}
+					}
+				}
+				notify(inproc.Dispatch{RunID: runID, Outcomes: []inproc.Outcome{{PluginID: pluginID, RouteID: routeID, ErrorCode: int32(failure.GetCode()), SafeMessage: failure.GetSafeMessage()}}})
+			}
+		}
+		harness.Trigger = func(ctx context.Context, pluginID, jobID string, notify func(inproc.Dispatch)) error {
+			return a.scheduler.Trigger(ctx, pluginID, jobID, completed(pluginID, "job."+jobID, notify))
+		}
+		harness.TriggerTask = func(ctx context.Context, pluginID, taskName, key string, notify func(inproc.Dispatch)) error {
+			return a.scheduler.TriggerTask(ctx, pluginID, taskName, key, completed(pluginID, "task."+taskName, notify))
+		}
+	}
 	a.journal = journal.New(journal.Options{Store: store, Secrets: secret.New(store), Config: config.New(store, dir), Settings: file, DataDir: dir, State: a.componentState,
 		Spec: func(ctx context.Context, in state.Install, packageDir string, boot *pb.Bootstrap) (supervisor.Spec, error) {
 			spec, _, err := a.core.installedSpec(ctx, in, packageDir, boot)
