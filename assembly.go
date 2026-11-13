@@ -25,7 +25,9 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/broker"
 	"github.com/AlonaBot/AlonaBot/internal/core/bus"
 	"github.com/AlonaBot/AlonaBot/internal/core/buttons"
+	"github.com/AlonaBot/AlonaBot/internal/core/continuation"
 	"github.com/AlonaBot/AlonaBot/internal/core/conversation"
+	"github.com/AlonaBot/AlonaBot/internal/core/hook"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 	"github.com/AlonaBot/AlonaBot/internal/core/media"
@@ -159,6 +161,9 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 		return nil, err
 	}
 	p := policy.New(store)
+	if err := p.LoadCommandNames(context.Background()); err != nil {
+		return nil, fmt.Errorf("load command names: %w", err)
+	}
 	a.buttons = buttons.New(store, time.Now, v.ButtonTokenTTL, func(id string) (string, []*pb.RouteDescriptor, bool) {
 		plugin, ok := a.router.Plugin(id)
 		if !ok || !plugin.Activated() {
@@ -167,10 +172,28 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 		caller, ok := a.router.Caller(id)
 		return caller.GenerationID, plugin.Routes(), ok
 	})
-	messages := message.New(a.adapters, p, a.media.LeaseForSend, a.buttons.Issue, v.RequestTimeout)
+	// Router、Hook Runner 与消息服务互相引用：Router 先建，Send 与 PreEvent 在调用时才读取之后赋值的变量。
+	var messages *message.Service
+	var hooks *hook.Runner
+	// 延续调用的 Manager 先于 Router 创建，回调在调用时才读取 a.router。
+	continuations := continuation.New(continuation.Options{Max: v.ContinuationMax, Timeout: v.ContinuationTimeout, Prepare: a.media.PrepareIncoming,
+		Caller: func(id string) (router.Caller, bool) { return a.router.Caller(id) },
+		Call: func(ctx context.Context, inv *router.Invocation, parent uint64, deadline time.Time) (wire.Response, error) {
+			return a.router.CallContinuation(ctx, inv, parent, deadline)
+		}})
 	a.router = router.New(router.Options{Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
-		Global: a.global, Adapters: a.adapters, Send: messages.Send, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: nil})
+		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: nil, CommandNames: p.CommandNames,
+		Continuations: continuations,
+		Send: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
+			return messages.Send(ctx, c, in)
+		},
+		PreEvent: func(ctx context.Context, ev *pb.Event) (*pb.EventPayload, bool, error) {
+			return hooks.PreEvent(ctx, ev)
+		}})
+	hooks = hook.New(a.router, hook.Options{Prepare: a.media.PrepareIncoming, CheckEvent: a.checkAdapterEvent})
+	messages = message.New(a.adapters, p, a.media.LeaseForSend, a.buttons.Issue, v.RequestTimeout, hooks)
 	p.SetCommandsChanged(a.router.CommandsChanged)
+	continuations.Register(a.mux)
 	a.mux.Handle(wire.ServiceSend, messages.Send)
 	a.mux.Handle(wire.ServiceEdit, messages.Edit)
 	a.mux.Handle(wire.ServiceDelete, messages.Delete)
@@ -599,4 +622,17 @@ func packageResources(dir string) (sdk.Generated, error) {
 		g.I18n[file.Name()] = raw
 	}
 	return g, nil
+}
+
+// checkAdapterEvent 按事件所属实例当前 Session 的 Adapter 声明复检 PreEvent 改写后的扩展事件。
+func (a *assembly) checkAdapterEvent(ev *pb.Event) error {
+	instance, ok := a.adapters.Get(ev.GetAdapterInstanceId())
+	if !ok {
+		return fmt.Errorf("adapter instance %q is unavailable", ev.GetAdapterInstanceId())
+	}
+	checker, ok := instance.(interface{ CheckEvent(*pb.Event) error })
+	if !ok {
+		return fmt.Errorf("adapter instance %q cannot validate extension events", ev.GetAdapterInstanceId())
+	}
+	return checker.CheckEvent(ev)
 }

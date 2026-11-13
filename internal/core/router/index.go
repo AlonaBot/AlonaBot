@@ -14,9 +14,22 @@ type CommandEntry struct {
 	PluginID string
 	RouteID  string
 	Priority int32
-	Path     []string // 命中的完整路径，来自 path 或某个 alias
-	Alias    bool     // Path 来自 alias
+	Path     []string   // 命中的生效完整路径
+	Alias    bool       // Path 不是主名
+	Names    [][]string // 生效的全部命令名，主名在前；只读
 }
+
+// InvalidName 记录覆盖因插件当前声明而失效的命令名。
+type InvalidName struct {
+	PluginID, RouteID string
+	Name              []string // 整条覆盖指向未注册或非路径命令时为 nil
+	Reason            string   // "declared" 表示声明名冲突；"unregistered" 表示路由不可用
+}
+
+const (
+	invalidNameDeclared     = "declared"
+	invalidNameUnregistered = "unregistered"
+)
 
 // Shadow 保存同一路径的胜出者及按胜出顺序排列的被遮蔽者。
 type Shadow struct {
@@ -28,8 +41,13 @@ type Shadow struct {
 // CommandIndex 保存不可变的静态命令快照；零值为空索引。
 // 路径在建立索引时复制；返回的 Path 及 Shadows 切片内容只读。
 type CommandIndex struct {
-	paths map[string][]CommandEntry // 候选按 priority、plugin_id、route_id 升序排列
+	paths        map[string][]CommandEntry        // 候选按 priority、plugin_id、route_id 升序排列
+	names        map[string]map[string][][]string // 每条路径命令的生效名字，供菜单与匹配共用
+	invalidNames []InvalidName
 }
+
+// InvalidNames 按 plugin_id、route_id 与名字返回失效覆盖诊断；返回的切片只读。
+func (x *CommandIndex) InvalidNames() []InvalidName { return x.invalidNames }
 
 // Lookup 按最长完整 token 路径查找命令，大小写敏感；consumed 为匹配的 token 数。
 // 返回的 entry.Path 只读。
@@ -57,7 +75,7 @@ func (x *CommandIndex) Shadows() []Shadow {
 	return shadows
 }
 
-// Commands 返回最近一次 Attach/Detach 建立的索引快照，可在后续重建期间继续读取。
+// Commands 返回最近一次注册或策略变化建立的索引快照，可在后续重建期间继续读取。
 func (r *Router) Commands() *CommandIndex {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -66,28 +84,69 @@ func (r *Router) Commands() *CommandIndex {
 
 // rebuildCommands 在持有 mu 时建立并发布快照，沿用注册边界已经校验过的路由。
 func (r *Router) rebuildCommands() {
-	// 1. 只收集已激活插件，命令 path 与各 alias 分别参与选择。
-	next := &CommandIndex{paths: make(map[string][]CommandEntry)}
+	// 1. 只收集已激活插件；声明名始终优先于同插件其他路由的覆盖。
+	next := &CommandIndex{paths: make(map[string][]CommandEntry), names: make(map[string]map[string][][]string)}
 	for _, session := range r.plugins {
 		plugin := session.plugin
 		if !plugin.Activated() {
 			continue
 		}
-		for _, route := range plugin.Routes() {
-			if route.GetKind() != pb.RouteKind_ROUTE_KIND_COMMAND {
+		pluginID := plugin.PluginID()
+		routes := plugin.Routes()
+		declared := make(map[string]string)
+		registered := make(map[string]bool)
+		for _, route := range routes {
+			if route.GetKind() != pb.RouteKind_ROUTE_KIND_COMMAND || route.GetCommand().GetMatch() != pb.CommandMatch_COMMAND_MATCH_PATH {
 				continue
 			}
-			command := route.GetCommand()
-			entry := CommandEntry{PluginID: plugin.PluginID(), RouteID: route.GetRouteId(), Priority: route.GetPriority()}
-			if len(command.GetPath()) > 0 {
-				next.add(entry, command.GetPath())
+			registered[route.GetRouteId()] = true
+			for _, name := range declaredCommandNames(route.GetCommand()) {
+				declared[strings.Join(name, " ")] = route.GetRouteId()
 			}
-			entry.Alias = true
-			for _, alias := range command.GetAliases() {
-				next.add(entry, alias.GetPath())
+		}
+		var overrides map[string][][]string
+		if r.commandNames != nil {
+			overrides = r.commandNames(pluginID)
+		}
+		for routeID := range overrides {
+			if !registered[routeID] {
+				next.invalidNames = append(next.invalidNames, InvalidName{PluginID: pluginID, RouteID: routeID, Reason: invalidNameUnregistered})
+			}
+		}
+		next.names[pluginID] = make(map[string][][]string)
+		for _, route := range routes {
+			routeID := route.GetRouteId()
+			if !registered[routeID] {
+				continue
+			}
+			var names [][]string
+			for _, name := range overrides[routeID] {
+				if owner, ok := declared[strings.Join(name, " ")]; ok && owner != routeID {
+					next.invalidNames = append(next.invalidNames, InvalidName{PluginID: pluginID, RouteID: routeID, Name: slices.Clone(name), Reason: invalidNameDeclared})
+					continue
+				}
+				names = append(names, slices.Clone(name))
+			}
+			if len(names) == 0 {
+				names = declaredCommandNames(route.GetCommand())
+			}
+			next.names[pluginID][routeID] = names
+			entry := CommandEntry{PluginID: pluginID, RouteID: routeID, Priority: route.GetPriority(), Names: names}
+			for i, name := range names {
+				entry.Alias = i != 0
+				next.add(entry, name)
 			}
 		}
 	}
+	slices.SortFunc(next.invalidNames, func(a, b InvalidName) int {
+		if order := cmp.Compare(a.PluginID, b.PluginID); order != 0 {
+			return order
+		}
+		if order := cmp.Compare(a.RouteID, b.RouteID); order != 0 {
+			return order
+		}
+		return slices.Compare(a.Name, b.Name)
+	})
 	for _, entries := range next.paths {
 		slices.SortFunc(entries, func(a, b CommandEntry) int {
 			if order := cmp.Compare(a.Priority, b.Priority); order != 0 {
@@ -119,3 +178,11 @@ func (x *CommandIndex) add(entry CommandEntry, path []string) {
 }
 
 func sameRoute(a, b CommandEntry) bool { return a.PluginID == b.PluginID && a.RouteID == b.RouteID }
+
+func declaredCommandNames(command *pb.CommandSpec) [][]string {
+	names := [][]string{slices.Clone(command.GetPath())}
+	for _, alias := range command.GetAliases() {
+		names = append(names, slices.Clone(alias.GetPath()))
+	}
+	return names
+}

@@ -232,6 +232,8 @@ enum HookPhase {
 message HookSpec {
   // 执行阶段。
   HookPhase phase = 1;
+  // PreEvent 恰好指定一种事件；出站 Hook 留空。
+  repeated string event_type_filter = 2;
 }
 
 // ServiceAccess 列出服务的访问范围。

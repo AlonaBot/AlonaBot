@@ -1,6 +1,7 @@
 package sdk
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -27,11 +28,12 @@ type Command struct {
 	mode      pb.HandlerMode // 由签名推出的 Handler 形态
 	structure reflect.Type   // 结构体参数的值类型；位置参数形式为 nil。
 
-	permission Permission
-	subID      string
-	rules      []Rule          // Collect 固定的调用顺序，全部通过后执行 Handler。
-	routeID    string          // 文本匹配与 Raw 的显式路由 ID
-	spec       *pb.CommandSpec // 已通过注册边界校验的命令描述
+	permission   Permission
+	subID        string
+	rules        []Rule          // Collect 固定的调用顺序，全部通过后执行 Handler。
+	routeID      string          // 文本匹配与 Raw 的显式路由 ID
+	spec         *pb.CommandSpec // 已通过注册边界校验的命令描述
+	continuation bool
 }
 
 // CommandGroup 收集命令；实例方法以方法值显式传入，不做自动 DI。
@@ -241,6 +243,13 @@ func (b *CommandBuilder) Rule(rules ...Rule) *CommandBuilder {
 	return b
 }
 
+// Continue 让 Handler 整体在独立的延续调用中执行，原调用保持继续传播。
+func (b *CommandBuilder) Continue() *CommandBuilder {
+	b.touch()
+	b.command.continuation = true
+	return b
+}
+
 func (r *CommandGroup) collect() {
 	r.commands = nil
 	r.errs = nil
@@ -292,12 +301,21 @@ func (r *CommandGroup) register(c Command, options routeOptions) {
 	spec.Path, spec.HandlerMode = c.Path, mode
 	spec.UsageMode, spec.UsageKey, spec.IgnoreCase = options.usageMode, options.usageKey, options.ignoreCase
 	spec.Params = params
+	if !options.argsSet && structure == nil {
+		options.names = handlerParamNames(r.plugin.generated, c.Handler)
+	}
+	if options.argsSet && len(options.names) != len(params) {
+		r.errs = append(r.errs, invalidCommand("command %q has %d argument names for %d parameters", commandRouteID(c), len(options.names), len(params)))
+		return
+	}
 	if len(options.names) > len(params) {
 		r.errs = append(r.errs, invalidCommand("command %q has more argument names than parameters", commandRouteID(c)))
 		return
 	}
 	for i, name := range options.names {
-		spec.Params[i].Name = name
+		if options.argsSet || name != "" {
+			spec.Params[i].Name = name
+		}
 	}
 	for _, optional := range options.optional {
 		if len(optional.defaults) > 1 {
@@ -410,30 +428,72 @@ type HTTPRoute struct {
 	AuthMode HTTPAuth // 认证方式；公开路由须校验回调凭证，Adapter 也可校验平台 token
 }
 
-// HTTPOption 调整 HTTP 路由声明。
-type HTTPOption func(*HTTPRoute)
+// RouteBuilder 收集 HTTP 路由；Handle 或 HandleFunc 结束构建。
+type RouteBuilder struct {
+	registry    *httpRegistry
+	route       HTTPRoute
+	method      string // 保留输入，沿用大写方法名的校验错误。
+	handles     int
+	afterHandle bool
+}
 
 // Public 声明公开路由；插件自行验证 state、签名或 nonce，Adapter 也可验证平台 token。
-func Public(mode HTTPAuth) HTTPOption {
-	return func(r *HTTPRoute) { r.Public, r.AuthMode = true, mode }
+func (b *RouteBuilder) Public(mode HTTPAuth) *RouteBuilder {
+	b.registry.plugin.checkRegistration()
+	if b.handles != 0 {
+		b.afterHandle = true
+	}
+	b.route.Public, b.route.AuthMode = true, mode
+	return b
+}
+
+// Handle 结束 HTTP 路由构建。
+func (b *RouteBuilder) Handle(h http.Handler) {
+	b.registry.plugin.checkRegistration()
+	b.handles++
+	b.route.Handler = h
+}
+
+// HandleFunc 以函数结束 HTTP 路由构建。
+func (b *RouteBuilder) HandleFunc(f func(http.ResponseWriter, *http.Request)) {
+	if f == nil {
+		b.Handle(nil)
+		return
+	}
+	b.Handle(http.HandlerFunc(f))
 }
 
 // httpRegistry 收集 HTTP 路由；默认需要 Core 授权会话。
 type httpRegistry struct {
-	plugin *Plugin
-	routes []HTTPRoute
-	errs   []error
+	plugin   *Plugin
+	builders []*RouteBuilder
+	routes   []HTTPRoute
+	errs     []error
 }
 
-// Handle 注册 method+path 的 Handler；同插件内重复的 method+path 报错。
-func (r *httpRegistry) Handle(method, path string, h http.Handler, opts ...HTTPOption) {
+func (r *httpRegistry) Route(method, path string) *RouteBuilder {
 	r.plugin.checkRegistration()
-	route := HTTPRoute{Method: strings.ToUpper(method), Path: path, Handler: h, AuthMode: AuthCoreSession}
-	for _, o := range opts {
-		o(&route)
+	b := &RouteBuilder{registry: r, method: method, route: HTTPRoute{Method: strings.ToUpper(method), Path: path, AuthMode: AuthCoreSession}}
+	r.builders = append(r.builders, b)
+	return b
+}
+
+func (r *httpRegistry) collect() {
+	r.routes, r.errs = nil, nil
+	for _, b := range r.builders {
+		if b.handles != 1 || b.afterHandle {
+			id := "http." + b.route.Method + "." + hex.EncodeToString([]byte(b.route.Path))
+			r.errs = append(r.errs, fmt.Errorf("route %q has invalid Handle sequence", id))
+			continue
+		}
+		r.add(b.method, b.route)
 	}
+}
+
+func (r *httpRegistry) add(method string, route HTTPRoute) {
+	path := route.Path
 	switch {
-	case h == nil:
+	case route.Handler == nil:
 		r.errs = append(r.errs, fmt.Errorf("handler for HTTP %s %s is nil", method, path))
 	case !validHTTPMethod(method) || !validHTTPMethod(route.Method):
 		r.errs = append(r.errs, fmt.Errorf("HTTP method must be standard and uppercase: input %q, registered %q", method, route.Method))
@@ -463,31 +523,73 @@ type Schedule struct {
 	Handler  func(*Context) error // 每次触发时调用的函数
 }
 
+// ScheduleBuilder 收集固定间隔或 cron 任务；Handle 结束构建。
+type ScheduleBuilder struct {
+	registry    *scheduleRegistry
+	schedule    Schedule
+	every       bool
+	timezoneSet bool // Every 上显式设置空时区也应报错。
+	handles     int
+	afterHandle bool
+}
+
+// Timezone 设置 cron 的 IANA 时区；缺省为 UTC，Every 上调用由 Collect 报错。
+func (b *ScheduleBuilder) Timezone(name string) *ScheduleBuilder {
+	b.registry.plugin.checkRegistration()
+	if b.handles != 0 {
+		b.afterHandle = true
+	}
+	b.timezoneSet = true
+	b.schedule.Timezone = name
+	return b
+}
+
+// Handle 结束定时任务构建。
+func (b *ScheduleBuilder) Handle(fn func(*Context) error) {
+	b.registry.plugin.checkRegistration()
+	b.handles++
+	b.schedule.Handler = fn
+}
+
 // scheduleRegistry 收集定时任务。
 type scheduleRegistry struct {
-	plugin *Plugin
-	jobs   []Schedule
-	errs   []error
+	plugin   *Plugin
+	builders []*ScheduleBuilder
+	jobs     []Schedule
+	errs     []error
 }
 
-// Every 声明固定间隔任务（至少 1s）。
-func (r *scheduleRegistry) Every(jobID string, d time.Duration, fn func(*Context) error) {
+func (r *scheduleRegistry) Every(jobID string, d time.Duration) *ScheduleBuilder {
 	r.plugin.checkRegistration()
-	if d < time.Second {
-		r.errs = append(r.errs, fmt.Errorf("interval %[2]s of job %[1]s is less than 1s", jobID, d))
-		return
-	}
-	r.add(Schedule{JobID: jobID, Interval: d, Handler: fn})
+	b := &ScheduleBuilder{registry: r, every: true, schedule: Schedule{JobID: jobID, Interval: d}}
+	r.builders = append(r.builders, b)
+	return b
 }
 
-// Cron 声明五字段 cron 任务；timezone 为 IANA 名称，空串表示 UTC。表达式在 REGISTER 时由 Core 校验。
-func (r *scheduleRegistry) Cron(jobID, expr, timezone string, fn func(*Context) error) {
+func (r *scheduleRegistry) Cron(jobID, expr string) *ScheduleBuilder {
 	r.plugin.checkRegistration()
-	if len(strings.Fields(expr)) != 5 {
-		r.errs = append(r.errs, fmt.Errorf("cron expression %[2]q of job %[1]s does not have five fields", jobID, expr))
-		return
+	b := &ScheduleBuilder{registry: r, schedule: Schedule{JobID: jobID, Cron: expr}}
+	r.builders = append(r.builders, b)
+	return b
+}
+
+func (r *scheduleRegistry) collect() {
+	r.jobs, r.errs = nil, nil
+	for _, b := range r.builders {
+		s := b.schedule
+		switch {
+		case b.handles != 1 || b.afterHandle:
+			r.errs = append(r.errs, fmt.Errorf("route %q has invalid Handle sequence", scheduleRoutePrefix+s.JobID))
+		case b.every && b.timezoneSet:
+			r.errs = append(r.errs, fmt.Errorf("route %q cannot set Timezone on Every", scheduleRoutePrefix+s.JobID))
+		case b.every && s.Interval < time.Second:
+			r.errs = append(r.errs, fmt.Errorf("interval %[2]s of job %[1]s is less than 1s", s.JobID, s.Interval))
+		case !b.every && len(strings.Fields(s.Cron)) != 5:
+			r.errs = append(r.errs, fmt.Errorf("cron expression %[2]q of job %[1]s does not have five fields", s.JobID, s.Cron))
+		default:
+			r.add(s)
+		}
 	}
-	r.add(Schedule{JobID: jobID, Cron: expr, Timezone: timezone, Handler: fn})
 }
 
 // add 检查 job_id、Handler 并去重后登记任务；问题记入 errs。

@@ -37,7 +37,7 @@ type Option struct {
 func ServeOptions(r Registrar, serviceName string, fn func(ctx context.Context, q OptionsQuery) (OptionsPage, error)) {
 	scope := r.registrar()
 	scope.plugin.checkRegistration()
-	b := &serviceBuilder{plugin: scope.plugin, subID: scope.subID, name: serviceName, access: AccessPrivate, handles: 1}
+	b := &serviceBuilder{plugin: scope.plugin, subID: scope.subID, name: serviceName, encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, access: AccessPrivate, handles: 1}
 	b.prepare = func() (serviceRoute, error) {
 		if fn == nil {
 			return serviceRoute{}, fmt.Errorf("options handler is nil")

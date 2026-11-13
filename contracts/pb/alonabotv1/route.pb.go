@@ -1334,9 +1334,11 @@ func (x *EventSpec) GetActionSchemaVersion() uint32 {
 type HookSpec struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 执行阶段。
-	Phase         HookPhase `protobuf:"varint,1,opt,name=phase,proto3,enum=alonabot.v1.HookPhase" json:"phase,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Phase HookPhase `protobuf:"varint,1,opt,name=phase,proto3,enum=alonabot.v1.HookPhase" json:"phase,omitempty"`
+	// PreEvent 恰好指定一种事件；出站 Hook 留空。
+	EventTypeFilter []string `protobuf:"bytes,2,rep,name=event_type_filter,json=eventTypeFilter,proto3" json:"event_type_filter,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *HookSpec) Reset() {
@@ -1374,6 +1376,13 @@ func (x *HookSpec) GetPhase() HookPhase {
 		return x.Phase
 	}
 	return HookPhase_HOOK_PHASE_UNSPECIFIED
+}
+
+func (x *HookSpec) GetEventTypeFilter() []string {
+	if x != nil {
+		return x.EventTypeFilter
+	}
+	return nil
 }
 
 // ServiceSpec 描述服务路由的专属描述；请求/响应 Schema 使用公共字段 input_*/output_*。
@@ -1797,9 +1806,10 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\fhandler_mode\x18\x02 \x01(\x0e2\x18.alonabot.v1.HandlerModeR\vhandlerMode\x12/\n" +
 	"\x04rule\x18\x03 \x01(\v2\x1b.alonabot.v1.RuleDescriptorR\x04rule\x12\x1b\n" +
 	"\taction_id\x18\x04 \x01(\tR\bactionId\x122\n" +
-	"\x15action_schema_version\x18\x05 \x01(\rR\x13actionSchemaVersion\"8\n" +
+	"\x15action_schema_version\x18\x05 \x01(\rR\x13actionSchemaVersion\"d\n" +
 	"\bHookSpec\x12,\n" +
-	"\x05phase\x18\x01 \x01(\x0e2\x16.alonabot.v1.HookPhaseR\x05phase\"\xa2\x02\n" +
+	"\x05phase\x18\x01 \x01(\x0e2\x16.alonabot.v1.HookPhaseR\x05phase\x12*\n" +
+	"\x11event_type_filter\x18\x02 \x03(\tR\x0feventTypeFilter\"\xa2\x02\n" +
 	"\vServiceSpec\x12!\n" +
 	"\fservice_name\x18\x01 \x01(\tR\vserviceName\x122\n" +
 	"\x06access\x18\x02 \x01(\x0e2\x1a.alonabot.v1.ServiceAccessR\x06access\x120\n" +

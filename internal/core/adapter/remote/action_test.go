@@ -29,7 +29,7 @@ func TestPlatformAction(t *testing.T) {
 	process := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: &eventSink{}})
 	mux := router.NewMux()
 	process.Services(mux)
-	service := message.New(registry, policy.New(store), nil, nil, tune.Defaults().RequestTimeout)
+	service := message.New(registry, policy.New(store), nil, nil, tune.Defaults().RequestTimeout, nil)
 	mux.Handle(wire.ServiceAction, service.Action)
 	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
 	spec.Handler = mux.For(caller)

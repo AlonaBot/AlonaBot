@@ -4,4 +4,8 @@ package main
 
 import alonabotgen0 "github.com/AlonaBot/AlonaBot/sdk"
 
-var alonabotGenerated = alonabotgen0.Generated{}
+var alonabotGenerated = alonabotgen0.Generated{
+	ParamNames: map[string][]string{
+		"main:main.go:61": {},
+	},
+}

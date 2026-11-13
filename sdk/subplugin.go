@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/sdk/config"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
 )
 
-// SubPlugin 提供一层逻辑路由分组、缺省命令权限与同名配置视图。
+// SubPlugin 提供一层逻辑路由分组、命令与 Hook 的缺省权限和同名配置视图。
 type SubPlugin struct {
 	scope      pluginScope
 	commands   CommandGroup
@@ -30,7 +29,7 @@ func (p *Plugin) Sub(id string) *SubPlugin {
 
 func (s *SubPlugin) registrar() *pluginScope { return &s.scope }
 
-// Permission 设置子插件内命令和文本匹配的缺省权限。
+// Permission 设置子插件内命令、文本匹配和 Hook 的缺省权限。
 func (s *SubPlugin) Permission(p Permission) *SubPlugin { s.commands.Permission(p); return s }
 
 // Config 返回可在登记时保存的同名顶层 object 视图；准备完成前读取会 panic。
@@ -127,17 +126,17 @@ func (r *SubPlugin) On(routeID string, eventType EventType) *EventBuilder {
 	return r.scope.on(routeID, eventType)
 }
 
-// Handle 登记 HTTP 路由。
-func (r *SubPlugin) Handle(method, path string, h http.Handler, opts ...HTTPOption) {
-	r.scope.plugin.http.Handle(method, path, h, opts...)
+// Route 开始构建 method+path 的 HTTP 路由。
+func (r *SubPlugin) Route(method, path string) *RouteBuilder {
+	return r.scope.plugin.http.Route(method, path)
 }
 
-// Every 登记固定间隔任务。
-func (r *SubPlugin) Every(jobID string, d time.Duration, fn func(*Context) error) {
-	r.scope.every(jobID, d, fn)
+// Every 开始构建固定间隔任务。
+func (r *SubPlugin) Every(jobID string, d time.Duration) *ScheduleBuilder {
+	return r.scope.every(jobID, d)
 }
 
-// Cron 登记 cron 任务。
-func (r *SubPlugin) Cron(jobID, expr, timezone string, fn func(*Context) error) {
-	r.scope.cron(jobID, expr, timezone, fn)
+// Cron 开始构建五字段 cron 任务。
+func (r *SubPlugin) Cron(jobID, expr string) *ScheduleBuilder {
+	return r.scope.cron(jobID, expr)
 }

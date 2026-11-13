@@ -11,6 +11,39 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
+// TestContinuationFieldNumbers 固定延续调用与等待载荷的编号、类型及 presence。
+func TestContinuationFieldNumbers(t *testing.T) {
+	field := (&pb.HandlerRequest{}).ProtoReflect().Descriptor().Fields().ByNumber(5)
+	if field == nil || field.Name() != "continuation_of" || field.Kind() != protoreflect.Uint64Kind || !field.HasOptionalKeyword() || !field.HasPresence() || field.IsList() {
+		t.Fatalf("HandlerRequest field 5 should be optional uint64 continuation_of, got %v", field)
+	}
+	for _, c := range []struct {
+		message proto.Message
+		name    protoreflect.Name
+		kind    protoreflect.Kind
+	}{
+		{&pb.ContinuationStartRequest{}, "", 0},
+		{&pb.ContinuationStartResponse{}, "", 0},
+		{&pb.WaitRequest{}, "timeout_ms", protoreflect.Uint32Kind},
+		{&pb.WaitResponse{}, "event", protoreflect.MessageKind},
+	} {
+		fields := c.message.ProtoReflect().Descriptor().Fields()
+		if c.name == "" {
+			if fields.Len() != 0 {
+				t.Errorf("%T should be empty", c.message)
+			}
+			continue
+		}
+		f := fields.ByNumber(1)
+		if fields.Len() != 1 || f == nil || f.Name() != c.name || f.Kind() != c.kind || f.IsList() || f.HasPresence() != (c.kind == protoreflect.MessageKind) {
+			t.Fatalf("%T field 1 should be %s %s, got %v", c.message, c.kind, c.name, f)
+		}
+		if c.name == "event" && f.Message().FullName() != "alonabot.v1.Event" {
+			t.Errorf("WaitResponse.event type = %s", f.Message().FullName())
+		}
+	}
+}
+
 // 以下期望值逐字取自 spec/WIRE-FORMAT.md §1/§2；改动这里等于改动线上协议。
 
 // Envelope 字段 1～16 的编号与名称和 WIRE §1 一致，且没有多余字段。
@@ -71,6 +104,48 @@ func TestButtonCoreTokenFieldNumber(t *testing.T) {
 	}
 }
 
+// TestHookFilterFieldNumber 固定 PreEvent 事件过滤器的编号与 repeated string 类型。
+func TestHookFilterFieldNumber(t *testing.T) {
+	fields := (&pb.HookSpec{}).ProtoReflect().Descriptor().Fields()
+	field := fields.ByNumber(2)
+	if fields.Len() != 2 || field == nil || field.Name() != "event_type_filter" || field.Kind() != protoreflect.StringKind || !field.IsList() || field.HasPresence() || field.ContainingOneof() != nil {
+		t.Fatalf("HookSpec field 2 should be repeated string event_type_filter, got %v", field)
+	}
+}
+
+// TestOutboundHookFieldNumbers 固定出站操作字段的编号、类型和编辑消息 ID 的 presence。
+func TestOutboundHookFieldNumbers(t *testing.T) {
+	for _, c := range []struct {
+		message proto.Message
+		names   []protoreflect.Name
+	}{
+		{&pb.BeforeSendRequest{}, []protoreflect.Name{"route_id", "context", "target", "chain", "operation", "edited_platform_message_id"}},
+		{&pb.AfterSendRequest{}, []protoreflect.Name{"route_id", "context", "target", "chain", "result", "error", "operation", "edited_platform_message_id"}},
+	} {
+		d := c.message.ProtoReflect().Descriptor()
+		fields := d.Fields()
+		if fields.Len() != len(c.names) {
+			t.Fatalf("%s field count = %d, want %d", d.Name(), fields.Len(), len(c.names))
+		}
+		for i, name := range c.names {
+			f := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+			if f == nil || f.Name() != name || f.IsList() {
+				t.Fatalf("%s field %d = %v, want singular %s", d.Name(), i+1, f, name)
+			}
+			switch name {
+			case "operation":
+				if f.Kind() != protoreflect.EnumKind || f.Enum().FullName() != "alonabot.v1.SendOperation" || f.HasPresence() || f.ContainingOneof() != nil {
+					t.Errorf("%s.operation = %v, want SendOperation without presence", d.Name(), f)
+				}
+			case "edited_platform_message_id":
+				if f.Kind() != protoreflect.StringKind || !f.HasOptionalKeyword() || !f.HasPresence() || f.ContainingOneof() == nil || !f.ContainingOneof().IsSynthetic() {
+					t.Errorf("%s.edited_platform_message_id = %v, want optional string", d.Name(), f)
+				}
+			}
+		}
+	}
+}
+
 // TestExtensionFieldNumbers 固定 extension 分支与载荷的编号、类型和 oneof 归属。
 func TestExtensionFieldNumbers(t *testing.T) {
 	field := (&pb.Segment{}).ProtoReflect().Descriptor().Fields().ByNumber(9)
@@ -118,6 +193,7 @@ func TestEnumValues(t *testing.T) {
 		{pb.BotOfflineReason(0).Descriptor(), "BOT_OFFLINE_REASON_", []string{"UNSPECIFIED", "STOPPED", "ADAPTER_EXITED", "INSTANCE_FAILED"}},
 		{pb.TextUnit(0).Descriptor(), "TEXT_UNIT_", []string{"UNSPECIFIED", "UTF16_CODE_UNITS", "UNICODE_CODE_POINTS", "BYTES"}},
 		{pb.SendStatus(0).Descriptor(), "SEND_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "PARTIAL", "REJECTED", "UNKNOWN"}},
+		{pb.SendOperation(0).Descriptor(), "SEND_OPERATION_", []string{"UNSPECIFIED", "SEND", "EDIT"}},
 		{pb.ChatType(0).Descriptor(), "CHAT_TYPE_", []string{"UNSPECIFIED", "PRIVATE", "GROUP", "CHANNEL"}},
 		{pb.PartStatus(0).Descriptor(), "PART_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "REJECTED", "UNKNOWN", "NOT_ATTEMPTED"}},
 		// MESSAGE-MODEL §3。
