@@ -22,6 +22,8 @@ message InvocationContext {
   repeated string plugin_chain = 4;
   // 出站 Hook 及其派生子调用为 true，再次 Send 返回 FAILED_PRECONDITION。
   bool send_forbidden = 5;
+  // Core 命令层已消费本条消息；只由 Core 设置，事件路由据此过滤命令。
+  bool command_consumed = 6;
 }
 
 // HandlerRequest 描述命令、事件、scheduled 与按钮 Handler 的请求。

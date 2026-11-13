@@ -424,7 +424,10 @@ func (r *Router) call(c candidate, event *trustedEvent, bind func(*pb.Event) (*p
 			return wire.Response{}, fmt.Errorf("%w: %w", errCommandArguments, err)
 		}
 	}
-	request := &pb.HandlerRequest{RouteId: c.route.GetRouteId(), Event: prepared, Command: command, Context: &pb.InvocationContext{Actor: proto.CloneOf(event.retained.GetActor()), DefaultTarget: proto.CloneOf(event.retained.GetTarget())}}
+	request := &pb.HandlerRequest{RouteId: c.route.GetRouteId(), Event: prepared, Command: command, Context: &pb.InvocationContext{
+		Actor: proto.CloneOf(event.retained.GetActor()), DefaultTarget: proto.CloneOf(event.retained.GetTarget()),
+		CommandConsumed: c.route.GetKind() == pb.RouteKind_ROUTE_KIND_EVENT && event.commandConsumed,
+	}}
 	encoded, err := proto.Marshal(request)
 	if err != nil {
 		return wire.Response{}, fmt.Errorf("encode handler request: %w", err)

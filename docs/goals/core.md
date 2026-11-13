@@ -72,7 +72,7 @@
 | goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 已完成（PR #156） |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 已完成（PR #155） |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 已完成（PR #153） |
-| goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 待派发 |
+| goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 已完成（PR #169） |
 | goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 已完成（PR #157） |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 已完成（PR #167） |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 待派发 |
@@ -5257,7 +5257,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-127 · T-07.8 动态任务与调度持久化的协议和 Core 侧
 
-状态：待派发。直接前置 T-07.5（PR #119，合并提交 `cc19e99`）、T-09.4（PR #163，合并提交 `cb8ae3d`）已合并；调度基础 T-07.2（PR #107，`fc2c247`）已合并。PR 与合并提交取自本地 `docs/goals/core.md` 的合并记录。下文新增接口为供审查者定稿的方案，契约缺口见末尾备注。
+状态：已完成（[PR #169](https://github.com/AlonaBot/AlonaBot/pull/169)，合并提交 `4dc4bcd`），证据见 TEST-MATRIX §3.2。合入：服务 `core.task.set`、`core.task.cancel`、`core.task.list`、`core.job.pause`、`core.job.resume`、`core.job.status` 与 proto `TaskTrigger`、`TaskSetRequest/Response`、`TaskCancelRequest/Response`、`TaskListRequest/Response`、`TaskInstance`、`JobPauseRequest/Response`、`JobResumeRequest/Response`、`JobStatusRequest/Response`、`TaskSpec`（`ROUTE_KIND_TASK`）；状态库 `dynamic_task` 与 `scheduled_job`；tune `TASKS_PER_PLUGIN`、`TASK_PAYLOAD_BYTES`、`TASK_CONCURRENCY`；`wire.Request.Late` 在准入前期限已过时同样调用一次；根包任务服务等待本 Session 装配完成后才处理请求。SDK 的作者 API 由 goal-128 提供。
 
 按 main 核对（2026-11-12，已用 rg 核对定义及调用者，并以离线 go doc 交叉核对 Scheduler.Options、manage.Service.Handler、state.Store.Uninstall）：
 
