@@ -8,10 +8,11 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// ButtonToken 保存按钮的路由、代次、目标与原样 JSON 值。
+// ButtonToken 保存按钮的用途、路由、代次、目标及插件 JSON 值或确认记录 ID。
 // 期限以 Unix 毫秒保存，Session 重启不会改变记录。
 type ButtonToken struct {
 	Token               string `gorm:"column:token;primaryKey"`
+	Purpose             string `gorm:"column:purpose"` // plugin 绑定插件路由，confirm 绑定 Core 确认记录
 	PluginID            string `gorm:"column:plugin_id"`
 	RouteID             string `gorm:"column:route_id"`
 	ActionID            string `gorm:"column:action_id"`
@@ -50,4 +51,12 @@ func (s *Store) PurgeButtonTokens(ctx context.Context, pluginID string) error {
 		return errEmptyPluginID
 	}
 	return s.db.WithContext(ctx).Where(&ButtonToken{PluginID: pluginID}).Delete(&ButtonToken{}).Error
+}
+
+// RevokeConfirmTokens 删除同一确认记录的两枚 token。
+func (s *Store) RevokeConfirmTokens(ctx context.Context, recordID string) error {
+	if recordID == "" {
+		return errors.New("empty confirmation record ID")
+	}
+	return s.db.WithContext(ctx).Where(&ButtonToken{Purpose: "confirm", Value: recordID}).Delete(&ButtonToken{}).Error
 }

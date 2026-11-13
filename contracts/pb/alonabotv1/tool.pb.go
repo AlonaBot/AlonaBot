@@ -293,6 +293,196 @@ func (x *ToolListResponse) GetTools() []*ToolInfo {
 	return nil
 }
 
+// ToolInvokeRequest 请求在父调用链中执行工具。
+type ToolInvokeRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// plugin_id/service_name。
+	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	ArgumentsJson string `protobuf:"bytes,2,opt,name=arguments_json,json=argumentsJson,proto3" json:"arguments_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ToolInvokeRequest) Reset() {
+	*x = ToolInvokeRequest{}
+	mi := &file_alonabot_v1_tool_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolInvokeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolInvokeRequest) ProtoMessage() {}
+
+func (x *ToolInvokeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_tool_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolInvokeRequest.ProtoReflect.Descriptor instead.
+func (*ToolInvokeRequest) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_tool_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ToolInvokeRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ToolInvokeRequest) GetArgumentsJson() string {
+	if x != nil {
+		return x.ArgumentsJson
+	}
+	return ""
+}
+
+// ToolInvokeResponse 保留工具返回的 JSON 原文。
+type ToolInvokeResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ResultJson    string                 `protobuf:"bytes,1,opt,name=result_json,json=resultJson,proto3" json:"result_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ToolInvokeResponse) Reset() {
+	*x = ToolInvokeResponse{}
+	mi := &file_alonabot_v1_tool_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolInvokeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolInvokeResponse) ProtoMessage() {}
+
+func (x *ToolInvokeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_tool_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolInvokeResponse.ProtoReflect.Descriptor instead.
+func (*ToolInvokeResponse) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_tool_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ToolInvokeResponse) GetResultJson() string {
+	if x != nil {
+		return x.ResultJson
+	}
+	return ""
+}
+
+// ToolConfirmRequest 请求确认调用插件即将执行的操作。
+type ToolConfirmRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 调用插件内稳定的操作名，例如 mcp/<server>/<tool>。
+	Operation     string `protobuf:"bytes,1,opt,name=operation,proto3" json:"operation,omitempty"`
+	Summary       string `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ToolConfirmRequest) Reset() {
+	*x = ToolConfirmRequest{}
+	mi := &file_alonabot_v1_tool_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolConfirmRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolConfirmRequest) ProtoMessage() {}
+
+func (x *ToolConfirmRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_tool_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolConfirmRequest.ProtoReflect.Descriptor instead.
+func (*ToolConfirmRequest) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_tool_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ToolConfirmRequest) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+func (x *ToolConfirmRequest) GetSummary() string {
+	if x != nil {
+		return x.Summary
+	}
+	return ""
+}
+
+// ToolConfirmResponse 表示用户允许本次操作。
+type ToolConfirmResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ToolConfirmResponse) Reset() {
+	*x = ToolConfirmResponse{}
+	mi := &file_alonabot_v1_tool_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolConfirmResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolConfirmResponse) ProtoMessage() {}
+
+func (x *ToolConfirmResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_tool_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolConfirmResponse.ProtoReflect.Descriptor instead.
+func (*ToolConfirmResponse) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_tool_proto_rawDescGZIP(), []int{7}
+}
+
 var File_alonabot_v1_tool_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_tool_proto_rawDesc = "" +
@@ -309,7 +499,17 @@ const file_alonabot_v1_tool_proto_rawDesc = "" +
 	"\x06policy\x18\x04 \x01(\x0e2\x17.alonabot.v1.ToolPolicyR\x06policy\"\x11\n" +
 	"\x0fToolListRequest\"?\n" +
 	"\x10ToolListResponse\x12+\n" +
-	"\x05tools\x18\x01 \x03(\v2\x15.alonabot.v1.ToolInfoR\x05tools*o\n" +
+	"\x05tools\x18\x01 \x03(\v2\x15.alonabot.v1.ToolInfoR\x05tools\"N\n" +
+	"\x11ToolInvokeRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12%\n" +
+	"\x0earguments_json\x18\x02 \x01(\tR\rargumentsJson\"5\n" +
+	"\x12ToolInvokeResponse\x12\x1f\n" +
+	"\vresult_json\x18\x01 \x01(\tR\n" +
+	"resultJson\"L\n" +
+	"\x12ToolConfirmRequest\x12\x1c\n" +
+	"\toperation\x18\x01 \x01(\tR\toperation\x12\x18\n" +
+	"\asummary\x18\x02 \x01(\tR\asummary\"\x15\n" +
+	"\x13ToolConfirmResponse*o\n" +
 	"\n" +
 	"ToolPolicy\x12\x1b\n" +
 	"\x17TOOL_POLICY_UNSPECIFIED\x10\x00\x12\x15\n" +
@@ -330,13 +530,17 @@ func file_alonabot_v1_tool_proto_rawDescGZIP() []byte {
 }
 
 var file_alonabot_v1_tool_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_alonabot_v1_tool_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_alonabot_v1_tool_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_alonabot_v1_tool_proto_goTypes = []any{
-	(ToolPolicy)(0),          // 0: alonabot.v1.ToolPolicy
-	(*ToolSpec)(nil),         // 1: alonabot.v1.ToolSpec
-	(*ToolInfo)(nil),         // 2: alonabot.v1.ToolInfo
-	(*ToolListRequest)(nil),  // 3: alonabot.v1.ToolListRequest
-	(*ToolListResponse)(nil), // 4: alonabot.v1.ToolListResponse
+	(ToolPolicy)(0),             // 0: alonabot.v1.ToolPolicy
+	(*ToolSpec)(nil),            // 1: alonabot.v1.ToolSpec
+	(*ToolInfo)(nil),            // 2: alonabot.v1.ToolInfo
+	(*ToolListRequest)(nil),     // 3: alonabot.v1.ToolListRequest
+	(*ToolListResponse)(nil),    // 4: alonabot.v1.ToolListResponse
+	(*ToolInvokeRequest)(nil),   // 5: alonabot.v1.ToolInvokeRequest
+	(*ToolInvokeResponse)(nil),  // 6: alonabot.v1.ToolInvokeResponse
+	(*ToolConfirmRequest)(nil),  // 7: alonabot.v1.ToolConfirmRequest
+	(*ToolConfirmResponse)(nil), // 8: alonabot.v1.ToolConfirmResponse
 }
 var file_alonabot_v1_tool_proto_depIdxs = []int32{
 	0, // 0: alonabot.v1.ToolSpec.default_policy:type_name -> alonabot.v1.ToolPolicy
@@ -360,7 +564,7 @@ func file_alonabot_v1_tool_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_tool_proto_rawDesc), len(file_alonabot_v1_tool_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   4,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
