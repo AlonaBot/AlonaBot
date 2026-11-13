@@ -289,6 +289,7 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	if err != nil {
 		return fail(err)
 	}
+	c.assembly.core = c
 	authentication := adminauth.New(store, time.Now, baseURL, dir)
 	adminMux := http.NewServeMux()
 	authentication.Routes(adminMux)
