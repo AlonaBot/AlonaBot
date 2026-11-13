@@ -731,7 +731,7 @@ var pipelineAction = sdk.Action[pipelineButtonValue]("choose")
 
 func pipelineHookPlugin(p *sdk.Plugin, mode string) {
 	if mode == "scheduled" || mode == "job-attack" {
-		p.Every("pulse", time.Second, func(c *sdk.Context) error {
+		p.Every("pulse", time.Second).Handle(func(c *sdk.Context) error {
 			return pipelineObserve("tick", "pulse", c)
 		})
 		if mode == "job-attack" {

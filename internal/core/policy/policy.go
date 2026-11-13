@@ -20,7 +20,9 @@ type Policy struct {
 	store           *state.Store
 	adminsMu        sync.RWMutex // 保护管理员列表的整体替换与读取
 	admins          []Admin
-	commandsChanged func() // 开始处理命令策略前装配一次，此后只读。
+	commandsChanged func()                           // 开始处理命令策略前装配一次，此后只读。
+	namesMu         sync.RWMutex                     // 串行化命令名写入并保护快照；通知 Router 前释放。
+	names           map[string]map[string][][]string // plugin_id → route_id → 命令名列表
 }
 
 // New 创建使用指定状态库的策略，初始管理员列表为空。

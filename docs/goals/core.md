@@ -73,9 +73,9 @@
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 已完成（PR #155） |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 已完成（PR #153） |
-| goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 待派发 |
+| goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 已完成（PR #159） |
 | goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 待派发 |
-| goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 待派发 |
+| goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 已完成（PR #156） |
 | goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 等待前置 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
@@ -5089,7 +5089,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-124 · T-04.11 注册写法统一
 
-状态：待派发。前置均已合并：T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）、T-04.8（[PR #141](https://github.com/AlonaBot/AlonaBot/pull/141)，合并提交 `ac4aded`）、T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）。2026-11-12 审查者按 main `aa11454` 的代码写出范围、接口与测试段，现有代码如下：
+状态：已完成（[PR #159](https://github.com/AlonaBot/AlonaBot/pull/159)，合并提交 `7872102`），证据见 TEST-MATRIX §3.2。合入：`(*Plugin)`/`(*SubPlugin)` 的 `Route(method, path) *RouteBuilder`（`Public(mode)`、`Handle(http.Handler)`、`HandleFunc`）与 `Every(jobID, d)`、`Cron(jobID, expr)` 返回的 `*ScheduleBuilder`（`Timezone`、`Handle`），删除 `HTTPOption`、`sdk.Public` 与旧的 Handle/Every/Cron 写法；`Generated.ParamNames`（键为 runtime 函数名，函数字面量为 `导入路径:文件:行`；同一行字面量冲突的键省略并 WARN，`_` 与无名参数记空串回退 argN），Collect 查找时规范化 main 与导入路径前缀、泛型实参与 `-fm`；`AdapterHTTP` 为 `HTTP(route func(method, path string) *RouteBuilder)`；Core 的公开路由允许 state、signature、nonce 与 Adapter 的 platform token。Subscribe 的缺省路由 ID 与 `.ID` 归 goal-126。派发时：前置均已合并：T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）、T-04.8（[PR #141](https://github.com/AlonaBot/AlonaBot/pull/141)，合并提交 `ac4aded`）、T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）。2026-11-12 审查者按 main `aa11454` 的代码写出范围、接口与测试段，现有代码如下：
 
 - **插件对象与子插件**（`sdk/plugin.go`、`sdk/subplugin.go`）上，HTTP 与定时任务仍是位置参数形式：
   - `Handle(method, path string, h http.Handler, opts ...HTTPOption)`，其中 `HTTPOption`、包级 `Public(mode HTTPAuth) HTTPOption` 与 `HTTPRoute` 在 `sdk/registry.go`，校验在未导出的 `httpRegistry.Handle`；
@@ -5236,7 +5236,7 @@ sdk（新增或替换）
 
 ### goal-129 · T-04.14 命令名覆盖的 Core 侧
 
-状态：待派发。前置均已合并：T-03.17（[PR #150](https://github.com/AlonaBot/AlonaBot/pull/150)，合并提交 `8eb7846`）、T-04.10（[PR #133](https://github.com/AlonaBot/AlonaBot/pull/133)，合并提交 `3d618cb`）、T-04.4（PR #88）。2026-11-12 审查者按 main `61bff90` 的代码写出范围、接口与测试段，要点如下：
+状态：已完成（[PR #156](https://github.com/AlonaBot/AlonaBot/pull/156)，合并提交 `0726d66`），证据见 TEST-MATRIX §3.2。合入：`command_policy.names` 列；state 的 `PutCommandNames`、`AllCommandNames`，Put 与 Delete 各自只写自己的列，删除时名称清理与空行删除在一个事务内；policy 的 `LoadCommandNames`、`SetCommandNames(ctx, pluginID, routeID, names, routes)`、`DeleteCommandNames`、`CommandNames(pluginID)`；`router.Options.CommandNames`、`CommandEntry.Names`（主名在前）与 `CommandIndex.InvalidNames()`。goal-93 的管理 API 经 policy 的上述方法读写名称；goal-39 的 --purge 删除整行。派发时：前置均已合并：T-03.17（[PR #150](https://github.com/AlonaBot/AlonaBot/pull/150)，合并提交 `8eb7846`）、T-04.10（[PR #133](https://github.com/AlonaBot/AlonaBot/pull/133)，合并提交 `3d618cb`）、T-04.4（PR #88）。2026-11-12 审查者按 main `61bff90` 的代码写出范围、接口与测试段，要点如下：
 
 - **状态库**：`command_policy` 表（`state.CommandPolicy{PluginID, Scope, Permissions, Enabled}`）现在由 `policy.SetOverride` 整行写入或删除（`PutCommandPolicy` 使用 `UpdateAll`，两项都为 nil 时 `DeleteCommandPolicy`）。按 PLAN 步骤 14，命令名写进同一张表的路由作用域行。为避免权限与启用的修改冲掉命令名，三个写入方法改为只更新各自的列，删除时只删三列都为 NULL 的行。
 - **Router**：`rebuildCommands` 在持有 `r.mu` 时从已激活插件的 `Routes()` 建立 `CommandIndex`。`CommandEntry{PluginID, RouteID, Priority, Path, Alias}` 记录命中的路径与是否为别名。`commandUsage` 从 `route.GetCommand()` 的 path 与 aliases 拼出 usage。`commandMenu` 以 `command.GetPath()` 作为菜单名，并用 `index.Lookup(path)` 确认胜出者。`CommandsChanged()` 由 `Policy.SetCommandsChanged` 注入，目前只调度菜单同步。

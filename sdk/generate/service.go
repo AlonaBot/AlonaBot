@@ -125,6 +125,7 @@ func (s *scan) schemaImporter(ctx context.Context, list *exec.Cmd) (*schemaImpor
 	}
 	i := &schemaImporter{
 		info: &types.Info{
+			Defs:      make(map[*ast.Ident]types.Object),
 			Instances: make(map[*ast.Ident]types.Instance), Uses: make(map[*ast.Ident]types.Object),
 			Types: make(map[ast.Expr]types.TypeAndValue), Selections: make(map[*ast.SelectorExpr]*types.Selection),
 		}, scan: s, sizes: types.SizesFor("gc", strings.TrimSpace(string(output))), checked: make(map[string]*types.Package),
@@ -164,6 +165,7 @@ func (s *scan) schemas(ctx context.Context, list *exec.Cmd) error {
 	} else {
 		s.checkConstructor(importer.checked[s.entry.ImportPath])
 	}
+	s.handlerParamNames(importer.info, paths)
 	s.migrationCalls(importer.info, paths)
 	s.translationCalls(importer.info, paths)
 	return s.serviceSchemasFrom(importer, paths)

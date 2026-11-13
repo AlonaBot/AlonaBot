@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/sdk/config"
@@ -127,17 +126,17 @@ func (r *SubPlugin) On(routeID string, eventType EventType) *EventBuilder {
 	return r.scope.on(routeID, eventType)
 }
 
-// Handle 登记 HTTP 路由。
-func (r *SubPlugin) Handle(method, path string, h http.Handler, opts ...HTTPOption) {
-	r.scope.plugin.http.Handle(method, path, h, opts...)
+// Route 开始构建 method+path 的 HTTP 路由。
+func (r *SubPlugin) Route(method, path string) *RouteBuilder {
+	return r.scope.plugin.http.Route(method, path)
 }
 
-// Every 登记固定间隔任务。
-func (r *SubPlugin) Every(jobID string, d time.Duration, fn func(*Context) error) {
-	r.scope.every(jobID, d, fn)
+// Every 开始构建固定间隔任务。
+func (r *SubPlugin) Every(jobID string, d time.Duration) *ScheduleBuilder {
+	return r.scope.every(jobID, d)
 }
 
-// Cron 登记 cron 任务。
-func (r *SubPlugin) Cron(jobID, expr, timezone string, fn func(*Context) error) {
-	r.scope.cron(jobID, expr, timezone, fn)
+// Cron 开始构建五字段 cron 任务。
+func (r *SubPlugin) Cron(jobID, expr string) *ScheduleBuilder {
+	return r.scope.cron(jobID, expr)
 }

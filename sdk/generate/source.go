@@ -16,7 +16,7 @@ func (s *scan) source() ([]byte, error) {
 	} else {
 		out.WriteString("var alonabotGenerated = alonabotgen0.Generated{")
 	}
-	if s.projectManifest != nil || s.adapterProject || len(s.result.ConfigSchema) != 0 || len(s.serviceSchemas) != 0 || len(s.i18nFiles) != 0 {
+	if s.projectManifest != nil || s.adapterProject || len(s.result.ConfigSchema) != 0 || len(s.serviceSchemas) != 0 || len(s.i18nFiles) != 0 || len(s.paramNames) != 0 {
 		out.WriteByte('\n')
 	}
 
@@ -45,6 +45,17 @@ func (s *scan) source() ([]byte, error) {
 		slices.Sort(ids)
 		for _, id := range ids {
 			fmt.Fprintf(&out, "%q: []byte(%q),\n", id, s.serviceSchemas[id])
+		}
+		out.WriteString("},\n")
+	}
+	if len(s.paramNames) != 0 {
+		out.WriteString("ParamNames: map[string][]string{\n")
+		for _, key := range slices.Sorted(maps.Keys(s.paramNames)) {
+			fmt.Fprintf(&out, "%q: {", key)
+			for _, name := range s.paramNames[key] {
+				fmt.Fprintf(&out, "%q,", name)
+			}
+			out.WriteString("},\n")
 		}
 		out.WriteString("},\n")
 	}
