@@ -307,3 +307,4 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-11-12：**D-139 审查者补齐，待维护者确认**：T-09.4 的发布者公钥文件、精确 pin、实例启停的范围与 Adapter 实例的组件归属。
 - 2026-11-12：按 D-135 修订 PLAN agent T-12 步骤 3：Agent 的流式显示交给 `c.Stream`，删去 Agent 自设的单条长度上限与段落切分。
 - 2026-11-12：**D-140 审查者补齐，待维护者确认**：开发 WebUI 不做 Admin API 版本检查。PLAN T-07 步骤 9 的可调上限登记位置由 contracts/limits 改为 internal/tune（与 CONTRACTS §16 一致）。
+- 2026-11-13：审查者调整 T-09.5 与 T-09.6 的分界：生产的管理动作接线（manage.Options.Candidates）、首次启用切换与没有 Active 的 Update 移到 T-09.6，与唯一提交点一并交付，T-09.5 只交付 Journal、两阶段 supervisor 入口与 Orchestrator 的 Prepare/Abort，避免出现「停旧版、准备、中止、返回 UNSUPPORTED」的过渡行为。T-09.5 同时补齐 WIRE-FORMAT §3.1 要求的 REGISTER 校验：Bootstrap 带可信的 config_schema_hash 时 REGISTER 必须相同，candidate_config_version 必须等于 target_config_version。
