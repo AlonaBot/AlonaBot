@@ -8,7 +8,7 @@
 | --- | --- | --- | --- | --- |
 | goal-78 | T-15.1 | 官方 OneBot 11 Adapter 的连接与接收 | T-03.3、T-03.4、T-04.6 | 已完成（PR #109） |
 | goal-79 | T-15.2 | 官方 OneBot 11 Adapter 的发送、媒体与 extension | T-03.6、T-03.8、T-15.1 | 待派发 |
-| goal-114 | T-15.4 | 官方 OneBot 11 Adapter 的反向 WebSocket | T-03.19、T-15.1 | 等待前置（T-15.2） |
+| goal-114 | T-15.4 | 官方 OneBot 11 Adapter 的反向 WebSocket | T-03.19、T-15.1、T-15.2 | 等待前置（T-15.2） |
 | goal-115 | T-15.5 | 官方 OneBot 11 Adapter 的新增片段与媒体 URL | T-03.13、T-03.14、T-15.2 | 等待前置 |
 | goal-116 | T-15.6 | 官方 OneBot 11 Adapter 的扩展事件、平台动作与撤回 | T-03.15、T-03.16、T-15.2 | 等待前置 |
 | goal-133 | T-15.7 | 官方 OneBot 11 Adapter 填写 chat_title | T-03.25、T-15.1 | 等待前置 |

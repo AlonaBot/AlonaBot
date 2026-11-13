@@ -10,7 +10,7 @@
 | goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 已完成 |
 | goal-89 | T-03.11 | 官方 Telegram Adapter 的平台权限 | T-04.6 | 已完成（PR #106） |
 | goal-111 | T-03.20 | 官方 Telegram Adapter 的媒体与新增片段 | T-03.13、T-03.14 | 待派发 |
-| goal-112 | T-03.21 | 官方 Telegram Adapter 的平台动作与撤回 | T-03.11、T-03.15、T-03.16 | 等待前置（T-03.20） |
+| goal-112 | T-03.21 | 官方 Telegram Adapter 的平台动作与撤回 | T-03.11、T-03.15、T-03.16、T-03.20 | 等待前置（T-03.20） |
 | goal-113 | T-03.22 | 官方 Telegram Adapter 的命令菜单 | T-03.17 | 待派发 |
 | goal-117 | T-03.23 | 官方 Telegram Adapter 的代理模式与话题判定 | T-03.4 | 已完成（PR #125） |
 | goal-132 | T-03.26 | 官方 Telegram Adapter 填写 chat_title | T-03.4、T-03.25 | 等待前置 |
