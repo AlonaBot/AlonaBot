@@ -2,12 +2,14 @@ package manage
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"strings"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
+	"github.com/AlonaBot/AlonaBot/internal/core/state"
 )
 
 // Candidates 接收通过管理前置校验的候选操作，由候选编排器实现。
@@ -98,10 +100,22 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (er
 	if err := s.checkCycles(ctx, m, nil); err != nil {
 		return err
 	}
-	if key != in.PublisherKeyID {
-		if err := s.opt.Store.SetPublisherKeyID(ctx, id, key); err != nil {
+	if err := s.dependencies(ctx, m); err != nil {
+		return err
+	}
+	active, err := s.opt.Store.Active(ctx, id)
+	if err != nil {
+		return err
+	}
+	if in.Role == state.RoleWebUI || active == "" {
+		digest, err := hex.DecodeString(candidate.Asset.SHA256)
+		if err != nil {
 			return err
 		}
+		if _, err := candidate.MoveTo(s.opt.Packages); err != nil {
+			return err
+		}
+		return s.opt.Store.ReplaceProgram(ctx, id, m.Version, m.Entrypoint, key, digest)
 	}
 	return s.opt.Candidates.Update(ctx, id, candidate)
 }

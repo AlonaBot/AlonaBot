@@ -342,6 +342,7 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 		Adapters: c.assembly.adapters, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(o.components),
 		Packages: filepath.Join(dir, "packages"), Limits: packages.NewLimits(values), Development: development, DevelopmentWebUI: o.webUI,
 		Descriptor: c.assembly.componentDescriptor,
+		Candidates: managedCandidates{core: c},
 		Start: func(ctx context.Context, id string) error {
 			return c.operation(ctx, func(ctx context.Context) error { return c.startManaged(ctx, id) })
 		},
@@ -423,14 +424,42 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 			if running != nil {
 				c.components = append(c.components, running)
 			}
-			if err != nil {
+			if err != nil && (running == nil || running.instance.State() != host.StateDegraded) {
 				return fail(fmt.Errorf("start %s: %w", install.PluginID, err))
 			}
 		}
 	}
+	// 开发 Adapter 先完成 REGISTER，依赖检查才能读取真实的 extension 与动作声明。
 	for i := range o.components {
+		if o.components[i].role != state.RoleAdapter {
+			continue
+		}
 		if err := ctx.Err(); err != nil {
 			return fail(err)
+		}
+		if err := c.startDevelopment(ctx, dir, &o.components[i]); err != nil {
+			return fail(fmt.Errorf("start %s: %w", o.components[i].manifest.ID, err))
+		}
+	}
+	for i := range o.components {
+		if o.components[i].role == state.RoleAdapter {
+			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return fail(err)
+		}
+		snapshot, err := manage.DependencySnapshot(ctx, store, c.assembly.componentDescriptor)
+		if err != nil {
+			return fail(err)
+		}
+		// 同次运行的开发插件与 Agent 都参与版本检查，保留目录参数的先后自由。
+		for _, entry := range o.components {
+			if entry.role != state.RoleAdapter {
+				snapshot.Plugins[entry.manifest.ID] = entry.manifest.Version
+			}
+		}
+		if err := manage.CheckDependencies(o.components[i].manifest, snapshot); err != nil {
+			return fail(fmt.Errorf("start %s: %w", o.components[i].manifest.ID, err))
 		}
 		if err := c.startDevelopment(ctx, dir, &o.components[i]); err != nil {
 			return fail(fmt.Errorf("start %s: %w", o.components[i].manifest.ID, err))
@@ -511,6 +540,14 @@ running:
 				continue
 			} // 管理停止的旧 Session 已移出，不再影响新 Session。
 			old := result.running
+			if old.instance.State() == host.StateDegraded {
+				// 已提交失败保留供管理员恢复；观察者已清理进程树，不触发自动重启。
+				c.assembly.media.ReleaseSession(old.caller.SessionKey)
+				if result.err != nil {
+					slog.Error("degraded process cleanup failed", "plugin_id", old.id, "error", result.err)
+				}
+				continue
+			}
 			c.assembly.detach(old)
 			c.assembly.media.ReleaseSession(old.caller.SessionKey)
 			if old.process == nil {
@@ -592,7 +629,7 @@ running:
 	close(c.done)
 }
 
-// Restart 停止并重新启动一个本次登记的开发组件，沿用 dev:<id> 代次。
+// Restart 检查新资源的依赖后重新启动一个开发组件，沿用 dev:<id> 代次；依赖失败时保持旧进程运行。
 func (c *Core) Restart(ctx context.Context, id string) error {
 	return c.operation(ctx, func(ctx context.Context) error {
 		for i := range c.development {
@@ -605,6 +642,14 @@ func (c *Core) Restart(ctx context.Context, id string) error {
 				if err := next.loadExecutableResources(); err != nil {
 					return err
 				}
+			}
+			// 停止前用已启用组件的当前版本和运行中 Adapter 声明检查新资源。
+			snapshot, err := manage.DependencySnapshot(ctx, c.store, c.assembly.componentDescriptor)
+			if err != nil {
+				return err
+			}
+			if err := manage.CheckDependencies(next.manifest, snapshot); err != nil {
+				return err
 			}
 			if err := c.stopManaged(id, pb.StopReason_STOP_REASON_RESTART); err != nil {
 				return err
@@ -797,11 +842,10 @@ func (c *Core) operation(ctx context.Context, apply func(context.Context) error)
 	case <-c.stopping:
 		return errors.New("Core is stopping")
 	}
+	// 已接纳的操作在取消后仍须交还资源所有权，调用者才可清理暂存包。
 	select {
 	case err := <-op.result:
 		return err
-	case <-ctx.Done():
-		return ctx.Err()
 	case <-c.stopping:
 		return errors.New("Core is stopping")
 	}
@@ -832,7 +876,7 @@ func (c *Core) startManaged(ctx context.Context, id string) error {
 	if running != nil {
 		c.components = append(c.components, running)
 	}
-	if err != nil && running != nil {
+	if err != nil && running != nil && running.instance.State() != host.StateDegraded {
 		return errors.Join(err, c.stopManaged(id, pb.StopReason_STOP_REASON_DISABLE))
 	}
 	return err

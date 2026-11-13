@@ -1,8 +1,10 @@
-// Package journal 编排未提交候选的准备、中止与旧 Session 恢复。
+// Package journal 编排候选的准备、原子提交、激活与失败恢复。
 //
 // Prepare 先完成静态检查，再持久化 started，停止旧写入者后依次登记数据库、
 // 代次与 PREPARED Session。Result 持有候选，调用方须继续提交或调用 Abort。
 // Abort 确认两棵进程树退出后才清理引用并恢复旧版；失败保留 Journal 供恢复。
+// Commit 在事务外复核持久资源，事务内切换 Active 与 COMMITTED，再激活同一 Session；
+// 返回的 Running 由调用方装配或保留 Degraded 诊断，提交后失败保持新代次权威。
 // 同包操作由编排器串行化，config 与 supervisor 仍各自取得 Store 的插件锁，
 // 避免持同一锁等待自身。规则见 CONTRACTS §6.3、§12.2、§12.3。
 package journal
@@ -254,6 +256,16 @@ func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, 
 		r.databaseOwned = true
 		r.record.DatabasePath = r.Prepared.DatabasePath
 		database.SqlitePath = r.Prepared.DatabasePath
+		if kind == KindFirstInstall {
+			// SDK 可以延迟打开首库；预先发布空 SQLite 文件，使提交前引用已持久化。
+			file, err := os.OpenFile(database.SqlitePath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
+			if err != nil {
+				return r, err
+			}
+			if err := file.Close(); err != nil {
+				return r, err
+			}
+		}
 		if err := o.save(context.WithoutCancel(ctx), r, phaseStoppedOld); err != nil {
 			return r, err
 		}
@@ -267,6 +279,10 @@ func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, 
 		return r, err
 	}
 	// 5. supervisor 只运行到 PREPARED；候选不进入普通异常恢复或业务装配。
+	if kind == KindUpdate && (!r.record.WasEnabled || !r.record.WasRunning) {
+		// 停用意图跨提交保留，候选激活仅完成生命周期，不发布 HTTP 或调度。
+		spec.HTTP, spec.Scheduler, spec.CommandsChanged = nil, nil, nil
+	}
 	r.Session, err = supervisor.Prepare(ctx, o.opt.Store, spec)
 	if err != nil {
 		return r, err

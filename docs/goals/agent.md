@@ -15,7 +15,7 @@
 | goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1、T-12.9、T-12.10、T-12.11、T-09.4 | 已完成（PR #170） |
 | goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-08.14、T-12.2 | 已完成（PR #175） |
 | goal-136 | T-12.14 | 对话中的图片输入 | T-04.8、T-12.2、T-12.13 | 待派发 |
-| goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 待派发 |
+| goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 已完成（PR #178） |
 | goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 待派发 |
 | goal-62 | T-12.5 | 技能 | T-12.3 | 等待前置 |
 | goal-63 | T-12.6 | 定时 Agent 任务 | T-07.9、T-08.5、T-12.3 | 等待前置 |
@@ -532,7 +532,7 @@ OnConfigLoad 之后的校验在 OnStart 中完成：providers 的 name 唯一、
 
 ### goal-60 · T-12.3 工具循环与 MCP
 
-状态：待派发。前置 T-11.2（PR #165，合并提交 `330164f`）、T-12.2（PR #170，合并提交 `eca6310`）均已合并；同时复用 T-11.1（PR #101，`de48f26`）的工具目录、T-11.3（PR #35，`d0983f0`）的会话接口。2026-11-13 审查者按 main `dbbb80b` 改写（起草稿经审查者裁决）：单轮工具步数按实际执行的工具调用次数计，每轮最多执行 20 次，第 21 次不执行（DECISIONS 2026-11-13 变更记录）；MCP 的 go-sdk 已在 docs/development.md 批准，只用于 `agent/`，版本在本切片验证后锁定。
+状态：已完成（[PR #178](https://github.com/AlonaBot/AlonaBot/pull/178)，合并提交 `a95b85b`），证据见 TEST-MATRIX §3.2。合入：官方 Agent 的工具循环（`agent/tools.go`、`agent/loop.go`）与 MCP 客户端（`agent/mcp.go`，stdio 与 streamable HTTP，配置 `mcp_servers`）；Core 工具经 `sdk.InvokeTool`，MCP 工具经 `sdk.ConfirmOperation` 确认后执行，单轮最多 20 次；`github.com/modelcontextprotocol/go-sdk` v1.3.1 锁定为 agent 的直接依赖。以下为派发时的语句。
 
 已有接口（审查者按 main 核对）：
 

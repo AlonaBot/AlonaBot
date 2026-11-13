@@ -77,7 +77,7 @@
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 已完成（PR #167） |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 已完成（PR #171） |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2、T-09.4 | 已完成（PR #168） |
-| goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 待派发 |
+| goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 已完成（PR #180） |
 | goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 已完成（PR #166） |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 已完成（PR #162） |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 已完成（PR #161） |
@@ -88,11 +88,11 @@
 | goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 已完成（PR #164） |
 | goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 已完成（PR #165） |
 | goal-70 | T-13.4 | 开发运行示例与验收 | T-03.10、T-13.2、T-13.3 | 等待前置 |
-| goal-82 | T-16.2 | 按钮、多轮等待、schedule 与示例测试 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | 等待前置 |
+| goal-82 | T-16.2 | 按钮、多轮等待、schedule 与示例测试 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | 待派发 |
 | goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | 等待前置 |
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 已完成（PR #173） |
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 已完成（PR #172） |
-| goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 等待前置 |
+| goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 待派发 |
 | goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 待派发 |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 等待前置 |
 | goal-93 | T-09.14 | 配置、权限、工具策略与会话的管理 API | T-03.25、T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-08.14、T-09.6、T-09.12、T-11.1、T-11.3 | 等待前置 |
@@ -5697,7 +5697,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-9 · T-03.10 Telegram 接入开发入口与故障矩阵
 
-状态：待派发。既定前置 T-03.6（PR #55，合并提交 `b023130`）、T-03.8（PR #136，`3621fc1`）、T-03.9（PR #118，`1cbfb2e`）、T-07.6（PR #100，`cb83eeb`）、T-13.3（PR #171，`3043c4e`）均已合并。相关基线包括 T-03.7（PR #108，`d89e9b7`）、T-08.12（PR #114，`a796766`）、T-13.2（PR #160，`65ebc5f`）及 T-09.4（PR #163，`cb8ae3d`）。合并号取自本地 `docs/goals/core.md` 的完成记录。本稿于 2026-11-13 以维护者指定的 main `db48bec` 只读副本为依据，用 `rg` 定位定义和调用者；`pluginkit.Build`、根包 `Executable`、`sdk.AdapterHTTP` 与 `sdk.ServiceBuilder` 另用本机 Go 1.27.3 的离线 `go doc` 核对。派发前需审查者裁决末尾所列 `platform_file` 最小修复的归属。2026-11-13 审查者裁决（DECISIONS 2026-11-13 变更记录）：Telegram 的 platform_file 发送消费由本切片以最小修复补齐（只补 `adapters/telegram/plan.go` 的 renderMedia 分支），T-03.20（goal-111）的范围相应扣除；按 MESSAGE-MODEL §4、§6.2 与 V-35 改写相册带按钮与零 message_id 两处旧验收；生产停止顺序保持 `alonabot.go` 的共用停止起点，测试装配中自行安排观察者与被测实例的先后；测试专用的新依赖边由本切片登记进 ARCHITECTURE。维护者不提供 Telegram 凭证，真实平台记为未运行。
+状态：已完成（[PR #180](https://github.com/AlonaBot/AlonaBot/pull/180)，合并提交 `c128000`），证据见 TEST-MATRIX §3.2。合入：`manage.DependencySnapshot` 改为接收运行时 Adapter 描述（`descriptor func(string) *pb.AdapterDescriptor`）、新增 `manage.CheckDependencies`；开发入口先启动开发 Adapter，再按依赖快照检查开发插件，重启时在停止旧进程前检查依赖；Telegram renderMedia 消费 `platform_file`；示例插件 `examples/plugins/media`；`cmd/alonabot` 的 Telegram 开发入口与故障矩阵集成测试。真实 Telegram 平台未运行（维护者不提供凭证）。以下为派发时的语句。
 
 按 main 核对：
 
@@ -6460,58 +6460,93 @@ broker.Options、bus.Options 与 router.Options 增加 Metrics *metrics.Counters
 
 ### goal-82 · T-16.2 按钮、多轮等待、schedule 与示例测试
 
-状态：等待前置（T-05.4、T-07.9、T-16.1）。T-03.8（[PR #136](https://github.com/AlonaBot/AlonaBot/pull/136)，合并提交 `3621fc1`）已合并：`internal/core/buttons` 的 `New(store, now, current)` 与 `Service.Issue`、`Resolve`、`Purge`；`message.New(adapters, p, lease, issue, requestTimeout)`；`router.Options.Buttons`；可选接口 `adapter.ExtensionChecker`；`manifest.CheckDependencies(m, Installed)`；SDK 的 `sdk.Action[T]`、`sdk.OnButton(r, a).Handle(func(*Context, T) error)`、`message.Buttons`、`message.Extension`；`Segment` oneof 已用到 `extension = 9`。2026-11-10 按 D-124：前置加入 T-07.9，由第 13 波移到第 14 波；套件另需支持立即触发一个动态任务实例并测试示例中的提醒命令，下面语句的接口与测试段尚未写入这一项，T-07.9 合并后由审查者补写。T-07.2（PR #107，合并提交 `fc2c247`）已合并，合入的符号：`internal/core/scheduler` 的 `New(Options{JobTimeout, Now})`、`Scheduler.Attach(router.Plugin, activatedAt)`/`Detach`/`Released`/`Close`/`Stats(pluginID, jobID) JobStats`；`wire.Request.Late`；SDK 的 `ScheduleRegistry.Every`/`Cron` 已随 REGISTER 声明并分发到 Handler。语句中 goal-8、goal-24、goal-52、goal-81 提供的符号（Button.core_token 与 button.clicked 的派发、调度器的运行入口、core.wait 的等待状态、plugintest 与 inproc.Harness）只写名字；合并后由审查者核对签名，再改为待派发。
+状态：待派发，在 PR #180（goal-9）合并后从包含它的 main 派发：goal-9 补齐 examples/plugins/echo 的 plugin.yaml 并新增 examples/plugins/media。2026-11-13 审查者裁决（DECISIONS 2026-11-13 变更记录）：采纳 `Trigger(p, jobID)` 与新增的 `TriggerTask(p, taskName, key)`，手动触发按正常派发处理（一次性实例被消费、周期实例保留起点、scheduled_at 取触发时刻），静态任务已暂停或同一实例已在运行、排队时返回 FAILED_PRECONDITION；后台发送按 CONTRACTS §17「这期间」的语义归属（注入到完成通知之间的发送随 Result 返回，区间外的留给 Background）；#174 的合并提交为 `9c394b3`。直接前置 T-03.8（goal-8，PR #136，合并提交 `3621fc1`）、T-05.4（goal-52，PR #153，`f22b538`）、T-07.2（goal-24，PR #107，`fc2c247`）、T-07.9（goal-128，PR #176，`9785c22`）、T-16.1（goal-81，PR #168，`37b0ada`）均已合并。动态调度以 T-07.8（PR #169，`4dc4bcd`）为基线；开发配置与装配沿用 PR #160（`65ebc5f`）、#163（`cb8ae3d`）、#171（`3043c4e`）。2026-11-13 起草者按维护者指定的 main `9efee73` 工作副本，用 `rg`、源码读取及离线 `GO111MODULE=off go doc` 核对下列事实；合并提交号取自本地已完成 goal 的记录。
+
+按 main 核对：
+
+- `plugintest/plugintest.go`：`Start(t testing.TB, opts ...Option) *Harness`；`(*Harness).Message(chat Chat, from User, content message.Content) Result`、`Text(chat Chat, from User, text string) Result`、`Event(chat Chat, from User, event sdk.EventType, payload any) Result`。`Result{Sends []Sent; Outcomes []Outcome; Waiting bool}`；`Outcome{PluginID, RouteID string; Err *errcode.Error}`；`Sent{Op string; To message.Session; Chain message.Chain; Edited message.MessageRef; Result *message.SendResult}`，`(Sent).Text() string`。当前没有 Click、Trigger、TriggerTask 或 Background。
+- `plugintest/options.go`：`Plugin(p *sdk.Plugin) Option`、`Config(p *sdk.Plugin, configJSON string) Option`、`Admin(userID string) Option`、`AllowedInstances(p *sdk.Plugin, instanceIDs ...string) Option`、`Capabilities(names ...string) Option`、`Adapter(id string, declarations ...any) Option`。`User.Permissions` 是 `[]sdk.Permission`；`sdk/permission.go` 的 `PermissionName(name string) Permission`、`(Permission).Or(others ...Permission) Permission` 与 `Names() []string` 表达权限名集合。缺省发信许可为全部实例；`AllowedInstances(p)` 收紧为空集合。
+- `sdk/plugin.go`、`sdk/generated.go`：`NewPlugin() *Plugin`、`UseGenerated(p *Plugin, g Generated)`、`(*Plugin).Generated() Generated`；工程身份从 `Generated.Manifest` 解析。`(*Plugin).Every(jobID string, d time.Duration) *ScheduleBuilder`、`Cron(jobID, expr string) *ScheduleBuilder`；`sdk/registry.go` 的 `(*ScheduleBuilder).Handle(fn func(*Context) error)`。`sdk/continuation.go` 的 `(*Context).Continue(fn func(*Context) error) error`、`Wait(timeout time.Duration) (*Context, error)` 已可用。
+- `internal/inproc/harness.go`：`Outcome{PluginID, RouteID string; ErrorCode int32; SafeMessage string}`、`Dispatch{InstanceID, SourceEventID string; Waiting bool; Outcomes []Outcome}`、`Harness{AllowedInstances map[string][]string; Dispatched func(Dispatch)}`；`RegisterHarness(dataDir string, h *Harness) (unregister func())`、`HarnessFor(dataDir string) *Harness`。`internal/core/router/observation.go` 已通过 `Invocation.OnContinuation`、`OnWait`、`OnWaitMatch` 覆盖延续调用的结束、首次等待和下一条注入的归属；`assembly.go` 已把 `router.Options.Dispatched func(router.Dispatch)` 转成 `inproc.Dispatch`。本切片只补单条 Outcome 的 Waiting，不重做这套通知。
+- `internal/core/scheduler/scheduler.go`：`New(opt Options) *Scheduler`，`Options{Store *state.Store; TasksPerPlugin int; TaskPayloadBytes int64; TaskConcurrency int; JobTimeout time.Duration; Now func() time.Time}`；`(*Scheduler).Attach(ctx context.Context, p router.Plugin, activatedAt time.Time) error`、`Detach(pluginID string)`、`Released(pluginID string)`、`Close()`、`Stats(pluginID, jobID string) JobStats`；`tasks.go` 有 `TasksStats(pluginID string) TaskStats`。正常触发共用 `call(ctx, pluginID, reg, job, run, scheduledAt, now, task)`、静态运行槽及动态 `tickTask`/`pump`；当前没有立即运行入口。`assembly.go` 已把持久状态库、tune 限额与六个任务服务接入同一个 Scheduler。
+- `sdk/task.go`：`Task[T any](name string) TaskType[T]`、`OnTask[T any](r Registrar, t TaskType[T]) *TaskBuilder[T]`、`(*TaskBuilder[T]).Handle(fn func(*Context, T) error)`；`(TaskType[T]).At(ctx context.Context, when time.Time, args T, opts ...TaskOption) (string, error)`，`Every(ctx context.Context, d time.Duration, args T, opts ...TaskOption) (string, error)`，`Cron(ctx context.Context, expr string, args T, opts ...TaskOption) (string, error)`，`Cancel(ctx context.Context, key string) error`，`List(ctx context.Context) ([]TaskInstance[T], error)`；`Key(key string) TaskOption`。静态暂停函数的真实名称在 `sdk/job.go`，是 `PauseJob`、`ResumeJob`、`JobStatus`。
+- `sdk/buttons.go`：`Action[T any](name string) ButtonAction[T]`、`(ButtonAction[T]).Button(label string, value T) message.Button`、`OnButton[T any](r Registrar, a ButtonAction[T]) *ButtonBuilder[T]`；`sdk/message/buttons.go` 的 `Buttons(rows ...[]Button) Segment`；按钮的 `CoreToken string` 在 `sdk/internal/messagecodec/codec.go`。`internal/core/buttons/buttons.go` 的 `Resolve(ctx context.Context, ev *pb.Event) (pluginID, routeID string, err error)` 从点击载荷 `value` 读取 token，再恢复可信 action 与业务 value。`sdk/adapter/adapter.go` 的 `Core.Deliver(ctx context.Context, ev *message.Event, cursor []byte) (accepted bool, err error)` 是注入入口。
+- `sdk/adapter/declaration.go`、`action.go`：`PermissionDeclaration`；`Event[T any](name string, version uint32) EventDeclaration`、`Extension[T any](name string, version uint32) ExtensionDeclaration`、`Action[P, R any](name string, version uint32, scope ActionScope) ActionDeclaration`。若本地多进程验证需要 Adapter HTTP，沿用 `sdk.AdapterHTTP.HTTP(route func(method, path string) *sdk.RouteBuilder)`（`sdk/adapter_run.go`）及 `RouteBuilder.Public(mode HTTPAuth) *RouteBuilder`、`HandleFunc(func(http.ResponseWriter, *http.Request))`，路径登记函数和 Builder 各有其职责。
+- `examples/plugins/{echo,lifecycle,showcase,configdb}/main.go` 均有 `New() *sdk.Plugin`。echo 与 showcase 当前缺 `plugin.yaml`，对应 `alonabot_gen.go` 没有 Manifest；`plugintest.Start` 会在启动前拒绝。showcase 已有 `/demo remind <key> <seconds> <text>`、`/demo cancel <key>`，任务名 `remind`，route_id `task.remind`；内部 key 按 `fmt.Sprintf("%d:%s/%d:%s/%s", len(c.User()), c.User(), len(c.Session()), c.Session(), key)` 组成。仓库没有独立 `examples/plugins/media/`。
+- 旧在途快照中的 #165（`330164f`）、#167（`3a9b4af`）、#168（`37b0ada`）、#169（`4dc4bcd`）、goal-59（#170，`eca6310`）、goal-69（#171，`3043c4e`）已在本地完成记录中；#169 的 `internal/core/state/schema.sql` 与 manage 清理清单、#171 的根包与 `cmd/alonabot/` 已属于基线。相关 #166（`6f72fc8`）、#173（`2bb8181`）同样已合并；启动取消修复 #174 按维护者信息已合并，合并号待审查者补齐。
+- 当前在途按维护者清单：#177（goal-66）和 goal-41 与本切片共享 `assembly.go`；#177 另改 `alonabot.go`、logging、manage 和 CLI，goal-41 另改 state、journal、supervisor 及 manage。#178（goal-60）主要改 `agent/`，本地多进程验证复用根包时关注 `pipeline_test.go` 的 TestMain；goal-9 共享 `docs/development.md` 与 `spec/TEST-MATRIX.md`，并消费根包测试装配。goal-102 与本切片共享 `plugintest/{plugintest,options}.go`、probe、文档和证据行；建议本切片先合并，goal-102 按合入后的文件接续。上述在途状态未查远端 diff。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-82（切片 T-16.2：按钮、多轮等待、schedule 与示例测试）。goal 目录 goal-82，分支 goal-82，worktree .worktrees/goal-82，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-82（切片 T-16.2：按钮、多轮等待、schedule 与示例测试）。goal 目录 goal-82，分支 goal-82，worktree .worktrees/goal-82，从最新 origin/main 创建（包含 PR #136、#153、#107、#168、#169、#176）。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：plugintest 支持对已发送按钮的点击、多轮等待中的注入、立即触发一次 schedule 与读取分发链之外的后台发送；用套件为示例插件编写提交的集成测试；docs/development.md 补充「插件测试」一节；在 TEST-MATRIX §3.2 记录 V-73 的证据。
+目标：补齐 plugintest 的按钮点击、等待中继续注入、静态 schedule 与动态任务实例的立即触发，以及分发链之外后台发送的顺序读取；用套件测试现有示例插件并补充开发文档，记录 V-73 的本切片证据。事件与任务都经真实 Core、SDK Session、权限、Hook、Target 准入及 Scheduler 执行。
 
-依据：PLAN T-16 步骤 3、4 与「失败停止条件」；CONTRACTS §17、§2.4、§4.3、§8（后台 Send 的准入）、MESSAGE-MODEL §6.3 的按钮 token 规则；DECISIONS D-47；TEST-MATRIX V-73。
+依据：spec/PLAN.md §3.1、§5；spec/plan/core.md 的 T-16.2、T-16 步骤 3（LLM 替身归 T-16.3）、4 及「失败停止条件」；spec/CONTRACTS-v0.1.md §2.1～§2.4、§4.3、§8、§15.5、§16（JOB_TIMEOUT、动态任务限额）、§17；spec/MESSAGE-MODEL.md §1～§4、§5、§6.3；spec/WIRE-FORMAT.md §3.3（schedule/task 注册）、§3.5（任务与等待固定服务）、§4；spec/adr/DECISIONS.md D-47、D-68～D-72、D-77、D-83、D-86、D-102、D-105、D-107～D-108、D-119～D-120、D-124～D-127、D-134、D-137；spec/TEST-MATRIX.md V-73、§3（动态任务沿用 V-114 的既有语义）。
 
 范围（只新增或修改这些）：
-- plugintest/：Click、Trigger、Background 与等待状态的处理
-- plugintest/internal/probe/：增加按钮、多轮等待、schedule 与后台发送的用例路由
-- internal/inproc/harness.go：Outcome 增加 Waiting；Harness 增加 Trigger
-- 根包：把调度器的立即运行入口接到 Harness.Trigger（只加调用点）
-- internal/core/router/：Handler 进入 core.wait 时也调用分发结束回调（只加调用点）
-- internal/core/ 中 goal-24 的调度器：没有立即运行一次的入口时增加一个（只加函数，复用正常的运行槽、期限与跳过重叠规则）
-- examples/plugins/ 下的示例：为合并时已有的 echo、media 与命令示例各新增一个 *_test.go（用 plugintest）
-- docs/development.md：新增「插件测试」一节（本切片获授权修改这一节）
-- spec/TEST-MATRIX.md §3.2：追加 T-16 的证据行（本切片获授权修改这一处；其他 spec 文件不改）
-允许的新跨模块边：examples/plugins/... -> plugintest（仅测试代码，ARCHITECTURE 已登记）。
+- plugintest/plugintest.go、adapter.go 及同目录新增的按钮、调度、后台记录实现文件；plugintest/options.go 仅在共用套件状态接入所需时修改。
+- plugintest/internal/probe/：在已有插件内追加按钮动作、静态任务、动态任务和受测试同步控制的后台发送场景；修改相应源资源后重新生成 alonabot_gen.go。
+- internal/inproc/harness.go：Outcome.Waiting 与调度桥接字段；字段在组件启动前装配完成，运行期间保持现有只读约定。
+- internal/core/router/observation.go：等待通知附带进入等待的路由 Outcome；保持已存在的延续调用跟踪与匹配通知。
+- internal/core/scheduler/scheduler.go、tasks.go 及同目录新增 trigger.go：立即运行入口，复用正常调度的派发、队列、运行槽、期限和完成处理。
+- assembly.go：仅给该数据目录的 inproc.Harness 安装调度桥接，并传递 Outcome.Waiting。
+- examples/plugins/showcase/plugin.yaml（以及派发时仍缺少 plugin.yaml 的其他示例；goal-9 合并后 echo 已有）：补齐可供 Start 解析的最小工程身份；对应 alonabot_gen.go 只由现有生成器重建。各示例 main.go 的业务行为保持原有含义。
+- plugintest/plugintest_test.go；examples/plugins/{echo,lifecycle,showcase,configdb}/main_test.go：以下列出的集成测试。
+- 上述包内被忽略的 *_local_test.go，以及根包的 *_local_test.go：只用于本地验证；多进程验证复用 pipeline_test.go 的 newPipeline/TestMain 装配，不新增 testdata 插件。
+- docs/development.md：仅新增「插件测试」一节；spec/TEST-MATRIX.md §3.2：仅追加本切片证据行。
 
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. internal/inproc
-   Outcome 增加 Waiting bool // Handler 进入多轮等待，分发链尚未结束
-   Harness 增加 Trigger func(ctx context.Context, pluginID, jobID string) (runID string, err error) // 由根包设置；在调用结束后返回
-   Dispatch 增加 RunID string // schedule 调用结束时设置，SourceEventID 为空
-2. plugintest（在 goal-81 上追加）
-   Outcome 增加 Waiting bool
-   func (h *Harness) Click(from User, sent Sent, actionID string) Result // 在 sent.Chain 的 buttons 中按 action_id 找到按钮，以其 core_token 交付 button.clicked；找不到时 t.Fatal
-   func (h *Harness) Trigger(root sdk.Root, jobID string) Result       // 立即运行该插件的一次 schedule，调用结束后返回期间的发送记录
-   func (h *Harness) Background() []Sent                                // 返回并清空不属于任何一次注入的发送记录，按发生顺序
+允许的新跨模块边：无。复用 ARCHITECTURE 已允许的 plugintest -> 根包、sdk/...、internal/inproc、contracts，以及 examples/plugins/... -> plugintest（仅测试）。internal/inproc 的字段仅使用标准库与本包类型；Core、SDK、根包产品代码均沿用既有依赖方向。
+
+接口（照此实现；以下标明新增，其余保持 main 的真实签名；内部辅助函数自定）：
+1. plugintest 新增：
+   func (h *Harness) Click(from User, sent Sent, actionID string) Result
+   func (h *Harness) Trigger(p *sdk.Plugin, jobID string) Result
+   func (h *Harness) TriggerTask(p *sdk.Plugin, taskName, key string) Result
+   func (h *Harness) Background() []Sent
+   type Outcome struct { PluginID, RouteID string; Err *errcode.Error; Waiting bool }
+   Result 的 Sends、Outcomes、Waiting 及 Message/Text/Event 的参数、返回值保持 main 的定义。
+   TriggerTask 用任务名和完整实例 key 定位已经创建的实例，参数取 Core 已保存的数据。
+2. internal/inproc 新增字段：
+   Outcome.Waiting bool
+   Dispatch.RunID string
+   Harness.Trigger func(ctx context.Context, pluginID, jobID string, completed func(Dispatch)) error
+   Harness.TriggerTask func(ctx context.Context, pluginID, taskName, key string, completed func(Dispatch)) error
+   completed 只服务于这次显式触发：在本次 RPC 结果确定时调用一次；Dispatch 带 RunID 和路由 Outcome，InstanceID、SourceEventID 为空。函数返回准入/定位错误；已派发 Handler 的错误放入 Outcome。
+3. internal/core/router：Outcome 增加 Waiting bool；Dispatch.Waiting 保持现有事件级语义。
+4. internal/core/scheduler 新增内部跨包入口：
+   func (s *Scheduler) Trigger(ctx context.Context, pluginID, jobID string, completed func(runID string, response wire.Response, err error)) error
+   func (s *Scheduler) TriggerTask(ctx context.Context, pluginID, taskName, key string, completed func(runID string, response wire.Response, err error)) error
+   根包将这两个入口适配成 Harness 字段；completed 在锁外调用，并在本次触发方法返回前完成。普通 timer 与任务服务继续复用同一派发及收尾代码。结果超时/取消后，实际运行槽仍按既有 Late/Released 规则释放。
+5. 使用现有 wire 字段，字段号保持原值：
+   Button.core_token=4（optional string）；ButtonClickedPayload { action_id=1; action_schema_version=2; value=3; callback_query_id=4; optional origin_platform_message_id=5; }。
+   ScheduledPayload { job_id=1; run_id=2; scheduled_at_unix_ms=3; task_name=4; task_key=5; task_payload_json=6; }。
+   动态请求目标与 job_id 均为 task.<任务名>，三个 task 字段来自保存的实例；静态任务的 task 字段为空。
 
 行为：
-- 等待：Router 在某条分发链的 Handler 进入 core.wait 时，以 Waiting=true 的 Outcome 调用分发结束回调；Message 与 Click 收到它后返回。之后对同一会话与用户的 Message 按普通注入处理，Core 按等待键把它交给等待中的 Handler，该 Handler 的后续发送属于这次注入的结果。
-- Click：button.clicked 的 Actor 为 from，Target 为 sent 的 Target，origin_platform_message_id 为 sent 的消息 ID；token 过期、插件代次变化或权限不足时由 Core 照常拒绝，结果中没有发送，Outcomes 为空。
-- Trigger：经 Harness.Trigger 运行一次，走与定时触发相同的运行槽、15 分钟期限与跳过重叠规则；同 job 正在运行时返回该错误并 t.Fatal。返回这次调用期间的发送记录与 Outcome。
-- Background：注入与 Trigger 之外发生的发送（例如插件在 OnReady 中启动的后台任务）进入后台记录。后台 Send 仍经 Core 的 Target 准入：没有 Allow 时结果为 PERMISSION_DENIED。
-- 示例测试：每个示例至少覆盖它的主要命令或事件，以及一条失败路径（权限、参数错误或 UNSUPPORTED）；不依赖 time.Sleep。
-- 文档：「插件测试」一节给出最小示例（Start、Text、断言 Sent）、各选项的用途、不跳过 Core 检查的说明，以及运行命令 go test -race ./...。
+- Click 在 sent.Chain 的 buttons 行中按 actionID 找到回调按钮，读取 CoreToken；不存在或找到的是 URL 按钮等测试输入错误时 t.Fatal。交付的 button.clicked 使用 sent.To、其 SendResult 的实例与原消息 ID，Actor 取本次 from，CallbackQueryID 为本次唯一值，Value 只放 token。通过测试 Adapter 的 Core.Deliver 进入原有 buttons.Resolve 与 Router；Core 恢复 action、版本和值并逐次鉴权。过期、代次失效或权限拒绝时返回无发送、无实际 Handler Outcome 的结果。
+- 等待继续复用 main 的普通分发链和延续调用计数：某路由进入 core.wait 时，快照中该 Outcome.Waiting=true，Result.Waiting=true，注入立即返回；下一条同键消息命中等待后，后续发送归属本次新注入，直到延续调用结束或再次等待。其他用户或会话继续普通分发。等待中的路由最终返回的错误由后续对应注入取得。
+- Trigger 只定位 p 对应的已激活插件及静态 job_id，立即运行一轮，复用 Scheduler 的调用身份、可信 job scope、运行槽、JOB_TIMEOUT 和错误处理。未知任务、未激活、暂停或同 job 已运行时返回有原因的错误，由套件报告 t.Fatal；自然 tick 仍按原有跳过重叠规则处理。
+- TriggerTask 定位 p 下已经存在的 taskName/key，使用完整保存参数立即安排这一实例；经过同一实例运行槽、TASK_CONCURRENCY 与既有到期队列。同实例已运行或已排队时返回 FAILED_PRECONDITION；静态任务已暂停时 Trigger 返回 FAILED_PRECONDITION；全插件名额已满时经既有队列等待。一次性实例在实际派发时按现有规则删除；周期实例保留定义与持久起点，后续自然触发仍取未来时刻。测试触发时刻为本次立即触发的时刻，动态期限从实际派发时计算。替换、取消、缺失任务、存储错误均保留既有语义；取消实例后再次触发报告定位失败。
+- Trigger/TriggerTask 在 completed 通知处冻结发送记录终点、收集 run_id 与 Outcome，之后返回 Result；记录接收者先登记，再发起运行，避免快速完成丢通知。Handler 错误与 DEADLINE_EXCEEDED 等进入 Outcome.Err；RPC 结果与实际运行结束的区分沿用 Scheduler。显式触发仍用 scheduled REQUEST/RESPONSE，所需消息目标由 Handler 显式 sdk.To 提供。
+- Background 返回并清空尚未交给任何注入结果的发送/编辑记录，按测试 Adapter 接受的顺序；已经由 Result.Sends 交付的记录各消费一次。沿用 Harness 的串行注入约定和现有锁，在分发/调度完成通知处固定区间。真正位于这些区间之外的 OnReady 后台发送保留到 Background；读取时尚未发生的发送由之后的读取取得。
+- 发信许可遵循 D-83：缺省全部实例可发；AllowedInstances(p) 收紧为空后，job 与后台显式发送返回 PERMISSION_DENIED。拒绝的发送保留错误而无 Sent；原可信入站目标的回复仍按现有豁免处理。
+- 示例用现有 New 创建插件。echo 验证文本回复及混合片段中的文本提取；lifecycle 验证 /ping；showcase 验证 /demo hello、参数解析，以及创建提醒后通过完整内部 key 的 TriggerTask 得到原会话提醒、取消后查询消失；configdb 验证 Config、/note 命令与真实 dev.sqlite。media 示例（goal-9 新增）验证上传图片组成相册、相册后的文本承载按钮，以及去掉 message.album 能力后被拒。
+- 文档给出 Start/Plugin、Text 与 Sent 断言的最小例子，再展示权限、Config/AllowedInstances/Capabilities、Click、Trigger、TriggerTask、等待与 Background；写明后台发送用测试自己的 channel 同步，套件靠 Core 完成通知返回。运行命令包含 -race -count=2。
 
-测试（按编码规范「测试提交规则」）：
-- 提交：plugintest/plugintest_test.go 追加：
-  - 按钮：/menu 发送带两个按钮的消息；Click 第一个按钮得到对应回复；另一个用户 Click 同一按钮也得到回复（按点击者鉴权）；按钮对应的 action 要求 Core Admin 时，普通用户 Click 没有回复。
-  - 多轮等待：/ask 询问后 Message 立即返回，Outcomes 中有 Waiting；同一用户回答后得到确认回复；另一个用户的消息不被等待中的 Handler 消费。
-  - schedule：probe 注册的 job 发送到 Allow 过的测试实例，Trigger 返回一条 Sent；未 Allow 时该发送为 PERMISSION_DENIED。
-  - go test -race -count=2 ./plugintest/... ./examples/... 两遍都通过。
-- 证据：TEST-MATRIX §3.2 追加一行，写明覆盖的场景、命令、平台与 Go 版本。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Click 找不到 action_id；同 job 重叠时的 Trigger；等待超时后再次注入按普通消息处理；后台：probe 的 OnReady 启动的后台发送出现在 Background 中，读取后清空。
+测试（按编码规范「测试提交规则」，D-86）：
+- 提交：扩展 plugintest/plugintest_test.go 的一个 TestPluginHarness，使用既有 probe 与真实 Core/Session/SQLite，按子测试覆盖：
+  1) /menu 发两个动作按钮，点击获得对应回复；同群另一用户点同按钮以点击者身份执行；要求 sdk.Admin 的动作拒绝普通用户并允许 Admin。
+  2) /ask 先发送问题再进入等待，返回 Waiting Outcome；另一用户消息正常分发，同一用户回答归入新注入；保留既有多轮等待测试断言。
+  3) 静态 Trigger、动态 TriggerTask 各返回真实发送与路由 Outcome；动态以任务创建命令经 SDK 写入 Core，触发后核对一次性实例被删除。缺省发送允许；空 AllowedInstances 的另一套 Harness 中显式发送为 PERMISSION_DENIED。
+  4) OnReady 只登记后台 goroutine，使用 channel 在 Start 返回后控制一次真实后台发送并等待该 Send 返回；Background 依次读到该发送、第二次为空，已归入 Text/Trigger 的发送不会重复读取。
+  5) 保留命令、平台权限、Core Admin、Capability 降级的既有集成断言；补一条 Rule 主路径与一条媒体/能力拒绝路径，守住 V-73 所需组合。
+- 提交：examples/plugins/{echo,lifecycle,showcase,configdb,media}/main_test.go 各一个主路径集成测试，均直接调用本包 New 与 plugintest.Start。showcase 的提醒通过实际创建命令和 TriggerTask 交付；configdb 通过 Config 写入问候词并执行笔记写入/读取。参数失败路径选 showcase，其他边界放本地。多列理由：T-16 步骤 4 要求交付示例测试；四个现有 package main 各自构建，测试分别运行真实组件与各自资源，套件内部 probe 测试无法替代这些工程的生成资源与入口验收。
+- 本地自测（*_local_test.go，PR 写明实际命令、平台与结果）：按钮不存在、过期和代次失效；再次等待、超时与错误归属；发送与完成通知的竞态；同静态 job 重叠、暂停与未知 job；动态实例替换/取消、并发队列、存储失败与超时后的 Late 槽释放；后台 Edit 与顺序消费；收紧发信许可后原目标回复豁免；每份套件临时目录与配置/SQLite 隔离；Start 失败、启动 ctx 取消及清理后锁和组件释放。需要多进程对照时在根包 *_local_test.go 复用 pipeline_test.go 的装配与测试二进制分流，分别记录 TCP/stdio；sdk/、supervisor/、testdata 不新增提交测试。
+- 证据：TEST-MATRIX §3.2 追加 T-16.2/V-73 一行，写测试位置、实际命令、平台、Go 版本、结果和真实未运行项；LLM 分项由 goal-102 追加，保留已有 T-16.1 证据。
 
-完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./plugintest/... ./examples/... ./internal/core/... ./internal/inproc/...；go test -race . ；go build ./...。
+完成条件：改动 Go 文件 gofmt -l 无输出；按现有入口生成 probe 与补齐身份的示例资源，go generate ./... 后重复生成内容一致；go vet ./...；go test -race -count=2 ./plugintest/... ./examples/plugins/...；go test -race ./internal/core/... ./internal/inproc/... .；go build ./...。核对 T-16 的三项失败停止条件：所有 Core 检查与正常派发仍生效，注入返回由完成通知决定，生产依赖方向符合 ARCHITECTURE；任一失败先修复。spec/TEST-MATRIX.md 证据与本地自测结果完整后结束。
 
-不做：模拟时钟或缩短 schedule 的周期（只提供立即运行）；WebUI 沙盒（v0.1 之外）；为 Adapter 作者提供的测试工具。
+不做：LLM 替身（goal-102）；模拟时钟、缩短正式周期、另建派发器或 wire 服务；动态任务 SDK、schema.sql 与卸载清理的返工；Adapter 作者测试框架；日志管理、Agent 工具循环、开发 CLI、Journal 激活流程；新增 SDK 公开符号或实现 ServiceBuilder.Permission；真实 Telegram 与 WebUI 沙盒；范围外 spec、PLAN、ADR 与 ARCHITECTURE 修改。
 ```
 
 ## 第 15 波
@@ -6869,16 +6904,87 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 ### goal-102 · T-16.3 plugintest 的 LLM 替身
 
-状态：等待前置（T-12.8、T-16.1）。依据 D-77 新增。语句只写了目标、依据和要点，前置合并后由审查者按 sdk/llm 与 plugintest 的实际代码写出接口与测试段。
+状态：待派发，在 goal-82 合并后从包含它的 main 派发（共享 plugintest 的 options、probe、生成物与文档）。2026-11-13 审查者裁决：替身只经共享的 llm.Request/Response Schema 做结构校验，业务规则与错误交给传入函数，不复制官方 Agent 的 Provider 与名单配置；多次给出 LLM 选项时最后一个生效，nil 函数在公开入口报错；默认的 public Service 沿用当前空权限集合，不等待 goal-61 的 ServiceBuilder.Permission；#174 的合并提交为 `9c394b3`。直接前置 T-12.8（goal-83，PR #175，合并提交 `ac6083a`）与 T-16.1（goal-81，PR #168，`37b0ada`）均已合并；Agent 开发组件与文本生成分别沿用 PR #163（`cb8ae3d`）、#170（`eca6310`），带类型 Service 声明沿用 PR #158（`464ccfd`）。2026-11-13 起草者按维护者指定的 main `9efee73` 工作副本，用 `rg`、源码读取及离线 `GO111MODULE=off go doc` 核对下列事实；前置合并号取自本地 goal 完成记录。
 
-目标：plugintest.LLM(func(ctx context.Context, req llm.Request) (llm.Response, error)) 登记一个只提供 llm.generate 的测试 Agent，被测插件经 @agent 的调用交给这个函数处理；没有登记时 @agent 按目标未激活处理。
+按 main 核对：
 
-依据：PLAN T-16 步骤 3；CONTRACTS §13.5、§17；DECISIONS D-77、D-83；TEST-MATRIX V-73 的 LLM 分项。
+- `sdk/llm/llm.go`：`const AgentTarget = "@agent"`、`ServiceName = "llm.generate"`、`SchemaIn = "github.com/AlonaBot/AlonaBot/sdk/llm.Request"`、`SchemaOut = "github.com/AlonaBot/AlonaBot/sdk/llm.Response"`、`SchemaVersion uint32 = 1`；`var GenerateService = sdk.JSON[Request, Response](AgentTarget + "/" + ServiceName)`；`Generate(ctx context.Context, req Request) (Response, error)`、`Ask(ctx context.Context, prompt string) (string, error)`。`Response.InputTokens` 与 `OutputTokens` 均为 `*int`，保留缺失与零值的区别。
+- `sdk/services.go`：`JSON[In, Out any](target string) Service[In, Out]`、`Serve[In, Out any](owner Registrar, declaration Service[In, Out]) *ServiceBuilder[In, Out]`；`(*ServiceBuilder[In, Out]).Access(a Access, allowlist ...string) *ServiceBuilder[In, Out]`、`Handle(h func(*Context, In) (Out, error))`；`(Service[In, Out]).Call(ctx context.Context, in In) (Out, error)`。真实服务调用在调用方和提供方都读取生成的 JSON Schema。现有公开 builder 方法只有 Access、Tool、Handle；D-142 的 `Permission` 将由 goal-61 加入。
+- `sdk/generated.go`：`UseGenerated(p *Plugin, g Generated)`、`(*Plugin).Generated() Generated`；`Generated{Manifest []byte; AdapterConfigSchema []byte; ServiceSchemas map[string][]byte; I18n map[string][]byte; ParamNames map[string][]string; ConfigSchema []byte}`。`sdk/sdk.go` 的 `(*Context).Context() context.Context` 提供本次关联上下文；`sdk/services.go` 的 `(*Context).Caller() string` 读取 Core 给出的直接调用方。
+- 根包 `alonabot.go`：`Plugin(root *sdk.Plugin) Option` 已接受 role plugin 或 agent；`Start(ctx context.Context, opts ...Option) (*Core, error)`；`assembly.go` 已向 Broker 注入 Agent 定位，`agent_target.go` 的 `(*assembly).agentID(ctx context.Context) (string, error)` 从 state 的安装记录选择未卸载的 `RoleAgent`。`internal/core/broker/broker.go` 的 Broker 处理 @agent 后以真实插件 ID 执行激活、访问、调用链、schema 与取消检查。
+- `agent/agent.go` 的 `New() *sdk.Plugin` 已用 `sdk.Serve(p, llm.GenerateService).Access(sdk.AccessPublic).Handle(a.generate)` 注册真实服务；`agent/generate.go` 的 `(*component).generate(c *sdk.Context, req llm.Request) (llm.Response, error)` 按直接 Caller 检查默认 `["*"]` 的配置名单。测试 Agent 只需实现本切片的生成服务及默认放行语义。
+- `plugintest/plugintest.go`、`options.go`：`Start(t testing.TB, opts ...Option) *Harness`、`Plugin(p *sdk.Plugin) Option`、`Config(p *sdk.Plugin, configJSON string) Option`；`(*Harness).Text(chat Chat, from User, text string) Result`，`Result{Sends []Sent; Outcomes []Outcome; Waiting bool}`，`Outcome{PluginID, RouteID string; Err *errcode.Error}`。现有 options 没有 LLM；Start 统一给每个开发组件绑定临时目录与真实生命周期，清理取消 ctx 并 Wait。
+- `plugintest/internal/probe/probe.go` 的 `New() *sdk.Plugin` 是现有集成插件入口，已有生成资源与配置/SQLite、命令和等待场景，可在此追加调用 llm.Generate/Ask 的命令。`sdk/errcode` 的 `Of(err error) Code` 与 `(Code).New(message string) *Error` 用于返回与断言协议错误。
+- `pipeline_test.go` 已有 `newPipeline(t *testing.T, stdio ...bool) *pipelineHarness` 及 TestMain 子进程分流；根包 `agent_service_test.go` 已用真实 SDK Session、Core、官方 Agent 与 httptest Provider 验证文本生成。多进程本地取证沿用这些装配，正式提交的套件测试直接通过 plugintest 的公开入口。
+- 旧在途清单中的 #165（`330164f`）、#167（`3a9b4af`）、#168（`37b0ada`）、#169（`4dc4bcd`）、goal-59（#170，`eca6310`）和 goal-69（#171，`3043c4e`）均已在本地完成记录中；#169 的 schema.sql/manage 清理以及 #171 的根包/cmd 入口已在基线。相关 #166（`6f72fc8`）、#173（`2bb8181`）、#176（`9785c22`）已合并；#174 的已合并状态按维护者提供的信息处理。
+- 当前在途按维护者清单：#177（goal-66）、goal-41 改根包装配与生命周期，但本切片无需修改它们的产品文件；#178（goal-60）改官方 agent 与其生成资源，本切片的替身放在 plugintest 内，不复用官方 Agent 业务。goal-9 与本切片共享 `docs/development.md`、`spec/TEST-MATRIX.md`。goal-82 直接共享 `plugintest/{options,plugintest}.go`、probe 与其生成物，建议 goal-82 先合并，再按新 options/Outcome 接入本切片。goal-61 将改 `sdk/services.go`，本切片仅消费现有 Access/Handle，保持其后续 Permission 的所有权。未读取远端 PR diff。
 
-要点：
-- 测试 Agent 是库模式的开发组件（role 为 agent），走真实的 Service Broker、调用链与 llm.generate 的 Schema 校验；函数返回的错误按 llm.generate 的错误码交回调用方。
-- llm_service_allowed_plugins 按缺省的 ["*"] 处理，不需要额外授权。
-- 提交的集成测试覆盖：插件调用 llm.generate 得到替身的回复；替身返回错误时插件收到对应错误码；没有登记替身时调用失败。
+```text
+/goal 使用 $alonabot-execute 推进 goal-102（切片 T-16.3：plugintest 的 LLM 替身）。goal 目录 goal-102，分支 goal-102，worktree .worktrees/goal-102，从最新 origin/main 创建（包含 PR #168、#175；若 goal-82 已合并，读取其 options、Outcome 与 probe 后接续）。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：实现 plugintest.LLM(func(ctx context.Context, req llm.Request) (llm.Response, error)) Option。Start 登记一个只提供 llm.generate 的测试 Agent，被测插件通过 llm.Generate、llm.Ask 或共享 GenerateService 经 @agent 的真实 Service 调用交给测试函数；保留完整请求、响应、错误码与取消。未给 LLM 选项时 @agent 沿现有目标未激活路径失败。
+
+依据：spec/PLAN.md §3.1、§5；spec/plan/core.md T-16.3、T-16 步骤 3 的 LLM 替身项及「失败停止条件」；spec/CONTRACTS-v0.1.md §1.2、§2.3、§3、§4.1～§4.2、§13.5、§15.5、§17；spec/MESSAGE-MODEL.md §1、§3～§5（触发插件的真实事件、回复与 Hook）；spec/WIRE-FORMAT.md §3.3 的 Service 描述、§4 的可信上下文与取消、§5/§5A 的 ServiceInvocation；spec/adr/DECISIONS.md D-47、D-51、D-61、D-70、D-77、D-83、D-86、D-111、D-122、D-134、D-137、D-142 的 API 所有权；spec/TEST-MATRIX.md V-73 的 LLM 分项与 §3，沿用 V-76 的 Broker 及 V-109 的 sdk/llm 既有行为。
+
+范围（只新增或修改这些）：
+- plugintest/options.go：增加 LLM 选项及其测试函数存储；plugintest/plugintest.go：Start 将测试 Agent 作为开发组件登记，沿既有清理路径结束。
+- 新增 plugintest/llm.go：选项接入所需的私有组装代码；新增 plugintest/internal/llmagent/：测试 Agent 的内部构造、plugin.yaml、生成的 alonabot_gen.go；只提供本切片指定的服务。生成资源按现有入口生成。
+- plugintest/internal/probe/probe.go 与其生成资源：追加触发 llm.Generate/Ask 的测试命令，保留已有 probe 路由与资源。
+- plugintest/llm_test.go：以下一个公开入口集成测试；上述包的 *_local_test.go 与根包 *_local_test.go：本地自测，不提交。
+- docs/development.md「插件测试」一节：追加 LLM 替身示例；spec/TEST-MATRIX.md §3.2：只追加本切片证据行。
+
+允许的新跨模块边：无。沿用 plugintest -> sdk/...、根包、internal/inproc、contracts；内部 llmagent 属于套件实现，使用 sdk 与 sdk/llm。测试 Agent 不链接 agent/、agent/provider/ 或外部 Provider 客户端；依赖方向按 ARCHITECTURE。
+
+接口（照此实现；唯一新增的面向作者接口为 LLM）：
+1. plugintest 新增：
+   func LLM(handler func(ctx context.Context, req llm.Request) (llm.Response, error)) Option
+   Start(t testing.TB, opts ...Option) *Harness、Plugin(p *sdk.Plugin) Option 及 Result/Outcome 保持合并后 main 的签名。
+2. 测试 Agent 使用现有声明注册：
+   sdk.Serve(p, llm.GenerateService).Access(sdk.AccessPublic).Handle(func(c *sdk.Context, req llm.Request) (llm.Response, error) {
+       return handler(c.Context(), req)
+   })
+   内部构造函数与组件 ID 由实现自定，工程 manifest 明确 role: agent；Start 用既有 alonabot.Plugin 将其纳入同一临时 Core。组件身份和 Schema 均由源资源生成并绑定。
+3. 共享输入输出，逐字段保持 sdk/llm/llm.go：
+   type Message struct { Role string `json:"role"`; Text string `json:"text"` }
+   type Request struct {
+       Messages []Message `json:"messages"`
+       System string `json:"system,omitempty"`
+       Provider string `json:"provider,omitempty"`
+       MaxOutputTokens int `json:"max_output_tokens,omitempty"`
+   }
+   type Response struct {
+       Text string `json:"text"`
+       Provider string `json:"provider"`
+       Model string `json:"model"`
+       InputTokens *int `json:"input_tokens,omitempty"`
+       OutputTokens *int `json:"output_tokens,omitempty"`
+   }
+   以上为引用现有类型的说明，代码直接使用 llm.Request/Response/Message。
+4. 服务目标 @agent/llm.generate，JSON 编码；schema_id 使用 llm.SchemaIn、SchemaOut，version 使用 llm.SchemaVersion=1。内部路由沿 sdk.Serve 生成 svc.llm.generate（sdk/services.go 的 serviceRoutePrefix="svc."）；请求由真实 ServiceInvocation 携带 route_id、可信 context、encoding、schema_id、schema_version、payload，响应为现有输出 Schema 的业务载荷。沿用已合并字段及编号，协议文件不变。
+
+行为：
+- LLM 选项只登记函数。Start 在启动前构造一份测试 Agent，与被测插件及测试 Adapter 一同完成 HELLO、配置准备、REGISTER、ACTIVATE、ACTIVATED；Start 成功后才接受注入。Agent 使用该 Harness 的临时数据目录、开发代次和既有 ctx/Wait 清理，不启动独立 Core。
+- 每份 Harness 登记一份测试 Agent，沿用根包已有的重复组件/Agent 身份检查；LLM(nil) 作为公开选项的无效输入在启动前使测试明确失败。多个 LLM 选项与现有 Config/Capabilities 的覆盖方式一致，最后一个函数生效。每个 Harness 保存自己的函数，平行套件互不覆盖。
+- @agent 继续由现有 Core Agent 定位解析；权限、激活门、调用链、parent_call_id、期限与取消、Schema ID/version/encoding、SDK 输入输出 Schema 校验均走真实 Broker/Session。提供方 AccessPublic 实现 llm_service_allowed_plugins 默认 ["*"] 的放行语义，无需测试作者再授权。
+- 函数收到 c.Context() 及解码后的完整 llm.Request，调用一次；返回的文本、Provider、Model、nil/零值 token 用量原样经 SDK 编码。请求的语义结果由替身函数给出。错误沿已有 SDK 映射：*errcode.Error 保留 Code 与英文 SafeMessage，普通 Go error/panic 按 SDK 的 INTERNAL 处理；保留失败，不伪造空成功、不自动重试。
+- parent 取消与期限照常传播给替身 ctx；测试函数按 ctx 协作结束，结束行为沿既有 Service 生命周期。调用与后续回复仍遵循真实出站 Hook 和 Target 检查。
+- 未配置 LLM 时，套件保持当前组件集合，@agent 调用得到现有 UNAVAILABLE；注入正常结束并将调用错误作为 Handler Outcome 暴露。llm.Ask 继续保留 SDK 的非空白 prompt 检查，并将原始 prompt 作为唯一 user 消息。
+- 测试 Agent 只登记 llm.generate，无官方对话、会话存储、人格、工具循环、llm.providers 或 Provider 请求。生成的 ServiceSchemas 同时供调用方 probe 和提供方使用，均从相应 Go 源的带类型声明生成，生成代码只经生成器更新。
+- 文档给出一个 Plugin(p)+LLM(handler)+Text 的可运行测试例子：按 req.Messages 返回固定 Response，断言被测插件发出的文本；另用简短例子展示 errcode.Unavailable 和保留 nil 用量。读者运行 go test -race -count=2 ./plugintest/...。
+
+测试（按编码规范「测试提交规则」，D-86）：
+- 提交：plugintest/llm_test.go 的一个 TestLLMHarness。通过 plugintest.Start + 已有 probe 的新命令驱动真实 Core、SDK Session 和 Broker，在同一测试的子场景中验证：
+  1) llm.Generate 经 @agent 到达替身一次，函数收到 Messages、System、Provider、MaxOutputTokens，返回的完整 Response 被 probe 核对后发送 Text；用量区分 nil 与指向 0。llm.Ask 到达同一服务，函数收到唯一 user 消息与原始 prompt，插件回复替身文本。
+  2) 替身返回 errcode.Unavailable.New("synthetic generation failure")，调用插件将错误返回给 Handler；Result.Outcomes 中保留 UNAVAILABLE 与 SafeMessage，Result.Sends 为空，调用次数为一。
+  3) 另一 Harness 不提供 LLM 选项，调用结果是 UNAVAILABLE，注入正常结束并留下 Handler 错误；组件关闭后清理沿 Start 的既有路径。
+  这是一个套件跨组件集成测试，直接守住选项→开发 Agent→真实 @agent/Broker→共享 Schema→调用插件回复/错误的主路径。sdk/、internal/core/supervisor/ 与 testdata 均不新增提交测试。
+- 本地自测（*_local_test.go，PR 记录实际命令、平台和结果）：替身 context 的直接调用方/父链、deadline 与取消；Schema/版本/编码拒绝且函数未执行、输出 Schema 失败；一般 error/panic 的 INTERNAL 映射；nil handler、选项覆盖、Agent 身份冲突；平行 Harness 函数隔离与多次调用；停止或启动失败后组件、锁及 goroutine 清理；缺省名单允许不同插件。需要跨进程对照时复用根包 pipeline_test.go 的 newPipeline/TestMain，在临时目录中写子进程入口或按既有模式分流，分别记录 TCP/stdio。
+- 证据：TEST-MATRIX §3.2 追加 T-16.3/V-73 LLM 一行，写测试位置、命令、平台、Go 版本、结果、未运行项；保留 T-16.1/T-16.2 已有证据。
+
+完成条件：改动 Go 文件 gofmt -l 无输出；通过已有生成入口重建内部测试 Agent 与 probe 的生成资源，go generate ./... 后重复生成内容一致；go vet ./...；go test -race -count=2 ./plugintest/...；go test -race .；go build ./...。逐项核对 T-16 失败停止条件：真实 Core 检查和派发完整、注入依完成通知返回、依赖方向符合 ARCHITECTURE；本地自测与 V-73 LLM 证据记录完整后结束。
+
+不做：真实 Provider 请求、官方 Agent 的对话/工具/记忆/选项来源；跳过 Broker 的函数直调替身路径；可配置调用方名单、额外的公开 Agent 工厂或 Schema 导出；SDK 的新公开符号、ServiceBuilder.Permission（由 goal-61 提供）；根包启动/Journal/日志管理改造；goal-82 的按钮与调度；新 testdata 插件、依赖、wire 消息或状态表；范围外 spec、PLAN、ADR 与 ARCHITECTURE 修改。
+```
 
 ## 第 16 波
 

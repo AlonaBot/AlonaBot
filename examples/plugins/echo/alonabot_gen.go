@@ -5,6 +5,7 @@ package main
 import alonabotgen0 "github.com/AlonaBot/AlonaBot/sdk"
 
 var alonabotGenerated = alonabotgen0.Generated{
+	Manifest: []byte("# echo 示例的开发工程身份。\nid: echo\nname: Echo\nversion: 0.1.0\nauthor: AlonaBot\nsource: github.com/AlonaBot/AlonaBot\nrole: plugin\n"),
 	ParamNames: map[string][]string{
 		"main:main.go:18": {"e"},
 	},
