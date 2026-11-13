@@ -72,9 +72,9 @@
 | goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 已完成（PR #156） |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 已完成（PR #155） |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 已完成（PR #153） |
-| goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 等待前置 |
+| goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 待派发 |
 | goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 已完成（PR #157） |
-| goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
+| goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 待派发 |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 待派发 |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2、T-09.4 | 待派发 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
@@ -5257,25 +5257,122 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-127 · T-07.8 动态任务与调度持久化的协议和 Core 侧
 
-状态：等待前置（T-09.4）。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。已合入 `Scheduler.Drain(pluginID string)`（停止新 tick，保留运行槽）、`Detach(pluginID)` 与 `Released(pluginID)`；`supervisor.Spec.Scheduler *scheduler.Scheduler` 在 ACTIVATED 后 Attach，`Running.Stop` 通过 `host.StopHooks.Frozen` Drain、`Stopping` Detach，停止或断链后只在确认进程树清空时 Released。合并后由审查者按 main `2c1fdcc` 核对。2026-11-10 按 D-124～D-127 新增。T-09.4（goal-39）将提供管理服务的卸载与清理对象列表，待其合并后补全接口段。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片修改 `internal/core/state/schema.sql`，按执行顺序的共享文件规则处理冲突。
+状态：待派发。直接前置 T-07.5（PR #119，合并提交 `cc19e99`）、T-09.4（PR #163，合并提交 `cb8ae3d`）已合并；调度基础 T-07.2（PR #107，`fc2c247`）已合并。PR 与合并提交取自本地 `docs/goals/core.md` 的合并记录。下文新增接口为供审查者定稿的方案，契约缺口见末尾备注。
 
-目标：Core 支持插件在运行时创建、替换、取消与列出带参数的定时任务实例，并能暂停、恢复静态任务；任务定义、周期任务的起点与暂停状态保存在 Core 状态库，Core 重启、插件重启与更新后仍在；错过的触发一律作废；卸载按清理范围删除或保留这些状态。SDK 的写法由 goal-128 提供。
+按 main 核对（2026-11-12，已用 rg 核对定义及调用者，并以离线 go doc 交叉核对 Scheduler.Options、manage.Service.Handler、state.Store.Uninstall）：
 
-依据：PLAN T-07 步骤 9；DESIGN §H；CONTRACTS §4.3、§9.3、§16；WIRE-FORMAT §3.3、§3.5；DECISIONS D-124～D-127；TEST-MATRIX V-114 的 Core 分项。
+- `internal/core/scheduler/scheduler.go`：`func New(opt Options) *Scheduler`；当前 `Options` 只有 `JobTimeout time.Duration`、`Now func() time.Time`；`func (s *Scheduler) Attach(p router.Plugin, activatedAt time.Time)` 当前无返回值。`Drain(pluginID string)`、`Detach(pluginID string)`、`Released(pluginID string)`、`Close()`、`Stats(pluginID, jobID string) JobStats` 已存在；`JobStats` 为 `Runs, Skipped, TimedOut, Late uint64; Running bool`。当前定时器和起点均在内存中，运行槽按 plugin_id/job_id 保存。
+- `contracts/schedule/schedule.go`：`Interval(d time.Duration) (Trigger, error)`、`Cron(expr, timezone string) (Trigger, error)`、`FromSpec(s *pb.ScheduleSpec) (Trigger, error)`、`func (t Trigger) Next(anchor, now time.Time) time.Time` 已存在；本切片复用其 interval、cron、IANA 与未来 tick 计算。
+- `internal/core/router/mux.go`：`type ServiceFunc func(ctx context.Context, c Caller, in *wire.Inbound) wire.Response`；`(*Mux).Handle(name string, fn ServiceFunc)`、`(*Mux).For(c Caller) wire.Handler`；`Caller{PluginID, GenerationID, SessionKey string}`。调用身份由装配绑定。`internal/core/router/router.go` 的 `Plugin` 提供 `PluginID() string`、`Activated() bool`、`Routes() []*pb.RouteDescriptor`、`Call(ctx context.Context, req wire.Request) (wire.Response, error)` 等方法；`func (r *Router) PluginFor(c Caller) (Plugin, bool)` 核对 Session 身份。
+- `assembly.go`：`assemble(store *state.Store, dir string, v tune.Values, file *settings.File) (*assembly, error)` 在一处构造 Scheduler；`(*assembly).attach(ctx context.Context, r *runningComponent) error` 先接 Router，再为同进程组件 Attach。`internal/core/supervisor/supervisor.go` 的 `Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error)` 在 `host.Activate` 成功后为独立进程 Attach；冻结、撤销及确认进程退出分别调用 Drain、Detach、Released。两条 Attach 路径都须同步处理持久化错误。
+- `internal/core/state/installs.go`：私有 `cleanupObjects(db *gorm.DB, id string, all bool) ([]cleanupObject, error)` 同时供 `PurgeObjects(ctx context.Context, id string, all bool) ([]string, error)` 和 `Uninstall(ctx context.Context, id string, data, all bool) error` 使用，后者在同一个事务内删除对象。`internal/core/manage/lifecycle.go` 已有 `PurgeNone`、`PurgeData`、`PurgeAll`；`(*Service).Uninstall(ctx context.Context, id string, purge PurgeScope, confirm bool) error` 先预览、确认和停止，再调 Store；无需另建清理回调。
+- `contracts/proto/alonabot/v1/route.proto`：RouteKind 用到 7，RouteDescriptor.spec 用到 16，公共 `required_permissions = 17` 已占用；TaskSpec 可用字段 18。`message.proto` 的 ScheduledPayload 当前只有 `job_id = 1`、`run_id = 2`、`scheduled_at_unix_ms = 3`。`contracts/validate/register.go` 的 `Register(r *pb.Register) error` 原子检查注册，静态路由前缀为 `job.`。
+- `internal/tune/params.go` 的 `Values` 和 `parameters` 是现有可调上限登记处；TASK 三项尚未登记；`contracts/limits/` 尚不存在。`internal/wire/services.go` 尚无六个 task/job 服务常量。
+- 根包 `pipeline_test.go` 已有 `newPipeline(t *testing.T) *pipelineHarness`、`(*pipelineHarness).launch(id, mode string, priority int) *runningComponent` 与测试二进制子进程装配。SDK 尚无 Task API，本切片的动态任务验证使用原始 wire/pb；goal-128 负责作者 API。
+- 在途冲突：goal-55、goal-131 同改 `internal/core/state/schema.sql`，goal-131 还涉及清理对象；goal-22、goal-55、goal-69、goal-81 与本切片共用 `assembly.go`，goal-22 可改 `pipeline_test.go`，goal-81 可改 Router，goal-69 改根包与 `cmd/alonabot`；goal-59 的产品代码在 `agent/`，与本切片无直接重叠。`contracts/wirespec_test.go`、生成目录与 `internal/wire/services.go` 也可能由 goal-55/goal-131 追加。后合并者保留各自对象、服务、装配点与编号，再统一生成；本切片无需修改 cmd 或 Agent。
 
-要点：
-- 协议：RouteKind 追加 TASK，RouteDescriptor 追加 TaskSpec（只有任务名），ScheduledPayload 追加 task_name、task_key、task_payload_json；动态触发的 job_id 为 `task.<name>`。REGISTER 校验任务名的格式、同名重复与 `task.` 保留前缀。
-- 状态库（写进唯一的初始迁移）：动态任务表以（plugin_id、任务名、key）为主键，保存触发规则（at、interval 或 cron）、时区、参数、起点与创建时刻；调度状态表以（plugin_id、job_id）为主键，保存静态 interval 任务的起点、对应的间隔与暂停标记。
-- 调度器以状态库为准：Attach 时读出该插件的调度状态与任务实例；静态 interval 任务没有起点或间隔已变时写入本次激活时刻；按 contracts/schedule 计算下一未来触发。过期的一次性实例在 Attach 时删除，记 WARN（plugin_id、任务名、key、原定时刻）并计数。任务名未在本 Session 注册的实例保留、不安排。
-- 六个固定服务：`core.task.set`、`core.task.cancel`、`core.task.list`、`core.job.pause`、`core.job.resume`、`core.job.status`，校验与错误码按 CONTRACTS §4.3；只在 Activated 之后可用，不需要父调用链，调用方只能操作自己的任务。先写状态库，成功后才更新内存中的定时器。
-- 派发：动态任务经每插件 `TASK_CONCURRENCY` 的名额，其余按到期时间排队；排队中的周期实例到了下一个触发时刻仍未执行时只保留一次；同一实例上一轮未结束时跳过本轮。一次性实例在派发的同一事务中删除，失败与超时不重试。运行槽、期限与迟到 Response 沿用静态任务的规则（goal-24）。
-- cancel 删除行、摘除定时器与排队项，并取消该实例在途的调用（协作式）。暂停只让之后的触发作废，不打断在途的一轮；恢复后从下一个未来时刻继续，起点不变；重复暂停或恢复成功且不改变状态。
-- 启停：Draining 与停止时摘除该 Session 的全部定时器并清空队列，队列中的触发按作废处理；状态库中的行不动。
-- 卸载：把两张表加入管理服务的清理对象，PurgeData 与 PurgeAll 时按 plugin_id 删除，与其余数据在同一个状态库事务内，并列入确认对象；删除不依赖插件进程，也不要求 Session 存在。PurgeNone 时行保留，没有 Session 所以不触发；重装并激活后周期任务从下一个未来时刻继续，期间到期的一次性实例按过期处理。
-- 上限 `TASKS_PER_PLUGIN`、`TASK_PAYLOAD_BYTES`、`TASK_CONCURRENCY` 登记到 contracts/limits。
-- 测试：用注入时钟与真实插件进程覆盖创建、替换、取消在途实例、列出、配额与参数上限；Core 重启后任务仍在且 interval 沿原起点触发；停用期间越过多次触发后不补跑，过期的 at 被删除并有 WARN；并发名额与排队；暂停跨重启保持；三种卸载范围下两张表的去留。
+- 审查者决定（2026-11-12）：可调上限沿用 internal/tune 登记；采纳本语句的协议字段号、表结构与任务名格式（D-124～D-126 约定由审查者提出）；Cancel 匹配持久实例或仍在途的同一实例（派发后的 at 在途时也可取消），两者都不存在时 NOT_FOUND，替换不取消在途的旧一轮；动态任务的 JobTimeout 从实际派发时开始计算，scheduled_at 仍为原到期时刻；JobStatus 的 last_at 为本次 Core 运行中最后一次实际派发的时刻，Core 重启后缺失，暂停时 next_at 缺失；既有 supervisor_test.go 只同步构造参数。
+```text
+/goal 使用 $alonabot-execute 推进 goal-127（切片 T-07.8：动态任务与调度持久化的协议和 Core 侧）。goal 目录 goal-127，分支 goal-127，worktree .worktrees/goal-127，从最新 origin/main 创建（包含 PR #119、PR #163）。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-不做：SDK 的 `sdk.Task` 等写法（goal-128）；管理界面对任务的查看与清理；补执行错过的触发；动态任务的暂停。
+目标：Core 支持运行时创建、整体替换、取消与分页列出带参数的任务实例，并支持静态任务的暂停、恢复与状态查询。动态定义、interval 起点与暂停状态保存在 Core 状态库，跨 Core/插件重启与更新保留；错过的触发作废。按管理服务已有的三种卸载范围保留或事务删除这些数据。SDK 的作者 API 由 goal-128 提供。
+
+依据：spec/PLAN.md §3.1；spec/plan/core.md T-07.8、T-07 步骤 2、3、7、9 及「停止和失败条件」，T-09 步骤 3 的清理语义；spec/DESIGN.md §H；spec/CONTRACTS-v0.1.md §1.2、§4.3、§9.3、§14.5、§16；spec/MESSAGE-MODEL.md §1 的 scheduled 来源与无 Actor、§3 的 HandlerOutcome；spec/WIRE-FORMAT.md §3.3、§3.5；spec/adr/DECISIONS.md D-124～D-127、D-86；spec/TEST-MATRIX.md V-114 的 Core 分项，并回归 V-20、V-21、V-46 的运行槽与启停分项。工作包在 spec/plan/core.md。
+
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/route.proto、message.proto；新增 task.proto：下列声明、字段与服务载荷。授权只追加接口段列出的内容；运行 go generate ./... 更新 contracts/pb/alonabotv1/，生成产物按实际差异保留。
+- contracts/validate/register.go：TASK 注册、任务名与 task. 前缀校验；contracts/wirespec_test.go：追加本次协议编号检查。
+- internal/wire/services.go：末尾追加六个服务名常量。
+- internal/tune/params.go 与 parse.go：登记三项可调上限与交叉约束，沿用现有调优入口（PLAN 中的 contracts/limits 已改为 internal/tune）。
+- internal/core/state/schema.sql、installs.go；新增 tasks.go、jobs.go：唯一初始迁移中的两张表、GORM 读写和清理清单。各模型与方法放在所属主题文件。
+- internal/core/scheduler/scheduler.go；可新增 tasks.go、services.go、jobs.go：持久化 Attach、六个固定服务、动态运行槽/队列、统计与生命周期。
+- assembly.go：传入同一 Store 与生效上限、注册固定服务、处理同进程 Attach 错误；internal/core/supervisor/supervisor.go：处理独立进程 Attach 错误并走已有失败清理。
+- 根包 pipeline_test.go：仅保留原断言的装配同步和测试子进程模式分流；新增 scheduler_tasks_test.go（unix）的一项集成测试。SDK 与 supervisor 目录不新增提交的测试；既有 internal/core/supervisor/supervisor_test.go 只同步 Scheduler 的构造参数，断言不变（审查者授权）。
+- 上述相关包的 *_local_test.go：本地验证，不提交。
+
+允许的新跨模块边：无。scheduler -> state/router 属于 internal/core 内部；Core -> contracts/internal/wire/internal/tune 已允许。contracts 与 internal/tune 保持现有依赖方向。生产 Core 保持通过协议调用组件。
+
+接口（照此实现；字段名、任务名格式与分页细节已由审查者采纳，内部辅助函数自定）：
+1. route.proto：
+   enum RouteKind 追加 ROUTE_KIND_TASK = 8;
+   message TaskSpec { string name = 1; }
+   RouteDescriptor.spec 追加 TaskSpec task = 18;
+   required_permissions = 17 和 reserved 5 保持原编号。
+2. message.proto 的 ScheduledPayload 追加：
+   string task_name = 4;
+   string task_key = 5;
+   string task_payload_json = 6;
+   动态 job_id/route_id 为 task.<name>；静态触发的三个新增字段为空。
+3. 新增 task.proto（均为 protobuf，schema_id 用 validate.SchemaID，schema_version=1）：
+   message TaskTrigger {
+     oneof trigger { int64 at_unix_ms = 1; uint64 interval_ms = 2; string cron = 3; }
+     string timezone = 4;
+   }
+   message TaskSetRequest { string task_name = 1; string key = 2; TaskTrigger trigger = 3; string payload_json = 4; }
+   message TaskSetResponse { int64 next_at_unix_ms = 1; }
+   message TaskCancelRequest { string task_name = 1; string key = 2; }
+   message TaskCancelResponse {}
+   message TaskListRequest { string task_name = 1; optional string after_key = 2; }
+   message TaskInstance { string key = 1; TaskTrigger trigger = 2; string payload_json = 3; optional int64 next_at_unix_ms = 4; }
+   message TaskListResponse { repeated TaskInstance instances = 1; optional string next_after_key = 2; }
+   message JobPauseRequest { string job_id = 1; }
+   message JobPauseResponse {}
+   message JobResumeRequest { string job_id = 1; }
+   message JobResumeResponse {}
+   message JobStatusRequest { string job_id = 1; }
+   message JobStatusResponse { bool paused = 1; optional int64 last_at_unix_ms = 2; optional int64 next_at_unix_ms = 3; }
+   next_at 的缺失表示当前无已安排的触发；last_at 的缺失表示本次 Core 运行中尚未派发。静态 job_id 为 ScheduleSpec.job_id。
+4. internal/wire 追加常量：ServiceTaskSet="core.task.set"、ServiceTaskCancel="core.task.cancel"、ServiceTaskList="core.task.list"、ServiceJobPause="core.job.pause"、ServiceJobResume="core.job.resume"、ServiceJobStatus="core.job.status"。
+5. internal/tune.Values 追加 TasksPerPlugin int、TaskPayloadBytes int64、TaskConcurrency int；登记 TASKS_PER_PLUGIN（10000，>=1）、TASK_PAYLOAD_BYTES（64KiB，1～4MiB）、TASK_CONCURRENCY（16，1～SESSION_MAX_INFLIGHT）。沿现有参数表/解析器校验和传递；全部构造方传入生效值。
+6. internal/core/state（方法返回原始存储错误；事务内用 GORM）：
+   type Task struct {
+       PluginID, Name, Key string
+       At time.Time; Interval time.Duration; Cron, Timezone string
+       PayloadJSON string; Anchor, CreatedAt time.Time
+   }
+   type Job struct { PluginID, JobID string; Anchor time.Time; Interval time.Duration; Paused bool }
+   func (s *Store) Tasks(ctx context.Context, pluginID, name string) ([]Task, error) // name 为空读取该插件全部实例
+   func (s *Store) SetTask(ctx context.Context, task Task, maxTasks int) error // 原子检查该插件总数后按复合主键替换；替换不增加配额
+   func (s *Store) DeleteTask(ctx context.Context, pluginID, name, key string) error // 无行返回 state.ErrNotFound；服务层另核对在途实例
+   func (s *Store) Jobs(ctx context.Context, pluginID string) ([]Job, error)
+   func (s *Store) SaveJob(ctx context.Context, job Job) error
+   dynamic_task 以 (plugin_id,name,key) 为主键；scheduled_job 以 (plugin_id,job_id) 为主键。cron 的 Job 行同样保存暂停标记，Anchor/Interval 为零；起点仅用于 interval。以安装身份关联，普通卸载保留记录；清理经 cleanupObjects 在既有事务内完成。
+7. internal/core/scheduler：
+   Options 保留 JobTimeout、Now，追加必填 Store *state.Store、TasksPerPlugin int、TaskPayloadBytes int64、TaskConcurrency int。
+   func New(opt Options) *Scheduler // 签名保持；所有构造点同步新字段
+   func (s *Scheduler) Attach(ctx context.Context, p router.Plugin, activatedAt time.Time) error // 替换原 Attach；数据库失败向启动方返回
+   func (s *Scheduler) Services(m *router.Mux, current func(router.Caller) (router.Plugin, bool)) // 注册六个服务；assembly 传 a.router.PluginFor
+   保持 Drain/Detach/Released/Close/Stats 的签名和既有计数含义。
+   type TaskStats struct { Expired uint64; Unregistered uint64; Running, Queued int }
+   func (s *Scheduler) TasksStats(pluginID string) TaskStats // 内存诊断快照；本切片无管理 HTTP API
+   动态运行槽的稳定键为 (plugin_id,name,key)，与静态 (plugin_id,job_id) 分开。
+
+行为：
+- REGISTER 原子拒绝错误的 kind/spec、空/非法任务名、重复任务名、任务路由 ID 与 task.<name> 不一致，以及其他路由占用 task. 前缀。任务名为 ^[a-z][a-z0-9_.-]{0,63}$。同名实例靠 key 区分。保留既有权限名集合的校验；TASK 触发只具有 job scope，事件及可信父附件均无用户 Actor、默认 Target 或默认 Admin。
+- Attach 在安排定时器前从同一个状态库读取两类状态并完成必要写入：静态 interval 无起点或间隔变化时写 activatedAt，新间隔重置起点并保留暂停状态；未变化时用旧起点。静态 cron 保留暂停状态。全部读取/写入成功后发布本 Session 的注册和未来定时器；数据库失败走启动失败清理，错误保持可见。
+- 动态 interval 的 Anchor 为创建/替换时刻，cron 复用 contracts/schedule，at 为一次性绝对时刻。Attach 清除已到期的 at，WARN 含 plugin_id、task_name、key、scheduled_at 并计 Expired；先处理过期 at，再安排已注册任务名的未来实例。当前 Session 缺少任务名的其余行保留，计 Unregistered。重启、更新与 rollback 均以 Core 状态库的任务为准。
+- 服务入口以 Mux Caller 为身份，经 current 核对当前 Session 且处于 Activated；旧 Session 与未激活调用返回 FAILED_PRECONDITION，Draining 后拒绝新的任务变更，包括仍带父调用的请求。无需 parent_call_id。请求载荷无 plugin_id 字段。
+- set 先完整校验，再写库：key 是 1～128 字节合法 UTF-8；三种触发恰有一种；interval >=1s、五字段 cron、有效 IANA、cron 缺省 UTC；timezone 只用于 cron；at 必须晚于 Now；参数为原样 JSON 对象且不超 TaskPayloadBytes。当前未注册任务名返回 NOT_FOUND；非法输入/过去的 at/参数超限返回 INVALID_ARGUMENT；新 key 超总数返回 RESOURCE_EXHAUSTED。相同 key 整体替换触发与参数，interval 起点重置。写入失败保持旧定时器、队列和数据，返回完整存储错误经协议安全错误通道处理。
+- cancel 对该插件的实例撤销后续触发、定时器和排队项，取消其在途 wire 调用；删除持久行成功后才改内存。实例已在派发时删行但仍在途时，仍应成功取消该次调用；持久与在途记录均不存在才返回 NOT_FOUND。槽一直保留到真实 Response 或确认旧进程退出。替换后旧在途响应仅释放自身运行记录，禁止删除新实例或释放新调用的槽。
+- list 按同一任务名、key 字典序返回完整参数与规则；after_key 为上一页最后返回的 key，下一页严格从其后开始。按实际 protobuf/Envelope 大小限制分页，完整保留单条数据；超帧的单条返回 RESOURCE_EXHAUSTED。next_after_key 仅有后续条目时设置。无并发写入时分页不丢不重；当前缺少处理函数的已保存任务也可列出和取消，其 next_at 缺失。任务名对应的零实例返回空页。
+- tick 仍使用真实 REQUEST/RESPONSE、独立 run_id 与 JobTimeout；静态任务保持原期限和实际运行槽语义。动态同一实例有未结束调用时跳过本轮；每插件动态实际运行数受 TaskConcurrency 限制，其余按到期时刻排队。排队周期实例只保留一项；等待名额期间触发仍有效。一次性实例在取得名额、实际派发前的状态库事务中删除，删除失败禁止派发。排队动态调用期限拟从实际派发时刻计算，详见备注。
+- 超时/协作取消只结束调用结果，实际槽及动态并发名额继续保留；真实迟到 Response 或 Released 才释放并推进仍有效的队列。失败与超时无业务重试。落后时只安排下一未来 tick。
+- pause/resume/status 只操作已注册的静态 job_id，缺失返回 NOT_FOUND。pause 先保存标记，再撤销未来定时器，在途一轮继续；resume 先保存标记，再按原起点安排下一未来时刻。重复操作成功且保持状态与起点。status 的 last_at/next_at 语义按备注定稿。
+- Drain、Detach、Close 摘除该 Session 全部静态/动态定时器，清空到期队列，持久定义保留；STOPPING 沿既有停止路径取消在途调用，共用全局停止预算。Session 替换后旧定时器、队列项与完成回调均按所属注册/运行身份失效。
+- 将 dynamic_task、scheduled_job 添加到 state.cleanupObjects 的数据对象部分，预览和删除用同一清单。PurgeData/PurgeAll 在既有 Uninstall 事务中按 plugin_id 删除，并进入管理服务 ErrNeedsConfirm 的 affected；无需插件进程在线。PurgeNone 保留行；停止完成后无 Session 可再创建任务。同来源重装，周期任务从原起点的下一未来时刻继续，期间到期的 at 作废；PurgeData 保留配置/secret，PurgeAll 沿用全部配置清理。
+- 内部存储、定时器与服务写操作采用同一串行顺序，覆盖 set/cancel 与到期派发、暂停和停止的交错；事务中只操作状态，不等待 IPC。数据库错误有返回/日志，参数 JSON 与 secret 不写日志。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：只新增根包 scheduler_tasks_test.go 的 TestPersistentTasks（//go:build unix），测试子进程以原始 wire/pb 完成新 TASK 注册与服务请求，复用 pipeline_test.go 的生产装配、真实 Session、独立进程与临时 SQLite。主链：创建 interval/at、同 key 替换与 list、触发参数和无 Actor；重新打开同一数据目录后起点及任务保留、静态暂停保持、恢复从未来 tick 继续；已进入 Handler 的实例经 cancel 收到 Cancel；经真实 manage.Service 的三种卸载范围与同来源重装检查定义的去留和后续触发。主链可用同一测试的子场景，具体平台证据单列。
+- 同步 contracts/wirespec_test.go 的编号断言。多列理由：公开协议追加需要固定编号与 presence，这是编码规范允许的协议编号检查。
+- 范围内既有测试只同步新签名与必填装配字段，断言不变。SDK 与 supervisor 目录的测试、新 testdata 插件全部放本地；提交测试代码中的辅助进程直接在现有测试二进制内实现，不引入提交的 SDK Task 示例。遇到范围外既有 fixture 必须同步时标 [!]，交审查者处理。
+- 本地自测（*_local_test.go，PR 写明结果）：注入 Now 验证固定起点、间隔变化、cron/夏令时、落后跳过、暂停跨重启；过期 at 的删除/WARN/计数，缺少任务名时的保留/诊断；输入错误码、配额替换、字节上限与跨帧完整分页；同插件超过并发名额后全部依次执行、周期排队合并与不同实例独立；超时/断链保槽和迟到响应；已派发 at 的 cancel、同 key 替换交错、Draining 清队列及旧 Session 变更拒绝；数据库失败不派发/不发布半注册，purge 清单准确和同事务回滚。
+- 本地多进程补充：Core/插件停用越过多个 tick、插件更新缺少任务名、卸载时有排队/在途调用、重新安装的原起点恢复。原始协议进程保留参数和实际完成通知；其余 SDK API 验收交 goal-128。
+
+完成条件：接口、持久化、实际槽、取消、暂停和三种清理语义均有证据；本草稿备注中的契约决定已由审查者写入正式语句/权威规格。执行阶段运行 go generate ./... 并核对差异仅为上述授权追加；gofmt -l 本次修改的 Go 文件无输出；go vet ./...；go test -race . ./contracts/... ./internal/core/... ./sdk/...；go build ./...。PR 记录命令、平台、Go 版本、提交测试新增行数及本地自测结果，V-114 的证据交审查者回写 TEST-MATRIX §3.2。出现工作包停止条件、范围外变更、新依赖或未决契约冲突时标 [!]。
+
+不做：sdk.Task/OnTask、sdk.Key/Timezone、SDK 事件自有类型转换和作者示例（goal-128）；任务管理界面/API；动态任务暂停；错过触发的补执行；持久化到期队列；候选/rollback 改写 Core 任务；新增状态库迁移和兼容层；新依赖。
+```
 
 ### goal-130 · T-08.14 配置项的选项来源
 
@@ -5373,18 +5470,87 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-84 · T-09.12 WebUI 组件与组件图标
 
-状态：等待前置（T-09.4、T-13.1）。T-07.7（[PR #116](https://github.com/AlonaBot/AlonaBot/pull/116)，合并提交 `e65eb4d`）已合并。已合入 `settings.Settings.BaseURL`（键 `base_url`）、`webhost.Options{BaseURL, Admin, Proxy, Now}` 与 `adminauth.Auth.Authorize`；装配用 `httpproxy.New(auth)`，WebUI 静态入口挂到 Admin，`/plugins/` 由 Proxy 提供统一沙箱响应。私有插件请求直接使用管理 Cookie/Bearer，Cookie 的非 GET/HEAD 请求校验 CSRF 与 Origin；页面的 iframe 与 postMessage 桥仍由后继实现。合并后由审查者按 main `2c1fdcc` 核对。语句只写了目标、依据和要点。依据 D-62、D-63 新增；前置合并后由审查者按实际的 webhost、adminauth、manage 与根包装配写出接口和测试段。2026-11-04 随前后端拆分从 WebUI 章节移入核心章节。2026-11-04 按 D-77～D-85 修订计划：Core 只有一个主机名（D-84），WebUI 与插件路由同在其下；spec/ADMIN-API.md 还要写出插件页面桥的消息格式。
+状态：待派发。直接前置 T-07.7（PR #116，合并提交 `e65eb4d`）、T-09.1（PR #72，`1ba7e5b`）、T-09.4（PR #163，`cb8ae3d`）、T-13.1（PR #149，`bc39361`）均已合并。PR 与合并提交取自本地 `docs/goals/core.md` 的合并记录。下文新增接口与页面桥消息格式供审查者定稿；WebUI(fs.FS) 的版本元数据缺口见备注。
 
-目标：Core 以组件方式提供 WebUI 与组件图标：已启用 WebUI 组件的静态文件（保留 `/api/` 与内部路径，无扩展名的不存在路径回退 index.html，未安装时 503 与英文提示），Admin API 主版本常量与 WebUI 声明范围的检查（不兼容时拒绝安装与启用并提示），只提供 manifest 声明的图标并带 sandbox CSP 与 nosniff、要求管理员会话；写出 spec/ADMIN-API.md（主版本、全部接口、认证与错误格式）；根包增加 `alonabot.WebUI(fsys fs.FS)` 选项。
+按 main 核对（2026-11-12，已用 rg 核对签名、字段和路由；manage.Service.Handler 另以离线 go doc 核对）：
 
-依据：PLAN T-09 步骤 9、§3.1 的 T-09.12 行；CONTRACTS §7.3、§7.5、§9.1、§15.5；DECISIONS D-62、D-63；TEST-MATRIX V-83。
+- 根包 `alonabot.go` 已有 `type Option func(*options)`、`Run(opts ...Option) error`、`Start(ctx context.Context, opts ...Option) (*Core, error)`、`(*Core).Wait() error`；选项含 `Plugin(root *sdk.Plugin)`、`Adapter(a adapter.Adapter)`、`DataDir(dir string)`、`Listen(addr string)`、`LogLevel(level slog.Level)`、`LogFormat(format string)`、`Args(values ...string)`，均返回 Option。当前无 WebUI 选项。Start 只读取一次 settings.File，然后装配认证、管理服务、HTTP Listener 与已启用组件。
+- `alonabot.go` 当前依次 `authentication.Routes(adminMux)`、`adminMux.Handle("/", management.Handler(authentication))`，再把 adminMux 传给 webhost；静态入口须从这个根路由拆开，否则会落入管理认证/404。启动进程的安装遍历已跳过 `state.RoleWebUI`。
+- `internal/core/webhost/host.go`：`New(opt Options) *Host`；`Options{BaseURL *url.URL, Admin http.Handler, Media http.Handler, Proxy *httpproxy.Server, Now func() time.Time}`。`(*Host).ServeHTTP` 验证 Host，先分流 `/plugins/`、`/media/`，其余交 Admin。保留这条真实分流及一个公开端口。
+- `internal/core/adminauth/auth.go`：`New(st *state.Store, now func() time.Time, adminBaseURL *url.URL, dataDir string) *Auth`、`(*Auth).Routes(mux *http.ServeMux)`、`Require(next http.Handler) http.Handler`、`Authorize(r *http.Request, pluginID string) bool`；现有路由仅 POST `/api/auth/login`、POST `/api/auth/logout`。登录成功返回 `{"csrf_token":...}`；Cookie 变更请求使用 `X-Alonabot-CSRF` 并验证 Origin，CLI 使用 Bearer。
+- `internal/core/manage/service.go`：`New(opt Options) *Service`，Options 已有 `Store *state.Store`、`Settings *settings.File`、`Packages string`、`Development map[string]*manifest.Manifest` 与生命周期函数；`(*Service).List(ctx context.Context) ([]Package, error)`。私有 `directory(in state.Install) string` 用安装版本与 BuildDigest 前缀定位包目录，`manifest(ctx context.Context, id string) (*manifest.Manifest, error)` 读包内或开发组件 manifest，静态入口应复用它们。
+- `internal/core/manage/http.go`：`(*Service).Handler(auth *adminauth.Auth) http.Handler` 统一认证；已注册 `/api/v1/packages`、packages 的 install/enable/disable/restart/uninstall/pin/reload/update/rollback、`/api/v1/admins` 及 add/remove、`/api/v1/adapter/instances/` 的 create/start/stop/delete。成功结果直接编码结构体；409 确认响应是 `{"affected":[...]}`，其他管理错误是 `{"code":...,"safe_message":...}`；认证错误目前为英文纯文本。准确大小写及字段以源码 JSON 标签为准。
+- `internal/core/manage/lifecycle.go` 的 `Enable(ctx context.Context, id string) error` 对 WebUI 只设 Enabled；尚无 Admin API 版本检查。`install.go` 的 `Install(ctx context.Context, req InstallRequest) (Package, error)` 先 prepare，再同类替换；兼容性检查须在替换旧包前完成。`candidates.go` 的 Update 也先 prepare，候选执行当前仍为 UNSUPPORTED，属后继切片。
+- `contracts/manifest/manifest.go`：`Manifest{Role, Icon, Assets string; AdminAPIMinMajor, AdminAPIMaxMajor uint32; ...}`、`Parse(data []byte) (*Result, error)`、`ParseProject(data []byte) (*Result, error)`（project.go）、`ValidateRelPath(p string) error`。WebUI 已要求版本范围与 assets 路径；icon 已限制为 `.svg/.png/.webp`。`internal/core/packages/preflight.go`：`Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error)`、`(*Candidate).MoveTo(packagesRoot string) (string, error)`；解压已拒绝链接与越界路径，当前只核对进程 entrypoint，尚未核对 WebUI index.html 与图标实际文件。
+- 在途冲突：goal-69、goal-81 同改根包 `alonabot.go`/`assembly.go`，goal-22、goal-55 也改装配；本切片集中在 alonabot.go 的 Option 和 HTTP 挂载，不改 cmd。goal-131 改 state/manage 的清理，本切片只改 manage 的静态入口、安装/启用门禁与 HTTP 注册；goal-59 在 agent/ 无直接文件冲突。本切片与 goal-127 可分别追加 manage/http.go 之外的新文件；state/schema.sql 由 goal-55/goal-131/goal-127 负责，本切片无需修改。后合并者同步保留其他 HTTP 路由与装配项。
 
-要点：
-- 文件只从不可变包目录读取，路径按 CONTRACTS §9.1 的相对路径规则校验，不跟随链接，不经组件进程。
-- 图标的类型只按扩展名取 image/svg+xml、image/png、image/webp；未声明的包内文件即使存在也返回 404。
-- spec/ADMIN-API.md 由本切片新建，写入此时已有的全部 Admin API（goal-36、goal-39 等）；之后新增接口的切片（goal-66、goal-92、goal-93）同步追加；同一主版本内只做向后兼容的增加。
-- 原 goal-43 要求 Core 给 WebUI 静态文件加 `Content-Security-Policy: default-src 'self'`、`X-Frame-Options: DENY` 与 `nosniff`。CONTRACTS §7.5 目前只规定了图标的响应头，没有这一条；补写接口段前先由维护者确认，确认后写入 §7.5 再列入本语句。
-- 提交的集成测试经真实 Core 与临时安装的 WebUI 测试包覆盖 V-83 的全部场景；含脚本的 SVG 在浏览器中不执行的检查没有浏览器时记为未运行。
+- 审查者决定（2026-11-12）：开发 WebUI 不做 Admin API 版本检查并记 WARN（D-140，待维护者确认）；WebUI 静态响应只加契约写明的头；采纳本语句的桥消息格式；图标端点也接受 HEAD（与 GET 相同的状态与头、无正文）；本切片的图标只覆盖已安装组件，开发组件的图标另行安排；spec/ADMIN-API.md 如实记录当前端点（含字段大小写与纯文本认证错误），不借本切片统一格式。
+```text
+/goal 使用 $alonabot-execute 推进 goal-84（切片 T-09.12：WebUI 组件与组件图标）。goal 目录 goal-84，分支 goal-84，worktree .worktrees/goal-84，从最新 origin/main 创建（包含 PR #116、PR #72、PR #149、PR #163）。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：Core 提供已启用 WebUI 组件的静态文件、单页路由回退与缺失/版本不兼容的英文提示；定义 Admin API 主版本并拒绝不兼容的安装与启用；通过管理员认证的入口只提供 manifest 声明的图标并施加沙箱响应头。新增库模式 alonabot.WebUI(fsys fs.FS) 选项，以及包含当前全部管理 HTTP 接口、认证/错误格式和插件页面桥消息格式的 spec/ADMIN-API.md。
+
+依据：spec/PLAN.md §3.1；spec/plan/core.md T-09.12、T-09 步骤 9、相关的步骤 3/7 与「对应 V 验收与停止条件」；spec/CONTRACTS-v0.1.md §7.2～§7.5、§9.1、§9.3、§15.5；spec/MESSAGE-MODEL.md §1 的 Target、Actor 与事件来源（代理既有消息/事件接口时沿用）；spec/WIRE-FORMAT.md §3.3 的现有 HTTP 路由描述与 Listener 凭证、§3.4 中 Adapter 平台 token 路由与内部代理凭证的区分；spec/adr/DECISIONS.md D-62、D-63、D-74、D-77、D-78、D-84、D-86、D-139；spec/TEST-MATRIX.md V-83，并回归 V-47 的管理认证、CSRF 与插件沙箱。对应工作包在 spec/plan/core.md。
+
+范围（只新增或修改这些）：
+- internal/core/manage/service.go：Options 增加开发 WebUI 文件系统；新增 static.go：WebUI 选择、版本检查、静态与图标提供。复用现有安装记录、manifest 读取和包目录定位。
+- internal/core/manage/install.go、lifecycle.go：安装/替换预检与 Enable 的版本门禁；candidates.go 只在已有 Update 预检链补同一兼容性检查，候选执行保持后继所有者。
+- internal/core/manage/http.go：追加图标端点，复用现有认证；新增静态入口方法与原管理 Handler 分开。
+- internal/core/packages/preflight.go：验证 assets/index.html 与 icon 是包内普通文件，沿用已批准的解压与路径规则。
+- 根包 alonabot.go：WebUI Option、options 字段、给同一个 manage.Service 传 fsys，以及 Admin API/静态入口的 HTTP 挂载；其余装配保持现有所有者。
+- 新增根包 webui_test.go（unix）：一项经真实 Start/管理服务/公开 Listener/临时组件包的集成测试；上述包的 *_local_test.go。
+- 新增 spec/ADMIN-API.md：当前 API 主版本、全部已实现端点和插件页面桥的格式。后继新增接口由 goal-66/goal-92/goal-93 追加。
+
+允许的新跨模块边：无。静态托管与包身份解析都在 internal/core 内；根包经已允许的 internal/core 装配。fs.FS 使用标准库；Core 保持通过协议接入组件。
+
+接口（照此实现；内部辅助函数自定）：
+1. internal/core/manage：
+   const AdminAPIMajor uint32 = 1
+   Options 追加 DevelopmentWebUI fs.FS // 本次运行的静态根目录；未传时选择已启用的安装包
+   func (s *Service) WebUI() http.Handler
+   保持 New、Install、Enable、Handler 等现有公开签名。WebUI Handler 处理静态 GET；管理 API 仍由 Handler(auth) 提供。
+2. 根包：
+   func WebUI(fsys fs.FS) Option
+   fsys 根目录即静态根目录；本次运行取代已安装的 WebUI，不将 dev WebUI 写成 Native 安装记录、不启动进程。开发 WebUI 没有 manifest，不做 Admin API 版本检查，启动时记一条 WARN（D-140，待维护者确认）；同一次 Start 登记两次 WebUI 选项返回错误。
+3. HTTP：
+   保持 POST /api/auth/login、POST /api/auth/logout 与全部 /api/v1/ 路由。
+   GET /api/v1/packages/{id}/icon：只取该组件 manifest.Icon 的文件；无图标/未安装/已卸载/非文件返回 404，未认证返回 401。没有任意包路径参数；额外路径和查询参数均不得改变被选择的文件。
+   Admin 挂载：authentication.Routes(adminMux)；/api/v1/ 交 management.Handler(authentication)；其余 /api/ 交同一管理错误入口；/ 根路由交 management.WebUI()。已登记的 auth 路由优先。/plugins/、/media/ 仍在 webhost 分流，所有其他 Core 保留路径在静态查找前拒绝。
+4. spec/ADMIN-API.md 的桥消息格式（供后继 WebUI 页面实现；本切片只定义格式）：
+   request: {channel:"alonabot.plugin", id:string, op:"request", method:string, path:string, headers?:Record<string,string>, body_base64?:string}
+   locale/theme 请求: {channel:"alonabot.plugin", id:string, op:"locale"|"theme"}
+   文案请求: {channel:"alonabot.plugin", id:string, op:"translate", key:string, args?:Record<string,string>}
+   response: {channel:"alonabot.plugin", id:string, ok:true, result:{status:number,headers:Record<string,string>,body_base64:string}} // request
+   response: {channel:"alonabot.plugin", id:string, ok:true, result:{locale:string}} // locale
+   response: {channel:"alonabot.plugin", id:string, ok:true, result:{theme:string}} // theme
+   response: {channel:"alonabot.plugin", id:string, ok:true, result:{text:string}} // translate：只查该组件的 messages
+   error: {channel:"alonabot.plugin", id:string, ok:false, error:{code:string,safe_message:string}}
+   body_base64 使用标准 base64，缺省请求正文为空；响应保留完整字节。translate 按当前界面语言及该组件已有 i18n 回落规则格式化 messages.key。以上格式已由审查者采纳，写入 spec/ADMIN-API.md，后继 WebUI 实现遵循它。
+
+行为：
+- 安装 WebUI 时，在 prepare 已完成且任何旧组件停止/卸载前，检查 AdminAPIMinMajor <= AdminAPIMajor <= AdminAPIMaxMajor；不兼容返回 FAILED_PRECONDITION，英文提示含 Core 主版本和组件声明范围。Enable 同样检查，失败保持原 Enabled。Update 复用同一预检，避免未来候选流程跳过版本门禁。保持同类唯一、--replace、来源绑定和确认语义。
+- 每次提供已安装 WebUI 时，依据 Store.Installs/Enabled 选择 role=webui、未卸载且已启用的唯一记录，复用 directory 和 manifest 的 assets。Core 升级后范围失配时返回 503 与英文纯文本版本提示，管理 API 仍可用；缺少已启用 WebUI 时返回 503 与安装提示，明确使用 alonabot install 安装 WebUI 组件。安装损坏、读取/状态库错误保留并记录安全错误，响应 500，拒绝伪装成未安装。
+- assets/index.html 与 icon 的存在性/普通文件检查在预检边界完成；已安装提供时同样保持文件边界。路径使用 fs.ValidPath/manifest.ValidateRelPath 的相应形式，拒绝 ..、反斜杠、绝对路径和链接；禁止先 Clean 后接受越界输入。包目录只读，不遍历暴露整个包。根静态路径映射为 index.html。
+- GET 对应文件存在时提供该文件。不存在且 URL 最后一段无扩展名时提供 index.html；带扩展名的不存在路径返回 404；目录按静态根语义处理且不列目录。实际 I/O 错误返回错误，只有文件不存在才适用回退。非 GET 的静态请求返回 405。HEAD 的支持按备注定稿，保持静态与 API 的方法规则清晰。
+- /api/、/plugins/、/media/ 及已有内部路径在回退前分流，即使 WebUI 包内有同名文件也不覆盖；未知 API 返回既有 API 错误，保留状态码和 Content-Type。所有静态请求继续由 webhost 验证受控 Host，错误 Host 为 421。无 WebUI 时登录、管理与插件/媒体入口照常可达。
+- WebUI 是登录页面本身的来源，静态资源可在登录前获取；管理 API 和图标始终通过现有认证。图标只打开该组件自身的 manifest.Icon；MIME 只按扩展名取 image/svg+xml、image/png、image/webp。图标响应强制 Content-Security-Policy: sandbox; default-src 'none'; style-src 'unsafe-inline' 与 X-Content-Type-Options: nosniff，包括直接打开 SVG 的场景。未声明文件与其他扩展名一律拒绝提供。开发插件/Adapter 的图标若缺少可访问包目录，按备注定稿，禁止推测其工程路径。
+- dev WebUI 选项只在本次运行覆盖安装包静态来源；不修改已安装组件的启用状态、来源或包文件。其资源使用同一回退与保留路径规则，不做 Admin API 版本检查（见接口 2）。
+- 静态 WebUI 响应不额外加 CSP 或 X-Frame-Options（契约未规定，审查者决定只落实已写明的头）；图标与插件代理继续使用各自契约规定的响应头，避免将插件 CSP 套在持有管理会话的 WebUI 页面上。
+- API 参考逐个登记当前源码的 method/path、认证方式、请求/响应 JSON 的准确字段大小写、状态码与确认流程；包括 auth、packages 全部管理动作、admins、Adapter 实例和新增图标。管理成功为直接结果、409 affected、其他错误 code/safe_message，认证与路由的纯文本错误单列。reload/update/rollback 写明当前候选执行返回 UNSUPPORTED（HTTP 501），后继实现再修订能力说明。上传与会话取回等后继端点由所属切片实现时追加。
+- API 参考写明 Cookie/Origin/X-Alonabot-CSRF、CLI Bearer、8h 会话、缺认证时的行为、WebUI 版本范围与同主版本的兼容增加。插件路由的内部凭证由 SDK/Core 管理，浏览器桥无需取得它。
+- 桥格式（已采纳）：请求来源按已嵌入的 iframe.contentWindow 绑定组件 ID；不透明源的 origin 为 null，父页面同时核对窗口身份。父页面向正确窗口回应，request.id 对应原请求。只接受插件相对路径，拒绝绝对 URL、越界路径和重定向；父页面将路径固定到该 iframe 所属组件的 /plugins/{id}/ 前缀，Core 现有代理负责已注册 method/path 的最终匹配，禁止访问其他组件和 Admin API。父页面添加管理员会话/CSRF，页面自带头中拒绝 Cookie、Authorization、CSRF 与 Core 内部凭证，响应也滤去 Set-Cookie 等凭证。语言/文案/主题只返回相应值。后继前端实现遵循本格式。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：只新增根包 webui_test.go 的 TestWebUIComponents（//go:build unix）。用临时 data_dir、真实 alonabot.Start 的单一 HTTP Listener、真实认证与管理服务，在临时目录构造并安装 WebUI 组件包。一个测试内分子场景覆盖 V-83：启用后取 index/资源；无扩展名前端路由回退；带扩展名缺失 404；/api/ 和内部路径保持分流；未安装/停用 503 及英文提示；安装与启用时版本不兼容被拒且旧 WebUI 可继续提供；Core 主版本升级式模拟下，已安装不兼容 WebUI 返回版本提示；WebUI(fsys) 在契约定稿后通过同一 Start 路径覆盖已安装静态来源。
+- 同一测试安装声明 SVG/PNG/WebP 图标的临时组件包，经图标公开端点验证认证、MIME、完整 CSP/nosniff、只读取声明文件；未声明、额外包路径、其他扩展名与越界路径拒绝。图标错误扩展名的包在安装预检被拒。测试包在 t.TempDir 动态生成，无新增 testdata 插件；包校验所必需的摘要沿用安装夹具，不作额外完整性计算。
+- 本地自测（*_local_test.go，PR 写明结果）：所有 reserved 前缀、未知 API 的认证/404 与 MIME、非 GET 方法、编码后的路径与 symlink、目录/index 缺失和普通 I/O 故障；Host 校验；禁用/卸载/替换后的即时选择；--replace 拒绝不兼容候选时旧包与 Enabled 保持；Update 预检；图标 Cookie 与 Bearer、登录 CSRF 回归；重复 WebUI 选项按审查者定稿的规则处理。既有测试只做必需接口迁移，原断言保持。
+- 浏览器本地验证：真实 Core 上登录，直接打开包含 script 的 SVG 图标，确认脚本无法访问 Admin 源或产生副作用；记录浏览器版本与实际结果。环境缺少浏览器时写“未运行”，V-83 此分项保留待联验；页面桥的执行验证由后继前端切片负责，本切片检查文档结构与安全规则完整。
+- 不向 sdk/、internal/core/supervisor/ 增加提交测试；多进程本地自测如需插件页面，复用根包 pipeline_test.go 的真实 Session 装配。
+
+完成条件：WebUI 提供/回退、保留路径、版本拒绝、图标认证与头部、库模式覆盖均有集成证据；spec/ADMIN-API.md 与当前 main 的所有端点逐项对应，桥格式已写入。gofmt -l 本次修改 Go 文件无输出；go vet ./...；go test -race . ./internal/core/manage/... ./internal/core/packages/... ./internal/core/webhost/... ./internal/core/adminauth/...；go build ./...。PR 给出命令、OS/架构、Go/浏览器版本、提交测试新增行数及本地验证结果，未运行项按原样交审查者回写 TEST-MATRIX §3.2。遇到 T-09 的停止条件、额外依赖、范围外文件或未决契约时标 [!]。
+
+不做：WebUI 前端页面与桥运行代码（goal-43/goal-44）；Core 内嵌前端；插件页面票据/第二 host；会话取回与 multipart 上传（goal-92）；日志 API（goal-66）、配置/权限/工具/会话管理 API（goal-93）；候选 Journal、正式更新与 rollback 编排（goal-40）；任意包文件浏览、表单选项图标、组件进程静态代理；新依赖和 proto 变更。
+```
 
 ### goal-69 · T-13.3 开发运行与热部署
 
