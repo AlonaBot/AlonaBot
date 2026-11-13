@@ -32,8 +32,9 @@ const (
 type Options struct {
 	Router         *router.Router
 	RequestTimeout time.Duration
-	MaxDepth       int               // CALL_CHAIN_MAX_DEPTH，包含即将调用的目标插件。
-	Metrics        *metrics.Counters // nil 时关闭原因计数。
+	MaxDepth       int                                       // CALL_CHAIN_MAX_DEPTH，包含即将调用的目标插件。
+	Metrics        *metrics.Counters                         // nil 时关闭原因计数。
+	Agent          func(ctx context.Context) (string, error) // 仅 @agent 目标需要，空 ID 表示未安装。
 }
 
 // Broker 保存路由入口和在途转发关系；New 创建，Call 接入 Mux.Forward。
@@ -44,6 +45,7 @@ type Broker struct {
 	requestTimeout time.Duration
 	maxDepth       int
 	metrics        *metrics.Counters
+	agent          func(ctx context.Context) (string, error)
 	mu             sync.Mutex // 只保护 calls，转发期间不持锁
 	calls          map[*router.Invocation]callOrigin
 }
@@ -57,7 +59,7 @@ type callOrigin struct {
 
 // New 按装配处传入的请求期限和调用链深度上限创建 Broker。
 func New(opt Options) *Broker {
-	return &Broker{router: opt.Router, requestTimeout: opt.RequestTimeout, maxDepth: opt.MaxDepth, metrics: opt.Metrics, calls: make(map[*router.Invocation]callOrigin)}
+	return &Broker{router: opt.Router, requestTimeout: opt.RequestTimeout, maxDepth: opt.MaxDepth, metrics: opt.Metrics, agent: opt.Agent, calls: make(map[*router.Invocation]callOrigin)}
 }
 
 // Call 依次完成定位、访问与输入准入，再以独立编号调用目标 Session。
@@ -94,7 +96,16 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 	}()
 	// 1. 目标语法必须先于插件与服务查找检查。
 	pluginID, name, ok := strings.Cut(in.Target, "/")
-	if _, err := validate.PluginID(pluginID); err != nil || !ok || !validate.IsServiceName(name) {
+	if !ok || !validate.IsServiceName(name) {
+		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid service target")
+	}
+	if pluginID == "@agent" {
+		var err *pb.ErrorInfo
+		pluginID, err = b.agentID(ctx)
+		if err != nil {
+			return wire.Response{Err: err}
+		}
+	} else if _, err := validate.PluginID(pluginID); err != nil {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid service target")
 	}
 	var plugin router.Plugin
