@@ -1,0 +1,12 @@
+{
+  "messages": {
+    "pong": "pong",
+    "admin": "admin",
+    "mod": "mod",
+    "buttons": "buttons",
+    "button_label": "Open",
+    "plain": "plain",
+    "before_edit": "before",
+    "after_edit": "after"
+  }
+}

@@ -206,8 +206,18 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 		Call: func(ctx context.Context, inv *router.Invocation, parent uint64, deadline time.Time) (wire.Response, error) {
 			return a.router.CallContinuation(ctx, inv, parent, deadline)
 		}})
-	a.router = router.New(router.Options{Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
-		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: a.settings.CommandPrefixes, CommandNames: p.CommandNames,
+	var dispatched func(router.Dispatch)
+	if harness := inproc.HarnessFor(dir); harness != nil && harness.Dispatched != nil {
+		dispatched = func(d router.Dispatch) {
+			result := inproc.Dispatch{InstanceID: d.InstanceID, SourceEventID: d.SourceEventID, Waiting: d.Waiting}
+			for _, outcome := range d.Outcomes {
+				result.Outcomes = append(result.Outcomes, inproc.Outcome{PluginID: outcome.PluginID, RouteID: outcome.RouteID, ErrorCode: int32(outcome.Err.GetCode()), SafeMessage: outcome.Err.GetSafeMessage()})
+			}
+			harness.Dispatched(result)
+		}
+	}
+	a.router = router.New(router.Options{Dispatched: dispatched, Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
+		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Intercept: a.buttons.InterceptConfirm, Policy: p, CommandState: p.CommandState, Prefixes: a.settings.CommandPrefixes, CommandNames: p.CommandNames,
 		Continuations: continuations, Metrics: a.metrics,
 		Send: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
 			return messages.Send(ctx, c, in)
@@ -226,10 +236,13 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 	a.media.AddServices(a.mux)
 	a.media.AddReadServices(a.mux, a.adapters, a.router, store.AdapterInstanceAllowed)
 	conversation.New(store).Register(a.mux)
-	tool.New(store, a.router).Register(a.mux)
+	tools := tool.New(store, a.router)
+	tools.Register(a.mux)
 	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes, Metrics: a.metrics})
 	a.bus.Register(a.mux)
 	a.broker = broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth, Metrics: a.metrics})
+	tools.RegisterInvoke(a.mux, tool.InvokeOptions{Call: a.broker.Call, Adapters: a.adapters, Buttons: a.buttons,
+		ConfirmTimeout: v.ToolConfirmTimeout, DefaultLocale: func() string { return a.settings.Settings().DefaultLocale }})
 	a.mux.Forward(a.broker.Call)
 	a.schemas = make(map[string]componentOptionSchemas)
 	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: a.broker, Chats: store.Chats, Page: v.OptionsPage, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
@@ -460,6 +473,13 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	}
 	if err != nil {
 		return err
+	}
+	if harness := inproc.HarnessFor(dir); harness != nil {
+		if instances, restricted := harness.AllowedInstances[id]; restricted {
+			if err := c.store.SetAdapterInstanceAccess(ctx, id, false, instances); err != nil {
+				return err
+			}
+		}
 	}
 	active, err := c.store.Active(ctx, id)
 	if err != nil {

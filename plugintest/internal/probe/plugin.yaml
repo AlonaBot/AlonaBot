@@ -1,0 +1,8 @@
+# 插件测试套件的集成探针身份。
+id: plugintest_probe
+name: Plugin test probe
+version: 0.1.0
+author: AlonaBot
+role: plugin
+description: Integration probe for the plugin test harness
+source: github.com/AlonaBot/AlonaBot

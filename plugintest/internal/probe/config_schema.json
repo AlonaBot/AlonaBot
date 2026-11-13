@@ -1,0 +1,5 @@
+{
+  "$version": 1,
+  "value": {"type": "string", "description": "Value returned by the config command", "default": "configured"},
+  "fail_start": {"type": "bool", "description": "Fail after opening the managed database", "default": false}
+}
