@@ -48,6 +48,19 @@ CREATE TABLE adapter_cursor (
   updated_at  INTEGER NOT NULL
 );
 
+CREATE TABLE chat (
+  adapter_id  TEXT NOT NULL,
+  chat_id     TEXT NOT NULL,
+  chat_type   TEXT NOT NULL,
+  title       TEXT NOT NULL,
+  instance_id TEXT NOT NULL,
+  first_seen  INTEGER NOT NULL,
+  last_seen   INTEGER NOT NULL,
+  PRIMARY KEY (adapter_id, chat_id)
+);
+
+CREATE INDEX chat_last_seen ON chat(last_seen DESC, adapter_id, chat_id);
+
 CREATE TABLE plugin_adapter_permission (
   plugin_id           TEXT NOT NULL REFERENCES install(plugin_id),
   adapter_instance_id TEXT NOT NULL,

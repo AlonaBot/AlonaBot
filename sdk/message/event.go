@@ -71,6 +71,7 @@ type Event struct {
 	AdapterID, AdapterInstanceID, AccountID string
 	Session                                 Session
 	ChatType                                ChatType
+	ChatTitle                               string // 平台给出的会话显示名；空串表示未提供。
 	Actor                                   *Actor
 	Message                                 *PlatformMessage
 	Payload                                 Payload
