@@ -17,8 +17,8 @@
 | goal-136 | T-12.14 | 对话中的图片输入 | T-04.8、T-12.2、T-12.13 | 待派发 |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 已完成（PR #178） |
 | goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 待派发 |
-| goal-62 | T-12.5 | 技能 | T-12.3 | 等待前置 |
-| goal-63 | T-12.6 | 定时 Agent 任务 | T-07.9、T-08.5、T-12.3 | 等待前置 |
+| goal-62 | T-12.5 | 技能 | T-12.3 | 待派发 |
+| goal-63 | T-12.6 | 定时 Agent 任务 | T-07.9、T-08.5、T-12.3 | 待派发 |
 | goal-64 | T-12.7 | 官方 Agent 组件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6、T-12.8、T-12.14 | 等待前置 |
 
 ## 第 1 波
@@ -745,7 +745,7 @@ type memoryResponse struct{}
 
 ### goal-62 · T-12.5 技能
 
-状态：等待前置（T-12.3）。语句中 goal-59、goal-60 提供的符号（agent 的 Config.SkillsDir、工具目录与循环）只写名字；合并后由审查者核对，再改为待派发。
+状态：待派发。前置 T-12.3（goal-60，PR #178，合并提交 `a95b85b`）已合并。2026-11-13 审查者按 main 核对：工具目录为 agent/tools.go 的 `listTools`/`toolCatalog`/`roundTool`（Core 工具经 `sdk.InvokeTool`，MCP 工具经 `mcpPeer`），请求消息在 agent/conversation.go 中按「人格 system → 会话历史 → 用户档案 system → 用户消息」组装；goal-59 的配置里没有技能目录（PLAN T-12 步骤 2 列有此项），`Config.SkillsDir` 不存在，本切片补配置项 `skills_dir`。本切片与 T-12.4（goal-61，PR #182）共改 agent/conversation.go 与 tools.go，审查者在 #182 合并后派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-62（切片 T-12.5：技能）。goal 目录 goal-62，分支 goal-62，worktree .worktrees/goal-62，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -756,13 +756,14 @@ type memoryResponse struct{}
 
 范围（只新增或修改这些）：
 - agent/：新增 skills.go；系统提示与工具目录接入技能（只改调用处）
+- agent/config_schema.json 与 agent/i18n/*.json：新增配置项 `skills_dir`（string，缺省空串）及其 config 文案；agent/agent.go 的配置读取加入该项；运行 `go generate ./agent/...` 更新生成产物
 - 上述包的测试文件
 允许的新跨模块边：无（YAML 用已批准的 go.yaml.in/yaml/v3）。
 
 行为：
-- 目录：Config.SkillsDir 为空时不启用技能；相对路径以插件工作目录为基准。只读取一级子目录中的 SKILL.md（文件名区分大小写），不跟随符号链接，单个文件上限 256 KiB（命名常量），超过则视为不合法。
+- 目录：配置项 `skills_dir` 为空时不启用技能；相对路径以插件工作目录为基准。只读取一级子目录中的 SKILL.md（文件名区分大小写），不跟随符号链接，单个文件上限 256 KiB（命名常量），超过则视为不合法。
 - 解析：文件以 "---\n" 开头的 frontmatter 到下一个 "---\n" 为止，用 yaml.v3 严格解码（未知字段允许并忽略）；name 为 [a-z0-9_-]{1,64}，description 为 1～1024 字符的非空字符串；同名技能以目录名字典序第一个为准，其余记诊断。不合法的文件以 WARN 记录（路径与原因）并跳过。
-- 系统提示：在人格提示之后追加一段（文案键 agent.skills.header），逐行列出「name: description」，按 name 排序；没有技能时不追加。
+- 系统提示：在人格提示之后、会话历史之前追加一条 system 消息（文案键 agent.skills.header），逐行列出「name: description」，按 name 排序；没有技能时不追加。
 - load_skill：插件内工具（不经 Core 的工具目录与策略），在 goal-60 的工具列表中加入，输入 {"name": string}，返回正文；名字不存在时返回错误文本 "error: NOT_FOUND: unknown skill"。不计入额外的确认。
 - 技能在插件启动时读取一次，修改后需要重启插件。
 
@@ -770,14 +771,14 @@ type memoryResponse struct{}
 - 提交：agent/skills_test.go（//go:build unix）：临时技能目录含两个合法技能、一个缺少 frontmatter、一个缺少 description、一个超过大小上限：模拟 Provider 收到的系统提示只含两个合法技能，日志有三条诊断，插件正常启动；模型调用 load_skill 得到正文；不存在的名字得到错误结果。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：frontmatter 的边界（CRLF、没有结束分隔）；同名技能；符号链接被忽略；name 的字符规则。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./plugins/...；go build ./...。
+完成条件：gofmt -l 无输出；go generate ./agent/... 后产物无差异；go vet ./...；go test -race ./agent/...；go build ./...；在 agent 目录运行 `go run ../cmd/alonabot plugin check`。
 
 不做：技能的热更新；从网络下载技能。
 ```
 
 ### goal-63 · T-12.6 定时 Agent 任务
 
-状态：等待前置（T-07.9、T-12.3）。T-08.5（PR #79）已合并。2026-11-10 按 D-124、D-125 修订：任务改用 SDK 的动态任务保存与触发，删去自建的任务表与每分钟的固定 schedule，前置由 T-07.2 改为 T-07.9，并增加一次性的 at。语句中 goal-128、goal-32、goal-55、goal-59、goal-60 提供的符号（sdk.Task、sdk.OnTask、Task 的 At/Every/Cron/Cancel/List、sdk.Key、sdk.Timezone、sdk.ConfirmOperation、Agent 的一轮对话与工具循环）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：定时任务的后台发送按发信许可缺省允许全部实例（D-83）。
+状态：待派发。前置 T-07.9（goal-128，PR #176，合并提交 `9785c22`）、T-08.5（PR #79）与 T-12.3（goal-60，PR #178，合并提交 `a95b85b`）均已合并。2026-11-13 审查者按 main 核对：`sdk.Task[T](name) TaskType[T]` 的 `At`/`Every`/`Cron`（返回 key）、`Cancel`、`List`（返回 `TaskInstance[T]{Key, Args, At, Interval, Cron, Timezone, NextAt}`），`sdk.OnTask(r, t) *TaskBuilder[T]` 的 `Handle`，`sdk.Key`、`sdk.Timezone`、`sdk.ConfirmOperation(ctx, operation, summary)`、`sdk.Send`、`(*Context).Has(sdk.Admin)` 均已存在。根包装配不向 Scheduler 注入时钟（`scheduler.Options.Now` 只在包内测试使用），提交测试改用真实时间的 at 任务；周期任务的到期运行与离线不补跑已由 T-07.9 的 Scheduler 证据覆盖。权限判断以 `c.Has(sdk.Admin)` 表述。本切片与 T-12.5（goal-62）都在 agent/tools.go 加入 Agent 内工具，审查者在 goal-62 合并后派发。2026-11-10 按 D-124、D-125 修订：任务改用 SDK 的动态任务保存与触发，删去自建的任务表与每分钟的固定 schedule，前置由 T-07.2 改为 T-07.9，并增加一次性的 at。语句中 goal-128、goal-32、goal-55、goal-59、goal-60 提供的符号（sdk.Task、sdk.OnTask、Task 的 At/Every/Cron/Cancel/List、sdk.Key、sdk.Timezone、sdk.ConfirmOperation、Agent 的一轮对话与工具循环）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：定时任务的后台发送按发信许可缺省允许全部实例（D-83）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-63（切片 T-12.6：定时 Agent 任务）。goal 目录 goal-63，分支 goal-63，worktree .worktrees/goal-63，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -793,9 +794,9 @@ type memoryResponse struct{}
 
 行为：
 - 任务声明：sdk.Task[AgentTask]("agent")，AgentTask 为 {creator（instance、user）、target（instance、chat、thread）、prompt、created_at}；sdk.OnTask 在 New() 中注册处理函数。
-- schedule_task：输入 {"prompt", "at"?, "interval_seconds"?, "cron"?, "timezone"?}，at（RFC 3339）、interval 与 cron 恰有一个，timezone 只随 cron；interval 至少 60s（命名常量），在调用 Core 之前检查。调用者（工具循环的当前 Actor）必须含 ADMIN 角色，否则返回错误结果 "error: PERMISSION_DENIED"；先 ConfirmOperation("agent/schedule_task", 摘要)，允许后按触发规则调用 At、Every 或 Cron（cron 带 sdk.Timezone），返回值中的 key 作为任务 ID 交回模型。Target 为当前对话的默认 Target。Core 返回的 INVALID_ARGUMENT（表达式不合法、at 不晚于当前时间）与 RESOURCE_EXHAUSTED 作为错误结果交回模型。
+- schedule_task：输入 {"prompt", "at"?, "interval_seconds"?, "cron"?, "timezone"?}，at（RFC 3339）、interval 与 cron 恰有一个，timezone 只随 cron；interval 至少 60s（命名常量），在调用 Core 之前检查。调用者（工具循环的当前 Actor）必须满足 `c.Has(sdk.Admin)`，否则返回错误结果 "error: PERMISSION_DENIED"；先 ConfirmOperation("agent/schedule_task", 摘要)，允许后按触发规则调用 At、Every 或 Cron（cron 带 sdk.Timezone），返回值中的 key 作为任务 ID 交回模型。Target 为当前对话的默认 Target。Core 返回的 INVALID_ARGUMENT（表达式不合法、at 不晚于当前时间）与 RESOURCE_EXHAUSTED 作为错误结果交回模型。
 - list_tasks：调用 List，只返回 target 与当前默认 Target（instance、chat、thread）相同的任务，含 ID、提示词、触发规则与下一次触发时刻；任何人可用。
-- cancel_task：输入 {"id"}；只有 ADMIN，先确认；先用 List 确认该 ID 属于本聊天，再调用 Cancel；不属于本聊天或不存在时返回错误结果 "error: NOT_FOUND"。
+- cancel_task：输入 {"id"}；只有满足 `c.Has(sdk.Admin)` 的调用者，先确认；先用 List 确认该 ID 属于本聊天，再调用 Cancel；不属于本聊天或不存在时返回错误结果 "error: NOT_FOUND"。
 - 处理函数运行一轮对话：
   - 没有 Actor，只有 job scope；会话键为 "task/<key>"，与聊天会话分开；不调用记忆服务。
   - 回复经 sdk.Send 显式 To 任务的 Target，需要 allowed_adapter_instances，没有许可时 PERMISSION_DENIED 并记 WARN（周期任务保留）。
@@ -805,13 +806,12 @@ type memoryResponse struct{}
 - 插件离线期间到期的触发由 Core 作废：周期任务从下一个未来时刻继续，一次性任务删除。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：agent/tasks_test.go（//go:build unix）：用模拟 Provider（脚本化调用 schedule_task 等工具）与注入时钟的 Scheduler：
+- 提交：agent/tasks_test.go（//go:build unix）：经 agent_test.go 的真实 Start 装配，用模拟 Provider（脚本化调用 schedule_task 等工具），到期用接近当前时刻的 at 绝对时间触发（真实时钟，不注入）：
   - 非 Admin 调用 schedule_task 得到错误结果，List 为空；Admin 经确认后创建 at、interval 与 cron 任务各一个。
-  - 时钟推进到到期：任务运行一轮，回复发往任务 Target；没有发信许可时没有发送并记 WARN，授予许可后下一次运行发送；at 任务运行一次后 List 中不再出现。
-  - 停止插件、推进时钟越过多次触发、再启动：不补跑，周期任务只在下一次未来时刻运行。
+  - at 任务到期：运行一轮，回复发往任务 Target；没有发信许可时没有发送并记 WARN，授予许可后另一个 at 任务运行时发送；at 任务运行一次后 List 中不再出现；interval 与 cron 任务在 List 中带触发规则与 NextAt。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：interval 下限；三种触发规则互斥；会话键隔离；后台一轮中模型调用 confirm 策略的工具得到拒绝结果；没有注入记忆（请求中没有快照与档案）；其他用户 list_tasks 只看到本聊天的任务；cancel_task 需要 Admin 与确认，不能取消其他聊天的任务；Agent 的数据库中没有任务表。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./plugins/...；go build ./...。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./agent/...；go build ./...；在 agent 目录运行 `go run ../cmd/alonabot plugin check`。
 
 不做：打包与 T-12 验收（T-12.7）；任务的管理页面。
 ```
