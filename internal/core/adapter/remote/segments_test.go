@@ -47,7 +47,7 @@ func TestMessageSegments(t *testing.T) {
 		t.Error("URL buttons queried action routes")
 		return "", nil, false
 	})
-	sender := coremessage.New(registry, policy.New(store), mediaStore.LeaseForSend, tokens.Issue, tune.Defaults().RequestTimeout)
+	sender := coremessage.New(registry, policy.New(store), mediaStore.LeaseForSend, tokens.Issue, tune.Defaults().RequestTimeout, nil)
 	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
 	spec.Handler = mux.For(caller)
 	running, err := supervisor.Launch(ctx, store, spec)

@@ -19,6 +19,9 @@ func (s *Service) Action(ctx context.Context, caller router.Caller, in *wire.Inb
 	reject := func(code pb.ErrorCode, message string) wire.Response {
 		return wire.Response{Err: &pb.ErrorInfo{Code: code, SafeMessage: message}}
 	}
+	if parent, _ := in.ParentAttach.(*router.Invocation); parent != nil && parent.SendForbidden {
+		return reject(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "platform actions are forbidden in outbound hooks")
+	}
 	request := &pb.ActionRequest{}
 	if in.Payload.Encoding != pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF || in.Payload.SchemaID != validate.SchemaID(request) || in.Payload.SchemaVersion != schemaVersion {
 		return reject(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "expected ActionRequest protobuf schema version 1")

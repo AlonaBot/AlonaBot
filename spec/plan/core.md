@@ -52,8 +52,8 @@
 | T-04.14 | goal-129 | 命令名覆盖的 Core 侧：命令策略保存按路由的命令名列表，Router 的索引、遮蔽诊断、usage 回复与命令菜单使用生效的命令名，保存时的格式与重名检查，插件更新后的失效处理（D-128） | T-04 步骤 14 | T-03.17、T-04.10 | V-115 的 Core 分项 | 未开始 |
 | T-05.1 | goal-15 | 可信事件上下文与有界同事件分发：64 条并发链、256 条/8 MiB 等待队列、稳定候选排序、链执行与读循环分离；经回环测试 Adapter 运行，按钮与 scheduled 绑定先用规范 fixture | T-05 步骤 1、2 | T-03.3、T-04.3、T-04.4 | V-13、V-16 的 fixture 分项 | 已完成（PR #67；TEST-MATRIX §3.2） |
 | T-05.2 | goal-16 | SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支 | T-05 步骤 3、4 | T-05.1、T-04.7、T-04.8 | V-14、V-11 的 Rule 分项 | 已完成（PR #145；TEST-MATRIX §3.2） |
-| T-05.3 | goal-17 | PreEvent/BeforeSend/AfterSend 三阶段 Hook（链式注册与 SDK 类型，D-112），send_forbidden 的保存与继承 | T-05 步骤 5、6 | T-05.2 | V-15 的直接路径分项，V-110 的 Hook 分项 | 未开始 |
-| T-05.4 | goal-52 | 延续调用与多轮等待：`core.continuation.start`、`core.wait`、等待键与消费、超时与 Session 失效；SDK 的 `Continue`（Handler 内调用与 builder 的 `.Continue()`，D-119）与 `Wait` | T-05 步骤 7 | T-05.2 | V-50，V-113 的延续调用分项 | 未开始 |
+| T-05.3 | goal-17 | PreEvent/BeforeSend/AfterSend 三阶段 Hook（链式注册与 SDK 类型，D-112），send_forbidden 的保存与继承 | T-05 步骤 5、6 | T-05.2 | V-15 的直接路径分项，V-110 的 Hook 分项 | 已完成（PR #155；TEST-MATRIX §3.2） |
+| T-05.4 | goal-52 | 延续调用与多轮等待：`core.continuation.start`、`core.wait`、等待键与消费、超时与 Session 失效；SDK 的 `Continue`（Handler 内调用与 builder 的 `.Continue()`，D-119）与 `Wait` | T-05 步骤 7 | T-05.2 | V-50，V-113 的延续调用分项 | 已完成（PR #153；TEST-MATRIX §3.2） |
 | T-05.5 | goal-18 | 多进程事件流水线验收（含真实按钮回调与多轮等待），汇总证据 | T-05 步骤 8 | T-03.8、T-05.3、T-05.4 | V-11、V-13～V-16、V-43、V-49、V-50 的 T-05 分项 | 未开始 |
 | T-06.1 | goal-19 | Service/Bus 描述与编码校验、SDK 入口；Broker 定位与准入 | T-06 步骤 1、2 | T-04.1 | V-19 | 已完成（PR #45；TEST-MATRIX §3.2） |
 | T-06.2 | goal-20 | 父调用链上下文传播、循环与深度检查、跨段取消与背压 | T-06 步骤 3、4 | T-03.6、T-05.3、T-06.1 | V-18、V-42 的嵌套分项 | 未开始 |

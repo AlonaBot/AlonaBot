@@ -1630,7 +1630,7 @@ func TestRemoteStream(t *testing.T) {
 	process := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: dispatch, RegisterIncoming: openMediaStore(t).RegisterIncoming})
 	mux := router.NewMux()
 	process.Services(mux)
-	service := coremessage.New(registry, policy.New(store), nil, nil, tune.Defaults().RequestTimeout)
+	service := coremessage.New(registry, policy.New(store), nil, nil, tune.Defaults().RequestTimeout, nil)
 	var requestsMu sync.Mutex
 	var parents []uint64
 	for name, handler := range map[string]router.ServiceFunc{wire.ServiceSend: service.Send, wire.ServiceEdit: service.Edit} {
@@ -1831,7 +1831,7 @@ func TestPluginObjectCommand(t *testing.T) {
 	defer cancel()
 	store, spec, logs := setup(t)
 	registry := adapter.NewRegistry()
-	sender := coremessage.New(registry, policy.New(store), nil, nil, tune.Defaults().RequestTimeout)
+	sender := coremessage.New(registry, policy.New(store), nil, nil, tune.Defaults().RequestTimeout, nil)
 	dispatch := router.New(router.Options{Concurrency: 1, QueueBytes: tune.Defaults().DispatchQueueBytes, QueueEvents: tune.Defaults().DispatchQueueEvents, Adapters: registry, Send: sender.Send})
 	dispatch.Start()
 	defer func() {
