@@ -72,7 +72,7 @@
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 待派发 |
-| goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 待派发 |
+| goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 已完成（PR #153） |
 | goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 待派发 |
 | goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 待派发 |
 | goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 待派发 |
@@ -4946,7 +4946,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-52 · T-05.4 延续调用与多轮等待
 
-状态：待派发。前置 T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)，合并提交 `0f860a9`）已合并：SDK 的 Rule 与目标 Handler 在同一调用、同一 Context 中执行，`StopPropagation` 锁存，调用结束时 Context 失效；Core 的自动回复排在显式发送之后。2026-11-12 审查者按 main `3e4db62` 的代码改写接口段，要点如下：
+状态：已完成（[PR #153](https://github.com/AlonaBot/AlonaBot/pull/153)，合并提交 `f22b538`），证据见 TEST-MATRIX §3.2。合入：SDK 的 `(*Context).Continue(fn func(*Context) error) error`、`(*Context).Wait(timeout) (*Context, error)`、`(*Context).Text()` 与 `(*EventBuilder).Continue()`；`internal/core/continuation` 的 `New(Options{Max, Timeout, Prepare, Caller})`、`Manager.Register(mux)`，等待按 Caller 的当前绑定匹配，`Release(c router.Caller)` 在 Session 结束时释放该 Session 的等待；`router.Options.Continuations`（`Finished`、`Match`、`Release`）与 `Router.CallContinuation(ctx, inv, continuationOf, deadline)`；proto 的 `HandlerRequest.continuation_of`、`ContinuationStartRequest`/`Response`、`WaitRequest{timeout_ms}`/`WaitResponse{event}`。审查时接受 `sdk/sdk.go` 中 Context 字段的改动（范围修订）。派发时：SDK 的 Rule 与目标 Handler 在同一调用、同一 Context 中执行，`StopPropagation` 锁存，调用结束时 Context 失效；Core 的自动回复排在显式发送之后。2026-11-12 审查者按 main `3e4db62` 的代码改写接口段，要点如下：
 - `router.Invocation` 现有 PluginID、Event、DefaultTarget 三个字段，由 `Router.call` 作为 `wire.Request.Attach` 传出，插件以该调用为父请求时，服务函数从 `wire.Inbound.ParentAttach` 取回同一指针。
 - 定时任务与 Service 调用的 ParentAttach 不是 `*router.Invocation`。
 - 没有 `router.Dispatch` 类型。router 不能 import continuation，所以改为由 router 声明接口、在 Options 中注入。
