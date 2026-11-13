@@ -36,8 +36,9 @@ type Request struct {
 	ParentCallID uint64
 	// Attach 只保存在本端；对端以本调用为父发起子请求时，交给子请求的 Handler（Core 借此派生可信上下文）。
 	Attach any
-	// Late 在本地期限结束后的首个响应到达时，由读循环在锁外调用；回调须及时返回。
-	// 请求尚在队列中就到期时，撤回后在锁外立即以本地 DEADLINE_EXCEEDED 响应调用一次。
+	// Late 在本地超时或取消后的首个响应到达时，由读循环在锁外调用；回调须及时返回。
+	// 请求尚在队列中时，撤回后在锁外立即以本地结果调用一次；LocalErrorCode 保留本地结束原因。
+	// 准入前期限已过时同样在锁外立即通知，表示没有实际在途执行。
 	Late func(Response)
 }
 
@@ -47,6 +48,8 @@ type Response struct {
 	Err     *pb.ErrorInfo // 对调用者公开的错误；对端发来的未知错误码已映射为 INTERNAL
 	// 对端发来的原始错误码，只供内部诊断；与 Err.Code 不同说明发生了映射。
 	RawErrorCode pb.ErrorCode
+	// LocalErrorCode 仅在 Late 回调中携带先前本地结束的错误码，不上协议帧。
+	LocalErrorCode pb.ErrorCode
 }
 
 // Inbound 描述对端发来的一次调用。
@@ -150,7 +153,7 @@ type outCall struct {
 	deadline time.Time // 有效期限，子调用不能超过它
 	// Request.Attach，交给以本调用为父的子请求的 Handler。
 	attach any
-	late   func(Response) // Request.Late，只在本地期限结束后保留到首个响应或 Session 关闭
+	late   func(Response) // Request.Late，本地超时或取消后保留到首个响应或 Session 关闭
 	// result 容量 1，只写一次。
 	result chan Response
 	// eventResult 非 nil 表示无业务回执的 EVENT；只通知写出结果，不登记到 pending。
@@ -207,7 +210,7 @@ type Session struct {
 	biz           []*outCall
 	events        map[*outCall]struct{}     // 尚未写完的 EVENT，由 mu 保护
 	pending       map[uint64]*outCall       // 本端发起、尚未完成的调用
-	lateCallbacks map[uint64]func(Response) // 已因本地期限结束、仍等待实际响应的调用；不占业务准入
+	lateCallbacks map[uint64]func(Response) // 本地超时或取消后仍等待实际响应的调用；不占业务准入
 	inbound       map[uint64]*inCall        // 对端发起、尚未响应的调用
 	outBytes      int64                     // 本方向仍计入预算的载荷字节
 	inBytes       int64                     // 对端方向在途的载荷字节
@@ -419,7 +422,11 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 	}
 	if !deadline.After(time.Now()) {
 		s.mu.Unlock()
-		return Response{}, callErr(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "deadline already passed; request not sent")
+		err := callErr(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "deadline already passed; request not sent")
+		if req.Late != nil {
+			req.Late(Response{Err: err.ErrorInfo, LocalErrorCode: pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED})
+		}
+		return Response{}, err
 	}
 	if !s.opt.Global.Acquire(n) {
 		s.mu.Unlock()
@@ -636,17 +643,21 @@ func (s *Session) complete(c *outCall, r Response, reason pb.CancelReason) bool 
 	}
 	c.finished = true
 	delete(s.pending, c.id)
-	// 已写出或正在写出的超期调用仍可能返回；只保留回调，载荷与准入按原流程释放。
-	expired := reason != pb.CancelReason_CANCEL_REASON_UNSPECIFIED && r.Err.GetCode() == pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED
+	// 本地结束后实际执行仍可能返回；只保留回调，载荷与准入按原流程释放。
 	var late func(Response)
-	if expired && c.late != nil && s.err == nil {
+	if reason != pb.CancelReason_CANCEL_REASON_UNSPECIFIED && c.late != nil && s.err == nil {
+		localCode := r.Err.GetCode()
+		notify := func(response Response) {
+			response.LocalErrorCode = localCode
+			c.late(response)
+		}
 		if c.state == queued {
-			late = c.late // 请求将被撤回，实际响应永远不会到达。
+			late = notify // 请求将被撤回，实际响应永远不会到达。
 		} else {
 			if s.lateCallbacks == nil {
 				s.lateCallbacks = make(map[uint64]func(Response))
 			}
-			s.lateCallbacks[c.id] = c.late
+			s.lateCallbacks[c.id] = notify
 		}
 	}
 	s.notifyChange()
@@ -937,7 +948,7 @@ func (s *Session) respondErr(id uint64, code pb.ErrorCode, msg string) error {
 	return s.enqueuePriority(env)
 }
 
-// onResponse 用 RESPONSE 完成对应的本端调用；迟到响应计数并调用一次期限回调，重复或未知响应只计数。
+// onResponse 用 RESPONSE 完成对应的本端调用；迟到响应计数并调用一次 Late 回调，重复或未知响应只计数。
 func (s *Session) onResponse(env *pb.Envelope) error {
 	if env.GetInitiatorSide() != s.opt.Local {
 		return errors.New("RESPONSE initiator_side is not this side")

@@ -200,7 +200,7 @@ func TestEnumValues(t *testing.T) {
 		{pb.Propagation(0).Descriptor(), "PROPAGATION_", []string{"UNSPECIFIED", "CONTINUE", "STOP"}},
 		// WIRE §3.3 的 kind 与 CONTRACTS §2.3 的 Hook phase。
 		{pb.RouteKind(0).Descriptor(), "ROUTE_KIND_", []string{
-			"UNSPECIFIED", "COMMAND", "EVENT", "HOOK", "SERVICE", "SCHEDULE", "HTTP", "BUS_SUBSCRIPTION"}},
+			"UNSPECIFIED", "COMMAND", "EVENT", "HOOK", "SERVICE", "SCHEDULE", "HTTP", "BUS_SUBSCRIPTION", "TASK"}},
 		{pb.HookPhase(0).Descriptor(), "HOOK_PHASE_", []string{"UNSPECIFIED", "PRE_EVENT", "BEFORE_SEND", "AFTER_SEND"}},
 		{pb.ParamType(0).Descriptor(), "PARAM_TYPE_", []string{"UNSPECIFIED", "STRING", "INT", "FLOAT", "BOOL", "USER", "IMAGE", "MESSAGE"}},
 		{pb.CommandMatch(0).Descriptor(), "COMMAND_MATCH_", []string{"UNSPECIFIED", "PATH", "REGEX", "RAW", "KEYWORD", "STARTSWITH", "ENDSWITH", "FULLMATCH"}},
@@ -721,5 +721,61 @@ func TestMessageSegmentFieldNumbers(t *testing.T) {
 		if f.HasPresence() != (c.kind == protoreflect.MessageKind || c.optional) {
 			t.Errorf("presence = %v", f)
 		}
+	}
+}
+
+// TestTaskFieldNumbers 固定动态任务的编号、分支、类型和 optional presence。
+func TestTaskFieldNumbers(t *testing.T) {
+	for _, c := range []struct {
+		message  proto.Message
+		names    []string
+		kinds    []protoreflect.Kind
+		optional map[int]bool
+	}{
+		{&pb.TaskSpec{}, []string{"name"}, []protoreflect.Kind{protoreflect.StringKind}, nil},
+		{&pb.TaskTrigger{}, []string{"at_unix_ms", "interval_ms", "cron", "timezone"}, []protoreflect.Kind{protoreflect.Int64Kind, protoreflect.Uint64Kind, protoreflect.StringKind, protoreflect.StringKind}, nil},
+		{&pb.TaskSetRequest{}, []string{"task_name", "key", "trigger", "payload_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.StringKind}, nil},
+		{&pb.TaskSetResponse{}, []string{"next_at_unix_ms"}, []protoreflect.Kind{protoreflect.Int64Kind}, nil},
+		{&pb.TaskCancelRequest{}, []string{"task_name", "key"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind}, nil},
+		{&pb.TaskCancelResponse{}, nil, nil, nil},
+		{&pb.TaskListRequest{}, []string{"task_name", "after_key"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind}, map[int]bool{2: true}},
+		{&pb.TaskInstance{}, []string{"key", "trigger", "payload_json", "next_at_unix_ms"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.Int64Kind}, map[int]bool{4: true}},
+		{&pb.TaskListResponse{}, []string{"instances", "next_after_key"}, []protoreflect.Kind{protoreflect.MessageKind, protoreflect.StringKind}, map[int]bool{2: true}},
+		{&pb.JobPauseRequest{}, []string{"job_id"}, []protoreflect.Kind{protoreflect.StringKind}, nil},
+		{&pb.JobPauseResponse{}, nil, nil, nil},
+		{&pb.JobResumeRequest{}, []string{"job_id"}, []protoreflect.Kind{protoreflect.StringKind}, nil},
+		{&pb.JobResumeResponse{}, nil, nil, nil},
+		{&pb.JobStatusRequest{}, []string{"job_id"}, []protoreflect.Kind{protoreflect.StringKind}, nil},
+		{&pb.JobStatusResponse{}, []string{"paused", "last_at_unix_ms", "next_at_unix_ms"}, []protoreflect.Kind{protoreflect.BoolKind, protoreflect.Int64Kind, protoreflect.Int64Kind}, map[int]bool{2: true, 3: true}},
+		{&pb.ScheduledPayload{}, []string{"job_id", "run_id", "scheduled_at_unix_ms", "task_name", "task_key", "task_payload_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.Int64Kind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind}, nil},
+	} {
+		fields := c.message.ProtoReflect().Descriptor().Fields()
+		if fields.Len() != len(c.names) {
+			t.Fatalf("%T fields = %d, want %d", c.message, fields.Len(), len(c.names))
+		}
+		for i, name := range c.names {
+			f := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+			if f == nil || string(f.Name()) != name || f.Kind() != c.kinds[i] || f.HasOptionalKeyword() != c.optional[i+1] {
+				t.Fatalf("%T field %d = %v", c.message, i+1, f)
+			}
+			list := false
+			if _, ok := c.message.(*pb.TaskListResponse); ok && i == 0 {
+				list = true
+			}
+			oneof := false
+			if _, ok := c.message.(*pb.TaskTrigger); ok && i < 3 {
+				oneof = true
+				if f.ContainingOneof() == nil || f.ContainingOneof().Name() != "trigger" {
+					t.Fatalf("TaskTrigger oneof = %v", f)
+				}
+			}
+			if f.IsList() != list || f.HasPresence() != (c.optional[i+1] || oneof || (c.kinds[i] == protoreflect.MessageKind && !list)) {
+				t.Errorf("%T field %s presence/cardinality = %v", c.message, name, f)
+			}
+		}
+	}
+	f := (&pb.RouteDescriptor{}).ProtoReflect().Descriptor().Fields().ByNumber(18)
+	if f == nil || f.Name() != "task" || f.Message().FullName() != "alonabot.v1.TaskSpec" || f.ContainingOneof().Name() != "spec" {
+		t.Fatalf("RouteDescriptor task = %v", f)
 	}
 }

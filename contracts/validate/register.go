@@ -31,6 +31,10 @@ const maxToolDescriptionBytes = 1024
 
 const scheduleRoutePrefix = "job."
 
+var taskNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,63}$`)
+
+const taskRoutePrefix = "task."
+
 const (
 	// OptionsQuerySchemaID 固定 SDK 选项查询输入的类型标识，版本为 1。
 	OptionsQuerySchemaID = "github.com/AlonaBot/AlonaBot/sdk.OptionsQuery"
@@ -49,6 +53,8 @@ func routeKindOf(r *pb.RouteDescriptor) pb.RouteKind {
 		return pb.RouteKind_ROUTE_KIND_HOOK
 	case *pb.RouteDescriptor_Service:
 		return pb.RouteKind_ROUTE_KIND_SERVICE
+	case *pb.RouteDescriptor_Task:
+		return pb.RouteKind_ROUTE_KIND_TASK
 	case *pb.RouteDescriptor_Schedule:
 		return pb.RouteKind_ROUTE_KIND_SCHEDULE
 	case *pb.RouteDescriptor_Http:
@@ -90,6 +96,9 @@ func register(r *pb.Register, isAdapter bool) error {
 		case routeKindOf(rd) != rd.GetKind():
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q has kind %s, which does not match its spec", id, rd.GetKind())
 		}
+		if strings.HasPrefix(id, taskRoutePrefix) && rd.GetKind() != pb.RouteKind_ROUTE_KIND_TASK {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q occupies reserved task prefix", id)
+		}
 		permissions := make(map[string]bool, len(rd.GetRequiredPermissions()))
 		for _, permission := range rd.GetRequiredPermissions() {
 			if !IsPermissionName(permission) || permissions[permission] {
@@ -117,6 +126,7 @@ func register(r *pb.Register, isAdapter bool) error {
 	paths := make(map[string]string)
 	httpRoutes := make(map[[2]string]string)
 	actions := make(map[string]string)
+	tasks := make(map[string]bool)
 	for _, route := range r.GetRoutes() {
 		switch route.GetKind() {
 		case pb.RouteKind_ROUTE_KIND_COMMAND:
@@ -145,6 +155,15 @@ func register(r *pb.Register, isAdapter bool) error {
 			if err := registerService(route); err != nil {
 				return err
 			}
+		case pb.RouteKind_ROUTE_KIND_TASK:
+			name := route.GetTask().GetName()
+			if !taskNamePattern.MatchString(name) || route.GetRouteId() != taskRoutePrefix+name {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "task route %q has invalid name or route_id", route.GetRouteId())
+			}
+			if tasks[name] {
+				return errf(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "duplicate task name %q", name)
+			}
+			tasks[name] = true
 		case pb.RouteKind_ROUTE_KIND_SCHEDULE:
 			if err := registerSchedule(route); err != nil {
 				return err
