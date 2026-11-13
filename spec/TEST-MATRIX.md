@@ -344,6 +344,23 @@ T-02.4 按 D-86 删除的测试及测试插件只保留历史运行证据，相�
 | T-03.10 / 完成条件 | `gofmt -l alonabot.go assembly.go internal/core/manage/dependencies.go examples/plugins/echo examples/plugins/media adapters/telegram/plan.go adapters/telegram/telegram_local_test.go cmd/alonabot/telegram_e2e_test.go cmd/alonabot/telegram_local_test.go telegram_local_test.go`；`go run ./cmd/alonabot plugin check --dir examples/plugins/echo`；`go run ./cmd/alonabot plugin check --dir examples/plugins/media`；`go vet ./...`；`go test -race ./...`；`go build ./...`；`git diff --check` | 全部通过，gofmt 无输出；日志 `gate-*-fixed.log`；D/M/C/A/F 全部通过 | 远程 CI 与其他目标平台运行未执行 |
 | T-03.10 / 真实 Telegram | 官方服务、真实账号与授权会话 | **未运行：维护者未提供 Telegram 凭证和授权测试会话** | 全部模拟证据保留上述版本、传输、进程与故障注入范围 |
 
+#### T-03.10 / FIX-3 开发热重启依赖门禁（PR #180）
+
+候选为审查者已提交 head `038abb27e4f24d26d727bc225ce08d6aa017e28e` 加本轮未提交的 FIX-3；原切片上表与历史日志保留。2026-11-13，darwin/arm64，Go 1.27.3，沿用上述 Go 环境；真实 Core/SDK/SQLite 与临时目录，CLI 回归使用真实 SDK 回环 Adapter 的 TCP Session，HTTP 仅本机回环。产品仅在 `Core.Restart` 读取新资源后、停止旧进程前复用 manage 的快照与依赖判定。
+
+| 分项 / 测试位置 | 完整命令 | 本次结果与本地日志（goal-9/logs/） |
+| --- | --- | --- |
+| V-48/V-52 热部署拒绝与恢复；本地 `cmd/alonabot/review180_local_test.go` 的 `TestReview180ReloadMissingRequiredDependencyLocal`、`TestReview180ReloadOptionalDependencyLocal`、`TestReview180ConfigRestartRuntimeDescriptorLocal` | `go test -race -count=1 -v ./cmd/alonabot -run '^TestReview180'` | 三项通过（23.289s，`fix3-cli.log`）；必需缺失在停止前返回 FAILED_PRECONDITION，旧 PID/回复保持；修正工程后轮询继续替换；可选缺失 WARN 后正常替换；Adapter 删除/恢复 extension 只重启自身，插件下一次配置重启按实时 descriptor 拒绝/放行。该命令初跑时有三项，第四项随后加入，最终全仓重跑包含全部四项 |
+| V-52 运行版本；同一本地文件的 `TestReview180ReloadRunningDependencyVersionLocal` | `go test -race -count=1 -v ./cmd/alonabot -run '^TestReview180ReloadRunningDependencyVersionLocal$'` | 通过（13.564s，`fix3-running-version.log`）；新版本9因缺依赖被拒后，调用方最低版本9依然按运行版本0.1拒绝；版本9真正激活后，再次配置重启放行 |
+| 审查原对照；根本地 `review180_local_test.go` 的 `TestReview180InitialDependencyCheckLocal`、Adapter 本地同名文件的 `TestReview180PlatformFileBoundaryLocal` | `go test -race -count=1 -v . ./adapters/telegram -run '^TestReview180'` | 通过，原两子项/单条/相册/插件直接 PlatformFile 校验断言保留，`fix3-review-controls.log` |
+| 修复前红测；本地热部署必需依赖回归 | `go test -race -count=1 -v ./cmd/alonabot -run '^TestReview180ReloadMissingRequiredDependencyLocal$'` | 修改前失败，old PID=20760/new PID=20786，确认旧进程实际被替换，`fix3-before.log`；测试改为期望拒绝、保留旧进程与回复，并在修复后通过 |
+| 全仓 gate / 全部本地回归 | `go vet ./...`；`go test -race ./...`；`go build ./...`；`git diff --check` | 全通过，含本轮四个 CLI 回归与两个原对照，无 race 报告；`gate-{vet,race,build,diff}-fix3.log`；本次 Go 文件 gofmt 无输出（`gate-gofmt-fix3.log`），echo/media 的 `go run ./cmd/alonabot plugin check --dir examples/plugins/echo`、`go run ./cmd/alonabot plugin check --dir examples/plugins/media` 通过（`gate-generation-{echo,media}-fix3.log`） |
+| 原 Telegram 主路径与矩阵重跑 | `go test -race -count=1 -v ./cmd/alonabot -run '^TestTelegramDevelopment$'`；`go test -race -count=1 -v . -run '^TestTelegramFaultMatrix$'` | 通过（9.831s/10.974s，`telegram-development-fix3.log`、`telegram-matrix-fix3.log`）；主路径官方 Telegram 两账号与 TCP/stdio 故障矩阵原断言保留 |
+| 配置/目录/reload/首次依赖回归 | `go test -race -count=1 -v ./cmd/alonabot -run '^TestTelegram(ConfigurationLocal\|DirectoryIdentityLocal\|ReloadLocal\|DependenciesLocal)$'` | 通过（24.926s，`telegram-cli-fix3.log`），首次启动依赖原四项与全部八子项保留 |
+| 媒体与接收原分项 | `go test -race -count=1 -v ./adapters/telegram -run '^TestTelegram(PlatformFileLocal\|AlbumAndZeroIDLocal)$'`；`go test -race -count=1 -v ./adapters/telegram ./internal/core/media ./internal/core/settings -run '^(TestRoundRebuild\|TestSubscriptionAndRestart\|TestSequentialAcknowledgements\|TestMessageMetadata\|TestReferenceLifetime\|TestInstanceConfigurationFiles)$'` | 全通过，`telegram-adapter-fix3.log`、`telegram-reused-fix3.log` |
+
+真实 Telegram：**未运行：维护者未提供 Telegram 凭证和授权测试会话**。其他目标平台实际运行与远程 CI 未运行；提交测试仍为原 151 行，FIX-3 新增提交测试 0 行。本地测试与日志留给审查者归档，修复 commit SHA 由审查者提交后补入。
+
 ### 3.3 Target 与发信许可分项证据
 
 [PR #31](https://github.com/AlonaBot/AlonaBot/pull/31)（T-03.2），产品代码 head `bb5992119928b06a3df89f8445a2da9b4e005472`；2026-10-28 在 macOS 27.0.1（26A434）、darwin/arm64、Go 1.27.1 上运行。

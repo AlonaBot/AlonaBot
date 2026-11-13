@@ -579,7 +579,7 @@ running:
 	close(c.done)
 }
 
-// Restart 停止并重新启动一个本次登记的开发组件，沿用 dev:<id> 代次。
+// Restart 检查新资源的依赖后重新启动一个开发组件，沿用 dev:<id> 代次；依赖失败时保持旧进程运行。
 func (c *Core) Restart(ctx context.Context, id string) error {
 	return c.operation(ctx, func(ctx context.Context) error {
 		for i := range c.development {
@@ -592,6 +592,14 @@ func (c *Core) Restart(ctx context.Context, id string) error {
 				if err := next.loadExecutableResources(); err != nil {
 					return err
 				}
+			}
+			// 停止前用已启用组件的当前版本和运行中 Adapter 声明检查新资源。
+			snapshot, err := manage.DependencySnapshot(ctx, c.store, c.assembly.componentDescriptor)
+			if err != nil {
+				return err
+			}
+			if err := manage.CheckDependencies(next.manifest, snapshot); err != nil {
+				return err
 			}
 			if err := c.stopManaged(id, pb.StopReason_STOP_REASON_RESTART); err != nil {
 				return err
