@@ -11,4 +11,11 @@ var alonabotGenerated = alonabotgen0.Generated{
 		"en-US.json": []byte("{\n  \"messages\": {\n    \"note.saved\": \"Saved {key}\",\n    \"note.value\": \"{key}: {value}\",\n    \"note.deleted\": \"Deleted {key}\",\n    \"note.hello\": \"Hello, {name}\"\n  }\n}\n"),
 		"zh-CN.json": []byte("{\n  \"config\": {\n    \"greeting\": {\"description\": \"问候语\"},\n    \"enabled\": {\"description\": \"启用\"},\n    \"count\": {\"description\": \"数量\"},\n    \"tags\": {\"description\": \"标签\"},\n    \"nested\": {\"description\": \"嵌套设置\", \"items\": {\"enabled\": {\"description\": \"启用\"}}},\n    \"token\": {\"description\": \"访问令牌\"}\n  },\n  \"messages\": {\n    \"note.saved\": \"已保存 {key}\",\n    \"note.value\": \"{key}：{value}\",\n    \"note.deleted\": \"已删除 {key}\",\n    \"note.hello\": \"你好，{name}\"\n  }\n}\n"),
 	},
+	ParamNames: map[string][]string{
+		"main.reply":       {"key", "args"},
+		"main:main.go:102": {"name"},
+		"main:main.go:83":  {"key", "value"},
+		"main:main.go:89":  {"key"},
+		"main:main.go:96":  {"key"},
+	},
 }

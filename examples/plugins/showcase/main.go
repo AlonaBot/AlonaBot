@@ -78,14 +78,14 @@ func (p *Demo) Echo(c *sdk.Context, text string, times int64) error {
 
 // HTTP 注册一个返回 ok 的 GET /status。
 func (p *Demo) HTTP(r *sdk.Plugin) {
-	r.Handle(http.MethodGet, "/status", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	r.Route(http.MethodGet, "/status").HandleFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
-	}))
+	})
 }
 
 // Schedules 注册每分钟运行一次的 tick 任务。
 func (p *Demo) Schedules(r *sdk.Plugin) {
-	r.Every("tick", time.Minute, func(*sdk.Context) error { return nil })
+	r.Every("tick", time.Minute).Handle(func(*sdk.Context) error { return nil })
 }
 
 // OnStart 演示生命周期 Hook 的签名，不做任何事。

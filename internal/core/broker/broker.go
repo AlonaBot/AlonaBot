@@ -55,12 +55,30 @@ func New(opt Options) *Broker {
 
 // Call 依次完成定位、访问与输入准入，再以独立编号调用目标 Session。
 func (b *Broker) Call(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
+	return b.call(ctx, c, in, nil)
+}
+
+// CallSession 只向 target 绑定的 Session 转发；目标已替换时返回 UNAVAILABLE。
+// 定位后持有原实例，后续替换不会使请求转发到新 Session。
+func (b *Broker) CallSession(ctx context.Context, c, target router.Caller, in *wire.Inbound) wire.Response {
+	return b.call(ctx, c, in, &target)
+}
+
+func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, target *router.Caller) wire.Response {
 	// 1. 目标语法必须先于插件与服务查找检查。
 	pluginID, name, ok := strings.Cut(in.Target, "/")
 	if _, err := validate.PluginID(pluginID); err != nil || !ok || !validate.IsServiceName(name) {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid service target")
 	}
-	plugin, ok := b.router.Plugin(pluginID)
+	var plugin router.Plugin
+	if target != nil {
+		if target.PluginID != pluginID {
+			return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "target session does not match service target")
+		}
+		plugin, ok = b.router.PluginFor(*target)
+	} else {
+		plugin, ok = b.router.Plugin(pluginID)
+	}
 	if !ok || !plugin.Activated() {
 		return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "target plugin is not active")
 	}
