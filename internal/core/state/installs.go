@@ -90,7 +90,7 @@ func cleanupObjects(db *gorm.DB, id string, all bool) ([]cleanupObject, error) {
 	if err := db.Where(owned).Find(&generations).Error; err != nil {
 		return nil, err
 	}
-	objects := []cleanupObject{{&ButtonToken{}, owned}, {&conversationEntry{}, owned}, {&adapterCursor{}, owned}}
+	objects := []cleanupObject{{&ButtonToken{}, owned}, {&conversationEntry{}, owned}, {&adapterCursor{}, owned}, {&dynamicTask{}, owned}, {&scheduledJob{}, owned}}
 	for _, row := range generations {
 		objects = append(objects, cleanupObject{&generationSecretPath{}, clause.Eq{Column: columnGenerationID, Value: row.GenerationID}})
 	}

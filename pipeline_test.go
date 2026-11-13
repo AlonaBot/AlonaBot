@@ -61,7 +61,9 @@ func TestMain(m *testing.M) {
 		os.Exit(m.Run())
 	}
 	var err error
-	if mode == "adapter" {
+	if strings.HasPrefix(mode, "tasks") {
+		err = persistentTaskProcess(mode)
+	} else if mode == "adapter" {
 		err = sdk.RunAdapter(&pipelineAdapter{})
 	} else {
 		err = sdk.Run(pipelinePlugin(mode))
@@ -461,9 +463,13 @@ func (h *pipelineHarness) launch(id, mode string, priority int) *runningComponen
 	c := &runningComponent{id: id, install: install, caller: router.NewCaller(id, pipelineGeneration+":"+id)}
 	// 2. 通过生产 Handler 绑定启动真实插件或 Adapter。
 	handler := h.assembly.handler(c, install)
-	c.process, err = supervisor.Launch(h.t.Context(), h.store, supervisor.Spec{PluginID: id, Role: install.Role, AdapterID: install.AdapterID, PluginDir: pluginDir, Executable: os.Args[0], BuildDigest: install.BuildDigest, GenerationID: pipelineGeneration + ":" + id,
+	spec := supervisor.Spec{PluginID: id, Role: install.Role, AdapterID: install.AdapterID, PluginDir: pluginDir, Executable: os.Args[0], BuildDigest: install.BuildDigest, GenerationID: pipelineGeneration + ":" + id,
 		Bootstrap: bootstrap(pipelineGeneration+":"+id, 1), NewCandidate: active == "", Limits: host.NewLimits(h.values), Stop: host.NewStopTiming(h.values), Log: h, Handler: handler, Global: h.assembly.global,
-		ExtraEnv: map[string]string{pipelineModeEnv: mode, pipelineIDEnv: id, pipelinePriorityEnv: strconv.Itoa(priority), pipelineAuditEnv: h.server.URL, "GORACE": "atexit_sleep_ms=0"}})
+		ExtraEnv: map[string]string{pipelineModeEnv: mode, pipelineIDEnv: id, pipelinePriorityEnv: strconv.Itoa(priority), pipelineAuditEnv: h.server.URL, "GORACE": "atexit_sleep_ms=0"}}
+	if strings.HasPrefix(mode, "tasks") {
+		spec.Scheduler = h.assembly.scheduler
+	}
+	c.process, err = supervisor.Launch(h.t.Context(), h.store, spec)
 	if err != nil {
 		h.t.Fatal(err)
 	}
@@ -948,7 +954,9 @@ func pipelineBoundPayloadTest(t *testing.T) {
 				hook, stage, recoveredMode = "pre.button", "button", "buttons"
 			} else {
 				c := h.components["pipeline"]
-				h.assembly.scheduler.Attach(&pipelineObserver{Plugin: router.FromInstance(c.instance), harness: h}, time.Now())
+				if err := h.assembly.scheduler.Attach(t.Context(), &pipelineObserver{Plugin: router.FromInstance(c.instance), harness: h}, time.Now()); err != nil {
+					t.Fatal(err)
+				}
 				h.await(func(_ []pipelineRecord) bool { h.mu.Lock(); defer h.mu.Unlock(); return len(h.outcomes) > 0 })
 				h.assembly.scheduler.Drain(c.id)
 				h.mu.Lock()
@@ -997,7 +1005,9 @@ func pipelineBoundPayloadTest(t *testing.T) {
 				h.inject(pipelineInput{User: "alice", Token: token})
 				h.idle()
 			} else {
-				h.assembly.scheduler.Attach(&pipelineObserver{Plugin: router.FromInstance(c.instance), harness: h}, time.Now())
+				if err := h.assembly.scheduler.Attach(t.Context(), &pipelineObserver{Plugin: router.FromInstance(c.instance), harness: h}, time.Now()); err != nil {
+					t.Fatal(err)
+				}
 				h.await(func(_ []pipelineRecord) bool { h.mu.Lock(); defer h.mu.Unlock(); return len(h.outcomes) > before })
 				h.assembly.scheduler.Drain(c.id)
 			}
@@ -1090,7 +1100,9 @@ func pipelineScheduledTest(t *testing.T) {
 		t.Fatalf("forged scheduled error=%v", safe)
 	}
 	c := h.components["pipeline"]
-	h.assembly.scheduler.Attach(&pipelineObserver{Plugin: router.FromInstance(c.instance), harness: h}, time.Now())
+	if err := h.assembly.scheduler.Attach(t.Context(), &pipelineObserver{Plugin: router.FromInstance(c.instance), harness: h}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
 	h.await(func(records []pipelineRecord) bool { return len(pipelineStages(records, "tick")) > 0 })
 	h.assembly.scheduler.Drain(c.id)
 	h.await(func(_ []pipelineRecord) bool { h.mu.Lock(); defer h.mu.Unlock(); return len(h.outcomes) > 0 })

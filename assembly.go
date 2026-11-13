@@ -252,7 +252,8 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 		}
 		return instances, nil
 	}})
-	a.scheduler = scheduler.New(scheduler.Options{JobTimeout: v.JobTimeout})
+	a.scheduler = scheduler.New(scheduler.Options{JobTimeout: v.JobTimeout, Store: store, TasksPerPlugin: v.TasksPerPlugin, TaskPayloadBytes: v.TaskPayloadBytes, TaskConcurrency: v.TaskConcurrency})
+	a.scheduler.Services(a.mux, a.router.PluginFor)
 	return a, nil
 }
 
@@ -373,7 +374,10 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) error {
 		if r.instance.HTTPListener != nil {
 			a.http.Bind(r.id, r.instance.GenerationID, r.instance.HTTPListener, r.instance.HTTPProxyToken, r.instance.Routes, r.install.Role == state.RoleAdapter)
 		}
-		a.scheduler.Attach(plugin, time.Now())
+		if err := a.scheduler.Attach(ctx, plugin, time.Now()); err != nil {
+			a.detach(r)
+			return fmt.Errorf("attach scheduler: %w", err)
+		}
 	}
 	if r.remote != nil {
 		return r.remote.Bind(ctx, r.instance, r.caller)

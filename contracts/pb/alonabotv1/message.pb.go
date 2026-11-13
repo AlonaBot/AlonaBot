@@ -1311,8 +1311,14 @@ type ScheduledPayload struct {
 	RunId string `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	// 计划触发时刻，UTC 毫秒。
 	ScheduledAtUnixMs int64 `protobuf:"varint,3,opt,name=scheduled_at_unix_ms,json=scheduledAtUnixMs,proto3" json:"scheduled_at_unix_ms,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// 动态任务名；静态任务为空。
+	TaskName string `protobuf:"bytes,4,opt,name=task_name,json=taskName,proto3" json:"task_name,omitempty"`
+	// 动态实例键。
+	TaskKey string `protobuf:"bytes,5,opt,name=task_key,json=taskKey,proto3" json:"task_key,omitempty"`
+	// 创建时原样保存的 JSON 对象。
+	TaskPayloadJson string `protobuf:"bytes,6,opt,name=task_payload_json,json=taskPayloadJson,proto3" json:"task_payload_json,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ScheduledPayload) Reset() {
@@ -1364,6 +1370,27 @@ func (x *ScheduledPayload) GetScheduledAtUnixMs() int64 {
 		return x.ScheduledAtUnixMs
 	}
 	return 0
+}
+
+func (x *ScheduledPayload) GetTaskName() string {
+	if x != nil {
+		return x.TaskName
+	}
+	return ""
+}
+
+func (x *ScheduledPayload) GetTaskKey() string {
+	if x != nil {
+		return x.TaskKey
+	}
+	return ""
+}
+
+func (x *ScheduledPayload) GetTaskPayloadJson() string {
+	if x != nil {
+		return x.TaskPayloadJson
+	}
+	return ""
 }
 
 // MessageChain 描述一次逻辑 Send 的有序片段。
@@ -3421,11 +3448,14 @@ const file_alonabot_v1_message_proto_rawDesc = "" +
 	"\x17member_external_user_id\x18\x01 \x01(\tR\x14memberExternalUserId\"b\n" +
 	"\x14ReactionAddedPayload\x12.\n" +
 	"\x13platform_message_id\x18\x01 \x01(\tR\x11platformMessageId\x12\x1a\n" +
-	"\breaction\x18\x02 \x01(\tR\breaction\"q\n" +
+	"\breaction\x18\x02 \x01(\tR\breaction\"\xd5\x01\n" +
 	"\x10ScheduledPayload\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12/\n" +
-	"\x14scheduled_at_unix_ms\x18\x03 \x01(\x03R\x11scheduledAtUnixMs\"@\n" +
+	"\x14scheduled_at_unix_ms\x18\x03 \x01(\x03R\x11scheduledAtUnixMs\x12\x1b\n" +
+	"\ttask_name\x18\x04 \x01(\tR\btaskName\x12\x19\n" +
+	"\btask_key\x18\x05 \x01(\tR\ataskKey\x12*\n" +
+	"\x11task_payload_json\x18\x06 \x01(\tR\x0ftaskPayloadJson\"@\n" +
 	"\fMessageChain\x120\n" +
 	"\bsegments\x18\x01 \x03(\v2\x14.alonabot.v1.SegmentR\bsegments\"\xb3\x04\n" +
 	"\aSegment\x12.\n" +

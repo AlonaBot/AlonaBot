@@ -48,6 +48,7 @@ enum RouteKind {
   ROUTE_KIND_SCHEDULE = 5;
   ROUTE_KIND_HTTP = 6;
   ROUTE_KIND_BUS_SUBSCRIPTION = 7;
+  ROUTE_KIND_TASK = 8;
 }
 
 // RouteDescriptor 描述一条路由的公共描述；target 为 plugin_id/route_id，kind 必须与 spec 分支一致。
@@ -86,6 +87,8 @@ message RouteDescriptor {
     HttpRouteSpec http = 15;
     // BUS_SUBSCRIPTION。
     BusSubscriptionSpec bus_subscription = 16;
+    // TASK。
+    TaskSpec task = 18;
   }
   // 触发者满足其中任一权限即可；空集合不要求 Actor。
   repeated string required_permissions = 17;
@@ -317,4 +320,10 @@ message BusSubscriptionSpec {
   uint32 schema_version = 3;
   // 收到事件时调用的本插件路由。
   string callback_route_id = 4;
+}
+
+// TaskSpec 声明动态任务的处理函数；实例规则由 Core 保存。
+message TaskSpec {
+  // 稳定的任务名。
+  string name = 1;
 }

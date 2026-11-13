@@ -134,3 +134,26 @@ CREATE TABLE button_token (
 );
 
 CREATE INDEX button_token_plugin ON button_token(plugin_id);
+
+CREATE TABLE dynamic_task (
+  plugin_id TEXT NOT NULL REFERENCES install(plugin_id),
+  name TEXT NOT NULL,
+  key TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  interval INTEGER NOT NULL,
+  cron TEXT NOT NULL,
+  timezone TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  anchor INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (plugin_id, name, key)
+);
+
+CREATE TABLE scheduled_job (
+  plugin_id TEXT NOT NULL REFERENCES install(plugin_id),
+  job_id TEXT NOT NULL,
+  anchor INTEGER NOT NULL,
+  interval INTEGER NOT NULL,
+  paused INTEGER NOT NULL,
+  PRIMARY KEY (plugin_id, job_id)
+);

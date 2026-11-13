@@ -81,3 +81,21 @@ const ServiceContinuationStart = "core.continuation.start"
 
 // ServiceWait 等待延续调用所属用户在原会话的下一条消息。
 const ServiceWait = "core.wait"
+
+// ServiceTaskSet 创建或替换动态实例。
+const ServiceTaskSet = "core.task.set"
+
+// ServiceTaskCancel 取消动态实例与在途调用。
+const ServiceTaskCancel = "core.task.cancel"
+
+// ServiceTaskList 分页列出动态实例。
+const ServiceTaskList = "core.task.list"
+
+// ServiceJobPause 暂停静态任务。
+const ServiceJobPause = "core.job.pause"
+
+// ServiceJobResume 恢复静态任务。
+const ServiceJobResume = "core.job.resume"
+
+// ServiceJobStatus 查询静态任务状态。
+const ServiceJobStatus = "core.job.status"
