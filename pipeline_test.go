@@ -61,7 +61,11 @@ func TestMain(m *testing.M) {
 		os.Exit(m.Run())
 	}
 	var err error
-	if strings.HasPrefix(mode, "tasks") {
+	if strings.HasPrefix(mode, "t11-") {
+		err = t11Process(mode)
+	} else if strings.HasPrefix(mode, "tasks-sdk") {
+		err = sdk.Run(schedulerSDKPlugin(mode))
+	} else if strings.HasPrefix(mode, "tasks") {
 		err = persistentTaskProcess(mode)
 	} else if mode == "adapter" {
 		err = sdk.RunAdapter(&pipelineAdapter{})
@@ -79,6 +83,7 @@ type pipelineRecord struct {
 	Stage, Plugin, Route, Text, User, Session, Token, Code  string
 	Action, Value, Job, RunID, MessageID, Instance, Account string
 	Permissions                                             []string
+	Tokens, Labels                                          []string
 }
 
 // pipelineAudit 同步写入父进程，记录返回后才允许当前 Handler 继续。
@@ -367,15 +372,19 @@ type pipelineHarness struct {
 
 func newPipeline(t *testing.T, stdio ...bool) *pipelineHarness {
 	t.Helper()
-	dir := t.TempDir()
+	useStdio := len(stdio) > 0 && stdio[0]
+	return newPipelineAt(t, t.TempDir(), tune.Defaults(), useStdio)
+}
+
+// newPipelineAt 在装配前确定调优值，并允许完整清理后重开同一数据目录。
+func newPipelineAt(t *testing.T, dir string, values tune.Values, stdio bool) *pipelineHarness {
+	t.Helper()
 	store, err := state.Open(t.Context(), filepath.Join(dir, "data"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &pipelineHarness{t: t, store: store, dir: dir, values: tune.Defaults(), changed: make(chan struct{}, 1), release: make(chan struct{}, 1), components: make(map[string]*runningComponent)}
-	if len(stdio) > 0 {
-		h.stdio = stdio[0]
-	}
+	h := &pipelineHarness{t: t, store: store, dir: dir, values: values, changed: make(chan struct{}, 1), release: make(chan struct{}, 1), components: make(map[string]*runningComponent)}
+	h.stdio = stdio
 	h.values.StopDrain = pipelineStopDrain
 	file, err := settings.Load(dir)
 	if err != nil {
@@ -442,7 +451,7 @@ func (h *pipelineHarness) install(id, mode string) {
 	h.t.Helper()
 	role := state.RolePlugin
 	adapterID := ""
-	if mode == "adapter" {
+	if mode == "adapter" || strings.HasPrefix(mode, "t11-adapter") {
 		role = state.RoleAdapter
 		adapterID = "loop"
 	}
@@ -494,7 +503,7 @@ func (h *pipelineHarness) launch(id, mode string, priority int) *runningComponen
 	}
 	observed := &pipelineObserver{Plugin: router.FromInstance(c.instance), harness: h}
 	h.assembly.router.Attach(observed, c.caller)
-	if mode == "adapter" {
+	if mode == "adapter" || strings.HasPrefix(mode, "t11-adapter") {
 		if err := c.remote.StartInstance(h.t.Context(), pipelineInstanceID, []byte(`{}`)); err != nil {
 			h.t.Fatal(err)
 		}

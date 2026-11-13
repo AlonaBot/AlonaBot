@@ -249,6 +249,9 @@
           }
         }
       }
+    },
+    "llm_service_allowed_plugins": {
+      "description": "允许生成文本的插件"
     }
   }
 }

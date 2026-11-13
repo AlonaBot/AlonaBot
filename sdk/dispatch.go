@@ -33,6 +33,9 @@ func businessHandler(reg *Registration) wire.Handler {
 	for _, job := range reg.Schedules {
 		handlers[scheduleRoutePrefix+job.JobID] = job.Handler
 	}
+	for _, task := range reg.tasks {
+		handlers[taskRoutePrefix+task.name] = task.invoke
+	}
 	for _, command := range reg.Commands {
 		commands[commandRouteID(command)] = command
 	}

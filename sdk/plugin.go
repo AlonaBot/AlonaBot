@@ -24,6 +24,7 @@ type Plugin struct {
 	subscriptions  subscriptionRegistry
 	http           httpRegistry
 	schedules      scheduleRegistry
+	tasks          taskRegistry
 	scope          pluginScope
 	subs           []*SubPlugin
 	jobSubPlugins  map[string]string
@@ -40,7 +41,7 @@ type Plugin struct {
 	errs           []error
 }
 
-// Registrar 约束类型化服务、订阅和按钮只能登记到插件或子插件。
+// Registrar 约束类型化服务、订阅、按钮和任务只能登记到插件或子插件。
 type Registrar interface{ registrar() *pluginScope }
 
 type pluginScope struct {

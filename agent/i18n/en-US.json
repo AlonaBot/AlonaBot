@@ -60,6 +60,9 @@
           }
         }
       }
+    },
+    "llm_service_allowed_plugins": {
+      "description": "Plugins allowed to generate text"
     }
   }
 }

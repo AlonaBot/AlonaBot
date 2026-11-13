@@ -262,3 +262,11 @@ message SessionError {
   // 触发失败的帧种类；与具体帧无关时为 UNSPECIFIED。
   FrameKind failed_kind = 2;
 }
+
+// LogSetLevelRequest 更新当前 SDK Session 的日志阈值（CONTRACTS §14.3）。
+message LogSetLevelRequest {
+  LogLevel level = 1;
+}
+
+// LogSetLevelResponse 确认日志阈值已更新。
+message LogSetLevelResponse {}

@@ -4,7 +4,8 @@
 // Stop 排空并停用插件，WaitExit 在断链或退出时撤销业务入口，确认旧进程树清空后释放调度运行槽。
 // Launch 与 Stop 由状态库的逐插件锁串行执行，Stop 与 WaitExit 由 Running 的锁交接清理所有权。
 //
-// 尚不含正式的安装、Journal 与恢复编排。
+// Prepare 返回的候选由 Prepared 持有，Activate 后移交 Running，Close 确认树退出后释放。
+// 正式候选的 Journal 与恢复编排由调用方负责。
 package supervisor
 
 import (
@@ -23,13 +24,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 	"github.com/AlonaBot/AlonaBot/internal/core/process"
-	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/scheduler"
 	"github.com/AlonaBot/AlonaBot/internal/core/secret"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
@@ -70,6 +71,7 @@ type Spec struct {
 	// NewCandidate 为 true 时在 ACTIVATE 前提交 ActiveGeneration（期望旧值 ExpectedOld）；
 	// false 表示普通 restart，复用已提交的代次。
 	NewCandidate bool
+	Development  bool   // 开发代次每次读取原始配置，快照以明文直接覆盖。
 	ExpectedOld  string // 提交新候选时预期的旧 ActiveGeneration；首次激活为空
 	// Stdio 为 true 时使用 stdio 传输，否则使用 TCP loopback。
 	Stdio    bool
@@ -119,12 +121,35 @@ type Running struct {
 	cleanupErr error // Stop 或 WaitExit 清理进程树时的错误，供随后的 Stop 返回
 }
 
-// Launch 启动插件进程并完成握手、准备、提交与激活。任何一步失败都会终止进程树、确认清空后返回；无法确认清空时把原因并入返回的错误。
-// 同一插件的管理操作由状态库的逐插件锁串行化。
+// Launch 启动插件并完成准备与激活；保持启动期间的逐插件锁。
 func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error) {
 	unlock := store.LockPlugin(spec.PluginID)
 	defer unlock()
+	p, err := prepare(ctx, store, spec)
+	if err != nil {
+		if p != nil {
+			err = errors.Join(err, p.close())
+		}
+		return nil, err
+	}
+	var commit func(context.Context) error
+	if spec.NewCandidate {
+		commit = func(ctx context.Context) error {
+			return store.CommitActive(ctx, spec.PluginID, spec.ExpectedOld, spec.GenerationID)
+		}
+	}
+	return p.activate(ctx, commit)
+}
 
+// Prepare 启动进程并完成 PREPARED，返回连接和进程树的唯一所有者。
+// 失败时若尚未确认树清空，仍返回句柄供调用方 Close。
+func Prepare(ctx context.Context, store *state.Store, spec Spec) (*Prepared, error) {
+	unlock := store.LockPlugin(spec.PluginID)
+	defer unlock()
+	return prepare(ctx, store, spec)
+}
+
+func prepare(ctx context.Context, store *state.Store, spec Spec) (*Prepared, error) {
 	// 启动前检查包内文案，失败时尚未读取候选资源或创建进程。
 	messages, problems := i18n.Parse(spec.I18n)
 	if len(problems) != 0 {
@@ -164,12 +189,16 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		boot.DefaultLocale = defaultLocale
 	}
 	input := []byte(boot.GetCandidateConfigJson())
-	if !spec.NewCandidate {
+	if !spec.NewCandidate && !spec.Development {
 		input = previous
 	}
-	plaintext, err := secrets.Resolve(ctx, spec.PluginID, input)
-	if err != nil {
-		return nil, err
+	plaintext := input
+	if !spec.Development {
+		var err error
+		plaintext, err = secrets.Resolve(ctx, spec.PluginID, input)
+		if err != nil {
+			return nil, err
+		}
 	}
 	boot.CandidateConfigJson = string(plaintext)
 
@@ -221,19 +250,13 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		closeListener(ln)
 		return nil, err
 	}
-	// fail 终止并确认进程树清空、释放资源后返回 err；无法确认清空时把原因并入错误，调用方不能另起写入者。
-	fail := func(err error) (*Running, error) {
-		kerr := proc.KillTree()
-		if kerr == nil {
-			<-proc.Exited()
-			drainLogs(proc, time.Now().Add(spec.Stop.Total))
+	p := &Prepared{store: store, spec: spec, process: proc, listener: ln, messages: messages}
+	fail := func(err error) (*Prepared, error) {
+		cleanupErr := p.close()
+		if !p.released {
+			return p, errors.Join(err, cleanupErr)
 		}
-		_ = proc.Release()
-		closeListener(ln)
-		if kerr != nil {
-			err = errors.Join(err, fmt.Errorf("process tree of plugin %s not confirmed empty: %w", spec.PluginID, kerr))
-		}
-		return nil, err
+		return nil, errors.Join(err, cleanupErr)
 	}
 
 	// 5. 建立连接，注册后抽取快照；新候选先持久化，restart 只核对且保持原代次不变。
@@ -241,10 +264,27 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	if err != nil {
 		return fail(err)
 	}
+	p.conn = conn
 	secretBytes, _ := hex.DecodeString(sessionSecret)
 	exp := host.Expect{Role: spec.Role, AdapterID: spec.AdapterID, PluginID: spec.PluginID, Secret: secretBytes, BuildDigest: spec.BuildDigest,
 		Offer: validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}}
 	exp.Snapshot = func(candidate []byte) ([]byte, error) {
+		if spec.Development {
+			var paths []string
+			if len(spec.ConfigSchema) != 0 {
+				schema, problems := configschema.Parse(spec.ConfigSchema)
+				if len(problems) != 0 {
+					return nil, fmt.Errorf("config schema: %v", problems)
+				}
+				for _, path := range schema.SecretPaths() {
+					paths = append(paths, strings.Join(path, "."))
+				}
+			}
+			if err := store.SetDevGenerationConfig(ctx, spec.GenerationID, string(candidate), boot.TargetConfigVersion, paths); err != nil {
+				return nil, err
+			}
+			return candidate, nil
+		}
 		snapshot, paths, err := secrets.Extract(ctx, spec.PluginID, spec.ConfigSchema, candidate, previous, keptPaths)
 		if err != nil {
 			return nil, err
@@ -263,34 +303,8 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		return fail(err)
 	}
 	spec.Log.SetSession(prep.SessionID)
-	opt := host.ActivateOptions{PluginID: spec.PluginID, GenerationID: spec.GenerationID, Handler: spec.Handler, Global: spec.Global, Limits: spec.Limits, Messages: messages}
-	if spec.NewCandidate {
-		opt.Commit = func(ctx context.Context) error {
-			return store.CommitActive(ctx, spec.PluginID, spec.ExpectedOld, spec.GenerationID)
-		}
-	}
-	in, err := host.Activate(ctx, conn, prep, opt)
-	if err != nil {
-		return fail(err)
-	}
-	// 6. ACTIVATED 已应用后才开放 HTTP 与定时任务，绑定顺序保证首个 tick 可以访问 HTTP。
-	activatedAt := time.Now()
-	if spec.HTTP != nil && in.HTTPListener != nil {
-		spec.HTTP.Bind(spec.PluginID, in.GenerationID, in.HTTPListener, in.HTTPProxyToken, in.Routes, spec.Role == state.RoleAdapter)
-	}
-	if spec.Scheduler != nil {
-		if err := spec.Scheduler.Attach(ctx, router.FromInstance(in), activatedAt); err != nil {
-			if spec.HTTP != nil && in.HTTPListener != nil {
-				spec.HTTP.Unbind(spec.PluginID, in.GenerationID, in.HTTPProxyToken)
-			}
-			return fail(errors.Join(err, in.Session.Close()))
-		}
-	}
-	if spec.CommandsChanged != nil {
-		spec.CommandsChanged()
-	}
-	return &Running{Instance: in, Process: proc, store: store, pluginID: spec.PluginID, listener: ln, timing: spec.Stop,
-		scheduler: spec.Scheduler, http: spec.HTTP, commandsChanged: spec.CommandsChanged, onDetach: spec.Detach}, nil
+	p.Registration = prep
+	return p, nil
 }
 
 // connect 在握手期限内建立与插件的连接：TCP 等待插件拨入（进程提前退出则放弃），stdio 直接使用管道。

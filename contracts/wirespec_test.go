@@ -11,6 +11,18 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
+// TestLogSetLevelFieldNumbers 固定日志级别请求和响应的协议布局。
+func TestLogSetLevelFieldNumbers(t *testing.T) {
+	fields := (&pb.LogSetLevelRequest{}).ProtoReflect().Descriptor().Fields()
+	f := fields.ByNumber(1)
+	if fields.Len() != 1 || f == nil || f.Name() != "level" || f.Kind() != protoreflect.EnumKind || f.Enum().FullName() != "alonabot.v1.LogLevel" || f.HasPresence() || f.IsList() || f.ContainingOneof() != nil {
+		t.Fatalf("LogSetLevelRequest field 1 should be singular LogLevel level, got %v", f)
+	}
+	if (&pb.LogSetLevelResponse{}).ProtoReflect().Descriptor().Fields().Len() != 0 {
+		t.Fatal("LogSetLevelResponse should be empty")
+	}
+}
+
 // TestCommandConsumedFieldNumber 固定可信命令消费标记的字段编号与类型。
 func TestCommandConsumedFieldNumber(t *testing.T) {
 	field := (&pb.InvocationContext{}).ProtoReflect().Descriptor().Fields().ByNumber(6)
