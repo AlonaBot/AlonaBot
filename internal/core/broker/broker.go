@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -24,12 +25,20 @@ const (
 	invocationSchemaVersion = 1
 )
 
+// Options 提供路由依赖与 tune.Values 中的请求期限、调用链深度上限。
+type Options struct {
+	Router         *router.Router
+	RequestTimeout time.Duration
+	MaxDepth       int // CALL_CHAIN_MAX_DEPTH，包含即将调用的目标插件。
+}
+
 // Broker 保存路由入口和在途转发关系；New 创建，Call 接入 Mux.Forward。
 // Session 将新分配的目标 call_id 与 Request.Attach 绑定，calls 以同一附件关联源 Session/call_id。
 // 业务函数在锁外执行；目标返回或调用结束时删除关联。
 type Broker struct {
 	router         *router.Router
 	requestTimeout time.Duration
+	maxDepth       int
 	mu             sync.Mutex // 只保护 calls，转发期间不持锁
 	calls          map[*router.Invocation]callOrigin
 }
@@ -39,9 +48,9 @@ type callOrigin struct {
 	callID uint64
 }
 
-// New 创建 Broker；requestTimeout 由装配处传入 tune.Values.RequestTimeout。
-func New(r *router.Router, requestTimeout time.Duration) *Broker {
-	return &Broker{router: r, requestTimeout: requestTimeout, calls: make(map[*router.Invocation]callOrigin)}
+// New 按装配处传入的请求期限和调用链深度上限创建 Broker。
+func New(opt Options) *Broker {
+	return &Broker{router: opt.Router, requestTimeout: opt.RequestTimeout, maxDepth: opt.MaxDepth, calls: make(map[*router.Invocation]callOrigin)}
 }
 
 // Call 依次完成定位、访问与输入准入，再以独立编号调用目标 Session。
@@ -96,15 +105,29 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 	if payload.Encoding == pb.PayloadEncoding_PAYLOAD_ENCODING_JSON && !validJSON(payload.Bytes) {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service input is not valid UTF-8 JSON")
 	}
-	// 3. 只从 Core 的父请求附件派生 Actor 与默认 Target，插件载荷不提供可信身份。
-	invocation := &router.Invocation{PluginID: pluginID}
-	trusted := &pb.InvocationContext{PluginChain: []string{c.PluginID}}
+	// 3. 父附件由 Core 保留；每次复制祖先链，防止独立并发调用修改同一底层切片。
+	invocation := &router.Invocation{PluginID: pluginID, TraceID: in.TraceID}
+	trusted := &pb.InvocationContext{}
 	if parent, ok := in.ParentAttach.(*router.Invocation); ok {
 		trusted.Actor = parent.Event.GetActor()
 		trusted.DefaultTarget = parent.DefaultTarget
+		invocation.Chain = slices.Clone(parent.Chain)
+		invocation.Scopes = slices.Clone(parent.Scopes)
+		invocation.SendForbidden = parent.SendForbidden
 		invocation.Event = parent.Event
 		invocation.DefaultTarget = parent.DefaultTarget
+		invocation.TraceID = parent.TraceID
 	}
+	invocation.Chain = append(invocation.Chain, c.PluginID)
+	if slices.Contains(invocation.Chain, pluginID) {
+		return failure(pb.ErrorCode_ERROR_CODE_CALL_CYCLE, "service call chain contains target plugin")
+	}
+	if len(invocation.Chain)+1 > b.maxDepth {
+		return failure(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "service call chain exceeds maximum depth")
+	}
+	trusted.PluginChain = invocation.Chain
+	trusted.Scopes = invocation.Scopes
+	trusted.SendForbidden = invocation.SendForbidden
 	request := &pb.ServiceInvocation{RouteId: service.GetRouteId(), Context: trusted, Encoding: payload.Encoding, SchemaId: payload.SchemaID, SchemaVersion: payload.SchemaVersion, Payload: payload.Bytes}
 	encoded, err := proto.Marshal(request)
 	if err != nil {
@@ -127,7 +150,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		delete(b.calls, invocation)
 		b.mu.Unlock()
 	}()
-	response, err := plugin.Call(ctx, wire.Request{Target: service.GetRouteId(), TraceID: in.TraceID, Deadline: deadline, Attach: invocation,
+	response, err := plugin.Call(ctx, wire.Request{Target: service.GetRouteId(), TraceID: invocation.TraceID, Deadline: deadline, Attach: invocation,
 		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: invocationSchemaVersion, Bytes: encoded}})
 	// 5. 保留目标的业务错误与有效载荷；成功结果必须符合声明的输出契约。
 	if response.Err != nil {
