@@ -1,7 +1,8 @@
-// Package tool 提供工具目录与按插件、服务名持久化的调用策略。
+// Package tool 提供工具目录、调用策略及带父调用链的工具执行与用户确认。
 //
 // [Catalog] 从 Router 的已 Attach 声明取得工具，并在每次查询时读取状态库覆盖。
 // 固定服务只列出已激活且调用者可访问的工具；管理查询同时保留未声明工具的覆盖（CONTRACTS §13.1）。
+// [Catalog.RegisterInvoke] 装配 Broker 转发与 Core 直接发送的确认消息，确认随父调用失效。
 package tool
 
 import (
@@ -10,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
@@ -23,8 +25,10 @@ const schemaVersion = 1
 
 // Catalog 合并插件工具声明与状态库中的策略覆盖。
 type Catalog struct {
-	store  *state.Store
-	router *router.Router
+	store      *state.Store
+	router     *router.Router
+	mu         sync.Mutex // 保护本次 Core 运行中出现的操作名；持久化覆盖仍归 store
+	operations map[string]ToolPolicyEntry
 }
 
 // ToolPolicyEntry 列出工具声明的缺省策略与已保存的覆盖。
@@ -36,7 +40,7 @@ type ToolPolicyEntry struct {
 
 // New 创建从 r 读取工具声明、从 store 读取策略的目录。
 func New(store *state.Store, r *router.Router) *Catalog {
-	return &Catalog{store: store, router: r}
+	return &Catalog{store: store, router: r, operations: make(map[string]ToolPolicyEntry)}
 }
 
 // Register 将 core.tool.list 注册到固定服务分流器。
@@ -77,13 +81,19 @@ func (c *Catalog) SetPolicy(ctx context.Context, pluginID, service string, p pb.
 	return err
 }
 
-// Policies 按完整工具名字典序列出全部已 Attach 工具与保存覆盖的并集。
+// Policies 按完整名字典序列出已 Attach 工具、本次运行出现的操作与保存覆盖的并集。
 func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error) {
 	// 1. 保存的覆盖先占位，使未 Attach 或已移除的声明仍可被管理。
 	entries, err := c.overrides(ctx)
 	if err != nil {
 		return nil, err
 	}
+	c.mu.Lock()
+	for key, operation := range c.operations {
+		operation.Override = entries[key].Override
+		entries[key] = operation
+	}
+	c.mu.Unlock()
 	// 2. 声明补全缺省策略；未激活的 Attach 声明也包含在查询中。
 	for _, plugin := range c.router.Plugins() {
 		for _, route := range plugin.Routes() {
@@ -105,6 +115,12 @@ func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error) {
 		return cmp.Compare(a.PluginID+"/"+a.Service, b.PluginID+"/"+b.Service)
 	})
 	return result, nil
+}
+
+func (c *Catalog) observe(pluginID, operation string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.operations[pluginID+"/"+operation] = ToolPolicyEntry{PluginID: pluginID, Service: operation, Default: pb.ToolPolicy_TOOL_POLICY_CONFIRM}
 }
 
 func (c *Catalog) overrides(ctx context.Context) (map[string]ToolPolicyEntry, error) {
