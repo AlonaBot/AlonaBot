@@ -7,8 +7,8 @@
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
 | goal-78 | T-15.1 | 官方 OneBot 11 Adapter 的连接与接收 | T-03.3、T-03.4、T-04.6 | 已完成（PR #109） |
-| goal-79 | T-15.2 | 官方 OneBot 11 Adapter 的发送、媒体与 extension | T-03.6、T-03.8、T-15.1 | 等待前置 |
-| goal-114 | T-15.4 | 官方 OneBot 11 Adapter 的反向 WebSocket | T-03.19、T-15.1 | 等待前置 |
+| goal-79 | T-15.2 | 官方 OneBot 11 Adapter 的发送、媒体与 extension | T-03.6、T-03.8、T-15.1 | 待派发 |
+| goal-114 | T-15.4 | 官方 OneBot 11 Adapter 的反向 WebSocket | T-03.19、T-15.1 | 等待前置（T-15.2） |
 | goal-115 | T-15.5 | 官方 OneBot 11 Adapter 的新增片段与媒体 URL | T-03.13、T-03.14、T-15.2 | 等待前置 |
 | goal-116 | T-15.6 | 官方 OneBot 11 Adapter 的扩展事件、平台动作与撤回 | T-03.15、T-03.16、T-15.2 | 等待前置 |
 | goal-133 | T-15.7 | 官方 OneBot 11 Adapter 填写 chat_title | T-03.25、T-15.1 | 等待前置 |
@@ -105,64 +105,121 @@
 
 ### goal-79 · T-15.2 官方 OneBot 11 Adapter 的发送、媒体与 extension
 
-状态：等待前置（T-03.8）。2026-11-09 按 D-88 修订媒体来源：不再把 media_ref 转成 base64，改为经实例配置的共享目录 `media_dir` 以 `file://` 传递，没有配置时 UNSUPPORTED；临时媒体 URL、inline_base64 与 platform_file 由 goal-115 加入。T-15.1（PR #109，合并提交 `1b226a2`）已合并，合入 `onebot11.New`、实例的 echo 调用与 `onebottest.Server`（`NewServer`、`URL`、`SetLogin`、`Push`、`Disconnect`、`Connections`、`Calls`、`Respond`），T-03.8 合并后由审查者按合入代码写出接口段。T-03.6（PR #55）已合并。语句中 goal-7、goal-8、goal-78 提供的符号（sdk/adapter 的 Core.ReadMedia 与实例可选实现的平台文件读取接口、ExtensionDeclaration 的校验、adapters/onebot11 的实例与 API 调用、onebottest.Server）只写名字；合并后由审查者核对签名，再改为待派发。
+状态：待派发；暂不派发（维护者指示只改写语句）。前置 T-03.6（PR #55，合并提交 b023130）、T-03.8（PR #136，3621fc1）、T-15.1（PR #109，1b226a2）均已合并。2026-11-13 按维护者指定的 main 0af1255 源码及本地完成记录重新核对。以下裁决均记为「审查者补齐，待维护者确认」：下载仅开放显式 media_download_origins；共享目录在 Start 校验条件必填；模拟端全量记录只用于小对象；同实例 incoming_ref 的 platform_file 映射与完整 V-89 由 T-15.5（goal-115）交付，本切片保留阶段分工。
+
+已有接口与衔接：onebot11.New() adapter.Adapter、Start(context.Context, adapter.StartRequest, adapter.Core) (adapter.Instance, error)、instance.call(context.Context, string, any, any) error 均存在，Send 仍返回 UNSUPPORTED；receiveCapabilities 仅声明接收。adapter.Core.ReadMedia、adapter.MediaSource.ReadPlatformFile 的分块签名已存在，adapter.Extension[T] 接收包内 face 类型。onebottest.Server 已有 Calls、Respond、SetLogin、Disconnect；本语句列出的 Files、DisconnectOn 为新增。与 goal-114 共用 OneBot 连接、生命周期、Schema 和模拟端，先合本切片；T-04.8、T-03.13 已合并。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-79（切片 T-15.2：官方 OneBot 11 Adapter 的发送、媒体与 extension）。goal 目录 goal-79，分支 goal-79，worktree .worktrees/goal-79，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：OneBot 11 实例的 Send 先对整条 Chain 做完整预检并生成确定的物理操作计划，再依次调用 send_msg；连续的 text、mention、image 与 extension 合成一条消息，video 单独成一条，reference 只加在第一条前；每条消息一个 PartResult，按 MESSAGE-MODEL §4 汇总。入站 image、video 生成带 incoming_ref 的片段并实现平台文件读取；出站 https_url 原样传递，media_ref 经共享目录以 file:// 传递，不把任何来源转成 base64；注册 onebot11.face extension。
+目标：实现 OneBot 11 的完整发送预检、确定的物理计划与逐项回执，入站 image/video 的惰性读取、出站 https_url 与共享目录 media_ref，以及类型化 onebot11.face extension；保留原始数据、顺序与部分结果。
 
-依据：PLAN T-15 步骤 3、4；CONTRACTS §8（Send、Chain 与计划段，extension 段，OneBot 11 段的 media_dir）、§1.3、§1.4；MESSAGE-MODEL §2、§4、§7.1 的入站媒体、§7.2；DECISIONS D-46、D-88；TEST-MATRIX V-71 的发送与媒体分项。
+依据：spec/PLAN.md §3.1；spec/plan/adapters/onebot11.md T-15.2、T-15 步骤 3、4 及「失败停止条件」；spec/CONTRACTS-v0.1.md §1.2～§1.4、§8、§14.5；spec/MESSAGE-MODEL.md §2、§4、§7.1 的 image/video 入站媒体、§7.2；spec/WIRE-FORMAT.md §2、§3.4、§5；spec/adr/DECISIONS.md D-46、D-73、D-88、D-113；spec/TEST-MATRIX.md V-71 的发送与媒体分项。OneBot 11 标准 communication/ws.md、api/public.md 的 send_msg、message/segment.md 的 text/at/reply/image/video/face 字段在实施时对照原文。
 
 范围（只新增或修改这些）：
-- adapters/onebot11/：新增 plan.go、send.go、media.go；实例的 Send、Capabilities 与 Descriptor 的 extensions 补全；标准化补上入站 image、video；adapter_config_schema.json 追加可选的 media_dir（对象：local 必填，remote 缺省与 local 相同）
-- adapters/onebot11/onebottest/：增加 send_msg 的缺省响应与故障注入；收到 file:// 段时立即读取文件内容并随请求记录（实现端在调用期间读取文件）
-- 上述包的测试文件
-允许的新跨模块边：无。
+- adapters/onebot11/onebot11.go：Send、描述与实例能力、媒体配置接入。
+- adapters/onebot11/connection.go：解析 media_dir、media_download_origins；保留 API 原始响应与写出阶段，旧登录/get_msg 调用语义同步保留。
+- adapters/onebot11/lifecycle.go：仅在发送调用的断链收尾需要时调整，不改变接收重连规则。
+- adapters/onebot11/inbound.go：image/video 入站映射。
+- 新增 adapters/onebot11/plan.go、send.go、media.go：物理计划、发送与平台文件读取；face 载荷结构体放 plan.go，保持包内类型。
+- adapters/onebot11/adapter_config_schema.json：追加 media_dir 对象与 media_download_origins 列表。
+- adapters/onebot11/onebottest/server.go：send_msg 缺省响应、断线注入及共享文件读取记录。
+- 新增 adapters/onebot11/send_test.go；按需更新 adapters/onebot11/onebot11_test.go 中共用的 Core 测试替身；本地 *_local_test.go。
 
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. adapters/onebot11：实例实现 sdk/adapter 的 Instance.Send 与 goal-7 定义的平台文件读取接口；不新增导出符号。
-2. adapters/onebot11/onebottest（在 goal-78 的 Server 上追加）
-   func (s *Server) DisconnectOn(action string, nth int) // 收到第 nth 次该 action 后不响应并关闭连接（请求已写出、结果未知）
-   send_msg 的缺省响应：status "ok"，data.message_id 从 1001 起递增。
+允许的新跨模块边：无。沿用 adapters/... -> sdk/...、contracts；只使用已批准的标准库与 github.com/coder/websocket。测试同样遵守 ARCHITECTURE，依赖、Core、SDK 与 proto 变更按共同约束标 [!]。
+
+接口（照此实现；内部辅助函数自定）：
+- 保持 New() adapter.Adapter、Adapter.Start 的签名；实例实现
+  Send(ctx context.Context, to message.Session, chain message.Chain) (*message.SendResult, *errcode.Error)
+  ReadPlatformFile(ctx context.Context, fileID string, offset uint64, length uint32) ([]byte, uint64, bool, error)
+- face 载荷：type face struct { ID string `json:"id"` }；Descriptor.Extensions 以 adapter.Extension[face]("face", 1) 声明，片段 AdapterID 为 "onebot11"。Schema 由 SDK 推导，ID 的非空十进制格式在发送预检中检查。
+- 配置追加 "media_dir":{"local":string,"remote":string}；配置共享目录时 local 必填，remote 缺省等于 local。Schema 为 {"type":"object","items":{"local":{"type":"string"},"remote":{"type":"string"}}}：现有 Complete 会把可选对象和字符串补成空值，两个子字段不声明 required；Start 将两者均空识别为未配置，给了 remote 而 local 为空时 INVALID_ARGUMENT，local 非空而 remote 为空时按 local。这样保持未使用共享目录的已有实例可启动；不新增迁移。
+- 媒体下载配置追加 media_download_origins []string，Schema 为 {"type":"list","default":[]}。每项必须为 http/https origin（scheme、host、可选 port，无 userinfo、非根 path、query、fragment）；Start 校验后按小写主机名和有效端口比较精确 origin。列表为空时停用平台 URL 取件；它独立于 media_dir。
+- onebottest.Call 保留 Action、Params，追加 Files map[string][]byte（键为请求中的 file:// 原文）；用于断言调用期间读取的字节。
+  func (s *Server) DisconnectOn(action string, nth int)
+  第 nth 次该 action 请求完整收到后关闭连接且不响应。send_msg 的缺省响应为 status=ok、retcode=0，data.message_id 从 1001 起递增。
+- 复用现有 proto 字段，不追加编号：SendResult 与 PartResult、MediaSource、IncomingMedia、AdapterMediaReadRequest/Response。
 
 行为：
-- 能力与 extension：Capabilities 声明 message.send、message.reference（version 1，supported=true）；不声明 message.markdown、message.album、message.buttons、message.edit。Descriptor 的 extensions 含 {name "face", version 1, schema_json 为只有必需字符串属性 "id"（pattern ^[0-9]+$）、不允许其他属性的 JSON Schema}；片段的 adapter_id 为 AdapterID。
-- 预检（任何 send_msg 之前，任一失败都返回 REJECTED 的 SendResult 加 ErrorInfo，part_results 为空）：
-  - 片段只支持 plain 且无 entities 的 text、image、video、mention、reference 与本 Adapter 的 face extension；带 markdown 或 entities 的 text、file、buttons、forward 与其他 extension → UNSUPPORTED。
-  - target.chat_id 必须是 "private:<十进制>" 或 "group:<十进制>"，否则 INVALID_ARGUMENT；thread_id 存在 → UNSUPPORTED。mention 的 external_user_id、reference 的 original_platform_message_id 必须是十进制，否则 INVALID_ARGUMENT。
-  - 媒体来源：https_url 只接受 https，原样作为段的 file；media_ref（incoming_ref 已由 Core 换成 media_ref）在实例配置了 media_dir 时，于执行该部分时经 Core.ReadMedia 分块写入 media_dir.local 下的随机文件名（crypto/rand，不含插件给出的 filename），段的 file 为 "file://" 加 media_dir.remote 下的同名路径，该部分结束（含 UNKNOWN 与 ctx 到期）后删除文件；没有配置 media_dir 时在预检中返回 UNSUPPORTED，safe_message 提示配置 media_dir（临时媒体 URL 由 goal-115 加入）。不生成 base64://。
-- 物理计划：按原顺序扫描，连续的 text、mention、image、face 合成一条消息的段数组（text → text，mention → at{qq}，image → image{file}，face → face{id}）；video 单独成一条（video{file}）；reference 转为第一条消息最前面的 reply{id}。每条消息一个 send_msg（private 用 user_id，group 用 group_id，message 为段数组），对应一项 PartResult（part_index 从 0 起，segment_indexes 为它覆盖的片段，reference 计入第一项）。
-- 执行与回执：按计划顺序执行。status ok → ACCEPTED，message_id 的十进制进入 platform_message_ids；status async → ACCEPTED 且 message_ids_unavailable=true；status failed → REJECTED，ErrorInfo 为 FAILED_PRECONDITION，safe_message 带 retcode；请求写出后连接断开或到 ctx 期限仍无响应 → UNKNOWN；发出前连接不可用 → 该部分 REJECTED，ErrorInfo 为 UNAVAILABLE。任一部分不是 ACCEPTED 后，其余部分 NOT_ATTEMPTED。整体状态与 primary_platform_message_id 按 MESSAGE-MODEL §4 汇总，部分成功时同时返回 ErrorInfo。不自动重试。
-- 入站媒体：image、video 段生成 image、video 片段，incoming_ref.token 为段的 url（没有 url 时为 file，并在读取时返回 UNSUPPORTED）；平台文件读取接口首次被调用时经 HTTP GET 下载 url（只允许 http、https；响应非 2xx → UNAVAILABLE），按 offset 返回；下载使用实例自己的 http.Client 与 http.ProxyFromEnvironment。
-- 脱敏沿用 goal-78：access_token 不进入日志与错误。
+- Descriptor 与实例能力在原接收能力上追加 message.send、message.reference、media.read，version=1、supported=true；发送的 CapabilitiesUsed 只列实际采用的已声明能力。保留原平台权限声明。
+- Send 在首个平台请求前完整验证 Chain：支持 plain 且无 entities 的 text、mention、image、video、reference 与本 Adapter 的 face v1。空链或仅有 reference 为 INVALID_ARGUMENT；markdown、entities、buttons、file、voice、forward、其他 extension 为 UNSUPPORTED。合法而无法表示的 caption/alt 等显式内容须明确拒绝，保留可表达的字段，不静默丢弃。
+- session.Parts() 取得 chat_id；仅接受 private:<十进制号码>、group:<十进制号码>，无 thread_id。mention 的 ExternalUserID、引用句柄中的消息 ID 须为十进制；引用会话和实例与发送一致。结构错误 INVALID_ARGUMENT，平台无法表示 UNSUPPORTED。预检失败返回 SendRejected 的有效 SendResult 和安全错误，PartResults 为空，平台请求数为零。
+- 物理计划按原位置扫描：连续 text、mention、image、face 合成一条段数组；video 单独成一条；reference 变为第一条最前的 reply{id}，计入第一项的 SegmentIndexes。每条消息一次 send_msg，message_type 为 private/group，目标号码写 user_id/group_id，message 为数组。每个操作一项 PartResult，PartIndex 从 0 起。
+- https_url 原样写段的 file，要求 https。media_ref（跨实例 incoming_ref 已经 Core 准备）只在配置 media_dir 时可发送，否则预检返回 UNSUPPORTED 并提示配置 media_dir。执行当前部分时用 Core.ReadMedia 每块至多 1 MiB 顺序写入 media_dir.local 的随机临时文件（crypto/rand）；平台收到 file:// 加 remote 中同名路径。随机名独立于插件 filename，该部分结束、明确失败、UNKNOWN 或取消后都删除。删除失败保留完整错误并记脱敏诊断，返回可用回执与错误。其余临时来源支持由 T-15.5 交付；本切片遇到 InlineBase64、PlatformFile 时明确返回 UNSUPPORTED。
+- ok + 可用 data.message_id 为 PartAccepted 并保留十进制 ID；async 为 PartAccepted、MessageIDsUnavailable=true，无消息 ID；failed 为 PartRejected，错误 FAILED_PRECONDITION 且 safe_message 带 retcode。请求已写出后断线或到期为 PartUnknown，错误分别 UNAVAILABLE/DEADLINE_EXCEEDED；发出前连接不可用为 PartRejected + UNAVAILABLE。保留响应与写出事实，不沿用 call 抹掉状态的旧写法。任何非 ACCEPTED 后停止，后续 PartNotAttempted；整体、首个 ID 和已确认 ID 按 MESSAGE-MODEL §4 汇总，不自动重试。
+- 入站 image/video 生成对应片段。存在 http/https url 时 Incoming.Token 保留完整 url；仅当其 origin 在本实例 media_download_origins 中时标 Readable，否则标 Unreadable。没有 url 时 token 保留 file 标识、标 Unreadable，读取返回 UNSUPPORTED。原片段及 platform_payload 保留；Core 接纳后自行签发 Session token。
+- ReadPlatformFile 在调用时才经 HTTP GET 按 offset/length 取件。允许的目标仅为本实例显式列出的 media_download_origins；Core 只会转交本 Adapter 可信上报登记的标识。未获准 origin 或非 http/https 来源返回 UNSUPPORTED，HTTP 请求数为零。实例复用一个 HTTP 客户端并使用 http.ProxyFromEnvironment；所有 3xx 均停止，禁止跟随重定向；其他非 2xx 为 UNAVAILABLE。管理员可显式列出所需的私网/loopback origin；生产与模拟服务使用同一规则。Range 成功校验 Content-Range；服务忽略 Range 时流式跳过 offset、最多读取 length，并按分块接口返回 next/eof，避免整份积累。
+- access_token、URL userinfo 和查询凭证沿用脱敏；平台已接受、未知结果、临时文件清理错误均完整保留。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：adapters/onebot11/send_test.go。用 onebottest.Server 与 Core 测试替身（ReadMedia 返回内存字节）驱动真实实例：
-  - 配置 media_dir 时，reference+text+mention+image(media_ref)+face+video(https_url)+text 的计划为三次 send_msg：[reply, text, at, image(file://)、face]、[video(https URL)]、[text]，参数与顺序正确，onebottest 记录的文件内容等于 ReadMedia 的字节，发送结束后 media_dir 为空，三项 PartResult 的 segment_indexes 正确。
-  - 第二次 send_msg 返回 failed：第一项 ACCEPTED、第二项 REJECTED、第三项 NOT_ATTEMPTED，整体 PARTIAL 并带 ErrorInfo；DisconnectOn 第一次 send_msg：整体 UNKNOWN，其余 NOT_ATTEMPTED；async 响应标记 message_ids_unavailable 且 platform_message_ids 为空。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：face 的 Schema 校验正反例；只含 reference 的 Chain 被拒；大媒体分块写入共享目录且常驻内存不随大小增长；没有 media_dir 时 media_ref 在预检被拒且没有 send_msg；ctx 期限到达时的 UNKNOWN；预检失败（buttons、file、forward、markdown、thread_id、非法 chat_id、其他 Adapter 的 extension）时 Calls() 中没有 send_msg；adapters/onebot11 的入站媒体：推入带 image 的群消息（url 指向测试 HTTP 服务），片段的 incoming_ref.token 为该 url；平台文件读取返回正确内容；url 为 file:// 时读取返回 UNSUPPORTED。
+- 提交：adapters/onebot11/send_test.go 一个集成测试 TestSendPlan，经 onebottest.Server 与 recordingCore 驱动 New().Start 得到的实例。子场景覆盖：reference+text+mention+image(media_ref)+face+video(https_url)+text 得到三次 send_msg，第一条 [reply,text,at,image,face]、第二条 video、第三条 text；共享文件在调用期间可读且结束后目录为空；SegmentIndexes 与三项回执正确。第二次 failed 得 PARTIAL / ACCEPTED、REJECTED、NOT_ATTEMPTED；DisconnectOn 得 UNKNOWN 且后续未尝试；async 得 ACCEPTED 且无可用 ID。多场景理由：V-71 明确要求区分三类响应与写出后断线，只有经实际 WebSocket 才覆盖 echo 和写出阶段。
+- 本地自测（*_local_test.go，PR 写明命令与结果）：入站 image/video、无 url/未获准 origin 的 Unreadable、白名单精确比较（协议/主机/端口）、显式私网与 loopback、未配置时零下载、跨 origin 和同 origin 重定向均拒绝、平台文件分块/Range/EOF；face 类型推导及非法 ID；无 media_dir 时零平台请求；预检不支持内容；取消与期限、写文件/删除失败；大媒体常驻内存不随总大小增长（实现端替身流式读文件，不使用 Call.Files 保存大对象）；旧登录、get_msg、接收重连保持；-race 下并发 API 响应配对。
+- 真实 OneBot 11 实现端：未运行（无凭证）；上述证据标明「onebottest 本地模拟服务」，记录实际 OS/架构、Go 版本、命令和结果，交给审查者回写 TEST-MATRIX §3.2。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./adapters/...；go build ./...。
+完成条件：上述集成与本地自测覆盖本切片分项；gofmt -l 本次改动 Go 文件无输出；go vet ./...；go test -race ./adapters/onebot11/...；go build ./...。遇到 T-15「失败停止条件」、范围外修改、依赖或协议缺口标 [!]，保留阻塞证据。
 
-不做：Core 侧装配、alonabot run 联验与一致性验收（T-15.3）；消息编辑（OneBot 11 不支持，由 Core 按未声明的 message.edit 拒绝）；临时媒体 URL、inline_base64、platform_file、语音、全体提及、合并转发与文件上传（goal-115）。
+不做：Core/根包/CLI 装配、T-15.3 跨 Adapter 一致性、message.edit、message.delete、voice/file/forward/at_all、临时媒体 URL 与 inline_base64/platform_file 的平台映射（T-15.5）、反向 WebSocket（T-15.4）、真实 QQ 端验证。
 ```
 
 ## 第 12 波
 
 ### goal-114 · T-15.4 官方 OneBot 11 Adapter 的反向 WebSocket
 
-状态：等待前置（T-03.19）。T-15.1（PR #109）已合并。2026-11-09 按 D-87、D-94 新增。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。
+状态：等待前置（T-15.2）；暂不派发（维护者指示只改写语句）。原前置 T-03.19（PR #152，2f4284d）、T-15.1（PR #109，1b226a2）均已合并。2026-11-13 按 main 0af1255 重新核对，T-15.2（goal-79）的 Send 尚未实现，新增它为直接前置以保留完整反向收发验收。以下裁决均记为「审查者补齐，待维护者确认」：Core 保留 Start 响应时的 Account 展示名快照；凭证优先使用存在的 Authorization；条件必填由 Start 校验；统一 HTTP 入口使用已合并装配。
 
-目标：实例 `mode` 支持 `reverse`：Adapter 注册公开的前缀路由 `/ws/`，实现端经 Core 统一端口连入 `<base_url>/plugins/<Adapter 包 ID>/ws/<instance_id>`；握手鉴权、账号核对、单连接与断开后等待重连；`onebottest` 增加以反向客户端身份连入的模式。
+已有接口与衔接：sdk.AdapterHTTP.HTTP(route func(method, path string) *sdk.RouteBuilder)、RouteBuilder.Public/HandleFunc 及 AuthPlatformToken 均已存在；sdk.RunAdapter 托管 Listener、内部代理凭证与 Session。onebotAdapter 当前仍为空结构体，parseConfig 只接受 forward、Start 总先 Dial/get_login_info，无进程级实例表；startRead 与 receiveConnection.checked/valid 是现有复核门禁。onebottest.Server 仍仅提供正向端点，ConnectReverse 为本切片新增。根包管理装配（PR #163）、run/热部署（PR #171）、启动取消修复（PR #174）已合并；本切片复用它们，不改根包/CLI。goal-79 先合并，并在派发前重新核对 connection.go、lifecycle.go、Schema、模拟端和新增 send.go；media_dir、media_download_origins 与真实 Send 必须完整保留。
 
-依据：PLAN T-15 步骤 6；CONTRACTS §7.2、§8（OneBot 11 段）、§14.5；MESSAGE-MODEL §7、§7.3；DECISIONS D-46、D-94；TEST-MATRIX V-95 的 OneBot 11 分项；OneBot 11 标准原文 communication/ws-reverse.md。
+```text
+/goal 使用 $alonabot-execute 推进 goal-114（切片 T-15.4：官方 OneBot 11 Adapter 的反向 WebSocket）。goal 目录 goal-114，分支 goal-114，worktree .worktrees/goal-114，从包含已合并 goal-79（T-15.2）的最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-要点：
-- adapter_config_schema.json：mode 增加 reverse；reverse 时 access_token 与 self_id 必填，ws_url 不用。
-- 握手检查顺序：instance_id 未知或实例未启动 404；access_token（Authorization Bearer 或查询参数，恒时比较）不符 401；X-Self-ID 不等于 self_id 或 X-Client-Role 不是 Universal 403；已有连接 409。
-- 启动：Start 不等待连入，Account 的 ID 为 self_id；连入后 get_login_info 核对 user_id 并取得展示名，不符时关闭连接并记诊断。断开后实例保持运行，不调用 ReportFailure；未连接时 Send 与动作在首个请求前返回 UNAVAILABLE。读循环、队列、echo 配对与格式检查复用 forward 模式的实现。
-- 测试：提交在既有 `onebot11_test.go` 中追加的用例：onebottest 以反向客户端连入后收发一条消息，第二条连接得到 409，断开后重连照常收发；其余进本地自测。
+目标：OneBot 11 实例支持 mode=reverse，经 Core 统一端口的公开 /ws/ 前缀接收实现端连接；完成配置、逐项握手鉴权、单连接、get_login_info 账号核对、断开后等待重连；onebottest 支持反向客户端。
+
+依据：spec/PLAN.md §3.1；spec/plan/adapters/onebot11.md T-15.4、T-15 步骤 6 及「失败停止条件」；spec/CONTRACTS-v0.1.md §7.2、§8、§14.5；spec/MESSAGE-MODEL.md §7、§7.1、§7.3；spec/WIRE-FORMAT.md §2、§3.3、§3.4（Adapter HTTP 与平台 token）；spec/adr/DECISIONS.md D-25、D-46、D-94、D-113、D-136；spec/TEST-MATRIX.md V-95 的 OneBot 11 分项；OneBot 11 标准 communication/ws-reverse.md、api/public.md 的 get_login_info。
+
+范围（只新增或修改这些）：
+- adapters/onebot11/onebot11.go：进程级实例登记、Start 分模式、Account 展示名同步与 Stop 撤销（Core 仍保留 Start 快照）。
+- adapters/onebot11/connection.go、lifecycle.go：模式配置、连接复用、反向断线与在途调用收尾。
+- 新增 adapters/onebot11/reverse.go：sdk.AdapterHTTP 登记与反向 WebSocket Handler。
+- adapters/onebot11/adapter_config_schema.json：mode 的 reverse 选项、self_id 与条件字段。
+- adapters/onebot11/onebottest/server.go 与新增 onebottest/reverse.go：反向客户端，共用响应、上报和断线控制。
+- adapters/onebot11/onebot11_test.go：一个新增反向连接集成测试；本地 *_local_test.go。
+- adapters/onebot11/send.go：在已合并 T-15.2 的发送实现接入 reverse 未连接/未复核的 UNAVAILABLE 门禁，保留物理计划与回执。派发基线须包含 goal-79；该文件和其私有函数名在前置合并后由审查者按实际 diff 核对。
+
+允许的新跨模块边：无。沿用 adapters/... -> sdk/...、contracts，以及本 Adapter 已批准的 github.com/coder/websocket。HTTP 路由由 SDK/Core 托管，测试用 net/http/httptest；不改根包、cmd、Core、SDK 或 proto。
+
+接口（照此实现；内部辅助函数自定）：
+- 保持 func New() adapter.Adapter；返回对象新增实现
+  func (a *onebotAdapter) HTTP(route func(method,path string) *sdk.RouteBuilder)
+  在该方法一次登记 route(http.MethodGet,"/ws/").Public(sdk.AuthPlatformToken).HandleFunc(a.reverseHTTP)。HTTP 方法与路径使用现成 builder，禁止使用旧 HTTPRegistry/HTTPOption 签名。
+- 配置 JSON：mode 为 forward（缺省）或 reverse；forward 的 ws_url 必填，access_token 可选；reverse 的 access_token 与 self_id 必填，self_id 为正十进制 QQ 号 string，ws_url 不使用。Schema 的 mode.options 追加 reverse，删除 ws_url 的无条件 required，ws_url.condition 为 {"mode":"forward"}，self_id 为可选 string、condition 为 {"mode":"reverse"}；access_token 保留 secret 且不加 required。CONTRACTS §5.1 的 condition 只控制显示，模式相关必填统一在 Start 的外部配置边界校验；Schema 补齐的空字符串按对应模式解释，不扩展 Schema 引擎。
+- Account() adapter.Account：reverse 启动后 ID 为 self_id，DisplayName 初始为空，验证连入后更新为 nickname；Username 为空。读写同一 account 有同步，ID 在实例存活期固定。SDK/Core 当前只在 Start 响应取一次 Account：Core 管理面的 account_display_name 及初始 bot.online 取 SDK 制作 Start 响应时那次 Account() 的快照，尚未复核时为空；后续 nickname 仅供实例内 Account() 读取，Core 不刷新；本切片采用现有快照语义，不新增状态刷新服务。
+- Instance.Send 和既有可选动作使用原接口签名，不新增平台动作或任意透传。
+- onebottest 在既有 Server 上追加
+  func (s *Server) ConnectReverse(ctx context.Context,endpoint string,headers http.Header) (status int,err error)
+  endpoint 为 ws/wss 地址；headers 原样交握手，成功 status=101；失败保留 HTTP 状态及错误。成功后 Server 作为 OneBot 实现端读取 API 并回复、Push 推送上报；SetLogin/Respond/Calls/Disconnect/Connections 复用原接口。t.Cleanup 关闭并等待全部反向读写循环。
+- 沿用已存在的 HTTP_AUTH_MODE_PLATFORM_TOKEN、REGISTER routes 与 HttpListener 字段及 AdapterInstanceStartResponse，不追加 proto。
+
+行为：
+- Adapter 进程持有按 InstanceID 索引的实例 map；Start 成功登记，失败和 Stop 完成时撤销；只对正在运行的 reverse 实例开放连接。forward 保持原 Dial、get_login_info、退避重连和致命错误规则，实例之间的启停互不影响。
+- reverse Start 完成配置校验和接收生命周期初始化后立即返回，不等待外部连入、不主动 Dial；account.ID=self_id。外部地址为 <base_url>/plugins/<Adapter 包 ID>/ws/<instance_id>，Adapter Handler 收到的相对路径为 /ws/<instance_id>。Adapter 包 ID 与 adapter_id 按各自身份使用。
+- 按以下顺序返回 HTTP 状态，均在 Upgrade 前：未知、未启动、非 reverse 或已停止实例 404；Authorization: Bearer 或 access_token 查询参数的凭证不匹配 401，恒时比较；X-Self-ID 不等于 self_id 或 X-Client-Role 不为 Universal 403；已有连接或同实例正在接受连接 409。Authorization 头存在时仅校验该头：必须是单个有效 Bearer 凭证；即使查询参数正确，头缺少有效 Bearer 或凭证不符仍返回 401。仅头完全缺失时读取单个非空 access_token 查询参数；多值/空值返回 401。恒时比较 token，不记录请求原文、认证头或查询值。
+- 单连接的检查与占槽须覆盖并发握手；Upgrade 失败释放自身槽。旧连接的收尾仅撤销自己，避免把后来连接清掉。Stop 期间冻结新握手，关闭已有连接，等待读、交付及握手收尾后再返回。
+- Upgrade 后读循环先就绪，通过同一 echo 配对调用 get_login_info；复核 user_id=self_id 后更新展示名、开放该连接的事件交付。账号不符或登录调用失败时关闭该连接并记安全诊断，丢弃复核前排队的上报，实例继续等待下一条连接。不可在账号核对前向 Core 交付消息。
+- 复核成功后沿用 forward 的事件解析、self_id 检查、256 条队列、满队列计数、逐条 Deliver、空游标、API/心跳独立读取与数组格式检查。字符串消息仍是实例致命错误并 ReportFailure，符合原格式契约；单纯断线/登录不符的处理按 reverse 的规则等待。
+- 断线后结束该连接的在途调用、清理连接槽，实例继续等待；不启动向外 Dial 的退避循环，不 ReportFailure、不合成 bot.offline。未连接或尚未完成账号复核时 Send/已有动作在首个平台业务请求前返回 UNAVAILABLE，重连成功恢复；已写出的发送在断开时仍保留 UNKNOWN 和可用回执，不重放。
+- 生命周期 ctx 独立于 Start RPC，HTTP Upgrade 的连接寿命独立于握手请求的短期 context，Stop 与 SDK Session 失效能结束它。SDK 内部代理凭证照常先验证，平台 access_token 由本 Handler 再验；生产进程只使用 SDK 托管的 Listener。
+- 脱敏沿用 access_token、URL userinfo/查询参数规则；所有状态码错误响应只含安全短文，不回显凭证。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：在 onebot11_test.go 追加一个集成测试 TestReverseLifecycle，httptest 仅托管生产 reverseHTTP Handler，通过 onebottest.ConnectReverse 驱动真实 WebSocket；实例 reverse Start 在未连入时返回，账号为 self_id。正确握手后 get_login_info 核对，推入群消息正常 Deliver；第二个独立模拟客户端同实例连接得到 409；断开后重新连入、再次交付且无 ReportFailure。同一用例通过实例 Send 回发一条文本，断言 send_msg、ACCEPTED 及其消息 ID，断线期 Send 为 UNAVAILABLE，重连后同样恢复。T-15.2 为新增直接前置，收发验收完整保留。
+- 本地自测（*_local_test.go，PR 写明结果）：404/401/403/409 的先后次序；Bearer 与查询参数；正确头+错误查询成功、错误头+正确查询 401、格式错误头+正确查询 401、多头/多查询 401；未知实例、forward 实例、Stop 后；并发握手仅一条成功；登录账号不符后可再次正确连入；未复核连接不交付、不发业务请求；同包多实例隔离；Stop/Session 失效关闭连接；连接收尾不影响新连接；前向模式回归、字符串格式仍致命；错误响应和日志无 token。
+- 本地自测的 SDK/Core 集成：复用 PR #152 的真实 SDK Adapter 进程与统一代理模式，在临时测试中接入本 Adapter 的 HTTP 声明，确认 /plugins/<包 ID>/ws/<实例> 可达、Authorization/查询参数保留、内部凭证必验、Unbind 关闭 Upgrade；只在本地测试文件/临时目录建探针，提交范围保持上述一个平台集成测试。SDK 路由登记使用插件对象与 RouteBuilder，所需消息 Content 使用 sdk/message。
+- 真实 OneBot 11 实现端：未运行（无凭证）。分别记录 onebottest 平台 Handler 模拟证据与 SDK/Core 代理集成证据；提供 OS/架构、Go 版本、命令及结果给审查者回写 TEST-MATRIX §3.2。
+
+完成条件：握手、单连接、复核、断线重连及收发有证据，已在包含 T-15.2 的基线上完成收发验收；gofmt -l 本次改动 Go 文件无输出；go vet ./...；go test -race ./adapters/onebot11/...；go build ./...。遇到 T-15「失败停止条件」、范围外文件/依赖/proto 变更或未解决契约冲突标 [!]。
+
+不做：Core 代理/根包/CLI 装配重写、额外公开 Listener、Telegram webhook、未声明平台动作、发送能力实现（T-15.2）、媒体 URL/新增片段（T-15.5）、扩展事件与动作清单（T-15.6）、真实实现端手测。
+```
 
 ### goal-115 · T-15.5 官方 OneBot 11 Adapter 的新增片段与媒体 URL
 
