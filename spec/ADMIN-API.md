@@ -82,13 +82,13 @@ Cookie 为 host-only、`Path=/`、`HttpOnly`、`SameSite=Strict`；HTTP 下名�
 | `/api/v1/packages/restart` | `{"id":"demo"}` | 以当前 Active 换 Session；要求已启用且有 Active；WebUI 无进程，返回 412 |
 | `/api/v1/packages/uninstall` | `{"id":"demo","purge":0,"confirm":false}` | 停止并清理选定范围，准确对象需确认；开发组件返回 412 |
 | `/api/v1/packages/pin` | `{"id":"demo","constraint":"1.2.3"}` | 精确 SemVer；空串解除；格式错误 400 |
-| `/api/v1/packages/reload` | `{"id":"demo"}` | 要求已激活的进程组件；当前候选执行返回 501 / `UNSUPPORTED`；WebUI 返回 412 |
-| `/api/v1/packages/update` | `{"id":"demo","confirm":false,"install":{"Source":"owner/repo"}}` | `install` 使用 3.1 的 `InstallRequest` 大写字段；外层 `confirm` 覆盖 `install.Confirm`；校验身份、来源、公钥、pin、版本与依赖影响，当前候选执行返回 501 / `UNSUPPORTED` |
+| `/api/v1/packages/reload` | `{"id":"demo"}` | 要求已激活的进程组件，通过候选准备与提交生成新代次；WebUI 返回 412 |
+| `/api/v1/packages/update` | `{"id":"demo","confirm":false,"install":{"Source":"owner/repo"}}` | `install` 使用 3.1 的 `InstallRequest` 大写字段；外层 `confirm` 覆盖 `install.Confirm`；校验身份、来源、公钥、pin、版本与依赖影响，通过候选准备与提交更新版本，保持启用状态 |
 | `/api/v1/packages/rollback` | `{"id":"demo","generation":"<保留代次>","confirm":false}` | 要求目标代次属于该组件，校验确认后，当前候选执行返回 501 / `UNSUPPORTED` |
 
 `purge` 为整数：0（缺省）保留数据、配置及来源绑定；1 额外清除受管数据；2 额外清除受管配置及安装绑定。保留记录重装要求匹配原来源与身份。Adapter 替换保留的实例归旧组件，新实例配置块换归属时另行确认。具体清理对象见 [CONTRACTS §9.3](CONTRACTS-v0.1.md#93-cli-的最小完整动作)。
 
-Update 的本地候选可以提供 `install.Archive/ReleaseJSON/Signature/PublicKey`；省略候选来源和归档时，沿用安装时绑定来源。前置校验可能先返回 400、403、404、409 或 412；501 表示请求已到达当前尚未实现的候选执行入口，正式更新与回退编排由后继切片完成。
+Update 的本地候选可以提供 `install.Archive/ReleaseJSON/Signature/PublicKey`；省略候选来源和归档时，沿用安装时绑定来源。前置校验可能先返回 400、403、404、409 或 412；重复上传已安装的同版本同归档会因不可变包目录已存在返回 409 / `ALREADY_EXISTS`。Rollback 的正式候选编排由后继切片完成，当前返回 501 / `UNSUPPORTED`。
 
 ### 3.3 组件图标
 
@@ -326,7 +326,7 @@ install 成功为 200、原 `Package` 导出字段；update 成功为 200、`{}`
 
 临时目录覆盖完整 Install/Update 调用；成功、400/403/409、候选失败、请求中断和文件写入失败均执行清理。关闭或清理的真实错误保留在管理错误或日志中。服务调用结束后归档源可删除；已安装不可变目录及 Journal 接管资源继续由各自所有者管理。
 
-multipart 与 JSON Update 均进入 `manage.Service.Update`，执行绑定来源、组件身份、公钥、pin 与依赖影响检查。当前候选动作返回 501 / `UNSUPPORTED`，上传层原样传播；经 HTTP 真实更新成功的验收由 T-09.6（goal-41）接通管理动作后完成。
+multipart 与 JSON Update 均进入 `manage.Service.Update`，执行绑定来源、组件身份、公钥、pin 与依赖影响检查。Core 已接通候选准备与提交：有效的新版本上传成功返回 200、`{}`，已启用的组件激活新代次，用户数据保留，受管 SQLite 在候选副本上执行迁移。缺文件或验签失败在修改旧组件前拒绝；重复上传已安装的同版本同归档返回 409 / `ALREADY_EXISTS`。
 
 ## 11. Core 总览
 

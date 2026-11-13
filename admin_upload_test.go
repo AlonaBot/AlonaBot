@@ -10,6 +10,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -87,7 +88,7 @@ func TestAdminSessionAndUploads(t *testing.T) {
 		t.Helper()
 		body, content := adminMultipart(t, request, action == "update", omit)
 		response, raw := adminRequest(t, h, "POST", "/api/v1/packages/"+action, content, body, cookie, logged.CSRF)
-		if response.StatusCode != want || !strings.Contains(string(raw), contains) {
+		if response.StatusCode != want || !strings.Contains(string(raw), contains) || (action == "update" && want == 200 && strings.TrimSpace(string(raw)) != "{}") {
 			t.Fatalf("%s=%d %s, want %d %q", action, response.StatusCode, raw, want, contains)
 		}
 		adminUploadsClean(t, h)
@@ -113,6 +114,14 @@ func TestAdminSessionAndUploads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	db, err := sql.Open("sqlite", filepath.Join(h.dir, "plugins", "upload_demo", "generations", before.Active, "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, writeErr := db.Exec("UPDATE upload_data SET value = 'keep original database data'")
+	if closeErr := db.Close(); writeErr != nil || closeErr != nil {
+		t.Fatalf("write user database: %v close: %v", writeErr, closeErr)
+	}
 	preserved := func() {
 		t.Helper()
 		after := adminInstalled(t, h)
@@ -128,17 +137,42 @@ func TestAdminSessionAndUploads(t *testing.T) {
 		if after != before || !reflect.DeepEqual(current, original) || string(data) != "keep original user data" || !ok || same != plugin || !same.Activated() {
 			t.Fatalf("old component changed: before=%+v after=%+v data=%q", before, after, data)
 		}
+		adminDatabase(t, h, before.Active, "1.0.0")
 	}
 	next := adminSignedBundle(t, h, "1.1.0", key)
-	upload("update", next, "", 501, "UNSUPPORTED")
-	preserved()
 	upload("update", next, "release", 400, "INVALID_ARGUMENT")
 	preserved()
 	bad := next
 	bad.Signature = base64.StdEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))
 	upload("update", bad, "", 403, "PERMISSION_DENIED")
 	preserved()
-	t.Log("V-40/V-47 API: real Core Listener, SQLite, signed installed plugin process; 409 replay, 501 handoff, preflight failures and upload cleanup passed")
+	upload("update", next, "", 200, "{}")
+	after := adminInstalled(t, h)
+	updated, ok := h.core.assembly.router.Plugin("upload_demo")
+	if after.Version != "1.1.0" || after.State != "Activated" || !after.Enabled || !after.Signed || after.Active == before.Active || !ok || !updated.Activated() {
+		t.Fatalf("updated component=%+v activated=%v", after, ok)
+	}
+	data, err := os.ReadFile(dataPath)
+	if err != nil || string(data) != "keep original user data" {
+		t.Fatalf("updated user data=%q err=%v", data, err)
+	}
+	// 更新迁移只写候选副本，旧代次的数据库保留原值。
+	adminDatabase(t, h, before.Active, "1.0.0")
+	adminDatabase(t, h, after.Active, "1.1.0")
+	t.Log("V-40/V-47 API: real Core Listener, SQLite, signed plugin processes; 409 replay, rejected uploads preserve old state, successful 1.1.0 update preserves user data through a migrated database copy, upload cleanup passed")
+}
+
+func adminDatabase(t *testing.T, h *webUIHarness, generation, version string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", filepath.Join(h.dir, "plugins", "upload_demo", "generations", generation, "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var data, migrated string
+	readErr := db.QueryRow("SELECT value, version FROM upload_data").Scan(&data, &migrated)
+	if closeErr := db.Close(); readErr != nil || closeErr != nil || data != "keep original database data" || migrated != version {
+		t.Fatalf("database generation=%s data=%q version=%q want=%q read=%v close=%v", generation, data, migrated, version, readErr, closeErr)
+	}
 }
 
 func adminRequest(t *testing.T, h *webUIHarness, method, path, content string, body io.Reader, cookie *http.Cookie, csrf string) (*http.Response, []byte) {
@@ -251,10 +285,15 @@ func adminSignedBundle(t *testing.T, h *webUIHarness, version string, key ed2551
 	request := h.bundle("upload_demo", "plugin", "", 1)
 	project := t.TempDir()
 	source := `package main
-import("fmt";"log/slog";"os";"github.com/AlonaBot/AlonaBot/sdk")
+import("context";"database/sql";"fmt";"log/slog";"os";"github.com/AlonaBot/AlonaBot/sdk";"github.com/AlonaBot/AlonaBot/sdk/sqlitedb")
 func New()*sdk.Plugin{
  p:=sdk.NewPlugin()
  sdk.UseGenerated(p,sdk.Generated{Manifest:[]byte(fmt.Sprintf("id: upload_demo\nname: WebUI Fixture\nversion: %s\nsource: github.com/example/upload_demo\n",` + fmt.Sprintf("%q", version) + `))})
+ sqlitedb.Migrate(p,func(ctx context.Context,db *sql.DB)error{
+  if _,err:=db.ExecContext(ctx,"CREATE TABLE IF NOT EXISTS upload_data (value TEXT, version TEXT); INSERT INTO upload_data SELECT 'initial database data', '' WHERE NOT EXISTS (SELECT 1 FROM upload_data)");err!=nil{return err}
+  _,err:=db.ExecContext(ctx,"UPDATE upload_data SET version = ?",` + fmt.Sprintf("%q", version) + `)
+  return err
+ })
  return p
 }
 func main(){if err:=sdk.Run(New());err!=nil{slog.Error("fixture failed","error",err);os.Exit(1)}}
@@ -297,6 +336,7 @@ func main(){if err:=sdk.Run(New());err!=nil{slog.Error("fixture failed","error",
 		}
 		if header.Name == "plugin.yaml" {
 			raw = bytes.ReplaceAll(raw, []byte("version: 1.0.0\n"), []byte("version: "+version+"\n"))
+			raw = bytes.ReplaceAll(raw, []byte("migration_mode: none\nprepare_effects: none\n"), []byte("migration_mode: self\nprepare_effects: managed_db\n"))
 		}
 		if header.Name == "bin/component" {
 			raw = binary
