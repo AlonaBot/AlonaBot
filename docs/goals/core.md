@@ -81,7 +81,7 @@
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
 | goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 等待前置 |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 待派发 |
-| goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 待派发 |
+| goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 已完成（PR #161） |
 | goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 等待前置 |
 | goal-92 | T-09.13 | 管理页所需的会话与上传接口 | T-09.1、T-09.4、T-09.12 | 等待前置 |
 | goal-70 | T-13.4 | 开发运行示例与验收 | T-03.10、T-13.2、T-13.3 | 等待前置 |
@@ -5624,7 +5624,7 @@ sdk（新增或替换）
 
 ### goal-20 · T-06.2 父调用链、取消与背压
 
-状态：待派发。T-05.3（[PR #155](https://github.com/AlonaBot/AlonaBot/pull/155)，合并提交 `53393aa`）、T-03.6（PR #55）、T-06.1（PR #45）已合并。2026-11-12 审查者按合并后的 main 核对：
+状态：已完成（[PR #161](https://github.com/AlonaBot/AlonaBot/pull/161)，合并提交 `b4610e1`），证据见 TEST-MATRIX §3.2。合入：`broker.New(broker.Options{Router, RequestTimeout, MaxDepth})`；`router.Invocation` 的 `Chain`、`Scopes` 与导出的 `TraceID`；Broker 从父附件继承 actor、default_target、scopes、send_forbidden 与 trace，链为父链加调用方，CALL_CYCLE 与深度检查在调用目标前返回；Hook 调用的附件继承父链加父插件、scopes 与 trace，Scheduler 的父附件带本次 tick 的 trace。父请求结束时的取消与背压由 wire 的现有机制提供，以三进程场景验证。执行中审查者授权导出 TraceID 并修改 hook 与 scheduler。派发时：T-05.3（[PR #155](https://github.com/AlonaBot/AlonaBot/pull/155)，合并提交 `53393aa`）、T-03.6（PR #55）、T-06.1（PR #45）已合并。2026-11-12 审查者按合并后的 main 核对：
 - `broker.New(r *router.Router, requestTimeout time.Duration)`，调用方为根包 assembly.go（goal-130 的选项查询也使用它）；`Broker.Call` 已从 `in.ParentAttach.(*router.Invocation)` 派生 Actor 与默认 Target，`InvocationContext.plugin_chain` 目前只有调用方一跳，`send_forbidden` 与 `scopes` 没有继承；期限已取 REQUEST_TIMEOUT、调用方期限与 ctx 期限中最早者；`b.calls` 以子调用的 Invocation 记录调用来源。
 - `router.Invocation{PluginID, Event, DefaultTarget, SendForbidden, RouteID, Continuation}`；`SendForbidden` 由 hook 包在出站 Hook 调用时设置，message 的 send、edit、delete、action 检查父附件的这个标记（goal-17）。
 - `tune.Values.CallChainMaxDepth`（CALL_CHAIN_MAX_DEPTH，缺省 16）已登记。
