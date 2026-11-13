@@ -144,6 +144,9 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 		return nil, err
 	}
 	p := policy.New(store)
+	if err := p.LoadCommandNames(context.Background()); err != nil {
+		return nil, fmt.Errorf("load command names: %w", err)
+	}
 	a.buttons = buttons.New(store, time.Now, v.ButtonTokenTTL, func(id string) (string, []*pb.RouteDescriptor, bool) {
 		plugin, ok := a.router.Plugin(id)
 		if !ok || !plugin.Activated() {
@@ -162,7 +165,7 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 			return a.router.CallContinuation(ctx, inv, parent, deadline)
 		}})
 	a.router = router.New(router.Options{Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
-		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: nil,
+		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: nil, CommandNames: p.CommandNames,
 		Continuations: continuations,
 		Send: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
 			return messages.Send(ctx, c, in)
