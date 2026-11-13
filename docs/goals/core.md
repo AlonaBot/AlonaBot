@@ -69,7 +69,7 @@
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 已完成（PR #119） |
 | goal-39 | T-09.4 | 管理服务、安装记录与 run | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 待派发 |
 | goal-68 | T-13.2 | 开发组件的配置与数据库 | T-07.6、T-08.5、T-08.11、T-13.1 | 已完成（PR #160） |
-| goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1 | 等待前置 |
+| goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1 | 待派发（PR #163 合并后） |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 已完成（PR #155） |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 已完成（PR #153） |
@@ -4766,19 +4766,59 @@ goal-125 若先合并，Collect 改为收 *Plugin，命令、事件与 OnButton 
 
 ### goal-69 · T-13.3 开发运行与热部署
 
-状态：等待前置（T-13.1）。2026-11-12 审查者决定：本切片与 goal-39 都改写 `alonabot run` 与根包装配，goal-39 先把 run 迁到根包并删除 `--plugin-id`、`--entry`、`--stdio`，本切片在 goal-39 与 goal-68 合并后按合并后的代码改写并派发，并恢复开发组件的 `--stdio` 与 stdio 端到端测试；测试不能使用 `alonabot init`（goal-38 依赖本切片），工程文件由测试直接写出。T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并，待审查者按合并后的代码改写。T-13.1（[PR #149](https://github.com/AlonaBot/AlonaBot/pull/149)，合并提交 `bc39361`）已合并，其余前置均已合并；待 T-04.12（PR #154）合并后由审查者按根包的插件对象选项改写。T-09.16（[PR #140](https://github.com/AlonaBot/AlonaBot/pull/140)，合并提交 `896991b`）已合并：工程 manifest 用 `manifest.ParseProject`，包内 manifest 用 `Parse`，`Generate` 由工程 manifest 加 `BuildInfo` 生成包内 YAML。T-03.24（[PR #135](https://github.com/AlonaBot/AlonaBot/pull/135)，合并提交 `f83ad95`）已合并：重新读取设置后 `Reload` 的 changed 含 `adapters` 时调用 `adapter.Registry.SetDefaults(settings.DefaultInstances())`。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin`（T-04.10 起为 `{AdapterID, UserID}`，admins 为用户字符串）；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。2026-11-04 按 D-77 改写：热部署不再是库模式的 `Reload` 选项与 `ALONABOT_RELOAD`，而是 `alonabot run [目录...] --reload`，开发组件以独立进程运行。语句只写了目标、依据和要点，前置合并后由审查者按 goal-67 的装配、goal-97 的 settings 与 goal-100 的工程 manifest 写出接口与测试段。
+状态：待派发，在 PR #163（goal-39）合并后从包含它的 main 派发。PLAN 上的前置 T-07.6（PR #100）、T-09.16（PR #140）、T-13.1（PR #149）早已合并；本切片一直未派发，是审查者安排的先后顺序：goal-39 把 `cmd/alonabot` 的 run 迁到根包装配并删除 `--plugin-id`、`--entry`、`--stdio`，本切片在同一个 run 上加入目录与热部署，同时做会互相重写。2026-11-12 审查者按 PR #163 的 head `1796add`（已合入 main `b4610e1`）改写，要点如下：
+- 根包：`alonabot.Run`/`Start` 与选项 `Plugin`（接受 role plugin 或 agent）、`Adapter`、`DataDir`、`Args`、`Listen`、`LogLevel`、`LogFormat`；Start 只加载一次 `settings.File` 并交给装配；开发组件由 `startDevelopment` 以同进程方式运行，配置取 `plugins/<id>/config.json`、数据库为 `dev.sqlite`（T-13.2），开发 Adapter 按 `core_config.json` 中属于它的实例启动（T-09.4）；已安装组件由 `startInstalled` 经 `supervisor.Launch` 以独立进程运行。根包目前没有「开发组件以独立进程运行」与「运行中只重启一个开发组件」的入口，本切片加入。
+- `cmd/alonabot/commands.go` 的 run：`alonabot run [--data-dir] [--listen] [--log-level] [--log-format] [--args]` 调用 `alonabot.Run`，不接受位置参数；不带子命令时等同 run。
+- 生成器 `sdk/generate` 与 `alonabot plugin generate` 已有；`internal/pluginkit` 尚不存在（ARCHITECTURE 已登记 `cmd/alonabot -> internal/pluginkit` 与 `internal/pluginkit -> sdk/generate` 的边，供 goal-38 的 `alonabot build` 复用）。
+- tune 已登记 `DEV_RELOAD_POLL`（缺省 500ms，CONTRACTS §16）。
+- `alonabot init` 由 goal-38 提供，goal-38 依赖本切片，所以测试不能用 init，工程文件由测试直接写出。
 
-目标：`alonabot run [目录...] [--reload]` 把给出的目录（没有给出且当前目录有 plugin.yaml 时为当前目录）作为开发组件运行：按 `alonabot build` 的方式构建到 `<data_dir>/dev/bin/`，插件、Adapter 与 Agent 以独立进程运行，WebUI 以目录中的 assets 代替已安装的 WebUI。`--reload` 时轮询源码、资源与配置，源码变化时重新构建并只重启变化的组件，编译失败时旧组件继续运行，只有配置变化时不重新构建。
+```text
+/goal 使用 $alonabot-execute 推进 goal-69（切片 T-13.3：开发运行与热部署）。goal 目录 goal-69，分支 goal-69，worktree .worktrees/goal-69，从最新 origin/main 创建（须已包含 PR #163）。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-依据：PLAN T-13 步骤 4；CONTRACTS §15.4、§15.1、§16（DEV_RELOAD_POLL）；DESIGN §S；DECISIONS D-77；TEST-MATRIX V-64 的独立进程分项、V-65。
+目标：`alonabot run [目录...] [--reload] [--stdio]` 把给出的目录（没有给出且当前目录有 plugin.yaml 时为当前目录）作为开发组件：按 `alonabot build` 将用的方式构建到 `<data_dir>/dev/bin/`，插件、Adapter 与 Agent 以独立进程运行，沿用固定代次 `dev:<组件 ID>`（D-134）与 T-13.2 的开发配置和数据库。`--reload` 时每 DEV_RELOAD_POLL 轮询源码、资源与配置：源码或资源变化时重新构建，成功后只重启变化的组件，编译失败时输出编译器信息、旧组件继续运行；只有配置变化时不重新构建，只重启该组件或变化的 Adapter 实例。
 
-要点：
-- 组件身份取自目录中的工程 plugin.yaml（goal-100 的解析）；构建失败或 ID、adapter_id 与已安装的包冲突时，在启动任何组件前报错退出。
-- 构建复用生成器与 `go build`，提供供 goal-38 的 `alonabot build` 复用的内部函数，不另写一套。
-- 开发组件使用 goal-67 的 dev 来源安装记录与固定代次；进程的启动、停止与有限重启沿用 supervisor，与已安装组件相同。
-- 轮询：每 DEV_RELOAD_POLL 用标准库检查每个组件目录中的 `.go` 文件、`//go:embed` 引用的文件、go.mod、go.sum、plugin.yaml、config_schema.json、adapter_config_schema.json 与 i18n/（排除数据目录、vendor、以 . 或 _ 开头的目录与 testdata），以及插件的 config.json 与 core_config.json 中该 Adapter 的实例；源码或资源变化时重新构建，成功后依次重启变化的组件；只有配置变化时只重启该组件，Adapter 只重启变化的实例；core_config.json 的其他变化交给 goal-97 的 Reload：返回的键含 admins 时调用 policy.SetAdmins，命令前缀经 File.CommandPrefixes 读当前设置，不需要额外处理；开发组件的 Spec.DefaultLocale 在每次启动时取当前设置，default_locale 变化后在之后建立的 Session 生效，不为此重启运行中的组件。
-- 删除现在 `run` 的 `--plugin-id`、`--entry` 参数，不留兼容；`--data-dir`、`--stdio`、`--listen` 与 `--args` 保留。
-- 提交的集成测试（//go:build unix）在临时目录用 `alonabot init` 生成插件工程并以 `--reload` 运行：改动回复文本后插件重启并回复新文本、Core 与回环 Adapter 不重启；写入语法错误时旧插件继续回复；只改 config.json 时不重新构建但新配置生效；改动 config_schema.json 后重新构建。
+依据：PLAN T-13 步骤 4；CONTRACTS §15.4、§15.1、§16（DEV_RELOAD_POLL）；DESIGN §S；DECISIONS D-77、D-134；TEST-MATRIX V-64 的独立进程分项、V-65。
+
+范围（只新增或修改这些）：
+- 新增 internal/pluginkit/：开发构建（读取工程 plugin.yaml、运行生成器、go build 到指定目录；Adapter 工程包生成 cmd 薄入口，不在作者目录写文件），供 goal-38 复用
+- 根包 alonabot.go、assembly.go：独立进程的开发组件与运行中重启单个开发组件（见接口）
+- cmd/alonabot/commands.go 与新增 cmd/alonabot/dev.go：run 的位置参数、--reload、--stdio 与轮询
+- cmd/alonabot/e2e_test.go：恢复 stdio 子项（改为以目录运行 examples/plugins/lifecycle）；新增 cmd/alonabot/dev_e2e_test.go
+- docs/development.md 的开发运行一节
+允许的新跨模块边：cmd/alonabot -> internal/pluginkit、internal/pluginkit -> sdk/generate 与 contracts/manifest（ARCHITECTURE 已登记）。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. 根包
+   func Executable(path string, projectManifest []byte) Option // 登记以独立进程运行的开发组件：projectManifest 为工程 plugin.yaml 原文（按 manifest.ParseProject 解析 id、role、adapter_id，规则同 Plugin/Adapter 的登记与冲突检查），path 为构建出的可执行文件
+   func Stdio() Option                                         // 本次运行中 Executable 登记的组件使用 stdio 传输（缺省 TCP loopback）
+   func (c *Core) Restart(ctx context.Context, id string) error // 只重启一个开发组件：重新读取可执行文件摘要与 config.json，按 §4.2 停止旧 Session 后以同一代次 dev:<id> 启动；Adapter 重启后按属于它的实例重新启动；id 不是本次运行的开发组件时返回错误
+   func (c *Core) RestartInstance(ctx context.Context, adapterID, instanceID string) error // 只重启开发 Adapter 的一个实例（配置变化时）
+2. internal/pluginkit
+   func BuildDev(ctx context.Context, dir, outDir string) (Build, error) // 返回可执行文件路径、工程 manifest 原文与构建输入的摘要；编译失败返回带编译器原文的错误
+   type Build struct { Executable string; Manifest []byte; Role, ID, AdapterID string }
+
+行为：
+- 组件身份取自目录中的工程 plugin.yaml；构建失败、ID 或 adapter_id 与已安装的包冲突、两个目录的 ID 相同时，在启动任何组件前报错退出。
+- 构建复用 sdk/generate 与 go build；插件与 Agent 工程直接构建入口包；Adapter 目录为可导入的工程包，构建时为它生成只调用 sdk.RunAdapter(New()) 的薄入口（放在 <data_dir>/dev/ 下或经 go build -overlay，不写入作者目录）。
+- 开发组件进程沿用 supervisor 的启动、停止与有限重启，与已安装组件相同；配置、数据库、日志级别与 T-13.2 相同（独立进程的开发组件由构建写入明确的 migration_mode）。
+- 轮询（--reload）：每 DEV_RELOAD_POLL 用标准库检查每个组件目录中的 .go 文件、//go:embed 引用的文件、go.mod、go.sum、plugin.yaml、config_schema.json、adapter_config_schema.json 与 i18n/（排除数据目录、vendor、以 . 或 _ 开头的目录与 testdata），以及组件的 config.json 与 core_config.json 中属于该 Adapter 的实例。源码或资源变化：重新构建，成功后依次调用 Core.Restart；失败时输出编译器原文，旧组件继续运行。只有 config.json 变化：不构建，Core.Restart 该组件。只有某个 Adapter 实例的配置变化：Core.RestartInstance 该实例。core_config.json 的其他变化交给 settings 的 Reload（admins 变化时 SetAdmins，命令前缀经 File.CommandPrefixes 读取当前设置；default_locale 在之后建立的 Session 生效，不为此重启组件）。
+- 不带 --reload 时只构建并运行一次。WebUI 目录（role: webui）以目录中的 assets 代替已安装的 WebUI（与 alonabot.WebUI 选项同义；该选项尚未实现时本项登记为阻塞，不在本切片实现 WebUI 托管）。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：
+  - cmd/alonabot/dev_e2e_test.go（//go:build unix；多列理由：本切片首次接通目录运行与热部署，没有其他端到端入口）。测试在临时目录写出两个工程（各自的 go.mod 以 replace 指向本仓库）：一个插件（/hello 回复配置中的文本），一个回环 Adapter 工程包（声明私有 HTTP 路由，测试以管理 token 调用它注入 message.created，Adapter 把收到的发送写入文件），以 `alonabot run <插件目录> <Adapter 目录> --reload` 运行：
+    - 改动插件的回复文本后，插件重启并回复新文本；Core 与 Adapter 进程不重启（PID 不变）。
+    - 写入语法错误后，输出含编译器信息，旧插件继续回复。
+    - 只改 config.json 时不重新构建（dev/bin 中的文件不变），新配置生效。
+    - 改动 config_schema.json 后重新构建，新的缺省值生效。
+  - cmd/alonabot/e2e_test.go：TestLifecycleOverTCPAndStdio 的 stdio 子项以 `alonabot run <examples/plugins/lifecycle> --stdio` 恢复，断言不变。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：ID 冲突与构建失败时在启动前退出；轮询的排除规则；只改 Adapter 一个实例时只重启该实例；同一目录两次给出时报错；Core.Restart 对非开发组件报错；不带 --reload 时不轮询。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+
+不做：alonabot init、build、check、test、pack 的 CLI（T-09.3）；开发示例与文档汇总（T-13.4）；WebUI 的静态托管（T-09.12）。
+```
 
 ## 第 12 波
 
