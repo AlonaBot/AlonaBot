@@ -69,9 +69,10 @@ func (o *Orchestrator) Abort(ctx context.Context, r *Result, cause error) error 
 	if err != nil {
 		return errors.Join(cause, err)
 	}
-	if active != r.record.ExpectedOld {
+	if active == r.Generation {
 		return errors.Join(cause, state.ErrStaleGeneration)
 	}
+	// 并发提交可能已切换权威；只丢弃本候选，Resume 按当前 Active 建立新 Session。
 	// 3. 清理不越过其他操作、已提交代次或 Pending 的有效引用。
 	cleanupErr := o.discardGeneration(ctx, r)
 	if cleanupErr == nil {

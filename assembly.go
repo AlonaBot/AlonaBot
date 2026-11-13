@@ -39,6 +39,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/message"
 	"github.com/AlonaBot/AlonaBot/internal/core/metrics"
 	coreoptions "github.com/AlonaBot/AlonaBot/internal/core/options"
+	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/scheduler"
@@ -174,6 +175,7 @@ func validateComponents(components []component, installs []state.Install) error 
 type assembly struct {
 	core       *Core // assemble 返回后由 Start 绑定，候选回调在运行循环内读取。
 	journal    *journal.Orchestrator
+	candidate  *runningComponent // 仅运行循环访问；Spec 与提交结果合并前的本次运行上下文。
 	adapters   *coreadapter.Registry
 	router     *router.Router
 	mux        *router.Mux
@@ -187,7 +189,7 @@ type assembly struct {
 	metrics    *metrics.Counters
 	store      *state.Store
 	policy     *policy.Policy
-	components sync.Map // 运行状态查询借用已激活的 host.Instance，退出时按同一指针撤销。
+	components sync.Map // 运行状态查询借用 host.Instance，激活失败时保留 Degraded 诊断。
 	options    *coreoptions.Service
 	settings   *settings.File
 	schemaMu   sync.RWMutex // 保护按 Session 发布的只读选项声明。
@@ -301,7 +303,8 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 	a.scheduler.Services(a.mux, a.router.PluginFor)
 	a.journal = journal.New(journal.Options{Store: store, Secrets: secret.New(store), Config: config.New(store, dir), Settings: file, DataDir: dir, State: a.componentState,
 		Spec: func(ctx context.Context, in state.Install, packageDir string, boot *pb.Bootstrap) (supervisor.Spec, error) {
-			spec, _, err := a.core.installedSpec(ctx, in, packageDir, boot)
+			spec, running, err := a.core.installedSpec(ctx, in, packageDir, boot)
+			a.candidate = running
 			return spec, err
 		},
 		Stop: func(ctx context.Context, id string, reason pb.StopReason) error {
@@ -674,6 +677,10 @@ func bootstrap(generation string, version uint32) *pb.Bootstrap {
 func (a *assembly) detach(r *runningComponent) {
 	// STOPPING 和退出收尾都可能到达；旧 Session 的迟到清理保留新绑定。
 	if a.components.CompareAndDelete(r.id, r.instance) {
+		if r.instance.State() == host.StateDegraded {
+			// 撤销业务绑定时保留管理诊断，迟到清理不得覆盖新 Session。
+			a.components.LoadOrStore(r.id, r.instance)
+		}
 		a.router.Detach(r.id)
 		a.schemaMu.Lock()
 		delete(a.schemas, r.id)
@@ -721,6 +728,7 @@ func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.Stop
 		_ = r.listener.Close()
 	}
 	a.media.ReleaseSession(r.caller.SessionKey)
+	a.components.CompareAndDelete(r.id, r.instance)
 	select {
 	case <-r.exited():
 		if r.process == nil {
@@ -741,7 +749,9 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	if err != nil {
 		return nil, err
 	}
-	isNew := generation == ""
+	if generation == "" {
+		return c.prepareCandidate(ctx, install.PluginID, journal.KindFirstInstall, nil)
+	}
 	packageDir, err := installedDirectory(dir, install)
 	if err != nil {
 		return nil, err
@@ -750,44 +760,16 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		return nil, err
 	}
-	configuration := []byte(emptyConfig)
-	if isNew {
-		configuration, err = os.ReadFile(filepath.Join(pluginDir, "config.json"))
-		if errors.Is(err, os.ErrNotExist) {
-			configuration, err = []byte(emptyConfig), nil
-		}
-		if err != nil {
-			return nil, err
-		}
-		configuration, err = config.Canonical(configuration)
-		if err != nil {
-			return nil, err
-		}
-		generation = "gen-" + rand.Text()
-	}
 	boot := bootstrap(generation, initialConfigVersion)
 	boot.DatabaseDescriptor.ActivationReason = pb.ActivationReason_ACTIVATION_REASON_RESUME
-	if isNew {
-		boot.CandidateConfigJson = string(configuration)
-		boot.DatabaseDescriptor.ActivationReason = pb.ActivationReason_ACTIVATION_REASON_FIRST_INSTALL
-	} else {
-		version, err := c.store.GenerationConfigVersion(ctx, generation)
-		if err != nil {
-			return nil, err
-		}
-		boot.PreviousConfigVersion = &version
-	}
-	spec, running, err := c.installedSpec(ctx, install, packageDir, boot)
+	version, err := c.store.GenerationConfigVersion(ctx, generation)
 	if err != nil {
 		return nil, err
 	}
-	spec.NewCandidate = isNew
-	if isNew {
-		// shortcut: 首装仍由 supervisor 提交，正式提交入口接管后替换。
-		// 原文只交给 Bootstrap；supervisor 提取 secret 后才写最终快照。
-		if err := c.store.AddGeneration(ctx, install.PluginID, generation, emptyConfig, boot.TargetConfigVersion); err != nil {
-			return nil, err
-		}
+	boot.PreviousConfigVersion = &version
+	spec, running, err := c.installedSpec(ctx, install, packageDir, boot)
+	if err != nil {
+		return nil, err
 	}
 	running.process, err = supervisor.Launch(ctx, c.store, spec)
 	if err != nil {
@@ -807,12 +789,121 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	if err := c.startInstances(ctx, running, instanceSchema); err != nil {
 		return running, err
 	}
-	mode := "restart"
-	if isNew {
+	slog.Info("plugin activated", "plugin_id", running.id, "generation_id", generation, "mode", "restart", "pid", running.process.Process.Pid())
+	return running, nil
+}
+
+// prepareCandidate 由运行循环独占调用，合并准备上下文与显式交接的进程资源。
+func (c *Core) prepareCandidate(ctx context.Context, id string, kind journal.Kind, staged *packages.Candidate) (*runningComponent, error) {
+	a := c.assembly
+	defer func() { a.candidate = nil }()
+	// 1. 准备失败由 Journal 中止，恢复直接在当前运行循环执行。
+	r, err := a.journal.Prepare(ctx, id, kind, staged)
+	if err != nil {
+		if r != nil {
+			err = a.journal.Abort(ctx, r, err)
+		}
+		return nil, err
+	}
+	running := a.candidate
+	record, err := c.store.GetJournal(ctx, r.OpID)
+	if err != nil {
+		return nil, a.journal.Abort(ctx, r, err)
+	}
+	// 2. 提交返回进程所有权，激活失败也登记诊断并交给退出观察者。
+	process, err := a.journal.Commit(ctx, r)
+	if process == nil {
+		return nil, err
+	}
+	running.process, running.instance = process, process.Instance
+	if kind == journal.KindFirstInstall {
+		err = errors.Join(err, c.store.SetEnabled(context.WithoutCancel(ctx), id, true))
+	}
+	if kind == journal.KindUpdate && (!record.WasEnabled || !record.WasRunning) {
+		// 提交只切换权威代次；先停止候选，之后显式 enable 才建立业务 Session。
+		if stopErr := c.stopComponent(running, time.Now(), host.NewStopTiming(c.values), pb.StopReason_STOP_REASON_DISABLE); stopErr != nil {
+			return running, errors.Join(err, stopErr)
+		}
+		return nil, err
+	}
+	if running.instance.State() == host.StateDegraded {
+		a.components.Store(id, running.instance)
+		return running, err
+	}
+	degraded := func(cause error) (*runningComponent, error) {
+		// 元数据已提交，装配失败沿同一 Degraded 状态交还资源，保留管理员恢复入口。
+		failure := errors.Join(err, cause)
+		running.instance.Degrade(failure)
+		a.detach(running)
+		slog.Error("committed candidate assembly failed", "plugin_id", id, "op_id", r.OpID, "generation_id", r.Generation, "kind", kind, "error", failure)
+		return running, errors.Join(failure, running.instance.Session.Close())
+	}
+	// 3. ACTIVATED 成功后发布业务入口，再启动 Adapter 实例。
+	if attachErr := a.attach(ctx, running); attachErr != nil {
+		return degraded(attachErr)
+	}
+	var instanceSchema []byte
+	if running.install.Role == state.RoleAdapter {
+		directory, directoryErr := installedDirectory(c.dir, running.install)
+		if directoryErr != nil {
+			return degraded(directoryErr)
+		}
+		var readErr error
+		instanceSchema, readErr = os.ReadFile(filepath.Join(directory, "adapter_config_schema.json"))
+		if readErr != nil {
+			return degraded(readErr)
+		}
+	}
+	if startErr := c.startInstances(ctx, running, instanceSchema); startErr != nil {
+		return degraded(startErr)
+	}
+	mode := string(kind)
+	if kind == journal.KindFirstInstall {
 		mode = "new"
 	}
-	slog.Info("plugin activated", "plugin_id", running.id, "generation_id", generation, "mode", mode, "pid", running.process.Process.Pid())
-	return running, nil
+	slog.Info("plugin activated", "plugin_id", id, "generation_id", r.Generation, "mode", mode, "pid", process.Process.Pid())
+	return running, err
+}
+
+// managedCandidates 只在外部管理入口排队，Journal 的停止和恢复回调直接执行。
+type managedCandidates struct{ core *Core }
+
+// Reload 串行导入正式组件候选，开发组件沿直接停止与启动路径执行。
+func (m managedCandidates) Reload(ctx context.Context, id string) error {
+	return m.core.operation(ctx, func(ctx context.Context) error {
+		in, err := m.core.store.GetInstall(ctx, id)
+		if err != nil {
+			return err
+		}
+		if in.Source == devSource {
+			if err := m.core.stopManaged(id, pb.StopReason_STOP_REASON_RELOAD); err != nil {
+				return err
+			}
+			return m.core.startManaged(ctx, id)
+		}
+		return m.apply(ctx, id, journal.KindReload, nil)
+	})
+}
+
+// Update 把已预检的候选交给一次 Core 操作。
+func (m managedCandidates) Update(ctx context.Context, id string, staged *packages.Candidate) error {
+	return m.core.operation(ctx, func(ctx context.Context) error { return m.apply(ctx, id, journal.KindUpdate, staged) })
+}
+
+func (m managedCandidates) apply(ctx context.Context, id string, kind journal.Kind, staged *packages.Candidate) error {
+	running, err := m.core.prepareCandidate(ctx, id, kind, staged)
+	if running != nil {
+		m.core.components = append(m.core.components, running)
+		if err != nil && running.instance.State() != host.StateDegraded {
+			err = errors.Join(err, m.core.stopManaged(id, pb.StopReason_STOP_REASON_DISABLE))
+		}
+	}
+	return err
+}
+
+// Rollback 返回尚未提供显式回退的协议错误。
+func (m managedCandidates) Rollback(context.Context, string, string) error {
+	return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "candidate orchestration is not available"}
 }
 
 func installedDirectory(dir string, install state.Install) (string, error) {
@@ -846,6 +937,9 @@ func (a *assembly) componentState(id string) string {
 		return ""
 	}
 	instance := value.(*host.Instance)
+	if instance.State() == host.StateDegraded {
+		return host.StateDegraded.String()
+	}
 	select {
 	case <-instance.Session.Done():
 		return ""

@@ -1,4 +1,4 @@
-// echo 命令运行一个回复 message.created 文本片段的 Native 插件。
+// echo 命令运行一个原样回送文本与入站图片的 Native 插件。
 package main
 
 //go:generate go run ../../../cmd/alonabot plugin generate
@@ -18,8 +18,11 @@ func New() *sdk.Plugin {
 	r.On("echo", sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error {
 		var chain message.Chain
 		for _, segment := range e.Chain {
-			if text, ok := segment.(message.TextSegment); ok {
-				chain = append(chain, text)
+			switch segment := segment.(type) {
+			case message.TextSegment:
+				chain = append(chain, segment)
+			case message.ImageSegment:
+				chain = append(chain, segment)
 			}
 		}
 		if len(chain) == 0 {
