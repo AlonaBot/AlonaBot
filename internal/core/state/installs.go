@@ -91,6 +91,13 @@ func cleanupObjects(db *gorm.DB, id string, all bool) ([]cleanupObject, error) {
 		return nil, err
 	}
 	objects := []cleanupObject{{&ButtonToken{}, owned}, {&conversationEntry{}, owned}, {&adapterCursor{}, owned}}
+	var installed installation
+	if err := db.Where(owned).Take(&installed).Error; err != nil {
+		return nil, err
+	}
+	if installed.Role == RoleAdapter {
+		objects = append(objects, cleanupObject{&chatRecord{}, clause.Eq{Column: "adapter_id", Value: installed.AdapterID}})
+	}
 	for _, row := range generations {
 		objects = append(objects, cleanupObject{&generationSecretPath{}, clause.Eq{Column: columnGenerationID, Value: row.GenerationID}})
 	}
@@ -116,7 +123,11 @@ func (s *Store) PurgeObjects(ctx context.Context, id string, all bool) ([]string
 			return nil, err
 		}
 		if count > 0 {
-			names = append(names, object.model.TableName())
+			name := object.model.TableName()
+			if _, chat := object.model.(*chatRecord); chat {
+				name = fmt.Sprintf("%s (%d)", name, count)
+			}
+			names = append(names, name)
 		}
 	}
 	return names, nil

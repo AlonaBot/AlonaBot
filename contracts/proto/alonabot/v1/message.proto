@@ -61,6 +61,8 @@ message Event {
   optional string source_event_id = 14;
   // 会话类型；没有 target 时必须为 UNSPECIFIED。
   ChatType chat_type = 15;
+  // 会话显示名；没有 target 时必须 absent。
+  optional string chat_title = 16;
 }
 
 // PlatformMessage 描述一条已存在的平台消息。
