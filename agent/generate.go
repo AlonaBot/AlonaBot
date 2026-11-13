@@ -1,6 +1,9 @@
 package agent
 
 import (
+	"context"
+	"errors"
+	"net"
 	"slices"
 	"strings"
 	"time"
@@ -63,14 +66,7 @@ func (a *component) generate(c *sdk.Context, req llm.Request) (llm.Response, err
 		fields = append(fields, "input_tokens", result.Usage.InputTokens, "output_tokens", result.Usage.OutputTokens)
 	}
 	if err != nil {
-		// Provider 的错误说明可能回显输入，记录前移除本次请求正文。
-		detail := err.Error()
-		for _, message := range request.Messages {
-			if message.Content != "" {
-				detail = strings.ReplaceAll(detail, message.Content, "[REDACTED]")
-			}
-		}
-		c.Logger().DebugContext(c.Context(), "provider generation failed", append(fields, "error", detail)...)
+		c.Logger().DebugContext(c.Context(), "provider generation failed", append(fields, "error_kind", providerErrorKind(err))...)
 		return llm.Response{}, errcode.Unavailable.New("provider generation failed")
 	}
 	c.Logger().DebugContext(c.Context(), "provider generation completed", fields...)
@@ -82,4 +78,22 @@ func (a *component) generate(c *sdk.Context, req llm.Request) (llm.Response, err
 		response.OutputTokens = &result.Usage.OutputTokens
 	}
 	return response, nil
+}
+
+// providerErrorKind 只按错误类型分类，Provider 的任意说明可能包含请求正文。
+func providerErrorKind(err error) string {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	}
+	var network net.Error
+	if errors.As(err, &network) {
+		if network.Timeout() {
+			return "timeout"
+		}
+		return "network_error"
+	}
+	return "provider_error"
 }
