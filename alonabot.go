@@ -23,6 +23,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
@@ -32,6 +33,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
+	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/webhost"
@@ -51,7 +53,19 @@ type options struct {
 	listen     *string
 	level      *slog.Level
 	format     *string
+	stdio      bool
 }
+
+// Executable 登记使用包内 manifest 确定身份的独立进程开发组件。
+func Executable(path string, packageManifest []byte) Option {
+	raw := append([]byte(nil), packageManifest...)
+	return func(o *options) {
+		o.components = append(o.components, component{executable: path, packageManifest: raw})
+	}
+}
+
+// Stdio 让本次 Executable 登记的组件使用 stdio 传输。
+func Stdio() Option { return func(o *options) { o.stdio = true } }
 
 // Plugin 登记由生成资源确定身份的开发插件或唯一 Agent。
 func Plugin(root *sdk.Plugin) Option {
@@ -83,21 +97,22 @@ func Args(values ...string) Option {
 
 // Core 持有已装配的运行资源；取消 Start 的 context 后调用 Wait 等待停止结果。
 type Core struct {
-	assembly    *assembly
-	store       *state.Store
-	output      *logging.Output
-	values      tune.Values
-	components  []*runningComponent
-	development []component
-	operations  chan coreOperation // Core.run 独占组件列表，HTTP 回调把变更交给同一所有者。
-	stopping    chan struct{}      // 关闭后解除仍在等待管理操作的 HTTP 请求。
-	dir         string
-	environment map[string]string
-	http        *http.Server
-	httpErrors  chan error
-	monitors    sync.WaitGroup // 停止后等待退出观察者交还清理权，再关闭共享资源。
-	done        chan struct{}  // err 写入后关闭，允许多个 Wait 读取同一结果。
-	err         error
+	assembly      *assembly
+	store         *state.Store
+	output        *logging.Output
+	values        tune.Values
+	components    []*runningComponent
+	development   []component
+	developmentMu sync.RWMutex       // HTTP 管理端读取 Schema 时，与开发资源替换同步。
+	operations    chan coreOperation // Core.run 独占组件列表，HTTP 回调把变更交给同一所有者。
+	stopping      chan struct{}      // 关闭后解除仍在等待管理操作的 HTTP 请求。
+	dir           string
+	environment   map[string]string
+	http          *http.Server
+	httpErrors    chan error
+	monitors      sync.WaitGroup // 停止后等待退出观察者交还清理权，再关闭共享资源。
+	done          chan struct{}  // err 写入后关闭，允许多个 Wait 读取同一结果。
+	err           error
 
 	stoppedInstances map[[2]string]bool // 包与实例的运行期停用选择，跨 Session 保留；同样由操作队列串行访问。
 }
@@ -178,6 +193,9 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 		return fail(err)
 	}
 	c.development = o.components
+	for i := range c.development {
+		c.development[i].stdio = o.stdio
+	}
 	output, err := logging.Open(logging.Options{Format: logging.Format(configuration.LogFormat), Level: configuration.LogLevel, Stderr: os.Stderr})
 	if err != nil {
 		return fail(startupUsage(err))
@@ -423,6 +441,19 @@ running:
 			switch policy.OnExit(old.id, result.abnormal, time.Now()) {
 			case host.DecisionRestart:
 				slog.Info("restarting plugin", "plugin_id", old.id)
+				if old.install.Source == devSource {
+					c.components[index] = nil
+					before := len(c.components)
+					if err := c.startManaged(ctx, old.id); err != nil {
+						slog.Error("restart plugin failed", "plugin_id", old.id, "error", err)
+					}
+					for _, running := range c.components[before:] {
+						if running != nil {
+							c.watch(running, exits)
+						}
+					}
+					continue
+				}
 				replacement, err := c.startInstalled(ctx, c.dir, old.install)
 				if replacement != nil {
 					c.components[index] = replacement
@@ -463,6 +494,89 @@ running:
 	}
 	c.err = errors.Join(c.err, c.shutdown())
 	close(c.done)
+}
+
+// Restart 停止并重新启动一个本次登记的开发组件，沿用 dev:<id> 代次。
+func (c *Core) Restart(ctx context.Context, id string) error {
+	return c.operation(ctx, func(ctx context.Context) error {
+		for i := range c.development {
+			entry := &c.development[i]
+			if entry.manifest.ID != id {
+				continue
+			}
+			next := *entry
+			if next.executable != "" {
+				if err := next.loadExecutableResources(); err != nil {
+					return err
+				}
+			}
+			if err := c.stopManaged(id, pb.StopReason_STOP_REASON_RESTART); err != nil {
+				return err
+			}
+			c.developmentMu.Lock()
+			*entry = next
+			c.developmentMu.Unlock()
+			return c.startManaged(ctx, id)
+		}
+		return fmt.Errorf("component %s is not a development component", id)
+	})
+}
+
+// RestartInstance 只重新准备并启动开发 Adapter 的指定实例。
+func (c *Core) RestartInstance(ctx context.Context, adapterID, instanceID string) error {
+	return c.operation(ctx, func(ctx context.Context) error {
+		for _, entry := range c.development {
+			if entry.manifest.AdapterID != adapterID || entry.role != state.RoleAdapter {
+				continue
+			}
+			if _, err := c.assembly.settings.Reload(); err != nil {
+				return err
+			}
+			var admins []policy.Admin
+			for _, admin := range c.assembly.settings.Settings().Admins {
+				admins = append(admins, policy.Admin{AdapterID: admin.AdapterID, UserID: admin.UserID})
+			}
+			c.assembly.policy.SetAdmins(admins)
+			for _, running := range c.components {
+				if running == nil || running.id != entry.manifest.ID || running.remote == nil {
+					continue
+				}
+				schema, problems := configschema.Parse(entry.resources.AdapterConfigSchema)
+				if len(problems) != 0 {
+					return fmt.Errorf("adapter instance schema: %v", problems)
+				}
+				owned, err := c.assembly.settings.BindAdapter(adapterID, running.id)
+				if err != nil {
+					return err
+				}
+				if !owned {
+					return fmt.Errorf("adapter %s configuration belongs to another component", adapterID)
+				}
+				instances, diagnostics, err := c.assembly.settings.PrepareInstances(adapterID, schema)
+				if err != nil {
+					return err
+				}
+				for _, problem := range diagnostics {
+					if problem.InstanceID == "" || problem.InstanceID == instanceID {
+						return fmt.Errorf("instance %s: %s: %s", instanceID, problem.Path, problem.Reason)
+					}
+				}
+				if err := running.remote.StopInstance(ctx, instanceID); err != nil {
+					var detail *validate.Error
+					if !errors.As(err, &detail) || detail.Code != pb.ErrorCode_ERROR_CODE_NOT_FOUND {
+						return err
+					}
+				}
+				c.assembly.adapters.SetDefaults(c.assembly.settings.Settings().DefaultInstances())
+				if configuration, exists := instances[instanceID]; exists {
+					return running.remote.StartInstance(ctx, instanceID, configuration)
+				}
+				return nil
+			}
+			return fmt.Errorf("adapter %s is not running", adapterID)
+		}
+		return fmt.Errorf("adapter %s is not a development component", adapterID)
+	})
 }
 
 func (c *Core) shutdown() error {

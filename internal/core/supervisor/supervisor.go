@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
@@ -70,6 +71,7 @@ type Spec struct {
 	// NewCandidate 为 true 时在 ACTIVATE 前提交 ActiveGeneration（期望旧值 ExpectedOld）；
 	// false 表示普通 restart，复用已提交的代次。
 	NewCandidate bool
+	Development  bool   // 开发代次每次读取原始配置，快照以明文直接覆盖。
 	ExpectedOld  string // 提交新候选时预期的旧 ActiveGeneration；首次激活为空
 	// Stdio 为 true 时使用 stdio 传输，否则使用 TCP loopback。
 	Stdio    bool
@@ -162,12 +164,16 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		boot.DefaultLocale = defaultLocale
 	}
 	input := []byte(boot.GetCandidateConfigJson())
-	if !spec.NewCandidate {
+	if !spec.NewCandidate && !spec.Development {
 		input = previous
 	}
-	plaintext, err := secrets.Resolve(ctx, spec.PluginID, input)
-	if err != nil {
-		return nil, err
+	plaintext := input
+	if !spec.Development {
+		var err error
+		plaintext, err = secrets.Resolve(ctx, spec.PluginID, input)
+		if err != nil {
+			return nil, err
+		}
 	}
 	boot.CandidateConfigJson = string(plaintext)
 
@@ -243,6 +249,22 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 	exp := host.Expect{Role: spec.Role, AdapterID: spec.AdapterID, PluginID: spec.PluginID, Secret: secretBytes, BuildDigest: spec.BuildDigest,
 		Offer: validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}}
 	exp.Snapshot = func(candidate []byte) ([]byte, error) {
+		if spec.Development {
+			var paths []string
+			if len(spec.ConfigSchema) != 0 {
+				schema, problems := configschema.Parse(spec.ConfigSchema)
+				if len(problems) != 0 {
+					return nil, fmt.Errorf("config schema: %v", problems)
+				}
+				for _, path := range schema.SecretPaths() {
+					paths = append(paths, strings.Join(path, "."))
+				}
+			}
+			if err := store.SetDevGenerationConfig(ctx, spec.GenerationID, string(candidate), boot.TargetConfigVersion, paths); err != nil {
+				return nil, err
+			}
+			return candidate, nil
+		}
 		snapshot, paths, err := secrets.Extract(ctx, spec.PluginID, spec.ConfigSchema, candidate, previous, keptPaths)
 		if err != nil {
 			return nil, err

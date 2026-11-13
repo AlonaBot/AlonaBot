@@ -3,7 +3,9 @@ package alonabot
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha512"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -61,11 +63,15 @@ const (
 )
 
 type component struct {
-	root      *sdk.Plugin
-	adapter   adapter.Adapter
-	role      state.Role
-	manifest  *manifest.Manifest
-	resources sdk.Generated
+	root            *sdk.Plugin
+	adapter         adapter.Adapter
+	role            state.Role
+	manifest        *manifest.Manifest
+	resources       sdk.Generated
+	executable      string
+	packageManifest []byte
+	digest          []byte
+	stdio           bool
 }
 
 func validateComponents(components []component, installs []state.Install) error {
@@ -74,31 +80,51 @@ func validateComponents(components []component, installs []state.Install) error 
 	agent := false
 	for i := range components {
 		entry := &components[i]
-		var object any = entry.root
-		if entry.role == state.RoleAdapter {
-			object = entry.adapter
-		}
-		if object == nil || (reflect.ValueOf(object).Kind() == reflect.Pointer && reflect.ValueOf(object).IsNil()) {
-			return fmt.Errorf("component %T is nil", object)
-		}
 		var generated sdk.Generated
-		if entry.role == state.RoleAdapter {
-			generated, _ = sdk.GeneratedFor(entry.adapter)
+		var m *manifest.Manifest
+		var warnings []string
+		if entry.executable != "" {
+			parsed, err := manifest.Parse(entry.packageManifest)
+			if err != nil {
+				return err
+			}
+			m = parsed.Manifest
+			warnings = parsed.Warnings
+			if m.Role == string(state.RoleWebUI) {
+				return fmt.Errorf("component %s has no executable role", m.ID)
+			}
+			entry.role, entry.manifest = state.Role(m.Role), m
+			if err := entry.loadExecutableResources(); err != nil {
+				return err
+			}
+			generated = entry.resources
 		} else {
-			generated = entry.root.Generated()
+			var object any = entry.root
+			if entry.role == state.RoleAdapter {
+				object = entry.adapter
+			}
+			if object == nil || (reflect.ValueOf(object).Kind() == reflect.Pointer && reflect.ValueOf(object).IsNil()) {
+				return fmt.Errorf("component %T is nil", object)
+			}
+			if entry.role == state.RoleAdapter {
+				generated, _ = sdk.GeneratedFor(entry.adapter)
+			} else {
+				generated = entry.root.Generated()
+			}
+			if len(generated.Manifest) == 0 {
+				return fmt.Errorf("component %T has no generated project manifest", object)
+			}
+			parsed, err := manifest.ParseProject(generated.Manifest)
+			if err != nil {
+				return fmt.Errorf("component %T: %w", object, err)
+			}
+			m = parsed.Manifest
+			warnings = parsed.Warnings
 		}
-		if len(generated.Manifest) == 0 {
-			return fmt.Errorf("component %T has no generated project manifest", object)
-		}
-		parsed, err := manifest.ParseProject(generated.Manifest)
-		if err != nil {
-			return fmt.Errorf("component %T: %w", object, err)
-		}
-		m := parsed.Manifest
 		if entry.role == state.RolePlugin && m.Role == string(state.RoleAgent) {
 			entry.role = state.RoleAgent
 		}
-		for _, warning := range parsed.Warnings {
+		for _, warning := range warnings {
 			slog.Warn("project manifest warning", "plugin_id", m.ID, "warning", warning)
 		}
 		if state.Role(m.Role) != entry.role {
@@ -398,6 +424,9 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 		return fmt.Errorf("config %s must be a JSON object", configPath)
 	}
 	version := uint32(initialConfigVersion)
+	if entry.executable != "" {
+		version = *entry.manifest.ConfigVersion
+	}
 	var secretPaths []string
 	if len(entry.resources.ConfigSchema) != 0 {
 		schema, problems := configschema.Parse(entry.resources.ConfigSchema)
@@ -446,8 +475,11 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	}
 
 	// 2. 保留固定代次与已有安装身份，本次启动只刷新构建摘要。
-	digest := make([]byte, launchRandomBytes)
-	rand.Read(digest)
+	digest := entry.digest
+	if entry.executable == "" {
+		digest = make([]byte, launchRandomBytes)
+		rand.Read(digest)
+	}
 	install, err := c.store.GetInstall(ctx, id)
 	if errors.Is(err, state.ErrNotFound) {
 		install = state.Install{Role: entry.role, PluginID: id, AdapterID: entry.manifest.AdapterID, Source: devSource, BuildDigest: digest, Version: entry.manifest.Version}
@@ -477,7 +509,48 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		return err
 	}
-	// 3. 走共用的握手、准备与激活流程。
+	// 3. 独立进程与同进程共用开发配置、数据库和固定代次。
+	if entry.executable != "" {
+		boot.DatabaseDescriptor.MigrationMode = pb.MigrationMode_MIGRATION_MODE_NONE
+		switch entry.manifest.MigrationMode {
+		case manifest.MigrationSelf:
+			boot.DatabaseDescriptor.MigrationMode = pb.MigrationMode_MIGRATION_MODE_SELF
+		case manifest.MigrationVersioned:
+			boot.DatabaseDescriptor.MigrationMode = pb.MigrationMode_MIGRATION_MODE_VERSIONED
+		}
+		running := &runningComponent{id: id, install: install, caller: router.NewCaller(id, generation), schemas: schemas}
+		running.process, err = supervisor.Launch(ctx, c.store, supervisor.Spec{
+			Role: entry.role, AdapterID: entry.manifest.AdapterID, PluginID: id, PluginDir: pluginDir,
+			Executable: entry.executable, BuildDigest: digest, GenerationID: generation, Bootstrap: boot,
+			ConfigSchema: entry.resources.ConfigSchema, I18n: entry.resources.I18n,
+			Development: true, NewCandidate: active == "", Stdio: entry.stdio,
+			DefaultLocale: current.DefaultLocale, Handler: c.assembly.handler(running, install), Global: c.assembly.global,
+			Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values), Log: c.output.Plugin(id, generation),
+			Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment,
+		})
+		if err != nil {
+			return err
+		}
+		running.instance = running.process.Instance
+		c.components = append(c.components, running)
+		if err := c.assembly.attach(ctx, running); err != nil {
+			return err
+		}
+		if err := c.startInstances(ctx, running, entry.resources.AdapterConfigSchema); err != nil {
+			return err
+		}
+		mode := "restart"
+		if active == "" {
+			mode = "new"
+		}
+		if err := c.store.SetEnabled(ctx, id, true); err != nil {
+			return err
+		}
+		slog.Info("plugin activated", "plugin_id", id, "generation_id", generation, "mode", mode, "pid", running.process.Process.Pid())
+		return nil
+	}
+	// 4. 同进程调用方保留原有 SDK 入口。
+
 	listener, err := wire.ListenLoopback()
 	if err != nil {
 		return err
@@ -765,12 +838,14 @@ func (a *assembly) componentDescriptor(id string) *pb.AdapterDescriptor {
 func (c *Core) instanceSchema(components []component) func(context.Context, string) (*configschema.Schema, error) {
 	return func(ctx context.Context, id string) (*configschema.Schema, error) {
 		var raw []byte
+		c.developmentMu.RLock()
 		for _, entry := range components {
 			if entry.manifest.ID == id {
 				raw = entry.resources.AdapterConfigSchema
 				break
 			}
 		}
+		c.developmentMu.RUnlock()
 		if raw == nil {
 			install, err := c.store.GetInstall(ctx, id)
 			if err != nil {
@@ -879,4 +954,38 @@ func (a *assembly) checkAdapterEvent(ev *pb.Event) error {
 		return fmt.Errorf("adapter instance %q cannot validate extension events", ev.GetAdapterInstanceId())
 	}
 	return checker.CheckEvent(ev)
+}
+
+// loadExecutableResources 将资源与当前二进制摘要配对；重建改变身份时保留旧 Session。
+func (entry *component) loadExecutableResources() error {
+	path, err := filepath.Abs(entry.executable)
+	if err != nil {
+		return err
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	digest := sha512.Sum512_256(content)
+	raw, err := os.ReadFile(fmt.Sprintf("%s.%x.json", path, digest[:]))
+	resources := sdk.Generated{}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err == nil {
+		if err := json.Unmarshal(raw, &resources); err != nil {
+			return err
+		}
+		parsed, err := manifest.Parse(resources.Manifest)
+		if err != nil {
+			return err
+		}
+		m := parsed.Manifest
+		if m.ID != entry.manifest.ID || m.Role != entry.manifest.Role || m.AdapterID != entry.manifest.AdapterID {
+			return fmt.Errorf("development component identity changed: %s", entry.manifest.ID)
+		}
+		entry.manifest = m
+	}
+	entry.executable, entry.digest, entry.resources = path, digest[:], resources
+	return nil
 }
