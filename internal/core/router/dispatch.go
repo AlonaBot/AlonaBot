@@ -12,17 +12,25 @@ import (
 
 // Options 提供事件分发限额与现有的路由依赖；限额使用 tune.Values 对应值。
 type Options struct {
-	Concurrency  int                                                                           // DISPATCH_CONCURRENCY
-	QueueEvents  int                                                                           // DISPATCH_QUEUE_EVENTS
-	QueueBytes   int64                                                                         // DISPATCH_QUEUE_BYTES
-	Global       *wire.Budget                                                                  // 排队事件占用的 Core 全局预算；nil 时不限额
-	Adapters     *adapter.Registry                                                             // 账号用户名查询
-	Send         ServiceFunc                                                                   // usage 与自动回复发送
-	Prepare      func(*pb.Event, Caller) (*pb.Event, error)                                    // 按接收 Session 准备媒体；nil 时原样派发
-	Prefixes     func(adapterInstanceID string) []string                                       // nil 时所有实例使用 ["/"]
-	Buttons      func(ctx context.Context, ev *pb.Event) (pluginID, routeID string, err error) // nil 时丢弃按钮点击
-	Policy       CommandPolicy                                                                 // nil 时仅按声明权限判定且不赋予 admin
-	CommandState func(context.Context, string, *pb.RouteDescriptor) (bool, []string, error)    // 菜单读取完整策略；nil 时使用注册描述。
+	Concurrency   int                                                                           // DISPATCH_CONCURRENCY
+	QueueEvents   int                                                                           // DISPATCH_QUEUE_EVENTS
+	QueueBytes    int64                                                                         // DISPATCH_QUEUE_BYTES
+	Global        *wire.Budget                                                                  // 排队事件占用的 Core 全局预算；nil 时不限额
+	Adapters      *adapter.Registry                                                             // 账号用户名查询
+	Send          ServiceFunc                                                                   // usage 与自动回复发送
+	Prepare       func(*pb.Event, Caller) (*pb.Event, error)                                    // 按接收 Session 准备媒体；nil 时原样派发
+	Prefixes      func(adapterInstanceID string) []string                                       // nil 时所有实例使用 ["/"]
+	Buttons       func(ctx context.Context, ev *pb.Event) (pluginID, routeID string, err error) // nil 时丢弃按钮点击
+	Policy        CommandPolicy                                                                 // nil 时仅按声明权限判定且不赋予 admin
+	CommandState  func(context.Context, string, *pb.RouteDescriptor) (bool, []string, error)    // 菜单读取完整策略；nil 时使用注册描述。
+	Continuations Continuations                                                                 // nil 时跳过延续与等待。
+}
+
+// Continuations 接入 Handler 结束通知、入站等待匹配及插件释放。
+type Continuations interface {
+	Finished(inv *Invocation, ok bool)
+	Match(ev *pb.Event) bool
+	Release(c Caller)
 }
 
 // Stats 记录本次 Router 运行的准入计数与当前链、等待事件数。

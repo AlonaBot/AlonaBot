@@ -24,6 +24,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/broker"
 	"github.com/AlonaBot/AlonaBot/internal/core/bus"
 	"github.com/AlonaBot/AlonaBot/internal/core/buttons"
+	"github.com/AlonaBot/AlonaBot/internal/core/continuation"
 	"github.com/AlonaBot/AlonaBot/internal/core/conversation"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
@@ -151,9 +152,17 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 		return caller.GenerationID, plugin.Routes(), ok
 	})
 	messages := message.New(a.adapters, p, a.media.LeaseForSend, a.buttons.Issue, v.RequestTimeout)
+	// 延续调用的 Manager 先于 Router 创建，回调在调用时才读取 a.router。
+	continuations := continuation.New(continuation.Options{Max: v.ContinuationMax, Timeout: v.ContinuationTimeout, Prepare: a.media.PrepareIncoming,
+		Caller: func(id string) (router.Caller, bool) { return a.router.Caller(id) },
+		Call: func(ctx context.Context, inv *router.Invocation, parent uint64, deadline time.Time) (wire.Response, error) {
+			return a.router.CallContinuation(ctx, inv, parent, deadline)
+		}})
 	a.router = router.New(router.Options{Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
-		Global: a.global, Adapters: a.adapters, Send: messages.Send, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: nil})
+		Global: a.global, Adapters: a.adapters, Send: messages.Send, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: nil,
+		Continuations: continuations})
 	p.SetCommandsChanged(a.router.CommandsChanged)
+	continuations.Register(a.mux)
 	a.mux.Handle(wire.ServiceSend, messages.Send)
 	a.mux.Handle(wire.ServiceEdit, messages.Edit)
 	a.mux.Handle(wire.ServiceDelete, messages.Delete)
