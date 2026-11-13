@@ -74,7 +74,7 @@
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 已完成（PR #155） |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 已完成（PR #153） |
 | goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 已完成（PR #159） |
-| goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 待派发 |
+| goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 已完成（PR #158） |
 | goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 已完成（PR #156） |
 | goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 等待前置 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
@@ -5164,7 +5164,7 @@ sdk（替换与新增；*Plugin 与 *SubPlugin 各有一套同名方法）
 
 ### goal-126 · T-04.13 Service 与 Event Bus 的带类型声明
 
-状态：待派发。前置 T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并。2026-11-12 审查者按 main `9983182` 的代码写出范围、接口与测试段，现有代码如下：
+状态：已完成（[PR #158](https://github.com/AlonaBot/AlonaBot/pull/158)，合并提交 `464ccfd`），证据见 TEST-MATRIX §3.2。合入：`sdk.JSON[In, Out](target) Service[In, Out]`、`sdk.Proto[In, Out](target)`、`sdk.Serve(r, s) *ServiceBuilder[In, Out]`（`Access`、`Tool`、`Handle`）、`Service.Call(ctx, in)`；`sdk.BusEvent[T](name) BusEventType[T]` 与 `Publish(ctx, payload)`、`sdk.Subscribe(r, e) *Subscription[T]`（路由 ID 缺省为事件名，`ID(routeID)` 另给，`Handle`）；删除 CallJSON、CallProto、Publish 与旧形式的 JSON、Proto、Subscribe。target 的组件部分在握手取得插件 ID 后、REGISTER 前核对，`@agent` 只检查格式；调用方生成器为依赖模块的声明嵌入输入、输出 Schema；Schema 校验失败的公开错误只含 target 与方向。范围修订：组件归属改在握手后核对（D-52，SDK 根包不链接 yaml）。派发时：待派发。前置 T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并。2026-11-12 审查者按 main `9983182` 的代码写出范围、接口与测试段，现有代码如下：
 
 - **Service 注册**：`sdk.JSON[In, Out any](owner Registrar, name string) *JSONService[In, Out]` 与 `sdk.Proto[In, Out proto.Message](owner Registrar, name string) *ProtoService[In, Out]`（`sdk/services.go`），builder 有 `Access`、`Tool`（仅 JSON）与 `Handle`。
 - **Service 调用**：`sdk.CallJSON[In, Out any](ctx, target string, in In) (Out, error)` 与 `sdk.CallProto[Out proto.Message](ctx, target string, in proto.Message) (Out, error)`。
