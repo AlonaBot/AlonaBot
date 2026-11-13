@@ -65,7 +65,7 @@
 | goal-125 | T-04.12 | 插件对象、结构体参数与子插件 | T-04.8 | 已完成（PR #154） |
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 已完成（PR #145） |
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 已完成（PR #119） |
-| goal-39 | T-09.4 | 管理服务、安装记录与 run | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 待派发 |
+| goal-39 | T-09.4 | 管理服务、安装记录与 run | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 已完成（PR #163） |
 | goal-68 | T-13.2 | 开发组件的配置与数据库 | T-07.6、T-08.5、T-08.11、T-13.1 | 已完成（PR #160） |
 | goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 已完成（PR #159） |
 | goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 已完成（PR #158） |
@@ -75,8 +75,8 @@
 | goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 等待前置 |
 | goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 已完成（PR #157） |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
-| goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 等待前置 |
-| goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2、T-09.4 | 等待前置 |
+| goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 待派发 |
+| goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2、T-09.4 | 待派发 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 等待前置 |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 已完成（PR #162） |
@@ -4603,7 +4603,7 @@ goal-125 若先合并，Collect 改为收 *Plugin，命令、事件与 OnButton 
 
 ### goal-39 · T-09.4 管理服务、安装记录与 run
 
-状态：待派发。前置均已合并。2026-11-12 审查者按 main `ce89453` 改写，要点如下（之前各轮的核对记录见本切片的 git 历史）：
+状态：已完成（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`），证据见 TEST-MATRIX §3.2。合入：根包 `Listen`、`LogLevel`、`LogFormat` 选项，`Plugin` 接受 role plugin 或 agent，Start 只加载一次 `settings.File` 并交给 `assemble(store, dir, values, file)`，HTTP 代理与管理认证在 Start 中创建；`internal/core/manage` 的 `New(Options)`、`Install`/`List`/`Enable`/`Disable`/`Restart`/`Uninstall(PurgeScope)`/`Pin`/`Reload`/`Update`/`Rollback`、实例与管理员方法、`Handler(auth)`；state 的 install 新列与 `RoleAgent`、`RoleWebUI`；`release.pub` 与签名可选的预检；`core_config.json` 的 `adapters.<id>.package` 归属；cmd/alonabot 的 run 调用根包，管理命令经管理 API。D-139 待维护者确认。派发时：前置均已合并。2026-11-12 审查者按 main `ce89453` 改写，要点如下（之前各轮的核对记录见本切片的 git 历史）：
 
 - 根包 `alonabot.Start` 已按安装记录启动已启用的包（`startInstalled`），并以同进程方式运行登记的开发组件；但它没有读取 `core_config.json`、没有 HTTP Listener、webhost 与管理认证，Router 的 Prefixes 为 nil，也不启动 Adapter 实例。
 - `cmd/alonabot` 的 `run` 仍是 T-02 时期的独立运行器（`main.go` 的 `run` 与 `launch`）：自己读取设置、开日志、交付首次管理凭证、建立 webhost 与 HTTP Listener，再用 `--plugin-id`、`--entry`、`--stdio` 运行一个插件可执行文件，没有 Router 与 Adapter。`cmd/alonabot/e2e_test.go` 的 15 个测试都经它运行 `examples/plugins/lifecycle`。
@@ -5388,7 +5388,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-69 · T-13.3 开发运行与热部署
 
-状态：等待前置（T-09.4，PR #163 待合并）。T-07.6（PR #100）、T-09.16（PR #140）、T-13.1（PR #149）已合并。2026-11-12 前置加入 T-09.4：本切片的 run 建在 goal-39 迁到根包的 run 与根包选项之上（goal-39 删除 `--plugin-id`、`--entry`、`--stdio`），此前只在状态段写明先后、未列入前置。语句已按 PR #163 的代码写好，#163 合并后改为待派发。2026-11-12 审查者按 PR #163 的 head `1796add`（已合入 main `b4610e1`）改写，要点如下：
+状态：待派发。T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`）已合并，语句按它的代码写成，无需改动。T-07.6（PR #100）、T-09.16（PR #140）、T-13.1（PR #149）已合并。2026-11-12 前置加入 T-09.4：本切片的 run 建在 goal-39 迁到根包的 run 与根包选项之上（goal-39 删除 `--plugin-id`、`--entry`、`--stdio`），此前只在状态段写明先后、未列入前置。语句已按 PR #163 的代码写好，#163 合并后改为待派发。2026-11-12 审查者按 PR #163 的 head `1796add`（已合入 main `b4610e1`）改写，要点如下：
 - 根包：`alonabot.Run`/`Start` 与选项 `Plugin`（接受 role plugin 或 agent）、`Adapter`、`DataDir`、`Args`、`Listen`、`LogLevel`、`LogFormat`；Start 只加载一次 `settings.File` 并交给装配；开发组件由 `startDevelopment` 以同进程方式运行，配置取 `plugins/<id>/config.json`、数据库为 `dev.sqlite`（T-13.2），开发 Adapter 按 `core_config.json` 中属于它的实例启动（T-09.4）；已安装组件由 `startInstalled` 经 `supervisor.Launch` 以独立进程运行。根包目前没有「开发组件以独立进程运行」与「运行中只重启一个开发组件」的入口，本切片加入。
 - `cmd/alonabot/commands.go` 的 run：`alonabot run [--data-dir] [--listen] [--log-level] [--log-format] [--args]` 调用 `alonabot.Run`，不接受位置参数；不带子命令时等同 run。
 - 生成器 `sdk/generate` 与 `alonabot plugin generate` 已有；`internal/pluginkit` 尚不存在（ARCHITECTURE 已登记 `cmd/alonabot -> internal/pluginkit` 与 `internal/pluginkit -> sdk/generate` 的边，供 goal-38 的 `alonabot build` 复用）。
@@ -5444,7 +5444,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-81 · T-16.1 插件测试套件基础
 
-状态：等待前置（T-09.4，PR #163 待合并）。T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)）与 T-13.2（[PR #160](https://github.com/AlonaBot/AlonaBot/pull/160)，合并提交 `65ebc5f`）已合并。2026-11-12 审查者按 main 与 PR #163 的代码改写，前置加入 T-09.4：测试 Adapter 的实例经 `core_config.json` 启动、Core Admin 从同一文件读取，这两项由 T-09.4 的根包装配提供。改写要点：
+状态：待派发。T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`）已合并，语句按它的代码写成，无需改动。T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)）与 T-13.2（[PR #160](https://github.com/AlonaBot/AlonaBot/pull/160)，合并提交 `65ebc5f`）已合并。2026-11-12 审查者按 main 与 PR #163 的代码改写，前置加入 T-09.4：测试 Adapter 的实例经 `core_config.json` 启动、Core Admin 从同一文件读取，这两项由 T-09.4 的根包装配提供。改写要点：
 - 插件对象：`*sdk.Plugin`（`sdk.NewPlugin`，`p.Generated().Manifest` 为工程 plugin.yaml 原文，D-137）；SDK 公开类型用 `sdk/message`（`message.Session`、`message.Chain`、`message.Content`、`message.SendResult`、`message.MessageRef`）与 `sdk/errcode`，pb 只在 SDK 内部（T-04.8）。
 - 权限：Actor 的平台权限为权限名集合（D-68～D-72，`sdk.Permission`、`sdk.ChatAdmin`）；Core Admin 是 `core_config.json` 的 `admins` 中的 `<adapter_id>:<external_user_id>`（D-105）；发信许可缺省为全部实例（D-83）。
 - 根包（PR #163 之后）：`alonabot.Start(ctx, DataDir, Plugin, Adapter, Listen, ...)`；Start 读取 `core_config.json`，开发 Adapter 按 `adapters.<adapter_id>` 中 `package` 属于它的实例启动；开发组件的配置为 `plugins/<id>/config.json`，数据库为 `dev.sqlite`（T-13.2）。

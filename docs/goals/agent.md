@@ -12,7 +12,7 @@
 | goal-120 | T-12.11 | Provider：Ollama 原生协议 | T-12.1 | 已完成（PR #128） |
 | goal-134 | T-12.12 | Provider 改用官方 SDK | T-12.9、T-12.10、T-12.11 | 已完成（PR #134） |
 | goal-135 | T-12.13 | Provider 图片输入 | T-12.12 | 已完成（PR #138） |
-| goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1、T-12.9、T-12.10、T-12.11、T-09.4 | 等待前置 |
+| goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1、T-12.9、T-12.10、T-12.11、T-09.4 | 待派发 |
 | goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-08.14、T-12.2 | 等待前置 |
 | goal-136 | T-12.14 | 对话中的图片输入 | T-04.8、T-12.2、T-12.13 | 等待前置 |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 等待前置 |
@@ -294,63 +294,54 @@ type Message struct {
 
 ### goal-59 · T-12.2 Agent 对话与流式显示
 
-状态：等待前置（T-09.4，PR #163 待合并）。T-05.4（[PR #153](https://github.com/AlonaBot/AlonaBot/pull/153)，合并提交 `f22b538`）已合并，PLAN 上原有的前置均已完成。2026-11-12 前置加入 T-09.4：Core 运行 `role: agent` 组件（状态库角色、host 准备、库模式 `Plugin` 接受 agent）由 goal-39 提供，此前未列入前置。#163 合并后由审查者按合并后的代码与 D-135 改写并派发。此前的记录：T-03.9（[PR #118](https://github.com/AlonaBot/AlonaBot/pull/118)，合并提交 `1cbfb2e`）与 T-12.9～T-12.11（PR #126～#128，合并提交 `594bbac`、`4f1c39d`、`47a0cd5`）已合并。2026-11-09 按 D-103 加入 T-12.9～T-12.11 为前置，预设增加 gemini、ollama 改用 ollama-chat，OnLoad 接受六种协议。T-08.4（PR #74）已合并。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。T-04.3、T-11.3、T-12.1 已合并；命令注册、Args/Optional、Context.Match 与自动回复接口已按 PR #47 核对。Context.Edit、Continue、配置及数据库入口仍待相关前置合并后核对。语句中的配置按 D-74 的 Go 配置类型与 `config` 标签编写；D-76 改为手写 `config_schema.json` 与 `Config()` 取值后，由审查者在 T-08.11 合并后改写，providers 可以写成 template_list，每个预设一个模板，由模板 items 的 default 给出 protocol 与 base_url。2026-11-10 按 D-132：anthropic 预设的 base_url 改为服务根地址 https://api.anthropic.com；会话条目只存文本，图片输入由 T-12.14（goal-136）接入。
+状态：待派发。前置均已合并：T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`）提供 `role: agent` 的运行与库模式的 Adapter 实例，T-05.4（PR #153）提供 `c.Continue`，T-13.2（PR #160）提供开发组件的 config.json 与 dev.sqlite，T-03.18（PR #151）提供 `c.Stream`。2026-11-12 审查者按 main 改写：流式显示按 D-135 交给 `c.Stream`（编辑节流、实例 text_limit 与换条），PLAN agent T-12 步骤 3 同步修订；配置按 D-76 写在 config_schema.json，providers 为每个预设一个模板的 template_list；SDK 写法为插件对象、`Command(...).RawTail().Permission(...)`、`On(routeID, sdk.MessageCreated).Rule(sdk.ToMe())`、`sdk.AppendConversation`/`ListConversation`/`ClearConversation`、`gormdb.Open` 与 `gormdb.Migrations`；Provider 客户端为 `provider.New(Config{Protocol, BaseURL, APIKey, Model}, *http.Client)` 与 `Client.Stream(ctx, req, emit)`。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-59（切片 T-12.2：Agent 对话与流式显示）。goal 目录 goal-59，分支 goal-59，worktree .worktrees/goal-59，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：建立官方 Agent 组件 agent/（manifest `role: agent`）的骨架与配置（Provider 与预设、人格、历史条数等），注册 /ask、/agent on|off、/persona、/provider、/reset 与 message 事件路由；一轮对话在延续调用中执行：读取会话历史、组装请求、经 Provider 流式接收，先发送一条消息再按 1s 间隔编辑，结束时以完整内容最后编辑，超长时在段落边界换新消息；结束后追加会话条目。Provider 出错或中途断开时保留已显示内容并按 Actor locale 报告，不自动重发。
+目标：建立官方 Agent 组件 agent/（工程 manifest `role: agent`）的骨架与配置（Provider 与预设、人格、历史条数），注册 /ask、/agent on|off、/persona、/provider、/reset 与 message.created 事件路由；一轮对话在延续调用中执行：读取会话历史、组装请求、经 Provider 流式接收，用 SDK 的 c.Stream 显示（D-135），结束后追加会话条目。Provider 出错或中途断开时保留已显示内容并按 Actor locale 报告，不自动重发。
 
-依据：PLAN T-12 步骤 2、3；CONTRACTS §13（Agent 段）、§2.4、§8（Edit）、§5.4；DECISIONS D-27、D-38；TEST-MATRIX V-57。
+依据：PLAN agent T-12 步骤 2、3（2026-11-12 按 D-135 修订的流式显示）；CONTRACTS §13（Agent 段）、§2.4、§5.5（配置）、§8、MESSAGE-MODEL §4A；DECISIONS D-27、D-38、D-59、D-76、D-98、D-103、D-132、D-135；TEST-MATRIX V-57。
 
 范围（只新增或修改这些）：
-- agent/：新增 agent 包（可导入的根组件 agent.New()）、cmd/ 下的 main、plugin.yaml（`role: agent`、`icon`）、i18n/en-US.json 与 zh-CN.json、assets/icons/（组件自身的图标）；provider 包已存在，不改
-- 上述包的测试文件
-允许的新跨模块边：agent/... -> sdk/...、-> contracts（已允许）。不 import internal/...。
+- agent/：新增可导入的根组件包 agent（`func New() *sdk.Plugin`）、cmd/alonabot-agent/ 的薄入口（只调用 sdk.Run(agent.New())）、plugin.yaml（`role: agent`、`icon`）、config_schema.json、i18n/en-US.json 与 zh-CN.json、assets/icons/；生成文件 alonabot_gen.go 只由生成器生成；agent/provider 已存在，不改
+- agent/agent_test.go（见测试）
+允许的新跨模块边：agent/... -> sdk/...、-> contracts/...（已允许）；agent 的产品代码不 import internal/...，测试可以使用根包 alonabot。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
-agent
-   func New() *sdk.Plugin
-   type Config struct {
-       config.Base
-       Providers       []ProviderConfig `json:"providers"`
-       DefaultProvider string           `json:"default_provider"`
-       Personas        map[string]string `json:"personas"`        // 名称 → 系统提示
-       DefaultPersona  string           `json:"default_persona"`
-       HistoryEntries  int              `json:"history_entries" config:"default:20;min:0;max:500"`
-       MessageLimit    int              `json:"message_limit" config:"default:4096;min:256;max:65536"`
-       MCPServers      []MCPServer      `json:"mcp_servers"`     // T-12.3 使用
-       SkillsDir       string           `json:"skills_dir"`      // T-12.5 使用
-   }
-   type ProviderConfig struct { Name string `json:"name"`; Preset string `json:"preset"`; Protocol string `json:"protocol"`; BaseURL string `json:"base_url"`; APIKey string `json:"api_key" config:"secret"`; Model string `json:"model"`; MaxTokens int `json:"max_tokens" config:"default:2048;min:1"` }
-   type MCPServer struct { Name string `json:"name"`; Transport string `json:"transport"`; Command string `json:"command"`; Args []string `json:"args"`; Env []SecretPair `json:"env"`; URL string `json:"url"`; Headers []SecretPair `json:"headers"` }
-   type SecretPair struct { Name string `json:"name"`; Value string `json:"value" config:"secret"` }
+   package agent
+   func New() *sdk.Plugin // 调用 sdk.UseGenerated(p, alonabotGenerated)
+配置写在手写的 config_schema.json（D-76），Go 代码经 p.Config()/c.Config() 读取：
+- providers：template_list，每个预设一个模板（openai、anthropic、gemini、deepseek、ollama、custom），模板 items 为 name（required）、protocol（options 为六种协议，default 取预设）、base_url（default 取预设）、api_key（secret）、model（required）、max_tokens（int，default 2048，min 1）；预设缺省值：openai 为 openai 与 https://api.openai.com/v1，anthropic 为 anthropic-messages 与服务根地址 https://api.anthropic.com，gemini 为 gemini-generate-content 与 https://generativelanguage.googleapis.com/v1beta，deepseek 为 openai-compatible 与 https://api.deepseek.com/v1，ollama 为 ollama-chat 与 http://localhost:11434，custom 为 openai-compatible 且 base_url 必填。image_input 由 T-12.14 加入。
+- default_provider：string，options_from 不使用（T-12.8 提供 llm.providers 后由该切片接入）。
+- personas：list，items 为 name（required）与 prompt（text）；default_persona：string。
+- history_entries：int，default 20，min 0，max 500。
+- mcp_servers 与 skills_dir 由 T-12.3、T-12.5 加入，本切片不声明。
+OnConfigLoad 之后的校验在 OnStart 中完成：providers 的 name 唯一、api_key 只在 ollama-chat 时可以为空、default_provider 与 default_persona 指向存在的项（列表为空时允许为空）；不合法时 OnStart 返回错误。
 
 行为：
-- 配置：preset 的表单选项为 openai、anthropic、gemini、deepseek、ollama 与 custom，下拉框显示名称（config 标签写成 `options:openai|anthropic|gemini|deepseek|ollama|custom;labels:OpenAI|Anthropic|Gemini|DeepSeek|Ollama|Custom`，D-74）；preset 给出 protocol 与 base_url 的缺省值（anthropic 为 anthropic-messages 与服务根地址 https://api.anthropic.com，D-132；gemini 为 gemini-generate-content 与 https://generativelanguage.googleapis.com/v1beta，ollama 为 ollama-chat 与 http://localhost:11434），配置中显式给出的值优先。OnLoad 校验 providers 的 name 唯一、protocol 为 openai、openai-compatible、openai-responses、anthropic-messages、gemini-generate-content 或 ollama-chat、api_key 只在 ollama-chat 时可以为空、default_provider 与 default_persona 指向存在的项（列表为空时允许为空）；错误时返回 OnLoad 错误。
-- 数据：每个聊天（adapter_instance_id、chat_id、thread_id）当前的人格、Provider 与自由对话开关保存在 Agent 的数据库（gormdb.Open，versioned 迁移）。
-- 命令：/ask <text:raw>（缺省 USER）、/agent on|off（ADMIN）、/persona [name]（ADMIN，无参数时列出）、/provider [name]（ADMIN）、/reset（USER），说明用 sdk.Description 指向 messages。自由对话开启时，该聊天中 to_me 的非命令 message.created 也触发一轮（message 事件路由带 ToMe Rule，并检查开关）；私聊的消息都是 to_me。默认关闭。
-- 一轮对话（Handler 调用 Continue，在延续调用中执行）：
-  1) 没有可用 Provider 时用 Context.T 回复 agent.no_provider，结束。
-  2) 会话键为 "<instance>/<chat>/<thread>"；ListConversation 读取最近 history_entries 条（从末尾往前，按序号顺序组装）。条目为 JSON 对象 {"role": "user"|"assistant", "speaker": 外部用户 ID（群聊时）, "content": 文本}。
-  3) 以人格为 system 消息，组装 provider.Request（MaxTokens 取 Provider 配置）。
-  4) 事件的 capabilities 含 message.edit 时：发送一条占位消息（agent.thinking），之后流式接收：每累计到新的文本时，距上次编辑不少于 1s（命名常量）才 Edit；Edit 返回限流错误时把下一次编辑推迟 retry_after；生成结束后用完整内容最后编辑一次。不含 message.edit 时：不发占位消息，不发送中间增量，生成结束后一次发送完整内容。回复以纯文本发送（不使用 markdown 格式）。
-  5) 当前消息的内容将超过 message_limit 时，在最近的段落边界（"\n\n"，没有时为 "\n"，再没有时为空白，最后硬切）结束当前消息，再发送新消息继续显示；不能编辑时按同样的切分发送多条。
-  6) 结束后用 AppendConversation 追加本轮的 user 与 assistant 条目。
-  7) Provider 返回错误或中途断开：保留已显示的内容（不能编辑时不发送已生成的部分），在其后编辑或发送 agent.error（按 Actor locale，参数为错误码），不追加 assistant 条目，不重发请求。
+- 数据：每个聊天（会话字符串 c.Session()）当前的人格、Provider 与自由对话开关保存在 Agent 的受管 SQLite（gormdb，versioned 迁移）。
+- 命令：/ask（RawTail 的 text，缺省 sdk.User）、/agent on|off（sdk.Admin）、/persona [name]（Admin，无参数时列出）、/provider [name]（Admin）、/reset（User）；说明经 Description 指向 i18n。自由对话开启时，该聊天中 to_me 的非命令 message.created 也触发一轮（On("chat", sdk.MessageCreated).Rule(sdk.ToMe())，Handler 内检查开关）；私聊的消息都是 to_me。默认关闭。
+- 一轮对话（Handler 调用 c.Continue，在延续调用中执行）：
+  1) 没有可用 Provider 时用 c.T 回复 agent.no_provider，结束。
+  2) 会话键为 c.Session() 的字符串；ListConversation 读取最近 history_entries 条（从末尾向前取，按序号顺序组装）。条目为 JSON 对象 {"role": "user"|"assistant", "speaker": 外部用户 ID（群聊时）, "content": 文本}。
+  3) 以人格为 system 消息组装 provider.Request（MaxTokens 取 Provider 配置），provider.New 使用标准库 http.Client（沿用进程的代理环境变量）。
+  4) 显示：用 c.Stream，回调每次返回 Provider 新到的文本增量，生成结束返回 io.EOF。编辑节流、平台单条上限（实例的 text_limit）与换条都由 c.Stream 处理（D-135），Agent 不另设单条上限、不自行切分。回复以纯文本发送。
+  5) 结束后 AppendConversation 追加本轮的 user 与 assistant 条目。
+  6) Provider 返回错误或中途断开：c.Stream 已发出的内容保留，之后用 c.Reply 发送 agent.error（按 Actor locale，参数为错误码），不追加 assistant 条目，不重发请求；Provider 的错误说明只写日志。
 - /reset：ClearConversation 清除该会话。
-- 工具、MCP、记忆与技能分别在 T-12.3、T-12.4、T-12.5 接入；本切片不调用它们。
+- 工具、MCP、记忆、技能、图片输入与 llm.generate 分别在 T-12.3、T-12.4、T-12.5、T-12.14、T-12.8 接入；本切片不调用它们。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：agent/agent_test.go（//go:build unix）。用本仓库 Core 的测试装配（supervisor、memory Adapter，实现 Editor 与 Named）、真实状态库与本地模拟 Provider（openai、openai-compatible 与 anthropic-messages 各一次；其他协议的流解析由 TestStream 覆盖）：
-  - /ask hello：memory 先收到一条发送，随后收到若干次编辑，最后一次编辑是完整回复；编辑间隔不小于 1s（用注入时钟或计时断言）。
-  - 实例不声明 message.edit 时：memory 只收到完整回复的发送（超过 message_limit 时为多条），没有占位消息与编辑。
+- 提交：agent/agent_test.go（//go:build unix）：用根包库模式 alonabot.Start(ctx, alonabot.DataDir(dir), alonabot.Plugin(agent.New()), alonabot.Adapter(<测试中定义的回环 Adapter>))，Agent 的配置写在 <dir>/plugins/<agent id>/config.json（T-13.2），回环 Adapter 的实例写在 <dir>/core_config.json（T-09.4）；回环 Adapter 声明 message.send（带 text_limit）与 message.edit，记录收到的发送与编辑；Provider 为 httptest 模拟服务（openai、openai-compatible 与 anthropic-messages 各一次；其他协议的流解析由 TestStream 覆盖）：
+  - /ask hello：先收到一条发送，随后若干次编辑，最后一次编辑是完整回复；会话中追加了 user 与 assistant 条目。
+  - 实例不声明 message.edit：只收到完整回复的发送，没有中间编辑；回复超过 text_limit 时为多条。
   - 模拟 Provider 中途断开：已显示内容保留，最后有错误说明，会话中没有 assistant 条目，Provider 只收到一次请求。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：段落切分函数；OnLoad 的校验；限流推迟；会话条目格式；配置 Schema 由生成器生成且 api_key 为 secret；回复超过 message_limit（测试中设为 256）时分成多条消息，切分点在段落边界；自由对话关闭时群聊中的 to_me 消息不触发；Admin /agent on 后触发；非 to_me 的消息不触发；/persona 切换后请求的 system 消息改变；/reset 后历史为空；普通用户执行 /agent 被拒（不回复）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：OnStart 的配置校验；预设缺省值与显式值优先；会话条目格式与历史条数；自由对话关闭时群聊中的 to_me 消息不触发、Admin /agent on 后触发、非 to_me 的消息不触发；/persona 切换后请求的 system 消息改变；/reset 后历史为空；普通用户执行 /agent 被拒；经 cpa 兼容网关的真实 Provider 一轮对话（凭证从仓库 tmp/agent-debug/providers.json 读取，文件不存在时跳过；证据写「经 cpa 兼容网关运行」，不写成官方服务；不打印、不提交凭证）。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./agent/... ./internal/core/...；go build ./...；在 agent 运行 alonabot check 通过。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./agent/... . ./internal/core/...；go build ./...；在 agent 运行 alonabot plugin check 通过。
 
-不做：工具循环与 MCP（T-12.3）；记忆（T-12.4）；技能（T-12.5）；定时任务（T-12.6）；打包（T-12.7）；图片输入（T-12.14）；真实 Provider（T-10）。
+不做：工具循环与 MCP（T-12.3）；记忆（T-12.4）；技能（T-12.5）；定时任务（T-12.6）；打包（T-12.7）；llm.generate 与 @agent 解析（T-12.8）；图片输入（T-12.14）。
 ```
 
 ## 第 14 波
