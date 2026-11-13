@@ -12,7 +12,11 @@ CREATE TABLE install (
   build_digest BLOB NOT NULL,
   created_at   INTEGER NOT NULL,
   role         TEXT NOT NULL,
-  adapter_id   TEXT NOT NULL
+  adapter_id   TEXT NOT NULL,
+  version      TEXT NOT NULL,
+  publisher_key_id TEXT NOT NULL,
+  pin          TEXT NOT NULL,
+  uninstalled  INTEGER NOT NULL
 );
 
 CREATE TABLE generation (

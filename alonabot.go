@@ -6,23 +6,39 @@ package alonabot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
+	"net/netip"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/manifest"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/core/adminauth"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
+	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
+	"github.com/AlonaBot/AlonaBot/internal/core/manage"
+	"github.com/AlonaBot/AlonaBot/internal/core/packages"
+	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/core/webhost"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/adapter"
+	"github.com/mattn/go-isatty"
 )
 
 // Option 配置一次 Core 启动。
@@ -32,9 +48,12 @@ type options struct {
 	dir        string
 	args       []string
 	components []component
+	listen     *string
+	level      *slog.Level
+	format     *string
 }
 
-// Plugin 登记由生成资源确定身份的开发插件。
+// Plugin 登记由生成资源确定身份的开发插件或唯一 Agent。
 func Plugin(root *sdk.Plugin) Option {
 	return func(o *options) { o.components = append(o.components, component{root: root, role: state.RolePlugin}) }
 }
@@ -47,6 +66,15 @@ func Adapter(a adapter.Adapter) Option {
 // DataDir 指定 Core 数据目录，缺省为当前工作目录下的 data。
 func DataDir(dir string) Option { return func(o *options) { o.dir = dir } }
 
+// Listen 覆盖本次运行的 HTTP 监听地址，安全条件与 core_config.json 相同。
+func Listen(addr string) Option { return func(o *options) { o.listen = &addr } }
+
+// LogLevel 覆盖本次运行的全局日志级别。
+func LogLevel(level slog.Level) Option { return func(o *options) { o.level = &level } }
+
+// LogFormat 覆盖本次运行的 stderr 日志格式，接受 text 或 json。
+func LogFormat(format string) Option { return func(o *options) { o.format = &format } }
+
 // Args 追加调优参数或参数文件，后于 ALONABOT_ARGS 应用。
 func Args(values ...string) Option {
 	args := append([]string(nil), values...)
@@ -55,15 +83,23 @@ func Args(values ...string) Option {
 
 // Core 持有已装配的运行资源；取消 Start 的 context 后调用 Wait 等待停止结果。
 type Core struct {
-	assembly   *assembly
-	store      *state.Store
-	output     *logging.Output
-	values     tune.Values
-	components []*runningComponent
-	dir        string
-	monitors   sync.WaitGroup // 停止后等待退出观察者交还清理权，再关闭共享资源。
-	done       chan struct{}  // err 写入后关闭，允许多个 Wait 读取同一结果。
-	err        error
+	assembly    *assembly
+	store       *state.Store
+	output      *logging.Output
+	values      tune.Values
+	components  []*runningComponent
+	development []component
+	operations  chan coreOperation // Core.run 独占组件列表，HTTP 回调把变更交给同一所有者。
+	stopping    chan struct{}      // 关闭后解除仍在等待管理操作的 HTTP 请求。
+	dir         string
+	environment map[string]string
+	http        *http.Server
+	httpErrors  chan error
+	monitors    sync.WaitGroup // 停止后等待退出观察者交还清理权，再关闭共享资源。
+	done        chan struct{}  // err 写入后关闭，允许多个 Wait 读取同一结果。
+	err         error
+
+	stoppedInstances map[[2]string]bool // 包与实例的运行期停用选择，跨 Session 保留；同样由操作队列串行访问。
 }
 
 // Run 启动 Core，并等待 SIGINT、SIGTERM 或开发组件异常后完成停止。
@@ -92,7 +128,7 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	}
 	values, overrides, err := tune.Parse(args)
 	if err != nil {
-		return nil, err
+		return nil, startupUsage(err)
 	}
 	dir, err := filepath.Abs(o.dir)
 	if err != nil {
@@ -103,8 +139,37 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Core{store: store, values: values, dir: dir, done: make(chan struct{})}
-	fail := func(err error) (*Core, error) { return nil, errors.Join(err, c.shutdown()) }
+	c := &Core{store: store, values: values, dir: dir, done: make(chan struct{}), stopping: make(chan struct{}), operations: make(chan coreOperation)}
+	fail := func(err error) (*Core, error) {
+		c.err = err
+		return nil, errors.Join(err, c.shutdown())
+	}
+	file, err := settings.Load(dir)
+	if err != nil {
+		return fail(startupUsage(err))
+	}
+	configuration := file.Settings()
+	baseURL, err := url.Parse(configuration.BaseURL)
+	if err != nil {
+		return fail(fmt.Errorf("parse base_url: %w", err))
+	}
+	if o.listen != nil {
+		if err := settings.ValidateListen(*o.listen); err != nil {
+			return fail(startupUsage(fmt.Errorf("--listen: %w", err)))
+		}
+		hostname, _, _ := net.SplitHostPort(*o.listen)
+		ip, _ := netip.ParseAddr(hostname)
+		if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(hostname, "."), "localhost") && baseURL.Scheme != "https" && len(configuration.TrustedProxies) == 0 {
+			return fail(startupUsage(errors.New("--listen: non-loopback listen requires HTTPS base_url or trusted_proxies")))
+		}
+		configuration.Listen = *o.listen
+	}
+	if o.level != nil {
+		configuration.LogLevel = *o.level
+	}
+	if o.format != nil {
+		configuration.LogFormat = *o.format
+	}
 	installs, err := store.Installs(ctx)
 	if err != nil {
 		return fail(err)
@@ -112,28 +177,127 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	if err := validateComponents(o.components, installs); err != nil {
 		return fail(err)
 	}
-	output, err := logging.Open(logging.Options{Format: logging.FormatText, Level: slog.LevelInfo, Stderr: os.Stderr})
+	c.development = o.components
+	output, err := logging.Open(logging.Options{Format: logging.Format(configuration.LogFormat), Level: configuration.LogLevel, Stderr: os.Stderr})
+	if err != nil {
+		return fail(startupUsage(err))
+	}
+	c.output = output
+	slog.SetDefault(output.Logger())
+	if configuration.LogFile.Enabled {
+		if err := output.EnableFile(logging.FileOptions{Dir: filepath.Join(dir, "logs"), MaxSize: configuration.LogFile.MaxSize, MaxTotal: configuration.LogFile.MaxTotal, MaxAgeDays: configuration.LogFile.MaxAgeDays}); err != nil {
+			return fail(err)
+		}
+	}
+	interactive := isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stderr.Fd())
+	token, err := adminauth.FirstToken(ctx, store, dir, interactive)
 	if err != nil {
 		return fail(err)
 	}
-	c.output = output
-	if err := output.EnableFile(logging.FileOptions{Dir: filepath.Join(dir, "logs"), MaxSize: logging.DefaultMaxFileSize, MaxTotal: logging.DefaultMaxTotalSize, MaxAgeDays: logging.DefaultMaxAgeDays}); err != nil {
-		return fail(err)
+	if token != "" {
+		if _, err := fmt.Fprintln(os.Stderr, token); err != nil {
+			return fail(fmt.Errorf("write admin token: %w", err))
+		}
+	} else if !interactive {
+		name := filepath.Join(dir, adminauth.FirstTokenFile)
+		if _, err := os.Stat(name); err == nil {
+			slog.Info("first admin token is available", "path", name)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fail(fmt.Errorf("stat first admin token file: %w", err))
+		}
 	}
-	slog.SetDefault(output.Logger())
-	for _, override := range overrides {
-		slog.Warn("tuning parameter overridden", "name", override.Name, "value", override.Value, "origin", override.Origin)
+	if configuration.Proxy != "" {
+		for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY"} {
+			if err := os.Setenv(name, configuration.Proxy); err != nil {
+				return fail(fmt.Errorf("set %s: %w", name, err))
+			}
+		}
+	}
+	c.environment = make(map[string]string)
+	for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"} {
+		if value, exists := os.LookupEnv(name); exists {
+			c.environment[name] = value
+		}
+	}
+	if len(overrides) > 0 {
+		attrs := make([]any, 0, len(overrides))
+		for _, override := range overrides {
+			attrs = append(attrs, slog.Group(override.Name, "value", override.Value, "origin", override.Origin))
+		}
+		slog.Warn("tuning parameters overridden", attrs...)
 	}
 	if values.CoreMemorySoftLimit > 0 {
 		debug.SetMemoryLimit(values.CoreMemorySoftLimit)
 	}
 	// 2. 装配公共服务，再依次启动已启用安装包与显式登记的开发组件。
-	c.assembly, err = assemble(store, dir, values)
+	c.assembly, err = assemble(store, dir, values, file)
 	if err != nil {
 		return fail(err)
 	}
+	authentication := adminauth.New(store, time.Now, baseURL, dir)
+	adminMux := http.NewServeMux()
+	authentication.Routes(adminMux)
+	development := make(map[string]*manifest.Manifest)
+	c.stoppedInstances = make(map[[2]string]bool)
+	for _, entry := range o.components {
+		development[entry.manifest.ID] = entry.manifest
+	}
+	management := manage.New(manage.Options{Store: store, Settings: c.assembly.settings, Policy: c.assembly.policy,
+		Adapters: c.assembly.adapters, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(o.components),
+		Packages: filepath.Join(dir, "packages"), Limits: packages.NewLimits(values), Development: development,
+		Descriptor: c.assembly.componentDescriptor,
+		Start: func(ctx context.Context, id string) error {
+			return c.operation(ctx, func(ctx context.Context) error { return c.startManaged(ctx, id) })
+		},
+		Stop: func(ctx context.Context, id string, reason pb.StopReason) error {
+			return c.operation(ctx, func(context.Context) error { return c.stopManaged(id, reason) })
+		},
+		StartInstance: func(ctx context.Context, id, instance string, config json.RawMessage) error {
+			return c.operation(ctx, func(ctx context.Context) error {
+				for _, running := range c.components {
+					if running != nil && running.id == id && running.remote != nil {
+						if err := running.remote.StartInstance(ctx, instance, config); err != nil {
+							return err
+						}
+						delete(c.stoppedInstances, [2]string{id, instance})
+						return nil
+					}
+				}
+				return fmt.Errorf("adapter is not running: %s", id)
+			})
+		},
+		StopInstance: func(ctx context.Context, id, instance string) error {
+			return c.operation(ctx, func(ctx context.Context) error {
+				c.stoppedInstances[[2]string{id, instance}] = true
+				for _, running := range c.components {
+					if running != nil && running.id == id && running.remote != nil {
+						return running.remote.StopInstance(ctx, instance)
+					}
+				}
+				return fmt.Errorf("adapter is not running: %s", id)
+			})
+		},
+		ForgetInstance: func(ctx context.Context, id, instance string) error {
+			return c.operation(ctx, func(context.Context) error {
+				delete(c.stoppedInstances, [2]string{id, instance})
+				return nil
+			})
+		},
+	})
+	adminMux.Handle("/", management.Handler(authentication))
+	c.assembly.http = httpproxy.New(authentication)
+	publicHost := webhost.New(webhost.Options{BaseURL: baseURL, Proxy: c.assembly.http, Admin: adminMux})
+	listener, err := net.Listen("tcp", configuration.Listen)
+	if err != nil {
+		return fail(fmt.Errorf("listen HTTP: %w", err))
+	}
+	c.http = &http.Server{Addr: listener.Addr().String(), Handler: publicHost, ErrorLog: slog.NewLogLogger(slog.Default().Handler(), slog.LevelError)}
+	c.httpErrors = make(chan error, 1)
+	go func() { c.httpErrors <- c.http.Serve(listener) }()
+	slog.Info("HTTP listener started", "listen", listener.Addr().String())
+	slog.Info("Core started", "data_dir", dir)
 	for _, install := range installs {
-		if install.Source == devSource {
+		if install.Source == devSource || install.Uninstalled || install.Role == state.RoleWebUI {
 			continue
 		}
 		enabled, err := store.Enabled(ctx, install.PluginID)
@@ -167,42 +331,46 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	return c, nil
 }
 
+func startupUsage(err error) error {
+	return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: err.Error()}
+}
+
 // Wait 等待 Core 停止；组件停止超时或开发组件异常退出时返回含组件 ID 的错误。
 func (c *Core) Wait() error { <-c.done; return c.err }
 
 // componentExit 在旧进程树的清理完成后交回退出结果，Core.run 独占替换组件列表。
 type componentExit struct {
-	index    int
+	running  *runningComponent
 	abnormal bool
 	state    string
 	err      error
 }
 
-func (c *Core) watch(index int, exits chan<- componentExit) {
-	running := c.components[index]
+func (c *Core) watch(running *runningComponent, exits chan<- componentExit) {
 	c.monitors.Go(func() {
 		select {
 		case <-running.exited():
 		case <-running.instance.Session.Done():
 		}
-		result := componentExit{index: index}
+		result := componentExit{running: running}
 		if running.process != nil {
-			c.assembly.detach(running)
-			c.assembly.media.ReleaseSession(running.caller.SessionKey)
 			result.abnormal, result.state, result.err = running.process.WaitExit()
 		} else {
 			result.err = fmt.Errorf("component %s exited before Core shutdown", running.id)
 		}
-		// 每个槽位至多有一个待处理结果；缓冲使 shutdown 可以等待观察者结束。
-		exits <- result
+		// 停止时归还观察者，不让 HTTP 动态增减组件改变退出队列容量的要求。
+		select {
+		case exits <- result:
+		case <-c.stopping:
+		}
 	})
 }
 
 func (c *Core) run(ctx context.Context) {
-	exits := make(chan componentExit, len(c.components))
+	exits := make(chan componentExit)
 	policy := host.NewRestartPolicy(c.values)
-	for index := range c.components {
-		c.watch(index, exits)
+	for _, running := range c.components {
+		c.watch(running, exits)
 	}
 	ticker := time.NewTicker(c.values.MediaTTL)
 	defer ticker.Stop()
@@ -211,11 +379,26 @@ running:
 		select {
 		case <-ctx.Done():
 			break running
+		case err := <-c.httpErrors:
+			c.err = fmt.Errorf("serve HTTP: %w", err)
+			break running
 		case result := <-exits:
 			if ctx.Err() != nil {
 				break running
 			}
-			old := c.components[result.index]
+			index := -1
+			for i, running := range c.components {
+				if running == result.running {
+					index = i
+					break
+				}
+			}
+			if index < 0 {
+				continue
+			} // 管理停止的旧 Session 已移出，不再影响新 Session。
+			old := result.running
+			c.assembly.detach(old)
+			c.assembly.media.ReleaseSession(old.caller.SessionKey)
 			if old.process == nil {
 				c.err = result.err
 				break running
@@ -242,18 +425,18 @@ running:
 				slog.Info("restarting plugin", "plugin_id", old.id)
 				replacement, err := c.startInstalled(ctx, c.dir, old.install)
 				if replacement != nil {
-					c.components[result.index] = replacement
+					c.components[index] = replacement
 				}
 				if err != nil {
 					slog.Error("restart plugin failed", "plugin_id", old.id, "error", err)
 					if replacement != nil {
-						if stopErr := c.stopComponent(replacement, time.Now(), host.NewStopTiming(c.values)); stopErr != nil {
+						if stopErr := c.stopComponent(replacement, time.Now(), host.NewStopTiming(c.values), pb.StopReason_STOP_REASON_DISABLE); stopErr != nil {
 							slog.Error("cleanup failed restart", "plugin_id", old.id, "error", stopErr)
 						}
 					}
 					continue
 				}
-				c.watch(result.index, exits)
+				c.watch(replacement, exits)
 			case host.DecisionDisable:
 				if err := c.store.SetEnabled(ctx, old.id, false); err != nil {
 					slog.Error("disable plugin failed", "plugin_id", old.id, "error", err)
@@ -261,6 +444,19 @@ running:
 					slog.Error("plugin disabled after repeated abnormal exits", "plugin_id", old.id, "crashes", c.values.RestartMaxCrashes, "window", c.values.RestartWindow)
 				}
 			}
+		case operation := <-c.operations:
+			before := len(c.components)
+			operationContext, cancel := context.WithCancel(operation.ctx)
+			stopCancel := context.AfterFunc(ctx, cancel)
+			err := operation.apply(operationContext)
+			stopCancel()
+			cancel()
+			for _, running := range c.components[before:] {
+				if running != nil {
+					c.watch(running, exits)
+				}
+			}
+			operation.result <- err
 		case <-ticker.C:
 			c.assembly.media.Sweep()
 		}
@@ -270,6 +466,14 @@ running:
 }
 
 func (c *Core) shutdown() error {
+	close(c.stopping)
+	var result error
+	if c.http != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), c.values.StopTotal)
+		result = c.http.Shutdown(ctx)
+		cancel()
+		result = errors.Join(result, c.http.Close())
+	}
 	t0 := time.Now()
 	timing := host.NewStopTiming(c.values)
 	var wg sync.WaitGroup
@@ -285,8 +489,11 @@ func (c *Core) shutdown() error {
 		})
 	}
 	for _, running := range c.components {
+		if running == nil {
+			continue
+		}
 		wg.Go(func() {
-			if err := c.stopComponent(running, t0, timing); err != nil {
+			if err := c.stopComponent(running, t0, timing, pb.StopReason_STOP_REASON_CORE_SHUTDOWN); err != nil {
 				errs <- err
 			}
 		})
@@ -294,16 +501,25 @@ func (c *Core) shutdown() error {
 	wg.Wait()
 	c.monitors.Wait()
 	close(errs)
-	var result error
 	for err := range errs {
 		result = errors.Join(result, err)
 	}
 	if c.assembly != nil {
 		c.assembly.scheduler.Close()
 	}
+	if c.output != nil {
+		if err := errors.Join(c.err, result); err != nil {
+			slog.Error("Core stopped", "err", err)
+		} else {
+			slog.Info("Core stopped")
+		}
+	}
 	// 同进程用户回调超时时保留实例锁，实际退出后再关闭状态库与日志。
 	pending := false
 	for _, running := range c.components {
+		if running == nil {
+			continue
+		}
 		select {
 		case <-running.exited():
 		default:
@@ -313,6 +529,9 @@ func (c *Core) shutdown() error {
 	if pending {
 		go func() {
 			for _, running := range c.components {
+				if running == nil {
+					continue
+				}
 				<-running.exited()
 			}
 			if err := c.close(); err != nil {
@@ -330,4 +549,73 @@ func (c *Core) close() error {
 		err = errors.Join(err, c.output.Close())
 	}
 	return err
+}
+
+type coreOperation struct {
+	ctx    context.Context
+	apply  func(context.Context) error
+	result chan error
+}
+
+func (c *Core) operation(ctx context.Context, apply func(context.Context) error) error {
+	op := coreOperation{ctx: ctx, apply: apply, result: make(chan error, 1)}
+	select {
+	case c.operations <- op:
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.stopping:
+		return errors.New("Core is stopping")
+	}
+	select {
+	case err := <-op.result:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.stopping:
+		return errors.New("Core is stopping")
+	}
+}
+
+func (c *Core) startManaged(ctx context.Context, id string) error {
+	for _, running := range c.components {
+		if running != nil && running.id == id && c.assembly.componentState(id) == "Activated" {
+			return nil
+		}
+	}
+	if err := c.stopManaged(id, pb.StopReason_STOP_REASON_RESTART); err != nil {
+		return err
+	}
+	for i := range c.development {
+		if c.development[i].manifest.ID == id {
+			if err := c.startDevelopment(ctx, c.dir, &c.development[i]); err != nil {
+				return errors.Join(err, c.stopManaged(id, pb.StopReason_STOP_REASON_DISABLE))
+			}
+			return nil
+		}
+	}
+	in, err := c.store.GetInstall(ctx, id)
+	if err != nil {
+		return err
+	}
+	running, err := c.startInstalled(ctx, c.dir, in)
+	if running != nil {
+		c.components = append(c.components, running)
+	}
+	if err != nil && running != nil {
+		return errors.Join(err, c.stopManaged(id, pb.StopReason_STOP_REASON_DISABLE))
+	}
+	return err
+}
+
+func (c *Core) stopManaged(id string, reason pb.StopReason) error {
+	for i, running := range c.components {
+		if running == nil || running.id != id {
+			continue
+		}
+		if err := c.stopComponent(running, time.Now(), host.NewStopTiming(c.values), reason); err != nil {
+			return err
+		}
+		c.components[i] = nil
+	}
+	return nil
 }

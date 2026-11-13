@@ -26,8 +26,10 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	coreadapter "github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
+	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
+	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
@@ -365,10 +367,15 @@ func newPipeline(t *testing.T) *pipelineHarness {
 	}
 	h := &pipelineHarness{t: t, store: store, dir: dir, values: tune.Defaults(), changed: make(chan struct{}, 1), release: make(chan struct{}, 1), components: make(map[string]*runningComponent)}
 	h.values.StopDrain = pipelineStopDrain
-	h.assembly, err = assemble(store, dir, h.values)
+	file, err := settings.Load(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
+	h.assembly, err = assemble(store, dir, h.values, file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.assembly.http = httpproxy.New(nil) // 测试不经管理认证，与 Start 中的 HTTP 入口分开。
 	h.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/release" {
 			select {
