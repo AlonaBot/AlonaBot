@@ -78,7 +78,7 @@
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 待派发 |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2、T-09.4 | 待派发 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
-| goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 等待前置 |
+| goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 待派发 |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 已完成（PR #162） |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 已完成（PR #161） |
 | goal-128 | T-07.9 | 动态任务与暂停恢复的 SDK | T-04.12、T-07.8 | 等待前置 |
@@ -5584,7 +5584,15 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-131 · T-03.25 聊天目录
 
-状态：等待前置（T-08.14、T-09.4）。2026-11-10 按 D-130 新增。T-03.3（PR #32）已合并。goal-130（T-08.14）提供内置来源的登记处，goal-39（T-09.4）提供卸载的清理对象，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片修改 Event 的 proto 与 `internal/core/state/schema.sql`，按执行顺序的共享文件规则处理冲突。
+状态：待派发。前置 T-03.3（PR #32）、T-08.14（[PR #157](https://github.com/AlonaBot/AlonaBot/pull/157)，合并提交 `e709135`）与 T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`）已合并。2026-11-10 按 D-130 新增；2026-11-12 审查者按 main `d6eb381` 写出范围、接口与测试段，要点如下：
+- 协议：Event 在 `contracts/proto/alonabot/v1/message.proto`，最后一个字段为 `ChatType chat_type = 15`，`chat_title` 用 16；SDK 侧 `sdk/message.Event` 与 `sdk/internal/convert` 同步一个字段，`sdk/adapter` 的 `Core.Deliver(ctx, ev *message.Event, cursor)` 不变。
+- 交付：`internal/core/adapter/remote/services.go` 处理 `AdapterDeliverRequest` 时先校验 Target 与 Actor，再 `Store.PutAdapterCursor(ctx, pluginID, instanceID, cursor)`，之后重建可信字段并派发。聊天记录与游标写在同一个状态库事务中。
+- 选项来源：`configschema.BuiltinOptionSources` 已登记 `core.chats` 与 filter 键 `chat_type`、`adapter_id`；`internal/core/options` 的内置来源目前对它返回 UNAVAILABLE，本切片实现。
+- 清理：`internal/core/manage/lifecycle.go` 的卸载按 `PurgeScope` 列出并删除受管对象，状态库对象在一个事务内删除。
+- 本切片修改 Event 的 proto 与 `internal/core/state/schema.sql`，按执行顺序的共享文件规则处理冲突（goal-55 也在改 schema.sql 的按钮表）。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-131（切片 T-03.25：聊天目录）。goal 目录 goal-131，分支 goal-131，worktree .worktrees/goal-131，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：Event 带上可选的会话显示名 `chat_title`；Core 在接纳入站事件时记录见过的聊天，并把它登记为内置选项来源 `core.chats`；聊天目录随 Adapter 的数据清理。两个官方 Adapter 的填写由 goal-132 与 goal-133 提供。
 
@@ -5599,7 +5607,39 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 - 名称不写入日志；诊断只写 adapter_id 与 chat_id。
 - 测试：提交一个集成测试（经回环测试 Adapter），覆盖群与私聊各交付一条带名称的事件后 `core.chats` 能按名称搜到、按 `chat_type` 筛选、之后一条不带名称的事件不清空名称；其余（没有 target 却带名称被拒、Core 重启后保留、两个实例交付同一聊天、`--purge-data` 后删除而只卸载保留、按存储值取回）进本地自测。
 
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/message.proto：Event 追加 `optional string chat_title = 16`，随后 go generate ./...；contracts/wirespec_test.go 追加编号检查
+- sdk/message 与 sdk/internal/convert：Event 增加 ChatTitle 字段与转换
+- internal/core/state/：schema.sql 增加 chat 表（写进唯一的初始迁移）；新增 chats.go；PutAdapterCursor 同步签名
+- internal/core/adapter/remote/services.go：交付时校验并写入聊天
+- internal/core/options/：实现内置来源 core.chats
+- internal/core/manage/：把聊天表加入 Adapter 的清理对象
+- internal/core/adapter/remote/remote_test.go：追加集成测试 TestChatDirectory
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+   // internal/core/state
+   type Chat struct { AdapterID, ChatID, ChatType, Title, InstanceID string; FirstSeen, LastSeen time.Time } // ChatType 为 private、group 或 channel，空串表示未知
+   func (s *Store) PutAdapterCursor(ctx context.Context, pluginID, instanceID string, cursor []byte, chat *Chat) error // chat 为 nil 时只保存游标；否则在同一事务中写入或更新聊天
+   type ChatQuery struct { Search, ChatType, AdapterID string; Keys []ChatKey; Limit int }
+   type ChatKey struct { AdapterID, ChatID string }
+   func (s *Store) Chats(ctx context.Context, q ChatQuery) (chats []Chat, more bool, err error) // 按 LastSeen 从新到旧
+   清理时删除某个 adapter_id 的聊天：在 manage 已有的清理事务中执行（state 提供按 adapter_id 删除的方法，名称自定）。
+
+行为：按上文要点。补充：
+- 没有 target 的事件带 chat_title 时，Core 以 INVALID_ARGUMENT 拒绝这次交付并记 WARN（只写 adapter_id 与 chat_id）。
+- 写入：Title 为空时保留已有名称，ChatType 未知时保留已有类型，InstanceID 与 LastSeen 每次更新；Core 生成的 bot.online、bot.offline 与 scheduled 不写。
+- core.chats：存储值为 `<adapter_id>:<chat_id>` 会话字符串（转义规则同 MESSAGE-MODEL §1，复用已有的会话字符串编码），显示名为 Title（为空时为 chat_id），说明为 adapter_id 与 chat_type；Search 不区分大小写地匹配名称与 chat_id；按值取回时格式不合法或不存在的值不返回；上限 OPTIONS_PAGE，超出时 More。
+- 卸载 Adapter：--purge-data 与 --purge 删除该 adapter_id 的聊天并在确认对象中列出条数；只卸载与 --replace 保留。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/adapter/remote/remote_test.go 的 TestChatDirectory（经回环测试 Adapter 进程）：群与私聊各交付一条带名称的事件后，core.chats 能按名称搜到、按 chat_type 筛选；之后一条不带名称的事件不清空名称。contracts/wirespec_test.go 的编号检查。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有 target 却带名称被拒；Core 重启后保留；两个实例交付同一聊天时 InstanceID 更新为最近的一个；--purge-data 后删除而只卸载保留；按存储值取回；聊天名称不出现在日志中。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./...；go build ./...。
+
 不做：给插件的聊天列表服务；读取 `chat_title` 的 SDK 方法；话题的目录；成员列表；主动向平台拉取全部群；管理 API（goal-93）与页面（goal-44）；两个官方 Adapter 的填写（goal-132、goal-133）。
+```
 
 ### goal-18 · T-05.5 多进程事件流水线验收
 
