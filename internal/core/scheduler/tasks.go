@@ -154,6 +154,9 @@ func (s *Scheduler) pump(pluginID string, plugin *pluginJobs) {
 				queued.reject(fmt.Errorf("delete one-time task before dispatch: %w", err))
 				continue
 			}
+			if task.timer != nil {
+				task.timer.Stop()
+			}
 			delete(reg.tasks, key)
 		}
 		parent := queued.ctx

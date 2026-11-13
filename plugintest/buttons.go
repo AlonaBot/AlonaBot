@@ -1,6 +1,10 @@
 package plugintest
 
-import "github.com/AlonaBot/AlonaBot/sdk/message"
+import (
+	"strings"
+
+	"github.com/AlonaBot/AlonaBot/sdk/message"
+)
 
 // Click 点击已发送链中的动作按钮，以本次用户身份经过 Core 的令牌解析与鉴权。
 func (h *Harness) Click(from User, sent Sent, actionID string) Result {
@@ -22,12 +26,19 @@ func (h *Harness) Click(from User, sent Sent, actionID string) Result {
 				if button.URL != "" || button.CoreToken == "" || sent.Result == nil || sent.Result.PrimaryPlatformMessageID == "" {
 					h.t.Fatalf("action %q is not a sent callback button", actionID)
 				}
-				adapterID, _, _, ok := sent.To.Parts()
+				adapterID, chatID, _, ok := sent.To.Parts()
 				if !ok {
 					h.t.Fatalf("invalid button session %q", sent.To)
 				}
+				chatType := message.ChatUnspecified
+				switch {
+				case strings.HasPrefix(chatID, "private:"):
+					chatType = message.ChatPrivate
+				case strings.HasPrefix(chatID, "group:"):
+					chatType = message.ChatGroup
+				}
 				return h.deliverEvent(from, &message.Event{Type: "button.clicked", AdapterID: adapterID,
-					AdapterInstanceID: sent.Result.AdapterInstanceID, AccountID: AccountID, Session: sent.To,
+					AdapterInstanceID: sent.Result.AdapterInstanceID, AccountID: AccountID, Session: sent.To, ChatType: chatType,
 					Payload: &message.ButtonClickedPayload{Value: button.CoreToken, OriginPlatformMessageID: sent.Result.PrimaryPlatformMessageID}})
 			}
 		}
