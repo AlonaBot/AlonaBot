@@ -52,7 +52,8 @@ type Options struct {
 	Descriptor     func(string) *pb.AdapterDescriptor          // 返回当前运行 Session 的 Adapter 声明。
 	Candidates     Candidates
 
-	DevelopmentWebUI fs.FS // 本次运行的静态根目录；nil 时选择已启用的安装包。
+	DevelopmentWebUI fs.FS                           // 本次运行的静态根目录；nil 时选择已启用的安装包。
+	CoreInfo         func() (version, listen string) // 总览在请求时读取同一个 Core 的构建版本与实际监听地址。
 }
 
 // Service 用独立的逐包锁串行管理动作，supervisor 继续持有状态库的进程锁。

@@ -82,13 +82,13 @@ Cookie 为 host-only、`Path=/`、`HttpOnly`、`SameSite=Strict`；HTTP 下名�
 | `/api/v1/packages/restart` | `{"id":"demo"}` | 以当前 Active 换 Session；要求已启用且有 Active；WebUI 无进程，返回 412 |
 | `/api/v1/packages/uninstall` | `{"id":"demo","purge":0,"confirm":false}` | 停止并清理选定范围，准确对象需确认；开发组件返回 412 |
 | `/api/v1/packages/pin` | `{"id":"demo","constraint":"1.2.3"}` | 精确 SemVer；空串解除；格式错误 400 |
-| `/api/v1/packages/reload` | `{"id":"demo"}` | 要求已激活的进程组件；当前候选执行返回 501 / `UNSUPPORTED`；WebUI 返回 412 |
-| `/api/v1/packages/update` | `{"id":"demo","confirm":false,"install":{"Source":"owner/repo"}}` | `install` 使用 3.1 的 `InstallRequest` 大写字段；外层 `confirm` 覆盖 `install.Confirm`；校验身份、来源、公钥、pin、版本与依赖影响，当前候选执行返回 501 / `UNSUPPORTED` |
+| `/api/v1/packages/reload` | `{"id":"demo"}` | 要求已激活的进程组件，通过候选准备与提交生成新代次；WebUI 返回 412 |
+| `/api/v1/packages/update` | `{"id":"demo","confirm":false,"install":{"Source":"owner/repo"}}` | `install` 使用 3.1 的 `InstallRequest` 大写字段；外层 `confirm` 覆盖 `install.Confirm`；校验身份、来源、公钥、pin、版本与依赖影响，通过候选准备与提交更新版本，保持启用状态 |
 | `/api/v1/packages/rollback` | `{"id":"demo","generation":"<保留代次>","confirm":false}` | 要求目标代次属于该组件，校验确认后，当前候选执行返回 501 / `UNSUPPORTED` |
 
 `purge` 为整数：0（缺省）保留数据、配置及来源绑定；1 额外清除受管数据；2 额外清除受管配置及安装绑定。保留记录重装要求匹配原来源与身份。Adapter 替换保留的实例归旧组件，新实例配置块换归属时另行确认。具体清理对象见 [CONTRACTS §9.3](CONTRACTS-v0.1.md#93-cli-的最小完整动作)。
 
-Update 的本地候选可以提供 `install.Archive/ReleaseJSON/Signature/PublicKey`；省略候选来源和归档时，沿用安装时绑定来源。前置校验可能先返回 400、403、404、409 或 412；501 表示请求已到达当前尚未实现的候选执行入口，正式更新与回退编排由后继切片完成。
+Update 的本地候选可以提供 `install.Archive/ReleaseJSON/Signature/PublicKey`；省略候选来源和归档时，沿用安装时绑定来源。前置校验可能先返回 400、403、404、409 或 412；重复上传已安装的同版本同归档会因不可变包目录已存在返回 409 / `ALREADY_EXISTS`。Rollback 的正式候选编排由后继切片完成，当前返回 501 / `UNSUPPORTED`。
 
 ### 3.3 组件图标
 
@@ -289,3 +289,51 @@ Rename 前保存失败保留旧设置与内存阈值；Rename 后目录同步失
 Cookie 写级别须同时提供受控 Origin 和 `X-Alonabot-CSRF`；Bearer 沿用管理客户端规则。认证在读取或开始 SSE 响应前完成，未认证的 recent/stream 返回 401。
 
 CLI 用法：`alonabot logs [--source ID] [--level L] [--trace T] [--follow] [--date YYYY-MM-DD]`；缺省 recent，date 读取 history，follow 直接消费含快照的 stream；date 与 follow 同时给出时返回用法错误。`alonabot log-level [ID] [LEVEL]` 无参数列出全部设置，单独 ID 显示该设置（文件未覆盖时显示 inherit），`ID=global` 选择全局。两个命令复用 `--data-dir`、`--admin-url`、`--token-file` 与 Bearer 客户端。
+
+## 9. 刷新后取回管理会话
+
+浏览器刷新后，先用现有管理 Cookie 调用 `GET /api/auth/session`，取回当前会话原有的 CSRF 和固定到期时刻。成功为 200、`Content-Type: application/json`，并带 `Cache-Control: no-store`：
+
+```json
+{"csrf_token":"<当前会话原有值>","expires_at_unix_ms":1790000000000}
+```
+
+此接口只接受有效管理 Cookie。仅有 Bearer、Cookie 无效、过期、已登出或认证代次失配时返回 401。管理凭证未初始化返回 503；状态库故障返回 500，真实错误记录到 Core 日志。错误使用第 1/2 节的英文纯文本格式。成功读取保持会话 ID、CSRF、认证代次和已保存的到期时刻，响应无 `Set-Cookie`。后续变更请求继续携带这个 CSRF 与受控 Origin。
+
+## 10. 浏览器上传安装与更新包
+
+`POST /api/v1/packages/install` 和 `POST /api/v1/packages/update` 同时接受 `multipart/form-data; boundary=...`。现有 JSON 入口继续使用第 3 节的原请求结构、大小写和响应；JSON 的 Archive 仍为 Core 本机路径。
+
+浏览器每次上传一组本地候选，part 名严格区分大小写：
+
+| Part | 格式 | 规则 |
+| --- | --- | --- |
+| `archive` | 文件 | 必填且一份；归档字节，通常文件名为 `<id>-<version>-<platform>.tar.gz` |
+| `release` | 文件 | 必填且一份；release.json 原始字节 |
+| `signature` | 文件 | 有签名时提供 release.json.sig 原始字节；无签名包可省略 |
+| `public_key` | 文本 | release.pub 的标准 base64 内容，映射 `InstallRequest.PublicKey` |
+| `confirm` | 文本 | 可选，严格为 `true` 或 `false`；省略为 false，映射 `InstallRequest.Confirm` |
+| `replace` | 文本 | 仅 install 可选，严格为 `true` 或 `false`；省略为 false，映射 `InstallRequest.Replace` |
+| `id` | 文本 | 仅 update 必填，指定已安装组件 ID |
+
+文件 part 在 Content-Disposition 中带 `filename` 参数（其值可为空），文本 part 省略该参数；各 part 可任意排序。未知或重复 part、缺少必需文件或更新 ID、错误布尔值和截断 multipart 返回 400 / `INVALID_ARGUMENT`。上传固定为本地候选，`Source` 留空；来源从 release/manifest 与既有绑定校验。客户端文件名只作展示，服务器自行生成目录与文件名。
+
+有签名时对 release.json 的确切字节验签，提供 `archive`、`release`、`signature` 三个文件与 `public_key` 文本。缺少或错误公钥、错误签名与来源绑定等错误经既有服务返回 403 / `PERMISSION_DENIED`。无签名包省略 signature，继续执行归档长度、摘要、平台、manifest、身份、来源、依赖和显式信任确认；列表的 `Signed` 为 false。已经绑定签名的来源继续要求同一公钥，验签失败按原码返回。
+
+认证先于上传解析：Cookie 变更请求先验证 Origin/CSRF，Bearer 沿用第 1 节规则。archive 流式写入 `<data_dir>/staging` 中独占的请求目录（0700），文件权限为 0600，大小沿用 `packages.Limits.MaxArchiveBytes`（缺省 256 MiB）；解压总量与条目上限由同一 Preflight 执行。超限沿用 `RESOURCE_EXHAUSTED`，其 HTTP 状态按第 5 节当前映射为 500。解析层保持 release/signature 精确字节，安装和更新均调用同一管理服务，预检与确认发生在停止或修改旧组件前。
+
+install 成功为 200、原 `Package` 导出字段；update 成功为 200、`{}`。确认响应为 409、`{"affected":[...]}`，浏览器展示全部对象，经管理员确认后，重新上传同一组文件并设置文本 `confirm=true`。JSON 客户端继续使用 install 的 `Confirm` 或 update 外层 `confirm`。
+
+临时目录覆盖完整 Install/Update 调用；成功、400/403/409、候选失败、请求中断和文件写入失败均执行清理。关闭或清理的真实错误保留在管理错误或日志中。服务调用结束后归档源可删除；已安装不可变目录及 Journal 接管资源继续由各自所有者管理。
+
+multipart 与 JSON Update 均进入 `manage.Service.Update`，执行绑定来源、组件身份、公钥、pin 与依赖影响检查。Core 已接通候选准备与提交：有效的新版本上传成功返回 200、`{}`，已启用的组件激活新代次，用户数据保留，受管 SQLite 在候选副本上执行迁移。缺文件或验签失败在修改旧组件前拒绝；重复上传已安装的同版本同归档返回 409 / `ALREADY_EXISTS`。
+
+## 11. Core 总览
+
+`GET /api/v1/core` 使用第 1 节的 Bearer 或有效 Cookie 管理认证，成功为 200、`application/json`：
+
+```json
+{"version":"v0.1.0","listen":"127.0.0.1:7650","admin_api_major":1}
+```
+
+`version` 来自 `runtime/debug.ReadBuildInfo` 中 AlonaBot module（`github.com/AlonaBot/AlonaBot`）的版本：作为主 module 取 Main，作为库取对应依赖项；依赖存在 `Replace` 时取替换模块的版本，本地路径替换或其他缺少版本的情况为 `(devel)`。`listen` 是当前 Core 的 `listener.Addr().String()`，包含启动覆盖及端口 0 实际分配结果。`admin_api_major` 使用 `manage.AdminAPIMajor`，保持为 1。响应只包含以上三个字段。
