@@ -148,10 +148,7 @@ func parseHistory(raw string, date time.Time) (Record, error) {
 	}
 	suffix := strings.TrimPrefix(raw, first) // 多行字段继续属于同一条原始记录。
 	body := m[6] + suffix
-	fields, err := historyAttrs(body)
-	if err != nil {
-		return Record{}, err
-	}
+	fields := historyAttrs(body)
 	for key, value := range fields {
 		if !sourceKeys[key] || source == ComponentCore {
 			attrs[key] = value
@@ -166,16 +163,12 @@ func parseHistory(raw string, date time.Time) (Record, error) {
 	return Record{Time: stamp, Level: level, Source: source, Message: raw[start:], Attrs: attrs, TraceID: trace}, nil
 }
 
-func historyAttrs(body string) (map[string]any, error) {
+func historyAttrs(body string) map[string]any {
 	attrs := map[string]any{}
 	// 跳过消息和字段中的引号内容，避免把其中的 key=value 误判为另一个属性。
 	for offset := 0; offset < len(body); {
 		if body[offset] == '"' {
-			end, _, err := quotedHistory(body[offset:])
-			if err != nil {
-				offset++
-				continue
-			}
+			end, _, _ := quotedHistory(body[offset:])
 			offset += end
 			continue
 		}
@@ -192,11 +185,10 @@ func historyAttrs(body string) (map[string]any, error) {
 		offset += m[1]
 		switch {
 		case offset < len(body) && body[offset] == '"':
-			end, value, err := quotedHistory(body[offset:])
-			if err != nil {
-				return nil, err
+			end, value, ok := quotedHistory(body[offset:])
+			if ok {
+				attrs[key] = value
 			}
-			attrs[key] = value
 			offset += end
 		case strings.HasPrefix(body[offset:], "\n"+continuationIndent):
 			value := body[offset+1:]
@@ -219,10 +211,11 @@ func historyAttrs(body string) (map[string]any, error) {
 			offset += end
 		}
 	}
-	return attrs, nil
+	return attrs
 }
 
-func quotedHistory(text string) (int, string, error) {
+// quotedHistory 尝试读取完整的带引号字段；结束边界有歧义时只跳过开头引号，继续寻找可靠字段。
+func quotedHistory(text string) (int, string, bool) {
 	escaped := false
 	for i := 1; i < len(text); i++ {
 		if escaped {
@@ -234,12 +227,12 @@ func quotedHistory(text string) (int, string, error) {
 			continue
 		}
 		if text[i] == '"' {
-			value, err := strconv.Unquote(text[:i+1])
-			if err != nil {
-				return 0, "", fmt.Errorf("invalid quoted log value: %w", err)
+			if i+1 < len(text) && text[i+1] != ' ' && text[i+1] != '\n' {
+				return 1, "", false
 			}
-			return i + 1, value, nil
+			value, err := strconv.Unquote(text[:i+1])
+			return i + 1, value, err == nil
 		}
 	}
-	return 0, "", errors.New("unterminated quoted log value")
+	return 1, "", false
 }

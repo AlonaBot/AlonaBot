@@ -31,6 +31,7 @@ import (
 // Options 绑定同一个 Core 的持久状态与运行登记。
 type Options struct {
 	Logs           *logging.Output                                               // 与 Core 共用的输出、缓冲与级别表。
+	Stopping       <-chan struct{}                                               // Core 开始停机时关闭，在 HTTP Shutdown 等待之前结束日志流。
 	NotifyLogLevel func(ctx context.Context, id string, level pb.LogLevel) error // 仅通知当前 Activated Session。
 	Store          *state.Store
 	Settings       *settings.File

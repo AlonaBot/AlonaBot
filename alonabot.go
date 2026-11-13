@@ -277,7 +277,7 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	for _, entry := range o.components {
 		development[entry.manifest.ID] = entry.manifest
 	}
-	management := manage.New(manage.Options{Logs: output, NotifyLogLevel: func(ctx context.Context, id string, level pb.LogLevel) error {
+	management := manage.New(manage.Options{Logs: output, Stopping: c.stopping, NotifyLogLevel: func(ctx context.Context, id string, level pb.LogLevel) error {
 		return c.operation(ctx, func(ctx context.Context) error {
 			plugin, ok := c.assembly.router.Plugin(id)
 			if !ok || !plugin.Activated() {

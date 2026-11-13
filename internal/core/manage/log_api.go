@@ -122,7 +122,9 @@ func (s *Service) streamLogs(w http.ResponseWriter, r *http.Request) {
 		respond(w, nil, err)
 		return
 	}
-	stream := s.opt.Logs.Subscribe(r.Context())
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel() // handler 因停机或写入失败返回时，取消输出侧订阅。
+	stream := s.opt.Logs.Subscribe(ctx)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	controller := http.NewResponseController(w)
@@ -132,6 +134,8 @@ func (s *Service) streamLogs(w http.ResponseWriter, r *http.Request) {
 	var last time.Time
 	for {
 		select {
+		case <-s.opt.Stopping:
+			return
 		case <-r.Context().Done():
 			return
 		case record, ok := <-stream:
