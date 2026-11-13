@@ -135,6 +135,9 @@ func Run(opts ...Option) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	core, err := Start(ctx, opts...)
+	if err == context.Canceled {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -142,6 +145,7 @@ func Run(opts ...Option) error {
 }
 
 // Start 完成身份检查、握手、注册与激活后返回 Core；失败时清理已启动的部分。
+// 启动期间 ctx 取消且清理成功时返回 context.Canceled，清理错误随启动错误一起返回。
 func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -176,7 +180,18 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	c := &Core{store: store, values: values, dir: dir, logLevel: o.level, done: make(chan struct{}), stopping: make(chan struct{}), operations: make(chan coreOperation)}
 	fail := func(err error) (*Core, error) {
 		c.err = err
-		return nil, errors.Join(err, c.shutdown())
+		// 只沿单一错误链识别调用方取消，保留合并错误中的其他失败。
+		for cause := err; cause != nil; cause = errors.Unwrap(cause) {
+			if cause == context.Canceled && ctx.Err() == context.Canceled {
+				c.err = nil
+				break
+			}
+		}
+		shutdownErr := c.shutdown()
+		if c.err == nil && shutdownErr == nil {
+			return nil, context.Canceled
+		}
+		return nil, errors.Join(err, shutdownErr)
 	}
 	file, err := settings.Load(dir)
 	if err != nil {
