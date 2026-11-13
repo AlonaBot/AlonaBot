@@ -67,10 +67,11 @@ bin/alonabot admin add telegram:123456
 
 ```sh
 bin/alonabot run ./myplugin ./myadapter --data-dir ./data --reload
+bin/alonabot run ./myplugin ./mywebui --data-dir ./data --reload
 bin/alonabot run ./examples/plugins/lifecycle --stdio
 ```
 
-未给目录时，当前目录含 `plugin.yaml` 就运行该工程；其他情况按安装记录启动 Core。组件身份与角色取自工程 manifest，全部工程构建成功并通过身份冲突检查后才启动组件。重复目录、重复 ID、与已安装包冲突的 ID 或 `adapter_id` 都会报错。
+未给目录时，当前目录含 `plugin.yaml` 就运行该工程；其他情况按安装记录启动 Core。组件身份与角色取自工程 manifest，完成工程检查与进程组件构建后才启动组件。重复目录、重复 ID 都会报错；进程组件的 ID 或 `adapter_id` 与已安装包冲突时也会报错。
 
 构建复用 SDK 生成器与 `go build`，可执行文件写到 `<data_dir>/dev/bin/`，生成资源与薄入口通过 overlay 提供，作者目录中的源码和 module 文件保持原样。插件与 Agent 构建入口包；Adapter 工程导出 `New()` 并提供可导入的包，构建器为其生成调用 `sdk.RunAdapter(New())` 的薄入口。
 
@@ -80,7 +81,9 @@ bin/alonabot run ./examples/plugins/lifecycle --stdio
 
 源码或资源变化后重新构建，成功时只重启变化的组件；编译失败保留编译器诊断，旧组件继续运行。只改组件 `config.json` 时直接重启该组件，只改 Adapter 的一个实例配置时只重启该实例，二进制保持原样。不带 `--reload` 时构建并运行一次。
 
-目前，单独修改 Core 的 admins、命令前缀或缺省语言等设置后，需重启 Core 生效；Adapter 实例重启会同时刷新共享 Core 设置。WebUI 目录运行等待 WebUI 选项接通。
+`--reload` 也监视 `core_config.json` 的其他设置：`admins` 更新后立即改变 Core Admin 权限，命令前缀从共享设置读取当前值，`default_locale` 对之后建立的 Session 生效。这些修改保持组件进程与实例运行；同时修改设置与开发 Adapter 实例时，先刷新设置，再重启变化的实例。重新读取失败时记录错误并保留旧设置。库模式可调用 `Core.ReloadSettings(ctx)`，与其他管理操作串行刷新同一份设置。
+
+`role: webui` 的工程直接以 manifest 中 `assets` 指定的目录为静态根目录，覆盖已安装的 WebUI，等同于 `alonabot.WebUI(os.DirFS(<assets 目录>))`。一次运行只接受一个 WebUI 目录，重复时在启动任何组件前报错。开发 WebUI 按 D-140 跳过 Admin API 主版本检查；静态文件按请求读取，修改后立即可见，无需构建或重启，也无需 `--reload`。
 
 独立进程调试时将调试器附加到组件 PID；需要在同一进程调试 Core 和组件时使用下文库模式。
 
@@ -94,7 +97,7 @@ bin/alonabot run ./examples/plugins/lifecycle --stdio
 
 `(*settings.File).Update` 在未展开的文档上编辑，校验后以 0600 临时文件替换原文件，保留其他键的顺序与 `${...}` 写法，新键追加到所在对象末尾；写回使用两个空格缩进并以换行结束。`$version` 当前为 1，缺失时按 1 读取、下次写回时补上，高于 1 时拒绝读取。
 
-部署运行中，手改设置后重启 Core 生效；开发运行的实例配置可按上节热部署。`--listen`、`--log-level`、`--log-format` 只在命令行显式给出时覆盖设置，只对本次运行有效，文件内容保持不变：
+部署运行中，手改设置后重启 Core 生效；带 `--reload` 的运行按上节刷新设置与开发实例，监听地址等启动时装配的设置仍需重启 Core。`--listen`、`--log-level`、`--log-format` 只在命令行显式给出时覆盖设置，只对本次运行有效，文件内容保持不变：
 
 ```sh
 bin/alonabot run --data-dir ./data --listen 127.0.0.1:8080

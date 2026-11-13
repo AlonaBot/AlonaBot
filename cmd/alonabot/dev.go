@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"go/parser"
 	"go/token"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -26,6 +27,7 @@ import (
 
 type developmentProject struct {
 	dir     string
+	assets  string // WebUI 直接读取的静态根目录，无构建或进程。
 	build   pluginkit.Build
 	sources map[string]string
 	config  string
@@ -50,7 +52,11 @@ func runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval 
 		return err
 	}
 	for _, project := range projects {
-		options = append(options, alonabot.Executable(project.build.Executable, project.build.PackageManifest))
+		if project.assets != "" {
+			options = append(options, alonabot.WebUI(os.DirFS(project.assets)))
+		} else {
+			options = append(options, alonabot.Executable(project.build.Executable, project.build.PackageManifest))
+		}
 	}
 	if len(projects) > 0 {
 		dataDir, err = filepath.EvalSymlinks(dataDir)
@@ -95,6 +101,7 @@ func buildDevelopment(ctx context.Context, dirs []string, dataDir string) (proje
 	projects = make([]developmentProject, 0, len(dirs))
 	seen := make(map[string]bool)
 	ids := make(map[string]bool)
+	webUI := false
 	for _, dir := range dirs {
 		dir, err = filepath.Abs(dir)
 		if err != nil {
@@ -121,10 +128,21 @@ func buildDevelopment(ctx context.Context, dirs []string, dataDir string) (proje
 			return nil, fmt.Errorf("duplicate component ID %s", id)
 		}
 		ids[id] = true
-		projects = append(projects, developmentProject{dir: dir})
+		project := developmentProject{dir: dir}
+		if parsed.Manifest.Role == "webui" {
+			if webUI {
+				return nil, errors.New("only one development WebUI directory is allowed")
+			}
+			webUI = true
+			project.assets = filepath.Join(dir, filepath.FromSlash(parsed.Manifest.Assets))
+		}
+		projects = append(projects, project)
 	}
 	for i := range projects {
 		project := &projects[i]
+		if project.assets != "" {
+			continue
+		}
 		project.sources, err = developmentSources(project.dir, dataDir)
 		if err != nil {
 			return nil, err
@@ -152,9 +170,9 @@ func developmentConfig(dataDir, id string) (string, error) {
 func pollDevelopment(ctx context.Context, core *alonabot.Core, projects []developmentProject, dataDir string, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	instances, err := developmentInstances(dataDir)
+	settings, err := developmentSettings(dataDir, projects)
 	if err != nil {
-		slog.Error("read development instances", "error", err)
+		slog.Error("read development settings", "error", err)
 	}
 	for {
 		select {
@@ -164,6 +182,9 @@ func pollDevelopment(ctx context.Context, core *alonabot.Core, projects []develo
 		}
 		for i := range projects {
 			project := &projects[i]
+			if project.assets != "" {
+				continue
+			}
 			sources, err := developmentSources(project.dir, dataDir)
 			if err != nil {
 				slog.Error("scan development project", "plugin_id", project.build.ID, "error", err)
@@ -202,10 +223,17 @@ func pollDevelopment(ctx context.Context, core *alonabot.Core, projects []develo
 				}
 			}
 		}
-		next, err := developmentInstances(dataDir)
+		next, err := developmentSettings(dataDir, projects)
 		if err != nil {
-			slog.Error("read development instances", "error", err)
+			slog.Error("read development settings", "error", err)
 			continue
+		}
+		// Core 设置先发布，实例在同一轮重启时即可读取新的管理员、前缀与语言。
+		if next.core != settings.core {
+			if err := core.ReloadSettings(ctx); err != nil {
+				slog.Error("development settings reload failed", "error", err)
+				continue
+			}
 		}
 		for _, project := range projects {
 			id := project.build.AdapterID
@@ -213,53 +241,90 @@ func pollDevelopment(ctx context.Context, core *alonabot.Core, projects []develo
 				continue
 			}
 			keys := make(map[string]bool)
-			for instance := range instances[id] {
+			for instance := range settings.instances[id] {
 				keys[instance] = true
 			}
-			for instance := range next[id] {
+			for instance := range next.instances[id] {
 				keys[instance] = true
 			}
 			for instance := range keys {
-				if next[id][instance] != instances[id][instance] {
+				if next.instances[id][instance] != settings.instances[id][instance] {
 					if err := core.RestartInstance(ctx, id, instance); err != nil {
 						slog.Error("development instance restart failed", "adapter_id", id, "instance_id", instance, "error", err)
 					}
 				}
 			}
 		}
-		instances = next
+		settings = next
 	}
 }
 
-func developmentInstances(dataDir string) (map[string]map[string]string, error) {
+type developmentSettingsSnapshot struct {
+	instances map[string]map[string]string
+	core      string // 排除开发 Adapter 实例后的规范 JSON，其他设置变化只触发 ReloadSettings。
+}
+
+func developmentSettings(dataDir string, projects []developmentProject) (developmentSettingsSnapshot, error) {
+	result := developmentSettingsSnapshot{instances: make(map[string]map[string]string)}
 	raw, err := os.ReadFile(filepath.Join(dataDir, "core_config.json"))
 	if err != nil {
-		return nil, err
+		return result, err
 	}
-	var document struct {
-		Adapters map[string]struct{ Instances map[string]json.RawMessage }
+	var document map[string]any
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&document); err != nil {
+		return result, err
 	}
-	if err := json.Unmarshal(raw, &document); err != nil {
-		return nil, err
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			err = errors.New("unexpected value after core settings")
+		}
+		return result, err
 	}
-	result := make(map[string]map[string]string)
-	for id, group := range document.Adapters {
-		result[id] = make(map[string]string)
-		for instance, raw := range group.Instances {
-			var value any
-			decoder := json.NewDecoder(strings.NewReader(string(raw)))
-			decoder.UseNumber()
-			if err := decoder.Decode(&value); err != nil {
-				return nil, err
-			}
-			canonical, err := json.Marshal(value)
-			if err != nil {
-				return nil, err
-			}
-			result[id][instance] = string(canonical)
+	adapters := make(map[string]any)
+	if value, exists := document["adapters"]; exists {
+		var ok bool
+		adapters, ok = value.(map[string]any)
+		if !ok {
+			return result, errors.New("adapters must be an object")
 		}
 	}
-	return result, nil
+	for _, project := range projects {
+		id := project.build.AdapterID
+		if id == "" {
+			continue
+		}
+		value, exists := adapters[id]
+		if !exists {
+			continue
+		}
+		group, ok := value.(map[string]any)
+		if !ok {
+			return result, fmt.Errorf("adapters.%s must be an object", id)
+		}
+		value, exists = group["instances"]
+		if !exists {
+			continue
+		}
+		instances, ok := value.(map[string]any)
+		if !ok {
+			return result, fmt.Errorf("adapters.%s.instances must be an object", id)
+		}
+		result.instances[id] = make(map[string]string)
+		for instance, value := range instances {
+			canonical, err := json.Marshal(value)
+			if err != nil {
+				return result, err
+			}
+			result.instances[id][instance] = string(canonical)
+		}
+		delete(group, "instances")
+	}
+	canonical, err := json.Marshal(document)
+	result.core = string(canonical)
+	return result, err
 }
 
 // developmentSources 按工程目录保存输入原文；比较内容可识别同大小、同时间戳的替换。

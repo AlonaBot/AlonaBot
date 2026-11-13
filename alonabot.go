@@ -561,6 +561,29 @@ func (c *Core) Restart(ctx context.Context, id string) error {
 	})
 }
 
+// ReloadSettings 重新读取 core_config.json，更新 Core Admin；命令前缀立即读取新值，
+// default_locale 在之后建立的 Session 生效。与其他管理操作串行，组件保持运行。
+func (c *Core) ReloadSettings(ctx context.Context) error {
+	return c.operation(ctx, func(context.Context) error { return c.reloadSettings() })
+}
+
+func (c *Core) reloadSettings() error {
+	changed, err := c.assembly.settings.Reload()
+	if err != nil {
+		return err
+	}
+	for _, key := range changed {
+		if key == "admins" {
+			var admins []policy.Admin
+			for _, admin := range c.assembly.settings.Settings().Admins {
+				admins = append(admins, policy.Admin{AdapterID: admin.AdapterID, UserID: admin.UserID})
+			}
+			c.assembly.policy.SetAdmins(admins)
+		}
+	}
+	return nil
+}
+
 // RestartInstance 只重新准备并启动开发 Adapter 的指定实例。
 func (c *Core) RestartInstance(ctx context.Context, adapterID, instanceID string) error {
 	return c.operation(ctx, func(ctx context.Context) error {
@@ -568,14 +591,9 @@ func (c *Core) RestartInstance(ctx context.Context, adapterID, instanceID string
 			if entry.manifest.AdapterID != adapterID || entry.role != state.RoleAdapter {
 				continue
 			}
-			if _, err := c.assembly.settings.Reload(); err != nil {
+			if err := c.reloadSettings(); err != nil {
 				return err
 			}
-			var admins []policy.Admin
-			for _, admin := range c.assembly.settings.Settings().Admins {
-				admins = append(admins, policy.Admin{AdapterID: admin.AdapterID, UserID: admin.UserID})
-			}
-			c.assembly.policy.SetAdmins(admins)
 			for _, running := range c.components {
 				if running == nil || running.id != entry.manifest.ID || running.remote == nil {
 					continue
