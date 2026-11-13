@@ -27,7 +27,7 @@ func (o *Orchestrator) Commit(ctx context.Context, r *Result) (*supervisor.Runni
 }
 
 func (o *Orchestrator) commit(ctx context.Context, r *Result, committed *bool) (*supervisor.Running, error) {
-	// 1. 文件检查和同步先完成；提交回调只访问状态库元数据。
+	// 1. 程序包已在启动前持久化；此处检查引用并同步数据库，避免写打开运行中的程序。
 	current, err := o.opt.Store.GetJournal(ctx, r.OpID)
 	if err != nil {
 		return nil, err
@@ -36,9 +36,6 @@ func (o *Orchestrator) commit(ctx context.Context, r *Result, committed *bool) (
 		return nil, precondition("candidate journal is not prepared")
 	}
 	if _, err := os.Stat(filepath.Join(current.PackageDir, current.Entrypoint)); err != nil {
-		return nil, err
-	}
-	if err := persistPackage(current.PackageDir); err != nil {
 		return nil, err
 	}
 	if current.DatabasePath != "" {
