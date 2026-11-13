@@ -47,30 +47,34 @@ var ErrNotImplemented = &Error{Code: errcode.Unsupported, Message: "SDK runtime 
 
 // Context 只在一次 Handler 调用期间有效。
 type Context struct {
-	plugin        *Plugin
-	subID         string
-	ctx           context.Context // 本次调用的 context
-	propagationMu sync.Mutex      // 串行化 StopPropagation 与调用结束的传播快照。
-	stopped       bool            // 由 propagationMu 保护，只在有效调用内锁存。
-	active        atomic.Bool     // Handler 返回时关闭，阻止继续使用父调用
-	inbound       *wire.Inbound
-	caller        string     // Core 下发的服务直接调用方
-	actor         *pb.Actor  // Service 继承的可信 Actor；事件调用从 event 读取。
-	defaultTarget *pb.Target // Service 继承的可信默认目标；事件调用从 event 读取。
-	event         *pb.Event
-	eventOnce     sync.Once
-	publicEvent   *message.Event
-	match         []string               // 本次 Regex 的捕获组
-	autoReply     bool                   // 自动回复 Handler 通过返回 Content 发送
-	continuations *continuationFunctions // 所属 Session 的延续函数登记表。
-	continuation  bool
-	inHandler     bool       // Rule 执行完成后开放 Continue。
-	continueMu    sync.Mutex // 串行化一次性登记。
-	continued     bool
+	plugin          *Plugin
+	subID           string
+	ctx             context.Context // 本次调用的 context
+	propagationMu   sync.Mutex      // 串行化 StopPropagation 与调用结束的传播快照。
+	stopped         bool            // 由 propagationMu 保护，只在有效调用内锁存。
+	active          atomic.Bool     // Handler 返回时关闭，阻止继续使用父调用
+	inbound         *wire.Inbound
+	caller          string     // Core 下发的服务直接调用方
+	actor           *pb.Actor  // Service 继承的可信 Actor；事件调用从 event 读取。
+	defaultTarget   *pb.Target // Service 继承的可信默认目标；事件调用从 event 读取。
+	commandConsumed bool       // Core 下发的本条消息命令消费结果。
+	event           *pb.Event
+	eventOnce       sync.Once
+	publicEvent     *message.Event
+	match           []string               // 本次 Regex 的捕获组
+	autoReply       bool                   // 自动回复 Handler 通过返回 Content 发送
+	continuations   *continuationFunctions // 所属 Session 的延续函数登记表。
+	continuation    bool
+	inHandler       bool       // Rule 执行完成后开放 Continue。
+	continueMu      sync.Mutex // 串行化一次性登记。
+	continued       bool
 }
 
 // Context 返回本次调用的 context（含 deadline 与取消）。
 func (c *Context) Context() context.Context { return c.ctx }
+
+// CommandConsumed 返回 Core 命令层是否已消费本条消息。
+func (c *Context) CommandConsumed() bool { return c.commandConsumed }
 
 // Event 返回本次 Handler 接收的标准事件。
 func (c *Context) Event() *message.Event {

@@ -603,7 +603,7 @@ func TestScheduleAndHTTPLifecycle(t *testing.T) {
 		store, spec, logs := rawSpec(t, "schedule-http-late", false)
 		setDefaultLogger(t, slog.New(slog.NewTextHandler(logs, nil)))
 		spec.HTTP = httpproxy.New(nil)
-		spec.Scheduler = scheduler.New(scheduler.Options{JobTimeout: 250 * time.Millisecond})
+		spec.Scheduler = scheduler.New(scheduler.Options{JobTimeout: 250 * time.Millisecond, Store: store, TasksPerPlugin: tune.Defaults().TasksPerPlugin, TaskPayloadBytes: tune.Defaults().TaskPayloadBytes, TaskConcurrency: tune.Defaults().TaskConcurrency})
 		t.Cleanup(spec.Scheduler.Close)
 		spec.Limits.OnReady = lifecycleWait
 		activationGate := filepath.Join(t.TempDir(), "activate")
@@ -691,7 +691,7 @@ func TestScheduleAndHTTPLifecycle(t *testing.T) {
 		store, spec, logs := rawSpec(t, "schedule-http-drain", false)
 		setDefaultLogger(t, slog.New(slog.NewTextHandler(logs, nil)))
 		spec.HTTP = httpproxy.New(nil)
-		spec.Scheduler = scheduler.New(scheduler.Options{JobTimeout: time.Minute})
+		spec.Scheduler = scheduler.New(scheduler.Options{JobTimeout: time.Minute, Store: store, TasksPerPlugin: tune.Defaults().TasksPerPlugin, TaskPayloadBytes: tune.Defaults().TaskPayloadBytes, TaskConcurrency: tune.Defaults().TaskConcurrency})
 		t.Cleanup(spec.Scheduler.Close)
 		spec.Stop = host.StopTiming{Drain: 1500 * time.Millisecond, Total: 2500 * time.Millisecond, OnStopAt: time.Second}
 		running, err := Launch(context.Background(), store, spec)
@@ -774,7 +774,7 @@ func TestScheduleAndHTTPLifecycle(t *testing.T) {
 		store, spec, logs := rawSpec(t, "schedule-http-drain", false)
 		setDefaultLogger(t, slog.New(slog.NewTextHandler(logs, nil)))
 		spec.HTTP = httpproxy.New(nil)
-		spec.Scheduler = scheduler.New(scheduler.Options{JobTimeout: 250 * time.Millisecond})
+		spec.Scheduler = scheduler.New(scheduler.Options{JobTimeout: 250 * time.Millisecond, Store: store, TasksPerPlugin: tune.Defaults().TasksPerPlugin, TaskPayloadBytes: tune.Defaults().TaskPayloadBytes, TaskConcurrency: tune.Defaults().TaskConcurrency})
 		t.Cleanup(spec.Scheduler.Close)
 		old, err := Launch(context.Background(), store, spec)
 		if err != nil {
@@ -825,6 +825,10 @@ func TestScheduleAndHTTPLifecycle(t *testing.T) {
 		spec.ExtraEnv[faultEnv] = "schedule-http-live"
 		restartLogs := &logBuf{}
 		spec.Log = restartLogs
+		savedJobs, err := store.Jobs(context.Background(), "demo")
+		if err != nil || len(savedJobs) != 1 {
+			t.Fatalf("saved jobs before restart = %v, err = %v", savedJobs, err)
+		}
 		restartedAt := time.Now()
 		current, err := Launch(context.Background(), store, spec)
 		if err != nil {
@@ -859,8 +863,11 @@ func TestScheduleAndHTTPLifecycle(t *testing.T) {
 			stats := spec.Scheduler.Stats("demo", "probe")
 			return stats.Runs == beforeRestart.Runs+1 && !stats.Running && len(scheduledTicks(restartLogs)) == 1
 		})
-		if tick := scheduledTicks(restartLogs)[0][0]; tick < restartedAt.Add(scheduleInterval).UnixMilli() {
-			t.Fatalf("restart replayed an old tick: scheduled_at=%d", tick)
+		// 重启沿保存的起点取下一未来 tick；握手跨过的 tick 直接作废。
+		anchor := savedJobs[0].Anchor
+		next := anchor.Add((restartedAt.Sub(anchor)/scheduleInterval + 1) * scheduleInterval)
+		if tick := scheduledTicks(restartLogs)[0][0]; tick < next.UnixMilli() || (tick-anchor.UnixMilli())%scheduleInterval.Milliseconds() != 0 {
+			t.Fatalf("restart tick is off the saved schedule: scheduled_at=%d next_at=%d anchor=%s", tick, next.UnixMilli(), anchor)
 		}
 		if got := spec.Scheduler.Stats("demo", "probe"); got.TimedOut != beforeRestart.TimedOut || got.Late != beforeRestart.Late {
 			t.Fatalf("old execution affected the new Session: before=%+v after=%+v", beforeRestart, got)
@@ -872,7 +879,7 @@ func TestScheduleAndHTTPLifecycle(t *testing.T) {
 		store, spec, logs := rawSpec(t, "schedule-http-drain", false)
 		setDefaultLogger(t, slog.New(slog.NewTextHandler(logs, nil)))
 		spec.HTTP = httpproxy.New(nil)
-		spec.Scheduler = scheduler.New(scheduler.Options{JobTimeout: time.Minute})
+		spec.Scheduler = scheduler.New(scheduler.Options{JobTimeout: time.Minute, Store: store, TasksPerPlugin: tune.Defaults().TasksPerPlugin, TaskPayloadBytes: tune.Defaults().TaskPayloadBytes, TaskConcurrency: tune.Defaults().TaskConcurrency})
 		t.Cleanup(spec.Scheduler.Close)
 		spec.Stop = host.StopTiming{Drain: 1500 * time.Millisecond, Total: 2500 * time.Millisecond, OnStopAt: time.Second}
 		next := spec

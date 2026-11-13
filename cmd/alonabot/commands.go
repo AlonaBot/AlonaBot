@@ -23,23 +23,30 @@ func execute(args []string) int {
 	var inputs []string
 	var values tune.Values
 	root := &cobra.Command{Use: "alonabot", Short: "Run and configure AlonaBot Core", SilenceErrors: true, SilenceUsage: true}
-	root.Args = cobra.NoArgs
+	root.Args = cobra.ArbitraryArgs
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentFlags().StringArrayVar(&inputs, "args", nil, "tuning overrides (KEY=VALUE,... or a text file; repeatable)")
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		var err error
-		values, _, err = tune.Parse(inputs)
+		overrides := inputs
+		if env := os.Getenv("ALONABOT_ARGS"); env != "" {
+			overrides = append([]string{env}, overrides...)
+		}
+		values, _, err = tune.Parse(overrides)
 		return err
 	}
 	var dataDir, format, listen string
+	var reload, stdio bool
 	level := slog.LevelInfo
-	runCommand := &cobra.Command{Use: "run", Short: "Run AlonaBot Core", Args: cobra.NoArgs}
+	runCommand := &cobra.Command{Use: "run [directories...]", Short: "Build development components and run AlonaBot Core", Args: cobra.ArbitraryArgs}
 	for _, command := range []*cobra.Command{root, runCommand} {
 		flags := command.Flags()
 		flags.StringVar(&dataDir, "data-dir", "data", "Core data directory (only one Core per directory)")
 		flags.StringVar(&listen, "listen", "", "Core HTTP listen address (overrides settings for this run)")
 		flags.TextVar(&level, "log-level", slog.LevelInfo, "global log level: debug, info, warn or error")
 		flags.StringVar(&format, "log-format", string(logging.FormatText), "stderr log format: text or json")
+		flags.BoolVar(&reload, "reload", false, "rebuild and restart changed development components")
+		flags.BoolVar(&stdio, "stdio", false, "use stdio for development component sessions")
 	}
 	runCommand.RunE = func(cmd *cobra.Command, args []string) error {
 		flags := cmd.Flags()
@@ -59,7 +66,7 @@ func execute(args []string) int {
 			options = append(options, alonabot.LogFormat(format))
 		}
 		code = exitFailure
-		if err := alonabot.Run(options...); err != nil {
+		if err := runDevelopment(args, dataDir, reload, stdio, values.DevReloadPoll, options); err != nil {
 			var detail *validate.Error
 			if errors.As(err, &detail) && detail.Code == pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT {
 				code = exitUsage

@@ -36,6 +36,9 @@ type Values struct {
 	StopOnStop            time.Duration
 	RestartWindow         time.Duration
 	RestartMaxCrashes     int
+	TasksPerPlugin        int
+	TaskPayloadBytes      int64 // 字节
+	TaskConcurrency       int
 	JobTimeout            time.Duration
 	ButtonTokenTTL        time.Duration
 	ToolConfirmTimeout    time.Duration
@@ -116,6 +119,9 @@ var parameters = []parameter{
 	param("RESTART_WINDOW", durationUnit, time.Duration(5*time.Minute), true, "> 0", "§4.2", func(v *Values) *time.Duration { return &v.RestartWindow }),
 	param("RESTART_MAX_CRASHES", integerUnit, int(3), true, ">= 1", "§4.2", func(v *Values) *int { return &v.RestartMaxCrashes }),
 	param("JOB_TIMEOUT", durationUnit, time.Duration(15*time.Minute), true, "> 0", "§4.3", func(v *Values) *time.Duration { return &v.JobTimeout }),
+	param("TASKS_PER_PLUGIN", integerUnit, int(10000), true, ">= 1", "§4.3", func(v *Values) *int { return &v.TasksPerPlugin }),
+	param("TASK_PAYLOAD_BYTES", bytesUnit, int64(64<<10), true, "1..4MiB", "§4.3", func(v *Values) *int64 { return &v.TaskPayloadBytes }),
+	param("TASK_CONCURRENCY", integerUnit, int(16), true, "1..SESSION_MAX_INFLIGHT", "§4.3", func(v *Values) *int { return &v.TaskConcurrency }),
 	param("BUTTON_TOKEN_TTL", durationUnit, time.Duration(24*time.Hour), true, "> 0", "MESSAGE-MODEL §6.3", func(v *Values) *time.Duration { return &v.ButtonTokenTTL }),
 	param("TOOL_CONFIRM_TIMEOUT", durationUnit, time.Duration(5*time.Minute), true, "> 0", "§13.2", func(v *Values) *time.Duration { return &v.ToolConfirmTimeout }),
 	param("LOG_BUFFER_RECORDS", integerUnit, int(1000), true, ">= 1", "§14.4", func(v *Values) *int { return &v.LogBufferRecords }),

@@ -56,7 +56,12 @@ func (p *Prepared) activate(ctx context.Context, commit func(context.Context) er
 		spec.HTTP.Bind(spec.PluginID, in.GenerationID, in.HTTPListener, in.HTTPProxyToken, in.Routes, spec.Role == state.RoleAdapter)
 	}
 	if spec.Scheduler != nil {
-		spec.Scheduler.Attach(router.FromInstance(in), activatedAt)
+		if err := spec.Scheduler.Attach(ctx, router.FromInstance(in), activatedAt); err != nil {
+			if spec.HTTP != nil && in.HTTPListener != nil {
+				spec.HTTP.Unbind(spec.PluginID, in.GenerationID, in.HTTPProxyToken)
+			}
+			return nil, errors.Join(err, in.Session.Close(), p.close())
+		}
 	}
 	if spec.CommandsChanged != nil {
 		spec.CommandsChanged()

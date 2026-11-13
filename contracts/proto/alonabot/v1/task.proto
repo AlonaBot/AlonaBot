@@ -1,0 +1,54 @@
+// 动态任务与静态调度管理载荷（CONTRACTS §4.3、WIRE §3.5）。
+syntax = "proto3";
+package alonabot.v1;
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
+
+// TaskTrigger 声明恰好一种触发规则；timezone 仅适用于 cron。
+message TaskTrigger {
+  oneof trigger {
+    int64 at_unix_ms = 1;
+    uint64 interval_ms = 2;
+    string cron = 3;
+  }
+  string timezone = 4;
+}
+// TaskSetRequest 整体创建或替换同名同 key 的实例。
+message TaskSetRequest {
+  string task_name = 1;
+  string key = 2;
+  TaskTrigger trigger = 3;
+  string payload_json = 4;
+}
+// TaskSetResponse 返回下一触发时刻。
+message TaskSetResponse { int64 next_at_unix_ms = 1; }
+// TaskCancelRequest 删除实例并取消其在途调用。
+message TaskCancelRequest { string task_name = 1; string key = 2; }
+// TaskCancelResponse 确认取消成功。
+message TaskCancelResponse {}
+// TaskListRequest 按 key 字典序从 after_key 之后读取。
+message TaskListRequest { string task_name = 1; optional string after_key = 2; }
+// TaskInstance 保留完整规则与原样参数；next_at 缺失表示没有已安排的触发。
+message TaskInstance {
+  string key = 1;
+  TaskTrigger trigger = 2;
+  string payload_json = 3;
+  optional int64 next_at_unix_ms = 4;
+}
+// TaskListResponse 仅在还有后续条目时设置 next_after_key。
+message TaskListResponse { repeated TaskInstance instances = 1; optional string next_after_key = 2; }
+// JobPauseRequest 暂停已注册的静态任务。
+message JobPauseRequest { string job_id = 1; }
+// JobPauseResponse 确认暂停成功。
+message JobPauseResponse {}
+// JobResumeRequest 恢复已注册的静态任务。
+message JobResumeRequest { string job_id = 1; }
+// JobResumeResponse 确认恢复成功。
+message JobResumeResponse {}
+// JobStatusRequest 查询已注册的静态任务。
+message JobStatusRequest { string job_id = 1; }
+// JobStatusResponse 的 last_at 只记录本次 Core 运行的实际派发，暂停时 next_at 缺失。
+message JobStatusResponse {
+  bool paused = 1;
+  optional int64 last_at_unix_ms = 2;
+  optional int64 next_at_unix_ms = 3;
+}

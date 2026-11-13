@@ -136,8 +136,10 @@ type InvocationContext struct {
 	PluginChain []string `protobuf:"bytes,4,rep,name=plugin_chain,json=pluginChain,proto3" json:"plugin_chain,omitempty"`
 	// 出站 Hook 及其派生子调用为 true，再次 Send 返回 FAILED_PRECONDITION。
 	SendForbidden bool `protobuf:"varint,5,opt,name=send_forbidden,json=sendForbidden,proto3" json:"send_forbidden,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Core 命令层已消费本条消息；只由 Core 设置，事件路由据此过滤命令。
+	CommandConsumed bool `protobuf:"varint,6,opt,name=command_consumed,json=commandConsumed,proto3" json:"command_consumed,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *InvocationContext) Reset() {
@@ -201,6 +203,13 @@ func (x *InvocationContext) GetPluginChain() []string {
 func (x *InvocationContext) GetSendForbidden() bool {
 	if x != nil {
 		return x.SendForbidden
+	}
+	return false
+}
+
+func (x *InvocationContext) GetCommandConsumed() bool {
+	if x != nil {
+		return x.CommandConsumed
 	}
 	return false
 }
@@ -1268,13 +1277,14 @@ var File_alonabot_v1_invocation_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_invocation_proto_rawDesc = "" +
 	"\n" +
-	"\x1calonabot/v1/invocation.proto\x12\valonabot.v1\x1a\x1aalonabot/v1/envelope.proto\x1a\x18alonabot/v1/errors.proto\x1a\x1aalonabot/v1/identity.proto\x1a\x19alonabot/v1/message.proto\"\xdb\x01\n" +
+	"\x1calonabot/v1/invocation.proto\x12\valonabot.v1\x1a\x1aalonabot/v1/envelope.proto\x1a\x18alonabot/v1/errors.proto\x1a\x1aalonabot/v1/identity.proto\x1a\x19alonabot/v1/message.proto\"\x86\x02\n" +
 	"\x11InvocationContext\x12(\n" +
 	"\x05actor\x18\x01 \x01(\v2\x12.alonabot.v1.ActorR\x05actor\x12:\n" +
 	"\x0edefault_target\x18\x02 \x01(\v2\x13.alonabot.v1.TargetR\rdefaultTarget\x12\x16\n" +
 	"\x06scopes\x18\x03 \x03(\tR\x06scopes\x12!\n" +
 	"\fplugin_chain\x18\x04 \x03(\tR\vpluginChain\x12%\n" +
-	"\x0esend_forbidden\x18\x05 \x01(\bR\rsendForbidden\"\x8b\x02\n" +
+	"\x0esend_forbidden\x18\x05 \x01(\bR\rsendForbidden\x12)\n" +
+	"\x10command_consumed\x18\x06 \x01(\bR\x0fcommandConsumed\"\x8b\x02\n" +
 	"\x0eHandlerRequest\x12\x19\n" +
 	"\broute_id\x18\x01 \x01(\tR\arouteId\x128\n" +
 	"\acontext\x18\x02 \x01(\v2\x1e.alonabot.v1.InvocationContextR\acontext\x12(\n" +
