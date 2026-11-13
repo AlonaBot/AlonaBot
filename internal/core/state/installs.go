@@ -90,7 +90,16 @@ func cleanupObjects(db *gorm.DB, id string, all bool) ([]cleanupObject, error) {
 	if err := db.Where(owned).Find(&generations).Error; err != nil {
 		return nil, err
 	}
-	objects := []cleanupObject{{&ButtonToken{}, owned}, {&conversationEntry{}, owned}, {&adapterCursor{}, owned}, {&dynamicTask{}, owned}, {&scheduledJob{}, owned}}
+	var journals []journalRecord
+	if err := db.Where(owned).Find(&journals).Error; err != nil {
+		return nil, err
+	}
+	for _, record := range journals {
+		if record.Phase != "cleaned" && record.Phase != "committed" {
+			return nil, journalPrecondition("candidate operation " + record.OpID + " requires recovery before purge")
+		}
+	}
+	objects := []cleanupObject{{&journalRecord{}, owned}, {&ButtonToken{}, owned}, {&conversationEntry{}, owned}, {&adapterCursor{}, owned}, {&dynamicTask{}, owned}, {&scheduledJob{}, owned}}
 	var installed installation
 	if err := db.Where(owned).Take(&installed).Error; err != nil {
 		return nil, err
