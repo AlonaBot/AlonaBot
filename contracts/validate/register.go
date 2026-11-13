@@ -31,6 +31,13 @@ const maxToolDescriptionBytes = 1024
 
 const scheduleRoutePrefix = "job."
 
+const (
+	// OptionsQuerySchemaID 固定 SDK 选项查询输入的类型标识，版本为 1。
+	OptionsQuerySchemaID = "github.com/AlonaBot/AlonaBot/sdk.OptionsQuery"
+	// OptionsPageSchemaID 固定 SDK 选项查询输出的类型标识，版本为 1。
+	OptionsPageSchemaID = "github.com/AlonaBot/AlonaBot/sdk.OptionsPage"
+)
+
 // routeKindOf 给出 RouteDescriptor 的 spec 分支对应的 kind。
 func routeKindOf(r *pb.RouteDescriptor) pb.RouteKind {
 	switch r.GetSpec().(type) {
@@ -141,6 +148,20 @@ func register(r *pb.Register, isAdapter bool) error {
 		case pb.RouteKind_ROUTE_KIND_SCHEDULE:
 			if err := registerSchedule(route); err != nil {
 				return err
+			}
+		case pb.RouteKind_ROUTE_KIND_HOOK:
+			filters := route.GetHook().GetEventTypeFilter()
+			switch route.GetHook().GetPhase() {
+			case pb.HookPhase_HOOK_PHASE_PRE_EVENT:
+				if len(filters) != 1 || (!IsEventType(filters[0]) && !IsAdapterEventType(filters[0])) {
+					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "pre-event hook route %q requires exactly one valid event_type_filter", route.GetRouteId())
+				}
+			case pb.HookPhase_HOOK_PHASE_BEFORE_SEND, pb.HookPhase_HOOK_PHASE_AFTER_SEND:
+				if len(filters) != 0 {
+					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "outbound hook route %q must not contain event_type_filter", route.GetRouteId())
+				}
+			default:
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "hook route %q has an invalid phase", route.GetRouteId())
 			}
 		case pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION:
 			subscription := route.GetBusSubscription()
@@ -343,7 +364,10 @@ func registerHTTPRoute(routes map[[2]string]string, route *pb.RouteDescriptor, i
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "HTTP route %q has invalid path %q", route.GetRouteId(), rawPath)
 	}
 	if spec.GetIsPublic() {
-		if spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_STATE && spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_SIGNATURE && !(isAdapter && spec.GetAuthMode() == pb.HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN) {
+		switch mode := spec.GetAuthMode(); {
+		case mode == pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_STATE, mode == pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_SIGNATURE, mode == pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_NONCE:
+		case isAdapter && mode == pb.HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN:
+		default:
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "public HTTP route %q must declare callback verification", route.GetRouteId())
 		}
 	} else if spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CORE_SESSION {
@@ -360,6 +384,15 @@ func registerHTTPRoute(routes map[[2]string]string, route *pb.RouteDescriptor, i
 func registerService(route *pb.RouteDescriptor) error {
 	service := route.GetService()
 	name := service.GetServiceName()
+	if service.GetOptionsSource() {
+		if service.GetEncoding() != pb.PayloadEncoding_PAYLOAD_ENCODING_JSON ||
+			route.GetInputSchemaId() != OptionsQuerySchemaID || route.GetInputSchemaVersion() != 1 ||
+			route.GetOutputSchemaId() != OptionsPageSchemaID || route.GetOutputSchemaVersion() != 1 ||
+			service.GetAccess() != pb.ServiceAccess_SERVICE_ACCESS_PRIVATE ||
+			len(service.GetAllowlistPluginIds()) != 0 || service.GetTool() != nil {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q has invalid options source declaration", name)
+		}
+	}
 	if !IsServiceName(name) || route.GetRouteId() != "svc."+name {
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service route %q has invalid name or route_id", route.GetRouteId())
 	}

@@ -28,11 +28,13 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/config"
 	"github.com/AlonaBot/AlonaBot/internal/core/continuation"
 	"github.com/AlonaBot/AlonaBot/internal/core/conversation"
+	"github.com/AlonaBot/AlonaBot/internal/core/hook"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/media"
 	"github.com/AlonaBot/AlonaBot/internal/core/message"
+	coreoptions "github.com/AlonaBot/AlonaBot/internal/core/options"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/process"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
@@ -153,11 +155,21 @@ type assembly struct {
 	global     *wire.Budget
 	store      *state.Store
 	policy     *policy.Policy
-	components sync.Map // 运行状态查询只借用已激活的 host.Instance，退出时按同一指针撤销。
+	components sync.Map // 运行状态查询借用已激活的 host.Instance，退出时按同一指针撤销。
+	options    *coreoptions.Service
+	settings   *settings.File
+	schemaMu   sync.RWMutex // 保护按 Session 发布的只读选项声明。
+	schemas    map[string]componentOptionSchemas
+}
+
+type componentOptionSchemas struct {
+	session string
+	config  *configschema.Schema
+	adapter *configschema.Schema
 }
 
 func assemble(store *state.Store, dir string, v tune.Values, file *settings.File) (*assembly, error) {
-	a := &assembly{store: store, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload)}
+	a := &assembly{store: store, settings: file, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload)}
 	var err error
 	a.media, err = media.Open(filepath.Join(dir, "media"), media.NewLimits(v), time.Now)
 	if err != nil {
@@ -166,11 +178,14 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 	p := policy.New(store)
 	a.policy = p
 	var admins []policy.Admin
-	for _, admin := range file.Settings().Admins {
+	for _, admin := range a.settings.Settings().Admins {
 		admins = append(admins, policy.Admin{AdapterID: admin.AdapterID, UserID: admin.UserID})
 	}
 	p.SetAdmins(admins)
-	a.adapters.SetDefaults(file.Settings().DefaultInstances())
+	a.adapters.SetDefaults(a.settings.Settings().DefaultInstances())
+	if err := p.LoadCommandNames(context.Background()); err != nil {
+		return nil, fmt.Errorf("load command names: %w", err)
+	}
 	a.buttons = buttons.New(store, time.Now, v.ButtonTokenTTL, func(id string) (string, []*pb.RouteDescriptor, bool) {
 		plugin, ok := a.router.Plugin(id)
 		if !ok || !plugin.Activated() {
@@ -179,7 +194,9 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 		caller, ok := a.router.Caller(id)
 		return caller.GenerationID, plugin.Routes(), ok
 	})
-	messages := message.New(a.adapters, p, a.media.LeaseForSend, a.buttons.Issue, v.RequestTimeout)
+	// Router、Hook Runner 与消息服务互相引用：Router 先建，Send 与 PreEvent 在调用时才读取之后赋值的变量。
+	var messages *message.Service
+	var hooks *hook.Runner
 	// 延续调用的 Manager 先于 Router 创建，回调在调用时才读取 a.router。
 	continuations := continuation.New(continuation.Options{Max: v.ContinuationMax, Timeout: v.ContinuationTimeout, Prepare: a.media.PrepareIncoming,
 		Caller: func(id string) (router.Caller, bool) { return a.router.Caller(id) },
@@ -187,8 +204,16 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 			return a.router.CallContinuation(ctx, inv, parent, deadline)
 		}})
 	a.router = router.New(router.Options{Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
-		Global: a.global, Adapters: a.adapters, Send: messages.Send, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: file.CommandPrefixes,
-		Continuations: continuations})
+		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: a.settings.CommandPrefixes, CommandNames: p.CommandNames,
+		Continuations: continuations,
+		Send: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
+			return messages.Send(ctx, c, in)
+		},
+		PreEvent: func(ctx context.Context, ev *pb.Event) (*pb.EventPayload, bool, error) {
+			return hooks.PreEvent(ctx, ev)
+		}})
+	hooks = hook.New(a.router, hook.Options{Prepare: a.media.PrepareIncoming, CheckEvent: a.checkAdapterEvent})
+	messages = message.New(a.adapters, p, a.media.LeaseForSend, a.buttons.Issue, v.RequestTimeout, hooks)
 	p.SetCommandsChanged(a.router.CommandsChanged)
 	continuations.Register(a.mux)
 	a.mux.Handle(wire.ServiceSend, messages.Send)
@@ -201,9 +226,74 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 	tool.New(store, a.router).Register(a.mux)
 	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes})
 	a.bus.Register(a.mux)
-	a.mux.Forward(broker.New(a.router, v.RequestTimeout).Call)
+	serviceBroker := broker.New(a.router, v.RequestTimeout)
+	a.mux.Forward(serviceBroker.Call)
+	a.schemas = make(map[string]componentOptionSchemas)
+	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: serviceBroker, Page: v.OptionsPage, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
+		installed, err := store.Installs(ctx)
+		if err != nil {
+			return nil, err
+		}
+		owners := make(map[string]string)
+		for _, in := range installed {
+			if in.Role == state.RoleAdapter && !in.Uninstalled {
+				owners[in.AdapterID] = in.PluginID
+			}
+		}
+		var instances []coreoptions.AdapterInstance
+		for adapterID, configured := range a.settings.Settings().Adapters {
+			owner := owners[adapterID]
+			if owner == "" || configured.Package != "" && configured.Package != owner {
+				continue
+			}
+			for instanceID := range configured.Instances {
+				instances = append(instances, coreoptions.AdapterInstance{InstanceID: instanceID, AdapterID: adapterID})
+			}
+		}
+		return instances, nil
+	}})
 	a.scheduler = scheduler.New(scheduler.Options{JobTimeout: v.JobTimeout})
 	return a, nil
+}
+
+func (a *assembly) optionSchema(componentID string, kind coreoptions.SchemaKind) (*configschema.Schema, bool) {
+	caller, active := a.router.Caller(componentID)
+	if !active {
+		return nil, false
+	}
+	a.schemaMu.RLock()
+	defer a.schemaMu.RUnlock()
+	current := a.schemas[componentID]
+	if current.session != caller.SessionKey {
+		return nil, false
+	}
+	var schema *configschema.Schema
+	switch kind {
+	case coreoptions.ConfigSchema:
+		schema = current.config
+	case coreoptions.AdapterInstanceSchema:
+		schema = current.adapter
+	}
+	return schema, schema != nil
+}
+
+func optionSchemas(resources sdk.Generated) (componentOptionSchemas, error) {
+	var result componentOptionSchemas
+	for _, entry := range []struct {
+		name   string
+		raw    []byte
+		schema **configschema.Schema
+	}{{"config_schema.json", resources.ConfigSchema, &result.config}, {"adapter_config_schema.json", resources.AdapterConfigSchema, &result.adapter}} {
+		if len(entry.raw) == 0 {
+			continue
+		}
+		schema, problems := configschema.Parse(entry.raw)
+		if len(problems) != 0 {
+			return result, fmt.Errorf("%s: %v", entry.name, problems)
+		}
+		*entry.schema = schema
+	}
+	return result, nil
 }
 
 // runningComponent 保存一次外部进程或同进程 Session，退出观察者结束后才由 Core 替换。
@@ -218,6 +308,7 @@ type runningComponent struct {
 	conn     *wire.Conn
 	finished chan struct{} // SDK goroutine 返回后关闭，并发布 runErr。
 	runErr   error
+	schemas  componentOptionSchemas
 }
 
 func (r *runningComponent) exited() <-chan struct{} {
@@ -272,6 +363,10 @@ func (a *assembly) handler(r *runningComponent, install state.Install) wire.Hand
 func (a *assembly) attach(ctx context.Context, r *runningComponent) error {
 	a.components.Store(r.id, r.instance)
 	plugin := router.FromInstance(r.instance)
+	r.schemas.session = r.caller.SessionKey
+	a.schemaMu.Lock()
+	a.schemas[r.id] = r.schemas
+	a.schemaMu.Unlock()
 	a.router.Attach(plugin, r.caller)
 	a.bus.Attach(plugin)
 	if r.process == nil {
@@ -288,6 +383,69 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) error {
 
 func (c *Core) startDevelopment(ctx context.Context, dir string, entry *component) error {
 	id := entry.manifest.ID
+	const configFile = "config.json"
+	const databaseFile = "dev.sqlite"
+	// 1. 每次启动读取原配置，SDK 随后按首装顺序准备；文件内容保持原样。
+	pluginDir := filepath.Join(dir, "plugins", id)
+	configPath := filepath.Join(pluginDir, configFile)
+	configJSON, err := os.ReadFile(configPath)
+	if errors.Is(err, os.ErrNotExist) {
+		configJSON = []byte(emptyConfig)
+	} else if err != nil {
+		return fmt.Errorf("read %s: %w", configPath, err)
+	}
+	if !validate.IsJSONObject(configJSON) {
+		return fmt.Errorf("config %s must be a JSON object", configPath)
+	}
+	version := uint32(initialConfigVersion)
+	var secretPaths []string
+	if len(entry.resources.ConfigSchema) != 0 {
+		schema, problems := configschema.Parse(entry.resources.ConfigSchema)
+		if len(problems) != 0 {
+			return fmt.Errorf("component %s config schema: %v", id, problems)
+		}
+		version = uint32(schema.Version())
+		for _, path := range schema.SecretPaths() {
+			secretPaths = append(secretPaths, strings.Join(path, "."))
+		}
+	}
+	generation := devGenerationPrefix + id
+	boot := bootstrap(generation, version)
+	boot.CandidateConfigJson = string(configJSON)
+	if entry.role != state.RoleAdapter {
+		path := filepath.Join(pluginDir, databaseFile)
+		reason := pb.ActivationReason_ACTIVATION_REASON_RESUME
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			reason = pb.ActivationReason_ACTIVATION_REASON_FIRST_INSTALL
+		} else if err != nil {
+			return fmt.Errorf("stat %s: %w", path, err)
+		}
+		boot.DatabaseDescriptor = &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_SQLITE,
+			SqlitePath: path, ActivationReason: reason, MigrationMode: pb.MigrationMode_MIGRATION_MODE_UNSPECIFIED}
+	}
+	current := c.assembly.settings.Settings()
+	level := slog.LevelDebug
+	if explicit, ok := current.LogSources[id]; ok {
+		switch explicit {
+		case "off":
+			level = logging.LevelOff
+		case "inherit":
+			level = current.LogLevel
+		default:
+			if err := level.UnmarshalText([]byte(explicit)); err != nil {
+				return err
+			}
+		}
+	}
+	boot.LogLevel = logging.ProtoLevel(level)
+	c.output.Levels().SetSource(id, level)
+
+	schemas, err := optionSchemas(entry.resources)
+	if err != nil {
+		return fmt.Errorf("component %s options schema: %w", id, err)
+	}
+
+	// 2. 保留固定代次与已有安装身份，本次启动只刷新构建摘要。
 	digest := make([]byte, launchRandomBytes)
 	rand.Read(digest)
 	install, err := c.store.GetInstall(ctx, id)
@@ -300,7 +458,6 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	if err != nil {
 		return err
 	}
-	generation := devGenerationPrefix + id
 	active, err := c.store.Active(ctx, id)
 	if err != nil {
 		return err
@@ -313,21 +470,21 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 		return err
 	}
 	if _, exists := snapshots[generation]; !exists {
-		if err := c.store.AddGeneration(ctx, id, generation, emptyConfig, initialConfigVersion); err != nil {
+		if err := c.store.AddGeneration(ctx, id, generation, emptyConfig, version); err != nil {
 			return err
 		}
 	}
-	pluginDir := filepath.Join(dir, "plugins", id)
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		return err
 	}
+	// 3. 走共用的握手、准备与激活流程。
 	listener, err := wire.ListenLoopback()
 	if err != nil {
 		return err
 	}
-	running := &runningComponent{id: id, install: install, caller: router.NewCaller(id, generation), listener: listener, finished: make(chan struct{})}
+	running := &runningComponent{id: id, install: install, caller: router.NewCaller(id, generation), listener: listener, finished: make(chan struct{}), schemas: schemas}
 	c.components = append(c.components, running)
-	l := &inproc.Launch{PluginID: id, Secret: make([]byte, launchRandomBytes), Addr: listener.Addr().String(), BuildDigest: digest, RuntimeLockPath: filepath.Join(pluginDir, wire.RuntimeLockFile)}
+	l := &inproc.Launch{PluginID: id, Secret: make([]byte, launchRandomBytes), Addr: listener.Addr().String(), BuildDigest: digest, RuntimeLockPath: filepath.Join(pluginDir, wire.RuntimeLockFile), Log: c.output.Component(id, generation)}
 	rand.Read(l.Secret)
 	go func() {
 		if entry.role == state.RoleAdapter {
@@ -349,8 +506,7 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	}
 	running.conn = wire.NewStreamConn(conn)
 	limits := host.NewLimits(c.values)
-	boot := bootstrap(generation, initialConfigVersion)
-	boot.DefaultLocale = c.settings.Settings().DefaultLocale
+	boot.DefaultLocale = current.DefaultLocale
 	messages, problems := i18n.Parse(entry.resources.I18n)
 	if len(problems) != 0 {
 		return fmt.Errorf("component %s messages: %v", id, problems)
@@ -358,6 +514,9 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	prep, err := host.Prepare(ctx, running.conn, host.Expect{Role: entry.role, AdapterID: entry.manifest.AdapterID, PluginID: id, Secret: l.Secret, BuildDigest: digest,
 		Offer: validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}}, boot, limits)
 	if err != nil {
+		return err
+	}
+	if err := c.store.SetDevGenerationConfig(ctx, generation, string(prep.ConfigSnapshot), prep.Register.GetCandidateConfigVersion(), secretPaths); err != nil {
 		return err
 	}
 	activation := host.ActivateOptions{PluginID: id, GenerationID: generation, Handler: c.assembly.handler(running, install), Global: c.assembly.global, Limits: limits, Messages: messages}
@@ -385,6 +544,9 @@ func bootstrap(generation string, version uint32) *pb.Bootstrap {
 func (a *assembly) detach(r *runningComponent) {
 	a.components.CompareAndDelete(r.id, r.instance)
 	a.router.Detach(r.id)
+	a.schemaMu.Lock()
+	delete(a.schemas, r.id)
+	a.schemaMu.Unlock()
 	a.bus.Detach(r.id)
 	a.scheduler.Detach(r.id)
 	if r.instance != nil {
@@ -474,6 +636,10 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	if err != nil {
 		return nil, err
 	}
+	schemas, err := optionSchemas(resources)
+	if err != nil {
+		return nil, err
+	}
 	pluginDir := filepath.Join(dir, "plugins", install.PluginID)
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		return nil, err
@@ -498,7 +664,7 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 			return nil, err
 		}
 	}
-	running := &runningComponent{id: install.PluginID, install: install, caller: router.NewCaller(install.PluginID, generation)}
+	running := &runningComponent{id: install.PluginID, install: install, caller: router.NewCaller(install.PluginID, generation), schemas: schemas}
 	boot := bootstrap(generation, *m.ConfigVersion)
 	boot.LogLevel = logging.ProtoLevel(c.output.Levels().Source(install.PluginID))
 	boot.DatabaseDescriptor.ActivationReason = pb.ActivationReason_ACTIVATION_REASON_RESUME
@@ -518,7 +684,7 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	running.process, err = supervisor.Launch(ctx, c.store, supervisor.Spec{Role: install.Role, AdapterID: install.AdapterID, PluginID: install.PluginID, PluginDir: pluginDir,
 		Executable: executable, BuildDigest: install.BuildDigest, GenerationID: generation, Bootstrap: boot, ConfigSchema: resources.ConfigSchema, I18n: resources.I18n,
 		NewCandidate:  isNew,
-		DefaultLocale: c.settings.Settings().DefaultLocale, Handler: c.assembly.handler(running, install), Global: c.assembly.global, Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values),
+		DefaultLocale: c.assembly.settings.Settings().DefaultLocale, Handler: c.assembly.handler(running, install), Global: c.assembly.global, Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values),
 		Log: c.output.Plugin(install.PluginID, generation), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment})
 	if err != nil {
 		return nil, err
@@ -633,7 +799,7 @@ func (c *Core) startInstances(ctx context.Context, running *runningComponent, ra
 	}
 	unlock := c.store.LockPlugin(running.id)
 	defer unlock()
-	owned, err := c.settings.BindAdapter(running.install.AdapterID, running.id)
+	owned, err := c.assembly.settings.BindAdapter(running.install.AdapterID, running.id)
 	if err != nil || !owned {
 		return err
 	}
@@ -641,14 +807,14 @@ func (c *Core) startInstances(ctx context.Context, running *runningComponent, ra
 	if len(problems) != 0 {
 		return fmt.Errorf("adapter instance schema: %v", problems)
 	}
-	instances, diagnostics, err := c.settings.PrepareInstances(running.install.AdapterID, schema)
+	instances, diagnostics, err := c.assembly.settings.PrepareInstances(running.install.AdapterID, schema)
 	if err != nil {
 		return err
 	}
 	for _, problem := range diagnostics {
 		slog.Warn("adapter instance configuration failed", "plugin_id", running.id, "instance_id", problem.InstanceID, "path", problem.Path, "reason", problem.Reason)
 	}
-	c.assembly.adapters.SetDefaults(c.settings.Settings().DefaultInstances())
+	c.assembly.adapters.SetDefaults(c.assembly.settings.Settings().DefaultInstances())
 	for id, configuration := range instances {
 		if c.stoppedInstances[[2]string{running.id, id}] {
 			continue
@@ -672,6 +838,16 @@ func packageResources(dir string) (sdk.Generated, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return g, err
 	}
+	raw, err = os.ReadFile(filepath.Join(dir, "adapter_config_schema.json"))
+	if err == nil {
+		schema, problems := configschema.Parse(raw)
+		if len(problems) != 0 {
+			return g, fmt.Errorf("installed adapter instance schema: %v", problems)
+		}
+		g.AdapterConfigSchema = schema.Canonical()
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return g, err
+	}
 	files, err := os.ReadDir(filepath.Join(dir, "i18n"))
 	if errors.Is(err, os.ErrNotExist) {
 		return g, nil
@@ -690,4 +866,17 @@ func packageResources(dir string) (sdk.Generated, error) {
 		g.I18n[file.Name()] = raw
 	}
 	return g, nil
+}
+
+// checkAdapterEvent 按事件所属实例当前 Session 的 Adapter 声明复检 PreEvent 改写后的扩展事件。
+func (a *assembly) checkAdapterEvent(ev *pb.Event) error {
+	instance, ok := a.adapters.Get(ev.GetAdapterInstanceId())
+	if !ok {
+		return fmt.Errorf("adapter instance %q is unavailable", ev.GetAdapterInstanceId())
+	}
+	checker, ok := instance.(interface{ CheckEvent(*pb.Event) error })
+	if !ok {
+		return fmt.Errorf("adapter instance %q cannot validate extension events", ev.GetAdapterInstanceId())
+	}
+	return checker.CheckEvent(ev)
 }

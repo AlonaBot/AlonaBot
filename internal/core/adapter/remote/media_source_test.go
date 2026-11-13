@@ -121,7 +121,7 @@ func TestMediaSources(t *testing.T) {
 	t.Cleanup(func() { mediaStore.ReleaseSession(consumer.SessionKey) })
 	sourceTarget := &pb.Target{AdapterId: "loop", AdapterInstanceId: "source", AccountId: "source", ChatId: "chat"}
 	otherTarget := &pb.Target{AdapterId: "loop", AdapterInstanceId: "other", AccountId: "other", ChatId: "chat"}
-	service := coremessage.New(registry, policy.New(store), mediaStore.LeaseForSend, nil, tune.Defaults().RequestTimeout)
+	service := coremessage.New(registry, policy.New(store), mediaStore.LeaseForSend, nil, tune.Defaults().RequestTimeout, nil)
 	mux.Handle(wire.ServiceSend, service.Send)
 	send := func(target *pb.Target, source *pb.MediaSource) *pb.SendResult {
 		t.Helper()

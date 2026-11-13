@@ -99,6 +99,7 @@ CREATE TABLE command_policy (
   scope       TEXT NOT NULL,
   permissions TEXT,
   enabled     INTEGER,
+  names       TEXT,
   PRIMARY KEY (plugin_id, scope)
 );
 

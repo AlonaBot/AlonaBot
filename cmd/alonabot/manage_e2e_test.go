@@ -455,14 +455,14 @@ func(i *instance) Stop(ctx context.Context)error{
  i.platform.mu.Lock();delete(i.platform.cores,i.id);i.platform.mu.Unlock()
  slog.Info("fixture instance "+i.id+" stopped");return i.Instance.Stop(ctx)
 }
-func(p *platform) HTTP(handle func(string,string,http.Handler,...sdk.HTTPOption)){
- handle("POST","/deliver",http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+func(p *platform) HTTP(route func(string,string)*sdk.RouteBuilder){
+ route("POST","/deliver").HandleFunc(func(w http.ResponseWriter,r *http.Request){
   id:=r.URL.Query().Get("instance");p.mu.Lock();core:=p.cores[id];p.mu.Unlock()
   if core==nil{http.Error(w,"instance missing",404);return}
   _,err:=core.Deliver(r.Context(),&message.Event{Type:"message.created",AdapterID:"devloop",AdapterInstanceID:id,AccountID:id,Session:message.NewSession("devloop","chat",""),Actor:&message.Actor{ExternalUserID:r.URL.Query().Get("user"),AdapterInstanceID:id},Payload:&message.CreatedPayload{PlatformMessageID:"fixture",Chain:message.Chain{message.Text(r.URL.Query().Get("text"))}}},nil)
   if err!=nil{http.Error(w,err.Error(),500);return};w.WriteHeader(204)
- }))
- handle("GET","/sent",http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){p.mu.Lock();defer p.mu.Unlock();if err:=json.NewEncoder(w).Encode(p.sent);err!=nil{slog.Error("write sent failed","error",err)}}))
+ })
+ route("GET","/sent").HandleFunc(func(w http.ResponseWriter,r *http.Request){p.mu.Lock();defer p.mu.Unlock();if err:=json.NewEncoder(w).Encode(p.sent);err!=nil{slog.Error("write sent failed","error",err)}})
 }
 func main(){p:=&platform{Adapter:example.New(),cores:map[string]adapter.Core{}};if err:=sdk.RunAdapter(p);err!=nil{slog.Error("fixture failed","error",err);os.Exit(1)}}
 `

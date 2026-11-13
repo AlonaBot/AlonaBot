@@ -37,7 +37,7 @@ func inProcessLaunch(l *inproc.Launch) (launch, error) {
 	if l == nil {
 		return launch{}, errors.New("in-process launch is nil")
 	}
-	return launch{pluginID: l.PluginID, transport: wire.TransportTCP, addr: l.Addr, secret: l.Secret, digest: l.BuildDigest, runtimeLockPath: l.RuntimeLockPath, inProcess: true}, nil
+	return launch{pluginID: l.PluginID, transport: wire.TransportTCP, addr: l.Addr, secret: l.Secret, digest: l.BuildDigest, runtimeLockPath: l.RuntimeLockPath, log: l.Log, inProcess: true}, nil
 }
 
 type componentContextKey struct{}
@@ -50,6 +50,7 @@ type componentSession struct {
 	active       atomic.Pointer[activation]
 	translations atomic.Pointer[translationSession]
 	level        slog.LevelVar
+	log          slog.Handler // Core 提供的不过滤日志目标；nil 时使用默认 Handler。
 	source       []slog.Attr
 	inProcess    bool
 	callbacks    sync.WaitGroup
@@ -118,7 +119,11 @@ func componentLogger(ctx context.Context) *slog.Logger {
 	if s == nil || !s.inProcess {
 		return slog.Default()
 	}
-	return slog.New(&componentLogHandler{Handler: slog.Default().Handler().WithAttrs(s.source), session: s})
+	handler := s.log
+	if handler == nil {
+		handler = slog.Default().Handler()
+	}
+	return slog.New(&componentLogHandler{Handler: handler.WithAttrs(s.source), session: s})
 }
 
 type componentLogHandler struct {
@@ -126,8 +131,8 @@ type componentLogHandler struct {
 	session *componentSession
 }
 
-func (h *componentLogHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return level >= h.session.level.Level() && h.Handler.Enabled(ctx, level)
+func (h *componentLogHandler) Enabled(_ context.Context, level slog.Level) bool {
+	return level >= h.session.level.Level()
 }
 
 func (h *componentLogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {

@@ -88,11 +88,61 @@ func TestErrorInfoFieldNumbers(t *testing.T) {
 	}
 }
 
+// TestOptionsSourceFieldNumber 固定 Service 选项来源标记的字段编号和类型。
+func TestOptionsSourceFieldNumber(t *testing.T) {
+	field := (&pb.ServiceSpec{}).ProtoReflect().Descriptor().Fields().ByNumber(6)
+	if field == nil || field.Name() != "options_source" || field.Kind() != protoreflect.BoolKind || field.IsList() || field.HasPresence() || field.ContainingOneof() != nil {
+		t.Fatalf("ServiceSpec field 6 should be bool options_source, got %v", field)
+	}
+}
+
 // TestButtonCoreTokenFieldNumber 固定 Core 回调令牌的字段编号、类型与 optional presence。
 func TestButtonCoreTokenFieldNumber(t *testing.T) {
 	field := (&pb.Button{}).ProtoReflect().Descriptor().Fields().ByNumber(4)
 	if field == nil || field.Name() != "core_token" || field.Kind() != protoreflect.StringKind || !field.HasOptionalKeyword() || !field.HasPresence() || field.IsList() {
 		t.Errorf("Button field 4 should be optional string core_token, got %v", field)
+	}
+}
+
+// TestHookFilterFieldNumber 固定 PreEvent 事件过滤器的编号与 repeated string 类型。
+func TestHookFilterFieldNumber(t *testing.T) {
+	fields := (&pb.HookSpec{}).ProtoReflect().Descriptor().Fields()
+	field := fields.ByNumber(2)
+	if fields.Len() != 2 || field == nil || field.Name() != "event_type_filter" || field.Kind() != protoreflect.StringKind || !field.IsList() || field.HasPresence() || field.ContainingOneof() != nil {
+		t.Fatalf("HookSpec field 2 should be repeated string event_type_filter, got %v", field)
+	}
+}
+
+// TestOutboundHookFieldNumbers 固定出站操作字段的编号、类型和编辑消息 ID 的 presence。
+func TestOutboundHookFieldNumbers(t *testing.T) {
+	for _, c := range []struct {
+		message proto.Message
+		names   []protoreflect.Name
+	}{
+		{&pb.BeforeSendRequest{}, []protoreflect.Name{"route_id", "context", "target", "chain", "operation", "edited_platform_message_id"}},
+		{&pb.AfterSendRequest{}, []protoreflect.Name{"route_id", "context", "target", "chain", "result", "error", "operation", "edited_platform_message_id"}},
+	} {
+		d := c.message.ProtoReflect().Descriptor()
+		fields := d.Fields()
+		if fields.Len() != len(c.names) {
+			t.Fatalf("%s field count = %d, want %d", d.Name(), fields.Len(), len(c.names))
+		}
+		for i, name := range c.names {
+			f := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+			if f == nil || f.Name() != name || f.IsList() {
+				t.Fatalf("%s field %d = %v, want singular %s", d.Name(), i+1, f, name)
+			}
+			switch name {
+			case "operation":
+				if f.Kind() != protoreflect.EnumKind || f.Enum().FullName() != "alonabot.v1.SendOperation" || f.HasPresence() || f.ContainingOneof() != nil {
+					t.Errorf("%s.operation = %v, want SendOperation without presence", d.Name(), f)
+				}
+			case "edited_platform_message_id":
+				if f.Kind() != protoreflect.StringKind || !f.HasOptionalKeyword() || !f.HasPresence() || f.ContainingOneof() == nil || !f.ContainingOneof().IsSynthetic() {
+					t.Errorf("%s.edited_platform_message_id = %v, want optional string", d.Name(), f)
+				}
+			}
+		}
 	}
 }
 
@@ -143,6 +193,7 @@ func TestEnumValues(t *testing.T) {
 		{pb.BotOfflineReason(0).Descriptor(), "BOT_OFFLINE_REASON_", []string{"UNSPECIFIED", "STOPPED", "ADAPTER_EXITED", "INSTANCE_FAILED"}},
 		{pb.TextUnit(0).Descriptor(), "TEXT_UNIT_", []string{"UNSPECIFIED", "UTF16_CODE_UNITS", "UNICODE_CODE_POINTS", "BYTES"}},
 		{pb.SendStatus(0).Descriptor(), "SEND_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "PARTIAL", "REJECTED", "UNKNOWN"}},
+		{pb.SendOperation(0).Descriptor(), "SEND_OPERATION_", []string{"UNSPECIFIED", "SEND", "EDIT"}},
 		{pb.ChatType(0).Descriptor(), "CHAT_TYPE_", []string{"UNSPECIFIED", "PRIVATE", "GROUP", "CHANNEL"}},
 		{pb.PartStatus(0).Descriptor(), "PART_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "REJECTED", "UNKNOWN", "NOT_ATTEMPTED"}},
 		// MESSAGE-MODEL §3。
@@ -541,7 +592,7 @@ func TestToolFieldNumbers(t *testing.T) {
 		names   []protoreflect.Name
 		kinds   []protoreflect.Kind
 	}{
-		{&pb.ServiceSpec{}, []protoreflect.Name{"service_name", "access", "allowlist_plugin_ids", "encoding", "tool"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.MessageKind}},
+		{&pb.ServiceSpec{}, []protoreflect.Name{"service_name", "access", "allowlist_plugin_ids", "encoding", "tool", "options_source"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.BoolKind}},
 		{&pb.ToolSpec{}, []protoreflect.Name{"description", "default_policy", "input_schema_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind}},
 		{&pb.ToolInfo{}, []protoreflect.Name{"name", "description", "input_schema_json", "policy"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.EnumKind}},
 		{&pb.ToolListRequest{}, nil, nil},

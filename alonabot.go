@@ -92,7 +92,6 @@ type Core struct {
 	operations  chan coreOperation // Core.run 独占组件列表，HTTP 回调把变更交给同一所有者。
 	stopping    chan struct{}      // 关闭后解除仍在等待管理操作的 HTTP 请求。
 	dir         string
-	settings    *settings.File
 	environment map[string]string
 	http        *http.Server
 	httpErrors  chan error
@@ -145,11 +144,11 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 		c.err = err
 		return nil, errors.Join(err, c.shutdown())
 	}
-	c.settings, err = settings.Load(dir)
+	file, err := settings.Load(dir)
 	if err != nil {
 		return fail(startupUsage(err))
 	}
-	configuration := c.settings.Settings()
+	configuration := file.Settings()
 	baseURL, err := url.Parse(configuration.BaseURL)
 	if err != nil {
 		return fail(fmt.Errorf("parse base_url: %w", err))
@@ -231,7 +230,7 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 		debug.SetMemoryLimit(values.CoreMemorySoftLimit)
 	}
 	// 2. 装配公共服务，再依次启动已启用安装包与显式登记的开发组件。
-	c.assembly, err = assemble(store, dir, values, c.settings)
+	c.assembly, err = assemble(store, dir, values, file)
 	if err != nil {
 		return fail(err)
 	}
@@ -243,7 +242,7 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	for _, entry := range o.components {
 		development[entry.manifest.ID] = entry.manifest
 	}
-	management := manage.New(manage.Options{Store: store, Settings: c.settings, Policy: c.assembly.policy,
+	management := manage.New(manage.Options{Store: store, Settings: c.assembly.settings, Policy: c.assembly.policy,
 		Adapters: c.assembly.adapters, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(o.components),
 		Packages: filepath.Join(dir, "packages"), Limits: packages.NewLimits(values), Development: development,
 		Descriptor: c.assembly.componentDescriptor,

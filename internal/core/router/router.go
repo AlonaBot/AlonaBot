@@ -87,6 +87,7 @@ type CommandPolicy interface {
 // Router 并发执行有界的事件链；每条链内按稳定次序调用候选。
 // mu 串行化接纳、出队和注册；链调用插件期间不持锁。
 type Router struct {
+	preEvent      func(context.Context, *pb.Event) (*pb.EventPayload, bool, error)
 	adapters      *adapter.Registry
 	send          ServiceFunc
 	prepare       func(*pb.Event, Caller) (*pb.Event, error)
@@ -94,6 +95,7 @@ type Router struct {
 	buttons       func(context.Context, *pb.Event) (string, string, error)
 	policy        CommandPolicy
 	commandState  func(context.Context, string, *pb.RouteDescriptor) (bool, []string, error)
+	commandNames  func(string) map[string][][]string
 	commandSyncs  map[string]*commandSync   // 当前运行实例身份与任务，由 mu 保护。
 	matches       map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
 	queue         []queuedEvent
@@ -122,13 +124,13 @@ func New(opt Options) *Router {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Router{
-		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy, buttons: opt.Buttons,
+		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy, buttons: opt.Buttons, preEvent: opt.PreEvent,
 		concurrency: opt.Concurrency, queueEvents: opt.QueueEvents, queueBytes: opt.QueueBytes, global: opt.Global,
 		ctx: ctx, cancel: cancel, drained: make(chan struct{}),
 		continuations: opt.Continuations,
 		matches:       make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
 		inFlight: make(map[inFlightKey]int), commands: &CommandIndex{},
-		commandState: opt.CommandState, commandSyncs: make(map[string]*commandSync),
+		commandState: opt.CommandState, commandNames: opt.CommandNames, commandSyncs: make(map[string]*commandSync),
 	}
 }
 
@@ -156,6 +158,17 @@ func (r *Router) Plugin(pluginID string) (Plugin, bool) {
 	defer r.mu.Unlock()
 	session, ok := r.plugins[pluginID]
 	if !ok {
+		return nil, false
+	}
+	return session.plugin, true
+}
+
+// PluginFor 原子核对 Caller 并返回该 Session 的插件；替换后的绑定查找失败。
+func (r *Router) PluginFor(c Caller) (Plugin, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	session, ok := r.plugins[c.PluginID]
+	if !ok || session.caller != c {
 		return nil, false
 	}
 	return session.plugin, true
@@ -221,6 +234,7 @@ type candidate struct {
 	*pluginSession
 	pluginID string
 	route    *pb.RouteDescriptor
+	names    [][]string // 路径命令匹配时从同一索引快照取得的生效命令名
 }
 
 func (r *Router) candidates(ev *pb.Event) []candidate {
@@ -295,14 +309,28 @@ func (r *Router) dispatch(event *trustedEvent) {
 		actor.Permissions = slices.Compact(permissions)
 	}
 	ev = event.rebuild()
+	// 2. 预处理只回写业务载荷；后继路由从原绑定重建可信字段。
+	if r.preEvent != nil {
+		payload, stop, err := r.preEvent(r.ctx, ev)
+		if err != nil {
+			slog.Warn("pre-event hook failed", "event_id", event.retained.GetEventId(), "error", err)
+			return
+		}
+		event.payload = payload
+		if stop {
+			return
+		}
+		ev = event.rebuild()
+	}
+	// 3. 多轮等待先于命令匹配取走匹配的消息。
 	if ev.GetEventType() == "message.created" && r.continuations != nil && r.continuations.Match(ev) {
 		return
 	}
-	// 2. 命令层的 STOP 终止整条分发链；消费但继续的命令仍进入事件层。
+	// 4. 命令层的 STOP 终止整条分发链；消费但继续的命令仍进入事件层。
 	if ev.GetEventType() == "message.created" && r.dispatchCommands(ev, event) {
 		return
 	}
-	// 3. 事件路由独立判断权限，拒绝当前候选后继续后继路由。
+	// 5. 事件路由独立判断权限，拒绝当前候选后继续后继路由。
 	if !buttonClick {
 		candidates = r.candidates(ev)
 	}
