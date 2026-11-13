@@ -95,6 +95,7 @@ type Router struct {
 	buttons       func(context.Context, *pb.Event) (string, string, error)
 	policy        CommandPolicy
 	commandState  func(context.Context, string, *pb.RouteDescriptor) (bool, []string, error)
+	commandNames  func(string) map[string][][]string
 	commandSyncs  map[string]*commandSync   // 当前运行实例身份与任务，由 mu 保护。
 	matches       map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
 	queue         []queuedEvent
@@ -129,7 +130,7 @@ func New(opt Options) *Router {
 		continuations: opt.Continuations,
 		matches:       make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
 		inFlight: make(map[inFlightKey]int), commands: &CommandIndex{},
-		commandState: opt.CommandState, commandSyncs: make(map[string]*commandSync),
+		commandState: opt.CommandState, commandNames: opt.CommandNames, commandSyncs: make(map[string]*commandSync),
 	}
 }
 
@@ -157,6 +158,17 @@ func (r *Router) Plugin(pluginID string) (Plugin, bool) {
 	defer r.mu.Unlock()
 	session, ok := r.plugins[pluginID]
 	if !ok {
+		return nil, false
+	}
+	return session.plugin, true
+}
+
+// PluginFor 原子核对 Caller 并返回该 Session 的插件；替换后的绑定查找失败。
+func (r *Router) PluginFor(c Caller) (Plugin, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	session, ok := r.plugins[c.PluginID]
+	if !ok || session.caller != c {
 		return nil, false
 	}
 	return session.plugin, true
@@ -222,6 +234,7 @@ type candidate struct {
 	*pluginSession
 	pluginID string
 	route    *pb.RouteDescriptor
+	names    [][]string // 路径命令匹配时从同一索引快照取得的生效命令名
 }
 
 func (r *Router) candidates(ev *pb.Event) []candidate {

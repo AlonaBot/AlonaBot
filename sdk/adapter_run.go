@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -52,9 +51,9 @@ type adapterCore struct {
 	commandSync sync.Mutex  // 覆盖本次运行的实际菜单回调，RPC 到期后仍持有。
 }
 
-// AdapterHTTP 提供 Adapter 可选的统一入口 HTTP 路由登记；handle 与插件对象的 Handle 签名和校验相同。
+// AdapterHTTP 提供 Adapter 可选的统一入口 HTTP 路由登记；route 与插件对象的 Route 写法和校验相同。
 type AdapterHTTP interface {
-	HTTP(handle func(method, path string, h http.Handler, opts ...HTTPOption))
+	HTTP(route func(method, path string) *RouteBuilder)
 }
 
 // RunAdapter 作为 Adapter 进程的 main 入口，复用插件的锁、握手、激活与停止状态机。
@@ -79,8 +78,9 @@ func runAdapter(a adapter.Adapter, l launch) (err error) {
 	// Adapter 没有插件对象；借一个只收集 HTTP 路由的对象复用同一套声明校验。
 	routes := NewPlugin()
 	if provider, ok := a.(AdapterHTTP); ok {
-		provider.HTTP(routes.Handle)
+		provider.HTTP(routes.Route)
 	}
+	routes.http.collect()
 	if err := errors.Join(routes.http.errs...); err != nil {
 		return fmt.Errorf("invalid adapter HTTP registration: %w", err)
 	}

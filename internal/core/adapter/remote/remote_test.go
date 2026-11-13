@@ -30,14 +30,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter/remote"
+	"github.com/AlonaBot/AlonaBot/internal/core/broker"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 	"github.com/AlonaBot/AlonaBot/internal/core/media"
 	coremessage "github.com/AlonaBot/AlonaBot/internal/core/message"
+	"github.com/AlonaBot/AlonaBot/internal/core/options"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
@@ -64,10 +67,12 @@ func TestMain(m *testing.M) {
 		os.Exit(m.Run())
 	}
 	var err error
-	if mode == "plugin" || mode == "command-plugin" || mode == "stream-plugin" {
+	if mode == "plugin" || mode == "command-plugin" || mode == "stream-plugin" || mode == "names-plugin" {
 		err = sdk.Run(newLoopPlugin())
 	} else if mode == "plugin-object" {
 		err = sdk.Run(newObjectPlugin())
+	} else if mode == "options-plugin" {
+		err = sdk.Run(newOptionsPlugin())
 	} else if mode == "schema-parse" || mode == "schema-resolve" {
 		err = invalidSchemaAdapter(mode)
 	} else if mode == "http-upgrade" {
@@ -195,6 +200,12 @@ func registerLoopEvents(r *sdk.Plugin) {
 
 // registerLoopCommands 让扩展事件误入命令层时留下可观察记录。
 func registerLoopCommands(r *sdk.Plugin) {
+	if os.Getenv(helperEnv) == "names-plugin" {
+		r.Command("echo").Alias("e").Args("value").Handle(func(c *sdk.Context, value string) error {
+			return observe("cmd.echo:"+value, c, nil)
+		})
+		return
+	}
 	if os.Getenv(helperEnv) == "command-plugin" {
 		handler := func(*sdk.Context) error { return nil }
 		r.Command("ping").Description("Ping the bot").Alias("p").Handle(handler)
@@ -216,8 +227,8 @@ const httpPlatformToken = "loop-platform-test-token"
 type httpUpgradeAdapter struct{ loopAdapter }
 
 // HTTP 声明公开平台凭证入口；最小 WebSocket echo 只收发四字节文本帧。
-func (*httpUpgradeAdapter) HTTP(handle func(method, path string, h http.Handler, opts ...sdk.HTTPOption)) {
-	handle("GET", "/ws", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func (*httpUpgradeAdapter) HTTP(route func(method, path string) *sdk.RouteBuilder) {
+	route("GET", "/ws").Public(sdk.AuthPlatformToken).Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if r.Header.Get("Authorization") == "" {
 			token = r.URL.Query().Get("access_token")
@@ -264,7 +275,7 @@ func (*httpUpgradeAdapter) HTTP(handle func(method, path string, h http.Handler,
 				return
 			}
 		}
-	}), sdk.Public(sdk.AuthPlatformToken))
+	}))
 }
 
 func remoteHTTPUpgrade(t *testing.T, address, target, authorization string) (net.Conn, *bufio.Reader) {
@@ -1787,6 +1798,104 @@ func (i *loopInstance) Action(_ context.Context, to message.Session, name string
 	return json.RawMessage(` {"value": ` + string(value) + `, "platform_extra": true} `), nil
 }
 
+// TestCommandNameOverride 验证同一真实插件进程在保存和删除覆盖后按新名字派发，参数保持一致。
+func TestCommandNameOverride(t *testing.T) {
+	ctx := t.Context()
+	store, spec, _ := setup(t)
+	commandPolicy := policy.New(store)
+	dispatch := router.New(router.Options{Concurrency: 1, QueueEvents: tune.Defaults().DispatchQueueEvents, QueueBytes: tune.Defaults().DispatchQueueBytes, Policy: commandPolicy, CommandNames: commandPolicy.CommandNames})
+	commandPolicy.SetCommandsChanged(dispatch.CommandsChanged)
+	dispatch.Start()
+	defer func() {
+		if err := dispatch.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	}()
+	audit := filepath.Join(t.TempDir(), "names.jsonl")
+	if err := os.WriteFile(audit, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	spec.PluginID, spec.Role, spec.AdapterID = "names-observer", state.RolePlugin, ""
+	spec.GenerationID, spec.PluginDir = "names-gen", t.TempDir()
+	spec.Bootstrap = &pb.Bootstrap{GenerationId: spec.GenerationID, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	spec.ExtraEnv = map[string]string{helperEnv: "names-plugin", observerAuditEnv: audit, "GORACE": "atexit_sleep_ms=0"}
+	if err := store.AddInstall(ctx, state.Install{PluginID: spec.PluginID, Role: spec.Role, BuildDigest: spec.BuildDigest}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddGeneration(ctx, spec.PluginID, spec.GenerationID, "{}", 1); err != nil {
+		t.Fatal(err)
+	}
+	plugin, err := supervisor.Launch(ctx, store, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if result := plugin.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE); result.Err != nil {
+			t.Error(result.Err)
+		}
+	}()
+	dispatch.Attach(router.FromInstance(plugin.Instance), router.NewCaller(spec.PluginID, spec.GenerationID))
+	check := func(name string, matched bool) {
+		t.Helper()
+		before, err := os.ReadFile(audit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		entry, _, ok := dispatch.Commands().Lookup(strings.Fields(name))
+		if ok != matched || matched && entry.RouteID != "cmd.echo" {
+			t.Fatalf("lookup %s=%+v matched=%v", name, entry, ok)
+		}
+		event := &pb.Event{EventId: name, EventType: "message.created", SourceKind: pb.EventSourceKind_EVENT_SOURCE_KIND_ADAPTER, AdapterId: proto.String("loop"), AdapterInstanceId: proto.String("one"), AccountId: proto.String("a"), Actor: &pb.Actor{ExternalUserId: "user"}, Target: &pb.Target{AdapterId: "loop", AdapterInstanceId: "one", AccountId: "a", ChatId: "chat"}, EventPayload: &pb.EventPayload{Kind: &pb.EventPayload_MessageCreated{MessageCreated: &pb.MessageCreatedPayload{Chain: &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: "/" + name + ` "hello world"`}}}}}}}}}
+		if err := dispatch.Deliver(ctx, event); err != nil {
+			t.Fatal(err)
+		}
+		timer, ticker := time.NewTimer(5*time.Second), time.NewTicker(10*time.Millisecond)
+		defer timer.Stop()
+		defer ticker.Stop()
+		for stats := dispatch.Stats(); stats.Running != 0 || stats.Queued != 0; stats = dispatch.Stats() {
+			select {
+			case <-ticker.C:
+			case <-timer.C:
+				t.Fatal("command dispatch timed out")
+			}
+		}
+		after, err := os.ReadFile(audit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoder := json.NewDecoder(bytes.NewReader(after[len(before):]))
+		var commands []string
+		for {
+			var report observedEvent
+			if err := decoder.Decode(&report); err == io.EOF {
+				break
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			if strings.HasPrefix(report.Route, "cmd.") {
+				commands = append(commands, report.Route)
+			}
+		}
+		if matched && !reflect.DeepEqual(commands, []string{"cmd.echo:hello world"}) || !matched && len(commands) != 0 {
+			t.Fatalf("name=%s handler reports=%v matched=%v", name, commands, matched)
+		}
+	}
+	check("echo", true)
+	if err := commandPolicy.SetCommandNames(ctx, spec.PluginID, "cmd.echo", [][]string{{"renamed", "echo"}, {"another"}}, plugin.Instance.Routes); err != nil {
+		t.Fatal(err)
+	}
+	check("echo", false)
+	check("e", false)
+	check("renamed echo", true)
+	check("another", true)
+	if err := commandPolicy.DeleteCommandNames(ctx, spec.PluginID, "cmd.echo"); err != nil {
+		t.Fatal(err)
+	}
+	check("echo", true)
+	check("e", true)
+	check("renamed echo", false)
+}
+
 const objectConfigSchema = `{"root":{"type":"string","default":"whole"},"part":{"type":"object","items":{"prefix":{"type":"string","default":"config"}}}}`
 
 func objectI18n() map[string][]byte {
@@ -1901,5 +2010,93 @@ func TestPluginObjectCommand(t *testing.T) {
 			logs.mu.Unlock()
 			t.Fatalf("translated command reply not received: %v\n%s", ctx.Err(), text)
 		}
+	}
+}
+
+const optionsConfigSchema = `{"selection":{"type":"object","items":{"choice":{"type":"string","options_from":{"source":"options-plugin/choices","filter":{"group":"all"}}}}}}`
+
+func newOptionsPlugin() *sdk.Plugin {
+	p := sdk.NewPlugin()
+	sdk.UseGenerated(p, sdk.Generated{ConfigSchema: []byte(optionsConfigSchema)})
+	sdk.ServeOptions(p, "choices", func(_ context.Context, q sdk.OptionsQuery) (sdk.OptionsPage, error) {
+		if q.Filter["group"] != "all" {
+			return sdk.OptionsPage{}, fmt.Errorf("missing schema filter")
+		}
+		page := sdk.OptionsPage{Options: []sdk.Option{}}
+		for _, option := range []sdk.Option{{Value: "one", Label: "First", Description: "choice one"}, {Value: "two", Label: "Second"}} {
+			if len(q.Values) > 0 {
+				found := false
+				for _, value := range q.Values {
+					if value == option.Value {
+						found = true
+						break
+					}
+				}
+				if !found {
+					continue
+				}
+			} else if !strings.Contains(strings.ToLower(option.Label), strings.ToLower(q.Search)) {
+				continue
+			}
+			page.Options = append(page.Options, option)
+		}
+		return page, nil
+	})
+	return p
+}
+
+// TestOptionSources 通过真实插件进程、Session、Router 和 Broker 查询配置字段的选项。
+func TestOptionSources(t *testing.T) {
+	ctx := t.Context()
+	store, spec, _ := setup(t)
+	spec.PluginID = "options-plugin"
+	spec.Role = state.RolePlugin
+	spec.AdapterID = ""
+	spec.GenerationID = "options-gen"
+	spec.PluginDir = t.TempDir()
+	spec.ConfigSchema = []byte(optionsConfigSchema)
+	spec.ExtraEnv = map[string]string{helperEnv: "options-plugin", "GORACE": "atexit_sleep_ms=0"}
+	spec.Bootstrap = &pb.Bootstrap{GenerationId: spec.GenerationID, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	if err := store.AddInstall(ctx, state.Install{PluginID: spec.PluginID, Role: state.RolePlugin, BuildDigest: spec.BuildDigest}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddGeneration(ctx, spec.PluginID, spec.GenerationID, "{}", 1); err != nil {
+		t.Fatal(err)
+	}
+	dispatch := router.New(router.Options{})
+	defer dispatch.Close(context.Background())
+	serviceBroker := broker.New(dispatch, tune.Defaults().RequestTimeout)
+	schema, problems := configschema.Parse(spec.ConfigSchema)
+	if len(problems) > 0 {
+		t.Fatal(problems)
+	}
+	service := options.New(options.Options{Schema: func(id string, kind options.SchemaKind) (*configschema.Schema, bool) {
+		return schema, id == spec.PluginID && kind == options.ConfigSchema
+	}, Router: dispatch, Broker: serviceBroker, Page: tune.Defaults().OptionsPage})
+	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
+	mux := router.NewMux()
+	mux.Forward(serviceBroker.Call)
+	spec.Handler = mux.For(caller)
+	running, err := supervisor.Launch(ctx, store, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
+	dispatch.Attach(router.FromInstance(running.Instance), caller)
+	page, err := service.Query(ctx, spec.PluginID, options.ConfigSchema, "selection.choice", options.Query{Search: "First", Locale: "en-US"})
+	if err != nil || len(page.Options) != 1 || page.Options[0].Value != "one" || page.Options[0].Label != "First" || page.Options[0].Description != "choice one" || page.More {
+		t.Fatalf("search page=%+v error=%v", page, err)
+	}
+	page, err = service.Query(ctx, spec.PluginID, options.ConfigSchema, "selection.choice", options.Query{Values: []string{"two", "missing"}})
+	if err != nil || len(page.Options) != 1 || page.Options[0].Value != "two" || page.Options[0].Label != "Second" {
+		t.Fatalf("values page=%+v error=%v", page, err)
+	}
+	if stopped := running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE); stopped.Err != nil {
+		t.Fatal(stopped.Err)
+	}
+	_, err = service.Query(ctx, spec.PluginID, options.ConfigSchema, "selection.choice", options.Query{})
+	var invalid *validate.Error
+	if !errors.As(err, &invalid) || invalid.Code != pb.ErrorCode_ERROR_CODE_UNAVAILABLE {
+		t.Fatalf("inactive source error=%v", err)
 	}
 }

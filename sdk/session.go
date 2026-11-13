@@ -37,11 +37,12 @@ type launch struct {
 	log             slog.Handler
 	runtime         *componentSession
 	pluginID        string
-	transport       string        // tcp 或 stdio
-	addr            string        // TCP 传输时 Core 的 loopback 地址
-	secret          []byte        // 32 字节 Session Secret
-	digest          []byte        // 安装时已验证的归档摘要，在 HELLO 中原样回显
-	http            *httpListener // 有HTTP路由时持有本Run的Listener，传给prepare与activation
+	serviceSchemas  map[string][]byte // 当前组件的生成资源，Session 内只读。
+	transport       string            // tcp 或 stdio
+	addr            string            // TCP 传输时 Core 的 loopback 地址
+	secret          []byte            // 32 字节 Session Secret
+	digest          []byte            // 安装时已验证的归档摘要，在 HELLO 中原样回显
+	http            *httpListener     // 有HTTP路由时持有本Run的Listener，传给prepare与activation
 }
 
 // readLaunch 读取并校验 Core 下发的启动环境变量。
@@ -303,6 +304,10 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Reg
 	}
 
 	// 5. 发送完整 REGISTER；超过 4 MiB 时报告 RESOURCE_EXHAUSTED。
+	if err := checkServiceTargets(root, l.pluginID); err != nil {
+		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER,
+			pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error(), err)
+	}
 	registration := buildRegister(reg, string(preparedConfig.JSON), preparedConfig.Version, generatedFor(root).ConfigSchema)
 	registration.Migration = migration
 	l.http.report(registration)
