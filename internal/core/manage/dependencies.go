@@ -8,22 +8,32 @@ import (
 	"strings"
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 )
 
 func (s *Service) dependencies(ctx context.Context, m *manifest.Manifest) error {
-	installs, err := s.opt.Store.Installs(ctx)
+	in, err := DependencySnapshot(ctx, s.opt.Store, s.opt.Descriptor)
 	if err != nil {
-		return failure(err)
+		return err
+	}
+	return CheckDependencies(m, in)
+}
+
+// DependencySnapshot 读取已启用组件的版本与当前运行 Adapter 的声明，供启动和管理共用。
+func DependencySnapshot(ctx context.Context, store *state.Store, descriptor func(string) *pb.AdapterDescriptor) (manifest.Installed, error) {
+	installs, err := store.Installs(ctx)
+	if err != nil {
+		return manifest.Installed{}, failure(err)
 	}
 	in := manifest.Installed{Plugins: map[string]string{}, Adapters: map[string][]manifest.ExtensionRequirement{}, Actions: map[string][]manifest.ActionRequirement{}}
 	for _, installed := range installs {
 		if installed.Uninstalled {
 			continue
 		}
-		enabled, err := s.opt.Store.Enabled(ctx, installed.PluginID)
+		enabled, err := store.Enabled(ctx, installed.PluginID)
 		if err != nil {
-			return failure(err)
+			return manifest.Installed{}, failure(err)
 		}
 		if !enabled {
 			continue
@@ -32,7 +42,7 @@ func (s *Service) dependencies(ctx context.Context, m *manifest.Manifest) error 
 			in.Plugins[installed.PluginID] = installed.Version
 			continue
 		}
-		if descriptor := s.opt.Descriptor(installed.PluginID); descriptor != nil {
+		if descriptor := descriptor(installed.PluginID); descriptor != nil {
 			in.Adapters[installed.AdapterID] = nil
 			for _, extension := range descriptor.Extensions {
 				in.Adapters[installed.AdapterID] = append(in.Adapters[installed.AdapterID], manifest.ExtensionRequirement{Name: extension.Name, Version: extension.Version})
@@ -42,6 +52,11 @@ func (s *Service) dependencies(ctx context.Context, m *manifest.Manifest) error 
 			}
 		}
 	}
+	return in, nil
+}
+
+// CheckDependencies 汇总必需依赖的问题并返回错误，可选依赖问题按统一格式记录 WARN。
+func CheckDependencies(m *manifest.Manifest, in manifest.Installed) error {
 	var required []string
 	for _, problem := range manifest.CheckDependencies(m, in) {
 		if problem.Required {

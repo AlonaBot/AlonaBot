@@ -387,9 +387,37 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 			}
 		}
 	}
+	// 开发 Adapter 先完成 REGISTER，依赖检查才能读取真实的 extension 与动作声明。
 	for i := range o.components {
+		if o.components[i].role != state.RoleAdapter {
+			continue
+		}
 		if err := ctx.Err(); err != nil {
 			return fail(err)
+		}
+		if err := c.startDevelopment(ctx, dir, &o.components[i]); err != nil {
+			return fail(fmt.Errorf("start %s: %w", o.components[i].manifest.ID, err))
+		}
+	}
+	for i := range o.components {
+		if o.components[i].role == state.RoleAdapter {
+			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return fail(err)
+		}
+		snapshot, err := manage.DependencySnapshot(ctx, store, c.assembly.componentDescriptor)
+		if err != nil {
+			return fail(err)
+		}
+		// 同次运行的开发插件与 Agent 都参与版本检查，保留目录参数的先后自由。
+		for _, entry := range o.components {
+			if entry.role != state.RoleAdapter {
+				snapshot.Plugins[entry.manifest.ID] = entry.manifest.Version
+			}
+		}
+		if err := manage.CheckDependencies(o.components[i].manifest, snapshot); err != nil {
+			return fail(fmt.Errorf("start %s: %w", o.components[i].manifest.ID, err))
 		}
 		if err := c.startDevelopment(ctx, dir, &o.components[i]); err != nil {
 			return fail(fmt.Errorf("start %s: %w", o.components[i].manifest.ID, err))

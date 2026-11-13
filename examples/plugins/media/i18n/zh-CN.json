@@ -1,0 +1,8 @@
+{
+  "messages": {
+    "media.caption": "已上传的示例图片",
+    "media.prompt": "点击按钮编辑这条文字。",
+    "media.button": "编辑文字",
+    "media.edited": "文字已编辑。"
+  }
+}

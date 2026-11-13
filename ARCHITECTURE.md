@@ -54,6 +54,7 @@
 | `cmd/alonabot -> sdk/generate` | `plugin generate`/`plugin check` 复用 SDK 的 Schema 嵌入生成器 |
 | `cmd/alonabot -> internal/pluginkit`、`internal/pluginkit -> contracts/...`、`-> sdk/generate` | 开发 CLI 的构建与打包复用生成器与契约包 |
 | `examples/plugins/... -> sdk/...`、`-> contracts` | 示例只走公共 SDK |
+| `cmd/alonabot -> adapters/telegram/telegramtest`（仅集成测试）；`根包 -> adapters/telegram`、`-> adapters/telegram/telegramtest`、`-> internal/pluginkit`（仅 `*_local_test.go`） | Telegram 目录运行集成测试与本地故障矩阵复用官方 Adapter、Bot API 模拟服务和开发构建装配 |
 | `scripts/dist -> contracts/release`、`scripts/release-check -> contracts/release` | 发行构建与发布复验只用契约包核对签名；其余步骤经 `os/exec` 调用 go 与 alonabot |
 | `examples/devbot -> 根包`、`-> sdk/...` | 库模式示例 |
 | `plugintest -> 根包`、`-> sdk/...`、`-> internal/inproc`、`-> contracts`；`examples/plugins/... -> plugintest`（仅测试代码） | 套件经根包的 `Start` 装配 Core，经 `internal/inproc` 接收分发结束通知；示例插件的测试使用套件 |
