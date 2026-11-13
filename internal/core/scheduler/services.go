@@ -85,6 +85,19 @@ func validKey(key string) bool {
 	return len(key) > 0 && len(key) <= maxTaskKeyBytes && utf8.ValidString(key)
 }
 
+func scheduledFrameSize(task *state.Task) int {
+	// 周期任务与重开 Session 会改变时间和编号；按最大 varint 宽度预留这几个字段。
+	stamp := time.UnixMilli(-1)
+	id := strings.Repeat("0", invocationIDBytes*2)
+	routeID := "task." + task.Name
+	request := scheduledRequest(&registeredJob{routeID: routeID, jobID: routeID}, stamp, stamp, id, id, task)
+	base := proto.Size(&pb.Envelope{ProtocolMajor: validate.ProtocolMajor, ProtocolMinor: validate.ProtocolMinor,
+		SessionId: make([]byte, validate.SessionIDLen), Kind: pb.FrameKind_FRAME_KIND_REQUEST, InitiatorSide: pb.InitiatorSide_INITIATOR_SIDE_CORE,
+		CallId: math.MaxUint64, DeadlineUnixMs: proto.Int64(-1), Target: routeID, TraceId: make([]byte, invocationIDBytes),
+		PayloadEncoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaId: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion})
+	return base + protowire.SizeTag(15) + protowire.SizeBytes(proto.Size(request))
+}
+
 func (s *Scheduler) set(ctx context.Context, pluginID string, plugin *pluginJobs, in *wire.Inbound) wire.Response {
 	// 1. 所有输入校验完毕后才写入；失败保留旧定义、timer 和队列。
 	request := &pb.TaskSetRequest{}
@@ -134,6 +147,9 @@ func (s *Scheduler) set(ctx context.Context, pluginID string, plugin *pluginJobs
 	}
 	if !plugin.current.names[request.TaskName] {
 		return failure(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "task name is not registered")
+	}
+	if scheduledFrameSize(&task) > wire.MaxFrame {
+		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "task scheduled request exceeds frame limit")
 	}
 	if err := s.store.SetTask(ctx, task, s.maxTasks); err != nil {
 		return storageFailure(pluginID, err)

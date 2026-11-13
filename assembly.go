@@ -299,17 +299,19 @@ func optionSchemas(resources sdk.Generated) (componentOptionSchemas, error) {
 
 // runningComponent 保存一次外部进程或同进程 Session，退出观察者结束后才由 Core 替换。
 type runningComponent struct {
-	id       string
-	install  state.Install // 独立进程恢复时复用安装身份与已提交代次。
-	caller   router.Caller
-	instance *host.Instance
-	process  *supervisor.Running // 仅独立进程设置。
-	remote   *remote.Process
-	listener net.Listener
-	conn     *wire.Conn
-	finished chan struct{} // SDK goroutine 返回后关闭，并发布 runErr。
-	runErr   error
-	schemas  componentOptionSchemas
+	id        string
+	install   state.Install // 独立进程恢复时复用安装身份与已提交代次。
+	caller    router.Caller
+	instance  *host.Instance
+	process   *supervisor.Running // 仅独立进程设置。
+	remote    *remote.Process
+	listener  net.Listener
+	conn      *wire.Conn
+	finished  chan struct{} // SDK goroutine 返回后关闭，并发布 runErr。
+	runErr    error
+	schemas   componentOptionSchemas
+	attached  chan struct{} // 本 Session 的 Router/Scheduler 装配完成后关闭，发布 attachErr。
+	attachErr error
 }
 
 func (r *runningComponent) exited() <-chan struct{} {
@@ -341,8 +343,29 @@ func (r *runningComponent) KillTree() error {
 }
 
 func (a *assembly) handler(r *runningComponent, install state.Install) wire.Handler {
+	r.attached = make(chan struct{})
+	bound := a.mux.For(r.caller)
+	shared := func(ctx context.Context, in *wire.Inbound) wire.Response {
+		switch in.Target {
+		case wire.ServiceTaskSet, wire.ServiceTaskCancel, wire.ServiceTaskList, wire.ServiceJobPause, wire.ServiceJobResume, wire.ServiceJobStatus:
+			// ACTIVATED 后读循环立即接纳请求；等待本 Session 装配，避免首请求越过发布。
+			select {
+			case <-r.attached:
+				if r.attachErr != nil {
+					return wire.Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "task services could not attach this Session"}}
+				}
+			case <-ctx.Done():
+				code := pb.ErrorCode_ERROR_CODE_CANCELLED
+				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+					code = pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED
+				}
+				return wire.Response{Err: &pb.ErrorInfo{Code: code, SafeMessage: "task service ended while waiting for Session attachment"}}
+			}
+		}
+		return bound(ctx, in)
+	}
 	if install.Role != state.RoleAdapter {
-		return a.mux.For(r.caller)
+		return shared
 	}
 	r.remote = remote.New(remote.Options{AdapterID: install.AdapterID, PluginID: install.PluginID, Store: a.store, Registry: a.adapters, Sink: a.router, RegisterIncoming: a.media.RegisterIncoming,
 		StartCommandSync: a.router.StartCommandSync, StopCommandSync: a.router.StopCommandSync})
@@ -350,7 +373,6 @@ func (a *assembly) handler(r *runningComponent, install state.Install) wire.Hand
 	local := router.NewMux()
 	r.remote.Services(local)
 	private := local.For(r.caller)
-	shared := a.mux.For(r.caller)
 	return func(ctx context.Context, in *wire.Inbound) wire.Response {
 		switch in.Target {
 		case wire.ServiceCoreAdapterDeliver, wire.ServiceCoreAdapterCursor, wire.ServiceCoreAdapterStatus:
@@ -361,7 +383,11 @@ func (a *assembly) handler(r *runningComponent, install state.Install) wire.Hand
 	}
 }
 
-func (a *assembly) attach(ctx context.Context, r *runningComponent) error {
+func (a *assembly) attach(ctx context.Context, r *runningComponent) (err error) {
+	defer func() {
+		r.attachErr = err
+		close(r.attached)
+	}()
 	a.components.Store(r.id, r.instance)
 	plugin := router.FromInstance(r.instance)
 	r.schemas.session = r.caller.SessionKey

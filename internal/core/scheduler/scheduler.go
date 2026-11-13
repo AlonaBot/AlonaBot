@@ -342,6 +342,19 @@ func (s *Scheduler) tick(pluginID string, reg *registration, job *registeredJob,
 	go s.call(ctx, pluginID, reg, job, run, scheduledAt, now, nil)
 }
 
+// scheduledRequest 统一派发与帧大小校验使用的完整载荷。
+func scheduledRequest(job *registeredJob, scheduledAt, now time.Time, eventID, runID string, task *state.Task) *pb.HandlerRequest {
+	event := &pb.Event{EventId: eventID, EventType: scheduledEventType,
+		SourceKind: pb.EventSourceKind_EVENT_SOURCE_KIND_SCHEDULER, OccurredAtUnixMs: now.UnixMilli(),
+		EventPayload: &pb.EventPayload{Kind: &pb.EventPayload_Scheduled{Scheduled: &pb.ScheduledPayload{
+			JobId: job.jobID, RunId: runID, ScheduledAtUnixMs: scheduledAt.UnixMilli()}}}}
+	if task != nil {
+		payload := event.EventPayload.GetScheduled()
+		payload.TaskName, payload.TaskKey, payload.TaskPayloadJson = task.Name, task.Key, task.PayloadJSON
+	}
+	return &pb.HandlerRequest{RouteId: job.routeID, Context: &pb.InvocationContext{Scopes: []string{"job"}}, Event: event}
+}
+
 func (s *Scheduler) call(ctx context.Context, pluginID string, reg *registration, job *registeredJob, run *jobRun, scheduledAt, now time.Time, task *state.Task) {
 	defer run.cancel()
 	// 1. 由 Core 构造独立运行 ID 与无 Actor、默认目标的可信调用上下文。
@@ -350,15 +363,8 @@ func (s *Scheduler) call(ctx context.Context, pluginID string, reg *registration
 	rand.Read(trace)
 	rand.Read(runBytes)
 	runID := hex.EncodeToString(runBytes)
-	event := &pb.Event{EventId: hex.EncodeToString(trace), EventType: scheduledEventType,
-		SourceKind: pb.EventSourceKind_EVENT_SOURCE_KIND_SCHEDULER, OccurredAtUnixMs: now.UnixMilli(),
-		EventPayload: &pb.EventPayload{Kind: &pb.EventPayload_Scheduled{Scheduled: &pb.ScheduledPayload{
-			JobId: job.jobID, RunId: runID, ScheduledAtUnixMs: scheduledAt.UnixMilli()}}}}
-	if task != nil {
-		payload := event.EventPayload.GetScheduled()
-		payload.TaskName, payload.TaskKey, payload.TaskPayloadJson = task.Name, task.Key, task.PayloadJSON
-	}
-	request := &pb.HandlerRequest{RouteId: job.routeID, Context: &pb.InvocationContext{Scopes: []string{"job"}}, Event: event}
+	request := scheduledRequest(job, scheduledAt, now, hex.EncodeToString(trace), runID, task)
+	event := request.Event
 	encoded, err := proto.Marshal(request)
 	var response wire.Response
 	// 2. 编码成功后才提交 RPC；编码失败也走下面的槽释放和错误记录路径。

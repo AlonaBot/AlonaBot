@@ -38,6 +38,7 @@ type Request struct {
 	Attach any
 	// Late 在本地超时或取消后的首个响应到达时，由读循环在锁外调用；回调须及时返回。
 	// 请求尚在队列中时，撤回后在锁外立即以本地结果调用一次；LocalErrorCode 保留本地结束原因。
+	// 准入前期限已过时同样在锁外立即通知，表示没有实际在途执行。
 	Late func(Response)
 }
 
@@ -421,7 +422,11 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 	}
 	if !deadline.After(time.Now()) {
 		s.mu.Unlock()
-		return Response{}, callErr(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "deadline already passed; request not sent")
+		err := callErr(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "deadline already passed; request not sent")
+		if req.Late != nil {
+			req.Late(Response{Err: err.ErrorInfo, LocalErrorCode: pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED})
+		}
+		return Response{}, err
 	}
 	if !s.opt.Global.Acquire(n) {
 		s.mu.Unlock()
