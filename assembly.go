@@ -815,6 +815,10 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, kind journal.Kin
 		return nil, err
 	}
 	running := a.candidate
+	record, err := c.store.GetJournal(ctx, r.OpID)
+	if err != nil {
+		return nil, a.journal.Abort(ctx, r, err)
+	}
 	// 2. 提交返回进程所有权，激活失败也登记诊断并交给退出观察者。
 	process, err := a.journal.Commit(ctx, r)
 	if process == nil {
@@ -824,28 +828,43 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, kind journal.Kin
 	if kind == journal.KindFirstInstall {
 		err = errors.Join(err, c.store.SetEnabled(context.WithoutCancel(ctx), id, true))
 	}
+	if kind == journal.KindUpdate && (!record.WasEnabled || !record.WasRunning) {
+		// 提交只切换权威代次；先停止候选，之后显式 enable 才建立业务 Session。
+		if stopErr := c.stopComponent(running, time.Now(), host.NewStopTiming(c.values), pb.StopReason_STOP_REASON_DISABLE); stopErr != nil {
+			return running, errors.Join(err, stopErr)
+		}
+		return nil, err
+	}
 	if running.instance.State() == host.StateDegraded {
 		a.components.Store(id, running.instance)
 		return running, err
 	}
+	degraded := func(cause error) (*runningComponent, error) {
+		// 元数据已提交，装配失败沿同一 Degraded 状态交还资源，保留管理员恢复入口。
+		failure := errors.Join(err, cause)
+		running.instance.Degrade(failure)
+		a.detach(running)
+		slog.Error("committed candidate assembly failed", "plugin_id", id, "op_id", r.OpID, "generation_id", r.Generation, "kind", kind, "error", failure)
+		return running, errors.Join(failure, running.instance.Session.Close())
+	}
 	// 3. ACTIVATED 成功后发布业务入口，再启动 Adapter 实例。
 	if attachErr := a.attach(ctx, running); attachErr != nil {
-		return running, errors.Join(err, attachErr)
+		return degraded(attachErr)
 	}
 	var instanceSchema []byte
 	if running.install.Role == state.RoleAdapter {
 		directory, directoryErr := installedDirectory(c.dir, running.install)
 		if directoryErr != nil {
-			return running, errors.Join(err, directoryErr)
+			return degraded(directoryErr)
 		}
 		var readErr error
 		instanceSchema, readErr = os.ReadFile(filepath.Join(directory, "adapter_config_schema.json"))
 		if readErr != nil {
-			return running, errors.Join(err, readErr)
+			return degraded(readErr)
 		}
 	}
 	if startErr := c.startInstances(ctx, running, instanceSchema); startErr != nil {
-		return running, errors.Join(err, startErr)
+		return degraded(startErr)
 	}
 	slog.Info("plugin activated", "plugin_id", id, "generation_id", r.Generation, "mode", string(kind), "pid", process.Process.Pid())
 	return running, err

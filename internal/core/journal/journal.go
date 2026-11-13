@@ -279,6 +279,10 @@ func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, 
 		return r, err
 	}
 	// 5. supervisor 只运行到 PREPARED；候选不进入普通异常恢复或业务装配。
+	if kind == KindUpdate && (!r.record.WasEnabled || !r.record.WasRunning) {
+		// 停用意图跨提交保留，候选激活仅完成生命周期，不发布 HTTP 或调度。
+		spec.HTTP, spec.Scheduler, spec.CommandsChanged = nil, nil, nil
+	}
 	r.Session, err = supervisor.Prepare(ctx, o.opt.Store, spec)
 	if err != nil {
 		return r, err

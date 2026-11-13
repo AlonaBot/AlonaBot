@@ -68,6 +68,11 @@ func (p *Prepared) activate(ctx context.Context, commit func(context.Context) er
 			if spec.HTTP != nil && in.HTTPListener != nil {
 				spec.HTTP.Unbind(spec.PluginID, in.GenerationID, in.HTTPProxyToken)
 			}
+			if handoffFailure {
+				in.Degrade(err)
+				p.released = true
+				return p.running(in), errors.Join(err, in.Session.Close())
+			}
 			return nil, errors.Join(err, in.Session.Close(), p.close())
 		}
 	}

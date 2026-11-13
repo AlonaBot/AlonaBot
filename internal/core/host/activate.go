@@ -80,8 +80,8 @@ func (in *Instance) Err() error {
 	return in.failErr
 }
 
-// degrade 记录第一个失败原因并进入 Degraded。
-func (in *Instance) degrade(err error) {
+// Degrade 记录提交后第一个失败原因并进入 Degraded；调用方负责撤销入口与关闭 Session。
+func (in *Instance) Degrade(err error) {
 	in.failOnce.Do(func() {
 		in.failErr = err
 		in.state.Store(int32(StateDegraded))
@@ -118,7 +118,7 @@ func (in *Instance) control(env *pb.Envelope) error {
 		close(in.activated)
 		return nil
 	case *pb.SessionError:
-		in.degrade(&PhaseError{Phase: m.GetFailedPhase(), Code: validate.PublicCode(env.GetError().GetCode()), Message: env.GetError().GetSafeMessage()})
+		in.Degrade(&PhaseError{Phase: m.GetFailedPhase(), Code: validate.PublicCode(env.GetError().GetCode()), Message: env.GetError().GetSafeMessage()})
 		return errors.New("plugin reported SESSION_ERROR")
 	case *pb.Heartbeat:
 		return nil
@@ -156,7 +156,7 @@ func Activate(ctx context.Context, conn *wire.Conn, prep *Prepared, opt Activate
 	marker := sha256.Sum256(append(append([]byte(opt.GenerationID), prep.RouteHash...), prep.ConfigDigest...))
 	if err := in.Session.SendControl(pb.FrameKind_FRAME_KIND_ACTIVATE,
 		&pb.Activate{GenerationId: opt.GenerationID, CommitMarker: marker[:], OnReadyDeadlineUnixMs: deadline.UnixMilli()}); err != nil {
-		in.degrade(err)
+		in.Degrade(err)
 		_ = in.Session.Close()
 		return in, err
 	}

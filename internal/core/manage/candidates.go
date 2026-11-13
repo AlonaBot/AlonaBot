@@ -100,6 +100,9 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (er
 	if err := s.checkCycles(ctx, m, nil); err != nil {
 		return err
 	}
+	if err := s.dependencies(ctx, m); err != nil {
+		return err
+	}
 	active, err := s.opt.Store.Active(ctx, id)
 	if err != nil {
 		return err
