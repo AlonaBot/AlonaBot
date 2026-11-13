@@ -97,9 +97,9 @@ type PluginLog interface {
 	SetSession(sessionID []byte)
 }
 
-// Running 持有一个已激活插件的实例与进程，负责它的停止与清理。
+// Running 持有已提交插件的实例与进程，负责 Activated 或 Degraded 实例的停止与清理。
 type Running struct {
-	Instance *host.Instance   // 已激活的 Core 侧实例
+	Instance *host.Instance   // 已提交的 Core 侧实例，激活失败时为 Degraded。
 	Process  *process.Process // 插件进程及其进程树
 	// store 提供逐插件管理锁。
 	store    *state.Store
@@ -138,7 +138,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 			return store.CommitActive(ctx, spec.PluginID, spec.ExpectedOld, spec.GenerationID)
 		}
 	}
-	return p.activate(ctx, commit)
+	return p.activate(ctx, commit, false)
 }
 
 // Prepare 启动进程并完成 PREPARED，返回连接和进程树的唯一所有者。

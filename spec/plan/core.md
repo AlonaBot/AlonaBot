@@ -86,7 +86,7 @@
 | T-09.3 | goal-38 | 开发 CLI：顶层的 `init/build/check/test/pack`（D-77）；init 在当前目录创建只含作者信息的组件工程，build 生成嵌入代码与调用 `sdk.Run` 的正式入口并编译，取代 `plugin generate`；pack 支持四种角色，WebUI 包为 `any` 平台，签名可选 | T-09 步骤 2（CLI） | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | V-01、V-41、V-54 的打包分项 | 未开始 |
 | T-09.4 | goal-39 | 唯一管理服务与安装记录：逐包串行、来源/pin/卸载保留、各管理动作的区分；卸载的三种清理范围（D-127）；组件角色的同类唯一、`install --source` 与 `--replace`；Adapter 包与实例的管理（实例写回 `core_config.json`）；启用、停用、卸载与更新时的 Adapter 依赖和插件依赖检查；`alonabot run` 按安装记录启动全部已启用的包；Core 装配读取 `core_config.json`，接入命令前缀、Core Admin 列表与默认 locale | T-09 步骤 3 | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | V-40、V-48、V-52、V-82、V-01 的安装分项、V-88 的接入分项 | 已完成（PR #163；TEST-MATRIX §3.2） |
 | T-09.5 | goal-40 | 正式候选 Journal 与准备编排 | T-09 步骤 4 | T-09.4、T-08.6、T-06.4 | V-29 | 已完成（PR #173；TEST-MATRIX §3.2） |
-| T-09.6 | goal-41 | 唯一提交点（ActiveGeneration+COMMITTED）与激活门禁 | T-09 步骤 5 | T-07.5、T-09.5 | V-30、V-21 的提交分项 | 未开始 |
+| T-09.6 | goal-41 | 唯一提交点（ActiveGeneration+COMMITTED）与激活门禁 | T-09 步骤 5 | T-07.5、T-09.5 | V-30、V-21 的提交分项 | 已完成（PR #179；TEST-MATRIX §3.2） |
 | T-09.7 | goal-42 | 崩溃恢复、显式回退与引用回收 | T-09 步骤 6 | T-09.6 | V-30、V-31、V-36 | 未开始 |
 | T-09.10 | goal-66 | 日志管理：按来源级别的持久化与运行时修改（`sdk.log.set_level`）、最近记录缓冲、按日期查询日志文件、管理 API 与 SSE、`alonabot logs` 与 `log-level` | T-09 步骤 7（日志） | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | V-62、V-63、V-68 | 已完成（PR #177；TEST-MATRIX §3.2） |
 | T-09.11 | goal-45 | 正式流程的故障注入，回填 T-08 待联验项，汇总证据 | T-09 步骤 8 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | V-23～V-25、V-27～V-31、V-39、V-40、V-52、V-54～V-56、V-62、V-63、V-82、V-83 | 未开始 |
