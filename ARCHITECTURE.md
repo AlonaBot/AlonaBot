@@ -50,6 +50,7 @@
 | `adapters/... -> sdk/...`、`-> contracts` | Adapter 程序与插件示例一样，只经公共 SDK（`sdk/adapter`）与 Core 通信 |
 | `cmd/alonabot -> internal/core/...`、`-> contracts`、`-> 根包`、`-> internal/tune` | 装配；`run` 复用根包的 Core 装配；`--args` 与 `tune list` 使用调优参数表 |
 | `根包 -> internal/core/...`、`-> sdk/...`、`-> contracts` | 库模式在同一进程中装配 Core 与开发中的组件 |
+| `根包测试 -> agent/...`（仅集成测试） | 通过官方 Agent 与本地 Provider 验证文本生成服务及选项来源 |
 | `根包 -> internal/inproc`、`sdk/... -> internal/inproc` | 库模式把同进程组件的启动参数从根包交给 SDK；`internal` 保证外部模块无法构造这些参数 |
 | `cmd/alonabot -> sdk/generate` | `plugin generate`/`plugin check` 复用 SDK 的 Schema 嵌入生成器 |
 | `cmd/alonabot -> internal/pluginkit`、`internal/pluginkit -> contracts/...`、`-> sdk/generate` | 开发 CLI 的构建与打包复用生成器与契约包 |

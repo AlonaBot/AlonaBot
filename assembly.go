@@ -240,12 +240,12 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 	tools.Register(a.mux)
 	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes, Metrics: a.metrics})
 	a.bus.Register(a.mux)
-	a.broker = broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth, Metrics: a.metrics})
+	a.broker = broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth, Metrics: a.metrics, Agent: a.agentID})
 	tools.RegisterInvoke(a.mux, tool.InvokeOptions{Call: a.broker.Call, Adapters: a.adapters, Buttons: a.buttons,
 		ConfirmTimeout: v.ToolConfirmTimeout, DefaultLocale: func() string { return a.settings.Settings().DefaultLocale }})
 	a.mux.Forward(a.broker.Call)
 	a.schemas = make(map[string]componentOptionSchemas)
-	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: a.broker, Chats: store.Chats, Page: v.OptionsPage, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
+	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: a.broker, Chats: store.Chats, Page: v.OptionsPage, Agent: a.agentID, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
 		installed, err := store.Installs(ctx)
 		if err != nil {
 			return nil, err
