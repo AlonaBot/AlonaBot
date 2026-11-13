@@ -5602,10 +5602,10 @@ sdk（新增或替换）
 
 验收矩阵（pipeline_test.go 中各为一个子测试，以 Adapter 收到的发送与编辑、插件写出的调用次序记录与 HandlerOutcome 为证据）：
 1) 三个插件 priority 为 0、0、-1，以两种不同的安装与启动顺序运行：调用顺序都是 (priority, plugin_id, route_id)。
-2) 自定义 Rule 为 false 与出错：事件路由跳过；已识别的命令被消费且不回落到 Raw 与事件路由（V-11 的真实 Rule 分项）。
-3) 两种 Handler：自动回复只发一次；手动多次 Send；自动回复型 Handler 内的 Send 被拒。
+2) 自定义 Rule 为 false 与出错：事件路由跳过；已识别的命令被消费且不回落到短路径、文本匹配与 Raw，没有 Stop 时 message.created 仍进入事件路由，StopPropagation 后不进入（CONTRACTS §2.2 第 3 条，D-44；V-11 的真实 Rule 分项）。
+3) 两种 Handler：自动回复只发一次；手动多次 Send；自动回复型 Handler 内的显式 Send 照常发送，自动回复排在其后（MESSAGE-MODEL §3，D-70）。
 4) Hook：PreEvent 改写载荷后后继路由看到改写结果；BeforeSend 改写链与拒绝发送；AfterSend 出错不改变发送结果；每次 Send 经过一组 Hook。
-5) 恶意载荷：回环 Adapter 交付的事件与 PreEvent 的返回尝试改 Actor、Target、button 的 action/value、scheduled 的 job_id：插件收到的仍是 Core 保留的值。
+5) 恶意载荷：回环 Adapter 交付的事件与 PreEvent 的返回尝试改 Actor、Target：插件收到的仍是 Core 保留的值；PreEvent 对 button.clicked 与 scheduled 返回载荷（改 action/value 或 job_id）时按 Hook 失败终止入站链并记 WARN，没有 Handler 收到伪造值，去掉该 Hook 后原绑定照常工作（CONTRACTS §2.3）。
 6) 按钮：发送带 `sdk.Action` 按钮的消息后，回环 Adapter 交付点击：调用正确的插件与动作；另一用户点击也调用一次并按该用户鉴权；过期 token 不调用、不落入 Raw。
 7) 等待：两个用户在同一群同时 Wait，各自只收到自己的下一条消息，这些消息不进入普通分发；超时为 DEADLINE_EXCEEDED；等待期间停用插件，重新启动后不补发。
 8) 延迟 Handler（睡眠数秒）执行期间，同一插件 Session 的另一请求的 Response 与 Cancel 正常完成，其他事件照常派发。
