@@ -279,23 +279,32 @@ const (
 	RolePlugin Role = "plugin"
 	// RoleAdapter 指定承载平台账号实例的 Adapter 进程。
 	RoleAdapter Role = "adapter"
+	// RoleAgent 指定全局唯一的 Agent 组件。
+	RoleAgent Role = "agent"
+	// RoleWebUI 指定全局唯一的静态管理界面组件。
+	RoleWebUI Role = "webui"
 )
 
-// Install 记录插件的最小安装信息；尚不含来源绑定、pin、卸载保留等内容。
+// Install 保存组件身份、来源绑定、版本约束与卸载保留状态。
 type Install struct {
-	Role        Role   `gorm:"column:role"`                 // 必填的安装角色
-	AdapterID   string `gorm:"column:adapter_id"`           // RoleAdapter 必填的平台类型
-	PluginID    string `gorm:"column:plugin_id;primaryKey"` // 插件 ID，主键
-	Source      string `gorm:"column:source"`               // 安装来源（库模式为 dev）
-	Entrypoint  string `gorm:"column:entrypoint"`           // 入口可执行文件的路径
-	BuildDigest []byte `gorm:"column:build_digest"`         // 安装时已验证的归档摘要，经启动上下文交给 SDK 回显
+	Role           Role   `gorm:"column:role"`                 // 必填的安装角色
+	AdapterID      string `gorm:"column:adapter_id"`           // RoleAdapter 必填的平台类型
+	PluginID       string `gorm:"column:plugin_id;primaryKey"` // 插件 ID，主键
+	Source         string `gorm:"column:source"`               // 安装来源（库模式为 dev）
+	Entrypoint     string `gorm:"column:entrypoint"`           // 入口可执行文件的路径
+	BuildDigest    []byte `gorm:"column:build_digest"`         // 安装时已验证的归档摘要，经启动上下文交给 SDK 回显
+	Version        string `gorm:"column:version"`
+	PublisherKeyID string `gorm:"column:publisher_key_id"` // 无签名时为空串。
+	Pin            string `gorm:"column:pin"`              // 空串表示允许所有版本。
+	Uninstalled    bool   `gorm:"column:uninstalled"`      // 保留数据与来源绑定的已卸载记录。
 }
 
 // AddInstall 登记安装记录，install_seq 按登记顺序递增（first-wins 的依据）。
-// Role 必须明确指定；Adapter 必须指定 adapter_id，且同一平台类型只允许安装一个包。
+// Role 必须明确指定；Adapter 按 adapter_id 唯一，Agent 与 WebUI 各自全局唯一。
+// 同来源、同发布者的已卸载记录可以重装，保留启用状态行与代次并刷新安装顺序。
 func (s *Store) AddInstall(ctx context.Context, in Install) error {
 	// 1. 校验安装角色与 Adapter 的必填身份。
-	if in.Role != RolePlugin && in.Role != RoleAdapter {
+	if in.Role != RolePlugin && in.Role != RoleAdapter && in.Role != RoleAgent && in.Role != RoleWebUI {
 		return fmt.Errorf("invalid installation role %q", in.Role)
 	}
 	if in.Role == RoleAdapter && in.AdapterID == "" {
@@ -303,13 +312,24 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 	}
 	return s.tx(ctx, func(tx *gorm.DB) error {
 		// 2. 在单连接事务内核对平台类型唯一性并写入安装与启用状态。
-		if in.Role == RoleAdapter {
-			var count int64
-			if err := tx.Model(&installation{}).Where(&installation{Install: Install{Role: RoleAdapter, AdapterID: in.AdapterID}}).Count(&count).Error; err != nil {
-				return err
+		var rows []installation
+		if err := tx.Find(&rows).Error; err != nil {
+			return err
+		}
+		var previous *installation
+		for i := range rows {
+			row := &rows[i]
+			if row.PluginID == in.PluginID {
+				if !row.Uninstalled {
+					return fmt.Errorf("component %s is already installed", in.PluginID)
+				}
+				if row.Source != in.Source || row.PublisherKeyID != in.PublisherKeyID || row.Role != in.Role || row.AdapterID != in.AdapterID {
+					return fmt.Errorf("component %s installation binding differs", in.PluginID)
+				}
+				previous = row
 			}
-			if count > 0 {
-				return fmt.Errorf("adapter %q is already installed", in.AdapterID)
+			if !row.Uninstalled && row.Role == in.Role && (in.Role == RoleAgent || in.Role == RoleWebUI || (in.Role == RoleAdapter && row.AdapterID == in.AdapterID)) {
+				return fmt.Errorf("component %s of role %s is already installed", row.PluginID, in.Role)
 			}
 		}
 		var last installation
@@ -318,6 +338,11 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 			return err
 		}
 		sequence := last.InstallSeq + 1
+		if previous != nil {
+			in.Pin = previous.Pin
+			previous.Install, previous.InstallSeq = in, sequence
+			return tx.Save(previous).Error
+		}
 		row := installation{Install: in, InstallSeq: sequence, CreatedAt: time.Now().UnixMilli()}
 		if err := tx.Create(&row).Error; err != nil {
 			return err

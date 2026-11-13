@@ -65,7 +65,7 @@
 | goal-125 | T-04.12 | 插件对象、结构体参数与子插件 | T-04.8 | 已完成（PR #154） |
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 已完成（PR #145） |
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 已完成（PR #119） |
-| goal-39 | T-09.4 | 管理服务、安装记录与 run | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 待派发 |
+| goal-39 | T-09.4 | 管理服务、安装记录与 run | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 已完成（PR #163） |
 | goal-68 | T-13.2 | 开发组件的配置与数据库 | T-07.6、T-08.5、T-08.11、T-13.1 | 已完成（PR #160） |
 | goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 已完成（PR #159） |
 | goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 已完成（PR #158） |
@@ -75,10 +75,10 @@
 | goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 等待前置 |
 | goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 已完成（PR #157） |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
-| goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 等待前置 |
-| goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2、T-09.4 | 等待前置 |
+| goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 待派发 |
+| goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2、T-09.4 | 待派发 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
-| goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 等待前置 |
+| goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 待派发 |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 已完成（PR #162） |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 已完成（PR #161） |
 | goal-128 | T-07.9 | 动态任务与暂停恢复的 SDK | T-04.12、T-07.8 | 等待前置 |
@@ -86,7 +86,7 @@
 | goal-92 | T-09.13 | 管理页所需的会话与上传接口 | T-09.1、T-09.4、T-09.12 | 等待前置 |
 | goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 等待前置 |
 | goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 待派发 |
-| goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 等待前置 |
+| goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 待派发 |
 | goal-70 | T-13.4 | 开发运行示例与验收 | T-03.10、T-13.2、T-13.3 | 等待前置 |
 | goal-82 | T-16.2 | 按钮、多轮等待、schedule 与示例测试 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | 等待前置 |
 | goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | 等待前置 |
@@ -4603,7 +4603,7 @@ goal-125 若先合并，Collect 改为收 *Plugin，命令、事件与 OnButton 
 
 ### goal-39 · T-09.4 管理服务、安装记录与 run
 
-状态：待派发。前置均已合并。2026-11-12 审查者按 main `ce89453` 改写，要点如下（之前各轮的核对记录见本切片的 git 历史）：
+状态：已完成（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`），证据见 TEST-MATRIX §3.2。合入：根包 `Listen`、`LogLevel`、`LogFormat` 选项，`Plugin` 接受 role plugin 或 agent，Start 只加载一次 `settings.File` 并交给 `assemble(store, dir, values, file)`，HTTP 代理与管理认证在 Start 中创建；`internal/core/manage` 的 `New(Options)`、`Install`/`List`/`Enable`/`Disable`/`Restart`/`Uninstall(PurgeScope)`/`Pin`/`Reload`/`Update`/`Rollback`、实例与管理员方法、`Handler(auth)`；state 的 install 新列与 `RoleAgent`、`RoleWebUI`；`release.pub` 与签名可选的预检；`core_config.json` 的 `adapters.<id>.package` 归属；cmd/alonabot 的 run 调用根包，管理命令经管理 API。D-139 待维护者确认。派发时：前置均已合并。2026-11-12 审查者按 main `ce89453` 改写，要点如下（之前各轮的核对记录见本切片的 git 历史）：
 
 - 根包 `alonabot.Start` 已按安装记录启动已启用的包（`startInstalled`），并以同进程方式运行登记的开发组件；但它没有读取 `core_config.json`、没有 HTTP Listener、webhost 与管理认证，Router 的 Prefixes 为 nil，也不启动 Adapter 实例。
 - `cmd/alonabot` 的 `run` 仍是 T-02 时期的独立运行器（`main.go` 的 `run` 与 `launch`）：自己读取设置、开日志、交付首次管理凭证、建立 webhost 与 HTTP Listener，再用 `--plugin-id`、`--entry`、`--stdio` 运行一个插件可执行文件，没有 Router 与 Adapter。`cmd/alonabot/e2e_test.go` 的 15 个测试都经它运行 `examples/plugins/lifecycle`。
@@ -5388,7 +5388,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-69 · T-13.3 开发运行与热部署
 
-状态：等待前置（T-09.4，PR #163 待合并）。T-07.6（PR #100）、T-09.16（PR #140）、T-13.1（PR #149）已合并。2026-11-12 前置加入 T-09.4：本切片的 run 建在 goal-39 迁到根包的 run 与根包选项之上（goal-39 删除 `--plugin-id`、`--entry`、`--stdio`），此前只在状态段写明先后、未列入前置。语句已按 PR #163 的代码写好，#163 合并后改为待派发。2026-11-12 审查者按 PR #163 的 head `1796add`（已合入 main `b4610e1`）改写，要点如下：
+状态：待派发。T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`）已合并，语句按它的代码写成，无需改动。T-07.6（PR #100）、T-09.16（PR #140）、T-13.1（PR #149）已合并。2026-11-12 前置加入 T-09.4：本切片的 run 建在 goal-39 迁到根包的 run 与根包选项之上（goal-39 删除 `--plugin-id`、`--entry`、`--stdio`），此前只在状态段写明先后、未列入前置。语句已按 PR #163 的代码写好，#163 合并后改为待派发。2026-11-12 审查者按 PR #163 的 head `1796add`（已合入 main `b4610e1`）改写，要点如下：
 - 根包：`alonabot.Run`/`Start` 与选项 `Plugin`（接受 role plugin 或 agent）、`Adapter`、`DataDir`、`Args`、`Listen`、`LogLevel`、`LogFormat`；Start 只加载一次 `settings.File` 并交给装配；开发组件由 `startDevelopment` 以同进程方式运行，配置取 `plugins/<id>/config.json`、数据库为 `dev.sqlite`（T-13.2），开发 Adapter 按 `core_config.json` 中属于它的实例启动（T-09.4）；已安装组件由 `startInstalled` 经 `supervisor.Launch` 以独立进程运行。根包目前没有「开发组件以独立进程运行」与「运行中只重启一个开发组件」的入口，本切片加入。
 - `cmd/alonabot/commands.go` 的 run：`alonabot run [--data-dir] [--listen] [--log-level] [--log-format] [--args]` 调用 `alonabot.Run`，不接受位置参数；不带子命令时等同 run。
 - 生成器 `sdk/generate` 与 `alonabot plugin generate` 已有；`internal/pluginkit` 尚不存在（ARCHITECTURE 已登记 `cmd/alonabot -> internal/pluginkit` 与 `internal/pluginkit -> sdk/generate` 的边，供 goal-38 的 `alonabot build` 复用）。
@@ -5444,7 +5444,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-81 · T-16.1 插件测试套件基础
 
-状态：等待前置（T-09.4，PR #163 待合并）。T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)）与 T-13.2（[PR #160](https://github.com/AlonaBot/AlonaBot/pull/160)，合并提交 `65ebc5f`）已合并。2026-11-12 审查者按 main 与 PR #163 的代码改写，前置加入 T-09.4：测试 Adapter 的实例经 `core_config.json` 启动、Core Admin 从同一文件读取，这两项由 T-09.4 的根包装配提供。改写要点：
+状态：待派发。T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`）已合并，语句按它的代码写成，无需改动。T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)）与 T-13.2（[PR #160](https://github.com/AlonaBot/AlonaBot/pull/160)，合并提交 `65ebc5f`）已合并。2026-11-12 审查者按 main 与 PR #163 的代码改写，前置加入 T-09.4：测试 Adapter 的实例经 `core_config.json` 启动、Core Admin 从同一文件读取，这两项由 T-09.4 的根包装配提供。改写要点：
 - 插件对象：`*sdk.Plugin`（`sdk.NewPlugin`，`p.Generated().Manifest` 为工程 plugin.yaml 原文，D-137）；SDK 公开类型用 `sdk/message`（`message.Session`、`message.Chain`、`message.Content`、`message.SendResult`、`message.MessageRef`）与 `sdk/errcode`，pb 只在 SDK 内部（T-04.8）。
 - 权限：Actor 的平台权限为权限名集合（D-68～D-72，`sdk.Permission`、`sdk.ChatAdmin`）；Core Admin 是 `core_config.json` 的 `admins` 中的 `<adapter_id>:<external_user_id>`（D-105）；发信许可缺省为全部实例（D-83）。
 - 根包（PR #163 之后）：`alonabot.Start(ctx, DataDir, Plugin, Adapter, Listen, ...)`；Start 读取 `core_config.json`，开发 Adapter 按 `adapters.<adapter_id>` 中 `package` 属于它的实例启动；开发组件的配置为 `plugins/<id>/config.json`，数据库为 `dev.sqlite`（T-13.2）。
@@ -5584,7 +5584,15 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-131 · T-03.25 聊天目录
 
-状态：等待前置（T-08.14、T-09.4）。2026-11-10 按 D-130 新增。T-03.3（PR #32）已合并。goal-130（T-08.14）提供内置来源的登记处，goal-39（T-09.4）提供卸载的清理对象，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片修改 Event 的 proto 与 `internal/core/state/schema.sql`，按执行顺序的共享文件规则处理冲突。
+状态：待派发。前置 T-03.3（PR #32）、T-08.14（[PR #157](https://github.com/AlonaBot/AlonaBot/pull/157)，合并提交 `e709135`）与 T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`）已合并。2026-11-10 按 D-130 新增；2026-11-12 审查者按 main `d6eb381` 写出范围、接口与测试段，要点如下：
+- 协议：Event 在 `contracts/proto/alonabot/v1/message.proto`，最后一个字段为 `ChatType chat_type = 15`，`chat_title` 用 16；SDK 侧 `sdk/message.Event` 与 `sdk/internal/convert` 同步一个字段，`sdk/adapter` 的 `Core.Deliver(ctx, ev *message.Event, cursor)` 不变。
+- 交付：`internal/core/adapter/remote/services.go` 处理 `AdapterDeliverRequest` 时先校验 Target 与 Actor，再 `Store.PutAdapterCursor(ctx, pluginID, instanceID, cursor)`，之后重建可信字段并派发。聊天记录与游标写在同一个状态库事务中。
+- 选项来源：`configschema.BuiltinOptionSources` 已登记 `core.chats` 与 filter 键 `chat_type`、`adapter_id`；`internal/core/options` 的内置来源目前对它返回 UNAVAILABLE，本切片实现。
+- 清理：`internal/core/manage/lifecycle.go` 的卸载按 `PurgeScope` 列出并删除受管对象，状态库对象在一个事务内删除。
+- 本切片修改 Event 的 proto 与 `internal/core/state/schema.sql`，按执行顺序的共享文件规则处理冲突（goal-55 也在改 schema.sql 的按钮表）。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-131（切片 T-03.25：聊天目录）。goal 目录 goal-131，分支 goal-131，worktree .worktrees/goal-131，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：Event 带上可选的会话显示名 `chat_title`；Core 在接纳入站事件时记录见过的聊天，并把它登记为内置选项来源 `core.chats`；聊天目录随 Adapter 的数据清理。两个官方 Adapter 的填写由 goal-132 与 goal-133 提供。
 
@@ -5599,7 +5607,39 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 - 名称不写入日志；诊断只写 adapter_id 与 chat_id。
 - 测试：提交一个集成测试（经回环测试 Adapter），覆盖群与私聊各交付一条带名称的事件后 `core.chats` 能按名称搜到、按 `chat_type` 筛选、之后一条不带名称的事件不清空名称；其余（没有 target 却带名称被拒、Core 重启后保留、两个实例交付同一聊天、`--purge-data` 后删除而只卸载保留、按存储值取回）进本地自测。
 
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/message.proto：Event 追加 `optional string chat_title = 16`，随后 go generate ./...；contracts/wirespec_test.go 追加编号检查
+- sdk/message 与 sdk/internal/convert：Event 增加 ChatTitle 字段与转换
+- internal/core/state/：schema.sql 增加 chat 表（写进唯一的初始迁移）；新增 chats.go；PutAdapterCursor 同步签名
+- internal/core/adapter/remote/services.go：交付时校验并写入聊天
+- internal/core/options/：实现内置来源 core.chats
+- internal/core/manage/：把聊天表加入 Adapter 的清理对象
+- internal/core/adapter/remote/remote_test.go：追加集成测试 TestChatDirectory
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+   // internal/core/state
+   type Chat struct { AdapterID, ChatID, ChatType, Title, InstanceID string; FirstSeen, LastSeen time.Time } // ChatType 为 private、group 或 channel，空串表示未知
+   func (s *Store) PutAdapterCursor(ctx context.Context, pluginID, instanceID string, cursor []byte, chat *Chat) error // chat 为 nil 时只保存游标；否则在同一事务中写入或更新聊天
+   type ChatQuery struct { Search, ChatType, AdapterID string; Keys []ChatKey; Limit int }
+   type ChatKey struct { AdapterID, ChatID string }
+   func (s *Store) Chats(ctx context.Context, q ChatQuery) (chats []Chat, more bool, err error) // 按 LastSeen 从新到旧
+   清理时删除某个 adapter_id 的聊天：在 manage 已有的清理事务中执行（state 提供按 adapter_id 删除的方法，名称自定）。
+
+行为：按上文要点。补充：
+- 没有 target 的事件带 chat_title 时，Core 以 INVALID_ARGUMENT 拒绝这次交付并记 WARN（只写 adapter_id 与 chat_id）。
+- 写入：Title 为空时保留已有名称，ChatType 未知时保留已有类型，InstanceID 与 LastSeen 每次更新；Core 生成的 bot.online、bot.offline 与 scheduled 不写。
+- core.chats：存储值为 `<adapter_id>:<chat_id>` 会话字符串（转义规则同 MESSAGE-MODEL §1，复用已有的会话字符串编码），显示名为 Title（为空时为 chat_id），说明为 adapter_id 与 chat_type；Search 不区分大小写地匹配名称与 chat_id；按值取回时格式不合法或不存在的值不返回；上限 OPTIONS_PAGE，超出时 More。
+- 卸载 Adapter：--purge-data 与 --purge 删除该 adapter_id 的聊天并在确认对象中列出条数；只卸载与 --replace 保留。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/adapter/remote/remote_test.go 的 TestChatDirectory（经回环测试 Adapter 进程）：群与私聊各交付一条带名称的事件后，core.chats 能按名称搜到、按 chat_type 筛选；之后一条不带名称的事件不清空名称。contracts/wirespec_test.go 的编号检查。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有 target 却带名称被拒；Core 重启后保留；两个实例交付同一聊天时 InstanceID 更新为最近的一个；--purge-data 后删除而只卸载保留；按存储值取回；聊天名称不出现在日志中。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./...；go build ./...。
+
 不做：给插件的聊天列表服务；读取 `chat_title` 的 SDK 方法；话题的目录；成员列表；主动向平台拉取全部群；管理 API（goal-93）与页面（goal-44）；两个官方 Adapter 的填写（goal-132、goal-133）。
+```
 
 ### goal-18 · T-05.5 多进程事件流水线验收
 
@@ -5887,7 +5927,7 @@ broker.Options、bus.Options 与 router.Options 增加 Metrics *metrics.Counters
 
 ### goal-55 · T-11.2 工具调用与用户确认
 
-状态：等待前置（T-06.2）。T-03.8（[PR #136](https://github.com/AlonaBot/AlonaBot/pull/136)，合并提交 `3621fc1`）已合并：`internal/core/buttons` 的 `New(store, now, current)` 与 `Service.Issue`、`Resolve`、`Purge`；`message.New(adapters, p, lease, issue, requestTimeout)`；`router.Options.Buttons`；可选接口 `adapter.ExtensionChecker`；`manifest.CheckDependencies(m, Installed)`；SDK 的 `sdk.Action[T]`、`sdk.OnButton(r, a).Handle(func(*Context, T) error)`、`message.Buttons`、`message.Extension`；`Segment` oneof 已用到 `extension = 9`。用户确认按钮使用上述 SDK 按钮动作。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。语句中 goal-8、goal-20、goal-53 提供的符号（buttons.Service、broker 的父链调用、internal/core/i18n）只写名字；合并后由审查者核对，再改为待派发。goal-54（PR #101，合并提交 `de48f26`）已合并，合入的符号：`tool.Catalog`（`New(store, r)`、`Register(m)` 注册 `core.tool.list`、`Effective`、`SetPolicy`、`Policies`，可见性按 `router.ServiceCallable` 与生效策略非 DENY 判定）、`router.Plugins`、tool.proto 的 ToolPolicy/ToolSpec/ToolInfo/ToolListRequest/ToolListResponse、sdk 的 `ToolDefault`/`ToolInfo`/`ListTools`；`Catalog` 目前只持有状态库与 Router，invoke 需要的 Broker 等依赖在本切片按实际前置写入接口段。
+状态：待派发。前置 T-03.8（PR #136）、T-06.2（[PR #161](https://github.com/AlonaBot/AlonaBot/pull/161)，合并提交 `b4610e1`）、T-08.8（PR #102）与 T-11.1（PR #101）已合并。2026-11-12 审查者按 main 核对：`buttons.New(store, now, ttl, current)`（ttl 为 BUTTON_TOKEN_TTL）与 `Service.Issue`、`Resolve`、`Purge`；`button_token` 表以 plugin_id 外键关联安装记录，确认 token 记在调用工具的插件名下并以新增的类型列区分（写进唯一的初始迁移）；`broker.New(broker.Options{Router, RequestTimeout, MaxDepth})`，经 `Broker.Call(ctx, caller, &wire.Inbound{Target, Payload, ParentAttach})` 以父调用链转发（T-06.2 继承 actor、默认目标、scopes、send_forbidden 与 trace，CALL_CYCLE 与深度照常检查）；tune 已有 `TOOL_CONFIRM_TIMEOUT`（缺省 5m）；`sdk.ListTools` 已在 `sdk/tool.go`；多进程本地集成复用根包 `pipeline_test.go` 的装配（T-05.5）。与 PR #163（goal-39）同改 assembly.go 时后合并者同步 main。此前的记录：T-03.8（[PR #136](https://github.com/AlonaBot/AlonaBot/pull/136)，合并提交 `3621fc1`）已合并：`internal/core/buttons` 的 `New(store, now, current)` 与 `Service.Issue`、`Resolve`、`Purge`；`message.New(adapters, p, lease, issue, requestTimeout)`；`router.Options.Buttons`；可选接口 `adapter.ExtensionChecker`；`manifest.CheckDependencies(m, Installed)`；SDK 的 `sdk.Action[T]`、`sdk.OnButton(r, a).Handle(func(*Context, T) error)`、`message.Buttons`、`message.Extension`；`Segment` oneof 已用到 `extension = 9`。用户确认按钮使用上述 SDK 按钮动作。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。语句中 goal-8、goal-20、goal-53 提供的符号（buttons.Service、broker 的父链调用、internal/core/i18n）只写名字；合并后由审查者核对，再改为待派发。goal-54（PR #101，合并提交 `de48f26`）已合并，合入的符号：`tool.Catalog`（`New(store, r)`、`Register(m)` 注册 `core.tool.list`、`Effective`、`SetPolicy`、`Policies`，可见性按 `router.ServiceCallable` 与生效策略非 DENY 判定）、`router.Plugins`、tool.proto 的 ToolPolicy/ToolSpec/ToolInfo/ToolListRequest/ToolListResponse、sdk 的 `ToolDefault`/`ToolInfo`/`ListTools`；`Catalog` 目前只持有状态库与 Router，invoke 需要的 Broker 等依赖在本切片按实际前置写入接口段。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-55（切片 T-11.2：工具调用与用户确认）。goal 目录 goal-55，分支 goal-55，worktree .worktrees/goal-55，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -5902,6 +5942,8 @@ broker.Options、bus.Options 与 router.Options 增加 Metrics *metrics.Counters
 - internal/wire/services.go：末尾追加 ServiceToolInvoke = "core.tool.invoke"、ServiceToolConfirm = "core.tool.confirm"
 - internal/core/tool/：新增 invoke.go、confirm.go
 - internal/core/buttons/：确认记录绑定的 token（与插件按钮共用表，增加确认类型）
+- internal/core/state/schema.sql 与 buttons.go：button_token 增加类型列（plugin 或 confirm，写进唯一的初始迁移），读写同步
+- 根包 assembly.go：注册两个新服务、把确认点击接到 buttons 的解析（只加装配点）
 - internal/core/i18n/：en-US.json 与 zh-CN.json 增加确认消息的文案
 - sdk/：tool.go 增加 InvokeTool 与 ConfirmOperation
 - 上述包的测试文件
@@ -5934,7 +5976,7 @@ broker.Options、bus.Options 与 router.Options 增加 Metrics *metrics.Counters
 
 测试（按编码规范「测试提交规则」）：
 - 提交：无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：参数截断；token 只能用一次；父调用结束时记录作废；zh-CN 文案；策略在两次调用之间修改；internal/core/supervisor/tool_invoke_local_test.go（//go:build unix）。在测试临时目录生成工具服务与测试插件（写法同 goal-54 的本地测试；收到消息时调用 InvokeTool 或 ConfirmOperation 并回复结果），memory Adapter 支持 buttons 与 Editor：allow 工具直接返回结果；deny 工具返回 PERMISSION_DENIED 且工具未执行；confirm 工具：memory 收到带两个按钮的确认消息，内容含实际 JSON 参数；同一用户点「允许」后工具执行并返回结果；另一用户先点击被拒、不影响结果；点「拒绝」返回 PERMISSION_DENIED 且工具未执行；超时（注入较短的 TOOL_CONFIRM_TIMEOUT）返回 DEADLINE_EXCEEDED；确认消息没有经过插件的 BeforeSend Hook（测试插件注册了会改链的 BeforeSend，确认消息不受影响）；没有 Actor 的调用（scheduled fixture）遇到 confirm 返回 PERMISSION_DENIED，没有发消息；不支持 buttons 的实例返回 UNSUPPORTED；arguments 不符合 input schema 时 INVALID_ARGUMENT；ConfirmOperation 展示 summary 而不是参数。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：参数截断；token 只能用一次；父调用结束时记录作废；zh-CN 文案；策略在两次调用之间修改；根包 tool_invoke_local_test.go（//go:build unix），复用 pipeline_test.go 的装配：测试二进制扮演工具服务插件与调用方插件（收到消息时调用 InvokeTool 或 ConfirmOperation 并回复结果），回环 Adapter 声明 message.buttons 与 message.edit：allow 工具直接返回结果；deny 工具返回 PERMISSION_DENIED 且工具未执行；confirm 工具：memory 收到带两个按钮的确认消息，内容含实际 JSON 参数；同一用户点「允许」后工具执行并返回结果；另一用户先点击被拒、不影响结果；点「拒绝」返回 PERMISSION_DENIED 且工具未执行；超时（注入较短的 TOOL_CONFIRM_TIMEOUT）返回 DEADLINE_EXCEEDED；确认消息没有经过插件的 BeforeSend Hook（测试插件注册了会改链的 BeforeSend，确认消息不受影响）；没有 Actor 的调用（scheduled fixture）遇到 confirm 返回 PERMISSION_DENIED，没有发消息；不支持 buttons 的实例返回 UNSUPPORTED；arguments 不符合 input schema 时 INVALID_ARGUMENT；ConfirmOperation 展示 summary 而不是参数。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/... ./sdk/...；go build ./...。
 

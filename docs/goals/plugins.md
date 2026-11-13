@@ -6,8 +6,8 @@
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
-| goal-71 | T-14.1 | help 插件与命令列表 | T-04.4、T-05.2、T-08.8 | 等待前置 |
-| goal-72 | T-14.2 | welcome 与 rss 插件 | T-05.2、T-07.2、T-08.5、T-08.8、T-08.11 | 等待前置 |
+| goal-71 | T-14.1 | help 插件与命令列表 | T-04.4、T-05.2、T-08.8 | 待派发 |
+| goal-72 | T-14.2 | welcome 与 rss 插件 | T-05.2、T-07.2、T-08.5、T-08.8、T-08.11、T-09.4 | 待派发 |
 
 ## 第 12 波
 
@@ -15,55 +15,55 @@
 
 状态注记（2026-11-10，D-128）：`core.command.list` 返回的路径与别名取生效的命令名（有命令名覆盖时主名为路径，其余为别名）；goal-129 先合并时本切片按生效的命令名实现，后合并时由 goal-129 同步。
 
-状态：等待前置（T-05.2）。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。T-04.4（PR #88）已合并。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。语句中 goal-10、goal-12、goal-13、goal-16、goal-53 提供的符号（router.CommandIndex、policy.CheckCommand、contracts/i18n、sdk 的命令注册与 Context.T）只写名字；合并后由审查者核对签名，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：经 `alonabot run <目录>` 运行，不再用 `--plugin-id`、`--entry`（D-77）。前置合并后由审查者改写。说明键已由 T-03.17 按 D-138 交付。
+状态：待派发。前置 T-04.4（PR #88）、T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)）与 T-08.8（PR #102）已合并。2026-11-12 审查者按 main `9eaf8e2` 改写（老师确认只改写、暂不派发），按 D-68～D-72、D-77、D-105、D-138 删去旧写法，要点如下：
+- 说明（D-138，T-03.17 已交付）：命令 builder 的 `Description(text)` 直接登记英文原文，写入 `CommandSpec.description = 13`；其他语言写在插件 `i18n/<locale>.json` 的 commands 中、按完整规范路径覆盖，`contracts/i18n` 的 `Catalog.CommandDescription(locales, path, source)` 逐语言回落。插件的文案目录由 Core 在 Session 激活时取得，经 `router.Plugin.Messages()` 与 `DefaultLocale()` 读取，不需要另外登记。
+- 命令名（T-04.14）：`Router.Commands()` 的 `CommandIndex` 只含胜出者，`CommandEntry{PluginID, RouteID, Priority, Path, Alias, Names}` 的 Names 为生效的全部命令名、主名在前。
+- 权限与启用：Router 内部的 `commandPermitted(candidate, ev)` 与 `router.Options.CommandState`（policy 的完整生效状态）已用于命令派发与 T-03.17 的命令菜单（`Router.commandMenu`）；usage 由 Router 内部的 `commandUsage(candidate, ev, prefix)` 按 Core 文案目录生成。core.command.list 复用这些内部函数，所以放在 internal/core/router 中实现。
+- 权限名为字符串集合（`sdk.User`、`sdk.Admin`、`sdk.ChatAdmin`、`sdk.PermissionName`，D-69）；Core Admin 写在 `core_config.json` 的 admins，用户字符串为 `<adapter_id>:<external_user_id>`（D-105）。
+- 插件写法：插件对象（`func New() *sdk.Plugin`，`sdk.UseGenerated`）、`p.Command(path...).Args(...).Description(text).Handle(fn)`、`c.T`。多进程本地集成复用根包 `pipeline_test.go` 的装配（T-05.5）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-71（切片 T-14.1：help 插件与命令列表）。goal 目录 goal-71，分支 goal-71，worktree .worktrees/goal-71，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：Core 提供 core.command.list：按调用者 Actor 与默认 Target 返回可用的命令（已启用、权限满足、未被遮蔽），说明按 CommandSpec 的说明键在所属插件的 messages 中按 Actor locale 翻译。官方 help 插件 plugins/help/ 注册 /help [命令] 与 /whoami。
+目标：Core 提供 core.command.list：按调用者的 Actor 与默认 Target 返回可用的命令（胜出者、已启用、权限满足），带生效命令名、usage 与按 Actor locale 选出的说明。官方 help 插件 plugins/help/ 注册 /help [命令] 与 /whoami。
 
-依据：PLAN T-14 步骤 1；CONTRACTS §15.2、§2.2、§2.3、§5.4；WIRE-FORMAT §3.5（core.command.list 与 CommandSpec 的说明键）；TEST-MATRIX V-67 的 help 分项。
+依据：PLAN plugins T-14 步骤 1；CONTRACTS §15.2、§2.2、§2.3、§5.4；WIRE-FORMAT §3.5；DECISIONS D-69、D-105、D-128、D-138；TEST-MATRIX V-67 的 help 分项。
 
 范围（只新增或修改这些）：
-- contracts/proto/alonabot/v1/：route.proto 的 CommandSpec 追加 optional string description_key = 12；新增 CommandListRequest/Response 与 CommandInfo。随后 go generate ./...（本切片获授权只追加这些）
+- contracts/proto/alonabot/v1/：新增 CommandListRequest/Response 与 CommandInfo（只追加），随后 go generate ./...
 - contracts/wirespec_test.go：追加编号检查
 - internal/wire/services.go：末尾追加 ServiceCommandList = "core.command.list"
-- 新增 internal/core/commandlist/
-- internal/core/supervisor 或 cmd/alonabot 的装配处：调用 SetMessages（只加调用点）
-- sdk/：Description(key string) 路由选项；buildRegister 写入 description_key；新增 commands.go（ListCommands）
-- 新增 plugins/help/（main 包与可导入的 help 包，含 plugin.yaml 与 i18n/en-US.json、zh-CN.json）
+- internal/core/router/：新增 commandlist.go（服务实现与注册函数）
+- 根包 assembly.go：注册该服务（只加装配点）
+- sdk/：新增 commands.go（ListCommands 与 CommandInfo）
+- 新增 plugins/help/（可导入的 help 包与 cmd 薄入口，含 plugin.yaml 与 i18n/en-US.json、zh-CN.json）
 - 上述包的测试文件
 允许的新跨模块边：plugins/... -> sdk/...、-> contracts（已允许）。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 1. proto
    message CommandListRequest {}
-   message CommandInfo { string plugin_id = 1; string route_id = 2; repeated string path = 3; repeated CommandAlias aliases = 4; string usage = 5; optional string description = 6; }
+   message CommandInfo { string plugin_id = 1; string route_id = 2; repeated string path = 3; repeated CommandAlias aliases = 4; string usage = 5; optional string description = 6; } // CommandAlias 为 route.proto 已有的消息
    message CommandListResponse { repeated CommandInfo commands = 1; }
-2. internal/core/commandlist
-   type Service struct{ ... }
-   func New(r *router.Router, p *policy.Policy) *Service
-   func (s *Service) Register(m *router.Mux)
-   func (s *Service) SetMessages(pluginID string, files map[string][]byte) // 文件按 contracts/i18n 解析；有问题时记 WARN 并忽略该插件的说明
+2. internal/core/router
+   func (r *Router) RegisterCommandList(m *Mux) // 注册 core.command.list
 3. sdk
-   func Description(key string) RouteOption // 命令说明在本插件 messages 中的键
    type CommandInfo struct { PluginID, RouteID string; Path []string; Aliases [][]string; Usage string; Description string }
-   func ListCommands(ctx context.Context) ([]CommandInfo, error) // 必须在 Handler 内调用（需要父调用链）
+   func ListCommands(ctx context.Context) ([]CommandInfo, error) // 必须在 Handler 或其延续调用内调用（需要父调用链）
 4. plugins/help
-   func New() *sdk.Plugin // 根插件
+   func New() *sdk.Plugin
 
 行为：
-- core.command.list（必须带 parent_call_id；Actor 与默认 Target 取自父调用的可信上下文，没有 Actor 时只列出 ANY 权限的命令）：遍历 Router 的 CommandIndex，只保留每个规范路径的胜出者（被遮蔽者不列出）；对每条命令执行 policy.CheckCommand（全局禁止、启用、权限），通过的才列出；按路径字典序返回。usage 与 goal-12 的 usage 生成规则相同（按 Actor locale 使用 Core 文案目录）；description 在所属插件的 messages 中按 [Actor.locale, 默认 locale, en-US] 翻译，键不存在时 absent。
-- 插件的 messages：SDK 不在 REGISTER 中上传。commandlist.Service 提供 SetMessages(pluginID string, files map[string][]byte)，由装配方调用：已安装的包读取包目录下的 i18n/*.json；库模式的开发组件使用生成器嵌入的 Generated.I18n；alonabot run 的开发入口读取 --entry 所在目录的 i18n/（存在时）。取不到时 description absent。
+- core.command.list：必须带 parent_call_id，否则 FAILED_PRECONDITION；Actor 与默认 Target 取自父附件（`*router.Invocation`）。只列 match 为路径的命令：遍历 CommandIndex 的胜出者（被遮蔽者与 alias 条目不单列），对每条用完整生效状态判断启用，用 commandPermitted 判断权限（没有 Actor 时只列出不要求权限的命令）；path 为主名，aliases 为其余生效命令名；usage 用 commandUsage（前缀取默认 Target 所在实例的第一个命令前缀）；description 用 `Catalog.CommandDescription([Actor.locale, 插件默认 locale], 规范路径, 英文原文)`，没有登记说明时 absent。按 path 字典序返回。
 - help 插件：
-  - /help：调用 ListCommands，按插件分组列出路径与说明，文案经 Context.T（键 help.list.header 等）。
+  - /help：调用 ListCommands，按插件分组列出路径与说明，标题等文案经 c.T（键 help.list.header 等）。
   - /help <路径>：只显示匹配命令的 usage、别名与说明；没有可用的匹配命令时回复 help.not_found。
-  - /whoami：回复调用者的用户字符串 `<adapter_id>:<external_user_id>`（可以直接写进 admins，D-105）与收到消息的实例名（文案键 help.whoami，参数 user 与 instance）；没有 Actor 时回复 help.whoami.no_actor。
-  - 所有回复都用 Context.Send 回复原 Target；用户可见文案只来自 i18n（en-US 与 zh-CN）。
+  - /whoami：回复调用者的用户字符串 `<adapter_id>:<external_user_id>`（可以直接写进 admins，D-105）与收到消息的实例名（键 help.whoami，参数 user 与 instance）；没有 Actor 时回复 help.whoami.no_actor。
+  - 命令说明用 Description 登记英文，zh-CN 写在 i18n 的 commands；用户可见文案只来自 i18n。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有父调用链时 core.command.list 返回 FAILED_PRECONDITION；没有 Actor 时只列 ANY；排序；help 的 i18n 文件在 alonabot check 中通过；internal/core/supervisor/help_local_test.go（//go:build unix）：构建 plugins/help 与两个测试插件（一个有 ADMIN 权限的命令，一个与另一插件同路径且 priority 较低的命令），用 memory Adapter 装配：普通用户的 /help 不包含 ADMIN 命令与被遮蔽的命令；Core Admin 能看到 ADMIN 命令；zh-CN 用户看到中文说明，en-US 用户看到英文；说明键缺失的命令没有说明；禁用的命令不出现；/help 某命令显示 usage；/whoami 回复正确的用户字符串与实例名。
+- 提交：contracts/wirespec_test.go 的编号检查；其余无（D-86）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有父调用链时 FAILED_PRECONDITION；没有 Actor 时只列不要求权限的命令；排序；`alonabot plugin check` 在 plugins/help 通过；根包 help_local_test.go（//go:build unix，复用 pipeline_test.go 的装配，测试二进制扮演 help 与两个测试插件：一个有 Admin 权限的命令，一个与另一插件同路径且 priority 较低的命令）：普通用户的 /help 不含 Admin 命令与被遮蔽的命令；Core Admin 能看到 Admin 命令；zh-CN 用户看到中文说明，en-US 用户看到英文；没有说明的命令没有说明；禁用的命令不出现；命令名覆盖后显示生效的名字；/help 某命令显示 usage；/whoami 回复正确的用户字符串与实例名。
 
 完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./...；go build ./...。
 
@@ -72,12 +72,12 @@
 
 ### goal-72 · T-14.2 welcome 与 rss 插件
 
-状态：等待前置（T-05.2）。T-07.2（PR #107，合并提交 `fc2c247`）已合并，合入的符号：`internal/core/scheduler` 的 `New(Options{JobTimeout, Now})`、`Scheduler.Attach(router.Plugin, activatedAt)`/`Detach`/`Released`/`Close`/`Stats(pluginID, jobID) JobStats`；`wire.Request.Late`；SDK 的 `ScheduleRegistry.Every`/`Cron` 已随 REGISTER 声明并分发到 Handler。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。T-08.5（PR #79）已合并。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。语句中 goal-16、goal-24、goal-32、goal-53、goal-95 提供的符号（ChatAdmin Rule、ScheduleRegistry.Every、gormdb.Open、Context.T、sdk.Send、Config() 与 OnConfigLoad）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：rss 的后台推送按缺省的发信许可即可发送（D-83）。
+状态：待派发（老师确认暂不派发）。T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`）已合并。T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)）、T-07.2（PR #107）、T-08.5（PR #79）、T-08.8（PR #102）与 T-08.11（PR #103）已合并。2026-11-12 审查者按 main 改写（老师确认只改写、暂不派发），前置加入 T-09.4：提交的测试在 plugins/ 中以根包库模式 `alonabot.Start` 运行插件与测试中定义的 Adapter，测试 Adapter 的实例经 `core_config.json` 启动、Core Admin 从同一文件读取，由 T-09.4 提供。改写要点：权限按 D-69 写成 `sdk.ChatAdmin.Or(sdk.Admin)`；定时任务按 T-04.11 写成 `p.Every(jobID, d).Handle(fn)`，注册时读不到配置，所以固定每分钟一次，按订阅的上次检查时间与 `interval_minutes` 决定是否抓取；数据库用 `sqlitedb.Open(ctx)` 与 `sqlitedb.Migrations(p, ...)`；事件为 `sdk.MemberJoined`（`*message.MemberPayload`）；后台发送用 `sdk.Send(ctx, session, content)`，发信许可缺省为全部实例（D-83）。此前的记录：T-07.2（PR #107，合并提交 `fc2c247`）已合并，合入的符号：`internal/core/scheduler` 的 `New(Options{JobTimeout, Now})`、`Scheduler.Attach(router.Plugin, activatedAt)`/`Detach`/`Released`/`Close`/`Stats(pluginID, jobID) JobStats`；`wire.Request.Late`；SDK 的 `ScheduleRegistry.Every`/`Cron` 已随 REGISTER 声明并分发到 Handler。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。T-08.5（PR #79）已合并。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。语句中 goal-16、goal-24、goal-32、goal-53、goal-95 提供的符号（ChatAdmin Rule、ScheduleRegistry.Every、gormdb.Open、Context.T、sdk.Send、Config() 与 OnConfigLoad）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：rss 的后台推送按缺省的发信许可即可发送（D-83）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-72（切片 T-14.2：welcome 与 rss 插件）。goal 目录 goal-72，分支 goal-72，worktree .worktrees/goal-72，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：预装插件 plugins/welcome/ 在 member.joined 时向该聊天发送欢迎语，按聊天开关与自定义文案；plugins/rss/ 提供 /rss add|list|remove，订阅经 sqlitedb.Open 保存在插件数据库（不链接 GORM，D-49），固定 interval 的定时任务抓取 RSS 2.0 与 Atom，按 guid 或链接去重，只推送新条目；抓取只允许 http/https，拒绝 loopback、私网、链路本地、组播与未指定地址（含每次重定向之后），响应上限 5 MiB、超时 30s。
+目标：预装插件 plugins/welcome/ 在 member.joined 时向该聊天发送欢迎语，按聊天开关与自定义文案；plugins/rss/ 提供 /rss add|list|remove，订阅经 sqlitedb.Open 与 sqlitedb.Migrations 保存在插件数据库（不链接 GORM，D-49），固定 interval 的定时任务抓取 RSS 2.0 与 Atom，按 guid 或链接去重，只推送新条目；抓取只允许 http/https，拒绝 loopback、私网、链路本地、组播与未指定地址（含每次重定向之后），响应上限 5 MiB、超时 30s。
 
 依据：PLAN T-14 步骤 2；CONTRACTS §15.2、§8（后台 Send 需要许可）、§5.4；TEST-MATRIX V-67。
 
@@ -92,24 +92,24 @@
 
 行为：
 - welcome：
-  - /welcome on|off|set <text:raw>：只有 chat_admin 或 Core Admin 能执行（Rule：Any(ChatAdmin(), CoreAdmin())）；设置按聊天（instance、chat、thread）保存在插件数据库。默认关闭。
+  - /welcome on|off|set <text:raw>：只有 chat_admin 或 Core Admin 能执行（命令的 Permission 为 sdk.ChatAdmin.Or(sdk.Admin)）；设置按聊天（instance、chat、thread）保存在插件数据库。默认关闭。
   - member.joined 时，该聊天已开启则发送欢迎语：自定义文案或 messages 中的 welcome.default；{name} 替换为新成员的显示名（没有时为 external_user_id）。回复原 Target，不需要许可。
   - 只响应 member.joined。
 - rss：
-  - /rss add <url> 与 /rss remove <url>：只有 chat_admin 或 Core Admin（Any(ChatAdmin(), CoreAdmin())）；/rss list 不限。订阅（url、目标 Target、最后条目标识集合的摘要）保存在插件数据库。add 时先做一次抓取校验（地址规则同下），失败时回复原因（文案键）。
-  - 定时任务：Every(interval_minutes 分钟) 检查全部订阅；每个订阅抓取后解析 RSS 2.0（channel/item 的 guid、link、title）与 Atom（entry 的 id、link[rel=alternate 或缺省]、title）；条目标识为 guid（或 id），没有时为链接；只推送此前未见过的条目（首次订阅时只记录现有条目，不推送），按发布顺序发送，经 sdk.Send 显式 To（需要 allowed_adapter_instances，缺少许可时记 WARN 并跳过）。
+  - /rss add <url> 与 /rss remove <url>：只有 chat_admin 或 Core Admin（Permission 为 sdk.ChatAdmin.Or(sdk.Admin)）；/rss list 不限。订阅（url、目标 Target、最后条目标识集合的摘要）保存在插件数据库。add 时先做一次抓取校验（地址规则同下），失败时回复原因（文案键）。
+  - 定时任务：p.Every("check", time.Minute).Handle(fn)，每次只抓取上次检查早于 interval_minutes 的订阅（上次检查时间保存在插件数据库）；每个订阅抓取后解析 RSS 2.0（channel/item 的 guid、link、title）与 Atom（entry 的 id、link[rel=alternate 或缺省]、title）；条目标识为 guid（或 id），没有时为链接；只推送此前未见过的条目（首次订阅时只记录现有条目，不推送），按发布顺序发送，经 sdk.Send(ctx, 订阅的会话, content) 发送（发信许可缺省为全部实例；被管理员收紧而拒绝时记 WARN 并跳过）。
   - 抓取：只允许 http 与 https；自定义 http.Client 的 DialContext 在连接前解析地址并拒绝 IsLoopback、IsPrivate、IsLinkLocalUnicast、IsLinkLocalMulticast、IsMulticast、IsUnspecified 的地址；CheckRedirect 对每次重定向的 URL 同样检查 scheme，连接时再检查地址；响应体以 io.LimitReader 读取 5 MiB 加一字节，超过即失败；整个抓取超时 30s（命名常量）。失败记 WARN（订阅 URL 与原因），不推送、不重试到下一个周期之前。
 
 测试（按编码规范「测试提交规则」）：
 - 提交（多列理由：rss 与 welcome 是两个独立的插件）：
-  - plugins/rss/rss_test.go（//go:build unix）：用 memory Adapter 与真实 Core 装配，httptest 提供订阅源。注意 httptest 监听 loopback，测试通过包内的测试钩子把「允许 loopback」打开（钩子只在测试中设置，生产默认关闭），并另有子测试在钩子关闭时验证 loopback 被拒：
+  - plugins/rss/rss_test.go（//go:build unix）：以根包库模式 alonabot.Start 运行 rss 插件与测试中定义的回环 Adapter（实例写在 core_config.json，声明成员事件与发送），httptest 提供订阅源。注意 httptest 监听 loopback，测试通过包内的测试钩子把「允许 loopback」打开（钩子只在测试中设置，生产默认关闭），并另有子测试在钩子关闭时验证 loopback 被拒：
     - 普通用户 /rss add 被拒；chat_admin 成功；list 显示订阅。
     - 首次抓取不推送；源中新增两个条目后下一次定时任务推送两条，顺序正确；再次运行不重复推送。
     - 响应超过 5 MiB、超过 30s（注入更短的超时）、重定向到 127.0.0.1（钩子关闭）、file:// 与 ftp:// 都失败。
-  - plugins/welcome/welcome_test.go（//go:build unix）：开关权限、自定义文案与 {name} 替换、关闭时不发送、只响应 member.joined。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：地址检查函数（IPv4/IPv6 私网、链路本地、映射地址 ::ffff:127.0.0.1）；条目标识的优先级；XML 中缺少字段的条目；没有发信许可时不推送并记 WARN；授予许可后推送；Atom 与 RSS 2.0 各一个源。
+  - plugins/welcome/welcome_test.go（//go:build unix，装配同上）：开关权限、自定义文案与 {name} 替换、关闭时不发送、只响应 member.joined。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：地址检查函数（IPv4/IPv6 私网、链路本地、映射地址 ::ffff:127.0.0.1）；条目标识的优先级；XML 中缺少字段的条目；发信许可被收紧时不推送并记 WARN；恢复缺省后推送；Atom 与 RSS 2.0 各一个源。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./plugins/...；go build ./...；两个插件目录运行 alonabot check 通过。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./plugins/...；go build ./...；两个插件目录运行 alonabot plugin check 通过。
 
 不做：发行归档与预装（T-14.3、T-14.4）；HTML 清洗与富文本推送；代理设置（沿用进程环境的 HTTP_PROXY）。
 ```

@@ -11,6 +11,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,6 +48,9 @@ func TestMain(m *testing.M) {
 			os.Exit(1)
 		}
 	}
+	if err := prepareTestPackages(); err != nil {
+		panic(err)
+	}
 	code := m.Run()
 	_ = os.RemoveAll(dir)
 	os.Exit(code)
@@ -65,8 +71,22 @@ type core struct {
 
 // startCore 以 dataDir 运行 alonabot run 并收集 stderr；测试结束时杀掉进程并等待回收。
 func startCore(t *testing.T, dataDir string, extra ...string) *core {
+	return startCoreWithToken(t, dataDir, "", extra...)
+}
+
+func startCoreWithToken(t *testing.T, dataDir, token string, extra ...string) *core {
 	t.Helper()
-	args := append([]string{"run", "--data-dir", dataDir, "--plugin-id", "demo", "--entry", filepath.Join(binDir, "lifecycle")}, extra...)
+	c := startEmptyCore(t, dataDir, extra...)
+	if _, err := os.Stat(filepath.Join(dataDir, "packages", "demo")); errors.Is(err, os.ErrNotExist) {
+		c.management(t, dataDir, token, "install", filepath.Join(binDir, "demo-package", "package.tar.gz"), "--yes")
+		c.management(t, dataDir, token, "enable", "demo")
+	}
+	return c
+}
+
+func startEmptyCore(t *testing.T, dataDir string, extra ...string) *core {
+	t.Helper()
+	args := append([]string{"run", "--data-dir", dataDir}, extra...)
 	c := &core{t: t, cmd: exec.Command(filepath.Join(binDir, "alonabot"), args...), added: make(chan struct{}, 1), done: make(chan struct{})}
 	stderr, err := c.cmd.StderrPipe()
 	if err != nil {
@@ -94,6 +114,53 @@ func startCore(t *testing.T, dataDir string, extra ...string) *core {
 		<-c.done
 	})
 	return c
+}
+
+func (c *core) address() string {
+	m := c.waitFor(`HTTP listener started listen=(\S+)|"msg":"HTTP listener started"[^\n]*"listen":"([^"]+)"`)
+	if m[1] != "" {
+		return m[1]
+	}
+	return m[2]
+}
+
+func (c *core) management(t *testing.T, dir, token string, args ...string) string {
+	t.Helper()
+	address := c.address()
+	if token == "" {
+		raw, err := os.ReadFile(filepath.Join(dir, adminauth.FirstTokenFile))
+		if err != nil {
+			t.Fatal(err)
+		}
+		token = strings.TrimSpace(string(raw))
+	}
+	// 特殊 Host 的认证测试仍走真实 CLI；本地转发器只改 Host，不参与认证或管理行为。
+	target, _ := url.Parse("http://" + address)
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	base := settings.Defaults().BaseURL
+	if raw, err := os.ReadFile(filepath.Join(dir, settings.FileName)); err == nil {
+		var doc struct {
+			BaseURL string `json:"base_url"`
+		}
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			t.Fatal(err)
+		}
+		if doc.BaseURL != "" {
+			base = doc.BaseURL
+		}
+	}
+	baseURL, _ := url.Parse(base)
+	director := proxy.Director
+	proxy.Director = func(r *http.Request) { director(r); r.Host = baseURL.Host }
+	server := httptest.NewServer(proxy)
+	defer server.Close()
+	command := exec.Command(filepath.Join(binDir, "alonabot"), append(args, "--admin-url", server.URL)...)
+	command.Env = append(os.Environ(), "ALONABOT_ADMIN_TOKEN="+token)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("management %v: %v\n%s\nCore:\n%s", args, err, output, c.log())
+	}
+	return string(output)
 }
 
 // log 返回已收集的全部 stderr。
@@ -150,25 +217,21 @@ const activatedRe = `plugin activated plugin_id=demo generation_id=(\S+) mode=(\
 
 // lifecycleLogRe 是一次完整生命周期在控制台格式（CONTRACTS §14.2）中必须出现的行，覆盖 Core 与插件两类来源。
 var lifecycleLogRe = []string{
-	`(?m)^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[Core\] \[INFO\] \[alonabot/main\.go:\d+\]: Core started data_dir=`,
+	`(?m)^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[Core\] \[INFO\] \[[^\]]+/alonabot\.go:\d+\]: Core started data_dir=`,
 	`(?m)^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[Plug:demo\] \[INFO\] \[lifecycle/main\.go:\d+\]: OnStart$`,
 	`(?m)\[Plug:demo\] \[INFO\] \[lifecycle/main\.go:\d+\]: OnReady$`,
 	`(?m)\[Plug:demo\] \[INFO\] \[lifecycle/main\.go:\d+\]: OnStop$`,
 	`(?m)\[Plug:demo\] \[INFO\] \[lifecycle/main\.go:\d+\]: exiting normally$`,
-	`(?m)\[Core\] \[INFO\] \[alonabot/main\.go:\d+\]: plugin stopped plugin_id=demo drained=true killed=false$`,
+	`(?m)\[Core\] \[INFO\] \[[^\]]+/assembly\.go:\d+\]: plugin stopped plugin_id=demo drained=true killed=false$`,
 }
 
-// 完整生命周期：两种传输都能走完 OnStart → OnReady → 激活 → SIGTERM → STOPPING/OnStop → 正常退出；
+// 完整生命周期：TCP 走完 OnStart → OnReady → 激活 → SIGTERM → STOPPING/OnStop → 正常退出；
 // 日志按控制台格式输出到 stderr（不是终端，不着色），并写入当天的日志文件。
 func TestLifecycleOverTCPAndStdio(t *testing.T) {
-	for _, transport := range []string{"tcp", "stdio"} {
+	for _, transport := range []string{"tcp"} {
 		t.Run(transport, func(t *testing.T) {
-			var extra []string
-			if transport == "stdio" {
-				extra = []string{"--stdio"}
-			}
 			dir := t.TempDir()
-			c := startCore(t, dir, extra...)
+			c := startCore(t, dir)
 			m := c.waitFor(activatedRe)
 			pid, _ := strconv.Atoi(m[3])
 			if m[2] != "new" {
@@ -289,17 +352,13 @@ func TestCoreKilledPluginExitsAndRecovers(t *testing.T) {
 	c2.wait(15 * time.Second)
 }
 
-// 相对 --data-dir：两种传输下都能启动、停止，并以 restart 再次打开同一目录；runtime.lock 文件保留。
+// 相对 --data-dir：TCP 能启动、停止，并以 restart 再次打开同一目录；runtime.lock 文件保留。
 func TestRelativeDataDir(t *testing.T) {
-	for _, transport := range []string{"tcp", "stdio"} {
+	for _, transport := range []string{"tcp"} {
 		t.Run(transport, func(t *testing.T) {
 			t.Chdir(t.TempDir())
-			var extra []string
-			if transport == "stdio" {
-				extra = []string{"--stdio"}
-			}
 			for i, mode := range []string{"new", "restart"} {
-				c := startCore(t, "data", extra...)
+				c := startCore(t, "data")
 				if m := c.waitFor(activatedRe); m[2] != mode {
 					t.Fatalf("run %d should be mode=%s, got %s", i+1, mode, m[2])
 				}
@@ -424,7 +483,7 @@ func TestUnknownSettingUsage(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte("{\n  \"log\": {\"unknown\": true}\n}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	command := exec.Command(filepath.Join(binDir, "alonabot"), "run", "--data-dir", dir, "--plugin-id", "demo", "--entry", filepath.Join(binDir, "lifecycle"))
+	command := exec.Command(filepath.Join(binDir, "alonabot"), "run", "--data-dir", dir)
 	output, err := command.CombinedOutput()
 	if err == nil || command.ProcessState.ExitCode() != exitUsage {
 		t.Fatalf("expected usage exit: %v %s", err, output)
@@ -505,7 +564,7 @@ func TestAdminAuthRun(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte(`{"listen":"127.0.0.1:0","base_url":"`+origin+`"}`), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			c := startCore(t, dir)
+			c := startCoreWithToken(t, dir, token)
 			c.waitFor(activatedRe)
 			address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
 			send := func(method, path, host, source, body string, cookie *http.Cookie, csrf, bearer string, want int) (*http.Response, []byte) {

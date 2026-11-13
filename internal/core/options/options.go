@@ -59,7 +59,7 @@ type Options struct {
 	Schema    func(componentID string, kind SchemaKind) (*configschema.Schema, bool)
 	Router    *router.Router
 	Broker    *broker.Broker
-	Instances func() []AdapterInstance
+	Instances func(context.Context) ([]AdapterInstance, error)
 	Page      int // 传入 tune.Values.OptionsPage。
 }
 
@@ -95,15 +95,15 @@ func (s *Service) Query(ctx context.Context, componentID string, kind SchemaKind
 	if _, builtin := configschema.BuiltinOptionSources[from.Source]; builtin {
 		switch from.Source {
 		case "core.adapter_instances":
-			page = s.instances(from, q)
+			page, err = s.instances(ctx, from, q)
 		default:
 			return Page{}, unavailable("options source is unavailable: " + from.Source)
 		}
 	} else {
 		page, err = s.service(ctx, from, q)
-		if err != nil {
-			return Page{}, err
-		}
+	}
+	if err != nil {
+		return Page{}, err
 	}
 	// 3. 按值查询只返回请求的存储值，统一执行分页上限。
 	if len(q.Values) > 0 {
@@ -122,10 +122,14 @@ func (s *Service) Query(ctx context.Context, componentID string, kind SchemaKind
 	return page, nil
 }
 
-func (s *Service) instances(from configschema.OptionsFrom, q Query) Page {
+func (s *Service) instances(ctx context.Context, from configschema.OptionsFrom, q Query) (Page, error) {
+	instances, err := s.opt.Instances(ctx)
+	if err != nil {
+		return Page{}, unavailable(fmt.Sprintf("read adapter instances: %v", err))
+	}
 	page := Page{Options: []Option{}}
 	search := strings.ToLower(q.Search)
-	for _, instance := range s.opt.Instances() {
+	for _, instance := range instances {
 		if len(q.Values) > 0 {
 			if !slices.Contains(q.Values, instance.InstanceID) {
 				continue
@@ -141,7 +145,7 @@ func (s *Service) instances(from configschema.OptionsFrom, q Query) Page {
 		page.Options = append(page.Options, Option{Value: instance.InstanceID, Label: instance.InstanceID, Description: instance.AdapterID})
 	}
 	slices.SortFunc(page.Options, func(a, b Option) int { return cmp.Compare(a.Value, b.Value) })
-	return page
+	return page, nil
 }
 
 func (s *Service) service(ctx context.Context, from configschema.OptionsFrom, q Query) (Page, error) {

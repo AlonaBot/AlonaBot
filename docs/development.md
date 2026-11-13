@@ -39,19 +39,27 @@ done
 GOARCH=amd64 CGO_ENABLED=0 go test ./...   # Apple Silicon 上经 Rosetta 运行 darwin/amd64 测试
 ```
 
-## 本地运行一个插件（B1 开发入口）
+## 运行 Core 与管理组件
 
 ```sh
 go build -o bin/alonabot ./cmd/alonabot
-go build -o bin/lifecycle ./examples/plugins/lifecycle
-bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle          # TCP loopback（默认）
-bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle --stdio  # stdio 传输
+bin/alonabot run --data-dir ./data      # 不带子命令时等同 run；按安装记录启动全部已启用的组件
 # Ctrl-C / SIGTERM：排空 → STOPPING/OnStop → 退出；同一 data_dir 只能运行一个 Core
 ```
 
-首次运行会登记开发用安装记录并提交新代次（`mode=new`），之后复用已提交代次（`mode=restart`）。正式的组件安装与来源校验入口尚未提供。
+`run` 与库模式（`alonabot.Start`）共用根包的同一套 Core 装配。组件经管理服务安装与启停，CLI 通过 `base_url` 上的管理 API 操作，token 取自 `ALONABOT_ADMIN_TOKEN` 或 `--token-file`，管理地址可用 `--admin-url` 覆盖：
 
-插件目录（`--entry` 所在目录）有 `plugin.yaml` 时，`run` 解析它并检查依赖；当前 `run` 只启动这一个插件、不启动 Adapter，必需依赖都会报告缺失并以失败退出，可选依赖逐条记 WARN 后继续。
+```sh
+bin/alonabot install --archive pkg.tar.gz --release release.json --signature release.json.sig --public-key release.pub --yes
+bin/alonabot install --source owner/repo --yes      # 从 GitHub Release 下载 release.json、可选的 .sig 与 release.pub
+bin/alonabot enable <id>
+bin/alonabot list
+bin/alonabot uninstall <id> --purge-data --yes      # 或 --purge；不带选项时只卸载
+bin/alonabot adapter instance create <adapter-package-id> <instance-id> --config instance.json
+bin/alonabot admin add telegram:123456
+```
+
+需要确认的操作不带 `--yes` 时列出受影响的对象后退出。开发中的组件用库模式运行，例如 `go run ./examples/devbot --data-dir ./data`；配置取自 `<data_dir>/plugins/<id>/config.json`，数据库为 `dev.sqlite`（CONTRACTS §15.4）。
 
 `run` 取得 core.lock 后读取 `<data_dir>/core_config.json`，Core 设置统一从这个 JSON 对象读取；文件不存在时以 0600 权限写入缺省内容。未知键、重复键、类型或取值错误时，以 usage 退出码报告完整键路径与行列号。
 
@@ -64,7 +72,7 @@ bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle --stdi
 手改设置后重启生效。`--listen`、`--log-level`、`--log-format` 只在命令行显式给出时覆盖设置，只对本次运行有效，文件内容保持不变：
 
 ```sh
-bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle --listen 127.0.0.1:8080
+bin/alonabot run --data-dir ./data --listen 127.0.0.1:8080
 ```
 
 Core 在 `listen` 地址（缺省 `127.0.0.1:7650`）上提供唯一的公开 HTTP 入口。请求 Host 的主机名须匹配 `base_url`：`/plugins/{id}/...` 转发给该插件当前 Session 的路由，其余路径交给管理处理器；其他 Host 返回 421。缺省设置下，lifecycle 示例的私有页面地址为 `http://127.0.0.1:7650/plugins/demo/page`。listen 为非 loopback 地址时，`base_url` 必须是 https，或者配置非空的 `trusted_proxies`（由可信反代终止 TLS），设置文件与 `--listen` 都按此校验。
@@ -90,7 +98,7 @@ bin/alonabot admin-token show --data-dir ./data
 ```sh
 bin/alonabot tune list
 bin/alonabot --args REQUEST_TIMEOUT=2s tune list
-bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle --args REQUEST_TIMEOUT=2s --args ./tuning.txt
+bin/alonabot run --data-dir ./data --args REQUEST_TIMEOUT=2s --args ./tuning.txt
 ```
 
 `--args` 可重复，放在子命令前后均生效，后出现的覆盖先出现的。直接参数支持逗号分隔的 `KEY=VALUE`；文件每行一项，空行和以 `#` 开头的注释行会被忽略。时长使用 `2s` 等 Go 时长格式；大小使用 `B`、`KiB`、`MiB`、`GiB`，`MB` 等十进制单位会报错。`run` 将最终覆盖值及出处记为 WARN。

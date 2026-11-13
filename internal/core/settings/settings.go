@@ -52,6 +52,7 @@ func (a Admin) String() string { return a.AdapterID + ":" + a.UserID }
 
 // AdapterSettings 保存配置版本和已展开环境变量的实例配置。
 type AdapterSettings struct {
+	Package         string // 拥有实例配置的组件 ID；空串归当前已安装的组件。
 	Version         int
 	Instances       map[string]json.RawMessage
 	DefaultInstance string // 为空时仅有一个实例的 Adapter 自动使用该实例。
@@ -338,6 +339,16 @@ func readAdapters(n *node, s *Settings) error {
 		adapter := AdapterSettings{Version: defaultInstanceVersion}
 		if err := value.object(func(key string, value *node) error {
 			switch key {
+			case "package":
+				owner, err := value.text()
+				if err != nil {
+					return err
+				}
+				if _, err := validate.PluginID(owner); err != nil {
+					return value.fail(err)
+				}
+				adapter.Package = owner
+				return nil
 			case "$version":
 				version, err := positiveVersion(value)
 				if err == nil {
