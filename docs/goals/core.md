@@ -74,7 +74,7 @@
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 已完成（PR #153） |
 | goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 待派发 |
 | goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 已完成（PR #157） |
-| goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 待派发 |
+| goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 已完成（PR #167） |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 待派发 |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2、T-09.4 | 已完成（PR #168） |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
@@ -91,7 +91,7 @@
 | goal-82 | T-16.2 | 按钮、多轮等待、schedule 与示例测试 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | 等待前置 |
 | goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | 等待前置 |
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 待派发 |
-| goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 等待前置 |
+| goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 待派发 |
 | goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 等待前置 |
 | goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 等待前置 |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 等待前置 |
@@ -5470,7 +5470,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-84 · T-09.12 WebUI 组件与组件图标
 
-状态：待派发。直接前置 T-07.7（PR #116，合并提交 `e65eb4d`）、T-09.1（PR #72，`1ba7e5b`）、T-09.4（PR #163，`cb8ae3d`）、T-13.1（PR #149，`bc39361`）均已合并。PR 与合并提交取自本地 `docs/goals/core.md` 的合并记录。下文新增接口与页面桥消息格式供审查者定稿；WebUI(fs.FS) 的版本元数据缺口见备注。
+状态：已完成（[PR #167](https://github.com/AlonaBot/AlonaBot/pull/167)，合并提交 `3a9b4af`），证据见 TEST-MATRIX §3.2。合入：`manage.AdminAPIMajor = 1`；`(*manage.Service).WebUI()`；根包选项 `alonabot.WebUI(fsys fs.FS)`（开发 WebUI，D-140 不做 Admin API 版本检查）；WebUI 静态托管（保留 /api/ 与内部路径，无扩展名的不存在路径回退 index.html，未安装时 503）与认证的组件图标端点；`spec/ADMIN-API.md` 登记现有管理端点。
 
 按 main 核对（2026-11-12，已用 rg 核对签名、字段和路由；manage.Service.Handler 另以离线 go doc 核对）：
 
@@ -6460,38 +6460,142 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 ### goal-57 · T-11.4 工具与会话的验收
 
-状态：等待前置（T-11.2）。T-11.3（PR #35）已合并。语句中 goal-54～goal-56 提供的符号与测试插件只写名字；合并后由审查者核对，再改为待派发。goal-54 已合并，它的测试插件只在执行者本地（D-86），本切片需要时在测试临时目录生成。
+状态：待派发，在 PR #169（goal-127）合并后从包含它的 main 派发：第 6 项与第 7 项复用它在根包 `scheduler_tasks_test.go` 中的原始 wire/pb 子进程写法（`persistentTaskProcess`）与同一数据目录重建装配的 `taskPipelineAt`。前置 T-11.2（PR #165，合并提交 `330164f`）、T-11.3（PR #35，合并提交 `d0983f0`）与 T-11.1（PR #101，合并提交 `de48f26`）均已合并。2026-11-13 审查者按 main `3a9b4af` 改写（起草稿经审查者裁决）：
+- 原语句的 `internal/core/supervisor/testdata` 测试插件按 D-86 改为根包测试二进制扮演的插件，测试位置改为根包。
+- 第 6 项拆成两部分：Service 的访问规则（Access）与继承 Actor、默认 Target 用 SDK 写；`RouteDescriptor.required_permissions` 分项由原始 wire/pb 的 provider 模式驱动。CONTRACTS §2.3 的路由权限对 Service 同样适用、`internal/core/tool/invoke.go` 已检查，但 SDK 的 `ServiceBuilder` 还没有声明入口；SDK 入口不在本切片。
+- 运行时修改策略与会话的服务层操作由父测试进程直接调用 `tool.New(h.store, h.assembly.router)` 与 `conversation.New(h.store)`：`Catalog.Effective` 每次从状态库读取，另建的 Catalog 与生产实例共享同一 Store。管理 API 与页面分别属于 T-09.14、T-09.9。
+
+已有接口（审查者按 main 核对）：
+
+- `internal/core/tool/catalog.go`：`New(store *state.Store, r *router.Router) *Catalog`；`(*Catalog).Register(m *router.Mux)`；`Effective(ctx context.Context, pluginID, service string) (pb.ToolPolicy, error)`；`SetPolicy(ctx context.Context, pluginID, service string, p pb.ToolPolicy) error`；`Policies(ctx context.Context) ([]ToolPolicyEntry, error)`。`ToolPolicyEntry` 含 `PluginID, Service string`、`Default, Override pb.ToolPolicy`。`SetPolicy` 成功时覆盖已提交，UNSPECIFIED 删除覆盖。
+- `internal/core/tool/invoke.go`：`(*Catalog).RegisterInvoke(m *router.Mux, opt InvokeOptions)`；`InvokeOptions` 的实际字段与类型见下方接口段。`assembly.go` 已将 `Call` 接到 `a.broker.Call`，将 `ConfirmTimeout` 接到 `v.ToolConfirmTimeout`，并注册 `core.tool.list/invoke/confirm`。
+- `internal/core/buttons/buttons.go`：`New(store *state.Store, now func() time.Time, ttl time.Duration, current func(pluginID string) (generationID string, routes []*pb.RouteDescriptor, ok bool)) *Service`；`IssueConfirm(ctx context.Context, caller router.Caller, target *pb.Target, recordID string) (allow, deny string, err error)`；`InterceptConfirm(ctx context.Context, ev *pb.Event) bool`；`OnConfirm(fn func(context.Context, string, bool, *pb.Event))`；`RevokeConfirm(ctx context.Context, recordID string) error`。Router 的 `Options.Intercept` 已接 `a.buttons.InterceptConfirm`，确认点击在事件队列前消费。
+- `internal/core/conversation/service.go`：`New(store *state.Store) *Service`；`Register(m *router.Mux)`；`List(ctx context.Context, pluginID string) ([]state.ConversationSummary, error)`；`Clear(ctx context.Context, pluginID, key string) error`；`Purge(ctx context.Context, pluginID string) error`。`assembly.go` 已注册 `core.conversation.append/list/clear`。
+- `sdk/tool.go`：`ListTools(ctx context.Context) ([]ToolInfo, error)`；`InvokeTool(ctx context.Context, name string, arguments json.RawMessage) (json.RawMessage, error)`；`ConfirmOperation(ctx context.Context, operation, summary string) error`。后两者要求活跃 Handler 或延续调用的 context。`sdk/conversation.go`：`AppendConversation(ctx context.Context, key string, entries ...json.RawMessage) (lastSeq uint64, err error)`；`ListConversation(ctx context.Context, key string, fromSeq uint64) (entries []ConversationEntry, nextSeq uint64, more bool, err error)`；`ClearConversation(ctx context.Context, key string) error`。
+- `sdk/services.go`：工具经 `sdk.Serve(p, sdk.JSON[In, Out](target)).Access(...).Tool(description, sdk.ToolAllow 或 sdk.ToolConfirm).Handle(fn)` 登记；`ServiceBuilder` 当前只有 `Access`、`Tool`、`Handle` 三个公开方法。`sdk/plugin.go` 的 `NewPlugin() *Plugin`、`sdk/generated.go` 的 `UseGenerated(p *Plugin, g Generated)` 为现行插件对象与资源绑定入口。Service 输入、输出 Schema 可按 `service_chain_test.go` 写入 `Generated.ServiceSchemas`。
+- `internal/core/manage/service.go`、`http.go` 当前提供安装、生命周期、实例与管理员入口，工具策略和指定会话的管理方法及 HTTP 路由尚缺。T-11 的服务层验收分别经 `tool.Catalog` 与 `conversation.Service` 驱动；T-09.14（goal-93）负责后续管理 API，T-09.9（goal-44）负责页面。已存在的卸载入口为 `manage.Service.Uninstall(ctx context.Context, id string, purge PurgeScope, confirm bool) error`（`lifecycle.go`），三种范围为 `PurgeNone`、`PurgeData`、`PurgeAll`。
+- 根包 `pipeline_test.go`：`newPipeline(t *testing.T, stdio ...bool) *pipelineHarness`；`(*pipelineHarness).install(id, mode string)`、`launch(id, mode string, priority int) *runningComponent`、`stop(c *runningComponent)`、`deliver(input pipelineInput) *pb.ErrorInfo`、`inject(input pipelineInput)`、`snapshot() []pipelineRecord`、`await(predicate func([]pipelineRecord) bool)`、`idle()`。`TestMain` 按 `ALONABOT_PIPELINE_MODE` 运行 `sdk.Run(pipelinePlugin(mode))` 或 `sdk.RunAdapter(&pipelineAdapter{})`。`service_chain_test.go` 已复用同一装配运行真实插件进程；参考条目为 goal-22（PR #164，合并提交 `039802f`）。
+- `internal/tune/params.go`：名称为 `TOOL_CONFIRM_TIMEOUT`，字段为 `Values.ToolConfirmTimeout time.Duration`，缺省 `5*time.Minute`，覆盖约束为 `> 0`。`parse.go` 的 `Parse(args []string) (Values, []Override, error)` 接受 `NAME=value`、逗号分隔的覆盖或参数文件。`alonabot.go` 的 `Args(values ...string) Option` 经 `Start` 调用 `tune.Parse`；根包测试的 `assemble(store *state.Store, dir string, v tune.Values, file *settings.File) (*assembly, error)` 直接接收生效值。
+- 在途、可能与本切片改同一批文件的 PR：#170（goal-59，Router 与 SDK 的 InvocationContext）；goal-69 正在执行（根包与 cmd/alonabot）；goal-40 正在执行（根包装配、supervisor 与 state）。本切片共享 `pipeline_test.go` 与 `spec/TEST-MATRIX.md`，后合并者合并模式分流与追加行。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-57（切片 T-11.4：工具与会话的验收）。goal 目录 goal-57，分支 goal-57，worktree .worktrees/goal-57，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-57（切片 T-11.4：工具与会话的验收）。goal 目录 goal-57，分支 goal-57，worktree .worktrees/goal-57，从最新 origin/main 创建（须已包含 PR #101、#35、#165、#169）。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：用一个提供工具的插件和一个调用工具的测试插件，经回环测试 Adapter（或 Telegram 模拟服务）以真实进程覆盖三种策略、确认的允许/拒绝/超时/他人点击、无 Actor、目标不支持按钮与策略的运行时修改；会话存储覆盖原子追加、分页、跨插件隔离与 Core 重启；在 TEST-MATRIX §3.2 记录 T-11 证据。
+目标：复用根包生产装配，以一个工具提供方插件、一个工具调用方插件和一个回环 Adapter 的真实进程，完成下列七项矩阵；验证工具目录与三种策略、确认的全部指定分支、策略的运行时修改、继承 Actor 的 Service 准入，以及会话的原子追加、分页、隔离、清除、Core 重启保留和服务层 purge；在 TEST-MATRIX §3.2 记录 T-11 证据。
 
-依据：PLAN T-11 步骤 6 与「停止和失败条件」；CONTRACTS §13；TEST-MATRIX V-55、V-56 的 T-11 分项。
+依据：spec/PLAN.md §3.1；spec/plan/core.md T-11.4、T-11 步骤 6，以及步骤 1～5 的既有语义和「失败停止条件」；spec/CONTRACTS-v0.1.md §1.2（父调用与帧上限）、§2.3（权限名集合）、§3（Service 访问与调用链）、§5.4（确认文案）、§13.1～§13.3、§9.3（卸载清理归属）、§16（TOOL_CONFIRM_TIMEOUT）；spec/MESSAGE-MODEL.md §1（可信 Actor、默认 Target）、§2（buttons）、§3（Handler）、§5（Hook）、§6.3（token 与点击）；spec/WIRE-FORMAT.md §3.3（注册）、§3.5（固定服务）、§5A（追加字段）；spec/adr/DECISIONS.md D-07、D-12、D-69、D-86、D-102、D-105、D-114、D-127、D-137；spec/TEST-MATRIX.md V-55、V-56 的 T-11 分项与 §3 的证据格式。
 
 范围（只新增或修改这些）：
-- 新增 cmd/alonabot/t11_e2e_test.go（//go:build unix）
-- 复用或补充 internal/core/supervisor/testdata 下的工具与会话测试插件
-- spec/TEST-MATRIX.md §3.2：追加 T-11 的证据行（本切片获授权修改这一处）
-允许的新跨模块边：无。
+- 新增根包 t11_e2e_test.go（//go:build unix，package alonabot）：一个顶层集成测试 TestToolsAndConversations，含下列七项子测试；测试二进制所需的工具插件、调用方插件及本切片专用回环 Adapter 行为也写在该文件。
+- 根包 pipeline_test.go：只扩充 TestMain 的本切片子进程模式分流与必要的装配辅助（原始 wire/pb 的 provider 模式参照 scheduler_tasks_test.go 的 persistentTaskProcess；同一数据目录重建装配可复用 taskPipelineAt）。支持在 assemble 前传入测试 tune.Values、复用同一临时数据目录重建装配，以及记录确认的两枚 token、完整展示文本与工具执行审计；能力缩减、无 Actor 输入只作用于本切片模式。保留既有模式的行为与全部断言。
+- 根包与 internal/core/tool/、internal/core/buttons/、internal/core/conversation/、sdk/ 中的 *_local_test.go：仅按本地自测段需要编写，不提交。
+- spec/TEST-MATRIX.md §3.2：追加 T-11.4 对应 V-55、V-56 的证据行（本切片获授权修改这一处）。
+允许的新跨模块边：无；根包继续通过既有的 internal/core、contracts、internal/wire、internal/tune 和 sdk 依赖装配测试。
 
-验收矩阵（各为一个子测试）：
-1) allow、confirm、deny 三种策略各一次；deny 与拒绝返回 PERMISSION_DENIED 且工具未执行（以工具插件的调用计数证明）。
-2) 确认：允许、拒绝、超时（DEADLINE_EXCEEDED）、他人先点击（被拒、不影响结果）、token 第二次点击无效；确认消息展示实际 JSON 参数。
-3) 无 Actor 的后台调用遇到 confirm 直接 PERMISSION_DENIED，不发消息；目标不支持按钮时 UNSUPPORTED。
-4) core.tool.confirm 用于 MCP 风格的操作名（mcp/x/y），展示插件给出的摘要。
-5) 运行时修改策略：下一次调用生效，进程未重启。
-6) 工具仍按继承 Actor 检查 Service 访问规则。
-7) 会话：多条原子追加、跨帧上限分页不丢不重、两个插件同名会话互相隔离、Core 重启后保留、purge 后删除（卸载默认保留由 T-09.4 的测试覆盖，这里只覆盖服务层）。
-- 证据：TEST-MATRIX §3.2 追加 T-11 一行，写明测试位置、命令、平台与结果；工具策略与会话清除的管理页面留给 T-09.9，记为未闭合。
+接口（照此复用；本切片只增加测试与证据，公开符号和协议沿用 main；内部测试辅助函数自定）：
+1. internal/core/tool
+   func New(store *state.Store, r *router.Router) *Catalog
+   func (c *Catalog) Register(m *router.Mux)
+   func (c *Catalog) Effective(ctx context.Context, pluginID, service string) (pb.ToolPolicy, error)
+   func (c *Catalog) SetPolicy(ctx context.Context, pluginID, service string, p pb.ToolPolicy) error
+   func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error)
+   type ToolPolicyEntry struct {
+       PluginID, Service string
+       Default, Override pb.ToolPolicy
+   }
+   type InvokeOptions struct {
+       Call func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response
+       Adapters *adapter.Registry
+       Buttons *buttons.Service
+       ConfirmTimeout time.Duration
+       DefaultLocale func() string
+   }
+   func (c *Catalog) RegisterInvoke(m *router.Mux, opt InvokeOptions)
+   以上由 assembly.go 完成生产注册；测试通过插件 SDK 调用固定服务。运行时改策略由父测试进程持有 tool.New(h.store, h.assembly.router)，调用 SetPolicy；pluginID 为工具提供方，service 为 Service 的局部名。MCP 风格操作的策略键使用调用插件 ID 与完整操作名。覆盖取 pb.ToolPolicy_TOOL_POLICY_ALLOW/CONFIRM/DENY；UNSPECIFIED 删除覆盖。
 
-测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/t11_e2e_test.go。
-- 本地自测（不提交，PR 中写明结果）：在 -race 下重复运行矩阵若干次无偶发失败。
+2. internal/core/buttons
+   func New(store *state.Store, now func() time.Time, ttl time.Duration, current func(pluginID string) (generationID string, routes []*pb.RouteDescriptor, ok bool)) *Service
+   func (s *Service) Issue(ctx context.Context, caller router.Caller, target *pb.Target, chain *pb.MessageChain) error
+   func (s *Service) Resolve(ctx context.Context, ev *pb.Event) (pluginID, routeID string, err error)
+   func (s *Service) IssueConfirm(ctx context.Context, caller router.Caller, target *pb.Target, recordID string) (allow, deny string, err error)
+   func (s *Service) InterceptConfirm(ctx context.Context, ev *pb.Event) bool
+   func (s *Service) OnConfirm(fn func(ctx context.Context, recordID string, allow bool, ev *pb.Event))
+   func (s *Service) RevokeConfirm(ctx context.Context, recordID string) error
+   func (s *Service) Purge(ctx context.Context, pluginID string) error
+   确认 token 由 Core 签发；测试从真实 Adapter 收到的 message.ButtonsSegment 中取得允许与拒绝 token，再经 Adapter Core.Deliver 注入可信 button.clicked。保留生产 Router 的 InterceptConfirm 分流。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+3. internal/core/conversation 与 SDK 会话函数
+   func New(store *state.Store) *Service
+   func (s *Service) Register(m *router.Mux)
+   func (s *Service) List(ctx context.Context, pluginID string) ([]state.ConversationSummary, error)
+   func (s *Service) Clear(ctx context.Context, pluginID, key string) error
+   func (s *Service) Purge(ctx context.Context, pluginID string) error
+   // state.ConversationSummary 的字段：Key string、Entries int、LastSeq uint64、UpdatedAt time.Time。
+   sdk 包中的签名：
+   func AppendConversation(ctx context.Context, key string, entries ...json.RawMessage) (lastSeq uint64, err error)
+   func ListConversation(ctx context.Context, key string, fromSeq uint64) (entries []ConversationEntry, nextSeq uint64, more bool, err error)
+   func ClearConversation(ctx context.Context, key string) error
+   type ConversationEntry struct { Seq uint64; Entry json.RawMessage }
+   插件调用的身份取自认证 Session；管理服务层查询、指定会话清除与 purge 由父测试进程调用 conversation.New(h.store) 的 List/Clear/Purge。
 
-不做：Agent 组件的工具循环（T-12.3）；管理页面（T-09.9）。
+4. SDK 工具与登记（下列签名位于 sdk 包）
+   func ListTools(ctx context.Context) ([]ToolInfo, error)
+   func InvokeTool(ctx context.Context, name string, arguments json.RawMessage) (json.RawMessage, error)
+   func ConfirmOperation(ctx context.Context, operation, summary string) error
+   func NewPlugin() *Plugin
+   func UseGenerated(p *Plugin, g Generated)
+   func JSON[In, Out any](target string) Service[In, Out]
+   func Serve[In, Out any](owner Registrar, declaration Service[In, Out]) *ServiceBuilder[In, Out]
+   func (s *ServiceBuilder[In, Out]) Access(a Access, allowlist ...string) *ServiceBuilder[In, Out]
+   func (s *ServiceBuilder[In, Out]) Tool(description string, defaultPolicy ToolDefault) *ServiceBuilder[In, Out]
+   func (s *ServiceBuilder[In, Out]) Handle(h func(*Context, In) (Out, error))
+   工具提供方参考 service_chain_test.go：p := sdk.NewPlugin()；用 sdk.UseGenerated 绑定输入、输出 ServiceSchemas；sdk.Serve(p, sdk.JSON[In, Out](providerID+"/run")).Access(sdk.AccessPublic).Tool("...", sdk.ToolConfirm).Handle(fn)。按测试场景设置缺省策略或经 Catalog 设置覆盖。ToolDefault 仅有 ToolAllow、ToolConfirm；deny 使用 Core 策略覆盖。
+   调用方在 p.On(..., sdk.MessageCreated).Handle(func(c *sdk.Context) error { ... }) 中使用 c.Context() 调用 InvokeTool/ConfirmOperation；取结果、错误码和父链身份写入审计。自动回复若需要，使用现行 (message.Content, error) 签名。后台无 Actor 场景使用 p.Every(jobID, interval).Handle(func(c *sdk.Context) error { ... }) 的真实 scheduled 父调用，或真实 Service 根调用建立的无 Actor Handler。
+   Adapter 使用 sdk/adapter 的 Adapter、Instance、Core.Deliver 与 sdk/message、sdk/errcode 类型；沿用 pipeline 的 sdkadapter.Action[pipelineInput, struct{}]("loop.inject", 1, sdkadapter.ActionScopeChat) 声明。需要新增本切片输入类型时相应声明真实的类型化 Action。权限为 Actor.Permissions 中的名称集合，Core Admin 按 settings 中的 <adapter_id>:<external_user_id> 取得。若测试采用 HTTP 输入，Adapter 的可选接口为 sdk.AdapterHTTP：HTTP(route func(method, path string) *sdk.RouteBuilder)，经 RouteBuilder 登记；首选复用已有 Action 输入。
+
+5. 既有协议（均为 alonabot.v1，PROTOBUF 载荷，schema_version=1）：
+   ServiceSpec.tool = 5：ToolSpec{description=1, default_policy=2, input_schema_json=3}。
+   ToolPolicy：UNSPECIFIED=0，ALLOW=1，CONFIRM=2，DENY=3。
+   ToolInfo：name=1、description=2、input_schema_json=3、policy=4；ToolListRequest 为空；ToolListResponse.tools=1（repeated）。
+   ToolInvokeRequest：name=1、arguments_json=2；ToolInvokeResponse.result_json=1。
+   ToolConfirmRequest：operation=1、summary=2；ToolConfirmResponse 为空。
+   ConversationAppendRequest：conversation_key=1、entries_json=2（repeated）；ConversationAppendResponse.last_seq=1。
+   ConversationListRequest：conversation_key=1、from_seq=2；ConversationEntry：seq=1、entry_json=2。
+   ConversationListResponse：entries=1（repeated）、next_seq=2（optional uint64，absent 表示读完）。
+   ConversationClearRequest.conversation_key=1；ConversationClearResponse 为空。
+   工具 invoke/confirm 的 parent_call_id 由 SDK 的活跃 context 关联；会话服务无父调用要求。RouteDescriptor.required_permissions=17（repeated string），准入取继承 Actor 的权限名集合。
+
+6. 根包测试装配与 tune
+   func newPipeline(t *testing.T, stdio ...bool) *pipelineHarness
+   func assemble(store *state.Store, dir string, v tune.Values, file *settings.File) (*assembly, error)
+   func Args(values ...string) Option
+   internal/tune 包中的签名：
+   func Defaults() Values
+   func Parse(args []string) (Values, []Override, error)
+   常规确认保留默认期限；超时子场景可经 tune.Parse([]string{"TOOL_CONFIRM_TIMEOUT=2s"}) 取得测试值，并在 assemble 之前传入。父请求的 deadline 应晚于确认期限，以收到确认服务产生的 DEADLINE_EXCEEDED。现有 newPipeline 内部直接取 Defaults，必要时提取可传值的未导出装配辅助并同步本文件调用处；成功路径继续使用正常期限。
+   通过 Start 启动 Core 的测试可用 Args("TOOL_CONFIRM_TIMEOUT=2s")；CLI 对应 --args TOOL_CONFIRM_TIMEOUT=2s。ALONABOT_ARGS 由 Start 读取，现有 newPipeline 直接调用 assemble，因此本矩阵在构造装配时显式传 tune.Values。
+
+行为：
+- 测试二进制按环境变量扮演 provider、caller 与回环 Adapter，复用 newPipeline、install、launch、生产 handler/attach 与真实 SQLite/Session。本切片的 Adapter 子模式继续使用 role adapter、adapter_id loop，并由真实 StartInstance 启动实例。提交的矩阵默认 TCP；stdio 复用现有 stdio 选项做本地自测。所有数据和插件进程目录使用测试临时目录。
+- 审计覆盖提供方每次实际执行、调用方的结束结果、Adapter 的实际发送与编辑，以及两枚确认 token。用明确的调用完成、Router 排空和审计屏障断言拒绝后执行计数不变；时间到期依据确认结果判断，沿用现有测试等待期限。
+- 验收矩阵（按以下七项组织子测试，保留每项原有含义）：
+  1) allow、confirm、deny：相同工具参数经 sdk.InvokeTool 走真实服务。allow 直接得到 JSON 输出；confirm 在同一用户允许后执行一次；deny 返回 PERMISSION_DENIED 且调用计数不变。sdk.ListTools 只列出访问允许且生效策略非 deny 的工具，核对名称、说明、输入 Schema 与生效策略。拒绝确认同样返回 PERMISSION_DENIED，计数不变。
+  2) 确认的允许、拒绝、超时、他人先点、重复点击：核对确认文本含工具名和实际 JSON 参数（按 JSON 值核对，允许展示缩进）；他人点击后本次调用仍等待，原 Actor 允许后只执行一次；拒绝和超时后均未执行，超时为 DEADLINE_EXCEEDED。已完成记录的原 token 再点无额外执行，另一枚 token 同样失效。确认发送直接到 Adapter，调用方 BeforeSend 审计保持为空；支持编辑时核对允许/拒绝后的结果文本与按钮撤除。使用 Core 现有 locale 文案与真实 token 绑定。
+  3) 无 Actor 与无按钮能力：在真实 scheduled 或 Service 根 Handler 内调用 confirm 策略工具，保留活跃父调用且缺少可信 Actor，得到 PERMISSION_DENIED，Adapter 没收到确认消息。另在具有 Actor 和默认 Target、但该测试实例缺少 message.buttons 能力时调用，得到 UNSUPPORTED，工具未执行。两种场景分别验证。
+  4) MCP 风格操作：调用方在活跃 Handler 中执行 sdk.ConfirmOperation(c.Context(), "mcp/x/y", summary)，核对 Core 展示完整操作名及插件提供的摘要；同 Actor 允许返回 nil，随后由调用方记录一次操作。Core 的本次确认按调用插件 ID 与操作名识别；确认前该操作审计为空。
+  5) 运行时修改策略：父测试进程用 tool.New(h.store, h.assembly.router).SetPolicy 修改已安装工具的覆盖；同一 provider/caller 进程上再次 InvokeTool，allow/confirm/deny 的下一次调用按新策略运行，PID 和 Session 身份保持不变。配合 Effective/Policies 核对服务层已保存的覆盖，SDK 目录同步反映 deny 的移除；删除覆盖后回到声明缺省策略。修改经 Core 内部服务层驱动。
+  6) Service 访问与继承 Actor：provider 的 Service 访问规则使用 sdk.AccessPublic 或 sdk.AccessAllowlist，并另设当前 caller 无访问权的工具；目录按调用方过滤，直接 InvokeTool 对不可见工具返回当前实现的 NOT_FOUND，提供方计数不变。允许访问的调用中核对提供方收到原 Actor 与默认会话；带 required_permissions 的工具必须覆盖权限不足 PERMISSION_DENIED 与具备权限成功，策略 allow 或用户允许均保留该权限检查。required_permissions 分项由测试二进制的原始 wire/pb provider 模式驱动：参照 scheduler_tasks_test.go 的 persistentTaskProcess，以既有协议完成握手与 REGISTER（JSON Service 带 ToolSpec 与 RouteDescriptor.required_permissions），并应答工具调用；SDK 的 Service 权限声明入口不在本切片。
+  7) 会话：provider 与 caller 均经 SDK 操作自己的同名会话。一次 AppendConversation 追加多条，随后再追加，返回连续的末尾序号；含无效 JSON 对象的一次批量追加整次失败，原条目与下一序号不变。多次合法追加的总量超过 4 MiB，单次请求保持帧内；可用六条约 1 MiB 的对象分批追加，ListConversation 从 0 起按 more/nextSeq 读完，至少两页，序号、顺序、内容原文不丢不重。两插件同键读取各自内容，ClearConversation 只清自己的会话。父测试进程经 conversation.Service.List/Clear 核对管理服务层的摘要与指定会话清除。停止全部旧子进程和装配、关闭 Store 后，用同一数据目录重新 Open、assemble 并 Launch，插件再次 ListConversation 与重启前一致。最后经 conversation.Service.Purge 删除一个插件的全部会话，另一个插件的内容仍保留；本切片覆盖服务层 purge，三种卸载流程沿用 T-09.4 的证据。
+- T-11 的失败停止条件：未经确认执行、接受其他 Actor 的决定、无 Actor 通过确认、绕过 Service 访问或 required_permissions，以及会话丢失、重排、跨插件可见，均使验收失败。保留错误与原始数据，按实际失败位置记录；需要改范围外的生产代码、协议或契约时依共同约束标 [!] 并交审查者处理。
+- 证据：TEST-MATRIX §3.2 追加 T-11.4 一行，关联 V-55、V-56，写明提交的测试与子场景、实际命令、OS/arch、Go 版本、传输和结果；本地自测另列。管理 API（T-09.14）、管理页（T-09.9）、Agent 工具循环（T-12.3）、未运行的真实平台与系统必须保留真实状态。
+
+测试（按编码规范「测试提交规则」与 D-86）：
+- 提交：根包 t11_e2e_test.go 的 TestToolsAndConversations，按上述七项组织子测试。多列理由：七项是 T-11.4 明确要求的跨进程验收矩阵，分别涉及工具策略与确认、可信调用链、状态持久化；共用同一装配。pipeline_test.go 仅纳入支持该矩阵的必要改动。
+- 本地自测（范围所列目录的 *_local_test.go，不提交，PR 中写明命令和结果）：以 stdio 运行同一矩阵；在 -race 下 -count=5 检查偶发失败；父调用取消或 Session 失效后确认 token 作废；参数与摘要展示的 UTF-8/大小边界；MCP 操作 allow/deny 覆盖与相同操作名的插件隔离；会话并发追加和异常分页边界。SDK 客户端边界验证按 D-86 放 sdk/ 的本地测试。
+
+完成条件：七项矩阵含 required_permissions 分项均取得证据；gofmt -l 对本次 Go 文件无输出；go vet ./...；go test -race ./...；go build ./...；TEST-MATRIX §3.2 写入实际证据和未运行项；既有 pipeline 与 service_chain 的断言保持有效。有失败停止条件命中时保留 [!]。
+
+不做：Agent 对话与工具循环（T-12.2、T-12.3）；工具策略或会话的管理 API（T-09.14）与页面（T-09.9）；新增公开 SDK 权限 API；生产实现重构；协议字段与生成物、状态库 schema、manage 清理清单；新增依赖；向 sdk/、internal/core/supervisor/ 提交测试或新增 testdata 测试插件；改写 service_chain_test.go 的既有断言。
 ```
 
 ### goal-102 · T-16.3 plugintest 的 LLM 替身
