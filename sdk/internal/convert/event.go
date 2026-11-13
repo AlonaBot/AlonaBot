@@ -13,6 +13,7 @@ func EventFromProto(e *pb.Event) *message.Event {
 		return nil
 	}
 	out := &message.Event{ID: e.EventId, Type: e.EventType, ChatType: message.ChatType(e.ChatType), Source: message.SourceKind(e.SourceKind), OccurredAt: timestamp(e.OccurredAtUnixMs), AdapterID: e.GetAdapterId(), AdapterInstanceID: e.GetAdapterInstanceId(), AccountID: e.GetAccountId(), Session: SessionFromProto(e.Target), Capabilities: CapabilitiesFromProto(e.Capabilities), PlatformPayload: slices.Clone(e.PlatformPayload), SourceEventID: e.GetSourceEventId()}
+	out.ChatTitle = e.GetChatTitle()
 	if a := e.Actor; a != nil {
 		out.Actor = &message.Actor{ExternalUserID: a.ExternalUserId, AdapterInstanceID: a.AdapterInstanceId, DisplayName: a.GetDisplayName(), Locale: a.GetLocale(), Permissions: slices.Clone(a.Permissions)}
 	}
@@ -55,6 +56,7 @@ func EventToProto(e *message.Event) (*pb.Event, error) {
 		return nil, nil
 	}
 	out := &pb.Event{EventId: e.ID, EventType: e.Type, ChatType: pb.ChatType(e.ChatType), SourceKind: pb.EventSourceKind(e.Source), OccurredAtUnixMs: milliseconds(e.OccurredAt), AdapterId: optional(e.AdapterID), AdapterInstanceId: optional(e.AdapterInstanceID), AccountId: optional(e.AccountID), Capabilities: CapabilitiesToProto(e.Capabilities), PlatformPayload: slices.Clone(e.PlatformPayload), SourceEventId: optional(e.SourceEventID)}
+	out.ChatTitle = optional(e.ChatTitle)
 	if e.Session != "" {
 		target, err := TargetToProto(e.Session, e.AdapterInstanceID)
 		if err != nil {

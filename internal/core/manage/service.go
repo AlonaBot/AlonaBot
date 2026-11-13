@@ -1,8 +1,8 @@
 // Package manage 提供组件安装、生命周期、Adapter 实例与 Core Admin 的管理服务。
 //
-// [Service] 共用 Core 的状态库、设置文件与策略；HTTP 入口由 [Service.Handler]
-// 经管理认证保护。实例配置只写回设置文件，响应中只包含操作结果。
-// 管理语义见 CONTRACTS §9.3、§15.1。
+// [Service] 共用 Core 的状态库、设置文件与策略；[Service.Handler] 经管理认证保护，
+// [Service.WebUI] 提供登录前可读取的静态页面。实例配置只写回设置文件，响应中只包含操作结果。
+// 管理与静态组件语义见 CONTRACTS §7.5、§9.3、§15.1。
 package manage
 
 import (
@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -46,6 +47,8 @@ type Options struct {
 	ForgetInstance func(context.Context, string, string) error // 配置创建、删除成功后清除该实例的运行期选择。
 	Descriptor     func(string) *pb.AdapterDescriptor          // 返回当前运行 Session 的 Adapter 声明。
 	Candidates     Candidates
+
+	DevelopmentWebUI fs.FS // 本次运行的静态根目录；nil 时选择已启用的安装包。
 }
 
 // Service 用独立的逐包锁串行管理动作，supervisor 继续持有状态库的进程锁。

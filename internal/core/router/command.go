@@ -141,6 +141,7 @@ func (r *Router) commandPermitted(c candidate, ev *pb.Event) bool {
 		return r.permitted(c, ev)
 	}
 	if failure := r.policy.CheckCommand(r.ctx, c.pluginID, c.route, ev.GetActor(), ev.GetTarget()); failure != nil {
+		r.metrics.Add(c.pluginID, "event", "denied")
 		slog.Debug("command policy denied", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "code", failure.GetCode())
 		return false
 	}

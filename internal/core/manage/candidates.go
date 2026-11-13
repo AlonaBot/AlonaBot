@@ -66,6 +66,9 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (er
 	}
 	defer func() { err = errors.Join(err, candidate.Discard()) }()
 	m := candidate.Manifest
+	if err := checkWebUIVersion(m); err != nil {
+		return err
+	}
 	if m.ID != id || m.Role != string(in.Role) || m.AdapterID != in.AdapterID {
 		return invalid("candidate identity differs from installed component")
 	}

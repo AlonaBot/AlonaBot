@@ -48,6 +48,19 @@ CREATE TABLE adapter_cursor (
   updated_at  INTEGER NOT NULL
 );
 
+CREATE TABLE chat (
+  adapter_id  TEXT NOT NULL,
+  chat_id     TEXT NOT NULL,
+  chat_type   TEXT NOT NULL,
+  title       TEXT NOT NULL,
+  instance_id TEXT NOT NULL,
+  first_seen  INTEGER NOT NULL,
+  last_seen   INTEGER NOT NULL,
+  PRIMARY KEY (adapter_id, chat_id)
+);
+
+CREATE INDEX chat_last_seen ON chat(last_seen DESC, adapter_id, chat_id);
+
 CREATE TABLE plugin_adapter_permission (
   plugin_id           TEXT NOT NULL REFERENCES install(plugin_id),
   adapter_instance_id TEXT NOT NULL,
@@ -119,6 +132,7 @@ CREATE TABLE tool_policy (
 
 CREATE TABLE button_token (
   token                 TEXT PRIMARY KEY,
+  purpose               TEXT NOT NULL CHECK (purpose IN ('plugin', 'confirm')),
   plugin_id             TEXT NOT NULL REFERENCES install(plugin_id),
   route_id              TEXT NOT NULL,
   action_id             TEXT NOT NULL,
@@ -134,3 +148,26 @@ CREATE TABLE button_token (
 );
 
 CREATE INDEX button_token_plugin ON button_token(plugin_id);
+
+CREATE TABLE dynamic_task (
+  plugin_id TEXT NOT NULL REFERENCES install(plugin_id),
+  name TEXT NOT NULL,
+  key TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  interval INTEGER NOT NULL,
+  cron TEXT NOT NULL,
+  timezone TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  anchor INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (plugin_id, name, key)
+);
+
+CREATE TABLE scheduled_job (
+  plugin_id TEXT NOT NULL REFERENCES install(plugin_id),
+  job_id TEXT NOT NULL,
+  anchor INTEGER NOT NULL,
+  interval INTEGER NOT NULL,
+  paused INTEGER NOT NULL,
+  PRIMARY KEY (plugin_id, job_id)
+);

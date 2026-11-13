@@ -448,7 +448,9 @@ type Event struct {
 	// 原平台事件标识。
 	SourceEventId *string `protobuf:"bytes,14,opt,name=source_event_id,json=sourceEventId,proto3,oneof" json:"source_event_id,omitempty"`
 	// 会话类型；没有 target 时必须为 UNSPECIFIED。
-	ChatType      ChatType `protobuf:"varint,15,opt,name=chat_type,json=chatType,proto3,enum=alonabot.v1.ChatType" json:"chat_type,omitempty"`
+	ChatType ChatType `protobuf:"varint,15,opt,name=chat_type,json=chatType,proto3,enum=alonabot.v1.ChatType" json:"chat_type,omitempty"`
+	// 会话显示名；没有 target 时必须 absent。
+	ChatTitle     *string `protobuf:"bytes,16,opt,name=chat_title,json=chatTitle,proto3,oneof" json:"chat_title,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -586,6 +588,13 @@ func (x *Event) GetChatType() ChatType {
 		return x.ChatType
 	}
 	return ChatType_CHAT_TYPE_UNSPECIFIED
+}
+
+func (x *Event) GetChatTitle() string {
+	if x != nil && x.ChatTitle != nil {
+		return *x.ChatTitle
+	}
+	return ""
 }
 
 // PlatformMessage 描述一条已存在的平台消息。
@@ -1311,8 +1320,14 @@ type ScheduledPayload struct {
 	RunId string `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	// 计划触发时刻，UTC 毫秒。
 	ScheduledAtUnixMs int64 `protobuf:"varint,3,opt,name=scheduled_at_unix_ms,json=scheduledAtUnixMs,proto3" json:"scheduled_at_unix_ms,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// 动态任务名；静态任务为空。
+	TaskName string `protobuf:"bytes,4,opt,name=task_name,json=taskName,proto3" json:"task_name,omitempty"`
+	// 动态实例键。
+	TaskKey string `protobuf:"bytes,5,opt,name=task_key,json=taskKey,proto3" json:"task_key,omitempty"`
+	// 创建时原样保存的 JSON 对象。
+	TaskPayloadJson string `protobuf:"bytes,6,opt,name=task_payload_json,json=taskPayloadJson,proto3" json:"task_payload_json,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ScheduledPayload) Reset() {
@@ -1364,6 +1379,27 @@ func (x *ScheduledPayload) GetScheduledAtUnixMs() int64 {
 		return x.ScheduledAtUnixMs
 	}
 	return 0
+}
+
+func (x *ScheduledPayload) GetTaskName() string {
+	if x != nil {
+		return x.TaskName
+	}
+	return ""
+}
+
+func (x *ScheduledPayload) GetTaskKey() string {
+	if x != nil {
+		return x.TaskKey
+	}
+	return ""
+}
+
+func (x *ScheduledPayload) GetTaskPayloadJson() string {
+	if x != nil {
+		return x.TaskPayloadJson
+	}
+	return ""
 }
 
 // MessageChain 描述一次逻辑 Send 的有序片段。
@@ -3349,7 +3385,7 @@ var File_alonabot_v1_message_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"\x19alonabot/v1/message.proto\x12\valonabot.v1\x1a\x18alonabot/v1/errors.proto\x1a\x1aalonabot/v1/identity.proto\x1a\x17alonabot/v1/media.proto\"\x8e\x06\n" +
+	"\x19alonabot/v1/message.proto\x12\valonabot.v1\x1a\x18alonabot/v1/errors.proto\x1a\x1aalonabot/v1/identity.proto\x1a\x17alonabot/v1/media.proto\"\xc1\x06\n" +
 	"\x05Event\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x1d\n" +
 	"\n" +
@@ -3370,11 +3406,14 @@ const file_alonabot_v1_message_proto_rawDesc = "" +
 	"\fcapabilities\x18\f \x03(\v2\x17.alonabot.v1.CapabilityR\fcapabilities\x12)\n" +
 	"\x10platform_payload\x18\r \x01(\fR\x0fplatformPayload\x12+\n" +
 	"\x0fsource_event_id\x18\x0e \x01(\tH\x03R\rsourceEventId\x88\x01\x01\x122\n" +
-	"\tchat_type\x18\x0f \x01(\x0e2\x15.alonabot.v1.ChatTypeR\bchatTypeB\r\n" +
+	"\tchat_type\x18\x0f \x01(\x0e2\x15.alonabot.v1.ChatTypeR\bchatType\x12\"\n" +
+	"\n" +
+	"chat_title\x18\x10 \x01(\tH\x04R\tchatTitle\x88\x01\x01B\r\n" +
 	"\v_adapter_idB\x16\n" +
 	"\x14_adapter_instance_idB\r\n" +
 	"\v_account_idB\x12\n" +
-	"\x10_source_event_id\"\xb0\x01\n" +
+	"\x10_source_event_idB\r\n" +
+	"\v_chat_title\"\xb0\x01\n" +
 	"\x0fPlatformMessage\x12.\n" +
 	"\x13platform_message_id\x18\x01 \x01(\tR\x11platformMessageId\x12/\n" +
 	"\x05chain\x18\x02 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\x12)\n" +
@@ -3421,11 +3460,14 @@ const file_alonabot_v1_message_proto_rawDesc = "" +
 	"\x17member_external_user_id\x18\x01 \x01(\tR\x14memberExternalUserId\"b\n" +
 	"\x14ReactionAddedPayload\x12.\n" +
 	"\x13platform_message_id\x18\x01 \x01(\tR\x11platformMessageId\x12\x1a\n" +
-	"\breaction\x18\x02 \x01(\tR\breaction\"q\n" +
+	"\breaction\x18\x02 \x01(\tR\breaction\"\xd5\x01\n" +
 	"\x10ScheduledPayload\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12/\n" +
-	"\x14scheduled_at_unix_ms\x18\x03 \x01(\x03R\x11scheduledAtUnixMs\"@\n" +
+	"\x14scheduled_at_unix_ms\x18\x03 \x01(\x03R\x11scheduledAtUnixMs\x12\x1b\n" +
+	"\ttask_name\x18\x04 \x01(\tR\btaskName\x12\x19\n" +
+	"\btask_key\x18\x05 \x01(\tR\ataskKey\x12*\n" +
+	"\x11task_payload_json\x18\x06 \x01(\tR\x0ftaskPayloadJson\"@\n" +
 	"\fMessageChain\x120\n" +
 	"\bsegments\x18\x01 \x03(\v2\x14.alonabot.v1.SegmentR\bsegments\"\xb3\x04\n" +
 	"\aSegment\x12.\n" +

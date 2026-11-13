@@ -72,26 +72,26 @@
 | goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 已完成（PR #156） |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 已完成（PR #155） |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 已完成（PR #153） |
-| goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 等待前置 |
+| goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 待派发 |
 | goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 已完成（PR #157） |
-| goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
+| goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 已完成（PR #167） |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 待派发 |
-| goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2、T-09.4 | 待派发 |
+| goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2、T-09.4 | 已完成（PR #168） |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
-| goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 等待前置 |
+| goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 已完成（PR #166） |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 已完成（PR #162） |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 已完成（PR #161） |
 | goal-128 | T-07.9 | 动态任务与暂停恢复的 SDK | T-04.12、T-07.8 | 等待前置 |
 | goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 等待前置 |
 | goal-92 | T-09.13 | 管理页所需的会话与上传接口 | T-09.1、T-09.4、T-09.12 | 等待前置 |
 | goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 等待前置 |
-| goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 待派发 |
-| goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 待派发 |
+| goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 已完成（PR #164） |
+| goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 已完成（PR #165） |
 | goal-70 | T-13.4 | 开发运行示例与验收 | T-03.10、T-13.2、T-13.3 | 等待前置 |
 | goal-82 | T-16.2 | 按钮、多轮等待、schedule 与示例测试 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | 等待前置 |
 | goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | 等待前置 |
-| goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 等待前置 |
-| goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 等待前置 |
+| goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 待派发 |
+| goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 待派发 |
 | goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 等待前置 |
 | goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 等待前置 |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 等待前置 |
@@ -5257,25 +5257,122 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-127 · T-07.8 动态任务与调度持久化的协议和 Core 侧
 
-状态：等待前置（T-09.4）。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。已合入 `Scheduler.Drain(pluginID string)`（停止新 tick，保留运行槽）、`Detach(pluginID)` 与 `Released(pluginID)`；`supervisor.Spec.Scheduler *scheduler.Scheduler` 在 ACTIVATED 后 Attach，`Running.Stop` 通过 `host.StopHooks.Frozen` Drain、`Stopping` Detach，停止或断链后只在确认进程树清空时 Released。合并后由审查者按 main `2c1fdcc` 核对。2026-11-10 按 D-124～D-127 新增。T-09.4（goal-39）将提供管理服务的卸载与清理对象列表，待其合并后补全接口段。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片修改 `internal/core/state/schema.sql`，按执行顺序的共享文件规则处理冲突。
+状态：待派发。直接前置 T-07.5（PR #119，合并提交 `cc19e99`）、T-09.4（PR #163，合并提交 `cb8ae3d`）已合并；调度基础 T-07.2（PR #107，`fc2c247`）已合并。PR 与合并提交取自本地 `docs/goals/core.md` 的合并记录。下文新增接口为供审查者定稿的方案，契约缺口见末尾备注。
 
-目标：Core 支持插件在运行时创建、替换、取消与列出带参数的定时任务实例，并能暂停、恢复静态任务；任务定义、周期任务的起点与暂停状态保存在 Core 状态库，Core 重启、插件重启与更新后仍在；错过的触发一律作废；卸载按清理范围删除或保留这些状态。SDK 的写法由 goal-128 提供。
+按 main 核对（2026-11-12，已用 rg 核对定义及调用者，并以离线 go doc 交叉核对 Scheduler.Options、manage.Service.Handler、state.Store.Uninstall）：
 
-依据：PLAN T-07 步骤 9；DESIGN §H；CONTRACTS §4.3、§9.3、§16；WIRE-FORMAT §3.3、§3.5；DECISIONS D-124～D-127；TEST-MATRIX V-114 的 Core 分项。
+- `internal/core/scheduler/scheduler.go`：`func New(opt Options) *Scheduler`；当前 `Options` 只有 `JobTimeout time.Duration`、`Now func() time.Time`；`func (s *Scheduler) Attach(p router.Plugin, activatedAt time.Time)` 当前无返回值。`Drain(pluginID string)`、`Detach(pluginID string)`、`Released(pluginID string)`、`Close()`、`Stats(pluginID, jobID string) JobStats` 已存在；`JobStats` 为 `Runs, Skipped, TimedOut, Late uint64; Running bool`。当前定时器和起点均在内存中，运行槽按 plugin_id/job_id 保存。
+- `contracts/schedule/schedule.go`：`Interval(d time.Duration) (Trigger, error)`、`Cron(expr, timezone string) (Trigger, error)`、`FromSpec(s *pb.ScheduleSpec) (Trigger, error)`、`func (t Trigger) Next(anchor, now time.Time) time.Time` 已存在；本切片复用其 interval、cron、IANA 与未来 tick 计算。
+- `internal/core/router/mux.go`：`type ServiceFunc func(ctx context.Context, c Caller, in *wire.Inbound) wire.Response`；`(*Mux).Handle(name string, fn ServiceFunc)`、`(*Mux).For(c Caller) wire.Handler`；`Caller{PluginID, GenerationID, SessionKey string}`。调用身份由装配绑定。`internal/core/router/router.go` 的 `Plugin` 提供 `PluginID() string`、`Activated() bool`、`Routes() []*pb.RouteDescriptor`、`Call(ctx context.Context, req wire.Request) (wire.Response, error)` 等方法；`func (r *Router) PluginFor(c Caller) (Plugin, bool)` 核对 Session 身份。
+- `assembly.go`：`assemble(store *state.Store, dir string, v tune.Values, file *settings.File) (*assembly, error)` 在一处构造 Scheduler；`(*assembly).attach(ctx context.Context, r *runningComponent) error` 先接 Router，再为同进程组件 Attach。`internal/core/supervisor/supervisor.go` 的 `Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error)` 在 `host.Activate` 成功后为独立进程 Attach；冻结、撤销及确认进程退出分别调用 Drain、Detach、Released。两条 Attach 路径都须同步处理持久化错误。
+- `internal/core/state/installs.go`：私有 `cleanupObjects(db *gorm.DB, id string, all bool) ([]cleanupObject, error)` 同时供 `PurgeObjects(ctx context.Context, id string, all bool) ([]string, error)` 和 `Uninstall(ctx context.Context, id string, data, all bool) error` 使用，后者在同一个事务内删除对象。`internal/core/manage/lifecycle.go` 已有 `PurgeNone`、`PurgeData`、`PurgeAll`；`(*Service).Uninstall(ctx context.Context, id string, purge PurgeScope, confirm bool) error` 先预览、确认和停止，再调 Store；无需另建清理回调。
+- `contracts/proto/alonabot/v1/route.proto`：RouteKind 用到 7，RouteDescriptor.spec 用到 16，公共 `required_permissions = 17` 已占用；TaskSpec 可用字段 18。`message.proto` 的 ScheduledPayload 当前只有 `job_id = 1`、`run_id = 2`、`scheduled_at_unix_ms = 3`。`contracts/validate/register.go` 的 `Register(r *pb.Register) error` 原子检查注册，静态路由前缀为 `job.`。
+- `internal/tune/params.go` 的 `Values` 和 `parameters` 是现有可调上限登记处；TASK 三项尚未登记；`contracts/limits/` 尚不存在。`internal/wire/services.go` 尚无六个 task/job 服务常量。
+- 根包 `pipeline_test.go` 已有 `newPipeline(t *testing.T) *pipelineHarness`、`(*pipelineHarness).launch(id, mode string, priority int) *runningComponent` 与测试二进制子进程装配。SDK 尚无 Task API，本切片的动态任务验证使用原始 wire/pb；goal-128 负责作者 API。
+- 在途冲突：goal-55、goal-131 同改 `internal/core/state/schema.sql`，goal-131 还涉及清理对象；goal-22、goal-55、goal-69、goal-81 与本切片共用 `assembly.go`，goal-22 可改 `pipeline_test.go`，goal-81 可改 Router，goal-69 改根包与 `cmd/alonabot`；goal-59 的产品代码在 `agent/`，与本切片无直接重叠。`contracts/wirespec_test.go`、生成目录与 `internal/wire/services.go` 也可能由 goal-55/goal-131 追加。后合并者保留各自对象、服务、装配点与编号，再统一生成；本切片无需修改 cmd 或 Agent。
 
-要点：
-- 协议：RouteKind 追加 TASK，RouteDescriptor 追加 TaskSpec（只有任务名），ScheduledPayload 追加 task_name、task_key、task_payload_json；动态触发的 job_id 为 `task.<name>`。REGISTER 校验任务名的格式、同名重复与 `task.` 保留前缀。
-- 状态库（写进唯一的初始迁移）：动态任务表以（plugin_id、任务名、key）为主键，保存触发规则（at、interval 或 cron）、时区、参数、起点与创建时刻；调度状态表以（plugin_id、job_id）为主键，保存静态 interval 任务的起点、对应的间隔与暂停标记。
-- 调度器以状态库为准：Attach 时读出该插件的调度状态与任务实例；静态 interval 任务没有起点或间隔已变时写入本次激活时刻；按 contracts/schedule 计算下一未来触发。过期的一次性实例在 Attach 时删除，记 WARN（plugin_id、任务名、key、原定时刻）并计数。任务名未在本 Session 注册的实例保留、不安排。
-- 六个固定服务：`core.task.set`、`core.task.cancel`、`core.task.list`、`core.job.pause`、`core.job.resume`、`core.job.status`，校验与错误码按 CONTRACTS §4.3；只在 Activated 之后可用，不需要父调用链，调用方只能操作自己的任务。先写状态库，成功后才更新内存中的定时器。
-- 派发：动态任务经每插件 `TASK_CONCURRENCY` 的名额，其余按到期时间排队；排队中的周期实例到了下一个触发时刻仍未执行时只保留一次；同一实例上一轮未结束时跳过本轮。一次性实例在派发的同一事务中删除，失败与超时不重试。运行槽、期限与迟到 Response 沿用静态任务的规则（goal-24）。
-- cancel 删除行、摘除定时器与排队项，并取消该实例在途的调用（协作式）。暂停只让之后的触发作废，不打断在途的一轮；恢复后从下一个未来时刻继续，起点不变；重复暂停或恢复成功且不改变状态。
-- 启停：Draining 与停止时摘除该 Session 的全部定时器并清空队列，队列中的触发按作废处理；状态库中的行不动。
-- 卸载：把两张表加入管理服务的清理对象，PurgeData 与 PurgeAll 时按 plugin_id 删除，与其余数据在同一个状态库事务内，并列入确认对象；删除不依赖插件进程，也不要求 Session 存在。PurgeNone 时行保留，没有 Session 所以不触发；重装并激活后周期任务从下一个未来时刻继续，期间到期的一次性实例按过期处理。
-- 上限 `TASKS_PER_PLUGIN`、`TASK_PAYLOAD_BYTES`、`TASK_CONCURRENCY` 登记到 contracts/limits。
-- 测试：用注入时钟与真实插件进程覆盖创建、替换、取消在途实例、列出、配额与参数上限；Core 重启后任务仍在且 interval 沿原起点触发；停用期间越过多次触发后不补跑，过期的 at 被删除并有 WARN；并发名额与排队；暂停跨重启保持；三种卸载范围下两张表的去留。
+- 审查者决定（2026-11-12）：可调上限沿用 internal/tune 登记；采纳本语句的协议字段号、表结构与任务名格式（D-124～D-126 约定由审查者提出）；Cancel 匹配持久实例或仍在途的同一实例（派发后的 at 在途时也可取消），两者都不存在时 NOT_FOUND，替换不取消在途的旧一轮；动态任务的 JobTimeout 从实际派发时开始计算，scheduled_at 仍为原到期时刻；JobStatus 的 last_at 为本次 Core 运行中最后一次实际派发的时刻，Core 重启后缺失，暂停时 next_at 缺失；既有 supervisor_test.go 只同步构造参数。
+```text
+/goal 使用 $alonabot-execute 推进 goal-127（切片 T-07.8：动态任务与调度持久化的协议和 Core 侧）。goal 目录 goal-127，分支 goal-127，worktree .worktrees/goal-127，从最新 origin/main 创建（包含 PR #119、PR #163）。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-不做：SDK 的 `sdk.Task` 等写法（goal-128）；管理界面对任务的查看与清理；补执行错过的触发；动态任务的暂停。
+目标：Core 支持运行时创建、整体替换、取消与分页列出带参数的任务实例，并支持静态任务的暂停、恢复与状态查询。动态定义、interval 起点与暂停状态保存在 Core 状态库，跨 Core/插件重启与更新保留；错过的触发作废。按管理服务已有的三种卸载范围保留或事务删除这些数据。SDK 的作者 API 由 goal-128 提供。
+
+依据：spec/PLAN.md §3.1；spec/plan/core.md T-07.8、T-07 步骤 2、3、7、9 及「停止和失败条件」，T-09 步骤 3 的清理语义；spec/DESIGN.md §H；spec/CONTRACTS-v0.1.md §1.2、§4.3、§9.3、§14.5、§16；spec/MESSAGE-MODEL.md §1 的 scheduled 来源与无 Actor、§3 的 HandlerOutcome；spec/WIRE-FORMAT.md §3.3、§3.5；spec/adr/DECISIONS.md D-124～D-127、D-86；spec/TEST-MATRIX.md V-114 的 Core 分项，并回归 V-20、V-21、V-46 的运行槽与启停分项。工作包在 spec/plan/core.md。
+
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/route.proto、message.proto；新增 task.proto：下列声明、字段与服务载荷。授权只追加接口段列出的内容；运行 go generate ./... 更新 contracts/pb/alonabotv1/，生成产物按实际差异保留。
+- contracts/validate/register.go：TASK 注册、任务名与 task. 前缀校验；contracts/wirespec_test.go：追加本次协议编号检查。
+- internal/wire/services.go：末尾追加六个服务名常量。
+- internal/tune/params.go 与 parse.go：登记三项可调上限与交叉约束，沿用现有调优入口（PLAN 中的 contracts/limits 已改为 internal/tune）。
+- internal/core/state/schema.sql、installs.go；新增 tasks.go、jobs.go：唯一初始迁移中的两张表、GORM 读写和清理清单。各模型与方法放在所属主题文件。
+- internal/core/scheduler/scheduler.go；可新增 tasks.go、services.go、jobs.go：持久化 Attach、六个固定服务、动态运行槽/队列、统计与生命周期。
+- assembly.go：传入同一 Store 与生效上限、注册固定服务、处理同进程 Attach 错误；internal/core/supervisor/supervisor.go：处理独立进程 Attach 错误并走已有失败清理。
+- 根包 pipeline_test.go：仅保留原断言的装配同步和测试子进程模式分流；新增 scheduler_tasks_test.go（unix）的一项集成测试。SDK 与 supervisor 目录不新增提交的测试；既有 internal/core/supervisor/supervisor_test.go 只同步 Scheduler 的构造参数，断言不变（审查者授权）。
+- 上述相关包的 *_local_test.go：本地验证，不提交。
+
+允许的新跨模块边：无。scheduler -> state/router 属于 internal/core 内部；Core -> contracts/internal/wire/internal/tune 已允许。contracts 与 internal/tune 保持现有依赖方向。生产 Core 保持通过协议调用组件。
+
+接口（照此实现；字段名、任务名格式与分页细节已由审查者采纳，内部辅助函数自定）：
+1. route.proto：
+   enum RouteKind 追加 ROUTE_KIND_TASK = 8;
+   message TaskSpec { string name = 1; }
+   RouteDescriptor.spec 追加 TaskSpec task = 18;
+   required_permissions = 17 和 reserved 5 保持原编号。
+2. message.proto 的 ScheduledPayload 追加：
+   string task_name = 4;
+   string task_key = 5;
+   string task_payload_json = 6;
+   动态 job_id/route_id 为 task.<name>；静态触发的三个新增字段为空。
+3. 新增 task.proto（均为 protobuf，schema_id 用 validate.SchemaID，schema_version=1）：
+   message TaskTrigger {
+     oneof trigger { int64 at_unix_ms = 1; uint64 interval_ms = 2; string cron = 3; }
+     string timezone = 4;
+   }
+   message TaskSetRequest { string task_name = 1; string key = 2; TaskTrigger trigger = 3; string payload_json = 4; }
+   message TaskSetResponse { int64 next_at_unix_ms = 1; }
+   message TaskCancelRequest { string task_name = 1; string key = 2; }
+   message TaskCancelResponse {}
+   message TaskListRequest { string task_name = 1; optional string after_key = 2; }
+   message TaskInstance { string key = 1; TaskTrigger trigger = 2; string payload_json = 3; optional int64 next_at_unix_ms = 4; }
+   message TaskListResponse { repeated TaskInstance instances = 1; optional string next_after_key = 2; }
+   message JobPauseRequest { string job_id = 1; }
+   message JobPauseResponse {}
+   message JobResumeRequest { string job_id = 1; }
+   message JobResumeResponse {}
+   message JobStatusRequest { string job_id = 1; }
+   message JobStatusResponse { bool paused = 1; optional int64 last_at_unix_ms = 2; optional int64 next_at_unix_ms = 3; }
+   next_at 的缺失表示当前无已安排的触发；last_at 的缺失表示本次 Core 运行中尚未派发。静态 job_id 为 ScheduleSpec.job_id。
+4. internal/wire 追加常量：ServiceTaskSet="core.task.set"、ServiceTaskCancel="core.task.cancel"、ServiceTaskList="core.task.list"、ServiceJobPause="core.job.pause"、ServiceJobResume="core.job.resume"、ServiceJobStatus="core.job.status"。
+5. internal/tune.Values 追加 TasksPerPlugin int、TaskPayloadBytes int64、TaskConcurrency int；登记 TASKS_PER_PLUGIN（10000，>=1）、TASK_PAYLOAD_BYTES（64KiB，1～4MiB）、TASK_CONCURRENCY（16，1～SESSION_MAX_INFLIGHT）。沿现有参数表/解析器校验和传递；全部构造方传入生效值。
+6. internal/core/state（方法返回原始存储错误；事务内用 GORM）：
+   type Task struct {
+       PluginID, Name, Key string
+       At time.Time; Interval time.Duration; Cron, Timezone string
+       PayloadJSON string; Anchor, CreatedAt time.Time
+   }
+   type Job struct { PluginID, JobID string; Anchor time.Time; Interval time.Duration; Paused bool }
+   func (s *Store) Tasks(ctx context.Context, pluginID, name string) ([]Task, error) // name 为空读取该插件全部实例
+   func (s *Store) SetTask(ctx context.Context, task Task, maxTasks int) error // 原子检查该插件总数后按复合主键替换；替换不增加配额
+   func (s *Store) DeleteTask(ctx context.Context, pluginID, name, key string) error // 无行返回 state.ErrNotFound；服务层另核对在途实例
+   func (s *Store) Jobs(ctx context.Context, pluginID string) ([]Job, error)
+   func (s *Store) SaveJob(ctx context.Context, job Job) error
+   dynamic_task 以 (plugin_id,name,key) 为主键；scheduled_job 以 (plugin_id,job_id) 为主键。cron 的 Job 行同样保存暂停标记，Anchor/Interval 为零；起点仅用于 interval。以安装身份关联，普通卸载保留记录；清理经 cleanupObjects 在既有事务内完成。
+7. internal/core/scheduler：
+   Options 保留 JobTimeout、Now，追加必填 Store *state.Store、TasksPerPlugin int、TaskPayloadBytes int64、TaskConcurrency int。
+   func New(opt Options) *Scheduler // 签名保持；所有构造点同步新字段
+   func (s *Scheduler) Attach(ctx context.Context, p router.Plugin, activatedAt time.Time) error // 替换原 Attach；数据库失败向启动方返回
+   func (s *Scheduler) Services(m *router.Mux, current func(router.Caller) (router.Plugin, bool)) // 注册六个服务；assembly 传 a.router.PluginFor
+   保持 Drain/Detach/Released/Close/Stats 的签名和既有计数含义。
+   type TaskStats struct { Expired uint64; Unregistered uint64; Running, Queued int }
+   func (s *Scheduler) TasksStats(pluginID string) TaskStats // 内存诊断快照；本切片无管理 HTTP API
+   动态运行槽的稳定键为 (plugin_id,name,key)，与静态 (plugin_id,job_id) 分开。
+
+行为：
+- REGISTER 原子拒绝错误的 kind/spec、空/非法任务名、重复任务名、任务路由 ID 与 task.<name> 不一致，以及其他路由占用 task. 前缀。任务名为 ^[a-z][a-z0-9_.-]{0,63}$。同名实例靠 key 区分。保留既有权限名集合的校验；TASK 触发只具有 job scope，事件及可信父附件均无用户 Actor、默认 Target 或默认 Admin。
+- Attach 在安排定时器前从同一个状态库读取两类状态并完成必要写入：静态 interval 无起点或间隔变化时写 activatedAt，新间隔重置起点并保留暂停状态；未变化时用旧起点。静态 cron 保留暂停状态。全部读取/写入成功后发布本 Session 的注册和未来定时器；数据库失败走启动失败清理，错误保持可见。
+- 动态 interval 的 Anchor 为创建/替换时刻，cron 复用 contracts/schedule，at 为一次性绝对时刻。Attach 清除已到期的 at，WARN 含 plugin_id、task_name、key、scheduled_at 并计 Expired；先处理过期 at，再安排已注册任务名的未来实例。当前 Session 缺少任务名的其余行保留，计 Unregistered。重启、更新与 rollback 均以 Core 状态库的任务为准。
+- 服务入口以 Mux Caller 为身份，经 current 核对当前 Session 且处于 Activated；旧 Session 与未激活调用返回 FAILED_PRECONDITION，Draining 后拒绝新的任务变更，包括仍带父调用的请求。无需 parent_call_id。请求载荷无 plugin_id 字段。
+- set 先完整校验，再写库：key 是 1～128 字节合法 UTF-8；三种触发恰有一种；interval >=1s、五字段 cron、有效 IANA、cron 缺省 UTC；timezone 只用于 cron；at 必须晚于 Now；参数为原样 JSON 对象且不超 TaskPayloadBytes。当前未注册任务名返回 NOT_FOUND；非法输入/过去的 at/参数超限返回 INVALID_ARGUMENT；新 key 超总数返回 RESOURCE_EXHAUSTED。相同 key 整体替换触发与参数，interval 起点重置。写入失败保持旧定时器、队列和数据，返回完整存储错误经协议安全错误通道处理。
+- cancel 对该插件的实例撤销后续触发、定时器和排队项，取消其在途 wire 调用；删除持久行成功后才改内存。实例已在派发时删行但仍在途时，仍应成功取消该次调用；持久与在途记录均不存在才返回 NOT_FOUND。槽一直保留到真实 Response 或确认旧进程退出。替换后旧在途响应仅释放自身运行记录，禁止删除新实例或释放新调用的槽。
+- list 按同一任务名、key 字典序返回完整参数与规则；after_key 为上一页最后返回的 key，下一页严格从其后开始。按实际 protobuf/Envelope 大小限制分页，完整保留单条数据；超帧的单条返回 RESOURCE_EXHAUSTED。next_after_key 仅有后续条目时设置。无并发写入时分页不丢不重；当前缺少处理函数的已保存任务也可列出和取消，其 next_at 缺失。任务名对应的零实例返回空页。
+- tick 仍使用真实 REQUEST/RESPONSE、独立 run_id 与 JobTimeout；静态任务保持原期限和实际运行槽语义。动态同一实例有未结束调用时跳过本轮；每插件动态实际运行数受 TaskConcurrency 限制，其余按到期时刻排队。排队周期实例只保留一项；等待名额期间触发仍有效。一次性实例在取得名额、实际派发前的状态库事务中删除，删除失败禁止派发。排队动态调用期限拟从实际派发时刻计算，详见备注。
+- 超时/协作取消只结束调用结果，实际槽及动态并发名额继续保留；真实迟到 Response 或 Released 才释放并推进仍有效的队列。失败与超时无业务重试。落后时只安排下一未来 tick。
+- pause/resume/status 只操作已注册的静态 job_id，缺失返回 NOT_FOUND。pause 先保存标记，再撤销未来定时器，在途一轮继续；resume 先保存标记，再按原起点安排下一未来时刻。重复操作成功且保持状态与起点。status 的 last_at/next_at 语义按备注定稿。
+- Drain、Detach、Close 摘除该 Session 全部静态/动态定时器，清空到期队列，持久定义保留；STOPPING 沿既有停止路径取消在途调用，共用全局停止预算。Session 替换后旧定时器、队列项与完成回调均按所属注册/运行身份失效。
+- 将 dynamic_task、scheduled_job 添加到 state.cleanupObjects 的数据对象部分，预览和删除用同一清单。PurgeData/PurgeAll 在既有 Uninstall 事务中按 plugin_id 删除，并进入管理服务 ErrNeedsConfirm 的 affected；无需插件进程在线。PurgeNone 保留行；停止完成后无 Session 可再创建任务。同来源重装，周期任务从原起点的下一未来时刻继续，期间到期的 at 作废；PurgeData 保留配置/secret，PurgeAll 沿用全部配置清理。
+- 内部存储、定时器与服务写操作采用同一串行顺序，覆盖 set/cancel 与到期派发、暂停和停止的交错；事务中只操作状态，不等待 IPC。数据库错误有返回/日志，参数 JSON 与 secret 不写日志。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：只新增根包 scheduler_tasks_test.go 的 TestPersistentTasks（//go:build unix），测试子进程以原始 wire/pb 完成新 TASK 注册与服务请求，复用 pipeline_test.go 的生产装配、真实 Session、独立进程与临时 SQLite。主链：创建 interval/at、同 key 替换与 list、触发参数和无 Actor；重新打开同一数据目录后起点及任务保留、静态暂停保持、恢复从未来 tick 继续；已进入 Handler 的实例经 cancel 收到 Cancel；经真实 manage.Service 的三种卸载范围与同来源重装检查定义的去留和后续触发。主链可用同一测试的子场景，具体平台证据单列。
+- 同步 contracts/wirespec_test.go 的编号断言。多列理由：公开协议追加需要固定编号与 presence，这是编码规范允许的协议编号检查。
+- 范围内既有测试只同步新签名与必填装配字段，断言不变。SDK 与 supervisor 目录的测试、新 testdata 插件全部放本地；提交测试代码中的辅助进程直接在现有测试二进制内实现，不引入提交的 SDK Task 示例。遇到范围外既有 fixture 必须同步时标 [!]，交审查者处理。
+- 本地自测（*_local_test.go，PR 写明结果）：注入 Now 验证固定起点、间隔变化、cron/夏令时、落后跳过、暂停跨重启；过期 at 的删除/WARN/计数，缺少任务名时的保留/诊断；输入错误码、配额替换、字节上限与跨帧完整分页；同插件超过并发名额后全部依次执行、周期排队合并与不同实例独立；超时/断链保槽和迟到响应；已派发 at 的 cancel、同 key 替换交错、Draining 清队列及旧 Session 变更拒绝；数据库失败不派发/不发布半注册，purge 清单准确和同事务回滚。
+- 本地多进程补充：Core/插件停用越过多个 tick、插件更新缺少任务名、卸载时有排队/在途调用、重新安装的原起点恢复。原始协议进程保留参数和实际完成通知；其余 SDK API 验收交 goal-128。
+
+完成条件：接口、持久化、实际槽、取消、暂停和三种清理语义均有证据；本草稿备注中的契约决定已由审查者写入正式语句/权威规格。执行阶段运行 go generate ./... 并核对差异仅为上述授权追加；gofmt -l 本次修改的 Go 文件无输出；go vet ./...；go test -race . ./contracts/... ./internal/core/... ./sdk/...；go build ./...。PR 记录命令、平台、Go 版本、提交测试新增行数及本地自测结果，V-114 的证据交审查者回写 TEST-MATRIX §3.2。出现工作包停止条件、范围外变更、新依赖或未决契约冲突时标 [!]。
+
+不做：sdk.Task/OnTask、sdk.Key/Timezone、SDK 事件自有类型转换和作者示例（goal-128）；任务管理界面/API；动态任务暂停；错过触发的补执行；持久化到期队列；候选/rollback 改写 Core 任务；新增状态库迁移和兼容层；新依赖。
+```
 
 ### goal-130 · T-08.14 配置项的选项来源
 
@@ -5373,18 +5470,87 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-84 · T-09.12 WebUI 组件与组件图标
 
-状态：等待前置（T-09.4、T-13.1）。T-07.7（[PR #116](https://github.com/AlonaBot/AlonaBot/pull/116)，合并提交 `e65eb4d`）已合并。已合入 `settings.Settings.BaseURL`（键 `base_url`）、`webhost.Options{BaseURL, Admin, Proxy, Now}` 与 `adminauth.Auth.Authorize`；装配用 `httpproxy.New(auth)`，WebUI 静态入口挂到 Admin，`/plugins/` 由 Proxy 提供统一沙箱响应。私有插件请求直接使用管理 Cookie/Bearer，Cookie 的非 GET/HEAD 请求校验 CSRF 与 Origin；页面的 iframe 与 postMessage 桥仍由后继实现。合并后由审查者按 main `2c1fdcc` 核对。语句只写了目标、依据和要点。依据 D-62、D-63 新增；前置合并后由审查者按实际的 webhost、adminauth、manage 与根包装配写出接口和测试段。2026-11-04 随前后端拆分从 WebUI 章节移入核心章节。2026-11-04 按 D-77～D-85 修订计划：Core 只有一个主机名（D-84），WebUI 与插件路由同在其下；spec/ADMIN-API.md 还要写出插件页面桥的消息格式。
+状态：已完成（[PR #167](https://github.com/AlonaBot/AlonaBot/pull/167)，合并提交 `3a9b4af`），证据见 TEST-MATRIX §3.2。合入：`manage.AdminAPIMajor = 1`；`(*manage.Service).WebUI()`；根包选项 `alonabot.WebUI(fsys fs.FS)`（开发 WebUI，D-140 不做 Admin API 版本检查）；WebUI 静态托管（保留 /api/ 与内部路径，无扩展名的不存在路径回退 index.html，未安装时 503）与认证的组件图标端点；`spec/ADMIN-API.md` 登记现有管理端点。
 
-目标：Core 以组件方式提供 WebUI 与组件图标：已启用 WebUI 组件的静态文件（保留 `/api/` 与内部路径，无扩展名的不存在路径回退 index.html，未安装时 503 与英文提示），Admin API 主版本常量与 WebUI 声明范围的检查（不兼容时拒绝安装与启用并提示），只提供 manifest 声明的图标并带 sandbox CSP 与 nosniff、要求管理员会话；写出 spec/ADMIN-API.md（主版本、全部接口、认证与错误格式）；根包增加 `alonabot.WebUI(fsys fs.FS)` 选项。
+按 main 核对（2026-11-12，已用 rg 核对签名、字段和路由；manage.Service.Handler 另以离线 go doc 核对）：
 
-依据：PLAN T-09 步骤 9、§3.1 的 T-09.12 行；CONTRACTS §7.3、§7.5、§9.1、§15.5；DECISIONS D-62、D-63；TEST-MATRIX V-83。
+- 根包 `alonabot.go` 已有 `type Option func(*options)`、`Run(opts ...Option) error`、`Start(ctx context.Context, opts ...Option) (*Core, error)`、`(*Core).Wait() error`；选项含 `Plugin(root *sdk.Plugin)`、`Adapter(a adapter.Adapter)`、`DataDir(dir string)`、`Listen(addr string)`、`LogLevel(level slog.Level)`、`LogFormat(format string)`、`Args(values ...string)`，均返回 Option。当前无 WebUI 选项。Start 只读取一次 settings.File，然后装配认证、管理服务、HTTP Listener 与已启用组件。
+- `alonabot.go` 当前依次 `authentication.Routes(adminMux)`、`adminMux.Handle("/", management.Handler(authentication))`，再把 adminMux 传给 webhost；静态入口须从这个根路由拆开，否则会落入管理认证/404。启动进程的安装遍历已跳过 `state.RoleWebUI`。
+- `internal/core/webhost/host.go`：`New(opt Options) *Host`；`Options{BaseURL *url.URL, Admin http.Handler, Media http.Handler, Proxy *httpproxy.Server, Now func() time.Time}`。`(*Host).ServeHTTP` 验证 Host，先分流 `/plugins/`、`/media/`，其余交 Admin。保留这条真实分流及一个公开端口。
+- `internal/core/adminauth/auth.go`：`New(st *state.Store, now func() time.Time, adminBaseURL *url.URL, dataDir string) *Auth`、`(*Auth).Routes(mux *http.ServeMux)`、`Require(next http.Handler) http.Handler`、`Authorize(r *http.Request, pluginID string) bool`；现有路由仅 POST `/api/auth/login`、POST `/api/auth/logout`。登录成功返回 `{"csrf_token":...}`；Cookie 变更请求使用 `X-Alonabot-CSRF` 并验证 Origin，CLI 使用 Bearer。
+- `internal/core/manage/service.go`：`New(opt Options) *Service`，Options 已有 `Store *state.Store`、`Settings *settings.File`、`Packages string`、`Development map[string]*manifest.Manifest` 与生命周期函数；`(*Service).List(ctx context.Context) ([]Package, error)`。私有 `directory(in state.Install) string` 用安装版本与 BuildDigest 前缀定位包目录，`manifest(ctx context.Context, id string) (*manifest.Manifest, error)` 读包内或开发组件 manifest，静态入口应复用它们。
+- `internal/core/manage/http.go`：`(*Service).Handler(auth *adminauth.Auth) http.Handler` 统一认证；已注册 `/api/v1/packages`、packages 的 install/enable/disable/restart/uninstall/pin/reload/update/rollback、`/api/v1/admins` 及 add/remove、`/api/v1/adapter/instances/` 的 create/start/stop/delete。成功结果直接编码结构体；409 确认响应是 `{"affected":[...]}`，其他管理错误是 `{"code":...,"safe_message":...}`；认证错误目前为英文纯文本。准确大小写及字段以源码 JSON 标签为准。
+- `internal/core/manage/lifecycle.go` 的 `Enable(ctx context.Context, id string) error` 对 WebUI 只设 Enabled；尚无 Admin API 版本检查。`install.go` 的 `Install(ctx context.Context, req InstallRequest) (Package, error)` 先 prepare，再同类替换；兼容性检查须在替换旧包前完成。`candidates.go` 的 Update 也先 prepare，候选执行当前仍为 UNSUPPORTED，属后继切片。
+- `contracts/manifest/manifest.go`：`Manifest{Role, Icon, Assets string; AdminAPIMinMajor, AdminAPIMaxMajor uint32; ...}`、`Parse(data []byte) (*Result, error)`、`ParseProject(data []byte) (*Result, error)`（project.go）、`ValidateRelPath(p string) error`。WebUI 已要求版本范围与 assets 路径；icon 已限制为 `.svg/.png/.webp`。`internal/core/packages/preflight.go`：`Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error)`、`(*Candidate).MoveTo(packagesRoot string) (string, error)`；解压已拒绝链接与越界路径，当前只核对进程 entrypoint，尚未核对 WebUI index.html 与图标实际文件。
+- 在途冲突：goal-69、goal-81 同改根包 `alonabot.go`/`assembly.go`，goal-22、goal-55 也改装配；本切片集中在 alonabot.go 的 Option 和 HTTP 挂载，不改 cmd。goal-131 改 state/manage 的清理，本切片只改 manage 的静态入口、安装/启用门禁与 HTTP 注册；goal-59 在 agent/ 无直接文件冲突。本切片与 goal-127 可分别追加 manage/http.go 之外的新文件；state/schema.sql 由 goal-55/goal-131/goal-127 负责，本切片无需修改。后合并者同步保留其他 HTTP 路由与装配项。
 
-要点：
-- 文件只从不可变包目录读取，路径按 CONTRACTS §9.1 的相对路径规则校验，不跟随链接，不经组件进程。
-- 图标的类型只按扩展名取 image/svg+xml、image/png、image/webp；未声明的包内文件即使存在也返回 404。
-- spec/ADMIN-API.md 由本切片新建，写入此时已有的全部 Admin API（goal-36、goal-39 等）；之后新增接口的切片（goal-66、goal-92、goal-93）同步追加；同一主版本内只做向后兼容的增加。
-- 原 goal-43 要求 Core 给 WebUI 静态文件加 `Content-Security-Policy: default-src 'self'`、`X-Frame-Options: DENY` 与 `nosniff`。CONTRACTS §7.5 目前只规定了图标的响应头，没有这一条；补写接口段前先由维护者确认，确认后写入 §7.5 再列入本语句。
-- 提交的集成测试经真实 Core 与临时安装的 WebUI 测试包覆盖 V-83 的全部场景；含脚本的 SVG 在浏览器中不执行的检查没有浏览器时记为未运行。
+- 审查者决定（2026-11-12）：开发 WebUI 不做 Admin API 版本检查并记 WARN（D-140，待维护者确认）；WebUI 静态响应只加契约写明的头；采纳本语句的桥消息格式；图标端点也接受 HEAD（与 GET 相同的状态与头、无正文）；本切片的图标只覆盖已安装组件，开发组件的图标另行安排；spec/ADMIN-API.md 如实记录当前端点（含字段大小写与纯文本认证错误），不借本切片统一格式。
+```text
+/goal 使用 $alonabot-execute 推进 goal-84（切片 T-09.12：WebUI 组件与组件图标）。goal 目录 goal-84，分支 goal-84，worktree .worktrees/goal-84，从最新 origin/main 创建（包含 PR #116、PR #72、PR #149、PR #163）。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：Core 提供已启用 WebUI 组件的静态文件、单页路由回退与缺失/版本不兼容的英文提示；定义 Admin API 主版本并拒绝不兼容的安装与启用；通过管理员认证的入口只提供 manifest 声明的图标并施加沙箱响应头。新增库模式 alonabot.WebUI(fsys fs.FS) 选项，以及包含当前全部管理 HTTP 接口、认证/错误格式和插件页面桥消息格式的 spec/ADMIN-API.md。
+
+依据：spec/PLAN.md §3.1；spec/plan/core.md T-09.12、T-09 步骤 9、相关的步骤 3/7 与「对应 V 验收与停止条件」；spec/CONTRACTS-v0.1.md §7.2～§7.5、§9.1、§9.3、§15.5；spec/MESSAGE-MODEL.md §1 的 Target、Actor 与事件来源（代理既有消息/事件接口时沿用）；spec/WIRE-FORMAT.md §3.3 的现有 HTTP 路由描述与 Listener 凭证、§3.4 中 Adapter 平台 token 路由与内部代理凭证的区分；spec/adr/DECISIONS.md D-62、D-63、D-74、D-77、D-78、D-84、D-86、D-139；spec/TEST-MATRIX.md V-83，并回归 V-47 的管理认证、CSRF 与插件沙箱。对应工作包在 spec/plan/core.md。
+
+范围（只新增或修改这些）：
+- internal/core/manage/service.go：Options 增加开发 WebUI 文件系统；新增 static.go：WebUI 选择、版本检查、静态与图标提供。复用现有安装记录、manifest 读取和包目录定位。
+- internal/core/manage/install.go、lifecycle.go：安装/替换预检与 Enable 的版本门禁；candidates.go 只在已有 Update 预检链补同一兼容性检查，候选执行保持后继所有者。
+- internal/core/manage/http.go：追加图标端点，复用现有认证；新增静态入口方法与原管理 Handler 分开。
+- internal/core/packages/preflight.go：验证 assets/index.html 与 icon 是包内普通文件，沿用已批准的解压与路径规则。
+- 根包 alonabot.go：WebUI Option、options 字段、给同一个 manage.Service 传 fsys，以及 Admin API/静态入口的 HTTP 挂载；其余装配保持现有所有者。
+- 新增根包 webui_test.go（unix）：一项经真实 Start/管理服务/公开 Listener/临时组件包的集成测试；上述包的 *_local_test.go。
+- 新增 spec/ADMIN-API.md：当前 API 主版本、全部已实现端点和插件页面桥的格式。后继新增接口由 goal-66/goal-92/goal-93 追加。
+
+允许的新跨模块边：无。静态托管与包身份解析都在 internal/core 内；根包经已允许的 internal/core 装配。fs.FS 使用标准库；Core 保持通过协议接入组件。
+
+接口（照此实现；内部辅助函数自定）：
+1. internal/core/manage：
+   const AdminAPIMajor uint32 = 1
+   Options 追加 DevelopmentWebUI fs.FS // 本次运行的静态根目录；未传时选择已启用的安装包
+   func (s *Service) WebUI() http.Handler
+   保持 New、Install、Enable、Handler 等现有公开签名。WebUI Handler 处理静态 GET；管理 API 仍由 Handler(auth) 提供。
+2. 根包：
+   func WebUI(fsys fs.FS) Option
+   fsys 根目录即静态根目录；本次运行取代已安装的 WebUI，不将 dev WebUI 写成 Native 安装记录、不启动进程。开发 WebUI 没有 manifest，不做 Admin API 版本检查，启动时记一条 WARN（D-140，待维护者确认）；同一次 Start 登记两次 WebUI 选项返回错误。
+3. HTTP：
+   保持 POST /api/auth/login、POST /api/auth/logout 与全部 /api/v1/ 路由。
+   GET /api/v1/packages/{id}/icon：只取该组件 manifest.Icon 的文件；无图标/未安装/已卸载/非文件返回 404，未认证返回 401。没有任意包路径参数；额外路径和查询参数均不得改变被选择的文件。
+   Admin 挂载：authentication.Routes(adminMux)；/api/v1/ 交 management.Handler(authentication)；其余 /api/ 交同一管理错误入口；/ 根路由交 management.WebUI()。已登记的 auth 路由优先。/plugins/、/media/ 仍在 webhost 分流，所有其他 Core 保留路径在静态查找前拒绝。
+4. spec/ADMIN-API.md 的桥消息格式（供后继 WebUI 页面实现；本切片只定义格式）：
+   request: {channel:"alonabot.plugin", id:string, op:"request", method:string, path:string, headers?:Record<string,string>, body_base64?:string}
+   locale/theme 请求: {channel:"alonabot.plugin", id:string, op:"locale"|"theme"}
+   文案请求: {channel:"alonabot.plugin", id:string, op:"translate", key:string, args?:Record<string,string>}
+   response: {channel:"alonabot.plugin", id:string, ok:true, result:{status:number,headers:Record<string,string>,body_base64:string}} // request
+   response: {channel:"alonabot.plugin", id:string, ok:true, result:{locale:string}} // locale
+   response: {channel:"alonabot.plugin", id:string, ok:true, result:{theme:string}} // theme
+   response: {channel:"alonabot.plugin", id:string, ok:true, result:{text:string}} // translate：只查该组件的 messages
+   error: {channel:"alonabot.plugin", id:string, ok:false, error:{code:string,safe_message:string}}
+   body_base64 使用标准 base64，缺省请求正文为空；响应保留完整字节。translate 按当前界面语言及该组件已有 i18n 回落规则格式化 messages.key。以上格式已由审查者采纳，写入 spec/ADMIN-API.md，后继 WebUI 实现遵循它。
+
+行为：
+- 安装 WebUI 时，在 prepare 已完成且任何旧组件停止/卸载前，检查 AdminAPIMinMajor <= AdminAPIMajor <= AdminAPIMaxMajor；不兼容返回 FAILED_PRECONDITION，英文提示含 Core 主版本和组件声明范围。Enable 同样检查，失败保持原 Enabled。Update 复用同一预检，避免未来候选流程跳过版本门禁。保持同类唯一、--replace、来源绑定和确认语义。
+- 每次提供已安装 WebUI 时，依据 Store.Installs/Enabled 选择 role=webui、未卸载且已启用的唯一记录，复用 directory 和 manifest 的 assets。Core 升级后范围失配时返回 503 与英文纯文本版本提示，管理 API 仍可用；缺少已启用 WebUI 时返回 503 与安装提示，明确使用 alonabot install 安装 WebUI 组件。安装损坏、读取/状态库错误保留并记录安全错误，响应 500，拒绝伪装成未安装。
+- assets/index.html 与 icon 的存在性/普通文件检查在预检边界完成；已安装提供时同样保持文件边界。路径使用 fs.ValidPath/manifest.ValidateRelPath 的相应形式，拒绝 ..、反斜杠、绝对路径和链接；禁止先 Clean 后接受越界输入。包目录只读，不遍历暴露整个包。根静态路径映射为 index.html。
+- GET 对应文件存在时提供该文件。不存在且 URL 最后一段无扩展名时提供 index.html；带扩展名的不存在路径返回 404；目录按静态根语义处理且不列目录。实际 I/O 错误返回错误，只有文件不存在才适用回退。非 GET 的静态请求返回 405。HEAD 的支持按备注定稿，保持静态与 API 的方法规则清晰。
+- /api/、/plugins/、/media/ 及已有内部路径在回退前分流，即使 WebUI 包内有同名文件也不覆盖；未知 API 返回既有 API 错误，保留状态码和 Content-Type。所有静态请求继续由 webhost 验证受控 Host，错误 Host 为 421。无 WebUI 时登录、管理与插件/媒体入口照常可达。
+- WebUI 是登录页面本身的来源，静态资源可在登录前获取；管理 API 和图标始终通过现有认证。图标只打开该组件自身的 manifest.Icon；MIME 只按扩展名取 image/svg+xml、image/png、image/webp。图标响应强制 Content-Security-Policy: sandbox; default-src 'none'; style-src 'unsafe-inline' 与 X-Content-Type-Options: nosniff，包括直接打开 SVG 的场景。未声明文件与其他扩展名一律拒绝提供。开发插件/Adapter 的图标若缺少可访问包目录，按备注定稿，禁止推测其工程路径。
+- dev WebUI 选项只在本次运行覆盖安装包静态来源；不修改已安装组件的启用状态、来源或包文件。其资源使用同一回退与保留路径规则，不做 Admin API 版本检查（见接口 2）。
+- 静态 WebUI 响应不额外加 CSP 或 X-Frame-Options（契约未规定，审查者决定只落实已写明的头）；图标与插件代理继续使用各自契约规定的响应头，避免将插件 CSP 套在持有管理会话的 WebUI 页面上。
+- API 参考逐个登记当前源码的 method/path、认证方式、请求/响应 JSON 的准确字段大小写、状态码与确认流程；包括 auth、packages 全部管理动作、admins、Adapter 实例和新增图标。管理成功为直接结果、409 affected、其他错误 code/safe_message，认证与路由的纯文本错误单列。reload/update/rollback 写明当前候选执行返回 UNSUPPORTED（HTTP 501），后继实现再修订能力说明。上传与会话取回等后继端点由所属切片实现时追加。
+- API 参考写明 Cookie/Origin/X-Alonabot-CSRF、CLI Bearer、8h 会话、缺认证时的行为、WebUI 版本范围与同主版本的兼容增加。插件路由的内部凭证由 SDK/Core 管理，浏览器桥无需取得它。
+- 桥格式（已采纳）：请求来源按已嵌入的 iframe.contentWindow 绑定组件 ID；不透明源的 origin 为 null，父页面同时核对窗口身份。父页面向正确窗口回应，request.id 对应原请求。只接受插件相对路径，拒绝绝对 URL、越界路径和重定向；父页面将路径固定到该 iframe 所属组件的 /plugins/{id}/ 前缀，Core 现有代理负责已注册 method/path 的最终匹配，禁止访问其他组件和 Admin API。父页面添加管理员会话/CSRF，页面自带头中拒绝 Cookie、Authorization、CSRF 与 Core 内部凭证，响应也滤去 Set-Cookie 等凭证。语言/文案/主题只返回相应值。后继前端实现遵循本格式。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：只新增根包 webui_test.go 的 TestWebUIComponents（//go:build unix）。用临时 data_dir、真实 alonabot.Start 的单一 HTTP Listener、真实认证与管理服务，在临时目录构造并安装 WebUI 组件包。一个测试内分子场景覆盖 V-83：启用后取 index/资源；无扩展名前端路由回退；带扩展名缺失 404；/api/ 和内部路径保持分流；未安装/停用 503 及英文提示；安装与启用时版本不兼容被拒且旧 WebUI 可继续提供；Core 主版本升级式模拟下，已安装不兼容 WebUI 返回版本提示；WebUI(fsys) 在契约定稿后通过同一 Start 路径覆盖已安装静态来源。
+- 同一测试安装声明 SVG/PNG/WebP 图标的临时组件包，经图标公开端点验证认证、MIME、完整 CSP/nosniff、只读取声明文件；未声明、额外包路径、其他扩展名与越界路径拒绝。图标错误扩展名的包在安装预检被拒。测试包在 t.TempDir 动态生成，无新增 testdata 插件；包校验所必需的摘要沿用安装夹具，不作额外完整性计算。
+- 本地自测（*_local_test.go，PR 写明结果）：所有 reserved 前缀、未知 API 的认证/404 与 MIME、非 GET 方法、编码后的路径与 symlink、目录/index 缺失和普通 I/O 故障；Host 校验；禁用/卸载/替换后的即时选择；--replace 拒绝不兼容候选时旧包与 Enabled 保持；Update 预检；图标 Cookie 与 Bearer、登录 CSRF 回归；重复 WebUI 选项按审查者定稿的规则处理。既有测试只做必需接口迁移，原断言保持。
+- 浏览器本地验证：真实 Core 上登录，直接打开包含 script 的 SVG 图标，确认脚本无法访问 Admin 源或产生副作用；记录浏览器版本与实际结果。环境缺少浏览器时写“未运行”，V-83 此分项保留待联验；页面桥的执行验证由后继前端切片负责，本切片检查文档结构与安全规则完整。
+- 不向 sdk/、internal/core/supervisor/ 增加提交测试；多进程本地自测如需插件页面，复用根包 pipeline_test.go 的真实 Session 装配。
+
+完成条件：WebUI 提供/回退、保留路径、版本拒绝、图标认证与头部、库模式覆盖均有集成证据；spec/ADMIN-API.md 与当前 main 的所有端点逐项对应，桥格式已写入。gofmt -l 本次修改 Go 文件无输出；go vet ./...；go test -race . ./internal/core/manage/... ./internal/core/packages/... ./internal/core/webhost/... ./internal/core/adminauth/...；go build ./...。PR 给出命令、OS/架构、Go/浏览器版本、提交测试新增行数及本地验证结果，未运行项按原样交审查者回写 TEST-MATRIX §3.2。遇到 T-09 的停止条件、额外依赖、范围外文件或未决契约时标 [!]。
+
+不做：WebUI 前端页面与桥运行代码（goal-43/goal-44）；Core 内嵌前端；插件页面票据/第二 host；会话取回与 multipart 上传（goal-92）；日志 API（goal-66）、配置/权限/工具/会话管理 API（goal-93）；候选 Journal、正式更新与 rollback 编排（goal-40）；任意包文件浏览、表单选项图标、组件进程静态代理；新依赖和 proto 变更。
+```
 
 ### goal-69 · T-13.3 开发运行与热部署
 
@@ -5444,7 +5610,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-81 · T-16.1 插件测试套件基础
 
-状态：待派发。T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`）已合并，语句按它的代码写成，无需改动。T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)）与 T-13.2（[PR #160](https://github.com/AlonaBot/AlonaBot/pull/160)，合并提交 `65ebc5f`）已合并。2026-11-12 审查者按 main 与 PR #163 的代码改写，前置加入 T-09.4：测试 Adapter 的实例经 `core_config.json` 启动、Core Admin 从同一文件读取，这两项由 T-09.4 的根包装配提供。改写要点：
+状态：已完成（[PR #168](https://github.com/AlonaBot/AlonaBot/pull/168)，合并提交 `37b0ada`），证据见 TEST-MATRIX §3.2。合入：公开包 `plugintest`（`Start`、`Plugin`、`Config`、`Admin`、`AllowedInstances`、`Capabilities`、`Adapter`、`Private`、`Group`、`(*Harness).Message`/`Text`/`Event`、`Result`、`Sent`、`Outcome`）；`internal/inproc` 的 `Harness`、`RegisterHarness`、`HarnessFor`；`router.Options.Dispatched`（一个事件的分发链结束或进入等待时回调）。
 - 插件对象：`*sdk.Plugin`（`sdk.NewPlugin`，`p.Generated().Manifest` 为工程 plugin.yaml 原文，D-137）；SDK 公开类型用 `sdk/message`（`message.Session`、`message.Chain`、`message.Content`、`message.SendResult`、`message.MessageRef`）与 `sdk/errcode`，pb 只在 SDK 内部（T-04.8）。
 - 权限：Actor 的平台权限为权限名集合（D-68～D-72，`sdk.Permission`、`sdk.ChatAdmin`）；Core Admin 是 `core_config.json` 的 `admins` 中的 `<adapter_id>:<external_user_id>`（D-105）；发信许可缺省为全部实例（D-83）。
 - 根包（PR #163 之后）：`alonabot.Start(ctx, DataDir, Plugin, Adapter, Listen, ...)`；Start 读取 `core_config.json`，开发 Adapter 按 `adapters.<adapter_id>` 中 `package` 属于它的实例启动；开发组件的配置为 `plugins/<id>/config.json`，数据库为 `dev.sqlite`（T-13.2）。
@@ -5584,7 +5750,15 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-131 · T-03.25 聊天目录
 
-状态：等待前置（T-08.14、T-09.4）。2026-11-10 按 D-130 新增。T-03.3（PR #32）已合并。goal-130（T-08.14）提供内置来源的登记处，goal-39（T-09.4）提供卸载的清理对象，合并前写接口段只能按将要改动的代码写。语句只写了目标、依据和要点，前置合并后由审查者按合入代码写出范围、接口与测试段。本切片修改 Event 的 proto 与 `internal/core/state/schema.sql`，按执行顺序的共享文件规则处理冲突。
+状态：已完成（[PR #166](https://github.com/AlonaBot/AlonaBot/pull/166)，合并提交 `6f72fc8`），证据见 TEST-MATRIX §3.2。合入：Event 的 `chat_title = 16` 与 `message.Event.ChatTitle`；状态库 chat 表、`Store.PutAdapterCursor(ctx, pluginID, instanceID, cursor, chat)`、`Store.Chats(ctx, ChatQuery)`；`options.Options.Chats` 与内置来源 core.chats；Adapter 的清理对象加入聊天目录。派发时：前置 T-03.3（PR #32）、T-08.14（[PR #157](https://github.com/AlonaBot/AlonaBot/pull/157)，合并提交 `e709135`）与 T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`）已合并。2026-11-10 按 D-130 新增；2026-11-12 审查者按 main `d6eb381` 写出范围、接口与测试段，要点如下：
+- 协议：Event 在 `contracts/proto/alonabot/v1/message.proto`，最后一个字段为 `ChatType chat_type = 15`，`chat_title` 用 16；SDK 侧 `sdk/message.Event` 与 `sdk/internal/convert` 同步一个字段，`sdk/adapter` 的 `Core.Deliver(ctx, ev *message.Event, cursor)` 不变。
+- 交付：`internal/core/adapter/remote/services.go` 处理 `AdapterDeliverRequest` 时先校验 Target 与 Actor，再 `Store.PutAdapterCursor(ctx, pluginID, instanceID, cursor)`，之后重建可信字段并派发。聊天记录与游标写在同一个状态库事务中。
+- 选项来源：`configschema.BuiltinOptionSources` 已登记 `core.chats` 与 filter 键 `chat_type`、`adapter_id`；`internal/core/options` 的内置来源目前对它返回 UNAVAILABLE，本切片实现。
+- 清理：`internal/core/manage/lifecycle.go` 的卸载按 `PurgeScope` 列出并删除受管对象，状态库对象在一个事务内删除。
+- 本切片修改 Event 的 proto 与 `internal/core/state/schema.sql`，按执行顺序的共享文件规则处理冲突（goal-55 也在改 schema.sql 的按钮表）。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-131（切片 T-03.25：聊天目录）。goal 目录 goal-131，分支 goal-131，worktree .worktrees/goal-131，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：Event 带上可选的会话显示名 `chat_title`；Core 在接纳入站事件时记录见过的聊天，并把它登记为内置选项来源 `core.chats`；聊天目录随 Adapter 的数据清理。两个官方 Adapter 的填写由 goal-132 与 goal-133 提供。
 
@@ -5599,7 +5773,39 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 - 名称不写入日志；诊断只写 adapter_id 与 chat_id。
 - 测试：提交一个集成测试（经回环测试 Adapter），覆盖群与私聊各交付一条带名称的事件后 `core.chats` 能按名称搜到、按 `chat_type` 筛选、之后一条不带名称的事件不清空名称；其余（没有 target 却带名称被拒、Core 重启后保留、两个实例交付同一聊天、`--purge-data` 后删除而只卸载保留、按存储值取回）进本地自测。
 
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/message.proto：Event 追加 `optional string chat_title = 16`，随后 go generate ./...；contracts/wirespec_test.go 追加编号检查
+- sdk/message 与 sdk/internal/convert：Event 增加 ChatTitle 字段与转换
+- internal/core/state/：schema.sql 增加 chat 表（写进唯一的初始迁移）；新增 chats.go；PutAdapterCursor 同步签名
+- internal/core/adapter/remote/services.go：交付时校验并写入聊天
+- internal/core/options/：实现内置来源 core.chats
+- internal/core/manage/：把聊天表加入 Adapter 的清理对象
+- internal/core/adapter/remote/remote_test.go：追加集成测试 TestChatDirectory
+允许的新跨模块边：无。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+   // internal/core/state
+   type Chat struct { AdapterID, ChatID, ChatType, Title, InstanceID string; FirstSeen, LastSeen time.Time } // ChatType 为 private、group 或 channel，空串表示未知
+   func (s *Store) PutAdapterCursor(ctx context.Context, pluginID, instanceID string, cursor []byte, chat *Chat) error // chat 为 nil 时只保存游标；否则在同一事务中写入或更新聊天
+   type ChatQuery struct { Search, ChatType, AdapterID string; Keys []ChatKey; Limit int }
+   type ChatKey struct { AdapterID, ChatID string }
+   func (s *Store) Chats(ctx context.Context, q ChatQuery) (chats []Chat, more bool, err error) // 按 LastSeen 从新到旧
+   清理时删除某个 adapter_id 的聊天：在 manage 已有的清理事务中执行（state 提供按 adapter_id 删除的方法，名称自定）。
+
+行为：按上文要点。补充：
+- 没有 target 的事件带 chat_title 时，Core 以 INVALID_ARGUMENT 拒绝这次交付并记 WARN（只写 adapter_id 与 chat_id）。
+- 写入：Title 为空时保留已有名称，ChatType 未知时保留已有类型，InstanceID 与 LastSeen 每次更新；Core 生成的 bot.online、bot.offline 与 scheduled 不写。
+- core.chats：存储值为 `<adapter_id>:<chat_id>` 会话字符串（转义规则同 MESSAGE-MODEL §1，复用已有的会话字符串编码），显示名为 Title（为空时为 chat_id），说明为 adapter_id 与 chat_type；Search 不区分大小写地匹配名称与 chat_id；按值取回时格式不合法或不存在的值不返回；上限 OPTIONS_PAGE，超出时 More。
+- 卸载 Adapter：--purge-data 与 --purge 删除该 adapter_id 的聊天并在确认对象中列出条数；只卸载与 --replace 保留。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/core/adapter/remote/remote_test.go 的 TestChatDirectory（经回环测试 Adapter 进程）：群与私聊各交付一条带名称的事件后，core.chats 能按名称搜到、按 chat_type 筛选；之后一条不带名称的事件不清空名称。contracts/wirespec_test.go 的编号检查。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有 target 却带名称被拒；Core 重启后保留；两个实例交付同一聊天时 InstanceID 更新为最近的一个；--purge-data 后删除而只卸载保留；按存储值取回；聊天名称不出现在日志中。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./...；go build ./...。
+
 不做：给插件的聊天列表服务；读取 `chat_title` 的 SDK 方法；话题的目录；成员列表；主动向平台拉取全部群；管理 API（goal-93）与页面（goal-44）；两个官方 Adapter 的填写（goal-132、goal-133）。
+```
 
 ### goal-18 · T-05.5 多进程事件流水线验收
 
@@ -5831,7 +6037,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-22 · T-06.4 Session 清理与 Service 端到端
 
-状态：待派发。前置 T-06.2（[PR #161](https://github.com/AlonaBot/AlonaBot/pull/161)，合并提交 `b4610e1`）与 T-06.3（PR #56）已合并。2026-11-12 审查者按 main `96856ec` 改写，要点如下：
+状态：已完成（[PR #164](https://github.com/AlonaBot/AlonaBot/pull/164)，合并提交 `039802f`），证据见 TEST-MATRIX §3.2。合入：`internal/core/metrics` 的 `Counters.Add`/`Snapshot`（以已知身份为界）；broker、bus、router 的 Options 增加 Metrics；Broker 为每次转发保存取消入口，Session 进入 STOPPING、被替换或断链时取消相关转发并归还预算；根包 `service_chain_test.go` 的 TCP、stdio 矩阵。执行中审查者授权 supervisor 透传停止钩子。派发时：前置 T-06.2（[PR #161](https://github.com/AlonaBot/AlonaBot/pull/161)，合并提交 `b4610e1`）与 T-06.3（PR #56）已合并。2026-11-12 审查者按 main `96856ec` 改写，要点如下：
 - 已有的清理：根包 `assembly.detach` 在组件停止或 Session 替换时依次调用 `router.Detach`、`bus.Detach`、`scheduler.Detach`、`httpproxy.Server.Unbind` 与 Adapter 的 `remote.Unbind`；延续调用与等待随 `continuation.Manager.Release(caller)` 释放（T-05.4）；插件的入站请求在 Session 结束时由 wire 取消，Broker 转发时用的就是这个 ctx。
 - Broker（T-06.2）：`broker.New(broker.Options{Router, RequestTimeout, MaxDepth})`，`b.calls` 以子调用的 Invocation 记录来源；CALL_CYCLE 与深度在调用前返回；额满由 wire 立即返回 RESOURCE_EXHAUSTED。
 - Bus（T-06.3）：`bus.New(bus.Options{QueueEvents, QueueBytes})`、`Register`、`Attach`、`Detach`、`Stats(pluginID) Stats{Published, Delivered, Dropped}`（丢弃不分原因）；wire 的接收丢弃为 `wire.Stats.DroppedEvents`。
@@ -5887,7 +6093,7 @@ broker.Options、bus.Options 与 router.Options 增加 Metrics *metrics.Counters
 
 ### goal-55 · T-11.2 工具调用与用户确认
 
-状态：待派发。前置 T-03.8（PR #136）、T-06.2（[PR #161](https://github.com/AlonaBot/AlonaBot/pull/161)，合并提交 `b4610e1`）、T-08.8（PR #102）与 T-11.1（PR #101）已合并。2026-11-12 审查者按 main 核对：`buttons.New(store, now, ttl, current)`（ttl 为 BUTTON_TOKEN_TTL）与 `Service.Issue`、`Resolve`、`Purge`；`button_token` 表以 plugin_id 外键关联安装记录，确认 token 记在调用工具的插件名下并以新增的类型列区分（写进唯一的初始迁移）；`broker.New(broker.Options{Router, RequestTimeout, MaxDepth})`，经 `Broker.Call(ctx, caller, &wire.Inbound{Target, Payload, ParentAttach})` 以父调用链转发（T-06.2 继承 actor、默认目标、scopes、send_forbidden 与 trace，CALL_CYCLE 与深度照常检查）；tune 已有 `TOOL_CONFIRM_TIMEOUT`（缺省 5m）；`sdk.ListTools` 已在 `sdk/tool.go`；多进程本地集成复用根包 `pipeline_test.go` 的装配（T-05.5）。与 PR #163（goal-39）同改 assembly.go 时后合并者同步 main。此前的记录：T-03.8（[PR #136](https://github.com/AlonaBot/AlonaBot/pull/136)，合并提交 `3621fc1`）已合并：`internal/core/buttons` 的 `New(store, now, current)` 与 `Service.Issue`、`Resolve`、`Purge`；`message.New(adapters, p, lease, issue, requestTimeout)`；`router.Options.Buttons`；可选接口 `adapter.ExtensionChecker`；`manifest.CheckDependencies(m, Installed)`；SDK 的 `sdk.Action[T]`、`sdk.OnButton(r, a).Handle(func(*Context, T) error)`、`message.Buttons`、`message.Extension`；`Segment` oneof 已用到 `extension = 9`。用户确认按钮使用上述 SDK 按钮动作。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。语句中 goal-8、goal-20、goal-53 提供的符号（buttons.Service、broker 的父链调用、internal/core/i18n）只写名字；合并后由审查者核对，再改为待派发。goal-54（PR #101，合并提交 `de48f26`）已合并，合入的符号：`tool.Catalog`（`New(store, r)`、`Register(m)` 注册 `core.tool.list`、`Effective`、`SetPolicy`、`Policies`，可见性按 `router.ServiceCallable` 与生效策略非 DENY 判定）、`router.Plugins`、tool.proto 的 ToolPolicy/ToolSpec/ToolInfo/ToolListRequest/ToolListResponse、sdk 的 `ToolDefault`/`ToolInfo`/`ListTools`；`Catalog` 目前只持有状态库与 Router，invoke 需要的 Broker 等依赖在本切片按实际前置写入接口段。
+状态：已完成（[PR #165](https://github.com/AlonaBot/AlonaBot/pull/165)，合并提交 `330164f`），证据见 TEST-MATRIX §3.2。合入：服务 `core.tool.invoke`、`core.tool.confirm`；`sdk.InvokeTool(ctx, name, arguments)`、`sdk.ConfirmOperation(ctx, operation, summary)`；`internal/core/tool` 的 `InvokeOptions{Call, Adapters, Buttons, ConfirmTimeout, DefaultLocale}` 与 `(*Catalog).RegisterInvoke(m, opt)`；`internal/core/buttons` 的 `IssueConfirm`、`RevokeConfirm`、`OnConfirm`、`InterceptConfirm`；`router.Options.Intercept`（确认点击在派发槽之外处理）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-55（切片 T-11.2：工具调用与用户确认）。goal 目录 goal-55，分支 goal-55，worktree .worktrees/goal-55，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -6083,90 +6289,313 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 ### goal-40 · T-09.5 候选 Journal 与准备编排
 
-状态：等待前置（T-09.4、T-06.4）。T-08.12（[PR #114](https://github.com/AlonaBot/AlonaBot/pull/114)，合并提交 `a796766`）已合并。Adapter 更新停止旧版本前调用 `settings.File.TrialInstances(adapterID string, schema *configschema.Schema) []settings.InstanceProblem`；它只读试算，不写回、不备份，成功提交后的迁移写回复用 `PrepareInstances` 与 `BackupDir`。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。冻结与停止沿用 `Running.Stop(t0, reason)`，经 `host.StopHooks{Frozen, Stopping}` 调用 `Scheduler.Drain(pluginID)` 与 `HTTP.Drain(pluginID, deadline)`，进入 STOPPING 后 Detach/Unbind，确认进程树清空后 Released。合并后由审查者按 main `2c1fdcc` 核对。T-08.6（PR #85）已合并。语句中 goal-22、goal-33、goal-39 提供的符号（manage.Service 与 Candidates 接口、candidate.PrepareDatabase/Discard 与交接约定）只写名字；合并后由审查者核对，再改为待派发。
+状态：待派发。前置 T-09.4（PR #163，合并提交 `cb8ae3d`）、T-08.6（PR #85，合并提交 `7d554bd`）、T-06.4（PR #164，合并提交 `039802f`）均已合并；相关已合并能力：T-08.12（PR #114，`a796766`）、T-07.5（PR #119，`cc19e99`）。2026-11-13 审查者按 main `37b0ada` 改写（起草稿经审查者裁决），裁决如下：
+- 生产入口的分界（DECISIONS 2026-11-13 变更记录）：本切片只交付 Journal、两阶段 supervisor 入口与 Orchestrator 的 Prepare/Abort，不接入生产的管理动作与首次启用；`manage.Options.Candidates` 保持缺省的 `unsupportedCandidates`，`startInstalled` 的首次启用保持现状。管理动作接线、首次启用切换与没有 Active 的 Update 由 T-09.6（goal-41）在 Commit 可用时一并交付，避免出现「停旧版、准备、中止、返回 UNSUPPORTED」的过渡行为。
+- `manage.Candidates.Update` 改为交接完整的 `*packages.Candidate`（BuildDigest、Release 与发布者随包对象交接）。
+- 从 `supervisor.Launch` 提取只到 PREPARED 的 `supervisor.Prepare`/`Prepared`，Launch 保持现有签名与行为。
+- external 获准维护后的失败按 CONTRACTS §6.3 保持停机；当前没有维护许可来源，一律下发 `manual_migration_approved=false`。
+- Journal 表的列见接口 1；`state/installs.go` 把 Journal 纳入卸载预览与事务清理。
+- 没有 Active 的 reload/update、role 为 webui 的组件与开发来源的组件，Prepare 在写 Journal 前返回 FAILED_PRECONDITION。
+- REGISTER 的可信 schema 与配置版本绑定：WIRE-FORMAT §3.1 要求 REGISTER 带 `config_schema_hash` 与 `candidate_config_version`、Core 原子校验，main 的 Core 尚未在 Bootstrap 填入摘要，也未比对；本切片补齐（行为 7）。
+
+已有接口（审查者按 main `37b0ada` 核对）：
+
+- `internal/core/manage/candidates.go`：现有 `Candidates` 为 `Reload(ctx context.Context, id string) error`、`Update(ctx context.Context, id, staged string) error`、`Rollback(ctx context.Context, id, generation string) error`；默认 `unsupportedCandidates` 三项都返回 `UNSUPPORTED`。`Service.Update(ctx context.Context, id string, req InstallRequest) error` 完成预检后只传 `candidate.Dir`，退出时 defer `candidate.Discard()`。`packages.Candidate` 的 `Manifest`、`Release`、`Asset` 没有随目录交接。
+- `internal/core/manage/lifecycle.go`：`Service.Enable(ctx context.Context, id string) error` 经 `enable` 检查依赖、调用 `Options.Start`，成功后才 `SetEnabled(true)`。`Service.Restart(ctx context.Context, id string) error` 要求 enabled 且有 Active，按 `Stop → Start` 恢复同一代次。首次启用的 shortcut 实际位于 `assembly.go` 的 `startInstalled`，当前直接 `AddGeneration → supervisor.Launch(NewCandidate:true)`。
+- `internal/core/candidate/database.go`：`PrepareDatabase(ctx context.Context, req Request) (*Prepared, error)`；`Request` 字段为 `PluginID string`、`PluginDir string`、`Reason pb.ActivationReason`、`FromGeneration string`、`NewGeneration string`；`Prepared` 字段为 `PluginID string`、`Generation string`、`DatabasePath string`、`Created bool`。FIRST_INSTALL 只建目录，SDK 创建首库；RELOAD/UPDATE 以 Backup API 复制；RESUME 复用路径。返回前释放 `runtime.lock`。
+- `internal/core/candidate/discard.go`：`Discard(ctx context.Context, st *state.Store, secrets *secret.Store, p *Prepared) error`；先删未提交代次与 secret 路径，再删候选目录，最后按全部代次与 Pending 保护 secret。已提交或 Active 代次拒绝删除。包文档要求调用方持管理操作锁，先确认旧树退出，候选失败时先确认候选树退出再清理。
+- `internal/core/state/state.go`：`(*Store).LockPlugin(pluginID string) (unlock func())`、`AddGeneration(ctx context.Context, pluginID, generationID, configSnapshot string, configVersion uint32) error`、`Active(ctx context.Context, pluginID string) (string, error)`、`CommitActive(ctx context.Context, pluginID, expectedOld, newGen string) error`。现有 `CommitActive` 原子写 Active 与 `generation.committed_at`，尚无正式 Journal。`schema.sql` 没有 Journal 或代次程序包路径列。
+- `internal/core/state/secrets.go`、`pending.go`、`candidate.go`：`SetGenerationConfig(ctx context.Context, generationID, snapshot string, secretPaths []string) error`、`GenerationSecretPaths(ctx context.Context, generationID string) ([]string, error)`、`GenerationConfig(ctx context.Context, generationID string) (string, error)`、`PluginGenerationConfigs(ctx context.Context, pluginID string) (map[string]string, error)`、`DeleteCandidateGeneration(ctx context.Context, pluginID, generationID string) error`；代次的 `config_version` 已存储，当前没有公开读取它的方法。
+- `internal/core/config/service.go`：`New(store *state.Store, dataDir string) *Service`；`(*Service).ImportSnapshot(ctx context.Context, pluginID string) (Pending, error)`、`Pending(ctx context.Context, pluginID string) (Pending, bool, error)`。这些方法自行持 `Store.LockPlugin`；编辑快照缺失返回 NOT_FOUND，导入时只核对 JSON 对象，不先用新 schema 否决旧配置。
+- `internal/core/settings/instances.go`：`(*File).TrialInstances(adapterID string, schema *configschema.Schema) []InstanceProblem`、`PrepareInstances(adapterID string, schema *configschema.Schema) (map[string]json.RawMessage, []InstanceProblem, error)`；问题包含 `InstanceID`、`Path`、`Reason`。Trial 不写文件；Prepare 的迁移写回会备份。`BindAdapter(adapterID, packageID string) (bool, error)` 保护实例包归属。
+- `internal/core/supervisor/supervisor.go`：`Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error)`，当前从进程启动一直执行到 `host.Activate`，`NewCandidate=true` 时调用 `CommitActive`，随后 Bind HTTP、Attach Scheduler。当前不存在只到 PREPARED 的 supervisor 入口。`(*Running).Stop(t0 time.Time, reason pb.StopReason) host.StopResult` 与 `WaitExit() (abnormal bool, state string, err error)` 负责树清理；Stop 的 Frozen/Stopping 钩子处理 Scheduler/HTTP 与装配 Detach。
+- `internal/core/host/prepare.go`、`activate.go`：`Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstrap, lim Limits) (*Prepared, error)` 已停在 PREPARED；`Prepared` 含 `SessionID`、`Register`、`ConfigSnapshot`、`RouteHash`、`ConfigDigest`。`Activate(ctx context.Context, conn *wire.Conn, prep *Prepared, opt ActivateOptions) (*Instance, error)` 独立执行提交回调与激活。预算由 `NewLimits(v tune.Values) Limits`、`NewStopTiming(v tune.Values) StopTiming` 提供。
+- `alonabot.go`：`Start(ctx context.Context, opts ...Option) (*Core, error)` 装配同一 `settings.File`、state、管理服务；管理 Start/Stop 经 `Core.operation` 串行进入运行循环，当前未传 `manage.Options.Candidates`。`assembly.go`：`assemble(store *state.Store, dir string, v tune.Values, file *settings.File) (*assembly, error)`；`(*Core).startInstalled(ctx context.Context, dir string, install state.Install) (*runningComponent, error)`、`stopComponent(r *runningComponent, t0 time.Time, timing host.StopTiming, reason pb.StopReason) error`；`(*assembly).detach(r *runningComponent)` 按 Session 撤销 Router、Bus、Scheduler、HTTP、remote 与 Broker 关联。
+- `internal/core/packages/preflight.go`：`Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error)`、`(*Candidate).MoveTo(packagesRoot string) (string, error)`、`Discard() error`。MoveTo 用已验证的 `Asset.SHA256` 选择不可变目录，成功后清空 `Dir`；没有在该目录中保存完整 release 元数据。这里沿用现成摘要，不新增摘要计算。
+- 同时在途、可能与本切片改同一批文件的 PR：#169（goal-127，`state/schema.sql`、`state/installs.go` 的清理清单、`assembly.go`）与 #170（goal-59，Router 与 SDK）；goal-69（根包与 cmd/alonabot 的开发运行）。从最新 main 创建；后合并者按最新 main 合并调用点、初始 schema 与清理清单。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-40（切片 T-09.5：候选 Journal 与准备编排）。goal 目录 goal-40，分支 goal-40，worktree .worktrees/goal-40，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：为 reload、update 与首次启用实现正式的候选编排：预检通过后，以预期的旧 ActiveGeneration 写入持久化的管理操作记录（Journal）及其资源引用；冻结新根派发、drain 并停止旧进程，确认进程树退出且 runtime.lock 可取；调用 T-08.6 复制数据库并创建候选 Session（启动原因、维护许可与阶段预算放进 Bootstrap）；REGISTER 校验后持久化程序、配置快照、secret 与数据库的候选引用，形成 PREPARED。提交与激活门禁留给 T-09.6；失败时清理候选并以旧版的新 Session 恢复。
+目标：为 reload、update 与首次启用实现正式候选准备（本切片交付 Prepare 与 Abort，生产入口由 T-09.6 接入）：预检通过后，以预期旧 ActiveGeneration 持久化 Journal 及程序、配置、secret、数据库资源引用；冻结新根派发，排空并停止旧进程，确认进程树退出与 runtime.lock 可取；受管 SQLite 调用已有候选复制，创建新的 Generation 与 Session，以已有 Bootstrap 下发启动原因和阶段预算；REGISTER 校验及 secret 抽取后持久化候选资源，停在 PREPARED。提交与激活由 T-09.6 接续。受管候选提交前失败时清理候选，以旧版的新 Session 恢复；external 维护失败按 CONTRACTS §6.3 保持停机。
 
-依据：PLAN T-09 步骤 4；CONTRACTS §12、§6.3、§5.2、§4.2；TEST-MATRIX V-29。
+依据：
+- spec/PLAN.md §3.1 → spec/plan/core.md 的 T-09.5 切片表、T-09「实施动作」步骤 4、「前置输入与边界」与「对应 V 验收与停止条件」；T-08 步骤 7 的候选交接及其停止条件。该 goal 属于 Core 章节，工作包位于 spec/plan/core.md。
+- spec/CONTRACTS-v0.1.md §4.1、§4.2、§5.1～§5.3、§5.5、§6.1、§6.3、§8、§9.3、§12.1～§12.3、§14.5、§16。
+- spec/WIRE-FORMAT.md §3.1、§3.2、§3.4：准备与激活分界、Bootstrap、Adapter 共用生命周期；spec/MESSAGE-MODEL.md §1、§1.2、§5、§6.3：可信事件、父调用链与按钮的代次归属沿用已有行为，准备期保持业务门禁。
+- spec/adr/DECISIONS.md D-26、D-48、D-68、D-75、D-76、D-80、D-82、D-85、D-86、D-114、D-127、D-134；管理锁与实例归属沿用已合并的 D-139 实现，其维护者确认状态由审查者跟进。
+- spec/TEST-MATRIX.md V-29；关联复验 V-24、V-36 的候选与锁分项、V-31/V-39 的维护拒绝与 resume 分项、V-21 的准备期门禁。V-30 的正式提交及崩溃恢复留给 T-09.6/T-09.7。
 
 范围（只新增或修改这些）：
-- internal/core/state/schema.sql：在唯一的初始迁移末尾加入新表；新增 internal/core/state/journal.go
-- 新增 internal/core/journal/（操作记录的状态机与编排，实现 manage.Candidates 的 Reload 与 Update）
-- internal/core/manage/：首次启用改用 journal 编排，删除 goal-39 的 shortcut 注释（只改该处与装配）
-- 上述包的测试文件
-允许的新跨模块边：无。
+- internal/core/state/schema.sql：在唯一初始迁移加入 Journal 表；新增 journal.go：Journal 模型、读写、阶段转换及旧代次配置版本读取。
+- internal/core/state/installs.go：仅把 Journal 纳入既有卸载预览与事务清理清单；保留 main 及 goal-127 的其他清理对象。
+- 新增 internal/core/journal/：候选资源持久化、Prepare/Abort、管理动作入口；包内可按平台分文件处理落盘。
+- internal/core/supervisor/supervisor.go；可新增 prepare.go：从现有 Launch 提取只到 PREPARED 的入口及资源关闭、继续激活的方法，Launch 与 Running 的现有调用契约保留。
+- internal/core/manage/candidates.go 与 service.go 中的唯一调用点：把预检包的完整交接改为下面的签名，同步默认实现；预检、来源、信任、pin、依赖确认仍沿用现有流程。
+- internal/core/host/prepare.go：REGISTER 的 config_schema_hash 与 candidate_config_version 绑定检查（行为 7）。
+- 根包 alonabot.go、assembly.go；可新增 journal.go：在 assemble 中创建 Orchestrator 并保存在装配结构（供 T-09.6 接线与本地测试使用），以及共用的已安装包 Spec 构造（startInstalled 改用它，行为不变）。不改 manage.Options.Candidates 的生产装配与 startInstalled 的首次启用分支。
+- 新增根包 journal_test.go（unix）的一项 SQLite/文件系统集成测试；pipeline_test.go 仅允许保留既有断言的装配同步。真实 SDK 候选进程验证写在根包 journal_local_test.go；上述相关包可写 *_local_test.go。
 
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
+允许的新跨模块边：无。journal、candidate、config、secret、settings、state、supervisor 均属于 ARCHITECTURE 的 internal/core 模块；根包装配、Core 到 contracts/internal/wire/internal/oslock 的边已允许。Core 保持经协议接入 SDK 进程。
+
+接口（以下为本切片新增或调整的接口；现有接口复用状态段所列签名；内部辅助函数自定）：
 1. internal/core/state
-   迁移：CREATE TABLE journal (op_id TEXT PRIMARY KEY, plugin_id TEXT NOT NULL REFERENCES install(plugin_id), kind TEXT NOT NULL, expected_old TEXT NOT NULL, new_generation TEXT NOT NULL, phase TEXT NOT NULL, package_dir TEXT NOT NULL, database_path TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
-   kind 为 first_install、reload、update；phase 为 started、stopped_old、candidate_ready、prepared、committed、failed、cleaned。读写方法自定，阶段只能前进。
-2. internal/core/journal
-   type Orchestrator struct{ ... }
-   func New(opt Options) *Orchestrator // Options 由执行者按实际依赖列出：Store、Secrets、supervisor 启动函数、Router/Broker 的冻结入口、Log
-   type Result struct { OpID string; Generation string; Prepared *candidate.Prepared }
-   func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, stagedPackage string) (*Result, error) // 运行到 PREPARED 为止
-   func (o *Orchestrator) Abort(ctx context.Context, r *Result, cause error) error // 清理候选并以旧版的新 Session 恢复
-   func (o *Orchestrator) Reload(ctx context.Context, id string) error   // 实现 manage.Candidates：Prepare → 交给提交入口（T-09.6 之前提交入口为 UNSUPPORTED 时 Abort 并返回）
-   func (o *Orchestrator) Update(ctx context.Context, id, staged string) error
+   type Journal struct {
+       OpID, PluginID, Kind, ExpectedOld, NewGeneration, Phase string
+       PackageDir, DatabasePath string
+       Entrypoint, Version, PublisherKeyID string
+       BuildDigest []byte
+       OwnsPackage bool
+       WasRunning, WasEnabled bool
+       SessionID []byte
+       CreatedAt, UpdatedAt time.Time
+   }
+   func (s *Store) CreateJournal(ctx context.Context, record Journal) error
+   func (s *Store) UpdateJournal(ctx context.Context, record Journal) error
+   func (s *Store) GetJournal(ctx context.Context, opID string) (Journal, error)
+   func (s *Store) Journals(ctx context.Context, pluginID string) ([]Journal, error)
+   func (s *Store) GenerationConfigVersion(ctx context.Context, generationID string) (uint32, error)
+   Journals 按 created_at、op_id 排序，pluginID 为空时列全部记录，缺单项返回 state.ErrNotFound。
 
-行为（Prepare，调用方已持插件操作锁）：
-1) 预检：update 的包已经过 packages.Preflight（staged 目录）；reload 用 config.Service.ImportSnapshot 导入编辑快照为 Pending（base 为当前 Active）；first_install 没有旧 Active。Adapter update 先从新包读取 adapter_config_schema.json，经 configschema.Parse 后调用 settings.File.TrialInstances；有 InstanceProblem 时在停止旧版之前拒绝，保留完整 Path 与 Reason。所有静态错误在停止旧版之前返回。
-2) 写入 Journal（phase=started，expected_old=当前 Active，new_generation 为新 ID）。
-3) 冻结：Router/Broker/Bus/Scheduler/HTTP 停止向该插件派发新的根调用（Router/Broker/Bus 沿用 goal-22；Scheduler/HTTP 由 Running.Stop 的 Frozen 回调调用各自的 Drain），按停止流程停止旧进程并等待进程树退出；phase=stopped_old。进程树没有在停止预算内清空时失败（不 sleep 猜测）。
-4) candidate.PrepareDatabase（取得 runtime.lock 后复制，完成后释放）；AddGeneration(new, 未提交)；phase=candidate_ready。
-5) 启动候选：supervisor.Launch（NewCandidate=true，Bootstrap 带 activation_reason（first_install/reload/update）、manual_migration_approved（只有管理员为本次 Session/Generation 显式授予时为 true）、阶段预算、Pending 解析后的配置；Spec.DefaultLocale 取当前设置，同 goal-39），REGISTER 校验与 secret 抽取后得到快照；SetGenerationConfig 写入快照与 secret 路径；phase=prepared。此时不提交 Active、不发 ACTIVATE。
-6) manifest 声明 prepare_effects=external 的插件，已有安装的 reload 与 update 在步骤 2 之前检查：没有本次操作的维护许可时返回 FAILED_PRECONDITION（safe_message "NEEDS_MANUAL_MIGRATION"），不写 Journal、不停止旧版；有许可时 Bootstrap 的 manual_migration_approved=true，其余照常。first_install 不受此门槛限制。
-- 普通 resume（restart、Core 重启后的恢复）不经过本编排，不写新 Journal。
-- Abort：phase 改为 failed → 停止候选进程并确认退出 → candidate.Discard（只删未受保护的候选资源）→ 以旧 Active 启动旧版的新 Session（first_install 时保持未启用）→ phase=cleaned。Abort 本身失败时保留 Journal 供 T-09.7 恢复。
-- 任一步失败都调用 Abort；错误返回给管理服务（安全文本）。
-- 日志：每次 phase 变化以 INFO 记录（op_id、plugin_id、kind、phase）。
+   Journal 表的列固定对应上述字段：op_id TEXT PRIMARY KEY；plugin_id TEXT NOT NULL REFERENCES install(plugin_id)；kind、expected_old、new_generation、phase、package_dir、database_path、entrypoint、version、publisher_key_id 为 TEXT NOT NULL；build_digest、session_id 为 BLOB NOT NULL；owns_package、was_running、was_enabled 为 INTEGER NOT NULL；created_at、updated_at 为 INTEGER NOT NULL，使用 Unix 毫秒。session_id 在握手前为空 BLOB；NONE 后端的 database_path 为空串。new_generation 在 started 时已分配，generation 行随后创建，因此该列使用逻辑引用。
+   kind：first_install、reload、update。phase：started、stopped_old、candidate_ready、prepared、committed、failed、cleaned。正常准备顺序为 started → stopped_old → candidate_ready → prepared；首装也记录 stopped_old，含义为旧写入者退出条件已满足。任一提交前阶段可转 failed，failed 在清理与恢复完成后转 cleaned；committed 的写入由 T-09.6 的提交事务完成。本切片的 UpdateJournal 拒绝写 committed。
+   UpdateJournal 用事务复核原阶段、操作身份、expected_old/new_generation；身份与预期旧值保持不变，资源引用按实际取得/释放更新。清理错误保留 failed 及仍持有的引用。时间与阶段在同一次状态写入中更新；SQL 事务只处理元数据。
 
-测试（按编码规范「测试提交规则」）：
-- 提交：无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：phase 只能前进；expected_old 与写入一致；manual_migration_approved 只在显式授予时为 true；resume 不写 Journal；internal/core/supervisor/journal_local_test.go（//go:build unix）。测试插件按环境变量在 OnStart 写库后失败、或迁移失败：reload 成功运行到 PREPARED：Journal phase 依次前进，候选数据库是独立副本，旧进程已退出，Active 未变；候选 OnStart 失败：Abort 后旧版以新 Session 运行，旧库不含候选写入，候选目录已删除，phase=cleaned；旧进程不退出（忽略 STOPPING 且持有 runtime.lock 的测试插件）：编排在停止预算内失败，没有复制数据库，旧版状态可诊断；磁盘空间不足（用测试钩子使备份失败）：不激活，候选目录被清理；first_install：成功到 PREPARED；失败时插件保持未启用。
+2. internal/core/supervisor
+   type Prepared struct {
+       Registration *host.Prepared
+       // 其余字段私有：进程树、连接、Listener、Spec、日志与清理所有权。
+   }
+   func Prepare(ctx context.Context, store *state.Store, spec Spec) (*Prepared, error)
+   func (p *Prepared) Activate(ctx context.Context, commit func(context.Context) error) (*Running, error)
+   func (p *Prepared) Close() error
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/...；go build ./...。
+   Prepare 复用 Launch 的身份、secret、配置快照、预算和失败清理，只完成 host.Prepare。返回后进程与连接由 Prepared 持有；候选没有 host.Instance，也未接入业务装配。Close 关闭准备连接，按原 StopTiming 等待退出及必要的树终止，合并并返回清理错误；确认清空后才释放进程资源。Prepare 失败而树清空尚未确认时，返回非 nil 的句柄及错误，供调用方保留和关闭该进程。
+   Activate 把既有 host.Activate 及激活成功后的接入提取为共用方法，成功后将资源所有权转交 Running；commit 为 nil 只用于已有提交记录的 resume。Launch 保持现有签名和调用行为，内部复用两阶段实现；其 NewCandidate 路径仍传既有 CommitActive 回调。journal.Prepare 只调用 Prepare；T-09.6 接续时才调用 Prepared.Activate。
 
-不做：唯一提交点与激活门禁（T-09.6）；崩溃恢复与 rollback（T-09.7）；维护许可的管理入口（T-09.14、T-09.9）。
+3. internal/core/manage
+   type Candidates interface {
+       Reload(ctx context.Context, id string) error
+       Update(ctx context.Context, id string, staged *packages.Candidate) error
+       Rollback(ctx context.Context, id, generation string) error
+   }
+   Service.Update 在全部现有预检通过后传 candidate 本身；保留 defer candidate.Discard()。移动成功由 MoveTo 清空 Dir，之后由 Journal 持有不可变包资源。同步 unsupportedCandidates.Update；Reload/Rollback 和管理 HTTP、CLI 的公开参数保持现有签名。
+
+4. internal/core/journal
+   type Kind string
+   const (
+       KindFirstInstall Kind = "first_install"
+       KindReload       Kind = "reload"
+       KindUpdate       Kind = "update"
+   )
+   type Options struct {
+       Store *state.Store
+       Secrets *secret.Store
+       Config *config.Service
+       Settings *settings.File
+       DataDir string
+       State func(id string) string
+       Spec func(ctx context.Context, in state.Install, packageDir string, boot *pb.Bootstrap) (supervisor.Spec, error)
+       Stop func(ctx context.Context, id string, reason pb.StopReason) error
+       Resume func(ctx context.Context, id string) error
+   }
+   type Orchestrator struct { /* 私有状态 */ }
+   type Result struct {
+       OpID, Generation string
+       Prepared *candidate.Prepared // NONE 后端为 nil
+       Session *supervisor.Prepared
+       // 操作上下文与中途资源所有权保存在私有字段。
+   }
+   func New(opt Options) *Orchestrator
+   func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, staged *packages.Candidate) (*Result, error)
+   func (o *Orchestrator) Abort(ctx context.Context, r *Result, cause error) error
+
+   Prepare 的 staged 仅在 KindUpdate 时非 nil；其身份与 release 已由 manage 预检。静态阶段失败且尚未写 Journal 时返回 nil、error；写记录后失败返回可 Abort 的 Result、error，由调用方 Abort，避免重复清理。成功返回的 Result 由调用方负责后续提交或 Abort。
+   Spec 在停旧版前构造完整 supervisor.Spec，复用根包的包路径、资源、schema、i18n、handler、日志、预算与 detach 装配；此时只读取与准备输入。Spec 的 Bootstrap 随后填入实际候选 DB 路径与 generation。Stop/Resume 使用 Core 的既有停止、已提交代次启动实现。
+   FirstInstall、Reload、Update 的管理入口方法由 T-09.6 新增，Rollback 由 T-09.7 新增，本切片不提供。
+
+5. 根包装配与既有 proto
+   Orchestrator 在 assemble 中创建，不交给 manage.Service。Options.Stop/Resume 直接调用运行循环的既有停止与已提交代次启动实现，不经 Core.operation（T-09.6 的管理桥接会在 operation 内调用 Orchestrator，二者不能互相等待）。开发来源沿用 dev:<组件 ID>、config.json/dev.sqlite 与开发重启路径。
+   Store.LockPlugin 继续由 config/supervisor 的各自方法取得，管理服务保留自己的逐包互斥；编排器调用这些方法期间保持管理操作串行，避免重复取得同一 Store 锁。
+
+   复用 contracts/proto/alonabot/v1/control.proto 的现有字段，字段号与生成代码保持现状：
+   Bootstrap：generation_id=1、candidate_config_json=2、config_schema_hash=3、optional previous_config_version=4、target_config_version=5、database_descriptor=6、phase_limits=8、preparation_deadline_unix_ms=9、log_level=10、session_limits=11、default_locale=12。
+   DatabaseDescriptor：backend=1、sqlite_path=2、migration_mode=4、applied_migration_ids=5、activation_reason=6、manual_migration_approved=7。
+   复用 FIRST_INSTALL/RESUME/RELOAD/UPDATE 枚举；previous_config_version 取旧代次元数据，target_config_version 与 schema 输入取候选包。schema 摘要复用 configschema.Schema.Hash，沿用既有协议摘要实现。
+
+行为：
+1) 停机前完成静态工作。读取安装记录与 Active，保存先前 enabled/运行状态。reload 用 ImportSnapshot 导入编辑快照为以当前 Active 为 base 的 Pending；update 取有效 Pending，否则取 Active 的完整配置；首装取编辑快照，文件缺失时沿用当前首装空对象语义。保留未知键、显式零值和 secret 引用，配置对象检查后把旧格式交给 SDK 迁移。读取候选 manifest、入口、schema 与 i18n 等资源，沿用既有错误和身份校验。
+2) Adapter 更新在停机前解析新包 adapter_config_schema.json，使用同一个 settings.File 的 TrialInstances，只对归属于本组件的实例准备。失败完整返回 InstanceID、Path、Reason，保留旧进程、设置文件和旧 Active。准备阶段只试算；成功提交后的 PrepareInstances/备份写回由 T-09.6 接续。
+3) external 的已有安装在 Journal 与停机前返回 FAILED_PRECONDITION，safe_message 为 NEEDS_MANUAL_MIGRATION。现有管理入口没有显式维护许可来源，全部下发 manual_migration_approved=false；首装与普通 resume 按契约放行。T-09.14/T-09.9 接入显式维护后，许可须绑定本次 Session/Generation/DB；获准 external 候选失败时保留停机及诊断，按插件的人工恢复步骤处理。
+4) 分配 op_id/new_generation，保存 phase=started、expected_old 及程序引用。update 从 packages.Candidate.Asset 取得已验证的完整 BuildDigest，从 Manifest/Release 取得入口、版本、发布者；移动到不可变包目录，确保文件及目录持久化，再保存 Journal 的最终路径与所有权。install 的 Version、Entrypoint、BuildDigest 保持旧值，候选的程序身份暂存在 Journal，供 T-09.6 提交接续；显式确认后的发布者信任绑定沿用 manage 当前的写入时机。reload/首装复用已有不可变程序目录。
+5) 冻结并停止旧进程。经原 Stop 路径进入 Draining，拒绝新根调用，既有合法子链按原 deadline 和停止 deadline 排空；Scheduler/HTTP 使用 Frozen 钩子，STOPPING 时按 Session 撤销 Router/Broker/Bus/HTTP/Adapter 等绑定。沿用原停止总预算并确认整棵树清空，然后记 stopped_old。停止未确认时保留诊断与 Journal，后续复制、启动候选及恢复旧版都等待该前提成立。首次安装也须核对 runtime.lock，处理已有残存进程。
+6) 受管 SQLite 调用 candidate.PrepareDatabase，使用绝对 PluginDir、旧 Active 与新 Generation；FIRST_INSTALL 只准备目录，RELOAD/UPDATE 备份到独立库，成功后由该函数释放 runtime.lock。NONE 后端（含 Adapter）跳过数据库复制，以 oslock.TryLock 临时核对相同 runtime.lock 并释放，DatabasePath 留空。创建未提交 generation 行，配置版本取目标版本，初始快照只存引用或空对象；已有引用在所有准备阶段受保护。资源已登记后记 candidate_ready。
+7) 调用 supervisor.Prepare(NewCandidate=true, ExpectedOld=旧 Active)。启动原因由操作 kind 映射；DefaultLocale、LogLevel 与各阶段预算取同一 Core 当前设置/生效值。SDK 顺序沿用配置迁移、OnConfigLoad、补值和校验、允许的 DB 准备、OnStart、REGISTER。Core 在 Bootstrap 填入候选包 config_schema.json 的 configschema.Schema.Hash（只对 role 为 plugin 或 agent 的包；没有该文件或 Adapter 时为空），host.Prepare 在 Bootstrap 的 config_schema_hash 非空时要求 REGISTER 的 config_schema_hash 相同，并要求 REGISTER 的 candidate_config_version 等于 Bootstrap 的 target_config_version，不符时返回 FAILED_PRECONDITION 并按准备失败处理（该检查对所有经 host.Prepare 的启动生效，普通启动经共用的 Spec 构造同样填入摘要）。Core 复用 host 的 REGISTER 验证与 secret.Extract，将不可变配置及 secret 路径写入新代次，再生成 PREPARED。准备成功后保存 SessionID，确认资源及引用持久化，记 prepared，返回 Result。保持 Active 与旧包安装身份，候选 OnReady 尚未执行，命令、事件、Service、Bus、Scheduler、HTTP 和 Adapter 实例均未向候选开放。
+8) 本切片不接入生产入口：manage.Options.Candidates 保持缺省，startInstalled 的首次启用保持现状，二者由 T-09.6 在 Commit 可用时一并切换。Prepare 在写 Journal 之前对下列情况返回 FAILED_PRECONDITION：kind 为 reload 或 update 而没有 Active；role 为 webui；开发来源（固定代次 dev:<组件 ID>）；kind 与 staged 不匹配（只有 update 带 staged）。验证由本地测试直接调用 Prepare，检查 PREPARED 后显式 Abort。
+9) Abort：先记 failed；停止并确认候选树退出，再清理本操作拥有的未提交 generation/数据库/新程序包与孤立 secret。SQLite 资源沿用 candidate.Discard；NONE 分支使用同一代次删除与 secret 保护规则。当前 Active、已提交代次、其他 Journal、Pending 及保留代次仍引用的资源持续保护；只清理本操作已取得所有权的资源。释放某项引用与更新 Journal 状态按实际清理结果进行。
+10) 受管回退只在旧树及候选树均已确认退出后执行；以旧安装记录、旧 Active、旧快照、旧 DB 和新 Session 恢复原先运行的组件。失败发生在停旧版之前时，只清理已取得的候选资源，保留仍有效的旧 Session。首装失败保持未启用，原先停用的组件保留停用状态；external 维护失败保持停机。清理与恢复全部成功才记 cleaned，失败保留 failed 和尚需处理的引用，供 T-09.7 接续。管理请求取消后仍完成必要清理，沿用已有停止/准备预算，保留最初错误及清理/恢复错误。
+11) restart、正常 Core 启动的已有 Active 恢复及异常恢复复用原提交记录，沿用 activation_reason=resume；这些路径保持 Generation/配置/secret 引用，Journal 数量不变。候选进程在 PREPARED 前后失败也归当前管理操作处理，避免进入普通异常进程自动重启分支。
+12) Journal 每次阶段变化以 INFO 记 op_id、plugin_id、kind、phase；失败记录具体原因，日志及管理错误省略完整配置、secret、Bootstrap、内部 HTTP 凭证。卸载预览与删除沿用同一清单：两种 purge 将可清理的 Journal 与其关联数据在一个状态事务中处理；仍待恢复的操作先报告 FAILED_PRECONDITION，保留恢复材料。只卸载继续保留代次与恢复所需引用。
+
+测试（按编码规范「测试提交规则」与 D-86）：
+- 提交：根包 journal_test.go 的一个 TestCandidateJournalResources（//go:build unix）。通过公开 state、candidate、secret 入口协作真实 SQLite、WAL、文件系统和系统锁：创建旧 Active 与 Journal，取得候选副本并保存 generation/secret 引用，再经既有 candidate.Discard 清理本操作资源，核对独立 DB、旧值保护及 Journal 的持久化结果。该项验证编排依赖的真实资源交接；完整 Orchestrator.Prepare/Abort 使用下列本地进程测试取证。理由：本切片新增持久化资源引用，SQLite/文件/锁之间的交接需要长期集成回归。
+- 本地自测：根包 journal_local_test.go 复用 pipeline_test.go 的生产 assemble、测试二进制分进程与 TCP/stdio 传输。必要的候选模式分流仅写本地测试，通过现有 TestMain 在执行 m.Run() 时以本地 Test 辅助进程运行 SDK；插件对象使用 sdk.NewPlugin、p.OnConfigLoad、p.OnStart、p.OnReady，受管迁移用 sqlitedb 的现有登记函数。补充临时包工程只写 t.TempDir()，按 D-86 留在本地测试，记录实际命令、平台、进程与结果。
+  a. reload 到 PREPARED：旧进程已退出，新 Session 不同；WAL 内容进入独立 DB，候选写入未污染旧库；Journal 保存旧 Active、程序/DB/配置/secret 关联；Active、enabled 及旧安装身份不变；候选 OnReady/业务/HTTP/任务未执行；显式 Abort 后旧代次以新 Session 接单。
+  b. update 到 PREPARED：以 packages.Preflight 得到的 *packages.Candidate（与 manage.Service.Update 交出的对象相同）调用 Prepare；新程序版本与 BuildDigest 用于 HELLO，候选配置迁移到目标版本，旧包、旧 schema 与旧 secret 可恢复；Abort 后候选新包按引用清理，旧身份保持。另以 manage.Service.Update 配一个本地测试用的 Candidates 实现，核对 defer Discard 不删除已转交的不可变目录。
+  c. first_install 成功到 PREPARED：expected_old 为空，新 generation 未提交，首库由 SDK 创建，OnReady 与业务均未执行，显式 Abort 后仍未启用。OnConfigLoad、DB 迁移、OnStart、REGISTER 失败时，已有安装的旧版以新 Session 恢复，旧 DB/配置/secret 保持；初装失败仍未启用；清理或恢复失败时 Journal 保留 failed 与真实错误。
+  d. 旧树/残存子进程未清空、runtime.lock 被占用、备份空间或校验失败：保持 Active，无第二写入者；使用已有真实锁与文件权限/故障手段，测试控制点写在 *_local_test.go。准备后的候选树未确认退出时，同样保留资源并停止恢复。
+  e. Adapter/NONE 后端：无旧 db.sqlite 时照常准备，Adapter TrialInstances 失败发生在旧进程停止前且设置原文保持；PREPARED 前后实例未启动、游标仍归原组件；恢复保留本次运行已选择停用的实例。
+  f. 已有 external 安装的 reload/update 在停机前返回 NEEDS_MANUAL_MIGRATION，Journal 数量和 Session 保持；FIRST_INSTALL 与 resume 的许可位为 false；插件自行声称获准不影响 Core 输入。有效维护入口与其失败停机分支由后继管理切片补端到端证据。
+  g. 首装取编辑快照与缺省空对象、Pending base 陈旧、配置迁移版本、unknown/secret 保留、旧程序引用保护、清理失败重入、同包并发管理、无 DB 与未运行 update 的状态保持、phase 非法后退/伪 committed、resume 不增 Journal，Prepare 拒绝的四种情况（无 Active、webui、开发来源、kind 与 staged 不匹配），REGISTER 的摘要或配置版本与 Bootstrap 不符时准备失败并恢复旧版，以及 Store 锁不自锁。
+- 既有提交测试的签名同步只保留原断言；SDK 与 supervisor 的新增测试全部用 *_local_test.go，不新增 testdata 插件。
+
+完成条件：
+- 范围内完成静态预检、两阶段进程入口、持久化 Journal、SQLite/NONE、REGISTER 绑定检查、Orchestrator 装配、Abort 与引用保护；所有公开调用者按最终接口同步；交接给 T-09.6 的 Result/Journal 可继续同一候选 Session。
+- V-29 与本切片关联分项具有实际证据；按 TEST-MATRIX §3 的格式在 PR 写明测试位置、命令、平台、结果与未运行项；规格文档由审查者同步。
+- gofmt -l . 无输出；go vet ./...；go test -race ./internal/core/...；go test -race -run '^TestCandidateJournalResources$' .；go test -race ./cmd/alonabot/...；go build ./...。本地进程测试另记实际命令和结果。
+- 遇到候选污染旧数据、未确认旧树退出便启动写入者、external 未授权准备、资源被仍有效引用时删除、Journal/Active 权威含混，立即停止交付并修复。涉及范围外修复、proto、依赖或切片衔接裁决缺失时按共同约束记阻塞，由审查者补齐语句后继续。
+
+不做：Active+COMMITTED+Journal 的唯一提交事务、候选正式激活与提交后 Degraded、生产的管理动作接线、首次启用切换与没有 Active 的 Update（T-09.6）；Core 崩溃扫描、rollback 和保留代次回收策略（T-09.7）；显式维护许可的 CLI/API/WebUI（T-09.14、T-09.9）；开发热部署、dev 代次改造、静态 WebUI 候选化；新增 proto、SDK 公共 API、依赖、调优值或通用审批机制。
 ```
 
 ### goal-57 · T-11.4 工具与会话的验收
 
-状态：等待前置（T-11.2）。T-11.3（PR #35）已合并。语句中 goal-54～goal-56 提供的符号与测试插件只写名字；合并后由审查者核对，再改为待派发。goal-54 已合并，它的测试插件只在执行者本地（D-86），本切片需要时在测试临时目录生成。
+状态：待派发，在 PR #169（goal-127）合并后从包含它的 main 派发：第 6 项与第 7 项复用它在根包 `scheduler_tasks_test.go` 中的原始 wire/pb 子进程写法（`persistentTaskProcess`）与同一数据目录重建装配的 `taskPipelineAt`。前置 T-11.2（PR #165，合并提交 `330164f`）、T-11.3（PR #35，合并提交 `d0983f0`）与 T-11.1（PR #101，合并提交 `de48f26`）均已合并。2026-11-13 审查者按 main `3a9b4af` 改写（起草稿经审查者裁决）：
+- 原语句的 `internal/core/supervisor/testdata` 测试插件按 D-86 改为根包测试二进制扮演的插件，测试位置改为根包。
+- 第 6 项拆成两部分：Service 的访问规则（Access）与继承 Actor、默认 Target 用 SDK 写；`RouteDescriptor.required_permissions` 分项由原始 wire/pb 的 provider 模式驱动。CONTRACTS §2.3 的路由权限对 Service 同样适用、`internal/core/tool/invoke.go` 已检查，但 SDK 的 `ServiceBuilder` 还没有声明入口；SDK 入口不在本切片。
+- 运行时修改策略与会话的服务层操作由父测试进程直接调用 `tool.New(h.store, h.assembly.router)` 与 `conversation.New(h.store)`：`Catalog.Effective` 每次从状态库读取，另建的 Catalog 与生产实例共享同一 Store。管理 API 与页面分别属于 T-09.14、T-09.9。
+
+已有接口（审查者按 main 核对）：
+
+- `internal/core/tool/catalog.go`：`New(store *state.Store, r *router.Router) *Catalog`；`(*Catalog).Register(m *router.Mux)`；`Effective(ctx context.Context, pluginID, service string) (pb.ToolPolicy, error)`；`SetPolicy(ctx context.Context, pluginID, service string, p pb.ToolPolicy) error`；`Policies(ctx context.Context) ([]ToolPolicyEntry, error)`。`ToolPolicyEntry` 含 `PluginID, Service string`、`Default, Override pb.ToolPolicy`。`SetPolicy` 成功时覆盖已提交，UNSPECIFIED 删除覆盖。
+- `internal/core/tool/invoke.go`：`(*Catalog).RegisterInvoke(m *router.Mux, opt InvokeOptions)`；`InvokeOptions` 的实际字段与类型见下方接口段。`assembly.go` 已将 `Call` 接到 `a.broker.Call`，将 `ConfirmTimeout` 接到 `v.ToolConfirmTimeout`，并注册 `core.tool.list/invoke/confirm`。
+- `internal/core/buttons/buttons.go`：`New(store *state.Store, now func() time.Time, ttl time.Duration, current func(pluginID string) (generationID string, routes []*pb.RouteDescriptor, ok bool)) *Service`；`IssueConfirm(ctx context.Context, caller router.Caller, target *pb.Target, recordID string) (allow, deny string, err error)`；`InterceptConfirm(ctx context.Context, ev *pb.Event) bool`；`OnConfirm(fn func(context.Context, string, bool, *pb.Event))`；`RevokeConfirm(ctx context.Context, recordID string) error`。Router 的 `Options.Intercept` 已接 `a.buttons.InterceptConfirm`，确认点击在事件队列前消费。
+- `internal/core/conversation/service.go`：`New(store *state.Store) *Service`；`Register(m *router.Mux)`；`List(ctx context.Context, pluginID string) ([]state.ConversationSummary, error)`；`Clear(ctx context.Context, pluginID, key string) error`；`Purge(ctx context.Context, pluginID string) error`。`assembly.go` 已注册 `core.conversation.append/list/clear`。
+- `sdk/tool.go`：`ListTools(ctx context.Context) ([]ToolInfo, error)`；`InvokeTool(ctx context.Context, name string, arguments json.RawMessage) (json.RawMessage, error)`；`ConfirmOperation(ctx context.Context, operation, summary string) error`。后两者要求活跃 Handler 或延续调用的 context。`sdk/conversation.go`：`AppendConversation(ctx context.Context, key string, entries ...json.RawMessage) (lastSeq uint64, err error)`；`ListConversation(ctx context.Context, key string, fromSeq uint64) (entries []ConversationEntry, nextSeq uint64, more bool, err error)`；`ClearConversation(ctx context.Context, key string) error`。
+- `sdk/services.go`：工具经 `sdk.Serve(p, sdk.JSON[In, Out](target)).Access(...).Tool(description, sdk.ToolAllow 或 sdk.ToolConfirm).Handle(fn)` 登记；`ServiceBuilder` 当前只有 `Access`、`Tool`、`Handle` 三个公开方法。`sdk/plugin.go` 的 `NewPlugin() *Plugin`、`sdk/generated.go` 的 `UseGenerated(p *Plugin, g Generated)` 为现行插件对象与资源绑定入口。Service 输入、输出 Schema 可按 `service_chain_test.go` 写入 `Generated.ServiceSchemas`。
+- `internal/core/manage/service.go`、`http.go` 当前提供安装、生命周期、实例与管理员入口，工具策略和指定会话的管理方法及 HTTP 路由尚缺。T-11 的服务层验收分别经 `tool.Catalog` 与 `conversation.Service` 驱动；T-09.14（goal-93）负责后续管理 API，T-09.9（goal-44）负责页面。已存在的卸载入口为 `manage.Service.Uninstall(ctx context.Context, id string, purge PurgeScope, confirm bool) error`（`lifecycle.go`），三种范围为 `PurgeNone`、`PurgeData`、`PurgeAll`。
+- 根包 `pipeline_test.go`：`newPipeline(t *testing.T, stdio ...bool) *pipelineHarness`；`(*pipelineHarness).install(id, mode string)`、`launch(id, mode string, priority int) *runningComponent`、`stop(c *runningComponent)`、`deliver(input pipelineInput) *pb.ErrorInfo`、`inject(input pipelineInput)`、`snapshot() []pipelineRecord`、`await(predicate func([]pipelineRecord) bool)`、`idle()`。`TestMain` 按 `ALONABOT_PIPELINE_MODE` 运行 `sdk.Run(pipelinePlugin(mode))` 或 `sdk.RunAdapter(&pipelineAdapter{})`。`service_chain_test.go` 已复用同一装配运行真实插件进程；参考条目为 goal-22（PR #164，合并提交 `039802f`）。
+- `internal/tune/params.go`：名称为 `TOOL_CONFIRM_TIMEOUT`，字段为 `Values.ToolConfirmTimeout time.Duration`，缺省 `5*time.Minute`，覆盖约束为 `> 0`。`parse.go` 的 `Parse(args []string) (Values, []Override, error)` 接受 `NAME=value`、逗号分隔的覆盖或参数文件。`alonabot.go` 的 `Args(values ...string) Option` 经 `Start` 调用 `tune.Parse`；根包测试的 `assemble(store *state.Store, dir string, v tune.Values, file *settings.File) (*assembly, error)` 直接接收生效值。
+- 在途、可能与本切片改同一批文件的 PR：#170（goal-59，Router 与 SDK 的 InvocationContext）；goal-69 正在执行（根包与 cmd/alonabot）；goal-40 正在执行（根包装配、supervisor 与 state）。本切片共享 `pipeline_test.go` 与 `spec/TEST-MATRIX.md`，后合并者合并模式分流与追加行。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-57（切片 T-11.4：工具与会话的验收）。goal 目录 goal-57，分支 goal-57，worktree .worktrees/goal-57，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-57（切片 T-11.4：工具与会话的验收）。goal 目录 goal-57，分支 goal-57，worktree .worktrees/goal-57，从最新 origin/main 创建（须已包含 PR #101、#35、#165、#169）。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：用一个提供工具的插件和一个调用工具的测试插件，经回环测试 Adapter（或 Telegram 模拟服务）以真实进程覆盖三种策略、确认的允许/拒绝/超时/他人点击、无 Actor、目标不支持按钮与策略的运行时修改；会话存储覆盖原子追加、分页、跨插件隔离与 Core 重启；在 TEST-MATRIX §3.2 记录 T-11 证据。
+目标：复用根包生产装配，以一个工具提供方插件、一个工具调用方插件和一个回环 Adapter 的真实进程，完成下列七项矩阵；验证工具目录与三种策略、确认的全部指定分支、策略的运行时修改、继承 Actor 的 Service 准入，以及会话的原子追加、分页、隔离、清除、Core 重启保留和服务层 purge；在 TEST-MATRIX §3.2 记录 T-11 证据。
 
-依据：PLAN T-11 步骤 6 与「停止和失败条件」；CONTRACTS §13；TEST-MATRIX V-55、V-56 的 T-11 分项。
+依据：spec/PLAN.md §3.1；spec/plan/core.md T-11.4、T-11 步骤 6，以及步骤 1～5 的既有语义和「失败停止条件」；spec/CONTRACTS-v0.1.md §1.2（父调用与帧上限）、§2.3（权限名集合）、§3（Service 访问与调用链）、§5.4（确认文案）、§13.1～§13.3、§9.3（卸载清理归属）、§16（TOOL_CONFIRM_TIMEOUT）；spec/MESSAGE-MODEL.md §1（可信 Actor、默认 Target）、§2（buttons）、§3（Handler）、§5（Hook）、§6.3（token 与点击）；spec/WIRE-FORMAT.md §3.3（注册）、§3.5（固定服务）、§5A（追加字段）；spec/adr/DECISIONS.md D-07、D-12、D-69、D-86、D-102、D-105、D-114、D-127、D-137；spec/TEST-MATRIX.md V-55、V-56 的 T-11 分项与 §3 的证据格式。
 
 范围（只新增或修改这些）：
-- 新增 cmd/alonabot/t11_e2e_test.go（//go:build unix）
-- 复用或补充 internal/core/supervisor/testdata 下的工具与会话测试插件
-- spec/TEST-MATRIX.md §3.2：追加 T-11 的证据行（本切片获授权修改这一处）
-允许的新跨模块边：无。
+- 新增根包 t11_e2e_test.go（//go:build unix，package alonabot）：一个顶层集成测试 TestToolsAndConversations，含下列七项子测试；测试二进制所需的工具插件、调用方插件及本切片专用回环 Adapter 行为也写在该文件。
+- 根包 pipeline_test.go：只扩充 TestMain 的本切片子进程模式分流与必要的装配辅助（原始 wire/pb 的 provider 模式参照 scheduler_tasks_test.go 的 persistentTaskProcess；同一数据目录重建装配可复用 taskPipelineAt）。支持在 assemble 前传入测试 tune.Values、复用同一临时数据目录重建装配，以及记录确认的两枚 token、完整展示文本与工具执行审计；能力缩减、无 Actor 输入只作用于本切片模式。保留既有模式的行为与全部断言。
+- 根包与 internal/core/tool/、internal/core/buttons/、internal/core/conversation/、sdk/ 中的 *_local_test.go：仅按本地自测段需要编写，不提交。
+- spec/TEST-MATRIX.md §3.2：追加 T-11.4 对应 V-55、V-56 的证据行（本切片获授权修改这一处）。
+允许的新跨模块边：无；根包继续通过既有的 internal/core、contracts、internal/wire、internal/tune 和 sdk 依赖装配测试。
 
-验收矩阵（各为一个子测试）：
-1) allow、confirm、deny 三种策略各一次；deny 与拒绝返回 PERMISSION_DENIED 且工具未执行（以工具插件的调用计数证明）。
-2) 确认：允许、拒绝、超时（DEADLINE_EXCEEDED）、他人先点击（被拒、不影响结果）、token 第二次点击无效；确认消息展示实际 JSON 参数。
-3) 无 Actor 的后台调用遇到 confirm 直接 PERMISSION_DENIED，不发消息；目标不支持按钮时 UNSUPPORTED。
-4) core.tool.confirm 用于 MCP 风格的操作名（mcp/x/y），展示插件给出的摘要。
-5) 运行时修改策略：下一次调用生效，进程未重启。
-6) 工具仍按继承 Actor 检查 Service 访问规则。
-7) 会话：多条原子追加、跨帧上限分页不丢不重、两个插件同名会话互相隔离、Core 重启后保留、purge 后删除（卸载默认保留由 T-09.4 的测试覆盖，这里只覆盖服务层）。
-- 证据：TEST-MATRIX §3.2 追加 T-11 一行，写明测试位置、命令、平台与结果；工具策略与会话清除的管理页面留给 T-09.9，记为未闭合。
+接口（照此复用；本切片只增加测试与证据，公开符号和协议沿用 main；内部测试辅助函数自定）：
+1. internal/core/tool
+   func New(store *state.Store, r *router.Router) *Catalog
+   func (c *Catalog) Register(m *router.Mux)
+   func (c *Catalog) Effective(ctx context.Context, pluginID, service string) (pb.ToolPolicy, error)
+   func (c *Catalog) SetPolicy(ctx context.Context, pluginID, service string, p pb.ToolPolicy) error
+   func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error)
+   type ToolPolicyEntry struct {
+       PluginID, Service string
+       Default, Override pb.ToolPolicy
+   }
+   type InvokeOptions struct {
+       Call func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response
+       Adapters *adapter.Registry
+       Buttons *buttons.Service
+       ConfirmTimeout time.Duration
+       DefaultLocale func() string
+   }
+   func (c *Catalog) RegisterInvoke(m *router.Mux, opt InvokeOptions)
+   以上由 assembly.go 完成生产注册；测试通过插件 SDK 调用固定服务。运行时改策略由父测试进程持有 tool.New(h.store, h.assembly.router)，调用 SetPolicy；pluginID 为工具提供方，service 为 Service 的局部名。MCP 风格操作的策略键使用调用插件 ID 与完整操作名。覆盖取 pb.ToolPolicy_TOOL_POLICY_ALLOW/CONFIRM/DENY；UNSPECIFIED 删除覆盖。
 
-测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/t11_e2e_test.go。
-- 本地自测（不提交，PR 中写明结果）：在 -race 下重复运行矩阵若干次无偶发失败。
+2. internal/core/buttons
+   func New(store *state.Store, now func() time.Time, ttl time.Duration, current func(pluginID string) (generationID string, routes []*pb.RouteDescriptor, ok bool)) *Service
+   func (s *Service) Issue(ctx context.Context, caller router.Caller, target *pb.Target, chain *pb.MessageChain) error
+   func (s *Service) Resolve(ctx context.Context, ev *pb.Event) (pluginID, routeID string, err error)
+   func (s *Service) IssueConfirm(ctx context.Context, caller router.Caller, target *pb.Target, recordID string) (allow, deny string, err error)
+   func (s *Service) InterceptConfirm(ctx context.Context, ev *pb.Event) bool
+   func (s *Service) OnConfirm(fn func(ctx context.Context, recordID string, allow bool, ev *pb.Event))
+   func (s *Service) RevokeConfirm(ctx context.Context, recordID string) error
+   func (s *Service) Purge(ctx context.Context, pluginID string) error
+   确认 token 由 Core 签发；测试从真实 Adapter 收到的 message.ButtonsSegment 中取得允许与拒绝 token，再经 Adapter Core.Deliver 注入可信 button.clicked。保留生产 Router 的 InterceptConfirm 分流。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+3. internal/core/conversation 与 SDK 会话函数
+   func New(store *state.Store) *Service
+   func (s *Service) Register(m *router.Mux)
+   func (s *Service) List(ctx context.Context, pluginID string) ([]state.ConversationSummary, error)
+   func (s *Service) Clear(ctx context.Context, pluginID, key string) error
+   func (s *Service) Purge(ctx context.Context, pluginID string) error
+   // state.ConversationSummary 的字段：Key string、Entries int、LastSeq uint64、UpdatedAt time.Time。
+   sdk 包中的签名：
+   func AppendConversation(ctx context.Context, key string, entries ...json.RawMessage) (lastSeq uint64, err error)
+   func ListConversation(ctx context.Context, key string, fromSeq uint64) (entries []ConversationEntry, nextSeq uint64, more bool, err error)
+   func ClearConversation(ctx context.Context, key string) error
+   type ConversationEntry struct { Seq uint64; Entry json.RawMessage }
+   插件调用的身份取自认证 Session；管理服务层查询、指定会话清除与 purge 由父测试进程调用 conversation.New(h.store) 的 List/Clear/Purge。
 
-不做：Agent 组件的工具循环（T-12.3）；管理页面（T-09.9）。
+4. SDK 工具与登记（下列签名位于 sdk 包）
+   func ListTools(ctx context.Context) ([]ToolInfo, error)
+   func InvokeTool(ctx context.Context, name string, arguments json.RawMessage) (json.RawMessage, error)
+   func ConfirmOperation(ctx context.Context, operation, summary string) error
+   func NewPlugin() *Plugin
+   func UseGenerated(p *Plugin, g Generated)
+   func JSON[In, Out any](target string) Service[In, Out]
+   func Serve[In, Out any](owner Registrar, declaration Service[In, Out]) *ServiceBuilder[In, Out]
+   func (s *ServiceBuilder[In, Out]) Access(a Access, allowlist ...string) *ServiceBuilder[In, Out]
+   func (s *ServiceBuilder[In, Out]) Tool(description string, defaultPolicy ToolDefault) *ServiceBuilder[In, Out]
+   func (s *ServiceBuilder[In, Out]) Handle(h func(*Context, In) (Out, error))
+   工具提供方参考 service_chain_test.go：p := sdk.NewPlugin()；用 sdk.UseGenerated 绑定输入、输出 ServiceSchemas；sdk.Serve(p, sdk.JSON[In, Out](providerID+"/run")).Access(sdk.AccessPublic).Tool("...", sdk.ToolConfirm).Handle(fn)。按测试场景设置缺省策略或经 Catalog 设置覆盖。ToolDefault 仅有 ToolAllow、ToolConfirm；deny 使用 Core 策略覆盖。
+   调用方在 p.On(..., sdk.MessageCreated).Handle(func(c *sdk.Context) error { ... }) 中使用 c.Context() 调用 InvokeTool/ConfirmOperation；取结果、错误码和父链身份写入审计。自动回复若需要，使用现行 (message.Content, error) 签名。后台无 Actor 场景使用 p.Every(jobID, interval).Handle(func(c *sdk.Context) error { ... }) 的真实 scheduled 父调用，或真实 Service 根调用建立的无 Actor Handler。
+   Adapter 使用 sdk/adapter 的 Adapter、Instance、Core.Deliver 与 sdk/message、sdk/errcode 类型；沿用 pipeline 的 sdkadapter.Action[pipelineInput, struct{}]("loop.inject", 1, sdkadapter.ActionScopeChat) 声明。需要新增本切片输入类型时相应声明真实的类型化 Action。权限为 Actor.Permissions 中的名称集合，Core Admin 按 settings 中的 <adapter_id>:<external_user_id> 取得。若测试采用 HTTP 输入，Adapter 的可选接口为 sdk.AdapterHTTP：HTTP(route func(method, path string) *sdk.RouteBuilder)，经 RouteBuilder 登记；首选复用已有 Action 输入。
+
+5. 既有协议（均为 alonabot.v1，PROTOBUF 载荷，schema_version=1）：
+   ServiceSpec.tool = 5：ToolSpec{description=1, default_policy=2, input_schema_json=3}。
+   ToolPolicy：UNSPECIFIED=0，ALLOW=1，CONFIRM=2，DENY=3。
+   ToolInfo：name=1、description=2、input_schema_json=3、policy=4；ToolListRequest 为空；ToolListResponse.tools=1（repeated）。
+   ToolInvokeRequest：name=1、arguments_json=2；ToolInvokeResponse.result_json=1。
+   ToolConfirmRequest：operation=1、summary=2；ToolConfirmResponse 为空。
+   ConversationAppendRequest：conversation_key=1、entries_json=2（repeated）；ConversationAppendResponse.last_seq=1。
+   ConversationListRequest：conversation_key=1、from_seq=2；ConversationEntry：seq=1、entry_json=2。
+   ConversationListResponse：entries=1（repeated）、next_seq=2（optional uint64，absent 表示读完）。
+   ConversationClearRequest.conversation_key=1；ConversationClearResponse 为空。
+   工具 invoke/confirm 的 parent_call_id 由 SDK 的活跃 context 关联；会话服务无父调用要求。RouteDescriptor.required_permissions=17（repeated string），准入取继承 Actor 的权限名集合。
+
+6. 根包测试装配与 tune
+   func newPipeline(t *testing.T, stdio ...bool) *pipelineHarness
+   func assemble(store *state.Store, dir string, v tune.Values, file *settings.File) (*assembly, error)
+   func Args(values ...string) Option
+   internal/tune 包中的签名：
+   func Defaults() Values
+   func Parse(args []string) (Values, []Override, error)
+   常规确认保留默认期限；超时子场景可经 tune.Parse([]string{"TOOL_CONFIRM_TIMEOUT=2s"}) 取得测试值，并在 assemble 之前传入。父请求的 deadline 应晚于确认期限，以收到确认服务产生的 DEADLINE_EXCEEDED。现有 newPipeline 内部直接取 Defaults，必要时提取可传值的未导出装配辅助并同步本文件调用处；成功路径继续使用正常期限。
+   通过 Start 启动 Core 的测试可用 Args("TOOL_CONFIRM_TIMEOUT=2s")；CLI 对应 --args TOOL_CONFIRM_TIMEOUT=2s。ALONABOT_ARGS 由 Start 读取，现有 newPipeline 直接调用 assemble，因此本矩阵在构造装配时显式传 tune.Values。
+
+行为：
+- 测试二进制按环境变量扮演 provider、caller 与回环 Adapter，复用 newPipeline、install、launch、生产 handler/attach 与真实 SQLite/Session。本切片的 Adapter 子模式继续使用 role adapter、adapter_id loop，并由真实 StartInstance 启动实例。提交的矩阵默认 TCP；stdio 复用现有 stdio 选项做本地自测。所有数据和插件进程目录使用测试临时目录。
+- 审计覆盖提供方每次实际执行、调用方的结束结果、Adapter 的实际发送与编辑，以及两枚确认 token。用明确的调用完成、Router 排空和审计屏障断言拒绝后执行计数不变；时间到期依据确认结果判断，沿用现有测试等待期限。
+- 验收矩阵（按以下七项组织子测试，保留每项原有含义）：
+  1) allow、confirm、deny：相同工具参数经 sdk.InvokeTool 走真实服务。allow 直接得到 JSON 输出；confirm 在同一用户允许后执行一次；deny 返回 PERMISSION_DENIED 且调用计数不变。sdk.ListTools 只列出访问允许且生效策略非 deny 的工具，核对名称、说明、输入 Schema 与生效策略。拒绝确认同样返回 PERMISSION_DENIED，计数不变。
+  2) 确认的允许、拒绝、超时、他人先点、重复点击：核对确认文本含工具名和实际 JSON 参数（按 JSON 值核对，允许展示缩进）；他人点击后本次调用仍等待，原 Actor 允许后只执行一次；拒绝和超时后均未执行，超时为 DEADLINE_EXCEEDED。已完成记录的原 token 再点无额外执行，另一枚 token 同样失效。确认发送直接到 Adapter，调用方 BeforeSend 审计保持为空；支持编辑时核对允许/拒绝后的结果文本与按钮撤除。使用 Core 现有 locale 文案与真实 token 绑定。
+  3) 无 Actor 与无按钮能力：在真实 scheduled 或 Service 根 Handler 内调用 confirm 策略工具，保留活跃父调用且缺少可信 Actor，得到 PERMISSION_DENIED，Adapter 没收到确认消息。另在具有 Actor 和默认 Target、但该测试实例缺少 message.buttons 能力时调用，得到 UNSUPPORTED，工具未执行。两种场景分别验证。
+  4) MCP 风格操作：调用方在活跃 Handler 中执行 sdk.ConfirmOperation(c.Context(), "mcp/x/y", summary)，核对 Core 展示完整操作名及插件提供的摘要；同 Actor 允许返回 nil，随后由调用方记录一次操作。Core 的本次确认按调用插件 ID 与操作名识别；确认前该操作审计为空。
+  5) 运行时修改策略：父测试进程用 tool.New(h.store, h.assembly.router).SetPolicy 修改已安装工具的覆盖；同一 provider/caller 进程上再次 InvokeTool，allow/confirm/deny 的下一次调用按新策略运行，PID 和 Session 身份保持不变。配合 Effective/Policies 核对服务层已保存的覆盖，SDK 目录同步反映 deny 的移除；删除覆盖后回到声明缺省策略。修改经 Core 内部服务层驱动。
+  6) Service 访问与继承 Actor：provider 的 Service 访问规则使用 sdk.AccessPublic 或 sdk.AccessAllowlist，并另设当前 caller 无访问权的工具；目录按调用方过滤，直接 InvokeTool 对不可见工具返回当前实现的 NOT_FOUND，提供方计数不变。允许访问的调用中核对提供方收到原 Actor 与默认会话；带 required_permissions 的工具必须覆盖权限不足 PERMISSION_DENIED 与具备权限成功，策略 allow 或用户允许均保留该权限检查。required_permissions 分项由测试二进制的原始 wire/pb provider 模式驱动：参照 scheduler_tasks_test.go 的 persistentTaskProcess，以既有协议完成握手与 REGISTER（JSON Service 带 ToolSpec 与 RouteDescriptor.required_permissions），并应答工具调用；SDK 的 Service 权限声明入口不在本切片。
+  7) 会话：provider 与 caller 均经 SDK 操作自己的同名会话。一次 AppendConversation 追加多条，随后再追加，返回连续的末尾序号；含无效 JSON 对象的一次批量追加整次失败，原条目与下一序号不变。多次合法追加的总量超过 4 MiB，单次请求保持帧内；可用六条约 1 MiB 的对象分批追加，ListConversation 从 0 起按 more/nextSeq 读完，至少两页，序号、顺序、内容原文不丢不重。两插件同键读取各自内容，ClearConversation 只清自己的会话。父测试进程经 conversation.Service.List/Clear 核对管理服务层的摘要与指定会话清除。停止全部旧子进程和装配、关闭 Store 后，用同一数据目录重新 Open、assemble 并 Launch，插件再次 ListConversation 与重启前一致。最后经 conversation.Service.Purge 删除一个插件的全部会话，另一个插件的内容仍保留；本切片覆盖服务层 purge，三种卸载流程沿用 T-09.4 的证据。
+- T-11 的失败停止条件：未经确认执行、接受其他 Actor 的决定、无 Actor 通过确认、绕过 Service 访问或 required_permissions，以及会话丢失、重排、跨插件可见，均使验收失败。保留错误与原始数据，按实际失败位置记录；需要改范围外的生产代码、协议或契约时依共同约束标 [!] 并交审查者处理。
+- 证据：TEST-MATRIX §3.2 追加 T-11.4 一行，关联 V-55、V-56，写明提交的测试与子场景、实际命令、OS/arch、Go 版本、传输和结果；本地自测另列。管理 API（T-09.14）、管理页（T-09.9）、Agent 工具循环（T-12.3）、未运行的真实平台与系统必须保留真实状态。
+
+测试（按编码规范「测试提交规则」与 D-86）：
+- 提交：根包 t11_e2e_test.go 的 TestToolsAndConversations，按上述七项组织子测试。多列理由：七项是 T-11.4 明确要求的跨进程验收矩阵，分别涉及工具策略与确认、可信调用链、状态持久化；共用同一装配。pipeline_test.go 仅纳入支持该矩阵的必要改动。
+- 本地自测（范围所列目录的 *_local_test.go，不提交，PR 中写明命令和结果）：以 stdio 运行同一矩阵；在 -race 下 -count=5 检查偶发失败；父调用取消或 Session 失效后确认 token 作废；参数与摘要展示的 UTF-8/大小边界；MCP 操作 allow/deny 覆盖与相同操作名的插件隔离；会话并发追加和异常分页边界。SDK 客户端边界验证按 D-86 放 sdk/ 的本地测试。
+
+完成条件：七项矩阵含 required_permissions 分项均取得证据；gofmt -l 对本次 Go 文件无输出；go vet ./...；go test -race ./...；go build ./...；TEST-MATRIX §3.2 写入实际证据和未运行项；既有 pipeline 与 service_chain 的断言保持有效。有失败停止条件命中时保留 [!]。
+
+不做：Agent 对话与工具循环（T-12.2、T-12.3）；工具策略或会话的管理 API（T-09.14）与页面（T-09.9）；新增公开 SDK 权限 API；生产实现重构；协议字段与生成物、状态库 schema、manage 清理清单；新增依赖；向 sdk/、internal/core/supervisor/ 提交测试或新增 testdata 测试插件；改写 service_chain_test.go 的既有断言。
 ```
 
 ### goal-102 · T-16.3 plugintest 的 LLM 替身
@@ -6186,7 +6615,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 ### goal-41 · T-09.6 唯一提交点与激活门禁
 
-状态：等待前置（T-09.5）。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。已核对 `supervisor.Spec.Scheduler`/`HTTP`：`Launch` 在 `host.Activate` 成功后才 `HTTP.Bind`、`Scheduler.Attach(router.FromInstance(in), activatedAt)`；`host.Instance.Stop(t0, reason, tree, timing, hooks)` 接收 `StopHooks{Frozen, Stopping}`，分别接入 Scheduler/HTTP 的 Drain 与 Detach/Unbind。合并后由审查者按 main `2c1fdcc` 核对。`host.Instance.State()`、`Err()` 与 `StateDegraded` 已存在；`journal.Orchestrator` 与 `Result` 待 goal-40 合并后核对，再改为待派发。
+状态：等待前置（T-09.5）。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。已核对 `supervisor.Spec.Scheduler`/`HTTP`：`Launch` 在 `host.Activate` 成功后才 `HTTP.Bind`、`Scheduler.Attach(router.FromInstance(in), activatedAt)`；`host.Instance.Stop(t0, reason, tree, timing, hooks)` 接收 `StopHooks{Frozen, Stopping}`，分别接入 Scheduler/HTTP 的 Drain 与 Detach/Unbind。合并后由审查者按 main `2c1fdcc` 核对。`host.Instance.State()`、`Err()` 与 `StateDegraded` 已存在；`journal.Orchestrator` 与 `Result` 待 goal-40 合并后核对，再改为待派发。2026-11-13 审查者调整分界：生产的管理动作接线、首次启用切换与没有 Active 的 Update 从 goal-40 移到本切片（DECISIONS 2026-11-13 变更记录），goal-40 只交付 Prepare/Abort。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-41（切片 T-09.6：唯一提交点与激活门禁）。goal 目录 goal-41，分支 goal-41，worktree .worktrees/goal-41，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -6196,7 +6625,9 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 依据：PLAN T-09 步骤 5；CONTRACTS §12.1、§12.3、§6.3 第 2 条、§4.2；MESSAGE-MODEL §6.3；TEST-MATRIX V-30、V-21 的提交分项。
 
 范围（只新增或修改这些）：
-- internal/core/journal/：新增 commit.go（Commit 与提交后的激活）；Reload/Update 在 Prepare 之后调用 Commit（替换 goal-40 中「提交入口为 UNSUPPORTED」的分支）
+- internal/core/journal/：新增 commit.go（Commit 与提交后的激活）与管理入口 FirstInstall、Reload、Update（Prepare → Commit，任一步失败按 goal-40 的 Abort 处理）
+- 根包 alonabot.go、assembly.go：把 Orchestrator 经根包私有桥接类型接到 manage.Options.Candidates（外部管理调用只进入一次 Core.operation，内部 Stop/Resume 直接调用运行循环方法，不在 operation 内再等待 operation；桥接的 Rollback 在 T-09.7 前返回现有 UNSUPPORTED）；startInstalled 的首次启用改走 FirstInstall，删除直接 AddGeneration → Launch(NewCandidate) 的 shortcut
+- internal/core/manage/：没有 Active 的 Update 的程序身份替换（见行为）
 - internal/core/state/：新增在同一事务中写 Active、COMMITTED 与 Journal 阶段的方法（新文件，不改 CommitActive 的已有行为）
 - internal/core/supervisor/：激活结果的回调（只加调用点）
 - 上述包的测试文件
@@ -6207,6 +6638,9 @@ internal/core/state
    func (s *Store) CommitCandidate(ctx context.Context, opID, pluginID, expectedOld, newGen string) error // 同一事务：核对当前 Active == expectedOld、Journal 阶段为 prepared、代次快照已写入；然后更新 Active、写 COMMITTED、Journal 阶段改为 committed。不满足时返回 ErrStaleGeneration 或带原因的错误
 internal/core/journal
    func (o *Orchestrator) Commit(ctx context.Context, r *Result) error // CommitCandidate → ACTIVATE → 等待 ACTIVATED；之后 Attach 到 Router/Broker/Bus/Scheduler/HTTP
+   func (o *Orchestrator) FirstInstall(ctx context.Context, id string) error
+   func (o *Orchestrator) Reload(ctx context.Context, id string) error
+   func (o *Orchestrator) Update(ctx context.Context, id string, staged *packages.Candidate) error
 
 行为：
 - 提交前置：journal 阶段为 prepared、候选代次的 config_snapshot 与 generation_secret_path 已写入、候选目录与数据库文件存在（fsync 已完成），否则不提交，按 Abort 处理。
@@ -6214,7 +6648,8 @@ internal/core/journal
 - 激活：提交成功后向候选 Session 发送 ACTIVATE（带 OnReady 截止），收到 ACTIVATED 后才 Attach 到 Router、Broker、Bus、Scheduler 与 HTTP（复用 goal-27 的接入点）；在此之前候选的路由不可见。
 - 提交后失败（OnReady 失败、超时、进程退出）：新代次保持为 Active，插件进入 Degraded（不派发、HTTP 503、Scheduler 不触发），以 ERROR 记录；不切回旧代次、不使用旧数据库。之后的恢复由管理员 restart（以新代次的新 Session）或 T-09.7 的 rollback 处理。
 - 按钮：提交新代次后，旧代次签发的按钮 token 在解析时因 generation 不是当前 Active 而失效（goal-8 已实现，本切片补测试）。
-- 首次安装同样经此提交；first_install 提交后失败时插件为 Degraded 而不是未安装。
+- 首次安装同样经此提交；first_install 提交后失败时插件为 Degraded 而不是未安装。首次启用切到 FirstInstall 后，cmd/alonabot/manage_e2e_test.go 等既有成功启用的断言保持不变。
+- 没有 Active 的 Update（已安装但从未启用）：不建 Journal、不准备候选，管理预检通过后只把安装记录的程序身份（版本、入口、BuildDigest、发布者）与不可变包目录换成新包，首次启用时再走 first_install；role 为 webui 的 Update 保持 goal-84 的直接替换路径；开发组件不经 Journal。
 - 不出现两个代次同时接单：旧进程在 goal-40 的冻结阶段已确认退出，提交后只有候选 Session 能 Attach。
 
 测试（按编码规范「测试提交规则」）：

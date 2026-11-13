@@ -39,6 +39,7 @@ type Manager struct {
 }
 
 type continuation struct {
+	finish   func() // 可选的分发关联释放，由登记失败或运行结束调用。
 	caller   router.Caller
 	parentID uint64
 	ctx      context.Context
@@ -48,6 +49,7 @@ type continuation struct {
 
 type waitKey struct{ instanceID, chatID, threadID, userID string }
 type waiter struct {
+	inv    *router.Invocation
 	caller router.Caller
 	result chan wire.Response // 单次交付缓冲，超时退出后匹配仍可完成交接。
 }
@@ -95,7 +97,11 @@ func (m *Manager) start(ctx context.Context, caller router.Caller, in *wire.Inbo
 	}
 	// 延续与原请求的有效期独立，只在释放或自身期限结束时取消。
 	lifetime, cancel := context.WithCancel(context.Background())
-	m.calls[inv] = &continuation{caller: caller, parentID: in.ParentCallID, ctx: lifetime, cancel: cancel}
+	call := &continuation{caller: caller, parentID: in.ParentCallID, ctx: lifetime, cancel: cancel}
+	if inv.OnContinuation != nil {
+		call.finish = inv.OnContinuation()
+	}
+	m.calls[inv] = call
 	return response(&pb.ContinuationStartResponse{})
 }
 
@@ -111,6 +117,9 @@ func (m *Manager) Finished(inv *router.Invocation, ok bool) {
 		delete(m.calls, inv)
 		call.cancel()
 		m.mu.Unlock()
+		if call.finish != nil {
+			call.finish()
+		}
 		return
 	}
 	call.started = true
@@ -124,6 +133,9 @@ func (m *Manager) run(inv *router.Invocation, call *continuation) {
 		m.mu.Lock()
 		delete(m.calls, inv)
 		m.mu.Unlock()
+		if call.finish != nil {
+			call.finish()
+		}
 	}()
 	if call.ctx.Err() != nil {
 		return
@@ -161,7 +173,7 @@ func (m *Manager) wait(ctx context.Context, caller router.Caller, in *wire.Inbou
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "wait timeout is out of range")
 	}
 	k := key(inv.DefaultTarget, inv.Event.Actor)
-	w := &waiter{caller: caller, result: make(chan wire.Response, 1)}
+	w := &waiter{inv: inv, caller: caller, result: make(chan wire.Response, 1)}
 	m.mu.Lock()
 	if !m.current(caller) {
 		m.mu.Unlock()
@@ -176,6 +188,9 @@ func (m *Manager) wait(ctx context.Context, caller router.Caller, in *wire.Inbou
 		return failure(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "wait already exists for this Actor and Target")
 	}
 	m.waits[k] = w
+	if inv.OnWait != nil {
+		inv.OnWait()
+	}
 	m.mu.Unlock()
 	// 2. 超时、父调用取消和交付竞争；取得表项的一方负责交付唯一结果。
 	timer := time.NewTimer(timeout)
@@ -235,6 +250,9 @@ func (m *Manager) Match(ev *pb.Event) bool {
 	current := m.current(w.caller) // Prepare 在锁外执行，交付前再次复核替换与 Release 的窗口。
 	if _, waiting := m.delivering[w]; waiting {
 		delete(m.delivering, w)
+		if current && w.inv.OnWaitMatch != nil {
+			w.inv.OnWaitMatch(ev)
+		}
 		if !current {
 			w.result <- failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "plugin Session released")
 		} else if prepareError != nil {
@@ -259,6 +277,9 @@ func (m *Manager) Release(c router.Caller) {
 		if call.caller == c {
 			call.cancel()
 			delete(m.calls, inv)
+			if !call.started && call.finish != nil {
+				call.finish()
+			}
 		}
 	}
 	for k, w := range m.waits {

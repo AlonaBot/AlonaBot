@@ -61,7 +61,9 @@ func TestMain(m *testing.M) {
 		os.Exit(m.Run())
 	}
 	var err error
-	if mode == "adapter" {
+	if strings.HasPrefix(mode, "tasks") {
+		err = persistentTaskProcess(mode)
+	} else if mode == "adapter" {
 		err = sdk.RunAdapter(&pipelineAdapter{})
 	} else {
 		err = sdk.Run(pipelinePlugin(mode))
@@ -123,6 +125,10 @@ func pipelineObserve(stage, route string, c *sdk.Context) error {
 func pipelinePlugin(mode string) *sdk.Plugin {
 	p := sdk.NewPlugin()
 	switch mode {
+	case "service-chain":
+		return serviceChainPlugin()
+	case chainBackgroundMode:
+		return serviceChainBackgroundPlugin()
 	case "order":
 		priority, err := strconv.Atoi(os.Getenv(pipelinePriorityEnv))
 		if err != nil {
@@ -356,9 +362,10 @@ type pipelineHarness struct {
 	changed    chan struct{}
 	release    chan struct{}
 	components map[string]*runningComponent
+	stdio      bool
 }
 
-func newPipeline(t *testing.T) *pipelineHarness {
+func newPipeline(t *testing.T, stdio ...bool) *pipelineHarness {
 	t.Helper()
 	dir := t.TempDir()
 	store, err := state.Open(t.Context(), filepath.Join(dir, "data"))
@@ -366,6 +373,9 @@ func newPipeline(t *testing.T) *pipelineHarness {
 		t.Fatal(err)
 	}
 	h := &pipelineHarness{t: t, store: store, dir: dir, values: tune.Defaults(), changed: make(chan struct{}, 1), release: make(chan struct{}, 1), components: make(map[string]*runningComponent)}
+	if len(stdio) > 0 {
+		h.stdio = stdio[0]
+	}
 	h.values.StopDrain = pipelineStopDrain
 	file, err := settings.Load(dir)
 	if err != nil {
@@ -461,13 +471,22 @@ func (h *pipelineHarness) launch(id, mode string, priority int) *runningComponen
 	c := &runningComponent{id: id, install: install, caller: router.NewCaller(id, pipelineGeneration+":"+id)}
 	// 2. 通过生产 Handler 绑定启动真实插件或 Adapter。
 	handler := h.assembly.handler(c, install)
-	c.process, err = supervisor.Launch(h.t.Context(), h.store, supervisor.Spec{PluginID: id, Role: install.Role, AdapterID: install.AdapterID, PluginDir: pluginDir, Executable: os.Args[0], BuildDigest: install.BuildDigest, GenerationID: pipelineGeneration + ":" + id,
-		Bootstrap: bootstrap(pipelineGeneration+":"+id, 1), NewCandidate: active == "", Limits: host.NewLimits(h.values), Stop: host.NewStopTiming(h.values), Log: h, Handler: handler, Global: h.assembly.global,
-		ExtraEnv: map[string]string{pipelineModeEnv: mode, pipelineIDEnv: id, pipelinePriorityEnv: strconv.Itoa(priority), pipelineAuditEnv: h.server.URL, "GORACE": "atexit_sleep_ms=0"}})
+	spec := supervisor.Spec{PluginID: id, Role: install.Role, AdapterID: install.AdapterID, PluginDir: pluginDir, Executable: os.Args[0], BuildDigest: install.BuildDigest, GenerationID: pipelineGeneration + ":" + id,
+		Bootstrap: bootstrap(pipelineGeneration+":"+id, 1), NewCandidate: active == "", Limits: host.NewLimits(h.values), Stop: host.NewStopTiming(h.values), Log: h, Handler: handler, Global: h.assembly.global, Stdio: h.stdio,
+		ExtraEnv: map[string]string{pipelineModeEnv: mode, pipelineIDEnv: id, pipelinePriorityEnv: strconv.Itoa(priority), pipelineAuditEnv: h.server.URL, "GORACE": "atexit_sleep_ms=0"}, Detach: func() { h.assembly.detach(c) }}
+	if strings.HasPrefix(mode, "tasks") {
+		spec.Scheduler = h.assembly.scheduler
+	}
+	c.process, err = supervisor.Launch(h.t.Context(), h.store, spec)
 	if err != nil {
 		h.t.Fatal(err)
 	}
 	// 3. 接入生产装配，观察者只记录原 Session 请求和结果。
+	transport := wire.TransportTCP
+	if h.stdio {
+		transport = wire.TransportStdio
+	}
+	h.t.Logf("plugin=%s pid=%d transport=%s command=%s mode=%s", id, c.process.Process.Pid(), transport, os.Args[0], mode)
 	c.instance = c.process.Instance
 	h.components[id] = c
 	if err := h.assembly.attach(h.t.Context(), c); err != nil {
@@ -948,7 +967,9 @@ func pipelineBoundPayloadTest(t *testing.T) {
 				hook, stage, recoveredMode = "pre.button", "button", "buttons"
 			} else {
 				c := h.components["pipeline"]
-				h.assembly.scheduler.Attach(&pipelineObserver{Plugin: router.FromInstance(c.instance), harness: h}, time.Now())
+				if err := h.assembly.scheduler.Attach(t.Context(), &pipelineObserver{Plugin: router.FromInstance(c.instance), harness: h}, time.Now()); err != nil {
+					t.Fatal(err)
+				}
 				h.await(func(_ []pipelineRecord) bool { h.mu.Lock(); defer h.mu.Unlock(); return len(h.outcomes) > 0 })
 				h.assembly.scheduler.Drain(c.id)
 				h.mu.Lock()
@@ -997,7 +1018,9 @@ func pipelineBoundPayloadTest(t *testing.T) {
 				h.inject(pipelineInput{User: "alice", Token: token})
 				h.idle()
 			} else {
-				h.assembly.scheduler.Attach(&pipelineObserver{Plugin: router.FromInstance(c.instance), harness: h}, time.Now())
+				if err := h.assembly.scheduler.Attach(t.Context(), &pipelineObserver{Plugin: router.FromInstance(c.instance), harness: h}, time.Now()); err != nil {
+					t.Fatal(err)
+				}
 				h.await(func(_ []pipelineRecord) bool { h.mu.Lock(); defer h.mu.Unlock(); return len(h.outcomes) > before })
 				h.assembly.scheduler.Drain(c.id)
 			}
@@ -1090,7 +1113,9 @@ func pipelineScheduledTest(t *testing.T) {
 		t.Fatalf("forged scheduled error=%v", safe)
 	}
 	c := h.components["pipeline"]
-	h.assembly.scheduler.Attach(&pipelineObserver{Plugin: router.FromInstance(c.instance), harness: h}, time.Now())
+	if err := h.assembly.scheduler.Attach(t.Context(), &pipelineObserver{Plugin: router.FromInstance(c.instance), harness: h}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
 	h.await(func(records []pipelineRecord) bool { return len(pipelineStages(records, "tick")) > 0 })
 	h.assembly.scheduler.Drain(c.id)
 	h.await(func(_ []pipelineRecord) bool { h.mu.Lock(); defer h.mu.Unlock(); return len(h.outcomes) > 0 })

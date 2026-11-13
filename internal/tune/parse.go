@@ -105,6 +105,8 @@ func Parse(args []string) (Values, []Override, error) {
 		names   []string
 		rule    string
 	}{
+		{v.TaskPayloadBytes > maxFrame, []string{"TASK_PAYLOAD_BYTES"}, "TASK_PAYLOAD_BYTES must be <= 4MiB"},
+		{v.TaskConcurrency > v.SessionMaxInflight, []string{"TASK_CONCURRENCY", "SESSION_MAX_INFLIGHT"}, "TASK_CONCURRENCY must be <= SESSION_MAX_INFLIGHT"},
 		{v.OptionsPage > maxOptionsPage, []string{"OPTIONS_PAGE"}, "OPTIONS_PAGE must be <= 200"},
 		{v.CoreMaxPayload < v.SessionMaxPayload, []string{"CORE_MAX_PAYLOAD", "SESSION_MAX_PAYLOAD"}, "CORE_MAX_PAYLOAD must be >= SESSION_MAX_PAYLOAD"},
 		{v.ContinuationMax >= v.SessionMaxInflight, []string{"CONTINUATION_MAX", "SESSION_MAX_INFLIGHT"}, "CONTINUATION_MAX must be < SESSION_MAX_INFLIGHT"},

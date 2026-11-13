@@ -64,7 +64,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 
 1. `message.created` 的文本命令以命令前缀开头。前缀由 `core_config.json` 的 `command_prefixes` 决定（§15.1，缺省 `["/"]`），可以用 `command_prefixes_by_instance` 按 Adapter 实例覆盖；空字符串表示不带前缀的命令，多个前缀都能匹配时取最长者（D-72）。匹配前去掉 chain 开头的 reference 片段与指向本账号的 mention 片段。路径 token 大小写敏感、按完整 token 匹配；不以字符串前缀把 `/rssx` 当 `/rss`。首个路径 token 带 `@username` 时，只在它等于当前实例的 account_username 时接受（比较不区分大小写，D-67），实例没有 account_username 时不接受。空白后的子命令按最长完整路径选择。
 2. 普通命令/别名优先于文本匹配与 Raw。跨插件同路径以 priority/plugin_id/route_id 稳定选出**一个**胜出路由，并在管理诊断中显示被遮蔽者；同插件重复 route ID 或规范化路径/别名属于注册错误。禁用的已注册命令仍占有其路径，不能使同名低优先级路由接管。管理员保存了命令名覆盖的命令，按覆盖后的命令名参与本条与下一条的匹配、遮蔽与占位（§2.3，D-128）。
-3. 一旦识别命令路径，权限拒绝、禁用、Rule false/error 或参数错误都消费该命令，不退到短路径、文本匹配或 Raw。没有识别到任何普通命令时才处理文本匹配，再处理 Raw；每类内部按固定顺序，可 Continue/Stop。命令层结束且没有 Stop 时，message.created 再进入该类型的事件路由（D-44）。其他 event_type 只进入对应事件路由。
+3. 一旦识别命令路径，权限拒绝、禁用、Rule false/error 或参数错误都消费该命令，不退到短路径、文本匹配或 Raw。没有识别到任何普通命令时才处理文本匹配，再处理 Raw；每类内部按固定顺序，可 Continue/Stop。命令层结束且没有 Stop 时，message.created 再进入该类型的事件路由（D-44）；事件路由的 Handler 经可信调用上下文的 `command_consumed` 得知本条消息是否已被命令层消费（识别到命令路径，或文本匹配、Raw 的 Handler 匹配时为 true，只由 Core 设置），SDK 以 `(*Context).CommandConsumed()` 与 Rule `sdk.NotCommand()` 读取（D-141）。其他 event_type 只进入对应事件路由。
 4. 参数取自命令路径之后的片段：text 片段按下述规则分词，其间的每个 mention 与 image 片段各自是一个非文本 token，其余片段不参与分词。参数只做分词与类型转换，不执行 shell 展开。空白分隔；单引号内容原样，双引号/未引号中的反斜杠仅转义下一字符；未闭合引号/尾部转义报 INVALID_ARGUMENT。string 保留解码文本；int 为有符号十进制 int64；float 为有限 float64（拒绝 NaN/Inf）；bool 只接受 true/false；这四种类型只接受文本 token。`user` 接受 mention 片段，或被 Telegram `text_mention` 实体完整覆盖的文本 token，值为 external_user_id；`image` 接受 image 片段，值为该片段（含 incoming_ref）。非文本 token 出现在其他类型的位置属于参数错误（D-72）。显式空字符串不等于缺失。
 5. 注册描述包含每个参数 name/type/required/default，必需参数在可选参数前，default 只用于缺失位置。raw args 只能是最后一个 string 参数，与该尾部的再次分词互斥，保留最后一个已消费参数后的原始尾部，去掉尾部起始分隔空白；raw 为唯一参数时，从命令路径后的首个非分隔空白开始。末位参数也可以是 `message` 类型：接收最后一个已消费参数之后的全部片段（含非文本片段），去掉起始分隔空白，不再分词，与 raw 互斥。多余参数、溢出或非法格式均失败；Go 函数类型与描述由生成器/显式适配器校验。Handler 用位置参数或一个结构体接收这些参数，两种方式生成相同的注册描述，Go 侧的规则见 §9.1（D-115）。
 6. message.created 的 `to_me` 表示消息是否发给机器人（MESSAGE-MODEL §1.1）；SDK 提供对应的 `ToMe` Rule，与其他 Rule 一样组合。
@@ -144,11 +144,11 @@ SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 contex
 - job 的调用结果与实际执行结束分开：deadline 到达先返回 DEADLINE_EXCEEDED/Cancel，但 Scheduler 仍保留 running 槽与原调用键；SDK 等用户 callback 实际返回后才发唯一 Response。迟到 Response 只释放任务槽，不恢复业务成功；未收到结束响应时直到确认旧进程退出才释放。仅 RPC 断链不能证明 goroutine 已停止。下一轮只运行未来 tick，不补跑跳过项。
 - **动态任务（D-124）。** 插件在注册描述中声明任务名（路由 ID 为 `task.` 加任务名，kind 为 task），运行时经 Core 固定服务增删任务实例：
   - `core.task.set` 创建或替换实例：任务名、key、触发规则（at、interval 或 cron 加可选的 timezone，三者恰有一个）与参数。key 为 1～128 字节的 UTF-8 字符串，在同一插件的同一任务名下唯一，已存在时整体替换并重新计算触发时刻。参数是 JSON 对象，至多 `TASK_PAYLOAD_BYTES`，Core 只校验它是合法的 JSON 对象。任务名未在本 Session 注册返回 NOT_FOUND；触发规则不合法、at 不晚于当前时间、参数超限返回 INVALID_ARGUMENT；该插件的实例数达到 `TASKS_PER_PLUGIN` 且 key 不存在时返回 RESOURCE_EXHAUSTED。interval 与 cron 的规则同上，interval 的起点是创建（或替换）时刻。
-  - `core.task.cancel` 按任务名与 key 删除实例，不存在返回 NOT_FOUND；实例正在执行时同时取消这一轮调用（协作式，§1.2），运行槽照上一条的规则释放。`core.task.list` 按任务名返回实例的 key、触发规则、参数与下一次触发时刻，受帧上限约束时分页。
+  - `core.task.cancel` 按任务名与 key 删除实例，持久实例与在途的同一实例都不存在时返回 NOT_FOUND（一次性任务派发后、仍在执行时也可以取消）；实例正在执行时同时取消这一轮调用（协作式，§1.2），运行槽照上一条的规则释放；`core.task.set` 替换实例不取消在途的旧一轮。动态任务的 JobTimeout 从实际派发时开始计算，事件中的 scheduled_at 仍为原到期时刻。`core.task.list` 按任务名返回实例的 key、触发规则、参数与下一次触发时刻，受帧上限约束时分页。
   - 这三个服务只在 Activated 之后可用，不需要父调用链；插件只能操作自己的任务。
   - 触发与静态任务一样经 `scheduled` 的 REQUEST 执行，载荷另带任务名、key 与参数，没有 Actor。同一实例上一轮未结束时跳过本轮。同一插件同时执行的动态任务至多 `TASK_CONCURRENCY` 个，其余到期的实例按到期时间先后排队等待；排队中的周期实例到了下一个触发时刻仍未执行时，只保留一次。一次性实例在派发时删除，执行失败或超时不重试。
 - **持久化与错过的触发（D-125）。** 动态任务的定义与周期任务的起点保存在 Core 状态库，以 plugin_id 为键，Core 重启、插件重启与更新后保留，不属于插件数据库的候选与回退。到期时 Core 未运行、插件未处于 Activated 或任务被暂停的触发一律作废，不补执行：周期任务从下一个未来时刻继续；一次性实例过期即删除，记一条 WARN（plugin_id、任务名、key、原定时刻）并计数。排队等待并发名额不算错过，但插件离开 Activated 时队列清空，其中的触发按作废处理。新版本没有注册某个任务名时，该任务的实例保留但不触发，在管理诊断中标出。卸载时的去留见 §9.3。
-- **静态任务的暂停与恢复（D-126）。** `core.job.pause` 与 `core.job.resume` 按 job_id 暂停、恢复本插件的静态任务，`core.job.status` 返回是否暂停、上一次与下一次触发时刻；job_id 未注册返回 NOT_FOUND，重复暂停或恢复成功且不改变状态。暂停状态保存在 Core 状态库，跨重启与更新保持。暂停期间的触发作废，不打断正在执行的一轮；恢复后从下一个未来时刻继续，interval 的起点不变。
+- **静态任务的暂停与恢复（D-126）。** `core.job.pause` 与 `core.job.resume` 按 job_id 暂停、恢复本插件的静态任务，`core.job.status` 返回是否暂停、上一次与下一次触发时刻（上一次为本次 Core 运行中最后一次实际派发的时刻，Core 重启后缺失；暂停时没有下一次）；job_id 未注册返回 NOT_FOUND，重复暂停或恢复成功且不改变状态。暂停状态保存在 Core 状态库，跨重启与更新保持。暂停期间的触发作废，不打断正在执行的一轮；恢复后从下一个未来时刻继续，interval 的起点不变。
 
 ## 5. 配置、Schema、i18、Secrets
 
@@ -698,7 +698,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 库模式用 `alonabot.Args(...)` 选项或环境变量 `ALONABOT_ARGS` 覆盖调优参数，语法与 `--args` 相同（§16）。
 - 官方 Adapter 与官方插件以可导入的 Go 包提供组件（例如 `telegram.New()`），程序入口只调用 SDK 的运行函数，库模式可以直接引用它们。
 - `alonabot.Plugin(p)` 登记工程 manifest 的 role 为 plugin 或 agent 的组件（agent 只能登记一个）。`alonabot.Listen(addr)`、`alonabot.LogLevel(level)` 与 `alonabot.LogFormat(format)` 覆盖本次运行的监听地址与日志设置，与 `alonabot run` 的 `--listen`、`--log-level`、`--log-format` 相同，不写回设置文件（D-139）。库模式与 `alonabot run` 共用同一套装配：读取 `core_config.json`，提供 HTTP 入口、管理认证与管理 API，启动已安装与开发中 Adapter 的实例。
-- 库模式与 `alonabot run` 一样提供已安装的 WebUI 组件。`alonabot.WebUI(fsys fs.FS)` 选项提供 dev 来源的 WebUI：fsys 的根目录即静态根目录，本次运行中它代替已安装的 WebUI，不经安装、签名与 Admin API 版本检查之外的校验。
+- 库模式与 `alonabot run` 一样提供已安装的 WebUI 组件。`alonabot.WebUI(fsys fs.FS)` 选项提供 dev 来源的 WebUI：fsys 的根目录即静态根目录，本次运行中它代替已安装的 WebUI，不经安装、签名与 Admin API 版本检查之外的校验。开发 WebUI 没有 manifest，不做 Admin API 版本检查，Core 启动时记一条 WARN；同一次 Start 登记两次该选项返回错误（D-140）。
 - 库模式也可以用于小规模部署，但不提供上述隔离与崩溃恢复；正式分发插件与 Adapter 仍使用安装包。
 
 ### 15.6 install.sh
@@ -778,6 +778,6 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 - 包 `github.com/AlonaBot/AlonaBot/plugintest`（D-47）供插件作者在 `go test` 中做集成测试，只在测试代码中使用。`plugintest.Start(t, opts...)` 在 `t.TempDir()` 的数据目录上用 `alonabot.Start`（§15.5）装配真实 Core，登记被测插件（`plugintest.Plugin(root)`，可以有多个）与套件自带的测试 Adapter（adapter_id `plugintest`），并在 `t.Cleanup` 中停止；任一组件激活失败时测试失败。被测插件是库模式的开发组件，配置取自 `plugintest.Config(root, json)`，受管 SQLite 为 `dev.sqlite`。
 - 测试 Adapter 只有一个实例和一个固定账号。它的 adapter_id 缺省为 `plugintest`；`plugintest.Adapter(id, declarations...)` 可改为指定的 adapter_id，并声明该 Adapter 的权限与扩展事件（通常取自其常量包），用于测试依赖平台权限或扩展事件的路由。会话分私聊与群聊，用户可带上该会话的平台权限；`plugintest.Admin(user)` 把用户加入 Core Admin。实例缺省声明 `message.send`、`message.markdown`、`message.album`、`message.reference`、`message.buttons`、`message.forward` 与 `message.edit`，`plugintest.Capabilities(...)` 可改为子集：未声明能力对应的片段在发送时返回 UNSUPPORTED，用来测试插件的降级分支。发送与编辑一律 ACCEPTED，消息 ID 按发送顺序递增。
-- 注入事件：消息（message.created）、对已发送按钮的点击（button.clicked）、已声明的扩展事件与立即触发一次 schedule。每次注入在这个事件的全部分发链结束，或其中的 Handler 进入多轮等待（§2.4）后返回，结果包含这期间产生的全部 Send 与 Edit（Target、Chain、SendResult）和 Handler 返回的错误。分发结束由 Core 经 `internal/inproc` 通知套件，不靠等待时间判断。分发链之外的后台发送另行按顺序读取。
+- 注入事件：消息（message.created）、对已发送按钮的点击（button.clicked）、已声明的扩展事件与立即触发一次 schedule。每次注入在这个事件的全部分发链结束，或其中的 Handler 进入多轮等待（§2.4）后返回，结果包含这期间产生的全部 Send 与 Edit（Target、Chain、SendResult）和 Handler 返回的错误。分发结束由 Core 经 `internal/inproc` 通知套件，不靠等待时间判断。「分发结束」指：注入的事件的普通分发链与由它发起的全部延续调用都结束；其中任一调用登记了多轮等待时立即返回。被等待取走的下一条注入，在取走它的延续调用结束或再次等待时返回，这期间的发送归入它。测试 Adapter 与正式 Adapter 一样按自己声明的能力判定片段，不支持时返回 UNSUPPORTED。SDK 的 `GeneratedProvider` 接口让 Adapter 值按对象提供生成资源（套件据此改用指定的 adapter_id），`EventType.Name()` 返回事件类型名。分发链之外的后台发送另行按顺序读取。
 - `plugintest.LLM(func(ctx context.Context, req llm.Request) (llm.Response, error))` 登记一个只提供 `llm.generate` 的测试 Agent（§13.5），被测插件经 `@agent` 的调用交给这个函数处理，不需要真实 Agent 与 Provider（D-77）；没有登记时，`@agent` 按目标未激活处理。
 - 套件不跳过 Core 的任何检查：权限、Target 准入（后台发信许可与正式运行一样缺省为全部实例，可以用套件选项收紧）、Capability 预检、Hook 与文案都与正式运行相同。套件属于 SDK 公共 API，兼容承诺与 `sdk` 相同。

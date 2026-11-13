@@ -34,6 +34,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/media"
 	"github.com/AlonaBot/AlonaBot/internal/core/message"
+	"github.com/AlonaBot/AlonaBot/internal/core/metrics"
 	coreoptions "github.com/AlonaBot/AlonaBot/internal/core/options"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/process"
@@ -150,9 +151,11 @@ type assembly struct {
 	media      *media.Store
 	buttons    *buttons.Service
 	bus        *bus.Bus
+	broker     *broker.Broker
 	scheduler  *scheduler.Scheduler
 	http       *httpproxy.Server
 	global     *wire.Budget
+	metrics    *metrics.Counters
 	store      *state.Store
 	policy     *policy.Policy
 	components sync.Map // 运行状态查询借用已激活的 host.Instance，退出时按同一指针撤销。
@@ -169,7 +172,7 @@ type componentOptionSchemas struct {
 }
 
 func assemble(store *state.Store, dir string, v tune.Values, file *settings.File) (*assembly, error) {
-	a := &assembly{store: store, settings: file, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload)}
+	a := &assembly{store: store, settings: file, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload), metrics: &metrics.Counters{}}
 	var err error
 	a.media, err = media.Open(filepath.Join(dir, "media"), media.NewLimits(v), time.Now)
 	if err != nil {
@@ -203,9 +206,19 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 		Call: func(ctx context.Context, inv *router.Invocation, parent uint64, deadline time.Time) (wire.Response, error) {
 			return a.router.CallContinuation(ctx, inv, parent, deadline)
 		}})
-	a.router = router.New(router.Options{Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
-		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: a.settings.CommandPrefixes, CommandNames: p.CommandNames,
-		Continuations: continuations,
+	var dispatched func(router.Dispatch)
+	if harness := inproc.HarnessFor(dir); harness != nil && harness.Dispatched != nil {
+		dispatched = func(d router.Dispatch) {
+			result := inproc.Dispatch{InstanceID: d.InstanceID, SourceEventID: d.SourceEventID, Waiting: d.Waiting}
+			for _, outcome := range d.Outcomes {
+				result.Outcomes = append(result.Outcomes, inproc.Outcome{PluginID: outcome.PluginID, RouteID: outcome.RouteID, ErrorCode: int32(outcome.Err.GetCode()), SafeMessage: outcome.Err.GetSafeMessage()})
+			}
+			harness.Dispatched(result)
+		}
+	}
+	a.router = router.New(router.Options{Dispatched: dispatched, Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
+		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Intercept: a.buttons.InterceptConfirm, Policy: p, CommandState: p.CommandState, Prefixes: a.settings.CommandPrefixes, CommandNames: p.CommandNames,
+		Continuations: continuations, Metrics: a.metrics,
 		Send: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
 			return messages.Send(ctx, c, in)
 		},
@@ -223,13 +236,16 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 	a.media.AddServices(a.mux)
 	a.media.AddReadServices(a.mux, a.adapters, a.router, store.AdapterInstanceAllowed)
 	conversation.New(store).Register(a.mux)
-	tool.New(store, a.router).Register(a.mux)
-	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes})
+	tools := tool.New(store, a.router)
+	tools.Register(a.mux)
+	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes, Metrics: a.metrics})
 	a.bus.Register(a.mux)
-	serviceBroker := broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth})
-	a.mux.Forward(serviceBroker.Call)
+	a.broker = broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth, Metrics: a.metrics})
+	tools.RegisterInvoke(a.mux, tool.InvokeOptions{Call: a.broker.Call, Adapters: a.adapters, Buttons: a.buttons,
+		ConfirmTimeout: v.ToolConfirmTimeout, DefaultLocale: func() string { return a.settings.Settings().DefaultLocale }})
+	a.mux.Forward(a.broker.Call)
 	a.schemas = make(map[string]componentOptionSchemas)
-	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: serviceBroker, Page: v.OptionsPage, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
+	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: a.broker, Chats: store.Chats, Page: v.OptionsPage, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
 		installed, err := store.Installs(ctx)
 		if err != nil {
 			return nil, err
@@ -252,7 +268,8 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 		}
 		return instances, nil
 	}})
-	a.scheduler = scheduler.New(scheduler.Options{JobTimeout: v.JobTimeout})
+	a.scheduler = scheduler.New(scheduler.Options{JobTimeout: v.JobTimeout, Store: store, TasksPerPlugin: v.TasksPerPlugin, TaskPayloadBytes: v.TaskPayloadBytes, TaskConcurrency: v.TaskConcurrency})
+	a.scheduler.Services(a.mux, a.router.PluginFor)
 	return a, nil
 }
 
@@ -298,17 +315,19 @@ func optionSchemas(resources sdk.Generated) (componentOptionSchemas, error) {
 
 // runningComponent 保存一次外部进程或同进程 Session，退出观察者结束后才由 Core 替换。
 type runningComponent struct {
-	id       string
-	install  state.Install // 独立进程恢复时复用安装身份与已提交代次。
-	caller   router.Caller
-	instance *host.Instance
-	process  *supervisor.Running // 仅独立进程设置。
-	remote   *remote.Process
-	listener net.Listener
-	conn     *wire.Conn
-	finished chan struct{} // SDK goroutine 返回后关闭，并发布 runErr。
-	runErr   error
-	schemas  componentOptionSchemas
+	id        string
+	install   state.Install // 独立进程恢复时复用安装身份与已提交代次。
+	caller    router.Caller
+	instance  *host.Instance
+	process   *supervisor.Running // 仅独立进程设置。
+	remote    *remote.Process
+	listener  net.Listener
+	conn      *wire.Conn
+	finished  chan struct{} // SDK goroutine 返回后关闭，并发布 runErr。
+	runErr    error
+	schemas   componentOptionSchemas
+	attached  chan struct{} // 本 Session 的 Router/Scheduler 装配完成后关闭，发布 attachErr。
+	attachErr error
 }
 
 func (r *runningComponent) exited() <-chan struct{} {
@@ -340,8 +359,29 @@ func (r *runningComponent) KillTree() error {
 }
 
 func (a *assembly) handler(r *runningComponent, install state.Install) wire.Handler {
+	r.attached = make(chan struct{})
+	bound := a.mux.For(r.caller)
+	shared := func(ctx context.Context, in *wire.Inbound) wire.Response {
+		switch in.Target {
+		case wire.ServiceTaskSet, wire.ServiceTaskCancel, wire.ServiceTaskList, wire.ServiceJobPause, wire.ServiceJobResume, wire.ServiceJobStatus:
+			// ACTIVATED 后读循环立即接纳请求；等待本 Session 装配，避免首请求越过发布。
+			select {
+			case <-r.attached:
+				if r.attachErr != nil {
+					return wire.Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "task services could not attach this Session"}}
+				}
+			case <-ctx.Done():
+				code := pb.ErrorCode_ERROR_CODE_CANCELLED
+				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+					code = pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED
+				}
+				return wire.Response{Err: &pb.ErrorInfo{Code: code, SafeMessage: "task service ended while waiting for Session attachment"}}
+			}
+		}
+		return bound(ctx, in)
+	}
 	if install.Role != state.RoleAdapter {
-		return a.mux.For(r.caller)
+		return shared
 	}
 	r.remote = remote.New(remote.Options{AdapterID: install.AdapterID, PluginID: install.PluginID, Store: a.store, Registry: a.adapters, Sink: a.router, RegisterIncoming: a.media.RegisterIncoming,
 		StartCommandSync: a.router.StartCommandSync, StopCommandSync: a.router.StopCommandSync})
@@ -349,7 +389,6 @@ func (a *assembly) handler(r *runningComponent, install state.Install) wire.Hand
 	local := router.NewMux()
 	r.remote.Services(local)
 	private := local.For(r.caller)
-	shared := a.mux.For(r.caller)
 	return func(ctx context.Context, in *wire.Inbound) wire.Response {
 		switch in.Target {
 		case wire.ServiceCoreAdapterDeliver, wire.ServiceCoreAdapterCursor, wire.ServiceCoreAdapterStatus:
@@ -360,7 +399,11 @@ func (a *assembly) handler(r *runningComponent, install state.Install) wire.Hand
 	}
 }
 
-func (a *assembly) attach(ctx context.Context, r *runningComponent) error {
+func (a *assembly) attach(ctx context.Context, r *runningComponent) (err error) {
+	defer func() {
+		r.attachErr = err
+		close(r.attached)
+	}()
 	a.components.Store(r.id, r.instance)
 	plugin := router.FromInstance(r.instance)
 	r.schemas.session = r.caller.SessionKey
@@ -373,7 +416,10 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) error {
 		if r.instance.HTTPListener != nil {
 			a.http.Bind(r.id, r.instance.GenerationID, r.instance.HTTPListener, r.instance.HTTPProxyToken, r.instance.Routes, r.install.Role == state.RoleAdapter)
 		}
-		a.scheduler.Attach(plugin, time.Now())
+		if err := a.scheduler.Attach(ctx, plugin, time.Now()); err != nil {
+			a.detach(r)
+			return fmt.Errorf("attach scheduler: %w", err)
+		}
 	}
 	if r.remote != nil {
 		return r.remote.Bind(ctx, r.instance, r.caller)
@@ -457,6 +503,13 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	}
 	if err != nil {
 		return err
+	}
+	if harness := inproc.HarnessFor(dir); harness != nil {
+		if instances, restricted := harness.AllowedInstances[id]; restricted {
+			if err := c.store.SetAdapterInstanceAccess(ctx, id, false, instances); err != nil {
+				return err
+			}
+		}
 	}
 	active, err := c.store.Active(ctx, id)
 	if err != nil {
@@ -542,19 +595,22 @@ func bootstrap(generation string, version uint32) *pb.Bootstrap {
 }
 
 func (a *assembly) detach(r *runningComponent) {
-	a.components.CompareAndDelete(r.id, r.instance)
-	a.router.Detach(r.id)
-	a.schemaMu.Lock()
-	delete(a.schemas, r.id)
-	a.schemaMu.Unlock()
-	a.bus.Detach(r.id)
-	a.scheduler.Detach(r.id)
-	if r.instance != nil {
-		a.http.Unbind(r.id, r.instance.GenerationID, r.instance.HTTPProxyToken)
+	// STOPPING 和退出收尾都可能到达；旧 Session 的迟到清理保留新绑定。
+	if a.components.CompareAndDelete(r.id, r.instance) {
+		a.router.Detach(r.id)
+		a.schemaMu.Lock()
+		delete(a.schemas, r.id)
+		a.schemaMu.Unlock()
+		a.bus.Detach(r.id)
+		a.scheduler.Detach(r.id)
+		if r.instance != nil {
+			a.http.Unbind(r.id, r.instance.GenerationID, r.instance.HTTPProxyToken)
+		}
+		if r.remote != nil {
+			r.remote.Unbind()
+		}
 	}
-	if r.remote != nil {
-		r.remote.Unbind()
-	}
+	a.broker.Release(r.caller)
 }
 
 func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.StopTiming, reason pb.StopReason) error {
@@ -685,7 +741,8 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 		Executable: executable, BuildDigest: install.BuildDigest, GenerationID: generation, Bootstrap: boot, ConfigSchema: resources.ConfigSchema, I18n: resources.I18n,
 		NewCandidate:  isNew,
 		DefaultLocale: c.assembly.settings.Settings().DefaultLocale, Handler: c.assembly.handler(running, install), Global: c.assembly.global, Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values),
-		Log: c.output.Plugin(install.PluginID, generation), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment})
+		Log: c.output.Plugin(install.PluginID, generation), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment,
+		Detach: func() { c.assembly.detach(running) }})
 	if err != nil {
 		return nil, err
 	}

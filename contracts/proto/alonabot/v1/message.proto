@@ -61,6 +61,8 @@ message Event {
   optional string source_event_id = 14;
   // 会话类型；没有 target 时必须为 UNSPECIFIED。
   ChatType chat_type = 15;
+  // 会话显示名；没有 target 时必须 absent。
+  optional string chat_title = 16;
 }
 
 // PlatformMessage 描述一条已存在的平台消息。
@@ -170,6 +172,12 @@ message ScheduledPayload {
   string run_id = 2;
   // 计划触发时刻，UTC 毫秒。
   int64 scheduled_at_unix_ms = 3;
+  // 动态任务名；静态任务为空。
+  string task_name = 4;
+  // 动态实例键。
+  string task_key = 5;
+  // 创建时原样保存的 JSON 对象。
+  string task_payload_json = 6;
 }
 
 // ---------- MessageChain ----------
