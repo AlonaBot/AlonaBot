@@ -39,6 +39,11 @@ func ToMe() Rule {
 	}
 }
 
+// NotCommand 匹配尚未被 Core 命令层消费的消息。
+func NotCommand() Rule {
+	return func(c *Context) (bool, error) { return !c.CommandConsumed(), nil }
+}
+
 func checkRules(rules []Rule) error {
 	for i, rule := range rules {
 		if rule == nil {

@@ -11,6 +11,14 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
+// TestCommandConsumedFieldNumber 固定可信命令消费标记的字段编号与类型。
+func TestCommandConsumedFieldNumber(t *testing.T) {
+	field := (&pb.InvocationContext{}).ProtoReflect().Descriptor().Fields().ByNumber(6)
+	if field == nil || field.Name() != "command_consumed" || field.Kind() != protoreflect.BoolKind || field.IsList() || field.HasPresence() || field.ContainingOneof() != nil {
+		t.Fatalf("InvocationContext field 6 should be bool command_consumed, got %v", field)
+	}
+}
+
 // TestContinuationFieldNumbers 固定延续调用与等待载荷的编号、类型及 presence。
 func TestContinuationFieldNumbers(t *testing.T) {
 	field := (&pb.HandlerRequest{}).ProtoReflect().Descriptor().Fields().ByNumber(5)

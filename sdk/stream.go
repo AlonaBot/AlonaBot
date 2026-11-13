@@ -42,7 +42,7 @@ func (c *Context) Stream(next func(context.Context) (string, error)) ([]*message
 		}
 	}
 	stream := streamOutput{context: c, limit: limit}
-	// 2. 无编辑能力时只在正常结束后发送一次，输入错误时不发布缓存。
+	// 2. 无编辑能力时正常结束后按上限发送缓存，输入错误时不发布缓存。
 	if !edit {
 		var text strings.Builder
 		for {
@@ -55,16 +55,7 @@ func (c *Context) Stream(next func(context.Context) (string, error)) ([]*message
 				return nil, canceled
 			}
 			if errors.Is(err, io.EOF) {
-				if text.Len() == 0 {
-					return nil, nil
-				}
-				result, sendError := c.Send(message.Text(text.String()))
-				if result != nil {
-					stream.results = append(stream.results, result)
-				}
-				if canceled := c.ctx.Err(); canceled != nil {
-					return stream.results, canceled
-				}
+				sendError := stream.append(text.String())
 				return stream.results, sendError
 			}
 			if err != nil {
