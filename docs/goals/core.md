@@ -77,7 +77,7 @@
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 已完成（PR #167） |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 已完成（PR #171） |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2、T-09.4 | 已完成（PR #168） |
-| goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 待派发 |
+| goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 已完成（PR #180） |
 | goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 已完成（PR #166） |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 已完成（PR #162） |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 已完成（PR #161） |
@@ -5697,7 +5697,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-9 · T-03.10 Telegram 接入开发入口与故障矩阵
 
-状态：待派发。既定前置 T-03.6（PR #55，合并提交 `b023130`）、T-03.8（PR #136，`3621fc1`）、T-03.9（PR #118，`1cbfb2e`）、T-07.6（PR #100，`cb83eeb`）、T-13.3（PR #171，`3043c4e`）均已合并。相关基线包括 T-03.7（PR #108，`d89e9b7`）、T-08.12（PR #114，`a796766`）、T-13.2（PR #160，`65ebc5f`）及 T-09.4（PR #163，`cb8ae3d`）。合并号取自本地 `docs/goals/core.md` 的完成记录。本稿于 2026-11-13 以维护者指定的 main `db48bec` 只读副本为依据，用 `rg` 定位定义和调用者；`pluginkit.Build`、根包 `Executable`、`sdk.AdapterHTTP` 与 `sdk.ServiceBuilder` 另用本机 Go 1.27.3 的离线 `go doc` 核对。派发前需审查者裁决末尾所列 `platform_file` 最小修复的归属。2026-11-13 审查者裁决（DECISIONS 2026-11-13 变更记录）：Telegram 的 platform_file 发送消费由本切片以最小修复补齐（只补 `adapters/telegram/plan.go` 的 renderMedia 分支），T-03.20（goal-111）的范围相应扣除；按 MESSAGE-MODEL §4、§6.2 与 V-35 改写相册带按钮与零 message_id 两处旧验收；生产停止顺序保持 `alonabot.go` 的共用停止起点，测试装配中自行安排观察者与被测实例的先后；测试专用的新依赖边由本切片登记进 ARCHITECTURE。维护者不提供 Telegram 凭证，真实平台记为未运行。
+状态：已完成（[PR #180](https://github.com/AlonaBot/AlonaBot/pull/180)，合并提交 `c128000`），证据见 TEST-MATRIX §3.2。合入：`manage.DependencySnapshot` 改为接收运行时 Adapter 描述（`descriptor func(string) *pb.AdapterDescriptor`）、新增 `manage.CheckDependencies`；开发入口先启动开发 Adapter，再按依赖快照检查开发插件，重启时在停止旧进程前检查依赖；Telegram renderMedia 消费 `platform_file`；示例插件 `examples/plugins/media`；`cmd/alonabot` 的 Telegram 开发入口与故障矩阵集成测试。真实 Telegram 平台未运行（维护者不提供凭证）。以下为派发时的语句。
 
 按 main 核对：
 
