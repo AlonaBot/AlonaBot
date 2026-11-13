@@ -470,21 +470,12 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 			SqlitePath: path, ActivationReason: reason, MigrationMode: pb.MigrationMode_MIGRATION_MODE_UNSPECIFIED}
 	}
 	current := c.assembly.settings.Settings()
-	level := slog.LevelDebug
-	if explicit, ok := current.LogSources[id]; ok {
-		switch explicit {
-		case "off":
-			level = logging.LevelOff
-		case "inherit":
-			level = current.LogLevel
-		default:
-			if err := level.UnmarshalText([]byte(explicit)); err != nil {
-				return err
-			}
-		}
+	if _, explicit := current.LogSources[id]; !explicit {
+		c.output.Levels().SetSource(id, slog.LevelDebug)
+	} else if current.LogSources[id] == "inherit" {
+		c.output.Levels().InheritSource(id)
 	}
-	boot.LogLevel = logging.ProtoLevel(level)
-	c.output.Levels().SetSource(id, level)
+	boot.LogLevel = logging.ProtoLevel(c.output.Levels().Source(id))
 
 	schemas, err := optionSchemas(entry.resources)
 	if err != nil {
@@ -537,7 +528,7 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	}
 	running := &runningComponent{id: id, install: install, caller: router.NewCaller(id, generation), listener: listener, finished: make(chan struct{}), schemas: schemas}
 	c.components = append(c.components, running)
-	l := &inproc.Launch{PluginID: id, Secret: make([]byte, launchRandomBytes), Addr: listener.Addr().String(), BuildDigest: digest, RuntimeLockPath: filepath.Join(pluginDir, wire.RuntimeLockFile), Log: c.output.Component(id, generation)}
+	l := &inproc.Launch{PluginID: id, Secret: make([]byte, launchRandomBytes), Addr: listener.Addr().String(), BuildDigest: digest, RuntimeLockPath: filepath.Join(pluginDir, wire.RuntimeLockFile), Log: c.output.Component(id, generation, componentLogAttrs(install)...)}
 	rand.Read(l.Secret)
 	go func() {
 		if entry.role == state.RoleAdapter {
@@ -741,7 +732,7 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 		Executable: executable, BuildDigest: install.BuildDigest, GenerationID: generation, Bootstrap: boot, ConfigSchema: resources.ConfigSchema, I18n: resources.I18n,
 		NewCandidate:  isNew,
 		DefaultLocale: c.assembly.settings.Settings().DefaultLocale, Handler: c.assembly.handler(running, install), Global: c.assembly.global, Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values),
-		Log: c.output.Plugin(install.PluginID, generation), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment,
+		Log: c.output.Plugin(install.PluginID, generation, componentLogAttrs(install)...), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment,
 		Detach: func() { c.assembly.detach(running) }})
 	if err != nil {
 		return nil, err
@@ -936,4 +927,12 @@ func (a *assembly) checkAdapterEvent(ev *pb.Event) error {
 		return fmt.Errorf("adapter instance %q cannot validate extension events", ev.GetAdapterInstanceId())
 	}
 	return checker.CheckEvent(ev)
+}
+
+// componentLogAttrs 从 Core 的安装记录绑定可信来源类别，Adapter 的实例字段由 SDK 记录携带。
+func componentLogAttrs(install state.Install) []slog.Attr {
+	if install.Role == state.RoleAdapter {
+		return []slog.Attr{slog.String(logging.KeyComponent, logging.ComponentAdapter), slog.String(logging.KeyAdapterID, install.AdapterID)}
+	}
+	return nil
 }

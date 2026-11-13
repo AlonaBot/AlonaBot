@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
 // levelOff 高于任何记录的级别：Core 下发 OFF 时本进程不输出任何记录。
@@ -44,6 +45,21 @@ func setLogLevel(level *slog.LevelVar, lv pb.LogLevel) {
 	default:
 		level.Set(slog.LevelInfo)
 	}
+}
+
+func (s *componentSession) changeLogLevel(in *wire.Inbound) wire.Response {
+	request := &pb.LogSetLevelRequest{}
+	if err := decodeInvocation(in.Payload, request); err != nil {
+		return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+	}
+	if _, ok := pb.LogLevel_name[int32(request.Level)]; !ok {
+		return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "unknown log level")
+	}
+	setLogLevel(&s.level, request.Level)
+	if !s.inProcess {
+		setLogLevel(&logLevel, request.Level)
+	}
+	return adapterResponse(&pb.LogSetLevelResponse{}, nil)
 }
 
 // logPanic 把调用边界捕获的 panic 记为一条 ERROR，堆栈放在 stack 字段（CONTRACTS §14.1）；

@@ -24,6 +24,7 @@ func (e *ErrNeedsConfirm) Error() string {
 // Handler 将管理端点全部放在相同的 Bearer 或 Cookie/CSRF 认证之后。
 func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	mux := http.NewServeMux()
+	s.logRoutes(mux)
 	mux.HandleFunc("GET /api/v1/packages/{id}/icon", s.icon)
 	mux.HandleFunc("POST /api/v1/packages/install", func(w http.ResponseWriter, r *http.Request) {
 		var request InstallRequest

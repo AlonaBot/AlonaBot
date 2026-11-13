@@ -37,9 +37,11 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/webhost"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/adapter"
 	"github.com/mattn/go-isatty"
+	"google.golang.org/protobuf/proto"
 )
 
 // Option 配置一次 Core 启动。
@@ -196,12 +198,24 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 		return fail(err)
 	}
 	c.development = o.components
-	output, err := logging.Open(logging.Options{Format: logging.Format(configuration.LogFormat), Level: configuration.LogLevel, Stderr: os.Stderr})
+	output, err := logging.Open(logging.Options{Format: logging.Format(configuration.LogFormat), Level: configuration.LogLevel, Stderr: os.Stderr, BufferRecords: values.LogBufferRecords})
 	if err != nil {
 		return fail(startupUsage(err))
 	}
 	c.output = output
 	slog.SetDefault(output.Logger())
+	for id, value := range configuration.LogSources {
+		if value == "inherit" {
+			continue
+		}
+		level := logging.LevelOff
+		if value != "off" {
+			if err := level.UnmarshalText([]byte(value)); err != nil {
+				return fail(err)
+			}
+		}
+		output.Levels().SetSource(id, level)
+	}
 	if o.webUI != nil {
 		slog.Warn("development WebUI has no manifest; Admin API version compatibility is not checked")
 	}
@@ -263,7 +277,31 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	for _, entry := range o.components {
 		development[entry.manifest.ID] = entry.manifest
 	}
-	management := manage.New(manage.Options{Store: store, Settings: c.assembly.settings, Policy: c.assembly.policy,
+	management := manage.New(manage.Options{Logs: output, NotifyLogLevel: func(ctx context.Context, id string, level pb.LogLevel) error {
+		return c.operation(ctx, func(ctx context.Context) error {
+			plugin, ok := c.assembly.router.Plugin(id)
+			if !ok || !plugin.Activated() {
+				return nil
+			}
+			request := &pb.LogSetLevelRequest{Level: level}
+			encoded, err := proto.Marshal(request)
+			if err != nil {
+				return err
+			}
+			response, err := plugin.Call(ctx, wire.Request{Target: wire.ServiceLogSetLevel, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: 1, Bytes: encoded}})
+			if err != nil {
+				return err
+			}
+			if response.Err != nil {
+				return &wire.CallError{ErrorInfo: response.Err}
+			}
+			reply := &pb.LogSetLevelResponse{}
+			if response.Payload.Encoding != pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF || response.Payload.SchemaID != validate.SchemaID(reply) || response.Payload.SchemaVersion != 1 {
+				return errors.New("invalid log level response metadata")
+			}
+			return proto.Unmarshal(response.Payload.Bytes, reply)
+		})
+	}, Store: store, Settings: c.assembly.settings, Policy: c.assembly.policy,
 		Adapters: c.assembly.adapters, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(o.components),
 		Packages: filepath.Join(dir, "packages"), Limits: packages.NewLimits(values), Development: development, DevelopmentWebUI: o.webUI,
 		Descriptor: c.assembly.componentDescriptor,

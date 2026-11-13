@@ -50,7 +50,7 @@ type componentSession struct {
 	active       atomic.Pointer[activation]
 	translations atomic.Pointer[translationSession]
 	level        slog.LevelVar
-	log          slog.Handler // Core 提供的不过滤日志目标；nil 时使用默认 Handler。
+	log          slog.Handler // Core 提供的日志目标；nil 时使用默认 Handler。
 	source       []slog.Attr
 	inProcess    bool
 	callbacks    sync.WaitGroup
@@ -110,6 +110,9 @@ func (s *componentSession) handler(next wire.Handler) wire.Handler {
 			return dispatchError(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "plugin session has stopped")
 		}
 		defer s.callbacks.Done()
+		if in.Target == wire.ServiceLogSetLevel {
+			return s.changeLogLevel(in)
+		}
 		return next(s.context(ctx), in)
 	}
 }

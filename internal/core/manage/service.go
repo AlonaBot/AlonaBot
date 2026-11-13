@@ -1,8 +1,8 @@
-// Package manage 提供组件安装、生命周期、Adapter 实例与 Core Admin 的管理服务。
+// Package manage 提供组件安装、生命周期、Adapter 实例、Core Admin 与日志的管理服务。
 //
 // [Service] 共用 Core 的状态库、设置文件与策略；[Service.Handler] 经管理认证保护，
 // [Service.WebUI] 提供登录前可读取的静态页面。实例配置只写回设置文件，响应中只包含操作结果。
-// 管理与静态组件语义见 CONTRACTS §7.5、§9.3、§15.1。
+// 管理、日志与静态组件语义见 CONTRACTS §7.5、§9.3、§14、§15.1。
 package manage
 
 import (
@@ -21,6 +21,7 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
+	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
@@ -29,6 +30,8 @@ import (
 
 // Options 绑定同一个 Core 的持久状态与运行登记。
 type Options struct {
+	Logs           *logging.Output                                               // 与 Core 共用的输出、缓冲与级别表。
+	NotifyLogLevel func(ctx context.Context, id string, level pb.LogLevel) error // 仅通知当前 Activated Session。
 	Store          *state.Store
 	Settings       *settings.File
 	Policy         *policy.Policy
@@ -53,6 +56,7 @@ type Options struct {
 
 // Service 用独立的逐包锁串行管理动作，supervisor 继续持有状态库的进程锁。
 type Service struct {
+	logs      sync.Mutex // 串行提交日志设置和通知。
 	opt       Options
 	admins    sync.Mutex
 	instances sync.Mutex // 实例名跨包唯一，串行化配置创建与删除。
