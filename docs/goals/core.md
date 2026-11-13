@@ -77,7 +77,7 @@
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 已完成（PR #167） |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 已完成（PR #171） |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2、T-09.4 | 已完成（PR #168） |
-| goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
+| goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 待派发 |
 | goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 已完成（PR #166） |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 已完成（PR #162） |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 已完成（PR #161） |
@@ -5697,55 +5697,152 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-9 · T-03.10 Telegram 接入开发入口与故障矩阵
 
-状态：等待前置（T-13.3）。T-03.8（[PR #136](https://github.com/AlonaBot/AlonaBot/pull/136)，合并提交 `3621fc1`）已合并：`internal/core/buttons` 的 `New(store, now, current)` 与 `Service.Issue`、`Resolve`、`Purge`；`message.New(adapters, p, lease, issue, requestTimeout)`；`router.Options.Buttons`；可选接口 `adapter.ExtensionChecker`；`manifest.CheckDependencies(m, Installed)`；SDK 的 `sdk.Action[T]`、`sdk.OnButton(r, a).Handle(func(*Context, T) error)`、`message.Buttons`、`message.Extension`；`Segment` oneof 已用到 `extension = 9`。T-08.12（[PR #114](https://github.com/AlonaBot/AlonaBot/pull/114)，合并提交 `a796766`）已合并。Telegram 实例声明已位于 `adapters/telegram/cmd/alonabot-adapter-telegram/adapter_config_schema.json`，含 `token`、`api_base_url`、`proxy_mode` 与 `proxy`；启动复用 `settings.File.PrepareInstances(adapterID, schema)` 的可启动配置与 `InstanceProblem`，再调用 `remote.Process.StartInstance(ctx, instanceID, configJSON)`。`sdk/generate.Scan` 与 `plugin check` 已检查实例声明。合并后由审查者按 main `2c1fdcc` 核对。T-03.9（[PR #118](https://github.com/AlonaBot/AlonaBot/pull/118)，合并提交 `1cbfb2e`）已合并。T-03.7（[PR #108](https://github.com/AlonaBot/AlonaBot/pull/108)，合并提交 `d89e9b7`）已合并，合入的符号：`Button.core_token = 4`（optional string，发送时校验 1～64 字节）；`adapters/telegram` 实例的 `Send`（整链预检、确定的物理计划、每个物理操作一个 PartResult；末条物理消息为相册且带按钮时首发前 UNSUPPORTED）与 message.send/markdown/album/reference/buttons 能力；`telegramtest` 的 `Request{Method, Params, Files}`、`Requests()`、`FailMethod`、`ZeroMessageID`、`Drop`，模拟服务已支持 editMessageReplyMarkup。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin`（T-04.10 起为 `{AdapterID, UserID}`，admins 为用户字符串）；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, baseURL, dataDir)`；`alonabot admin-token show`。语句中 goal-4～goal-8、goal-50、goal-51 提供的符号（remote.Process、supervisor.Spec 的 Role、adapters/telegram、telegramtest、media.Store、buttons.Service、message 的 Send/Edit）只写名字；合并后由审查者核对签名，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：开发入口改由 goal-69 的 `alonabot run <目录>` 提供，本切片不再给 run 加 `--adapter-id` 等参数；Adapter 实例写在 `core_config.json` 的 `adapters` 中，不再读取 instances/ 目录。前置合并后由审查者改写。
+状态：待派发。既定前置 T-03.6（PR #55，合并提交 `b023130`）、T-03.8（PR #136，`3621fc1`）、T-03.9（PR #118，`1cbfb2e`）、T-07.6（PR #100，`cb83eeb`）、T-13.3（PR #171，`3043c4e`）均已合并。相关基线包括 T-03.7（PR #108，`d89e9b7`）、T-08.12（PR #114，`a796766`）、T-13.2（PR #160，`65ebc5f`）及 T-09.4（PR #163，`cb8ae3d`）。合并号取自本地 `docs/goals/core.md` 的完成记录。本稿于 2026-11-13 以维护者指定的 main `db48bec` 只读副本为依据，用 `rg` 定位定义和调用者；`pluginkit.Build`、根包 `Executable`、`sdk.AdapterHTTP` 与 `sdk.ServiceBuilder` 另用本机 Go 1.27.3 的离线 `go doc` 核对。派发前需审查者裁决末尾所列 `platform_file` 最小修复的归属。2026-11-13 审查者裁决（DECISIONS 2026-11-13 变更记录）：Telegram 的 platform_file 发送消费由本切片以最小修复补齐（只补 `adapters/telegram/plan.go` 的 renderMedia 分支），T-03.20（goal-111）的范围相应扣除；按 MESSAGE-MODEL §4、§6.2 与 V-35 改写相册带按钮与零 message_id 两处旧验收；生产停止顺序保持 `alonabot.go` 的共用停止起点，测试装配中自行安排观察者与被测实例的先后；测试专用的新依赖边由本切片登记进 ARCHITECTURE。维护者不提供 Telegram 凭证，真实平台记为未运行。
+
+按 main 核对：
+
+- `internal/pluginkit/build.go`：`func BuildDev(ctx context.Context, dir, outDir string) (build Build, err error)`；`Build` 含 `Executable string`、`Manifest []byte`、`PackageManifest []byte`、`Digest []byte`、`Role, ID, AdapterID string`。`Manifest` 是工程原文；`PackageManifest` 是交给根包的包内构建元数据。构建使用 overlay，作者目录保持原样。
+- `alonabot.go`：`func Start(ctx context.Context, opts ...Option) (*Core, error)`、`func Run(opts ...Option) error`、`func Executable(path string, packageManifest []byte) Option`、`func Stdio() Option`；`func (c *Core) Restart(ctx context.Context, id string) error`、`RestartInstance(ctx context.Context, adapterID, instanceID string) error`、`ReloadSettings(ctx context.Context) error`。`cmd/alonabot/dev.go` 的 `runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval time.Duration, options []alonabot.Option) error` 已调用 BuildDev、Executable、Start；`commands.go` 已提供 `alonabot run [目录...] [--reload] [--stdio]`。
+- `assembly.go` 的 `startInstances` 已执行 `settings.File.BindAdapter`、`PrepareInstances`、诊断记录和 `remote.Process.StartInstance`；`internal/core/settings/instances.go` 的真实签名为 `BindAdapter(adapterID, packageID string) (bool, error)`、`PrepareInstances(adapterID string, schema *configschema.Schema) (map[string]json.RawMessage, []InstanceProblem, error)`，`InstanceProblem` 含 `InstanceID, Path, Reason string`。`settings/settings.go` 的 `AdapterSettings` 还含 `Package string`、`Version int`、`Instances map[string]json.RawMessage`、`DefaultInstance string`。本切片复用这些装配。
+- `adapters/telegram/telegram.go`：`func New() adapter.Adapter`；工程身份和实例声明位于 `adapters/telegram/plugin.yaml`、`adapter_config_schema.json`、`alonabot_gen.go`，薄入口为 `cmd/alonabot-adapter-telegram/main.go`。实例声明现有 `token`、`api_base_url`、`proxy_mode`、`proxy`；开发目录应传 `adapters/telegram`。
+- `sdk/plugin.go`、`generated.go`：`NewPlugin() *Plugin`、`UseGenerated(p *Plugin, g Generated)`、`(*Plugin).Generated() Generated`；示例入口为 `func New() *sdk.Plugin`，main 调用 `sdk.Run(New())`。`sdk/sdk.go` 的 `(*Context).Send(m message.Content, opts ...SendOption) (*message.SendResult, error)` 与 `sdk/edit.go` 的 `(*Context).Edit(ref message.MessageRef, m message.Content) (*message.SendResult, error)` 已使用 SDK 自有类型。`examples/plugins/echo/main.go` 已用插件对象并显式绑定生成资源，但该目录尚缺 `plugin.yaml`；`examples/plugins/media/` 尚未建立。
+- `sdk/adapter/adapter.go`：`Adapter.Start(ctx context.Context, req StartRequest, core Core) (Instance, error)`；`StartRequest{InstanceID string; ConfigJSON, Cursor []byte}`；`Core.Deliver(ctx context.Context, ev *message.Event, cursor []byte) (accepted bool, err error)`；`Instance.Send(ctx context.Context, to message.Session, chain message.Chain) (*message.SendResult, *errcode.Error)`。可选编辑接口在 `sdk/adapter/edit.go`。`sdk/adapter/declaration.go`、`action.go` 的声明函数为 `Event[T](name string, version uint32) EventDeclaration`、`Extension[T](name string, version uint32) ExtensionDeclaration`、`Action[P,R](name string, version uint32, scope ActionScope) ActionDeclaration`，权限声明用 `PermissionDeclaration{Name, Implies, LabelKey}`。
+- `sdk/adapter_run.go` 的 `AdapterHTTP` 为 `HTTP(route func(method, path string) *RouteBuilder)`；`sdk/plugin.go` 的插件入口为 `Route(method, path string) *RouteBuilder`；`sdk/registry.go` 的终点是 `Handle(http.Handler)` 或 `HandleFunc(func(http.ResponseWriter, *http.Request))`。`sdk/permission.go` 的 `Permission` 是权限名集合，`PermissionName(name string) Permission`、`Permission.Names() []string`；`message.Actor.Permissions` 为 `[]string`。
+- `internal/core/adapter/remote/remote.go`：`New(opt Options) *Process`、`(*Process).Bind(ctx context.Context, in *host.Instance, caller router.Caller) error`、`StartInstance(ctx context.Context, instanceID string, configJSON []byte) error`、`StopInstance(ctx context.Context, instanceID string) error`、`Unbind()`。`supervisor.Spec` 的 `Role state.Role`、`AdapterID`、`PluginID` 绑定可信启动身份。`internal/core/message/send.go` 的 `New` 现有末尾参数为 `requestTimeout time.Duration, hooks Hooks`；`internal/core/buttons/buttons.go` 的 `New` 现有显式 `ttl time.Duration` 参数，旧 goal 中省略它们的写法已过时。本切片以生产 assemble 复用完整装配。
+- `adapters/telegram/telegramtest/server.go`、`send.go`、`media.go` 已提供 `NewServer(t testing.TB, token string) *Server`、`URL() string`、`SetMe(userID int64, username string)`、`Push(updates ...json.RawMessage)`、`Calls(method string) int`、`Offsets() []int64`、`AllowedUpdates() [][]string`、`FailNext(status int, n int)`、`Requests() []Request`、`FailMethod(method string, nth int, status int, description string)`、`ZeroMessageID(method string, nth int)`、`Drop(method string, nth int)`、`AddFile(fileID, filePath string, content []byte)`；`Request{Method string; Params map[string]any; Files map[string][]byte}`。
+- `MESSAGE-MODEL §4/§6.2`、`adapters/telegram/plan.go` 与 `send.go` 一致：末尾相册带按钮在首发前返回 `UNSUPPORTED`；零 ID 对应的 PartResult 仍为 `ACCEPTED` 并置 `MessageIDsUnavailable`。相册后增加文本可承载按钮，文本请求失败时保留相册 ID。另发现 `internal/core/media/lease.go` 已把同实例 incoming_ref 转为 platform_file，而 Telegram 的 `renderMedia` 尚未处理该来源；下文提出限于此消费分支的修复。
+- 根包 `pipeline_test.go` 已有 `newPipeline(t *testing.T, stdio ...bool) *pipelineHarness`、`newPipelineAt(t *testing.T, dir string, values tune.Values, stdio bool) *pipelineHarness`，后者调用 `assemble(store *state.Store, dir string, v tune.Values, file *settings.File) (*assembly, error)`，可复用真实 Core/SDK 子进程、状态库及审计装配。`cmd/alonabot/dev_e2e_test.go` 已有临时工程和目录运行的测试方式。
+- 旧在途快照中的 #165（goal-55，`330164f`）、#167（goal-84，`3a9b4af`）、#168（goal-81，`37b0ada`）、#169（goal-127，`4dc4bcd`）、goal-59（PR #170，`eca6310`）与 goal-69（PR #171，`3043c4e`）均已合并；#169 的 `state/schema.sql`、manage 清理清单及 #171 的根包/CLI 改动已在基线。根包测试装配还含 PR #172（goal-57，`15f9495`）的改动。
+- 按维护者本次提供的在途信息：#173（goal-40）涉及 `internal/core/state/`、`internal/core/supervisor/`、`alonabot.go`、`assembly.go`；#174 涉及启动取消的 `alonabot.go`；#175（goal-83）涉及 Broker、options、agent 与 `assembly.go`；#176（goal-128）涉及 SDK 任务 API、生成器及根包本地测试；执行中的 goal-60 涉及 agent 工具循环，goal-66 涉及 logging、manage HTTP、`alonabot.go`、`assembly.go` 与 `cmd/alonabot/`。本切片新增 CLI 测试及本地复用装配时核对这些消费点，保留已合并的字段和服务；业务代码共享点主要是既有根包装配，草稿未给这些文件另加产品职责。goal-111 也规划修改 `adapters/telegram/plan.go` 的媒体来源分支，归属须在派发前确定。以上在途状态来自维护者，未联网查询 PR。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-9（切片 T-03.10：Telegram 接入开发入口与故障矩阵）。goal 目录 goal-9，分支 goal-9，worktree .worktrees/goal-9，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-9（切片 T-03.10：Telegram 接入开发入口与故障矩阵）。goal 目录 goal-9，分支 goal-9，worktree .worktrees/goal-9，从最新 origin/main 创建（须已包含 PR #55、#100、#108、#114、#118、#136、#160、#163、#171）。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：alonabot run 可以同时启动一个 Adapter 包与一个插件，Adapter 的实例配置取自 <data_dir>/core_config.json 的 adapters.<adapter_id>.instances；提供 echo 与媒体示例；用本地 Bot API 模拟服务跑完 PLAN T-03 步骤 8 的发送与接收故障矩阵，并在 TEST-MATRIX §3.2 记录 T-03 的证据。真实 Telegram 没有测试账号时记为未运行。
+目标：复用已合并的 alonabot run <目录...>，同时以独立进程运行官方 Telegram Adapter、echo 与媒体示例；实例配置取自 <data_dir>/core_config.json 的 adapters.telegram.instances。补齐可运行示例，在本地 Bot API 模拟服务上用真实 Core/SDK 进程完成 PLAN T-03 步骤 8 的发送与接收故障矩阵，记录 T-03 分项证据。维护者不提供 Telegram 凭证，本切片真实 Telegram 平台验证明确记为「未运行」。
 
-依据：PLAN T-03 步骤 8 与「停止和失败条件」；CONTRACTS §8、§15.1（`adapters`）、§15.4；MESSAGE-MODEL §4、§6；TEST-MATRIX V-07、V-08、V-09、V-35、V-44、V-45、V-48、V-51～V-54 的 T-03 分项。
+依据：
+- spec/PLAN.md §3.1；spec/plan/core.md T-03.10、T-03 步骤 8，以及步骤 2～7 的既有语义、「验收与后续边界」和「失败停止条件」；T-13 步骤 4 的已合并开发运行入口。
+- spec/plan/adapters/telegram.md T-03 步骤 4、6 的已实现接收/发送规则；步骤 17 中 platform_file 的既定语义仅用于下述最小衔接修复。
+- spec/CONTRACTS-v0.1.md §1.2～§1.4、§2.3、§4.1～§4.2、§8、§9.1 的身份/依赖、§15.1、§15.4、§16 的既有调优参数；测试 HTTP 入口遵循 §7.2～§7.4。
+- spec/MESSAGE-MODEL.md §1～§4、§5 的既有 Edit Hook、§6.1～§6.3；同实例媒体来源沿用 §6.4 的 platform_file。
+- spec/WIRE-FORMAT.md §2、§3.2～§3.5、§4、§5/§5A 的既有消息、媒体、按钮与 Adapter 字段；本切片不分配新字段号。
+- spec/adr/DECISIONS.md D-26、D-68～D-72、D-77、D-79、D-82、D-83、D-86、D-88、D-102、D-104、D-107、D-109、D-112、D-114、D-117、D-134、D-137；2026-11-13 的 ReloadSettings/Executable 参数补齐记录。
+- spec/TEST-MATRIX.md V-07、V-08、V-09、V-35、V-44、V-45、V-48、V-51～V-54 的 T-03 分项与 §3 的证据格式。V-89 的 platform_file 仅记本次实际衔接分项，其余由 T-03.20 汇总。
 
 范围（只新增或修改这些）：
-- cmd/alonabot/：复用 goal-69 的 alonabot run <目录...> 开发入口，读取 core_config.json，经 File.PrepareInstances 准备 Adapter 实例后启动
-- 新增 examples/plugins/echo/ 的媒体回送能力（收到图片时以 incoming_ref 原样回送）；新增 examples/plugins/media/（上传一个内置图片并发送相册与按钮）
-- adapters/telegram/telegramtest/：补齐矩阵所需的故障注入（getUpdates 409、提交后超时、相册后 markup 失败等）
-- 新增 cmd/alonabot/telegram_e2e_test.go（//go:build unix）
-- spec/TEST-MATRIX.md §3.2：追加 T-03 的证据行（本切片获授权修改这一处；其他 spec 文件不改）
-- 上述包的测试文件
-允许的新跨模块边：cmd/alonabot 的测试 -> adapters/telegram/telegramtest（测试代码，审查者确认允许）。
+- examples/plugins/echo/main.go；新增 examples/plugins/echo/plugin.yaml；仅经现有生成器更新 examples/plugins/echo/alonabot_gen.go：保留文本回送，增加入站图片的 incoming_ref 原样回送，并补齐目录运行需要的工程身份。
+- 新增 examples/plugins/media/main.go、plugin.yaml、alonabot_gen.go、assets/sample.png、i18n/en-US.json、i18n/zh-CN.json：一个上传内置图片、发送相册与末尾文本按钮、处理按钮并编辑文本的最小示例。alonabot_gen.go 由现有生成器产生。
+- 新增 examples/plugins/media/README.md：给出 core_config.json 的实例配置与同时运行两个示例的命令，使用环境变量占位，不写实际凭证。
+- adapters/telegram/plan.go：只补 renderMedia 对 Core 给出的 PlatformFile 的消费，原样作为 Bot API file_id；保留现有计划、预检、顺序与错误处理。审查者已确认由本切片完成，goal-111 相应扣除。
+- adapters/telegram/telegramtest/server.go、send.go、media.go：只在现有故障注入/记录不足以表达矩阵时补齐内部实现，复用现有公开方法，不新增公开 API。
+- 新增 cmd/alonabot/telegram_e2e_test.go（//go:build unix）：一个目录运行主路径集成测试，复用该包既有 Core 子进程和临时目录辅助。
+- 本地、忽略、不提交：根包 telegram_local_test.go、cmd/alonabot/telegram_local_test.go、adapters/telegram/telegram_local_test.go；按需在 telegramtest/ 下写 *_local_test.go。根包本地测试复用 pipeline_test.go 的装配，临时 SDK 进程工程只写 t.TempDir()。
+- spec/TEST-MATRIX.md §3.2：追加本切片的证据行；本切片仅获授权修改这一节。
 
-接口：
-- goal-69 合并后复用其 alonabot run <目录...> 入口与组件身份；实例读取使用 settings.Load 与 File.PrepareInstances，schema 取 Adapter 工程的 adapter_config_schema.json；返回的配置经 remote.Process.StartInstance 下发，失败实例按 InstanceProblem 定位。
-- 不新增公开 Go 符号。
+允许的新跨模块边：cmd/alonabot 的集成测试 -> adapters/telegram/telegramtest；根包的 *_local_test.go -> adapters/telegram、adapters/telegram/telegramtest、internal/pluginkit（均仅测试装配）。这些测试边已由审查者确认，本切片获授权把它们登记进 ARCHITECTURE.md 的依赖表（只改这一处）。示例沿用 examples/plugins/... -> sdk/...，Telegram 沿用 adapters/... -> sdk/...；产品代码不新增跨模块边。
+
+接口（照此实现；除新示例的 New 外，复用 main 公开接口）：
+1. 开发运行与 Core：
+   func alonabot.Start(ctx context.Context, opts ...alonabot.Option) (*alonabot.Core, error)
+   func alonabot.Executable(path string, packageManifest []byte) alonabot.Option
+   func alonabot.Stdio() alonabot.Option
+   func (c *Core) Restart(ctx context.Context, id string) error
+   func (c *Core) RestartInstance(ctx context.Context, adapterID, instanceID string) error
+   func (c *Core) ReloadSettings(ctx context.Context) error
+   func pluginkit.BuildDev(ctx context.Context, dir, outDir string) (build pluginkit.Build, err error)
+   type pluginkit.Build struct {
+       Executable string
+       Manifest, PackageManifest, Digest []byte
+       Role, ID, AdapterID string
+   }
+   手工装配测试时传 alonabot.Executable(build.Executable, build.PackageManifest)。CLI 已有 --reload 与 --stdio，配置准备、实例恢复与热部署继续由现有 Core 所有者执行。
+
+2. 设置与 Adapter 进程：
+   func settings.Load(dataDir string) (*settings.File, error)
+   func (f *File) BindAdapter(adapterID, packageID string) (bool, error)
+   func (f *File) PrepareInstances(adapterID string, schema *configschema.Schema) (map[string]json.RawMessage, []settings.InstanceProblem, error)
+   func (p *remote.Process) Bind(ctx context.Context, in *host.Instance, caller router.Caller) error
+   func (p *remote.Process) StartInstance(ctx context.Context, instanceID string, configJSON []byte) error
+   func (p *remote.Process) StopInstance(ctx context.Context, instanceID string) error
+   func (p *remote.Process) Unbind()
+   func manifest.CheckDependencies(m *manifest.Manifest, in manifest.Installed) []manifest.Problem
+   core_config.json 示例结构：
+   {"adapters":{"telegram":{"package":"alonabot_adapter_telegram","$version":1,"default_instance":"tg_a","instances":{"tg_a":{"token":"${TELEGRAM_BOT_TOKEN_A}","api_base_url":"https://api.telegram.org","proxy_mode":"none"},"tg_b":{"token":"${TELEGRAM_BOT_TOKEN_B}","api_base_url":"https://api.telegram.org","proxy_mode":"none"}}}}}
+   模拟测试把 api_base_url 换成各自 Server.URL()；两个 Server 用不同 token 和 SetMe 账号。schema 来自 adapters/telegram/adapter_config_schema.json；配置归属与 PrepareInstances 已在 assembly.go 中接通。
+
+3. 插件对象、消息与媒体：
+   两个示例各提供 func New() *sdk.Plugin，New 中 p := sdk.NewPlugin()，sdk.UseGenerated(p, alonabotGenerated)；main 调用 sdk.Run(New())。
+   func (p *Plugin) On(routeID string, eventType sdk.EventType) *sdk.EventBuilder
+   func (p *Plugin) Command(path ...string) *sdk.CommandBuilder
+   p.On(..., sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error { ... })
+   p.Command("media").Handle(func(c *sdk.Context) error { ... })
+   func (c *Context) Send(m message.Content, opts ...sdk.SendOption) (*message.SendResult, error)
+   func sdk.Send(ctx context.Context, to message.Session, m message.Content, opts ...sdk.SendOption) (*message.SendResult, error)
+   func sdk.To(s message.Session) sdk.SendOption
+   func sdk.Via(instanceID string) sdk.SendOption
+   func (c *Context) Edit(ref message.MessageRef, m message.Content) (*message.SendResult, error)
+   func sdk.Upload(ctx context.Context, r io.Reader, mime string) (*message.MediaRef, error)
+   func sdk.OpenMedia(ctx context.Context, src message.MediaSource) (io.ReadCloser, error)
+   func sdk.GrantMedia(ctx context.Context, token, granteePluginID string, sessions ...message.Session) (string, error)
+   func (m *message.MediaRef) Source() message.MediaSource
+   func (m *message.IncomingMedia) Source() message.MediaSource
+   message.Content 由 message.Segment 和 message.Chain 实现；入站图片用 message.ImageSegment.Source，其中 Incoming 为 *message.IncomingMedia。会话用 message.Session，编辑与引用用 message.MessageRef（result.Ref()/Refs()、event.Ref()），引用构造用 message.Quote(ref)。
+
+4. 按钮、权限与可选 HTTP：
+   func sdk.Action[T any](name string) sdk.ButtonAction[T]
+   func (a ButtonAction[T]) Button(label string, value T) message.Button
+   func sdk.OnButton[T any](r sdk.Registrar, a sdk.ButtonAction[T]) *sdk.ButtonBuilder[T]
+   func (b *ButtonBuilder[T]) Handle(h func(*sdk.Context, T) error)
+   func message.Buttons(rows ...[]message.Button) message.Segment
+   路由 Permission 使用 sdk.Anyone、sdk.User、sdk.Admin、sdk.ChatAdmin 或 sdk.PermissionName(name)，Actor.Permissions 为权限名集合；Core Admin 取 admins 中的 "telegram:<用户 ID>"。
+   测试 Adapter 按需实现：
+   type sdk.AdapterHTTP interface { HTTP(route func(method, path string) *sdk.RouteBuilder) }
+   route("POST", "/inject").HandleFunc(handler) 声明私有路由，由真实管理认证调用；插件的私有观测路由用 p.Route(method, path).Handle/HandleFunc。SDK 托管 Listener 和内部 Session 凭证。
+   测试声明只使用 sdk/adapter.PermissionDeclaration，以及 adapter.Event[T](name, version)、Extension[T](name, version)、Action[P,R](name, version, scope)；按钮动作使用 sdk.Action[T](name)。
+
+5. 既有 wire 字段（仅核对、使用）：
+   contracts/proto/alonabot/v1/adapter.proto：AdapterInstanceStartRequest 的 instance_id=1、config_json=2、cursor=3；AdapterInstanceStopRequest.instance_id=1；AdapterDeliverRequest 的 instance_id=1、event=2、cursor=3；AdapterDeliverResponse.accepted=1。
+   identity.proto：Target 的 adapter_id=1、adapter_instance_id=2、account_id=3、chat_id=4、optional thread_id=5；Actor 的 repeated string permissions=6（trusted_roles 已 reserved）。
+   message.proto：Button.optional string core_token=4 由 Core 填写；SendResult.part_results=7；PartResult 的 platform_message_ids=4、message_ids_unavailable=5、error=6。
+   这些字段由现有转换层消费；插件和 Adapter 作者代码使用 sdk/message 与 sdk/errcode。
 
 行为：
-- 启动顺序：取得 core.lock → 启动 Adapter 进程并 Bind → 启动全部实例 → 启动插件。插件停止与 Core 退出时先停插件、再停 Adapter。Adapter 进程异常退出按有限重启策略恢复，Bind 后恢复已启用的实例。
-- 实例配置的 token、proxy 在 core_config.json 保留原值或 ${...} 引用，PrepareInstances 在运行副本展开后下发；它们只出现在 adapter.instance.start 请求中，不写日志。
-- 故障矩阵（全部以 telegramtest 运行，在 telegram_e2e_test.go 中各为一个子测试，并以 telegramtest.Calls() 的实际请求数量为证据）：
-  1) 同包两个实例单独启停；停一个不影响另一个，进程 PID 不变。
-  2) Adapter 进程被杀后恢复：两条 ADAPTER_EXITED 的 bot.offline，恢复后各一条 bot.online，从已保存游标继续，不重复交付。
-  3) 伪造其他实例的事件被拒（使用回环测试 Adapter 的方式无法覆盖时，以 Telegram 实例在 deliver 中填错 account_id 的测试钩子验证）。
-  4) 话题（thread）消息的回复带 message_thread_id。
-  5) 一条 Chain 生成多条物理消息与两次 Send 的区别：请求数分别为 N 与 2。
-  6) 提交后超时：第一个物理请求断开，结果 UNKNOWN，此后没有任何补发请求。
-  7) 相册后 markup 失败：PARTIAL，媒体组 ID 保留，没有重发相册。
-  8) message_id=0：PARTIAL，依赖它的 markup 为 NOT_ATTEMPTED。
-  9) 入站图片：两个插件共享一次 getFile 下载；授权与过期按 goal-7；超出配额 RESOURCE_EXHAUSTED。
-  10) 游标提交后崩溃：交付后杀掉 Core 进程，重启后不重复交付该 update。
-  11) getUpdates 409：实例停止并产生 INSTANCE_FAILED 的 bot.offline。
-  12) 按钮点击回到发送插件；编辑消息成功，不改为发送新消息。
-  13) Actor.locale、to_me 的映射（各一条）。
-- 证据：TEST-MATRIX §3.2 追加 T-03 一行，写明测试位置、命令、平台（darwin/arm64 等实际运行平台）与结果，模拟服务的结果标为「本地 Bot API 模拟」；真实 Telegram 标「未运行」并写明原因，不用模拟结果代替。
+- 示例可运行：在仓库根用 alonabot run adapters/telegram examples/plugins/echo examples/plugins/media --data-dir <临时数据目录>。echo 的文本行为保留；收到图片时以其原 Incoming 来源回送，保留图片说明与片段顺序，不读文件再上传来绕过来源语义。media 通过 sdk.Upload 上传嵌入图片（明确覆盖上传链路），用返回的 Source 构造连续图片相册；相册之后放一段文本承载按钮。按钮回调使用带类型的值，编辑文本消息的句柄取 result.Refs() 的末条。面向用户的固定文字与按钮标签经 i18n，错误和日志保持英文。
+- platform_file 衔接：renderMedia 识别 Core 传入的非空 PlatformFile，原样填写单媒体/相册的 media 参数，不取件、不 base64 转换。插件直接给出 PlatformFile 仍由现有 Core 输入校验拒绝。只完成同实例图片回送必需的消费分支，保留其他来源行为。
+- 生命周期沿用 Core：先持有 core.lock，再启动/激活组件、Bind Adapter、按归属准备并启动实例。测试用目录参数控制所需启动先后；全局停止沿用 Core 的共用停止起点、冻结和排空。一个实例的启停保持 Adapter PID 与其他实例不变；异常恢复只启动当前仍启用的实例。以观察插件记录 bot.online/offline；记录生命周期时保证观察插件已注册到对应事件路由。
+- 配置：token、proxy 的原值或 ${...} 写法留在 core_config.json；PrepareInstances 的运行副本展开后仅经 adapter.instance.start 送到所属 Adapter。插件进程的环境、Bootstrap、事件、回执和日志均不含平台 token/proxy；测试使用自己生成的虚构凭证。配置失败记录 InstanceProblem 的路径与原因，其他可启动实例照常启动。
+- 故障矩阵全部以本地 Bot API 模拟服务和真实 Core/SDK Session 完成；以下 1～13 的结果逐项留在 PR 与 TEST-MATRIX §3.2 的分项记录中：
+  1) 两个不同账号实例分别启动、停用、恢复，核对 PID、实际发送账号及实例隔离；停用原因是 STOPPED。另验证已停用的实例在 Adapter 崩溃恢复时保持停用（CONTRACTS §8）。
+  2) 两实例运行时杀掉测试拥有的 Adapter 进程：旧 Session 各产生一条 ADAPTER_EXITED 的 bot.offline，恢复后各一条 bot.online；从已保存游标继续，不重复交付。生命周期事件无 Actor/Target；Core 重启不补发历史上下线事件。
+  3) 用真实 SDK 回环 Adapter 的 Deliver 交付错误 adapter_id、instance_id、account_id，或用另一 Adapter Session 试图交付不属于它的实例事件，Core 拒绝并记诊断，目标插件没有收到事件。保留官方 Telegram 实例的正常对照；测试控制只在本地测试进程中实现。
+  4) 论坛 is_topic_message=true 的消息回复带正确 message_thread_id；普通超级群回复串与无 thread_id 的 General 话题按 MESSAGE-MODEL §6.1 处理。账号和话题的原 Target、显式 To/Via、收紧/撤销实例许可逐项核对；后台无目标返回 NO_DEFAULT_TARGET。
+  5) 一条 Chain 产生多个物理消息，与两次独立 Send 分别记录逻辑调用数、Server.Calls 的增量及 Requests 的物理顺序；相邻文本、首条引用、末条按钮按计划执行，PartIndex/SegmentIndexes 与确认 ID 全部保留。
+  6) 第一个物理请求完整到达模拟服务后用 Drop 断开响应：逻辑 UNKNOWN、该 part UNKNOWN，其余 NOT_ATTEMPTED；此前已有成功 part 时为 PARTIAL 并保留 ID。另用 FailMethod 覆盖平台明确拒绝的 REJECTED。各项均保留 payload+error，以后续实际调用数证明没有自动补发。
+  7) 末尾相册加按钮：UNSUPPORTED/REJECTED，首个平台发送请求增量为 0。合法的「相册→带按钮的尾随文本」计划中，让尾随文本请求失败，结果 PARTIAL，保留相册 ID，sendMediaGroup 恰调用一次。另以「相册→文本→文件」计划让文本失败，核对文件 part 为 NOT_ATTEMPTED。此项覆盖旧语句所谓「相册后 markup 失败」的部分成功意图，按当前平台可表达的计划取证。
+  8) ZeroMessageID 注入成功的单条/相册请求：对应 part ACCEPTED、MessageIDsUnavailable=true，ID 列表不含 "0"，所有计划成功时逻辑 ACCEPTED。缺少可用 ID 时不调用 Edit、不伪造句柄、不补发；若同一计划后续操作失败，整体为 PARTIAL，逐 part 保留具体状态。
+  9) 入站图片在 Read 前 getFile 增量为 0；两个真实插件 Session 的不同 token 读取同一小文件，仅一次 getFile，内容相同且缓存共享。另验证同实例 incoming_ref 回送直接使用 file_id，getFile 增量仍为 0；Grant 的合法/拒绝路径、token 过期、源实例许可收紧、越界 Target、配额 RESOURCE_EXHAUSTED、首个读者取消与 owner 退出后的租约按 CONTRACTS §1.3～§1.4、§8 取证。配额/TTL 使用既有 tune.Values 或 --args，值和命令写进证据。
+  10) 在持久游标已提交、Handler 尚未完成的位置以审计同步点杀掉测试 Core 子进程，清理它拥有的其余进程并等待退出后，在同一临时 data_dir 重启。核对 Offsets 与业务计数，已接纳 update 不再交付；允许该条未完成业务丢失。不得只用「等一段时间」猜测游标提交。
+  11) getUpdates 401 与 409（FailNext）：接收实例停止并产生 INSTANCE_FAILED 的 bot.offline；其他实例继续运行。启动时已有 webhook、getMe 账号重复的拒绝，以及显式 allowed_updates、逐条游标、匿名 sender_chat、7 天接收轮次重建，复用既有证据并对本次有改动或缺失的项做本地补证。
+  12) callback_query：先有 answerCallbackQuery 请求再执行对应发送插件的带类型按钮 Handler；非法/过期 token、其他 Target、inline-mode 缺少可核验 Target 时只拒绝和诊断。成功编辑及编辑带按钮用 editMessageText，保留原 ID；平台拒绝、不支持、含媒体的 Edit 按现有契约返回并保持 Send 请求数不变。每次 Edit 的既有出站 Hook 行为按生产装配验证。
+  13) Actor.locale 与 to_me：language_code 的 zh-CN/zh-TW/缺失等映射，私聊、回复机器人、mention/text_mention 各按契约；权限验证使用现行权限名集合。开发入口的必需/可选插件依赖、版本条件与 Adapter extension 依赖沿用 CheckDependencies，缺失必需项在启用前拒绝；不满足目标 Adapter 的 extension 为 UNSUPPORTED。
+- 请求数量以每个场景开始/结束的 Calls 差值与完整 Requests 对照，区分正常 long polling 和业务发送。现有 FailNext 已能注入 getUpdates 409，Drop 已能表达请求到达后的响应断开；只有取证确有缺口时才修改模拟器内部记录，保持模拟器与当前契约一致。
+- 证据追加为「T-03.10 / 对应 V 分项」行，包含候选版本、测试位置、完整命令、实际 GOOS/GOARCH、Go 版本、传输、进程、模拟服务版本/故障方式、结果及日志位置。真实 Telegram 明确写「未运行：维护者未提供 Telegram 凭证和授权测试会话」；既有历史实测记录保留其原版本和范围。本次模拟通过后，仅更新实际完成的 T-03 分项。
 
-测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/telegram_e2e_test.go（上述矩阵）；构建 cmd/alonabot、adapters/telegram/cmd/alonabot-adapter-telegram、examples/plugins/echo 与 media 后以真实进程运行。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：实例配置的非法 JSON、迁移与校验失败、空实例集，以及失败实例不影响其余可启动实例。
-- 若维护者提供了测试账号：在 PR 中另附一次真实 Telegram 的手动运行记录（命令、时间、结果），不写入提交的测试。
+测试（按编码规范「测试提交规则」与 D-86）：
+- 提交：cmd/alonabot/telegram_e2e_test.go 的一个 TestTelegramDevelopment（unix）。通过真实 CLI 的 run 目录入口构建并运行官方 Telegram Adapter、echo、media，测试临时 data_dir 与两个账号的模拟服务：文本/话题回复、incoming 图片原样回送、Upload→相册→尾随文本按钮、点击后编辑原文本消息，以及带按钮尾随文本失败后保留相册且不重发。断言 Bot API 请求顺序、参数、上传字节、实例隔离和最终业务效果；需要检查回执的分项由本地多进程矩阵取得。理由：长期守住本切片新增的目录示例接入与跨进程媒体/按钮主路径，一个测试内用子测试组织。
+- 本地自测：根包 telegram_local_test.go 的 TestTelegramFaultMatrix（unix）完成上述矩阵的其余分项，TCP 与 stdio 各一遍；复用 pipeline_test.go 的 newPipeline/newPipelineAt、assemble、真实 SDK 进程和 SQLite。必要的测试模式以现有 TestMain 在 m.Run() 中执行本地辅助 Test 的方式接入，或在 t.TempDir() 写临时工程经 BuildDev 构建；不修改现有 TestMain 的分流与断言。正常平台路径用官方 Adapter；伪造归属等攻击输入用真实 SDK 回环 Adapter，记录为 Core 信任边界证据。
+- 本地自测：cmd/alonabot/telegram_local_test.go 覆盖目录身份/配置失败、非法 JSON、实例迁移与校验失败、空实例集、单个失败实例不影响其他实例；--reload 下配置变化只重启指定实例，Adapter PID、其他实例与插件 PID 保持；手工根包装配传递 PackageManifest，并核对 Restart/RestartInstance/ReloadSettings 的既有职责。
+- 本地自测：adapters/telegram/telegram_local_test.go 覆盖新增 PlatformFile 消费及保留的媒体来源分支、当前相册按钮拒绝和零 ID 断言；telegramtest 的记录/故障辅助若改动，在该包 *_local_test.go 自测。
+- 不向 sdk/、internal/core/supervisor/ 提交测试，不新增 testdata 测试插件；本地测试、辅助进程和临时工程不提交，PR 写明实际命令、平台与结果。真实 Telegram 在本切片固定记为「未运行」。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+完成条件：
+- echo/media 均能从工程目录由现有 run 构建并运行；所有新生成资源由现有生成器产生，生成一致性检查覆盖本次修改的示例。
+- gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。记录主路径与本地矩阵的实际测试命令；需要单独复现时分别用 go test -race -count=1 ./cmd/alonabot -run '^TestTelegramDevelopment$' 和 go test -race -count=1 . -run '^TestTelegramFaultMatrix$'，本地辅助 Test 的实际运行方式同时记录。已有同一候选的通过结果可复用。
+- 上述 1～13 每项有本次结果或适用的既有证据；新增链路与发送/接收故障必须经真实 Core/SDK 进程取证，未执行的分项写「未运行」并说明原因。现有证据只在实现与输入仍相同时复用。
+- TEST-MATRIX §3.2 有本次 T-03 分项证据及真实 Telegram「未运行」记录；PR 附本地测试结果、提交测试新增行数、故障日志和待审查者同步的文档清单。
+- 对照 T-03「失败停止条件」：凭证串用/泄漏、其他 Session 实例事件被接纳、实例启停牵连整个进程、成功被误报未发送、部分结果丢 ID、已知不支持却先发消息、失败后补发、媒体越权/超预算、游标重放或重复 owner，任一出现均须停止验收并修复；修复涉及范围外文件、proto、依赖或契约冲突时标阻塞交审查者，不用删断言或降级示例解除。
 
-不做：正式安装与实例管理（T-09.4）；其他平台的 Adapter。
+不做：重新实现 run/热部署或增加 --adapter-id 等 CLI 参数；Core 根包装配/启动取消/停止状态机改造；候选 Journal、schema.sql 和 manage 清理清单；Agent、Broker/options、SDK 任务 API 与日志管理；正式安装/卸载和管理流程的重复实现；T-03.20 的其他媒体功能、file_base_url、流式 multipart、voice/GIF/url 按钮与其他平台 Adapter；Service required_permissions 的新 SDK API；真实 Telegram 验证；除获授权的 TEST-MATRIX §3.2 外的 spec、PLAN、ADR、ARCHITECTURE 修改。
 ```
 
 ### goal-131 · T-03.25 聊天目录

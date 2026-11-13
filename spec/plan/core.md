@@ -235,7 +235,7 @@ Adapter 以安装包和独立进程运行（CONTRACTS §8）。以下步骤中�
 
 15. **流式输出（D-98、D-135）。** SDK 的 `c.Stream(next func(context.Context) (string, error)) ([]*message.SendResult, error)` 按 MESSAGE-MODEL §4A 处理文本增量、结束/错误与回执，选择节流编辑或缓冲后发送一次；同 Session 同完整 Target 的编辑间隔 1 秒，失败即停止，每次发送与编辑照常执行出站 Hook。在 `message.send` Capability 上追加 `text_limit{max, unit}`，单位为 UTF-16 码元、Unicode 码点或 UTF-8 字节，补齐 Adapter 描述、实例启动、事件与 SDK 的传递和边界校验；SDK 按声明换条，未声明不换条。官方 Telegram Adapter 用现有 `maxTextUTF16` 声明 4096 UTF-16 码元。proto 按 T-03.13～T-03.19 的授权只追加字段，字段号按合入时 main 分配；不新增流式服务。Telegram 的草稿是它的平台动作（步骤 18）。
 
-16. **Adapter 的 HTTP 路由（D-94、D-136）。** Adapter 的 REGISTER 可以携带 HTTP 路由与实际监听的 loopback endpoint，复用插件的路径、方法与端点校验，角色限制按 CONTRACTS §9.1；SDK 根包的可选 `AdapterHTTP` 接口为 `HTTP(*HTTPRegistry)`，`sdk.RunAdapter` 在声明了路由时托管 Listener。平台 token 路由用 `Public(AuthPlatformToken)`，追加对应 `HTTP_AUTH_MODE_PLATFORM_TOKEN` 枚举值；代理从可信安装角色区分路由，Adapter 包的 Authorization 保留并由 Adapter 校验，插件路由继续清除，两者均清除内部代理凭证、CSRF、Cookie、Forwarded 与 X-Forwarded-* 后注入内部凭证。统一端口代理转发 WebSocket Upgrade，升级后的连接不受普通请求期限限制，路由撤销、Session 失效或代次变化时关闭。
+16. **Adapter 的 HTTP 路由（D-94、D-136）。** Adapter 的 REGISTER 可以携带 HTTP 路由与实际监听的 loopback endpoint，复用插件的路径、方法与端点校验，角色限制按 CONTRACTS §9.1；SDK 根包的可选 `AdapterHTTP` 接口为 `HTTP(route func(method, path string) *RouteBuilder)`，`sdk.RunAdapter` 在声明了路由时托管 Listener。平台 token 路由用 `Public(AuthPlatformToken)`，追加对应 `HTTP_AUTH_MODE_PLATFORM_TOKEN` 枚举值；代理从可信安装角色区分路由，Adapter 包的 Authorization 保留并由 Adapter 校验，插件路由继续清除，两者均清除内部代理凭证、CSRF、Cookie、Forwarded 与 X-Forwarded-* 后注入内部凭证。统一端口代理转发 WebSocket Upgrade，升级后的连接不受普通请求期限限制，路由撤销、Session 失效或代次变化时关闭。
 
 17. **Telegram 的媒体与新增片段。** 在[Telegram 实施计划](adapters/telegram.md#t-03-的-telegram-步骤)中实施。
 

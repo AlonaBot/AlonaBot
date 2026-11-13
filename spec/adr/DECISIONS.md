@@ -314,3 +314,4 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-11-13：审查者补齐 T-12.14 的跨库失败规则：Agent 的图片记录所属 Core 会话条目序号，回放只取 Core 中仍存在的条目对应的图片；Core 追加成功而图片写入失败时保留文字、不回放图片并记 WARN，/reset 删除图片失败时向用户返回错误，管理服务直接清除 Core 会话后残留图片不回放，下一次 /reset 清理。图片表并入 Agent 受管库的初始迁移。
 - 2026-11-13：审查者补齐 T-09.10 的日志订阅规则：每个 SSE 订阅有 LOG_BUFFER_RECORDS 条的发送队列，满时不阻塞写入，Core 先发 `event: overflow` 再结束该订阅，客户端用 recent 补齐；历史查询按文件中实际的来源标签与 8 位 trace 前缀筛选。TEST-MATRIX V-63 按 CONTRACTS §14.3 改为全局级别的运行时修改也写回文件。T-09.13 只交付 HTTP 层，经 HTTP 真实更新成功的验收移到 T-09.6。
 - 2026-11-13：**审查者补齐，待维护者确认**：T-13.3 新增根包 `Core.ReloadSettings(ctx) error`（开发运行的轮询只发现 Core 设置变化时调用，同步 Core Admin、缺省实例与全局日志级别，不重启组件，`--log-level` 继续优先）；`Executable(path, packageManifest)` 的第二个参数为构建生成的包内 manifest。
+- 2026-11-13：审查者调整 T-03.10 与 T-03.20 的分界：Telegram 发送时对 Core 给出的 platform_file（同实例 incoming_ref）的消费由 T-03.10 以最小修复补齐，使 echo 示例按原来源回送图片；T-03.20 不再包含这一项。T-03.10 的相册带按钮与零 message_id 两处验收按 MESSAGE-MODEL §4、§6.2 与 V-35 改写。
