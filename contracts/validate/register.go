@@ -31,6 +31,13 @@ const maxToolDescriptionBytes = 1024
 
 const scheduleRoutePrefix = "job."
 
+const (
+	// OptionsQuerySchemaID 固定 SDK 选项查询输入的类型标识，版本为 1。
+	OptionsQuerySchemaID = "github.com/AlonaBot/AlonaBot/sdk.OptionsQuery"
+	// OptionsPageSchemaID 固定 SDK 选项查询输出的类型标识，版本为 1。
+	OptionsPageSchemaID = "github.com/AlonaBot/AlonaBot/sdk.OptionsPage"
+)
+
 // routeKindOf 给出 RouteDescriptor 的 spec 分支对应的 kind。
 func routeKindOf(r *pb.RouteDescriptor) pb.RouteKind {
 	switch r.GetSpec().(type) {
@@ -377,6 +384,15 @@ func registerHTTPRoute(routes map[[2]string]string, route *pb.RouteDescriptor, i
 func registerService(route *pb.RouteDescriptor) error {
 	service := route.GetService()
 	name := service.GetServiceName()
+	if service.GetOptionsSource() {
+		if service.GetEncoding() != pb.PayloadEncoding_PAYLOAD_ENCODING_JSON ||
+			route.GetInputSchemaId() != OptionsQuerySchemaID || route.GetInputSchemaVersion() != 1 ||
+			route.GetOutputSchemaId() != OptionsPageSchemaID || route.GetOutputSchemaVersion() != 1 ||
+			service.GetAccess() != pb.ServiceAccess_SERVICE_ACCESS_PRIVATE ||
+			len(service.GetAllowlistPluginIds()) != 0 || service.GetTool() != nil {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q has invalid options source declaration", name)
+		}
+	}
 	if !IsServiceName(name) || route.GetRouteId() != "svc."+name {
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service route %q has invalid name or route_id", route.GetRouteId())
 	}

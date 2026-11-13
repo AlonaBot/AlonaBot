@@ -94,6 +94,9 @@ func checkAttributes(f *field, path string, problems *[]Problem) {
 		case "options", "labels":
 			allowed = f.typ == typeString || f.typ == typeList && !f.attributes.has("items")
 			valid = stringArray(p.value)
+		case "options_from":
+			allowed = f.typ == typeString || f.typ == typeList && !f.attributes.has("items")
+			_, valid = p.value.(orderedObject)
 		case "slider":
 			allowed = f.typ == typeInt || f.typ == typeFloat
 			_, valid = p.value.(orderedObject)
@@ -108,6 +111,16 @@ func checkAttributes(f *field, path string, problems *[]Problem) {
 			*problems = append(*problems, Problem{attributePath, "attribute does not apply to this field type"})
 		} else if !valid {
 			*problems = append(*problems, Problem{attributePath, "invalid attribute value type"})
+		}
+	}
+	if from, ok := f.attributes.get("options_from").(orderedObject); ok {
+		checkOptionsFrom(from, joinPath(path, "options_from"), problems)
+	}
+	if f.attributes.has("options_from") {
+		for _, key := range []string{"options", "labels", "secret"} {
+			if f.attributes.has(key) {
+				*problems = append(*problems, Problem{joinPath(path, key), "options_from must not coexist with options, labels or secret"})
+			}
 		}
 	}
 	for _, required := range []struct{ typ, key string }{{typeObject, "items"}, {typeTemplate, "templates"}, {typeTemplateList, "templates"}} {

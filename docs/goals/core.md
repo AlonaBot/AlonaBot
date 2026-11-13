@@ -49,7 +49,7 @@
 | goal-54 | T-11.1 | 工具描述、目录与策略 | T-04.4、T-04.7、T-06.1 | 已完成（PR #101） |
 | goal-91 | T-04.8 | SDK 自有类型与事件常量 | T-03.9、T-03.24、T-04.7、T-04.9 | 已完成（PR #141） |
 | goal-123 | T-08.13 | 文案函数只返回字符串 | T-04.9、T-08.8 | 已完成（PR #137） |
-| goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 待派发 |
+| goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 已完成（PR #157） |
 | goal-24 | T-07.2 | schedule 注册与运行槽 | T-05.1、T-07.1 | 已完成（PR #107） |
 | goal-35 | T-08.9 | configdb 示例与 T-08 验收 | T-08.6、T-08.7、T-08.8、T-08.11 | 已完成（PR #117） |
 | goal-101 | T-08.12 | Adapter 实例配置与 Core 设置的版本迁移 | T-07.6、T-08.11 | 已完成（PR #114） |
@@ -68,20 +68,20 @@
 | goal-16 | T-05.2 | Rule、HandlerOutcome 与传播 | T-05.1、T-04.7、T-04.8 | 已完成（PR #145） |
 | goal-27 | T-07.5 | 调度与 HTTP 启停集成及验收 | T-07.2、T-07.4 | 已完成（PR #119） |
 | goal-39 | T-09.4 | 管理服务、安装记录与 run | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | 待派发 |
-| goal-68 | T-13.2 | 开发组件的配置与数据库 | T-07.6、T-08.5、T-08.11、T-13.1 | 待派发 |
+| goal-68 | T-13.2 | 开发组件的配置与数据库 | T-07.6、T-08.5、T-08.11、T-13.1 | 已完成（PR #160） |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 已完成（PR #155） |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 已完成（PR #153） |
 | goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 已完成（PR #159） |
-| goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 待派发 |
+| goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 已完成（PR #158） |
 | goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 已完成（PR #156） |
 | goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 等待前置 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
 | goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 等待前置 |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 待派发 |
-| goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 待派发 |
+| goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 已完成（PR #161） |
 | goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 等待前置 |
 | goal-92 | T-09.13 | 管理页所需的会话与上传接口 | T-09.1、T-09.4、T-09.12 | 等待前置 |
 | goal-70 | T-13.4 | 开发运行示例与验收 | T-03.10、T-13.2、T-13.3 | 等待前置 |
@@ -4720,7 +4720,7 @@ goal-125 若先合并，Collect 改为收 *Plugin，命令、事件与 OnButton 
 
 ### goal-68 · T-13.2 开发组件的配置与数据库
 
-状态：待派发。前置均已合并：T-13.1（[PR #149](https://github.com/AlonaBot/AlonaBot/pull/149)，合并提交 `bc39361`）、T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）、T-07.6（PR #100）、T-08.5（PR #79）、T-08.11（PR #103）。2026-11-12 审查者按 main `56550de` 的代码改写，现有代码如下：
+状态：已完成（[PR #160](https://github.com/AlonaBot/AlonaBot/pull/160)，合并提交 `65ebc5f`），证据见 TEST-MATRIX §3.2。合入：根包 startDevelopment 读取 `plugins/<id>/config.json`，Bootstrap 的数据库为 `dev.sqlite`（first_install/resume，migration_mode UNSPECIFIED），日志级别缺省 debug（settings 的来源级别优先，读取装配共用的 `settings.File`）；`state.Store.SetDevGenerationConfig(ctx, generationID, snapshot, configVersion, secretPaths)`；`internal/inproc.Launch.Log` 与 `logging.Output.Component(pluginID, generationID)`；host 在 Bootstrap 方式为 UNSPECIFIED 时接受明确回报；SDK 对 `dev:` 代次的 RESUME 允许 OnConfigLoad 变换配置。执行中审查者扩充授权（host、logging、inproc、state）。配置写回随 T-09.14；dev 来源拒绝 update/rollback/uninstall 与开发 Adapter 的实例在 goal-39。派发时：前置均已合并：T-13.1（[PR #149](https://github.com/AlonaBot/AlonaBot/pull/149)，合并提交 `bc39361`）、T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）、T-07.6（PR #100）、T-08.5（PR #79）、T-08.11（PR #103）。2026-11-12 审查者按 main `56550de` 的代码改写，现有代码如下：
 
 - **开发组件的 Bootstrap**：根包 `assembly.go` 的 `startDevelopment` 用 `bootstrap(generation, initialConfigVersion)` 构造，固定为 `CandidateConfigJson: "{}"`、`DatabaseDescriptor{Backend: NONE, MigrationMode: NONE}` 与 `LogLevel: INFO`；资源来自 `entry.resources`（插件对象的 `p.Generated()`）。
 - **代次与提交**：代次固定为 `dev:<id>`，首次以 `AddGeneration` 建快照，经 `host.Prepare`/`host.Activate` 激活并在首次 `CommitActive`；开发组件的数据目录为 `<data_dir>/plugins/<id>`。
@@ -5164,7 +5164,7 @@ sdk（替换与新增；*Plugin 与 *SubPlugin 各有一套同名方法）
 
 ### goal-126 · T-04.13 Service 与 Event Bus 的带类型声明
 
-状态：待派发。前置 T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并。2026-11-12 审查者按 main `9983182` 的代码写出范围、接口与测试段，现有代码如下：
+状态：已完成（[PR #158](https://github.com/AlonaBot/AlonaBot/pull/158)，合并提交 `464ccfd`），证据见 TEST-MATRIX §3.2。合入：`sdk.JSON[In, Out](target) Service[In, Out]`、`sdk.Proto[In, Out](target)`、`sdk.Serve(r, s) *ServiceBuilder[In, Out]`（`Access`、`Tool`、`Handle`）、`Service.Call(ctx, in)`；`sdk.BusEvent[T](name) BusEventType[T]` 与 `Publish(ctx, payload)`、`sdk.Subscribe(r, e) *Subscription[T]`（路由 ID 缺省为事件名，`ID(routeID)` 另给，`Handle`）；删除 CallJSON、CallProto、Publish 与旧形式的 JSON、Proto、Subscribe。target 的组件部分在握手取得插件 ID 后、REGISTER 前核对，`@agent` 只检查格式；调用方生成器为依赖模块的声明嵌入输入、输出 Schema；Schema 校验失败的公开错误只含 target 与方向。范围修订：组件归属改在握手后核对（D-52，SDK 根包不链接 yaml）。派发时：前置 T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）已合并。2026-11-12 审查者按 main `9983182` 的代码写出范围、接口与测试段，现有代码如下：
 
 - **Service 注册**：`sdk.JSON[In, Out any](owner Registrar, name string) *JSONService[In, Out]` 与 `sdk.Proto[In, Out proto.Message](owner Registrar, name string) *ProtoService[In, Out]`（`sdk/services.go`），builder 有 `Access`、`Tool`（仅 JSON）与 `Handle`。
 - **Service 调用**：`sdk.CallJSON[In, Out any](ctx, target string, in In) (Out, error)` 与 `sdk.CallProto[Out proto.Message](ctx, target string, in proto.Message) (Out, error)`。
@@ -5326,7 +5326,7 @@ sdk（新增或替换）
 
 ### goal-130 · T-08.14 配置项的选项来源
 
-状态：待派发。前置均已合并：T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）、T-06.1（PR #45）、T-08.11（PR #103）。2026-11-12 审查者按 main `2828864` 的代码写出范围、接口与测试段，现有代码如下：
+状态：已完成（[PR #157](https://github.com/AlonaBot/AlonaBot/pull/157)，合并提交 `e709135`），证据见 TEST-MATRIX §3.2。合入：`configschema.BuiltinOptionSources`、`Schema.OptionsFrom`；`ServiceSpec.options_source = 6`；`validate.OptionsQuerySchemaID`/`OptionsPageSchemaID`；tune 的 `OPTIONS_PAGE`；`sdk.ServeOptions(r, serviceName, fn)` 与 `OptionsQuery`、`OptionsPage`、`Option`（自有服务只声明名称，归属在注册时确定）；`internal/core/options` 的 `New(Options{Schema, Router, Broker, Instances, Page})` 与 `Query`；`Broker.CallSession(ctx, c, target, in)` 与 `Router.PluginFor(c)`；根包 assemble 加载 `settings.File` 并按 Session 发布选项 schema。范围修订：`@agent` 来源的解析归 T-12.8（goal-83），之前返回 UNAVAILABLE。派发时：前置均已合并：T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）、T-06.1（PR #45）、T-08.11（PR #103）。2026-11-12 审查者按 main `2828864` 的代码写出范围、接口与测试段，现有代码如下：
 
 - **配置 schema**：字段属性在 `contracts/configschema/declaration.go` 的属性 switch 中逐项校验。`options`、`labels` 只用于 string 与没有 items 的 list；secret 不能与 default、options 并存。
 - **ServiceSpec**：现用到字段 5（tool）；`ServiceAccess_SERVICE_ACCESS_PRIVATE` 表示只允许 Core 与本插件。
@@ -5602,10 +5602,10 @@ sdk（新增或替换）
 
 验收矩阵（pipeline_test.go 中各为一个子测试，以 Adapter 收到的发送与编辑、插件写出的调用次序记录与 HandlerOutcome 为证据）：
 1) 三个插件 priority 为 0、0、-1，以两种不同的安装与启动顺序运行：调用顺序都是 (priority, plugin_id, route_id)。
-2) 自定义 Rule 为 false 与出错：事件路由跳过；已识别的命令被消费且不回落到 Raw 与事件路由（V-11 的真实 Rule 分项）。
-3) 两种 Handler：自动回复只发一次；手动多次 Send；自动回复型 Handler 内的 Send 被拒。
+2) 自定义 Rule 为 false 与出错：事件路由跳过；已识别的命令被消费且不回落到短路径、文本匹配与 Raw，没有 Stop 时 message.created 仍进入事件路由，StopPropagation 后不进入（CONTRACTS §2.2 第 3 条，D-44；V-11 的真实 Rule 分项）。
+3) 两种 Handler：自动回复只发一次；手动多次 Send；自动回复型 Handler 内的显式 Send 照常发送，自动回复排在其后（MESSAGE-MODEL §3，D-70）。
 4) Hook：PreEvent 改写载荷后后继路由看到改写结果；BeforeSend 改写链与拒绝发送；AfterSend 出错不改变发送结果；每次 Send 经过一组 Hook。
-5) 恶意载荷：回环 Adapter 交付的事件与 PreEvent 的返回尝试改 Actor、Target、button 的 action/value、scheduled 的 job_id：插件收到的仍是 Core 保留的值。
+5) 恶意载荷：回环 Adapter 交付的事件与 PreEvent 的返回尝试改 Actor、Target：插件收到的仍是 Core 保留的值；PreEvent 对 button.clicked 与 scheduled 返回载荷（改 action/value 或 job_id）时按 Hook 失败终止入站链并记 WARN，没有 Handler 收到伪造值，去掉该 Hook 后原绑定照常工作（CONTRACTS §2.3）。
 6) 按钮：发送带 `sdk.Action` 按钮的消息后，回环 Adapter 交付点击：调用正确的插件与动作；另一用户点击也调用一次并按该用户鉴权；过期 token 不调用、不落入 Raw。
 7) 等待：两个用户在同一群同时 Wait，各自只收到自己的下一条消息，这些消息不进入普通分发；超时为 DEADLINE_EXCEEDED；等待期间停用插件，重新启动后不补发。
 8) 延迟 Handler（睡眠数秒）执行期间，同一插件 Session 的另一请求的 Response 与 Cancel 正常完成，其他事件照常派发。
@@ -5624,7 +5624,7 @@ sdk（新增或替换）
 
 ### goal-20 · T-06.2 父调用链、取消与背压
 
-状态：待派发。T-05.3（[PR #155](https://github.com/AlonaBot/AlonaBot/pull/155)，合并提交 `53393aa`）、T-03.6（PR #55）、T-06.1（PR #45）已合并。2026-11-12 审查者按合并后的 main 核对：
+状态：已完成（[PR #161](https://github.com/AlonaBot/AlonaBot/pull/161)，合并提交 `b4610e1`），证据见 TEST-MATRIX §3.2。合入：`broker.New(broker.Options{Router, RequestTimeout, MaxDepth})`；`router.Invocation` 的 `Chain`、`Scopes` 与导出的 `TraceID`；Broker 从父附件继承 actor、default_target、scopes、send_forbidden 与 trace，链为父链加调用方，CALL_CYCLE 与深度检查在调用目标前返回；Hook 调用的附件继承父链加父插件、scopes 与 trace，Scheduler 的父附件带本次 tick 的 trace。父请求结束时的取消与背压由 wire 的现有机制提供，以三进程场景验证。执行中审查者授权导出 TraceID 并修改 hook 与 scheduler。派发时：T-05.3（[PR #155](https://github.com/AlonaBot/AlonaBot/pull/155)，合并提交 `53393aa`）、T-03.6（PR #55）、T-06.1（PR #45）已合并。2026-11-12 审查者按合并后的 main 核对：
 - `broker.New(r *router.Router, requestTimeout time.Duration)`，调用方为根包 assembly.go（goal-130 的选项查询也使用它）；`Broker.Call` 已从 `in.ParentAttach.(*router.Invocation)` 派生 Actor 与默认 Target，`InvocationContext.plugin_chain` 目前只有调用方一跳，`send_forbidden` 与 `scopes` 没有继承；期限已取 REQUEST_TIMEOUT、调用方期限与 ctx 期限中最早者；`b.calls` 以子调用的 Invocation 记录调用来源。
 - `router.Invocation{PluginID, Event, DefaultTarget, SendForbidden, RouteID, Continuation}`；`SendForbidden` 由 hook 包在出站 Hook 调用时设置，message 的 send、edit、delete、action 检查父附件的这个标记（goal-17）。
 - `tune.Values.CallChainMaxDepth`（CALL_CHAIN_MAX_DEPTH，缺省 16）已登记。

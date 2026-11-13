@@ -247,6 +247,10 @@ func invocationContext(parent *router.Invocation, forbidden bool) *pb.Invocation
 	if parent != nil {
 		trusted.Actor = parent.Event.GetActor()
 		trusted.DefaultTarget = parent.DefaultTarget
+		trusted.Scopes = slices.Clone(parent.Scopes)
+		if parent.PluginID != "" {
+			trusted.PluginChain = append(slices.Clone(parent.Chain), parent.PluginID)
+		}
 	}
 	return trusted
 }
@@ -260,10 +264,12 @@ func editedMessageID(op pb.SendOperation, edited string) *string {
 
 func call(ctx context.Context, candidate candidate, request, result proto.Message, parent *router.Invocation, forbidden bool) *pb.ErrorInfo {
 	// 1. 附件只在 Core 内保存；出站调用的附件和协议上下文均携带禁令。
-	invocation := &router.Invocation{PluginID: candidate.caller.PluginID, SendForbidden: forbidden}
+	trusted := invocationContext(parent, forbidden)
+	invocation := &router.Invocation{PluginID: candidate.caller.PluginID, Chain: trusted.PluginChain, Scopes: trusted.Scopes, SendForbidden: forbidden}
 	if parent != nil {
 		invocation.Event = parent.Event
 		invocation.DefaultTarget = parent.DefaultTarget
+		invocation.TraceID = parent.TraceID
 	}
 	encoded, err := proto.Marshal(request)
 	if err != nil {

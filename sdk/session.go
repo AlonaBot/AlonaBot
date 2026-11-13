@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,13 +34,15 @@ const scheduleRoutePrefix = "job."
 type launch struct {
 	runtimeLockPath string
 	inProcess       bool
+	log             slog.Handler
 	runtime         *componentSession
 	pluginID        string
-	transport       string        // tcp 或 stdio
-	addr            string        // TCP 传输时 Core 的 loopback 地址
-	secret          []byte        // 32 字节 Session Secret
-	digest          []byte        // 安装时已验证的归档摘要，在 HELLO 中原样回显
-	http            *httpListener // 有HTTP路由时持有本Run的Listener，传给prepare与activation
+	serviceSchemas  map[string][]byte // 当前组件的生成资源，Session 内只读。
+	transport       string            // tcp 或 stdio
+	addr            string            // TCP 传输时 Core 的 loopback 地址
+	secret          []byte            // 32 字节 Session Secret
+	digest          []byte            // 安装时已验证的归档摘要，在 HELLO 中原样回显
+	http            *httpListener     // 有HTTP路由时持有本Run的Listener，传给prepare与activation
 }
 
 // readLaunch 读取并校验 Core 下发的启动环境变量。
@@ -99,6 +103,9 @@ func withWatchdog(conn *wire.Conn, d time.Duration) (stop func()) {
 
 // clientHandshake 发送 HELLO 并等待 HELLO_ACK。
 func clientHandshake(conn *wire.Conn, l launch) (*pb.HelloAck, error) {
+	if l.log != nil {
+		l.runtime.log = l.log
+	}
 	stop := withWatchdog(conn, handshakeTimeout)
 	defer stop()
 	supported, required := httpOffer(l)
@@ -203,7 +210,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Reg
 			pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "Bootstrap is missing valid session limits", nil)
 	}
 
-	// 2. 在 OnStart 之前完成配置迁移、默认值与校验；restart 与恢复均使用 RESUME。
+	// 2. 在 OnStart 之前完成配置迁移、默认值与校验。
 	configContext, cancelConfig := context.WithTimeout(l.runtime.ctx, time.Duration(limits.GetConfigMs())*time.Millisecond)
 	var loader config.Loader
 	if root.onConfigLoad != nil {
@@ -219,9 +226,11 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Reg
 			return loaded, err
 		}
 	}
+	// 开发代次每次从 config.json 重新准备，恢复数据库时也允许 OnConfigLoad 变换配置。
+	restart := boot.GetDatabaseDescriptor().GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME && !strings.HasPrefix(boot.GetGenerationId(), "dev:")
 	preparedConfig, err := config.Prepare(configContext, loader, generatedFor(root).ConfigSchema,
 		[]byte(boot.GetCandidateConfigJson()), boot.PreviousConfigVersion, boot.GetTargetConfigVersion(),
-		boot.GetDatabaseDescriptor().GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME)
+		restart)
 	cancelConfig()
 	if err != nil {
 		failure := err.(*validate.Error) // Prepare 的失败均携带协议错误码和安全消息。
@@ -295,6 +304,10 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Reg
 	}
 
 	// 5. 发送完整 REGISTER；超过 4 MiB 时报告 RESOURCE_EXHAUSTED。
+	if err := checkServiceTargets(root, l.pluginID); err != nil {
+		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER,
+			pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error(), err)
+	}
 	registration := buildRegister(reg, string(preparedConfig.JSON), preparedConfig.Version, generatedFor(root).ConfigSchema)
 	registration.Migration = migration
 	l.http.report(registration)
@@ -361,7 +374,9 @@ func prepareMigrations(ctx context.Context, root *Plugin, descriptor *pb.Databas
 		if len(migrators) != 0 {
 			mode = migrators[0].Mode
 		}
-		if mode != descriptor.GetMigrationMode() {
+		// 同进程开发组件跳过构建步骤，由实际登记决定迁移方式。
+		discover := runtime.inProcess && descriptor.GetMigrationMode() == pb.MigrationMode_MIGRATION_MODE_UNSPECIFIED
+		if !discover && mode != descriptor.GetMigrationMode() {
 			completed <- result{err: &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: fmt.Sprintf("registered migration mode %s does not match manifest mode %s", mode, descriptor.GetMigrationMode())}}
 			return
 		}

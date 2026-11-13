@@ -131,10 +131,14 @@ func (o *Output) reportFileError(err error) {
 
 // Plugin 为插件进程的一次启动建立 [Source]，记录带 component=plugin、plugin_id 与 generation_id。
 func (o *Output) Plugin(pluginID, generationID string) *Source {
-	h := o.handler.WithAttrs([]slog.Attr{
+	return &Source{levels: o.levels, id: pluginID, h: o.Component(pluginID, generationID)}
+}
+
+// Component 返回带插件来源属性、不过滤级别的同进程日志目标；Adapter 的 SDK 补充 component=adapter。
+func (o *Output) Component(pluginID, generationID string) slog.Handler {
+	return o.handler.WithAttrs([]slog.Attr{
 		slog.String(KeyComponent, ComponentPlugin), slog.String(KeyPluginID, pluginID), slog.String(KeyGenerationID, generationID),
 	})
-	return &Source{levels: o.levels, id: pluginID, h: h}
 }
 
 // Levels 保存全局级别与按来源单独设置的级别；方法可以并发调用。

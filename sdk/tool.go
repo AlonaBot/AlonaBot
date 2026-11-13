@@ -30,7 +30,7 @@ type ToolInfo struct {
 // ListTools 读取当前插件可访问且策略允许列出的工具，按完整名称排序。
 // Session 尚未就绪或已停止时返回 FAILED_PRECONDITION。
 func ListTools(ctx context.Context) ([]ToolInfo, error) {
-	result, err := CallProto[*pb.ToolListResponse](ctx, wire.ServiceToolList, &pb.ToolListRequest{})
+	result, err := Proto[*pb.ToolListRequest, *pb.ToolListResponse](wire.ServiceToolList).Call(ctx, &pb.ToolListRequest{})
 	if err != nil {
 		return nil, err
 	}
