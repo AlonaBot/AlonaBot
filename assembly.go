@@ -151,6 +151,7 @@ type assembly struct {
 	media      *media.Store
 	buttons    *buttons.Service
 	bus        *bus.Bus
+	broker     *broker.Broker
 	scheduler  *scheduler.Scheduler
 	http       *httpproxy.Server
 	global     *wire.Budget
@@ -228,10 +229,10 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 	tool.New(store, a.router).Register(a.mux)
 	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes, Metrics: a.metrics})
 	a.bus.Register(a.mux)
-	serviceBroker := broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth, Metrics: a.metrics})
-	a.mux.Forward(serviceBroker.Call)
+	a.broker = broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth, Metrics: a.metrics})
+	a.mux.Forward(a.broker.Call)
 	a.schemas = make(map[string]componentOptionSchemas)
-	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: serviceBroker, Page: v.OptionsPage, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
+	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: a.broker, Page: v.OptionsPage, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
 		installed, err := store.Installs(ctx)
 		if err != nil {
 			return nil, err
@@ -544,19 +545,22 @@ func bootstrap(generation string, version uint32) *pb.Bootstrap {
 }
 
 func (a *assembly) detach(r *runningComponent) {
-	a.components.CompareAndDelete(r.id, r.instance)
-	a.router.Detach(r.id)
-	a.schemaMu.Lock()
-	delete(a.schemas, r.id)
-	a.schemaMu.Unlock()
-	a.bus.Detach(r.id)
-	a.scheduler.Detach(r.id)
-	if r.instance != nil {
-		a.http.Unbind(r.id, r.instance.GenerationID, r.instance.HTTPProxyToken)
+	// STOPPING 和退出收尾都可能到达；旧 Session 的迟到清理保留新绑定。
+	if a.components.CompareAndDelete(r.id, r.instance) {
+		a.router.Detach(r.id)
+		a.schemaMu.Lock()
+		delete(a.schemas, r.id)
+		a.schemaMu.Unlock()
+		a.bus.Detach(r.id)
+		a.scheduler.Detach(r.id)
+		if r.instance != nil {
+			a.http.Unbind(r.id, r.instance.GenerationID, r.instance.HTTPProxyToken)
+		}
+		if r.remote != nil {
+			r.remote.Unbind()
+		}
 	}
-	if r.remote != nil {
-		r.remote.Unbind()
-	}
+	a.broker.Release(r.caller)
 }
 
 func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.StopTiming, reason pb.StopReason) error {
@@ -687,7 +691,8 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 		Executable: executable, BuildDigest: install.BuildDigest, GenerationID: generation, Bootstrap: boot, ConfigSchema: resources.ConfigSchema, I18n: resources.I18n,
 		NewCandidate:  isNew,
 		DefaultLocale: c.assembly.settings.Settings().DefaultLocale, Handler: c.assembly.handler(running, install), Global: c.assembly.global, Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values),
-		Log: c.output.Plugin(install.PluginID, generation), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment})
+		Log: c.output.Plugin(install.PluginID, generation), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment,
+		Detach: func() { c.assembly.detach(running) }})
 	if err != nil {
 		return nil, err
 	}

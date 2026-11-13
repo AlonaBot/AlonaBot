@@ -30,10 +30,11 @@ import (
 )
 
 const (
-	chainMode      = "service-chain"
-	chainBadOutput = "invalid-output"
-	chainDeadline  = pipelineTimeout
-	chainBusBytes  = 1 << 20
+	chainMode           = "service-chain"
+	chainBackgroundMode = "service-chain-background"
+	chainBadOutput      = "invalid-output"
+	chainDeadline       = pipelineTimeout
+	chainBusBytes       = 1 << 20
 )
 
 type chainInput struct {
@@ -67,6 +68,40 @@ func chainSchema[T any]() string {
 }
 func chainService(id string) sdk.Service[chainInput, chainOutput] {
 	return sdk.JSON[chainInput, chainOutput](id + "/run")
+}
+
+func serviceChainBackgroundPlugin() *sdk.Plugin {
+	p := serviceChainPlugin()
+	id := os.Getenv(pipelineIDEnv)
+	sdk.Serve(p, sdk.JSON[chainInput, chainOutput](id+"/background")).Access(sdk.AccessPublic).Handle(func(c *sdk.Context, in chainInput) (chainOutput, error) {
+		// 后台根调用脱离本次 Handler，停止时须由 Core 按 Session 取消。
+		go func() {
+			_, err := chainService("c").Call(context.Background(), chainInput{Mode: "hang", Key: "background-stop"})
+			if err := pipelineAudit(pipelineRecord{Stage: "background-result", Code: chainCode(err).String()}); err != nil {
+				panic(err)
+			}
+		}()
+		return chainOutput{Value: chainText(id)}, nil
+	})
+	p.OnStop(func(ctx context.Context) error {
+		if err := pipelineAudit(pipelineRecord{Stage: "on-stop"}); err != nil {
+			return err
+		}
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, os.Getenv(pipelineAuditEnv)+"/release", nil)
+		if err != nil {
+			return err
+		}
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			return err
+		}
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusNoContent {
+			return fmt.Errorf("on-stop barrier status %d", response.StatusCode)
+		}
+		return nil
+	})
+	return p
 }
 
 func serviceChainPlugin() *sdk.Plugin {
@@ -405,6 +440,44 @@ func TestServiceChain(t *testing.T) {
 					}
 				}
 			})
+			t.Run("background-root-stopping", func(t *testing.T) {
+				h := newPipeline(t, stdio)
+				h.install("c", chainMode)
+				h.launch("c", chainMode, 0)
+				h.install("b", chainBackgroundMode)
+				b := h.launch("b", chainBackgroundMode, 0)
+				initial := h.assembly.global.Used()
+				chainAssertValue(t, chainCall(h, t.Context(), "b/background", chainInput{}), "b")
+				chainAwait(h, "service", "c", "background-stop", 1)
+				stopped := make(chan host.StopResult, 1)
+				go func() { stopped <- b.process.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE) }()
+				chainAwait(h, "on-stop", "b", "", 1)
+				chainAwait(h, "cancelled", "c", "background-stop", 1)
+				chainAwait(h, "background-result", "b", "", 1)
+				chainEventually(t, func() bool { return h.assembly.global.Used() == initial })
+				if b.instance.State() != host.StateStopping {
+					t.Fatalf("background cancellation state=%s", b.instance.State())
+				}
+				select {
+				case <-b.instance.Session.Done():
+					t.Fatal("background root waited for session close")
+				default:
+				} // OnStop 保持连接开放，确认取消发生在 STOPPING。
+				for _, record := range h.snapshot() {
+					if record.Stage == "background-result" && record.Code != errcode.Cancelled.String() && record.Code != errcode.Unavailable.String() {
+						t.Fatalf("background result=%+v", record)
+					}
+				}
+				if chainCount(h, "service", "c", "background-stop") != 1 || h.assembly.metrics.Snapshot()["c"]["service"]["cancelled"] != 1 {
+					t.Fatal("background root repeated or cancellation count missing")
+				}
+				t.Logf("caller=b pid=%d state=%s transport=%s; background target=c cancelled; budget=%d", b.process.Process.Pid(), b.instance.State(), chainTransport(stdio), h.assembly.global.Used())
+				h.release <- struct{}{}
+				if result := <-stopped; result.Err != nil {
+					t.Fatal(result.Err)
+				}
+				delete(h.components, "b")
+			})
 			t.Run("cycles-depth-concurrent", func(t *testing.T) {
 				h, observers := newServiceChain(t, stdio)
 				cycle := chainCall(h, t.Context(), "a/run", chainInput{Path: []string{"b", "a"}, Key: "cycle"})
@@ -423,7 +496,7 @@ func TestServiceChain(t *testing.T) {
 						chain[i] = fmt.Sprintf("ancestor%d", i)
 					}
 					req.ParentAttach = &router.Invocation{Chain: chain, TraceID: req.TraceID}
-					response := h.assembly.mux.For(router.Caller{PluginID: "origin"})(t.Context(), req)
+					response := h.assembly.mux.For(router.Caller{})(t.Context(), req)
 					if ancestors == 12 {
 						chainAssertValue(t, response, "a>b>c")
 					} else {

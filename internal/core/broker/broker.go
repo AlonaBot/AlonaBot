@@ -51,6 +51,8 @@ type Broker struct {
 type callOrigin struct {
 	caller router.Caller
 	callID uint64
+	target router.Caller
+	cancel context.CancelFunc
 }
 
 // New 按装配处传入的请求期限和调用链深度上限创建 Broker。
@@ -69,6 +71,17 @@ func (b *Broker) CallSession(ctx context.Context, c, target router.Caller, in *w
 	return b.call(ctx, c, in, &target)
 }
 
+// Release 取消以该 Session 为调用方或目标的全部在途转发，保留其他 Session 的调用。
+func (b *Broker) Release(c router.Caller) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, origin := range b.calls {
+		if origin.caller == c || origin.target == c {
+			origin.cancel()
+		}
+	}
+}
+
 func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, target *router.Caller) (result wire.Response) {
 	trace := in.TraceID
 	if parent, ok := in.ParentAttach.(*router.Invocation); ok {
@@ -85,16 +98,28 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid service target")
 	}
 	var plugin router.Plugin
+	var destination router.Caller
 	if target != nil {
 		if target.PluginID != pluginID {
-			b.metrics.Add(pluginID, "service", "offline")
+			b.metrics.Add(c.PluginID, "service", "offline")
 			return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "target session does not match service target")
 		}
-		plugin, ok = b.router.PluginFor(*target)
+		destination = *target
 	} else {
-		plugin, ok = b.router.Plugin(pluginID)
+		destination, ok = b.router.Caller(pluginID)
 	}
-	if !ok || !plugin.Activated() {
+	if ok {
+		plugin, ok = b.router.PluginFor(destination)
+	}
+	if !ok {
+		owner := c.PluginID
+		if _, known := b.router.Plugin(pluginID); known {
+			owner = pluginID
+		}
+		b.metrics.Add(owner, "service", "offline")
+		return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "target plugin is not active")
+	}
+	if !plugin.Activated() {
 		b.metrics.Add(pluginID, "service", "offline")
 		return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "target plugin is not active")
 	}
@@ -166,9 +191,25 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		return failure(pb.ErrorCode_ERROR_CODE_CANCELLED, "service call cancelled before dispatch")
 	}
 	b.mu.Lock()
-	b.calls[invocation] = callOrigin{caller: c, callID: in.CallID}
+	// 与 Release 串行复核绑定，关闭已准入请求在撤销后才登记的窗口。
+	_, current := b.router.PluginFor(destination)
+	if !current || !plugin.Activated() {
+		b.mu.Unlock()
+		b.metrics.Add(pluginID, "service", "offline")
+		return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "target session is no longer active")
+	}
+	if c.PluginID != "" {
+		if _, current := b.router.PluginFor(c); !current {
+			b.mu.Unlock()
+			b.metrics.Add(pluginID, "service", "cancelled")
+			return failure(pb.ErrorCode_ERROR_CODE_CANCELLED, "caller session is no longer active")
+		}
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	b.calls[invocation] = callOrigin{caller: c, callID: in.CallID, target: destination, cancel: cancel}
 	b.mu.Unlock()
 	defer func() {
+		cancel()
 		b.mu.Lock()
 		delete(b.calls, invocation)
 		b.mu.Unlock()

@@ -125,6 +125,8 @@ func pipelinePlugin(mode string) *sdk.Plugin {
 	switch mode {
 	case "service-chain":
 		return serviceChainPlugin()
+	case chainBackgroundMode:
+		return serviceChainBackgroundPlugin()
 	case "order":
 		priority, err := strconv.Atoi(os.Getenv(pipelinePriorityEnv))
 		if err != nil {
@@ -469,7 +471,7 @@ func (h *pipelineHarness) launch(id, mode string, priority int) *runningComponen
 	handler := h.assembly.handler(c, install)
 	c.process, err = supervisor.Launch(h.t.Context(), h.store, supervisor.Spec{PluginID: id, Role: install.Role, AdapterID: install.AdapterID, PluginDir: pluginDir, Executable: os.Args[0], BuildDigest: install.BuildDigest, GenerationID: pipelineGeneration + ":" + id,
 		Bootstrap: bootstrap(pipelineGeneration+":"+id, 1), NewCandidate: active == "", Limits: host.NewLimits(h.values), Stop: host.NewStopTiming(h.values), Log: h, Handler: handler, Global: h.assembly.global, Stdio: h.stdio,
-		ExtraEnv: map[string]string{pipelineModeEnv: mode, pipelineIDEnv: id, pipelinePriorityEnv: strconv.Itoa(priority), pipelineAuditEnv: h.server.URL, "GORACE": "atexit_sleep_ms=0"}})
+		ExtraEnv: map[string]string{pipelineModeEnv: mode, pipelineIDEnv: id, pipelinePriorityEnv: strconv.Itoa(priority), pipelineAuditEnv: h.server.URL, "GORACE": "atexit_sleep_ms=0"}, Detach: func() { h.assembly.detach(c) }})
 	if err != nil {
 		h.t.Fatal(err)
 	}
