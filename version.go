@@ -17,8 +17,14 @@ func moduleVersion(info *debug.BuildInfo) string {
 		return info.Main.Version
 	}
 	for _, dependency := range info.Deps {
-		if dependency.Path == coreModule && dependency.Version != "" {
-			return dependency.Version
+		if dependency.Path == coreModule {
+			if dependency.Replace != nil {
+				dependency = dependency.Replace
+			}
+			if dependency.Version != "" {
+				return dependency.Version
+			}
+			return "(devel)"
 		}
 	}
 	return "(devel)"

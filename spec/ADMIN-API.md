@@ -336,4 +336,4 @@ multipart 与 JSON Update 均进入 `manage.Service.Update`，执行绑定来源
 {"version":"v0.1.0","listen":"127.0.0.1:7650","admin_api_major":1}
 ```
 
-`version` 来自 `runtime/debug.ReadBuildInfo` 中 AlonaBot module（`github.com/AlonaBot/AlonaBot`）的版本：作为主 module 取 Main，作为库取对应依赖项；缺少版本时为 `(devel)`。`listen` 是当前 Core 的 `listener.Addr().String()`，包含启动覆盖及端口 0 实际分配结果。`admin_api_major` 使用 `manage.AdminAPIMajor`，保持为 1。响应只包含以上三个字段。
+`version` 来自 `runtime/debug.ReadBuildInfo` 中 AlonaBot module（`github.com/AlonaBot/AlonaBot`）的版本：作为主 module 取 Main，作为库取对应依赖项；依赖存在 `Replace` 时取替换模块的版本，本地路径替换或其他缺少版本的情况为 `(devel)`。`listen` 是当前 Core 的 `listener.Addr().String()`，包含启动覆盖及端口 0 实际分配结果。`admin_api_major` 使用 `manage.AdminAPIMajor`，保持为 1。响应只包含以上三个字段。
