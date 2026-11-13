@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/types"
+	"log/slog"
 	"path/filepath"
 )
 
@@ -12,6 +13,7 @@ func (s *scan) handlerParamNames(info *types.Info, paths []string) {
 	if s.adapterProject {
 		return
 	}
+	conflicts := make(map[string]bool)
 	for _, path := range paths {
 		if path == sdkPath {
 			continue
@@ -30,9 +32,14 @@ func (s *scan) handlerParamNames(info *types.Info, paths []string) {
 					}
 					key = prefix + "." + object.Name()
 					if receiver := signature.Recv(); receiver != nil {
-						name := types.TypeString(receiver.Type(), func(*types.Package) string { return "" })
-						if _, pointer := types.Unalias(receiver.Type()).(*types.Pointer); pointer {
-							name = "(" + name + ")"
+						typ := types.Unalias(receiver.Type())
+						pointer, isPointer := typ.(*types.Pointer)
+						if isPointer {
+							typ = types.Unalias(pointer.Elem())
+						}
+						name := typ.(*types.Named).Obj().Name()
+						if isPointer {
+							name = "(*" + name + ")"
 						}
 						key = prefix + "." + name + "." + object.Name()
 					}
@@ -61,10 +68,22 @@ func (s *scan) handlerParamNames(info *types.Info, paths []string) {
 				}
 				names := make([]string, params.Len()-1)
 				for i := range names {
-					names[i] = params.At(i + 1).Name()
+					if name := params.At(i + 1).Name(); name != "_" {
+						names[i] = name
+					}
 				}
 				if s.paramNames == nil {
 					s.paramNames = make(map[string][]string)
+				}
+				if conflicts[key] {
+					return true
+				}
+				if _, exists := s.paramNames[key]; exists {
+					// 文件与行号无法区分这些 Handler；整组省略，避免取错名称。
+					delete(s.paramNames, key)
+					conflicts[key] = true
+					slog.Warn("ambiguous handler parameter names; using argN, specify Args for Optional names", "position", s.position(node.Pos()), "key", key)
+					return true
 				}
 				s.paramNames[key] = names
 				return true

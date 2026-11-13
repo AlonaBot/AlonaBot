@@ -282,16 +282,44 @@ func handlerParamNames(g Generated, handler any) []string {
 		return nil
 	}
 	fn := runtime.FuncForPC(reflect.ValueOf(handler).Pointer())
-	name := strings.TrimSuffix(fn.Name(), "-fm")
+	name := handlerFunctionName(fn.Name())
 	if names, ok := g.ParamNames[name]; ok {
+		return names
+	}
+	packageStart := strings.LastIndexByte(name, '/') + 1
+	packageEnd := packageStart + strings.IndexByte(name[packageStart:], '.')
+	packagePath := name[:packageEnd]
+	// main 在普通二进制中用 main 前缀，在 go test 中用包的导入路径。
+	if names, ok := g.ParamNames["main"+name[packageEnd:]]; ok {
 		return names
 	}
 	file, line := fn.FileLine(fn.Entry())
 	suffix := fmt.Sprintf(":%s:%d", filepath.Base(file), line)
-	for key, names := range g.ParamNames {
-		if path, ok := strings.CutSuffix(key, suffix); ok && strings.HasPrefix(name, path+".") {
-			return names
+	if names, ok := g.ParamNames[packagePath+suffix]; ok {
+		return names
+	}
+	return g.ParamNames["main"+suffix]
+}
+
+// handlerFunctionName 去掉实例类型实参和方法值包装后缀，对齐源码声明键。
+func handlerFunctionName(name string) string {
+	name = strings.TrimSuffix(name, "-fm")
+	if !strings.ContainsRune(name, '[') {
+		return name
+	}
+	var out strings.Builder
+	depth := 0
+	for _, char := range name {
+		switch char {
+		case '[':
+			depth++
+		case ']':
+			depth--
+		default:
+			if depth == 0 {
+				out.WriteRune(char)
+			}
 		}
 	}
-	return nil
+	return out.String()
 }
