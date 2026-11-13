@@ -75,7 +75,7 @@
 | goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 已完成（PR #169） |
 | goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 已完成（PR #157） |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 已完成（PR #167） |
-| goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 待派发 |
+| goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 已完成（PR #171） |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2、T-09.4 | 已完成（PR #168） |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 已完成（PR #166） |
@@ -91,7 +91,7 @@
 | goal-82 | T-16.2 | 按钮、多轮等待、schedule 与示例测试 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | 等待前置 |
 | goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | 等待前置 |
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 待派发 |
-| goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 待派发 |
+| goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 已完成（PR #172） |
 | goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 等待前置 |
 | goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 等待前置 |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 等待前置 |
@@ -5554,7 +5554,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-69 · T-13.3 开发运行与热部署
 
-状态：待派发。T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)，合并提交 `cb8ae3d`）已合并，语句按它的代码写成，无需改动。T-07.6（PR #100）、T-09.16（PR #140）、T-13.1（PR #149）已合并。2026-11-12 前置加入 T-09.4：本切片的 run 建在 goal-39 迁到根包的 run 与根包选项之上（goal-39 删除 `--plugin-id`、`--entry`、`--stdio`），此前只在状态段写明先后、未列入前置。语句已按 PR #163 的代码写好，#163 合并后改为待派发。2026-11-12 审查者按 PR #163 的 head `1796add`（已合入 main `b4610e1`）改写，要点如下：
+状态：已完成（[PR #171](https://github.com/AlonaBot/AlonaBot/pull/171)，合并提交 `3043c4e`），证据见 TEST-MATRIX §3.2。合入：`internal/pluginkit.BuildDev(ctx, dir, outDir) (Build, error)` 与 `Build{Executable, Manifest, PackageManifest, Digest, Role, ID, AdapterID}`；根包 `Executable(path string, packageManifest []byte) Option`（第二个参数为构建生成的包内 manifest）、`Stdio() Option`、`(*Core).Restart(ctx, id)`、`(*Core).RestartInstance(ctx, adapterID, instanceID)` 与执行中审查者补齐的 `(*Core).ReloadSettings(ctx) error`（同步 Core Admin、缺省实例与全局日志级别，不重启组件，DECISIONS 2026-11-13，待维护者确认）；`alonabot run [目录...] [--reload] [--stdio]` 与目录 WebUI。以下为派发时的语句，接口段未含执行中的补齐。
 - 根包：`alonabot.Run`/`Start` 与选项 `Plugin`（接受 role plugin 或 agent）、`Adapter`、`DataDir`、`Args`、`Listen`、`LogLevel`、`LogFormat`；Start 只加载一次 `settings.File` 并交给装配；开发组件由 `startDevelopment` 以同进程方式运行，配置取 `plugins/<id>/config.json`、数据库为 `dev.sqlite`（T-13.2），开发 Adapter 按 `core_config.json` 中属于它的实例启动（T-09.4）；已安装组件由 `startInstalled` 经 `supervisor.Launch` 以独立进程运行。根包目前没有「开发组件以独立进程运行」与「运行中只重启一个开发组件」的入口，本切片加入。
 - `cmd/alonabot/commands.go` 的 run：`alonabot run [--data-dir] [--listen] [--log-level] [--log-format] [--args]` 调用 `alonabot.Run`，不接受位置参数；不带子命令时等同 run。
 - 生成器 `sdk/generate` 与 `alonabot plugin generate` 已有；`internal/pluginkit` 尚不存在（ARCHITECTURE 已登记 `cmd/alonabot -> internal/pluginkit` 与 `internal/pluginkit -> sdk/generate` 的边，供 goal-38 的 `alonabot build` 复用）。
@@ -6632,7 +6632,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 ### goal-57 · T-11.4 工具与会话的验收
 
-状态：待派发，在 PR #169（goal-127）合并后从包含它的 main 派发：第 6 项与第 7 项复用它在根包 `scheduler_tasks_test.go` 中的原始 wire/pb 子进程写法（`persistentTaskProcess`）与同一数据目录重建装配的 `taskPipelineAt`。前置 T-11.2（PR #165，合并提交 `330164f`）、T-11.3（PR #35，合并提交 `d0983f0`）与 T-11.1（PR #101，合并提交 `de48f26`）均已合并。2026-11-13 审查者按 main `3a9b4af` 改写（起草稿经审查者裁决）：
+状态：已完成（[PR #172](https://github.com/AlonaBot/AlonaBot/pull/172)，合并提交 `15f9495`），证据见 TEST-MATRIX §3.2。合入：根包 `t11_e2e_test.go` 的 `TestToolsAndConversations`（T-11 七项验收）与 `pipeline_test.go` 的 `newPipelineAt`（可传调优值、可重开同一数据目录）；未新增生产代码。
 - 原语句的 `internal/core/supervisor/testdata` 测试插件按 D-86 改为根包测试二进制扮演的插件，测试位置改为根包。
 - 第 6 项拆成两部分：Service 的访问规则（Access）与继承 Actor、默认 Target 用 SDK 写；`RouteDescriptor.required_permissions` 分项由原始 wire/pb 的 provider 模式驱动。CONTRACTS §2.3 的路由权限对 Service 同样适用、`internal/core/tool/invoke.go` 已检查，但 SDK 的 `ServiceBuilder` 还没有声明入口；SDK 入口不在本切片。
 - 运行时修改策略与会话的服务层操作由父测试进程直接调用 `tool.New(h.store, h.assembly.router)` 与 `conversation.New(h.store)`：`Catalog.Effective` 每次从状态库读取，另建的 Catalog 与生产实例共享同一 Store。管理 API 与页面分别属于 T-09.14、T-09.9。
