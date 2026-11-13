@@ -376,7 +376,7 @@ func (s *Scheduler) call(ctx context.Context, pluginID string, reg *registration
 		response, err = reg.plugin.Call(ctx, wire.Request{Target: job.routeID, TraceID: trace,
 			Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF,
 				SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
-			Deadline: deadline, Attach: &router.Invocation{PluginID: pluginID, Event: event, TraceID: trace, Scopes: []string{"job"}, RouteID: job.routeID},
+			Deadline: deadline, Attach: &router.Invocation{Depth: 1, PluginID: pluginID, Event: event, TraceID: trace, Scopes: []string{"job"}, RouteID: job.routeID},
 			Late: func(response wire.Response) {
 				s.mu.Lock()
 				defer s.mu.Unlock()

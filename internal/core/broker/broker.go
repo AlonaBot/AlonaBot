@@ -57,6 +57,13 @@ type callOrigin struct {
 	cancel context.CancelFunc
 }
 
+type selfToolCallKey struct{}
+
+// WithSelfToolCall 标记已通过 core.tool.invoke 策略检查的转发，仅在目标为调用方时放行。
+func WithSelfToolCall(ctx context.Context) context.Context {
+	return context.WithValue(ctx, selfToolCallKey{}, true)
+}
+
 // New 按装配处传入的请求期限和调用链深度上限创建 Broker。
 func New(opt Options) *Broker {
 	return &Broker{router: opt.Router, requestTimeout: opt.RequestTimeout, maxDepth: opt.MaxDepth, metrics: opt.Metrics, agent: opt.Agent, calls: make(map[*router.Invocation]callOrigin)}
@@ -150,6 +157,16 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		b.metrics.Add(pluginID, "service", "denied")
 		return failure(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "service access denied")
 	}
+	permitted := len(service.GetRequiredPermissions()) == 0
+	if parent, ok := in.ParentAttach.(*router.Invocation); ok {
+		for _, required := range service.GetRequiredPermissions() {
+			permitted = permitted || slices.Contains(parent.Event.GetActor().GetPermissions(), required)
+		}
+	}
+	if !permitted {
+		b.metrics.Add(pluginID, "service", "denied")
+		return failure(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "service permission denied")
+	}
 	payload := in.Payload
 	if payload.Encoding != spec.GetEncoding() || payload.SchemaID != service.GetInputSchemaId() || payload.SchemaVersion != service.GetInputSchemaVersion() {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service input does not match registered encoding or schema")
@@ -159,7 +176,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service input is not valid UTF-8 JSON")
 	}
 	// 3. 父附件由 Core 保留；每次复制祖先链，防止独立并发调用修改同一底层切片。
-	invocation := &router.Invocation{PluginID: pluginID, TraceID: in.TraceID}
+	invocation := &router.Invocation{PluginID: pluginID, TraceID: in.TraceID, Depth: 2}
 	trusted := &pb.InvocationContext{}
 	if parent, ok := in.ParentAttach.(*router.Invocation); ok {
 		trusted.Actor = parent.Event.GetActor()
@@ -170,13 +187,16 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		invocation.Event = parent.Event
 		invocation.DefaultTarget = parent.DefaultTarget
 		invocation.TraceID = parent.TraceID
+		invocation.Depth = parent.Depth + 1
 	}
-	invocation.Chain = append(invocation.Chain, c.PluginID)
+	if self, _ := ctx.Value(selfToolCallKey{}).(bool); !self || pluginID != c.PluginID {
+		invocation.Chain = append(invocation.Chain, c.PluginID)
+	}
 	if slices.Contains(invocation.Chain, pluginID) {
 		b.metrics.Add(pluginID, "service", "cycle")
 		return failure(pb.ErrorCode_ERROR_CODE_CALL_CYCLE, "service call chain contains target plugin")
 	}
-	if len(invocation.Chain)+1 > b.maxDepth {
+	if invocation.Depth > b.maxDepth {
 		b.metrics.Add(pluginID, "service", "depth")
 		return failure(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "service call chain exceeds maximum depth")
 	}

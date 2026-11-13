@@ -133,7 +133,7 @@ func TestMediaSources(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		out := mux.For(consumer)(ctx, &wire.Inbound{Target: wire.ServiceSend, Deadline: time.Now().Add(tune.Defaults().RequestTimeout), ParentAttach: &router.Invocation{PluginID: consumer.PluginID, DefaultTarget: target}, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: 1, Bytes: encoded}})
+		out := mux.For(consumer)(ctx, &wire.Inbound{Target: wire.ServiceSend, Deadline: time.Now().Add(tune.Defaults().RequestTimeout), ParentAttach: &router.Invocation{Depth: 1, PluginID: consumer.PluginID, DefaultTarget: target}, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: 1, Bytes: encoded}})
 		if out.Err != nil {
 			t.Fatal(out.Err)
 		}
