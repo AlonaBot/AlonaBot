@@ -76,10 +76,10 @@
 | goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 已完成（PR #157） |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 等待前置 |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 等待前置 |
-| goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2 | 等待前置 |
+| goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2、T-09.4 | 等待前置 |
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 等待前置 |
-| goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 待派发 |
+| goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 已完成（PR #162） |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 已完成（PR #161） |
 | goal-128 | T-07.9 | 动态任务与暂停恢复的 SDK | T-04.12、T-07.8 | 等待前置 |
 | goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 等待前置 |
@@ -5444,84 +5444,87 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-81 · T-16.1 插件测试套件基础
 
-状态：等待前置（T-05.2、T-13.2）。2026-11-09 按 D-105，Harness 的 `Admin` 改为 `{ AdapterID, UserID }`（与 goal-122 的 policy.Admin 一致）。语句按 D-68～D-72 之前的契约编写，前置合并后由审查者按新契约改写其中的旧写法（TrustedRole 与 Permission 枚举、`RouteOption`、`ChatAdmin` Rule 等）。语句中 goal-4、goal-16、goal-67、goal-68 提供的符号（sdk/adapter 的 Adapter 与 Instance、Router 的分发流程、alonabot.Start 与 Core、Plugin/Adapter/DataDir 选项、dev 的 config.json 与 dev.sqlite、生成器的 Generated）只写名字；合并后由审查者核对签名，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：测试实例写在 `core_config.json` 而不是 instances/ 文件；发信许可缺省为全部实例，套件选项用于收紧（D-82、D-83）。前置合并后由审查者改写。
+状态：等待前置（T-09.4，PR #163 待合并）。T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)）与 T-13.2（[PR #160](https://github.com/AlonaBot/AlonaBot/pull/160)，合并提交 `65ebc5f`）已合并。2026-11-12 审查者按 main 与 PR #163 的代码改写，前置加入 T-09.4：测试 Adapter 的实例经 `core_config.json` 启动、Core Admin 从同一文件读取，这两项由 T-09.4 的根包装配提供。改写要点：
+- 插件对象：`*sdk.Plugin`（`sdk.NewPlugin`，`p.Generated().Manifest` 为工程 plugin.yaml 原文，D-137）；SDK 公开类型用 `sdk/message`（`message.Session`、`message.Chain`、`message.Content`、`message.SendResult`、`message.MessageRef`）与 `sdk/errcode`，pb 只在 SDK 内部（T-04.8）。
+- 权限：Actor 的平台权限为权限名集合（D-68～D-72，`sdk.Permission`、`sdk.ChatAdmin`）；Core Admin 是 `core_config.json` 的 `admins` 中的 `<adapter_id>:<external_user_id>`（D-105）；发信许可缺省为全部实例（D-83）。
+- 根包（PR #163 之后）：`alonabot.Start(ctx, DataDir, Plugin, Adapter, Listen, ...)`；Start 读取 `core_config.json`，开发 Adapter 按 `adapters.<adapter_id>` 中 `package` 属于它的实例启动；开发组件的配置为 `plugins/<id>/config.json`，数据库为 `dev.sqlite`（T-13.2）。
+- `internal/inproc` 已有 `Launch`（同进程启动参数，含 `Log`）；Router 没有「一个事件的分发结束」回调，由本切片加入。
+- 扩展声明：`sdk/adapter` 的 `PermissionDeclaration`、`Event[T](name, version)`、`Extension[T](name, version)`、`Action[P, R](name, version, scope)`，`sdk.AdapterEvent[T](name, version)` 为插件侧的扩展事件类型。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-81（切片 T-16.1：插件测试套件基础）。goal 目录 goal-81，分支 goal-81，worktree .worktrees/goal-81，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：新建公开包 plugintest：在 go test 中用 alonabot.Start 在临时数据目录上装配真实 Core，登记被测插件与套件自带的测试 Adapter；提供会话与用户构造、Core Admin、发信许可、Capability 子集与配置的选项；注入一条消息并在这个事件的全部分发链结束后返回期间产生的 Send、Edit 与 Handler 错误。分发结束由 Core 经 internal/inproc 通知，不靠等待时间。
+目标：新建公开包 plugintest：在 go test 中用 alonabot.Start 在临时数据目录上装配真实 Core，登记被测插件与套件自带的测试 Adapter；提供会话、带平台权限的用户、Core Admin、发信许可、Capability 子集、Adapter 声明与配置的选项；注入一条消息或一个已声明的扩展事件，在这个事件的全部分发链结束（或其中的 Handler 进入多轮等待）后返回期间产生的 Send、Edit 与 Handler 错误。分发结束由 Core 经 internal/inproc 通知，不靠等待时间。
 
-依据：PLAN T-16 步骤 1、2 与「失败停止条件」；CONTRACTS §17、§15.5、§8（Target 准入）、§2；DECISIONS D-47；ARCHITECTURE 的 plugintest 一行；TEST-MATRIX V-73 的基础分项。
+依据：PLAN T-16 步骤 1、2 与「失败停止条件」；CONTRACTS §17、§15.5、§8（Target 准入）、§2、§2.4；DECISIONS D-47、D-68～D-72、D-82、D-83、D-105；ARCHITECTURE 的 plugintest 一行；TEST-MATRIX V-73 的基础分项。
 
 范围（只新增或修改这些）：
-- 新增 plugintest/（包 plugintest）
-- 新增 plugintest/internal/probe/（测试用插件，含 go generate 生成的注册文件）
+- 新增 plugintest/（包 plugintest）与 plugintest/internal/probe/（测试用插件，生成文件只由生成器生成）
 - internal/inproc/：新增 harness.go
-- 根包：Start 读取 internal/inproc 中登记给该数据目录的 Harness，在启动组件前写入其中的 Core Admin 与发信许可，并把 Router 的分发结束回调接到 Harness（只加调用点）
-- internal/core/router/：Options 增加分发结束回调字段，在每个事件的分发结束时调用（只加字段与调用点）
+- 根包 alonabot.go、assembly.go：Start 读取 internal/inproc 中登记给该数据目录的 Harness，在激活组件前写入发信许可，并把 Router 的分发结束回调接到 Harness（只加调用点）
+- internal/core/router/：Options 增加分发结束回调，在每个事件的分发链结束或进入等待时调用（只加字段与调用点）
 - 上述包的测试文件
 允许的新跨模块边：plugintest -> 根包、-> sdk/...、-> internal/inproc、-> contracts（ARCHITECTURE 已登记）。internal/inproc 仍不 import 本 module 的任何包。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 1. internal/inproc（只用标准库类型）
-   type Admin struct { InstanceID, UserID string }
    type Outcome struct { PluginID, RouteID string; ErrorCode int32; SafeMessage string } // ErrorCode 为 0 表示 Handler 成功
-   type Dispatch struct { InstanceID, SourceEventID string; Outcomes []Outcome }
+   type Dispatch struct { InstanceID, SourceEventID string; Waiting bool; Outcomes []Outcome } // Waiting 为 true 表示其中的 Handler 进入了多轮等待
    type Harness struct {
-       Admins           []Admin
-       AllowedInstances map[string][]string // plugin_id → 授予的 adapter_instance_id
-       Dispatched       func(Dispatch)      // Core 在一个事件的全部分发链结束、且其自动回复都已发送后调用
+       AllowedInstances map[string][]string // plugin_id → 收紧后的 adapter_instance_id 列表；没有的插件保持缺省的全部实例
+       Dispatched       func(Dispatch)      // 一个事件的全部分发链结束、且自动回复都已发送，或其中的 Handler 进入多轮等待时调用
    }
    func RegisterHarness(dataDir string, h *Harness) (unregister func()) // dataDir 为绝对路径；同一目录重复登记 panic
    func HarnessFor(dataDir string) *Harness                             // 没有登记时返回 nil
-2. 根包：不新增公开符号。Start 在取得 core.lock、创建开发组件的安装记录之后、激活组件之前，按 HarnessFor(DataDir) 写入 Admins 与 AllowedInstances（经 internal/core 已有的策略与许可写入方法），并设置 Router 的分发结束回调。HarnessFor 返回 nil 时行为与之前完全相同。
+2. 根包：不新增公开符号。HarnessFor 返回 nil 时行为与之前完全相同。
 3. plugintest
-   const AdapterID = "plugintest"
-   const InstanceID = "test"
-   const AccountID = "bot"
+   const AdapterID = "plugintest"; const InstanceID = "test"; const AccountID = "bot"
    type Option func(*options)
-   func Plugin(root sdk.Root) Option                     // 可以多次使用
-   func Config(root sdk.Root, configJSON string) Option  // 写入该插件的 config.json
-   func Admin(userID string) Option                      // 加入 Core Admin（测试实例上的该用户）
-   func Allow(root sdk.Root) Option                      // 授予该插件对测试实例的 allowed_adapter_instances
-   func Capabilities(names ...string) Option             // 替换测试实例声明的能力
+   func Plugin(p *sdk.Plugin) Option                    // 可以多次使用
+   func Config(p *sdk.Plugin, configJSON string) Option // 写入该插件的 config.json
+   func Admin(userID string) Option                     // 写入 core_config.json 的 admins（<当前测试 Adapter 的 adapter_id>:<userID>）
+   func AllowedInstances(p *sdk.Plugin, instanceIDs ...string) Option // 收紧该插件的发信许可；不给 instanceIDs 表示不允许任何实例
+   func Capabilities(names ...string) Option            // 替换测试实例声明的能力
+   func Adapter(id string, declarations ...any) Option  // 改用指定 adapter_id，并声明 sdk/adapter 的 PermissionDeclaration、EventDeclaration、ExtensionDeclaration 或 ActionDeclaration；其他类型 t.Fatal
    type Chat struct{ ... }
-   func Private(userID string) Chat                      // chat_id 为 "private:<userID>"
-   func Group(chatID string) Chat                        // chat_id 为 "group:<chatID>"
-   type User struct { ID, Name string; ChatAdmin bool }
-   type Sent struct { Op string; Target *pb.Target; Chain *pb.MessageChain; EditedMessageID string; Result *pb.SendResult } // Op 为 "send" 或 "edit"
-   func (s Sent) Text() string                           // 依次拼接 Chain 中 text 片段的文字
-   type Outcome struct { PluginID, RouteID string; Err *pb.ErrorInfo } // Err 为 nil 表示 Handler 成功
-   type Result struct { Sends []Sent; Outcomes []Outcome }
+   func Private(userID string) Chat // chat_id 为 "private:<userID>"
+   func Group(chatID string) Chat   // chat_id 为 "group:<chatID>"
+   type User struct { ID, Name string; Permissions []sdk.Permission } // 该会话中的平台权限
+   type Sent struct { Op string; To message.Session; Chain message.Chain; Edited message.MessageRef; Result *message.SendResult } // Op 为 "send" 或 "edit"
+   func (s Sent) Text() string // 依次拼接 Chain 中 text 片段的文字
+   type Outcome struct { PluginID, RouteID string; Err *errcode.Error } // Err 为 nil 表示 Handler 成功
+   type Result struct { Sends []Sent; Outcomes []Outcome; Waiting bool }
    type Harness struct{ ... }
    func Start(t testing.TB, opts ...Option) *Harness
-   func (h *Harness) Message(chat Chat, from User, chain message.Chain) Result
-   func (h *Harness) Text(chat Chat, from User, text string) Result // 等于 Message(chat, from, message.Chain{message.Text(text)})
+   func (h *Harness) Message(chat Chat, from User, content message.Content) Result
+   func (h *Harness) Text(chat Chat, from User, text string) Result // 等于 Message(chat, from, message.Text(text))
+   func (h *Harness) Event(chat Chat, from User, event sdk.EventType, payload any) Result // 只接受 Adapter 选项声明过的扩展事件
 
 行为：
 - Start：
-  1) 数据目录为 t.TempDir()；写入 adapters/plugintest/instances/test.json（内容 "{}"）与每个 Config 的 plugins/<id>/config.json（插件 ID 取自根类型的 Generated manifest；没有 Generated 时 t.Fatal）。
-  2) 登记 inproc.Harness（Admins、AllowedInstances 与 Dispatched），调用 alonabot.Start(ctx, DataDir, 全部 Plugin, Adapter(测试 Adapter))；返回错误时 t.Fatal。Start 返回时测试实例已启动。
+  1) 数据目录为 t.TempDir()；写入 core_config.json：admins（Admin 选项）、adapters.<adapter_id> 的 instances.test（内容 {}，package 为测试 Adapter 的组件 ID）；写入每个 Config 的 plugins/<id>/config.json（插件 ID 取自 p.Generated().Manifest；没有生成资源时 t.Fatal）。
+  2) 登记 inproc.Harness（AllowedInstances 与 Dispatched），调用 alonabot.Start(ctx, DataDir, 全部 Plugin, Adapter(测试 Adapter), Listen("127.0.0.1:0"))；返回错误时 t.Fatal。Start 返回时测试实例已启动。
   3) t.Cleanup：取消 ctx、Wait，返回错误时 t.Error；注销 Harness。
 - 测试 Adapter（套件内的 sdk/adapter 实现，与被测插件一样经 loopback 走完整生命周期）：
-  - 实例账号固定为 AccountID。缺省能力为 message.send、message.markdown、message.album、message.reference、message.buttons、message.forward、message.edit（version 1）；Capabilities 选项替换这一列表。
-  - Send：markdown 的 text、reference、buttons、forward 片段所需的能力（依次为 message.markdown、message.reference、message.buttons、message.forward）未声明时返回 REJECTED 与 UNSUPPORTED，不记录为已发送；否则 ACCEPTED，一项 PartResult 覆盖全部片段，消息 ID 从 1 起按顺序递增（十进制字符串）。Edit 同样记录（Op "edit"）。每次 Send 与 Edit 都追加到套件的发送记录。
-- Message：
-  - 构造 message.created：Target 为 (AdapterID, InstanceID, AccountID, chat_id)；Actor 为 from（ChatAdmin 时 trusted_roles 含 CHAT_ADMIN）；platform_message_id 与 source_event_id 为套件内递增的唯一值；to_me 在私聊或 chain 中 mention 了 AccountID 时为 true。
-  - 经测试实例交付；Core 不接纳时 t.Fatal。然后等待 Dispatched 中 SourceEventID 与之相同的通知，返回从交付到通知之间追加的全部发送记录与 Outcomes。等待不设套件自己的超时，以测试的期限为准；Message 不能并发调用（同一 Harness 上并发调用时 t.Fatal）。
-- 套件不跳过 Core 的任何检查：命令权限、Rule、Target 准入、Hook 与文案都与正式运行相同。被测插件是库模式的开发组件，配置与 dev.sqlite 按 goal-68 的规则处理。
+  - 实例账号固定为 AccountID。缺省能力为 message.send、message.markdown、message.album、message.reference、message.buttons、message.forward、message.edit（version 1）；Capabilities 选项替换这一列表。Adapter 选项的声明原样放进 Descriptor。
+  - Send 与 Edit：片段所需的能力未声明时由 Core 的 Capability 预检拒绝（UNSUPPORTED），不记录为已发送；其余一律 ACCEPTED，一项 PartResult 覆盖全部片段，消息 ID 从 1 起按顺序递增（十进制字符串）；每次都追加到套件的发送记录。
+- Message 与 Event：
+  - 构造事件：Target 为 (adapter_id, InstanceID, AccountID, chat_id)；Actor 为 from（permissions 为 User.Permissions 的名称）；platform_message_id 与 source_event_id 为套件内递增的唯一值；私聊或内容中 mention 了 AccountID 时 to_me 为 true。
+  - 经测试实例交付；Core 不接纳时 t.Fatal。然后等待 SourceEventID 相同的 Dispatched 通知，返回从交付到通知之间追加的发送记录、Outcomes 与 Waiting。等待不设套件自己的超时，以测试的期限为准；同一 Harness 上并发调用 t.Fatal。
+- 套件不跳过 Core 的任何检查：命令权限、Rule、Target 准入、Capability 预检、Hook 与文案都与正式运行相同。被测插件是库模式的开发组件，配置与 dev.sqlite 按 T-13.2 的规则处理。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：plugintest/plugintest_test.go，用 plugintest/internal/probe（/ping 回复 pong；/admin 只允许 Core Admin；chat_admin Rule 的 /mod；发送带 buttons 的消息，收到 UNSUPPORTED 时改发纯文本；/config 回复配置中的值；/count 在 dev.sqlite 中计数并回复；/edit 先发送再编辑）：
-  - /ping 的结果恰好一条 Sent，Text() 为 "pong"，Target 为原会话。
-  - /admin：普通用户被拒（没有 Sent，命令被消费），Admin 选项给出的用户成功。/mod：ChatAdmin 为 false 时没有回复，为 true 时回复。
-  - 缺省能力下按钮消息 ACCEPTED；Capabilities 去掉 message.buttons 后，结果中第一条为 REJECTED/UNSUPPORTED、第二条为纯文本。
+- 提交：plugintest/plugintest_test.go，用 plugintest/internal/probe（/ping 回复 pong；/admin 只允许 Core Admin；要求 sdk.ChatAdmin 的 /mod；发送带 buttons 的消息，收到 UNSUPPORTED 时改发纯文本；/config 回复配置中的值；/count 在 dev.sqlite 中计数并回复；/edit 先发送再编辑；/ask 进入多轮等待）：
+  - /ping 的结果恰好一条 Sent，Text() 为 "pong"，To 为原会话。
+  - /admin：普通用户被拒（没有 Sent，命令被消费），Admin 选项给出的用户成功。/mod：没有 chat_admin 权限时没有回复，有时回复。
+  - 缺省能力下按钮消息 ACCEPTED；Capabilities 去掉 message.buttons 后，结果中只有纯文本那一条，Outcomes 无错误。
+  - /ask 返回时 Waiting 为 true，下一条 Text 的结果是等待的回复。
   - 用 go test -race -count=2 ./plugintest/... 运行两遍都通过。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有 Generated 的根类型；同一 Harness 并发 Message；Start 失败（probe 的 OnStart 返回错误）后数据目录可以再次 Start；Dispatched 只在自动回复发送之后调用；Config 选项的值经 /config 返回；/count 连续两次回复 1 与 2；/edit 产生 Op 为 send 与 edit 的两条记录；去掉 message.edit 后 edit 被 Core 以 UNSUPPORTED 拒绝；两个使用 t.Parallel 的测试各自 Start，计数互不影响。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有生成资源的插件；同一 Harness 并发 Message；Start 失败（probe 的 OnStart 返回错误）后数据目录可以再次 Start；Dispatched 只在自动回复发送之后调用；Config 的值经 /config 返回；/count 连续两次回复 1 与 2；/edit 产生 send 与 edit 两条记录；去掉 message.edit 后 edit 被拒；AllowedInstances(p) 后插件的后台发送被拒；Adapter 选项声明的扩展事件经 Event 注入到插件；两个 t.Parallel 的测试各自 Start，计数互不影响。
 
-完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./plugintest/... ./internal/core/router/... ./internal/inproc/...；go test -race . ；go build ./...。
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./plugintest/... ./internal/core/router/... ./internal/inproc/...；go test -race .；go build ./...。
 
-不做：按钮点击、多轮等待、schedule 触发与后台发送（T-16.2）；用套件测试示例插件与开发文档（T-16.2）；WebUI 沙盒（v0.1 之外）。
+不做：按钮点击、schedule 触发与后台发送的读取（T-16.2）；用套件测试示例插件与开发文档（T-16.2）；LLM 替身（T-16.3）；WebUI 沙盒（v0.1 之外）。
 ```
 
 ## 第 13 波
@@ -5600,7 +5603,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-18 · T-05.5 多进程事件流水线验收
 
-状态：待派发。前置 T-03.8（[PR #136](https://github.com/AlonaBot/AlonaBot/pull/136)，合并提交 `3621fc1`）、T-05.3（[PR #155](https://github.com/AlonaBot/AlonaBot/pull/155)，合并提交 `53393aa`）与 T-05.4（[PR #153](https://github.com/AlonaBot/AlonaBot/pull/153)，合并提交 `f22b538`）已合并。2026-11-12 审查者按 main `2a1c504` 改写：
+状态：已完成（[PR #162](https://github.com/AlonaBot/AlonaBot/pull/162)，合并提交 `8c12972`），证据见 TEST-MATRIX §3.2。合入：根包 `pipeline_test.go`（unix）的 `TestPipeline`，经 assemble 取得生产装配、以测试二进制运行流水线插件与回环 Adapter 进程，覆盖矩阵 1～10；不修改产品代码。验收矩阵第 2、3、5 项已按契约改正（main `1f17170`）。派发时：前置 T-03.8（[PR #136](https://github.com/AlonaBot/AlonaBot/pull/136)，合并提交 `3621fc1`）、T-05.3（[PR #155](https://github.com/AlonaBot/AlonaBot/pull/155)，合并提交 `53393aa`）与 T-05.4（[PR #153](https://github.com/AlonaBot/AlonaBot/pull/153)，合并提交 `f22b538`）已合并。2026-11-12 审查者按 main `2a1c504` 改写：
 - 测试装配：`cmd/alonabot` 的 run 目前不带 Router 与 Adapter（goal-39 改写），所以不经 cmd 与 Telegram 模拟服务。根包的 `assemble(store, dir, tune.Values)` 给出与生产相同的 Router、hook.Runner、continuation.Manager、buttons、policy 与 message 服务；插件与 Adapter 进程沿用 `internal/core/adapter/remote/remote_test.go` 的写法：测试二进制按环境变量以 `sdk.Run` 或 `sdk.RunAdapter` 运行，经 `supervisor.Launch` 启动，Adapter 用回环测试 Adapter。
 - T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)）已合并，scheduled 用真实 Scheduler 验收，不再只用 fixture。
 - 按钮点击前的 answerCallbackQuery 只在 Telegram Adapter 中，由 goal-9 的故障矩阵覆盖；本切片以回环 Adapter 交付 button.clicked。
