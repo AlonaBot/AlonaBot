@@ -314,6 +314,58 @@ T-02.4 按 D-86 删除的测试及测试插件只保留历史运行证据，相�
 | T-09.10 / V-62、V-63、V-68 的日志管理分项 | [PR #177](https://github.com/AlonaBot/AlonaBot/pull/177)；提交测试：`cmd/alonabot/logs_e2e_test.go` 的 `TestLogManagement`（unix，真实 Core、CLI 与安装包进程：来源改为 debug 后 SDK 发出 DEBUG 且 `alonabot logs` 读到，改为 off 后进程记录消失而 Core 关于它的记录仍在，改为 inherit 后跟随全局，全局与来源设置写回 core_config.json 并在重启后沿用），`contracts/wirespec_test.go` 追加 LogSetLevel 的编号检查。执行者本地自测（未提交）：sdk.log.set_level 在插件与 Adapter 中更新进程内级别、逐来源缓冲覆盖与只缓存已输出记录、可信身份与 Adapter 归组、SSE 快照与并发追加、overflow、停机时结束订阅、历史的续写顺序、多行与转义、正文中的引号文本、缺失日期与 I/O 错误、设置写回失败、管理认证与 Cookie/CSRF、CLI 客户端。审查者复现并确认修复活动 SSE 订阅使正常停机超时、正文中的引号文本使整日历史查询失败两项。2026-11-13，darwin/arm64，Go 1.27.x。 | 通过 | WebUI 日志页（T-09.15）；其他操作系统、真实平台与磁盘写满未运行 |
 | T-12.3 / V-58 | [PR #178](https://github.com/AlonaBot/AlonaBot/pull/178)；提交测试：`agent/tools_test.go` 的 `TestAgentTools`（unix，真实 Core、Agent SDK Session、受管 SQLite 与回环 Adapter，脚本化 httptest Provider；MCP 以 stdio 真实子进程与 streamable HTTP 模拟服务器：模型依次调用 Core 工具与 MCP 工具，确认消息展示实际参数，同一 Actor 允许后执行一次，ToolCallID 与结果回传正确；确认拒绝与工具错误交回模型；停止 Agent 后 stdio 子进程退出）。执行者本地自测（未提交）：六种协议的名称映射与 Replay、非法字符与超长名、同响应多个工具与累计 20 次上限、allow/confirm/deny、确认超时、无 Actor、父调用取消、首次连接失败、tools/list 分页、凭证在日志与工具结果中的脱敏（含 Basic 值、URL 编码与掩码形式）、HTTP 不重放 tools/call、停止预算覆盖 stdio 会话关闭、DELETE 状态检查、Agent 与 MCP 子进程树在 TCP/stdio 下的退出。审查者经 cpa 兼容网关运行（`https://cpa.atri.rodeo`，gemini-3.1-flash-lite，本地忽略文件 `agent/router_cpa_tools_local_test.go`）：四种协议各一轮真实对话，模型调用 Core 工具恰好一次并把结果带回回复，anthropic-messages 另经 MCP 工具确认后执行一次。审查者复现并确认修复 URL 凭证脱敏遗漏、stdio 会话关闭超出停止预算、DELETE 失败仍报告成功三项。2026-11-13，darwin/arm64，Go 1.27.x，MCP go-sdk v1.3.1。 | 通过 | 其他操作系统与真实聊天平台未运行 |
 
+#### T-03.10 候选的 Telegram 开发入口与故障矩阵
+
+候选：`goal-9`，基线 `813a12e4f6faf37bab6c5746cd43c1d71bc560a9` 加本切片未提交改动，待审查者提交。2026-11-13，darwin/arm64，Go 1.27.3。主路径使用真实 CLI、Core 与官方 Telegram Adapter、echo、media 独立进程，传输为 TCP；本地矩阵使用生产 Start/assemble、SQLite、官方 Adapter、两个真实 SDK 插件 Session，分别执行 TCP 与 stdio。伪造归属场景使用真实 SDK 回环 Adapter。Bot API 为基线中的 `adapters/telegram/telegramtest`（本切片未修改），两个服务使用不同虚构 token 与账号；全部 HTTP 仅本机回环。通过每场景 Calls 差值、完整 Requests、payload+error、审计同步点与 PID 核对结果。
+
+以下完整命令均在仓库根运行，Go 环境为 `PATH=/Users/flanchan/.asdf/installs/go/1.27.3/go/bin:$PATH`、`GOTOOLCHAIN=local`、`GOMODCACHE=/Users/flanchan/.asdf/installs/go/1.27.3/packages/pkg/mod`、`GOPATH=/private/tmp/goal9-gopath`。日志位于本地忽略的 `goal-9/logs/`，由审查者随 PR 归档：
+
+| 命令标记 | 完整命令 | 日志 |
+| --- | --- | --- |
+| D | `go test -race -count=1 -v ./cmd/alonabot -run '^TestTelegramDevelopment$'` | `telegram-development-fixed.log` |
+| M | `go test -race -count=1 -v . -run '^TestTelegramFaultMatrix$'` | `telegram-matrix-fixed.log` |
+| C | `go test -race -count=1 -v ./cmd/alonabot -run '^TestTelegram(ConfigurationLocal\|DirectoryIdentityLocal\|ReloadLocal)$'` | `telegram-cli-fixed.log` |
+| A | `go test -race -count=1 -v ./adapters/telegram -run '^TestTelegram(PlatformFileLocal\|AlbumAndZeroIDLocal)$'` | `telegram-adapter-fixed.log` |
+| R | `go test -race -count=1 -v ./adapters/telegram ./internal/core/media ./internal/core/settings -run '^(TestTelegramPlatformFileLocal\|TestTelegramAlbumAndZeroIDLocal\|TestRoundRebuild\|TestSubscriptionAndRestart\|TestSequentialAcknowledgements\|TestMessageMetadata\|TestReferenceLifetime\|TestInstanceConfigurationFiles)$'` | `telegram-reused.log` |
+| F | `go test -race -count=1 -v ./cmd/alonabot -run '^TestTelegramDependenciesLocal$'` | `telegram-dependency-fixed.log` |
+
+表中 M 的位置为本地 `telegram_local_test.go`，C/F 为本地 `cmd/alonabot/telegram_local_test.go`，A 为本地 `adapters/telegram/telegram_local_test.go`，均未提交；D 的位置为提交的 `cmd/alonabot/telegram_e2e_test.go`（unix，151 行）。M 的 Core/回环 Adapter 辅助进程由现有 TestMain 的 `m.Run()` 执行 `TestTelegramCoreHelperLocal`、`TestTelegramHelperLocal`，临时插件工程在 `t.TempDir()` 内由 BuildDev 构建；现有 TestMain 未修改。
+
+| 切片 | 实现与证据 | 结果 | 尚未闭合 |
+| --- | --- | --- | --- |
+| T-03.10 / 1 / V-48、V-51 实例分项 | M `lifecycle_and_receive_failures`：两个账号的 STOPPED 停用/恢复、发送账号、Adapter 与观察插件 PID、停用实例在 Adapter 崩溃后保持停用 | TCP/stdio 通过，单实例启停保持 Adapter PID 与其他实例 | 正式安装/卸载继续沿用 T-09 的所属证据 |
+| T-03.10 / 2 / V-45、V-51 恢复分项 | M `lifecycle_and_receive_failures`：杀测试拥有的 Adapter；每旧 Session 一条 ADAPTER_EXITED、恢复后各一条 online，无 Actor/Target，保存游标继续且无重复事件；`committed_cursor_core_crash` 验证 Core 重启无历史 offline 补发 | TCP/stdio 通过；PID、Offsets 与业务事件 ID 记入 M 日志 | 真实平台未运行 |
+| T-03.10 / 3 / V-48 信任边界分项 | M `trust_boundary`：真实 SDK 回环 Adapter 分别伪造 adapter_id、instance_id、account_id，另一 Adapter Session 冒用 tg_a；官方 Telegram 正常事件为对照 | TCP/stdio 通过，伪造交付返回 INVALID_ARGUMENT、记诊断，目标插件收到事件数为 0 | 其他 Adapter 平台未运行 |
+| T-03.10 / 4 / V-07 目标分项 | D `accounts_and_topic`；M `targets_locale_permissions`：论坛 thread 42、普通回复串、General、原 Target/To/Via、后台实例许可收紧/撤销、原在途 Target 豁免、越界账号/话题、无默认 Target | 通过；论坛带 message_thread_id，普通串/General 无该参数；后台无目标 NO_DEFAULT_TARGET，拒绝场景业务请求增量为 0 | 真实平台未运行 |
+| T-03.10 / 5 / V-08、V-35 计划分项 | M `physical_plans_and_faults`：一条 Chain 的 quote、相邻文本、图片、尾随文本按钮对照两次独立 Send；记录逻辑回执与物理顺序、PartIndex/SegmentIndexes/全部确认 ID | TCP/stdio 通过，Calls 差值与 Requests 一致 | 其他平台物理计划未运行 |
+| T-03.10 / 6 / V-35 故障分项 | M 同子测试：Drop 使请求到达后断开响应；首 part UNKNOWN/后续 NOT_ATTEMPTED，成功后断开为 PARTIAL 并保留 ID；FailMethod 注入明确 400 拒绝为 REJECTED；后续正常发送作观察屏障 | TCP/stdio 通过，完整 payload+error 保留，无自动补发 | 真实网络故障未运行 |
+| T-03.10 / 7 / V-35 相册分项 | A、M 验证末尾相册带按钮首发前 UNSUPPORTED/REJECTED、发送增量 0；D/M 验证合法相册→文本按钮尾请求失败，另测相册→文本→文件在文本失败后文件 NOT_ATTEMPTED | 通过，PARTIAL 保留两条相册 ID，sendMediaGroup 恰一次 | 历史相册 markup 验收按当前可表达计划取证 |
+| T-03.10 / 8 / V-35 零 ID 分项 | A/M：ZeroMessageID 注入单条与相册，后续正常/失败分别取证；检查 part ACCEPTED、MessageIDsUnavailable、Refs/ID 无 "0"，缺少句柄时跳过 Edit | 通过；全计划成功为 ACCEPTED，后续失败为 PARTIAL，无伪造句柄或补发 | 真实平台零 ID 未运行 |
+| T-03.10 / 9 / V-09、V-44、V-89 媒体衔接分项 | D `incoming_file_id`/`upload_album_button_edit`；M `incoming_shared_cache_and_grants`、`media_budgets_ttl_cancel_lease`：Read 前零 getFile、两个 Session 不同 token 共用缓存且只取件一次、同实例 Incoming 原 file_id 回送零 getFile、Upload 字节、Grant 合法/非法接收方/越界 Target、源许可收紧、TTL、配额、首读者取消、消费 Session 与上传 owner 退出；A 覆盖 PlatformFile/MediaRef/HTTPS 单条和相册来源 | 通过；M 调优 `MEDIA_TTL=500ms BUTTON_TOKEN_TTL=500ms MEDIA_MAX_OBJECT=32B MEDIA_SESSION_BUDGET=64B MEDIA_DISK_BUDGET=128B`；两份 32B 后新增 1B 为 RESOURCE_EXHAUSTED，过期 NOT_FOUND，取消/退出后的取件与回收有审计及回环 gate 同步证据 | V-89 其余来源能力由 T-03.20 汇总；真实平台未运行 |
+| T-03.10 / 10 / V-45 游标崩溃分项 | M `committed_cursor_core_crash`：Handler 审计阻塞在 update 500，杀独立 Core、清理其 SDK 进程并确认 PID 消失，读 SQLite 确认 cursor=501，同 data_dir 重启 | TCP/stdio 通过；重启首 offset=501，业务计数确认 500 未重放，未完成业务丢失，重启无历史 offline 补发 | 其他 OS 进程回收未运行 |
+| T-03.10 / 11 / V-45、V-51 接收分项 | M `lifecycle_and_receive_failures`：FailNext 401/409 产生 INSTANCE_FAILED，另一实例继续发送；重复账号/webhook 拒绝、显式 allowed_updates；R 重跑现有 TestRoundRebuild、TestSubscriptionAndRestart、TestSequentialAcknowledgements、TestMessageMetadata、TestInstanceConfigurationFiles | 通过；七天接收轮次以既有可控时钟测试取证，逐条游标/重启、匿名 sender_chat、配置迁移保留原实现与输入 | 七天真实时间等待、真实平台未运行 |
+| T-03.10 / 12 / V-08、V-53 按钮与编辑分项 | D `upload_album_button_edit`；M `physical_plans_and_faults` 内按钮验证和 `media_budgets_ttl_cancel_lease`：answerCallbackQuery 在类型化 Handler 的 editMessageText 之前，编辑带按钮保留原 ID；非法/过期/其他 Target/inline 回调拒绝，媒体 Edit INVALID_ARGUMENT 零发送，平台编辑拒绝保留错误；生产装配的两插件 Before/After Hook 各一次 | TCP/stdio 通过；平台失败和不合规 Edit 的 Send 请求数不变 | 不支持编辑能力的目标沿用 T-03.9 / V-53 原范围证据；真实平台未运行 |
+| T-03.10 / 13 / V-48、V-52、V-54 locale、权限与依赖分项 | M `targets_locale_permissions`/`physical_plans_and_faults`：locale、to_me、权限名集合、其他 Adapter extension UNSUPPORTED；F 保留四项回归，加后置开发插件、后置 Adapter、真实 REGISTER 的 extension/action 成功与缺动作拒绝 | TCP/stdio 的 locale/权限/发送 extension 通过；F 八项全通过：required_missing 汇总两项错误，minimum_version/adapter_extension 在 hello 启用前拒绝且非零退出；optional_missing 启动并记录原 WARN；后置依赖与声明成功，缺动作拒绝 | 已安装组件保持原启动行为，开发 Adapter 优先完成 REGISTER；快照/判定由 manage 导出供原管理调用点与 Start 共用。必需失败沿原 fail/shutdown 清理。真实平台未运行 |
+| T-03.10 / 完成条件 | `gofmt -l alonabot.go assembly.go internal/core/manage/dependencies.go examples/plugins/echo examples/plugins/media adapters/telegram/plan.go adapters/telegram/telegram_local_test.go cmd/alonabot/telegram_e2e_test.go cmd/alonabot/telegram_local_test.go telegram_local_test.go`；`go run ./cmd/alonabot plugin check --dir examples/plugins/echo`；`go run ./cmd/alonabot plugin check --dir examples/plugins/media`；`go vet ./...`；`go test -race ./...`；`go build ./...`；`git diff --check` | 全部通过，gofmt 无输出；日志 `gate-*-fixed.log`；D/M/C/A/F 全部通过 | 远程 CI 与其他目标平台运行未执行 |
+| T-03.10 / 真实 Telegram | 官方服务、真实账号与授权会话 | **未运行：维护者未提供 Telegram 凭证和授权测试会话** | 全部模拟证据保留上述版本、传输、进程与故障注入范围 |
+
+#### T-03.10 / FIX-3 开发热重启依赖门禁（PR #180）
+
+候选为审查者已提交 head `038abb27e4f24d26d727bc225ce08d6aa017e28e` 加本轮未提交的 FIX-3；原切片上表与历史日志保留。2026-11-13，darwin/arm64，Go 1.27.3，沿用上述 Go 环境；真实 Core/SDK/SQLite 与临时目录，CLI 回归使用真实 SDK 回环 Adapter 的 TCP Session，HTTP 仅本机回环。产品仅在 `Core.Restart` 读取新资源后、停止旧进程前复用 manage 的快照与依赖判定。
+
+| 分项 / 测试位置 | 完整命令 | 本次结果与本地日志（goal-9/logs/） |
+| --- | --- | --- |
+| V-48/V-52 热部署拒绝与恢复；本地 `cmd/alonabot/review180_local_test.go` 的 `TestReview180ReloadMissingRequiredDependencyLocal`、`TestReview180ReloadOptionalDependencyLocal`、`TestReview180ConfigRestartRuntimeDescriptorLocal` | `go test -race -count=1 -v ./cmd/alonabot -run '^TestReview180'` | 三项通过（23.289s，`fix3-cli.log`）；必需缺失在停止前返回 FAILED_PRECONDITION，旧 PID/回复保持；修正工程后轮询继续替换；可选缺失 WARN 后正常替换；Adapter 删除/恢复 extension 只重启自身，插件下一次配置重启按实时 descriptor 拒绝/放行。该命令初跑时有三项，第四项随后加入，最终全仓重跑包含全部四项 |
+| V-52 运行版本；同一本地文件的 `TestReview180ReloadRunningDependencyVersionLocal` | `go test -race -count=1 -v ./cmd/alonabot -run '^TestReview180ReloadRunningDependencyVersionLocal$'` | 通过（13.564s，`fix3-running-version.log`）；新版本9因缺依赖被拒后，调用方最低版本9依然按运行版本0.1拒绝；版本9真正激活后，再次配置重启放行 |
+| 审查原对照；根本地 `review180_local_test.go` 的 `TestReview180InitialDependencyCheckLocal`、Adapter 本地同名文件的 `TestReview180PlatformFileBoundaryLocal` | `go test -race -count=1 -v . ./adapters/telegram -run '^TestReview180'` | 通过，原两子项/单条/相册/插件直接 PlatformFile 校验断言保留，`fix3-review-controls.log` |
+| 修复前红测；本地热部署必需依赖回归 | `go test -race -count=1 -v ./cmd/alonabot -run '^TestReview180ReloadMissingRequiredDependencyLocal$'` | 修改前失败，old PID=20760/new PID=20786，确认旧进程实际被替换，`fix3-before.log`；测试改为期望拒绝、保留旧进程与回复，并在修复后通过 |
+| 全仓 gate / 全部本地回归 | `go vet ./...`；`go test -race ./...`；`go build ./...`；`git diff --check` | 全通过，含本轮四个 CLI 回归与两个原对照，无 race 报告；`gate-{vet,race,build,diff}-fix3.log`；本次 Go 文件 gofmt 无输出（`gate-gofmt-fix3.log`），echo/media 的 `go run ./cmd/alonabot plugin check --dir examples/plugins/echo`、`go run ./cmd/alonabot plugin check --dir examples/plugins/media` 通过（`gate-generation-{echo,media}-fix3.log`） |
+| 原 Telegram 主路径与矩阵重跑 | `go test -race -count=1 -v ./cmd/alonabot -run '^TestTelegramDevelopment$'`；`go test -race -count=1 -v . -run '^TestTelegramFaultMatrix$'` | 通过（9.831s/10.974s，`telegram-development-fix3.log`、`telegram-matrix-fix3.log`）；主路径官方 Telegram 两账号与 TCP/stdio 故障矩阵原断言保留 |
+| 配置/目录/reload/首次依赖回归 | `go test -race -count=1 -v ./cmd/alonabot -run '^TestTelegram(ConfigurationLocal\|DirectoryIdentityLocal\|ReloadLocal\|DependenciesLocal)$'` | 通过（24.926s，`telegram-cli-fix3.log`），首次启动依赖原四项与全部八子项保留 |
+| 媒体与接收原分项 | `go test -race -count=1 -v ./adapters/telegram -run '^TestTelegram(PlatformFileLocal\|AlbumAndZeroIDLocal)$'`；`go test -race -count=1 -v ./adapters/telegram ./internal/core/media ./internal/core/settings -run '^(TestRoundRebuild\|TestSubscriptionAndRestart\|TestSequentialAcknowledgements\|TestMessageMetadata\|TestReferenceLifetime\|TestInstanceConfigurationFiles)$'` | 全通过，`telegram-adapter-fix3.log`、`telegram-reused-fix3.log` |
+
+真实 Telegram：**未运行：维护者未提供 Telegram 凭证和授权测试会话**。其他目标平台实际运行与远程 CI 未运行；提交测试仍为原 151 行，FIX-3 新增提交测试 0 行。本地测试与日志留给审查者归档，修复 commit SHA 由审查者提交后补入。
+
 ### 3.3 Target 与发信许可分项证据
 
 [PR #31](https://github.com/AlonaBot/AlonaBot/pull/31)（T-03.2），产品代码 head `bb5992119928b06a3df89f8445a2da9b4e005472`；2026-10-28 在 macOS 27.0.1（26A434）、darwin/arm64、Go 1.27.1 上运行。
