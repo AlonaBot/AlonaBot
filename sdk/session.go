@@ -189,6 +189,9 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32, c
 	appendServiceRoutes(reg, r)
 	appendSubscriptionRoutes(reg, r)
 	appendHookRoutes(reg, r)
+	for _, task := range reg.tasks {
+		r.Routes = append(r.Routes, task.descriptor())
+	}
 	return r
 }
 
