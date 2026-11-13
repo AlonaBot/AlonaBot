@@ -20,7 +20,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
+	"reflect"
+	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -56,8 +60,13 @@ type Context struct {
 	event         *pb.Event
 	eventOnce     sync.Once
 	publicEvent   *message.Event
-	match         []string // 本次 Regex 的捕获组
-	autoReply     bool     // 自动回复 Handler 通过返回 Content 发送
+	match         []string               // 本次 Regex 的捕获组
+	autoReply     bool                   // 自动回复 Handler 通过返回 Content 发送
+	continuations *continuationFunctions // 所属 Session 的延续函数登记表。
+	continuation  bool
+	inHandler     bool       // Rule 执行完成后开放 Continue。
+	continueMu    sync.Mutex // 串行化一次性登记。
+	continued     bool
 }
 
 // Context 返回本次调用的 context（含 deadline 与取消）。
@@ -224,6 +233,7 @@ type Registration struct {
 	Schedules     []Schedule
 	services      []serviceRoute
 	subscriptions []subscriptionRoute
+	hooks         []hookRoute
 	messages      *i18n.Catalog // 收集时解析，供本次 Session 只读使用。
 }
 
@@ -233,6 +243,8 @@ func Collect(root *Plugin) (*Registration, error) {
 		return nil, errors.New("plugin is nil")
 	}
 	cmds, events, routes, jobs := &root.commands, &root.events, &root.http, &root.schedules
+	routes.collect()
+	jobs.collect()
 	cmds.collect()
 	events.seen = make(map[string]bool)
 	for _, command := range cmds.commands {
@@ -242,9 +254,13 @@ func Collect(root *Plugin) (*Registration, error) {
 	reg := &Registration{plugin: root, subPlugins: make(map[string]string), Commands: cmds.commands, Events: events.events, HTTP: routes.routes, Schedules: jobs.jobs}
 	errs := slices.Concat(root.errs, cmds.errs, events.errs, routes.errs, jobs.errs)
 	errs = append(errs, root.checkSubPlugins(), dbhook.Validate(root), collectServices(root, reg), collectSubscriptions(root, reg), collectI18n(root, reg))
+	errs = append(errs, collectHooks(root, reg))
 	// HTTP Listener 在准备阶段创建；这里只核对所有种类共享的 route_id。
 	seen := make(map[string]bool)
 	for _, route := range buildRegister(reg, "{}", 0, nil).GetRoutes() {
+		if spec := route.GetHttp(); spec.GetAuthMode() == pb.HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN {
+			errs = append(errs, fmt.Errorf("HTTP route %s %s: platform token authentication is only available to adapters", spec.GetMethod(), spec.GetPath()))
+		}
 		id := route.GetRouteId()
 		if seen[id] {
 			errs = append(errs, fmt.Errorf("route %q registered twice", id))
@@ -268,3 +284,51 @@ func Collect(root *Plugin) (*Registration, error) {
 
 // Config 返回整个插件的只读配置。
 func (c *Context) Config() config.Values { return c.plugin.Config() }
+
+// handlerParamNames 在注册时解析函数身份，运行时绑定只读已收集的 CommandSpec。
+func handlerParamNames(g Generated, handler any) []string {
+	if len(g.ParamNames) == 0 {
+		return nil
+	}
+	fn := runtime.FuncForPC(reflect.ValueOf(handler).Pointer())
+	name := handlerFunctionName(fn.Name())
+	if names, ok := g.ParamNames[name]; ok {
+		return names
+	}
+	packageStart := strings.LastIndexByte(name, '/') + 1
+	packageEnd := packageStart + strings.IndexByte(name[packageStart:], '.')
+	packagePath := name[:packageEnd]
+	// main 在普通二进制中用 main 前缀，在 go test 中用包的导入路径。
+	if names, ok := g.ParamNames["main"+name[packageEnd:]]; ok {
+		return names
+	}
+	file, line := fn.FileLine(fn.Entry())
+	suffix := fmt.Sprintf(":%s:%d", filepath.Base(file), line)
+	if names, ok := g.ParamNames[packagePath+suffix]; ok {
+		return names
+	}
+	return g.ParamNames["main"+suffix]
+}
+
+// handlerFunctionName 去掉实例类型实参和方法值包装后缀，对齐源码声明键。
+func handlerFunctionName(name string) string {
+	name = strings.TrimSuffix(name, "-fm")
+	if !strings.ContainsRune(name, '[') {
+		return name
+	}
+	var out strings.Builder
+	depth := 0
+	for _, char := range name {
+		switch char {
+		case '[':
+			depth++
+		case ']':
+			depth--
+		default:
+			if depth == 0 {
+				out.WriteRune(char)
+			}
+		}
+	}
+	return out.String()
+}

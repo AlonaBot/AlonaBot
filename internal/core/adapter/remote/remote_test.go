@@ -3,8 +3,12 @@
 package remote_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha1"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -13,6 +17,9 @@ import (
 	"log"
 	"log/slog"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -28,12 +35,14 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter/remote"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
+	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 	"github.com/AlonaBot/AlonaBot/internal/core/media"
 	coremessage "github.com/AlonaBot/AlonaBot/internal/core/message"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
+	"github.com/AlonaBot/AlonaBot/internal/core/webhost"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk"
@@ -55,12 +64,14 @@ func TestMain(m *testing.M) {
 		os.Exit(m.Run())
 	}
 	var err error
-	if mode == "plugin" || mode == "command-plugin" || mode == "stream-plugin" {
+	if mode == "plugin" || mode == "command-plugin" || mode == "stream-plugin" || mode == "names-plugin" {
 		err = sdk.Run(newLoopPlugin())
 	} else if mode == "plugin-object" {
 		err = sdk.Run(newObjectPlugin())
 	} else if mode == "schema-parse" || mode == "schema-resolve" {
 		err = invalidSchemaAdapter(mode)
+	} else if mode == "http-upgrade" {
+		err = sdk.RunAdapter(&httpUpgradeAdapter{})
 	} else {
 		err = sdk.RunAdapter(&loopAdapter{})
 	}
@@ -184,6 +195,12 @@ func registerLoopEvents(r *sdk.Plugin) {
 
 // registerLoopCommands 让扩展事件误入命令层时留下可观察记录。
 func registerLoopCommands(r *sdk.Plugin) {
+	if os.Getenv(helperEnv) == "names-plugin" {
+		r.Command("echo").Alias("e").Args("value").Handle(func(c *sdk.Context, value string) error {
+			return observe("cmd.echo:"+value, c, nil)
+		})
+		return
+	}
 	if os.Getenv(helperEnv) == "command-plugin" {
 		handler := func(*sdk.Context) error { return nil }
 		r.Command("ping").Description("Ping the bot").Alias("p").Handle(handler)
@@ -199,6 +216,131 @@ func registerLoopCommands(r *sdk.Plugin) {
 }
 
 type loopAdapter struct{}
+
+const httpPlatformToken = "loop-platform-test-token"
+
+type httpUpgradeAdapter struct{ loopAdapter }
+
+// HTTP 声明公开平台凭证入口；最小 WebSocket echo 只收发四字节文本帧。
+func (*httpUpgradeAdapter) HTTP(route func(method, path string) *sdk.RouteBuilder) {
+	route("GET", "/ws").Public(sdk.AuthPlatformToken).Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if r.Header.Get("Authorization") == "" {
+			token = r.URL.Query().Get("access_token")
+		}
+		if subtle.ConstantTimeCompare([]byte(token), []byte(httpPlatformToken)) != 1 {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		for name := range r.Header {
+			lower := strings.ToLower(name)
+			if strings.EqualFold(name, wire.HeaderProxyAuth) || lower == "cookie" || lower == "x-alonabot-csrf" || lower == "forwarded" || strings.HasPrefix(lower, "x-forwarded-") {
+				http.Error(w, "identity leaked", http.StatusInternalServerError)
+				return
+			}
+		}
+		conn, rw, err := http.NewResponseController(w).Hijack()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		// RFC 6455 的握手摘要固定使用 SHA-1，与平台凭证的校验分开。
+		accept := sha1.Sum([]byte(r.Header.Get("Sec-WebSocket-Key") + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
+		if _, err := fmt.Fprintf(rw, "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: %s\r\n\r\n", base64.StdEncoding.EncodeToString(accept[:])); err != nil {
+			return
+		}
+		if err := rw.Flush(); err != nil {
+			return
+		}
+		for {
+			var frame [10]byte
+			if _, err := io.ReadFull(rw, frame[:]); err != nil {
+				return
+			}
+			if frame[0] != 0x81 || frame[1] != 0x84 {
+				return
+			}
+			for i := range frame[6:] {
+				frame[6+i] ^= frame[2+i]
+			}
+			if _, err := rw.Write(append([]byte{0x81, 4}, frame[6:]...)); err != nil {
+				return
+			}
+			if err := rw.Flush(); err != nil {
+				return
+			}
+		}
+	}))
+}
+
+func remoteHTTPUpgrade(t *testing.T, address, target, authorization string) (net.Conn, *bufio.Reader) {
+	t.Helper()
+	conn, err := net.DialTimeout("tcp", address, 3*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	if err := conn.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	_, err = fmt.Fprintf(conn, "GET %s HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nAuthorization: %s\r\nCookie: custom=leak\r\nX-Alonabot-CSRF: forged\r\nForwarded: forged\r\nX-Forwarded-For: forged\r\nX-Forwarded-Test: forged\r\n%s: forged\r\n\r\n", target, authorization, wire.HeaderProxyAuth)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := bufio.NewReader(conn)
+	response, err := http.ReadResponse(reader, &http.Request{Method: "GET"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusSwitchingProtocols || response.Header.Get("Upgrade") != "websocket" || response.Header.Get("Sec-WebSocket-Accept") != "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=" {
+		t.Fatalf("WebSocket handshake failed: status=%s", response.Status)
+	}
+	return conn, reader
+}
+
+// TestRemoteHTTPUpgrade 通过统一 Listener 验证真实 SDK Adapter 的平台认证、WebSocket 往返与停止回收。
+func TestRemoteHTTPUpgrade(t *testing.T) {
+	store, spec, logs := setup(t)
+	spec.ExtraEnv[helperEnv] = "http-upgrade"
+	spec.Stop.Drain = 10 * time.Millisecond
+	spec.HTTP = httpproxy.New(nil)
+	base, err := url.Parse("http://127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(webhost.New(webhost.Options{BaseURL: base, Proxy: spec.HTTP}))
+	defer server.Close()
+	running, err := supervisor.Launch(t.Context(), store, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE) })
+	if running.Instance.HTTPListener == nil {
+		t.Fatal("SDK did not register HTTP listener")
+	}
+	conn, reader := remoteHTTPUpgrade(t, server.Listener.Addr().String(), "/plugins/loop-package/ws", "Bearer "+httpPlatformToken)
+	if _, err := conn.Write([]byte{0x81, 0x84, 1, 2, 3, 4, 'p' ^ 1, 'i' ^ 2, 'n' ^ 3, 'g' ^ 4}); err != nil {
+		t.Fatal(err)
+	}
+	var frame [6]byte
+	if _, err := io.ReadFull(reader, frame[:]); err != nil || string(frame[:]) != "\x81\x04ping" {
+		t.Fatalf("WebSocket echo=%q, error=%v", frame, err)
+	}
+	if result := running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE); result.Err != nil || result.Killed {
+		t.Fatalf("adapter stop=%+v", result)
+	}
+	if _, err := reader.ReadByte(); err == nil {
+		t.Fatal("WebSocket survived adapter stop")
+	} else if timeout, ok := err.(net.Error); ok && timeout.Timeout() {
+		t.Fatal("WebSocket left open after adapter stop")
+	}
+	logs.mu.Lock()
+	leaked := bytes.Contains(logs.b.Bytes(), []byte(httpPlatformToken))
+	logs.mu.Unlock()
+	if leaked {
+		t.Fatal("platform credential entered logs")
+	}
+}
 
 func (*loopAdapter) Descriptor() *sdkadapter.Descriptor {
 	descriptor := &sdkadapter.Descriptor{AdapterID: "loop", Permissions: []sdkadapter.PermissionDeclaration{
@@ -1494,7 +1636,7 @@ func TestRemoteStream(t *testing.T) {
 	process := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: dispatch, RegisterIncoming: openMediaStore(t).RegisterIncoming})
 	mux := router.NewMux()
 	process.Services(mux)
-	service := coremessage.New(registry, policy.New(store), nil, nil, tune.Defaults().RequestTimeout)
+	service := coremessage.New(registry, policy.New(store), nil, nil, tune.Defaults().RequestTimeout, nil)
 	var requestsMu sync.Mutex
 	var parents []uint64
 	for name, handler := range map[string]router.ServiceFunc{wire.ServiceSend: service.Send, wire.ServiceEdit: service.Edit} {
@@ -1651,6 +1793,104 @@ func (i *loopInstance) Action(_ context.Context, to message.Session, name string
 	return json.RawMessage(` {"value": ` + string(value) + `, "platform_extra": true} `), nil
 }
 
+// TestCommandNameOverride 验证同一真实插件进程在保存和删除覆盖后按新名字派发，参数保持一致。
+func TestCommandNameOverride(t *testing.T) {
+	ctx := t.Context()
+	store, spec, _ := setup(t)
+	commandPolicy := policy.New(store)
+	dispatch := router.New(router.Options{Concurrency: 1, QueueEvents: tune.Defaults().DispatchQueueEvents, QueueBytes: tune.Defaults().DispatchQueueBytes, Policy: commandPolicy, CommandNames: commandPolicy.CommandNames})
+	commandPolicy.SetCommandsChanged(dispatch.CommandsChanged)
+	dispatch.Start()
+	defer func() {
+		if err := dispatch.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	}()
+	audit := filepath.Join(t.TempDir(), "names.jsonl")
+	if err := os.WriteFile(audit, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	spec.PluginID, spec.Role, spec.AdapterID = "names-observer", state.RolePlugin, ""
+	spec.GenerationID, spec.PluginDir = "names-gen", t.TempDir()
+	spec.Bootstrap = &pb.Bootstrap{GenerationId: spec.GenerationID, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	spec.ExtraEnv = map[string]string{helperEnv: "names-plugin", observerAuditEnv: audit, "GORACE": "atexit_sleep_ms=0"}
+	if err := store.AddInstall(ctx, state.Install{PluginID: spec.PluginID, Role: spec.Role, BuildDigest: spec.BuildDigest}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddGeneration(ctx, spec.PluginID, spec.GenerationID, "{}", 1); err != nil {
+		t.Fatal(err)
+	}
+	plugin, err := supervisor.Launch(ctx, store, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if result := plugin.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE); result.Err != nil {
+			t.Error(result.Err)
+		}
+	}()
+	dispatch.Attach(router.FromInstance(plugin.Instance), router.NewCaller(spec.PluginID, spec.GenerationID))
+	check := func(name string, matched bool) {
+		t.Helper()
+		before, err := os.ReadFile(audit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		entry, _, ok := dispatch.Commands().Lookup(strings.Fields(name))
+		if ok != matched || matched && entry.RouteID != "cmd.echo" {
+			t.Fatalf("lookup %s=%+v matched=%v", name, entry, ok)
+		}
+		event := &pb.Event{EventId: name, EventType: "message.created", SourceKind: pb.EventSourceKind_EVENT_SOURCE_KIND_ADAPTER, AdapterId: proto.String("loop"), AdapterInstanceId: proto.String("one"), AccountId: proto.String("a"), Actor: &pb.Actor{ExternalUserId: "user"}, Target: &pb.Target{AdapterId: "loop", AdapterInstanceId: "one", AccountId: "a", ChatId: "chat"}, EventPayload: &pb.EventPayload{Kind: &pb.EventPayload_MessageCreated{MessageCreated: &pb.MessageCreatedPayload{Chain: &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: "/" + name + ` "hello world"`}}}}}}}}}
+		if err := dispatch.Deliver(ctx, event); err != nil {
+			t.Fatal(err)
+		}
+		timer, ticker := time.NewTimer(5*time.Second), time.NewTicker(10*time.Millisecond)
+		defer timer.Stop()
+		defer ticker.Stop()
+		for stats := dispatch.Stats(); stats.Running != 0 || stats.Queued != 0; stats = dispatch.Stats() {
+			select {
+			case <-ticker.C:
+			case <-timer.C:
+				t.Fatal("command dispatch timed out")
+			}
+		}
+		after, err := os.ReadFile(audit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoder := json.NewDecoder(bytes.NewReader(after[len(before):]))
+		var commands []string
+		for {
+			var report observedEvent
+			if err := decoder.Decode(&report); err == io.EOF {
+				break
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			if strings.HasPrefix(report.Route, "cmd.") {
+				commands = append(commands, report.Route)
+			}
+		}
+		if matched && !reflect.DeepEqual(commands, []string{"cmd.echo:hello world"}) || !matched && len(commands) != 0 {
+			t.Fatalf("name=%s handler reports=%v matched=%v", name, commands, matched)
+		}
+	}
+	check("echo", true)
+	if err := commandPolicy.SetCommandNames(ctx, spec.PluginID, "cmd.echo", [][]string{{"renamed", "echo"}, {"another"}}, plugin.Instance.Routes); err != nil {
+		t.Fatal(err)
+	}
+	check("echo", false)
+	check("e", false)
+	check("renamed echo", true)
+	check("another", true)
+	if err := commandPolicy.DeleteCommandNames(ctx, spec.PluginID, "cmd.echo"); err != nil {
+		t.Fatal(err)
+	}
+	check("echo", true)
+	check("e", true)
+	check("renamed echo", false)
+}
+
 const objectConfigSchema = `{"root":{"type":"string","default":"whole"},"part":{"type":"object","items":{"prefix":{"type":"string","default":"config"}}}}`
 
 func objectI18n() map[string][]byte {
@@ -1695,7 +1935,7 @@ func TestPluginObjectCommand(t *testing.T) {
 	defer cancel()
 	store, spec, logs := setup(t)
 	registry := adapter.NewRegistry()
-	sender := coremessage.New(registry, policy.New(store), nil, nil, tune.Defaults().RequestTimeout)
+	sender := coremessage.New(registry, policy.New(store), nil, nil, tune.Defaults().RequestTimeout, nil)
 	dispatch := router.New(router.Options{Concurrency: 1, QueueBytes: tune.Defaults().DispatchQueueBytes, QueueEvents: tune.Defaults().DispatchQueueEvents, Adapters: registry, Send: sender.Send})
 	dispatch.Start()
 	defer func() {

@@ -461,6 +461,8 @@ const (
 	HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_SIGNATURE HttpAuthMode = 3
 	// 公开回调，由插件验证 nonce。
 	HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_NONCE HttpAuthMode = 4
+	// Adapter 校验平台传入的凭证。
+	HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN HttpAuthMode = 5
 )
 
 // Enum value maps for HttpAuthMode.
@@ -471,6 +473,7 @@ var (
 		2: "HTTP_AUTH_MODE_CALLBACK_STATE",
 		3: "HTTP_AUTH_MODE_CALLBACK_SIGNATURE",
 		4: "HTTP_AUTH_MODE_CALLBACK_NONCE",
+		5: "HTTP_AUTH_MODE_PLATFORM_TOKEN",
 	}
 	HttpAuthMode_value = map[string]int32{
 		"HTTP_AUTH_MODE_UNSPECIFIED":        0,
@@ -478,6 +481,7 @@ var (
 		"HTTP_AUTH_MODE_CALLBACK_STATE":     2,
 		"HTTP_AUTH_MODE_CALLBACK_SIGNATURE": 3,
 		"HTTP_AUTH_MODE_CALLBACK_NONCE":     4,
+		"HTTP_AUTH_MODE_PLATFORM_TOKEN":     5,
 	}
 )
 
@@ -1330,9 +1334,11 @@ func (x *EventSpec) GetActionSchemaVersion() uint32 {
 type HookSpec struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 执行阶段。
-	Phase         HookPhase `protobuf:"varint,1,opt,name=phase,proto3,enum=alonabot.v1.HookPhase" json:"phase,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Phase HookPhase `protobuf:"varint,1,opt,name=phase,proto3,enum=alonabot.v1.HookPhase" json:"phase,omitempty"`
+	// PreEvent 恰好指定一种事件；出站 Hook 留空。
+	EventTypeFilter []string `protobuf:"bytes,2,rep,name=event_type_filter,json=eventTypeFilter,proto3" json:"event_type_filter,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *HookSpec) Reset() {
@@ -1370,6 +1376,13 @@ func (x *HookSpec) GetPhase() HookPhase {
 		return x.Phase
 	}
 	return HookPhase_HOOK_PHASE_UNSPECIFIED
+}
+
+func (x *HookSpec) GetEventTypeFilter() []string {
+	if x != nil {
+		return x.EventTypeFilter
+	}
+	return nil
 }
 
 // ServiceSpec 描述服务路由的专属描述；请求/响应 Schema 使用公共字段 input_*/output_*。
@@ -1784,9 +1797,10 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\fhandler_mode\x18\x02 \x01(\x0e2\x18.alonabot.v1.HandlerModeR\vhandlerMode\x12/\n" +
 	"\x04rule\x18\x03 \x01(\v2\x1b.alonabot.v1.RuleDescriptorR\x04rule\x12\x1b\n" +
 	"\taction_id\x18\x04 \x01(\tR\bactionId\x122\n" +
-	"\x15action_schema_version\x18\x05 \x01(\rR\x13actionSchemaVersion\"8\n" +
+	"\x15action_schema_version\x18\x05 \x01(\rR\x13actionSchemaVersion\"d\n" +
 	"\bHookSpec\x12,\n" +
-	"\x05phase\x18\x01 \x01(\x0e2\x16.alonabot.v1.HookPhaseR\x05phase\"\xfb\x01\n" +
+	"\x05phase\x18\x01 \x01(\x0e2\x16.alonabot.v1.HookPhaseR\x05phase\x12*\n" +
+	"\x11event_type_filter\x18\x02 \x03(\tR\x0feventTypeFilter\"\xfb\x01\n" +
 	"\vServiceSpec\x12!\n" +
 	"\fservice_name\x18\x01 \x01(\tR\vserviceName\x122\n" +
 	"\x06access\x18\x02 \x01(\x0e2\x1a.alonabot.v1.ServiceAccessR\x06access\x120\n" +
@@ -1857,13 +1871,14 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x1aSERVICE_ACCESS_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16SERVICE_ACCESS_PRIVATE\x10\x01\x12\x1c\n" +
 	"\x18SERVICE_ACCESS_ALLOWLIST\x10\x02\x12\x19\n" +
-	"\x15SERVICE_ACCESS_PUBLIC\x10\x03*\xbc\x01\n" +
+	"\x15SERVICE_ACCESS_PUBLIC\x10\x03*\xdf\x01\n" +
 	"\fHttpAuthMode\x12\x1e\n" +
 	"\x1aHTTP_AUTH_MODE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bHTTP_AUTH_MODE_CORE_SESSION\x10\x01\x12!\n" +
 	"\x1dHTTP_AUTH_MODE_CALLBACK_STATE\x10\x02\x12%\n" +
 	"!HTTP_AUTH_MODE_CALLBACK_SIGNATURE\x10\x03\x12!\n" +
-	"\x1dHTTP_AUTH_MODE_CALLBACK_NONCE\x10\x04B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
+	"\x1dHTTP_AUTH_MODE_CALLBACK_NONCE\x10\x04\x12!\n" +
+	"\x1dHTTP_AUTH_MODE_PLATFORM_TOKEN\x10\x05B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
 
 var (
 	file_alonabot_v1_route_proto_rawDescOnce sync.Once

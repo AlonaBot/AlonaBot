@@ -38,10 +38,16 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 ## 5. 生命周期与调用
 
 - 资源在 OnStart 中打开、在 OnStop 中关闭；后台 goroutine 随 OnStop 结束，并响应 ctx 取消（CONTRACTS §4）。
-- 普通请求的期限是 30s。需要更久的工作放进延续调用或 schedule 回调（CONTRACTS §1.2、§2.4、§4.3）。
+- 普通请求的期限是 30s。需要更久的工作放进延续调用或 schedule 回调（CONTRACTS §1.2、§2.4、§4.3）。延续调用有两种写法，见下一条。
+- 延续调用有两种写法，期限为 CONTINUATION_TIMEOUT，不占分发链：
+  - Handler 内调用 `c.Continue(func(c *sdk.Context) error { ... })`：原 Handler 照常返回并决定传播，fn 在原调用成功结束后的独立调用中执行，原调用返回错误时 fn 不执行。
+  - 命令、事件或按钮路由的 builder 写 `.Continue()`：SDK 在原调用中照常执行 Rule，匹配后整个 Handler 放到延续调用中执行。这类路由中 `StopPropagation` 不起作用；自动回复型 Handler 返回的非空内容在延续调用结束前发送一次。
+  - 在延续调用中，`c.Wait(timeout)` 等待同一用户在同一会话（含话题）的下一条消息，返回它的 Context，可用 `Text()` 取文本；这条消息不再进入普通分发。只能由真实入站事件触发（需要 Actor 与默认 Target），延续调用中不能再次 Continue，等待与延续都不持久化，插件停止或替换时结束（D-119）。
 - 有副作用的业务调用不自动重试；超时与取消不代表对端没有执行（CONTRACTS §1.2）。
 - 插件包导出 `func New() *sdk.Plugin`：`p := sdk.NewPlugin()` 后先 `sdk.UseGenerated(p, alonabotGenerated)` 绑定生成资源，再在 p 上登记路由、`p.OnStart`/`OnReady`/`OnStop`、`p.OnConfigLoad` 与数据库迁移，最后返回 p；`New` 可以被多次调用，不依赖包级状态（D-114、D-137）。逻辑模块用 `p.Sub(id)` 分成一层子插件，通常由子包导出 `func Register(s *sdk.SubPlugin)`；子插件的 ID 不进入 route_id、命令路径与 Service 名，生命周期回调与迁移只登记在插件对象上（D-116）。
 - 参数较多或需要可选、默认值时，命令 Handler 在 `*sdk.Context` 之后只收一个结构体：字段按顺序对应参数，名字取 `arg` 标签或把字段名开头的大写段转小写（`FeedURL` 为 `feedURL`），指针字段可选、缺失为 nil，`default:"…"` 给出默认值，`arg:",raw"` 接收末位 raw 尾部；与位置参数及 `Args`/`Optional`/`RawTail` 不能混用，全部检查在 `Collect` 完成（D-115）。
+- 位置参数的名字：省略 `Args` 时取 Handler 源码中的参数名，由生成器记入 `Generated.ParamNames`，显式 `Args` 优先；`_` 与无名参数、同一行多个函数字面量（生成时给出 WARN）回退为 `argN`，这时要用 `Args` 显式命名后才能按名字写 `Optional`。
+- HTTP 路由写作 `p.Route(method, path).Handle(h)`（或 `.HandleFunc(f)`），公开回调在 `Handle` 之前加 `.Public(sdk.AuthCallbackState)` 等认证方式；定时任务写作 `p.Every(jobID, d).Handle(fn)` 或 `p.Cron(jobID, expr).Timezone(tz).Handle(fn)`。每个 builder 必须恰好 `Handle` 一次，`Handle` 之后不能再设置选项，错误在 `Collect` 报告。
 - 命令、文本匹配、事件、Service 与 Event Bus 订阅都链式注册，以 `Handle` 结束；漏写 `Handle`、重复调用或在它之后继续调用，都会让 `Collect` 报错（D-70）。
 - 命令说明在注册处写英文原文：`p.Command("set").Description("Set a value").Handle(Set)`。其他语言在 `i18n/<locale>.json` 的顶层 `commands` 中以完整规范路径（含 Group 前缀，token 用一个空格连接）覆盖，例如 `{"commands":{"rss add":{"description":"添加订阅"}}}`；只有 `commands` 的语言文件可以省略 en-US。`check`/`build` 只检查 `commands` 的结构，`Collect` 检查覆盖路径对应已注册且登记了英文说明的命令，否则注册失败（D-138）。
 - 权限写成 `sdk.Permission`：`sdk.Anyone`、`sdk.User`、`sdk.Admin`、`sdk.ChatAdmin`、`sdk.PermissionName`，用 `Or` 取并集。命令与文本匹配取最近一层显式设置（路由、最近的组、外层的组），都没有时要求 `user`；事件路由没有设置时为空集合。Handler 内用 `c.Has` 按当前 Actor 判断。

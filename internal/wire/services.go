@@ -75,3 +75,9 @@ const ServiceMediaURL = "core.media.url"
 
 // ServiceAdapterCommandsSync 替换账号实例的命令菜单。
 const ServiceAdapterCommandsSync = "adapter.commands.sync"
+
+// ServiceContinuationStart 登记父 Handler 成功结束后的延续调用。
+const ServiceContinuationStart = "core.continuation.start"
+
+// ServiceWait 等待延续调用所属用户在原会话的下一条消息。
+const ServiceWait = "core.wait"

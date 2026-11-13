@@ -61,6 +61,12 @@ func (b *ButtonBuilder[T]) Rule(rules ...Rule) *ButtonBuilder[T] {
 	return b
 }
 
+// Continue 让按钮 Handler 在独立的延续调用中执行。
+func (b *ButtonBuilder[T]) Continue() *ButtonBuilder[T] {
+	b.event.Continue()
+	return b
+}
+
 // Handle 登记接收解码后按钮值的处理函数。
 func (b *ButtonBuilder[T]) Handle(h func(*Context, T) error) {
 	b.event.plugin.checkRegistration()

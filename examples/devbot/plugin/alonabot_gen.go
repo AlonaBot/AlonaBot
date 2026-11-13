@@ -6,4 +6,7 @@ import alonabotgen0 "github.com/AlonaBot/AlonaBot/sdk"
 
 var alonabotGenerated = alonabotgen0.Generated{
 	Manifest: []byte("id: alonabot_plugin_devbot\nname: Devbot Echo\nversion: 0.1.0\nauthor: AlonaBot\nsource: github.com/AlonaBot/AlonaBot\n"),
+	ParamNames: map[string][]string{
+		"github.com/AlonaBot/AlonaBot/examples/devbot/plugin:plugin.go:15": {"e"},
+	},
 }

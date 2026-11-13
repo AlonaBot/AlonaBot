@@ -38,7 +38,7 @@ func startDeleteHarness(t *testing.T, stdio bool) *deleteHarness {
 	spec.Stdio = stdio
 	registry := adapter.NewRegistry()
 	p := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: &eventSink{}, RegisterIncoming: openMediaStore(t).RegisterIncoming})
-	service := coremessage.New(registry, policy.New(store), nil, nil, time.Second)
+	service := coremessage.New(registry, policy.New(store), nil, nil, time.Second, nil)
 	mux := router.NewMux()
 	p.Services(mux)
 	mux.Handle(wire.ServiceDelete, service.Delete)
