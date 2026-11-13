@@ -55,6 +55,14 @@ type callOrigin struct {
 	callID uint64
 	target router.Caller
 	cancel context.CancelFunc
+	depth  int // 包含自身工具调用；这类调用不重复写入插件链。
+}
+
+type selfToolCallKey struct{}
+
+// WithSelfToolCall 标记已通过 core.tool.invoke 策略检查的转发，仅在目标为调用方时放行。
+func WithSelfToolCall(ctx context.Context) context.Context {
+	return context.WithValue(ctx, selfToolCallKey{}, true)
 }
 
 // New 按装配处传入的请求期限和调用链深度上限创建 Broker。
@@ -161,6 +169,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 	// 3. 父附件由 Core 保留；每次复制祖先链，防止独立并发调用修改同一底层切片。
 	invocation := &router.Invocation{PluginID: pluginID, TraceID: in.TraceID}
 	trusted := &pb.InvocationContext{}
+	depth := 2
 	if parent, ok := in.ParentAttach.(*router.Invocation); ok {
 		trusted.Actor = parent.Event.GetActor()
 		trusted.DefaultTarget = parent.DefaultTarget
@@ -170,13 +179,21 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		invocation.Event = parent.Event
 		invocation.DefaultTarget = parent.DefaultTarget
 		invocation.TraceID = parent.TraceID
+		depth = len(parent.Chain) + 2
+		b.mu.Lock()
+		if origin, ok := b.calls[parent]; ok {
+			depth = origin.depth + 1
+		}
+		b.mu.Unlock()
 	}
-	invocation.Chain = append(invocation.Chain, c.PluginID)
+	if self, _ := ctx.Value(selfToolCallKey{}).(bool); !self || pluginID != c.PluginID {
+		invocation.Chain = append(invocation.Chain, c.PluginID)
+	}
 	if slices.Contains(invocation.Chain, pluginID) {
 		b.metrics.Add(pluginID, "service", "cycle")
 		return failure(pb.ErrorCode_ERROR_CODE_CALL_CYCLE, "service call chain contains target plugin")
 	}
-	if len(invocation.Chain)+1 > b.maxDepth {
+	if depth > b.maxDepth {
 		b.metrics.Add(pluginID, "service", "depth")
 		return failure(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "service call chain exceeds maximum depth")
 	}
@@ -217,7 +234,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		}
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	b.calls[invocation] = callOrigin{caller: c, callID: in.CallID, target: destination, cancel: cancel}
+	b.calls[invocation] = callOrigin{caller: c, callID: in.CallID, target: destination, cancel: cancel, depth: depth}
 	b.mu.Unlock()
 	defer func() {
 		cancel()
