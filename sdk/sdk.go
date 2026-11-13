@@ -19,7 +19,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
+	"reflect"
+	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -237,6 +241,8 @@ func Collect(root *Plugin) (*Registration, error) {
 		return nil, errors.New("plugin is nil")
 	}
 	cmds, events, routes, jobs := &root.commands, &root.events, &root.http, &root.schedules
+	routes.collect()
+	jobs.collect()
 	cmds.collect()
 	events.seen = make(map[string]bool)
 	for _, command := range cmds.commands {
@@ -276,3 +282,51 @@ func Collect(root *Plugin) (*Registration, error) {
 
 // Config 返回整个插件的只读配置。
 func (c *Context) Config() config.Values { return c.plugin.Config() }
+
+// handlerParamNames 在注册时解析函数身份，运行时绑定只读已收集的 CommandSpec。
+func handlerParamNames(g Generated, handler any) []string {
+	if len(g.ParamNames) == 0 {
+		return nil
+	}
+	fn := runtime.FuncForPC(reflect.ValueOf(handler).Pointer())
+	name := handlerFunctionName(fn.Name())
+	if names, ok := g.ParamNames[name]; ok {
+		return names
+	}
+	packageStart := strings.LastIndexByte(name, '/') + 1
+	packageEnd := packageStart + strings.IndexByte(name[packageStart:], '.')
+	packagePath := name[:packageEnd]
+	// main 在普通二进制中用 main 前缀，在 go test 中用包的导入路径。
+	if names, ok := g.ParamNames["main"+name[packageEnd:]]; ok {
+		return names
+	}
+	file, line := fn.FileLine(fn.Entry())
+	suffix := fmt.Sprintf(":%s:%d", filepath.Base(file), line)
+	if names, ok := g.ParamNames[packagePath+suffix]; ok {
+		return names
+	}
+	return g.ParamNames["main"+suffix]
+}
+
+// handlerFunctionName 去掉实例类型实参和方法值包装后缀，对齐源码声明键。
+func handlerFunctionName(name string) string {
+	name = strings.TrimSuffix(name, "-fm")
+	if !strings.ContainsRune(name, '[') {
+		return name
+	}
+	var out strings.Builder
+	depth := 0
+	for _, char := range name {
+		switch char {
+		case '[':
+			depth++
+		case ']':
+			depth--
+		default:
+			if depth == 0 {
+				out.WriteRune(char)
+			}
+		}
+	}
+	return out.String()
+}

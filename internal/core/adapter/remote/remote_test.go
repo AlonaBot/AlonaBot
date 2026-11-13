@@ -222,8 +222,8 @@ const httpPlatformToken = "loop-platform-test-token"
 type httpUpgradeAdapter struct{ loopAdapter }
 
 // HTTP 声明公开平台凭证入口；最小 WebSocket echo 只收发四字节文本帧。
-func (*httpUpgradeAdapter) HTTP(handle func(method, path string, h http.Handler, opts ...sdk.HTTPOption)) {
-	handle("GET", "/ws", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func (*httpUpgradeAdapter) HTTP(route func(method, path string) *sdk.RouteBuilder) {
+	route("GET", "/ws").Public(sdk.AuthPlatformToken).Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if r.Header.Get("Authorization") == "" {
 			token = r.URL.Query().Get("access_token")
@@ -270,7 +270,7 @@ func (*httpUpgradeAdapter) HTTP(handle func(method, path string, h http.Handler,
 				return
 			}
 		}
-	}), sdk.Public(sdk.AuthPlatformToken))
+	}))
 }
 
 func remoteHTTPUpgrade(t *testing.T, address, target, authorization string) (net.Conn, *bufio.Reader) {
