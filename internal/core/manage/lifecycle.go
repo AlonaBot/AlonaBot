@@ -140,6 +140,8 @@ func (s *Service) uninstall(ctx context.Context, id string, purge PurgeScope, co
 		return err
 	}
 	pluginDir := filepath.Join(filepath.Dir(s.opt.Packages), "plugins", id)
+	group := s.opt.Settings.Settings().Adapters[in.AdapterID]
+	ownsInstances := in.Role == state.RoleAdapter && (group.Package == id || group.Package == "" && !in.Uninstalled)
 	var paths []string
 	if purge != PurgeNone {
 		objects, err := s.opt.Store.PurgeObjects(ctx, id, purge == PurgeAll)
@@ -149,12 +151,13 @@ func (s *Service) uninstall(ctx context.Context, id string, purge PurgeScope, co
 		for _, object := range objects {
 			affected = append(affected, id+":"+object)
 		}
+		// 预览与删除共用受管路径清单，插件工作目录中的其余文件归作者管理。
 		paths = append(paths, filepath.Join(pluginDir, "generations"))
 		if purge == PurgeAll {
-			paths = []string{pluginDir}
+			paths = append(paths, filepath.Join(pluginDir, "config.json"))
 			affected = append(affected, id+":installation binding")
-			if in.Role == state.RoleAdapter {
-				for name := range s.opt.Settings.Settings().Adapters[in.AdapterID].Instances {
+			if ownsInstances {
+				for name := range group.Instances {
 					affected = append(affected, "adapter instance: "+name)
 				}
 			}
@@ -174,12 +177,17 @@ func (s *Service) uninstall(ctx context.Context, id string, purge PurgeScope, co
 	if len(affected) > 0 && !confirm {
 		return &ErrNeedsConfirm{Affected: affected}
 	}
+	if ownsInstances {
+		if _, err := s.opt.Settings.BindAdapter(in.AdapterID, id); err != nil {
+			return err
+		}
+	}
 	if in.Role != state.RoleWebUI {
 		if err := s.opt.Stop(ctx, id, pb.StopReason_STOP_REASON_DISABLE); err != nil {
 			return err
 		}
 	}
-	if purge == PurgeAll && in.Role == state.RoleAdapter {
+	if purge == PurgeAll && ownsInstances {
 		if err := s.opt.Settings.Update(func(doc *settings.Document) error { return doc.Delete([]string{"adapters", in.AdapterID}) }); err != nil {
 			return err
 		}

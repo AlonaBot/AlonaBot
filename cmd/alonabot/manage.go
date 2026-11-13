@@ -59,8 +59,10 @@ func managementCommands(code *int) []*cobra.Command {
 	adapterOptions.flags(adapter)
 	instance := &cobra.Command{Use: "instance", Short: "Create or delete Adapter instances", Args: cobra.NoArgs}
 	var configFile string
+	var confirmInstance bool
 	create := &cobra.Command{Use: "create <adapter-package-id> <instance-id>", Short: "Save an Adapter instance configuration", Args: cobra.ExactArgs(2)}
 	create.Flags().StringVar(&configFile, "config", "", "file containing the instance JSON configuration (default: {})")
+	create.Flags().BoolVar(&confirmInstance, "yes", false, "confirm discarding instances owned by the previous Adapter component")
 	create.RunE = func(cmd *cobra.Command, args []string) error {
 		config := json.RawMessage("{}")
 		if configFile != "" {
@@ -77,7 +79,8 @@ func managementCommands(code *int) []*cobra.Command {
 			PackageID  string          `json:"package_id"`
 			InstanceID string          `json:"instance_id"`
 			Config     json.RawMessage `json:"config"`
-		}{args[0], args[1], config})
+			Confirm    bool            `json:"confirm"`
+		}{args[0], args[1], config, confirmInstance})
 	}
 	instance.AddCommand(create)
 	for _, action := range []string{"delete", "start", "stop"} {
@@ -301,7 +304,9 @@ func (c *managementClient) request(ctx context.Context, method, path string, bod
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	response, err := http.DefaultClient.Do(request)
+	client := *http.DefaultClient
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	response, err := client.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("request management API: %w", err)
 	}
@@ -310,6 +315,9 @@ func (c *managementClient) request(ctx context.Context, method, path string, bod
 		return nil, fmt.Errorf("read management response: %w", err)
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		if response.StatusCode >= http.StatusMultipleChoices && response.StatusCode < http.StatusBadRequest {
+			return nil, fmt.Errorf("management API %s: redirect to %q refused", response.Status, response.Header.Get("Location"))
+		}
 		var detail struct {
 			Code        string   `json:"code"`
 			SafeMessage string   `json:"safe_message"`

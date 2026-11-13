@@ -69,13 +69,17 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (er
 	if m.ID != id || m.Role != string(in.Role) || m.AdapterID != in.AdapterID {
 		return invalid("candidate identity differs from installed component")
 	}
-	if m.Source != in.Source || candidate.Release.PublisherKeyID != in.PublisherKeyID {
-		return denied("candidate source or publisher differs from installed binding")
+	if m.Source != in.Source {
+		return denied("candidate source differs from installed binding")
+	}
+	key := candidate.Release.PublisherKeyID
+	if err := checkPublisher(in.PublisherKeyID, key, req.Confirm); err != nil {
+		return err
 	}
 	if in.Pin != "" && m.Version != in.Pin {
 		return precondition("candidate version does not match pin: " + in.Pin)
 	}
-	if in.PublisherKeyID == "" && !req.Confirm {
+	if key == "" && !req.Confirm {
 		return &ErrNeedsConfirm{Affected: []string{"unsigned package: " + id}}
 	}
 	affected, err := s.affected(ctx, in, m.Version)
@@ -88,7 +92,25 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (er
 	if err := s.checkCycles(ctx, m, nil); err != nil {
 		return err
 	}
+	if key != in.PublisherKeyID {
+		if err := s.opt.Store.SetPublisherKeyID(ctx, id, key); err != nil {
+			return err
+		}
+	}
 	return s.opt.Candidates.Update(ctx, id, candidate.Dir)
+}
+
+func checkPublisher(bound, candidate string, confirm bool) error {
+	if bound == candidate {
+		return nil
+	}
+	if bound != "" {
+		return denied("candidate publisher differs from installed binding")
+	}
+	if !confirm {
+		return &ErrNeedsConfirm{Affected: []string{"trust publisher: " + candidate}}
+	}
+	return nil
 }
 
 // Rollback 校验代次属于该安装，再交给候选编排器。

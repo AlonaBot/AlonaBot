@@ -633,6 +633,10 @@ func (c *Core) startInstances(ctx context.Context, running *runningComponent, ra
 	}
 	unlock := c.store.LockPlugin(running.id)
 	defer unlock()
+	owned, err := c.settings.BindAdapter(running.install.AdapterID, running.id)
+	if err != nil || !owned {
+		return err
+	}
 	schema, problems := configschema.Parse(raw)
 	if len(problems) != 0 {
 		return fmt.Errorf("adapter instance schema: %v", problems)
@@ -646,6 +650,9 @@ func (c *Core) startInstances(ctx context.Context, running *runningComponent, ra
 	}
 	c.assembly.adapters.SetDefaults(c.settings.Settings().DefaultInstances())
 	for id, configuration := range instances {
+		if c.stoppedInstances[[2]string{running.id, id}] {
+			continue
+		}
 		if err := running.remote.StartInstance(ctx, id, configuration); err != nil {
 			slog.Warn("adapter instance start failed", "plugin_id", running.id, "instance_id", id, "error", err)
 		}

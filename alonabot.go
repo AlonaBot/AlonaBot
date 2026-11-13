@@ -99,6 +99,8 @@ type Core struct {
 	monitors    sync.WaitGroup // 停止后等待退出观察者交还清理权，再关闭共享资源。
 	done        chan struct{}  // err 写入后关闭，允许多个 Wait 读取同一结果。
 	err         error
+
+	stoppedInstances map[[2]string]bool // 包与实例的运行期停用选择，跨 Session 保留；同样由操作队列串行访问。
 }
 
 // Run 启动 Core，并等待 SIGINT、SIGTERM 或开发组件异常后完成停止。
@@ -237,6 +239,7 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	adminMux := http.NewServeMux()
 	authentication.Routes(adminMux)
 	development := make(map[string]*manifest.Manifest)
+	c.stoppedInstances = make(map[[2]string]bool)
 	for _, entry := range o.components {
 		development[entry.manifest.ID] = entry.manifest
 	}
@@ -254,10 +257,31 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 			return c.operation(ctx, func(ctx context.Context) error {
 				for _, running := range c.components {
 					if running != nil && running.id == id && running.remote != nil {
-						return running.remote.StartInstance(ctx, instance, config)
+						if err := running.remote.StartInstance(ctx, instance, config); err != nil {
+							return err
+						}
+						delete(c.stoppedInstances, [2]string{id, instance})
+						return nil
 					}
 				}
 				return fmt.Errorf("adapter is not running: %s", id)
+			})
+		},
+		StopInstance: func(ctx context.Context, id, instance string) error {
+			return c.operation(ctx, func(ctx context.Context) error {
+				c.stoppedInstances[[2]string{id, instance}] = true
+				for _, running := range c.components {
+					if running != nil && running.id == id && running.remote != nil {
+						return running.remote.StopInstance(ctx, instance)
+					}
+				}
+				return fmt.Errorf("adapter is not running: %s", id)
+			})
+		},
+		ForgetInstance: func(ctx context.Context, id, instance string) error {
+			return c.operation(ctx, func(context.Context) error {
+				delete(c.stoppedInstances, [2]string{id, instance})
+				return nil
 			})
 		},
 	})

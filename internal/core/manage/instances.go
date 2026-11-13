@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -20,7 +21,8 @@ var environmentReference = regexp.MustCompile(`^\$\{[A-Za-z_][A-Za-z0-9_]*\}$`)
 var instanceName = regexp.MustCompile(fmt.Sprintf(`^[A-Za-z0-9_-]{1,%d}$`, validate.MaxPluginIDLen))
 
 // CreateInstance 补全并校验实例配置，将凭证或环境变量引用原样写入 Core 设置。
-func (s *Service) CreateInstance(ctx context.Context, adapterPackageID, instanceID string, raw json.RawMessage) error {
+// 更换配置块的所属组件须 confirm，确认后整块丢弃旧实例与缺省选择。
+func (s *Service) CreateInstance(ctx context.Context, adapterPackageID, instanceID string, raw json.RawMessage, confirm bool) error {
 	if !instanceName.MatchString(instanceID) {
 		return invalid("invalid adapter instance name")
 	}
@@ -36,7 +38,21 @@ func (s *Service) CreateInstance(ctx context.Context, adapterPackageID, instance
 	if installed.Role != state.RoleAdapter || installed.Uninstalled {
 		return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "component is not an installed adapter"}
 	}
-	for _, group := range s.opt.Settings.Settings().Adapters {
+	groups := s.opt.Settings.Settings().Adapters
+	group := groups[installed.AdapterID]
+	replacing := group.Package != "" && group.Package != adapterPackageID
+	if replacing && !confirm {
+		affected := []string{"adapter configuration owned by: " + group.Package}
+		for id := range group.Instances {
+			affected = append(affected, "adapter instance: "+id)
+		}
+		slices.Sort(affected)
+		return &ErrNeedsConfirm{Affected: affected}
+	}
+	for adapterID, group := range groups {
+		if replacing && adapterID == installed.AdapterID {
+			continue
+		}
 		if _, exists := group.Instances[instanceID]; exists {
 			return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, Message: "adapter instance already exists"}
 		}
@@ -64,14 +80,24 @@ func (s *Service) CreateInstance(ctx context.Context, adapterPackageID, instance
 		return err
 	}
 	// 旧实例先按已有迁移入口准备，避免新实例使旧实例的版本标记提前升级。
-	_, problems, err := s.opt.Settings.PrepareInstances(installed.AdapterID, schema)
-	if err != nil {
-		return failure(err)
-	}
-	if len(problems) != 0 {
-		return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: fmt.Sprintf("adapter instances require attention: %v", problems)}
+	if !replacing {
+		_, problems, err := s.opt.Settings.PrepareInstances(installed.AdapterID, schema)
+		if err != nil {
+			return failure(err)
+		}
+		if len(problems) != 0 {
+			return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: fmt.Sprintf("adapter instances require attention: %v", problems)}
+		}
 	}
 	err = s.opt.Settings.Update(func(doc *settings.Document) error {
+		if replacing {
+			if err := doc.Delete([]string{"adapters", installed.AdapterID}); err != nil {
+				return err
+			}
+		}
+		if err := doc.Set([]string{"adapters", installed.AdapterID, "package"}, adapterPackageID); err != nil {
+			return err
+		}
 		if err := doc.Set([]string{"adapters", installed.AdapterID, "$version"}, schema.Version()); err != nil {
 			return err
 		}
@@ -81,43 +107,21 @@ func (s *Service) CreateInstance(ctx context.Context, adapterPackageID, instance
 	if err != nil {
 		return failure(err)
 	}
-	return nil
+	return failure(s.opt.ForgetInstance(ctx, adapterPackageID, instanceID))
 }
 
 // DeleteInstance 停止仍在运行的实例，再删除设置中的实例及指向它的缺省选择。
 func (s *Service) DeleteInstance(ctx context.Context, instanceID string) error {
 	s.instances.Lock()
 	defer s.instances.Unlock()
-	var adapterID string
-	for id, group := range s.opt.Settings.Settings().Adapters {
-		if _, exists := group.Instances[instanceID]; exists {
-			adapterID = id
-			break
-		}
-	}
-	if adapterID == "" {
-		return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_NOT_FOUND, Message: "adapter instance not found"}
-	}
-	installs, err := s.opt.Store.Installs(ctx)
+	owner, adapterID, err := s.instanceOwner(ctx, instanceID)
 	if err != nil {
 		return failure(err)
 	}
-	var owner string
-	for _, in := range installs {
-		if in.Role == state.RoleAdapter && in.AdapterID == adapterID {
-			owner = in.PluginID
-			if !in.Uninstalled {
-				break
-			}
-		}
-	}
-	if owner == "" {
-		return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "adapter installation record is missing"}
-	}
 	unlock := s.lock(owner)
 	defer unlock()
-	if running, ok := s.opt.Adapters.Get(instanceID); ok {
-		if err := running.Stop(ctx); err != nil {
+	if _, ok := s.opt.Adapters.Get(instanceID); ok {
+		if err := s.opt.StopInstance(ctx, owner, instanceID); err != nil {
 			return failure(err)
 		}
 	}
@@ -135,7 +139,7 @@ func (s *Service) DeleteInstance(ctx context.Context, instanceID string) error {
 	if err != nil {
 		return failure(err)
 	}
-	return nil
+	return failure(s.opt.ForgetInstance(ctx, owner, instanceID))
 }
 
 // StartInstance 通过当前配置和 schema 启动实例，只影响本次运行。
@@ -173,7 +177,8 @@ func (s *Service) StartInstance(ctx context.Context, instanceID string) (err err
 
 func existsInstance(id string) error { return exists("adapter instance is already running: " + id) }
 
-// StopInstance 停止运行中的实例，保留配置供下次 Core 启动。
+// StopInstance 停止运行中的实例，本次 Core 运行中的进程恢复继续保持停用。
+// 配置保留，下次 Core 启动时重新启用。
 func (s *Service) StopInstance(ctx context.Context, instanceID string) (err error) {
 	defer finish(&err)
 	s.instances.Lock()
@@ -184,17 +189,19 @@ func (s *Service) StopInstance(ctx context.Context, instanceID string) (err erro
 	}
 	unlock := s.lock(owner)
 	defer unlock()
-	if running, ok := s.opt.Adapters.Get(instanceID); ok {
-		return running.Stop(ctx)
+	if _, ok := s.opt.Adapters.Get(instanceID); ok {
+		return s.opt.StopInstance(ctx, owner, instanceID)
 	}
 	return precondition("adapter instance is not running")
 }
 
 func (s *Service) instanceOwner(ctx context.Context, instanceID string) (string, string, error) {
 	var adapterID string
+	var packageID string
 	for id, group := range s.opt.Settings.Settings().Adapters {
 		if _, ok := group.Instances[instanceID]; ok {
 			adapterID = id
+			packageID = group.Package
 			break
 		}
 	}
@@ -206,7 +213,7 @@ func (s *Service) instanceOwner(ctx context.Context, instanceID string) (string,
 		return "", "", err
 	}
 	for _, in := range installs {
-		if !in.Uninstalled && in.Role == state.RoleAdapter && in.AdapterID == adapterID {
+		if in.Role == state.RoleAdapter && in.AdapterID == adapterID && (packageID == in.PluginID || packageID == "" && !in.Uninstalled) {
 			return in.PluginID, adapterID, nil
 		}
 	}

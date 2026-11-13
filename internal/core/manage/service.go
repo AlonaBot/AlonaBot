@@ -42,7 +42,9 @@ type Options struct {
 	Start          func(context.Context, string) error
 	Stop           func(context.Context, string, pb.StopReason) error
 	StartInstance  func(context.Context, string, string, json.RawMessage) error
-	Descriptor     func(string) *pb.AdapterDescriptor // 返回当前运行 Session 的 Adapter 声明。
+	StopInstance   func(context.Context, string, string) error // 与组件恢复串行，并保留本次 Core 运行的停用选择。
+	ForgetInstance func(context.Context, string, string) error // 配置创建、删除成功后清除该实例的运行期选择。
+	Descriptor     func(string) *pb.AdapterDescriptor          // 返回当前运行 Session 的 Adapter 声明。
 	Candidates     Candidates
 }
 

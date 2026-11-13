@@ -42,6 +42,8 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 	}
 	defer func() { err = errors.Join(err, candidate.Discard()) }()
 	m := candidate.Manifest
+	s.instances.Lock()
+	defer s.instances.Unlock()
 	unlock := s.lock(m.ID)
 	defer unlock()
 	key := candidate.Release.PublisherKeyID
@@ -60,8 +62,11 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 		if !previous.Uninstalled {
 			return result, exists("component is already installed: " + m.ID)
 		}
-		if previous.Source != in.Source || previous.PublisherKeyID != in.PublisherKeyID || previous.Role != in.Role || previous.AdapterID != in.AdapterID {
+		if previous.Source != in.Source || previous.Role != in.Role || previous.AdapterID != in.AdapterID {
 			return result, denied("reinstallation source, publisher or identity differs from retained binding")
+		}
+		if err := checkPublisher(previous.PublisherKeyID, key, req.Confirm); err != nil {
+			return result, err
 		}
 	} else if !errors.Is(err, state.ErrNotFound) {
 		return result, err
@@ -92,8 +97,11 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 		replaced = append(replaced, old.PluginID)
 		confirmation = append(confirmation, old.PluginID)
 		if old.Role == state.RoleAdapter {
-			for id := range s.opt.Settings.Settings().Adapters[old.AdapterID].Instances {
-				confirmation = append(confirmation, "adapter instance (retained, not migrated): "+id)
+			group := s.opt.Settings.Settings().Adapters[old.AdapterID]
+			if group.Package == "" || group.Package == old.PluginID {
+				for id := range group.Instances {
+					confirmation = append(confirmation, "adapter instance (retained, not migrated): "+id)
+				}
 			}
 		}
 		affected, err := s.affected(ctx, old, "")
@@ -133,6 +141,11 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 	directory, err := candidate.MoveTo(s.opt.Packages)
 	if err != nil {
 		return result, err
+	}
+	if previous.Uninstalled && previous.PublisherKeyID != key {
+		if err := s.opt.Store.SetPublisherKeyID(ctx, m.ID, key); err != nil {
+			return result, errors.Join(err, os.RemoveAll(directory))
+		}
 	}
 	if err := s.opt.Store.AddInstall(ctx, in); err != nil {
 		return result, errors.Join(err, os.RemoveAll(directory))

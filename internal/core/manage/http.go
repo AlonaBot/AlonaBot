@@ -98,12 +98,13 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 			PackageID  string          `json:"package_id"`
 			InstanceID string          `json:"instance_id"`
 			Config     json.RawMessage `json:"config"`
+			Confirm    bool            `json:"confirm"`
 		}
 		if err := decode(r, &request); err != nil {
 			respond(w, nil, err)
 			return
 		}
-		respond(w, struct{}{}, s.CreateInstance(r.Context(), request.PackageID, request.InstanceID, request.Config))
+		respond(w, struct{}{}, s.CreateInstance(r.Context(), request.PackageID, request.InstanceID, request.Config, request.Confirm))
 	})
 	for _, action := range []string{"start", "stop", "delete"} {
 		mux.HandleFunc("POST /api/v1/adapter/instances/"+action, func(w http.ResponseWriter, r *http.Request) {

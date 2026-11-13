@@ -64,6 +64,20 @@ func (s *Store) SetPin(ctx context.Context, id, version string) error {
 	})
 }
 
+// SetPublisherKeyID 保存管理服务已确认并验证的发布者指纹。
+func (s *Store) SetPublisherKeyID(ctx context.Context, id, key string) error {
+	return s.tx(ctx, func(tx *gorm.DB) error {
+		result := tx.Model(&installation{}).Where(clause.Eq{Column: clause.PrimaryColumn, Value: id}).Update("publisher_key_id", key)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return ErrNotFound
+		}
+		return nil
+	})
+}
+
 type cleanupObject struct {
 	model     interface{ TableName() string }
 	condition clause.Expression
