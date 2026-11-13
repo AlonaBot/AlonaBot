@@ -2065,7 +2065,7 @@ func TestOptionSources(t *testing.T) {
 	}
 	dispatch := router.New(router.Options{})
 	defer dispatch.Close(context.Background())
-	serviceBroker := broker.New(dispatch, tune.Defaults().RequestTimeout)
+	serviceBroker := broker.New(broker.Options{Router: dispatch, RequestTimeout: tune.Defaults().RequestTimeout, MaxDepth: tune.Defaults().CallChainMaxDepth})
 	schema, problems := configschema.Parse(spec.ConfigSchema)
 	if len(problems) > 0 {
 		t.Fatal(problems)

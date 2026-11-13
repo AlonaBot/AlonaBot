@@ -248,7 +248,7 @@ func (s *Scheduler) call(pluginID string, reg *registration, job *registeredJob,
 		response, err = reg.plugin.Call(context.Background(), wire.Request{Target: job.routeID, TraceID: trace,
 			Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF,
 				SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
-			Deadline: scheduledAt.Add(s.jobTimeout), Attach: &router.Invocation{PluginID: pluginID, Event: event},
+			Deadline: scheduledAt.Add(s.jobTimeout), Attach: &router.Invocation{PluginID: pluginID, Event: event, TraceID: trace},
 			Late: func(response wire.Response) {
 				s.mu.Lock()
 				defer s.mu.Unlock()

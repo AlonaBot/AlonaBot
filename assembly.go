@@ -205,7 +205,7 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 	tool.New(store, a.router).Register(a.mux)
 	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes})
 	a.bus.Register(a.mux)
-	serviceBroker := broker.New(a.router, v.RequestTimeout)
+	serviceBroker := broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth})
 	a.mux.Forward(serviceBroker.Call)
 	a.schemas = make(map[string]componentOptionSchemas)
 	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: serviceBroker, Page: v.OptionsPage, Instances: func() []coreoptions.AdapterInstance {
