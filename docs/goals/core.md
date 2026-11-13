@@ -73,7 +73,7 @@
 | goal-9 | T-03.10 | Telegram 接入开发入口与故障矩阵 | T-03.6、T-03.8、T-03.9、T-07.6、T-13.3 | 等待前置 |
 | goal-17 | T-05.3 | 三阶段 Hook 与 send_forbidden | T-05.2 | 已完成（PR #155） |
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 已完成（PR #153） |
-| goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 待派发 |
+| goal-124 | T-04.11 | 注册写法统一 | T-04.8、T-04.12、T-07.5 | 已完成（PR #159） |
 | goal-126 | T-04.13 | Service 与 Event Bus 的带类型声明 | T-04.12 | 待派发 |
 | goal-129 | T-04.14 | 命令名覆盖的 Core 侧 | T-03.17、T-04.10 | 已完成（PR #156） |
 | goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 等待前置 |
@@ -5089,7 +5089,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-124 · T-04.11 注册写法统一
 
-状态：待派发。前置均已合并：T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）、T-04.8（[PR #141](https://github.com/AlonaBot/AlonaBot/pull/141)，合并提交 `ac4aded`）、T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）。2026-11-12 审查者按 main `aa11454` 的代码写出范围、接口与测试段，现有代码如下：
+状态：已完成（[PR #159](https://github.com/AlonaBot/AlonaBot/pull/159)，合并提交 `7872102`），证据见 TEST-MATRIX §3.2。合入：`(*Plugin)`/`(*SubPlugin)` 的 `Route(method, path) *RouteBuilder`（`Public(mode)`、`Handle(http.Handler)`、`HandleFunc`）与 `Every(jobID, d)`、`Cron(jobID, expr)` 返回的 `*ScheduleBuilder`（`Timezone`、`Handle`），删除 `HTTPOption`、`sdk.Public` 与旧的 Handle/Every/Cron 写法；`Generated.ParamNames`（键为 runtime 函数名，函数字面量为 `导入路径:文件:行`；同一行字面量冲突的键省略并 WARN，`_` 与无名参数记空串回退 argN），Collect 查找时规范化 main 与导入路径前缀、泛型实参与 `-fm`；`AdapterHTTP` 为 `HTTP(route func(method, path string) *RouteBuilder)`；Core 的公开路由允许 state、signature、nonce 与 Adapter 的 platform token。Subscribe 的缺省路由 ID 与 `.ID` 归 goal-126。派发时：前置均已合并：T-04.12（[PR #154](https://github.com/AlonaBot/AlonaBot/pull/154)，合并提交 `43a6135`）、T-04.8（[PR #141](https://github.com/AlonaBot/AlonaBot/pull/141)，合并提交 `ac4aded`）、T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）。2026-11-12 审查者按 main `aa11454` 的代码写出范围、接口与测试段，现有代码如下：
 
 - **插件对象与子插件**（`sdk/plugin.go`、`sdk/subplugin.go`）上，HTTP 与定时任务仍是位置参数形式：
   - `Handle(method, path string, h http.Handler, opts ...HTTPOption)`，其中 `HTTPOption`、包级 `Public(mode HTTPAuth) HTTPOption` 与 `HTTPRoute` 在 `sdk/registry.go`，校验在未导出的 `httpRegistry.Handle`；
