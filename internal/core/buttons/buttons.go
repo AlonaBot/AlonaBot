@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"slices"
 	"time"
 
@@ -96,6 +97,21 @@ func (s *Service) Issue(ctx context.Context, caller router.Caller, target *pb.Ta
 		button.CoreToken = proto.String(records[i].Token)
 	}
 	return nil
+}
+
+// InterceptConfirm 在 Router 入队前消费确认点击；插件按钮继续排队派发。
+func (s *Service) InterceptConfirm(ctx context.Context, ev *pb.Event) bool {
+	if ev.GetEventType() != "button.clicked" || ev.GetEventPayload().GetButtonClicked() == nil {
+		return false
+	}
+	record, err := s.store.GetButtonToken(ctx, ev.GetEventPayload().GetButtonClicked().GetValue())
+	if err != nil || record.Purpose != confirmPurpose {
+		return false // 交回原解析路径处理未知 token 或存储错误。
+	}
+	if _, _, err := s.Resolve(ctx, ev); err != nil {
+		slog.Info("discard invalid confirmation click", "error", err)
+	}
+	return true
 }
 
 // Resolve 将插件点击还原为动作与值，将确认点击交给回调并返回空 pluginID 结束派发。

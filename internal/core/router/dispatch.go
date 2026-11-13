@@ -22,6 +22,7 @@ type Options struct {
 	Prepare       func(*pb.Event, Caller) (*pb.Event, error)                                               // 按接收 Session 准备媒体；nil 时原样派发
 	Prefixes      func(adapterInstanceID string) []string                                                  // nil 时所有实例使用 ["/"]
 	Buttons       func(ctx context.Context, ev *pb.Event) (pluginID, routeID string, err error)            // nil 时丢弃按钮点击
+	Intercept     func(ctx context.Context, ev *pb.Event) (handled bool)                                   // 入队前在锁外消费 Core 事件；nil 时跳过
 	Policy        CommandPolicy                                                                            // nil 时仅按声明权限判定且不赋予 admin
 	CommandState  func(context.Context, string, *pb.RouteDescriptor) (bool, []string, error)               // 菜单读取完整策略；nil 时使用注册描述。
 	CommandNames  func(pluginID string) map[string][][]string                                              // nil 时使用声明；在 Router 锁内调用，不得做 I/O。
@@ -68,6 +69,18 @@ func (r *Router) Start() {
 func (r *Router) Deliver(ctx context.Context, ev *pb.Event) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if r.intercept != nil {
+		r.mu.Lock()
+		closed := r.closed
+		r.mu.Unlock()
+		if closed {
+			return errors.New("event router is closed")
+		}
+		// 确认解析会查询插件身份，必须在锁外执行且无需等待派发槽。
+		if r.intercept(ctx, ev) {
+			return nil
+		}
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()

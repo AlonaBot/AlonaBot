@@ -93,6 +93,7 @@ type Router struct {
 	prepare       func(*pb.Event, Caller) (*pb.Event, error)
 	prefixes      func(adapterInstanceID string) []string
 	buttons       func(context.Context, *pb.Event) (string, string, error)
+	intercept     func(context.Context, *pb.Event) bool
 	policy        CommandPolicy
 	commandState  func(context.Context, string, *pb.RouteDescriptor) (bool, []string, error)
 	commandNames  func(string) map[string][][]string
@@ -124,7 +125,7 @@ func New(opt Options) *Router {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Router{
-		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy, buttons: opt.Buttons, preEvent: opt.PreEvent,
+		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy, buttons: opt.Buttons, intercept: opt.Intercept, preEvent: opt.PreEvent,
 		concurrency: opt.Concurrency, queueEvents: opt.QueueEvents, queueBytes: opt.QueueBytes, global: opt.Global,
 		ctx: ctx, cancel: cancel, drained: make(chan struct{}),
 		continuations: opt.Continuations,

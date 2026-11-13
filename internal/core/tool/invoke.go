@@ -3,6 +3,8 @@ package tool
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -83,7 +85,9 @@ func (i *invoker) invoke(ctx context.Context, caller router.Caller, in *wire.Inb
 		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "resolve tool input schema: "+err.Error())
 	}
 	if err := resolved.Validate(value); err != nil {
-		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "tool arguments: "+err.Error())
+		// 校验器错误包含参数原值，公开错误与日志只保留声明信息。
+		slog.DebugContext(ctx, "tool input schema validation failed", "tool", request.GetName(), "schema_id", service.GetInputSchemaId())
+		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("invalid tool arguments for %q", request.GetName()))
 	}
 	permitted := len(service.GetRequiredPermissions()) == 0
 	for _, required := range service.GetRequiredPermissions() {
