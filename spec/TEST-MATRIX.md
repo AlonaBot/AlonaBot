@@ -365,6 +365,7 @@ T-02.4 按 D-86 删除的测试及测试插件只保留历史运行证据，相�
 | 媒体与接收原分项 | `go test -race -count=1 -v ./adapters/telegram -run '^TestTelegram(PlatformFileLocal\|AlbumAndZeroIDLocal)$'`；`go test -race -count=1 -v ./adapters/telegram ./internal/core/media ./internal/core/settings -run '^(TestRoundRebuild\|TestSubscriptionAndRestart\|TestSequentialAcknowledgements\|TestMessageMetadata\|TestReferenceLifetime\|TestInstanceConfigurationFiles)$'` | 全通过，`telegram-adapter-fix3.log`、`telegram-reused-fix3.log` |
 
 真实 Telegram：**未运行：维护者未提供 Telegram 凭证和授权测试会话**。其他目标平台实际运行与远程 CI 未运行；提交测试仍为原 151 行，FIX-3 新增提交测试 0 行。本地测试与日志留给审查者归档，修复 commit SHA 由审查者提交后补入。
+| T-09.6 / V-30 与 V-21 的提交分项 | [PR #179](https://github.com/AlonaBot/AlonaBot/pull/179)；按 D-86 不新增提交测试，既有 `cmd/alonabot/manage_e2e_test.go` 等管理与启用测试的断言保持不变并通过（首次启用改走候选准备与提交）。执行者本地自测（未提交）：CommitCandidate 的 16 个前置拒绝、四个写入点整体回滚与并发提交；ReplaceProgram；Commit 的 reload、陈旧候选、OnReady 失败、缺程序、缺数据库；根包管理场景：经管理 HTTP 的 JSON 入口真实更新成功、ACTIVATED 前路由隐藏与 HTTP 503、旧代次按钮失效、提交后 OnReady 或 Scheduler 装配失败进入 Degraded 且 restart 可恢复、停用组件 Update 后保持停用、Update 缺少必需依赖时拒绝且旧版继续运行、没有 Active 与 WebUI 的直接更新、Update 失败时发布者绑定保持。审查者复现并确认修复停用组件被重新激活、提交后 Scheduler 失败丢失 Degraded、Update 跳过依赖检查三项，并在合入 main 后发现、确认修复首次启用日志 mode 变化破坏两项既有断言。2026-11-13，darwin/arm64，Go 1.27.x。 | 通过 | 经 multipart 上传的更新（goal-92 合并后复核）；崩溃恢复、rollback 与回收（T-09.7）；其他操作系统未运行 |
 
 ### 3.3 Target 与发信许可分项证据
 

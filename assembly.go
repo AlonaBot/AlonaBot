@@ -857,7 +857,11 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, kind journal.Kin
 	if startErr := c.startInstances(ctx, running, instanceSchema); startErr != nil {
 		return degraded(startErr)
 	}
-	slog.Info("plugin activated", "plugin_id", id, "generation_id", r.Generation, "mode", string(kind), "pid", process.Process.Pid())
+	mode := string(kind)
+	if kind == journal.KindFirstInstall {
+		mode = "new"
+	}
+	slog.Info("plugin activated", "plugin_id", id, "generation_id", r.Generation, "mode", mode, "pid", process.Process.Pid())
 	return running, err
 }
 
