@@ -82,7 +82,7 @@
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 已完成（PR #162） |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 已完成（PR #161） |
 | goal-128 | T-07.9 | 动态任务与暂停恢复的 SDK | T-04.12、T-07.8 | 已完成（PR #176） |
-| goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 待派发 |
+| goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 已完成（PR #177） |
 | goal-92 | T-09.13 | 管理页所需的会话与上传接口 | T-09.1、T-09.4、T-09.12 | 待派发 |
 | goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 等待前置 |
 | goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 已完成（PR #164） |
@@ -6094,7 +6094,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-66 · T-09.10 日志管理
 
-状态：待派发。直接前置 T-09.4（goal-39，PR #163，合并提交 `cb8ae3d`）、T-09.12（goal-84，PR #167，合并提交 `3a9b4af`）均已合并；既有日志基线 T-02.1（goal-65，PR #13，`775f665`）、设置文件 T-07.6（goal-97，PR #100，`cb83eeb`）、首次认证 T-09.1（goal-36，PR #72，`1ba7e5b`）均可复用。2026-11-13 按本 worktree 的 main `dbbb80b` 用 `rg` 核对定义与调用者，`logging.Output` 另以离线 `go doc` 交叉核对。语句按现行 CONTRACTS §14.3 修正两种级别的持久化；末尾列出派发前须裁决的规格冲突。2026-11-13 审查者裁决（DECISIONS 2026-11-13 变更记录）：全局与来源级别都按 CONTRACTS §14.3 写回 core_config.json（TEST-MATRIX V-63 同步修正）；SSE 订阅的慢消费者规则见行为；历史查询按文件中实际存在的内容返回，精度登记进 ADMIN-API；实时 Source 以可信组件 ID 归组，来源类别取自 Core 的安装记录。采纳 `Options.BufferRecords`、`manage.Options.Logs`/`NotifyLogLevel` 与 Record 的 JSON 形状。
+状态：已完成（[PR #177](https://github.com/AlonaBot/AlonaBot/pull/177)，合并提交 `99efcd1`），证据见 TEST-MATRIX §3.2。合入：服务 `sdk.log.set_level`（`LogSetLevelRequest/Response`）；`logging.Options.BufferRecords`、`(*Output).Recent`、`(*Output).Subscribe`、`logging.Query`、`logging.Record`；管理 API 的 `/api/v1/logs/recent`、`/stream`、`/history` 与日志级别修改，`alonabot logs` 与日志级别命令；组件日志的可信来源类别。以下为派发时的语句。
 
 按 main 核对：
 
