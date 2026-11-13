@@ -17,6 +17,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
+	"github.com/AlonaBot/AlonaBot/internal/core/metrics"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
@@ -115,6 +116,7 @@ type Router struct {
 	started       bool
 	closed        bool
 	continuations Continuations
+	metrics       *metrics.Counters
 }
 
 // New 按显式的并发和队列限额创建路由器；限额由装配处从 tune.Values 传入。
@@ -127,8 +129,8 @@ func New(opt Options) *Router {
 		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy, buttons: opt.Buttons, preEvent: opt.PreEvent,
 		concurrency: opt.Concurrency, queueEvents: opt.QueueEvents, queueBytes: opt.QueueBytes, global: opt.Global,
 		ctx: ctx, cancel: cancel, drained: make(chan struct{}),
-		continuations: opt.Continuations,
-		matches:       make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
+		continuations: opt.Continuations, metrics: opt.Metrics,
+		matches: make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
 		inFlight: make(map[inFlightKey]int), commands: &CommandIndex{},
 		commandState: opt.CommandState, commandNames: opt.CommandNames, commandSyncs: make(map[string]*commandSync),
 	}
@@ -380,6 +382,7 @@ func (r *Router) permitted(c candidate, ev *pb.Event) bool {
 		}
 	}
 	slog.Debug("route permission denied", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId())
+	r.metrics.Add(c.pluginID, "event", "denied")
 	return false
 }
 
@@ -395,6 +398,7 @@ func (r *Router) call(c candidate, event *trustedEvent, bind func(*pb.Event) (*p
 	current := r.current(c)
 	r.mu.Unlock()
 	if !current {
+		r.metrics.Add(c.pluginID, "event", "offline")
 		return wire.Response{}, errors.New("plugin Session is no longer active")
 	}
 	prepared := ev
@@ -424,6 +428,7 @@ func (r *Router) call(c candidate, event *trustedEvent, bind func(*pb.Event) (*p
 	r.mu.Lock()
 	if !r.current(c) {
 		r.mu.Unlock()
+		r.metrics.Add(c.pluginID, "event", "offline")
 		return wire.Response{}, errors.New("plugin Session is no longer active")
 	}
 	r.inFlight[key]++
@@ -435,6 +440,7 @@ func (r *Router) call(c candidate, event *trustedEvent, bind func(*pb.Event) (*p
 		Attach:  inv,
 		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
 	})
+	r.countCall(c.pluginID, response, err)
 	if r.continuations != nil {
 		r.continuations.Finished(inv, err == nil && response.Err == nil)
 	}
@@ -447,6 +453,7 @@ func (r *Router) CallContinuation(ctx context.Context, inv *Invocation, continua
 	current := r.current(inv.candidate)
 	r.mu.Unlock()
 	if !current {
+		r.metrics.Add(inv.PluginID, "event", "offline")
 		return wire.Response{}, errors.New("plugin Session is no longer active")
 	}
 	request := proto.CloneOf(inv.request)
@@ -460,6 +467,7 @@ func (r *Router) CallContinuation(ctx context.Context, inv *Invocation, continua
 	r.mu.Lock()
 	if !r.current(inv.candidate) {
 		r.mu.Unlock()
+		r.metrics.Add(inv.PluginID, "event", "offline")
 		return wire.Response{}, errors.New("plugin Session is no longer active")
 	}
 	r.inFlight[key]++
@@ -469,10 +477,24 @@ func (r *Router) CallContinuation(ctx context.Context, inv *Invocation, continua
 		Target: inv.RouteID, TraceID: inv.TraceID, Deadline: deadline, Attach: next,
 		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
 	})
+	r.countCall(inv.PluginID, response, err)
 	if r.continuations != nil {
 		r.continuations.Finished(next, err == nil && response.Err == nil)
 	}
 	return response, err
+}
+
+func (r *Router) countCall(pluginID string, response wire.Response, err error) {
+	code := response.Err.GetCode()
+	if err != nil {
+		code = wire.CodeOf(err)
+	}
+	switch code {
+	case pb.ErrorCode_ERROR_CODE_CANCELLED, pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, pb.ErrorCode_ERROR_CODE_UNAVAILABLE:
+		r.metrics.Add(pluginID, "event", "cancelled")
+	case pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED:
+		r.metrics.Add(pluginID, "event", "dropped_budget")
+	}
 }
 
 func (r *Router) finishCall(key inFlightKey) {

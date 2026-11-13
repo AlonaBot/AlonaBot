@@ -5,8 +5,10 @@
 package broker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -16,6 +18,7 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/core/metrics"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
@@ -29,7 +32,8 @@ const (
 type Options struct {
 	Router         *router.Router
 	RequestTimeout time.Duration
-	MaxDepth       int // CALL_CHAIN_MAX_DEPTH，包含即将调用的目标插件。
+	MaxDepth       int               // CALL_CHAIN_MAX_DEPTH，包含即将调用的目标插件。
+	Metrics        *metrics.Counters // nil 时关闭原因计数。
 }
 
 // Broker 保存路由入口和在途转发关系；New 创建，Call 接入 Mux.Forward。
@@ -39,6 +43,7 @@ type Broker struct {
 	router         *router.Router
 	requestTimeout time.Duration
 	maxDepth       int
+	metrics        *metrics.Counters
 	mu             sync.Mutex // 只保护 calls，转发期间不持锁
 	calls          map[*router.Invocation]callOrigin
 }
@@ -50,7 +55,7 @@ type callOrigin struct {
 
 // New 按装配处传入的请求期限和调用链深度上限创建 Broker。
 func New(opt Options) *Broker {
-	return &Broker{router: opt.Router, requestTimeout: opt.RequestTimeout, maxDepth: opt.MaxDepth, calls: make(map[*router.Invocation]callOrigin)}
+	return &Broker{router: opt.Router, requestTimeout: opt.RequestTimeout, maxDepth: opt.MaxDepth, metrics: opt.Metrics, calls: make(map[*router.Invocation]callOrigin)}
 }
 
 // Call 依次完成定位、访问与输入准入，再以独立编号调用目标 Session。
@@ -64,7 +69,16 @@ func (b *Broker) CallSession(ctx context.Context, c, target router.Caller, in *w
 	return b.call(ctx, c, in, &target)
 }
 
-func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, target *router.Caller) wire.Response {
+func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, target *router.Caller) (result wire.Response) {
+	trace := in.TraceID
+	if parent, ok := in.ParentAttach.(*router.Invocation); ok {
+		trace = parent.TraceID
+	}
+	defer func() {
+		if result.Err != nil {
+			result.Err.TraceId = bytes.Clone(trace)
+		}
+	}()
 	// 1. 目标语法必须先于插件与服务查找检查。
 	pluginID, name, ok := strings.Cut(in.Target, "/")
 	if _, err := validate.PluginID(pluginID); err != nil || !ok || !validate.IsServiceName(name) {
@@ -73,6 +87,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 	var plugin router.Plugin
 	if target != nil {
 		if target.PluginID != pluginID {
+			b.metrics.Add(pluginID, "service", "offline")
 			return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "target session does not match service target")
 		}
 		plugin, ok = b.router.PluginFor(*target)
@@ -80,6 +95,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		plugin, ok = b.router.Plugin(pluginID)
 	}
 	if !ok || !plugin.Activated() {
+		b.metrics.Add(pluginID, "service", "offline")
 		return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "target plugin is not active")
 	}
 	var service *pb.RouteDescriptor
@@ -95,6 +111,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 	// 2. Caller 来自认证 Session；Core 与本插件始终满足缺省访问规则。
 	spec := service.GetService()
 	if !router.ServiceCallable(spec, c.PluginID, pluginID) {
+		b.metrics.Add(pluginID, "service", "denied")
 		return failure(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "service access denied")
 	}
 	payload := in.Payload
@@ -120,9 +137,11 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 	}
 	invocation.Chain = append(invocation.Chain, c.PluginID)
 	if slices.Contains(invocation.Chain, pluginID) {
+		b.metrics.Add(pluginID, "service", "cycle")
 		return failure(pb.ErrorCode_ERROR_CODE_CALL_CYCLE, "service call chain contains target plugin")
 	}
 	if len(invocation.Chain)+1 > b.maxDepth {
+		b.metrics.Add(pluginID, "service", "depth")
 		return failure(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "service call chain exceeds maximum depth")
 	}
 	trusted.PluginChain = invocation.Chain
@@ -142,6 +161,10 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		deadline = parentDeadline
 	}
 	// 4. wire.Session 为本跳分配 call_id，并将它与此附件绑定；不回填源请求编号。
+	if ctx.Err() != nil {
+		b.metrics.Add(pluginID, "service", "cancelled")
+		return failure(pb.ErrorCode_ERROR_CODE_CANCELLED, "service call cancelled before dispatch")
+	}
 	b.mu.Lock()
 	b.calls[invocation] = callOrigin{caller: c, callID: in.CallID}
 	b.mu.Unlock()
@@ -153,13 +176,26 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 	response, err := plugin.Call(ctx, wire.Request{Target: service.GetRouteId(), TraceID: invocation.TraceID, Deadline: deadline, Attach: invocation,
 		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: invocationSchemaVersion, Bytes: encoded}})
 	// 5. 保留目标的业务错误与有效载荷；成功结果必须符合声明的输出契约。
-	if response.Err != nil {
-		response.Err = proto.Clone(response.Err).(*pb.ErrorInfo)
-		response.Err.Code = validate.PublicCode(response.Err.GetCode())
+	if response.Err != nil || err != nil {
+		code := validate.PublicCode(wire.CodeOf(err))
+		message := "service call failed"
+		if response.Err != nil {
+			code = validate.PublicCode(response.Err.GetCode())
+			message = response.Err.GetSafeMessage()
+		}
+		switch code {
+		case pb.ErrorCode_ERROR_CODE_CANCELLED, pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, pb.ErrorCode_ERROR_CODE_UNAVAILABLE:
+			b.metrics.Add(pluginID, "service", "cancelled")
+		case pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED:
+			b.metrics.Add(pluginID, "service", "dropped_budget")
+		}
+		if code == pb.ErrorCode_ERROR_CODE_INTERNAL {
+			slog.Error("service call failed", "plugin_id", pluginID, "service_name", name, "trace_id", fmt.Sprintf("%x", trace), "error", err, "remote_error", message)
+			message = "service call failed"
+		}
+		// 重新构造公开错误，避免透传远端未知字段；业务载荷仍随错误保留。
+		response.Err = &pb.ErrorInfo{Code: code, SafeMessage: message}
 		return response
-	}
-	if err != nil {
-		return failure(validate.PublicCode(wire.CodeOf(err)), err.Error())
 	}
 	out := response.Payload
 	if out.Encoding != spec.GetEncoding() || out.SchemaID != service.GetOutputSchemaId() || out.SchemaVersion != service.GetOutputSchemaVersion() || out.Encoding == pb.PayloadEncoding_PAYLOAD_ENCODING_JSON && !validJSON(out.Bytes) {

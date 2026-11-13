@@ -33,6 +33,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/media"
 	"github.com/AlonaBot/AlonaBot/internal/core/message"
+	"github.com/AlonaBot/AlonaBot/internal/core/metrics"
 	coreoptions "github.com/AlonaBot/AlonaBot/internal/core/options"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/process"
@@ -137,6 +138,7 @@ type assembly struct {
 	scheduler *scheduler.Scheduler
 	http      *httpproxy.Server
 	global    *wire.Budget
+	metrics   *metrics.Counters
 	store     *state.Store
 	options   *coreoptions.Service
 	settings  *settings.File
@@ -151,7 +153,7 @@ type componentOptionSchemas struct {
 }
 
 func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) {
-	a := &assembly{store: store, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload)}
+	a := &assembly{store: store, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload), metrics: &metrics.Counters{}}
 	var err error
 	a.settings, err = settings.Load(dir)
 	if err != nil {
@@ -184,7 +186,7 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 		}})
 	a.router = router.New(router.Options{Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
 		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: nil, CommandNames: p.CommandNames,
-		Continuations: continuations,
+		Continuations: continuations, Metrics: a.metrics,
 		Send: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
 			return messages.Send(ctx, c, in)
 		},
@@ -203,9 +205,9 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 	a.media.AddReadServices(a.mux, a.adapters, a.router, store.AdapterInstanceAllowed)
 	conversation.New(store).Register(a.mux)
 	tool.New(store, a.router).Register(a.mux)
-	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes})
+	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes, Metrics: a.metrics})
 	a.bus.Register(a.mux)
-	serviceBroker := broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth})
+	serviceBroker := broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth, Metrics: a.metrics})
 	a.mux.Forward(serviceBroker.Call)
 	a.schemas = make(map[string]componentOptionSchemas)
 	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: serviceBroker, Page: v.OptionsPage, Instances: func() []coreoptions.AdapterInstance {
