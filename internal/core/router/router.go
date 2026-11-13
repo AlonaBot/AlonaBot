@@ -416,7 +416,7 @@ func (r *Router) call(c candidate, event *trustedEvent, bind func(*pb.Event) (*p
 	r.inFlight[key]++
 	r.mu.Unlock()
 	defer r.finishCall(key)
-	inv := &Invocation{PluginID: c.pluginID, Event: prepared, DefaultTarget: proto.CloneOf(event.retained.GetTarget()), RouteID: request.RouteId, candidate: c, request: request, trace: trace}
+	inv := &Invocation{PluginID: c.pluginID, Event: prepared, DefaultTarget: proto.CloneOf(event.retained.GetTarget()), Chain: slices.Clone(request.Context.PluginChain), Scopes: slices.Clone(request.Context.Scopes), RouteID: request.RouteId, candidate: c, request: request, TraceID: trace}
 	response, err := c.plugin.Call(r.ctx, wire.Request{
 		Target: request.RouteId, TraceID: trace,
 		Attach:  inv,
@@ -442,7 +442,7 @@ func (r *Router) CallContinuation(ctx context.Context, inv *Invocation, continua
 	if err != nil {
 		return wire.Response{}, fmt.Errorf("encode continuation request: %w", err)
 	}
-	next := &Invocation{PluginID: inv.PluginID, Event: request.Event, DefaultTarget: proto.CloneOf(inv.DefaultTarget), RouteID: inv.RouteID, Continuation: true, candidate: inv.candidate, request: request, trace: inv.trace}
+	next := &Invocation{PluginID: inv.PluginID, Event: request.Event, DefaultTarget: proto.CloneOf(inv.DefaultTarget), Chain: slices.Clone(inv.Chain), Scopes: slices.Clone(inv.Scopes), SendForbidden: inv.SendForbidden, RouteID: inv.RouteID, Continuation: true, candidate: inv.candidate, request: request, TraceID: inv.TraceID}
 	key := inFlightKey{caller: inv.candidate.caller, eventID: inv.Event.GetEventId()}
 	r.mu.Lock()
 	if !r.current(inv.candidate) {
@@ -453,7 +453,7 @@ func (r *Router) CallContinuation(ctx context.Context, inv *Invocation, continua
 	r.mu.Unlock()
 	defer r.finishCall(key)
 	response, err := inv.candidate.plugin.Call(ctx, wire.Request{
-		Target: inv.RouteID, TraceID: inv.trace, Deadline: deadline, Attach: next,
+		Target: inv.RouteID, TraceID: inv.TraceID, Deadline: deadline, Attach: next,
 		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
 	})
 	if r.continuations != nil {

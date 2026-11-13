@@ -184,7 +184,7 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 	tool.New(store, a.router).Register(a.mux)
 	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes})
 	a.bus.Register(a.mux)
-	a.mux.Forward(broker.New(a.router, v.RequestTimeout).Call)
+	a.mux.Forward(broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth}).Call)
 	a.scheduler = scheduler.New(scheduler.Options{JobTimeout: v.JobTimeout})
 	a.http = httpproxy.New(nil)
 	return a, nil
