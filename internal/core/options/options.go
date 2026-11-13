@@ -1,6 +1,6 @@
 // Package options 按组件 Active 配置声明查询内置或私有 Service 提供的选项。
 //
-// [Service.Query] 从 schema 读取来源和 filter，经 [Options] 注入 Router、Broker 与实例快照。
+// [Service.Query] 从 schema 读取来源和 filter，经 [Options] 注入 Router、Broker、实例快照与聊天查询。
 // 配置值的补齐、保存与校验继续由 configschema 负责（CONTRACTS §5.1）。
 package options
 
@@ -17,6 +17,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/broker"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
+	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/google/jsonschema-go/jsonschema"
 )
@@ -54,13 +55,14 @@ const (
 	AdapterInstanceSchema
 )
 
-// Options 注入当前代次的声明、路由、已配置实例快照与分页上限。
+// Options 注入当前代次的声明、路由、实例快照、聊天查询与分页上限。
 type Options struct {
 	Schema    func(componentID string, kind SchemaKind) (*configschema.Schema, bool)
 	Router    *router.Router
 	Broker    *broker.Broker
 	Instances func(context.Context) ([]AdapterInstance, error)
-	Page      int // 传入 tune.Values.OptionsPage。
+	Chats     func(ctx context.Context, q state.ChatQuery) ([]state.Chat, bool, error) // nil 时聊天来源不可用。
+	Page      int                                                                      // 传入 tune.Values.OptionsPage。
 }
 
 // AdapterInstance 标识一个已配置的平台接入实例。
@@ -96,6 +98,8 @@ func (s *Service) Query(ctx context.Context, componentID string, kind SchemaKind
 		switch from.Source {
 		case "core.adapter_instances":
 			page, err = s.instances(ctx, from, q)
+		case "core.chats":
+			page, err = s.chats(ctx, from, q)
 		default:
 			return Page{}, unavailable("options source is unavailable: " + from.Source)
 		}

@@ -35,7 +35,7 @@
 | T-03.18 | goal-109 | SDK 的流式输出辅助函数 `c.Stream`：按 `message.edit` 选择节流编辑或缓冲后发送一次，按 `message.send` 声明的上限与单位换条，未声明时不换条，失败即停止；追加能力元数据与官方 Telegram 声明（D-98、D-135） | T-03 步骤 15 | T-03.9、T-04.8 | V-94 的 Core 分项 | 已完成（PR #151；TEST-MATRIX §3.2） |
 | T-03.19 | goal-110 | Adapter 的 HTTP 路由：Adapter 的 REGISTER 携带 HTTP 路由与 endpoint，`sdk.RunAdapter` 托管 Listener，统一端口代理 WebSocket Upgrade 并在路由撤销时关闭连接，Adapter 路由保留 Authorization 交 Adapter 校验（D-94、D-136） | T-03 步骤 16 | T-03.3、T-04.8、T-07.7 | V-95 的 Core 分项 | 已完成（PR #152；TEST-MATRIX §3.2） |
 | T-03.24 | goal-121 | 插件给出的目标由 Core 补齐：缺少实例时按在途事件的同一会话或 Adapter 的缺省实例选择，account_id 按实例补上；`core.send` 的 To 与引用片段、`core.media.grant` 的 targets 在准入前补齐；`core_config.json` 的实例名规则与 `default_instance`（D-102） | T-03 步骤 21 | T-03.6、T-07.6 | V-101 的 Core 分项 | 已完成（PR #135；TEST-MATRIX §3.2） |
-| T-03.25 | goal-131 | 聊天目录：Event 追加 `chat_title`，Core 在接纳入站事件时记录聊天（键、chat_type、名称、最近的实例与活跃时刻），内置选项来源 `core.chats`，随 Adapter 的数据清理（D-130） | T-03 步骤 22 | T-03.3、T-08.14、T-09.4 | V-117 的 Core 分项 | 未开始 |
+| T-03.25 | goal-131 | 聊天目录：Event 追加 `chat_title`，Core 在接纳入站事件时记录聊天（键、chat_type、名称、最近的实例与活跃时刻），内置选项来源 `core.chats`，随 Adapter 的数据清理（D-130） | T-03 步骤 22 | T-03.3、T-08.14、T-09.4 | V-117 的 Core 分项 | 已完成（PR #166；TEST-MATRIX §3.2） |
 | T-04.1 | goal-10 | 根插件 API 与显式注册；静态注册索引、重复拒绝、跨插件遮蔽的稳定选择 | T-04 步骤 1、3 | T-03.1 | V-10 的注册分项、V-02 的注册原子性 | 已完成（PR #34；TEST-MATRIX §3.2） |
 | T-04.2 | goal-11 | 构建期生成器 `sdk/generate`：限定扫描范围、build tags、生成注册代码、稳定输出；`cmd/alonabot` 的构建检查入口 | T-04 步骤 2 | T-04.1 | V-10 | 已完成（PR #42；TEST-MATRIX §3.2） |
 | T-04.3 | goal-12 | 命令选择与参数绑定：完整 token、@username、最长路径/别名→文本匹配（Regex、keyword、startswith、endswith、fullmatch）→Raw、消费状态、参数语法、usage/silent | T-04 步骤 4 | T-04.1 | V-11 的命令分项、V-49 | 已完成（PR #47；TEST-MATRIX §3.2） |
