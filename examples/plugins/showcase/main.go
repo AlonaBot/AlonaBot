@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/sdk"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
@@ -70,22 +71,40 @@ func (p *Demo) Commands(r *sdk.Plugin) {
 	}
 }
 
-// CreateReminder 以作者指定的 key 创建提醒，回复实际使用的取消键。
+// CreateReminder 在当前用户与会话内创建提醒，回复用户输入的 key。
 func (p *Demo) CreateReminder(c *sdk.Context, key string, seconds int64, text string) (message.Content, error) {
-	key, err := p.reminder.At(c.Context(), time.Now().Add(time.Duration(seconds)*time.Second),
-		ReminderArgs{Session: c.Session(), Text: text}, sdk.Key(key))
+	internalKey, err := reminderKey(c, key)
+	if err != nil {
+		return nil, err
+	}
+	_, err = p.reminder.At(c.Context(), time.Now().Add(time.Duration(seconds)*time.Second),
+		ReminderArgs{Session: c.Session(), Text: text}, sdk.Key(internalKey))
 	if err != nil {
 		return nil, err
 	}
 	return message.Text(key), nil
 }
 
-// CancelReminder 按 key 取消提醒，成功后回显取消键。
+// CancelReminder 取消当前用户在当前会话的提醒，成功后回显用户输入的 key。
 func (p *Demo) CancelReminder(c *sdk.Context, key string) (message.Content, error) {
-	if err := p.reminder.Cancel(c.Context(), key); err != nil {
+	internalKey, err := reminderKey(c, key)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.reminder.Cancel(c.Context(), internalKey); err != nil {
 		return nil, err
 	}
 	return message.Text(key), nil
+}
+
+func reminderKey(c *sdk.Context, key string) (string, error) {
+	user, session := c.User(), c.Session()
+	// 长度前缀保留各段边界，用户 key 中的分隔符也无法改变身份作用域。
+	internalKey := fmt.Sprintf("%d:%s/%d:%s/%s", len(user), user, len(session), session, key)
+	if len(internalKey) > 128 { // CONTRACTS §4.3 按 UTF-8 字节限制完整内部 key。
+		return "", errcode.InvalidArgument.New("reminder key with user and session scope exceeds 128 bytes")
+	}
+	return internalKey, nil
 }
 
 // Remind 使用参数保存的会话显式发送提醒。

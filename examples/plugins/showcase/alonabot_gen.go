@@ -12,6 +12,7 @@ var alonabotGenerated = alonabotgen0.Generated{
 		"main.(*Demo).Echo":           {"text", "times"},
 		"main.(*Demo).Hello":          {},
 		"main.(*Demo).Remind":         {"args"},
-		"main:main.go:122":            {},
+		"main.reminderKey":            {"key"},
+		"main:main.go:141":            {},
 	},
 }

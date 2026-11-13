@@ -174,12 +174,22 @@ Adapter 可以实现 `sdk.AdapterHTTP`，在统一端口的 `/plugins/<Adapter �
 
 ## 动态提醒与静态任务暂停恢复
 
-需要十分钟后给当前会话发提醒时，先在 `New()` 中登记任务声明和处理函数，命令执行时再创建实例。完整示例见 [showcase](../examples/plugins/showcase/main.go)：`/demo remind meeting 600 开会` 创建 key 为 `meeting` 的提醒，`/demo cancel meeting` 取消。
+需要十分钟后给当前会话发提醒时，先在 `New()` 中登记任务声明和处理函数，命令执行时再创建实例。完整示例见 [showcase](../examples/plugins/showcase/main.go)：`/demo remind meeting 600 开会` 创建当前用户在当前会话内的 `meeting` 提醒，`/demo cancel meeting` 取消。同用户、同会话、同 key 再次创建会替换提醒；不同用户或会话各自独立，回复始终使用用户输入的 key。
 
 ```go
 type ReminderArgs struct {
     Session message.Session `json:"session"`
     Text    string          `json:"text"`
+}
+
+// 创建与取消共用编码，将可信身份与用户 key 一起放入内部 key。
+func reminderKey(c *sdk.Context, key string) (string, error) {
+    user, session := c.User(), c.Session()
+    internalKey := fmt.Sprintf("%d:%s/%d:%s/%s", len(user), user, len(session), session, key)
+    if len(internalKey) > 128 {
+        return "", errcode.InvalidArgument.New("reminder key with user and session scope exceeds 128 bytes")
+    }
+    return internalKey, nil
 }
 
 // New 中创建并登记一次，命令闭包持有同一个声明值。
@@ -189,21 +199,31 @@ sdk.OnTask(p, reminder).Handle(func(c *sdk.Context, args ReminderArgs) error {
     return err
 })
 p.Command("remind").Handle(func(c *sdk.Context, key, text string) (message.Content, error) {
-    key, err := reminder.At(c.Context(), time.Now().Add(10*time.Minute),
-        ReminderArgs{Session: c.Session(), Text: text}, sdk.Key(key))
+    internalKey, err := reminderKey(c, key)
+    if err != nil {
+        return nil, err
+    }
+    _, err = reminder.At(c.Context(), time.Now().Add(10*time.Minute),
+        ReminderArgs{Session: c.Session(), Text: text}, sdk.Key(internalKey))
     if err != nil {
         return nil, err
     }
     return message.Text(key), nil
 })
 p.Command("cancel").Handle(func(c *sdk.Context, key string) error {
-    return reminder.Cancel(c.Context(), key)
+    internalKey, err := reminderKey(c, key)
+    if err != nil {
+        return err
+    }
+    return reminder.Cancel(c.Context(), internalKey)
 })
 ```
 
+`reminderKey` 使用 `c.User()` 与 `c.Session()` 的可信身份，以长度前缀区分完整字段。128 字节上限包含身份作用域和用户 key；超长返回明确的 `INVALID_ARGUMENT`，保留输入原文。示例需导入标准库 `fmt` 与 `sdk/errcode`。
+
 任务回调没有 Actor 与默认会话；将所需会话、用户或取消键写入参数，并以 `sdk.To` 指定发送目标。主动发送遵循 Core 的 `allowed_adapter_instances` 准入。参数类型遵循 JSON Service 的类型规则，使用包级具名、非泛型的值类型，顶层编码为 JSON 对象；生成器检查嵌套字段与自定义编码限制。新增声明后运行 `go generate`。
 
-`reminder.Every(ctx, time.Hour, args, sdk.Key(key))` 创建周期实例；`reminder.Cron(ctx, "0 9 * * *", args, sdk.Timezone("Asia/Shanghai"))` 按 IANA 时区运行。`At`、`Every` 上设置 `Timezone` 返回 `INVALID_ARGUMENT`。省略 `Key` 时 SDK 生成随机 key，成功返回实际使用的 key；同任务名、同 key 再次创建会整体替换规则和参数，在途旧一轮继续执行。`Cancel` 删除实例并协作取消在途调用，函数实际返回后释放运行槽。未知实例保留 Core 的 `NOT_FOUND`。
+`reminder.Every(ctx, time.Hour, args, sdk.Key(internalKey))` 创建周期实例；`reminder.Cron(ctx, "0 9 * * *", args, sdk.Key(internalKey), sdk.Timezone("Asia/Shanghai"))` 按 IANA 时区运行，其中 `internalKey` 沿用上述身份作用域编码。`At`、`Every` 上设置 `Timezone` 返回 `INVALID_ARGUMENT`。省略 `Key` 时 SDK 生成随机 key，成功返回实际使用的 key；同任务名、同 key 再次创建会整体替换规则和参数，在途旧一轮继续执行。`Cancel` 删除实例并协作取消在途调用，函数实际返回后释放运行槽。未知实例保留 Core 的 `NOT_FOUND`。
 
 `reminder.List(ctx)` 读取全部分页，返回完整的 `TaskInstance[ReminderArgs]`。`At`、`Interval`、`Cron` 中仅对应触发规则的字段有值，`Timezone` 随 Cron 返回；`NextAt == nil` 表示协议没有下一次触发时刻。任一页读取或参数解码失败都会返回错误。
 
