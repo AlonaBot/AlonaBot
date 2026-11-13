@@ -93,8 +93,8 @@
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 已完成（PR #173） |
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 已完成（PR #172） |
 | goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 待派发 |
-| goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 待派发 |
-| goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 等待前置 |
+| goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 已完成（PR #179） |
+| goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 待派发 |
 | goal-93 | T-09.14 | 配置、权限、工具策略与会话的管理 API | T-03.25、T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-08.14、T-09.6、T-09.12、T-11.1、T-11.3 | 等待前置 |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
 
@@ -6990,7 +6990,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 ### goal-41 · T-09.6 唯一提交点与激活门禁
 
-状态：待派发。前置 T-09.5（[PR #173](https://github.com/AlonaBot/AlonaBot/pull/173)，合并提交 `2bb8181`）与 T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。2026-11-13 审查者按 main 核对 goal-40 合入的接口：`journal.Result{OpID, Generation, Prepared, Session}` 交接 PREPARED 的候选 Session，`Commit` 以 `r.Session.Activate(ctx, commit)` 完成激活，commit 回调中调用 `state.CommitCandidate`；`Orchestrator.Abort` 处理提交前的失败；根包装配结构已有 `journal` 字段，管理桥接与首次启用切换按本语句的范围接入。已核对 `supervisor.Spec.Scheduler`/`HTTP` 与 `host.Instance.Stop(t0, reason, tree, timing, hooks)` 的 `StopHooks{Frozen, Stopping}`；`host.Instance.State()`、`Err()` 与 `StateDegraded` 已存在。2026-11-13 审查者调整分界：生产的管理动作接线、首次启用切换与没有 Active 的 Update 从 goal-40 移到本切片（DECISIONS 2026-11-13 变更记录）。
+状态：已完成（[PR #179](https://github.com/AlonaBot/AlonaBot/pull/179)，合并提交 `8898251`），证据见 TEST-MATRIX §3.2。合入：`journal.(*Orchestrator).Commit(ctx, r) (*supervisor.Running, error)`，提交前失败经 Abort 以旧版新 Session 恢复，提交后激活失败返回 Degraded 的 Running；`state.(*Store).CommitCandidate` 在同一事务中复核并提交 Active、COMMITTED 与程序身份（含 BuildDigest、PublisherKeyID）；`state.(*Store).ReplaceProgram(ctx, pluginID, version, entrypoint, publisherKeyID string, buildDigest []byte)`；根包私有桥接 `managedCandidates` 经 `prepareCandidate`（journal.Prepare → 接入 → journal.Commit）实现 Reload 与 Update，`Rollback` 仍返回 UNSUPPORTED；首次启用改走候选准备与提交，Degraded 组件登记但不接入。接口调整见 DECISIONS 2026-11-13 变更记录。以下为派发时的语句。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-41（切片 T-09.6：唯一提交点与激活门禁）。goal 目录 goal-41，分支 goal-41，worktree .worktrees/goal-41，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -7040,7 +7040,7 @@ internal/core/journal
 
 ### goal-42 · T-09.7 崩溃恢复、回退与回收
 
-状态：等待前置（T-09.6）。语句中 goal-33、goal-39～goal-41 提供的符号（journal 的阶段与 Abort、state.CommitCandidate、candidate 的 PrepareDatabase/Discard、manage.Candidates.Rollback、secret.Collect）只写名字；合并后由审查者核对，再改为待派发。
+状态：待派发。前置 T-09.6（[PR #179](https://github.com/AlonaBot/AlonaBot/pull/179)，合并提交 `8898251`）已合并；T-09.5（PR #173，`2bb8181`）提供 journal 的阶段、`Prepare`、`Abort` 与 `candidate.PrepareDatabase`/`Discard`。2026-11-13 审查者按 main `8898251` 核对：`state.CommitCandidate`、`journal.Commit`、`manage.Candidates.Rollback(ctx, id, generation string) error`、`process.LockRuntime(pluginDir)` 已存在；journal 只有 `KindFirstInstall`、`KindReload`、`KindUpdate`，`Prepare(ctx, pluginID, kind, staged)` 不能指定来源代次；回退的生产接线在根包 `managedCandidates.Rollback`（现返回 UNSUPPORTED），Reload/Update 由同一类型的 `apply` 经 `prepareCandidate` 接入并提交。据此改写接口与范围：journal 提供 `KindRollback` 与返回 `*Result` 的 `PrepareRollback`，根包的 `managedCandidates.Rollback` 沿用 apply 的接入与提交路径（DECISIONS 2026-11-13 变更记录）。原状态行中的 `secret.Collect` 为笔误，回收函数是本切片新增的 `gc.Collect`。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-42（切片 T-09.7：崩溃恢复、回退与回收）。goal 目录 goal-42，分支 goal-42，worktree .worktrees/goal-42，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -7050,10 +7050,10 @@ internal/core/journal
 依据：PLAN T-09 步骤 6；CONTRACTS §12、§6.3、§9.3（rollback）；MESSAGE-MODEL §6.3（rollback 不复活旧按钮）；TEST-MATRIX V-30、V-31、V-36。
 
 范围（只新增或修改这些）：
-- internal/core/journal/：新增 recover.go（启动时恢复）与 rollback.go（实现 manage.Candidates.Rollback）
+- internal/core/journal/：新增 recover.go（启动时恢复）与 rollback.go（回退候选的准备）；journal.go 只为回退复用准备流程做内部调整，不改 Prepare 的签名
 - internal/core/state/：保留代次的读写（新文件；保留策略见下）
 - 新增 internal/core/gc/（引用回收）
-- 根包 assembly.go：serve/Run 启动时在启动任何包之前调用恢复（只加调用点）
+- 根包 assembly.go：serve/Run 启动时在启动任何包之前调用恢复；`managedCandidates.Rollback` 改为在 `operation` 中调用 `PrepareRollback`，再沿用 `apply` 的接入、Commit 与失败停止路径（可把 `prepareCandidate` 改为接收准备函数，不新增公开符号）
 - docs/development.md：增加「备份与恢复」一节，说明整机备份覆盖整个 data_dir 与插件自管的外部数据（本切片获授权修改这一节）
 - 上述包的测试文件
 允许的新跨模块边：无。
@@ -7061,7 +7061,8 @@ internal/core/journal
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 internal/core/journal
    func (o *Orchestrator) Recover(ctx context.Context) error // 处理全部未到 committed 或 cleaned 的 Journal
-   func (o *Orchestrator) Rollback(ctx context.Context, id, generation string) error
+   const KindRollback Kind = "rollback"
+   func (o *Orchestrator) PrepareRollback(ctx context.Context, pluginID, generation string) (*Result, error) // 准备回退候选，提交由调用方经 Commit 完成
 internal/core/gc
    func Collect(ctx context.Context, st *state.Store, secrets *secret.Store, packagesDir string) (removed []string, err error)
 internal/core/state
@@ -7072,7 +7073,7 @@ internal/core/state
   - Journal 阶段为 started、stopped_old、candidate_ready、prepared、failed：候选未提交。确认没有仍在运行的候选或旧进程（通过 runtime.lock 能否取得判断；取不到时该插件标为 Degraded 并以 ERROR 说明「旧进程可能仍在运行」，不启动任何实例）；然后 candidate.Discard 候选资源，Journal 改为 cleaned；有旧 Active 时稍后按正常启动流程启动旧版（新 Session），首次安装则保持未激活。
   - Journal 阶段为 committed 但插件没有成功 ACTIVATED 过：只按当前 Active 启动（新代次），失败则 Degraded；不切回旧代次。
   - 恢复判断只信状态库的 Active 指针与 Journal，不读插件目录猜测。
-- Rollback（管理服务调用，持插件操作锁）：选定的代次必须是保留代次之一且不是当前 Active；以 Journal kind=rollback 经 goal-40 的编排：停止当前版本、从选定代次的数据库用 Backup API 复制到新代次（不是复用旧文件）、以选定代次的程序包与配置快照启动候选（activation_reason=rollback）、经 goal-41 提交。新代次 ID 为新值，旧代次签发的按钮不会因此复活（解析时比较的是当前 Active）。声明 prepare_effects=external 的插件 rollback 返回 FAILED_PRECONDITION（"NEEDS_MANUAL_MIGRATION"：需要维护与外部备份），不假装能恢复。
+- Rollback（管理服务经 `manage.Candidates.Rollback` 调用根包的 `managedCandidates.Rollback`，持插件操作锁）：选定的代次必须是保留代次之一且不是当前 Active；`PrepareRollback` 以 Journal kind=rollback 沿用 goal-40 的准备流程：停止当前版本、从选定代次的数据库用 Backup API 复制到新代次（不是复用旧文件）、以选定代次的程序包与配置快照启动候选（activation_reason=rollback），返回 PREPARED 的 Result；根包再经 `journal.Commit` 提交并按 apply 的方式接入，提交前失败经 Abort 恢复当前版本。新代次 ID 为新值，旧代次签发的按钮不会因此复活（解析时比较的是当前 Active）。声明 prepare_effects=external 的插件 rollback 返回 FAILED_PRECONDITION（"NEEDS_MANUAL_MIGRATION"：需要维护与外部备份），不假装能恢复。
 - 回收（Collect，可在 serve 启动后与每次操作结束后调用）：删除不被 Active、保留代次、Pending 与未完成 Journal 引用的代次目录、程序包目录与 secret；绝不删除受保护资源；返回删除的路径列表并以 INFO 记录。
 - 文档：docs/development.md 新增「备份与恢复」：整机备份须在 Core 与插件停止后复制完整 data_dir，并单独备份插件自管的外部数据；只备份 state.sqlite 不包含插件业务数据。
 

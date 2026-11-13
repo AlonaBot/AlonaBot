@@ -60,7 +60,7 @@
 
 ### goal-74 · T-14.4 首次运行与预装
 
-状态：等待前置（T-09.6、T-14.3）。语句中 goal-39、goal-41、goal-73 提供的符号（manage.Service、serve、trust.Official、发行归档结构）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：首次 token 由 goal-97 实现（终端显示或写入 `admin_token`）；`core_setting` 表不再由 goal-53 建立（D-82），preinstalled 标记的存放位置由审查者改写；`core_config.json` 中写了实例的 Adapter 自动启用（D-82）。前置合并后由审查者改写。
+状态：等待前置（T-14.3）。T-09.6（PR #179，合并提交 `8898251`）已合并。语句中 goal-39、goal-41、goal-73 提供的符号（manage.Service、serve、trust.Official、发行归档结构）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：首次 token 由 goal-97 实现（终端显示或写入 `admin_token`）；`core_setting` 表不再由 goal-53 建立（D-82），preinstalled 标记的存放位置由审查者改写；`core_config.json` 中写了实例的 Adapter 自动启用（D-82）。前置合并后由审查者改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-74（切片 T-14.4：首次运行与预装）。goal 目录 goal-74，分支 goal-74，worktree .worktrees/goal-74，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
