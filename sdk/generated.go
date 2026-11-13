@@ -17,6 +17,11 @@ type Generated struct {
 	ConfigSchema        []byte              // config_schema.json 的规范 JSON；没有该文件时为 nil。
 }
 
+// GeneratedProvider 按对象提供工程资源，优先于 Adapter 类型登记。
+type GeneratedProvider interface {
+	Generated() Generated
+}
+
 // adapterGeneratedRegistrations 仅由 Adapter 生成代码的 init 写入，初始化后只读。
 var adapterGeneratedRegistrations = make(map[reflect.Type]Generated)
 
@@ -53,9 +58,12 @@ func adapterType(component reflect.Type) reflect.Type {
 	return component
 }
 
-// GeneratedFor 按 Adapter 类型读取生成资源；值与指针读取同一登记。
+// GeneratedFor 优先读取对象资源，否则按 Adapter 类型读取；值与指针共用类型登记。
 // 插件资源通过 Plugin.Generated 读取。
 func GeneratedFor(component any) (Generated, bool) {
+	if provider, ok := component.(GeneratedProvider); ok {
+		return provider.Generated(), true
+	}
 	typ := reflect.TypeOf(component)
 	generated, ok := adapterGeneratedRegistrations[typ]
 	if !ok {

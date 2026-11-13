@@ -13,6 +13,7 @@ import (
 
 // Options 提供事件分发限额与现有的路由依赖；限额使用 tune.Values 对应值。
 type Options struct {
+	Dispatched    func(Dispatch)                                                                           // nil 时不记录分发结果；仅库模式测试套件装配。
 	PreEvent      func(ctx context.Context, ev *pb.Event) (payload *pb.EventPayload, stop bool, err error) // nil 时跳过；返回载荷替换业务副本
 	Concurrency   int                                                                                      // DISPATCH_CONCURRENCY
 	QueueEvents   int                                                                                      // DISPATCH_QUEUE_EVENTS
@@ -129,7 +130,9 @@ func (r *Router) startLocked() {
 }
 
 func (r *Router) run(event *trustedEvent) {
+	r.observe(event)
 	r.dispatch(event)
+	r.completeDispatch(event.dispatch)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.stats.Running--
