@@ -273,7 +273,7 @@ func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, 
 	}
 	r.record.SessionID = append([]byte(nil), r.Session.Registration.SessionID...)
 	if r.Prepared != nil {
-		if err := persistDatabase(r.Prepared.DatabasePath); err != nil {
+		if err := persistDatabase(r.Prepared.DatabasePath, kind == KindFirstInstall); err != nil {
 			return r, err
 		}
 	}

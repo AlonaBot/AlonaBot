@@ -44,8 +44,17 @@ func persistPackage(dir string) error {
 }
 
 // persistDatabase 同步准备中仍打开的 WAL 数据库；SDK 的每次提交已使用 FULL。
-func persistDatabase(path string) error {
-	for _, name := range []string{path, path + "-wal"} {
+// 首装文件由 SDK 按需创建，尚未打开时只持久化目录。
+func persistDatabase(path string, firstInstall bool) error {
+	files := []string{path, path + "-wal"}
+	if firstInstall {
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			files = nil
+		} else if err != nil {
+			return err
+		}
+	}
+	for _, name := range files {
 		err := syncFile(name)
 		if name != path && errors.Is(err, os.ErrNotExist) {
 			continue
