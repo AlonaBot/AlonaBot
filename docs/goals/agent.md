@@ -15,7 +15,7 @@
 | goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1、T-12.9、T-12.10、T-12.11、T-09.4 | 已完成（PR #170） |
 | goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-08.14、T-12.2 | 等待前置 |
 | goal-136 | T-12.14 | 对话中的图片输入 | T-04.8、T-12.2、T-12.13 | 等待前置 |
-| goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 等待前置 |
+| goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 待派发 |
 | goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 等待前置 |
 | goal-62 | T-12.5 | 技能 | T-12.3 | 等待前置 |
 | goal-63 | T-12.6 | 定时 Agent 任务 | T-07.9、T-08.5、T-12.3 | 等待前置 |
@@ -446,43 +446,106 @@ OnConfigLoad 之后的校验在 OnStart 中完成：providers 的 name 唯一、
 
 ### goal-60 · T-12.3 工具循环与 MCP
 
-状态：等待前置（T-11.2、T-12.2）。sdk.ListTools 已由 goal-54（PR #101，合并提交 `de48f26`）合入。语句中 goal-55、goal-58、goal-59 提供的符号（sdk.InvokeTool、sdk.ConfirmOperation、provider 的 Tool/ToolCall/ToolResult、agent 的一轮对话与 Config.MCPServers）只写名字；合并后由审查者核对，再改为待派发。本切片获授权引入已批准的 github.com/modelcontextprotocol/go-sdk（docs/development.md 只授权给 goal-60）。2026-11-10 按 D-132：goal-134 引入 anthropic-sdk-go 后，go.mod 中已有它要求的 MCP go-sdk 版本（indirect）；本切片把它改为直接依赖，取的版本不低于该版本。
+状态：待派发。前置 T-11.2（PR #165，合并提交 `330164f`）、T-12.2（PR #170，合并提交 `eca6310`）均已合并；同时复用 T-11.1（PR #101，`de48f26`）的工具目录、T-11.3（PR #35，`d0983f0`）的会话接口。2026-11-13 审查者按 main `dbbb80b` 改写（起草稿经审查者裁决）：单轮工具步数按实际执行的工具调用次数计，每轮最多执行 20 次，第 21 次不执行（DECISIONS 2026-11-13 变更记录）；MCP 的 go-sdk 已在 docs/development.md 批准，只用于 `agent/`，版本在本切片验证后锁定。
+
+已有接口（审查者按 main 核对）：
+
+- `agent/agent.go`：`func New() *sdk.Plugin`；内部对象为 `component`，配置为未导出的 `configuration`；`func readConfiguration(values config.Values) (configuration, error)` 在 `p.OnStart(func(context.Context) error)` 中调用。当前配置只有 providers、personas、defaultProvider、defaultPersona、historyEntries，MCP 配置由本切片加入。`sdk/plugin.go` 已有 `func (p *Plugin) OnStop(fn func(context.Context) error)`；应在同一组件对象上管理 MCP 资源。
+- `agent/conversation.go`：`func (a *component) converse(c *sdk.Context, text string) error`、`func recentConversation(ctx context.Context, key string, count int) ([]conversationEntry, error)`；`conversationEntry` 只有 `Role, Speaker, Content string`。当前通过 `c.Continue` 执行对话、`iter.Pull2` 衔接一次 Provider 请求与 `c.Stream`，Provider 的 ToolCall 尚未处理。`agent/settings.go` 的 `ResetGeneration`、`sessionLock` 已保护 reset 与成功轮次追加；接入循环须保留这些条件。
+- `sdk/tool.go`：`ListTools(ctx context.Context) ([]ToolInfo, error)`；`ToolInfo{Name, Description string; InputSchema json.RawMessage; Policy string}`，Policy 为 `allow` 或 `confirm`；`InvokeTool(ctx context.Context, name string, arguments json.RawMessage) (json.RawMessage, error)`；`ConfirmOperation(ctx context.Context, operation, summary string) error`。后两者绑定活跃 Handler/延续调用的父调用；InvokeTool 可同时返回结果与错误。
+- `agent/provider/provider.go`：`New(config Config, httpClient *http.Client) (*Client, error)`、`(*Client).Stream(ctx context.Context, req Request, emit func(Event) error) (Result, error)`。六种协议均已存在；`ToolCall` 的 `Replay json.RawMessage` 原样保留于本轮工具循环，D-103 要求其生命周期止于本轮。接口段列出实际载荷类型。
+- `sdk/sdk.go`、`sdk/continuation.go`、`sdk/stream.go`、`sdk/rule.go`：`(*Context).Context() context.Context`、`Continue(func(*Context) error) error`、`Stream(func(context.Context) (string, error)) ([]*message.SendResult, error)`、`Event() *message.Event`、`Session() message.Session`、`CommandConsumed() bool`、`NotCommand() Rule`。自由对话仍用 `sdk.ToMe(), sdk.NotCommand()`（D-141）。Send 接受 `message.Content`，平台权限为 `message.Actor.Permissions []string`。
+- `sdk/config/values.go`：`Values.Objects(key string) []Values`、`String(key string) string`、`Strings(key string) []string`；secret 的 String getter 取得已解析明文。secret 只适用于 string/text，MCP env、headers 应使用含 secret value 的对象列表，沿用 `docs/plugin-guide.md` §7，避免把整个 dict 标为 secret。
+- `go.mod` 当前没有 MCP 的直接 require；`go.sum` 已有 `github.com/modelcontextprotocol/go-sdk v1.3.1`，本机该版本源码与 anthropic-sdk-go/v2 v2.9.0 的 go.mod 均可读，后者要求 MCP v1.3.1。MCP 的 `NewClient`、`Client.Connect`、`ClientSession.ListTools/CallTool/Close`、`CommandTransport` 与 `StreamableClientTransport` 已按缓存源码核对，签名见接口段；正式版本在执行时验证并锁定，最低 v1.3.1。
+- `agent/agent_test.go`（外部包 `agent_test`，unix）：`startAgent(t *testing.T, loop *loopback, configuration map[string]any, coreExtra map[string]any, plugins ...*sdk.Plugin) *harness` 已经用 `alonabot.Start`、`agent.New()`、真实 Session、临时 SQLite 与回环 Adapter 验证对话，可直接复用。多进程本地补证据可复用根包 `pipeline_test.go` 的 `newPipeline(t *testing.T, stdio ...bool) *pipelineHarness`；其 `TestMain` 已有 tasks 模式分流。测试插件用 `sdk.NewPlugin`、`sdk.UseGenerated`、`sdk.Serve(p, sdk.JSON[In, Out](target)).Access(...).Tool(...).Handle(...)`；`ServiceBuilder` 的公开方法为 Access、Tool、Handle。
+- `alonabot.go` 的 `Start(ctx context.Context, opts ...Option) (*Core, error)`、`Plugin(root *sdk.Plugin) Option` 已接受 Agent；`internal/core/manage/static.go` 的 `(*Service).WebUI() http.Handler` 已合入，管理端点以 `spec/ADMIN-API.md` 为准。本切片使用 SDK 工具接口，测试策略通过既有 Core 工具服务层或临时状态准备设置。
+- 在途共享文件：goal-40 涉及 `internal/core/state/`、`internal/core/supervisor/`、`assembly.go` 等根包装配；PR #171（goal-69）涉及根包与 `cmd/alonabot/`；PR #172（goal-57）涉及根包 `t11_e2e_test.go`、`pipeline_test.go`。本切片仅本地多进程自测可能接触根包测试辅助，须读取最新分流后追加；正式测试放在 Agent 目录。goal-61 与本切片共享 `agent/{agent,conversation}.go`、生成物及 i18n；后合并者保留双方接入点。旧提示中的 #165/#167/#168/#169、goal-59 均按已合并处理，#169 的 `state/schema.sql` 与清理清单按现状复用。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-60（切片 T-12.3：工具循环与 MCP）。goal 目录 goal-60，分支 goal-60，worktree .worktrees/goal-60，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-60（切片 T-12.3：工具循环与 MCP）。goal 目录 goal-60，分支 goal-60，worktree .worktrees/goal-60，从最新 origin/main 创建（须已包含 PR #101、#165、#170）。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：Agent 组件每轮把 core.tool.list 返回的工具与已连接 MCP 服务器的工具交给模型；工具名按 Provider 的命名规则映射且一轮内稳定（六种协议都要覆盖，Gemini 的函数名规则最严）；模型交出的 provider.ToolCall 原样（含 Replay）放回下一次请求的 assistant 消息；Core 工具经 core.tool.invoke 调用，MCP 工具先经 core.tool.confirm（操作名 mcp/<server>/<tool>）再调用；拒绝、超时与工具错误作为工具结果交回模型；单轮工具步数达到上限时结束本轮并告知用户；MCP 服务器首次使用时连接、随插件停止关闭，stdio 子进程属于插件的进程树。
+目标：在官方 Agent 的每轮对话中接入 Core 工具和 MCP tools，依次执行模型返回的工具调用并把结果交回模型；按六种 Provider 协议映射工具名，保持本轮映射和 Replay；执行 Core 工具策略与 MCP 操作确认，达到单轮工具步数上限时结束本轮并告知用户；MCP 懒连接，插件停止时关闭会话并回收 stdio 子进程。
 
-依据：PLAN T-12 步骤 4；CONTRACTS §13.1、§13.2、§7.1（进程树）；DECISIONS D-27、D-38；docs/development.md（MCP go-sdk 的批准范围）；TEST-MATRIX V-58。
+依据：spec/PLAN.md §3.1、§5；spec/plan/agent.md T-12.3、T-12 步骤 2（MCP 配置）、3（对话显示）、4，以及「失败停止条件」；spec/plan/core.md T-11 步骤 1～4 与「失败停止条件」；spec/CONTRACTS-v0.1.md §2.4、§3、§4.1～§4.2、§5.1、§5.3～§5.4、§7.1、§13.1～§13.3；spec/MESSAGE-MODEL.md §1、§2（按钮）、§3、§4A、§6.3；spec/WIRE-FORMAT.md §3.3、§3.5、§4；spec/adr/DECISIONS.md D-27、D-38（按 D-132 修订）、D-86、D-98、D-103、D-132、D-135、D-141；docs/development.md 的已批准依赖范围；TEST-MATRIX V-58、§3，保留 V-57 的已实现对话行为。
 
 范围（只新增或修改这些）：
-- go.mod、go.sum：新增 github.com/modelcontextprotocol/go-sdk（取当前最新的 v1 版本，PR 中写明版本，并用 go mod why 说明它只被 agent 使用）
-- agent/：新增 tools.go（工具目录与名称映射）、mcp.go（MCP 客户端管理）、loop.go（工具循环）；一轮对话接入循环（只改调用处）
-- 新增 agent/mcptest/（stdio 与 streamable HTTP 的 MCP 模拟服务器，测试用）
-- i18n：en-US.json 与 zh-CN.json 增加步数上限与工具错误的文案
-- 上述包的测试文件
-允许的新跨模块边：只有 agent 可以 import MCP go-sdk。
+- go.mod、go.sum：把 github.com/modelcontextprotocol/go-sdk 显式列为直接依赖，版本不低于 v1.3.1，执行验证后锁定。
+- agent/agent.go：内部 configuration 增加 MCP 配置，component 持有连接；在已有 OnStart 中读取配置，在 New 的注册阶段另登记一个 OnStop 关闭资源；保留 agent.New 的签名与既有注册。
+- agent/config_schema.json：追加 mcp_servers；agent/i18n/en-US.json、agent/i18n/zh-CN.json：相应配置翻译、agent.tool_limit 及必要的用户错误文案。
+- 新增 agent/tools.go、agent/mcp.go、agent/loop.go：目录与名称映射、MCP 管理、工具循环；agent/conversation.go 只修改请求生成/流处理的接入处，保留历史提交与 reset 代次核对。
+- 新增 agent/mcptest/main.go：仅供测试启动的 stdio MCP 模拟服务器（命令包）；streamable HTTP 模拟服务放在测试辅助中。
+- 新增 agent/tools_test.go（//go:build unix，package agent_test）；agent/agent_test.go 只补充共用测试 Adapter 的确认按钮能力、点击交付和生命周期辅助，保留原测试断言。
+- agent/alonabot_gen.go：仅通过生成器更新上述源码与资源对应的生成内容。
+- 本地自测文件：agent/*_local_test.go；如需独立 Agent 进程与进程树证据，在根包 *_local_test.go 复用 pipeline_test.go 的装配与测试二进制，不改根包被跟踪的测试辅助。
+允许的新跨模块边：agent/... -> github.com/modelcontextprotocol/go-sdk/mcp（已批准）；其余沿用 agent/... -> sdk/...、contracts 的既有边。测试复用 agent/agent_test.go 已有的外部测试包 -> 根包库模式入口；产品代码只经 SDK 与 Core 通信。
 
-接口：agent 不新增导出符号（Config.MCPServers 已在 goal-59 声明）。mcptest 包导出测试所需的启动函数，由执行者在包文档列出。
+接口（已有公开符号照此调用，Agent 新增类型和辅助函数均不导出）：
+// agent
+func New() *sdk.Plugin
+// agent/provider 的现有类型与方法
+type Tool struct { Name, Description string; InputSchema json.RawMessage }
+type ToolCall struct { ID, Name string; Arguments, Replay json.RawMessage }
+type ToolResult struct { ToolCallID, Content string }
+type Message struct { Role, Content string; ToolCalls []ToolCall; ToolResults []ToolResult; Images []Image }
+type Request struct { Messages []Message; Tools []Tool; MaxTokens int }
+type Event struct { Text string; ToolCall *ToolCall }
+func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error) (Result, error)
+// sdk
+func ListTools(ctx context.Context) ([]ToolInfo, error)
+func InvokeTool(ctx context.Context, name string, arguments json.RawMessage) (json.RawMessage, error)
+func ConfirmOperation(ctx context.Context, operation, summary string) error
+func (c *Context) Continue(fn func(*Context) error) error
+func (c *Context) Stream(next func(context.Context) (string, error)) ([]*message.SendResult, error)
+func (p *Plugin) OnStop(fn func(context.Context) error)
+
+// 新增私有配置的字段含义，放进现有 configuration；名称可按周围代码整理。
+type secretPair struct { Name, Value string }
+type mcpServer struct {
+    Name, Transport, Command, URL string
+    Args []string
+    Env, Headers []secretPair
+}
+// mcp_servers：objects，name、transport、command、args、env、url、headers。
+// transport 为 stdio 或 streamable-http；env/headers 为 name、value 对象列表，value 为 secret string。
+// stdio 使用 command/args/env；streamable-http 使用 url/headers；名称须在配置中唯一。
+// 由 Config().Objects/String/Strings 读取，校验本传输实际使用的字段，秘密值来自已解析配置。
+
+// github.com/modelcontextprotocol/go-sdk/mcp，v1.3.1 已核对的入口；以下按 mcp 包内签名列出。
+// 采用其他版本时先核对实际签名。
+func NewClient(impl *Implementation, options *ClientOptions) *Client
+func (c *Client) Connect(ctx context.Context, t Transport, opts *ClientSessionOptions) (*ClientSession, error)
+func (cs *ClientSession) ListTools(ctx context.Context, params *ListToolsParams) (*ListToolsResult, error)
+func (cs *ClientSession) CallTool(ctx context.Context, params *CallToolParams) (*CallToolResult, error)
+func (cs *ClientSession) Close() error
+// mcp.CommandTransport{Command *exec.Cmd, TerminateDuration time.Duration}
+// mcp.StreamableClientTransport{Endpoint string, HTTPClient *http.Client, MaxRetries int, ...}
+
+协议复用（字段保持现状，无新增 proto）：
+ToolInvokeRequest{name = 1, arguments_json = 2} -> ToolInvokeResponse{result_json = 1}；
+ToolConfirmRequest{operation = 1, summary = 2} -> ToolConfirmResponse{}；
+两次请求均通过 sdk 关联活跃父调用。结果和 ErrorInfo 可以同时存在。
 
 行为：
-- 工具目录：每轮开始时调用 sdk.ListTools，并对已连接（或首次使用时连接）的 MCP 服务器调用 tools/list；合并为一个列表交给模型。名称映射：Provider 只接受 ^[a-zA-Z0-9_-]{1,64}$ 的名字（两种协议都按此规则，命名常量），把 "plugin_id/service_name" 与 "mcp/<server>/<tool>" 转为合规名字（非法字符替换为 _，冲突或超长时加 _ 与短哈希）；映射在一轮内固定，结果交回模型时用映射后的名字。
-- 循环：模型返回工具调用时依次执行，结果作为 ToolResult 交回，再继续请求；文本照常流式显示（沿用 goal-59）。单轮工具步数上限为命名常量（初值 20），达到时停止请求模型，回复 agent.tool_limit。
-- Core 工具：sdk.InvokeTool（在延续调用内，继承父调用链与 Actor）；错误（PERMISSION_DENIED、DEADLINE_EXCEEDED、工具错误等）转为文本结果交回模型（"error: <code>: <safe_message>"），不重试。
-- MCP 工具：先 sdk.ConfirmOperation("mcp/<server>/<tool>", 参数的 JSON 摘要)，允许后经 go-sdk 调用；拒绝与超时同样作为结果交回。MCP 工具的参数在交给模型前就以其 inputSchema 暴露，调用前不在 Agent 侧另做 Schema 校验（由服务器校验）。
-- MCP 连接：stdio 以 command 与 args 启动子进程，env 为配置中解析后的 secret 值（SecretPair），子进程在插件的进程组内（由 Core 的进程树管理回收）；streamable HTTP 以 url 与 headers 连接。首次使用时连接，失败时该服务器本轮不可用并以 WARN 记录（不阻止对话）；插件 OnStop 时关闭全部会话并等待 stdio 子进程退出。
-- 安全：MCP 的 env 与 headers 中的值不写日志、不进入工具结果。
+- 每轮开始经 sdk.ListTools(c.Context()) 取得 Core 目录；按配置对尚未连接的 MCP 服务器首次连接，取得 tools/list 的全部分页，与 Core 目录合并。本轮固定映射和来源信息，随后请求复用；连接失败的服务器本轮不可用，脱敏 WARN 后其余工具与对话继续。
+- 工具的来源名为 plugin_id/service_name 或 mcp/<server>/<tool>。映射为六种协议共同接受的名称：首字符为 ASCII 字母或下划线，后续只用 ASCII 字母、数字、下划线，长度至多 64；非法字符替换为下划线，首字符和超长/冲突按命名常量及稳定后缀处理，维护可逆的本轮查表。后缀算法使用标准库，保留每个工具的唯一映射。原始名用于执行与确认，模型侧名称随 ToolCall 原样回放。
+- 整轮仍在已有延续调用中运行，使用其 context、Actor、Target、deadline 与取消。Provider 返回的文本增量继续交给同一次 c.Stream；每次响应的文本与完整 ToolCall 组成 assistant 消息，ToolCall（含 ID、Name、Arguments、Replay）原样放回下一请求；工具结果组成 user 消息的 ToolResults，ToolCallID 精确对应调用 ID，再继续请求模型。最终无工具调用时结束。会话仅按既有成功提交规则保存本轮 user/assistant 文本；ToolCall、Replay 与 ToolResult 只保留在本轮请求链。
+- Core 工具只调用 sdk.InvokeTool。成功返回的 JSON 原文作为工具结果；失败保留 ErrorInfo 的 code、safe_message，编码为 error: <code>: <safe_message>，有同时返回的结果时一并交回模型。依次执行同一响应里的工具调用；不自动重试，不直接调用目标 Service。
+- MCP 每次执行前调用 sdk.ConfirmOperation(c.Context(), "mcp/<server>/<tool>", 参数 JSON 摘要)，摘要完整表达实际参数。成功后才 CallTool；拒绝、超时和工具失败都交回模型。服务器校验工具业务 Schema；Agent 不另写一套 Schema 校验。MCP 返回的 content、structuredContent、isError 保留为可供 ToolResult.Content 携带的文本表示，禁止悄悄丢掉错误或非文本块。
+- 单轮工具步数上限使用 Agent 的命名常量，初值 20，按实际执行的工具调用次数计（同一响应中的多个 ToolCall 各计一次，Core 工具与 MCP 工具合计）；模型请求第 21 次工具调用时不执行，停止继续工具与模型请求，按 Actor locale 回复 agent.tool_limit。父调用取消或结束时立即终止本轮，保留已有平台回执与显示内容；不继续请求模型处理已经失效的调用。
+- stdio 使用 exec.Cmd 的 command/args/env；凭证只来自本服务器配置，不把 Core 管理凭证或其他服务器凭证传入。子进程继承插件的受管进程树。streamable HTTP 使用注入 headers 的 HTTP client；禁止自动重放 tools/call，核对 go-sdk 自带重连行为并关闭会导致自动重发的设置。
+- 连接可跨轮复用，生存期归插件 Session；本轮 context 只控制本轮请求。OnStop 关闭全部 MCP 会话、等待 stdio 进程退出，服从 CONTRACTS §4.2 的剩余停止预算并保留关闭错误。v1.3.1 CommandTransport.Close 默认每阶段等待 5s，接入时须按实际剩余停止预算处理，避免直接套用该默认值。
+- env、headers、认证头与含凭证的 URL 不进入日志、用户错误或工具结果；保留脱敏后的错误类别与说明。沿用 Provider 不重发、显示失败立即结束、reset 之前的轮次跳过历史追加、NotCommand 过滤以及配置为空时提示管理员的现状。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：agent/tools_test.go（//go:build unix）。用 goal-59 的测试装配、模拟 Provider（脚本化地返回工具调用）、在测试临时目录生成的工具插件（goal-54、goal-55 的同类插件只在执行者本地）与 mcptest 的两种服务器：
-  - 模型连续调用一个 Core 工具与一个 MCP 工具：两者都执行，结果交回模型，最终回复显示。
-  - Core 工具为 confirm 策略且用户拒绝：结果为错误文本交回模型，工具未执行；MCP 工具的确认被拒同样如此。
-  - 停止插件后 stdio MCP 子进程已退出（按 PID 检查）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：名称映射函数；MCP 连接失败时对话继续；secret 值不出现在日志中；HTTP 服务器的 headers；工具出错：错误作为结果交回，不重试；模型持续请求工具超过 20 步：本轮结束并回复步数上限文案；名称映射对含 / 与 . 的名字、冲突名字的结果稳定。
+- 提交一个集成测试 agent/tools_test.go 的 TestAgentTools（unix，表驱动）。复用 startAgent 的真实 Core、Agent SDK Session、受管 SQLite 与回环 Adapter；工具提供方使用真实 sdk.Plugin、带类型 JSON 声明与 Generated.ServiceSchemas；Provider 用 httptest 脚本，MCP 用 stdio 真实子进程和 streamable HTTP 模拟服务器。主路径让模型先调用 Core 工具、再调用 MCP 工具、最后输出文本；分别覆盖两种 MCP 传输，核对确认的实际参数、同一 Actor 允许、执行次数、ToolCallID、后续请求中的结果与最终显示。再覆盖确认拒绝及工具错误交回模型且目标执行次数正确；停止 Agent 后核对 stdio 子进程退出。多个子场景理由：V-58 明列两种传输、确认拒绝与工具错误，且关闭子进程是本切片的资源交付条件。
+- 原 TestAgentConversation 只按必要的辅助签名改写，原断言保持；不向 sdk/、internal/core/supervisor/ 提交测试，不新增 testdata 插件。
+- 本地自测（*_local_test.go，不提交，PR 写明实际结果）：六种协议收到映射后的目录并完成工具往返；Responses 的 reasoning Replay、Gemini thoughtSignature 原样回传；非法字符、首字符、超长与同名碰撞；同响应多个工具的顺序与结果对应；Core/MCP 的 allow、confirm、deny、确认超时、无 Actor、无按钮、父调用取消；结果与错误同时返回；Provider/工具失败的请求次数；持续调用达到 20 次（同一响应含多个 ToolCall 时跨过上限的那一次不执行）；首次连接失败时其余对话继续；tools/list 分页；headers/env 的到达与日志/结果脱敏；并发首次使用同服务器、跨轮复用及停止预算。独立 Agent 进程的 stdio 子进程树退出证据可在根包本地测试复用 pipeline 装配。
+- 经 cpa 兼容网关的真实工具往返由审查者在合并前补跑（凭证只在审查者本机）。
+- 证据记入 goal-60/tasks.md 与 PR，按 TEST-MATRIX §3 写明位置、命令、OS/arch、Go 版本、传输、结果；T-12.7 负责最终汇总，真实 Provider/平台未运行项如实列出。
 
-完成条件：gofmt -l 无输出；go mod tidy 后无差异；go vet ./...；go test -race ./plugins/...；go build ./...。
+完成条件：生成资源前后对应源码一致；gofmt -l 对改动的 Go 文件无输出；go vet ./agent/...；go test -race -count=1 ./agent/...；go build ./...；在 agent 目录运行 go run ../cmd/alonabot plugin check 通过。依赖验证运行 go mod tidy、go mod why github.com/modelcontextprotocol/go-sdk/mcp，并核对 Core 与 SDK 根包的 go list -deps 未链接 MCP 包；在 PR 记明实际版本。通过上述检查并落实 V-58 的指定证据后完成；未经策略/确认执行、自动重放业务请求、丢失必需 Replay、子进程脱离管理或 Agent 产品代码访问 internal/core 时按工作包停止。
 
-不做：记忆（T-12.4）；技能（T-12.5）；MCP 的资源与提示词能力（只用 tools）；真实 Provider（T-10）。
+不做：记忆实现（T-12.4）、技能（T-12.5）、动态任务 SDK 与定时 Agent（T-07.9、T-12.6）、llm.generate、图片输入、MCP 资源与提示词、真实 Provider 汇总（T-10）、管理页面、Core/SDK/proto 改造、根包产品装配修改、SHA256。
 ```
 
 ### goal-61 · T-12.4 Agent 的记忆
