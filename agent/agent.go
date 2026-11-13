@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/AlonaBot/AlonaBot/agent/provider"
 	"github.com/AlonaBot/AlonaBot/sdk"
@@ -34,7 +35,10 @@ type configuration struct {
 	historyEntries  int
 }
 
-type component struct{ config configuration }
+type component struct {
+	config       configuration
+	sessionLocks [sessionLockCount]sync.Mutex
+}
 
 // New 创建官方 Agent，绑定生成资源并登记命令、迁移和生命周期回调。
 func New() *sdk.Plugin {

@@ -51,7 +51,12 @@ func (a *component) converse(c *sdk.Context, text string) error {
 	if err != nil {
 		return err
 	}
-	settings, err := a.settings(c.Context(), string(c.Session()), db)
+	session := string(c.Session())
+	lock := a.sessionLock(session)
+	// 等 reset 的代次递增和历史清空一起完成，再取得新轮次的代次。
+	lock.Lock()
+	settings, err := a.settings(c.Context(), session, db)
+	lock.Unlock()
 	if err != nil {
 		return err
 	}
@@ -104,7 +109,7 @@ func (a *component) converse(c *sdk.Context, text string) error {
 		return c.Reply(c.T("agent.error", "code", errcode.Unavailable.String()))
 	}
 
-	// 3. 仅在生成和显示成功后原子追加本轮条目。
+	// 3. 生成和显示成功后，仅将仍属于当前 reset 代次的轮次原子追加。
 	user := conversationEntry{Role: roleUser, Content: text}
 	if c.Event().ChatType == message.ChatGroup {
 		user.Speaker = c.Event().Actor.ExternalUserID
@@ -117,7 +122,16 @@ func (a *component) converse(c *sdk.Context, text string) error {
 	if err != nil {
 		return fmt.Errorf("encode assistant conversation entry: %w", err)
 	}
-	_, err = sdk.AppendConversation(c.Context(), string(c.Session()), userJSON, assistantJSON)
+	lock.Lock()
+	defer lock.Unlock()
+	current, err := a.settings(c.Context(), session, db)
+	if err != nil {
+		return err
+	}
+	if current.ResetGeneration != settings.ResetGeneration {
+		return nil
+	}
+	_, err = sdk.AppendConversation(c.Context(), session, userJSON, assistantJSON)
 	return err
 }
 
