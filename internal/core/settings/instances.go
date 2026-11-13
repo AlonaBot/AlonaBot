@@ -27,6 +27,35 @@ type instancePreparation struct {
 
 var errNoInstanceMigration = errors.New("instance configuration does not require a write")
 
+// BindAdapter 为已有的无归属配置记录当前组件；其他组件的配置保持原样并返回 false。
+// 调用方先检查返回值，再准备实例，避免把保留的凭证交给替换组件。
+func (f *File) BindAdapter(adapterID, packageID string) (bool, error) {
+	group, exists := f.Settings().Adapters[adapterID]
+	if !exists {
+		return true, nil
+	}
+	if group.Package != "" {
+		return group.Package == packageID, nil
+	}
+	owned := false
+	err := f.Update(func(doc *Document) error {
+		current, err := doc.settings()
+		if err != nil {
+			return err
+		}
+		group, exists := current.Adapters[adapterID]
+		owned = !exists || group.Package == "" || group.Package == packageID
+		if !exists || group.Package != "" {
+			return errNoInstanceMigration
+		}
+		return doc.Set([]string{"adapters", adapterID, "package"}, packageID)
+	})
+	if errors.Is(err, errNoInstanceMigration) {
+		err = nil
+	}
+	return owned, err
+}
+
 // PrepareInstances 迁移、补齐并校验一个 Adapter 的全部实例，返回可启动实例的完整配置。
 // 低版本的全部实例成功后才备份并经 Update 写回；实例失败只列入 problems。
 // 返回的 error 表示备份或写回失败，原文中的环境变量引用始终保留。

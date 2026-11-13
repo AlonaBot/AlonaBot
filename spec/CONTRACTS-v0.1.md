@@ -318,7 +318,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 - D-25 保持不变：只有 Core 公开 HTTP(S) Listener；插件作者注册 Go `http.Handler`，不选择、配置或向部署用户开放内部端口。SDK 仅在存在 HTTP route 时创建 `127.0.0.1:0` Listener，并向 REGISTER 报告实际 endpoint；无 HTTP route 不创建 Listener。SDK 持续持有该 Listener，不能释放端口后另起服务。
 - Core 只接受当前 Session 注册的 loopback endpoint，使用标准 `httputil.ReverseProxy` 和 `Rewrite` 构造转发；不接受外部请求指定代理目标。外部路径固定 `/plugins/{id}/...`，Core 完成 ID、method、route 和权限匹配后去掉 `/plugins/{id}` 前缀，插件收到以 `/` 开头的相对应用路径。路由 path 以 `/` 开头且为规范形式：`path.Clean` 的结果，原路径以 `/` 结尾时保留一个尾斜杠并表示前缀路由（`/` 匹配全部路径），其余为精确路由；Core 与 SDK 用同一份未清理的请求路径匹配，两侧选出同一条路由（D-65）。Core 保留 Admin/API/healthz 和内部认证路径，不让插件覆盖。
 - Bootstrap 中的 HTTP 凭证与 Session/Generation 绑定。Core 删除外部可伪造的内部身份/认证头，并在 Rewrite 阶段注入受信凭证；SDK 在进入用户 Handler 前校验。Core 对插件与 Adapter 路由都清除外部传入的内部代理凭证、CSRF、Cookie、Forwarded 与 X-Forwarded-* 头；插件路由同时清除 Authorization，Adapter 包的路由保留平台请求的 Authorization，交给 Adapter 自行校验（D-136）。路由停止、Session 失效或代次变化时撤销代理映射，SDK 关闭 Listener。
-- 框架托管 HTTP 默认要求 Core 授权。公开 OAuth/Webhook 在描述中显式声明；插件必须验证对应 state、签名或 nonce。Adapter 的公开平台 token 路由声明 `Route(method, path).Public(sdk.AuthPlatformToken)`（协议 `HTTP_AUTH_MODE_PLATFORM_TOKEN`），由 Adapter 校验 Authorization 或查询参数中的平台凭证（D-136）。回调地址由已配置 Base URL 生成，不以任意 Host 或 Forwarded 请求头拼接；允许的 Host 与可信反代来源由 Core 全局设置验证。
+- 框架托管 HTTP 默认要求 Core 授权。公开 OAuth/Webhook 在描述中显式声明；插件必须验证对应 state、签名或 nonce。Adapter 的公开平台 token 路由声明 `Route(method, path).Public(sdk.AuthPlatformToken)`（协议 `HTTP_AUTH_MODE_PLATFORM_TOKEN`），由 Adapter 校验 Authorization 或查询参数中的平台凭证（D-136）。转发插件与 Adapter 的私有路由前，Core 清除用于 Core 认证的 Authorization、管理 Cookie 与 CSRF 头；只有 Adapter 声明为 platform token 的公开路由保留平台的 Authorization（D-136、D-139）。回调地址由已配置 Base URL 生成，不以任意 Host 或 Forwarded 请求头拼接；允许的 Host 与可信反代来源由 Core 全局设置验证。
 - Adapter 包也可以按本节注册 HTTP 路由（D-94、D-136），路径、内部代理认证与生命周期规则与插件相同，平台凭证按上述角色规则转交，外部路径同样为 `/plugins/{Adapter 包 ID}/...`；用于平台端主动连入，例如 OneBot 11 反向 WebSocket。代理转发 WebSocket Upgrade 请求并在升级后双向转发字节，连接寿命不受普通请求期限限制，路由撤销或 Session 失效时 Core 关闭已升级的连接。
 - HTTP 代理与普通命令/事件/Service 的 Protobuf RPC 分工不变；Native 插件自行建立的框架外 Listener 不享受统一入口和生命周期托管承诺。
 
@@ -348,7 +348,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 
 - Adapter 与插件一样以安装包分发，在 Core 之外以独立 Native 子进程运行，复用插件的握手、Session、准备/激活/停止状态机、代次、配置、Secret、安装与来源校验（D-26）。官方 Telegram Adapter 也是这样一个可卸载的安装包，Core 不静态链接任何平台实现。manifest 以 `role: adapter` 和 `adapter_id`（平台类型，例如 `telegram`）区分，同一 `adapter_id` 同时只能安装一个包；社区 Adapter 可以按 §9.3 的 `--replace` 替换同一 `adapter_id` 的官方 Adapter。
 - Adapter 的工程入口是可导入的 Go 包（例如 `adapters/telegram`），工程 `plugin.yaml`、`adapter_config_schema.json` 与生成的登记代码都位于该包目录（D-134）。`cmd/alonabot-adapter-<id>` 只保留调用 `sdk.RunAdapter` 的薄 main；独立进程与库模式（§15.5）共用该包的组件身份与资源。
-- 同一个 Adapter 包只运行一个进程，进程内承载该包的全部账号实例。实例配置（含凭证）写在 `core_config.json` 的 `adapters` 中（§15.1），由 Core 按 Adapter 包内 `adapter_config_schema.json` 迁移、补缺失值并校验（§5.5），经 `adapter.instance.start`/`adapter.instance.stop` 单独启停；启停一个实例不重启进程，也不影响同包的其他实例。停用整个 Adapter 即按插件的停止流程停止该进程，全部实例随之停止。进程异常退出按插件的有限重启策略处理，重启后 Core 只重新启动仍处于启用状态的实例。
+- 同一个 Adapter 包只运行一个进程，进程内承载该包的全部账号实例。实例配置（含凭证）写在 `core_config.json` 的 `adapters` 中（§15.1），由 Core 按 Adapter 包内 `adapter_config_schema.json` 迁移、补缺失值并校验（§5.5），经 `adapter.instance.start`/`adapter.instance.stop` 单独启停（停用只对本次运行有效，同一次运行中 Adapter 崩溃恢复后仍保持停用，Core 重启后按 `core_config.json` 启动全部已配置的实例；要持久停用就删除实例或停用 Adapter，D-139）；启停一个实例不重启进程，也不影响同包的其他实例。停用整个 Adapter 即按插件的停止流程停止该进程，全部实例随之停止。进程异常退出按插件的有限重启策略处理，重启后 Core 只重新启动仍处于启用状态的实例。
 - Core 只接受 Adapter 为它在本 Session 中已启动的实例交付的事件：Target 与事件中的 adapter_id、adapter_instance_id、account_id 必须与该实例一致，否则拒绝并记诊断。event_id 由 Core 生成；Actor 的权限集合由 Core 按 §2.3 计算，Adapter 只提供平台给出的身份与平台权限；平台权限中未声明的名字由 Core 丢弃并记诊断。同一 `adapter_id` 下的同一平台账号只能有一个已启动实例（唯一入站 owner），由 Core 依据 `adapter.instance.start` 返回的 account_id 检查。
 - 接收游标由 Core 持久化：Adapter 每交付一条事件都附带交付后的不透明游标，Core 先写状态库，再接纳事件并应答；Adapter 收到应答后才处理下一条。没有事件时的游标变化（例如空闲轮次重建）使用单独的游标保存调用。实例启动时，Core 把已保存的游标交给 Adapter。
 - Core 保存的平台凭证只经 `adapter.instance.start` 下发给所属 Adapter 进程；平台主动连入时，请求中的 Authorization 按 §7.2 保留并交所属 Adapter 校验（D-136）。平台凭证不进入插件进程、日志或普通响应。入站媒体的平台文件标识留在 Adapter，Core 以 IncomingMedia token 映射，首次 Read 时经 `adapter.media.read` 取件；出站媒体由 Core 为该次发送向 Adapter Session 签发只读 token，Adapter 经 `core.media.read` 读取。
@@ -406,6 +406,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 
 - GitHub Releases 作为首发分发入口，不建设中心商店。**归档外**的 `release.json` 包含发布者公钥标识、绑定仓库来源、插件 ID/版本、各 OS/arch 资产 URL、字节长度和整个归档的 SHA256；归档内 manifest 不保存自身归档摘要，避免自包含循环。若记录单文件摘要，其对象必须明确是 binary 或资源，不与归档摘要混用。
 - 发布者可以用 Ed25519 对 `release.json` 的**确切 UTF-8 文件字节**签名，输出外部 `release.json.sig`（D-81，可选）；验证先签名后解析，不能重新序列化 JSON 后验签。有签名时 Core 使用已信任公钥校验签名；有没有签名都验证下载长度/SHA256、平台和内层 manifest 一致性。实现使用 Go 标准库 `crypto/ed25519`，不引入通用 PKI 系统。
+- 签名时发布者在 release.json 旁一并发布 `release.pub`（标准 base64 的 32 字节 Ed25519 公钥，允许末尾空白），`--source` 安装与更新时随 release.json.sig 下载，本地安装由 `--public-key` 给出（缺省取 release.json 同目录的 release.pub）；公钥的 KeyID 必须等于 release.json 的 `publisher_key_id`。首次信任由管理员确认后记录该指纹，之后同来源的候选必须由同一公钥签名；无签名的来源以后带有效签名时，经管理员确认指纹后改为绑定（D-81、D-139）。WebUI 包的资产平台为 `any`，没有可执行入口；其他角色的资产必须与本机平台一致。
 - 首次来源信任由管理员明确接受并持久化仓库，有签名时同时持久化发布者公钥指纹。有签名的来源：之后的更新必须由同一公钥签名，来源或公钥变化停止更新，重新信任是独立管理动作。没有签名的来源：安装界面与 `list` 标明未签名，之后的更新只从同一仓库取，照常校验长度、SHA256、平台与内层 manifest；它以后提供签名时，由管理员确认后改为按该公钥绑定。已签名来源永远不能静默降级为无签名，验签失败也不能自动降级为无签名信任；不能仅凭同 ID 接管已有安装。官方组件始终签名。
 - 下载/签名/平台/静态检查都在停止旧版前完成；损坏或不可信候选直接拒绝。签名证明发布来源，不证明 Native 程序行为安全。新版本包只是安装候选，仍须 §6/§12 的准备与唯一提交流程。
 
@@ -431,8 +432,8 @@ Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行�
 | `restart` | 以当前 Active 程序/配置/DB 启动新 Session，不导入编辑中的 config.json。 |
 | `reload` | 把编辑快照导入 Pending，走配置校验及候选激活；SQLite 同样复制 DB。 |
 | `update` | 仅从绑定来源选择符合 pin 的候选版本并执行受控更新；不把 install 同 ID 当更新。 |
-| `uninstall` | 停止、解除运行注册并删除未引用程序包，清理范围有三种（D-127）。不带选项时只卸载：保留数据、配置与来源绑定，以便同来源重装。`--purge-data` 另外删除数据，保留配置与来源绑定。`--purge` 删除数据与配置，连同来源绑定与安装记录。数据是框架受管的运行数据：全部代次（受管 SQLite、代次目录与代次内的配置快照）、Agent 会话（§13.3）、按钮 token、动态任务以及静态任务的起点与暂停状态（§4.3）、Adapter 的游标与聊天目录（§8，D-130）。配置是管理员与作者给出的设置：编辑快照 `config.json`、Pending、secret、命令策略、工具策略、发信许可、Adapter 在 `core_config.json` 中的实例。`--purge-data` 之后重装，首个候选的配置取编辑快照；编辑快照与被删除的 Active 配置不同时，确认对象中写明。两种清理都须展示并确认准确对象；不擅自删除插件自管的外部数据库或任意插件自管目录。卸载先按停止流程摘除该组件的定时器、清空排队的到期任务并取消在途的任务调用；清理时在同一个状态库事务中删除它的任务与调度状态，不经过插件进程。只卸载时任务保留但不触发。 |
-| `pin` | 固定允许的更新版本；解除固定须显式操作，不能被自动更新忽略。 |
+| `uninstall` | 停止、解除运行注册并删除未引用程序包，清理范围有三种（D-127）。不带选项时只卸载：保留数据、配置与来源绑定，以便同来源重装。`--purge-data` 另外删除数据，保留配置与来源绑定。`--purge` 删除数据与配置，连同来源绑定与安装记录。数据是框架受管的运行数据：全部代次（受管 SQLite、代次目录与代次内的配置快照）、Agent 会话（§13.3）、按钮 token、动态任务以及静态任务的起点与暂停状态（§4.3）、Adapter 的游标与聊天目录（§8，D-130）。配置是管理员与作者给出的设置：编辑快照 `config.json`、Pending、secret、命令策略、工具策略、发信许可、Adapter 在 `core_config.json` 中的实例。`--purge-data` 之后重装，首个候选的配置取编辑快照；编辑快照与被删除的 Active 配置不同时，确认对象中写明。两种清理都须展示并确认准确对象，只删除集中列出的框架受管路径；不擅自删除插件自管的外部数据库或任意插件自管目录与文件。被替换 Adapter 的实例按 `core_config.json` 中 Core 写入的 `package` 归属区分：新组件不启动、不列出归属于其他组件的实例，在其上新建实例需要确认并丢弃旧实例；清理只删除归属于被卸载组件的实例配置（D-139）。卸载先按停止流程摘除该组件的定时器、清空排队的到期任务并取消在途的任务调用；清理时在同一个状态库事务中删除它的任务与调度状态，不经过插件进程。只卸载时任务保留但不触发。 |
+| `pin` | 固定允许的更新版本：值为精确的 SemVer 版本，`update` 只接受与之相等的候选，空串解除（D-139）；解除固定须显式操作，不能被自动更新忽略。 |
 | `admin add` / `admin remove` / `admin list` | 管理 Core Admin 列表（按用户字符串 `<adapter_id>:<external_user_id>`），与 WebUI 的 Core 设置页使用同一管理服务，写回 `core_config.json` 的 `admins`。 |
 | `logs` | 按来源、级别与 trace_id 读取最近记录，`--follow` 时持续输出（§14.4）。 |
 | `log-level` | 修改全局或某个插件、Adapter 的日志级别，立即生效（§14.3）。 |
@@ -696,6 +697,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 库模式没有热部署，需要热部署时用 `alonabot run --reload`（§15.4）。
 - 库模式用 `alonabot.Args(...)` 选项或环境变量 `ALONABOT_ARGS` 覆盖调优参数，语法与 `--args` 相同（§16）。
 - 官方 Adapter 与官方插件以可导入的 Go 包提供组件（例如 `telegram.New()`），程序入口只调用 SDK 的运行函数，库模式可以直接引用它们。
+- `alonabot.Plugin(p)` 登记工程 manifest 的 role 为 plugin 或 agent 的组件（agent 只能登记一个）。`alonabot.Listen(addr)`、`alonabot.LogLevel(level)` 与 `alonabot.LogFormat(format)` 覆盖本次运行的监听地址与日志设置，与 `alonabot run` 的 `--listen`、`--log-level`、`--log-format` 相同，不写回设置文件（D-139）。库模式与 `alonabot run` 共用同一套装配：读取 `core_config.json`，提供 HTTP 入口、管理认证与管理 API，启动已安装与开发中 Adapter 的实例。
 - 库模式与 `alonabot run` 一样提供已安装的 WebUI 组件。`alonabot.WebUI(fsys fs.FS)` 选项提供 dev 来源的 WebUI：fsys 的根目录即静态根目录，本次运行中它代替已安装的 WebUI，不经安装、签名与 Admin API 版本检查之外的校验。
 - 库模式也可以用于小规模部署，但不提供上述隔离与崩溃恢复；正式分发插件与 Adapter 仍使用安装包。
 

@@ -50,9 +50,10 @@ type binding struct {
 }
 
 type route struct {
-	method string
-	path   string
-	public bool
+	method        string
+	path          string
+	public        bool
+	platformToken bool
 }
 
 // New 构造统一插件代理；auth 为 nil 时私有路由返回 401。
@@ -70,7 +71,8 @@ func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, 
 	for _, descriptor := range routes {
 		if descriptor.GetKind() == pb.RouteKind_ROUTE_KIND_HTTP {
 			spec := descriptor.GetHttp()
-			current.routes = append(current.routes, route{method: spec.GetMethod(), path: spec.GetPath(), public: spec.GetIsPublic()})
+			current.routes = append(current.routes, route{method: spec.GetMethod(), path: spec.GetPath(), public: spec.GetIsPublic(),
+				platformToken: isAdapter && spec.GetIsPublic() && spec.GetAuthMode() == pb.HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN})
 		}
 	}
 	current.proxy = &httputil.ReverseProxy{
@@ -85,7 +87,6 @@ func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, 
 			request.Out.URL.Path = strings.TrimPrefix(request.In.URL.Path, prefix)
 			request.Out.URL.RawPath = ""
 			request.Out.URL.RawQuery = request.In.URL.RawQuery
-			stripIdentity(request.Out, isAdapter)
 			request.Out.Header.Set(wire.HeaderProxyAuth, auth)
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
@@ -209,15 +210,20 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 	// 每次请求复制代理配置，响应策略不会改写其他并发请求的快照。
 	proxy := *current.proxy
+	rewrite := proxy.Rewrite
+	proxy.Rewrite = func(request *httputil.ProxyRequest) {
+		stripIdentity(request.Out, selected.platformToken)
+		rewrite(request)
+	}
 	if policy, ok := w.(interface{ ModifyResponse(*http.Response) error }); ok {
 		proxy.ModifyResponse = policy.ModifyResponse
 	}
 	proxy.ServeHTTP(&upgradeWriter{ResponseWriter: w, binding: current}, r)
 }
 
-func stripIdentity(r *http.Request, isAdapter bool) {
+func stripIdentity(r *http.Request, platformToken bool) {
 	for name := range r.Header {
-		if strings.EqualFold(name, wire.HeaderProxyAuth) || (!isAdapter && strings.EqualFold(name, "Authorization")) || strings.EqualFold(name, "Cookie") || strings.EqualFold(name, "X-Alonabot-CSRF") || strings.EqualFold(name, "Forwarded") || strings.HasPrefix(strings.ToLower(name), "x-forwarded-") {
+		if strings.EqualFold(name, wire.HeaderProxyAuth) || (!platformToken && strings.EqualFold(name, "Authorization")) || strings.EqualFold(name, "Cookie") || strings.EqualFold(name, "X-Alonabot-CSRF") || strings.EqualFold(name, "Forwarded") || strings.HasPrefix(strings.ToLower(name), "x-forwarded-") {
 			delete(r.Header, name)
 		}
 	}

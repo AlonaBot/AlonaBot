@@ -25,6 +25,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/broker"
 	"github.com/AlonaBot/AlonaBot/internal/core/bus"
 	"github.com/AlonaBot/AlonaBot/internal/core/buttons"
+	"github.com/AlonaBot/AlonaBot/internal/core/config"
 	"github.com/AlonaBot/AlonaBot/internal/core/continuation"
 	"github.com/AlonaBot/AlonaBot/internal/core/conversation"
 	"github.com/AlonaBot/AlonaBot/internal/core/hook"
@@ -70,6 +71,7 @@ type component struct {
 func validateComponents(components []component, installs []state.Install) error {
 	ids := make(map[string]bool)
 	adapters := make(map[string]bool)
+	agent := false
 	for i := range components {
 		entry := &components[i]
 		var object any = entry.root
@@ -93,6 +95,9 @@ func validateComponents(components []component, installs []state.Install) error 
 			return fmt.Errorf("component %T: %w", object, err)
 		}
 		m := parsed.Manifest
+		if entry.role == state.RolePlugin && m.Role == string(state.RoleAgent) {
+			entry.role = state.RoleAgent
+		}
 		for _, warning := range parsed.Warnings {
 			slog.Warn("project manifest warning", "plugin_id", m.ID, "warning", warning)
 		}
@@ -103,6 +108,12 @@ func validateComponents(components []component, installs []state.Install) error 
 			return fmt.Errorf("duplicate component ID %s", m.ID)
 		}
 		ids[m.ID] = true
+		if entry.role == state.RoleAgent {
+			if agent {
+				return fmt.Errorf("duplicate agent component %s", m.ID)
+			}
+			agent = true
+		}
 		if m.AdapterID != "" {
 			if adapters[m.AdapterID] {
 				return fmt.Errorf("duplicate adapter_id %s", m.AdapterID)
@@ -114,12 +125,17 @@ func validateComponents(components []component, installs []state.Install) error 
 			}
 		}
 		for _, installed := range installs {
+			if installed.Uninstalled {
+				continue
+			}
 			if installed.PluginID == m.ID {
 				if installed.Source != devSource || installed.Role != entry.role || installed.AdapterID != m.AdapterID {
 					return fmt.Errorf("component %s conflicts with installed component", m.ID)
 				}
 			} else if m.AdapterID != "" && installed.AdapterID == m.AdapterID {
 				return fmt.Errorf("adapter_id %s conflicts with installed component %s", m.AdapterID, installed.PluginID)
+			} else if entry.role == state.RoleAgent && installed.Role == state.RoleAgent {
+				return fmt.Errorf("agent conflicts with installed component %s", installed.PluginID)
 			}
 		}
 		entry.manifest, entry.resources = m, generated
@@ -128,20 +144,22 @@ func validateComponents(components []component, installs []state.Install) error 
 }
 
 type assembly struct {
-	adapters  *coreadapter.Registry
-	router    *router.Router
-	mux       *router.Mux
-	media     *media.Store
-	buttons   *buttons.Service
-	bus       *bus.Bus
-	scheduler *scheduler.Scheduler
-	http      *httpproxy.Server
-	global    *wire.Budget
-	store     *state.Store
-	options   *coreoptions.Service
-	settings  *settings.File
-	schemaMu  sync.RWMutex // 保护按 Session 发布的只读选项声明。
-	schemas   map[string]componentOptionSchemas
+	adapters   *coreadapter.Registry
+	router     *router.Router
+	mux        *router.Mux
+	media      *media.Store
+	buttons    *buttons.Service
+	bus        *bus.Bus
+	scheduler  *scheduler.Scheduler
+	http       *httpproxy.Server
+	global     *wire.Budget
+	store      *state.Store
+	policy     *policy.Policy
+	components sync.Map // 运行状态查询借用已激活的 host.Instance，退出时按同一指针撤销。
+	options    *coreoptions.Service
+	settings   *settings.File
+	schemaMu   sync.RWMutex // 保护按 Session 发布的只读选项声明。
+	schemas    map[string]componentOptionSchemas
 }
 
 type componentOptionSchemas struct {
@@ -150,18 +168,21 @@ type componentOptionSchemas struct {
 	adapter *configschema.Schema
 }
 
-func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) {
-	a := &assembly{store: store, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload)}
+func assemble(store *state.Store, dir string, v tune.Values, file *settings.File) (*assembly, error) {
+	a := &assembly{store: store, settings: file, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload)}
 	var err error
-	a.settings, err = settings.Load(dir)
-	if err != nil {
-		return nil, err
-	}
 	a.media, err = media.Open(filepath.Join(dir, "media"), media.NewLimits(v), time.Now)
 	if err != nil {
 		return nil, err
 	}
 	p := policy.New(store)
+	a.policy = p
+	var admins []policy.Admin
+	for _, admin := range a.settings.Settings().Admins {
+		admins = append(admins, policy.Admin{AdapterID: admin.AdapterID, UserID: admin.UserID})
+	}
+	p.SetAdmins(admins)
+	a.adapters.SetDefaults(a.settings.Settings().DefaultInstances())
 	if err := p.LoadCommandNames(context.Background()); err != nil {
 		return nil, fmt.Errorf("load command names: %w", err)
 	}
@@ -183,7 +204,7 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 			return a.router.CallContinuation(ctx, inv, parent, deadline)
 		}})
 	a.router = router.New(router.Options{Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
-		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: nil, CommandNames: p.CommandNames,
+		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Policy: p, CommandState: p.CommandState, Prefixes: a.settings.CommandPrefixes, CommandNames: p.CommandNames,
 		Continuations: continuations,
 		Send: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
 			return messages.Send(ctx, c, in)
@@ -208,17 +229,30 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 	serviceBroker := broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth})
 	a.mux.Forward(serviceBroker.Call)
 	a.schemas = make(map[string]componentOptionSchemas)
-	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: serviceBroker, Page: v.OptionsPage, Instances: func() []coreoptions.AdapterInstance {
+	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: serviceBroker, Page: v.OptionsPage, Instances: func(ctx context.Context) ([]coreoptions.AdapterInstance, error) {
+		installed, err := store.Installs(ctx)
+		if err != nil {
+			return nil, err
+		}
+		owners := make(map[string]string)
+		for _, in := range installed {
+			if in.Role == state.RoleAdapter && !in.Uninstalled {
+				owners[in.AdapterID] = in.PluginID
+			}
+		}
 		var instances []coreoptions.AdapterInstance
 		for adapterID, configured := range a.settings.Settings().Adapters {
+			owner := owners[adapterID]
+			if owner == "" || configured.Package != "" && configured.Package != owner {
+				continue
+			}
 			for instanceID := range configured.Instances {
 				instances = append(instances, coreoptions.AdapterInstance{InstanceID: instanceID, AdapterID: adapterID})
 			}
 		}
-		return instances
+		return instances, nil
 	}})
 	a.scheduler = scheduler.New(scheduler.Options{JobTimeout: v.JobTimeout})
-	a.http = httpproxy.New(nil)
 	return a, nil
 }
 
@@ -327,6 +361,7 @@ func (a *assembly) handler(r *runningComponent, install state.Install) wire.Hand
 }
 
 func (a *assembly) attach(ctx context.Context, r *runningComponent) error {
+	a.components.Store(r.id, r.instance)
 	plugin := router.FromInstance(r.instance)
 	r.schemas.session = r.caller.SessionKey
 	a.schemaMu.Lock()
@@ -415,10 +450,10 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	rand.Read(digest)
 	install, err := c.store.GetInstall(ctx, id)
 	if errors.Is(err, state.ErrNotFound) {
-		install = state.Install{Role: entry.role, PluginID: id, AdapterID: entry.manifest.AdapterID, Source: devSource, BuildDigest: digest}
+		install = state.Install{Role: entry.role, PluginID: id, AdapterID: entry.manifest.AdapterID, Source: devSource, BuildDigest: digest, Version: entry.manifest.Version}
 		err = c.store.AddInstall(ctx, install)
 	} else if err == nil {
-		err = c.store.SetDevBuildDigest(ctx, id, digest)
+		err = c.store.SetDevBuild(ctx, id, entry.manifest.Version, digest)
 	}
 	if err != nil {
 		return err
@@ -447,7 +482,7 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	if err != nil {
 		return err
 	}
-	running := &runningComponent{id: id, caller: router.NewCaller(id, generation), listener: listener, finished: make(chan struct{}), schemas: schemas}
+	running := &runningComponent{id: id, install: install, caller: router.NewCaller(id, generation), listener: listener, finished: make(chan struct{}), schemas: schemas}
 	c.components = append(c.components, running)
 	l := &inproc.Launch{PluginID: id, Secret: make([]byte, launchRandomBytes), Addr: listener.Addr().String(), BuildDigest: digest, RuntimeLockPath: filepath.Join(pluginDir, wire.RuntimeLockFile), Log: c.output.Component(id, generation)}
 	rand.Read(l.Secret)
@@ -471,6 +506,7 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	}
 	running.conn = wire.NewStreamConn(conn)
 	limits := host.NewLimits(c.values)
+	boot.DefaultLocale = current.DefaultLocale
 	messages, problems := i18n.Parse(entry.resources.I18n)
 	if len(problems) != 0 {
 		return fmt.Errorf("component %s messages: %v", id, problems)
@@ -491,7 +527,13 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	if err != nil {
 		return err
 	}
-	return c.assembly.attach(ctx, running)
+	if err := c.assembly.attach(ctx, running); err != nil {
+		return err
+	}
+	if err := c.startInstances(ctx, running, entry.resources.AdapterConfigSchema); err != nil {
+		return err
+	}
+	return c.store.SetEnabled(ctx, id, true)
 }
 
 func bootstrap(generation string, version uint32) *pb.Bootstrap {
@@ -500,6 +542,7 @@ func bootstrap(generation string, version uint32) *pb.Bootstrap {
 }
 
 func (a *assembly) detach(r *runningComponent) {
+	a.components.CompareAndDelete(r.id, r.instance)
 	a.router.Detach(r.id)
 	a.schemaMu.Lock()
 	delete(a.schemas, r.id)
@@ -514,7 +557,7 @@ func (a *assembly) detach(r *runningComponent) {
 	}
 }
 
-func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.StopTiming) error {
+func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.StopTiming, reason pb.StopReason) error {
 	a := c.assembly
 	frozen := func(deadline time.Time) { a.scheduler.Drain(r.id); a.http.Drain(r.id, deadline); a.bus.Detach(r.id) }
 	detach := func() { a.detach(r) }
@@ -522,11 +565,12 @@ func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.Stop
 	if r.process != nil {
 		// supervisor 处理进程树、HTTP 与 Scheduler；其余映射由装配撤销。
 		a.bus.Detach(r.id)
-		result := r.process.Stop(t0, pb.StopReason_STOP_REASON_CORE_SHUTDOWN)
+		result := r.process.Stop(t0, reason)
+		slog.Info("plugin stopped", "plugin_id", r.id, "drained", result.Drained, "killed", result.Killed)
 		err = result.Err
 		detach()
 	} else if r.instance != nil {
-		result := r.instance.Stop(t0, pb.StopReason_STOP_REASON_CORE_SHUTDOWN, r, timing, host.StopHooks{Frozen: frozen, Stopping: detach})
+		result := r.instance.Stop(t0, reason, r, timing, host.StopHooks{Frozen: frozen, Stopping: detach})
 		err = result.Err
 	} else {
 		if r.conn != nil {
@@ -564,31 +608,11 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	if err != nil {
 		return nil, err
 	}
-	if generation == "" {
-		return nil, fmt.Errorf("enabled component %s has no committed generation", install.PluginID)
-	}
-	// MoveTo 已将版本与归档摘要前缀写入目录名；摘要绑定当前安装记录。
-	digest := hex.EncodeToString(install.BuildDigest)
-	if len(digest) < packageDigestPrefix {
-		return nil, fmt.Errorf("component %s has invalid installed build digest", install.PluginID)
-	}
-	parent := filepath.Join(dir, "packages", install.PluginID)
-	entries, err := os.ReadDir(parent)
+	isNew := generation == ""
+	packageDir, err := installedDirectory(dir, install)
 	if err != nil {
 		return nil, err
 	}
-	var paths []string
-	suffix := "-" + digest[:packageDigestPrefix]
-	for _, entry := range entries {
-		version, matches := strings.CutSuffix(entry.Name(), suffix)
-		if entry.IsDir() && matches && manifest.ValidVersion(version) {
-			paths = append(paths, filepath.Join(parent, entry.Name()))
-		}
-	}
-	if len(paths) != 1 {
-		return nil, fmt.Errorf("component %s: expected one installed package for build digest, found %d", install.PluginID, len(paths))
-	}
-	packageDir := paths[0]
 	raw, err := os.ReadFile(filepath.Join(packageDir, "plugin.yaml"))
 	if err != nil {
 		return nil, err
@@ -620,27 +644,186 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		return nil, err
 	}
+	configuration := []byte(emptyConfig)
+	if isNew {
+		configuration, err = os.ReadFile(filepath.Join(pluginDir, "config.json"))
+		if errors.Is(err, os.ErrNotExist) {
+			configuration, err = []byte(emptyConfig), nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		configuration, err = config.Canonical(configuration)
+		if err != nil {
+			return nil, err
+		}
+		generation = "gen-" + rand.Text()
+		// shortcut: 首装候选直接交给 supervisor 提交，候选 Journal 接入后由编排器接管。
+		// 原文只交给 Bootstrap；supervisor 提取 secret 后才写最终快照。
+		if err := c.store.AddGeneration(ctx, install.PluginID, generation, emptyConfig, *m.ConfigVersion); err != nil {
+			return nil, err
+		}
+	}
 	running := &runningComponent{id: install.PluginID, install: install, caller: router.NewCaller(install.PluginID, generation), schemas: schemas}
 	boot := bootstrap(generation, *m.ConfigVersion)
+	boot.LogLevel = logging.ProtoLevel(c.output.Levels().Source(install.PluginID))
 	boot.DatabaseDescriptor.ActivationReason = pb.ActivationReason_ACTIVATION_REASON_RESUME
+	if isNew {
+		boot.CandidateConfigJson = string(configuration)
+		boot.DatabaseDescriptor.ActivationReason = pb.ActivationReason_ACTIVATION_REASON_FIRST_INSTALL
+	}
 	switch m.MigrationMode {
 	case manifest.MigrationSelf:
 		boot.DatabaseDescriptor.MigrationMode = pb.MigrationMode_MIGRATION_MODE_SELF
 	case manifest.MigrationVersioned:
 		boot.DatabaseDescriptor.MigrationMode = pb.MigrationMode_MIGRATION_MODE_VERSIONED
 	}
-	if install.Role == state.RolePlugin && (m.PrepareEffects == manifest.EffectsManagedDB || m.MigrationMode == manifest.MigrationSelf || m.MigrationMode == manifest.MigrationVersioned) {
+	if (install.Role == state.RolePlugin || install.Role == state.RoleAgent) && (m.PrepareEffects == manifest.EffectsManagedDB || m.MigrationMode == manifest.MigrationSelf || m.MigrationMode == manifest.MigrationVersioned) {
 		boot.DatabaseDescriptor.Backend = pb.DatabaseBackend_DATABASE_BACKEND_SQLITE
 	}
 	running.process, err = supervisor.Launch(ctx, c.store, supervisor.Spec{Role: install.Role, AdapterID: install.AdapterID, PluginID: install.PluginID, PluginDir: pluginDir,
 		Executable: executable, BuildDigest: install.BuildDigest, GenerationID: generation, Bootstrap: boot, ConfigSchema: resources.ConfigSchema, I18n: resources.I18n,
-		DefaultLocale: defaultLocale, Handler: c.assembly.handler(running, install), Global: c.assembly.global, Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values),
-		Log: c.output.Plugin(install.PluginID, generation), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit})
+		NewCandidate:  isNew,
+		DefaultLocale: c.assembly.settings.Settings().DefaultLocale, Handler: c.assembly.handler(running, install), Global: c.assembly.global, Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values),
+		Log: c.output.Plugin(install.PluginID, generation), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment})
 	if err != nil {
 		return nil, err
 	}
 	running.instance = running.process.Instance
-	return running, c.assembly.attach(ctx, running)
+	if err := c.assembly.attach(ctx, running); err != nil {
+		return running, err
+	}
+	var instanceSchema []byte
+	if install.Role == state.RoleAdapter {
+		instanceSchema, err = os.ReadFile(filepath.Join(packageDir, "adapter_config_schema.json"))
+		if err != nil {
+			return running, err
+		}
+	}
+	if err := c.startInstances(ctx, running, instanceSchema); err != nil {
+		return running, err
+	}
+	mode := "restart"
+	if isNew {
+		mode = "new"
+	}
+	slog.Info("plugin activated", "plugin_id", running.id, "generation_id", generation, "mode", mode, "pid", running.process.Process.Pid())
+	return running, nil
+}
+
+func installedDirectory(dir string, install state.Install) (string, error) {
+	// MoveTo 已将版本与归档摘要前缀写入目录名；摘要绑定当前安装记录。
+	digest := hex.EncodeToString(install.BuildDigest)
+	if len(digest) < packageDigestPrefix {
+		return "", fmt.Errorf("component %s has invalid installed build digest", install.PluginID)
+	}
+	parent := filepath.Join(dir, "packages", install.PluginID)
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		return "", err
+	}
+	var paths []string
+	suffix := "-" + digest[:packageDigestPrefix]
+	for _, entry := range entries {
+		version, matches := strings.CutSuffix(entry.Name(), suffix)
+		if entry.IsDir() && matches && manifest.ValidVersion(version) {
+			paths = append(paths, filepath.Join(parent, entry.Name()))
+		}
+	}
+	if len(paths) != 1 {
+		return "", fmt.Errorf("component %s: expected one installed package for build digest, found %d", install.PluginID, len(paths))
+	}
+	return paths[0], nil
+}
+
+func (a *assembly) componentState(id string) string {
+	value, ok := a.components.Load(id)
+	if !ok {
+		return ""
+	}
+	instance := value.(*host.Instance)
+	select {
+	case <-instance.Session.Done():
+		return ""
+	default:
+		return instance.State().String()
+	}
+}
+
+func (a *assembly) componentDescriptor(id string) *pb.AdapterDescriptor {
+	value, ok := a.components.Load(id)
+	if !ok {
+		return nil
+	}
+	instance := value.(*host.Instance)
+	if !router.FromInstance(instance).Activated() {
+		return nil
+	}
+	return instance.Adapter
+}
+
+func (c *Core) instanceSchema(components []component) func(context.Context, string) (*configschema.Schema, error) {
+	return func(ctx context.Context, id string) (*configschema.Schema, error) {
+		var raw []byte
+		for _, entry := range components {
+			if entry.manifest.ID == id {
+				raw = entry.resources.AdapterConfigSchema
+				break
+			}
+		}
+		if raw == nil {
+			install, err := c.store.GetInstall(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			directory, err := installedDirectory(c.dir, install)
+			if err != nil {
+				return nil, err
+			}
+			raw, err = os.ReadFile(filepath.Join(directory, "adapter_config_schema.json"))
+			if err != nil {
+				return nil, err
+			}
+		}
+		schema, problems := configschema.Parse(raw)
+		if len(problems) != 0 {
+			return nil, fmt.Errorf("adapter instance schema: %v", problems)
+		}
+		return schema, nil
+	}
+}
+
+func (c *Core) startInstances(ctx context.Context, running *runningComponent, raw []byte) error {
+	if running.remote == nil {
+		return nil
+	}
+	unlock := c.store.LockPlugin(running.id)
+	defer unlock()
+	owned, err := c.assembly.settings.BindAdapter(running.install.AdapterID, running.id)
+	if err != nil || !owned {
+		return err
+	}
+	schema, problems := configschema.Parse(raw)
+	if len(problems) != 0 {
+		return fmt.Errorf("adapter instance schema: %v", problems)
+	}
+	instances, diagnostics, err := c.assembly.settings.PrepareInstances(running.install.AdapterID, schema)
+	if err != nil {
+		return err
+	}
+	for _, problem := range diagnostics {
+		slog.Warn("adapter instance configuration failed", "plugin_id", running.id, "instance_id", problem.InstanceID, "path", problem.Path, "reason", problem.Reason)
+	}
+	c.assembly.adapters.SetDefaults(c.assembly.settings.Settings().DefaultInstances())
+	for id, configuration := range instances {
+		if c.stoppedInstances[[2]string{running.id, id}] {
+			continue
+		}
+		if err := running.remote.StartInstance(ctx, id, configuration); err != nil {
+			slog.Warn("adapter instance start failed", "plugin_id", running.id, "instance_id", id, "error", err)
+		}
+	}
+	return nil
 }
 
 func packageResources(dir string) (sdk.Generated, error) {

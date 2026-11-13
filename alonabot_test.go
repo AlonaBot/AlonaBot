@@ -33,6 +33,12 @@ func TestLibraryLifecycle(t *testing.T) {
 	}
 	defer output.Close()
 	dir := filepath.Join(temp, "data")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "core_config.json"), []byte(`{"listen":"127.0.0.1:0"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, scenario := range []struct{ name, config, want string }{
 		{name: "defaults", want: "Hello"},
