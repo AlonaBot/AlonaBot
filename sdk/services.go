@@ -292,15 +292,19 @@ func collectServices(root *Plugin, reg *Registration) error {
 	for _, b := range r.builders {
 		component, name, ok := strings.Cut(b.target, "/")
 		_, componentError := validate.PluginID(component)
-		if !ok || !validate.IsServiceName(name) || component != "@agent" && componentError != nil || b.encoding == pb.PayloadEncoding_PAYLOAD_ENCODING_UNSPECIFIED {
+		invalidDeclaration := !ok || !validate.IsServiceName(name) || component != "@agent" && componentError != nil
+		if b.target == "" && b.name != "" { // 本组件自有服务只声明名称，归属在注册时确定。
+			invalidDeclaration = !validate.IsServiceName(b.name)
+		}
+		if invalidDeclaration || b.encoding == pb.PayloadEncoding_PAYLOAD_ENCODING_UNSPECIFIED {
 			r.errs = append(r.errs, fmt.Errorf("service %q has an invalid declaration", b.target))
 			continue
 		}
-		if seen[b.target] {
-			r.errs = append(r.errs, fmt.Errorf("service %q registered twice", b.target))
+		if seen[b.name] {
+			r.errs = append(r.errs, fmt.Errorf("service %q registered twice", b.name))
 			continue
 		}
-		seen[b.target] = true
+		seen[b.name] = true
 		if b.handles != 1 || b.afterHandle {
 			r.errs = append(r.errs, fmt.Errorf("service %q has invalid Handle sequence", b.target))
 			continue
@@ -323,6 +327,9 @@ func collectServices(root *Plugin, reg *Registration) error {
 func checkServiceTargets(root *Plugin, pluginID string) error {
 	var errs []error
 	for _, b := range root.services.builders {
+		if b.target == "" && b.name != "" {
+			continue
+		}
 		component, _, _ := strings.Cut(b.target, "/")
 		if component != pluginID && component != "@agent" {
 			errs = append(errs, fmt.Errorf("service %q does not belong to plugin %q", b.target, pluginID))

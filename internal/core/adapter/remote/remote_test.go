@@ -30,14 +30,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter/remote"
+	"github.com/AlonaBot/AlonaBot/internal/core/broker"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 	"github.com/AlonaBot/AlonaBot/internal/core/media"
 	coremessage "github.com/AlonaBot/AlonaBot/internal/core/message"
+	"github.com/AlonaBot/AlonaBot/internal/core/options"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
@@ -68,6 +71,8 @@ func TestMain(m *testing.M) {
 		err = sdk.Run(newLoopPlugin())
 	} else if mode == "plugin-object" {
 		err = sdk.Run(newObjectPlugin())
+	} else if mode == "options-plugin" {
+		err = sdk.Run(newOptionsPlugin())
 	} else if mode == "schema-parse" || mode == "schema-resolve" {
 		err = invalidSchemaAdapter(mode)
 	} else if mode == "http-upgrade" {
@@ -2005,5 +2010,93 @@ func TestPluginObjectCommand(t *testing.T) {
 			logs.mu.Unlock()
 			t.Fatalf("translated command reply not received: %v\n%s", ctx.Err(), text)
 		}
+	}
+}
+
+const optionsConfigSchema = `{"selection":{"type":"object","items":{"choice":{"type":"string","options_from":{"source":"options-plugin/choices","filter":{"group":"all"}}}}}}`
+
+func newOptionsPlugin() *sdk.Plugin {
+	p := sdk.NewPlugin()
+	sdk.UseGenerated(p, sdk.Generated{ConfigSchema: []byte(optionsConfigSchema)})
+	sdk.ServeOptions(p, "choices", func(_ context.Context, q sdk.OptionsQuery) (sdk.OptionsPage, error) {
+		if q.Filter["group"] != "all" {
+			return sdk.OptionsPage{}, fmt.Errorf("missing schema filter")
+		}
+		page := sdk.OptionsPage{Options: []sdk.Option{}}
+		for _, option := range []sdk.Option{{Value: "one", Label: "First", Description: "choice one"}, {Value: "two", Label: "Second"}} {
+			if len(q.Values) > 0 {
+				found := false
+				for _, value := range q.Values {
+					if value == option.Value {
+						found = true
+						break
+					}
+				}
+				if !found {
+					continue
+				}
+			} else if !strings.Contains(strings.ToLower(option.Label), strings.ToLower(q.Search)) {
+				continue
+			}
+			page.Options = append(page.Options, option)
+		}
+		return page, nil
+	})
+	return p
+}
+
+// TestOptionSources 通过真实插件进程、Session、Router 和 Broker 查询配置字段的选项。
+func TestOptionSources(t *testing.T) {
+	ctx := t.Context()
+	store, spec, _ := setup(t)
+	spec.PluginID = "options-plugin"
+	spec.Role = state.RolePlugin
+	spec.AdapterID = ""
+	spec.GenerationID = "options-gen"
+	spec.PluginDir = t.TempDir()
+	spec.ConfigSchema = []byte(optionsConfigSchema)
+	spec.ExtraEnv = map[string]string{helperEnv: "options-plugin", "GORACE": "atexit_sleep_ms=0"}
+	spec.Bootstrap = &pb.Bootstrap{GenerationId: spec.GenerationID, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	if err := store.AddInstall(ctx, state.Install{PluginID: spec.PluginID, Role: state.RolePlugin, BuildDigest: spec.BuildDigest}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddGeneration(ctx, spec.PluginID, spec.GenerationID, "{}", 1); err != nil {
+		t.Fatal(err)
+	}
+	dispatch := router.New(router.Options{})
+	defer dispatch.Close(context.Background())
+	serviceBroker := broker.New(dispatch, tune.Defaults().RequestTimeout)
+	schema, problems := configschema.Parse(spec.ConfigSchema)
+	if len(problems) > 0 {
+		t.Fatal(problems)
+	}
+	service := options.New(options.Options{Schema: func(id string, kind options.SchemaKind) (*configschema.Schema, bool) {
+		return schema, id == spec.PluginID && kind == options.ConfigSchema
+	}, Router: dispatch, Broker: serviceBroker, Page: tune.Defaults().OptionsPage})
+	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
+	mux := router.NewMux()
+	mux.Forward(serviceBroker.Call)
+	spec.Handler = mux.For(caller)
+	running, err := supervisor.Launch(ctx, store, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
+	dispatch.Attach(router.FromInstance(running.Instance), caller)
+	page, err := service.Query(ctx, spec.PluginID, options.ConfigSchema, "selection.choice", options.Query{Search: "First", Locale: "en-US"})
+	if err != nil || len(page.Options) != 1 || page.Options[0].Value != "one" || page.Options[0].Label != "First" || page.Options[0].Description != "choice one" || page.More {
+		t.Fatalf("search page=%+v error=%v", page, err)
+	}
+	page, err = service.Query(ctx, spec.PluginID, options.ConfigSchema, "selection.choice", options.Query{Values: []string{"two", "missing"}})
+	if err != nil || len(page.Options) != 1 || page.Options[0].Value != "two" || page.Options[0].Label != "Second" {
+		t.Fatalf("values page=%+v error=%v", page, err)
+	}
+	if stopped := running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE); stopped.Err != nil {
+		t.Fatal(stopped.Err)
+	}
+	_, err = service.Query(ctx, spec.PluginID, options.ConfigSchema, "selection.choice", options.Query{})
+	var invalid *validate.Error
+	if !errors.As(err, &invalid) || invalid.Code != pb.ErrorCode_ERROR_CODE_UNAVAILABLE {
+		t.Fatalf("inactive source error=%v", err)
 	}
 }

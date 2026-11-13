@@ -116,6 +116,8 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 
 字段可覆盖 `description`、`hint`、`labels`；子字段放在 `items`，模板放在 `templates`，模板文案可覆盖 `name`、`hint`。options 的存储值保持原文，翻译写在 labels 中。生成器核对覆盖键与 schema 的字段、模板和选项是否对应，问题诊断带文件名与路径。
 
+- 字段的可选值来自运行时的数据（例如实例列表或本插件维护的条目）时，用 `options_from` 代替 `options`：`{"type": "string", "options_from": {"source": "core.adapter_instances", "filter": {"adapter_id": "telegram"}}}`，或指向本插件的选项服务 `"source": "<插件 ID>/<服务名>"`（[CONTRACTS §5.5](../spec/CONTRACTS-v0.1.md)「选项来源」，D-129）。选项服务用 `sdk.ServeOptions(p, "feeds", func(ctx context.Context, q sdk.OptionsQuery) (sdk.OptionsPage, error) {...})` 登记：按 `q.Search` 搜索、`q.Values` 按存储值取回显示名，最多返回 `q.Limit` 项，有更多结果时 `More` 为 true；输入、输出 Schema 由 SDK 固定提供，不用生成。该服务只由 Core 在管理页面打开表单时调用，访问固定为 PRIVATE。取值仍是普通字符串，来源不可用或值已不存在时配置照常加载，插件自己处理不认识的值。
+
 ## 8. 测试
 
 - 用插件测试套件 `plugintest` 在 `go test` 中启动真实 Core 与测试 Adapter，注入消息并检查发送（D-47、CONTRACTS §17）。

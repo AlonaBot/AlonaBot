@@ -259,6 +259,8 @@ message ServiceSpec {
   PayloadEncoding encoding = 4;
   // JSON 服务可选的工具声明。
   ToolSpec tool = 5;
+  // 固定 Schema、仅 Core 与本组件可调用的配置选项来源。
+  bool options_source = 6;
 }
 
 // ScheduleSpec 描述定时任务的专属描述；interval 与 cron 互斥，cron 固定五字段，timezone 为 IANA 名称，省略为 UTC。

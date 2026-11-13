@@ -46,7 +46,10 @@ type Values struct {
 	DevReloadPoll         time.Duration
 	PluginMemorySoftLimit int64 // 字节；0 表示不设置
 	CoreMemorySoftLimit   int64 // 字节；0 表示不设置
+	OptionsPage           int
 }
+
+const maxOptionsPage = 200 // CONTRACTS §16。
 
 // Override 记录一项最终生效的覆盖及其来源。
 type Override struct {
@@ -122,6 +125,7 @@ var parameters = []parameter{
 	param("DEV_RELOAD_POLL", durationUnit, time.Duration(500*time.Millisecond), true, "> 0", "§15.5", func(v *Values) *time.Duration { return &v.DevReloadPoll }),
 	param("PLUGIN_MEMORY_SOFT_LIMIT", bytesUnit, int64(0), true, "> 0", "§16", func(v *Values) *int64 { return &v.PluginMemorySoftLimit }),
 	param("CORE_MEMORY_SOFT_LIMIT", bytesUnit, int64(0), true, "> 0", "§16", func(v *Values) *int64 { return &v.CoreMemorySoftLimit }),
+	param("OPTIONS_PAGE", integerUnit, int(50), true, ">= 1 and <= 200", "§5.1", func(v *Values) *int { return &v.OptionsPage }),
 }
 
 // Defaults 返回 CONTRACTS §16 规定的全部缺省值。

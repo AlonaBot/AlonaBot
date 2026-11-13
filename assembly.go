@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
@@ -31,10 +32,12 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 	"github.com/AlonaBot/AlonaBot/internal/core/media"
 	"github.com/AlonaBot/AlonaBot/internal/core/message"
+	coreoptions "github.com/AlonaBot/AlonaBot/internal/core/options"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/process"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/scheduler"
+	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
 	"github.com/AlonaBot/AlonaBot/internal/core/tool"
@@ -134,11 +137,25 @@ type assembly struct {
 	http      *httpproxy.Server
 	global    *wire.Budget
 	store     *state.Store
+	options   *coreoptions.Service
+	settings  *settings.File
+	schemaMu  sync.RWMutex // 保护按 Session 发布的只读选项声明。
+	schemas   map[string]componentOptionSchemas
+}
+
+type componentOptionSchemas struct {
+	session string
+	config  *configschema.Schema
+	adapter *configschema.Schema
 }
 
 func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) {
 	a := &assembly{store: store, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload)}
 	var err error
+	a.settings, err = settings.Load(dir)
+	if err != nil {
+		return nil, err
+	}
 	a.media, err = media.Open(filepath.Join(dir, "media"), media.NewLimits(v), time.Now)
 	if err != nil {
 		return nil, err
@@ -187,10 +204,61 @@ func assemble(store *state.Store, dir string, v tune.Values) (*assembly, error) 
 	tool.New(store, a.router).Register(a.mux)
 	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes})
 	a.bus.Register(a.mux)
-	a.mux.Forward(broker.New(a.router, v.RequestTimeout).Call)
+	serviceBroker := broker.New(a.router, v.RequestTimeout)
+	a.mux.Forward(serviceBroker.Call)
+	a.schemas = make(map[string]componentOptionSchemas)
+	a.options = coreoptions.New(coreoptions.Options{Schema: a.optionSchema, Router: a.router, Broker: serviceBroker, Page: v.OptionsPage, Instances: func() []coreoptions.AdapterInstance {
+		var instances []coreoptions.AdapterInstance
+		for adapterID, configured := range a.settings.Settings().Adapters {
+			for instanceID := range configured.Instances {
+				instances = append(instances, coreoptions.AdapterInstance{InstanceID: instanceID, AdapterID: adapterID})
+			}
+		}
+		return instances
+	}})
 	a.scheduler = scheduler.New(scheduler.Options{JobTimeout: v.JobTimeout})
 	a.http = httpproxy.New(nil)
 	return a, nil
+}
+
+func (a *assembly) optionSchema(componentID string, kind coreoptions.SchemaKind) (*configschema.Schema, bool) {
+	caller, active := a.router.Caller(componentID)
+	if !active {
+		return nil, false
+	}
+	a.schemaMu.RLock()
+	defer a.schemaMu.RUnlock()
+	current := a.schemas[componentID]
+	if current.session != caller.SessionKey {
+		return nil, false
+	}
+	var schema *configschema.Schema
+	switch kind {
+	case coreoptions.ConfigSchema:
+		schema = current.config
+	case coreoptions.AdapterInstanceSchema:
+		schema = current.adapter
+	}
+	return schema, schema != nil
+}
+
+func optionSchemas(resources sdk.Generated) (componentOptionSchemas, error) {
+	var result componentOptionSchemas
+	for _, entry := range []struct {
+		name   string
+		raw    []byte
+		schema **configschema.Schema
+	}{{"config_schema.json", resources.ConfigSchema, &result.config}, {"adapter_config_schema.json", resources.AdapterConfigSchema, &result.adapter}} {
+		if len(entry.raw) == 0 {
+			continue
+		}
+		schema, problems := configschema.Parse(entry.raw)
+		if len(problems) != 0 {
+			return result, fmt.Errorf("%s: %v", entry.name, problems)
+		}
+		*entry.schema = schema
+	}
+	return result, nil
 }
 
 // runningComponent 保存一次外部进程或同进程 Session，退出观察者结束后才由 Core 替换。
@@ -205,6 +273,7 @@ type runningComponent struct {
 	conn     *wire.Conn
 	finished chan struct{} // SDK goroutine 返回后关闭，并发布 runErr。
 	runErr   error
+	schemas  componentOptionSchemas
 }
 
 func (r *runningComponent) exited() <-chan struct{} {
@@ -258,6 +327,10 @@ func (a *assembly) handler(r *runningComponent, install state.Install) wire.Hand
 
 func (a *assembly) attach(ctx context.Context, r *runningComponent) error {
 	plugin := router.FromInstance(r.instance)
+	r.schemas.session = r.caller.SessionKey
+	a.schemaMu.Lock()
+	a.schemas[r.id] = r.schemas
+	a.schemaMu.Unlock()
 	a.router.Attach(plugin, r.caller)
 	a.bus.Attach(plugin)
 	if r.process == nil {
@@ -274,6 +347,10 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) error {
 
 func (c *Core) startDevelopment(ctx context.Context, dir string, entry *component) error {
 	id := entry.manifest.ID
+	schemas, err := optionSchemas(entry.resources)
+	if err != nil {
+		return fmt.Errorf("component %s options schema: %w", id, err)
+	}
 	digest := make([]byte, launchRandomBytes)
 	rand.Read(digest)
 	install, err := c.store.GetInstall(ctx, id)
@@ -311,7 +388,7 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	if err != nil {
 		return err
 	}
-	running := &runningComponent{id: id, caller: router.NewCaller(id, generation), listener: listener, finished: make(chan struct{})}
+	running := &runningComponent{id: id, caller: router.NewCaller(id, generation), listener: listener, finished: make(chan struct{}), schemas: schemas}
 	c.components = append(c.components, running)
 	l := &inproc.Launch{PluginID: id, Secret: make([]byte, launchRandomBytes), Addr: listener.Addr().String(), BuildDigest: digest, RuntimeLockPath: filepath.Join(pluginDir, wire.RuntimeLockFile)}
 	rand.Read(l.Secret)
@@ -363,6 +440,9 @@ func bootstrap(generation string, version uint32) *pb.Bootstrap {
 
 func (a *assembly) detach(r *runningComponent) {
 	a.router.Detach(r.id)
+	a.schemaMu.Lock()
+	delete(a.schemas, r.id)
+	a.schemaMu.Unlock()
 	a.bus.Detach(r.id)
 	a.scheduler.Detach(r.id)
 	if r.instance != nil {
@@ -471,11 +551,15 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	if err != nil {
 		return nil, err
 	}
+	schemas, err := optionSchemas(resources)
+	if err != nil {
+		return nil, err
+	}
 	pluginDir := filepath.Join(dir, "plugins", install.PluginID)
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		return nil, err
 	}
-	running := &runningComponent{id: install.PluginID, install: install, caller: router.NewCaller(install.PluginID, generation)}
+	running := &runningComponent{id: install.PluginID, install: install, caller: router.NewCaller(install.PluginID, generation), schemas: schemas}
 	boot := bootstrap(generation, *m.ConfigVersion)
 	boot.DatabaseDescriptor.ActivationReason = pb.ActivationReason_ACTIVATION_REASON_RESUME
 	switch m.MigrationMode {
@@ -507,6 +591,16 @@ func packageResources(dir string) (sdk.Generated, error) {
 			return g, fmt.Errorf("installed config schema: %v", problems)
 		}
 		g.ConfigSchema = schema.Canonical()
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return g, err
+	}
+	raw, err = os.ReadFile(filepath.Join(dir, "adapter_config_schema.json"))
+	if err == nil {
+		schema, problems := configschema.Parse(raw)
+		if len(problems) != 0 {
+			return g, fmt.Errorf("installed adapter instance schema: %v", problems)
+		}
+		g.AdapterConfigSchema = schema.Canonical()
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return g, err
 	}
