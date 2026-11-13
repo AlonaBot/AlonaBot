@@ -16,7 +16,7 @@
 | goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-08.14、T-12.2 | 待派发 |
 | goal-136 | T-12.14 | 对话中的图片输入 | T-04.8、T-12.2、T-12.13 | 待派发 |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 待派发 |
-| goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 等待前置 |
+| goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 待派发 |
 | goal-62 | T-12.5 | 技能 | T-12.3 | 等待前置 |
 | goal-63 | T-12.6 | 定时 Agent 任务 | T-07.9、T-08.5、T-12.3 | 等待前置 |
 | goal-64 | T-12.7 | 官方 Agent 组件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6、T-12.8、T-12.14 | 等待前置 |
@@ -636,7 +636,7 @@ ToolConfirmRequest{operation = 1, summary = 2} -> ToolConfirmResponse{}；
 
 ### goal-61 · T-12.4 Agent 的记忆
 
-状态：等待前置（T-11.2、T-12.2）。T-08.5（PR #79）已合并。`sdk.JSONService` 的 `Tool` 方法已由 goal-54（PR #101，合并提交 `de48f26`）合入。语句中 goal-19、goal-32、goal-59 提供的符号（sdk.JSONService、gormdb.Open、agent 的一轮对话）只写名字；合并后由审查者核对，再改为待派发。2026-10-28 按 D-60 改写：记忆并入 Agent，不再有 sdk/memory 与记忆插件。
+状态：待派发。前置 T-08.5（PR #79）、T-11.2（PR #165，`330164f`）、T-12.2（PR #170，`eca6310`）均已合并；派发前须由维护者裁决三处契约缺口，审查者再按裁决改写本语句：(1) CONTRACTS §13.4 与 D-60 要求 memory 工具经 `core.tool.invoke` 调用，而 Broker 把调用方加入调用链后检查目标（`internal/core/broker/broker.go`），Agent 调用自己的工具必然 CALL_CYCLE；(2) SDK 的 Service Handler 读不到可信的 Actor 与默认 Target（`Event()` 为 nil，`Session()` 不含实例）；(3) 会话字符串不含实例，T-12.2 的 Agent 历史在同一聊天的两个实例间共用，与 V-57「不同实例的会话历史互不共用」及记忆范围含实例不一致。以下为前置合并前的语句，保留作记录。原状态：等待前置（T-11.2、T-12.2）。T-08.5（PR #79）已合并。`sdk.JSONService` 的 `Tool` 方法已由 goal-54（PR #101，合并提交 `de48f26`）合入。语句中 goal-19、goal-32、goal-59 提供的符号（sdk.JSONService、gormdb.Open、agent 的一轮对话）只写名字；合并后由审查者核对，再改为待派发。2026-10-28 按 D-60 改写：记忆并入 Agent，不再有 sdk/memory 与记忆插件。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-61（切片 T-12.4：Agent 的记忆）。goal 目录 goal-61，分支 goal-61，worktree .worktrees/goal-61，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

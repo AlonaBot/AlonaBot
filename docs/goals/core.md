@@ -5900,7 +5900,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 不做：Event Bus（T-06.3）；Session 清理的完整矩阵（T-06.4）。
 ```
 
-# goal-128 · T-07.9 动态任务与暂停恢复的 SDK
+### goal-128 · T-07.9 动态任务与暂停恢复的 SDK
 
 状态：待派发。直接前置 T-04.12（goal-125，PR #154，合并提交 `43a6135`）、T-07.8（goal-127，PR #169，合并提交 `4dc4bcd`）均已合并。本稿于 2026-11-13 按本 worktree 的 main `dbbb80b` 核对；合并提交来自仓库 goal 的完成记录，符号定义及调用者用 `rg` 核对，`sdk.Registrar` 另用离线 `go doc` 交叉核对。末尾的 API 定名建议供审查者派发前确认。2026-11-13 审查者裁决：采纳 `JobState` 的命名（避免与函数 `JobStatus` 同名）、`TaskBuilder[T]`/`TaskInstance[T]` 的字段与 optional 时间为 `*time.Time`；参数类型检查纳入 `sdk/generate/service.go`，复用 Service 的类型检查并要求顶层为对象。
 
@@ -5995,7 +5995,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 不做：Core 协议、状态表、调度器与卸载清理（goal-127）；Service 的权限 API；plugintest 的动态任务立即触发（goal-82）；官方 Agent 的定时任务（goal-63）；新增任务管理页面或持久化执行队列。
 ```
 
-# goal-66 · T-09.10 日志管理
+### goal-66 · T-09.10 日志管理
 
 状态：待派发。直接前置 T-09.4（goal-39，PR #163，合并提交 `cb8ae3d`）、T-09.12（goal-84，PR #167，合并提交 `3a9b4af`）均已合并；既有日志基线 T-02.1（goal-65，PR #13，`775f665`）、设置文件 T-07.6（goal-97，PR #100，`cb83eeb`）、首次认证 T-09.1（goal-36，PR #72，`1ba7e5b`）均可复用。2026-11-13 按本 worktree 的 main `dbbb80b` 用 `rg` 核对定义与调用者，`logging.Output` 另以离线 `go doc` 交叉核对。语句按现行 CONTRACTS §14.3 修正两种级别的持久化；末尾列出派发前须裁决的规格冲突。2026-11-13 审查者裁决（DECISIONS 2026-11-13 变更记录）：全局与来源级别都按 CONTRACTS §14.3 写回 core_config.json（TEST-MATRIX V-63 同步修正）；SSE 订阅的慢消费者规则见行为；历史查询按文件中实际存在的内容返回，精度登记进 ADMIN-API；实时 Source 以可信组件 ID 归组，来源类别取自 Core 的安装记录。采纳 `Options.BufferRecords`、`manage.Options.Logs`/`NotifyLogLevel` 与 Record 的 JSON 形状。
 
@@ -6089,9 +6089,9 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 不做：WebUI 日志页（goal-94/T-09.15）；远程日志收集、额外日志存储格式；日志文件设置的运行时修改；状态库日志级别表、额外调优参数和业务自动重试。
 ```
 
-# goal-92 · T-09.13 管理页所需的会话与上传接口
+### goal-92 · T-09.13 管理页所需的会话与上传接口
 
-状态：待派发。既定前置 T-09.4（goal-39，PR #163，合并提交 `cb8ae3d`）、T-09.12（goal-84，PR #167，合并提交 `3a9b4af`）与 T-09.1（goal-36，PR #72，合并提交 `1ba7e5b`）均已合并。本稿于 2026-11-13 按本 worktree 的 main `dbbb80b` 用 `rg` 核对签名、路由及调用者，`manage.Service.Update` 与 `sdk.AdapterHTTP` 另以离线 `go doc` 交叉核对。真实更新成功另依赖尚待接线的 T-09.6（goal-41），派发时机见起草者备注。2026-11-13 审查者裁决：本切片交付 HTTP 层（会话取回、multipart 上传、签名材料与 Core 总览）；更新请求经 HTTP 正确交到 `manage.Service.Update` 即可（此时 Candidates 仍返回现有 UNSUPPORTED，原样传播），「经 HTTP 真实更新成功」的验收由 goal-41 在接通管理动作时完成（已写入 goal-41 的测试）。三文件上传另带文本 part `public_key`（release.pub 的标准 base64）；Core 版本取 `runtime/debug.ReadBuildInfo` 中 AlonaBot module 的版本（作为主 module 取 Main，作为库取对应依赖项），读不到时为 `(devel)`；采纳草稿的 HTTP 字段。
+状态：待派发。既定前置 T-09.4（goal-39，PR #163，合并提交 `cb8ae3d`）、T-09.12（goal-84，PR #167，合并提交 `3a9b4af`）与 T-09.1（goal-36，PR #72，合并提交 `1ba7e5b`）均已合并。本稿于 2026-11-13 按本 worktree 的 main `dbbb80b` 用 `rg` 核对签名、路由及调用者，`manage.Service.Update` 与 `sdk.AdapterHTTP` 另以离线 `go doc` 交叉核对。真实更新成功另依赖尚待接线的 T-09.6（goal-41），派发时机见起草者备注。2026-11-13 审查者裁决：本切片交付 HTTP 层（会话取回、multipart 上传、签名材料与 Core 总览）；更新请求经 HTTP 正确交到 `manage.Service.Update` 即可（此时 Candidates 仍返回现有 UNSUPPORTED，原样传播），「经 HTTP 真实更新成功」的验收由 goal-41 在接通管理动作时完成（已写入 goal-41 的测试）。三文件上传另带文本 part `public_key`（release.pub 的标准 base64）；Core 版本取 `runtime/debug.ReadBuildInfo` 中 AlonaBot module 的版本（作为主 module 取 Main，作为库取对应依赖项），读不到时为 `(devel)`；采纳草稿的 HTTP 字段。派发顺序：在 goal-66 合并后从包含它的 main 派发（两者都改 internal/core/manage 的 HTTP 层与根包 alonabot.go）。
 
 按 main 核对：
 
