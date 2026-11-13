@@ -90,10 +90,10 @@
 | goal-70 | T-13.4 | 开发运行示例与验收 | T-03.10、T-13.2、T-13.3 | 等待前置 |
 | goal-82 | T-16.2 | 按钮、多轮等待、schedule 与示例测试 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | 等待前置 |
 | goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | 等待前置 |
-| goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 待派发 |
+| goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 已完成（PR #173） |
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 已完成（PR #172） |
 | goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 等待前置 |
-| goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 等待前置 |
+| goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 待派发 |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 等待前置 |
 | goal-93 | T-09.14 | 配置、权限、工具策略与会话的管理 API | T-03.25、T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-08.14、T-09.6、T-09.12、T-11.1、T-11.3 | 等待前置 |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
@@ -6558,7 +6558,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 ### goal-40 · T-09.5 候选 Journal 与准备编排
 
-状态：待派发。前置 T-09.4（PR #163，合并提交 `cb8ae3d`）、T-08.6（PR #85，合并提交 `7d554bd`）、T-06.4（PR #164，合并提交 `039802f`）均已合并；相关已合并能力：T-08.12（PR #114，`a796766`）、T-07.5（PR #119，`cc19e99`）。2026-11-13 审查者按 main `37b0ada` 改写（起草稿经审查者裁决），裁决如下：
+状态：已完成（[PR #173](https://github.com/AlonaBot/AlonaBot/pull/173)，合并提交 `2bb8181`），证据见 TEST-MATRIX §3.2。合入：状态库 `journal` 表与 `state.Journal`、`CreateJournal`、`UpdateJournal`、`GetJournal`、`Journals`、`GenerationConfigVersion`；`supervisor.Prepare(ctx, store, spec) (*Prepared, error)`、`(*Prepared).Activate(ctx, commit func(context.Context) error) (*Running, error)`、`(*Prepared).Close() error`；`internal/core/journal` 的 `Kind`（first_install、reload、update）、`Options{Store, Secrets, Config, Settings, DataDir, State, Spec, Stop, Resume}`、`Result{OpID, Generation, Prepared, Session}`、`New`、`(*Orchestrator).Prepare(ctx, pluginID, kind, staged)`、`(*Orchestrator).Abort(ctx, r, cause)`；根包装配结构的 `journal` 字段；`manage.Candidates.Update(ctx, id, staged *packages.Candidate)`；host.Prepare 的 REGISTER 绑定检查。以下为派发时的语句。
 - 生产入口的分界（DECISIONS 2026-11-13 变更记录）：本切片只交付 Journal、两阶段 supervisor 入口与 Orchestrator 的 Prepare/Abort，不接入生产的管理动作与首次启用；`manage.Options.Candidates` 保持缺省的 `unsupportedCandidates`，`startInstalled` 的首次启用保持现状。管理动作接线、首次启用切换与没有 Active 的 Update 由 T-09.6（goal-41）在 Commit 可用时一并交付，避免出现「停旧版、准备、中止、返回 UNSUPPORTED」的过渡行为。
 - `manage.Candidates.Update` 改为交接完整的 `*packages.Candidate`（BuildDigest、Release 与发布者随包对象交接）。
 - 从 `supervisor.Launch` 提取只到 PREPARED 的 `supervisor.Prepare`/`Prepared`，Launch 保持现有签名与行为。
@@ -6884,7 +6884,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 ### goal-41 · T-09.6 唯一提交点与激活门禁
 
-状态：等待前置（T-09.5）。T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。已核对 `supervisor.Spec.Scheduler`/`HTTP`：`Launch` 在 `host.Activate` 成功后才 `HTTP.Bind`、`Scheduler.Attach(router.FromInstance(in), activatedAt)`；`host.Instance.Stop(t0, reason, tree, timing, hooks)` 接收 `StopHooks{Frozen, Stopping}`，分别接入 Scheduler/HTTP 的 Drain 与 Detach/Unbind。合并后由审查者按 main `2c1fdcc` 核对。`host.Instance.State()`、`Err()` 与 `StateDegraded` 已存在；`journal.Orchestrator` 与 `Result` 待 goal-40 合并后核对，再改为待派发。2026-11-13 审查者调整分界：生产的管理动作接线、首次启用切换与没有 Active 的 Update 从 goal-40 移到本切片（DECISIONS 2026-11-13 变更记录），goal-40 只交付 Prepare/Abort。
+状态：待派发。前置 T-09.5（[PR #173](https://github.com/AlonaBot/AlonaBot/pull/173)，合并提交 `2bb8181`）与 T-07.5（[PR #119](https://github.com/AlonaBot/AlonaBot/pull/119)，合并提交 `cc19e99`）已合并。2026-11-13 审查者按 main 核对 goal-40 合入的接口：`journal.Result{OpID, Generation, Prepared, Session}` 交接 PREPARED 的候选 Session，`Commit` 以 `r.Session.Activate(ctx, commit)` 完成激活，commit 回调中调用 `state.CommitCandidate`；`Orchestrator.Abort` 处理提交前的失败；根包装配结构已有 `journal` 字段，管理桥接与首次启用切换按本语句的范围接入。已核对 `supervisor.Spec.Scheduler`/`HTTP` 与 `host.Instance.Stop(t0, reason, tree, timing, hooks)` 的 `StopHooks{Frozen, Stopping}`；`host.Instance.State()`、`Err()` 与 `StateDegraded` 已存在。2026-11-13 审查者调整分界：生产的管理动作接线、首次启用切换与没有 Active 的 Update 从 goal-40 移到本切片（DECISIONS 2026-11-13 变更记录）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-41（切片 T-09.6：唯一提交点与激活门禁）。goal 目录 goal-41，分支 goal-41，worktree .worktrees/goal-41，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -6923,7 +6923,7 @@ internal/core/journal
 
 测试（按编码规范「测试提交规则」）：
 - 提交：无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：CommitCandidate 的每个前置条件；事务中没有文件与 RPC 操作（代码审查加测试钩子）；Degraded 状态下 Scheduler 不触发；internal/core/supervisor/commit_local_test.go（//go:build unix）：reload 成功：Active 改为新代次，COMMITTED 存在，Journal 为 committed；ACTIVATED 之前发送的消息没有派发给候选（候选的事件路由调用计数为 0，消息被旧版处理或因冻结被丢弃并计数），之后由新代次处理；提交前把 Active 改成别的值（模拟并发）：CommitCandidate 失败，候选被 Abort，旧版恢复；提交后 OnReady 失败：Active 仍为新代次，插件 Degraded，没有启动旧代次；HTTP 返回 503；提交后旧代次的按钮点击不调用插件。另经管理 HTTP（goal-92 的 multipart 上传与现有 JSON 入口）上传同一来源的新版本，以新 Active、版本与运行结果证明更新成功。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：CommitCandidate 的每个前置条件；事务中没有文件与 RPC 操作（代码审查加测试钩子）；Degraded 状态下 Scheduler 不触发；internal/core/supervisor/commit_local_test.go（//go:build unix）：reload 成功：Active 改为新代次，COMMITTED 存在，Journal 为 committed；ACTIVATED 之前发送的消息没有派发给候选（候选的事件路由调用计数为 0，消息被旧版处理或因冻结被丢弃并计数），之后由新代次处理；提交前把 Active 改成别的值（模拟并发）：CommitCandidate 失败，候选被 Abort，旧版恢复；提交后 OnReady 失败：Active 仍为新代次，插件 Degraded，没有启动旧代次；HTTP 返回 503；提交后旧代次的按钮点击不调用插件。另经管理 HTTP 的现有 JSON 更新入口上传同一来源的新版本，以新 Active、版本与运行结果证明更新成功（goal-92 若已合并，同时经其 multipart 上传覆盖一次）。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/...；go build ./...。
 
