@@ -85,7 +85,7 @@
 | goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 等待前置 |
 | goal-92 | T-09.13 | 管理页所需的会话与上传接口 | T-09.1、T-09.4、T-09.12 | 等待前置 |
 | goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 等待前置 |
-| goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 等待前置 |
+| goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 待派发 |
 | goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 等待前置 |
 | goal-70 | T-13.4 | 开发运行示例与验收 | T-03.10、T-13.2、T-13.3 | 等待前置 |
 | goal-82 | T-16.2 | 按钮、多轮等待、schedule 与示例测试 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | 等待前置 |
@@ -5831,52 +5831,58 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-22 · T-06.4 Session 清理与 Service 端到端
 
-状态：等待前置（T-06.2）。T-06.3（PR #56）已合并。语句中 goal-15、goal-17、goal-19～goal-21 提供的符号（router、broker、bus、hook 与各自的 Stats）只写名字；合并后由审查者核对，再改为待派发。T-06.3 已由 PR #56 合并，bus 的实际接口：`bus.New(opt bus.Options) *Bus`（`Options{QueueEvents int; QueueBytes int64}`，装配处传入 tune.Values 的值）、`(*Bus).Register(m *router.Mux)`、`Attach(p router.Plugin)`、`Detach(pluginID string)`、`Stats(pluginID string) Stats`（`Stats{Published, Delivered, Dropped uint64}`，丢弃不分原因；本切片要按原因计数时在 bus 中扩展）；Router 不持有 Bus，Attach/Detach 由装配处与 Router 的 Attach/Detach 一起调用；`router.Plugin` 增加了 `SendEvent`，wire 的接收丢弃计数为 `wire.Stats.DroppedEvents`。
+状态：待派发。前置 T-06.2（[PR #161](https://github.com/AlonaBot/AlonaBot/pull/161)，合并提交 `b4610e1`）与 T-06.3（PR #56）已合并。2026-11-12 审查者按 main `96856ec` 改写，要点如下：
+- 已有的清理：根包 `assembly.detach` 在组件停止或 Session 替换时依次调用 `router.Detach`、`bus.Detach`、`scheduler.Detach`、`httpproxy.Server.Unbind` 与 Adapter 的 `remote.Unbind`；延续调用与等待随 `continuation.Manager.Release(caller)` 释放（T-05.4）；插件的入站请求在 Session 结束时由 wire 取消，Broker 转发时用的就是这个 ctx。
+- Broker（T-06.2）：`broker.New(broker.Options{Router, RequestTimeout, MaxDepth})`，`b.calls` 以子调用的 Invocation 记录来源；CALL_CYCLE 与深度在调用前返回；额满由 wire 立即返回 RESOURCE_EXHAUSTED。
+- Bus（T-06.3）：`bus.New(bus.Options{QueueEvents, QueueBytes})`、`Register`、`Attach`、`Detach`、`Stats(pluginID) Stats{Published, Delivered, Dropped}`（丢弃不分原因）；wire 的接收丢弃为 `wire.Stats.DroppedEvents`。
+- 多进程装配：根包 `pipeline_test.go`（T-05.5）的 `newPipeline` 经 assemble 取得生产装配，以测试二进制运行插件与回环 Adapter 进程；本切片的测试在同一个包里复用它，并按需加入 stdio 传输。
+- 与 PR #163（goal-39）同改 assembly.go 与 pipeline_test.go 的装配（#163 让 assemble 接收共用的 settings.File、HTTP 代理改在 Start 中创建），后合并者同步 main。
+- 测试插件按 main 上的写法：插件对象、`sdk.JSON[In, Out](target)` 与 `sdk.Serve`/`Call`（T-04.13）、`Plugin.BeforeSend`（T-05.3）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-22（切片 T-06.4：Session 清理与 Service 端到端）。goal 目录 goal-22，分支 goal-22，worktree .worktrees/goal-22，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：Session 停止或失效时，按 T-02 的冻结、drain、STOPPING 流程停止新的根调用，取消在途父链，并清理路由目标、Bus 订阅队列、Broker 映射与预算，不把未完成的工作转交给同插件的新 Session。错误只返回安全的 ErrorInfo 与 trace。记录按原因区分的拒绝、取消、离线与丢弃计数。在 TCP 与 stdio 上完成 A/B/C 嵌套与故障的端到端验收（含 Hook→Service→Send），在 TEST-MATRIX §3.2 记录 T-06 证据。
+目标：核对并补齐 Session 停止或失效时的清理：停止新的根调用，取消在途父链，清理路由目标、Bus 订阅队列、Broker 映射与预算，不把未完成的工作转交给同插件的新 Session；错误只返回安全的 ErrorInfo 与 trace。记录按原因区分的拒绝、取消、离线与丢弃计数。在 TCP 与 stdio 上完成 A/B/C 嵌套与故障的端到端验收（含 Hook→Service→Send），在 TEST-MATRIX §3.2 记录 T-06 证据。
 
 依据：PLAN T-06 步骤 6、7 与「停止和失败条件」；CONTRACTS §3、§1.2、§4.2、§14.5；TEST-MATRIX V-15、V-17、V-18、V-19、V-42。
 
 范围（只新增或修改这些）：
-- internal/core/broker/、internal/core/bus/、internal/core/router/：Session 失效时的清理入口与计数（新增文件或只加调用点）
-- internal/core/supervisor/：停止流程中调用上述清理（只加调用点）
 - 新增 internal/core/metrics/（按原因的计数，只在内存中，供管理面读取）
-- 新增 cmd/alonabot/t06_e2e_test.go（//go:build unix）
+- internal/core/broker/、internal/core/bus/、internal/core/router/：Options 增加计数器并在各拒绝、取消与丢弃处计数；核对中发现的清理缺口在这些包内补齐
+- 根包 assembly.go：创建计数器并传给上述三者（只加装配点）
+- 新增根包 service_chain_test.go（//go:build unix），复用 pipeline_test.go 的装配辅助（可以为它加入 stdio 选项）
 - spec/TEST-MATRIX.md §3.2：追加 T-06 的证据行（本切片获授权修改这一处）
-- 上述包的测试文件
-允许的新跨模块边：无。
+允许的新跨模块边：internal/core/broker、bus、router -> internal/core/metrics；根包 -> internal/core/metrics。
 
 接口（照此实现，不增减公开符号；内部辅助函数自定）：
 internal/core/metrics
-   type Reason string // denied、cancelled、offline、dropped_queue、dropped_budget、cycle、depth
-   type Counters struct{ ... }
-   func (c *Counters) Add(pluginID string, kind string, r Reason) // kind 为 service、bus、event
-   func (c *Counters) Snapshot() map[string]map[string]map[Reason]uint64 // plugin → kind → reason → count
-broker、bus、router 的 Options 增加 Metrics *metrics.Counters（可为 nil）。
+   type Reason string // 取值：denied、cancelled、offline、dropped_queue、dropped_budget、cycle、depth
+   type Kind string   // 取值：service、bus、event
+   type Counters struct{ ... } // 零值可用，方法可以并发调用
+   func (c *Counters) Add(pluginID string, kind Kind, reason Reason)
+   func (c *Counters) Snapshot() map[string]map[Kind]map[Reason]uint64 // plugin → kind → reason → count，返回副本
+broker.Options、bus.Options 与 router.Options 增加 Metrics *metrics.Counters（nil 时不计数）。
 
 行为：
-- 冻结：插件进入 Draining 后，Broker 对以它为目标的新调用返回 UNAVAILABLE（offline），Bus 不再向它入队，Router 不再派发给它。
-- 失效（STOPPING 或断链）：Broker 取消它作为调用方或目标的全部转发请求（调用方得到 UNAVAILABLE 或 CANCELLED），释放这些请求占用的预算；Bus 丢弃它的订阅队列（计入 offline）；Router 移除它的路由目标与等待（与 goal-52 的 Release 一致）。不转交新 Session，新 Session 从空状态开始。
+- 冻结：插件进入 Draining 后，Broker 对以它为目标的新调用返回 UNAVAILABLE（计 offline），Bus 不再向它入队，Router 不再派发给它。核对现有行为，缺口在对应包内补齐。
+- 失效（STOPPING 或断链）：以它为调用方或目标的转发请求被取消，调用方得到 UNAVAILABLE 或 CANCELLED（计 cancelled），占用的预算归还；Bus 丢弃它的订阅队列（计 offline）；Router 移除它的路由目标，等待与延续调用按 Release 释放。不转交给新 Session，新 Session 从空状态开始。
 - 错误：返回给调用方的 ErrorInfo 只含 code、safe_message 与 trace_id；远端堆栈、Secret、文件路径只进 Core 日志。
-- 计数：每次拒绝、取消、离线、队列丢弃、CALL_CYCLE、深度超限都计数；不持久化，不建设可靠事件存储或自动重试。
-- 验收矩阵（t06_e2e_test.go，TCP 与 stdio 各运行一遍）：
-  1) A→B→C、A→B→A、深度边界、两条独立并发链：结果、Actor/Target、deadline 与取消在每一跳一致。
-  2) A 的出站 Hook → B 的 Service → Send：FAILED_PRECONDITION（闭合 V-15）。
-  3) B/C 挂起、进程退出、满额、畸形输入与输出、排队前取消：没有死锁，没有重复的业务效果（以目标插件的调用计数证明）。
-  4) Bus：慢订阅者、断线、条数满与字节满同时发生时，新事件按规则丢弃，其他订阅者继续收到。
-  5) 每项记录实际进程、传输、命令与日志摘录。
+- 计数：每次访问拒绝（denied）、取消、离线、队列满丢弃（dropped_queue）、预算不足丢弃（dropped_budget）、CALL_CYCLE（cycle）、深度超限（depth）都计数；不持久化，不建设可靠事件存储或自动重试。
+- 验收矩阵（service_chain_test.go，TCP 与 stdio 各运行一遍；测试插件由测试二进制按环境变量扮演 A、B、C）：
+  1) A→B→C、A→B→A（CALL_CYCLE）、深度边界、两条独立并发链：结果、Actor/Target、deadline 与取消在每一跳一致。
+  2) A 的出站 Hook（BeforeSend）→ B 的 Service → Send：FAILED_PRECONDITION（闭合 V-15）；A 原本的发送照常完成。
+  3) B/C 挂起、进程退出、满额、畸形输入与输出、排队前取消：没有死锁，没有重复的业务效果（以目标插件的调用计数证明）；B 退出后它的新 Session 不收到旧的未完成请求。
+  4) Bus：慢订阅者、断线、条数满与字节满同时发生时，新事件按规则丢弃，其他订阅者继续收到；计数中有对应的原因。
+  5) 每项在日志中记录实际进程、传输与命令。
 - 证据：TEST-MATRIX §3.2 追加 T-06 一行，写明测试位置、命令、平台、传输与结果。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/t06_e2e_test.go（上述矩阵，复用 goal-19～goal-21 的测试插件）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Counters 的并发；失效后预算归还到初始值；ErrorInfo 中不含路径与堆栈。
+- 提交：根包 service_chain_test.go 的上述矩阵（多列理由：T-06 的验收矩阵本身）。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：Counters 的并发与 Snapshot 副本；失效后预算归还到初始值；ErrorInfo 中不含路径与堆栈；在 -race 下以 -count=5 运行矩阵无偶发失败。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
-不做：管理面对计数的读取接口（T-09.14）；可靠事件存储与服务重试（契约不提供）。
+不做：管理面对计数的读取接口（T-09.14）；可靠事件存储与服务重试（契约不提供）；修改 pipeline_test.go 的既有断言。
 ```
 
 ### goal-55 · T-11.2 工具调用与用户确认
