@@ -148,3 +148,24 @@ CREATE TABLE button_token (
 );
 
 CREATE INDEX button_token_plugin ON button_token(plugin_id);
+
+CREATE TABLE journal (
+  op_id TEXT PRIMARY KEY,
+  plugin_id TEXT NOT NULL REFERENCES install(plugin_id),
+  kind TEXT NOT NULL,
+  expected_old TEXT NOT NULL,
+  new_generation TEXT NOT NULL,
+  phase TEXT NOT NULL,
+  package_dir TEXT NOT NULL,
+  database_path TEXT NOT NULL,
+  entrypoint TEXT NOT NULL,
+  version TEXT NOT NULL,
+  publisher_key_id TEXT NOT NULL,
+  build_digest BLOB NOT NULL,
+  session_id BLOB NOT NULL,
+  owns_package INTEGER NOT NULL,
+  was_running INTEGER NOT NULL,
+  was_enabled INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);

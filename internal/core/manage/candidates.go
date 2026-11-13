@@ -7,19 +7,22 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 )
 
 // Candidates 接收通过管理前置校验的候选操作，由候选编排器实现。
 type Candidates interface {
 	Reload(ctx context.Context, id string) error
-	Update(ctx context.Context, id, staged string) error
+	Update(ctx context.Context, id string, staged *packages.Candidate) error
 	Rollback(ctx context.Context, id, generation string) error
 }
 
 type unsupportedCandidates struct{}
 
-func (unsupportedCandidates) Reload(context.Context, string) error           { return unsupported() }
-func (unsupportedCandidates) Update(context.Context, string, string) error   { return unsupported() }
+func (unsupportedCandidates) Reload(context.Context, string) error { return unsupported() }
+func (unsupportedCandidates) Update(context.Context, string, *packages.Candidate) error {
+	return unsupported()
+}
 func (unsupportedCandidates) Rollback(context.Context, string, string) error { return unsupported() }
 func unsupported() error {
 	return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "candidate orchestration is not available"}
@@ -97,7 +100,7 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (er
 			return err
 		}
 	}
-	return s.opt.Candidates.Update(ctx, id, candidate.Dir)
+	return s.opt.Candidates.Update(ctx, id, candidate)
 }
 
 func checkPublisher(bound, candidate string, confirm bool) error {

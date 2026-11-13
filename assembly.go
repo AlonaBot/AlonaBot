@@ -31,15 +31,16 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/hook"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
+	"github.com/AlonaBot/AlonaBot/internal/core/journal"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/media"
 	"github.com/AlonaBot/AlonaBot/internal/core/message"
 	"github.com/AlonaBot/AlonaBot/internal/core/metrics"
 	coreoptions "github.com/AlonaBot/AlonaBot/internal/core/options"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
-	"github.com/AlonaBot/AlonaBot/internal/core/process"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/scheduler"
+	"github.com/AlonaBot/AlonaBot/internal/core/secret"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
@@ -145,6 +146,8 @@ func validateComponents(components []component, installs []state.Install) error 
 }
 
 type assembly struct {
+	core       *Core // assemble 返回后由 Start 绑定，候选回调在运行循环内读取。
+	journal    *journal.Orchestrator
 	adapters   *coreadapter.Registry
 	router     *router.Router
 	mux        *router.Mux
@@ -269,6 +272,16 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 		return instances, nil
 	}})
 	a.scheduler = scheduler.New(scheduler.Options{JobTimeout: v.JobTimeout})
+	a.journal = journal.New(journal.Options{Store: store, Secrets: secret.New(store), Config: config.New(store, dir), Settings: file, DataDir: dir, State: a.componentState,
+		Spec: func(ctx context.Context, in state.Install, packageDir string, boot *pb.Bootstrap) (supervisor.Spec, error) {
+			spec, _, err := a.core.installedSpec(ctx, in, packageDir, boot)
+			return spec, err
+		},
+		Stop: func(ctx context.Context, id string, reason pb.StopReason) error {
+			return a.core.stopManaged(id, reason)
+		},
+		Resume: func(ctx context.Context, id string) error { return a.core.startManaged(ctx, id) },
+	})
 	return a, nil
 }
 
@@ -639,33 +652,6 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	if err != nil {
 		return nil, err
 	}
-	raw, err := os.ReadFile(filepath.Join(packageDir, "plugin.yaml"))
-	if err != nil {
-		return nil, err
-	}
-	parsed, err := manifest.Parse(raw)
-	if err != nil {
-		return nil, err
-	}
-	m := parsed.Manifest
-	if m.ID != install.PluginID || state.Role(m.Role) != install.Role || m.AdapterID != install.AdapterID || m.Entrypoint != install.Entrypoint {
-		return nil, fmt.Errorf("installed manifest identity differs from record for %s", install.PluginID)
-	}
-	for _, warning := range parsed.Warnings {
-		slog.Warn("installed manifest warning", "plugin_id", m.ID, "warning", warning)
-	}
-	executable, err := process.Entrypoint(packageDir, install.Entrypoint)
-	if err != nil {
-		return nil, err
-	}
-	resources, err := packageResources(packageDir)
-	if err != nil {
-		return nil, err
-	}
-	schemas, err := optionSchemas(resources)
-	if err != nil {
-		return nil, err
-	}
 	pluginDir := filepath.Join(dir, "plugins", install.PluginID)
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		return nil, err
@@ -684,35 +670,32 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 			return nil, err
 		}
 		generation = "gen-" + rand.Text()
-		// shortcut: 首装候选直接交给 supervisor 提交，候选 Journal 接入后由编排器接管。
-		// 原文只交给 Bootstrap；supervisor 提取 secret 后才写最终快照。
-		if err := c.store.AddGeneration(ctx, install.PluginID, generation, emptyConfig, *m.ConfigVersion); err != nil {
-			return nil, err
-		}
 	}
-	running := &runningComponent{id: install.PluginID, install: install, caller: router.NewCaller(install.PluginID, generation), schemas: schemas}
-	boot := bootstrap(generation, *m.ConfigVersion)
-	boot.LogLevel = logging.ProtoLevel(c.output.Levels().Source(install.PluginID))
+	boot := bootstrap(generation, initialConfigVersion)
 	boot.DatabaseDescriptor.ActivationReason = pb.ActivationReason_ACTIVATION_REASON_RESUME
 	if isNew {
 		boot.CandidateConfigJson = string(configuration)
 		boot.DatabaseDescriptor.ActivationReason = pb.ActivationReason_ACTIVATION_REASON_FIRST_INSTALL
+	} else {
+		version, err := c.store.GenerationConfigVersion(ctx, generation)
+		if err != nil {
+			return nil, err
+		}
+		boot.PreviousConfigVersion = &version
 	}
-	switch m.MigrationMode {
-	case manifest.MigrationSelf:
-		boot.DatabaseDescriptor.MigrationMode = pb.MigrationMode_MIGRATION_MODE_SELF
-	case manifest.MigrationVersioned:
-		boot.DatabaseDescriptor.MigrationMode = pb.MigrationMode_MIGRATION_MODE_VERSIONED
+	spec, running, err := c.installedSpec(ctx, install, packageDir, boot)
+	if err != nil {
+		return nil, err
 	}
-	if (install.Role == state.RolePlugin || install.Role == state.RoleAgent) && (m.PrepareEffects == manifest.EffectsManagedDB || m.MigrationMode == manifest.MigrationSelf || m.MigrationMode == manifest.MigrationVersioned) {
-		boot.DatabaseDescriptor.Backend = pb.DatabaseBackend_DATABASE_BACKEND_SQLITE
+	spec.NewCandidate = isNew
+	if isNew {
+		// shortcut: 首装仍由 supervisor 提交，正式提交入口接管后替换。
+		// 原文只交给 Bootstrap；supervisor 提取 secret 后才写最终快照。
+		if err := c.store.AddGeneration(ctx, install.PluginID, generation, emptyConfig, boot.TargetConfigVersion); err != nil {
+			return nil, err
+		}
 	}
-	running.process, err = supervisor.Launch(ctx, c.store, supervisor.Spec{Role: install.Role, AdapterID: install.AdapterID, PluginID: install.PluginID, PluginDir: pluginDir,
-		Executable: executable, BuildDigest: install.BuildDigest, GenerationID: generation, Bootstrap: boot, ConfigSchema: resources.ConfigSchema, I18n: resources.I18n,
-		NewCandidate:  isNew,
-		DefaultLocale: c.assembly.settings.Settings().DefaultLocale, Handler: c.assembly.handler(running, install), Global: c.assembly.global, Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values),
-		Log: c.output.Plugin(install.PluginID, generation), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http, MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment,
-		Detach: func() { c.assembly.detach(running) }})
+	running.process, err = supervisor.Launch(ctx, c.store, spec)
 	if err != nil {
 		return nil, err
 	}
