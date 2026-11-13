@@ -683,11 +683,16 @@ func TestServiceChain(t *testing.T) {
 				if chainCount(h, "service", "b", "overflow") != 0 {
 					t.Fatal("full target executed overflow")
 				}
+				targetSession := h.components["b"].instance.Session
+				lateResponses := targetSession.Stats().LateResponses
 				cancel()
 				for range max {
 					chainAssertCode(t, chainReceive(t, pending), pb.ErrorCode_ERROR_CODE_CANCELLED)
 				}
-				chainEventually(t, func() bool { return h.assembly.global.Used() == 0 })
+				// 等这批取消调用的迟到响应全部到达，确认插件已释放接收侧槽位。
+				chainEventually(t, func() bool {
+					return h.assembly.global.Used() == 0 && targetSession.Stats().LateResponses == lateResponses+int64(max)
+				})
 				if !h.assembly.global.Acquire(h.values.CoreMaxPayload) {
 					t.Fatal("global budget not empty")
 				}
