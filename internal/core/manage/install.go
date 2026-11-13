@@ -42,6 +42,9 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 	}
 	defer func() { err = errors.Join(err, candidate.Discard()) }()
 	m := candidate.Manifest
+	if err := checkWebUIVersion(m); err != nil {
+		return result, err
+	}
 	s.instances.Lock()
 	defer s.instances.Unlock()
 	unlock := s.lock(m.ID)

@@ -597,6 +597,10 @@ func TestToolFieldNumbers(t *testing.T) {
 		{&pb.ToolInfo{}, []protoreflect.Name{"name", "description", "input_schema_json", "policy"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.EnumKind}},
 		{&pb.ToolListRequest{}, nil, nil},
 		{&pb.ToolListResponse{}, []protoreflect.Name{"tools"}, []protoreflect.Kind{protoreflect.MessageKind}},
+		{&pb.ToolInvokeRequest{}, []protoreflect.Name{"name", "arguments_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind}},
+		{&pb.ToolInvokeResponse{}, []protoreflect.Name{"result_json"}, []protoreflect.Kind{protoreflect.StringKind}},
+		{&pb.ToolConfirmRequest{}, []protoreflect.Name{"operation", "summary"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind}},
+		{&pb.ToolConfirmResponse{}, nil, nil},
 	} {
 		t.Run(string(c.message.ProtoReflect().Descriptor().Name()), func(t *testing.T) {
 			fields := c.message.ProtoReflect().Descriptor().Fields()
@@ -679,7 +683,7 @@ func TestActionFieldNumbers(t *testing.T) {
 	}
 }
 
-// TestMessageSegmentFieldNumbers 固定语音、转发、URL 按钮与会话类型的追加编号。
+// TestMessageSegmentFieldNumbers 固定语音、转发、URL 按钮、会话类型与名称的追加编号。
 func TestMessageSegmentFieldNumbers(t *testing.T) {
 	for _, c := range []struct {
 		message  proto.Message
@@ -697,6 +701,7 @@ func TestMessageSegmentFieldNumbers(t *testing.T) {
 		{&pb.ForwardSegment{}, 2, "platform_forward_id", protoreflect.StringKind, true, ""},
 		{&pb.Button{}, 5, "url", protoreflect.StringKind, true, ""},
 		{&pb.Event{}, 15, "chat_type", protoreflect.EnumKind, false, "alonabot.v1.ChatType"},
+		{&pb.Event{}, 16, "chat_title", protoreflect.StringKind, true, ""},
 	} {
 		f := c.message.ProtoReflect().Descriptor().Fields().ByNumber(c.number)
 		if f == nil || f.Name() != c.name || f.Kind() != c.kind || f.HasOptionalKeyword() != c.optional || f.IsList() {

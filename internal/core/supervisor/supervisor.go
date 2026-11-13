@@ -87,6 +87,7 @@ type Spec struct {
 	Scheduler       *scheduler.Scheduler // 可选；激活后接入，排空时冻结，进程树清空后释放槽
 	HTTP            *httpproxy.Server    // 可选；只绑定已激活 Session 的端点
 	CommandsChanged func()               // 可选；激活与撤销后在状态锁外通知命令菜单。
+	Detach          func()               // 可选；STOPPING 或断链时撤销装配层的本次 Session 绑定。
 }
 
 // PluginLog 接收一个插件进程的输出行；Launch 在 Session 建立后调用 SetSession，之后的行带上 session_id。
@@ -109,6 +110,7 @@ type Running struct {
 	scheduler       *scheduler.Scheduler
 	http            *httpproxy.Server
 	commandsChanged func()
+	onDetach        func()
 
 	// mu 串行化 Stop 与 WaitExit 的清理，保护 stopping、released 与 cleanupErr。
 	mu sync.Mutex
@@ -305,7 +307,7 @@ func Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error
 		spec.CommandsChanged()
 	}
 	return &Running{Instance: in, Process: proc, store: store, pluginID: spec.PluginID, listener: ln, timing: spec.Stop,
-		scheduler: spec.Scheduler, http: spec.HTTP, commandsChanged: spec.CommandsChanged}, nil
+		scheduler: spec.Scheduler, http: spec.HTTP, commandsChanged: spec.CommandsChanged, onDetach: spec.Detach}, nil
 }
 
 // connect 在握手期限内建立与插件的连接：TCP 等待插件拨入（进程提前退出则放弃），stdio 直接使用管道。
@@ -447,6 +449,9 @@ func (r *Running) WaitExit() (abnormal bool, state string, err error) {
 
 // detach 撤销本实例的注册；由 Stop 或 WaitExit 中取得清理权的一方调用。
 func (r *Running) detach() {
+	if r.onDetach != nil {
+		r.onDetach()
+	}
 	if r.http != nil {
 		r.http.Unbind(r.pluginID, r.Instance.GenerationID, r.Instance.HTTPProxyToken)
 	}

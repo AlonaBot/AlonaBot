@@ -8,6 +8,7 @@ import (
 // trustedEvent 分离来源绑定与可改写载荷；每条分发链独占其副本。
 // retained 只在链开始时更新权限，此后不交给 Prepare 或插件。
 type trustedEvent struct {
+	dispatch *dispatchState
 	retained *pb.Event
 	payload  *pb.EventPayload
 }

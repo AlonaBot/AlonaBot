@@ -139,7 +139,7 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 		return nil, err
 	}
 
-	// 4. 包内 manifest 必须与签名清单和本机平台一致，entrypoint 必须是解压出的普通文件。
+	// 4. 包内 manifest 必须与签名清单和本机平台一致，声明的入口与图标必须是普通文件。
 	data, err := os.ReadFile(filepath.Join(dir, manifestFileName))
 	if err != nil {
 		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "archive has no readable "+manifestFileName)
@@ -161,11 +161,18 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 	case m.Role != "webui" && (asset.OS != in.OS || asset.Arch != in.Arch):
 		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "only webui can use the any platform")
 	}
-	// Lstat 不跟随链接；解压只产生普通文件和目录，这里再确认一次 entrypoint 的类型。
-	if m.Role != "webui" {
-		entry, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(m.Entrypoint)))
+	// 解压已拒绝所有链接；这里核对声明的文件存在且类型正确。
+	files := []string{m.Entrypoint}
+	if m.Role == "webui" {
+		files = []string{m.Assets + "/index.html"}
+	}
+	if m.Icon != "" {
+		files = append(files, m.Icon)
+	}
+	for _, name := range files {
+		entry, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(name)))
 		if err != nil || !entry.Mode().IsRegular() {
-			return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "manifest entrypoint is not a regular file in the archive")
+			return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("manifest file %q is not a regular file in the archive", name))
 		}
 	}
 	keep = true

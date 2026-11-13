@@ -625,6 +625,10 @@ func (i *loopInstance) Send(ctx context.Context, target message.Session, chain m
 	}
 	ev := &message.Event{ID: "adapter-forged-id", Type: "message.created", AdapterID: "loop", AdapterInstanceID: id, AccountID: i.account, Session: target, Payload: &message.CreatedPayload{Chain: chain, PlatformMessageID: strconv.Itoa(i.sequence)}}
 	switch text {
+	case "chat-directory-group":
+		ev.ChatType, ev.ChatTitle = message.ChatGroup, "Garden Group"
+	case "chat-directory-private":
+		ev.ChatType, ev.ChatTitle = message.ChatPrivate, "Garden Person"
 	case "segments":
 		ev.ChatType = message.ChatGroup
 	case "bot.online", "bot.offline", "scheduled":
@@ -2043,6 +2047,71 @@ func newOptionsPlugin() *sdk.Plugin {
 		return page, nil
 	})
 	return p
+}
+
+// TestChatDirectory 验证真实 Adapter 交付后，聊天名称可供搜索、筛选并在无名事件后保留。
+func TestChatDirectory(t *testing.T) {
+	ctx := t.Context()
+	store, spec, _ := setup(t)
+	registry := adapter.NewRegistry()
+	p := remote.New(remote.Options{AdapterID: "loop", PluginID: spec.PluginID, Store: store, Registry: registry, Sink: &eventSink{}})
+	mux := router.NewMux()
+	p.Services(mux)
+	caller := router.NewCaller(spec.PluginID, spec.GenerationID)
+	spec.Handler = mux.For(caller)
+	running, err := supervisor.Launch(ctx, store, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if result := running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE); result.Err != nil {
+			t.Error(result.Err)
+		}
+	})
+	if err := p.Bind(ctx, running.Instance, caller); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.StartInstance(ctx, "one", []byte(`{"account":"a"}`)); err != nil {
+		t.Fatal(err)
+	}
+	instance, ok := registry.Get("one")
+	if !ok {
+		t.Fatal("missing adapter instance")
+	}
+	send := func(chatID, text string) {
+		t.Helper()
+		_, safe := instance.Send(ctx, &pb.Target{AdapterId: "loop", AdapterInstanceId: "one", AccountId: "a", ChatId: chatID}, &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: text}}}}})
+		if safe != nil {
+			t.Fatal(safe)
+		}
+	}
+	send("group#%", "chat-directory-group")
+	send("person", "chat-directory-private")
+	schema, problems := configschema.Parse([]byte(`{
+		"all":{"type":"string","options_from":{"source":"core.chats"}},
+		"group":{"type":"string","options_from":{"source":"core.chats","filter":{"chat_type":"group"}}},
+		"private":{"type":"string","options_from":{"source":"core.chats","filter":{"chat_type":"private"}}}
+	}`))
+	if len(problems) > 0 {
+		t.Fatal(problems)
+	}
+	service := options.New(options.Options{Schema: func(id string, kind options.SchemaKind) (*configschema.Schema, bool) {
+		return schema, id == spec.PluginID && kind == options.ConfigSchema
+	}, Chats: store.Chats, Page: tune.Defaults().OptionsPage})
+	check := func(field, search, chatID, title, chatType string) {
+		t.Helper()
+		page, err := service.Query(ctx, spec.PluginID, options.ConfigSchema, field, options.Query{Search: search})
+		want := options.Option{Value: string(message.NewSession("loop", chatID, "")), Label: title, Description: "loop " + chatType}
+		if err != nil || page.More || !reflect.DeepEqual(page.Options, []options.Option{want}) {
+			t.Fatalf("field=%s search=%s page=%+v error=%v", field, search, page, err)
+		}
+	}
+	check("all", "gArDeN gRoUp", "group#%", "Garden Group", "group")
+	check("all", "garden person", "person", "Garden Person", "private")
+	check("group", "garden", "group#%", "Garden Group", "group")
+	check("private", "garden", "person", "Garden Person", "private")
+	send("group#%", "without-title")
+	check("all", "garden group", "group#%", "Garden Group", "group")
 }
 
 // TestOptionSources 通过真实插件进程、Session、Router 和 Broker 查询配置字段的选项。

@@ -163,6 +163,12 @@ type EventType struct {
 	adapter bool
 }
 
+// Name 返回事件的完整名称。
+func (e EventType) Name() string { return e.name }
+
+// Version 返回 Adapter 扩展事件的版本，标准事件返回 0。
+func (e EventType) Version() uint32 { return e.version }
+
 var (
 	MessageCreated = EventType{name: "message.created", payload: reflect.TypeFor[*message.CreatedPayload]()}      // 新消息。
 	MessageEdited  = EventType{name: "message.edited", payload: reflect.TypeFor[*message.EditedPayload]()}        // 消息编辑。

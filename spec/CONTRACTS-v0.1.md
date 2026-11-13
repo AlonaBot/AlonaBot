@@ -698,7 +698,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 库模式用 `alonabot.Args(...)` 选项或环境变量 `ALONABOT_ARGS` 覆盖调优参数，语法与 `--args` 相同（§16）。
 - 官方 Adapter 与官方插件以可导入的 Go 包提供组件（例如 `telegram.New()`），程序入口只调用 SDK 的运行函数，库模式可以直接引用它们。
 - `alonabot.Plugin(p)` 登记工程 manifest 的 role 为 plugin 或 agent 的组件（agent 只能登记一个）。`alonabot.Listen(addr)`、`alonabot.LogLevel(level)` 与 `alonabot.LogFormat(format)` 覆盖本次运行的监听地址与日志设置，与 `alonabot run` 的 `--listen`、`--log-level`、`--log-format` 相同，不写回设置文件（D-139）。库模式与 `alonabot run` 共用同一套装配：读取 `core_config.json`，提供 HTTP 入口、管理认证与管理 API，启动已安装与开发中 Adapter 的实例。
-- 库模式与 `alonabot run` 一样提供已安装的 WebUI 组件。`alonabot.WebUI(fsys fs.FS)` 选项提供 dev 来源的 WebUI：fsys 的根目录即静态根目录，本次运行中它代替已安装的 WebUI，不经安装、签名与 Admin API 版本检查之外的校验。
+- 库模式与 `alonabot run` 一样提供已安装的 WebUI 组件。`alonabot.WebUI(fsys fs.FS)` 选项提供 dev 来源的 WebUI：fsys 的根目录即静态根目录，本次运行中它代替已安装的 WebUI，不经安装、签名与 Admin API 版本检查之外的校验。开发 WebUI 没有 manifest，不做 Admin API 版本检查，Core 启动时记一条 WARN；同一次 Start 登记两次该选项返回错误（D-140）。
 - 库模式也可以用于小规模部署，但不提供上述隔离与崩溃恢复；正式分发插件与 Adapter 仍使用安装包。
 
 ### 15.6 install.sh
@@ -778,6 +778,6 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 - 包 `github.com/AlonaBot/AlonaBot/plugintest`（D-47）供插件作者在 `go test` 中做集成测试，只在测试代码中使用。`plugintest.Start(t, opts...)` 在 `t.TempDir()` 的数据目录上用 `alonabot.Start`（§15.5）装配真实 Core，登记被测插件（`plugintest.Plugin(root)`，可以有多个）与套件自带的测试 Adapter（adapter_id `plugintest`），并在 `t.Cleanup` 中停止；任一组件激活失败时测试失败。被测插件是库模式的开发组件，配置取自 `plugintest.Config(root, json)`，受管 SQLite 为 `dev.sqlite`。
 - 测试 Adapter 只有一个实例和一个固定账号。它的 adapter_id 缺省为 `plugintest`；`plugintest.Adapter(id, declarations...)` 可改为指定的 adapter_id，并声明该 Adapter 的权限与扩展事件（通常取自其常量包），用于测试依赖平台权限或扩展事件的路由。会话分私聊与群聊，用户可带上该会话的平台权限；`plugintest.Admin(user)` 把用户加入 Core Admin。实例缺省声明 `message.send`、`message.markdown`、`message.album`、`message.reference`、`message.buttons`、`message.forward` 与 `message.edit`，`plugintest.Capabilities(...)` 可改为子集：未声明能力对应的片段在发送时返回 UNSUPPORTED，用来测试插件的降级分支。发送与编辑一律 ACCEPTED，消息 ID 按发送顺序递增。
-- 注入事件：消息（message.created）、对已发送按钮的点击（button.clicked）、已声明的扩展事件与立即触发一次 schedule。每次注入在这个事件的全部分发链结束，或其中的 Handler 进入多轮等待（§2.4）后返回，结果包含这期间产生的全部 Send 与 Edit（Target、Chain、SendResult）和 Handler 返回的错误。分发结束由 Core 经 `internal/inproc` 通知套件，不靠等待时间判断。分发链之外的后台发送另行按顺序读取。
+- 注入事件：消息（message.created）、对已发送按钮的点击（button.clicked）、已声明的扩展事件与立即触发一次 schedule。每次注入在这个事件的全部分发链结束，或其中的 Handler 进入多轮等待（§2.4）后返回，结果包含这期间产生的全部 Send 与 Edit（Target、Chain、SendResult）和 Handler 返回的错误。分发结束由 Core 经 `internal/inproc` 通知套件，不靠等待时间判断。「分发结束」指：注入的事件的普通分发链与由它发起的全部延续调用都结束；其中任一调用登记了多轮等待时立即返回。被等待取走的下一条注入，在取走它的延续调用结束或再次等待时返回，这期间的发送归入它。测试 Adapter 与正式 Adapter 一样按自己声明的能力判定片段，不支持时返回 UNSUPPORTED。SDK 的 `GeneratedProvider` 接口让 Adapter 值按对象提供生成资源（套件据此改用指定的 adapter_id），`EventType.Name()` 返回事件类型名。分发链之外的后台发送另行按顺序读取。
 - `plugintest.LLM(func(ctx context.Context, req llm.Request) (llm.Response, error))` 登记一个只提供 `llm.generate` 的测试 Agent（§13.5），被测插件经 `@agent` 的调用交给这个函数处理，不需要真实 Agent 与 Provider（D-77）；没有登记时，`@agent` 按目标未激活处理。
 - 套件不跳过 Core 的任何检查：权限、Target 准入（后台发信许可与正式运行一样缺省为全部实例，可以用套件选项收紧）、Capability 预检、Hook 与文案都与正式运行相同。套件属于 SDK 公共 API，兼容承诺与 `sdk` 相同。
