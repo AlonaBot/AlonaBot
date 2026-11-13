@@ -18,6 +18,7 @@ type migrationState = dbhook.State
 type Plugin struct {
 	migrationState
 	commands       CommandGroup
+	hooks          []*hookRoute
 	events         eventRegistry
 	services       serviceRegistry
 	subscriptions  subscriptionRegistry

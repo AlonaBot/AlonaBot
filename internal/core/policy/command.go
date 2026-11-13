@@ -49,7 +49,7 @@ type ScopedOverride struct {
 	Override Override
 }
 
-// SetOverride 保存一项覆盖，成功返回前已完成持久化；两项都为 nil 时删除。
+// SetOverride 保存权限与启用覆盖，成功返回前已完成持久化；两项都为 nil 时恢复继承。
 // 重复或非法权限名返回 INVALID_ARGUMENT；有效列表按字典序保存。
 func (p *Policy) SetOverride(ctx context.Context, pluginID string, s Scope, o Override) error {
 	// 1. 在管理入口校验作用域与权限，失败时不触及状态库。
@@ -66,14 +66,9 @@ func (p *Policy) SetOverride(ctx context.Context, pluginID string, s Scope, o Ov
 			return invalidArgument("duplicate permission name: " + permission)
 		}
 	}
-	// 2. 删除或整体覆盖当前项，保留 nil 与显式空集合的区别。
+	// 2. 只保存权限与启用，保留命令名以及 nil 与显式空集合的区别。
 	key := scopeKey(s)
-	var err error
-	if o.Permissions == nil && o.Enabled == nil {
-		err = p.store.DeleteCommandPolicy(ctx, pluginID, key)
-	} else {
-		err = p.store.PutCommandPolicy(ctx, state.CommandPolicy{PluginID: pluginID, Scope: key, Permissions: permissions, Enabled: o.Enabled})
-	}
+	err := p.store.PutCommandPolicy(ctx, state.CommandPolicy{PluginID: pluginID, Scope: key, Permissions: permissions, Enabled: o.Enabled})
 	if err == nil && p.commandsChanged != nil {
 		p.commandsChanged()
 	}

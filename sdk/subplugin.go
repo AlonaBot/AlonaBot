@@ -10,7 +10,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
 )
 
-// SubPlugin 提供一层逻辑路由分组、缺省命令权限与同名配置视图。
+// SubPlugin 提供一层逻辑路由分组、命令与 Hook 的缺省权限和同名配置视图。
 type SubPlugin struct {
 	scope      pluginScope
 	commands   CommandGroup
@@ -29,7 +29,7 @@ func (p *Plugin) Sub(id string) *SubPlugin {
 
 func (s *SubPlugin) registrar() *pluginScope { return &s.scope }
 
-// Permission 设置子插件内命令和文本匹配的缺省权限。
+// Permission 设置子插件内命令、文本匹配和 Hook 的缺省权限。
 func (s *SubPlugin) Permission(p Permission) *SubPlugin { s.commands.Permission(p); return s }
 
 // Config 返回可在登记时保存的同名顶层 object 视图；准备完成前读取会 panic。

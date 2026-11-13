@@ -59,8 +59,13 @@ type Context struct {
 	event         *pb.Event
 	eventOnce     sync.Once
 	publicEvent   *message.Event
-	match         []string // 本次 Regex 的捕获组
-	autoReply     bool     // 自动回复 Handler 通过返回 Content 发送
+	match         []string               // 本次 Regex 的捕获组
+	autoReply     bool                   // 自动回复 Handler 通过返回 Content 发送
+	continuations *continuationFunctions // 所属 Session 的延续函数登记表。
+	continuation  bool
+	inHandler     bool       // Rule 执行完成后开放 Continue。
+	continueMu    sync.Mutex // 串行化一次性登记。
+	continued     bool
 }
 
 // Context 返回本次调用的 context（含 deadline 与取消）。
@@ -226,6 +231,7 @@ type Registration struct {
 	Schedules     []Schedule
 	services      []serviceRoute
 	subscriptions []subscriptionRoute
+	hooks         []hookRoute
 	messages      *i18n.Catalog // 收集时解析，供本次 Session 只读使用。
 }
 
@@ -246,6 +252,7 @@ func Collect(root *Plugin) (*Registration, error) {
 	reg := &Registration{plugin: root, subPlugins: make(map[string]string), Commands: cmds.commands, Events: events.events, HTTP: routes.routes, Schedules: jobs.jobs}
 	errs := slices.Concat(root.errs, cmds.errs, events.errs, routes.errs, jobs.errs)
 	errs = append(errs, root.checkSubPlugins(), dbhook.Validate(root), collectServices(root, reg), collectSubscriptions(root, reg), collectI18n(root, reg))
+	errs = append(errs, collectHooks(root, reg))
 	// HTTP Listener 在准备阶段创建；这里只核对所有种类共享的 route_id。
 	seen := make(map[string]bool)
 	for _, route := range buildRegister(reg, "{}", 0, nil).GetRoutes() {

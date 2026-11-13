@@ -137,3 +137,16 @@ func (d declarations) validateEvent(ev *pb.Event) error {
 	}
 	return nil
 }
+
+// CheckEvent 按事件所属实例当前 Session 的声明校验扩展载荷，供 Core 改写后复检。
+func (i *instance) CheckEvent(ev *pb.Event) error {
+	p := i.process
+	p.mu.Lock()
+	current := i.id == ev.GetAdapterInstanceId() && i.running && p.session != nil && i.session == p.session.Session
+	declared := p.declarations
+	p.mu.Unlock()
+	if !current {
+		return fmt.Errorf("adapter event instance %q has no current session", ev.GetAdapterInstanceId())
+	}
+	return declared.validateEvent(ev)
+}

@@ -28,11 +28,12 @@ type Command struct {
 	mode      pb.HandlerMode // 由签名推出的 Handler 形态
 	structure reflect.Type   // 结构体参数的值类型；位置参数形式为 nil。
 
-	permission Permission
-	subID      string
-	rules      []Rule          // Collect 固定的调用顺序，全部通过后执行 Handler。
-	routeID    string          // 文本匹配与 Raw 的显式路由 ID
-	spec       *pb.CommandSpec // 已通过注册边界校验的命令描述
+	permission   Permission
+	subID        string
+	rules        []Rule          // Collect 固定的调用顺序，全部通过后执行 Handler。
+	routeID      string          // 文本匹配与 Raw 的显式路由 ID
+	spec         *pb.CommandSpec // 已通过注册边界校验的命令描述
+	continuation bool
 }
 
 // CommandGroup 收集命令；实例方法以方法值显式传入，不做自动 DI。
@@ -239,6 +240,13 @@ func (b *CommandBuilder) Handle(handler any) {
 func (b *CommandBuilder) Rule(rules ...Rule) *CommandBuilder {
 	b.touch()
 	b.command.rules = append(b.command.rules, rules...)
+	return b
+}
+
+// Continue 让 Handler 整体在独立的延续调用中执行，原调用保持继续传播。
+func (b *CommandBuilder) Continue() *CommandBuilder {
+	b.touch()
+	b.command.continuation = true
 	return b
 }
 
