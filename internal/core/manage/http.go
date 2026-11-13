@@ -25,8 +25,14 @@ func (e *ErrNeedsConfirm) Error() string {
 func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	mux := http.NewServeMux()
 	s.logRoutes(mux)
+	mux.HandleFunc("GET /api/v1/core", s.coreInfo)
 	mux.HandleFunc("GET /api/v1/packages/{id}/icon", s.icon)
 	mux.HandleFunc("POST /api/v1/packages/install", func(w http.ResponseWriter, r *http.Request) {
+		if multipartUpload(r) {
+			result, err := s.uploadPackage(r, false)
+			respond(w, result, err)
+			return
+		}
 		var request InstallRequest
 		if err := decode(r, &request); err != nil {
 			respond(w, nil, err)
@@ -37,6 +43,11 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	})
 	for _, action := range []string{"enable", "disable", "restart", "uninstall", "pin", "reload", "update", "rollback"} {
 		mux.HandleFunc("POST /api/v1/packages/"+action, func(w http.ResponseWriter, r *http.Request) {
+			if action == "update" && multipartUpload(r) {
+				result, err := s.uploadPackage(r, true)
+				respond(w, result, err)
+				return
+			}
 			var request struct {
 				ID         string         `json:"id"`
 				Confirm    bool           `json:"confirm"`

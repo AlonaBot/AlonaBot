@@ -312,6 +312,7 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 	for _, entry := range o.components {
 		development[entry.manifest.ID] = entry.manifest
 	}
+	version := coreVersion()
 	management := manage.New(manage.Options{Logs: output, Stopping: c.stopping, NotifyLogLevel: func(ctx context.Context, id string, level pb.LogLevel) error {
 		return c.operation(ctx, func(ctx context.Context) error {
 			plugin, ok := c.assembly.router.Plugin(id)
@@ -337,6 +338,7 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 			return proto.Unmarshal(response.Payload.Bytes, reply)
 		})
 	}, Store: store, Settings: c.assembly.settings, Policy: c.assembly.policy,
+		CoreInfo: func() (string, string) { return version, c.http.Addr },
 		Adapters: c.assembly.adapters, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(o.components),
 		Packages: filepath.Join(dir, "packages"), Limits: packages.NewLimits(values), Development: development, DevelopmentWebUI: o.webUI,
 		Descriptor: c.assembly.componentDescriptor,

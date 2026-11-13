@@ -45,9 +45,10 @@ func New(st *state.Store, now func() time.Time, adminBaseURL *url.URL, dataDir s
 	return &Auth{store: st, now: now, baseURL: *adminBaseURL, secure: adminBaseURL.Scheme == "https", firstTokenPath: filepath.Join(dataDir, FirstTokenFile)}
 }
 
-// Routes 注册受控主机上的登录与需认证的登出接口。
+// Routes 注册受控主机上的登录、当前会话与需认证的登出接口。
 func (a *Auth) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auth/login", a.login)
+	mux.HandleFunc("GET /api/auth/session", a.currentSession)
 	mux.Handle("POST /api/auth/logout", a.Require(http.HandlerFunc(a.logout)))
 }
 
