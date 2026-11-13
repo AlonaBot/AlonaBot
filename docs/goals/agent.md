@@ -13,7 +13,7 @@
 | goal-134 | T-12.12 | Provider 改用官方 SDK | T-12.9、T-12.10、T-12.11 | 已完成（PR #134） |
 | goal-135 | T-12.13 | Provider 图片输入 | T-12.12 | 已完成（PR #138） |
 | goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1、T-12.9、T-12.10、T-12.11、T-09.4 | 已完成（PR #170） |
-| goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-08.14、T-12.2 | 待派发 |
+| goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-08.14、T-12.2 | 已完成（PR #175） |
 | goal-136 | T-12.14 | 对话中的图片输入 | T-04.8、T-12.2、T-12.13 | 待派发 |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 待派发 |
 | goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 待派发 |
@@ -348,7 +348,7 @@ OnConfigLoad 之后的校验在 OnStart 中完成：providers 的 name 唯一、
 
 ### goal-83 · T-12.8 文本生成服务
 
-状态：待派发。直接前置 T-03.8（PR #136，合并提交 `3621fc1`）、T-06.1（PR #45，`dcb4ec2`）、T-08.14（PR #157，`e709135`）、T-12.2（PR #170，`eca6310`）均已合并。相关装配以 T-09.4（PR #163，`cb8ae3d`）、T-06.4（PR #164，`039802f`）、T-11.2（PR #165，`330164f`）、T-09.12（PR #167，`3a9b4af`）、T-16.1（PR #168，`37b0ada`）、T-07.9（PR #169，`4dc4bcd`）合入后的 main `dbbb80b` 为基线。2026-11-13 起草者在本 worktree 用 `rg`、源码读取与 `go doc` 按 main 核对：2026-11-13 审查者裁决：采纳 `llm.GenerateService` 声明、Broker 与 options.Service 经 Options 注入的 Agent 定位函数、Response 用量字段为 `*int`（零用量也能表达）与逐调用 DEBUG 日志（CONTRACTS §14.1）；根包集成测试到 `agent/...` 的边只用于测试，本切片获授权登记进 ARCHITECTURE。
+状态：已完成（[PR #175](https://github.com/AlonaBot/AlonaBot/pull/175)，合并提交 `ac6083a`），证据见 TEST-MATRIX §3.2。合入：公开包 `sdk/llm`（`Request`、`Response`（用量为 `*int`）、`Message`、`AgentTarget = "@agent"`、`ServiceName = "llm.generate"`、`GenerateService`、`Generate(ctx, req)`、`Ask(ctx, text)`）；Broker 与 options.Service 的 Agent 定位注入，根包 `agent_target.go`；官方 Agent 的 llm.generate（按 llm_service_allowed_plugins 授权）与 llm.providers 选项来源。以下为派发时的语句。
 
 - `agent/agent.go`：`func New() *sdk.Plugin`；组件 ID 为 `alonabot_agent_official`。配置通过 `readConfiguration(values config.Values) (configuration, error)` 读取，`configuration` 与 `configuredProvider{name string; client *provider.Client; maxTokens int}` 均为私有类型；当前没有公开 `Config`，也没有保存供服务响应使用的 model、protocol 元数据。`agent/config_schema.json` 已有六个 Provider 模板及 default_provider。
 - `sdk/services.go`：`func JSON[In, Out any](target string) Service[In, Out]`；`func Serve[In, Out any](owner Registrar, declaration Service[In, Out]) *ServiceBuilder[In, Out]`；`func (s *ServiceBuilder[In, Out]) Access(a Access, allowlist ...string) *ServiceBuilder[In, Out]`；`func (s *ServiceBuilder[In, Out]) Handle(h func(*Context, In) (Out, error))`；`func (s Service[In, Out]) Call(ctx context.Context, in In) (Out, error)`；`func (c *Context) Caller() string`。`AccessPublic` 为现有访问规则。类型的 schema_id 是 `<Go import path>.<type name>`，缺省版本为 1；Schema 原文来自生成器。旧 JSONService、CallJSON、WithAccess 和 Services Hook 的写法已过时。

@@ -81,7 +81,7 @@
 | goal-131 | T-03.25 | 聊天目录 | T-03.3、T-08.14、T-09.4 | 已完成（PR #166） |
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 已完成（PR #162） |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 已完成（PR #161） |
-| goal-128 | T-07.9 | 动态任务与暂停恢复的 SDK | T-04.12、T-07.8 | 待派发 |
+| goal-128 | T-07.9 | 动态任务与暂停恢复的 SDK | T-04.12、T-07.8 | 已完成（PR #176） |
 | goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 待派发 |
 | goal-92 | T-09.13 | 管理页所需的会话与上传接口 | T-09.1、T-09.4、T-09.12 | 待派发 |
 | goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 等待前置 |
@@ -5999,7 +5999,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-128 · T-07.9 动态任务与暂停恢复的 SDK
 
-状态：待派发。直接前置 T-04.12（goal-125，PR #154，合并提交 `43a6135`）、T-07.8（goal-127，PR #169，合并提交 `4dc4bcd`）均已合并。本稿于 2026-11-13 按本 worktree 的 main `dbbb80b` 核对；合并提交来自仓库 goal 的完成记录，符号定义及调用者用 `rg` 核对，`sdk.Registrar` 另用离线 `go doc` 交叉核对。末尾的 API 定名建议供审查者派发前确认。2026-11-13 审查者裁决：采纳 `JobState` 的命名（避免与函数 `JobStatus` 同名）、`TaskBuilder[T]`/`TaskInstance[T]` 的字段与 optional 时间为 `*time.Time`；参数类型检查纳入 `sdk/generate/service.go`，复用 Service 的类型检查并要求顶层为对象。
+状态：已完成（[PR #176](https://github.com/AlonaBot/AlonaBot/pull/176)，合并提交 `9785c22`），证据见 TEST-MATRIX §3.2。合入：`sdk.Task[T](name) TaskType[T]`、`TaskBuilder[T]` 与 `TaskInstance[T]`（经 core.task.set、cancel、list 创建、替换、取消与分页列出），`sdk.JobPause`、`sdk.JobResume`、`sdk.JobStatus(ctx, jobID) (JobState, error)`；生成器对动态任务参数类型的检查；showcase 提醒示例按可信用户与会话划分内部 key。以下为派发时的语句。
 
 按 main 核对：
 
