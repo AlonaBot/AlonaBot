@@ -18,6 +18,10 @@ const (
 
 // Delete 补齐目标并按发信许可准入，调用一次 Adapter 后保留有序逐项回执与安全错误。
 func (s *Service) Delete(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response {
+	invocation, _ := in.ParentAttach.(*router.Invocation)
+	if invocation != nil && invocation.SendForbidden {
+		return wire.Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "sending is forbidden in outbound hooks"}}
+	}
 	reject := func(code pb.ErrorCode, message string) wire.Response {
 		return wire.Response{Err: &pb.ErrorInfo{Code: code, SafeMessage: message}}
 	}
@@ -38,7 +42,6 @@ func (s *Service) Delete(ctx context.Context, caller router.Caller, in *wire.Inb
 		}
 	}
 	// 2. 沿用 Send 的目标补齐、原目标豁免及当前实例许可。
-	invocation, _ := in.ParentAttach.(*router.Invocation)
 	var defaultTarget *pb.Target
 	if invocation != nil {
 		defaultTarget = invocation.DefaultTarget

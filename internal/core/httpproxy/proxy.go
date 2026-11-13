@@ -1,10 +1,12 @@
-// Package httpproxy 将 Core 的插件 HTTP 入口代理到当前已激活 Session 的 loopback Listener。
+// Package httpproxy 将 Core 的插件与 Adapter HTTP 入口代理到当前已激活 Session 的 loopback Listener。
 //
 // 装配方在激活后调用 [Server.Bind]，排空时调用 [Server.Drain]，停止或 Session 失效时调用 [Server.Unbind]；
 // 每次请求读取一个不可变路由快照，网络转发期间不持有映射锁。代理身份隔离见 CONTRACTS §7.2。
 package httpproxy
 
 import (
+	"bufio"
+	"crypto/subtle"
 	"encoding/hex"
 	"log/slog"
 	"net"
@@ -27,7 +29,7 @@ type Authorizer interface {
 }
 
 // Server 保存当前已激活 Session 的代理映射；Bind、Drain、Unbind 与 ServeHTTP 可并发调用。
-// Drain 冻结新派发并按停止截止等待在途请求；Unbind 撤销当前代次的映射。
+// Drain 冻结新派发并按停止截止等待在途请求；Unbind 撤销匹配 Session 的映射。
 type Server struct {
 	auth     Authorizer   // nil 时拒绝全部私有路由
 	mu       sync.RWMutex // 保护 mappings 及 binding 的排空状态；调用授权方与网络转发前释放
@@ -36,11 +38,15 @@ type Server struct {
 
 type binding struct {
 	generationID string
+	token        []byte // Bind 时复制的 Session 内部代理凭证，后续只读。
 	routes       []route
 	proxy        *httputil.ReverseProxy
 	draining     bool
 	inflight     int
 	drained      chan struct{} // 冻结后最后一个在途请求返回时关闭，由 Server.mu 保护
+	mu           sync.Mutex    // 保护 upgraded 与 closed；连接在锁外关闭
+	upgraded     map[*upgradedConnection]struct{}
+	closed       bool
 }
 
 type route struct {
@@ -56,11 +62,11 @@ func New(auth Authorizer) *Server {
 
 // Bind 用已通过注册校验、且已激活的 Session 替换插件的旧映射。
 // endpoint、token 与 routes 在调用时复制为该 Session 的不可变快照。
-func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, token []byte, routes []*pb.RouteDescriptor) {
+func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, token []byte, routes []*pb.RouteDescriptor, isAdapter bool) {
 	host := net.JoinHostPort(endpoint.GetHost(), strconv.FormatUint(uint64(endpoint.GetPort()), 10))
 	auth := hex.EncodeToString(token)
 	prefix := pluginPrefix + pluginID
-	current := &binding{generationID: generationID, drained: make(chan struct{})}
+	current := &binding{generationID: generationID, token: append([]byte(nil), token...), drained: make(chan struct{}), upgraded: make(map[*upgradedConnection]struct{})}
 	for _, descriptor := range routes {
 		if descriptor.GetKind() == pb.RouteKind_ROUTE_KIND_HTTP {
 			spec := descriptor.GetHttp()
@@ -79,7 +85,7 @@ func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, 
 			request.Out.URL.Path = strings.TrimPrefix(request.In.URL.Path, prefix)
 			request.Out.URL.RawPath = ""
 			request.Out.URL.RawQuery = request.In.URL.RawQuery
-			stripIdentity(request.Out)
+			stripIdentity(request.Out, isAdapter)
 			request.Out.Header.Set(wire.HeaderProxyAuth, auth)
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
@@ -88,8 +94,12 @@ func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, 
 		},
 	}
 	s.mu.Lock()
+	previous := s.mappings[pluginID]
 	s.mappings[pluginID] = current
 	s.mu.Unlock()
+	if previous != nil {
+		previous.closeUpgrades()
+	}
 }
 
 // Drain 拒绝该插件的新请求，并等待已经派发的请求结束，最多等到 deadline。
@@ -119,13 +129,17 @@ func (s *Server) Drain(pluginID string, deadline time.Time) {
 	}
 }
 
-// Unbind 仅撤销 generationID 仍与当前映射一致的插件，旧代次清理不会删除新映射。
-func (s *Server) Unbind(pluginID, generationID string) {
+// Unbind 仅撤销代次与内部代理凭证均匹配的 Session 映射。
+func (s *Server) Unbind(pluginID, generationID string, token []byte) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if current := s.mappings[pluginID]; current != nil && current.generationID == generationID {
-		delete(s.mappings, pluginID)
+	current := s.mappings[pluginID]
+	if current == nil || current.generationID != generationID || subtle.ConstantTimeCompare(current.token, token) != 1 {
+		s.mu.Unlock()
+		return
 	}
+	delete(s.mappings, pluginID)
+	s.mu.Unlock()
+	current.closeUpgrades()
 }
 
 // ServeHTTP 匹配 /plugins/{id}/ 下的原始请求路径并授权，再向绑定的固定端点转发。
@@ -198,20 +212,65 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if policy, ok := w.(interface{ ModifyResponse(*http.Response) error }); ok {
 		proxy.ModifyResponse = policy.ModifyResponse
 	}
-	proxy.ServeHTTP(w, r)
+	proxy.ServeHTTP(&upgradeWriter{ResponseWriter: w, binding: current}, r)
 }
 
-func stripIdentity(r *http.Request) {
+func stripIdentity(r *http.Request, isAdapter bool) {
 	for name := range r.Header {
-		if strings.EqualFold(name, wire.HeaderProxyAuth) || strings.EqualFold(name, "Authorization") || strings.EqualFold(name, "X-Alonabot-CSRF") || strings.EqualFold(name, "Forwarded") || strings.HasPrefix(strings.ToLower(name), "x-forwarded-") {
+		if strings.EqualFold(name, wire.HeaderProxyAuth) || (!isAdapter && strings.EqualFold(name, "Authorization")) || strings.EqualFold(name, "Cookie") || strings.EqualFold(name, "X-Alonabot-CSRF") || strings.EqualFold(name, "Forwarded") || strings.HasPrefix(strings.ToLower(name), "x-forwarded-") {
 			delete(r.Header, name)
 		}
 	}
-	cookies := r.Cookies()
-	r.Header.Del("Cookie")
-	for _, cookie := range cookies {
-		if !strings.HasPrefix(cookie.Name, "alonabot_") && !strings.HasPrefix(cookie.Name, "__Host-alonabot_") {
-			r.AddCookie(cookie)
-		}
+}
+
+// upgradeWriter 登记 ReverseProxy 劫持的客户端连接；关闭客户端也会结束代理的双向复制。
+type upgradeWriter struct {
+	http.ResponseWriter
+	binding *binding
+}
+
+func (w *upgradeWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func (w *upgradeWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	conn, rw, err := http.NewResponseController(w.ResponseWriter).Hijack()
+	if err != nil {
+		return nil, nil, err
+	}
+	tracked := &upgradedConnection{Conn: conn, binding: w.binding}
+	w.binding.mu.Lock()
+	closed := w.binding.closed
+	if !closed {
+		w.binding.upgraded[tracked] = struct{}{}
+	}
+	w.binding.mu.Unlock()
+	if closed {
+		_ = conn.Close() // 撤销先于 Hijack 完成时，已经劫持的连接同样由本绑定回收。
+		return nil, nil, net.ErrClosed
+	}
+	return tracked, rw, nil
+}
+
+type upgradedConnection struct {
+	net.Conn
+	binding *binding
+}
+
+func (c *upgradedConnection) Close() error {
+	c.binding.mu.Lock()
+	delete(c.binding.upgraded, c)
+	c.binding.mu.Unlock()
+	return c.Conn.Close()
+}
+
+func (b *binding) closeUpgrades() {
+	b.mu.Lock()
+	b.closed = true
+	connections := make([]*upgradedConnection, 0, len(b.upgraded))
+	for conn := range b.upgraded {
+		connections = append(connections, conn)
+	}
+	b.mu.Unlock()
+	for _, conn := range connections {
+		_ = conn.Close()
 	}
 }

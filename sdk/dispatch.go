@@ -21,10 +21,13 @@ func businessHandler(reg *Registration) wire.Handler {
 	handlers := make(map[string]func(*Context) error, len(reg.Events)+len(reg.Schedules))
 	rules := make(map[string][]Rule, len(reg.Events))
 	commands := make(map[string]Command, len(reg.Commands))
+	deferredRoutes := make(map[string]bool, len(reg.Events))
+	functions := &continuationFunctions{functions: make(map[uint64]continuationFunction)}
 	for _, route := range reg.Events {
 		route := route
 		handlers[route.RouteID] = func(c *Context) error { return invokeEvent(c, route) }
 		rules[route.RouteID] = route.rules
+		deferredRoutes[route.RouteID] = route.continuation
 	}
 	// 定时任务与事件共用手动 Handler 路径，取消后仍等待用户函数实际返回。
 	for _, job := range reg.Schedules {
@@ -34,9 +37,13 @@ func businessHandler(reg *Registration) wire.Handler {
 		commands[commandRouteID(command)] = command
 	}
 	services := serviceHandler(reg)
+	hooks := hookHandler(reg)
 	return func(ctx context.Context, in *wire.Inbound) wire.Response {
 		ctx = context.WithValue(ctx, pluginContextKey{}, pluginScope{plugin: reg.plugin, subID: reg.subPlugins[in.Target]})
 		if response, ok := services(ctx, in); ok {
+			return response
+		}
+		if response, ok := hooks(ctx, in); ok {
 			return response
 		}
 		handler, manualRoute := handlers[in.Target]
@@ -60,7 +67,7 @@ func businessHandler(reg *Registration) wire.Handler {
 			if command.spec.GetMatch() == pb.CommandMatch_COMMAND_MATCH_REGEX {
 				groups = request.GetCommand().GetRegexGroups()
 			}
-			return invokeHandler(ctx, in, request.GetEvent(), command.mode == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY, groups, command.rules, func(c *Context) (message.Content, error) {
+			return invokeHandler(ctx, in, request, command.mode == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY, groups, command.rules, functions, command.continuation, func(c *Context) (message.Content, error) {
 				args[0] = reflect.ValueOf(c)
 				values := reflect.ValueOf(command.Handler).Call(args)
 				var result message.Content
@@ -75,15 +82,17 @@ func businessHandler(reg *Registration) wire.Handler {
 				return result, nil
 			})
 		}
-		return invokeHandler(ctx, in, request.GetEvent(), false, nil, rules[in.Target], func(c *Context) (message.Content, error) { return nil, handler(c) })
+		return invokeHandler(ctx, in, request, false, nil, rules[in.Target], functions, deferredRoutes[in.Target], func(c *Context) (message.Content, error) { return nil, handler(c) })
 	}
 }
 
-func invokeHandler(ctx context.Context, in *wire.Inbound, event *pb.Event, autoReply bool, groups []string, rules []Rule, handler func(*Context) (message.Content, error)) (response wire.Response) {
+func invokeHandler(ctx context.Context, in *wire.Inbound, request *pb.HandlerRequest, autoReply bool, groups []string, rules []Rule, functions *continuationFunctions, deferred bool, handler func(*Context) (message.Content, error)) (response wire.Response) {
 	// 1. 为 Handler 建立独立有效期，返回或 panic 后取消所有仍在使用 Context 的工作。
+	parentContext := ctx
 	ctx, cancel := context.WithCancel(ctx)
+	event := request.GetEvent()
 	scope, _ := ctx.Value(pluginContextKey{}).(pluginScope)
-	c := &Context{plugin: scope.plugin, subID: scope.subID, ctx: ctx, inbound: in, event: event, autoReply: autoReply, match: groups}
+	c := &Context{plugin: scope.plugin, subID: scope.subID, ctx: ctx, inbound: in, event: event, autoReply: autoReply, match: groups, continuations: functions, continuation: request.ContinuationOf != nil}
 	bindServiceContext(c)
 	outcome := &pb.HandlerOutcome{Propagation: pb.Propagation_PROPAGATION_CONTINUE}
 	c.active.Store(true)
@@ -91,7 +100,7 @@ func invokeHandler(ctx context.Context, in *wire.Inbound, event *pb.Event, autoR
 		// 与 StopPropagation 共用锁，使失效与传播结果的快照成为同一步。
 		c.propagationMu.Lock()
 		c.active.Store(false)
-		if c.stopped {
+		if c.stopped && !deferred && !c.continuation {
 			outcome.Propagation = pb.Propagation_PROPAGATION_STOP
 		}
 		c.propagationMu.Unlock()
@@ -117,11 +126,29 @@ func invokeHandler(ctx context.Context, in *wire.Inbound, event *pb.Event, autoR
 			}
 		}
 		response.Payload = wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(outcome), SchemaVersion: invocationSchemaVersion, Bytes: encoded}
+		if response.Err != nil || parentContext.Err() != nil {
+			c.discardContinuation()
+		}
 	}()
 	// 2. Rule 与目标函数共享恢复、错误映射和生命周期；全部通过才标记匹配。
 	var chain message.Content
 	var err error
 	matched := true
+	if c.continuation {
+		rules = nil // 原调用已执行全部 Rule，重放只执行 Handler 或登记的函数。
+		if !deferred {
+			functions.mu.Lock()
+			fn, ok := functions.functions[request.GetContinuationOf()]
+			if ok && fn.routeID == in.Target {
+				delete(functions.functions, request.GetContinuationOf())
+			}
+			functions.mu.Unlock()
+			if !ok || fn.routeID != in.Target {
+				return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "continuation function not found")
+			}
+			handler = func(c *Context) (message.Content, error) { return nil, fn.fn(c) }
+		}
+	}
 	for _, rule := range rules {
 		matched, err = rule(c)
 		if err != nil || !matched {
@@ -130,7 +157,16 @@ func invokeHandler(ctx context.Context, in *wire.Inbound, event *pb.Event, autoR
 	}
 	if matched && err == nil {
 		outcome.Matched = true
-		chain, err = handler(c)
+		c.inHandler = true
+		if deferred && !c.continuation {
+			err = c.callContinuation(wire.ServiceContinuationStart, &pb.ContinuationStartRequest{}, &pb.ContinuationStartResponse{})
+		} else {
+			chain, err = handler(c)
+		}
+	}
+	if err == nil && c.continuation && autoReply && len(convert.ContentChain(chain)) != 0 {
+		_, err = c.Send(chain)
+		chain = nil // 延续调用的回复在有效父调用内发送，Core 不再处理该返回值。
 	}
 	finish()
 	if err != nil {

@@ -15,11 +15,16 @@ func AdapterRegister(r *pb.Register, adapterID string) error {
 	if descriptor == nil || descriptor.GetAdapterId() != adapterID {
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "adapter descriptor does not match installation")
 	}
-	if len(r.GetRoutes()) != 0 || r.GetHttpListener() != nil || r.GetMigration().GetMode() != pb.MigrationMode_MIGRATION_MODE_NONE || len(r.GetMigration().GetCompletedMigrationIds()) != 0 || r.GetMigration().GetSelfMigrateCompleted() {
-		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "adapter registration contains plugin routes, listener or migration")
+	if r.GetMigration().GetMode() != pb.MigrationMode_MIGRATION_MODE_NONE || len(r.GetMigration().GetCompletedMigrationIds()) != 0 || r.GetMigration().GetSelfMigrateCompleted() {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "adapter registration contains migration")
 	}
-	if !IsJSONObject([]byte(r.GetCandidateConfigJson())) {
-		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "candidate_config_json is not a JSON object")
+	for _, route := range r.GetRoutes() {
+		if route.GetKind() != pb.RouteKind_ROUTE_KIND_HTTP {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "adapter registration contains non-HTTP plugin routes")
+		}
+	}
+	if err := register(r, true); err != nil {
+		return err
 	}
 	// 2. 校验能力及名称唯一性，并在接纳 extension 声明前解析 Schema 的引用。
 	if err := Capabilities(descriptor.GetCapabilities()); err != nil {
