@@ -177,9 +177,12 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 		if err != nil {
 			return nil, err
 		}
-		packageDir = record.PackageDir
 		target.Entrypoint, target.Version = record.Entrypoint, record.Version
 		target.BuildDigest, target.PublisherKeyID = record.BuildDigest, record.PublisherKeyID
+		packageDir, err = o.installedPackage(target)
+		if err != nil {
+			return nil, err
+		}
 		m, err = readManifest(packageDir)
 		if err != nil {
 			return nil, err

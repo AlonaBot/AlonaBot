@@ -112,6 +112,10 @@ func (s *Store) DeleteUnreferencedGeneration(ctx context.Context, pluginID, gene
 		if row.PluginID != pluginID {
 			return journalPrecondition("generation belongs to a different plugin")
 		}
+		// 切换代次后按钮永久失效，先清除映射，避免外键阻止淘汰快照。
+		if err := tx.Where(&ButtonToken{GenerationID: generationID}).Delete(&ButtonToken{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where(&generationSecretPath{GenerationID: generationID}).Delete(&generationSecretPath{}).Error; err != nil {
 			return err
 		}

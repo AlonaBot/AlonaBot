@@ -161,6 +161,11 @@ func (o *Orchestrator) discardPackage(ctx context.Context, r *Result) error {
 	if !r.record.OwnsPackage {
 		return nil
 	}
+	// Journal 中的历史绝对路径只取包目录身份，清理始终定位当前 data_dir。
+	directory, err := filepath.Abs(filepath.Join(o.opt.DataDir, "packages", r.record.PluginID, filepath.Base(r.record.PackageDir)))
+	if err != nil {
+		return err
+	}
 	installs, err := o.opt.Store.Installs(ctx)
 	if err != nil {
 		return err
@@ -170,11 +175,11 @@ func (o *Orchestrator) discardPackage(ctx context.Context, r *Result) error {
 		if in.Source == "dev" {
 			continue
 		}
-		directory, err := o.installedPackage(in)
+		installed, err := o.installedPackage(in)
 		if err != nil {
 			return err
 		}
-		if directory == r.record.PackageDir {
+		if installed == directory {
 			protected = true
 		}
 	}
@@ -183,12 +188,12 @@ func (o *Orchestrator) discardPackage(ctx context.Context, r *Result) error {
 		return err
 	}
 	for _, record := range records {
-		if record.OpID != r.OpID && record.Phase != phaseCleaned && record.PackageDir == r.record.PackageDir {
+		if record.OpID != r.OpID && record.Phase != phaseCleaned && record.PluginID == r.record.PluginID && record.PackageDir != "" && filepath.Base(record.PackageDir) == filepath.Base(directory) {
 			protected = true
 		}
 	}
 	if !protected {
-		if err := os.RemoveAll(r.record.PackageDir); err != nil {
+		if err := os.RemoveAll(directory); err != nil {
 			return fmt.Errorf("remove candidate package: %w", err)
 		}
 	}

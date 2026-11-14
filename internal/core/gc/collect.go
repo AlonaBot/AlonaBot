@@ -32,13 +32,35 @@ func Collect(ctx context.Context, st *state.Store, secrets *secret.Store, packag
 	if err != nil {
 		return nil, err
 	}
+	installed := make(map[string]bool, len(installs))
 	for _, in := range installs {
+		installed[in.PluginID] = true
 		unlock := st.LockPlugin(in.PluginID)
 		paths, collectErr := collectPlugin(ctx, st, secrets, packagesDir, in)
 		unlock()
 		removed = append(removed, paths...)
 		if collectErr != nil {
 			return removed, fmt.Errorf("collect plugin %s: %w", in.PluginID, collectErr)
+		}
+	}
+	entries, err := os.ReadDir(packagesDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return removed, nil
+	}
+	if err != nil {
+		return removed, err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() || installed[entry.Name()] {
+			continue
+		}
+		// purge 同事务移除安装及其引用；外键保证孤立目录没有 Pending 或 Journal 引用。
+		unlock := st.LockPlugin(entry.Name())
+		paths, collectErr := removeChildren(ctx, filepath.Join(packagesDir, entry.Name()), func(string) bool { return false })
+		unlock()
+		removed = append(removed, paths...)
+		if collectErr != nil {
+			return removed, fmt.Errorf("collect uninstalled plugin %s: %w", entry.Name(), collectErr)
 		}
 	}
 	return removed, nil
@@ -73,7 +95,7 @@ func collectPlugin(ctx context.Context, st *state.Store, secrets *secret.Store, 
 		if len(digest) < packageDigestPrefix {
 			return nil, fmt.Errorf("installed build digest is invalid")
 		}
-		programs[filepath.Join(packagesDir, in.PluginID, in.Version+"-"+digest[:packageDigestPrefix])] = true
+		programs[in.Version+"-"+digest[:packageDigestPrefix]] = true
 	}
 	operations, err := st.Journals(ctx, in.PluginID)
 	if err != nil {
@@ -82,7 +104,8 @@ func collectPlugin(ctx context.Context, st *state.Store, secrets *secret.Store, 
 	for _, operation := range operations {
 		unfinished := operation.Phase != "committed" && operation.Phase != "cleaned"
 		if operation.PackageDir != "" && (unfinished || operation.Phase == "committed" && slices.Contains(ids, operation.NewGeneration)) {
-			programs[filepath.Clean(operation.PackageDir)] = true
+			// 包目录名是持久身份，data_dir 迁移后仍在当前 packages 下保护。
+			programs[filepath.Base(operation.PackageDir)] = true
 		}
 	}
 
@@ -101,7 +124,7 @@ func collectPlugin(ctx context.Context, st *state.Store, secrets *secret.Store, 
 	if err != nil {
 		return removed, err
 	}
-	paths, err = removeChildren(ctx, filepath.Join(packagesDir, in.PluginID), func(path string) bool { return programs[path] })
+	paths, err = removeChildren(ctx, filepath.Join(packagesDir, in.PluginID), func(path string) bool { return programs[filepath.Base(path)] })
 	removed = append(removed, paths...)
 	if err != nil {
 		return removed, err

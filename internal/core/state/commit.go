@@ -75,6 +75,10 @@ func (s *Store) CommitCandidate(ctx context.Context, opID, pluginID, expectedOld
 			return err
 		}
 		current.ActiveGeneration = sql.NullString{String: newGen, Valid: true}
+		if operation.Kind == "first_install" {
+			// 首次 enable 的意图与提交一起持久化，崩溃恢复据此启动已提交代次。
+			current.Enabled = true
+		}
 		if err := tx.Save(&current).Error; err != nil {
 			return err
 		}

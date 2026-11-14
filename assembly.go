@@ -819,9 +819,6 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 		return nil, err
 	}
 	running.process, running.instance = process, process.Instance
-	if kind == journal.KindFirstInstall {
-		err = errors.Join(err, c.store.SetEnabled(context.WithoutCancel(ctx), id, true))
-	}
 	if (kind == journal.KindUpdate || kind == journal.KindRollback) && (!record.WasEnabled || !record.WasRunning) {
 		// 提交只切换权威代次；先停止候选，之后显式 enable 才建立业务 Session。
 		if stopErr := c.stopComponent(running, time.Now(), host.NewStopTiming(c.values), pb.StopReason_STOP_REASON_DISABLE); stopErr != nil {
