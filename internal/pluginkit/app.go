@@ -129,7 +129,7 @@ func CompileApp(ctx context.Context, options generate.Options, outDir string, go
 	executable = filepath.Join(outDir, name)
 	// 3. 构建成功后再发布，保留此前可运行的产物。
 	temporary := filepath.Join(staging, name)
-	args := append([]string{"build", "-trimpath", "-buildvcs=false", "-overlay", overlayPath, "-o", temporary}, goFlags...)
+	args := append([]string{"build", "-buildvcs=false", "-overlay", overlayPath, "-o", temporary}, goFlags...)
 	args = append(args, ".")
 	if _, err := targetGoCommand(ctx, options, true, args...); err != nil {
 		return "", err
