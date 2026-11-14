@@ -52,7 +52,7 @@ TCP 为默认，Core 持有 loopback 端口 0 分配的 Listener；stdio 可选�
 
 一个插件包导出一个 `func New() *sdk.Plugin`（D-114）：`sdk.NewPlugin()` 创建插件对象，路由、生命周期回调（`p.OnStart`、`p.OnReady`、`p.OnStop`）、配置回调（`p.OnConfigLoad`）与数据库迁移都在 `New()` 返回之前登记在它上面，回调的签名由编译器检查，没有登记的回调不执行。配置由包内的 `config_schema.json` 声明，不定义 Go 配置类型（D-76），经 `p.Config()` 或 Handler 内的 `c.Config()` 读取。元数据 ID 只来自 plugin.yaml。插件自己的状态放在自己的类型中，以方法值注册；包级函数也这样注册，没有第二种写法（D-79），不引入自动 DI，也不在包级变量或 `init` 中注册。`sdk.Run` 开始后注册描述固定，之后再调用注册方法是编程错误。
 
-`alonabot build` 只处理当前模块的目标构建包，遵守 Go build tags/GOOS/GOARCH，排除外部依赖、vendor 和测试文件；生成的 Go 代码嵌入 manifest、配置 schema、`i18n/` 与 Service Schema，并生成正式入口；不在运行时从磁盘扫描任意包。作者代码不引用任何生成内容：入口包的 `alonabot_gen.go` 由 CLI 维护，在 `init()` 中按入口包登记资源，`sdk.NewPlugin()` 按调用方所在的包取得（D-145）。单次 Session 注册描述固定，Core 动态修改权限/开关，不重建插件对象。
+`alonabot build` 只处理当前模块的目标构建包，遵守 Go build tags/GOOS/GOARCH，排除外部依赖、vendor 和测试文件；生成的 Go 代码嵌入 manifest、配置 schema、`i18n/` 与 Service Schema，并生成正式入口；库模式的 main 包另外扫描其依赖中的组件入口包（CONTRACTS §15.5）。正式运行不从磁盘扫描任意包，只有 plugintest 在 `go test` 中扫描被测组件的源码。作者工程中没有生成文件，作者代码也不引用任何生成内容：CLI 构建把按入口包登记资源的代码经 overlay 编入，`sdk.NewPlugin()` 只记录调用方所在的包，启动组件时才取得资源（D-145）。单次 Session 注册描述固定，Core 动态修改权限/开关，不重建插件对象。
 
 以下是接口用法示意，需随 SDK 实现编译验证：
 
