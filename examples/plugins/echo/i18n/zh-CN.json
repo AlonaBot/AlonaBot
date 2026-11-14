@@ -1,0 +1,12 @@
+{
+  "messages": {
+    "echo.added": "笔记已添加。",
+    "echo.empty": "暂无笔记。",
+    "echo.published": "笔记已发布。",
+    "echo.roll": "掷骰参数：{count}d{sides}。",
+    "echo.keyword": "已匹配关键词。",
+    "echo.raw": "已匹配原始消息。",
+    "echo.question": "需要回送什么？",
+    "echo.answer": "回答：{text}"
+  }
+}

@@ -374,6 +374,36 @@ T-02.4 按 D-86 删除的测试及测试插件只保留历史运行证据，相�
 | --- | --- | --- | --- |
 | T-09.13 / V-40、V-47 的管理HTTP分项 | PR #181；根包 `admin_upload_test.go` 的 `TestAdminSessionAndUploads`（unix）：真实 `Start`、公开回环 Listener、SQLite、签名SDK插件进程与文件系统；Cookie取回原CSRF/固定期限，首次信任409重传安装；先缺文件400、坏签名403，每次检查旧进程、完整安装记录、用户文件与受管数据库保持，再用同一1.1.0候选有效签名更新200 `{}`，GET packages显示1.1.0且Activated，新Active的数据库副本保留用户修改并完成迁移、旧代次库保持1.0.0；各分支上传目录清理，总览返回实际端口。PR #179已在 `8898251` 合并，本分支合入main为 `5ceeb7a`，本轮覆盖真实更新成功。19项本地测试（未提交）另覆盖JSON更新/外层confirm、unsigned确认、同版本重复归档409、公钥、认证先于读取、会话、版本及上传异常清理 | 2026-11-13，darwin/arm64、Go1.27.1：`go test -race ./ ./internal/core/manage ./internal/core/adminauth -run 'Local$\|^TestAdminSessionAndUploads$' -count=1 -v` 通过；`gofmt -l`无输出，`go vet ./...`、`go test -race ./...`（根包81.695s，含最终本地测试与真实Core集成）、`go build ./...`、`git diff --check`全部通过；build有只读模块stat cache提示但退出0 | 其他平台、真实浏览器页面、外部Telegram/OneBot与远端CI未运行；崩溃恢复/rollback/回收归T-09.7 |
 
+#### T-04.5 候选：示例升级与 T-04 分项汇总
+
+2026-11-13，基线 `d36a7b21734d1f68622db2a6650fcfeed7ff7cbd` 上的 goal-14 工作区；Darwin 27.0.0、darwin/arm64、Go 1.27.1。提交测试新增 [`cmd/alonabot/t04_e2e_test.go`](../cmd/alonabot/t04_e2e_test.go) 的 `TestSDKExamples`（64 行），用真实 CLI/Core/官方 Telegram Adapter/echo/media 进程和本地 Bot API 验证目录构建、激活与新增命令。原 `TestTelegramDevelopment` 保留。按 FIX-1 裁决，echo 的原 `TestEcho` 将 Outcome 数量 1→2（新增 Raw Rule false 的记录），逐条检查无错；唯一发送和文本/图片输入断言保留，其余示例 main_test.go 保留。
+
+| 分项 | 本次证据与结果 | 既有证据及剩余归属 |
+| --- | --- | --- |
+| V-10：当前 New、生成与构建拒绝 | 本地 `sdk/generate/t04_local_test.go:TestT04Generation` 通过：缺失/错误/重复 New、build tags、Linux/Windows 构建选择、测试文件排除、外部依赖与残留标记不生成路由、资源重复生成稳定；`sdk/t04_local_test.go:TestT04RegistrationDiagnostics` 通过：错误 Handler、重复资源绑定/路由/路径/别名、非法结构体组合与重复子插件。两个示例实际生成、原生构建和目录启动通过 | 引用上方 T-04.2（#42）、T-04.9（#110）、T-04.12（#154）。旧多根类/多 Config/方法标记诊断分别按 D-114/D-76/D-79 已替代。echo 的 go test 注册经下述 FIX-1 修复后通过 |
+| V-11、V-49：示例与消费 | `TestSDKExamples` 的显式命令、完整子命令别名、raw 空白、结构体默认值、Regex 捕获、IgnoreCase keyword、限定 Raw、普通文本回声和 media 结构体子插件命令通过。本地根包 `TestT04ExampleProcesses` 通过：int64 解析溢出只发送一次 usage；禁用/权限拒绝/Rule false/error/Silent 参数错误后无事件回声；不同文本匹配类型按 priority 排序 | 引用上方 T-04.3（#47）的 `internal/core/supervisor/command_test.go:TestCommandDispatchBothTransports` 历史通过记录，以及 T-05.5（#162）现行 `pipeline_test.go:TestPipeline` 的真实 Rule/传播证据。#47 的 SDK 绑定测试已随 D-86 删除 |
+| V-12、V-43：策略 | 本地根包 `TestT04PolicySessions` 通过：a/b 两个真实 SDK Session，在相反启动次序下 `Commands().Lookup` 与 `Shadows` 均得 a 胜出、b 遮蔽；`SetOverride` 下一条生效、插件 PID 不变；父禁用优先于子启用；禁用 a 后路径仍归 a；关闭装配、状态库和全部进程后，复用同一临时 data_dir 重建 Core，覆盖保持。本地 `TestT04PermissionNames` 通过无 Actor、user、admin、chat_admin、平台名和 Or 的集合判定 | 引用上方 T-04.1（#34）历史 `index_test.go:TestCommandIndexProcesses`、T-04.4（#88）历史 `policy_test.go:TestCommandPolicyBothTransports` 当时通过记录及 #162 的当前流水线证据；历史文件已随 D-86 删除。全局禁止优先沿用 #88；V-12 浏览器管理操作归 T-09 |
+| V-112：对象、参数、子插件 | 两个示例保持 `New() *sdk.Plugin`、独立对象、显式 `UseGenerated`；echo `Calculation` 默认参数与 `notebook` 子插件命令、media `Caption` raw 字段与 `captions` 子插件已实际收发。`TestT04Calculation` 通过算术边界。本地 `TestT04ExampleResources` 验证两次独立 New 的 Service/Bus 资源注册通过 | 配置视图、对象回调及完整结构体矩阵引用上方 T-04.12（#154）的 `TestPluginObjectCommand` 与本地自测历史；新增示例组合已通过；其他分项沿用既有证据 |
+| V-113：声明与延续 | 本地根包 `TestT04ExampleProcesses` 通过：临时调用方工程直接复用 echo 的声明源文件，真实独立进程在有效 Handler 内通过同一 `notesService.Call` 读取快照；`notesPublished.Publish/Subscribe` 传递同一业务载荷，订阅 Context 无用户权限和默认目标；echo 的 `.Continue()`/`Wait` 提问、等待与下一条回复各一次 | SDK 类型分项引用 T-04.8（#141）；延续完整失败矩阵引用 T-05.4（#153）；Service/Bus 完整失败矩阵引用 T-04.13（#158）。新示例的 go test 资源注册经 FIX-1 修复通过 |
+
+完整命令及日志（`goal-14/` 为本地忽略目录，审查者据 PR 正文取证）：
+
+| 命令 | 结果 | 日志位置 |
+| --- | --- | --- |
+| `go generate ./examples/plugins/echo`；`go generate ./examples/plugins/media` | 通过，生成产物只由该入口更新 | `goal-14/logs/echo-generate.log`、`media-generate.log` |
+| `gofmt -l sdk/services.go sdk/bus.go examples/plugins/echo/*.go examples/plugins/media/*.go cmd/alonabot/t04_e2e_test.go sdk/t04_local_test.go sdk/generate/t04_local_test.go t04_local_test.go` | 无输出 | `goal-14/logs/fix1-gofmt.log` |
+| `go vet ./...`；`go build ./...` | 通过；build 的只读 module stat cache 提示保留在日志，退出 0 | `goal-14/logs/fix1-vet.log`、`fix1-build.log` |
+| `go test -race ./...` | 通过，退出 0；根包 83.618s | `goal-14/logs/fix1-race.log` |
+| `go test -race -count=1 ./cmd/alonabot -run '^(TestSDKExamples\|TestTelegramDevelopment)$' -v` | 两个测试及全部子场景通过，原 Telegram 媒体与失败路径断言保留 | `goal-14/logs/fix1-cli.log` |
+| `go run ./cmd/alonabot plugin check --dir examples/plugins/echo`；`go run ./cmd/alonabot plugin check --dir examples/plugins/media` | 均通过 | `goal-14/logs/fix1-echo-check.log`、`fix1-media-check.log` |
+| `go test -race -count=1 ./sdk/generate ./sdk . ./examples/plugins/echo ./examples/plugins/media -run '^TestT04' -v` | 全部本地自测通过（含 `TestT04SchemaIdentity` 四子场景）；media 包无匹配本地用例 | `goal-14/logs/fix1-local.log`；策略 PID 与覆盖输入在同一日志 |
+| `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /tmp/alonabot-t04-cross/linux/ ./examples/plugins/echo ./examples/plugins/media` | 交叉构建通过 | `goal-14/logs/fix1-cross-linux.log` |
+| `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o /tmp/alonabot-t04-cross/windows/ ./examples/plugins/echo ./examples/plugins/media` | 交叉构建通过 | `goal-14/logs/fix1-cross-windows.log` |
+
+**FIX-1 已修复，无当前阻塞：** 2026-11-13 审查者授权 SDK 修复 main 包反射身份差异。`sdk/services.go:generatedSchemaID` 优先完整身份，仅在其缺失且生成资源存在 `main.<Name>` 时采用后者；Service 注册/Call 和 Bus 订阅/Publish 统一使用该身份，Schema 查找与注册描述一致，生成器输出保持现状。本地 `sdk/t04_local_test.go:TestT04SchemaIdentity` 覆盖完整名优先、main 回退、缺失和无关资源，并核对 Service 输入/输出及 Bus 描述；echo 的 `TestT04ExampleResources` 与迁移后的原 `TestEcho` 通过，证据 `goal-14/logs/fix1-focused.log`。实际 main 二进制 Service/Bus/延续与 CLI 联验通过。历史失败保留于 `echo-test.log`、`race.log`、`local-all.log`，本表指向最终通过日志。
+
+未运行：顶层 `alonabot check/build`（2026-11-13 裁决留 T-09.3 / goal-38 补证）、真实 Telegram、浏览器管理操作、Linux/Windows 实际运行与远端 CI。媒体故障矩阵继续引用 T-03.10 / #180，示例套件覆盖引用 T-16.2 / #183；本次只增加上述一个提交集成测试。
+
 ### 3.3 Target 与发信许可分项证据
 
 [PR #31](https://github.com/AlonaBot/AlonaBot/pull/31)（T-03.2），产品代码 head `bb5992119928b06a3df89f8445a2da9b4e005472`；2026-10-28 在 macOS 27.0.1（26A434）、darwin/arm64、Go 1.27.1 上运行。
