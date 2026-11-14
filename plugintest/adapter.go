@@ -73,8 +73,13 @@ func (a *testAdapter) record(op string, to message.Session, edited message.Messa
 	}
 	a.h.mu.Lock()
 	defer a.h.mu.Unlock()
-	a.h.messageID++
-	id := strconv.FormatUint(a.h.messageID, 10)
+	var id string
+	if op == "edit" {
+		_, id, _, _ = edited.Parts()
+	} else {
+		a.h.messageID++
+		id = strconv.FormatUint(a.h.messageID, 10)
+	}
 	result := &message.SendResult{Status: message.SendAccepted, Session: to, AdapterInstanceID: InstanceID,
 		PlatformMessageIDs: []string{id}, PrimaryPlatformMessageID: id, ProviderAcceptedAt: time.Now(),
 		PartResults: []message.PartResult{{PartIndex: 0, SegmentIndexes: indexes, Status: message.PartAccepted, PlatformMessageIDs: []string{id}}}}

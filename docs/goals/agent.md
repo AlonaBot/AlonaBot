@@ -14,10 +14,10 @@
 | goal-135 | T-12.13 | Provider 图片输入 | T-12.12 | 已完成（PR #138） |
 | goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1、T-12.9、T-12.10、T-12.11、T-09.4 | 已完成（PR #170） |
 | goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-08.14、T-12.2 | 已完成（PR #175） |
-| goal-136 | T-12.14 | 对话中的图片输入 | T-04.8、T-12.2、T-12.13 | 待派发 |
+| goal-136 | T-12.14 | 对话中的图片输入 | T-04.8、T-12.2、T-12.13 | 已完成（PR #189） |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 已完成（PR #178） |
-| goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 待派发 |
-| goal-62 | T-12.5 | 技能 | T-12.3 | 待派发 |
+| goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 已完成（PR #182） |
+| goal-62 | T-12.5 | 技能 | T-12.3 | 已完成（PR #188） |
 | goal-63 | T-12.6 | 定时 Agent 任务 | T-07.9、T-08.5、T-12.3 | 待派发 |
 | goal-64 | T-12.7 | 官方 Agent 组件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6、T-12.8、T-12.14 | 等待前置 |
 
@@ -459,7 +459,7 @@ OnConfigLoad 之后的校验在 OnStart 中完成：providers 的 name 唯一、
 
 ### goal-136 · T-12.14 对话中的图片输入
 
-状态：待派发。直接前置 T-04.8（PR #141，合并提交 `ac4aded`）、T-12.2（PR #170，`eca6310`）、T-12.13（PR #138，`9b3bb86`）均已合并；媒体读取沿用 D-109、D-121 已合并的 SDK。相关装配以 PR #163（goal-39，`cb8ae3d`）、#164（goal-22，`039802f`）、#165（goal-55，`330164f`）、#167（goal-84，`3a9b4af`）、#168（goal-81，`37b0ada`）、#169（goal-127，`4dc4bcd`）合入后的 main `dbbb80b` 为基线。2026-11-13 起草者在本 worktree 用 `rg`、源码读取与 `go doc` 按 main 核对：2026-11-13 审查者裁决（DECISIONS 2026-11-13 变更记录）：图片表与计数字段并入 Agent 受管库的初始迁移 ID 1（与 goal-59 的 reset 代次一致，首次发布前不追加迁移）；回放只取 Core 会话中仍存在的条目对应的图片，Core 追加或清除与 Agent 图片写入或删除之间的失败按行为中的规则处理，不做跨库事务。派发顺序：在 goal-61 合并后从包含它的 main 派发（goal-60、goal-61 与本切片都改 agent/conversation.go 中同一段请求生成逻辑，且 goal-61 改变 Agent 的会话键）。
+状态：已完成（[PR #189](https://github.com/AlonaBot/AlonaBot/pull/189)，合并提交 `2268366`），证据见 TEST-MATRIX §3.2（含经 cpa 兼容网关以 pixiv 插图运行的四种协议实测）。合入：Provider 条目的 `image_input`；agent/image.go 的图片读取（sdk.OpenMedia）、MIME 与大小校验、受管 SQLite 存储与按会话键编号，历史中按回放窗口重放、窗口外与关闭时占位，/reset 删除；`conversationEntry` 记录图片编号，`chatSettings` 记录会话图片计数。以下为派发时的语句。
 
 - `agent/agent.go`：`func New() *sdk.Plugin`，私有 `configuration`、`configuredProvider` 与 `readConfiguration(values config.Values) (configuration, error)`；当前 configuredProvider 含 name、client、maxTokens。不存在公开 Config。New 通过 `gormdb.Migrations(p, []gormdb.Migration{{ID: 1, Up: ...}})` 对 chatSettings 执行 AutoMigrate；尚无图片表或图片计数。
 - `agent/settings.go`：私有 `chatSettings{Session string; Provider string; Persona string; Enabled bool; ResetGeneration uint64}`，表名 chat_settings；`func (a *component) sessionLock(session string) *sync.Mutex`；`func (a *component) resetConversation(c *sdk.Context) error` 在同一会话锁内递增 ResetGeneration，再 `sdk.ClearConversation`。当前轮次最终追加也持该锁并核对 reset 代次。
@@ -636,7 +636,7 @@ ToolConfirmRequest{operation = 1, summary = 2} -> ToolConfirmResponse{}；
 
 ### goal-61 · T-12.4 Agent 的记忆
 
-状态：待派发，在 goal-60（PR #178）合并后从包含它的 main 派发（共享 agent/conversation.go 的请求生成与工具循环）。前置 T-08.5（PR #79，合并提交 `75c16d3`）、T-11.2（PR #165，`330164f`）、T-12.2（PR #170，`eca6310`）均已合并；同时复用 T-11.1（PR #101，`de48f26`）的工具声明、T-11.3（PR #35，`d0983f0`）的会话存储。2026-11-13 维护者同意按审查者方案补齐三处契约缺口（D-142，审查者补齐，待维护者确认），审查者据此改写：(1) Agent 经 `core.tool.invoke` 调用自己的工具时 Broker 不判 CALL_CYCLE、仍计深度；(2) SDK 新增 `(*Context).Instance() string` 与 `(*ServiceBuilder).Permission(p Permission)`；(3) Agent 的会话、聊天设置、reset 锁与会话笔记按 `<会话字符串>@<实例名>` 区分，同步改 T-12.2 已合并的键。
+状态：已完成（[PR #182](https://github.com/AlonaBot/AlonaBot/pull/182)，合并提交 `90b6817`），证据见 TEST-MATRIX §3.2（含经 cpa 兼容网关运行的 openai-responses 与 gemini-generate-content 实测）。合入：agent/memory.go 的 `memory_record`（会话笔记按 `<会话字符串>@<实例名>`、用户档案按 Actor）与 memory 工具（AccessPrivate、缺省 allow，经 core.tool.invoke 自身调用，add/patch/remove 原子执行，上限 2,200 与 1,375 码点）；会话首轮冻结笔记快照（`conversationEntry.Kind` 区分），/reset 后重取，每轮只注入当前 Actor 的档案；agent 的会话键 `sessionKey(c)`；`sdk.(*Context).Instance() string`、`sdk.(*ServiceBuilder).Permission(p)`；Broker 对自身工具调用不判 CALL_CYCLE、Service 的 required_permissions 在通用准入检查、深度记在 `router.Invocation.Depth`；CONTRACTS §2.3、§3、§13.4 同步 D-142。以下为派发时的语句。
 
 已有接口（审查者按 main 核对）：
 
@@ -745,7 +745,7 @@ type memoryResponse struct{}
 
 ### goal-62 · T-12.5 技能
 
-状态：待派发。前置 T-12.3（goal-60，PR #178，合并提交 `a95b85b`）已合并。2026-11-13 审查者按 main 核对：工具目录为 agent/tools.go 的 `listTools`/`toolCatalog`/`roundTool`（Core 工具经 `sdk.InvokeTool`，MCP 工具经 `mcpPeer`），请求消息在 agent/conversation.go 中按「人格 system → 会话历史 → 用户档案 system → 用户消息」组装；goal-59 的配置里没有技能目录（PLAN T-12 步骤 2 列有此项），`Config.SkillsDir` 不存在，本切片补配置项 `skills_dir`。本切片与 T-12.4（goal-61，PR #182）共改 agent/conversation.go 与 tools.go，审查者在 #182 合并后派发。
+状态：已完成（[PR #188](https://github.com/AlonaBot/AlonaBot/pull/188)，合并提交 `c80276e`），证据见 TEST-MATRIX §3.2（含经 cpa 兼容网关运行的四种协议 load_skill 实测）。合入：agent/skills.go（配置项 `skills_dir`，启动时以 os.Root 读取一级子目录的 SKILL.md，严格 YAML frontmatter，不合法 WARN 跳过）；技能清单作为人格之后、会话历史之前的 system 消息；插件内工具 `load_skill`（agent/tools.go 的 roundTool 增加插件内工具）。以下为派发时的语句。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-62（切片 T-12.5：技能）。goal 目录 goal-62，分支 goal-62，worktree .worktrees/goal-62，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -778,7 +778,7 @@ type memoryResponse struct{}
 
 ### goal-63 · T-12.6 定时 Agent 任务
 
-状态：待派发。前置 T-07.9（goal-128，PR #176，合并提交 `9785c22`）、T-08.5（PR #79）与 T-12.3（goal-60，PR #178，合并提交 `a95b85b`）均已合并。2026-11-13 审查者按 main 核对：`sdk.Task[T](name) TaskType[T]` 的 `At`/`Every`/`Cron`（返回 key）、`Cancel`、`List`（返回 `TaskInstance[T]{Key, Args, At, Interval, Cron, Timezone, NextAt}`），`sdk.OnTask(r, t) *TaskBuilder[T]` 的 `Handle`，`sdk.Key`、`sdk.Timezone`、`sdk.ConfirmOperation(ctx, operation, summary)`、`sdk.Send`、`(*Context).Has(sdk.Admin)` 均已存在。根包装配不向 Scheduler 注入时钟（`scheduler.Options.Now` 只在包内测试使用），提交测试改用真实时间的 at 任务；周期任务的到期运行与离线不补跑已由 T-07.9 的 Scheduler 证据覆盖。权限判断以 `c.Has(sdk.Admin)` 表述。本切片与 T-12.5（goal-62）都在 agent/tools.go 加入 Agent 内工具，审查者在 goal-62 合并后派发。2026-11-10 按 D-124、D-125 修订：任务改用 SDK 的动态任务保存与触发，删去自建的任务表与每分钟的固定 schedule，前置由 T-07.2 改为 T-07.9，并增加一次性的 at。语句中 goal-128、goal-32、goal-55、goal-59、goal-60 提供的符号（sdk.Task、sdk.OnTask、Task 的 At/Every/Cron/Cancel/List、sdk.Key、sdk.Timezone、sdk.ConfirmOperation、Agent 的一轮对话与工具循环）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：定时任务的后台发送按发信许可缺省允许全部实例（D-83）。
+状态：待派发。前置 T-07.9（goal-128，PR #176，合并提交 `9785c22`）、T-08.5（PR #79）与 T-12.3（goal-60，PR #178，合并提交 `a95b85b`）均已合并。2026-11-13 审查者按 main 核对：`sdk.Task[T](name) TaskType[T]` 的 `At`/`Every`/`Cron`（返回 key）、`Cancel`、`List`（返回 `TaskInstance[T]{Key, Args, At, Interval, Cron, Timezone, NextAt}`），`sdk.OnTask(r, t) *TaskBuilder[T]` 的 `Handle`，`sdk.Key`、`sdk.Timezone`、`sdk.ConfirmOperation(ctx, operation, summary)`、`sdk.Send`、`(*Context).Has(sdk.Admin)` 均已存在。根包装配不向 Scheduler 注入时钟（`scheduler.Options.Now` 只在包内测试使用），提交测试改用真实时间的 at 任务；周期任务的到期运行与离线不补跑已由 T-07.9 的 Scheduler 证据覆盖。权限判断以 `c.Has(sdk.Admin)` 表述。本切片与 T-12.5（goal-62）都在 agent/tools.go 加入 Agent 内工具，goal-62（PR #188，`c80276e`）已合并，从包含它的 main 派发；agent/tools.go 的插件内工具沿用 load_skill 的做法。2026-11-10 按 D-124、D-125 修订：任务改用 SDK 的动态任务保存与触发，删去自建的任务表与每分钟的固定 schedule，前置由 T-07.2 改为 T-07.9，并增加一次性的 at。语句中 goal-128、goal-32、goal-55、goal-59、goal-60 提供的符号（sdk.Task、sdk.OnTask、Task 的 At/Every/Cron/Cancel/List、sdk.Key、sdk.Timezone、sdk.ConfirmOperation、Agent 的一轮对话与工具循环）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：定时任务的后台发送按发信许可缺省允许全部实例（D-83）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-63（切片 T-12.6：定时 Agent 任务）。goal 目录 goal-63，分支 goal-63，worktree .worktrees/goal-63，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

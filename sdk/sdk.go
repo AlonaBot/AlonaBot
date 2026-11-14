@@ -101,6 +101,9 @@ func (c *Context) Session() message.Session {
 	return convert.SessionFromProto(c.target())
 }
 
+// Instance 返回当前事件目标或继承的默认目标的实例名；没有目标时为空。
+func (c *Context) Instance() string { return c.target().GetAdapterInstanceId() }
+
 func (c *Context) target() *pb.Target {
 	target := c.defaultTarget
 	if c.event != nil {

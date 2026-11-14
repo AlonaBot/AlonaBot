@@ -63,6 +63,29 @@ bin/alonabot admin add telegram:123456
 
 ## 开发运行与热部署
 
+先从仓库示例完成一次可见回复（以下使用 fish）：
+
+```fish
+go build -o bin/alonabot ./cmd/alonabot
+set -gx DEVBOT_DATA (mktemp -d)
+set -gx DEVBOT_OUTPUT (mktemp)
+cp examples/devbot/core_config.example.json $DEVBOT_DATA/core_config.json
+printf 'DEVBOT_DATA=%s\nDEVBOT_OUTPUT=%s\n' $DEVBOT_DATA $DEVBOT_OUTPUT
+bin/alonabot run examples/devbot/plugin examples/devbot/adapter --data-dir $DEVBOT_DATA --reload
+```
+
+另开终端，设置相同的 `DEVBOT_DATA`、`DEVBOT_OUTPUT`。终端首次启动的 token 在 stderr 显示一次；非终端启动可用 `bin/alonabot admin-token show --data-dir $DEVBOT_DATA` 读取 `admin_token`。令 `token` 为该值后：
+
+```fish
+curl --fail-with-body -X POST -H "Authorization: Bearer $token" \
+  'http://127.0.0.1:7650/plugins/alonabot_adapter_devbot/inject?instance=one&text=%2Fhello'
+cat $DEVBOT_OUTPUT
+```
+
+注入返回 204，异步发送后文件内容为 `Hello from devbot!`。完整实例 JSON、目录结构、认证、源码／翻译／配置改动与编译失败恢复操作见 [devbot README](../examples/devbot/README.md)。样例把 `adapters.devloop.package` 绑定到 `alonabot_adapter_devbot`，实例在 `instances.one`，命令前缀为 `/`。两个开发组件沿用真实 Deliver／Send 流水线。
+
+契约的创建入口是 `alonabot init [目录]`，生成可导入插件包、作者 manifest、schema、i18n 与忽略 `data/` 的 `.gitignore`；当前基线使用上述已有工程。`init` 与顶层 `build/check` 由 T-09.3 交付，实际 init 创建与模板比对登记「未运行，T-09.3 补证」。现阶段资源生成与检查使用下文的 `plugin generate/check`。
+
 在包含 `plugin.yaml` 的组件工程中运行 `alonabot run --reload`，或者明确给出一个或多个工程目录：
 
 ```sh
@@ -166,11 +189,19 @@ go generate ./examples/devbot/...
 go run ./examples/devbot -data-dir ./data
 ```
 
-组件以 source=dev 登记，代次固定为 `dev:<组件 ID>`；资源取自各组件包内生成并嵌入的副本。
+组件以 source=dev 登记，代次固定为 `dev:<组件 ID>`；资源取自各组件包内生成并嵌入的副本。`plugin.New()` 显式绑定 `sdk.Generated`，Adapter 身份与实例 schema 来自同一个可导入包。两个模式使用各自的 data_dir；按 [devbot 同进程调试步骤](../examples/devbot/README.md#同进程调试) 复制设置、重新生成后运行，即可使用相同私有注入路径观察回复。
+
+库模式更改源码或资源后重新生成并重启程序。未捕获的后台 panic 使整个进程非零退出且无有限重启；SDK Handler 边界内捕获的 panic 记录 stack 并返回 `INTERNAL`。同进程组件超过停止预算仍未退出时，`Wait` 返回错误；独立进程由 supervisor 隔离并有限恢复，两种模式的 SIGINT/SIGTERM 停止总预算缺省均为 `STOP_TOTAL=10s`。开发来源的 update、rollback、uninstall 返回 `FAILED_PRECONDITION`；WebUI/CLI 修改开发配置后写回并重启由 T-09.14 承接，手改配置的轮询行为见上节。
 
 ## Adapter 的 HTTP 路由
 
 Adapter 可以实现 `sdk.AdapterHTTP`，在统一端口的 `/plugins/<Adapter 包 ID>/...` 下声明路由，例如 OneBot 11 反向 WebSocket。路由规则与插件相同：私有路由需要 Core 会话，非 GET/HEAD 的 Cookie 请求还要验证 CSRF 与 Origin。公开路由除回调校验方式外，还可以用 `sdk.Public(sdk.AuthPlatformToken)`：Core 代理保留入站的 `Authorization` 交给 Adapter，由 Adapter 校验平台凭证，并给出错误时的平台响应。插件路由的 `Authorization` 一律被清除。两者都会清除入站的 Cookie、CSRF、Forwarded 与 X-Forwarded-*，并注入内部代理凭证；SDK 先恒定时间比较该凭证，比较后移除，再进入用户 Handler。WebSocket Upgrade 由代理双向转发，连接寿命不受普通请求期限限制，路由撤销或 Session 失效时由 Core 关闭。
+
+## 备份与恢复
+
+整机备份前先停止 Core 和全部插件进程，再复制完整的 `data_dir`。备份须同时覆盖 Core 元数据、程序包、插件配置及各代次的受管 SQLite 数据库。单独备份 `state.sqlite` 只保存 Core 元数据，不包含插件业务数据。
+
+插件自管的外部数据库与框架目录之外的文件，按插件的维护说明单独备份。恢复时保持 Core 和插件停止，还原完整的 `data_dir`，并同步恢复插件自管的外部数据，再启动 Core。恢复旧备份会丢弃备份之后的新写入，执行前须确认要恢复的数据时点。
 
 ## 外部测试环境
 
@@ -274,3 +305,133 @@ return sdk.ResumeJob(ctx, "tick")
 ```
 
 `JobState.LastAt` 记录本次 Core 运行最后一次实际派发，首次派发前和 Core 重启后为 `nil`；暂停时 `Paused` 为 true、`NextAt` 为 `nil`。暂停保留在途函数继续执行，恢复沿保存的 interval 起点安排未来触发。暂停状态跨重启保存，重复暂停或恢复成功，未登记的 job ID 返回 `NOT_FOUND`。
+
+## 插件测试
+
+在插件包的 `main_test.go` 中直接调用 `New()`，用 `plugintest.Start` 运行真实 Core、SDK Session 与测试 Adapter。例如 lifecycle 的 `/ping`：
+
+```go
+package main
+
+import (
+    "testing"
+
+    "github.com/AlonaBot/AlonaBot/plugintest"
+)
+
+func TestPing(t *testing.T) {
+    p := New()
+    h := plugintest.Start(t, plugintest.Plugin(p))
+    alice := plugintest.User{ID: "alice"}
+    result := h.Text(plugintest.Private(alice.ID), alice, "/ping")
+    if len(result.Sends) != 1 || result.Sends[0].Text() != "pong" {
+        t.Fatalf("ping = %+v", result)
+    }
+    for _, outcome := range result.Outcomes {
+        if outcome.Err != nil {
+            t.Fatal(outcome.Err)
+        }
+    }
+}
+```
+
+`New()` 需绑定生成资源中的 `plugin.yaml` 工程身份。先运行工程已有的 `go generate`，再运行测试。每次 Start 创建独立的临时目录、配置和 `dev.sqlite`，在测试清理时停止组件；同一 Harness 的注入与读取按顺序调用。
+
+`Message(chat, user, message.Chain{...})` 可以注入混合片段，`Sent.Text()` 按顺序提取文本。`Sent.To`、`Chain`、`Result` 保留目标、消息链与回执；`Op` 区分 send/edit，`Edited` 保存编辑句柄。`Event` 注入通过 `Adapter` 选项声明的扩展事件。
+
+**权限与配置。** `Admin("root")` 登记 Core Admin；`User.Permissions` 携带该会话的平台权限，需通过 `Adapter` 声明它们。例如：
+
+```go
+moderator := plugintest.User{
+    ID: "mod",
+    Permissions: []sdk.Permission{sdk.PermissionName("plugintest.moderator")},
+}
+h := plugintest.Start(t, plugintest.Plugin(p), plugintest.Admin("root"),
+    plugintest.Adapter(plugintest.AdapterID, adapter.PermissionDeclaration{
+        Name: "plugintest.moderator", Implies: []string{"chat_admin"}, LabelKey: "moderator",
+    }))
+result := h.Text(plugintest.Group("room"), moderator, "/mod")
+```
+
+其中 `sdk` 与 `adapter` 分别来自 `sdk`、`sdk/adapter`。配置按被测插件的 Schema 提供：
+
+```go
+h := plugintest.Start(t, plugintest.Plugin(p),
+    plugintest.Config(p, `{"$version":2,"greeting":"Hello"}`),
+    plugintest.AllowedInstances(p, plugintest.InstanceID),
+    plugintest.Capabilities("message.send", "message.edit"))
+```
+
+`AllowedInstances` 缺省允许全部实例，`AllowedInstances(p)` 收紧为空集合，job 和后台的显式发送会得到 `PERMISSION_DENIED`；可信入站事件的原目标回复沿用原有豁免。`Capabilities` 完整替换缺省能力，上例可验证按钮、相册等片段的 `UNSUPPORTED` 错误及插件降级行为。拒绝的发送在 Outcome 中保留错误。
+
+**按钮。** 从发送结果点击动作名，用户取本次点击者；Core 恢复 token 中的 action、版本与业务值，并逐次鉴权：
+
+```go
+menu := h.Text(plugintest.Group("room"), alice, "/menu")
+clicked := h.Click(plugintest.User{ID: "bob"}, menu.Sends[0], "first")
+```
+
+缺失的动作、URL 按钮及缺少已发送回执属于测试输入错误，Click 通过 `t.Fatal` 报告。过期 token、失效代次和权限拒绝会返回空发送及空 Handler Outcome。
+
+**静态与动态任务。** `h.Trigger(p, "tick")` 立即执行已登记静态任务；`h.TriggerTask(p, "remind", key)` 定位已创建实例，使用 Core 保存的参数。两者通过 Scheduler 的正常 REQUEST/RESPONSE、job scope、运行槽和期限执行，Handler 使用显式 `sdk.To` 发送目标。准入及定位错误使测试失败；已派发 Handler 的错误保留在 `Result.Outcomes`。
+
+showcase 的提醒先通过命令创建，再用含用户与会话的完整内部 key 触发：
+
+```go
+h.Text(chat, alice, "/demo remind lunch 3600 soup")
+user := message.NewUser(plugintest.AdapterID, alice.ID)
+session := message.NewSession(plugintest.AdapterID, "private:alice", "")
+key := fmt.Sprintf("%d:%s/%d:%s/%s", len(user), user, len(session), session, "lunch")
+reminder := h.TriggerTask(p, "remind", key)
+```
+
+完整示例见 [showcase/main_test.go](../examples/plugins/showcase/main_test.go)。一次性实例在实际派发时消费；周期实例保留起点并继续安排未来 tick。静态任务暂停或运行中、动态实例运行中或排队时，显式触发返回 `FAILED_PRECONDITION`；动态全插件并发名额已满时沿用到期队列。
+
+**多轮等待。** 进入 `core.wait` 后注入立即返回 `Result.Waiting=true`，进入等待的路由 `Outcome.Waiting=true`；问题发送仍在本次 `Sends` 中。下一条同用户、同会话消息由普通入口注入：
+
+```go
+question := h.Text(chat, alice, "/ask")
+if !question.Waiting {
+    t.Fatalf("ask = %+v", question)
+}
+answer := h.Text(chat, alice, "answer")
+```
+
+命中等待后的发送和最终错误归入新注入，直到延续调用结束或再次等待；其他用户或会话继续正常分发。注入返回由 Core 的完成或等待通知决定。
+
+**后台发送。** `h.Background()` 按 Adapter 接受顺序返回并清空尚未交付的发送和编辑。注入开始到完成通知之间的发送随 `Result.Sends` 交付，区间外的留给 Background，每条记录消费一次。测试用自己的 channel 控制后台工作，并等待 Send 返回后读取：
+
+```go
+send, done := make(chan struct{}), make(chan error, 1)
+var cancel context.CancelFunc
+p.OnReady(func(ready context.Context) error {
+    ctx, stop := context.WithCancel(context.WithoutCancel(ready))
+    cancel = stop
+    go func() {
+        select {
+        case <-send:
+        case <-ctx.Done():
+            return
+        }
+        _, err := sdk.Send(ctx, "plugintest:private:alice", message.Text("background"))
+        done <- err
+    }()
+    return nil
+})
+p.OnStop(func(context.Context) error { cancel(); return nil })
+h := plugintest.Start(t, plugintest.Plugin(p))
+send <- struct{}{}
+if err := <-done; err != nil {
+    t.Fatal(err)
+}
+records := h.Background()
+```
+
+`OnReady` 的回调 context 在返回时取消，上例保留其 Session 归属，后台生命周期由 OnStop 管理。channel 确定发送时刻，Core 通知确定注入终点。
+
+仓库完整示例覆盖 echo、lifecycle、showcase、configdb 与 media：
+
+```sh
+go generate ./...
+go test -race -count=2 ./plugintest/... ./examples/plugins/...
+```

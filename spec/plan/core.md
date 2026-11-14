@@ -87,11 +87,11 @@
 | T-09.4 | goal-39 | 唯一管理服务与安装记录：逐包串行、来源/pin/卸载保留、各管理动作的区分；卸载的三种清理范围（D-127）；组件角色的同类唯一、`install --source` 与 `--replace`；Adapter 包与实例的管理（实例写回 `core_config.json`）；启用、停用、卸载与更新时的 Adapter 依赖和插件依赖检查；`alonabot run` 按安装记录启动全部已启用的包；Core 装配读取 `core_config.json`，接入命令前缀、Core Admin 列表与默认 locale | T-09 步骤 3 | T-03.8、T-07.6、T-08.4、T-08.8、T-09.1、T-09.2、T-13.1 | V-40、V-48、V-52、V-82、V-01 的安装分项、V-88 的接入分项 | 已完成（PR #163；TEST-MATRIX §3.2） |
 | T-09.5 | goal-40 | 正式候选 Journal 与准备编排 | T-09 步骤 4 | T-09.4、T-08.6、T-06.4 | V-29 | 已完成（PR #173；TEST-MATRIX §3.2） |
 | T-09.6 | goal-41 | 唯一提交点（ActiveGeneration+COMMITTED）与激活门禁 | T-09 步骤 5 | T-07.5、T-09.5 | V-30、V-21 的提交分项 | 已完成（PR #179；TEST-MATRIX §3.2） |
-| T-09.7 | goal-42 | 崩溃恢复、显式回退与引用回收 | T-09 步骤 6 | T-09.6 | V-30、V-31、V-36 | 未开始 |
+| T-09.7 | goal-42 | 崩溃恢复、显式回退与引用回收 | T-09 步骤 6 | T-09.6 | V-30、V-31、V-36 | 已完成（PR #187；TEST-MATRIX §3.2） |
 | T-09.10 | goal-66 | 日志管理：按来源级别的持久化与运行时修改（`sdk.log.set_level`）、最近记录缓冲、按日期查询日志文件、管理 API 与 SSE、`alonabot logs` 与 `log-level` | T-09 步骤 7（日志） | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | V-62、V-63、V-68 | 已完成（PR #177；TEST-MATRIX §3.2） |
 | T-09.11 | goal-45 | 正式流程的故障注入，回填 T-08 待联验项，汇总证据 | T-09 步骤 8 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | V-23～V-25、V-27～V-31、V-39、V-40、V-52、V-54～V-56、V-62、V-63、V-82、V-83 | 未开始 |
 | T-09.12 | goal-84 | WebUI 组件与组件图标：Core 提供 WebUI 静态文件与单页路由回退、未安装与版本不兼容的提示、Admin API 主版本与 `spec/ADMIN-API.md` 参考（含插件页面桥的消息格式）、带 sandbox CSP 的图标、库模式的 `alonabot.WebUI` 选项 | T-09 步骤 9 | T-07.7、T-09.1、T-09.4、T-13.1 | V-83 | 已完成（PR #167；TEST-MATRIX §3.2） |
-| T-09.13 | goal-92 | 管理页所需的会话与上传接口：已登录会话取回 csrf_token、multipart 上传安装包与更新包、总览的 Core 版本与监听地址，追加到 `spec/ADMIN-API.md` | T-09 步骤 7（管理页） | T-09.1、T-09.4、T-09.12 | V-40、V-47 的 API 分项 | 未开始 |
+| T-09.13 | goal-92 | 管理页所需的会话与上传接口：已登录会话取回 csrf_token、multipart 上传安装包与更新包、总览的 Core 版本与监听地址，追加到 `spec/ADMIN-API.md` | T-09 步骤 7（管理页） | T-09.1、T-09.4、T-09.12 | V-40、V-47 的 API 分项 | 已完成（PR #181；TEST-MATRIX §3.2） |
 | T-09.14 | goal-93 | 配置、权限、工具策略与会话的管理 API：配置 raw JSON/PATCH/base_generation/secret、命令权限、命令名覆盖（D-128）、配置字段的选项查询（D-129）、发信许可、Core 设置（Core Admin 列表、默认 locale、命令前缀、全局禁止表）、工具调用策略、Agent 会话、插件页面票据、secret 明文查看的再认证 | T-09 步骤 7（配置与插件页） | T-03.25、T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-08.14、T-09.6、T-09.12、T-11.1、T-11.3 | V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56、V-115、V-116、V-117 的管理 API 分项 | 未开始 |
 | T-09.16 | goal-100 | manifest 拆分：工程 `plugin.yaml` 只含作者信息（name、description、author 等），构建与打包补上协议、平台、入口、迁移方式与配置版本，包内 manifest 照常严格校验；`i18n/` 中 `metadata` 的翻译（D-78） | T-09 步骤 2 | T-03.8、T-09.2 | V-01 | 已完成（PR #140；TEST-MATRIX §3.2） |
 | T-11.1 | goal-54 | 工具描述与目录：Service 描述的 `tool` 字段、注册校验、`core.tool.list`、调用策略的持久化与管理服务层 | T-11 步骤 1、2 | T-04.4、T-04.7、T-06.1 | V-55 的目录与策略分项 | 已完成（PR #101；TEST-MATRIX §3.2） |
@@ -101,9 +101,9 @@
 | T-13.1 | goal-67 | 库模式入口：根包 `alonabot.Run`、`alonabot.Start` 与选项、与 `alonabot run` 共用的 Core 装配、开发组件同进程经 loopback 连接、生成代码中嵌入的工程 manifest 身份、可导入 Adapter 包的工程入口与资源登记、dev 来源与固定代次 `dev:<组件 ID>`（D-134） | T-13 步骤 1、2 | T-02.1、T-03.3、T-04.2、T-04.9、T-08.8、T-09.16 | V-64 的生命周期分项 | 已完成（PR #149；TEST-MATRIX §3.2） |
 | T-13.2 | goal-68 | 开发组件的配置与数据库：`config.json` 直读、准备与写回（WebUI 修改时重启组件）、`dev.sqlite`、拒绝 update/rollback/uninstall；沿用固定代次 `dev:<组件 ID>`（D-134） | T-13 步骤 3 | T-07.6、T-08.5、T-08.11、T-13.1 | V-64 | 已完成（PR #160；TEST-MATRIX §3.2；配置写回随 T-09.14 的配置管理 API，dev 来源拒绝 update/rollback/uninstall 与开发 Adapter 的实例在 T-09.4） |
 | T-13.3 | goal-69 | 开发运行与热部署：`alonabot run [目录...] [--reload]` 构建并以独立进程运行开发组件，轮询源码、资源与配置，只重启变化的组件；Adapter 以可导入包为工程目录，沿用 `dev:<组件 ID>`（D-77、D-134） | T-13 步骤 4 | T-07.6、T-09.16、T-13.1、T-09.4 | V-65 | 已完成（PR #171；TEST-MATRIX §3.2） |
-| T-13.4 | goal-70 | 开发运行示例与开发文档，汇总证据 | T-13 步骤 5 | T-03.10、T-13.2、T-13.3 | V-64、V-65 | 未开始 |
+| T-13.4 | goal-70 | 开发运行示例与开发文档，汇总证据 | T-13 步骤 5 | T-03.10、T-13.2、T-13.3 | V-64、V-65 | 已完成（PR #186；TEST-MATRIX §3.2） |
 | T-16.1 | goal-81 | 插件测试套件基础：`plugintest.Start`、测试 Adapter、会话与身份、Capability 子集、消息注入、`internal/inproc` 的分发结束通知、配置与数据库 | T-16 步骤 1、2 | T-05.2、T-13.2、T-09.4 | V-73 的基础分项 | 已完成（PR #168；TEST-MATRIX §3.2） |
-| T-16.2 | goal-82 | 按钮点击、多轮等待、schedule 触发（含动态任务实例，D-124）与后台发送；用套件测试示例插件，开发文档，汇总证据 | T-16 步骤 3、4 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | V-73 | 未开始 |
+| T-16.2 | goal-82 | 按钮点击、多轮等待、schedule 触发（含动态任务实例，D-124）与后台发送；用套件测试示例插件，开发文档，汇总证据 | T-16 步骤 3、4 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | V-73 | 已完成（PR #183；TEST-MATRIX §3.2） |
 | T-16.3 | goal-102 | `plugintest.LLM`：登记只提供 `llm.generate` 的测试 Agent，被测插件经 `@agent` 的调用交给测试函数（D-77） | T-16 步骤 3 | T-12.8、T-16.1 | V-73 的 LLM 分项 | 未开始 |
 
 ## 3. 工作包

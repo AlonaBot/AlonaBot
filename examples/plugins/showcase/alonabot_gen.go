@@ -5,6 +5,7 @@ package main
 import alonabotgen0 "github.com/AlonaBot/AlonaBot/sdk"
 
 var alonabotGenerated = alonabotgen0.Generated{
+	Manifest:     []byte("# showcase 示例的开发工程身份。\nid: showcase\nname: Showcase\nversion: 0.1.0\nauthor: AlonaBot\nsource: github.com/AlonaBot/AlonaBot\nrole: plugin\n"),
 	ConfigSchema: []byte("{\"$version\":2,\"$migrations\":[{\"to\":2,\"rename\":{\"hello\":\"greeting\"}}],\"greeting\":{\"type\":\"string\",\"description\":\"Greeting\"},\"interval_seconds\":{\"type\":\"int\",\"description\":\"Interval in seconds\"}}"),
 	ParamNames: map[string][]string{
 		"main.(*Demo).CancelReminder": {"key"},

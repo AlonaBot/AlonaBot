@@ -4,6 +4,8 @@
     "description": "官方对话 Agent"
   },
   "messages": {
+    "agent.skills.header": "可用技能（使用 load_skill 读取技能）：",
+    "agent.memory_error": "记忆读取失败（{code}）。",
     "agent.no_provider": "请管理员配置并选择 Provider。",
     "agent.error": "Provider 请求失败（{code}）。",
     "agent.enabled": "已开启自由对话。",
@@ -39,6 +41,10 @@
     }
   },
   "config": {
+    "skills_dir": {
+      "description": "技能目录",
+      "hint": "留空关闭技能。相对路径以插件工作目录为基准，修改技能后需重启插件。"
+    },
     "providers": {
       "description": "Provider",
       "templates": {
@@ -63,6 +69,9 @@
             "max_tokens": {
               "description": "最大输出 token 数",
               "hint": "至少为 1。"
+            },
+            "image_input": {
+              "description": "图片输入"
             }
           }
         },
@@ -87,6 +96,9 @@
             "max_tokens": {
               "description": "最大输出 token 数",
               "hint": "至少为 1。"
+            },
+            "image_input": {
+              "description": "图片输入"
             }
           }
         },
@@ -111,6 +123,9 @@
             "max_tokens": {
               "description": "最大输出 token 数",
               "hint": "至少为 1。"
+            },
+            "image_input": {
+              "description": "图片输入"
             }
           }
         },
@@ -135,6 +150,9 @@
             "max_tokens": {
               "description": "最大输出 token 数",
               "hint": "至少为 1。"
+            },
+            "image_input": {
+              "description": "图片输入"
             }
           }
         },
@@ -159,6 +177,9 @@
             "max_tokens": {
               "description": "最大输出 token 数",
               "hint": "至少为 1。"
+            },
+            "image_input": {
+              "description": "图片输入"
             }
           }
         },
@@ -183,6 +204,9 @@
             "max_tokens": {
               "description": "最大输出 token 数",
               "hint": "至少为 1。"
+            },
+            "image_input": {
+              "description": "图片输入"
             }
           }
         }

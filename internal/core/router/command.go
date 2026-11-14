@@ -292,7 +292,7 @@ func (r *Router) sendReply(c candidate, ev *pb.Event, chain *pb.MessageChain, tr
 		slog.Warn("encode reply failed", "error", err)
 		return
 	}
-	response := r.send(r.ctx, c.caller, &wire.Inbound{TraceID: trace, ParentAttach: &Invocation{PluginID: c.pluginID, Event: ev, DefaultTarget: ev.GetTarget(), TraceID: trace}, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded}})
+	response := r.send(r.ctx, c.caller, &wire.Inbound{TraceID: trace, ParentAttach: &Invocation{Depth: 1, PluginID: c.pluginID, Event: ev, DefaultTarget: ev.GetTarget(), TraceID: trace}, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded}})
 	result := &pb.SendResult{}
 	if err := proto.Unmarshal(response.Payload.Bytes, result); err != nil {
 		slog.Warn("decode reply result failed", "error", err)
