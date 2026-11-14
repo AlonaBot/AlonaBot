@@ -23,7 +23,8 @@ func TestLibraryLifecycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), startupTimeout)
 	defer cancel()
 	temp := t.TempDir()
-	executable, err := pluginkit.CompileApp(ctx, generate.Options{Dir: "./examples/devbot"}, temp, "-race")
+	// 关闭 -trimpath，复用 go test -race 已编译的依赖；带 -trimpath 时会在启动预算内重编全部依赖。
+	executable, err := pluginkit.CompileApp(ctx, generate.Options{Dir: "./examples/devbot"}, temp, "-race", "-trimpath=false")
 	if err != nil {
 		t.Fatalf("build devbot: %v", err)
 	}
