@@ -104,7 +104,8 @@ func TestHello(t *testing.T) {
 			t.Fatalf("go %v: %v\n%s", args, err, output)
 		}
 	}
-	command := exec.Command("go", "test", "./...")
+	// 与外层 go test -race 使用相同的构建参数，复用已编译的依赖。
+	command := exec.Command("go", "test", "-race", "./...")
 	command.Dir = dir
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("direct go test: %v\n%s", err, output)
@@ -218,7 +219,7 @@ func main() {
 		t.Fatalf("library application: %v\n%s", err, output)
 	}
 	native := filepath.Join(t.TempDir(), "native")
-	command = exec.Command("go", "build", "-o", native, "./cmd/bot")
+	command = exec.Command("go", "build", "-race", "-o", native, "./cmd/bot")
 	command.Dir = dir
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("native go build: %v\n%s", err, output)
