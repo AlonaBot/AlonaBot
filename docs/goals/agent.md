@@ -14,7 +14,7 @@
 | goal-135 | T-12.13 | Provider 图片输入 | T-12.12 | 已完成（PR #138） |
 | goal-59 | T-12.2 | Agent 对话与流式显示 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1、T-12.9、T-12.10、T-12.11、T-09.4 | 已完成（PR #170） |
 | goal-83 | T-12.8 | 文本生成服务 | T-03.8、T-06.1、T-08.14、T-12.2 | 已完成（PR #175） |
-| goal-136 | T-12.14 | 对话中的图片输入 | T-04.8、T-12.2、T-12.13 | 待派发 |
+| goal-136 | T-12.14 | 对话中的图片输入 | T-04.8、T-12.2、T-12.13 | 已完成（PR #189） |
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 已完成（PR #178） |
 | goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 已完成（PR #182） |
 | goal-62 | T-12.5 | 技能 | T-12.3 | 已完成（PR #188） |
@@ -459,7 +459,7 @@ OnConfigLoad 之后的校验在 OnStart 中完成：providers 的 name 唯一、
 
 ### goal-136 · T-12.14 对话中的图片输入
 
-状态：待派发。直接前置 T-04.8（PR #141，合并提交 `ac4aded`）、T-12.2（PR #170，`eca6310`）、T-12.13（PR #138，`9b3bb86`）均已合并；媒体读取沿用 D-109、D-121 已合并的 SDK。相关装配以 PR #163（goal-39，`cb8ae3d`）、#164（goal-22，`039802f`）、#165（goal-55，`330164f`）、#167（goal-84，`3a9b4af`）、#168（goal-81，`37b0ada`）、#169（goal-127，`4dc4bcd`）合入后的 main `dbbb80b` 为基线。2026-11-13 起草者在本 worktree 用 `rg`、源码读取与 `go doc` 按 main 核对：2026-11-13 审查者裁决（DECISIONS 2026-11-13 变更记录）：图片表与计数字段并入 Agent 受管库的初始迁移 ID 1（与 goal-59 的 reset 代次一致，首次发布前不追加迁移）；回放只取 Core 会话中仍存在的条目对应的图片，Core 追加或清除与 Agent 图片写入或删除之间的失败按行为中的规则处理，不做跨库事务。派发顺序：在 goal-61 合并后从包含它的 main 派发（goal-60、goal-61 与本切片都改 agent/conversation.go 中同一段请求生成逻辑，且 goal-61 改变 Agent 的会话键）。2026-11-13 审查者按 main `90b6817`（含 goal-60 的 PR #178 与 goal-61 的 PR #182）复核：`converse`、`recentConversation`、`chatSettings`、`resetConversation` 仍在原文件；`conversationEntry` 另有 `Kind`（记忆快照条目），`configuredProvider` 另有 protocol、model；会话键改由 `sessionKey(c)` 给出（`<会话字符串>@<实例名>`，D-142），图片的保存、回放、计数与清理都按这个键；请求按「人格 → 会话历史（含笔记快照）→ 用户档案 → 用户消息」组装，图片随用户消息与历史中的 user 条目回放。本切片与 T-12.5（goal-62）并行，都改 agent/conversation.go、agent.go、config_schema.json、i18n 与生成产物，后合并者负责合入。
+状态：已完成（[PR #189](https://github.com/AlonaBot/AlonaBot/pull/189)，合并提交 `2268366`），证据见 TEST-MATRIX §3.2（含经 cpa 兼容网关以 pixiv 插图运行的四种协议实测）。合入：Provider 条目的 `image_input`；agent/image.go 的图片读取（sdk.OpenMedia）、MIME 与大小校验、受管 SQLite 存储与按会话键编号，历史中按回放窗口重放、窗口外与关闭时占位，/reset 删除；`conversationEntry` 记录图片编号，`chatSettings` 记录会话图片计数。以下为派发时的语句。
 
 - `agent/agent.go`：`func New() *sdk.Plugin`，私有 `configuration`、`configuredProvider` 与 `readConfiguration(values config.Values) (configuration, error)`；当前 configuredProvider 含 name、client、maxTokens。不存在公开 Config。New 通过 `gormdb.Migrations(p, []gormdb.Migration{{ID: 1, Up: ...}})` 对 chatSettings 执行 AutoMigrate；尚无图片表或图片计数。
 - `agent/settings.go`：私有 `chatSettings{Session string; Provider string; Persona string; Enabled bool; ResetGeneration uint64}`，表名 chat_settings；`func (a *component) sessionLock(session string) *sync.Mutex`；`func (a *component) resetConversation(c *sdk.Context) error` 在同一会话锁内递增 ResetGeneration，再 `sdk.ClearConversation`。当前轮次最终追加也持该锁并核对 reset 代次。
