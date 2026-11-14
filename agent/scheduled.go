@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/AlonaBot/AlonaBot/agent/provider"
 	"github.com/AlonaBot/AlonaBot/sdk"
@@ -63,8 +64,14 @@ func (a *component) runScheduled(c *sdk.Context, session string, task AgentTask)
 	if err := runToolLoop(c.Context(), selected, request, catalog, func(text string) error { assistant.WriteString(text); return nil }); err != nil {
 		return err
 	}
-	if _, err := sdk.Send(c.Context(), task.Target.session(), message.Text(assistant.String()), sdk.Via(task.Target.Instance)); err != nil {
+	chunks, err := splitTaskText(assistant.String(), task.Target.TextLimit, task.Target.TextUnit)
+	if err != nil {
 		return err
+	}
+	for _, chunk := range chunks {
+		if _, err := sdk.Send(c.Context(), task.Target.session(), message.Text(chunk), sdk.Via(task.Target.Instance)); err != nil {
+			return err
+		}
 	}
 	userJSON, err := json.Marshal(conversationEntry{Role: roleUser, Content: task.Prompt})
 	if err != nil {
@@ -76,4 +83,35 @@ func (a *component) runScheduled(c *sdk.Context, session string, task AgentTask)
 	}
 	_, err = sdk.AppendConversation(c.Context(), session, userJSON, assistantJSON)
 	return err
+}
+
+// splitTaskText 沿用 Context.Stream 的计量方式，按创建时快照在码点边界分段。
+func splitTaskText(text string, limit uint64, unit message.TextUnit) ([]string, error) {
+	if limit == 0 {
+		return []string{text}, nil
+	}
+	var chunks []string
+	start := 0
+	var used uint64
+	for offset, r := range text {
+		units := uint64(1)
+		switch unit {
+		case message.TextUTF16CodeUnits:
+			if r > 0xffff {
+				units = 2
+			}
+		case message.TextBytes:
+			_, width := utf8.DecodeRuneInString(text[offset:])
+			units = uint64(width)
+		}
+		if units > limit {
+			return nil, errcode.InvalidArgument.New("a code point exceeds the text limit")
+		}
+		if units > limit-used {
+			chunks = append(chunks, text[start:offset])
+			start, used = offset, 0
+		}
+		used += units
+	}
+	return append(chunks, text[start:]), nil
 }
