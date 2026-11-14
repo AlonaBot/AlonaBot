@@ -1,11 +1,13 @@
 package plugintest
 
 import (
+	"context"
 	"slices"
 	"testing"
 
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/adapter"
+	"github.com/AlonaBot/AlonaBot/sdk/llm"
 )
 
 // Option 配置一次插件测试套件启动。
@@ -19,6 +21,18 @@ type options struct {
 	allowed      map[*sdk.Plugin][]string
 	capabilities []string
 	descriptor   adapter.Descriptor
+	llmHandler   func(context.Context, llm.Request) (llm.Response, error)
+}
+
+// LLM 登记经真实 Agent Service 调用的生成替身；多次设置时最后一个生效。
+// handler 为 nil 时 Start 在启动组件前使测试失败。
+func LLM(handler func(ctx context.Context, req llm.Request) (llm.Response, error)) Option {
+	return func(o *options) {
+		if handler == nil {
+			o.t.Fatal("LLM handler must not be nil")
+		}
+		o.llmHandler = handler
+	}
 }
 
 // Plugin 登记被测插件，可多次使用。

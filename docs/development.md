@@ -435,3 +435,70 @@ records := h.Background()
 go generate ./...
 go test -race -count=2 ./plugintest/... ./examples/plugins/...
 ```
+
+**LLM 替身。** 测试调用文本生成的插件时，用 `LLM(handler)` 提供结果。插件仍经 `@agent/llm.generate` 调用同一 Core 中的测试 Agent。先在插件的 `New()` 返回前登记命令（导入 `sdk/llm` 与 `sdk/message`）：
+
+```go
+p.Command("llm").Handle(func(c *sdk.Context, prompt string) (message.Content, error) {
+    text, err := llm.Ask(c.Context(), prompt)
+    if err != nil {
+        return nil, err
+    }
+    return message.Text(text), nil
+})
+```
+
+运行工程的 `go generate`，让调用方生成并绑定 `llm.Request`、`llm.Response` 的 ServiceSchemas。然后在同包的 `main_test.go` 中加入：
+
+```go
+package main
+
+import (
+    "context"
+    "testing"
+
+    "github.com/AlonaBot/AlonaBot/plugintest"
+    "github.com/AlonaBot/AlonaBot/sdk/errcode"
+    "github.com/AlonaBot/AlonaBot/sdk/llm"
+)
+
+func TestLLMReply(t *testing.T) {
+    p := New()
+    h := plugintest.Start(t, plugintest.Plugin(p),
+        plugintest.LLM(func(ctx context.Context, req llm.Request) (llm.Response, error) {
+            if len(req.Messages) != 1 || req.Messages[0].Role != "user" || req.Messages[0].Text != "hello" {
+                return llm.Response{}, errcode.InvalidArgument.New("unexpected prompt")
+            }
+            return llm.Response{
+                Text: "fixed answer", Provider: "synthetic", Model: "test-model",
+                InputTokens: nil, OutputTokens: nil,
+            }, nil
+        }))
+    alice := plugintest.User{ID: "alice"}
+    result := h.Text(plugintest.Private(alice.ID), alice, "/llm hello")
+    if len(result.Sends) != 1 || result.Sends[0].Text() != "fixed answer" {
+        t.Fatalf("LLM reply = %+v", result)
+    }
+    for _, outcome := range result.Outcomes {
+        if outcome.Err != nil {
+            t.Fatal(outcome.Err)
+        }
+    }
+}
+```
+
+上例的 nil 用量经 Service 编码后仍为 nil；已知用量为零时，返回指向 `0` 的 `*int`。验证失败路径时，将 handler 换成：
+
+```go
+plugintest.LLM(func(context.Context, llm.Request) (llm.Response, error) {
+    return llm.Response{}, errcode.Unavailable.New("synthetic generation failure")
+})
+```
+
+同一条命令会得到空 `result.Sends`，`result.Outcomes[0].Err` 保留 `errcode.Unavailable` 与 `Message`。未设置 LLM 时，`@agent` 调用同样返回 `UNAVAILABLE`。多次设置 LLM 时最后一个函数生效；`LLM(nil)` 在 Start 启动前使测试失败。handler 接收关联的 context，并应响应其取消与期限。Schema 负责结构校验，业务规则与错误由 handler 决定。
+
+仓库的完整集成测试见 [plugintest/llm_test.go](../plugintest/llm_test.go)。运行：
+
+```sh
+go test -race -count=2 ./plugintest/...
+```
