@@ -7,11 +7,11 @@
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
 | goal-78 | T-15.1 | 官方 OneBot 11 Adapter 的连接与接收 | T-03.3、T-03.4、T-04.6 | 已完成（PR #109） |
-| goal-79 | T-15.2 | 官方 OneBot 11 Adapter 的发送、媒体与 extension | T-03.6、T-03.8、T-15.1 | 待派发 |
-| goal-114 | T-15.4 | 官方 OneBot 11 Adapter 的反向 WebSocket | T-03.19、T-15.1、T-15.2 | 等待前置（T-15.2） |
+| goal-79 | T-15.2 | 官方 OneBot 11 Adapter 的发送、媒体与 extension | T-03.6、T-03.8、T-04.16、T-15.1 | 等待前置（T-04.16） |
+| goal-114 | T-15.4 | 官方 OneBot 11 Adapter 的反向 WebSocket | T-03.19、T-04.16、T-15.1、T-15.2 | 等待前置（T-04.16、T-15.2） |
 | goal-115 | T-15.5 | 官方 OneBot 11 Adapter 的新增片段与媒体 URL | T-03.13、T-03.14、T-15.2 | 等待前置 |
 | goal-116 | T-15.6 | 官方 OneBot 11 Adapter 的扩展事件、平台动作与撤回 | T-03.15、T-03.16、T-15.2 | 等待前置 |
-| goal-133 | T-15.7 | 官方 OneBot 11 Adapter 填写 chat_title | T-03.25、T-15.1 | 待派发 |
+| goal-133 | T-15.7 | 官方 OneBot 11 Adapter 填写 chat_title | T-03.25、T-04.16、T-15.1 | 等待前置（T-04.16） |
 | goal-80 | T-15.3 | 跨 Adapter 一致性验收 | T-03.10、T-15.2 | 等待前置 |
 
 ## 第 8 波
@@ -105,7 +105,7 @@
 
 ### goal-79 · T-15.2 官方 OneBot 11 Adapter 的发送、媒体与 extension
 
-状态：待派发；暂不派发（维护者指示只改写语句）。前置 T-03.6（PR #55，合并提交 b023130）、T-03.8（PR #136，3621fc1）、T-15.1（PR #109，1b226a2）均已合并。2026-11-13 按维护者指定的 main 0af1255 源码及本地完成记录重新核对。以下裁决均记为「审查者补齐，待维护者确认」：下载仅开放显式 media_download_origins；共享目录在 Start 校验条件必填；模拟端全量记录只用于小对象；同实例 incoming_ref 的 platform_file 映射与完整 V-89 由 T-15.5（goal-115）交付，本切片保留阶段分工。
+状态：等待前置（T-04.16）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：待派发；暂不派发（维护者指示只改写语句）。前置 T-03.6（PR #55，合并提交 b023130）、T-03.8（PR #136，3621fc1）、T-15.1（PR #109，1b226a2）均已合并。2026-11-13 按维护者指定的 main 0af1255 源码及本地完成记录重新核对。以下裁决均记为「审查者补齐，待维护者确认」：下载仅开放显式 media_download_origins；共享目录在 Start 校验条件必填；模拟端全量记录只用于小对象；同实例 incoming_ref 的 platform_file 映射与完整 V-89 由 T-15.5（goal-115）交付，本切片保留阶段分工。
 
 已有接口与衔接：onebot11.New() adapter.Adapter、Start(context.Context, adapter.StartRequest, adapter.Core) (adapter.Instance, error)、instance.call(context.Context, string, any, any) error 均存在，Send 仍返回 UNSUPPORTED；receiveCapabilities 仅声明接收。adapter.Core.ReadMedia、adapter.MediaSource.ReadPlatformFile 的分块签名已存在，adapter.Extension[T] 接收包内 face 类型。onebottest.Server 已有 Calls、Respond、SetLogin、Disconnect；本语句列出的 Files、DisconnectOn 为新增。与 goal-114 共用 OneBot 连接、生命周期、Schema 和模拟端，先合本切片；T-04.8、T-03.13 已合并。
 
@@ -165,7 +165,7 @@
 
 ### goal-114 · T-15.4 官方 OneBot 11 Adapter 的反向 WebSocket
 
-状态：等待前置（T-15.2）；暂不派发（维护者指示只改写语句）。原前置 T-03.19（PR #152，2f4284d）、T-15.1（PR #109，1b226a2）均已合并。2026-11-13 按 main 0af1255 重新核对，T-15.2（goal-79）的 Send 尚未实现，新增它为直接前置以保留完整反向收发验收。以下裁决均记为「审查者补齐，待维护者确认」：Core 保留 Start 响应时的 Account 展示名快照；凭证优先使用存在的 Authorization；条件必填由 Start 校验；统一 HTTP 入口使用已合并装配。
+状态：等待前置（T-04.16、T-15.2）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：等待前置（T-15.2）；暂不派发（维护者指示只改写语句）。原前置 T-03.19（PR #152，2f4284d）、T-15.1（PR #109，1b226a2）均已合并。2026-11-13 按 main 0af1255 重新核对，T-15.2（goal-79）的 Send 尚未实现，新增它为直接前置以保留完整反向收发验收。以下裁决均记为「审查者补齐，待维护者确认」：Core 保留 Start 响应时的 Account 展示名快照；凭证优先使用存在的 Authorization；条件必填由 Start 校验；统一 HTTP 入口使用已合并装配。
 
 已有接口与衔接：sdk.AdapterHTTP.HTTP(route func(method, path string) *sdk.RouteBuilder)、RouteBuilder.Public/HandleFunc 及 AuthPlatformToken 均已存在；sdk.RunAdapter 托管 Listener、内部代理凭证与 Session。onebotAdapter 当前仍为空结构体，parseConfig 只接受 forward、Start 总先 Dial/get_login_info，无进程级实例表；startRead 与 receiveConnection.checked/valid 是现有复核门禁。onebottest.Server 仍仅提供正向端点，ConnectReverse 为本切片新增。根包管理装配（PR #163）、run/热部署（PR #171）、启动取消修复（PR #174）已合并；本切片复用它们，不改根包/CLI。goal-79 先合并，并在派发前重新核对 connection.go、lifecycle.go、Schema、模拟端和新增 send.go；media_dir、media_download_origins 与真实 Send 必须完整保留。
 
@@ -300,7 +300,7 @@
 
 ### goal-133 · T-15.7 官方 OneBot 11 Adapter 填写 chat_title
 
-状态：待派发。暂不派发（维护者指示只改写语句）。直接前置 T-15.1（goal-78，PR #109，合并提交 `1b226a2`）、T-03.25（goal-131，PR #166，合并提交 `6f72fc8`）均已合并。2026-11-13 按维护者指定的 main `9efee73` 只读副本，用 `rg` 核对定义、调用者与完整 Event 断言；`message.Event`、`adapter.Core`、`onebottest.Server.Respond` 另经离线 `go doc` 核对输出。以下补齐方案均为「审查者补齐，待维护者确认」。
+状态：等待前置（T-04.16）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：待派发。暂不派发（维护者指示只改写语句）。直接前置 T-15.1（goal-78，PR #109，合并提交 `1b226a2`）、T-03.25（goal-131，PR #166，合并提交 `6f72fc8`）均已合并。2026-11-13 按维护者指定的 main `9efee73` 只读副本，用 `rg` 核对定义、调用者与完整 Event 断言；`message.Event`、`adapter.Core`、`onebottest.Server.Respond` 另经离线 `go doc` 核对输出。以下补齐方案均为「审查者补齐，待维护者确认」。
 
 按 main 核对：
 
