@@ -45,6 +45,8 @@ const (
 	KindReload Kind = "reload"
 	// KindUpdate 使用预检后的新包及有效 Pending 或 Active 快照。
 	KindUpdate Kind = "update"
+	// KindRollback 从保留代次的程序、配置与数据库准备新代次。
+	KindRollback Kind = "rollback"
 )
 
 const (
@@ -111,10 +113,14 @@ func precondition(message string) error {
 // Prepare 完成静态检查、停止旧写入者和候选准备，停在 PREPARED。
 // 写 Journal 之后发生的错误连同 Result 返回，由调用方 Abort。
 func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, staged *packages.Candidate) (*Result, error) {
+	return o.prepare(ctx, pluginID, kind, staged, "")
+}
+
+func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, staged *packages.Candidate, source string) (*Result, error) {
 	unlock := o.lock(pluginID)
 	defer unlock()
 	// 1. 静态检查全部在 Journal 与停机之前，旧配置交给 SDK 迁移。
-	if (kind != KindFirstInstall && kind != KindReload && kind != KindUpdate) || (kind == KindUpdate) != (staged != nil) {
+	if (kind != KindFirstInstall && kind != KindReload && kind != KindUpdate && kind != KindRollback) || (kind == KindUpdate) != (staged != nil) {
 		return nil, precondition("candidate kind and staged package do not match")
 	}
 	in, err := o.opt.Store.GetInstall(ctx, pluginID)
@@ -166,6 +172,24 @@ func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, 
 			return nil, err
 		}
 	}
+	if kind == KindRollback {
+		record, err := o.rollbackSource(ctx, pluginID, source, active, records)
+		if err != nil {
+			return nil, err
+		}
+		target.Entrypoint, target.Version = record.Entrypoint, record.Version
+		target.BuildDigest, target.PublisherKeyID = record.BuildDigest, record.PublisherKeyID
+		packageDir, err = o.installedPackage(target)
+		if err != nil {
+			return nil, err
+		}
+		m, err = readManifest(packageDir)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		source = active
+	}
 	if kind != KindFirstInstall && (oldManifest.PrepareEffects == manifest.EffectsExternal || m.PrepareEffects == manifest.EffectsExternal) {
 		return nil, precondition("NEEDS_MANUAL_MIGRATION")
 	}
@@ -174,14 +198,14 @@ func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, 
 			return nil, err
 		}
 	}
-	configuration, err := o.configuration(ctx, pluginID, active, kind)
+	configuration, err := o.configuration(ctx, pluginID, source, kind)
 	if err != nil {
 		return nil, err
 	}
 	boot := &pb.Bootstrap{GenerationId: "gen-" + rand.Text(), CandidateConfigJson: string(configuration), TargetConfigVersion: *m.ConfigVersion,
 		DatabaseDescriptor: &pb.DatabaseDescriptor{ActivationReason: activationReason(kind), ManualMigrationApproved: false}}
-	if active != "" {
-		version, err := o.opt.Store.GenerationConfigVersion(ctx, active)
+	if source != "" {
+		version, err := o.opt.Store.GenerationConfigVersion(ctx, source)
 		if err != nil {
 			return nil, err
 		}
@@ -193,6 +217,13 @@ func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, 
 	}
 	spec.NewCandidate, spec.ExpectedOld = true, active
 	spec.Secrets = o.opt.Secrets
+	if kind == KindRollback {
+		// 来源快照中仍有历史 secret 路径，回退后继续加密保存未知字段。
+		spec.KeptSecretPaths, err = o.opt.Store.GenerationSecretPaths(ctx, source)
+		if err != nil {
+			return nil, err
+		}
+	}
 	pluginDir, err := filepath.Abs(spec.PluginDir)
 	if err != nil {
 		return nil, err
@@ -240,7 +271,12 @@ func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, 
 	// 4. 数据库独立准备后登记代次。初始快照使用空对象，避免明文落入状态库。
 	database := spec.Bootstrap.GetDatabaseDescriptor()
 	if database.GetBackend() == pb.DatabaseBackend_DATABASE_BACKEND_SQLITE {
-		r.Prepared, err = candidate.PrepareDatabase(ctx, candidate.Request{PluginID: pluginID, PluginDir: pluginDir, Reason: activationReason(kind), FromGeneration: active, NewGeneration: r.Generation})
+		copyReason := activationReason(kind)
+		if kind == KindRollback {
+			// 数据库层复用 UPDATE 的 Backup API 分支，Session 仍声明 ROLLBACK。
+			copyReason = pb.ActivationReason_ACTIVATION_REASON_UPDATE
+		}
+		r.Prepared, err = candidate.PrepareDatabase(ctx, candidate.Request{PluginID: pluginID, PluginDir: pluginDir, Reason: copyReason, FromGeneration: source, NewGeneration: r.Generation})
 		if err != nil {
 			// PrepareDatabase 清理失败时，仍登记本操作独占代次目录中的残留资源。
 			path := filepath.Join(pluginDir, "generations", r.Generation, "db.sqlite")
@@ -279,7 +315,7 @@ func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, 
 		return r, err
 	}
 	// 5. supervisor 只运行到 PREPARED；候选不进入普通异常恢复或业务装配。
-	if kind == KindUpdate && (!r.record.WasEnabled || !r.record.WasRunning) {
+	if (kind == KindUpdate || kind == KindRollback) && (!r.record.WasEnabled || !r.record.WasRunning) {
 		// 停用意图跨提交保留，候选激活仅完成生命周期，不发布 HTTP 或调度。
 		spec.HTTP, spec.Scheduler, spec.CommandsChanged = nil, nil, nil
 	}
@@ -315,13 +351,15 @@ func activationReason(kind Kind) pb.ActivationReason {
 		return pb.ActivationReason_ACTIVATION_REASON_FIRST_INSTALL
 	case KindReload:
 		return pb.ActivationReason_ACTIVATION_REASON_RELOAD
+	case KindRollback:
+		return pb.ActivationReason_ACTIVATION_REASON_ROLLBACK
 	default:
 		return pb.ActivationReason_ACTIVATION_REASON_UPDATE
 	}
 }
 
 func stopReason(kind Kind) pb.StopReason {
-	if kind == KindUpdate {
+	if kind == KindUpdate || kind == KindRollback {
 		return pb.StopReason_STOP_REASON_UPDATE
 	}
 	return pb.StopReason_STOP_REASON_RELOAD
@@ -378,6 +416,13 @@ func (o *Orchestrator) configuration(ctx context.Context, id, active string, kin
 	if kind == KindReload {
 		pending, err := o.opt.Config.ImportSnapshot(ctx, id)
 		return pending.ConfigJSON, err
+	}
+	if kind == KindRollback {
+		snapshot, err := o.opt.Store.GenerationConfig(ctx, active)
+		if err != nil {
+			return nil, err
+		}
+		return config.Canonical([]byte(snapshot))
 	}
 	if kind == KindUpdate {
 		pending, found, err := o.opt.Config.Pending(ctx, id)
