@@ -1,1 +1,4 @@
-{"$version":1}
+{
+  "$version": 1,
+  "output": {"type": "string", "description": "Absolute path for the last sent text", "default": ""}
+}

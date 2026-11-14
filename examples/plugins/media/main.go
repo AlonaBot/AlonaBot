@@ -30,10 +30,11 @@ const (
 	editedKey  = "media.edited"
 )
 
-// New 绑定资源并登记 /media 与一次性编辑按钮。
+// New 绑定资源并登记媒体命令与一次性编辑按钮。
 func New() *sdk.Plugin {
 	p := sdk.NewPlugin()
 	sdk.UseGenerated(p, alonabotGenerated)
+	p.Sub("captions").Permission(sdk.User).Command("caption").Handle(caption)
 	edit := sdk.Action[string]("media.edit")
 	var mu sync.Mutex
 	sqlitedb.Migrate(p, func(ctx context.Context, db *sql.DB) error {
@@ -92,6 +93,19 @@ func New() *sdk.Plugin {
 		return err
 	})
 	return p
+}
+
+// Caption 以末位 raw 字段保留用户提供的整段图片说明。
+type Caption struct {
+	Text string `arg:"text,raw"`
+}
+
+func caption(c *sdk.Context, args Caption) (message.Content, error) {
+	ref, err := sdk.Upload(c.Context(), bytes.NewReader(sample), "image/png")
+	if err != nil {
+		return nil, err
+	}
+	return message.ImageSegment{Source: ref.Source(), Caption: args.Text}, nil
 }
 
 func main() {

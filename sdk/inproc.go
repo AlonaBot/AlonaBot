@@ -46,6 +46,7 @@ type componentContextKey struct{}
 // callbacks 保留仍在执行的生命周期回调，同进程入口等它们退出后才释放 runtime.lock。
 type componentSession struct {
 	ctx          context.Context
+	cancel       context.CancelFunc // 准备期断链或 Session 关闭时取消阶段回调。
 	database     *dbhook.Session
 	active       atomic.Pointer[activation]
 	translations atomic.Pointer[translationSession]
@@ -64,7 +65,7 @@ func init() { dbhook.Logger = componentLogger }
 
 func newComponentSession(inProcess bool) *componentSession {
 	s := &componentSession{inProcess: inProcess, database: dbhook.New(!inProcess)}
-	s.ctx = s.context(context.Background())
+	s.ctx, s.cancel = context.WithCancel(s.context(context.Background()))
 	if !inProcess {
 		defaultSession.Store(s)
 	}
@@ -83,6 +84,7 @@ func componentFor(ctx context.Context) *componentSession {
 }
 
 func (s *componentSession) close() error {
+	s.cancel()
 	s.callbackMu.Lock()
 	s.closing = true
 	s.callbackMu.Unlock()

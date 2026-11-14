@@ -39,3 +39,19 @@ go run ./cmd/alonabot run adapters/telegram examples/plugins/echo examples/plugi
 echo 直接回送入站图片的 Incoming 来源；同实例发送会复用平台 file_id。media 的相册后接文本，按钮附在文本上。示例只在发送成功且尾随文本带可用消息 ID 时保存 `result.Refs()` 的末条句柄；部分失败保留平台已发送的内容并返回错误。
 
 编辑按钮为一次性演示，待点击句柄保存在插件的受管 SQLite 中，成功编辑后删除。
+
+## 结构体参数与子插件
+
+发送 `/caption a  custom caption`，得到带这段原文说明的示例图片。`Caption.Text` 使用 `arg:"text,raw"` 保留内部空白，Handler 返回 `(message.Content, error)` 自动发送。它属于 `p.Sub("captions")`，默认要求 `sdk.User`；命令路径为 `/caption`，route_id 为 `cmd.caption`。
+
+在仓库根目录生成资源、检查和构建：
+
+```fish
+go generate ./examples/plugins/media
+go run ./cmd/alonabot plugin check --dir examples/plugins/media
+go build -o /tmp/alonabot-media ./examples/plugins/media
+```
+
+`New()` 保持资源绑定和所有注册显式可见。原 `/media` 使用 `c.Send` 获取完整 `SendResult`，先保存可编辑文字的消息句柄，再接收按钮点击；`/caption` 展示结构体参数和子插件，不需要持有发送回执。英文和中文按钮、提示取自 i18n 资源。
+
+真实 CLI/Core/官方 Adapter/示例进程与本地 Bot API 的主路径由 `TestSDKExamples` 和原有 `TestTelegramDevelopment` 验证；真实 Telegram 验收沿用所属切片的记录。顶层 `alonabot check/build` 由 T-09.3 补证。

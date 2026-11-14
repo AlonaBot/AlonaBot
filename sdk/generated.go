@@ -3,6 +3,8 @@ package sdk
 import (
 	"fmt"
 	"reflect"
+	"runtime"
+	"strings"
 
 	"github.com/AlonaBot/AlonaBot/sdk/adapter"
 )
@@ -33,6 +35,11 @@ func UseGenerated(p *Plugin, g Generated) {
 		p.errs = append(p.errs, fmt.Errorf("generated resources bound more than once"))
 	}
 	p.generated = g
+	// New 显式绑定资源时记录入口包；go test 保留其导入路径，供 main 类型身份精确匹配。
+	pc, _, _, _ := runtime.Caller(1)
+	name := runtime.FuncForPC(pc).Name()
+	packageStart := strings.LastIndexByte(name, '/') + 1
+	p.entryPackage = name[:packageStart+strings.IndexByte(name[packageStart:], '.')]
 }
 
 // Generated 返回插件对象绑定的只读构建资源。

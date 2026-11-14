@@ -11,7 +11,8 @@ var alonabotGenerated = alonabotgen0.Generated{
 		"zh-CN.json": []byte("{\n  \"messages\": {\n    \"media.caption\": \"已上传的示例图片\",\n    \"media.prompt\": \"点击按钮编辑这条文字。\",\n    \"media.button\": \"编辑文字\",\n    \"media.edited\": \"文字已编辑。\"\n  }\n}\n"),
 	},
 	ParamNames: map[string][]string{
-		"main:main.go:43": {},
-		"main:main.go:75": {"key"},
+		"main.caption":    {"args"},
+		"main:main.go:44": {},
+		"main:main.go:76": {"key"},
 	},
 }
