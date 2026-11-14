@@ -375,17 +375,17 @@ func (o *Orchestrator) trialInstances(in state.Install, dir string) error {
 }
 
 func (o *Orchestrator) configuration(ctx context.Context, id, active string, kind Kind) ([]byte, error) {
-	if kind == KindReload {
-		pending, err := o.opt.Config.ImportSnapshot(ctx, id)
-		return pending.ConfigJSON, err
-	}
-	if kind == KindUpdate {
+	if kind == KindReload || kind == KindUpdate {
 		pending, found, err := o.opt.Config.Pending(ctx, id)
 		if err != nil {
 			return nil, err
 		}
 		if found {
 			return pending.ConfigJSON, nil
+		}
+		if kind == KindReload {
+			pending, err := o.opt.Config.ImportSnapshot(ctx, id)
+			return pending.ConfigJSON, err
 		}
 		snapshot, err := o.opt.Store.GenerationConfig(ctx, active)
 		if err != nil {

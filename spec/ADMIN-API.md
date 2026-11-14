@@ -82,7 +82,7 @@ Cookie 为 host-only、`Path=/`、`HttpOnly`、`SameSite=Strict`；HTTP 下名�
 | `/api/v1/packages/restart` | `{"id":"demo"}` | 以当前 Active 换 Session；要求已启用且有 Active；WebUI 无进程，返回 412 |
 | `/api/v1/packages/uninstall` | `{"id":"demo","purge":0,"confirm":false}` | 停止并清理选定范围，准确对象需确认；开发组件返回 412 |
 | `/api/v1/packages/pin` | `{"id":"demo","constraint":"1.2.3"}` | 精确 SemVer；空串解除；格式错误 400 |
-| `/api/v1/packages/reload` | `{"id":"demo"}` | 要求已激活的进程组件，通过候选准备与提交生成新代次；WebUI 返回 412 |
+| `/api/v1/packages/reload` | `{"id":"demo"}` | 要求已激活的进程组件，优先激活有效 Pending；无 Pending 时导入 config.json 再激活；WebUI 返回 412 |
 | `/api/v1/packages/update` | `{"id":"demo","confirm":false,"install":{"Source":"owner/repo"}}` | `install` 使用 3.1 的 `InstallRequest` 大写字段；外层 `confirm` 覆盖 `install.Confirm`；校验身份、来源、公钥、pin、版本与依赖影响，通过候选准备与提交更新版本，保持启用状态 |
 | `/api/v1/packages/rollback` | `{"id":"demo","generation":"<保留代次>","confirm":false}` | 要求目标代次属于该组件，校验确认后，当前候选执行返回 501 / `UNSUPPORTED` |
 
@@ -123,7 +123,7 @@ X-Content-Type-Options: nosniff
 | `POST /api/v1/adapter/instances/stop` | `{"instance_id":"bot"}` | 200、`{}` | 保留配置，本次 Core 运行中持续停用，包括组件崩溃恢复；下次 Core 启动按设置启动；未运行 412 |
 | `POST /api/v1/adapter/instances/delete` | `{"instance_id":"bot"}` | 200、`{}` | 停止仍运行的实例，删除配置与指向它的缺省选择；未知实例 404 |
 
-实例响应仅包含操作结果，凭证与完整实例配置随设置保存，API 响应不返回它们。用户、消息与事件语义沿用 [MESSAGE-MODEL §1](MESSAGE-MODEL.md#1-eventactor-与-target)，平台身份须来自可信 Adapter。
+本节的实例动作响应仅包含操作结果；脱敏配置读取与编辑见第 14 节。用户、消息与事件语义沿用 [MESSAGE-MODEL §1](MESSAGE-MODEL.md#1-eventactor-与-target)，平台身份须来自可信 Adapter。
 
 ## 5. 错误、确认和路由规则
 
@@ -138,9 +138,10 @@ X-Content-Type-Options: nosniff
 | 400 | `INVALID_ARGUMENT` |
 | 403 | `PERMISSION_DENIED` |
 | 404 | `NOT_FOUND`，含未知管理端点 |
-| 409 | `ALREADY_EXISTS`，或下文确认响应 |
+| 409 | `ALREADY_EXISTS`、配置编辑的陈旧代次 `FAILED_PRECONDITION`，或下文确认响应 |
 | 412 | `FAILED_PRECONDITION` |
 | 501 | `UNSUPPORTED` |
+| 503 | `UNAVAILABLE` |
 | 500 | `INTERNAL` 及当前映射中其余错误码；保留实际 `code` |
 
 需要显式确认时为 HTTP 409，正文为 `{"affected":["受影响对象", "..."]}`。客户端展示全部对象，在管理员同意后重发同一请求并置 `Confirm: true`（install）或 `confirm: true`（动作、实例创建）。它与 `ALREADY_EXISTS` 的 JSON 结构不同。
@@ -151,7 +152,7 @@ X-Content-Type-Options: nosniff
 
 - 认证错误与登录错误见第 1/2 节，均为 `text/plain; charset=utf-8`。
 - 图标缺失为 404；受控 Host 不匹配为 421；静态错误见第 6 节，均为纯文本。
-- ServeMux 对子树入口缺少尾斜杠的规范路径（如 `/api/v1`）会产生标准重定向；客户端使用本文完整端点。原始路径含 `..`、重复分隔符、反斜杠或绝对路径形式时按所属入口拒绝。
+- ServeMux 对子树入口缺少尾斜杠的规范路径（如 `/api/v1`）会产生标准重定向；客户端使用本文完整端点。原始路径含 `..`、重复分隔符、反斜杠或绝对路径形式时按所属入口拒绝；第 15 节会话清除的最后一段按不透明键接收。
 - `/plugins/{id}/...` 与 `/media/...` 在 WebUI 之前分流，使用各自现有状态码与 MIME；插件路由受现有 sandbox CSP、nosniff 和凭证过滤保护。
 
 ## 6. 静态 WebUI
@@ -337,3 +338,140 @@ multipart 与 JSON Update 均进入 `manage.Service.Update`，执行绑定来源
 ```
 
 `version` 来自 `runtime/debug.ReadBuildInfo` 中 AlonaBot module（`github.com/AlonaBot/AlonaBot`）的版本：作为主 module 取 Main，作为库取对应依赖项；依赖存在 `Replace` 时取替换模块的版本，本地路径替换或其他缺少版本的情况为 `(devel)`。`listen` 是当前 Core 的 `listener.Addr().String()`，包含启动覆盖及端口 0 实际分配结果。`admin_api_major` 使用 `manage.AdminAPIMajor`，保持为 1。响应只包含以上三个字段。
+
+## 12. 组件配置、Pending 与秘密查看
+
+本节及后续端点均使用第 1 节的管理认证；Cookie 变更请求携带 Origin 与 CSRF。路径中的 `{id}` 为已安装组件 ID。成功响应为 200 JSON，错误遵循第 5 节。
+
+### 12.1 配置快照
+
+`GET /api/v1/plugins/{id}/config` 返回：
+
+```json
+{
+  "active_generation": "gen-example",
+  "active": {"token":{"$secret_set":true},"hidden":"value"},
+  "pending": {"base_generation":"gen-example","config":{"token":{"$secret_set":true},"hidden":"value"}},
+  "schema": {"token":{"type":"string","secret":true}},
+  "i18n": {"zh-CN":{"token":{"description":"访问凭证"}}}
+}
+```
+
+没有 Active 时 `active_generation` 为空串、`active` 为 `{}`；没有有效 Pending 时 `pending` 为 null。`schema` 是当前安装包 `config_schema.json` 的规范内容，缺失时为 null。`i18n` 按包内 `i18n/*.json` 的语言标签返回各文件的 `config` 根节点，缺失时为 `{}`。读取隐藏秘密引用、schema 声明的秘密及代次保留的秘密路径；`invisible` 字段照常返回，由表单决定是否展示。
+
+| Method / path | 请求 | 成功响应与语义 |
+| --- | --- | --- |
+| `PUT /api/v1/plugins/{id}/config/pending` | `{"base_generation":"gen-example","config":{...}}` | 返回 `{base_generation,config}`，完整替换编辑值，响应脱敏 |
+| `PATCH /api/v1/plugins/{id}/config/pending` | `{"base_generation":"gen-example","patch":{...}}` | 同上；按 RFC 7396 合并，null 删除键、数组整体替换、对象递归合并 |
+| `DELETE /api/v1/plugins/{id}/config/pending` | 无正文 | `{}`，丢弃 Pending，保持 Active |
+| `POST /api/v1/plugins/{id}/config/import` | 无正文 | 返回脱敏的 `{base_generation,config}`，导入 `<data_dir>/plugins/<id>/config.json`，保持 Active |
+| `POST /api/v1/plugins/{id}/reload` | 无正文 | `{}`，要求组件 Activated，经候选编排激活有效 Pending；没有 Pending 时先导入编辑快照 |
+
+PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当前 Active 不同时返回 **409 / `FAILED_PRECONDITION`**。编辑以有效 Pending 为起点，否则以 Active 为起点。新秘密在写入 Pending 前存为不可变引用；相同位置未改变的秘密复用原引用。PUT 省略的秘密路径保留；PUT/PATCH 提交数组时，仍存在的相同下标内省略的秘密保留，删除行或显式 null 沿用删除语义；PATCH 省略的字段继续保留，包含 invisible 字段。`$secret_ref` 与 `$secret_set` 属于读取标记，提交它们返回 400 / `INVALID_ARGUMENT`。导入文件缺失返回 404。
+
+安装包保存操作只更新 Pending；两个 reload HTTP 入口共用候选编排，优先激活有效 Pending。`config/import` 总是显式导入磁盘编辑，保持 Active。CLI `alonabot reload <id>` 先调用 config/import，再调用 reload，因此直接编辑 config.json 后执行 CLI reload 继续导入文件内容。
+
+开发来源从当前工程资源读取 schema/i18n，GET 返回固定 `dev:<id>` 代次的脱敏 Active。PUT/PATCH 使用同样的 base 和秘密省略规则，先 Complete/Validate，再以临时文件替换 `<data_dir>/plugins/<id>/config.json`，随后经 Core 的开发重启入口建立新 Session；返回脱敏 `{base_generation,config}`，保持 Pending 为 null。保存失败保留原文件；重启失败返回实际错误并保留已保存文件，调用方可修订配置后再次重启。dev 的 config/import 只读取编辑文件并返回脱敏结果，缺文件时返回脱敏 Active，CLI 随后的 reload 仍按原有路径启动 schema 缺省配置。WebUI 配置返回 400。
+
+### 12.2 再认证查看秘密
+
+`POST /api/v1/secrets/{plugin}/{path}/reveal` 接收 `{"token":"<当前管理 token>"}`，在既有管理认证后再次调用 `adminauth.Reauthenticate`。失败返回 403 / `PERMISSION_DENIED`；成功返回 `{"value":"<秘密明文>"}`，附加 `Cache-Control: no-store`，并以 INFO 记录组件 ID 与字段路径。
+
+`path` 使用秘密字段的点分路径，数组下标占一段；字段名中的 `.` 编码为 `~1`，`~` 编码为 `~0`，然后将整个路径作为一个 URL 段转义。读取有效 Pending 中的引用，否则读取 Active；开发来源按 schema 确认秘密路径后读取明文。路径未指向秘密字段时返回 400。审计记录省略明文与 token。
+
+## 13. Core 设置与发信许可
+
+### 13.1 Core 设置
+
+| Method / path | 请求或成功响应 | 操作语义 |
+| --- | --- | --- |
+| `GET /api/v1/core/admins` | `["telegram:123"]` | 返回当前生效的、排序后的用户字符串 |
+| `PUT /api/v1/core/admins` | 同形字符串数组 | 整份替换，空数组清空；格式错误或展开后重复的身份返回 400 |
+| `DELETE /api/v1/core/admins` | 同形字符串数组 | 删除指定用户，未列出的用户保留 |
+| `GET /api/v1/core/default-locale` | `{"default_locale":"en-US"}` | 当前有效语言 |
+| `PUT /api/v1/core/default-locale` | 同形对象 | 必填且展开后非空，之后新建的 Session 使用新值 |
+| `GET /api/v1/core/command-prefixes` | `{"command_prefixes":["/"],"command_prefixes_by_instance":{"bot":["!"]}}` | 全局与按 Adapter 实例的覆盖；无覆盖时返回空对象 |
+| `PUT /api/v1/core/command-prefixes` | 同形对象 | 两个字段必填，整体替换；前缀列表须非空，`[""]` 表示无前缀匹配 |
+| `GET /api/v1/core/denies` | `{"users":["telegram:123"],"chats":["telegram:room"]}` | 全局禁止表，两个数组均返回，空列表为 `[]` |
+| `PUT /api/v1/core/denies` | 同形对象 | 两个数组必填，整体替换 |
+| `DELETE /api/v1/core/denies` | 同形对象 | 两个数组必填，删除指定用户与会话 |
+
+写接口成功返回 `{}`。管理员、语言和前缀经 `settings.File.Update` 写回 `core_config.json`，保留未修改字段的 `${...}` 原文；请求中的完整环境变量引用按原文保存、按展开值校验。管理员列表写回后调用 `policy.SetAdmins`；现有 `/admins` 与 CLI `admin add/remove/list` 共用同一管理服务和设置。前缀由下一次消息派发读取，实例未配置覆盖时使用全局值。Rename 后目录同步失败时设置已发布，接口返回实际错误，同时管理员策略跟随当前设置更新。
+
+禁止表保存在状态库。用户使用 `<adapter_id>:<external_user_id>`；会话使用不含话题的会话字符串，外部会话 ID 中的 `%`、`#` 分别编码为 `%25`、`%23`。输入包含话题或非规范编码时返回 400，检查发生在写入前。批量替换先增加新限制，再解除旧项；各项独立提交，发生存储错误时返回实际错误，已提交的限制保留，调用方可 GET 核对当前状态。
+
+### 13.2 插件发信许可
+
+`GET /api/v1/plugins/{id}/allowed-instances` 返回 `{"all":true,"instances":[]}`。PUT 接收同形对象并整份替换；省略 `all` 时为 true。`all:false` 将后台发信限定到 `instances`，空列表拒绝所有实例；`all:true` 允许全部实例。实例名格式错误返回 400。许可保存至共享状态库，下一次发信使用新策略。
+
+## 14. Adapter 实例配置
+
+| Method / path | 请求或成功响应 | 操作语义 |
+| --- | --- | --- |
+| `GET /api/v1/adapters/{adapter_id}/instance-schema` | `adapter_config_schema.json` 的规范 JSON 对象 | 声明通过 `configschema.Parse` 读取 |
+| `GET /api/v1/adapters/{adapter_id}/instances/{instance_id}` | `{"config":{"token":{"$secret_set":true},"name":"bot"}}` | 返回实例配置，秘密字段只显示设置状态，附加 `Cache-Control: no-store` |
+| `PUT /api/v1/adapters/{adapter_id}/instances/{instance_id}` | `{"config":{...}}` | 创建或整体替换指定实例配置，成功返回 `{}` |
+| `DELETE /api/v1/adapters/{adapter_id}/instances/{instance_id}` | 无正文 | 停止仍运行的实例、删除配置和指向它的默认选择，成功返回 `{}` |
+
+实例名跨 Adapter 唯一，其他 Adapter 已占用时返回 409 / `ALREADY_EXISTS`；未知 Adapter、未知实例或删除时 URL 的归属失配返回 404。配置块属于其他组件时返回 412。
+
+提交先经 `Schema.Complete` 补全，再对展开环境变量后的副本执行 `Schema.Validate`，最后用 `File.Update` 写回原文。省略的秘密从原始文档保留，数组中仍存在的相同下标也遵循此规则。提交 `$secret_ref`、`$secret_set` 返回 400。已有实例需升级配置版本时，复用 `PrepareInstances`；问题中的 `Path`、`Reason` 保留在错误定位中。
+
+保存配置后通过第 4 节的启停入口管理运行实例。启动前仍由 `File.PrepareInstances` 执行迁移、补全和校验，失败实例的路径与原因原样用于定位。
+
+## 15. Agent 会话管理
+
+`GET /api/v1/plugins/{id}/conversations` 返回按键排序的摘要数组，空结果为 `[]`：
+
+```json
+[{"key":"telegram:room@assistant","entries":3,"updated_at":"2026-11-13T12:00:00Z"}]
+```
+
+`DELETE /api/v1/plugins/{id}/conversations/{key}` 清除该组件指定会话，成功返回 `{}`。`key` 是会话存储键，Agent 按 `<会话字符串>@<实例名>` 组织；调用方把整个键按一个 URL 段转义，服务端解码一次后原样交给 `conversation.Service.Clear`。该端点在路径清理前接收键，因此键中的斜杠、冒号、反斜杠和点段保留。键须为 1～256 字节的有效 UTF-8，格式错误返回 400；未知组件返回 404。列表仅返回键、条目数与最后时间。
+
+## 16. 命令权限、启用与命令名
+
+`GET /api/v1/plugins/{id}/policies` 返回：
+
+```json
+{
+  "overrides":[{"scope":{"kind":"route","route_id":"cmd.ping"},"permissions":["admin"],"enabled":null}],
+  "commands":[{"route_id":"cmd.ping","enabled":true,"permissions":["admin"],"declared_names":[["ping"]],"effective_names":[["check"],["c"]],"has_names_override":true,"invalid_names":[]}],
+  "shadows":[{"path":["check"],"winner":{"plugin_id":"demo","route_id":"cmd.ping"},"shadowed":[{"plugin_id":"other","route_id":"cmd.check"}]}],
+  "invalid_names":[]
+}
+```
+
+`PUT /api/v1/plugins/{id}/policies` 接收一项 `{scope,permissions,enabled}`，整份替换该作用域的权限与启用覆盖，成功返回 `{}`。`scope.kind` 使用 `plugin/group/route`；group 另带 token 数组 `group`，route 另带 `route_id`。permissions 为 null 或省略时继承，`[]` 表示无权限要求；enabled 为 null 或省略时继承，false 禁用。两项都继承时清除该作用域覆盖。输入校验及保存复用 `policy.SetOverride`，GET 的有效权限/启用与派发的 `CheckCommand` 共用 `CommandState` 规则；子级启用保持父级禁用的效果。覆盖在下一次派发生效。
+
+命令列表来自当前 Router 注册声明，权限覆盖保留未注册项。名称只对路径命令返回；Raw 与文本匹配的 declared_names/effective_names 为空数组。has_names_override 表示保存过覆盖，覆盖失效后仍为 true。invalid_names 为 `{route_id,name,reason}`，reason 为 `declared`（与其他当前声明名冲突）或 `unregistered`（路由未注册或非路径命令，name 为 null）；顶层包含当前插件的全部诊断，命令项包含该路由的诊断。shadows 只列涉及该插件的关系，来自 Router 按生效命令名建立的索引。
+
+| Method / path | 请求 | 语义 |
+| --- | --- | --- |
+| `PUT /api/v1/plugins/{id}/commands/{route_id}/names` | `{"names":[["check"],["c"]]}` | 整份替换该路径命令的名称，第一项为主名，成功返回 `{}` |
+| `DELETE /api/v1/plugins/{id}/commands/{route_id}/names` | 无正文 | 删除覆盖、恢复声明名称，也可清除已移除路由的失效覆盖，成功返回 `{}` |
+
+名称修改复用 policy 的格式、声明与重名校验；空列表、空路径、非法 token、Raw 或文本匹配路由返回 400 / INVALID_ARGUMENT。同插件声明或覆盖重名返回 409 / ALREADY_EXISTS，safe_message 包含冲突 route_id。调用方增删单个名称时先在列表上编辑，再整份提交。保存和删除后下一次派发使用新索引，无需重启组件。
+
+## 17. 配置字段与 Core 选项
+
+所有选项响应为 `{options:[{value,label,description?}],more}`，空列表为 `[]`。列表请求用 `q` 传搜索文本；resolve 请求返回当前仍存在的存储值，缺失值省略，空 values 返回空列表。两种查询沿用共享 options.Service 的 OPTIONS_PAGE 上限。
+
+| Method / path | 请求 |
+| --- | --- |
+| `GET /api/v1/plugins/{id}/config/options` | `?path=字段路径&q=搜索文本` |
+| `POST /api/v1/plugins/{id}/config/options/resolve` | `{"path":"字段路径","values":["已存值"]}` |
+| `GET /api/v1/adapters/{adapter_id}/instances/{instance_id}/options` | 同插件字段列表查询 |
+| `POST /api/v1/adapters/{adapter_id}/instances/{instance_id}/options/resolve` | 同插件字段 resolve |
+| `GET /api/v1/core/options/{source}` | `?q=搜索文本&filter[键]=值` |
+| `POST /api/v1/core/options/{source}/resolve` | `{"values":["已存值"]}`；可带同形 filter 查询参数 |
+
+插件与 Adapter 字段的来源名和 filter 只从当前 Active Session 的 schema 取得；额外的 source/filter 查询参数忽略。字段使用 schema 的点分路径，列表字段省略下标；不存在的字段或没有 options_from 返回 400 / INVALID_ARGUMENT。Adapter 实例入口要求该 Adapter 和实例存在，归属不匹配返回 404。组件 schema、服务来源或 Agent 不可用时返回 503 / UNAVAILABLE。
+
+界面用 `Accept-Language` 传当前管理语言，取首选语言标签；缺省使用 Core default_locale。Core 直接查询仅接受 core.chats（filter 键 chat_type、adapter_id）和 core.adapter_instances（filter 键 adapter_id）；服务来源与未知 filter 键返回 400。core.chats 可按名称或聊天 ID 搜索并按类型筛选；按值取回沿用来源的 resolve 语义。
+
+## 18. 工具调用策略
+
+`GET /api/v1/tools/policies` 返回 `{"policies":[{"plugin_id":"demo","service":"echo","default":"allow","override":"inherit"}]}`。目录合并当前 Attach 工具声明、本次运行出现的操作和已保存覆盖；default 为 inherit 表示当前无声明，override 为 inherit 表示没有覆盖。
+
+`PUT /api/v1/tools/policies` 接收 `{"plugin_id":"demo","service":"echo","policy":"deny"}`，成功返回 `{}`。policy 接受 allow、confirm、deny、inherit；inherit 删除覆盖。未知策略或服务名格式错误返回 400，未知组件返回 404。写入与固定 ListTools 使用同一个 tool.Catalog 和状态库；下次查询或调用读取新策略，deny 的工具从 ListTools 隐藏，无需重启。

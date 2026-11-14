@@ -337,11 +337,12 @@ func Start(ctx context.Context, opts ...Option) (*Core, error) {
 			}
 			return proto.Unmarshal(response.Payload.Bytes, reply)
 		})
-	}, Store: store, Settings: c.assembly.settings, Policy: c.assembly.policy,
+	}, Store: store, Settings: c.assembly.settings, Policy: c.assembly.policy, Router: c.assembly.router, Options: c.assembly.options, Tools: c.assembly.tools,
 		CoreInfo: func() (string, string) { return version, c.http.Addr },
 		Adapters: c.assembly.adapters, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(o.components),
 		Packages: filepath.Join(dir, "packages"), Limits: packages.NewLimits(values), Development: development, DevelopmentWebUI: o.webUI,
-		Descriptor: c.assembly.componentDescriptor,
+		Descriptor:        c.assembly.componentDescriptor,
+		DevelopmentConfig: c.developmentConfig, RestartDevelopment: c.Restart,
 		Candidates: managedCandidates{core: c},
 		Start: func(ctx context.Context, id string) error {
 			return c.operation(ctx, func(ctx context.Context) error { return c.startManaged(ctx, id) })
