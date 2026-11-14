@@ -1,0 +1,1 @@
+{"messages":{"hello":"来自 devbot 的问候！"},"commands":{"hello":{"description":"显示翻译后的问候"}},"config":{"greetings":{"description":"启动问候语","items":{"text":{"description":"问候文本"}}}}}
