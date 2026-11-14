@@ -164,6 +164,7 @@ func (s *scan) schemas(ctx context.Context, list *exec.Cmd) error {
 		}
 	} else {
 		s.checkConstructor(importer.checked[s.entry.ImportPath])
+		s.httpCalls(importer.info, paths)
 	}
 	s.handlerParamNames(importer.info, paths)
 	s.migrationCalls(importer.info, paths)

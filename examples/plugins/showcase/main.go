@@ -4,7 +4,7 @@
 // New 显式绑定生成资源、路由与生命周期回调。
 package main
 
-//go:generate go run ../../../cmd/alonabot plugin generate
+//go:generate go run ../../../cmd/alonabot build --out ../../../bin/generated/examples-plugins-showcase
 
 import (
 	"context"

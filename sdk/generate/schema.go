@@ -20,7 +20,7 @@ func (s *scan) configSchema() error {
 	if s.adapterProject {
 		fileName = instanceSchemaFileName
 	}
-	raw, err := os.ReadFile(filepath.Join(s.dir, fileName))
+	raw, err := s.resourceFile(fileName)
 	present := err == nil
 	if errors.Is(err, os.ErrNotExist) {
 		raw = []byte(`{}`)

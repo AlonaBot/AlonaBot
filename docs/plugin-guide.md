@@ -32,7 +32,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 
 - 用标准库 `log/slog` 记录，SDK 把记录交给 Core 并补上来源（CONTRACTS §14）。不要往 stdout 写内容：stdio 传输下 stdout 是协议通道。
 - 日志、错误字符串与 safe_message 用英文；给用户看的文字放进 `i18/` 的 `messages`，至少提供 en-US（D-30、CONTRACTS §5.4）。
-- 取文案用 `c.T(key, name, value, ...)`，后台用 `sdk.T`，两者只返回字符串（D-106）。键与参数名尽量写成常量：`alonabot plugin generate` 与 `plugin check` 会检查键是否存在于 en-US、参数是否成对、参数名是否为 `string` 类型且与占位符一致；键在运行时才确定时不检查，运行时找不到键或参数不符时返回键名或保留占位符原文，并在插件日志记一次 WARN（CONTRACTS §5.4）。
+- 取文案用 `c.T(key, name, value, ...)`，后台用 `sdk.T`，两者只返回字符串（D-106）。键与参数名尽量写成常量：`alonabot build` 与 `alonabot check` 会检查键是否存在于 en-US、参数是否成对、参数名是否为 `string` 类型且与占位符一致；键在运行时才确定时不检查，运行时找不到键或参数不符时返回键名或保留占位符原文，并在插件日志记一次 WARN（CONTRACTS §5.4）。
 - 不记录 secret、token、完整配置与 DSN；含凭证的 URL 先脱敏（CONTRACTS §14）。
 
 ## 5. 生命周期与调用
@@ -70,7 +70,7 @@ Adapter 作者用 `adapter.Event[T](name, version)` 与 `adapter.Extension[T](na
 - 用 Service Call 与 Event Bus 协作，不直接读写其他插件的文件或数据库（CONTRACTS §3）。
 - Service 与事件都先写成包级的声明，提供方与调用方共用同一个声明：`var Search = sdk.JSON[SearchIn, SearchOut]("weather/search")`（Protobuf 用 `sdk.Proto`），提供方在 `New()` 中 `sdk.Serve(p, Search).Handle(fn)`，调用方 `Search.Call(ctx, in)`；事件为 `var Updated = sdk.BusEvent[Update]("weather/updated")`，发布 `Updated.Publish(ctx, payload)`，订阅 `sdk.Subscribe(p, Updated).Handle(fn)`，订阅的路由 ID 缺省为完整事件名，同一事件订阅多次时用 `.ID(routeID)` 区分。target 与事件名的组件部分必须是本插件的 ID，SDK 在握手取得插件 ID 后、REGISTER 之前检查。`@agent/<name>` 只应由 Agent 组件 Serve：SDK 只检查它的格式，Broker 只把 `@agent` 的调用转给 `role: agent` 的组件，普通插件写了也不会被找到。声明可以从其他 Go module 导入后直接调用，调用方的生成器会嵌入该声明的输入与输出 Schema，经包装函数调用时同样适用。
 - Event Bus 是非持久广播：`Publish` 只能发布到本插件的命名空间，返回成功只表示 Core 准入，不代表有人收到；订阅方队列满、预算不足或离线时事件会丢失，也不会补发。需要回执或可靠送达时改用 Service Call。订阅回调串行执行，不要在其中阻塞：积压的事件占用本插件的接收预算，会让命令请求也被拒绝。回调里没有 Actor 与默认会话，发消息时用 `sdk.Send(ctx, session, content, ...)` 或 `sdk.SendText(ctx, session, text, ...)` 显式给出会话（CONTRACTS §3、§8，D-102、D-118）。
-- `sdk.JSON` 与 `sdk.BusEvent` 声明的类型参数必须是包级的具名非泛型类型，由生成器检查并给出带位置的诊断。schema_id 由类型决定，版本取类型的 `SchemaVersion() uint32`，没有该方法时为 1；改动类型后运行 `alonabot plugin generate`。切片与 map 接受 null，与 `encoding/json` 对 nil 的编码一致。
+- `sdk.JSON` 与 `sdk.BusEvent` 声明的类型参数必须是包级的具名非泛型类型，由生成器检查并给出带位置的诊断。schema_id 由类型决定，版本取类型的 `SchemaVersion() uint32`，没有该方法时为 1；改动类型后运行 `alonabot build`。切片与 map 接受 null，与 `encoding/json` 对 nil 的编码一致。
 - JSON Service 的输入不符合 Schema 时，调用方收到 INVALID_ARGUMENT 和固定文本 `invalid service input`，Handler 不被调用；输出不符合时调用方收到 INTERNAL，日志只记 `schema_id`；调用方的 `Call` 也按声明校验响应，不符合时返回 INTERNAL 与 `invalid service output for "<target>"`。校验详情可能带业务载荷，不写入响应和日志。
 - 需要模型能力时调用 Agent 组件的 `llm.generate`：`sdk/llm` 提供类型与以 `@agent` 为目标的调用辅助，官方 Agent 被替换后也不用修改；请管理员把插件加入 `llm_service_allowed_plugins`；一次调用是一次非流式请求，期限受调用方约束（CONTRACTS §13.5）。
 - 要把能力交给 Agent 使用时，注册带 `tool` 描述的 JSON Service（CONTRACTS §13.1）。
@@ -78,7 +78,7 @@ Adapter 作者用 `adapter.Event[T](name, version)` 与 `adapter.Extension[T](na
 
 ## 7. 配置与 secret
 
-在 `plugin.yaml` 同目录编写 `config_schema.json`，按字段键声明类型与英文源文案。运行 `alonabot plugin generate` 检查声明并把规范 JSON 嵌入生成文件；`alonabot plugin check` 执行同样的检查。声明格式见 [CONTRACTS §5.1](../spec/CONTRACTS-v0.1.md#51-配置真源缺失值与编辑)，例如：
+在 `plugin.yaml` 同目录编写 `config_schema.json`，按字段键声明类型与英文源文案。运行 `alonabot build` 检查声明并把规范 JSON 嵌入生成文件；`alonabot check` 执行同样的检查。声明格式见 [CONTRACTS §5.1](../spec/CONTRACTS-v0.1.md#51-配置真源缺失值与编辑)，例如：
 
 ```json
 {
@@ -128,4 +128,4 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 
 - 市场 ID 按角色使用 `alonabot_plugin_`、`alonabot_adapter_`、`alonabot_agent_` 或 `alonabot_webui_` 前缀（CONTRACTS §9.1）。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
 - 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`（CONTRACTS §9.3）。
-- 用 `alonabot plugin check` 与 `alonabot plugin pack` 为每个支持的平台生成安装包与外部 `release.json`，用 Ed25519 签名（CONTRACTS §9.2、§9.3）。签名私钥由作者保管，不放进仓库或构建日志。
+- 用 `alonabot build` 更新资源并编译独立组件，`alonabot check` 只读核对。`alonabot pack --asset-url https://example.com/component.tar.gz` 为所选平台生成安装包与归档外的 `release.json`；目标通过 `--goos/--goarch/--tags` 选择，`--out` 默认 `<工程>/bin`。可选 `--key FILE` 读取标准 base64 编码的 64 字节 Ed25519 私钥，对清单原始字节签名，并在归档外写 `release.json.sig` 与 `release.pub`；省略时输出 unsigned 清单（CONTRACTS §9.2、§9.3）。密钥读取或签名失败直接报错。进程包含可解析的 `build-info` 文本，WebUI 包只含 manifest 与静态资源。签名私钥由作者保管，留在打包资源、仓库和构建日志之外。

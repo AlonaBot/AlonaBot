@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
@@ -13,7 +12,7 @@ import (
 const instanceSchemaFileName = "adapter_config_schema.json"
 
 func (s *scan) instanceSchema() (bool, error) {
-	raw, err := os.ReadFile(filepath.Join(s.dir, instanceSchemaFileName))
+	raw, err := s.resourceFile(instanceSchemaFileName)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}

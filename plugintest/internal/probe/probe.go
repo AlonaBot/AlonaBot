@@ -3,7 +3,7 @@
 // New 为每次测试创建独立的插件对象；配置和计数由真实 Core 的开发组件资源管理。
 package probe
 
-//go:generate go run ../../../cmd/alonabot plugin generate
+//go:generate go run ../../../cmd/alonabot build --out ../../../bin/generated/plugintest-internal-probe
 
 import (
 	"context"

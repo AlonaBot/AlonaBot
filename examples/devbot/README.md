@@ -111,15 +111,16 @@ go run ./examples/devbot -data-dir $DEVBOT_LIBRARY_DATA
 
 两个模式收到 SIGINT/SIGTERM 后按同一停止预算排空、执行停止回调，缺省总计 `STOP_TOTAL=10s`。独立进程由 supervisor 隔离并执行有限崩溃恢复；库模式下未捕获的后台 panic 使整个进程非零退出，停止预算到期仍有组件运行时 `Wait` 返回错误。SDK Handler 边界捕获的 panic 记录 stack 并返回 `INTERNAL`，后续调用继续。
 
-## 创建工程的命令状态
+## 创建与检查工程
 
-契约规定 `alonabot init [目录]` 创建可导入插件包、作者 manifest、schema、i18n 与忽略 `data/` 的 `.gitignore`。当前基线可直接运行本示例工程，生成与检查使用：
+`alonabot init [目录] --id ID` 在空目录创建可导入插件包、作者 manifest、schema、i18n 与忽略 `data/`、`bin/` 的 `.gitignore`，导出 `New()` 并用 `sdk.UseGenerated` 绑定资源。模板与本示例的 plugin 具有相同工程形状；本示例另含启动计数 SQL、回声与回环 Adapter。库模式宿主沿用本示例根目录的 main.go。
 
 ```fish
-go run ./cmd/alonabot plugin generate --dir examples/devbot/plugin
-go run ./cmd/alonabot plugin generate --dir examples/devbot/adapter
-go run ./cmd/alonabot plugin check --dir examples/devbot/plugin
-go run ./cmd/alonabot plugin check --dir examples/devbot/adapter
+go run ./cmd/alonabot build --dir examples/devbot/plugin --out bin/devbot-plugin
+go run ./cmd/alonabot build --dir examples/devbot/adapter --out bin/devbot-adapter
+go run ./cmd/alonabot check --dir examples/devbot/plugin
+go run ./cmd/alonabot check --dir examples/devbot/adapter
+go run ./cmd/alonabot test --dir examples/devbot/plugin
 ```
 
-`init`、顶层 `build/check` 由 T-09.3 交付；实际 init 创建与模板比对为「未运行，T-09.3 补证」。管理界面的开发配置写回与重启由 T-09.14 承接。
+创建外部工程时，目标目录已有 Go module 就复用；否则须提供 `--module`，SDK 版本来源及 `init → build → check → test → pack` 完整步骤见 [开发文档](../../docs/development.md)。管理界面的开发配置写回与重启由 T-09.14 承接。

@@ -20,7 +20,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
-//go:generate go run ../../../cmd/alonabot plugin generate
+//go:generate go run ../../../cmd/alonabot build --out ../../../bin/generated/examples-devbot-adapter
 
 const adapterID = "devloop"
 

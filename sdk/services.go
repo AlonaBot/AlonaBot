@@ -289,7 +289,7 @@ func generatedSchemaID(schemas map[string][]byte, entryPackage, id string) strin
 func resolveServiceSchema(schemas map[string][]byte, id string) (*jsonschema.Resolved, error) {
 	raw, ok := schemas[id]
 	if !ok {
-		return nil, fmt.Errorf("service schema for %s is not generated; run alonabot plugin generate", id)
+		return nil, fmt.Errorf("service schema for %s is not generated; run alonabot build", id)
 	}
 	schema := &jsonschema.Schema{}
 	if err := json.Unmarshal(raw, schema); err != nil {

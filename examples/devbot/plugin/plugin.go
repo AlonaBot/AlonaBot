@@ -14,7 +14,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/sqlitedb"
 )
 
-//go:generate go run ../../../cmd/alonabot plugin generate
+//go:generate go run ../../../cmd/alonabot build --out ../../../bin/generated/examples-devbot-plugin
 
 //go:embed startup.sql
 var startupDDL string

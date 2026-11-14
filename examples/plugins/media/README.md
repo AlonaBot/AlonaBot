@@ -48,7 +48,7 @@ echo 直接回送入站图片的 Incoming 来源；同实例发送会复用平�
 
 ```fish
 go generate ./examples/plugins/media
-go run ./cmd/alonabot plugin check --dir examples/plugins/media
+go run ./cmd/alonabot check --dir examples/plugins/media
 go build -o /tmp/alonabot-media ./examples/plugins/media
 ```
 

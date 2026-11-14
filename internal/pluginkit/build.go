@@ -1,7 +1,10 @@
-// Package pluginkit 构建开发组件，复用 SDK 生成器与 Go 工具链。
+// Package pluginkit 创建、检查、构建和打包组件工程，复用 SDK 生成器与 Go 工具链。
 //
 // BuildDev 通过 overlay 注入资源与薄入口，保留作者目录原样；构建成功后才替换可执行文件。
 // 组件运行与热部署由调用方装配，开发运行规则见 CONTRACTS §15.4。
+//
+// 包的组成：[Init] 创建作者工程，[Check] 只读检查，[Compile] 发布正式构建；
+// [BuildDev] 提供只读开发构建，[Pack] 输出归档与发布清单。
 package pluginkit
 
 import (
@@ -19,6 +22,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+
 	"strconv"
 	"strings"
 
@@ -37,7 +41,7 @@ const (
 	fileMode    = 0o600
 )
 
-// Build 保存开发可执行文件、工程 manifest 原文与组件身份。
+// Build 保存可执行文件、工程 manifest 原文与组件身份。
 type Build struct {
 	Executable          string
 	Manifest            []byte
@@ -47,8 +51,18 @@ type Build struct {
 }
 
 // BuildDev 构建 dir 中的组件到 outDir，失败时保留编译器原文与上一次成功的产物。
-func BuildDev(ctx context.Context, dir, outDir string) (build Build, err error) {
-	// 1. 身份与生成诊断先于产物发布，工程目录始终只读。
+func BuildDev(ctx context.Context, dir, outDir string) (Build, error) {
+	return buildComponent(ctx, generate.Options{Dir: dir}, outDir, true, nil)
+}
+
+// Compile 生成目标资源并发布独立组件与包内 manifest；outDir 为空时使用工程 bin/。
+func Compile(ctx context.Context, options generate.Options, outDir string) (Build, error) {
+	return buildComponent(ctx, options, outDir, false, nil)
+}
+
+func buildComponent(ctx context.Context, options generate.Options, outDir string, development bool, snapshot *projectScan) (build Build, err error) {
+	dir := options.Dir
+	// 1. 身份与生成诊断先于产物发布；开发构建保持工程目录只读。
 	dir, err = filepath.Abs(dir)
 	if err != nil {
 		return build, err
@@ -57,34 +71,78 @@ func BuildDev(ctx context.Context, dir, outDir string) (build Build, err error) 
 	if err != nil {
 		return build, err
 	}
-	build.Manifest, err = os.ReadFile(filepath.Join(dir, projectFile))
-	if err != nil {
-		return build, fmt.Errorf("read project manifest: %w", err)
+	options.Dir = dir
+	if development {
+		options.GOOS = runtime.GOOS
+		options.GOARCH = runtime.GOARCH
+	} else {
+		options.CGOEnabled = "0"
+		options.RequireAdapterConstructor = true
 	}
-	project, err := manifest.ParseProject(build.Manifest)
-	if err != nil {
-		return build, err
-	}
-	build.Role, build.ID, build.AdapterID = project.Manifest.Role, project.Manifest.ID, project.Manifest.AdapterID
-	if build.Role == "webui" {
-		return build, errors.New("webui projects have no development executable")
-	}
-	result, err := generate.Scan(ctx, generate.Options{Dir: dir})
+	targetEnv, err := goCommand(ctx, dir, "env", "GOOS", "GOARCH")
 	if err != nil {
 		return build, err
 	}
-	if len(result.Diagnostics) > 0 {
-		var diagnostics []string
-		for _, diagnostic := range result.Diagnostics {
-			diagnostics = append(diagnostics, diagnostic.Pos+": "+diagnostic.Message)
+	targetParts := strings.Fields(string(targetEnv))
+	if options.GOOS == "" {
+		options.GOOS = targetParts[0]
+	}
+	if options.GOARCH == "" {
+		options.GOARCH = targetParts[1]
+	}
+	if snapshot == nil {
+		snapshot, err = scanProject(ctx, options)
+		if err != nil {
+			return build, err
 		}
-		return build, errors.New(strings.Join(diagnostics, "\n"))
 	}
-	// 2. 生成文件放在数据目录；overlay 的虚拟路径保持工程内的导入语义。
+	project, result := snapshot.project, snapshot.generated
+	build.Manifest = snapshot.manifest
+	build.Role, build.ID, build.AdapterID = project.Manifest.Role, project.Manifest.ID, project.Manifest.AdapterID
+	if outDir == "" {
+		outDir = filepath.Join(dir, "bin")
+	}
 	outDir, err = filepath.Abs(outDir)
 	if err != nil {
 		return build, err
 	}
+	outputProject := filepath.Join(outDir, projectFile)
+	if info, statErr := os.Stat(outputProject); statErr == nil {
+		author, statErr := os.Stat(filepath.Join(dir, projectFile))
+		if statErr != nil {
+			return build, statErr
+		}
+		if !development && os.SameFile(info, author) {
+			return build, errors.New("output directory would overwrite the author manifest")
+		}
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return build, statErr
+	}
+	if build.Role == "webui" {
+		if development {
+			return build, errors.New("webui projects have no development executable")
+		}
+		build.PackageManifest, err = manifest.Generate(project.Manifest, manifest.BuildInfo{ManifestVersion: 1, OS: "any", Arch: "any"})
+		if err != nil {
+			return build, err
+		}
+		if err = os.MkdirAll(outDir, privateMode); err != nil {
+			return build, err
+		}
+		for name, raw := range snapshot.files {
+			path := filepath.Join(outDir, filepath.FromSlash(name))
+			if err = os.MkdirAll(filepath.Dir(path), privateMode); err != nil {
+				return build, err
+			}
+			if err = os.WriteFile(path, raw, fileMode); err != nil {
+				return build, err
+			}
+		}
+		err = os.WriteFile(filepath.Join(outDir, projectFile), build.PackageManifest, fileMode)
+		return build, err
+	}
+	runGo := func(args ...string) ([]byte, error) { return targetGoCommand(ctx, options, development, args...) }
+	// 2. 生成文件放在数据目录；overlay 的虚拟路径保持工程内的导入语义。
 	if err := os.MkdirAll(outDir, privateMode); err != nil {
 		return build, err
 	}
@@ -116,21 +174,14 @@ func BuildDev(ctx context.Context, dir, outDir string) (build Build, err error) 
 	if err := writeOverlay(); err != nil {
 		return build, err
 	}
-	var entry struct {
-		Name, ImportPath string
-		GoFiles          []string
-		Module           struct{ GoMod string }
-	}
-	listed, err := goCommand(ctx, dir, "list", "-overlay", overlayPath, "-json", ".")
+	goModRaw, err := goCommand(ctx, dir, "env", "GOMOD")
 	if err != nil {
 		return build, err
 	}
-	if err := json.Unmarshal(listed, &entry); err != nil {
-		return build, fmt.Errorf("decode entry package: %w", err)
-	}
+	goMod := strings.TrimSpace(string(goModRaw))
 	// 薄入口额外导入 SDK；允许 Go 在临时 module 文件中补齐其间接依赖。
 	modFile := filepath.Join(staging, "project.mod")
-	for _, pair := range [][2]string{{entry.Module.GoMod, modFile}, {strings.TrimSuffix(entry.Module.GoMod, ".mod") + ".sum", filepath.Join(staging, "project.sum")}} {
+	for _, pair := range [][2]string{{goMod, modFile}, {strings.TrimSuffix(goMod, ".mod") + ".sum", filepath.Join(staging, "project.sum")}} {
 		content, err := os.ReadFile(pair[0])
 		if errors.Is(err, os.ErrNotExist) && strings.HasSuffix(pair[0], ".sum") {
 			continue
@@ -142,7 +193,19 @@ func BuildDev(ctx context.Context, dir, outDir string) (build Build, err error) 
 			return build, err
 		}
 	}
-	mode, effects, err := migrationMode(ctx, dir, overlayPath, modFile)
+	var entry struct {
+		Name, ImportPath string
+		GoFiles          []string
+		Module           struct{ GoMod string }
+	}
+	listed, err := runGo("list", "-modfile", modFile, "-mod=mod", "-overlay", overlayPath, "-json", ".")
+	if err != nil {
+		return build, err
+	}
+	if err := json.Unmarshal(listed, &entry); err != nil {
+		return build, fmt.Errorf("decode entry package: %w", err)
+	}
+	mode, effects, err := migrationMode(ctx, options, overlayPath, modFile, development)
 	if err != nil {
 		return build, err
 	}
@@ -163,7 +226,11 @@ func BuildDev(ctx context.Context, dir, outDir string) (build Build, err error) 
 			return build, err
 		}
 		if !hasMain {
-			source := fmt.Sprintf("package main\nimport (\"log/slog\"; \"os\"; sdk %q)\nfunc main() { if err := sdk.Run(New()); err != nil { slog.Error(\"component stopped\", \"error\", err); os.Exit(1) } }\n", sdkPath)
+			call := "Run"
+			if build.Role == "adapter" {
+				call = "RunAdapter"
+			}
+			source := fmt.Sprintf("package main\nimport (\"log/slog\"; \"os\"; sdk %q)\nfunc main() { if err := sdk.%s(New()); err != nil { slog.Error(\"component stopped\", \"error\", err); os.Exit(1) } }\n", sdkPath, call)
 			if err := write(filepath.Join(dir, entryFile), entryFile, []byte(source)); err != nil {
 				return build, err
 			}
@@ -175,7 +242,10 @@ func BuildDev(ctx context.Context, dir, outDir string) (build Build, err error) 
 
 	// 3. 链接到临时路径，避免编译失败或运行中的旧二进制受到写入影响。
 	name := build.ID
-	if runtime.GOOS == "windows" {
+	if !development {
+		name = "component"
+	}
+	if options.GOOS == "windows" {
 		name += ".exe"
 	}
 	version := uint32(1)
@@ -184,33 +254,24 @@ func BuildDev(ctx context.Context, dir, outDir string) (build Build, err error) 
 		version = uint32(schema.Version())
 	}
 	major := uint32(validate.ProtocolMajor)
-	capabilities := []manifest.Capability{}
+	capabilities, err := requiredCapabilities(ctx, options, overlayPath, modFile, development, result.HTTP)
+	if err != nil {
+		return build, err
+	}
 	build.PackageManifest, err = manifest.Generate(project.Manifest, manifest.BuildInfo{
 		ManifestVersion: 1, ProtocolMinMajor: &major, ProtocolMaxMajor: &major,
-		RequiredCapabilities: &capabilities, OS: runtime.GOOS, Arch: runtime.GOARCH,
+		RequiredCapabilities: &capabilities, OS: options.GOOS, Arch: options.GOARCH,
 		Entrypoint: name, ConfigVersion: &version, MigrationMode: mode, PrepareEffects: effects,
 	})
 	if err != nil {
 		return build, err
 	}
-	resources := struct {
-		Manifest, ConfigSchema, AdapterConfigSchema []byte
-		I18n                                        map[string][]byte
-	}{Manifest: build.PackageManifest, ConfigSchema: result.ConfigSchema, I18n: map[string][]byte{}}
-	resources.AdapterConfigSchema, err = os.ReadFile(filepath.Join(dir, "adapter_config_schema.json"))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return build, err
-	}
-	catalogs, err := filepath.Glob(filepath.Join(dir, "i18n", "*.json"))
-	if err != nil {
-		return build, err
-	}
-	for _, path := range catalogs {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return build, err
+	resources := Resources{Manifest: build.PackageManifest, ConfigSchema: result.ConfigSchema, I18n: map[string][]byte{}}
+	resources.AdapterConfigSchema = snapshot.files["adapter_config_schema.json"]
+	for name, raw := range snapshot.files {
+		if strings.HasPrefix(name, "i18n/") && filepath.Dir(name) == "i18n" && strings.HasSuffix(name, ".json") {
+			resources.I18n[filepath.Base(name)] = raw
 		}
-		resources.I18n[filepath.Base(path)] = raw
 	}
 	metadata, err := json.Marshal(resources)
 	if err != nil {
@@ -221,8 +282,16 @@ func BuildDev(ctx context.Context, dir, outDir string) (build Build, err error) 
 		return build, err
 	}
 	executable := filepath.Join(staging, name)
-	if _, err := goCommand(ctx, dir, "build", "-modfile", modFile, "-mod=mod", "-overlay", overlayPath, "-o", executable, target); err != nil {
+	if _, err := runGo("build", "-trimpath", "-buildvcs=false", "-modfile", modFile, "-mod=mod", "-overlay", overlayPath, "-o", executable, target); err != nil {
 		return build, err
+	}
+	if !development {
+		if err := os.WriteFile(filepath.Join(dir, generate.FileName), result.Source, 0o644); err != nil {
+			return build, err
+		}
+		if err := os.WriteFile(filepath.Join(outDir, projectFile), build.PackageManifest, fileMode); err != nil {
+			return build, err
+		}
 	}
 	build.Executable = filepath.Join(outDir, name)
 	content, err := os.ReadFile(executable)
@@ -242,8 +311,8 @@ func BuildDev(ctx context.Context, dir, outDir string) (build Build, err error) 
 }
 
 // migrationMode 检查参与构建的本 module 中的 SDK 函数引用，包含别名和传参。
-func migrationMode(ctx context.Context, dir, overlay, modFile string) (string, string, error) {
-	listed, err := goCommand(ctx, dir, "list", "-modfile", modFile, "-mod=mod", "-overlay", overlay, "-deps", "-json", ".")
+func migrationMode(ctx context.Context, options generate.Options, overlay, modFile string, development bool) (string, string, error) {
+	listed, err := targetGoCommand(ctx, options, development, "list", "-modfile", modFile, "-mod=mod", "-overlay", overlay, "-deps", "-json", ".")
 	if err != nil {
 		return "", "", err
 	}
@@ -252,14 +321,18 @@ func migrationMode(ctx context.Context, dir, overlay, modFile string) (string, s
 	var self, versioned bool
 	for {
 		var pkg struct {
-			Dir     string
-			GoFiles []string
-			Module  *struct{ Main bool }
+			ImportPath string
+			Dir        string
+			GoFiles    []string
+			Module     *struct{ Main bool }
 		}
 		if err := decoder.Decode(&pkg); err == io.EOF {
 			break
 		} else if err != nil {
 			return "", "", err
+		}
+		if !development && (pkg.ImportPath == modulePath || strings.HasPrefix(pkg.ImportPath, modulePath+"/internal/core/")) {
+			return "", "", fmt.Errorf("independent component imports Core package %q", pkg.ImportPath)
 		}
 		if pkg.Module == nil || !pkg.Module.Main {
 			continue
@@ -346,4 +419,23 @@ func declaresMain(dir string, files []string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+func targetGoCommand(ctx context.Context, options generate.Options, development bool, args ...string) ([]byte, error) {
+	if len(options.Tags) > 0 {
+		args = append([]string{args[0], "-tags", strings.Join(options.Tags, ",")}, args[1:]...)
+	}
+	command := exec.CommandContext(ctx, "go", args...)
+	command.Dir = options.Dir
+	command.Env = append(command.Environ(), "GOOS="+options.GOOS, "GOARCH="+options.GOARCH)
+	if !development {
+		command.Env = append(command.Env, "CGO_ENABLED=0")
+	}
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	output, err := command.Output()
+	if err != nil {
+		return output, fmt.Errorf("go %s: %w\n%s%s", strings.Join(args, " "), err, output, stderr.String())
+	}
+	return output, nil
 }

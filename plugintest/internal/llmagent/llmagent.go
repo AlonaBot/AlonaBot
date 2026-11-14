@@ -3,7 +3,7 @@
 // 请求与响应由共享的 llm Schema 校验，业务结果由每次构造传入的函数决定。
 package llmagent
 
-//go:generate go run ../../../cmd/alonabot plugin generate
+//go:generate go run ../../../cmd/alonabot build --out ../../../bin/generated/plugintest-llmagent
 
 import (
 	"context"
