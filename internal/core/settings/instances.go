@@ -58,19 +58,24 @@ func (f *File) BindAdapter(adapterID, packageID string) (bool, error) {
 
 // PrepareInstances 迁移、补齐并校验一个 Adapter 的全部实例，返回可启动实例的完整配置。
 // 低版本的全部实例成功后才备份并经 Update 写回；实例失败只列入 problems。
+// replacement 可省略或传一组按当前 schema 替换的实例；省略时仅准备已有配置。
 // 返回的 error 表示备份或写回失败，原文中的环境变量引用始终保留。
-func (f *File) PrepareInstances(adapterID string, schema *configschema.Schema) (map[string]json.RawMessage, []InstanceProblem, error) {
+func (f *File) PrepareInstances(adapterID string, schema *configschema.Schema, replacement ...map[string]json.RawMessage) (map[string]json.RawMessage, []InstanceProblem, error) {
+	var replacements map[string]json.RawMessage
+	if len(replacement) != 0 {
+		replacements = replacement[0]
+	}
 	// 1. 当前文档只读试算，无需迁移或有失败实例时不触碰磁盘。
 	f.mu.RLock()
-	prepared := prepareInstances(f.document, adapterID, schema)
+	prepared := prepareInstances(f.document, adapterID, schema, replacements)
 	f.mu.RUnlock()
-	if len(prepared.problems) != 0 || prepared.version >= schema.Version() {
+	if len(prepared.problems) != 0 || (len(replacements) == 0 && prepared.version >= schema.Version()) {
 		return prepared.ready, prepared.problems, nil
 	}
 	// 2. Update 持锁重读磁盘，在同一份候选上试算和编辑，保留期间的手动修改。
 	err := f.Update(func(document *Document) error {
-		prepared = prepareInstances(document, adapterID, schema)
-		if len(prepared.problems) != 0 || prepared.version >= schema.Version() {
+		prepared = prepareInstances(document, adapterID, schema, replacements)
+		if len(prepared.problems) != 0 || (len(replacements) == 0 && prepared.version >= schema.Version()) {
 			return errNoInstanceMigration
 		}
 		for id, raw := range prepared.migrated {
@@ -81,7 +86,10 @@ func (f *File) PrepareInstances(adapterID string, schema *configschema.Schema) (
 		if err := document.Set([]string{"adapters", adapterID, "$version"}, schema.Version()); err != nil {
 			return err
 		}
-		return backupSettings(f.name, currentVersion)
+		if prepared.version < schema.Version() {
+			return backupSettings(f.name, currentVersion)
+		}
+		return nil
 	})
 	if errors.Is(err, errNoInstanceMigration) {
 		err = nil
@@ -93,11 +101,26 @@ func (f *File) PrepareInstances(adapterID string, schema *configschema.Schema) (
 func (f *File) TrialInstances(adapterID string, schema *configschema.Schema) []InstanceProblem {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return prepareInstances(f.document, adapterID, schema).problems
+	return prepareInstances(f.document, adapterID, schema, nil).problems
 }
 
-func prepareInstances(document *Document, adapterID string, schema *configschema.Schema) instancePreparation {
+func prepareInstances(document *Document, adapterID string, schema *configschema.Schema, replacements map[string]json.RawMessage) instancePreparation {
 	prepared := instancePreparation{ready: make(map[string]json.RawMessage), migrated: make(map[string]json.RawMessage), version: schema.Version()}
+	if len(replacements) != 0 {
+		// 替换值已经使用当前声明；在独立候选中合入，旧文档只在整组校验通过后提交。
+		var err error
+		document, err = parseDocument(document.root.encode())
+		if err != nil {
+			prepared.problems = append(prepared.problems, InstanceProblem{Reason: err.Error()})
+			return prepared
+		}
+		for id, raw := range replacements {
+			if err := document.Set([]string{"adapters", adapterID, "instances", id}, raw); err != nil {
+				prepared.problems = append(prepared.problems, InstanceProblem{InstanceID: id,
+					Path: fmt.Sprintf("$.adapters[%q].instances[%q]", adapterID, id), Reason: err.Error()})
+			}
+		}
+	}
 	adaptersIndex := document.root.index("adapters")
 	if adaptersIndex < 0 {
 		return prepared
@@ -129,7 +152,11 @@ func prepareInstances(document *Document, adapterID string, schema *configschema
 	}
 	for _, instance := range group.members[index].value.members {
 		basePath := path + ".instances[" + strconv.Quote(instance.key) + "]"
-		raw, complete, err := prepareInstance(instance.value, prepared.version, schema)
+		version := prepared.version
+		if _, replaced := replacements[instance.key]; replaced {
+			version = schema.Version()
+		}
+		raw, complete, err := prepareInstance(instance.value, version, schema)
 		if err != nil {
 			// configschema 的错误只包含声明路径和原因，保留完整错误并补文件与版本。
 			problemPath := basePath

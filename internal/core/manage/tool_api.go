@@ -2,9 +2,11 @@ package manage
 
 import (
 	"net/http"
+	"slices"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/core/tool"
 )
 
 type toolPolicy struct {
@@ -36,8 +38,18 @@ func (s *Service) toolRoutes(mux *http.ServeMux) {
 			return
 		}
 		if !validate.IsServiceName(request.Service) {
-			respond(w, nil, invalid("invalid tool service name"))
-			return
+			// ConfirmOperation 的操作名独立于 Service 语法，只接纳目录已记录的完整名字。
+			entries, err := s.opt.Tools.Policies(r.Context())
+			if err != nil {
+				respond(w, nil, err)
+				return
+			}
+			if request.Service == "" || !slices.ContainsFunc(entries, func(entry tool.ToolPolicyEntry) bool {
+				return entry.PluginID == request.PluginID && entry.Service == request.Service
+			}) {
+				respond(w, nil, invalid("invalid tool service or unknown operation name"))
+				return
+			}
 		}
 		var value pb.ToolPolicy
 		switch request.Policy {

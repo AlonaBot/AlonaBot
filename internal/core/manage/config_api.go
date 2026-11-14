@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -246,7 +247,8 @@ func (s *Service) redactConfig(ctx context.Context, active string, schema, snaps
 	if err := decodeConfigObject(redacted, &value); err != nil {
 		return nil, err
 	}
-	for _, path := range paths {
+	slices.SortFunc(paths, slices.Compare[[]string])
+	for _, path := range slices.CompactFunc(paths, slices.Equal) {
 		redactSecretPath(value, path)
 	}
 	return json.Marshal(value)
@@ -368,7 +370,7 @@ func rejectSecretMarkers(value any) error {
 		if _, ok := value[secret.RefKey]; ok {
 			return invalid("secret references cannot be submitted")
 		}
-		if _, ok := value["$secret_set"]; ok {
+		if _, ok := secretMask(value); ok {
 			return invalid("secret masks cannot be submitted")
 		}
 		for _, child := range value {
@@ -384,6 +386,19 @@ func rejectSecretMarkers(value any) error {
 		}
 	}
 	return nil
+}
+
+func secretMask(value any) (bool, bool) {
+	switch object := value.(type) {
+	case map[string]any:
+		set, ok := object["$secret_set"].(bool)
+		return set, ok && len(object) == 1
+	case map[string]bool:
+		set, ok := object["$secret_set"]
+		return set, ok && len(object) == 1
+	default:
+		return false, false
+	}
 }
 
 func decodeConfigObject(raw []byte, target *map[string]any) error {

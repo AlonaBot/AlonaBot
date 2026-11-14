@@ -292,7 +292,8 @@ func (s *Service) instanceRoutes(mux *http.ServeMux) {
 			respond(w, nil, err)
 			return
 		}
-		raw, found := s.opt.Settings.Settings().Adapters[adapterID].Instances[instanceID]
+		group := s.opt.Settings.Settings().Adapters[adapterID]
+		raw, found := group.Instances[instanceID]
 		if !found {
 			respond(w, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_NOT_FOUND, Message: "adapter instance not found"})
 			return
@@ -305,6 +306,11 @@ func (s *Service) instanceRoutes(mux *http.ServeMux) {
 		var value map[string]any
 		if err := decodeConfigObject(raw, &value); err != nil {
 			respond(w, nil, err)
+			return
+		}
+		// 旧版本的秘密可能已改名，先迁移读取副本才能使用当前声明脱敏。
+		if err := schema.Migrate(value, group.Version); err != nil {
+			respond(w, nil, precondition(fmt.Sprintf("$.adapters[%q].instances[%q]: %s", adapterID, instanceID, err)))
 			return
 		}
 		for _, path := range schema.SecretPaths() {
@@ -384,6 +390,12 @@ func (s *Service) writeInstance(ctx context.Context, adapterID, instanceID strin
 	if err != nil {
 		return err
 	}
+	group := s.opt.Settings.Settings().Adapters[adapterID]
+	if _, exists := group.Instances[instanceID]; exists {
+		if err := schema.Migrate(original, group.Version); err != nil {
+			return precondition(fmt.Sprintf("$.adapters[%q].instances[%q]: %s", adapterID, instanceID, err))
+		}
+	}
 	for _, path := range schema.SecretPaths() {
 		preserveInstanceSecret(value, original, path)
 	}
@@ -395,26 +407,21 @@ func (s *Service) writeInstance(ctx context.Context, adapterID, instanceID strin
 	if err := schema.Validate(expanded.(map[string]any)); err != nil {
 		return err
 	}
-	// 2. 当前提交校验通过后才迁移已有实例，避免非法请求写回配置或产生备份。
-	group := s.opt.Settings.Settings().Adapters[adapterID]
-	if len(group.Instances) != 0 && group.Version != schema.Version() {
-		_, problems, err := s.opt.Settings.PrepareInstances(adapterID, schema)
-		if err != nil {
-			return err
-		}
-		if len(problems) != 0 {
-			return precondition(fmt.Sprintf("adapter instances require attention: %v", problems))
-		}
+	// 2. 修复值和旧实例共用候选校验，成功后一次提交迁移与替换，保留迁移前备份。
+	replacement, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, problems, err := s.opt.Settings.PrepareInstances(adapterID, schema, map[string]json.RawMessage{instanceID: replacement})
+	if err != nil {
+		return err
+	}
+	if len(problems) != 0 {
+		return precondition(fmt.Sprintf("adapter instances require attention: %v", problems))
 	}
 	// 3. 提交后更新默认实例选择，运行实例仍由统一启停入口管理。
 	err = s.opt.Settings.Update(func(doc *settings.Document) error {
-		if err := doc.Set([]string{"adapters", adapterID, "package"}, owner); err != nil {
-			return err
-		}
-		if err := doc.Set([]string{"adapters", adapterID, "$version"}, schema.Version()); err != nil {
-			return err
-		}
-		return doc.Set([]string{"adapters", adapterID, "instances", instanceID}, value)
+		return doc.Set([]string{"adapters", adapterID, "package"}, owner)
 	})
 	s.opt.Adapters.SetDefaults(s.opt.Settings.Settings().DefaultInstances())
 	if err != nil {
@@ -483,7 +490,7 @@ func redactSecretPath(value any, path []string) {
 		for index, child := range array {
 			if path[0] == "*" || path[0] == strconv.Itoa(index) {
 				if len(path) == 1 {
-					array[index] = map[string]bool{"$secret_set": child != "" && child != nil}
+					array[index] = secretState(child)
 				} else {
 					redactSecretPath(child, path[1:])
 				}
@@ -500,10 +507,17 @@ func redactSecretPath(value any, path []string) {
 		return
 	}
 	if len(path) == 1 {
-		object[path[0]] = map[string]bool{"$secret_set": child != "" && child != nil}
+		object[path[0]] = secretState(child)
 		return
 	}
 	redactSecretPath(child, path[1:])
+}
+
+func secretState(value any) map[string]bool {
+	if set, masked := secretMask(value); masked {
+		return map[string]bool{"$secret_set": set}
+	}
+	return map[string]bool{"$secret_set": value != "" && value != nil}
 }
 
 func (s *Service) removeInstance(ctx context.Context, adapterID, instanceID string) error {

@@ -367,7 +367,7 @@ multipart 与 JSON Update 均进入 `manage.Service.Update`，执行绑定来源
 | `POST /api/v1/plugins/{id}/config/import` | 无正文 | 返回脱敏的 `{base_generation,config}`，导入 `<data_dir>/plugins/<id>/config.json`，保持 Active |
 | `POST /api/v1/plugins/{id}/reload` | 无正文 | `{}`，要求组件 Activated，经候选编排激活有效 Pending；没有 Pending 时先导入编辑快照 |
 
-PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当前 Active 不同时返回 **409 / `FAILED_PRECONDITION`**。编辑以有效 Pending 为起点，否则以 Active 为起点。新秘密在写入 Pending 前存为不可变引用；相同位置未改变的秘密复用原引用。PUT 省略的秘密路径保留；PUT/PATCH 提交数组时，仍存在的相同下标内省略的秘密保留，删除行或显式 null 沿用删除语义；PATCH 省略的字段继续保留，包含 invisible 字段。`$secret_ref` 与 `$secret_set` 属于读取标记，提交它们返回 400 / `INVALID_ARGUMENT`。导入文件缺失返回 404。
+PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当前 Active 不同时返回 **409 / `FAILED_PRECONDITION`**。编辑以有效 Pending 为起点，否则以 Active 为起点。新秘密在写入 Pending 前存为不可变引用；相同位置未改变的秘密复用原引用。PUT 省略的秘密路径保留；PUT/PATCH 提交数组时，仍存在的相同下标内省略的秘密保留，删除行或显式 null 沿用删除语义；PATCH 省略的字段继续保留，包含 invisible 字段。提交秘密引用或恰为 `{"$secret_set":布尔值}` 的读取掩码返回 400 / `INVALID_ARGUMENT`；含其他键的普通对象可保存 `$secret_set` 字段。导入文件缺失返回 404。
 
 安装包保存操作只更新 Pending；两个 reload HTTP 入口共用候选编排，优先激活有效 Pending。`config/import` 总是显式导入磁盘编辑，保持 Active。CLI `alonabot reload <id>` 先调用 config/import，再调用 reload，因此直接编辑 config.json 后执行 CLI reload 继续导入文件内容。
 
@@ -415,7 +415,7 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 实例名跨 Adapter 唯一，其他 Adapter 已占用时返回 409 / `ALREADY_EXISTS`；未知 Adapter、未知实例或删除时 URL 的归属失配返回 404。配置块属于其他组件时返回 412。
 
-提交先经 `Schema.Complete` 补全，再对展开环境变量后的副本执行 `Schema.Validate`，最后用 `File.Update` 写回原文。省略的秘密从原始文档保留，数组中仍存在的相同下标也遵循此规则。提交 `$secret_ref`、`$secret_set` 返回 400。已有实例需升级配置版本时，复用 `PrepareInstances`；问题中的 `Path`、`Reason` 保留在错误定位中。
+提交先经 `Schema.Complete` 补全，再对展开环境变量后的副本执行 `Schema.Validate`，最后用 `File.Update` 写回原文。省略的秘密从原始文档保留，数组中仍存在的相同下标也遵循此规则。提交秘密引用或恰为 `{"$secret_set":布尔值}` 的掩码返回 400。旧版本读取先迁移独立副本再脱敏；迁移失败返回带实例路径的 412。已有实例需升级配置版本时，`PrepareInstances` 在包含本次替换值的候选文档上迁移与校验其他实例，全部通过后备份并提交，问题中的 `Path`、`Reason` 保留在错误定位中。
 
 保存配置后通过第 4 节的启停入口管理运行实例。启动前仍由 `File.PrepareInstances` 执行迁移、补全和校验，失败实例的路径与原因原样用于定位。
 
@@ -466,7 +466,7 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 | `GET /api/v1/core/options/{source}` | `?q=搜索文本&filter[键]=值` |
 | `POST /api/v1/core/options/{source}/resolve` | `{"values":["已存值"]}`；可带同形 filter 查询参数 |
 
-插件与 Adapter 字段的来源名和 filter 只从当前 Active Session 的 schema 取得；额外的 source/filter 查询参数忽略。字段使用 schema 的点分路径，列表字段省略下标；不存在的字段或没有 options_from 返回 400 / INVALID_ARGUMENT。Adapter 实例入口要求该 Adapter 和实例存在，归属不匹配返回 404。组件 schema、服务来源或 Agent 不可用时返回 503 / UNAVAILABLE。
+插件与 Adapter 字段的来源名和 filter 只从插件 Active 代次的 schema 取得；额外的 source/filter 查询参数忽略。字段使用 schema 的点分路径，列表字段省略下标；不存在的字段或没有 options_from 返回 400 / INVALID_ARGUMENT。Adapter 实例入口要求该 Adapter 和实例存在，归属不匹配返回 404。停用组件仍可查询内置来源；Core 重启后从 Active 安装包或开发资源读取声明。组件来源要求提供该来源的运行中 Session，服务来源、Agent 或 Active schema 不可用时返回 503 / UNAVAILABLE。
 
 界面用 `Accept-Language` 传当前管理语言，取首选语言标签；缺省使用 Core default_locale。Core 直接查询仅接受 core.chats（filter 键 chat_type、adapter_id）和 core.adapter_instances（filter 键 adapter_id）；服务来源与未知 filter 键返回 400。core.chats 可按名称或聊天 ID 搜索并按类型筛选；按值取回沿用来源的 resolve 语义。
 
@@ -474,4 +474,4 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 `GET /api/v1/tools/policies` 返回 `{"policies":[{"plugin_id":"demo","service":"echo","default":"allow","override":"inherit"}]}`。目录合并当前 Attach 工具声明、本次运行出现的操作和已保存覆盖；default 为 inherit 表示当前无声明，override 为 inherit 表示没有覆盖。
 
-`PUT /api/v1/tools/policies` 接收 `{"plugin_id":"demo","service":"echo","policy":"deny"}`，成功返回 `{}`。policy 接受 allow、confirm、deny、inherit；inherit 删除覆盖。未知策略或服务名格式错误返回 400，未知组件返回 404。写入与固定 ListTools 使用同一个 tool.Catalog 和状态库；下次查询或调用读取新策略，deny 的工具从 ListTools 隐藏，无需重启。
+`PUT /api/v1/tools/policies` 接收 `{"plugin_id":"demo","service":"echo","policy":"deny"}`，成功返回 `{}`。policy 接受 allow、confirm、deny、inherit；inherit 删除覆盖。service 也接受目录已记录的完整操作名，例如 `mcp/filesystem/read_file`；操作名独立于 Service 名语法校验。未知策略、服务名格式错误或目录未记录的操作名返回 400，未知组件返回 404。写入与固定 ListTools 使用同一个 tool.Catalog 和状态库；下次查询或调用读取新策略，deny 的工具从 ListTools 隐藏，无需重启。
