@@ -92,9 +92,9 @@
 | goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | 等待前置 |
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 已完成（PR #173） |
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 已完成（PR #172） |
-| goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 待派发 |
+| goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 已完成（PR #190） |
 | goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 已完成（PR #179） |
-| goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 待派发 |
+| goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 已完成（PR #187） |
 | goal-93 | T-09.14 | 配置、权限、工具策略与会话的管理 API | T-03.25、T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-08.14、T-09.6、T-09.12、T-11.1、T-11.3 | 待派发 |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
 
@@ -6951,7 +6951,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 ### goal-102 · T-16.3 plugintest 的 LLM 替身
 
-状态：待派发，goal-82（PR #183，`1f1c058`）已合并，从包含它的 main 派发（共享 plugintest 的 options、probe、生成物与文档）。2026-11-13 审查者裁决：替身只经共享的 llm.Request/Response Schema 做结构校验，业务规则与错误交给传入函数，不复制官方 Agent 的 Provider 与名单配置；多次给出 LLM 选项时最后一个生效，nil 函数在公开入口报错；默认的 public Service 沿用当前空权限集合，不等待 goal-61 的 ServiceBuilder.Permission；#174 的合并提交为 `9c394b3`。直接前置 T-12.8（goal-83，PR #175，合并提交 `ac6083a`）与 T-16.1（goal-81，PR #168，`37b0ada`）均已合并；Agent 开发组件与文本生成分别沿用 PR #163（`cb8ae3d`）、#170（`eca6310`），带类型 Service 声明沿用 PR #158（`464ccfd`）。2026-11-13 起草者按维护者指定的 main `9efee73` 工作副本，用 `rg`、源码读取及离线 `GO111MODULE=off go doc` 核对下列事实；前置合并号取自本地 goal 完成记录。
+状态：已完成（[PR #190](https://github.com/AlonaBot/AlonaBot/pull/190)，合并提交 `2ddaabd`），证据见 TEST-MATRIX §3.2。合入：`plugintest.LLM(handler func(ctx context.Context, req llm.Request) (llm.Response, error)) Option` 登记只提供 `llm.generate` 的测试 Agent（`plugintest/internal/llmagent`），被测插件经 `@agent` 的调用只做共享 Schema 的结构校验后交给测试函数，多次给出时最后一个生效，nil 函数在公开入口报错。以下为派发时的语句。
 
 按 main 核对：
 
@@ -7087,7 +7087,7 @@ internal/core/journal
 
 ### goal-42 · T-09.7 崩溃恢复、回退与回收
 
-状态：待派发。前置 T-09.6（[PR #179](https://github.com/AlonaBot/AlonaBot/pull/179)，合并提交 `8898251`）已合并；T-09.5（PR #173，`2bb8181`）提供 journal 的阶段、`Prepare`、`Abort` 与 `candidate.PrepareDatabase`/`Discard`。2026-11-13 审查者按 main `8898251` 核对：`state.CommitCandidate`、`journal.Commit`、`manage.Candidates.Rollback(ctx, id, generation string) error`、`process.LockRuntime(pluginDir)` 已存在；journal 只有 `KindFirstInstall`、`KindReload`、`KindUpdate`，`Prepare(ctx, pluginID, kind, staged)` 不能指定来源代次；回退的生产接线在根包 `managedCandidates.Rollback`（现返回 UNSUPPORTED），Reload/Update 由同一类型的 `apply` 经 `prepareCandidate` 接入并提交。据此改写接口与范围：journal 提供 `KindRollback` 与返回 `*Result` 的 `PrepareRollback`，根包的 `managedCandidates.Rollback` 沿用 apply 的接入与提交路径（DECISIONS 2026-11-13 变更记录）。原状态行中的 `secret.Collect` 为笔误，回收函数是本切片新增的 `gc.Collect`。
+状态：已完成（[PR #187](https://github.com/AlonaBot/AlonaBot/pull/187)，合并提交 `864819e`），证据见 TEST-MATRIX §3.2。合入：`journal.(*Orchestrator).Recover(ctx) (blocked []string, err error)`（取不到 runtime.lock 的插件以 blocked 返回，根包不启动它们，管理状态为 Degraded）、`KindRollback` 与 `PrepareRollback(ctx, pluginID, generation string) (*Result, error)`、根包 `managedCandidates.Rollback`（须确认并按目标版本核对依赖）、`internal/core/gc.Collect`、状态库保留最近三个已提交代次；first_install 的提交同时写入启用意图；资源按当前 data_dir 与包身份定位；docs/development.md「备份与恢复」。接口调整见 DECISIONS 2026-11-13 变更记录。以下为派发时的语句。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-42（切片 T-09.7：崩溃恢复、回退与回收）。goal 目录 goal-42，分支 goal-42，worktree .worktrees/goal-42，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
