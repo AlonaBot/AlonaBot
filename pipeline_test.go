@@ -118,6 +118,7 @@ func pipelineObserve(stage, route string, c *sdk.Context) error {
 		case *message.ScheduledPayload:
 			record.Job = payload.JobID
 			record.RunID = payload.RunID
+			record.Value = payload.TaskKey
 		}
 		if ev.Actor != nil {
 			record.User = ev.Actor.ExternalUserID

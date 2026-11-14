@@ -132,6 +132,7 @@ type ReactionAddedPayload struct{ PlatformMessageID, Reaction string }
 type ScheduledPayload struct {
 	JobID, RunID string
 	ScheduledAt  time.Time
+	TaskKey      string // 动态任务实例的 key；静态 job 为空串。
 }
 
 // BotOnlinePayload 保存上线实例的账号信息。

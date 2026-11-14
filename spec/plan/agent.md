@@ -15,7 +15,7 @@
 | T-12.3 | goal-60 | 工具循环与 MCP：Core 工具、MCP 客户端（stdio、streamable HTTP）、确认、单轮步数上限 | T-12 步骤 4 | T-11.2、T-12.2 | V-58 | 已完成（PR #178；TEST-MATRIX §3.2） |
 | T-12.4 | goal-61 | 记忆：Agent 内的会话笔记与用户档案、`memory` 工具、会话快照与档案注入 | T-12 步骤 5 | T-08.5、T-11.2、T-12.2 | V-59 | 已完成（PR #182；TEST-MATRIX §3.2） |
 | T-12.5 | goal-62 | 技能：技能目录、`SKILL.md` 解析、`load_skill` | T-12 步骤 6 | T-12.3 | V-60 | 已完成（PR #188；TEST-MATRIX §3.2） |
-| T-12.6 | goal-63 | 定时 Agent 任务：任务工具、用动态任务（D-124）保存与触发、后台运行 | T-12 步骤 7 | T-07.9、T-08.5、T-12.3 | V-61 | 未开始 |
+| T-12.6 | goal-63 | 定时 Agent 任务：任务工具、用动态任务（D-124）保存与触发、后台运行 | T-12 步骤 7 | T-07.9、T-08.5、T-12.3 | V-61 | 已完成（PR #193；TEST-MATRIX §3.2） |
 | T-12.7 | goal-64 | 官方 Agent 组件的打包与多进程验收，汇总证据 | T-12 步骤 8 | T-12.4、T-12.5、T-12.6、T-12.8、T-12.14 | V-57～V-61、V-76、V-118 | 未开始 |
 | T-12.8 | goal-83 | 文本生成服务：Core Broker 的 `@agent` 目标解析，`sdk/llm` 的类型、Schema 与调用辅助（含一问一答的 `llm.Ask`，D-111），Agent 的 `llm.generate` 与调用方许可，选项来源 `llm.providers`（D-131） | T-12 步骤 9 | T-03.8、T-06.1、T-08.14、T-12.2 | V-76、V-82 的 `@agent` 分项，V-109，V-116 的 `llm.providers` 分项 | 已完成（PR #175；TEST-MATRIX §3.2） |
 | T-12.9 | goal-118 | Provider 增加 OpenAI Responses（`openai-responses`）：请求编码、SSE 事件解析、reasoning item 的回传、停止原因与用量；`ToolCall.Replay` | T-12 步骤 10 | T-12.1 | V-57 的 Provider 分项 | 已完成（PR #126；TEST-MATRIX §3.2） |

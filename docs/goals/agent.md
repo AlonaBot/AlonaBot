@@ -18,7 +18,7 @@
 | goal-60 | T-12.3 | 工具循环与 MCP | T-11.2、T-12.2 | 已完成（PR #178） |
 | goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 已完成（PR #182） |
 | goal-62 | T-12.5 | 技能 | T-12.3 | 已完成（PR #188） |
-| goal-63 | T-12.6 | 定时 Agent 任务 | T-07.9、T-08.5、T-12.3 | 待派发 |
+| goal-63 | T-12.6 | 定时 Agent 任务 | T-07.9、T-08.5、T-12.3 | 已完成（PR #193） |
 | goal-64 | T-12.7 | 官方 Agent 组件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6、T-12.8、T-12.14 | 等待前置 |
 
 ## 第 1 波
@@ -778,7 +778,7 @@ type memoryResponse struct{}
 
 ### goal-63 · T-12.6 定时 Agent 任务
 
-状态：待派发。前置 T-07.9（goal-128，PR #176，合并提交 `9785c22`）、T-08.5（PR #79）与 T-12.3（goal-60，PR #178，合并提交 `a95b85b`）均已合并。2026-11-13 审查者按 main 核对：`sdk.Task[T](name) TaskType[T]` 的 `At`/`Every`/`Cron`（返回 key）、`Cancel`、`List`（返回 `TaskInstance[T]{Key, Args, At, Interval, Cron, Timezone, NextAt}`），`sdk.OnTask(r, t) *TaskBuilder[T]` 的 `Handle`，`sdk.Key`、`sdk.Timezone`、`sdk.ConfirmOperation(ctx, operation, summary)`、`sdk.Send`、`(*Context).Has(sdk.Admin)` 均已存在。根包装配不向 Scheduler 注入时钟（`scheduler.Options.Now` 只在包内测试使用），提交测试改用真实时间的 at 任务；周期任务的到期运行与离线不补跑已由 T-07.9 的 Scheduler 证据覆盖。权限判断以 `c.Has(sdk.Admin)` 表述。本切片与 T-12.5（goal-62）都在 agent/tools.go 加入 Agent 内工具，goal-62（PR #188，`c80276e`）已合并，从包含它的 main 派发；agent/tools.go 的插件内工具沿用 load_skill 的做法。2026-11-10 按 D-124、D-125 修订：任务改用 SDK 的动态任务保存与触发，删去自建的任务表与每分钟的固定 schedule，前置由 T-07.2 改为 T-07.9，并增加一次性的 at。语句中 goal-128、goal-32、goal-55、goal-59、goal-60 提供的符号（sdk.Task、sdk.OnTask、Task 的 At/Every/Cron/Cancel/List、sdk.Key、sdk.Timezone、sdk.ConfirmOperation、Agent 的一轮对话与工具循环）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：定时任务的后台发送按发信许可缺省允许全部实例（D-83）。
+状态：已完成（[PR #193](https://github.com/AlonaBot/AlonaBot/pull/193)，合并提交 `7f81469`），证据见 TEST-MATRIX §3.2（含经 cpa 兼容网关运行的四种协议定时任务往返）。合入：agent/tasks.go 与 scheduled.go（schedule_task、list_tasks、cancel_task，后台一轮，会话键 `task/<TaskKey>`，按创建时的目标文本上限快照分段发送，空值与 0 的可选字段视为未给出）；SDK 的 `message.ScheduledPayload.TaskKey`。以下为派发时的语句。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-63（切片 T-12.6：定时 Agent 任务）。goal 目录 goal-63，分支 goal-63，worktree .worktrees/goal-63，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -820,7 +820,7 @@ type memoryResponse struct{}
 
 ### goal-64 · T-12.7 官方 Agent 组件打包与 T-12 验收
 
-状态：等待前置（T-12.4、T-12.5、T-12.6、T-12.8、T-12.14）。2026-11-10 按 D-132：前置加入 T-12.14，验收矩阵增加 V-118。语句中 goal-38、goal-58～goal-63、goal-83 提供的命令与符号（alonabot pack、Agent 组件、mcptest、模拟 Provider）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：llm_service_allowed_plugins 缺省为 `["*"]`（D-83）。
+状态：等待前置（T-12.4、T-12.5、T-12.6、T-12.8、T-12.14）。2026-11-10 按 D-132：前置加入 T-12.14，验收矩阵增加 V-118。语句中 goal-38、goal-58～goal-63、goal-83 提供的命令与符号（alonabot pack、Agent 组件、mcptest、模拟 Provider）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：llm_service_allowed_plugins 缺省为 `["*"]`（D-83）。2026-11-13 审查者核对：前置 T-12.4（PR #182）、T-12.5（PR #188）、T-12.6（PR #193）、T-12.8（PR #175）、T-12.14（PR #189）均已合并；语句以 `alonabot pack` 产出的安装包验收，pack 由 T-09.3（goal-38，执行中）交付，审查者在 goal-38 合并后按 main 核对语句并派发；各分项已有经 cpa 兼容网关的真实 Provider 证据（TEST-MATRIX §3.2 的 T-12.2～T-12.6、T-12.8、T-12.14 行），本切片汇总时引用。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-64（切片 T-12.7：官方 Agent 组件打包与 T-12 验收）。goal 目录 goal-64，分支 goal-64，worktree .worktrees/goal-64，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

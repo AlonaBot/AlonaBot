@@ -166,6 +166,15 @@ func managementCommands(code *int) []*cobra.Command {
 					request["install"] = candidate
 				}
 			}
+			if action == "reload" {
+				client, err := options.client()
+				if err != nil {
+					return err
+				}
+				if _, err := client.request(cmd.Context(), http.MethodPost, "/api/v1/plugins/"+url.PathEscape(args[0])+"/config/import", nil); err != nil {
+					return err
+				}
+			}
 			return managementCall(cmd, code, options, http.MethodPost, "/api/v1/packages/"+action, body)
 		}
 		commands = append(commands, command)

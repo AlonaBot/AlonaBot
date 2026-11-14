@@ -6,7 +6,7 @@
 
 ```fish
 go generate ./examples/plugins/echo
-go run ./cmd/alonabot plugin check --dir examples/plugins/echo
+go run ./cmd/alonabot check --dir examples/plugins/echo
 go build -o /tmp/alonabot-echo ./examples/plugins/echo
 ```
 
