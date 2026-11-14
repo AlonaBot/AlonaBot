@@ -20,24 +20,35 @@ const i18nDirectory = "i18n"
 const i18nExtension = ".json"
 
 func (s *scan) readI18n() error {
-	directory := filepath.Join(s.dir, i18nDirectory)
-	entries, err := os.ReadDir(directory)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read i18n directory: %w", err)
-	}
 	files := make(map[string][]byte)
-	for _, entry := range entries {
-		if !strings.HasSuffix(entry.Name(), i18nExtension) {
-			continue
+	if s.resources != nil {
+		for name, raw := range s.resources {
+			if strings.HasPrefix(name, i18nDirectory+"/") && filepath.Dir(name) == i18nDirectory && strings.HasSuffix(name, i18nExtension) {
+				files[filepath.Base(name)] = raw
+			}
 		}
-		data, err := os.ReadFile(filepath.Join(directory, entry.Name()))
+		if len(files) == 0 {
+			return nil
+		}
+	} else {
+		directory := filepath.Join(s.dir, i18nDirectory)
+		entries, err := os.ReadDir(directory)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
 		if err != nil {
-			return fmt.Errorf("read i18n file: %w", err)
+			return fmt.Errorf("read i18n directory: %w", err)
 		}
-		files[entry.Name()] = data
+		for _, entry := range entries {
+			if !strings.HasSuffix(entry.Name(), i18nExtension) {
+				continue
+			}
+			data, err := s.resourceFile(i18nDirectory + "/" + entry.Name())
+			if err != nil {
+				return fmt.Errorf("read i18n file: %w", err)
+			}
+			files[entry.Name()] = data
+		}
 	}
 	// 存在 i18n 目录时必须提供源语言；Parse 的空输入留给无资源的组件。
 	if len(files) == 0 {

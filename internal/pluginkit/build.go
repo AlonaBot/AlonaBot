@@ -52,15 +52,15 @@ type Build struct {
 
 // BuildDev 构建 dir 中的组件到 outDir，失败时保留编译器原文与上一次成功的产物。
 func BuildDev(ctx context.Context, dir, outDir string) (Build, error) {
-	return buildComponent(ctx, generate.Options{Dir: dir}, outDir, true)
+	return buildComponent(ctx, generate.Options{Dir: dir}, outDir, true, nil)
 }
 
 // Compile 生成目标资源并发布独立组件与包内 manifest；outDir 为空时使用工程 bin/。
 func Compile(ctx context.Context, options generate.Options, outDir string) (Build, error) {
-	return buildComponent(ctx, options, outDir, false)
+	return buildComponent(ctx, options, outDir, false, nil)
 }
 
-func buildComponent(ctx context.Context, options generate.Options, outDir string, development bool) (build Build, err error) {
+func buildComponent(ctx context.Context, options generate.Options, outDir string, development bool, snapshot *projectScan) (build Build, err error) {
 	dir := options.Dir
 	// 1. 身份与生成诊断先于产物发布；开发构建保持工程目录只读。
 	dir, err = filepath.Abs(dir)
@@ -71,14 +71,13 @@ func buildComponent(ctx context.Context, options generate.Options, outDir string
 	if err != nil {
 		return build, err
 	}
-	build.Manifest, err = os.ReadFile(filepath.Join(dir, projectFile))
-	if err != nil {
-		return build, fmt.Errorf("read project manifest: %w", err)
-	}
 	options.Dir = dir
 	if development {
 		options.GOOS = runtime.GOOS
 		options.GOARCH = runtime.GOARCH
+	} else {
+		options.CGOEnabled = "0"
+		options.RequireAdapterConstructor = true
 	}
 	targetEnv, err := goCommand(ctx, dir, "env", "GOOS", "GOARCH")
 	if err != nil {
@@ -91,10 +90,14 @@ func buildComponent(ctx context.Context, options generate.Options, outDir string
 	if options.GOARCH == "" {
 		options.GOARCH = targetParts[1]
 	}
-	project, result, err := scanProject(ctx, options)
-	if err != nil {
-		return build, err
+	if snapshot == nil {
+		snapshot, err = scanProject(ctx, options)
+		if err != nil {
+			return build, err
+		}
 	}
+	project, result := snapshot.project, snapshot.generated
+	build.Manifest = snapshot.manifest
 	build.Role, build.ID, build.AdapterID = project.Manifest.Role, project.Manifest.ID, project.Manifest.AdapterID
 	if outDir == "" {
 		outDir = filepath.Join(dir, "bin")
@@ -126,11 +129,7 @@ func buildComponent(ctx context.Context, options generate.Options, outDir string
 		if err = os.MkdirAll(outDir, privateMode); err != nil {
 			return build, err
 		}
-		files, resourceErr := projectResources(dir, project.Manifest)
-		if resourceErr != nil {
-			return build, resourceErr
-		}
-		for name, raw := range files {
+		for name, raw := range snapshot.files {
 			path := filepath.Join(outDir, filepath.FromSlash(name))
 			if err = os.MkdirAll(filepath.Dir(path), privateMode); err != nil {
 				return build, err
@@ -268,27 +267,11 @@ func buildComponent(ctx context.Context, options generate.Options, outDir string
 		return build, err
 	}
 	resources := Resources{Manifest: build.PackageManifest, ConfigSchema: result.ConfigSchema, I18n: map[string][]byte{}}
-	resources.AdapterConfigSchema, err = os.ReadFile(filepath.Join(dir, "adapter_config_schema.json"))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return build, err
-	}
-	if len(resources.AdapterConfigSchema) > 0 {
-		schema, problems := configschema.Parse(resources.AdapterConfigSchema)
-		if len(problems) > 0 {
-			return build, fmt.Errorf("adapter schema: %v", problems)
+	resources.AdapterConfigSchema = snapshot.files["adapter_config_schema.json"]
+	for name, raw := range snapshot.files {
+		if strings.HasPrefix(name, "i18n/") && filepath.Dir(name) == "i18n" && strings.HasSuffix(name, ".json") {
+			resources.I18n[filepath.Base(name)] = raw
 		}
-		resources.AdapterConfigSchema = schema.Canonical()
-	}
-	catalogs, err := filepath.Glob(filepath.Join(dir, "i18n", "*.json"))
-	if err != nil {
-		return build, err
-	}
-	for _, path := range catalogs {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return build, err
-		}
-		resources.I18n[filepath.Base(path)] = raw
 	}
 	metadata, err := json.Marshal(resources)
 	if err != nil {

@@ -173,11 +173,11 @@ bin/alonabot build --dir ./myplugin --goos linux --goarch amd64 --tags a,b
 bin/alonabot check --dir ./myplugin --goos linux --goarch amd64 --tags a,b
 ```
 
-`build/check/pack` 按相同的 `--goos`、`--goarch`、`--tags` 选择源码，缺省沿用 Go 环境。`build` 成功后更新生成文件，默认输出到 `<工程>/bin`，可用 `--out DIR` 覆盖。进程产物包含独立的 `component`（Windows 为 `component.exe`）、资源旁车及包内 `plugin.yaml`；作者 manifest 保持原样。WebUI build 发布静态资源与包内 manifest。`check` 只读比较生成文件，缺失或陈旧时提示 `alonabot build`，保留全部静态诊断与位置。
+`build/check/pack` 按相同的 `--goos`、`--goarch`、`--tags` 选择源码，目标缺省沿用 Go 环境；扫描、依赖分析和正式编译统一使用 `CGO_ENABLED=0`。开发运行的 BuildDev 沿用开发环境的 cgo 设置。`build` 成功后更新生成文件，默认输出到 `<工程>/bin`，可用 `--out DIR` 覆盖。进程产物包含独立的 `component`（Windows 为 `component.exe`）、资源旁车及包内 `plugin.yaml`；作者 manifest 保持原样。WebUI build 发布静态资源与包内 manifest。`check` 只读比较生成文件，缺失或陈旧时提示 `alonabot build`，保留全部静态诊断与位置。
 
 `test` 在全新临时数据目录中构建宿主平台组件，完成真实握手、准备、注册、激活与停止，报告注册命令及清理结果；Adapter 保持零平台实例，WebUI 检查静态加载资源。准备、注册、停止或清理失败均非零退出。
 
-`pack` 使用相同构建路径输出 `<id>-<version>-<os>-<arch>.tar.gz`（WebUI 为 `<id>-<version>-any.tar.gz`）及归档外的 `release.json`，`--out` 默认同 build。`--asset-url` 必填且须为绝对 https URL。进程包的 `build-info` 是 `debug.BuildInfo.String()` 文本；配置 schema 与嵌入资源使用同一规范内容。
+`pack` 使用相同构建路径输出 `<id>-<version>-<os>-<arch>.tar.gz`（WebUI 为 `<id>-<version>-any.tar.gz`）及归档外的 `release.json`，`--out` 默认同 build。`--asset-url` 必填且须为绝对 https URL。进程包的 `build-info` 是 `debug.BuildInfo.String()` 文本；生成代码、资源旁车与归档共用扫描时校验的资源快照，配置 schema 使用同一规范内容；扫描后保存的工程资源留待下次构建。
 
 ```fish
 bin/alonabot pack --dir ./myplugin --asset-url https://example.com/hello.tar.gz --key ./release.key --out ./dist

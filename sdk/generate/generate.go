@@ -35,9 +35,12 @@ const FileName = "alonabot_gen.go"
 
 // Options 指定构建入口和目标环境。
 type Options struct {
-	Dir          string // 构建入口包目录
-	GOOS, GOARCH string // 空值沿用 go 命令的当前环境
-	Tags         []string
+	Dir                       string // 构建入口包目录
+	GOOS, GOARCH              string // 空值沿用 go 命令的当前环境
+	Tags                      []string
+	Resources                 map[string][]byte // 可选的工程资源快照，键为相对路径；nil 时读取工程文件。
+	CGOEnabled                string            // 空值沿用 Go 环境；正式构建传 "0"，与编译视图一致。
+	RequireAdapterConstructor bool              // 正式工程要求 New 返回 adapter.Adapter；开发构建保留原入口约定。
 }
 
 // Diagnostic 携带一条源码或组件资源问题的位置和说明。
@@ -76,19 +79,21 @@ type declaration struct {
 }
 
 type scan struct {
-	result          Result
-	files           *token.FileSet
-	dir             string
-	entry           listedPackage
-	constructors    []token.Pos
-	adapterProject  bool
-	adapterRoot     declaration
-	projectManifest []byte
-	instanceJSON    []byte
-	paramNames      map[string][]string
-	serviceSchemas  map[string][]byte
-	i18nFiles       map[string][]byte // 已读文案原文；全量诊断通过后才嵌入，没有资源时为 nil。
-	syntax          map[string][]*ast.File
+	resources                 map[string][]byte
+	result                    Result
+	files                     *token.FileSet
+	dir                       string
+	entry                     listedPackage
+	constructors              []token.Pos
+	adapterProject            bool
+	requireAdapterConstructor bool
+	adapterRoot               declaration
+	projectManifest           []byte
+	instanceJSON              []byte
+	paramNames                map[string][]string
+	serviceSchemas            map[string][]byte
+	i18nFiles                 map[string][]byte // 已读文案原文；全量诊断通过后才嵌入，没有资源时为 nil。
+	syntax                    map[string][]*ast.File
 }
 
 // Scan 按目标环境扫描源码与文案资源并生成嵌入代码。输入问题记入 Diagnostics；
@@ -105,7 +110,7 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve plugin directory links: %w", err)
 	}
-	s := &scan{files: token.NewFileSet(), dir: dir, syntax: make(map[string][]*ast.File)}
+	s := &scan{files: token.NewFileSet(), dir: dir, resources: opt.Resources, requireAdapterConstructor: opt.RequireAdapterConstructor, syntax: make(map[string][]*ast.File)}
 	if err := s.readProject(); err != nil {
 		return nil, err
 	}
@@ -161,6 +166,9 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 	}
 	if opt.GOARCH != "" {
 		cmd.Env = append(cmd.Env, "GOARCH="+opt.GOARCH)
+	}
+	if opt.CGOEnabled != "" {
+		cmd.Env = append(cmd.Env, "CGO_ENABLED="+opt.CGOEnabled)
 	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -303,4 +311,15 @@ func (s *scan) checkTypes() {
 		panic(err)
 	} // 固定模板只替换 go list 确定的包名与路径。
 	s.syntax[s.entry.ImportPath] = append(s.syntax[s.entry.ImportPath], file)
+}
+
+// resourceFile 优先读取调用方提供的资源快照，缺失项按文件不存在处理。
+func (s *scan) resourceFile(name string) ([]byte, error) {
+	if s.resources == nil {
+		return os.ReadFile(filepath.Join(s.dir, name))
+	}
+	if raw, ok := s.resources[name]; ok {
+		return raw, nil
+	}
+	return nil, &os.PathError{Op: "open", Path: name, Err: os.ErrNotExist}
 }

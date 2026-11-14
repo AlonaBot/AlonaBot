@@ -27,6 +27,8 @@ import (
 
 // Pack 构建组件并发布可重复归档、release.json 和可选的 Ed25519 签名。
 func Pack(ctx context.Context, options generate.Options, assetURL, keyFile, outDir string) (archive string, err error) {
+	options.CGOEnabled = "0"
+	options.RequireAdapterConstructor = true
 	// 1. 发布地址、密钥与静态资源问题先于构建和产物发布拒绝。
 	u, err := url.Parse(assetURL)
 	if err != nil || u.Scheme != "https" || u.Host == "" {
@@ -52,14 +54,11 @@ func Pack(ctx context.Context, options generate.Options, assetURL, keyFile, outD
 			return "", err
 		}
 	}
-	project, _, err := scanProject(ctx, options)
+	snapshot, err := scanProject(ctx, options)
 	if err != nil {
 		return "", err
 	}
-	files, err := projectResources(options.Dir, project.Manifest)
-	if err != nil {
-		return "", err
-	}
+	files := snapshot.files
 	if keyInfo != nil {
 		for name := range files {
 			info, err := os.Stat(filepath.Join(options.Dir, filepath.FromSlash(name)))
@@ -84,7 +83,7 @@ func Pack(ctx context.Context, options generate.Options, assetURL, keyFile, outD
 	}
 	defer func() { err = errors.Join(err, os.RemoveAll(staging)) }()
 	// 2. 归档资源取同一次构建的规范副本，薄入口与临时 module 信息不进入包。
-	build, err := Compile(ctx, options, filepath.Join(staging, "build"))
+	build, err := buildComponent(ctx, options, filepath.Join(staging, "build"), false, snapshot)
 	if err != nil {
 		return "", err
 	}
@@ -102,19 +101,6 @@ func Pack(ctx context.Context, options generate.Options, assetURL, keyFile, outD
 	if m.Role == "webui" {
 		name = fmt.Sprintf("%s-%s-any.tar.gz", m.ID, m.Version)
 	} else {
-		resources, err := ReadResources(build)
-		if err != nil {
-			return "", err
-		}
-		if len(resources.ConfigSchema) > 0 {
-			files["config_schema.json"] = resources.ConfigSchema
-		}
-		if len(resources.AdapterConfigSchema) > 0 {
-			files["adapter_config_schema.json"] = resources.AdapterConfigSchema
-		}
-		for locale, raw := range resources.I18n {
-			files["i18n/"+locale] = raw
-		}
 		files[m.Entrypoint], err = os.ReadFile(build.Executable)
 		if err != nil {
 			return "", err

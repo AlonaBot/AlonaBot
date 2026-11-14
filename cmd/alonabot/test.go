@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -163,18 +164,30 @@ type offlineLog struct {
 	source   *logging.Source
 	mu       sync.Mutex // 停止开始与 stdout/stderr 日志回调可并发。
 	stopping bool
+	pending  []byte // stderr 的不完整 JSON 记录；进程日志可能按缓冲区分块。
 	err      error
 }
 
 func (l *offlineLog) SetSession(id []byte) { l.source.SetSession(id) }
 func (l *offlineLog) Line(id, stream string, line []byte) {
-	l.source.Line(id, stream, line)
-	var record struct{ Level, Msg string }
-	if stream != "stderr" || json.Unmarshal(line, &record) != nil {
+	if stream != "stderr" {
+		l.source.Line(id, stream, line)
 		return
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.pending = append(l.pending, line...)
+	var record struct{ Level, Msg string }
+	// 以完整 JSON 记录识别停止错误，跨分块保留原文而不截断错误内容。
+	err := json.NewDecoder(bytes.NewReader(l.pending)).Decode(&record)
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		return
+	}
+	line, l.pending = l.pending, nil
+	l.source.Line(id, stream, line)
+	if err != nil {
+		return
+	}
 	if l.stopping && (record.Level == "ERROR" || record.Msg == "OnStop exceeded the stop deadline; giving up waiting") {
 		l.err = errors.Join(l.err, fmt.Errorf("component stop: %s", line))
 	}

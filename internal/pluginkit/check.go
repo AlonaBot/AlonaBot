@@ -6,20 +6,25 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/sdk/generate"
 )
 
 // Check 只读检查作者工程及目标平台的生成资源是否最新。
 func Check(ctx context.Context, options generate.Options) error {
-	_, result, err := scanProject(ctx, options)
+	options.CGOEnabled = "0"
+	options.RequireAdapterConstructor = true
+	snapshot, err := scanProject(ctx, options)
 	if err != nil {
 		return err
 	}
+	result := snapshot.generated
 	if result == nil {
 		return nil
 	}
@@ -33,36 +38,60 @@ func Check(ctx context.Context, options generate.Options) error {
 	return nil
 }
 
-func scanProject(ctx context.Context, options generate.Options) (*manifest.Result, *generate.Result, error) {
+// projectScan 持有同一次校验所使用的作者 manifest、资源与生成源码。
+type projectScan struct {
+	project   *manifest.Result
+	generated *generate.Result
+	manifest  []byte
+	files     map[string][]byte
+}
+
+func scanProject(ctx context.Context, options generate.Options) (*projectScan, error) {
 	raw, err := os.ReadFile(filepath.Join(options.Dir, projectFile))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	project, err := manifest.ParseProject(raw)
 	if err != nil {
-		return nil, nil, fmt.Errorf("plugin.yaml:1:1: %w", err)
+		return nil, fmt.Errorf("plugin.yaml:1:1: %w", err)
 	}
-	if _, err := projectResources(options.Dir, project.Manifest); err != nil {
-		return nil, nil, err
+	files, err := projectResources(options.Dir, project.Manifest)
+	if err != nil {
+		return nil, err
 	}
+	snapshot := &projectScan{project: project, manifest: raw, files: files}
 	if project.Manifest.Role == "webui" {
-		return project, nil, nil
+		return snapshot, nil
 	}
+	options.Resources = maps.Clone(files)
+	options.Resources[projectFile] = raw
 	result, err := generate.Scan(ctx, options)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if len(result.Diagnostics) != 0 {
 		diagnostics := make([]string, 0, len(result.Diagnostics))
 		for _, d := range result.Diagnostics {
 			diagnostics = append(diagnostics, d.Pos+": "+d.Message)
 		}
-		return nil, nil, errors.New(strings.Join(diagnostics, "\n"))
+		return nil, errors.New(strings.Join(diagnostics, "\n"))
 	}
 	if len(result.Source) == 0 {
-		return nil, nil, errors.New("entry package must declare a component constructor")
+		return nil, errors.New("entry package must declare a component constructor")
 	}
-	return project, result, nil
+	snapshot.generated = result
+	// 包资源与生成代码均采用同一份规范 schema。
+	if len(result.ConfigSchema) > 0 {
+		files["config_schema.json"] = result.ConfigSchema
+	}
+	if raw, ok := files["adapter_config_schema.json"]; ok {
+		schema, problems := configschema.Parse(raw)
+		if len(problems) > 0 {
+			return nil, fmt.Errorf("adapter schema: %v", problems)
+		}
+		files["adapter_config_schema.json"] = schema.Canonical()
+	}
+	return snapshot, nil
 }
 
 // projectResources 在工程文件系统边界检查打包资源，所有角色共用这份白名单。
@@ -139,6 +168,11 @@ func projectResources(dir string, project *manifest.Manifest) (map[string][]byte
 			}
 			if err := walk(name); err != nil {
 				return nil, err
+			}
+			if name == "i18n" {
+				if _, ok := files["i18n/en-US.json"]; !ok {
+					return nil, errors.New("i18n/en-US.json: source catalog is missing")
+				}
 			}
 		}
 	}

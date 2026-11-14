@@ -16,7 +16,7 @@ const adapterRole = "adapter"
 const adapterPath = sdkPath + "/adapter"
 
 func (s *scan) readProject() error {
-	raw, err := os.ReadFile(filepath.Join(s.dir, projectFileName))
+	raw, err := s.resourceFile(projectFileName)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -43,6 +43,24 @@ func (s *scan) checkAdapterType(importer *schemaImporter) error {
 	entry, err := importer.Import(s.entry.ImportPath)
 	if err != nil {
 		return err
+	}
+	if s.requireAdapterConstructor {
+		constructor := entry.Scope().Lookup("New")
+		fn, valid := constructor.(*types.Func)
+		if valid {
+			sig := fn.Signature()
+			valid = sig.Recv() == nil && sig.Params().Len() == 0 && !sig.Variadic() && sig.TypeParams().Len() == 0 && sig.Results().Len() == 1
+			if valid {
+				valid = types.Identical(sig.Results().At(0).Type(), contractPackage.Scope().Lookup("Adapter").Type())
+			}
+		}
+		if !valid {
+			position := s.syntax[s.entry.ImportPath][0].Name.Pos()
+			if constructor != nil {
+				position = constructor.Pos()
+			}
+			s.diagnostic(position, "entry constructor must have signature func New() adapter.Adapter")
+		}
 	}
 	var candidates []declaration
 	for _, name := range entry.Scope().Names() {
