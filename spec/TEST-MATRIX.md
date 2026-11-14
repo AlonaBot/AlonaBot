@@ -390,17 +390,19 @@ T-02.4 按 D-86 删除的测试及测试插件只保留历史运行证据，相�
 
 | 命令 | 结果 | 日志位置 |
 | --- | --- | --- |
-| `go generate ./examples/plugins/echo`；`go generate ./examples/plugins/media` | 通过，生成产物只由该入口更新 | `goal-14/logs/echo-generate.log`、`media-generate.log` |
-| `gofmt -l sdk/services.go sdk/bus.go examples/plugins/echo/*.go examples/plugins/media/*.go cmd/alonabot/t04_e2e_test.go sdk/t04_local_test.go sdk/generate/t04_local_test.go t04_local_test.go` | 无输出 | `goal-14/logs/fix1-gofmt.log` |
-| `go vet ./...`；`go build ./...` | 通过；build 的只读 module stat cache 提示保留在日志，退出 0 | `goal-14/logs/fix1-vet.log`、`fix1-build.log` |
-| `go test -race ./...` | 通过，退出 0；根包 83.618s | `goal-14/logs/fix1-race.log` |
-| `go test -race -count=1 ./cmd/alonabot -run '^(TestSDKExamples\|TestTelegramDevelopment)$' -v` | 两个测试及全部子场景通过，原 Telegram 媒体与失败路径断言保留 | `goal-14/logs/fix1-cli.log` |
-| `go run ./cmd/alonabot plugin check --dir examples/plugins/echo`；`go run ./cmd/alonabot plugin check --dir examples/plugins/media` | 均通过 | `goal-14/logs/fix1-echo-check.log`、`fix1-media-check.log` |
-| `go test -race -count=1 ./sdk/generate ./sdk . ./examples/plugins/echo ./examples/plugins/media -run '^TestT04' -v` | 全部本地自测通过（含 `TestT04SchemaIdentity` 四子场景）；media 包无匹配本地用例 | `goal-14/logs/fix1-local.log`；策略 PID 与覆盖输入在同一日志 |
-| `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /tmp/alonabot-t04-cross/linux/ ./examples/plugins/echo ./examples/plugins/media` | 交叉构建通过 | `goal-14/logs/fix1-cross-linux.log` |
-| `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o /tmp/alonabot-t04-cross/windows/ ./examples/plugins/echo ./examples/plugins/media` | 交叉构建通过 | `goal-14/logs/fix1-cross-windows.log` |
+| `go generate ./examples/plugins/echo ./examples/plugins/media` | 通过，生成产物只由该入口更新 | `goal-14/logs/fix4-generate.log` |
+| `gofmt -l sdk/generated.go sdk/plugin.go sdk/session.go sdk/sdk.go sdk/services.go sdk/bus.go sdk/t04_local_test.go sdk/generate/t04_local_test.go examples/plugins/echo/*.go examples/plugins/media/*.go cmd/alonabot/t04_e2e_test.go t04_local_test.go t04_review_local_test.go` | 无输出 | `goal-14/logs/fix4-gofmt.log` |
+| `go vet ./...`；`go build ./...` | 通过；build 的只读 module stat cache 提示保留在日志，退出 0 | `goal-14/logs/fix4-vet.log`、`fix4-build.log` |
+| `go test -race ./...` | 通过，退出 0；根包 121.418s、CLI 57.703s | `goal-14/logs/fix4-race.log` |
+| `go test -race -count=1 ./cmd/alonabot -run '^(TestSDKExamples\|TestTelegramDevelopment)$' -v` | 两个测试及全部子场景通过，原 Telegram 媒体与失败路径断言保留 | `goal-14/logs/fix4-cli.log` |
+| `go run ./cmd/alonabot plugin check --dir examples/plugins/echo`；`go run ./cmd/alonabot plugin check --dir examples/plugins/media` | 均通过 | `goal-14/logs/fix4-echo-check.log`、`fix4-media-check.log` |
+| `go test -race -count=1 ./sdk/generate ./sdk . ./examples/plugins/echo ./examples/plugins/media -run '^(TestT04\|TestPR191)' -v` | 全部本地自测通过（含 `TestT04SchemaIdentity` 四子场景和三项 TestPR191 本地回归）；media 包无匹配本地用例 | `goal-14/logs/fix4-local.log`；策略 PID 与覆盖输入在同一日志 |
+| `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /tmp/alonabot-t04-cross/linux/ ./examples/plugins/echo ./examples/plugins/media` | 交叉构建通过 | `goal-14/logs/fix4-cross-linux.log` |
+| `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o /tmp/alonabot-t04-cross/windows/ ./examples/plugins/echo ./examples/plugins/media` | 交叉构建通过 | `goal-14/logs/fix4-cross-windows.log` |
 
-**FIX-1 已修复，无当前阻塞：** 2026-11-13 审查者授权 SDK 修复 main 包反射身份差异。`sdk/services.go:generatedSchemaID` 优先完整身份，仅在其缺失且生成资源存在 `main.<Name>` 时采用后者；Service 注册/Call 和 Bus 订阅/Publish 统一使用该身份，Schema 查找与注册描述一致，生成器输出保持现状。本地 `sdk/t04_local_test.go:TestT04SchemaIdentity` 覆盖完整名优先、main 回退、缺失和无关资源，并核对 Service 输入/输出及 Bus 描述；echo 的 `TestT04ExampleResources` 与迁移后的原 `TestEcho` 通过，证据 `goal-14/logs/fix1-focused.log`。实际 main 二进制 Service/Bus/延续与 CLI 联验通过。历史失败保留于 `echo-test.log`、`race.log`、`local-all.log`，本表指向最终通过日志。
+**FIX-1 已修复，无当前阻塞：** 2026-11-13 审查者授权 SDK 修复 main 包反射身份差异。`sdk/services.go:generatedSchemaID` 优先完整身份，仅在其缺失、类型属于 UseGenerated 记录的入口包且生成资源存在 `main.<Name>` 时采用后者（FIX-4 收紧判定）；Service 注册/Call 和 Bus 订阅/Publish 统一使用该身份，Schema 查找与注册描述一致，生成器输出保持现状。本地 `sdk/t04_local_test.go:TestT04SchemaIdentity` 覆盖完整名优先、main 回退、缺失和无关资源，并核对 Service 输入/输出及 Bus 描述；echo 的 `TestT04ExampleResources` 与迁移后的原 `TestEcho` 通过，证据 `goal-14/logs/fix1-focused.log`。实际 main 二进制 Service/Bus/延续与 CLI 联验通过。历史失败保留于 `echo-test.log`、`race.log`、`local-all.log`，本表指向最终通过日志。
+
+**FIX-4 / PR #191：** head `4943ddf82eec2db10533bace5ce93639ab85a978` 上复现导入 sdk.OptionsQuery 与 main 同名资源冲突：Publish 成功但订阅方无事件（`goal-14/logs/fix4-before.log`，对照组通过）。UseGenerated 记录精确调用包，Plugin 与 Session 保存私有身份，Service 注册/调用及 Bus 订阅/发布采用同一包归属判定。修复后 `t04_review_local_test.go` 的 `TestPR191BusSchemaCollisionLocal` 两组、`TestPR191GenerationCollisionLocal`、echo 的 `TestPR191EchoCompositionLocal` 和原 `TestT04SchemaIdentity` 均通过（`goal-14/logs/fix4-focused.log`）；全仓与完整本地结果见表中 fix4 日志。
 
 未运行：顶层 `alonabot check/build`（2026-11-13 裁决留 T-09.3 / goal-38 补证）、真实 Telegram、浏览器管理操作、Linux/Windows 实际运行与远端 CI。媒体故障矩阵继续引用 T-03.10 / #180，示例套件覆盖引用 T-16.2 / #183；本次只增加上述一个提交集成测试。
 

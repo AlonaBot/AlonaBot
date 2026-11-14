@@ -38,6 +38,7 @@ type launch struct {
 	runtime         *componentSession
 	pluginID        string
 	serviceSchemas  map[string][]byte // 当前组件的生成资源，Session 内只读。
+	entryPackage    string            // 插件入口包路径，Session 内只读。
 	transport       string            // tcp 或 stdio
 	addr            string            // TCP 传输时 Core 的 loopback 地址
 	secret          []byte            // 32 字节 Session Secret
