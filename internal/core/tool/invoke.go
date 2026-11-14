@@ -13,6 +13,7 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
+	"github.com/AlonaBot/AlonaBot/internal/core/broker"
 	"github.com/AlonaBot/AlonaBot/internal/core/buttons"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
@@ -108,7 +109,7 @@ func (i *invoker) invoke(ctx context.Context, caller router.Caller, in *wire.Inb
 	forward := *in
 	forward.Target = request.GetName()
 	forward.Payload = wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: service.GetInputSchemaId(), SchemaVersion: service.GetInputSchemaVersion(), Bytes: []byte(arguments)}
-	response := i.options.Call(ctx, caller, &forward)
+	response := i.options.Call(broker.WithSelfToolCall(ctx), caller, &forward)
 	if response.Err == nil || response.Payload.SchemaID != "" {
 		encoded := toolResponse(&pb.ToolInvokeResponse{ResultJson: string(response.Payload.Bytes)})
 		response.Payload = encoded.Payload

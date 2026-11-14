@@ -1,6 +1,6 @@
-// Package agent 提供官方 Agent 组件，通过 SDK 管理聊天设置、会话历史和流式回复。
+// Package agent 提供官方 Agent 组件，通过 SDK 管理聊天设置、会话历史、图片和流式回复。
 //
-// [New] 构造独立的组件对象；Provider 客户端位于 provider 子包，聊天设置保存在
+// [New] 构造独立的组件对象；Provider 客户端位于 provider 子包，聊天设置与图片保存在
 // 受管 SQLite，会话条目交由 Core 保存。生命周期与会话契约见 CONTRACTS §13。
 package agent
 
@@ -21,11 +21,12 @@ import (
 //go:generate go run ../cmd/alonabot plugin generate
 
 type configuredProvider struct {
-	name      string
-	client    *provider.Client
-	maxTokens int
-	protocol  provider.Protocol
-	model     string
+	name       string
+	client     *provider.Client
+	maxTokens  int
+	protocol   provider.Protocol
+	model      string
+	imageInput bool
 }
 
 type persona struct{ name, prompt string }
@@ -37,6 +38,7 @@ type configuration struct {
 	defaultPersona           string
 	historyEntries           int
 	mcpServers               []mcpServer
+	skillsDir                string
 	llmServiceAllowedPlugins []string
 }
 
@@ -44,6 +46,7 @@ type component struct {
 	config       configuration
 	sessionLocks [sessionLockCount]sync.Mutex
 	mcp          []*mcpPeer // 当前插件 Session 拥有，连接在首次对话时建立。
+	skills       []skill    // 启动时读取，整个插件 Session 内保持不变。
 }
 
 // New 创建官方 Agent，绑定生成资源并登记命令、迁移和生命周期回调。
@@ -52,12 +55,15 @@ func New() *sdk.Plugin {
 	sdk.UseGenerated(p, alonabotGenerated)
 	a := &component{}
 	gormdb.Migrations(p, []gormdb.Migration{{ID: 1, Up: func(ctx context.Context, tx *gorm.DB) error {
-		return tx.WithContext(ctx).AutoMigrate(&chatSettings{})
+		return tx.WithContext(ctx).AutoMigrate(&chatSettings{}, &conversationImage{})
+	}}, {ID: 2, Up: func(ctx context.Context, tx *gorm.DB) error {
+		return tx.WithContext(ctx).AutoMigrate(&memoryRecord{})
 	}}})
 	p.OnStart(func(ctx context.Context) error {
 		var err error
 		a.config, err = readConfiguration(p.Config())
 		if err == nil {
+			a.skills = readSkills(a.config.skillsDir)
 			for _, server := range a.config.mcpServers {
 				a.mcp = append(a.mcp, newMCPPeer(server))
 			}
@@ -67,6 +73,7 @@ func New() *sdk.Plugin {
 	p.OnStop(a.closeMCP)
 	a.registerCommands(p)
 	a.registerConversation(p)
+	registerMemory(p)
 	sdk.Serve(p, llm.GenerateService).Access(sdk.AccessPublic).Handle(a.generate)
 	sdk.ServeOptions(p, providersServiceName, a.providers)
 	return p
@@ -76,6 +83,7 @@ func readConfiguration(values config.Values) (configuration, error) {
 	// 1. 在配置边界验证名称、密钥与连接参数，客户端复用进程的代理环境。
 	result := configuration{defaultProvider: values.String("default_provider"), defaultPersona: values.String("default_persona"), historyEntries: int(values.Int("history_entries"))}
 	result.llmServiceAllowedPlugins = values.Strings("llm_service_allowed_plugins")
+	result.skillsDir = values.String("skills_dir")
 	names := make(map[string]bool)
 	for _, item := range values.TemplateList("providers") {
 		name := item.String("name")
@@ -90,7 +98,7 @@ func readConfiguration(values config.Values) (configuration, error) {
 		if err != nil {
 			return configuration{}, fmt.Errorf("configure provider: %w", err)
 		}
-		result.providers = append(result.providers, configuredProvider{name: name, client: client, maxTokens: int(item.Int("max_tokens")), protocol: provider.Protocol(item.String("protocol")), model: item.String("model")})
+		result.providers = append(result.providers, configuredProvider{name: name, client: client, maxTokens: int(item.Int("max_tokens")), protocol: provider.Protocol(item.String("protocol")), model: item.String("model"), imageInput: item.Bool("image_input")})
 	}
 	if (result.defaultProvider != "" || len(names) > 0) && !names[result.defaultProvider] {
 		return configuration{}, fmt.Errorf("default_provider must name a configured provider")

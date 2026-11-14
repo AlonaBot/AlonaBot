@@ -49,6 +49,7 @@ type operation struct {
 
 type loopback struct {
 	core       adapter.Core
+	cores      map[string]adapter.Core // 各实例的真实入站入口，启动后只读。
 	edit       bool
 	buttons    bool
 	limit      uint64
@@ -56,15 +57,48 @@ type loopback struct {
 	operations []operation
 	changed    chan struct{} // 关闭后同时唤醒 Provider 与测试断言，随后换成新通道。
 	sequence   atomic.Uint64
+	files      map[string][]byte // 启动前填入平台文件，取件时只读。
 }
 
 func (a *loopback) Descriptor() *adapter.Descriptor {
 	return &adapter.Descriptor{AdapterID: loopID, Capabilities: a.Capabilities()}
 }
 
-func (a *loopback) Start(_ context.Context, _ adapter.StartRequest, core adapter.Core) (adapter.Instance, error) {
-	a.core = core
-	return a, nil
+func (a *loopback) Start(_ context.Context, request adapter.StartRequest, core adapter.Core) (adapter.Instance, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cores == nil {
+		a.cores = make(map[string]adapter.Core)
+	}
+	a.cores[request.InstanceID] = core
+	if request.InstanceID == "main" {
+		a.core = core
+	}
+	return &loopbackInstance{loopback: a, instance: request.InstanceID}, nil
+}
+
+type loopbackInstance struct {
+	*loopback
+	instance string
+}
+
+func (a *loopbackInstance) Account() adapter.Account {
+	if a.instance == "main" {
+		return a.loopback.Account()
+	}
+	return adapter.Account{ID: "bot-" + a.instance}
+}
+
+func (a *loopbackInstance) Send(ctx context.Context, to message.Session, chain message.Chain) (*message.SendResult, *errcode.Error) {
+	result, err := a.loopback.Send(ctx, to, chain)
+	result.AdapterInstanceID = a.instance
+	return result, err
+}
+
+func (a *loopbackInstance) Edit(ctx context.Context, to message.Session, id string, chain message.Chain) (*message.SendResult, *errcode.Error) {
+	result, err := a.loopback.Edit(ctx, to, id, chain)
+	result.AdapterInstanceID = a.instance
+	return result, err
 }
 
 func (*loopback) Account() adapter.Account { return adapter.Account{ID: "bot"} }
@@ -74,7 +108,20 @@ func (a *loopback) Capabilities() []message.Capability {
 		{Name: "message.send", Version: 1, Supported: true, TextLimit: &message.TextLimit{Max: a.limit, Unit: message.TextUnicodeCodePoints}},
 		{Name: "message.edit", Version: 1, Supported: a.edit},
 		{Name: "message.buttons", Version: 1, Supported: a.buttons},
+		{Name: "media.read", Version: 1, Supported: true},
 	}
+}
+
+func (a *loopback) ReadPlatformFile(_ context.Context, fileID string, offset uint64, length uint32) ([]byte, uint64, bool, error) {
+	data, ok := a.files[fileID]
+	if !ok {
+		return nil, 0, false, fmt.Errorf("platform file not found")
+	}
+	if offset > uint64(len(data)) {
+		return nil, 0, false, fmt.Errorf("platform file offset exceeds size")
+	}
+	end := min(offset+uint64(length), uint64(len(data)))
+	return data[offset:end], end, end == uint64(len(data)), nil
 }
 
 func (a *loopback) record(method, id string, to message.Session, chain message.Chain) (*message.SendResult, *errcode.Error) {
@@ -137,7 +184,11 @@ type harness struct {
 
 func startAgent(t *testing.T, loop *loopback, configuration map[string]any, coreExtra map[string]any, plugins ...*sdk.Plugin) *harness {
 	t.Helper()
-	dir := t.TempDir()
+	return startAgentAt(t, t.TempDir(), loop, configuration, coreExtra, agent.New(), nil, plugins...)
+}
+
+func startAgentAt(t *testing.T, dir string, loop *loopback, configuration map[string]any, coreExtra map[string]any, root *sdk.Plugin, args []string, plugins ...*sdk.Plugin) *harness {
+	t.Helper()
 	pluginDir := filepath.Join(dir, "plugins", agentID)
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -150,7 +201,7 @@ func startAgent(t *testing.T, loop *loopback, configuration map[string]any, core
 	writeJSON(t, filepath.Join(dir, "core_config.json"), coreConfig)
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	logger := slog.Default()
-	options := []alonabot.Option{alonabot.DataDir(dir), alonabot.Plugin(agent.New()), alonabot.Adapter(loop)}
+	options := []alonabot.Option{alonabot.DataDir(dir), alonabot.Plugin(root), alonabot.Adapter(loop), alonabot.Args(args...)}
 	for _, plugin := range plugins {
 		options = append(options, alonabot.Plugin(plugin))
 	}
@@ -192,12 +243,17 @@ func newLoop(edit bool, limit uint64) *loopback {
 
 func (h *harness) deliver(t *testing.T, text, user, locale string, toMe bool) {
 	t.Helper()
+	h.deliverChain(t, message.Chain{message.Text(text)}, user, locale, toMe)
+}
+
+func (h *harness) deliverChain(t *testing.T, chain message.Chain, user, locale string, toMe bool) {
+	t.Helper()
 	accepted, err := h.loop.core.Deliver(h.ctx, &message.Event{
 		Type: "message.created", Source: message.SourceAdapter, AdapterID: loopID, AdapterInstanceID: "main", AccountID: "bot", Session: loopSession, ChatType: message.ChatGroup,
-		Actor: &message.Actor{ExternalUserID: user, AdapterInstanceID: "main", Locale: locale}, Payload: &message.CreatedPayload{PlatformMessageID: fmt.Sprint(h.loop.sequence.Add(1)), Chain: message.Chain{message.Text(text)}, ToMe: toMe},
+		Actor: &message.Actor{ExternalUserID: user, AdapterInstanceID: "main", Locale: locale}, Payload: &message.CreatedPayload{PlatformMessageID: fmt.Sprint(h.loop.sequence.Add(1)), Chain: chain, ToMe: toMe},
 	}, nil)
 	if err != nil || !accepted {
-		t.Fatalf("deliver %q: accepted=%v, error=%v", text, accepted, err)
+		t.Fatalf("deliver %q: accepted=%v, error=%v", chain.Text(), accepted, err)
 	}
 }
 
@@ -213,18 +269,34 @@ func (h *harness) waitText(t *testing.T, text string) []operation {
 
 func (h *harness) entries(t *testing.T) []map[string]string {
 	t.Helper()
-	rows, err := h.db.QueryContext(h.ctx, "SELECT entry_json FROM conversation_entry WHERE plugin_id = ? AND conversation_key = ? ORDER BY seq", agentID, string(loopSession))
+	// 文本断言沿用字符串视图，原始条目读取保留 images 的数字数组。
+	var entries []map[string]string
+	for _, stored := range h.readEntries(t) {
+		entry := make(map[string]string)
+		for key, value := range stored {
+			if text, ok := value.(string); ok {
+				entry[key] = text
+			}
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
+func (h *harness) readEntries(t *testing.T) []map[string]any {
+	t.Helper()
+	rows, err := h.db.QueryContext(h.ctx, "SELECT entry_json FROM conversation_entry WHERE plugin_id = ? AND conversation_key = ? ORDER BY seq", agentID, string(loopSession)+"@main")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	var entries []map[string]string
+	var entries []map[string]any
 	for rows.Next() {
 		var raw string
 		if err := rows.Scan(&raw); err != nil {
 			t.Fatal(err)
 		}
-		var entry map[string]string
+		var entry map[string]any
 		if err := json.Unmarshal([]byte(raw), &entry); err != nil {
 			t.Fatal(err)
 		}
@@ -242,8 +314,16 @@ func (h *harness) waitEntries(t *testing.T, count int) []map[string]string {
 	defer ticker.Stop()
 	for {
 		entries := h.entries(t)
-		if len(entries) == count {
-			return entries
+		if len(entries) == count+1 {
+			if entries[0]["role"] != "system" || entries[0]["kind"] != "memory_snapshot" {
+				t.Fatalf("missing initial memory snapshot: %v", entries)
+			}
+			for _, entry := range entries[1:] {
+				if entry["kind"] != "" {
+					t.Fatalf("unexpected snapshot in ordinary history: %v", entries)
+				}
+			}
+			return entries[1:]
 		}
 		select {
 		case <-ticker.C:
@@ -320,10 +400,9 @@ func TestAgentConversation(t *testing.T) {
 				if len(operations) != 2 || operations[0].text != "Hello" || operations[0].method != "send" {
 					t.Fatalf("partial content was not preserved: %v", operations)
 				}
-				for _, entry := range h.entries(t) {
-					if entry["role"] == "assistant" {
-						t.Fatalf("failed assistant was stored: %v", entry)
-					}
+				entries := h.entries(t)
+				if len(entries) != 1 || entries[0]["role"] != "system" || entries[0]["kind"] != "memory_snapshot" || entries[0]["content"] != "" {
+					t.Fatalf("failed turn must retain only the empty snapshot: %v", entries)
 				}
 			} else {
 				entries := h.waitEntries(t, 2)

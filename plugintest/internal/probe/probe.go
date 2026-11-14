@@ -62,6 +62,7 @@ func New() *sdk.Plugin {
 	})
 	p.Command("edit").Handle(edit)
 	p.Command("ask").Handle(ask)
+	registerScenarios(p)
 	return p
 }
 
@@ -97,6 +98,9 @@ func edit(c *sdk.Context) error {
 
 func ask(c *sdk.Context) error {
 	return c.Continue(func(c *sdk.Context) error {
+		if _, err := c.Send(message.Text(c.T("question"))); err != nil {
+			return err
+		}
 		next, err := c.Wait(waitTimeout)
 		if err != nil {
 			return err

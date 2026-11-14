@@ -53,8 +53,8 @@ func TestSendPermissions(t *testing.T) {
 	wrongAccount.AccountId = "wrong"
 	wrongAdapter := proto.CloneOf(original)
 	wrongAdapter.AdapterId = "wrong"
-	invocation := &router.Invocation{PluginID: pluginID, DefaultTarget: original}
-	foreign := &router.Invocation{PluginID: "other-plugin", DefaultTarget: original}
+	invocation := &router.Invocation{Depth: 1, PluginID: pluginID, DefaultTarget: original}
+	foreign := &router.Invocation{Depth: 1, PluginID: "other-plugin", DefaultTarget: original}
 	chain := &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: "hello"}}}}}
 	settings := []struct {
 		name             string
@@ -183,7 +183,7 @@ func TestSendTargetCompletion(t *testing.T) {
 	}
 	service := message.New(registry, policy.New(store), nil, nil, tune.Defaults().RequestTimeout, nil)
 	original := &pb.Target{AdapterId: "memory", AdapterInstanceId: "a", AccountId: "account-a", ChatId: "original", ThreadId: proto.String("topic")}
-	invocation := &router.Invocation{PluginID: pluginID, DefaultTarget: original}
+	invocation := &router.Invocation{Depth: 1, PluginID: pluginID, DefaultTarget: original}
 	tests := []struct {
 		name           string
 		to             *pb.Target

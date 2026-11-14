@@ -20,6 +20,7 @@ type chatSettings struct {
 	Persona         string
 	Enabled         bool
 	ResetGeneration uint64 // reset 前开始的轮次按此代次跳过历史追加。
+	ImageCount      uint64 `gorm:"not null;default:0"` // 成功保存的最大图片编号，reset 时归零。
 }
 
 // TableName 固定受管数据库中聊天设置的表名。
@@ -47,7 +48,7 @@ func (a *component) updateSettings(c *sdk.Context, update func(*chatSettings)) e
 		return err
 	}
 	return db.WithContext(c.Context()).Transaction(func(tx *gorm.DB) error {
-		settings, err := a.settings(c.Context(), string(c.Session()), tx)
+		settings, err := a.settings(c.Context(), sessionKey(c), tx)
 		if err != nil {
 			return err
 		}
@@ -83,14 +84,27 @@ func (a *component) registerCommands(p *sdk.Plugin) {
 }
 
 func (a *component) resetConversation(c *sdk.Context) error {
-	lock := a.sessionLock(string(c.Session()))
+	lock := a.sessionLock(sessionKey(c))
 	lock.Lock()
 	defer lock.Unlock()
 	// 与轮次最终的代次核对和追加共用锁，清空后旧轮次只能跳过追加。
 	if err := a.updateSettings(c, func(s *chatSettings) { s.ResetGeneration++ }); err != nil {
 		return err
 	}
-	return sdk.ClearConversation(c.Context(), string(c.Session()))
+	session := sessionKey(c)
+	if err := sdk.ClearConversation(c.Context(), session); err != nil {
+		return err
+	}
+	db, err := gormdb.Open(c.Context())
+	if err != nil {
+		return err
+	}
+	return db.WithContext(c.Context()).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("session = ?", session).Delete(&conversationImage{}).Error; err != nil {
+			return err
+		}
+		return tx.Model(&chatSettings{}).Where("session = ?", session).Update("image_count", 0).Error
+	})
 }
 
 func (a *component) selectPersona(c *sdk.Context, name string) error {
