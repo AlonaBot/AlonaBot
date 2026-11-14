@@ -413,22 +413,22 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 
 ### 9.3 CLI 的最小完整动作
 
-Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行（§15.4）。首次管理凭证与离线恢复使用 §7.4 的 `alonabot admin-token init/show/reset`。开发命令是对四种组件通用的顶层命令（D-77）：
+Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行（§15.4）。首次管理凭证与离线恢复使用 §7.4 的 `alonabot admin-token init/show/reset`。开发命令是对四种组件通用的顶层命令（D-77）。工程目录都是位置参数，缺省为当前目录；其他参数不给时取能唯一推出的缺省值，推不出时报错并列出候选（D-149）：
 
 | 命令 | 明确语义 |
 | --- | --- |
-| `init [目录]` | 在当前目录（或给定的空目录）创建组件工程：只含作者信息的 `plugin.yaml`、导出 `func New() *sdk.Plugin` 并注册一个示例命令的插件包、示例 `config_schema.json`、`i18n/en-US.json` 与忽略 `data/` 的 `.gitignore`，不含生成文件（D-145）；`--role` 选择角色，缺省 plugin；目录非空时拒绝。 |
-| `build` | 以本次扫描的结果经 overlay 编入资源登记（manifest、配置与 i18n 资源、Service Schema 与 Handler 参数名）与调用 `sdk.Run` 的正式入口并编译，不写工程目录（D-145）；目录中没有 `plugin.yaml`、且是 import 根包的 main 包时按库模式构建（§15.5）：扫描其依赖中每个目录含 `plugin.yaml` 的组件入口包（包括模块缓存中的第三方 module），把全部登记经 overlay 编入该 main 包，只输出可执行文件。使用已锁定的 Go Modules；`--goos`、`--goarch` 选择目标平台。源码安装显式选择本地构建，预编译安装不要求服务器编译。 |
-| `check` | 不写文件，执行与 `build` 相同的扫描，核对入口、工程 manifest 是否只含作者信息、`config_schema.json`、`adapter_config_schema.json` 及其迁移与 i18n；没有生成文件可比对（D-145）。 |
-| `test` | 按 `build` 的规则把本次扫描的资源经 overlay 编入后，在临时数据和离线测试会话检查加载与注册，不能调用生产凭证或宣称已测试平台发信。 |
-| `pack` | 先 `build`，再生成安装包与归档外的 `release.json`；给出 `--key` 时签名，也可以只生成待离线签名的清单，私钥不进入包。 |
+| `init [目录]` | 在当前目录（或给定的空目录）创建组件工程：只含作者信息的 `plugin.yaml`、导出 `func New() *sdk.Plugin` 并注册一个示例命令的插件包、示例 `config_schema.json`、`i18n/en-US.json` 与忽略 `data/` 的 `.gitignore`，不含生成文件（D-145）；`--role` 选择角色，缺省 plugin；`--id` 缺省取目录名（不符合组件 ID 规则时报错），不在已有 module 中时 `--module` 缺省同为目录名，Adapter 的 `--adapter-id` 缺省等于组件 ID（D-149）；目录非空时拒绝。 |
+| `build [目录]` | 以本次扫描的结果经 overlay 编入资源登记（manifest、配置与 i18n 资源、Service Schema 与 Handler 参数名）与调用 `sdk.Run` 的正式入口并编译，不写工程目录（D-145）；目录中没有 `plugin.yaml`、且是 import 根包的 main 包时按库模式构建（§15.5）：扫描其依赖中每个目录含 `plugin.yaml` 的组件入口包（包括模块缓存中的第三方 module），把全部登记经 overlay 编入该 main 包，只输出可执行文件。使用已锁定的 Go Modules；`--goos`、`--goarch` 选择目标平台。源码安装显式选择本地构建，预编译安装不要求服务器编译。 |
+| `check [目录]` | 不写文件，执行与 `build` 相同的扫描，核对入口、工程 manifest 是否只含作者信息、`config_schema.json`、`adapter_config_schema.json` 及其迁移与 i18n；没有生成文件可比对（D-145）。 |
+| `test [目录]` | 按 `build` 的规则把本次扫描的资源经 overlay 编入后，在临时数据和离线测试会话检查加载与注册，不能调用生产凭证或宣称已测试平台发信。 |
+| `pack [目录]` | 先 `build`，再生成安装包与归档外的 `release.json`；`--asset-url` 不给时，工程 manifest 的 `source` 为 `github.com/<owner>/<repo>` 则取 `https://github.com/<owner>/<repo>/releases/download/v<version>/<归档名>`，其他来源须显式给出（D-149）；给出 `--key` 时签名，也可以只生成待离线签名的清单，私钥不进入包，`--key` 没有缺省值。 |
 
 
 管理命令如下；修改均经 Core 管理接口，CLI 不直接写状态库，离线时只允许只读检查或明确的维护恢复流程：
 
 | 命令 | 明确语义 |
 | --- | --- |
-| `install` / `list` | 校验包、首次来源与 ID 后登记；仍处于已安装状态的同 ID 不覆盖。`--source owner/repo` 从该 GitHub 仓库的 Release 下载并安装；不给时安装命令行给出的本地包，来源取自其 release.json（发行包 `packages/` 中的官方组件即官方来源）。之后的 `update` 只从安装时的来源取版本。同类组件（§9.1）已安装时返回 ALREADY_EXISTS 并列出它；加 `--replace` 时列出将被替换的组件并要求确认，在新组件的下载、签名与静态检查通过后，按 `uninstall` 的缺省语义卸载旧组件（保留其数据与来源绑定），再安装新组件；旧组件替换前已启用时，新组件安装后按普通 `enable` 流程启用，否则保持未启用。会话、记忆、按组件 ID 记录的策略，以及被替换 Adapter 的实例配置与凭证都不在组件之间迁移，新 Adapter 的实例需要重新创建；新组件准备或启用失败时旧组件保持已卸载，可以按原来源重装。已卸载的保留记录只允许匹配原来源的显式重装并复用数据，来源不符拒绝。list 返回实际安装/激活状态与角色。 |
+| `install [归档或组件 ID]` / `list` | 校验包、首次来源与 ID 后登记；仍处于已安装状态的同 ID 不覆盖。`--source owner/repo` 从该 GitHub 仓库的 Release 下载并安装；不给时安装本地包，来源取自其 release.json（发行包 `packages/` 中的官方组件即官方来源）：参数是已存在的普通文件时为该归档；否则按组件 ID 取程序目录 `packages/` 中的官方包，没有时报错并列出可用的官方组件；不给参数时在当前目录（组件工程为其 `bin/`）寻找与本机平台相符的唯一一个安装包，没有或不止一个时报错并列出候选（D-149）。之后的 `update` 只从安装时的来源取版本。同类组件（§9.1）已安装时返回 ALREADY_EXISTS 并列出它；加 `--replace` 时列出将被替换的组件并要求确认，在新组件的下载、签名与静态检查通过后，按 `uninstall` 的缺省语义卸载旧组件（保留其数据与来源绑定），再安装新组件；旧组件替换前已启用时，新组件安装后按普通 `enable` 流程启用，否则保持未启用。会话、记忆、按组件 ID 记录的策略，以及被替换 Adapter 的实例配置与凭证都不在组件之间迁移，新 Adapter 的实例需要重新创建；新组件准备或启用失败时旧组件保持已卸载，可以按原来源重装。已卸载的保留记录只允许匹配原来源的显式重装并复用数据，来源不符拒绝。list 返回实际安装/激活状态与角色。 |
 | `enable` / `disable` | 已有 Active 时启动该代次；首次安装尚无 Active 时走首个候选 Prepared/提交。disable 停止并保留安装及数据。 |
 | `restart` | 以当前 Active 程序/配置/DB 启动新 Session，不导入编辑中的 config.json。 |
 | `reload` | 把编辑快照导入 Pending，走配置校验及候选激活；SQLite 同样复制 DB。管理 API 的 reload 激活已有 Pending，没有 Pending 时才导入编辑快照（D-143）。 |
@@ -647,7 +647,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 每个目标平台发布一个发行归档 `alonabot-<version>-<os>-<arch>`（Windows 为 zip，其他为 tar.gz），包含 `alonabot` 可执行文件和 `packages/` 目录。`packages/` 中是官方 Telegram Adapter、官方 OneBot 11 Adapter、官方 Agent、官方 WebUI 与预装插件的组件包，以及各自归档外的 `release.json` 与 `.sig`（§9.2）。同一 Release 另附 `install.sh` 与列出全部发行归档 SHA256 的 `SHA256SUMS`。
 - 发行版 Core 内置官方发布者公钥作为已信任来源：运行官方发行包即视为接受该来源，预装包不再逐个确认。签名与摘要照常校验，校验失败的包不安装并记 ERROR。
 - 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，只启用 help 插件与官方 WebUI；Agent 组件与 help 以外的预装插件只安装不启用，不使用 AI 对话的部署不运行它们的进程（D-50、D-62）。官方 Telegram 与 OneBot 11 Adapter 只安装，`core_config.json` 的 `adapters` 中有它的实例时自动启用；某个 Adapter 写了实例却尚未安装时，Core 从 `packages/` 安装，没有发行包（例如经 `go install` 取得的 `alonabot`）时从官方 Release 安装（D-82）。需要 AI 对话时，管理员在 WebUI 或 CLI 启用 Agent；Agent 在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。
-- 管理员可以用 `install --source <来源> --replace` 把任一官方 Adapter、Agent 或 WebUI 换成社区组件（§9.3）；之后不再从官方来源更新该组件。卸载或损坏 WebUI 后，用 `alonabot install` 从 `packages/` 重装官方 WebUI。
+- 管理员可以用 `install --source <来源> --replace` 把任一官方 Adapter、Agent 或 WebUI 换成社区组件（§9.3）；之后不再从官方来源更新该组件。卸载或损坏 WebUI 后，用 `alonabot install <官方 WebUI 的组件 ID>` 从 `packages/` 重装（§9.3，D-149）。
 - 之后不再自动安装，已卸载的预装包不会在下次启动时重新安装。新版本发行包中的包版本高于已安装版本时，作为可用更新列在管理界面与 `alonabot list` 中，由管理员确认后按 `update` 流程更新。Core 本身通过替换可执行文件升级，新版本按 §5.5 迁移 `core_config.json`。
 - 首批预装插件为 help（按调用者权限列出可用命令与用法，`/whoami` 回复调用者的用户字符串与收到消息的实例名）、welcome（新成员入群时发送欢迎语）与 rss（订阅 RSS/Atom 并推送到聊天）。
 - 第一个 Core Admin 的产生：用户在聊天中发送 `/whoami` 取得自己的用户字符串，管理员把它写入 `core_config.json` 的 `admins`，或在 WebUI 的 Core 设置页、`alonabot admin add` 中添加。预装插件与第三方插件一样以独立进程运行，只有启用的才运行。

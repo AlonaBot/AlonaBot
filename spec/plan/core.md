@@ -105,6 +105,7 @@
 | T-13.3 | goal-69 | 开发运行与热部署：`alonabot run [目录...] [--reload]` 构建并以独立进程运行开发组件，轮询源码、资源与配置，只重启变化的组件；Adapter 以可导入包为工程目录，沿用 `dev:<组件 ID>`（D-77、D-134） | T-13 步骤 4 | T-07.6、T-09.16、T-13.1、T-09.4 | V-65 | 已完成（PR #171；TEST-MATRIX §3.2） |
 | T-13.4 | goal-70 | 开发运行示例与开发文档，汇总证据 | T-13 步骤 5 | T-03.10、T-13.2、T-13.3 | V-64、V-65 | 已完成（PR #186；TEST-MATRIX §3.2） |
 | T-13.5 | goal-140 | 模块根包只保留库模式接口：Core 装配、候选与进程管理移入 `internal/app`，只供开发 CLI 使用的 `Executable`、`Stdio`、`Core.Restart`、`Core.RestartInstance`、`Core.ReloadSettings` 随之移入，根目录的端到端测试按归属迁移（D-148） | T-13 步骤 6 | T-04.16 | V-64、V-65 的回归（行为不变） | 未开始 |
+| T-13.6 | goal-141 | CLI 参数从简：`build`、`check`、`test`、`pack` 的工程目录改为位置参数并删除 `--dir`；`init` 的 ID 与 module、`pack` 的资产 URL 取缺省值；`install` 可按组件 ID 安装 `packages/` 中的官方包，不给参数时在当前目录寻找唯一的安装包（D-149） | T-13 步骤 7 | T-13.5、T-14.3 | V-121 | 未开始 |
 | T-16.1 | goal-81 | 插件测试套件基础：`plugintest.Start`、测试 Adapter、会话与身份、Capability 子集、消息注入、`internal/inproc` 的分发结束通知、配置与数据库 | T-16 步骤 1、2 | T-05.2、T-13.2、T-09.4 | V-73 的基础分项 | 已完成（PR #168；TEST-MATRIX §3.2） |
 | T-16.2 | goal-82 | 按钮点击、多轮等待、schedule 触发（含动态任务实例，D-124）与后台发送；用套件测试示例插件，开发文档，汇总证据 | T-16 步骤 3、4 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | V-73 | 已完成（PR #183；TEST-MATRIX §3.2） |
 | T-16.3 | goal-102 | `plugintest.LLM`：登记只提供 `llm.generate` 的测试 Agent，被测插件经 `@agent` 的调用交给测试函数（D-77） | T-16 步骤 3 | T-12.8、T-16.1 | V-73 的 LLM 分项 | 已完成（PR #190；TEST-MATRIX §3.2） |
@@ -732,13 +733,15 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 5. **示例与文档。** `examples/devbot/` 是一个用 `alonabot init` 生成的插件工程与回环测试 Adapter，覆盖开发运行、热部署、编译失败与同进程调试。docs/development.md 补充 `init`、`run --reload` 与库模式的用法。
 6. **根包只保留库模式接口（D-148）。** 行为与协议不变。Core 装配、候选与进程管理从根包移到 `internal/app`，根包的 `Run`、`Start`、`*Core`、`Wait` 与选项改为对它的薄包装。只供开发 CLI 使用的 `Executable`、`Stdio`、`Core.Restart`、`Core.RestartInstance` 与 `Core.ReloadSettings` 移入 `internal/app`，`cmd/alonabot` 直接使用。根目录下测试装配与内部服务的端到端测试移到 `internal/app` 或行为所属的包，根包只留验证库模式公开接口的测试；ARCHITECTURE 同步模块表与依赖边。
 
+7. **CLI 参数从简（D-149）。** 协议与管理 API 不变，只改 `cmd/alonabot` 与说明。`build`、`check`、`test`、`pack` 改为 `命令 [目录]`，删除 `--dir`；`init` 的 `--id`、`--module` 与 `--adapter-id` 按 D-149 取缺省值；`pack` 在 manifest 的 `source` 为 GitHub 仓库时推出 `--asset-url`；`install` 的位置参数按「已存在的普通文件」与「组件 ID」区分，组件 ID 从程序目录的 `packages/` 取官方包，不给参数时在当前目录或工程的 `bin/` 中寻找唯一的安装包。推不出唯一值时报错并列出候选。docs/development.md、docs/plugin-guide.md、README 与 CLI 帮助中的写法同步。
+
 #### 拟目录与交付
 
 | 拟目录 | 本工作包交付 |
 | --- | --- |
 | 根包 | `Run`、`Start` 与选项、Core 装配 |
 | `internal/core/devrun/` | dev 来源记录、开发组件的构建与进程、同进程组件、源码与配置轮询、重启 |
-| `cmd/alonabot/` | `run` 的组件目录与 `--reload` |
+| `cmd/alonabot/` | `run` 的组件目录与 `--reload`；参数从简（步骤 7） |
 | `sdk/`、`sdk/adapter/`、`sdk/generate/` | 可直接传入的启动参数；生成代码嵌入组件身份与资源 |
 | `adapters/telegram/` 及其 cmd 薄入口 | 工程 manifest、实例声明与生成登记归可导入包，库模式与独立进程共享身份（D-134） |
 | `examples/devbot/` | 开发运行示例 |
@@ -750,6 +753,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 | V-64 | 开发组件的完整生命周期（独立进程与同进程）、Adapter 包资源生成登记与共用身份、多个组件的固定代次 `dev:<组件 ID>` 与重启后按钮有效、dev 来源的限制、`config.json` 的读取与写回、panic 与停止超时、与已安装包混合运行 |
 | V-65 | 改动源码后只重启变化的组件、编译失败旧组件继续、只改配置时不重新构建、已安装组件与 Adapter 连接不中断 |
 | V-64、V-65（步骤 6） | 拆分根包后，库模式、开发运行与热部署的集成测试在新位置照常通过；根包只导出 CONTRACTS §15.5 的接口 |
+| V-121（步骤 7） | 工程目录的位置参数与缺省、`init` 与 `pack` 的缺省值、`install` 按文件、组件 ID 与当前目录寻找安装包，推不出唯一值时报错并列出候选 |
 
 #### 失败停止条件
 
