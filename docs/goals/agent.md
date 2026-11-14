@@ -19,7 +19,7 @@
 | goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 已完成（PR #182） |
 | goal-62 | T-12.5 | 技能 | T-12.3 | 已完成（PR #188） |
 | goal-63 | T-12.6 | 定时 Agent 任务 | T-07.9、T-08.5、T-12.3 | 已完成（PR #193） |
-| goal-64 | T-12.7 | 官方 Agent 组件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6、T-12.8、T-12.14 | 等待前置 |
+| goal-64 | T-12.7 | 官方 Agent 组件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6、T-12.8、T-12.14 | 待派发 |
 
 ## 第 1 波
 
@@ -820,37 +820,131 @@ type memoryResponse struct{}
 
 ### goal-64 · T-12.7 官方 Agent 组件打包与 T-12 验收
 
-状态：等待前置（T-12.4、T-12.5、T-12.6、T-12.8、T-12.14）。2026-11-10 按 D-132：前置加入 T-12.14，验收矩阵增加 V-118。语句中 goal-38、goal-58～goal-63、goal-83 提供的命令与符号（alonabot pack、Agent 组件、mcptest、模拟 Provider）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：llm_service_allowed_plugins 缺省为 `["*"]`（D-83）。2026-11-13 审查者核对：前置 T-12.4（PR #182）、T-12.5（PR #188）、T-12.6（PR #193）、T-12.8（PR #175）、T-12.14（PR #189）均已合并；语句以 `alonabot pack` 产出的安装包验收，pack 由 T-09.3（goal-38，执行中）交付，审查者在 goal-38 合并后按 main 核对语句并派发；各分项已有经 cpa 兼容网关的真实 Provider 证据（TEST-MATRIX §3.2 的 T-12.2～T-12.6、T-12.8、T-12.14 行），本切片汇总时引用。
+状态：待派发。前置 T-12.4（PR #182）、T-12.5（PR #188）、T-12.6（PR #193，`7f81469`）、T-12.8（PR #175）、T-12.14（PR #189）均已合并；打包所用的顶层 check/build/test/pack 由 T-09.3（PR #194，合并提交 `e9ff45e`）交付。2026-11-13 审查者按 main `e9ff45e` 定稿：本切片的增量是「正式安装包的安装与运行路径」，以一个安装包主路径集成测试覆盖各能力的最小代表，V-57～V-61、V-76、V-118 的分项矩阵引用各前置切片已有的提交测试与经 cpa 兼容网关的真实 Provider 证据，不在安装包形态下重复（DECISIONS 2026-11-13 变更记录）；合并前审查者经 cpa 对安装包路径补一次真实对话与工具往返。以下核对事实取自起草时的 goal-38 分支并经审查者按 main 复核：前置 T-12.4（PR #182）、T-12.5（#188）、T-12.6（#193）、T-12.8（#175）、T-12.14（#189）的合并状态按本次任务输入；打包工具前置 T-09.3（goal-38，PR #194）正在审查，实际派发须从包含 #193、#194 的最新 main 创建分支。2026-11-13 按指定的 goal-38 head `71fa662` 副本读取代码：`agent/plugin.yaml` 已含 `id: alonabot_agent_official`、`version: 0.1.0`、`role: agent`、source 与静态图标；`agent.New() *sdk.Plugin` 已注册对话、聊天控制、memory、技能、`llm.generate` 与 `llm.providers`。顶层 `pack` 的 `--asset-url` 必填，`--key` 可选；本地安装读取归档及同目录的 release 文件，经管理 CLI/API 安装后单独 enable。现有 `agent/*_test.go`、根包 `agent_service_test.go` 和 TEST-MATRIX §3.2 已覆盖分项，包含经 cpa 兼容网关运行的真实 Provider 记录。T-12.6 已由 PR #193 合入：agent/tasks.go 注册 Agent 内工具 schedule_task（prompt 必填，at、interval_seconds、cron 恰有一个非空，timezone 只随 cron，空值与 0 视为未给出）、list_tasks、cancel_task（id），agent/scheduled.go 运行后台一轮，证据见 TEST-MATRIX §3.2 的 T-12.6 行。`spec/plan/agent.md` 步骤 8 的全量验收按本语句以「安装包主路径＋引用前置证据」组织（DECISIONS 2026-11-13 变更记录）。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-64（切片 T-12.7：官方 Agent 组件打包与 T-12 验收）。goal 目录 goal-64，分支 goal-64，worktree .worktrees/goal-64，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-64（切片 T-12.7：官方 Agent 组件打包与 T-12 验收）。goal 目录 goal-64，分支 goal-64，worktree .worktrees/goal-64，从已包含 PR #193、#194 的最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：官方 Agent 组件（`role: agent`）按 T-09 的打包流程生成可安装包；用本地 Provider 与 MCP 模拟服务、回环测试 Adapter（或 Telegram 模拟服务）以安装包方式运行 V-57～V-61、V-76 与 V-118 的全部场景；在 TEST-MATRIX §3.2 记录 T-12 证据，真实 Provider 与真实 Telegram 没有凭证时记为未运行。
+目标：用正式 alonabot pack 产出的官方 Agent 安装包，经管理入口安装并启用，新增一条跨进程主路径集成测试，证明包内资源、首次启用、受管数据库与 Agent 关键交互接通；对话、Core/MCP 工具、记忆、技能、定时任务、llm.generate、图片各选最小代表。T-12 的其余验收分项在 TEST-MATRIX §3.2 汇总行引用前置切片的既有证据，保留各项实际平台、真实环境与未运行项。
 
-依据：PLAN T-12 步骤 8 与「停止和失败条件」；CONTRACTS §13、§9.3；TEST-MATRIX V-57～V-61、V-76、V-118。
+依据：spec/PLAN.md §3.1、§5；spec/plan/agent.md T-12.7、T-12 步骤 8、验收与失败停止条件，以及 T-12.2～T-12.6、T-12.8、T-12.14 的已交付行为；spec/plan/core.md T-09.3；spec/CONTRACTS-v0.1.md §3、§4.3、§9.1～§9.3、§13、§15.1；spec/MESSAGE-MODEL.md 的 Actor、Target 与媒体片段；spec/adr/DECISIONS.md D-83、D-86、D-124、D-125、D-132、D-142；docs/coding-standards.md「测试提交规则」；TEST-MATRIX V-57～V-61、V-76、V-118 与 §3。执行前确认审查者已把工作包步骤 8 同步为「新增安装包主路径证据，其余分项引用既有证据」。
 
 范围（只新增或修改这些）：
-- agent/plugin.yaml：补齐打包所需字段（version、source、os/arch 由 pack 填写的部分除外）
-- 新增 cmd/alonabot/t12_e2e_test.go（//go:build unix）
-- spec/TEST-MATRIX.md §3.2：追加 T-12 的证据行（本切片获授权修改这一处）
-- 上述包的测试文件
-允许的新跨模块边：无。
+- 新增 cmd/alonabot/t12_e2e_test.go（//go:build unix，package main）：仅一个 TestAgentPackage 集成测试，私有辅助也放本文件；复用同包既有 CLI/Core/Telegram 辅助。
+- spec/TEST-MATRIX.md §3.2：追加 T-12.7 / T-12 汇总证据行，记录本次安装包路径的增量并引用各前置行；本切片获授权修改这一处。
+- 本地自测如确有缺口，写在 cmd/alonabot/*_local_test.go 或 agent/*_local_test.go；执行记录留 goal-64/ 与 PR。
+agent/plugin.yaml 已具备工程身份，沿用现值；os、arch、entrypoint、manifest_version、协议版本范围、required_capabilities、config_version、migration_mode、prepare_effects 由 build/pack 生成。Agent 的产品实现、配置、i18n 与生成源码沿用前置交付；发现需要修改时，按范围外变更交审查者处理。
+允许的新跨模块边：无。测试沿用 cmd/alonabot 已有的管理入口与 telegramtest；Agent 产品代码继续只经 SDK 与 Core 通信。现有 probe 与 mcptest 按目录构建和运行，测试无须跨 internal 可见性导入它们。
 
-验收矩阵（以 alonabot pack 产生的安装包经 alonabot run 与管理 API 安装、启用后运行；各为一个子测试）：
-- V-57：openai、openai-compatible 与 anthropic-messages 三种协议的流式文本、工具调用、停止原因与用量（其他协议的流解析由 TestStream 覆盖）；/ask 与自由对话开关；群聊非 to_me；/provider 与人格切换；/reset；超长回复分段；Provider 出错或中途断开。
-- V-58：连续调用 Core 工具与 MCP 工具（stdio、streamable HTTP）；确认拒绝；工具出错；超过单轮步数上限；MCP 进程随 Agent 停止。
-- V-59：记忆 add/patch/remove、超限、重复、不可见字符、群聊多用户、会话中写入与 /reset、memory 工具设为 confirm 与 deny。
-- V-60：合法与不合法的 SKILL.md、load_skill 不存在的技能。
-- V-61：非 Admin 创建任务、interval/cron 任务到期运行、无发信许可、confirm 工具、插件离线错过。
-- V-76：另一个测试插件经安装包调用 llm.generate：未列入与列入 llm_service_allowed_plugins、Provider 不存在、Provider 出错、Agent 未启用。
-- V-118：开启 image_input 的 Provider 在同一会话连续收到带图片的消息，回放边界与删除；关闭时只有占位；/reset 后不再回放。
-- 证据：TEST-MATRIX §3.2 追加 T-12 一行，写明测试位置、命令、平台与结果；Provider 与 MCP 标为本地模拟；真实 Provider 与 Telegram 为「未运行」。
+接口（按已读代码复用，公开接口保持现状）：
 
-测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/t12_e2e_test.go。
-- 本地自测（不提交，PR 中写明结果）：Agent 组件的 alonabot check 与 pack（当前平台）；若维护者提供了 Provider 凭证，另附一次手动运行记录，不写入提交的测试。
+1. 工程与打包命令（从仓库根执行；实际测试使用 TestMain 已构建的 alonabot）：
+   alonabot check --dir agent [--goos <os>] [--goarch <arch>] [--tags <tags>]
+   alonabot build --dir agent --out <临时构建目录> [--goos <os>] [--goarch <arch>] [--tags <tags>]
+   alonabot test --dir agent
+   alonabot pack --dir agent --asset-url <绝对 https URL> --out <临时打包目录> [--key <私钥文件>] [--goos <os>] [--goarch <arch>] [--tags <tags>]
+   --dir 缺省为当前目录；build/pack 的 --out 缺省为工程 bin/；--tags 为逗号分隔的列表。test 只有 --dir 这个组件参数，在临时离线会话加载、注册、激活、停止组件。
+   --asset-url 必填且 scheme 为 https；本地安装直接读本次归档，无须访问这个发布 URL。--key 为包含标准 base64 编码的 64 字节 Ed25519 私钥的文件路径。
+   当前平台产物：alonabot_agent_official-0.1.0-<GOOS>-<GOARCH>.tar.gz、归档外 release.json；指定 --key 时另有 release.json.sig 与 release.pub。归档含包内 plugin.yaml、component（Windows 为 component.exe）、build-info、规范 config_schema.json、i18n 及已声明图标。
+   internal/pluginkit 的现有签名：
+   func Pack(ctx context.Context, options generate.Options, assetURL, keyFile, outDir string) (archive string, err error)
+   sdk/generate 包内：type Options struct { Dir string; GOOS, GOARCH string; Tags []string; Resources map[string][]byte; CGOEnabled string; RequireAdapterConstructor bool }（正式构建由 pluginkit 设 CGOEnabled="0" 与资源快照）
+   build/pack 会写工程的 alonabot_gen.go；测试的产物与数据目录放 t.TempDir，生成源码应与前置提交一致。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+2. 安装、启用与认证：
+   alonabot run --data-dir <临时 data_dir> --listen 127.0.0.1:0 [<开发组件目录>...]
+   alonabot install <归档绝对路径> --yes --admin-url <管理 URL> --token-file <token 文件>
+   alonabot enable alonabot_agent_official --admin-url <管理 URL> --token-file <token 文件>
+   alonabot list --admin-url <管理 URL> --token-file <token 文件>
+   install 也接受 --archive；--release 显式指定 release.json，缺省读取归档同目录；可选 --signature、--public-key，缺省读取 release 文件同目录的 release.json.sig、release.pub。管理 CLI 也可从 ALONABOT_ADMIN_TOKEN 读取 token，--data-dir 用于发现 base_url。
+   POST /api/v1/packages/install：Authorization: Bearer <token>，JSON 使用 manage.InstallRequest：
+   type InstallRequest struct {
+       Archive, ReleaseJSON, Signature string
+       PublicKey string
+       Source string
+       Replace, Confirm bool
+   }
+   Archive 为 Core 所在本机的归档路径；ReleaseJSON、Signature、PublicKey 为文件内容。主路径使用本地包，Source 留空、Confirm 为 true；JSON 可按上述 Go 字段名编码。
+   POST /api/v1/packages/enable：{"id":"alonabot_agent_official"}。
+   GET /api/v1/packages：核对 Package 的 Role="agent"、Source="github.com/AlonaBot/AlonaBot"、Version、Enabled、Active、State；这些字段按 Go 字段名编码，首次 install 后为 Installed，enable 后为 Activated。
+   Agent 配置在首次 enable 前写到 <data_dir>/plugins/alonabot_agent_official/config.json；配置沿用既有文件入口。
+   Core Admin 可经 alonabot admin add telegram:88 写入；后台发信许可沿用 allowed_adapter_instances 缺省允许全部实例（D-83）。
 
-不做：发行归档与预装（T-14.3、T-14.4）。
+3. Agent 已有配置与命令：
+   agent 包内：func New() *sdk.Plugin
+   providers 的条目是 template_list，例如：
+   {"custom":{"name":"synthetic","protocol":"openai-compatible","base_url":"<模拟 Provider URL>","api_key":"synthetic-key","model":"test-model","max_tokens":128,"image_input":true}}
+   default_provider="synthetic"；personas 为 {name,prompt} 列表，default_persona 引用其中名字；history_entries 缺省 20；skills_dir 缺省空串，测试指定临时技能目录的绝对路径；llm_service_allowed_plugins 缺省 ["*"]。
+   mcp_servers 为列表，stdio 条目 {name,transport:"stdio",command,args,env:[{name,value}]}；另一传输名为 "streamable-http"，字段为 url、headers:[{name,value}]。
+   命令：/ask <text>（message.Chain 尾参）、/agent on、/agent off、/provider [name]、/persona [name]、/reset。agent on/off、provider、persona 需要 sdk.Admin；ask、reset 需要 sdk.User；自由对话要求已开启且满足 ToMe 与 NotCommand。
+   Core 工具原名 alonabot_agent_official/memory，AccessPrivate、缺省 allow：
+   {"operations":[{"op":"add","target":"memory","text":"package note"}]} -> {}
+   target 也可为 user；patch/remove 用 old_text。会话键为 string(c.Session())+"@"+c.Instance()；可信范围由 Core/SDK 上下文提供。
+   Agent 内工具 load_skill：{"name":"package-skill"} -> 技能正文。
+   T-12.6 契约的 Agent 内工具：schedule_task 输入 {prompt,at?,interval_seconds?,cron?,timezone?}，list_tasks 无参数，cancel_task 输入 {id}；创建/取消要求 Core Admin 并先确认；本次只选择 at 的创建与到期运行。工具名与参数以 main 上 agent/tasks.go 的注册为准。
+   动态任务底座的已存在签名（以下为 sdk 包内签名，供核对 #193）：
+   func Task[T any](name string) TaskType[T]
+   func OnTask[T any](r Registrar, t TaskType[T]) *TaskBuilder[T]
+   func (t TaskType[T]) At(ctx context.Context, when time.Time, args T, opts ...TaskOption) (string, error)
+   func (t TaskType[T]) Every(ctx context.Context, d time.Duration, args T, opts ...TaskOption) (string, error)
+   func (t TaskType[T]) Cron(ctx context.Context, expr string, args T, opts ...TaskOption) (string, error)
+   func (t TaskType[T]) Cancel(ctx context.Context, key string) error
+   func (t TaskType[T]) List(ctx context.Context) ([]TaskInstance[T], error)
+   TaskInstance[T] 的字段为 Key string、Args T、At time.Time、Interval time.Duration、Cron/Timezone string、NextAt *time.Time。
+   Core/MCP 的模型侧工具名由现有映射产生，脚本化 Provider 根据收到的工具目录识别目标并使用实际名字；直接调用原工具名的路径继续由 Agent 工具循环承担。
+
+4. llm.generate 与既有调用方（以下为 sdk/llm 包内签名）：
+   var GenerateService = sdk.JSON[Request, Response](AgentTarget + "/" + ServiceName)
+   const AgentTarget = "@agent"
+   const ServiceName = "llm.generate"
+   func Generate(ctx context.Context, req Request) (Response, error)
+   func Ask(ctx context.Context, prompt string) (string, error)
+   type Message struct { Role string `json:"role"`; Text string `json:"text"` }
+   type Request struct {
+       Messages []Message `json:"messages"`
+       System string `json:"system,omitempty"`
+       Provider string `json:"provider,omitempty"`
+       MaxOutputTokens int `json:"max_output_tokens,omitempty"`
+   }
+   type Response struct {
+       Text string `json:"text"`; Provider string `json:"provider"`; Model string `json:"model"`
+       InputTokens *int `json:"input_tokens,omitempty"`; OutputTokens *int `json:"output_tokens,omitempty"`
+   }
+   复用 plugintest/internal/probe（ID plugintest_probe）的 /llmask：其 Handler 已调用 llm.Ask(c.Context(), "  original prompt\n")，后者调用真实 llm.Generate。请求为 Messages:[{Role:"user",Text:"  original prompt\n"}]，其余字段取零值，Agent 使用配置的默认 Provider 与 max_tokens；模拟 Provider 返回 "generated"，探针把返回文本回复到原聊天。直接用 pack 构建现有 probe 工程并安装、启用，源码与既有断言保持现状。probe 的 /llmgenerate 对可选用量字段有针对替身的固定预期，主路径采用 /llmask。
+
+5. 现有测试辅助的可用方式：
+   同包直接复用：startEmptyCore(t *testing.T, dataDir string, extra ...string) *core；(*core).management(t *testing.T, dir, token string, args ...string) string；findPackage(t *testing.T, c *core, dir, id string) manage.Package；stopTestCore(t *testing.T, c *core)；developmentWrite/Read；telegramMessage、telegramUpdate、telegramEventually。管理辅助已有 token 与 Host 处理。
+   telegramtest.NewServer(t testing.TB, token string) *telegramtest.Server；(*Server).URL() string、SetMe(userID int64, username string)、AddFile(fileID, filePath string, content []byte)、Push(updates ...json.RawMessage)、Requests() []telegramtest.Request、Calls(method string) int。Request 有 Method string、Params map[string]any、Files map[string][]byte；确认按钮从发送请求的 reply_markup 读取 callback_data，再以相同 Actor 的 callback_query 回送。
+   Agent 的模拟 Provider 为各测试文件中的 httptest Handler，当前没有可跨测试包直接导入的统一 fixture。参考 agent/tools_test.go 的 completionRequest、writeToolCall、checkToolResult 与 agent/agent_test.go 的 writeDelta/writeEnd，按本次主路径在 t12_e2e_test.go 写最少的私有 HTTP/SSE 辅助；这些未导出函数属于另一个测试包。
+   agent/provider/provider_test.go 的 mockProvider(t *testing.T, protocol Protocol, status int, stream string, images ...bool) http.HandlerFunc、testRequest() Request 用于 Provider 分项，留在原测试包。
+   stdio MCP 复用 go build -o <临时 mcptest> ./agent/mcptest；参数 --pid-file <文件>、--ignore-eof（后者用于已有故障测试，本次无需启用）。现有 echo/tool 输入 {text:string,fail?:bool}，输出包含文本、结构化结果与调用计数；使用 stdio 一个传输即可。streamable HTTP 与故障场景引用 T-12.3 的既有证据。
+
+行为与验收矩阵（一个 TestAgentPackage 内顺序执行、共享同一个安装包与 Core；下列为主路径阶段）：
+- 打包与启用：当前平台调用正式 pack，--asset-url 使用明确的测试 https URL，输出到临时目录；主路径选择 unsigned 包，安装时 --yes 确认来源与未签名包。通过管理 CLI install，再 enable；核对包身份、版本、Activated 与有效 Active。首次启用使用包内 schema/i18n、生成入口和受管 SQLite。Agent 的运行来源始终为本次安装包，alonabot run 的开发目录仅用于真实 Telegram Adapter；probe 同样用现有工程 pack 后安装。Core/Agent/Adapter/probe 都运行真实实现与 Session。
+- V-57：复用 Telegram Bot API 模拟服务，配置一个测试账号与实例；把 telegram:88 设为 Core Admin，/agent on 后发送一条普通私聊消息。只用 openai-compatible 一个协议，模拟 Provider 返回文本增量，最终回复经真实 Adapter 回到模拟服务；核对最终文本与该轮工具往返的请求记录。
+- V-58、V-59、V-60：同一轮里模型依次调用 memory（add 一条会话笔记）、load_skill（一个合法 SKILL.md 的正文）、stdio MCP 的 echo/tool，然后生成最终回复。MCP 操作先在平台侧展示确认，原 Actor 点击允许后恰好执行一次；核对每次 ToolCallID 与回传结果、技能正文和 MCP 实际参数。memory 通过 Core 的自身工具路径执行，记忆的实际效果在 /reset 后新轮请求中验证。
+- V-118 与 V-59 的持久结果：/reset 后发送一条带有效图片的消息，模拟 Provider 同时收到前轮写入的会话笔记与本轮图片的预期 MIME/字节；下一条纯文本消息仍回放这一张图片。再次 /reset 后的请求保留长期笔记、图片回放为空。图片经 telegramtest.AddFile、真实 Adapter、Core 媒体入口与 Agent 的 sdk.OpenMedia 取得；图片窗口边界、失败与多图规则引用既有证据。
+- V-61：同一管理员发起新一轮，模型调用 schedule_task 创建一个未来 RFC 3339 at 任务，真实确认按钮允许后得到任务 ID；按真实时钟等待 Core Scheduler 派发，任务执行一轮并向原 Target 发送唯一的标记回复。核对后台 Provider 请求未注入会话笔记/用户档案，at 任务只运行一次。时刻由测试运行时计算，等待复用既有端到端测试的机制；interval/cron、无许可、confirm 拒绝和离线错过的分项引用 T-12.6 与 T-07.9 证据。
+- V-76：通过已安装并启用的 plugintest_probe 收到 /llmask，驱动真实 Handler -> llm.Ask -> llm.Generate -> Core @agent 解析 -> 已安装 Agent -> 模拟 Provider -> 原聊天回复。核对最终文本为 generated，Provider 请求保留上述 prompt 的原始空白、使用配置的 model="test-model" 与 max_tokens=128、无工具和聊天历史。调用方使用 llm_service_allowed_plugins 的默认 ["*"]，用量、名单拒绝与其他错误分项引用 T-12.8。
+- 收尾：经管理入口 disable Agent，随后正常停止 Core，回收 Agent 与其已启动的 stdio MCP 进程。用 mcptest 的 PID 记录核对该进程退出，保留完整失败输出。
+
+TEST-MATRIX 汇总方式：
+- 新增「T-12.7 / T-12 安装包主路径与汇总」一行，列 TestAgentPackage、实际运行命令、候选提交、OS/arch、Go 版本、结果及 goal-64/ 日志；明确外部环境为 httptest Provider、stdio MCP 与 Telegram Bot API 模拟服务。
+- V-57 的其余对话场景引用 T-12.2（#170）行；协议客户端分项沿用 T-12.1、T-12.9～T-12.13 的现有证据。
+- V-58、V-59、V-60、V-61 分别引用 T-12.3（#178）、T-12.4（#182）、T-12.5（#188）、T-12.6（#193）行；Scheduler 周期/错过的底座证据沿用 T-07.9（#176）。
+- V-76 引用 T-12.8（#175）行，同时保留该行 V-82 的 @agent、V-109、V-116 的 llm.providers 分项；V-118 对话分项引用 T-12.14（#189）行与已有 Provider 图片证据。
+- 保留前置行经 cpa 兼容网关运行真实 Provider 的日期、模型、协议和结果；汇总行写明引用来源。本次新跑的安装包结果单独记录，既有真实证据保持原样。
+- 某行缺少证据时标明具体分项、责任人与补齐条件，交审查者处理；使用「已运行的增量＋既有证据引用＋未运行项」表达 T-12 验收状态。
+
+测试（按编码规范「测试提交规则」与 D-86）：
+- 提交：仅 cmd/alonabot/t12_e2e_test.go 的 TestAgentPackage 一个集成测试。理由：前置已验证功能分项，本切片新增的风险集中在正式打包、管理安装/启用、跨进程注册、资源读取与真实协作链接通；上述顺序阶段用一套已安装实例证明这一条主路径。
+- D-86：复用现有 probe、mcptest 和 Telegram 模拟服务，新增私有辅助只服务本测试；SDK/supervisor 的额外验证、临时插件与故障复现留 *_local_test.go 或 tmp/test/。维持单个提交集成测试。
+- 本地自测：对官方 Agent 实际运行 check、build、test、pack（当前平台；输出目录临时化），记录命令及结果。签名流程与通用包损坏/篡改的矩阵引用 T-09.3 的既有证据；只有实际发现的安装路径缺口才补本地复现。前置分项沿用既有有效证据。
+- 真实 Provider：由审查者在本地使用已配置的 cpa 兼容网关，基于本切片 pack 后安装、启用的 Agent 跑一次代表性真实对话与工具往返，按 §3 记录模型、协议、命令、平台、结果及本地日志；本地测试使用 *_local_test.go，凭证留在既有本地配置。执行者提交的测试只连模拟 Provider。审查者补验前，本次「安装包＋真实 Provider」标为待补验，同时引用前置已完成的 cpa 实测。
+- 真实 Telegram：当前没有凭证，记「未运行」，后续由 T-10 汇总。模拟 Bot API 的通过记录按模拟环境填写；其他操作系统实际运行沿用各行的现有状态。
+- PR 写明提交测试的新增行数、本地运行结果与审查者待补项；证据回写 goal-64/tasks.md 与 TEST-MATRIX §3.2。
+
+完成条件：改动 Go 文件 gofmt -l 无输出；go vet ./...；go test -race -count=1 ./cmd/alonabot -run '^TestAgentPackage$' -v；go test -race ./...；go build ./...；官方 Agent 的顶层 check、build、test、pack 当前平台本地记录齐全，生成资源与前置源码一致。若全仓测试已在同一最终候选中包含 TestAgentPackage 并实际运行，可复用该结果。TEST-MATRIX 汇总行能追到各前置证据、区分模拟与真实环境、保留未运行项；审查者负责合并前的 cpa 安装包补验回写。安装包激活失败、缺必要资源、绕过工具确认、Provider 失败自动重发、记忆串读或丢失、Core 会话写入图片字节、Agent 产品代码导入 internal/core，按工作包停止条件处理。
+
+不做：复制 V-57～V-61、V-76、V-118 的全量分项到安装包测试；新增测试插件工程或公共测试框架；扩充 Agent 功能、配置和 SDK 接口；新增依赖；发行归档与预装（T-14.3、T-14.4）；真实 Telegram 接入和多平台实机验收（T-10）。
 ```

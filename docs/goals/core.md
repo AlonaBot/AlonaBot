@@ -89,7 +89,7 @@
 | goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 已完成（PR #165） |
 | goal-70 | T-13.4 | 开发运行示例与验收 | T-03.10、T-13.2、T-13.3 | 已完成（PR #186） |
 | goal-82 | T-16.2 | 按钮、多轮等待、schedule 与示例测试 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | 已完成（PR #183） |
-| goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | 待派发 |
+| goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | 已完成（PR #194） |
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 已完成（PR #173） |
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 已完成（PR #172） |
 | goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 已完成（PR #190） |
@@ -6600,7 +6600,7 @@ broker.Options、bus.Options 与 router.Options 增加 Metrics *metrics.Counters
 
 ### goal-38 · T-09.3 开发 CLI 与库模式脚手架
 
-状态：待派发。2026-11-13 按指定 main `cb090835d7ab18ac013b4980c972deae02379289` 核对：直接前置 T-08.8 / goal-53（PR #102，`f685c92cf594b657b7abba12d07d6f3bec4d7e53`）、T-08.11 / goal-95（PR #103，`c840af7f77506c996f0392f0a4fac299fc5f344e`）、T-09.16 / goal-100（PR #140，`896991b1ceed98133ca31c7f5585618a5a4317d4`）、T-13.3 / goal-69（PR #171，`3043c4e42cb8687886936a39bf0796db81e4993c`）均已合并，`spec/plan/core.md` 状态列为「已完成」；T-04.5 的状态列仍为「未开始」，本地一父历史尚无 #191 的合并提交。额外补证来源 T-13.4 / goal-70 已合并（PR #186，`c38a2945fb870c036dbf5c6d547ad6dbfbcce2b1`）。以上提交从只读 HEAD、松散提交对象及 pack/idx 中的一父历史核对，全程未执行 Git 命令。2026-11-13 审查者定稿：T-04.5（goal-14，[PR #191](https://github.com/AlonaBot/AlonaBot/pull/191)，合并提交 `862b7be`）已合并，其中 SDK 的 schema_id 对齐规则为 `UseGenerated` 记录调用它的入口包、go test 中只有入口包类型对齐到 `main.<Name>`。审查者补齐（待维护者确认，DECISIONS 2026-11-13 变更记录）：pack 的必填 `--asset-url`、`--key` 私钥文件编码、`build-info` 的文件格式、init 的 `--module` 与 SDK 版本来源；packages.Preflight 对 build-info 的严格核对与 T-09.16 遗留的缺 migration_mode/prepare_effects 只警告，另列待维护者裁决，本切片不改 Preflight。
+状态：已完成（[PR #194](https://github.com/AlonaBot/AlonaBot/pull/194)，合并提交 `e9ff45e`），证据见 TEST-MATRIX §3.2。合入：顶层 `alonabot init`（四角色模板，`--module`）、`check`、`build`、`test`（离线 Core 侧会话）、`pack`（`--asset-url` 必填、`--key` Ed25519 签名、包根 build-info、归档外 release.json）；`internal/pluginkit` 的 `Check`、`Pack(ctx, options, assetURL, keyFile, outDir)` 与正式构建（`CGO_ENABLED=0`、资源快照、`manifest.Generate` 合成包内 manifest）；`sdk/generate` 的 `Result.HTTP` 与 `Options{Resources, CGOEnabled, RequireAdapterConstructor}`；仓库生成指令迁移到 `alonabot build`；echo、media 的顶层 check/build 与 devbot 的 init 模板比对补证。审查者补齐的约定见 DECISIONS 2026-11-13 变更记录。以下为派发时的语句。
 
 按 main 核对：
 
@@ -7227,7 +7227,7 @@ internal/core/state
 
 ### goal-45 · T-09.11 正式流程故障注入与 T-09 验收
 
-状态：等待前置（T-09.3、T-09.9、T-09.15）。T-09.7（PR #187，`864819e`）、T-09.10（PR #177）、T-09.12（PR #167）已合并；T-09.3（goal-38）执行中；T-09.9（goal-44）与 T-09.15（goal-94）属 WebUI 章节，未在本轮 core/agent 推进范围内派发，本切片因此阻塞，待两者合并后由审查者核对语句。语句中 goal-38～goal-44、goal-66、goal-84、goal-92～goal-94 提供的命令与 API 只写名字；合并后由审查者核对，再改为待派发。
+状态：等待前置（T-09.9、T-09.15）。T-09.3（PR #194，`e9ff45e`）、T-09.7（PR #187，`864819e`）、T-09.10（PR #177）、T-09.12（PR #167）已合并；T-09.9（goal-44）与 T-09.15（goal-94）属 WebUI 章节，未在本轮 core/agent 推进范围内派发，本切片因此阻塞，待两者合并后由审查者核对语句。语句中 goal-38～goal-44、goal-66、goal-84、goal-92～goal-94 提供的命令与 API 只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-45（切片 T-09.11：正式流程故障注入与 T-09 验收）。goal 目录 goal-45，分支 goal-45，worktree .worktrees/goal-45，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
