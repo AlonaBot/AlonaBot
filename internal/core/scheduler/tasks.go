@@ -3,12 +3,15 @@ package scheduler
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"log/slog"
 	"slices"
 	"time"
 
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/schedule"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
 // TaskStats 汇总本次 Core 的过期计数、当前缺少处理函数的实例和实际动态槽。
@@ -30,6 +33,8 @@ type registeredTask struct {
 type queuedTask struct {
 	task        *registeredTask
 	scheduledAt time.Time
+	ctx         context.Context    // nil 为自然到期，使用后台 context。
+	result      chan triggerResult // nil 为自然到期；缓冲接收准入失败或 RPC 结果。
 }
 
 // TasksStats 返回该插件的动态任务诊断快照。
@@ -109,8 +114,13 @@ func (s *Scheduler) tickTask(pluginID string, reg *registration, task *registere
 	if task.state.running != nil || task.queued {
 		return
 	}
-	task.queued = true
-	reg.queue = append(reg.queue, &queuedTask{task: task, scheduledAt: scheduledAt})
+	s.enqueue(reg, &queuedTask{task: task, scheduledAt: scheduledAt})
+	s.pump(pluginID, plugin)
+}
+
+func (s *Scheduler) enqueue(reg *registration, queued *queuedTask) {
+	queued.task.queued = true
+	reg.queue = append(reg.queue, queued)
 	slices.SortFunc(reg.queue, func(a, b *queuedTask) int {
 		if c := a.scheduledAt.Compare(b.scheduledAt); c != 0 {
 			return c
@@ -120,7 +130,6 @@ func (s *Scheduler) tickTask(pluginID string, reg *registration, task *registere
 		}
 		return cmp.Compare(a.task.definition.Key, b.task.definition.Key)
 	})
-	s.pump(pluginID, plugin)
 }
 
 // pump 只持锁操作库与运行记录；真正的 IPC 由新 goroutine 执行。
@@ -142,12 +151,25 @@ func (s *Scheduler) pump(pluginID string, plugin *pluginJobs) {
 		if !task.definition.At.IsZero() {
 			if err := s.store.DeleteTask(context.Background(), pluginID, key.name, key.key); err != nil {
 				slog.Error("delete one-time task before dispatch failed", "plugin_id", pluginID, "task_name", key.name, "key", key.key, "error", err)
+				queued.reject(fmt.Errorf("delete one-time task before dispatch: %w", err))
 				continue
+			}
+			if task.timer != nil {
+				task.timer.Stop()
 			}
 			delete(reg.tasks, key)
 		}
-		ctx, cancel := context.WithCancel(context.Background())
+		parent := queued.ctx
+		if parent == nil {
+			parent = context.Background()
+		}
+		ctx, cancel := context.WithCancel(parent)
 		run := &jobRun{cancel: cancel, dynamic: true, reg: reg, key: key}
+		if queued.result != nil {
+			run.completed = func(id string, response wire.Response, err error) {
+				queued.result <- triggerResult{runID: id, response: response, err: err}
+			}
+		}
 		task.state.running = run
 		plugin.running++
 		job := &registeredJob{routeID: "task." + key.name, jobID: "task." + key.name, state: task.state}
@@ -165,6 +187,10 @@ func removeTask(reg *registration, key taskKey) {
 		delete(reg.tasks, key)
 	}
 	reg.queue = slices.DeleteFunc(reg.queue, func(q *queuedTask) bool {
-		return q.task.definition.Name == key.name && q.task.definition.Key == key.key
+		if q.task.definition.Name == key.name && q.task.definition.Key == key.key {
+			q.reject(triggerError(pb.ErrorCode_ERROR_CODE_CANCELLED, "task instance replaced or cancelled"))
+			return true
+		}
+		return false
 	})
 }
