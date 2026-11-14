@@ -8,11 +8,11 @@
 | --- | --- | --- | --- | --- |
 | goal-78 | T-15.1 | 官方 OneBot 11 Adapter 的连接与接收 | T-03.3、T-03.4、T-04.6 | 已完成（PR #109） |
 | goal-79 | T-15.2 | 官方 OneBot 11 Adapter 的发送、媒体与 extension | T-03.6、T-03.8、T-04.16、T-15.1 | 等待前置（T-04.16） |
+| goal-133 | T-15.7 | 官方 OneBot 11 Adapter 填写 chat_title | T-03.25、T-04.16、T-15.1 | 等待前置（T-04.16） |
+| goal-80 | T-15.3 | 跨 Adapter 一致性验收 | T-03.10、T-15.2 | 等待前置 |
 | goal-114 | T-15.4 | 官方 OneBot 11 Adapter 的反向 WebSocket | T-03.19、T-04.16、T-15.1、T-15.2 | 等待前置（T-04.16、T-15.2） |
 | goal-115 | T-15.5 | 官方 OneBot 11 Adapter 的新增片段与媒体 URL | T-03.13、T-03.14、T-15.2 | 等待前置 |
 | goal-116 | T-15.6 | 官方 OneBot 11 Adapter 的扩展事件、平台动作与撤回 | T-03.15、T-03.16、T-15.2 | 等待前置 |
-| goal-133 | T-15.7 | 官方 OneBot 11 Adapter 填写 chat_title | T-03.25、T-04.16、T-15.1 | 等待前置（T-04.16） |
-| goal-80 | T-15.3 | 跨 Adapter 一致性验收 | T-03.10、T-15.2 | 等待前置 |
 
 ## 第 8 波
 
@@ -101,7 +101,7 @@
 不做：发送、发送计划与回执、入站与出站媒体、extension（T-15.2）；Core 按 adapter_config_schema.json 补值与迁移（T-08.12）；权限文案的 i18n 文件（label_key 的文案随 Adapter 包的 i18n 目录由打包切片加入）；Core 侧装配、alonabot run 联验与一致性验收（T-15.3）；反向 WebSocket（v0.1 之外）。
 ```
 
-## 第 9 波
+## 第 18 波
 
 ### goal-79 · T-15.2 官方 OneBot 11 Adapter 的发送、媒体与 extension
 
@@ -161,7 +161,111 @@
 不做：Core/根包/CLI 装配、T-15.3 跨 Adapter 一致性、message.edit、message.delete、voice/file/forward/at_all、临时媒体 URL 与 inline_base64/platform_file 的平台映射（T-15.5）、反向 WebSocket（T-15.4）、真实 QQ 端验证。
 ```
 
-## 第 12 波
+### goal-133 · T-15.7 官方 OneBot 11 Adapter 填写 chat_title
+
+状态：等待前置（T-04.16）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：待派发。暂不派发（维护者指示只改写语句）。直接前置 T-15.1（goal-78，PR #109，合并提交 `1b226a2`）、T-03.25（goal-131，PR #166，合并提交 `6f72fc8`）均已合并。2026-11-13 按维护者指定的 main `9efee73` 只读副本，用 `rg` 核对定义、调用者与完整 Event 断言；`message.Event`、`adapter.Core`、`onebottest.Server.Respond` 另经离线 `go doc` 核对输出。以下补齐方案均为「审查者补齐，待维护者确认」。
+
+按 main 核对：
+
+- `sdk/message/event.go` 已有 `message.Event{ChatTitle string, ChatType message.ChatType, Session message.Session, ...}`；空 ChatTitle 表示未提供。`contracts/proto/alonabot/v1/message.proto` 已有 `ChatType chat_type = 15`、`optional string chat_title = 16`；`sdk/internal/convert/event.go` 的 `EventToProto(e *message.Event) (*pb.Event, error)` 与 `EventFromProto(e *pb.Event) *message.Event` 已处理该字段。
+- `sdk/adapter/adapter.go`：`Core.Deliver(ctx context.Context, ev *message.Event, cursor []byte) (accepted bool, err error)`。`adapters/onebot11/onebot11.go` 已有 `func New() adapter.Adapter`、`func (*onebotAdapter) Start(ctx context.Context, request adapter.StartRequest, core adapter.Core) (adapter.Instance, error)`、`func (i *instance) Stop(context.Context) error`；每次成功 Start 建立独立 instance，交付循环消费其 256 条实例队列。
+- `adapters/onebot11/inbound.go`：`func (i *instance) deliverEvents()` 顺序调用 `normalize(ctx context.Context, raw json.RawMessage) (*msg.Event, error)`，等待所属连接账号核对后交付，cursor 为 nil。`onebotPost.Sender` 已有 `Card`、`Nickname`、`Role string`，`GroupID`、`UserID` 为 `*int64`；`messageEvent(ctx context.Context, post onebotPost, event *msg.Event) (*msg.Event, error)`、`noticeEvent(post onebotPost, event *msg.Event) (*msg.Event, error)` 是既有标准化入口。当前尚未填写 ChatTitle、ChatType，也没有群名缓存。
+- `adapters/onebot11/connection.go`：`func (i *instance) call(ctx context.Context, action string, params any, result any) error` 已按 echo 配对，并处理取消、断线、非 ok/非零 retcode 与 JSON 解码错误；读循环独立处理 API 响应与心跳。`lifecycle.go` 的重连复用同一个 instance；Stop 取消 receiveCtx、关闭连接并等待交付结束。
+- `adapters/onebot11/onebottest/server.go` 已有 `NewServer(t testing.TB, accessToken string) *Server`、`URL() string`、`SetLogin(userID int64, nickname string)`、`Push(events ...json.RawMessage)`、`Calls() []Call`、`Respond(action string, fn func(params map[string]any) (status string, retcode int, data any))`；`Call` 已含 `Action string`、`Params map[string]any`，数字参数按 json.Number 保留。`defaultResponse(action string, params map[string]any) (string, int, any)` 尚无 get_group_info。所有动作已有统一调用记录，增加响应分支即可取得查询次数。
+- 审查者补齐，待维护者确认：群名缓存归单个存活 instance，成功名与失败结果都缓存；同实例断线重连继续复用，Stop 后重新 Start 得到新缓存。查询在首次有效事件的顺序交付路径上完成，原语句的 5 秒以 Adapter 包内命名常量 groupInfoTimeout 保留，属于 CONTRACTS §16 明确排除的 Adapter 自有常量。空或缺失的 group_name 均保持空名称，缺字段或错误类型按平台响应失败记录一次；原有事件照常交付。
+- 审查者补齐，待维护者确认：在已通过来源、结构与事件类型检查后统一填写现行 D-100 的 ChatType；private: → ChatPrivate（含群临时会话），group: → ChatGroup。goal-115 原先规划的类型赋值由本切片承担，审查者正式派发时同步其语句；基线已有时复用。
+- 在途协调按本次维护者提供的信息：PR #177（goal-66）改 `internal/core/logging/`、`internal/core/manage/`、`sdk/log.go`、`sdk/adapter_run.go`、根包装配与 `cmd/alonabot/`；PR #178（goal-60）改 `agent/`；goal-41 改 Journal、state、manage、supervisor 与根包装配；goal-9 的生产修改位于 `adapters/telegram/plan.go`，另有 Telegram 示例和 CLI 集成测试。这些与本切片生产文件分离。尚待实施的 goal-79、114、115、116 会共用 `onebot11.go`、`inbound.go`、`onebottest/server.go`、`onebot11_test.go`；后合并者保留缓存、类型与已有收发逻辑，群名逻辑经共同交付路径复用。
+- 旧在途提示按完成记录更新：PR #165（`330164f`）、#167（`3a9b4af`）、#168（`37b0ada`）、#169（`4dc4bcd`），以及 goal-59／PR #170（`eca6310`）、goal-69／PR #171（`3043c4e`）均已合并；#169 的 schema.sql／manage 清理清单及 goal-69 的根包／cmd 装配已是现有基线。最近 #173（`2bb8181`）、#175（`ac6083a`）、#176（`9785c22`）及维护者告知已合并的 #174 均保留，本切片复用现有启动、取消与 SDK 交付接口。
+- 需维护者另行决定：新增依赖、改变已确认决策均无新增请求；真实 OneBot 11 实现端、QQ 测试账号与凭证由维护者决定，模拟验收可独立完成，真实平台结果留作「未运行」。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-133（切片 T-15.7：官方 OneBot 11 Adapter 填写 chat_title）。goal 目录 goal-133，分支 goal-133，worktree .worktrees/goal-133，从包含 PR #109、#166 的最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：OneBot 11 实例为私聊与群的已支持入站事件填写 chat_title；私聊取 sender.nickname，群首次经 get_group_info 取得名称并在实例进程内缓存，失败后同一实例运行期间保持无名称且事件继续交付。在同一构造路径填写现行契约规定的 chat_type。
+
+依据：spec/PLAN.md §3.1、§5；spec/plan/adapters/onebot11.md T-15.7、T-15 步骤 1、2、9 及「失败停止条件」；spec/plan/core.md T-03 步骤 22 已合并的聊天目录；spec/CONTRACTS-v0.1.md §8（OneBot 11 实例交付与聊天目录）、§14.1（日志）、§16（Adapter 自有常量）；spec/MESSAGE-MODEL.md §1、§7.1；spec/WIRE-FORMAT.md §3.4（core.adapter.deliver）、§5A（Event 的追加字段）；spec/adr/DECISIONS.md D-46、D-86、D-100、D-130；spec/TEST-MATRIX.md V-117 的 OneBot 11 分项及 §3 的证据格式。平台请求按 OneBot 11 标准的 get_group_info、私聊/群聊消息与通知上报核对。
+
+范围（只新增或修改这些）：
+- adapters/onebot11/onebot11.go：instance 增加私有群名缓存，并在创建新实例时初始化；其余生命周期与公开方法保持现状。
+- adapters/onebot11/inbound.go：在有效事件的共同标准化路径填写私聊/群名和既定 ChatType；包内 groupInfoTimeout 与群名查询辅助函数也放在本文件。
+- adapters/onebot11/onebottest/server.go：defaultResponse 追加 get_group_info 缺省响应，复用现有请求记录及 Respond 覆盖。
+- adapters/onebot11/onebot11_test.go：追加下述一个集成测试，更新既有完整 Event 比较的名称、类型预期，保留其余断言。
+- adapters/onebot11/ 下本切片的 *_local_test.go：失败、期限、重连、重启、通知与日志验证，只作本地自测。
+允许的新跨模块边：无；沿用 sdk/adapter、sdk/message、sdk/errcode 和本模块模拟服务；WebSocket 使用已有批准依赖。
+
+接口（照此实现；内部辅助函数自定）：
+- 保持 func New() adapter.Adapter、Adapter.Start、Instance.Stop、adapter.Core.Deliver 的既有签名；normalize、messageEvent、noticeEvent 与 call 的现有签名保持原样。
+- 使用既有 message.Event.ChatTitle string 与 ChatType；协议字段沿用 Event.target = 8、Event.chat_type = 15、optional string Event.chat_title = 16，SDK 负责空串与 absent 的转换。
+- instance 追加私有 groupTitles map[int64]string：键为群号，map 中存在该键表示已尝试查询，值为空可表示失败或平台没有给出名称。只由唯一交付循环读写，在 Start 创建的新实例上初始化；禁止为它增加后台刷新循环。
+- 包内 const groupInfoTimeout = 5 * time.Second。每次首次查询从 normalize 的 ctx（生产为 receiveCtx）派生 context.WithTimeout，结束时 cancel；复用 i.call(ctx, "get_group_info", params, &result)。params 只有数值 group_id，沿用标准 no_cache 的缺省行为；读取 data.group_name，缺字段或非 string 为响应失败，空 string 视作未提供名称。group_id 在平台 JSON 中保持数值，缓存与日志按同一群号索引。
+- onebottest 的既有公开 API 保持现状。defaultResponse("get_group_info", params) 返回 status="ok"、retcode=0、data 包含请求的 group_id 与 group_name="test_group"。测试经 Respond("get_group_info", fn) 控制不同群名、failed、不支持、畸形数据或不应答；通过遍历 Calls() 中 Action=="get_group_info" 的记录按 group_id 计数，复用 json.Number 读取数字。
+
+行为：
+- 先完成现有 self_id、支持的消息/通知类型、会话标识、消息数组与对应 payload 检查，再为即将交付的有效事件取名；被忽略或拒绝的上报保持原处理方式。私聊（含群临时会话）仅取该上报 sender.nickname；为空时 ChatTitle 留空。Actor.DisplayName 原有 card 优先规则继续生效，聊天名称单独按 nickname 取值。
+- 所有已支持的 group: 事件在本实例首次遇到该群时，先尝试一次 get_group_info，再交付当前事件；成功时当前事件及随后同群事件都带 group_name 原文。匿名群消息和群撤回、成员通知适用同样规则；私聊通知缺少 sender.nickname 时保留空名称。没有 target 的事件以及没有会话的扩展事件保持空名称。
+- 在相同位置按最终会话填写 ChatType：private: 为 ChatPrivate，group: 为 ChatGroup，群临时会话依然为私聊。已有相同映射时直接复用。
+- 查询成功、调用失败、超时、实现端不支持、缺失/畸形响应都使该群进入已尝试状态。失败时本事件 ChatTitle 留空，继续原事件交付；同实例运行期间不再为该群查询。名称获取失败只记一条英文 DEBUG，业务字段仅 adapter_instance_id 与群号；名称、响应体、认证信息与可能带名称的错误原文均不进入日志。
+- 顺序交付循环等待查询最多 groupInfoTimeout，之后继续当前事件及队列中后续事件；其他群照常排队，保持原有事件顺序。API 响应与心跳继续由独立读取循环处理，原有 256 条队列及满队列计数不变。查询只使用既有单次 API 调用；查询持锁范围和取消规则沿用 call。
+- 同一个存活 instance 的 WebSocket 重连复用缓存。群改名后在该实例存活期间保持缓存值；Stop 后重新 Start 创建空缓存，Adapter 进程重启自然清空全部实例缓存；不同实例的缓存独立。群名查询失败只影响可选名称，原有致命格式错误、账号变化及 access_token 错误继续按各自规则处理。
+- Stop 或 Session 停止沿既有 receiveCtx 取消查询并等待交付循环结束，停止后没有新的 Deliver。PlatformPayload 保持完整原始上报，消息、Actor、权限名集合、to_me 和 nil cursor 的语义保留。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：在 adapters/onebot11/onebot11_test.go 新增一个 TestChatTitle 集成测试。用现有 onebottest.Server、SetLogin、Respond、New().Start 和录制 Core，经真实 WebSocket 依次推入同群两条消息及一条私聊消息；为 get_group_info 的该群返回固定完整名称，私聊同时提供不同 card 与 nickname。断言两条群事件都带该群名、ChatGroup，私聊带 nickname、ChatPrivate；Calls() 中该群 get_group_info 恰好一次且 group_id 数值正确；事件交付顺序、原始载荷与 nil cursor 保持正确。理由：覆盖真实 API echo 响应、实例缓存、平台事件标准化和交付的主路径。
+- 既有测试同步：TestReceiveLifecycle 完整 Event 比较中，私聊使用已有 sender.nickname，群使用模拟端新缺省的 test_group，并补齐 ChatType；原先的群主/匿名/撤回/成员、重连、accepted=false 与凭证脱敏断言保留。此项属于既有测试的预期更新。
+- 本地自测（adapters/onebot11/*_local_test.go，PR 记录命令、平台与结果）：failed/非零 retcode、不支持 API、超时不应答、缺字段/错误类型与空群名；每种情形同群两条事件均继续交付且总查询一次，失败情形诊断一次，合法空群名缓存空串。查询超时后后续群仍按序交付，API 读循环继续处理 echo 与心跳；Stop 在查询中及时取消、结束后无交付。
+- 本地自测继续覆盖：首次事件为群撤回/成员通知、匿名群消息；群临时会话取昵称；缺 nickname 的私聊通知；两群各查一次；同实例断线重连不再查询；群改名保持缓存；同一进程 Stop 后重新 Start 再次查询；两个实例同群独立查询；不匹配 self_id、未知上报、非法消息不触发群名查询。DEBUG 日志不含群名、私聊昵称、响应原文与 access_token，错误文本保持英文。
+- D-86：提交范围为上述平台集成测试；SDK 字段编解码、Core 目录持久化与查询复用 PR #166 的证据。本切片的本地自测也集中在 adapters/onebot11/，无需新增 SDK 测试或 testdata 插件。
+- 真实 OneBot 11 实现端与 QQ：未运行（待维护者提供环境）。模拟证据与真实手测分别记录；执行者把 V-117 OneBot 11 分项的测试位置、命令、OS/架构、Go 版本、结果及未运行项交审查者汇总到 TEST-MATRIX §3.2。
+
+完成条件：主路径集成及列明本地自测取得结果；每实例每群只尝试一次查询，成功与失败均缓存、事件顺序与停止语义保持有效，名称及凭证无日志泄漏；gofmt -l 本次修改的 Go 文件无输出；go vet ./adapters/onebot11/...；go test -race ./adapters/onebot11/...；go build ./...。对照 T-15「失败停止条件」：通用 Segment 语义、Core 平台分支、凭证泄漏、静默片段丢弃等问题先修复；需要范围外生产文件、proto、新依赖或改变已确认语义时标 [!] 交审查者处理。V-117 全项由跨任务汇总关闭，本切片交付其 OneBot 11 分项。
+
+不做：Core 聊天目录与 schema；群成员、群列表拉取；按时间或改名事件刷新群名；公开的平台 get_group_info 动作（goal-116）；反向 WebSocket、发送与媒体能力；新增配置项、可调参数或 SDK 公开方法。
+```
+
+## 第 19 波
+
+### goal-80 · T-15.3 跨 Adapter 一致性验收
+
+状态：等待前置（T-03.10、T-15.2）。2026-11-09 按 D-88 补充：OneBot 11 的 media_ref 需要实例配置 media_dir（goal-115 合并后也可用临时媒体 URL），审查者改写时在 OneBot 11 的实例文件中配置 media_dir，并断言请求中没有 base64://。语句中 goal-9、goal-78、goal-79 提供的符号（alonabot run 的 --adapter-id/--adapter-entry、cmd/alonabot/telegram_e2e_test.go 的装配方式、telegramtest.Server、onebottest.Server）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：OneBot 11 的端到端链路经 `alonabot run <目录>` 运行，实例写在 `core_config.json`（D-77、D-82）。前置合并后由审查者改写。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-80（切片 T-15.3：跨 Adapter 一致性验收）。goal 目录 goal-80，分支 goal-80，worktree .worktrees/goal-80，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：用同一个插件二进制，分别经 Telegram 与 OneBot 11 两个模拟服务收发同一组 Chain 与入站消息，对照两边的结果，证明通用片段在两边语义一致、每个实例只用自己声明的能力、未声明的能力在首个平台请求前被拒绝；经 alonabot run 跑 OneBot 11 的端到端链路；在 TEST-MATRIX §3.2 记录 V-71、V-72 的证据。真实 QQ 端只有维护者的手测记录，没有时记为未运行。
+
+依据：PLAN T-15 步骤 5 与「失败停止条件」；CONTRACTS §8；MESSAGE-MODEL §2、§4、§6.2、§7；DECISIONS D-46；TEST-MATRIX V-71、V-72。
+
+范围（只新增或修改这些）：
+- 新增 cmd/alonabot/testdata/conformance/（测试插件：收到 "case:<name>" 时发送下表中该用例的 Chain，并以一行 INFO 记录 SendResult 的摘要；收到其他消息时以一行 INFO 记录入站 chain 的片段类型序列与 to_me）
+- 新增 cmd/alonabot/conformance_e2e_test.go（//go:build unix）
+- docs/development.md：在 alonabot run 一节补充以 OneBot 11 Adapter 运行的示例命令与实例文件（本切片获授权修改这一处）
+- spec/TEST-MATRIX.md §3.2：追加 T-15 的证据行（本切片获授权修改这一处；其他 spec 文件不改）
+允许的新跨模块边：cmd/alonabot 的测试 -> adapters/telegram/telegramtest、-> adapters/onebot11/onebottest（测试代码，审查者确认允许）。
+
+接口：不新增公开 Go 符号，不修改 alonabot run 的参数。测试插件的日志摘要格式自定，但须包含 status、每项 PartResult 的 status 与 segment_indexes、ErrorInfo 的 code。
+
+行为与测试：
+- conformance_e2e_test.go 构建 alonabot 与两个 Adapter 程序和测试插件，对每个 Adapter 各起一次 alonabot run（各自的临时 data_dir 与实例文件，同一个插件二进制）；经模拟服务注入 "case:<name>" 消息，从 Core 日志读出摘要，从模拟服务的 Calls() 读出实际平台请求，再按下表断言：
+  | 用例 | Telegram | OneBot 11 |
+  | text | ACCEPTED，1 项 | ACCEPTED，1 项 |
+  | mention+text | ACCEPTED（text_mention） | ACCEPTED（at 段） |
+  | reference+text | ACCEPTED，reply_parameters 只在第一个请求 | ACCEPTED，reply 段只在第一条消息最前 |
+  | text+image+text | ACCEPTED，3 项 | ACCEPTED，1 项 |
+  | text+buttons | ACCEPTED | REJECTED/UNSUPPORTED，send_msg 为 0 次 |
+  | file | ACCEPTED | REJECTED/UNSUPPORTED，send_msg 为 0 次 |
+  | markdown text | ACCEPTED | REJECTED/UNSUPPORTED，send_msg 为 0 次 |
+  | forward | REJECTED/UNSUPPORTED，Bot API 请求为 0 次 | REJECTED/UNSUPPORTED，send_msg 为 0 次 |
+  | onebot11.face extension | REJECTED/UNSUPPORTED，由 Core 拒绝，Bot API 请求为 0 次 | ACCEPTED |
+  | Edit 文本 | ACCEPTED（editMessageText） | UNSUPPORTED，由 Core 按 message.edit 拒绝，send_msg 为 0 次 |
+  两边都 ACCEPTED 的用例另外断言：每个片段恰好出现在一项 PartResult 的 segment_indexes 中，按项的顺序展开等于原片段顺序；platform_message_ids 的数量等于物理请求数。
+- 入站对照：两边各注入一组语义相同的消息（纯文本；@本机器人加文本；回复本机器人消息；带图片的消息），测试插件记录的片段类型序列与 to_me 在两边相同。
+- OneBot 11 的端到端链路（同一测试文件的子测试）：实例启动后出现 bot.online；模拟服务 Disconnect 后实例自动重连，之后的消息照常收发，没有 bot.offline；access_token 错误时实例失败，出现 reason=INSTANCE_FAILED 的 bot.offline；Core 日志与 data_dir 中的日志文件不含 access_token。
+- 证据：TEST-MATRIX §3.2 追加一行，写明上表的实测结果、命令、平台与 Go 版本；真实 QQ 端：维护者提供手测记录（实现端名称与版本、通过的用例）时写入，否则写「未运行」。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./cmd/alonabot/... ./adapters/...；go build ./...。
+
+不做：修改两个 Adapter 的映射或 Core 的派发（发现不一致时标 [!] 并在 PR 中写明用例与差异，由审查者决定修契约还是修实现）；alonabot run 同时启动多个 Adapter；反向 WebSocket。
+```
 
 ### goal-114 · T-15.4 官方 OneBot 11 Adapter 的反向 WebSocket
 
@@ -250,112 +354,3 @@
 - 动作参数中可由 Target 推出的 group_id、user_id 不重复出现；结果为响应 data 原文；failed 为 FAILED_PRECONDITION 并带 retcode；实现端扩展的动作不探测实现端类型。
 - 撤回逐个 delete_msg，失败或结果未知后其余为 NOT_ATTEMPTED。
 - 测试：提交在既有测试文件中追加的用例：推入好友请求得到 onebot11.friend_request，再用 set_friend_add_request 动作处理，断言请求参数；其余进本地自测。
-
-## 第 13 波
-
-### goal-80 · T-15.3 跨 Adapter 一致性验收
-
-状态：等待前置（T-03.10、T-15.2）。2026-11-09 按 D-88 补充：OneBot 11 的 media_ref 需要实例配置 media_dir（goal-115 合并后也可用临时媒体 URL），审查者改写时在 OneBot 11 的实例文件中配置 media_dir，并断言请求中没有 base64://。语句中 goal-9、goal-78、goal-79 提供的符号（alonabot run 的 --adapter-id/--adapter-entry、cmd/alonabot/telegram_e2e_test.go 的装配方式、telegramtest.Server、onebottest.Server）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：OneBot 11 的端到端链路经 `alonabot run <目录>` 运行，实例写在 `core_config.json`（D-77、D-82）。前置合并后由审查者改写。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-80（切片 T-15.3：跨 Adapter 一致性验收）。goal 目录 goal-80，分支 goal-80，worktree .worktrees/goal-80，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
-
-目标：用同一个插件二进制，分别经 Telegram 与 OneBot 11 两个模拟服务收发同一组 Chain 与入站消息，对照两边的结果，证明通用片段在两边语义一致、每个实例只用自己声明的能力、未声明的能力在首个平台请求前被拒绝；经 alonabot run 跑 OneBot 11 的端到端链路；在 TEST-MATRIX §3.2 记录 V-71、V-72 的证据。真实 QQ 端只有维护者的手测记录，没有时记为未运行。
-
-依据：PLAN T-15 步骤 5 与「失败停止条件」；CONTRACTS §8；MESSAGE-MODEL §2、§4、§6.2、§7；DECISIONS D-46；TEST-MATRIX V-71、V-72。
-
-范围（只新增或修改这些）：
-- 新增 cmd/alonabot/testdata/conformance/（测试插件：收到 "case:<name>" 时发送下表中该用例的 Chain，并以一行 INFO 记录 SendResult 的摘要；收到其他消息时以一行 INFO 记录入站 chain 的片段类型序列与 to_me）
-- 新增 cmd/alonabot/conformance_e2e_test.go（//go:build unix）
-- docs/development.md：在 alonabot run 一节补充以 OneBot 11 Adapter 运行的示例命令与实例文件（本切片获授权修改这一处）
-- spec/TEST-MATRIX.md §3.2：追加 T-15 的证据行（本切片获授权修改这一处；其他 spec 文件不改）
-允许的新跨模块边：cmd/alonabot 的测试 -> adapters/telegram/telegramtest、-> adapters/onebot11/onebottest（测试代码，审查者确认允许）。
-
-接口：不新增公开 Go 符号，不修改 alonabot run 的参数。测试插件的日志摘要格式自定，但须包含 status、每项 PartResult 的 status 与 segment_indexes、ErrorInfo 的 code。
-
-行为与测试：
-- conformance_e2e_test.go 构建 alonabot 与两个 Adapter 程序和测试插件，对每个 Adapter 各起一次 alonabot run（各自的临时 data_dir 与实例文件，同一个插件二进制）；经模拟服务注入 "case:<name>" 消息，从 Core 日志读出摘要，从模拟服务的 Calls() 读出实际平台请求，再按下表断言：
-  | 用例 | Telegram | OneBot 11 |
-  | text | ACCEPTED，1 项 | ACCEPTED，1 项 |
-  | mention+text | ACCEPTED（text_mention） | ACCEPTED（at 段） |
-  | reference+text | ACCEPTED，reply_parameters 只在第一个请求 | ACCEPTED，reply 段只在第一条消息最前 |
-  | text+image+text | ACCEPTED，3 项 | ACCEPTED，1 项 |
-  | text+buttons | ACCEPTED | REJECTED/UNSUPPORTED，send_msg 为 0 次 |
-  | file | ACCEPTED | REJECTED/UNSUPPORTED，send_msg 为 0 次 |
-  | markdown text | ACCEPTED | REJECTED/UNSUPPORTED，send_msg 为 0 次 |
-  | forward | REJECTED/UNSUPPORTED，Bot API 请求为 0 次 | REJECTED/UNSUPPORTED，send_msg 为 0 次 |
-  | onebot11.face extension | REJECTED/UNSUPPORTED，由 Core 拒绝，Bot API 请求为 0 次 | ACCEPTED |
-  | Edit 文本 | ACCEPTED（editMessageText） | UNSUPPORTED，由 Core 按 message.edit 拒绝，send_msg 为 0 次 |
-  两边都 ACCEPTED 的用例另外断言：每个片段恰好出现在一项 PartResult 的 segment_indexes 中，按项的顺序展开等于原片段顺序；platform_message_ids 的数量等于物理请求数。
-- 入站对照：两边各注入一组语义相同的消息（纯文本；@本机器人加文本；回复本机器人消息；带图片的消息），测试插件记录的片段类型序列与 to_me 在两边相同。
-- OneBot 11 的端到端链路（同一测试文件的子测试）：实例启动后出现 bot.online；模拟服务 Disconnect 后实例自动重连，之后的消息照常收发，没有 bot.offline；access_token 错误时实例失败，出现 reason=INSTANCE_FAILED 的 bot.offline；Core 日志与 data_dir 中的日志文件不含 access_token。
-- 证据：TEST-MATRIX §3.2 追加一行，写明上表的实测结果、命令、平台与 Go 版本；真实 QQ 端：维护者提供手测记录（实现端名称与版本、通过的用例）时写入，否则写「未运行」。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./cmd/alonabot/... ./adapters/...；go build ./...。
-
-不做：修改两个 Adapter 的映射或 Core 的派发（发现不一致时标 [!] 并在 PR 中写明用例与差异，由审查者决定修契约还是修实现）；alonabot run 同时启动多个 Adapter；反向 WebSocket。
-```
-
-## 第 14 波
-
-### goal-133 · T-15.7 官方 OneBot 11 Adapter 填写 chat_title
-
-状态：等待前置（T-04.16）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：待派发。暂不派发（维护者指示只改写语句）。直接前置 T-15.1（goal-78，PR #109，合并提交 `1b226a2`）、T-03.25（goal-131，PR #166，合并提交 `6f72fc8`）均已合并。2026-11-13 按维护者指定的 main `9efee73` 只读副本，用 `rg` 核对定义、调用者与完整 Event 断言；`message.Event`、`adapter.Core`、`onebottest.Server.Respond` 另经离线 `go doc` 核对输出。以下补齐方案均为「审查者补齐，待维护者确认」。
-
-按 main 核对：
-
-- `sdk/message/event.go` 已有 `message.Event{ChatTitle string, ChatType message.ChatType, Session message.Session, ...}`；空 ChatTitle 表示未提供。`contracts/proto/alonabot/v1/message.proto` 已有 `ChatType chat_type = 15`、`optional string chat_title = 16`；`sdk/internal/convert/event.go` 的 `EventToProto(e *message.Event) (*pb.Event, error)` 与 `EventFromProto(e *pb.Event) *message.Event` 已处理该字段。
-- `sdk/adapter/adapter.go`：`Core.Deliver(ctx context.Context, ev *message.Event, cursor []byte) (accepted bool, err error)`。`adapters/onebot11/onebot11.go` 已有 `func New() adapter.Adapter`、`func (*onebotAdapter) Start(ctx context.Context, request adapter.StartRequest, core adapter.Core) (adapter.Instance, error)`、`func (i *instance) Stop(context.Context) error`；每次成功 Start 建立独立 instance，交付循环消费其 256 条实例队列。
-- `adapters/onebot11/inbound.go`：`func (i *instance) deliverEvents()` 顺序调用 `normalize(ctx context.Context, raw json.RawMessage) (*msg.Event, error)`，等待所属连接账号核对后交付，cursor 为 nil。`onebotPost.Sender` 已有 `Card`、`Nickname`、`Role string`，`GroupID`、`UserID` 为 `*int64`；`messageEvent(ctx context.Context, post onebotPost, event *msg.Event) (*msg.Event, error)`、`noticeEvent(post onebotPost, event *msg.Event) (*msg.Event, error)` 是既有标准化入口。当前尚未填写 ChatTitle、ChatType，也没有群名缓存。
-- `adapters/onebot11/connection.go`：`func (i *instance) call(ctx context.Context, action string, params any, result any) error` 已按 echo 配对，并处理取消、断线、非 ok/非零 retcode 与 JSON 解码错误；读循环独立处理 API 响应与心跳。`lifecycle.go` 的重连复用同一个 instance；Stop 取消 receiveCtx、关闭连接并等待交付结束。
-- `adapters/onebot11/onebottest/server.go` 已有 `NewServer(t testing.TB, accessToken string) *Server`、`URL() string`、`SetLogin(userID int64, nickname string)`、`Push(events ...json.RawMessage)`、`Calls() []Call`、`Respond(action string, fn func(params map[string]any) (status string, retcode int, data any))`；`Call` 已含 `Action string`、`Params map[string]any`，数字参数按 json.Number 保留。`defaultResponse(action string, params map[string]any) (string, int, any)` 尚无 get_group_info。所有动作已有统一调用记录，增加响应分支即可取得查询次数。
-- 审查者补齐，待维护者确认：群名缓存归单个存活 instance，成功名与失败结果都缓存；同实例断线重连继续复用，Stop 后重新 Start 得到新缓存。查询在首次有效事件的顺序交付路径上完成，原语句的 5 秒以 Adapter 包内命名常量 groupInfoTimeout 保留，属于 CONTRACTS §16 明确排除的 Adapter 自有常量。空或缺失的 group_name 均保持空名称，缺字段或错误类型按平台响应失败记录一次；原有事件照常交付。
-- 审查者补齐，待维护者确认：在已通过来源、结构与事件类型检查后统一填写现行 D-100 的 ChatType；private: → ChatPrivate（含群临时会话），group: → ChatGroup。goal-115 原先规划的类型赋值由本切片承担，审查者正式派发时同步其语句；基线已有时复用。
-- 在途协调按本次维护者提供的信息：PR #177（goal-66）改 `internal/core/logging/`、`internal/core/manage/`、`sdk/log.go`、`sdk/adapter_run.go`、根包装配与 `cmd/alonabot/`；PR #178（goal-60）改 `agent/`；goal-41 改 Journal、state、manage、supervisor 与根包装配；goal-9 的生产修改位于 `adapters/telegram/plan.go`，另有 Telegram 示例和 CLI 集成测试。这些与本切片生产文件分离。尚待实施的 goal-79、114、115、116 会共用 `onebot11.go`、`inbound.go`、`onebottest/server.go`、`onebot11_test.go`；后合并者保留缓存、类型与已有收发逻辑，群名逻辑经共同交付路径复用。
-- 旧在途提示按完成记录更新：PR #165（`330164f`）、#167（`3a9b4af`）、#168（`37b0ada`）、#169（`4dc4bcd`），以及 goal-59／PR #170（`eca6310`）、goal-69／PR #171（`3043c4e`）均已合并；#169 的 schema.sql／manage 清理清单及 goal-69 的根包／cmd 装配已是现有基线。最近 #173（`2bb8181`）、#175（`ac6083a`）、#176（`9785c22`）及维护者告知已合并的 #174 均保留，本切片复用现有启动、取消与 SDK 交付接口。
-- 需维护者另行决定：新增依赖、改变已确认决策均无新增请求；真实 OneBot 11 实现端、QQ 测试账号与凭证由维护者决定，模拟验收可独立完成，真实平台结果留作「未运行」。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-133（切片 T-15.7：官方 OneBot 11 Adapter 填写 chat_title）。goal 目录 goal-133，分支 goal-133，worktree .worktrees/goal-133，从包含 PR #109、#166 的最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
-
-目标：OneBot 11 实例为私聊与群的已支持入站事件填写 chat_title；私聊取 sender.nickname，群首次经 get_group_info 取得名称并在实例进程内缓存，失败后同一实例运行期间保持无名称且事件继续交付。在同一构造路径填写现行契约规定的 chat_type。
-
-依据：spec/PLAN.md §3.1、§5；spec/plan/adapters/onebot11.md T-15.7、T-15 步骤 1、2、9 及「失败停止条件」；spec/plan/core.md T-03 步骤 22 已合并的聊天目录；spec/CONTRACTS-v0.1.md §8（OneBot 11 实例交付与聊天目录）、§14.1（日志）、§16（Adapter 自有常量）；spec/MESSAGE-MODEL.md §1、§7.1；spec/WIRE-FORMAT.md §3.4（core.adapter.deliver）、§5A（Event 的追加字段）；spec/adr/DECISIONS.md D-46、D-86、D-100、D-130；spec/TEST-MATRIX.md V-117 的 OneBot 11 分项及 §3 的证据格式。平台请求按 OneBot 11 标准的 get_group_info、私聊/群聊消息与通知上报核对。
-
-范围（只新增或修改这些）：
-- adapters/onebot11/onebot11.go：instance 增加私有群名缓存，并在创建新实例时初始化；其余生命周期与公开方法保持现状。
-- adapters/onebot11/inbound.go：在有效事件的共同标准化路径填写私聊/群名和既定 ChatType；包内 groupInfoTimeout 与群名查询辅助函数也放在本文件。
-- adapters/onebot11/onebottest/server.go：defaultResponse 追加 get_group_info 缺省响应，复用现有请求记录及 Respond 覆盖。
-- adapters/onebot11/onebot11_test.go：追加下述一个集成测试，更新既有完整 Event 比较的名称、类型预期，保留其余断言。
-- adapters/onebot11/ 下本切片的 *_local_test.go：失败、期限、重连、重启、通知与日志验证，只作本地自测。
-允许的新跨模块边：无；沿用 sdk/adapter、sdk/message、sdk/errcode 和本模块模拟服务；WebSocket 使用已有批准依赖。
-
-接口（照此实现；内部辅助函数自定）：
-- 保持 func New() adapter.Adapter、Adapter.Start、Instance.Stop、adapter.Core.Deliver 的既有签名；normalize、messageEvent、noticeEvent 与 call 的现有签名保持原样。
-- 使用既有 message.Event.ChatTitle string 与 ChatType；协议字段沿用 Event.target = 8、Event.chat_type = 15、optional string Event.chat_title = 16，SDK 负责空串与 absent 的转换。
-- instance 追加私有 groupTitles map[int64]string：键为群号，map 中存在该键表示已尝试查询，值为空可表示失败或平台没有给出名称。只由唯一交付循环读写，在 Start 创建的新实例上初始化；禁止为它增加后台刷新循环。
-- 包内 const groupInfoTimeout = 5 * time.Second。每次首次查询从 normalize 的 ctx（生产为 receiveCtx）派生 context.WithTimeout，结束时 cancel；复用 i.call(ctx, "get_group_info", params, &result)。params 只有数值 group_id，沿用标准 no_cache 的缺省行为；读取 data.group_name，缺字段或非 string 为响应失败，空 string 视作未提供名称。group_id 在平台 JSON 中保持数值，缓存与日志按同一群号索引。
-- onebottest 的既有公开 API 保持现状。defaultResponse("get_group_info", params) 返回 status="ok"、retcode=0、data 包含请求的 group_id 与 group_name="test_group"。测试经 Respond("get_group_info", fn) 控制不同群名、failed、不支持、畸形数据或不应答；通过遍历 Calls() 中 Action=="get_group_info" 的记录按 group_id 计数，复用 json.Number 读取数字。
-
-行为：
-- 先完成现有 self_id、支持的消息/通知类型、会话标识、消息数组与对应 payload 检查，再为即将交付的有效事件取名；被忽略或拒绝的上报保持原处理方式。私聊（含群临时会话）仅取该上报 sender.nickname；为空时 ChatTitle 留空。Actor.DisplayName 原有 card 优先规则继续生效，聊天名称单独按 nickname 取值。
-- 所有已支持的 group: 事件在本实例首次遇到该群时，先尝试一次 get_group_info，再交付当前事件；成功时当前事件及随后同群事件都带 group_name 原文。匿名群消息和群撤回、成员通知适用同样规则；私聊通知缺少 sender.nickname 时保留空名称。没有 target 的事件以及没有会话的扩展事件保持空名称。
-- 在相同位置按最终会话填写 ChatType：private: 为 ChatPrivate，group: 为 ChatGroup，群临时会话依然为私聊。已有相同映射时直接复用。
-- 查询成功、调用失败、超时、实现端不支持、缺失/畸形响应都使该群进入已尝试状态。失败时本事件 ChatTitle 留空，继续原事件交付；同实例运行期间不再为该群查询。名称获取失败只记一条英文 DEBUG，业务字段仅 adapter_instance_id 与群号；名称、响应体、认证信息与可能带名称的错误原文均不进入日志。
-- 顺序交付循环等待查询最多 groupInfoTimeout，之后继续当前事件及队列中后续事件；其他群照常排队，保持原有事件顺序。API 响应与心跳继续由独立读取循环处理，原有 256 条队列及满队列计数不变。查询只使用既有单次 API 调用；查询持锁范围和取消规则沿用 call。
-- 同一个存活 instance 的 WebSocket 重连复用缓存。群改名后在该实例存活期间保持缓存值；Stop 后重新 Start 创建空缓存，Adapter 进程重启自然清空全部实例缓存；不同实例的缓存独立。群名查询失败只影响可选名称，原有致命格式错误、账号变化及 access_token 错误继续按各自规则处理。
-- Stop 或 Session 停止沿既有 receiveCtx 取消查询并等待交付循环结束，停止后没有新的 Deliver。PlatformPayload 保持完整原始上报，消息、Actor、权限名集合、to_me 和 nil cursor 的语义保留。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：在 adapters/onebot11/onebot11_test.go 新增一个 TestChatTitle 集成测试。用现有 onebottest.Server、SetLogin、Respond、New().Start 和录制 Core，经真实 WebSocket 依次推入同群两条消息及一条私聊消息；为 get_group_info 的该群返回固定完整名称，私聊同时提供不同 card 与 nickname。断言两条群事件都带该群名、ChatGroup，私聊带 nickname、ChatPrivate；Calls() 中该群 get_group_info 恰好一次且 group_id 数值正确；事件交付顺序、原始载荷与 nil cursor 保持正确。理由：覆盖真实 API echo 响应、实例缓存、平台事件标准化和交付的主路径。
-- 既有测试同步：TestReceiveLifecycle 完整 Event 比较中，私聊使用已有 sender.nickname，群使用模拟端新缺省的 test_group，并补齐 ChatType；原先的群主/匿名/撤回/成员、重连、accepted=false 与凭证脱敏断言保留。此项属于既有测试的预期更新。
-- 本地自测（adapters/onebot11/*_local_test.go，PR 记录命令、平台与结果）：failed/非零 retcode、不支持 API、超时不应答、缺字段/错误类型与空群名；每种情形同群两条事件均继续交付且总查询一次，失败情形诊断一次，合法空群名缓存空串。查询超时后后续群仍按序交付，API 读循环继续处理 echo 与心跳；Stop 在查询中及时取消、结束后无交付。
-- 本地自测继续覆盖：首次事件为群撤回/成员通知、匿名群消息；群临时会话取昵称；缺 nickname 的私聊通知；两群各查一次；同实例断线重连不再查询；群改名保持缓存；同一进程 Stop 后重新 Start 再次查询；两个实例同群独立查询；不匹配 self_id、未知上报、非法消息不触发群名查询。DEBUG 日志不含群名、私聊昵称、响应原文与 access_token，错误文本保持英文。
-- D-86：提交范围为上述平台集成测试；SDK 字段编解码、Core 目录持久化与查询复用 PR #166 的证据。本切片的本地自测也集中在 adapters/onebot11/，无需新增 SDK 测试或 testdata 插件。
-- 真实 OneBot 11 实现端与 QQ：未运行（待维护者提供环境）。模拟证据与真实手测分别记录；执行者把 V-117 OneBot 11 分项的测试位置、命令、OS/架构、Go 版本、结果及未运行项交审查者汇总到 TEST-MATRIX §3.2。
-
-完成条件：主路径集成及列明本地自测取得结果；每实例每群只尝试一次查询，成功与失败均缓存、事件顺序与停止语义保持有效，名称及凭证无日志泄漏；gofmt -l 本次修改的 Go 文件无输出；go vet ./adapters/onebot11/...；go test -race ./adapters/onebot11/...；go build ./...。对照 T-15「失败停止条件」：通用 Segment 语义、Core 平台分支、凭证泄漏、静默片段丢弃等问题先修复；需要范围外生产文件、proto、新依赖或改变已确认语义时标 [!] 交审查者处理。V-117 全项由跨任务汇总关闭，本切片交付其 OneBot 11 分项。
-
-不做：Core 聊天目录与 schema；群成员、群列表拉取；按时间或改名事件刷新群名；公开的平台 get_group_info 动作（goal-116）；反向 WebSocket、发送与媒体能力；新增配置项、可调参数或 SDK 公开方法。
-```
-

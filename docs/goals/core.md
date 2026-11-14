@@ -93,10 +93,14 @@
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 已完成（PR #173） |
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 已完成（PR #172） |
 | goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 已完成（PR #190） |
+| goal-138 | T-04.15 | SDK 公开面收敛 | T-04.5、T-09.3、T-16.1 | 待派发 |
 | goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 已完成（PR #179） |
+| goal-139 | T-04.16 | SDK 按类别分包 | T-04.15 | 等待前置 |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 已完成（PR #187） |
 | goal-93 | T-09.14 | 配置、权限、工具策略与会话的管理 API | T-03.25、T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-08.14、T-09.6、T-09.12、T-11.1、T-11.3 | 已完成（PR #192） |
+| goal-140 | T-13.5 | 模块根包只保留库模式接口 | T-04.16 | 等待前置 |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
+| goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 等待前置 |
 
 ## 第 1 波
 
@@ -7070,6 +7074,117 @@ broker.Options、bus.Options 与 router.Options 增加 Metrics *metrics.Counters
 
 ## 第 16 波
 
+### goal-138 · T-04.15 SDK 公开面收敛
+
+状态：待派发。前置 T-04.5（[PR #191](https://github.com/AlonaBot/AlonaBot/pull/191)）、T-09.3（[PR #194](https://github.com/AlonaBot/AlonaBot/pull/194)）与 T-16.1（[PR #168](https://github.com/AlonaBot/AlonaBot/pull/168)）均已合并。2026-11-14 按 main `eba58e2` 的代码写出接口、行为与测试段（D-144、D-145、D-147 由 [PR #196](https://github.com/AlonaBot/AlonaBot/pull/196) 定稿）。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-138（切片 T-04.15：SDK 公开面收敛）。goal 目录 goal-138，分支 goal-138，worktree .worktrees/goal-138，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：会话、消息句柄与用户字符串在 SDK 中一律是 string，发往当前事件以外的会话写 c.SendTo(sid, content)；作者工程与仓库中不再有生成文件，作者代码不写任何生成相关的内容，资源由 CLI 构建经 overlay 编入、由 plugintest 在 go test 中现场扫描，按入口包登记；库模式改由 alonabot build 构建；Adapter 的 HTTP 路由写进 adapter.Descriptor；示例只在 New() 中注册。协议、Core 行为与管理 API 不变。
+
+依据：PLAN T-04 步骤 15 及其失败停止条件；CONTRACTS §7.2、§8、§9.1、§9.3、§15.5、§17；MESSAGE-MODEL §1、§4；DESIGN §D、§E；DECISIONS D-86、D-102、D-104、D-105、D-114、D-118、D-120、D-136、D-137、D-144、D-145、D-147；TEST-MATRIX V-112、V-120；ARCHITECTURE 中 sdk 与 internal/generate 的拟建说明。
+
+范围（只新增、修改或删除这些）：
+- sdk/message/：session.go 改为 SID/ParseSID、Ref/ParseRef、UID/ParseUID；event.go、result.go、delete.go、media.go、message.go 中以 Session、MessageRef、User 声明的字段与方法改为 string；包文档同步
+- sdk/：sdk.go、send.go、edit.go、delete.go、action.go、hooks.go 的发送与句柄 API；plugin.go 记录入口包；generated.go 删除，资源改由内部登记表读取；registry.go、bus.go、services.go、i18n.go、session.go、subplugin.go、inproc.go 中读取资源的位置；adapter_run.go 与 http.go 的 Adapter 路由；sdk/internal/convert/ 的句柄转换
+- sdk/adapter/：declaration.go 新增 HTTPRoute、HTTPAuth、AuthPlatformToken 与 Descriptor.HTTP；adapter.go 的包文档
+- 新增 sdk/genimpl/ 与 internal/generated/
+- sdk/generate/ 整体移到 internal/generate/（用 git mv 保留历史），以及调用方 cmd/alonabot/{build,check,pack,plugin,test}.go 与 internal/pluginkit/{build,capabilities,check,pack,init}.go；pluginkit 新增库模式构建
+- 根包 assembly.go 的库模式资源读取；根目录 *_test.go 中的资源夹具、会话写法与组件构建方式
+- plugintest/：plugintest.go、adapter.go、buttons.go，plugintest/internal/{probe,llmagent}/ 及其测试
+- agent/、adapters/telegram/、adapters/onebot11/、examples/ 中使用上述 API 的源码与测试
+- 删除 agent/、adapters/telegram/、examples/、plugintest/internal/ 下的 11 个 alonabot_gen.go 与全部 `//go:generate go run …/cmd/alonabot build` 指令；contracts/doc.go 的 Protobuf 指令不动
+- cmd/alonabot/*_test.go、internal/core/adapter/remote/remote_test.go、internal/core/supervisor/supervisor_test.go 中随 API、资源夹具与组件构建方式改写的部分，以及下文的提交测试
+- docs/plugin-guide.md、docs/development.md 的写法
+- 上述包的 *_local_test.go
+允许的新跨模块边：sdk、sdk/genimpl、根包、plugintest、internal/generate -> internal/generated；plugintest -> internal/generate；cmd/alonabot、internal/pluginkit -> internal/generate（取代 -> sdk/generate）；本 module 的测试代码 -> internal/generated。internal/generated 只 import 标准库。
+
+接口（照此实现）：
+sdk/message
+   func SID(adapterID, chatID, threadID string) string
+   func ParseSID(sid string) (adapterID, chatID, threadID string, err error)
+   func Ref(sid, platformMessageID, instance string) string
+   func ParseRef(ref string) (sid, platformMessageID, instance string, err error)
+   func UID(adapterID, externalUserID string) string
+   func ParseUID(uid string) (adapterID, externalUserID string, err error)
+   // 转义与格式规则沿用现有 NewSession/NewMessageRef/NewUser 与 Parts；Parse* 在格式不合法时返回 code 为 INVALID_ARGUMENT 的 *errcode.Error（sdk/errcode）。
+   // 删除 Session、MessageRef、User、NewSession、NewMessageRef、NewUser 与各自的 Parts，不留别名。
+   // 以下成员只改类型为 string，名字不变：Event.Session、Event.Ref()、SendResult.Session、SendResult.Ref()、SendResult.Refs()（[]string）、ReferenceSegment.Ref、Quote(ref string)、DeleteResult.Session、media.go 中的 Sessions（[]string），以及其他以这三种类型声明的字段。
+sdk
+   func (c *Context) SendTo(sid string, m message.Content, opts ...SendOption) (*message.SendResult, error)
+   func (c *Context) Send(m message.Content, opts ...SendOption) (*message.SendResult, error) // 只发往当前事件的默认目标
+   func Send(ctx context.Context, sid string, m message.Content, opts ...SendOption) (*message.SendResult, error)
+   func SendText(ctx context.Context, sid, text string, opts ...SendOption) error
+   func Via(instanceID string) SendOption // 唯一的 SendOption
+   func (c *Context) Session() string
+   func (c *Context) User() string
+   func (c *Context) Editing() string
+   func (c *Context) CallAction(sid, name string, version uint32, params any, opts ...SendOption) (json.RawMessage, error)
+   func (c *Context) Edit(ref string, m message.Content) (*message.SendResult, error)
+   func Edit(ctx context.Context, ref string, m message.Content) (*message.SendResult, error)
+   func (c *Context) Delete(refs ...string) (*message.DeleteResult, error)
+   func Delete(ctx context.Context, refs ...string) (*message.DeleteResult, error)
+   // 删除 To、Generated、UseGenerated、UseGeneratedAdapter、GeneratedFor、GeneratedProvider、(*Plugin).Generated 与 AdapterHTTP，不留别名。UserID、NewPlugin 与其余公开签名不变。
+sdk/adapter
+   type HTTPAuth int
+   const AuthPlatformToken HTTPAuth = 1 // 平台 token 公开路由；零值要求 Core 会话
+   type HTTPRoute struct {
+       Method  string
+       Path    string
+       Auth    HTTPAuth
+       Handler http.Handler
+   }
+   // Descriptor 新增字段 HTTP []HTTPRoute，其余字段不变。
+sdk/genimpl（新包；包文档写明只供 CLI 注入的登记代码使用，不对作者承诺兼容）
+   type Resources = generated.Resources
+   func Register(pkgPath string, r Resources)
+internal/generated（新包）
+   type Resources struct {
+       Manifest            []byte              // 工程入口目录 plugin.yaml 的原文
+       ConfigSchema        []byte              // config_schema.json 的规范 JSON；没有该文件时为 nil
+       AdapterConfigSchema []byte              // Adapter 实例的规范 JSON Schema；插件为 nil
+       ServiceSchemas      map[string][]byte   // schema_id 对应的规范 JSON Service Schema
+       I18n                map[string][]byte   // i18n 文件名对应的原文
+       ParamNames          map[string][]string // 键与现有 Generated.ParamNames 相同
+   }
+   func Register(pkgPath string, r Resources)                   // 同一导入路径登记两次时 panic
+   func Bind(component any, r Resources)                        // 按对象绑定，只供仓库测试夹具与 plugintest 的测试 Adapter
+   func Lookup(component any, pkgPath string) (Resources, bool) // 先查对象绑定，再查入口包
+   func SetEntry(p any, pkgPath string)                         // sdk.NewPlugin 记录插件对象的入口包
+   func Entry(p any) (pkgPath string, ok bool)
+   // 全部函数并发安全。
+internal/generate（由 sdk/generate 移入）
+   Options 增加 Package string // 要扫描的组件入口包导入路径；为空时扫描 Dir 本身。非空时按 Dir 所在 module 的构建列表解析，可以是模块缓存中的第三方包，只读。
+   Result 增加 Generated generated.Resources // 本次扫描得到的全部资源
+   // Result.Source 改为调用 genimpl.Register 的登记代码；删除 FileName。Scan 与其余字段、诊断规则保持。
+internal/pluginkit
+   func CompileApp(ctx context.Context, options generate.Options, outDir string, goFlags ...string) (executable string, err error)
+   // 库模式构建；goFlags 只供仓库测试传入（例如 -race），CLI 不暴露。BuildDev、Compile、Pack、Check、Init 的签名不变。
+
+行为：
+- 实施次序：先句柄与 Adapter 路由；再资源登记，期间把现有 alonabot_gen.go 按新格式重新生成以保持编译；再 plugintest 现场扫描与库模式构建；最后删除生成文件，改 CLI、示例与文档。每一步结束时完成条件都通过。
+- 句柄：SID、Ref、UID 只拼接与转义，不校验；ParseSID、ParseRef、ParseUID 的校验与现有 Parts 相同（adapter_id 规则、聊天非空、话题不含 `#`、实例字符集、external_user_id 非空且原样保留其中的 `:`），英文错误指明是哪一种字符串。sdk/internal/convert 与 Adapter SDK 的 Target、Event 映射改用这些函数，Wire 字段不变。
+- 发送：c.SendTo 发往给出的 sid，可带 Via；c.Send 只发往当前事件的默认目标，没有时照旧返回 NO_DEFAULT_TARGET；sdk.Send、sdk.SendText 收 sid。发送、编辑、撤回与 CallAction 收到不合法的 sid 或句柄时，在发出请求前返回 INVALID_ARGUMENT。c.Session()、c.User() 没有默认目标或 Actor 时为空串。Agent 的任务目标保留现有 JSON 字段名与字符串内容，只把类型改为 string；Telegram、OneBot 11 Adapter 中的 Parts 调用改用 Parse*。
+- 入口包：sdk.NewPlugin() 用 runtime.Caller 记录调用方所在的包，规则与现有 UseGenerated 相同（普通二进制中 package main 记为 `main`，go test 中记为导入路径），经 generated.SetEntry 保存。注册期间不读取资源。
+- 取得资源：Collect、sdk.Run、sdk.RunAdapter、RunInProcess、RunAdapterInProcess 与库模式启动组件时，按 generated.Lookup 取得资源：插件用对象与记录的入口包，Adapter 用值与其具名类型所在的包。命令省略 Args 时的参数名、Service 与 Event Bus 的 schema ID、子插件配置的 schema 检查、配置准备与 i18n 都改在此时解析，规则不变；registry.go、bus.go 中现在注册时读取资源的位置一并后移。没有登记时，Collect 按无资源处理，与现在未绑定资源时相同，不启动组件的单元测试照旧可用；sdk.Run、sdk.RunAdapter 与库模式在连接 Core 前返回英文错误，指明入口包并提示 `alonabot build` 或 `alonabot run`。同包多次 New 共用一份只读资源，不同包互不影响。
+- 仓库测试与夹具：原 sdk.UseGenerated(p, sdk.Generated{…}) 与 sdk.UseGeneratedAdapter 改为 generated.Bind(p, generated.Resources{…})，断言不变；本 module 之外的夹具源码（写入临时目录再编译的 main 程序）改为在 init 中调用 genimpl.Register。直接 `go build` 依赖生成资源的组件再运行的测试，改为经 CLI 或 pluginkit 构建：cmd/alonabot/e2e_test.go 的 TestMain 与 internal/core/supervisor/supervisor_test.go 构建 lifecycle 示例，alonabot_test.go 以 CompileApp 带 -race 构建 devbot，其余同类夹具照此处理；断言不变。
+- 登记代码：internal/generate 产出的源码首行为 `// Code generated by alonabot. DO NOT EDIT.`，包名同入口包，import genimpl 后在 init() 中调用 genimpl.Register(键, genimpl.Resources{…})；键为入口包导入路径，package main 为 `main`。Adapter 包同样以其导入路径登记，不再按类型登记。生成器核对 New 签名、不包装 New 的规则不变。
+- CLI：run、build、test、pack 只经 overlay 编入登记代码与正式入口，不写工程目录，删除 build.go 中非开发构建写入 alonabot_gen.go 的分支与扫描对该文件的排除和比对。check 只做扫描与资源检查，不比较生成文件。init 模板的 New 只含 sdk.NewPlugin() 与注册，工程中不生成 alonabot_gen.go。
+- 库模式构建：`alonabot build --dir <目录>` 在目录没有 plugin.yaml、且是 import 根包 github.com/AlonaBot/AlonaBot 的 main 包时调用 CompileApp：用 `go list -deps` 找出其依赖中目录含 plugin.yaml 的组件入口包（包括模块缓存中的第三方 module），逐个以 Options.Package 只读扫描，把全部登记合成一个 overlay 文件放进该 main 包目录后编译。只输出可执行文件，缺省放在 `<目录>/bin/`，文件名为目录名，Windows 加 `.exe`；不生成安装包与 release.json。目录两者都不是时返回英文错误。overlay 只写入用户自己的 main 包目录，不替换模块缓存中的文件（go 命令拒绝这样做）。
+- plugintest：Start 对每个被测插件，若 generated.Lookup 已有登记则直接使用；否则用 internal/generate 现场扫描其入口包：以测试进程的当前目录为 module 上下文，Options.Package 为入口包导入路径，GOOS、GOARCH 与 build tags 取自 debug.ReadBuildInfo 的 `GOOS`、`GOARCH` 与 `-tags`，扫描后 generated.Register。同一入口包在一个进程内只扫描一次，并发安全；扫描失败或有诊断时 t.Fatal 并给出原文。作者不需要先运行 CLI。测试 Adapter 改为启动前按对象 generated.Bind 本次 adapter_id 的资源，删除其 Generated 方法。
+- Adapter 路由：runAdapter 先取 a.Descriptor()，再按 Descriptor.HTTP 建立 Listener：Auth 为零值时是 Core 会话私有路由，为 AuthPlatformToken 时是平台 token 公开路由。Method 与 Path 规范、重复检查和错误文本沿用插件路由的校验，不合法时在连接 Core 前返回英文错误；注册描述与原 AdapterHTTP 写法逐项相同。生成器在 Adapter 工程的入口包或其本模块依赖引用 adapter.HTTPRoute 时把 Result.HTTP 置为 true，取代按 AdapterHTTP 判定，宁可多报。devbot 的回环 Adapter 改在 Descriptor 中声明 `/inject`。
+- 示例与文档：showcase 删除 Commands、HTTP、Schedules 方法，configdb 删除 Commands 方法，注册直接写在 New() 中，命令与行为不变（D-114）。全部示例、devbot、Agent 与 plugintest 的内部插件删除 UseGenerated 调用。docs/plugin-guide.md 与 docs/development.md 改为新写法：作者不写生成相关的内容，没有 alonabot_gen.go，go test 直接可用，库模式用 alonabot build；删除用 go generate 刷新生成文件的说明，Protobuf 的保留。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：只改写并扩展 cmd/alonabot/plugin_cli_e2e_test.go 的 TestDevelopmentCLI，作为本切片唯一的主路径集成测试。init 之后工程中没有 alonabot_gen.go，plugin.go 不含 UseGenerated；在工程中写一个用 plugintest 发送 /hello 并核对 i18n 回复的 plugin_test.go，直接运行 `go test ./...`（不经 CLI）通过；build、check、test、pack 之后工程目录仍然没有 alonabot_gen.go；再写一个 import 根包、用 alonabot.Start 装配该插件、激活后打印结果并退出的 cmd/bot，`alonabot build --dir cmd/bot` 的产物激活成功，同一 main 包直接 `go build` 的产物在启动组件前以提示 `alonabot build` 的英文错误退出。既有断言按新模板改写，其余既有测试只迁移 API，断言不变。
+- 本地自测（*_local_test.go，结果写入 PR）：V-120 的会话分项，即 SID/ParseSID、Ref/ParseRef、UID/ParseUID 的往返（含 `%`、`#`、`/`、`@` 与 external_user_id 中的 `:`）与各类不合法输入，SendTo 发往另一会话与同一会话的另一话题，没有默认目标时 c.Send 返回 NO_DEFAULT_TARGET，后台 sdk.Send 与 sdk.SendText，不合法的 sid 或句柄不发出请求；资源分项，即同包多次 New 共用资源、不同包隔离、重复 Register panic、没有登记时 Run、RunAdapter 与库模式的错误以及 Collect 不报错、在包级变量中调用 New 的组件在库模式下取得资源、plugintest 同一入口包只扫描一次与带 build tags 的扫描、经本地文件 GOPROXY 进入模块缓存的第三方组件经 `alonabot build` 库模式构建后取得资源、登记代码只含 genimpl.Register 且不包装 New、各命令构建后工程目录没有写入；Adapter 路由分项，即 Descriptor.HTTP 的私有路由与 platform token 公开路由、路径不合法与重复在连接 Core 前报错、注册描述与原写法一致、引用 HTTPRoute 时出现 http_listener；示例的命令与回复不变。
+
+完成条件：V-120 中本切片的分项有本地证据；gofmt -l 对改动的 Go 文件无输出；go generate ./... 之后工作区没有变化（只剩 Protobuf 生成）；`git ls-files '*alonabot_gen.go'` 输出为空，仓库中没有 alonabot 的 go:generate 指令；go vet ./...；go test -race ./...；go build ./...；CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./...；go build -tags configdb_gorm ./examples/plugins/configdb。注册语义改变、组件构建扫描了外部依赖、准备阶段的配置或迁移错误被吞掉时，按 PLAN T-04 的停止条件暂停交付。
+
+不做：SDK 按类别分包（T-04.16，D-146）；根包装配移入 internal/app（T-13.5，D-148）；CLI 的位置参数与缺省值（T-13.6，D-149），本切片的库模式构建仍用 --dir；协议、Core 行为与管理 API 的改动；新增依赖；改写 plugins、adapters 章节未派发的 goal 语句；OneBot 11 反向 WebSocket（T-15.4）；向 sdk/ 或 internal/core/supervisor/ 提交新测试、增加 testdata 插件。
+```
+
 ### goal-41 · T-09.6 唯一提交点与激活门禁
 
 状态：已完成（[PR #179](https://github.com/AlonaBot/AlonaBot/pull/179)，合并提交 `8898251`），证据见 TEST-MATRIX §3.2。合入：`journal.(*Orchestrator).Commit(ctx, r) (*supervisor.Running, error)`，提交前失败经 Abort 以旧版新 Session 恢复，提交后激活失败返回 Degraded 的 Running；`state.(*Store).CommitCandidate` 在同一事务中复核并提交 Active、COMMITTED 与程序身份（含 BuildDigest、PublisherKeyID）；`state.(*Store).ReplaceProgram(ctx, pluginID, version, entrypoint, publisherKeyID string, buildDigest []byte)`；根包私有桥接 `managedCandidates` 经 `prepareCandidate`（journal.Prepare → 接入 → journal.Commit）实现 Reload 与 Update，`Rollback` 仍返回 UNSUPPORTED；首次启用改走候选准备与提交，Degraded 组件登记但不接入。接口调整见 DECISIONS 2026-11-13 变更记录。以下为派发时的语句。
@@ -7119,6 +7234,25 @@ internal/core/journal
 ```
 
 ## 第 17 波
+
+### goal-139 · T-04.16 SDK 按类别分包
+
+状态：等待前置（T-04.15）。目标、依据与要点由 PLAN T-04 步骤 16 确定；T-04.15 合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-139（切片 T-04.16：SDK 按类别分包）。goal 目录 goal-139，分支 goal-139，worktree .worktrees/goal-139，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：SDK 的调用不再集中在 sdk 根包。按 D-146 的对照把包级函数与类型移入 sdk/task、sdk/service、sdk/bus、sdk/button、sdk/media、sdk/conversation、sdk/tool、sdk/action 与 sdk/options；根包只留插件对象、Handler 上下文、注册 builder、权限与运行入口。协议与行为不变，只改包与名字。
+
+依据：PLAN T-04 步骤 16 及其失败停止条件；DESIGN §D；CONTRACTS §1.3、§1.4、§3、§8、§9.1；DECISIONS D-146；TEST-MATRIX V-120；ARCHITECTURE 的 sdk 行。
+
+要点：
+- 子包 import 根包取得 Registrar、*Context 与 Permission，共享的注册状态放在 sdk/internal，根包不 import 子包。
+- RunInProcess、RunAdapterInProcess、Collect、Registration 及其描述类型改为内部入口。
+- 全部调用方（Adapter 的常量与动作包、Agent、plugintest、示例、根包与文档）同步修改，不留别名；ARCHITECTURE 的模块表与依赖边同步。
+
+不做：协议与行为的改动；根包装配移入 internal/app（T-13.5）；CLI 参数（T-13.6）；新增依赖。
+```
 
 ### goal-42 · T-09.7 崩溃恢复、回退与回收
 
@@ -7223,6 +7357,27 @@ internal/core/state
 不做：页面（T-09.9）；日志 API（T-09.10）；故障注入与验收汇总（T-09.11）。
 ```
 
+## 第 18 波
+
+### goal-140 · T-13.5 模块根包只保留库模式接口
+
+状态：等待前置（T-04.16）。目标、依据与要点由 PLAN T-13 步骤 6 确定；T-04.16 合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-140（切片 T-13.5：模块根包只保留库模式接口）。goal 目录 goal-140，分支 goal-140，worktree .worktrees/goal-140，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：模块根包 alonabot 只保留 CONTRACTS §15.5 的库模式接口（Run、Start、*Core、Wait 与选项 Plugin、Adapter、WebUI、DataDir、Args、Listen、LogLevel、LogFormat），Core 装配、候选与进程管理移到 internal/app。行为与协议不变。
+
+依据：PLAN T-13 步骤 6 及其失败停止条件；CONTRACTS §15.5；DECISIONS D-148；TEST-MATRIX V-64、V-65；ARCHITECTURE 的根包与 internal/app 行。
+
+要点：
+- 根包的 Run、Start、*Core、Wait 与选项改为对 internal/app 的薄包装。
+- 只供开发 CLI 使用的 Executable、Stdio、Core.Restart、Core.RestartInstance 与 Core.ReloadSettings 移入 internal/app，cmd/alonabot 直接使用。
+- 根目录下的测试装配与端到端测试移出根包；库模式、开发运行与热部署的集成测试在新位置照常通过。
+
+不做：库模式接口的增删；协议与行为的改动；CLI 参数（T-13.6）；新增依赖。
+```
+
 ## 第 19 波
 
 ### goal-45 · T-09.11 正式流程故障注入与 T-09 验收
@@ -7264,4 +7419,27 @@ internal/core/state
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：五平台运行与发布（T-10）；新的产品功能（只做验收与必要的缺陷修复，修复需在 PR 中逐条说明）。
+```
+
+## 第 20 波
+
+### goal-141 · T-13.6 CLI 参数从简
+
+状态：等待前置（T-13.5、T-14.3）。目标、依据与要点由 PLAN T-13 步骤 7 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。派发前核对它与同在第 20 波的 T-14.4 不改同一批文件（两者都涉及 `packages/`）。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-141（切片 T-13.6：CLI 参数从简）。goal 目录 goal-141，分支 goal-141，worktree .worktrees/goal-141，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：CLI 的目录用位置参数，不给时取当前目录；不给的文件在当前目录寻找；其他参数取官方或能唯一推出的缺省值，推不出时报错并列出候选。根命令仍为 alonabot。协议与管理 API 不变，只改 cmd/alonabot 与说明。
+
+依据：PLAN T-13 步骤 7 及其失败停止条件；CONTRACTS §9.3、§15.2；DECISIONS D-149；TEST-MATRIX V-121。
+
+要点：
+- build、check、test、pack 改为「命令 [目录]」，删除 --dir；库模式的 build 同样改用位置参数。
+- init 的 --id 与 --module 缺省取目录名，目录名不符合组件 ID 规则时报错；Adapter 的 --adapter-id 缺省等于组件 ID。
+- pack 在 manifest 的 source 为 github.com/<owner>/<repo> 时推出 --asset-url；--key 没有缺省值。
+- install 的参数按「已存在的普通文件」与「组件 ID」区分，组件 ID 取程序目录 packages/ 中的官方包；不给参数时在当前目录或工程的 bin/ 中寻找唯一的安装包，没有或不止一个时报错并列出候选。
+- docs/development.md、docs/plugin-guide.md、README 与 CLI 帮助中的写法同步。
+
+不做：根命令改名；缺省值扩大卸载、清理与回退等破坏性操作的对象；协议与管理 API 的改动；新增依赖。
 ```

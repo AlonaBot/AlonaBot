@@ -8,13 +8,13 @@
 | --- | --- | --- | --- | --- |
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 已完成（PR #39） |
 | goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 已完成 |
+| goal-117 | T-03.23 | 官方 Telegram Adapter 的代理模式与话题判定 | T-03.4 | 已完成（PR #125） |
 | goal-89 | T-03.11 | 官方 Telegram Adapter 的平台权限 | T-04.6 | 已完成（PR #106） |
 | goal-111 | T-03.20 | 官方 Telegram Adapter 的媒体与新增片段 | T-03.13、T-03.14、T-04.16 | 等待前置（T-04.16） |
-| goal-112 | T-03.21 | 官方 Telegram Adapter 的平台动作与撤回 | T-03.11、T-03.15、T-03.16、T-03.20、T-04.16 | 等待前置（T-03.20、T-04.16） |
 | goal-113 | T-03.22 | 官方 Telegram Adapter 的命令菜单 | T-03.17、T-04.16 | 等待前置（T-04.16） |
-| goal-117 | T-03.23 | 官方 Telegram Adapter 的代理模式与话题判定 | T-03.4 | 已完成（PR #125） |
 | goal-132 | T-03.26 | 官方 Telegram Adapter 填写 chat_title | T-03.4、T-03.25、T-04.16 | 等待前置（T-04.16） |
 | goal-137 | T-03.27 | 官方 Telegram Adapter 的服务消息 | T-03.23、T-04.16 | 等待前置（T-04.16） |
+| goal-112 | T-03.21 | 官方 Telegram Adapter 的平台动作与撤回 | T-03.11、T-03.15、T-03.16、T-03.20、T-04.16 | 等待前置（T-03.20、T-04.16） |
 
 ## 第 5 波
 
@@ -205,59 +205,6 @@
 不做：入站事件的 chat_type（T-03.20，依赖 T-03.14 的 proto 字段）；file_base_url（T-03.20）；Core 全局代理的设置与子进程环境（cmd/alonabot 已实现，不改）；OneBot 11 的代理。
 ```
 
-## 第 7 波
-
-### goal-137 · T-03.27 官方 Telegram Adapter 的服务消息
-
-状态：等待前置（T-04.16）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：待派发。前置 T-03.23（[PR #125](https://github.com/AlonaBot/AlonaBot/pull/125)，合并提交 `f3af986`）已合并。2026-11-11 按 D-133 新增，接口与测试段按 main（`db6317a`）的代码写出：`instance.normalize` 把 message、channel_post 与两种 edited 都交给 `messageEvent`，带服务字段的 Message 因此成为 chain 为空的 message.created；`Descriptor` 只声明权限，没有 `Events`；Core 的 `internal/core/adapter/remote` 已按声明的 Schema 校验扩展事件。`inbound.go` 与 goal-111、goal-132 共用，处理方式见执行顺序 §3。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-137（切片 T-03.27：官方 Telegram Adapter 的服务消息）。goal 目录 goal-137，分支 goal-137，worktree .worktrees/goal-137，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
-
-目标：Telegram 的服务消息不再以 chain 为空的 message.created 交付：话题的创建、编辑、关闭与重开，置顶，修改群名，普通群升级为超级群映射为扩展事件；成员类与其他服务消息不交付，只推进游标。
-
-依据：PLAN T-03 步骤 24；MESSAGE-MODEL §1.2、§6.1、§6.6；CONTRACTS §8（扩展事件的声明）；DECISIONS D-133；TEST-MATRIX V-119；Bot API 原文的 Message（描述为 service message 的字段）、ForumTopicCreated、ForumTopicEdited。
-
-范围（只新增或修改这些）：
-- adapters/telegram/inbound.go：服务字段的解析与映射
-- adapters/telegram/telegram.go：Descriptor 追加 Events
-- adapters/telegram/telegram_test.go：本语句的测试
-- ARCHITECTURE.md：Telegram 行的实现说明追加一句
-没有新的跨模块边。不改 proto，不改 telegramtest，不新增公开包。
-
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. Descriptor().Events 声明 7 个事件，Version 都为 1，SchemaJson 为 type object、additionalProperties false 的 JSON Schema：
-   - telegram.forum_topic_created：{"name": string, "icon_color": integer, "icon_custom_emoji_id": string}，required ["name", "icon_color"]
-   - telegram.forum_topic_edited：{"name": string, "icon_custom_emoji_id": string}，都不 required
-   - telegram.forum_topic_closed、telegram.forum_topic_reopened：没有属性
-   - telegram.message_pinned：{"message_id": string}，required
-   - telegram.chat_title_changed：{"new_chat_title": string}，required
-   - telegram.chat_migrated：{"migrate_from_chat_id": string}，required
-2. 事件：EventType 为上面的完整名，EventPayload 为 adapter_event{version: 1, payload_json: 对象}；payload 字段名照抄 Bot API，数字 ID 写作十进制字符串，平台没有给出的可选字段不写。
-
-行为：
-- 判定：message 与 channel_post 带任一服务字段时，在 messageEvent 之前分流，不再检查 text、caption 与媒体，也不产生 message.created。edited_message 与 edited_channel_post 不变。
-- 映射：forum_topic_created、forum_topic_edited、forum_topic_closed、forum_topic_reopened、pinned_message（取其 message_id）、new_chat_title、migrate_from_chat_id 各产生一个对应事件。事件经 baseEvent 构造：Target 为该 Message 的 chat，thread_id 沿用 is_topic_message 规则；Actor 为 from，带 sender_chat 时 absent；platform_payload 为原 update；群中的平台权限照常经 addPlatformPermissions 添加。
-- 不交付（只推进游标，不记 WARN）：new_chat_members、left_chat_member、migrate_to_chat_id，以及 Bot API 原文 Message 中其余描述为 service message 的字段（按原文逐项列出，例如 group_chat_created、supergroup_chat_created、channel_chat_created、new_chat_photo、delete_chat_photo、message_auto_delete_timer_changed、video_chat_scheduled、video_chat_started、video_chat_ended、video_chat_participants_invited、general_forum_topic_hidden、general_forum_topic_unhidden、write_access_allowed）。列表写在 inbound.go 的一处，注释写明来源与核对日期。
-- 一条 Message 同时带两个服务字段不会出现；只按第一个命中的映射字段处理，不另做校验。
-- 没有服务字段、也没有可映射内容的 Message（投票、位置等）不变，仍为 chain 为空的 message.created。
-- 其余接收、游标、权限与脱敏行为不变。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：在 TestNonMessageEvents 的 update 列表中追加用例（经 telegramtest.Server 与 recordingCore 驱动 New() 的实例），不新增测试函数：
-  - 超级群中带 is_topic_message 与 message_thread_id 5 的 forum_topic_created（name "Ideas"、icon_color 7322096）：EventType 为 telegram.forum_topic_created，Target 的 thread_id 为 "5"，payload_json 为 {"icon_color":7322096,"name":"Ideas"}（按 JSON 比较），Actor 为 from。
-  - pinned_message（被置顶消息 message_id 10）：telegram.message_pinned，payload {"message_id":"10"}。
-  - 新超级群中的 migrate_from_chat_id -123：telegram.chat_migrated，Target 的 chat_id 为新超级群，payload {"migrate_from_chat_id":"-123"}。
-  - 旧群中的 migrate_to_chat_id、new_chat_members 与 group_chat_created 各一条：不产生事件，游标仍推进（waitSaved 次数与 update 数一致，core.events 中没有它们）。
-  - 断言 Descriptor().Events 的 7 个名称与版本。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：forum_topic_edited（只有 name、只有空串 icon_custom_emoji_id）、forum_topic_closed 与 reopened、new_chat_title、频道中的 pinned_message（Actor absent）、left_chat_member；7 个 SchemaJson 能被 jsonschema-go 解析，且各事件的 payload 通过对应 Schema 的校验；投票消息仍为 chain 为空的 message.created。
-- 真实平台（可选）：维护者提供测试 Bot 与论坛超级群时，创建并关闭一个话题、置顶一条消息、修改群名，确认各产生一个对应事件且没有 message.created；没有条件时在 PR 中写「未运行」。
-
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./adapters/... ./internal/core/adapter/...；go build ./...。
-
-不做：标准事件类型中的服务事件；事件名的常量包；OneBot 11 的对应处理；chat_type（goal-111）与 chat_title（goal-132）。
-```
-
 ## 第 8 波
 
 ### goal-89 · T-03.11 官方 Telegram Adapter 的平台权限
@@ -309,7 +256,7 @@
 不做：Core 侧的权限过滤与展开（T-04.6 已完成）；按钮点击 Actor 的平台权限（随 T-03.8 的 callback_query 处理）；权限文案的 i18n 文件（label_key 的文案随 Adapter 包的 i18n 目录由打包切片加入）；OneBot 11 的平台权限（T-15.1）。
 ```
 
-## 第 12 波
+## 第 18 波
 
 ### goal-111 · T-03.20 官方 Telegram Adapter 的媒体与新增片段
 
@@ -366,6 +313,166 @@
 
 不做：Telegram platform_file 发送消费（已移交 goal-9）、平台动作/撤回/命令菜单、Core 来源租约重写、通用流式 API（已有 c.Stream）、新媒体转码、chat_title、服务消息路由、OneBot 平台实现、真实平台验证。
 ```
+
+### goal-113 · T-03.22 官方 Telegram Adapter 的命令菜单
+
+状态：等待前置（T-04.16）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：待派发；暂不派发（维护者指示只改写语句）。前置 T-03.17（PR #150，8eb7846）已合并。2026-11-13 按 main 0af1255 重新核对。以下裁决均记为「审查者补齐，待维护者确认」：主语言键优先、否则完整 locale 字典序选一个菜单语言；撤销语言用 deleteMyCommands；有效命令超 100 条或说明为空在请求前拒绝；诊断保留、平台调用按成功快照去重。
+
+- **需维护者决定：与 goal-112 共用的 Bot API 原文版本基线。** 本环境未取得可用官方正文，100 条、说明 1～256、两字母语言码和 deleteMyCommands 的平台语义须由审查者据选定版本复核后回写。当前方案已落入正文供审阅，真实平台差异涉及已确认决策时交维护者裁决，原文复核完成前保持暂不派发。
+
+已有接口与衔接：adapter.CommandMenuItem 为 convert.CommandMenuItem 的别名，字段 Name string、Descriptions map[string]string；CommandSynchronizer.SyncCommands(context.Context, []CommandMenuItem) *errcode.Error 已存在。SDK 对实际回调持有实例的 commandSync 锁。Core 的 router.commandMenu 已生成 en-US 及目录 locale 的说明，platformCapabilities() 同时用于 Descriptor 与实例。main 尚无 setMyCommands、菜单缓存。与 goal-111/112 共用 telegram.go 和 telegramtest 分派；RespondMethod 按同一接口复用，保留现有方法、权限和 TextLimit。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-113（切片 T-03.22：官方 Telegram Adapter 的命令菜单）。goal 目录 goal-113，分支 goal-113，worktree .worktrees/goal-113，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：Telegram 实例接收 adapter.commands.sync 的命令快照，以 setMyCommands 同步默认菜单与各语言说明，声明 commands.sync；按每个 language_code 记住成功内容并去重，失败保留错误且不阻断其他语言。
+
+依据：spec/PLAN.md §3.1；spec/plan/adapters/telegram.md T-03.22、T-03 步骤 19；spec/plan/core.md T-03「失败停止条件」；spec/CONTRACTS-v0.1.md §5.4、§8（命令菜单）；spec/MESSAGE-MODEL.md §6.5；spec/WIRE-FORMAT.md §2、§3.4 的 adapter.commands.sync；spec/adr/DECISIONS.md D-96、D-138；spec/TEST-MATRIX.md V-93 的 Telegram 分项；Bot API setMyCommands/BotCommand/BotCommandScopeDefault 的原文。
+
+范围（只新增或修改这些）：
+- 新增 adapters/telegram/commands.go：菜单转换、成功快照与去重。
+- adapters/telegram/telegram.go：commands.sync 能力与实例内缓存字段。
+- adapters/telegram/telegramtest/server.go、send.go：setMyCommands、deleteMyCommands 的参数记录、true/false 响应与 FailMethod 故障注入。
+- adapters/telegram/telegram_test.go：一个新增集成测试；本地 *_local_test.go。
+
+允许的新跨模块边：无。只用既有 sdk/adapter、sdk/message、sdk/errcode 与标准库；无需配置、proto、Core、i18n 生成器或插件注册 API 改动。
+
+接口（照此实现；内部辅助函数自定）：
+- 实例实现 sdk/adapter.CommandSynchronizer：
+  func (i *instance) SyncCommands(ctx context.Context,commands []adapter.CommandMenuItem) *errcode.Error
+- 输入项沿用 adapter.CommandMenuItem{Name string,Descriptions map[string]string}。输入是当前可用命令的完整替换快照，空列表用于清空。
+- Descriptor 与实例能力表追加 message.Capability{Name:"commands.sync",Version:1,Supported:true}；菜单成功缓存归实例，键为实际发出的 language_code（空串表示默认），值为上一次确认成功的完整 [{command,description}] 快照及存在标记。
+- setMyCommands 请求 JSON 为 {"scope":{"type":"default"},"commands":[{"command":string,"description":string}],"language_code":string（默认菜单省略）}；deleteMyCommands 请求只带同一 scope 与待撤销的 language_code；响应 result 均为 true。
+- telegramtest 沿用 Calls、Requests、FailMethod；setMyCommands 与 deleteMyCommands 进入 Requests 的顺序记录，默认返回 true；追加 func (s *Server) RespondMethod(method string, result json.RawMessage) 以注入 result=false，与 goal-112 同签名，只保留一份共用响应覆盖。无新增公开生产符号。
+- 复用既有 CommandMenuItem、AdapterCommandsSyncRequest/Response；不追加 proto 字段。
+
+行为：
+- Core 已筛选根命令、权限为 user、策略启用且实例前缀含 / 的命令，并按 D-138 提供语言说明；Adapter 按输入顺序转换，不重新读取路由或权限。名称不匹配 ^[a-z0-9_]{1,32}$ 时跳过并记诊断；说明超过 256 Unicode 字符时在字符边界截断并记诊断。保留实际成功发送的内容作为比较依据。
+- 默认 scope 的无 language_code 菜单使用输入 en-US 原文。从全部 Descriptions 键收集规范 locale，以主语言的小写两字母值作为 Telegram language_code；三字母、und、private-use 等无法映射的键跳过并记诊断。对同主语言的候选，优先无区域/脚本的主语言键；其余按完整 locale 的 ASCII 字典序取首个，整份菜单统一使用该 locale。某命令缺该 locale 时使用它的 en-US（Core 已做其已有 locale 的回落）；不重新执行 i18n。en-US 同时生成 language_code=en 的菜单，默认菜单始终存在。候选和实际语言排序后再处理，结果与 map 插入顺序无关。
+- 全量预检在任何平台请求前完成：过滤非法命令名后最多 100 条；超出返回 INVALID_ARGUMENT，保留实际数量且零平台请求。说明按 Unicode 码点截断至 256，截断后长度须为 1～256；缺少 en-US、空说明返回 INVALID_ARGUMENT，错误带命令/语言且不补占位文案。输入中的有效命令保持顺序。
+- 每个实际语言独立比较成功快照：相同内容跳过，不重复 setMyCommands；首次同步空列表仍须调用一次以清除可能残留的菜单，缓存存在标记与空内容分开。成功后复制保存，避免调用方随后修改切片/map 影响缓存。
+- 顺序确定：默认菜单先发，之后实际 language_code 排序处理；某语言的平台明确失败继续其余语言，返回按处理顺序遇到的第一个安全错误；ctx 取消时停止发起后续请求，未处理项保留原缓存。失败语言不更新成功快照，下一次相同输入仍会尝试它；已成功语言跳过。平台 result=false 返回 FAILED_PRECONDITION 并保留原缓存。诊断在每次实际同步收到非法名或超长说明时各记录一次，即使转换结果与成功快照相同也保留诊断；去重只控制平台调用。
+- 命令消失时以 setMyCommands 替换新的完整 commands 列表。对上次成功而本次完全消失的 language_code，用 deleteMyCommands（同一 default scope 和该语言码）撤销其旧菜单，使平台恢复语言回落；成功后移除该语言成功快照，失败保留以便下一次同步继续清理。新语言设置和旧语言撤销一起按 language_code 排序，默认菜单先处理；Stop 仍保持平台菜单。
+- 菜单同步无自动重试、无新增定时器；Core 的两秒合并、同步通知及失败后下次变化处理全部沿用。SyncCommands 失败不 ReportFailure、不停实例；Stop 不调用平台删除菜单。缓存仅随实例存活，不持久化。
+- 记录诊断时沿用默认 Logger 和 Bot token 脱敏，保留方法失败的安全错误；message.send 的 TextLimit、权限、其他切片能力保持。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：telegram_test.go 一个集成测试 TestCommandMenuSync，经 telegramtest.Server 驱动 New().Start 得到实例，再转为 adapter.CommandSynchronizer：同步两次相同的 en-US 快照，默认菜单实际只出现一次 setMyCommands；断言默认及 en 的 scope、command、description、language_code；修改说明后各更新一次；加入 zh-CN 后生成 zh，移除该 locale 时有 deleteMyCommands(language_code=zh)，其余成功快照不重发；清空时默认 setMyCommands(commands=[])，旧 en 菜单撤销；Descriptor 与实例均声明 commands.sync。测试调用模拟 HTTP，不采用纯函数测试代替集成主路径。
+- 本地自测（*_local_test.go，PR 写明结果）：en-US/zh-CN 等语言映射与冲突、旧语言移除；非法名称、256/257 字符与多字节文本；同内容不同 map 插入顺序；初次空列表；某语言失败后继续其他语言、下一次只重试失败内容；result=false、断线、ctx 取消；Stop 不删除菜单；不同实例缓存隔离、调用方修改原切片/map 不影响缓存。100/101 条有效命令、空说明和缺 en-US 的零平台请求；相同内容仍有非法/截断诊断；语言清理失败保留缓存并在下次同步再次清理。
+- 真实 Telegram：未运行（无凭证）。证据明确写 telegramtest 本地模拟服务，提供 OS/架构、Go 版本与实际命令，交审查者回写 TEST-MATRIX §3.2；Core 的 V-93 分项沿用 PR #150 的证据。
+
+完成条件：状态段的官方原文复核完成，上述语言映射、上限预检和撤销语义均有证据，菜单主路径与失败不污染缓存有证据；gofmt -l 本次改动 Go 文件无输出；go vet ./...；go test -race ./adapters/telegram/...；go build ./...。发生契约冲突、范围外修改或 T-03 失败停止条件时标 [!]。
+
+不做：Core 的根命令筛选、两秒通知合并与策略/i18n 规则改写、生成器扫描注册、插件生命周期装配、Telegram 动作/媒体/撤回、菜单持久化、停止删除菜单、自动重试、真实平台验证。
+```
+
+### goal-132 · T-03.26 官方 Telegram Adapter 填写 chat_title
+
+状态：等待前置（T-04.16）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：待派发。暂不派发（维护者指示只改写语句）。直接前置 T-03.4（goal-5，PR #39，合并提交 `604dc65`）、T-03.25（goal-131，PR #166，合并提交 `6f72fc8`）均已合并。2026-11-13 按维护者指定的 main `9efee73` 只读副本，用 `rg` 核对定义、调用者与既有集成测试；`message.Event`、`adapter.Core`、`telegramtest.Server.Calls` 另经离线 `go doc` 核对输出。以下补齐方案均为「审查者补齐，待维护者确认」。
+
+按 main 核对：
+
+- `sdk/message/event.go`：`message.Event` 已有 `ChatTitle string`、`ChatType message.ChatType`、`Session message.Session`；`ChatTitle == ""` 表示未提供。`contracts/proto/alonabot/v1/message.proto` 已有 `ChatType chat_type = 15`、`optional string chat_title = 16`；`sdk/internal/convert/event.go` 的 `func EventToProto(e *message.Event) (*pb.Event, error)`、`func EventFromProto(e *pb.Event) *message.Event` 已双向转换名称。
+- `sdk/adapter/adapter.go`：`Core.Deliver(ctx context.Context, ev *message.Event, cursor []byte) (accepted bool, err error)`。`adapters/telegram/telegram.go`：`func New() adapter.Adapter`、`func (a *telegramAdapter) Start(ctx context.Context, request adapter.StartRequest, core adapter.Core) (adapter.Instance, error)`；接收经 `processUpdate(ctx context.Context, raw json.RawMessage, saved cursor) (cursor, error)`、`save(ctx context.Context, event *msg.Event, next cursor) error` 交付，沿用逐条应答及游标规则。
+- `adapters/telegram/inbound.go`：`telegramChat` 当前只有 `ID int64`、`Type string`；`func (i *instance) baseEvent(chat telegramChat, date int64, user *telegramUser) *msg.Event` 由消息、编辑、成员与 reaction 路径共用；`messageEvent(received *telegramMessage, edited bool) (*msg.Event, error)` 负责消息与话题。`adapters/telegram/callback.go` 的 `callback(ctx context.Context, queryJSON json.RawMessage, updateID int64, raw json.RawMessage) ([]*msg.Event, error)` 同样调用 `baseEvent(query.Message.Chat, ...)`；没有 message 的 inline 回调当前只确认并跳过交付。
+- `adapters/telegram/telegramtest/server.go` 已有 `NewServer(t testing.TB, token string) *Server`、`(*Server).URL() string`、`Push(updates ...json.RawMessage)`、`Calls(method string) int`、`SetChatAdministrators(chatID int64, status int, members ...json.RawMessage)`；可以直接注入含名称的 Chat。`adapters/telegram/telegram_test.go` 已有 `recordingCore`、`newRecordingCore()`、`startRequest`、`waitSaved` 和 `registerStop`，足以覆盖真实 HTTP 接收链。
+- 审查者补齐，待维护者确认：当前 `baseEvent` 尚未填写 `ChatType`；在同一构造点一并落实 MESSAGE-MODEL §6 已确认的 D-100 映射，让新目录名称与会话类型配套。goal-111 原先规划的类型赋值由本切片承担，审查者在正式派发时同步其语句；已经合并时复用现有赋值。私聊姓名按非空字段连接，保留字段内容，只有一项时直接取该项。
+- 在途协调按本次维护者提供的信息：PR #177（goal-66）涉及 `internal/core/logging/`、`internal/core/manage/`、`sdk/log.go`、`sdk/adapter_run.go`、`alonabot.go`、`assembly.go`、`cmd/alonabot/`；PR #178（goal-60）涉及 `agent/`；goal-41 涉及 `internal/core/journal/`、`internal/core/state/`、`internal/core/manage/`、`internal/core/supervisor/` 与根包装配。这些文件与本切片生产修改范围分离。goal-9 的 Telegram 生产修改点是 `adapters/telegram/plan.go`，其 CLI 集成测试与本切片接收测试分离；派发时核对合并后的事件断言。另与尚待实施的 goal-111、goal-137 共用 `adapters/telegram/inbound.go`、`telegram_test.go`，后合并者保留完整字段和断言。
+- 旧在途提示按完成记录更新：PR #165（`330164f`）、#167（`3a9b4af`）、#168（`37b0ada`）、#169（`4dc4bcd`），以及 goal-59／PR #170（`eca6310`）、goal-69／PR #171（`3043c4e`）均已合并。最近的 #173（`2bb8181`）、#175（`ac6083a`）、#176（`9785c22`）及维护者告知已合并的 #174 作为基线成果保留；本切片只消费现有 Adapter 交付接口。
+- 需维护者另行决定：新增依赖、改变已确认决策均无新增请求；真实 Telegram 凭证与实测由维护者决定是否提供，本切片模拟验收可独立完成，真实平台结果留作「未运行」。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-132（切片 T-03.26：官方 Telegram Adapter 填写 chat_title）。goal 目录 goal-132，分支 goal-132，worktree .worktrees/goal-132，从包含 PR #39、#166 的最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：Telegram 实例为每个已支持、带 target 的入站事件填写平台给出的 chat_title，群、超级群与频道取聊天名称，私聊取对方姓名；在共用构造点填写既定 chat_type，让 Core 已合并的聊天目录取得名称与类型。
+
+依据：spec/PLAN.md §3.1、§5；spec/plan/adapters/telegram.md T-03.26、T-03 步骤 23；spec/plan/core.md T-03 的「失败停止条件」及步骤 22 的已合并聊天目录；spec/CONTRACTS-v0.1.md §8（Adapter 交付与聊天目录）、§14.1（日志）；spec/MESSAGE-MODEL.md §1、§6、§6.1、§6.3；spec/WIRE-FORMAT.md §3.4（core.adapter.deliver）、§5A（Event 的追加字段）；spec/adr/DECISIONS.md D-86、D-100、D-130；spec/TEST-MATRIX.md V-117 的 Telegram 分项及 §3 的证据格式。平台字段按 Telegram Bot API 的 Chat 对象核对。
+
+范围（只新增或修改这些）：
+- adapters/telegram/inbound.go：telegramChat 补字段；baseEvent 统一填写名称与既定类型；内部辅助函数放在本文件。
+- adapters/telegram/telegram_test.go：追加下述一个集成测试；既有集成测试的 Event 预期随新增字段同步，保留原有行为断言。
+- adapters/telegram/ 下本切片的 *_local_test.go：其余名称、事件路径与日志检查，只作本地自测。
+允许的新跨模块边：无；沿用 Adapter 到 sdk/adapter、sdk/message 及本模块 telegramtest 的现有依赖。
+
+接口（照此实现；内部辅助函数自定）：
+- 保持 func New() adapter.Adapter、Adapter.Start、Instance 及 adapter.Core 的全部公开签名。
+- telegramChat 在现有字段上追加 Title string `json:"title"`、FirstName string `json:"first_name"`、LastName string `json:"last_name"`；继续供 telegramMessage、membershipUpdate、reactionUpdate 与回调 Message 共用。
+- 保持 func (i *instance) baseEvent(chat telegramChat, date int64, user *telegramUser) *msg.Event；返回的 msg.Event.ChatTitle 为 string，ChatType 为 msg.ChatType。消息、成员、reaction 与 callback 的现有调用签名保持原样。
+- 使用既有协议字段：Event.target = 8、Event.chat_type = 15、Event.chat_title = 16；SDK 将非空 ChatTitle 编为 optional string，空串编为 absent。交付仍调用 Core.Deliver(ctx, event, cursor)。
+- 测试复用 telegramtest.NewServer(t, token)、server.Push(...json.RawMessage)、server.Calls(method string) int；模拟服务的公开 API 保持现状。
+
+行为：
+- 在 baseEvent 按 chat.type 统一赋值。group、supergroup、channel 的 ChatTitle 取 chat.title 原文；private 按 first_name、last_name 的顺序，以一个 ASCII 空格连接存在的非空项，两项都为空时 ChatTitle 留空。私聊只使用 Chat 的姓名字段。
+- ChatType 按 private → ChatPrivate、group/supergroup → ChatGroup、channel → ChatChannel；未知类型保留 ChatUnspecified 与空名称。复用已存在的同义映射，若基线已有该赋值则保留一个实现。
+- message、channel_post、edited_message、edited_channel_post、chat_member、my_chat_member、message_reaction 与带 Message 的 callback_query 都从各自所在 Chat 取得名称。sender_chat 下 Actor 的既有处理继续生效。缺失名称时交付事件仍正常进行。
+- 带话题的消息与回调仍按 is_topic_message 填写 thread_id；名称属于整个聊天，取所在 Chat。没有 target 的事件保持空名称；inline callback 的现有跳过行为保持原样。
+- 名称来自现有上报；获取名称额外产生的 Bot API 请求数为零。原有权限查询、callback 确认、long polling、游标与错误处理照常执行。
+- ChatTitle、私聊姓名和原始 Chat 对象均不写入 Adapter 日志；原始上报继续完整保存在 PlatformPayload。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：在 adapters/telegram/telegram_test.go 新增一个 TestChatTitle 集成测试。经 telegramtest.Server 的真实 HTTP long polling 与 New().Start、Core.Deliver 回调，依次注入一条有 title 的超级群消息、一条 Chat 中同时有 first_name/last_name 的私聊消息、一条 Chat 无姓名但 from 有姓名的私聊消息。断言 ChatTitle 依次为完整群名、两项姓名以单空格连接、空串，ChatType 分别为 ChatGroup、ChatPrivate、ChatPrivate；既有 Session、消息内容、来源和逐条游标继续正确。用 server.Calls("getChat") == 0 及既有请求记录核对取名未增加平台查询。理由：覆盖平台 Chat 解码、共享事件构造与实际接收交付的主路径。
+- 既有测试同步：如果完整 Event 比较受新增字段影响，只更新该字段的预期；原有权限、to_me、Actor、话题、回执与游标断言继续执行。
+- 本地自测（adapters/telegram/*_local_test.go，PR 写明命令、平台、结果）：普通群与频道取 title；仅 first_name、仅 last_name、Unicode 与名称原文保留；群无 title 时为空；修改消息、成员变化、reaction 和带 Message 的 callback 都取所在 Chat；callback 的 from 与 Chat 私聊姓名不同、sender_chat、同一 update 的多条 reaction、论坛话题、inline callback 无交付；日志中无名称与凭证。以既有模拟服务和录制 Core 驱动，直接复用原辅助函数。
+- D-86：提交范围为上述平台集成测试；SDK 字段编解码、Core 目录存储与查询的已有证据复用 PR #166。本切片的本地自测也集中在 adapters/telegram/，无需新增 SDK 测试或 testdata 插件。
+- 真实 Telegram：未运行（待维护者提供环境）。将模拟证据与真实平台记录分别填写，执行者把 V-117 Telegram 分项的测试位置、命令、OS/架构、Go 版本、结果及未运行项交给审查者汇总到 TEST-MATRIX §3.2。
+
+完成条件：上述一个集成测试与列明的本地自测取得结果；所有已支持的带 target 路径遵循相同名称规则，取名称新增平台请求为零；gofmt -l 本次修改的 Go 文件无输出；go vet ./adapters/telegram/...；go test -race ./adapters/telegram/...；go build ./...。对照 T-03「失败停止条件」，出现名称或凭证泄漏、重复接收 owner、游标重放、实例间干扰时先修复；需要范围外生产文件、proto、新依赖或改变已确认语义时标 [!] 交审查者处理。V-117 全项由跨任务汇总关闭，本切片交付其 Telegram 分项。
+
+不做：Core 聊天目录、schema 或管理 API 修改；SDK 的名称读取方法；话题名称、getChat 查询与主动拉取聊天；新增服务消息或扩展事件（goal-137）；媒体、发送、开发入口及日志管理的实现。
+```
+
+### goal-137 · T-03.27 官方 Telegram Adapter 的服务消息
+
+状态：等待前置（T-04.16）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：待派发。前置 T-03.23（[PR #125](https://github.com/AlonaBot/AlonaBot/pull/125)，合并提交 `f3af986`）已合并。2026-11-11 按 D-133 新增，接口与测试段按 main（`db6317a`）的代码写出：`instance.normalize` 把 message、channel_post 与两种 edited 都交给 `messageEvent`，带服务字段的 Message 因此成为 chain 为空的 message.created；`Descriptor` 只声明权限，没有 `Events`；Core 的 `internal/core/adapter/remote` 已按声明的 Schema 校验扩展事件。`inbound.go` 与 goal-111、goal-132 共用，处理方式见执行顺序 §3。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-137（切片 T-03.27：官方 Telegram Adapter 的服务消息）。goal 目录 goal-137，分支 goal-137，worktree .worktrees/goal-137，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：Telegram 的服务消息不再以 chain 为空的 message.created 交付：话题的创建、编辑、关闭与重开，置顶，修改群名，普通群升级为超级群映射为扩展事件；成员类与其他服务消息不交付，只推进游标。
+
+依据：PLAN T-03 步骤 24；MESSAGE-MODEL §1.2、§6.1、§6.6；CONTRACTS §8（扩展事件的声明）；DECISIONS D-133；TEST-MATRIX V-119；Bot API 原文的 Message（描述为 service message 的字段）、ForumTopicCreated、ForumTopicEdited。
+
+范围（只新增或修改这些）：
+- adapters/telegram/inbound.go：服务字段的解析与映射
+- adapters/telegram/telegram.go：Descriptor 追加 Events
+- adapters/telegram/telegram_test.go：本语句的测试
+- ARCHITECTURE.md：Telegram 行的实现说明追加一句
+没有新的跨模块边。不改 proto，不改 telegramtest，不新增公开包。
+
+接口（照此实现，不增减公开符号；内部辅助函数自定）：
+1. Descriptor().Events 声明 7 个事件，Version 都为 1，SchemaJson 为 type object、additionalProperties false 的 JSON Schema：
+   - telegram.forum_topic_created：{"name": string, "icon_color": integer, "icon_custom_emoji_id": string}，required ["name", "icon_color"]
+   - telegram.forum_topic_edited：{"name": string, "icon_custom_emoji_id": string}，都不 required
+   - telegram.forum_topic_closed、telegram.forum_topic_reopened：没有属性
+   - telegram.message_pinned：{"message_id": string}，required
+   - telegram.chat_title_changed：{"new_chat_title": string}，required
+   - telegram.chat_migrated：{"migrate_from_chat_id": string}，required
+2. 事件：EventType 为上面的完整名，EventPayload 为 adapter_event{version: 1, payload_json: 对象}；payload 字段名照抄 Bot API，数字 ID 写作十进制字符串，平台没有给出的可选字段不写。
+
+行为：
+- 判定：message 与 channel_post 带任一服务字段时，在 messageEvent 之前分流，不再检查 text、caption 与媒体，也不产生 message.created。edited_message 与 edited_channel_post 不变。
+- 映射：forum_topic_created、forum_topic_edited、forum_topic_closed、forum_topic_reopened、pinned_message（取其 message_id）、new_chat_title、migrate_from_chat_id 各产生一个对应事件。事件经 baseEvent 构造：Target 为该 Message 的 chat，thread_id 沿用 is_topic_message 规则；Actor 为 from，带 sender_chat 时 absent；platform_payload 为原 update；群中的平台权限照常经 addPlatformPermissions 添加。
+- 不交付（只推进游标，不记 WARN）：new_chat_members、left_chat_member、migrate_to_chat_id，以及 Bot API 原文 Message 中其余描述为 service message 的字段（按原文逐项列出，例如 group_chat_created、supergroup_chat_created、channel_chat_created、new_chat_photo、delete_chat_photo、message_auto_delete_timer_changed、video_chat_scheduled、video_chat_started、video_chat_ended、video_chat_participants_invited、general_forum_topic_hidden、general_forum_topic_unhidden、write_access_allowed）。列表写在 inbound.go 的一处，注释写明来源与核对日期。
+- 一条 Message 同时带两个服务字段不会出现；只按第一个命中的映射字段处理，不另做校验。
+- 没有服务字段、也没有可映射内容的 Message（投票、位置等）不变，仍为 chain 为空的 message.created。
+- 其余接收、游标、权限与脱敏行为不变。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：在 TestNonMessageEvents 的 update 列表中追加用例（经 telegramtest.Server 与 recordingCore 驱动 New() 的实例），不新增测试函数：
+  - 超级群中带 is_topic_message 与 message_thread_id 5 的 forum_topic_created（name "Ideas"、icon_color 7322096）：EventType 为 telegram.forum_topic_created，Target 的 thread_id 为 "5"，payload_json 为 {"icon_color":7322096,"name":"Ideas"}（按 JSON 比较），Actor 为 from。
+  - pinned_message（被置顶消息 message_id 10）：telegram.message_pinned，payload {"message_id":"10"}。
+  - 新超级群中的 migrate_from_chat_id -123：telegram.chat_migrated，Target 的 chat_id 为新超级群，payload {"migrate_from_chat_id":"-123"}。
+  - 旧群中的 migrate_to_chat_id、new_chat_members 与 group_chat_created 各一条：不产生事件，游标仍推进（waitSaved 次数与 update 数一致，core.events 中没有它们）。
+  - 断言 Descriptor().Events 的 7 个名称与版本。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：forum_topic_edited（只有 name、只有空串 icon_custom_emoji_id）、forum_topic_closed 与 reopened、new_chat_title、频道中的 pinned_message（Actor absent）、left_chat_member；7 个 SchemaJson 能被 jsonschema-go 解析，且各事件的 payload 通过对应 Schema 的校验；投票消息仍为 chain 为空的 message.created。
+- 真实平台（可选）：维护者提供测试 Bot 与论坛超级群时，创建并关闭一个话题、置顶一条消息、修改群名，确认各产生一个对应事件且没有 message.created；没有条件时在 PR 中写「未运行」。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./adapters/... ./internal/core/adapter/...；go build ./...。
+
+不做：标准事件类型中的服务事件；事件名的常量包；OneBot 11 的对应处理；chat_type（goal-111）与 chat_title（goal-132）。
+```
+
+## 第 19 波
 
 ### goal-112 · T-03.21 官方 Telegram Adapter 的平台动作与撤回
 
@@ -462,113 +569,3 @@
 
 不做：Core 准入、权限模型和通用协议改动、SDK 根包类型别名、通用输入状态或草稿服务、通用 c.Stream 重写、重试、Telegram 媒体与命令菜单、真实平台验证。
 ```
-
-### goal-113 · T-03.22 官方 Telegram Adapter 的命令菜单
-
-状态：等待前置（T-04.16）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：待派发；暂不派发（维护者指示只改写语句）。前置 T-03.17（PR #150，8eb7846）已合并。2026-11-13 按 main 0af1255 重新核对。以下裁决均记为「审查者补齐，待维护者确认」：主语言键优先、否则完整 locale 字典序选一个菜单语言；撤销语言用 deleteMyCommands；有效命令超 100 条或说明为空在请求前拒绝；诊断保留、平台调用按成功快照去重。
-
-- **需维护者决定：与 goal-112 共用的 Bot API 原文版本基线。** 本环境未取得可用官方正文，100 条、说明 1～256、两字母语言码和 deleteMyCommands 的平台语义须由审查者据选定版本复核后回写。当前方案已落入正文供审阅，真实平台差异涉及已确认决策时交维护者裁决，原文复核完成前保持暂不派发。
-
-已有接口与衔接：adapter.CommandMenuItem 为 convert.CommandMenuItem 的别名，字段 Name string、Descriptions map[string]string；CommandSynchronizer.SyncCommands(context.Context, []CommandMenuItem) *errcode.Error 已存在。SDK 对实际回调持有实例的 commandSync 锁。Core 的 router.commandMenu 已生成 en-US 及目录 locale 的说明，platformCapabilities() 同时用于 Descriptor 与实例。main 尚无 setMyCommands、菜单缓存。与 goal-111/112 共用 telegram.go 和 telegramtest 分派；RespondMethod 按同一接口复用，保留现有方法、权限和 TextLimit。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-113（切片 T-03.22：官方 Telegram Adapter 的命令菜单）。goal 目录 goal-113，分支 goal-113，worktree .worktrees/goal-113，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
-
-目标：Telegram 实例接收 adapter.commands.sync 的命令快照，以 setMyCommands 同步默认菜单与各语言说明，声明 commands.sync；按每个 language_code 记住成功内容并去重，失败保留错误且不阻断其他语言。
-
-依据：spec/PLAN.md §3.1；spec/plan/adapters/telegram.md T-03.22、T-03 步骤 19；spec/plan/core.md T-03「失败停止条件」；spec/CONTRACTS-v0.1.md §5.4、§8（命令菜单）；spec/MESSAGE-MODEL.md §6.5；spec/WIRE-FORMAT.md §2、§3.4 的 adapter.commands.sync；spec/adr/DECISIONS.md D-96、D-138；spec/TEST-MATRIX.md V-93 的 Telegram 分项；Bot API setMyCommands/BotCommand/BotCommandScopeDefault 的原文。
-
-范围（只新增或修改这些）：
-- 新增 adapters/telegram/commands.go：菜单转换、成功快照与去重。
-- adapters/telegram/telegram.go：commands.sync 能力与实例内缓存字段。
-- adapters/telegram/telegramtest/server.go、send.go：setMyCommands、deleteMyCommands 的参数记录、true/false 响应与 FailMethod 故障注入。
-- adapters/telegram/telegram_test.go：一个新增集成测试；本地 *_local_test.go。
-
-允许的新跨模块边：无。只用既有 sdk/adapter、sdk/message、sdk/errcode 与标准库；无需配置、proto、Core、i18n 生成器或插件注册 API 改动。
-
-接口（照此实现；内部辅助函数自定）：
-- 实例实现 sdk/adapter.CommandSynchronizer：
-  func (i *instance) SyncCommands(ctx context.Context,commands []adapter.CommandMenuItem) *errcode.Error
-- 输入项沿用 adapter.CommandMenuItem{Name string,Descriptions map[string]string}。输入是当前可用命令的完整替换快照，空列表用于清空。
-- Descriptor 与实例能力表追加 message.Capability{Name:"commands.sync",Version:1,Supported:true}；菜单成功缓存归实例，键为实际发出的 language_code（空串表示默认），值为上一次确认成功的完整 [{command,description}] 快照及存在标记。
-- setMyCommands 请求 JSON 为 {"scope":{"type":"default"},"commands":[{"command":string,"description":string}],"language_code":string（默认菜单省略）}；deleteMyCommands 请求只带同一 scope 与待撤销的 language_code；响应 result 均为 true。
-- telegramtest 沿用 Calls、Requests、FailMethod；setMyCommands 与 deleteMyCommands 进入 Requests 的顺序记录，默认返回 true；追加 func (s *Server) RespondMethod(method string, result json.RawMessage) 以注入 result=false，与 goal-112 同签名，只保留一份共用响应覆盖。无新增公开生产符号。
-- 复用既有 CommandMenuItem、AdapterCommandsSyncRequest/Response；不追加 proto 字段。
-
-行为：
-- Core 已筛选根命令、权限为 user、策略启用且实例前缀含 / 的命令，并按 D-138 提供语言说明；Adapter 按输入顺序转换，不重新读取路由或权限。名称不匹配 ^[a-z0-9_]{1,32}$ 时跳过并记诊断；说明超过 256 Unicode 字符时在字符边界截断并记诊断。保留实际成功发送的内容作为比较依据。
-- 默认 scope 的无 language_code 菜单使用输入 en-US 原文。从全部 Descriptions 键收集规范 locale，以主语言的小写两字母值作为 Telegram language_code；三字母、und、private-use 等无法映射的键跳过并记诊断。对同主语言的候选，优先无区域/脚本的主语言键；其余按完整 locale 的 ASCII 字典序取首个，整份菜单统一使用该 locale。某命令缺该 locale 时使用它的 en-US（Core 已做其已有 locale 的回落）；不重新执行 i18n。en-US 同时生成 language_code=en 的菜单，默认菜单始终存在。候选和实际语言排序后再处理，结果与 map 插入顺序无关。
-- 全量预检在任何平台请求前完成：过滤非法命令名后最多 100 条；超出返回 INVALID_ARGUMENT，保留实际数量且零平台请求。说明按 Unicode 码点截断至 256，截断后长度须为 1～256；缺少 en-US、空说明返回 INVALID_ARGUMENT，错误带命令/语言且不补占位文案。输入中的有效命令保持顺序。
-- 每个实际语言独立比较成功快照：相同内容跳过，不重复 setMyCommands；首次同步空列表仍须调用一次以清除可能残留的菜单，缓存存在标记与空内容分开。成功后复制保存，避免调用方随后修改切片/map 影响缓存。
-- 顺序确定：默认菜单先发，之后实际 language_code 排序处理；某语言的平台明确失败继续其余语言，返回按处理顺序遇到的第一个安全错误；ctx 取消时停止发起后续请求，未处理项保留原缓存。失败语言不更新成功快照，下一次相同输入仍会尝试它；已成功语言跳过。平台 result=false 返回 FAILED_PRECONDITION 并保留原缓存。诊断在每次实际同步收到非法名或超长说明时各记录一次，即使转换结果与成功快照相同也保留诊断；去重只控制平台调用。
-- 命令消失时以 setMyCommands 替换新的完整 commands 列表。对上次成功而本次完全消失的 language_code，用 deleteMyCommands（同一 default scope 和该语言码）撤销其旧菜单，使平台恢复语言回落；成功后移除该语言成功快照，失败保留以便下一次同步继续清理。新语言设置和旧语言撤销一起按 language_code 排序，默认菜单先处理；Stop 仍保持平台菜单。
-- 菜单同步无自动重试、无新增定时器；Core 的两秒合并、同步通知及失败后下次变化处理全部沿用。SyncCommands 失败不 ReportFailure、不停实例；Stop 不调用平台删除菜单。缓存仅随实例存活，不持久化。
-- 记录诊断时沿用默认 Logger 和 Bot token 脱敏，保留方法失败的安全错误；message.send 的 TextLimit、权限、其他切片能力保持。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：telegram_test.go 一个集成测试 TestCommandMenuSync，经 telegramtest.Server 驱动 New().Start 得到实例，再转为 adapter.CommandSynchronizer：同步两次相同的 en-US 快照，默认菜单实际只出现一次 setMyCommands；断言默认及 en 的 scope、command、description、language_code；修改说明后各更新一次；加入 zh-CN 后生成 zh，移除该 locale 时有 deleteMyCommands(language_code=zh)，其余成功快照不重发；清空时默认 setMyCommands(commands=[])，旧 en 菜单撤销；Descriptor 与实例均声明 commands.sync。测试调用模拟 HTTP，不采用纯函数测试代替集成主路径。
-- 本地自测（*_local_test.go，PR 写明结果）：en-US/zh-CN 等语言映射与冲突、旧语言移除；非法名称、256/257 字符与多字节文本；同内容不同 map 插入顺序；初次空列表；某语言失败后继续其他语言、下一次只重试失败内容；result=false、断线、ctx 取消；Stop 不删除菜单；不同实例缓存隔离、调用方修改原切片/map 不影响缓存。100/101 条有效命令、空说明和缺 en-US 的零平台请求；相同内容仍有非法/截断诊断；语言清理失败保留缓存并在下次同步再次清理。
-- 真实 Telegram：未运行（无凭证）。证据明确写 telegramtest 本地模拟服务，提供 OS/架构、Go 版本与实际命令，交审查者回写 TEST-MATRIX §3.2；Core 的 V-93 分项沿用 PR #150 的证据。
-
-完成条件：状态段的官方原文复核完成，上述语言映射、上限预检和撤销语义均有证据，菜单主路径与失败不污染缓存有证据；gofmt -l 本次改动 Go 文件无输出；go vet ./...；go test -race ./adapters/telegram/...；go build ./...。发生契约冲突、范围外修改或 T-03 失败停止条件时标 [!]。
-
-不做：Core 的根命令筛选、两秒通知合并与策略/i18n 规则改写、生成器扫描注册、插件生命周期装配、Telegram 动作/媒体/撤回、菜单持久化、停止删除菜单、自动重试、真实平台验证。
-```
-
-## 第 14 波
-
-### goal-132 · T-03.26 官方 Telegram Adapter 填写 chat_title
-
-状态：等待前置（T-04.16）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：待派发。暂不派发（维护者指示只改写语句）。直接前置 T-03.4（goal-5，PR #39，合并提交 `604dc65`）、T-03.25（goal-131，PR #166，合并提交 `6f72fc8`）均已合并。2026-11-13 按维护者指定的 main `9efee73` 只读副本，用 `rg` 核对定义、调用者与既有集成测试；`message.Event`、`adapter.Core`、`telegramtest.Server.Calls` 另经离线 `go doc` 核对输出。以下补齐方案均为「审查者补齐，待维护者确认」。
-
-按 main 核对：
-
-- `sdk/message/event.go`：`message.Event` 已有 `ChatTitle string`、`ChatType message.ChatType`、`Session message.Session`；`ChatTitle == ""` 表示未提供。`contracts/proto/alonabot/v1/message.proto` 已有 `ChatType chat_type = 15`、`optional string chat_title = 16`；`sdk/internal/convert/event.go` 的 `func EventToProto(e *message.Event) (*pb.Event, error)`、`func EventFromProto(e *pb.Event) *message.Event` 已双向转换名称。
-- `sdk/adapter/adapter.go`：`Core.Deliver(ctx context.Context, ev *message.Event, cursor []byte) (accepted bool, err error)`。`adapters/telegram/telegram.go`：`func New() adapter.Adapter`、`func (a *telegramAdapter) Start(ctx context.Context, request adapter.StartRequest, core adapter.Core) (adapter.Instance, error)`；接收经 `processUpdate(ctx context.Context, raw json.RawMessage, saved cursor) (cursor, error)`、`save(ctx context.Context, event *msg.Event, next cursor) error` 交付，沿用逐条应答及游标规则。
-- `adapters/telegram/inbound.go`：`telegramChat` 当前只有 `ID int64`、`Type string`；`func (i *instance) baseEvent(chat telegramChat, date int64, user *telegramUser) *msg.Event` 由消息、编辑、成员与 reaction 路径共用；`messageEvent(received *telegramMessage, edited bool) (*msg.Event, error)` 负责消息与话题。`adapters/telegram/callback.go` 的 `callback(ctx context.Context, queryJSON json.RawMessage, updateID int64, raw json.RawMessage) ([]*msg.Event, error)` 同样调用 `baseEvent(query.Message.Chat, ...)`；没有 message 的 inline 回调当前只确认并跳过交付。
-- `adapters/telegram/telegramtest/server.go` 已有 `NewServer(t testing.TB, token string) *Server`、`(*Server).URL() string`、`Push(updates ...json.RawMessage)`、`Calls(method string) int`、`SetChatAdministrators(chatID int64, status int, members ...json.RawMessage)`；可以直接注入含名称的 Chat。`adapters/telegram/telegram_test.go` 已有 `recordingCore`、`newRecordingCore()`、`startRequest`、`waitSaved` 和 `registerStop`，足以覆盖真实 HTTP 接收链。
-- 审查者补齐，待维护者确认：当前 `baseEvent` 尚未填写 `ChatType`；在同一构造点一并落实 MESSAGE-MODEL §6 已确认的 D-100 映射，让新目录名称与会话类型配套。goal-111 原先规划的类型赋值由本切片承担，审查者在正式派发时同步其语句；已经合并时复用现有赋值。私聊姓名按非空字段连接，保留字段内容，只有一项时直接取该项。
-- 在途协调按本次维护者提供的信息：PR #177（goal-66）涉及 `internal/core/logging/`、`internal/core/manage/`、`sdk/log.go`、`sdk/adapter_run.go`、`alonabot.go`、`assembly.go`、`cmd/alonabot/`；PR #178（goal-60）涉及 `agent/`；goal-41 涉及 `internal/core/journal/`、`internal/core/state/`、`internal/core/manage/`、`internal/core/supervisor/` 与根包装配。这些文件与本切片生产修改范围分离。goal-9 的 Telegram 生产修改点是 `adapters/telegram/plan.go`，其 CLI 集成测试与本切片接收测试分离；派发时核对合并后的事件断言。另与尚待实施的 goal-111、goal-137 共用 `adapters/telegram/inbound.go`、`telegram_test.go`，后合并者保留完整字段和断言。
-- 旧在途提示按完成记录更新：PR #165（`330164f`）、#167（`3a9b4af`）、#168（`37b0ada`）、#169（`4dc4bcd`），以及 goal-59／PR #170（`eca6310`）、goal-69／PR #171（`3043c4e`）均已合并。最近的 #173（`2bb8181`）、#175（`ac6083a`）、#176（`9785c22`）及维护者告知已合并的 #174 作为基线成果保留；本切片只消费现有 Adapter 交付接口。
-- 需维护者另行决定：新增依赖、改变已确认决策均无新增请求；真实 Telegram 凭证与实测由维护者决定是否提供，本切片模拟验收可独立完成，真实平台结果留作「未运行」。
-
-```text
-/goal 使用 $alonabot-execute 推进 goal-132（切片 T-03.26：官方 Telegram Adapter 填写 chat_title）。goal 目录 goal-132，分支 goal-132，worktree .worktrees/goal-132，从包含 PR #39、#166 的最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
-
-目标：Telegram 实例为每个已支持、带 target 的入站事件填写平台给出的 chat_title，群、超级群与频道取聊天名称，私聊取对方姓名；在共用构造点填写既定 chat_type，让 Core 已合并的聊天目录取得名称与类型。
-
-依据：spec/PLAN.md §3.1、§5；spec/plan/adapters/telegram.md T-03.26、T-03 步骤 23；spec/plan/core.md T-03 的「失败停止条件」及步骤 22 的已合并聊天目录；spec/CONTRACTS-v0.1.md §8（Adapter 交付与聊天目录）、§14.1（日志）；spec/MESSAGE-MODEL.md §1、§6、§6.1、§6.3；spec/WIRE-FORMAT.md §3.4（core.adapter.deliver）、§5A（Event 的追加字段）；spec/adr/DECISIONS.md D-86、D-100、D-130；spec/TEST-MATRIX.md V-117 的 Telegram 分项及 §3 的证据格式。平台字段按 Telegram Bot API 的 Chat 对象核对。
-
-范围（只新增或修改这些）：
-- adapters/telegram/inbound.go：telegramChat 补字段；baseEvent 统一填写名称与既定类型；内部辅助函数放在本文件。
-- adapters/telegram/telegram_test.go：追加下述一个集成测试；既有集成测试的 Event 预期随新增字段同步，保留原有行为断言。
-- adapters/telegram/ 下本切片的 *_local_test.go：其余名称、事件路径与日志检查，只作本地自测。
-允许的新跨模块边：无；沿用 Adapter 到 sdk/adapter、sdk/message 及本模块 telegramtest 的现有依赖。
-
-接口（照此实现；内部辅助函数自定）：
-- 保持 func New() adapter.Adapter、Adapter.Start、Instance 及 adapter.Core 的全部公开签名。
-- telegramChat 在现有字段上追加 Title string `json:"title"`、FirstName string `json:"first_name"`、LastName string `json:"last_name"`；继续供 telegramMessage、membershipUpdate、reactionUpdate 与回调 Message 共用。
-- 保持 func (i *instance) baseEvent(chat telegramChat, date int64, user *telegramUser) *msg.Event；返回的 msg.Event.ChatTitle 为 string，ChatType 为 msg.ChatType。消息、成员、reaction 与 callback 的现有调用签名保持原样。
-- 使用既有协议字段：Event.target = 8、Event.chat_type = 15、Event.chat_title = 16；SDK 将非空 ChatTitle 编为 optional string，空串编为 absent。交付仍调用 Core.Deliver(ctx, event, cursor)。
-- 测试复用 telegramtest.NewServer(t, token)、server.Push(...json.RawMessage)、server.Calls(method string) int；模拟服务的公开 API 保持现状。
-
-行为：
-- 在 baseEvent 按 chat.type 统一赋值。group、supergroup、channel 的 ChatTitle 取 chat.title 原文；private 按 first_name、last_name 的顺序，以一个 ASCII 空格连接存在的非空项，两项都为空时 ChatTitle 留空。私聊只使用 Chat 的姓名字段。
-- ChatType 按 private → ChatPrivate、group/supergroup → ChatGroup、channel → ChatChannel；未知类型保留 ChatUnspecified 与空名称。复用已存在的同义映射，若基线已有该赋值则保留一个实现。
-- message、channel_post、edited_message、edited_channel_post、chat_member、my_chat_member、message_reaction 与带 Message 的 callback_query 都从各自所在 Chat 取得名称。sender_chat 下 Actor 的既有处理继续生效。缺失名称时交付事件仍正常进行。
-- 带话题的消息与回调仍按 is_topic_message 填写 thread_id；名称属于整个聊天，取所在 Chat。没有 target 的事件保持空名称；inline callback 的现有跳过行为保持原样。
-- 名称来自现有上报；获取名称额外产生的 Bot API 请求数为零。原有权限查询、callback 确认、long polling、游标与错误处理照常执行。
-- ChatTitle、私聊姓名和原始 Chat 对象均不写入 Adapter 日志；原始上报继续完整保存在 PlatformPayload。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：在 adapters/telegram/telegram_test.go 新增一个 TestChatTitle 集成测试。经 telegramtest.Server 的真实 HTTP long polling 与 New().Start、Core.Deliver 回调，依次注入一条有 title 的超级群消息、一条 Chat 中同时有 first_name/last_name 的私聊消息、一条 Chat 无姓名但 from 有姓名的私聊消息。断言 ChatTitle 依次为完整群名、两项姓名以单空格连接、空串，ChatType 分别为 ChatGroup、ChatPrivate、ChatPrivate；既有 Session、消息内容、来源和逐条游标继续正确。用 server.Calls("getChat") == 0 及既有请求记录核对取名未增加平台查询。理由：覆盖平台 Chat 解码、共享事件构造与实际接收交付的主路径。
-- 既有测试同步：如果完整 Event 比较受新增字段影响，只更新该字段的预期；原有权限、to_me、Actor、话题、回执与游标断言继续执行。
-- 本地自测（adapters/telegram/*_local_test.go，PR 写明命令、平台、结果）：普通群与频道取 title；仅 first_name、仅 last_name、Unicode 与名称原文保留；群无 title 时为空；修改消息、成员变化、reaction 和带 Message 的 callback 都取所在 Chat；callback 的 from 与 Chat 私聊姓名不同、sender_chat、同一 update 的多条 reaction、论坛话题、inline callback 无交付；日志中无名称与凭证。以既有模拟服务和录制 Core 驱动，直接复用原辅助函数。
-- D-86：提交范围为上述平台集成测试；SDK 字段编解码、Core 目录存储与查询的已有证据复用 PR #166。本切片的本地自测也集中在 adapters/telegram/，无需新增 SDK 测试或 testdata 插件。
-- 真实 Telegram：未运行（待维护者提供环境）。将模拟证据与真实平台记录分别填写，执行者把 V-117 Telegram 分项的测试位置、命令、OS/架构、Go 版本、结果及未运行项交给审查者汇总到 TEST-MATRIX §3.2。
-
-完成条件：上述一个集成测试与列明的本地自测取得结果；所有已支持的带 target 路径遵循相同名称规则，取名称新增平台请求为零；gofmt -l 本次修改的 Go 文件无输出；go vet ./adapters/telegram/...；go test -race ./adapters/telegram/...；go build ./...。对照 T-03「失败停止条件」，出现名称或凭证泄漏、重复接收 owner、游标重放、实例间干扰时先修复；需要范围外生产文件、proto、新依赖或改变已确认语义时标 [!] 交审查者处理。V-117 全项由跨任务汇总关闭，本切片交付其 Telegram 分项。
-
-不做：Core 聊天目录、schema 或管理 API 修改；SDK 的名称读取方法；话题名称、getChat 查询与主动拉取聊天；新增服务消息或扩展事件（goal-137）；媒体、发送、开发入口及日志管理的实现。
-```
-
