@@ -3,9 +3,9 @@ package agent
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -36,17 +36,14 @@ func readSkills(directory string) []skill {
 	if directory == "" {
 		return nil
 	}
-	directory = filepath.Clean(directory)
 	// 1. 目录项按名字读取，只处理真实的一级子目录。
-	info, err := os.Lstat(directory)
+	root, err := os.OpenRoot(directory)
 	if err != nil {
 		slog.Warn("skills directory unavailable", "path", directory, "error", err)
 		return nil
 	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return nil
-	}
-	entries, err := os.ReadDir(directory)
+	defer root.Close()
+	entries, err := fs.ReadDir(root.FS(), ".")
 	if err != nil {
 		slog.Warn("skills directory unavailable", "path", directory, "error", err)
 		return nil
@@ -58,24 +55,14 @@ func readSkills(directory string) []skill {
 			continue
 		}
 		path := filepath.Join(directory, entry.Name(), skillFileName)
-		// 先匹配目录项原名，避免大小写不敏感文件系统把 skill.md 当成 SKILL.md。
-		files, err := os.ReadDir(filepath.Dir(path))
-		if err == nil && !slices.ContainsFunc(files, func(file os.DirEntry) bool { return file.Name() == skillFileName }) {
-			continue
-		}
-		var info os.FileInfo
-		if err == nil {
-			info, err = os.Lstat(path)
-		}
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err == nil && info.Mode()&os.ModeSymlink != 0 {
-			continue
-		}
+		info, err := root.Lstat(entry.Name())
 		var loaded skill
+		var found bool
 		if err == nil {
-			loaded, err = readSkillFile(path, info)
+			loaded, found, err = readSkillDirectory(root, entry.Name(), info)
+		}
+		if err == nil && !found {
+			continue
 		}
 		if err == nil && names[loaded.name] {
 			err = fmt.Errorf("duplicate skill name %q", loaded.name)
@@ -92,18 +79,61 @@ func readSkills(directory string) []skill {
 	return skills
 }
 
-func readSkillFile(path string, info os.FileInfo) (skill, error) {
+func readSkillDirectory(root *os.Root, name string, info os.FileInfo) (skill, bool, error) {
+	if !info.IsDir() {
+		return skill{}, false, fmt.Errorf("skill directory must be a directory")
+	}
+	directory, err := root.OpenRoot(name)
+	if err != nil {
+		return skill{}, false, err
+	}
+	defer directory.Close()
+	opened, err := directory.Stat(".")
+	if err != nil {
+		return skill{}, false, err
+	}
+	if !opened.IsDir() || !os.SameFile(info, opened) {
+		return skill{}, false, fmt.Errorf("skill directory changed while opening")
+	}
+	// 后续操作绑定已核对的目录句柄，目录改名或被替换时仍访问同一目录。
+	files, err := fs.ReadDir(directory.FS(), ".")
+	if err != nil {
+		return skill{}, false, err
+	}
+	// 按目录项原名匹配，使大小写不敏感文件系统也跳过 skill.md。
+	if !slices.ContainsFunc(files, func(file fs.DirEntry) bool { return file.Name() == skillFileName }) {
+		return skill{}, false, nil
+	}
+	info, err = directory.Lstat(skillFileName)
+	if err != nil {
+		return skill{}, false, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return skill{}, false, nil
+	}
+	loaded, err := readSkillFile(directory, skillFileName, info)
+	return loaded, true, err
+}
+
+func readSkillFile(directory *os.Root, path string, info os.FileInfo) (skill, error) {
 	if !info.Mode().IsRegular() {
 		return skill{}, fmt.Errorf("skill must be a regular file")
 	}
-	if info.Size() > skillFileLimit {
-		return skill{}, fmt.Errorf("skill exceeds %d bytes", skillFileLimit)
-	}
-	file, err := os.Open(path)
+	file, err := directory.Open(path)
 	if err != nil {
 		return skill{}, err
 	}
 	defer file.Close()
+	opened, err := file.Stat()
+	if err != nil {
+		return skill{}, err
+	}
+	if !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
+		return skill{}, fmt.Errorf("skill file changed while opening")
+	}
+	if opened.Size() > skillFileLimit {
+		return skill{}, fmt.Errorf("skill exceeds %d bytes", skillFileLimit)
+	}
 	// 文件在检查后增长时仍只读取上限加一字节，以识别超限而非截断成功。
 	content, err := io.ReadAll(io.LimitReader(file, skillFileLimit+1))
 	if err != nil {
@@ -140,9 +170,10 @@ func parseSkill(content []byte) (skill, error) {
 		}
 		return skill{}, fmt.Errorf("frontmatter must contain one YAML document")
 	}
-	// 2. Node 保留 YAML 类型，避免数字和布尔值被自动转成字符串。
-	name := metadata.Name.Value
-	if metadata.Name.Tag != "!!str" || len(name) == 0 || len(name) > skillNameLimit {
+	// 2. 展开别名后保留 YAML 类型，避免数字和布尔值被自动转成字符串。
+	nameNode := resolveSkillAlias(&metadata.Name)
+	name := nameNode.Value
+	if nameNode.Tag != "!!str" || len(name) == 0 || len(name) > skillNameLimit {
 		return skill{}, fmt.Errorf("name must match [a-z0-9_-]{1,%d}", skillNameLimit)
 	}
 	for _, ch := range name {
@@ -150,11 +181,19 @@ func parseSkill(content []byte) (skill, error) {
 			return skill{}, fmt.Errorf("name must match [a-z0-9_-]{1,%d}", skillNameLimit)
 		}
 	}
-	description := metadata.Description.Value
-	if metadata.Description.Tag != "!!str" || strings.TrimSpace(description) == "" || utf8.RuneCountInString(description) > skillDescriptionLimit {
+	descriptionNode := resolveSkillAlias(&metadata.Description)
+	description := descriptionNode.Value
+	if descriptionNode.Tag != "!!str" || strings.TrimSpace(description) == "" || utf8.RuneCountInString(description) > skillDescriptionLimit {
 		return skill{}, fmt.Errorf("description must contain 1 to %d characters", skillDescriptionLimit)
 	}
 	return skill{name: name, description: description, body: string(frontmatter[end+1+len(skillDelimiter):])}, nil
+}
+
+func resolveSkillAlias(node *yaml.Node) *yaml.Node {
+	for node.Kind == yaml.AliasNode {
+		node = node.Alias
+	}
+	return node
 }
 
 func (a *component) skillPrompt(header string) string {
