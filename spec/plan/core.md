@@ -50,6 +50,8 @@
 | T-04.12 | goal-125 | 插件对象、结构体参数与子插件：入口改为 `func New() *sdk.Plugin`，路由、生命周期回调、`OnConfigLoad` 与数据库迁移登记在插件对象上，删除 `sdk.Base`、`sdk.Root`、根插件的六个注册方法（`Commands`、`Events`、`Services`、`Subscriptions`、`HTTP`、`Schedules`）与对应的注册器类型（D-114）；命令 Handler 可以用一个结构体接收参数（D-115）；一层逻辑子插件及其缺省权限、配置视图与日志字段（D-116）；包内 `alonabotGenerated` 经 `sdk.UseGenerated(p, g)` 显式绑定插件对象，独立进程与库模式共用（D-137）；生成器、示例与已合并的调用方同步 | T-04 步骤 12 | T-04.8 | V-112 | 已完成（PR #154；TEST-MATRIX §3.2） |
 | T-04.13 | goal-126 | Service 与 Event Bus 的带类型声明：`sdk.JSON`、`sdk.Proto` 返回 `sdk.Service[In, Out]`，`sdk.Serve` 注册、`Call` 调用；`sdk.BusEvent[T]` 的 `Publish` 与 `sdk.Subscribe`；删除 `sdk.CallJSON`、`sdk.CallProto`、`sdk.Publish` 与旧形式的注册、订阅函数；`sdk/llm`、示例与已合并的调用方同步（D-122） | T-04 步骤 13 | T-04.12 | V-113 的声明分项 | 已完成（PR #158；TEST-MATRIX §3.2） |
 | T-04.14 | goal-129 | 命令名覆盖的 Core 侧：命令策略保存按路由的命令名列表，Router 的索引、遮蔽诊断、usage 回复与命令菜单使用生效的命令名，保存时的格式与重名检查，插件更新后的失效处理（D-128） | T-04 步骤 14 | T-03.17、T-04.10 | V-115 的 Core 分项 | 已完成（PR #156；TEST-MATRIX §3.2） |
+| T-04.15 | goal-138 | SDK 公开面收敛：会话、消息句柄与用户字符串改为 string，新增 `c.SendTo`，删除 `sdk.To`（D-144）；生成文件在 `init()` 中按入口包登记资源，删除 `sdk.UseGenerated` 等生成相关 API 与 `//go:generate`，生成器移入 `internal/generate`，CLI 维护生成文件（D-145）；Adapter 的 HTTP 路由写进 `adapter.Descriptor`，删除 `sdk.AdapterHTTP`（D-147）；示例只在 `New()` 中注册 | T-04 步骤 15 | T-04.5、T-09.3、T-16.1 | V-120 的会话、生成资源与 Adapter 路由分项 | 未开始 |
+| T-04.16 | goal-139 | SDK 按类别分包：动态任务、Service、Event Bus、按钮、媒体、会话历史、工具、平台动作与选项来源移入 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action`、`sdk/options`，根包只留插件对象、Context、注册 builder、权限与运行入口，`Collect` 等改为内部入口（D-146） | T-04 步骤 16 | T-04.15 | V-120 的分包分项 | 未开始 |
 | T-05.1 | goal-15 | 可信事件上下文与有界同事件分发：64 条并发链、256 条/8 MiB 等待队列、稳定候选排序、链执行与读循环分离；经回环测试 Adapter 运行，按钮与 scheduled 绑定先用规范 fixture | T-05 步骤 1、2 | T-03.3、T-04.3、T-04.4 | V-13、V-16 的 fixture 分项 | 已完成（PR #67；TEST-MATRIX §3.2） |
 | T-05.2 | goal-16 | SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支 | T-05 步骤 3、4 | T-05.1、T-04.7、T-04.8 | V-14、V-11 的 Rule 分项 | 已完成（PR #145；TEST-MATRIX §3.2） |
 | T-05.3 | goal-17 | PreEvent/BeforeSend/AfterSend 三阶段 Hook（链式注册与 SDK 类型，D-112），send_forbidden 的保存与继承 | T-05 步骤 5、6 | T-05.2 | V-15 的直接路径分项，V-110 的 Hook 分项 | 已完成（PR #155；TEST-MATRIX §3.2） |
@@ -102,6 +104,7 @@
 | T-13.2 | goal-68 | 开发组件的配置与数据库：`config.json` 直读、准备与写回（WebUI 修改时重启组件）、`dev.sqlite`、拒绝 update/rollback/uninstall；沿用固定代次 `dev:<组件 ID>`（D-134） | T-13 步骤 3 | T-07.6、T-08.5、T-08.11、T-13.1 | V-64 | 已完成（PR #160；TEST-MATRIX §3.2；配置写回随 T-09.14 的配置管理 API，dev 来源拒绝 update/rollback/uninstall 与开发 Adapter 的实例在 T-09.4） |
 | T-13.3 | goal-69 | 开发运行与热部署：`alonabot run [目录...] [--reload]` 构建并以独立进程运行开发组件，轮询源码、资源与配置，只重启变化的组件；Adapter 以可导入包为工程目录，沿用 `dev:<组件 ID>`（D-77、D-134） | T-13 步骤 4 | T-07.6、T-09.16、T-13.1、T-09.4 | V-65 | 已完成（PR #171；TEST-MATRIX §3.2） |
 | T-13.4 | goal-70 | 开发运行示例与开发文档，汇总证据 | T-13 步骤 5 | T-03.10、T-13.2、T-13.3 | V-64、V-65 | 已完成（PR #186；TEST-MATRIX §3.2） |
+| T-13.5 | goal-140 | 模块根包只保留库模式接口：Core 装配、候选与进程管理移入 `internal/app`，只供开发 CLI 使用的 `Executable`、`Stdio`、`Core.Restart`、`Core.RestartInstance`、`Core.ReloadSettings` 随之移入，根目录的端到端测试按归属迁移（D-148） | T-13 步骤 6 | T-04.16 | V-64、V-65 的回归（行为不变） | 未开始 |
 | T-16.1 | goal-81 | 插件测试套件基础：`plugintest.Start`、测试 Adapter、会话与身份、Capability 子集、消息注入、`internal/inproc` 的分发结束通知、配置与数据库 | T-16 步骤 1、2 | T-05.2、T-13.2、T-09.4 | V-73 的基础分项 | 已完成（PR #168；TEST-MATRIX §3.2） |
 | T-16.2 | goal-82 | 按钮点击、多轮等待、schedule 触发（含动态任务实例，D-124）与后台发送；用套件测试示例插件，开发文档，汇总证据 | T-16 步骤 3、4 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | V-73 | 已完成（PR #183；TEST-MATRIX §3.2） |
 | T-16.3 | goal-102 | `plugintest.LLM`：登记只提供 `llm.generate` 的测试 Agent，被测插件经 `@agent` 的调用交给测试函数（D-77） | T-16 步骤 3 | T-12.8、T-16.1 | V-73 的 LLM 分项 | 已完成（PR #190；TEST-MATRIX §3.2） |
@@ -342,6 +345,15 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
     - 本步骤（T-04.13）：Service 与 Event Bus 改为带类型的声明。`sdk.JSON[In, Out](target)`、`sdk.Proto[In, Out](target)` 返回 `sdk.Service[In, Out]`，`sdk.Serve(r, s)` 开始注册，`s.Call(ctx, in)` 调用；`sdk.BusEvent[T](name)` 返回事件声明，`e.Publish(ctx, payload)` 发布，`sdk.Subscribe(r, e)` 订阅。`Collect` 核对 target 的组件部分是本插件（Agent 组件为 `@agent`）、声明不是零值、同一声明只注册一次。删除 `sdk.CallJSON`、`sdk.CallProto`、`sdk.Publish` 与旧形式的 `sdk.JSON(r, name)`、`sdk.Proto(r, name)`、`sdk.Subscribe[T](r, name)`；生成器对类型参数的检查改为针对声明处。`sdk/llm` 的 `Generate` 与 `Ask` 签名不变，内部改用声明并导出它；示例与已合并的调用方同步修改。
 14. **命令名覆盖（D-128，T-04.14）。** 协议与 SDK 不变。命令策略的路由作用域增加命令名列表，写进状态库的命令策略表；保存时按注册描述中命令路径的规则校验每个命令名，拒绝空列表、列表内重复、文本匹配与 Raw 路由，并按 CONTRACTS §2.3 检查同一插件内的重名。Router 建立命令索引时，有覆盖的命令用覆盖的命令名代替声明的路径与别名；与本插件其他命令声明的名字相同的覆盖项不进入索引并记入诊断，一项不剩时用声明的名字；覆盖变化后重建索引，下一次派发生效。遮蔽诊断、usage 回复与命令菜单同步（T-03.17）改用生效的命令名，主名为列表第一项；覆盖变化触发受影响实例的菜单同步。命令组与策略的作用域仍按声明的规范路径。管理 API 由 T-09.14 提供，页面由 T-09.9 提供；`core.command.list`（T-14.1）返回生效的命令名，两者后合并者同步。
 
+15. **SDK 公开面收敛（D-144、D-145、D-147）。** 协议不变，只改 SDK、生成器、CLI 与调用方。
+    - 会话与句柄：删除 `message.Session`、`message.MessageRef`、`message.User` 及其构造与 `Parts`，删除 `sdk.To`；公开 API 的会话、消息句柄与用户字符串改为 string。新增 `c.SendTo(sid, content, opts...)`；`c.Send` 只发往当前事件的默认目标；`sdk.Send`、`sdk.SendText`、`c.CallAction` 与平台动作改收 sid。`sdk/message` 提供 `SID`/`ParseSID`、`Ref`/`ParseRef` 与 `UID`/`ParseUID`。
+    - 生成资源：生成器输出在 `init()` 中调用 `genimpl.Register` 的 `alonabot_gen.go`；`sdk.NewPlugin()` 按调用方所在的包、`sdk.RunAdapter` 与库模式按 Adapter 类型所在的包取得资源，缺少登记时在连接 Core 前返回英文错误。删除 `sdk.Generated`、`sdk.UseGenerated`、`sdk.UseGeneratedAdapter`、`sdk.GeneratedFor`、`sdk.GeneratedProvider` 与 `(*Plugin).Generated`；SDK、根包与 plugintest 经本 module 的内部包读取资源，仓库测试的资源夹具改经内部入口注入。`sdk/generate` 移到 `internal/generate`。`init` 创建生成文件，`run`、`build`、`test`、`pack` 在内容变化时刷新它，`check` 报告过期；删除官方组件、示例与 `plugintest/internal` 中的 `//go:generate`，CI 的生成一致性检查改为对各组件工程运行 `alonabot check`。新增的内部包与依赖边写进 ARCHITECTURE。
+    - Adapter 路由：`adapter.Descriptor` 增加 `HTTP []HTTPRoute`，删除 `sdk.AdapterHTTP`；官方 OneBot 11 与 devbot 的回环 Adapter 改用新字段；生成器按 Adapter 包对 `adapter.HTTPRoute` 的引用写入 http_listener。
+    - 示例：showcase 与 configdb 删除 `Commands`、`HTTP`、`Schedules` 这类按类别分组的方法，在 `New()` 中直接注册（D-114）。
+    - docs/plugin-guide.md、docs/development.md、examples/devbot 的说明与 `alonabot init` 的模板按新写法同步。
+
+16. **SDK 按类别分包（D-146）。** 协议与行为不变，只改包与名字。按 D-146 的对照把包级函数与类型移入 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action` 与 `sdk/options`；子包 import 根包取得 `Registrar`、`*Context` 与 `Permission`，共享的注册状态放在 `sdk/internal`，根包不 import 子包。`RunInProcess`、`RunAdapterInProcess`、`Collect`、`Registration` 及其描述类型改为内部入口。全部调用方（Adapter 的常量与动作包、Agent、plugintest、示例、根包与文档）同步修改，不留别名；ARCHITECTURE 的模块表与依赖边同步。
+
 #### 拟目录与交付
 
 | 拟目录 | 本工作包交付 |
@@ -372,6 +384,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 | V-112 | 步骤 12 中插件对象的注册与回调登记、结构体参数的绑定与注册检查、子插件的路由标识、缺省权限与配置视图 |
 | V-113 | 步骤 13 中 Service 与 Event Bus 的带类型声明；SDK 类型分项由 T-04.8 提供，延续调用分项由 T-05.4 提供 |
 | V-115 | 步骤 14 中命令名覆盖的保存检查、匹配、遮蔽、usage 与菜单同步；管理 API 分项由 T-09.14 提供，页面分项由 T-09.9 提供 |
+| V-120 | 步骤 15 与 16：会话、消息句柄与用户字符串的 string 形式与 `c.SendTo`；作者工程中没有生成相关的写法，不经 CLI 的 `go build` 与 `go test` 取得资源，生成文件过期时 `check` 报告、`build` 以本次扫描的资源构建；Adapter 路由在描述中声明；分包后的公开面 |
 
 V-12 是跨任务验收：T-04 不依赖尚不存在的 WebUI，但必须交付后续 UI 实际调用的策略服务层。矩阵中保存分项证据；只有 T-09 的鉴权后浏览器操作也完成，才将整项 V-12 标为通过。T-04 完成后，T-05 和 T-08 可以分别使用同一注册器继续实施。
 
@@ -717,6 +730,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 3. **开发组件的配置与数据库。** 每次启动以 `<data_dir>/plugins/<id>/config.json`（缺失时为空对象）为配置，经迁移、补值与校验后直接生效，不走候选与 Journal；WebUI 或 CLI 修改开发组件的配置时，校验通过后写回该文件并重启该组件。开发中的 Adapter 的实例与已安装的 Adapter 一样取自 `core_config.json` 的 `adapters`，schema 取自可导入 Adapter 包的生成资源；复用 `dev:<组件 ID>`（D-134）。受管 SQLite 为 `dev.sqlite`，不复制、不回退。dev 来源的组件拒绝 update、rollback 与 uninstall。
 4. **开发运行与热部署。** `alonabot run [目录...] [--reload]` 把给出的目录（缺省为当前目录）作为开发组件；Adapter 目录为可导入的工程包，manifest 与实例声明从该包读取，构建 cmd 薄入口，代次沿用 `dev:<组件 ID>`（D-134）：按 `build` 构建到 `<data_dir>/dev/bin/`，插件、Adapter 与 Agent 以独立进程运行，WebUI 以目录中的 `assets` 代替已安装的 WebUI。`--reload` 时每 `DEV_RELOAD_POLL` 用标准库轮询组件目录中的源码、嵌入资源、`go.mod`、`go.sum`、`plugin.yaml`、`config_schema.json`、`adapter_config_schema.json`、`i18n/` 与组件的配置：源码变化时重新构建，成功后只重启变化的组件，失败时输出编译器信息、旧组件继续运行；只有配置变化时不重新构建，只重启该组件或变化的 Adapter 实例；`core_config.json` 的其他变化交给 T-07.6 的重新读取。
 5. **示例与文档。** `examples/devbot/` 是一个用 `alonabot init` 生成的插件工程与回环测试 Adapter，覆盖开发运行、热部署、编译失败与同进程调试。docs/development.md 补充 `init`、`run --reload` 与库模式的用法。
+6. **根包只保留库模式接口（D-148）。** 行为与协议不变。Core 装配、候选与进程管理从根包移到 `internal/app`，根包的 `Run`、`Start`、`*Core`、`Wait` 与选项改为对它的薄包装。只供开发 CLI 使用的 `Executable`、`Stdio`、`Core.Restart`、`Core.RestartInstance` 与 `Core.ReloadSettings` 移入 `internal/app`，`cmd/alonabot` 直接使用。根目录下测试装配与内部服务的端到端测试移到 `internal/app` 或行为所属的包，根包只留验证库模式公开接口的测试；ARCHITECTURE 同步模块表与依赖边。
 
 #### 拟目录与交付
 
@@ -735,6 +749,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 | --- | --- |
 | V-64 | 开发组件的完整生命周期（独立进程与同进程）、Adapter 包资源生成登记与共用身份、多个组件的固定代次 `dev:<组件 ID>` 与重启后按钮有效、dev 来源的限制、`config.json` 的读取与写回、panic 与停止超时、与已安装包混合运行 |
 | V-65 | 改动源码后只重启变化的组件、编译失败旧组件继续、只改配置时不重新构建、已安装组件与 Adapter 连接不中断 |
+| V-64、V-65（步骤 6） | 拆分根包后，库模式、开发运行与热部署的集成测试在新位置照常通过；根包只导出 CONTRACTS §15.5 的接口 |
 
 #### 失败停止条件
 
