@@ -1,7 +1,8 @@
 // Package plugintest 在 go test 中装配真实 Core、被测插件和 loopback 测试 Adapter。
 //
-// [Start] 创建独立临时数据目录，[Harness.Message] 与 [Harness.Event] 注入事件，
-// [Result] 汇总 Core 分发结束或进入多轮等待前的发送与 Handler 结果（CONTRACTS §17）。
+// [Start] 创建独立临时数据目录，[Harness.Message]、[Harness.Event] 与 [Harness.Click] 注入事件，
+// [Harness.Trigger] 与 [Harness.TriggerTask] 经 Scheduler 立即触发任务。
+// [Result] 汇总 Core 完成或等待通知前的发送与 Handler 结果，区间外的记录由 [Harness.Background] 读取（CONTRACTS §17）。
 package plugintest
 
 import (
@@ -75,6 +76,7 @@ func (s Sent) Text() string { return s.Chain.Text() }
 type Outcome struct {
 	PluginID, RouteID string
 	Err               *errcode.Error // nil 表示成功。
+	Waiting           bool
 }
 
 // Result 汇总一次注入到分发通知之间的发送与调用结果。
@@ -96,6 +98,8 @@ type Harness struct {
 	sends     []Sent
 	messageID uint64
 	pending   map[string]chan dispatchResult
+	bridge    *inproc.Harness
+	plugins   map[*sdk.Plugin]string // 启动前登记，运行期间只读。
 }
 
 // Start 在 t.TempDir 装配真实 Core，测试清理时停止全部组件并注销桥接。
@@ -151,8 +155,12 @@ func Start(t testing.TB, opts ...Option) *Harness {
 	}
 	// 2. 在组件激活前登记桥接，让 Core 写入发信许可并发送分发通知。
 	ctx, cancel := context.WithCancel(context.Background())
-	h := &Harness{t: t, ctx: ctx, adapterID: o.descriptor.AdapterID, pending: make(map[string]chan dispatchResult)}
-	unregister := inproc.RegisterHarness(dir, &inproc.Harness{AllowedInstances: allowed, Dispatched: h.dispatched})
+	h := &Harness{t: t, ctx: ctx, adapterID: o.descriptor.AdapterID, pending: make(map[string]chan dispatchResult), plugins: make(map[*sdk.Plugin]string)}
+	for _, p := range o.plugins {
+		h.plugins[p] = pluginID(p)
+	}
+	h.bridge = &inproc.Harness{AllowedInstances: allowed, Dispatched: h.dispatched}
+	unregister := inproc.RegisterHarness(dir, h.bridge)
 	for _, name := range o.capabilities {
 		o.descriptor.Capabilities = append(o.descriptor.Capabilities, message.Capability{Name: name, Version: 1, Supported: true})
 	}
@@ -231,19 +239,26 @@ func (h *Harness) Event(chat Chat, from User, event sdk.EventType, payload any) 
 
 func (h *Harness) deliver(chat Chat, from User, eventType string, payload message.Payload) Result {
 	h.t.Helper()
+	return h.deliverEvent(from, &message.Event{Type: eventType, AdapterID: h.adapterID, AdapterInstanceID: InstanceID, AccountID: AccountID,
+		Session: message.NewSession(h.adapterID, chat.id, ""), ChatType: chat.chatType, Payload: payload})
+}
+
+func (h *Harness) deliverEvent(from User, ev *message.Event) Result {
+	h.t.Helper()
 	h.sequence++
 	id := strconv.FormatUint(h.sequence, 10)
-	if created, ok := payload.(*message.CreatedPayload); ok {
+	if created, ok := ev.Payload.(*message.CreatedPayload); ok {
 		created.PlatformMessageID = id
+	}
+	if clicked, ok := ev.Payload.(*message.ButtonClickedPayload); ok {
+		clicked.CallbackQueryID = id
 	}
 	var permissions []string
 	for _, p := range from.Permissions {
 		permissions = append(permissions, p.Names()...)
 	}
-	ev := &message.Event{Type: eventType, Source: message.SourceAdapter, OccurredAt: time.Now(), AdapterID: h.adapterID,
-		AdapterInstanceID: InstanceID, AccountID: AccountID, Session: message.NewSession(h.adapterID, chat.id, ""), ChatType: chat.chatType,
-		Actor:         &message.Actor{ExternalUserID: from.ID, AdapterInstanceID: InstanceID, DisplayName: from.Name, Permissions: permissions},
-		SourceEventID: id, Payload: payload}
+	ev.Source, ev.OccurredAt, ev.SourceEventID = message.SourceAdapter, time.Now(), id
+	ev.Actor = &message.Actor{ExternalUserID: from.ID, AdapterInstanceID: ev.AdapterInstanceID, DisplayName: from.Name, Permissions: permissions}
 	receiver := make(chan dispatchResult, 1)
 	h.mu.Lock()
 	start := len(h.sends)
@@ -257,13 +272,18 @@ func (h *Harness) deliver(chat Chat, from User, eventType string, payload messag
 	}
 	// Core 拥有结束判定；这里不使用 sleep、轮询或套件自己的期限。
 	notification := <-receiver
+	return h.result(start, notification)
+}
+
+func (h *Harness) result(start int, notification dispatchResult) Result {
 	d := notification.dispatch
 	result := Result{Waiting: d.Waiting}
 	h.mu.Lock()
 	result.Sends = slices.Clone(h.sends[start:notification.end])
+	h.sends = slices.Delete(h.sends, start, notification.end)
 	h.mu.Unlock()
 	for _, o := range d.Outcomes {
-		outcome := Outcome{PluginID: o.PluginID, RouteID: o.RouteID}
+		outcome := Outcome{PluginID: o.PluginID, RouteID: o.RouteID, Waiting: o.Waiting}
 		if o.ErrorCode != 0 {
 			outcome.Err = errcode.Code(o.ErrorCode).New(o.SafeMessage)
 		}

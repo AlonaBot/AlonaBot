@@ -7,6 +7,6 @@ import alonabotgen0 "github.com/AlonaBot/AlonaBot/sdk"
 func init() {
 	alonabotgen0.UseGeneratedAdapter((*loopback)(nil), alonabotgen0.Generated{
 		Manifest:            []byte("id: alonabot_adapter_devbot\nname: Devbot Loopback\nversion: 0.1.0\nauthor: AlonaBot\nsource: github.com/AlonaBot/AlonaBot\nrole: adapter\nadapter_id: devloop\n"),
-		AdapterConfigSchema: []byte("{\"$version\":1}"),
+		AdapterConfigSchema: []byte("{\"$version\":1,\"output\":{\"type\":\"string\",\"description\":\"Absolute path for the last sent text\",\"default\":\"\"}}"),
 	})
 }
