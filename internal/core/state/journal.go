@@ -76,7 +76,7 @@ func (s *Store) CreateJournal(ctx context.Context, record Journal) error {
 		return journalPrecondition("journal requires an operation, plugin, generation and started phase")
 	}
 	switch record.Kind {
-	case "first_install", "reload", "update":
+	case "first_install", "reload", "update", "rollback":
 	default:
 		return journalPrecondition("invalid journal kind")
 	}
