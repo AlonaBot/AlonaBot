@@ -9,12 +9,12 @@
 | goal-5 | T-03.4 | 官方 Telegram Adapter 的接收 | T-03.3 | 已完成（PR #39） |
 | goal-50 | T-03.7 | 官方 Telegram Adapter 的发送计划与回执 | T-03.4 | 已完成 |
 | goal-89 | T-03.11 | 官方 Telegram Adapter 的平台权限 | T-04.6 | 已完成（PR #106） |
-| goal-111 | T-03.20 | 官方 Telegram Adapter 的媒体与新增片段 | T-03.13、T-03.14 | 待派发 |
-| goal-112 | T-03.21 | 官方 Telegram Adapter 的平台动作与撤回 | T-03.11、T-03.15、T-03.16、T-03.20 | 等待前置（T-03.20） |
-| goal-113 | T-03.22 | 官方 Telegram Adapter 的命令菜单 | T-03.17 | 待派发 |
+| goal-111 | T-03.20 | 官方 Telegram Adapter 的媒体与新增片段 | T-03.13、T-03.14、T-04.16 | 等待前置（T-04.16） |
+| goal-112 | T-03.21 | 官方 Telegram Adapter 的平台动作与撤回 | T-03.11、T-03.15、T-03.16、T-03.20、T-04.16 | 等待前置（T-03.20、T-04.16） |
+| goal-113 | T-03.22 | 官方 Telegram Adapter 的命令菜单 | T-03.17、T-04.16 | 等待前置（T-04.16） |
 | goal-117 | T-03.23 | 官方 Telegram Adapter 的代理模式与话题判定 | T-03.4 | 已完成（PR #125） |
-| goal-132 | T-03.26 | 官方 Telegram Adapter 填写 chat_title | T-03.4、T-03.25 | 待派发 |
-| goal-137 | T-03.27 | 官方 Telegram Adapter 的服务消息 | T-03.23 | 待派发 |
+| goal-132 | T-03.26 | 官方 Telegram Adapter 填写 chat_title | T-03.4、T-03.25、T-04.16 | 等待前置（T-04.16） |
+| goal-137 | T-03.27 | 官方 Telegram Adapter 的服务消息 | T-03.23、T-04.16 | 等待前置（T-04.16） |
 
 ## 第 5 波
 
@@ -209,7 +209,7 @@
 
 ### goal-137 · T-03.27 官方 Telegram Adapter 的服务消息
 
-状态：待派发。前置 T-03.23（[PR #125](https://github.com/AlonaBot/AlonaBot/pull/125)，合并提交 `f3af986`）已合并。2026-11-11 按 D-133 新增，接口与测试段按 main（`db6317a`）的代码写出：`instance.normalize` 把 message、channel_post 与两种 edited 都交给 `messageEvent`，带服务字段的 Message 因此成为 chain 为空的 message.created；`Descriptor` 只声明权限，没有 `Events`；Core 的 `internal/core/adapter/remote` 已按声明的 Schema 校验扩展事件。`inbound.go` 与 goal-111、goal-132 共用，处理方式见执行顺序 §3。
+状态：等待前置（T-04.16）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：待派发。前置 T-03.23（[PR #125](https://github.com/AlonaBot/AlonaBot/pull/125)，合并提交 `f3af986`）已合并。2026-11-11 按 D-133 新增，接口与测试段按 main（`db6317a`）的代码写出：`instance.normalize` 把 message、channel_post 与两种 edited 都交给 `messageEvent`，带服务字段的 Message 因此成为 chain 为空的 message.created；`Descriptor` 只声明权限，没有 `Events`；Core 的 `internal/core/adapter/remote` 已按声明的 Schema 校验扩展事件。`inbound.go` 与 goal-111、goal-132 共用，处理方式见执行顺序 §3。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-137（切片 T-03.27：官方 Telegram Adapter 的服务消息）。goal 目录 goal-137，分支 goal-137，worktree .worktrees/goal-137，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -313,7 +313,7 @@
 
 ### goal-111 · T-03.20 官方 Telegram Adapter 的媒体与新增片段
 
-状态：待派发；暂不派发（维护者指示只改写语句）。直接前置 T-03.13（PR #148，cf74fa9）、T-03.14（PR #143，15682e8）均已合并。2026-11-13 按 main 0af1255 重新核对。审查者补齐，待维护者确认：采用流式上传并隔离模拟端内存；file_base_url 的动态缺省在 Start 推导。按 DECISIONS 2026-11-13 变更记录，Telegram 对 Core 给出的 platform_file（同实例 incoming_ref）的发送消费已从本切片扣除，由 goal-9（T-03.10）以 renderMedia 最小分支交付。
+状态：等待前置（T-04.16）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：待派发；暂不派发（维护者指示只改写语句）。直接前置 T-03.13（PR #148，cf74fa9）、T-03.14（PR #143，15682e8）均已合并。2026-11-13 按 main 0af1255 重新核对。审查者补齐，待维护者确认：采用流式上传并隔离模拟端内存；file_base_url 的动态缺省在 Start 推导。按 DECISIONS 2026-11-13 变更记录，Telegram 对 Core 给出的 platform_file（同实例 incoming_ref）的发送消费已从本切片扣除，由 goal-9（T-03.10）以 renderMedia 最小分支交付。
 
 - **需维护者决定：MediaRef MIME 的传递接口。** MESSAGE-MODEL §6.4/D-99 已要求按 MIME 选择 sendAnimation，但当前媒体来源仅传 token。建议先由 Core/SDK 的媒体所有者补齐「Core 从已校验对象取得 MIME 并随 Core→Adapter 来源传递」的最小协议前置；新增字段及具体编号须有明确契约授权，随后同步本 goal 的范围、接口、前置与 V-97 验收。当前语句保持 proto 原状，完整切片的派发与 MediaRef GIF 验收等待该决定；不撤销 D-99。
 
@@ -369,7 +369,7 @@
 
 ### goal-112 · T-03.21 官方 Telegram Adapter 的平台动作与撤回
 
-状态：等待前置（T-03.20）；暂不派发（维护者指示只改写语句）。原前置 T-03.11（PR #106，3913d5a）、T-03.15（PR #146，ab5f8fb）、T-03.16（PR #144，707b74c）均已合并。2026-11-13 按 main 0af1255 重新核对。新增 T-03.20（goal-111）为直接前置：DraftStream 的 c.IsPrivate() 使用事件 ChatType，当前 Telegram 尚未填写它。以下裁决均记为「审查者补齐，待维护者确认」：保留单次 100 个 ID 上限；action 使用现成 sdk/message、sdk/errcode 公共类型；结果常用字段类型化、完整 JSON 保留；管理员缓存采用同一同步和失效代次。
+状态：等待前置（T-03.20、T-04.16）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：等待前置（T-03.20）；暂不派发（维护者指示只改写语句）。原前置 T-03.11（PR #106，3913d5a）、T-03.15（PR #146，ab5f8fb）、T-03.16（PR #144，707b74c）均已合并。2026-11-13 按 main 0af1255 重新核对。新增 T-03.20（goal-111）为直接前置：DraftStream 的 c.IsPrivate() 使用事件 ChatType，当前 Telegram 尚未填写它。以下裁决均记为「审查者补齐，待维护者确认」：保留单次 100 个 ID 上限；action 使用现成 sdk/message、sdk/errcode 公共类型；结果常用字段类型化、完整 JSON 保留；管理员缓存采用同一同步和失效代次。
 
 - **需维护者决定：Telegram Bot API 的原文基线及候选动作输入范围。** 本环境的网络和浏览器入口均未取得可用官方正文，详细证据见 adapters-decisions.md。当前 SendMessageDraftParams、ChatPermissions、MessageEntity/ReactionType 的候选字段未完成官方原文复核。建议按选定官方版本保留私聊限定、冻结下列最小输入字段并保留完整结果 Raw；审查者取得原文后逐字段核对和回写，维护者确认真实差异涉及的范围。原文齐备前保持本切片暂不派发，不把候选字段记成已验证的平台契约。
 
@@ -465,7 +465,7 @@
 
 ### goal-113 · T-03.22 官方 Telegram Adapter 的命令菜单
 
-状态：待派发；暂不派发（维护者指示只改写语句）。前置 T-03.17（PR #150，8eb7846）已合并。2026-11-13 按 main 0af1255 重新核对。以下裁决均记为「审查者补齐，待维护者确认」：主语言键优先、否则完整 locale 字典序选一个菜单语言；撤销语言用 deleteMyCommands；有效命令超 100 条或说明为空在请求前拒绝；诊断保留、平台调用按成功快照去重。
+状态：等待前置（T-04.16）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：待派发；暂不派发（维护者指示只改写语句）。前置 T-03.17（PR #150，8eb7846）已合并。2026-11-13 按 main 0af1255 重新核对。以下裁决均记为「审查者补齐，待维护者确认」：主语言键优先、否则完整 locale 字典序选一个菜单语言；撤销语言用 deleteMyCommands；有效命令超 100 条或说明为空在请求前拒绝；诊断保留、平台调用按成功快照去重。
 
 - **需维护者决定：与 goal-112 共用的 Bot API 原文版本基线。** 本环境未取得可用官方正文，100 条、说明 1～256、两字母语言码和 deleteMyCommands 的平台语义须由审查者据选定版本复核后回写。当前方案已落入正文供审阅，真实平台差异涉及已确认决策时交维护者裁决，原文复核完成前保持暂不派发。
 
@@ -519,7 +519,7 @@
 
 ### goal-132 · T-03.26 官方 Telegram Adapter 填写 chat_title
 
-状态：待派发。暂不派发（维护者指示只改写语句）。直接前置 T-03.4（goal-5，PR #39，合并提交 `604dc65`）、T-03.25（goal-131，PR #166，合并提交 `6f72fc8`）均已合并。2026-11-13 按维护者指定的 main `9efee73` 只读副本，用 `rg` 核对定义、调用者与既有集成测试；`message.Event`、`adapter.Core`、`telegramtest.Server.Calls` 另经离线 `go doc` 核对输出。以下补齐方案均为「审查者补齐，待维护者确认」。
+状态：等待前置（T-04.16）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：待派发。暂不派发（维护者指示只改写语句）。直接前置 T-03.4（goal-5，PR #39，合并提交 `604dc65`）、T-03.25（goal-131，PR #166，合并提交 `6f72fc8`）均已合并。2026-11-13 按维护者指定的 main `9efee73` 只读副本，用 `rg` 核对定义、调用者与既有集成测试；`message.Event`、`adapter.Core`、`telegramtest.Server.Calls` 另经离线 `go doc` 核对输出。以下补齐方案均为「审查者补齐，待维护者确认」。
 
 按 main 核对：
 

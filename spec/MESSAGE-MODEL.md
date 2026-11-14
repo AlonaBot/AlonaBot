@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | Event | event_id、event_type、source_kind、occurred_at_unix_ms、adapter_id?、adapter_instance_id?、account_id?、target?、chat_type、chat_title?、actor?、message?、event_payload、capabilities、platform_payload? | event_id 由 Core 在入站标准化时产生；source_kind 为 ADAPTER/SCHEDULER，Core 为实例状态生成的 bot.online/bot.offline 也记为 ADAPTER。平台字段只对相应来源存在；原平台事件标识另存 source_event_id。chat_type 是事件所在会话的类型（PRIVATE、GROUP、CHANNEL，平台未给出时 UNSPECIFIED，D-100），由 Adapter 在事件带 target 时填写，没有 target 的事件必须为 UNSPECIFIED；它不属于 Target，不参与 Target 的比较与准入，出站时 Adapter 不读取。chat_title 是该会话的显示名（D-130），平台给出时由 Adapter 填写，没有 target 的事件不带；它同样不属于 Target，只供 Core 记录聊天目录（CONTRACTS §8），SDK 不提供读取方法 |
 | Actor | external_user_id、adapter_instance_id、display_name?、locale?、permissions | permissions 是 Core 按 CONTRACTS §2.3 计算的权限名集合，Adapter 只给出本会话的平台权限；来源必须为可信 Adapter 元数据及 Core policy；用户身份以 adapter_id 为作用域（D-105）：同一 Adapter 的各实例给出的同一 external_user_id 必须是同一个平台用户，平台按机器人分配用户 ID 时由 Adapter 把区分范围写进 external_user_id；插件/外部 webhook 的 is_admin 不是身份依据。locale 是平台给出的用户语言（规范化的 BCP 47 标签），平台未提供时 absent，用于 CONTRACTS §5.4 的文案选择 |
-| Target | adapter_id、adapter_instance_id、account_id、chat_id、thread_id? | Adapter 验证 account 与实例绑定；默认 Target 仅来自当前实际入站事件；主动任务须显式 To，按 CONTRACTS §8 的 allowed_adapter_instances 与原事件回复范围准入。插件 API 把 Target 写成会话字符串 `<adapter_id>:<chat_id>`，话题为 `<adapter_id>:<chat_id>#<thread_id>`，chat_id 与 thread_id 中的 `%`、`#` 写作 `%25`、`%23`；实例是可选参数，account_id 由 Core 按实例补齐（CONTRACTS §8，D-102） |
+| Target | adapter_id、adapter_instance_id、account_id、chat_id、thread_id? | Adapter 验证 account 与实例绑定；默认 Target 仅来自当前实际入站事件；主动任务须显式 To，按 CONTRACTS §8 的 allowed_adapter_instances 与原事件回复范围准入。插件 API 把 Target 写成会话字符串 `<adapter_id>:<chat_id>`，话题为 `<adapter_id>:<chat_id>#<thread_id>`，chat_id 与 thread_id 中的 `%`、`#` 写作 `%25`、`%23`；实例是可选参数，account_id 由 Core 按实例补齐（CONTRACTS §8，D-102）。Go SDK 中会话字符串（sid）是 `string`，显式目标作为参数传入（D-144） |
 | Capability | name、version、supported | 使用 Adapter 明确公布的能力；未知能力不推定支持 |
 
 命令权限按权限名判定（CONTRACTS §2.3，D-69）：`user` 指具有可信 Actor 的用户；`admin` 指 Core 配置的、以用户字符串 `<adapter_id>:<external_user_id>` 标识的机器人管理员，同一 Adapter 的全部实例通用（D-105）；`chat_admin` 与 Adapter 声明的平台权限（例如 `onebot11.group_owner`）只在该会话有效，不因此取得 Core 管理、插件安装或其他会话权限。Core 全局禁止规则始终生效，动态策略在每次派发前重新检查。
@@ -54,7 +54,7 @@ MessageChain 是一次**逻辑 Send** 的有序 Segment 列表。Segment JSON �
 
 `entities` 使用 `type、offset_utf16、length_utf16` 及类型需要的 url/language/external_user_id；偏移相对于本 text，必须落在完整字符边界，不能截断代理对。首发公共类型为 bold/italic/underline/strikethrough/spoiler/code/pre/text_link/text_mention；不支持的类型明确拒绝。SDK 从 Go 字符串创建实体时须转换 UTF-8/rune 索引，不能直接把字节索引交给 Telegram。
 
-`inline_base64` 是插件直接给出的标准 base64 数据，解码后 1 B～1 MiB；Adapter 按 D-88 原样或解码后交给平台，不把其他来源转成它。`incoming_ref` 表示尚未取件的入站对象授权，与已校验的 MediaRef 分开；描述包含 token、声明 size/MIME 与 readability。插件经 `sdk.OpenMedia` 读取（D-109），按需取件、读取和共享缓存的规则见 CONTRACTS §1.4。入站元数据不泄漏 Bot Token 或任意宿主路径。
+`inline_base64` 是插件直接给出的标准 base64 数据，解码后 1 B～1 MiB；Adapter 按 D-88 原样或解码后交给平台，不把其他来源转成它。`incoming_ref` 表示尚未取件的入站对象授权，与已校验的 MediaRef 分开；描述包含 token、声明 size/MIME 与 readability。插件经 `media.Open` 读取（D-109、D-146），按需取件、读取和共享缓存的规则见 CONTRACTS §1.4。入站元数据不泄漏 Bot Token 或任意宿主路径。
 
 Core/Adapter 先验证整个 Chain 的结构、顺序、片段数、媒体租约及目标能力，再发出第一条平台请求。结构错误返回 INVALID_ARGUMENT；合法但平台无法表示返回 UNSUPPORTED；不能先发送已知可用前半段，再因已知不支持的末尾丢失内容。
 
@@ -109,7 +109,7 @@ Context 的传播/默认 Target/用户调用链仅在本次调用期间有效；
 
 Edit（CONTRACTS §8）同样返回 SendResult：part_results 恰有一项，status 只取 ACCEPTED / REJECTED / UNKNOWN，成功时 platform_message_ids 与 primary_platform_message_id 为被编辑消息的 ID。Edit 失败不改为发送新消息。
 
-插件 API 用消息句柄指向一条消息（D-104）：`<会话字符串>/<platform_message_id>[@<实例名>]`，platform_message_id 中的 `%`、`/`、`@` 写作 `%25`、`%2F`、`%40`。SendResult 与事件给出带实例的句柄；编辑、撤回、引用片段与 Telegram 中指向某条消息的平台动作只收句柄，省略实例时 Core 按 CONTRACTS §8 选择。协议不变，SDK 把句柄拆成 Target 与 platform_message_id。
+插件 API 用消息句柄指向一条消息（D-104）：`<会话字符串>/<platform_message_id>[@<实例名>]`，platform_message_id 中的 `%`、`/`、`@` 写作 `%25`、`%2F`、`%40`。SendResult 与事件给出带实例的句柄；编辑、撤回、引用片段与 Telegram 中指向某条消息的平台动作只收句柄，省略实例时 Core 按 CONTRACTS §8 选择。协议不变，SDK 把句柄拆成 Target 与 platform_message_id；Go SDK 中句柄是 `string`，由 `message.Ref` 与 `message.ParseRef` 处理转义（D-144）。
 
 ACCEPTED 只表示平台 API 确认接受，不保证用户阅读。跨多条平台请求无事务性；发送中的媒体租约保护到消费完成/失败/超时，不能因原插件退出就提前删除平台仍在读取的文件。
 

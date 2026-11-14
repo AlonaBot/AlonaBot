@@ -17,12 +17,12 @@
 | T-03.4 | goal-5 | 官方 Telegram Adapter 的接收：Bot API 客户端、本地 Bot API 模拟服务、getMe、webhook 冲突、long polling、逐条交付与游标、7 天轮次重建、401/409、媒体组、Actor.locale、`to_me`、实例代理 | T-03 步骤 4 | T-03.3 | V-45、V-54 的 locale 分项，V-62 的 Bot Token URL 分项 | 已完成（PR #39；TEST-MATRIX §3.2） |
 | T-03.7 | goal-50 | 官方 Telegram Adapter 的发送计划与回执：Chain 完整预检、物理操作计划、UTF-16 实体、相册/引用/按钮渲染、PartResult 汇总 | T-03 步骤 6（发送） | T-03.4 | V-08、V-35 | 已完成（[PR #108](https://github.com/AlonaBot/AlonaBot/pull/108)） |
 | T-03.11 | goal-89 | 官方 Telegram Adapter 的平台权限：`telegram.chat_owner`/`telegram.chat_admin` 的声明、`getChatAdministrators` 的会话缓存与作废、获取失败时不带权限，`adapters/telegram/perm` 常量包 | T-03 步骤 9 | T-04.6 | V-85 的 Telegram 分项 | 已完成（[PR #106](https://github.com/AlonaBot/AlonaBot/pull/106)） |
-| T-03.20 | goal-111 | 官方 Telegram Adapter 的媒体与新增片段：按来源传递与流式 multipart、`platform_file` 复用 file_id、voice 的收发、动图、贴纸与 video_note、url 按钮、`file_base_url`、入站事件的 chat_type | T-03 步骤 17 | T-03.13、T-03.14 | V-89、V-90、V-98 的 Telegram 分项，V-97 | 未开始 |
-| T-03.21 | goal-112 | 官方 Telegram Adapter 的平台动作与撤回：动作声明（含 sendChatAction、setMessageReaction、sendMessageDraft）与 `adapters/telegram/action` 的带类型函数（指向消息的动作收消息句柄，D-104）及输入状态、草稿两个辅助函数，deleteMessages | T-03 步骤 18 | T-03.11、T-03.15、T-03.16、T-03.20 | V-91、V-92、V-94 的 Telegram 分项、V-102 的动作分项 | 未开始 |
-| T-03.22 | goal-113 | 官方 Telegram Adapter 的命令菜单：setMyCommands 同步 | T-03 步骤 19 | T-03.17 | V-93 的 Telegram 分项 | 未开始 |
+| T-03.20 | goal-111 | 官方 Telegram Adapter 的媒体与新增片段：按来源传递与流式 multipart、`platform_file` 复用 file_id、voice 的收发、动图、贴纸与 video_note、url 按钮、`file_base_url`、入站事件的 chat_type | T-03 步骤 17 | T-03.13、T-03.14、T-04.16 | V-89、V-90、V-98 的 Telegram 分项，V-97 | 未开始 |
+| T-03.21 | goal-112 | 官方 Telegram Adapter 的平台动作与撤回：动作声明（含 sendChatAction、setMessageReaction、sendMessageDraft）与 `adapters/telegram/action` 的带类型函数（指向消息的动作收消息句柄，D-104）及输入状态、草稿两个辅助函数，deleteMessages | T-03 步骤 18 | T-03.11、T-03.15、T-03.16、T-03.20、T-04.16 | V-91、V-92、V-94 的 Telegram 分项、V-102 的动作分项 | 未开始 |
+| T-03.22 | goal-113 | 官方 Telegram Adapter 的命令菜单：setMyCommands 同步 | T-03 步骤 19 | T-03.17、T-04.16 | V-93 的 Telegram 分项 | 未开始 |
 | T-03.23 | goal-117 | 官方 Telegram Adapter 的代理模式与话题判定：实例配置 `proxy_mode`（none 缺省、core、custom），thread_id 只认 `is_topic_message` | T-03 步骤 20 | T-03.4 | V-99、V-100 | 已完成（PR #125；TEST-MATRIX §3.2） |
-| T-03.26 | goal-132 | 官方 Telegram Adapter 填写 `chat_title`：群、超级群与频道取 title，私聊取对方的姓名（D-130） | T-03 步骤 23 | T-03.4、T-03.25 | V-117 的 Telegram 分项 | 未开始 |
-| T-03.27 | goal-137 | 官方 Telegram Adapter 的服务消息：话题、置顶、改名与升级映射为扩展事件，成员类与其他服务消息不交付（D-133） | T-03 步骤 24 | T-03.23 | V-119 | 未开始 |
+| T-03.26 | goal-132 | 官方 Telegram Adapter 填写 `chat_title`：群、超级群与频道取 title，私聊取对方的姓名（D-130） | T-03 步骤 23 | T-03.4、T-03.25、T-04.16 | V-117 的 Telegram 分项 | 未开始 |
+| T-03.27 | goal-137 | 官方 Telegram Adapter 的服务消息：话题、置顶、改名与升级映射为扩展事件，成员类与其他服务消息不交付（D-133） | T-03 步骤 24 | T-03.23、T-04.16 | V-119 | 未开始 |
 
 ## 3. 工作包
 

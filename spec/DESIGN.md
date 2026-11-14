@@ -52,7 +52,7 @@ TCP 为默认，Core 持有 loopback 端口 0 分配的 Listener；stdio 可选�
 
 一个插件包导出一个 `func New() *sdk.Plugin`（D-114）：`sdk.NewPlugin()` 创建插件对象，路由、生命周期回调（`p.OnStart`、`p.OnReady`、`p.OnStop`）、配置回调（`p.OnConfigLoad`）与数据库迁移都在 `New()` 返回之前登记在它上面，回调的签名由编译器检查，没有登记的回调不执行。配置由包内的 `config_schema.json` 声明，不定义 Go 配置类型（D-76），经 `p.Config()` 或 Handler 内的 `c.Config()` 读取。元数据 ID 只来自 plugin.yaml。插件自己的状态放在自己的类型中，以方法值注册；包级函数也这样注册，没有第二种写法（D-79），不引入自动 DI，也不在包级变量或 `init` 中注册。`sdk.Run` 开始后注册描述固定，之后再调用注册方法是编程错误。
 
-`alonabot build` 只处理当前模块的目标构建包，遵守 Go build tags/GOOS/GOARCH，排除外部依赖、vendor 和测试文件；生成的 Go 代码嵌入 manifest、配置 schema、`i18n/` 与 Service Schema，并生成正式入口；不在运行时从磁盘扫描任意包。单次 Session 注册描述固定，Core 动态修改权限/开关，不重建插件对象。
+`alonabot build` 只处理当前模块的目标构建包，遵守 Go build tags/GOOS/GOARCH，排除外部依赖、vendor 和测试文件；生成的 Go 代码嵌入 manifest、配置 schema、`i18n/` 与 Service Schema，并生成正式入口；库模式的 main 包另外扫描其依赖中的组件入口包（CONTRACTS §15.5）。正式运行不从磁盘扫描任意包，只有 plugintest 在 `go test` 中扫描被测组件的源码。作者工程中没有生成文件，作者代码也不引用任何生成内容：CLI 构建把按入口包登记资源的代码经 overlay 编入，`sdk.NewPlugin()` 只记录调用方所在的包，启动组件时才取得资源（D-145）。单次 Session 注册描述固定，Core 动态修改权限/开关，不重建插件对象。
 
 以下是接口用法示意，需随 SDK 实现编译验证：
 
@@ -109,9 +109,9 @@ func (r *RSS) Poke(c *sdk.Context, e *obevent.PokePayload) error {
 }
 ```
 
-注册采用链式构建（D-70、D-112）：命令、文本匹配、事件、Service、Event Bus 订阅、Hook、定时任务与 HTTP 路由都由插件对象（或子插件）的方法开始，`Handle` 结束；漏写 `Handle` 是注册错误。带类型参数的 `sdk.Serve`、`sdk.Subscribe` 与 `sdk.OnButton` 是包级函数，第一个参数收 `sdk.Registrar`，即插件对象或子插件；Service 与 Event Bus 事件先用 `sdk.JSON`、`sdk.Proto`、`sdk.BusEvent` 声明成带类型的值，再注册或调用（§G，D-122）。命令参数名缺省取 Handler 的参数名，由生成器记录（Go 运行时取不到参数名），只在需要另起名字时写 `Args`；订阅的路由 ID 缺省为事件名。分组上设置的权限由组内路由继承。Permission 是不可变的值，用 `Or` 组合，满足其中任一即可（D-69）；Rule 是在 SDK 内执行的 Go 函数，`Rule(...)` 多个时全部满足，`sdk.Any` 表示任一。事件常量带 payload 的 Go 类型，`Collect` 核对 Handler 的参数类型；Adapter 的常量包（例如 `adapters/onebot11/perm`、`adapters/onebot11/event`）只含常量与数据类型，插件导入它们不链接 Adapter 的运行时。插件 API 不暴露生成的 pb 类型，Message、会话字符串与消息句柄（D-102、D-104）、Actor、SendResult 与错误码由 SDK 自己定义。
+注册采用链式构建（D-70、D-112）：命令、文本匹配、事件、Service、Event Bus 订阅、Hook、定时任务与 HTTP 路由都由插件对象（或子插件）的方法开始，`Handle` 结束；漏写 `Handle` 是注册错误。带类型参数的 `service.Serve`、`bus.Subscribe`、`button.On` 与 `task.On` 是各子包的包级函数，第一个参数收 `sdk.Registrar`，即插件对象或子插件；Service 与 Event Bus 事件先用 `service.JSON`、`service.Proto`、`bus.Define` 声明成带类型的值，再注册或调用（§G，D-122）。根包只放插件对象、Handler 上下文、注册 builder、权限与运行入口；动态任务、Service、Event Bus、按钮、媒体、会话历史、工具、平台动作与选项来源分别在 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action` 与 `sdk/options` 中（D-146）。命令参数名缺省取 Handler 的参数名，由生成器记录（Go 运行时取不到参数名），只在需要另起名字时写 `Args`；订阅的路由 ID 缺省为事件名。分组上设置的权限由组内路由继承。Permission 是不可变的值，用 `Or` 组合，满足其中任一即可（D-69）；Rule 是在 SDK 内执行的 Go 函数，`Rule(...)` 多个时全部满足，`sdk.Any` 表示任一。事件常量带 payload 的 Go 类型，`Collect` 核对 Handler 的参数类型；Adapter 的常量包（例如 `adapters/onebot11/perm`、`adapters/onebot11/event`）只含常量与数据类型，插件导入它们不链接 Adapter 的运行时。插件 API 不暴露生成的 pb 类型，Message、Actor、SendResult 与错误码由 SDK 自己定义；会话字符串、消息句柄与用户字符串（D-102、D-104、D-105）都是 `string`（D-144）。
 
-两类 Handler 保留：返回 `(Content,error)` 的自动回复型成功时由 Core 在 Handler 返回后发一次非空内容，Content 是 Chain 或单个片段，每种片段都有构造函数（D-108）；两种 Handler 都可以在内部多次 `c.Send`（D-70）；只回一段文本时用 `c.Reply(text)`，它不返回发送结果（D-118）。包级 `sdk.Send` 只供没有 Handler 上下文的后台任务使用，只发一段文本时用 `sdk.SendText(ctx, to, text)`（D-118）。触发者与所在会话用 `c.User()`、`c.Session()` 取得，分别是用户字符串 `<adapter_id>:<external_user_id>` 与会话字符串，可以原样保存和比较（D-120）。带错误码的错误用 `errcode.NotFound.New("…")` 构造、`errcode.Of(err)` 判断（D-123）。`c.StopPropagation()` 锁存传播结果，由 SDK 统一编码到 HandlerOutcome；不会给开发者增加第三套 Handler 签名。
+两类 Handler 保留：返回 `(Content,error)` 的自动回复型成功时由 Core 在 Handler 返回后发一次非空内容，Content 是 Chain 或单个片段，每种片段都有构造函数（D-108）；两种 Handler 都可以在内部多次 `c.Send`（D-70）；只回一段文本时用 `c.Reply(text)`，它不返回发送结果（D-118）。Handler 发往当前事件以外的会话时用 `c.SendTo(sid, content)`；包级 `sdk.Send(ctx, sid, content)` 只供没有 Handler 上下文的后台任务使用，只发一段文本时用 `sdk.SendText(ctx, sid, text)`（D-118、D-144）。触发者与所在会话用 `c.User()`、`c.Session()` 取得，分别是用户字符串 `<adapter_id>:<external_user_id>` 与会话字符串，都是 `string`，可以原样保存和比较（D-120、D-144）。带错误码的错误用 `errcode.NotFound.New("…")` 构造、`errcode.Of(err)` 判断（D-123）。`c.StopPropagation()` 锁存传播结果，由 SDK 统一编码到 HandlerOutcome；不会给开发者增加第三套 Handler 签名。
 
 命令参数有两种接收方式（D-115）。常用的是位置参数：`*sdk.Context` 之后逐个写出，名字取参数名，可选、默认值与 raw 尾部用 `Optional`、`RawTail` 声明。参数较多时可以只收一个结构体：字段按声明顺序对应参数位置，名字取字段名（开头的大写字母段转为小写）或 `arg` 标签，指针字段与带 `default` 标签的字段是可选参数，`arg:",raw"` 是末位的 raw 尾部；此时名字、可选与默认值只有结构体一个来源，不能再写 `Args`、`Optional` 与 `RawTail`。两种方式不混用，生成的注册描述相同，分词、类型转换与 usage 仍由 Core 完成。结构体由 SDK 用反射绑定，字段类型、顺序与标签都在 `Collect` 时检查，问题在启动时报告，不会留到第一条消息。
 
@@ -140,7 +140,7 @@ func (q *Quiz) Start(c *sdk.Context) error {
 
 MessageChain 表示一次逻辑 Send；多条独立推送应多次 Send。一个逻辑 Send 可产生多个平台消息 ID，并用 ACCEPTED/PARTIAL/REJECTED/UNKNOWN 和逐部分结果描述；错误返回不得丢掉已经确认的 ID。整条 Chain 在第一次平台调用前预检，失败后不继续发送剩余部分。
 
-Target 明确 Adapter、实例、账号、聊天和可选话题；插件 API 只写会话字符串 `<adapter_id>:<chat_id>[#<thread_id>]`，机器人用可选的 `sdk.Via` 指定，其余字段由 Core 补齐（D-102）。没有真实入站默认目标时必须显式 To。原事件 Target 的回复范围与主动/跨实例的 allowed_adapter_instances 按 CONTRACTS §8 准入，不以 User/Admin 代替发信许可。平台 ID 在公共 JSON 中用字符串。系统任务没有虚构的账号/Actor。Text/Image/Video/File/Mention/Reference/Buttons/Forward 的可表达组合和 Telegram 映射见 MESSAGE-MODEL。
+Target 明确 Adapter、实例、账号、聊天和可选话题；插件 API 只写会话字符串 `<adapter_id>:<chat_id>[#<thread_id>]`，机器人用可选的 `sdk.Via` 指定，其余字段由 Core 补齐（D-102）。没有真实入站默认目标时必须给出 sid（`c.SendTo` 或 `sdk.Send`，D-144）。原事件 Target 的回复范围与主动/跨实例的 allowed_adapter_instances 按 CONTRACTS §8 准入，不以 User/Admin 代替发信许可。平台 ID 在公共 JSON 中用字符串。系统任务没有虚构的账号/Actor。Text/Image/Video/File/Mention/Reference/Buttons/Forward 的可表达组合和 Telegram 映射见 MESSAGE-MODEL。
 
 普通命令按完整 token 路径最长匹配，再以 priority/plugin_id/route_id 选稳定胜出者；已识别的禁用、无权限、参数错误命令不回落 Regex/Raw/短路径。没有普通命令才按文本匹配（Regex、keyword、startswith、endswith、fullmatch）→Raw 处理，支持停止传播。跨插件同名命令在诊断中显示遮蔽关系，不由启动顺序决定。
 
@@ -164,15 +164,15 @@ Service 与 Event Bus 事件各用一个带类型的声明表示，名字与 Go 
 
 ```go
 // 提供方包 weather
-var Search = sdk.JSON[SearchRequest, SearchResponse]("weather/search")
-var Updated = sdk.BusEvent[UpdatedPayload]("weather/updated")
+var Search = service.JSON[SearchRequest, SearchResponse]("weather/search")
+var Updated = bus.Define[UpdatedPayload]("weather/updated")
 
-sdk.Serve(p, Search).Access(sdk.AccessPublic).Handle(w.search)
+service.Serve(p, Search).Access(service.AccessPublic).Handle(w.search)
 Updated.Publish(ctx, UpdatedPayload{City: city})
 
 // 调用方
 resp, err := weather.Search.Call(c.Context(), weather.SearchRequest{City: city})
-sdk.Subscribe(p, weather.Updated).Handle(r.onUpdated)
+bus.Subscribe(p, weather.Updated).Handle(r.onUpdated)
 ```
 
 通过 Core 动态调用其他插件命令/事件 Router 不在 v0.1 范围内（Q-15）；v0.1 不暴露该执行 API，只保留稳定 route ID。Go Modules 用于编译期复用，不能当作跨进程 Go 对象调用。
@@ -183,22 +183,22 @@ sdk.Subscribe(p, weather.Updated).Handle(r.onUpdated)
 
 每次执行有独立 run_id、job deadline 与 lifetime context，不被 30s 普通 RPC 默认值截断。任务超时后若插件未确认协作结束，不释放同 job 的运行槽并再次重叠启动；恢复策略见运行时契约。定时身份是显式 job/plugin scope，不获得默认 Admin。
 
-定时任务有两种（D-124）。静态任务在 `New()` 中用 `p.Every`、`p.Cron` 声明，随插件一直存在，可以在运行时暂停与恢复（`sdk.PauseJob`、`sdk.ResumeJob`，D-126）。动态任务在运行时增删：处理函数仍然静态注册，创建的是带参数的任务实例，由 Core 保存。
+定时任务有两种（D-124）。静态任务在 `New()` 中用 `p.Every`、`p.Cron` 声明，随插件一直存在，可以在运行时暂停与恢复（`task.Pause`、`task.Resume`，D-126、D-146）。动态任务在运行时增删：处理函数仍然静态注册，创建的是带参数的任务实例，由 Core 保存。
 
 ```go
 type RemindArgs struct {
-    Session message.Session
-    Text    string
+    SID  string // 会话字符串（D-144）
+    Text string
 }
 
-var Remind = sdk.Task[RemindArgs]("remind")
+var Remind = task.Define[RemindArgs]("remind")
 
-sdk.OnTask(p, Remind).Handle(func(c *sdk.Context, a RemindArgs) error {
-    return sdk.SendText(c.Context(), a.Session, a.Text)
+task.On(p, Remind).Handle(func(c *sdk.Context, a RemindArgs) error {
+    return sdk.SendText(c.Context(), a.SID, a.Text)
 })
 
 // 在命令 Handler 中创建、取消
-key, err := Remind.At(c.Context(), time.Now().Add(10*time.Minute), RemindArgs{Session: c.Session(), Text: text})
+key, err := Remind.At(c.Context(), time.Now().Add(10*time.Minute), RemindArgs{SID: c.Session(), Text: text})
 err = Remind.Cancel(c.Context(), key)
 ```
 
@@ -367,7 +367,7 @@ AlonaBot 同时面向直接使用机器人的用户和写插件的开发者（D-
 | 包含 | Core、官方 Telegram 与 OneBot 11 Adapter、Agent、WebUI 与预装插件；首次运行自动安装，默认只启用 help 与 WebUI，Adapter 在 `core_config.json` 写了实例时启用，Agent 由管理员按需启用（D-50、D-62、D-82） | 与部署相同的 Core 与已安装组件，外加当前工程（或给出的多个目录）中开发的组件 |
 | 组件进程 | 每个已启用的包一个独立进程（WebUI 没有进程） | 开发中的组件也是独立进程；改动源码后自动重新构建，只重启该组件 |
 
-开发者只写组件本身，不写 `main.go`：`alonabot build` 生成正式入口，`run` 每次启动前都会构建。开发时与生产时的行为只差安装来源（dev）与固定代次。热部署时 Core 常驻，源码改动后重新编译，只重启变化的组件，Adapter 连接、其他插件与按钮都不受影响；编译失败时旧版本继续运行；只改配置时不重新编译（CONTRACTS §15.4）。
+开发者只写组件本身，不写 `main.go`，也不写任何生成相关的代码（D-145）：`alonabot build` 生成正式入口，`run` 每次启动前都会构建。开发时与生产时的行为只差安装来源（dev）与固定代次。热部署时 Core 常驻，源码改动后重新编译，只重启变化的组件，Adapter 连接、其他插件与按钮都不受影响；编译失败时旧版本继续运行；只改配置时不重新编译（CONTRACTS §15.4）。
 
 Go 不能在进程内替换已加载的代码，所以热部署通过重启子进程实现。需要断点调试时把调试器附加到组件进程，或改用库模式：在自己的 Go 程序中调用 `alonabot.Run` 或 `alonabot.Start`，组件与 Core 同进程运行。库模式也用于把 Core 嵌入其他 Go 服务与插件测试套件（CONTRACTS §15.5、§17）。
 
