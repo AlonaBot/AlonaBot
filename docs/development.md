@@ -63,6 +63,29 @@ bin/alonabot admin add telegram:123456
 
 ## 开发运行与热部署
 
+先从仓库示例完成一次可见回复（以下使用 fish）：
+
+```fish
+go build -o bin/alonabot ./cmd/alonabot
+set -gx DEVBOT_DATA (mktemp -d)
+set -gx DEVBOT_OUTPUT (mktemp)
+cp examples/devbot/core_config.example.json $DEVBOT_DATA/core_config.json
+printf 'DEVBOT_DATA=%s\nDEVBOT_OUTPUT=%s\n' $DEVBOT_DATA $DEVBOT_OUTPUT
+bin/alonabot run examples/devbot/plugin examples/devbot/adapter --data-dir $DEVBOT_DATA --reload
+```
+
+另开终端，设置相同的 `DEVBOT_DATA`、`DEVBOT_OUTPUT`。终端首次启动的 token 在 stderr 显示一次；非终端启动可用 `bin/alonabot admin-token show --data-dir $DEVBOT_DATA` 读取 `admin_token`。令 `token` 为该值后：
+
+```fish
+curl --fail-with-body -X POST -H "Authorization: Bearer $token" \
+  'http://127.0.0.1:7650/plugins/alonabot_adapter_devbot/inject?instance=one&text=%2Fhello'
+cat $DEVBOT_OUTPUT
+```
+
+注入返回 204，异步发送后文件内容为 `Hello from devbot!`。完整实例 JSON、目录结构、认证、源码／翻译／配置改动与编译失败恢复操作见 [devbot README](../examples/devbot/README.md)。样例把 `adapters.devloop.package` 绑定到 `alonabot_adapter_devbot`，实例在 `instances.one`，命令前缀为 `/`。两个开发组件沿用真实 Deliver／Send 流水线。
+
+契约的创建入口是 `alonabot init [目录]`，生成可导入插件包、作者 manifest、schema、i18n 与忽略 `data/` 的 `.gitignore`；当前基线使用上述已有工程。`init` 与顶层 `build/check` 由 T-09.3 交付，实际 init 创建与模板比对登记「未运行，T-09.3 补证」。现阶段资源生成与检查使用下文的 `plugin generate/check`。
+
 在包含 `plugin.yaml` 的组件工程中运行 `alonabot run --reload`，或者明确给出一个或多个工程目录：
 
 ```sh
@@ -166,7 +189,9 @@ go generate ./examples/devbot/...
 go run ./examples/devbot -data-dir ./data
 ```
 
-组件以 source=dev 登记，代次固定为 `dev:<组件 ID>`；资源取自各组件包内生成并嵌入的副本。
+组件以 source=dev 登记，代次固定为 `dev:<组件 ID>`；资源取自各组件包内生成并嵌入的副本。`plugin.New()` 显式绑定 `sdk.Generated`，Adapter 身份与实例 schema 来自同一个可导入包。两个模式使用各自的 data_dir；按 [devbot 同进程调试步骤](../examples/devbot/README.md#同进程调试) 复制设置、重新生成后运行，即可使用相同私有注入路径观察回复。
+
+库模式更改源码或资源后重新生成并重启程序。未捕获的后台 panic 使整个进程非零退出且无有限重启；SDK Handler 边界内捕获的 panic 记录 stack 并返回 `INTERNAL`。同进程组件超过停止预算仍未退出时，`Wait` 返回错误；独立进程由 supervisor 隔离并有限恢复，两种模式的 SIGINT/SIGTERM 停止总预算缺省均为 `STOP_TOTAL=10s`。开发来源的 update、rollback、uninstall 返回 `FAILED_PRECONDITION`；WebUI/CLI 修改开发配置后写回并重启由 T-09.14 承接，手改配置的轮询行为见上节。
 
 ## Adapter 的 HTTP 路由
 
