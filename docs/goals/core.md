@@ -7227,7 +7227,7 @@ internal/core/state
 
 ### goal-45 · T-09.11 正式流程故障注入与 T-09 验收
 
-状态：等待前置（T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15）。语句中 goal-38～goal-44、goal-66、goal-84、goal-92～goal-94 提供的命令与 API 只写名字；合并后由审查者核对，再改为待派发。
+状态：等待前置（T-09.3、T-09.9、T-09.15）。T-09.7（PR #187，`864819e`）、T-09.10（PR #177）、T-09.12（PR #167）已合并；T-09.3（goal-38）执行中；T-09.9（goal-44）与 T-09.15（goal-94）属 WebUI 章节，未在本轮 core/agent 推进范围内派发，本切片因此阻塞，待两者合并后由审查者核对语句。语句中 goal-38～goal-44、goal-66、goal-84、goal-92～goal-94 提供的命令与 API 只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-45（切片 T-09.11：正式流程故障注入与 T-09 验收）。goal 目录 goal-45，分支 goal-45，worktree .worktrees/goal-45，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
