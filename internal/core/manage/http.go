@@ -24,6 +24,14 @@ func (e *ErrNeedsConfirm) Error() string {
 // Handler 将管理端点全部放在相同的 Bearer 或 Cookie/CSRF 认证之后。
 func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	mux := http.NewServeMux()
+	s.configRoutes(mux, auth)
+	s.accessRoutes(mux)
+	s.policyRoutes(mux)
+	s.optionRoutes(mux)
+	s.toolRoutes(mux)
+	s.settingsRoutes(mux)
+	s.instanceRoutes(mux)
+	s.conversationRoutes(mux)
 	s.logRoutes(mux)
 	mux.HandleFunc("GET /api/v1/core", s.coreInfo)
 	mux.HandleFunc("GET /api/v1/packages/{id}/icon", s.icon)
@@ -144,6 +152,9 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 		respond(w, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_NOT_FOUND, Message: "management endpoint not found"})
 	})
 	return auth.Require(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.deleteConversation(w, r) {
+			return
+		}
 		// ServeMux 会清理路径并重定向；在此之前拒绝原始的越界或非规范路径。
 		if !validStaticPath(strings.TrimPrefix(r.URL.Path, "/")) {
 			respond(w, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_NOT_FOUND, Message: "management endpoint not found"})
@@ -191,6 +202,12 @@ func respond(w http.ResponseWriter, result any, err error) {
 				status = http.StatusPreconditionFailed
 			case pb.ErrorCode_ERROR_CODE_UNSUPPORTED:
 				status = http.StatusNotImplemented
+			case pb.ErrorCode_ERROR_CODE_UNAVAILABLE:
+				status = http.StatusServiceUnavailable
+			}
+			var conflict *configConflict
+			if errors.As(err, &conflict) {
+				status = http.StatusConflict
 			}
 			result = struct {
 				Code    string `json:"code"`

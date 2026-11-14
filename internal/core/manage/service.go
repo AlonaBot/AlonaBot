@@ -1,7 +1,7 @@
-// Package manage 提供组件安装、生命周期、Adapter 实例、Core Admin 与日志的管理服务。
+// Package manage 提供组件生命周期、配置、权限、工具、会话与日志的管理服务。
 //
 // [Service] 共用 Core 的状态库、设置文件与策略；[Service.Handler] 经管理认证保护，
-// [Service.WebUI] 提供登录前可读取的静态页面。实例配置只写回设置文件，响应中只包含操作结果。
+// [Service.WebUI] 提供登录前可读取的静态页面。配置读取隐藏秘密，实例配置写回共享设置文件。
 // 管理、日志与静态组件语义见 CONTRACTS §7.5、§9.3、§14、§15.1。
 package manage
 
@@ -22,35 +22,43 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
+	"github.com/AlonaBot/AlonaBot/internal/core/options"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
+	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/core/tool"
 )
 
 // Options 绑定同一个 Core 的持久状态与运行登记。
 type Options struct {
-	Logs           *logging.Output                                               // 与 Core 共用的输出、缓冲与级别表。
-	Stopping       <-chan struct{}                                               // Core 开始停机时关闭，在 HTTP Shutdown 等待之前结束日志流。
-	NotifyLogLevel func(ctx context.Context, id string, level pb.LogLevel) error // 仅通知当前 Activated Session。
-	Store          *state.Store
-	Settings       *settings.File
-	Policy         *policy.Policy
-	Adapters       *adapter.Registry
-	State          func(id string) string                                             // 必填；返回运行状态，未运行时返回空串。
-	InstanceSchema func(ctx context.Context, id string) (*configschema.Schema, error) // 读取包内的实例声明。
-	Packages       string                                                             // 不可变程序包目录，其父目录是 Core data_dir。
-	Limits         packages.Limits
-	ReleaseBaseURL string                        // 缺省 https://github.com，测试可指向回环服务。
-	HTTPClient     *http.Client                  // nil 使用 http.DefaultClient。
-	Development    map[string]*manifest.Manifest // 由库模式登记的只读工程身份。
-	Start          func(context.Context, string) error
-	Stop           func(context.Context, string, pb.StopReason) error
-	StartInstance  func(context.Context, string, string, json.RawMessage) error
-	StopInstance   func(context.Context, string, string) error // 与组件恢复串行，并保留本次 Core 运行的停用选择。
-	ForgetInstance func(context.Context, string, string) error // 配置创建、删除成功后清除该实例的运行期选择。
-	Descriptor     func(string) *pb.AdapterDescriptor          // 返回当前运行 Session 的 Adapter 声明。
-	Candidates     Candidates
+	Logs               *logging.Output                                               // 与 Core 共用的输出、缓冲与级别表。
+	Stopping           <-chan struct{}                                               // Core 开始停机时关闭，在 HTTP Shutdown 等待之前结束日志流。
+	NotifyLogLevel     func(ctx context.Context, id string, level pb.LogLevel) error // 仅通知当前 Activated Session。
+	Store              *state.Store
+	Settings           *settings.File
+	Policy             *policy.Policy
+	Router             *router.Router
+	Options            *options.Service
+	Tools              *tool.Catalog
+	Adapters           *adapter.Registry
+	State              func(id string) string                                             // 必填；返回运行状态，未运行时返回空串。
+	InstanceSchema     func(ctx context.Context, id string) (*configschema.Schema, error) // 读取包内的实例声明。
+	Packages           string                                                             // 不可变程序包目录，其父目录是 Core data_dir。
+	Limits             packages.Limits
+	ReleaseBaseURL     string                                                      // 缺省 https://github.com，测试可指向回环服务。
+	HTTPClient         *http.Client                                                // nil 使用 http.DefaultClient。
+	Development        map[string]*manifest.Manifest                               // 由库模式登记的只读工程身份。
+	DevelopmentConfig  func(id string) (json.RawMessage, map[string][]byte, error) // 读取当前开发资源；返回值只读。
+	RestartDevelopment func(context.Context, string) error                         // 配置落盘后沿 Core 运行循环重启。
+	Start              func(context.Context, string) error
+	Stop               func(context.Context, string, pb.StopReason) error
+	StartInstance      func(context.Context, string, string, json.RawMessage) error
+	StopInstance       func(context.Context, string, string) error // 与组件恢复串行，并保留本次 Core 运行的停用选择。
+	ForgetInstance     func(context.Context, string, string) error // 配置创建、删除成功后清除该实例的运行期选择。
+	Descriptor         func(string) *pb.AdapterDescriptor          // 返回当前运行 Session 的 Adapter 声明。
+	Candidates         Candidates
 
 	DevelopmentWebUI fs.FS                           // 本次运行的静态根目录；nil 时选择已启用的安装包。
 	CoreInfo         func() (version, listen string) // 总览在请求时读取同一个 Core 的构建版本与实际监听地址。

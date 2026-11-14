@@ -86,6 +86,25 @@ func (s *Service) Query(ctx context.Context, componentID string, kind SchemaKind
 	if !ok {
 		return Page{}, invalid("field has no options source")
 	}
+	return s.query(ctx, from, q)
+}
+
+// QueryBuiltin 查询登记的内置来源，只接受该来源声明的 filter 键。
+func (s *Service) QueryBuiltin(ctx context.Context, source string, filter map[string]string, q Query) (Page, error) {
+	keys, ok := configschema.BuiltinOptionSources[source]
+	if !ok {
+		return Page{}, invalid("unknown builtin options source: " + source)
+	}
+	for key := range filter {
+		if !slices.Contains(keys, key) {
+			return Page{}, invalid("unknown options filter: " + key)
+		}
+	}
+	return s.query(ctx, configschema.OptionsFrom{Source: source, Filter: filter}, q)
+}
+
+func (s *Service) query(ctx context.Context, from configschema.OptionsFrom, q Query) (Page, error) {
+	// 1. 两种入口共用运行时的分页上限。
 	if q.Limit < 0 {
 		return Page{}, invalid("options limit must be non-negative")
 	}
