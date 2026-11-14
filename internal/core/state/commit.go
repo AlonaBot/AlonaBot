@@ -55,8 +55,8 @@ func (s *Store) CommitCandidate(ctx context.Context, opID, pluginID, expectedOld
 			return journalPrecondition("candidate config snapshot is missing or invalid")
 		}
 
-		// 2. 包更新的程序身份与代次一起切换，后续 restart 据此选择新程序。
-		if operation.Kind == "update" {
+		// 2. 更新或回退的程序身份与代次一起切换，后续 restart 据此选择新程序。
+		if operation.Kind == "update" || operation.Kind == "rollback" {
 			var installed installation
 			if err := tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&installed).Error; err != nil {
 				return err
@@ -75,6 +75,10 @@ func (s *Store) CommitCandidate(ctx context.Context, opID, pluginID, expectedOld
 			return err
 		}
 		current.ActiveGeneration = sql.NullString{String: newGen, Valid: true}
+		if operation.Kind == "first_install" {
+			// 首次 enable 的意图与提交一起持久化，崩溃恢复据此启动已提交代次。
+			current.Enabled = true
+		}
 		if err := tx.Save(&current).Error; err != nil {
 			return err
 		}

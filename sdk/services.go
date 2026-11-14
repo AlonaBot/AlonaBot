@@ -118,6 +118,8 @@ func (s *ServiceBuilder[In, Out]) prepareJSON() (serviceRoute, error) {
 	if err != nil {
 		return serviceRoute{}, err
 	}
+	inputID = generatedSchemaID(r.schemas, b.plugin.entryPackage, inputID)
+	outputID = generatedSchemaID(r.schemas, b.plugin.entryPackage, outputID)
 	inputSchema, err := resolveServiceSchema(r.schemas, inputID)
 	if err != nil {
 		return serviceRoute{}, err
@@ -268,6 +270,20 @@ func jsonType[T any]() (string, uint32, error) {
 		version = value.SchemaVersion()
 	}
 	return typ.PkgPath() + "." + typ.Name(), version, nil
+}
+
+// generatedSchemaID 仅将 UseGenerated 调用包的类型对齐到 main 生成键；go test 中该包保留导入路径，导入类型的身份保持完整。
+func generatedSchemaID(schemas map[string][]byte, entryPackage, id string) string {
+	if _, ok := schemas[id]; ok {
+		return id
+	}
+	if dot := strings.LastIndexByte(id, '.'); dot >= 0 && id[:dot] == entryPackage {
+		mainID := "main" + id[dot:]
+		if _, ok := schemas[mainID]; ok {
+			return mainID
+		}
+	}
+	return id
 }
 
 func resolveServiceSchema(schemas map[string][]byte, id string) (*jsonschema.Resolved, error) {
@@ -444,7 +460,10 @@ func (s Service[In, Out]) callJSON(ctx context.Context, in In) (Out, error) {
 	if err != nil {
 		return out, err
 	}
-	schemas := componentFor(ctx).active.Load().l.serviceSchemas
+	l := componentFor(ctx).active.Load().l
+	schemas := l.serviceSchemas
+	inputID = generatedSchemaID(schemas, l.entryPackage, inputID)
+	outputID = generatedSchemaID(schemas, l.entryPackage, outputID)
 	inputSchema, err := resolveServiceSchema(schemas, inputID)
 	if err != nil {
 		return out, err

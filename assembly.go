@@ -192,15 +192,16 @@ type assembly struct {
 	policy     *policy.Policy
 	components sync.Map // 运行状态查询借用 host.Instance，激活失败时保留 Degraded 诊断。
 	options    *coreoptions.Service
+	tools      *tool.Catalog
 	settings   *settings.File
-	schemaMu   sync.RWMutex // 保护按 Session 发布的只读选项声明。
+	schemaMu   sync.RWMutex // 保护按代次保留的只读选项声明。
 	schemas    map[string]componentOptionSchemas
 }
 
 type componentOptionSchemas struct {
-	session string
-	config  *configschema.Schema
-	adapter *configschema.Schema
+	generation string
+	config     *configschema.Schema
+	adapter    *configschema.Schema
 }
 
 func assemble(store *state.Store, dir string, v tune.Values, file *settings.File) (*assembly, error) {
@@ -268,12 +269,12 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 	a.media.AddServices(a.mux)
 	a.media.AddReadServices(a.mux, a.adapters, a.router, store.AdapterInstanceAllowed)
 	conversation.New(store).Register(a.mux)
-	tools := tool.New(store, a.router)
-	tools.Register(a.mux)
+	a.tools = tool.New(store, a.router)
+	a.tools.Register(a.mux)
 	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes, Metrics: a.metrics})
 	a.bus.Register(a.mux)
 	a.broker = broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth, Metrics: a.metrics, Agent: a.agentID})
-	tools.RegisterInvoke(a.mux, tool.InvokeOptions{Call: a.broker.Call, Adapters: a.adapters, Buttons: a.buttons,
+	a.tools.RegisterInvoke(a.mux, tool.InvokeOptions{Call: a.broker.Call, Adapters: a.adapters, Buttons: a.buttons,
 		ConfirmTimeout: v.ToolConfirmTimeout, DefaultLocale: func() string { return a.settings.Settings().DefaultLocale }})
 	a.mux.Forward(a.broker.Call)
 	a.schemas = make(map[string]componentOptionSchemas)
@@ -346,24 +347,63 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 }
 
 func (a *assembly) optionSchema(componentID string, kind coreoptions.SchemaKind) (*configschema.Schema, bool) {
-	caller, active := a.router.Caller(componentID)
-	if !active {
+	ctx := context.Background()
+	active, err := a.store.Active(ctx, componentID)
+	if err != nil || active == "" {
 		return nil, false
 	}
 	a.schemaMu.RLock()
-	defer a.schemaMu.RUnlock()
 	current := a.schemas[componentID]
-	if current.session != caller.SessionKey {
-		return nil, false
-	}
+	a.schemaMu.RUnlock()
 	var schema *configschema.Schema
+	var filename string
 	switch kind {
 	case coreoptions.ConfigSchema:
 		schema = current.config
+		filename = "config_schema.json"
 	case coreoptions.AdapterInstanceSchema:
 		schema = current.adapter
+		filename = "adapter_config_schema.json"
+	default:
+		return nil, false
 	}
-	return schema, schema != nil
+	if current.generation == active {
+		return schema, schema != nil
+	}
+	// Core 重启后停用组件没有 Session，从 Active 安装包或开发资源读取声明。
+	in, err := a.store.GetInstall(ctx, componentID)
+	if err != nil || in.Uninstalled {
+		return nil, false
+	}
+	var raw []byte
+	if in.Source == devSource {
+		a.core.developmentMu.RLock()
+		for _, entry := range a.core.development {
+			if entry.manifest.ID == componentID {
+				if kind == coreoptions.ConfigSchema {
+					raw = entry.resources.ConfigSchema
+				} else {
+					raw = entry.resources.AdapterConfigSchema
+				}
+				break
+			}
+		}
+		a.core.developmentMu.RUnlock()
+	} else {
+		directory, err := installedDirectory(a.core.dir, in)
+		if err != nil {
+			return nil, false
+		}
+		raw, err = os.ReadFile(filepath.Join(directory, filename))
+		if err != nil {
+			return nil, false
+		}
+	}
+	if len(raw) == 0 {
+		return nil, false
+	}
+	schema, problems := configschema.Parse(raw)
+	return schema, len(problems) == 0
 }
 
 func optionSchemas(resources sdk.Generated) (componentOptionSchemas, error) {
@@ -478,7 +518,7 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) (err error) 
 	}()
 	a.components.Store(r.id, r.instance)
 	plugin := router.FromInstance(r.instance)
-	r.schemas.session = r.caller.SessionKey
+	r.schemas.generation = r.caller.GenerationID
 	a.schemaMu.Lock()
 	a.schemas[r.id] = r.schemas
 	a.schemaMu.Unlock()
@@ -655,6 +695,9 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 		} else {
 			running.runErr = sdk.RunInProcess(entry.root, l)
 		}
+		if ctx.Err() == context.Canceled {
+			running.runErr = startupCleanupError(running.runErr)
+		}
 		close(running.finished)
 		_ = listener.Close() // SDK 若在拨号前失败，解除 Accept 的等待。
 	}()
@@ -699,6 +742,31 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	return c.store.SetEnabled(ctx, id, true)
 }
 
+// startupCleanupError 从启动错误链中移除取消，保留真实的启动与资源清理失败。
+func startupCleanupError(err error) error {
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		var remaining []error
+		for _, cause := range joined.Unwrap() {
+			remaining = append(remaining, startupCleanupError(cause))
+		}
+		return errors.Join(remaining...)
+	}
+	// 单一包装链里也可能包含合并错误；有其他失败时保留整个包装及原始说明。
+	for cause := errors.Unwrap(err); cause != nil; cause = errors.Unwrap(cause) {
+		if _, ok := cause.(interface{ Unwrap() []error }); ok && startupCleanupError(cause) != nil {
+			return err
+		}
+	}
+	if errors.Is(err, context.Canceled) {
+		return nil
+	}
+	var failure *validate.Error
+	if errors.As(err, &failure) && failure.Code == pb.ErrorCode_ERROR_CODE_CANCELLED {
+		return nil
+	}
+	return err
+}
+
 func bootstrap(generation string, version uint32) *pb.Bootstrap {
 	return &pb.Bootstrap{GenerationId: generation, CandidateConfigJson: emptyConfig, TargetConfigVersion: version, DefaultLocale: defaultLocale,
 		DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}, LogLevel: pb.LogLevel_LOG_LEVEL_INFO}
@@ -712,9 +780,6 @@ func (a *assembly) detach(r *runningComponent) {
 			a.components.LoadOrStore(r.id, r.instance)
 		}
 		a.router.Detach(r.id)
-		a.schemaMu.Lock()
-		delete(a.schemas, r.id)
-		a.schemaMu.Unlock()
 		a.bus.Detach(r.id)
 		a.scheduler.Detach(r.id)
 		if r.instance != nil {
@@ -780,7 +845,9 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 		return nil, err
 	}
 	if generation == "" {
-		return c.prepareCandidate(ctx, install.PluginID, journal.KindFirstInstall, nil)
+		return c.prepareCandidate(ctx, install.PluginID, func(ctx context.Context) (*journal.Result, error) {
+			return c.assembly.journal.Prepare(ctx, install.PluginID, journal.KindFirstInstall, nil)
+		})
 	}
 	packageDir, err := installedDirectory(dir, install)
 	if err != nil {
@@ -824,11 +891,11 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 }
 
 // prepareCandidate 由运行循环独占调用，合并准备上下文与显式交接的进程资源。
-func (c *Core) prepareCandidate(ctx context.Context, id string, kind journal.Kind, staged *packages.Candidate) (*runningComponent, error) {
+func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(context.Context) (*journal.Result, error)) (*runningComponent, error) {
 	a := c.assembly
 	defer func() { a.candidate = nil }()
 	// 1. 准备失败由 Journal 中止，恢复直接在当前运行循环执行。
-	r, err := a.journal.Prepare(ctx, id, kind, staged)
+	r, err := prepare(ctx)
 	if err != nil {
 		if r != nil {
 			err = a.journal.Abort(ctx, r, err)
@@ -840,16 +907,14 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, kind journal.Kin
 	if err != nil {
 		return nil, a.journal.Abort(ctx, r, err)
 	}
+	kind := journal.Kind(record.Kind)
 	// 2. 提交返回进程所有权，激活失败也登记诊断并交给退出观察者。
 	process, err := a.journal.Commit(ctx, r)
 	if process == nil {
 		return nil, err
 	}
 	running.process, running.instance = process, process.Instance
-	if kind == journal.KindFirstInstall {
-		err = errors.Join(err, c.store.SetEnabled(context.WithoutCancel(ctx), id, true))
-	}
-	if kind == journal.KindUpdate && (!record.WasEnabled || !record.WasRunning) {
+	if (kind == journal.KindUpdate || kind == journal.KindRollback) && (!record.WasEnabled || !record.WasRunning) {
 		// 提交只切换权威代次；先停止候选，之后显式 enable 才建立业务 Session。
 		if stopErr := c.stopComponent(running, time.Now(), host.NewStopTiming(c.values), pb.StopReason_STOP_REASON_DISABLE); stopErr != nil {
 			return running, errors.Join(err, stopErr)
@@ -898,7 +963,7 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, kind journal.Kin
 // managedCandidates 只在外部管理入口排队，Journal 的停止和恢复回调直接执行。
 type managedCandidates struct{ core *Core }
 
-// Reload 串行导入正式组件候选，开发组件沿直接停止与启动路径执行。
+// Reload 串行激活正式组件的 Pending；缺省导入快照，开发组件沿直接停止与启动路径执行。
 func (m managedCandidates) Reload(ctx context.Context, id string) error {
 	return m.core.operation(ctx, func(ctx context.Context) error {
 		in, err := m.core.store.GetInstall(ctx, id)
@@ -911,17 +976,23 @@ func (m managedCandidates) Reload(ctx context.Context, id string) error {
 			}
 			return m.core.startManaged(ctx, id)
 		}
-		return m.apply(ctx, id, journal.KindReload, nil)
+		return m.apply(ctx, id, func(ctx context.Context) (*journal.Result, error) {
+			return m.core.assembly.journal.Prepare(ctx, id, journal.KindReload, nil)
+		})
 	})
 }
 
 // Update 把已预检的候选交给一次 Core 操作。
 func (m managedCandidates) Update(ctx context.Context, id string, staged *packages.Candidate) error {
-	return m.core.operation(ctx, func(ctx context.Context) error { return m.apply(ctx, id, journal.KindUpdate, staged) })
+	return m.core.operation(ctx, func(ctx context.Context) error {
+		return m.apply(ctx, id, func(ctx context.Context) (*journal.Result, error) {
+			return m.core.assembly.journal.Prepare(ctx, id, journal.KindUpdate, staged)
+		})
+	})
 }
 
-func (m managedCandidates) apply(ctx context.Context, id string, kind journal.Kind, staged *packages.Candidate) error {
-	running, err := m.core.prepareCandidate(ctx, id, kind, staged)
+func (m managedCandidates) apply(ctx context.Context, id string, prepare func(context.Context) (*journal.Result, error)) error {
+	running, err := m.core.prepareCandidate(ctx, id, prepare)
 	if running != nil {
 		m.core.components = append(m.core.components, running)
 		if err != nil && running.instance.State() != host.StateDegraded {
@@ -931,9 +1002,13 @@ func (m managedCandidates) apply(ctx context.Context, id string, kind journal.Ki
 	return err
 }
 
-// Rollback 返回尚未提供显式回退的协议错误。
-func (m managedCandidates) Rollback(context.Context, string, string) error {
-	return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "candidate orchestration is not available"}
+// Rollback 串行准备保留代次的副本，沿用候选接入、提交与失败停止路径。
+func (m managedCandidates) Rollback(ctx context.Context, id, generation string) error {
+	return m.core.operation(ctx, func(ctx context.Context) error {
+		return m.apply(ctx, id, func(ctx context.Context) (*journal.Result, error) {
+			return m.core.assembly.journal.PrepareRollback(ctx, id, generation)
+		})
+	})
 }
 
 func installedDirectory(dir string, install state.Install) (string, error) {
@@ -1151,4 +1226,15 @@ func componentLogAttrs(install state.Install) []slog.Attr {
 		return []slog.Attr{slog.String(logging.KeyComponent, logging.ComponentAdapter), slog.String(logging.KeyAdapterID, install.AdapterID)}
 	}
 	return nil
+}
+
+func (c *Core) developmentConfig(id string) (json.RawMessage, map[string][]byte, error) {
+	c.developmentMu.RLock()
+	defer c.developmentMu.RUnlock()
+	for _, entry := range c.development {
+		if entry.manifest.ID == id {
+			return entry.resources.ConfigSchema, entry.resources.I18n, nil
+		}
+	}
+	return nil, nil, fmt.Errorf("component %s is not a development component", id)
 }

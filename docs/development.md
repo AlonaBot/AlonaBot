@@ -197,6 +197,12 @@ go run ./examples/devbot -data-dir ./data
 
 Adapter 可以实现 `sdk.AdapterHTTP`，在统一端口的 `/plugins/<Adapter 包 ID>/...` 下声明路由，例如 OneBot 11 反向 WebSocket。路由规则与插件相同：私有路由需要 Core 会话，非 GET/HEAD 的 Cookie 请求还要验证 CSRF 与 Origin。公开路由除回调校验方式外，还可以用 `sdk.Public(sdk.AuthPlatformToken)`：Core 代理保留入站的 `Authorization` 交给 Adapter，由 Adapter 校验平台凭证，并给出错误时的平台响应。插件路由的 `Authorization` 一律被清除。两者都会清除入站的 Cookie、CSRF、Forwarded 与 X-Forwarded-*，并注入内部代理凭证；SDK 先恒定时间比较该凭证，比较后移除，再进入用户 Handler。WebSocket Upgrade 由代理双向转发，连接寿命不受普通请求期限限制，路由撤销或 Session 失效时由 Core 关闭。
 
+## 备份与恢复
+
+整机备份前先停止 Core 和全部插件进程，再复制完整的 `data_dir`。备份须同时覆盖 Core 元数据、程序包、插件配置及各代次的受管 SQLite 数据库。单独备份 `state.sqlite` 只保存 Core 元数据，不包含插件业务数据。
+
+插件自管的外部数据库与框架目录之外的文件，按插件的维护说明单独备份。恢复时保持 Core 和插件停止，还原完整的 `data_dir`，并同步恢复插件自管的外部数据，再启动 Core。恢复旧备份会丢弃备份之后的新写入，执行前须确认要恢复的数据时点。
+
 ## 外部测试环境
 
 - **Telegram：** 真实测试需要授权的测试 Bot，目前没有，相关项记为「未运行」；Adapter 测试改用本地 Bot API 模拟服务。
@@ -428,4 +434,71 @@ records := h.Background()
 ```sh
 go generate ./...
 go test -race -count=2 ./plugintest/... ./examples/plugins/...
+```
+
+**LLM 替身。** 测试调用文本生成的插件时，用 `LLM(handler)` 提供结果。插件仍经 `@agent/llm.generate` 调用同一 Core 中的测试 Agent。先在插件的 `New()` 返回前登记命令（导入 `sdk/llm` 与 `sdk/message`）：
+
+```go
+p.Command("llm").Handle(func(c *sdk.Context, prompt string) (message.Content, error) {
+    text, err := llm.Ask(c.Context(), prompt)
+    if err != nil {
+        return nil, err
+    }
+    return message.Text(text), nil
+})
+```
+
+运行工程的 `go generate`，让调用方生成并绑定 `llm.Request`、`llm.Response` 的 ServiceSchemas。然后在同包的 `main_test.go` 中加入：
+
+```go
+package main
+
+import (
+    "context"
+    "testing"
+
+    "github.com/AlonaBot/AlonaBot/plugintest"
+    "github.com/AlonaBot/AlonaBot/sdk/errcode"
+    "github.com/AlonaBot/AlonaBot/sdk/llm"
+)
+
+func TestLLMReply(t *testing.T) {
+    p := New()
+    h := plugintest.Start(t, plugintest.Plugin(p),
+        plugintest.LLM(func(ctx context.Context, req llm.Request) (llm.Response, error) {
+            if len(req.Messages) != 1 || req.Messages[0].Role != "user" || req.Messages[0].Text != "hello" {
+                return llm.Response{}, errcode.InvalidArgument.New("unexpected prompt")
+            }
+            return llm.Response{
+                Text: "fixed answer", Provider: "synthetic", Model: "test-model",
+                InputTokens: nil, OutputTokens: nil,
+            }, nil
+        }))
+    alice := plugintest.User{ID: "alice"}
+    result := h.Text(plugintest.Private(alice.ID), alice, "/llm hello")
+    if len(result.Sends) != 1 || result.Sends[0].Text() != "fixed answer" {
+        t.Fatalf("LLM reply = %+v", result)
+    }
+    for _, outcome := range result.Outcomes {
+        if outcome.Err != nil {
+            t.Fatal(outcome.Err)
+        }
+    }
+}
+```
+
+上例的 nil 用量经 Service 编码后仍为 nil；已知用量为零时，返回指向 `0` 的 `*int`。验证失败路径时，将 handler 换成：
+
+```go
+plugintest.LLM(func(context.Context, llm.Request) (llm.Response, error) {
+    return llm.Response{}, errcode.Unavailable.New("synthetic generation failure")
+})
+```
+
+同一条命令会得到空 `result.Sends`，`result.Outcomes[0].Err` 保留 `errcode.Unavailable` 与 `Message`。未设置 LLM 时，`@agent` 调用同样返回 `UNAVAILABLE`。多次设置 LLM 时最后一个函数生效；`LLM(nil)` 在 Start 启动前使测试失败。handler 接收关联的 context，并应响应其取消与期限。Schema 负责结构校验，业务规则与错误由 handler 决定。
+
+仓库的完整集成测试见 [plugintest/llm_test.go](../plugintest/llm_test.go)。运行：
+
+```sh
+go test -race -count=2 ./plugintest/...
 ```

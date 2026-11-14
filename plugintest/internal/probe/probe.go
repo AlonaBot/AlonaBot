@@ -9,11 +9,13 @@ import (
 	"context"
 	_ "embed"
 	"errors"
+	"reflect"
 	"strconv"
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
+	"github.com/AlonaBot/AlonaBot/sdk/llm"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 	"github.com/AlonaBot/AlonaBot/sdk/sqlitedb"
 )
@@ -62,8 +64,35 @@ func New() *sdk.Plugin {
 	})
 	p.Command("edit").Handle(edit)
 	p.Command("ask").Handle(ask)
+	p.Command("llmgenerate").Handle(generateLLM)
+	p.Command("llmask").Handle(func(c *sdk.Context) (message.Content, error) {
+		text, err := llm.Ask(c.Context(), "  original prompt\n")
+		if err != nil {
+			return nil, err
+		}
+		return message.Text(text), nil
+	})
 	registerScenarios(p)
 	return p
+}
+
+func generateLLM(c *sdk.Context, usage string) (message.Content, error) {
+	response, err := llm.Generate(c.Context(), llm.Request{
+		Messages: []llm.Message{{Role: "user", Text: "first"}, {Role: "assistant", Text: "second"}, {Role: "user", Text: "third"}},
+		System:   "system prompt", Provider: "synthetic", MaxOutputTokens: 37,
+	})
+	if err != nil {
+		return nil, err
+	}
+	zero := 0
+	expected := llm.Response{Text: "generated", Provider: "synthetic", Model: "test-model", OutputTokens: &zero}
+	if usage == "input" {
+		expected.InputTokens, expected.OutputTokens = &zero, nil
+	}
+	if !reflect.DeepEqual(response, expected) {
+		return nil, errors.New("unexpected generation response")
+	}
+	return message.Text(response.Text), nil
 }
 
 func nextCount(ctx context.Context) (int64, error) {

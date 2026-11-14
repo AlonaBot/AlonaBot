@@ -29,6 +29,7 @@ type Plugin struct {
 	subs           []*SubPlugin
 	jobSubPlugins  map[string]string
 	generated      Generated
+	entryPackage   string // 调用 UseGenerated 的入口包路径。
 	generatedCount int
 	onStart        func(context.Context) error
 	onReady        func(context.Context) error

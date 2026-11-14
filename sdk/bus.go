@@ -69,6 +69,7 @@ func Subscribe[T any](owner Registrar, e BusEventType[T]) *Subscription[T] {
 		if err != nil {
 			return fmt.Errorf("subscription route %q: %w", s.routeID, err)
 		}
+		id = generatedSchemaID(generatedFor(scope.plugin).ServiceSchemas, scope.plugin.entryPackage, id)
 		r.subscriptions = append(r.subscriptions, subscriptionRoute{plugin: scope.plugin, subID: scope.subID, descriptor: &pb.RouteDescriptor{
 			RouteId: s.routeID, Kind: pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION, DefaultEnabled: true,
 			Spec: &pb.RouteDescriptor_BusSubscription{BusSubscription: &pb.BusSubscriptionSpec{EventName: s.eventName, SchemaId: id, SchemaVersion: version, CallbackRouteId: s.routeID}},
@@ -141,6 +142,8 @@ func (e BusEventType[T]) Publish(ctx context.Context, payload T) (eventID string
 	if pluginID != componentFor(ctx).active.Load().l.pluginID {
 		return "", errcode.InvalidArgument.Errorf("bus event %q does not belong to this plugin", e.name)
 	}
+	l := componentFor(ctx).active.Load().l
+	schemaID = generatedSchemaID(l.serviceSchemas, l.entryPackage, schemaID)
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return "", &Error{Code: errcode.InvalidArgument, Message: "encode bus event payload: " + err.Error()}

@@ -84,17 +84,17 @@
 | goal-128 | T-07.9 | 动态任务与暂停恢复的 SDK | T-04.12、T-07.8 | 已完成（PR #176） |
 | goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 已完成（PR #177） |
 | goal-92 | T-09.13 | 管理页所需的会话与上传接口 | T-09.1、T-09.4、T-09.12 | 已完成（PR #181） |
-| goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 待派发 |
+| goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 已完成（PR #191） |
 | goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 已完成（PR #164） |
 | goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 已完成（PR #165） |
 | goal-70 | T-13.4 | 开发运行示例与验收 | T-03.10、T-13.2、T-13.3 | 已完成（PR #186） |
 | goal-82 | T-16.2 | 按钮、多轮等待、schedule 与示例测试 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | 已完成（PR #183） |
-| goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | 等待前置 |
+| goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | 待派发 |
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 已完成（PR #173） |
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 已完成（PR #172） |
-| goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 待派发 |
+| goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 已完成（PR #190） |
 | goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 已完成（PR #179） |
-| goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 待派发 |
+| goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 已完成（PR #187） |
 | goal-93 | T-09.14 | 配置、权限、工具策略与会话的管理 API | T-03.25、T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-08.14、T-09.6、T-09.12、T-11.1、T-11.3 | 待派发 |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
 
@@ -6268,7 +6268,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-14 · T-04.5 示例升级与 T-04 验收
 
-状态：待派发。直接前置均已合并：T-03.10 / goal-9（PR #180，`c128000`）；T-04.2 / goal-11（PR #42，`62d5afa`）；T-04.3 / goal-12（PR #47，`5cb1cfd`）；T-04.4 / goal-13（PR #88，`c8dd516`）；T-04.7 / goal-88（PR #89，`3e37cd6`）；T-04.8 / goal-91（PR #141，`ac4aded`）；T-04.9 / goal-96（PR #110，`6aed25d`）；T-04.11 / goal-124（PR #159，`7872102`）；T-04.12 / goal-125（PR #154，`43a6135`）；T-04.13 / goal-126（PR #158，`464ccfd`）。Rule 与延续调用的相关基线为 T-05.4（PR #153，`f22b538`）、T-05.5（PR #162，`8c12972`）。状态已与 `spec/plan/core.md` 切片表核对；提交号通过只读 HEAD 与提交对象的一父历史核对，未执行 git 命令。2026-11-13 按指定 main `7bf07ba`，用 `rg`、源码读取和 `go doc` 核对如下。2026-11-13 审查者裁决：顶层 `alonabot check`/`build` 由 T-09.3（goal-38）交付，而 T-09.3 以本切片为前置；本切片用已合并的 `plugin check`、`go build` 与 `run` 的开发构建取证，顶层命令对两个示例的检查与构建由 T-09.3 补证（DECISIONS 2026-11-13 变更记录）。本切片与 PR #183（goal-82）共涉 examples/plugins，#183 已合并（`1f1c058`），从包含它的 main 派发。
+状态：已完成（[PR #191](https://github.com/AlonaBot/AlonaBot/pull/191)，合并提交 `862b7be`），证据见 TEST-MATRIX §3.2。合入：echo 与 media 示例按链式注册与 T-04.11～T-04.13 的 API 升级（命令组、子命令、别名、可选参数、Regex、keyword、Raw、结构体参数、子插件、带类型的 Service 与 Event Bus、i18n）；`cmd/alonabot/t04_e2e_test.go` 的 `TestSDKExamples`；SDK 的 schema_id 对齐：`UseGenerated` 记录入口包，go test 中只有入口包类型对齐到 `main.<Name>`（DECISIONS 2026-11-13 变更记录）。顶层 check/build 对示例的补证归 T-09.3。以下为派发时的语句。
 
 按 main 核对：
 
@@ -6600,42 +6600,77 @@ broker.Options、bus.Options 与 router.Options 增加 Metrics *metrics.Counters
 
 ### goal-38 · T-09.3 开发 CLI 与库模式脚手架
 
-状态：等待前置（T-04.5、T-13.3）。T-09.16（[PR #140](https://github.com/AlonaBot/AlonaBot/pull/140)，合并提交 `896991b`）已合并：工程 manifest 用 `manifest.ParseProject`，包内 manifest 用 `Parse`，`Generate` 由工程 manifest 加 `BuildInfo` 生成包内 YAML。T-08.8（PR #102，合并提交 `f685c92`）已合并，合入的符号：`contracts/i18n` 的 `Parse(files) (*Catalog, []Problem)`、`Catalog.Has`/`Format(locales, key, args)`、`Placeholders`；`sdk.Context.T`、后台 `sdk.T` 与 `Generated.I18n`；`internal/core/i18n.Messages()`；`host.Instance.Messages`/`DefaultLocale`；`router.Plugin` 的 `Messages()`/`DefaultLocale()`；`supervisor.Spec.I18n`/`DefaultLocale`；`Bootstrap.default_locale = 12`。goal-95（PR #103，合并提交 `c840af7`）已合并，合入的接口：`contracts/configschema` 的 `Parse(raw) (*Schema, []Problem)` 与 `Schema` 的 `Canonical`、`Hash`、`Version`、`Migrate(config, from)`、`Complete`、`Validate`、`SecretPaths`、`CheckI18n(config)`；`sdk/config` 的 `Prepare(ctx, load, schema, raw, fromVersion, targetVersion, restart)`、`Loader`、只读的 `Values`（`String`/`Int`/`Float`/`Bool`/`Strings`/`Object`/`Objects`/`Dict`/`Template`/`TemplateList`）与 `Template.Key`；`sdk.Base.Config() config.Values` 与根插件的 `OnConfigLoad(ctx, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`；`supervisor.Spec.ConfigSchema` 为 config_schema.json 的规范 JSON。生成器读取手写 `config_schema.json`，配置标签解析与 `config.Config`/`config.Base` 已删除。2026-11-04 按 D-76 改为核对与打包 config_schema.json。语句中 goal-11、goal-37、goal-53、goal-67、goal-95 提供的符号（sdk/generate、packages 的 Preflight 与包格式、contracts/release、contracts/i18n、根包 Run、contracts/configschema）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：开发命令改为顶层的 init、build、check、test、pack（D-77），build 取代 plugin generate，init 在当前目录创建工程、不生成 main.go，`.gitignore` 忽略 data/；包内 manifest 由 goal-100 的函数补上构建信息（D-78）；签名可选（D-81）；`run` 由 goal-69 实现；代码中提到旧命令名的提示（生成文件头的 `alonabot plugin generate`、`Collect` 报错中的命令）一并改为新命令。前置合并后由审查者改写。2026-11-13：T-04.5（goal-14）与 T-13.4（goal-70）把顶层 `check`/`build` 对 echo、media 示例的检查与构建，以及 `init` 生成 examples/devbot 工程形状的模板比对，留给本切片补证；定稿时并入验收矩阵。
+状态：待派发。2026-11-13 按指定 main `cb090835d7ab18ac013b4980c972deae02379289` 核对：直接前置 T-08.8 / goal-53（PR #102，`f685c92cf594b657b7abba12d07d6f3bec4d7e53`）、T-08.11 / goal-95（PR #103，`c840af7f77506c996f0392f0a4fac299fc5f344e`）、T-09.16 / goal-100（PR #140，`896991b1ceed98133ca31c7f5585618a5a4317d4`）、T-13.3 / goal-69（PR #171，`3043c4e42cb8687886936a39bf0796db81e4993c`）均已合并，`spec/plan/core.md` 状态列为「已完成」；T-04.5 的状态列仍为「未开始」，本地一父历史尚无 #191 的合并提交。额外补证来源 T-13.4 / goal-70 已合并（PR #186，`c38a2945fb870c036dbf5c6d547ad6dbfbcce2b1`）。以上提交从只读 HEAD、松散提交对象及 pack/idx 中的一父历史核对，全程未执行 Git 命令。2026-11-13 审查者定稿：T-04.5（goal-14，[PR #191](https://github.com/AlonaBot/AlonaBot/pull/191)，合并提交 `862b7be`）已合并，其中 SDK 的 schema_id 对齐规则为 `UseGenerated` 记录调用它的入口包、go test 中只有入口包类型对齐到 `main.<Name>`。审查者补齐（待维护者确认，DECISIONS 2026-11-13 变更记录）：pack 的必填 `--asset-url`、`--key` 私钥文件编码、`build-info` 的文件格式、init 的 `--module` 与 SDK 版本来源；packages.Preflight 对 build-info 的严格核对与 T-09.16 遗留的缺 migration_mode/prepare_effects 只警告，另列待维护者裁决，本切片不改 Preflight。
+
+按 main 核对：
+
+- **生成器与入口。** `sdk/generate/generate.go`：`Scan(ctx context.Context, opt Options) (*Result, error)`；`Options{Dir string, GOOS, GOARCH string, Tags []string}`，目标为空时沿用 Go 环境；`Result{PluginConstructor string, AdapterType string, ConfigSchema []byte, Source []byte, Diagnostics []Diagnostic}`；`Diagnostic{Pos, Message string}`；`FileName = "alonabot_gen.go"`。`Scan` 排除旧生成文件，汇总诊断，成功时返回格式化源码；只有实例 schema、没有插件构造函数的旧检查路径仍存在。`sdk/generate/project.go` 按工程 manifest 的 adapter 角色查找入口包中唯一具体 Adapter 类型；`sdk/generate/source.go` 为插件生成包内变量 `alonabotGenerated`，为 Adapter 生成 `UseGeneratedAdapter` 登记。该生成器已有 schema/迁移、i18n、Service Schema、Handler 参数名与文案常量检查。
+- **现有共享构建。** `internal/pluginkit/build.go`：`BuildDev(ctx context.Context, dir, outDir string) (build Build, err error)`；`Build{Executable string, Manifest []byte, PackageManifest []byte, Digest []byte, Role, ID, AdapterID string}`。它按宿主平台扫描，通过 overlay 注入资源与薄入口，使用临时 modfile，成功后发布可执行文件及其摘要命名的资源旁车；工程目录保持只读。可导入插件/Agent 调 `sdk.Run(component.New())`，Adapter 调 `sdk.RunAdapter(component.New())`；main 包已有 main 时沿用，否则注入入口。其私有 `migrationMode(ctx context.Context, dir, overlay, modFile string) (string, string, error)` 已识别 Migrate/Migrations/Open 的引用与互斥。当前尚未提供带 GOOS/GOARCH/tags 的正式构建、归档与签名接口。
+- **工程与包 manifest。** `contracts/manifest/project.go`：`ParseProject(data []byte) (*Result, error)`；`contracts/manifest/manifest.go`：`Parse(data []byte) (*Result, error)`，`Result{Manifest *Manifest, Warnings []string}`。`contracts/manifest/build.go`：`Generate(project *Manifest, build BuildInfo) ([]byte, error)`；`BuildInfo{ManifestVersion int, ProtocolMinMajor, ProtocolMaxMajor *uint32, RequiredCapabilities *[]Capability, OS, Arch, Entrypoint string, ConfigVersion *uint32, MigrationMode, PrepareEffects string}`。Generate 保留作者字段和 external，按角色输出并再次 Parse。工程 manifest 显式写构建字段（含零值/null）会被拒绝；包 manifest 缺 migration_mode/prepare_effects 的遗留警告行为已在 goal-100 与 TEST-MATRIX 记为待裁决。
+- **配置与翻译。** `contracts/configschema/schema.go`：`Parse(raw []byte) (*Schema, []Problem)`、`(*Schema).Canonical() []byte`、`Version() int`；`contracts/configschema/i18n.go`：`(*Schema).CheckI18n(config json.RawMessage) []Problem`。`contracts/i18n/catalog.go`：`Parse(files map[string][]byte) (*Catalog, []Problem)`；`sdk/generated.go` 的 `Generated` 含 Manifest、ConfigSchema、AdapterConfigSchema、ServiceSchemas、I18n 与 ParamNames。复用这些检查，作者不再声明 Config 类型或 sdk.Base。
+- **SDK 与离线会话。** `sdk/plugin.go`：`NewPlugin() *Plugin`；`sdk/generated.go`：`UseGenerated(p *Plugin, g Generated)`、`(*Plugin).Generated() Generated`、`UseGeneratedAdapter(a adapter.Adapter, g Generated)`；`sdk/sdk.go`：`Run(root *Plugin) error`、`Collect(root *Plugin) (*Registration, error)`；`sdk/adapter_run.go`：`RunAdapter(a adapter.Adapter) error`。`internal/core/supervisor/supervisor.go`：`Launch(ctx context.Context, store *state.Store, spec Spec) (*Running, error)`、`(*Running).Stop(t0 time.Time, reason pb.StopReason) host.StopResult`；`Running.Instance` 是 `*host.Instance`，`internal/core/host/activate.go` 的 `Instance.Routes []*pb.RouteDescriptor` 为已校验路由。CLI test 可复用现有 Core 侧会话、状态与停止原语取实际注册结果。
+- **release 与预检。** `contracts/release/release.go`：`Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*Release, error)`、`KeyID(pub ed25519.PublicKey) string`、`DecodeSignature(sigFile []byte) ([]byte, error)`、`DecodePublicKey(raw []byte) (ed25519.PublicKey, error)`；`Release{PublisherKeyID, Source, PluginID, Version string, Assets []Asset}`，`Asset{OS, Arch, URL string, Size int64, SHA256 string}`，资产 URL 必须是绝对 https URL。`internal/core/packages/preflight.go`：`Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error)`、`(*Candidate).MoveTo(packagesRoot string) (string, error)`、`Discard() error`；`Input{ReleaseJSON, Signature []byte, PublicKey ed25519.PublicKey, Source, OS, Arch, ArchivePath string}`；`NewLimits(v tune.Values) Limits`。预检已完成验签、归档长度/摘要/来源/平台、受控解压与入口文件检查。
+- **命令树与改名。** `cmd/alonabot/commands.go` 的 `execute(args []string) int` 注册 root 默认 run、`run [directories...]`、`tune list`、`plugin generate/check`、`admin-token init/reset/show`、管理命令与日志命令。管理命令为 install/list/enable/disable/restart/reload/update/rollback/uninstall/pin、adapter instance create/start/stop/delete、admin add/remove/list，日志为 logs/log-level。`plugin.go` 的 `pluginCommand(code *int) *cobra.Command` 与 `pluginGeneration(cmd *cobra.Command, options generate.Options, check bool) error` 共用扫描，check 逐字节比较生成代码；提示仍要求 `alonabot plugin generate`。本切片替换 plugin 命令组为顶层 init/build/check/test/pack，删除旧 generate/check 命令入口与别名；run 已由 #171 实现。`cmd/alonabot/dev.go` 的 `runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval time.Duration, options []alonabot.Option) error` 已调用 BuildDev 与根包 Start。
+- **库模式与示例补证。** `alonabot.go`：`Start(ctx context.Context, opts ...Option) (*Core, error)`、`Run(opts ...Option) error`、`(*Core).Wait() error`、`Plugin(root *sdk.Plugin) Option`、`Adapter(a adapter.Adapter) Option`、`Executable(path string, packageManifest []byte) Option`、`DataDir(dir string) Option`。`examples/devbot/plugin/plugin.go` 是可导入包，New 显式绑定资源，含 /hello 命令；相邻 plugin.yaml 只含作者字段，另有 config_schema.json、i18n/en-US.json、忽略 data/ 的 .gitignore。examples/devbot 根目录另有库模式 main.go、回环 Adapter 与 core_config.example.json。init 模板比对针对组件工程形状；库模式宿主由既有示例展示。goal-14 状态末尾、goal-70 状态及 TEST-MATRIX §3.2、DECISIONS 2026-11-13 变更记录共同把 echo/media 的顶层 check/build 与 init 模板比对交给本切片。
+- **生成调用链与在途冲突。** `rg` 已定位 sdk/generate/source.go 的文件头、sdk/services.go 的缺 Schema 提示，以及 agent、Telegram、五个插件示例、devbot 两个组件与 plugintest/internal/probe 的 go:generate 指令仍使用旧命令。PR #191 持有 examples/plugins/echo、media、sdk/services.go、sdk/bus.go 和 cmd/alonabot/t04_e2e_test.go，并包含 main 包 schema_id 的 go test 回退；这些实现在本基线尚未合并。PR #188/#189 持有 agent/，#190 持有 plugintest/；本切片在这些目录仅迁移命令指令及重新生成资源。PR #187 持有 journal/state/gc、alonabot.go/assembly.go，#192 持有 manage/options、根包装配及 cmd/alonabot/manage.go 的 reload；本切片复用其接口，生产改动集中于自己的命令文件与 pluginkit。commands.go 注册行、spec/TEST-MATRIX.md 追加区亦需后合并者协调。PR 在途范围按本次任务提供的信息记录，未查询远端状态。
+
+签名与字段均经本 worktree 的 `rg`/源码核对；BuildDev、BuildInfo、generate.Result 另用本机 Go 1.27.3 的 `go doc` 复核，其余主要入口也已读取 go doc 输出。Go 文档命令伴随未缓存模块的查询警告，文档结果与源码逐项核对；未运行编译或产品测试。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-38（切片 T-09.3：开发 CLI 与库模式脚手架）。goal 目录 goal-38，分支 goal-38，worktree .worktrees/goal-38，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-38（切片 T-09.3：开发 CLI 与库模式脚手架）。goal 目录 goal-38，分支 goal-38，worktree .worktrees/goal-38，从最新 origin/main 创建。须包含直接前置 PR #102（f685c92）、#103（c840af7）、#140（896991b）、#171（3043c4e），以及审查者定稿时补记的 T-04.5 / PR #191 实际合并提交；沿用 #186（c38a294）的 devbot 工程及补证约定。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。发布 URL、密钥编码、build-info 与外部 module 模板的接口细节须由审查者在派发前按本稿备注写定。
 
-目标：完成开发命令 alonabot init|check|build|test|pack：init 生成插件骨架与库模式调试用的 main.go；check 验证 CONTRACTS §9.1 的静态契约；build 用生成器为根插件生成调用 sdk.Run 的正式入口并按目标 OS/arch 编译，产物不含 Core；test 在临时数据与离线测试会话中检查加载与注册；pack 为四种角色的组件生成 tar.gz 安装包与归档外的 release.json（WebUI 只含 plugin.yaml、icon 与 assets 目录，平台为 any，不运行 build），并可用本地密钥对清单的确切字节签名。
+目标：完成四种组件通用的顶层 alonabot init/build/check/test/pack。init 在当前或给定空目录创建作者工程，不生成 main.go；build 生成资源与正式薄入口并编译独立组件，产物不包含 Core；check 只读核对；test 在临时数据与离线会话验证加载、准备、注册和激活；pack 复用构建生成可安装 tar.gz、归档外 release.json 及可选签名。复用现有库模式与开发运行入口，补齐 goal-14、goal-70 留给本切片的顶层命令和模板证据。
 
-依据：PLAN T-09 步骤 2（CLI）；CONTRACTS §9.1～§9.3、§15.4、§7.5；DECISIONS D-42、D-43、D-59、D-62、D-63；TEST-MATRIX V-01、V-41、V-54 的打包分项。
+依据：spec/PLAN.md §3.1 的 T-09.3；spec/plan/core.md 切片表 T-09.3、T-09 步骤 2 中的开发 CLI 部分及「对应 V 验收与停止条件」；T-09.16、T-13.3、T-13.4 的既有实现与证据用于界定复用。spec/CONTRACTS-v0.1.md §5.1/§5.3～§5.5、§6.2、§7.5、§8、§9.1～§9.3、§15.4/§15.5、§16；实际握手、注册、激活及停止沿用 §1.1/§4.1/§4.2 与 WIRE-FORMAT §3.1～§3.4。DECISIONS D-42/D-43、D-59、D-62/D-63 取其仍有效部分，并按 D-76～D-81、D-82、D-85/D-86、D-106、D-114、D-117、D-134、D-136/D-137、D-139 的现行修订执行；另读 2026-11-13 关于 T-04.5/T-13.4 向本切片移交补证的变更记录。TEST-MATRIX §1/§2 的 V-01、V-41、V-54 打包分项及 §3/§3.2；V-10、V-64/V-65 只补下述命令与模板分项。模块边按 ARCHITECTURE.md，测试按 docs/coding-standards.md「测试提交规则」。
 
 范围（只新增或修改这些）：
-- cmd/alonabot/：plugin 命令组增加 init、build、test、pack，check 补齐静态契约（新文件）
-- 新增 sdk/generate/entry.go（正式入口生成）
-- 新增 internal/pluginkit/（打包、release.json 生成与签名，供 cmd 使用）；packages 的包格式与 goal-37 一致
-- 上述包的测试文件
-允许的新跨模块边：cmd/alonabot -> internal/pluginkit；internal/pluginkit -> contracts/...、-> sdk/generate（ARCHITECTURE 已登记）。
+- cmd/alonabot/commands.go：把 pluginCommand 的注册替换为五个顶层开发命令，保留其他命令注册；cmd/alonabot/plugin.go：迁移原扫描、诊断与只读生成比较，移除旧命令组；按职责新增 init.go、build.go、check.go、test.go、pack.go 中实际需要的文件。
+- internal/pluginkit/build.go 及该目录必要的普通 Go 文件：复用并整理现有构建链，加入正式目标平台/tags、生成资源发布、脚手架与打包/清单/可选签名所需逻辑；保留 BuildDev 的签名与开发调用契约。薄入口继续由现有构建所有者生成，无须另建 SDK 入口生成器。
+- cmd/alonabot/dev.go：仅在共享构建接口接线确有需要时调整调用；保留目录发现、轮询、重启与错误处理。
+- sdk/generate/source.go：把生成文件头改为 alonabot build；sdk/services.go：只把缺 Schema 的建议命令改为 alonabot build，保留 #191 合入后的 schema_id 回退。生成器的扫描与 SDK 注册语义沿用前置。
+- 下列源文件仅迁移 go:generate 的旧命令为 build（输出放到被忽略的 bin/ 或临时目录，避免工程目录混入二进制）：agent/agent.go；adapters/telegram/telegram.go；examples/plugins/{echo,media,showcase,configdb,lifecycle}/main.go；examples/devbot/plugin/plugin.go；examples/devbot/adapter/adapter.go；plugintest/internal/probe/probe.go。
+- 以上十个工程目录的 alonabot_gen.go：只由更新后的生成命令重新生成；同时保留各工程按其既有 tags 选择的生成方式。echo/media 的作者逻辑与 #191 新增测试、agent/ 与 plugintest/ 的在途功能由各自切片持有。
+- 新增 cmd/alonabot/plugin_cli_e2e_test.go（//go:build unix）：仅下述一个提交集成测试及必要内部辅助；复用该包 TestMain 和既有 CLI/临时目录辅助。本地自测写 cmd/alonabot/、internal/pluginkit/、sdk/generate/ 下的 *_local_test.go，临时工程全部写 t.TempDir()，不新增 testdata 测试插件。
+- docs/development.md 的开发命令与 init→build→check→test→pack 用法、docs/plugin-guide.md 中生成/检查/打包命令与可选签名说明、examples/devbot/README.md 的命令及模板比对说明。只修改受命令迁移影响的内容。
+- spec/TEST-MATRIX.md §3.2：追加 T-09.3 的实际证据及两个切片移交的补证，引用已有证据与剩余归属。README.md、ARCHITECTURE.md、docs/goals/、docs/execution-order.md 与规格的其他同步交给审查者，在 PR「文档同步」中逐项列出。
+允许的新跨模块边：无。cmd/alonabot -> internal/pluginkit、sdk/generate、contracts、internal/core/...、根包，以及 internal/pluginkit -> contracts/...、sdk/generate 已由 ARCHITECTURE 登记。组件可执行文件仅链接公共 SDK；不为离线 test 新增 SDK 到 Core、pluginkit 到 Core/根包或根包到 plugintest 的边。
 
-接口：
-- alonabot init <dir> --id ID [--role plugin|adapter] [--adapter-id ID]：生成 plugin.yaml（manifest_version 1、version 0.1.0、source 为占位并提示修改）、带 sdk.Base 的根插件、一个示例命令、i18n/en-US.json、main.go（调用 alonabot.Run(alonabot.Plugin(...))，供库模式调试）与 .gitignore（忽略 .alonabot/，其中的实例配置可能含平台凭证）；目录非空时拒绝。
-- alonabot check [--dir] [--goos] [--goarch] [--tags]：在 goal-11/goal-53/goal-95 的检查之外，核对 manifest（Parse 与 §9.1 的字段规则、role 与描述一致、migration_mode 与实际迁移接口一致、prepare_effects 已声明）、config_schema.json（goal-95 的 Parse）与 config_version、i18 文件；全部问题一次列出。
-- alonabot build [--dir] --goos OS --goarch ARCH [--out DIR]：生成正式入口（临时目录中的 main 包，调用 sdk.Run 或 sdk.RunAdapter，引用根类型），用锁定的 Go Modules 编译（CGO_ENABLED=0，-trimpath），输出可执行文件；不链接根包 alonabot。
-- alonabot test [--dir]：build 当前平台后，在临时 data_dir 中经 Core 的开发入口启动一次，完成握手、准备、注册与激活后停止，报告注册的路由；不连接任何真实平台，不读取生产凭证。
-- alonabot pack [--dir] --goos OS --goarch ARCH [--key FILE] [--out DIR]：build 后打包 tar.gz（plugin.yaml、entrypoint、存在时的 config_schema.json、i18n/、build-info，以及 manifest 的 icon）；role 为 webui 时不需要 --goos/--goarch，只打包 plugin.yaml、icon 与 assets 目录，归档名为 <id>-<version>-any.tar.gz；生成 release.json（id、version、source、os/arch、归档 SHA256 与长度、发布者公钥 ID）；给出 --key（Ed25519 私钥文件）时对 release.json 的确切字节签名生成 release.json.sig，否则只输出待签名的 release.json。私钥不进入包。
-internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包文档列出。
+接口（照此实现）：
+1) alonabot init [目录] --id ID [--role plugin|adapter|agent|webui] [--adapter-id ID] [--module PATH]。省略目录时为当前目录；role 缺省 plugin，目录非空时拒绝且保留原内容。工程 plugin.yaml 只含作者字段：id、name、version（初始 0.1.0）、source，及角色必需字段；source 的示例值明确提示作者修改。插件与 Agent 为可导入包，导出 func New() *sdk.Plugin，调用 sdk.NewPlugin 与 sdk.UseGenerated(p, alonabotGenerated)，显式登记一个带英文说明的示例命令；生成 config_schema.json、i18n/en-US.json 与忽略 data/ 的 .gitignore。Adapter 要求 --adapter-id，以可导入包提供 New() adapter.Adapter、唯一具体 Adapter 类型和 adapter_config_schema.json，遵守 D-134/D-136；WebUI 生成作者 manifest、assets/index.html 与 Admin API 主版本范围，使用静态工程形状。所有角色均生成忽略 data/ 的 .gitignore，均不生成 main.go；库模式宿主参考 examples/devbot/main.go。仓库内工程复用根 module，外部工程沿用组件自身 Go Modules；目标目录已位于某个 Go module 内时复用该 module、不写 go.mod；否则必须给出 --module PATH 并写 go.mod，`require github.com/AlonaBot/AlonaBot` 的版本取 CLI 自身的模块版本（与根包 version.go 的规则一致），为 (devel) 时不写 require，并以英文提示执行 `go get github.com/AlonaBot/AlonaBot@<version>`；集成测试在临时工程中用 replace 指向本 checkout。
+2) alonabot check [--dir DIR] [--goos OS] [--goarch ARCH] [--tags a,b]。dir 缺省当前目录；目标缺省沿用 Go 环境，与 generate.Options 一致。用 manifest.ParseProject 与 generate.Scan 复用检查，并比较 alonabot_gen.go 是否最新；缺失或过期时失败，提示 alonabot build。检查工程作者字段、入口/角色、config_schema.json、adapter_config_schema.json、声明式迁移、i18n 及已有 Service/参数名/文案静态规则；保留全部诊断及位置，成功或失败均不写工程、生成文件、输出包或 data/。WebUI 直接检查 manifest、静态根及 index.html/icon 等包资源，跳过 Go 扫描和生成文件比较。各角色的检查按其真实资源执行。
+3) alonabot build [--dir DIR] [--goos OS] [--goarch ARCH] [--tags a,b] [--out DIR]。dir/目标/tags 与 check 一致，out 的确定缺省值由实现写入帮助和文档。先执行共同静态检查，使用新扫描结果生成资源；已有生成文件过期由本命令更新，其他静态错误阻止发布。用已锁定 Go Modules、CGO_ENABLED=0 与 -trimpath 按目标编译；薄入口放临时目录或 overlay，插件/Agent 调 sdk.Run(New())，可导入包经 component.New() 调用，Adapter 调 sdk.RunAdapter(component.New())。main 包示例已有入口时继续使用；无入口时生成薄入口。正式二进制不链接根包 alonabot 或 Core。构建成功后发布可执行文件与由 manifest.Generate 合成的包内 manifest；工程 plugin.yaml 保持作者内容。正式入口不落为作者 main.go。WebUI 沿用静态检查路径，无 Go 二进制；pack 直接取静态资源。
+4) 保持 pluginkit.BuildDev(ctx context.Context, dir, outDir string) (Build, error) 与 Build 字段的现有含义。共享生成与编译逻辑时，run 的宿主平台构建、工程只读、资源旁车、旧成功产物保留及编译器完整错误继续成立。正式 build 与 run 复用相同的角色、迁移、配置版本及资源选择，目标参数在扫描和编译时一致；不要为了新增顶层命令让 run 要求工程内生成文件已经最新。internal/pluginkit 的新增内部辅助与命令装配函数由执行者按现有结构确定，不新增框架公开 API。
+5) 包内 manifest 统一调用 manifest.Generate(project.Manifest, BuildInfo{...})。进程角色填 manifest_version=1、链接 SDK 的协议范围与 required_capabilities、所选 os/arch、包内相对 entrypoint、config_version（schema.$version，无文件时 1）；插件/Agent 的 migration_mode 按实际登记取 none/self/versioned，prepare_effects 按受管 SQLite 使用取 none/managed_db，保留作者 external。Adapter 按其角色排除数据库与迁移字段。WebUI 使用 any/any，只合成其角色允许的字段；包内不写 entrypoint、协议范围、required_capabilities 与 config_version。SDK 能力来源复用前置与实际链接信息，当前 BuildDev 的空能力列表只用于 SDK 确实没有必需能力的构建。
+6) alonabot test [--dir DIR]。构建宿主平台，在新临时数据目录建立真实离线 Core 侧会话，完成握手→配置准备/OnStart→REGISTER 校验→Activate/OnReady→Stop；从已校验的注册结果报告路由，任一步与停止失败均保留完整错误并非零退出。复用 supervisor/host/wire/state 的现有入口与 tune 预算，数据与配置均来自临时测试环境；不读取工作目录 data/、生产凭证或启动真实平台实例。Adapter 验证组件注册/描述，使用离线会话；WebUI 验证静态加载所需资源。此命令按 CONTRACTS §9.3 检查加载与注册，保留既有 plugintest 与 go test 的各自入口。
+7) alonabot pack [--dir DIR] [--goos OS] [--goarch ARCH] [--tags a,b] --asset-url URL [--key FILE] [--out DIR]。与 build 使用同一目标与资源检查；合法但陈旧的生成文件由共同 build 更新，schema/i18n/manifest 等问题导致失败。进程角色先正式构建再写 <id>-<version>-<os>-<arch>.tar.gz，Windows 同格式；包根包含包内 plugin.yaml、entrypoint、存在时的 config_schema.json、adapter_config_schema.json、i18n/、build-info 与声明的 icon。WebUI 直接写 <id>-<version>-any.tar.gz，只含包内 plugin.yaml、icon 与 assets 静态树，跳过 Go 编译。归档外写 release.json，字段使用 contracts/release.Release/Asset 的现有 JSON 名，绑定来源、ID/版本、目标、资产 URL、实际长度及整个归档摘要。资产 URL 取必填的 --asset-url（绝对 https，一次 pack 对应一个 os/arch）。build-info 为包根的 `build-info` 文件，内容是 `debug/buildinfo.ReadFile(可执行文件)` 的 `(*debug.BuildInfo).String()` 文本（可被 `debug.ParseBuildInfo` 解析），其中 GOOS/GOARCH 与包内 manifest 的 os/arch 一致；WebUI 包没有 build-info。packages.Preflight 对 build-info 的严格核对不在本切片范围。
+8) --key 可选。提供时用标准库 Ed25519 对已写出的 release.json 确切 UTF-8 字节签名，release.json.sig 为标准 base64 的 64 字节签名，另写 release.pub（标准 base64 的 32 字节公钥），publisher_key_id 取 release.KeyID；key 文件为去掉首尾空白的标准 base64，内容是 64 字节的 `ed25519.PrivateKey`，长度不符完整报错。未给 key 时输出归档与 unsigned release.json，不生成伪签名或伪公钥。密钥读取/签名失败完整报错，不切换到 unsigned 成功路径。归档不包含 release.json、sig、公钥身份材料、私钥、运行配置、data/ 或 DB/secret；release 及公钥文件留在归档外。摘要只用于契约要求的归档完整性与公钥标识。
 
-行为：
-- build 与 pack 的产物对同一源码与工具链可重复（tar 中的文件按名称排序、时间戳固定、权限固定）。
-- pack 前自动运行 check；有问题时不打包。
-- 签名：release.json 的签名对象是文件的确切字节（与 contracts/release.Verify 一致）；pack 输出的包必须能通过 goal-37 的 packages.Preflight（以测试中注入的公钥为受信来源）。
+行为与验收矩阵：
+1) 命令树（D-77）：帮助列出五个顶层命令；旧 plugin generate/check 入口与建议文本完成迁移。核对命令注册修改后 run、默认运行、管理与日志命令仍沿用现有入口。仓库 go:generate 指令及其生成文件头统一使用 build，能实际重新生成；命令输出和错误为英文。
+2) init 与模板补证（V-01、V-64 的入口分项）：在临时空目录省略目录参数执行 init，核对作者 manifest、可导入 New、一个命令、schema、i18n 与忽略 data/ 的 .gitignore，确认未生成 main.go。与 #186 的 examples/devbot/plugin 比较工程形状及资源绑定方式；用 ParseProject、configschema、i18n 和实际构建核对有效性。devbot 的启动计数 SQL、回声、回环 Adapter、库模式宿主与配置示例属于演示内容，模板只实现契约规定的最小命令。给定空目录同样可用；非空目录拒绝并保留原文件。Adapter/Agent/WebUI 逐角色核对实际形状。
+3) check 只读与构建更新（V-01、V-54）：对合法工程先 build 再 check 成功；改动资源使生成代码过期后 check 失败且目录内容/mtime 保持，build 更新后 check 成功。工程手写构建字段（含零值/null）、错误 New、迁移不连续/非法目标、缺少 en-US、占位符不符、已有静态文案诊断都失败且带原位置。WebUI 缺 index.html、资源路径非法或角色字段不符时失败。复用前置规则与诊断，不恢复标记扫描和 Config 类型推导。
+4) 正式构建（V-01、V-10 的入口分项）：同一目标贯穿 Scan、go list、编译、文件名与包内 manifest；Windows entrypoint 带 .exe，生成薄入口不污染作者源码。schema 的规范内容与版本、Adapter 实例 schema、i18n、Service Schema 与实际 binary 同源。以依赖清单核对独立组件未链接根包/Core。BuildDev 经共享逻辑调整后，用原有 TestDevelopmentReload 的场景守住编译失败保留旧组件与 config-only 不重建。
+5) goal-14 移交补证：必须在包含 #191 的基线上分别执行顶层 check/build --dir examples/plugins/echo 与 examples/plugins/media，实际生成/编译成功，并记录完整命令、目标和产物；检查可导入包与既有 main 包形状均被支持。go test 下 Service/Bus schema_id 与生成器一致的回归引用 #191 的证据，保留其修复；本切片不再次实现 SDK 回退。已有 TestSDKExamples（#191 合入后）与 TestTelegramDevelopment 的命令/收发断言继续有效。
+6) 离线 test（CONTRACTS §9.3）：实际运行新建插件到 Activated，报告其示例命令，再停止进程并释放锁；准备/注册错误与停止错误均使命令失败。Adapter 无真实平台实例启动；临时配置与数据隔离，测试结束后有明确清理结果。WebUI 静态路径与普通进程路径分别取证。阶段预算、进程树、锁与停止失败引用现有 supervisor/host 原语，失败时完整传播。
+7) 四角色 pack（V-01、V-41）：插件、Adapter、Agent 使用同一构建规则，Adapter 工程取可导入包目录并把实例 schema 放包根；WebUI 为 any/any、只含静态内容。每种角色的合法归档经 packages.Preflight 成功，主路径插件再经 MoveTo 成功。新进程包明确写足 migration_mode/prepare_effects 等角色必需元数据，保留 external；不以现有 parser 的警告行为省略构建字段。包内资源与嵌入资源逐项核对。
+8) 可重复与签名（V-41）：同源码、目标、tags、工具链与作者元数据两次构建/打包，产物逐字节相同；tar 条目按名称排序、时间戳和权限固定，元数据排除临时路径与当前时间。分别验证 unsigned 包及给测试 key 的 signed 包；release.Verify 对实际清单字节通过，改动签名字节或清单后拒绝。归档长度/摘要覆盖实际完整文件，包内无自包含归档摘要。包输入只收普通文件和目录，路径/链接/大小写冲突按 §9.1 拒绝。安全解压上限和完整拒绝矩阵直接引用 T-09.2 / #19、签名信任转换引用 T-09.4 / #163；本切片验证自己生成的包能接入预检。
+9) i18n 打包（V-54）：合法 en-US/其他 locale 与 metadata/config/commands/messages 经原检查并完整进入进程包，config_schema.json 采用与嵌入一致的规范内容；缺少 en-US 或占位符不一致时 check 与 pack 均失败，不发布成功归档。SDK 的语言选择、运行期回落引用 #102、T-08.13/#137；配置 schema/迁移引用 #103 与 T-08.12/#114。本切片不重复关闭 WebUI 语言切换分项。
+10) 既有开发与库模式证据：TEST-MATRIX §3.2 的 #149/#160/#171/#186 已覆盖库模式生命周期、固定开发代次、配置/数据库、双传输、热部署、混合运行与 panic。补本切片顶层命令及 init 比对后按分项追加，保留原有未运行平台与 T-09.14 配置管理承接；T-03.10/#180 的真实进程/本地 Bot API 与故障矩阵继续引用。
 
 测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/plugin_cli_e2e_test.go（//go:build unix）：在临时目录 init 一个插件 → check 通过 → build 当前平台 → test 报告注册的命令 → pack 带测试密钥 → packages.Preflight 校验通过并 MoveTo 成功；改动 manifest 使 migration_mode 与实际不符时 check 失败；init 的 main.go 能以库模式编译；pack 两次的归档字节相同。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：五个目标平台的 build（交叉编译，只编译不运行）；Adapter 与 Agent 角色的 init 与 build；WebUI 包的 pack（缺少 assets/index.html 时 check 失败）；目录非空时 init 拒绝；没有 --key 时只输出 release.json。
+- 提交：仅新增 cmd/alonabot/plugin_cli_e2e_test.go 的 TestDevelopmentCLI 一个主路径集成测试（unix）。在临时目录 init 插件→build 宿主平台→check→test（实际 Session/进程、注册示例命令并正常停止）→pack 使用临时测试 key→release.Verify→packages.Preflight→MoveTo。核对 init 契约形状、无 main.go、包内角色与资源。理由：首次通过真实 CLI、生成器、Go 编译器、SDK/离线 Core 会话、文件系统与包预检闭合开发发布主路径，补现有构建与预检各自测试间的接线空缺；只比对模板字符串不足以覆盖此协作路径。测试 key、工程与产物均在 t.TempDir() 生成。
+- 本地自测（*_local_test.go，忽略、不提交，PR 列命令与结果）：上述矩阵其余分项，包括四角色、只读与陈旧生成文件、非法字段/迁移/i18n、命令帮助与旧入口、包资源/重复构建字节、unsigned/signature 拒绝、非空目录、编译/准备/停止失败，以及 echo/media 顶层命令和 devbot 模板语义比对。Go 侧真实失败用最小临时工程，不新建 testdata 插件。向 sdk/ 与 internal/core/supervisor/ 的新增测试一律留本地，保留现有 supervisor_test.go。
+- 沿用测试：对新的共享构建和生成命令重跑现有 TestDevelopmentReload、TestDevelopmentExample、TestLifecycleOverTCPAndStdio、TestTelegramDevelopment，以及 #191 合并后的 TestSDKExamples；保留原断言。其余已有规则证据直接引用，无新增同类提交测试。
+- 五平台 build 本地取证：linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64；记录交叉编译产物、manifest 与命令，平台实际运行单独记录。仓库内生成器的 host/target/tags 选择复用已有测试与本切片最小联验。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./cmd/... ./sdk/... ./internal/...；go build ./...。
+完成条件：
+- 改动 Go 文件 gofmt -l 无输出；go vet ./...、go test -race ./...、go build ./... 通过。更新所有生成指令后 go generate ./... 成功，二次运行生成源码内容稳定；只通过生成源更新生成产物。生成二进制位于忽略的输出目录。
+- 上述全仓 race 中定向确认 TestDevelopmentCLI 与沿用测试的结果；如需独立取证，运行 go test -race -count=1 ./cmd/alonabot -run '^(TestDevelopmentCLI|TestSDKExamples|TestDevelopmentReload|TestDevelopmentExample|TestLifecycleOverTCPAndStdio|TestTelegramDevelopment)$'，同候选已有有效结果时复用。
+- 用构建好的 alonabot 分别运行 check --dir examples/plugins/echo、check --dir examples/plugins/media，以及 build --dir examples/plugins/echo --out <临时目录>、build --dir examples/plugins/media --out <临时目录>；为 init 的当前目录模式、给定空目录模式和 devbot 形状比对保存实际证据。
+- TEST-MATRIX §3.2 按 §3 写测试位置、完整命令、平台/工具版本、日志位置、实际结果与未运行归属，明确列出 goal-14/goal-70 的三项补证。PR「文档同步」列出命令树、生成入口、开发文档与规格缺口的审查者同步项。
+- 按 T-09 停止条件核对：任何协议/Session 校验、包路径/来源校验或 secret 泄漏失败，均阻塞交付；身份、平台或静态错误在管理入口停止旧版前拒绝，沿用现有预检链。本切片发现的范围外缺陷与接口缺口交审查者确定归属，不通过吞错、伪元数据或静默降级获得成功结果。
 
-不做：安装与管理（T-09.4）；市场与远程发布；发行归档（T-14.3）。
+不做：T-09.4 的管理/安装服务重做，T-09.5～T-09.7 的 Journal/提交/恢复，T-09.14 的 reload 与管理配置；T-13.3 的 run/热部署重做、库模式宿主自动生成或新的根包公开选项；PR #191 的 SDK schema_id 修复和示例业务升级；Agent/plugintest 的在途功能；远程发布/市场、官方发行归档与发布签名流水线（T-14.3）；新增依赖、旧 CLI 别名或兼容层、构建期注册标记、sdk.Base/Config 类型恢复、新增 testdata 插件与绑定 SDK 的提交测试。
 ```
 
 ### goal-40 · T-09.5 候选 Journal 与准备编排
@@ -6951,7 +6986,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 ### goal-102 · T-16.3 plugintest 的 LLM 替身
 
-状态：待派发，goal-82（PR #183，`1f1c058`）已合并，从包含它的 main 派发（共享 plugintest 的 options、probe、生成物与文档）。2026-11-13 审查者裁决：替身只经共享的 llm.Request/Response Schema 做结构校验，业务规则与错误交给传入函数，不复制官方 Agent 的 Provider 与名单配置；多次给出 LLM 选项时最后一个生效，nil 函数在公开入口报错；默认的 public Service 沿用当前空权限集合，不等待 goal-61 的 ServiceBuilder.Permission；#174 的合并提交为 `9c394b3`。直接前置 T-12.8（goal-83，PR #175，合并提交 `ac6083a`）与 T-16.1（goal-81，PR #168，`37b0ada`）均已合并；Agent 开发组件与文本生成分别沿用 PR #163（`cb8ae3d`）、#170（`eca6310`），带类型 Service 声明沿用 PR #158（`464ccfd`）。2026-11-13 起草者按维护者指定的 main `9efee73` 工作副本，用 `rg`、源码读取及离线 `GO111MODULE=off go doc` 核对下列事实；前置合并号取自本地 goal 完成记录。
+状态：已完成（[PR #190](https://github.com/AlonaBot/AlonaBot/pull/190)，合并提交 `2ddaabd`），证据见 TEST-MATRIX §3.2。合入：`plugintest.LLM(handler func(ctx context.Context, req llm.Request) (llm.Response, error)) Option` 登记只提供 `llm.generate` 的测试 Agent（`plugintest/internal/llmagent`），被测插件经 `@agent` 的调用只做共享 Schema 的结构校验后交给测试函数，多次给出时最后一个生效，nil 函数在公开入口报错。以下为派发时的语句。
 
 按 main 核对：
 
@@ -7087,7 +7122,7 @@ internal/core/journal
 
 ### goal-42 · T-09.7 崩溃恢复、回退与回收
 
-状态：待派发。前置 T-09.6（[PR #179](https://github.com/AlonaBot/AlonaBot/pull/179)，合并提交 `8898251`）已合并；T-09.5（PR #173，`2bb8181`）提供 journal 的阶段、`Prepare`、`Abort` 与 `candidate.PrepareDatabase`/`Discard`。2026-11-13 审查者按 main `8898251` 核对：`state.CommitCandidate`、`journal.Commit`、`manage.Candidates.Rollback(ctx, id, generation string) error`、`process.LockRuntime(pluginDir)` 已存在；journal 只有 `KindFirstInstall`、`KindReload`、`KindUpdate`，`Prepare(ctx, pluginID, kind, staged)` 不能指定来源代次；回退的生产接线在根包 `managedCandidates.Rollback`（现返回 UNSUPPORTED），Reload/Update 由同一类型的 `apply` 经 `prepareCandidate` 接入并提交。据此改写接口与范围：journal 提供 `KindRollback` 与返回 `*Result` 的 `PrepareRollback`，根包的 `managedCandidates.Rollback` 沿用 apply 的接入与提交路径（DECISIONS 2026-11-13 变更记录）。原状态行中的 `secret.Collect` 为笔误，回收函数是本切片新增的 `gc.Collect`。
+状态：已完成（[PR #187](https://github.com/AlonaBot/AlonaBot/pull/187)，合并提交 `864819e`），证据见 TEST-MATRIX §3.2。合入：`journal.(*Orchestrator).Recover(ctx) (blocked []string, err error)`（取不到 runtime.lock 的插件以 blocked 返回，根包不启动它们，管理状态为 Degraded）、`KindRollback` 与 `PrepareRollback(ctx, pluginID, generation string) (*Result, error)`、根包 `managedCandidates.Rollback`（须确认并按目标版本核对依赖）、`internal/core/gc.Collect`、状态库保留最近三个已提交代次；first_install 的提交同时写入启用意图；资源按当前 data_dir 与包身份定位；docs/development.md「备份与恢复」。接口调整见 DECISIONS 2026-11-13 变更记录。以下为派发时的语句。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-42（切片 T-09.7：崩溃恢复、回退与回收）。goal 目录 goal-42，分支 goal-42，worktree .worktrees/goal-42，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

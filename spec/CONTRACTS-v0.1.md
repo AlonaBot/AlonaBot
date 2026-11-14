@@ -155,7 +155,7 @@ SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 contex
 
 ### 5.1 配置真源、缺失值与编辑
 
-- 每插件使用独立 JSON 对象，不加外层 `config`；`config` 只用于 `i18n/*.json` 的翻译根节点。`<data_dir>/plugins/<id>/config.json` 是可编辑快照，运行值以 Core 状态库的 Active Generation 为准。直接编辑后执行 `alonabot reload <id>` 才导入 Pending；`restart` 只重启已激活配置。已有状态库无法读取时必须报错，不能把编辑快照或空对象当成新的 Active。
+- 每插件使用独立 JSON 对象，不加外层 `config`；`config` 只用于 `i18n/*.json` 的翻译根节点。`<data_dir>/plugins/<id>/config.json` 是可编辑快照，运行值以 Core 状态库的 Active Generation 为准。直接编辑后执行 `alonabot reload <id>` 才导入 Pending（CLI 先经管理 API 的 config/import 把编辑快照导入 Pending，再请求 reload）；管理 API 的 reload 激活已有的 Pending，没有 Pending 时才导入编辑快照（D-143）；`restart` 只重启已激活配置。已有状态库无法读取时必须报错，不能把编辑快照或空对象当成新的 Active。
 - 插件配置由与 `plugin.yaml` 同目录的 `config_schema.json` 声明（D-76），没有该文件的插件只有空配置；插件不声明 Go 配置类型。文件是 JSON 对象，键为字段键、值为字段描述，键的顺序就是表单顺序。字段键与模板键是非空的 ASCII 字母、数字、`_` 与 `-`；顶层以 `$` 开头的键保留给 `$version` 与 `$migrations`（§5.5）。Adapter 实例配置用同样格式的 `adapter_config_schema.json` 声明（§8）。键名沿用 AstrBot 的 `_conf_schema.json`，在此之上增加 `secret`、`required` 与 `template` 类型。`type` 必填：
 
   | type | 值 | 表单 |
@@ -431,7 +431,7 @@ Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行�
 | `install` / `list` | 校验包、首次来源与 ID 后登记；仍处于已安装状态的同 ID 不覆盖。`--source owner/repo` 从该 GitHub 仓库的 Release 下载并安装；不给时安装命令行给出的本地包，来源取自其 release.json（发行包 `packages/` 中的官方组件即官方来源）。之后的 `update` 只从安装时的来源取版本。同类组件（§9.1）已安装时返回 ALREADY_EXISTS 并列出它；加 `--replace` 时列出将被替换的组件并要求确认，在新组件的下载、签名与静态检查通过后，按 `uninstall` 的缺省语义卸载旧组件（保留其数据与来源绑定），再安装新组件；旧组件替换前已启用时，新组件安装后按普通 `enable` 流程启用，否则保持未启用。会话、记忆、按组件 ID 记录的策略，以及被替换 Adapter 的实例配置与凭证都不在组件之间迁移，新 Adapter 的实例需要重新创建；新组件准备或启用失败时旧组件保持已卸载，可以按原来源重装。已卸载的保留记录只允许匹配原来源的显式重装并复用数据，来源不符拒绝。list 返回实际安装/激活状态与角色。 |
 | `enable` / `disable` | 已有 Active 时启动该代次；首次安装尚无 Active 时走首个候选 Prepared/提交。disable 停止并保留安装及数据。 |
 | `restart` | 以当前 Active 程序/配置/DB 启动新 Session，不导入编辑中的 config.json。 |
-| `reload` | 把编辑快照导入 Pending，走配置校验及候选激活；SQLite 同样复制 DB。 |
+| `reload` | 把编辑快照导入 Pending，走配置校验及候选激活；SQLite 同样复制 DB。管理 API 的 reload 激活已有 Pending，没有 Pending 时才导入编辑快照（D-143）。 |
 | `update` | 仅从绑定来源选择符合 pin 的候选版本并执行受控更新；不把 install 同 ID 当更新。 |
 | `uninstall` | 停止、解除运行注册并删除未引用程序包，清理范围有三种（D-127）。不带选项时只卸载：保留数据、配置与来源绑定，以便同来源重装。`--purge-data` 另外删除数据，保留配置与来源绑定。`--purge` 删除数据与配置，连同来源绑定与安装记录。数据是框架受管的运行数据：全部代次（受管 SQLite、代次目录与代次内的配置快照）、Agent 会话（§13.3）、按钮 token、动态任务以及静态任务的起点与暂停状态（§4.3）、Adapter 的游标与聊天目录（§8，D-130）。配置是管理员与作者给出的设置：编辑快照 `config.json`、Pending、secret、命令策略、工具策略、发信许可、Adapter 在 `core_config.json` 中的实例。`--purge-data` 之后重装，首个候选的配置取编辑快照；编辑快照与被删除的 Active 配置不同时，确认对象中写明。两种清理都须展示并确认准确对象，只删除集中列出的框架受管路径；不擅自删除插件自管的外部数据库或任意插件自管目录与文件。被替换 Adapter 的实例按 `core_config.json` 中 Core 写入的 `package` 归属区分：新组件不启动、不列出归属于其他组件的实例，在其上新建实例需要确认并丢弃旧实例；清理只删除归属于被卸载组件的实例配置（D-139）。卸载先按停止流程摘除该组件的定时器、清空排队的到期任务并取消在途的任务调用；清理时在同一个状态库事务中删除它的任务与调度状态，不经过插件进程。只卸载时任务保留但不触发。 |
 | `pin` | 固定允许的更新版本：值为精确的 SemVer 版本，`update` 只接受与之相等的候选，空串解除（D-139）；解除固定须显式操作，不能被自动更新忽略。 |

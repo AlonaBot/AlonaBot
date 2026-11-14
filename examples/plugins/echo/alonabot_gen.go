@@ -6,7 +6,29 @@ import alonabotgen0 "github.com/AlonaBot/AlonaBot/sdk"
 
 var alonabotGenerated = alonabotgen0.Generated{
 	Manifest: []byte("# echo 示例的开发工程身份。\nid: echo\nname: Echo\nversion: 0.1.0\nauthor: AlonaBot\nsource: github.com/AlonaBot/AlonaBot\nrole: plugin\n"),
+	I18n: map[string][]byte{
+		"en-US.json": []byte("{\n  \"messages\": {\n    \"echo.added\": \"Note added.\",\n    \"echo.empty\": \"No notes yet.\",\n    \"echo.published\": \"Notes published.\",\n    \"echo.roll\": \"Rolling {count}d{sides}.\",\n    \"echo.keyword\": \"Keyword matched.\",\n    \"echo.raw\": \"Raw matched.\",\n    \"echo.question\": \"What should I echo?\",\n    \"echo.answer\": \"Answer: {text}\"\n  }\n}\n"),
+		"zh-CN.json": []byte("{\n  \"messages\": {\n    \"echo.added\": \"笔记已添加。\",\n    \"echo.empty\": \"暂无笔记。\",\n    \"echo.published\": \"笔记已发布。\",\n    \"echo.roll\": \"掷骰参数：{count}d{sides}。\",\n    \"echo.keyword\": \"已匹配关键词。\",\n    \"echo.raw\": \"已匹配原始消息。\",\n    \"echo.question\": \"需要回送什么？\",\n    \"echo.answer\": \"回答：{text}\"\n  }\n}\n"),
+	},
+	ServiceSchemas: map[string][]byte{
+		"main.NotesQuery":    []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"properties\":{},\"type\":\"object\"}"),
+		"main.NotesSnapshot": []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"properties\":{\"notes\":{\"items\":{\"type\":\"string\"},\"type\":[\"array\",\"null\"]}},\"required\":[\"notes\"],\"type\":\"object\"}"),
+	},
 	ParamNames: map[string][]string{
-		"main:main.go:18": {"e"},
+		"main.(*notebook).add":           {"text"},
+		"main.(*notebook).list":          {},
+		"main.(*notebook).listPublished": {},
+		"main.ask":                       {},
+		"main.calculate":                 {"args"},
+		"main.echoText":                  {"text"},
+		"main.replyNotes":                {"notes"},
+		"main:commands.go:53":            {},
+		"main:commands.go:62":            {},
+		"main:commands.go:66":            {},
+		"main:commands.go:69":            {},
+		"main:commands.go:71":            {},
+		"main:commands.go:73":            {""},
+		"main:commands.go:76":            {"snapshot"},
+		"main:main.go:19":                {"e"},
 	},
 }

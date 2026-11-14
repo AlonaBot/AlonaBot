@@ -203,6 +203,7 @@ func run(root *Plugin, l launch) (err error) {
 		return err
 	}
 	l.serviceSchemas = generatedFor(root).ServiceSchemas
+	l.entryPackage = root.entryPackage
 
 	// 3. 连接 Core 并依次完成握手、准备与激活，然后进入服务循环。
 	l.http = newHTTPListener(reg.HTTP)
