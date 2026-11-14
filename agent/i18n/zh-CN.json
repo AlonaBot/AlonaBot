@@ -64,6 +64,9 @@
             "max_tokens": {
               "description": "最大输出 token 数",
               "hint": "至少为 1。"
+            },
+            "image_input": {
+              "description": "图片输入"
             }
           }
         },
@@ -88,6 +91,9 @@
             "max_tokens": {
               "description": "最大输出 token 数",
               "hint": "至少为 1。"
+            },
+            "image_input": {
+              "description": "图片输入"
             }
           }
         },
@@ -112,6 +118,9 @@
             "max_tokens": {
               "description": "最大输出 token 数",
               "hint": "至少为 1。"
+            },
+            "image_input": {
+              "description": "图片输入"
             }
           }
         },
@@ -136,6 +145,9 @@
             "max_tokens": {
               "description": "最大输出 token 数",
               "hint": "至少为 1。"
+            },
+            "image_input": {
+              "description": "图片输入"
             }
           }
         },
@@ -160,6 +172,9 @@
             "max_tokens": {
               "description": "最大输出 token 数",
               "hint": "至少为 1。"
+            },
+            "image_input": {
+              "description": "图片输入"
             }
           }
         },
@@ -184,6 +199,9 @@
             "max_tokens": {
               "description": "最大输出 token 数",
               "hint": "至少为 1。"
+            },
+            "image_input": {
+              "description": "图片输入"
             }
           }
         }
