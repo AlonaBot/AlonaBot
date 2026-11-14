@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -57,9 +56,7 @@ type pluginContextKey struct{}
 // NewPlugin 创建一个独立的插件对象。
 func NewPlugin() *Plugin {
 	pc, _, _, _ := runtime.Caller(1)
-	name := runtime.FuncForPC(pc).Name()
-	start := strings.LastIndexByte(name, '/') + 1
-	pkgPath := name[:start+strings.IndexByte(name[start:], '.')]
+	pkgPath, _ := runtimeFunctionParts(runtime.FuncForPC(pc).Name())
 	p := &Plugin{callbacks: make(map[string]bool), jobSubPlugins: make(map[string]string)}
 	generated.SetEntry(p, pkgPath)
 	p.commands.plugin = p

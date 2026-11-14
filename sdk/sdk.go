@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -312,15 +313,12 @@ func handlerParamNames(g generated.Resources, handler any) []string {
 		return nil
 	}
 	fn := runtime.FuncForPC(reflect.ValueOf(handler).Pointer())
-	name := handlerFunctionName(fn.Name())
-	if names, ok := g.ParamNames[name]; ok {
+	packagePath, function := runtimeFunctionParts(handlerFunctionName(fn.Name()))
+	if names, ok := g.ParamNames[packagePath+function]; ok {
 		return names
 	}
-	packageStart := strings.LastIndexByte(name, '/') + 1
-	packageEnd := packageStart + strings.IndexByte(name[packageStart:], '.')
-	packagePath := name[:packageEnd]
 	// main 在普通二进制中用 main 前缀，在 go test 中用包的导入路径。
-	if names, ok := g.ParamNames["main"+name[packageEnd:]]; ok {
+	if names, ok := g.ParamNames["main"+function]; ok {
 		return names
 	}
 	file, line := fn.FileLine(fn.Entry())
@@ -329,6 +327,15 @@ func handlerParamNames(g generated.Resources, handler any) []string {
 		return names
 	}
 	return g.ParamNames["main"+suffix]
+}
+
+// runtimeFunctionParts 先按符号分隔符切开包与函数，再还原包路径中的 Go %xx 转义。
+func runtimeFunctionParts(name string) (pkgPath, function string) {
+	start := strings.LastIndexByte(name, '/') + 1
+	end := start + strings.IndexByte(name[start:], '.')
+	// 编译器生成的包路径转义总是合法；函数部分保留符号原文。
+	pkgPath, _ = url.PathUnescape(name[:end])
+	return pkgPath, name[end:]
 }
 
 // handlerFunctionName 去掉实例类型实参和方法值包装后缀，对齐源码声明键。
