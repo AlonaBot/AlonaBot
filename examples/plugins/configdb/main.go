@@ -4,7 +4,7 @@
 // fail_migration 与 fail_start 供临时 data_dir 中的候选失败验收使用。
 package main
 
-//go:generate go run ../../../cmd/alonabot plugin generate
+//go:generate go run ../../../cmd/alonabot build --out ../../../bin/generated/examples-plugins-configdb
 
 import (
 	"context"

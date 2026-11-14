@@ -50,6 +50,7 @@ type Diagnostic struct {
 type Result struct {
 	PluginConstructor string // 插件的导入路径.New；Adapter 或只有实例声明时为空。
 	AdapterType       string // Adapter 的导入路径.具体类型名；插件或只有实例声明时为空。
+	HTTP              bool   // 入口工程在所选目标下登记 HTTP 路由；构建据此向包内 required_capabilities 写入 http_listener。
 	ConfigSchema      []byte // config_schema.json 的规范 JSON；没有该文件时为 nil
 	Source            []byte // 完整 gofmt 源码；有诊断或只有实例声明时为 nil。
 	Diagnostics       []Diagnostic

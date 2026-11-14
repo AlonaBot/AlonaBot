@@ -1,7 +1,7 @@
 // echo 命令演示显式注册、参数、延续调用与类型化服务，并回送未消费的文本和图片。
 package main
 
-//go:generate go run ../../../cmd/alonabot plugin generate
+//go:generate go run ../../../cmd/alonabot build --out ../../../bin/generated/examples-plugins-echo
 
 import (
 	"log/slog"

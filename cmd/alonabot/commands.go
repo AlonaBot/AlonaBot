@@ -83,7 +83,8 @@ func execute(args []string) int {
 			return tune.WriteList(os.Stdout, values)
 		}}
 	tuneCommand.AddCommand(listCommand)
-	root.AddCommand(runCommand, tuneCommand, pluginCommand(&code), adminTokenCommand(&code))
+	root.AddCommand(runCommand, tuneCommand, adminTokenCommand(&code))
+	root.AddCommand(initCommand(&code), buildCommand(&code), checkCommand(&code), testCommand(&code, &values), packCommand(&code))
 	root.AddCommand(managementCommands(&code)...)
 	root.AddCommand(logCommands(&code)...)
 	// 2. 由 Cobra 生成帮助，错误只在这里打印一次。

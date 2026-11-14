@@ -429,6 +429,34 @@ T-02.4 按 D-86 删除的测试及测试插件只保留历史运行证据，相�
 
 未运行：顶层 `alonabot check/build`（2026-11-13 裁决留 T-09.3 / goal-38 补证）、真实 Telegram、浏览器管理操作、Linux/Windows 实际运行与远端 CI。媒体故障矩阵继续引用 T-03.10 / #180，示例套件覆盖引用 T-16.2 / #183；本次只增加上述一个提交集成测试。
 
+#### T-09.3 候选：顶层开发 CLI 与四角色脚手架
+
+2026-11-13，基线 `e0b8ab48c951d3536dd6bebeaee7ff59267595da` 的 goal-38 工作区候选，macOS 27.0.1（26A434）、darwin/arm64、Go go1.27.1。Git 只读，commit 与 PR 由审查者处理；FIX-2/FIX-3 已按审查者裁决修复，当前无阻塞。
+
+| 分项 | 测试位置与实际结果 | 完整命令及日志 |
+| --- | --- | --- |
+| V-01、V-41、V-54 主路径 | 新增 `cmd/alonabot/plugin_cli_e2e_test.go:TestDevelopmentCLI`（unix，150 行）：真实 CLI 当前目录 init→build→check→test→signed pack→release.Verify→Preflight→MoveTo；验证可导入 New、英文 hello 命令、schema/i18n、忽略 data/、无作者 main.go、真实激活/停止/清理、包内 manifest/build-info/规范 schema 与归档外身份材料。通过 | `go test ./cmd/alonabot -run '^TestDevelopmentCLI$' -v`，`goal-38/development-cli.log`；最终候选随 `go test -race -count=1 -json ./...` 通过，`goal-38/race-fix-final.json` |
+| 四角色与包接线 | 忽略的 `internal/pluginkit/build_local_test.go:TestLocalInitAndBuild`、`cmd/alonabot/plugin_cli_local_test.go:TestLocalOfflineAndPack`：plugin/adapter/agent 真进程离线激活停止，Adapter 零实例；WebUI 静态加载和长路径；四角色重复归档逐字节相同、签名/篡改拒绝、unsigned 清单、Verify/Preflight/MoveTo 及角色资源。通过 | `go test ./cmd/alonabot ./internal/pluginkit ./sdk/generate -run 'Local' -v` 初次日志 `goal-38/local-matrix.log`；该次 prepare/ready 的自测断言只搜索返回错误，完整原因已在 stderr，修正为核对完整命令输出后最终 `go test -race -count=1 -json ./...` 全部通过 |
+| 检查与失败路径 | 忽略的 `internal/pluginkit/matrix_local_test.go:TestLocalReadOnlyAndFailures`、`TestLocalBuildDevPreservesProject`、`TestLocalOutputAndArchiveConflicts`，及 CLI 本地 `TestLocalOfflineFailures`、`TestLocalPublicationFailures`：目录内容/mtime 只读、陈旧资源 build 修复、显式零值/null、错误 New、非法/不连续迁移、缺 en-US/占位符/文案诊断、WebUI 路径/角色/index、符号/硬链接/大小写冲突、文件/目录归档冲突、作者 manifest 覆盖拒绝；编译/准备/注册/激活/停止及停止期限失败、清理、旧产物保留、坏 URL/key 拒绝。通过 | 同上述本地矩阵命令及最终 `go test -race -count=1 -json ./...`；失败内容与诊断位置见 `goal-38/local-matrix.log`，最终通过见 `goal-38/race-fix-final.json` |
+| V-54 资源同源与 secret 拒绝 | 忽略的 `cmd/alonabot/plugin_cli_local_test.go:TestLocalI18nAndKeyResources`：en-US/zh-CN 的 metadata/config/commands/messages；schema 版本及声明式迁移；包资源与构建旁车逐字节一致；将签名私钥声明为 icon 时拒绝且无发布目录。通过 | `go test -race ./cmd/alonabot -run '^TestLocalI18nAndKeyResources$' -v`，`goal-38/i18n-key-resources.log` |
+| 五平台构建、V-10 入口 | 忽略的 `internal/pluginkit/matrix_local_test.go:TestLocalTargets`：linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64 的正式 Compile/Check，tags=goal38；核对 manifest、GOOS/GOARCH、CGO_ENABLED=0、trimpath、Windows .exe。通过；各次产物在 t.TempDir，测试后清理。正式依赖图拒绝根包/Core 导入 | 随 `go test ./cmd/alonabot ./internal/pluginkit ./sdk/generate -run 'Local' -v` 与最终 `go test -race -count=1 -json ./...` 运行；逐目标 Options、完整产物路径与包内 manifest 见 `goal-38/local-matrix.log` |
+| 沿用开发、SDK 与双传输 | `TestDevelopmentReload`、`TestDevelopmentExample`、`TestLifecycleOverTCPAndStdio`、`TestTelegramDevelopment`、`TestSDKExamples` 原断言保留，随全仓 race 通过；这些测试在当前 Unix 候选无 Skip 分支 | `go test -race -count=1 -json ./...`，`goal-38/race-fix-final.json`、`race-fix-summary.log`，CLI 包 161.307s；复用同候选结果 |
+| 全仓检查 | 445 个 Go 文件 gofmt 无输出；vet、全仓 race、build 通过 | `gofmt -l` 的具体文件列表见 `goal-38/gofmt-fix-files.txt`、输出 `gofmt-fix.log`；`go vet ./...`，`vet-fix-final.log`；`go test -race -count=1 -json ./...`，`race-fix-final.json`；`go build ./...` 退出 0（附 stat cache 写入 `operation not permitted` 警告，`build-fix-final.log`）；`git diff --check` 通过 |
+| 十一个工程重新生成 | 原十个指定工程及追加授权的 llmagent 指令改为 build，输出到忽略的根 bin/generated；全部实际生成与编译，全仓命令连续两次退出 0，24 份生成 Go 源码逐字节相同 | `go generate ./...` 两次；`goal-38/generate-fix-1.log`、`generate-fix-2.log`、`generate-fix-stability.log`。此前旧指令的失败记录保留为历史，当前已解除 |
+| FIX-2 目标 HTTP 必需能力 | 忽略的 `cmd/alonabot/http_capabilities_local_test.go:TestLocalHTTPCapabilities`：HTTP 插件/子插件、AdapterHTTP 与无 HTTP 插件的 darwin/arm64 和 windows/amd64 顶层 build；tags 开关、同名方法/函数值不误判；pack→Preflight→MoveTo 后实际进程 HELLO 与包内必需能力一致，真实离线激活/停止通过。`internal/pluginkit/capabilities_local_test.go:TestLocalSDKRequiredCapabilities` 验证非空 SDK Required 常量列表提取通过 | `go test -race ./cmd/alonabot -run '^TestLocalHTTPCapabilities$' -v`（`goal-38/fix2-http.log`）；子插件补充定向 race（`fix2-subhttp.log`）；`go test ./internal/pluginkit -run '^TestLocalSDKRequiredCapabilities$' -v`（`fix2-sdk-required.log`）；最终全部随 `go test -race -count=1 -json ./...` 通过（`race-fix-final.json`） |
+
+三项移交补证：
+
+- **goal-14 / echo：** `goal-38/alonabot check --dir examples/plugins/echo`；`goal-38/alonabot build --dir examples/plugins/echo --out goal-38/outputs/echo`，均通过，darwin/arm64，产物 `goal-38/outputs/echo/component` 与包内 `plugin.yaml`。实际执行使用上述 CLI/out 的绝对路径，完整命令、manifest、`go version -m` 记录在 `goal-38/examples-fix-cli.log`。
+- **goal-14 / media：** `goal-38/alonabot check --dir examples/plugins/media`；`goal-38/alonabot build --dir examples/plugins/media --out goal-38/outputs/media`，同样通过，产物 `goal-38/outputs/media/component`。主包入口与可导入组件均已由真实构建覆盖。#191 的 Service/Bus schema_id 修复保留，回归沿用上面的 TestSDKExamples 与 T-04.5 已有证据。
+- **goal-70 / 模板：** `TestDevelopmentCLI` 在临时当前目录执行 init；忽略的 `cmd/alonabot/plugin_cli_local_test.go:TestLocalCLITreeAndInit` 实际执行给定空目录 init、父 module 复用、非空目录拒绝与原文件保留，并比较新模板与 `examples/devbot/plugin` 的工程文件、可导入 New、NewPlugin/UseGenerated 绑定和命令形状。随本地矩阵与最终 race 通过。devbot SQL/回环/库模式宿主继续引用 T-13.4 / #186，库模式生命周期/配置/双传输等沿用 #149/#160/#171/#186，Telegram 故障矩阵沿用 T-03.10 / #180。
+
+**FIX-2 已完成：** 按审查者裁决，`generate.Result.HTTP` 依据目标工程包内类型检查后的 Plugin.Route/SubPlugin.Route 直接调用或入口具体 Adapter 对 AdapterHTTP 的 types.Implements 判定。共享构建静态读取实际链接 SDK 的 sdkOffer.Required 与既有 HTTP 能力常量，当前基础 Required 为空；不新增其他公开 API。保守识别、不做可达性分析及函数值/反射间接登记限制已注释；裁决由审查者合并时记入 DECISIONS。
+
+**FIX-3 已完成：** llmagent 的 go:generate 及生成文件头已按追加授权迁移；全仓两次生成成功且稳定。最终全仓 race 共 25 个测试包零失败，根包 91.673s、CLI 161.307s、pluginkit 53.146s；新提交集成及五项沿用测试、12 项本地自测全部通过，逐项事件见 `goal-38/race-fix-final.json`，摘要 `race-fix-summary.log`。
+
+未运行：真实 Telegram、Linux/Windows 实际运行、darwin/amd64 实际运行、浏览器管理流程、远端 CI。交叉编译仅作为构建证据；管理配置界面归 T-09.14，WebUI 语言切换保留原剩余归属。packages.Preflight 的 build-info 严格核对及遗留缺字段警告按派发说明交审查者裁决；归档拒绝矩阵继续引用 T-09.2 / #19，签名信任转换引用 T-09.4 / #163。
+
 ### 3.3 Target 与发信许可分项证据
 
 [PR #31](https://github.com/AlonaBot/AlonaBot/pull/31)（T-03.2），产品代码 head `bb5992119928b06a3df89f8445a2da9b4e005472`；2026-10-28 在 macOS 27.0.1（26A434）、darwin/arm64、Go 1.27.1 上运行。

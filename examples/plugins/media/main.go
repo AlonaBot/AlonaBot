@@ -1,7 +1,7 @@
 // media 命令演示上传内置图片、相册与带类型按钮的文本编辑。
 package main
 
-//go:generate go run ../../../cmd/alonabot plugin generate
+//go:generate go run ../../../cmd/alonabot build --out ../../../bin/generated/examples-plugins-media
 
 import (
 	"bytes"

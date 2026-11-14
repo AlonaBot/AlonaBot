@@ -84,7 +84,19 @@ cat $DEVBOT_OUTPUT
 
 注入返回 204，异步发送后文件内容为 `Hello from devbot!`。完整实例 JSON、目录结构、认证、源码／翻译／配置改动与编译失败恢复操作见 [devbot README](../examples/devbot/README.md)。样例把 `adapters.devloop.package` 绑定到 `alonabot_adapter_devbot`，实例在 `instances.one`，命令前缀为 `/`。两个开发组件沿用真实 Deliver／Send 流水线。
 
-契约的创建入口是 `alonabot init [目录]`，生成可导入插件包、作者 manifest、schema、i18n 与忽略 `data/` 的 `.gitignore`；当前基线使用上述已有工程。`init` 与顶层 `build/check` 由 T-09.3 交付，实际 init 创建与模板比对登记「未运行，T-09.3 补证」。现阶段资源生成与检查使用下文的 `plugin generate/check`。
+先构建 CLI（`go build -o bin/alonabot ./cmd/alonabot`），再创建与验证组件：
+
+```fish
+bin/alonabot init ./myplugin --id alonabot_plugin_hello
+bin/alonabot build --dir ./myplugin
+bin/alonabot check --dir ./myplugin
+bin/alonabot test --dir ./myplugin
+bin/alonabot pack --dir ./myplugin --asset-url https://example.com/hello.tar.gz
+```
+
+`init` 也可在空目录中省略目录参数；非空目录会报错并保留文件。缺省角色为 plugin，`--role agent|adapter|webui` 创建对应工程；Adapter 还须给出 `--adapter-id`。插件与 Agent 导出 `New()`，包含一个英文示例命令、schema、i18n；Adapter 提供实例 schema，WebUI 提供 `assets/index.html`。模板忽略 `data/` 与 `bin/`，正式薄入口通过 overlay 提供。库模式宿主参考 [devbot](../examples/devbot/README.md)。
+
+位于现有 Go module 中时复用该 module；外部空目录须给出 `--module example.com/myplugin`。发布版 CLI 用自身模块版本写 SDK require，开发版 `(devel)` 会提示执行 `go get github.com/AlonaBot/AlonaBot@<version>`，由作者选定版本。发布前修改 `plugin.yaml` 中的示例 source。
 
 在包含 `plugin.yaml` 的组件工程中运行 `alonabot run --reload`，或者明确给出一个或多个工程目录：
 
@@ -156,12 +168,22 @@ bin/alonabot run --data-dir ./data --args REQUEST_TIMEOUT=2s --args ./tuning.txt
 
 插件包导出 `func New() *sdk.Plugin`，命令、文本匹配与事件都在插件对象上链式注册，包级函数也这样注册；构建期生成器不读取任何标记，只生成包内变量 `alonabotGenerated`（配置 Schema、Service Schema、i18n 与 manifest），由 `New` 显式调用 `sdk.UseGenerated(p, alonabotGenerated)` 绑定。在插件构建入口目录生成或检查 `alonabot_gen.go`：
 
-```sh
-bin/alonabot plugin generate --dir ./myplugin   # 内容不变时不改文件
-bin/alonabot plugin check --dir ./myplugin --goos linux --goarch amd64 --tags a,b
+```fish
+bin/alonabot build --dir ./myplugin --goos linux --goarch amd64 --tags a,b
+bin/alonabot check --dir ./myplugin --goos linux --goarch amd64 --tags a,b
 ```
 
-两者按 `--goos`、`--goarch`、`--tags` 筛选源码（缺省取当前环境），只扫描入口及其依赖的本 module 包，不受现有生成文件的 import 影响。源码问题逐行输出为 `文件:行:列: 说明`，此时不写文件；`check` 在生成内容与现有文件不同时报告过期。两种情况都以退出码 1 结束。
+`build/check/pack` 按相同的 `--goos`、`--goarch`、`--tags` 选择源码，缺省沿用 Go 环境。`build` 成功后更新生成文件，默认输出到 `<工程>/bin`，可用 `--out DIR` 覆盖。进程产物包含独立的 `component`（Windows 为 `component.exe`）、资源旁车及包内 `plugin.yaml`；作者 manifest 保持原样。WebUI build 发布静态资源与包内 manifest。`check` 只读比较生成文件，缺失或陈旧时提示 `alonabot build`，保留全部静态诊断与位置。
+
+`test` 在全新临时数据目录中构建宿主平台组件，完成真实握手、准备、注册、激活与停止，报告注册命令及清理结果；Adapter 保持零平台实例，WebUI 检查静态加载资源。准备、注册、停止或清理失败均非零退出。
+
+`pack` 使用相同构建路径输出 `<id>-<version>-<os>-<arch>.tar.gz`（WebUI 为 `<id>-<version>-any.tar.gz`）及归档外的 `release.json`，`--out` 默认同 build。`--asset-url` 必填且须为绝对 https URL。进程包的 `build-info` 是 `debug.BuildInfo.String()` 文本；配置 schema 与嵌入资源使用同一规范内容。
+
+```fish
+bin/alonabot pack --dir ./myplugin --asset-url https://example.com/hello.tar.gz --key ./release.key --out ./dist
+```
+
+`--key` 可选，文件内容为标准 base64 编码的 64 字节 Ed25519 私钥，允许首尾空白。提供时额外写 `release.json.sig` 和 `release.pub`，分别为标准 base64 签名及公钥；省略时生成 unsigned release。密钥读取或签名失败直接报错。私钥、运行配置与数据目录均应留在打包资源之外。
 
 真实进程验收（Unix；构建 Core、lifecycle 与临时热部署工程）：
 
