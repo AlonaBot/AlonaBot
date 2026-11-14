@@ -1,0 +1,12 @@
+{
+  "messages": {
+    "echo.added": "Note added.",
+    "echo.empty": "No notes yet.",
+    "echo.published": "Notes published.",
+    "echo.roll": "Rolling {count}d{sides}.",
+    "echo.keyword": "Keyword matched.",
+    "echo.raw": "Raw matched.",
+    "echo.question": "What should I echo?",
+    "echo.answer": "Answer: {text}"
+  }
+}
