@@ -7,6 +7,12 @@
     "button_label": "Open",
     "plain": "plain",
     "before_edit": "before",
-    "after_edit": "after"
+    "after_edit": "after",
+    "question": "Your answer?",
+    "choice": "{value}:{user}",
+    "first": "First",
+    "second": "Second",
+    "tick": "tick",
+    "background": "background"
   }
 }

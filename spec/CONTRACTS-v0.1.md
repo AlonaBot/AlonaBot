@@ -75,6 +75,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 ### 2.3 权限与 Hook
 
 - 路由所需的权限是一组权限名，触发者满足其中任一即可；空集合表示不要求 Actor。权限名包括 Core 内置的 `user`（具有可信 Actor 的用户）、`admin`（`core_config.json` 的 `admins` 中以用户字符串 `<adapter_id>:<external_user_id>` 登记的机器人管理员，§15.1，D-105）、`chat_admin`（任一 Adapter 的会话管理员），以及 Adapter 声明的 `<adapter_id>.<name>`（§8，D-69）。Core 为每个事件计算 Actor 的权限集合：可信 Actor 含 `user`；位于 Core Admin 列表时含 `admin`；Adapter 在事件中给出的平台权限只保留该 Adapter 声明过的名字，并展开声明的隐含关系。`admin` 不自动满足其他权限名，需要 Core Admin 也能执行时显式列出 `admin`。SDK 的缺省权限为 `{user}`。平台权限与 `chat_admin` 只对该事件所在的会话有效，不取得 Core 安装、配置或跨会话权限。没有 Actor 的 job/后台调用只满足空集合。Core 全局禁止由状态库中的两张禁止表组成：按用户字符串禁止用户，按不含话题的会话字符串 `<adapter_id>:<chat_id>` 禁止会话，Core Admin 与两张表都对该 Adapter 的全部实例生效（MESSAGE-MODEL §1，D-105）；被禁止的用户触发的命令、发往被禁止会话的 Send 一律拒绝，任何策略覆盖与 Admin 身份都不能绕过（D-45）。
+- Service 也可以声明所需权限（SDK 的 `ServiceBuilder.Permission`，写入 RouteDescriptor.required_permissions，D-142），语义与命令相同：Broker 派发前以 Core 从父调用派生的可信 Actor 检查，满足任一才运行；没有 Actor 的调用只满足空集合，失败返回 PERMISSION_DENIED，不运行函数。Service Handler 以 `Context.User()`、`Session()` 与 `Instance()`（当前事件 Target 或继承的默认 Target 的 adapter_instance_id）确定可信范围。
 - 命令策略以稳定 plugin_id/route_id 持久化，权限使用最近显式子项覆盖，否则继承父项。策略中的权限同样是权限名集合，可以引用任一权限名；引用的 Adapter 未安装或未声明该名时保留设置并在管理诊断中标出，这个名字不被任何事件满足；插件/父组/当前项任一 disabled 均拒绝，再与 Core 全局安全限制 AND。运行时修改在下一次派发检查时生效，不承诺撤销已开始的调用。
 - 命令名覆盖（D-128）：按路径匹配的命令有一个命令名列表，每个命令名是一条完整路径，缺省为插件声明的路径加别名，第一个是主名。管理员可以按 plugin_id/route_id 保存一份覆盖，它是完整的列表，取代缺省列表；列表至少一项，空列表返回 INVALID_ARGUMENT，删除覆盖即恢复缺省。命令名的格式校验与注册描述中的命令路径相同，列表内不得重复。覆盖只改变匹配用的文字，route_id、命令组归属、策略的作用域、参数与 Handler 不变。同一插件内，覆盖中的命令名与本插件其他命令声明的路径或别名（不论该命令是否被覆盖）或其他命令的覆盖相同时，保存返回 ALREADY_EXISTS 并指出冲突的 route_id。插件更新后新声明的名字与已有覆盖相同时，声明的名字优先，覆盖中的这一项失效并在管理诊断中标出；覆盖一项不剩时该命令使用声明的名字。跨插件同名按 §2.2 的遮蔽规则处理。路由不再注册时覆盖保留并在诊断中标出。usage 回复、命令菜单（§8）与 `core.command.list` 使用生效的命令名。文本匹配与 Raw 路由不能设置，返回 INVALID_ARGUMENT。覆盖在下一次派发时生效，属于命令策略，卸载时归入配置（§9.3）。
 - Hook 注册为独立 route kind，phase 仅 PreEvent/BeforeSend/AfterSend，沿用 priority 与稳定排序。PreEvent 只可改变业务 payload 或 Stop，Core 保留的 Actor、Target、来源与 trace 不可改；button.clicked 的 action_id/action_schema_version/value、scheduled 的 job_id/run_id 及平台原消息 ID 也属于不可修改的路由/来源字段，后续匹配使用 Core 保留的原绑定；Hook error 终止本次入站链并记录，不在失去预处理条件时继续。
@@ -99,7 +100,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 - Service 名为 `plugin_id/service_name`，描述包含输入/输出 schema_id/version、编码与调用规则。默认允许 Core 与本插件，其他插件必须位于发布者声明的 allowlist，或服务明确声明 public；public 仍仅表示已启用插件可调用，不赋予用户 Admin。目标须 Activated，权限/输入检查失败不运行函数。
 - JSON 服务只使用 UTF-8 JSON + 明确 schema/version，Protobuf 服务使用对应类型与二进制编码；不得把任意 JSON 冒充 Any。Core 检查已注册 schema 标识/版本、编码、大小与 JSON 语法，不符时只拒绝该次调用（INVALID_ARGUMENT），不关闭调用方 Session；服务声明的版本可以大于 1（D-66）。JSON 服务的输入/输出 Schema 由生成器从 Go 类型生成（D-70），SDK 用生成类型/校验器验证业务字段；Schema 资源随包固定，不允许运行时访问网络 `$ref`。空响应也用声明的空对象/消息，不能把编解码失败吞成空结果。
 - 每一跳由 Core 关联可信 Actor、权限 scope、trace、祖先插件链和执行限制。插件发起 Request 的 parent_call_id 只能引用**同一 Session 中仍在途的 Core→该插件 Request**；Core 从此记录派生上下文，不采信插件自报角色。父请求完成/超时/取消会取消未完成子调用；无父调用的后台/主动 Service 只有插件身份，不能沿用已结束用户权限。
-- 同一调用链重复插件 ID 返回 CALL_CYCLE，最大插件链深 16，独立并发链互不影响。子调用截止取父 deadline 与自身操作预算的较早者；取消/中断不自动重试。read loop、response 与 admission 规则必须使 Handler 内 Send、A→B→C 及出站 Hook 能完成或明确失败，不能等待自己占据的槽位。
+- 同一调用链重复插件 ID 返回 CALL_CYCLE，最大插件链深 16；例外是 `core.tool.invoke` 的目标插件等于调用方插件（如 Agent 调用自己注册的工具）：不判 CALL_CYCLE、不把调用方再次加入调用链，但这一跳仍计入深度（D-142）。深度由 Core 记在可信调用上下文中，出站 Hook 与延续调用等派生调用继承，独立并发链互不影响。子调用截止取父 deadline 与自身操作预算的较早者；取消/中断不自动重试。read loop、response 与 admission 规则必须使 Handler 内 Send、A→B→C 及出站 Hook 能完成或明确失败，不能等待自己占据的槽位。
 - Event Bus 发布使用带 CallID 的 Core Publish RPC，只确认 Core 已处理发布请求，不确认订阅者执行业务；实际分发使用无业务回执 EVENT。发布者只能使用自己的 `plugin_id/event_name`，订阅者明确注册事件名及 schema/version；离线或满队列丢弃并统计，慢订阅者不阻塞其他插件。payload 不能携带可信 Actor 权限，广播处理发起的业务默认使用订阅插件自身身份。SDK 对每个 Session 的订阅投递额外限制为 4 MiB（`BUS_QUEUE_BYTES` 缺省值），包含排队及正在处理的 EVENT protobuf 载荷；超出时 drop-newest、WARN 并立即 release wire 接收预算。Core 的 `BUS_QUEUE_BYTES` 覆盖仅调整 Core 等待队列，SDK 此上限保持 4 MiB，以给同 Session 的业务请求留出预算。
 - SDK 中 Service 与 Event Bus 事件用带类型的声明表示（D-122），协议不变：
   - `sdk.JSON[In, Out](target)` 与 `sdk.Proto[In, Out](target)` 返回 `sdk.Service[In, Out]`，target 是完整的 `plugin_id/service_name`，或 Agent 组件的 `@agent/service_name`。`sdk.Serve(r, s)` 开始注册，之后照旧用 `Access`、`Tool` 与 `Handle`；target 的组件部分不是本插件的 ID（Agent 组件为 `@agent`）、声明为零值或同一声明注册两次时，`Collect` 报错。`s.Call(ctx, in)` 发起调用，返回 `(Out, error)`。
@@ -539,7 +540,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 ### 13.4 记忆
 
 - 记忆由 Agent 组件自己实现和存储，Core 不提供记忆服务（D-60）。官方 Agent 组件的记忆见 DESIGN §R 与 PLAN T-12 步骤 5，社区 Agent 可以采用其他实现。
-- Agent 把写入记忆的操作注册为工具（§13.1），模型的调用照常经 `core.tool.invoke`，管理员可以按工具设置策略。
+- Agent 把写入记忆的操作注册为工具（§13.1），模型的调用照常经 `core.tool.invoke`，按 §3 的自身工具调用处理（D-142），管理员可以按工具设置策略。
 - 记忆的范围取自 Core 下发的可信上下文：会话按默认 Target（adapter_instance_id、chat_id、thread_id），用户按 Actor，不采信模型或插件在参数中给出的范围。缺少所需的 Actor 或默认 Target 时返回 FAILED_PRECONDITION。
 
 ### 13.5 文本生成服务

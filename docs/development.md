@@ -299,3 +299,133 @@ return sdk.ResumeJob(ctx, "tick")
 ```
 
 `JobState.LastAt` 记录本次 Core 运行最后一次实际派发，首次派发前和 Core 重启后为 `nil`；暂停时 `Paused` 为 true、`NextAt` 为 `nil`。暂停保留在途函数继续执行，恢复沿保存的 interval 起点安排未来触发。暂停状态跨重启保存，重复暂停或恢复成功，未登记的 job ID 返回 `NOT_FOUND`。
+
+## 插件测试
+
+在插件包的 `main_test.go` 中直接调用 `New()`，用 `plugintest.Start` 运行真实 Core、SDK Session 与测试 Adapter。例如 lifecycle 的 `/ping`：
+
+```go
+package main
+
+import (
+    "testing"
+
+    "github.com/AlonaBot/AlonaBot/plugintest"
+)
+
+func TestPing(t *testing.T) {
+    p := New()
+    h := plugintest.Start(t, plugintest.Plugin(p))
+    alice := plugintest.User{ID: "alice"}
+    result := h.Text(plugintest.Private(alice.ID), alice, "/ping")
+    if len(result.Sends) != 1 || result.Sends[0].Text() != "pong" {
+        t.Fatalf("ping = %+v", result)
+    }
+    for _, outcome := range result.Outcomes {
+        if outcome.Err != nil {
+            t.Fatal(outcome.Err)
+        }
+    }
+}
+```
+
+`New()` 需绑定生成资源中的 `plugin.yaml` 工程身份。先运行工程已有的 `go generate`，再运行测试。每次 Start 创建独立的临时目录、配置和 `dev.sqlite`，在测试清理时停止组件；同一 Harness 的注入与读取按顺序调用。
+
+`Message(chat, user, message.Chain{...})` 可以注入混合片段，`Sent.Text()` 按顺序提取文本。`Sent.To`、`Chain`、`Result` 保留目标、消息链与回执；`Op` 区分 send/edit，`Edited` 保存编辑句柄。`Event` 注入通过 `Adapter` 选项声明的扩展事件。
+
+**权限与配置。** `Admin("root")` 登记 Core Admin；`User.Permissions` 携带该会话的平台权限，需通过 `Adapter` 声明它们。例如：
+
+```go
+moderator := plugintest.User{
+    ID: "mod",
+    Permissions: []sdk.Permission{sdk.PermissionName("plugintest.moderator")},
+}
+h := plugintest.Start(t, plugintest.Plugin(p), plugintest.Admin("root"),
+    plugintest.Adapter(plugintest.AdapterID, adapter.PermissionDeclaration{
+        Name: "plugintest.moderator", Implies: []string{"chat_admin"}, LabelKey: "moderator",
+    }))
+result := h.Text(plugintest.Group("room"), moderator, "/mod")
+```
+
+其中 `sdk` 与 `adapter` 分别来自 `sdk`、`sdk/adapter`。配置按被测插件的 Schema 提供：
+
+```go
+h := plugintest.Start(t, plugintest.Plugin(p),
+    plugintest.Config(p, `{"$version":2,"greeting":"Hello"}`),
+    plugintest.AllowedInstances(p, plugintest.InstanceID),
+    plugintest.Capabilities("message.send", "message.edit"))
+```
+
+`AllowedInstances` 缺省允许全部实例，`AllowedInstances(p)` 收紧为空集合，job 和后台的显式发送会得到 `PERMISSION_DENIED`；可信入站事件的原目标回复沿用原有豁免。`Capabilities` 完整替换缺省能力，上例可验证按钮、相册等片段的 `UNSUPPORTED` 错误及插件降级行为。拒绝的发送在 Outcome 中保留错误。
+
+**按钮。** 从发送结果点击动作名，用户取本次点击者；Core 恢复 token 中的 action、版本与业务值，并逐次鉴权：
+
+```go
+menu := h.Text(plugintest.Group("room"), alice, "/menu")
+clicked := h.Click(plugintest.User{ID: "bob"}, menu.Sends[0], "first")
+```
+
+缺失的动作、URL 按钮及缺少已发送回执属于测试输入错误，Click 通过 `t.Fatal` 报告。过期 token、失效代次和权限拒绝会返回空发送及空 Handler Outcome。
+
+**静态与动态任务。** `h.Trigger(p, "tick")` 立即执行已登记静态任务；`h.TriggerTask(p, "remind", key)` 定位已创建实例，使用 Core 保存的参数。两者通过 Scheduler 的正常 REQUEST/RESPONSE、job scope、运行槽和期限执行，Handler 使用显式 `sdk.To` 发送目标。准入及定位错误使测试失败；已派发 Handler 的错误保留在 `Result.Outcomes`。
+
+showcase 的提醒先通过命令创建，再用含用户与会话的完整内部 key 触发：
+
+```go
+h.Text(chat, alice, "/demo remind lunch 3600 soup")
+user := message.NewUser(plugintest.AdapterID, alice.ID)
+session := message.NewSession(plugintest.AdapterID, "private:alice", "")
+key := fmt.Sprintf("%d:%s/%d:%s/%s", len(user), user, len(session), session, "lunch")
+reminder := h.TriggerTask(p, "remind", key)
+```
+
+完整示例见 [showcase/main_test.go](../examples/plugins/showcase/main_test.go)。一次性实例在实际派发时消费；周期实例保留起点并继续安排未来 tick。静态任务暂停或运行中、动态实例运行中或排队时，显式触发返回 `FAILED_PRECONDITION`；动态全插件并发名额已满时沿用到期队列。
+
+**多轮等待。** 进入 `core.wait` 后注入立即返回 `Result.Waiting=true`，进入等待的路由 `Outcome.Waiting=true`；问题发送仍在本次 `Sends` 中。下一条同用户、同会话消息由普通入口注入：
+
+```go
+question := h.Text(chat, alice, "/ask")
+if !question.Waiting {
+    t.Fatalf("ask = %+v", question)
+}
+answer := h.Text(chat, alice, "answer")
+```
+
+命中等待后的发送和最终错误归入新注入，直到延续调用结束或再次等待；其他用户或会话继续正常分发。注入返回由 Core 的完成或等待通知决定。
+
+**后台发送。** `h.Background()` 按 Adapter 接受顺序返回并清空尚未交付的发送和编辑。注入开始到完成通知之间的发送随 `Result.Sends` 交付，区间外的留给 Background，每条记录消费一次。测试用自己的 channel 控制后台工作，并等待 Send 返回后读取：
+
+```go
+send, done := make(chan struct{}), make(chan error, 1)
+var cancel context.CancelFunc
+p.OnReady(func(ready context.Context) error {
+    ctx, stop := context.WithCancel(context.WithoutCancel(ready))
+    cancel = stop
+    go func() {
+        select {
+        case <-send:
+        case <-ctx.Done():
+            return
+        }
+        _, err := sdk.Send(ctx, "plugintest:private:alice", message.Text("background"))
+        done <- err
+    }()
+    return nil
+})
+p.OnStop(func(context.Context) error { cancel(); return nil })
+h := plugintest.Start(t, plugintest.Plugin(p))
+send <- struct{}{}
+if err := <-done; err != nil {
+    t.Fatal(err)
+}
+records := h.Background()
+```
+
+`OnReady` 的回调 context 在返回时取消，上例保留其 Session 归属，后台生命周期由 OnStop 管理。channel 确定发送时刻，Core 通知确定注入终点。
+
+仓库完整示例覆盖 echo、lifecycle、showcase、configdb 与 media：
+
+```sh
+go generate ./...
+go test -race -count=2 ./plugintest/... ./examples/plugins/...
+```
