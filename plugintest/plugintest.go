@@ -111,6 +111,7 @@ func Start(t testing.TB, opts ...Option) *Harness {
 	for _, apply := range opts {
 		apply(&o)
 	}
+	o.addLLM()
 	// 1. 身份来自生成 manifest，配置按开发组件的目录规则写入。
 	dir := t.TempDir()
 	pluginID := func(p *sdk.Plugin) string {
