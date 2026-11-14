@@ -44,6 +44,7 @@ func init() {
 
 type operation struct {
 	method, id, text string
+	to               message.Session
 	buttons          []message.Button
 }
 
@@ -112,7 +113,7 @@ func (a *loopback) Capabilities() []message.Capability {
 
 func (a *loopback) record(method, id string, to message.Session, chain message.Chain) (*message.SendResult, *errcode.Error) {
 	a.mu.Lock()
-	op := operation{method: method, id: id, text: chain.Text()}
+	op := operation{method: method, id: id, text: chain.Text(), to: to}
 	for _, segment := range chain {
 		if buttons, ok := segment.(message.ButtonsSegment); ok {
 			for _, row := range buttons.Rows {

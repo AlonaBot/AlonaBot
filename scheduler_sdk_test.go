@@ -49,7 +49,7 @@ func schedulerSDKPlugin(mode string) *sdk.Plugin {
 		if err != nil {
 			return err
 		}
-		if err := pipelineAudit(pipelineRecord{Stage: "sdk-task", Value: args.Key, Text: string(raw)}); err != nil {
+		if err := pipelineAudit(pipelineRecord{Stage: "sdk-task", Value: c.Event().Payload.(*message.ScheduledPayload).TaskKey, Text: string(raw)}); err != nil {
 			return err
 		}
 		if args.Session != "" {
