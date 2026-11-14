@@ -8,10 +8,13 @@ package plugintest
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -19,6 +22,8 @@ import (
 
 	"github.com/AlonaBot/AlonaBot"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
+	"github.com/AlonaBot/AlonaBot/internal/generate"
+	"github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/internal/inproc"
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/adapter"
@@ -63,9 +68,9 @@ type User struct {
 // Sent 记录测试 Adapter 接受的一次发送或编辑。
 type Sent struct {
 	Op     string // "send" 或 "edit"。
-	To     message.Session
+	To     string
 	Chain  message.Chain
-	Edited message.MessageRef
+	Edited string
 	Result *message.SendResult
 }
 
@@ -115,10 +120,11 @@ func Start(t testing.TB, opts ...Option) *Harness {
 	// 1. 身份来自生成 manifest，配置按开发组件的目录规则写入。
 	dir := t.TempDir()
 	pluginID := func(p *sdk.Plugin) string {
-		if p == nil || len(p.Generated().Manifest) == 0 {
+		if p == nil {
 			t.Fatal("plugin has no generated project manifest")
 		}
-		parsed, err := manifest.ParseProject(p.Generated().Manifest)
+		resources := scanResources(t, p)
+		parsed, err := manifest.ParseProject(resources.Manifest)
 		if err != nil {
 			t.Fatalf("parse plugin manifest: %v", err)
 		}
@@ -165,7 +171,9 @@ func Start(t testing.TB, opts ...Option) *Harness {
 	for _, name := range o.capabilities {
 		o.descriptor.Capabilities = append(o.descriptor.Capabilities, message.Capability{Name: name, Version: 1, Supported: true})
 	}
-	rootOptions = append(rootOptions, alonabot.Adapter(&testAdapter{h: h, descriptor: o.descriptor}))
+	test := &testAdapter{h: h, descriptor: o.descriptor}
+	test.bindResources()
+	rootOptions = append(rootOptions, alonabot.Adapter(test))
 	core, err := alonabot.Start(ctx, rootOptions...)
 	if err != nil {
 		cancel()
@@ -241,7 +249,7 @@ func (h *Harness) Event(chat Chat, from User, event sdk.EventType, payload any) 
 func (h *Harness) deliver(chat Chat, from User, eventType string, payload message.Payload) Result {
 	h.t.Helper()
 	return h.deliverEvent(from, &message.Event{Type: eventType, AdapterID: h.adapterID, AdapterInstanceID: InstanceID, AccountID: AccountID,
-		Session: message.NewSession(h.adapterID, chat.id, ""), ChatType: chat.chatType, Payload: payload})
+		Session: message.SID(h.adapterID, chat.id, ""), ChatType: chat.chatType, Payload: payload})
 }
 
 func (h *Harness) deliverEvent(from User, ev *message.Event) Result {
@@ -297,4 +305,50 @@ func (h *Harness) result(start int, notification dispatchResult) Result {
 type dispatchResult struct {
 	dispatch inproc.Dispatch
 	end      int
+}
+
+// resourceScanMu 保证并行 Harness 只扫描并登记同一入口包一次。
+var resourceScanMu sync.Mutex
+
+func scanResources(t testing.TB, p *sdk.Plugin) generated.Resources {
+	t.Helper()
+	pkgPath, _ := generated.Entry(p)
+	if resources, ok := generated.Lookup(p, pkgPath); ok {
+		return resources
+	}
+	resourceScanMu.Lock()
+	defer resourceScanMu.Unlock()
+	if resources, ok := generated.Lookup(p, pkgPath); ok {
+		return resources
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := generate.Options{Dir: dir, Package: pkgPath}
+	if build, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range build.Settings {
+			switch setting.Key {
+			case "GOOS":
+				options.GOOS = setting.Value
+			case "GOARCH":
+				options.GOARCH = setting.Value
+			case "-tags":
+				options.Tags = strings.FieldsFunc(setting.Value, func(c rune) bool { return c == ',' || c == ' ' })
+			}
+		}
+	}
+	result, err := generate.Scan(context.Background(), options)
+	if err != nil {
+		t.Fatalf("scan entry package %q: %v", pkgPath, err)
+	}
+	if len(result.Diagnostics) != 0 {
+		var diagnostics []string
+		for _, d := range result.Diagnostics {
+			diagnostics = append(diagnostics, fmt.Sprintf("%s: %s", d.Pos, d.Message))
+		}
+		t.Fatalf("scan entry package %q:\n%s", pkgPath, strings.Join(diagnostics, "\n"))
+	}
+	generated.Register(pkgPath, result.Generated)
+	return result.Generated
 }

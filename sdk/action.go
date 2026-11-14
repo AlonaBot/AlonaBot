@@ -8,12 +8,11 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/convert"
-	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
 // ActionCaller 为 Adapter 的带类型动作函数提供统一调用入口。
 type ActionCaller interface {
-	CallAction(to message.Session, name string, version uint32, params any, opts ...SendOption) (json.RawMessage, error)
+	CallAction(to string, name string, version uint32, params any, opts ...SendOption) (json.RawMessage, error)
 }
 
 var (
@@ -22,7 +21,7 @@ var (
 )
 
 // CallAction 关联当前 Handler 的父调用与期限；opts 只接受 Via，账号动作传空会话。
-func (c *Context) CallAction(to message.Session, name string, version uint32, params any, opts ...SendOption) (json.RawMessage, error) {
+func (c *Context) CallAction(to string, name string, version uint32, params any, opts ...SendOption) (json.RawMessage, error) {
 	if !c.active.Load() {
 		return nil, errcode.FailedPrecondition.New("handler context has expired")
 	}
@@ -38,18 +37,15 @@ type ActionClient struct {
 func NewActionClient(ctx context.Context) *ActionClient { return &ActionClient{ctx: ctx} }
 
 // CallAction 独立调用平台动作；opts 只接受 Via，账号动作传空会话。
-func (c *ActionClient) CallAction(to message.Session, name string, version uint32, params any, opts ...SendOption) (json.RawMessage, error) {
+func (c *ActionClient) CallAction(to string, name string, version uint32, params any, opts ...SendOption) (json.RawMessage, error) {
 	return callAction(c.ctx, nil, to, name, version, params, opts...)
 }
 
-func callAction(ctx context.Context, parent *wire.Inbound, to message.Session, name string, version uint32, params any, opts ...SendOption) (json.RawMessage, error) {
+func callAction(ctx context.Context, parent *wire.Inbound, to string, name string, version uint32, params any, opts ...SendOption) (json.RawMessage, error) {
 	// 1. 编码参数与目标，动作只接受既有的实例选择选项。
 	options := &sendOptions{}
 	for _, option := range opts {
 		option(options)
-	}
-	if options.explicit {
-		return nil, errcode.InvalidArgument.New("CallAction only accepts Via")
 	}
 	request, err := convert.ActionRequestToProto(to, name, version, params, options.via)
 	if err != nil {

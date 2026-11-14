@@ -26,8 +26,8 @@ func (h *Harness) Click(from User, sent Sent, actionID string) Result {
 				if button.URL != "" || button.CoreToken == "" || sent.Result == nil || sent.Result.PrimaryPlatformMessageID == "" {
 					h.t.Fatalf("action %q is not a sent callback button", actionID)
 				}
-				adapterID, chatID, _, ok := sent.To.Parts()
-				if !ok {
+				adapterID, chatID, _, err := message.ParseSID(sent.To)
+				if err != nil {
 					h.t.Fatalf("invalid button session %q", sent.To)
 				}
 				chatType := message.ChatUnspecified

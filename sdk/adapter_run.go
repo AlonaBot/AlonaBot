@@ -51,13 +51,11 @@ type adapterCore struct {
 	commandSync sync.Mutex  // 覆盖本次运行的实际菜单回调，RPC 到期后仍持有。
 }
 
-// AdapterHTTP 提供 Adapter 可选的统一入口 HTTP 路由登记；route 与插件对象的 Route 写法和校验相同。
-type AdapterHTTP interface {
-	HTTP(route func(method, path string) *RouteBuilder)
-}
-
 // RunAdapter 作为 Adapter 进程的 main 入口，复用插件的锁、握手、激活与停止状态机。
 func RunAdapter(a adapter.Adapter) error {
+	if err := requireResources(a); err != nil {
+		return err
+	}
 	setupLogging()
 	l, err := readLaunch()
 	if err != nil {
@@ -67,6 +65,7 @@ func RunAdapter(a adapter.Adapter) error {
 }
 
 func runAdapter(a adapter.Adapter, l launch) (err error) {
+	descriptor := a.Descriptor()
 	// 1. 先取得运行锁，再执行 Adapter 描述与启动流程。
 	lock, err := acquireRuntimeLock(l.runtimeLockPath)
 	if err != nil {
@@ -77,8 +76,16 @@ func runAdapter(a adapter.Adapter, l launch) (err error) {
 	defer func() { err = errors.Join(err, l.runtime.close()) }()
 	// Adapter 没有插件对象；借一个只收集 HTTP 路由的对象复用同一套声明校验。
 	routes := NewPlugin()
-	if provider, ok := a.(AdapterHTTP); ok {
-		provider.HTTP(routes.Route)
+	for _, route := range descriptor.HTTP {
+		builder := routes.http.Route(route.Method, route.Path)
+		switch route.Auth {
+		case 0:
+		case adapter.AuthPlatformToken:
+			builder.Public(AuthPlatformToken)
+		default:
+			return fmt.Errorf("invalid adapter HTTP authentication: %d", route.Auth)
+		}
+		builder.Handle(route.Handler)
 	}
 	routes.http.collect()
 	if err := errors.Join(routes.http.errs...); err != nil {
@@ -99,7 +106,7 @@ func runAdapter(a adapter.Adapter, l launch) (err error) {
 		return err
 	}
 	l.runtime.configure(l, ack, "adapter")
-	if err := prepareAdapter(conn, l, ack, a); err != nil {
+	if err := prepareAdapter(conn, l, ack, descriptor); err != nil {
 		return err
 	}
 	// 2. 复用激活与停止回调，仅将业务处理器替换成实例服务。
@@ -122,7 +129,7 @@ func runAdapter(a adapter.Adapter, l launch) (err error) {
 	return serve(active.sess, active)
 }
 
-func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, a adapter.Adapter) error {
+func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, d *adapter.Descriptor) error {
 	boot := ack.GetBootstrap()
 	limits := boot.GetSessionLimits()
 	// 1. 在信任边界检查 Core 提供的预算，Adapter 没有包级配置或用户 OnStart。
@@ -131,7 +138,7 @@ func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, a adapter.Adapt
 	}
 	stop := withWatchdog(conn, time.Until(time.UnixMilli(boot.GetPreparationDeadlineUnixMs())))
 	defer stop()
-	descriptor, err := convert.DescriptorToProto((*convert.Descriptor)(a.Descriptor()))
+	descriptor, err := convert.DescriptorToProto(&convert.Descriptor{AdapterID: d.AdapterID, Capabilities: d.Capabilities, Extensions: d.Extensions, Permissions: d.Permissions, Events: d.Events, Actions: d.Actions})
 	if err != nil {
 		return err
 	}

@@ -1,10 +1,8 @@
 // showcase 演示 SDK 全部公共签名的组合方式；可以真实运行的最小插件见 examples/plugins/lifecycle。
 //
 // 示例包括一个根插件、两类 Handler、StopPropagation、配置回调、HTTP Handler 与静态及动态任务。
-// New 显式绑定生成资源、路由与生命周期回调。
+// New 登记路由与生命周期回调。
 package main
-
-//go:generate go run ../../../cmd/alonabot build --out ../../../bin/generated/examples-plugins-showcase
 
 import (
 	"context"
@@ -42,33 +40,26 @@ type Demo struct {
 
 // ReminderArgs 保存提醒发送所需的会话与完整文本。
 type ReminderArgs struct {
-	Session message.Session `json:"session"`
-	Text    string          `json:"text"`
+	Session string `json:"session"`
+	Text    string `json:"text"`
 }
 
 // New 每次创建独立的插件和示例状态。
 func New() *sdk.Plugin {
 	p := sdk.NewPlugin()
-	sdk.UseGenerated(p, alonabotGenerated)
+
 	demo := &Demo{plugin: p, reminder: sdk.Task[ReminderArgs]("remind")}
 	sdk.OnTask(p, demo.reminder).Handle(demo.Remind)
 	p.OnConfigLoad(demo.OnConfigLoad)
 	p.OnStart(demo.OnStart)
-	demo.Commands(p)
-	demo.HTTP(p)
-	demo.Schedules(p)
+	g := p.Group("demo")
+	g.Command("hello").Handle(demo.Hello)
+	g.Command("echo").Handle(demo.Echo)
+	g.Command("remind").Handle(demo.CreateReminder)
+	g.Command("cancel").Handle(demo.CancelReminder)
+	p.Route(http.MethodGet, "/status").HandleFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
+	p.Every("tick", time.Minute).Handle(func(*sdk.Context) error { return nil })
 	return p
-}
-
-// Commands 在 demo 分组下注册问候、回显和提醒命令。
-func (p *Demo) Commands(r *sdk.Plugin) {
-	{
-		g := r.Group("demo")
-		g.Command("hello").Handle(p.Hello)           // /demo hello
-		g.Command("echo").Handle(p.Echo)             // /demo echo <text> <times>，例如 /demo echo hi 3
-		g.Command("remind").Handle(p.CreateReminder) // /demo remind <key> <seconds> <text>
-		g.Command("cancel").Handle(p.CancelReminder) // /demo cancel <key>
-	}
 }
 
 // CreateReminder 在当前用户与会话内创建提醒，回复用户输入的 key。
@@ -109,7 +100,7 @@ func reminderKey(c *sdk.Context, key string) (string, error) {
 
 // Remind 使用参数保存的会话显式发送提醒。
 func (*Demo) Remind(c *sdk.Context, args ReminderArgs) error {
-	_, err := c.Send(message.Text(args.Text), sdk.To(args.Session))
+	_, err := c.SendTo(args.Session, message.Text(args.Text))
 	return err
 }
 
@@ -127,18 +118,6 @@ func (p *Demo) Echo(c *sdk.Context, text string, times int64) error {
 		}
 	}
 	return nil
-}
-
-// HTTP 注册一个返回 ok 的 GET /status。
-func (p *Demo) HTTP(r *sdk.Plugin) {
-	r.Route(http.MethodGet, "/status").HandleFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ok"))
-	})
-}
-
-// Schedules 注册每分钟运行一次的 tick 任务。
-func (p *Demo) Schedules(r *sdk.Plugin) {
-	r.Every("tick", time.Minute).Handle(func(*sdk.Context) error { return nil })
 }
 
 // OnStart 演示生命周期 Hook 的签名，不做任何事。

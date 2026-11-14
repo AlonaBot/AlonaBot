@@ -209,7 +209,9 @@ import (
  "net/http"
  "os"
  "github.com/AlonaBot/AlonaBot/sdk"
+ "github.com/AlonaBot/AlonaBot/sdk/genimpl"
 )
+func init(){genimpl.Register("main",genimpl.Resources{})}
 func main(){
  p:=sdk.NewPlugin()
  p.Route(http.MethodGet,"/probe").HandleFunc(func(w http.ResponseWriter,r *http.Request){

@@ -13,14 +13,14 @@ const scheduleInterval = 24 * time.Hour
 
 // TaskArgs 保存 Core 持久化并在触发时恢复的发送参数。
 type TaskArgs struct {
-	Session message.Session `json:"session"`
-	Text    string          `json:"text"`
+	Session string `json:"session"`
+	Text    string `json:"text"`
 }
 
 func registerScenarios(p *sdk.Plugin) {
 	first, second, admin := sdk.Action[string]("first"), sdk.Action[string]("second"), sdk.Action[string]("admin")
 	click := func(c *sdk.Context, value string) error {
-		return c.Reply(c.T("choice", "value", value, "user", string(c.User())))
+		return c.Reply(c.T("choice", "value", value, "user", c.User()))
 	}
 	sdk.OnButton(p, first).Handle(click)
 	sdk.OnButton(p, second).Handle(click)
@@ -39,12 +39,12 @@ func registerScenarios(p *sdk.Plugin) {
 		return err
 	})
 	p.Every("tick", scheduleInterval).Handle(func(c *sdk.Context) error {
-		_, err := c.Send(message.Text(c.T("tick")), sdk.To(message.NewSession("plugintest", "private:alice", "")))
+		_, err := c.SendTo(message.SID("plugintest", "private:alice", ""), message.Text(c.T("tick")))
 		return err
 	})
 	task := sdk.Task[TaskArgs]("remind")
 	sdk.OnTask(p, task).Handle(func(c *sdk.Context, args TaskArgs) error {
-		_, err := c.Send(message.Text(args.Text), sdk.To(args.Session))
+		_, err := c.SendTo(args.Session, message.Text(args.Text))
 		return err
 	})
 	p.Command("remind").Args("key", "text").Handle(func(c *sdk.Context, key, text string) error {
@@ -64,7 +64,7 @@ func registerScenarios(p *sdk.Plugin) {
 type Background struct {
 	Send   <-chan struct{}
 	Done   chan<- error
-	To     message.Session
+	To     string
 	cancel context.CancelFunc
 }
 

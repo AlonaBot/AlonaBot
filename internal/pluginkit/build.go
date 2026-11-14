@@ -29,16 +29,17 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
-	"github.com/AlonaBot/AlonaBot/sdk/generate"
+	"github.com/AlonaBot/AlonaBot/internal/generate"
 )
 
 const (
-	projectFile = "plugin.yaml"
-	entryFile   = "alonabot_main.go"
-	entryDir    = ".alonabot-dev"
-	sdkPath     = "github.com/AlonaBot/AlonaBot/sdk"
-	privateMode = 0o700
-	fileMode    = 0o600
+	projectFile      = "plugin.yaml"
+	registrationFile = "alonabot_resources.go"
+	entryFile        = "alonabot_main.go"
+	entryDir         = ".alonabot-dev"
+	sdkPath          = "github.com/AlonaBot/AlonaBot/sdk"
+	privateMode      = 0o700
+	fileMode         = 0o600
 )
 
 // Build 保存可执行文件、工程 manifest 原文与组件身份。
@@ -160,7 +161,7 @@ func buildComponent(ctx context.Context, options generate.Options, outDir string
 		replacements[virtual] = path
 		return nil
 	}
-	if err := write(filepath.Join(dir, generate.FileName), generate.FileName, result.Source); err != nil {
+	if err := write(filepath.Join(dir, registrationFile), registrationFile, result.Source); err != nil {
 		return build, err
 	}
 	overlayPath := filepath.Join(staging, "overlay.json")
@@ -286,9 +287,6 @@ func buildComponent(ctx context.Context, options generate.Options, outDir string
 		return build, err
 	}
 	if !development {
-		if err := os.WriteFile(filepath.Join(dir, generate.FileName), result.Source, 0o644); err != nil {
-			return build, err
-		}
 		if err := os.WriteFile(filepath.Join(outDir, projectFile), build.PackageManifest, fileMode); err != nil {
 			return build, err
 		}
@@ -338,7 +336,7 @@ func migrationMode(ctx context.Context, options generate.Options, overlay, modFi
 			continue
 		}
 		for _, name := range pkg.GoFiles {
-			if name == generate.FileName {
+			if name == registrationFile {
 				continue
 			}
 			file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(pkg.Dir, name), nil, 0)
@@ -405,7 +403,7 @@ func goCommand(ctx context.Context, dir string, args ...string) ([]byte, error) 
 
 func declaresMain(dir string, files []string) (bool, error) {
 	for _, name := range files {
-		if name == generate.FileName {
+		if name == registrationFile {
 			continue // 资源登记由 overlay 提供，入口只检查作者源码。
 		}
 		file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(dir, name), nil, 0)
@@ -428,7 +426,9 @@ func targetGoCommand(ctx context.Context, options generate.Options, development 
 	command := exec.CommandContext(ctx, "go", args...)
 	command.Dir = options.Dir
 	command.Env = append(command.Environ(), "GOOS="+options.GOOS, "GOARCH="+options.GOARCH)
-	if !development {
+	if options.CGOEnabled != "" {
+		command.Env = append(command.Env, "CGO_ENABLED="+options.CGOEnabled)
+	} else if !development {
 		command.Env = append(command.Env, "CGO_ENABLED=0")
 	}
 	var stderr bytes.Buffer

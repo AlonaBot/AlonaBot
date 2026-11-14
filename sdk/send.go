@@ -13,15 +13,12 @@ import (
 )
 
 // Send 通过已激活的 Session 独立发送到指定会话，opts 只接受 Via。
-func Send(ctx context.Context, to message.Session, m message.Content, opts ...SendOption) (*message.SendResult, error) {
+func Send(ctx context.Context, sid string, m message.Content, opts ...SendOption) (*message.SendResult, error) {
 	options := &sendOptions{}
 	for _, option := range opts {
 		option(options)
 	}
-	if options.explicit {
-		return nil, errcode.InvalidArgument.New("background Send only accepts Via")
-	}
-	target, err := convert.TargetToProto(to, options.via)
+	target, err := convert.TargetToProto(sid, options.via)
 	if err != nil {
 		return nil, err
 	}
@@ -29,8 +26,8 @@ func Send(ctx context.Context, to message.Session, m message.Content, opts ...Se
 }
 
 // SendText 独立发送一段文本，并丢弃发送回执。
-func SendText(ctx context.Context, to message.Session, text string, opts ...SendOption) error {
-	_, err := Send(ctx, to, message.Text(text), opts...)
+func SendText(ctx context.Context, sid, text string, opts ...SendOption) error {
+	_, err := Send(ctx, sid, message.Text(text), opts...)
 	return err
 }
 func callSend(ctx context.Context, to *pb.Target, m message.Content, parent *wire.Inbound, defaultTarget *pb.Target) (*message.SendResult, error) {

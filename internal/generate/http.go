@@ -11,6 +11,11 @@ func (s *scan) httpCalls(info *types.Info, paths []string) {
 	for _, path := range paths {
 		for _, file := range s.syntax[path] {
 			ast.Inspect(file, func(node ast.Node) bool {
+				if ident, ok := node.(*ast.Ident); ok && s.adapterProject {
+					if object := info.Uses[ident]; object != nil && object.Pkg() != nil && object.Pkg().Path() == adapterPath && object.Name() == "HTTPRoute" {
+						s.result.HTTP = true
+					}
+				}
 				call, ok := node.(*ast.CallExpr)
 				if !ok {
 					return true

@@ -1,8 +1,6 @@
 // media 命令演示上传内置图片、相册与带类型按钮的文本编辑。
 package main
 
-//go:generate go run ../../../cmd/alonabot build --out ../../../bin/generated/examples-plugins-media
-
 import (
 	"bytes"
 	"context"
@@ -33,7 +31,7 @@ const (
 // New 绑定资源并登记媒体命令与一次性编辑按钮。
 func New() *sdk.Plugin {
 	p := sdk.NewPlugin()
-	sdk.UseGenerated(p, alonabotGenerated)
+
 	p.Sub("captions").Permission(sdk.User).Command("caption").Handle(caption)
 	edit := sdk.Action[string]("media.edit")
 	var mu sync.Mutex
@@ -80,7 +78,7 @@ func New() *sdk.Plugin {
 		if err != nil {
 			return err
 		}
-		var ref message.MessageRef
+		var ref string
 		if err := db.QueryRowContext(c.Context(), "SELECT ref FROM messages WHERE button_key = ?", key).Scan(&ref); errors.Is(err, sql.ErrNoRows) {
 			return errcode.FailedPrecondition.New("media example message handle is no longer available")
 		} else if err != nil {

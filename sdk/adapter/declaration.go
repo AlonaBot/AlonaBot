@@ -1,6 +1,8 @@
 package adapter
 
 import (
+	"net/http"
+
 	"github.com/AlonaBot/AlonaBot/sdk/internal/convert"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
@@ -24,6 +26,20 @@ func Event[T any](name string, version uint32) EventDeclaration {
 // PermissionDeclaration 保存平台权限、隐含权限与展示文案键。
 type PermissionDeclaration = convert.PermissionDeclaration
 
+// HTTPAuth 指定 Adapter 路由的认证方式；零值要求 Core 会话。
+type HTTPAuth int
+
+// AuthPlatformToken 声明由 Adapter 校验公开路由的平台凭证。
+const AuthPlatformToken HTTPAuth = 1
+
+// HTTPRoute 声明 SDK 托管的 HTTP 路由。
+type HTTPRoute struct {
+	Method  string
+	Path    string
+	Auth    HTTPAuth
+	Handler http.Handler
+}
+
 // Descriptor 保存 Adapter 的能力、片段、权限、事件与动作声明。
 type Descriptor struct {
 	AdapterID    string
@@ -32,4 +48,5 @@ type Descriptor struct {
 	Permissions  []PermissionDeclaration
 	Events       []EventDeclaration
 	Actions      []ActionDeclaration
+	HTTP         []HTTPRoute
 }

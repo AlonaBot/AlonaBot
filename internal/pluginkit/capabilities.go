@@ -16,7 +16,7 @@ import (
 	"path/filepath"
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
-	"github.com/AlonaBot/AlonaBot/sdk/generate"
+	"github.com/AlonaBot/AlonaBot/internal/generate"
 )
 
 // requiredCapabilities 读取实际链接 SDK 的声明，避免 CLI 自身版本替目标 SDK 声明能力。

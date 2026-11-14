@@ -34,7 +34,7 @@ func TestPluginHarness(t *testing.T) {
 		h := plugintest.Start(t, plugintest.Plugin(p), plugintest.Admin("root"), plugintest.Adapter(plugintest.AdapterID, adapter.PermissionDeclaration{Name: "plugintest.moderator", Implies: []string{"chat_admin"}, LabelKey: "moderator"}))
 		result := h.Text(chat, user, "/ping")
 		check(t, result, "pong")
-		if result.Sends[0].To != message.NewSession(plugintest.AdapterID, "private:alice", "") {
+		if result.Sends[0].To != message.SID(plugintest.AdapterID, "private:alice", "") {
 			t.Fatalf("reply session = %q", result.Sends[0].To)
 		}
 		// 命令权限拒绝仍消费消息，后续 /ping 证明套件继续可用。
@@ -142,7 +142,7 @@ func TestPluginHarness(t *testing.T) {
 	t.Run("background ordered consumption", func(t *testing.T) {
 		p := probe.New()
 		send, done := make(chan struct{}), make(chan error)
-		background := &probe.Background{Send: send, Done: done, To: message.NewSession(plugintest.AdapterID, "private:alice", "")}
+		background := &probe.Background{Send: send, Done: done, To: message.SID(plugintest.AdapterID, "private:alice", "")}
 		p.OnReady(background.Ready)
 		p.OnStop(background.Stop)
 		h := plugintest.Start(t, plugintest.Plugin(p))

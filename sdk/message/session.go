@@ -4,38 +4,40 @@ import (
 	"strings"
 
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 )
-
-// Session 保存平台会话及可选话题，可直接用字符串字面量声明。
-type Session string
 
 var sessionEscape = strings.NewReplacer("%", "%25", "#", "%23")
 
-// NewSession 转义聊天和话题中的保留字符，threadID 为空时省略话题。
-func NewSession(adapterID, chatID, threadID string) Session {
+// SID 拼接会话字符串，转义聊天和话题中的保留字符；空话题省略。
+func SID(adapterID, chatID, threadID string) string {
 	s := adapterID + ":" + sessionEscape.Replace(chatID)
 	if threadID != "" {
 		s += "#" + sessionEscape.Replace(threadID)
 	}
-	return Session(s)
+	return s
 }
 
-// Parts 拆出 Adapter、聊天与话题；格式不合法时 ok 为 false。
-func (s Session) Parts() (adapterID, chatID, threadID string, ok bool) {
-	adapterID, rest, found := strings.Cut(string(s), ":")
+// ParseSID 拆出 Adapter、聊天与话题；格式不合法时返回 INVALID_ARGUMENT。
+func ParseSID(sid string) (adapterID, chatID, threadID string, err error) {
+	invalid := errcode.InvalidArgument.New("invalid session string")
+	adapterID, rest, found := strings.Cut(sid, ":")
 	if !found || !validAdapterID(adapterID) || rest == "" {
-		return "", "", "", false
+		return "", "", "", invalid
 	}
 	chat, thread, topic := strings.Cut(rest, "#")
 	if chat == "" || (topic && thread == "") || strings.Contains(thread, "#") {
-		return "", "", "", false
+		return "", "", "", invalid
 	}
-	chatID, ok = unescape(chat, map[string]string{"25": "%", "23": "#"})
+	chatID, ok := unescape(chat, map[string]string{"25": "%", "23": "#"})
 	if !ok {
-		return "", "", "", false
+		return "", "", "", invalid
 	}
 	threadID, ok = unescape(thread, map[string]string{"25": "%", "23": "#"})
-	return adapterID, chatID, threadID, ok
+	if !ok {
+		return "", "", "", invalid
+	}
+	return adapterID, chatID, threadID, nil
 }
 
 func validAdapterID(id string) bool {
@@ -47,36 +49,37 @@ func validAdapterID(id string) bool {
 	return err == nil
 }
 
-// MessageRef 保存一条消息的会话、平台消息 ID 与可选的机器人实例。
-type MessageRef string
-
 var messageEscape = strings.NewReplacer("%", "%25", "/", "%2F", "@", "%40")
 
-// NewMessageRef 构造可存储的消息句柄，省略空实例。
-func NewMessageRef(s Session, platformMessageID, instanceID string) MessageRef {
-	r := string(s) + "/" + messageEscape.Replace(platformMessageID)
-	if instanceID != "" {
-		r += "@" + instanceID
+// Ref 拼接消息句柄，转义平台消息 ID 中的保留字符；空实例省略。
+func Ref(sid, platformMessageID, instance string) string {
+	r := sid + "/" + messageEscape.Replace(platformMessageID)
+	if instance != "" {
+		r += "@" + instance
 	}
-	return MessageRef(r)
+	return r
 }
 
-// Parts 拆出会话、平台消息 ID 与实例；同时校验内嵌会话。
-func (r MessageRef) Parts() (s Session, platformMessageID, instanceID string, ok bool) {
-	separator := strings.LastIndexByte(string(r), '/')
+// ParseRef 拆出会话、平台消息 ID 与实例，并校验内嵌会话；格式不合法时返回 INVALID_ARGUMENT。
+func ParseRef(ref string) (sid, platformMessageID, instance string, err error) {
+	invalid := errcode.InvalidArgument.New("invalid message reference string")
+	separator := strings.LastIndexByte(ref, '/')
 	if separator < 0 {
-		return "", "", "", false
+		return "", "", "", invalid
 	}
-	s = Session(r[:separator])
-	if _, _, _, valid := s.Parts(); !valid {
-		return "", "", "", false
+	sid = ref[:separator]
+	if _, _, _, err := ParseSID(sid); err != nil {
+		return "", "", "", invalid
 	}
-	id, instance, explicit := strings.Cut(string(r[separator+1:]), "@")
+	id, instance, explicit := strings.Cut(ref[separator+1:], "@")
 	if id == "" || (explicit && !validInstance(instance)) {
-		return "", "", "", false
+		return "", "", "", invalid
 	}
-	platformMessageID, ok = unescape(id, map[string]string{"25": "%", "2F": "/", "40": "@"})
-	return s, platformMessageID, instance, ok
+	platformMessageID, ok := unescape(id, map[string]string{"25": "%", "2F": "/", "40": "@"})
+	if !ok {
+		return "", "", "", invalid
+	}
+	return sid, platformMessageID, instance, nil
 }
 
 func unescape(s string, escapes map[string]string) (string, bool) {
@@ -111,16 +114,14 @@ func validInstance(s string) bool {
 	return true
 }
 
-// User 保存用户在某个平台上的字符串身份。
-type User string
+// UID 拼接用户字符串，保留外部用户 ID 的原文，包括其中的冒号。
+func UID(adapterID, externalUserID string) string { return adapterID + ":" + externalUserID }
 
-// NewUser 保留外部用户 ID 的原文，包括其中的冒号。
-func NewUser(adapterID, externalUserID string) User {
-	return User(adapterID + ":" + externalUserID)
-}
-
-// Parts 按第一个冒号拆分身份，校验 Adapter ID 并要求外部用户 ID 非空。
-func (u User) Parts() (adapterID, externalUserID string, ok bool) {
-	adapterID, externalUserID, ok = strings.Cut(string(u), ":")
-	return adapterID, externalUserID, ok && validAdapterID(adapterID) && externalUserID != ""
+// ParseUID 按第一个冒号拆分身份；Adapter ID 不合法或外部用户 ID 为空时返回 INVALID_ARGUMENT。
+func ParseUID(uid string) (adapterID, externalUserID string, err error) {
+	adapterID, externalUserID, ok := strings.Cut(uid, ":")
+	if !ok || !validAdapterID(adapterID) || externalUserID == "" {
+		return "", "", errcode.InvalidArgument.New("invalid user string")
+	}
+	return adapterID, externalUserID, nil
 }

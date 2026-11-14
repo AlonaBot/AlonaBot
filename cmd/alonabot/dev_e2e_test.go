@@ -196,7 +196,6 @@ import (
 )
 func New() *sdk.Plugin {
  p := sdk.NewPlugin()
- sdk.UseGenerated(p, alonabotGenerated)
  p.Command("hello").Handle(func(c *sdk.Context) (message.Content, error) { return message.Chain{message.Text("source:"+c.Config().String("text"))}, nil })
  return p
 }
@@ -212,22 +211,20 @@ import (
  "sync"
  "sync/atomic"
  "time"
- "github.com/AlonaBot/AlonaBot/sdk"
  "github.com/AlonaBot/AlonaBot/sdk/adapter"
  "github.com/AlonaBot/AlonaBot/sdk/errcode"
  "github.com/AlonaBot/AlonaBot/sdk/message"
 )
 type Loopback struct { mu sync.Mutex; clients map[string]adapter.Core; sequence atomic.Uint64 }
 func New() *Loopback { return &Loopback{clients: map[string]adapter.Core{}} }
-func (*Loopback) Descriptor() *adapter.Descriptor { return &adapter.Descriptor{AdapterID:"loopback"} }
-func (a *Loopback) HTTP(route func(string,string)*sdk.RouteBuilder) {
- route(http.MethodPost,"/inject").HandleFunc(func(w http.ResponseWriter,r *http.Request) {
+func (a *Loopback) Descriptor() *adapter.Descriptor {
+ return &adapter.Descriptor{AdapterID:"loopback", HTTP: []adapter.HTTPRoute{{Method:http.MethodPost,Path:"/inject",Handler:http.HandlerFunc(func(w http.ResponseWriter,r *http.Request) {
   id:=r.URL.Query().Get("instance"); a.mu.Lock(); core:=a.clients[id]; a.mu.Unlock()
   if core==nil { http.Error(w,"instance unavailable",http.StatusServiceUnavailable); return }
   number:=fmt.Sprint(a.sequence.Add(1))
-  _,err:=core.Deliver(r.Context(), &message.Event{ID:number,Type:"message.created",Source:message.SourceAdapter,OccurredAt:time.Now(),AdapterID:"loopback",AdapterInstanceID:id,AccountID:"bot-"+id,Session:message.NewSession("loopback","chat",""),ChatType:message.ChatPrivate,Actor:&message.Actor{ExternalUserID:"user",AdapterInstanceID:id},Message:&message.PlatformMessage{PlatformMessageID:number,Chain:message.Chain{message.Text("/hello")}},Payload:&message.CreatedPayload{PlatformMessageID:number,Chain:message.Chain{message.Text("/hello")},ToMe:true}}, nil)
+  _,err:=core.Deliver(r.Context(), &message.Event{ID:number,Type:"message.created",Source:message.SourceAdapter,OccurredAt:time.Now(),AdapterID:"loopback",AdapterInstanceID:id,AccountID:"bot-"+id,Session:message.SID("loopback","chat",""),ChatType:message.ChatPrivate,Actor:&message.Actor{ExternalUserID:"user",AdapterInstanceID:id},Message:&message.PlatformMessage{PlatformMessageID:number,Chain:message.Chain{message.Text("/hello")}},Payload:&message.CreatedPayload{PlatformMessageID:number,Chain:message.Chain{message.Text("/hello")},ToMe:true}}, nil)
   if err!=nil { http.Error(w,err.Error(),http.StatusInternalServerError); return }; w.WriteHeader(http.StatusNoContent)
- })
+ })}}}
 }
 type instance struct { owner *Loopback; id, output string }
 func (a *Loopback) Start(_ context.Context, req adapter.StartRequest, core adapter.Core) (adapter.Instance,error) {
@@ -239,7 +236,7 @@ func (a *Loopback) Start(_ context.Context, req adapter.StartRequest, core adapt
 func (i *instance) Account() adapter.Account {return adapter.Account{ID:"bot-"+i.id}}
 func (*instance) Capabilities() []message.Capability {return nil}
 func (i *instance) Stop(context.Context) error {i.owner.mu.Lock();delete(i.owner.clients,i.id);i.owner.mu.Unlock();return nil}
-func (i *instance) Send(_ context.Context,to message.Session,chain message.Chain)(*message.SendResult,*errcode.Error){
+func (i *instance) Send(_ context.Context,to string,chain message.Chain)(*message.SendResult,*errcode.Error){
  var text string;for _,segment:=range chain {if value,ok:=segment.(message.TextSegment);ok{text+=value.Text}}
  if err:=os.WriteFile(i.output,[]byte(text),0600);err!=nil{return nil,&errcode.Error{Code:errcode.Internal,Message:err.Error()}}
  return &message.SendResult{Status:message.SendAccepted,Session:to,AdapterInstanceID:i.id,PrimaryPlatformMessageID:"sent",PlatformMessageIDs:[]string{"sent"},PartResults:[]message.PartResult{{PartIndex:0,SegmentIndexes:[]uint32{0},Status:message.PartAccepted,PlatformMessageIDs:[]string{"sent"}}}},nil

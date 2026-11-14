@@ -48,6 +48,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
 	"github.com/AlonaBot/AlonaBot/internal/core/tool"
+	genresources "github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/internal/inproc"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
@@ -71,7 +72,7 @@ type component struct {
 	adapter         adapter.Adapter
 	role            state.Role
 	manifest        *manifest.Manifest
-	resources       sdk.Generated
+	resources       genresources.Resources
 	executable      string
 	packageManifest []byte
 	digest          []byte
@@ -84,7 +85,7 @@ func validateComponents(components []component, installs []state.Install) error 
 	agent := false
 	for i := range components {
 		entry := &components[i]
-		var generated sdk.Generated
+		var generated genresources.Resources
 		var m *manifest.Manifest
 		var warnings []string
 		if entry.executable != "" {
@@ -110,14 +111,23 @@ func validateComponents(components []component, installs []state.Install) error 
 			if object == nil || (reflect.ValueOf(object).Kind() == reflect.Pointer && reflect.ValueOf(object).IsNil()) {
 				return fmt.Errorf("component %T is nil", object)
 			}
+			pkgPath, _ := genresources.Entry(object)
 			if entry.role == state.RoleAdapter {
-				generated, _ = sdk.GeneratedFor(entry.adapter)
-			} else {
-				generated = entry.root.Generated()
+				typ := reflect.TypeOf(object)
+				if typ.Kind() == reflect.Pointer {
+					typ = typ.Elem()
+				}
+				pkgPath = typ.PkgPath()
+			}
+			var found bool
+			generated, found = genresources.Lookup(object, pkgPath)
+			if !found {
+				return fmt.Errorf("entry package %q has no registered resources; use alonabot build or alonabot run", pkgPath)
 			}
 			if len(generated.Manifest) == 0 {
-				return fmt.Errorf("component %T has no generated project manifest", object)
+				return fmt.Errorf("component %T has no project manifest", object)
 			}
+
 			parsed, err := manifest.ParseProject(generated.Manifest)
 			if err != nil {
 				return fmt.Errorf("component %T: %w", object, err)
@@ -406,7 +416,7 @@ func (a *assembly) optionSchema(componentID string, kind coreoptions.SchemaKind)
 	return schema, len(problems) == 0
 }
 
-func optionSchemas(resources sdk.Generated) (componentOptionSchemas, error) {
+func optionSchemas(resources genresources.Resources) (componentOptionSchemas, error) {
 	var result componentOptionSchemas
 	for _, entry := range []struct {
 		name   string
@@ -1131,8 +1141,8 @@ func (c *Core) startInstances(ctx context.Context, running *runningComponent, ra
 	return nil
 }
 
-func packageResources(dir string) (sdk.Generated, error) {
-	g := sdk.Generated{I18n: make(map[string][]byte)}
+func packageResources(dir string) (genresources.Resources, error) {
+	g := genresources.Resources{I18n: make(map[string][]byte)}
 	raw, err := os.ReadFile(filepath.Join(dir, "config_schema.json"))
 	if err == nil {
 		schema, problems := configschema.Parse(raw)
@@ -1198,7 +1208,7 @@ func (entry *component) loadExecutableResources() error {
 	}
 	digest := sha512.Sum512_256(content)
 	raw, err := os.ReadFile(fmt.Sprintf("%s.%x.json", path, digest[:]))
-	resources := sdk.Generated{}
+	resources := genresources.Resources{}
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}

@@ -285,10 +285,10 @@ func adminSignedBundle(t *testing.T, h *webUIHarness, version string, key ed2551
 	request := h.bundle("upload_demo", "plugin", "", 1)
 	project := t.TempDir()
 	source := `package main
-import("context";"database/sql";"fmt";"log/slog";"os";"github.com/AlonaBot/AlonaBot/sdk";"github.com/AlonaBot/AlonaBot/sdk/sqlitedb")
+import("context";"database/sql";"fmt";"log/slog";"os";"github.com/AlonaBot/AlonaBot/sdk";"github.com/AlonaBot/AlonaBot/sdk/sqlitedb";"github.com/AlonaBot/AlonaBot/sdk/genimpl")
+func init(){ genimpl.Register("main",genimpl.Resources{Manifest:[]byte(fmt.Sprintf("id: upload_demo\nname: WebUI Fixture\nversion: %s\nsource: github.com/example/upload_demo\n",` + fmt.Sprintf("%q", version) + `))}) }
 func New()*sdk.Plugin{
  p:=sdk.NewPlugin()
- sdk.UseGenerated(p,sdk.Generated{Manifest:[]byte(fmt.Sprintf("id: upload_demo\nname: WebUI Fixture\nversion: %s\nsource: github.com/example/upload_demo\n",` + fmt.Sprintf("%q", version) + `))})
  sqlitedb.Migrate(p,func(ctx context.Context,db *sql.DB)error{
   if _,err:=db.ExecContext(ctx,"CREATE TABLE IF NOT EXISTS upload_data (value TEXT, version TEXT); INSERT INTO upload_data SELECT 'initial database data', '' WHERE NOT EXISTS (SELECT 1 FROM upload_data)");err!=nil{return err}
   _,err:=db.ExecContext(ctx,"UPDATE upload_data SET version = ?",` + fmt.Sprintf("%q", version) + `)

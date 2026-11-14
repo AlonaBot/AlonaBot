@@ -6,7 +6,6 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/convert"
-	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
 // ActionScope 指定动作需要会话还是只需要账号实例。
@@ -32,5 +31,5 @@ func Action[P, R any](name string, version uint32, scope ActionScope) ActionDecl
 // ActionExecutor 提供实例可选的平台动作入口；账号动作的 to 为空。
 // 返回的 JSON 原文与安全错误可以同时存在。
 type ActionExecutor interface {
-	Action(ctx context.Context, to message.Session, name string, version uint32, params json.RawMessage) (json.RawMessage, *errcode.Error)
+	Action(ctx context.Context, to string, name string, version uint32, params json.RawMessage) (json.RawMessage, *errcode.Error)
 }

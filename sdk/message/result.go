@@ -39,7 +39,7 @@ type PartResult struct {
 // SendResult 保存一次逻辑发送的已确认消息及各操作结果。
 type SendResult struct {
 	Status                   SendStatus
-	Session                  Session
+	Session                  string
 	AdapterInstanceID        string
 	PlatformMessageIDs       []string
 	PrimaryPlatformMessageID string
@@ -49,18 +49,18 @@ type SendResult struct {
 }
 
 // Ref 返回首个已确认消息的句柄，缺少消息 ID 时返回空串。
-func (r *SendResult) Ref() MessageRef {
+func (r *SendResult) Ref() string {
 	if r.PrimaryPlatformMessageID == "" || r.Session == "" {
 		return ""
 	}
-	return NewMessageRef(r.Session, r.PrimaryPlatformMessageID, r.AdapterInstanceID)
+	return Ref(r.Session, r.PrimaryPlatformMessageID, r.AdapterInstanceID)
 }
 
 // Refs 按平台回执顺序返回全部已确认消息的句柄。
-func (r *SendResult) Refs() []MessageRef {
-	var refs []MessageRef
+func (r *SendResult) Refs() []string {
+	var refs []string
 	for _, id := range r.PlatformMessageIDs {
-		refs = append(refs, NewMessageRef(r.Session, id, r.AdapterInstanceID))
+		refs = append(refs, Ref(r.Session, id, r.AdapterInstanceID))
 	}
 	return refs
 }

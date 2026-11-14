@@ -11,7 +11,7 @@ type DeleteItemResult struct {
 
 // DeleteResult 按输入顺序保存撤回结果，重复 ID 也各自占一项。
 type DeleteResult struct {
-	Session           Session
+	Session           string
 	AdapterInstanceID string
 	Items             []DeleteItemResult
 }

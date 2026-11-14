@@ -13,7 +13,7 @@ import (
 )
 
 // Delete 撤回同一会话和实例的消息，关联当前 Handler 的父调用与期限。
-func (c *Context) Delete(refs ...message.MessageRef) (*message.DeleteResult, error) {
+func (c *Context) Delete(refs ...string) (*message.DeleteResult, error) {
 	if !c.active.Load() {
 		return nil, errcode.FailedPrecondition.New("handler context has expired")
 	}
@@ -21,11 +21,11 @@ func (c *Context) Delete(refs ...message.MessageRef) (*message.DeleteResult, err
 }
 
 // Delete 通过已激活的 Session 独立撤回句柄所指的消息。
-func Delete(ctx context.Context, refs ...message.MessageRef) (*message.DeleteResult, error) {
+func Delete(ctx context.Context, refs ...string) (*message.DeleteResult, error) {
 	return callDelete(ctx, refs, nil)
 }
 
-func callDelete(ctx context.Context, refs []message.MessageRef, parent *wire.Inbound) (*message.DeleteResult, error) {
+func callDelete(ctx context.Context, refs []string, parent *wire.Inbound) (*message.DeleteResult, error) {
 	// 1. 在取得 Session 和发送 RPC 前校验全部句柄。
 	request, err := convert.DeleteRequestToProto(refs)
 	if err != nil {

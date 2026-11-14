@@ -4,7 +4,7 @@
 // [Editor] 提供可选的消息编辑入口，[CommandSynchronizer] 提供命令菜单同步。
 // [Core] 将事件与游标交给宿主，并读取出站媒体。
 // 实例配置只在启动请求中传递；生命周期由 sdk.RunAdapter 管理。
-// 包级 HTTP 路由可通过 sdk 根包的可选 AdapterHTTP 接口登记，Listener 随 Session 托管。
+// 包级 HTTP 路由在 [Descriptor.HTTP] 中声明，Listener 随 Session 托管。
 package adapter
 
 import (
@@ -56,7 +56,7 @@ type Instance interface {
 	// Capabilities 返回本实例声明的平台能力。
 	Capabilities() []message.Capability
 	// Send 同时保留发送结果和安全错误，包括部分成功。
-	Send(ctx context.Context, to message.Session, chain message.Chain) (*message.SendResult, *errcode.Error)
+	Send(ctx context.Context, to string, chain message.Chain) (*message.SendResult, *errcode.Error)
 	// Stop 返回前停止接收；此后实例的 Deliver、SaveCursor 均返回 FAILED_PRECONDITION。
 	Stop(ctx context.Context) error
 }

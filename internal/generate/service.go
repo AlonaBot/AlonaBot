@@ -81,7 +81,7 @@ func (s *scan) schemaImporter(ctx context.Context, list *exec.Cmd) (*schemaImpor
 	args := append(slices.Clone(list.Args[1:len(list.Args)-1]), "-export", "-compiled")
 	args = append(args, paths...)
 	command := exec.CommandContext(ctx, list.Path, args...)
-	command.Dir, command.Env = s.dir, list.Env
+	command.Dir, command.Env = list.Dir, list.Env
 	var stderr bytes.Buffer
 	command.Stderr = &stderr
 	output, err := command.Output()
@@ -118,7 +118,7 @@ func (s *scan) schemaImporter(ctx context.Context, list *exec.Cmd) (*schemaImpor
 		}
 	}
 	command = exec.CommandContext(ctx, list.Path, "env", "GOARCH")
-	command.Dir, command.Env = s.dir, list.Env
+	command.Dir, command.Env = list.Dir, list.Env
 	output, err = command.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("go env GOARCH: %w\n%s", err, output)
@@ -164,8 +164,8 @@ func (s *scan) schemas(ctx context.Context, list *exec.Cmd) error {
 		}
 	} else {
 		s.checkConstructor(importer.checked[s.entry.ImportPath])
-		s.httpCalls(importer.info, paths)
 	}
+	s.httpCalls(importer.info, paths)
 	s.handlerParamNames(importer.info, paths)
 	s.migrationCalls(importer.info, paths)
 	s.translationCalls(importer.info, paths)

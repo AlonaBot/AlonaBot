@@ -14,13 +14,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/adapter"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
-
-//go:generate go run ../../../cmd/alonabot build --out ../../../bin/generated/examples-devbot-adapter
 
 const adapterID = "devloop"
 
@@ -33,10 +30,8 @@ type loopback struct {
 // New 创建无需外部平台的回环 Adapter。
 func New() adapter.Adapter { return &loopback{clients: make(map[string]adapter.Core)} }
 
-func (*loopback) Descriptor() *adapter.Descriptor { return &adapter.Descriptor{AdapterID: adapterID} }
-
-func (a *loopback) HTTP(route func(string, string) *sdk.RouteBuilder) {
-	route(http.MethodPost, "/inject").HandleFunc(func(w http.ResponseWriter, r *http.Request) {
+func (a *loopback) Descriptor() *adapter.Descriptor {
+	return &adapter.Descriptor{AdapterID: adapterID, HTTP: []adapter.HTTPRoute{{Method: http.MethodPost, Path: "/inject", Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.URL.Query().Get("instance")
 		text := r.URL.Query().Get("text")
 		if id == "" || text == "" {
@@ -55,7 +50,7 @@ func (a *loopback) HTTP(route func(string, string) *sdk.RouteBuilder) {
 		accepted, err := core.Deliver(r.Context(), &message.Event{
 			ID: number, Type: "message.created", Source: message.SourceAdapter, OccurredAt: time.Now(),
 			AdapterID: adapterID, AdapterInstanceID: id, AccountID: id,
-			Session: message.NewSession(adapterID, "chat", ""), ChatType: message.ChatPrivate,
+			Session: message.SID(adapterID, "chat", ""), ChatType: message.ChatPrivate,
 			Actor:   &message.Actor{ExternalUserID: "user", AdapterInstanceID: id},
 			Message: &message.PlatformMessage{PlatformMessageID: number, Chain: chain},
 			Payload: &message.CreatedPayload{PlatformMessageID: number, Chain: chain, ToMe: true},
@@ -69,7 +64,7 @@ func (a *loopback) HTTP(route func(string, string) *sdk.RouteBuilder) {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
-	})
+	})}}}
 }
 
 func (a *loopback) Start(_ context.Context, req adapter.StartRequest, core adapter.Core) (adapter.Instance, error) {
@@ -94,7 +89,7 @@ type instance struct {
 
 func (i *instance) Account() adapter.Account         { return adapter.Account{ID: i.account} }
 func (*instance) Capabilities() []message.Capability { return nil }
-func (i *instance) Send(_ context.Context, to message.Session, chain message.Chain) (*message.SendResult, *errcode.Error) {
+func (i *instance) Send(_ context.Context, to string, chain message.Chain) (*message.SendResult, *errcode.Error) {
 	if i.stopped.Load() {
 		return nil, errcode.FailedPrecondition.New("loopback instance has stopped")
 	}
