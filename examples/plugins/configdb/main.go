@@ -4,8 +4,6 @@
 // fail_migration 与 fail_start 供临时 data_dir 中的候选失败验收使用。
 package main
 
-//go:generate go run ../../../cmd/alonabot build --out ../../../bin/generated/examples-plugins-configdb
-
 import (
 	"context"
 	_ "embed"
@@ -39,14 +37,36 @@ type plugin struct {
 	plugin *sdk.Plugin
 }
 
-// New 显式绑定资源、配置回调、命令和所选数据库入口的迁移。
+// New 登记配置回调、命令和所选数据库入口的迁移。
 func New() *sdk.Plugin {
 	p := sdk.NewPlugin()
-	sdk.UseGenerated(p, alonabotGenerated)
+
 	state := &plugin{plugin: p}
 	p.OnConfigLoad(state.OnConfigLoad)
 	p.OnStart(state.OnStart)
-	state.Commands(p)
+	g := p.Group("note")
+	g.Command("set").Handle(func(c *sdk.Context, key, value string) (message.Content, error) {
+		if err := saveNote(c.Context(), key, value); err != nil {
+			return nil, err
+		}
+		return reply(c, "note.saved", "key", key)
+	})
+	g.Command("get").Handle(func(c *sdk.Context, key string) (message.Content, error) {
+		value, err := readNote(c.Context(), key)
+		if err != nil {
+			return nil, err
+		}
+		return reply(c, "note.value", "key", key, "value", value)
+	})
+	g.Command("delete").Handle(func(c *sdk.Context, key string) (message.Content, error) {
+		if err := deleteNote(c.Context(), key); err != nil {
+			return nil, err
+		}
+		return reply(c, "note.deleted", "key", key)
+	})
+	g.Command("hello").Handle(func(c *sdk.Context, name string) (message.Content, error) {
+		return reply(c, "note.hello", "name", name)
+	})
 	state.registerMigrations(p)
 	return p
 }
@@ -75,33 +95,6 @@ func (*plugin) OnConfigLoad(ctx context.Context, fromVersion uint32, raw json.Ra
 		object["greeting"] = converted
 	}
 	return json.Marshal(object)
-}
-
-// Commands 注册 /note set、get、delete 与语言选择示例 /note hello。
-func (*plugin) Commands(r *sdk.Plugin) {
-	g := r.Group("note")
-	g.Command("set").Handle(func(c *sdk.Context, key, value string) (message.Content, error) {
-		if err := saveNote(c.Context(), key, value); err != nil {
-			return nil, err
-		}
-		return reply(c, "note.saved", "key", key)
-	})
-	g.Command("get").Handle(func(c *sdk.Context, key string) (message.Content, error) {
-		value, err := readNote(c.Context(), key)
-		if err != nil {
-			return nil, err
-		}
-		return reply(c, "note.value", "key", key, "value", value)
-	})
-	g.Command("delete").Handle(func(c *sdk.Context, key string) (message.Content, error) {
-		if err := deleteNote(c.Context(), key); err != nil {
-			return nil, err
-		}
-		return reply(c, "note.deleted", "key", key)
-	})
-	g.Command("hello").Handle(func(c *sdk.Context, name string) (message.Content, error) {
-		return reply(c, "note.hello", "name", name)
-	})
 }
 
 func reply(c *sdk.Context, key string, args ...any) (message.Content, error) {

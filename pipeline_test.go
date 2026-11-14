@@ -32,6 +32,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
+	genresources "github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk"
@@ -68,7 +69,9 @@ func TestMain(m *testing.M) {
 	} else if strings.HasPrefix(mode, "tasks") {
 		err = persistentTaskProcess(mode)
 	} else if mode == "adapter" {
-		err = sdk.RunAdapter(&pipelineAdapter{})
+		a := &pipelineAdapter{}
+		genresources.Bind(a, genresources.Resources{})
+		err = sdk.RunAdapter(a)
 	} else {
 		err = sdk.Run(pipelinePlugin(mode))
 	}
@@ -105,7 +108,7 @@ func pipelineAudit(record pipelineRecord) error {
 }
 
 func pipelineObserve(stage, route string, c *sdk.Context) error {
-	record := pipelineRecord{Stage: stage, Route: route, Text: c.Text(), Session: string(c.Session())}
+	record := pipelineRecord{Stage: stage, Route: route, Text: c.Text(), Session: c.Session()}
 	if ev := c.Event(); ev != nil {
 		record.Instance = ev.AdapterInstanceID
 		record.Account = ev.AccountID
@@ -130,6 +133,7 @@ func pipelineObserve(stage, route string, c *sdk.Context) error {
 
 func pipelinePlugin(mode string) *sdk.Plugin {
 	p := sdk.NewPlugin()
+	genresources.Bind(p, genresources.Resources{})
 	switch mode {
 	case "service-chain":
 		return serviceChainPlugin()
@@ -187,10 +191,10 @@ func pipelinePlugin(mode string) *sdk.Plugin {
 				return message.Text("automatic-after-explicit"), nil
 			})
 		}
-		p.BeforeSend("before").Handle(func(_ *sdk.Context, _ message.Session, chain message.Chain) (message.Chain, error) {
+		p.BeforeSend("before").Handle(func(_ *sdk.Context, _ string, chain message.Chain) (message.Chain, error) {
 			return nil, pipelineAudit(pipelineRecord{Stage: "before", Text: chain.Text()})
 		})
-		p.AfterSend("after").Handle(func(_ *sdk.Context, _ message.Session, result *message.SendResult, sendErr error) error {
+		p.AfterSend("after").Handle(func(_ *sdk.Context, _ string, result *message.SendResult, sendErr error) error {
 			if sendErr != nil {
 				return sendErr
 			}
@@ -243,7 +247,7 @@ func (*pipelineLoop) Capabilities() []message.Capability {
 func (*pipelineLoop) Stop(context.Context) error { return nil }
 
 // Action 只承担测试平台输入；事件仍经 Adapter 的真实 Deliver 进入 Core。
-func (i *pipelineLoop) Action(ctx context.Context, to message.Session, name string, _ uint32, params json.RawMessage) (json.RawMessage, *errcode.Error) {
+func (i *pipelineLoop) Action(ctx context.Context, to string, name string, _ uint32, params json.RawMessage) (json.RawMessage, *errcode.Error) {
 	var input pipelineInput
 	if err := json.Unmarshal(params, &input); err != nil {
 		return nil, errcode.InvalidArgument.New(err.Error())
@@ -279,22 +283,22 @@ func (i *pipelineLoop) Action(ctx context.Context, to message.Session, name stri
 }
 
 // Send 记录平台实际收到的链并返回确认回执。
-func (i *pipelineLoop) Send(_ context.Context, to message.Session, chain message.Chain) (*message.SendResult, *errcode.Error) {
+func (i *pipelineLoop) Send(_ context.Context, to string, chain message.Chain) (*message.SendResult, *errcode.Error) {
 	return i.receipt("send", to, "", chain)
 }
 
 // Edit 保留消息 ID，记录平台实际收到的编辑链。
-func (i *pipelineLoop) Edit(_ context.Context, to message.Session, id string, chain message.Chain) (*message.SendResult, *errcode.Error) {
+func (i *pipelineLoop) Edit(_ context.Context, to string, id string, chain message.Chain) (*message.SendResult, *errcode.Error) {
 	return i.receipt("edit", to, id, chain)
 }
-func (i *pipelineLoop) receipt(stage string, to message.Session, id string, chain message.Chain) (*message.SendResult, *errcode.Error) {
+func (i *pipelineLoop) receipt(stage string, to string, id string, chain message.Chain) (*message.SendResult, *errcode.Error) {
 	i.mu.Lock()
 	defer i.mu.Unlock() // 平台回执序号与审计次序共同串行化。
 	i.sequence++
 	if id == "" {
 		id = strconv.Itoa(i.sequence)
 	}
-	record := pipelineRecord{Stage: stage, Text: chain.Text(), Session: string(to), MessageID: id}
+	record := pipelineRecord{Stage: stage, Text: chain.Text(), Session: to, MessageID: id}
 	for _, segment := range chain {
 		if buttons, ok := segment.(message.ButtonsSegment); ok {
 			record.Token = buttons.Rows[0][0].CoreToken
@@ -857,8 +861,8 @@ func pipelineHookPlugin(p *sdk.Plugin, mode string) {
 			c.StopPropagation()
 			return message.Text("automatic"), nil
 		})
-		p.BeforeSend("before").Handle(func(c *sdk.Context, to message.Session, chain message.Chain) (message.Chain, error) {
-			if err := pipelineAudit(pipelineRecord{Stage: "before", Text: chain.Text(), Session: string(to)}); err != nil {
+		p.BeforeSend("before").Handle(func(c *sdk.Context, to string, chain message.Chain) (message.Chain, error) {
+			if err := pipelineAudit(pipelineRecord{Stage: "before", Text: chain.Text(), Session: to}); err != nil {
 				return nil, err
 			}
 			// 出站 Hook 的递归 Send 必须由 Core 拒绝，使用同一 Session 的实际请求取证。
@@ -870,8 +874,8 @@ func pipelineHookPlugin(p *sdk.Plugin, mode string) {
 			}
 			return message.Chain{message.Text("before:" + chain.Text())}, nil
 		})
-		p.AfterSend("after").Handle(func(_ *sdk.Context, to message.Session, result *message.SendResult, sendErr error) error {
-			record := pipelineRecord{Stage: "after", Session: string(to)}
+		p.AfterSend("after").Handle(func(_ *sdk.Context, to string, result *message.SendResult, sendErr error) error {
+			record := pipelineRecord{Stage: "after", Session: to}
 			if sendErr != nil {
 				record.Code = sendErr.Error()
 			}

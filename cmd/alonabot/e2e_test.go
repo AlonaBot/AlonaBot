@@ -30,6 +30,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/adminauth"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/pluginkit"
 )
 
 // binDir 存放 TestMain 构建的 Core 与真实插件二进制。
@@ -42,12 +43,18 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	binDir = dir
-	for name, pkg := range map[string]string{"alonabot": ".", "lifecycle": "../../examples/plugins/lifecycle"} {
-		if out, err := exec.Command("go", "build", "-o", filepath.Join(dir, name), pkg).CombinedOutput(); err != nil {
-			fmt.Fprintf(os.Stderr, "build %s failed: %v\n%s", name, err, out)
-			os.Exit(1)
-		}
+	if out, err := exec.Command("go", "build", "-o", filepath.Join(dir, "alonabot"), ".").CombinedOutput(); err != nil {
+		fmt.Fprintf(os.Stderr, "build CLI: %v\n%s", err, out)
+		os.Exit(1)
 	}
+	build, err := pluginkit.BuildDev(context.Background(), "../../examples/plugins/lifecycle", dir)
+	if err != nil {
+		panic(err)
+	}
+	if err := os.Rename(build.Executable, filepath.Join(dir, "lifecycle")); err != nil {
+		panic(err)
+	}
+
 	if err := prepareTestPackages(); err != nil {
 		panic(err)
 	}

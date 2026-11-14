@@ -9,12 +9,12 @@ import (
 const maxDeleteMessages = 100
 
 // DeleteRequestToProto 校验同一会话与实例的句柄，保留输入顺序、重复 ID 及省略的实例。
-func DeleteRequestToProto(refs []message.MessageRef) (*pb.DeleteRequest, error) {
+func DeleteRequestToProto(refs []string) (*pb.DeleteRequest, error) {
 	if len(refs) == 0 || len(refs) > maxDeleteMessages {
 		return nil, errcode.InvalidArgument.New("delete requires 1 to 100 message references")
 	}
 	request := &pb.DeleteRequest{}
-	var session message.Session
+	var session string
 	var instance string
 	for i, ref := range refs {
 		target, id, err := RefToProto(ref)

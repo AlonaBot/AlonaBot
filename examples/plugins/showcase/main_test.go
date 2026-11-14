@@ -40,8 +40,8 @@ func TestShowcase(t *testing.T) {
 		t.Fatalf("invalid argument usage = %+v", invalid)
 	}
 	check(h.Text(chat, user, "/demo remind lunch 3600 soup"), "lunch", 1)
-	session := message.NewSession(plugintest.AdapterID, "private:alice", "")
-	actor := message.NewUser(plugintest.AdapterID, user.ID)
+	session := message.SID(plugintest.AdapterID, "private:alice", "")
+	actor := message.UID(plugintest.AdapterID, user.ID)
 	key := fmt.Sprintf("%d:%s/%d:%s/%s", len(actor), actor, len(session), session, "lunch")
 	reminder := h.TriggerTask(p, "remind", key)
 	check(reminder, "soup", 1)

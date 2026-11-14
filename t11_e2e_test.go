@@ -21,6 +21,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/tool"
+	genresources "github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk"
@@ -63,13 +64,15 @@ func t11Process(mode string) error {
 		return t11PermissionProcess()
 	}
 	if strings.HasPrefix(mode, "t11-adapter") {
-		return sdk.RunAdapter(&t11Adapter{buttons: mode != "t11-adapter-text"})
+		a := &t11Adapter{buttons: mode != "t11-adapter-text"}
+		genresources.Bind(a, genresources.Resources{})
+		return sdk.RunAdapter(a)
 	}
 	return sdk.Run(t11Plugin(mode))
 }
 func t11Plugin(mode string) *sdk.Plugin {
 	p := sdk.NewPlugin()
-	sdk.UseGenerated(p, sdk.Generated{ServiceSchemas: map[string][]byte{
+	genresources.Bind(p, genresources.Resources{ServiceSchemas: map[string][]byte{
 		chainSchema[t11Arguments](): []byte(t11InputSchema),
 		chainSchema[t11Command]():   []byte(`{"type":"object"}`),
 		chainSchema[t11Reply]():     []byte(`{"type":"object"}`),
@@ -93,7 +96,7 @@ func t11Plugin(mode string) *sdk.Plugin {
 				if err != nil {
 					return in, err
 				}
-				err = pipelineAudit(pipelineRecord{Stage: "execute", Route: entry.name, Text: in.Key, Value: string(b), User: string(c.User()), Session: string(c.Session())})
+				err = pipelineAudit(pipelineRecord{Stage: "execute", Route: entry.name, Text: in.Key, Value: string(b), User: c.User(), Session: c.Session()})
 				return in, err
 			})
 		}
@@ -111,9 +114,9 @@ func t11Plugin(mode string) *sdk.Plugin {
 			if err != nil {
 				return err
 			}
-			return pipelineAudit(pipelineRecord{Stage: "result", Text: in.Key, Value: string(b), Code: out.Code, User: string(c.User()), Session: string(c.Session())})
+			return pipelineAudit(pipelineRecord{Stage: "result", Text: in.Key, Value: string(b), Code: out.Code, User: c.User(), Session: c.Session()})
 		})
-		p.BeforeSend("audit").Handle(func(_ *sdk.Context, _ message.Session, chain message.Chain) (message.Chain, error) {
+		p.BeforeSend("audit").Handle(func(_ *sdk.Context, _ string, chain message.Chain) (message.Chain, error) {
 			return chain, pipelineAudit(pipelineRecord{Stage: "before", Text: chain.Text()})
 		})
 	}
@@ -182,22 +185,22 @@ func (i *t11Loop) Capabilities() []message.Capability {
 }
 
 // Send 记录 Core 发到平台的完整文本和两枚 token。
-func (i *t11Loop) Send(_ context.Context, to message.Session, chain message.Chain) (*message.SendResult, *errcode.Error) {
+func (i *t11Loop) Send(_ context.Context, to string, chain message.Chain) (*message.SendResult, *errcode.Error) {
 	return i.receipt("send", to, "", chain)
 }
 
 // Edit 记录确认完成后的文本与实际剩余按钮。
-func (i *t11Loop) Edit(_ context.Context, to message.Session, id string, chain message.Chain) (*message.SendResult, *errcode.Error) {
+func (i *t11Loop) Edit(_ context.Context, to string, id string, chain message.Chain) (*message.SendResult, *errcode.Error) {
 	return i.receipt("edit", to, id, chain)
 }
-func (i *t11Loop) receipt(stage string, to message.Session, id string, chain message.Chain) (*message.SendResult, *errcode.Error) {
+func (i *t11Loop) receipt(stage string, to string, id string, chain message.Chain) (*message.SendResult, *errcode.Error) {
 	i.mu.Lock()
 	defer i.mu.Unlock() // 平台消息编号和对应审计保持相同次序。
 	i.sequence++
 	if id == "" {
 		id = strconv.Itoa(i.sequence)
 	}
-	record := pipelineRecord{Stage: stage, Text: chain.Text(), Session: string(to), MessageID: id}
+	record := pipelineRecord{Stage: stage, Text: chain.Text(), Session: to, MessageID: id}
 	for _, segment := range chain {
 		if buttons, ok := segment.(message.ButtonsSegment); ok {
 			for _, row := range buttons.Rows {

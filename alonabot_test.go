@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/internal/generate"
+	"github.com/AlonaBot/AlonaBot/internal/pluginkit"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
 
@@ -21,10 +23,9 @@ func TestLibraryLifecycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), startupTimeout)
 	defer cancel()
 	temp := t.TempDir()
-	executable := filepath.Join(temp, "devbot")
-	build := exec.CommandContext(ctx, "go", "build", "-race", "-o", executable, "./examples/devbot")
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build devbot: %v\n%s", err, output)
+	executable, err := pluginkit.CompileApp(ctx, generate.Options{Dir: "./examples/devbot"}, temp, "-race")
+	if err != nil {
+		t.Fatalf("build devbot: %v", err)
 	}
 	logPath := filepath.Join(temp, "output.log")
 	output, err := os.Create(logPath)

@@ -22,7 +22,7 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/contracts/release"
-	"github.com/AlonaBot/AlonaBot/sdk/generate"
+	"github.com/AlonaBot/AlonaBot/internal/generate"
 )
 
 // Pack 构建组件并发布可重复归档、release.json 和可选的 Ed25519 签名。

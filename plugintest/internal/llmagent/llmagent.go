@@ -3,8 +3,6 @@
 // 请求与响应由共享的 llm Schema 校验，业务结果由每次构造传入的函数决定。
 package llmagent
 
-//go:generate go run ../../../cmd/alonabot build --out ../../../bin/generated/plugintest-llmagent
-
 import (
 	"context"
 
@@ -15,7 +13,7 @@ import (
 // New 按生成器的工程入口约定构造并绑定资源；服务由 Handle 登记。
 func New() *sdk.Plugin {
 	p := sdk.NewPlugin()
-	sdk.UseGenerated(p, alonabotGenerated)
+
 	return p
 }
 

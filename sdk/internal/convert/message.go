@@ -37,27 +37,27 @@ func milliseconds(t time.Time) int64 {
 }
 
 // SessionFromProto 提取不含账号和实例的会话字符串。
-func SessionFromProto(t *pb.Target) message.Session {
+func SessionFromProto(t *pb.Target) string {
 	if t == nil {
 		return ""
 	}
-	return message.NewSession(t.AdapterId, t.ChatId, t.GetThreadId())
+	return message.SID(t.AdapterId, t.ChatId, t.GetThreadId())
 }
 
 // TargetToProto 拆分会话与可选实例，账号由 Core 补齐。
-func TargetToProto(s message.Session, instance string) (*pb.Target, error) {
-	a, c, t, ok := s.Parts()
-	if !ok {
-		return nil, errcode.InvalidArgument.New("invalid session")
+func TargetToProto(s string, instance string) (*pb.Target, error) {
+	a, c, t, err := message.ParseSID(s)
+	if err != nil {
+		return nil, err
 	}
 	return &pb.Target{AdapterId: a, ChatId: c, ThreadId: optional(t), AdapterInstanceId: instance}, nil
 }
 
 // RefToProto 拆分消息句柄中的目标、消息 ID 与实例。
-func RefToProto(ref message.MessageRef) (*pb.Target, string, error) {
-	s, id, instance, ok := ref.Parts()
-	if !ok {
-		return nil, "", errcode.InvalidArgument.New("invalid message reference")
+func RefToProto(ref string) (*pb.Target, string, error) {
+	s, id, instance, err := message.ParseRef(ref)
+	if err != nil {
+		return nil, "", err
 	}
 	target, err := TargetToProto(s, instance)
 	return target, id, err
@@ -195,7 +195,7 @@ func segmentToProto(s message.Segment, enclosingTarget *pb.Target, outbound bool
 			return nil, err
 		}
 		// 仅对原先省略目标且句柄未改动的引用恢复省略，跨目标发送仍保留原会话和实例。
-		if messagecodec.ImplicitReference(v) == string(v.Ref) && SessionFromProto(target) == SessionFromProto(enclosingTarget) && target.AdapterInstanceId == enclosingTarget.GetAdapterInstanceId() {
+		if messagecodec.ImplicitReference(v) == v.Ref && SessionFromProto(target) == SessionFromProto(enclosingTarget) && target.AdapterInstanceId == enclosingTarget.GetAdapterInstanceId() {
 			target = nil
 		}
 		out.Data = &pb.Segment_Reference{Reference: &pb.ReferenceSegment{Target: target, OriginalPlatformMessageId: id}}
@@ -322,9 +322,9 @@ func ChainFromProto(c *pb.MessageChain, enclosingTarget *pb.Target) message.Chai
 			if target == nil {
 				target = enclosingTarget
 			}
-			reference := message.ReferenceSegment{Ref: message.NewMessageRef(SessionFromProto(target), v.Reference.OriginalPlatformMessageId, target.GetAdapterInstanceId())}
+			reference := message.ReferenceSegment{Ref: message.Ref(SessionFromProto(target), v.Reference.OriginalPlatformMessageId, target.GetAdapterInstanceId())}
 			if v.Reference.Target == nil {
-				messagecodec.SetImplicitReference(&reference, string(reference.Ref))
+				messagecodec.SetImplicitReference(&reference, reference.Ref)
 			}
 			out = append(out, reference)
 		case *pb.Segment_Buttons:

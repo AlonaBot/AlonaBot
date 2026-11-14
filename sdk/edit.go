@@ -11,7 +11,7 @@ import (
 )
 
 // Edit 编辑句柄所指的消息，关联当前 Handler 的父调用。
-func (c *Context) Edit(ref message.MessageRef, m message.Content) (*message.SendResult, error) {
+func (c *Context) Edit(ref string, m message.Content) (*message.SendResult, error) {
 	if !c.active.Load() {
 		return nil, errcode.FailedPrecondition.New("handler context has expired")
 	}
@@ -19,10 +19,10 @@ func (c *Context) Edit(ref message.MessageRef, m message.Content) (*message.Send
 }
 
 // Edit 通过已激活的 Session 独立编辑句柄所指的消息。
-func Edit(ctx context.Context, ref message.MessageRef, m message.Content) (*message.SendResult, error) {
+func Edit(ctx context.Context, ref string, m message.Content) (*message.SendResult, error) {
 	return callEdit(ctx, ref, m, nil)
 }
-func callEdit(ctx context.Context, ref message.MessageRef, m message.Content, parent *wire.Inbound) (*message.SendResult, error) {
+func callEdit(ctx context.Context, ref string, m message.Content, parent *wire.Inbound) (*message.SendResult, error) {
 	target, id, err := convert.RefToProto(ref)
 	if err != nil {
 		return nil, err

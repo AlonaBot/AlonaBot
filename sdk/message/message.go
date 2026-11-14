@@ -1,7 +1,8 @@
 // Package message 提供 SDK 的消息、会话、事件与发送结果类型。
 //
 // [Chain] 按顺序组成一次逻辑发送，[Segment] 与 Chain 都实现 [Content]。
-// [Session] 定位聊天与话题，[MessageRef] 定位具体消息；[Event] 与 [SendResult] 提供消息句柄。
+// 会话、消息句柄与用户身份使用 string，由 [SID]、[Ref]、[UID] 拼接，Parse 函数校验并拆分。
+// [Event] 与 [SendResult] 提供关联消息的句柄。
 // 类型语义见 spec/MESSAGE-MODEL.md §1～§4。
 package message
 
@@ -108,7 +109,7 @@ type referenceOrigin = messagecodec.ReferenceOrigin
 // ReferenceSegment 通过句柄引用消息，实例省略时由 Core 补齐。
 type ReferenceSegment struct {
 	referenceOrigin
-	Ref MessageRef
+	Ref string
 }
 
 // ForwardSource 保存转发条目的可选来源展示信息。
@@ -156,7 +157,7 @@ func File(src MediaSource, filename string) Segment {
 func Mention(externalUserID string) Segment { return MentionSegment{ExternalUserID: externalUserID} }
 
 // Quote 构造引用指定消息的片段。
-func Quote(ref MessageRef) Segment { return ReferenceSegment{Ref: ref} }
+func Quote(ref string) Segment { return ReferenceSegment{Ref: ref} }
 
 func (s TextSegment) segment()       {}
 func (s TextSegment) content() Chain { return Chain{s} }

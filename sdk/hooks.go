@@ -82,7 +82,7 @@ func (b *BeforeSendBuilder) Priority(p int32) *BeforeSendBuilder {
 }
 
 // Handle 设置改链函数；返回 nil Chain 保留当前内容，返回错误拒绝本次操作。
-func (b *BeforeSendBuilder) Handle(h func(c *Context, to message.Session, m message.Chain) (message.Chain, error)) {
+func (b *BeforeSendBuilder) Handle(h func(c *Context, to string, m message.Chain) (message.Chain, error)) {
 	b.route.scope.plugin.checkRegistration()
 	b.route.handles++
 	b.route.handler = h
@@ -109,7 +109,7 @@ func (b *AfterSendBuilder) Priority(p int32) *AfterSendBuilder {
 }
 
 // Handle 设置观察函数；其错误由 Core 记录，不改变原发送结果。
-func (b *AfterSendBuilder) Handle(h func(c *Context, to message.Session, res *message.SendResult, sendErr error) error) {
+func (b *AfterSendBuilder) Handle(h func(c *Context, to string, res *message.SendResult, sendErr error) error) {
 	b.route.scope.plugin.checkRegistration()
 	b.route.handles++
 	b.route.handler = h
@@ -122,9 +122,9 @@ func collectHooks(root *Plugin, reg *Registration) error {
 	}
 	var errs []error
 	for _, route := range root.hooks {
-		expected := "func(*sdk.Context, message.Session, message.Chain) (message.Chain, error)"
+		expected := "func(*sdk.Context, string, message.Chain) (message.Chain, error)"
 		if route.phase == pb.HookPhase_HOOK_PHASE_AFTER_SEND {
-			expected = "func(*sdk.Context, message.Session, *message.SendResult, error) error"
+			expected = "func(*sdk.Context, string, *message.SendResult, error) error"
 		} else if route.phase == pb.HookPhase_HOOK_PHASE_PRE_EVENT {
 			expected = fmt.Sprintf("func(*sdk.Context, %s) (%s, error)", route.event.payload, route.event.payload)
 			if err := route.event.check(); err != nil {
@@ -173,8 +173,8 @@ func appendHookRoutes(reg *Registration, registration *pb.Register) {
 type editingContextKey struct{}
 
 // Editing 返回出站 Hook 本次编辑的消息句柄；发送与其他 Handler 返回空串。
-func (c *Context) Editing() message.MessageRef {
-	ref, _ := c.ctx.Value(editingContextKey{}).(message.MessageRef)
+func (c *Context) Editing() string {
+	ref, _ := c.ctx.Value(editingContextKey{}).(string)
 	return ref
 }
 
@@ -245,7 +245,7 @@ func invokeHook(ctx context.Context, in *wire.Inbound, route hookRoute) (respons
 	case *pb.BeforeSendRequest:
 		bindOutboundHook(c, request.Context, request.Operation, request.Target, request.GetEditedPlatformMessageId())
 		var chain message.Chain
-		chain, err = route.handler.(func(*Context, message.Session, message.Chain) (message.Chain, error))(c, convert.SessionFromProto(request.Target), convert.ChainFromProto(request.Chain, request.Target))
+		chain, err = route.handler.(func(*Context, string, message.Chain) (message.Chain, error))(c, convert.SessionFromProto(request.Target), convert.ChainFromProto(request.Chain, request.Target))
 		out := &pb.BeforeSendResult{}
 		if err == nil && chain != nil {
 			out.Chain, err = convert.ChainToProto(chain, request.Target)
@@ -257,7 +257,7 @@ func invokeHook(ctx context.Context, in *wire.Inbound, route hookRoute) (respons
 		if request.Error != nil {
 			sendErr = convert.ErrorFromProto(request.Error)
 		}
-		err = route.handler.(func(*Context, message.Session, *message.SendResult, error) error)(c, convert.SessionFromProto(request.Target), convert.SendResultFromProto(request.Result), sendErr)
+		err = route.handler.(func(*Context, string, *message.SendResult, error) error)(c, convert.SessionFromProto(request.Target), convert.SendResultFromProto(request.Result), sendErr)
 		result = &pb.AfterSendResult{}
 	}
 	if err != nil {
@@ -279,7 +279,7 @@ func bindOutboundHook(c *Context, invocation *pb.InvocationContext, op pb.SendOp
 	c.actor = invocation.GetActor()
 	c.defaultTarget = invocation.GetDefaultTarget()
 	if op == pb.SendOperation_SEND_OPERATION_EDIT {
-		c.ctx = context.WithValue(c.ctx, editingContextKey{}, message.NewMessageRef(convert.SessionFromProto(target), edited, target.GetAdapterInstanceId()))
+		c.ctx = context.WithValue(c.ctx, editingContextKey{}, message.Ref(convert.SessionFromProto(target), edited, target.GetAdapterInstanceId()))
 	}
 }
 

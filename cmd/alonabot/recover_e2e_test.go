@@ -437,8 +437,10 @@ import (
  "net/http"
  "os"
  "github.com/AlonaBot/AlonaBot/sdk"
+ "github.com/AlonaBot/AlonaBot/sdk/genimpl"
  "github.com/AlonaBot/AlonaBot/sdk/sqlitedb"
 )
+func init(){genimpl.Register("main",genimpl.Resources{})}
 func main() {
  p:=sdk.NewPlugin()
  p.OnStart(func(ctx context.Context)error{

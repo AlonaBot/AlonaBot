@@ -14,15 +14,13 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/sqlitedb"
 )
 
-//go:generate go run ../../../cmd/alonabot build --out ../../../bin/generated/examples-devbot-plugin
-
 //go:embed startup.sql
 var startupDDL string
 
 // New 创建独立插件，绑定生成资源，登记启动记录与回声路由。
 func New() *sdk.Plugin {
 	p := sdk.NewPlugin()
-	sdk.UseGenerated(p, alonabotGenerated)
+
 	p.OnStart(func(ctx context.Context) error {
 		db, err := sqlitedb.Open(ctx)
 		if err != nil {

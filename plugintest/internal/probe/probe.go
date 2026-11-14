@@ -3,8 +3,6 @@
 // New 为每次测试创建独立的插件对象；配置和计数由真实 Core 的开发组件资源管理。
 package probe
 
-//go:generate go run ../../../cmd/alonabot build --out ../../../bin/generated/plugintest-internal-probe
-
 import (
 	"context"
 	_ "embed"
@@ -28,7 +26,7 @@ var counterDDL string
 // New 登记测试命令，绑定生成资源，并在启动时初始化受管计数表。
 func New() *sdk.Plugin {
 	p := sdk.NewPlugin()
-	sdk.UseGenerated(p, alonabotGenerated)
+
 	p.OnStart(func(ctx context.Context) error {
 		db, err := sqlitedb.Open(ctx)
 		if err != nil {

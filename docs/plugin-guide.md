@@ -44,26 +44,42 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
   - 命令、事件或按钮路由的 builder 写 `.Continue()`：SDK 在原调用中照常执行 Rule，匹配后整个 Handler 放到延续调用中执行。这类路由中 `StopPropagation` 不起作用；自动回复型 Handler 返回的非空内容在延续调用结束前发送一次。
   - 在延续调用中，`c.Wait(timeout)` 等待同一用户在同一会话（含话题）的下一条消息，返回它的 Context，可用 `Text()` 取文本；这条消息不再进入普通分发。只能由真实入站事件触发（需要 Actor 与默认 Target），延续调用中不能再次 Continue，等待与延续都不持久化，插件停止或替换时结束（D-119）。
 - 有副作用的业务调用不自动重试；超时与取消不代表对端没有执行（CONTRACTS §1.2）。
-- 插件包导出 `func New() *sdk.Plugin`：`p := sdk.NewPlugin()` 后先 `sdk.UseGenerated(p, alonabotGenerated)` 绑定生成资源，再在 p 上登记路由、`p.OnStart`/`OnReady`/`OnStop`、`p.OnConfigLoad` 与数据库迁移，最后返回 p；`New` 可以被多次调用，不依赖包级状态（D-114、D-137）。逻辑模块用 `p.Sub(id)` 分成一层子插件，通常由子包导出 `func Register(s *sdk.SubPlugin)`；子插件的 ID 不进入 route_id、命令路径与 Service 名，生命周期回调与迁移只登记在插件对象上（D-116）。
+- 插件包导出 `func New() *sdk.Plugin`：`p := sdk.NewPlugin()` 后在 p 上登记路由、`p.OnStart`/`OnReady`/`OnStop`、`p.OnConfigLoad` 与数据库迁移，最后返回 p；`New` 可以被多次调用，不依赖包级状态（D-114、D-145）。逻辑模块用 `p.Sub(id)` 分成一层子插件，通常由子包导出 `func Register(s *sdk.SubPlugin)`；子插件的 ID 不进入 route_id、命令路径与 Service 名，生命周期回调与迁移只登记在插件对象上（D-116）。
 - 参数较多或需要可选、默认值时，命令 Handler 在 `*sdk.Context` 之后只收一个结构体：字段按顺序对应参数，名字取 `arg` 标签或把字段名开头的大写段转小写（`FeedURL` 为 `feedURL`），指针字段可选、缺失为 nil，`default:"…"` 给出默认值，`arg:",raw"` 接收末位 raw 尾部；与位置参数及 `Args`/`Optional`/`RawTail` 不能混用，全部检查在 `Collect` 完成（D-115）。
-- 位置参数的名字：省略 `Args` 时取 Handler 源码中的参数名，由生成器记入 `Generated.ParamNames`，显式 `Args` 优先；`_` 与无名参数、同一行多个函数字面量（生成时给出 WARN）回退为 `argN`，这时要用 `Args` 显式命名后才能按名字写 `Optional`。
+- 位置参数的名字：省略 `Args` 时取 Handler 源码中的参数名，由构建工具自动记录，显式 `Args` 优先；`_` 与无名参数、同一行多个函数字面量（生成时给出 WARN）回退为 `argN`，这时要用 `Args` 显式命名后才能按名字写 `Optional`。
 - HTTP 路由写作 `p.Route(method, path).Handle(h)`（或 `.HandleFunc(f)`），公开回调在 `Handle` 之前加 `.Public(sdk.AuthCallbackState)` 等认证方式；定时任务写作 `p.Every(jobID, d).Handle(fn)` 或 `p.Cron(jobID, expr).Timezone(tz).Handle(fn)`。每个 builder 必须恰好 `Handle` 一次，`Handle` 之后不能再设置选项，错误在 `Collect` 报告。
 - 命令、文本匹配、事件、Service 与 Event Bus 订阅都链式注册，以 `Handle` 结束；漏写 `Handle`、重复调用或在它之后继续调用，都会让 `Collect` 报错（D-70）。
 - 命令说明在注册处写英文原文：`p.Command("set").Description("Set a value").Handle(Set)`。其他语言在 `i18n/<locale>.json` 的顶层 `commands` 中以完整规范路径（含 Group 前缀，token 用一个空格连接）覆盖，例如 `{"commands":{"rss add":{"description":"添加订阅"}}}`；只有 `commands` 的语言文件可以省略 en-US。`check`/`build` 只检查 `commands` 的结构，`Collect` 检查覆盖路径对应已注册且登记了英文说明的命令，否则注册失败（D-138）。
 - 权限写成 `sdk.Permission`：`sdk.Anyone`、`sdk.User`、`sdk.Admin`、`sdk.ChatAdmin`、`sdk.PermissionName`，用 `Or` 取并集。命令与文本匹配取最近一层显式设置（路由、最近的组、外层的组），都没有时要求 `user`；事件路由没有设置时为空集合。Handler 内用 `c.Has` 按当前 Actor 判断。
 - `c.Send`、`sdk.Send`、编辑与自动回复都接收 `message.Content`，可以直接传 `message.Text(...)`、`message.ImageURL(...)` 等单个片段，也可以传 `message.Chain{...}`。自动回复型 Handler 的返回类型为 `(message.Content, error)`，成功返回的非空内容由 Core 在 Handler 返回后发送，排在本次调用的全部显式发送之后；nil 与空 Chain 表示不回复，显式发送与编辑的空内容返回 INVALID_ARGUMENT（CONTRACTS §8，MESSAGE-MODEL §2～§3，D-108）。
-- 发送目标用会话字符串 `message.Session`：`<adapter_id>:<chat_id>[#<thread_id>]`，例如 `telegram:-100123#42` 或 `onebot11:group:123456`。用 `message.NewSession(adapterID, chatID, threadID)` 处理 chat_id 与 thread_id 中 `%`、`#` 的转义，用 `Parts()` 拆解；adapter_id 遵守 manifest 的本地 ID 规则。`c.Send(content)` 使用本次调用的默认会话，`sdk.To(session)` 覆盖会话，`sdk.Via(instanceID)` 指定机器人实例；只有 Via 时保留默认会话与话题。后台用 `sdk.Send(ctx, session, content, opts...)`，opts 只接受 Via。省略实例时由 Core 选择并补齐账号；非法会话在发出请求前返回 INVALID_ARGUMENT（CONTRACTS §8、§9.1，MESSAGE-MODEL §1，D-102）。
-- 编辑、撤回与引用所指的消息统一用 `message.MessageRef`，格式为 `<会话字符串>/<platform_message_id>[@<实例名>]`，可以原样保存。用发送回执的 `Ref()`、`Refs()` 或 `c.Event().Ref()` 取得句柄，手工构造用 `message.NewMessageRef`，它负责消息 ID 中 `%`、`/`、`@` 的转义。编辑用 `c.Edit(ref, content)` 或后台的 `sdk.Edit(ctx, ref, content)`，引用用 `message.Quote(ref)`；省略实例时由 Core 按目标选择规则补齐（CONTRACTS §8，MESSAGE-MODEL §4，D-104）。
+- 发送目标用 `string` 会话字符串：`<adapter_id>:<chat_id>[#<thread_id>]`，例如 `telegram:-100123#42` 或 `onebot11:group:123456`。用 `message.SID(adapterID, chatID, threadID)` 处理 chat_id 与 thread_id 中 `%`、`#` 的转义，用 `message.ParseSID(sid)` 校验并拆解；adapter_id 遵守 manifest 的本地 ID 规则。`c.Send(content)` 使用本次调用的默认会话，`c.SendTo(sid, content)` 发往指定会话，`sdk.Via(instanceID)` 指定机器人实例；只有 Via 时保留默认会话与话题。后台用 `sdk.Send(ctx, session, content, opts...)`，opts 只接受 Via。省略实例时由 Core 选择并补齐账号；非法会话在发出请求前返回 INVALID_ARGUMENT（CONTRACTS §8、§9.1，MESSAGE-MODEL §1，D-102）。
+- 编辑、撤回与引用所指的消息统一用 `string` 消息句柄，格式为 `<会话字符串>/<platform_message_id>[@<实例名>]`，可以原样保存。用发送回执的 `Ref()`、`Refs()` 或 `c.Event().Ref()` 取得句柄，手工构造用 `message.Ref(sid, platformMessageID, instance)`，它负责消息 ID 中 `%`、`/`、`@` 的转义，用 `message.ParseRef(ref)` 校验并拆解。编辑用 `c.Edit(ref, content)` 或后台的 `sdk.Edit(ctx, ref, content)`，引用用 `message.Quote(ref)`；省略实例时由 Core 按目标选择规则补齐（CONTRACTS §8，MESSAGE-MODEL §4，D-104）。
 - 流式输出用 `c.Stream(next)`：next 每次返回一段增量文本，返回 `io.EOF` 正常结束（可以同时带上末段）。实例声明 `message.edit` 时先发送再节流编辑，超过 `TextLimit` 时换条；没有编辑能力时在正常结束后发送一次，输入出错时不发布缓存。返回全部回执，失败时保留已有回执（D-135）。
 - 只回一段文本时用 `c.Reply(text)`；后台发文本用 `sdk.SendText(ctx, session, text, opts...)`，opts 只接受 Via。两者分别等于对应 Send 发送 `message.Text(text)` 并丢弃回执，错误原样返回（D-118）。
-- `c.User()` 返回 `message.User` 用户字符串 `<adapter_id>:<external_user_id>`，没有 Actor 时为空串；`message.NewUser` 与 `Parts()` 保留 external_user_id 中的冒号。`c.Session()` 返回默认会话，没有默认目标时为空串，未指定目标的发送返回 NO_DEFAULT_TARGET。Service 调用沿用调用上下文中的 Actor 与默认会话，`c.Event()` 为 nil（CONTRACTS §1.2、§3、§8，MESSAGE-MODEL §1，D-120）。
+- `c.User()` 返回 `string` 用户字符串 `<adapter_id>:<external_user_id>`，没有 Actor 时为空串；`message.UID` 与 `message.ParseUID` 保留 external_user_id 中的冒号。`c.Session()` 返回默认会话，没有默认目标时为空串，未指定目标的发送返回 NO_DEFAULT_TARGET。Service 调用沿用调用上下文中的 Actor 与默认会话，`c.Event()` 为 nil（CONTRACTS §1.2、§3、§8，MESSAGE-MODEL §1，D-120）。
 - 事件用常量注册，例如 `p.On("created", sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error { return c.Reply(e.Chain.Text()) })`；也接受只收 `*sdk.Context` 的 Handler。其他标准事件同样使用对应常量与 payload 指针类型，`Collect` 检查签名并在错误中给出 route_id。扩展事件用 `sdk.AdapterEvent[T]("adapter.name", version)`，T 须为结构体，带载荷的 Handler 收 `*T`；版本不符或 JSON 解码失败时记 WARN 并跳过 Handler，日志只含路由、事件名与版本或安全错误类别（MESSAGE-MODEL §1.1～§1.2，CONTRACTS §8，D-70、D-71、D-113）。
-- 上传用 `sdk.Upload(ctx, r, mime)` 得到 `*message.MediaRef`，SDK 计算大小与 SHA-256，mime 为空时按内容判断；r 可 Seek 时读两遍，否则使用临时文件，调用方应保持两遍读取的内容一致（CONTRACTS §1.3，D-109）。读取用 `sdk.OpenMedia(ctx, src)`，src 可以是片段的 `Source`、`MediaRef.Source()`、`IncomingMedia.Source()`，只持有 token 时用 `message.MediaSource{MediaRef: token}`。打开时先读第一块，失败直接返回错误；成功后顺序读取并关闭返回的 `io.ReadCloser`，读取响应 ctx 取消且不自动重试。HTTPS URL 来源在发出请求前返回 INVALID_ARGUMENT。向其他插件授权用 `sdk.GrantMedia(ctx, token, granteePluginID, sessions...)`，会话参数为 `message.Session`（CONTRACTS §1.3～§1.4，D-102、D-109、D-121）。
+- 上传用 `sdk.Upload(ctx, r, mime)` 得到 `*message.MediaRef`，SDK 计算大小与 SHA-256，mime 为空时按内容判断；r 可 Seek 时读两遍，否则使用临时文件，调用方应保持两遍读取的内容一致（CONTRACTS §1.3，D-109）。读取用 `sdk.OpenMedia(ctx, src)`，src 可以是片段的 `Source`、`MediaRef.Source()`、`IncomingMedia.Source()`，只持有 token 时用 `message.MediaSource{MediaRef: token}`。打开时先读第一块，失败直接返回错误；成功后顺序读取并关闭返回的 `io.ReadCloser`，读取响应 ctx 取消且不自动重试。HTTPS URL 来源在发出请求前返回 INVALID_ARGUMENT。向其他插件授权用 `sdk.GrantMedia(ctx, token, granteePluginID, sessions...)`，会话参数为 `string`（CONTRACTS §1.3～§1.4，D-102、D-109、D-121）。
 - 错误码用 `errcode`，例如 `errcode.InvalidArgument.New("invalid input")`、`errcode.InvalidArgument.Errorf("invalid field %s", name)`；用 `errcode.Of(err)` 查询错误链中的 SDK 错误码，没有 SDK 错误时返回 0。`sdk.Error` 是 `errcode.Error` 的别名，仍可用 `errors.As` 取得错误并读取 Code 与 Message（CONTRACTS §1.2，D-123）。
 
 发送带回调的按钮时，用 `a := sdk.Action[T](name)` 声明动作，通过 `sdk.OnButton(r, a).Handle(...)` 注册签名为 `func(*sdk.Context, T) error` 的 Handler，再将 `a.Button(label, value)` 放入 `message.Buttons` 发送。`button.` 是按钮路由的保留前缀，注册其他路由时避开该前缀。value 用 `encoding/json` 编码，Core 限制编码结果最多 1024 字节；编码失败的按钮在发送前返回 INVALID_ARGUMENT。点击时 value 解码失败记 WARN，跳过 Handler 并正常结束本次调用。直接构造 `message.Button` 时，空的 `Value` 会省略该字段，省略值的点击同样按解码失败处理。`message.Extension(adapterID, name, version, payload)` 只能发往所属 Adapter 声明了对应 extension 名称与版本的实例，payload 按声明的 Schema 校验（[CONTRACTS §8](../spec/CONTRACTS-v0.1.md)、[MESSAGE-MODEL §6.3](../spec/MESSAGE-MODEL.md#63-按钮与回调)）。
 
 Adapter 作者用 `adapter.Event[T](name, version)` 与 `adapter.Extension[T](name, version)` 声明扩展事件与 extension；T 须为结构体，放在 Adapter 的常量与数据类型包中，供插件共用。SDK 从 Go 类型推导 Schema：没有 `omitempty` 的字段为必需，不允许未声明的属性；类型不符或推导失败时，`RunAdapter` 在 REGISTER 前返回带声明名的错误（CONTRACTS §8，MESSAGE-MODEL §1.2、§2，D-113）。
+
+Adapter 的 HTTP 路由在 `adapter.Descriptor.HTTP` 中声明，例如：
+
+```go
+return &adapter.Descriptor{
+    AdapterID: "example",
+    HTTP: []adapter.HTTPRoute{{
+        Method: http.MethodPost,
+        Path: "/webhook",
+        Auth: adapter.AuthPlatformToken,
+        Handler: http.HandlerFunc(handleWebhook),
+    }},
+}
+```
+
+省略 `Auth` 时要求 Core 会话；`AuthPlatformToken` 由 Adapter 校验平台凭证。SDK 在连接 Core 前核对路径与重复路由。
 
 ## 6. 跨插件协作
 
@@ -78,7 +94,7 @@ Adapter 作者用 `adapter.Event[T](name, version)` 与 `adapter.Extension[T](na
 
 ## 7. 配置与 secret
 
-在 `plugin.yaml` 同目录编写 `config_schema.json`，按字段键声明类型与英文源文案。运行 `alonabot build` 检查声明并把规范 JSON 嵌入生成文件；`alonabot check` 执行同样的检查。声明格式见 [CONTRACTS §5.1](../spec/CONTRACTS-v0.1.md#51-配置真源缺失值与编辑)，例如：
+在 `plugin.yaml` 同目录编写 `config_schema.json`，按字段键声明类型与英文源文案。运行 `alonabot build` 检查声明并把规范 JSON 经 overlay 编入程序；`alonabot check` 执行同样的检查。声明格式见 [CONTRACTS §5.1](../spec/CONTRACTS-v0.1.md#51-配置真源缺失值与编辑)，例如：
 
 ```json
 {
@@ -128,4 +144,10 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 
 - 市场 ID 按角色使用 `alonabot_plugin_`、`alonabot_adapter_`、`alonabot_agent_` 或 `alonabot_webui_` 前缀（CONTRACTS §9.1）。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
 - 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`（CONTRACTS §9.3）。
-- 用 `alonabot build` 更新资源并编译独立组件，`alonabot check` 只读核对。`alonabot pack --asset-url https://example.com/component.tar.gz` 为所选平台生成安装包与归档外的 `release.json`；目标通过 `--goos/--goarch/--tags` 选择，`--out` 默认 `<工程>/bin`。可选 `--key FILE` 读取标准 base64 编码的 64 字节 Ed25519 私钥，对清单原始字节签名，并在归档外写 `release.json.sig` 与 `release.pub`；省略时输出 unsigned 清单（CONTRACTS §9.2、§9.3）。密钥读取或签名失败直接报错。进程包含可解析的 `build-info` 文本，WebUI 包只含 manifest 与静态资源。签名私钥由作者保管，留在打包资源、仓库和构建日志之外。
+- 用 `alonabot build` 检查资源并编译独立组件，`alonabot check` 只读核对。`alonabot pack --asset-url https://example.com/component.tar.gz` 为所选平台生成安装包与归档外的 `release.json`；目标通过 `--goos/--goarch/--tags` 选择，`--out` 默认 `<工程>/bin`。可选 `--key FILE` 读取标准 base64 编码的 64 字节 Ed25519 私钥，对清单原始字节签名，并在归档外写 `release.json.sig` 与 `release.pub`；省略时输出 unsigned 清单（CONTRACTS §9.2、§9.3）。密钥读取或签名失败直接报错。进程包含可解析的 `build-info` 文本，WebUI 包只含 manifest 与静态资源。签名私钥由作者保管，留在打包资源、仓库和构建日志之外。
+
+## 直接测试与构建
+
+在组件目录运行 `go test ./...` 即可使用 plugintest。测试启动时按入口包现场扫描 manifest、Schema、i18n 和 Handler 参数名，并复用同一入口包的只读资源。作者的 `New()` 只创建插件并登记业务行为，工程里没有 `alonabot_gen.go`，也无需编写生成相关的代码或指令。
+
+独立组件运行 `alonabot build --dir .`；导入根包装配组件的 main 包运行 `alonabot build --dir ./cmd/bot`，执行产物为 `cmd/bot/bin/bot`（Windows 加 `.exe`）。库模式构建会只读扫描依赖中的组件，包括模块缓存中的第三方组件，并将资源经 main 包的 overlay 编入。直接 Go 构建的程序在启动缺少资源的组件时会提示使用 `alonabot build` 或 `alonabot run`。

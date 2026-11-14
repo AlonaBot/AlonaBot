@@ -302,7 +302,7 @@ func (r *CommandGroup) register(c Command, options routeOptions) {
 	spec.UsageMode, spec.UsageKey, spec.IgnoreCase = options.usageMode, options.usageKey, options.ignoreCase
 	spec.Params = params
 	if !options.argsSet && structure == nil {
-		options.names = handlerParamNames(r.plugin.generated, c.Handler)
+		options.names = handlerParamNames(generatedFor(r.plugin), c.Handler)
 	}
 	if options.argsSet && len(options.names) != len(params) {
 		r.errs = append(r.errs, invalidCommand("command %q has %d argument names for %d parameters", commandRouteID(c), len(options.names), len(params)))

@@ -4,9 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"runtime"
+	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/sdk/config"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
 )
@@ -17,29 +21,26 @@ type migrationState = dbhook.State
 // Run 开始后登记状态固定；每次 NewPlugin 返回独立的对象。
 type Plugin struct {
 	migrationState
-	commands       CommandGroup
-	hooks          []*hookRoute
-	events         eventRegistry
-	services       serviceRegistry
-	subscriptions  subscriptionRegistry
-	http           httpRegistry
-	schedules      scheduleRegistry
-	tasks          taskRegistry
-	scope          pluginScope
-	subs           []*SubPlugin
-	jobSubPlugins  map[string]string
-	generated      Generated
-	entryPackage   string // 调用 UseGenerated 的入口包路径。
-	generatedCount int
-	onStart        func(context.Context) error
-	onReady        func(context.Context) error
-	onStop         func(context.Context) error
-	onConfigLoad   config.Loader
-	callbacks      map[string]bool
-	config         config.Values
-	configReady    bool
-	running        atomic.Bool
-	errs           []error
+	commands      CommandGroup
+	hooks         []*hookRoute
+	events        eventRegistry
+	services      serviceRegistry
+	subscriptions subscriptionRegistry
+	http          httpRegistry
+	schedules     scheduleRegistry
+	tasks         taskRegistry
+	scope         pluginScope
+	subs          []*SubPlugin
+	jobSubPlugins map[string]string
+	onStart       func(context.Context) error
+	onReady       func(context.Context) error
+	onStop        func(context.Context) error
+	onConfigLoad  config.Loader
+	callbacks     map[string]bool
+	config        config.Values
+	configReady   bool
+	running       atomic.Bool
+	errs          []error
 }
 
 // Registrar 约束类型化服务、订阅、按钮和任务只能登记到插件或子插件。
@@ -55,7 +56,12 @@ type pluginContextKey struct{}
 
 // NewPlugin 创建一个独立的插件对象。
 func NewPlugin() *Plugin {
+	pc, _, _, _ := runtime.Caller(1)
+	name := runtime.FuncForPC(pc).Name()
+	start := strings.LastIndexByte(name, '/') + 1
+	pkgPath := name[:start+strings.IndexByte(name[start:], '.')]
 	p := &Plugin{callbacks: make(map[string]bool), jobSubPlugins: make(map[string]string)}
+	generated.SetEntry(p, pkgPath)
 	p.commands.plugin = p
 	p.events.plugin = p
 	p.http.plugin = p
@@ -182,4 +188,35 @@ func (r *Plugin) Every(jobID string, d time.Duration) *ScheduleBuilder {
 // Cron 开始构建五字段 cron 任务。
 func (r *Plugin) Cron(jobID, expr string) *ScheduleBuilder {
 	return r.scope.cron(jobID, expr)
+}
+
+func entryPackage(p *Plugin) string {
+	pkgPath, _ := generated.Entry(p)
+	return pkgPath
+}
+
+func generatedFor(p *Plugin) generated.Resources {
+	r, _ := generated.Lookup(p, entryPackage(p))
+	return r
+}
+
+func componentResources(component any) (generated.Resources, string, bool) {
+	pkgPath, ok := generated.Entry(component)
+	if !ok {
+		typ := reflect.TypeOf(component)
+		if typ.Kind() == reflect.Pointer {
+			typ = typ.Elem()
+		}
+		pkgPath = typ.PkgPath()
+	}
+	r, ok := generated.Lookup(component, pkgPath)
+	return r, pkgPath, ok
+}
+
+func requireResources(component any) error {
+	_, pkgPath, ok := componentResources(component)
+	if !ok {
+		return fmt.Errorf("entry package %q has no registered resources; use alonabot build or alonabot run", pkgPath)
+	}
+	return nil
 }

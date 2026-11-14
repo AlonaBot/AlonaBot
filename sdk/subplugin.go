@@ -64,8 +64,8 @@ func (p *Plugin) checkSubPlugins() error {
 		seen[id] = true
 
 		if s.usesConfig {
-			if schema == nil && len(p.generated.ConfigSchema) != 0 {
-				if err := json.Unmarshal(p.generated.ConfigSchema, &schema); err != nil {
+			if schema == nil && len(generatedFor(p).ConfigSchema) != 0 {
+				if err := json.Unmarshal(generatedFor(p).ConfigSchema, &schema); err != nil {
 					errs = append(errs, fmt.Errorf("sub-plugin %q config schema: %w", id, err))
 					continue
 				}

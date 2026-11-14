@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	genresources "github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
@@ -17,15 +18,16 @@ import (
 const schedulerSDKMode = "tasks-sdk"
 
 type schedulerSDKArgs struct {
-	Key     string          `json:"key"`
-	Text    string          `json:"text"`
-	Version int64           `json:"version"`
-	Session message.Session `json:"session"`
+	Key     string `json:"key"`
+	Text    string `json:"text"`
+	Version int64  `json:"version"`
+	Session string `json:"session"`
 }
 
 // schedulerSDKPlugin 经公开作者 API 操作真实 Core，审计只保存调用结果。
 func schedulerSDKPlugin(mode string) *sdk.Plugin {
 	p := sdk.NewPlugin()
+	genresources.Bind(p, genresources.Resources{})
 	task := sdk.Task[schedulerSDKArgs]("remind")
 	checkGate := func(ctx context.Context) error {
 		_, err := task.List(ctx)
@@ -53,7 +55,7 @@ func schedulerSDKPlugin(mode string) *sdk.Plugin {
 			return err
 		}
 		if args.Session != "" {
-			if _, err := c.Send(message.Text(args.Text), sdk.To(args.Session)); err != nil {
+			if _, err := c.SendTo(args.Session, message.Text(args.Text)); err != nil {
 				return err
 			}
 		}
