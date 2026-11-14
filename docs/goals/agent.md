@@ -19,7 +19,7 @@
 | goal-61 | T-12.4 | Agent 的记忆 | T-08.5、T-11.2、T-12.2 | 已完成（PR #182） |
 | goal-62 | T-12.5 | 技能 | T-12.3 | 已完成（PR #188） |
 | goal-63 | T-12.6 | 定时 Agent 任务 | T-07.9、T-08.5、T-12.3 | 已完成（PR #193） |
-| goal-64 | T-12.7 | 官方 Agent 组件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6、T-12.8、T-12.14 | 待派发 |
+| goal-64 | T-12.7 | 官方 Agent 组件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6、T-12.8、T-12.14 | 已完成（PR #195） |
 
 ## 第 1 波
 
@@ -820,7 +820,7 @@ type memoryResponse struct{}
 
 ### goal-64 · T-12.7 官方 Agent 组件打包与 T-12 验收
 
-状态：待派发。前置 T-12.4（PR #182）、T-12.5（PR #188）、T-12.6（PR #193，`7f81469`）、T-12.8（PR #175）、T-12.14（PR #189）均已合并；打包所用的顶层 check/build/test/pack 由 T-09.3（PR #194，合并提交 `e9ff45e`）交付。2026-11-13 审查者按 main `e9ff45e` 定稿：本切片的增量是「正式安装包的安装与运行路径」，以一个安装包主路径集成测试覆盖各能力的最小代表，V-57～V-61、V-76、V-118 的分项矩阵引用各前置切片已有的提交测试与经 cpa 兼容网关的真实 Provider 证据，不在安装包形态下重复（DECISIONS 2026-11-13 变更记录）；合并前审查者经 cpa 对安装包路径补一次真实对话与工具往返。以下核对事实取自起草时的 goal-38 分支并经审查者按 main 复核：前置 T-12.4（PR #182）、T-12.5（#188）、T-12.6（#193）、T-12.8（#175）、T-12.14（#189）的合并状态按本次任务输入；打包工具前置 T-09.3（goal-38，PR #194）正在审查，实际派发须从包含 #193、#194 的最新 main 创建分支。2026-11-13 按指定的 goal-38 head `71fa662` 副本读取代码：`agent/plugin.yaml` 已含 `id: alonabot_agent_official`、`version: 0.1.0`、`role: agent`、source 与静态图标；`agent.New() *sdk.Plugin` 已注册对话、聊天控制、memory、技能、`llm.generate` 与 `llm.providers`。顶层 `pack` 的 `--asset-url` 必填，`--key` 可选；本地安装读取归档及同目录的 release 文件，经管理 CLI/API 安装后单独 enable。现有 `agent/*_test.go`、根包 `agent_service_test.go` 和 TEST-MATRIX §3.2 已覆盖分项，包含经 cpa 兼容网关运行的真实 Provider 记录。T-12.6 已由 PR #193 合入：agent/tasks.go 注册 Agent 内工具 schedule_task（prompt 必填，at、interval_seconds、cron 恰有一个非空，timezone 只随 cron，空值与 0 视为未给出）、list_tasks、cancel_task（id），agent/scheduled.go 运行后台一轮，证据见 TEST-MATRIX §3.2 的 T-12.6 行。`spec/plan/agent.md` 步骤 8 的全量验收按本语句以「安装包主路径＋引用前置证据」组织（DECISIONS 2026-11-13 变更记录）。
+状态：已完成（[PR #195](https://github.com/AlonaBot/AlonaBot/pull/195)，合并提交 `47ae5f6`），证据见 TEST-MATRIX §3.2（含审查者经 cpa 兼容网关对安装包路径的四种协议实测）。合入：`cmd/alonabot/t12_e2e_test.go` 的 `TestAgentPackage`（正式 pack 的 Agent 与 probe 安装包经管理 CLI 安装、启用后的主路径）；Agent 对入站图片空 MIME 读取后按内容判断（CONTRACTS §1.3）；PLAN T-12 步骤 8 按增量验收同步。以下为派发时的语句。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-64（切片 T-12.7：官方 Agent 组件打包与 T-12 验收）。goal 目录 goal-64，分支 goal-64，worktree .worktrees/goal-64，从已包含 PR #193、#194 的最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
