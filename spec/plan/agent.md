@@ -14,7 +14,7 @@
 | T-12.2 | goal-59 | 对话：`agent/` 骨架与配置、人格、历史、延续调用内的一轮对话、流式编辑显示、`/persona` 与 `/reset` | T-12 步骤 2、3 | T-03.9、T-04.3、T-05.4、T-08.4、T-08.11、T-11.3、T-12.1、T-12.9、T-12.10、T-12.11、T-09.4 | V-57 | 已完成（PR #170；TEST-MATRIX §3.2） |
 | T-12.3 | goal-60 | 工具循环与 MCP：Core 工具、MCP 客户端（stdio、streamable HTTP）、确认、单轮步数上限 | T-12 步骤 4 | T-11.2、T-12.2 | V-58 | 已完成（PR #178；TEST-MATRIX §3.2） |
 | T-12.4 | goal-61 | 记忆：Agent 内的会话笔记与用户档案、`memory` 工具、会话快照与档案注入 | T-12 步骤 5 | T-08.5、T-11.2、T-12.2 | V-59 | 已完成（PR #182；TEST-MATRIX §3.2） |
-| T-12.5 | goal-62 | 技能：技能目录、`SKILL.md` 解析、`load_skill` | T-12 步骤 6 | T-12.3 | V-60 | 未开始 |
+| T-12.5 | goal-62 | 技能：技能目录、`SKILL.md` 解析、`load_skill` | T-12 步骤 6 | T-12.3 | V-60 | 已完成（PR #188；TEST-MATRIX §3.2） |
 | T-12.6 | goal-63 | 定时 Agent 任务：任务工具、用动态任务（D-124）保存与触发、后台运行 | T-12 步骤 7 | T-07.9、T-08.5、T-12.3 | V-61 | 未开始 |
 | T-12.7 | goal-64 | 官方 Agent 组件的打包与多进程验收，汇总证据 | T-12 步骤 8 | T-12.4、T-12.5、T-12.6、T-12.8、T-12.14 | V-57～V-61、V-76、V-118 | 未开始 |
 | T-12.8 | goal-83 | 文本生成服务：Core Broker 的 `@agent` 目标解析，`sdk/llm` 的类型、Schema 与调用辅助（含一问一答的 `llm.Ask`，D-111），Agent 的 `llm.generate` 与调用方许可，选项来源 `llm.providers`（D-131） | T-12 步骤 9 | T-03.8、T-06.1、T-08.14、T-12.2 | V-76、V-82 的 `@agent` 分项，V-109，V-116 的 `llm.providers` 分项 | 已完成（PR #175；TEST-MATRIX §3.2） |
@@ -23,7 +23,7 @@
 | T-12.11 | goal-120 | Provider 增加 Ollama 原生协议（`ollama-chat`）：`/api/chat` 的请求编码与 NDJSON 流解析、可选的 API key、工具结果按调用查名 | T-12 步骤 10 | T-12.1 | V-57 的 Provider 分项 | 已完成（PR #128；TEST-MATRIX §3.2） |
 | T-12.12 | goal-134 | Provider 改用官方 SDK：`openai`、`openai-compatible` 与 `openai-responses` 经 openai-go，`anthropic-messages` 经 anthropic-sdk-go；不重试、不读环境变量、Chat Completions 的成功条件、Anthropic 的 BaseURL 改为服务根（D-132） | T-12 步骤 1、10 | T-12.9、T-12.10、T-12.11 | V-57 的 Provider 分项 | 已完成（PR #134；TEST-MATRIX §3.2） |
 | T-12.13 | goal-135 | Provider 图片输入：`Image` 与 `Message.Images`、请求前的校验、六种协议的图片编码（D-132） | T-12 步骤 1、10 | T-12.12 | V-118 的 Provider 分项 | 已完成（PR #138；TEST-MATRIX §3.2） |
-| T-12.14 | goal-136 | 对话中的图片输入：Provider 条目的 `image_input`、读取入站图片、Agent 内的图片存储、历史回放与占位、`/reset` 删除（D-132） | T-12 步骤 11 | T-04.8、T-12.2、T-12.13 | V-118 | 未开始 |
+| T-12.14 | goal-136 | 对话中的图片输入：Provider 条目的 `image_input`、读取入站图片、Agent 内的图片存储、历史回放与占位、`/reset` 删除（D-132） | T-12 步骤 11 | T-04.8、T-12.2、T-12.13 | V-118 | 已完成（PR #189；TEST-MATRIX §3.2） |
 
 ## 3. 工作包
 

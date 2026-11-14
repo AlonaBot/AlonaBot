@@ -780,7 +780,9 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 		return nil, err
 	}
 	if generation == "" {
-		return c.prepareCandidate(ctx, install.PluginID, journal.KindFirstInstall, nil)
+		return c.prepareCandidate(ctx, install.PluginID, func(ctx context.Context) (*journal.Result, error) {
+			return c.assembly.journal.Prepare(ctx, install.PluginID, journal.KindFirstInstall, nil)
+		})
 	}
 	packageDir, err := installedDirectory(dir, install)
 	if err != nil {
@@ -824,11 +826,11 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 }
 
 // prepareCandidate 由运行循环独占调用，合并准备上下文与显式交接的进程资源。
-func (c *Core) prepareCandidate(ctx context.Context, id string, kind journal.Kind, staged *packages.Candidate) (*runningComponent, error) {
+func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(context.Context) (*journal.Result, error)) (*runningComponent, error) {
 	a := c.assembly
 	defer func() { a.candidate = nil }()
 	// 1. 准备失败由 Journal 中止，恢复直接在当前运行循环执行。
-	r, err := a.journal.Prepare(ctx, id, kind, staged)
+	r, err := prepare(ctx)
 	if err != nil {
 		if r != nil {
 			err = a.journal.Abort(ctx, r, err)
@@ -840,16 +842,14 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, kind journal.Kin
 	if err != nil {
 		return nil, a.journal.Abort(ctx, r, err)
 	}
+	kind := journal.Kind(record.Kind)
 	// 2. 提交返回进程所有权，激活失败也登记诊断并交给退出观察者。
 	process, err := a.journal.Commit(ctx, r)
 	if process == nil {
 		return nil, err
 	}
 	running.process, running.instance = process, process.Instance
-	if kind == journal.KindFirstInstall {
-		err = errors.Join(err, c.store.SetEnabled(context.WithoutCancel(ctx), id, true))
-	}
-	if kind == journal.KindUpdate && (!record.WasEnabled || !record.WasRunning) {
+	if (kind == journal.KindUpdate || kind == journal.KindRollback) && (!record.WasEnabled || !record.WasRunning) {
 		// 提交只切换权威代次；先停止候选，之后显式 enable 才建立业务 Session。
 		if stopErr := c.stopComponent(running, time.Now(), host.NewStopTiming(c.values), pb.StopReason_STOP_REASON_DISABLE); stopErr != nil {
 			return running, errors.Join(err, stopErr)
@@ -911,17 +911,23 @@ func (m managedCandidates) Reload(ctx context.Context, id string) error {
 			}
 			return m.core.startManaged(ctx, id)
 		}
-		return m.apply(ctx, id, journal.KindReload, nil)
+		return m.apply(ctx, id, func(ctx context.Context) (*journal.Result, error) {
+			return m.core.assembly.journal.Prepare(ctx, id, journal.KindReload, nil)
+		})
 	})
 }
 
 // Update 把已预检的候选交给一次 Core 操作。
 func (m managedCandidates) Update(ctx context.Context, id string, staged *packages.Candidate) error {
-	return m.core.operation(ctx, func(ctx context.Context) error { return m.apply(ctx, id, journal.KindUpdate, staged) })
+	return m.core.operation(ctx, func(ctx context.Context) error {
+		return m.apply(ctx, id, func(ctx context.Context) (*journal.Result, error) {
+			return m.core.assembly.journal.Prepare(ctx, id, journal.KindUpdate, staged)
+		})
+	})
 }
 
-func (m managedCandidates) apply(ctx context.Context, id string, kind journal.Kind, staged *packages.Candidate) error {
-	running, err := m.core.prepareCandidate(ctx, id, kind, staged)
+func (m managedCandidates) apply(ctx context.Context, id string, prepare func(context.Context) (*journal.Result, error)) error {
+	running, err := m.core.prepareCandidate(ctx, id, prepare)
 	if running != nil {
 		m.core.components = append(m.core.components, running)
 		if err != nil && running.instance.State() != host.StateDegraded {
@@ -931,9 +937,13 @@ func (m managedCandidates) apply(ctx context.Context, id string, kind journal.Ki
 	return err
 }
 
-// Rollback 返回尚未提供显式回退的协议错误。
-func (m managedCandidates) Rollback(context.Context, string, string) error {
-	return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "candidate orchestration is not available"}
+// Rollback 串行准备保留代次的副本，沿用候选接入、提交与失败停止路径。
+func (m managedCandidates) Rollback(ctx context.Context, id, generation string) error {
+	return m.core.operation(ctx, func(ctx context.Context) error {
+		return m.apply(ctx, id, func(ctx context.Context) (*journal.Result, error) {
+			return m.core.assembly.journal.PrepareRollback(ctx, id, generation)
+		})
+	})
 }
 
 func installedDirectory(dir string, install state.Install) (string, error) {

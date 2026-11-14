@@ -7,7 +7,12 @@ import alonabotgen0 "github.com/AlonaBot/AlonaBot/sdk"
 var alonabotGenerated = alonabotgen0.Generated{
 	Manifest:     []byte("id: alonabot_plugin_devbot\nname: Devbot Echo\nversion: 0.1.0\nauthor: AlonaBot\nsource: github.com/AlonaBot/AlonaBot\n"),
 	ConfigSchema: []byte("{\"$version\":2,\"greetings\":{\"type\":\"list\",\"description\":\"Startup greetings\",\"required\":true,\"default\":[{\"text\":\"Hello\"}],\"items\":{\"text\":{\"type\":\"string\",\"description\":\"Greeting text\",\"required\":true}}}}"),
+	I18n: map[string][]byte{
+		"en-US.json": []byte("{\"messages\":{\"hello\":\"Hello from devbot!\"}}\n"),
+		"zh-CN.json": []byte("{\"messages\":{\"hello\":\"来自 devbot 的问候！\"},\"commands\":{\"hello\":{\"description\":\"显示翻译后的问候\"}},\"config\":{\"greetings\":{\"description\":\"启动问候语\",\"items\":{\"text\":{\"description\":\"问候文本\"}}}}}\n"),
+	},
 	ParamNames: map[string][]string{
-		"github.com/AlonaBot/AlonaBot/examples/devbot/plugin:plugin.go:41": {"e"},
+		"github.com/AlonaBot/AlonaBot/examples/devbot/plugin:plugin.go:41": {},
+		"github.com/AlonaBot/AlonaBot/examples/devbot/plugin:plugin.go:44": {"e"},
 	},
 }

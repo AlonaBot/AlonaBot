@@ -87,7 +87,7 @@
 | goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 待派发 |
 | goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 已完成（PR #164） |
 | goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 已完成（PR #165） |
-| goal-70 | T-13.4 | 开发运行示例与验收 | T-03.10、T-13.2、T-13.3 | 待派发 |
+| goal-70 | T-13.4 | 开发运行示例与验收 | T-03.10、T-13.2、T-13.3 | 已完成（PR #186） |
 | goal-82 | T-16.2 | 按钮、多轮等待、schedule 与示例测试 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | 已完成（PR #183） |
 | goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | 等待前置 |
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 已完成（PR #173） |
@@ -6442,7 +6442,7 @@ broker.Options、bus.Options 与 router.Options 增加 Metrics *metrics.Counters
 
 ### goal-70 · T-13.4 开发运行示例与验收
 
-状态：待派发。直接前置均已合并：T-03.10 / goal-9（PR #180，`c128000`）、T-13.2 / goal-68（PR #160，`65ebc5f`）、T-13.3 / goal-69（PR #171，`3043c4e`）。库模式与共用装配基线为 T-13.1 / goal-67（PR #149，`bc39361`）、T-09.4 / goal-39（PR #163，`cb8ae3d`）；插件对象与资源绑定沿用 PR #154（`43a6135`）。状态已与 `spec/plan/core.md` 切片表核对；提交号通过只读 HEAD 与提交对象的一父历史核对，未执行 git 命令。2026-11-13 按指定 main `7bf07ba`，用 `rg`、源码读取和 `go doc` 核对如下。2026-11-13 审查者裁决：`alonabot init` 由 T-09.3（goal-38）交付，本切片先把 examples/devbot 整理成 init 契约规定的工程形状，以已实现的 `run --reload` 与库模式入口取证，实际 init 生成与模板比对登记「未运行，T-09.3 补证」（DECISIONS 2026-11-13 变更记录）。
+状态：已完成（[PR #186](https://github.com/AlonaBot/AlonaBot/pull/186)，合并提交 `c38a294`），证据见 TEST-MATRIX §3.2。合入：examples/devbot 整理为 init 契约的工程形状（可导入插件包、命令、i18n、.gitignore、README 与 core_config.example.json），回环 Adapter 的私有注入路由经真实 Deliver 交付并观察回复（同一实例写入串行化，未接纳时返回 503）；`cmd/alonabot/t13_e2e_test.go` 的 `TestDevelopmentExample`。init 生成与模板比对仍为「未运行，T-09.3 补证」。以下为派发时的语句。
 
 按 main 核对：
 
