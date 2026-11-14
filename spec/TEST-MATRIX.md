@@ -129,6 +129,7 @@
 | V-119 | T-03 | Telegram 服务消息（D-133）：论坛话题的创建、编辑、关闭与重开；置顶消息；修改群名；普通群升级为超级群（旧群与新超级群各一条服务消息）；Bot 与其他成员入群、退群的服务消息；其他服务消息（如 group_chat_created、new_chat_photo）；频道中的置顶；投票等没有可映射内容的普通消息 | 表中的服务消息各交付一次对应的扩展事件，payload 符合声明的 Schema，话题事件带该话题的 thread_id，迁移事件的 Target 为新超级群且旧群那条不交付；成员类服务消息不交付，成员变化只来自 chat_member 与 my_chat_member；其他服务消息不交付且游标推进；以上都不产生 message.created；投票等仍为 chain 为空的 message.created |
 | V-120 | T-04、T-13 | SDK 公开面（D-144～D-147）：Handler 内 `c.SendTo` 发往另一会话与同一会话的另一话题、没有默认目标时 `c.Send`、后台 `sdk.Send` 与 `sdk.SendText` 收 sid；`message.SID`/`ParseSID`、`Ref`/`ParseRef`、`UID`/`ParseUID` 的往返（含 `%`、`#`、`/`、`@` 与 external_user_id 中的 `:`）与不合法输入；`alonabot init` 创建的工程只含 `New()` 与注册，没有生成文件、不写 `//go:generate`；`run`、`build`、`test`、`pack` 之后作者目录不变；不经 CLI 直接 `go test`（plugintest，含 build tags），修改 `config_schema.json` 或 i18n 后再直接 `go test`；用 `alonabot build` 构建库模式的 main 包（本 module 的组件与一个经本地文件 GOPROXY 进入模块缓存的第三方组件），以及直接 `go build` 同一 main 包；在包级变量中调用 New 的组件；同包多次 New、库模式登记多个插件与一个 Adapter；Adapter 在 Descriptor 中声明私有路由与 platform token 公开路由，路径不合法或重复；分包后的示例、官方组件、Agent 与 plugintest 的编译与运行 | 消息发往给出的 sid，没有默认目标时 `c.Send` 返回 NO_DEFAULT_TARGET；往返不变，不合法时返回 INVALID_ARGUMENT 且不发出请求；作者目录中不出现生成文件；`go test` 中插件以现场扫描的资源注册与激活，修改后的 schema 与文案在下一次 `go test` 生效；`alonabot build` 的库模式二进制取得每个组件的资源并激活，直接 `go build` 的产物能编译，启动时在连接 Core 前返回英文错误并提示 `alonabot build`，不启动组件的单元测试不受影响；包级变量中构造的组件同样取得资源；同包对象共用资源，不同组件互不串用；Adapter 路由的注册描述与原 `AdapterHTTP` 写法相同，不合法的声明在连接 Core 前报错；`sdk` 根包不再导出生成相关的 API 与已移入子包的标识符 |
 | V-121 | T-13 | CLI 参数从简（D-149）：在组件工程目录中不带目录运行 `build`、`check`、`test`、`pack`，以及给出另一工程的目录；使用已删除的 `--dir`；在空目录中运行 `init`（目录名合法与不合法、在已有 module 内外、Adapter 角色）；`source` 为 GitHub 与非 GitHub 的工程不带 `--asset-url` 运行 `pack`；`install` 给出归档、给出官方组件 ID（`packages/` 中存在与不存在）、不给参数（当前目录与工程 `bin/` 中有零个、一个、多个安装包） | 不给目录时作用于当前目录，给出目录时作用于该目录，`--dir` 报未知参数；目录名合法时 ID 与 module 取目录名、Adapter 的 adapter_id 等于 ID，不合法时报错要求 `--id`；GitHub 来源的 release.json 资产 URL 为 `https://github.com/<owner>/<repo>/releases/download/v<version>/<归档名>`，其他来源报缺少 `--asset-url`；给出归档时与现状相同，官方组件 ID 安装 `packages/` 中的包并以官方来源登记，不存在时报错并列出可用 ID；恰好一个候选时安装它，零个或多个时报错并列出候选，不安装任何包 |
+| V-122 | T-09 | 包校验收紧（D-150、D-151）：安装与更新缺少 `migration_mode`、`prepare_effects` 或二者的包；进程角色的包缺少 build-info、build-info 无法解析、build-info 与 entrypoint 内嵌的构建信息不同、`GOOS`/`GOARCH` 与 manifest 不符；WebUI 包没有 build-info | 缺字段的包照常安装与更新，结果中带英文警告并记 WARN 日志，准备阶段不返回 NEEDS_MANUAL_MIGRATION；取值非法时照旧拒绝；build-info 的各类问题在停止旧版前拒绝，错误指明哪一项不符，已安装版本保持运行；WebUI 包照常安装 |
 
 ## 2. 跨任务验收的最终闭合点
 
@@ -173,6 +174,7 @@
 | V-118 | 图片输入（D-132）：T-12.13 的 Provider 分项；T-12.14 的对话分项 | T-12.7 汇总；真实 Provider 的图片请求由 T-10 汇总 |
 | V-120 | SDK 公开面（D-144～D-147）：T-04.15 的会话、生成资源与 Adapter 路由分项；T-04.16 的分包分项 | T-04.16 汇总；按 D-86 由一个主路径集成测试与本地自测提供证据 |
 | V-121 | CLI 参数从简（D-149）：T-13.6 | T-13.6；按 D-86 由一个主路径集成测试与本地自测提供证据 |
+| V-122 | 包校验收紧（D-150、D-151）：T-09.17 | T-09.17；按 D-86 由一个主路径集成测试与本地自测提供证据 |
 
 T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前者可支持后续开发，真实平台部分仍由 T-10 查证。测试会话、无配置/无 DB 最小插件和 payload fixture 的范围必须写明，不可据此关闭生产认证或数据恢复用例。
 
@@ -476,7 +478,7 @@ T-02.4 按 D-86 删除的测试及测试插件只保留历史运行证据，相�
 
 **FIX-3 已完成：** llmagent 的 go:generate 及生成文件头已按追加授权迁移；全仓两次生成成功且稳定。最终全仓 race 共 25 个测试包零失败，根包 80.924s、CLI 161.284s、pluginkit 71.212s；新提交集成及五项沿用测试、17 项本地自测全部通过（原 12 项及本轮 5 项），逐项事件见 `goal-38/race-review194-final.json`，摘要 `race-review194-final-summary.log`。
 
-未运行：真实 Telegram、Linux/Windows 实际运行、darwin/amd64 实际运行、浏览器管理流程、远端 CI。交叉编译仅作为构建证据；管理配置界面归 T-09.14，WebUI 语言切换保留原剩余归属。packages.Preflight 的 build-info 严格核对及遗留缺字段警告按派发说明交审查者裁决；归档拒绝矩阵继续引用 T-09.2 / #19，签名信任转换引用 T-09.4 / #163。
+未运行：真实 Telegram、Linux/Windows 实际运行、darwin/amd64 实际运行、浏览器管理流程、远端 CI。交叉编译仅作为构建证据；管理配置界面归 T-09.14，WebUI 语言切换保留原剩余归属。packages.Preflight 的 build-info 严格核对及遗留缺字段警告按派发说明交审查者裁决（2026-11-14 维护者裁决：缺字段只警告（D-150），build-info 严格核对（D-151），由 T-09.17 实施）；归档拒绝矩阵继续引用 T-09.2 / #19，签名信任转换引用 T-09.4 / #163。
 
 本轮全部完成条件均已重跑。原始复现失败日志 `fix4-before.log`、`fix5-before.log`、`fix6-before.log`、`fix7-before.log` 保留；首次全仓候选的开发入口回归记录于 `race-review194.json`，修正后的最终事件与摘要为 `race-review194-final.json`、`race-review194-final-summary.log`。独立只读复核已完成四条 FIX 的契约、架构边、规范与停止条件检查，未发现有证据的 P1/P2。
 

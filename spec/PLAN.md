@@ -10,7 +10,7 @@
 
 交付一个 Go Core、Go 插件与 Adapter SDK、可安装的官方 Telegram 与 OneBot 11 Adapter、官方 Agent 组件、可替换的官方 WebUI 组件与管理 CLI。用户用发行归档、`install.sh` 或 `docker compose` 安装官方整合包即可开箱即用，官方 Adapter、Agent 与 WebUI 都可以换成社区组件；开发者用 `alonabot init` 创建组件工程、用 `alonabot run --reload` 在工程目录中开发，改动源码后只重启该组件；需要把 Core 嵌入其他 Go 程序或在同一进程中调试时，也可以把框架当作 Go 库运行。用户能够安装预构建的插件与 Adapter，配置并启用它，在指定聊天/话题执行命令、发送消息和媒体、进行多轮对话，使用 Service、Event Bus、Scheduler、插件 HTTP 与受管 SQLite；能够与 Agent 对话，Agent 调用工具前按策略取得用户确认；管理动作能够按确定的代次和维护规则更新、停止及恢复。机器人回复与 WebUI 提供英文和简体中文。
 
-首发目标为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64。每插件一个 Native 子进程，每个 Adapter 包一个 Native 子进程（承载其全部实例），TCP 默认、stdio 可选；框架托管 HTTP 只开放 Core 的一个公开端口。动态跨插件命令 Router、其他官方 Adapter、多语言 SDK、持久化的多轮会话状态与暂停 DSL、跨会话的记忆检索和额外客户端后置。分层休眠与按需唤醒在 §7 单独规划（S-01～S-06），不属于 v0.1 交付。
+首发目标为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64。每插件一个 Native 子进程，每个 Adapter 包一个 Native 子进程（承载其全部实例），TCP 默认、stdio 可选；框架托管 HTTP 只开放 Core 的一个公开端口。动态跨插件命令 Router、持久化的多轮会话状态与暂停 DSL、跨会话的记忆检索和额外客户端后置；官方 Adapter 只有 Telegram 与 OneBot 11，不做其他官方 Adapter，也不做多语言 SDK（D-152）。分层休眠与按需唤醒在 §7 单独规划（S-01～S-06），不属于 v0.1 交付。
 
 ## 2. 实施目录和工作流
 
@@ -156,7 +156,7 @@ flowchart TD
 
 跨任务 V 用例按 TEST-MATRIX 的阶段分工记录。较早任务只完成自己负责的组件断言；用例整体在最终闭合任务完成后才标为通过。例如动态权限的管理服务测试不等于 WebUI 操作通过，内置 Send 的 Hook 检查不等于跨插件 Service 递归已经验证。后续接入仍复用较早实现，测试装配不能成为生产放行路径。
 
-每项 V 的证据记录包含实现版本、测试位置、完整运行命令、平台/依赖、结果与失败日志。T-10 汇总时按 V-01～V-76 与 V-82～V-121 逐项查证，不以其他名称的新清单取代现有编号；休眠扩展的 V-77～V-81 由 S-06 汇总，不属于 T-10。除 TEST-MATRIX §3.1 所列分项外均未运行。
+每项 V 的证据记录包含实现版本、测试位置、完整运行命令、平台/依赖、结果与失败日志。T-10 汇总时按 V-01～V-76 与 V-82～V-122 逐项查证，不以其他名称的新清单取代现有编号；休眠扩展的 V-77～V-81 由 S-06 汇总，不属于 T-10。除 TEST-MATRIX §3.1 所列分项外均未运行。
 
 若接口无法表达既定行为，先修对应契约和 fixture，再推进消费者；若已经表达但测试失败，先修负责实现。驱动备份、进程所有权、权限和提交唯一性未通过，不得被下游功能完成状态覆盖。
 
