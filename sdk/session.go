@@ -213,6 +213,29 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Reg
 			pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "Bootstrap is missing valid session limits", nil)
 	}
 
+	// Preparing 只读取一个准备结果；收到 PREPARED 后结束读取，把后续 ACTIVATE 留给激活读循环。
+	var received *pb.Prepared
+	var readErr error
+	readDone := make(chan struct{})
+	go func() {
+		received, readErr = readPrepared(conn, l, ack)
+		if readErr != nil {
+			readErr = &preparationInterrupted{cause: readErr}
+			l.runtime.cancel()
+			_ = conn.Close()
+		}
+		close(readDone)
+	}()
+	defer func() {
+		if err != nil {
+			l.runtime.cancel()
+			_ = conn.Close()
+		}
+		// 等待读取者退出后再清理资源或交接连接，同时保留断链与阶段失败的原因。
+		<-readDone
+		err = errors.Join(err, readErr)
+	}()
+
 	// 2. 在 OnStart 之前完成配置迁移、默认值与校验。
 	configContext, cancelConfig := context.WithTimeout(l.runtime.ctx, time.Duration(limits.GetConfigMs())*time.Millisecond)
 	var loader config.Loader
@@ -330,11 +353,23 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Reg
 	deadline := time.UnixMilli(boot.GetPreparationDeadlineUnixMs())
 	stop := withWatchdog(conn, time.Until(deadline))
 	defer stop()
+	<-readDone
+	return received, nil
+}
+
+// preparationInterrupted 保留断链原因，同时标识它已取消准备期 lifetime。
+type preparationInterrupted struct{ cause error }
+
+func (e *preparationInterrupted) Error() string        { return e.cause.Error() }
+func (e *preparationInterrupted) Unwrap() error        { return e.cause }
+func (e *preparationInterrupted) Is(target error) bool { return target == context.Canceled }
+
+func readPrepared(conn *wire.Conn, l launch, ack *pb.HelloAck) (*pb.Prepared, error) {
 	env, err := conn.ReadFrame()
 	if err != nil {
 		return nil, fmt.Errorf("wait for PREPARED: %w", err)
 	}
-	if err := wire.CheckPeer(env, sid, minor, ""); err != nil {
+	if err := wire.CheckPeer(env, ack.GetSessionId(), ack.GetChosenMinor(), ""); err != nil {
 		_ = conn.Close()
 		return nil, fmt.Errorf("invalid frame during preparation: %w", err)
 	}

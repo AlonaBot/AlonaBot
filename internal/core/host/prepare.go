@@ -156,6 +156,9 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		if errors.As(err, &pe) {
 			return pe
 		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		return phaseErr(phase, pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "%v", err)
 	}
 

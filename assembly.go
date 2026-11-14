@@ -655,6 +655,9 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 		} else {
 			running.runErr = sdk.RunInProcess(entry.root, l)
 		}
+		if ctx.Err() == context.Canceled {
+			running.runErr = startupCleanupError(running.runErr)
+		}
 		close(running.finished)
 		_ = listener.Close() // SDK 若在拨号前失败，解除 Accept 的等待。
 	}()
@@ -697,6 +700,31 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 		return err
 	}
 	return c.store.SetEnabled(ctx, id, true)
+}
+
+// startupCleanupError 从启动错误链中移除取消，保留真实的启动与资源清理失败。
+func startupCleanupError(err error) error {
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		var remaining []error
+		for _, cause := range joined.Unwrap() {
+			remaining = append(remaining, startupCleanupError(cause))
+		}
+		return errors.Join(remaining...)
+	}
+	// 单一包装链里也可能包含合并错误；有其他失败时保留整个包装及原始说明。
+	for cause := errors.Unwrap(err); cause != nil; cause = errors.Unwrap(cause) {
+		if _, ok := cause.(interface{ Unwrap() []error }); ok && startupCleanupError(cause) != nil {
+			return err
+		}
+	}
+	if errors.Is(err, context.Canceled) {
+		return nil
+	}
+	var failure *validate.Error
+	if errors.As(err, &failure) && failure.Code == pb.ErrorCode_ERROR_CODE_CANCELLED {
+		return nil
+	}
+	return err
 }
 
 func bootstrap(generation string, version uint32) *pb.Bootstrap {
