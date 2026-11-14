@@ -88,7 +88,7 @@
 | goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 已完成（PR #164） |
 | goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 已完成（PR #165） |
 | goal-70 | T-13.4 | 开发运行示例与验收 | T-03.10、T-13.2、T-13.3 | 待派发 |
-| goal-82 | T-16.2 | 按钮、多轮等待、schedule 与示例测试 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | 待派发 |
+| goal-82 | T-16.2 | 按钮、多轮等待、schedule 与示例测试 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | 已完成（PR #183） |
 | goal-38 | T-09.3 | 开发 CLI 与库模式脚手架 | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | 等待前置 |
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 已完成（PR #173） |
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 已完成（PR #172） |
@@ -6268,7 +6268,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 
 ### goal-14 · T-04.5 示例升级与 T-04 验收
 
-状态：待派发。直接前置均已合并：T-03.10 / goal-9（PR #180，`c128000`）；T-04.2 / goal-11（PR #42，`62d5afa`）；T-04.3 / goal-12（PR #47，`5cb1cfd`）；T-04.4 / goal-13（PR #88，`c8dd516`）；T-04.7 / goal-88（PR #89，`3e37cd6`）；T-04.8 / goal-91（PR #141，`ac4aded`）；T-04.9 / goal-96（PR #110，`6aed25d`）；T-04.11 / goal-124（PR #159，`7872102`）；T-04.12 / goal-125（PR #154，`43a6135`）；T-04.13 / goal-126（PR #158，`464ccfd`）。Rule 与延续调用的相关基线为 T-05.4（PR #153，`f22b538`）、T-05.5（PR #162，`8c12972`）。状态已与 `spec/plan/core.md` 切片表核对；提交号通过只读 HEAD 与提交对象的一父历史核对，未执行 git 命令。2026-11-13 按指定 main `7bf07ba`，用 `rg`、源码读取和 `go doc` 核对如下。2026-11-13 审查者裁决：顶层 `alonabot check`/`build` 由 T-09.3（goal-38）交付，而 T-09.3 以本切片为前置；本切片用已合并的 `plugin check`、`go build` 与 `run` 的开发构建取证，顶层命令对两个示例的检查与构建由 T-09.3 补证（DECISIONS 2026-11-13 变更记录）。本切片与 PR #183（goal-82）共涉 examples/plugins，审查者在 #183 合并后派发。
+状态：待派发。直接前置均已合并：T-03.10 / goal-9（PR #180，`c128000`）；T-04.2 / goal-11（PR #42，`62d5afa`）；T-04.3 / goal-12（PR #47，`5cb1cfd`）；T-04.4 / goal-13（PR #88，`c8dd516`）；T-04.7 / goal-88（PR #89，`3e37cd6`）；T-04.8 / goal-91（PR #141，`ac4aded`）；T-04.9 / goal-96（PR #110，`6aed25d`）；T-04.11 / goal-124（PR #159，`7872102`）；T-04.12 / goal-125（PR #154，`43a6135`）；T-04.13 / goal-126（PR #158，`464ccfd`）。Rule 与延续调用的相关基线为 T-05.4（PR #153，`f22b538`）、T-05.5（PR #162，`8c12972`）。状态已与 `spec/plan/core.md` 切片表核对；提交号通过只读 HEAD 与提交对象的一父历史核对，未执行 git 命令。2026-11-13 按指定 main `7bf07ba`，用 `rg`、源码读取和 `go doc` 核对如下。2026-11-13 审查者裁决：顶层 `alonabot check`/`build` 由 T-09.3（goal-38）交付，而 T-09.3 以本切片为前置；本切片用已合并的 `plugin check`、`go build` 与 `run` 的开发构建取证，顶层命令对两个示例的检查与构建由 T-09.3 补证（DECISIONS 2026-11-13 变更记录）。本切片与 PR #183（goal-82）共涉 examples/plugins，#183 已合并（`1f1c058`），从包含它的 main 派发。
 
 按 main 核对：
 
@@ -6507,7 +6507,7 @@ broker.Options、bus.Options 与 router.Options 增加 Metrics *metrics.Counters
 
 ### goal-82 · T-16.2 按钮、多轮等待、schedule 与示例测试
 
-状态：待派发，在 PR #180（goal-9）合并后从包含它的 main 派发：goal-9 补齐 examples/plugins/echo 的 plugin.yaml 并新增 examples/plugins/media。2026-11-13 审查者裁决（DECISIONS 2026-11-13 变更记录）：采纳 `Trigger(p, jobID)` 与新增的 `TriggerTask(p, taskName, key)`，手动触发按正常派发处理（一次性实例被消费、周期实例保留起点、scheduled_at 取触发时刻），静态任务已暂停或同一实例已在运行、排队时返回 FAILED_PRECONDITION；后台发送按 CONTRACTS §17「这期间」的语义归属（注入到完成通知之间的发送随 Result 返回，区间外的留给 Background）；#174 的合并提交为 `9c394b3`。直接前置 T-03.8（goal-8，PR #136，合并提交 `3621fc1`）、T-05.4（goal-52，PR #153，`f22b538`）、T-07.2（goal-24，PR #107，`fc2c247`）、T-07.9（goal-128，PR #176，`9785c22`）、T-16.1（goal-81，PR #168，`37b0ada`）均已合并。动态调度以 T-07.8（PR #169，`4dc4bcd`）为基线；开发配置与装配沿用 PR #160（`65ebc5f`）、#163（`cb8ae3d`）、#171（`3043c4e`）。2026-11-13 起草者按维护者指定的 main `9efee73` 工作副本，用 `rg`、源码读取及离线 `GO111MODULE=off go doc` 核对下列事实；合并提交号取自本地已完成 goal 的记录。
+状态：已完成（[PR #183](https://github.com/AlonaBot/AlonaBot/pull/183)，合并提交 `1f1c058`），证据见 TEST-MATRIX §3.2。合入：`plugintest.(*Harness).Click(from User, sent Sent, actionID string) Result`（点击事件带原会话类型）、`Trigger(p *sdk.Plugin, jobID string) Result`、`TriggerTask(p *sdk.Plugin, taskName, key string) Result`、`Background() []Sent`，单条 Outcome 的 `Waiting`；`scheduler.(*Scheduler).Trigger`/`TriggerTask`（暂停、重叠与未知任务返回 FAILED_PRECONDITION，一次性实例被消费并停止原定时器）；五个示例插件的 `main_test.go`。启动取消的本地自测失败源于 SDK 准备期断链的基线缺陷，由普通任务 PR #185 处理。以下为派发时的语句。
 
 按 main 核对：
 
@@ -6951,7 +6951,7 @@ internal/pluginkit 的导出函数由执行者按上述命令拆分，并在包�
 
 ### goal-102 · T-16.3 plugintest 的 LLM 替身
 
-状态：待派发，在 goal-82 合并后从包含它的 main 派发（共享 plugintest 的 options、probe、生成物与文档）。2026-11-13 审查者裁决：替身只经共享的 llm.Request/Response Schema 做结构校验，业务规则与错误交给传入函数，不复制官方 Agent 的 Provider 与名单配置；多次给出 LLM 选项时最后一个生效，nil 函数在公开入口报错；默认的 public Service 沿用当前空权限集合，不等待 goal-61 的 ServiceBuilder.Permission；#174 的合并提交为 `9c394b3`。直接前置 T-12.8（goal-83，PR #175，合并提交 `ac6083a`）与 T-16.1（goal-81，PR #168，`37b0ada`）均已合并；Agent 开发组件与文本生成分别沿用 PR #163（`cb8ae3d`）、#170（`eca6310`），带类型 Service 声明沿用 PR #158（`464ccfd`）。2026-11-13 起草者按维护者指定的 main `9efee73` 工作副本，用 `rg`、源码读取及离线 `GO111MODULE=off go doc` 核对下列事实；前置合并号取自本地 goal 完成记录。
+状态：待派发，goal-82（PR #183，`1f1c058`）已合并，从包含它的 main 派发（共享 plugintest 的 options、probe、生成物与文档）。2026-11-13 审查者裁决：替身只经共享的 llm.Request/Response Schema 做结构校验，业务规则与错误交给传入函数，不复制官方 Agent 的 Provider 与名单配置；多次给出 LLM 选项时最后一个生效，nil 函数在公开入口报错；默认的 public Service 沿用当前空权限集合，不等待 goal-61 的 ServiceBuilder.Permission；#174 的合并提交为 `9c394b3`。直接前置 T-12.8（goal-83，PR #175，合并提交 `ac6083a`）与 T-16.1（goal-81，PR #168，`37b0ada`）均已合并；Agent 开发组件与文本生成分别沿用 PR #163（`cb8ae3d`）、#170（`eca6310`），带类型 Service 声明沿用 PR #158（`464ccfd`）。2026-11-13 起草者按维护者指定的 main `9efee73` 工作副本，用 `rg`、源码读取及离线 `GO111MODULE=off go doc` 核对下列事实；前置合并号取自本地 goal 完成记录。
 
 按 main 核对：
 
