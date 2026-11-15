@@ -1,6 +1,6 @@
 //go:build unix
 
-package alonabot
+package app
 
 import (
 	"archive/tar"

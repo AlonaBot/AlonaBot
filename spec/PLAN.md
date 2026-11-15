@@ -25,7 +25,8 @@
 | `adapters/telegram/` | 官方 Telegram Adapter 程序：接收、发送、能力和平台映射 | T-03 |
 | `agent/` | 官方 Agent 组件（含记忆） | T-12 |
 | `plugins/help/`、`plugins/welcome/`、`plugins/rss/` | 预装插件 | T-14 |
-| 根包（`alonabot.go` 等） | 库模式入口 `alonabot.Run`，与 `alonabot run` 共用 Core 装配 | T-13 |
+| 根包（`alonabot.go`） | 库模式入口 `alonabot.Run` 与 `Start`，对 `internal/app` 的薄包装（D-148） | T-13 |
+| `internal/app/` | Core 装配、候选与进程管理、开发组件运行与重启，库模式与 `alonabot run` 共用（D-148） | T-13 |
 | `scripts/dist/` | 发行归档的构建与打包 | T-14 |
 | `Dockerfile`、`deploy/compose.yaml`、`deploy/install.sh` | 官方容器镜像、compose 整合包入口与 install.sh | T-14 |
 | `cmd/alonabot/` | Core 启停、开发者与管理 CLI 装配 | T-02 起，T-09 完整 |
