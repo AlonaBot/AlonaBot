@@ -1,8 +1,6 @@
 // echo 命令演示显式注册、参数、延续调用与类型化服务，并回送未消费的文本和图片。
 package main
 
-//go:generate go run ../../../cmd/alonabot build --out ../../../bin/generated/examples-plugins-echo
-
 import (
 	"log/slog"
 	"os"
@@ -14,7 +12,7 @@ import (
 // New 为每个插件对象创建独立的笔记状态并绑定生成资源。
 func New() *sdk.Plugin {
 	r := sdk.NewPlugin()
-	sdk.UseGenerated(r, alonabotGenerated)
+
 	registerCommands(r)
 	r.On("echo", sdk.MessageCreated).Rule(sdk.NotCommand()).Handle(func(c *sdk.Context, e *message.CreatedPayload) error {
 		var chain message.Chain

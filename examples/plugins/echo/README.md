@@ -2,12 +2,11 @@
 
 发送普通文字或图片，插件会原样回送文字和入站图片。识别到命令、文本匹配或 Raw 后，事件回声通过 `sdk.NotCommand()` 读取 Core 的消费状态，避免重复回复。
 
-在仓库根目录生成资源并构建：
+在仓库根目录检查并构建：
 
 ```fish
-go generate ./examples/plugins/echo
 go run ./cmd/alonabot check --dir examples/plugins/echo
-go build -o /tmp/alonabot-echo ./examples/plugins/echo
+go run ./cmd/alonabot build --dir examples/plugins/echo --out /tmp/alonabot-echo
 ```
 
 按[开发指南](../../../docs/development.md)配置临时 `data_dir` 中的 Telegram 实例，再运行：
@@ -34,4 +33,4 @@ go run ./cmd/alonabot run adapters/telegram examples/plugins/echo examples/plugi
 
 `notesPublished = sdk.BusEvent[NotesSnapshot]("echo/notes_published")` 同时供 Publish 与 Subscribe 使用。发布成功只确认 Core 接纳；订阅处理异步进行，`/note published` 显示当时收到的快照。订阅 Context 没有用户 Actor 或默认目标，Handler 内保存列表即可。
 
-新增声明和文案后重新运行 `go generate`。资源只由生成器写入 `alonabot_gen.go`，再由 `New()` 显式绑定。顶层 `alonabot check/build` 的入口验收由 T-09.3 补证。
+新增声明和文案后不需要额外步骤：`alonabot run`、`build` 与 `go test` 每次都会重新扫描资源，工程中没有生成文件。

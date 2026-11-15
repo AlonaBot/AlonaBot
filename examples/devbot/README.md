@@ -54,13 +54,11 @@ examples/devbot/
 │   ├── config_schema.json        # greetings；启动时读取首项 text
 │   ├── startup.sql               # startup 表
 │   ├── i18n/{en-US,zh-CN}.json
-│   ├── .gitignore                # data/
-│   └── alonabot_gen.go
+│   └── .gitignore                # data/
 └── adapter/
     ├── adapter.go                # New、私有注入与文件观察
     ├── plugin.yaml               # alonabot_adapter_devbot；adapter_id=devloop
-    ├── adapter_config_schema.json
-    └── alonabot_gen.go
+    └── adapter_config_schema.json
 ```
 
 样例中实例所在的设置如下，`${DEVBOT_OUTPUT}` 在读取设置时展开为环境变量的完整值。`output` 可填写绝对文件路径；空串表示只返回发送回执。文件保存最近一次发送的文本，权限为 0600。
@@ -103,17 +101,18 @@ set -gx DEVBOT_LIBRARY_DATA (mktemp -d)
 set -gx DEVBOT_OUTPUT (mktemp)
 cp examples/devbot/core_config.example.json $DEVBOT_LIBRARY_DATA/core_config.json
 printf 'DEVBOT_LIBRARY_DATA=%s\nDEVBOT_OUTPUT=%s\n' $DEVBOT_LIBRARY_DATA $DEVBOT_OUTPUT
-go generate ./examples/devbot/...
-go run ./examples/devbot -data-dir $DEVBOT_LIBRARY_DATA
+set -gx DEVBOT_BIN (mktemp -d)
+go run ./cmd/alonabot build --dir examples/devbot --out $DEVBOT_BIN
+$DEVBOT_BIN/devbot -data-dir $DEVBOT_LIBRARY_DATA
 ```
 
-使用上面的 token 与注入步骤，将数据目录替换为 `DEVBOT_LIBRARY_DATA`。调试器可直接在 `plugin.New()` 注册的 Handler 与 Adapter 的 `Send` 中打断点。源码与资源变化后，重新生成并重新启动 Go 程序。
+使用上面的 token 与注入步骤，将数据目录替换为 `DEVBOT_LIBRARY_DATA`。库模式的资源由 `alonabot build` 在构建时编入，直接 `go run` 或 `go build` 的程序在启动组件前会报缺少资源。调试器可在 `plugin.New()` 注册的 Handler 与 Adapter 的 `Send` 中打断点。源码与资源变化后，重新运行 `alonabot build` 再启动程序。
 
 两个模式收到 SIGINT/SIGTERM 后按同一停止预算排空、执行停止回调，缺省总计 `STOP_TOTAL=10s`。独立进程由 supervisor 隔离并执行有限崩溃恢复；库模式下未捕获的后台 panic 使整个进程非零退出，停止预算到期仍有组件运行时 `Wait` 返回错误。SDK Handler 边界捕获的 panic 记录 stack 并返回 `INTERNAL`，后续调用继续。
 
 ## 创建与检查工程
 
-`alonabot init [目录] --id ID` 在空目录创建可导入插件包、作者 manifest、schema、i18n 与忽略 `data/`、`bin/` 的 `.gitignore`，导出 `New()` 并用 `sdk.UseGenerated` 绑定资源。模板与本示例的 plugin 具有相同工程形状；本示例另含启动计数 SQL、回声与回环 Adapter。库模式宿主沿用本示例根目录的 main.go。
+`alonabot init [目录] --id ID` 在空目录创建可导入插件包、作者 manifest、schema、i18n 与忽略 `data/`、`bin/` 的 `.gitignore`，导出只做注册的 `New()`，工程中没有生成文件，资源在构建与 `go test` 时自动取得。模板与本示例的 plugin 具有相同工程形状；本示例另含启动计数 SQL、回声与回环 Adapter。库模式宿主沿用本示例根目录的 main.go。
 
 ```fish
 go run ./cmd/alonabot build --dir examples/devbot/plugin --out bin/devbot-plugin

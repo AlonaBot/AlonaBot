@@ -1,7 +1,6 @@
 package pluginkit
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,29 +12,15 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
-	"github.com/AlonaBot/AlonaBot/sdk/generate"
+	"github.com/AlonaBot/AlonaBot/internal/generate"
 )
 
-// Check 只读检查作者工程及目标平台的生成资源是否最新。
+// Check 只读检查作者工程、入口和目标平台的资源。
 func Check(ctx context.Context, options generate.Options) error {
 	options.CGOEnabled = "0"
 	options.RequireAdapterConstructor = true
-	snapshot, err := scanProject(ctx, options)
-	if err != nil {
-		return err
-	}
-	result := snapshot.generated
-	if result == nil {
-		return nil
-	}
-	current, err := os.ReadFile(filepath.Join(options.Dir, generate.FileName))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	if !bytes.Equal(current, result.Source) {
-		return fmt.Errorf("%s is out of date; run alonabot build", generate.FileName)
-	}
-	return nil
+	_, err := scanProject(ctx, options)
+	return err
 }
 
 // projectScan 持有同一次校验所使用的作者 manifest、资源与生成源码。

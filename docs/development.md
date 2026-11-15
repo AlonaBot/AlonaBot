@@ -59,7 +59,7 @@ bin/alonabot adapter instance create <adapter-package-id> <instance-id> --config
 bin/alonabot admin add telegram:123456
 ```
 
-需要确认的操作不带 `--yes` 时列出受影响的对象后退出。开发中的组件可以按下节以目录运行，也可以用库模式，例如 `go run ./examples/devbot --data-dir ./data`。
+需要确认的操作不带 `--yes` 时列出受影响的对象后退出。开发中的组件可以按下节以目录运行，也可以用库模式，先 `alonabot build --dir ./examples/devbot`，再运行 `examples/devbot/bin/devbot --data-dir ./data`。
 
 ## 开发运行与热部署
 
@@ -108,7 +108,7 @@ bin/alonabot run ./examples/plugins/lifecycle --stdio
 
 未给目录时，当前目录含 `plugin.yaml` 就运行该工程；其他情况按安装记录启动 Core。组件身份与角色取自工程 manifest，完成工程检查与进程组件构建后才启动组件。重复目录、重复 ID 都会报错；进程组件的 ID 或 `adapter_id` 与已安装包冲突时也会报错。
 
-构建复用 SDK 生成器与 `go build`，可执行文件写到 `<data_dir>/dev/bin/`，生成资源与薄入口通过 overlay 提供，作者目录中的源码和 module 文件保持原样。插件与 Agent 构建入口包；Adapter 工程导出 `New()` 并提供可导入的包，构建器为其生成调用 `sdk.RunAdapter(New())` 的薄入口。
+构建复用内部生成器与 `go build`，可执行文件写到 `<data_dir>/dev/bin/`，生成资源与薄入口通过 overlay 提供，作者目录中的源码和 module 文件保持原样。插件与 Agent 构建入口包；Adapter 工程导出 `New()` 并提供可导入的包，构建器为其生成调用 `sdk.RunAdapter(New())` 的薄入口。
 
 开发组件通过 supervisor 在独立进程中运行，缺省使用 TCP loopback，`--stdio` 切换本次开发进程的传输。组件固定使用 `dev:<组件 ID>` 代次，配置每次从 `<data_dir>/plugins/<id>/config.json` 读取，缺失时按空对象准备；准备后的配置保存在开发代次快照中。受管 SQLite 为同目录的 `dev.sqlite`，跨重启保留。Adapter 实例配置来自 `core_config.json` 的 `adapters`。开发日志缺省为 debug，显式 `log.sources` 设置优先。
 
@@ -166,14 +166,14 @@ bin/alonabot run --data-dir ./data --args REQUEST_TIMEOUT=2s --args ./tuning.txt
 
 `--args` 可重复，放在子命令前后均生效，后出现的覆盖先出现的。直接参数支持逗号分隔的 `KEY=VALUE`；文件每行一项，空行和以 `#` 开头的注释行会被忽略。时长使用 `2s` 等 Go 时长格式；大小使用 `B`、`KiB`、`MiB`、`GiB`，`MB` 等十进制单位会报错。`run` 将最终覆盖值及出处记为 WARN。
 
-插件包导出 `func New() *sdk.Plugin`，命令、文本匹配与事件都在插件对象上链式注册，包级函数也这样注册；构建期生成器不读取任何标记，只生成包内变量 `alonabotGenerated`（配置 Schema、Service Schema、i18n 与 manifest），由 `New` 显式调用 `sdk.UseGenerated(p, alonabotGenerated)` 绑定。在插件构建入口目录生成或检查 `alonabot_gen.go`：
+插件包导出 `func New() *sdk.Plugin`，在 `sdk.NewPlugin()` 返回的对象上登记命令、生命周期回调与业务行为。构建工具自动扫描 manifest、配置 Schema、Service Schema、i18n 和参数名，经 overlay 编入程序；作者工程中没有 `alonabot_gen.go`，作者代码无需生成相关内容。构建或只读检查：
 
 ```fish
 bin/alonabot build --dir ./myplugin --goos linux --goarch amd64 --tags a,b
 bin/alonabot check --dir ./myplugin --goos linux --goarch amd64 --tags a,b
 ```
 
-`build/check/pack` 按相同的 `--goos`、`--goarch`、`--tags` 选择源码，目标缺省沿用 Go 环境；扫描、依赖分析和正式编译统一使用 `CGO_ENABLED=0`。开发运行的 BuildDev 沿用开发环境的 cgo 设置。`build` 成功后更新生成文件，默认输出到 `<工程>/bin`，可用 `--out DIR` 覆盖。进程产物包含独立的 `component`（Windows 为 `component.exe`）、资源旁车及包内 `plugin.yaml`；作者 manifest 保持原样。WebUI build 发布静态资源与包内 manifest。`check` 只读比较生成文件，缺失或陈旧时提示 `alonabot build`，保留全部静态诊断与位置。
+`build/check/pack` 按相同的 `--goos`、`--goarch`、`--tags` 选择源码，目标缺省沿用 Go 环境；扫描、依赖分析和正式编译统一使用 `CGO_ENABLED=0`。开发运行的 BuildDev 沿用开发环境的 cgo 设置。`build` 默认输出到 `<工程>/bin`，可用 `--out DIR` 覆盖。进程产物包含独立的 `component`（Windows 为 `component.exe`）、资源旁车及包内 `plugin.yaml`；作者 manifest 保持原样。WebUI build 发布静态资源与包内 manifest。`check` 只读扫描入口与资源，保留全部静态诊断与位置。
 
 `test` 在全新临时数据目录中构建宿主平台组件，完成真实握手、准备、注册、激活与停止，报告注册命令及清理结果；Adapter 保持零平台实例，WebUI 检查静态加载资源。准备、注册、停止或清理失败均非零退出。
 
@@ -206,18 +206,18 @@ if err != nil {
 return core.Wait() // ctx 取消（例如 SIGTERM）后在 STOP_TOTAL 内停止全部组件
 ```
 
-```sh
-go generate ./examples/devbot/...
-go run ./examples/devbot -data-dir ./data
+```fish
+bin/alonabot build --dir ./examples/devbot
+examples/devbot/bin/devbot -data-dir ./data
 ```
 
-组件以 source=dev 登记，代次固定为 `dev:<组件 ID>`；资源取自各组件包内生成并嵌入的副本。`plugin.New()` 显式绑定 `sdk.Generated`，Adapter 身份与实例 schema 来自同一个可导入包。两个模式使用各自的 data_dir；按 [devbot 同进程调试步骤](../examples/devbot/README.md#同进程调试) 复制设置、重新生成后运行，即可使用相同私有注入路径观察回复。
+组件以 source=dev 登记，代次固定为 `dev:<组件 ID>`。库模式由 `alonabot build --dir <main 目录>` 构建，扫描 main 依赖中的组件入口（含模块缓存中的第三方组件），将全部资源登记经 main 包的 overlay 编入。默认只输出 `<main 目录>/bin/<目录名>` 可执行文件（Windows 加 `.exe`），可用 `--out` 修改输出目录。组件源码与模块缓存保持只读。同包多次 New 共用资源；main 的包级变量也可调用组件的 New。直接 `go build` 的库模式产物在启动缺少资源的组件前返回提示 `alonabot build` 或 `alonabot run` 的英文错误。
 
-库模式更改源码或资源后重新生成并重启程序。未捕获的后台 panic 使整个进程非零退出且无有限重启；SDK Handler 边界内捕获的 panic 记录 stack 并返回 `INTERNAL`。同进程组件超过停止预算仍未退出时，`Wait` 返回错误；独立进程由 supervisor 隔离并有限恢复，两种模式的 SIGINT/SIGTERM 停止总预算缺省均为 `STOP_TOTAL=10s`。开发来源的 update、rollback、uninstall 返回 `FAILED_PRECONDITION`；WebUI/CLI 修改开发配置后写回并重启由 T-09.14 承接，手改配置的轮询行为见上节。
+库模式更改源码或资源后重新运行 `alonabot build` 并重启程序。未捕获的后台 panic 使整个进程非零退出且无有限重启；SDK Handler 边界内捕获的 panic 记录 stack 并返回 `INTERNAL`。同进程组件超过停止预算仍未退出时，`Wait` 返回错误；独立进程由 supervisor 隔离并有限恢复，两种模式的 SIGINT/SIGTERM 停止总预算缺省均为 `STOP_TOTAL=10s`。开发来源的 update、rollback、uninstall 返回 `FAILED_PRECONDITION`；WebUI/CLI 修改开发配置后写回并重启由 T-09.14 承接，手改配置的轮询行为见上节。
 
 ## Adapter 的 HTTP 路由
 
-Adapter 可以实现 `sdk.AdapterHTTP`，在统一端口的 `/plugins/<Adapter 包 ID>/...` 下声明路由，例如 OneBot 11 反向 WebSocket。路由规则与插件相同：私有路由需要 Core 会话，非 GET/HEAD 的 Cookie 请求还要验证 CSRF 与 Origin。公开路由除回调校验方式外，还可以用 `sdk.Public(sdk.AuthPlatformToken)`：Core 代理保留入站的 `Authorization` 交给 Adapter，由 Adapter 校验平台凭证，并给出错误时的平台响应。插件路由的 `Authorization` 一律被清除。两者都会清除入站的 Cookie、CSRF、Forwarded 与 X-Forwarded-*，并注入内部代理凭证；SDK 先恒定时间比较该凭证，比较后移除，再进入用户 Handler。WebSocket Upgrade 由代理双向转发，连接寿命不受普通请求期限限制，路由撤销或 Session 失效时由 Core 关闭。
+Adapter 在 `adapter.Descriptor.HTTP` 中用 `[]adapter.HTTPRoute` 声明路由，对外位于统一端口的 `/plugins/<Adapter 包 ID>/...` 下声明路由，例如 OneBot 11 反向 WebSocket。路由规则与插件相同：私有路由需要 Core 会话，非 GET/HEAD 的 Cookie 请求还要验证 CSRF 与 Origin。`Auth` 的零值要求 Core 会话；公开路由写 `Auth: adapter.AuthPlatformToken`：Core 代理保留入站的 `Authorization` 交给 Adapter，由 Adapter 校验平台凭证，并给出错误时的平台响应。插件路由的 `Authorization` 一律被清除。两者都会清除入站的 Cookie、CSRF、Forwarded 与 X-Forwarded-*，并注入内部代理凭证；SDK 先恒定时间比较该凭证，比较后移除，再进入用户 Handler。WebSocket Upgrade 由代理双向转发，连接寿命不受普通请求期限限制，路由撤销或 Session 失效时由 Core 关闭。
 
 ## 备份与恢复
 
@@ -259,8 +259,8 @@ Adapter 可以实现 `sdk.AdapterHTTP`，在统一端口的 `/plugins/<Adapter �
 
 ```go
 type ReminderArgs struct {
-    Session message.Session `json:"session"`
-    Text    string          `json:"text"`
+    Session string `json:"session"`
+    Text    string `json:"text"`
 }
 
 // 创建与取消共用编码，将可信身份与用户 key 一起放入内部 key。
@@ -276,7 +276,7 @@ func reminderKey(c *sdk.Context, key string) (string, error) {
 // New 中创建并登记一次，命令闭包持有同一个声明值。
 reminder := sdk.Task[ReminderArgs]("remind")
 sdk.OnTask(p, reminder).Handle(func(c *sdk.Context, args ReminderArgs) error {
-    _, err := c.Send(message.Text(args.Text), sdk.To(args.Session))
+    _, err := c.SendTo(args.Session, message.Text(args.Text))
     return err
 })
 p.Command("remind").Handle(func(c *sdk.Context, key, text string) (message.Content, error) {
@@ -302,7 +302,7 @@ p.Command("cancel").Handle(func(c *sdk.Context, key string) error {
 
 `reminderKey` 使用 `c.User()` 与 `c.Session()` 的可信身份，以长度前缀区分完整字段。128 字节上限包含身份作用域和用户 key；超长返回明确的 `INVALID_ARGUMENT`，保留输入原文。示例需导入标准库 `fmt` 与 `sdk/errcode`。
 
-任务回调没有 Actor 与默认会话；将所需会话、用户或取消键写入参数，并以 `sdk.To` 指定发送目标。主动发送遵循 Core 的 `allowed_adapter_instances` 准入。参数类型遵循 JSON Service 的类型规则，使用包级具名、非泛型的值类型，顶层编码为 JSON 对象；生成器检查嵌套字段与自定义编码限制。新增声明后运行 `go generate`。
+任务回调没有 Actor 与默认会话；将所需会话、用户或取消键写入参数，并用 `c.SendTo(sid, content)` 指定发送目标。主动发送遵循 Core 的 `allowed_adapter_instances` 准入。参数类型遵循 JSON Service 的类型规则，使用包级具名、非泛型的值类型，顶层编码为 JSON 对象；生成器检查嵌套字段与自定义编码限制。新增声明后直接运行测试，或运行 `alonabot build` 构建组件。
 
 `reminder.Every(ctx, time.Hour, args, sdk.Key(internalKey))` 创建周期实例；`reminder.Cron(ctx, "0 9 * * *", args, sdk.Key(internalKey), sdk.Timezone("Asia/Shanghai"))` 按 IANA 时区运行，其中 `internalKey` 沿用上述身份作用域编码。`At`、`Every` 上设置 `Timezone` 返回 `INVALID_ARGUMENT`。省略 `Key` 时 SDK 生成随机 key，成功返回实际使用的 key；同任务名、同 key 再次创建会整体替换规则和参数，在途旧一轮继续执行。`Cancel` 删除实例并协作取消在途调用，函数实际返回后释放运行槽。未知实例保留 Core 的 `NOT_FOUND`。
 
@@ -357,7 +357,7 @@ func TestPing(t *testing.T) {
 }
 ```
 
-`New()` 需绑定生成资源中的 `plugin.yaml` 工程身份。先运行工程已有的 `go generate`，再运行测试。每次 Start 创建独立的临时目录、配置和 `dev.sqlite`，在测试清理时停止组件；同一 Harness 的注入与读取按顺序调用。
+直接运行 `go test ./...`。plugintest 按被测插件的入口包自动扫描工程身份与资源，沿用测试二进制的 GOOS、GOARCH 与 build tags；同一入口包在一个进程中只扫描一次。每次 Start 创建独立的临时目录、配置和 `dev.sqlite`，在测试清理时停止组件；同一 Harness 的注入与读取按顺序调用。
 
 `Message(chat, user, message.Chain{...})` 可以注入混合片段，`Sent.Text()` 按顺序提取文本。`Sent.To`、`Chain`、`Result` 保留目标、消息链与回执；`Op` 区分 send/edit，`Edited` 保存编辑句柄。`Event` 注入通过 `Adapter` 选项声明的扩展事件。
 
@@ -395,14 +395,14 @@ clicked := h.Click(plugintest.User{ID: "bob"}, menu.Sends[0], "first")
 
 缺失的动作、URL 按钮及缺少已发送回执属于测试输入错误，Click 通过 `t.Fatal` 报告。过期 token、失效代次和权限拒绝会返回空发送及空 Handler Outcome。
 
-**静态与动态任务。** `h.Trigger(p, "tick")` 立即执行已登记静态任务；`h.TriggerTask(p, "remind", key)` 定位已创建实例，使用 Core 保存的参数。两者通过 Scheduler 的正常 REQUEST/RESPONSE、job scope、运行槽和期限执行，Handler 使用显式 `sdk.To` 发送目标。准入及定位错误使测试失败；已派发 Handler 的错误保留在 `Result.Outcomes`。
+**静态与动态任务。** `h.Trigger(p, "tick")` 立即执行已登记静态任务；`h.TriggerTask(p, "remind", key)` 定位已创建实例，使用 Core 保存的参数。两者通过 Scheduler 的正常 REQUEST/RESPONSE、job scope、运行槽和期限执行，Handler 使用 `c.SendTo(sid, content)` 指定发送目标。准入及定位错误使测试失败；已派发 Handler 的错误保留在 `Result.Outcomes`。
 
 showcase 的提醒先通过命令创建，再用含用户与会话的完整内部 key 触发：
 
 ```go
 h.Text(chat, alice, "/demo remind lunch 3600 soup")
-user := message.NewUser(plugintest.AdapterID, alice.ID)
-session := message.NewSession(plugintest.AdapterID, "private:alice", "")
+user := message.UID(plugintest.AdapterID, alice.ID)
+session := message.SID(plugintest.AdapterID, "private:alice", "")
 key := fmt.Sprintf("%d:%s/%d:%s/%s", len(user), user, len(session), session, "lunch")
 reminder := h.TriggerTask(p, "remind", key)
 ```
@@ -454,7 +454,6 @@ records := h.Background()
 仓库完整示例覆盖 echo、lifecycle、showcase、configdb 与 media：
 
 ```sh
-go generate ./...
 go test -race -count=2 ./plugintest/... ./examples/plugins/...
 ```
 
@@ -470,7 +469,7 @@ p.Command("llm").Handle(func(c *sdk.Context, prompt string) (message.Content, er
 })
 ```
 
-运行工程的 `go generate`，让调用方生成并绑定 `llm.Request`、`llm.Response` 的 ServiceSchemas。然后在同包的 `main_test.go` 中加入：
+在同包的 `main_test.go` 中加入，plugintest 会自动扫描调用方的 `llm.Request`、`llm.Response` Schema：
 
 ```go
 package main

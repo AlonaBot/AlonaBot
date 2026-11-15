@@ -1,6 +1,6 @@
 // Package sdk 提供 AlonaBot Native Go 插件的公共入口。
 //
-// 插件的 New 构造 [Plugin]，显式绑定生成资源并登记路由和生命周期回调。
+// 插件的 New 构造 [Plugin]，登记路由和生命周期回调，构建资源由 CLI 自动注入。
 // main 调用 Run(New())，取得 runtime.lock，与 Core 完成握手、准备和激活，再处理调用直到停止。
 // Run 把 log/slog 的默认 Logger 换成写 stderr 的 JSON 行，按 Core 下发的级别过滤（CONTRACTS §14）。
 //
@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -31,6 +32,7 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk/config"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
@@ -83,7 +85,7 @@ func (c *Context) Event() *message.Event {
 }
 
 // User 返回本次调用触发者的用户字符串，没有 Actor 时为空。
-func (c *Context) User() message.User {
+func (c *Context) User() string {
 	actor := c.actor
 	adapterID := c.defaultTarget.GetAdapterId()
 	if c.event != nil {
@@ -93,11 +95,11 @@ func (c *Context) User() message.User {
 	if actor == nil || (c.event == nil && c.defaultTarget == nil) {
 		return ""
 	}
-	return message.NewUser(adapterID, actor.ExternalUserId)
+	return message.UID(adapterID, actor.ExternalUserId)
 }
 
 // Session 返回本次调用的默认会话，没有默认目标时为空。
-func (c *Context) Session() message.Session {
+func (c *Context) Session() string {
 	return convert.SessionFromProto(c.target())
 }
 
@@ -133,41 +135,32 @@ func (c *Context) StopPropagation() {
 	}
 }
 
-// SendOption 调整一次消息发送的会话或机器人实例。
+// SendOption 调整一次消息发送的机器人实例。
 type SendOption func(*sendOptions)
 
 type sendOptions struct {
-	to       message.Session
-	explicit bool
-	via      string
+	via string
 }
-
-// To 指定发送会话，实例缺省由 Core 选择。
-func To(s message.Session) SendOption { return func(o *sendOptions) { o.to = s; o.explicit = true } }
 
 // Via 指定发送的机器人实例。
 func Via(instanceID string) SendOption { return func(o *sendOptions) { o.via = instanceID } }
 
-// Send 向当前会话或显式目标发送内容，保留已确认的部分结果。
+// Send 向当前事件的默认会话发送内容，保留已确认的部分结果。
 func (c *Context) Send(m message.Content, opts ...SendOption) (*message.SendResult, error) {
 	if !c.active.Load() {
 		return nil, errcode.FailedPrecondition.New("handler context has expired")
+	}
+	if c.target() == nil {
+		return nil, errcode.NoDefaultTarget.New("no default target")
 	}
 	options := &sendOptions{}
 	for _, option := range opts {
 		option(options)
 	}
 	var target *pb.Target
-	if options.explicit || options.via != "" {
-		to := options.to
-		if !options.explicit {
-			to = c.Session()
-			if to == "" {
-				return nil, errcode.NoDefaultTarget.New("no default target")
-			}
-		}
+	if options.via != "" {
 		var err error
-		target, err = convert.TargetToProto(to, options.via)
+		target, err = convert.TargetToProto(c.Session(), options.via)
 		if err != nil {
 			return nil, err
 		}
@@ -175,9 +168,28 @@ func (c *Context) Send(m message.Content, opts ...SendOption) (*message.SendResu
 	return callSend(c.ctx, target, m, c.inbound, c.target())
 }
 
+// SendTo 向指定会话发送内容，关联当前 Handler 的父调用并保留部分结果。
+func (c *Context) SendTo(sid string, m message.Content, opts ...SendOption) (*message.SendResult, error) {
+	if !c.active.Load() {
+		return nil, errcode.FailedPrecondition.New("handler context has expired")
+	}
+	options := &sendOptions{}
+	for _, option := range opts {
+		option(options)
+	}
+	target, err := convert.TargetToProto(sid, options.via)
+	if err != nil {
+		return nil, err
+	}
+	return callSend(c.ctx, target, m, c.inbound, c.target())
+}
+
 // Run 作为插件 main 的入口：连接 Core、完成握手并处理请求，直到停止。
 // 顺序：取得 runtime.lock → 收集注册项 → 握手 → 准备阶段 → 激活（OnReady/ACTIVATED）→ 服务。
 func Run(root *Plugin) error {
+	if err := requireResources(root); err != nil {
+		return err
+	}
 	root.freeze()
 	setupLogging()
 	l, err := readLaunch()
@@ -203,7 +215,7 @@ func run(root *Plugin, l launch) (err error) {
 		return err
 	}
 	l.serviceSchemas = generatedFor(root).ServiceSchemas
-	l.entryPackage = root.entryPackage
+	l.entryPackage = entryPackage(root)
 
 	// 3. 连接 Core 并依次完成握手、准备与激活，然后进入服务循环。
 	l.http = newHTTPListener(reg.HTTP)
@@ -295,21 +307,18 @@ func Collect(root *Plugin) (*Registration, error) {
 // Config 返回整个插件的只读配置。
 func (c *Context) Config() config.Values { return c.plugin.Config() }
 
-// handlerParamNames 在注册时解析函数身份，运行时绑定只读已收集的 CommandSpec。
-func handlerParamNames(g Generated, handler any) []string {
+// handlerParamNames 在收集时解析函数身份，运行时绑定只读已收集的 CommandSpec。
+func handlerParamNames(g generated.Resources, handler any) []string {
 	if len(g.ParamNames) == 0 {
 		return nil
 	}
 	fn := runtime.FuncForPC(reflect.ValueOf(handler).Pointer())
-	name := handlerFunctionName(fn.Name())
-	if names, ok := g.ParamNames[name]; ok {
+	packagePath, function := runtimeFunctionParts(handlerFunctionName(fn.Name()))
+	if names, ok := g.ParamNames[packagePath+function]; ok {
 		return names
 	}
-	packageStart := strings.LastIndexByte(name, '/') + 1
-	packageEnd := packageStart + strings.IndexByte(name[packageStart:], '.')
-	packagePath := name[:packageEnd]
 	// main 在普通二进制中用 main 前缀，在 go test 中用包的导入路径。
-	if names, ok := g.ParamNames["main"+name[packageEnd:]]; ok {
+	if names, ok := g.ParamNames["main"+function]; ok {
 		return names
 	}
 	file, line := fn.FileLine(fn.Entry())
@@ -318,6 +327,15 @@ func handlerParamNames(g Generated, handler any) []string {
 		return names
 	}
 	return g.ParamNames["main"+suffix]
+}
+
+// runtimeFunctionParts 先按符号分隔符切开包与函数，再还原包路径中的 Go %xx 转义。
+func runtimeFunctionParts(name string) (pkgPath, function string) {
+	start := strings.LastIndexByte(name, '/') + 1
+	end := start + strings.IndexByte(name[start:], '.')
+	// 编译器生成的包路径转义总是合法；函数部分保留符号原文。
+	pkgPath, _ = url.PathUnescape(name[:end])
+	return pkgPath, name[end:]
 }
 
 // handlerFunctionName 去掉实例类型实参和方法值包装后缀，对齐源码声明键。

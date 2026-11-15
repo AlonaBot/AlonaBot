@@ -1,8 +1,8 @@
 package main
 
 import (
+	"github.com/AlonaBot/AlonaBot/internal/generate"
 	"github.com/AlonaBot/AlonaBot/internal/pluginkit"
-	"github.com/AlonaBot/AlonaBot/sdk/generate"
 	"github.com/spf13/cobra"
 )
 

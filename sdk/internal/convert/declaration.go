@@ -223,7 +223,7 @@ func DescriptorToProto(d *Descriptor) (*pb.AdapterDescriptor, error) {
 }
 
 // ActionRequestToProto 编码动作参数，按会话是否为空把 Via 放入相应目标字段。
-func ActionRequestToProto(to message.Session, name string, version uint32, params any, via string) (*pb.ActionRequest, error) {
+func ActionRequestToProto(to string, name string, version uint32, params any, via string) (*pb.ActionRequest, error) {
 	raw, err := json.Marshal(params)
 	if err != nil {
 		return nil, errcode.InvalidArgument.New("encode action params: " + err.Error())

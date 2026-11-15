@@ -85,7 +85,7 @@ func (r *mediaReader) Read(p []byte) (int, error) {
 func (r *mediaReader) Close() error { r.closed = true; r.data = nil; return nil }
 
 // GrantMedia 为接收插件申请会话范围受限的新令牌。
-func GrantMedia(ctx context.Context, token, granteePluginID string, sessions ...message.Session) (string, error) {
+func GrantMedia(ctx context.Context, token, granteePluginID string, sessions ...string) (string, error) {
 	var targets []*pb.Target
 	for _, s := range sessions {
 		t, err := convert.TargetToProto(s, "")

@@ -404,7 +404,9 @@ func TestAgentPackage(t *testing.T) {
 func packAgentComponent(t *testing.T, project, id string) string {
 	t.Helper()
 	generated := filepath.Join(project, "alonabot_gen.go")
-	before := developmentRead(t, generated)
+	if _, err := os.Stat(generated); !os.IsNotExist(err) {
+		t.Fatalf("unexpected generated source: %v", err)
+	}
 	out := t.TempDir()
 	command := exec.Command(filepath.Join(binDir, "alonabot"), "pack", "--dir", project, "--asset-url", "https://example.invalid/"+id+".tar.gz", "--out", out)
 	if output, err := command.CombinedOutput(); err != nil {
@@ -412,8 +414,8 @@ func packAgentComponent(t *testing.T, project, id string) string {
 	} else {
 		t.Logf("pack %s:\n%s", project, output)
 	}
-	if !bytes.Equal(before, developmentRead(t, generated)) {
-		t.Fatalf("pack changed generated source: %s", generated)
+	if _, err := os.Stat(generated); !os.IsNotExist(err) {
+		t.Fatalf("pack wrote generated source: %v", err)
 	}
 	return filepath.Join(out, id+"-0.1.0-"+runtime.GOOS+"-"+runtime.GOARCH+".tar.gz")
 }

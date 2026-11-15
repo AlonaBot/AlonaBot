@@ -22,6 +22,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
+	genresources "github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
@@ -106,7 +107,7 @@ func serviceChainBackgroundPlugin() *sdk.Plugin {
 
 func serviceChainPlugin() *sdk.Plugin {
 	p := sdk.NewPlugin()
-	sdk.UseGenerated(p, sdk.Generated{ServiceSchemas: map[string][]byte{
+	genresources.Bind(p, genresources.Resources{ServiceSchemas: map[string][]byte{
 		chainSchema[chainInput]():  []byte(`{"type":"object","properties":{"path":{"type":"array","items":{"type":"string"}},"mode":{"type":"string"},"key":{"type":"string"},"size":{"type":"integer"}}}`),
 		chainSchema[chainOutput](): []byte(`{"type":"object","properties":{"value":{"type":"string"}},"required":["value"]}`),
 	}})
@@ -131,7 +132,7 @@ func serviceChainPlugin() *sdk.Plugin {
 			out, err := chainService(target).Call(c.Context(), in)
 			return pipelineAudit(pipelineRecord{Stage: "root-result", Text: in.Key, Value: string(out.Value), Code: chainCode(err).String()})
 		})
-		p.BeforeSend("service").Handle(func(c *sdk.Context, _ message.Session, _ message.Chain) (message.Chain, error) {
+		p.BeforeSend("service").Handle(func(c *sdk.Context, _ string, _ message.Chain) (message.Chain, error) {
 			_, err := chainService("b").Call(c.Context(), chainInput{Mode: "send", Key: "hook"})
 			return nil, pipelineAudit(pipelineRecord{Stage: "hook-result", Code: chainCode(err).String()})
 		})
@@ -142,7 +143,7 @@ func serviceChainPlugin() *sdk.Plugin {
 			continue
 		}
 		sdk.Subscribe(p, sdk.BusEvent[chainBusPayload]("a/"+name)).Handle(func(c *sdk.Context, in chainBusPayload) error {
-			return pipelineAudit(pipelineRecord{Stage: "bus", Text: in.Key, User: string(c.User()), Session: string(c.Session())})
+			return pipelineAudit(pipelineRecord{Stage: "bus", Text: in.Key, User: c.User(), Session: c.Session()})
 		})
 	}
 	return p
@@ -160,7 +161,7 @@ func chainCode(err error) errcode.Code {
 }
 func chainAudit(stage string, c *sdk.Context, in chainInput) error {
 	deadline, _ := c.Context().Deadline()
-	return pipelineAudit(pipelineRecord{Stage: stage, Text: in.Key, Route: in.Mode, User: string(c.User()), Session: string(c.Session()), Value: strconv.FormatInt(deadline.UnixMilli(), 10)})
+	return pipelineAudit(pipelineRecord{Stage: stage, Text: in.Key, Route: in.Mode, User: c.User(), Session: c.Session(), Value: strconv.FormatInt(deadline.UnixMilli(), 10)})
 }
 func chainHandle(c *sdk.Context, id string, in chainInput) (chainOutput, error) {
 	if err := chainAudit("service", c, in); err != nil {

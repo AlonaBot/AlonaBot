@@ -101,29 +101,6 @@ func (s *scan) checkAdapterType(importer *schemaImporter) error {
 	}
 	s.adapterRoot = candidates[0]
 	s.result.AdapterType = s.adapterRoot.pkg + "." + s.adapterRoot.name
-	// 实现 AdapterHTTP 必然引用 SDK 类型；没有这条依赖的 Adapter 无需加载 SDK。
-	sdk := importedPackage(entry, sdkPath)
-	if sdk == nil {
-		return nil
-	}
-	http := sdk.Scope().Lookup("AdapterHTTP").Type().Underlying().(*types.Interface)
-	typ := entry.Scope().Lookup(s.adapterRoot.name).Type()
-	s.result.HTTP = types.Implements(typ, http) || types.Implements(types.NewPointer(typ), http)
-	return nil
-}
 
-func importedPackage(pkg *types.Package, path string) *types.Package {
-	seen := make(map[*types.Package]bool)
-	for queue := []*types.Package{pkg}; len(queue) > 0; {
-		current := queue[0]
-		queue = queue[1:]
-		if current.Path() == path {
-			return current
-		}
-		if !seen[current] {
-			seen[current] = true
-			queue = append(queue, current.Imports()...)
-		}
-	}
 	return nil
 }

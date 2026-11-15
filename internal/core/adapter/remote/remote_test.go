@@ -46,6 +46,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
 	"github.com/AlonaBot/AlonaBot/internal/core/webhost"
+	genresources "github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk"
@@ -76,9 +77,13 @@ func TestMain(m *testing.M) {
 	} else if mode == "schema-parse" || mode == "schema-resolve" {
 		err = invalidSchemaAdapter(mode)
 	} else if mode == "http-upgrade" {
-		err = sdk.RunAdapter(&httpUpgradeAdapter{})
+		a := &httpUpgradeAdapter{}
+		genresources.Bind(a, genresources.Resources{})
+		err = sdk.RunAdapter(a)
 	} else {
-		err = sdk.RunAdapter(&loopAdapter{})
+		a := &loopAdapter{}
+		genresources.Bind(a, genresources.Resources{})
+		err = sdk.RunAdapter(a)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -89,8 +94,9 @@ func TestMain(m *testing.M) {
 
 func newLoopPlugin() *sdk.Plugin {
 	p := sdk.NewPlugin()
+	genresources.Bind(p, genresources.Resources{})
 	if os.Getenv(helperEnv) == "command-plugin" {
-		sdk.UseGenerated(p, sdk.Generated{I18n: commandCatalog()})
+		genresources.Bind(p, genresources.Resources{I18n: commandCatalog()})
 	}
 	registerLoopEvents(p)
 	registerLoopCommands(p)
@@ -226,9 +232,10 @@ const httpPlatformToken = "loop-platform-test-token"
 
 type httpUpgradeAdapter struct{ loopAdapter }
 
-// HTTP 声明公开平台凭证入口；最小 WebSocket echo 只收发四字节文本帧。
-func (*httpUpgradeAdapter) HTTP(route func(method, path string) *sdk.RouteBuilder) {
-	route("GET", "/ws").Public(sdk.AuthPlatformToken).Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// Descriptor 声明公开平台凭证入口；最小 WebSocket echo 只收发四字节文本帧。
+func (a *httpUpgradeAdapter) Descriptor() *sdkadapter.Descriptor {
+	d := a.loopAdapter.Descriptor()
+	d.HTTP = []sdkadapter.HTTPRoute{{Method: "GET", Path: "/ws", Auth: sdkadapter.AuthPlatformToken, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if r.Header.Get("Authorization") == "" {
 			token = r.URL.Query().Get("access_token")
@@ -275,7 +282,8 @@ func (*httpUpgradeAdapter) HTTP(route func(method, path string) *sdk.RouteBuilde
 				return
 			}
 		}
-	}))
+	})}}
+	return d
 }
 
 func remoteHTTPUpgrade(t *testing.T, address, target, authorization string) (net.Conn, *bufio.Reader) {
@@ -539,7 +547,7 @@ func (i *loopInstance) Capabilities() []message.Capability {
 }
 
 // Delete 记录真实 RPC 到达并模拟顺序平台操作，失败或未知后保留未尝试项。
-func (i *loopInstance) Delete(ctx context.Context, target message.Session, ids []string) (*message.DeleteResult, *errcode.Error) {
+func (i *loopInstance) Delete(ctx context.Context, target string, ids []string) (*message.DeleteResult, *errcode.Error) {
 	data, err := json.Marshal(struct {
 		Instance string
 		IDs      []string
@@ -586,7 +594,7 @@ func (i *loopInstance) Stop(context.Context) error {
 	}
 	return nil
 }
-func (i *loopInstance) Send(ctx context.Context, target message.Session, chain message.Chain) (*message.SendResult, *errcode.Error) {
+func (i *loopInstance) Send(ctx context.Context, target string, chain message.Chain) (*message.SendResult, *errcode.Error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	text := chain.Text()
@@ -1600,18 +1608,18 @@ type streamReport struct {
 
 type streamObservation struct {
 	Operation, Text, ID string
-	Session             message.Session
+	Session             string
 	At                  time.Time
 }
 
-func (i *loopInstance) Edit(_ context.Context, target message.Session, id string, chain message.Chain) (*message.SendResult, *errcode.Error) {
+func (i *loopInstance) Edit(_ context.Context, target string, id string, chain message.Chain) (*message.SendResult, *errcode.Error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	return i.streamReceipt("edit", target, id, chain.Text())
 }
 
 // streamReceipt 在 Adapter 侧记录真实请求到达时间与消息 ID，返回完整回执。
-func (i *loopInstance) streamReceipt(operation string, target message.Session, id, text string) (*message.SendResult, *errcode.Error) {
+func (i *loopInstance) streamReceipt(operation string, target string, id, text string) (*message.SendResult, *errcode.Error) {
 	observation := streamObservation{Operation: operation, Text: text, ID: id, Session: target, At: time.Now()}
 	data, err := json.Marshal(observation)
 	if err != nil {
@@ -1755,10 +1763,10 @@ func TestRemoteStream(t *testing.T) {
 	}
 	for index, call := range observed {
 		result := report.Results[index]
-		if call.Operation != wantOperations[index] || call.Text != wantText[index] || call.Session != message.NewSession("loop", "chat", "topic") {
+		if call.Operation != wantOperations[index] || call.Text != wantText[index] || call.Session != message.SID("loop", "chat", "topic") {
 			t.Fatalf("request %d=%+v", index, call)
 		}
-		if result.PrimaryPlatformMessageID != call.ID || !reflect.DeepEqual(result.PlatformMessageIDs, []string{call.ID}) || result.Ref() != message.NewMessageRef(call.Session, call.ID, "one") || result.ProviderAcceptedAt.UnixMilli() != 1234 || !reflect.DeepEqual(result.CapabilitiesUsed, streamCapabilities()) || len(result.PartResults) != 1 || result.PartResults[0].PlatformMessageIDs[0] != call.ID {
+		if result.PrimaryPlatformMessageID != call.ID || !reflect.DeepEqual(result.PlatformMessageIDs, []string{call.ID}) || result.Ref() != message.Ref(call.Session, call.ID, "one") || result.ProviderAcceptedAt.UnixMilli() != 1234 || !reflect.DeepEqual(result.CapabilitiesUsed, streamCapabilities()) || len(result.PartResults) != 1 || result.PartResults[0].PlatformMessageIDs[0] != call.ID {
 			t.Fatalf("receipt %d=%+v", index, result)
 		}
 	}
@@ -1781,7 +1789,7 @@ func TestRemoteStream(t *testing.T) {
 }
 
 // Action 记录真实跨进程调用次数，回传带平台额外字段的 JSON 原文。
-func (i *loopInstance) Action(_ context.Context, to message.Session, name string, version uint32, params json.RawMessage) (json.RawMessage, *errcode.Error) {
+func (i *loopInstance) Action(_ context.Context, to string, name string, version uint32, params json.RawMessage) (json.RawMessage, *errcode.Error) {
 	if version != 1 || (name != "loop.echo" && name != "loop.account") {
 		return nil, errcode.Unsupported.New("action is not declared")
 	}
@@ -1908,7 +1916,7 @@ func objectI18n() map[string][]byte {
 
 func newObjectPlugin() *sdk.Plugin {
 	p := sdk.NewPlugin()
-	sdk.UseGenerated(p, sdk.Generated{ConfigSchema: []byte(objectConfigSchema), I18n: objectI18n()})
+	genresources.Bind(p, genresources.Resources{ConfigSchema: []byte(objectConfigSchema), I18n: objectI18n()})
 	sub := p.Sub("part").Permission(sdk.Anyone)
 	values := sub.Config()
 	sub.Command("object").Handle(func(c *sdk.Context, args struct {
@@ -2021,7 +2029,7 @@ const optionsConfigSchema = `{"selection":{"type":"object","items":{"choice":{"t
 
 func newOptionsPlugin() *sdk.Plugin {
 	p := sdk.NewPlugin()
-	sdk.UseGenerated(p, sdk.Generated{ConfigSchema: []byte(optionsConfigSchema)})
+	genresources.Bind(p, genresources.Resources{ConfigSchema: []byte(optionsConfigSchema)})
 	sdk.ServeOptions(p, "choices", func(_ context.Context, q sdk.OptionsQuery) (sdk.OptionsPage, error) {
 		if q.Filter["group"] != "all" {
 			return sdk.OptionsPage{}, fmt.Errorf("missing schema filter")
@@ -2101,7 +2109,7 @@ func TestChatDirectory(t *testing.T) {
 	check := func(field, search, chatID, title, chatType string) {
 		t.Helper()
 		page, err := service.Query(ctx, spec.PluginID, options.ConfigSchema, field, options.Query{Search: search})
-		want := options.Option{Value: string(message.NewSession("loop", chatID, "")), Label: title, Description: "loop " + chatType}
+		want := options.Option{Value: string(message.SID("loop", chatID, "")), Label: title, Description: "loop " + chatType}
 		if err != nil || page.More || !reflect.DeepEqual(page.Options, []options.Option{want}) {
 			t.Fatalf("field=%s search=%s page=%+v error=%v", field, search, page, err)
 		}

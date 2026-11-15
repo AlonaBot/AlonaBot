@@ -91,8 +91,8 @@ type streamOutput struct {
 	text      strings.Builder
 	units     uint64
 	sent      bool
-	displayed int                // 当前消息最后一次成功请求的 UTF-8 字节长度。
-	ref       message.MessageRef // 只取首次 Send 的真实回执。
+	displayed int    // 当前消息最后一次成功请求的 UTF-8 字节长度。
+	ref       string // 只取首次 Send 的真实回执。
 	results   []*message.SendResult
 }
 

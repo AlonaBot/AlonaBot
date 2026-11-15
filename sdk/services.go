@@ -118,8 +118,8 @@ func (s *ServiceBuilder[In, Out]) prepareJSON() (serviceRoute, error) {
 	if err != nil {
 		return serviceRoute{}, err
 	}
-	inputID = generatedSchemaID(r.schemas, b.plugin.entryPackage, inputID)
-	outputID = generatedSchemaID(r.schemas, b.plugin.entryPackage, outputID)
+	inputID = generatedSchemaID(r.schemas, entryPackage(b.plugin), inputID)
+	outputID = generatedSchemaID(r.schemas, entryPackage(b.plugin), outputID)
 	inputSchema, err := resolveServiceSchema(r.schemas, inputID)
 	if err != nil {
 		return serviceRoute{}, err
@@ -272,7 +272,7 @@ func jsonType[T any]() (string, uint32, error) {
 	return typ.PkgPath() + "." + typ.Name(), version, nil
 }
 
-// generatedSchemaID 仅将 UseGenerated 调用包的类型对齐到 main 生成键；go test 中该包保留导入路径，导入类型的身份保持完整。
+// generatedSchemaID 仅将 NewPlugin 调用包的类型对齐到 main 生成键；go test 中该包保留导入路径，导入类型的身份保持完整。
 func generatedSchemaID(schemas map[string][]byte, entryPackage, id string) string {
 	if _, ok := schemas[id]; ok {
 		return id

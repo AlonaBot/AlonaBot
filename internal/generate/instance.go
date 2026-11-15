@@ -35,7 +35,7 @@ func hasBuildSource(dir string) (bool, error) {
 	}
 	for _, entry := range entries {
 		name := entry.Name()
-		if !entry.IsDir() && strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") && name != FileName {
+		if !entry.IsDir() && strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") {
 			return true, nil
 		}
 	}

@@ -171,10 +171,9 @@ package plugin
 
 import "github.com/AlonaBot/AlonaBot/sdk"
 
-// New 创建独立插件并绑定生成资源。
+// New 创建独立插件并登记路由。
 func New() *sdk.Plugin {
  p := sdk.NewPlugin()
- sdk.UseGenerated(p, alonabotGenerated)
  p.Command("hello").Description("Show a greeting").Handle(func(c *sdk.Context) error {
   return c.Reply(c.T("hello"))
  })

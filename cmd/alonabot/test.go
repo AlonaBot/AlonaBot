@@ -21,9 +21,9 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
+	"github.com/AlonaBot/AlonaBot/internal/generate"
 	"github.com/AlonaBot/AlonaBot/internal/pluginkit"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
-	"github.com/AlonaBot/AlonaBot/sdk/generate"
 	"github.com/spf13/cobra"
 )
 

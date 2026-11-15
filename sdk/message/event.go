@@ -69,7 +69,7 @@ type Event struct {
 	Source                                  SourceKind
 	OccurredAt                              time.Time
 	AdapterID, AdapterInstanceID, AccountID string
-	Session                                 Session
+	Session                                 string
 	ChatType                                ChatType
 	ChatTitle                               string // 平台给出的会话显示名；空串表示未提供。
 	Actor                                   *Actor
@@ -81,7 +81,7 @@ type Event struct {
 }
 
 // Ref 返回创建、编辑、回应或按钮所在消息的句柄；其他事件返回空串。
-func (e *Event) Ref() MessageRef {
+func (e *Event) Ref() string {
 	var id string
 	switch p := e.Payload.(type) {
 	case *CreatedPayload:
@@ -96,7 +96,7 @@ func (e *Event) Ref() MessageRef {
 	if id == "" || e.Session == "" {
 		return ""
 	}
-	return NewMessageRef(e.Session, id, e.AdapterInstanceID)
+	return Ref(e.Session, id, e.AdapterInstanceID)
 }
 
 // CreatedPayload 保存新消息内容及是否指向本机器人。

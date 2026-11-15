@@ -93,9 +93,9 @@
 | goal-40 | T-09.5 | 候选 Journal 与准备编排 | T-09.4、T-08.6、T-06.4 | 已完成（PR #173） |
 | goal-57 | T-11.4 | 工具与会话的验收 | T-11.2、T-11.3 | 已完成（PR #172） |
 | goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 已完成（PR #190） |
-| goal-138 | T-04.15 | SDK 公开面收敛 | T-04.5、T-09.3、T-16.1 | 待派发 |
+| goal-138 | T-04.15 | SDK 公开面收敛 | T-04.5、T-09.3、T-16.1 | 已完成（PR #197） |
 | goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 已完成（PR #179） |
-| goal-139 | T-04.16 | SDK 按类别分包 | T-04.15 | 等待前置 |
+| goal-139 | T-04.16 | SDK 按类别分包 | T-04.15 | 待派发 |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 已完成（PR #187） |
 | goal-93 | T-09.14 | 配置、权限、工具策略与会话的管理 API | T-03.25、T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-08.14、T-09.6、T-09.12、T-11.1、T-11.3 | 已完成（PR #192） |
 | goal-140 | T-13.5 | 模块根包只保留库模式接口 | T-04.16 | 等待前置 |
@@ -7076,7 +7076,7 @@ broker.Options、bus.Options 与 router.Options 增加 Metrics *metrics.Counters
 
 ### goal-138 · T-04.15 SDK 公开面收敛
 
-状态：待派发。前置 T-04.5（[PR #191](https://github.com/AlonaBot/AlonaBot/pull/191)）、T-09.3（[PR #194](https://github.com/AlonaBot/AlonaBot/pull/194)）与 T-16.1（[PR #168](https://github.com/AlonaBot/AlonaBot/pull/168)）均已合并。2026-11-14 按 main `eba58e2` 的代码写出接口、行为与测试段（D-144、D-145、D-147 由 [PR #196](https://github.com/AlonaBot/AlonaBot/pull/196) 定稿）。
+状态：已完成（[PR #197](https://github.com/AlonaBot/AlonaBot/pull/197)，合并提交 `ba2d323`），证据见 TEST-MATRIX §3.2。合入：`sdk/message` 的 `SID`/`ParseSID`、`Ref`/`ParseRef`、`UID`/`ParseUID`，`c.SendTo(sid, content, opts...)`，`sdk.Send(ctx, sid, …)`、`sdk.SendText(ctx, sid, text, …)` 与 string 句柄的 Edit、Delete、CallAction、Session、User、Editing；`internal/generated`（`Register`、`Bind`、`Lookup`、`SetEntry`、`Entry`）与 `sdk/genimpl`（`Resources`、`Register`），`sdk.NewPlugin()` 记录入口包（还原符号名的 `%xx` 转义），资源在 Collect 与启动组件时取得；`internal/generate`（`Options.Package`、`Result.Generated`、登记源码）与 `pluginkit.CompileApp(ctx, options, outDir, goFlags...)`（库模式构建，不加 `-trimpath`），`alonabot build --dir` 在没有 plugin.yaml 的 main 包目录按库模式构建；plugintest 按入口包现场扫描；`adapter.Descriptor.HTTP`、`adapter.HTTPRoute`、`adapter.HTTPAuth`、`adapter.AuthPlatformToken`。删除 `sdk.To`、三种具名类型、`sdk` 的生成 API、`sdk.AdapterHTTP`、`sdk/generate`、仓库中的 `alonabot_gen.go` 与 alonabot 的 `go:generate`。审查追加的修复：入口包路径还原符号转义（FIX-1）、`Send`/`SendText` 参数名为 `sid`（FIX-2）、库模式构建不强加 `-trimpath`（FIX-3），以及两处测试复用 race 构建缓存。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-138（切片 T-04.15：SDK 公开面收敛）。goal 目录 goal-138，分支 goal-138，worktree .worktrees/goal-138，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -7237,21 +7237,64 @@ internal/core/journal
 
 ### goal-139 · T-04.16 SDK 按类别分包
 
-状态：等待前置（T-04.15）。目标、依据与要点由 PLAN T-04 步骤 16 确定；T-04.15 合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：待派发。前置 T-04.15（[PR #197](https://github.com/AlonaBot/AlonaBot/pull/197)，合并提交 `ba2d323`）已合并。2026-11-14 按 main `ba2d323` 的代码写出接口、行为与测试段（D-146 由 [PR #196](https://github.com/AlonaBot/AlonaBot/pull/196) 定稿）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-139（切片 T-04.16：SDK 按类别分包）。goal 目录 goal-139，分支 goal-139，worktree .worktrees/goal-139，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：SDK 的调用不再集中在 sdk 根包。按 D-146 的对照把包级函数与类型移入 sdk/task、sdk/service、sdk/bus、sdk/button、sdk/media、sdk/conversation、sdk/tool、sdk/action 与 sdk/options；根包只留插件对象、Handler 上下文、注册 builder、权限与运行入口。协议与行为不变，只改包与名字。
+目标：SDK 的包级函数与类型不再集中在 sdk 根包。按 D-146 的对照把它们移入 sdk/task、sdk/service、sdk/bus、sdk/button、sdk/media、sdk/conversation、sdk/tool、sdk/action 与 sdk/options，名字去掉与包名重复的部分；根包只留插件对象、Handler 上下文、注册 builder、权限、事件类型与运行入口。RunInProcess、RunAdapterInProcess、Collect、Registration 及其描述类型不再导出。行为与协议不变，只改包与名字，调用方全部同步，不留别名。
 
-依据：PLAN T-04 步骤 16 及其失败停止条件；DESIGN §D；CONTRACTS §1.3、§1.4、§3、§8、§9.1；DECISIONS D-146；TEST-MATRIX V-120；ARCHITECTURE 的 sdk 行。
+依据：PLAN T-04 步骤 16 及其失败停止条件；CONTRACTS §1.3、§1.4、§3、§8、§9.1；DESIGN §D、§G、§H；DECISIONS D-86、D-114、D-122、D-146；TEST-MATRIX V-120；ARCHITECTURE 的 sdk 行。
 
-要点：
-- 子包 import 根包取得 Registrar、*Context 与 Permission，共享的注册状态放在 sdk/internal，根包不 import 子包。
-- RunInProcess、RunAdapterInProcess、Collect、Registration 及其描述类型改为内部入口。
-- 全部调用方（Adapter 的常量与动作包、Agent、plugintest、示例、根包与文档）同步修改，不留别名；ARCHITECTURE 的模块表与依赖边同步。
+范围（只新增、修改或删除这些）：
+- sdk/：task.go、job.go、services.go、bus.go、buttons.go、media.go、media_bytes.go、conversation.go、tool.go、action.go、options.go 中移出的公开 API；根包其余文件中引用这些类型的位置；inproc.go 与 sdk.go 中改为不导出的入口；registry.go、plugin.go、subplugin.go 中改为经 sdk/internal 共享的注册状态
+- 新增 sdk/task/、sdk/service/、sdk/bus/、sdk/button/、sdk/media/、sdk/conversation/、sdk/tool/、sdk/action/、sdk/options/，以及 sdk/internal/ 下承载共享注册状态的包
+- sdk/llm/llm.go：GenerateService 改用 service.JSON
+- internal/inproc/：增加由 sdk 在 init 中登记的同进程入口；根包 assembly.go 改经 internal/inproc 调用
+- internal/generate/：对四个 JSON 泛型入口的识别改为 service.JSON、service.Proto、bus.Define、task.Define
+- agent/、examples/、plugintest/、adapters/ 中使用这些 API 的源码与测试；根目录 *_test.go；internal/core/adapter/remote/remote_test.go；cmd/alonabot/*_test.go 中随包名改写的部分
+- docs/plugin-guide.md、docs/development.md、README.md 与 examples/ 下 README 中的写法
+- 上述包的 *_local_test.go
+允许的新跨模块边：sdk/{task,service,bus,button,media,conversation,tool,action,options} -> sdk、-> sdk/message、-> sdk/errcode、-> sdk/internal/...，以及原根包对应代码已有的依赖；调用方 -> 这些子包。根包不 import 任何新子包；internal/inproc 仍不 import 本 module 的包。
 
-不做：协议与行为的改动；根包装配移入 internal/app（T-13.5）；CLI 参数（T-13.6）；新增依赖。
+接口（照此实现；类型的字段、方法集与函数的参数、返回值和行为保持不变，只换包与名字）：
+| 原（sdk 根包） | 新 |
+| --- | --- |
+| Task[T](name) TaskType[T]、TaskType[T] | task.Define[T](name) task.Type[T]、task.Type[T] |
+| OnTask[T](r, t) *TaskBuilder[T]、TaskBuilder[T] | task.On[T](r, t) *task.Builder[T]、task.Builder[T] |
+| TaskInstance[T]、TaskOption、Key、Timezone | task.Instance[T]、task.Option、task.Key、task.Timezone |
+| PauseJob、ResumeJob、JobStatus、JobState | task.Pause、task.Resume、task.Status、task.State |
+| JSON、Proto、Service[In, Out] | service.JSON、service.Proto、service.Spec[In, Out] |
+| Serve、ServiceBuilder[In, Out] | service.Serve、service.Builder[In, Out] |
+| Access、AccessPrivate、AccessAllowlist、AccessPublic | service.Access、service.AccessPrivate、service.AccessAllowlist、service.AccessPublic |
+| BusEvent[T](name) BusEventType[T]、BusEventType[T] | bus.Define[T](name) bus.Event[T]、bus.Event[T] |
+| Subscribe、Subscription[T] | bus.Subscribe、bus.Subscription[T] |
+| Action[T](name) ButtonAction[T]、ButtonAction[T] | button.Define[T](name) button.Action[T]、button.Action[T] |
+| OnButton、ButtonBuilder[T] | button.On、button.Builder[T] |
+| Upload、OpenMedia、GrantMedia | media.Upload、media.Open、media.Grant |
+| ImageBytes、FileBytes、VideoBytes | media.Image、media.File、media.Video |
+| AppendConversation、ListConversation、ClearConversation、ConversationEntry | conversation.Append、conversation.List、conversation.Clear、conversation.Entry |
+| InvokeTool、ListTools、ToolInfo、ConfirmOperation | tool.Invoke、tool.List、tool.Info、tool.Confirm |
+| ToolDefault、ToolAllow、ToolConfirm | tool.Default、tool.DefaultAllow、tool.DefaultConfirm（常量带类型名前缀，避免与 tool.Confirm 重名） |
+| ActionClient、NewActionClient、ActionCaller | action.Client、action.NewClient、action.Caller |
+| ServeOptions、OptionsQuery、OptionsPage、Option | options.Serve、options.Query、options.Page、options.Option |
+| RunInProcess、RunAdapterInProcess | 不导出。sdk 在 init 中向 internal/inproc 登记两个入口，参数以 any 收插件对象与 Adapter，根包经 internal/inproc 调用 |
+| Collect、Registration 与描述类型 Command、EventRoute、Schedule、HTTPRoute | 不导出，只在 sdk 内使用 |
+根包保留：NewPlugin、Plugin、SubPlugin、Registrar；CommandBuilder、CommandGroup、EventBuilder、PreEventBuilder、BeforeSendBuilder、AfterSendBuilder、ScheduleBuilder、RouteBuilder；Context；Rule、Any、ToMe、NotCommand；Permission、PermissionName、Anyone、User、Admin、ChatAdmin；EventType、标准事件常量与 AdapterEvent；UserID；HTTPAuth 及其常量；Run、RunAdapter；Send、SendText、Edit、Delete、Via、SendOption；T；Error、ErrNotImplemented。
+
+行为：
+- 子包 import 根包取得 Registrar、*Context 与 Permission。路由登记、收集与分发要用的共享状态放在 sdk/internal，根包与子包都经它读写，不新增公开符号。子包登记的命令、任务、Service、订阅、按钮与选项来源，得到的注册描述、route_id、错误文本与检查次序和移出前相同。
+- 子包函数的 Context 参数（例如任务与按钮 Handler 收 *sdk.Context）与泛型约束（Proto 的 proto.Message）不变；Handler 内的平台动作仍用 c.CallAction，action.Caller 由 *sdk.Context 与 *action.Client 实现。
+- 生成器对四个 JSON 泛型入口的检查（类型须为包级具名非泛型）与 Service Schema 的生成改为识别 service.JSON、service.Proto、bus.Define 与 task.Define，诊断位置与文本不变；ParamNames、i18n 常量键与迁移方式的识别不受影响。
+- 删除旧名，不留别名或转发函数。CONTRACTS 与 DESIGN 已按新名书写（PR #196）；plugin-guide、development、README 与示例 README 同步。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：不新增测试。既有测试只迁移到新包名，断言不变；TestSDKExamples、TestAgentPackage、TestPluginHarness 与 TestDevelopmentCLI 覆盖分包后的示例、Agent、plugintest 与 CLI 的编译与运行。
+- 本地自测（*_local_test.go，结果写入 PR）：V-120 的分包分项，即根包的导出集合只剩上文「根包保留」的标识符；各子包的导出与上表一致；`go list -deps ./sdk` 不含新子包；示例插件与 Agent 的 REGISTER 描述与移出前逐项相同（以 main 上的描述为基准对比）；生成器对新入口的 Schema 生成与诊断和移出前相同。
+
+完成条件：V-120 中本切片的分项有本地证据；gofmt -l 对改动的 Go 文件无输出；go generate ./... 之后工作区没有变化；go vet ./...；go test -race ./...；go build ./...；CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./...；go build -tags configdb_gorm ./examples/plugins/configdb；`go doc ./sdk` 不再列出上表左栏的标识符。注册描述或行为发生变化、根包 import 子包、出现循环依赖时，按 PLAN T-04 的停止条件暂停交付。
+
+不做：协议与行为的改动；根包装配移入 internal/app（T-13.5）；CLI 的位置参数与缺省值（T-13.6）；改写 plugins、adapters 章节未派发的 goal 语句（合并后由审查者改写）；新增依赖；向 sdk/ 或 internal/core/supervisor/ 提交新测试、增加 testdata 插件。
 ```
 
 ### goal-42 · T-09.7 崩溃恢复、回退与回收

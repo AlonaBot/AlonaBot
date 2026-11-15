@@ -44,11 +44,41 @@ func TestDevelopmentCLI(t *testing.T) {
 		t.Fatalf("unexpected main.go: %v", err)
 	}
 	source := string(developmentRead(t, filepath.Join(dir, "plugin.go")))
-	for _, required := range []string{"package plugin", "func New() *sdk.Plugin", "sdk.NewPlugin()", "sdk.UseGenerated(p, alonabotGenerated)", `p.Command("hello")`, `.Description("Show a greeting")`} {
+	for _, required := range []string{"package plugin", "func New() *sdk.Plugin", "sdk.NewPlugin()", `p.Command("hello")`, `.Description("Show a greeting")`} {
 		if !strings.Contains(source, required) {
 			t.Fatalf("template missing %q", required)
 		}
 	}
+	if strings.Contains(source, "UseGenerated") {
+		t.Fatal("template contains generated API")
+	}
+	noGenerated := func() {
+		t.Helper()
+		if err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if entry.Name() == "alonabot_gen.go" {
+				t.Errorf("generated source written to project: %s", path)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	noGenerated()
+	developmentWrite(t, filepath.Join(dir, "plugin_test.go"), `package plugin
+import (
+ "testing"
+ "github.com/AlonaBot/AlonaBot/plugintest"
+ "github.com/AlonaBot/AlonaBot/sdk/message"
+)
+func TestHello(t *testing.T) {
+ h := plugintest.Start(t, plugintest.Plugin(New()))
+ result := h.Message(plugintest.Private("alice"), plugintest.User{ID:"alice"}, message.Text("/hello"))
+ if len(result.Sends) != 1 || result.Sends[0].Text() != "Hello!" { t.Fatalf("unexpected greeting: %+v", result) }
+}
+`)
 	if !strings.Contains(string(developmentRead(t, filepath.Join(dir, ".gitignore"))), "data/") {
 		t.Fatal("data ignore missing")
 	}
@@ -74,9 +104,19 @@ func TestDevelopmentCLI(t *testing.T) {
 			t.Fatalf("go %v: %v\n%s", args, err, output)
 		}
 	}
+	// 与外层 go test -race 使用相同的构建参数，复用已编译的依赖。
+	command := exec.Command("go", "test", "-race", "./...")
+	command.Dir = dir
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("direct go test: %v\n%s", err, output)
+	}
+	noGenerated()
 	cli("build")
+	noGenerated()
 	cli("check")
+	noGenerated()
 	output := cli("test")
+	noGenerated()
 	for _, required := range []string{"Activated alonabot_plugin_cli (plugin)", "Command: hello", "Removed temporary test data:"} {
 		if !strings.Contains(output, required) {
 			t.Fatalf("missing %q:\n%s", required, output)
@@ -97,6 +137,7 @@ func TestDevelopmentCLI(t *testing.T) {
 	developmentWrite(t, keyPath, base64.StdEncoding.EncodeToString(key))
 	out := t.TempDir()
 	cli("pack", "--asset-url", "https://example.com/cli.tar.gz", "--key", keyPath, "--out", out)
+	noGenerated()
 	raw := developmentRead(t, filepath.Join(out, "release.json"))
 	sig := developmentRead(t, filepath.Join(out, "release.json.sig"))
 	publication, err := release.Verify(raw, sig, pub)
@@ -147,4 +188,44 @@ func TestDevelopmentCLI(t *testing.T) {
 	if _, err := candidate.MoveTo(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
+	developmentWrite(t, filepath.Join(dir, "cmd", "bot", "main.go"), `package main
+import (
+ "context"
+ "fmt"
+ "os"
+ "github.com/AlonaBot/AlonaBot"
+ plugin "example.com/cli"
+)
+var component = plugin.New()
+func main() {
+ ctx, cancel := context.WithCancel(context.Background())
+ defer cancel()
+ core, err := alonabot.Start(ctx, alonabot.DataDir(os.Args[1]), alonabot.Listen("127.0.0.1:0"), alonabot.Plugin(component))
+ if err != nil { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
+ fmt.Println("Activated library plugin")
+ cancel()
+ if err := core.Wait(); err != nil { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
+}
+`)
+	command = exec.Command("go", "mod", "tidy")
+	command.Dir = dir
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("tidy library app: %v\n%s", err, output)
+	}
+	cli("build", "--dir", "cmd/bot")
+	noGenerated()
+	built := filepath.Join(dir, "cmd", "bot", "bin", "bot")
+	if output, err := exec.Command(built, t.TempDir()).CombinedOutput(); err != nil || !strings.Contains(string(output), "Activated library plugin") {
+		t.Fatalf("library application: %v\n%s", err, output)
+	}
+	native := filepath.Join(t.TempDir(), "native")
+	command = exec.Command("go", "build", "-race", "-o", native, "./cmd/bot")
+	command.Dir = dir
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("native go build: %v\n%s", err, output)
+	}
+	if output, err := exec.Command(native, t.TempDir()).CombinedOutput(); err == nil || !strings.Contains(string(output), "alonabot build") || strings.Contains(string(output), "Activated library plugin") {
+		t.Fatalf("missing resource diagnostic: %v\n%s", err, output)
+	}
+
 }

@@ -417,8 +417,10 @@ import (
  "log/slog"
  "os"
  "github.com/AlonaBot/AlonaBot/sdk"
+ "github.com/AlonaBot/AlonaBot/sdk/genimpl"
  "github.com/AlonaBot/AlonaBot/sdk/message"
 )
+func init(){genimpl.Register("main",genimpl.Resources{})}
 func main() {
  p:=sdk.NewPlugin()
  p.Command("inspect").Handle(func(c *sdk.Context)(message.Content,error){return message.Chain{message.Text(fmt.Sprintf("admin=%t",c.Has(sdk.Admin)))},nil})
@@ -437,6 +439,7 @@ import (
  "os"
  "sync"
  "github.com/AlonaBot/AlonaBot/sdk"
+ "github.com/AlonaBot/AlonaBot/sdk/genimpl"
  "github.com/AlonaBot/AlonaBot/sdk/adapter"
  "github.com/AlonaBot/AlonaBot/sdk/message"
  "github.com/AlonaBot/AlonaBot/sdk/errcode"
@@ -451,7 +454,7 @@ func (p *platform) Start(ctx context.Context,req adapter.StartRequest,core adapt
  slog.Info("fixture instance "+req.InstanceID+" started")
  return &instance{Instance:base,platform:p,id:req.InstanceID},nil
 }
-func(i *instance) Send(ctx context.Context,to message.Session,chain message.Chain)(*message.SendResult,*errcode.Error){
+func(i *instance) Send(ctx context.Context,to string,chain message.Chain)(*message.SendResult,*errcode.Error){
  i.platform.mu.Lock();i.platform.sent=append(i.platform.sent,chain.Text());i.platform.mu.Unlock()
  return i.Instance.Send(ctx,to,chain)
 }
@@ -459,15 +462,17 @@ func(i *instance) Stop(ctx context.Context)error{
  i.platform.mu.Lock();delete(i.platform.cores,i.id);i.platform.mu.Unlock()
  slog.Info("fixture instance "+i.id+" stopped");return i.Instance.Stop(ctx)
 }
-func(p *platform) HTTP(route func(string,string)*sdk.RouteBuilder){
- route("POST","/deliver").HandleFunc(func(w http.ResponseWriter,r *http.Request){
+func(p *platform) Descriptor()*adapter.Descriptor{
+ d:=p.Adapter.Descriptor()
+ d.HTTP=[]adapter.HTTPRoute{{Method:"POST",Path:"/deliver",Handler:http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
   id:=r.URL.Query().Get("instance");p.mu.Lock();core:=p.cores[id];p.mu.Unlock()
   if core==nil{http.Error(w,"instance missing",404);return}
-  _,err:=core.Deliver(r.Context(),&message.Event{Type:"message.created",AdapterID:"devloop",AdapterInstanceID:id,AccountID:id,Session:message.NewSession("devloop","chat",""),Actor:&message.Actor{ExternalUserID:r.URL.Query().Get("user"),AdapterInstanceID:id},Payload:&message.CreatedPayload{PlatformMessageID:"fixture",Chain:message.Chain{message.Text(r.URL.Query().Get("text"))}}},nil)
+  _,err:=core.Deliver(r.Context(),&message.Event{Type:"message.created",AdapterID:"devloop",AdapterInstanceID:id,AccountID:id,Session:message.SID("devloop","chat",""),Actor:&message.Actor{ExternalUserID:r.URL.Query().Get("user"),AdapterInstanceID:id},Payload:&message.CreatedPayload{PlatformMessageID:"fixture",Chain:message.Chain{message.Text(r.URL.Query().Get("text"))}}},nil)
   if err!=nil{http.Error(w,err.Error(),500);return};w.WriteHeader(204)
- })
- route("GET","/sent").HandleFunc(func(w http.ResponseWriter,r *http.Request){p.mu.Lock();defer p.mu.Unlock();if err:=json.NewEncoder(w).Encode(p.sent);err!=nil{slog.Error("write sent failed","error",err)}})
+ })}, {Method:"GET",Path:"/sent",Handler:http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){p.mu.Lock();defer p.mu.Unlock();if err:=json.NewEncoder(w).Encode(p.sent);err!=nil{slog.Error("write sent failed","error",err)}})}}
+ return d
 }
+func init(){genimpl.Register("main",genimpl.Resources{})}
 func main(){p:=&platform{Adapter:example.New(),cores:map[string]adapter.Core{}};if err:=sdk.RunAdapter(p);err!=nil{slog.Error("fixture failed","error",err);os.Exit(1)}}
 `
 

@@ -28,6 +28,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 	"github.com/AlonaBot/AlonaBot/internal/core/scheduler"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/pluginkit"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
@@ -432,10 +433,11 @@ func TestStartupFaultsAreKilledAndReported(t *testing.T) {
 
 // 用真实 SDK 插件验证：同一插件并发启动时，runtime.lock 保证只有一个受管写入者。
 func TestConcurrentLaunchSamePluginOnlyOneRuns(t *testing.T) {
-	bin := filepath.Join(t.TempDir(), "lifecycle")
-	if out, err := exec.Command("go", "build", "-o", bin, "../../../examples/plugins/lifecycle").CombinedOutput(); err != nil {
-		t.Fatalf("build example plugin: %v\n%s", err, out)
+	build, err := pluginkit.BuildDev(context.Background(), "../../../examples/plugins/lifecycle", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
 	}
+	bin := build.Executable
 	s, spec := setup(t, bin)
 	spec.Limits = host.NewLimits(tune.Defaults())
 	first, err := Launch(context.Background(), s, spec)

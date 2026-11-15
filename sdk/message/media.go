@@ -36,7 +36,7 @@ type MediaRef struct {
 	SHA256            []byte
 	ExpiresAt         time.Time
 	ConsumerPluginIDs []string
-	Sessions          []Session
+	Sessions          []string
 }
 
 // Source 返回此已上传媒体的来源。
