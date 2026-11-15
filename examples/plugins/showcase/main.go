@@ -16,6 +16,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
+	"github.com/AlonaBot/AlonaBot/sdk/task"
 )
 
 // OnConfigLoad 检查 interval_seconds 非负，原样返回完整配置。
@@ -35,7 +36,7 @@ func (*Demo) OnConfigLoad(_ context.Context, _ uint32, raw json.RawMessage) (jso
 // Demo 作为根插件注册命令、HTTP 路由与定时任务；插件 ID 来自 plugin.yaml。
 type Demo struct {
 	plugin   *sdk.Plugin
-	reminder sdk.TaskType[ReminderArgs]
+	reminder task.Type[ReminderArgs]
 }
 
 // ReminderArgs 保存提醒发送所需的会话与完整文本。
@@ -48,8 +49,8 @@ type ReminderArgs struct {
 func New() *sdk.Plugin {
 	p := sdk.NewPlugin()
 
-	demo := &Demo{plugin: p, reminder: sdk.Task[ReminderArgs]("remind")}
-	sdk.OnTask(p, demo.reminder).Handle(demo.Remind)
+	demo := &Demo{plugin: p, reminder: task.Define[ReminderArgs]("remind")}
+	task.On(p, demo.reminder).Handle(demo.Remind)
 	p.OnConfigLoad(demo.OnConfigLoad)
 	p.OnStart(demo.OnStart)
 	g := p.Group("demo")
@@ -69,7 +70,7 @@ func (p *Demo) CreateReminder(c *sdk.Context, key string, seconds int64, text st
 		return nil, err
 	}
 	_, err = p.reminder.At(c.Context(), time.Now().Add(time.Duration(seconds)*time.Second),
-		ReminderArgs{Session: c.Session(), Text: text}, sdk.Key(internalKey))
+		ReminderArgs{Session: c.Session(), Text: text}, task.Key(internalKey))
 	if err != nil {
 		return nil, err
 	}

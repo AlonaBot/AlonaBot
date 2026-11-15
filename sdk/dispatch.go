@@ -17,10 +17,10 @@ import (
 
 const invocationSchemaVersion = 1
 
-func businessHandler(reg *Registration) wire.Handler {
+func businessHandler(reg *registration) wire.Handler {
 	handlers := make(map[string]func(*Context) error, len(reg.Events)+len(reg.Schedules))
 	rules := make(map[string][]Rule, len(reg.Events))
-	commands := make(map[string]Command, len(reg.Commands))
+	commands := make(map[string]command, len(reg.Commands))
 	deferredRoutes := make(map[string]bool, len(reg.Events))
 	functions := &continuationFunctions{functions: make(map[uint64]continuationFunction)}
 	for _, route := range reg.Events {
@@ -34,7 +34,7 @@ func businessHandler(reg *Registration) wire.Handler {
 		handlers[scheduleRoutePrefix+job.JobID] = job.Handler
 	}
 	for _, task := range reg.tasks {
-		handlers[taskRoutePrefix+task.name] = task.invoke
+		handlers[taskRoutePrefix+task.Name] = task.Invoke
 	}
 	for _, command := range reg.Commands {
 		commands[commandRouteID(command)] = command
@@ -197,8 +197,8 @@ func invokeHandler(ctx context.Context, in *wire.Inbound, request *pb.HandlerReq
 // Match 返回本次 Regex 的捕获组，包含下标 0 的整体匹配；其他路由返回 nil。
 func (c *Context) Match() []string { return c.match }
 
-func commandArguments(command Command, invocation *pb.CommandInvocation, target *pb.Target) ([]reflect.Value, error) {
-	// 1. 在协议边界核对载荷与注册描述；Handler 签名已在 Collect 时检查。
+func commandArguments(command command, invocation *pb.CommandInvocation, target *pb.Target) ([]reflect.Value, error) {
+	// 1. 在协议边界核对载荷与注册描述；Handler 签名已在 collect 时检查。
 	params := command.spec.GetParams()
 	if invocation == nil || len(invocation.GetArgs()) != len(params) {
 		return nil, errors.New("command arguments or handler do not match the registered signature")

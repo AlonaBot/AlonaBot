@@ -158,7 +158,7 @@ func sessionFailure(conn *wire.Conn, sid []byte, minor uint32, pluginID string, 
 
 // buildRegister 把收集到的注册项转成 REGISTER。
 // shortcut: route_id 暂用 "cmd.<路径以 . 连接>"，有稳定 route_id 生成器后替换。
-func buildRegister(reg *Registration, configJSON string, configVersion uint32, configSchema []byte) *pb.Register {
+func buildRegister(reg *registration, configJSON string, configVersion uint32, configSchema []byte) *pb.Register {
 	r := &pb.Register{CandidateConfigJson: configJSON, CandidateConfigVersion: configVersion,
 		Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 	if len(configSchema) != 0 {
@@ -191,14 +191,14 @@ func buildRegister(reg *Registration, configJSON string, configVersion uint32, c
 	appendSubscriptionRoutes(reg, r)
 	appendHookRoutes(reg, r)
 	for _, task := range reg.tasks {
-		r.Routes = append(r.Routes, task.descriptor())
+		r.Routes = append(r.Routes, task.Descriptor())
 	}
 	return r
 }
 
 // prepare 执行准备阶段：配置准备 → 迁移 → OnStart（各有独立预算）→ REGISTER → 等待 PREPARED。
 // 准备期不能发起业务 RPC。失败时已向 Core 报告 SESSION_ERROR 并关闭连接。
-func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Registration) (prepared *pb.Prepared, err error) {
+func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *registration) (prepared *pb.Prepared, err error) {
 	sid, boot, minor := ack.GetSessionId(), ack.GetBootstrap(), ack.GetChosenMinor()
 	l.runtime.translations.Store(&translationSession{messages: reg.messages, defaultLocale: boot.GetDefaultLocale()})
 	limits := boot.GetPhaseLimits()

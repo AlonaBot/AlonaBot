@@ -12,22 +12,21 @@ import (
 
 // SubPlugin 提供一层逻辑路由分组、命令与 Hook 的缺省权限和同名配置视图。
 type SubPlugin struct {
+	registrationScope
 	scope      pluginScope
 	commands   CommandGroup
 	usesConfig bool
 }
 
-// Sub 创建逻辑子插件；ID 和重复声明在 Collect 时检查。
+// Sub 创建逻辑子插件；ID 和重复声明在 Run 收集注册时检查。
 func (p *Plugin) Sub(id string) *SubPlugin {
 	p.checkRegistration()
-	s := &SubPlugin{}
+	s := &SubPlugin{registrationScope: p.sharedScope(id)}
 	s.commands = CommandGroup{plugin: p, subID: id}
 	s.scope = pluginScope{plugin: p, subID: id, commands: &s.commands}
 	p.subs = append(p.subs, s)
 	return s
 }
-
-func (s *SubPlugin) registrar() *pluginScope { return &s.scope }
 
 // Permission 设置子插件内命令、文本匹配和 Hook 的缺省权限。
 func (s *SubPlugin) Permission(p Permission) *SubPlugin { s.commands.Permission(p); return s }

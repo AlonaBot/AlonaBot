@@ -274,8 +274,8 @@ func reminderKey(c *sdk.Context, key string) (string, error) {
 }
 
 // New 中创建并登记一次，命令闭包持有同一个声明值。
-reminder := sdk.Task[ReminderArgs]("remind")
-sdk.OnTask(p, reminder).Handle(func(c *sdk.Context, args ReminderArgs) error {
+reminder := task.Define[ReminderArgs]("remind")
+task.On(p, reminder).Handle(func(c *sdk.Context, args ReminderArgs) error {
     _, err := c.SendTo(args.Session, message.Text(args.Text))
     return err
 })
@@ -285,7 +285,7 @@ p.Command("remind").Handle(func(c *sdk.Context, key, text string) (message.Conte
         return nil, err
     }
     _, err = reminder.At(c.Context(), time.Now().Add(10*time.Minute),
-        ReminderArgs{Session: c.Session(), Text: text}, sdk.Key(internalKey))
+        ReminderArgs{Session: c.Session(), Text: text}, task.Key(internalKey))
     if err != nil {
         return nil, err
     }
@@ -300,33 +300,33 @@ p.Command("cancel").Handle(func(c *sdk.Context, key string) error {
 })
 ```
 
-`reminderKey` 使用 `c.User()` 与 `c.Session()` 的可信身份，以长度前缀区分完整字段。128 字节上限包含身份作用域和用户 key；超长返回明确的 `INVALID_ARGUMENT`，保留输入原文。示例需导入标准库 `fmt` 与 `sdk/errcode`。
+`reminderKey` 使用 `c.User()` 与 `c.Session()` 的可信身份，以长度前缀区分完整字段。128 字节上限包含身份作用域和用户 key；超长返回明确的 `INVALID_ARGUMENT`，保留输入原文。示例需导入标准库 `fmt`、`sdk/errcode` 与 `sdk/task`。
 
 任务回调没有 Actor 与默认会话；将所需会话、用户或取消键写入参数，并用 `c.SendTo(sid, content)` 指定发送目标。主动发送遵循 Core 的 `allowed_adapter_instances` 准入。参数类型遵循 JSON Service 的类型规则，使用包级具名、非泛型的值类型，顶层编码为 JSON 对象；生成器检查嵌套字段与自定义编码限制。新增声明后直接运行测试，或运行 `alonabot build` 构建组件。
 
-`reminder.Every(ctx, time.Hour, args, sdk.Key(internalKey))` 创建周期实例；`reminder.Cron(ctx, "0 9 * * *", args, sdk.Key(internalKey), sdk.Timezone("Asia/Shanghai"))` 按 IANA 时区运行，其中 `internalKey` 沿用上述身份作用域编码。`At`、`Every` 上设置 `Timezone` 返回 `INVALID_ARGUMENT`。省略 `Key` 时 SDK 生成随机 key，成功返回实际使用的 key；同任务名、同 key 再次创建会整体替换规则和参数，在途旧一轮继续执行。`Cancel` 删除实例并协作取消在途调用，函数实际返回后释放运行槽。未知实例保留 Core 的 `NOT_FOUND`。
+`reminder.Every(ctx, time.Hour, args, task.Key(internalKey))` 创建周期实例；`reminder.Cron(ctx, "0 9 * * *", args, task.Key(internalKey), task.Timezone("Asia/Shanghai"))` 按 IANA 时区运行，其中 `internalKey` 沿用上述身份作用域编码。`At`、`Every` 上设置 `Timezone` 返回 `INVALID_ARGUMENT`。省略 `Key` 时 SDK 生成随机 key，成功返回实际使用的 key；同任务名、同 key 再次创建会整体替换规则和参数，在途旧一轮继续执行。`Cancel` 删除实例并协作取消在途调用，函数实际返回后释放运行槽。未知实例保留 Core 的 `NOT_FOUND`。
 
-`reminder.List(ctx)` 读取全部分页，返回完整的 `TaskInstance[ReminderArgs]`。`At`、`Interval`、`Cron` 中仅对应触发规则的字段有值，`Timezone` 随 Cron 返回；`NextAt == nil` 表示协议没有下一次触发时刻。任一页读取或参数解码失败都会返回错误。
+`reminder.List(ctx)` 读取全部分页，返回完整的 `task.Instance[ReminderArgs]`。`At`、`Interval`、`Cron` 中仅对应触发规则的字段有值，`Timezone` 随 Cron 返回；`NextAt == nil` 表示协议没有下一次触发时刻。任一页读取或参数解码失败都会返回错误。
 
 所有任务客户端函数在 Activated 后可用；`OnStart`、`OnReady`、停止后与已失效的 Handler Context 返回 `FAILED_PRECONDITION`。在 Handler 中传 `c.Context()` 以保留父调用关联；独立后台 context 只有组件身份。Core 保存任务定义与 interval 起点，重启后安排下一未来触发；离线、未激活与暂停期间错过的触发作废，一次性过期实例删除。
 
 静态任务继续在 `New()` 中声明，例如 `p.Every("tick", time.Minute).Handle(tick)`。在已激活的 Handler 或后台工作中暂停、恢复与查询：
 
 ```go
-if err := sdk.PauseJob(ctx, "tick"); err != nil {
+if err := task.Pause(ctx, "tick"); err != nil {
     return err
 }
-state, err := sdk.JobStatus(ctx, "tick")
+state, err := task.Status(ctx, "tick")
 if err != nil {
     return err
 }
 if state.LastAt != nil {
     slog.Info("last tick", "at", *state.LastAt)
 }
-return sdk.ResumeJob(ctx, "tick")
+return task.Resume(ctx, "tick")
 ```
 
-`JobState.LastAt` 记录本次 Core 运行最后一次实际派发，首次派发前和 Core 重启后为 `nil`；暂停时 `Paused` 为 true、`NextAt` 为 `nil`。暂停保留在途函数继续执行，恢复沿保存的 interval 起点安排未来触发。暂停状态跨重启保存，重复暂停或恢复成功，未登记的 job ID 返回 `NOT_FOUND`。
+`task.State.LastAt` 记录本次 Core 运行最后一次实际派发，首次派发前和 Core 重启后为 `nil`；暂停时 `Paused` 为 true、`NextAt` 为 `nil`。暂停保留在途函数继续执行，恢复沿保存的 interval 起点安排未来触发。暂停状态跨重启保存，重复暂停或恢复成功，未登记的 job ID 返回 `NOT_FOUND`。
 
 ## 插件测试
 

@@ -26,7 +26,7 @@ const httpCapabilityVersion = 1
 // routes/token 在 Serve 启动前写入；activation 通过原子指针发布，关闭按首次停止的截止执行一次。
 type httpListener struct {
 	runtime    *componentSession
-	routes     []HTTPRoute
+	routes     []httpRoute
 	listener   net.Listener
 	server     *http.Server
 	token      []byte // token 的十六进制，仅在进入用户 Handler 前比较
@@ -37,7 +37,7 @@ type httpListener struct {
 	closeOnce  sync.Once
 }
 
-func newHTTPListener(routes []HTTPRoute) *httpListener {
+func newHTTPListener(routes []httpRoute) *httpListener {
 	if len(routes) == 0 {
 		return nil
 	}
@@ -128,7 +128,7 @@ func (h *httpListener) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// 2. 与 Core 一致：对未清理 Path 按 method 选择最长精确/尾斜杠前缀。
-	var selected *HTTPRoute
+	var selected *httpRoute
 	pathExists := false
 	for i := range h.routes {
 		candidate := &h.routes[i]
@@ -157,7 +157,7 @@ func (h *httpListener) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	selected.Handler.ServeHTTP(w, r.WithContext(a.l.runtime.context(r.Context())))
 }
 
-func appendHTTPRoutes(r *pb.Register, routes []HTTPRoute) {
+func appendHTTPRoutes(r *pb.Register, routes []httpRoute) {
 	for _, route := range routes {
 		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: "http." + route.Method + "." + hex.EncodeToString([]byte(route.Path)), Kind: pb.RouteKind_ROUTE_KIND_HTTP, DefaultEnabled: true, Spec: &pb.RouteDescriptor_Http{Http: &pb.HttpRouteSpec{Method: route.Method, Path: route.Path, IsPublic: route.Public, AuthMode: pb.HttpAuthMode(route.AuthMode)}}})
 	}

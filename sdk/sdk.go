@@ -5,8 +5,7 @@
 // Run 把 log/slog 的默认 Logger 换成写 stderr 的 JSON 行，按 Core 下发的级别过滤（CONTRACTS §14）。
 //
 // 包的组成：[Plugin] 持有登记状态，[SubPlugin] 提供一层逻辑子插件，[CommandGroup] 组织命令路径与权限；
-// [Collect] 检查全部登记。[JSON]、[Proto] 与 [BusEvent] 声明类型，
-// 供 [Serve]、[Service.Call]、[BusEventType.Publish] 与 [Subscribe] 使用。
+// 注册收集在运行前统一检查；类型化服务、事件、任务与按钮分别由 service、bus、task、button 子包声明。
 // [Context] 在一次 Rule 与 Handler 调用期间有效，提供配置、翻译、日志、发送、编辑和停止传播入口。
 // 自动回复型命令返回 [message.Content]，由 Core 在显式发送完成后发送一次。
 // [Context.Stream] 按当前事件实例的能力发送文本增量并节流编辑。
@@ -210,7 +209,7 @@ func run(root *Plugin, l launch) (err error) {
 	defer func() { err = errors.Join(err, l.runtime.close()) }()
 
 	// 2. 收集静态注册项；HTTP 路由与定时任务随 REGISTER 一并声明。
-	reg, err := Collect(root)
+	reg, err := collect(root)
 	if err != nil {
 		return err
 	}
@@ -243,14 +242,14 @@ func run(root *Plugin, l launch) (err error) {
 	return serve(sess, a) // 收到 STOPPING 正常返回；断链时执行 OnStop 后返回错误，随后进程退出
 }
 
-// Registration 汇总从根插件收集到的静态注册项。
-type Registration struct {
+// registration 汇总从根插件收集到的静态注册项。
+type registration struct {
 	plugin        *Plugin
 	subPlugins    map[string]string
-	Commands      []Command
-	Events        []EventRoute
-	HTTP          []HTTPRoute
-	Schedules     []Schedule
+	Commands      []command
+	Events        []eventRoute
+	HTTP          []httpRoute
+	Schedules     []schedule
 	services      []serviceRoute
 	subscriptions []subscriptionRoute
 	hooks         []hookRoute
@@ -258,8 +257,8 @@ type Registration struct {
 	messages      *i18n.Catalog // 收集时解析，供本次 Session 只读使用。
 }
 
-// Collect 检查插件对象的全部登记、资源与跨路由冲突。
-func Collect(root *Plugin) (*Registration, error) {
+// collect 检查插件对象的全部登记、资源与跨路由冲突。
+func collect(root *Plugin) (*registration, error) {
 	if root == nil {
 		return nil, errors.New("plugin is nil")
 	}
@@ -272,7 +271,7 @@ func Collect(root *Plugin) (*Registration, error) {
 		events.seen[commandRouteID(command)] = true
 	}
 	events.collect()
-	reg := &Registration{plugin: root, subPlugins: make(map[string]string), Commands: cmds.commands, Events: events.events, HTTP: routes.routes, Schedules: jobs.jobs}
+	reg := &registration{plugin: root, subPlugins: make(map[string]string), Commands: cmds.commands, Events: events.events, HTTP: routes.routes, Schedules: jobs.jobs}
 	errs := slices.Concat(root.errs, cmds.errs, events.errs, routes.errs, jobs.errs)
 	errs = append(errs, root.checkSubPlugins(), dbhook.Validate(root), collectServices(root, reg), collectSubscriptions(root, reg), collectI18n(root, reg))
 	errs = append(errs, collectHooks(root, reg))

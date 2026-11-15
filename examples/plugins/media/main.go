@@ -13,7 +13,9 @@ import (
 	"sync"
 
 	"github.com/AlonaBot/AlonaBot/sdk"
+	buttonapi "github.com/AlonaBot/AlonaBot/sdk/button"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
+	mediaapi "github.com/AlonaBot/AlonaBot/sdk/media"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 	"github.com/AlonaBot/AlonaBot/sdk/sqlitedb"
 )
@@ -33,7 +35,7 @@ func New() *sdk.Plugin {
 	p := sdk.NewPlugin()
 
 	p.Sub("captions").Permission(sdk.User).Command("caption").Handle(caption)
-	edit := sdk.Action[string]("media.edit")
+	edit := buttonapi.Define[string]("media.edit")
 	var mu sync.Mutex
 	sqlitedb.Migrate(p, func(ctx context.Context, db *sql.DB) error {
 		_, err := db.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS messages (button_key TEXT PRIMARY KEY, ref TEXT NOT NULL)")
@@ -42,7 +44,7 @@ func New() *sdk.Plugin {
 	p.Command("media").Handle(func(c *sdk.Context) error {
 		c.StopPropagation()
 		// 1. 通过 Upload 取得媒体引用，再用同一来源构造相邻图片。
-		ref, err := sdk.Upload(c.Context(), bytes.NewReader(sample), "image/png")
+		ref, err := mediaapi.Upload(c.Context(), bytes.NewReader(sample), "image/png")
 		if err != nil {
 			return err
 		}
@@ -71,7 +73,7 @@ func New() *sdk.Plugin {
 		_, err = db.ExecContext(c.Context(), "INSERT INTO messages (button_key, ref) VALUES (?, ?)", key, string(messages[len(messages)-1]))
 		return err
 	})
-	sdk.OnButton(p, edit).Handle(func(c *sdk.Context, key string) error {
+	buttonapi.On(p, edit).Handle(func(c *sdk.Context, key string) error {
 		mu.Lock()
 		defer mu.Unlock()
 		db, err := sqlitedb.Open(c.Context())
@@ -99,7 +101,7 @@ type Caption struct {
 }
 
 func caption(c *sdk.Context, args Caption) (message.Content, error) {
-	ref, err := sdk.Upload(c.Context(), bytes.NewReader(sample), "image/png")
+	ref, err := mediaapi.Upload(c.Context(), bytes.NewReader(sample), "image/png")
 	if err != nil {
 		return nil, err
 	}

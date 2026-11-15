@@ -203,7 +203,7 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 			}
 		}
 		named, ok := types.Unalias(value.Type).(*types.Named)
-		if ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == sdkPath && slices.Contains([]string{"Service", "TaskType"}, named.Obj().Name()) {
+		if ok && named.Obj().Pkg() != nil && (named.Obj().Pkg().Path() == sdkPath+"/service" && named.Obj().Name() == "Spec" || named.Obj().Pkg().Path() == sdkPath+"/task" && named.Obj().Name() == "Type") {
 			referenced = append(referenced, named)
 		}
 	}
@@ -215,11 +215,11 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 	for _, ident := range instances {
 		object := importer.info.Uses[ident]
 		fn, ok := object.(*types.Func)
-		if !ok || fn.Pkg() == nil || fn.Pkg().Path() != sdkPath || !slices.Contains([]string{"JSON", "Proto", "BusEvent", "Task"}, fn.Name()) {
+		if !ok || fn.Pkg() == nil || !(fn.Pkg().Path() == sdkPath+"/service" && slices.Contains([]string{"JSON", "Proto"}, fn.Name()) || fn.Pkg().Path() == sdkPath+"/bus" && fn.Name() == "Define" || fn.Pkg().Path() == sdkPath+"/task" && fn.Name() == "Define") {
 			continue
 		}
 		if !localFiles[s.files.Position(ident.Pos()).Filename] {
-			if fn.Name() != "JSON" && fn.Name() != "Task" {
+			if fn.Name() != "JSON" && fn.Pkg().Path() != sdkPath+"/task" {
 				continue
 			}
 			result := importer.info.Instances[ident].Type.(*types.Signature).Results().At(0).Type()
@@ -230,7 +230,7 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 		args := importer.info.Instances[ident].TypeArgs
 		for index := range args.Len() {
 			typ := types.Unalias(args.At(index))
-			// Protobuf 的指针参数绑定包级消息类型，JSON 与 BusEvent 仍要求值类型。
+			// Protobuf 的指针参数绑定包级消息类型，service.JSON 与 bus.Define 仍要求值类型。
 			if pointer, ok := typ.(*types.Pointer); ok && fn.Name() == "Proto" {
 				typ = types.Unalias(pointer.Elem())
 			}
@@ -240,7 +240,7 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 				continue
 			}
 			// Task 复用完整 JSON 类型检查，但不增加生成结果或运行期 Schema 依赖。
-			if fn.Name() == "Task" {
+			if fn.Pkg().Path() == sdkPath+"/task" {
 				schema := b.schema(typ, ident.Pos())
 				if schema != nil && schema.Type != "object" && !slices.Contains(schema.Types, "object") {
 					s.diagnostic(ident.Pos(), "task parameters must encode a JSON object: "+typ.String())

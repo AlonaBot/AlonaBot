@@ -26,8 +26,11 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk"
 	sdkadapter "github.com/AlonaBot/AlonaBot/sdk/adapter"
+	conversationapi "github.com/AlonaBot/AlonaBot/sdk/conversation"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
+	serviceapi "github.com/AlonaBot/AlonaBot/sdk/service"
+	toolapi "github.com/AlonaBot/AlonaBot/sdk/tool"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -53,7 +56,7 @@ type t11Stored struct {
 }
 type t11Reply struct {
 	Code, Error, Result string
-	Tools               []sdk.ToolInfo
+	Tools               []toolapi.Info
 	LastSeq, Next       uint64
 	More                bool
 	Entries             []t11Stored
@@ -78,20 +81,20 @@ func t11Plugin(mode string) *sdk.Plugin {
 		chainSchema[t11Reply]():     []byte(`{"type":"object"}`),
 	}})
 	id := os.Getenv(pipelineIDEnv)
-	sdk.Serve(p, sdk.JSON[t11Command, t11Reply](id+"/probe")).Access(sdk.AccessPublic).Handle(t11Execute)
+	serviceapi.Serve(p, serviceapi.JSON[t11Command, t11Reply](id+"/probe")).Access(serviceapi.AccessPublic).Handle(t11Execute)
 	if mode == "t11-provider" {
 		for _, entry := range []struct {
 			name      string
-			access    sdk.Access
+			access    serviceapi.Access
 			allowlist []string
-			policy    sdk.ToolDefault
+			policy    toolapi.Default
 		}{
-			{"run", sdk.AccessPublic, nil, sdk.ToolConfirm},
-			{"direct", sdk.AccessPublic, nil, sdk.ToolAllow},
-			{"listed", sdk.AccessAllowlist, []string{t11Caller}, sdk.ToolAllow},
-			{"hidden", sdk.AccessAllowlist, []string{"someone-else"}, sdk.ToolAllow},
+			{"run", serviceapi.AccessPublic, nil, toolapi.DefaultConfirm},
+			{"direct", serviceapi.AccessPublic, nil, toolapi.DefaultAllow},
+			{"listed", serviceapi.AccessAllowlist, []string{t11Caller}, toolapi.DefaultAllow},
+			{"hidden", serviceapi.AccessAllowlist, []string{"someone-else"}, toolapi.DefaultAllow},
 		} {
-			sdk.Serve(p, sdk.JSON[t11Arguments, t11Arguments](id+"/"+entry.name)).Access(entry.access, entry.allowlist...).Tool(t11Description, entry.policy).Handle(func(c *sdk.Context, in t11Arguments) (t11Arguments, error) {
+			serviceapi.Serve(p, serviceapi.JSON[t11Arguments, t11Arguments](id+"/"+entry.name)).Access(entry.access, entry.allowlist...).Tool(t11Description, entry.policy).Handle(func(c *sdk.Context, in t11Arguments) (t11Arguments, error) {
 				b, err := json.Marshal(in)
 				if err != nil {
 					return in, err
@@ -127,13 +130,13 @@ func t11Execute(c *sdk.Context, in t11Command) (t11Reply, error) {
 	var err error
 	switch in.Action {
 	case "list":
-		out.Tools, err = sdk.ListTools(c.Context())
+		out.Tools, err = toolapi.List(c.Context())
 	case "invoke":
 		var result json.RawMessage
-		result, err = sdk.InvokeTool(c.Context(), in.Name, json.RawMessage(in.Arguments))
+		result, err = toolapi.Invoke(c.Context(), in.Name, json.RawMessage(in.Arguments))
 		out.Result = string(result)
 	case "operation":
-		err = sdk.ConfirmOperation(c.Context(), in.Name, in.Summary)
+		err = toolapi.Confirm(c.Context(), in.Name, in.Summary)
 		if err == nil {
 			err = pipelineAudit(pipelineRecord{Stage: "operation", Text: in.Key, Route: in.Name})
 		}
@@ -142,15 +145,15 @@ func t11Execute(c *sdk.Context, in t11Command) (t11Reply, error) {
 		for i, e := range in.Entries {
 			entries[i] = json.RawMessage(e)
 		}
-		out.LastSeq, err = sdk.AppendConversation(c.Context(), in.Conversation, entries...)
+		out.LastSeq, err = conversationapi.Append(c.Context(), in.Conversation, entries...)
 	case "read":
-		var entries []sdk.ConversationEntry
-		entries, out.Next, out.More, err = sdk.ListConversation(c.Context(), in.Conversation, in.From)
+		var entries []conversationapi.Entry
+		entries, out.Next, out.More, err = conversationapi.List(c.Context(), in.Conversation, in.From)
 		for _, entry := range entries {
 			out.Entries = append(out.Entries, t11Stored{Seq: entry.Seq, JSON: string(entry.Entry)})
 		}
 	case "clear":
-		err = sdk.ClearConversation(c.Context(), in.Conversation)
+		err = conversationapi.Clear(c.Context(), in.Conversation)
 	default:
 		return out, fmt.Errorf("unknown command %q", in.Action)
 	}

@@ -17,7 +17,7 @@ type translationSession struct {
 	warned        sync.Map // [2]string{key, problem}；同一 Session 内并发去重。
 }
 
-func collectI18n(root *Plugin, reg *Registration) error {
+func collectI18n(root *Plugin, reg *registration) error {
 	catalog, problems := i18n.Parse(generatedFor(root).I18n)
 	var errs []error
 	for _, problem := range problems {

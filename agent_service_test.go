@@ -27,6 +27,8 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/llm"
+	optionsapi "github.com/AlonaBot/AlonaBot/sdk/options"
+	serviceapi "github.com/AlonaBot/AlonaBot/sdk/service"
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
@@ -156,12 +158,12 @@ func TestAgentServices(t *testing.T) {
 			generationCallers := make(chan string, 1) // 将 Handler 观察到的可信身份交回测试。
 			replacement := sdk.NewPlugin()
 			genresources.Bind(replacement, agentServiceResources(t, replacementID, "agent"))
-			sdk.Serve(replacement, llm.GenerateService).Access(sdk.AccessPublic).Handle(func(c *sdk.Context, _ llm.Request) (llm.Response, error) {
+			serviceapi.Serve(replacement, llm.GenerateService).Access(serviceapi.AccessPublic).Handle(func(c *sdk.Context, _ llm.Request) (llm.Response, error) {
 				generationCallers <- c.Caller()
 				return llm.Response{Text: replacementID, Provider: replacementID, Model: serviceModel}, nil
 			})
-			sdk.ServeOptions(replacement, "llm.providers", func(context.Context, sdk.OptionsQuery) (sdk.OptionsPage, error) {
-				return sdk.OptionsPage{Options: []sdk.Option{{Value: replacementID, Label: replacementID}}}, nil
+			optionsapi.Serve(replacement, "llm.providers", func(context.Context, optionsapi.Query) (optionsapi.Page, error) {
+				return optionsapi.Page{Options: []optionsapi.Option{{Value: replacementID, Label: replacementID}}}, nil
 			})
 			if err := core.operation(t.Context(), func(ctx context.Context) error {
 				if err := core.stopManaged(serviceAgentID, pb.StopReason_STOP_REASON_DISABLE); err != nil {
@@ -227,15 +229,15 @@ func startAgentServices(t *testing.T, configuration map[string]any) *Core {
 	for _, id := range []string{serviceCallerID, serviceDeniedID} {
 		p := sdk.NewPlugin()
 		genresources.Bind(p, agentServiceResources(t, id, "plugin"))
-		sdk.Serve(p, sdk.JSON[llm.Request, llm.Response](id+"/"+serviceGenerate)).Handle(func(c *sdk.Context, req llm.Request) (llm.Response, error) {
+		serviceapi.Serve(p, serviceapi.JSON[llm.Request, llm.Response](id+"/"+serviceGenerate)).Handle(func(c *sdk.Context, req llm.Request) (llm.Response, error) {
 			return llm.Generate(c.Context(), req)
 		})
-		sdk.Serve(p, sdk.JSON[llm.Request, llm.Response](id+"/"+serviceAsk)).Handle(func(c *sdk.Context, req llm.Request) (llm.Response, error) {
+		serviceapi.Serve(p, serviceapi.JSON[llm.Request, llm.Response](id+"/"+serviceAsk)).Handle(func(c *sdk.Context, req llm.Request) (llm.Response, error) {
 			text, err := llm.Ask(c.Context(), req.Messages[0].Text)
 			return llm.Response{Text: text}, err
 		})
-		sdk.Serve(p, sdk.JSON[llm.Request, llm.Response](id+"/"+servicePrivate)).Handle(func(c *sdk.Context, _ llm.Request) (llm.Response, error) {
-			_, err := sdk.JSON[sdk.OptionsQuery, sdk.OptionsPage](serviceSource).Call(c.Context(), sdk.OptionsQuery{Limit: 10})
+		serviceapi.Serve(p, serviceapi.JSON[llm.Request, llm.Response](id+"/"+servicePrivate)).Handle(func(c *sdk.Context, _ llm.Request) (llm.Response, error) {
+			_, err := serviceapi.JSON[optionsapi.Query, optionsapi.Page](serviceSource).Call(c.Context(), optionsapi.Query{Limit: 10})
 			return llm.Response{}, err
 		})
 		opts = append(opts, Plugin(p))
@@ -258,11 +260,11 @@ func startAgentServices(t *testing.T, configuration map[string]any) *Core {
 func agentServiceResources(t *testing.T, id, role string) genresources.Resources {
 	t.Helper()
 	schemas := maps.Clone(agentServiceFixture.ServiceSchemas)
-	input, err := jsonschema.For[sdk.OptionsQuery](nil)
+	input, err := jsonschema.For[optionsapi.Query](nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	output, err := jsonschema.For[sdk.OptionsPage](nil)
+	output, err := jsonschema.For[optionsapi.Page](nil)
 	if err != nil {
 		t.Fatal(err)
 	}

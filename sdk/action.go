@@ -10,35 +10,12 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/internal/convert"
 )
 
-// ActionCaller 为 Adapter 的带类型动作函数提供统一调用入口。
-type ActionCaller interface {
-	CallAction(to string, name string, version uint32, params any, opts ...SendOption) (json.RawMessage, error)
-}
-
-var (
-	_ ActionCaller = (*Context)(nil)
-	_ ActionCaller = (*ActionClient)(nil)
-)
-
 // CallAction 关联当前 Handler 的父调用与期限；opts 只接受 Via，账号动作传空会话。
 func (c *Context) CallAction(to string, name string, version uint32, params any, opts ...SendOption) (json.RawMessage, error) {
 	if !c.active.Load() {
 		return nil, errcode.FailedPrecondition.New("handler context has expired")
 	}
 	return callAction(c.ctx, c.inbound, to, name, version, params, opts...)
-}
-
-// ActionClient 保存后台任务的取消与期限上下文，每次调用使用当前已激活的 Session。
-type ActionClient struct {
-	ctx context.Context
-}
-
-// NewActionClient 以后台任务的 context 创建动作客户端。
-func NewActionClient(ctx context.Context) *ActionClient { return &ActionClient{ctx: ctx} }
-
-// CallAction 独立调用平台动作；opts 只接受 Via，账号动作传空会话。
-func (c *ActionClient) CallAction(to string, name string, version uint32, params any, opts ...SendOption) (json.RawMessage, error) {
-	return callAction(c.ctx, nil, to, name, version, params, opts...)
 }
 
 func callAction(ctx context.Context, parent *wire.Inbound, to string, name string, version uint32, params any, opts ...SendOption) (json.RawMessage, error) {
