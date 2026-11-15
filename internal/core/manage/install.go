@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -158,7 +159,9 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 			return result, err
 		}
 	}
-	return s.describe(ctx, m.ID)
+	result, err = s.describe(ctx, m.ID)
+	result.Warnings = candidate.Warnings
+	return result, err
 }
 
 func exists(message string) error {
@@ -265,6 +268,9 @@ func (s *Service) prepare(ctx context.Context, req InstallRequest) (*packages.Ca
 	}
 	if req.Signature == "" {
 		candidate.Release.PublisherKeyID = ""
+	}
+	for _, warning := range candidate.Warnings {
+		slog.Warn("package manifest warning", "plugin_id", candidate.Manifest.ID, "warning", warning)
 	}
 	return candidate, nil
 }

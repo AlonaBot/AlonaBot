@@ -123,6 +123,7 @@ type Package struct {
 	ID, Role, AdapterID, Version, Source, PublisherKeyID, Pin string
 	Enabled, Uninstalled, Signed                              bool
 	Active, State                                             string
+	Warnings                                                  []string `json:",omitempty"` // 仅安装结果携带清单警告。
 }
 
 // List 按安装顺序列出组件及其当前运行状态。

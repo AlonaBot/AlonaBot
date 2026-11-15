@@ -237,8 +237,11 @@ func (m *Manifest) validate(declared map[string]yaml.Node, project bool) ([]stri
 	default:
 		return nil, fmt.Errorf("unknown prepare_effects %q", m.PrepareEffects)
 	}
-	if m.MigrationMode == "" || m.PrepareEffects == "" {
-		warnings = append(warnings, "migration_mode or prepare_effects not declared; automatic upgrades are not allowed for this package")
+	if m.MigrationMode == "" {
+		warnings = append(warnings, "migration_mode not declared; preparation and rollback assume no external side effects")
+	}
+	if m.PrepareEffects == "" {
+		warnings = append(warnings, "prepare_effects not declared; preparation and rollback assume no external side effects")
 	}
 	return warnings, nil
 }

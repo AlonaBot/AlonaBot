@@ -8,6 +8,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"debug/buildinfo"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -283,6 +284,10 @@ func taskArchive(t *testing.T, id string) manage.InstallRequest {
 	if err != nil {
 		t.Fatal(err)
 	}
+	info, err := buildinfo.ReadFile(os.Args[0])
+	if err != nil {
+		t.Fatal(err)
+	}
 	const source = "github.com/AlonaBot/testtasks"
 	manifest := fmt.Sprintf("manifest_version: 1\nname: Tasks\nid: %s\nversion: 1.0.0\nprotocol_min_major: 1\nprotocol_max_major: 1\nrequired_capabilities: []\nos: %s\narch: %s\nentrypoint: plugin\nconfig_version: 1\nsource: %s\nmigration_mode: none\nprepare_effects: none\n", id, runtime.GOOS, runtime.GOARCH, source)
 	var archive bytes.Buffer
@@ -292,7 +297,7 @@ func taskArchive(t *testing.T, id string) manage.InstallRequest {
 		name string
 		body []byte
 		mode int64
-	}{{"plugin.yaml", []byte(manifest), 0600}, {"plugin", executable, 0700}} {
+	}{{"plugin.yaml", []byte(manifest), 0600}, {"plugin", executable, 0700}, {"build-info", []byte(info.String()), 0600}} {
 		if err := writer.WriteHeader(&tar.Header{Name: entry.name, Mode: entry.mode, Size: int64(len(entry.body)), Typeflag: tar.TypeReg}); err != nil {
 			t.Fatal(err)
 		}

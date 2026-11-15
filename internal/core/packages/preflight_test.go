@@ -7,12 +7,14 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"debug/buildinfo"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -27,8 +29,8 @@ const (
 	testSource   = "github.com/example/demo"
 	testPluginID = "alonabot_plugin_demo"
 	testVersion  = "1.2.3"
-	testOS       = "darwin"
-	testArch     = "arm64"
+	testOS       = runtime.GOOS
+	testArch     = runtime.GOARCH
 )
 
 // testEntry 是测试归档中的一个条目。
@@ -48,10 +50,19 @@ func manifestYAML(id, version, source, osName, arch, entrypoint string) string {
 
 // validEntries 返回能通过预检的最小包内容，extra 追加在后面。
 func validEntries(extra ...testEntry) []testEntry {
+	executable, err := os.ReadFile(os.Args[0])
+	if err != nil {
+		panic(err)
+	}
+	info, err := buildinfo.ReadFile(os.Args[0])
+	if err != nil {
+		panic(err)
+	}
 	return append([]testEntry{
 		{name: "plugin.yaml", typeflag: tar.TypeReg, mode: 0o644, body: manifestYAML(testPluginID, testVersion, testSource, testOS, testArch, "bin/plugin")},
 		{name: "bin/", typeflag: tar.TypeDir, mode: 0o755},
-		{name: "bin/plugin", typeflag: tar.TypeReg, mode: 0o755, body: "executable"},
+		{name: "bin/plugin", typeflag: tar.TypeReg, mode: 0o755, body: string(executable)},
+		{name: "build-info", typeflag: tar.TypeReg, mode: 0o644, body: info.String()},
 	}, extra...)
 }
 
@@ -127,7 +138,8 @@ func newPackage(t *testing.T, entries []testEntry, edit func(*release.Release)) 
 
 // TestPreflightAndMoveTo 用真实归档、签名与文件系统驱动合法包的完整流程（V-27、V-41 的预检分项）。
 func TestPreflightAndMoveTo(t *testing.T) {
-	p := newPackage(t, validEntries(), nil)
+	entries := validEntries()
+	p := newPackage(t, entries, nil)
 	staging, packages := filepath.Join(p.root, "staging"), filepath.Join(p.root, "packages")
 
 	c, err := Preflight(p.input, staging, NewLimits(tune.Defaults()))
@@ -141,8 +153,8 @@ func TestPreflightAndMoveTo(t *testing.T) {
 	if want := filepath.Join(packages, testPluginID, testVersion+"-"+c.Asset.SHA256[:12]); final != want {
 		t.Fatalf("MoveTo() = %s, want %s", final, want)
 	}
-	if got, err := os.ReadFile(filepath.Join(final, "bin", "plugin")); err != nil || string(got) != "executable" {
-		t.Fatalf("entrypoint = %q, %v", got, err)
+	if got, err := os.ReadFile(filepath.Join(final, "bin", "plugin")); err != nil || string(got) != entries[2].body {
+		t.Fatalf("entrypoint differs from the test binary: %v", err)
 	}
 	assertNoStaging(t, staging)
 
@@ -166,6 +178,10 @@ func TestPreflightRejects(t *testing.T) {
 		invalid   = pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT
 		exhausted = pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED
 	)
+	otherOS := "linux"
+	if testOS == "linux" {
+		otherOS = "darwin"
+	}
 	withManifest := func(id, version, source, osName, arch, entrypoint string) []testEntry {
 		entries := validEntries()
 		entries[0].body = manifestYAML(id, version, source, osName, arch, entrypoint)
@@ -186,14 +202,14 @@ func TestPreflightRejects(t *testing.T) {
 	}{
 		{name: "bad signature", input: func(in *Input) { in.ReleaseJSON = append(in.ReleaseJSON, ' ') }, want: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED},
 		{name: "source mismatch", input: func(in *Input) { in.Source = "github.com/other/demo" }, want: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED},
-		{name: "no asset for platform", input: func(in *Input) { in.Arch = "amd64" }, want: pb.ErrorCode_ERROR_CODE_UNSUPPORTED},
+		{name: "no asset for platform", input: func(in *Input) { in.OS = "unsupported" }, want: pb.ErrorCode_ERROR_CODE_UNSUPPORTED},
 		{name: "size mismatch", release: func(r *release.Release) { r.Assets[0].Size++ }, want: invalid},
 		{name: "digest mismatch", release: func(r *release.Release) { r.Assets[0].SHA256 = strings.Repeat("0", 64) }, want: invalid},
 		{name: "archive over limit", limits: Limits{MaxArchiveBytes: 1, MaxExpandedBytes: 1 << 20, MaxEntries: 100}, want: exhausted},
 		{name: "manifest id", entries: withManifest("alonabot_plugin_other", testVersion, testSource, testOS, testArch, "bin/plugin"), want: invalid},
 		{name: "manifest version", entries: withManifest(testPluginID, "1.2.4", testSource, testOS, testArch, "bin/plugin"), want: invalid},
 		{name: "manifest source", entries: withManifest(testPluginID, testVersion, "github.com/other/demo", testOS, testArch, "bin/plugin"), want: invalid},
-		{name: "manifest platform", entries: withManifest(testPluginID, testVersion, testSource, "linux", testArch, "bin/plugin"), want: invalid},
+		{name: "manifest platform", entries: withManifest(testPluginID, testVersion, testSource, otherOS, testArch, "bin/plugin"), want: invalid},
 		{name: "manifest entrypoint missing", entries: withManifest(testPluginID, testVersion, testSource, testOS, testArch, "bin/missing"), want: invalid},
 		{name: "parent traversal", entries: validEntries(file("../x")), want: invalid},
 		{name: "absolute path", entries: validEntries(file("/abs")), want: invalid},

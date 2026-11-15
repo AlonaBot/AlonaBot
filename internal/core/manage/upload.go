@@ -44,7 +44,7 @@ func (s *Service) uploadPackage(r *http.Request, update bool) (result any, err e
 		return nil, err
 	}
 	if update {
-		return struct{}{}, s.Update(r.Context(), id, request)
+		return s.Update(r.Context(), id, request)
 	}
 	return s.Install(r.Context(), request)
 }

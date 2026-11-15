@@ -410,7 +410,7 @@ func recoveryCheckpoint(phase string) {
 	}
 	binary, plugin := filepath.Join(dir, "core"), filepath.Join(dir, "plugin")
 	for target, source := range map[string]string{binary: ".", plugin: pluginSource} {
-		cmd := exec.CommandContext(context.Background(), "go", "build", "-overlay", overlay, "-o", target, source)
+		cmd := exec.CommandContext(context.Background(), "go", fixtureBuildArgs("-overlay", overlay, "-o", target, source)...)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("build recovery fixture: %v\n%s", err, output)
 		}

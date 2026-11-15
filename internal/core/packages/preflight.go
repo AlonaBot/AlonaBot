@@ -15,6 +15,7 @@ import (
 	"compress/gzip"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"debug/buildinfo"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -22,6 +23,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
@@ -32,8 +34,14 @@ import (
 )
 
 const (
-	manifestFileName = "plugin.yaml"
-	stagingPattern   = "alonabot-candidate-"
+	manifestFileName    = "plugin.yaml"
+	stagingPattern      = "alonabot-candidate-"
+	buildInfoFileName   = "build-info"
+	missingBuildInfo    = "archive has no build-info"
+	invalidBuildInfo    = "parse build-info: %v"
+	mismatchedBuildInfo = "build-info does not match the entrypoint"
+	mismatchedBuildOS   = "build-info GOOS does not match the manifest os"
+	mismatchedBuildArch = "build-info GOARCH does not match the manifest arch"
 	// digestPrefixLength 是包目录名中归档 SHA256 的十六进制位数。
 	digestPrefixLength = 12
 
@@ -70,6 +78,7 @@ type Candidate struct {
 	Manifest *manifest.Manifest
 	Release  *release.Release
 	Asset    release.Asset // 本机平台对应的资产
+	Warnings []string      // manifest.Parse 返回的全部警告，保持原顺序。
 }
 
 // Preflight 校验发布清单、可选签名与归档，并解压到 stagingRoot 下新建的唯一目录。
@@ -175,8 +184,51 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 			return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("manifest file %q is not a regular file in the archive", name))
 		}
 	}
+	// 5. 进程包的外置构建信息须来自同一入口，并与声明的平台一致。
+	if m.Role != "webui" {
+		if err := checkBuildInfo(dir, m); err != nil {
+			return nil, err
+		}
+	}
 	keep = true
-	return &Candidate{Dir: dir, Manifest: m, Release: r, Asset: asset}, nil
+	return &Candidate{Dir: dir, Manifest: m, Release: r, Asset: asset, Warnings: parsed.Warnings}, nil
+}
+
+func checkBuildInfo(dir string, m *manifest.Manifest) error {
+	raw, err := os.ReadFile(filepath.Join(dir, buildInfoFileName))
+	if errors.Is(err, os.ErrNotExist) {
+		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, missingBuildInfo)
+	}
+	if err != nil {
+		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf(invalidBuildInfo, err))
+	}
+	info, err := debug.ParseBuildInfo(string(raw))
+	if err != nil {
+		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf(invalidBuildInfo, err))
+	}
+	entry, err := buildinfo.ReadFile(filepath.Join(dir, filepath.FromSlash(m.Entrypoint)))
+	if err != nil {
+		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, mismatchedBuildInfo+": "+err.Error())
+	}
+	if entry.String() != string(raw) {
+		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, mismatchedBuildInfo)
+	}
+	var goos, goarch string
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "GOOS":
+			goos = setting.Value
+		case "GOARCH":
+			goarch = setting.Value
+		}
+	}
+	if goos != m.OS {
+		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, mismatchedBuildOS)
+	}
+	if goarch != m.Arch {
+		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, mismatchedBuildArch)
+	}
+	return nil
 }
 
 // Extract 把 archivePath 处的 tar.gz 受控解压到已存在的目录 dest。
