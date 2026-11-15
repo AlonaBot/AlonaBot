@@ -115,7 +115,7 @@ func (b *AfterSendBuilder) Handle(h func(c *Context, to string, res *message.Sen
 	b.route.handler = h
 }
 
-func collectHooks(root *Plugin, reg *Registration) error {
+func collectHooks(root *Plugin, reg *registration) error {
 	seen := make(map[string]bool)
 	for _, route := range buildRegister(reg, "{}", 0, nil).Routes {
 		seen[route.GetRouteId()] = true
@@ -160,7 +160,7 @@ func collectHooks(root *Plugin, reg *Registration) error {
 	return errors.Join(errs...)
 }
 
-func appendHookRoutes(reg *Registration, registration *pb.Register) {
+func appendHookRoutes(reg *registration, registration *pb.Register) {
 	for _, route := range reg.hooks {
 		spec := &pb.HookSpec{Phase: route.phase}
 		if route.phase == pb.HookPhase_HOOK_PHASE_PRE_EVENT {
@@ -178,7 +178,7 @@ func (c *Context) Editing() string {
 	return ref
 }
 
-func hookHandler(reg *Registration) func(context.Context, *wire.Inbound) (wire.Response, bool) {
+func hookHandler(reg *registration) func(context.Context, *wire.Inbound) (wire.Response, bool) {
 	routes := make(map[string]hookRoute, len(reg.hooks))
 	for _, route := range reg.hooks {
 		routes[route.id] = route

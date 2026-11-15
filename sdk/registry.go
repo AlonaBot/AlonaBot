@@ -19,8 +19,8 @@ import (
 // UserID 携带命令 user 参数所指向的 external_user_id。
 type UserID string
 
-// Command 记录一条已收集的命令注册。
-type Command struct {
+// command 记录一条已收集的命令注册。
+type command struct {
 	Path      []string       // 完整命令路径（含分组前缀），大小写敏感
 	Aliases   [][]string     // 完整别名路径，不附加分组前缀
 	Priority  int32          // 数值越小越先，缺省为 0
@@ -30,14 +30,14 @@ type Command struct {
 
 	permission   Permission
 	subID        string
-	rules        []Rule          // Collect 固定的调用顺序，全部通过后执行 Handler。
+	rules        []Rule          // collect 固定的调用顺序，全部通过后执行 Handler。
 	routeID      string          // 文本匹配与 Raw 的显式路由 ID
 	spec         *pb.CommandSpec // 已通过注册边界校验的命令描述
 	continuation bool
 }
 
 // CommandGroup 收集命令；实例方法以方法值显式传入，不做自动 DI。
-// 子组共享根注册器的构建链和冲突索引；Collect 在全部声明结束后解析继承权限。
+// 子组共享根注册器的构建链和冲突索引；collect 在全部声明结束后解析继承权限。
 type CommandGroup struct {
 	plugin     *Plugin
 	subID      string
@@ -46,8 +46,8 @@ type CommandGroup struct {
 	permission *Permission
 	builders   []*CommandBuilder
 	prefix     []string          // 本分组的公共路径前缀
-	commands   []Command         // 已收集的命令，按注册顺序排列
-	errs       []error           // 收集过程中发现的错误，由 Collect 一并返回
+	commands   []command         // 已收集的命令，按注册顺序排列
+	errs       []error           // 收集过程中发现的错误，由 collect 一并返回
 	seen       map[string]string // 路径或别名对应的 route_id；惰性创建
 	routeIDs   map[string]bool   // 命令路径生成的 route_id，跨分组检查重复
 }
@@ -94,7 +94,7 @@ func (r *CommandGroup) owner() *CommandGroup {
 
 // Command 开始构建相对于本组路径的命令。
 func (r *CommandGroup) Command(path ...string) *CommandBuilder {
-	return r.start(Command{Path: append(slices.Clone(r.prefix), path...), spec: &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_PATH}}, len(path) == 0)
+	return r.start(command{Path: append(slices.Clone(r.prefix), path...), spec: &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_PATH}}, len(path) == 0)
 }
 
 // Regex 开始构建 Go regexp 文本匹配。
@@ -128,10 +128,10 @@ func (r *CommandGroup) Raw(routeID string) *CommandBuilder {
 }
 
 func (r *CommandGroup) text(routeID string, spec *pb.CommandSpec) *CommandBuilder {
-	return r.start(Command{routeID: routeID, spec: spec}, routeID == "" || strings.HasPrefix(routeID, commandRoutePrefix) || strings.HasPrefix(routeID, buttonRoutePrefix))
+	return r.start(command{routeID: routeID, spec: spec}, routeID == "" || strings.HasPrefix(routeID, commandRoutePrefix) || strings.HasPrefix(routeID, buttonRoutePrefix))
 }
 
-func (r *CommandGroup) start(c Command, invalid bool) *CommandBuilder {
+func (r *CommandGroup) start(c command, invalid bool) *CommandBuilder {
 	r.plugin.checkRegistration()
 	c.subID = r.subID
 	b := &CommandBuilder{registry: r, command: c, invalid: invalid, options: routeOptions{usageMode: pb.UsageMode_USAGE_MODE_DEFAULT}}
@@ -139,10 +139,10 @@ func (r *CommandGroup) start(c Command, invalid bool) *CommandBuilder {
 	return b
 }
 
-// CommandBuilder 收集一条路由；Handle 结束构建，Collect 统一验证。
+// CommandBuilder 收集一条路由；Handle 结束构建，collect 统一验证。
 type CommandBuilder struct {
 	registry    *CommandGroup
-	command     Command
+	command     command
 	options     routeOptions
 	permission  *Permission
 	handles     int
@@ -229,7 +229,7 @@ func (b *CommandBuilder) Permission(p Permission) *CommandBuilder {
 	return b
 }
 
-// Handle 结束路由构建，签名规则由 Collect 检查。
+// Handle 结束路由构建，签名规则由 collect 检查。
 func (b *CommandBuilder) Handle(handler any) {
 	b.registry.plugin.checkRegistration()
 	b.handles++
@@ -283,7 +283,7 @@ func (r *CommandGroup) collect() {
 	}
 }
 
-func (r *CommandGroup) register(c Command, options routeOptions) {
+func (r *CommandGroup) register(c command, options routeOptions) {
 	// 1. 从真实函数签名取得参数类型，选项仅描述名称与缺失时的行为。
 	mode, structure, params, err := checkHandler(c.Handler)
 	if err != nil {
@@ -376,7 +376,7 @@ func invalidCommand(format string, args ...any) *Error {
 }
 
 // add 对已校验的命令检查跨注册项冲突；问题记入 errs。
-func (r *CommandGroup) add(c Command) {
+func (r *CommandGroup) add(c command) {
 	// 1. 全部路径与别名检查跨注册项冲突，失败时不登记部分路径。
 	var paths [][]string
 	if c.spec.GetMatch() == pb.CommandMatch_COMMAND_MATCH_PATH {
@@ -417,8 +417,8 @@ var (
 	contentType = reflect.TypeFor[message.Content]()
 )
 
-// HTTPRoute 记录一条插件 HTTP 路由；path 相对于 /plugins/{id}，端口由 SDK 托管（D-25）。
-type HTTPRoute struct {
+// httpRoute 记录一条插件 HTTP 路由；path 相对于 /plugins/{id}，端口由 SDK 托管（D-25）。
+type httpRoute struct {
 	Method string // 大写的 HTTP 方法
 	Path   string // 插件相对路径，以 / 开头且为规范形式
 	// Handler 处理请求。
@@ -431,7 +431,7 @@ type HTTPRoute struct {
 // RouteBuilder 收集 HTTP 路由；Handle 或 HandleFunc 结束构建。
 type RouteBuilder struct {
 	registry    *httpRegistry
-	route       HTTPRoute
+	route       httpRoute
 	method      string // 保留输入，沿用大写方法名的校验错误。
 	handles     int
 	afterHandle bool
@@ -467,13 +467,13 @@ func (b *RouteBuilder) HandleFunc(f func(http.ResponseWriter, *http.Request)) {
 type httpRegistry struct {
 	plugin   *Plugin
 	builders []*RouteBuilder
-	routes   []HTTPRoute
+	routes   []httpRoute
 	errs     []error
 }
 
 func (r *httpRegistry) Route(method, path string) *RouteBuilder {
 	r.plugin.checkRegistration()
-	b := &RouteBuilder{registry: r, method: method, route: HTTPRoute{Method: strings.ToUpper(method), Path: path, AuthMode: AuthCoreSession}}
+	b := &RouteBuilder{registry: r, method: method, route: httpRoute{Method: strings.ToUpper(method), Path: path, AuthMode: AuthCoreSession}}
 	r.builders = append(r.builders, b)
 	return b
 }
@@ -490,7 +490,7 @@ func (r *httpRegistry) collect() {
 	}
 }
 
-func (r *httpRegistry) add(method string, route HTTPRoute) {
+func (r *httpRegistry) add(method string, route httpRoute) {
 	path := route.Path
 	switch {
 	case route.Handler == nil:
@@ -514,8 +514,8 @@ func (r *httpRegistry) add(method string, route HTTPRoute) {
 	}
 }
 
-// Schedule 记录一个定时任务声明；interval 与 cron 互斥，触发由 Core 负责。
-type Schedule struct {
+// schedule 记录一个定时任务声明；interval 与 cron 互斥，触发由 Core 负责。
+type schedule struct {
 	JobID    string               // 插件内稳定的任务 ID
 	Interval time.Duration        // 固定间隔；为零表示使用 Cron
 	Cron     string               // 五字段 cron 表达式；为空表示使用 Interval
@@ -526,14 +526,14 @@ type Schedule struct {
 // ScheduleBuilder 收集固定间隔或 cron 任务；Handle 结束构建。
 type ScheduleBuilder struct {
 	registry    *scheduleRegistry
-	schedule    Schedule
+	schedule    schedule
 	every       bool
 	timezoneSet bool // Every 上显式设置空时区也应报错。
 	handles     int
 	afterHandle bool
 }
 
-// Timezone 设置 cron 的 IANA 时区；缺省为 UTC，Every 上调用由 Collect 报错。
+// Timezone 设置 cron 的 IANA 时区；缺省为 UTC，Every 上调用由 collect 报错。
 func (b *ScheduleBuilder) Timezone(name string) *ScheduleBuilder {
 	b.registry.plugin.checkRegistration()
 	if b.handles != 0 {
@@ -555,20 +555,20 @@ func (b *ScheduleBuilder) Handle(fn func(*Context) error) {
 type scheduleRegistry struct {
 	plugin   *Plugin
 	builders []*ScheduleBuilder
-	jobs     []Schedule
+	jobs     []schedule
 	errs     []error
 }
 
 func (r *scheduleRegistry) Every(jobID string, d time.Duration) *ScheduleBuilder {
 	r.plugin.checkRegistration()
-	b := &ScheduleBuilder{registry: r, every: true, schedule: Schedule{JobID: jobID, Interval: d}}
+	b := &ScheduleBuilder{registry: r, every: true, schedule: schedule{JobID: jobID, Interval: d}}
 	r.builders = append(r.builders, b)
 	return b
 }
 
 func (r *scheduleRegistry) Cron(jobID, expr string) *ScheduleBuilder {
 	r.plugin.checkRegistration()
-	b := &ScheduleBuilder{registry: r, schedule: Schedule{JobID: jobID, Cron: expr}}
+	b := &ScheduleBuilder{registry: r, schedule: schedule{JobID: jobID, Cron: expr}}
 	r.builders = append(r.builders, b)
 	return b
 }
@@ -593,7 +593,7 @@ func (r *scheduleRegistry) collect() {
 }
 
 // add 检查 job_id、Handler 并去重后登记任务；问题记入 errs。
-func (r *scheduleRegistry) add(s Schedule) {
+func (r *scheduleRegistry) add(s schedule) {
 	switch {
 	case s.JobID == "":
 		r.errs = append(r.errs, fmt.Errorf("scheduled job is missing job_id"))

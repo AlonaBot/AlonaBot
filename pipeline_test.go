@@ -37,6 +37,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk"
 	sdkadapter "github.com/AlonaBot/AlonaBot/sdk/adapter"
+	buttonapi "github.com/AlonaBot/AlonaBot/sdk/button"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 	"google.golang.org/protobuf/proto"
@@ -767,7 +768,7 @@ type pipelineButtonValue struct {
 	Choice string `json:"choice"`
 }
 
-var pipelineAction = sdk.Action[pipelineButtonValue]("choose")
+var pipelineAction = buttonapi.Define[pipelineButtonValue]("choose")
 
 func pipelineHookPlugin(p *sdk.Plugin, mode string) {
 	if mode == "scheduled" || mode == "job-attack" {
@@ -804,7 +805,7 @@ func pipelineHookPlugin(p *sdk.Plugin, mode string) {
 				return payload, nil
 			})
 		}
-		sdk.OnButton(p, pipelineAction).Permission(sdk.User).Handle(func(c *sdk.Context, value pipelineButtonValue) error {
+		buttonapi.On(p, pipelineAction).Permission(sdk.User).Handle(func(c *sdk.Context, value pipelineButtonValue) error {
 			if value.Choice != "kept" {
 				return errors.New("button binding changed")
 			}

@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/sdk"
+	"github.com/AlonaBot/AlonaBot/sdk/bus"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
+	"github.com/AlonaBot/AlonaBot/sdk/service"
 )
 
 const (
@@ -34,8 +36,8 @@ type NotesSnapshot struct {
 }
 
 var (
-	notesService   = sdk.JSON[NotesQuery, NotesSnapshot]("echo/notes")
-	notesPublished = sdk.BusEvent[NotesSnapshot]("echo/notes_published")
+	notesService   = service.JSON[NotesQuery, NotesSnapshot]("echo/notes")
+	notesPublished = bus.Define[NotesSnapshot]("echo/notes_published")
 )
 
 type notebook struct {
@@ -70,10 +72,10 @@ func registerCommands(p *sdk.Plugin) {
 		return c.Text() == rawPhrase, nil
 	}).Handle(func(c *sdk.Context) error { return c.Reply(c.T("echo.raw")) })
 	p.Command("ask").Permission(sdk.User).Continue().Handle(ask)
-	sdk.Serve(p, notesService).Access(sdk.AccessPublic).Handle(func(_ *sdk.Context, _ NotesQuery) (NotesSnapshot, error) {
+	service.Serve(p, notesService).Access(service.AccessPublic).Handle(func(_ *sdk.Context, _ NotesQuery) (NotesSnapshot, error) {
 		return book.snapshot(), nil
 	})
-	sdk.Subscribe(p, notesPublished).Handle(func(_ *sdk.Context, snapshot NotesSnapshot) error {
+	bus.Subscribe(p, notesPublished).Handle(func(_ *sdk.Context, snapshot NotesSnapshot) error {
 		book.mu.Lock()
 		defer book.mu.Unlock()
 		book.published = slices.Clone(snapshot.Notes)

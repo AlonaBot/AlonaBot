@@ -53,6 +53,7 @@ import (
 	sdkadapter "github.com/AlonaBot/AlonaBot/sdk/adapter"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
+	optionsapi "github.com/AlonaBot/AlonaBot/sdk/options"
 	"github.com/google/jsonschema-go/jsonschema"
 	"google.golang.org/protobuf/proto"
 )
@@ -2030,12 +2031,12 @@ const optionsConfigSchema = `{"selection":{"type":"object","items":{"choice":{"t
 func newOptionsPlugin() *sdk.Plugin {
 	p := sdk.NewPlugin()
 	genresources.Bind(p, genresources.Resources{ConfigSchema: []byte(optionsConfigSchema)})
-	sdk.ServeOptions(p, "choices", func(_ context.Context, q sdk.OptionsQuery) (sdk.OptionsPage, error) {
+	optionsapi.Serve(p, "choices", func(_ context.Context, q optionsapi.Query) (optionsapi.Page, error) {
 		if q.Filter["group"] != "all" {
-			return sdk.OptionsPage{}, fmt.Errorf("missing schema filter")
+			return optionsapi.Page{}, fmt.Errorf("missing schema filter")
 		}
-		page := sdk.OptionsPage{Options: []sdk.Option{}}
-		for _, option := range []sdk.Option{{Value: "one", Label: "First", Description: "choice one"}, {Value: "two", Label: "Second"}} {
+		page := optionsapi.Page{Options: []optionsapi.Option{}}
+		for _, option := range []optionsapi.Option{{Value: "one", Label: "First", Description: "choice one"}, {Value: "two", Label: "Second"}} {
 			if len(q.Values) > 0 {
 				found := false
 				for _, value := range q.Values {

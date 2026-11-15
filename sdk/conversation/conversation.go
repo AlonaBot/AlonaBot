@@ -1,4 +1,5 @@
-package sdk
+// Package conversation 追加、分页读取与清除原样 JSON 会话历史（CONTRACTS §3）。
+package conversation
 
 import (
 	"context"
@@ -7,18 +8,20 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
+	"github.com/AlonaBot/AlonaBot/sdk/internal/registry"
 	"google.golang.org/protobuf/proto"
 )
 
-// ConversationEntry 保存会话内的序号与原样 JSON 条目。
-type ConversationEntry struct {
+// Entry 保存会话内的序号与原样 JSON 条目。
+type Entry struct {
 	Seq   uint64
 	Entry json.RawMessage
 }
 
-// AppendConversation 原子追加 JSON 对象，返回本次追加的最后一个序号。
-func AppendConversation(ctx context.Context, key string, entries ...json.RawMessage) (lastSeq uint64, err error) {
+// Append 原子追加 JSON 对象，返回本次追加的最后一个序号。
+func Append(ctx context.Context, key string, entries ...json.RawMessage) (lastSeq uint64, err error) {
 	request := &pb.ConversationAppendRequest{ConversationKey: key, EntriesJson: make([]string, len(entries))}
 	for i, entry := range entries {
 		request.EntriesJson[i] = string(entry)
@@ -30,43 +33,43 @@ func AppendConversation(ctx context.Context, key string, entries ...json.RawMess
 	return result.LastSeq, nil
 }
 
-// ListConversation 读取一页会话条目；more 为 true 时以 nextSeq 继续读取。
+// List 读取一页会话条目；more 为 true 时以 nextSeq 继续读取。
 // fromSeq 为零时从 1 开始；全部读完时 more 为 false。
-func ListConversation(ctx context.Context, key string, fromSeq uint64) (entries []ConversationEntry, nextSeq uint64, more bool, err error) {
+func List(ctx context.Context, key string, fromSeq uint64) (entries []Entry, nextSeq uint64, more bool, err error) {
 	result := &pb.ConversationListResponse{}
 	if err := callConversation(ctx, wire.ServiceConversationList, &pb.ConversationListRequest{ConversationKey: key, FromSeq: fromSeq}, result); err != nil {
 		return nil, 0, false, err
 	}
 	for _, entry := range result.Entries {
-		entries = append(entries, ConversationEntry{Seq: entry.Seq, Entry: json.RawMessage(entry.EntryJson)})
+		entries = append(entries, Entry{Seq: entry.Seq, Entry: json.RawMessage(entry.EntryJson)})
 	}
 	return entries, result.GetNextSeq(), result.NextSeq != nil, nil
 }
 
-// ClearConversation 删除会话的全部条目；会话不存在时也成功。
-func ClearConversation(ctx context.Context, key string) error {
+// Clear 删除会话的全部条目；会话不存在时也成功。
+func Clear(ctx context.Context, key string) error {
 	return callConversation(ctx, wire.ServiceConversationClear, &pb.ConversationClearRequest{ConversationKey: key}, &pb.ConversationClearResponse{})
 }
 
 func callConversation(ctx context.Context, target string, request, result proto.Message) error {
 	// 1. 复用就绪门禁；会话请求只需要插件身份，不设置父调用链。
-	session, err := currentSession(ctx)
+	session, err := registry.Session(ctx)
 	if err != nil {
 		return err
 	}
 	encoded, err := proto.Marshal(request)
 	if err != nil {
-		return &Error{Code: errcode.InvalidArgument, Message: "encode conversation request: " + err.Error()}
+		return &sdk.Error{Code: errcode.InvalidArgument, Message: "encode conversation request: " + err.Error()}
 	}
 	out, callError := session.Call(ctx, wire.Request{Target: target,
-		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: invocationSchemaVersion, Bytes: encoded}})
+		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: registry.SchemaVersion, Bytes: encoded}})
 	// 2. Core 错误保留安全消息，协议码统一转为公开错误码。
 	if callError != nil {
 		info := callError.(*wire.CallError).ErrorInfo
-		return &Error{Code: errcode.Code(validate.PublicCode(info.GetCode())), Message: info.GetSafeMessage()}
+		return &sdk.Error{Code: errcode.Code(validate.PublicCode(info.GetCode())), Message: info.GetSafeMessage()}
 	}
-	if err := decodeInvocation(out.Payload, result); err != nil {
-		return &Error{Code: errcode.Internal, Message: err.Error()}
+	if err := registry.Decode(out.Payload, result); err != nil {
+		return &sdk.Error{Code: errcode.Internal, Message: err.Error()}
 	}
 	return nil
 }

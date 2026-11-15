@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/AlonaBot/AlonaBot/plugintest"
-	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
+	"github.com/AlonaBot/AlonaBot/sdk/task"
 )
 
 func TestShowcase(t *testing.T) {
@@ -50,7 +50,7 @@ func TestShowcase(t *testing.T) {
 	}
 	check(h.Text(chat, user, "/demo remind lunch 3600 soup"), "lunch", 1)
 	check(h.Text(chat, user, "/demo cancel lunch"), "lunch", 1)
-	instances, err := sdk.Task[ReminderArgs]("remind").List(ctx)
+	instances, err := task.Define[ReminderArgs]("remind").List(ctx)
 	if err != nil || len(instances) != 0 {
 		t.Fatalf("cancelled instances = %+v, error = %v", instances, err)
 	}

@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/sdk"
+	"github.com/AlonaBot/AlonaBot/sdk/button"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
+	taskapi "github.com/AlonaBot/AlonaBot/sdk/task"
 )
 
 const scheduleInterval = 24 * time.Hour
@@ -18,13 +20,13 @@ type TaskArgs struct {
 }
 
 func registerScenarios(p *sdk.Plugin) {
-	first, second, admin := sdk.Action[string]("first"), sdk.Action[string]("second"), sdk.Action[string]("admin")
+	first, second, admin := button.Define[string]("first"), button.Define[string]("second"), button.Define[string]("admin")
 	click := func(c *sdk.Context, value string) error {
 		return c.Reply(c.T("choice", "value", value, "user", c.User()))
 	}
-	sdk.OnButton(p, first).Handle(click)
-	sdk.OnButton(p, second).Handle(click)
-	sdk.OnButton(p, admin).Permission(sdk.Admin).Handle(click)
+	button.On(p, first).Handle(click)
+	button.On(p, second).Handle(click)
+	button.On(p, admin).Permission(sdk.Admin).Handle(click)
 	p.Command("menu").Handle(func(c *sdk.Context) (message.Content, error) {
 		return message.Chain{message.Text(c.T("buttons")), message.Buttons([]message.Button{
 			first.Button(c.T("first"), "one"), second.Button(c.T("second"), "two"),
@@ -42,13 +44,13 @@ func registerScenarios(p *sdk.Plugin) {
 		_, err := c.SendTo(message.SID("plugintest", "private:alice", ""), message.Text(c.T("tick")))
 		return err
 	})
-	task := sdk.Task[TaskArgs]("remind")
-	sdk.OnTask(p, task).Handle(func(c *sdk.Context, args TaskArgs) error {
+	task := taskapi.Define[TaskArgs]("remind")
+	taskapi.On(p, task).Handle(func(c *sdk.Context, args TaskArgs) error {
 		_, err := c.SendTo(args.Session, message.Text(args.Text))
 		return err
 	})
 	p.Command("remind").Args("key", "text").Handle(func(c *sdk.Context, key, text string) error {
-		_, err := task.At(c.Context(), time.Now().Add(scheduleInterval), TaskArgs{Session: c.Session(), Text: text}, sdk.Key(key))
+		_, err := task.At(c.Context(), time.Now().Add(scheduleInterval), TaskArgs{Session: c.Session(), Text: text}, taskapi.Key(key))
 		return err
 	})
 	p.Command("tasks").Handle(func(c *sdk.Context) error {

@@ -13,6 +13,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
+	taskapi "github.com/AlonaBot/AlonaBot/sdk/task"
 )
 
 const schedulerSDKMode = "tasks-sdk"
@@ -28,7 +29,7 @@ type schedulerSDKArgs struct {
 func schedulerSDKPlugin(mode string) *sdk.Plugin {
 	p := sdk.NewPlugin()
 	genresources.Bind(p, genresources.Resources{})
-	task := sdk.Task[schedulerSDKArgs]("remind")
+	task := taskapi.Define[schedulerSDKArgs]("remind")
 	checkGate := func(ctx context.Context) error {
 		_, err := task.List(ctx)
 		if errcode.Of(err) != errcode.FailedPrecondition {
@@ -40,7 +41,7 @@ func schedulerSDKPlugin(mode string) *sdk.Plugin {
 	p.OnReady(checkGate)
 	p.OnStop(checkGate)
 	p.Every("pulse", time.Second).Handle(func(c *sdk.Context) error { return pipelineObserve("sdk-static", "pulse", c) })
-	sdk.OnTask(p.Sub("reminders"), task).Handle(func(c *sdk.Context, args schedulerSDKArgs) error {
+	taskapi.On(p.Sub("reminders"), task).Handle(func(c *sdk.Context, args schedulerSDKArgs) error {
 		if c.User() != "" || c.Session() != "" || c.Event().Actor != nil {
 			return fmt.Errorf("task received an actor or default target")
 		}
@@ -69,20 +70,20 @@ func schedulerSDKPlugin(mode string) *sdk.Plugin {
 		var err error
 		switch operation {
 		case "start":
-			if _, err = task.At(ctx, time.Now().Add(time.Second), args("at", "once 参数", 1), sdk.Key("at")); err != nil {
+			if _, err = task.At(ctx, time.Now().Add(time.Second), args("at", "once 参数", 1), taskapi.Key("at")); err != nil {
 				return err
 			}
-			if _, err = task.Every(ctx, time.Second, args("every", "periodic 参数", 2), sdk.Key("every")); err != nil {
+			if _, err = task.Every(ctx, time.Second, args("every", "periodic 参数", 2), taskapi.Key("every")); err != nil {
 				return err
 			}
-			if _, err = task.Cron(ctx, "* * * * *", args("cron", "cron 参数", 3), sdk.Key("cron"), sdk.Timezone("UTC")); err != nil {
+			if _, err = task.Cron(ctx, "* * * * *", args("cron", "cron 参数", 3), taskapi.Key("cron"), taskapi.Timezone("UTC")); err != nil {
 				return err
 			}
 		case "replace":
-			if _, err = task.At(ctx, time.Now().Add(time.Hour), args("replace", "old", 1), sdk.Key("replace")); err != nil {
+			if _, err = task.At(ctx, time.Now().Add(time.Hour), args("replace", "old", 1), taskapi.Key("replace")); err != nil {
 				return err
 			}
-			if _, err = task.Every(ctx, time.Hour, args("replace", "new 参数", 2), sdk.Key("replace")); err != nil {
+			if _, err = task.Every(ctx, time.Hour, args("replace", "new 参数", 2), taskapi.Key("replace")); err != nil {
 				return err
 			}
 			instances, listErr := task.List(ctx)
@@ -118,15 +119,15 @@ func schedulerSDKPlugin(mode string) *sdk.Plugin {
 			}
 		case "pause", "resume", "status":
 			if operation == "pause" {
-				err = sdk.PauseJob(ctx, "pulse")
+				err = taskapi.Pause(ctx, "pulse")
 			}
 			if operation == "resume" {
-				err = sdk.ResumeJob(ctx, "pulse")
+				err = taskapi.Resume(ctx, "pulse")
 			}
 			if err != nil {
 				return err
 			}
-			state, statusErr := sdk.JobStatus(ctx, "pulse")
+			state, statusErr := taskapi.Status(ctx, "pulse")
 			if statusErr != nil {
 				return statusErr
 			}

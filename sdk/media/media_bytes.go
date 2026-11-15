@@ -1,4 +1,4 @@
-package sdk
+package media
 
 import (
 	"bytes"
@@ -11,8 +11,8 @@ import (
 
 const maxInlineMediaBytes = 1 << 20 // CONTRACTS §1.3：1 MiB 以内直接内联。
 
-// ImageBytes 将非空图片字节内联，超过 1 MiB 时先上传。
-func ImageBytes(ctx context.Context, data []byte) (message.Segment, error) {
+// Image 将非空图片字节内联，超过 1 MiB 时先上传。
+func Image(ctx context.Context, data []byte) (message.Segment, error) {
 	source, err := bytesSource(ctx, data, "")
 	if err != nil {
 		return nil, err
@@ -20,8 +20,8 @@ func ImageBytes(ctx context.Context, data []byte) (message.Segment, error) {
 	return message.Image(source), nil
 }
 
-// VideoBytes 将非空视频字节内联，超过 1 MiB 时先上传。
-func VideoBytes(ctx context.Context, data []byte) (message.Segment, error) {
+// Video 将非空视频字节内联，超过 1 MiB 时先上传。
+func Video(ctx context.Context, data []byte) (message.Segment, error) {
 	source, err := bytesSource(ctx, data, "")
 	if err != nil {
 		return nil, err
@@ -29,8 +29,8 @@ func VideoBytes(ctx context.Context, data []byte) (message.Segment, error) {
 	return message.Video(source), nil
 }
 
-// FileBytes 将非空文件字节内联或上传，保留展示名称与 MIME。
-func FileBytes(ctx context.Context, data []byte, filename, mime string) (message.Segment, error) {
+// File 将非空文件字节内联或上传，保留展示名称与 MIME。
+func File(ctx context.Context, data []byte, filename, mime string) (message.Segment, error) {
 	source, err := bytesSource(ctx, data, mime)
 	if err != nil {
 		return nil, err

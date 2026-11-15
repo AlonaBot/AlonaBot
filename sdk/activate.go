@@ -243,7 +243,7 @@ func currentSession(ctx context.Context) (*wire.Session, error) {
 
 // activate 在 PREPARED 之后启动 Session，等待 ACTIVATE、执行 OnReady 并写出 ACTIVATED。
 // 返回时 ready gate 已打开；失败时已向 Core 报告并关闭 Session。之后用 serve 等待停止。
-func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *Registration) (session *wire.Session, active *activation, err error) {
+func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *registration) (session *wire.Session, active *activation, err error) {
 	defer func() {
 		if err != nil {
 			err = errors.Join(err, l.runtime.database.Close())

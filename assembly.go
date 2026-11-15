@@ -689,7 +689,7 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 		slog.Info("plugin activated", "plugin_id", id, "generation_id", generation, "mode", mode, "pid", running.process.Process.Pid())
 		return nil
 	}
-	// 4. 同进程调用方保留原有 SDK 入口。
+	// 4. 同进程调用经内部入口复用 SDK 的握手、激活和停止流程。
 
 	listener, err := wire.ListenLoopback()
 	if err != nil {
@@ -701,9 +701,9 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *componen
 	rand.Read(l.Secret)
 	go func() {
 		if entry.role == state.RoleAdapter {
-			running.runErr = sdk.RunAdapterInProcess(entry.adapter, l)
+			running.runErr = inproc.Adapter(entry.adapter, l)
 		} else {
-			running.runErr = sdk.RunInProcess(entry.root, l)
+			running.runErr = inproc.Plugin(entry.root, l)
 		}
 		if ctx.Err() == context.Canceled {
 			running.runErr = startupCleanupError(running.runErr)

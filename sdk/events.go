@@ -14,13 +14,13 @@ import (
 
 const commandRoutePrefix = "cmd."
 
-// EventRoute 保存一个手动发送事件 Handler 的静态注册。
-type EventRoute struct {
+// eventRoute 保存一个手动发送事件 Handler 的静态注册。
+type eventRoute struct {
 	RouteID       string
 	EventType     EventType
 	Handler       any
 	permission    Permission
-	rules         []Rule // Collect 固定的调用顺序，含按钮路由。
+	rules         []Rule // collect 固定的调用顺序，含按钮路由。
 	continuation  bool
 	actionID      string
 	actionVersion uint32
@@ -30,12 +30,12 @@ type EventRoute struct {
 	Priority      int32 // 数值越小越先，缺省为 0
 }
 
-// eventRegistry 按注册顺序收集事件路由，错误由 Collect 统一返回。
-// 零值可用；Collect 另将命令的 route_id 登记到 seen，检查跨注册器冲突。
+// eventRegistry 按注册顺序收集事件路由，错误由 collect 统一返回。
+// 零值可用；collect 另将命令的 route_id 登记到 seen，检查跨注册器冲突。
 type eventRegistry struct {
 	plugin   *Plugin
 	builders []*EventBuilder
-	events   []EventRoute
+	events   []eventRoute
 	errs     []error
 	seen     map[string]bool
 }
@@ -43,7 +43,7 @@ type eventRegistry struct {
 // On 开始构建事件路由。
 func (r *eventRegistry) On(routeID string, eventType EventType) *EventBuilder {
 	r.plugin.checkRegistration()
-	b := &EventBuilder{plugin: r.plugin, route: EventRoute{RouteID: routeID, EventType: eventType}}
+	b := &EventBuilder{plugin: r.plugin, route: eventRoute{RouteID: routeID, EventType: eventType}}
 	r.builders = append(r.builders, b)
 	return b
 }
@@ -51,10 +51,10 @@ func (r *eventRegistry) On(routeID string, eventType EventType) *EventBuilder {
 // EventBuilder 收集一个事件路由；Handle 结束构建。
 type EventBuilder struct {
 	plugin      *Plugin
-	route       EventRoute
+	route       eventRoute
 	handles     int
 	afterHandle bool
-	button      bool // 仅由 OnButton 开始的构建链可占用保留前缀
+	button      bool // 仅由类型化按钮登记开始的构建链可占用保留前缀
 }
 
 // Priority 设置路由优先级。
@@ -121,7 +121,7 @@ func (r *eventRegistry) collect() {
 	}
 }
 
-func (r *eventRegistry) add(route EventRoute) {
+func (r *eventRegistry) add(route eventRoute) {
 	routeID, handler := route.RouteID, route.Handler
 	switch {
 	case routeID == "":
@@ -148,14 +148,14 @@ func (r *eventRegistry) add(route EventRoute) {
 	r.events = append(r.events, route)
 }
 
-func commandRouteID(command Command) string {
+func commandRouteID(command command) string {
 	if command.routeID != "" {
 		return command.routeID
 	}
 	return commandRoutePrefix + strings.Join(command.Path, ".")
 }
 
-// EventType 绑定事件名及 Handler 的载荷类型，零值由 Collect 拒绝。
+// EventType 绑定事件名及 Handler 的载荷类型，零值由 collect 拒绝。
 type EventType struct {
 	name    string
 	payload reflect.Type
@@ -199,7 +199,7 @@ func (e EventType) check() error {
 	}
 	return nil
 }
-func checkEventHandler(route EventRoute) error {
+func checkEventHandler(route eventRoute) error {
 	event := route.EventType
 	if err := event.check(); err != nil {
 		return fmt.Errorf("event route %q: %w", route.RouteID, err)
@@ -211,7 +211,7 @@ func checkEventHandler(route EventRoute) error {
 	}
 	return fmt.Errorf("event route %q: expected %s; got %T", route.RouteID, expected, route.Handler)
 }
-func invokeEvent(c *Context, route EventRoute) error {
+func invokeEvent(c *Context, route eventRoute) error {
 	handler := reflect.ValueOf(route.Handler)
 	event := route.EventType
 	payload := c.Event().Payload

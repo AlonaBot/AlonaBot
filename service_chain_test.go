@@ -25,8 +25,10 @@ import (
 	genresources "github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk"
+	busapi "github.com/AlonaBot/AlonaBot/sdk/bus"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
+	serviceapi "github.com/AlonaBot/AlonaBot/sdk/service"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -67,14 +69,14 @@ func chainSchema[T any]() string {
 	typ := reflect.TypeFor[T]()
 	return typ.PkgPath() + "." + typ.Name()
 }
-func chainService(id string) sdk.Service[chainInput, chainOutput] {
-	return sdk.JSON[chainInput, chainOutput](id + "/run")
+func chainService(id string) serviceapi.Spec[chainInput, chainOutput] {
+	return serviceapi.JSON[chainInput, chainOutput](id + "/run")
 }
 
 func serviceChainBackgroundPlugin() *sdk.Plugin {
 	p := serviceChainPlugin()
 	id := os.Getenv(pipelineIDEnv)
-	sdk.Serve(p, sdk.JSON[chainInput, chainOutput](id+"/background")).Access(sdk.AccessPublic).Handle(func(c *sdk.Context, in chainInput) (chainOutput, error) {
+	serviceapi.Serve(p, serviceapi.JSON[chainInput, chainOutput](id+"/background")).Access(serviceapi.AccessPublic).Handle(func(c *sdk.Context, in chainInput) (chainOutput, error) {
 		// 后台根调用脱离本次 Handler，停止时须由 Core 按 Session 取消。
 		go func() {
 			_, err := chainService("c").Call(context.Background(), chainInput{Mode: "hang", Key: "background-stop"})
@@ -112,8 +114,8 @@ func serviceChainPlugin() *sdk.Plugin {
 		chainSchema[chainOutput](): []byte(`{"type":"object","properties":{"value":{"type":"string"}},"required":["value"]}`),
 	}})
 	id := os.Getenv(pipelineIDEnv)
-	sdk.Serve(p, chainService(id)).Access(sdk.AccessPublic).Handle(func(c *sdk.Context, in chainInput) (chainOutput, error) { return chainHandle(c, id, in) })
-	sdk.Serve(p, sdk.JSON[chainInput, chainOutput](id+"/private")).Handle(func(c *sdk.Context, in chainInput) (chainOutput, error) { return chainHandle(c, id, in) })
+	serviceapi.Serve(p, chainService(id)).Access(serviceapi.AccessPublic).Handle(func(c *sdk.Context, in chainInput) (chainOutput, error) { return chainHandle(c, id, in) })
+	serviceapi.Serve(p, serviceapi.JSON[chainInput, chainOutput](id+"/private")).Handle(func(c *sdk.Context, in chainInput) (chainOutput, error) { return chainHandle(c, id, in) })
 	if id == "a" {
 		p.On("root", sdk.MessageCreated).Handle(func(c *sdk.Context) error {
 			var in chainInput
@@ -142,7 +144,7 @@ func serviceChainPlugin() *sdk.Plugin {
 		if id == "b" && name != "small" || id == "c" && name != "large" {
 			continue
 		}
-		sdk.Subscribe(p, sdk.BusEvent[chainBusPayload]("a/"+name)).Handle(func(c *sdk.Context, in chainBusPayload) error {
+		busapi.Subscribe(p, busapi.Define[chainBusPayload]("a/"+name)).Handle(func(c *sdk.Context, in chainBusPayload) error {
 			return pipelineAudit(pipelineRecord{Stage: "bus", Text: in.Key, User: c.User(), Session: c.Session()})
 		})
 	}
@@ -206,7 +208,7 @@ func chainHandle(c *sdk.Context, id string, in chainInput) (chainOutput, error) 
 	case "error":
 		return chainOutput{}, errors.New("/private/plugin.go:42 stack: synthetic diagnostic")
 	case "small", "large":
-		_, err := sdk.BusEvent[chainBusPayload]("a/"+in.Mode).Publish(c.Context(), chainBusPayload{Key: in.Key, Body: strings.Repeat("x", in.Size)})
+		_, err := busapi.Define[chainBusPayload]("a/"+in.Mode).Publish(c.Context(), chainBusPayload{Key: in.Key, Body: strings.Repeat("x", in.Size)})
 		return chainOutput{Value: chainText(id)}, err
 	}
 	return chainOutput{Value: chainText(id)}, nil

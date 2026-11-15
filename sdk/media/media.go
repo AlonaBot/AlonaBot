@@ -1,4 +1,5 @@
-package sdk
+// Package media 上传、打开与授权媒体，并将内存字节转换为消息片段（CONTRACTS §1.3）。
+package media
 
 import (
 	"context"
@@ -12,15 +13,17 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
+	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/convert"
+	"github.com/AlonaBot/AlonaBot/sdk/internal/registry"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 	"google.golang.org/protobuf/proto"
 )
 
-// OpenMedia 立即读取来源令牌的第一块，成功后返回按顺序读取的 reader。
+// Open 立即读取来源令牌的第一块，成功后返回按顺序读取的 reader。
 // Read 沿用 ctx，Close 停止读取而保留令牌授权。
-func OpenMedia(ctx context.Context, src message.MediaSource) (io.ReadCloser, error) {
+func Open(ctx context.Context, src message.MediaSource) (io.ReadCloser, error) {
 	if src.InlineBase64 != "" || src.HTTPSURL != "" || src.PlatformFile != "" || (src.Incoming != nil && src.MediaRef != "") {
 		return nil, errcode.InvalidArgument.New("media source must contain only an incoming or media_ref token")
 	}
@@ -50,7 +53,7 @@ func (r *mediaReader) nextChunk() error {
 	if err := r.ctx.Err(); err != nil {
 		return err
 	}
-	result, err := Proto[*pb.ReadRequest, *pb.ReadResponse](wire.ServiceMediaRead).Call(r.ctx, &pb.ReadRequest{Token: r.token, Offset: r.next, Length: wire.MaxMediaChunk})
+	result, err := registry.Proto[*pb.ReadRequest, *pb.ReadResponse](wire.ServiceMediaRead).Call(r.ctx, &pb.ReadRequest{Token: r.token, Offset: r.next, Length: wire.MaxMediaChunk})
 	if err != nil {
 		if cancelled := r.ctx.Err(); cancelled != nil {
 			return cancelled
@@ -84,8 +87,8 @@ func (r *mediaReader) Read(p []byte) (int, error) {
 }
 func (r *mediaReader) Close() error { r.closed = true; r.data = nil; return nil }
 
-// GrantMedia 为接收插件申请会话范围受限的新令牌。
-func GrantMedia(ctx context.Context, token, granteePluginID string, sessions ...string) (string, error) {
+// Grant 为接收插件申请会话范围受限的新令牌。
+func Grant(ctx context.Context, token, granteePluginID string, sessions ...string) (string, error) {
 	var targets []*pb.Target
 	for _, s := range sessions {
 		t, err := convert.TargetToProto(s, "")
@@ -94,7 +97,7 @@ func GrantMedia(ctx context.Context, token, granteePluginID string, sessions ...
 		}
 		targets = append(targets, t)
 	}
-	result, err := Proto[*pb.GrantRequest, *pb.GrantResponse](wire.ServiceMediaGrant).Call(ctx, &pb.GrantRequest{Token: token, GranteePluginId: granteePluginID, Targets: targets})
+	result, err := registry.Proto[*pb.GrantRequest, *pb.GrantResponse](wire.ServiceMediaGrant).Call(ctx, &pb.GrantRequest{Token: token, GranteePluginId: granteePluginID, Targets: targets})
 	if err != nil {
 		return "", err
 	}
@@ -105,7 +108,7 @@ func GrantMedia(ctx context.Context, token, granteePluginID string, sessions ...
 // 可 Seek 的来源回到当前起始位置；其他来源通过 0600 临时文件完成第二遍读取。
 func Upload(ctx context.Context, r io.Reader, mime string) (ref *message.MediaRef, err error) {
 	// 1. 先通过就绪门禁，再准备两遍读取的来源。
-	session, err := currentSession(ctx)
+	session, err := registry.Session(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -175,12 +178,12 @@ func Upload(ctx context.Context, r io.Reader, mime string) (ref *message.MediaRe
 		if err != nil {
 			return errcode.InvalidArgument.New("encode media request: " + err.Error())
 		}
-		response, err := session.Call(ctx, wire.Request{Target: target, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: invocationSchemaVersion, Bytes: encoded}})
+		response, err := session.Call(ctx, wire.Request{Target: target, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: registry.SchemaVersion, Bytes: encoded}})
 		if err != nil {
 			info := err.(*wire.CallError).ErrorInfo
-			return &Error{Code: errcode.Code(validate.PublicCode(info.GetCode())), Message: info.GetSafeMessage()}
+			return &sdk.Error{Code: errcode.Code(validate.PublicCode(info.GetCode())), Message: info.GetSafeMessage()}
 		}
-		if err := decodeInvocation(response.Payload, result); err != nil {
+		if err := registry.Decode(response.Payload, result); err != nil {
 			return errcode.Internal.New(err.Error())
 		}
 		return nil

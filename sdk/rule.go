@@ -10,7 +10,7 @@ import (
 // Rule 在本次调用的 Context 中判断是否执行 Handler，错误交由调用边界处理。
 type Rule func(*Context) (bool, error)
 
-// Any 按顺序返回首个匹配或错误；空列表不匹配，含 nil 的组合在 Collect 报错。
+// Any 按顺序返回首个匹配或错误；空列表不匹配，含 nil 的组合在 collect 报错。
 func Any(rules ...Rule) Rule {
 	if checkRules(rules) != nil {
 		return nil

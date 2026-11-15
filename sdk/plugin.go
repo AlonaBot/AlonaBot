@@ -9,17 +9,23 @@ import (
 	"sync/atomic"
 	"time"
 
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/generated"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk/config"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
+	"github.com/AlonaBot/AlonaBot/sdk/internal/registry"
 )
 
 type migrationState = dbhook.State
+
+type registrationScope = registry.State[*Context, Permission]
 
 // Plugin 持有一次构造的路由、配置、生成资源和生命周期回调。
 // Run 开始后登记状态固定；每次 NewPlugin 返回独立的对象。
 type Plugin struct {
 	migrationState
+	registrationScope
 	commands      CommandGroup
 	hooks         []*hookRoute
 	events        eventRegistry
@@ -43,7 +49,9 @@ type Plugin struct {
 }
 
 // Registrar 约束类型化服务、订阅、按钮和任务只能登记到插件或子插件。
-type Registrar interface{ registrar() *pluginScope }
+type Registrar interface {
+	registry.Owner[*Context, Permission]
+}
 
 type pluginScope struct {
 	plugin   *Plugin
@@ -64,10 +72,9 @@ func NewPlugin() *Plugin {
 	p.http.plugin = p
 	p.schedules.plugin = p
 	p.scope = pluginScope{plugin: p, commands: &p.commands}
+	p.registrationScope = p.sharedScope("")
 	return p
 }
-
-func (p *Plugin) registrar() *pluginScope { return &p.scope }
 
 func (p *Plugin) freeze() {
 	if p != nil {
@@ -216,4 +223,14 @@ func requireResources(component any) error {
 		return fmt.Errorf("entry package %q has no registered resources; use alonabot build or alonabot run", pkgPath)
 	}
 	return nil
+}
+
+func (p *Plugin) sharedScope(subID string) registrationScope {
+	return registry.NewState(registry.Scope[*Context, Permission]{
+		Plugin: p, SubID: subID,
+		Services: &p.services, Subscriptions: &p.subscriptions, Tasks: &p.tasks,
+		TaskContext: func(c *Context) (*pb.Event, *wire.Inbound) { return c.event, c.inbound },
+		Button:      (&pluginScope{plugin: p, subID: subID}).buttonBuilder,
+		Check:       p.checkRegistration,
+	})
 }

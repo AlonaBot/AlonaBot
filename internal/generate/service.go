@@ -19,6 +19,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
@@ -203,7 +204,7 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 			}
 		}
 		named, ok := types.Unalias(value.Type).(*types.Named)
-		if ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == sdkPath && slices.Contains([]string{"Service", "TaskType"}, named.Obj().Name()) {
+		if ok && named.Obj().Pkg() != nil && (named.Obj().Pkg().Path() == sdkPath+"/service" && named.Obj().Name() == "Spec" || named.Obj().Pkg().Path() == sdkPath+"/task" && named.Obj().Name() == "Type") {
 			referenced = append(referenced, named)
 		}
 	}
@@ -215,11 +216,11 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 	for _, ident := range instances {
 		object := importer.info.Uses[ident]
 		fn, ok := object.(*types.Func)
-		if !ok || fn.Pkg() == nil || fn.Pkg().Path() != sdkPath || !slices.Contains([]string{"JSON", "Proto", "BusEvent", "Task"}, fn.Name()) {
+		if !ok || fn.Pkg() == nil || !(fn.Pkg().Path() == sdkPath+"/service" && slices.Contains([]string{"JSON", "Proto"}, fn.Name()) || fn.Pkg().Path() == sdkPath+"/bus" && fn.Name() == "Define" || fn.Pkg().Path() == sdkPath+"/task" && fn.Name() == "Define") {
 			continue
 		}
 		if !localFiles[s.files.Position(ident.Pos()).Filename] {
-			if fn.Name() != "JSON" && fn.Name() != "Task" {
+			if fn.Name() != "JSON" && fn.Pkg().Path() != sdkPath+"/task" {
 				continue
 			}
 			result := importer.info.Instances[ident].Type.(*types.Signature).Results().At(0).Type()
@@ -240,7 +241,7 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 				continue
 			}
 			// Task 复用完整 JSON 类型检查，但不增加生成结果或运行期 Schema 依赖。
-			if fn.Name() == "Task" {
+			if fn.Pkg().Path() == sdkPath+"/task" {
 				schema := b.schema(typ, ident.Pos())
 				if schema != nil && schema.Type != "object" && !slices.Contains(schema.Types, "object") {
 					s.diagnostic(ident.Pos(), "task parameters must encode a JSON object: "+typ.String())
@@ -256,6 +257,13 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 				pkgPath = "main"
 			}
 			id := pkgPath + "." + named.Obj().Name()
+			// 固定选项查询协议保留类型迁移前的 Schema 身份。
+			switch id {
+			case sdkPath + "/options.Query":
+				id = validate.OptionsQuerySchemaID
+			case sdkPath + "/options.Page":
+				id = validate.OptionsPageSchemaID
+			}
 			if previous := ids[id]; previous != nil {
 				if !types.Identical(previous, typ) {
 					s.diagnostic(ident.Pos(), "conflicting service schema_id "+id)

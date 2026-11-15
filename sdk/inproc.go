@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"sync"
@@ -12,10 +13,11 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk/adapter"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
+	"github.com/AlonaBot/AlonaBot/sdk/internal/registry"
 )
 
-// RunInProcess 使用 Core 显式提供的参数运行插件；环境变量、工作目录与默认 Logger 保持进程级含义。
-func RunInProcess(root *Plugin, l *inproc.Launch) error {
+// runInProcess 使用 Core 显式提供的参数运行插件；环境变量、工作目录与默认 Logger 保持进程级含义。
+func runInProcess(root *Plugin, l *inproc.Launch) error {
 	if err := requireResources(root); err != nil {
 		return err
 	}
@@ -27,8 +29,8 @@ func RunInProcess(root *Plugin, l *inproc.Launch) error {
 	return run(root, launch)
 }
 
-// RunAdapterInProcess 使用显式参数运行 Adapter，复用独立进程入口的握手、激活与停止流程。
-func RunAdapterInProcess(a adapter.Adapter, l *inproc.Launch) error {
+// runAdapterInProcess 使用显式参数运行 Adapter，复用独立进程入口的握手、激活与停止流程。
+func runAdapterInProcess(a adapter.Adapter, l *inproc.Launch) error {
 	if err := requireResources(a); err != nil {
 		return err
 	}
@@ -67,7 +69,29 @@ type componentSession struct {
 
 var defaultSession atomic.Pointer[componentSession]
 
-func init() { dbhook.Logger = componentLogger }
+func init() {
+	inproc.Plugin = func(plugin any, l *inproc.Launch) error { return runInProcess(plugin.(*Plugin), l) }
+	inproc.Adapter = func(a any, l *inproc.Launch) error { return runAdapterInProcess(a.(adapter.Adapter), l) }
+	dbhook.Logger = componentLogger
+	registry.Parent = func(ctx context.Context) (*wire.Inbound, bool) {
+		c, ok := ctx.Value(serviceContextKey{}).(*Context)
+		if !ok {
+			return nil, false
+		}
+		return c.inbound, c.active.Load()
+	}
+	registry.Action = func(ctx context.Context, to, name string, version uint32, params, options any) (json.RawMessage, error) {
+		return callAction(ctx, nil, to, name, version, params, options.([]SendOption)...)
+	}
+	registry.Session = currentSession
+	registry.Call = callService
+	registry.Decode = decodeInvocation
+	registry.Logger = componentLogger
+	registry.Runtime = func(ctx context.Context) (string, string, map[string][]byte) {
+		l := componentFor(ctx).active.Load().l
+		return l.pluginID, l.entryPackage, l.serviceSchemas
+	}
+}
 
 func newComponentSession(inProcess bool) *componentSession {
 	s := &componentSession{inProcess: inProcess, database: dbhook.New(!inProcess)}
