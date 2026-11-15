@@ -69,11 +69,13 @@ Cookie 为 host-only、`Path=/`、`HttpOnly`、`SameSite=Strict`；HTTP 下名�
 
 `Role` 取 `plugin/adapter/agent/webui`；`Signed` 根据绑定发布者公钥是否非空返回；`Active` 是当前代次标识，尚无代次时为空。`State` 来自实际运行状态或安装状态，包含 `Installed`、`Stopped`、`Activated`、`Degraded`。WebUI 无进程，启用时显示 `Activated`。
 
+Install 的 `Package` 额外携带可选 `Warnings: string[]`，按原顺序返回 manifest 的全部警告；没有警告时省略。List 与其他返回 `Package` 的接口省略 `Warnings`。缺少 `migration_mode` 或 `prepare_effects` 各产生一条警告，安装与更新继续执行；管理服务按条记录 WARN 日志，字段为 `plugin_id` 与 `warning`，准备与回退按没有框架外副作用处理。
+
 同类组件遵循 Agent/WebUI 全局各一个、Adapter 每个 `adapter_id` 一个的安装限制。已存在时为 409 / `ALREADY_EXISTS`；`Replace: true` 经预检和确认后按缺省卸载语义替换，保留旧绑定与数据，旧组件已启用时启用新组件。WebUI 可执行全部管理动作，安装界面须展示来源与这一权限。
 
 ### 3.2 组件动作
 
-全部为 POST，成功均返回 200 和 `{}`。动作共享解码结构 `id`、`confirm`、`purge`、`constraint`、`generation`、`install`，每个动作消费下表字段；`id` 为组件 ID。
+全部为 POST，成功返回 200；update 返回 `UpdateResult`，其他动作返回 `{}`。动作共享解码结构 `id`、`confirm`、`purge`、`constraint`、`generation`、`install`，每个动作消费下表字段；`id` 为组件 ID。
 
 | Path | 请求字段及示例 | 行为与特定失败 |
 | --- | --- | --- |
@@ -87,6 +89,8 @@ Cookie 为 host-only、`Path=/`、`HttpOnly`、`SameSite=Strict`；HTTP 下名�
 | `/api/v1/packages/rollback` | `{"id":"demo","generation":"<保留代次>","confirm":false}` | 要求目标代次属于该组件，校验确认后，当前候选执行返回 501 / `UNSUPPORTED` |
 
 `purge` 为整数：0（缺省）保留数据、配置及来源绑定；1 额外清除受管数据；2 额外清除受管配置及安装绑定。保留记录重装要求匹配原来源与身份。Adapter 替换保留的实例归旧组件，新实例配置块换归属时另行确认。具体清理对象见 [CONTRACTS §9.3](CONTRACTS-v0.1.md#93-cli-的最小完整动作)。
+
+Update 成功响应为 `UpdateResult`：有警告时为 `{"warnings":["..."]}`，按原顺序返回 manifest 的全部警告；没有警告时为 `{}`。JSON 与 multipart 使用相同响应格式。
 
 Update 的本地候选可以提供 `install.Archive/ReleaseJSON/Signature/PublicKey`；省略候选来源和归档时，沿用安装时绑定来源。前置校验可能先返回 400、403、404、409 或 412；重复上传已安装的同版本同归档会因不可变包目录已存在返回 409 / `ALREADY_EXISTS`。Rollback 的正式候选编排由后继切片完成，当前返回 501 / `UNSUPPORTED`。
 
@@ -323,11 +327,11 @@ CLI 用法：`alonabot logs [--source ID] [--level L] [--trace T] [--follow] [--
 
 认证先于上传解析：Cookie 变更请求先验证 Origin/CSRF，Bearer 沿用第 1 节规则。archive 流式写入 `<data_dir>/staging` 中独占的请求目录（0700），文件权限为 0600，大小沿用 `packages.Limits.MaxArchiveBytes`（缺省 256 MiB）；解压总量与条目上限由同一 Preflight 执行。超限沿用 `RESOURCE_EXHAUSTED`，其 HTTP 状态按第 5 节当前映射为 500。解析层保持 release/signature 精确字节，安装和更新均调用同一管理服务，预检与确认发生在停止或修改旧组件前。
 
-install 成功为 200、原 `Package` 导出字段；update 成功为 200、`{}`。确认响应为 409、`{"affected":[...]}`，浏览器展示全部对象，经管理员确认后，重新上传同一组文件并设置文本 `confirm=true`。JSON 客户端继续使用 install 的 `Confirm` 或 update 外层 `confirm`。
+install 成功为 200、§3 的 `Package`（有警告时带 `Warnings`）；update 成功为 200、§3 的 `UpdateResult`（没有警告时为 `{}`）。确认响应为 409、`{"affected":[...]}`，浏览器展示全部对象，经管理员确认后，重新上传同一组文件并设置文本 `confirm=true`。JSON 客户端继续使用 install 的 `Confirm` 或 update 外层 `confirm`。
 
 临时目录覆盖完整 Install/Update 调用；成功、400/403/409、候选失败、请求中断和文件写入失败均执行清理。关闭或清理的真实错误保留在管理错误或日志中。服务调用结束后归档源可删除；已安装不可变目录及 Journal 接管资源继续由各自所有者管理。
 
-multipart 与 JSON Update 均进入 `manage.Service.Update`，执行绑定来源、组件身份、公钥、pin 与依赖影响检查。Core 已接通候选准备与提交：有效的新版本上传成功返回 200、`{}`，已启用的组件激活新代次，用户数据保留，受管 SQLite 在候选副本上执行迁移。缺文件或验签失败在修改旧组件前拒绝；重复上传已安装的同版本同归档返回 409 / `ALREADY_EXISTS`。
+multipart 与 JSON Update 均进入 `manage.Service.Update`，执行绑定来源、组件身份、公钥、pin 与依赖影响检查。Core 已接通候选准备与提交：有效的新版本上传成功返回 200、§3 的 `UpdateResult`（没有警告时为 `{}`），已启用的组件激活新代次，用户数据保留，受管 SQLite 在候选副本上执行迁移。缺文件或验签失败在修改旧组件前拒绝；重复上传已安装的同版本同归档返回 409 / `ALREADY_EXISTS`。
 
 ## 11. Core 总览
 

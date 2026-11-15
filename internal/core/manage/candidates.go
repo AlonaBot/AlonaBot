@@ -52,8 +52,13 @@ func (s *Service) Reload(ctx context.Context, id string) (err error) {
 	return s.opt.Candidates.Reload(ctx, id)
 }
 
+// UpdateResult 返回本次更新的清单警告。
+type UpdateResult struct {
+	Warnings []string `json:"warnings,omitempty"`
+}
+
 // Update 验证来源、公钥、pin 与降版影响，再移交暂存候选。
-func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (err error) {
+func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (result UpdateResult, err error) {
 	defer finish(&err)
 	s.catalog.Lock()
 	defer s.catalog.Unlock()
@@ -61,67 +66,68 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (er
 	defer unlock()
 	in, err := s.installed(ctx, id)
 	if err != nil {
-		return err
+		return result, err
 	}
 	if in.Source == "dev" {
-		return developmentError(id)
+		return result, developmentError(id)
 	}
 	if req.Source == "" && req.Archive == "" {
 		req.Source = strings.TrimPrefix(in.Source, "github.com/")
 	}
 	candidate, err := s.prepare(ctx, req)
 	if err != nil {
-		return err
+		return result, err
 	}
 	defer func() { err = errors.Join(err, candidate.Discard()) }()
+	result.Warnings = candidate.Warnings
 	m := candidate.Manifest
 	if err := checkWebUIVersion(m); err != nil {
-		return err
+		return result, err
 	}
 	if m.ID != id || m.Role != string(in.Role) || m.AdapterID != in.AdapterID {
-		return invalid("candidate identity differs from installed component")
+		return result, invalid("candidate identity differs from installed component")
 	}
 	if m.Source != in.Source {
-		return denied("candidate source differs from installed binding")
+		return result, denied("candidate source differs from installed binding")
 	}
 	key := candidate.Release.PublisherKeyID
 	if err := checkPublisher(in.PublisherKeyID, key, req.Confirm); err != nil {
-		return err
+		return result, err
 	}
 	if in.Pin != "" && m.Version != in.Pin {
-		return precondition("candidate version does not match pin: " + in.Pin)
+		return result, precondition("candidate version does not match pin: " + in.Pin)
 	}
 	if key == "" && !req.Confirm {
-		return &ErrNeedsConfirm{Affected: []string{"unsigned package: " + id}}
+		return result, &ErrNeedsConfirm{Affected: []string{"unsigned package: " + id}}
 	}
 	affected, err := s.affected(ctx, in, m.Version)
 	if err != nil {
-		return err
+		return result, err
 	}
 	if len(affected) != 0 && !req.Confirm {
-		return &ErrNeedsConfirm{Affected: affected}
+		return result, &ErrNeedsConfirm{Affected: affected}
 	}
 	if err := s.checkCycles(ctx, m, nil); err != nil {
-		return err
+		return result, err
 	}
 	if err := s.dependencies(ctx, m); err != nil {
-		return err
+		return result, err
 	}
 	active, err := s.opt.Store.Active(ctx, id)
 	if err != nil {
-		return err
+		return result, err
 	}
 	if in.Role == state.RoleWebUI || active == "" {
 		digest, err := hex.DecodeString(candidate.Asset.SHA256)
 		if err != nil {
-			return err
+			return result, err
 		}
 		if _, err := candidate.MoveTo(s.opt.Packages); err != nil {
-			return err
+			return result, err
 		}
-		return s.opt.Store.ReplaceProgram(ctx, id, m.Version, m.Entrypoint, key, digest)
+		return result, s.opt.Store.ReplaceProgram(ctx, id, m.Version, m.Entrypoint, key, digest)
 	}
-	return s.opt.Candidates.Update(ctx, id, candidate)
+	return result, s.opt.Candidates.Update(ctx, id, candidate)
 }
 
 func checkPublisher(bound, candidate string, confirm bool) error {

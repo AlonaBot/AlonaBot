@@ -11,6 +11,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
+	"debug/buildinfo"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -22,6 +23,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -84,11 +86,12 @@ func TestAdminSessionAndUploads(t *testing.T) {
 		t.Fatal(err)
 	}
 	first := adminSignedBundle(t, h, "1.0.0", key)
+	const updateResponse = `{"warnings":["plugin ID \"upload_demo\" lacks the market prefix alonabot_plugin_ and can only be installed as a local plugin"]}`
 	upload := func(action string, request manage.InstallRequest, omit string, want int, contains string) {
 		t.Helper()
 		body, content := adminMultipart(t, request, action == "update", omit)
 		response, raw := adminRequest(t, h, "POST", "/api/v1/packages/"+action, content, body, cookie, logged.CSRF)
-		if response.StatusCode != want || !strings.Contains(string(raw), contains) || (action == "update" && want == 200 && strings.TrimSpace(string(raw)) != "{}") {
+		if response.StatusCode != want || !strings.Contains(string(raw), contains) || (action == "update" && want == 200 && strings.TrimSpace(string(raw)) != updateResponse) {
 			t.Fatalf("%s=%d %s, want %d %q", action, response.StatusCode, raw, want, contains)
 		}
 		adminUploadsClean(t, h)
@@ -134,7 +137,7 @@ func TestAdminSessionAndUploads(t *testing.T) {
 			t.Fatal(err)
 		}
 		same, ok := h.core.assembly.router.Plugin("upload_demo")
-		if after != before || !reflect.DeepEqual(current, original) || string(data) != "keep original user data" || !ok || same != plugin || !same.Activated() {
+		if !reflect.DeepEqual(after, before) || !reflect.DeepEqual(current, original) || string(data) != "keep original user data" || !ok || same != plugin || !same.Activated() {
 			t.Fatalf("old component changed: before=%+v after=%+v data=%q", before, after, data)
 		}
 		adminDatabase(t, h, before.Active, "1.0.0")
@@ -146,7 +149,7 @@ func TestAdminSessionAndUploads(t *testing.T) {
 	bad.Signature = base64.StdEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))
 	upload("update", bad, "", 403, "PERMISSION_DENIED")
 	preserved()
-	upload("update", next, "", 200, "{}")
+	upload("update", next, "", 200, updateResponse)
 	after := adminInstalled(t, h)
 	updated, ok := h.core.assembly.router.Plugin("upload_demo")
 	if after.Version != "1.1.0" || after.State != "Activated" || !after.Enabled || !after.Signed || after.Active == before.Active || !ok || !updated.Activated() {
@@ -303,8 +306,20 @@ func main(){if err:=sdk.Run(New());err!=nil{slog.Error("fixture failed","error",
 		t.Fatal(err)
 	}
 	executable := filepath.Join(project, "component")
-	if output, err := exec.Command("go", "build", "-o", executable, name).CombinedOutput(); err != nil {
+	args := []string{"build"}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range info.Settings {
+			if setting.Key == "-race" && setting.Value == "true" {
+				args = append(args, "-race")
+			}
+		}
+	}
+	if output, err := exec.Command("go", append(args, "-o", executable, name)...).CombinedOutput(); err != nil {
 		t.Fatalf("build upload plugin: %v\n%s", err, output)
+	}
+	info, err := buildinfo.ReadFile(executable)
+	if err != nil {
+		t.Fatal(err)
 	}
 	binary, err := os.ReadFile(executable)
 	if err != nil {
@@ -341,6 +356,9 @@ func main(){if err:=sdk.Run(New());err!=nil{slog.Error("fixture failed","error",
 		if header.Name == "bin/component" {
 			raw = binary
 			header.Mode = 0o700
+		}
+		if header.Name == "build-info" {
+			raw = []byte(info.String())
 		}
 		header.Size = int64(len(raw))
 		if err := writer.WriteHeader(header); err != nil {

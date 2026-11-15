@@ -8,6 +8,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"debug/buildinfo"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -262,7 +263,16 @@ func (h *webUIHarness) bundle(id, role, icon string, major uint32) manage.Instal
 			files["public/"+name] = body
 		}
 	} else {
-		files["bin/component"] = "unused executable"
+		binary, err := os.ReadFile(os.Args[0])
+		if err != nil {
+			h.t.Fatal(err)
+		}
+		info, err := buildinfo.ReadFile(os.Args[0])
+		if err != nil {
+			h.t.Fatal(err)
+		}
+		files["bin/component"] = string(binary)
+		files["build-info"] = info.String()
 	}
 	if icon != "" {
 		files["plugin.yaml"] += "icon: " + icon + "\n"

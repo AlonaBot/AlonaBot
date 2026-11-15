@@ -84,7 +84,9 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 				err = s.Reload(r.Context(), request.ID)
 			case "update":
 				request.Install.Confirm = request.Confirm
-				err = s.Update(r.Context(), request.ID, request.Install)
+				result, err := s.Update(r.Context(), request.ID, request.Install)
+				respond(w, result, err)
+				return
 			case "rollback":
 				err = s.Rollback(r.Context(), request.ID, request.Generation, request.Confirm)
 			}

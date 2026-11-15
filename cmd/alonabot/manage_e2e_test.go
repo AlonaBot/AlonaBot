@@ -10,6 +10,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"debug/buildinfo"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -22,14 +23,19 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/generate"
+	"github.com/AlonaBot/AlonaBot/internal/pluginkit"
 
 	"github.com/AlonaBot/AlonaBot/contracts/release"
 )
@@ -50,11 +56,24 @@ func prepareTestPackages() error {
 		if err := os.WriteFile(file, []byte(source), 0o600); err != nil {
 			return err
 		}
-		if output, err := exec.Command("go", "build", "-o", filepath.Join(binDir, name), file).CombinedOutput(); err != nil {
+		if output, err := exec.Command("go", fixtureBuildArgs("-o", filepath.Join(binDir, name), file)...).CombinedOutput(); err != nil {
 			return fmt.Errorf("build fixture %s: %w: %s", name, err, output)
 		}
 	}
 	return nil
+}
+
+// fixtureBuildArgs 让手工组件构建沿用外层测试的 race 依赖缓存。
+func fixtureBuildArgs(args ...string) []string {
+	build := []string{"build"}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range info.Settings {
+			if setting.Key == "-race" && setting.Value == "true" {
+				build = append(build, "-race")
+			}
+		}
+	}
+	return append(build, args...)
 }
 
 // 本切片首次接通管理 CLI、依赖、替换和设置写回，以下场景需要多个端到端入口。
@@ -78,6 +97,187 @@ func TestManagementLifecycle(t *testing.T) {
 		t.Fatalf("restart changed generation or reused session: %+v", second)
 	}
 	stopTestCore(t, c)
+	t.Run("package-warnings-and-build-info", func(t *testing.T) {
+		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/lifecycle"}, "https://example.invalid/package.tar.gz", "", t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir := t.TempDir()
+		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json")
+		first := validationPackage(t, archive, "1.0.0", []string{"prepare_effects"}, "")
+		var installed manage.Package
+		output := c.management(t, dir, "", "install", first, "--yes")
+		if err := json.Unmarshal([]byte(output), &installed); err != nil {
+			t.Fatal(err)
+		}
+		if installed.Version != "1.0.0" || len(installed.Warnings) != 2 || installed.Warnings[1] != "prepare_effects not declared; preparation and rollback assume no external side effects" {
+			t.Fatalf("install: %s", output)
+		}
+		c.management(t, dir, "", "enable", "demo")
+		adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+		c.management(t, dir, "", "install", adapter, "--yes")
+		c.management(t, dir, "", "adapter", "instance", "create", "alonabot_adapter_fixture", "one")
+		c.management(t, dir, "", "enable", "alonabot_adapter_fixture")
+		c.waitFor("fixture instance one started")
+		next := validationPackage(t, archive, "1.1.0", []string{"migration_mode", "prepare_effects"}, "")
+		output = c.management(t, dir, "", "update", "demo", "--archive", next, "--yes")
+		var updated manage.UpdateResult
+		if err := json.Unmarshal([]byte(output), &updated); err != nil {
+			t.Fatal(err)
+		}
+		want := []string{installed.Warnings[0], "migration_mode not declared; preparation and rollback assume no external side effects", installed.Warnings[1]}
+		if !slices.Equal(updated.Warnings, want) {
+			t.Fatalf("update: %s; want %v", output, want)
+		}
+		counts := map[string]int{}
+		for _, line := range strings.Split(c.log(), "\n") {
+			var record struct {
+				Level    string `json:"level"`
+				Message  string `json:"msg"`
+				PluginID string `json:"plugin_id"`
+				Warning  string `json:"warning"`
+			}
+			if json.Unmarshal([]byte(line), &record) != nil {
+				continue
+			}
+			if record.Level == "WARN" && record.PluginID == "demo" && record.Message == "package manifest warning" {
+				counts[record.Warning]++
+			}
+		}
+		for i, warning := range want {
+			count := 2
+			if i == 1 {
+				count = 1
+			}
+			if counts[warning] != count {
+				t.Fatalf("WARN %q count = %d, want %d\n%s", warning, counts[warning], count, c.log())
+			}
+		}
+		active := findPackage(t, c, dir, "demo")
+		session := lastSession(t, c)
+		if active.Version != "1.1.0" || active.State != "Activated" {
+			t.Fatalf("updated package: %+v", active)
+		}
+		for i, tc := range []struct{ change, message string }{{"change", "build-info does not match the entrypoint"}, {"remove", "archive has no build-info"}} {
+			bad := validationPackage(t, archive, "1.2.0", nil, tc.change)
+			output := managementFailure(t, c, dir, "update", "demo", "--archive", bad, "--yes")
+			if !strings.Contains(output, "INVALID_ARGUMENT") || !strings.Contains(output, tc.message) {
+				t.Fatal(output)
+			}
+			after := findPackage(t, c, dir, "demo")
+			if after.Active != active.Active || after.Version != active.Version || after.State != "Activated" || lastSession(t, c) != session {
+				t.Fatalf("rejected update changed running package: %+v", after)
+			}
+			status, body := fixtureHTTP(t, c, dir, http.MethodPost, "/plugins/alonabot_adapter_fixture/deliver?instance=one&user=alice&text=%2Fping")
+			if status != http.StatusNoContent {
+				t.Fatalf("ping: %d %s", status, body)
+			}
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				status, body = fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot_adapter_fixture/sent")
+				var replies []string
+				if status != http.StatusOK || json.Unmarshal(body, &replies) != nil {
+					t.Fatalf("sent: %d %s", status, body)
+				}
+				if len(replies) == i+1 && replies[i] == "pong" {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("old plugin did not reply: %s\n%s", body, c.log())
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+		stopTestCore(t, c)
+	})
+}
+
+// validationPackage 只改真实 pack 产物的声明与构建信息，并同步归档发布清单。
+func validationPackage(t *testing.T, original, version string, missing []string, buildInfoChange string) string {
+	t.Helper()
+	file, err := os.Open(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	gz, err := gzip.NewReader(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gz.Close()
+	reader := tar.NewReader(gz)
+	var archive bytes.Buffer
+	compressed := gzip.NewWriter(&archive)
+	writer := tar.NewWriter(compressed)
+	for {
+		header, err := reader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := io.ReadAll(reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch header.Name {
+		case "plugin.yaml":
+			parsed, err := manifest.Parse(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw = bytes.Replace(raw, []byte("version: "+parsed.Manifest.Version+"\n"), []byte("version: "+version+"\n"), 1)
+			for _, field := range missing {
+				raw = bytes.Replace(raw, []byte(field+": none\n"), nil, 1)
+			}
+		case "build-info":
+			if buildInfoChange == "remove" {
+				continue
+			}
+			if buildInfoChange == "change" {
+				index := bytes.Index(raw, []byte("go1."))
+				if index < 0 {
+					t.Fatal("build-info has no Go version")
+				}
+				raw[index+2] = '2'
+			}
+		}
+		header.Size = int64(len(raw))
+		if err := writer.WriteHeader(header); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := writer.Write(raw); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := compressed.Close(); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(original), "release.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var released release.Release
+	if err := json.Unmarshal(raw, &released); err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(archive.Bytes())
+	released.Version, released.Assets[0].Size, released.Assets[0].SHA256 = version, int64(archive.Len()), hex.EncodeToString(digest[:])
+	raw, err = json.Marshal(released)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for name, content := range map[string][]byte{"package.tar.gz": archive.Bytes(), "release.json": raw} {
+		if err := os.WriteFile(filepath.Join(dir, name), content, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return filepath.Join(dir, "package.tar.gz")
 }
 
 func TestManagementDependencies(t *testing.T) {
@@ -506,6 +706,11 @@ func writeTestPackage(dir, id, role, adapterID, source, version, executable, ext
 			return "", err
 		}
 		files["bin/component"] = raw
+		info, err := buildinfo.ReadFile(executable)
+		if err != nil {
+			return "", err
+		}
+		files["build-info"] = []byte(info.String())
 	} else {
 		files["public/index.html"] = []byte("<!doctype html><title>Fixture</title>")
 	}
