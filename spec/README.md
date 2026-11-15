@@ -10,7 +10,7 @@
 
 | 文件 | 执行时的用途 |
 | --- | --- |
-| [PLAN.md](PLAN.md) | 实施计划总纲：最终交付、工作包依赖与交付次序、章节划分（§3.1）、验收规则；§7 为 v0.1 之后的休眠扩展 S-01～S-06 |
+| [PLAN.md](PLAN.md) | 实施计划总纲：最终交付、工作包依赖与交付次序、章节划分（§3.1）、验收规则；§7 为 v0.1 之后的插件休眠扩展（S-01～S-03、S-06；S-04、S-05 已取消） |
 | [plan/](plan/core.md) | 各章节的实施计划：核心、Agent、适配器（[总述](plan/adapters/README.md)、Telegram、OneBot 11）、插件、WebUI、集成与发布；每章有切片表与工作包 |
 | [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md) | API、权限、生命周期、配置、数据与安装的精确行为 |
 | [WIRE-FORMAT.md](WIRE-FORMAT.md) | Protobuf 字段、枚举、控制帧、Bootstrap 与载荷定义 |
