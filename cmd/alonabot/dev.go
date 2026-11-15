@@ -19,8 +19,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/AlonaBot/AlonaBot"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
+	"github.com/AlonaBot/AlonaBot/internal/app"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/pluginkit"
 )
@@ -33,7 +33,7 @@ type developmentProject struct {
 	config  string
 }
 
-func runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval time.Duration, options []alonabot.Option) error {
+func runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval time.Duration, options app.Options) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	dataDir, err := filepath.Abs(dataDir)
@@ -53,9 +53,9 @@ func runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval 
 	}
 	for _, project := range projects {
 		if project.assets != "" {
-			options = append(options, alonabot.WebUI(os.DirFS(project.assets)))
+			options.WebUIs = append(options.WebUIs, os.DirFS(project.assets))
 		} else {
-			options = append(options, alonabot.Executable(project.build.Executable, project.build.PackageManifest))
+			options.Components = append(options.Components, app.ExecutableComponent(project.build.Executable, project.build.PackageManifest))
 		}
 	}
 	if len(projects) > 0 {
@@ -64,10 +64,8 @@ func runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval 
 			return err
 		}
 	}
-	if stdio {
-		options = append(options, alonabot.Stdio())
-	}
-	core, err := alonabot.Start(ctx, options...)
+	options.Stdio = stdio
+	core, err := app.Start(ctx, options)
 	if err == context.Canceled {
 		return nil
 	}
@@ -170,7 +168,7 @@ func developmentConfig(dataDir, id string) (string, error) {
 	return string(raw), err
 }
 
-func pollDevelopment(ctx context.Context, core *alonabot.Core, projects []developmentProject, dataDir string, interval time.Duration) {
+func pollDevelopment(ctx context.Context, core *app.Core, projects []developmentProject, dataDir string, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	settings, err := developmentSettings(dataDir, projects)

@@ -1,6 +1,6 @@
 //go:build unix
 
-package alonabot
+package app
 
 import (
 	"context"
@@ -22,7 +22,6 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	coreoptions "github.com/AlonaBot/AlonaBot/internal/core/options"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
-	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	genresources "github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk"
@@ -176,7 +175,7 @@ func TestAgentServices(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				entries := []component{{root: replacement, role: state.RoleAgent}}
+				entries := []Component{PluginComponent(replacement)}
 				if err := validateComponents(entries, installed); err != nil {
 					return err
 				}
@@ -225,7 +224,8 @@ func startAgentServices(t *testing.T, configuration map[string]any) *Core {
 	}
 	root := agent.New()
 	genresources.Bind(root, agentServiceFixture)
-	opts := []Option{DataDir(dir), Listen("127.0.0.1:0"), Args("STOP_DRAIN=50ms"), Plugin(root)}
+	listen := "127.0.0.1:0"
+	opts := Options{DataDir: dir, Listen: &listen, Args: []string{"STOP_DRAIN=50ms"}, Components: []Component{PluginComponent(root)}}
 	for _, id := range []string{serviceCallerID, serviceDeniedID} {
 		p := sdk.NewPlugin()
 		genresources.Bind(p, agentServiceResources(t, id, "plugin"))
@@ -240,10 +240,10 @@ func startAgentServices(t *testing.T, configuration map[string]any) *Core {
 			_, err := serviceapi.JSON[optionsapi.Query, optionsapi.Page](serviceSource).Call(c.Context(), optionsapi.Query{Limit: 10})
 			return llm.Response{}, err
 		})
-		opts = append(opts, Plugin(p))
+		opts.Components = append(opts.Components, PluginComponent(p))
 	}
 	ctx, cancel := context.WithCancel(t.Context())
-	core, err := Start(ctx, opts...)
+	core, err := Start(ctx, opts)
 	if err != nil {
 		cancel()
 		t.Fatal(err)

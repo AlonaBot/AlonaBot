@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/AlonaBot/AlonaBot"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/app"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/spf13/cobra"
@@ -50,20 +50,20 @@ func execute(args []string) int {
 	}
 	runCommand.RunE = func(cmd *cobra.Command, args []string) error {
 		flags := cmd.Flags()
-		options := []alonabot.Option{alonabot.DataDir(dataDir), alonabot.Args(inputs...)}
+		options := app.Options{DataDir: dataDir, Args: inputs}
 		if flags.Changed("listen") {
-			options = append(options, alonabot.Listen(listen))
+			options.Listen = &listen
 		}
 		if flags.Changed("log-level") {
 			switch level {
 			case slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError:
-				options = append(options, alonabot.LogLevel(level))
+				options.LogLevel = &level
 			default:
 				return fmt.Errorf("--log-level must be debug, info, warn or error")
 			}
 		}
 		if flags.Changed("log-format") {
-			options = append(options, alonabot.LogFormat(format))
+			options.LogFormat = &format
 		}
 		code = exitFailure
 		if err := runDevelopment(args, dataDir, reload, stdio, values.DevReloadPoll, options); err != nil {

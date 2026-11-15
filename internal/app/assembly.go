@@ -1,4 +1,4 @@
-package alonabot
+package app
 
 import (
 	"context"
@@ -67,7 +67,8 @@ const (
 	packageDigestPrefix  = 12 // 与 packages.Candidate.MoveTo 的不可变目录命名一致。
 )
 
-type component struct {
+// Component 保留开发组件的角色与装配资源，由对应的构造函数生成。
+type Component struct {
 	root            *sdk.Plugin
 	adapter         adapter.Adapter
 	role            state.Role
@@ -79,7 +80,22 @@ type component struct {
 	stdio           bool
 }
 
-func validateComponents(components []component, installs []state.Install) error {
+// PluginComponent 登记由生成资源确定身份的开发插件或唯一 Agent。
+func PluginComponent(root *sdk.Plugin) Component {
+	return Component{root: root, role: state.RolePlugin}
+}
+
+// AdapterComponent 登记由生成资源确定身份的开发 Adapter。
+func AdapterComponent(a adapter.Adapter) Component {
+	return Component{adapter: a, role: state.RoleAdapter}
+}
+
+// ExecutableComponent 复制包 manifest，启动时按 manifest 确定开发组件的角色。
+func ExecutableComponent(path string, packageManifest []byte) Component {
+	return Component{executable: path, packageManifest: append([]byte(nil), packageManifest...)}
+}
+
+func validateComponents(components []Component, installs []state.Install) error {
 	ids := make(map[string]bool)
 	adapters := make(map[string]bool)
 	agent := false
@@ -549,7 +565,7 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) (err error) 
 	return nil
 }
 
-func (c *Core) startDevelopment(ctx context.Context, dir string, entry *component) error {
+func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Component) error {
 	id := entry.manifest.ID
 	const configFile = "config.json"
 	const databaseFile = "dev.sqlite"
@@ -1075,7 +1091,7 @@ func (a *assembly) componentDescriptor(id string) *pb.AdapterDescriptor {
 	return instance.Adapter
 }
 
-func (c *Core) instanceSchema(components []component) func(context.Context, string) (*configschema.Schema, error) {
+func (c *Core) instanceSchema(components []Component) func(context.Context, string) (*configschema.Schema, error) {
 	return func(ctx context.Context, id string) (*configschema.Schema, error) {
 		var raw []byte
 		c.developmentMu.RLock()
@@ -1197,7 +1213,7 @@ func (a *assembly) checkAdapterEvent(ev *pb.Event) error {
 }
 
 // loadExecutableResources 将资源与当前二进制摘要配对；重建改变身份时保留旧 Session。
-func (entry *component) loadExecutableResources() error {
+func (entry *Component) loadExecutableResources() error {
 	path, err := filepath.Abs(entry.executable)
 	if err != nil {
 		return err

@@ -1,6 +1,6 @@
 //go:build unix
 
-package alonabot
+package app
 
 import (
 	"archive/tar"
@@ -169,11 +169,11 @@ func newWebUIHarness(t *testing.T) *webUIHarness {
 func (h *webUIHarness) start(fsys fs.FS) {
 	h.t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	opts := []Option{DataDir(h.dir)}
+	opts := Options{DataDir: h.dir}
 	if fsys != nil {
-		opts = append(opts, WebUI(fsys))
+		opts.WebUIs = append(opts.WebUIs, fsys)
 	}
-	core, err := Start(ctx, opts...)
+	core, err := Start(ctx, opts)
 	if err != nil {
 		cancel()
 		h.t.Fatal(err)

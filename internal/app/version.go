@@ -1,4 +1,4 @@
-package alonabot
+package app
 
 import "runtime/debug"
 
