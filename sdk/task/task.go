@@ -55,7 +55,7 @@ func On[T any](r sdk.Registrar, t Type[T]) *Builder[T] {
 		if typ.Kind() != reflect.Struct && typ.Kind() != reflect.Map {
 			return route, fmt.Errorf("task %q parameters must encode a JSON object", t.name)
 		}
-		handler := b.handler // 注册收集阶段 固定本次 Session 的处理函数。
+		handler := b.handler // 注册收集阶段固定本次 Session 的处理函数。
 		route.Invoke = func(c *sdk.Context) error {
 			// 协议边界核对任务身份，解码成功后才进入用户函数。
 			event, inbound := scope.TaskContext(c)
@@ -76,7 +76,7 @@ func On[T any](r sdk.Registrar, t Type[T]) *Builder[T] {
 	return b
 }
 
-// Handle 结束任务登记；缺失、重复或 nil 函数在 注册收集阶段 报错。
+// Handle 结束任务登记；缺失、重复或 nil 函数在 Run 收集注册时报错。
 func (b *Builder[T]) Handle(fn func(*sdk.Context, T) error) {
 	b.scope.Check()
 	b.handles++

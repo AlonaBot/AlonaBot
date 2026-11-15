@@ -125,7 +125,7 @@ func (s *Builder[In, Out]) prepareJSON() (registry.Service[*sdk.Context], error)
 		}
 		return encoded, nil
 	})
-	// 2. 工具描述携带同一输入 Schema 原文，完整注册校验交给 注册收集阶段。
+	// 2. 工具描述携带同一输入 Schema 原文，完整注册校验交给注册收集阶段。
 	if s.toolDescription != nil {
 		var policy pb.ToolPolicy
 		switch s.toolDefault {
@@ -182,7 +182,7 @@ func (s *Builder[In, Out]) Permission(p sdk.Permission) *Builder[In, Out] {
 	return s
 }
 
-// Tool 设置工具说明与缺省策略；Proto 声明或 Handle 后调用由 注册收集阶段 报错。
+// Tool 设置工具说明与缺省策略；Proto 声明或 Handle 后调用在 Run 收集注册时报错。
 func (s *Builder[In, Out]) Tool(description string, defaultPolicy tool.Default) *Builder[In, Out] {
 	s.builder.Scope.Check()
 	if s.builder.Handles != 0 {

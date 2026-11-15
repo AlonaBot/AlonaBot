@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/google/jsonschema-go/jsonschema"
 )
@@ -22,13 +21,6 @@ func JSONType[T any]() (string, uint32, error) {
 		version = value.SchemaVersion()
 	}
 	id := typ.PkgPath() + "." + typ.Name()
-	// 选项来源的 Schema 身份由协议固定，不随 Go 包移动。
-	switch id {
-	case "github.com/AlonaBot/AlonaBot/sdk/options.Query":
-		id = validate.OptionsQuerySchemaID
-	case "github.com/AlonaBot/AlonaBot/sdk/options.Page":
-		id = validate.OptionsPageSchemaID
-	}
 	return id, version, nil
 }
 

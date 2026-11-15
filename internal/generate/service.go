@@ -19,7 +19,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
@@ -231,7 +230,7 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 		args := importer.info.Instances[ident].TypeArgs
 		for index := range args.Len() {
 			typ := types.Unalias(args.At(index))
-			// Protobuf 的指针参数绑定包级消息类型，JSON 与 BusEvent 仍要求值类型。
+			// Protobuf 的指针参数绑定包级消息类型，service.JSON 与 bus.Define 仍要求值类型。
 			if pointer, ok := typ.(*types.Pointer); ok && fn.Name() == "Proto" {
 				typ = types.Unalias(pointer.Elem())
 			}
@@ -257,13 +256,6 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 				pkgPath = "main"
 			}
 			id := pkgPath + "." + named.Obj().Name()
-			// 固定选项查询协议保留类型迁移前的 Schema 身份。
-			switch id {
-			case sdkPath + "/options.Query":
-				id = validate.OptionsQuerySchemaID
-			case sdkPath + "/options.Page":
-				id = validate.OptionsPageSchemaID
-			}
 			if previous := ids[id]; previous != nil {
 				if !types.Identical(previous, typ) {
 					s.diagnostic(ident.Pos(), "conflicting service schema_id "+id)

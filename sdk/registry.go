@@ -37,7 +37,7 @@ type command struct {
 }
 
 // CommandGroup 收集命令；实例方法以方法值显式传入，不做自动 DI。
-// 子组共享根注册器的构建链和冲突索引；collect 在全部声明结束后解析继承权限。
+// 子组共享根注册器的构建链和冲突索引；Run 在全部声明结束后收集注册时解析继承权限。
 type CommandGroup struct {
 	plugin     *Plugin
 	subID      string
@@ -139,7 +139,7 @@ func (r *CommandGroup) start(c command, invalid bool) *CommandBuilder {
 	return b
 }
 
-// CommandBuilder 收集一条路由；Handle 结束构建，collect 统一验证。
+// CommandBuilder 收集一条路由；Handle 结束构建，Run 收集注册时统一验证。
 type CommandBuilder struct {
 	registry    *CommandGroup
 	command     command
@@ -229,7 +229,7 @@ func (b *CommandBuilder) Permission(p Permission) *CommandBuilder {
 	return b
 }
 
-// Handle 结束路由构建，签名规则由 collect 检查。
+// Handle 结束路由构建，签名规则在 Run 收集注册时检查。
 func (b *CommandBuilder) Handle(handler any) {
 	b.registry.plugin.checkRegistration()
 	b.handles++
@@ -533,7 +533,7 @@ type ScheduleBuilder struct {
 	afterHandle bool
 }
 
-// Timezone 设置 cron 的 IANA 时区；缺省为 UTC，Every 上调用由 collect 报错。
+// Timezone 设置 cron 的 IANA 时区；缺省为 UTC，Every 上调用在 Run 收集注册时报错。
 func (b *ScheduleBuilder) Timezone(name string) *ScheduleBuilder {
 	b.registry.plugin.checkRegistration()
 	if b.handles != 0 {

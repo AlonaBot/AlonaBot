@@ -37,9 +37,9 @@ const taskRoutePrefix = "task."
 
 const (
 	// OptionsQuerySchemaID 固定 SDK 选项查询输入的类型标识，版本为 1。
-	OptionsQuerySchemaID = "github.com/AlonaBot/AlonaBot/sdk.OptionsQuery"
+	OptionsQuerySchemaID = "github.com/AlonaBot/AlonaBot/sdk/options.Query"
 	// OptionsPageSchemaID 固定 SDK 选项查询输出的类型标识，版本为 1。
-	OptionsPageSchemaID = "github.com/AlonaBot/AlonaBot/sdk.OptionsPage"
+	OptionsPageSchemaID = "github.com/AlonaBot/AlonaBot/sdk/options.Page"
 )
 
 // routeKindOf 给出 RouteDescriptor 的 spec 分支对应的 kind。

@@ -155,7 +155,7 @@ func commandRouteID(command command) string {
 	return commandRoutePrefix + strings.Join(command.Path, ".")
 }
 
-// EventType 绑定事件名及 Handler 的载荷类型，零值由 collect 拒绝。
+// EventType 绑定事件名及 Handler 的载荷类型，零值在 Run 收集注册时被拒绝。
 type EventType struct {
 	name    string
 	payload reflect.Type

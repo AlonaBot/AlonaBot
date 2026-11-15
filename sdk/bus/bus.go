@@ -73,7 +73,7 @@ func Subscribe[T any](owner sdk.Registrar, e Event[T]) *Subscription[T] {
 	return s
 }
 
-// ID 设置订阅路由 ID；Handle 之后调用由 注册收集阶段 报错。
+// ID 设置订阅路由 ID；Handle 之后调用在 Run 收集注册时报错。
 func (s *Subscription[T]) ID(routeID string) *Subscription[T] {
 	s.scope.Check()
 	if s.handles != 0 {

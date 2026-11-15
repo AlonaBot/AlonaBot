@@ -18,7 +18,7 @@ type SubPlugin struct {
 	usesConfig bool
 }
 
-// Sub 创建逻辑子插件；ID 和重复声明在 collect 时检查。
+// Sub 创建逻辑子插件；ID 和重复声明在 Run 收集注册时检查。
 func (p *Plugin) Sub(id string) *SubPlugin {
 	p.checkRegistration()
 	s := &SubPlugin{registrationScope: p.sharedScope(id)}

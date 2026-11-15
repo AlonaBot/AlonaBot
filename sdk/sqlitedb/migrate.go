@@ -132,7 +132,7 @@ func Migrate(p *sdk.Plugin, fn func(context.Context, *sql.DB) error) {
 	}})
 }
 
-// Migrations 登记按 ID 严格递增的迁移列表，Collect 时核对全部步骤。
+// Migrations 登记按 ID 严格递增的迁移列表，Run 收集注册时核对全部步骤。
 func Migrations(p *sdk.Plugin, list []Migration) {
 	list = slices.Clone(list)
 	dbhook.Register(p, dbhook.Migrator{Mode: pb.MigrationMode_MIGRATION_MODE_VERSIONED, Check: func() error { return checkMigrations(list) }, Run: func(ctx context.Context) (*pb.MigrationState, error) {

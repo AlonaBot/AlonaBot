@@ -36,7 +36,7 @@ type Option struct {
 	Description string `json:"description,omitempty"`
 }
 
-// Serve 登记固定 Schema 的私有 JSON 选项来源，注册收集阶段 检查重复名称与 nil Handler。
+// Serve 登记固定 Schema 的私有 JSON 选项来源，Run 收集注册时检查重复名称与 nil Handler。
 func Serve(r sdk.Registrar, serviceName string, fn func(ctx context.Context, q Query) (Page, error)) {
 	scope := registry.For[*sdk.Context, sdk.Permission](r)
 	scope.Check()
