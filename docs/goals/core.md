@@ -7237,7 +7237,7 @@ internal/core/journal
 
 ### goal-139 · T-04.16 SDK 按类别分包
 
-状态：待派发。前置 T-04.15（[PR #197](https://github.com/AlonaBot/AlonaBot/pull/197)，合并提交 `ba2d323`）已合并。2026-11-14 按 main `ba2d323` 的代码写出接口、行为与测试段（D-146 由 [PR #196](https://github.com/AlonaBot/AlonaBot/pull/196) 定稿）。
+状态：已完成（[PR #199](https://github.com/AlonaBot/AlonaBot/pull/199)，合并提交 `046e752`），证据见 TEST-MATRIX §3.2。合入：`sdk/task`（`Define`、`Type`、`On`、`Builder`、`Instance`、`Option`、`Key`、`Timezone`、`Pause`、`Resume`、`Status`、`State`）、`sdk/service`（`JSON`、`Proto`、`Spec`、`Serve`、`Builder`、`Access` 与其常量）、`sdk/bus`（`Define`、`Event`、`Subscribe`、`Subscription`）、`sdk/button`（`Define`、`Action`、`On`、`Builder`）、`sdk/media`（`Upload`、`Open`、`Grant`、`Image`、`File`、`Video`）、`sdk/conversation`（`Append`、`List`、`Clear`、`Entry`）、`sdk/tool`（`Invoke`、`List`、`Info`、`Confirm`、`Default`、`DefaultAllow`、`DefaultConfirm`）、`sdk/action`（`Client`、`NewClient`、`Caller`）与 `sdk/options`（`Serve`、`Query`、`Page`、`Option`）；根包与子包共用的注册状态在 `sdk/internal/registry`；`Collect`、`Registration` 及其描述类型不再导出，同进程入口 `internal/inproc.Plugin`、`internal/inproc.Adapter` 由 SDK 在 init 中登记，根包经它启动组件；生成器识别 `service.JSON`、`service.Proto`、`bus.Define` 与 `task.Define`。审查追加的修复：选项来源的固定 Schema ID 改为 `sdk/options.Query`、`sdk/options.Page`，删除运行期与生成器中按类型名改写旧 ID 的特例（FIX-1）；注释去掉已不导出的 `Collect` 与替换残留（FIX-2）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-139（切片 T-04.16：SDK 按类别分包）。goal 目录 goal-139，分支 goal-139，worktree .worktrees/goal-139，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -7404,21 +7404,66 @@ internal/core/state
 
 ### goal-140 · T-13.5 模块根包只保留库模式接口
 
-状态：等待前置（T-04.16）。目标、依据与要点由 PLAN T-13 步骤 6 确定；T-04.16 合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：待派发。前置 T-04.16（[PR #199](https://github.com/AlonaBot/AlonaBot/pull/199)，合并提交 `046e752`）已合并。2026-11-14 按 main `046e752` 的代码写出范围、接口、行为与测试段（D-148 由 [PR #196](https://github.com/AlonaBot/AlonaBot/pull/196) 定稿）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-140（切片 T-13.5：模块根包只保留库模式接口）。goal 目录 goal-140，分支 goal-140，worktree .worktrees/goal-140，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：模块根包 alonabot 只保留 CONTRACTS §15.5 的库模式接口（Run、Start、*Core、Wait 与选项 Plugin、Adapter、WebUI、DataDir、Args、Listen、LogLevel、LogFormat），Core 装配、候选与进程管理移到 internal/app。行为与协议不变。
+目标：模块根包 alonabot 只保留 CONTRACTS §15.5 的库模式接口——Run、Start、*Core 与 Wait，选项 Plugin、Adapter、WebUI、DataDir、Args、Listen、LogLevel、LogFormat——每个都是对新包 internal/app 的薄包装。Core 装配、候选与进程管理，以及只供开发 CLI 使用的 Executable、Stdio、Core.Restart、Core.RestartInstance 与 Core.ReloadSettings 移到 internal/app，cmd/alonabot 直接使用。行为与协议不变，只改包与调用方式。
 
-依据：PLAN T-13 步骤 6 及其失败停止条件；CONTRACTS §15.5；DECISIONS D-148；TEST-MATRIX V-64、V-65；ARCHITECTURE 的根包与 internal/app 行。
+依据：PLAN T-13 步骤 6 及其失败停止条件；CONTRACTS §15.4、§15.5；DECISIONS D-148；TEST-MATRIX V-64、V-65；ARCHITECTURE 的根包与 internal/app 行。
 
-要点：
-- 根包的 Run、Start、*Core、Wait 与选项改为对 internal/app 的薄包装。
-- 只供开发 CLI 使用的 Executable、Stdio、Core.Restart、Core.RestartInstance 与 Core.ReloadSettings 移入 internal/app，cmd/alonabot 直接使用。
-- 根目录下的测试装配与端到端测试移出根包；库模式、开发运行与热部署的集成测试在新位置照常通过。
+范围（只新增、修改或删除这些）：
+- 根目录的 alonabot.go、assembly.go、agent_target.go、journal.go、version.go：除下文「根包」列出的库模式接口外，全部代码移入 internal/app（文件用普通 mv 后改包名，不做任何 git 写操作）；根包只留 alonabot.go 一个非测试文件
+- 根目录测试 admin_upload_test.go、agent_service_test.go、journal_test.go、pipeline_test.go、scheduler_sdk_test.go、scheduler_tasks_test.go、service_chain_test.go、t11_e2e_test.go、webui_test.go 移入 internal/app；alonabot_test.go（TestLibraryLifecycle，只用公开接口）留在根包
+- 新增 internal/app/
+- cmd/alonabot/：commands.go 与 dev.go 改用 internal/app；随之改写的 cmd/alonabot/*_test.go
+- docs/development.md、docs/plugin-guide.md、README.md 中提到这些能力或测试位置的写法
+- 上述包的 *_local_test.go
+允许的新跨模块边：根包 -> internal/app；cmd/alonabot -> internal/app；internal/app 承接原根包已有的依赖（-> internal/core/...、-> sdk/...、-> contracts/...、-> internal/generated、-> internal/inproc、-> internal/tune、-> internal/wire），其测试承接原根包测试的依赖（-> agent/...、-> internal/generate、-> internal/pluginkit、-> internal/oslock）。根包只 import internal/app、sdk、sdk/adapter 与标准库；cmd/alonabot 不再 import 根包；internal/core 仍不 import sdk 与 internal/app。
 
-不做：库模式接口的增删；协议与行为的改动；CLI 参数（T-13.6）；新增依赖。
+接口（照此实现）：
+- internal/app：
+  // Options 汇总一次运行的装配参数；指针字段为 nil 时不覆盖 core_config.json。
+  type Options struct {
+      DataDir    string        // 原样交给 filepath.Abs；不设缺省值
+      Args       []string      // 调优参数与参数文件，后于 ALONABOT_ARGS 应用
+      Components []Component   // 开发组件，按登记顺序
+      Listen     *string
+      LogLevel   *slog.Level
+      LogFormat  *string
+      Stdio      bool          // Executable 组件使用 stdio 传输
+      WebUIs     []fs.FS       // 开发 WebUI；多于一个或含 nil 时返回原有的用法错误
+  }
+  // Component 只设 Plugin、Adapter 或 Executable 其一；Executable 与 PackageManifest 成对给出。
+  type Component struct { Plugin *sdk.Plugin; Adapter adapter.Adapter; Executable string; PackageManifest []byte }
+  func Start(ctx context.Context, o Options) (*Core, error)
+  type Core struct{ ... }
+  func (c *Core) Wait() error
+  func (c *Core) Restart(ctx context.Context, id string) error
+  func (c *Core) RestartInstance(ctx context.Context, adapterID, instanceID string) error
+  func (c *Core) ReloadSettings(ctx context.Context) error
+- 根包（签名、文档注释与行为不变，函数体只做转发）：
+  type Option func(*app.Options)
+  func Plugin(root *sdk.Plugin) Option；func Adapter(a adapter.Adapter) Option；func WebUI(fsys fs.FS) Option；func DataDir(dir string) Option；func Args(values ...string) Option；func Listen(addr string) Option；func LogLevel(level slog.Level) Option；func LogFormat(format string) Option
+  type Core struct{ ... }（只持有 *app.Core）；func (c *Core) Wait() error
+  func Start(ctx context.Context, opts ...Option) (*Core, error)：以 app.Options{DataDir: "data"} 为起点依次应用选项，再调用 app.Start
+  func Run(opts ...Option) error：保留现有的 SIGINT、SIGTERM 处理，调用 Start 与 Wait
+  删除根包的 Executable、Stdio 与 Core 的 Restart、RestartInstance、ReloadSettings，不留别名或转发。
+
+行为：
+- 库模式、alonabot run 与 run --reload 的启动、组件检查、错误文本、退出码、日志、停止与热部署行为都与移动前相同：ALONABOT_ARGS 先于 Args 应用；根包缺省数据目录为 data，CLI 传入 --data-dir 的值；WebUI 重复登记与 nil 文件系统的用法错误、Listen 的安全检查、开发组件与已安装包的身份冲突都按原次序报告。
+- 根包的 Start 返回的错误与 app.Start 相同（包括 context.Canceled），不另行包装。
+- plugintest、examples/devbot 与 agent 测试继续经根包的 Start 运行，代码不改。cmd/alonabot/plugin_cli_e2e_test.go 中写给作者工程的库模式 main 仍 import 根包。
+- 版本号（coreVersion、moduleVersion）随装配移入 internal/app，仍按模块路径 github.com/AlonaBot/AlonaBot 读取构建信息。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：不新增测试。9 个根目录测试文件移入 internal/app，只改包名、装配写法（选项函数改为 Options 字面量或测试内的辅助函数）与 import，断言、子测试与超时不变；TestMain 按原环境变量重入组件进程的方式不变。根包保留 TestLibraryLifecycle；cmd/alonabot 的 TestDevelopmentCLI 与 dev 端到端测试覆盖 CLI 经 internal/app 的开发运行与热部署。
+- 本地自测（*_local_test.go，结果写入 PR）：根包 `go doc` 的导出集合只剩上文「根包」列出的标识符；`go list -deps ./cmd/alonabot` 不含根包、`go list -deps ./internal/core/...` 不含 internal/app 与 sdk；移动后 internal/app 的测试函数与子测试名称集合与移动前根包的相同（以 main 为基准，排除 TestLibraryLifecycle）。
+
+完成条件：本地证据齐备；gofmt -l 对改动的 Go 文件无输出；go generate ./... 之后工作区没有变化；go vet ./...；go test -race ./...；go build ./...；CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./...；`go doc .` 只列出库模式接口。行为发生变化、出现循环依赖，或 internal/core 需要 import sdk 或 internal/app 时，按 PLAN T-13 的停止条件暂停交付。
+
+不做：库模式接口的增删；协议与行为的改动；CLI 位置参数与缺省值（T-13.6）；新增依赖；在根包新增测试；改写 TEST-MATRIX 中已有的证据行（文件移动后的链接由审查者合并前同步）。
 ```
 
 ## 第 19 波
