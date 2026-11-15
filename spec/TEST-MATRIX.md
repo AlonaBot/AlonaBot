@@ -84,10 +84,10 @@
 | V-74 | T-10 | linux/amd64，与 V-33 同一台机器；各进程 Activated 后空闲 2 分钟，读 `/proc/<pid>/smaps_rollup` 的 Pss，取 3 轮中位数：只运行 Core（不启用任何插件与 Adapter）；echo 示例插件进程；rss 插件进程（`sqlitedb`，有一个订阅）；configdb 示例的 `gormdb` 变体进程 | Core ≤ 24 MiB，echo ≤ 10 MiB，rss ≤ 14 MiB，configdb ≤ 16 MiB；同时记录 RSS 与私有内存。超出视为回归，按 CONTRACTS §10 处理 |
 | V-75 | T-01、T-10 | 用 docs/development.md 的 `go list -deps` 命令，在五个目标上（设 GOOS/GOARCH）列出 Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）链接的模块 | 只含 docs/development.md 允许清单中的模块 |
 | V-76 | T-12 | 测试插件调用 `llm.generate`：`llm_service_allowed_plugins` 为缺省的 `["*"]`、改为名单后在与不在名单中、指定不存在的 Provider、模拟 Provider 出错与中途断开、调用方期限短于生成耗时、Agent 配置中没有 Provider、Agent 组件未启用、调用方经 `@agent` 调用 | 缺省时调用成功；改为名单后不在名单中返回 PERMISSION_DENIED，模拟服务没有收到请求（D-83）；不存在的 Provider 为 INVALID_ARGUMENT，没有 Provider 为 FAILED_PRECONDITION；出错与断开为 UNAVAILABLE，safe_message 不含 API Key，模拟服务只收到一次请求；期限到达时调用方得到 DEADLINE_EXCEEDED；Agent 未启用时按目标未激活失败；`@agent` 解析到已安装的 Agent 组件；成功时返回 text、provider、model 与用量，会话存储没有新增条目 |
-| V-77 | S-01、S-02 | 插件声明可休眠且空闲达到阈值后退出；休眠后首条命令、Service 调用与 HTTP 请求；同一插件 100 个并发唤醒；等待中取消与 deadline 到达；STOPPING 期间到达请求；唤醒后 REGISTER 的路由摘要与快照不一致；在途 Handler、Service、HTTP、多轮等待阻止休眠；Core 重启后从快照恢复路由；未启用休眠 | 首条请求按原权限、Target、Trace 与 deadline 交付一次；并发唤醒只产生一个新 Session；冷启动不延长请求期限，取消的请求不交付；停止中到达的请求等旧进程退出后由新 Session 处理，没有双进程；摘要不一致时停止激活；空闲退出记 `SUSPENDED`、StopReason 为 `IDLE`，不计入异常退出，不更新 ActiveGeneration、不重跑迁移；快照不含 Secret；未启用时生命周期与事件行为不变 |
+| V-77 | S-01、S-02 | 插件声明可休眠且空闲达到阈值后退出；休眠后首条命令、Service 调用与 HTTP 请求；同一插件 100 个并发唤醒；等待中取消与 deadline 到达；STOPPING 期间到达请求；唤醒后 REGISTER 的路由摘要与快照不一致；在途 Handler、Service、HTTP、多轮等待阻止休眠；Core 重启后从快照恢复路由；未启用休眠；注册了消息类事件路由或 Raw 路由的插件；插件策略为 `never` 或自带空闲时长；运行中修改全局与按插件的设置 | 首条请求按原权限、Target、Trace 与 deadline 交付一次；并发唤醒只产生一个新 Session；冷启动不延长请求期限，取消的请求不交付；停止中到达的请求等旧进程退出后由新 Session 处理，没有双进程；摘要不一致时停止激活；空闲退出记 `SUSPENDED`、StopReason 为 `IDLE`，不计入异常退出，不更新 ActiveGeneration、不重跑迁移；快照不含 Secret；未启用时生命周期与事件行为不变；任意消息监听的插件缺省不休眠，管理员显式给出时长后才休眠；`never` 的插件不休眠，改为 `never` 时正在休眠的插件随即唤醒；按插件的空闲时长覆盖全局值；设置修改不重载插件，从下一次空闲判定起生效（D-153） |
 | V-78 | S-03 | 休眠插件上 12:00、16:00、22:00 三个 cron 任务与一个 interval 任务；同一 job 上一轮未结束；插件异常离线期间到期 | 休眠插件按计划被唤醒并执行，结果记录后可再次休眠；同一 job 不重叠；异常离线期间的 tick 跳过且不补执行 |
-| V-79 | S-04 | Telegram long polling 与 OneBot 11 正向 WebSocket 实例空闲；同一 Adapter 包一个实例停止、另一个仍运行；声明外部唤醒来源的测试 Adapter 空闲、收到出站调用与外部缓冲事件 | 官方两个 Adapter 不休眠；仍有运行实例时进程不停止；测试 Adapter 休眠后被唤醒，恢复游标后交付且不重复；`bot.offline` 区分空闲休眠与掉线 |
-| V-80 | S-05 | 外部唤醒提供者（本地模拟）可用与不可用；触发器注册失败；休眠事务各步注入失败；同一次外部触发重复送达与并发送达；执行中崩溃；唤醒迟到超出容忍窗口；库模式 | 接管或注册未确认时保持运行；任一步失败恢复服务；重复触发只产生一次执行尝试；结果未知的记 `UNKNOWN` 不重跑；超出窗口的记为跳过；唤醒时不出现第二个持有 core.lock 的实例；库模式不进入整机休眠 |
+| V-79 | S-04 | 已取消（D-153）：Adapter 始终常驻，不做这一项休眠 | — |
+| V-80 | S-05 | 已取消（D-153）：Core 始终常驻，不做这一项休眠 | — |
 | V-81 | S-06 | 固定机器上 echo 示例插件与 V-74 的同组插件：冷启动到 ACTIVATED 各 100 次；活跃与休眠时的 PSS/RSS；频繁唤醒；切回 `always_on` | 记录冷启动 P50/P95/P99（echo 的 P95 以 200 ms 为初步目标）、PSS/RSS、CPU、唤醒次数、失败与丢弃数；超过冷启动阈值的插件转为常驻；切回 `always_on` 后按原代次启动全部已启用组件，路由快照、任务记录与业务数据保留 |
 | V-82 | T-09、T-12 | 已安装官方 Agent、WebUI 与 Telegram Adapter 时，不带与带 `--replace` 安装同类的社区组件（本地签名的测试包与本地 Release 模拟服务）、新组件预检失败、替换后 update、`@agent` 调用、按原来源重装旧组件、两个不同 `adapter_id` 的 Adapter | 不带 `--replace` 返回 ALREADY_EXISTS 并列出已安装的组件；预检失败时旧组件不受影响；替换在确认后卸载旧组件并保留其数据与来源绑定，新组件沿用旧组件的启用状态，被替换 Adapter 的实例不出现在新 Adapter 下；之后 update 只查询新来源；`@agent` 调用到达新 Agent；旧组件可按原来源重装并复用数据；不同 `adapter_id` 的 Adapter 可以并存 |
 | V-83 | T-08、T-09 | WebUI 组件：已启用、未安装、Admin API 主版本不在声明范围内、前端路由路径、`/api/` 与内部路径、带扩展名的不存在路径、库模式 `alonabot.WebUI`；图标：manifest 声明的 SVG、PNG、WebP，未声明的包内文件、其他扩展名、含 `<script>` 的 SVG、未认证请求 | WebUI 文件来自不可变包目录，前端路由回退 `index.html`，`/api/` 不被覆盖，带扩展名的不存在路径返回 404；未安装返回 503 与提示；版本不兼容时拒绝安装与启用；图标只提供声明过的路径并带 sandbox CSP 与 nosniff，其他扩展名在包校验时拒绝，未认证返回 401；直接打开含脚本的 SVG 时脚本不在 Admin 源执行 |
@@ -129,6 +129,7 @@
 | V-119 | T-03 | Telegram 服务消息（D-133）：论坛话题的创建、编辑、关闭与重开；置顶消息；修改群名；普通群升级为超级群（旧群与新超级群各一条服务消息）；Bot 与其他成员入群、退群的服务消息；其他服务消息（如 group_chat_created、new_chat_photo）；频道中的置顶；投票等没有可映射内容的普通消息 | 表中的服务消息各交付一次对应的扩展事件，payload 符合声明的 Schema，话题事件带该话题的 thread_id，迁移事件的 Target 为新超级群且旧群那条不交付；成员类服务消息不交付，成员变化只来自 chat_member 与 my_chat_member；其他服务消息不交付且游标推进；以上都不产生 message.created；投票等仍为 chain 为空的 message.created |
 | V-120 | T-04、T-13 | SDK 公开面（D-144～D-147）：Handler 内 `c.SendTo` 发往另一会话与同一会话的另一话题、没有默认目标时 `c.Send`、后台 `sdk.Send` 与 `sdk.SendText` 收 sid；`message.SID`/`ParseSID`、`Ref`/`ParseRef`、`UID`/`ParseUID` 的往返（含 `%`、`#`、`/`、`@` 与 external_user_id 中的 `:`）与不合法输入；`alonabot init` 创建的工程只含 `New()` 与注册，没有生成文件、不写 `//go:generate`；`run`、`build`、`test`、`pack` 之后作者目录不变；不经 CLI 直接 `go test`（plugintest，含 build tags），修改 `config_schema.json` 或 i18n 后再直接 `go test`；用 `alonabot build` 构建库模式的 main 包（本 module 的组件与一个经本地文件 GOPROXY 进入模块缓存的第三方组件），以及直接 `go build` 同一 main 包；在包级变量中调用 New 的组件；同包多次 New、库模式登记多个插件与一个 Adapter；Adapter 在 Descriptor 中声明私有路由与 platform token 公开路由，路径不合法或重复；分包后的示例、官方组件、Agent 与 plugintest 的编译与运行 | 消息发往给出的 sid，没有默认目标时 `c.Send` 返回 NO_DEFAULT_TARGET；往返不变，不合法时返回 INVALID_ARGUMENT 且不发出请求；作者目录中不出现生成文件；`go test` 中插件以现场扫描的资源注册与激活，修改后的 schema 与文案在下一次 `go test` 生效；`alonabot build` 的库模式二进制取得每个组件的资源并激活，直接 `go build` 的产物能编译，启动时在连接 Core 前返回英文错误并提示 `alonabot build`，不启动组件的单元测试不受影响；包级变量中构造的组件同样取得资源；同包对象共用资源，不同组件互不串用；Adapter 路由的注册描述与原 `AdapterHTTP` 写法相同，不合法的声明在连接 Core 前报错；`sdk` 根包不再导出生成相关的 API 与已移入子包的标识符 |
 | V-121 | T-13 | CLI 参数从简（D-149）：在组件工程目录中不带目录运行 `build`、`check`、`test`、`pack`，以及给出另一工程的目录；使用已删除的 `--dir`；在空目录中运行 `init`（目录名合法与不合法、在已有 module 内外、Adapter 角色）；`source` 为 GitHub 与非 GitHub 的工程不带 `--asset-url` 运行 `pack`；`install` 给出归档、给出官方组件 ID（`packages/` 中存在与不存在）、不给参数（当前目录与工程 `bin/` 中有零个、一个、多个安装包） | 不给目录时作用于当前目录，给出目录时作用于该目录，`--dir` 报未知参数；目录名合法时 ID 与 module 取目录名、Adapter 的 adapter_id 等于 ID，不合法时报错要求 `--id`；GitHub 来源的 release.json 资产 URL 为 `https://github.com/<owner>/<repo>/releases/download/v<version>/<归档名>`，其他来源报缺少 `--asset-url`；给出归档时与现状相同，官方组件 ID 安装 `packages/` 中的包并以官方来源登记，不存在时报错并列出可用 ID；恰好一个候选时安装它，零个或多个时报错并列出候选，不安装任何包 |
+| V-122 | T-09 | 包校验收紧（D-150、D-151）：安装与更新缺少 `migration_mode`、`prepare_effects` 或二者的包；进程角色的包缺少 build-info、build-info 无法解析、build-info 与 entrypoint 内嵌的构建信息不同、`GOOS`/`GOARCH` 与 manifest 不符；WebUI 包没有 build-info | 缺字段的包照常安装与更新，结果中带英文警告并记 WARN 日志，准备阶段不返回 NEEDS_MANUAL_MIGRATION；取值非法时照旧拒绝；build-info 的各类问题在停止旧版前拒绝，错误指明哪一项不符，已安装版本保持运行；WebUI 包照常安装 |
 
 ## 2. 跨任务验收的最终闭合点
 
@@ -173,6 +174,7 @@
 | V-118 | 图片输入（D-132）：T-12.13 的 Provider 分项；T-12.14 的对话分项 | T-12.7 汇总；真实 Provider 的图片请求由 T-10 汇总 |
 | V-120 | SDK 公开面（D-144～D-147）：T-04.15 的会话、生成资源与 Adapter 路由分项；T-04.16 的分包分项 | T-04.16 汇总；按 D-86 由一个主路径集成测试与本地自测提供证据 |
 | V-121 | CLI 参数从简（D-149）：T-13.6 | T-13.6；按 D-86 由一个主路径集成测试与本地自测提供证据 |
+| V-122 | 包校验收紧（D-150、D-151）：T-09.17 | T-09.17；按 D-86 由一个主路径集成测试与本地自测提供证据 |
 
 T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前者可支持后续开发，真实平台部分仍由 T-10 查证。测试会话、无配置/无 DB 最小插件和 payload fixture 的范围必须写明，不可据此关闭生产认证或数据恢复用例。
 
@@ -476,7 +478,7 @@ T-02.4 按 D-86 删除的测试及测试插件只保留历史运行证据，相�
 
 **FIX-3 已完成：** llmagent 的 go:generate 及生成文件头已按追加授权迁移；全仓两次生成成功且稳定。最终全仓 race 共 25 个测试包零失败，根包 80.924s、CLI 161.284s、pluginkit 71.212s；新提交集成及五项沿用测试、17 项本地自测全部通过（原 12 项及本轮 5 项），逐项事件见 `goal-38/race-review194-final.json`，摘要 `race-review194-final-summary.log`。
 
-未运行：真实 Telegram、Linux/Windows 实际运行、darwin/amd64 实际运行、浏览器管理流程、远端 CI。交叉编译仅作为构建证据；管理配置界面归 T-09.14，WebUI 语言切换保留原剩余归属。packages.Preflight 的 build-info 严格核对及遗留缺字段警告按派发说明交审查者裁决；归档拒绝矩阵继续引用 T-09.2 / #19，签名信任转换引用 T-09.4 / #163。
+未运行：真实 Telegram、Linux/Windows 实际运行、darwin/amd64 实际运行、浏览器管理流程、远端 CI。交叉编译仅作为构建证据；管理配置界面归 T-09.14，WebUI 语言切换保留原剩余归属。packages.Preflight 的 build-info 严格核对及遗留缺字段警告按派发说明交审查者裁决（2026-11-14 维护者裁决：缺字段只警告（D-150），build-info 严格核对（D-151），由 T-09.17 实施）；归档拒绝矩阵继续引用 T-09.2 / #19，签名信任转换引用 T-09.4 / #163。
 
 本轮全部完成条件均已重跑。原始复现失败日志 `fix4-before.log`、`fix5-before.log`、`fix6-before.log`、`fix7-before.log` 保留；首次全仓候选的开发入口回归记录于 `race-review194.json`，修正后的最终事件与摘要为 `race-review194-final.json`、`race-review194-final-summary.log`。独立只读复核已完成四条 FIX 的契约、架构边、规范与停止条件检查，未发现有证据的 P1/P2。
 
