@@ -95,10 +95,11 @@
 | goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 已完成（PR #190） |
 | goal-138 | T-04.15 | SDK 公开面收敛 | T-04.5、T-09.3、T-16.1 | 已完成（PR #197） |
 | goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 已完成（PR #179） |
-| goal-139 | T-04.16 | SDK 按类别分包 | T-04.15 | 待派发 |
+| goal-142 | T-09.17 | 包校验收紧 | T-09.3、T-09.4 | 待派发 |
+| goal-139 | T-04.16 | SDK 按类别分包 | T-04.15 | 已完成（PR #199） |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 已完成（PR #187） |
 | goal-93 | T-09.14 | 配置、权限、工具策略与会话的管理 API | T-03.25、T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-08.14、T-09.6、T-09.12、T-11.1、T-11.3 | 已完成（PR #192） |
-| goal-140 | T-13.5 | 模块根包只保留库模式接口 | T-04.16 | 等待前置 |
+| goal-140 | T-13.5 | 模块根包只保留库模式接口 | T-04.16 | 待派发 |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
 | goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 等待前置 |
 
@@ -7231,6 +7232,46 @@ internal/core/journal
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/...；go build ./...。
 
 不做：Core 崩溃后的恢复判定与 rollback（T-09.7）；管理页面（T-09.8）。
+```
+
+### goal-142 · T-09.17 包校验收紧
+
+状态：待派发。前置 T-09.3（[PR #194](https://github.com/AlonaBot/AlonaBot/pull/194)）与 T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)）已合并；D-150、D-151 由 [PR #198](https://github.com/AlonaBot/AlonaBot/pull/198)（合并提交 `79f6163`）定稿。2026-11-14 按 main `79f6163` 的代码写出范围、接口、行为与测试段。派发前须等 goal-140（T-13.5）合并：两者都改根目录测试中手工打包的夹具，T-13.5 把这些测试移入 internal/app；合并后审查者把范围中的测试位置改为新位置并核对接口段，再派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-142（切片 T-09.17：包校验收紧）。goal 目录 goal-142，分支 goal-142，worktree .worktrees/goal-142，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：包内 manifest 缺少 migration_mode 或 prepare_effects 时只警告，安装与更新照常进行，警告出现在安装与更新的结果中并记 WARN 日志（D-150）；进程角色的包在安装与更新时严格核对 build-info，任一项不符时在停止旧版之前拒绝（D-151）。协议不变。
+
+依据：PLAN T-09 步骤 10 及其失败停止条件；CONTRACTS §9.1、§9.2；ADMIN-API §3；DECISIONS D-150、D-151；TEST-MATRIX V-122。
+
+范围（只新增、修改或删除这些）：
+- contracts/manifest/manifest.go：缺少两项时的警告文案
+- internal/core/packages/preflight.go：Candidate 携带 manifest 警告；build-info 核对
+- internal/core/manage/：install.go、candidates.go、upload.go、http.go、service.go 中传出警告与记 WARN 日志
+- spec/ADMIN-API.md §3：install 与 update 响应中的警告字段
+- 既有测试中手工打包的夹具，只补 build-info，断言不变：internal/core/packages/preflight_test.go、cmd/alonabot/manage_e2e_test.go、cmd/alonabot/recover_e2e_test.go，以及根目录的 admin_upload_test.go、scheduler_tasks_test.go（T-13.5 合并后在 internal/app 下）
+- cmd/alonabot/manage_e2e_test.go 中新增的一个子测试（见「测试」）与上述包的 *_local_test.go
+允许的新跨模块边：无（internal/core/packages 只增加标准库 debug/buildinfo 与 runtime/debug）。
+
+接口（照此实现）：
+- packages.Candidate 增加 Warnings []string：manifest.Parse 返回的警告，保持原顺序。
+- manage.Package 增加 Warnings []string `json:",omitempty"`：只在 Install 的结果中填写，List 与其他返回 Package 的接口不填（JSON 中省略）；字段名与 Package 的其他字段一样沿用 Go 导出名。
+- manage.Service.Update 改为 func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (UpdateResult, error)；新增 type UpdateResult struct { Warnings []string `json:"warnings,omitempty"` }，与 update 的其他响应字段一样用小写键。HTTP 的 update（JSON 与 multipart）都返回 UpdateResult，没有警告时仍为 {}。
+- 缺少的字段各给一条警告，文案固定为 "<字段名> not declared; preparation and rollback assume no external side effects"，<字段名> 为 migration_mode 或 prepare_effects；删除 "automatic upgrades are not allowed" 的说法。
+
+行为：
+- D-150：缺少 migration_mode、prepare_effects 或二者时，安装与更新照常完成；准备阶段按没有框架外副作用处理，与 none 相同，不返回 NEEDS_MANUAL_MIGRATION（internal/core/journal 只认 external 的现有判断保持不变）。Install 结果的 Warnings 与 Update 结果的 warnings 原样带出 manifest 的全部警告（包括组件 ID 缺少市场前缀等已有警告）；管理服务对每条警告记一条 WARN 日志，字段为 plugin_id 与 warning。CLI 原样打印响应，不改 CLI。取值不在规定集合内时照旧拒绝；REGISTER 回报的迁移方式与 manifest 不符时照旧准备失败。
+- D-151：role 为 plugin、adapter、agent 的包，Preflight 在核对入口与图标文件之后依次检查：归档根目录有 build-info 文件；debug.ParseBuildInfo 能解析它；debug/buildinfo.ReadFile 读取的 entrypoint 内嵌构建信息的 String() 与 build-info 文件内容逐字相同；解析结果中 GOOS、GOARCH 两项设置分别等于 manifest 的 os 与 arch。任一项不符时返回 INVALID_ARGUMENT，英文错误分别为 "archive has no build-info"、"parse build-info: <原因>"、"build-info does not match the entrypoint"、"build-info GOOS does not match the manifest os"、"build-info GOARCH does not match the manifest arch"（文案写成命名常量）。这些检查与其他静态检查一样在停止旧版之前完成，被拒的更新不影响已安装版本的运行。role 为 webui 的包不要求 build-info，有也不核对。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/manage_e2e_test.go 新增一个子测试（unix，真实 Core 与 pluginkit 打出的包，覆盖主路径）：缺 prepare_effects 的插件包安装成功，CLI 输出的 Package 带 Warnings、Core 日志有对应 WARN；更新为两项都缺的版本同样成功，响应带 warnings；build-info 改动一个字节的包与删除 build-info 的包更新被拒，错误指明问题，旧版仍在运行并响应命令。
+- 既有测试：手工打包的夹具补上入口程序的 build-info（入口为真实 Go 程序，build-info 取 buildinfo.ReadFile(入口).String()）；preflight_test.go 中以伪造字节作入口的进程角色用例改用测试二进制作入口；断言不变。
+- 本地自测（*_local_test.go，结果写入 PR）：缺 migration_mode、缺 prepare_effects、两项都缺的警告文案；build-info 缺失、不可解析、与入口不同、GOOS 不符、GOARCH 不符五种拒绝及错误文案；WebUI 包没有 build-info 照常预检；非法 migration_mode 与 prepare_effects 照旧拒绝；List 的 JSON 不含 Warnings。
+
+完成条件：本地证据齐备；gofmt -l 对改动的 Go 文件无输出；go generate ./... 之后工作区没有变化；go vet ./...；go test -race ./...；go build ./...；CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./...。缺字段的包被拒、被拒的更新停止了旧版，或需要改 .proto 时，按 PLAN T-09 的停止条件暂停交付。
+
+不做：发布清单与签名格式的改动；WebUI 页面展示警告（T-09.9）；manifest 中其他字段的检查；新增依赖。
 ```
 
 ## 第 17 波
