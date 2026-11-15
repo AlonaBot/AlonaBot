@@ -99,7 +99,7 @@
 | goal-139 | T-04.16 | SDK 按类别分包 | T-04.15 | 已完成（PR #199） |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 已完成（PR #187） |
 | goal-93 | T-09.14 | 配置、权限、工具策略与会话的管理 API | T-03.25、T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-08.14、T-09.6、T-09.12、T-11.1、T-11.3 | 已完成（PR #192） |
-| goal-140 | T-13.5 | 模块根包只保留库模式接口 | T-04.16 | 待派发 |
+| goal-140 | T-13.5 | 模块根包只保留库模式接口 | T-04.16 | 已完成（PR #200） |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
 | goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 等待前置 |
 
@@ -7236,7 +7236,7 @@ internal/core/journal
 
 ### goal-142 · T-09.17 包校验收紧
 
-状态：待派发。前置 T-09.3（[PR #194](https://github.com/AlonaBot/AlonaBot/pull/194)）与 T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)）已合并；D-150、D-151 由 [PR #198](https://github.com/AlonaBot/AlonaBot/pull/198)（合并提交 `79f6163`）定稿。2026-11-14 按 main `79f6163` 的代码写出范围、接口、行为与测试段。派发前须等 goal-140（T-13.5）合并：两者都改根目录测试中手工打包的夹具，T-13.5 把这些测试移入 internal/app；合并后审查者把范围中的测试位置改为新位置并核对接口段，再派发。
+状态：待派发。前置 T-09.3（[PR #194](https://github.com/AlonaBot/AlonaBot/pull/194)）与 T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)）已合并；D-150、D-151 由 [PR #198](https://github.com/AlonaBot/AlonaBot/pull/198)（合并提交 `79f6163`）定稿。2026-11-14 按 main `79f6163` 的代码写出范围、接口、行为与测试段；与 T-13.5 都改手工打包的测试夹具，排在其后派发。T-13.5（[PR #200](https://github.com/AlonaBot/AlonaBot/pull/200)，合并提交 `2e5ac2b`）合并后，2026-11-15 审查者按 main 把范围中的测试位置改为 internal/app，接口段核对无需改动。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-142（切片 T-09.17：包校验收紧）。goal 目录 goal-142，分支 goal-142，worktree .worktrees/goal-142，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -7250,7 +7250,7 @@ internal/core/journal
 - internal/core/packages/preflight.go：Candidate 携带 manifest 警告；build-info 核对
 - internal/core/manage/：install.go、candidates.go、upload.go、http.go、service.go 中传出警告与记 WARN 日志
 - spec/ADMIN-API.md §3：install 与 update 响应中的警告字段
-- 既有测试中手工打包的夹具，只补 build-info，断言不变：internal/core/packages/preflight_test.go、cmd/alonabot/manage_e2e_test.go、cmd/alonabot/recover_e2e_test.go，以及根目录的 admin_upload_test.go、scheduler_tasks_test.go（T-13.5 合并后在 internal/app 下）
+- 既有测试中手工打包的夹具，只补 build-info，断言不变：internal/core/packages/preflight_test.go、cmd/alonabot/manage_e2e_test.go、cmd/alonabot/recover_e2e_test.go，以及 internal/app/admin_upload_test.go、internal/app/scheduler_tasks_test.go
 - cmd/alonabot/manage_e2e_test.go 中新增的一个子测试（见「测试」）与上述包的 *_local_test.go
 允许的新跨模块边：无（internal/core/packages 只增加标准库 debug/buildinfo 与 runtime/debug）。
 
@@ -7445,7 +7445,7 @@ internal/core/state
 
 ### goal-140 · T-13.5 模块根包只保留库模式接口
 
-状态：待派发。前置 T-04.16（[PR #199](https://github.com/AlonaBot/AlonaBot/pull/199)，合并提交 `046e752`）已合并。2026-11-14 按 main `046e752` 的代码写出范围、接口、行为与测试段（D-148 由 [PR #196](https://github.com/AlonaBot/AlonaBot/pull/196) 定稿）。
+状态：已完成（[PR #200](https://github.com/AlonaBot/AlonaBot/pull/200)，合并提交 `2e5ac2b`），证据见 TEST-MATRIX §3.2。合入：`internal/app` 的 `Options`、`Component`（字段不导出，由 `PluginComponent`、`AdapterComponent`、`ExecutableComponent` 构造并保留角色）、`Start(ctx, Options)` 与 `Core`（`Wait`、`Restart`、`RestartInstance`、`ReloadSettings`）；根包只留 `Run`、`Start`、`*Core`、`Wait` 与 `Plugin`、`Adapter`、`WebUI`、`DataDir`、`Args`、`Listen`、`LogLevel`、`LogFormat`，`type Option func(*app.Options)`；cmd/alonabot 改用 `internal/app`，不再 import 根包；装配、内部服务、候选与 WebUI 的 9 个集成测试移入 `internal/app`。审查追加的修复：语句原定的 `Component` 导出字段分不出 nil Adapter 与 nil Plugin，改为构造函数，两者的错误文本与移动前相同（FIX-2）；下面语句中的接口段已按此修订。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-140（切片 T-13.5：模块根包只保留库模式接口）。goal 目录 goal-140，分支 goal-140，worktree .worktrees/goal-140，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -7476,8 +7476,11 @@ internal/core/state
       Stdio      bool          // Executable 组件使用 stdio 传输
       WebUIs     []fs.FS       // 开发 WebUI；多于一个或含 nil 时返回原有的用法错误
   }
-  // Component 只设 Plugin、Adapter 或 Executable 其一；Executable 与 PackageManifest 成对给出。
-  type Component struct { Plugin *sdk.Plugin; Adapter adapter.Adapter; Executable string; PackageManifest []byte }
+  // Component 保留开发组件的角色与装配资源，字段不导出（审查 FIX-2 修订）。
+  type Component struct{ ... }
+  func PluginComponent(root *sdk.Plugin) Component
+  func AdapterComponent(a adapter.Adapter) Component
+  func ExecutableComponent(path string, packageManifest []byte) Component // 复制 packageManifest，角色按包内 manifest 确定
   func Start(ctx context.Context, o Options) (*Core, error)
   type Core struct{ ... }
   func (c *Core) Wait() error
@@ -7554,7 +7557,7 @@ internal/core/state
 
 ### goal-141 · T-13.6 CLI 参数从简
 
-状态：等待前置（T-13.5、T-14.3）。目标、依据与要点由 PLAN T-13 步骤 7 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。派发前核对它与同在第 20 波的 T-14.4 不改同一批文件（两者都涉及 `packages/`）。
+状态：等待前置（T-14.3）。T-13.5（[PR #200](https://github.com/AlonaBot/AlonaBot/pull/200)，合并提交 `2e5ac2b`）已合并。目标、依据与要点由 PLAN T-13 步骤 7 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。派发前核对它与同在第 20 波的 T-14.4 不改同一批文件（两者都涉及 `packages/`）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-141（切片 T-13.6：CLI 参数从简）。goal 目录 goal-141，分支 goal-141，worktree .worktrees/goal-141，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
