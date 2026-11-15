@@ -95,7 +95,7 @@
 | goal-102 | T-16.3 | plugintest 的 LLM 替身 | T-12.8、T-16.1 | 已完成（PR #190） |
 | goal-138 | T-04.15 | SDK 公开面收敛 | T-04.5、T-09.3、T-16.1 | 已完成（PR #197） |
 | goal-41 | T-09.6 | 唯一提交点与激活门禁 | T-07.5、T-09.5 | 已完成（PR #179） |
-| goal-142 | T-09.17 | 包校验收紧 | T-09.3、T-09.4 | 待派发 |
+| goal-142 | T-09.17 | 包校验收紧 | T-09.3、T-09.4 | 已完成（PR #201） |
 | goal-139 | T-04.16 | SDK 按类别分包 | T-04.15 | 已完成（PR #199） |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 已完成（PR #187） |
 | goal-93 | T-09.14 | 配置、权限、工具策略与会话的管理 API | T-03.25、T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-08.14、T-09.6、T-09.12、T-11.1、T-11.3 | 已完成（PR #192） |
@@ -7236,7 +7236,7 @@ internal/core/journal
 
 ### goal-142 · T-09.17 包校验收紧
 
-状态：待派发。前置 T-09.3（[PR #194](https://github.com/AlonaBot/AlonaBot/pull/194)）与 T-09.4（[PR #163](https://github.com/AlonaBot/AlonaBot/pull/163)）已合并；D-150、D-151 由 [PR #198](https://github.com/AlonaBot/AlonaBot/pull/198)（合并提交 `79f6163`）定稿。2026-11-14 按 main `79f6163` 的代码写出范围、接口、行为与测试段；与 T-13.5 都改手工打包的测试夹具，排在其后派发。T-13.5（[PR #200](https://github.com/AlonaBot/AlonaBot/pull/200)，合并提交 `2e5ac2b`）合并后，2026-11-15 审查者按 main 把范围中的测试位置改为 internal/app，接口段核对无需改动。
+状态：已完成（[PR #201](https://github.com/AlonaBot/AlonaBot/pull/201)，合并提交 `e04e50b`），证据见 TEST-MATRIX §3.2。合入：manifest 缺少 `migration_mode` 或 `prepare_effects` 时各给一条警告；`packages.Candidate.Warnings`；`manage.Package.Warnings`（`json:",omitempty"`，只在 Install 结果中填写）；`manage.Service.Update` 返回 `UpdateResult{Warnings}`（JSON 键 `warnings`，无警告时为 `{}`），管理服务逐条记 WARN 日志；plugin、adapter、agent 包的 build-info 严格核对（存在、可解析、与入口内嵌构建信息逐字一致、GOOS/GOARCH 与 manifest 一致），WebUI 包不要求；ADMIN-API §3、§10 同步。审查追加授权：`internal/app/webui_test.go` 的图标夹具补真实入口与 build-info（FIX-1）；`internal/app/admin_upload_test.go` 的 update 成功响应断言改为逐字核对市场前缀警告（FIX-2）；ADMIN-API §10 两处响应说明（FIX-3）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-142（切片 T-09.17：包校验收紧）。goal 目录 goal-142，分支 goal-142，worktree .worktrees/goal-142，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
