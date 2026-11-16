@@ -545,12 +545,21 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 ### 13.5 文本生成服务
 
-- Agent 组件注册 JSON Service `llm.generate`，让其他插件复用管理员已配置的 Provider，不必各自内嵌 Provider 客户端和 API Key（D-51）。Schema、Go 类型与调用辅助由 `sdk/llm` 提供，调用辅助以 `@agent` 为目标（§3、D-61），因此替换 Agent 组件后调用方不用修改；只需一问一答时用 `llm.Ask(ctx, prompt)`，它等于只含一条 user 消息、使用默认 Provider 的请求，返回生成的文本（D-111）；替换官方 Agent 的组件应实现本服务。
-- 输入：`messages`（至少一条，每条为 `role`（user 或 assistant）与 `text`）、可选的 `system`、可选的 `provider`（Agent 配置中的 Provider 名称，缺省为默认 Provider）与可选的 `max_output_tokens`。输出：`text`、实际使用的 `provider` 与 `model`，以及 Provider 返回用量时的 `input_tokens` 与 `output_tokens`。
+- Agent 组件注册 JSON Service `llm.generate`，让其他插件复用管理员已配置的 Provider，不必各自内嵌 Provider 客户端和 API Key（D-51）。Schema、Go 类型与调用辅助由 `sdk/llm` 提供，调用辅助以 `@agent` 为目标（§3、D-61），因此替换 Agent 组件后调用方不用修改；只需一问一答时用 `llm.Ask(ctx, prompt)`，它等于只含一条 user 消息、使用 Agent 对话模型（`chat_model`）的请求，返回生成的文本（D-111）；替换官方 Agent 的组件应实现本服务。
+- 输入：`messages`（至少一条，每条为 `role`（user 或 assistant）与 `text`）、可选的 `system`、可选的 `model`（Agent 配置中 chat 类型模型的名字，缺省为 `chat_model`，D-154）与可选的 `max_output_tokens`。输出：`text`、实际使用的 `model`（名字），以及 Provider 返回用量时的 `input_tokens` 与 `output_tokens`。
 - 服务声明为 public（§3）。Agent 只接受直接调用方插件位于其配置项 `llm_service_allowed_plugins` 中的调用，缺省为 `["*"]`，表示全部插件（D-83），管理员可以改为插件 ID 名单；不在列表中返回 PERMISSION_DENIED，不请求 Provider。直接调用方取 Core 下发的调用链中的上一跳插件，不采信请求内容。
-- 一次调用对应一次完整的 Provider 请求：不流式、不调用工具、不读写 Agent 会话与记忆，也不套用人格。`messages` 为空、`role` 非法或指定的 Provider 不存在返回 INVALID_ARGUMENT；没有配置任何 Provider 返回 FAILED_PRECONDITION；Provider 出错或中途断开返回 UNAVAILABLE，safe_message 不含 API Key；不自动重试（D-38）。
+- 一次调用对应一次完整的 Provider 请求：不流式、不调用工具、不读写 Agent 会话与记忆，也不套用人格。`messages` 为空、`role` 非法、指定的模型不存在或不是 chat 类型返回 INVALID_ARGUMENT；没有指定模型且 `chat_model` 为空返回 FAILED_PRECONDITION；Provider 出错或中途断开返回 UNAVAILABLE，safe_message 不含 API Key；不自动重试（D-38；D-155 的重试与回退只用于 Agent 的对话轮次）。
 - 生成可用的时间受调用方期限约束（§1.2）。普通请求只有 30s，需要更长时间的调用方在延续调用（§2.4）或 schedule 回调中发起。没有安装或没有启用 Agent 组件时按 §3 的目标未激活处理。
-- Agent 组件另注册选项来源服务 `llm.providers`（§3、§5.1，D-131），让其他组件的配置字段用 `"options_from": {"source": "@agent/llm.providers"}` 选择 Provider：存储值是 Provider 名称，即 `llm.generate` 的 `provider`；显示名是名称，说明是协议与模型；不返回 base_url 与 API key。字段值为空串时调用方不传 `provider`，使用默认 Provider。替换官方 Agent 的组件应实现本服务。
+- Agent 组件另注册选项来源服务 `llm.models`（§3、§5.1，D-131、D-154），让其他组件的配置字段用 `"options_from": {"source": "@agent/llm.models", "filter": {"type": "chat"}}` 选择模型：存储值是模型名字，即 `llm.generate` 的 `model`；显示名是名字，说明是类型、提供商与模型 ID；filter 键 `type` 取 §13.6 的六类之一，省略时列出全部类型；不返回 base_url 与 API key。字段值为空串时调用方不传 `model`，使用 `chat_model`。替换官方 Agent 的组件应实现本服务。
+
+### 13.6 模型与模型管理路由
+
+- Agent 配置中的模型分两层（D-154）：提供商（`providers`）只存协议、base_url 与 API key；模型（`models`）引用一个提供商，带名字、模型 ID 与类型。类型为 `chat`、`speech_to_text`、`text_to_speech`、`embedding`、`rerank`、`decision`。v0.1 只有 `chat` 由 Agent 的对话、图像转述与 `llm.generate` 使用；其余五类只能配置、拉取与测试，没有服务或配置字段引用它们。
+- WebUI 的模型页编辑 Agent 配置（§5），另经 Agent 的非公开插件路由（§7.2、§7.3，要求管理会话，非 GET 验证 CSRF）完成运行时操作。WebUI 按 `role: agent` 找到已安装的 Agent 组件，路由在 `/plugins/{agent_id}/` 之下，请求与响应为 JSON：
+  - `POST models/discover`：输入为已保存提供商的 `provider`（名字），或未保存提供商的 `protocol`、`base_url` 与 `api_key`；返回 Provider 列出的模型 ID 与按名字推断的类型（推断不出时为 `chat`）。Provider 不支持列出模型时返回空列表与说明。
+  - `POST models/test`：输入为 Active 配置中已保存模型的 `model`（名字）；按类型发出一次最小请求（chat 与 decision 为一句短文本，speech_to_text 为内置的一段短音频，text_to_speech 为一句短文本，embedding 为一个词，rerank 为一个查询与两段文本），返回 `ok`、耗时毫秒数与失败时的英文说明。测试不重试，不计入用量。
+  - `GET models/usage`：返回每个模型在 Agent 进程所在时区当天的输入与输出 token 数，只统计 Provider 返回了用量的请求。
+- 三个路由的响应与错误说明不含 API key、认证头或带凭证的 URL。替换官方 Agent 的组件应实现这些路由；路由不存在时，模型页只提供配置编辑。
 
 ## 14. 日志
 
