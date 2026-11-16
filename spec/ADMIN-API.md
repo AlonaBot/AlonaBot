@@ -98,6 +98,8 @@ Update 的本地候选可以提供 `install.Archive/ReleaseJSON/Signature/Public
 
 `GET /api/v1/packages/{id}/icon` 经管理认证，只读取该已安装组件 `manifest.Icon` 声明的普通文件。`HEAD` 状态及响应头与 GET 相同，正文为空。查询参数忽略；额外路径返回 404，越界/非规范路径在路由匹配前拒绝。未安装、已卸载、无图标、缺失文件、目录或链接返回 404；开发组件图标本切片返回 404。
 
+`GET /api/v1/packages/{id}/examples/{path}` 经管理认证，只读取该组件 Active 代次 `config_schema.json` 中 `example` 引用的 `examples/` 下的普通文件（D-160），响应头与 HEAD 规则同图标；未引用的路径、缺失文件、目录或链接返回 404。
+
 | 扩展名 | Content-Type |
 | --- | --- |
 | `.svg` | `image/svg+xml` |
@@ -187,6 +189,12 @@ X-Content-Type-Options: nosniff
 // 语言、主题请求
 {channel:"alonabot.plugin", id:string, op:"locale"|"theme"}
 
+// 页面就绪（D-159），返回语言、明暗与设计令牌
+{channel:"alonabot.plugin", id:string, op:"hello"}
+
+// 快捷键转发（D-159），key 只接受 "mod+k"
+{channel:"alonabot.plugin", id:string, op:"shortcut", key:"mod+k"}
+
 // 文案请求
 {channel:"alonabot.plugin", id:string, op:"translate", key:string, args?:Record<string,string>}
 
@@ -203,11 +211,24 @@ X-Content-Type-Options: nosniff
 // 文案响应
 {channel:"alonabot.plugin", id:string, ok:true, result:{text:string}}
 
+// hello 响应
+{channel:"alonabot.plugin", id:string, ok:true,
+ result:{locale:string, theme:"light"|"dark", tokens:Record<string,string>}}
+
+// shortcut 响应
+{channel:"alonabot.plugin", id:string, ok:true, result:{}}
+
+// WebUI 推送的事件（没有 id）
+{channel:"alonabot.plugin", event:"theme", data:{theme:"light"|"dark", tokens:Record<string,string>}}
+{channel:"alonabot.plugin", event:"locale", data:{locale:string}}
+
 // 桥错误
 {channel:"alonabot.plugin", id:string, ok:false, error:{code:string,safe_message:string}}
 ```
 
 `body_base64` 使用标准 base64；请求省略时正文为空，响应保留完整字节。HTTP 响应的 `status` 保留实际状态，桥成功交付 HTTP 错误响应时也使用 `ok:true`；桥校验或执行失败使用 `ok:false` 与稳定错误码及安全英文提示。
+
+`hello` 由页面在加载后发送，此后明暗、令牌或语言变化时 WebUI 只向发过 hello 的页面推送事件。`tokens` 的键是 CSS 变量名，至少包含 `--ab-bg`、`--ab-surface`、`--ab-surface-2`、`--ab-line`、`--ab-text`、`--ab-text-muted`、`--ab-accent`、`--ab-accent-soft`、`--ab-success`、`--ab-warning`、`--ab-danger`、`--ab-critical`、`--ab-radius-sm`、`--ab-radius`、`--ab-radius-lg`、`--ab-font-sans`、`--ab-font-mono`，值为可直接用于 CSS 的字符串；同一主版本内只增加键（D-159）。`shortcut` 只接受 `mod+k`（macOS 为 ⌘K，其他系统为 Ctrl+K），WebUI 打开全局搜索；其他键返回 `ok:false`。
 
 `translate` 仅查所属组件的 `messages.key`，以 `args` 格式化命名占位符。语言按当前界面语言、该组件已有主语言回落与 en-US 规则选择；未知键返回键名，缺参数保留占位符，遵循既有 i18n 行为。`locale/theme/translate` 分别只返回相应值。
 
@@ -377,6 +398,8 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 开发来源从当前工程资源读取 schema/i18n，GET 返回固定 `dev:<id>` 代次的脱敏 Active。PUT/PATCH 使用同样的 base 和秘密省略规则，先 Complete/Validate，再以临时文件替换 `<data_dir>/plugins/<id>/config.json`，随后经 Core 的开发重启入口建立新 Session；返回脱敏 `{base_generation,config}`，保持 Pending 为 null。保存失败保留原文件；重启失败返回实际错误并保留已保存文件，调用方可修订配置后再次重启。dev 的 config/import 只读取编辑文件并返回脱敏结果，缺文件时返回脱敏 Active，CLI 随后的 reload 仍按原有路径启动 schema 缺省配置。WebUI 配置返回 400。
 
+**校正与无效配置（D-161）。** 插件配置、Core 设置与 Adapter 实例的读取响应各多两项：`corrections` 为校正记录数组，元素是 `{"path":"…","reason":"converted|reset|removed","original":…}`，secret 字段没有 `original`；`unknown` 为无效配置（schema 中没有的键）的 JSON 路径数组。插件配置的两项取自 Active 代次，在 `GET /api/v1/plugins/{id}/config` 的顶层；Core 设置用 `GET /api/v1/core/settings/corrections` 返回 `{"corrections":[…],"unknown":[…]}`；Adapter 实例在 `GET /api/v1/adapters/{adapter_id}/instances/{instance_id}` 的顶层。清理：`POST /api/v1/plugins/{id}/config/prune` 以 Active 为起点删除全部无效配置并写入 Pending，返回脱敏的 `{base_generation,config}`，随后照常 reload；`POST /api/v1/core/settings/prune` 与 `POST /api/v1/adapters/{adapter_id}/instances/{instance_id}/prune` 经 `settings.File.Update` 删除这些键并写回 `core_config.json`，成功返回 `{}`，保留其他键的 `${...}` 写法。
+
 ### 12.2 再认证查看秘密
 
 `POST /api/v1/secrets/{plugin}/{path}/reveal` 接收 `{"token":"<当前管理 token>"}`，在既有管理认证后再次调用 `adminauth.Reauthenticate`。失败返回 403 / `PERMISSION_DENIED`；成功返回 `{"value":"<秘密明文>"}`，附加 `Cache-Control: no-store`，并以 INFO 记录组件 ID 与字段路径。
@@ -476,9 +499,63 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 ## 18. 工具调用策略
 
-`GET /api/v1/tools/policies` 返回 `{"policies":[{"plugin_id":"demo","service":"echo","default":"allow","override":"inherit"}]}`。目录合并当前 Attach 工具声明、本次运行出现的操作和已保存覆盖；default 为 inherit 表示当前无声明，override 为 inherit 表示没有覆盖。
+`GET /api/v1/tools/policies` 返回 `{"policies":[{"plugin_id":"demo","service":"echo","default":"allow","override":"inherit","effect":"read_only"}]}`；effect 取 read_only、write、destructive 或 unspecified（D-157）。目录合并当前 Attach 工具声明、本次运行出现的操作和已保存覆盖；default 为 inherit 表示当前无声明，override 为 inherit 表示没有覆盖。
 
 `PUT /api/v1/tools/policies` 接收 `{"plugin_id":"demo","service":"echo","policy":"deny"}`，成功返回 `{}`。policy 接受 allow、confirm、deny、inherit；inherit 删除覆盖。service 也接受目录已记录的完整操作名，例如 `mcp/filesystem/read_file`；操作名独立于 Service 名语法校验。未知策略、服务名格式错误或目录未记录的操作名返回 400，未知组件返回 404。写入与固定 ListTools 使用同一个 tool.Catalog 和状态库；下次查询或调用读取新策略，deny 的工具从 ListTools 隐藏，无需重启。
+
+`PUT /api/v1/tools/policies` 也接收 `{"items":[{"plugin_id":"demo","service":"echo","policy":"deny"}, ...]}`，按上面的规则逐项校验，全部合法时在一个事务内写入；任一项不合法返回 400 并指出该项，不写入任何一项（D-157）。
+
+## 19. 诊断包
+
+`POST /api/v1/diagnostics` 接收 `{"since":"24h","logs":true,"settings":true,"components":true,"redact":true}`，各字段可省略，缺省为左边的值；成功时返回 `application/zip`，`Content-Disposition` 的文件名为 `alonabot-diagnostics-<UTC 时间>.zip`。内容与脱敏规则见 CONTRACTS §14.7（D-156）。since 不是正的时长返回 400；三组都为 false 返回 400。
+
+## 20. WebUI 需要的补充接口
+
+以下端点经管理认证，非 GET 验证 CSRF，错误规则同第 3 节（D-164）。
+
+| Method / path | 请求或成功响应 | 语义 |
+| --- | --- | --- |
+| `GET /api/v1/plugins/{id}/generations` | `{"generations":[{"id":"gen-…","version":"1.2.1","created_at":"RFC 3339","active":true,"has_db":true}]}` | 保留代次，新的在前；回退仍用 `/api/v1/packages/rollback` |
+| `GET /api/v1/plugins/{id}/jobs` | `{"jobs":[{"job_id":"…","trigger":"cron 0 8 * * *","paused":false,"last_run_at":"…","next_run_at":"…"}]}` | 静态任务及其状态（CONTRACTS §4.3，D-126），没有记录的时刻省略 |
+| `POST /api/v1/plugins/{id}/jobs/{job_id}/pause`、`…/resume` | 无正文，`{}` | 与插件调用 `core.job.pause/resume` 相同；未知 job 404 |
+| `GET /api/v1/adapter/instances` | `{"instances":[{"instance_id":"main","adapter_id":"telegram","package_id":"…","state":"running","safe_error":"","default":true}]}` | state 取 running、stopped、failed；safe_error 只在 failed 时非空 |
+| `GET /api/v1/chats` | `?q=&adapter_id=&chat_type=&offset=&limit=`，返回 `{"chats":[{"session":"telegram:-100…","title":"…","chat_type":"group","instance_id":"main","last_active_at":"…"}],"total":53}` | 聊天目录（D-130），按最近活跃降序；limit 缺省 50，最多 `OPTIONS_PAGE` 的十倍 |
+| `POST /api/auth/token/rotate` | `{"token":"<当前管理 token>"}`，返回 `{"token":"<新 token>"}` | 先按 §12.2 再认证，生成新令牌，删除全部管理会话（包括本次请求的会话），新令牌只在这个响应中出现一次 |
+
+`GET /api/v1/packages` 的每个组件追加 `pages`：`[{"path":"/subs/","title":"Subscriptions"}]`，标题按请求的 `Accept-Language` 取 `i18n/<locale>.json` 的 `pages` 覆盖，没有覆盖时为源文案。路径是插件相对路径，WebUI 用沙箱 iframe 打开 `/plugins/{id}` 加该路径（§7）。
+
+## 21. 插件数据浏览
+
+以下端点经管理认证，非 GET 验证 CSRF（D-163），只作用于受管 SQLite；插件没有受管数据库时返回 404。`generation` 查询参数缺省为 Active 代次，指定保留代次时只读。
+
+| Method / path | 请求或成功响应 | 语义 |
+| --- | --- | --- |
+| `GET /api/v1/plugins/{id}/data/tables` | `{"tables":[{"name":"subs","rows":42,"writable":true,"columns":[{"name":"id","type":"INTEGER","pk":true,"notnull":true}]}]}` | `_alonabot_migrations` 列出但 writable 为 false；`WITHOUT ROWID` 的表 writable 为 false |
+| `GET /api/v1/plugins/{id}/data/tables/{table}/rows` | `?offset=&limit=&order=列&desc=1&where.列=值`，返回 `{"rows":[{"rowid":1,"values":{…}}],"total":42}` | limit 缺省 50、最多 500；`where` 为等值筛选，可以有多个；BLOB 以 `{"$base64":"…"}` 表示 |
+| `POST /api/v1/plugins/{id}/data/tables/{table}/rows` | `{"values":{…}}`，返回 `{"rowid":43}` | 插入一行 |
+| `PATCH /api/v1/plugins/{id}/data/tables/{table}/rows/{rowid}` | `{"values":{…}}`，`{}` | 修改给出的列 |
+| `DELETE /api/v1/plugins/{id}/data/tables/{table}/rows/{rowid}` | 无正文，`{}` | 删除一行 |
+| `GET /api/v1/plugins/{id}/data/export` | `application/zip` | 含 `db.sqlite`（经 SQLite Backup API 的一致快照）与 `plugin_data/`（插件数据目录），D-165 |
+| `POST /api/v1/plugins/{id}/data/clear` | `{"confirm":true}`，`{}` | 删除全部可写表的行（含 `_alonabot_kv`）与数据目录中的全部文件，保留表结构、迁移记录与目录本身；没有 confirm 时 400 |
+| `GET /api/v1/plugins/{id}/data/kv` | `?prefix=&offset=&limit=`，返回 `{"items":[{"key":"…","size":12,"updated_at":"…"}],"total":128}` | KV 键列表（D-165），按键排序 |
+| `GET /api/v1/plugins/{id}/data/kv/{key}` | `{"value_base64":"…","text":"…"}` | 值是合法 UTF-8 时另给 text；不存在 404 |
+| `PUT /api/v1/plugins/{id}/data/kv/{key}` | `{"value_base64":"…"}` 或 `{"text":"…"}`，`{}` | 写入或覆盖 |
+| `DELETE /api/v1/plugins/{id}/data/kv/{key}` | 无正文，`{}` | 删除；不存在 404 |
+| `GET /api/v1/plugins/{id}/data/files` | `?path=子目录`，返回 `{"entries":[{"name":"card.png","dir":false,"size":20480,"modified_at":"…"}]}` | 列出数据目录（D-165），目录在前、按名称排序 |
+| `GET /api/v1/plugins/{id}/data/files/content` | `?path=文件`，`application/octet-stream` | 下载文件，`Content-Disposition: attachment` |
+| `PUT /api/v1/plugins/{id}/data/files/content` | `?path=文件&overwrite=1`，请求体为文件内容，`{}` | 先写临时文件再改名；已存在且没有 overwrite 时 409 |
+| `POST /api/v1/plugins/{id}/data/files/mkdir`、`…/rename`、`…/delete` | `{"path":"…"}`、`{"from":"…","to":"…"}`、`{"path":"…","recursive":false}`，`{}` | 删除非空目录须 recursive |
+
+KV 与文件的路径是相对于数据目录的 `/` 分隔路径，拒绝空段、`.`、`..`、绝对路径与反斜杠，不跟随符号链接，指向数据目录之外时 400。写入在插件运行中照常进行：Core 以 busy_timeout 打开数据库，每个请求一个事务，等待超时返回 409；约束错误返回 400 并带 SQLite 的英文说明。每次写入记一条 INFO 审计日志，只写组件、表与 rowid。
+
+## 22. 更新内容（changelog）
+
+| Method / path | 成功响应 | 语义 |
+| --- | --- | --- |
+| `GET /api/v1/packages/{id}/changelog` | `{"locale":"zh-CN","entries":[{"version":"1.2.1","date":"2026-11-17","markdown":"…"}]}` | 已安装版本包中的 changelog（D-166），版本新的在前；单文件按 `## [版本] - 日期` 切分，没有日期时省略 date，`[Unreleased]` 不返回；目录写法按 `Accept-Language` 与 CONTRACTS §5.4 的规则为每个版本选择语言，`locale` 为实际使用的首选语言。没有 changelog 时 `entries` 为 `[]` |
+| `GET /api/v1/core/changelog` | 同上 | Core 自身的 changelog，取自编进可执行文件的 `CHANGELOG.md` |
+
+Markdown 原文由 WebUI 渲染，WebUI 不执行其中的 HTML。经管理认证，错误规则同第 3 节；未安装的组件返回 404。
 
 ## 23. 配置文件
 

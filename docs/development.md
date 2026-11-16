@@ -128,9 +128,9 @@ bin/alonabot run ./examples/plugins/lifecycle --stdio
 
 键与缺省值见 CONTRACTS §15.1；`base_url` 缺省为 `http://127.0.0.1:7650`，管理入口与插件路由共用这个地址。旧键 `admin_base_url` 与 `plugin_base_url` 按未知键报错；已有配置需改用 `base_url`。`admins`、`command_prefixes`、`command_prefixes_by_instance`、`default_locale`、`log.sources` 与 `adapters` 已支持解析与保存；本地 `run` 按监听、日志、代理与 Base URL 装配。
 
-整个字符串值写成 `${NAME}` 时，读取时展开环境变量；NAME 由 `A-Z`、`a-z`、数字与下划线组成，首字符为字母或下划线。变量缺失会报告键路径并拒绝启动。
+整个字符串值写成 `${NAME}` 时，读取时展开环境变量；NAME 由 `A-Z`、`a-z`、数字与下划线组成，首字符为字母或下划线。变量缺失时该值按不合法处理，恢复为缺省值并记校正记录（D-161）。
 
-`(*settings.File).Update` 在未展开的文档上编辑，校验后以 0600 临时文件替换原文件，保留其他键的顺序与 `${...}` 写法，新键追加到所在对象末尾；写回使用两个空格缩进并以换行结束。`$version` 当前为 1，缺失时按 1 读取、下次写回时补上，高于 1 时拒绝读取。
+`(*settings.File).Update` 在未展开的文档上编辑，校验后以 0600 临时文件替换原文件，保留其他键的顺序与 `${...}` 写法，新键追加到所在对象末尾；写回使用两个空格缩进并以换行结束。文件没有格式版本（D-161）：不是合法 JSON 对象时拒绝启动，其中不合法的值按 CONTRACTS §5.5 校正，不改写文件。
 
 部署运行中，手改设置后重启 Core 生效；带 `--reload` 的运行按上节刷新设置与开发实例，监听地址等启动时装配的设置仍需重启 Core。`--listen`、`--log-level`、`--log-format` 只在命令行显式给出时覆盖设置，只对本次运行有效，文件内容保持不变：
 
@@ -381,7 +381,7 @@ result := h.Text(plugintest.Group("room"), moderator, "/mod")
 
 ```go
 h := plugintest.Start(t, plugintest.Plugin(p),
-    plugintest.Config(p, `{"$version":2,"greeting":"Hello"}`),
+    plugintest.Config(p, `{"greeting":"Hello"}`),
     plugintest.AllowedInstances(p, plugintest.InstanceID),
     plugintest.Capabilities("message.send", "message.edit"))
 ```
