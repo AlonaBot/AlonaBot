@@ -32,13 +32,13 @@ SDK 公开三个可选进程 Hook：`OnStart(context.Context) error`、`OnReady(
 
 ### 插件休眠
 
-Core 与全部 Adapter 常驻；`always_on` 为缺省，`component_idle` 允许声明 `sleep_capable: true` 的独立插件进程按策略空闲退出。同进程开发组件保持运行。管理层单独保存 `enabled` 与 `STOPPED/WAKING/ACTIVE/QUIESCING/SUSPENDED/FAILED`，底层 Session 继续使用上面的生命周期。
+Core 与全部 Adapter 常驻；`always_on` 为缺省，`component_idle` 允许 `role: plugin` 或 `role: agent` 声明 `sleep_capable: true` 的独立进程按策略空闲退出。同进程开发组件保持运行。管理层单独保存 `enabled` 与 `STOPPED/WAKING/ACTIVE/QUIESCING/SUSPENDED/FAILED`，底层 Session 继续使用上面的生命周期。
 
-Router 以当前已提交代次的完整路由快照完成无进程匹配；快照与 ActiveGeneration、COMMITTED 同时生效，保存路由描述、Schema 绑定与包/路由摘要，Session、Listener 与认证材料随进程退出撤销。唤醒以新 Session 复用原代次与 `activation_reason=resume`，在交付前校验 REGISTER 摘要、权限和原 deadline。Supervisor 合并并发 EnsureActive 并持有进程唯一所有权；请求取得活动引用，实际结束后释放。等待队列的条数与字节有界，取消移除，无副作用重试。
+Router 在交付前执行消息事件的 `message_filter`（CONTRACTS §2.5），按可信 to_me、会话类型与本会话生效配置中的唤醒词作 OR 匹配；可用 triggers 配置选择条件。声明只保存路径，配置文件的覆盖值由 Core 读取，SDK Rule 在交付后继续过滤。未命中时不唤醒。Router 以当前已提交代次的完整路由快照完成无进程匹配；快照与 ActiveGeneration、COMMITTED 同时生效，保存路由描述、Schema 绑定与包/路由摘要，Session、Listener 与认证材料随进程退出撤销。唤醒以新 Session 复用原代次与 `activation_reason=resume`，在交付前校验 REGISTER 摘要、权限和原 deadline。Supervisor 合并并发 EnsureActive 并持有进程唯一所有权；请求取得活动引用，实际结束后释放。等待队列的条数与字节有界，取消移除，无副作用重试。
 
 Idle Controller（`internal/core/idle/`）读取 `settings` 的生效策略与 Supervisor 的活动状态，只决定是否请求正常停止。Handler、Service、HTTP、媒体、schedule、多轮等待、后台工作、租约及管理变更都阻止休眠。STOPPING 前可撤销空闲停止；发出后新请求等旧进程树退出再唤醒。空闲退出使用 StopReason `IDLE`，成功后写 `SUSPENDED`，保留路由快照与调度计划，正常退出不计入异常重启。精确规则与可调初值见 CONTRACTS §4.4、§4.5、§16。
 
-`core_config.json` 的 `sleep` 保存模式、全局空闲时长与按插件覆盖；消息事件、Raw、HTTP、Hook 与持续监听缺省常驻，管理员显式时长仅覆盖路由准入，manifest 的可休眠声明始终有效。Admin API（ADMIN-API §24）、CLI 与 WebUI 共用管理服务，写回后立即应用、不重载插件；`never` 与切回 `always_on` 会唤醒相应的已启用插件。
+`core_config.json` 的 `sleep` 保存模式、全局空闲时长与按插件覆盖；未声明 Core 过滤的消息事件、Raw、HTTP、Hook 与持续监听缺省常驻，管理员显式时长仅覆盖路由准入，manifest 的可休眠声明始终有效。Admin API（ADMIN-API §24）、CLI 与 WebUI 共用管理服务，写回后立即应用、不重载插件；`never` 与切回 `always_on` 会唤醒相应的已启用插件。
 
 ## B. 安装包、平台与来源
 

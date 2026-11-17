@@ -93,6 +93,13 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
   - 注册时声明：命令、文本匹配、Raw、事件与按钮路由的 builder 调用 `.Continue()`。SDK 在原调用中照常执行 Rule，匹配后请求延续调用并成功结束原调用，Handler 整体在延续调用中执行，签名不变。原调用的传播结果固定为 Continue，Handler 中的 `c.StopPropagation()` 不起作用。自动回复型 Handler 返回的非空内容由 SDK 在延续调用结束前经 Send 发出一次。请求延续调用失败时，原调用返回该错误，Handler 不执行。定时任务、Service、Event Bus 订阅、Hook 与 HTTP 路由没有这个方法。
   - Handler 内调用：`c.Continue(fn)`，fn 在延续调用中执行，原调用的其余部分（含 `c.StopPropagation()`）照常决定传播。对已经用 `.Continue()` 注册的路由，Handler 本身就在延续调用中，再调用 `c.Continue` 返回 FAILED_PRECONDITION。
 
+### 2.5 消息事件的 Core 侧过滤
+
+- 事件路由可声明 `message_filter`，仅用于 `message.created`、`message.edited`、`message.deleted`。Core 在交付前匹配，常驻与休眠时使用同一规则；未命中不交付、不取得唤醒名额。未声明时沿用按事件类型交付的规则。SDK 的 `.Rule(...)` 继续在命中后的同一 Handler REQUEST 内执行。
+- 静态条件为 `to_me`、`chat_types` 与 `wake_words_config`，三者按 OR 组合，任一命中即交付：`to_me` 读取 message.created 的可信字段（私聊、@ 或回复机器人，MESSAGE-MODEL §1.1）；`chat_types` 为 PRIVATE、GROUP、CHANNEL 的集合；`wake_words_config` 是本插件配置中字符串列表字段的点分路径。text 片段按顺序拼接，包含任一非空唤醒词即命中，位置不限，拉丁字母不区分大小写，消息内容保持原样。事件未提供 to_me 或文本时，对应条件不命中；chat_type 未知时不命中会话类型条件。一个条件都没有（没有 to_me、chat_types、wake_words_config，也没有 triggers_config）的过滤器在 REGISTER 时拒绝。
+- 可选的 `triggers_config` 指向本插件字符串多选字段，按 D-167 的值选择条件：`mention` 为 GROUP 且 to_me，`private` 为 PRIVATE，`wake_word` 为上述唤醒词匹配；任一选中项命中即交付，空列表不匹配。使用此字段时不同时声明静态 `to_me` 或 `chat_types`，并提供 `wake_words_config`；未选中 `wake_word` 时不读取唤醒词值。SDK 注册只声明字段路径，配置值变化不改变 REGISTER 或路由摘要。
+- REGISTER 在信任边界校验事件类型、会话类型、字段路径及字段类型：配置路径只能指向本插件顶层或 object 子字段，唤醒词为字符串 list，触发方式为 options 仅含 mention、private、wake_word 的字符串 list，均须为非 secret 字段。声明错误拒绝整份注册。运行时只读当前 Active 的配置，排除 Pending；按 §5.6 解析本事件会话所用的配置文件，先应用有效覆盖再匹配。覆盖更新立即作用于后续匹配，不唤醒插件取值，也不把覆盖值写进路由快照。读取失败记实际错误并跳过该路由，不按未过滤交付。
+
 ## 3. 跨插件调用、动态 Router 与权限
 
 - v0.1 交付显式 Service Call 与非持久 Event Bus；通过 Core 动态调用其他插件的命令/事件 Router 不在 v0.1 范围内（Q-15），v0.1 只固定稳定 route ID。
@@ -153,6 +160,8 @@ SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 contex
 
 ### 4.4 插件运行模式、状态与路由快照
 
+本节及 §4.5 的插件包括 `role: plugin` 与 `role: agent`；WebUI 与 Adapter 保持常驻。
+
 Core 与全部 Adapter 始终常驻。`always_on` 为缺省模式，全部已启用插件保持运行；`component_idle` 允许符合准入条件的插件因空闲退出进程。同进程的开发组件保持运行；独立进程的插件按以下规则管理。
 
 `enabled` 表示管理配置中的启用意图，运行状态单独持久化；读取状态与策略不会唤醒插件。运行状态只描述插件，底层 Session 阶段继续使用 §12.1 的状态机。
@@ -168,7 +177,7 @@ Core 与全部 Adapter 始终常驻。`always_on` 为缺省模式，全部已启
 
 状态记录含最近一次变化的原因与时间。Core 恢复时先核对安装记录、ActiveGeneration、提交记录与进程所有权，再发布当前状态；已落盘的 `ACTIVE` 或 `WAKING` 本身不能证明 Session 存活。`SUSPENDED` 只有在空闲停止成功且确认进程树退出后写入；异常退出进入 `FAILED`。
 
-Core 为每个代次保存 REGISTER 中已验证的完整路由描述：`plugin_id`、`generation_id`、`route_id`、类型、匹配条件、优先级、参数、权限声明、Rule 描述、输入/输出 Schema 标识及其不可变包资源绑定、HTTP 公共路径、Service、静态 schedule、动态任务名与 Bus 订阅描述，以及路由内容摘要和已验证的安装包摘要。HTTP 公共路径由 Core 按 §7.2 推导。快照只取路由白名单字段，排除候选配置、HTTP 临时 Listener 地址、内部代理认证材料、Session Secret、Session ID 与进程句柄。
+Core 为每个代次保存 REGISTER 中已验证的完整路由描述：`plugin_id`、`generation_id`、`route_id`、类型、匹配条件（含消息事件的 `message_filter` 及其配置字段路径）、优先级、参数、权限声明、Rule 描述、输入/输出 Schema 标识及其不可变包资源绑定、HTTP 公共路径、Service、静态 schedule、动态任务名与 Bus 订阅描述，以及路由内容摘要和已验证的安装包摘要。HTTP 公共路径由 Core 按 §7.2 推导。快照只取路由白名单字段，排除配置值、配置文件覆盖值、HTTP 临时 Listener 地址、内部代理认证材料、Session Secret、Session ID 与进程句柄。
 
 新候选的快照在提交前准备持久化，随 ActiveGeneration 与 COMMITTED 的同一状态库事务成为有效快照；未提交候选的快照保持不可见。索引只读取当前已提交代次，并核对所属插件、代次、路由内容摘要及程序包摘要；Core 重启后据此恢复索引。Schema 原文从该快照绑定的不可变包资源读取并校验。缺失或不一致时报告失败并隔离该插件的路由，保留诊断。
 
@@ -186,11 +195,11 @@ Idle Controller 只作准入与空闲决策，生命周期由 Supervisor 执行�
 - 没有在途 Handler、Service、HTTP、媒体、schedule、延续调用、多轮等待、后台工作或资源租约；没有升级、配置应用、回退或其他管理变更。
 - 空闲时间达到生效阈值，唤醒后已达到最短运行时间，冷启动频率未触发暂时常驻规则（§16）。空闲从最近一次实际活动结束起计算。
 
-Core 无法观察插件私建的 goroutine 与连接，作者仅在没有独立后台活动、可按重启语义恢复时声明可休眠；缺省保持常驻。HTTP、Hook、持续事件监听、消息类事件路由（含带 Rule 的路由）或 Raw 路由缺省常驻；管理员显式给出插件时长后才允许参与，界面与 CLI 提示消息监听会频繁唤醒。普通命令与 Core 可匹配的文本规则按命中唤醒。声明未允许休眠时，管理员时长覆盖仍保持常驻，并显示原因。
+Core 无法观察插件私建的 goroutine 与连接，作者仅在没有独立后台活动、可按重启语义恢复时声明可休眠；缺省保持常驻。HTTP、Hook、其他持续事件监听、未声明 Core 侧 `message_filter` 的消息类事件路由（含仅带 SDK Rule 的路由）或 Raw 路由缺省常驻；管理员显式给出插件时长后才允许参与，界面与 CLI 提示消息监听会频繁唤醒。普通命令、Core 可匹配的文本规则与声明了 `message_filter` 的消息事件路由按命中唤醒；声明该过滤器的消息路由本身不构成缺省常驻理由，其他路由仍逐一判定。声明未允许休眠时，管理员时长覆盖仍保持常驻，并显示原因。
 
-策略取 §15.1 的 `sleep`：插件未配置时遵循准入规则与全局空闲时长；`never` 始终常驻；时长覆盖全局阈值。管理 API、CLI 与 WebUI 修改后写回文件并立即更新策略，无需 reload：改为 `never` 时立即唤醒仍已启用的休眠插件；修改时长在下一次空闲判定使用，不重置实际活动时间；切回 `always_on` 时按原代次启动全部已启用插件，保留快照、任务与业务数据。已停用插件保持停用。写回成功后的唤醒失败须返回实际错误，响应明确列出失败插件与已保存的设置。
+策略取 §15.1 的 `sleep`：插件未配置时遵循准入规则与全局空闲时长；`never` 始终常驻；时长覆盖全局阈值。管理 API、CLI 与 WebUI 修改后写回文件并立即更新策略，无需 reload：改为 `never` 时立即唤醒仍已启用的休眠插件；修改时长在下一次空闲判定使用，不重置实际活动时间；切回 `always_on` 时按原代次启动全部已启用插件，保留快照、任务与业务数据。已停用插件保持停用。写回成功后的唤醒失败须返回实际错误，响应按 ADMIN-API §5 返回实际错误；调用方重新 GET 核对已保存设置，失败同时记入对应插件的运行状态。
 
-停止与新请求共用逐插件生命周期门禁：发送 STOPPING 前允许撤销空闲停止并恢复接单；已发送后，新请求排队等旧进程树退出，再建立唯一新 Session。停止复用 §4.2 的排空与总预算，StopReason 为 `IDLE`，OnStop、DB、连接与受管资源正常关闭；成功后记 `SUSPENDED`。正常空闲退出不计入异常重启次数，也不启动新的候选或重复迁移。唤醒后的最短运行时间为 5 分钟；一小时内冷启动超过 3 次后暂时常驻，直到该滚动窗口内次数回到阈值以内再恢复空闲判定。
+停止与新请求共用逐插件生命周期门禁：发送 STOPPING 前允许撤销空闲停止并恢复接单；已发送后，新请求排队等旧进程树退出，再建立唯一新 Session。停止复用 §4.2 的排空与总预算，StopReason 为 `IDLE`，OnStop、DB、连接与受管资源正常关闭；成功后记 `SUSPENDED`。正常空闲退出不计入异常重启次数，也不启动新的候选或重复迁移。唤醒后的最短运行时间为 5 分钟；在 `SLEEP_COLD_START_WINDOW`（缺省 1 小时）内冷启动超过 `SLEEP_COLD_START_MAX`（缺省 3 次）时，从触发时刻起固定常驻一个 `SLEEP_COLD_START_WINDOW` 的冷却期，期间的新冷启动不延长本次冷却期；冷却结束后恢复空闲判定。
 
 Core 记录运行状态变化、唤醒/空闲停止原因、冷启动次数、失败与等待丢弃数；冷启动耗时从启动插件进程至 Core 确认 ACTIVATED，分别记录 OnStart、OnReady 耗时。固定机器验收记录冷启动 P50/P95/P99、活跃与休眠的 PSS/RSS 及 CPU，规则见 TEST-MATRIX V-81。
 
@@ -433,7 +442,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
   - Agent 的声明与插件相同，可以有路由、HTTP、数据库与 schedule；它额外承担 §13 的职责，并是 `@agent` 的解析目标（§3）。
   - WebUI 必有静态文件：作者写 `id`、`name`、`version`、`role`、`source`、静态根目录 `assets`（包内相对目录，含 `index.html`）与 Admin API 主版本范围 `admin_api_min_major`/`admin_api_max_major`（§7.5）。只有静态文件时 `pack` 只补上 `manifest_version`，不写 `entrypoint`、协议主版本、`required_capabilities`，`os/arch` 写 `any`，归档名为 `<id>-<version>-any.tar.gz`。WebUI 工程也可以有 Go 入口（D-162），这时它另有一个与插件相同的进程：`build`/`pack` 照插件补全 manifest 并按平台出包，进程可以使用配置、受管 SQLite、事件路由、Hook 与 HTTP 路由，HTTP 路由要求管理会话，前端与之同源直接调用。
 - 任何角色都可以声明可选的 `icon`：包内图标文件的相对路径（§7.5）。
-- 插件作者可以在工程 `plugin.yaml` 声明布尔字段 `sleep_capable`，缺省 `false`，构建时原样保留到包内 manifest；仅 `role: plugin` 使用。`false` 表示要求常驻，WebUI 锁定休眠时长选项并显示原因。`true` 仍受 §4.5 的活动、路由与管理策略约束。
+- 插件作者可以在工程 `plugin.yaml` 声明布尔字段 `sleep_capable`，缺省 `false`，构建时原样保留到包内 manifest；对 `role: plugin` 与 `role: agent` 开放，Adapter 与 WebUI 不接受该字段。`false` 表示要求常驻，WebUI 锁定休眠时长选项并显示原因。`true` 仍受 §4.5 的活动、路由与管理策略约束。
 - 任何角色都可以带 changelog（D-166），二选一：工程根目录的 `CHANGELOG.md`（Keep a Changelog，以 `## [版本] - 日期` 分节，`[Unreleased]` 不显示，只有一种语言），或 `changelog/<版本>/<locale>.md`（版本目录名是不带 `v` 的 SemVer 且不高于 manifest 的 `version`；文件名按 §5.4 的规则为规范化的 BCP 47 标签，每个版本必须有 `en-US.md`，其他语言缺少时回落到 en-US；目录中不能有其他文件）。两种同时出现、文件不是 UTF-8 或命名不合规时 `check`、`build` 与 `pack` 报错并指出路径。`pack` 原样放进安装包。Core 的管理 API 按已安装的版本提供它（ADMIN-API §22），Core 自身的 changelog 是本仓库根目录的 `CHANGELOG.md`，编进可执行文件。插件可声明 `adapter_dependencies` 与 `plugin_dependencies`，语义见 §8。
 - `migration_mode` 取 `none/self/versioned`，由构建按代码中登记的迁移方式写入（§6.2）；`prepare_effects` 固定 `none/managed_db/external`，描述配置回调以外的迁移/OnStart 在准备期的副作用。`managed_db` 仅表示写所属的受管 SQLite，候选可隔离；`external` 表示会写框架外的数据（例如插件自管的外部数据库），不具备自动回退承诺，按 §6.3 的维护门槛更新。包内 manifest 缺少这两项时安装与更新照常进行，管理服务在安装与更新的结果中返回警告并记 WARN 日志，准备阶段按没有框架外副作用处理（与 `none` 相同）；取值不在规定集合内时拒绝，插件实际登记的迁移方式与 manifest 不符时准备失败（D-150）。它们是插件包静态声明，不是 WebUI 调参开关。
 - 命令、文本匹配与事件只在入口包的 `func New() *sdk.Plugin` 中对插件对象链式注册（D-79、D-114），生成器不扫描注册；`build` 检查并嵌入 manifest、`config_schema.json`、`i18n/`、Service Schema 与 Handler 的参数名（命令省略 `Args` 时使用，D-112），入口包必须声明 `func New() *sdk.Plugin`（缺少或签名不符时构建失败），配置 schema 只来自 `config_schema.json`（§5.1），重复 Handler/HTTP 路由失败。Schema/注册描述与 binary 来自同一构建，安装期检查能静态取得的 Schema/能力与自动注册项；实例方法显式注册的完整集合在本次启动 REGISTER 时校验，不要求静态推导任意 Go 控制流或重复手写整张路由表。最终路由在该 Session 固定，Schema/能力必须与包资源一致；Go 与 protoc 的版本已由 T-01 锁定，见 docs/development.md。
@@ -702,9 +711,9 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | `command_prefixes` | `["/"]` | 命令前缀（§2.2），即配置文件 `default` 的命令前缀，其他配置文件可以覆盖（§5.6）；列表不能为空，不带前缀的命令写 `[""]` |
 | `reply` | `{"mention_sender": false, "quote": false, "prefix": "", "forward_threshold": 0}` | 配置文件 `default` 的回复方式（§5.6） |
 | `default_locale` | `en-US` | 机器人回复的缺省语言（§5.4） |
-| `sleep.mode` | `always_on` | 只接受 `always_on` 或 `component_idle`，Core 与 Adapter 始终常驻（§4.4） |
-| `sleep.idle_timeout` | `15m` | 插件全局空闲时长，正的 Go duration |
-| `sleep.plugins` | `{}` | 按插件 ID 的覆盖值：`"never"` 或正的 Go duration；未设置表示遵循准入规则与全局时长，`auto` 仅是 CLI 删除覆盖的操作名（§4.5） |
+| `sleep.mode` | `always_on` | 只接受 `always_on` 或 `component_idle`，Core、Adapter 与 WebUI 始终常驻（§4.4） |
+| `sleep.idle_timeout` | `15m` | plugin 与 agent 的全局空闲时长，正的 Go duration |
+| `sleep.plugins` | `{}` | 按 plugin 或 agent ID 的覆盖值：`"never"` 或正的 Go duration；未设置表示遵循准入规则与全局时长，`auto` 仅是 CLI 删除覆盖的操作名（§4.5） |
 | `adapters` | 空 | 按 adapter_id 分组的 Adapter 实例：`{"telegram": {"instances": {"main": {"token": "${TELEGRAM_BOT_TOKEN}"}}}}`；实例配置按该 Adapter 的 `adapter_config_schema.json` 补缺失值并校正（§5.5、§8）。实例名为 `^[A-Za-z0-9_-]{1,64}$`，跨 Adapter 也不能重名；每个 Adapter 可以写 `default_instance`（该 Adapter 的一个实例名），作为插件没有指定实例时的缺省发送实例（§8，D-102） |
 
 - 任何字符串值都可以写成 `${环境变量}`，启动时展开；变量不存在时该值按不合法处理，按 §5.5 恢复为缺省值并记校正记录（D-161）。敏感值也可以直接写明文，文件权限保护它们。
@@ -832,8 +841,8 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | `RESTART_WINDOW` | 5m | > 0 | §4.2 |
 | `RESTART_MAX_CRASHES` | 3 | ≥ 1 | §4.2 |
 | `SLEEP_MIN_UPTIME` | 5m | > 0 | §4.5 |
-| `SLEEP_COLD_START_WINDOW` | 1h | > 0 | §4.5 |
-| `SLEEP_COLD_START_MAX` | 3 | ≥ 1；窗口内超过此值暂时常驻 | §4.5 |
+| `SLEEP_COLD_START_WINDOW` | 1h | > 0；冷启动统计窗口及触发后固定常驻的冷却时长 | §4.5 |
+| `SLEEP_COLD_START_MAX` | 3 | ≥ 1；窗口内超过此值开始固定冷却期 | §4.5 |
 | `WAKE_QUEUE_REQUESTS` | 256 | ≥ 1；每插件未交付的等待请求数 | §4.5 |
 | `WAKE_QUEUE_BYTES` | 16MiB | ≥ 帧上限 4MiB 且 ≤ `CORE_MAX_PAYLOAD`；每插件等待 payload 总量 | §4.5 |
 | `JOB_TIMEOUT` | 15m | > 0 | §4.3 |

@@ -23,7 +23,7 @@
 | goal-143 | T-12.15 | 模型两层配置 | T-12.7 | 待派发 |
 | goal-144 | T-12.16 | 预留的五类模型与模型管理路由 | T-12.15 | 等待前置（T-12.15） |
 | goal-145 | T-12.17 | 对话重试与回退模型、图像转述 | T-12.15 | 等待前置（T-12.15） |
-| goal-159 | T-12.18 | Agent 的触发方式、唤醒词与成员独立会话 | T-12.17 | 等待前置（T-12.17） |
+| goal-159 | T-12.18 | Agent 的触发方式、唤醒词与成员独立会话 | T-12.17、S-02.3 | 等待前置（T-12.17、S-02.3） |
 | goal-164 | T-12.19 | Agent 接入配置文件 | T-04.18、T-12.18 | 等待前置（T-04.18、T-12.18） |
 | goal-167 | T-12.20 | 官方 Agent 的插件页面 | T-04.17、T-12.19 | 等待前置（T-04.17、T-12.19） |
 
@@ -1034,7 +1034,7 @@ TEST-MATRIX 汇总方式：
 
 ### goal-159 · T-12.18 Agent 的触发方式、唤醒词与成员独立会话
 
-状态：等待前置（T-12.17）。2026-11-17 按 D-167 新增。目标、依据与要点由 PLAN T-12 步骤 2、3 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：等待前置（T-12.17、S-02.3）。S-02.3 提供 Core 侧消息过滤及配置字段注册，避免未命中的消息交付或唤醒 Agent；首次发布前不做旧按聊天触发值的交接（见要点）。2026-11-17 按 D-167 新增。目标、依据与要点由 PLAN T-12 步骤 2、3 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-159（切片 T-12.18：Agent 的触发方式、唤醒词与成员独立会话）。goal 目录 goal-159，分支 goal-159，worktree .worktrees/goal-159，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -1044,8 +1044,8 @@ TEST-MATRIX 汇总方式：
 依据：PLAN T-12 步骤 2、3；DECISIONS D-141、D-167；TEST-MATRIX V-139。
 
 要点：
-- 非命令消息（command_consumed 为 false）命中任一选中的触发方式时触发一轮；mention 为群聊中 to_me 的消息，private 为私聊消息，wake_word 为 text 片段按顺序拼接后包含任一唤醒词（位置不限，拉丁字母不区分大小写），唤醒词保留在交给模型的文本中。
-- 缺省 triggers 为空，只有 `/ask` 触发；按聊天保存的触发方式优先于配置（goal-164 改为配置文件后删除按聊天的保存）。
+- 用 S-02.3 的 p.On(...).Filter(sdk.MessageFilter{TriggersConfig:"triggers", WakeWordsConfig:"wake_words"}) 注册自由对话，Core 按消息会话生效配置筛选，任一选中项命中才交付（休眠时才唤醒）；继续用 SDK NotCommand 与其他 Rule 排除 command_consumed 等进程内条件。mention 为群聊中 to_me，private 为私聊，wake_word 为 text 片段顺序拼接后包含任一非空词（拉丁字母不区分大小写），保留原文本。
+- 缺省 triggers 为空，只有 `/ask` 触发；triggers 与 wake_words 由 Core 读取当前 Active 及 D-168 配置文件的有效覆盖值，配置值不固化进路由。首次发布前不做交接：本切片起触发方式只由 Core 持有的配置与配置文件决定，Agent 数据库中旧的按聊天开关不再参与触发判断；`/agent on|off` 改写为配置文件写入与旧聊天设置的删除由 goal-164 负责。Core 只读自身持有的配置，不访问 Agent 数据库。
 - member_sessions 为 true 时群聊的会话键追加发言人的用户字符串，成员各自有历史与图片编号，`/reset` 只清除发言人的会话，Actor 缺省时用群的会话；记忆的会话笔记不受影响。
 
 不做：回复方式（Core 的平台设置，goal-162）；配置文件（goal-164）。

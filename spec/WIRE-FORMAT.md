@@ -108,13 +108,15 @@ RouteDescriptor 公共字段为 `route_id`、`kind`、`priority`、`default_enab
 | kind | 专属描述 |
 | --- | --- |
 | command | 规范命令路径、aliases、参数列表与默认值、Handler 模式、Rule 描述 |
-| event | event_type_filter、Handler 模式、Rule 描述；button.clicked 路由含 action schema version |
+| event | event_type_filter、Handler 模式、Rule 描述、可选 message_filter（CONTRACTS §2.5）；button.clicked 路由含 action schema version |
 | hook | phase（PreEvent/BeforeSend/AfterSend）、event_type_filter（PreEvent 恰好一项，为已知标准事件或合法 Adapter 扩展事件名；BeforeSend/AfterSend 留空）、优先级及固定 Hook 输入/输出 Schema |
 | service | service_name、公开/allowlist 能力、请求/响应 Schema |
 | schedule | 稳定 job_id、cron/interval、timezone、固定 job deadline |
 | task | 稳定任务名；实例的触发规则与参数不在注册描述中，由 `core.task.set` 在运行时给出（D-124） |
 | http | method、插件相对 path、is_public、认证/回调验证模式 |
 | bus_subscription | event_name、可接受的 Schema/版本、订阅回调 route_id |
+
+EventSpec 追加可选消息 `MessageFilter message_filter`；MessageFilter 的字段为 `bool to_me`、`repeated ChatType chat_types`、`string wake_words_config`、`string triggers_config`。字段号在实施时按最新 proto 顺延，不在规格中预分配。字段路径、OR、触发方式选择、缺失数据与空列表的语义见 CONTRACTS §2.5；过滤器的存在与缺省有区别。仅允许标准 message.created/edited/deleted 事件，和其他事件类型混用时拒绝注册。SDK 用自有类型登记这些声明，不在公开 API 暴露 pb。过滤器及配置字段路径参与确定性路由编码、摘要和快照白名单，配置值及按配置文件的覆盖值保持在 Core 的配置所有者中。
 
 自定义 Go Rule 是插件进程内与对应 Handler 一起执行的函数；Core 可表达的类型/命令/权限条件先执行，SDK 在同一 Handler REQUEST 中完成自定义 Rule，并以 HandlerOutcome.matched 返回结果，不另建 Rule 服务。
 
