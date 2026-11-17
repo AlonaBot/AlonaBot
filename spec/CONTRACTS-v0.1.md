@@ -382,7 +382,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 
 所有 ID 最长 64 个 ASCII 字符。市场使用 `^alonabot_plugin_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`，同时应用长度上限；本地使用 `^[a-z][a-z0-9_-]{0,63}$`，缺市场前缀只警告。为保证五平台路径有效，本地 ID 还拒绝 Windows 保留设备名 con/prn/aux/nul/com1～com9/lpt1～lpt9；大小写以规范小写保存，不能靠大小写形成两个安装。
 
-- 组件工程中的 `plugin.yaml` 由作者编写，只写作者信息（D-78）：必填 `id`、`name`（显示名，英文源文案）、SemVer `version` 与 `source`；可选 `description`、`author`、`role`（缺省 `plugin`）、`icon`，以及下文按角色需要的字段；会写框架外数据时写 `prepare_effects: external`。`name` 与 `description` 可以在 `i18n/<locale>.json` 的顶层 `metadata` 中翻译（§5.4），WebUI、`list` 与 help 显示 name。
+- 组件工程中的 `plugin.yaml` 由作者编写，只写作者信息（D-78）：必填 `id`、`name`（显示名，英文源文案）、SemVer `version` 与 `source`；可选 `description`、`author`、`role`（缺省 `plugin`）、`icon`，以及下文按角色需要的字段；会写框架外数据时写 `prepare_effects: external`。`name` 与 `description` 可以在 `i18n/<locale>.json` 的顶层 `metadata` 中翻译（§5.4），WebUI 与 `list` 显示 name。
 - `alonabot build` 与 `pack` 在包内的 manifest 中补上构建信息：`manifest_version=1`、`protocol_min_major/protocol_max_major` 与 `required_capabilities`（由所链接的 SDK 决定）、`os/arch`、相对可执行文件路径 `entrypoint`、`migration_mode`（按实际实现的迁移接口）与 `prepare_effects`（作者没写 external 时，按是否链接受管 SQLite 取 `managed_db` 或 `none`）。作者在工程的 `plugin.yaml` 中写这些字段时 `check` 报错。包校验严格解析包内 manifest，同时核对 `config_schema.json`、`adapter_config_schema.json`、注册描述、i18n 与 build-info；SDK 是编译依赖，不要求 Core 和插件 Go patch 相同，运行兼容以协议和能力协商为准。
 - 可安装的包统称组件，使用同一份 manifest，`role` 取 `plugin`（缺省）、`adapter`、`agent` 或 `webui`（D-59）。只有 `plugin` 是插件，可以安装任意多个；`adapter` 每个 `adapter_id` 至多安装一个，`agent` 与 `webui` 全局各至多安装一个，同类组件的替换见 §9.3。市场 ID 依次使用 `alonabot_plugin_`、`alonabot_adapter_`、`alonabot_agent_`、`alonabot_webui_` 前缀，其余部分与插件市场 ID 的规则相同。
   - Adapter 另需 `adapter_id`（小写平台类型，规则同本地 ID）。工程 `plugin.yaml` 与实例配置声明 `adapter_config_schema.json` 位于可导入的 Adapter 包目录（§5.5、§8，D-134）；`build`/`pack` 从该目录读取资源，构建调用 `sdk.RunAdapter` 的 cmd 薄入口，归档内的 manifest 与实例声明仍放在根目录。Adapter 可以按 §7.2 声明 HTTP 路由，仍不得声明其他插件路由、数据库或迁移（D-136）。
@@ -666,12 +666,12 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 ### 15.2 发行包、官方整合包与预装组件
 
 - 官方整合包是同一套发行物的三种安装方式（D-64）：发行归档、容器镜像与 `deploy/compose.yaml`（§15.3），以及 `install.sh`（§15.6）。三者包含相同的 Core 与官方组件。
-- 每个目标平台发布一个发行归档 `alonabot-<version>-<os>-<arch>`（Windows 为 zip，其他为 tar.gz），包含 `alonabot` 可执行文件和 `packages/` 目录。`packages/` 中是官方 Telegram Adapter、官方 OneBot 11 Adapter、官方 Agent、官方 WebUI 与预装插件的组件包，以及各自归档外的 `release.json` 与 `.sig`（§9.2）。同一 Release 另附 `install.sh` 与列出全部发行归档 SHA256 的 `SHA256SUMS`。
+- 每个目标平台发布一个发行归档 `alonabot-<version>-<os>-<arch>`（Windows 为 zip，其他为 tar.gz），包含 `alonabot` 可执行文件和 `packages/` 目录。`packages/` 中是官方 Telegram Adapter、官方 Agent、官方 WebUI 与预装插件的组件包，以及各自归档外的 `release.json` 与 `.sig`（§9.2）。官方 OneBot 11 Adapter 不进入首个发行版，完成后随后续版本加入（D-171）。同一 Release 另附 `install.sh` 与列出全部发行归档 SHA256 的 `SHA256SUMS`。
 - 发行版 Core 内置官方发布者公钥作为已信任来源：运行官方发行包即视为接受该来源，预装包不再逐个确认。签名与摘要照常校验，校验失败的包不安装并记 ERROR。
-- 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，只启用 help 插件与官方 WebUI；Agent 组件与 help 以外的预装插件只安装不启用，不使用 AI 对话的部署不运行它们的进程（D-50、D-62）。官方 Telegram 与 OneBot 11 Adapter 只安装，`core_config.json` 的 `adapters` 中有它的实例时自动启用；某个 Adapter 写了实例却尚未安装时，Core 从 `packages/` 安装，没有发行包（例如经 `go install` 取得的 `alonabot`）时从官方 Release 安装（D-82）。需要 AI 对话时，管理员在 WebUI 或 CLI 启用 Agent；Agent 在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。
+- 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，只启用 help 插件与官方 WebUI；Agent 组件与 help 以外的预装插件（首个发行版没有，D-171）只安装不启用，不使用 AI 对话的部署不运行它们的进程（D-50、D-62）。发行包中的官方 Adapter 只安装，`core_config.json` 的 `adapters` 中有它的实例时自动启用；某个 Adapter 写了实例却尚未安装时，Core 从 `packages/` 安装，没有发行包（例如经 `go install` 取得的 `alonabot`）时从官方 Release 安装（D-82）。需要 AI 对话时，管理员在 WebUI 或 CLI 启用 Agent；Agent 在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。
 - 管理员可以用 `install --source <来源> --replace` 把任一官方 Adapter、Agent 或 WebUI 换成社区组件（§9.3）；之后不再从官方来源更新该组件。卸载或损坏 WebUI 后，用 `alonabot install <官方 WebUI 的组件 ID>` 从 `packages/` 重装（§9.3，D-149）。
 - 之后不再自动安装，已卸载的预装包不会在下次启动时重新安装。新版本发行包中的包版本高于已安装版本时，作为可用更新列在管理界面与 `alonabot list` 中，由管理员确认后按 `update` 流程更新。Core 本身通过替换可执行文件升级，新版本按 §5.5 校正 `core_config.json`，不改写文件。
-- 首批预装插件为 help（按调用者权限列出可用命令与用法，`/whoami` 回复调用者的用户字符串与收到消息的实例名）、welcome（新成员入群时发送欢迎语）与 rss（订阅 RSS/Atom 并推送到聊天）。
+- 首个发行版的预装插件只有 help：`/help` 按调用者权限列出当前会话可用的命令与说明，`/whoami` 回复调用者的用户字符串与收到消息的实例名（D-171）。welcome（新成员入群时发送欢迎语）与 rss（订阅 RSS/Atom 并推送到聊天）完成后随后续版本加入预装。
 - 第一个 Core Admin 的产生：用户在聊天中发送 `/whoami` 取得自己的用户字符串，管理员把它写入 `core_config.json` 的 `admins`，或在 WebUI 的 Core 设置页、`alonabot admin add` 中添加。预装插件与第三方插件一样以独立进程运行，只有启用的才运行。
 
 ### 15.3 容器镜像
