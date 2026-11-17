@@ -66,6 +66,8 @@ RESPONSE 的 payload 与 ErrorInfo **不是 oneof**。例如部分发送成功�
 
 已定义的协议能力：`http_listener` 版本 1（D-65）。插件存在 HTTP 路由时 SDK 把它放进 HELLO 的 required；Core 支持它，交集含该项时才在 Bootstrap 中下发 `http_proxy_auth`，REGISTER 带 HTTP 路由而交集不含该项时拒绝注册。
 
+StopReason 在现有枚举末尾追加 `STOP_REASON_IDLE`（goal-170），表示正常空闲退出，沿用 STOPPING 的绝对 deadline 与停止预算。编号由获授权的切片按当前 `.proto` 顺延，已有值保持不变。`SUSPENDED` 是 Core 管理运行状态，SessionPhase 沿用现有状态。唤醒复用 `ActivationReason.RESUME`、原 generation_id 与新 Session，不增加业务 RPC。
+
 ### 3.2 Bootstrap 的最小内容
 
 Bootstrap 属于私有、已认证 IPC，和整个 HELLO_ACK 一起受 **4 MiB** 限制。超限明确失败；首发不增加分块 Bootstrap 或准备期业务 RPC。
@@ -119,6 +121,8 @@ RouteDescriptor 公共字段为 `route_id`、`kind`、`priority`、`default_enab
 REGISTER 的完整描述必须装入一帧；超限 RESOURCE_EXHAUSTED，不部分接收或激活。配置 Schema 与服务 Schema 从经过包摘要校验的安装资源取得，REGISTER 中的 hash/版本必须一致，不能仅上报不可解析的 hash 而缺少 Schema 原文。
 
 有 HTTP 路由时，SDK 先创建实际绑定的 loopback Listener，再上报 `host + port`；首发仅接受 `127.0.0.1` 或 `::1` 与合法非零端口，不能传任意 URL、文件路径或远端主机。Core 验证与当前 Session 的代理认证和就绪状态后保存端点，公开前缀仍由 Core 决定。无 HTTP 路由则不得要求创建 Listener。端点随 Session 失效撤销；外部请求不携带内部认证材料，Core 覆盖相应内部头。
+
+路由快照只保存以上 RouteDescriptor 的确定性编码、内容摘要及其插件/已提交代次/包身份，规则见 CONTRACTS §4.4；摘要复用 PREPARED 的 `route_descriptor_hash` 算法。REGISTER 中的配置、HTTP Listener 与任何 Session 认证材料均排除在快照外。唤醒重新 REGISTER 后在业务开放前核对摘要，HTTP 重新绑定本 Session 的 Listener 与凭证。
 
 ### 3.4 Adapter 会话
 
@@ -191,6 +195,8 @@ Core→插件与 Core→Adapter 方向另有 `sdk.log.set_level`：新的生效�
 - 每 Session 每方向最多 256 个 outstanding 业务请求；请求/事件载荷另受每 Session 每方向 16 MiB、Core 合计 64 MiB 的在途及排队字节预算约束；任一满额立即 RESOURCE_EXHAUSTED，不等待槽位。Response、Cancel、状态控制走独立、有界且优先的通道，不占用普通业务 admission；无法维持协议时使会话失败，不能无界缓存。优先队列不得使 Cancel 越过自己的 Request：尚未写出的被取消 Request 直接撤出且不再发送，已完整写出后才可随后发送 Cancel。
 - 本地超时/取消先完成调用者失败返回，再尽力发送 Cancel；已发送外部消息/SQL 不撤销，不自动重试。Session 失效时清理映射、取消调用并返回 UNAVAILABLE；已确认的 SendResult 仍须保留。
 - Core 停用时先冻结该插件的新根调用/新派发，最多 drain 6s；已有父 Request 链中的受限子请求与响应可继续。drain 结束后取消剩余调用并发送唯一 STOPPING，帧 deadline 为 min(t0+10s,发送STOPPING时刻+4s)，OnStop 与资源关闭使用这一独立 context；整个进程树停止预算仍为 10s。Core 同时停止多个插件时共享同一绝对截止时间，不逐个累加预算。
+
+等待休眠插件的业务请求在 Session admission 之前受 CONTRACTS §4.5 的有界唤醒队列约束，保留可信上下文、原始 Target、Trace、顺序与绝对 deadline；确认 ACTIVATED 及快照一致后复核权限再交付，取消或到期的未交付请求移出队列。空闲 STOPPING 与请求准入共用门禁；旧进程树退出前保持唯一 Session 所有权。
 
 ## 5. Event Bus、媒体与平台载荷
 
