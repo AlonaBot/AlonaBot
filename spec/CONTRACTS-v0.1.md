@@ -19,8 +19,8 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 - stdio 为可选传输：stdin/stdout 专用协议，stderr 专用普通日志；首帧同样认证。stdio stdout 出现非协议字节时关闭该 Session 并记录插件故障，不能把混入的日志当合法帧。TCP 模式下 Core 可同时捕获插件 stdout/stderr，并标记 plugin ID。
 - 两种传输均为 `uint32 big-endian payload length + Protobuf Envelope`；长度不含 4-byte 前缀，合法范围为 **1～4,194,304 bytes**。先验证长度再分配受限缓冲；完整读取前缀和载荷，不能假设一次 Read 得到一帧。长度 0、超限、截断或不可解码的 Envelope 终止当前连接。每方向只有一个帧写入器，多个 goroutine 的帧不能交错。
 - Hello 前不得发送其他帧。Protocol Major 不相等，或任一 required capability 不在双方能力交集中，拒绝握手；Minor 选双方支持范围内的较低版本。所有枚举保留零值 UNSPECIFIED，业务要求的枚举和身份字段解码后验证。Envelope 字段编号、控制帧方向及 schema 见 [WIRE-FORMAT.md](WIRE-FORMAT.md)，不另定义平行的 JSON 字节流协议。
-- HelloAck 的 `bootstrap` 一次性下发本 Session 的 `generation_id`、原始候选配置 JSON、配置版本、DB descriptor、内部 HTTP 认证凭证和阶段预算。Core 此时只检查配置是合法 JSON 对象并符合大小限额，**不在配置迁移之前按新版 schema 拒绝旧配置**。运行所需 Secret 仅在该插件私有 IPC 中解引用，不继承其他插件或 Core 管理凭证；不得写入日志。Bootstrap 同样受 4 MiB 帧上限限制，超限明确拒绝启动。
-- SDK 在 Preparing 中执行配置 `声明式迁移 → OnConfigLoad → 补缺失值 → schema 校验 → DB 迁移门槛核对及许可的迁移 → OnStart`。不存在的可选回调直接跳过。随后 REGISTER 一次性提交完整 RouteDescriptor、规范化配置及其版本、schema hash；声明 HTTP 路由时还提交实际已监听的 loopback endpoint。对新候选，Core 再次验证 Candidate，提取 Secret 为不可变引用后持久化；对已提交代次的普通重启，验证配置与原快照一致并复用原 Secret 引用，不创建新代次或改写快照。Core 校验所有路由和 endpoint 后才返回 PREPARED。明文配置只能经过私有 IPC 和必要的运行内存，不能进入 Journal 或普通配置快照。配置与 DB 细节分别以 §5、§6 为准。
+- HelloAck 的 `bootstrap` 一次性下发本 Session 的 `generation_id`、原始候选配置 JSON、DB descriptor、插件数据目录 `plugin_data_dir`（D-165）、内部 HTTP 认证凭证和阶段预算。Core 此时只检查配置是合法 JSON 对象并符合大小限额，**不按 schema 拒绝配置**，不合法的值由 SDK 按 §5.5 校正。运行所需 Secret 仅在该插件私有 IPC 中解引用，不继承其他插件或 Core 管理凭证；不得写入日志。Bootstrap 同样受 4 MiB 帧上限限制，超限明确拒绝启动。
+- SDK 在 Preparing 中执行配置 `OnConfigLoad → 补缺失值与校正 → required 校验 → DB 迁移门槛核对及许可的迁移 → OnStart`。不存在的可选回调直接跳过。随后 REGISTER 一次性提交完整 RouteDescriptor、规范化配置与校正记录、schema hash；声明 HTTP 路由时还提交实际已监听的 loopback endpoint。对新候选，Core 再次验证 Candidate，提取 Secret 为不可变引用后持久化；对已提交代次的普通重启，验证配置与原快照一致并复用原 Secret 引用，不创建新代次或改写快照。Core 校验所有路由和 endpoint 后才返回 PREPARED。明文配置只能经过私有 IPC 和必要的运行内存，不能进入 Journal 或普通配置快照。配置与 DB 细节分别以 §5、§6 为准。
 - Preparing/Prepared/Activating 不开放业务 REQUEST；配置、DB 位置和内部 HTTP 凭证由 Bootstrap 提供，不需要准备期通用 Core RPC。认证后的 OnConfigLoad/迁移/OnStart/REGISTER/OnReady 失败使用 `SESSION_ERROR` 携带失败阶段和 ErrorInfo，然后关闭 Session；认证失败直接关闭，不暴露凭证信息或注册残留。
 
 ### 1.2 调用、取消与资源边界
@@ -123,7 +123,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 | 阶段 | 内部首发预算 | 超时后的处理 |
 | --- | --- | --- |
 | Hello / HelloAck | 10s | 关闭未认证或未完成握手的 Session，无公开路由 |
-| 配置迁移 / 补缺失值 / schema 校验 | 60s | 候选失败，不覆盖 Active |
+| OnConfigLoad / 补缺失值与校正 / required 校验 | 60s | 候选失败，不覆盖 Active |
 | DB 迁移 | 15 分钟 | 取消并中止候选；按受管/自管边界恢复或要求人工处理 |
 | OnStart | 60s | 候选失败；已提交代次恢复失败则 Degraded |
 | OnReady | 30s | 已提交代次 Degraded，禁止新业务派发 |
@@ -156,7 +156,7 @@ SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 contex
 ### 5.1 配置真源、缺失值与编辑
 
 - 每插件使用独立 JSON 对象，不加外层 `config`；`config` 只用于 `i18n/*.json` 的翻译根节点。`<data_dir>/plugins/<id>/config.json` 是可编辑快照，运行值以 Core 状态库的 Active Generation 为准。直接编辑后执行 `alonabot reload <id>` 才导入 Pending（CLI 先经管理 API 的 config/import 把编辑快照导入 Pending，再请求 reload）；管理 API 的 reload 激活已有的 Pending，没有 Pending 时才导入编辑快照（D-143）；`restart` 只重启已激活配置。已有状态库无法读取时必须报错，不能把编辑快照或空对象当成新的 Active。
-- 插件配置由与 `plugin.yaml` 同目录的 `config_schema.json` 声明（D-76），没有该文件的插件只有空配置；插件不声明 Go 配置类型。文件是 JSON 对象，键为字段键、值为字段描述，键的顺序就是表单顺序。字段键与模板键是非空的 ASCII 字母、数字、`_` 与 `-`；顶层以 `$` 开头的键保留给 `$version` 与 `$migrations`（§5.5）。Adapter 实例配置用同样格式的 `adapter_config_schema.json` 声明（§8）。键名沿用 AstrBot 的 `_conf_schema.json`，在此之上增加 `secret`、`required` 与 `template` 类型。`type` 必填：
+- 插件配置由与 `plugin.yaml` 同目录的 `config_schema.json` 声明（D-76），没有该文件的插件只有空配置；插件不声明 Go 配置类型。文件是 JSON 对象，键为字段键、值为字段描述，键的顺序就是表单顺序。字段键与模板键是非空的 ASCII 字母、数字、`_` 与 `-`；顶层以 `$` 开头的键保留，目前没有使用，出现时构建报错（`$version` 与 `$migrations` 已由 D-161 删除）。Adapter 实例配置用同样格式的 `adapter_config_schema.json` 声明（§8）。键名沿用 AstrBot 的 `_conf_schema.json`，在此之上增加 `secret`、`required` 与 `template` 类型。`type` 必填：
 
   | type | 值 | 表单 |
   | --- | --- | --- |
@@ -183,15 +183,16 @@ SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 contex
   - `templates`：`template` 与 `template_list` 必填，模板键 → 模板描述。模板描述有 `name`（显示名，缺省显示模板键）、`hint`、`items`（可以为空对象）、`display_item`（指向该模板 items 中的一个 `string` 字段，可用 `.` 进入嵌套 object；`template_list` 折叠显示时附上它的当前值）与 `hide_hint_in_list`（为 true 时折叠列表中不显示模板的 hint）。
   - `secret`：为 true 时是 secret 字段，只用于 `string` 与 `text`，不能同时有 `default` 或 `options`；存储与读取见 §5.3。
   - `required`：为 true 时，`string` 与 `text` 须为非空串，`list`、`dict` 与 `template_list` 须非空，`template` 须选择了模板；其他类型不能写 required。
+  - `example`：回复示例，一个示例对象或其数组，显示在该字段下方，字段被 `condition` 隐藏时一同隐藏（D-160）。示例对象有 `input`（必填，用户发出的文字，不含命令前缀；WebUI 显示时加上所选配置文件的第一个命令前缀，§5.6）、`reply`（必填，字符串即一段文字，或片段数组，片段为 `{"text": "…"}` 或 `{"image": "examples/…", "alt": "…"}` 之一）与可选的 `condition`（`{"字段路径": 期望值}`，全部相等时才显示该示例，路径写法同下文「字段路径」）。`input` 与 `text` 中的 `{字段路径}` 换成表单中的草稿值：可以引用 `string`、`text`、`int`、`float`、`bool`，带 `labels` 的显示当前语言的 label，`int` 为十进制，`float` 为最短十进制写法，`bool` 为 true 或 false；模板字段用 `{字段.$key}` 取选中的模板键，`{字段.模板键.子字段}` 只在选中该模板时有值，否则为空串；`condition` 的键同样可以用 `字段.$key`。不能引用 `secret`、`list`、`dict`、`object` 与 `template_list`。字面花括号写作 `{{`、`}}`。图片是包内 `examples/` 目录下的 PNG、JPEG、WebP 或 GIF，按 §7.5 提供。
   - `profile`：为 true 时该字段可以按配置文件覆盖（§5.6，D-168）。只能写在顶层字段与 `object` 的子字段上，不能写在 `secret` 字段、list 的元素字段与模板的字段上，同一路径上的祖先与后代不能同时写。
-- `alonabot build` 与 `check` 校验 `config_schema.json`：未知键（包括 AstrBot 的 `file` 类型、`_special`、dict 的 `template_schema` 与 `editor_theme`）、键与类型不匹配、default 不合法、labels 多于 options、`options_from` 与 options 或 secret 并存、来源名格式不合法、condition 或 display_item 引用不存在的字段、`profile` 写在不允许的位置，都报带 JSON 路径的错误。生成器把通过检查的内容嵌入程序；REGISTER 的 `config_schema_hash` 是其规范 JSON（保留键的顺序）的摘要，必须与安装包中的文件一致。
+- `alonabot build` 与 `check` 校验 `config_schema.json`：未知键（包括 AstrBot 的 `file` 类型、`_special`、dict 的 `template_schema` 与 `editor_theme`）、键与类型不匹配、default 不合法、labels 多于 options、`options_from` 与 options 或 secret 并存、来源名格式不合法、condition 或 display_item 引用不存在的字段、`profile` 写在不允许的位置，`example` 的键不合法、片段不是恰好 text 与 image 之一、占位符或示例条件引用的字段不存在或类型不允许、图片不在 `examples/` 下或不存在或内容与扩展名不符，都报带 JSON 路径的错误。生成器把通过检查的内容嵌入程序；REGISTER 的 `config_schema_hash` 是其规范 JSON（保留键的顺序）的摘要，必须与安装包中的文件一致。
 - **选项来源（D-129）。** 带 `options_from` 的字段，取值仍是字符串（`list` 为字符串数组），补值、校验与读取照旧：Core 与 SDK 不按来源校验取值，来源不可用或值已不存在时配置照常加载，不认识的值由插件自行处理。
   - 来源名有两种。Core 内置来源：`core.chats`（§8 的聊天目录，filter 可用 `chat_type`：`private`、`group`、`channel`，与 `adapter_id`）与 `core.adapter_instances`（已配置的 Adapter 实例，存储值为 adapter_instance_id，filter 可用 `adapter_id`）。服务来源：`<组件 ID>/<service_name>` 或 `@agent/<service_name>`，指向声明为选项来源的 JSON Service（§3），组件 ID 可以是本组件。`check` 校验来源名的格式；内置来源还校验名称与 filter 的键，服务来源的 filter 原样交给服务。
   - 查询有两种：按搜索词、filter、locale 与条数上限列出选项，返回选项与是否还有更多；按一组存储值取它们当前的选项，不存在的值不返回。每个选项有存储值、显示名与可选的说明。条数上限为 `OPTIONS_PAGE`（§16）；来源返回的选项多于上限时，Core 只取前面的并标记还有更多。
   - 管理 API 按组件与字段路径查询，来源名与 filter 取自该组件 Active 代次的 schema，调用方不能指定任意服务；字段路径用 `.` 连接各层字段键，list 的子字段不含下标，模板的子字段写作 `<字段>.<模板键>.<子字段>`。查询服务来源时由 Core 以自己的身份调用，不带用户 Actor；目标未安装、未激活、不是选项来源或调用失败时返回 UNAVAILABLE，不影响配置的读取与保存。
   - 表单把字段显示为可搜索的单选（`string`）或多选（`list`），并允许手动输入存储值。已保存的值按存储值取显示名；来源不再返回的值照常显示存储值并标出，不自动删除，也不阻止保存。来源返回 UNAVAILABLE 时退化为文本输入。
   - `adapter_config_schema.json` 使用同一规则。
-- 每个字段都有值。缺失的键用 `default` 补齐；没有 default 时取类型的零值：`string`、`text` 为 `""`，`int`、`float` 为 0，`bool` 为 false，`list`、`template_list` 为 `[]`，`dict` 为 `{}`，`object` 递归补齐 items；`template` 没有零值，缺失表示未选择模板。只补**缺失键**，显式的 `false`、`0`、`""`、空数组与空对象都保留；list 与 template_list 的元素、template 的模板对象内同样补齐。补齐后按 schema 校验，不接受 `null`：类型不符、超出 int64 或 slider 范围、不在 options 中、template 不是恰好一个已声明的模板键、required 不满足，均返回 INVALID_ARGUMENT，错误指明 JSON 路径，不含取值。
+- 每个字段都有值。缺失的键用 `default` 补齐；没有 default 时取类型的零值：`string`、`text` 为 `""`，`int`、`float` 为 0，`bool` 为 false，`list`、`template_list` 为 `[]`，`dict` 为 `{}`，`object` 递归补齐 items；`template` 没有零值，缺失表示未选择模板。只补**缺失键**，显式的 `false`、`0`、`""`、空数组与空对象都保留；list 与 template_list 的元素、template 的模板对象内同样补齐。载入时按 §5.5 校正：类型不符先做无损转换（数字字符串与 int、float 互转，int 与没有小数部分的 float 互转，数字与 bool 转为字符串，"true"、"false" 转为 bool，单个值包成单元素 list），转换不了，或不在 options 中、超出 int64 或 slider 范围、template 不是恰好一个已声明的模板键时恢复为 default（没有 default 时取类型零值，template 为未选择），template_list 中模板键已不存在的元素移除，并记校正记录（D-161）；存储的 `null` 视为缺失。校正后 required 仍不满足时返回 INVALID_ARGUMENT，错误指明 JSON 路径，不含取值。
 - 未知键默认保留，包括 object、list 元素与模板对象中的未知键；SDK 以完整原始 JSON 对象维护配置，不能用只含已声明字段的结果覆盖整个文档。
 - 插件经插件对象的 `p.Config()` 或 Handler 内的 `c.Config()` 读取本 Session 的只读配置（D-114），两者都是整个插件的配置（Handler 中的 `c.Config()` 另合并本次调用所用配置文件的覆盖值，§5.6）：它在 OnConfigLoad 之后、OnStart 之前就绪，Session 内不变，配置修改由新 Session 应用（§4.1）。按字段类型取值：`String`（string、text）、`Int`、`Float`、`Bool`、`Strings`（没有 items 的 list）、`Object`（object）、`Objects`（有 items 的 list）、`Dict`（dict，值保持 JSON 原样）、`Template`（template，返回模板键与该模板的对象，未选择时模板键为空串）、`TemplateList`（template_list）。`Object`、`Objects` 与模板返回的对象用同样的方法读取其 items。键未在该层声明，或方法与字段类型不符时 panic，消息为英文并指明键的路径；secret 字段返回解析后的明文。
 - 子插件的配置是 `config_schema.json` 中与子插件 ID 同名的顶层 `object` 字段，不另设 schema 文件（D-116）。`s.Config()` 返回该对象的只读视图，与 `p.Config().Object(id)` 相同；它可以在注册时取得并保存，读取须在配置就绪之后，就绪前读取 panic。调用过 `s.Config()` 的子插件在 schema 顶层没有同名字段，或该字段不是 `object` 时，SDK 在收集注册时报错并指明子插件 ID；没有调用的子插件不要求有这个字段。`c.Config()` 在子插件的 Handler 中仍是整个插件的配置。表单、i18n 覆盖、secret、补缺失值与迁移路径照 `object` 的规则，配置版本每个插件只有一份。
@@ -202,67 +203,46 @@ SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 contex
 插件可以用 `p.OnConfigLoad(fn)` 登记可选的配置回调，至多一次，只能登记在插件对象上；没有登记时原样使用 raw（D-114）。它是配置数据处理回调，与 `OnStart/OnReady/OnStop` 生命周期回调分开：
 
 ```go
-func(ctx context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)
+func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error)
 ```
 
-- 配置格式版本是 `config_schema.json` 的 `$version`（§5.5），构建时写入包内 manifest 的 `config_version`；旧版本保存在 Core 代次元数据中，不塞入用户配置对象。SDK 先按 `$migrations` 把旧 JSON 迁移到本版本，再调用 OnConfigLoad：它输入经过声明式迁移的完整 JSON 与原始版本号，只做声明式迁移表达不了的转换；SDK 随后补缺失值并按 schema 校验，此时 `Config()` 尚未就绪。插件需要检查业务取值时在 OnConfigLoad 中返回错误，SDK 不另设校验回调。没有登记 OnConfigLoad 时仍保留原始键并执行补值与 schema 校验；不能转换的结构必须明确失败。回调应为可重复的纯配置变换，不执行数据库、文件、网络或发信副作用。
-- 顺序固定为：Pending JSON 语法/对象检查 → 停止旧代次并准备候选资源 → HelloAck.bootstrap 下发候选运行 JSON → SDK 声明式迁移 → OnConfigLoad → 补缺失值 → schema 校验 → DB 迁移 → OnStart → REGISTER 回传规范候选 JSON及注册描述 → Core 复核并形成含 secret 引用的不可变快照 → PREPARED → Active Generation 提交 → Activate/OnReady/Activated。不能在 OnConfigLoad 之前用新 schema 否定仍需迁移的旧配置。
-- Bootstrap 和 REGISTER 中的完整 JSON 只在所属插件的认证 IPC 内传输；持久化前由 Core 处理 secret，见 §5.3。PREPARED 的配置摘要由 Core 针对持久化快照计算，SDK 将其作为不透明确认值，不自行重建引用后计算摘要。提交前失败保留旧 Active；提交后失败按 §12 进入 Degraded，不把 OnReady 失败写成“任意阶段都能无损回退”。普通 restart/异常恢复只重验当前版本配置并复用原引用/代次；若 OnConfigLoad 在相同格式版本上产生不同配置，返回 FAILED_PRECONDITION，不能借 restart 隐式修改 Active。
+- 配置没有格式版本（D-161）。OnConfigLoad 输入完整的原始 JSON，在校正之前执行，供作者搬移旧值（自己判断旧键是否存在）或检查业务取值；SDK 随后补缺失值、按 §5.5 校正并检查 required，此时 `Config()` 尚未就绪。插件需要检查业务取值时在 OnConfigLoad 中返回错误，SDK 不另设校验回调。没有登记 OnConfigLoad 时仍保留原始键并执行补值与校正。回调应为可重复的纯配置变换，不执行数据库、文件、网络或发信副作用。
+- 顺序固定为：Pending JSON 语法/对象检查 → 停止旧代次并准备候选资源 → HelloAck.bootstrap 下发候选运行 JSON → OnConfigLoad → 补缺失值与校正 → required 校验 → DB 迁移 → OnStart → REGISTER 回传规范候选 JSON及注册描述 → Core 复核并形成含 secret 引用的不可变快照 → PREPARED → Active Generation 提交 → Activate/OnReady/Activated。不能在 OnConfigLoad 之前用 schema 否定配置。
+- Bootstrap 和 REGISTER 中的完整 JSON 只在所属插件的认证 IPC 内传输；持久化前由 Core 处理 secret，见 §5.3。PREPARED 的配置摘要由 Core 针对持久化快照计算，SDK 将其作为不透明确认值，不自行重建引用后计算摘要。提交前失败保留旧 Active；提交后失败按 §12 进入 Degraded，不把 OnReady 失败写成“任意阶段都能无损回退”。普通 restart/异常恢复只重验当前配置并复用原引用/代次；若 OnConfigLoad 与校正对同一快照产生不同配置，返回 FAILED_PRECONDITION，不能借 restart 隐式修改 Active。
 
 ### 5.3 Secret 与翻译
 
 - **配置快照存引用，Secret Store 存不可变 secret 版本**。持久化 secret 字段使用 `{"$secret_ref":"opaque-id"}`；secret 字段是 `config_schema.json` 中带 `"secret": true` 的 `string` 或 `text` 字段，可以位于 object、list 元素与模板对象内；空串表示未设置，不生成引用。新值生成新引用，旧代次的引用不可原地改值；普通配置 API 只返回引用/是否已设置，表单据此显示掩码，不能把掩码当成保存或“保持不变”的协议值。省略字段保持原值，显式删除走 §5.1 的校验。
-- Core 在构造本 Session 的 bootstrap 前解析其有权访问的引用，SDK 接收正常运行值完成 OnConfigLoad；REGISTER 回传后 Core 按新 Schema **以及此前保留的 secret 路径标记**重新抽取秘密值。旧 secret 字段从 Schema 移除但仍作为未知键保留时继续保密；只有迁移明确删除该键才移除对应路径标记。不能把其他插件的引用解析给当前插件，也不能把含明文的 bootstrap/REGISTER、DSN、配置差异写入日志或普通管理响应。
+- Core 在构造本 Session 的 bootstrap 前解析其有权访问的引用，SDK 接收正常运行值完成 OnConfigLoad；REGISTER 回传后 Core 按新 Schema **以及此前保留的 secret 路径标记**重新抽取秘密值。旧 secret 字段从 Schema 移除但仍作为未知键保留时继续保密；只有管理员清理无效配置删除该键时才移除对应路径标记。不能把其他插件的引用解析给当前插件，也不能把含明文的 bootstrap/REGISTER、DSN、配置差异写入日志或普通管理响应。
 - 首发 Secret Store 与 Core 状态一起持久化，使用仅运行账号可读写的文件权限/Windows ACL；这保护普通管理访问，不承诺隔离同账号 Native 代码。管理员明文查看须再次认证并审计。失败候选的 secret 仅在未被 Active、Pending 或保留代次引用时回收；保留旧程序/DB 却提前删旧密钥不算可恢复快照。
-- 字段与模板的源文案写在 `config_schema.json` 中。`i18n/<locale>.json` 的顶层 `config` 与 `config_schema.json` 同形：字段键 → 覆盖对象，object 与有 items 的 list 的子字段放在 `items` 下，模板放在 `templates` 下，例如 `{"config": {"mode": {"description": "模式", "labels": ["快速", "安全"]}, "music": {"templates": {"netease": {"name": "网易云音乐", "items": {"cookie": {"description": "Cookie"}}}}}}}`。字段可以覆盖 `description`、`hint`、`labels`，模板可以覆盖 `name`、`hint`；其他键或引用不存在的字段、模板时 `check` 报错。查找顺序为当前 locale 的文件 → `config_schema.json` 中的源文案 → 字段键（模板为模板键）；options 的存储值不翻译，显示文案由 labels 提供。缺少翻译不改变配置内容；`invisible` 不是权限控制，不另建字段排序或并发调参页面。
+- 字段与模板的源文案写在 `config_schema.json` 中。`i18n/<locale>.json` 的顶层 `config` 与 `config_schema.json` 同形：字段键 → 覆盖对象，object 与有 items 的 list 的子字段放在 `items` 下，模板放在 `templates` 下，字段的 `example` 按同样结构覆盖 `input`、`text` 与 `alt`（按位置对应，缺少的用源文案，D-160），例如 `{"config": {"mode": {"description": "模式", "labels": ["快速", "安全"]}, "music": {"templates": {"netease": {"name": "网易云音乐", "items": {"cookie": {"description": "Cookie"}}}}}}}`。字段可以覆盖 `description`、`hint`、`labels`，模板可以覆盖 `name`、`hint`；其他键或引用不存在的字段、模板时 `check` 报错。查找顺序为当前 locale 的文件 → `config_schema.json` 中的源文案 → 字段键（模板为模板键）；options 的存储值不翻译，显示文案由 labels 提供。缺少翻译不改变配置内容；`invisible` 不是权限控制，不另建字段排序或并发调参页面。
 
 PATCH 语义依据：[RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)。
 
 ### 5.4 用户可见文案
 
 - 日志、错误字符串、CLI 输出与 safe_message 只用英文，不经 i18n。发给聊天用户的文案与 WebUI 文案经 i18n 提供，英文为源语言。
-- 插件的用户可见文案放在 `i18n/<locale>.json` 的顶层 `messages` 对象中：键为点分隔的 ASCII 标识，值为文案字符串，`{name}` 是命名占位符，`{{` 与 `}}` 表示字面花括号。该文件的顶层键为 `metadata`（组件的 name 与 description，§9.1）、`config`（§5.3）、`messages` 与 `commands`（命令说明覆盖，§8，D-138）。
+- 插件的用户可见文案放在 `i18n/<locale>.json` 的顶层 `messages` 对象中：键为点分隔的 ASCII 标识，值为文案字符串，`{name}` 是命名占位符，`{{` 与 `}}` 表示字面花括号。该文件的顶层键为 `metadata`（组件的 name 与 description，§9.1）、`config`（§5.3）、`messages`、`commands`（命令说明覆盖，§8，D-138）与 `pages`（插件页面标题覆盖，以页面路径为键，D-164）。
 - `check` 与 `build` 对顶层 `commands` 只检查结构：它是对象，键为字符串，值为含字符串 `description` 的对象；覆盖路径与实际注册命令及其英文说明的对应由 SDK 在收集注册时检查（§8）。
 - 文件名是规范化的 BCP 47 标签，例如 `en-US.json`、`zh-CN.json`。`en-US.json` 是 messages 的源语言，必须包含全部 messages 键；其他语言缺少的 messages 键回落到 en-US。仅含 commands 覆盖的目录可省略 en-US.json，命令说明的英文源文案来自代码（§8，D-138）。`check`、`build` 与 `pack` 拒绝以下情况：含 metadata、config 或 messages 的目录缺少 en-US、其他语言的 messages 含 en-US 没有的键、同一 messages 键的占位符集合与 en-US 不同、JSON 不合法。
 - SDK 的 `T(key, args)` 按以下顺序选择语言：当前 Actor 的 locale（MESSAGE-MODEL §1）→ Core 全局默认 locale（缺省 en-US）→ en-US。每一级先精确匹配，再按主语言子标签匹配；同一主语言有多个文件时取字典序最小者。没有 Actor 的调用从 Core 默认 locale 开始。`T` 只返回字符串（D-106）：`check` 与 `build` 检查代码中以常量写出的键与参数名，键不在 en-US 中、参数不成对或名字集合与占位符集合不同时报错并指出位置；运行时仍未知的键返回键名，缺少的参数保留占位符原文，多余的参数忽略，并在插件日志记一条 WARN，只记键与问题，不记参数值。
 - Core 自己发给聊天用户的文案（缺省的命令 usage、§13.2 的确认消息）使用 Core 内置的 en-US 与 zh-CN 目录；插件声明的自定义 usage 取该插件 `i18n/` 的键（§2.2）。选择规则相同。WebUI 提供 en-US 与 zh-CN，按浏览器语言或用户在界面中的选择显示，与机器人回复的语言选择无关。
 
-### 5.5 配置版本与迁移
+### 5.5 配置的校正与清理
 
-- 插件配置、Adapter 实例配置与 Core 设置共用同一套版本与迁移规则（D-85），实现放在 `contracts/`，Core、SDK 与构建命令共用：
+- 配置没有格式版本，也没有声明式迁移（D-161，取代 D-85）。插件配置、Adapter 实例配置与 Core 设置按同一套规则载入，实现放在 `contracts/`，Core、SDK 与构建命令共用：
 
-  | 配置 | 声明 | 存储的版本 |
+  | 配置 | 声明 | 由谁校正 |
   | --- | --- | --- |
-  | 插件配置 | 插件的 `config_schema.json` | Core 代次元数据（§5.2） |
-  | Adapter 实例配置 | 可导入的 Adapter 工程包中与 `plugin.yaml` 同目录的 `adapter_config_schema.json`，打包后位于安装包根目录；格式与 `config_schema.json` 相同（D-134） | `core_config.json` 中该 Adapter 的 `$version` |
-  | Core 设置 | Core 内置的 schema | `core_config.json` 的 `$version` |
+  | 插件配置 | 插件的 `config_schema.json` | SDK（§5.2），校正记录随 REGISTER 交给 Core |
+  | Adapter 实例配置 | 可导入的 Adapter 工程包中与 `plugin.yaml` 同目录的 `adapter_config_schema.json`，打包后位于安装包根目录；格式与 `config_schema.json` 相同（D-134） | Core |
+  | Core 设置 | Core 内置的 schema | Core |
 
-- `config_schema.json` 与 `adapter_config_schema.json` 的顶层可以写 `$version`（正整数，缺省 1）与 `$migrations`：按 `to` 递增排列的步骤，最后一步的 `to` 等于 `$version`。每步可以有以下操作，按此顺序执行：
-  - `rename`：`{"旧路径": "新路径"}`，移动值，可以移到其他嵌套位置；目标已存在时迁移失败。
-  - `map`：`{"路径": {"旧值": "新值"}}`，替换字符串或数字值，用于选项改名。
-  - `wrap`：`["路径"]`，把不是数组的值包成单元素数组。
-  - `remove`：`["路径"]`，删除键；被删除的值是 secret 时同时移除其路径标记（§5.3）。
-
-  路径以 `.` 连接字段键，`*` 表示任意数组元素，template 与 template_list 的值中以模板键作为一段，例如 `sources.*.rss.url`；路径不存在时跳过该操作。示例：
-
-  ```json
-  {
-    "$version": 3,
-    "$migrations": [
-      {"to": 2, "rename": {"hello": "greeting", "proxy": "network.proxy"}},
-      {"to": 3, "map": {"mode": {"quick": "fast"}}, "wrap": ["keywords"]}
-    ],
-    "greeting": {"description": "Greeting", "type": "string"}
-  }
-  ```
-
-- 迁移从存储的版本依次执行到当前版本。新增字段不需要迁移，补缺失值时得到默认值；从 schema 中删除的字段不会被自动删除，作为未知键保留（§5.1），需要删除时写 `remove`。插件的 `OnConfigLoad` 在声明式迁移之后执行（§5.2），只用于声明式迁移表达不了的转换；Adapter 实例配置只有声明式迁移。
-- `alonabot build` 与 `check` 检查迁移：版本连续，最后一步的 `to` 等于 `$version`；`rename` 与 `wrap` 的目标路径、`map` 的新值在当前版本的 schema 中存在且合法。
-- 迁移不能丢失配置：
-  - Core 写回迁移后的 `core_config.json` 之前，把原文件复制到 `<data_dir>/backups/core_config.<旧版本>.<时间>.json`；插件的旧配置保存在旧代次的快照中（§6）。
-  - 迁移或迁移后的校验失败时：Core 设置——Core 拒绝启动，原文件不变；Adapter 实例配置——在停止旧版本之前拒绝这次更新，开发运行中只是该实例不启动；插件配置——候选失败，旧 Active 继续（§5.2）。错误指明文件、版本与 JSON 路径，不含取值。
-  - 存储的版本高于当前程序支持的版本（降级）时按上一条的失败处理，错误写明两个版本号；不猜测格式，也不删除无法识别的键。
-- Core 设置的迁移内置在 Core 中，随 Core 升级发布。Adapter 实例配置的迁移在 Adapter 更新的准备阶段由 Core 执行，成功提交后写回 `core_config.json` 并更新该 Adapter 的 `$version`。
+- 校正规则：schema 中没有的键保留但忽略，称为无效配置；缺失的键用 default 补齐（§5.1）；类型不符时先做无损转换（数字字符串与 int、float 互转，int 与没有小数部分的 float 互转，数字与 bool 转为字符串，"true"、"false" 转为 bool，单个值包成单元素 list）；转换不了，或不在 options 中、超出 int64 或 slider 范围、template 的模板键已不存在时恢复为 default，没有 default 时取类型零值，template 为未选择；template_list 中模板键已不存在的元素移除。校正对 object、list 元素与模板对象逐层进行。
+- 每处转换、恢复与移除记一条校正记录：JSON 路径、原因（`converted`、`reset`、`removed`）与原值；secret 字段不记原值。插件的校正记录保存在代次元数据中，Adapter 实例与 Core 设置的保存在内存中，都经管理 API 读取（ADMIN-API §12～§14），并各记一条 WARN 日志，日志只写路径与原因。
+- 校正不改写用户写下的原文：插件 Active 快照保存校正后的配置；`core_config.json` 与其中的 Adapter 实例配置不被自动改写，校正后的值只在运行时使用。无效配置只有管理员在 WebUI 或管理 API 中清理时才删除：插件写入 Pending 后 reload，Adapter 实例与 Core 设置经写回流程删除这些键。
+- 校正后 required 仍不满足时照旧失败：插件候选失败、旧 Active 继续；Adapter 实例不启动；Core 设置没有 required 字段。`core_config.json` 不是合法的 JSON 对象时 Core 拒绝启动。
+- 作者改名或调整字段时不需要写迁移：新键得到默认值，旧键成为无效配置；需要把旧值带到新键时，在 `OnConfigLoad` 中判断旧键是否存在再搬移（§5.2）。Adapter 实例配置没有回调。
 
 ### 5.6 配置文件
 
@@ -288,6 +268,8 @@ PATCH 语义依据：[RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)。
 - Core 元数据固定使用独立 `<data_dir>/state.sqlite`，记录安装/来源、代次、Journal、动态权限和 secret 引用关系，插件不复用其 DB 或凭证。Core 连接池固定为 1，采用 WAL、`synchronous=FULL`、`foreign_keys=ON`、`busy_timeout=5000`；每个物理连接都应用连接级设置，初始化核对实际生效值，失败停止启动。Core 的元数据事务只包含必要数据库操作，不在持锁事务中等待插件 RPC。状态库错误/损坏不能触发重建空库。
 - 受管 SQLite 有两个入口，共用当前 Session 的同一个连接：`sqlitedb.Open(ctx) (*sql.DB, error)` 返回标准库 `database/sql` 对象；`gormdb.Open(ctx) (*gorm.DB, error)` 在同一连接上返回原生 GORM 对象。插件只导入用到的包，不用 GORM 的插件不链接 GORM。重复调用复用该连接，SDK 停止时关闭。事务回调须使用传入的 tx，不能在事务里等待同一单连接池的另一条独立查询。连接默认单连接、WAL、FULL、外键开启和 5s busy timeout；这不串行化整个插件的 goroutine/任务。连接错误直接返回，不回退为空数据库。
 - SQLite 文件按 generation 分开：`plugins/<id>/generations/<g>/db.sqlite`。首次安装创建候选文件；配置 reload 和版本 update **一律创建独立 SQLite 候选副本**，不因“只改配置”而复用旧 DB，因为 OnStart 也能写入。普通 restart/异常恢复启动现有 Active，不创建新配置代次。框架外文件、任意外部数据库和出站副作用不纳入受管回退。
+- KV（D-165）：`sdk/kv` 的 `Get`、`Set`、`Delete` 与按前缀分页的 `List` 存放在受管 SQLite 的保留表 `_alonabot_kv`（key TEXT 主键、value BLOB、updated_at），与业务表一起随代次副本、回退与 purge 处理；使用 KV 的插件即链接受管 SQLite。业务代码不得直接改写 `_alonabot_kv` 的结构。
+- 插件数据目录（D-165）：Core 为每个插件建 `<data_dir>/plugin_data/<id>/`，经 Bootstrap 的 `plugin_data_dir` 告诉插件，SDK 以 `sdk.PluginDataDir()` 返回。它不随代次复制，回退与准备失败都不还原其中的文件；卸载时按 D-127 归入数据。
 - 框架只托管 SQLite。需要 PostgreSQL、MySQL 等外部数据库的插件自行导入驱动并管理连接，连接参数作为插件的 secret 配置项由管理员填写；这些数据属于插件自管的外部数据，Core 不创建、不校验、也不备份外部数据库。迁移或 OnStart 会写外部数据库的插件须在 manifest 声明 `prepare_effects=external`（§9.1），按 §6.3 的维护门槛更新。
 - `sqlitedb` 使用 `modernc.org/sqlite` 的 `database/sql` 驱动；`gormdb` 另用 `gorm.io/gorm` 与 `github.com/libtnb/sqlite`，经后者的 `Conn` 设置复用同一连接。Core 元数据经 GORM 访问，复用同一 modernc 连接（D-68）；schema 由唯一的初始迁移明确定义，不用 AutoMigrate 推断或改写表结构。Backup API 直接使用 modernc 驱动。T-01 已验证 GORM 组合的 CRUD/Tx/迁移、WAL Backup/恢复和五目标 `CGO_ENABLED=0` 构建，实际版本固定在 `go.mod/go.sum`，见 docs/development.md；不新增通用驱动兼容框架。
 
@@ -346,7 +328,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 - v0.1 只有 **一个 Core Listener、一个公开端口、一个主机名**（`base_url`，D-84）：管理界面（WebUI 组件，§7.5）、Admin API 与插件路由 `/plugins/{id}/...` 都在这个主机名下，不需要为插件页面准备第二个域名。Core 验证 Host，不把客户端提供的 Host 当信任依据；远程反代须保留受控 Host 并按全局可信反代配置处理转发信息。
 - 管理会话 Cookie 使用 host-only、HttpOnly、`SameSite=Strict`，并在 HTTPS 下使用 Secure 与 `__Host-` 前缀；Admin API 的状态变更验证 CSRF。公开安装/管理接口不能绕过管理员认证。
 - 插件路由的全部响应由 Core 加上 `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups`（不含 `allow-same-origin`）与 `X-Content-Type-Options: nosniff`，并去掉插件设置的 `Set-Cookie`；插件不能覆盖这些响应头。插件返回的页面因此运行在不透明源中：无论被嵌入还是直接打开，都读不到管理 Cookie、WebUI 的存储与 DOM，它发出的请求也不带管理 Cookie（D-15）。
-- WebUI 用带 `sandbox` 属性的 iframe 嵌入插件页面，页面只经 WebUI 提供的 postMessage 桥与外部交互：请求本插件的 HTTP 路由，读取当前语言的文案与界面主题。WebUI 只转发方法与路径落在该插件已注册路由内的请求，用管理员会话与 CSRF 头发出，再把响应交回页面；页面拿不到管理会话、CSRF token 或其他插件的路由。桥的消息格式记录在 Admin API 参考中（§7.5）。
+- WebUI 用带 `sandbox` 属性的 iframe 嵌入插件页面，页面只经 WebUI 提供的 postMessage 桥与外部交互：请求本插件的 HTTP 路由，读取当前语言的文案与界面主题，接收明暗与语言变化的通知和设计令牌，转发打开全局搜索的快捷键（D-159）。SDK 的 `sdk/page` 套件封装这些交互并提供与 WebUI 一致的基础样式。插件页面的第一行（插件名、标签与全局搜索）由 WebUI 绘制，iframe 只占其下的内容区。WebUI 只转发方法与路径落在该插件已注册路由内的请求，用管理员会话与 CSRF 头发出，再把响应交回页面；页面拿不到管理会话、CSRF token 或其他插件的路由。桥的消息格式记录在 Admin API 参考中（§7.5）。
 - 非公开的插件路由要求有效的管理会话，非 GET 请求与 Admin API 一样验证 CSRF；公开的 JSON API、OAuth 回调与 Webhook 按 §7.2 声明，不要求会话。插件页面与管理界面不同源，插件页面之间也互不同源（各自为不透明源），但插件仍是可信的本地代码（§7.1）。
 
 ### 7.4 首次管理认证与恢复
@@ -359,6 +341,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 
 - Core 直接提供两类组件静态文件，只读取不可变包目录中的文件，不经组件进程（D-62、D-63）：
   - **WebUI 组件的文件**：除 Admin API（`/api/`）、插件路由（`/plugins/`）与 Core 保留的内部路径外，GET 请求按路径取已启用 WebUI 组件静态根目录中的文件；路径不存在且最后一段不含扩展名时返回 `index.html`，供单页应用的前端路由使用。没有已启用的 WebUI 时返回 503 与英文纯文本提示，说明用 `alonabot install` 安装 WebUI 组件。
+  - **配置示例图片**：`config_schema.json` 中 `example` 引用的 `examples/` 下的文件（D-160），只提供被引用的路径，类型按扩展名取 PNG、JPEG、WebP 或 GIF，响应头与认证要求同组件图标。
   - **组件图标**：manifest 的 `icon`（§9.1），只提供声明过的路径。类型按扩展名取 SVG、PNG 或 WebP，其他扩展名在包校验时拒绝。响应带 `Content-Security-Policy: sandbox; default-src 'none'; style-src 'unsafe-inline'` 与 `X-Content-Type-Options: nosniff`，要求管理员会话；WebUI 只用 `<img>` 引用图标，直接打开图标 URL 时也只在隔离的源中渲染，SVG 中的脚本不会在 Admin 源中执行。
 - Admin API 是带主版本号的公开契约，接口、主版本与插件页面桥的消息格式（§7.3）记录在 Admin API 参考（`spec/ADMIN-API.md`，T-09.12 交付）；同一主版本内只做向后兼容的增加。WebUI 在 manifest 中声明支持的主版本范围（§9.1），Core 的主版本不在范围内时拒绝安装与启用；Core 升级后不兼容的已安装 WebUI 不再提供文件，Core 返回说明版本不兼容的提示。
 - WebUI 持有管理员会话，能执行全部管理动作，安装与替换界面展示这一点；签名只证明发布来源（§9.2）。
@@ -367,7 +350,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 
 - Adapter 与插件一样以安装包分发，在 Core 之外以独立 Native 子进程运行，复用插件的握手、Session、准备/激活/停止状态机、代次、配置、Secret、安装与来源校验（D-26）。官方 Telegram Adapter 也是这样一个可卸载的安装包，Core 不静态链接任何平台实现。manifest 以 `role: adapter` 和 `adapter_id`（平台类型，例如 `telegram`）区分，同一 `adapter_id` 同时只能安装一个包；社区 Adapter 可以按 §9.3 的 `--replace` 替换同一 `adapter_id` 的官方 Adapter。
 - Adapter 的工程入口是可导入的 Go 包（例如 `adapters/telegram`），工程 `plugin.yaml`、`adapter_config_schema.json` 与生成的登记代码都位于该包目录（D-134）。`cmd/alonabot-adapter-<id>` 只保留调用 `sdk.RunAdapter` 的薄 main；独立进程与库模式（§15.5）共用该包的组件身份与资源。
-- 同一个 Adapter 包只运行一个进程，进程内承载该包的全部账号实例。实例配置（含凭证）写在 `core_config.json` 的 `adapters` 中（§15.1），由 Core 按 Adapter 包内 `adapter_config_schema.json` 迁移、补缺失值并校验（§5.5），经 `adapter.instance.start`/`adapter.instance.stop` 单独启停（停用只对本次运行有效，同一次运行中 Adapter 崩溃恢复后仍保持停用，Core 重启后按 `core_config.json` 启动全部已配置的实例；要持久停用就删除实例或停用 Adapter，D-139）；启停一个实例不重启进程，也不影响同包的其他实例。停用整个 Adapter 即按插件的停止流程停止该进程，全部实例随之停止。进程异常退出按插件的有限重启策略处理，重启后 Core 只重新启动仍处于启用状态的实例。
+- 同一个 Adapter 包只运行一个进程，进程内承载该包的全部账号实例。实例配置（含凭证）写在 `core_config.json` 的 `adapters` 中（§15.1），由 Core 按 Adapter 包内 `adapter_config_schema.json` 补缺失值并校正（§5.5），经 `adapter.instance.start`/`adapter.instance.stop` 单独启停（停用只对本次运行有效，同一次运行中 Adapter 崩溃恢复后仍保持停用，Core 重启后按 `core_config.json` 启动全部已配置的实例；要持久停用就删除实例或停用 Adapter，D-139）；启停一个实例不重启进程，也不影响同包的其他实例。停用整个 Adapter 即按插件的停止流程停止该进程，全部实例随之停止。进程异常退出按插件的有限重启策略处理，重启后 Core 只重新启动仍处于启用状态的实例。
 - Core 只接受 Adapter 为它在本 Session 中已启动的实例交付的事件：Target 与事件中的 adapter_id、adapter_instance_id、account_id 必须与该实例一致，否则拒绝并记诊断。event_id 由 Core 生成；Actor 的权限集合由 Core 按 §2.3 计算，Adapter 只提供平台给出的身份与平台权限；平台权限中未声明的名字由 Core 丢弃并记诊断。同一 `adapter_id` 下的同一平台账号只能有一个已启动实例（唯一入站 owner），由 Core 依据 `adapter.instance.start` 返回的 account_id 检查。
 - 接收游标由 Core 持久化：Adapter 每交付一条事件都附带交付后的不透明游标，Core 先写状态库，再接纳事件并应答；Adapter 收到应答后才处理下一条。没有事件时的游标变化（例如空闲轮次重建）使用单独的游标保存调用。实例启动时，Core 把已保存的游标交给 Adapter。
 - Core 保存的平台凭证只经 `adapter.instance.start` 下发给所属 Adapter 进程；平台主动连入时，请求中的 Authorization 按 §7.2 保留并交所属 Adapter 校验（D-136）。平台凭证不进入插件进程、日志或普通响应。入站媒体的平台文件标识留在 Adapter，Core 以 IncomingMedia token 映射，首次 Read 时经 `adapter.media.read` 取件；出站媒体由 Core 为该次发送向 Adapter Session 签发只读 token，Adapter 经 `core.media.read` 读取。
@@ -400,12 +383,13 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 所有 ID 最长 64 个 ASCII 字符。市场使用 `^alonabot_plugin_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`，同时应用长度上限；本地使用 `^[a-z][a-z0-9_-]{0,63}$`，缺市场前缀只警告。为保证五平台路径有效，本地 ID 还拒绝 Windows 保留设备名 con/prn/aux/nul/com1～com9/lpt1～lpt9；大小写以规范小写保存，不能靠大小写形成两个安装。
 
 - 组件工程中的 `plugin.yaml` 由作者编写，只写作者信息（D-78）：必填 `id`、`name`（显示名，英文源文案）、SemVer `version` 与 `source`；可选 `description`、`author`、`role`（缺省 `plugin`）、`icon`，以及下文按角色需要的字段；会写框架外数据时写 `prepare_effects: external`。`name` 与 `description` 可以在 `i18n/<locale>.json` 的顶层 `metadata` 中翻译（§5.4），WebUI、`list` 与 help 显示 name。
-- `alonabot build` 与 `pack` 在包内的 manifest 中补上构建信息：`manifest_version=1`、`protocol_min_major/protocol_max_major` 与 `required_capabilities`（由所链接的 SDK 决定）、`os/arch`、相对可执行文件路径 `entrypoint`、`config_version`（`config_schema.json` 的 `$version`，没有该文件时为 1）、`migration_mode`（按实际实现的迁移接口）与 `prepare_effects`（作者没写 external 时，按是否链接受管 SQLite 取 `managed_db` 或 `none`）。作者在工程的 `plugin.yaml` 中写这些字段时 `check` 报错。包校验严格解析包内 manifest，同时核对 `config_schema.json`、`adapter_config_schema.json`、注册描述、i18n 与 build-info；SDK 是编译依赖，不要求 Core 和插件 Go patch 相同，运行兼容以协议和能力协商为准。
+- `alonabot build` 与 `pack` 在包内的 manifest 中补上构建信息：`manifest_version=1`、`protocol_min_major/protocol_max_major` 与 `required_capabilities`（由所链接的 SDK 决定）、`os/arch`、相对可执行文件路径 `entrypoint`、`migration_mode`（按实际实现的迁移接口）与 `prepare_effects`（作者没写 external 时，按是否链接受管 SQLite 取 `managed_db` 或 `none`）。作者在工程的 `plugin.yaml` 中写这些字段时 `check` 报错。包校验严格解析包内 manifest，同时核对 `config_schema.json`、`adapter_config_schema.json`、注册描述、i18n 与 build-info；SDK 是编译依赖，不要求 Core 和插件 Go patch 相同，运行兼容以协议和能力协商为准。
 - 可安装的包统称组件，使用同一份 manifest，`role` 取 `plugin`（缺省）、`adapter`、`agent` 或 `webui`（D-59）。只有 `plugin` 是插件，可以安装任意多个；`adapter` 每个 `adapter_id` 至多安装一个，`agent` 与 `webui` 全局各至多安装一个，同类组件的替换见 §9.3。市场 ID 依次使用 `alonabot_plugin_`、`alonabot_adapter_`、`alonabot_agent_`、`alonabot_webui_` 前缀，其余部分与插件市场 ID 的规则相同。
   - Adapter 另需 `adapter_id`（小写平台类型，规则同本地 ID）。工程 `plugin.yaml` 与实例配置声明 `adapter_config_schema.json` 位于可导入的 Adapter 包目录（§5.5、§8，D-134）；`build`/`pack` 从该目录读取资源，构建调用 `sdk.RunAdapter` 的 cmd 薄入口，归档内的 manifest 与实例声明仍放在根目录。Adapter 可以按 §7.2 声明 HTTP 路由，仍不得声明其他插件路由、数据库或迁移（D-136）。
   - Agent 的声明与插件相同，可以有路由、HTTP、数据库与 schedule；它额外承担 §13 的职责，并是 `@agent` 的解析目标（§3）。
-  - WebUI 只含静态文件，没有进程、配置、数据库与路由：作者写 `id`、`name`、`version`、`role`、`source`、静态根目录 `assets`（包内相对目录，含 `index.html`）与 Admin API 主版本范围 `admin_api_min_major`/`admin_api_max_major`（§7.5）；`pack` 只补上 `manifest_version`，不写 `entrypoint`、协议主版本、`required_capabilities` 与 `config_version`。WebUI 与平台无关，`os/arch` 写 `any`，归档名为 `<id>-<version>-any.tar.gz`。
-- 任何角色都可以声明可选的 `icon`：包内图标文件的相对路径（§7.5）。插件可声明 `adapter_dependencies` 与 `plugin_dependencies`，语义见 §8。
+  - WebUI 必有静态文件：作者写 `id`、`name`、`version`、`role`、`source`、静态根目录 `assets`（包内相对目录，含 `index.html`）与 Admin API 主版本范围 `admin_api_min_major`/`admin_api_max_major`（§7.5）。只有静态文件时 `pack` 只补上 `manifest_version`，不写 `entrypoint`、协议主版本、`required_capabilities`，`os/arch` 写 `any`，归档名为 `<id>-<version>-any.tar.gz`。WebUI 工程也可以有 Go 入口（D-162），这时它另有一个与插件相同的进程：`build`/`pack` 照插件补全 manifest 并按平台出包，进程可以使用配置、受管 SQLite、事件路由、Hook 与 HTTP 路由，HTTP 路由要求管理会话，前端与之同源直接调用。
+- 任何角色都可以声明可选的 `icon`：包内图标文件的相对路径（§7.5）。
+- 任何角色都可以带 changelog（D-166），二选一：工程根目录的 `CHANGELOG.md`（Keep a Changelog，以 `## [版本] - 日期` 分节，`[Unreleased]` 不显示，只有一种语言），或 `changelog/<版本>/<locale>.md`（版本目录名是不带 `v` 的 SemVer 且不高于 manifest 的 `version`；文件名按 §5.4 的规则为规范化的 BCP 47 标签，每个版本必须有 `en-US.md`，其他语言缺少时回落到 en-US；目录中不能有其他文件）。两种同时出现、文件不是 UTF-8 或命名不合规时 `check`、`build` 与 `pack` 报错并指出路径。`pack` 原样放进安装包。Core 的管理 API 按已安装的版本提供它（ADMIN-API §22），Core 自身的 changelog 是本仓库根目录的 `CHANGELOG.md`，编进可执行文件。插件可声明 `adapter_dependencies` 与 `plugin_dependencies`，语义见 §8。
 - `migration_mode` 取 `none/self/versioned`，由构建按代码中登记的迁移方式写入（§6.2）；`prepare_effects` 固定 `none/managed_db/external`，描述配置回调以外的迁移/OnStart 在准备期的副作用。`managed_db` 仅表示写所属的受管 SQLite，候选可隔离；`external` 表示会写框架外的数据（例如插件自管的外部数据库），不具备自动回退承诺，按 §6.3 的维护门槛更新。包内 manifest 缺少这两项时安装与更新照常进行，管理服务在安装与更新的结果中返回警告并记 WARN 日志，准备阶段按没有框架外副作用处理（与 `none` 相同）；取值不在规定集合内时拒绝，插件实际登记的迁移方式与 manifest 不符时准备失败（D-150）。它们是插件包静态声明，不是 WebUI 调参开关。
 - 命令、文本匹配与事件只在入口包的 `func New() *sdk.Plugin` 中对插件对象链式注册（D-79、D-114），生成器不扫描注册；`build` 检查并嵌入 manifest、`config_schema.json`、`i18n/`、Service Schema 与 Handler 的参数名（命令省略 `Args` 时使用，D-112），入口包必须声明 `func New() *sdk.Plugin`（缺少或签名不符时构建失败），配置 schema 只来自 `config_schema.json`（§5.1），重复 Handler/HTTP 路由失败。Schema/注册描述与 binary 来自同一构建，安装期检查能静态取得的 Schema/能力与自动注册项；实例方法显式注册的完整集合在本次启动 REGISTER 时校验，不要求静态推导任意 Go 控制流或重复手写整张路由表。最终路由在该 Session 固定，Schema/能力必须与包资源一致；Go 与 protoc 的版本已由 T-01 锁定，见 docs/development.md。
 - Adapter 的资源按工程 manifest 的 `role: adapter` 识别，以可导入的 Adapter 包的导入路径登记工程 `plugin.yaml` 原文与经检查的 `adapter_config_schema.json`，登记方式与插件相同（见下条，D-145）；Adapter 使用 `sdk/adapter.Adapter`，不要求插件的 `New() *sdk.Plugin` 入口（D-134）。库模式按 §15.5 取得同一份资源。
@@ -423,7 +407,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 
 ### 9.2 来源、摘要与签名
 
-- GitHub Releases 作为首发分发入口，不建设中心商店。**归档外**的 `release.json` 包含发布者公钥标识、绑定仓库来源、插件 ID/版本、各 OS/arch 资产 URL、字节长度和整个归档的 SHA256；归档内 manifest 不保存自身归档摘要，避免自包含循环。若记录单文件摘要，其对象必须明确是 binary 或资源，不与归档摘要混用。
+- GitHub Releases 作为首发分发入口，不自建分发服务器。插件源（D-162）是 GitHub 仓库中的 `index.json`：`{"version": 1, "plugins": [{"repo": "owner/name", "role": "plugin", "tags": ["weather"]}]}`，`role` 取 §9.1 的四种，`tags` 可省略；名称、描述、版本与图标从组件仓库最新 Release 的 release.json 与包内 manifest 取得，安装照常经 `--source owner/repo`。官方 WebUI 预置官方源，可以切换为其他源；条目只是索引，不改变来源绑定与签名规则。**归档外**的 `release.json` 包含发布者公钥标识、绑定仓库来源、插件 ID/版本、各 OS/arch 资产 URL、字节长度和整个归档的 SHA256；归档内 manifest 不保存自身归档摘要，避免自包含循环。若记录单文件摘要，其对象必须明确是 binary 或资源，不与归档摘要混用。
 - 发布者可以用 Ed25519 对 `release.json` 的**确切 UTF-8 文件字节**签名，输出外部 `release.json.sig`（D-81，可选）；验证先签名后解析，不能重新序列化 JSON 后验签。有签名时 Core 使用已信任公钥校验签名；有没有签名都验证下载长度/SHA256、平台和内层 manifest 一致性；进程角色的包还要严格核对 build-info：必须存在，能用 `debug.ParseBuildInfo` 解析，与 entrypoint 内嵌的构建信息逐字一致，`GOOS`、`GOARCH` 等于 manifest 的 `os`、`arch`，任一项不符时拒绝（D-151）。实现使用 Go 标准库 `crypto/ed25519`，不引入通用 PKI 系统。
 - 签名时发布者在 release.json 旁一并发布 `release.pub`（标准 base64 的 32 字节 Ed25519 公钥，允许末尾空白），`--source` 安装与更新时随 release.json.sig 下载，本地安装由 `--public-key` 给出（缺省取 release.json 同目录的 release.pub）；公钥的 KeyID 必须等于 release.json 的 `publisher_key_id`。首次信任由管理员确认后记录该指纹，之后同来源的候选必须由同一公钥签名；无签名的来源以后带有效签名时，经管理员确认指纹后改为绑定（D-81、D-139）。WebUI 包的资产平台为 `any`，没有可执行入口；其他角色的资产必须与本机平台一致。
 - 首次来源信任由管理员明确接受并持久化仓库，有签名时同时持久化发布者公钥指纹。有签名的来源：之后的更新必须由同一公钥签名，来源或公钥变化停止更新，重新信任是独立管理动作。没有签名的来源：安装界面与 `list` 标明未签名，之后的更新只从同一仓库取，照常校验长度、SHA256、平台与内层 manifest；它以后提供签名时，由管理员确认后改为按该公钥绑定。已签名来源永远不能静默降级为无签名，验签失败也不能自动降级为无签名信任；不能仅凭同 ID 接管已有安装。官方组件始终签名。
@@ -437,7 +421,7 @@ Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行�
 | --- | --- |
 | `init [目录]` | 在当前目录（或给定的空目录）创建组件工程：只含作者信息的 `plugin.yaml`、导出 `func New() *sdk.Plugin` 并注册一个示例命令的插件包、示例 `config_schema.json`、`i18n/en-US.json` 与忽略 `data/` 的 `.gitignore`，不含生成文件（D-145）；`--role` 选择角色，缺省 plugin；`--id` 缺省取目录名（不符合组件 ID 规则时报错），不在已有 module 中时 `--module` 缺省同为目录名，Adapter 的 `--adapter-id` 缺省等于组件 ID（D-149）；目录非空时拒绝。 |
 | `build [目录]` | 以本次扫描的结果经 overlay 编入资源登记（manifest、配置与 i18n 资源、Service Schema 与 Handler 参数名）与调用 `sdk.Run` 的正式入口并编译，不写工程目录（D-145）；目录中没有 `plugin.yaml`、且是 import 根包的 main 包时按库模式构建（§15.5）：扫描其依赖中每个目录含 `plugin.yaml` 的组件入口包（包括模块缓存中的第三方 module），把全部登记经 overlay 编入该 main 包，只输出可执行文件。使用已锁定的 Go Modules；`--goos`、`--goarch` 选择目标平台。源码安装显式选择本地构建，预编译安装不要求服务器编译。 |
-| `check [目录]` | 不写文件，执行与 `build` 相同的扫描，核对入口、工程 manifest 是否只含作者信息、`config_schema.json`、`adapter_config_schema.json` 及其迁移与 i18n；没有生成文件可比对（D-145）。 |
+| `check [目录]` | 不写文件，执行与 `build` 相同的扫描，核对入口、工程 manifest 是否只含作者信息、changelog（§9.1）、`config_schema.json`、`adapter_config_schema.json` 与 i18n；没有生成文件可比对（D-145）。 |
 | `test [目录]` | 按 `build` 的规则把本次扫描的资源经 overlay 编入后，在临时数据和离线测试会话检查加载与注册，不能调用生产凭证或宣称已测试平台发信。 |
 | `pack [目录]` | 先 `build`，再生成安装包与归档外的 `release.json`；`--asset-url` 不给时，工程 manifest 的 `source` 为 `github.com/<owner>/<repo>` 则取 `https://github.com/<owner>/<repo>/releases/download/v<version>/<归档名>`，其他来源须显式给出（D-149）；给出 `--key` 时签名，也可以只生成待离线签名的清单，私钥不进入包，`--key` 没有缺省值。 |
 
@@ -451,10 +435,11 @@ Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行�
 | `restart` | 以当前 Active 程序/配置/DB 启动新 Session，不导入编辑中的 config.json。 |
 | `reload` | 把编辑快照导入 Pending，走配置校验及候选激活；SQLite 同样复制 DB。管理 API 的 reload 激活已有 Pending，没有 Pending 时才导入编辑快照（D-143）。 |
 | `update` | 仅从绑定来源选择符合 pin 的候选版本并执行受控更新；不把 install 同 ID 当更新。 |
-| `uninstall` | 停止、解除运行注册并删除未引用程序包，清理范围有三种（D-127）。不带选项时只卸载：保留数据、配置与来源绑定，以便同来源重装。`--purge-data` 另外删除数据，保留配置与来源绑定。`--purge` 删除数据与配置，连同来源绑定与安装记录。数据是框架受管的运行数据：全部代次（受管 SQLite、代次目录与代次内的配置快照）、Agent 会话（§13.3）、按钮 token、动态任务以及静态任务的起点与暂停状态（§4.3）、Adapter 的游标与聊天目录（§8，D-130）。配置是管理员与作者给出的设置：编辑快照 `config.json`、Pending、secret、命令策略、工具策略、发信许可、配置文件中该插件的覆盖值、插件开关与工具策略（§5.6）、Adapter 在 `core_config.json` 中的实例。`--purge-data` 之后重装，首个候选的配置取编辑快照；编辑快照与被删除的 Active 配置不同时，确认对象中写明。两种清理都须展示并确认准确对象，只删除集中列出的框架受管路径；不擅自删除插件自管的外部数据库或任意插件自管目录与文件。被替换 Adapter 的实例按 `core_config.json` 中 Core 写入的 `package` 归属区分：新组件不启动、不列出归属于其他组件的实例，在其上新建实例需要确认并丢弃旧实例；清理只删除归属于被卸载组件的实例配置（D-139）。卸载先按停止流程摘除该组件的定时器、清空排队的到期任务并取消在途的任务调用；清理时在同一个状态库事务中删除它的任务与调度状态，不经过插件进程。只卸载时任务保留但不触发。 |
+| `uninstall` | 停止、解除运行注册并删除未引用程序包，清理范围有三种（D-127）。不带选项时只卸载：保留数据、配置与来源绑定，以便同来源重装。`--purge-data` 另外删除数据，保留配置与来源绑定。`--purge` 删除数据与配置，连同来源绑定与安装记录。数据是框架受管的运行数据：全部代次（受管 SQLite、代次目录与代次内的配置快照）、插件数据目录 `<data_dir>/plugin_data/<id>/`（D-165）、Agent 会话（§13.3）、按钮 token、动态任务以及静态任务的起点与暂停状态（§4.3）、Adapter 的游标与聊天目录（§8，D-130）。配置是管理员与作者给出的设置：编辑快照 `config.json`、Pending、secret、命令策略、工具策略、发信许可、配置文件中该插件的覆盖值、插件开关与工具策略（§5.6）、Adapter 在 `core_config.json` 中的实例。`--purge-data` 之后重装，首个候选的配置取编辑快照；编辑快照与被删除的 Active 配置不同时，确认对象中写明。两种清理都须展示并确认准确对象，只删除集中列出的框架受管路径；不擅自删除插件自管的外部数据库或任意插件自管目录与文件。被替换 Adapter 的实例按 `core_config.json` 中 Core 写入的 `package` 归属区分：新组件不启动、不列出归属于其他组件的实例，在其上新建实例需要确认并丢弃旧实例；清理只删除归属于被卸载组件的实例配置（D-139）。卸载先按停止流程摘除该组件的定时器、清空排队的到期任务并取消在途的任务调用；清理时在同一个状态库事务中删除它的任务与调度状态，不经过插件进程。只卸载时任务保留但不触发。 |
 | `pin` | 固定允许的更新版本：值为精确的 SemVer 版本，`update` 只接受与之相等的候选，空串解除（D-139）；解除固定须显式操作，不能被自动更新忽略。 |
 | `admin add` / `admin remove` / `admin list` | 管理 Core Admin 列表（按用户字符串 `<adapter_id>:<external_user_id>`），与 WebUI 的 Core 设置页使用同一管理服务，写回 `core_config.json` 的 `admins`。 |
 | `logs` | 按来源、级别与 trace_id 读取最近记录，`--follow` 时持续输出（§14.4）。 |
+| `diagnose` | 生成诊断包（§14.7）：`--since`（缺省 24h）、`--no-redact`、`--output`（缺省为当前目录下的 `alonabot-diagnostics-<UTC 时间>.zip`）。Core 运行时经管理 API，没有运行时只读数据目录。 |
 | `log-level` | 修改全局或某个插件、Adapter 的日志级别，立即生效（§14.3）。 |
 | `rollback` | 明确选择保留代次为输入，停机建立新的恢复候选 Generation；SQLite 从所选快照复制独立 DB，复用对应程序/配置/secret，走同一 Prepared/提交流程，不复用历史 Generation ID 或直接写保留快照；在执行前列明将舍弃该快照之后的本地写入，要求显式确认。声明 `prepare_effects=external` 的插件返回 NEEDS_MANUAL_MIGRATION，外部已发送消息不会撤回。 |
 
@@ -482,7 +467,7 @@ Core 可执行文件与 SDK 根包只链接 [docs/development.md](../docs/develo
 | §2、MESSAGE 分发/权限/Hook | T-03 发送，T-04 命令/文本匹配/策略，T-05 事件链、延续调用与多轮等待；间接 Hook 约束在 T-06 闭合 |
 | §3 服务/广播 | T-06 接入真实父调用链、编码校验与有界广播 |
 | §4 生命周期/调度 | T-02 生命周期原语，T-07 调度/HTTP，T-08 准备回调，T-09 正式更新集成 |
-| §5～§6 配置/Secret/数据库/文案 | T-01 先验驱动路径，T-08 候选准备与文案目录，T-08.11 `config_schema.json` 与插件配置迁移，T-08.12 Adapter 实例配置与 Core 设置的迁移，T-09 提交与恢复；Telegram locale 映射在 T-03 |
+| §5～§6 配置/Secret/数据库/文案 | T-01 先验驱动路径，T-08 候选准备与文案目录，T-08.11 `config_schema.json`，T-08.12 Adapter 实例配置与 Core 设置，T-08.16 去掉配置版本并改为校正（D-161），T-09 提交与恢复；Telegram locale 映射在 T-03 |
 | §7 信任/HTTP/认证 | T-02 进程，T-07 代理与授权检查，T-07.7 插件页面的沙箱隔离，T-07.6 首次 token 文件，T-09 首次登录及管理入口；T-09.12 WebUI 组件、组件图标、Admin API 参考与插件页面桥 |
 | §8 Adapter/消息 | T-03 Adapter 进程与 SDK、官方 Telegram Adapter 包、Target、媒体、按钮、extension 片段、回执、消息编辑、bot 上下线事件与依赖解析；T-15 官方 OneBot 11 Adapter 包与跨 Adapter 一致性验收；T-09 Adapter 包与实例的正式管理及启用时的依赖检查 |
 | §9 构建/分发/管理 CLI | T-01 契约，T-03.8 manifest 角色解析，T-04 生成器，T-04.9 删除构建期标记，T-09.16 作者 manifest 与构建信息，T-09 完整工具、来源检查（含无签名来源）与同类组件替换 |
@@ -540,9 +525,10 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 工具是带 `tool` 描述的 JSON Service：description 是给模型的说明，输入 Schema 即该 Service 的输入 Schema，输出是该 Service 的 JSON 输出；default_policy 取 allow 或 confirm。工具沿用 Service 的命名 `plugin_id/service_name`、访问规则、Broker 定位、调用链、深度、取消与准入（§3），不新增 route kind；Protobuf 编码的 Service 不能声明为工具。
 - 调用策略按工具持久化，取值 allow、confirm 或 deny，未设置时使用工具声明的 default_policy。管理员经管理服务修改，下一次调用生效，不撤销已开始的调用。策略不替代 Service 自身的 required_permission：工具执行时仍按继承的 Actor 判定 User/Admin。
 - 工具策略可以按配置文件覆盖（§5.6，D-168）：调用的默认 Target 所在会话使用的配置文件为某个工具或 `core.tool.confirm` 的操作设置了策略时，以它取代全局策略；该配置文件关闭了工具所属插件时视为 deny。`core.tool.list` 返回按本次调用生效的策略。
-- `core.tool.list` 返回调用插件可以调用、且生效策略不为 deny 的工具：名称、description、输入 Schema 与生效策略。
+- 工具可以声明副作用类别 `effect`：`read_only`、`write` 或 `destructive`，不声明为 `unspecified`；`core.tool.confirm` 的操作同样可以带类别，Core 与操作名一起记录（D-157）。类别只是提示：不改变缺省策略，不参与策略判断。
+- `core.tool.list` 返回调用插件可以调用、且生效策略不为 deny 的工具：名称、description、输入 Schema、副作用类别与生效策略。
 - `core.tool.invoke` 输入工具名与 JSON 参数，必须带 parent_call_id（§1.2）。策略为 deny 时返回 PERMISSION_DENIED；为 confirm 时先按 §13.2 取得确认，用户拒绝返回 PERMISSION_DENIED，超时返回 DEADLINE_EXCEEDED；为 allow 或确认通过后，Broker 以父调用链调用该 Service 并原样返回结果。确认的等待计入父调用期限。
-- `core.tool.confirm` 供插件在自己执行的操作（例如 MCP 工具）之前取得确认，输入操作名（调用插件内稳定的名称）与给用户看的参数摘要。Core 按「调用插件 ID + 操作名」查找策略，未设置时为 confirm，返回规则与 invoke 相同。Core 不检查插件随后是否执行了该操作；它记录出现过的操作名，供管理页列出并设置策略。
+- `core.tool.confirm` 供插件在自己执行的操作（例如 MCP 工具）之前取得确认，输入操作名（调用插件内稳定的名称）、给用户看的参数摘要与可选的副作用类别。Core 按「调用插件 ID + 操作名」查找策略，未设置时为 confirm，返回规则与 invoke 相同。Core 不检查插件随后是否执行了该操作；它记录出现过的操作名，供管理页列出并设置策略。
 
 ### 13.2 用户确认
 
@@ -585,10 +571,11 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 ### 14.1 记录与来源
 
 - Core、插件与 Adapter 都用 Go 标准库 `log/slog` 记录。一条记录包含时间、级别、消息、源码位置（文件与行号）、来源与键值字段。来源分为 core、plugin、adapter 三类：plugin 与 adapter 另带来源 ID（plugin_id 或 adapter_id），与某个 Adapter 实例相关时带 instance_id。处理某次调用时，记录带上该调用的 trace_id（Envelope.trace_id）、route_id 与 call_id。记录中的字段名：来源类别 `component`（core、plugin、adapter）、`plugin_id`、`adapter_id`、`instance_id`、`session_id`（十六进制）、`generation_id`，调用字段 `trace_id`、`route_id`、`call_id`。子插件中的 Handler 经 `c.Logger()` 写出的记录另带 `sub_plugin`（子插件 ID，D-116）。
-- 级别为 DEBUG、INFO、WARN、ERROR。逐条事件与逐次调用的记录只用 DEBUG：
+- 级别由低到高为 DEBUG、INFO、WARN、ERROR、CRITICAL（D-158）。逐条事件与逐次调用的记录只用 DEBUG：
 
 | 级别 | 用途 |
 | --- | --- |
+| CRITICAL | Core 或数据面临损坏、需要立即处理：状态库无法写入或核对失败、`core_config.json` 不是合法 JSON 而拒绝启动、`core_config.json` 写回失败、提交后的恢复失败、Core 因故障退出前的最后一条记录；插件与 Adapter 自己的数据损坏或无法继续运行 |
 | ERROR | 需要人处理的故障：插件崩溃或被自动停用、状态库错误、提交失败、实例致命错误、Handler panic |
 | WARN | 被拒绝或丢弃，但系统继续运行：队列满丢弃、Handler 返回错误、确认超时、接收退避重连、非结构化输出 |
 | INFO | 状态变化：Core 启停、插件激活与停止、实例上下线、安装、更新与回退、配置重载、管理员登录 |
@@ -619,8 +606,9 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 ### 14.3 级别
 
 - 全局级别由 `core_config.json` 的 `log.level`（§15.1）设置，缺省 info；`--log-level` 只覆盖本次运行。管理员在运行时修改时立即生效并写回该文件。Core 自己的记录按全局级别输出。
-- 每个插件与每个 Adapter 包可以单独设置级别：debug、info、warn、error、off，或 inherit（缺省，跟随全局）。该设置写在 `core_config.json` 的 `log.sources`（按组件 ID），经管理服务修改后立即生效并写回该文件。
-- Core 在 Bootstrap 的 `LogLevel log_level = 10` 中下发该来源的生效级别；枚举值为 DEBUG、INFO、WARN、ERROR、OFF，UNSPECIFIED 按 INFO 处理，inherit 由 Core 先解析，运行时的变化经 `sdk.log.set_level` 通知。SDK 在进程内按这个级别过滤，off 时不输出任何记录；Core 对收到的记录再按同一级别过滤。
+- 每个插件与每个 Adapter 包可以单独设置级别：debug、info、warn、error、critical、off，或 inherit（缺省，跟随全局）。该设置写在 `core_config.json` 的 `log.sources`（按组件 ID），经管理服务修改后立即生效并写回该文件。
+- Core 在 Bootstrap 的 `LogLevel log_level = 10` 中下发该来源的生效级别；枚举值为 DEBUG、INFO、WARN、ERROR、OFF、CRITICAL（CRITICAL 由 D-158 追加，级别高于 ERROR），UNSPECIFIED 按 INFO 处理，inherit 由 Core 先解析，运行时的变化经 `sdk.log.set_level` 通知。SDK 在进程内按这个级别过滤，off 时不输出任何记录；Core 对收到的记录再按同一级别过滤。
+- SDK 导出 `sdk.LevelCritical`（`slog.Level(12)`），JSON 行与控制台把它写作 `CRITICAL`；全局级别、`--log-level` 与 `alonabot log-level` 同样接受 critical。
 - 来源设为 off 只隐藏该进程自己的记录；Core 关于它的记录（例如崩溃、停用）仍以 `[Core]` 按全局级别输出。开发中的组件缺省为 debug（§15.4）。
 
 ### 14.4 查看
@@ -628,7 +616,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - Core 为 Core 自己、每个插件与每个 Adapter 包各保留最近 **1000** 条已输出的记录。这些记录只在内存中，Core 重启后清空。
 - 管理 API 提供按来源、级别与 trace_id 读取这些记录，以及经 SSE 实时订阅，都要求管理员会话或 CLI 的 Bearer token；`alonabot logs` 使用同一 API。
 - 过去日期的记录从日志文件读取：管理 API 与 `alonabot logs --date` 按日期、来源、级别与 trace 查询，WebUI 日志页可以选择日期。
-- WebUI 日志页先读取最近记录再订阅。按来源、级别与 trace 的筛选只在浏览器中进行，不改变输出，筛选条件保存在浏览器本地；修改输出级别使用 §14.3 的管理服务。
+- WebUI 日志页先读取最近记录再订阅。按来源、级别与 trace 的筛选只在浏览器中进行（级别可多选，来源分 Core、插件与账号三组可多选），不改变输出，筛选条件保存在浏览器本地；修改输出级别使用 §14.3 的管理服务。
 
 ### 14.5 脱敏
 
@@ -642,6 +630,12 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 写入失败（例如磁盘已满）时 Core 继续运行，在 stderr 报告一次，到下一次换文件时重新打开。
 - 这些是普通设置（§15.1），不属于调优参数。库模式的日志文件在 `.alonabot/logs/`。
 
+### 14.7 诊断包
+
+- 诊断包是一个 zip，供用户附在 issue 中（D-156）。内容分三组，可以分别取消：日志（时间范围内的日志文件，§14.6）；设置与配置（`core_config.json`、每个插件 Active 代次的配置）；组件与环境（已安装组件的 ID、角色、版本、来源、签名状态、是否启用、运行状态与最近一次错误，AlonaBot 版本、OS/arch、Go 版本、是否在容器中、数据目录占用）。根目录的 `manifest.json` 记录格式版本（1）、生成时间、时间范围、各组是否包含、是否脱敏与文件列表。不包含状态库、受管 SQLite、媒体、secret 存储、`admin_token` 与安装包。
+- 脱敏缺省开启：schema 中标为 `secret` 的字段与 Adapter 实例配置的凭证替换为 `[REDACTED]`，`${环境变量}` 的写法原样保留；日志在 §14.5 之外再按规则遮盖 Bearer 与 Basic 凭证、URL 中的用户信息、查询参数中名为 token、key、secret、password 的值、Telegram 的 `bot<id>:<token>` 与公网 IP 地址（私有、回环与链路本地地址保留）。聊天内容不处理。
+- 管理 API 与 `alonabot diagnose` 使用同一实现。Core 没有运行时，CLI 只读数据目录生成，不写任何文件，组件的运行状态记为未运行。生成失败时不留下不完整的文件。
+
 ## 15. 运行方式
 
 ### 15.1 启动与 core_config.json
@@ -651,7 +645,6 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 | 键 | 缺省值 | 含义 |
 | --- | --- | --- |
-| `$version` | 当前版本 | 文件的格式版本，迁移见 §5.5 |
 | `listen` | `127.0.0.1:7650` | Core 唯一的公开 Listener（§7.2） |
 | `base_url` | `http://127.0.0.1:7650` | Core 的地址，管理界面、Admin API 与插件路由都在这个主机名下（§7.3） |
 | `trusted_proxies` | 空 | 可信反向代理的地址范围 |
@@ -663,10 +656,10 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | `command_prefixes` | `["/"]` | 命令前缀（§2.2），即配置文件 `default` 的命令前缀，其他配置文件可以覆盖（§5.6）；列表不能为空，不带前缀的命令写 `[""]` |
 | `reply` | `{"mention_sender": false, "quote": false, "prefix": "", "forward_threshold": 0}` | 配置文件 `default` 的回复方式（§5.6） |
 | `default_locale` | `en-US` | 机器人回复的缺省语言（§5.4） |
-| `adapters` | 空 | 按 adapter_id 分组的 Adapter 实例：`{"telegram": {"$version": 1, "instances": {"main": {"token": "${TELEGRAM_BOT_TOKEN}"}}}}`；实例配置按该 Adapter 的 `adapter_config_schema.json` 补缺失值并校验（§5.5、§8）。实例名为 `^[A-Za-z0-9_-]{1,64}$`，跨 Adapter 也不能重名；每个 Adapter 可以写 `default_instance`（该 Adapter 的一个实例名），作为插件没有指定实例时的缺省发送实例（§8，D-102） |
+| `adapters` | 空 | 按 adapter_id 分组的 Adapter 实例：`{"telegram": {"instances": {"main": {"token": "${TELEGRAM_BOT_TOKEN}"}}}}`；实例配置按该 Adapter 的 `adapter_config_schema.json` 补缺失值并校正（§5.5、§8）。实例名为 `^[A-Za-z0-9_-]{1,64}$`，跨 Adapter 也不能重名；每个 Adapter 可以写 `default_instance`（该 Adapter 的一个实例名），作为插件没有指定实例时的缺省发送实例（§8，D-102） |
 
-- 任何字符串值都可以写成 `${环境变量}`，启动时展开；变量不存在时 Core 拒绝启动并指出键的路径。敏感值也可以直接写明文，文件权限保护它们。手写时可以省略 `$version`，Core 按当前版本读取，在下一次写回该文件时补上。
-- WebUI 与 CLI 修改这些设置时写回该文件（先写临时文件再替换），保留原有的 `${...}` 写法，不把展开后的值写回。手动修改后重启 Core 生效；`alonabot run --reload` 时 Core 监视该文件：`admins`、`command_prefixes`、`reply`、`default_locale`、`log.level`、`log.sources` 与 `adapters` 立即生效（Adapter 只重启变化的实例；`default_locale` 对运行中的插件从它的下一个 Session 起生效），其他键输出 WARN 提示需要重启。启动时文件不合法则拒绝启动并指出位置；运行中重新读取失败时保留当前设置并记 ERROR。
+- 任何字符串值都可以写成 `${环境变量}`，启动时展开；变量不存在时该值按不合法处理，按 §5.5 恢复为缺省值并记校正记录（D-161）。敏感值也可以直接写明文，文件权限保护它们。
+- WebUI 与 CLI 修改这些设置时写回该文件（先写临时文件再替换），保留原有的 `${...}` 写法，不把展开后的值写回。手动修改后重启 Core 生效；`alonabot run --reload` 时 Core 监视该文件：`admins`、`command_prefixes`、`reply`、`default_locale`、`log.level`、`log.sources` 与 `adapters` 立即生效（Adapter 只重启变化的实例；`default_locale` 对运行中的插件从它的下一个 Session 起生效），其他键输出 WARN 提示需要重启。启动时文件不是合法的 JSON 对象则拒绝启动并指出位置，其中的值不合法时按 §5.5 校正，不改写文件；运行中重新读取失败时保留当前设置并记 ERROR。
 - 调优参数用 `--args` 覆盖（§16）。命令行参数覆盖 `core_config.json` 中的同名项，只对本次运行有效。Core 全局禁止表、插件的命令策略与发信许可等按插件或按用户记录的管理数据仍在状态库，经管理服务修改。缺省只监听本机地址。远程管理有两种方式：经 SSH 隧道访问本机地址，或改为非本机地址并满足 §7.3、§7.4 的 Host、HTTPS 与可信反代要求；容器镜像的例外见 §15.3。
 - 首次启动且尚无管理凭证时按 §7.4 生成管理 token：stdin 与 stderr 都是终端时只在该终端显示一次；不是终端时写入 `<data_dir>/admin_token`，日志只输出该文件的路径。
 
@@ -677,7 +670,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 发行版 Core 内置官方发布者公钥作为已信任来源：运行官方发行包即视为接受该来源，预装包不再逐个确认。签名与摘要照常校验，校验失败的包不安装并记 ERROR。
 - 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，只启用 help 插件与官方 WebUI；Agent 组件与 help 以外的预装插件只安装不启用，不使用 AI 对话的部署不运行它们的进程（D-50、D-62）。官方 Telegram 与 OneBot 11 Adapter 只安装，`core_config.json` 的 `adapters` 中有它的实例时自动启用；某个 Adapter 写了实例却尚未安装时，Core 从 `packages/` 安装，没有发行包（例如经 `go install` 取得的 `alonabot`）时从官方 Release 安装（D-82）。需要 AI 对话时，管理员在 WebUI 或 CLI 启用 Agent；Agent 在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。
 - 管理员可以用 `install --source <来源> --replace` 把任一官方 Adapter、Agent 或 WebUI 换成社区组件（§9.3）；之后不再从官方来源更新该组件。卸载或损坏 WebUI 后，用 `alonabot install <官方 WebUI 的组件 ID>` 从 `packages/` 重装（§9.3，D-149）。
-- 之后不再自动安装，已卸载的预装包不会在下次启动时重新安装。新版本发行包中的包版本高于已安装版本时，作为可用更新列在管理界面与 `alonabot list` 中，由管理员确认后按 `update` 流程更新。Core 本身通过替换可执行文件升级，新版本按 §5.5 迁移 `core_config.json`。
+- 之后不再自动安装，已卸载的预装包不会在下次启动时重新安装。新版本发行包中的包版本高于已安装版本时，作为可用更新列在管理界面与 `alonabot list` 中，由管理员确认后按 `update` 流程更新。Core 本身通过替换可执行文件升级，新版本按 §5.5 校正 `core_config.json`，不改写文件。
 - 首批预装插件为 help（按调用者权限列出可用命令与用法，`/whoami` 回复调用者的用户字符串与收到消息的实例名）、welcome（新成员入群时发送欢迎语）与 rss（订阅 RSS/Atom 并推送到聊天）。
 - 第一个 Core Admin 的产生：用户在聊天中发送 `/whoami` 取得自己的用户字符串，管理员把它写入 `core_config.json` 的 `admins`，或在 WebUI 的 Core 设置页、`alonabot admin add` 中添加。预装插件与第三方插件一样以独立进程运行，只有启用的才运行。
 
@@ -695,7 +688,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 每个开发组件先按 `alonabot build` 构建到 `<data_dir>/dev/bin/`，再按 manifest 的 `role` 运行：插件、Adapter 与 Agent 以独立进程运行，进程、隔离与有限重启和已安装的组件相同；WebUI 以该目录的 `assets` 为静态根目录，代替已安装的 WebUI，按请求读取文件，不经安装与签名（Admin API 主版本检查照常进行）。构建失败或同一 ID、adapter_id 与已安装的包冲突时，`run` 在启动任何组件前报错退出。
 - 开发组件的规则（`alonabot run` 与库模式 §15.5 相同）：
   - Core 为它们创建 dev 来源的安装记录，不做来源、签名与归档摘要校验，Hello 的 build_digest 使用 Core 为本次运行生成的值；dev 来源的组件不能 update、rollback 或 uninstall。
-  - 它们使用固定代次 `dev:<组件 ID>`（D-134），组件 ID 为插件 ID 或 Adapter 包的 ID；代次 ID 全局唯一，状态库结构保持不变。不走候选与 Journal：配置取自 `<data_dir>/plugins/<id>/config.json`（缺失时为空对象），每次启动经迁移、补值与校验后直接生效（§5.2、§5.5）。WebUI 或 CLI 修改开发组件的配置时，校验通过后写回该文件并重启该组件。受管 SQLite 为 `<data_dir>/plugins/<id>/dev.sqlite`，不复制、不回退。按钮 token 因代次固定，重启后仍然有效。准备后的配置覆盖 `dev:<id>` 代次的快照，不回写 config.json；配置中的 secret 原样下发并原样保存在该快照中（dev 来源不分发）。开发代次每次启动都从 config.json 准备配置，数据库为 RESUME 时也允许 `OnConfigLoad` 变换配置。受管 SQLite 的 activation_reason 在文件不存在时为 first_install，否则为 resume；库模式的同进程开发组件不经构建，Bootstrap 的 migration_mode 为 UNSPECIFIED，SDK 只在同进程启动时按插件实际登记的方式（NONE、VERSIONED 或 SELF）执行并在 REGISTER 回报，Core 接受明确的回报，拒绝 UNSPECIFIED 与未定义值，VERSIONED 照常核对已执行的迁移 ID；已安装的包与独立进程的开发组件由构建写入明确的方式。开发组件的日志级别缺省为 debug，settings 对该来源有显式级别时用显式级别。
+  - 它们使用固定代次 `dev:<组件 ID>`（D-134），组件 ID 为插件 ID 或 Adapter 包的 ID；代次 ID 全局唯一，状态库结构保持不变。不走候选与 Journal：配置取自 `<data_dir>/plugins/<id>/config.json`（缺失时为空对象），每次启动经 OnConfigLoad、补值与校正后直接生效（§5.2、§5.5）。WebUI 或 CLI 修改开发组件的配置时，校验通过后写回该文件并重启该组件。受管 SQLite 为 `<data_dir>/plugins/<id>/dev.sqlite`，不复制、不回退。按钮 token 因代次固定，重启后仍然有效。准备后的配置覆盖 `dev:<id>` 代次的快照，不回写 config.json；配置中的 secret 原样下发并原样保存在该快照中（dev 来源不分发）。开发代次每次启动都从 config.json 准备配置，数据库为 RESUME 时也允许 `OnConfigLoad` 变换配置。受管 SQLite 的 activation_reason 在文件不存在时为 first_install，否则为 resume；库模式的同进程开发组件不经构建，Bootstrap 的 migration_mode 为 UNSPECIFIED，SDK 只在同进程启动时按插件实际登记的方式（NONE、VERSIONED 或 SELF）执行并在 REGISTER 回报，Core 接受明确的回报，拒绝 UNSPECIFIED 与未定义值，VERSIONED 照常核对已执行的迁移 ID；已安装的包与独立进程的开发组件由构建写入明确的方式。开发组件的日志级别缺省为 debug，settings 对该来源有显式级别时用显式级别。
   - 开发中的 Adapter 的实例与已安装的 Adapter 一样写在 `core_config.json` 的 `adapters` 中。
   - 日志级别缺省为 debug（§14.3）。
 - `--reload` 时每 `DEV_RELOAD_POLL`（§16）用标准库轮询每个组件目录中的 `.go` 文件、`//go:embed` 引用的文件、`go.mod`、`go.sum`、`plugin.yaml`、`config_schema.json`、`adapter_config_schema.json` 与 `i18n/`（排除数据目录、vendor、以 `.` 或 `_` 开头的目录与 testdata），以及该组件的配置（插件的 `config.json`，Adapter 在 `core_config.json` 中的实例）：
@@ -744,7 +737,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 - 执行顺序：识别 OS/arch → 下载 `--version` 指定的版本（缺省为最新 Release）的发行归档与 `SHA256SUMS` 并校验，不一致时退出且不改动已有安装 → 停止已有服务 → 替换程序目录中的 `alonabot` 与 `packages/` → 数据目录尚无管理凭证时以服务的身份运行 `alonabot admin-token init`，token 只在当前终端显示一次 → 写入服务定义并启动服务。
 - 以 `curl … | sh` 运行时，初始化从 `/dev/tty` 读写终端；没有可用终端时跳过初始化，Core 首次启动时按 §15.1 把一次性 token 写入数据目录的 `admin_token`，脚本输出读取它的命令（`alonabot admin-token show --data-dir <数据目录>`）。
-- 再次运行即升级：数据目录、`core_config.json` 与已安装组件不变（Core 按 §5.5 迁移设置），新版本 `packages/` 中更高版本的官方组件按 §15.2 作为可用更新列出。`--uninstall` 停止并删除服务定义与程序目录，保留数据目录并输出其路径。
+- 再次运行即升级：数据目录、`core_config.json` 与已安装组件不变（Core 按 §5.5 校正设置），新版本 `packages/` 中更高版本的官方组件按 §15.2 作为可用更新列出。`--uninstall` 停止并删除服务定义与程序目录，保留数据目录并输出其路径。
 - 只经 HTTPS 下载。`SHA256SUMS` 与归档来自同一 Release，只防止传输损坏，不证明发布者身份；归档内的组件包仍由 Core 按 §9.2 验签。脚本不修改防火墙、反向代理与 `core_config.json`，Core 缺省只监听本机（§15.1）。
 
 ## 16. 调优参数

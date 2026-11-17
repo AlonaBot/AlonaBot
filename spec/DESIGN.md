@@ -226,11 +226,11 @@ Core 管理状态库与插件业务库分开。框架只托管 SQLite（D-48）�
 
 运行配置为普通 JSON 对象，无外层 config；i18n/ 翻译才以 config 为顶层。字段由包内手写的 `config_schema.json` 声明（D-76），键名沿用 AstrBot 的 `_conf_schema.json`，另有 `secret`、`required` 与只能选一个模板的 `template`；键的顺序就是表单顺序。每个字段都有值：缺失键补 default 或类型零值，显式 false/0/空串与 invisible 字段保留，未知键保留。
 
-`OnConfigLoad` 是配置回调，区别于三个进程 Hook，也负责拒绝不合法的业务取值，SDK 不另设 Validate 回调。流程为原始对象→配置版本迁移（OnConfigLoad）→补缺失值→schema 校验→Candidate；不能先用新 schema 拒绝仍需迁移的旧字段。持久化保留原始完整对象，不能用只含已声明字段的结果丢掉未知键。插件经 `p.Config()` 或 `c.Config()` 按类型取值，键未声明或类型不符直接 panic，这类错误在开发时就会暴露。
+`OnConfigLoad` 是配置回调，区别于三个进程 Hook，也负责拒绝不合法的业务取值，SDK 不另设 Validate 回调。流程为原始对象→OnConfigLoad→补缺失值与校正→required 校验→Candidate；不能先用 schema 拒绝配置。持久化保留未知键，不能用只含已声明字段的结果丢掉它们。插件经 `p.Config()` 或 `c.Config()` 按类型取值，键未声明或类型不符直接 panic，这类错误在开发时就会暴露。
 
-子插件的配置不另设文件（D-116）：它是 `config_schema.json` 中与子插件 ID 同名的顶层 `object` 字段，`s.Config()` 返回这个对象的只读视图，等于 `p.Config().Object(id)`；表单把它显示为一个分组，i18n 覆盖、secret 与迁移路径照 object 的现有规则。`c.Config()` 在子插件的 Handler 中仍是整个插件的配置，共用的配置项经它读取。配置版本与迁移每个插件只有一份，字段在根与子插件之间移动只是一条 `rename`。
+子插件的配置不另设文件（D-116）：它是 `config_schema.json` 中与子插件 ID 同名的顶层 `object` 字段，`s.Config()` 返回这个对象的只读视图，等于 `p.Config().Object(id)`；表单把它显示为一个分组，i18n 覆盖、secret 与校正照 object 的现有规则。`c.Config()` 在子插件的 Handler 中仍是整个插件的配置，共用的配置项经它读取。字段在根与子插件之间移动时，旧值成为无效配置，需要保留旧值时在 OnConfigLoad 中搬移。
 
-配置会随版本演进：`config_schema.json` 用 `$version` 与 `$migrations` 声明改名、选项改值、单值改列表与删除，由框架按存储的版本依次迁移；新增字段自动补默认值，删除的字段作为未知键保留。插件不必为常见变更写迁移代码，`OnConfigLoad` 只处理声明表达不了的情况。Adapter 实例配置与 Core 的 `core_config.json` 用同一套规则，Core 写回前先备份，迁移失败或遇到更新的版本时明确报错，不丢配置（D-85、CONTRACTS §5.5）。
+配置没有版本，也不写迁移（D-161，CONTRACTS §5.5）：新增字段补默认值，删除或改名后的旧键作为无效配置保留并忽略，管理员可以在 WebUI 一键清理；类型不符的值先做无损转换，不行再恢复默认值，并记一条校正记录提示管理员。作者改名时要保留旧值，就在 `OnConfigLoad` 中搬移。Adapter 实例配置与 `core_config.json` 用同一套规则，校正不改写用户的原文件。
 
 Core 状态库的 ActiveGeneration 是权威，`config.json` 是用户编辑快照。直接编辑不热生效，`plugin reload` 导入 Pending 后走候选流程。新 secret 产生新不可变引用，候选失败不修改旧凭证；普通配置 API 不返回明文。表单 PATCH 采用明确操作，掩码不当作真实值。
 

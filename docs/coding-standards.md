@@ -67,7 +67,7 @@ v0.1 首次发布前，没有需要兼容的旧状态库、旧调用方或旧插
 
 - Core 状态库（`state.sqlite`）只有一条初始迁移。新表、新列和约束直接写进 `internal/core/state/schema.sql`；不追加迁移，不用 `ALTER TABLE` 加列，不为旧行补默认值或回填。本地的开发状态库在 schema 变化后删除重建。
 - 修改函数签名、结构字段或其语义时，同一次改动更新全部调用方。不为了让已有调用方免改，把新字段的零值解释为旧行为（例如「空值沿用插件角色」）；不保留旧名的别名、包装函数或 `Deprecated` 标记。
-- 只约束仓库自身的代码与状态库。插件受管 SQLite 的迁移接口、配置的 `config_version` 转换是面向插件作者的产品功能，照契约实现；protoc-gen-go 在生成文件里写的 `Deprecated: Use ... Descriptor instead` 是生成器样板，不属于兼容层。
+- 只约束仓库自身的代码与状态库。插件受管 SQLite 的迁移接口是面向插件作者的产品功能，照契约实现（配置没有版本与迁移，D-161）；protoc-gen-go 在生成文件里写的 `Deprecated: Use ... Descriptor instead` 是生成器样板，不属于兼容层。
 - 首次发布时再规定状态库只追加迁移的规则，并在此处更新。
 
 ## Core 状态库不写 SQL

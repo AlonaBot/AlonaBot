@@ -25,6 +25,7 @@
 | button.clicked | action_id、action_schema_version、value、callback_query_id、origin_platform_message_id? | message 内容可缺省；Actor 必须来自平台本次点击用户，不能取发送按钮时的用户 |
 | member.joined / member.left | member_external_user_id | 执行管理动作的 actor 可缺省，不把被操作成员自动当成操作人 |
 | reaction.added | platform_message_id、reaction | actor 可缺省；平台未给出个人身份时不猜测 |
+| command.invoked | plugin_id、route_id、command_name（生效的命令名，D-128）、result（ok、error、denied）、duration_ms | 由 Core 在命令层把消息交给 Handler 并得到结果后生成，target 与 actor 取原消息；只进入事件路由，不进入命令层与多轮等待（D-162） |
 | scheduled | job_id、run_id、scheduled_at_unix_ms | adapter/account/target/actor/message 均可 absent；只具有 Core 授予的 job scope |
 | bot.online | adapter_id、adapter_instance_id、account_id、account_display_name? | target/actor/message 均 absent；由 Core 在实例启动成功后生成 |
 | bot.offline | adapter_id、adapter_instance_id、account_id、reason（STOPPED 停用 / ADAPTER_EXITED Adapter 进程退出 / INSTANCE_FAILED 实例致命错误）、safe_error? | target/actor/message 均 absent；safe_error 仅在 INSTANCE_FAILED 时给出 |

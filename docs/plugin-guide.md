@@ -25,9 +25,10 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 - 业务数据放受管 SQLite：`sqlitedb.Open(ctx)` 返回 `*sql.DB`，`gormdb.Open(ctx)` 返回 `*gorm.DB`，两者共用同一个连接（CONTRACTS §6.1）。没有特别需要时用 `sqlitedb`：它比 GORM 少约 1.5 MiB 常驻内存。
 - 迁移用所选包的 `Migrate` 或 `Migrations`，二者择一；辅助迁移的 ID 发布后不能改成另一项操作（CONTRACTS §6.2）。
 - 受管 SQLite 在 reload 与 update 时使用独立候选副本，准备失败会回到旧数据（CONTRACTS §6.3）。框架外的文件与外部数据库不在这个保证内。
-- 大数据放在磁盘上：索引、缓存、向量放进受管 SQLite 或插件数据目录中的文件，不整份载入内存；内存缓存必须有上限。
+- 大数据放在磁盘上：索引、缓存、向量放进受管 SQLite 或 `sdk.PluginDataDir()` 中的文件，不整份载入内存；内存缓存必须有上限。
 - 需要 PostgreSQL、MySQL 等外部数据库时自带驱动，连接参数做成在 `config_schema.json` 中声明 `"secret": true` 的配置项（§7），由管理员填写。迁移或 OnStart 会写外部数据库时，manifest 声明 `prepare_effects=external`，此后已有安装的更新需要管理员进入维护（CONTRACTS §6.1、§6.3）。Core 不创建、不备份外部数据库。
-- Core 托管的轻量 KV 尚未提供（Q-19），简单状态也用 `sqlitedb`。
+- 简单状态用 `sdk/kv`（D-165）：`kv.Set(ctx, key, value)`、`kv.Get`、`kv.Delete` 与按前缀的 `kv.List`，数据放在受管 SQLite 的保留表中，随代次与回退处理，管理员能在 WebUI 查看和修改。
+- 插件自己的文件写到 `sdk.PluginDataDir()` 返回的数据目录，管理员能在 WebUI 浏览、上传与删除；它不随代次回退。不要写到其他位置。
 
 ## 4. 日志与文案
 
@@ -96,22 +97,24 @@ return &adapter.Descriptor{
 - 要把能力交给 Agent 使用时，注册带 `tool` 描述的 JSON Service（CONTRACTS §13.1）。
 - 在 Handler 或其延续调用中，`tool.Invoke(ctx, "plugin_id/service_name", args)` 按当前生效的工具策略调用工具（deny 返回 PERMISSION_DENIED；confirm 时 Core 先向当前会话发送带「允许」「拒绝」按钮的确认，展示实际参数，拒绝返回 PERMISSION_DENIED，超时返回 DEADLINE_EXCEEDED）；`tool.Confirm(ctx, operation, summary)` 只请求用户确认，展示插件给出的摘要，返回 nil 表示允许。两者都需要父调用链，后台任务中没有 Actor 时遇到确认返回 PERMISSION_DENIED；实例不支持按钮时返回 UNSUPPORTED（CONTRACTS §13.2）。
 
+### 插件页面
+
+插件页面在 WebUI 的沙箱 iframe 中打开，只能经桥与外部交互（[ADMIN-API §7](../spec/ADMIN-API.md)）。用 `sdk/page` 的套件：把它的 `http.Handler` 挂在插件自己的路由下，页面引用 `kit.css` 与 `kit.js`，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并让 ⌘K 打开全局搜索（D-159）。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
+
 ## 7. 配置与 secret
 
 在 `plugin.yaml` 同目录编写 `config_schema.json`，按字段键声明类型与英文源文案。运行 `alonabot build` 检查声明并把规范 JSON 经 overlay 编入程序；`alonabot check` 执行同样的检查。声明格式见 [CONTRACTS §5.1](../spec/CONTRACTS-v0.1.md#51-配置真源缺失值与编辑)，例如：
 
 ```json
 {
-  "$version": 2,
-  "$migrations": [{"to": 2, "rename": {"hello": "greeting"}}],
-  "greeting": {"type": "string", "description": "Greeting", "default": "Hello"},
+    "greeting": {"type": "string", "description": "Greeting", "default": "Hello"},
   "enabled": {"type": "bool", "default": true},
   "token": {"type": "string", "description": "Access token", "secret": true}
 }
 ```
 
-- `$version` 是配置格式版本，缺省为 1。SDK 从已保存的版本依次执行 `$migrations`，首装跳过迁移；上例把版本 1 的 `hello` 移到 `greeting`。每步按 `rename` → `map` → `wrap` → `remove` 执行，路径不存在时跳过，rename 目标已存在时失败；迁移路径与版本检查见 [CONTRACTS §5.5](../spec/CONTRACTS-v0.1.md#55-配置版本与迁移)。
-- 声明式迁移后调用 `p.OnConfigLoad(fn)` 登记的配置回调 `func(ctx context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)`。`raw` 是完整的迁移结果，`fromVersion` 保留迁移前的版本，首装时为目标版本；没有登记时原样返回。需要额外转换或业务取值检查时登记此回调，保留未知键，响应 ctx，只做可重复的纯配置变换；数据库、文件、网络与发信操作放在对应生命周期中。示例见 [showcase](../examples/plugins/showcase/main.go)。普通 restart 与恢复时，回调改变配置会返回 FAILED_PRECONDITION。
+- 配置没有版本，也不写迁移（D-161，[CONTRACTS §5.5](../spec/CONTRACTS-v0.1.md#55-配置的校正与清理)）：新增字段自动取默认值；删掉或改名的旧键保留为无效配置，管理员可以在 WebUI 一键清理；类型不符的值先无损转换，不行再恢复默认值并提示管理员。
+- 需要把旧值搬到新键，或检查业务取值时，用 `p.OnConfigLoad(fn)` 登记配置回调 `func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error)`。`raw` 是完整的原始配置，在补默认值与校正之前；判断旧键是否存在再搬移，保留其他键，响应 ctx，只做可重复的纯配置变换；没有登记时原样使用。
 - 回调之后，SDK 只给缺失键补 `default` 或类型零值，递归进入对象、列表与已选择的模板，再校验。显式 `false`、`0`、空串与空集合保持，未知键和数字原文保留。声明字段为 `null`、类型不符或违反 options、slider、required 等约束时，准备失败，错误只含 JSON 路径和错误类别。
 
 插件对象从 OnStart 开始通过 `p.Config()`（Handler 内为 `c.Config()`）取得 `config.Values`，子插件的 `s.Config()` 是 `config_schema.json` 中同名顶层 object 的只读视图；在 OnConfigLoad 中或更早调用会 panic。例如 `p.Config().String("greeting")` 读取上例的问候语。取值对象在同一 Session 内保持不变，可并发读取；集合 getter 返回可独立修改的副本。
@@ -149,6 +152,7 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 ## 9. 发布
 
 - 市场 ID 按角色使用 `alonabot_plugin_`、`alonabot_adapter_`、`alonabot_agent_` 或 `alonabot_webui_` 前缀（CONTRACTS §9.1）。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
+- 每次发布写 changelog，管理员更新后会在 WebUI 看到（D-166，CONTRACTS §9.1）。二选一：根目录的 `CHANGELOG.md`（Keep a Changelog，每版一节 `## [1.2.1] - 2026-11-17`），或按版本、按语言的 `changelog/1.2.1/en-US.md`、`changelog/1.2.1/zh-CN.md`；目录写法的文件名必须是规范化的 BCP 47 标签，每个版本都要有 `en-US.md`。
 - 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`（CONTRACTS §9.3）。
 - 用 `alonabot build` 检查资源并编译独立组件，`alonabot check` 只读核对。`alonabot pack --asset-url https://example.com/component.tar.gz` 为所选平台生成安装包与归档外的 `release.json`；目标通过 `--goos/--goarch/--tags` 选择，`--out` 默认 `<工程>/bin`。可选 `--key FILE` 读取标准 base64 编码的 64 字节 Ed25519 私钥，对清单原始字节签名，并在归档外写 `release.json.sig` 与 `release.pub`；省略时输出 unsigned 清单（CONTRACTS §9.2、§9.3）。密钥读取或签名失败直接报错。进程包含可解析的 `build-info` 文本，WebUI 包只含 manifest 与静态资源。签名私钥由作者保管，留在打包资源、仓库和构建日志之外。
 
