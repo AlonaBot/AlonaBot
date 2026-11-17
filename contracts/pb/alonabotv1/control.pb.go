@@ -33,7 +33,8 @@ const (
 	LogLevel_LOG_LEVEL_WARN        LogLevel = 3
 	LogLevel_LOG_LEVEL_ERROR       LogLevel = 4
 	// 不输出任何记录。
-	LogLevel_LOG_LEVEL_OFF LogLevel = 5
+	LogLevel_LOG_LEVEL_OFF      LogLevel = 5
+	LogLevel_LOG_LEVEL_CRITICAL LogLevel = 6
 )
 
 // Enum value maps for LogLevel.
@@ -45,6 +46,7 @@ var (
 		3: "LOG_LEVEL_WARN",
 		4: "LOG_LEVEL_ERROR",
 		5: "LOG_LEVEL_OFF",
+		6: "LOG_LEVEL_CRITICAL",
 	}
 	LogLevel_value = map[string]int32{
 		"LOG_LEVEL_UNSPECIFIED": 0,
@@ -53,6 +55,7 @@ var (
 		"LOG_LEVEL_WARN":        3,
 		"LOG_LEVEL_ERROR":       4,
 		"LOG_LEVEL_OFF":         5,
+		"LOG_LEVEL_CRITICAL":    6,
 	}
 )
 
@@ -1707,14 +1710,15 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"failedKind\"A\n" +
 	"\x12LogSetLevelRequest\x12+\n" +
 	"\x05level\x18\x01 \x01(\x0e2\x15.alonabot.v1.LogLevelR\x05level\"\x15\n" +
-	"\x13LogSetLevelResponse*\x8a\x01\n" +
+	"\x13LogSetLevelResponse*\xa2\x01\n" +
 	"\bLogLevel\x12\x19\n" +
 	"\x15LOG_LEVEL_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fLOG_LEVEL_DEBUG\x10\x01\x12\x12\n" +
 	"\x0eLOG_LEVEL_INFO\x10\x02\x12\x12\n" +
 	"\x0eLOG_LEVEL_WARN\x10\x03\x12\x13\n" +
 	"\x0fLOG_LEVEL_ERROR\x10\x04\x12\x11\n" +
-	"\rLOG_LEVEL_OFF\x10\x05*\x8c\x01\n" +
+	"\rLOG_LEVEL_OFF\x10\x05\x12\x16\n" +
+	"\x12LOG_LEVEL_CRITICAL\x10\x06*\x8c\x01\n" +
 	"\x0fDatabaseBackend\x12 \n" +
 	"\x1cDATABASE_BACKEND_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15DATABASE_BACKEND_NONE\x10\x01\x12\x1b\n" +
