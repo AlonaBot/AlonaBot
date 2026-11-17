@@ -74,6 +74,7 @@
 | goal-52 | T-05.4 | 延续调用与多轮等待 | T-05.2 | 已完成（PR #153） |
 | goal-127 | T-07.8 | 动态任务与调度持久化的协议和 Core 侧 | T-07.5、T-09.4 | 已完成（PR #169） |
 | goal-130 | T-08.14 | 配置项的选项来源 | T-04.12、T-06.1、T-08.11 | 已完成（PR #157） |
+| goal-157 | T-08.17 | 插件的 KV 与数据目录 | T-08.5、T-09.4 | 待派发 |
 | goal-84 | T-09.12 | WebUI 组件与组件图标 | T-07.7、T-09.1、T-09.4、T-13.1 | 已完成（PR #167） |
 | goal-69 | T-13.3 | 开发运行与热部署 | T-07.6、T-09.16、T-13.1、T-09.4 | 已完成（PR #171） |
 | goal-81 | T-16.1 | 插件测试套件基础 | T-05.2、T-13.2、T-09.4 | 已完成（PR #168） |
@@ -82,8 +83,10 @@
 | goal-18 | T-05.5 | 多进程事件流水线验收 | T-03.8、T-05.3、T-05.4 | 已完成（PR #162） |
 | goal-20 | T-06.2 | 父调用链、取消与背压 | T-03.6、T-05.3、T-06.1 | 已完成（PR #161） |
 | goal-128 | T-07.9 | 动态任务与暂停恢复的 SDK | T-04.12、T-07.8 | 已完成（PR #176） |
+| goal-151 | T-08.15 | 配置字段的回复示例 | T-08.11、T-08.14、T-09.12 | 待派发 |
 | goal-66 | T-09.10 | 日志管理 | T-02.1、T-03.1、T-07.6、T-09.4、T-09.12 | 已完成（PR #177） |
 | goal-92 | T-09.13 | 管理页所需的会话与上传接口 | T-09.1、T-09.4、T-09.12 | 已完成（PR #181） |
+| goal-149 | T-02.5 | CRITICAL 日志级别 | T-02.1、T-09.10 | 待派发 |
 | goal-14 | T-04.5 | 示例升级与 T-04 验收 | T-03.10、T-04.2、T-04.3、T-04.4、T-04.7、T-04.8、T-04.9、T-04.11、T-04.12、T-04.13 | 已完成（PR #191） |
 | goal-22 | T-06.4 | Session 清理与 Service 端到端 | T-06.2、T-06.3 | 已完成（PR #164） |
 | goal-55 | T-11.2 | 工具调用与用户确认 | T-03.8、T-06.2、T-08.8、T-11.1 | 已完成（PR #165） |
@@ -99,8 +102,20 @@
 | goal-139 | T-04.16 | SDK 按类别分包 | T-04.15 | 已完成（PR #199） |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 已完成（PR #187） |
 | goal-93 | T-09.14 | 配置、权限、工具策略与会话的管理 API | T-03.25、T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-08.14、T-09.6、T-09.12、T-11.1、T-11.3 | 已完成（PR #192） |
+| goal-150 | T-04.17 | 插件页面套件 | T-04.16、T-07.7 | 待派发 |
+| goal-152 | T-08.16 | 去掉配置版本与迁移，配置宽松载入 | T-08.11、T-08.12、T-09.14 | 待派发 |
+| goal-160 | T-08.18 | 配置文件的存储与管理 | T-08.14、T-09.14 | 待派发 |
+| goal-147 | T-09.19 | 诊断包 | T-09.10、T-09.14 | 待派发 |
+| goal-153 | T-09.20 | WebUI 组件的后台进程与 command.invoked | T-09.12、T-09.14、T-04.16 | 待派发 |
+| goal-154 | T-09.21 | 插件数据浏览 | T-09.14、T-08.5、T-08.17 | 等待前置（T-08.17） |
+| goal-155 | T-09.22 | WebUI 需要的补充管理 API | T-09.14、T-07.9、T-03.25、T-04.16 | 待派发 |
+| goal-158 | T-09.24 | 组件的 changelog | T-09.3、T-09.14 | 待派发 |
+| goal-148 | T-11.5 | 工具的副作用类别 | T-11.2、T-12.3、T-09.14 | 待派发 |
 | goal-140 | T-13.5 | 模块根包只保留库模式接口 | T-04.16 | 已完成（PR #200） |
+| goal-161 | T-04.18 | 配置文件的派发与 SDK | T-04.16、T-08.18 | 等待前置（T-08.18） |
+| goal-162 | T-04.19 | 平台与消息 | T-04.18 | 等待前置（T-04.18） |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
+| goal-163 | T-11.6 | 按配置文件的工具策略 | T-04.18、T-11.4 | 等待前置（T-04.18） |
 | goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 等待前置 |
 
 ## 第 1 波
@@ -5473,6 +5488,49 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 不做：管理 API（goal-93）；页面（goal-44）；`core.chats` 的查询（goal-131）；`llm.providers`（goal-83）；选项之间的级联；按来源校验已保存的值；用户与插件列表的内置来源。
 ```
 
+### goal-157 · T-08.17 插件的 KV 与数据目录
+
+状态：待派发。前置 T-08.5 与 T-09.4 已合并。2026-11-17 按 D-165 新增。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-157（切片 T-08.17：插件的 KV 与数据目录）。goal 目录 goal-157，分支 goal-157，worktree .worktrees/goal-157，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：新增 `sdk/kv`，在受管 SQLite 的保留表 `_alonabot_kv` 中提供键值存储；Core 在启动插件前建立 `<data_dir>/plugin_data/<id>/`，经 Bootstrap 的 `plugin_data_dir` 下发，SDK 以 `sdk.PluginDataDir()` 返回；卸载的 `--purge-data` 与 `--purge` 删除该目录。
+
+依据：PLAN T-08 步骤 14；CONTRACTS §1.1（Bootstrap）、§6.1、§9.3（uninstall）；WIRE-FORMAT §3.2；DECISIONS D-165；TEST-MATRIX V-137 的 SDK 与 Core 分项。
+
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/control.proto：Bootstrap 按 §5A 只追加 `string plugin_data_dir`；go generate 后的生成产物；contracts/wirespec_test.go 固定新编号
+- sdk/kv/（新包）、sdk/sqlitedb/（初始化时建保留表）、sdk/ 中读取 Bootstrap 与导出 PluginDataDir 的文件
+- internal/core/host 或 internal/core/process 中准备插件运行环境的位置（建立目录与权限）、internal/core/manage 中卸载清理的位置
+- internal/pluginkit（链接 sdk/kv 的插件按链接受管 SQLite 推出 prepare_effects）
+- examples/plugins/configdb：用 KV 与数据目录各写一处，作为示例
+- docs/plugin-guide.md：KV 与数据目录的用法
+- 上述的测试文件
+
+接口：
+- package kv
+  func Get(ctx context.Context, key string) (value []byte, ok bool, err error)
+  func Set(ctx context.Context, key string, value []byte) error
+  func Delete(ctx context.Context, key string) error
+  func List(ctx context.Context, prefix, cursor string, limit int) (Page, error)
+  type Page struct { Keys []string; Next string } // Next 为空表示没有更多
+  // 键为 1～512 字节的 UTF-8；值最大 1 MiB（命名常量）；ctx 取自 Handler 或生命周期回调，使用本 Session 的受管 SQLite
+- package sdk：func PluginDataDir() string // Session 就绪后可用，之前调用 panic，消息为英文
+
+行为：
+- `_alonabot_kv(key TEXT PRIMARY KEY, value BLOB NOT NULL, updated_at INTEGER NOT NULL)` 随受管 SQLite 初始化建立，不占用插件的迁移 ID，候选副本与回退照常包含它；没有受管 SQLite 的插件调用 kv 返回 FAILED_PRECONDITION。
+- 目录权限只有运行账号（Windows 用与状态库相同的 ACL）；Core 不读写目录内容。只卸载与 disable 保留目录；`--purge-data` 与 `--purge` 在卸载确认的对象列表中列出并删除它。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/plugin_cli_e2e_test.go 新增一个子测试（unix，真实 Core 与 configdb 示例）：示例写入 KV 与数据目录中的文件，restart 后仍能读到；`uninstall --purge-data` 之后目录不存在，重装后 KV 为空。
+- 本地自测（*_local_test.go，结果写入 PR）：键与值的上限、List 的前缀与分页游标、没有受管 SQLite 时的错误、PluginDataDir 就绪前 panic、只卸载保留目录、目录权限；Windows 交叉编译。
+
+完成条件：gofmt -l 无输出；go generate ./... 之后工作区没有变化；go vet ./...；go test -race ./...；go build ./...；CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./...。
+
+不做：管理 API 的 KV 与文件浏览（T-09.21）；WebUI 的存储视图（goal-156）；KV 的过期与事务。
+```
+
 ### goal-84 · T-09.12 WebUI 组件与组件图标
 
 状态：已完成（[PR #167](https://github.com/AlonaBot/AlonaBot/pull/167)，合并提交 `3a9b4af`），证据见 TEST-MATRIX §3.2。合入：`manage.AdminAPIMajor = 1`；`(*manage.Service).WebUI()`；根包选项 `alonabot.WebUI(fsys fs.FS)`（开发 WebUI，D-140 不做 Admin API 版本检查）；WebUI 静态托管（保留 /api/ 与内部路径，无扩展名的不存在路径回退 index.html，未安装时 503）与认证的组件图标端点；`spec/ADMIN-API.md` 登记现有管理端点。
@@ -6097,6 +6155,43 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 不做：Core 协议、状态表、调度器与卸载清理（goal-127）；Service 的权限 API；plugintest 的动态任务立即触发（goal-82）；官方 Agent 的定时任务（goal-63）；新增任务管理页面或持久化执行队列。
 ```
 
+### goal-151 · T-08.15 配置字段的回复示例
+
+状态：待派发。前置 T-08.11、T-08.14 与 T-09.12 已合并。2026-11-17 按 D-160 新增；预览由 WebUI 渲染（goal-44），本切片只做检查、随包校验与图片的提供。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-151（切片 T-08.15：配置字段的回复示例）。goal 目录 goal-151，分支 goal-151，worktree .worktrees/goal-151，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：`config_schema.json` 的字段可以带 `example`；`alonabot check`、`build` 与 `pack` 校验它与 i18n 覆盖，`examples/` 下被引用的图片随包校验；Core 经 `GET /api/v1/packages/{id}/examples/{path}` 提供 Active 代次中被引用的图片。
+
+依据：PLAN T-08 步骤 12；CONTRACTS §5.1（`example` 与字段路径）、§5.3（i18n 覆盖）、§7.5；ADMIN-API §3.3 之后的 examples 端点说明；DECISIONS D-160；TEST-MATRIX V-131 的检查与 API 分项。
+
+范围（只新增或修改这些）：
+- contracts/configschema/：解析与检查 example（schema.go 或新文件 example.go）、i18n 覆盖（i18n.go）
+- internal/pluginkit/：check、build 与 pack 校验并打包 examples/ 中被引用的文件
+- internal/core/packages/preflight.go：安装与更新时校验被引用的图片
+- internal/core/manage/：examples 端点
+- examples/plugins/showcase：给 greeting 加一个文字与图片的示例
+- docs/plugin-guide.md：example 的写法
+- 上述的测试文件
+
+接口（contracts/configschema）：
+  type Example struct { Input string; Reply []ExampleSegment; Condition map[string]json.RawMessage }
+  type ExampleSegment struct { Text string; Image string; Alt string } // Text 与 Image 恰有一个
+  Field 增加 Examples []Example
+  func (s *Schema) ExampleImages() []string // 全部被引用的 examples/ 相对路径，去重排序
+
+行为：按 CONTRACTS §5.1 检查结构、片段、占位符（`{字段路径}`、`{字段.$key}`、`{{`、`}}`）与示例条件引用的字段及其类型，错误带 JSON 路径；图片只接受 PNG、JPEG、WebP、GIF，按内容核对扩展名。端点要求管理认证，只提供 Active 代次 schema 中被引用的路径，响应头同组件图标；未引用、缺失、目录或链接返回 404。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/manage_e2e_test.go 新增一个子测试（unix）：showcase 装上后 examples 端点返回图片与图标相同的安全头，未引用的路径 404。
+- 本地自测（*_local_test.go，结果写入 PR）：V-131 的检查分项逐项（每类错误的 JSON 路径）、占位符与花括号、i18n 覆盖不同形、图片扩展名与内容不符。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+
+不做：WebUI 的预览渲染（goal-44）；预览的 html 类型（未确定）。
+```
+
 ### goal-66 · T-09.10 日志管理
 
 状态：已完成（[PR #177](https://github.com/AlonaBot/AlonaBot/pull/177)，合并提交 `99efcd1`），证据见 TEST-MATRIX §3.2。合入：服务 `sdk.log.set_level`（`LogSetLevelRequest/Response`）；`logging.Options.BufferRecords`、`(*Output).Recent`、`(*Output).Subscribe`、`logging.Query`、`logging.Record`；管理 API 的 `/api/v1/logs/recent`、`/stream`、`/history` 与日志级别修改，`alonabot logs` 与日志级别命令；组件日志的可信来源类别。以下为派发时的语句。
@@ -6270,6 +6365,39 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
 ```
 
 ## 第 14 波
+
+### goal-149 · T-02.5 CRITICAL 日志级别
+
+状态：待派发。前置 T-02.1 与 T-09.10 已合并。2026-11-17 按 D-158 新增。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-149（切片 T-02.5：CRITICAL 日志级别）。goal 目录 goal-149，分支 goal-149，worktree .worktrees/goal-149，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：日志级别在 ERROR 之上增加 CRITICAL：协议枚举、SDK 常量与输出、Core 的解析、过滤、控制台与最近记录、设置与 CLI 都接受它；Core 在 D-158 列出的情况改用 CRITICAL。
+
+依据：PLAN T-02 步骤 1（日志）；CONTRACTS §14.1、§14.3；WIRE-FORMAT §3.2；DECISIONS D-158；TEST-MATRIX V-129。
+
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/control.proto：LogLevel 追加 `LOG_LEVEL_CRITICAL = 6`（OFF 保持 5）；生成产物；contracts/wirespec_test.go
+- sdk/log.go（或现有日志文件）：导出常量与级别文本
+- internal/core/logging/：解析、过滤、控制台、JSON 行与最近记录
+- internal/core/settings/ 与 internal/core/manage/log_api.go：log.level、log.sources 与 PUT /logs/levels 接受 critical
+- cmd/alonabot/：`--log-level`、`log-level` 与 `logs --level` 接受 critical
+- D-158 列出的 Core 记录位置：状态库无法写入或核对失败、core_config.json 不是合法 JSON 而拒绝启动、core_config.json 写回失败、提交后的恢复失败、因故障退出前的最后一条
+- 上述的测试文件
+
+接口：package sdk：const LevelCritical = slog.Level(12)
+
+行为：级别由低到高 DEBUG、INFO、WARN、ERROR、CRITICAL、OFF；JSON 行与控制台写作 `CRITICAL`；按来源设置为 critical 时只输出 CRITICAL；Bootstrap 下发 CRITICAL 时 SDK 按它过滤。插件崩溃与自动停用仍是 ERROR。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/logs_e2e_test.go 新增一个子测试：测试插件以 sdk.LevelCritical 记录一条，`logs --level critical` 只列出它；全局设为 critical 后 ERROR 不再出现在最近记录中。
+- 本地自测（*_local_test.go，结果写入 PR）：各处解析 critical 与非法值；控制台文本；D-158 的每个记录点改用 CRITICAL。
+
+完成条件：gofmt -l 无输出；go generate ./... 之后工作区没有变化；go vet ./...；go test -race ./...；go build ./...。
+
+不做：日志页的颜色与计数（goal-94）；把插件崩溃改为 CRITICAL。
+```
 
 ### goal-14 · T-04.5 示例升级与 T-04 验收
 
@@ -7443,6 +7571,290 @@ internal/core/state
 
 ## 第 18 波
 
+### goal-150 · T-04.17 插件页面套件
+
+状态：待派发。前置 T-04.16 与 T-07.7 已合并。2026-11-17 按 D-159 新增；桥的 WebUI 一侧由 goal-44 实现。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-150（切片 T-04.17：插件页面套件）。goal 目录 goal-150，分支 goal-150，worktree .worktrees/goal-150，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：新增 `sdk/page`：以 embed 提供 `kit.css` 与 `kit.js`，插件把它挂在自己的 HTTP 路由下，页面引用后自动跟随 WebUI 的明暗、令牌与语言，并能请求本插件的路由。
+
+依据：PLAN T-04 步骤 17；ADMIN-API §7（hello、theme、locale、shortcut 与令牌变量表）；DECISIONS D-84、D-159、D-169；TEST-MATRIX V-130 的 SDK 分项。
+
+范围（只新增或修改这些）：
+- sdk/page/（新包）：page.go（包文档与 Handler）、kit.css、kit.js
+- examples/plugins/showcase：增加一个用套件的页面路由，作为示例
+- docs/plugin-guide.md：插件页面与套件的用法
+允许的依赖：无新增；kit.js 与 kit.css 不依赖第三方库。
+
+接口：
+- package page
+  func Handler() http.Handler // 只响应路径末段为 kit.css 与 kit.js 的 GET，其余 404；Content-Type 正确，带基于 SDK 版本的 ETag
+- kit.js 在 window.AlonaBot 上提供：request(method, path, body?) → Promise<Response 数据>（经桥请求本插件路由）；t(key, args?) → string（取当前语言的插件文案）；onTheme(fn)、onLocale(fn)
+
+行为：
+- kit.css 只使用 ADMIN-API §7 的 `--ab-*` 变量，给按钮、输入框、选择框、表格、标签与卡片写好样式；没有收到令牌时使用与 goal-166 浅色相同的缺省值（--ab-bg #F3F6F9、--ab-surface #FFFFFF、--ab-surface-2 #F4F7FA、--ab-line #DFE5EC、--ab-text #1F2A44、--ab-text-muted #5E6B82、--ab-accent #0E7C92、--ab-accent-soft #E2F5F8、--ab-success #1F9D6B、--ab-warning #D99A06、--ab-danger #F4505A、--ab-critical #C084FC，圆角 6/10/16px，字体同 goal-166）。
+- kit.js 加载后向父窗口发送 `hello`，把收到的令牌写到 :root 并设置 data-theme；监听 theme 与 locale 事件；捕获 ⌘K/Ctrl+K 并发送 `shortcut`。不在 iframe 中打开时只应用缺省值，不报错。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：无（D-86：sdk/ 不提交测试）。
+- 本地自测（结果写入 PR）：Handler 的路径、类型与 ETag；用 showcase 的页面在浏览器中直接打开（缺省值）与在模拟父窗口中打开（发送 hello、令牌写入、主题与语言事件、⌘K 转发），写明浏览器与版本。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+
+不做：WebUI 一侧的桥（goal-44）；把官方 WebUI 的组件库提供给插件。
+```
+
+### goal-152 · T-08.16 去掉配置版本与迁移，配置宽松载入
+
+状态：待派发。前置 T-08.11、T-08.12 与 T-09.14 已合并。2026-11-17 按 D-161 新增。改动面大，派发前确认同一波的 goal-160 与 goal-151 尚未改 `contracts/configschema/` 的同一批文件，否则先合并它们再派发本条。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-152（切片 T-08.16：去掉配置版本与迁移，配置宽松载入）。goal 目录 goal-152，分支 goal-152，worktree .worktrees/goal-152，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：删除配置的 `$version`、`$migrations` 与全部版本字段，改为按 CONTRACTS §5.5 宽松载入：缺失补 default、能无损转换的转换、不能转换的恢复 default、移除失效的模板元素，并产出校正记录；管理 API 返回校正记录并提供清理入口。
+
+依据：PLAN T-08 步骤 13；CONTRACTS §5.1、§5.2、§5.5、§15.1；WIRE-FORMAT §3.2、§3.3；ADMIN-API §12.1、§13、§14；DECISIONS D-161；TEST-MATRIX V-37、V-38、V-88、V-132。
+
+范围（只新增或修改这些）：
+- contracts/configschema/：删除 migration.go、migration_path.go 及其检查；新增校正（correct.go）；prepare.go 改为先 OnConfigLoad 再校正
+- contracts/manifest/：删除 config_version
+- contracts/proto：Bootstrap 的 previous_config_version、target_config_version 与 Register 的 candidate_config_version 改为 reserved；Register 追加 `repeated ConfigCorrection config_corrections`；生成产物与 wirespec_test.go
+- sdk/：OnConfigLoad 的签名与调用；internal/core/：代次元数据保存校正记录，settings 与 Adapter 实例的校正（不改写 core_config.json），管理 API 的校正记录与三个 prune 端点、GET /api/v1/core/settings/corrections
+- 全部示例、Agent、官方 Adapter 与测试夹具中的 `$version`、`$migrations` 与 OnConfigLoad 调用；docs/plugin-guide.md、docs/development.md
+- 上述的测试文件
+
+接口：
+- contracts/configschema：type Correction struct { Path string; Reason string /* converted、reset、removed */; Old json.RawMessage /* secret 字段为空 */ }；func (s *Schema) Correct(raw json.RawMessage) (json.RawMessage, []Correction, error)
+- sdk：func (p *Plugin) OnConfigLoad(fn func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error))
+
+行为：未知键保留但不生效；`core_config.json` 不是合法 JSON 对象时照旧拒绝启动（CRITICAL 由 goal-149 负责）；其余不合法的值按 §5.5 校正并记 WARN；清理只删除被列为无效的项。首次发布前不留兼容：旧写法的 `$version` 按未知键处理。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/manage_e2e_test.go 新增一个子测试（unix）：插件配置中一个字段类型不符、一个未知键，插件照常启动，管理 API 列出 reset 的校正记录与无效路径，prune 后未知键被删除；改写既有测试中的 `$version` 写法，断言不变。
+- 本地自测（*_local_test.go，结果写入 PR）：V-132 的各类校正（数字与字符串转换、bool、list 与 template_list 元素）、secret 不记原值、Adapter 实例与 Core 设置的校正、V-37 与 V-88 改写后的分项。
+
+完成条件：gofmt -l 无输出；go generate ./... 之后工作区没有变化；go vet ./...；go test -race ./...；go build ./...；CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./...；`grep -rn '\$version\|\$migrations' --include=*.go --include=*.json .` 只剩 DECISIONS 与历史证据中的文字。
+
+不做：WebUI 的提示与清理按钮（goal-44）；配置文件的覆盖值（goal-160）。
+```
+
+### goal-160 · T-08.18 配置文件的存储与管理
+
+状态：待派发。前置 T-08.14 与 T-09.14 已合并。2026-11-17 按 D-168 新增；派发与 SDK 合并在 goal-161。与同一波的 goal-152 都改 contracts/configschema/，两者不同时派发，先合并的一条之后再派发另一条。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-160（切片 T-08.18：配置文件的存储与管理）。goal 目录 goal-160，分支 goal-160，worktree .worktrees/goal-160，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：在 Core 状态库保存配置文件、会话的指定、字段覆盖值、插件开关、工具策略覆盖与平台设置；按 CONTRACTS §5.6 解析会话所用的配置文件；schema 接受 `profile` 标记；实现 ADMIN-API §23 与 `alonabot profile`。
+
+依据：PLAN T-08 步骤 15；CONTRACTS §5.1（`profile`）、§5.6、§9.3（uninstall）、§15.1（`reply`）；ADMIN-API §23；DECISIONS D-168；TEST-MATRIX V-140。
+
+范围（只新增或修改这些）：
+- internal/core/state/schema.sql 与新文件 profile.go（并入初始迁移，不新增迁移）
+- 新包 internal/core/profile/（解析与管理服务层）
+- contracts/configschema/：`profile` 键的位置检查与按字段路径校验单个值
+- internal/core/settings/：`reply` 键的解析、补缺与写回
+- internal/core/manage/：ADMIN-API §23 的端点；卸载 `--purge` 与删除 Adapter 实例时清理对应记录
+- cmd/alonabot/：profile 子命令
+- 上述的测试文件
+
+接口（internal/core/profile）：
+  type Profile struct { ID, Name, Color string }
+  func (s *Service) Resolve(instance, session string) Profile // 单独指定 → 实例缺省 → default
+  func (s *Service) Overrides(pluginID string) map[string]map[string]json.RawMessage // 配置文件 ID → 字段路径 → 值，只含有效项
+  以及 ADMIN-API §23 各端点对应的方法（名字自定，不导出到 internal/core 之外）
+
+行为：`default` 不能删除、没有自己的覆盖值与平台设置，平台设置读写 core_config.json 的 command_prefixes 与 reply；写入覆盖值时用该插件 Active 代次的 schema 校验，插件更新后失效的项保留并在 GET 中列为 invalid；会话数按聊天目录计算；复制配置文件不复制会话的指定。本切片只存储与管理，派发、下发与 SDK 合并不在这里。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/manage_e2e_test.go 新增一个子测试（unix）：经 CLI 新建配置文件、给天气类测试插件的标记字段写入覆盖值、指定实例缺省与一个会话，GET 返回对应的指定与覆盖；写入未标记字段返回 400；删除配置文件后指定回到 default。
+- 本地自测（*_local_test.go，结果写入 PR）：V-140 的全部分项。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+
+不做：InvocationContext 与下发、插件开关的派发过滤（goal-161）；命令前缀与回复方式的执行（goal-162）；工具策略覆盖的生效（goal-163）；页面（goal-165）。
+```
+
+### goal-147 · T-09.19 诊断包
+
+状态：待派发。前置 T-09.10 与 T-09.14 已合并。2026-11-17 按 D-156 新增；页面在 goal-94。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-147（切片 T-09.19：诊断包）。goal 目录 goal-147，分支 goal-147，worktree .worktrees/goal-147，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：按 CONTRACTS §14.7 生成诊断包 zip：日志、设置与配置、组件与环境三组内容可以分别取消，缺省脱敏；管理 API `POST /api/v1/diagnostics` 与 `alonabot diagnose` 共用同一实现，Core 未运行时 CLI 只读数据目录生成。
+
+依据：PLAN T-09 步骤 7（诊断包）；CONTRACTS §14.5、§14.6、§14.7；ADMIN-API §19；DECISIONS D-156；TEST-MATRIX V-127 的 Core、API 与 CLI 分项。
+
+范围（只新增或修改这些）：
+- 新包 internal/core/diagnostics/（打包与脱敏）
+- internal/core/manage/：diagnostics 端点
+- cmd/alonabot/：diagnose 命令
+- 上述的测试文件
+
+接口：
+- package diagnostics：type Options struct { Since time.Duration; Logs, Settings, Components, Redact bool }；func Write(ctx context.Context, w io.Writer, src Source, opts Options) error（Source 是运行中 Core 与只读数据目录的两种实现，名字自定）
+- CLI：`alonabot diagnose [--since 24h] [--no-logs] [--no-settings] [--no-components] [--no-redact] [-o 文件]`，不给 -o 时写入当前目录的 `alonabot-diagnostics-<时间>.zip`
+
+行为：根目录 manifest.json 记录格式版本 1、生成时间、时间范围、各组是否包含、是否脱敏与文件列表；不包含状态库、受管 SQLite、媒体、secret 存储、admin_token 与安装包；脱敏规则按 §14.7；生成失败不留下不完整的文件；CLI 在 Core 未运行时不写数据目录，组件运行状态记为未运行。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/logs_e2e_test.go 新增一个子测试（unix）：带一个 secret 配置的测试插件运行后，API 生成的诊断包含三组文件且 secret 为 [REDACTED]；停止 Core 后 diagnose 同样生成，组件为未运行。
+- 本地自测（*_local_test.go，结果写入 PR）：§14.7 的每条日志遮盖规则、since 非法、三组都取消、写入失败时不留文件。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./...。
+
+不做：日志页的导出对话框（goal-94）；上传诊断包到任何服务。
+```
+
+### goal-153 · T-09.20 WebUI 组件的后台进程与 command.invoked
+
+状态：待派发。前置 T-09.12、T-09.14 与 T-04.16 已合并。2026-11-17 按 D-162 新增；官方 WebUI 的后台实现在 goal-156。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-153（切片 T-09.20：WebUI 组件的后台进程与 command.invoked）。goal 目录 goal-153，分支 goal-153，worktree .worktrees/goal-153，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：`role: webui` 的组件可以带 Go 入口，这时它另有一个与插件相同的进程（可以使用配置、受管 SQLite、事件路由、Hook 与 HTTP 路由），HTTP 路由要求管理会话、与静态文件同源；Core 在命令层得到 Handler 结果后生成标准事件 `command.invoked`；插件源 `index.json` 的格式检查。
+
+依据：PLAN T-09 步骤 7（WebUI 进程）；CONTRACTS §7.5、§8（标准事件）、§9.1（WebUI）、§9.2（插件源）；DECISIONS D-162；TEST-MATRIX V-133。
+
+范围（只新增或修改这些）：
+- contracts/manifest 与 internal/pluginkit：WebUI 有入口时按插件补全 manifest 并按平台出包，没有入口时照旧 any
+- internal/core/manage、internal/core/webhost：WebUI 进程的启停随组件启停；其 HTTP 路由挂在管理源下并要求管理会话
+- internal/core/router 或 bus：command.invoked（plugin_id、route_id、command_name、result 为 ok、error 或 denied、duration_ms），经 Event Bus 交给订阅者，不进入事件路由
+- sdk/：command.invoked 的事件常量与载荷类型
+- contracts/：index.json 的类型与解析（供 goal-156 使用）
+- examples/：一个带 Go 入口的最小 WebUI 测试组件（只放在测试夹具中，不作为官方组件）
+- 上述的测试文件
+
+行为：WebUI 进程与插件同样经 Bootstrap、REGISTER 与 Activated，崩溃按插件规则恢复；没有入口的 WebUI 行为不变；command.invoked 不包含参数与聊天内容。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/manage_e2e_test.go 新增一个子测试（unix）：安装带入口的 WebUI 测试组件后，未登录请求其路由被拒、登录后成功；发送一条命令后该组件收到 command.invoked。
+- 本地自测（*_local_test.go，结果写入 PR）：V-133 的其余分项（denied 与 error 的结果、没有入口的 WebUI、index.json 的非法写法）。
+
+完成条件：gofmt -l 无输出；go generate ./... 之后工作区没有变化；go vet ./...；go test -race ./...；go build ./...。
+
+不做：官方 WebUI 的统计与商店（goal-156）；Core 的图表 API。
+```
+
+### goal-154 · T-09.21 插件数据浏览
+
+状态：等待前置（T-08.17）。2026-11-17 按 D-163、D-165 新增。目标、依据与要点由 PLAN T-09 步骤 7（数据浏览）确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-154（切片 T-09.21：插件数据浏览）。goal 目录 goal-154，分支 goal-154，worktree .worktrees/goal-154，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：实现 ADMIN-API §21：受管 SQLite 的表与行的浏览、增删改，KV 与数据目录文件的管理，整个插件数据的导出与清空。
+
+依据：PLAN T-09 步骤 7（数据浏览）；CONTRACTS §6.1、§6.3；ADMIN-API §21；DECISIONS D-163、D-165；TEST-MATRIX V-134、V-137 的 API 分项。
+
+要点：
+- 只作用于受管 SQLite 与 `<data_dir>/plugin_data/<id>/`；generation 参数缺省为 Active，保留代次的副本只读；以 `_alonabot_` 开头的表与没有主键的视图不可写。
+- 行的写入在插件运行时与插件共用同一个数据库文件的 WAL；导出用 SQLite Backup API 取一致快照，与数据目录一起打包 zip。
+- 路径规则：拒绝空段、`.`、`..`、绝对路径与反斜杠，不跟随符号链接；上传先写临时文件再改名。
+- 清空删除全部可写表的行、KV 与数据目录中的全部文件，保留表结构，要求确认。
+
+不做：页面（goal-44 的数据库视图、goal-156 的存储视图）。
+```
+
+### goal-155 · T-09.22 WebUI 需要的补充管理 API
+
+状态：待派发。前置 T-09.14、T-07.9、T-03.25 与 T-04.16 已合并。2026-11-17 按 D-164 新增。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-155（切片 T-09.22：WebUI 需要的补充管理 API）。goal 目录 goal-155，分支 goal-155，worktree .worktrees/goal-155，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：实现 ADMIN-API §20 的端点：保留代次列表、静态任务的列出与暂停恢复、Adapter 实例列表、聊天目录查询、更换管理令牌，以及组件列表追加 `pages`（插件声明的页面与按语言的标题）。
+
+依据：PLAN T-09 步骤 7（补充 API）；CONTRACTS §4.3、§7.4、§8；ADMIN-API §20；DECISIONS D-164；TEST-MATRIX V-135。
+
+范围（只新增或修改这些）：
+- internal/core/manage/ 与 internal/core/adminauth/：§20 的端点
+- sdk/：路由的 `.Page(title)`，注册描述携带 page_title；contracts/proto 按 §5A 追加字段、生成产物与 wirespec_test.go
+- contracts/i18n：`pages` 文案
+- 上述的测试文件
+
+接口：sdk 的 HTTP 路由构建器增加 `Page(title string)`（title 为英文源文案，i18n 覆盖在 `pages` 下）。
+
+行为：按 ADMIN-API §20 的请求与响应；更换令牌先按 §12.2 再认证，删除全部管理会话（包括当前会话）；聊天目录查询支持 q、adapter_id、chat_type 与分页。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/manage_e2e_test.go 新增一个子测试（unix）：暂停一个静态任务后到期不触发、恢复后触发；更换令牌后旧会话被拒、新令牌可登录。
+- 本地自测（*_local_test.go，结果写入 PR）：V-135 的其余分项。
+
+完成条件：gofmt -l 无输出；go generate ./... 之后工作区没有变化；go vet ./...；go test -race ./...；go build ./...。
+
+不做：页面（goal-43、goal-44）；数据浏览（goal-154）；changelog（goal-158）。
+```
+
+### goal-158 · T-09.24 组件的 changelog
+
+状态：待派发。前置 T-09.3 与 T-09.14 已合并。2026-11-17 按 D-166 新增。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-158（切片 T-09.24：组件的 changelog）。goal 目录 goal-158，分支 goal-158，worktree .worktrees/goal-158，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：组件可以带 `CHANGELOG.md`（Keep a Changelog）或 `changelog/<版本>/<locale>.md`；check、build 与 pack 检查并打包；管理 API 按已安装的版本提供组件与 Core 自身的 changelog。
+
+依据：PLAN T-09 步骤 7（changelog）；CONTRACTS §9.1；ADMIN-API §22；DECISIONS D-166；TEST-MATRIX V-138。
+
+范围（只新增或修改这些）：
+- internal/pluginkit/：检查与打包
+- internal/core/packages/preflight.go：随包校验
+- internal/core/manage/：两个 changelog 端点
+- 仓库根目录 CHANGELOG.md（新建，Keep a Changelog，[Unreleased] 一节）与把它编进可执行文件的位置
+- examples/plugins/showcase：加一个 CHANGELOG.md
+- 上述的测试文件
+
+行为：两种形式同时出现、文件不是 UTF-8、版本目录名不合规或高于 manifest 的 version、缺少 en-US.md 时报错并指出路径；`[Unreleased]` 不返回；按请求语言选择，缺少时回落到 en-US；Markdown 原样返回，Core 不渲染。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/manage_e2e_test.go 新增一个子测试（unix）：showcase 装上后 changelog 端点按版本返回条目，不含 [Unreleased]。
+- 本地自测（*_local_test.go，结果写入 PR）：V-138 的检查分项与目录形式的语言回落。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+
+不做：显示与「已看过」的记录（goal-156，Core 不记录）。
+```
+
+### goal-148 · T-11.5 工具的副作用类别
+
+状态：待派发。前置 T-11.2、T-12.3 与 T-09.14 已合并。2026-11-17 按 D-157 新增；页面在 goal-44。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-148（切片 T-11.5：工具的副作用类别）。goal 目录 goal-148，分支 goal-148，worktree .worktrees/goal-148，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：工具可以声明副作用类别 read_only、write 或 destructive（不声明为 unspecified）；注册、目录、确认记录与管理 API 带上类别；管理 API 的策略修改可以一次提交多项；官方 Agent 按 MCP 工具注解换算类别。类别不参与策略判断。
+
+依据：PLAN T-11 步骤 7；CONTRACTS §13.1；WIRE-FORMAT §3.3、§3.5；ADMIN-API §18；DECISIONS D-157；TEST-MATRIX V-128 的 Core、SDK、Agent 与 API 分项。
+
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/tool.proto：ToolEffect（UNSPECIFIED、READ_ONLY、WRITE、DESTRUCTIVE）与 ToolSpec、ToolInfo、ToolConfirmRequest 的 `effect`；生成产物；contracts/wirespec_test.go
+- internal/core/tool/、internal/core/state/tool.go：保存类别，confirm 记录操作的类别（同名以最近一次为准）
+- internal/core/manage/tool_api.go：目录返回类别，PUT 接受 `{"items":[...]}` 并在一个事务内写入
+- sdk/tool/tool.go 与 sdk/service/service.go：类别常量与构建器方法
+- agent/mcp.go：按注解换算类别并在 confirm 中带上
+- 上述的测试文件
+
+接口：
+- package tool：type Effect int；const ( Unspecified Effect = iota; ReadOnly; Write; Destructive )
+- package service：func (s *Builder[In, Out]) Effect(e tool.Effect) *Builder[In, Out] // 在 Tool 之前调用时 Collect 报错
+- SDK 的确认调用增加类别参数（随现有 confirm 函数追加一个 tool.Effect 参数，同步全部调用方）
+
+行为：MCP 注解换算：没有 annotations 为 unspecified；readOnlyHint 为 true 为 read_only；否则 destructiveHint 为 false 为 write，为 true 或缺省为 destructive。非法枚举值使注册失败。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：agent/tools_test.go 新增一个子测试：带三种注解的 MCP 服务器经 confirm 记录的类别符合换算；cmd/alonabot/manage_e2e_test.go 改写既有的工具策略子测试为批量 PUT，断言目录中的类别。多列理由：Agent 的换算与 Core 的批量写入在两个进程中。
+- 本地自测（*_local_test.go，结果写入 PR）：V-128 的其余分项（Effect 在 Tool 之前、非法枚举、批量中一项不合法时整批不写）。
+
+完成条件：gofmt -l 无输出；go generate ./... 之后工作区没有变化；go vet ./...；go test -race ./...；go build ./...。
+
+不做：权限页的按类别显示与批量设置（goal-44）；按类别自动决定策略。
+```
+
 ### goal-140 · T-13.5 模块根包只保留库模式接口
 
 状态：已完成（[PR #200](https://github.com/AlonaBot/AlonaBot/pull/200)，合并提交 `2e5ac2b`），证据见 TEST-MATRIX §3.2。合入：`internal/app` 的 `Options`、`Component`（字段不导出，由 `PluginComponent`、`AdapterComponent`、`ExecutableComponent` 构造并保留角色）、`Start(ctx, Options)` 与 `Core`（`Wait`、`Restart`、`RestartInstance`、`ReloadSettings`）；根包只留 `Run`、`Start`、`*Core`、`Wait` 与 `Plugin`、`Adapter`、`WebUI`、`DataDir`、`Args`、`Listen`、`LogLevel`、`LogFormat`，`type Option func(*app.Options)`；cmd/alonabot 改用 `internal/app`，不再 import 根包；装配、内部服务、候选与 WebUI 的 9 个集成测试移入 `internal/app`。审查追加的修复：语句原定的 `Component` 导出字段分不出 nil Adapter 与 nil Plugin，改为构造函数，两者的错误文本与移动前相同（FIX-2）；下面语句中的接口段已按此修订。
@@ -7512,6 +7924,26 @@ internal/core/state
 
 ## 第 19 波
 
+### goal-161 · T-04.18 配置文件的派发与 SDK
+
+状态：等待前置（T-08.18）。2026-11-17 按 D-168 新增。目标、依据与要点由 PLAN T-04 步骤 18 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-161（切片 T-04.18：配置文件的派发与 SDK）。goal 目录 goal-161，分支 goal-161，worktree .worktrees/goal-161，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：派发时按会话解析配置文件，InvocationContext 带 `profile_id`；Bootstrap 与 `sdk.profile.set_overrides` 下发插件的覆盖值，Handler 中的 `c.Config()` 合并；配置文件关闭的插件不接收该会话的派发；提供 `core.profile.list`、`current`、`assign` 与 `set`。
+
+依据：PLAN T-04 步骤 18；CONTRACTS §5.6；WIRE-FORMAT §3.2、§3.5、§4；DECISIONS D-168；TEST-MATRIX V-141。
+
+要点：
+- InvocationContext 追加 `string profile_id = 7`，Bootstrap 追加 `profile_overrides_json`；`sdk.profile.set_overrides` 整体替换 SDK 中的覆盖值，失败按 Session 失败处理。
+- `c.Config()` 合并本次调用的覆盖值，`p.Config()` 与 `s.Config()` 不变；同一调用内不变。
+- 关闭插件的会话：命令按禁用处理，文本匹配、事件路由与 Raw 跳过；Service 调用、定时任务与后台发送不受影响。
+- `core.profile.set` 只接受调用插件自己写了 `profile` 的字段；会话使用 default 时写入 Pending 并在根调用结束后 reload；assign 与 set 要求 Core Admin。
+
+不做：命令前缀与回复方式（goal-162）；工具策略（goal-163）；Agent 的命令（goal-164）。
+```
+
 ### goal-45 · T-09.11 正式流程故障注入与 T-09 验收
 
 状态：等待前置（T-09.9、T-09.15）。T-09.3（PR #194，`e9ff45e`）、T-09.7（PR #187，`864819e`）、T-09.10（PR #177）、T-09.12（PR #167）已合并；T-09.9（goal-44）与 T-09.15（goal-94）属 WebUI 章节，未在本轮 core/agent 推进范围内派发，本切片因此阻塞，待两者合并后由审查者核对语句。语句中 goal-38～goal-44、goal-66、goal-84、goal-92～goal-94 提供的命令与 API 只写名字；合并后由审查者核对，再改为待派发。
@@ -7555,6 +7987,43 @@ internal/core/state
 
 ## 第 20 波
 
+### goal-162 · T-04.19 平台与消息
+
+状态：等待前置（T-04.18）。2026-11-17 按 D-168 新增。目标、依据与要点由 PLAN T-04 步骤 19 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-162（切片 T-04.19：平台与消息）。goal 目录 goal-162，分支 goal-162，worktree .worktrees/goal-162，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：命令前缀按会话所用的配置文件；删除 `command_prefixes_by_instance`；Core 在发送管道中为回复加上提及、引用、前缀与合并转发。
+
+依据：PLAN T-04 步骤 19；CONTRACTS §2.2、§5.6（平台设置）、§15.1；ADMIN-API §13.1、§23；DECISIONS D-168；TEST-MATRIX V-87、V-142。
+
+要点：
+- 删除 `command_prefixes_by_instance` 的解析、保存与 `GET/PUT /api/v1/core/command-prefixes`，同步 docs/development.md 与 V-87 的测试；`core_config.json` 增加 `reply`。
+- 回复只指处理入站 message.created 的调用（及其延续调用）发往该消息所在会话的消息；提及、引用与前缀只加在第一条，记住它的平台消息 ID 以便 Edit 保留提及与前缀；加上后超过单条上限时不加提及与前缀，引用照加；在出站 Hook 之前加上。
+- forward_threshold 为正数且目标实例声明 `message.forward` 时，超过阈值的消息改为一个 forward 片段。
+
+不做：配置文件的存储与 API（goal-160）；页面（goal-165）。
+```
+
+### goal-163 · T-11.6 按配置文件的工具策略
+
+状态：等待前置（T-04.18）。2026-11-17 按 D-168 新增。目标、依据与要点由 PLAN T-11 步骤 8 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-163（切片 T-11.6：按配置文件的工具策略）。goal 目录 goal-163，分支 goal-163，worktree .worktrees/goal-163，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：工具策略先取调用所在会话的配置文件中的覆盖，再取全局策略；配置文件关闭了工具所属插件时视为 deny；`core.tool.list` 返回按本次调用生效的策略。
+
+依据：PLAN T-11 步骤 8；CONTRACTS §5.6、§13.1；ADMIN-API §23（tools）；DECISIONS D-168；TEST-MATRIX V-143。
+
+要点：
+- 覆盖可以针对工具（`plugin_id/service`）与 `core.tool.confirm` 的操作（插件 ID 与操作名）；inherit 删除覆盖。
+- 管理服务层与 ADMIN-API §23 的 tools 接口共用；全局策略的接口（§18）不变。
+
+不做：配置文件的存储（goal-160）；页面（goal-165）。
+```
+
 ### goal-141 · T-13.6 CLI 参数从简
 
 状态：等待前置（T-14.3）。T-13.5（[PR #200](https://github.com/AlonaBot/AlonaBot/pull/200)，合并提交 `2e5ac2b`）已合并。目标、依据与要点由 PLAN T-13 步骤 7 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。派发前核对它与同在第 20 波的 T-14.4 不改同一批文件（两者都涉及 `packages/`）。
@@ -7564,13 +8033,14 @@ internal/core/state
 
 目标：CLI 的目录用位置参数，不给时取当前目录；不给的文件在当前目录寻找；其他参数取官方或能唯一推出的缺省值，推不出时报错并列出候选。根命令仍为 alonabot。协议与管理 API 不变，只改 cmd/alonabot 与说明。
 
-依据：PLAN T-13 步骤 7 及其失败停止条件；CONTRACTS §9.3、§15.2；DECISIONS D-149；TEST-MATRIX V-121。
+依据：PLAN T-13 步骤 7 及其失败停止条件；CONTRACTS §9.3、§15.2；DECISIONS D-149、D-169；TEST-MATRIX V-121。
 
 要点：
 - build、check、test、pack 改为「命令 [目录]」，删除 --dir；库模式的 build 同样改用位置参数。
 - init 的 --id 与 --module 缺省取目录名，目录名不符合组件 ID 规则时报错；Adapter 的 --adapter-id 缺省等于组件 ID。
 - pack 在 manifest 的 source 为 github.com/<owner>/<repo> 时推出 --asset-url；--key 没有缺省值。
 - install 的参数按「已存在的普通文件」与「组件 ID」区分，组件 ID 取程序目录 packages/ 中的官方包；不给参数时在当前目录或工程的 bin/ 中寻找唯一的安装包，没有或不止一个时报错并列出候选。
+- pack 增加可重复的 `--target <os>/<arch>`：逐个平台构建归档，写出一份列出全部资产的 release.json，给出 --key 时只签这一份；不给时为本机平台（D-169）。插件模板仓库的 scripts/release.sh 在本切片合并后改用它（由审查者在模板仓库中同步）。
 - docs/development.md、docs/plugin-guide.md、README 与 CLI 帮助中的写法同步。
 
 不做：根命令改名；缺省值扩大卸载、清理与回退等破坏性操作的对象；协议与管理 API 的改动；新增依赖。

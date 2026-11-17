@@ -423,7 +423,7 @@ Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行�
 | `build [目录]` | 以本次扫描的结果经 overlay 编入资源登记（manifest、配置与 i18n 资源、Service Schema 与 Handler 参数名）与调用 `sdk.Run` 的正式入口并编译，不写工程目录（D-145）；目录中没有 `plugin.yaml`、且是 import 根包的 main 包时按库模式构建（§15.5）：扫描其依赖中每个目录含 `plugin.yaml` 的组件入口包（包括模块缓存中的第三方 module），把全部登记经 overlay 编入该 main 包，只输出可执行文件。使用已锁定的 Go Modules；`--goos`、`--goarch` 选择目标平台。源码安装显式选择本地构建，预编译安装不要求服务器编译。 |
 | `check [目录]` | 不写文件，执行与 `build` 相同的扫描，核对入口、工程 manifest 是否只含作者信息、changelog（§9.1）、`config_schema.json`、`adapter_config_schema.json` 与 i18n；没有生成文件可比对（D-145）。 |
 | `test [目录]` | 按 `build` 的规则把本次扫描的资源经 overlay 编入后，在临时数据和离线测试会话检查加载与注册，不能调用生产凭证或宣称已测试平台发信。 |
-| `pack [目录]` | 先 `build`，再生成安装包与归档外的 `release.json`；`--asset-url` 不给时，工程 manifest 的 `source` 为 `github.com/<owner>/<repo>` 则取 `https://github.com/<owner>/<repo>/releases/download/v<version>/<归档名>`，其他来源须显式给出（D-149）；给出 `--key` 时签名，也可以只生成待离线签名的清单，私钥不进入包，`--key` 没有缺省值。 |
+| `pack [目录]` | 先 `build`，再生成安装包与归档外的 `release.json`；`--asset-url` 不给时，工程 manifest 的 `source` 为 `github.com/<owner>/<repo>` 则取 `https://github.com/<owner>/<repo>/releases/download/v<version>/<归档名>`，其他来源须显式给出（D-149）；给出 `--key` 时签名，也可以只生成待离线签名的清单，私钥不进入包，`--key` 没有缺省值。`--target <os>/<arch>` 可重复，一次构建多个平台的归档并写出一份列出全部资产的 `release.json`，给出 `--key` 时只对这一份签名；不给时为本机平台（D-169）。 |
 
 
 管理命令如下；修改均经 Core 管理接口，CLI 不直接写状态库，离线时只允许只读检查或明确的维护恢复流程：

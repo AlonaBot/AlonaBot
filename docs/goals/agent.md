@@ -20,6 +20,12 @@
 | goal-62 | T-12.5 | 技能 | T-12.3 | 已完成（PR #188） |
 | goal-63 | T-12.6 | 定时 Agent 任务 | T-07.9、T-08.5、T-12.3 | 已完成（PR #193） |
 | goal-64 | T-12.7 | 官方 Agent 组件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6、T-12.8、T-12.14 | 已完成（PR #195） |
+| goal-143 | T-12.15 | 模型两层配置 | T-12.7 | 待派发 |
+| goal-144 | T-12.16 | 预留的五类模型与模型管理路由 | T-12.15 | 等待前置（T-12.15） |
+| goal-145 | T-12.17 | 对话重试与回退模型、图像转述 | T-12.15 | 等待前置（T-12.15） |
+| goal-159 | T-12.18 | Agent 的触发方式、唤醒词与成员独立会话 | T-12.17 | 等待前置（T-12.17） |
+| goal-164 | T-12.19 | Agent 接入配置文件 | T-04.18、T-12.18 | 等待前置（T-04.18、T-12.18） |
+| goal-167 | T-12.20 | 官方 Agent 的插件页面 | T-04.17、T-12.19 | 等待前置（T-04.17、T-12.19） |
 
 ## 第 1 波
 
@@ -947,4 +953,146 @@ TEST-MATRIX 汇总方式：
 完成条件：改动 Go 文件 gofmt -l 无输出；go vet ./...；go test -race -count=1 ./cmd/alonabot -run '^TestAgentPackage$' -v；go test -race ./...；go build ./...；官方 Agent 的顶层 check、build、test、pack 当前平台本地记录齐全，生成资源与前置源码一致。若全仓测试已在同一最终候选中包含 TestAgentPackage 并实际运行，可复用该结果。TEST-MATRIX 汇总行能追到各前置证据、区分模拟与真实环境、保留未运行项；审查者负责合并前的 cpa 安装包补验回写。安装包激活失败、缺必要资源、绕过工具确认、Provider 失败自动重发、记忆串读或丢失、Core 会话写入图片字节、Agent 产品代码导入 internal/core，按工作包停止条件处理。
 
 不做：复制 V-57～V-61、V-76、V-118 的全量分项到安装包测试；新增测试插件工程或公共测试框架；扩充 Agent 功能、配置和 SDK 接口；新增依赖；发行归档与预装（T-14.3、T-14.4）；真实 Telegram 接入和多平台实机验收（T-10）。
+```
+## 第 18 波
+
+### goal-143 · T-12.15 模型两层配置
+
+状态：待派发。前置 T-12.7（PR #195）已合并。2026-11-16 按 D-154 新增；预留的五类模型在 goal-144，重试回退与图像转述在 goal-145。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-143（切片 T-12.15：模型两层配置）。goal 目录 goal-143，分支 goal-143，worktree .worktrees/goal-143，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：Agent 配置从「每个 Provider 自带模型」改为提供商 `providers` 与模型 `models` 两层，全局 `chat_model` 取代 `default_provider`；对话与 `/provider` 按模型名选择；`llm.generate` 的 `provider` 改为 `model`，选项来源 `llm.providers` 改为 `llm.models` 并接受 filter `type`。
+
+依据：PLAN T-12 步骤 2、9；CONTRACTS §13.5；DECISIONS D-131、D-154；TEST-MATRIX V-76、V-116 的 `llm.models` 分项、V-123。
+
+范围（只新增或修改这些）：
+- agent/config_schema.json、agent/i18n/：providers（template_list，模板即预设：openai、anthropic、gemini、deepseek、ollama 等，每项 name、protocol、base_url、secret 的 api_key）与 models（object 列表：name、provider、model、type，type 为 chat 时另有 max_tokens 与缺省 false 的 image_input）、chat_model（options_from `@agent/llm.models` 且 filter type=chat）；删除 default_provider 与 Provider 条目中的模型字段
+- agent/settings.go、agent/agent.go、agent/generate.go、agent/options.go：加载与校验、按模型名选择 Provider 客户端、`/provider` 命令改为选择模型
+- sdk/llm/：Request.Provider 改为 Model（json `model`），Response.Provider 改为 Model；文档注释同步
+- 全部调用方（examples、plugins 中调用 llm 的代码与测试）
+- 上述的测试文件
+
+接口：
+- package llm：Request 字段 `Model string \`json:"model,omitempty"\``（空串使用 Agent 的 chat_model），删除 Provider；Response 字段 `Model string \`json:"model"\``（实际使用的模型名），删除 Provider
+- 选项来源服务名 `llm.models`，filter 键 `type`（省略时列出全部类型），返回的显示名为模型名，说明为「提供商 · 模型 ID」，不含 base_url 与 API key
+
+行为：名称在各自列表内唯一；模型引用不存在的提供商、类型与提供商协议不匹配（chat 用现有六种协议，其余五类只允许 openai 与 openai-compatible）、chat_model 不是 chat 类型时配置加载失败并带 JSON 路径；同一提供商的多个模型共用一份密钥；chat_model 为空时 `/ask` 回复提示管理员配置；首次发布前不写迁移。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：agent/agent_test.go 改写既有的对话子测试为两层配置（一个提供商下两个 chat 模型），断言 `/provider` 切换模型后请求发往对应的模型 ID；llm.generate 的既有子测试改用 model 字段。
+- 本地自测（*_local_test.go，结果写入 PR）：V-123 的全部校验分项；`llm.models` 的 type 筛选与按存储值取回；chat_model 为空。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+
+不做：预留五类模型的客户端与模型管理路由（goal-144）；重试回退与图像转述（goal-145）；模型页（goal-146）；配置文件（goal-164）。
+```
+
+## 第 19 波
+
+### goal-144 · T-12.16 预留的五类模型与模型管理路由
+
+状态：等待前置（T-12.15）。2026-11-16 按 D-154 新增。目标、依据与要点由 PLAN T-12 步骤 12 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-144（切片 T-12.16：预留的五类模型与模型管理路由）。goal 目录 goal-144，分支 goal-144，worktree .worktrees/goal-144，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：为 speech_to_text、text_to_speech、embedding、rerank 与 decision 提供单次请求客户端与本地模拟服务；Agent 提供非公开的模型管理路由 discover、test 与 usage，并按模型名与日期累加用量。
+
+依据：PLAN T-12 步骤 12；CONTRACTS §13.6；DECISIONS D-154；TEST-MATRIX V-124。
+
+要点：
+- 五类只支持 openai 与 openai-compatible，端点分别为 /audio/transcriptions、/audio/speech、/embeddings、/rerank（Jina/Cohere 格式）与 Chat Completions（decision 按结构化判断返回概率或评分）。
+- discover 可用已保存的提供商或未保存的连接，按协议的列表端点取模型并按名字推断类型；test 对每类做最小请求；usage 返回当天各模型的用量。路由要求管理会话，响应与错误不含 API key、认证头与带凭证的 URL。
+- 用量表并入 Agent 受管 SQLite 的初始迁移；对话、llm.generate 与图像转述在 Provider 返回用量时累加。
+- 五类在 v0.1 没有 Agent 功能使用它们。
+
+不做：模型页（goal-146）；重试回退（goal-145）。
+```
+
+### goal-145 · T-12.17 对话重试与回退模型、图像转述
+
+状态：等待前置（T-12.15）。2026-11-16 按 D-154、D-155 新增。目标、依据与要点由 PLAN T-12 步骤 3、11 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-145（切片 T-12.17：对话重试与回退模型、图像转述）。goal 目录 goal-145，分支 goal-145，worktree .worktrees/goal-145，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：对话轮次中的 Provider 请求在可重试错误且尚未交出增量或工具调用时，同一模型最多请求 max_attempts 次，用完后按 fallback_chat_models 回退；对话模型不接受图片而设置了 image_caption_model 时，先请转述模型把图片描述成文字。
+
+依据：PLAN T-12 步骤 3、11 及失败停止条件；DECISIONS D-38、D-132、D-154、D-155；TEST-MATRIX V-125。
+
+要点：
+- 可重试：连接失败、HTTP 408、429 与 5xx；间隔为命名常量（初值 1s）；context 结束立即停止；每次失败记 WARN；回退模型的图片按它自己的 image_input。
+- 已交出文本增量或工具调用后出错不重试；工具循环中已执行的工具不重复执行；`llm.generate`、图像转述与模型测试不重试；两个 Provider SDK 的内置重试仍为 0。
+- 图像转述的描述取代图片占位写入会话；转述模型必须是 image_input 为 true 的 chat 模型，转述失败时按占位处理并回复说明。
+
+不做：模型管理路由（goal-144）；模型页（goal-146）。
+```
+
+## 第 20 波
+
+### goal-159 · T-12.18 Agent 的触发方式、唤醒词与成员独立会话
+
+状态：等待前置（T-12.17）。2026-11-17 按 D-167 新增。目标、依据与要点由 PLAN T-12 步骤 2、3 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-159（切片 T-12.18：Agent 的触发方式、唤醒词与成员独立会话）。goal 目录 goal-159，分支 goal-159，worktree .worktrees/goal-159，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：自由对话开关改为可多选的触发方式 `triggers`（mention、wake_word、private），新增唤醒词 `wake_words` 与成员独立会话 `member_sessions`；`/agent on` 与 `/agent off` 改写当前聊天的触发方式。
+
+依据：PLAN T-12 步骤 2、3；DECISIONS D-141、D-167；TEST-MATRIX V-139。
+
+要点：
+- 非命令消息（command_consumed 为 false）命中任一选中的触发方式时触发一轮；mention 为群聊中 to_me 的消息，private 为私聊消息，wake_word 为 text 片段按顺序拼接后包含任一唤醒词（位置不限，拉丁字母不区分大小写），唤醒词保留在交给模型的文本中。
+- 缺省 triggers 为空，只有 `/ask` 触发；按聊天保存的触发方式优先于配置（goal-164 改为配置文件后删除按聊天的保存）。
+- member_sessions 为 true 时群聊的会话键追加发言人的用户字符串，成员各自有历史与图片编号，`/reset` 只清除发言人的会话，Actor 缺省时用群的会话；记忆的会话笔记不受影响。
+
+不做：回复方式（Core 的平台设置，goal-162）；配置文件（goal-164）。
+```
+
+## 第 21 波
+
+### goal-164 · T-12.19 Agent 接入配置文件
+
+状态：等待前置（T-04.18、T-12.18）。2026-11-17 按 D-168 新增。目标、依据与要点由 PLAN T-12 步骤 13 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-164（切片 T-12.19：Agent 接入配置文件）。goal 目录 goal-164，分支 goal-164，worktree .worktrees/goal-164，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：Agent 的对话设置按会话所用的配置文件生效；`/agent`、`/persona` 与 `/provider` 改为修改当前会话的配置文件，新增 `/profile [名字]`；删除按聊天保存的人格、模型与触发方式。
+
+依据：PLAN T-12 步骤 13；CONTRACTS §5.6；DECISIONS D-154、D-167、D-168；TEST-MATRIX V-144。
+
+要点：
+- config_schema.json 中 chat_model、image_caption_model、人格字段、triggers、wake_words 与 member_sessions 写 `profile: true`；对话路径从 Handler 的 `c.Config()` 读取。
+- 命令经 `core.profile.set` 修改，回复写明配置文件名与会话数；`reloading` 为 true 时说明 Agent 即将重载。
+- `/profile` 无参数时显示当前配置文件，给出名字时经 `core.profile.assign` 切换，「默认」或 default 取消单独指定，名字不存在时列出可用的配置文件；缺省权限为 Admin。
+- 删除 Agent 数据库中按聊天的设置（并入初始迁移）。
+
+不做：配置文件的 Core 实现（goal-160、goal-161）；人格的存储（goal-167）；页面（goal-165）。
+```
+
+## 第 22 波
+
+### goal-167 · T-12.20 官方 Agent 的插件页面
+
+状态：等待前置（T-04.17、T-12.19）。2026-11-17 按 D-170 新增。目标、依据与要点由 PLAN T-12 步骤 14 与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-167（切片 T-12.20：官方 Agent 的插件页面）。goal 目录 goal-167，分支 goal-167，worktree .worktrees/goal-167，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
+
+目标：用 `sdk/page` 套件提供人格、MCP、技能、记忆与用户任务五个插件页面；命名人格从配置移到 Agent 的受管 SQLite，并提供选项服务 `agent/personas`。
+
+依据：PLAN T-12 步骤 14；CONTRACTS §5.1（options_from）、§13.4；ADMIN-API §7；DECISIONS D-129、D-159、D-170；TEST-MATRIX V-147。画板：「v4 · 插件 · Agent · 人格」「v4 · 插件 · Agent · MCP」「v4 · 插件 · Agent · 技能」「v4 · 插件 · Agent · 用户任务（插件页面）」「v4 · 插件 · Agent · 数据（会话记录）」。
+
+要点：
+- 页面路由要求管理会话；页面经 kit.js 请求本插件的路由，样式只用 kit.css 与 `--ab-*` 令牌。
+- 人格：列表（名称、系统提示摘要、使用它的配置文件与会话数）、新建与编辑对话框、删除（被引用时拒绝并列出引用）；不提供「设为默认」，配置文件使用哪个人格在配置文件页选择；没有人格时使用内置的缺省系统提示。
+- MCP：各服务器的连接状态、工具列表与类别、重新连接；服务器配置仍在插件的配置标签。
+- 技能：只读列出名称、描述与校验问题，可以重新读取。
+- 记忆：会话笔记与用户档案的查看、编辑与删除，写入沿用字符上限与校验。
+- 用户任务：Agent 建的动态任务，可删除；插件代码中的任务在「定时任务」标签。
+
+不做：Agent 的配置标签（goal-44 的通用配置页）；插件页面的 WebUI 桥（goal-44）。
 ```
