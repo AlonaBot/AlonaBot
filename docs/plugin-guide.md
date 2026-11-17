@@ -116,6 +116,8 @@ return &adapter.Descriptor{
 
 插件对象从 OnStart 开始通过 `p.Config()`（Handler 内为 `c.Config()`）取得 `config.Values`，子插件的 `s.Config()` 是 `config_schema.json` 中同名顶层 object 的只读视图；在 OnConfigLoad 中或更早调用会 panic。例如 `p.Config().String("greeting")` 读取上例的问候语。取值对象在同一 Session 内保持不变，可并发读取；集合 getter 返回可独立修改的副本。
 
+字段写 `"profile": true` 时可以按配置文件覆盖（CONTRACTS §5.6，D-168）：Handler 中的 `c.Config()` 合并当前会话所用配置文件的覆盖值，`p.Config()` 与 `s.Config()` 仍是插件配置本身。在 OnStart 或后台读取的字段（令牌、连接、缓存）不要标记，secret、list 的元素与模板中的字段不能标记。
+
 | 声明类型 | 取值方法 |
 | --- | --- |
 | `string`、`text` | `String(key)` |
