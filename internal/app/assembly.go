@@ -956,7 +956,7 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 		failure := errors.Join(err, cause)
 		running.instance.Degrade(failure)
 		a.detach(running)
-		slog.Error("committed candidate assembly failed", "plugin_id", id, "op_id", r.OpID, "generation_id", r.Generation, "kind", kind, "error", failure)
+		slog.Log(ctx, logging.LevelCritical, "committed candidate assembly failed", "plugin_id", id, "op_id", r.OpID, "generation_id", r.Generation, "kind", kind, "error", failure)
 		return running, errors.Join(failure, running.instance.Session.Close())
 	}
 	// 3. ACTIVATED 成功后发布业务入口，再启动 Adapter 实例。

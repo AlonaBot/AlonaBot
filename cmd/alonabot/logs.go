@@ -33,7 +33,7 @@ func logCommands(code *int) []*cobra.Command {
 	logs := &cobra.Command{Use: "logs", Short: "Read and follow Core logs", Args: cobra.NoArgs}
 	options.flags(logs)
 	logs.Flags().StringVar(&source, "source", "", "component ID (history: displayed source)")
-	logs.Flags().StringVar(&level, "level", "", "minimum record level: debug, info, warn or error")
+	logs.Flags().StringVar(&level, "level", "", "minimum record level: debug, info, warn, error or critical")
 	logs.Flags().StringVar(&trace, "trace", "", "trace ID (history: first eight digits)")
 	logs.Flags().StringVar(&date, "date", "", "log file date: YYYY-MM-DD")
 	logs.Flags().BoolVar(&follow, "follow", false, "follow live logs, including the initial snapshot")

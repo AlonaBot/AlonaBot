@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-var historyHeader = regexp.MustCompile(`^\[([0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3})\] \[(Core|Plug:[^\]]+|Adpt:[^\]]+)\]( \[(DBUG|INFO|WARN|ERRO)\](?: \[([^\]]+)\])?: )(.*)$`)
+var historyHeader = regexp.MustCompile(`^\[([0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3})\] \[(Core|Plug:[^\]]+|Adpt:[^\]]+)\]( \[(DBUG|INFO|WARN|ERRO|CRITICAL)\](?: \[([^\]]+)\])?: )(.*)$`)
 var historyMultilineField = regexp.MustCompile(` [^\s=]+=\n`)
 var historyField = regexp.MustCompile(`(?:^| )([^\s=]+)=`)
 
@@ -108,7 +108,7 @@ func parseHistory(raw string, date time.Time) (Record, error) {
 	if err != nil {
 		return Record{}, fmt.Errorf("invalid log time: %w", err)
 	}
-	level := map[string]slog.Level{"DBUG": slog.LevelDebug, "INFO": slog.LevelInfo, "WARN": slog.LevelWarn, "ERRO": slog.LevelError}[m[4]]
+	level := map[string]slog.Level{"DBUG": slog.LevelDebug, "INFO": slog.LevelInfo, "WARN": slog.LevelWarn, "ERRO": slog.LevelError, "CRITICAL": LevelCritical}[m[4]]
 	source := strings.TrimPrefix(strings.TrimPrefix(m[2], "Plug:"), "Adpt:")
 	attrs := map[string]any{}
 	switch {
