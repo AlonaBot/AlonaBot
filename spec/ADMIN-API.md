@@ -394,11 +394,11 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 | `DELETE /api/v1/core/admins` | 同形字符串数组 | 删除指定用户，未列出的用户保留 |
 | `GET /api/v1/core/default-locale` | `{"default_locale":"en-US"}` | 当前有效语言 |
 | `PUT /api/v1/core/default-locale` | 同形对象 | 必填且展开后非空，之后新建的 Session 使用新值 |
-| `GET /api/v1/core/command-prefixes` | `{"command_prefixes":["/"],"command_prefixes_by_instance":{"bot":["!"]}}` | 全局与按 Adapter 实例的覆盖；无覆盖时返回空对象 |
-| `PUT /api/v1/core/command-prefixes` | 同形对象 | 两个字段必填，整体替换；前缀列表须非空，`[""]` 表示无前缀匹配 |
 | `GET /api/v1/core/denies` | `{"users":["telegram:123"],"chats":["telegram:room"]}` | 全局禁止表，两个数组均返回，空列表为 `[]` |
 | `PUT /api/v1/core/denies` | 同形对象 | 两个数组必填，整体替换 |
 | `DELETE /api/v1/core/denies` | 同形对象 | 两个数组必填，删除指定用户与会话 |
+
+命令前缀与回复方式按配置文件设置，`default` 的值写回 `core_config.json`，接口见 §23（D-168）。
 
 写接口成功返回 `{}`。管理员、语言和前缀经 `settings.File.Update` 写回 `core_config.json`，保留未修改字段的 `${...}` 原文；请求中的完整环境变量引用按原文保存、按展开值校验。管理员列表写回后调用 `policy.SetAdmins`；现有 `/admins` 与 CLI `admin add/remove/list` 共用同一管理服务和设置。前缀由下一次消息派发读取，实例未配置覆盖时使用全局值。Rename 后目录同步失败时设置已发布，接口返回实际错误，同时管理员策略跟随当前设置更新。
 
@@ -479,3 +479,24 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 `GET /api/v1/tools/policies` 返回 `{"policies":[{"plugin_id":"demo","service":"echo","default":"allow","override":"inherit"}]}`。目录合并当前 Attach 工具声明、本次运行出现的操作和已保存覆盖；default 为 inherit 表示当前无声明，override 为 inherit 表示没有覆盖。
 
 `PUT /api/v1/tools/policies` 接收 `{"plugin_id":"demo","service":"echo","policy":"deny"}`，成功返回 `{}`。policy 接受 allow、confirm、deny、inherit；inherit 删除覆盖。service 也接受目录已记录的完整操作名，例如 `mcp/filesystem/read_file`；操作名独立于 Service 名语法校验。未知策略、服务名格式错误或目录未记录的操作名返回 400，未知组件返回 404。写入与固定 ListTools 使用同一个 tool.Catalog 和状态库；下次查询或调用读取新策略，deny 的工具从 ListTools 隐藏，无需重启。
+
+## 23. 配置文件
+
+配置文件的语义见 CONTRACTS §5.6（D-168）。ID `default` 表示「默认」。修改立即生效；`default` 的字段值经 §12 的配置 API 修改，平台设置写回 `core_config.json`。
+
+| Method / path | 请求或成功响应 | 操作语义 |
+| --- | --- | --- |
+| `GET /api/v1/profiles` | `[{"id":"default","name":"默认","color":"teal","sessions":50}]` | `default` 在首位，其余按创建顺序 |
+| `POST /api/v1/profiles` | `{"name":"VIP 群","color":"navy","copy_from":"default"}` → `{"id":"…"}` | `copy_from` 可省略；名称重复 409 |
+| `PATCH /api/v1/profiles/{id}` | `{"name":"…","color":"…"}` → `{}` | 两键均可省略 |
+| `DELETE /api/v1/profiles/{id}` | `{}` | `default` 返回 400；指定它的会话与实例回到下一级 |
+| `GET /api/v1/profiles/assignments` | `{"instances":{"qq-main":"vip"},"sessions":[{"instance":"qq-main","session":"onebot11:group:123","profile":"vip"}]}` | `instances` 只列出设置了缺省的实例；空集合为 `{}` 与 `[]` |
+| `PUT /api/v1/profiles/assignments/instances/{instance}` | `{"profile":"vip"}`，`null` 取消 → `{}` | 实例不存在 404 |
+| `PUT /api/v1/profiles/assignments/sessions` | `{"instance":"qq-main","session":"…","profile":"vip"}`，profile 为 `null` 取消 → `{}` | 会话字符串按 MESSAGE-MODEL §1 校验 |
+| `GET /api/v1/profiles/{id}/plugins` | `[{"plugin_id":"weather","enabled":true,"fields":["city","unit"],"overrides":{"city":"北京"},"invalid":[{"path":"unit","reason":"type"}]}]` | `fields` 为 Active schema 中写了 `profile` 的字段路径；`id` 为 `default` 时 overrides 与 invalid 为空 |
+| `PATCH /api/v1/profiles/{id}/plugins/{plugin_id}` | `{"enabled":false,"overrides":{"city":"北京","unit":null}}` → `{}` | 两键均可省略，`null` 删除覆盖值；不合法时 400 带路径；`id` 为 `default` 时 overrides 返回 400 |
+| `POST /api/v1/profiles/{id}/plugins/{plugin_id}/prune` | `{"removed":["unit"]}` | 只删除列为无效的覆盖值 |
+| `GET /api/v1/profiles/{id}/platform` | `{"command_prefixes":["/","!"],"reply":{"mention_sender":true,"quote":null,"prefix":null,"forward_threshold":1500}}` | 没有覆盖的键为 `null`；`default` 返回完整值 |
+| `PUT /api/v1/profiles/{id}/platform` | 同形对象 → `{}` | 整体替换，`null` 跟随 `default`；`default` 写回 `core_config.json`，不接受 `null` |
+| `GET /api/v1/profiles/{id}/tools` | `{"items":[{"tool":"weather/subscribe","policy":"allow"},{"operation":{"plugin_id":"agent","name":"mcp/fs/write_file"},"policy":"deny"}]}` | 只列出覆盖了全局策略的工具与操作 |
+| `PUT /api/v1/profiles/{id}/tools` | `{"items":[…]}`，policy 取 allow、confirm、deny 或 inherit → `{}` | inherit 删除该项覆盖 |

@@ -27,6 +27,9 @@
 | T-12.15 | goal-143 | 模型两层配置：`providers` 与 `models`、`chat_model`、配置校验，对话与 `/provider` 改按模型选择，`llm.generate` 的 `model` 与选项来源 `llm.models`（D-154） | T-12 步骤 2、9 | T-12.7 | V-76、V-116 的 `llm.models` 分项、V-123 | 未开始 |
 | T-12.16 | goal-144 | 预留的五类模型：单次请求客户端与模拟服务，模型管理路由 discover、test、usage 与用量表（D-154） | T-12 步骤 12 | T-12.15 | V-124 | 未开始 |
 | T-12.17 | goal-145 | 对话请求的重试与回退模型（D-155），图像转述（D-154） | T-12 步骤 3、11 | T-12.15 | V-125 | 未开始 |
+| T-12.18 | goal-159 | 触发方式与唤醒词、成员独立会话，`/agent on` 与 `/agent off` 改写触发方式（D-167） | T-12 步骤 2、3 | T-12.17 | V-139 | 未开始 |
+| V-144 | 按配置文件的对话设置、命令修改配置文件与回复中的影响范围、`/profile` 的显示与切换、按聊天设置的删除 |
+| T-12.19 | goal-164 | Agent 接入配置文件：标记字段、删除按聊天的设置、命令改为修改配置文件、`/profile`（D-168） | T-12 步骤 13 | T-04.18、T-12.18 | V-144 | 未开始 |
 
 ## 3. 工作包
 
@@ -118,8 +121,8 @@
    SDK 的客户端由 `New` 构造一次，以注入的 HTTP client、Config 的 BaseURL 与 APIKey 构造，重试次数设为 0；不读取环境变量（两个 SDK 的 `NewClient` 缺省读取 `OPENAI_*`、`ANTHROPIC_*`，含凭证与自定义请求头）：anthropic-sdk-go 传 `option.WithoutEnvironmentDefaults()`，openai-go 没有公开的等价选项，直接构造 Chat Completions 与 Responses 的 Service，不经 `openai.NewClient`。请求体按本段与步骤 10 的字段规则用 SDK 的参数类型表达，InputSchema 原样发出，不丢失 `$defs` 等字段；SDK 没有对应字段时用它提供的额外字段机制。不导入两个 SDK 的 Azure、Bedrock、Vertex 等云厂商子包。
    `Stream` 逐事件读取流，不缓存完整响应；文本增量按到达顺序交给 emit。工具调用按协议的索引自行累积，OpenAI 分段中的 id 与 name 取非空值而不拼接（有的兼容实现在每个分段重复它们），只有收到完整结束标记且 arguments 是 JSON 对象后才发出带 ToolCall 的 Event。Anthropic 新增的事件类型与 block 类型按其版本策略忽略。只有收到协议的终止条件才算成功，成功时返回停止原因与用量：Anthropic 为 `message_stop`；两种 Chat Completions 协议为流无错误结束且至少一个 choice 给出过 `finish_reason`（openai-go 在 `[DONE]` 与提前 EOF 时都以无错误结束，无法区分，D-132），在 `finish_reason` 之后、用量之前断开时成功、Usage 为 nil。提前结束、无效事件、非成功 HTTP 状态、Provider 错误事件均返回错误，并附上 Provider 错误字段中的说明，其中回显的 API key 替换为 `[REDACTED]`；SDK 返回的错误用 `errors.As` 取出状态码与说明后照此格式报告，不沿用 SDK 错误的文本（anthropic-sdk-go 的含请求 URL）。emit 返回错误时立即停止读取并关闭响应体。错误文本不得包含 API key、认证头或带凭证的 URL；已交付的文本增量由调用方保留，不自动重发请求。
    为每种协议提供本地模拟服务，覆盖正常流、多个文本增量、完整工具调用、重复 id 的工具调用分段、未知 Anthropic 事件、停止原因与用量、非成功 HTTP 状态及其错误说明、中途断开（Chat Completions 分为 `finish_reason` 之前与之后）、畸形 SSE/JSON、取消 context、emit 返回错误、带图片的 user 消息与不合法的图片；模拟服务对非成功状态只收到一次请求，看不到 `OPENAI_*`、`ANTHROPIC_*` 环境变量带来的请求头。
-2. **组件骨架与配置。** manifest 为 `role: agent`。配置包含：提供商 `providers`（`template_list`，模板即预设；每项为名称、协议、base_url 与 `secret` 标记的 api_key）与模型 `models`（每项为名称、所属提供商、模型 ID、类型，类型为 chat 时另有 max_tokens 与缺省为 false 的 `image_input`，步骤 11、12，D-154），以及引用 chat 模型的 `chat_model`，预设（openai、anthropic、gemini、deepseek、ollama 等）给出缺省协议与 base_url（anthropic 为服务根地址 `https://api.anthropic.com`，步骤 1；gemini 为 `gemini-generate-content`，ollama 为 `ollama-chat`，步骤 10），表单下拉框用 labels 显示预设名（D-76）；名称在各自列表内唯一，模型引用不存在的提供商、类型与提供商协议不匹配（步骤 12）`chat_model` 或 `fallback_chat_models` 中的模型不是 chat 类型、`image_caption_model` 不是 `image_input` 为 true 的 chat 模型时配置加载失败；命名人格（系统提示）与默认人格；纳入上下文的历史条数；MCP 服务器（名称、传输方式；stdio 为 command、args 与 `secret` 标记的 env，streamable HTTP 为 url 与 `secret` 标记的 headers）；技能目录；重试次数与回退模型（步骤 3，D-155）；图像转述模型与提示词（步骤 11）。模型列表可以为空，`chat_model` 为空时 `/ask` 回复提示管理员配置。每个聊天当前的人格与模型选择保存在 Agent 的数据库；D-154 的配置文件机制落地后改由配置文件决定，届时另开切片。
-3. **一轮对话。** 注册 `/ask`、`/agent on|off`、`/persona`、`/provider`（选择 chat 模型）、`/reset` 命令与 message 事件路由。`/ask` 与 `/reset` 的缺省权限为 User，`/agent`、`/persona` 与 `/provider` 为 Admin，管理员可按 T-04 的命令策略调整。`/ask` 在任何聊天中触发一轮对话；Admin 用 `/agent on` 为某个聊天开启自由对话后，该聊天中 `to_me` 的非命令消息也触发（私聊的消息都是 `to_me`），默认关闭。群聊的会话条目标明发言人。触发的 Handler 请求延续调用，在其中：
+2. **组件骨架与配置。** manifest 为 `role: agent`。配置包含：提供商 `providers`（`template_list`，模板即预设；每项为名称、协议、base_url 与 `secret` 标记的 api_key）与模型 `models`（每项为名称、所属提供商、模型 ID、类型，类型为 chat 时另有 max_tokens 与缺省为 false 的 `image_input`，步骤 11、12，D-154），以及引用 chat 模型的 `chat_model`，预设（openai、anthropic、gemini、deepseek、ollama 等）给出缺省协议与 base_url（anthropic 为服务根地址 `https://api.anthropic.com`，步骤 1；gemini 为 `gemini-generate-content`，ollama 为 `ollama-chat`，步骤 10），表单下拉框用 labels 显示预设名（D-76）；名称在各自列表内唯一，模型引用不存在的提供商、类型与提供商协议不匹配（步骤 12）`chat_model` 或 `fallback_chat_models` 中的模型不是 chat 类型、`image_caption_model` 不是 `image_input` 为 true 的 chat 模型时配置加载失败；命名人格（系统提示）与默认人格；纳入上下文的历史条数；MCP 服务器（名称、传输方式；stdio 为 command、args 与 `secret` 标记的 env，streamable HTTP 为 url 与 `secret` 标记的 headers）；技能目录；重试次数与回退模型（步骤 3，D-155）；图像转述模型与提示词（步骤 11）；触发方式 `triggers`、唤醒词 `wake_words` 与成员独立会话 `member_sessions`（步骤 3，D-167）。模型列表可以为空，`chat_model` 为空时 `/ask` 回复提示管理员配置。每个聊天当前的人格、模型与触发方式保存在 Agent 的数据库；T-12.19 改由配置文件决定（D-168）。
+3. **一轮对话。** 注册 `/ask`、`/agent on|off`、`/persona`、`/provider`（选择 chat 模型）、`/reset` 命令与 message 事件路由。`/ask` 与 `/reset` 的缺省权限为 User，`/agent`、`/persona` 与 `/provider` 为 Admin，管理员可按 T-04 的命令策略调整。`/ask` 在任何聊天中触发一轮对话；非命令消息（D-141）命中聊天的触发方式时也触发（D-167）：`mention` 为群聊中 `to_me` 的消息，`wake_word` 为 text 片段按顺序拼接后包含 `wake_words` 中任一项（位置不限，拉丁字母不区分大小写，唤醒词保留在交给模型的文本中），`private` 为私聊消息。聊天的触发方式取 Agent 数据库中按聊天保存的值，没有时取配置的 `triggers`（缺省为空，只有 `/ask`）；Admin 用 `/agent on` 设为三项全部，`/agent off` 设为空。群聊的会话条目标明发言人；`member_sessions` 为 true 时群聊的会话键追加发言人的用户字符串，成员各自有历史与图片编号，`/reset` 只清除发言人的会话，Actor 缺省时用群的会话。触发的 Handler 请求延续调用，在其中：
    - 从 Core 会话存储读取最近的历史条目，条数取自配置；会话的第一轮读取该会话的笔记，作为快照条目写入会话；
    - 把当前 Actor 的档案附在本轮用户消息之前，组装请求并流式接收；本轮消息与历史中的图片按步骤 11 处理，会话条目只存文本与图片编号；
    - 流式显示交给 SDK 的 `c.Stream`（D-98、D-135，MESSAGE-MODEL §4A）：实例声明 `message.edit` 时先发送再按节流编辑，未声明时（例如 OneBot 11）生成结束后一次发送；单条上限由实例 `message.send` 能力的 `text_limit` 决定，超过时由 `c.Stream` 换条，Agent 不另设上限、不自行切分。回复以纯文本发送，不把模型输出的 Markdown 交给平台解析；
@@ -159,6 +162,8 @@
    - 路由：Agent 注册三个非公开的插件 HTTP 路由（要求管理会话）。`POST /models/discover` 接受已保存提供商的名字，或未保存提供商的协议、base_url 与 api_key，按协议列出远端模型（OpenAI 三种协议与 openai-compatible 为 `GET <BaseURL>/models`，anthropic-messages 为 `GET <BaseURL>/v1/models`，gemini-generate-content 为 `GET <BaseURL>/models`，ollama-chat 为 `GET <BaseURL>/api/tags`），模型 ID 中含 `embed` 推断为 embedding、含 `rerank` 为 rerank、含 `whisper` 或 `transcribe` 为 speech_to_text、含 `tts` 为 text_to_speech，其余为 chat。`POST /models/test` 对 Active 配置中的一个模型按类型发出 CONTRACTS §13.6 的最小请求，speech_to_text 的测试音频为嵌入 Agent 包的一段不超过 2 秒的 WAV，返回是否成功、耗时与英文说明，不计入用量。`GET /models/usage` 返回各模型当天的输入与输出 token 数。
    - 用量：对话轮次、`llm.generate` 与图像转述在 Provider 返回用量时，按模型名与本地日期累加到 Agent 受管 SQLite 的用量表（并入初始迁移）。
 
+13. **配置文件（D-168，T-12.19）。** 在 `config_schema.json` 中为 `chat_model`、`image_caption_model`、缺省人格、`triggers`、`wake_words` 与 `member_sessions` 写 `profile: true`，对话路径从 Handler 的 `c.Config()` 读取它们；删除 Agent 数据库中按聊天保存的人格、模型与触发方式（并入初始迁移）。`/agent on|off`、`/persona`、`/provider` 经 `core.profile.set` 修改当前会话所用的配置文件，回复写明配置文件名与会话数，`reloading` 为 true 时说明 Agent 即将重载；新增 Admin 命令 `/profile [名字]`：无参数时显示当前配置文件，给出名字时经 `core.profile.assign` 切换，名字为「默认」或 `default` 时取消单独指定，名字不存在时列出可用的配置文件。
+
 #### 拟目录与交付
 
 | 拟目录 | 本工作包交付 |
@@ -183,12 +188,14 @@
 | V-123 | 两层配置的加载与校验、`chat_model` 与 `/provider` 的模型选择、同一提供商的多个模型共用密钥 |
 | V-124 | 五类单次请求的成功与错误、密钥脱敏；discover 的各协议与类型推断；test 按类型的最小请求；usage 的累加与按日期分开 |
 | V-125 | 可重试错误的重试次数与间隔、回退顺序、已交出增量后不重试、不可重试的错误、context 结束；图像转述的成功、失败与占位 |
+| V-139 | 三种触发方式及组合、唤醒词的位置与大小写、命令消息不触发、`/agent on` 与 `/agent off`；成员独立会话的历史与 `/reset` |
 
 Agent 组件的真实 Telegram 与真实 Provider 结果由 T-10 汇总。
 
 #### 失败停止条件
 
 - 未经策略与确认执行工具或 MCP 操作、后台任务通过确认，阻止合入。
+- `triggers` 为空时非命令消息仍触发对话、一位成员读到另一位成员的独立会话，阻止 T-12.18 合入。
 - Provider 失败后在 D-155 之外自动重发请求（包括 SDK 的缺省重试、`llm.generate`、图像转述与模型测试的重试），或在已交出文本增量、工具调用之后重试，阻止合入。
 - 模型管理路由不要求管理会话，或其响应、错误说明含 API key、认证头或带凭证的 URL，阻止 T-12.16 合入。
 - Provider 客户端从环境变量取得地址、凭证或请求头，或导入两个 SDK 的云厂商子包，阻止 T-12.12 合入。
