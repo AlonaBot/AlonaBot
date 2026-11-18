@@ -126,6 +126,8 @@ REGISTER 的完整描述必须装入一帧；超限 RESOURCE_EXHAUSTED，不部�
 
 有 HTTP 路由时，SDK 先创建实际绑定的 loopback Listener，再上报 `host + port`；首发仅接受 `127.0.0.1` 或 `::1` 与合法非零端口，不能传任意 URL、文件路径或远端主机。Core 验证与当前 Session 的代理认证和就绪状态后保存端点，公开前缀仍由 Core 决定。无 HTTP 路由则不得要求创建 Listener。端点随 Session 失效撤销；外部请求不携带内部认证材料，Core 覆盖相应内部头。
 
+插件页面的 HTTP 请求由 WebUI 宿主转发，复用本节的路由注册与代理认证规则。主题、语言、令牌与快捷键消息由浏览器内的桥处理，消息格式见 [ADMIN-API §7](ADMIN-API.md#7-插件页面-postmessage-桥)。
+
 路由快照只保存以上 RouteDescriptor 的确定性编码、内容摘要及其插件/已提交代次/包身份，规则见 CONTRACTS §4.4；摘要复用 PREPARED 的 `route_descriptor_hash` 算法。REGISTER 中的配置、HTTP Listener 与任何 Session 认证材料均排除在快照外。唤醒重新 REGISTER 后在业务开放前核对摘要，HTTP 重新绑定本 Session 的 Listener 与凭证。
 
 ### 3.4 Adapter 会话

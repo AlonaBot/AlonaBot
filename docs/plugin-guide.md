@@ -99,7 +99,7 @@ return &adapter.Descriptor{
 
 ### 插件页面
 
-插件页面在 WebUI 的沙箱 iframe 中打开，只能经桥与外部交互（[ADMIN-API §7](../spec/ADMIN-API.md)）。用 `sdk/page` 的套件：把它的 `http.Handler` 挂在插件自己的路由下，页面引用 `kit.css` 与 `kit.js`，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并让 ⌘K 打开全局搜索（D-159）。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
+插件页面的沙箱 iframe 宿主与 `postMessage` 桥由 T-09.9 接入（[ADMIN-API §7](../spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。使用 T-04.17 提供的 `sdk/page` 套件：把它的 `http.Handler` 挂在插件自己的路由下，页面引用 `kit.css` 与 `kit.js`，通过桥使用 `--ab-*` 设计令牌、跟随明暗与语言切换，并转发 ⌘K / Ctrl+K（D-159）。页面的第一行（插件名、标签与搜索）由宿主绘制，插件页面无需另画标题栏或搜索框。
 
 ## 7. 配置与 secret
 
