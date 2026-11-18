@@ -25,7 +25,7 @@
 | goal-145 | T-12.17 | 对话重试与回退模型、图像转述 | T-12.15 | 已完成（PR #224） |
 | goal-159 | T-12.18 | Agent 的触发方式、唤醒词与成员独立会话 | T-12.17、S-02.3 | 已完成（PR #229） |
 | goal-164 | T-12.19 | Agent 接入配置文件 | T-04.18、T-12.18 | 待派发 |
-| goal-167 | T-12.20 | 官方 Agent 的插件页面 | T-04.17、T-12.19 | 等待前置（T-04.17、T-12.19） |
+| goal-167 | T-12.20 | 官方 Agent 的插件页面 | T-04.17、T-12.19 | 待派发 |
 
 ## 第 1 波
 
@@ -1277,22 +1277,113 @@ func (a *component) selectProfile(c *sdk.Context, name string) error
 
 ### goal-167 · T-12.20 官方 Agent 的插件页面
 
-状态：等待前置（T-12.19）。T-04.17（PR #218，`6d81be3`）已合并。2026-11-17 按 D-170 新增。目标、依据与要点由 PLAN T-12 步骤 14 与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：待派发。前置 T-04.17（PR #218，合并提交 `6d81be3e5b73e949b58b9a2890c8a4ea40c071fe`）、T-12.19（PR #247，合并提交 `f3959f6eb05060ea874544c6a786e114844f2d95`）均已合并；2026-11-18 按 main `f3959f6eb05060ea874544c6a786e114844f2d95` 核对，沿用原语句的目标、依据与要点。
+
+`github.com/AlonaBot/AlonaBot/sdk/page` 已提供 `func Handler() http.Handler`，只响应路径末段为 `kit.css`、`kit.js` 的 GET；`github.com/AlonaBot/AlonaBot/sdk` 已有 `func (p *Plugin) Route(method, path string) *RouteBuilder`、`func (b *RouteBuilder) Page(title string) *RouteBuilder`、`func (b *RouteBuilder) Handle(h http.Handler)` 和 `func (b *RouteBuilder) HandleFunc(f func(http.ResponseWriter, *http.Request))`，路由缺省要求 Core 管理会话。PR #218 完成套件与页面桥的 SDK 一侧；插件页面宿主、父桥、ADMIN-API §7 的窗口与路径校验、D-177 的配置读取 `messages` 及 `translate` 由进行中的 goal-44（T-09.9）完成。本切片按该契约实现 Agent 页面与路由，浏览器联验依赖 goal-44，保持切片表的直接前置为 T-04.17、T-12.19。
+
+`github.com/AlonaBot/AlonaBot/agent` 的入口为 `func New() *sdk.Plugin`。`readConfiguration(values config.Values) (configuration, error)` 仍从基础配置 `personas` 建立目录并校验 `default_persona`；`selectPersona(c *sdk.Context, name string) error`、`converse(c *sdk.Context, text string) error`、`runScheduled(c *sdk.Context, session string, task AgentTask) error` 仍经 `a.config.persona` 读取该目录。PR #247 已让对话与定时任务从 `c.Config()` 选择人格名，`chatSettings` 只保留 Session、ResetGeneration、ImageCount。会话正文是 `conversationEntry` JSON，存于 Core；`sdk/conversation.List(ctx context.Context, key string, fromSeq uint64) (entries []Entry, nextSeq uint64, more bool, err error)` 可以在 HTTP 请求上下文读取本插件的正文。goal-156 仅列会话摘要与清除，会话正文查看由本切片承接，沿用 D-176 之前的裁定。
+
+`agentTask` 已是 `sdk/task.Type[AgentTask]`；`memoryRecord` 与 `updateMemory` 已保存并校验有序记忆条目；`mcpPeer.tools`、`close` 已负责连接与回收；`readSkills(directory string) []skill` 当前只返回合法技能，校验问题只写日志。人格引用查询与会话键目录的现有公共接口缺口见语句「接口与依赖缺口」，由审查者裁定补齐路径；当前工作区未提供 `goal-167/figma/`，派发时由审查者提供原语句列出的五张画板。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-167（切片 T-12.20：官方 Agent 的插件页面）。goal 目录 goal-167，分支 goal-167，worktree .worktrees/goal-167，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
+/goal 使用 $alonabot-execute 推进 goal-167（切片 T-12.20：官方 Agent 的插件页面）。goal 目录 goal-167，分支 goal-167，worktree .worktrees/goal-167，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。画板由审查者放在 goal-167/figma/，保留在本地；缺少画板时按共同约束记录阻塞。
 
 目标：用 `sdk/page` 套件提供人格、MCP、技能、记忆与用户任务五个插件页面；命名人格从配置移到 Agent 的受管 SQLite，并提供选项服务 `agent/personas`。
 
-依据：PLAN T-12 步骤 14；CONTRACTS §5.1（options_from）、§13.4；ADMIN-API §7；DECISIONS D-129、D-159、D-170；TEST-MATRIX V-147。画板：「v4 · 插件 · Agent · 人格」「v4 · 插件 · Agent · MCP」「v4 · 插件 · Agent · 技能」「v4 · 插件 · Agent · 用户任务（插件页面）」「v4 · 插件 · Agent · 数据（会话记录）」。
+依据：spec/PLAN.md §3.1；spec/plan/agent.md T-12.20、T-12 步骤 2、5、6、7、13、14 及失败停止条件；spec/CONTRACTS-v0.1.md §5.1（options_from）、§5.6、§13.3、§13.4；spec/WIRE-FORMAT.md §3.3；spec/ADMIN-API.md §7、§12（D-177 的 messages）、§15（会话摘要）、§21（页面声明与标题）、§23（配置文件）；spec/adr/DECISIONS.md D-86、D-129、D-159、D-170、D-177；spec/TEST-MATRIX.md V-147。画板：「v4 · 插件 · Agent · 人格」「v4 · 插件 · Agent · MCP」「v4 · 插件 · Agent · 技能」「v4 · 插件 · Agent · 用户任务（插件页面）」「v4 · 插件 · Agent · 数据（会话记录）」。会话正文查看沿用 D-176 之前的裁定，归本切片。
 
-要点：
-- 页面路由要求管理会话；页面经 kit.js 请求本插件的路由，样式只用 kit.css 与 `--ab-*` 令牌。
-- 人格：列表（名称、系统提示摘要、使用它的配置文件与会话数）、新建与编辑对话框、删除（被引用时拒绝并列出引用）；不提供「设为默认」，配置文件使用哪个人格在配置文件页选择；没有人格时使用内置的缺省系统提示。
-- MCP：各服务器的连接状态、工具列表与类别、重新连接；服务器配置仍在插件的配置标签。
-- 技能：只读列出名称、描述与校验问题，可以重新读取。
-- 记忆：会话笔记与用户档案的查看、编辑与删除，写入沿用字符上限与校验。
-- 用户任务：Agent 建的动态任务，可删除；插件代码中的任务在「定时任务」标签。
+范围（只新增或修改这些）：
+- 新增 agent/pages.go、agent/pages/ 下的 HTML、CSS、JS 静态资源：嵌入五个页面、相对路径资源、页面登记与数据路由。资源直接由 Agent 的 Go HTTP Handler 提供。
+- 新增 agent/personas.go；修改 agent/agent.go、agent/options.go、agent/settings.go、agent/conversation.go、agent/scheduled.go：命名人格存储、初始迁移、选项来源、目录读取与引用校验、登记页面；同步所有人格调用方。
+- agent/mcp.go、agent/skills.go、agent/memory.go、agent/tasks.go：页面需要的连接状态、重新连接、技能诊断与重新读取、记忆管理及任务列表和删除；agent/tools.go 仅同步技能快照在提示与 load_skill 之间的传递。保留既有对话、工具、调度与停止语义。
+- agent/config_schema.json、agent/i18n/en-US.json、agent/i18n/zh-CN.json：删除人格目录字段与对应表单文案，default_persona 接入选项来源，补齐页面标题、页面文案及技能重新读取说明。
+- 新增 agent/pages_test.go 的一个主路径集成测试；agent/agent_test.go、agent/profile_test.go、agent/skills_test.go 及 internal/app/agent_service_test.go 只同步资源快照、人格初始化与受影响的既有调用，保留原断言。其余自测放在 agent/ 的 *_local_test.go。
 
-不做：Agent 的配置标签（goal-44 的通用配置页）；插件页面的 WebUI 桥（goal-44）。
+允许的依赖：标准库（含 embed、io/fs、net/http、encoding/json）、现有 sdk/...（含 sdk/page、sdk/config、sdk/conversation、sdk/gormdb、sdk/options、sdk/service、sdk/task、sdk/tool、sdk/errcode）、agent/provider、contracts/pb/alonabotv1 及已批准的 GORM、MCP go-sdk、YAML、Protobuf。沿用 ARCHITECTURE 的 agent -> sdk/...、contracts 方向，Core 状态经公共 SDK 访问；复用现有依赖。
+
+接口（main 现有签名；SDK 包前缀为 github.com/AlonaBot/AlonaBot/sdk）：
+// github.com/AlonaBot/AlonaBot/agent
+func New() *sdk.Plugin // 现有公开入口，保持签名。
+// sdk
+func (p *Plugin) Route(method, path string) *RouteBuilder
+func (b *RouteBuilder) Page(title string) *RouteBuilder
+func (b *RouteBuilder) Handle(h http.Handler)
+func (b *RouteBuilder) HandleFunc(f func(http.ResponseWriter, *http.Request))
+// sdk/page
+func Handler() http.Handler // 路径末段匹配 kit.css、kit.js。
+// sdk/gormdb
+func Open(ctx context.Context) (*gorm.DB, error)
+// sdk/options
+func Serve(r sdk.Registrar, serviceName string, fn func(ctx context.Context, q Query) (Page, error))
+type Query struct { Search string; Filter map[string]string; Locale string; Limit int; Values []string }
+type Page struct { Options []Option; More bool }
+type Option struct { Value string; Label string; Description string }
+// sdk/conversation
+type Entry struct { Seq uint64; Entry json.RawMessage }
+func List(ctx context.Context, key string, fromSeq uint64) (entries []Entry, nextSeq uint64, more bool, err error)
+// sdk/task，agentTask 为 task.Define[AgentTask]("agent")。
+func (t Type[T]) List(ctx context.Context) ([]Instance[T], error)
+func (t Type[T]) Cancel(ctx context.Context, key string) error
+type Instance[T any] struct { Key string; Args T; At time.Time; Interval time.Duration; Cron, Timezone string; NextAt *time.Time }
+// agent 包内复用
+func readConfiguration(values config.Values) (configuration, error)
+func (a *component) selectPersona(c *sdk.Context, name string) error
+func (a *component) converse(c *sdk.Context, text string) error
+func (a *component) runScheduled(c *sdk.Context, session string, task AgentTask) error
+func updateMemory(db *gorm.DB, scopes map[string]memoryRecord, operations []memoryOperation) error
+func (p *mcpPeer) tools(ctx context.Context) (*mcp.ClientSession, []*mcp.Tool, error)
+func (p *mcpPeer) close(ctx context.Context) error
+func mcpEffect(annotations *mcp.ToolAnnotations) tool.Effect
+
+新增与调整的包内接口（无新增包级公开符号；其余内部辅助函数自定）：
+func (a *component) registerPages(p *sdk.Plugin)
+func (a *component) servePage(w http.ResponseWriter, r *http.Request)
+func (a *component) pageData(w http.ResponseWriter, r *http.Request)
+func (a *component) personaOptions(ctx context.Context, q options.Query) (options.Page, error)
+func (a *component) readPersona(ctx context.Context, name string) (persona, error)
+func (p *mcpPeer) reconnect(ctx context.Context) error
+type skillProblem struct { Path string; Message string }
+func readSkills(directory string) ([]skill, []skillProblem) // 替换原签名，同步 OnStart 与重新读取的调用。
+
+页面与资源路由（以下全为插件相对路径，缺省管理会话；只在五条 HTML 路由调用 .Page，不调用 .Public）：
+- GET /pages/personas：.Page("Personas")；GET /pages/mcp：.Page("MCP")；GET /pages/skills：.Page("Skills")；GET /pages/data：.Page("Data")；GET /pages/tasks：.Page("User tasks")。均交给 servePage，以对应画板构造 Agent 内的页面内容。
+- GET /pages/kit.css、GET /pages/kit.js：Handle(page.Handler())；GET /pages/assets/：只提供嵌入的页面 CSS、JS。HTML 用 kit.css、kit.js、assets/ 下的相对路径引用资源。
+- agent/i18n/{en-US,zh-CN}.json 的 pages 根节点按上述五条 HTML 路径提供本地化标题；messages 根节点保存页面文案，两个语言的键集合一致。
+
+数据路由（均由 pageData 处理；JSON 字段使用下列小写名字，查询参数只解码一次）：
+- GET /pages/api/personas：返回 {personas:[{name,prompt,references:[{id,name,sessions}]}]}。POST /pages/api/personas 接受 {name,prompt} 新建；PUT /pages/api/personas 接受 {name,prompt} 编辑该名字的系统提示；DELETE /pages/api/personas?name=... 删除指定人格。新建成功返回 201 与 {name,prompt}，编辑成功返回 200 与 {name,prompt}，删除成功返回 200 与 {}；重名或被引用返回 409，被引用时同时返回 references。
+- GET /pages/api/mcp：返回 {servers:[{name,transport,status,tools:[{name,description,effect}],error?}]}，status 为 disconnected、connected 或 error；POST /pages/api/mcp/reconnect 接受 {name}，重新连接指定的已配置服务器并返回该服务器同结构结果。effect 为 mcpEffect 返回的 sdk/tool.Effect 数值，界面按 Unspecified、ReadOnly、Write、Destructive 显示对应类别；错误说明经过该服务器 sanitize。
+- GET /pages/api/skills：返回 {skills:[{name,description}],problems:[{path,message}]}；POST /pages/api/skills/reload 无业务字段，重新读取配置的 skills_dir 并返回相同结构。
+- GET /pages/api/memory：返回 {records:[{target,scope,instance,entries}]}，target 为 memory 或 user，entries 为完整的有序字符串数组。PATCH /pages/api/memory 接受 {target,scope,instance,operations:[{op,text?,old_text?}]}，其中操作的 target 统一取顶层 target；沿用现有 add、patch、remove，patch/remove 的 old_text 子串须恰好匹配一个条目，成功返回更新后的记录。DELETE /pages/api/memory 接受 {target,scope,instance}，删除整份笔记或档案，返回 {}。HTTP 输入边界校验 target 的取值与 scope、instance 非空，页面从已列出的记录选择完整三元键，服务端按同一键操作。
+- GET /pages/api/conversation?key=...&from_seq=...：key 为完整会话存储键，from_seq 省略或为 0 时从头读取；返回 {entries:[{seq,entry}],next_seq,more}，entry 为 sdk/conversation.Entry.Entry 的原样 JSON 对象，next_seq 与 more 取 SDK 返回值。包括普通会话、群成员独立会话与 task/<key> 的正文，逐页读完，保留 role、kind、speaker、content、images；正文呈现完整文本与图片编号，不按 history_entries 截取。
+- GET /pages/api/tasks：调用 agentTask.List，返回 {tasks:[{key,creator,target,prompt,created_at,at,interval_seconds,cron,timezone,next_at}]}。creator、target 与 AgentTask 的现有 JSON 结构一致；at、created_at、next_at 为 RFC 3339 时间，未选触发字段沿用现有 listTasks 的省略规则，未安排 next_at 时为 null。DELETE /pages/api/tasks?key=...：调用 agentTask.Cancel，成功返回 {}。
+- 所有 JSON 响应使用 application/json；无记录的列表字段返回 []。请求格式错误返回 400，未知人格、服务器或任务返回 404，重名或引用冲突返回 409；失败响应为 {description,code?,references?}，SDK 失败的 code 保留其公开错误码名称，记忆超限保留 RESOURCE_EXHAUSTED，MCP 说明经 sanitize。复用 agent/models.go 的 writeModelJSON；其余数据库与 SDK 失败保留错误链并记录具体原因，页面显示安全英文 description。页面同时检查 kit.js 返回的 status/ok 与桥错误，失败保留已有数据。
+
+审查者裁定（2026-11-18，D-182）：
+- 人格引用：`sdk` 新增只读访问函数 `func ProfileOverrides(ctx context.Context) (map[string]map[string]json.RawMessage, error)`，返回调用插件在各配置文件（键为配置文件 ID）中的有效覆盖值（SDK 已在 Bootstrap 与覆盖通知中持有这份数据），不新增协议字段或 Core 服务。Agent 以基础配置的 `default_persona`、各配置文件覆盖中的 `default_persona` 与 `core.profile.list` 的 `Sessions` 计算引用与会话数。本切片获授权修改 `sdk/` 中对应的会话状态文件并补本地回归。删除检查为尽力而为：删除后若仍有配置引用了不存在的人格，调用时按无人格处理（使用下述缺省提示）并记 WARN，不阻断对话。
+- 会话目录：Agent 在自己的受管 SQLite 中记录用过的会话键（写入会话条目时登记，随清除删除），数据页由此列出会话；不新增 Core 或 SDK 接口。
+- 缺省系统提示：Agent 内置英文常量 `You are AlonaBot, a helpful assistant. Reply in the user's language and keep answers concise.`，没有选中人格或人格缺失时作为 system 消息发送。
+- 画板由审查者在派发时放入 `goal-167/figma/`。
+- goal-44 负责 iframe 宿主及父桥（ADMIN-API §7）；D-177 在插件配置读取响应的 i18n 旁返回各语言 messages 根节点，供父桥每次 translate 取词。goal-44 合并前可用 `sdk/page` 独立打开验证，真实宿主联验在 PR 中写为未运行分项。
+
+行为：
+- 页面全部位于 Agent 组件内，使用 go:embed 嵌入静态资源，经 New 登记 Go 路由。五张画板分别落到用户任务、数据、技能、人格、MCP 页面；「数据（会话记录）」提供会话正文查看，并容纳会话笔记与用户档案的查看、编辑、删除。goal-156 保留摘要与清除入口，本切片提供正文与记忆操作。只实现画板中的 Agent 内容区域，外层插件标题、标签和导航由宿主提供。
+- 样式使用 sdk/page 的 kit.css 与 --ab-* 令牌，布局 CSS 随 Agent 嵌入；复用套件中的按钮、输入、选择、表格、标签和卡片，页面保持筛选、列表与操作的层次，新建、编辑与确认使用页面内对话框。Agent 页面使用原生 HTML/JS，docs/goals/webui.md 的 React 组件、web/admin 文案目录与 npm 命令适用于宿主，本切片使用 Agent 自己的资源和 i18n。
+- 所有数据操作经 window.AlonaBot.request(method,path,body?) 访问上述本插件路由；kit.js 已把对象编码为 JSON，并返回 status、ok、data、body 等字段。文案经 await AlonaBot.t(key,args?) 取得，在 onLocale 回调中重新取词并渲染；onTheme 接收套件主题与令牌，⌘K/Ctrl+K 由套件转发。沿用套件独立打开时的 light/en-US、键名翻译及请求拒绝行为。加载、空列表、校验问题和具体操作错误在相关区域显示。
+- 命名人格使用受管 SQLite 的独立表，名称为唯一键、保存系统提示；加入 New 中已有 ID:1 的初始迁移，ID:2 记忆迁移保持。删除 config_schema 的 personas 列表及 configuration.personas、configuration.persona；readConfiguration 保留模型与 MCP 的校验，基础 default_persona 的引用在 OnStart 打开受管库后检查，selectPersona 的列表与校验、converse 和 runScheduled 对本次 c.Config() 人格名的解析全部走受管库。每次调用读取当前已提交的系统提示，页面修改对后续调用立即生效，保留配置文件冻结视图与定时任务 default 选择语义。
+- 人格页列表展示名称、提示摘要和引用的配置文件与会话数，新建/编辑对话框读取完整提示；编辑保存该名字的系统提示。删除被基础配置或任一配置文件引用的人格时拒绝并列出引用；配置文件继承基础人格的情况同样计入。配置文件选人格沿用配置文件页，页面不提供「设为默认」。没有人格时使用上述缺省系统提示。
+- D-170 中的 agent/personas 按现有组件寻址实现为本插件名为 personas 的选项服务：options.Serve(p,"personas",a.personaOptions)，default_persona 保留 type:string 与 profile:true，添加 options_from:{source:"@agent/personas"}（实际组件 ID 为 alonabot-agent-official）。按 Query.Values 查询时只返回仍存在的名字，否则按 Search 与 Limit 列出并设置 More；Value 与 Label 均为人格名，修改后即时查询受管库。保留 @agent/llm.models 的现有模型选项来源。人格目录调整直接更新初始结构与全部调用方，沿用首次发布前规则。
+- MCP 页按已配置服务器显示名称、传输、连接状态、工具与副作用类别；GET 读取 gate 保护的当前状态和最近成功取得的工具目录，首次连接前为 disconnected，连接或读取失败显示 error 与具体说明。工具目录沿用 tools 的实际 ListTools 结果，重新连接成功后刷新。重新连接只作用于所选服务器，复用 gate 串行化旧连接回收与新连接建立；保留 stdio 子进程回收、HTTP 取消、停止预算和 sanitize，向页面返回的状态与错误均经过脱敏。工具调用继续使用既有策略与确认，手动重新连接不触发工具调用或业务重试，服务器配置仍由通用配置标签编辑。
+- 技能页只读显示名称、描述与全部校验问题，可以重新读取。readSkills 同时返回合法技能与结构化问题，保留原警告日志、目录顺序、名称去重和既有校验；重新读取后一次替换技能与问题快照，对话的技能目录与 load_skill 使用同一份快照，已开始的轮次继续使用原快照。目录打开、读取失败也呈现具体问题，页面不编辑文件。
+- 记忆页按 memoryRecord 的 target、scope、instance 区分笔记与档案，通过管理会话编辑选中的记录。PATCH 复用 updateMemory 的事务与完整文本校验：会话笔记 2200、用户档案 1375 个 Unicode 码点，包含条目间换行；空文本、重复条目、格式字符与匹配问题沿用既有校验，失败保留原记录。模型工具的 scope 继续从可信默认 Target/Actor 取得，页面管理操作使用已认证的 HTTP 路由；保留会话冻结笔记快照与每轮用户档案读取的现有语义。
+- 用户任务页列出 AgentTask 的创建者、发送目标、提示、触发规则与下次时间，删除经 agentTask.Cancel 删除实例并协作取消在途调用。使用 List 返回的真实 key，task/<key> 为历史会话键；列出本 Agent 建的动态任务，插件代码中的静态任务仍在「定时任务」标签。保留原 job scope、Core Admin 创建许可、确认策略与发送目标。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：agent/pages_test.go（//go:build unix，package agent_test）的一个 TestAgentPages 集成测试，复用 startModelAdmin、真实 Core/SDK Session、管理代理与受管 SQLite，Provider 使用本地模拟服务。主路径为「管理员读取五个已登记页面及套件资源 → 经人格路由新建人格 → 管理 API 查询 default_persona 的选项并在配置文件中选中 → 真实消息对话 → 修改提示后再次对话 → 经数据路由查看该会话正文」；断言页面声明及中英文标题存在、资源类型正确、选项返回新名字、后续 Provider 请求使用更新后的系统提示且 Agent 未重载、正文保留 Core 的序号及完整条目。只提交这一条集成主路径；上述既有集成测试只同步人格创建方式、schema/i18n 资源与调用签名，保留原断言。删除原配置 personas 的测试输入，在启动后通过人格路由建立所需人格，再设置 default_persona；llm.generate 仍断言显式请求之外的 Agent 人格未注入。
+- 本地自测（*_local_test.go，不提交，结果写入 PR）：V-147 的其余分项，包括未登录访问全部页面、资源和数据路由被 Core 拒绝，变更请求沿用 Origin/CSRF；基础配置、直接覆盖与继承配置文件引用均阻止人格删除并返回引用，解除引用后删除成功；未知名字、重复名字、选项搜索与 Values 查询、空人格目录及命令/定时任务即时读取。MCP 断开后的手动重新连接、并发读取与停止、工具类别与错误脱敏；非法 SKILL.md、目录读取失败与重新读取后技能快照一致；记忆两个字符上限、重复/格式字符/多处匹配的校验、跨实例同名档案隔离，失败后原数据完整。删除用户任务后不再触发并取消在途调用；会话正文跨页、成员键、task/ 键、中文与特殊字符、memory_snapshot 和图片编号完整保留，失败保留 SDK 原错误。测试数据使用临时文件与现有 MCP 模拟服务，不新增 testdata 插件。
+- 手动验证（在真实 Core 的 WebUI 沙箱 iframe 中，依赖 goal-44）：按五张画板走过人格新增/编辑/拒绝删除、MCP 状态与重连、技能问题与重新读取、会话正文查看与记忆编辑删除、用户任务删除；核对浅深色、窄屏、空态与错误。按 ADMIN-API §7、D-177 验证首次 translate、切换语言后重新取词、主题令牌及 ⌘K/Ctrl+K，记录浏览器、版本、平台与实际结果。未取得宿主或画板的项目写「未运行」并保留依赖；浏览器验证结果写入 PR。其余 JS 逻辑自测保留在本地，不提交前端纯函数测试。
+
+完成条件：gofmt -l agent 无输出；go vet ./agent/...；go test -race -count=1 ./agent/... ./internal/app/；go build ./...；go run ./cmd/alonabot check agent（agent 为位置目录）；node --check agent/pages/ 下实际新增的各个 JS 文件。五条页面路由、数据接口、人格存储与选项服务满足上述行为，会话正文查看归本切片；实际公共接口缺口由审查者补齐并同步本语句后实现，违反 T-12 工作包失败停止条件时停止合入。PR 写明提交的集成主路径、本地自测与真实浏览器验证的结果及未运行项；goal-44 尚未就绪的联验交由审查者在宿主合并后组织并补齐 V-147、V-130 的实际证据。「文档同步」列出人格存储与调用签名、页面和数据路由、V-147 及相关会话正文证据、与 goal-44/goal-165 的对接事实；推送并开 PR，由审查者同步 spec 与后继 goal。
+
+不做：Agent 的配置标签（goal-44 的通用配置页）；插件页面的 WebUI 宿主与父桥、D-177 的配置读取接口（goal-44）；配置文件页（goal-165）；goal-156 的摘要与清除页；MCP 服务器配置编辑、技能文件编辑、静态任务编辑；旧人格配置的交接或兼容层；新增依赖、修改 web/admin、sdk/、Core 产品代码、.proto 或 spec/。
 ```
