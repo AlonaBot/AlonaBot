@@ -97,7 +97,6 @@ type Manifest struct {
 	OS                   string              `yaml:"os"`                    // 包的目标 GOOS
 	Arch                 string              `yaml:"arch"`                  // 包的目标 GOARCH
 	Entrypoint           string              `yaml:"entrypoint"`            // 包内可执行文件的相对路径，规则见 ValidateRelPath
-	ConfigVersion        *uint32             `yaml:"config_version"`        // 包内配置 Schema 的版本
 	// 包的来源（例如 github.com/owner/repo），不能为空。
 	Source         string `yaml:"source"`
 	MigrationMode  string `yaml:"migration_mode"`  // 数据库迁移方式（Migration*）；空串表示未声明
@@ -184,7 +183,7 @@ func (m *Manifest) validate(declared map[string]yaml.Node, project bool) ([]stri
 	}
 	// 2. 静态组件单独校验，通过后返回；其余角色继续检查进程字段。
 	if m.Role == roleWebUI {
-		if err := forbidFields(declared, m.Role, "adapter_id", "entrypoint", "protocol_min_major", "protocol_max_major", "required_capabilities", "config_version", "migration_mode", "prepare_effects", "adapter_dependencies", "plugin_dependencies"); err != nil {
+		if err := forbidFields(declared, m.Role, "adapter_id", "entrypoint", "protocol_min_major", "protocol_max_major", "required_capabilities", "migration_mode", "prepare_effects", "adapter_dependencies", "plugin_dependencies"); err != nil {
 			return nil, err
 		}
 		if !project && (m.OS != "any" || m.Arch != "any") {
@@ -266,9 +265,6 @@ func (m *Manifest) validateProcess() error {
 	}
 	if err := ValidateRelPath(m.Entrypoint); err != nil {
 		return fmt.Errorf("entrypoint: %w", err)
-	}
-	if m.ConfigVersion == nil {
-		return errors.New("missing config_version")
 	}
 	return nil
 }

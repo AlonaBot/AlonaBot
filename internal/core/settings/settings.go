@@ -2,7 +2,7 @@
 //
 // 调用 [Load] 前由装配方取得 data_dir 的 core.lock；命令行覆盖由装配方应用。
 // [File] 持有未展开的 [Document] 和有效 [Settings]，副本中的环境变量已展开。
-// Core 格式迁移内置在本包，迁移写回前备份磁盘原文件。
+// Core 设置与 Adapter 实例按声明校正运行副本，原文件只经显式 Update 修改。
 // 设置遵循 CONTRACTS §15.1，日志文件上限遵循 §14.6。
 package settings
 
@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
@@ -32,11 +33,9 @@ import (
 const FileName = "core_config.json"
 
 const (
-	defaultPort            = "7650"
-	defaultListen          = "127.0.0.1:" + defaultPort
-	currentVersion         = 1
-	defaultInstanceVersion = 1
-	defaultLocale          = "en-US"
+	defaultPort   = "7650"
+	defaultListen = "127.0.0.1:" + defaultPort
+	defaultLocale = "en-US"
 )
 
 // DNS 文本长度扣除可选的终止点，遵循 net 解析器采用的 RFC 1035 线格式上限。
@@ -51,12 +50,14 @@ type Admin struct{ AdapterID, UserID string }
 // String 返回可写入 admins 的用户字符串，用户 ID 中的冒号保持原样。
 func (a Admin) String() string { return a.AdapterID + ":" + a.UserID }
 
-// AdapterSettings 保存配置版本和已展开环境变量的实例配置。
+// AdapterSettings 保存实例原文副本与最近一次准备的运行校正记录。
 type AdapterSettings struct {
 	Package         string // 拥有实例配置的组件 ID；空串归当前已安装的组件。
-	Version         int
 	Instances       map[string]json.RawMessage
 	DefaultInstance string // 为空时仅有一个实例的 Adapter 自动使用该实例。
+	Corrections     map[string][]configschema.Correction
+	Unknown         map[string][]string
+	Configurations  map[string]json.RawMessage // 包含 required 失败实例的校正副本，供管理修订。
 }
 
 // Settings 保存有效的 Core 设置；日志文件大小以字节计。
@@ -78,6 +79,8 @@ type Settings struct {
 	CommandPrefixesByInstance map[string][]string
 	DefaultLocale             string
 	Adapters                  map[string]AdapterSettings
+	Corrections               []configschema.Correction // Core 设置的运行校正，原值不写日志。
+	Unknown                   []string                  // Core 声明之外的 JSON 路径。
 }
 
 // File 持有设置文档及当前有效快照；方法可并发调用。
@@ -106,6 +109,11 @@ func (f *File) Settings() Settings {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	s := f.current
+	s.Corrections = slices.Clone(s.Corrections)
+	for i := range s.Corrections {
+		s.Corrections[i].Old = slices.Clone(s.Corrections[i].Old)
+	}
+	s.Unknown = slices.Clone(s.Unknown)
 	s.TrustedProxies = slices.Clone(s.TrustedProxies)
 	s.LogSources = maps.Clone(s.LogSources)
 	s.Admins = slices.Clone(s.Admins)
@@ -119,6 +127,22 @@ func (f *File) Settings() Settings {
 		adapter.Instances = maps.Clone(adapter.Instances)
 		for instance, raw := range adapter.Instances {
 			adapter.Instances[instance] = slices.Clone(raw)
+		}
+		adapter.Corrections = maps.Clone(adapter.Corrections)
+		for instance, records := range adapter.Corrections {
+			records = slices.Clone(records)
+			for i := range records {
+				records[i].Old = slices.Clone(records[i].Old)
+			}
+			adapter.Corrections[instance] = records
+		}
+		adapter.Unknown = maps.Clone(adapter.Unknown)
+		for instance, paths := range adapter.Unknown {
+			adapter.Unknown[instance] = slices.Clone(paths)
+		}
+		adapter.Configurations = maps.Clone(adapter.Configurations)
+		for instance, raw := range adapter.Configurations {
+			adapter.Configurations[instance] = slices.Clone(raw)
 		}
 		s.Adapters[id] = adapter
 	}
@@ -148,20 +172,18 @@ func Load(dataDir string) (*File, error) {
 		}
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}
-	if err := migrateSettings(name, document); err != nil {
-		return nil, fmt.Errorf("%s: %w", name, err)
-	}
 	current, err := document.settings()
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}
+	logCorrections(current.Corrections)
 	return &File{name: name, document: document, current: current}, nil
 }
 
 func defaultDocument() ([]byte, error) {
 	s := Defaults()
 	content, err := json.MarshalIndent(map[string]any{
-		"$version": currentVersion, "listen": s.Listen, "base_url": s.BaseURL,
+		"listen": s.Listen, "base_url": s.BaseURL,
 		"trusted_proxies": []string{}, "proxy": s.Proxy, "admins": []string{},
 		"command_prefixes": s.CommandPrefixes, "command_prefixes_by_instance": map[string][]string{}, "reply": s.Reply,
 		"default_locale": s.DefaultLocale, "adapters": map[string]any{},
@@ -176,13 +198,31 @@ func defaultDocument() ([]byte, error) {
 }
 
 func (d *Document) settings() (Settings, error) {
-	// 1. 保留原文，另建展开后的树以校验所有字符串，包括 Adapter 实例内部。
-	root, err := d.root.expanded()
+	// 1. 共享校正器只修改运行副本，原文保留供 Update 和实例准备使用。
+	schema, fields, defaults, err := coreSchema()
+	if err != nil {
+		return Settings{}, err
+	}
+	// Adapter 凭证按实例 schema 展开，Core 的分组声明只解释归属与实例目录。
+	adapterField := fields["adapters"]
+	adapterField.Type = "raw"
+	fields["adapters"] = adapterField
+	raw, corrections, unknown, err := correctDeclaredConfiguration(d.root.encode(), schema, fields)
+	if err != nil {
+		return Settings{}, err
+	}
+	root, err := parseNode(raw, "")
 	if err != nil {
 		return Settings{}, err
 	}
 	s := Defaults()
-	if err := readMapping(root, "", &s); err != nil {
+	for i := range corrections {
+		if corrections[i].Path == "$.adapters" {
+			corrections[i].Old = nil // 整个实例目录可能携带凭证。
+		}
+	}
+	s.Corrections, s.Unknown = corrections, unknown
+	if err := readCorrectedMapping(root, defaults, fields, "", &s); err != nil {
 		return Settings{}, err
 	}
 	// 2. 联合校验 Base URL、监听安全边界与日志文件限额。
@@ -195,29 +235,80 @@ func (d *Document) settings() (Settings, error) {
 		}
 	}
 	locate(root)
-	return s, validateSettings(s, locations)
+	if _, err := baseURL(s.BaseURL); err != nil {
+		resetCoreValue(root, defaults, "base_url", &s)
+	}
+	host, _, _ := net.SplitHostPort(s.Listen)
+	ip, _ := netip.ParseAddr(host)
+	base, _ := baseURL(s.BaseURL)
+	if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && base.Scheme != "https" && len(s.TrustedProxies) == 0 {
+		resetCoreValue(root, defaults, "listen", &s)
+	}
+	if s.LogFile.MaxSize > s.LogFile.MaxTotal {
+		resetCoreValue(root, defaults, "log.file.max_size", &s)
+		if s.LogFile.MaxSize > s.LogFile.MaxTotal {
+			resetCoreValue(root, defaults, "log.file.max_total", &s)
+		}
+	}
+	if err := validateNames(s, locations); err != nil {
+		// 实例目录违反命名约束时，整个 adapters 字段恢复 dict 零值；原文仍保留。
+		s.Corrections = append(s.Corrections, configschema.Correction{Path: "$.adapters", Reason: "reset"})
+		s.Adapters = make(map[string]AdapterSettings)
+	}
+	return s, nil
 }
 
-func readMapping(n *node, path string, s *Settings) error {
-	return n.object(func(key string, value *node) error {
-		if strings.Contains(key, ".") {
-			return value.fail(errors.New("unknown key; use nested JSON objects"))
+func readCorrectedMapping(root, defaults *node, fields map[string]configField, path string, s *Settings) error {
+	for _, field := range root.members {
+		declaration, declared := fields[field.key]
+		if !declared {
+			continue
 		}
-		name := key
+		name := field.key
 		if path != "" {
-			name = path + "." + key
+			name = path + "." + name
 		}
 		if name == "log" || name == "log.file" {
-			return readMapping(value, name, s)
+			if err := readCorrectedMapping(field.value, defaults, declaration.Items, name, s); err != nil {
+				return err
+			}
+			continue
 		}
-		return readValue(value, name, s)
-	})
+		before := *s
+		if err := readValue(field.value, name, s); err != nil {
+			*s = before
+			if name == "adapters" {
+				return err // 实例结构与名称由实例准备路径处理。
+			}
+			resetCoreNode(field.value, defaults, name, s)
+		}
+	}
+	return nil
+}
+
+func resetCoreValue(root, defaults *node, path string, s *Settings) {
+	for _, name := range strings.Split(path, ".") {
+		root = root.members[root.index(name)].value
+	}
+	resetCoreNode(root, defaults, path, s)
+}
+
+func resetCoreNode(old, defaults *node, path string, s *Settings) {
+	record := configschema.Correction{Path: "$." + path, Reason: "reset"}
+	if path != "proxy" {
+		record.Old = old.encode()
+	}
+	s.Corrections = append(s.Corrections, record)
+	value := defaults
+	for _, name := range strings.Split(path, ".") {
+		value = value.members[value.index(name)].value
+	}
+	_ = readValue(value, path, s) // 默认文档由 Defaults 构造，已通过声明与现有解析器。
+	*old = *value
 }
 
 func readValue(n *node, key string, s *Settings) error {
 	switch key {
-	case "$version":
-		return readVersion(n)
 	case "trusted_proxies":
 		values, err := n.strings()
 		if err != nil {
@@ -299,7 +390,7 @@ func readValue(n *node, key string, s *Settings) error {
 		}
 		return nil
 	default:
-		return n.fail(errors.New("unknown key"))
+		return nil // 未声明字段保留原文，不参与有效设置。
 	}
 }
 
@@ -342,53 +433,62 @@ func readAdmins(n *node, s *Settings) error {
 }
 
 func readAdapters(n *node, s *Settings) error {
+	schema, problems := configschema.Parse([]byte(adapterGroupDeclaration))
+	if len(problems) != 0 {
+		return fmt.Errorf("invalid Adapter group schema: %v", problems)
+	}
+	s.Adapters = make(map[string]AdapterSettings)
 	return n.object(func(id string, value *node) error {
-		adapter := AdapterSettings{Version: defaultInstanceVersion}
-		if err := value.object(func(key string, value *node) error {
-			switch key {
-			case "package":
-				owner, err := value.text()
-				if err != nil {
-					return err
-				}
-				if _, err := validate.PluginID(owner); err != nil {
-					return value.fail(err)
-				}
-				adapter.Package = owner
-				return nil
-			case "$version":
-				version, err := positiveVersion(value)
-				if err == nil {
-					adapter.Version = version
-				}
-				return err
-			case "default_instance":
-				instance, err := value.text()
-				if err == nil {
-					adapter.DefaultInstance = instance
-				}
-				return err
-			case "instances":
-				return value.object(func(instance string, configuration *node) error {
-					if configuration.delimiter != '{' {
-						return configuration.fail(errors.New("expected an object"))
-					}
-					if adapter.Instances == nil {
-						adapter.Instances = make(map[string]json.RawMessage)
-					}
-					adapter.Instances[instance] = configuration.encode()
-					return nil
-				})
-			default:
-				return value.fail(errors.New("unknown key"))
-			}
-		}); err != nil {
+		path := fmt.Sprintf("$.adapters[%q]", id)
+		raw := value.encode()
+		if value.delimiter != '{' {
+			s.Corrections = append(s.Corrections, configschema.Correction{Path: path, Reason: "reset"})
+			raw = []byte("{}")
+		}
+		var fields map[string]configField
+		if err := json.Unmarshal(schema.Canonical(), &fields); err != nil {
 			return err
 		}
-		if s.Adapters == nil {
-			s.Adapters = make(map[string]AdapterSettings)
+		instances := fields["instances"]
+		instances.Type = "raw"
+		fields["instances"] = instances
+		corrected, records, unknown, err := correctDeclaredConfiguration(raw, schema, fields)
+		if err != nil {
+			return err
 		}
-		s.Adapters[id] = adapter
+		for i := range records {
+			records[i].Path = path + strings.TrimPrefix(records[i].Path, "$")
+			if records[i].Path == path+".instances" {
+				records[i].Old = nil
+			}
+		}
+		s.Corrections = append(s.Corrections, records...)
+		for _, fieldPath := range unknown {
+			s.Unknown = append(s.Unknown, path+strings.TrimPrefix(fieldPath, "$"))
+		}
+		var group struct {
+			Package         string                     `json:"package"`
+			DefaultInstance string                     `json:"default_instance"`
+			Instances       map[string]json.RawMessage `json:"instances"`
+		}
+		if err := json.Unmarshal(corrected, &group); err != nil {
+			return err
+		}
+		if group.Package != "" {
+			if _, err := validate.PluginID(group.Package); err != nil {
+				old, _ := json.Marshal(group.Package)
+				s.Corrections = append(s.Corrections, configschema.Correction{Path: path + ".package", Reason: "reset", Old: old})
+				group.Package = ""
+			}
+		}
+		if group.DefaultInstance != "" {
+			if _, found := group.Instances[group.DefaultInstance]; !found {
+				old, _ := json.Marshal(group.DefaultInstance)
+				s.Corrections = append(s.Corrections, configschema.Correction{Path: path + ".default_instance", Reason: "reset", Old: old})
+				group.DefaultInstance = ""
+			}
+		}
+		s.Adapters[id] = AdapterSettings{Package: group.Package, DefaultInstance: group.DefaultInstance, Instances: group.Instances}
 		return nil
 	})
 }
@@ -515,22 +615,6 @@ func readString(value, key string, s *Settings) error {
 		s.Proxy = value
 	}
 	return nil
-}
-
-func validateSettings(s Settings, locations map[string]*node) error {
-	base, err := baseURL(s.BaseURL)
-	if err != nil {
-		return at(locations, "base_url", err)
-	}
-	host, _, _ := net.SplitHostPort(s.Listen) // listen 的语法已在 readString 中校验。
-	ip, _ := netip.ParseAddr(host)
-	if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && base.Scheme != "https" && len(s.TrustedProxies) == 0 {
-		return at(locations, "listen", errors.New("non-loopback listen requires HTTPS base_url or trusted_proxies"))
-	}
-	if s.LogFile.MaxSize > s.LogFile.MaxTotal {
-		return at(locations, "log.file.max_size", errors.New("exceeds log.file.max_total"))
-	}
-	return validateNames(s, locations)
 }
 
 func at(locations map[string]*node, key string, err error) error {

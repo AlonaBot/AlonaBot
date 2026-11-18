@@ -675,10 +675,6 @@ type Bootstrap struct {
 	CandidateConfigJson string `protobuf:"bytes,2,opt,name=candidate_config_json,json=candidateConfigJson,proto3" json:"candidate_config_json,omitempty"`
 	// 可信安装包中配置 Schema 的摘要。
 	ConfigSchemaHash []byte `protobuf:"bytes,3,opt,name=config_schema_hash,json=configSchemaHash,proto3" json:"config_schema_hash,omitempty"`
-	// 现有配置的版本；首次安装没有旧版本。
-	PreviousConfigVersion *uint32 `protobuf:"varint,4,opt,name=previous_config_version,json=previousConfigVersion,proto3,oneof" json:"previous_config_version,omitempty"`
-	// 配置迁移的目标版本。
-	TargetConfigVersion uint32 `protobuf:"varint,5,opt,name=target_config_version,json=targetConfigVersion,proto3" json:"target_config_version,omitempty"`
 	// 插件业务数据库的准备视图。
 	DatabaseDescriptor *DatabaseDescriptor `protobuf:"bytes,6,opt,name=database_descriptor,json=databaseDescriptor,proto3" json:"database_descriptor,omitempty"`
 	// 本 Session 的内部 HTTP 代理认证材料；仅在插件声明 HTTP 能力时设置。
@@ -748,20 +744,6 @@ func (x *Bootstrap) GetConfigSchemaHash() []byte {
 		return x.ConfigSchemaHash
 	}
 	return nil
-}
-
-func (x *Bootstrap) GetPreviousConfigVersion() uint32 {
-	if x != nil && x.PreviousConfigVersion != nil {
-		return *x.PreviousConfigVersion
-	}
-	return 0
-}
-
-func (x *Bootstrap) GetTargetConfigVersion() uint32 {
-	if x != nil {
-		return x.TargetConfigVersion
-	}
-	return 0
 }
 
 func (x *Bootstrap) GetDatabaseDescriptor() *DatabaseDescriptor {
@@ -1655,13 +1637,11 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"session_id\x18\x01 \x01(\fR\tsessionId\x12!\n" +
 	"\fchosen_minor\x18\x02 \x01(\rR\vchosenMinor\x12X\n" +
 	"\x17capability_intersection\x18\x03 \x03(\v2\x1f.alonabot.v1.ProtocolCapabilityR\x16capabilityIntersection\x124\n" +
-	"\tbootstrap\x18\x04 \x01(\v2\x16.alonabot.v1.BootstrapR\tbootstrap\"\xf9\x05\n" +
+	"\tbootstrap\x18\x04 \x01(\v2\x16.alonabot.v1.BootstrapR\tbootstrap\"\xa8\x05\n" +
 	"\tBootstrap\x12#\n" +
 	"\rgeneration_id\x18\x01 \x01(\tR\fgenerationId\x122\n" +
 	"\x15candidate_config_json\x18\x02 \x01(\tR\x13candidateConfigJson\x12,\n" +
-	"\x12config_schema_hash\x18\x03 \x01(\fR\x10configSchemaHash\x12;\n" +
-	"\x17previous_config_version\x18\x04 \x01(\rH\x00R\x15previousConfigVersion\x88\x01\x01\x122\n" +
-	"\x15target_config_version\x18\x05 \x01(\rR\x13targetConfigVersion\x12P\n" +
+	"\x12config_schema_hash\x18\x03 \x01(\fR\x10configSchemaHash\x12P\n" +
 	"\x13database_descriptor\x18\x06 \x01(\v2\x1f.alonabot.v1.DatabaseDescriptorR\x12databaseDescriptor\x12B\n" +
 	"\x0fhttp_proxy_auth\x18\a \x01(\v2\x1a.alonabot.v1.HttpProxyAuthR\rhttpProxyAuth\x12;\n" +
 	"\fphase_limits\x18\b \x01(\v2\x18.alonabot.v1.PhaseLimitsR\vphaseLimits\x12?\n" +
@@ -1670,8 +1650,7 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	" \x01(\x0e2\x15.alonabot.v1.LogLevelR\blogLevel\x12A\n" +
 	"\x0esession_limits\x18\v \x01(\v2\x1a.alonabot.v1.SessionLimitsR\rsessionLimits\x12%\n" +
 	"\x0edefault_locale\x18\f \x01(\tR\rdefaultLocale\x12&\n" +
-	"\x0fplugin_data_dir\x18\r \x01(\tR\rpluginDataDirB\x1a\n" +
-	"\x18_previous_config_version\"\x8c\x01\n" +
+	"\x0fplugin_data_dir\x18\r \x01(\tR\rpluginDataDirJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06R\x17previous_config_versionR\x15target_config_version\"\x8c\x01\n" +
 	"\rSessionLimits\x12!\n" +
 	"\fmax_inflight\x18\x01 \x01(\rR\vmaxInflight\x12*\n" +
 	"\x11max_payload_bytes\x18\x02 \x01(\rR\x0fmaxPayloadBytes\x12,\n" +
@@ -1844,7 +1823,6 @@ func file_alonabot_v1_control_proto_init() {
 		return
 	}
 	file_alonabot_v1_envelope_proto_init()
-	file_alonabot_v1_control_proto_msgTypes[3].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

@@ -12,21 +12,20 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 )
 
-// Loader 在声明式迁移之后处理完整配置；fromVersion 保留迁移前的版本号。
+// Loader 在补值与校正之前处理完整原始配置。
 // 回调应为可重复的纯变换，通过 ctx 响应准备阶段的取消与预算。
-type Loader func(ctx context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error)
+type Loader func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error)
 
 // Prepared 保存准备后的完整候选配置和只读取值，供 REGISTER 与根插件使用。
 type Prepared struct {
-	JSON    []byte // 规范 JSON：键排序、无多余空白、数字保留原文；包含全部未知键。
-	Version uint32 // target_config_version
-	Values  Values
+	JSON        []byte // 规范 JSON：键排序、无多余空白、数字保留原文；包含全部未知键。
+	Corrections []configschema.Correction
+	Values      Values
 }
 
-// Prepare 依次执行声明式迁移、load、补缺失值和 schema 校验，再构造完整 JSON 与 Values。
-// fromVersion 为 nil 时跳过迁移，并把 targetVersion 交给 load；load 为 nil 时跳过回调。
-// 失败返回 *validate.Error，消息只含路径与错误类别；restart 时回调须保持配置不变。
-func Prepare(ctx context.Context, load Loader, schema []byte, raw []byte, fromVersion *uint32, targetVersion uint32, restart bool) (Prepared, error) {
+// Prepare 依次执行 load、补值与校正、required 校验，再构造完整 JSON 与 Values。
+// 失败返回 *validate.Error，消息只含路径与错误类别；restart 时完整结果须保持配置不变。
+func Prepare(ctx context.Context, load Loader, schema []byte, raw []byte, restart bool) (Prepared, error) {
 	object, err := prepareObject(raw)
 	if err != nil {
 		return Prepared{}, err
@@ -42,18 +41,9 @@ func Prepare(ctx context.Context, load Loader, schema []byte, raw []byte, fromVe
 		return Prepared{}, prepareContextError(err)
 	}
 
-	// 1. 先迁移完整对象，回调接收的版本仍为迁移前的版本；首装不迁移。
-	version := targetVersion
-	if fromVersion != nil {
-		version = *fromVersion
-		if err := description.Migrate(object, int(version)); err != nil {
-			return Prepared{}, err
-		}
-	}
-
-	// 2. 回调只持有独立 JSON 字节；超时返回后不再接纳其结果。
+	before, _ := json.Marshal(object) // UseNumber 解码的 JSON 对象可直接编码。
+	// 1. 回调只持有独立 JSON 字节；超时返回后不再接纳其结果。
 	if load != nil {
-		before, _ := json.Marshal(object) // 对象来自 UseNumber 解码与已检查的声明式迁移，可直接编码。
 		type loadResult struct {
 			raw json.RawMessage
 			err error
@@ -63,7 +53,7 @@ func Prepare(ctx context.Context, load Loader, schema []byte, raw []byte, fromVe
 			return Prepared{}, prepareContextError(err)
 		}
 		go func() {
-			result, err := load(ctx, version, before)
+			result, err := load(ctx, bytes.Clone(before))
 			loaded <- loadResult{result, err}
 		}()
 		select {
@@ -80,26 +70,18 @@ func Prepare(ctx context.Context, load Loader, schema []byte, raw []byte, fromVe
 			if err != nil {
 				return Prepared{}, err
 			}
-			if restart {
-				// 回调可以复用输入字节；重新编码迁移结果，避免原地修改绕过比较。
-				before, _ := json.Marshal(object)
-				after, _ := json.Marshal(transformed)
-				if !bytes.Equal(before, after) {
-					return Prepared{}, prepareError(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "config OnConfigLoad changed the configuration during restart")
-				}
-			}
 			object = transformed
 		}
 	}
 
-	// 3. 只补缺失的声明字段，未知键与显式值保存在完整文档中。
-	description.Complete(object)
-	if err := description.Validate(object); err != nil {
+	// 2. 共享校正保留未知键；普通重启同时核对回调和校正的完整结果。
+	candidate, _ := json.Marshal(object)
+	canonical, corrections, err := description.Correct(candidate)
+	if err != nil {
 		return Prepared{}, err
 	}
-	canonical, err := json.Marshal(object)
-	if err != nil {
-		return Prepared{}, prepareError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "config cannot be encoded at $")
+	if restart && !bytes.Equal(before, canonical) {
+		return Prepared{}, prepareError(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "config changed during restart")
 	}
 	values, err := newValues(schema, canonical)
 	if err != nil {
@@ -108,7 +90,7 @@ func Prepare(ctx context.Context, load Loader, schema []byte, raw []byte, fromVe
 	if err := ctx.Err(); err != nil {
 		return Prepared{}, prepareContextError(err)
 	}
-	return Prepared{JSON: canonical, Version: targetVersion, Values: values}, nil
+	return Prepared{JSON: canonical, Corrections: corrections, Values: values}, nil
 }
 
 func prepareError(code pb.ErrorCode, message string) error {

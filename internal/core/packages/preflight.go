@@ -646,9 +646,6 @@ func exampleImageLocation(raw []byte, image string) string {
 	var find func(map[string]json.RawMessage, string) string
 	find = func(fields map[string]json.RawMessage, parent string) string {
 		for _, key := range slices.Sorted(maps.Keys(fields)) {
-			if key == "$version" || key == "$migrations" {
-				continue
-			}
 			var field struct {
 				Example          json.RawMessage
 				Items, Templates map[string]json.RawMessage

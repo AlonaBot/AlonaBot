@@ -24,6 +24,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
@@ -79,7 +80,8 @@ type Expect struct {
 	Offer       validate.Offer // Core 一侧支持/要求的协议版本与能力
 	// Snapshot 在 REGISTER 校验后生成持久化快照；nil 时使用原候选配置。
 	// 回调的错误消息须省略配置值。
-	Snapshot func(candidate []byte) (snapshot []byte, err error)
+	Snapshot    func(candidate []byte, corrections []configschema.Correction) (snapshot []byte, err error)
+	SecretPaths [][]string // 当前声明与旧代次保留的秘密路径；校正原值也按这些路径脱敏。
 }
 
 // PhaseError 记录准备阶段在哪个阶段、以什么错误码失败；消息不含 Secret 或配置内容。
@@ -103,8 +105,9 @@ type Prepared struct {
 	Minor          uint32                   // 协商出的协议次版本
 	Capabilities   []*pb.ProtocolCapability // 双方都支持的协议能力
 	Register       *pb.Register             // 已通过校验的注册载荷
-	RouteHash      []byte                   // PREPARED 中的 route_descriptor_hash
-	ConfigSnapshot []byte                   // 准备持久化的配置，secret 字段只包含引用
+	Corrections    []configschema.Correction
+	RouteHash      []byte // PREPARED 中的 route_descriptor_hash
+	ConfigSnapshot []byte // 准备持久化的配置，secret 字段只包含引用
 	// PREPARED 中的 candidate_config_digest，对 ConfigSnapshot 计算。
 	ConfigDigest   []byte
 	httpProxyToken []byte // 本 Session 的内部代理凭证；仅交给 Instance，不进入日志
@@ -277,11 +280,12 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		if registerErr == nil && len(boot.GetConfigSchemaHash()) != 0 && !bytes.Equal(m.GetConfigSchemaHash(), boot.GetConfigSchemaHash()) {
 			registerErr = &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "registered config schema hash differs from Bootstrap"}
 		}
-		if registerErr == nil && m.GetCandidateConfigVersion() != boot.GetTargetConfigVersion() {
-			registerErr = &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "registered config version differs from Bootstrap"}
-		}
 		if registerErr == nil {
 			registerErr = checkMigration(m.GetMigration(), boot.GetDatabaseDescriptor())
+		}
+		corrections, correctionErr := configCorrections(m.GetConfigCorrections(), exp.SecretPaths)
+		if registerErr == nil {
+			registerErr = correctionErr
 		}
 		if err := registerErr; err != nil {
 			var ve *validate.Error
@@ -299,7 +303,7 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		// 4. 注册校验通过后形成持久化快照，PREPARED 只确认该快照的摘要。
 		snapshot := []byte(m.GetCandidateConfigJson())
 		if exp.Snapshot != nil {
-			snapshot, err = exp.Snapshot(snapshot)
+			snapshot, err = exp.Snapshot(snapshot, corrections)
 			if err != nil {
 				code := pb.ErrorCode_ERROR_CODE_INTERNAL
 				safe := "create config snapshot failed"
@@ -311,7 +315,7 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 				return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_REGISTER, code, "%v", err)
 			}
 		}
-		p := &Prepared{SessionID: sid, Minor: agree.Minor, Capabilities: agree.Intersection, Register: m,
+		p := &Prepared{SessionID: sid, Minor: agree.Minor, Capabilities: agree.Intersection, Register: m, Corrections: corrections,
 			RouteHash: routeHash(m), ConfigSnapshot: snapshot, ConfigDigest: digest(snapshot), httpProxyToken: boot.GetHttpProxyAuth().GetToken(), defaultLocale: boot.GetDefaultLocale()}
 		prep, err := wire.ControlEnvelope(sid, agree.Minor, "", pb.FrameKind_FRAME_KIND_PREPARED, &pb.Prepared{RouteDescriptorHash: p.RouteHash, CandidateConfigDigest: p.ConfigDigest})
 		if err == nil {

@@ -14,7 +14,6 @@ type BuildInfo struct {
 	RequiredCapabilities *[]Capability // 进程角色必填，无能力时指向空列表
 	OS, Arch             string        // WebUI 必须为 any/any
 	Entrypoint           string        // 进程角色的包内相对路径
-	ConfigVersion        *uint32       // 进程角色必填
 	MigrationMode        string        // plugin/agent 必须为 none、self 或 versioned
 	PrepareEffects       string        // plugin/agent 必须为 none 或 managed_db
 }
@@ -30,7 +29,6 @@ func Generate(project *Manifest, build BuildInfo) ([]byte, error) {
 	m.RequiredCapabilities = build.RequiredCapabilities
 	m.OS, m.Arch = build.OS, build.Arch
 	m.Entrypoint = build.Entrypoint
-	m.ConfigVersion = build.ConfigVersion
 	m.MigrationMode = build.MigrationMode
 	if m.Role == rolePlugin || m.Role == roleAgent {
 		switch build.MigrationMode {
@@ -68,7 +66,7 @@ func Generate(project *Manifest, build BuildInfo) ([]byte, error) {
 			if m.Role != rolePlugin && m.Role != roleAgent {
 				continue
 			}
-		case "protocol_min_major", "protocol_max_major", "required_capabilities", "entrypoint", "config_version":
+		case "protocol_min_major", "protocol_max_major", "required_capabilities", "entrypoint":
 			if m.Role == roleWebUI {
 				continue
 			}

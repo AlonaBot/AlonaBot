@@ -375,10 +375,10 @@ func (s *Store) GetInstall(ctx context.Context, pluginID string) (Install, error
 }
 
 // AddGeneration 持久化一个候选代次（尚未提交）。配置快照只能含 secret 引用，不含明文。
-func (s *Store) AddGeneration(ctx context.Context, pluginID, generationID, configSnapshot string, configVersion uint32) error {
+func (s *Store) AddGeneration(ctx context.Context, pluginID, generationID, configSnapshot string) error {
 	return s.db.WithContext(ctx).Create(&generation{
-		GenerationID: generationID, PluginID: pluginID, ConfigSnapshot: configSnapshot,
-		ConfigVersion: configVersion, CreatedAt: time.Now().UnixMilli(),
+		GenerationID: generationID, PluginID: pluginID, ConfigSnapshot: configSnapshot, ConfigCorrections: "[]",
+		CreatedAt: time.Now().UnixMilli(),
 	}).Error
 }
 

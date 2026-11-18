@@ -12,9 +12,6 @@ import (
 func parseFields(object orderedObject, path string, root bool, problems *[]Problem) []*Field {
 	var fields []*Field
 	for _, p := range object {
-		if root && (p.name == "$version" || p.name == "$migrations") {
-			continue
-		}
 		fieldPath := joinPath(path, p.name)
 		if !validKey(p.name) {
 			*problems = append(*problems, Problem{fieldPath, "expected a nonempty ASCII field key using letters, digits, '_' or '-'"})
@@ -317,8 +314,8 @@ func validNumber(value any, typ string) bool {
 		return false
 	}
 	if typ == typeInt {
-		integer, ok := new(big.Rat).SetString(string(number))
-		return ok && integer.IsInt() && integer.Num().IsInt64()
+		_, ok := integerText(number)
+		return ok
 	}
 	decimal, err := number.Float64()
 	return err == nil && !math.IsInf(decimal, 0) && !math.IsNaN(decimal)

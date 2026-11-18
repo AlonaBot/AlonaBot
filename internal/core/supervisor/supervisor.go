@@ -268,7 +268,24 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (*Prepared, err
 	secretBytes, _ := hex.DecodeString(sessionSecret)
 	exp := host.Expect{Role: spec.Role, AdapterID: spec.AdapterID, PluginID: spec.PluginID, Secret: secretBytes, BuildDigest: spec.BuildDigest,
 		Offer: validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}}
-	exp.Snapshot = func(candidate []byte) ([]byte, error) {
+	if len(spec.ConfigSchema) != 0 {
+		schema, problems := configschema.Parse(spec.ConfigSchema)
+		if len(problems) != 0 {
+			return fail(fmt.Errorf("config schema: %v", problems))
+		}
+		exp.SecretPaths = schema.SecretPaths()
+	}
+	correctedPaths, err := correctedSecretPaths(spec.ConfigSchema, keptPaths)
+	if err != nil {
+		return fail(fmt.Errorf("map config secret paths: %w", err))
+	}
+	// 校正记录可能指向原结构或新结构，两组秘密路径都参与原值脱敏。
+	for _, paths := range [][]string{keptPaths, correctedPaths} {
+		for _, path := range paths {
+			exp.SecretPaths = append(exp.SecretPaths, strings.Split(path, "."))
+		}
+	}
+	exp.Snapshot = func(candidate []byte, corrections []configschema.Correction) ([]byte, error) {
 		if spec.Development {
 			var paths []string
 			if len(spec.ConfigSchema) != 0 {
@@ -280,17 +297,17 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (*Prepared, err
 					paths = append(paths, strings.Join(path, "."))
 				}
 			}
-			if err := store.SetDevGenerationConfig(ctx, spec.GenerationID, string(candidate), boot.TargetConfigVersion, paths); err != nil {
+			if err := store.SetDevGenerationConfig(ctx, spec.GenerationID, string(candidate), paths, corrections); err != nil {
 				return nil, err
 			}
 			return candidate, nil
 		}
-		snapshot, paths, err := secrets.Extract(ctx, spec.PluginID, spec.ConfigSchema, candidate, previous, keptPaths)
+		snapshot, paths, err := secrets.Extract(ctx, spec.PluginID, spec.ConfigSchema, candidate, previous, correctedPaths)
 		if err != nil {
 			return nil, err
 		}
 		if spec.NewCandidate {
-			if err := store.SetGenerationConfig(ctx, spec.GenerationID, string(snapshot), paths); err != nil {
+			if err := store.SetGenerationConfig(ctx, spec.GenerationID, string(snapshot), paths, corrections); err != nil {
 				return nil, err
 			}
 		} else if !bytes.Equal(snapshot, previous) {
@@ -301,6 +318,9 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (*Prepared, err
 	prep, err := host.Prepare(ctx, conn, exp, boot, spec.Limits)
 	if err != nil {
 		return fail(err)
+	}
+	for _, correction := range prep.Corrections {
+		slog.Warn("configuration corrected", "plugin_id", spec.PluginID, "path", correction.Path, "reason", correction.Reason)
 	}
 	spec.Log.SetSession(prep.SessionID)
 	p.Registration = prep

@@ -21,7 +21,7 @@ import (
 )
 
 // OnConfigLoad 检查 interval_seconds 非负，原样返回完整配置。
-func (*Demo) OnConfigLoad(_ context.Context, _ uint32, raw json.RawMessage) (json.RawMessage, error) {
+func (*Demo) OnConfigLoad(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
 	var c struct {
 		Interval int64 `json:"interval_seconds"`
 	}

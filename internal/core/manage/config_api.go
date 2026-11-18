@@ -38,6 +38,8 @@ type pluginConfig struct {
 	Pending          *pendingConfig             `json:"pending"`
 	Schema           json.RawMessage            `json:"schema"`
 	I18n             map[string]json.RawMessage `json:"i18n"`
+	Corrections      []configschema.Correction  `json:"corrections"`
+	Unknown          []string                   `json:"unknown"`
 }
 
 func (s *Service) configurations() *config.Service {
@@ -47,6 +49,10 @@ func (s *Service) configurations() *config.Service {
 func (s *Service) configRoutes(mux *http.ServeMux, auth *adminauth.Auth) {
 	mux.HandleFunc("GET /api/v1/plugins/{id}/config", func(w http.ResponseWriter, r *http.Request) {
 		result, err := s.readConfig(r.Context(), r.PathValue("id"))
+		respond(w, result, err)
+	})
+	mux.HandleFunc("POST /api/v1/plugins/{id}/config/prune", func(w http.ResponseWriter, r *http.Request) {
+		result, err := s.pruneConfig(r.Context(), r.PathValue("id"))
 		respond(w, result, err)
 	})
 	for _, method := range []string{"PUT", "PATCH"} {
@@ -216,7 +222,19 @@ func (s *Service) readConfig(ctx context.Context, id string) (pluginConfig, erro
 			return pluginConfig{}, err
 		}
 	}
-	return pluginConfig{active, redacted, pending, schema, translations}, nil
+	corrections := []configschema.Correction{}
+	if active != "" {
+		corrections, err = s.opt.Store.GenerationCorrections(ctx, active)
+		if err != nil {
+			return pluginConfig{}, err
+		}
+	}
+	_, unknown, err := unknownConfig(schema, snapshot, false)
+	if err != nil {
+		return pluginConfig{}, err
+	}
+	return pluginConfig{ActiveGeneration: active, Active: redacted, Pending: pending, Schema: schema,
+		I18n: translations, Corrections: corrections, Unknown: unknown}, nil
 }
 
 // redactConfig 同时隐藏引用和旧导入入口尚未抽取的明文 Pending，保留旧代次的秘密路径。

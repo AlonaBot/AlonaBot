@@ -80,7 +80,7 @@ func (s *Service) CreateInstance(ctx context.Context, adapterPackageID, instance
 	if err := schema.Validate(expanded.(map[string]any)); err != nil {
 		return err
 	}
-	// 旧实例先按已有迁移入口准备，避免新实例使旧实例的版本标记提前升级。
+	// 创建新实例前检查已有实例，保留既有的显式修订入口。
 	if !replacing {
 		_, problems, err := s.opt.Settings.PrepareInstances(installed.AdapterID, schema)
 		if err != nil {
@@ -97,9 +97,6 @@ func (s *Service) CreateInstance(ctx context.Context, adapterPackageID, instance
 			}
 		}
 		if err := doc.Set([]string{"adapters", installed.AdapterID, "package"}, adapterPackageID); err != nil {
-			return err
-		}
-		if err := doc.Set([]string{"adapters", installed.AdapterID, "$version"}, schema.Version()); err != nil {
 			return err
 		}
 		return doc.Set([]string{"adapters", installed.AdapterID, "instances", instanceID}, original)

@@ -26,7 +26,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/generate"
@@ -249,11 +248,6 @@ func buildComponent(ctx context.Context, options generate.Options, outDir string
 	if options.GOOS == "windows" {
 		name += ".exe"
 	}
-	version := uint32(1)
-	if len(result.ConfigSchema) != 0 {
-		schema, _ := configschema.Parse(result.ConfigSchema)
-		version = uint32(schema.Version())
-	}
 	major := uint32(validate.ProtocolMajor)
 	capabilities, err := requiredCapabilities(ctx, options, overlayPath, modFile, development, result.HTTP)
 	if err != nil {
@@ -262,7 +256,7 @@ func buildComponent(ctx context.Context, options generate.Options, outDir string
 	build.PackageManifest, err = manifest.Generate(project.Manifest, manifest.BuildInfo{
 		ManifestVersion: 1, ProtocolMinMajor: &major, ProtocolMaxMajor: &major,
 		RequiredCapabilities: &capabilities, OS: options.GOOS, Arch: options.GOARCH,
-		Entrypoint: name, ConfigVersion: &version, MigrationMode: mode, PrepareEffects: effects,
+		Entrypoint: name, MigrationMode: mode, PrepareEffects: effects,
 	})
 	if err != nil {
 		return build, err

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/config"
@@ -33,6 +34,25 @@ var escapeChat = strings.NewReplacer("%", "%25", "#", "%23")
 var unescapeChat = strings.NewReplacer("%25", "%", "%23", "#")
 
 func (s *Service) settingsRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/v1/core/settings/corrections", func(w http.ResponseWriter, r *http.Request) {
+		current := s.opt.Settings.Settings()
+		w.Header().Set("Cache-Control", "no-store")
+		respond(w, struct {
+			Corrections []configschema.Correction `json:"corrections"`
+			Unknown     []string                  `json:"unknown"`
+		}{current.Corrections, current.Unknown}, nil)
+	})
+	mux.HandleFunc("POST /api/v1/core/settings/prune", func(w http.ResponseWriter, r *http.Request) {
+		s.admins.Lock() // Update 会重读磁盘，策略跟随同一次发布的管理员快照。
+		defer s.admins.Unlock()
+		err := s.opt.Settings.Update(func(doc *settings.Document) error { return doc.Prune() })
+		admins := make([]policy.Admin, 0)
+		for _, admin := range s.opt.Settings.Settings().Admins {
+			admins = append(admins, policy.Admin{AdapterID: admin.AdapterID, UserID: admin.UserID})
+		}
+		s.opt.Policy.SetAdmins(admins)
+		respond(w, struct{}{}, err)
+	})
 	mux.HandleFunc("GET /api/v1/core/admins", func(w http.ResponseWriter, r *http.Request) { respond(w, s.Admins(r.Context()), nil) })
 	for _, method := range []string{"PUT", "DELETE"} {
 		mux.HandleFunc(method+" /api/v1/core/admins", func(w http.ResponseWriter, r *http.Request) {
@@ -303,14 +323,16 @@ func (s *Service) instanceRoutes(mux *http.ServeMux) {
 			respond(w, nil, err)
 			return
 		}
-		var value map[string]any
-		if err := decodeConfigObject(raw, &value); err != nil {
+		_, _, err = s.opt.Settings.PrepareInstances(adapterID, schema)
+		if err != nil {
 			respond(w, nil, err)
 			return
 		}
-		// 旧版本的秘密可能已改名，先迁移读取副本才能使用当前声明脱敏。
-		if err := schema.Migrate(value, group.Version); err != nil {
-			respond(w, nil, precondition(fmt.Sprintf("$.adapters[%q].instances[%q]: %s", adapterID, instanceID, err)))
+		group = s.opt.Settings.Settings().Adapters[adapterID]
+		raw = group.Configurations[instanceID]
+		var value map[string]any
+		if err := decodeConfigObject(raw, &value); err != nil {
+			respond(w, nil, err)
 			return
 		}
 		for _, path := range schema.SecretPaths() {
@@ -318,8 +340,33 @@ func (s *Service) instanceRoutes(mux *http.ServeMux) {
 		}
 		w.Header().Set("Cache-Control", "no-store")
 		respond(w, struct {
-			Config map[string]any `json:"config"`
-		}{value}, nil)
+			Config      map[string]any            `json:"config"`
+			Corrections []configschema.Correction `json:"corrections"`
+			Unknown     []string                  `json:"unknown"`
+		}{value, group.Corrections[instanceID], group.Unknown[instanceID]}, nil)
+	})
+	mux.HandleFunc("POST /api/v1/adapters/{adapter_id}/instances/{instance_id}/prune", func(w http.ResponseWriter, r *http.Request) {
+		s.instances.Lock()
+		defer s.instances.Unlock()
+		adapterID, instanceID := r.PathValue("adapter_id"), r.PathValue("instance_id")
+		owner, err := s.adapterPackage(r.Context(), adapterID)
+		if err != nil {
+			respond(w, nil, err)
+			return
+		}
+		if _, found := s.opt.Settings.Settings().Adapters[adapterID].Instances[instanceID]; !found {
+			respond(w, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_NOT_FOUND, Message: "adapter instance not found"})
+			return
+		}
+		unlock := s.lock(owner)
+		defer unlock()
+		schema, err := s.opt.InstanceSchema(r.Context(), owner)
+		if err != nil {
+			respond(w, nil, err)
+			return
+		}
+		err = s.opt.Settings.Update(func(doc *settings.Document) error { return doc.PruneInstance(adapterID, instanceID, schema) })
+		respond(w, struct{}{}, err)
 	})
 	mux.HandleFunc("PUT /api/v1/adapters/{adapter_id}/instances/{instance_id}", func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
@@ -390,12 +437,6 @@ func (s *Service) writeInstance(ctx context.Context, adapterID, instanceID strin
 	if err != nil {
 		return err
 	}
-	group := s.opt.Settings.Settings().Adapters[adapterID]
-	if _, exists := group.Instances[instanceID]; exists {
-		if err := schema.Migrate(original, group.Version); err != nil {
-			return precondition(fmt.Sprintf("$.adapters[%q].instances[%q]: %s", adapterID, instanceID, err))
-		}
-	}
 	for _, path := range schema.SecretPaths() {
 		preserveInstanceSecret(value, original, path)
 	}
@@ -407,7 +448,7 @@ func (s *Service) writeInstance(ctx context.Context, adapterID, instanceID strin
 	if err := schema.Validate(expanded.(map[string]any)); err != nil {
 		return err
 	}
-	// 2. 修复值和旧实例共用候选校验，成功后一次提交迁移与替换，保留迁移前备份。
+	// 2. 显式编辑经 Update 提交，其他实例只校正运行副本。
 	replacement, err := json.Marshal(value)
 	if err != nil {
 		return err

@@ -2,9 +2,12 @@ package state
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -85,9 +88,9 @@ func (s *Store) DeleteSecrets(ctx context.Context, pluginID string, refIDs []str
 	return int(result.RowsAffected), result.Error
 }
 
-// SetGenerationConfig 在同一事务中保存未提交代次的配置快照并替换其 secret 路径。
+// SetGenerationConfig 在同一事务中保存未提交代次的配置快照、校正记录并替换其 secret 路径。
 // 已提交代次保持不可变；路径写入失败时连同快照一起回滚。
-func (s *Store) SetGenerationConfig(ctx context.Context, generationID, snapshot string, secretPaths []string) error {
+func (s *Store) SetGenerationConfig(ctx context.Context, generationID, snapshot string, secretPaths []string, corrections []configschema.Correction) error {
 	if generationID == "" {
 		return errors.New("generation_id is required")
 	}
@@ -105,6 +108,11 @@ func (s *Store) SetGenerationConfig(ctx context.Context, generationID, snapshot 
 			return errors.New("generation is already committed")
 		}
 		row.ConfigSnapshot = snapshot
+		encoded, err := json.Marshal(append([]configschema.Correction{}, corrections...))
+		if err != nil {
+			return err
+		}
+		row.ConfigCorrections = string(encoded)
 		if err := tx.Save(&row).Error; err != nil {
 			return err
 		}
@@ -121,9 +129,9 @@ func (s *Store) SetGenerationConfig(ctx context.Context, generationID, snapshot 
 	})
 }
 
-// SetDevGenerationConfig 在同一事务中覆盖开发代次的配置、版本与 secret 路径，允许刷新已提交代次。
+// SetDevGenerationConfig 在同一事务中覆盖开发代次的配置、校正记录与 secret 路径，允许刷新已提交代次。
 // 仅接受 dev: 前缀且安装来源为 dev 的代次；路径写入失败时回滚全部改动。
-func (s *Store) SetDevGenerationConfig(ctx context.Context, generationID, snapshot string, configVersion uint32, secretPaths []string) error {
+func (s *Store) SetDevGenerationConfig(ctx context.Context, generationID, snapshot string, secretPaths []string, corrections []configschema.Correction) error {
 	if !strings.HasPrefix(generationID, "dev:") {
 		return errors.New("generation_id must have the dev: prefix")
 	}
@@ -144,11 +152,16 @@ func (s *Store) SetDevGenerationConfig(ctx context.Context, generationID, snapsh
 		if install.Source != devSource {
 			return fmt.Errorf("plugin %s has source %q, expected dev", row.PluginID, install.Source)
 		}
-		row.ConfigSnapshot, row.ConfigVersion = snapshot, configVersion
+		row.ConfigSnapshot = snapshot
+		encoded, err := json.Marshal(append([]configschema.Correction{}, corrections...))
+		if err != nil {
+			return err
+		}
+		row.ConfigCorrections = string(encoded)
 		if err := tx.Save(&row).Error; err != nil {
 			return err
 		}
-		// 2. 整体替换路径集合，和快照、版本一起提交。
+		// 2. 整体替换路径集合，和快照一起提交。
 		if err := tx.Where(&generationSecretPath{GenerationID: generationID}).Delete(&generationSecretPath{}).Error; err != nil {
 			return err
 		}
@@ -175,4 +188,21 @@ func (s *Store) GenerationSecretPaths(ctx context.Context, generationID string) 
 		paths[i] = row.Path
 	}
 	return paths, nil
+}
+
+// GenerationCorrections 读取代次持久化的配置校正记录。
+func (s *Store) GenerationCorrections(ctx context.Context, generationID string) ([]configschema.Correction, error) {
+	var row generation
+	err := s.db.WithContext(ctx).Where(clause.Eq{Column: clause.PrimaryColumn, Value: generationID}).Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	records := []configschema.Correction{}
+	if err := json.Unmarshal([]byte(row.ConfigCorrections), &records); err != nil {
+		return nil, err
+	}
+	return records, nil
 }
