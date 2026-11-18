@@ -1,4 +1,4 @@
-// Package manage 提供组件生命周期、配置、权限、工具、会话与日志的管理服务。
+// Package manage 提供组件生命周期、配置、权限、工具、会话、日志与诊断包的管理服务。
 //
 // [Service] 共用 Core 的状态库、设置文件与策略；[Service.Handler] 经管理认证保护，
 // [Service.WebUI] 提供登录前可读取的静态页面。配置读取隐藏秘密，实例配置写回共享设置文件。
@@ -26,6 +26,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
+	"github.com/AlonaBot/AlonaBot/internal/core/scheduler"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/tool"
@@ -62,6 +63,10 @@ type Options struct {
 
 	DevelopmentWebUI fs.FS                           // 本次运行的静态根目录；nil 时选择已启用的安装包。
 	CoreInfo         func() (version, listen string) // 总览在请求时读取同一个 Core 的构建版本与实际监听地址。
+
+	Scheduler             *scheduler.Scheduler
+	InstanceStatus        func(ctx context.Context, packageID, instanceID string) (state, safeError string, err error) // 远端实例的运行状态；直接装配 Registry 时可省略。
+	RecordInstanceFailure func(ctx context.Context, packageID, instanceID, safeError string) error                     // 可选，留存启动前的配置失败。
 }
 
 // Service 用独立的逐包锁串行管理动作，supervisor 继续持有状态库的进程锁。
@@ -124,6 +129,7 @@ type Package struct {
 	Enabled, Uninstalled, Signed                              bool
 	Active, State                                             string
 	Warnings                                                  []string `json:",omitempty"` // 仅安装结果携带清单警告。
+	Pages                                                     []page   `json:"pages"`
 }
 
 // List 按安装顺序列出组件及其当前运行状态。
@@ -171,7 +177,7 @@ func (s *Service) describe(ctx context.Context, id string) (Package, error) {
 	}
 	return Package{ID: id, Role: string(in.Role), AdapterID: in.AdapterID, Version: in.Version,
 		Source: in.Source, PublisherKeyID: in.PublisherKeyID, Pin: in.Pin, Enabled: enabled,
-		Uninstalled: in.Uninstalled, Signed: in.PublisherKeyID != "", Active: active, State: current}, nil
+		Uninstalled: in.Uninstalled, Signed: in.PublisherKeyID != "", Active: active, State: current, Pages: s.pages(id, nil)}, nil
 }
 
 func failure(err error) error {

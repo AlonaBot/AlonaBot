@@ -24,7 +24,7 @@ func TestLLMHarness(t *testing.T) {
 				calls.Add(1)
 				requests <- req
 				zero := 0
-				response := llm.Response{Text: "generated", Provider: "synthetic", Model: "test-model", OutputTokens: &zero}
+				response := llm.Response{Text: "generated", Model: "synthetic", OutputTokens: &zero}
 				if usage == "input" {
 					response.InputTokens, response.OutputTokens = &zero, nil
 				}
@@ -37,7 +37,7 @@ func TestLLMHarness(t *testing.T) {
 			if calls.Load() != 1 {
 				t.Fatalf("calls = %d, want 1", calls.Load())
 			}
-			want := llm.Request{Messages: []llm.Message{{Role: "user", Text: "first"}, {Role: "assistant", Text: "second"}, {Role: "user", Text: "third"}}, System: "system prompt", Provider: "synthetic", MaxOutputTokens: 37}
+			want := llm.Request{Messages: []llm.Message{{Role: "user", Text: "first"}, {Role: "assistant", Text: "second"}, {Role: "user", Text: "third"}}, System: "system prompt", Model: "synthetic", MaxOutputTokens: 37}
 			if got := <-requests; !reflect.DeepEqual(got, want) {
 				t.Fatalf("request = %+v, want %+v", got, want)
 			}
@@ -49,7 +49,7 @@ func TestLLMHarness(t *testing.T) {
 		h := plugintest.Start(t, plugintest.Plugin(probe.New()), plugintest.LLM(func(ctx context.Context, req llm.Request) (llm.Response, error) {
 			calls.Add(1)
 			requests <- req
-			return llm.Response{Text: "answer", Provider: "synthetic", Model: "test-model"}, nil
+			return llm.Response{Text: "answer", Model: "synthetic"}, nil
 		}))
 		result := h.Text(chat, user, "/llmask")
 		if len(result.Sends) != 1 || result.Sends[0].Text() != "answer" || len(result.Outcomes) != 1 || result.Outcomes[0].Err != nil || calls.Load() != 1 {

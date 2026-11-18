@@ -6,68 +6,92 @@
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
-| goal-71 | T-14.1 | help 插件与命令列表 | T-04.4、T-04.16、T-05.2、T-08.8 | 等待前置（T-04.16） |
-| goal-72 | T-14.2 | welcome 与 rss 插件 | T-04.16、T-05.2、T-07.2、T-08.5、T-08.8、T-08.11、T-09.4 | 等待前置（T-04.16） |
+| goal-71 | T-14.1 | help 插件与命令列表 | T-04.4、T-04.16、T-05.2、T-08.8 | 待派发 |
+| goal-72 | T-14.2 | welcome 与 rss 插件 | T-04.16、T-05.2、T-07.2、T-08.5、T-08.8、T-08.11、T-09.4 | 等待前置（T-04.16）；不进入首个发行版（D-171） |
 
 ## 第 18 波
 
 ### goal-71 · T-14.1 help 插件与命令列表
 
-状态注记（2026-11-10，D-128）：`core.command.list` 返回的路径与别名取生效的命令名（有命令名覆盖时主名为路径，其余为别名）；goal-129 先合并时本切片按生效的命令名实现，后合并时由 goal-129 同步。
+状态：待派发。前置 T-04.4（PR #88）、T-04.16（PR #199，`046e752`）、T-05.2（PR #145）与 T-08.8（PR #102）已合并。相关的 T-03.17（PR #150，`8eb7846`）、T-04.12（PR #154，`43a6135`）、T-04.14（PR #156，`0726d66`）、T-04.15（PR #197，`ba2d323`）与 T-13.5（PR #200，`2e5ac2b`）也已合并。2026-11-17 按 main `bae7faa` 的代码核对，并按 D-171 精简为 `/help` 与 `/whoami`。审查者定稿时确定：`core.command.list` 不返回参数用法（WIRE-FORMAT §3.5 同步）；主名被其他路由遮蔽的命令不列出，与命令菜单一致；`/help` 不按插件分组，只按命令名排序，因此不需要插件 name（CONTRACTS §9.1 同步）。核对事实如下：
 
-状态：等待前置（T-04.16）：维护者在 PR #196 确认加入 T-04.16 前置，按 D-146 分包后的接口改写本语句后再派发（2026-11-14）。此前：待派发。前置 T-04.4（PR #88）、T-05.2（[PR #145](https://github.com/AlonaBot/AlonaBot/pull/145)）与 T-08.8（PR #102）已合并。2026-11-12 审查者按 main `9eaf8e2` 改写（老师确认只改写、暂不派发），按 D-68～D-72、D-77、D-105、D-138 删去旧写法，要点如下：
-- 说明（D-138，T-03.17 已交付）：命令 builder 的 `Description(text)` 直接登记英文原文，写入 `CommandSpec.description = 13`；其他语言写在插件 `i18n/<locale>.json` 的 commands 中、按完整规范路径覆盖，`contracts/i18n` 的 `Catalog.CommandDescription(locales, path, source)` 逐语言回落。插件的文案目录由 Core 在 Session 激活时取得，经 `router.Plugin.Messages()` 与 `DefaultLocale()` 读取，不需要另外登记。
-- 命令名（T-04.14）：`Router.Commands()` 的 `CommandIndex` 只含胜出者，`CommandEntry{PluginID, RouteID, Priority, Path, Alias, Names}` 的 Names 为生效的全部命令名、主名在前。
-- 权限与启用：Router 内部的 `commandPermitted(candidate, ev)` 与 `router.Options.CommandState`（policy 的完整生效状态）已用于命令派发与 T-03.17 的命令菜单（`Router.commandMenu`）；usage 由 Router 内部的 `commandUsage(candidate, ev, prefix)` 按 Core 文案目录生成。core.command.list 复用这些内部函数，所以放在 internal/core/router 中实现。
-- 权限名为字符串集合（`sdk.User`、`sdk.Admin`、`sdk.ChatAdmin`、`sdk.PermissionName`，D-69）；Core Admin 写在 `core_config.json` 的 admins，用户字符串为 `<adapter_id>:<external_user_id>`（D-105）。
-- 插件写法：插件对象（`func New() *sdk.Plugin`，`sdk.UseGenerated`）、`p.Command(path...).Args(...).Description(text).Handle(fn)`、`c.T`。多进程本地集成复用根包 `pipeline_test.go` 的装配（T-05.5）。
+- `contracts/proto/alonabot/v1/route.proto` 已有 `CommandAlias { repeated string path = 1; }`，以及 `CommandSpec.description = 13`（`optional string`）；命令列表的请求、响应与 `CommandInfo` 尚未定义。`contracts/wirespec_test.go` 通过 `ProtoReflect().Descriptor().Fields().ByNumber(...)` 检查字段名、类型、列表、presence 与消息全名。
+- `internal/wire/services.go` 的固定服务沿用带文档注释的 `const ServiceX = "core.x"`。固定服务由 `router.Mux.Handle(name string, fn ServiceFunc)` 注册；`ServiceFunc` 为 `func(context.Context, Caller, *wire.Inbound) wire.Response`。装配在 `internal/app/assembly.go` 的 `assemble(...)`，其中 `a.mux = router.NewMux()`，Router 建好后注册各固定服务；根包已只保留库模式接口。
+- 索引入口为 `func (r *Router) Commands() *CommandIndex`；查询为 `func (x *CommandIndex) Lookup(tokens []string) (entry CommandEntry, consumed int, ok bool)`。`CommandIndex.paths` 保存按 priority/plugin_id/route_id 排序的全部候选，`Lookup` 返回胜出者；`Shadows() []Shadow` 提供遮蔽关系。`CommandEntry` 含 `PluginID`、`RouteID`、`Priority`、`Path`、`Alias`、`Names`，`Names` 是覆盖后且已处理同插件声明冲突的名字列表，主名在前。`rebuildCommands()` 与 `declaredCommandNames(command *pb.CommandSpec) [][]string` 在 `internal/core/router/index.go`。
+- 名称覆盖由 `router.Options.CommandNames func(pluginID string) map[string][][]string` 接入；实际装配为 `func (p *Policy) CommandNames(pluginID string) map[string][][]string`。完整启用与权限继承为 `func (p *Policy) CommandState(ctx context.Context, pluginID string, route *pb.RouteDescriptor) (enabled bool, permissions []string, err error)`，通过 `Options.CommandState` 接入。实际准入为 `func (p *Policy) CheckCommand(ctx context.Context, pluginID string, route *pb.RouteDescriptor, actor *pb.Actor, target *pb.Target) *pb.ErrorInfo`，同时处理全局禁止、逐层禁用和权限集合。
+- Router 中仍有 `func (r *Router) commandPermitted(c candidate, ev *pb.Event) bool`、`func commandUsage(c candidate, ev *pb.Event, prefix string) (string, error)`，以及菜单实现 `func (r *Router) commandMenu(ctx context.Context, instanceID string) ([]*pb.CommandMenuItem, error)`。`commandPermitted` 将策略错误压成布尔值；目录查询直接复用 `CheckCommand`，以保留系统故障。说明翻译仍是 `func (c *Catalog) CommandDescription(locales []string, path []string, source string) string`，目录与缺省语言分别来自 `router.Plugin.Messages() *i18n.Catalog`、`DefaultLocale() string`。
+- 插件入口仍是 `func New() *sdk.Plugin`，内部使用 `sdk.NewPlugin()` 和 `p.Command(...).Description(...).Handle(...)`；文案仍用 `func (c *sdk.Context) T(key string, args ...any) string`。`sdk.UseGenerated` 已删除，资源由构建工具通过 overlay 按入口包登记。分类 API 放子包；本草案将原拟 `ListCommands` 写为 `sdk/command.List`，返回 `command.Entry`。`c.User() string` 已给出用户字符串，`c.Instance() string` 已给出默认目标的实例名。
+- 官方组件结构参照 `agent/agent.go`、`agent/plugin.yaml`、`agent/cmd/alonabot-agent/main.go`；i18n 的 `messages` 与 `commands` 结构参照现有示例和 `contracts/i18n`。现有 CLI 为 `alonabot check --dir <工程>`、`alonabot pack --dir <工程> --asset-url <绝对 https URL>`；位置参数简化尚属后继切片。原根包的流水线测试已移到 `internal/app/pipeline_test.go`。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-71（切片 T-14.1：help 插件与命令列表）。goal 目录 goal-71，分支 goal-71，worktree .worktrees/goal-71，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：Core 提供 core.command.list：按调用者的 Actor 与默认 Target 返回可用的命令（胜出者、已启用、权限满足），带生效命令名、usage 与按 Actor locale 选出的说明。官方 help 插件 plugins/help/ 注册 /help [命令] 与 /whoami。
+目标：Core 提供 core.command.list，返回调用者 Actor 在默认 Target 中可用的路径命令，包含生效的主名、其余未被遮蔽的生效命令名、按 locale 选择的说明与所属插件；官方 plugins/help/ 只注册 /help 与 /whoami。/help 按命令名排序列出命令名与说明，/whoami 返回用户字符串与收到消息的实例名，供添加第一个 Core Admin。
 
-依据：PLAN plugins T-14 步骤 1；CONTRACTS §15.2、§2.2、§2.3、§5.4；WIRE-FORMAT §3.5；DECISIONS D-69、D-105、D-128、D-138；TEST-MATRIX V-67 的 help 分项。
+依据：spec/PLAN.md §3.1；spec/plan/plugins.md「T-14 的预装插件步骤」步骤 1；spec/plan/release.md「T-14」的前置输入与失败停止条件；CONTRACTS §2.2、§2.3、§5.4、§8、§9.1、§15.2；WIRE-FORMAT §3.5、§4、§5A；DECISIONS D-69、D-86、D-105、D-114、D-128、D-138、D-144～D-146、D-148、D-171；TEST-MATRIX V-67 的 help 分项、V-115 的 core.command.list 分项；ARCHITECTURE 的 SDK 分类与依赖方向；docs/plugin-guide.md。
 
 范围（只新增或修改这些）：
-- contracts/proto/alonabot/v1/：新增 CommandListRequest/Response 与 CommandInfo（只追加），随后 go generate ./...
-- contracts/wirespec_test.go：追加编号检查
-- internal/wire/services.go：末尾追加 ServiceCommandList = "core.command.list"
-- internal/core/router/：新增 commandlist.go（服务实现与注册函数）
-- 根包 assembly.go：注册该服务（只加装配点）
-- sdk/：新增 commands.go（ListCommands 与 CommandInfo）
-- 新增 plugins/help/（可导入的 help 包与 cmd 薄入口，含 plugin.yaml 与 i18n/en-US.json、zh-CN.json）
-- 上述包的测试文件
-允许的新跨模块边：plugins/... -> sdk/...、-> contracts（已允许）。
+- contracts/proto/alonabot/v1/command.proto：新增下述三个消息，import 已有 route.proto 复用 CommandAlias；本语句明确授权这一个新 .proto。contracts/pb/alonabotv1/command.pb.go 由 go generate ./... 生成。
+- contracts/wirespec_test.go：新增一项命令列表协议编号检查。
+- internal/wire/services.go：追加 ServiceCommandList 常量。
+- internal/core/router/commandlist.go：列表服务、筛选与注册；复用当前命令索引、策略接口与翻译。
+- internal/app/assembly.go：在 assemble 中为现有 a.router 增加一次服务注册。
+- sdk/command/command.go：新的按需类别包，提供 Entry 与 List。
+- plugins/help/help.go、plugins/help/plugin.yaml、plugins/help/i18n/en-US.json、plugins/help/i18n/zh-CN.json、plugins/help/cmd/alonabot-help/main.go：插件、资源与薄入口。
+- internal/core/router/、sdk/command/、plugins/help/ 下的 *_local_test.go，以及 internal/app/help_local_test.go：本地自测与验收取证。
 
-接口（照此实现，不增减公开符号；内部辅助函数自定）：
-1. proto
+允许的新跨模块边：sdk/command -> sdk、sdk/errcode、sdk/internal/registry、contracts/pb/alonabotv1、internal/wire，沿用分类 SDK 的方向；plugins/help -> sdk、sdk/command；plugins/help/cmd/alonabot-help -> plugins/help、sdk；internal/app 的 help_local_test.go -> internal/pluginkit，仅用于把实际 help 插件构建到测试临时目录。Core 服务留在 router 包内。根 sdk 包维持现有依赖方向。无新增第三方依赖。
+
+接口（照此实现；内部辅助函数自定）：
+1. contracts/proto/alonabot/v1/command.proto（package alonabot.v1，go_package 与其他 proto 一致）：
    message CommandListRequest {}
-   message CommandInfo { string plugin_id = 1; string route_id = 2; repeated string path = 3; repeated CommandAlias aliases = 4; string usage = 5; optional string description = 6; } // CommandAlias 为 route.proto 已有的消息
+   message CommandInfo {
+     string plugin_id = 1;
+     string route_id = 2;
+     repeated string path = 3;
+     repeated CommandAlias aliases = 4;
+     optional string description = 5;
+   }
    message CommandListResponse { repeated CommandInfo commands = 1; }
-2. internal/core/router
-   func (r *Router) RegisterCommandList(m *Mux) // 注册 core.command.list
-3. sdk
-   type CommandInfo struct { PluginID, RouteID string; Path []string; Aliases [][]string; Usage string; Description string }
-   func ListCommands(ctx context.Context) ([]CommandInfo, error) // 必须在 Handler 或其延续调用内调用（需要父调用链）
-4. plugins/help
-   func New() *sdk.Plugin
+   CommandSpec.description 和 CommandAlias 沿用已有定义。
+2. internal/wire：const ServiceCommandList = "core.command.list"，按现有固定服务常量风格写文档注释。
+3. internal/core/router：func (r *Router) RegisterCommandList(m *Mux)。内部 Handler 签名为 func (r *Router) listCommands(ctx context.Context, caller Caller, in *wire.Inbound) wire.Response；注册通过 m.Handle(wire.ServiceCommandList, r.listCommands)。internal/app/assembly.go 在 a.router 建好后调用 a.router.RegisterCommandList(a.mux)。
+4. sdk/command：
+   type Entry struct {
+     PluginID, RouteID string
+     Path []string
+     Aliases [][]string
+     Description string
+   }
+   func List(ctx context.Context) ([]Entry, error)
+   Path 为生效主名；Aliases 为其余可列出的名字，保持配置顺序；Description 为空表示没有说明。原拟 ListCommands 收敛为 command.List，名字与现有 tool.List、conversation.List 一致。
+5. plugins/help（package help）：func New() *sdk.Plugin。New 内直接创建对象并登记两个命令，Handler 都只收 *sdk.Context；两条命令的缺省权限均为 sdk.User，保持 Core 默认的参数错误 usage。
+   cmd/alonabot-help/main.go 只调用 sdk.Run(help.New())；错误按现有构建薄入口的方式记英文 slog 并以非零状态退出。
 
 行为：
-- core.command.list：必须带 parent_call_id，否则 FAILED_PRECONDITION；Actor 与默认 Target 取自父附件（`*router.Invocation`）。只列 match 为路径的命令：遍历 CommandIndex 的胜出者（被遮蔽者与 alias 条目不单列），对每条用完整生效状态判断启用，用 commandPermitted 判断权限（没有 Actor 时只列出不要求权限的命令）；path 为主名，aliases 为其余生效命令名；usage 用 commandUsage（前缀取默认 Target 所在实例的第一个命令前缀）；description 用 `Catalog.CommandDescription([Actor.locale, 插件默认 locale], 规范路径, 英文原文)`，没有登记说明时 absent。按 path 字典序返回。
-- help 插件：
-  - /help：调用 ListCommands，按插件分组列出路径与说明，标题等文案经 c.T（键 help.list.header 等）。
-  - /help <路径>：只显示匹配命令的 usage、别名与说明；没有可用的匹配命令时回复 help.not_found。
-  - /whoami：回复调用者的用户字符串 `<adapter_id>:<external_user_id>`（可以直接写进 admins，D-105）与收到消息的实例名（键 help.whoami，参数 user 与 instance）；没有 Actor 时回复 help.whoami.no_actor。
-  - 命令说明用 Description 登记英文，zh-CN 写在 i18n 的 commands；用户可见文案只来自 i18n。
+- 固定服务的身份与协议：要求 in.ParentCallID 非零且 in.ParentAttach 为有效的 *router.Invocation，否则返回 FAILED_PRECONDITION。父调用仍在途、同 Session 关联与取消由 wire.Session 负责。Actor 只取 parent.Event.GetActor()，目标只取 parent.DefaultTarget；请求体为空，不接收插件自报的 Actor、权限或目标。请求与响应使用 Protobuf、validate.SchemaID 对应消息和版本 1；错误的请求 encoding/schema/version、无效 Protobuf 返回 INVALID_ARGUMENT；编码响应失败返回 INTERNAL，保留错误原因。缺少 Actor 的有效父调用仍可查询，按实际的空 Actor 权限规则筛选。
+- 索引与遮蔽：在同一次 r.mu 临界区取得 r.commands 与 r.matches 的快照，随后解锁；策略读取、翻译和响应编码均在锁外执行。只枚举 COMMAND_MATCH_PATH 且插件仍 Activated 的路由，每个 plugin_id/route_id 最多一条。生效名字取同一索引快照的 names[pluginID][routeID]；沿用旧 goal 与 commandMenu 的主名胜出条件：Names[0] 的 Lookup 胜出者必须属于该路由，主名被其他路由遮蔽时整条省略。Path 取 Names[0]；Aliases 按 Names[1:] 原序逐个核对 Lookup，只保留胜出者仍属于该路由的名字。别名不另占一条目录记录；主名胜出时也收录多 token 命令。禁用或权限不满足的胜出者继续占有路径，遮蔽者保持隐藏；覆盖取代后的旧名字保持隐藏。
+- 启用与权限：生产装配继续使用现有 Policy。每条候选调用 r.policy.CheckCommand(ctx, pluginID, route, actor, parent.DefaultTarget)，一次复用全局禁止、插件/组/路由启用继承与最近显式权限的语义。PERMISSION_DENIED、FAILED_PRECONDITION 对应的命令省略；其他错误作为本次列表失败原样返回，保留安全消息。r.policy 为 nil 的既有轻量装配按注册描述的 DefaultEnabled 与 RequiredPermissions 判定，权限语义复用 r.permitted；空权限集合允许没有 Actor。列表查询沿用策略本身的权限判断，不运行候选的 SDK Rule 或 Handler。
+- 名称与说明：覆盖结果来自索引，路由身份、组策略与翻译键保持使用原规范路径。说明英文源文为 route.GetCommand().GetDescription()；有源文且有目录时调用 catalog.CommandDescription([]string{actor.GetLocale(), plugin.DefaultLocale()}, command.GetPath(), source)，缺目录直接使用英文源文。没有登记说明时 description 为 absent，SDK 转成空串，列表只显示名字。
+- 排序：响应按 strings.Join(path, " ") 字典序排列。
+- SDK：List 只在有效调用上下文内使用，调用方传 c.Context()。先用 sdk/internal/registry.Parent 检查有效父调用，后台或已结束的 Context 返回 errcode.FailedPrecondition；再用 registry.Proto[*pb.CommandListRequest, *pb.CommandListResponse](wire.ServiceCommandList).Call(ctx, &pb.CommandListRequest{}) 复用就绪门禁、父关联、取消、Schema 校验和错误转换。逐项转换为 Entry，不向插件公开 pb 类型；服务失败时返回原错误。
+- /help：调用 command.List(c.Context())，失败直接返回错误。按返回顺序每条一行，列出 Path 和 Aliases（token 以一个 ASCII 空格连接，主名在前），有 Description 时附上说明；不按插件分组。标题、空列表和行格式经 c.T 读取 messages；没有说明的行只展示名字。名称原样显示，不硬编码斜杠前缀。列表包含调用者可用的 help 与 whoami 本身；筛选由 Core 完成，插件只负责排版。
+- /whoami：通过 c.User() 与 c.Instance() 取得用户字符串和收到消息的实例名，调用 c.T("help.whoami", "user", c.User(), "instance", c.Instance()) 并回复。文案分别在 en-US、zh-CN 显示这两个原值；输出的用户字符串可直接用于 core_config.json 的 admins、WebUI Core 设置或 alonabot admin add（CONTRACTS §15.2）。命令要求 user 权限，首次使用无需已有 Core Admin。策略若被改为允许没有 Actor 的调用，c.User() 为空时回复 help.whoami.no_actor。
+- 注册与资源：New 中直接登记 p.Command("help").Description("List available commands") 与 p.Command("whoami").Description("Show your user ID and instance")，然后 Handle；保留英文源文，zh-CN 的顶层 commands 分别以 help、whoami 作为规范路径覆盖说明。en-US 的英文说明留在代码，i18n/en-US.json 提供 messages，zh-CN 同时提供 messages 与 commands。无需配置、数据库、生命周期状态或子插件。资源由 alonabot build 的 overlay 按入口包登记。
+- 工程 manifest：plugin.yaml 写 id: alonabot-plugin-help-official、name: Help、version: 0.1.0、author: AlonaBot、role: plugin、source: github.com/AlonaBot/AlonaBot 及英文 description；协议、平台、入口、配置版本、迁移方式与 prepare_effects 由工具推导。独立工程可导入，cmd 薄入口只负责运行。当前 check 使用 --dir；pack 所需的构建 manifest、build-info、发行 URL 与归档交由 T-14.3 产出。
 
-测试（按编码规范「测试提交规则」）：
-- 提交：contracts/wirespec_test.go 的编号检查；其余无（D-86）。
-- 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有父调用链时 FAILED_PRECONDITION；没有 Actor 时只列不要求权限的命令；排序；`alonabot plugin check` 在 plugins/help 通过；根包 help_local_test.go（//go:build unix，复用 pipeline_test.go 的装配，测试二进制扮演 help 与两个测试插件：一个有 Admin 权限的命令，一个与另一插件同路径且 priority 较低的命令）：普通用户的 /help 不含 Admin 命令与被遮蔽的命令；Core Admin 能看到 Admin 命令；zh-CN 用户看到中文说明，en-US 用户看到英文；没有说明的命令没有说明；禁用的命令不出现；命令名覆盖后显示生效的名字；/help 某命令显示 usage；/whoami 回复正确的用户字符串与实例名。
+测试（按编码规范「测试提交规则」与 docs/goals/README.md，D-86）：
+- 提交：只在 contracts/wirespec_test.go 新增 TestCommandListFieldNumbers 一项编号检查。沿用现有反射断言风格，检查空请求、响应 commands = 1 的 repeated CommandInfo、CommandInfo 的五个字段的编号/名称/类型/cardinality、aliases 的消息类型 alonabot.v1.CommandAlias、description 的 optional presence；同时确认复用的 CommandAlias.path = 1 与 CommandSpec.description = 13。其余验证全部为本地自测。
+- 本地自测（*_local_test.go，结果写入 PR）：
+  - internal/app/help_local_test.go（unix）：复用 internal/app/pipeline_test.go 的真实 Core、Session 与回环 Adapter 装配，以 internal/pluginkit.BuildDev 将实际 plugins/help 构建到测试临时目录并作为独立进程运行。其他候选在本地测试文件中登记，资源通过已有 internal/generated 机制绑定；使用临时状态库与 core_config.json。普通用户发送 /help，只见可用命令及本地化说明；发送 /whoami，收到正确用户字符串与实例名；将所得用户加入 Core Admin 后，/help 才出现显式要求 sdk.Admin 的命令。主路径验证实际插件、SDK 调用、Mux 注册和 Core 筛选串联。
+  - router 的本地测试：缺少 parent_call_id、失效父调用、错误附件与错误 encoding/schema/version/Protobuf；有父调用却没有 Actor 时只列空权限集合的命令；插件、父组和路由禁用；全局用户/会话禁止；Admin 与 chat_admin 的区别；被禁用或被拒的胜出者继续遮蔽低优先级命令；系统故障保留错误；文本匹配和 Raw 省略；排序、别名去重成单条、别名部分被遮蔽、主名被遮蔽而别名仍胜出时整条省略。
+  - 名称与翻译：覆盖后只显示生效名字，调整主名后顺序正确，route_id 与规范路径翻译键保持；zh-CN、en-US、缺翻译时的插件默认 locale 与英文回落；没有登记说明；多 token 子命令。
+  - SDK 与插件：command.List 的父上下文继承、返回值转换与 Core 错误；/help 的排序、主名/别名、空列表与缺说明排版；/help 多余参数由 Core 回复 usage，help Handler 保持零参数；/whoami 在相同 Adapter 的两个实例中返回同一用户字符串与各自的实例名，没有 Actor 的文案按上文取证；构造两次 New 得到独立插件对象。
+  - 在仓库根执行 go run ./cmd/alonabot check --dir ./plugins/help，确认资源与入口通过检查。测试插件均留在本地测试文件中。
 
-完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./...；go build ./...。
+完成条件：上述本地证据齐备，在 PR 按 TEST-MATRIX §3 写明命令、平台、结果与未运行项；gofmt -l 对改动 Go 文件无输出；go generate ./... 生成命令列表协议，随后再次生成无新增差异；go vet ./...；go test -race ./...；go build ./...；help 工程的 check 通过。安装包、预装和真实平台证据由对应后继切片验收。出现身份/权限越界、遮蔽语义变化、需要增加依赖或触及本范围外文件时，按共同约束与工作包失败停止条件记录阻塞。
 
-不做：welcome 与 rss（T-14.2）；help 的安装包与预装（T-14.3、T-14.4）；管理页面中的命令列表（T-09.9）。
+不做：/help <命令>；参数用法（由 Core 的 usage 回复给出）；按插件分组；welcome 与 rss（T-14.2，D-171 不进入首个发行版）；安装包、签名、发行归档与预装（T-14.3、T-14.4）；管理页面中的命令列表（T-09.9）；命令搜索、分页、缓存与自动重试；新增依赖。
 ```
 
 ### goal-72 · T-14.2 welcome 与 rss 插件

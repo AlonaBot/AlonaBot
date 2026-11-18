@@ -175,8 +175,9 @@ func TestAgentPackage(t *testing.T) {
 	}
 	developmentWrite(t, filepath.Join(dir, "plugins", agentPackageID, "config.json"), fmt.Sprintf(`{
 		"providers":[{"custom":{"name":"synthetic","protocol":"openai-compatible","base_url":%q,
-		"api_key":"synthetic-key","model":"test-model","max_tokens":128,"image_input":true}}],
-		"default_provider":"synthetic","personas":[{"name":"package","prompt":"Package persona"}],"default_persona":"package",
+		"api_key":"synthetic-key"}}],
+		"models":[{"name":"synthetic","provider":"synthetic","model":"test-model","type":"chat","max_tokens":128,"image_input":true}],
+		"chat_model":"synthetic","personas":[{"name":"package","prompt":"Package persona"}],"default_persona":"package",
 		"skills_dir":%q,"mcp_servers":[{"name":"package","transport":"stdio","command":%q,"args":["--pid-file",%q]}]
 	}`, model.URL, skills, mcp, pidFile))
 	c.management(t, dir, "", "enable", agentPackageID)

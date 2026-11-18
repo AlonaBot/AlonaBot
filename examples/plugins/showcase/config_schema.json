@@ -3,7 +3,14 @@
   "$migrations": [{"to": 2, "rename": {"hello": "greeting"}}],
   "greeting": {
     "type": "string",
-    "description": "Greeting"
+    "description": "Greeting",
+    "example": {
+      "input": "demo hello",
+      "reply": [
+        {"text": "{greeting}"},
+        {"image": "examples/greeting.png", "alt": "Greeting illustration"}
+      ]
+    }
   },
   "interval_seconds": {
     "type": "int",

@@ -12,20 +12,28 @@ package packages
 
 import (
 	"archive/tar"
+	"cmp"
 	"compress/gzip"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"debug/buildinfo"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime/debug"
+	"slices"
 	"strings"
+	"unicode/utf8"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/release"
@@ -187,7 +195,14 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 			return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("manifest file %q is not a regular file in the archive", name))
 		}
 	}
-	// 5. 进程包的外置构建信息须来自同一入口，并与声明的平台一致。
+	if err := checkChangelog(dir, m.Version); err != nil {
+		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+	}
+	// 5. 示例图片来自已检查的声明；解压已拒绝链接，仍需核对普通文件与图片签名。
+	if err := checkExampleImages(dir); err != nil {
+		return nil, err
+	}
+	// 6. 进程包的外置构建信息须来自同一入口，并与声明的平台一致。
 	if m.Role != "webui" || m.Entrypoint != "" {
 		if err := checkBuildInfo(dir, m); err != nil {
 			return nil, err
@@ -195,6 +210,37 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 	}
 	keep = true
 	return &Candidate{Dir: dir, Manifest: m, Release: r, Asset: asset, Warnings: parsed.Warnings}, nil
+}
+
+func checkExampleImages(dir string) error {
+	for _, schemaName := range []string{"config_schema.json", "adapter_config_schema.json"} {
+		raw, err := os.ReadFile(filepath.Join(dir, schemaName))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("read %s: %w", schemaName, err)
+		}
+		schema, problems := configschema.Parse(raw)
+		if len(problems) != 0 {
+			return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("%s: %v", schemaName, problems))
+		}
+		for _, name := range schema.ExampleImages() {
+			location := schemaName + ":" + exampleImageLocation(raw, name)
+			info, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(name)))
+			if err != nil || !info.Mode().IsRegular() {
+				return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("%s: image %q must be a regular file: %v", location, name, err))
+			}
+			content, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)))
+			if err != nil {
+				return fmt.Errorf("%s: %w", location, err)
+			}
+			if http.DetectContentType(content) != exampleContentType(name) {
+				return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("%s: image %q content does not match its extension", location, name))
+			}
+		}
+	}
+	return nil
 }
 
 func checkBuildInfo(dir string, m *manifest.Manifest) error {
@@ -380,4 +426,271 @@ func (c *Candidate) Discard() error {
 
 func failure(code pb.ErrorCode, message string) error {
 	return &validate.Error{Code: code, Message: message}
+}
+
+const changelogFile = "CHANGELOG.md"
+const changelogDirectory = "changelog"
+const changelogSource = "en-US.md"
+
+func checkChangelog(dir, version string) error {
+	single, err := os.Lstat(filepath.Join(dir, changelogFile))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	hasSingle := err == nil
+	directory, err := os.Lstat(filepath.Join(dir, changelogDirectory))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	hasDirectory := err == nil
+	if hasSingle && hasDirectory {
+		return fmt.Errorf("%s and %s must not both exist", changelogFile, changelogDirectory)
+	}
+	read := func(name string) error {
+		raw, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			return err
+		}
+		if !utf8.Valid(raw) {
+			return fmt.Errorf("%s: Markdown must contain valid UTF-8", name)
+		}
+		return nil
+	}
+	if hasSingle {
+		if !single.Mode().IsRegular() {
+			return fmt.Errorf("%s: expected a regular file", changelogFile)
+		}
+		return read(changelogFile)
+	}
+	if !hasDirectory {
+		return nil
+	}
+	if !directory.IsDir() {
+		return fmt.Errorf("%s: expected a directory", changelogDirectory)
+	}
+	versions, err := os.ReadDir(filepath.Join(dir, changelogDirectory))
+	if err != nil {
+		return err
+	}
+	for _, entry := range versions {
+		name := filepath.Join(changelogDirectory, entry.Name())
+		if !entry.IsDir() || !manifest.ValidVersion(entry.Name()) {
+			return fmt.Errorf("%s: expected a SemVer version directory", name)
+		}
+		if compareChangelogVersions(entry.Name(), version) > 0 {
+			return fmt.Errorf("%s: version exceeds manifest version %s", name, version)
+		}
+		files, err := os.ReadDir(filepath.Join(dir, name))
+		if err != nil {
+			return err
+		}
+		source := false
+		for _, file := range files {
+			path := filepath.Join(name, file.Name())
+			locale := strings.TrimSuffix(file.Name(), ".md")
+			canonical, err := canonicalChangelogLocale(locale)
+			if file.Type() != 0 || !strings.HasSuffix(file.Name(), ".md") || err != nil || canonical != locale {
+				return fmt.Errorf("%s: expected a canonical BCP 47 locale Markdown file", path)
+			}
+			if err := read(path); err != nil {
+				return err
+			}
+			source = source || file.Name() == changelogSource
+		}
+		if !source {
+			return fmt.Errorf("%s: source changelog is missing", filepath.Join(name, changelogSource))
+		}
+	}
+	return nil
+}
+
+func compareChangelogVersions(a, b string) int {
+	// 1. 先按数值比较主版本、次版本与修订版本。
+	left, right := changelogVersionParts(a), changelogVersionParts(b)
+	for i := 1; i <= 3; i++ {
+		if order := compareChangelogNumber(left[i], right[i]); order != 0 {
+			return order
+		}
+	}
+	// 2. 正式版本高于预发布版本；build metadata 不参与版本排序。
+	if left[4] == right[4] {
+		return 0
+	}
+	if left[4] == "" {
+		return 1
+	}
+	if right[4] == "" {
+		return -1
+	}
+	// 3. 逐个比较预发布标识符，数字标识符低于文本标识符。
+	leftParts, rightParts := strings.Split(left[4], "."), strings.Split(right[4], ".")
+	for i := range min(len(leftParts), len(rightParts)) {
+		l, r := leftParts[i], rightParts[i]
+		leftNumeric, rightNumeric := strings.Trim(l, "0123456789") == "", strings.Trim(r, "0123456789") == ""
+		var order int
+		switch {
+		case leftNumeric && rightNumeric:
+			order = compareChangelogNumber(l, r)
+		case leftNumeric:
+			order = -1
+		case rightNumeric:
+			order = 1
+		default:
+			order = strings.Compare(l, r)
+		}
+		if order != 0 {
+			return order
+		}
+	}
+	return cmp.Compare(len(leftParts), len(rightParts))
+}
+
+func compareChangelogNumber(a, b string) int {
+	// SemVer 数字不含前导零；先比较位数，避免大版本号溢出整数类型。
+	if order := cmp.Compare(len(a), len(b)); order != 0 {
+		return order
+	}
+	return strings.Compare(a, b)
+}
+
+func changelogVersionParts(version string) []string {
+	version, _, _ = strings.Cut(version, "+")
+	base, pre, _ := strings.Cut(version, "-")
+	return append(append([]string{""}, strings.Split(base, ".")...), pre)
+}
+
+// RFC 5646 §2.1 的 language-tag 语法；重复 variant 与 extension singleton 另行检查。
+const changelogLanguageTag = `^(?:` +
+	`(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})` +
+	`(?:-[A-Za-z]{4})?(?:-(?:[A-Za-z]{2}|[0-9]{3}))?` +
+	`(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*` +
+	`(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*` +
+	`(?:-[xX](?:-[A-Za-z0-9]{1,8})+)?|[xX](?:-[A-Za-z0-9]{1,8})+)$`
+
+var changelogTagSyntax = regexp.MustCompile(changelogLanguageTag)
+
+// RFC 5646 §2.1 固定的 grandfathered 标签保留其登记大小写。
+var changelogGrandfathered = map[string]string{
+	"en-gb-oed": "en-GB-oed", "i-ami": "i-ami", "i-bnn": "i-bnn",
+	"i-default": "i-default", "i-enochian": "i-enochian", "i-hak": "i-hak",
+	"i-klingon": "i-klingon", "i-lux": "i-lux", "i-mingo": "i-mingo",
+	"i-navajo": "i-navajo", "i-pwn": "i-pwn", "i-tao": "i-tao",
+	"i-tay": "i-tay", "i-tsu": "i-tsu", "sgn-be-fr": "sgn-BE-FR",
+	"sgn-be-nl": "sgn-BE-NL", "sgn-ch-de": "sgn-CH-DE", "art-lojban": "art-lojban",
+	"cel-gaulish": "cel-gaulish", "no-bok": "no-bok", "no-nyn": "no-nyn",
+	"zh-guoyu": "zh-guoyu", "zh-hakka": "zh-hakka", "zh-min": "zh-min",
+	"zh-min-nan": "zh-min-nan", "zh-xiang": "zh-xiang",
+}
+
+// canonicalChangelogLocale 检查 BCP 47 语法并按 language/script/region 规范大小写；
+// extension 与 private-use 保持小写，规则与 Actor.locale 的大小写约定一致。
+func canonicalChangelogLocale(locale string) (string, error) {
+	lower := strings.ToLower(locale)
+	if tag, exists := changelogGrandfathered[lower]; exists {
+		return tag, nil
+	}
+	if !changelogTagSyntax.MatchString(locale) {
+		return "", fmt.Errorf("invalid BCP 47 tag %q", locale)
+	}
+	parts := strings.Split(lower, "-")
+	if parts[0] == "x" {
+		return lower, nil
+	}
+	variants := make(map[string]bool)
+	singletons := make(map[string]bool)
+	extension := false
+	for i := 1; i < len(parts); i++ {
+		part := parts[i]
+		if len(part) == 1 {
+			if part == "x" {
+				break // private-use 后的单字符属于私有内容。
+			}
+			if singletons[part] {
+				return "", fmt.Errorf("duplicate extension %q in BCP 47 tag %q", part, locale)
+			}
+			singletons[part] = true
+			extension = true
+		}
+		if extension {
+			continue
+		}
+		if len(part) >= 5 || len(part) == 4 && part[0] >= '0' && part[0] <= '9' {
+			if variants[part] {
+				return "", fmt.Errorf("duplicate variant %q in BCP 47 tag %q", part, locale)
+			}
+			variants[part] = true
+		} else if len(part) == 4 {
+			parts[i] = strings.ToUpper(part[:1]) + part[1:]
+		} else if len(part) == 2 {
+			parts[i] = strings.ToUpper(part)
+		}
+	}
+	return strings.Join(parts, "-"), nil
+}
+
+func exampleContentType(name string) string {
+	switch path.Ext(name) {
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".webp":
+		return "image/webp"
+	case ".gif":
+		return "image/gif"
+	}
+	return ""
+}
+
+// exampleImageLocation 仅处理已通过 schema 检查的声明，把文件错误定位回示例片段。
+func exampleImageLocation(raw []byte, image string) string {
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(raw, &fields)
+	var find func(map[string]json.RawMessage, string) string
+	find = func(fields map[string]json.RawMessage, parent string) string {
+		for _, key := range slices.Sorted(maps.Keys(fields)) {
+			if key == "$version" || key == "$migrations" {
+				continue
+			}
+			var field struct {
+				Example          json.RawMessage
+				Items, Templates map[string]json.RawMessage
+			}
+			_ = json.Unmarshal(fields[key], &field)
+			location := parent + key
+			if len(field.Example) > 0 {
+				examples := []json.RawMessage{field.Example}
+				array := field.Example[0] == '['
+				if array {
+					_ = json.Unmarshal(field.Example, &examples)
+				}
+				for i, raw := range examples {
+					var example struct{ Reply json.RawMessage }
+					_ = json.Unmarshal(raw, &example)
+					if example.Reply[0] != '[' {
+						continue
+					}
+					var segments []struct{ Image string }
+					_ = json.Unmarshal(example.Reply, &segments)
+					for j, segment := range segments {
+						if segment.Image == image {
+							suffix := ""
+							if array {
+								suffix = fmt.Sprintf("[%d]", i)
+							}
+							return fmt.Sprintf("%s.example%s.reply[%d].image", location, suffix, j)
+						}
+					}
+				}
+			}
+			if result := find(field.Items, location+".items."); result != "" {
+				return result
+			}
+			if result := find(field.Templates, location+".templates."); result != "" {
+				return result
+			}
+		}
+		return ""
+	}
+	return find(fields, "")
 }
