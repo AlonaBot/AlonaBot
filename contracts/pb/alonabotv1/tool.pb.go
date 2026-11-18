@@ -76,6 +76,59 @@ func (ToolPolicy) EnumDescriptor() ([]byte, []int) {
 	return file_alonabot_v1_tool_proto_rawDescGZIP(), []int{0}
 }
 
+// ToolEffect 提示工具的副作用类别，不参与策略判断。
+type ToolEffect int32
+
+const (
+	ToolEffect_TOOL_EFFECT_UNSPECIFIED ToolEffect = 0
+	ToolEffect_TOOL_EFFECT_READ_ONLY   ToolEffect = 1
+	ToolEffect_TOOL_EFFECT_WRITE       ToolEffect = 2
+	ToolEffect_TOOL_EFFECT_DESTRUCTIVE ToolEffect = 3
+)
+
+// Enum value maps for ToolEffect.
+var (
+	ToolEffect_name = map[int32]string{
+		0: "TOOL_EFFECT_UNSPECIFIED",
+		1: "TOOL_EFFECT_READ_ONLY",
+		2: "TOOL_EFFECT_WRITE",
+		3: "TOOL_EFFECT_DESTRUCTIVE",
+	}
+	ToolEffect_value = map[string]int32{
+		"TOOL_EFFECT_UNSPECIFIED": 0,
+		"TOOL_EFFECT_READ_ONLY":   1,
+		"TOOL_EFFECT_WRITE":       2,
+		"TOOL_EFFECT_DESTRUCTIVE": 3,
+	}
+)
+
+func (x ToolEffect) Enum() *ToolEffect {
+	p := new(ToolEffect)
+	*p = x
+	return p
+}
+
+func (x ToolEffect) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ToolEffect) Descriptor() protoreflect.EnumDescriptor {
+	return file_alonabot_v1_tool_proto_enumTypes[1].Descriptor()
+}
+
+func (ToolEffect) Type() protoreflect.EnumType {
+	return &file_alonabot_v1_tool_proto_enumTypes[1]
+}
+
+func (x ToolEffect) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ToolEffect.Descriptor instead.
+func (ToolEffect) EnumDescriptor() ([]byte, []int) {
+	return file_alonabot_v1_tool_proto_rawDescGZIP(), []int{1}
+}
+
 // ToolSpec 声明 JSON Service 的工具说明、缺省策略与输入 Schema。
 type ToolSpec struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -84,7 +137,8 @@ type ToolSpec struct {
 	// 仅允许 ALLOW 或 CONFIRM。
 	DefaultPolicy ToolPolicy `protobuf:"varint,2,opt,name=default_policy,json=defaultPolicy,proto3,enum=alonabot.v1.ToolPolicy" json:"default_policy,omitempty"`
 	// 与该 Service 输入校验使用的 JSON Schema 原文相同。
-	InputSchemaJson string `protobuf:"bytes,3,opt,name=input_schema_json,json=inputSchemaJson,proto3" json:"input_schema_json,omitempty"`
+	InputSchemaJson string     `protobuf:"bytes,3,opt,name=input_schema_json,json=inputSchemaJson,proto3" json:"input_schema_json,omitempty"`
+	Effect          ToolEffect `protobuf:"varint,4,opt,name=effect,proto3,enum=alonabot.v1.ToolEffect" json:"effect,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -140,6 +194,13 @@ func (x *ToolSpec) GetInputSchemaJson() string {
 	return ""
 }
 
+func (x *ToolSpec) GetEffect() ToolEffect {
+	if x != nil {
+		return x.Effect
+	}
+	return ToolEffect_TOOL_EFFECT_UNSPECIFIED
+}
+
 // ToolInfo 返回调用者可见工具的描述与生效策略。
 type ToolInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -149,6 +210,7 @@ type ToolInfo struct {
 	InputSchemaJson string `protobuf:"bytes,3,opt,name=input_schema_json,json=inputSchemaJson,proto3" json:"input_schema_json,omitempty"`
 	// 目录中仅返回 ALLOW 或 CONFIRM。
 	Policy        ToolPolicy `protobuf:"varint,4,opt,name=policy,proto3,enum=alonabot.v1.ToolPolicy" json:"policy,omitempty"`
+	Effect        ToolEffect `protobuf:"varint,5,opt,name=effect,proto3,enum=alonabot.v1.ToolEffect" json:"effect,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -209,6 +271,13 @@ func (x *ToolInfo) GetPolicy() ToolPolicy {
 		return x.Policy
 	}
 	return ToolPolicy_TOOL_POLICY_UNSPECIFIED
+}
+
+func (x *ToolInfo) GetEffect() ToolEffect {
+	if x != nil {
+		return x.Effect
+	}
+	return ToolEffect_TOOL_EFFECT_UNSPECIFIED
 }
 
 // ToolListRequest 请求调用插件可调用的工具目录。
@@ -396,8 +465,9 @@ func (x *ToolInvokeResponse) GetResultJson() string {
 type ToolConfirmRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 调用插件内稳定的操作名，例如 mcp/<server>/<tool>。
-	Operation     string `protobuf:"bytes,1,opt,name=operation,proto3" json:"operation,omitempty"`
-	Summary       string `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
+	Operation     string     `protobuf:"bytes,1,opt,name=operation,proto3" json:"operation,omitempty"`
+	Summary       string     `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
+	Effect        ToolEffect `protobuf:"varint,3,opt,name=effect,proto3,enum=alonabot.v1.ToolEffect" json:"effect,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -446,6 +516,13 @@ func (x *ToolConfirmRequest) GetSummary() string {
 	return ""
 }
 
+func (x *ToolConfirmRequest) GetEffect() ToolEffect {
+	if x != nil {
+		return x.Effect
+	}
+	return ToolEffect_TOOL_EFFECT_UNSPECIFIED
+}
+
 // ToolConfirmResponse 表示用户允许本次操作。
 type ToolConfirmResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -487,16 +564,18 @@ var File_alonabot_v1_tool_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_tool_proto_rawDesc = "" +
 	"\n" +
-	"\x16alonabot/v1/tool.proto\x12\valonabot.v1\"\x98\x01\n" +
+	"\x16alonabot/v1/tool.proto\x12\valonabot.v1\"\xc9\x01\n" +
 	"\bToolSpec\x12 \n" +
 	"\vdescription\x18\x01 \x01(\tR\vdescription\x12>\n" +
 	"\x0edefault_policy\x18\x02 \x01(\x0e2\x17.alonabot.v1.ToolPolicyR\rdefaultPolicy\x12*\n" +
-	"\x11input_schema_json\x18\x03 \x01(\tR\x0finputSchemaJson\"\x9d\x01\n" +
+	"\x11input_schema_json\x18\x03 \x01(\tR\x0finputSchemaJson\x12/\n" +
+	"\x06effect\x18\x04 \x01(\x0e2\x17.alonabot.v1.ToolEffectR\x06effect\"\xce\x01\n" +
 	"\bToolInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12*\n" +
 	"\x11input_schema_json\x18\x03 \x01(\tR\x0finputSchemaJson\x12/\n" +
-	"\x06policy\x18\x04 \x01(\x0e2\x17.alonabot.v1.ToolPolicyR\x06policy\"\x11\n" +
+	"\x06policy\x18\x04 \x01(\x0e2\x17.alonabot.v1.ToolPolicyR\x06policy\x12/\n" +
+	"\x06effect\x18\x05 \x01(\x0e2\x17.alonabot.v1.ToolEffectR\x06effect\"\x11\n" +
 	"\x0fToolListRequest\"?\n" +
 	"\x10ToolListResponse\x12+\n" +
 	"\x05tools\x18\x01 \x03(\v2\x15.alonabot.v1.ToolInfoR\x05tools\"N\n" +
@@ -505,17 +584,24 @@ const file_alonabot_v1_tool_proto_rawDesc = "" +
 	"\x0earguments_json\x18\x02 \x01(\tR\rargumentsJson\"5\n" +
 	"\x12ToolInvokeResponse\x12\x1f\n" +
 	"\vresult_json\x18\x01 \x01(\tR\n" +
-	"resultJson\"L\n" +
+	"resultJson\"}\n" +
 	"\x12ToolConfirmRequest\x12\x1c\n" +
 	"\toperation\x18\x01 \x01(\tR\toperation\x12\x18\n" +
-	"\asummary\x18\x02 \x01(\tR\asummary\"\x15\n" +
+	"\asummary\x18\x02 \x01(\tR\asummary\x12/\n" +
+	"\x06effect\x18\x03 \x01(\x0e2\x17.alonabot.v1.ToolEffectR\x06effect\"\x15\n" +
 	"\x13ToolConfirmResponse*o\n" +
 	"\n" +
 	"ToolPolicy\x12\x1b\n" +
 	"\x17TOOL_POLICY_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11TOOL_POLICY_ALLOW\x10\x01\x12\x17\n" +
 	"\x13TOOL_POLICY_CONFIRM\x10\x02\x12\x14\n" +
-	"\x10TOOL_POLICY_DENY\x10\x03B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
+	"\x10TOOL_POLICY_DENY\x10\x03*x\n" +
+	"\n" +
+	"ToolEffect\x12\x1b\n" +
+	"\x17TOOL_EFFECT_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15TOOL_EFFECT_READ_ONLY\x10\x01\x12\x15\n" +
+	"\x11TOOL_EFFECT_WRITE\x10\x02\x12\x1b\n" +
+	"\x17TOOL_EFFECT_DESTRUCTIVE\x10\x03B6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
 
 var (
 	file_alonabot_v1_tool_proto_rawDescOnce sync.Once
@@ -529,28 +615,32 @@ func file_alonabot_v1_tool_proto_rawDescGZIP() []byte {
 	return file_alonabot_v1_tool_proto_rawDescData
 }
 
-var file_alonabot_v1_tool_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_alonabot_v1_tool_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_alonabot_v1_tool_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_alonabot_v1_tool_proto_goTypes = []any{
 	(ToolPolicy)(0),             // 0: alonabot.v1.ToolPolicy
-	(*ToolSpec)(nil),            // 1: alonabot.v1.ToolSpec
-	(*ToolInfo)(nil),            // 2: alonabot.v1.ToolInfo
-	(*ToolListRequest)(nil),     // 3: alonabot.v1.ToolListRequest
-	(*ToolListResponse)(nil),    // 4: alonabot.v1.ToolListResponse
-	(*ToolInvokeRequest)(nil),   // 5: alonabot.v1.ToolInvokeRequest
-	(*ToolInvokeResponse)(nil),  // 6: alonabot.v1.ToolInvokeResponse
-	(*ToolConfirmRequest)(nil),  // 7: alonabot.v1.ToolConfirmRequest
-	(*ToolConfirmResponse)(nil), // 8: alonabot.v1.ToolConfirmResponse
+	(ToolEffect)(0),             // 1: alonabot.v1.ToolEffect
+	(*ToolSpec)(nil),            // 2: alonabot.v1.ToolSpec
+	(*ToolInfo)(nil),            // 3: alonabot.v1.ToolInfo
+	(*ToolListRequest)(nil),     // 4: alonabot.v1.ToolListRequest
+	(*ToolListResponse)(nil),    // 5: alonabot.v1.ToolListResponse
+	(*ToolInvokeRequest)(nil),   // 6: alonabot.v1.ToolInvokeRequest
+	(*ToolInvokeResponse)(nil),  // 7: alonabot.v1.ToolInvokeResponse
+	(*ToolConfirmRequest)(nil),  // 8: alonabot.v1.ToolConfirmRequest
+	(*ToolConfirmResponse)(nil), // 9: alonabot.v1.ToolConfirmResponse
 }
 var file_alonabot_v1_tool_proto_depIdxs = []int32{
 	0, // 0: alonabot.v1.ToolSpec.default_policy:type_name -> alonabot.v1.ToolPolicy
-	0, // 1: alonabot.v1.ToolInfo.policy:type_name -> alonabot.v1.ToolPolicy
-	2, // 2: alonabot.v1.ToolListResponse.tools:type_name -> alonabot.v1.ToolInfo
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	1, // 1: alonabot.v1.ToolSpec.effect:type_name -> alonabot.v1.ToolEffect
+	0, // 2: alonabot.v1.ToolInfo.policy:type_name -> alonabot.v1.ToolPolicy
+	1, // 3: alonabot.v1.ToolInfo.effect:type_name -> alonabot.v1.ToolEffect
+	3, // 4: alonabot.v1.ToolListResponse.tools:type_name -> alonabot.v1.ToolInfo
+	1, // 5: alonabot.v1.ToolConfirmRequest.effect:type_name -> alonabot.v1.ToolEffect
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_tool_proto_init() }
@@ -563,7 +653,7 @@ func file_alonabot_v1_tool_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_tool_proto_rawDesc), len(file_alonabot_v1_tool_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,

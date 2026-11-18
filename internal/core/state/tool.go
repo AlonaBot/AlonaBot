@@ -22,24 +22,30 @@ type ToolPolicy struct {
 // TableName 指定工具策略表。
 func (ToolPolicy) TableName() string { return "tool_policy" }
 
-// SetToolPolicy 在事务内核对安装记录并幂等保存覆盖；UNSPECIFIED 删除覆盖。
+// SetToolPolicy 在同一事务内核对全部安装记录并保存覆盖；UNSPECIFIED 删除覆盖。
 // 调用方负责策略取值校验；安装记录缺失时返回 ErrNotFound。
-func (s *Store) SetToolPolicy(ctx context.Context, row ToolPolicy) error {
+func (s *Store) SetToolPolicy(ctx context.Context, rows ...ToolPolicy) error {
 	return s.tx(ctx, func(tx *gorm.DB) error {
-		// 1. 删除也要求存在安装记录，检查与写入共用事务。
-		var installed installation
-		err := tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: row.PluginID}).Take(&installed).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("plugin %s: %w", row.PluginID, ErrNotFound)
+		for index, row := range rows {
+			// 删除也要求存在安装记录；后续任一项失败时回滚先前写入。
+			var installed installation
+			err := tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: row.PluginID}).Take(&installed).Error
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("items[%d] plugin %s: %w", index, row.PluginID, ErrNotFound)
+			}
+			if err != nil {
+				return fmt.Errorf("items[%d]: %w", index, err)
+			}
+			if row.Policy == pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED {
+				err = tx.Where(toolPolicyKey(row.PluginID, row.Service)).Delete(&ToolPolicy{}).Error
+			} else {
+				err = tx.Clauses(clause.OnConflict{UpdateAll: true}).Create(&row).Error
+			}
+			if err != nil {
+				return fmt.Errorf("items[%d]: %w", index, err)
+			}
 		}
-		if err != nil {
-			return err
-		}
-		// 2. 提交后才返回，下一次读取直接取得当前覆盖。
-		if row.Policy == pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED {
-			return tx.Where(toolPolicyKey(row.PluginID, row.Service)).Delete(&ToolPolicy{}).Error
-		}
-		return tx.Clauses(clause.OnConflict{UpdateAll: true}).Create(&row).Error
+		return nil
 	})
 }
 

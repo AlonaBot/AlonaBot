@@ -126,6 +126,8 @@ EventSpec 追加可选消息 `MessageFilter message_filter`；MessageFilter 的�
 
 REGISTER 的完整描述必须装入一帧；超限 RESOURCE_EXHAUSTED，不部分接收或激活。配置 Schema 与服务 Schema 从经过包摘要校验的安装资源取得，REGISTER 中的 hash/版本必须一致，不能仅上报不可解析的 hash 而缺少 Schema 原文。
 
+工具声明 `ToolSpec.effect` 使用字段号 4，类型为 `ToolEffect`（§3.5）。省略字段或传 `UNSPECIFIED=0` 表示未声明；SDK 收集注册时拒绝非法类别，原始 REGISTER 中的非法枚举由 Core 以 INVALID_ARGUMENT 拒绝，英文错误含 Service 名和非法数值。
+
 有 HTTP 路由时，SDK 先创建实际绑定的 loopback Listener，再上报 `host + port`；首发仅接受 `127.0.0.1` 或 `::1` 与合法非零端口，不能传任意 URL、文件路径或远端主机。Core 验证与当前 Session 的代理认证和就绪状态后保存端点，公开前缀仍由 Core 决定。无 HTTP 路由则不得要求创建 Listener。端点随 Session 失效撤销；外部请求不携带内部认证材料，Core 覆盖相应内部头。
 
 插件页面的 HTTP 请求由 WebUI 宿主转发，复用本节的路由注册与代理认证规则。主题、语言、令牌与快捷键消息由浏览器内的桥处理，消息格式见 [ADMIN-API §7](ADMIN-API.md#7-插件页面-postmessage-桥)。
@@ -171,9 +173,9 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 | `core.delete` | Target、platform_message_ids（1～100）→ 每个 ID 的状态与安全错误 | CONTRACTS §8、MESSAGE-MODEL §4A |
 | `core.continuation.start` | 必须带 parent_call_id → 空结果，超过每 Session 128 个进行中的延续调用时 RESOURCE_EXHAUSTED；原调用成功结束后 Core 发出 Handler REQUEST，HandlerRequest 的 `continuation_of` 为原调用的 call_id，SDK 据此找到登记的延续函数 | CONTRACTS §2.4 |
 | `core.wait` | 必须带 parent_call_id（延续调用）、超时 → 命中的 Event | CONTRACTS §2.4 |
-| `core.tool.list` | 空 → 工具列表（名称、description、输入 Schema、生效策略） | CONTRACTS §13.1 |
+| `core.tool.list` | 空 → 工具列表（名称、description、输入 Schema、生效策略、副作用类别 `ToolInfo.effect`，字段号 5） | CONTRACTS §13.1 |
 | `core.tool.invoke` | 必须带 parent_call_id；工具名、JSON 参数 → 工具的 JSON 输出与/或 ErrorInfo | CONTRACTS §13.1、§13.2 |
-| `core.tool.confirm` | 必须带 parent_call_id；操作名、参数摘要 → 空结果（允许）或 ErrorInfo | CONTRACTS §13.1、§13.2 |
+| `core.tool.confirm` | 必须带 parent_call_id；操作名、参数摘要、副作用类别 `ToolConfirmRequest.effect`（字段号 3，省略为 `UNSPECIFIED`）→ 空结果（允许）或 ErrorInfo；非法类别返回 INVALID_ARGUMENT | CONTRACTS §13.1、§13.2 |
 | `core.conversation.append` | 会话键、一条或多条 JSON 条目 → 最后一条的序号 | CONTRACTS §13.3 |
 | `core.conversation.list` | 会话键、起始序号 → 条目及序号、下一个序号 | CONTRACTS §13.3 |
 | `core.conversation.clear` | 会话键 → 空结果 | CONTRACTS §13.3 |
@@ -190,6 +192,8 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 | `core.profile.set` | 必须带 parent_call_id，Actor 须为 Core Admin；字段路径、JSON 值（null 删除）→ 配置文件 ID、名称、会话数与 reloading | CONTRACTS §5.6、D-168 |
 
 `core.command.list` 请求与响应均为 PROTOBUF，`schema_id` 分别为 `alonabot.command_list_request.v1`、`alonabot.command_list_response.v1`，`schema_version` 均为 1。缺少有效父调用返回 FAILED_PRECONDITION；通过帧校验后，服务发现请求编码、Schema 或载荷不合法时返回 INVALID_ARGUMENT。路径是生效的主名，主名被遮蔽时省略整条记录；别名只保留该路由仍胜出的生效名称，顺序不变（D-128）。结果按主名 token 用空格连接后的字典序排列；说明按规范路径和 Actor locale 选择，未登记说明时 `description` 不出现。
+
+`ToolEffect` 的编号固定为 `UNSPECIFIED=0`、`READ_ONLY=1`、`WRITE=2`、`DESTRUCTIVE=3`（D-157）；`ToolSpec`、`ToolInfo`、`ToolConfirmRequest` 的 `effect` 均使用此枚举。
 
 Core→插件与 Core→Adapter 方向另有 `sdk.log.set_level`：`LogSetLevelRequest`（`LogLevel level = 1`，与 Bootstrap 使用同一枚举）→ 空的 `LogSetLevelResponse`，SDK 收到后立即按新级别过滤（CONTRACTS §14.3）。Core→插件方向另有 `sdk.profile.set_overrides`：该插件当前有效的全部覆盖值（与 Bootstrap 的 `profile_overrides_json` 同形）→ 空结果，SDK 以它整体替换已有的覆盖值（CONTRACTS §5.6，D-168）。
 

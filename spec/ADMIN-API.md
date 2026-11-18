@@ -503,11 +503,11 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 ## 18. 工具调用策略
 
-`GET /api/v1/tools/policies` 返回 `{"policies":[{"plugin_id":"demo","service":"echo","default":"allow","override":"inherit","effect":"read_only"}]}`；effect 取 read_only、write、destructive 或 unspecified（D-157）。目录合并当前 Attach 工具声明、本次运行出现的操作和已保存覆盖；default 为 inherit 表示当前无声明，override 为 inherit 表示没有覆盖。
+`GET /api/v1/tools/policies` 返回 `{"policies":[{"plugin_id":"demo","service":"echo","default":"allow","override":"inherit","effect":"read_only"}]}`；`effect` 取 `read_only`、`write`、`destructive` 或 `unspecified`（D-157）。目录按 `plugin_id` 和 `service` 合并当前 Attach 的工具声明、本次 Core 运行的确认记录和已保存覆盖。有确认记录时采用最近上报的类别（包括 `unspecified`），否则采用声明类别，仅有保存覆盖时为 `unspecified`。`default` 优先取声明的缺省策略，仅有确认记录时为 `confirm`，两者都没有时为 `inherit`；`override` 为 `inherit` 表示没有保存覆盖。
 
 `PUT /api/v1/tools/policies` 接收 `{"plugin_id":"demo","service":"echo","policy":"deny"}`，成功返回 `{}`。policy 接受 allow、confirm、deny、inherit；inherit 删除覆盖。service 也接受目录已记录的完整操作名，例如 `mcp/filesystem/read_file`；操作名独立于 Service 名语法校验。未知策略、服务名格式错误或目录未记录的操作名返回 400，未知组件返回 404。写入与固定 ListTools 使用同一个 tool.Catalog 和状态库；下次查询或调用读取新策略，deny 的工具从 ListTools 隐藏，无需重启。
 
-`PUT /api/v1/tools/policies` 也接收 `{"items":[{"plugin_id":"demo","service":"echo","policy":"deny"}, ...]}`，按上面的规则逐项校验，全部合法时在一个事务内写入；任一项不合法返回 400 并指出该项，不写入任何一项（D-157）。
+`PUT /api/v1/tools/policies` 也接收 `{"items":[{"plugin_id":"demo","service":"echo","policy":"deny"}]}`。逐项严格解码和校验，全部合法后，在一个事务内保存或删除覆盖；写入失败时整批回滚。项内字段类型错误、未知字段、非法值或未知组件返回 400（INVALID_ARGUMENT），`safe_message` 以 `items[index]:` 标注从 0 开始的项号（例如 `items[1]: unknown tool policy`）；校验失败时整批不写（D-157）。
 
 ## 19. 诊断包
 

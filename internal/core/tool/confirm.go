@@ -50,7 +50,10 @@ func (i *invoker) confirm(ctx context.Context, caller router.Caller, in *wire.In
 	if request.GetOperation() == "" || len(request.GetSummary()) > maxSummaryBytes {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "operation is required and summary must not exceed 1024 bytes")
 	}
-	i.catalog.observe(caller.PluginID, request.GetOperation())
+	if _, ok := pb.ToolEffect_name[int32(request.GetEffect())]; !ok {
+		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "unknown tool effect")
+	}
+	i.catalog.observe(caller.PluginID, request.GetOperation(), request.GetEffect())
 	policy, err := i.catalog.store.GetToolPolicy(ctx, caller.PluginID, request.GetOperation())
 	if errors.Is(err, state.ErrNotFound) {
 		policy = pb.ToolPolicy_TOOL_POLICY_CONFIRM

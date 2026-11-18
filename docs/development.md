@@ -278,11 +278,11 @@ Adapter 在 `adapter.Descriptor.HTTP` 中用 `[]adapter.HTTPRoute` 声明路由�
 | 规则 | 依据 | 检查 | 状态 |
 | --- | --- | --- | --- |
 | 生成代码可重复生成，结果稳定 | AGENTS「项目约定」 | 执行 `go generate ./...` 后检查 `git diff --exit-code` | 已观测（手动执行） |
-| Envelope 字段号/枚举值与 WIRE-FORMAT 一致 | spec/WIRE-FORMAT.md §1/§2/§5A | `contracts/wirespec_test.go`（`go test ./contracts/`） | 已观测 |
+| WIRE-FORMAT 规定的协议字段号与枚举值（含 `ToolEffect` 及三个 `effect` 字段） | spec/WIRE-FORMAT.md §1/§2/§3.3/§3.5/§5A | `contracts/wirespec_test.go`（`go test ./contracts/`） | 已观测 |
 | Core 与 SDK 根包只链接允许的模块 | CONTRACTS §10、D-52 | 审查时运行上方的 `go list -deps` 命令（需要时按目标平台设 GOOS/GOARCH） | 人工/agent 审查规则，不由 CI 自动证明 |
 | 五目标平台 `CGO_ENABLED=0` 可构建 | CONTRACTS §6.1/§7.1 | 下方交叉编译命令（手动执行） | 已观测（只验证了构建；运行见 V-32） |
 | 包文档、命名、注释与测试提交范围 | coding-standards.md | 代码审查与 PR 清单 | 人工/agent 审查规则，不由 CI 自动证明 |
-| V-01～V-117 证据 | spec/TEST-MATRIX.md | 按编号记录测试位置、命令、平台和结果 | §3.1 所列分项已观测（darwin/arm64）；其余未运行 |
+| 验收证据 | spec/TEST-MATRIX.md §3 | 按编号记录测试位置、命令、平台和结果 | 各分项的运行结果与未运行项见证据表 |
 
 状态说明：**已定义** 表示规则和检查方式已写下；**已实现** 表示检查代码已存在；**已观测** 表示检查真实运行过并有结果。工作流本身不代表目标提交已经验证。
 

@@ -593,10 +593,11 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 工具是带 `tool` 描述的 JSON Service：description 是给模型的说明，输入 Schema 即该 Service 的输入 Schema，输出是该 Service 的 JSON 输出；default_policy 取 allow 或 confirm。工具沿用 Service 的命名 `plugin_id/service_name`、访问规则、Broker 定位、调用链、深度、取消与准入（§3），不新增 route kind；Protobuf 编码的 Service 不能声明为工具。
 - 调用策略按工具持久化，取值 allow、confirm 或 deny，未设置时使用工具声明的 default_policy。管理员经管理服务修改，下一次调用生效，不撤销已开始的调用。策略不替代 Service 自身的 required_permission：工具执行时仍按继承的 Actor 判定 User/Admin。
 - 工具策略可以按配置文件覆盖（§5.6，D-168）：调用的默认 Target 所在会话使用的配置文件为某个工具或 `core.tool.confirm` 的操作设置了策略时，以它取代全局策略；该配置文件关闭了工具所属插件时视为 deny。`core.tool.list` 返回按本次调用生效的策略。
-- 工具可以声明副作用类别 `effect`：`read_only`、`write` 或 `destructive`，不声明为 `unspecified`；`core.tool.confirm` 的操作同样可以带类别，Core 与操作名一起记录（D-157）。类别只是提示：不改变缺省策略，不参与策略判断。
-- `core.tool.list` 返回调用插件可以调用、且生效策略不为 deny 的工具：名称、description、输入 Schema、副作用类别与生效策略。
+- 工具可以声明副作用类别 `effect`：`read_only`、`write` 或 `destructive`；省略字段或传 `UNSPECIFIED=0` 表示 `unspecified`（D-157）。SDK 收集注册时拒绝非法类别；Core 在原始 REGISTER 校验时也以 INVALID_ARGUMENT 拒绝非法枚举，英文错误包含 Service 名和非法数值。类别只作提示，不改变缺省策略或确认规则，也不参与策略判断。
+- `core.tool.list` 返回调用插件可以调用、且生效策略不为 deny 的工具：名称、description、输入 Schema、声明的副作用类别与生效策略。
 - `core.tool.invoke` 输入工具名与 JSON 参数，必须带 parent_call_id（§1.2）。策略为 deny 时返回 PERMISSION_DENIED；为 confirm 时先按 §13.2 取得确认，用户拒绝返回 PERMISSION_DENIED，超时返回 DEADLINE_EXCEEDED；为 allow 或确认通过后，Broker 以父调用链调用该 Service 并原样返回结果。确认的等待计入父调用期限。
-- `core.tool.confirm` 供插件在自己执行的操作（例如 MCP 工具）之前取得确认，输入操作名（调用插件内稳定的名称）、给用户看的参数摘要与可选的副作用类别。Core 按「调用插件 ID + 操作名」查找策略，未设置时为 confirm，返回规则与 invoke 相同。Core 不检查插件随后是否执行了该操作；它记录出现过的操作名，供管理页列出并设置策略。
+- `core.tool.confirm` 供插件在自己执行的操作（例如 MCP 工具）之前取得确认，输入操作名（调用插件内稳定的名称）、给用户看的参数摘要与可选的副作用类别。SDK 和 Core 均以 INVALID_ARGUMENT 拒绝非法类别。Core 在判断策略前记录操作名和类别，再按「调用插件 ID + 操作名」查找策略，未设置时为 confirm，返回规则与 invoke 相同。Core 不检查插件随后是否执行了该操作。
+- 管理目录按同一插件 ID 与 Service 名或操作名合并条目。有确认记录时，类别取本次 Core 运行中最近一次确认请求上报的值（包括 `unspecified`）；没有确认记录时取声明类别，仅有保存覆盖时为 `unspecified`。同名声明仍提供目录中的缺省策略，已保存的策略覆盖保持不变；仅有确认记录时缺省策略为 confirm。批量更新与错误规则见 ADMIN-API §18。
 
 ### 13.2 用户确认
 

@@ -45,6 +45,8 @@
 
 组件 changelog（D-166）由 `internal/pluginkit` 在 `check`、`build`、`pack` 的资源扫描中校验，`pack` 保留文件原文；`internal/core/packages` 在安装包解压后复核。`internal/core/manage` 通过 `GET /api/v1/packages/{id}/changelog` 读取当前安装包，通过 `GET /api/v1/core/changelog` 读取由根 `CHANGELOG.md` 生成并编入 Core 的 `changelog_core.go`。
 
+`sdk/service.Builder.Effect` 随 REGISTER 上报工具类别；`sdk/tool.List` 通过 `Info.Effect` 读回声明类别，Agent 将 MCP 注解换算后的类别交给 `sdk/tool.Confirm`。`internal/core/tool` 合并声明、确认记录与策略覆盖；管理层批量写入时先持有 catalog 锁，再按组件 ID 顺序取锁，与安装替换使用同一锁层级。`Catalog.SetPolicy(ctx, rows ...state.ToolPolicy)` 调用 `Store.SetToolPolicy(ctx, rows ...ToolPolicy)`，由状态库在同一事务内保存或删除覆盖。
+
 ## 依赖方向
 
 `A -> B` 表示 **A 的 Go 源码 import B**（静态依赖，含测试代码），不表示运行时调用或数据流。「模块」指上表每一行的路径前缀；同一模块内部的 import（如 `contracts/release -> contracts/manifest`、`sdk -> sdk/message`）不受限制。跨模块的边只允许下表列出的；标准库和已批准的第三方依赖不受此表限制。
