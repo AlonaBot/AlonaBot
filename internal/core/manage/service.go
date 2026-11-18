@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -47,6 +48,7 @@ type Options struct {
 	State              func(id string) string                                             // 必填；返回运行状态，未运行时返回空串。
 	InstanceSchema     func(ctx context.Context, id string) (*configschema.Schema, error) // 读取包内的实例声明。
 	Packages           string                                                             // 不可变程序包目录，其父目录是 Core data_dir。
+	BundledPackages    string                                                             // 可执行文件同目录 packages/ 的绝对路径；空串表示没有内置候选。
 	Limits             packages.Limits
 	ReleaseBaseURL     string                                                      // 缺省 https://github.com，测试可指向回环服务。
 	HTTPClient         *http.Client                                                // nil 使用 http.DefaultClient。
@@ -128,6 +130,7 @@ type Package struct {
 	ID, Role, AdapterID, Version, Source, PublisherKeyID, Pin string
 	Enabled, Uninstalled, Signed                              bool
 	Active, State                                             string
+	AvailableUpdate                                           string   `json:"available_update,omitempty"`
 	RuntimeState                                              string   `json:",omitempty"` // 仅插件和 Agent 持久化实际运行状态。
 	Warnings                                                  []string `json:",omitempty"` // 仅安装结果携带清单警告。
 	Pages                                                     []page   `json:"pages"`
@@ -143,6 +146,14 @@ func (s *Service) List(ctx context.Context) ([]Package, error) {
 	for _, install := range installs {
 		unlock := s.lock(install.PluginID)
 		item, err := s.describe(ctx, install.PluginID)
+		if err == nil {
+			_, version, candidateErr := s.bundledUpdate(ctx, install.PluginID)
+			if candidateErr != nil {
+				slog.Error("bundled update candidate rejected", "plugin_id", install.PluginID, "error", candidateErr)
+			} else {
+				item.AvailableUpdate = version
+			}
+		}
 		unlock()
 		if err != nil {
 			return nil, failure(err)

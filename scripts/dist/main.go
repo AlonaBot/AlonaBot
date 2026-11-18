@@ -140,7 +140,7 @@ func run(ctx context.Context, args []string) (err error) {
 	if err := os.MkdirAll(out, directoryMode); err != nil {
 		return err
 	}
-	// 3. 每个组件合并全部平台后只签一次；同一清单复制到各平台目录。
+	// 3. 每个组件只调用一次多平台 pack，再签名并将同一清单复制到各平台目录。
 	for _, component := range components {
 		if err := packComponent(ctx, opt, component, host, staging, out, targets, roots, key); err != nil {
 			return fmt.Errorf("pack %s: %w", component.id, err)
@@ -199,65 +199,52 @@ func command(ctx context.Context, dir string, env []string, name string, args ..
 }
 
 func packComponent(ctx context.Context, opt options, component component, host, staging, out string, targets []string, roots map[string]string, key ed25519.PrivateKey) error {
-	version, err := projectVersion(component.dir)
+	directory := filepath.Join(staging, "packed", component.id)
+	args := []string{"pack", component.dir, "--asset-base", opt.assetBase, "--out", directory}
+	for _, target := range targets {
+		args = append(args, "--target", target)
+	}
+	if _, err := command(ctx, ".", nil, host, args...); err != nil {
+		return err
+	}
+	raw, err := os.ReadFile(filepath.Join(directory, "release.json"))
 	if err != nil {
 		return err
 	}
-	var publication release.Release
+	publication, err := release.Verify(raw, nil, nil)
+	if err != nil {
+		return err
+	}
 	archives := make(map[string]string)
-	for i, target := range targets {
+	for _, target := range targets {
 		goos, goarch, _ := strings.Cut(target, "/")
-		name := fmt.Sprintf("%s-%s-%s-%s.tar.gz", component.id, version, goos, goarch)
-		// 静态 WebUI 的平台由 pack 判定；没有 Go 源码时只构建一次。
-		if component.dir == "web/admin" {
-			sources, err := filepath.Glob(filepath.Join(component.dir, "*.go"))
-			if err != nil {
-				return err
-			}
-			if len(sources) == 0 {
-				name = fmt.Sprintf("%s-%s-any.tar.gz", component.id, version)
-			}
+		asset, ok := publication.Asset(goos, goarch)
+		if !ok {
+			asset, ok = publication.Asset("any", "any")
 		}
-		directory := filepath.Join(staging, "packed", component.id, goos+"-"+goarch)
-		if _, err := command(ctx, ".", nil, host, "pack", "--dir", component.dir, "--goos", goos, "--goarch", goarch,
-			"--asset-url", opt.assetBase+"/"+name, "--out", directory); err != nil {
-			return err
+		if !ok {
+			return fmt.Errorf("release has no asset for %s", target)
 		}
-		raw, err := os.ReadFile(filepath.Join(directory, "release.json"))
+		address, err := url.Parse(asset.URL)
 		if err != nil {
 			return err
 		}
-		part, err := release.Verify(raw, nil, nil)
-		if err != nil {
-			return err
-		}
-		if i == 0 {
-			publication = *part
-			publication.Assets = nil
-		}
-		publication.Assets = append(publication.Assets, part.Assets...)
-		archive := filepath.Join(directory, name)
+		archive := filepath.Join(directory, filepath.Base(address.Path))
 		if err := checkPrivateKey(archive, key); err != nil {
 			return err
 		}
 		archives[target] = archive
-		if part.Assets[0].OS == "any" {
-			for _, target := range targets {
-				archives[target] = archive
-			}
-			break
-		}
 	}
 	public := key.Public().(ed25519.PublicKey)
 	publication.PublisherKeyID = release.KeyID(public)
-	raw, err := json.MarshalIndent(publication, "", "  ")
+	raw, err = json.MarshalIndent(publication, "", "  ")
 	if err != nil {
 		return err
 	}
 	raw = append(raw, '\n')
 	signature := []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(key, raw)) + "\n")
 	if _, err := release.Verify(raw, signature, public); err != nil {
-		return fmt.Errorf("verify merged release: %w", err)
+		return fmt.Errorf("verify release: %w", err)
 	}
 	metadata := map[string][]byte{
 		"release.json":     raw,
@@ -280,20 +267,6 @@ func packComponent(ctx context.Context, opt options, component component, host, 
 		}
 	}
 	return nil
-}
-
-// projectVersion 读取仓库内组件声明的顶层版本；完整 manifest 校验由 pack 负责。
-func projectVersion(dir string) (string, error) {
-	raw, err := os.ReadFile(filepath.Join(dir, "plugin.yaml"))
-	if err != nil {
-		return "", err
-	}
-	for _, line := range strings.Split(string(raw), "\n") {
-		if value, ok := strings.CutPrefix(line, "version:"); ok {
-			return strings.Trim(strings.TrimSpace(value), "'\""), nil
-		}
-	}
-	return "", errors.New("component manifest has no version")
 }
 
 func archiveDigest(path string) (digestBytes []byte, err error) {

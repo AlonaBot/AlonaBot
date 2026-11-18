@@ -4,12 +4,14 @@ package main
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"debug/buildinfo"
 	"encoding/base64"
 	"encoding/hex"
@@ -99,6 +101,7 @@ func TestManagementLifecycle(t *testing.T) {
 		t.Fatalf("restart changed generation or reused session: %+v", second)
 	}
 	stopTestCore(t, c)
+	t.Run("plugin-data", testManagementPluginData)
 	t.Run("sleep-capable-runtime", func(t *testing.T) {
 		const id, source = "demo", "github.com/example/lifecycle"
 		archive := testPackage(t, id, "plugin", "", source, "sleep_capable: true\n", nil)
@@ -969,8 +972,11 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	if err := os.WriteFile(configFile, []byte(`{"token":"${MANAGE_E2E_TOKEN}"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []string{"one", "two", "fail"} {
+	for _, id := range []string{"one", "two"} {
 		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", id, "--config", configFile)
+	}
+	if output := managementFailure(t, c, dir, "adapter", "instance", "create", "alonabot-adapter-fixture", "fail", "--config", configFile); !strings.Contains(output, "fixture instance rejected") {
+		t.Fatal(output)
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, settings.FileName))
 	if err != nil {
@@ -979,12 +985,27 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	if !bytes.Contains(raw, []byte("${MANAGE_E2E_TOKEN}")) || bytes.Contains(raw, []byte("fixture-credential-value")) {
 		t.Fatal("credential reference was changed")
 	}
-	c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
+	if adapter := findPackage(t, c, dir, "alonabot-adapter-fixture"); !adapter.Enabled || adapter.State != "Activated" {
+		t.Fatalf("adapter was not automatically enabled: %+v", adapter)
+	}
 	c.management(t, dir, "", "enable", "commands")
 	for _, id := range []string{"one", "two"} {
 		c.waitFor("fixture instance " + id + " started")
 	}
-	c.waitFor(`adapter instance start failed plugin_id=alonabot-adapter-fixture instance_id=fail`)
+	status, body := fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/adapter/instances")
+	var instances struct {
+		Instances []struct {
+			ID        string `json:"instance_id"`
+			State     string `json:"state"`
+			SafeError string `json:"safe_error"`
+		} `json:"instances"`
+	}
+	if status != http.StatusOK || json.Unmarshal(body, &instances) != nil {
+		t.Fatalf("instances: %d %s", status, body)
+	}
+	if len(instances.Instances) != 3 || instances.Instances[0].ID != "fail" || instances.Instances[0].State != "failed" || !strings.Contains(instances.Instances[0].SafeError, "fixture instance rejected") {
+		t.Fatalf("failed instance was not retained: %s", body)
+	}
 	check := func(instance, user, text, want string, count int) {
 		t.Helper()
 		path := "/plugins/alonabot-adapter-fixture/deliver?instance=" + instance + "&user=" + user + "&text=" + url.QueryEscape(text)
@@ -1335,4 +1356,173 @@ func main(){if err:=sdk.Run(sdk.NewPlugin());err!=nil{slog.Error("weather fixtur
 		t.Fatal(err)
 	}
 	return archive
+}
+
+// testManagementPluginData 经认证 API 修改运行中的受管数据，再由真实插件读取。
+func testManagementPluginData(t *testing.T) {
+	// 1. 复用动态构建和安装包工程，启动实际 Core、Adapter 与 SQLite 插件。
+	archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/configdb"}, "https://example.invalid/configdb.tar.gz", "", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
+	adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+	c.management(t, dir, "", "install", adapter, "--yes")
+	c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", "one")
+	c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
+	c.waitFor("fixture instance one started")
+	const id = "alonabot-plugin-configdb"
+	c.management(t, dir, "", "install", archive, "--yes")
+	c.management(t, dir, "", "enable", id)
+	token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	api := func(method, path, body string) []byte {
+		t.Helper()
+		request, err := http.NewRequestWithContext(t.Context(), method, "http://"+c.address()+"/api/v1/plugins/"+id+"/data/"+path, strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, readErr := io.ReadAll(response.Body)
+		if err := errors.Join(readErr, response.Body.Close()); err != nil {
+			t.Fatal(err)
+		}
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("%s %s: %d %s", method, path, response.StatusCode, raw)
+		}
+		return raw
+	}
+	replies := 0
+	pluginRead := func(command, want string) {
+		t.Helper()
+		path := "/plugins/alonabot-adapter-fixture/deliver?instance=one&user=alice&text=" + url.QueryEscape(command)
+		if status, body := fixtureHTTP(t, c, dir, http.MethodPost, path); status != http.StatusNoContent {
+			t.Fatalf("deliver: %d %s", status, body)
+		}
+		replies++
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			status, body := fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot-adapter-fixture/sent")
+			var sent []string
+			if status != http.StatusOK || json.Unmarshal(body, &sent) != nil {
+				t.Fatalf("sent: %d %s", status, body)
+			}
+			if len(sent) >= replies {
+				if len(sent) != replies || sent[replies-1] != want {
+					t.Fatalf("plugin reply %v, want %s", sent, want)
+				}
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("missing reply %s: %s\n%s", want, body, c.log())
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	pluginRead("/note set seed plugin-seed", "Saved seed")
+	if raw := api("GET", "tables", ""); !bytes.Contains(raw, []byte(`"name":"configdb_note"`)) {
+		t.Fatal(string(raw))
+	}
+	if raw := api("GET", "tables/configdb_note/rows", ""); !bytes.Contains(raw, []byte(`"value":"plugin-seed"`)) {
+		t.Fatal(string(raw))
+	}
+	// 2. 行、KV 与共用文件均在运行中改写；插件下一次调用读取同一数据。
+	raw := api("POST", "tables/configdb_note/rows", `{"values":{"key":"api","value":"initial"}}`)
+	var inserted struct {
+		RowID int64 `json:"rowid"`
+	}
+	if err := json.Unmarshal(raw, &inserted); err != nil {
+		t.Fatal(err)
+	}
+	api("PATCH", "tables/configdb_note/rows/"+strconv.FormatInt(inserted.RowID, 10), `{"values":{"value":"api-updated"}}`)
+	api("PUT", "kv/topic", `{"text":"kv-api"}`)
+	api("PUT", "files/content?path=note.txt", "file-api")
+	pluginRead("/note get api", "api: api-updated")
+	pluginRead("/note kvget topic", "topic: kv-api")
+	pluginRead("/note fileget", "note.txt: file-api")
+	raw = api("GET", "tables/configdb_note/rows?where.key=seed", "")
+	var seeded struct {
+		Rows []struct {
+			RowID int64 `json:"rowid"`
+		}
+	}
+	if err := json.Unmarshal(raw, &seeded); err != nil || len(seeded.Rows) != 1 {
+		t.Fatalf("seed rows: %s %v", raw, err)
+	}
+	api("DELETE", "tables/configdb_note/rows/"+strconv.FormatInt(seeded.Rows[0].RowID, 10), "")
+	// 3. 打开导出快照并核对文件，随后验证清空保留结构和真实迁移账本。
+	raw = api("GET", "export", "")
+	exported, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundDatabase, foundFile := false, false
+	for _, entry := range exported.File {
+		if entry.Name != "db.sqlite" && entry.Name != "plugin_data/note.txt" {
+			continue
+		}
+		file, err := entry.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		content, readErr := io.ReadAll(file)
+		if err := errors.Join(readErr, file.Close()); err != nil {
+			t.Fatal(err)
+		}
+		if entry.Name == "plugin_data/note.txt" {
+			foundFile = true
+			if string(content) != "file-api" {
+				t.Fatal(string(content))
+			}
+			continue
+		}
+		foundDatabase = true
+		snapshot := filepath.Join(t.TempDir(), "db.sqlite")
+		if err := os.WriteFile(snapshot, content, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		db, err := sql.Open("sqlite", snapshot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var value string
+		if err := db.QueryRow("SELECT value FROM configdb_note WHERE key='api'").Scan(&value); err != nil || value != "api-updated" {
+			t.Fatalf("exported row: %s %v", value, err)
+		}
+		if err := db.QueryRow("SELECT CAST(value AS TEXT) FROM _alonabot_kv WHERE key='topic'").Scan(&value); err != nil || value != "kv-api" {
+			t.Fatalf("exported KV: %s %v", value, err)
+		}
+		if err := db.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !foundDatabase || !foundFile {
+		t.Fatal("export omitted database or plugin file")
+	}
+	api("POST", "clear", `{"confirm":true}`)
+	for _, table := range []string{"configdb_note", "configdb_startup"} {
+		if raw := api("GET", "tables/"+table+"/rows", ""); !bytes.Contains(raw, []byte(`"total":0`)) {
+			t.Fatal(string(raw))
+		}
+	}
+	if raw := api("GET", "kv", ""); !bytes.Contains(raw, []byte(`"total":0`)) {
+		t.Fatal(string(raw))
+	}
+	if raw := api("GET", "files", ""); !bytes.Contains(raw, []byte(`"entries":[]`)) {
+		t.Fatal(string(raw))
+	}
+	if raw := api("GET", "tables/_alonabot_migrations/rows", ""); !bytes.Contains(raw, []byte(`"total":2`)) {
+		t.Fatal(string(raw))
+	}
+	if findPackage(t, c, dir, id).State != "Activated" {
+		t.Fatal("data management stopped the plugin")
+	}
+	stopTestCore(t, c)
 }

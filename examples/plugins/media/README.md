@@ -47,8 +47,8 @@ echo 直接回送入站图片的 Incoming 来源；同实例发送会复用平�
 在仓库根目录检查和构建：
 
 ```fish
-go run ./cmd/alonabot check --dir examples/plugins/media
-go run ./cmd/alonabot build --dir examples/plugins/media --out /tmp/alonabot-media
+go run ./cmd/alonabot check examples/plugins/media
+go run ./cmd/alonabot build examples/plugins/media --out /tmp/alonabot-media
 ```
 
 `New()` 只做注册，所有注册都显式可见。原 `/media` 使用 `c.Send` 获取完整 `SendResult`，先保存可编辑文字的消息句柄，再接收按钮点击；`/caption` 展示结构体参数和子插件，不需要持有发送回执。英文和中文按钮、提示取自 i18n 资源。
