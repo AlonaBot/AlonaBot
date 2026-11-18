@@ -42,7 +42,7 @@ func (r *Router) listCommands(ctx context.Context, _ Caller, in *wire.Inbound) w
 	result := &pb.CommandListResponse{}
 	for _, route := range routes {
 		command := route.route.GetCommand()
-		if command.GetMatch() != pb.CommandMatch_COMMAND_MATCH_PATH || !route.plugin.Activated() {
+		if command.GetMatch() != pb.CommandMatch_COMMAND_MATCH_PATH || !r.available(route.candidate) {
 			continue
 		}
 		names := index.names[route.pluginID][route.route.GetRouteId()]
@@ -52,6 +52,13 @@ func (r *Router) listCommands(ctx context.Context, _ Caller, in *wire.Inbound) w
 		winner, _, ok := index.Lookup(names[0])
 		identity := CommandEntry{PluginID: route.pluginID, RouteID: route.route.GetRouteId()}
 		if !ok || !sameRoute(winner, identity) {
+			continue
+		}
+		_, enabled, err := r.Profile(ctx, route.pluginID, parent.DefaultTarget)
+		if err != nil {
+			return wire.Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}}
+		}
+		if !enabled {
 			continue
 		}
 		if r.policy != nil {
@@ -74,8 +81,8 @@ func (r *Router) listCommands(ctx context.Context, _ Caller, in *wire.Inbound) w
 		}
 		if source := command.GetDescription(); source != "" {
 			description := source
-			if catalog := route.plugin.Messages(); catalog != nil {
-				description = catalog.CommandDescription([]string{actor.GetLocale(), route.plugin.DefaultLocale()}, command.GetPath(), source)
+			if catalog := route.messages(); catalog != nil {
+				description = catalog.CommandDescription([]string{actor.GetLocale(), route.defaultLocale()}, command.GetPath(), source)
 			}
 			entry.Description = proto.String(description)
 		}

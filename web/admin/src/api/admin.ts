@@ -8,13 +8,15 @@ export class AdminAPIError extends Error {
   code?: string;
   affected?: string[];
   responseBody?: string;
+  description?: string;
 
-  constructor(status: number, message: string, code?: string, affected?: string[]) {
+  constructor(status: number, message: string, code?: string, affected?: string[], description?: string) {
     super(message);
     this.name = 'AdminAPIError';
     this.status = status;
     this.code = code;
     this.affected = affected;
+    this.description = description;
   }
 }
 
@@ -90,6 +92,27 @@ function notifySessionExpired() {
   }
 }
 
+type PackagesChangedHandler = () => void;
+const packagesChangedHandlers = new Set<PackagesChangedHandler>();
+
+/** 订阅组件安装、更新或卸载成功事件，返回取消订阅函数。 */
+export function onPackagesChanged(handler: PackagesChangedHandler): () => void {
+  packagesChangedHandlers.add(handler);
+  return () => {
+    packagesChangedHandlers.delete(handler);
+  };
+}
+
+function notifyPackagesChanged() {
+  for (const handler of packagesChangedHandlers) {
+    try {
+      handler();
+    } catch (err) {
+      console.error('Packages changed handler failed:', err);
+    }
+  }
+}
+
 async function parseErrorResponse(response: Response): Promise<AdminAPIError> {
   const text = await response.text();
   if (response.headers.get('content-type')?.includes('application/json')) {
@@ -104,8 +127,11 @@ async function parseErrorResponse(response: Response): Promise<AdminAPIError> {
       const affected = Array.isArray(error.affected) && error.affected.every(item => typeof item === 'string')
         ? error.affected as string[] : undefined;
       const code = typeof error.code === 'string' ? error.code : undefined;
-      const message = typeof error.safe_message === 'string' ? error.safe_message : text;
-      const result = new AdminAPIError(response.status, message, code, affected);
+      const description = typeof error.description === 'string' ? error.description : undefined;
+      const message = typeof error.safe_message === 'string'
+        ? error.safe_message
+        : (description ?? text);
+      const result = new AdminAPIError(response.status, message, code, affected, description);
       result.responseBody = text;
       return result;
     }
@@ -118,9 +144,14 @@ interface RequestOptions {
   headers?: Record<string, string>;
   body?: string | FormData | Blob;
   response?: 'blob';
+  signal?: AbortSignal;
 }
 
-async function request<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
+async function request<T = unknown>(
+  path: string,
+  options: RequestOptions = {},
+  read?: (response: Response) => Promise<T>,
+): Promise<T> {
   if (!path.startsWith('/') || path.startsWith('//')) throw new Error('Expected a same-origin path');
   const method = options.method || 'GET';
   const headers: Record<string, string> = { ...(options.headers || {}) };
@@ -138,6 +169,7 @@ async function request<T = unknown>(path: string, options: RequestOptions = {}):
     headers,
     body: options.body,
     credentials: 'same-origin',
+    signal: options.signal,
   });
 
   if (!response.ok) {
@@ -147,6 +179,8 @@ async function request<T = unknown>(path: string, options: RequestOptions = {}):
     }
     throw await parseErrorResponse(response);
   }
+
+  if (read) return read(response);
 
   if (response.status === 204) {
     return undefined as unknown as T;
@@ -214,18 +248,21 @@ export function packageIconURL(id: string): string {
 export async function installPackage(
   input: { Source: string; Replace?: boolean; Confirm?: boolean } | FormData,
 ): Promise<Package> {
+  let pkg: Package;
   if (input instanceof FormData) {
-    return request<Package>('/api/v1/packages/install', {
+    pkg = await request<Package>('/api/v1/packages/install', {
       method: 'POST',
       body: input,
     });
+  } else {
+    pkg = await request<Package>('/api/v1/packages/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
   }
-
-  return request<Package>('/api/v1/packages/install', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
+  notifyPackagesChanged();
+  return pkg;
 }
 
 /** 更新组件（JSON 沿用原来源或 FormData 上传更新包）。 */
@@ -233,23 +270,26 @@ export async function updatePackage(
   id: string,
   input: { confirm?: boolean } | FormData,
 ): Promise<{ warnings?: string[] }> {
+  let result: { warnings?: string[] };
   if (input instanceof FormData) {
     input.set('id', id);
-    return request<{ warnings?: string[] }>('/api/v1/packages/update', {
+    result = await request<{ warnings?: string[] }>('/api/v1/packages/update', {
       method: 'POST',
       body: input,
     });
+  } else {
+    result = await request<{ warnings?: string[] }>('/api/v1/packages/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        confirm: input.confirm ?? false,
+        install: {},
+      }),
+    });
   }
-
-  return request<{ warnings?: string[] }>('/api/v1/packages/update', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      id,
-      confirm: input.confirm ?? false,
-      install: {},
-    }),
-  });
+  notifyPackagesChanged();
+  return result;
 }
 
 /** 启停、重启或重载组件。 */
@@ -280,6 +320,7 @@ export async function uninstallPackage(id: string, purge: 0 | 1 | 2, confirm?: b
       confirm: confirm ?? false,
     }),
   });
+  notifyPackagesChanged();
 }
 
 /** 回退组件到指定代次。 */
@@ -438,3 +479,322 @@ export function clearPluginConversation(id: string, key: string): Promise<void> 
 export type Changelog = { locale: string; entries: { version: string; date?: string; markdown: string }[] };
 export function getPackageChangelog(id: string, locale: string): Promise<Changelog> { return request(`/api/v1/packages/${encodeURIComponent(id)}/changelog`, { headers: { 'Accept-Language': locale } }); }
 export function getCoreChangelog(locale: string): Promise<Changelog> { return request('/api/v1/core/changelog', { headers: { 'Accept-Language': locale } }); }
+
+// ----------------------------------------------------------------------------
+// 插件配置与代次 API
+// ----------------------------------------------------------------------------
+
+export type PendingConfig = {
+  base_generation: string;
+  config: Record<string, unknown>;
+};
+
+export type ConfigSnapshot = {
+  active_generation: string;
+  active: Record<string, unknown>;
+  pending: PendingConfig | null;
+  schema: unknown;
+  i18n: Record<string, Record<string, unknown>>;
+};
+
+/** 读取指定插件的配置快照（包含 active、pending、schema、i18n）。 */
+export async function getPluginConfig(id: string): Promise<ConfigSnapshot> {
+  return request<ConfigSnapshot>(`/api/v1/plugins/${encodeURIComponent(id)}/config`);
+}
+
+/** 提交插件配置 Merge Patch，返回更新后的脱敏 Pending 配置。 */
+export async function patchPluginConfig(
+  id: string,
+  baseGeneration: string,
+  patch: Record<string, unknown>,
+): Promise<PendingConfig> {
+  return request<PendingConfig>(`/api/v1/plugins/${encodeURIComponent(id)}/config/pending`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      base_generation: baseGeneration,
+      patch,
+    }),
+  });
+}
+
+// ----------------------------------------------------------------------------
+// Agent 模型管理路由 API
+// ----------------------------------------------------------------------------
+
+export type ModelDiscoveryInput =
+  | { provider: string }
+  | { protocol: string; base_url: string; api_key?: string };
+
+export type DiscoveredModel = {
+  id: string;
+  type: string;
+};
+
+export type ModelUsage = {
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+};
+
+/** discoverAgentModels 调用 Agent 的 POST discover 路由发现远端可用模型。 */
+export async function discoverAgentModels(
+  id: string,
+  input: ModelDiscoveryInput,
+): Promise<{ models: DiscoveredModel[]; description?: string }> {
+  return request<{ models: DiscoveredModel[]; description?: string }>(
+    `/plugins/${encodeURIComponent(id)}/models/discover`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+/** testAgentModel 调用 Agent 的 POST test 路由测试 Active 模型。 */
+export async function testAgentModel(
+  id: string,
+  model: string,
+): Promise<{ ok: boolean; duration_ms: number; description?: string }> {
+  return request<{ ok: boolean; duration_ms: number; description?: string }>(
+    `/plugins/${encodeURIComponent(id)}/models/test`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model }),
+    },
+  );
+}
+
+/** getAgentModelUsage 调用 Agent 的 GET usage 路由读取当天用量记录。 */
+export async function getAgentModelUsage(
+  id: string,
+): Promise<{ models: ModelUsage[] }> {
+  return request<{ models: ModelUsage[] }>(
+    `/plugins/${encodeURIComponent(id)}/models/usage`,
+    {
+      method: 'GET',
+    },
+  );
+}
+
+// ----------------------------------------------------------------------------
+// 日志与诊断包 API (ADMIN-API §8, §19, CONTRACTS §14)
+// ----------------------------------------------------------------------------
+
+export type LogRecord = {
+  time: string;
+  level: string;
+  source: string;
+  message: string;
+  attrs: Record<string, unknown>;
+  trace_id: string;
+};
+
+export type DiagnosticsOptions = {
+  since: string;
+  logs: boolean;
+  settings: boolean;
+  components: boolean;
+  redact: boolean;
+};
+
+/** 获取今日最近已缓冲的日志记录（时间升序）。 */
+export async function getRecentLogs(): Promise<LogRecord[]> {
+  return request<LogRecord[]>('/api/v1/logs/recent');
+}
+
+/** 获取指定日期的历史日志记录（按日志文件续写顺序）。 */
+export async function getLogHistory(date: string): Promise<LogRecord[]> {
+  return request<LogRecord[]>(`/api/v1/logs/history?date=${encodeURIComponent(date)}`);
+}
+
+/** 解析 Content-Disposition 中的 attachment 文件名。 */
+function parseContentDispositionFilename(header: string | null): string {
+  if (!header) return 'alonabot-diagnostics.zip';
+  const starMatch = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (starMatch && starMatch[1]) {
+    try {
+      return decodeURIComponent(starMatch[1].trim());
+    } catch {
+      return starMatch[1].trim();
+    }
+  }
+  const match = /filename=(?:"([^"]+)"|([^;\s]+))/i.exec(header);
+  if (match) {
+    return (match[1] || match[2] || '').trim();
+  }
+  return 'alonabot-diagnostics.zip';
+}
+
+/** 解析并派发单条 SSE 事件块。 */
+function parseAndDispatchSSEEvent(
+  rawEvent: string,
+  handlers: {
+    onLog: (record: LogRecord) => void;
+    onOverflow: (lastTime: string) => void;
+    onError: (error: Error) => void;
+  },
+): boolean {
+  const lines = rawEvent.split(/\r?\n/);
+  let eventType = 'message';
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    if (!line || line.startsWith(':')) {
+      continue;
+    }
+    if (line.startsWith('event:')) {
+      eventType = line.slice(6).trim();
+    } else if (line.startsWith('data:')) {
+      dataLines.push(line.slice(5).trimStart());
+    } else if (line === 'data') {
+      dataLines.push('');
+    }
+  }
+
+  if (dataLines.length === 0) return false;
+  const dataStr = dataLines.join('\n');
+
+  if (eventType === 'log') {
+    const record = JSON.parse(dataStr) as LogRecord | null;
+    if (!record || !['time', 'level', 'source', 'message', 'trace_id'].every(
+      key => typeof record[key as keyof LogRecord] === 'string',
+    ) || !record.attrs || typeof record.attrs !== 'object' || Array.isArray(record.attrs)) {
+      throw new Error(`Invalid log event: ${dataStr}`);
+    }
+    handlers.onLog(record);
+  } else if (eventType === 'overflow') {
+    const lastTime: unknown = JSON.parse(dataStr);
+    if (typeof lastTime !== 'string') {
+      throw new Error(`Invalid overflow event: ${dataStr}`);
+    }
+    handlers.onOverflow(lastTime);
+    return true;
+  }
+  return false;
+}
+
+/** 订阅实时日志流（text/event-stream），返回取消订阅函数。 */
+export function subscribeLogs(handlers: {
+  onLog: (record: LogRecord) => void;
+  onOverflow: (lastTime: string) => void;
+  onError: (error: Error) => void;
+}): () => void {
+  const abortController = new AbortController();
+  let cancelled = false;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+
+  const startStream = async () => {
+    try {
+      const response = await request<Response>('/api/v1/logs/stream', {
+        headers: { Accept: 'text/event-stream' },
+        signal: abortController.signal,
+      }, async response => response);
+      if (cancelled) return;
+
+      if (!response.body) {
+        if (!cancelled) {
+          handlers.onError(new Error('ReadableStream not supported'));
+        }
+        return;
+      }
+
+      reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (!cancelled) {
+        const { value, done } = await reader.read();
+        if (cancelled) return;
+        if (done) throw new Error('Log stream ended');
+        buffer += decoder.decode(value, { stream: true });
+
+        let boundaryMatch = buffer.match(/\r?\n\r?\n/);
+        while (boundaryMatch && boundaryMatch.index !== undefined) {
+          const boundaryIndex = boundaryMatch.index;
+          const delimiterLength = boundaryMatch[0].length;
+          const rawEvent = buffer.slice(0, boundaryIndex);
+          buffer = buffer.slice(boundaryIndex + delimiterLength);
+          if (cancelled) return;
+          if (parseAndDispatchSSEEvent(rawEvent, handlers)) {
+            await reader.cancel();
+            return;
+          }
+          boundaryMatch = buffer.match(/\r?\n\r?\n/);
+        }
+      }
+    } catch (err: unknown) {
+      if (cancelled) return;
+      handlers.onError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      abortController.abort();
+      reader?.releaseLock();
+    }
+  };
+
+  void startStream();
+
+  return () => {
+    cancelled = true;
+    abortController.abort();
+  };
+}
+
+/** 导出诊断包，返回 zip 文件 Blob 与 Content-Disposition 附件名。 */
+export async function downloadDiagnostics(
+  input: DiagnosticsOptions,
+): Promise<{ blob: Blob; filename: string }> {
+  return request('/api/v1/diagnostics', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  }, async response => {
+    const filename = parseContentDispositionFilename(response.headers.get('content-disposition'));
+    return { blob: await response.blob(), filename };
+  });
+}
+
+export type Chat = {
+  session: string;
+  title: string;
+  chat_type: 'private' | 'group' | 'channel';
+  instance_id: string;
+  last_active_at: string;
+};
+
+/** listChats 读取完整聊天目录，再按实例归组，避免把单页或 Adapter 总数当成账号会话数。 */
+export async function listChats(): Promise<Chat[]> {
+  const chats: Chat[] = [];
+  let total: number;
+  do {
+    const page = await request<{ chats: Chat[]; total: number }>(`/api/v1/chats?offset=${chats.length}&limit=50`);
+    chats.push(...page.chats);
+    total = page.total;
+  } while (chats.length < total);
+  return chats;
+}
+
+export type Profile = { id: string; name: string; color: string; sessions: number };
+export type ProfileAssignments = {
+  instances: Record<string, string>;
+  sessions: { instance: string; session: string; profile: string }[];
+};
+
+/** listProfiles 读取配置文件选择项。 */
+export function listProfiles(): Promise<Profile[]> {
+  return request<Profile[]>('/api/v1/profiles');
+}
+
+/** getProfileAssignments 读取实例缺省与会话单独指定的配置文件。 */
+export function getProfileAssignments(): Promise<ProfileAssignments> {
+  return request<ProfileAssignments>('/api/v1/profiles/assignments');
+}
+
+/** assignInstanceProfile 保存已创建实例的配置文件指定。 */
+export async function assignInstanceProfile(instanceID: string, profile: string): Promise<void> {
+  await request('/api/v1/profiles/assignments/instances/' + encodeURIComponent(instanceID), {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile }),
+  });
+}

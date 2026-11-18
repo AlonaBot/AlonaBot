@@ -26,3 +26,9 @@ func activeMessageConfig(store *state.Store) func(context.Context, string, *pb.E
 		return json.RawMessage(snapshot), nil
 	}
 }
+
+// profileMessageConfig 按同一会话解析有效覆盖，仅以 Active 基础配置构造本次匹配视图。
+func (a *assembly) profileMessageConfig(ctx context.Context, pluginID string, event *pb.Event) (json.RawMessage, error) {
+	view, err := a.profileView(ctx, pluginID, event.GetTarget())
+	return view.Config, err
+}

@@ -212,6 +212,7 @@ func invokeHook(ctx context.Context, in *wire.Inbound, route hookRoute) (respons
 	ctx, cancel := context.WithCancel(ctx)
 	scope, _ := ctx.Value(pluginContextKey{}).(pluginScope)
 	c := &Context{plugin: scope.plugin, subID: scope.subID, ctx: ctx, inbound: in}
+	c.freezeProfile(request.(interface{ GetContext() *pb.InvocationContext }).GetContext())
 	bindServiceContext(c)
 	c.active.Store(true)
 	defer func() {

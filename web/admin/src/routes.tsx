@@ -1,6 +1,6 @@
 import { useState, type JSX } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { ShieldCheck, Bot, LayoutDashboard, Puzzle, SlidersHorizontal } from 'lucide-react';
+import { ShieldCheck, Bot, Box, LayoutDashboard, Puzzle, ScrollText, SlidersHorizontal } from 'lucide-react';
 import { ConfigForm } from './components/ConfigForm';
 import { useUI } from './i18n/UI';
 import { type CoreInfo } from './api/admin';
@@ -8,6 +8,8 @@ import { OverviewPage } from './pages/OverviewPage';
 import { PluginsPage } from './pages/PluginsPage';
 import { UsersPage } from './pages/UsersPage';
 import { AccountsPage } from './pages/AccountsPage';
+import { ModelsPage } from './pages/ModelsPage';
+import { LogsPage } from './pages/LogsPage';
 import chinese from '../i18n/zh-CN.json';
 import collections from '../fixtures/collections.config_schema.json';
 import pluginChinese from '../fixtures/i18n/zh-CN.json';
@@ -148,6 +150,22 @@ export const routes: RouteEntry[] = [
     render: () => <AccountsPage />,
   },
   { id: 'users', path: '/permissions/users', label: 'users', icon: ShieldCheck, group: 'main', render: () => <UsersPage /> },
+  {
+    id: 'models',
+    path: '/models',
+    label: 'models',
+    icon: Box,
+    group: 'main',
+    render: () => <ModelsPage />,
+  },
+  {
+    id: 'logs',
+    path: '/logs',
+    label: 'logs',
+    icon: ScrollText,
+    group: 'main',
+    render: () => <LogsPage />,
+  },
   ...(import.meta.env.DEV
     ? [
         {

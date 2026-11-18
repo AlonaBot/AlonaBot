@@ -138,8 +138,10 @@ type InvocationContext struct {
 	SendForbidden bool `protobuf:"varint,5,opt,name=send_forbidden,json=sendForbidden,proto3" json:"send_forbidden,omitempty"`
 	// Core 命令层已消费本条消息；只由 Core 设置，事件路由据此过滤命令。
 	CommandConsumed bool `protobuf:"varint,6,opt,name=command_consumed,json=commandConsumed,proto3" json:"command_consumed,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// 本次调用的配置文件；default 编码为空串。
+	ProfileId     string `protobuf:"bytes,7,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *InvocationContext) Reset() {
@@ -212,6 +214,13 @@ func (x *InvocationContext) GetCommandConsumed() bool {
 		return x.CommandConsumed
 	}
 	return false
+}
+
+func (x *InvocationContext) GetProfileId() string {
+	if x != nil {
+		return x.ProfileId
+	}
+	return ""
 }
 
 // HandlerRequest 描述命令、事件、scheduled 与按钮 Handler 的请求。
@@ -1277,14 +1286,16 @@ var File_alonabot_v1_invocation_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_invocation_proto_rawDesc = "" +
 	"\n" +
-	"\x1calonabot/v1/invocation.proto\x12\valonabot.v1\x1a\x1aalonabot/v1/envelope.proto\x1a\x18alonabot/v1/errors.proto\x1a\x1aalonabot/v1/identity.proto\x1a\x19alonabot/v1/message.proto\"\x86\x02\n" +
+	"\x1calonabot/v1/invocation.proto\x12\valonabot.v1\x1a\x1aalonabot/v1/envelope.proto\x1a\x18alonabot/v1/errors.proto\x1a\x1aalonabot/v1/identity.proto\x1a\x19alonabot/v1/message.proto\"\xa5\x02\n" +
 	"\x11InvocationContext\x12(\n" +
 	"\x05actor\x18\x01 \x01(\v2\x12.alonabot.v1.ActorR\x05actor\x12:\n" +
 	"\x0edefault_target\x18\x02 \x01(\v2\x13.alonabot.v1.TargetR\rdefaultTarget\x12\x16\n" +
 	"\x06scopes\x18\x03 \x03(\tR\x06scopes\x12!\n" +
 	"\fplugin_chain\x18\x04 \x03(\tR\vpluginChain\x12%\n" +
 	"\x0esend_forbidden\x18\x05 \x01(\bR\rsendForbidden\x12)\n" +
-	"\x10command_consumed\x18\x06 \x01(\bR\x0fcommandConsumed\"\x8b\x02\n" +
+	"\x10command_consumed\x18\x06 \x01(\bR\x0fcommandConsumed\x12\x1d\n" +
+	"\n" +
+	"profile_id\x18\a \x01(\tR\tprofileId\"\x8b\x02\n" +
 	"\x0eHandlerRequest\x12\x19\n" +
 	"\broute_id\x18\x01 \x01(\tR\arouteId\x128\n" +
 	"\acontext\x18\x02 \x01(\v2\x1e.alonabot.v1.InvocationContextR\acontext\x12(\n" +

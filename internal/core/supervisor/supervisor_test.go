@@ -294,7 +294,7 @@ func setup(t *testing.T, exe string) (*state.Store, Spec) {
 	pluginDir := filepath.Join(dir, "plugins", "demo")
 	_ = os.MkdirAll(pluginDir, 0o700)
 	return s, Spec{Role: state.RolePlugin, PluginID: "demo", PluginDir: pluginDir, Executable: exe, BuildDigest: digest[:], GenerationID: "gen-1",
-		Bootstrap:    &pb.Bootstrap{GenerationId: "gen-1", CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}},
+		Bootstrap:    &pb.Bootstrap{ProfileOverridesJson: "{}", GenerationId: "gen-1", CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}},
 		NewCandidate: true, Limits: fastLimits, Stop: fastStop, Log: &logBuf{}}
 }
 

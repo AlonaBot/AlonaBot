@@ -24,7 +24,7 @@
 | goal-144 | T-12.16 | 预留的五类模型与模型管理路由 | T-12.15 | 已完成（PR #223） |
 | goal-145 | T-12.17 | 对话重试与回退模型、图像转述 | T-12.15 | 已完成（PR #224） |
 | goal-159 | T-12.18 | Agent 的触发方式、唤醒词与成员独立会话 | T-12.17、S-02.3 | 已完成（PR #229） |
-| goal-164 | T-12.19 | Agent 接入配置文件 | T-04.18、T-12.18 | 等待前置（T-04.18、T-12.18） |
+| goal-164 | T-12.19 | Agent 接入配置文件 | T-04.18、T-12.18 | 待派发 |
 | goal-167 | T-12.20 | 官方 Agent 的插件页面 | T-04.17、T-12.19 | 等待前置（T-04.17、T-12.19） |
 
 ## 第 1 波
@@ -1193,22 +1193,84 @@ func conversationKey(c *sdk.Context) string
 
 ### goal-164 · T-12.19 Agent 接入配置文件
 
-状态：等待前置（T-04.18）。T-12.18（PR #229，`f00a55a`）已合并。2026-11-17 按 D-168 新增。目标、依据与要点由 PLAN T-12 步骤 13 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：待派发。前置 T-04.18（PR #242，合并提交 `b8161272fe9c2aacb07560f09ac0294c07a343f0`）、T-12.18（PR #229，合并提交 `f00a55adf7598eaaf4f3efdab2a1072a85bde010`）均已合并；按 main `9330f3992f9d1bdd9566e9e1d6af2b3625349e92` 核对。`github.com/AlonaBot/AlonaBot/sdk` 的 `func (c *Context) Config() config.Values` 已返回本次调用冻结的配置文件视图，`sdk/profile.go` 负责接收覆盖全集；`github.com/AlonaBot/AlonaBot/sdk/service` 已有 `func Proto[In, Out proto.Message](target string) Spec[In, Out]` 与 `func (s Spec[In, Out]) Call(ctx context.Context, in In) (Out, error)`，可直接调用 `core.profile.list`、`current`、`assign`、`set`。请求与响应已由 `contracts/proto/alonabot/v1/profile.proto` 生成到 `github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1`，Core 在 `internal/core/manage/profile_api.go` 登记固定服务并核验父调用与 Core Admin。
+
+`github.com/AlonaBot/AlonaBot/agent` 的入口仍为 `func New() *sdk.Plugin`；`agent.go` 的 OnStart 从 `p.Config()` 建立 `a.config`，`conversation.go` 仍从 `chatSettings.Model/Persona` 选择模型与人格，从 `a.config.imageCaptionModel` 选择转述模型。`settings.go` 的 `/agent on|off` 仍写 `chatSettings.Enabled`，`/persona`、`/provider` 仍经包内 `updateSettings` 写聊天记录；`scheduled.go` 的 `runScheduled` 也读取该记录。`chatSettings` 另有 `ResetGeneration`、`ImageCount`，供成员历史和图片运行状态使用。goal-159 已把自由对话注册为 `Filter(sdk.MessageFilter{TriggersConfig: "triggers", WakeWordsConfig: "wake_words"}).Rule(sdk.NotCommand())`，`memory.go` 的 `func conversationKey(c *sdk.Context) string` 已读取 `c.Config().Bool("member_sessions")`；本切片承接其命令切换与旧设置删除。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-164（切片 T-12.19：Agent 接入配置文件）。goal 目录 goal-164，分支 goal-164，worktree .worktrees/goal-164，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：Agent 的对话设置按会话所用的配置文件生效；`/agent`、`/persona` 与 `/provider` 改为修改当前会话的配置文件，新增 `/profile [名字]`；删除按聊天保存的人格、模型与触发方式。
 
-依据：PLAN T-12 步骤 13；CONTRACTS §5.6；DECISIONS D-154、D-167、D-168；TEST-MATRIX V-144。
+依据：spec/PLAN.md §3.1；spec/plan/agent.md T-12.19、T-12 步骤 13 及失败停止条件；spec/CONTRACTS-v0.1.md §5.6、§13.3～§13.5；spec/WIRE-FORMAT.md §3.5；spec/adr/DECISIONS.md D-86、D-154、D-167、D-168；spec/TEST-MATRIX.md V-144，承接 goal-159 留给本切片的 V-139 命令切换分项。
 
-要点：
-- config_schema.json 中 chat_model、image_caption_model、人格字段、triggers、wake_words 与 member_sessions 写 `profile: true`；对话路径从 Handler 的 `c.Config()` 读取。
-- 命令经 `core.profile.set` 修改，回复写明配置文件名与会话数；`reloading` 为 true 时说明 Agent 即将重载。
-- `/profile` 无参数时显示当前配置文件，给出名字时经 `core.profile.assign` 切换，「默认」或 default 取消单独指定，名字不存在时列出可用的配置文件；缺省权限为 Admin。
-- 删除 Agent 数据库中按聊天的设置（并入初始迁移）。
+范围（只新增或修改这些）：
+- agent/config_schema.json、agent/i18n/en-US.json、agent/i18n/zh-CN.json：六个字段的 profile 标记、命令说明与配置文件相关回复。
+- agent/agent.go、agent/settings.go、agent/conversation.go：初始迁移、删除旧设置、按调用读取模型与人格、改写三个管理命令并新增 /profile；包内配置文件服务声明和命令辅助可放入新文件 agent/profile.go。
+- agent/scheduled.go、agent/generate.go：同步旧设置读取的调用方，以及 llm.generate 未指定模型时的调用配置读取；保留既有任务与服务契约。
+- agent/image.go、agent/memory.go：仅同步旧设置拆除涉及的运行状态读写与包内调用；保留 conversationKey、会话笔记、reset 代次及图片计数的既有语义。
+- 新增 agent/profile_test.go 的一个主路径集成测试；agent/agent_test.go 同步 schema、i18n、处理函数参数名资源快照和必要的多会话、管理 API 装配，既有 /provider 断言适配配置文件回复与 default 延后重载。agent/image_test.go、agent/triggers_test.go 仅同步运行状态存储调整，保留既有断言；internal/app/agent_service_test.go 仅同步官方 Agent 的资源快照。其余验证写在 agent/ 的 *_local_test.go。
 
-不做：配置文件的 Core 实现（goal-160、goal-161）；人格的存储（goal-167）；页面（goal-165）。
+允许的依赖：标准库、现有 sdk/...（含 sdk/config、sdk/service、sdk/errcode、sdk/message、sdk/conversation、sdk/gormdb）、agent/provider、contracts/pb/alonabotv1 及已批准的 GORM、Protobuf；沿用 ARCHITECTURE 中 agent -> sdk/...、contracts 的依赖方向，Agent 经公共 SDK 调用 Core。复用现有依赖，不新增依赖。
+
+接口（main 现有签名与载荷，pb 为 github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1，proto 为 google.golang.org/protobuf/proto）：
+// github.com/AlonaBot/AlonaBot/sdk
+func (c *Context) Context() context.Context
+func (c *Context) Config() config.Values
+func (c *Context) Reply(text string) error
+func (c *Context) StopPropagation()
+func (c *Context) Continue(fn func(*Context) error) error
+// github.com/AlonaBot/AlonaBot/sdk/config
+func (v Values) String(key string) string
+func (v Values) Strings(key string) []string
+func (v Values) Bool(key string) bool
+// github.com/AlonaBot/AlonaBot/sdk/service
+func Proto[In, Out proto.Message](target string) Spec[In, Out]
+func (s Spec[In, Out]) Call(ctx context.Context, in In) (Out, error)
+
+// 使用上述 Proto 声明固定服务；四项均以 c.Context() 调用。
+service.Proto[*pb.ProfileListRequest, *pb.ProfileListResponse]("core.profile.list")
+service.Proto[*pb.ProfileCurrentRequest, *pb.ProfileCurrentResponse]("core.profile.current")
+service.Proto[*pb.ProfileAssignRequest, *pb.ProfileAssignResponse]("core.profile.assign")
+service.Proto[*pb.ProfileSetRequest, *pb.ProfileSetResponse]("core.profile.set")
+// pb.ProfileSummary 的业务字段：Id string、Name string、Sessions uint64。
+// ProfileListRequest 无字段；ProfileListResponse.Profiles []*pb.ProfileSummary。
+// ProfileCurrentRequest 无字段；ProfileCurrentResponse.Profile *pb.ProfileSummary。
+// ProfileAssignRequest.ProfileId string；ProfileAssignResponse 无字段。
+// ProfileSetRequest.Path string、ValueJson string；ProfileSetResponse.Profile *pb.ProfileSummary、Reloading bool。
+// Path 使用点分字段路径（本切片为顶层字段名）；ValueJson 是 JSON 编码的值，null 表示删除覆盖。
+
+// github.com/AlonaBot/AlonaBot/agent 包内的现有入口
+func readConfiguration(values config.Values) (configuration, error)
+func (a *component) registerCommands(p *sdk.Plugin)
+func (a *component) selectPersona(c *sdk.Context, name string) error
+func (a *component) selectModel(c *sdk.Context, name string) error
+func (a *component) converse(c *sdk.Context, text string) error
+func (a *component) runScheduled(c *sdk.Context, session string, task AgentTask) error
+func (a *component) generate(c *sdk.Context, req llm.Request) (llm.Response, error)
+func conversationKey(c *sdk.Context) string
+func (a *component) resetConversation(c *sdk.Context) error
+// 本切片新增的包内命令入口；无新增公开符号。
+func (a *component) selectProfile(c *sdk.Context, name string) error
+
+配置接口：仅为 chat_model、image_caption_model、default_persona、triggers、wake_words、member_sessions 添加 profile: true。default_persona 是当前人格字段；命名人格仍由基础配置 personas 提供，存储调整归 goal-167。保留 chat_model、image_caption_model 的模型选项来源及既有字段类型和缺省值：triggers 是 options=["mention", "wake_word", "private"]、default=[] 的字符串 list，wake_words 是 default=[] 的字符串 list，member_sessions 是 default=false 的 bool。
+
+行为：
+- /ask 与自由对话在延续调用的 c.Config() 中读取 chat_model、default_persona、image_caption_model，用现有 a.config 中的模型与人格目录解析名字；每轮使用本次调用的冻结视图。基础 providers、models、personas、MCP、技能、重试与回退配置继续由原有 OnStart 路径建立，保留模型类型、图片能力、用量、工具循环及错误处理。llm.generate 显式指定 req.Model 时沿用原选择，省略时从该调用的 c.Config() 取 chat_model；仍只请求一次且保持调用方许可、错误映射及不套用人格和历史的契约。
+- 自由对话继续登记 chat 路由、既有 Filter 与 NotCommand；Core 从会话的生效配置读取 triggers、wake_words，Agent 的 conversationKey 从相同调用视图读取 member_sessions。覆盖更新作用于后续调用，保留唤醒词原文、三项 OR 且每条至多一轮、triggers 为空只有 /ask 的规则；保留成员历史、图片编号与 /reset 隔离，以及按默认 Target 的会话笔记。配置文件切换沿用现有会话键规则，历史不因配置文件 ID 另建命名空间。
+- /agent on、/agent off 继续为 Admin 命令并 StopPropagation，分别向 core.profile.set 提交 Path="triggers"、ValueJson=["mention","wake_word","private"] 的 JSON 文本或 [] 的 JSON 文本。/persona [name]、/provider [name] 保留无参数列出可选人格或 chat 模型、未知名字回复提示的行为；有效名字分别以 JSON 字符串写入 default_persona、chat_model。三种命令均修改当前会话所用的配置文件，同一配置文件的其他会话后续调用一起生效。
+- 写入成功后使用 ProfileSetResponse.Profile.Name、Sessions 回复影响范围，Reloading=true 时追加 Agent 即将重载的提示。default 的 Pending 与根调用全部结束后 reload 由 Core 执行，命令在当前 Handler 内完成回复；其他配置文件的修改经现有覆盖下发立即生效。回复与命令说明通过中英文 i18n 提供。Core 返回的 PERMISSION_DENIED、FAILED_PRECONDITION（含已有 Pending 或管理互斥占用）及其他服务错误沿原错误链返回，保留具体原因。
+- 新增 p.Command("profile").Args("name").Optional("name").Permission(sdk.Admin).Description("Show or select a configuration profile").Handle(a.selectProfile)，Handler 先 StopPropagation。无参数调用 core.profile.current，显示当前配置文件名称与会话数；给出名字时调用 core.profile.list 按 Name 查 ID，再经 core.profile.assign 指定到该 ID。名字为「默认」或 default 时提交 ProfileId=""，取消当前会话的单独指定，按 Core 的实例缺省再到 default 的顺序解析；切换后再调用 current 回复实际生效的配置文件。名字不存在时回复可用配置文件的名称列表。切换只改变当前会话的指定，其他会话保持原指定；Core 从在途父调用取得可信 Target、Actor 并执行 Core Admin 校验。
+- 删除 chatSettings 的 Model、Persona、Enabled 及按聊天选择它们的所有读写；直接调整 agent.New 中已有 ID:1 迁移的 AutoMigrate 模型，不追加交接迁移。ResetGeneration 与 ImageCount 作为 conversationKey 对应的运行状态保留，按实际拆除同步 settings、updateSettingsFor、appendImages 与 resetConversation 的调用；删除仅供旧管理命令使用的 updateSettings。受管库继续保存图片、记忆与模型用量，Core 继续保存会话条目。
+- runScheduled 删除按 task.Target 查旧聊天设置的路径，模型与人格改从当前 c.Config() 读取。main 的 Scheduler 调用没有默认 Target，按 CONTRACTS §5.6 使用 default 配置视图；保留 task/ 历史、原目标发送、job scope、期限、工具策略与用量。Agent 不从任务载荷自报目标查询 Core 状态或构造另一份配置视图。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：agent/profile_test.go（//go:build unix，package agent_test）的一个 TestAgentProfiles 集成测试，复用 agent_test.go 的真实 Start、loopback、SDK Session、Core 状态库与受管 SQLite，Provider 使用本地模拟服务；经现有管理 API 创建两个具不同 chat_model、default_persona、triggers 的配置文件并指定会话。以真实消息验证两份配置各自的模型、系统提示与触发方式，再经 /profile 把两个会话归入同一配置文件，由 Admin 执行 /agent on、/persona、/provider，验证覆盖写入对应字段、回复包含 Core 返回的配置文件名称与会话数、两个会话的后续对话共同变化且另一配置文件保留原值。主路径只保留这一条「配置文件选择 → 命令修改 → 后续对话」链；既有集成测试只同步上述接口、资源与存储调整，保留原断言。
+- 本地自测（*_local_test.go，不提交，结果写入 PR）：V-144 的其余分项，包括 /profile 无参数、未知名字列表、「默认」与 default 取消单独指定并回落实例缺省、跨实例与话题切换只影响当前会话；非 Admin 命令拦截及 Core Admin 校验；default 上三个写命令各自返回名称、会话数和重载提示，回复先完成再 reload、后续调用读取新值，已有 Pending 与管理互斥占用保留 FAILED_PRECONDITION 原因。承接 V-139 的 /agent on、off 对同一组 mention、wake_word、private 消息的切换，off 写 [] 后 /ask 仍可用，命令消费仍只执行一次；不同配置文件的 wake_words、member_sessions 与 image_caption_model 生效，覆盖更新前已开始的调用保持原视图。核对新建受管库已移除 Model、Persona、Enabled 对应列，reset 代次、图片编号与成员隔离继续有效；定时任务使用 default 视图且保留发送目标，llm.generate 的缺省与显式模型选择保持上述契约。真实 Provider 有凭证时实测，否则写「真实 Provider 未运行」。不向 sdk/、internal/core/supervisor/ 或新 testdata 插件提交测试（D-86）。
+
+完成条件：gofmt -l agent 无输出；go vet ./agent/...；go test -race -count=1 ./agent/...；go build ./...；go run ./cmd/alonabot check agent。按配置文件读取与命令写入的字段一致，default 上先回复再重载，旧聊天设置删除且 reset、历史与图片状态保持契约；违反 T-12 工作包失败停止条件时停止合入。PR 写明实际运行平台、提交集成测试及本地自测结果、未运行项；「文档同步」列出 V-144 与承接的 V-139 命令切换证据及后继 goal-167 所需实际接口，按共同约束推送分支并开 PR，由审查者同步规格与后继语句。
+
+不做：配置文件的 Core 实现（goal-160、goal-161）；人格的存储与选项服务（goal-167）；配置文件页面（goal-165）与 Agent 插件页面（goal-167）；增加 profile 字段范围、旧按聊天设置的交接或兼容层；修改 sdk/、Core 产品代码、.proto、spec/ 或扩展 Provider、工具、记忆与定时任务功能。
 ```
 
 ## 第 22 波

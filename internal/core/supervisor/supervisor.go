@@ -87,6 +87,7 @@ type Spec struct {
 	HTTP            *httpproxy.Server    // 可选；只绑定已激活 Session 的端点
 	CommandsChanged func()               // 可选；激活与撤销后在状态锁外通知命令菜单。
 	Detach          func()               // 可选；STOPPING 或断链时撤销装配层的本次 Session 绑定。
+	Waker           *Waker               // 已安装独立插件的 Core 活动所有者；开发组件不设置。
 }
 
 // PluginLog 接收一个插件进程的输出行；Launch 在 Session 建立后调用 SetSession，之后的行带上 session_id。
@@ -111,6 +112,7 @@ type Running struct {
 	commandsChanged func()
 	onDetach        func()
 	runtime         *runtimeRecord
+	waker           *Waker
 
 	// released 与 cleanupErr 由逐插件锁保护；进程资源只释放一次。
 	released   bool
@@ -146,6 +148,14 @@ func Prepare(ctx context.Context, store *state.Store, spec Spec) (*Prepared, err
 }
 
 func prepare(ctx context.Context, store *state.Store, spec Spec) (prepared *Prepared, err error) {
+	if spec.Waker != nil {
+		spec.Waker.preparing(spec.PluginID)
+		defer func() {
+			if err != nil {
+				spec.Waker.failed(spec.PluginID, err)
+			}
+		}()
+	}
 	var runtime *runtimeRecord
 	if spec.Role == state.RolePlugin || spec.Role == state.RoleAgent {
 		key := runtimeKey{store, spec.PluginID}
@@ -171,7 +181,7 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (prepared *Prep
 				err = errors.Join(err, store.SetRuntimeStatus(statusCtx, spec.PluginID, previous))
 				return
 			}
-			err = errors.Join(err, runtime.write(statusCtx, state.RuntimeFailed, "preparation failed"))
+			err = errors.Join(err, runtime.write(statusCtx, state.RuntimeFailed, err.Error()))
 			runtime.release()
 		}()
 	}
@@ -286,11 +296,15 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (prepared *Prep
 	}
 
 	// 4. 启动进程；之后任何失败都由 fail 终止并确认进程树清空再返回，无法确认时错误中带上原因。
+	startedAt := time.Now()
 	proc, err := process.Start(process.Spec{PluginID: spec.PluginID, Path: spec.Executable, Dir: pluginDir,
 		Args: spec.Args, Env: env, Stdio: spec.Stdio}, spec.Log.Line)
 	if err != nil {
 		closeListener(ln)
 		return nil, err
+	}
+	if spec.Waker != nil {
+		spec.Waker.started(spec.PluginID, startedAt)
 	}
 	p := &Prepared{store: store, spec: spec, process: proc, listener: ln, messages: messages, snapshotRoutes: snapshotRoutes, runtime: runtime}
 	fail := func(err error) (*Prepared, error) {
@@ -430,7 +444,11 @@ func (r *Running) Stop(t0 time.Time, reason pb.StopReason) host.StopResult {
 	if r.released {
 		return host.StopResult{Err: r.cleanupErr}
 	}
-	defer r.runtime.release()
+	if r.waker != nil {
+		if !r.waker.stopping(r, reason == pb.StopReason_STOP_REASON_IDLE) {
+			return host.StopResult{Err: wakeError(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "plugin still has active work")}
+		}
+	}
 
 	// 2. 冻结、排空、STOPPING，并等待整棵进程树清空或在总截止终止它。
 	ctx := context.Background()
@@ -441,6 +459,9 @@ func (r *Running) Stop(t0 time.Time, reason pb.StopReason) host.StopResult {
 			if !activationFailed {
 				runtimeErr = r.runtime.writeIfCurrent(ctx, state.RuntimeQuiescing, reason.String())
 			}
+			if reason == pb.StopReason_STOP_REASON_IDLE && r.waker != nil {
+				return // 空闲停止先保留业务映射，撤销时继续使用原 Session。
+			}
 			if r.scheduler != nil {
 				r.scheduler.Drain(r.pluginID)
 			}
@@ -448,22 +469,47 @@ func (r *Running) Stop(t0 time.Time, reason pb.StopReason) host.StopResult {
 				r.http.Drain(r.pluginID, deadline)
 			}
 		},
+		BeforeStopping: func() bool {
+			return r.waker == nil || r.waker.commitStop(r)
+		},
 		Stopping: func() {
+			if reason == pb.StopReason_STOP_REASON_IDLE && r.waker != nil {
+				if r.scheduler != nil {
+					r.scheduler.Drain(r.pluginID)
+				}
+				if r.http != nil {
+					r.http.Drain(r.pluginID, t0.Add(r.timing.Drain))
+				}
+			}
 			r.detach()
 			if r.commandsChanged != nil {
 				r.commandsChanged()
 			}
 		},
 	})
+	if res.Cancelled {
+		runtimeErr = errors.Join(runtimeErr, r.runtime.writeIfCurrent(ctx, state.RuntimeActive, "idle stop cancelled by accepted work"))
+		r.waker.resume(r)
+		res.Err = errors.Join(runtimeErr, wakeError(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "idle stop cancelled by accepted work"))
+		return res
+	}
+	defer r.runtime.release()
 
 	// 3. 进程树处理完后读完插件的最后输出，再释放 Listener 与进程资源；读取受同一总截止约束。
 	drainLogs(r.Process, t0.Add(r.timing.Total))
 	r.cleanupErr = res.Err
 	r.release()
+	if r.waker != nil && r.cleanupErr == nil {
+		defer r.waker.released(r)
+	}
 	if res.Err != nil {
 		runtimeErr = errors.Join(runtimeErr, r.runtime.writeIfCurrent(ctx, state.RuntimeFailed, "stop failed"))
 	} else if !activationFailed {
-		runtimeErr = errors.Join(runtimeErr, r.runtime.writeIfCurrent(ctx, state.RuntimeStopped, reason.String()))
+		next := state.RuntimeStopped
+		if reason == pb.StopReason_STOP_REASON_IDLE {
+			next = state.RuntimeSuspended
+		}
+		runtimeErr = errors.Join(runtimeErr, r.runtime.writeIfCurrent(ctx, next, reason.String()))
 	}
 	res.Err = errors.Join(res.Err, runtimeErr)
 	return res
@@ -487,6 +533,14 @@ func (r *Running) WaitExit() (abnormal bool, exitState string, err error) {
 	defer unlock()
 	if r.released {
 		return false, fmt.Sprint(r.Process.ExitState()), r.cleanupErr
+	}
+	if r.waker != nil {
+		r.waker.stopping(r, false)
+		defer func() {
+			if r.cleanupErr == nil {
+				r.waker.released(r)
+			}
+		}()
 	}
 	defer r.runtime.release()
 	r.detach()
