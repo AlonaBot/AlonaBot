@@ -1,6 +1,6 @@
 // Package llm 提供 Agent 文本生成服务的共享声明与调用辅助。
 //
-// [Generate] 发送完整请求，[Ask] 使用默认 Provider 完成一问一答。
+// [Generate] 发送完整请求，[Ask] 使用对话模型完成一问一答。
 // 服务以 @agent 定位当前安装的 Agent，调用许可与期限见 CONTRACTS §13.5。
 package llm
 
@@ -35,15 +35,14 @@ type Message struct {
 type Request struct {
 	Messages        []Message `json:"messages"`
 	System          string    `json:"system,omitempty"`
-	Provider        string    `json:"provider,omitempty"`          // 空串使用 Agent 的默认 Provider。
-	MaxOutputTokens int       `json:"max_output_tokens,omitempty"` // 0 使用所选 Provider 的配置值。
+	Model           string    `json:"model,omitempty"`             // 空串使用 Agent 的 chat_model。
+	MaxOutputTokens int       `json:"max_output_tokens,omitempty"` // 0 使用所选模型的配置值。
 }
 
 // Response 返回生成文本、实际使用的模型与可选的 token 用量。
 type Response struct {
 	Text         string `json:"text"`
-	Provider     string `json:"provider"`
-	Model        string `json:"model"`
+	Model        string `json:"model"`                   // 实际使用的模型配置名。
 	InputTokens  *int   `json:"input_tokens,omitempty"`  // nil 表示 Provider 未返回用量。
 	OutputTokens *int   `json:"output_tokens,omitempty"` // 有用量时保留 0。
 }
@@ -56,7 +55,7 @@ func Generate(ctx context.Context, req Request) (Response, error) {
 	return GenerateService.Call(ctx, req)
 }
 
-// Ask 将非空白 prompt 原样作为唯一 user 消息，返回默认 Provider 的生成文本。
+// Ask 将非空白 prompt 原样作为唯一 user 消息，返回对话模型的生成文本。
 func Ask(ctx context.Context, prompt string) (string, error) {
 	if strings.TrimSpace(prompt) == "" {
 		return "", errcode.InvalidArgument.New("prompt must not be blank")
