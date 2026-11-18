@@ -21,14 +21,16 @@ Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）只能链�
 ## 日常命令（仓库根目录）
 
 ```sh
-go generate ./...   # 重新生成 contracts/pb（入口：contracts/doc.go → contracts/internal/protocgen）
+go generate ./...   # 重新生成协议代码和 Core changelog
 go test ./...
 go build ./...
 go vet ./...
 go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}' ./cmd/alonabot ./sdk | sort -u   # Core 与 SDK 根包链接的模块，对照允许清单（D-52）
 ```
 
-生成器会先删除 `contracts/pb/` 下的 `*.pb.go` 再重新生成；新增 `.proto` 放在 `contracts/proto/alonabot/v1/`，`go_package` 统一为 `github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1`。
+协议生成器（入口：`contracts/doc.go` → `contracts/internal/protocgen`）会先删除 `contracts/pb/` 下的 `*.pb.go` 再重新生成；新增 `.proto` 放在 `contracts/proto/alonabot/v1/`，`go_package` 统一为 `github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1`。
+
+更新仓库根目录的 [`CHANGELOG.md`](../CHANGELOG.md) 后，运行 `go generate ./internal/core/manage`，将生成的 `internal/core/manage/changelog_core.go` 一同提交。
 
 交叉编译矩阵（只证明能构建，不能代替目标平台的运行证据）：
 
