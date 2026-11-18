@@ -163,7 +163,14 @@ func run(ctx context.Context, args []string) (err error) {
 		}
 		fmt.Fprintf(&sums, "%x  %s\n", digest, name)
 	}
-	return os.WriteFile(filepath.Join(out, "SHA256SUMS"), []byte(sums.String()), fileMode)
+	if err := os.WriteFile(filepath.Join(out, "SHA256SUMS"), []byte(sums.String()), fileMode); err != nil {
+		return err
+	}
+	installer, err := os.ReadFile(filepath.Join("deploy", "install.sh"))
+	if err != nil {
+		return fmt.Errorf("read install script: %w", err)
+	}
+	return os.WriteFile(filepath.Join(out, "install.sh"), installer, fileMode)
 }
 
 func buildCore(ctx context.Context, output, goos, goarch, version string, public ed25519.PublicKey) error {

@@ -82,6 +82,14 @@ func distributionName(target string) string {
 
 func verifyDistribution(t *testing.T, out, target string, public ed25519.PublicKey, key ed25519.PrivateKey) {
 	t.Helper()
+	installer, err := os.ReadFile(filepath.Join(out, "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := os.ReadFile(filepath.Join("deploy", "install.sh"))
+	if err != nil || !bytes.Equal(installer, source) {
+		t.Fatalf("distribution install script differs from source: %v", err)
+	}
 	name := distributionName(target)
 	unpacked := t.TempDir()
 	unpackDistribution(t, filepath.Join(out, name), unpacked)

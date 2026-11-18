@@ -21,7 +21,11 @@ func adminTokenCommand(code *int) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error { return cmd.Help() }}
 	group.PersistentFlags().StringVar(&dataDir, "data-dir", "", "Core data directory")
 	for _, action := range []string{"init", "reset"} {
+		var ifMissing bool
 		command := &cobra.Command{Use: action, Short: action + " the offline admin token (Core must be stopped)", Args: cobra.NoArgs}
+		if action == "init" {
+			command.Flags().BoolVar(&ifMissing, "if-missing", false, "Initialize only if no admin credential exists")
+		}
 		command.RunE = func(cmd *cobra.Command, args []string) error {
 			if dataDir == "" {
 				return errors.New("--data-dir is required")
@@ -30,7 +34,7 @@ func adminTokenCommand(code *int) *cobra.Command {
 				return errors.New("admin-token requires stdin and stderr to be terminals")
 			}
 			*code = exitFailure
-			return writeAdminToken(cmd.Context(), dataDir, action == "reset")
+			return writeAdminToken(cmd.Context(), dataDir, action == "reset", ifMissing)
 		}
 		group.AddCommand(command)
 	}
@@ -53,7 +57,7 @@ func adminTokenCommand(code *int) *cobra.Command {
 	return group
 }
 
-func writeAdminToken(ctx context.Context, dataDir string, reset bool) (err error) {
+func writeAdminToken(ctx context.Context, dataDir string, reset, ifMissing bool) (err error) {
 	// 1. 先持有 core.lock，和 Core 使用相同的状态库入口。
 	store, err := state.Open(ctx, dataDir)
 	if err != nil {
@@ -63,6 +67,15 @@ func writeAdminToken(ctx context.Context, dataDir string, reset bool) (err error
 		return err
 	}
 	defer func() { err = errors.Join(err, store.Close()) }()
+
+	if ifMissing {
+		// 持锁检查，避免与正在运行的 Core 或另一次初始化交错。
+		if _, err := store.AdminCredential(ctx); err == nil {
+			return nil
+		} else if !errors.Is(err, state.ErrNotFound) {
+			return err
+		}
+	}
 
 	// 2. 凭证事务成功后只写一次本机终端，不经过 Logger。
 	var token string
