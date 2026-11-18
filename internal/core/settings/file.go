@@ -151,6 +151,7 @@ func settingsValues(s Settings) (map[string]any, error) {
 		"$version": currentVersion, "listen": s.Listen, "base_url": s.BaseURL,
 		"trusted_proxies": s.TrustedProxies, "proxy": s.Proxy, "admins": s.Admins,
 		"command_prefixes": s.CommandPrefixes, "command_prefixes_by_instance": s.CommandPrefixesByInstance,
+		"reply":          s.Reply,
 		"default_locale": s.DefaultLocale, "adapters": adapters,
 		"log": map[string]any{"level": s.LogLevel, "format": s.LogFormat, "file": s.LogFile, "sources": s.LogSources},
 	}, nil

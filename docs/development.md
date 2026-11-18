@@ -10,7 +10,7 @@
 | Go | 1.27.1（asdf，`~/.tool-versions`） | `go.mod` 的 go 指令固定为该版本 |
 | protoc | 36.0（`protoc --version` 输出 `libprotoc 36.0`；生成文件头记为 v7.36.0） | 版本不符时 `contracts/internal/protocgen` 拒绝生成 |
 | protoc-gen-go | v1.36.12（`go.mod` 的 `tool` 指令，与 `google.golang.org/protobuf` 同版本） | 通过 `go tool -n protoc-gen-go` 定位，不全局安装 |
-| Node（前端） | 26.5.1（asdf） | 供 web/admin 使用：在 `web/admin` 下运行 `npm ci`、`npm run typecheck`、`npm run build`，`npm run dev` 打开用 `fixtures/` 渲染表单的开发预览页；CI 不跑前端，前端测试只有被忽略的 `*.local.test.ts`，没有本地测试时 `npm run test` 也通过 |
+| Node（前端） | 26.5.1（asdf） | 供 `web/admin` 使用，见[官方 WebUI 开发](#官方-webui-开发) |
 
 已锁定并经测试验证的版本：protobuf v1.36.12、go.yaml.in/yaml/v3 v3.0.5、gorm v1.31.2、libtnb/sqlite v1.2.2、modernc.org/sqlite v1.61.0（已验证 CRUD/Tx/WAL Backup/迁移账本）；golang.org/x/sys v0.49.0 为直接依赖，用于 internal/oslock 的 flock/LockFileEx，以及 internal/core/process 在 Darwin 上查询进程组成员；Cobra v1.10.2、pflag v1.0.9、仅 Windows 链接的 mousetrap v1.1.0。
 
@@ -39,6 +39,21 @@ done
 GOARCH=amd64 CGO_ENABLED=0 go test ./...   # Apple Silicon 上经 Rosetta 运行 darwin/amd64 测试
 ```
 
+## 官方 WebUI 开发
+
+在仓库根目录安装锁定的依赖并启动 Vite：
+
+```sh
+npm --prefix web/admin ci
+npm --prefix web/admin run dev
+```
+
+打开 Vite 输出的地址，首页跳转到 `/dev/forms`。预览使用 `web/admin/fixtures/`，可切换语言并查看表单提交生成的 JSON Merge Patch，无需启动 Core。接入新页面时按 [WebUI 实施计划 §3](../spec/plan/webui.md#3-页面接入外壳) 登记路由和文案。
+
+本地运行 `npm --prefix web/admin run typecheck`、`npm --prefix web/admin run test` 和 `npm --prefix web/admin run build`。测试使用被忽略的 `*.local.test.ts`，无本地测试时命令也通过；CI 不运行前端检查。生产静态文件输出到 `web/admin/dist/`，其中包括站点图标、标志、JetBrains Mono woff2 和许可。
+
+T-09.26 锁定 `lucide-react` 1.74.0、`@dnd-kit/core` 6.3.1、`@dnd-kit/sortable` 10.0.0、`@radix-ui/react-dialog` 1.3.1、`@radix-ui/react-dropdown-menu` 2.2.1 和 `@radix-ui/react-tooltip` 1.4.1；`@radix-ui/react-popover` 与 `recharts` 由首个使用它们的页面切片引入。
+
 ## 运行 Core 与管理组件
 
 ```sh
@@ -59,7 +74,11 @@ bin/alonabot adapter instance create <adapter-package-id> <instance-id> --config
 bin/alonabot admin add telegram:123456
 ```
 
+help 插件启用后，在聊天中发送 `/whoami`，把回复中的用户字符串作为 `admin add` 的参数；回复中的实例名用于核对来源。
+
 需要确认的操作不带 `--yes` 时列出受影响的对象后退出。开发中的组件可以按下节以目录运行，也可以用库模式，先 `alonabot build --dir ./examples/devbot`，再运行 `examples/devbot/bin/devbot --data-dir ./data`。
+
+使用同一套管理凭证运行 `bin/alonabot profile list` 查看配置文件 ID 和会话数。`bin/alonabot profile assign <配置文件ID> <实例名>` 设置实例缺省；再给出会话字符串可单独指定会话。`profile set` 与 `profile unset` 编辑 `default` 时写入插件的 Pending，沿用配置重载流程。全部子命令见 [CONTRACTS §5.6](../spec/CONTRACTS-v0.1.md#56-配置文件)，平台设置与工具策略见 [ADMIN-API §23](../spec/ADMIN-API.md#23-配置文件)。
 
 ## 开发运行与热部署
 
@@ -78,16 +97,20 @@ bin/alonabot run examples/devbot/plugin examples/devbot/adapter --data-dir $DEVB
 
 ```fish
 curl --fail-with-body -X POST -H "Authorization: Bearer $token" \
-  'http://127.0.0.1:7650/plugins/alonabot_adapter_devbot/inject?instance=one&text=%2Fhello'
+  'http://127.0.0.1:7650/plugins/alonabot-adapter-devbot/inject?instance=one&text=%2Fhello'
 cat $DEVBOT_OUTPUT
 ```
 
-注入返回 204，异步发送后文件内容为 `Hello from devbot!`。完整实例 JSON、目录结构、认证、源码／翻译／配置改动与编译失败恢复操作见 [devbot README](../examples/devbot/README.md)。样例把 `adapters.devloop.package` 绑定到 `alonabot_adapter_devbot`，实例在 `instances.one`，命令前缀为 `/`。两个开发组件沿用真实 Deliver／Send 流水线。
+注入返回 204，异步发送后文件内容为 `Hello from devbot!`。完整实例 JSON、目录结构、认证、源码／翻译／配置改动与编译失败恢复操作见 [devbot README](../examples/devbot/README.md)。样例把 `adapters.devloop.package` 绑定到 `alonabot-adapter-devbot`，实例在 `instances.one`，命令前缀为 `/`。两个开发组件沿用真实 Deliver／Send 流水线。
+
+组件市场 ID 使用连字符前缀，例如 `alonabot-plugin-hello`；本地 ID 仍允许下划线，规则见 [CONTRACTS §9.1](../spec/CONTRACTS-v0.1.md#91-manifest-与构建产物)。D-172 的代码改名由 T-09.27（goal-177）实施：更新后需重建状态库与开发数据目录，再按新 ID 填写组件配置、实例的 `package` 与 `log.sources`。
+
+验证官方 help 工程可运行 `bin/alonabot check --dir ./plugins/help`。使用上面的回环 Adapter 试用时，在 `run` 的组件目录列表追加 `./plugins/help`，再把注入请求的 `text` 改为 `%2Fhelp` 或 `%2Fwhoami`，在同一输出文件查看回复。
 
 先构建 CLI（`go build -o bin/alonabot ./cmd/alonabot`），再创建与验证组件：
 
 ```fish
-bin/alonabot init ./myplugin --id alonabot_plugin_hello
+bin/alonabot init ./myplugin --id alonabot-plugin-hello
 bin/alonabot build --dir ./myplugin
 bin/alonabot check --dir ./myplugin
 bin/alonabot test --dir ./myplugin
@@ -126,7 +149,7 @@ bin/alonabot run ./examples/plugins/lifecycle --stdio
 
 `run` 取得 core.lock 后读取 `<data_dir>/core_config.json`，Core 设置统一从这个 JSON 对象读取；文件不存在时以 0600 权限写入缺省内容。未知键、重复键、类型或取值错误时，以 usage 退出码报告完整键路径与行列号。
 
-键与缺省值见 CONTRACTS §15.1；`base_url` 缺省为 `http://127.0.0.1:7650`，管理入口与插件路由共用这个地址。旧键 `admin_base_url` 与 `plugin_base_url` 按未知键报错；已有配置需改用 `base_url`。`admins`、`command_prefixes`、`command_prefixes_by_instance`、`default_locale`、`log.sources` 与 `adapters` 已支持解析与保存；本地 `run` 按监听、日志、代理与 Base URL 装配。
+键与缺省值见 CONTRACTS §15.1；`base_url` 缺省为 `http://127.0.0.1:7650`，管理入口与插件路由共用这个地址。旧键 `admin_base_url` 与 `plugin_base_url` 按未知键报错；已有配置需改用 `base_url`。`admins`、`command_prefixes`、`reply`、`default_locale`、`log.sources` 与 `adapters` 已支持解析与保存；`command_prefixes_by_instance` 仍由当前运行时读取，配置文件的前缀与回复行为由 T-04.19 接入。本地 `run` 按监听、日志、代理与 Base URL 装配。
 
 整个字符串值写成 `${NAME}` 时，读取时展开环境变量；NAME 由 `A-Z`、`a-z`、数字与下划线组成，首字符为字母或下划线。变量缺失时该值按不合法处理，恢复为缺省值并记校正记录（D-161）。
 
@@ -156,7 +179,7 @@ bin/alonabot admin-token show --data-dir ./data
 
 需要在启动前初始化凭证时，停止 Core 后在本机终端运行 `bin/alonabot admin-token init --data-dir ./data`。token 遗失时用 `bin/alonabot admin-token reset --data-dir ./data` 重新生成，旧 token 与全部管理会话随之失效。`init` 与 `reset` 都要求 stdin 与 stderr 是终端，只向 stderr 显示 token 一次；Core 运行中执行会因 core.lock 失败。
 
-调优参数在启动时解析；修改后重启生效。查看全部调优参数及当前生效值：
+调优参数在启动时解析；修改后重启生效。`default` 的前缀与 `reply` 属于 `core_config.json`；配置文件覆盖集合沿用固定 4 MiB 帧上限。查看全部调优参数及当前生效值：
 
 ```sh
 bin/alonabot tune list
@@ -178,6 +201,8 @@ bin/alonabot check --dir ./myplugin --goos linux --goarch amd64 --tags a,b
 `test` 在全新临时数据目录中构建宿主平台组件，完成真实握手、准备、注册、激活与停止，报告注册命令及清理结果；Adapter 保持零平台实例，WebUI 检查静态加载资源。进程组件的 Bootstrap 下发临时状态根内 `plugin_data/<id>/` 的绝对路径，测试结束时随临时目录清理。准备、注册、停止或清理失败均非零退出。
 
 `pack` 使用相同构建路径输出 `<id>-<version>-<os>-<arch>.tar.gz`（WebUI 为 `<id>-<version>-any.tar.gz`）及归档外的 `release.json`，`--out` 默认同 build。`--asset-url` 必填且须为绝对 https URL。进程包的 `build-info` 是 `debug.BuildInfo.String()` 文本；生成代码、资源旁车与归档共用扫描时校验的资源快照，配置 schema 使用同一规范内容；扫描后保存的工程资源留待下次构建。
+
+配置字段的 `example` 引用图片时，`check`、`build`、`pack` 检查两种配置 schema 中的引用及图片签名；被引用的图片随资源快照进入构建目录和归档。示例写法见 [插件开发规范](plugin-guide.md#配置字段的回复示例)。
 
 ```fish
 bin/alonabot pack --dir ./myplugin --asset-url https://example.com/hello.tar.gz --key ./release.key --out ./dist
