@@ -21,10 +21,10 @@ func (s *Store) AddReadServices(m *router.Mux, readers *adapter.Registry, dispat
 	s.mu.Lock()
 	s.readers = readers
 	s.mu.Unlock()
-	m.Handle(wire.ServiceMediaRead, s.read)
-	m.Handle(wire.ServiceMediaGrant, func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
+	m.Handle(wire.ServiceMediaRead, s.operation(s.read))
+	m.Handle(wire.ServiceMediaGrant, s.operation(func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
 		return s.grant(ctx, c, in, dispatch, allowed)
-	})
+	}))
 }
 
 func (s *Store) read(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {

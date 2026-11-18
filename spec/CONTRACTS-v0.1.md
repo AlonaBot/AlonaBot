@@ -103,6 +103,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 - 静态条件为 `to_me`、`chat_types` 与 `wake_words_config`，三者按 OR 组合，任一命中即交付：`to_me` 读取 message.created 的可信字段（私聊、@ 或回复机器人，MESSAGE-MODEL §1.1）；`chat_types` 为 PRIVATE、GROUP、CHANNEL 的集合；`wake_words_config` 是本插件配置中字符串列表字段的点分路径。text 片段按顺序拼接，包含任一非空唤醒词即命中，位置不限，拉丁字母不区分大小写，消息内容保持原样。事件未提供 to_me 或文本时，对应条件不命中；chat_type 未知时不命中会话类型条件。一个条件都没有（没有 to_me、chat_types、wake_words_config，也没有 triggers_config）的过滤器在 REGISTER 时拒绝。
 - 可选的 `triggers_config` 指向本插件字符串多选字段，按 D-167 的值选择条件：`mention` 为 GROUP 且 to_me，`private` 为 PRIVATE，`wake_word` 为上述唤醒词匹配；任一选中项命中即交付，空列表不匹配。使用此字段时不同时声明静态 `to_me` 或 `chat_types`，并提供 `wake_words_config`；未选中 `wake_word` 时不读取唤醒词值。SDK 注册只声明字段路径，配置值变化不改变 REGISTER 或路由摘要。
 - REGISTER 在信任边界校验事件类型、会话类型、字段路径及字段类型：配置路径只能指向本插件顶层或 object 子字段，唤醒词为字符串 list，触发方式为 options 仅含 mention、private、wake_word 的字符串 list，均须为非 secret 字段。声明错误拒绝整份注册。运行时只读当前 Active 的配置，排除 Pending；按 §5.6 解析本事件会话所用的配置文件，先应用有效覆盖再匹配。覆盖更新立即作用于后续匹配，不唤醒插件取值，也不把覆盖值写进路由快照。读取失败记实际错误并跳过该路由，不按未过滤交付。
+- 过滤在 PreEvent 之后、取得唤醒名额之前执行；常驻和快照候选共用 Router 的 `MessageConfig` 注入点。S-02.1 沿用 Active 配置读取；T-04.18（goal-161）接入会话配置时，保留 `Resolve` 与有效 `Overrides`，通过该注入点提供生效配置。
 
 ## 3. 跨插件调用、动态 Router 与权限
 
@@ -185,13 +186,17 @@ Core 为每个代次保存 REGISTER 中已验证的完整路由描述：`plugin_
 
 新候选的快照在提交前准备持久化，随 ActiveGeneration 与 COMMITTED 的同一状态库事务成为有效快照；未提交候选的快照保持不可见。索引只读取当前已提交代次，并核对所属插件、代次、路由内容摘要及程序包摘要；Core 重启后据此恢复索引。配置 Schema 原文从该快照绑定的不可变包资源读取并校验；Service Schema 原文只随插件程序构建，快照不另存（D-173）。缺失或不一致时报告失败并隔离该插件的路由，保留诊断。
 
-插件进程停止后保留有效快照，撤销旧 Session 的 Caller、Listener、代理凭证与媒体授权。休眠唤醒使用原 ActiveGeneration、配置、业务 DB 和 `activation_reason=resume`；重新 REGISTER 的路由摘要须与快照一致，先校验再允许业务交付。摘要不一致时停止激活。配置与版本变化仍走 Pending、候选准备及唯一提交点，保持旧代次快照不可变。停用和卸载后快照保留供代次引用与诊断，业务索引立即撤销；回收与数据清理沿用 §9.3、§12 的代次规则。
+插件进程停止后保留有效快照，撤销旧 Session 的 Caller、Listener、代理凭证与媒体授权。休眠唤醒使用原 ActiveGeneration、配置、业务 DB 和 `activation_reason=resume`；重新 REGISTER 的路由摘要须与快照一致，先校验再允许业务交付。摘要不一致时以 FAILED_PRECONDITION 停止激活，记录 FAILED 与实际错误原因。配置与版本变化仍走 Pending、候选准备及唯一提交点，保持旧代次快照不可变。停用和卸载后快照保留供代次引用与诊断，业务索引立即撤销；回收与数据清理沿用 §9.3、§12 的代次规则。
 
 ### 4.5 按需唤醒、活动引用与空闲退出
 
-Router 根据快照和动态策略初步匹配；Supervisor 的 `EnsureActive` 合并同一插件的并发唤醒，执行一次进程启动。Router、Broker、HTTP 代理与 Scheduler 交付前取得活动引用，业务实际结束后释放。引用覆盖 Handler、Service、HTTP、媒体操作、schedule 回调、延续调用与多轮等待；超时先返回的任务继续占有引用，直至实际完成或确认旧进程树退出。插件自己发起的在途业务同样阻止休眠。
+Router 根据快照和动态策略初步匹配；每个 Core 创建唯一的 Supervisor `Waker`，通过 `EnsureActive(ctx, pluginID, payloadBytes) (release func(), err error)` 合并同一插件的并发唤醒，执行一次进程启动。ACTIVATED、路由摘要核对及 Router、Bus、HTTP、Scheduler 的全部绑定完成后，由 `Ready(running *Running)` 开放等待者；ACTIVE 已发布而 Session 尚未登记时，继续等待同一次启动。单个等待者取消只撤回自己的等待，共享启动沿用 Core 生命周期与阶段预算。
+
+Router、Broker、HTTP 代理与 Scheduler 交付前取得活动引用。`AcquireActivity(pluginID, session) (release func(), err error)` 为已有 Session 取得引用；释放函数幂等且只影响取得时的 Session。引用覆盖 Handler、Service、Hook、媒体操作和租约、已运行的 schedule 回调、延续调用、多轮等待，以及插件自己发起的在途业务；请求本地超时、取消或断链先返回时，继续持有至实际响应、确认排队撤回或旧进程树退出。HTTP 引用覆盖反向代理、流式响应与升级连接的存续，在反向代理返回时释放；S-02.2 的 QUIESCING 须等待 SDK 记录的在途回调（含 HTTP Handler）全部结束，或在 SDK 报告仍有回调时放弃本次退出。
 
 等待唤醒的请求使用 Core 内存中的有界队列，逐插件限制条数与字节（§16），同时计入现有 Core 总 payload 预算；任一满额返回 RESOURCE_EXHAUSTED，并记录原因。HTTP 按现有管理/插件入口的错误映射返回失败。队列保留原请求、可信 Actor、Target、Trace、顺序约束与绝对 deadline，冷启动不延长期限；取消或到期的未交付请求立即退出队列。确认 ACTIVATED 及路由摘要后，交付前重新核对当前代次、路由开关、权限与剩余期限，原请求至多交付一次。唤醒失败返回实际错误；已交付业务的断链、取消与外部副作用按 §1.2 处理。Event Bus 继续按 §3 尽力广播，离线丢弃规则保持原样。
+
+命令/事件先匹配及过滤，Service 先完成访问、输入 Schema、编码与调用链准入，HTTP 先完成方法、路径与认证检查，再等待唤醒。普通请求在接纳时固定 `REQUEST_TIMEOUT` 与父期限的较早者；Scheduler 到期唤醒沿用原 `JOB_TIMEOUT`（S-03.1）。HTTP 等待期间保持正文流式读取，以零 payload 字节占用等待条数；满额映射 429、期限到达映射 504，其余唤醒失败映射 503，日志保留实际错误。交付前重新绑定当前 Listener 与凭证，核对代次、路由及认证；准入时已有提交快照的请求还须确认快照仍有效，开发组件按当前绑定复核。在线 Bus 工作使用订阅者自身 Caller 持有排队及 EVENT 写出引用，排队撤回或实际写出结束后释放。
 
 Idle Controller 只作准入与空闲决策，生命周期由 Supervisor 执行。以下条件须同时满足：
 
@@ -204,6 +209,8 @@ Core 无法观察插件私建的 goroutine 与连接，作者仅在没有独立�
 策略取 §15.1 的 `sleep`：插件未配置时遵循准入规则与全局空闲时长；`never` 始终常驻；时长覆盖全局阈值。管理 API、CLI 与 WebUI 修改后写回文件并立即更新策略，无需 reload：改为 `never` 时立即唤醒仍已启用的休眠插件；修改时长在下一次空闲判定使用，不重置实际活动时间；切回 `always_on` 时按原代次启动全部已启用插件，保留快照、任务与业务数据。已停用插件保持停用。写回成功后的唤醒失败须返回实际错误，响应按 ADMIN-API §5 返回实际错误；调用方重新 GET 核对已保存设置，失败同时记入对应插件的运行状态。
 
 停止与新请求共用逐插件生命周期门禁：发送 STOPPING 前允许撤销空闲停止并恢复接单；已发送后，新请求排队等旧进程树退出，再建立唯一新 Session。停止复用 §4.2 的排空与总预算，StopReason 为 `IDLE`，OnStop、DB、连接与受管资源正常关闭；成功后记 `SUSPENDED`。正常空闲退出不计入异常重启次数，也不启动新的候选或重复迁移。唤醒后的最短运行时间为 5 分钟；在 `SLEEP_COLD_START_WINDOW`（缺省 1 小时）内冷启动超过 `SLEEP_COLD_START_MAX`（缺省 3 次）时，从触发时刻起固定常驻一个 `SLEEP_COLD_START_WINDOW` 的冷却期，期间的新冷启动不延长本次冷却期；冷却结束后恢复空闲判定。
+
+同代次 RESUME 继续执行配置加载、补值/校正与 required 校验，并核对完整结果与原配置快照一致；SELF/VERSIONED 数据库迁移回调跳过，迁移模式、后端及已应用迁移 ID 仍核对并保留。首次激活、更新与回退按原规则执行数据库迁移。最近唤醒时间与原因只在 WAKING→ACTIVE 时更新，撤销空闲停止保留原值；活动时间记录实际活动归零的时刻，空闲停止时间在确认退出并写入 SUSPENDED 时更新。
 
 Core 记录运行状态变化、唤醒/空闲停止原因、冷启动次数、失败与等待丢弃数；冷启动耗时从启动插件进程至 Core 确认 ACTIVATED，分别记录 OnStart、OnReady 耗时。固定机器验收记录冷启动 P50/P95/P99、活跃与休眠的 PSS/RSS 及 CPU，规则见 TEST-MATRIX V-81。
 
@@ -872,7 +879,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | `SLEEP_COLD_START_WINDOW` | 1h | > 0；冷启动统计窗口及触发后固定常驻的冷却时长 | §4.5 |
 | `SLEEP_COLD_START_MAX` | 3 | ≥ 1；窗口内超过此值开始固定冷却期 | §4.5 |
 | `WAKE_QUEUE_REQUESTS` | 256 | ≥ 1；每插件未交付的等待请求数 | §4.5 |
-| `WAKE_QUEUE_BYTES` | 16MiB | ≥ 帧上限 4MiB 且 ≤ `CORE_MAX_PAYLOAD`；每插件等待 payload 总量 | §4.5 |
+| `WAKE_QUEUE_BYTES` | 16MiB | ≥ 帧上限 4MiB 且 ≤ `CORE_MAX_PAYLOAD`；每插件等待 payload 总量，同时占用 Core 总预算 | §4.5 |
 | `JOB_TIMEOUT` | 15m | > 0 | §4.3 |
 | `TASKS_PER_PLUGIN` | 10000 | ≥ 1 | §4.3 |
 | `TASK_PAYLOAD_BYTES` | 64KiB | ≥ 1 且 ≤ 帧上限 4MiB | §4.3 |

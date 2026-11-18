@@ -29,21 +29,20 @@ type commandRoute struct {
 }
 
 // cacheCommands 在持有 mu 时构建插件路由快照；描述已经过 REGISTER 校验。
-func (r *Router) cacheCommands(session *pluginSession) {
-	p := session.plugin
+func (r *Router) cacheCommands(pluginID string, source routeSnapshot) {
 	var routes []commandRoute
-	for _, route := range p.Routes() {
+	for _, route := range source.routes {
 		if route.GetKind() != pb.RouteKind_ROUTE_KIND_COMMAND {
 			continue
 		}
 		snapshot := proto.CloneOf(route)
-		next := commandRoute{candidate: candidate{pluginSession: session, pluginID: p.PluginID(), route: snapshot}}
+		next := commandRoute{candidate: candidate{pluginSession: source.session, pluginID: pluginID, generationID: source.generationID, committed: source.committed, route: snapshot}}
 		if snapshot.GetCommand().GetMatch() == pb.CommandMatch_COMMAND_MATCH_REGEX {
 			next.regex = regexp.MustCompile(snapshot.GetCommand().GetRegex())
 		}
 		routes = append(routes, next)
 	}
-	r.matches[p.PluginID()] = routes
+	r.matches[pluginID] = routes
 }
 
 func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
@@ -149,12 +148,15 @@ func (r *Router) commandPolicyFailure(ctx context.Context, c *candidate, ev *pb.
 
 	c.profileID = profileID
 	if r.policy == nil {
+		if !c.route.GetDefaultEnabled() {
+			return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "handler route is disabled"}
+		}
 		if r.permitted(*c, ev) {
 			return nil
 		}
 		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED}
 	}
-	failure := r.policy.CheckCommand(r.ctx, c.pluginID, c.route, ev.GetActor(), ev.GetTarget())
+	failure := r.policy.CheckCommand(ctx, c.pluginID, c.route, ev.GetActor(), ev.GetTarget())
 	if failure == nil {
 		return nil
 	}
@@ -268,13 +270,13 @@ func foldText(text string) string {
 }
 
 func (r *Router) invokeCommand(c candidate, ev *pb.Event, event *trustedEvent, bind func(*pb.Event) (*pb.CommandInvocation, error), prefix string) bool {
-	if r.ctx.Err() != nil || !c.plugin.Activated() {
+	if r.ctx.Err() != nil || !r.available(c) {
 		return false
 	}
 	trace := make([]byte, traceIDBytes)
 	rand.Read(trace)
 	started := time.Now()
-	response, callError := r.call(c, event, bind, trace)
+	response, callError := r.call(&c, event, bind, trace)
 	duration := time.Since(started)
 	if errors.Is(callError, errCommandArguments) {
 		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Debug("command arguments rejected", "error", callError)
@@ -351,7 +353,7 @@ func (r *Router) sendReply(c candidate, ev *pb.Event, chain *pb.MessageChain, tr
 
 func commandUsage(c candidate, ev *pb.Event, prefix string) (string, error) {
 	spec := c.route.GetCommand()
-	locales := []string{ev.GetActor().GetLocale(), c.plugin.DefaultLocale()}
+	locales := []string{ev.GetActor().GetLocale(), c.defaultLocale()}
 	names := c.names
 	if names == nil {
 		names = declaredCommandNames(spec)
@@ -360,7 +362,7 @@ func commandUsage(c candidate, ev *pb.Event, prefix string) (string, error) {
 	if spec.GetUsageMode() == pb.UsageMode_USAGE_MODE_CUSTOM {
 		var text string
 		var err error
-		if catalog := c.plugin.Messages(); catalog == nil {
+		if catalog := c.messages(); catalog == nil {
 			err = errors.New("plugin has no message catalog")
 		} else {
 			text, err = catalog.Format(locales, spec.GetUsageKey(), map[string]string{"prefix": prefix, "command": prefix + command})

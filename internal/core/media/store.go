@@ -73,20 +73,46 @@ type entry struct {
 // Store 串行管理文件变更与配额；上传提交后只转移索引，保留原有占用。
 // 上传文件每块写入后关闭，Store 无需持有长期文件描述符。
 type Store struct {
-	mu             sync.Mutex // 同时保护文件、索引与配额，避免释放和写入交错
-	dir            string
-	lim            Limits
-	now            func() time.Time
-	uploads        map[string]*entry
-	refs           map[string]*entry
-	used           map[string]int64 // SessionKey 到预留与引用占用字节数之和，由 mu 保护
-	total          int64
-	readers        *adapter.Registry
-	incoming       map[string]*incomingObject
-	bySource       map[platformFile]string
-	incomingTokens map[string]*incomingAccess
-	baseURL        *url.URL          // AddURLService 保存的已校验配置
-	urls           map[string]*entry // 临时 URL 只指向消费租约，由 mu 保护
+	mu              sync.Mutex // 同时保护文件、索引与配额，避免释放和写入交错
+	dir             string
+	lim             Limits
+	now             func() time.Time
+	uploads         map[string]*entry
+	refs            map[string]*entry
+	used            map[string]int64 // SessionKey 到预留与引用占用字节数之和，由 mu 保护
+	total           int64
+	readers         *adapter.Registry
+	incoming        map[string]*incomingObject
+	bySource        map[platformFile]string
+	incomingTokens  map[string]*incomingAccess
+	baseURL         *url.URL          // AddURLService 保存的已校验配置
+	urls            map[string]*entry // 临时 URL 只指向消费租约，由 mu 保护
+	acquireActivity func(router.Caller) (func(), error)
+}
+
+// SetActivity 接入当前 Core 的 Session 活动登记，须在开放服务前装配。
+func (s *Store) SetActivity(acquire func(c router.Caller) (release func(), err error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.acquireActivity = acquire
+}
+
+func (s *Store) acquire(c router.Caller) (func(), error) {
+	if s.acquireActivity == nil {
+		return func() {}, nil
+	}
+	return s.acquireActivity(c)
+}
+
+func (s *Store) operation(fn router.ServiceFunc) router.ServiceFunc {
+	return func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
+		release, err := s.acquire(c)
+		if err != nil {
+			return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, err)
+		}
+		defer release()
+		return fn(ctx, c, in)
+	}
 }
 
 // Open 清空独占媒体目录中的遗留文件；清理失败直接返回原错误。
@@ -108,9 +134,9 @@ func Open(dir string, lim Limits, now func() time.Time) (*Store, error) {
 
 // AddServices 注册三个 Core 固定上传服务。
 func (s *Store) AddServices(m *router.Mux) {
-	m.Handle(wire.ServiceMediaBeginUpload, s.begin)
-	m.Handle(wire.ServiceMediaWriteChunk, s.write)
-	m.Handle(wire.ServiceMediaCommitUpload, s.commit)
+	m.Handle(wire.ServiceMediaBeginUpload, s.operation(s.begin))
+	m.Handle(wire.ServiceMediaWriteChunk, s.operation(s.write))
+	m.Handle(wire.ServiceMediaCommitUpload, s.operation(s.commit))
 }
 
 func decode(in *wire.Inbound, msg proto.Message) error {

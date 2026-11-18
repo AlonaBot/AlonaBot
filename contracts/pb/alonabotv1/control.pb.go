@@ -318,6 +318,7 @@ const (
 	StopReason_STOP_REASON_RELOAD        StopReason = 3
 	StopReason_STOP_REASON_UPDATE        StopReason = 4
 	StopReason_STOP_REASON_CORE_SHUTDOWN StopReason = 5
+	StopReason_STOP_REASON_IDLE          StopReason = 6
 )
 
 // Enum value maps for StopReason.
@@ -329,6 +330,7 @@ var (
 		3: "STOP_REASON_RELOAD",
 		4: "STOP_REASON_UPDATE",
 		5: "STOP_REASON_CORE_SHUTDOWN",
+		6: "STOP_REASON_IDLE",
 	}
 	StopReason_value = map[string]int32{
 		"STOP_REASON_UNSPECIFIED":   0,
@@ -337,6 +339,7 @@ var (
 		"STOP_REASON_RELOAD":        3,
 		"STOP_REASON_UPDATE":        4,
 		"STOP_REASON_CORE_SHUTDOWN": 5,
+		"STOP_REASON_IDLE":          6,
 	}
 )
 
@@ -1739,7 +1742,7 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"\x1eCANCEL_REASON_CALLER_CANCELLED\x10\x01\x12#\n" +
 	"\x1fCANCEL_REASON_DEADLINE_EXCEEDED\x10\x02\x12!\n" +
 	"\x1dCANCEL_REASON_PARENT_FINISHED\x10\x03\x12\"\n" +
-	"\x1eCANCEL_REASON_SESSION_STOPPING\x10\x04*\xaa\x01\n" +
+	"\x1eCANCEL_REASON_SESSION_STOPPING\x10\x04*\xc0\x01\n" +
 	"\n" +
 	"StopReason\x12\x1b\n" +
 	"\x17STOP_REASON_UNSPECIFIED\x10\x00\x12\x17\n" +
@@ -1747,7 +1750,8 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"\x13STOP_REASON_RESTART\x10\x02\x12\x16\n" +
 	"\x12STOP_REASON_RELOAD\x10\x03\x12\x16\n" +
 	"\x12STOP_REASON_UPDATE\x10\x04\x12\x1d\n" +
-	"\x19STOP_REASON_CORE_SHUTDOWN\x10\x05*\xa7\x02\n" +
+	"\x19STOP_REASON_CORE_SHUTDOWN\x10\x05\x12\x14\n" +
+	"\x10STOP_REASON_IDLE\x10\x06*\xa7\x02\n" +
 	"\fSessionPhase\x12\x1d\n" +
 	"\x19SESSION_PHASE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17SESSION_PHASE_HANDSHAKE\x10\x01\x12\x18\n" +

@@ -154,5 +154,9 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 		DefaultLocale: c.assembly.settings.Settings().DefaultLocale, Handler: c.assembly.handler(running, in), Global: c.assembly.global,
 		Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values), Log: c.output.Plugin(in.PluginID, boot.GenerationId, componentLogAttrs(in)...), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http,
 		MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment, Detach: func() { c.assembly.detach(running) }}
+	if hasInstalledRoutes(in) {
+		spec.Waker = c.assembly.waker
+		running.activity = true
+	}
 	return spec, running, nil
 }

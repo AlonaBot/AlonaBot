@@ -245,6 +245,7 @@ func TestEnumValues(t *testing.T) {
 		values []string
 	}{
 		{pb.InitiatorSide(0).Descriptor(), "INITIATOR_SIDE_", []string{"UNSPECIFIED", "CORE", "PLUGIN"}},
+		{pb.StopReason(0).Descriptor(), "STOP_REASON_", []string{"UNSPECIFIED", "DISABLE", "RESTART", "RELOAD", "UPDATE", "CORE_SHUTDOWN", "IDLE"}},
 		{pb.FrameKind(0).Descriptor(), "FRAME_KIND_", []string{
 			"UNSPECIFIED", "HELLO", "HELLO_ACK", "REGISTER", "PREPARED", "ACTIVATE", "ACTIVATED",
 			"REQUEST", "RESPONSE", "CANCEL", "EVENT", "STOPPING", "HEARTBEAT", "SESSION_ERROR"}},
