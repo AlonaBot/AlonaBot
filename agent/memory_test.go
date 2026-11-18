@@ -79,7 +79,7 @@ func checkMemoryContext(t *testing.T, request completionRequest, notes, profile,
 			systems = append(systems, message.Content)
 		}
 	}
-	want := []string{notes}
+	want := []string{"You are AlonaBot, a helpful assistant. Reply in the user's language and keep answers concise.", notes}
 	if profile != "" {
 		want = append(want, profile)
 	}
