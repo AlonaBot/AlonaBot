@@ -72,21 +72,26 @@ type Settings struct {
 		MaxSize, MaxTotal int64 // 字节
 		MaxAgeDays        int
 	}
-	LogSources                map[string]string
-	Proxy                     string
-	Admins                    []Admin
-	CommandPrefixes           []string
-	Reply                     Reply
-	CommandPrefixesByInstance map[string][]string
-	DefaultLocale             string
-	Adapters                  map[string]AdapterSettings
-	Corrections               []configschema.Correction // Core 设置的运行校正，原值不写日志。
-	Unknown                   []string                  // Core 声明之外的 JSON 路径。
+	LogSources      map[string]string
+	Proxy           string
+	Admins          []Admin
+	CommandPrefixes []string
+	Reply           Reply
+	Sleep           Sleep
+	DefaultLocale   string
+	Adapters        map[string]AdapterSettings
+	Corrections     []configschema.Correction // Core 设置的运行校正，原值不写日志。
+	Unknown         []string                  // Core 声明之外的 JSON 路径。
 }
 
 // File 持有设置文档及当前有效快照；方法可并发调用。
 // mu 保护文档与快照的成对访问，返回给调用者的 Settings 单独复制。
 type File struct {
+	*fileState
+	publish func(change func() error) error // 受管视图由生命周期所有者执行写入与发布。
+}
+
+type fileState struct {
 	mu       sync.RWMutex
 	name     string
 	document *Document
@@ -106,6 +111,7 @@ func Defaults() Settings {
 	s.LogFile.MaxSize = logging.DefaultMaxFileSize
 	s.LogFile.MaxTotal = logging.DefaultMaxTotalSize
 	s.LogFile.MaxAgeDays = logging.DefaultMaxAgeDays
+	s.Sleep = Sleep{Mode: "always_on", IdleTimeout: defaultIdleTimeout, Plugins: make(map[string]string)}
 	return s
 }
 
@@ -121,12 +127,9 @@ func (f *File) Settings() Settings {
 	s.Unknown = slices.Clone(s.Unknown)
 	s.TrustedProxies = slices.Clone(s.TrustedProxies)
 	s.LogSources = maps.Clone(s.LogSources)
+	s.Sleep.Plugins = maps.Clone(s.Sleep.Plugins)
 	s.Admins = slices.Clone(s.Admins)
 	s.CommandPrefixes = slices.Clone(s.CommandPrefixes)
-	s.CommandPrefixesByInstance = maps.Clone(s.CommandPrefixesByInstance)
-	for id, prefixes := range s.CommandPrefixesByInstance {
-		s.CommandPrefixesByInstance[id] = slices.Clone(prefixes)
-	}
 	s.Adapters = maps.Clone(s.Adapters)
 	for id, adapter := range s.Adapters {
 		adapter.Instances = maps.Clone(adapter.Instances)
@@ -182,7 +185,7 @@ func Load(dataDir string) (*File, error) {
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}
 	logCorrections(current.Corrections)
-	return &File{name: name, document: document, current: current}, nil
+	return &File{fileState: &fileState{name: name, document: document, current: current}}, nil
 }
 
 func defaultDocument() ([]byte, error) {
@@ -190,8 +193,9 @@ func defaultDocument() ([]byte, error) {
 	content, err := json.MarshalIndent(map[string]any{
 		"listen": s.Listen, "base_url": s.BaseURL,
 		"trusted_proxies": []string{}, "proxy": s.Proxy, "admins": []string{},
-		"command_prefixes": s.CommandPrefixes, "command_prefixes_by_instance": map[string][]string{}, "reply": s.Reply,
+		"command_prefixes": s.CommandPrefixes, "reply": s.Reply,
 		"default_locale": s.DefaultLocale, "adapters": map[string]any{},
+		"sleep": map[string]any{"mode": s.Sleep.Mode, "idle_timeout": s.Sleep.IdleTimeout.String(), "plugins": s.Sleep.Plugins},
 		"log": map[string]any{"level": strings.ToLower(s.LogLevel.String()), "format": s.LogFormat, "sources": map[string]string{},
 			"file": map[string]any{"enabled": s.LogFile.Enabled, "max_size": fmt.Sprintf("%dMiB", s.LogFile.MaxSize>>20),
 				"max_total": fmt.Sprintf("%dGiB", s.LogFile.MaxTotal>>30), "max_age_days": s.LogFile.MaxAgeDays}},
@@ -276,7 +280,7 @@ func readCorrectedMapping(root, defaults *node, fields map[string]configField, p
 		if path != "" {
 			name = path + "." + name
 		}
-		if name == "log" || name == "log.file" {
+		if name == "log" || name == "log.file" || name == "sleep" {
 			if err := readCorrectedMapping(field.value, defaults, declaration.Items, name, s); err != nil {
 				return err
 			}
@@ -317,6 +321,8 @@ func resetCoreNode(old, defaults *node, path string, s *Settings) {
 
 func readValue(n *node, key string, s *Settings) error {
 	switch key {
+	case "sleep.mode", "sleep.idle_timeout", "sleep.plugins":
+		return readSleep(n, key, s)
 	case "trusted_proxies":
 		values, err := n.strings()
 		if err != nil {
@@ -338,18 +344,6 @@ func readValue(n *node, key string, s *Settings) error {
 		return err
 	case "reply":
 		return readReply(n, &s.Reply)
-	case "command_prefixes_by_instance":
-		return n.object(func(id string, value *node) error {
-			prefixes, err := readPrefixes(value)
-			if err != nil {
-				return err
-			}
-			if s.CommandPrefixesByInstance == nil {
-				s.CommandPrefixesByInstance = make(map[string][]string)
-			}
-			s.CommandPrefixesByInstance[id] = prefixes
-			return nil
-		})
 	case "log.sources":
 		return n.object(func(id string, value *node) error {
 			level, err := value.text()

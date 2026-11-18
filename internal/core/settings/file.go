@@ -15,21 +15,23 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 )
 
-// CommandPrefixes 返回当前实例的前缀覆盖，未配置覆盖时返回全局前缀。
-// 返回的切片只读且不复制；Update 与 Reload 成功后，下次调用立即读取新快照。
-func (f *File) CommandPrefixes(adapterInstanceID string) []string {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	if prefixes, ok := f.current.CommandPrefixesByInstance[adapterInstanceID]; ok {
-		return prefixes
-	}
-	return f.current.CommandPrefixes
+// WithPublisher 返回共享文档与快照的受管视图，Update/Reload 交由 publish 执行。
+// publish 应同步完成 change，再在文件锁外应用已发布设置；原视图供所有者直接使用。
+func (f *File) WithPublisher(publish func(change func() error) error) *File {
+	return &File{fileState: f.fileState, publish: publish}
 }
 
 // Update 在未展开的文档副本上编辑，校验通过后以 0600 临时文件替换原文件。
 // Rename 为提交点：此前失败保留文件与快照；此后目录同步失败仍发布新快照，
 // 并返回设置已写入但持久化尚未确认的错误。edit 执行期间持有写锁，应只操作传入的 Document。
 func (f *File) Update(edit func(doc *Document) error) error {
+	if f.publish != nil {
+		return f.publish(func() error { return f.update(edit) })
+	}
+	return f.update(edit)
+}
+
+func (f *File) update(edit func(doc *Document) error) error {
 	// 1. 持锁读取磁盘原文，与 Reload 串行，保留运行期间的手动修改。
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -60,7 +62,7 @@ func (f *File) Update(edit func(doc *Document) error) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", f.name, err)
 	}
-	// 3. 重命名成功后才发布成对的文档和设置；已返回的前缀切片保持只读。
+	// 3. 重命名成功后才发布成对的文档和设置。
 	if err := replaceFile(f.name, content); err != nil {
 		return err
 	}
@@ -76,6 +78,18 @@ func (f *File) Update(edit func(doc *Document) error) error {
 // Reload 重新读取并校验文件，返回有效值发生变化的顶层键，按字典序排列。
 // 失败时保留当前文档与快照；只改变格式、键顺序或显式写出缺省值时返回空列表。
 func (f *File) Reload() (changed []string, err error) {
+	if f.publish != nil {
+		err = f.publish(func() error {
+			var reloadErr error
+			changed, reloadErr = f.reload()
+			return reloadErr
+		})
+		return changed, err
+	}
+	return f.reload()
+}
+
+func (f *File) reload() (changed []string, err error) {
 	f.mu.Lock() // 文件读取与发布位于同一个锁区间，避免覆盖同时完成的 Update。
 	defer f.mu.Unlock()
 	content, err := os.ReadFile(f.name)
@@ -157,9 +171,10 @@ func settingsValues(s Settings) (map[string]any, error) {
 	return map[string]any{
 		"listen": s.Listen, "base_url": s.BaseURL,
 		"trusted_proxies": s.TrustedProxies, "proxy": s.Proxy, "admins": s.Admins,
-		"command_prefixes": s.CommandPrefixes, "command_prefixes_by_instance": s.CommandPrefixesByInstance,
-		"reply":          s.Reply,
-		"default_locale": s.DefaultLocale, "adapters": adapters,
+		"command_prefixes": s.CommandPrefixes,
+		"reply":            s.Reply,
+		"sleep":            s.Sleep,
+		"default_locale":   s.DefaultLocale, "adapters": adapters,
 		"log": map[string]any{"level": s.LogLevel, "format": s.LogFormat, "file": s.LogFile, "sources": s.LogSources},
 	}, nil
 }

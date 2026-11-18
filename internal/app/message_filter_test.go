@@ -29,10 +29,10 @@ func messageFilterPlugin() *sdk.Plugin {
 	p := sdk.NewPlugin()
 	genresources.Bind(p, genresources.Resources{ConfigSchema: []byte(messageFilterSchema)})
 	p.Command("ping").Handle(func(c *sdk.Context) error { return pipelineObserve("handler", "cmd.ping", c) })
-	p.On("filtered", sdk.MessageCreated).
+	p.On(sdk.MessageCreated).ID("filtered").
 		Filter(sdk.MessageFilter{TriggersConfig: "chat.triggers", WakeWordsConfig: "chat.words"}).
 		Rule(sdk.NotCommand()).Handle(func(c *sdk.Context) error { return pipelineObserve("handler", "filtered", c) })
-	p.On("plain", sdk.MessageCreated).Handle(func(c *sdk.Context) error { return pipelineObserve("handler", "plain", c) })
+	p.On(sdk.MessageCreated).ID("plain").Handle(func(c *sdk.Context) error { return pipelineObserve("handler", "plain", c) })
 	return p
 }
 

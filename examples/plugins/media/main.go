@@ -44,7 +44,7 @@ func New() *sdk.Plugin {
 	p.Command("media").Handle(func(c *sdk.Context) error {
 		c.StopPropagation()
 		// 1. 通过 Upload 取得媒体引用，再用同一来源构造相邻图片。
-		ref, err := mediaapi.Upload(c.Context(), bytes.NewReader(sample), "image/png")
+		ref, err := mediaapi.Upload(c, bytes.NewReader(sample), "image/png")
 		if err != nil {
 			return err
 		}
@@ -66,22 +66,22 @@ func New() *sdk.Plugin {
 			return errcode.FailedPrecondition.New("telegram accepted the text without an editable message ID")
 		}
 		messages := result.Refs()
-		db, err := sqlitedb.Open(c.Context())
+		db, err := sqlitedb.Open(c)
 		if err != nil {
 			return err
 		}
-		_, err = db.ExecContext(c.Context(), "INSERT INTO messages (button_key, ref) VALUES (?, ?)", key, string(messages[len(messages)-1]))
+		_, err = db.ExecContext(c, "INSERT INTO messages (button_key, ref) VALUES (?, ?)", key, string(messages[len(messages)-1]))
 		return err
 	})
 	buttonapi.On(p, edit).Handle(func(c *sdk.Context, key string) error {
 		mu.Lock()
 		defer mu.Unlock()
-		db, err := sqlitedb.Open(c.Context())
+		db, err := sqlitedb.Open(c)
 		if err != nil {
 			return err
 		}
 		var ref string
-		if err := db.QueryRowContext(c.Context(), "SELECT ref FROM messages WHERE button_key = ?", key).Scan(&ref); errors.Is(err, sql.ErrNoRows) {
+		if err := db.QueryRowContext(c, "SELECT ref FROM messages WHERE button_key = ?", key).Scan(&ref); errors.Is(err, sql.ErrNoRows) {
 			return errcode.FailedPrecondition.New("media example message handle is no longer available")
 		} else if err != nil {
 			return err
@@ -89,7 +89,7 @@ func New() *sdk.Plugin {
 		if _, err := c.Edit(ref, message.Text(c.T(editedKey))); err != nil {
 			return err
 		}
-		_, err = db.ExecContext(c.Context(), "DELETE FROM messages WHERE button_key = ?", key)
+		_, err = db.ExecContext(c, "DELETE FROM messages WHERE button_key = ?", key)
 		return err
 	})
 	return p
@@ -101,7 +101,7 @@ type Caption struct {
 }
 
 func caption(c *sdk.Context, args Caption) (message.Content, error) {
-	ref, err := mediaapi.Upload(c.Context(), bytes.NewReader(sample), "image/png")
+	ref, err := mediaapi.Upload(c, bytes.NewReader(sample), "image/png")
 	if err != nil {
 		return nil, err
 	}

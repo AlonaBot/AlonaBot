@@ -100,7 +100,7 @@ type Router struct {
 	adapters       *adapter.Registry
 	send           ServiceFunc
 	prepare        func(*pb.Event, Caller) (*pb.Event, error)
-	prefixes       func(adapterInstanceID string) []string
+	prefixes       func(context.Context, *pb.Target) ([]string, error)
 	buttons        func(context.Context, *pb.Event) (string, string, error)
 	intercept      func(context.Context, *pb.Event) bool
 	policy         CommandPolicy
@@ -132,7 +132,7 @@ type Router struct {
 // New 按显式的并发和队列限额创建路由器；限额由装配处从 tune.Values 传入。
 func New(opt Options) *Router {
 	if opt.Prefixes == nil {
-		opt.Prefixes = func(string) []string { return []string{"/"} }
+		opt.Prefixes = func(context.Context, *pb.Target) ([]string, error) { return []string{"/"}, nil }
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Router{
@@ -400,11 +400,11 @@ func (r *Router) dispatchEvents(event *trustedEvent, ev *pb.Event, candidates []
 		}
 		trace := make([]byte, traceIDBytes)
 		rand.Read(trace)
-		response, err := r.call(&candidate, event, nil, trace)
-		if err != nil {
-			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("event handler call failed", "error", err)
+		response, callError := r.call(&candidate, event, nil, trace)
+		if callError != nil {
+			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("event handler call failed", "error", callError)
 		}
-		if response.Err != nil && err == nil {
+		if response.Err != nil && callError == nil {
 			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("event handler returned an error", "code", response.Err.GetCode(), "error", response.Err.GetSafeMessage())
 		}
 		// 业务错误仍可能携带有效 STOP；先读取传播结果，再决定是否继续。
@@ -412,6 +412,9 @@ func (r *Router) dispatchEvents(event *trustedEvent, ev *pb.Event, candidates []
 		if err != nil {
 			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("decode event handler outcome failed", "error", err)
 			continue
+		}
+		if callError == nil && response.Err == nil && outcome.GetMatched() && candidate.route.GetEvent().GetHandlerMode() == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY && len(outcome.GetChain().GetSegments()) != 0 {
+			r.sendReply(candidate, ev, outcome.Chain, trace, event.invocation)
 		}
 		if outcome.GetPropagation() == pb.Propagation_PROPAGATION_STOP {
 			return
@@ -507,6 +510,9 @@ func (r *Router) call(c *candidate, event *trustedEvent, bind func(*pb.Event) (*
 		var err error
 		command, err = bind(prepared)
 		if err != nil {
+			// 参数错误的 usage 同样回复可信原消息，并保留到本条分发结束。
+			event.invocation = &Invocation{ProfileID: profileID, Depth: 1, PluginID: c.pluginID, RouteID: c.route.GetRouteId(), Event: proto.CloneOf(event.retained), DefaultTarget: proto.CloneOf(event.retained.GetTarget()), TraceID: trace}
+			event.finished = append(event.finished, event.invocation.Begin())
 			return wire.Response{}, fmt.Errorf("%w: %w", errCommandArguments, err)
 		}
 	}
@@ -531,6 +537,9 @@ func (r *Router) call(c *candidate, event *trustedEvent, bind func(*pb.Event) (*
 	r.mu.Unlock()
 	defer r.finishCall(key)
 	inv := &Invocation{ProfileID: profileID, Depth: 1, PluginID: c.pluginID, Event: prepared, DefaultTarget: proto.CloneOf(event.retained.GetTarget()), Chain: slices.Clone(request.Context.PluginChain), Scopes: slices.Clone(request.Context.Scopes), RouteID: request.RouteId, candidate: *c, request: request, TraceID: trace}
+	// 根只保存入站绑定；媒体准备与插件可见载荷均不能替换回复来源。
+	inv.Root = &Invocation{ProfileID: profileID, PluginID: c.pluginID, RouteID: request.RouteId, Event: proto.CloneOf(event.retained), DefaultTarget: proto.CloneOf(event.retained.GetTarget())}
+	inv.Root.Root = inv.Root
 	event.invocation = inv
 	event.finished = append(event.finished, inv.Begin())
 	r.observeInvocation(inv, event.dispatch)
@@ -597,6 +606,16 @@ func (r *Router) CallContinuation(ctx context.Context, inv *Invocation, continua
 	r.recordOutcome(next, response, err)
 	if r.continuations != nil {
 		r.continuations.Finished(next, err == nil && response.Err == nil)
+	}
+	if err == nil && response.Err == nil {
+		outcome, decodeErr := decodeOutcome(response.Payload)
+		mode := inv.candidate.route.GetCommand().GetHandlerMode()
+		if inv.candidate.route.GetKind() == pb.RouteKind_ROUTE_KIND_EVENT {
+			mode = inv.candidate.route.GetEvent().GetHandlerMode()
+		}
+		if decodeErr == nil && outcome.GetMatched() && mode == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY && len(outcome.GetChain().GetSegments()) != 0 {
+			r.sendReply(inv.candidate, next.Event, outcome.Chain, next.TraceID, next)
+		}
 	}
 	return response, err
 }

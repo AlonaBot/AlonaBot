@@ -812,6 +812,96 @@ func TestManagementLifecycle(t *testing.T) {
 		invoke("two", "base", "ok")
 		stopTestCore(t, c)
 	})
+	t.Run("platform-replies", func(t *testing.T) {
+		// 1. 复用真实插件子进程和回环 Adapter，给两个会话设置不同回复。
+		dir := t.TempDir()
+		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
+		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
+		commands, err := writeTestPackage(t.TempDir(), "commands", "plugin", "", "github.com/example/commands", "1.0.0", filepath.Join(binDir, "command-fixture"), "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, archive := range []string{adapter, commands} {
+			c.management(t, dir, "", "install", archive, "--yes")
+		}
+		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", "one")
+		c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
+		c.waitFor("fixture instance one started")
+		c.management(t, dir, "", "enable", "commands")
+		var created struct{ ID string }
+		output := c.management(t, dir, "", "profile", "create", "回复会话")
+		if err := json.Unmarshal([]byte(output), &created); err != nil || created.ID == "" {
+			t.Fatalf("create: %s: %v", output, err)
+		}
+		c.management(t, dir, "", "profile", "assign", created.ID, "one", "devloop:other")
+		putPlatform(t, c, dir, "default", `{"command_prefixes":["/"],"reply":{"mention_sender":true,"quote":true,"prefix":"D:","forward_threshold":0}}`)
+		putPlatform(t, c, dir, created.ID, `{"command_prefixes":["?"],"reply":{"prefix":"P:"}}`)
+		// 2. 首条手动 Send 与后续自动回复共享标记；Edit 保留真实回执对应的修饰。
+		type segment struct {
+			Text, ExternalUserID, Ref string
+			Entities                  []struct {
+				Type, OffsetUTF16, LengthUTF16 int
+				ExternalUserID                 string
+			}
+		}
+		var records []struct {
+			Operation, Instance, Session, ID string
+			Chain                            []segment
+		}
+		var hooks [][]segment
+		for n, chat := range []string{"chat", "other"} {
+			status, raw := fixtureHTTP(t, c, dir, http.MethodPost, "/plugins/alonabot-adapter-fixture/deliver?instance=one&group=1&chat="+chat+"&user=alice&text="+url.QueryEscape([]string{"/reply", "?reply"}[n]))
+			if status != http.StatusNoContent {
+				t.Fatalf("deliver: %d %s", status, raw)
+			}
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				status, raw = fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot-adapter-fixture/reply-records")
+				if status != http.StatusOK || json.Unmarshal(raw, &records) != nil {
+					t.Fatalf("records: %d %s", status, raw)
+				}
+				status, raw = fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/commands/reply-hooks")
+				if status != http.StatusOK || json.Unmarshal(raw, &hooks) != nil {
+					t.Fatalf("hooks: %d %s", status, raw)
+				}
+				if len(records) == (n+1)*3 && len(hooks) == len(records) {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("reply operations=%+v hooks=%+v\n%s", records, hooks, c.log())
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			prefix := []string{"D:", "P:"}[n]
+			first, edit, automatic := records[n*3], records[n*3+1], records[n*3+2]
+			if first.Operation != "send" || first.Instance != "one" || first.Session != "devloop:"+chat || first.ID == "" || len(first.Chain) != 3 || first.Chain[0].Ref == "" || first.Chain[1].ExternalUserID != "alice" || first.Chain[2].Text != prefix+"manual" {
+				t.Fatalf("first: %+v", first)
+			}
+			if edit.Operation != "edit" || edit.ID != first.ID || edit.Session != first.Session || len(edit.Chain) != 1 || edit.Chain[0].Text != "alice"+prefix+"edited" || len(edit.Chain[0].Entities) != 1 {
+				t.Fatalf("edit: %+v", edit)
+			}
+			entity := edit.Chain[0].Entities[0]
+			if entity.Type != 9 || entity.OffsetUTF16 != 0 || entity.LengthUTF16 != 5 || entity.ExternalUserID != "alice" {
+				t.Fatalf("mention entity: %+v", entity)
+			}
+			if automatic.Operation != "send" || len(automatic.Chain) != 1 || automatic.Chain[0].Text != "automatic" {
+				t.Fatalf("automatic: %+v", automatic)
+			}
+			// Reference 句柄在每次跨 Session 编码时重签；核对存在性与其余内容。
+			for i := n * 3; i < (n+1)*3; i++ {
+				if len(hooks[i]) != len(records[i].Chain) {
+					t.Fatalf("hook chain: %+v != %+v", hooks[i], records[i].Chain)
+				}
+				for j, got := range hooks[i] {
+					want := records[i].Chain[j]
+					if got.Text != want.Text || got.ExternalUserID != want.ExternalUserID || (got.Ref == "") != (want.Ref == "") || !slices.Equal(got.Entities, want.Entities) {
+						t.Fatalf("hook segment: %+v != %+v", got, want)
+					}
+				}
+			}
+		}
+		stopTestCore(t, c)
+	})
 	t.Run("profile-tool-policies", func(t *testing.T) {
 		// 1. 复用动态构建宿主，运行真实提供方、调用方与回环 Adapter。
 		dir := t.TempDir()
@@ -991,7 +1081,7 @@ func New() *sdk.Plugin {
 	p := sdk.NewPlugin()
 	var mu sync.Mutex
 	var received []message.CommandInvokedPayload
-	p.On("command.invoked", sdk.CommandInvoked).Handle(func(_ *sdk.Context, payload *message.CommandInvokedPayload) error {
+	p.On(sdk.CommandInvoked).ID("command.invoked").Handle(func(_ *sdk.Context, payload *message.CommandInvokedPayload) error {
 		mu.Lock()
 		defer mu.Unlock()
 		received = append(received, *payload)
@@ -1277,7 +1367,7 @@ func TestManagementReplacement(t *testing.T) {
 func TestManagementInstancesAndCommands(t *testing.T) {
 	t.Setenv("MANAGE_E2E_TOKEN", "fixture-credential-value")
 	dir := t.TempDir()
-	configuration := `{"listen":"127.0.0.1:0","command_prefixes":["!"],"command_prefixes_by_instance":{"one":["?"]},"admins":["devloop:initial"],"default_locale":"zh-CN"}`
+	configuration := `{"listen":"127.0.0.1:0","command_prefixes":["!"],"admins":["devloop:initial"],"default_locale":"zh-CN"}`
 	if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte(configuration), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -1352,6 +1442,14 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
+	var selected struct{ ID string }
+	output := c.management(t, dir, "", "profile", "create", "会话前缀")
+	if err := json.Unmarshal([]byte(output), &selected); err != nil || selected.ID == "" {
+		t.Fatalf("create profile: %s: %v", output, err)
+	}
+	putPlatform(t, c, dir, "default", `{"command_prefixes":["!"],"reply":{"mention_sender":false,"quote":false,"prefix":"","forward_threshold":0}}`)
+	putPlatform(t, c, dir, selected.ID, `{"command_prefixes":["?"]}`)
+	c.management(t, dir, "", "profile", "assign", selected.ID, "one", "devloop:chat")
 	check("one", "initial", "?inspect", "admin=true", 1)
 	check("two", "new", "!inspect", "admin=false", 2)
 	c.management(t, dir, "", "admin", "add", "devloop:new")
@@ -1386,6 +1484,31 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 		t.Fatal("deleted instance remains configured")
 	}
 	stopTestCore(t, c)
+}
+
+func putPlatform(t *testing.T, c *core, dir, id, body string) {
+	t.Helper()
+	token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequest(http.MethodPut, "http://"+c.address()+"/api/v1/profiles/"+id+"/platform", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, readErr := io.ReadAll(response.Body)
+	if err := errors.Join(readErr, response.Body.Close()); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("platform: %d %s", response.StatusCode, raw)
+	}
 }
 
 func fixtureHTTP(t *testing.T, c *core, dir, method, path string, body ...string) (int, []byte) {
@@ -1494,8 +1617,9 @@ import (
  "encoding/json"
  "fmt"
  "log/slog"
- "os"
  "net/http"
+ "os"
+ "sync"
  "sync/atomic"
  "github.com/AlonaBot/AlonaBot/sdk"
  "github.com/AlonaBot/AlonaBot/sdk/genimpl"
@@ -1507,6 +1631,15 @@ type toolArguments struct{}
 func init(){genimpl.Register("main",genimpl.Resources{ServiceSchemas:map[string][]byte{"main.toolArguments":[]byte("{\"type\":\"object\"}")}})}
 func main() {
  p:=sdk.NewPlugin()
+ var mu sync.Mutex
+ var hooks []message.Chain
+ p.BeforeSend("observe").Handle(func(_ *sdk.Context,_ string,m message.Chain)(message.Chain,error){mu.Lock();hooks=append(hooks,m);mu.Unlock();return nil,nil})
+ p.Route(http.MethodGet,"/reply-hooks").HandleFunc(func(w http.ResponseWriter,_ *http.Request){mu.Lock();defer mu.Unlock();if err:=json.NewEncoder(w).Encode(hooks);err!=nil{slog.Error("write hooks","error",err)}})
+ p.Command("reply").Handle(func(c *sdk.Context)(message.Content,error){
+  result,err:=c.Send(message.Text("manual"));if err!=nil{return nil,err}
+  if _,err:=c.Edit(result.Ref(),message.Text("edited"));err!=nil{return nil,err}
+  return message.Text("automatic"),nil
+ })
  var calls atomic.Int64
  p.Route("GET","/calls").HandleFunc(func(w http.ResponseWriter,_ *http.Request){if err:=json.NewEncoder(w).Encode(calls.Load());err!=nil{slog.Error("write calls failed","error",err)}})
  p.Command("inspect").Handle(func(c *sdk.Context)(message.Content,error){return message.Chain{message.Text(fmt.Sprintf("admin=%t",c.Has(sdk.Admin)))},nil})
@@ -1581,7 +1714,8 @@ import (
  "github.com/AlonaBot/AlonaBot/sdk/errcode"
  example "github.com/AlonaBot/AlonaBot/examples/devbot/adapter"
 )
-type platform struct {adapter.Adapter; mu sync.Mutex; cores map[string]adapter.Core; sent []string; tokens []string}
+type operation struct{Operation,Instance,Session,ID string;Chain message.Chain}
+type platform struct {adapter.Adapter; mu sync.Mutex; cores map[string]adapter.Core; sent []string; records []operation; tokens []string}
 type instance struct {adapter.Instance; platform *platform; id string}
 func (p *platform) Start(ctx context.Context,req adapter.StartRequest,core adapter.Core)(adapter.Instance,error){
  if req.InstanceID=="fail" {return nil,errors.New("fixture instance rejected")}
@@ -1591,11 +1725,18 @@ func (p *platform) Start(ctx context.Context,req adapter.StartRequest,core adapt
  return &instance{Instance:base,platform:p,id:req.InstanceID},nil
 }
 func(i *instance) Send(ctx context.Context,to string,chain message.Chain)(*message.SendResult,*errcode.Error){
- i.platform.mu.Lock();i.platform.sent=append(i.platform.sent,chain.Text());i.platform.mu.Unlock()
- i.platform.mu.Lock();for _,segment:=range chain{if buttons,ok:=segment.(message.ButtonsSegment);ok{for _,row:=range buttons.Rows{for _,button:=range row{i.platform.tokens=append(i.platform.tokens,button.CoreToken)}}}};i.platform.mu.Unlock()
- return i.Instance.Send(ctx,to,chain)
+ result,err:=i.Instance.Send(ctx,to,chain)
+ i.platform.mu.Lock();defer i.platform.mu.Unlock();i.platform.sent=append(i.platform.sent,chain.Text())
+ for _,segment:=range chain{if buttons,ok:=segment.(message.ButtonsSegment);ok{for _,row:=range buttons.Rows{for _,button:=range row{i.platform.tokens=append(i.platform.tokens,button.CoreToken)}}}}
+ if result!=nil{i.platform.records=append(i.platform.records,operation{"send",i.id,to,result.PrimaryPlatformMessageID,chain})}
+ return result,err
 }
-func(i *instance) Capabilities()[]message.Capability{return append(i.Instance.Capabilities(),message.Capability{Name:"message.buttons",Version:1,Supported:true})}
+func(i *instance) Edit(_ context.Context,to,id string,chain message.Chain)(*message.SendResult,*errcode.Error){
+ i.platform.mu.Lock();i.platform.records=append(i.platform.records,operation{"edit",i.id,to,id,chain});i.platform.mu.Unlock()
+ indexes:=make([]uint32,len(chain));for n:=range chain{indexes[n]=uint32(n)}
+ return &message.SendResult{Status:message.SendAccepted,Session:to,AdapterInstanceID:i.id,PrimaryPlatformMessageID:id,PlatformMessageIDs:[]string{id},PartResults:[]message.PartResult{{PartIndex:0,SegmentIndexes:indexes,Status:message.PartAccepted,PlatformMessageIDs:[]string{id}}}},nil
+}
+func(i *instance) Capabilities()[]message.Capability{return append(i.Instance.Capabilities(),message.Capability{Name:"message.edit",Version:1,Supported:true},message.Capability{Name:"message.buttons",Version:1,Supported:true})}
 func(i *instance) Stop(ctx context.Context)error{
  i.platform.mu.Lock();delete(i.platform.cores,i.id);i.platform.mu.Unlock()
  slog.Info("fixture instance "+i.id+" stopped");return i.Instance.Stop(ctx)
@@ -1605,9 +1746,11 @@ func(p *platform) Descriptor()*adapter.Descriptor{
  d.HTTP=[]adapter.HTTPRoute{{Method:"POST",Path:"/deliver",Handler:http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
   id:=r.URL.Query().Get("instance");p.mu.Lock();core:=p.cores[id];p.mu.Unlock()
   if core==nil{http.Error(w,"instance missing",404);return}
-  _,err:=core.Deliver(r.Context(),&message.Event{Type:"message.created",AdapterID:"devloop",AdapterInstanceID:id,AccountID:id,Session:message.SID("devloop","chat",""),Actor:&message.Actor{ExternalUserID:r.URL.Query().Get("user"),AdapterInstanceID:id},Payload:&message.CreatedPayload{PlatformMessageID:"fixture",Chain:message.Chain{message.Text(r.URL.Query().Get("text"))}}},nil)
+  chat:=r.URL.Query().Get("chat");if chat==""{chat="chat"};kind:=message.ChatUnspecified;if r.URL.Query().Get("group")=="1"{kind=message.ChatGroup}
+  _,err:=core.Deliver(r.Context(),&message.Event{Type:"message.created",AdapterID:"devloop",AdapterInstanceID:id,AccountID:id,Session:message.SID("devloop",chat,""),ChatType:kind,Actor:&message.Actor{ExternalUserID:r.URL.Query().Get("user"),AdapterInstanceID:id},Payload:&message.CreatedPayload{PlatformMessageID:"fixture",Chain:message.Chain{message.Text(r.URL.Query().Get("text"))}}},nil)
   if err!=nil{http.Error(w,err.Error(),500);return};w.WriteHeader(204)
  })}, {Method:"GET",Path:"/sent",Handler:http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){p.mu.Lock();defer p.mu.Unlock();if err:=json.NewEncoder(w).Encode(p.sent);err!=nil{slog.Error("write sent failed","error",err)}})},
+ {Method:"GET",Path:"/reply-records",Handler:http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){p.mu.Lock();defer p.mu.Unlock();if err:=json.NewEncoder(w).Encode(p.records);err!=nil{slog.Error("write records failed","error",err)}})},
  {Method:"GET",Path:"/tokens",Handler:http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){p.mu.Lock();defer p.mu.Unlock();if err:=json.NewEncoder(w).Encode(p.tokens);err!=nil{slog.Error("write tokens failed","error",err)}})},
  {Method:"POST",Path:"/click",Handler:http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
   id:=r.URL.Query().Get("instance");p.mu.Lock();core:=p.cores[id];p.mu.Unlock();if core==nil{http.Error(w,"instance missing",404);return}

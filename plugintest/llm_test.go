@@ -31,7 +31,8 @@ func TestLLMHarness(t *testing.T) {
 				return response, nil
 			}))
 			result := h.Text(chat, user, "/llmgenerate "+usage)
-			if len(result.Sends) != 1 || result.Sends[0].Text() != "generated" || len(result.Outcomes) != 1 || result.Outcomes[0].Err != nil || result.Waiting {
+			result.RequireReply(t, "generated")
+			if len(result.Outcomes) != 1 || result.Waiting {
 				t.Fatalf("generation = %+v", result)
 			}
 			if calls.Load() != 1 {
@@ -52,7 +53,8 @@ func TestLLMHarness(t *testing.T) {
 			return llm.Response{Text: "answer", Model: "synthetic"}, nil
 		}))
 		result := h.Text(chat, user, "/llmask")
-		if len(result.Sends) != 1 || result.Sends[0].Text() != "answer" || len(result.Outcomes) != 1 || result.Outcomes[0].Err != nil || calls.Load() != 1 {
+		result.RequireReply(t, "answer")
+		if len(result.Outcomes) != 1 || calls.Load() != 1 {
 			t.Fatalf("ask = %+v, calls = %d", result, calls.Load())
 		}
 		want := llm.Request{Messages: []llm.Message{{Role: "user", Text: "  original prompt\n"}}}

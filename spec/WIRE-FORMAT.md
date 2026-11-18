@@ -68,7 +68,7 @@ RESPONSE 的 payload 与 ErrorInfo **不是 oneof**。例如部分发送成功�
 
 已定义的协议能力：`http_listener` 版本 1（D-65）。插件存在 HTTP 路由时 SDK 把它放进 HELLO 的 required；Core 支持它，交集含该项时才在 Bootstrap 中下发 `http_proxy_auth`，REGISTER 带 HTTP 路由而交集不含该项时拒绝注册。
 
-StopReason 在现有枚举末尾追加 `STOP_REASON_IDLE=6`，表示正常空闲退出，沿用 STOPPING 的绝对 deadline 与停止预算；已有值 0～5 保持不变。`SUSPENDED` 是 Core 管理运行状态，SessionPhase 沿用现有状态。唤醒复用 `ActivationReason.RESUME`、原 generation_id 与新 Session，不增加业务 RPC。同代次 RESUME 保留数据库迁移模式与已应用 ID，跳过迁移回调；配置继续加载、补值/校正、required 校验，并核对完整快照一致性。Bootstrap 已删除的配置版本字段沿用 §3.2 的 reserved 编号与名称。
+StopReason 在现有枚举末尾追加 `STOP_REASON_IDLE=6`，表示正常空闲退出，沿用 STOPPING 的绝对 deadline 与停止预算；QUIESCING 冻结新派发，排空后发送一次 STOPPING，SDK 回调沿用正常停止截止（D-179）；已有值 0～5 保持不变。`SUSPENDED` 是 Core 管理运行状态，SessionPhase 沿用现有状态。唤醒复用 `ActivationReason.RESUME`、原 generation_id 与新 Session，不增加业务 RPC。同代次 RESUME 保留数据库迁移模式与已应用 ID，跳过迁移回调；配置继续加载、补值/校正、required 校验，并核对完整快照一致性。Bootstrap 已删除的配置版本字段沿用 §3.2 的 reserved 编号与名称。
 
 ### 3.2 Bootstrap 的最小内容
 
@@ -119,6 +119,8 @@ RouteDescriptor 公共字段为 `route_id`、`kind`、`priority`、`default_enab
 | task | 稳定任务名；实例的触发规则与参数不在注册描述中，由 `core.task.set` 在运行时给出（D-124） |
 | http | method、插件相对 path、is_public、认证/回调验证模式；`RouteDescriptor.page_title` 非空时声明页面及其英文源标题（D-164） |
 | bus_subscription | event_name、可接受的 Schema/版本、订阅回调 route_id |
+
+SDK 在收集注册时生成文本匹配、Raw、事件与 Hook 的缺省 `route_id`，或使用 builder 的 `.ID`；规则见 CONTRACTS §9.1（D-180）。`.Page(title)` 自动补齐的套件资源按普通 HTTP 路由登记，继承页面认证，`page_title` 为空；管理页面列表只包含页面本身。上述 SDK 简写沿用现有字段与路由描述。
 
 EventSpec 追加可选消息 `MessageFilter message_filter`；MessageFilter 的字段为 `bool to_me`、`repeated ChatType chat_types`、`string wake_words_config`、`string triggers_config`。字段号在实施时按最新 proto 顺延，不在规格中预分配。字段路径、OR、触发方式选择、缺失数据与空列表的语义见 CONTRACTS §2.5；过滤器的存在与缺省有区别。仅允许标准 message.created/edited/deleted 事件，和其他事件类型混用时拒绝注册。SDK 用自有类型登记这些声明，不在公开 API 暴露 pb。过滤器及配置字段路径参与确定性路由编码、摘要和快照白名单，配置值及按配置文件的覆盖值保持在 Core 的配置所有者中。
 
@@ -234,12 +236,13 @@ current/assign/set 从同一 Session 的在途父调用取得可信 Target 与 A
 - PLUGIN REQUEST 有 parent_call_id 时，Core 必须找到同一 Session 中仍在途的 CORE REQUEST，才能继承该父调用的 actor、target、scope、trace 和调用链；不存在或已经结束则 FAILED_PRECONDITION。无 parent 的调用只具有插件身份，不接受 payload 中的 Admin 标志作为授权。Core 发出的 Request 不靠该字段跨 Session 指认父调用，映射由 Broker 内部维护。
 - 可信调用上下文随 Core→Plugin 的 Invocation 载荷下发供 SDK 使用；插件回传的 actor、scope、trace 等值不能覆盖 Core 记录。事件路由的 HandlerRequest 上下文另带 `command_consumed`：本条 message.created 已被命令层消费时为 true，只由 Core 设置（D-141）。调用上下文另带 `string profile_id = 7`：本次调用所用的配置文件，内部 `default` 编码为空串（CONTRACTS §5.6，D-168）。Handler、Service、Hook 与延续的可信附件继承所选配置文件；无默认 Target 的定时任务、Event Bus 与独立后台调用使用 `default`。所有子调用采用 `min(parent_deadline,operation_deadline)`；父调用完成/取消时取消尚未结束的子调用。独立后台工作必须使用插件身份和独立 context。
 - 同一 Service 调用链的插件 ID 重复返回 CALL_CYCLE，链深超过 16 返回 FAILED_PRECONDITION；独立并发链互不影响。Event Bus 回调没有可继承的用户调用链，后续 Service 使用插件身份。
+- 回复方式由 Core 保存的可信 `message.created` 根与完整 Target 决定，手动 Send、自动回复、Service 派生与延续共用首条标记（CONTRACTS §5.6，T-04.19）。回复配置由 Core 在每次 Send 读取，改写发生在 BeforeSend 之前；编辑关联按 MESSAGE-MODEL §4 的 `primary_platform_message_id`、`platform_message_ids`、`part_results` 与 `segment_indexes` 记录实际已发送修饰，Session 结束时释放。该关联保存在 Core 内存中，沿用现有 Invocation、Send/Edit 与回执字段。
 - 每连接只有一个连续读帧/分流循环、一个串行 writer；Handler 不在读循环内执行。reader 同步处理 Session 状态变化，再将业务提交给执行器；Response/Cancel/控制帧及时分流，不排在正在等待 RPC 的 Handler 后面。
 - 每 Session 每方向最多 256 个 outstanding 业务请求；请求/事件载荷另受每 Session 每方向 16 MiB、Core 合计 64 MiB 的在途及排队字节预算约束；任一满额立即 RESOURCE_EXHAUSTED，不等待槽位。Response、Cancel、状态控制走独立、有界且优先的通道，不占用普通业务 admission；无法维持协议时使会话失败，不能无界缓存。优先队列不得使 Cancel 越过自己的 Request：尚未写出的被取消 Request 直接撤出且不再发送，已完整写出后才可随后发送 Cancel。
 - 本地超时/取消先完成调用者失败返回，再尽力发送 Cancel；已发送外部消息/SQL 不撤销，不自动重试。Session 失效时清理映射、取消调用并返回 UNAVAILABLE；已确认的 SendResult 仍须保留。
 - Core 停用时先冻结该插件的新根调用/新派发，最多 drain 6s；已有父 Request 链中的受限子请求与响应可继续。drain 结束后取消剩余调用并发送唯一 STOPPING，帧 deadline 为 min(t0+10s,发送STOPPING时刻+4s)，OnStop 与资源关闭使用这一独立 context；整个进程树停止预算仍为 10s。Core 同时停止多个插件时共享同一绝对截止时间，不逐个累加预算。
 
-等待休眠插件的业务请求在 Session admission 之前受 CONTRACTS §4.5 的有界唤醒队列约束，保留可信上下文、原始 Target、Trace、顺序与接纳时固定的绝对 deadline；确认 ACTIVATED、快照一致及全部业务绑定完成后，复核代次、路由、权限与剩余期限再交付。取消或到期的未交付请求立即移出队列并归还条数、字节及 Core 预算，单个等待者取消不取消共享启动。空闲 STOPPING 与请求准入共用门禁：提交 STOPPING 前可撤销停止，提交后等旧进程树退出再唯一恢复。
+等待休眠插件的业务请求在 Session admission 之前受 CONTRACTS §4.5 的有界唤醒队列约束，保留可信上下文、原始 Target、Trace、顺序与接纳时固定的绝对 deadline；确认 ACTIVATED、快照一致及全部业务绑定完成后，复核代次、路由、权限与剩余期限再交付。取消或到期的未交付请求立即移出队列并归还条数、字节及 Core 预算，单个等待者取消不取消共享启动。空闲停止与请求准入共用门禁：进入 QUIESCING 前复核 Session、Ready、零引用与实际活动结束时刻，变化时撤销空闲决定；进入后冻结新派发，新请求按原期限与预算等待旧树退出、SUSPENDED 及唯一新 Session 的 Ready。
 
 ## 5. Event Bus、媒体与平台载荷
 

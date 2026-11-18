@@ -192,7 +192,7 @@ Core 为每个代次保存 REGISTER 中已验证的完整路由描述：`plugin_
 
 Router 根据快照和动态策略初步匹配；每个 Core 创建唯一的 Supervisor `Waker`，通过 `EnsureActive(ctx, pluginID, payloadBytes) (release func(), err error)` 合并同一插件的并发唤醒，执行一次进程启动。ACTIVATED、路由摘要核对及 Router、Bus、HTTP、Scheduler 的全部绑定完成后，由 `Ready(running *Running)` 开放等待者；ACTIVE 已发布而 Session 尚未登记时，继续等待同一次启动。单个等待者取消只撤回自己的等待，共享启动沿用 Core 生命周期与阶段预算。
 
-Router、Broker、HTTP 代理与 Scheduler 交付前取得活动引用。`AcquireActivity(pluginID, session) (release func(), err error)` 为已有 Session 取得引用；释放函数幂等且只影响取得时的 Session。引用覆盖 Handler、Service、Hook、媒体操作和租约、已运行的 schedule 回调、延续调用、多轮等待，以及插件自己发起的在途业务；请求本地超时、取消或断链先返回时，继续持有至实际响应、确认排队撤回或旧进程树退出。插件 HTTP 例外：引用在 Core 反向代理返回时释放，客户端已取消、仍在执行的 Handler 与正常停止一样在停止截止时结束（D-179）。HTTP 引用覆盖反向代理、流式响应与升级连接的存续，在反向代理返回时释放；S-02.2 的 QUIESCING 须等待 SDK 记录的在途回调（含 HTTP Handler）全部结束，或在 SDK 报告仍有回调时放弃本次退出。
+Router、Broker、HTTP 代理与 Scheduler 交付前取得活动引用。`AcquireActivity(pluginID, session) (release func(), err error)` 为已有 Session 取得引用；释放函数幂等且只影响取得时的 Session。引用覆盖 Handler、Service、Hook、媒体操作和租约、已运行的 schedule 回调、延续调用、多轮等待，以及插件自己发起的在途业务；请求本地超时、取消或断链先返回时，继续持有至实际响应、确认排队撤回或旧进程树退出。插件 HTTP 例外：引用在 Core 反向代理返回时释放，客户端已取消、仍在执行的 Handler 与正常停止一样在停止截止时结束（D-179）。HTTP 引用覆盖流式响应与升级连接的存续。插件发起的请求在 Session 同步准入时登记活动，与在途登记共用临界区；Handler 装配等待计入活动，预算拒绝或实际处理结束时释放，正常停止的 WaitIdle 覆盖整个准入区间。
 
 等待唤醒的请求使用 Core 内存中的有界队列，逐插件限制条数与字节（§16），同时计入现有 Core 总 payload 预算；任一满额返回 RESOURCE_EXHAUSTED，并记录原因。HTTP 按现有管理/插件入口的错误映射返回失败。队列保留原请求、可信 Actor、Target、Trace、顺序约束与绝对 deadline，冷启动不延长期限；取消或到期的未交付请求立即退出队列。确认 ACTIVATED 及路由摘要后，交付前重新核对当前代次、路由开关、权限与剩余期限，原请求至多交付一次。唤醒失败返回实际错误；已交付业务的断链、取消与外部副作用按 §1.2 处理。Event Bus 继续按 §3 尽力广播，离线丢弃规则保持原样。
 
@@ -208,9 +208,9 @@ Core 无法观察插件私建的 goroutine 与连接，作者仅在没有独立�
 
 策略取 §15.1 的 `sleep`：插件未配置时遵循准入规则与全局空闲时长；`never` 始终常驻；时长覆盖全局阈值。管理 API、CLI 与 WebUI 修改后写回文件并立即更新策略，无需 reload：改为 `never` 时立即唤醒仍已启用的休眠插件；修改时长在下一次空闲判定使用，不重置实际活动时间；切回 `always_on` 时按原代次启动全部已启用插件，保留快照、任务与业务数据。已停用插件保持停用。写回成功后的唤醒失败须返回实际错误，响应按 ADMIN-API §5 返回实际错误；调用方重新 GET 核对已保存设置，失败同时记入对应插件的运行状态。
 
-停止与新请求共用逐插件生命周期门禁：发送 STOPPING 前允许撤销空闲停止并恢复接单；已发送后，新请求排队等旧进程树退出，再建立唯一新 Session。停止复用 §4.2 的排空与总预算，StopReason 为 `IDLE`，OnStop、DB、连接与受管资源正常关闭；成功后记 `SUSPENDED`。正常空闲退出不计入异常重启次数，也不启动新的候选或重复迁移。唤醒后的最短运行时间为 5 分钟；在 `SLEEP_COLD_START_WINDOW`（缺省 1 小时）内冷启动超过 `SLEEP_COLD_START_MAX`（缺省 3 次）时，从触发时刻起固定常驻一个 `SLEEP_COLD_START_WINDOW` 的冷却期，期间的新冷启动不延长本次冷却期；冷却结束后恢复空闲判定。
+停止与新请求共用逐插件生命周期门禁：进入 QUIESCING 前在逐插件锁与活动门禁内复核启用意图、代次、ACTIVE、当前 Session、Ready、零引用和实际活动结束时刻；变化时撤销本次空闲决定并保留原 Session 与绑定。进入后冻结新派发，新请求按原绝对期限、取消及唤醒队列/Core 总预算等待旧树退出、SUSPENDED 和唯一新 Session 的 Ready；已接纳请求的合法子调用继续按原期限排空。停止复用 §4.2 的 STOP_DRAIN、STOP_ONSTOP 与 STOP_TOTAL，排空后发送一次 STOPPING，OnStop、DB、连接与受管资源按原停止及整树截止关闭，StopReason 为 `IDLE`；成功后记 `SUSPENDED`。HTTP/Bus 在 Core 引用释放后仍执行的 SDK 回调沿用正常停止截止。停止或状态保存失败保留完整错误并记录 FAILED；旧树尚未确认清空时保留运行槽与资源所有权，确认清空后完成资源及组件槽收尾。正常空闲退出不计入异常重启次数，也不启动新的候选或重复迁移。唤醒后的最短运行时间由 `SLEEP_MIN_UPTIME` 控制（缺省 5 分钟）；在 `SLEEP_COLD_START_WINDOW`（缺省 1 小时）内冷启动超过 `SLEEP_COLD_START_MAX`（缺省 3 次）时，从触发时刻起固定常驻一个 `SLEEP_COLD_START_WINDOW` 的冷却期，期间的新冷启动不延长本次冷却期；冷却结束后恢复空闲判定。实际启动记录使用单调序号，Core 空闲控制器独占消费确认并回收快照前缀；常驻、停用和休眠实例同样消费，其他快照查询保持只读。控制器按窗口清理记录，回收后消费进度保持稳定。
 
-同代次 RESUME 继续执行配置加载、补值/校正与 required 校验，并核对完整结果与原配置快照一致；SELF/VERSIONED 数据库迁移回调跳过，迁移模式、后端及已应用迁移 ID 仍核对并保留。首次激活、更新与回退按原规则执行数据库迁移。最近唤醒时间与原因只在 WAKING→ACTIVE 时更新，撤销空闲停止保留原值；活动时间记录实际活动归零的时刻，空闲停止时间在确认退出并写入 SUSPENDED 时更新。
+同代次 RESUME 继续执行配置加载、补值/校正与 required 校验，并核对完整结果与原配置快照一致；SELF/VERSIONED 数据库迁移回调跳过，迁移模式、后端及已应用迁移 ID 仍核对并保留。首次激活、更新与回退按原规则执行数据库迁移。最近唤醒时间与原因只在 WAKING→ACTIVE 时更新，进入 QUIESCING 前撤销空闲决定保留原值；活动时间记录实际活动归零的时刻，空闲停止时间在确认退出并写入 SUSPENDED 时更新。
 
 Core 记录运行状态变化、唤醒/空闲停止原因、冷启动次数、失败与等待丢弃数；冷启动耗时从启动插件进程至 Core 确认 ACTIVATED，分别记录 OnStart、OnReady 耗时。固定机器验收记录冷启动 P50/P95/P99、活跃与休眠的 PSS/RSS 及 CPU，规则见 TEST-MATRIX V-81。
 
@@ -314,7 +314,7 @@ PATCH 语义依据：[RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)。
 
 ### 5.6 配置文件
 
-T-08.18 已提供存储、会话配置文件解析和管理接口；T-04.18 已接通派发、覆盖值下发、SDK 合并、消息过滤与插件服务（PR #242）；T-11.6 已接通按配置文件的工具目录、调用与操作确认策略（PR #246）。官方 Agent 已接入配置文件（T-12.19，PR #247）；前缀与回复行为由 T-04.19 接入。
+T-08.18 已提供存储、会话配置文件解析和管理接口；T-04.18 已接通派发、覆盖值下发、SDK 合并、消息过滤与插件服务（PR #242）；T-11.6 已接通按配置文件的工具目录、调用与操作确认策略（PR #246）。官方 Agent 已接入配置文件（T-12.19，PR #247）；命令前缀与回复方式已按会话配置文件生效（T-04.19，PR #250）。
 
 - 配置文件（D-168）让不同会话使用不同的设置。Core 状态库保存：配置文件（ID、名称、颜色）；Adapter 实例的缺省配置文件与单独指定的会话；按（插件 ID、配置文件 ID、字段路径）的覆盖值；按配置文件的插件开关与工具策略（§13.1）；按配置文件的平台设置。修改立即生效，不建立配置代次，不经 Pending 与 reload，也不随代次回退。
 - `default`（界面显示为「默认」）始终存在，不能删除，ID 不变。它没有自己的覆盖值与平台设置：字段值就是各插件的配置（§5.1），修改经 Pending 与 reload；平台设置是 `core_config.json` 的 `command_prefixes` 与 `reply`（§15.1）。插件开关与工具策略对 `default` 同样可以设置。其他配置文件的 ID 由 Core 生成；名称为 1～32 个 Unicode 码点，去掉首尾空白后非空且唯一；颜色取 `teal`、`navy`、`amber`、`pink`、`green`、`purple`、`red`、`gray` 之一。新建时可以从已有配置文件复制覆盖值、插件开关、工具策略与平台设置，不复制会话的指定。
@@ -323,10 +323,11 @@ T-08.18 已提供存储、会话配置文件解析和管理接口；T-04.18 已�
 - 下发与合并：插件 Session 的 Bootstrap 带上按候选 schema 筛选的该插件有效覆盖全集（按配置文件 ID 分组），`profile_overrides_json` 必须为 JSON 对象，无覆盖明确下发 `{}`；空串、null 与数组以 CONFIG 阶段的 INVALID_ARGUMENT 拒绝，错误关联 HELLO_ACK。管理创建、复制、删除导致有效集合变化时通知受影响的在线 Session；指定插件的覆盖编辑与 prune 成功后，即使有效集合相同也通知。Core 调用 `sdk.profile.set_overrides` 下发完整的新集合（WIRE §3.5）；发送、业务拒绝或响应协议错误关闭原 Session，返回完整错误，已保存的变更保留。新 Active 的新 Session 从候选 Bootstrap 接收筛选后的集合，离线插件在下次 Bootstrap 接收。Core→插件调用的 InvocationContext 带 `profile_id`（`default` 为空串），可信附件随父子调用继承。SDK 原子替换覆盖集合；Rule/Handler、Service、Hook 与延续每次建立 Context 时冻结本次视图，`c.Config()` 返回整个插件合并后的只读配置。覆盖按完整字段路径替换，object/list 整体替换，祖先 object 覆盖后子字段取新对象；以已载入、补值及校正的基础配置为基线，覆盖只做单值校验与替换。`p.Config()`、子插件的 `s.Config()`、OnStart 与后台基础视图保持原义，`Values.WithOverrides(overrides map[string]json.RawMessage) (Values, error)` 保留当前子视图路径。新的覆盖值从 SDK 收到之后开始的调用起生效。
 - 插件开关：会话所用的配置文件关闭某插件时，Core 不把该会话的入站消息与事件派发给它：命令按命令被禁用处理（§2.2、§2.3），文本匹配、事件路由与 Raw 跳过它；PreEvent 在媒体准备前解析并检查开关，关闭时跳过候选，读取失败保留原因并结束入站链。准入与消息过滤共用同一次操作的配置文件选择、开关、Active 基础配置与有效覆盖，后续匹配观察管理更新。默认 Target 在该会话的调用中，它的工具视为 deny（§13.1）。插件之间的 Service 调用、定时任务与后台发送不受影响。Adapter 不能按配置文件关闭。
 - 平台设置：
-  - 命令前缀（§2.2）取会话所用配置文件的值，没有设置时取 `default` 的值。
+  - 命令前缀（§2.2）取会话所用配置文件的值，没有设置时取 `default` 的值；usage 使用本次命中的前缀。读取失败保留实际错误及会话、候选插件定位，结束本次命令与文本匹配。平台命令菜单按实例缺省配置文件读取前缀，沿用包含 `/` 时发布的规则；菜单在启动及路由、命令策略变化时同步。旧 `command_prefixes_by_instance` 与 `GET/PUT /api/v1/core/command-prefixes` 已删除，磁盘旧键按 Unknown 保留并忽略，管理员 prune 时清理；按实例区分前缀通过指定实例缺省配置文件设置。
   - 回复方式只作用于回复：处理入站 `message.created` 的调用（命令、文本匹配、事件路由及其延续调用）中，发往该消息所在会话（同一实例、会话字符串与话题）的消息；后台工作、定时任务与发往其他会话的消息不变。共四项：`mention_sender`（缺省 false，只在群聊中于第一条消息开头提及发送人，chain 已提及该用户时不加）；`quote`（缺省 false，第一条消息引用触发消息，chain 已有 reference 片段时不加）；`prefix`（缺省空串，加在第一条消息的第一个 text 片段之前，没有 text 片段时作为第一个片段）；`forward_threshold`（缺省 0，表示关闭；为正数且目标实例声明 `message.forward` 时，一条消息中 text 片段按 Unicode 码点计的总字数超过它，就把这条改为一个 forward 片段发送，节点的发送者为本账号；未声明时照常发送）。
-  - 第一条消息是本次根调用及其延续调用发往该会话的第一次 Send。Core 记住它的平台消息 ID，之后对它的 Edit 同样保留提及与前缀，不再加引用。提及或前缀使该条超过单条上限（§8，D-135）时两者都不加，引用照加。回复方式在出站 Hook 之前加上，Hook 看到加上之后的 chain。
-  - 其他配置文件的平台设置按键覆盖，没有覆盖的键取 `default` 的值。
+  - 第一条消息是同一可信消息根的手动发送、自动回复、Service 派生与延续调用发往原完整 Target 的第一次 Send，并发发送共用一次首条占用。回复前缀按普通文本处理，Markdown 正文前插入独立 plain text 片段，实体偏移使用 UTF-16 码元。提及或前缀使该条超过实例声明单位的单条上限（§8，D-135）时两者都省略，引用照加。回复方式在出站 Hook 之前加上，Hook 看到改写后的 chain，改写后仍按原规则复检。
+  - Core 选择回执的 `primary_platform_message_id`，为空时取 `platform_message_ids` 首项；仅将该 ID 的 ACCEPTED `part_results` 及其 `segment_indexes` 确认已发送、且 Hook 后实际保留的自动提及与前缀关联到该消息（MESSAGE-MODEL §4），完整回执与错误继续返回。关联按 Caller Session、完整 Target 与平台消息 ID 隔离。Edit 保留已记录修饰，提及用 TEXT_MENTION 表达，重复编辑沿用已有修饰；前缀插入时平移后续实体并扩展跨越插入点的实体。Edit 沿用一个 text 与可选 buttons 的限制，自动修饰超限时省略；需保留的普通文本前缀或自动提及与 Markdown 编辑组合无法表达时返回 UNSUPPORTED。Session 退出释放关联，并使配置读取期间的在途准备及迟到回执失效；根调用结束时释放首条标记。
+  - 其他配置文件的平台设置按键覆盖，没有覆盖的键取当前 `default` 的值；显式 `false`、空字符串与 `0` 保留。后续命令派发与每次回复 Send 读取新平台快照，无需插件 reload；每次 Send 均重新判断转发阈值与实例能力，组合限制沿用 MESSAGE-MODEL 的校验。
 - 官方 Agent 标记 `chat_model`、`image_caption_model`、`default_persona`、`triggers`、`wake_words` 与 `member_sessions` 为可覆盖字段。对话按本次调用的 `c.Config()` 读取模型、人格与转述模型；触发过滤与成员会话键使用该会话视图。定时任务从调度调用视图读取模型与人格，无默认 Target 时使用 `default`，仍发往任务保存的 Target。OnStart 从基础配置建立模型与 `personas` 目录并校验引用；人格迁入数据库由 T-12.20 完成。对话中的非空 `image_caption_model` 须指向启用 `image_input` 的 chat 模型，否则在任何 Provider 请求前返回 `$.image_caption_model: must name a configured chat model with image_input enabled`；空值沿用图片占位行为。
 - Agent 的 Admin 命令 `/agent on|off`、`/persona <名字>` 与 `/provider <名字>` 经 `core.profile.set` 分别修改当前会话所用配置文件的 `triggers`（三项全部或空数组）、`default_persona` 与 `chat_model`。人格、模型名字按 OnStart 建立的目录校验，无参数时列出目录；共用配置文件的会话在后续调用一起生效。成功回复包含 Core 返回的配置文件名称与会话数，`reloading` 为 true 时追加即将重载提示并在当前 Handler 内完成回复。Admin 命令 `/profile [名字]` 无参数时查询当前名称与会话数，给出名字时从列表解析 ID 并指定到当前会话；「默认」或 `default` 取消单独指定，回落实例缺省，再回到 `default`；未知名字时列出可用配置文件。
 - 插件可调用的配置文件服务（WIRE §3.5）：`core.profile.list` 返回全部配置文件的 ID、名称与会话数；其余三项必须关联同一 Session 内仍在途的 parent_call_id，从 Core 保存的父调用附件取可信 Target 与 Actor，缺少有效父调用或默认 Target 时返回 FAILED_PRECONDITION。`core.profile.current` 从本次服务操作的快照解析该会话所用配置文件，返回 ID、名称与会话数。`core.profile.assign` 输入配置文件 ID，把该会话单独指定到它，空串取消单独指定。`core.profile.set` 输入字段路径与 JSON 值（null 删除），只能修改调用插件自己写了 `profile` 的字段，按上文校验，返回配置文件 ID、名称、会话数与 `reloading`；会话使用 `default` 时在同一插件管理锁内核对 Active/Pending，以当前 Active 为基线调用配置服务的 `Replace` 写入 Pending，已有 Pending 时返回 FAILED_PRECONDITION，`reloading` 为 true。根调用、派生调用、自动回复与延续全部释放后，在锁外触发既有 reload；根已结束时新登记的 `Invocation.AfterFinished` 回调立即在锁外执行。开发组件同样消费 Pending，异步 reload 的实际错误保留在状态与日志中。assign 与 set 要求调用链的可信 Actor 为 Core Admin，否则返回 PERMISSION_DENIED。list/current 直接读取快照；assign 跳过 schema，set 只读取调用插件的 schema。固定服务写请求沿 catalog → instances → 调用插件包锁（仅 set）尝试互斥，任一占用立即返回 FAILED_PRECONDITION；HTTP 管理入口沿原有管理互斥执行。
@@ -403,11 +404,11 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 - v0.1 只有 **一个 Core Listener、一个公开端口、一个主机名**（`base_url`，D-84）：管理界面（WebUI 组件，§7.5）、Admin API 与插件路由 `/plugins/{id}/...` 都在这个主机名下，不需要为插件页面准备第二个域名。Core 验证 Host，不把客户端提供的 Host 当信任依据；远程反代须保留受控 Host 并按全局可信反代配置处理转发信息。
 - 管理会话 Cookie 使用 host-only、HttpOnly、`SameSite=Strict`，并在 HTTPS 下使用 Secure 与 `__Host-` 前缀；Admin API 的状态变更验证 CSRF。公开安装/管理接口不能绕过管理员认证。
 - 插件用 `Route(method, path).Page(title).Handle(h)` 声明页面：`Page(title string) *RouteBuilder` 须在 `Handle` 或 `HandleFunc` 前调用，非空 `title` 为英文源标题。页面声明沿用原 HTTP 路由的认证与匹配规则。Core 从当前运行路由登记生成组件的 `pages` 列表，按 §5.4 选择标题（ADMIN-API §20，D-164）。
-- 声明页面时 SDK 在页面路径所在目录下同时登记 `kit.css` 与 `kit.js` 两条 GET 路由（`sdk/page` 的套件资源），认证与该页面路由相同；作者已登记同一路径时以作者的为准（D-180）。
+- 声明页面时 SDK 在页面路径所在目录下补齐 `kit.css` 与 `kit.js` 两条 GET 路由（`sdk/page` 的套件资源），继承页面的 `Public` 与 `AuthMode`。`/page` 对应 `/kit.css`、`/kit.js`，`/page/` 对应 `/page/kit.css`、`/page/kit.js`。作者已登记的同方法、同路径路由优先保留；共享目录的资源按方法与路径去重，认证取首个补齐该资源的页面（D-180）。
 - 插件路由的全部响应由 Core 加上 `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups`（不含 `allow-same-origin`）与 `X-Content-Type-Options: nosniff`，并去掉插件设置的 `Set-Cookie`；插件不能覆盖这些响应头。插件返回的页面因此运行在不透明源中：无论被嵌入还是直接打开，都读不到管理 Cookie、WebUI 的存储与 DOM，它发出的请求也不带管理 Cookie（D-15）。
 - WebUI 用带 `sandbox` 属性的 iframe 嵌入插件页面，页面只经 WebUI 提供的 postMessage 桥与外部交互：请求本插件的 HTTP 路由，读取当前语言的文案与界面主题，接收明暗与语言变化的通知和设计令牌，转发打开全局搜索的快捷键（D-159）。SDK 的 `sdk/page` 套件封装这些交互并提供与 WebUI 一致的基础样式。插件页面的第一行（插件名、标签与全局搜索）由 WebUI 绘制，iframe 只占其下的内容区。WebUI 只转发方法与路径落在该插件已注册路由内的请求，用管理员会话与 CSRF 头发出，再把响应交回页面；页面拿不到管理会话、CSRF token 或其他插件的路由。桥的消息格式记录在 Admin API 参考中（§7.5）。
 - 非公开的插件路由要求有效的管理会话，非 GET 请求与 Admin API 一样验证 CSRF；公开的 JSON API、OAuth 回调与 Webhook 按 §7.2 声明，不要求会话。插件页面与管理界面不同源，插件页面之间也互不同源（各自为不透明源），但插件仍是可信的本地代码（§7.1）。
-- 插件将 `sdk/page.Handler() http.Handler` 挂到自己的 GET 路由。处理器按路径末段提供 SDK 内嵌的 `kit.css` 与 `kit.js`，分别使用 `text/css; charset=utf-8`、`text/javascript; charset=utf-8`；其他文件、非 GET 或路径以 `/` 结尾时返回 404。`ETag` 为带引号的 SDK 模块版本（无版本时为 `"(devel)"`），`If-None-Match` 与该值完全相等时返回 304。客户端的异步翻译与订阅接口见 [ADMIN-API §7.3](ADMIN-API.md#73-sdk-页面客户端)。
+- 自动资源路由使用 `sdk/page.Handler() http.Handler`，插件也可手动将它挂到自己的 GET 路由。处理器按路径末段提供 SDK 内嵌的 `kit.css` 与 `kit.js`，分别使用 `text/css; charset=utf-8`、`text/javascript; charset=utf-8`；其他文件、非 GET 或路径以 `/` 结尾时返回 404。`ETag` 为带引号的 SDK 模块版本（无版本时为 `"(devel)"`），`If-None-Match` 与该值完全相等时返回 304。客户端的异步翻译与订阅接口见 [ADMIN-API §7.3](ADMIN-API.md#73-sdk-页面客户端)。
 
 ### 7.4 首次管理认证与恢复
 
@@ -486,10 +487,11 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
   - 两种形式都接受 `int`（与 int64 同样解析）以及底层类型为 string、int64、int、float64、bool 的具名类型；SDK 不做其他类型转换。
   - 以上检查都在 SDK 收集注册时完成。运行时 SDK 只把 Core 已解析的参数值赋给字段，不再分词或转换。
 - 子插件（D-116）：`p.Sub(id)` 返回 `*sdk.SubPlugin`，注册方法与 `*sdk.Plugin` 相同，没有 `Sub`，也没有生命周期、`OnConfigLoad` 与迁移的登记。ID 为非空的 ASCII 字母、数字、`_` 与 `-`，同一插件内重复或不合法时 SDK 在收集注册时报错。子插件不出现在 REGISTER 中：其中路由的 route_id、命令路径、别名、Service 名、HTTP 路径与 job ID 按原规则生成，不带子插件 ID，并与整个插件的其他路由一起检查重复。`s.Permission(perm)` 设置其中命令与文本匹配路由的缺省权限，解析次序为路由、由近到远的命令组、子插件、SDK 缺省（§2.3）；子插件内创建的命令组属于该子插件。配置见 §5.1，日志字段见 §14.1。
-- 注册从简（D-180）：`Regex(expr)`、`Keyword`、`StartsWith`、`EndsWith`、`FullMatch`（各收 `patterns ...string`）、`Raw()`、`On(eventType)`、`PreEvent(event)`、`BeforeSend()`、`AfterSend()` 不收 route ID，builder 的 `.ID(routeID string)` 另给。缺省 route ID：文本匹配为小写类别名加 `:` 加各模式以 `|` 连接，Raw 为 `raw`，事件路由为事件名，Hook 为 `pre_event:<事件名>`、`before_send`、`after_send`；同一插件内重复时注册报错并提示使用 `.ID`。`*sdk.Context` 实现 `context.Context`，转给本次调用的 context。`c.Reply(text string, more ...message.Segment) error` 把文本与片段作为一条消息发送。本文件其他小节与 docs/plugin-guide.md 中带 route ID 参数的旧写法按本条理解。
+- 注册从简（D-180）：`Plugin`、`SubPlugin` 与 `CommandGroup` 均提供 `Regex(expr string)`、`Keyword`、`StartsWith`、`EndsWith`、`FullMatch`（各收 `patterns ...string`）、`Raw()` 与 `On(eventType EventType)`；`PreEvent(event EventType)`、`BeforeSend()`、`AfterSend()` 在 `Plugin` 与 `SubPlugin` 上提供。需要稳定身份时，在 `Handle` 前调用对应 builder 的 `.ID(routeID string)`。缺省 route ID：文本匹配为小写类别名加 `:` 加各模式以 `|` 连接，Regex 保留表达式原文，Raw 为 `raw`，事件路由为事件名，Hook 为 `pre_event:<事件名>`、`before_send`、`after_send`。同一插件内重复时注册报错，包含冲突 ID 并提示使用 `.ID`；模式变更需要沿用命令策略时应固定 ID。子插件与命令组事件沿用所属子插件归属，route ID 按上述规则生成；路径命令继续按命令路径生成 ID。
+- `*sdk.Context` 实现 `context.Context`：`Deadline`、`Done`、`Err`、`Value` 转发给 `c.Context()`，可直接将 `c` 传给分类客户端；期限、取消、Session、父调用关联与 Handler 返回后的失效规则保持。`c.Context()` 继续提供底层 context。`c.Reply(text string, more ...message.Segment) error` 按文本、后续片段的次序构造一条 Chain，只调用一次 Send，错误原样返回（D-180）。
 - `pack` 输出 `<id>-<version>-<os>-<arch>.tar.gz`，Windows 同格式。归档内包括补上构建信息的 manifest、binary、存在时的 `config_schema.json` 与 `adapter_config_schema.json`、`i18n/`、changelog 和 build-info，不包含运行配置/DB/secret/签名私钥。只接受普通文件与目录，拒绝绝对路径、`..`、symlink/hardlink、设备文件、重复归档路径及跨平台大小写冲突；解压到新临时目录、验证后再移动为不可变包目录，不能覆盖正在使用的程序。
 
-- 命令目录按需导入 `sdk/command`。`command.List(ctx context.Context) ([]command.Entry, error)` 接收仍在途的 Handler 的 `c.Context()` 或其派生 context；后台或已结束的调用返回 `FAILED_PRECONDITION`，Core 返回的错误直接传给调用者。`Entry` 包含 `PluginID`、`RouteID`、`Path []string`（生效主名）、`Aliases [][]string` 与 `Description string`（未登记说明时为空）。筛选与排序见 §2.3。
+- 命令目录按需导入 `sdk/command`。`command.List(ctx context.Context) ([]command.Entry, error)` 接收仍在途的 Handler 的 `c`、`c.Context()` 或其派生 context；后台或已结束的调用返回 `FAILED_PRECONDITION`，Core 返回的错误直接传给调用者。`Entry` 包含 `PluginID`、`RouteID`、`Path []string`（生效主名）、`Aliases [][]string` 与 `Description string`（未登记说明时为空）。筛选与排序见 §2.3。
 
 ### 9.2 来源、摘要与签名
 
@@ -753,7 +755,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | `adapters` | 空 | 按 adapter_id 分组的 Adapter 实例：`{"telegram": {"instances": {"main": {"token": "${TELEGRAM_BOT_TOKEN}"}}}}`；实例配置按该 Adapter 的 `adapter_config_schema.json` 补缺失值并校正（§5.5、§8）。实例名为 `^[A-Za-z0-9_-]{1,64}$`，跨 Adapter 也不能重名；每个 Adapter 可以写 `default_instance`（该 Adapter 的一个实例名），作为插件没有指定实例时的缺省发送实例（§8，D-102） |
 
 - 任何字符串值都可以写成 `${环境变量}`，启动时展开；变量不存在时该值按不合法处理，按 §5.5 恢复为缺省值并记校正记录（D-161）。敏感值也可以直接写明文，文件权限保护它们。
-- WebUI 与 CLI 修改这些设置时写回该文件（先写临时文件再替换），保留原有的 `${...}` 写法，不把展开后的值写回。手动修改后重启 Core 生效；`alonabot run --reload` 时 Core 监视该文件：`admins`、`command_prefixes`、`reply`、`default_locale`、`log.level`、`log.sources`、`sleep` 与 `adapters` 立即生效（Adapter 只重启变化的实例；`default_locale` 对运行中的插件从它的下一个 Session 起生效），其他键输出 WARN 提示需要重启。启动时文件不是合法的 JSON 对象则拒绝启动并指出位置，其中的值不合法时按 §5.5 校正，不改写文件；运行中重新读取失败时保留当前设置并记 ERROR。
+- WebUI 与 CLI 修改这些设置时写回该文件（先写临时文件再替换），保留原有的 `${...}` 写法，不把展开后的值写回。手动修改后重启 Core 生效；`alonabot run --reload` 时 Core 监视该文件：`admins`、`command_prefixes`、`reply`、`default_locale`、`log.level`、`log.sources`、`sleep` 与 `adapters` 立即生效（Adapter 只重启变化的实例；`default_locale` 对运行中的插件从它的下一个 Session 起生效），其他键输出 WARN 提示需要重启。启动时文件不是合法的 JSON 对象则拒绝启动并指出位置，其中的值不合法时按 §5.5 校正，不改写文件；运行中重新读取失败时保留当前设置并记 ERROR。管理入口的 `settings.File.Update`/`Reload` 共用受管视图，经 Core 生命周期循环串行发布，与空闲判定读取同一生效策略；包括命令前缀、Prune、BindAdapter 与 PrepareInstances 引发的内部写回。有效 sleep 变化后，调用者在循环及文件锁、插件锁外等待原代次恢复；保存已提交时继续应用新策略，并聚合持久化错误与各插件恢复失败。
 - 调优参数用 `--args` 覆盖（§16）。命令行参数覆盖 `core_config.json` 中的同名项，只对本次运行有效。Core 全局禁止表、插件的命令策略与发信许可等按插件或按用户记录的管理数据仍在状态库，经管理服务修改。缺省只监听本机地址。远程管理有两种方式：经 SSH 隧道访问本机地址，或改为非本机地址并满足 §7.3、§7.4 的 Host、HTTPS 与可信反代要求；容器镜像的例外见 §15.3。
 - 首次启动且尚无管理凭证时按 §7.4 生成管理 token：stdin 与 stderr 都是终端时只在该终端显示一次；不是终端时写入 `<data_dir>/admin_token`，日志只输出该文件的路径。
 
@@ -852,6 +854,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 值的格式：整数用十进制；时长用 Go 的时长写法，例如 `2s`、`15m`；大小用 `B`、`KiB`、`MiB`、`GiB`，写成 `MB` 等十进制单位时报错并提示改用二进制单位。
 - `core.command.list` 沿用普通 RPC 的期限与 Session 预算（§1.2），没有独立的调优参数。
 - `core.profile.*` 与 `sdk.profile.set_overrides` 沿用普通 RPC 的期限与 Session 预算；覆盖集合按固定 4 MiB 编码上限校验（§5.6、WIRE §3.2）。
+- T-04.19 的 `reply.forward_threshold` 由配置文件的平台设置提供；文本长度上限及计数单位读取目标实例的 `message.send` 能力声明。`internal/tune/params.go` 与下表沿用现有参数。
 - 未知的键、格式错误、违反约束或彼此矛盾的值使 Core 拒绝启动，错误指明出处（参数，或文件及行号）。存在任何覆盖时，Core 启动时输出一条 WARN，列出全部覆盖项及出处。`alonabot tune list` 列出全部参数的缺省值与约束。
 - SDK 也要遵守的值（在途请求数、payload 预算、普通请求期限、各阶段预算）由 Core 经 Bootstrap 的 `SessionLimits session_limits = 11` 下发：`max_inflight` 对应 `SESSION_MAX_INFLIGHT`，`max_payload_bytes` 对应 `SESSION_MAX_PAYLOAD`，`request_timeout_ms` 对应 `REQUEST_TIMEOUT` 并转换为毫秒。`CORE_MAX_PAYLOAD` 是跨 Session 的 Core 总预算，只由 Core 使用。双方按同一组 Session 值执行。
 - `sdk/page` 的浏览器桥客户端等待父桥响应，无独立固定超时或调优参数（ADMIN-API §7.3）。
@@ -909,7 +912,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 ## 17. 插件测试套件
 
 - 包 `github.com/AlonaBot/AlonaBot/plugintest`（D-47）供插件作者在 `go test` 中做集成测试，只在测试代码中使用。`plugintest.Start(t, opts...)` 在 `t.TempDir()` 的数据目录上用 `alonabot.Start`（§15.5）装配真实 Core，登记被测插件（`plugintest.Plugin(root)`，可以有多个）与套件自带的测试 Adapter（adapter_id `plugintest`），并在 `t.Cleanup` 中停止；任一组件激活失败时测试失败。被测插件是库模式的开发组件，配置取自 `plugintest.Config(root, json)`，受管 SQLite 为 `dev.sqlite`。被测组件的资源由套件现场扫描取得（D-145）：按其入口包的导入路径经 `go list` 定位源码目录，按测试二进制构建信息中的 GOOS、GOARCH 与 build tags，用与 CLI 相同的扫描实现生成资源并经本 module 的内部入口登记；作者不需要先运行 CLI，扫描失败时测试失败并给出原文错误。
-- `Result.RequireReply(t testing.TB, want string)`（D-180）：任一 Outcome 有错误，或发送不是恰好一条文本为 want 的消息时使测试失败。
+- `Result.RequireReply(t testing.TB, want string)`（D-180）：先调用 `t.Helper()`，逐项检查 Outcome；有错误时报告 PluginID、RouteID 与错误。随后要求恰好一次发送，且该条 `Sent.Text()` 为 want，失败时报告实际发送记录；消息可同时包含其他片段。
 - 测试 Adapter 只有一个实例和一个固定账号。它的 adapter_id 缺省为 `plugintest`；`plugintest.Adapter(id, declarations...)` 可改为指定的 adapter_id，并声明该 Adapter 的权限与扩展事件（通常取自其常量包），用于测试依赖平台权限或扩展事件的路由。会话分私聊与群聊，用户可带上该会话的平台权限；`plugintest.Admin(user)` 把用户加入 Core Admin。实例缺省声明 `message.send`、`message.markdown`、`message.album`、`message.reference`、`message.buttons`、`message.forward` 与 `message.edit`，`plugintest.Capabilities(...)` 可改为子集：未声明能力对应的片段在发送时返回 UNSUPPORTED，用来测试插件的降级分支。发送与编辑一律 ACCEPTED，消息 ID 按发送顺序递增。
 - 注入事件：消息（message.created）、对已发送按钮的点击（button.clicked）、已声明的扩展事件与立即触发一次 schedule。每次注入在这个事件的全部分发链结束，或其中的 Handler 进入多轮等待（§2.4）后返回，结果包含这期间产生的全部 Send 与 Edit（Target、Chain、SendResult）和 Handler 返回的错误。分发结束由 Core 经 `internal/inproc` 通知套件，不靠等待时间判断。「分发结束」指：注入的事件的普通分发链与由它发起的全部延续调用都结束；其中任一调用登记了多轮等待时立即返回。被等待取走的下一条注入，在取走它的延续调用结束或再次等待时返回，这期间的发送归入它。测试 Adapter 与正式 Adapter 一样按自己声明的能力判定片段，不支持时返回 UNSUPPORTED。测试 Adapter 按对象使用套件给出的资源（经本 module 的内部入口，D-145），据此改用指定的 adapter_id；`EventType.Name()` 返回事件类型名。分发链之外的后台发送另行按顺序读取。
 - `plugintest.LLM(func(ctx context.Context, req llm.Request) (llm.Response, error))` 登记一个只提供 `llm.generate` 的测试 Agent（§13.5），被测插件经 `@agent` 的调用交给这个函数处理，不需要真实 Agent 与 Provider（D-77）；没有登记时，`@agent` 按目标未激活处理。

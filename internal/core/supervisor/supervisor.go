@@ -439,13 +439,46 @@ func closeListener(ln net.Listener) {
 func (r *Running) Stop(t0 time.Time, reason pb.StopReason) host.StopResult {
 	unlock := r.store.LockPlugin(r.pluginID)
 	defer unlock()
+	return r.stop(t0, reason, nil)
+}
 
+// StopIdle 在逐插件锁和活动门禁内复核空闲快照，再执行同一正常停止流程。
+// 活动、Session 或就绪状态已变化时返回 Cancelled，并保留原 Session 与绑定。
+func (r *Running) StopIdle(t0 time.Time, lastActivityAt time.Time) host.StopResult {
+	unlock := r.store.LockPlugin(r.pluginID)
+	defer unlock()
+	ctx := context.Background()
+	enabled, err := r.store.Enabled(ctx, r.pluginID)
+	if err != nil {
+		return host.StopResult{Err: err}
+	}
+	generation, err := r.store.Active(ctx, r.pluginID)
+	if err != nil {
+		return host.StopResult{Err: err}
+	}
+	status, err := r.store.RuntimeStatus(ctx, r.pluginID)
+	if err != nil {
+		return host.StopResult{Err: err}
+	}
+	if !enabled || generation != r.Instance.GenerationID || status.State != state.RuntimeActive {
+		return host.StopResult{Cancelled: true}
+	}
+	return r.stop(t0, pb.StopReason_STOP_REASON_IDLE, &lastActivityAt)
+}
+
+func (r *Running) stop(t0 time.Time, reason pb.StopReason, lastActivityAt *time.Time) host.StopResult {
 	// 1. 接管清理；WaitExit 已经清理过时不再触碰已释放的进程树句柄。
 	if r.released {
+		if lastActivityAt != nil {
+			return host.StopResult{Cancelled: true, Err: r.cleanupErr}
+		}
 		return host.StopResult{Err: r.cleanupErr}
 	}
 	if r.waker != nil {
-		if !r.waker.stopping(r, reason == pb.StopReason_STOP_REASON_IDLE) {
+		if !r.waker.stopping(r, reason == pb.StopReason_STOP_REASON_IDLE, lastActivityAt) {
+			if lastActivityAt != nil {
+				return host.StopResult{Cancelled: true}
+			}
 			return host.StopResult{Err: wakeError(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "plugin still has active work")}
 		}
 	}
@@ -459,9 +492,6 @@ func (r *Running) Stop(t0 time.Time, reason pb.StopReason) host.StopResult {
 			if !activationFailed {
 				runtimeErr = r.runtime.writeIfCurrent(ctx, state.RuntimeQuiescing, reason.String())
 			}
-			if reason == pb.StopReason_STOP_REASON_IDLE && r.waker != nil {
-				return // 空闲停止先保留业务映射，撤销时继续使用原 Session。
-			}
 			if r.scheduler != nil {
 				r.scheduler.Drain(r.pluginID)
 			}
@@ -469,49 +499,39 @@ func (r *Running) Stop(t0 time.Time, reason pb.StopReason) host.StopResult {
 				r.http.Drain(r.pluginID, deadline)
 			}
 		},
-		BeforeStopping: func() bool {
-			return r.waker == nil || r.waker.commitStop(r)
-		},
 		Stopping: func() {
-			if reason == pb.StopReason_STOP_REASON_IDLE && r.waker != nil {
-				if r.scheduler != nil {
-					r.scheduler.Drain(r.pluginID)
-				}
-				if r.http != nil {
-					r.http.Drain(r.pluginID, t0.Add(r.timing.Drain))
-				}
-			}
 			r.detach()
 			if r.commandsChanged != nil {
 				r.commandsChanged()
 			}
 		},
 	})
-	if res.Cancelled {
-		runtimeErr = errors.Join(runtimeErr, r.runtime.writeIfCurrent(ctx, state.RuntimeActive, "idle stop cancelled by accepted work"))
-		r.waker.resume(r)
-		res.Err = errors.Join(runtimeErr, wakeError(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "idle stop cancelled by accepted work"))
-		return res
-	}
-	defer r.runtime.release()
 
 	// 3. 进程树处理完后读完插件的最后输出，再释放 Listener 与进程资源；读取受同一总截止约束。
 	drainLogs(r.Process, t0.Add(r.timing.Total))
 	r.cleanupErr = res.Err
-	r.release()
-	if r.waker != nil && r.cleanupErr == nil {
-		defer r.waker.released(r)
-	}
-	if res.Err != nil {
-		runtimeErr = errors.Join(runtimeErr, r.runtime.writeIfCurrent(ctx, state.RuntimeFailed, "stop failed"))
+	if failure := errors.Join(res.Err, runtimeErr); failure != nil {
+		runtimeErr = errors.Join(runtimeErr, r.runtime.writeIfCurrent(ctx, state.RuntimeFailed, failure.Error()))
 	} else if !activationFailed {
 		next := state.RuntimeStopped
 		if reason == pb.StopReason_STOP_REASON_IDLE {
 			next = state.RuntimeSuspended
 		}
-		runtimeErr = errors.Join(runtimeErr, r.runtime.writeIfCurrent(ctx, next, reason.String()))
+		if err := r.runtime.writeIfCurrent(ctx, next, reason.String()); err != nil {
+			runtimeErr = errors.Join(err, r.runtime.writeIfCurrent(ctx, state.RuntimeFailed, err.Error()))
+		}
 	}
 	res.Err = errors.Join(res.Err, runtimeErr)
+	if r.cleanupErr == nil {
+		r.release()
+		r.runtime.release()
+		if r.waker != nil {
+			r.waker.released(r)
+		}
+	}
+	if r.waker != nil && res.Err != nil {
+		r.waker.failed(r.pluginID, res.Err)
+	}
 	return res
 }
 
@@ -535,14 +555,13 @@ func (r *Running) WaitExit() (abnormal bool, exitState string, err error) {
 		return false, fmt.Sprint(r.Process.ExitState()), r.cleanupErr
 	}
 	if r.waker != nil {
-		r.waker.stopping(r, false)
+		r.waker.stopping(r, false, nil)
 		defer func() {
 			if r.cleanupErr == nil {
 				r.waker.released(r)
 			}
 		}()
 	}
-	defer r.runtime.release()
 	r.detach()
 	// 2. 合作退出与日志收尾共用同一个总截止；到期仍存活才终止树内余留进程。
 	// 组内已没有进程时不再发信号，避免进程组号被复用后误杀无关进程。
@@ -555,7 +574,10 @@ func (r *Running) WaitExit() (abnormal bool, exitState string, err error) {
 		<-r.Process.Exited() // 树清空后仍要取得 cmd.Wait 发布的真实退出状态。
 	}
 	drainLogs(r.Process, total)
-	r.release()
+	if r.cleanupErr == nil {
+		r.release()
+		defer r.runtime.release()
+	}
 	st := r.Process.ExitState()
 	abnormal = r.cleanupErr != nil || !st.Success()
 	if r.Instance.State() == host.StateDegraded {
@@ -565,7 +587,15 @@ func (r *Running) WaitExit() (abnormal bool, exitState string, err error) {
 	if abnormal {
 		next = state.RuntimeFailed
 	}
-	return abnormal, fmt.Sprint(st), errors.Join(r.cleanupErr, r.runtime.writeIfCurrent(context.Background(), next, fmt.Sprint(st)))
+	reason := fmt.Sprint(st)
+	if r.cleanupErr != nil {
+		reason = r.cleanupErr.Error()
+	}
+	err = errors.Join(r.cleanupErr, r.runtime.writeIfCurrent(context.Background(), next, reason))
+	if r.waker != nil && err != nil {
+		r.waker.failed(r.pluginID, err)
+	}
+	return abnormal, fmt.Sprint(st), err
 }
 
 // detach 撤销本实例的注册；由 Stop 或 WaitExit 中取得清理权的一方调用。

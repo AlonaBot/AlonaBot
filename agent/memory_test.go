@@ -20,7 +20,7 @@ import (
 
 func memoryDatabase(t *testing.T, h *harness) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", "file:"+filepath.Join(h.dir, "plugins", agentID, "dev.sqlite")+"?mode=rw")
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(h.dir, "plugins", agentID, "dev.sqlite")+"?mode=rw&_pragma=busy_timeout(5000)")
 	if err != nil {
 		t.Fatal(err)
 	}

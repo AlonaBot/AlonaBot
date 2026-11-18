@@ -17,14 +17,16 @@ import (
 )
 
 type hookRoute struct {
-	scope      *pluginScope
-	permission Permission
-	id         string
-	phase      pb.HookPhase
-	event      EventType
-	priority   int32
-	handler    any
-	handles    int
+	scope       *pluginScope
+	permission  Permission
+	id          string
+	phase       pb.HookPhase
+	event       EventType
+	priority    int32
+	handler     any
+	handles     int
+	afterHandle bool
+	idSet       bool
 }
 
 func (r *pluginScope) addHook(id string, phase pb.HookPhase, event EventType) *hookRoute {
@@ -34,22 +36,37 @@ func (r *pluginScope) addHook(id string, phase pb.HookPhase, event EventType) *h
 	return route
 }
 
+func (r *hookRoute) touch() {
+	r.scope.plugin.checkRegistration()
+	if r.handles != 0 {
+		r.afterHandle = true
+	}
+}
+
 // PreEvent 开始登记一种事件的业务载荷改写 Hook。
-func (p *Plugin) PreEvent(routeID string, event EventType) *PreEventBuilder {
-	return &PreEventBuilder{route: p.scope.addHook(routeID, pb.HookPhase_HOOK_PHASE_PRE_EVENT, event)}
+func (p *Plugin) PreEvent(event EventType) *PreEventBuilder {
+	return &PreEventBuilder{route: p.scope.addHook("", pb.HookPhase_HOOK_PHASE_PRE_EVENT, event)}
 }
 
 // PreEvent 开始登记子插件的业务载荷改写 Hook。
-func (s *SubPlugin) PreEvent(routeID string, event EventType) *PreEventBuilder {
-	return &PreEventBuilder{route: s.scope.addHook(routeID, pb.HookPhase_HOOK_PHASE_PRE_EVENT, event)}
+func (s *SubPlugin) PreEvent(event EventType) *PreEventBuilder {
+	return &PreEventBuilder{route: s.scope.addHook("", pb.HookPhase_HOOK_PHASE_PRE_EVENT, event)}
 }
 
 // PreEventBuilder 构建 PreEvent Hook，Handle 的输入和输出载荷类型均须与事件一致。
 type PreEventBuilder struct{ route *hookRoute }
 
+// ID 设置 Hook 路由的稳定身份。
+func (b *PreEventBuilder) ID(routeID string) *PreEventBuilder {
+	b.route.touch()
+	b.route.id = routeID
+	b.route.idSet = true
+	return b
+}
+
 // Priority 设置 Hook 优先级，数值越小越先执行。
 func (b *PreEventBuilder) Priority(p int32) *PreEventBuilder {
-	b.route.scope.plugin.checkRegistration()
+	b.route.touch()
 	b.route.priority = p
 	return b
 }
@@ -62,21 +79,29 @@ func (b *PreEventBuilder) Handle(h any) {
 }
 
 // BeforeSend 开始注册消息链改写 Hook。
-func (p *Plugin) BeforeSend(routeID string) *BeforeSendBuilder {
-	return &BeforeSendBuilder{route: p.scope.addHook(routeID, pb.HookPhase_HOOK_PHASE_BEFORE_SEND, EventType{})}
+func (p *Plugin) BeforeSend() *BeforeSendBuilder {
+	return &BeforeSendBuilder{route: p.scope.addHook("", pb.HookPhase_HOOK_PHASE_BEFORE_SEND, EventType{})}
 }
 
 // BeforeSend 开始登记子插件的消息链改写 Hook。
-func (s *SubPlugin) BeforeSend(routeID string) *BeforeSendBuilder {
-	return &BeforeSendBuilder{route: s.scope.addHook(routeID, pb.HookPhase_HOOK_PHASE_BEFORE_SEND, EventType{})}
+func (s *SubPlugin) BeforeSend() *BeforeSendBuilder {
+	return &BeforeSendBuilder{route: s.scope.addHook("", pb.HookPhase_HOOK_PHASE_BEFORE_SEND, EventType{})}
 }
 
 // BeforeSendBuilder 构建发送前的改链或拒绝 Hook。
 type BeforeSendBuilder struct{ route *hookRoute }
 
+// ID 设置 Hook 路由的稳定身份。
+func (b *BeforeSendBuilder) ID(routeID string) *BeforeSendBuilder {
+	b.route.touch()
+	b.route.id = routeID
+	b.route.idSet = true
+	return b
+}
+
 // Priority 设置 Hook 优先级，数值越小越先执行。
 func (b *BeforeSendBuilder) Priority(p int32) *BeforeSendBuilder {
-	b.route.scope.plugin.checkRegistration()
+	b.route.touch()
 	b.route.priority = p
 	return b
 }
@@ -89,21 +114,29 @@ func (b *BeforeSendBuilder) Handle(h func(c *Context, to string, m message.Chain
 }
 
 // AfterSend 开始注册发送结果观察 Hook。
-func (p *Plugin) AfterSend(routeID string) *AfterSendBuilder {
-	return &AfterSendBuilder{route: p.scope.addHook(routeID, pb.HookPhase_HOOK_PHASE_AFTER_SEND, EventType{})}
+func (p *Plugin) AfterSend() *AfterSendBuilder {
+	return &AfterSendBuilder{route: p.scope.addHook("", pb.HookPhase_HOOK_PHASE_AFTER_SEND, EventType{})}
 }
 
 // AfterSend 开始登记子插件的发送结果观察 Hook。
-func (s *SubPlugin) AfterSend(routeID string) *AfterSendBuilder {
-	return &AfterSendBuilder{route: s.scope.addHook(routeID, pb.HookPhase_HOOK_PHASE_AFTER_SEND, EventType{})}
+func (s *SubPlugin) AfterSend() *AfterSendBuilder {
+	return &AfterSendBuilder{route: s.scope.addHook("", pb.HookPhase_HOOK_PHASE_AFTER_SEND, EventType{})}
 }
 
 // AfterSendBuilder 构建观察最终发送结果的 Hook。
 type AfterSendBuilder struct{ route *hookRoute }
 
+// ID 设置 Hook 路由的稳定身份。
+func (b *AfterSendBuilder) ID(routeID string) *AfterSendBuilder {
+	b.route.touch()
+	b.route.id = routeID
+	b.route.idSet = true
+	return b
+}
+
 // Priority 设置 Hook 优先级，数值越小越先执行。
 func (b *AfterSendBuilder) Priority(p int32) *AfterSendBuilder {
-	b.route.scope.plugin.checkRegistration()
+	b.route.touch()
 	b.route.priority = p
 	return b
 }
@@ -121,7 +154,18 @@ func collectHooks(root *Plugin, reg *registration) error {
 		seen[route.GetRouteId()] = true
 	}
 	var errs []error
-	for _, route := range root.hooks {
+	for _, pending := range root.hooks {
+		route := *pending
+		if !route.idSet {
+			switch route.phase {
+			case pb.HookPhase_HOOK_PHASE_PRE_EVENT:
+				route.id = "pre_event:" + route.event.Name()
+			case pb.HookPhase_HOOK_PHASE_BEFORE_SEND:
+				route.id = "before_send"
+			case pb.HookPhase_HOOK_PHASE_AFTER_SEND:
+				route.id = "after_send"
+			}
+		}
 		expected := "func(*sdk.Context, string, message.Chain) (message.Chain, error)"
 		if route.phase == pb.HookPhase_HOOK_PHASE_AFTER_SEND {
 			expected = "func(*sdk.Context, string, *message.SendResult, error) error"
@@ -133,7 +177,7 @@ func collectHooks(root *Plugin, reg *registration) error {
 			}
 		}
 		t := reflect.TypeOf(route.handler)
-		valid := route.handles == 1 && t != nil && t.Kind() == reflect.Func && !reflect.ValueOf(route.handler).IsNil()
+		valid := route.handles == 1 && !route.afterHandle && t != nil && t.Kind() == reflect.Func && !reflect.ValueOf(route.handler).IsNil()
 		if valid && route.phase == pb.HookPhase_HOOK_PHASE_PRE_EVENT {
 			valid = !t.IsVariadic() && t.NumIn() == 2 && t.In(0) == contextType && t.In(1) == route.event.payload && t.NumOut() == 2 && t.Out(0) == route.event.payload && t.Out(1) == errorType
 		}
@@ -142,11 +186,11 @@ func collectHooks(root *Plugin, reg *registration) error {
 			continue
 		}
 		if route.id == "" || seen[route.id] {
-			errs = append(errs, fmt.Errorf("hook route %q has empty or duplicate route_id", route.id))
+			errs = append(errs, fmt.Errorf("hook route %q has empty or duplicate route_id; use .ID to distinguish routes", route.id))
 			continue
 		}
 		seen[route.id] = true
-		collected := *route
+		collected := route
 		if inherited := route.scope.commands.permission; inherited != nil {
 			collected.permission = *inherited
 		}

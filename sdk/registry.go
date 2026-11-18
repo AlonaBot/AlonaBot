@@ -13,6 +13,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
+	"github.com/AlonaBot/AlonaBot/sdk/page"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -31,7 +32,7 @@ type command struct {
 	permission   Permission
 	subID        string
 	rules        []Rule          // collect 固定的调用顺序，全部通过后执行 Handler。
-	routeID      string          // 文本匹配与 Raw 的显式路由 ID
+	routeID      string          // 文本匹配与 Raw 的路由 ID，收集时补齐缺省值。
 	spec         *pb.CommandSpec // 已通过注册边界校验的命令描述
 	continuation bool
 }
@@ -98,37 +99,44 @@ func (r *CommandGroup) Command(path ...string) *CommandBuilder {
 }
 
 // Regex 开始构建 Go regexp 文本匹配。
-func (r *CommandGroup) Regex(routeID, expr string) *CommandBuilder {
-	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_REGEX, Regex: expr})
+func (r *CommandGroup) Regex(expr string) *CommandBuilder {
+	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_REGEX, Regex: expr})
 }
 
 // Keyword 开始构建包含文本匹配。
-func (r *CommandGroup) Keyword(routeID string, patterns ...string) *CommandBuilder {
-	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_KEYWORD, Patterns: slices.Clone(patterns)})
+func (r *CommandGroup) Keyword(patterns ...string) *CommandBuilder {
+	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_KEYWORD, Patterns: slices.Clone(patterns)})
 }
 
 // StartsWith 开始构建开头文本匹配。
-func (r *CommandGroup) StartsWith(routeID string, patterns ...string) *CommandBuilder {
-	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_STARTSWITH, Patterns: slices.Clone(patterns)})
+func (r *CommandGroup) StartsWith(patterns ...string) *CommandBuilder {
+	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_STARTSWITH, Patterns: slices.Clone(patterns)})
 }
 
 // EndsWith 开始构建结尾文本匹配。
-func (r *CommandGroup) EndsWith(routeID string, patterns ...string) *CommandBuilder {
-	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_ENDSWITH, Patterns: slices.Clone(patterns)})
+func (r *CommandGroup) EndsWith(patterns ...string) *CommandBuilder {
+	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_ENDSWITH, Patterns: slices.Clone(patterns)})
 }
 
 // FullMatch 开始构建完整文本匹配。
-func (r *CommandGroup) FullMatch(routeID string, patterns ...string) *CommandBuilder {
-	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_FULLMATCH, Patterns: slices.Clone(patterns)})
+func (r *CommandGroup) FullMatch(patterns ...string) *CommandBuilder {
+	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_FULLMATCH, Patterns: slices.Clone(patterns)})
 }
 
 // Raw 开始构建最后执行的原始消息路由。
-func (r *CommandGroup) Raw(routeID string) *CommandBuilder {
-	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_RAW})
+func (r *CommandGroup) Raw() *CommandBuilder {
+	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_RAW})
 }
 
-func (r *CommandGroup) text(routeID string, spec *pb.CommandSpec) *CommandBuilder {
-	return r.start(command{routeID: routeID, spec: spec}, routeID == "" || strings.HasPrefix(routeID, commandRoutePrefix) || strings.HasPrefix(routeID, buttonRoutePrefix))
+// On 开始登记本命令组所属作用域的事件路由。
+func (r *CommandGroup) On(eventType EventType) *EventBuilder {
+	b := r.plugin.events.On("", eventType)
+	b.route.subID = r.subID
+	return b
+}
+
+func (r *CommandGroup) text(spec *pb.CommandSpec) *CommandBuilder {
+	return r.start(command{spec: spec}, false)
 }
 
 func (r *CommandGroup) start(c command, invalid bool) *CommandBuilder {
@@ -148,6 +156,7 @@ type CommandBuilder struct {
 	handles     int
 	afterHandle bool
 	invalid     bool
+	idSet       bool // 显式空 ID 仍交给注册校验拒绝。
 }
 
 func (b *CommandBuilder) touch() {
@@ -155,6 +164,14 @@ func (b *CommandBuilder) touch() {
 	if b.handles != 0 {
 		b.afterHandle = true
 	}
+}
+
+// ID 设置文本匹配或 Raw 路由的稳定身份。
+func (b *CommandBuilder) ID(routeID string) *CommandBuilder {
+	b.touch()
+	b.command.routeID = routeID
+	b.idSet = true
+	return b
 }
 
 // Alias 追加完整别名路径。
@@ -257,8 +274,12 @@ func (r *CommandGroup) collect() {
 	r.routeIDs = nil
 	for _, b := range r.builders {
 		c := b.command
+		if c.spec.GetMatch() != pb.CommandMatch_COMMAND_MATCH_PATH && !b.idSet {
+			c.routeID = defaultCommandRouteID(c.spec)
+		}
+		invalidID := b.idSet && (c.spec.GetMatch() == pb.CommandMatch_COMMAND_MATCH_PATH || c.routeID == "" || strings.HasPrefix(c.routeID, commandRoutePrefix) || strings.HasPrefix(c.routeID, buttonRoutePrefix))
 		id := commandRouteID(c)
-		if b.invalid || b.handles != 1 || b.afterHandle {
+		if b.invalid || invalidID || b.handles != 1 || b.afterHandle {
 			r.errs = append(r.errs, invalidCommand("route %q (path %q) has invalid path/route_id or Handle sequence", id, strings.Join(c.Path, " ")))
 			continue
 		}
@@ -371,6 +392,18 @@ func (r *CommandGroup) register(c command, options routeOptions) {
 	r.add(c)
 }
 
+func defaultCommandRouteID(spec *pb.CommandSpec) string {
+	switch spec.GetMatch() {
+	case pb.CommandMatch_COMMAND_MATCH_REGEX:
+		return "regex:" + spec.GetRegex()
+	case pb.CommandMatch_COMMAND_MATCH_RAW:
+		return "raw"
+	default:
+		category := strings.TrimPrefix(strings.ToLower(spec.GetMatch().String()), "command_match_")
+		return category + ":" + strings.Join(spec.GetPatterns(), "|")
+	}
+}
+
 func invalidCommand(format string, args ...any) *Error {
 	return &Error{Code: errcode.InvalidArgument, Message: fmt.Sprintf(format, args...)}
 }
@@ -393,7 +426,7 @@ func (r *CommandGroup) add(c command) {
 		pending[key] = true
 	}
 	if r.routeIDs[id] {
-		r.errs = append(r.errs, invalidCommand("route %q registered twice", id))
+		r.errs = append(r.errs, invalidCommand("route %q registered twice; use .ID to distinguish routes", id))
 		return
 	}
 	// 2. 全部通过后统一登记，所有分组共用根注册器的冲突索引。
@@ -438,7 +471,7 @@ type RouteBuilder struct {
 	afterHandle bool
 }
 
-// Page 将路由标为插件页面，title 提供翻译缺失时的英文标题。
+// Page 声明页面及同目录的套件资源；title 提供翻译缺失时的英文标题。
 func (b *RouteBuilder) Page(title string) *RouteBuilder {
 	b.registry.plugin.checkRegistration()
 	if b.handles != 0 {
@@ -498,6 +531,22 @@ func (r *httpRegistry) collect() {
 			continue
 		}
 		r.add(b.method, b.route)
+	}
+	// 作者路由先全部收集，自动资源只补齐尚未登记的方法与路径。
+	for _, route := range slices.Clone(r.routes) {
+		if route.PageTitle == "" {
+			continue
+		}
+		directory := route.Path[:strings.LastIndexByte(route.Path, '/')+1]
+		for _, filename := range []string{"kit.css", "kit.js"} {
+			resourcePath := directory + filename
+			if slices.ContainsFunc(r.routes, func(existing httpRoute) bool {
+				return existing.Method == http.MethodGet && existing.Path == resourcePath
+			}) {
+				continue
+			}
+			r.add(http.MethodGet, httpRoute{Method: http.MethodGet, Path: resourcePath, Handler: page.Handler(), Public: route.Public, AuthMode: route.AuthMode})
+		}
 	}
 }
 
