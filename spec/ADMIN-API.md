@@ -579,3 +579,30 @@ Markdown 原文由 WebUI 渲染，WebUI 不执行其中的 HTML。经管理认�
 | `PUT /api/v1/profiles/{id}/platform` | 同形对象 → `{}` | 整体替换，`null` 跟随 `default`；`default` 写回 `core_config.json`，不接受 `null` |
 | `GET /api/v1/profiles/{id}/tools` | `{"items":[{"tool":"weather/subscribe","policy":"allow"},{"operation":{"plugin_id":"agent","name":"mcp/fs/write_file"},"policy":"deny"}]}` | 只列出覆盖了全局策略的工具与操作 |
 | `PUT /api/v1/profiles/{id}/tools` | `{"items":[…]}`，policy 取 allow、confirm、deny 或 inherit → `{}` | inherit 删除该项覆盖 |
+
+## 24. 插件休眠策略与运行状态
+
+模式、准入、活动引用与停止规则见 CONTRACTS §4.4、§4.5，设置存储见 §15.1。以下接口沿用 §1 的管理认证、CSRF 与 §5 的错误格式；读取只查询状态，不唤醒插件。CLI `alonabot sleep-policy [ID] [never|auto|时长]` 与 WebUI 使用同一管理服务。
+
+### 24.1 全局设置与插件覆盖
+
+| Method / path | 请求或成功响应 | 操作语义 |
+| --- | --- | --- |
+| `GET /api/v1/core/sleep` | `{"mode":"always_on","idle_timeout":"15m","plugins":{}}` | 返回 `core_config.json` 中的生效设置；plugins 的值为 `"never"` 或时长，未覆盖的 ID 省略 |
+| `PUT /api/v1/core/sleep` | `{"mode":"component_idle","idle_timeout":"15m"}` → `{}` | 两项必填，只修改全局模式和空闲时长，保留插件覆盖 |
+| `GET /api/v1/plugins/{id}/sleep-policy` | 下文的策略对象 | 返回配置覆盖、有效准入及常驻原因 |
+| `PUT /api/v1/plugins/{id}/sleep-policy` | `{"policy":"never"}` 或 `{"policy":"15m"}` → `{}` | 设置一个插件的覆盖；时长须为正的 Go duration |
+| `DELETE /api/v1/plugins/{id}/sleep-policy` | 无正文 → `{}` | 删除覆盖，恢复准入规则及全局时长；CLI 的 `auto` 使用此接口 |
+| `GET /api/v1/plugins/{id}/runtime` | 下文的运行对象 | 返回运行状态、代次与最近变化原因 |
+
+策略对象为 `{"policy":null,"effective_policy":"never","sleep_capable":false,"eligible":false,"reason":"manifest_requires_resident"}`。`policy` 为文件中的覆盖值，无覆盖时为 `null`；`effective_policy` 为 `"never"` 或生效时长；`eligible` 表示当前模式、manifest、进程形式与路由策略是否允许自动休眠，实际空闲退出仍须满足活动条件。`reason` 使用稳定值：`always_on`、`manifest_requires_resident`、`in_process`、`policy_never`、`route_requires_resident`，允许休眠时为空串，按前述顺序选择首个成立原因。未声明 Core 过滤的消息事件、Raw、HTTP、Hook 与持续监听被显式时长放行时另返回 `warnings` 字符串数组；无警告时省略。面向用户的原因与提示由 WebUI i18n 翻译。
+
+所有插件接口都只接受已安装且未卸载的 `role: plugin` 或 `role: agent` ID；ID 不存在、已卸载或属于其他角色返回 404 / `NOT_FOUND`。无 manifest 可休眠声明时，时长覆盖仍可保存，生效策略保持 `never`，WebUI 锁定时长选项并显示原因。未知模式、`auto` 字面量作为存储值、零/负/非法时长在写入前返回 400 / `INVALID_ARGUMENT`。
+
+写入经 `settings.File.Update` 保存 `sleep`，保留其他字段及未修改的 `${...}` 原文，再向生命周期所有者应用生效策略。变更立即生效，无需 reload。`never` 立即唤醒已启用的 `SUSPENDED` 插件；切回 `always_on` 唤醒全部已启用插件，已停用插件保持停用。时长变更从下一次空闲判定使用。文件保存失败时返回实际错误；保存成功后唤醒失败时保留已保存设置，仅按 §5 返回实际错误，调用方重新 GET 核对设置；各失败插件的运行状态同时记录实际错误。
+
+### 24.2 运行状态
+
+运行对象为 `{"enabled":true,"generation_id":"…","state":"SUSPENDED","reason":"idle","changed_at":"2026-11-17T12:00:00Z"}`。`state` 取 CONTRACTS §4.4 的六个值，`changed_at` 为最近状态变化的 UTC RFC 3339 时间；`reason` 为无 secret 的诊断字符串（程序输出用英文），失败保留实际错误原因。最近一次唤醒与空闲停止另在存在记录时返回 `last_wake:{"reason":"…","at":"…"}` 与 `last_suspend:{"reason":"idle","at":"…"}`，缺失时省略。
+
+组件列表继续保留 §3 的 `State` 字段及现有角色的语义；plugin 与 agent 追加 `RuntimeState`，取同一持久化记录中的六态值。休眠插件的 `State` 显示 `Suspended`，与 `Degraded` 区分；低层 Preparing、Activating、Activated 等阶段仍通过原字段展示。所有读取均排除快照中的私有认证材料与配置。
