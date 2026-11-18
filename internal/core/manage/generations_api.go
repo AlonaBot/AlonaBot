@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/AlonaBot/AlonaBot/internal/core/state"
 )
 
 type generationSummary struct {
@@ -63,10 +65,7 @@ func (s *Service) generations(w http.ResponseWriter, r *http.Request) {
 			respond(w, nil, fmt.Errorf("generation %s has no committed program snapshot", generation))
 			return
 		}
-		path := filepath.Join(filepath.Dir(s.opt.Packages), "plugins", id, "generations", generation, "db.sqlite")
-		if in.Source == "dev" {
-			path = filepath.Join(filepath.Dir(s.opt.Packages), "plugins", id, "dev.sqlite")
-		}
+		path := s.generationDatabase(in, generation)
 		_, err = os.Stat(path)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			respond(w, nil, err)
@@ -77,4 +76,11 @@ func (s *Service) generations(w http.ResponseWriter, r *http.Request) {
 	respond(w, struct {
 		Generations []generationSummary `json:"generations"`
 	}{result}, nil)
+}
+
+func (s *Service) generationDatabase(in state.Install, generation string) string {
+	if in.Source == "dev" {
+		return filepath.Join(filepath.Dir(s.opt.Packages), "plugins", in.PluginID, "dev.sqlite")
+	}
+	return filepath.Join(filepath.Dir(s.opt.Packages), "plugins", in.PluginID, "generations", generation, "db.sqlite")
 }

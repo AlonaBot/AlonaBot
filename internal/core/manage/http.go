@@ -34,6 +34,7 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	s.conversationRoutes(mux)
 	s.logRoutes(mux)
 	s.jobRoutes(mux)
+	s.dataRoutes(mux)
 	mux.HandleFunc("GET /api/v1/plugins/{id}/generations", s.generations)
 	mux.HandleFunc("GET /api/v1/adapter/instances", s.listInstances)
 	mux.HandleFunc("GET /api/v1/chats", s.chats)
@@ -167,6 +168,9 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 		respond(w, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_NOT_FOUND, Message: "management endpoint not found"})
 	})
 	return auth.Require(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.dataKVRequest(w, r) {
+			return
+		}
 		if s.deleteConversation(w, r) {
 			return
 		}
