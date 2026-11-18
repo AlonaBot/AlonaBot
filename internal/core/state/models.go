@@ -23,12 +23,12 @@ type installation struct {
 func (installation) TableName() string { return "install" }
 
 type generation struct {
-	GenerationID   string `gorm:"column:generation_id;primaryKey"`
-	PluginID       string `gorm:"column:plugin_id"`
-	ConfigSnapshot string `gorm:"column:config_snapshot"`
-	ConfigVersion  uint32 `gorm:"column:config_version"`
-	CreatedAt      int64  `gorm:"column:created_at;autoCreateTime:false"` // 毫秒
-	CommittedAt    *int64 `gorm:"column:committed_at"`                    // NULL 表示尚未提交
+	GenerationID      string `gorm:"column:generation_id;primaryKey"`
+	PluginID          string `gorm:"column:plugin_id"`
+	ConfigCorrections string `gorm:"column:config_corrections"`
+	ConfigSnapshot    string `gorm:"column:config_snapshot"`
+	CreatedAt         int64  `gorm:"column:created_at;autoCreateTime:false"` // 毫秒
+	CommittedAt       *int64 `gorm:"column:committed_at"`                    // NULL 表示尚未提交
 }
 
 func (generation) TableName() string { return "generation" }

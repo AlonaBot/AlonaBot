@@ -2,11 +2,9 @@ package diagnostics
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/netip"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
@@ -74,6 +72,11 @@ func maskPath(value any, path []string) {
 	}
 	switch value := value.(type) {
 	case map[string]any:
+		if path[0] == "*" && len(path) > 1 {
+			// 列表的单对象输入尚未校正，数组通配符在原文中不占一层。
+			maskPath(value, path[1:])
+			return
+		}
 		for key, child := range value {
 			if key != path[0] && path[0] != "*" {
 				continue
@@ -112,7 +115,7 @@ func maskSchema(value any, raw []byte) error {
 	return nil
 }
 
-// maskAdapter 先迁移读取副本再遮盖；schema 缺失时保留结构并遮盖全部实例值。
+// maskAdapter 按声明遮盖原文；schema 缺失时保留结构并遮盖全部实例值。
 func maskAdapter(adapter map[string]any, raw []byte) error {
 	if len(raw) == 0 {
 		if instances, found := adapter["instances"]; found {
@@ -124,33 +127,15 @@ func maskAdapter(adapter map[string]any, raw []byte) error {
 	if len(problems) > 0 {
 		return fmt.Errorf("invalid diagnostic adapter schema: %v", problems)
 	}
-	version := 1 // Adapter 配置省略 $version 时按首版读取，与 settings 一致。
-	if value, found := adapter["$version"]; found {
-		number, ok := value.(json.Number)
-		if !ok {
-			return fmt.Errorf("invalid adapter config version: %v", value)
-		}
-		var err error
-		version, err = strconv.Atoi(string(number))
-		if err != nil {
-			return err
-		}
-	}
 	instances, _ := adapter["instances"].(map[string]any)
 	for _, value := range instances {
 		config, ok := value.(map[string]any)
 		if !ok {
 			return fmt.Errorf("invalid adapter instance config: expected object")
 		}
-		if err := schema.Migrate(config, version); err != nil {
-			return err
-		}
 		for _, path := range schema.SecretPaths() {
 			maskPath(config, path)
 		}
-	}
-	if adapter != nil {
-		adapter["$version"] = schema.Version()
 	}
 	return nil
 }

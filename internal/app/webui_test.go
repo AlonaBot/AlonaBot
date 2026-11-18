@@ -254,7 +254,7 @@ func (h *webUIHarness) bundle(id, role, icon string, major uint32) manage.Instal
 		platformOS, arch = "any", "any"
 		m += fmt.Sprintf("assets: public\nadmin_api_min_major: %d\nadmin_api_max_major: %d\n", major, major)
 	} else {
-		m += "protocol_min_major: 1\nprotocol_max_major: 1\nrequired_capabilities: []\nentrypoint: bin/component\nconfig_version: 1\nmigration_mode: none\nprepare_effects: none\n"
+		m += "protocol_min_major: 1\nprotocol_max_major: 1\nrequired_capabilities: []\nentrypoint: bin/component\nmigration_mode: none\nprepare_effects: none\n"
 	}
 	m += fmt.Sprintf("os: %s\narch: %s\n", platformOS, arch)
 	files := map[string]string{"plugin.yaml": m, "private.txt": "private-package-file"}

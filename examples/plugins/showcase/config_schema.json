@@ -1,6 +1,4 @@
 {
-  "$version": 2,
-  "$migrations": [{"to": 2, "rename": {"hello": "greeting"}}],
   "greeting": {
     "type": "string",
     "description": "Greeting",

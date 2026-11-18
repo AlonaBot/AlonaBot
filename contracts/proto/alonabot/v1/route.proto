@@ -19,14 +19,26 @@ message Register {
   bytes config_schema_hash = 2;
   // 规范化后的完整候选 JSON（含已解析 secret，仅经私有 IPC 传输）。
   string candidate_config_json = 3;
-  // 候选配置的版本。
-  uint32 candidate_config_version = 4;
+  reserved 4;
+  reserved "candidate_config_version";
   // 仅在声明 HTTP 路由时设置。
   HttpListener http_listener = 5;
   // 本次准备阶段的迁移结果。
   MigrationState migration = 6;
   // 仅 Adapter 角色设置。
   AdapterDescriptor adapter = 7;
+  // 配置载入时的校正记录；secret 字段省略原值。
+  repeated ConfigCorrection config_corrections = 8;
+}
+
+// ConfigCorrection 描述配置的转换、恢复或模板元素移除。
+message ConfigCorrection {
+  // 配置的 JSON 路径。
+  string path = 1;
+  // converted、reset 或 removed。
+  string reason = 2;
+  // 原值的 JSON；涉及 secret 时为空。
+  string original_json = 3;
 }
 
 // MigrationState 描述本次准备阶段的迁移完成信息。

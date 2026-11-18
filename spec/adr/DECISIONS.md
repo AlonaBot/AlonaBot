@@ -185,6 +185,7 @@ D 表保留历史已确认方向；P/Q 在本文件集中记录议题、处置�
 | D-173 | 路由快照不另存 Service Schema 原文 | **审查者决定（2026-11-17，S-01.2 实施中发现契约缺口）**：安装包只含配置 Schema 与 i18n，Service Schema 原文由 `alonabot build` 编入插件程序，Core 没有离线读取它的资源。快照保存 REGISTER 中完整的路由描述：Service 只有 Schema 标识与版本，工具描述另带输入 Schema 原文（`core.tool.list` 所需），两者都受路由内容摘要与程序包摘要保护；配置 Schema 仍从不可变包资源读取并校验。不为 Service Schema 新增包资源格式，也不改 `pack` 与生成器。 | CONTRACTS §4.4 |
 | D-174 | `pack` 的资产地址前缀与平台参数 | **审查者决定（2026-11-17，T-13.6 起草时发现契约缺口）**：`pack --target` 可重复后，单个完整的 `--asset-url` 无法对应多个归档。改为 `--asset-base`：每个资产地址为该前缀加 `/` 与归档名，缺省由 GitHub 来源推出 `https://github.com/<owner>/<repo>/releases/download/v<version>`，其他来源须显式给出绝对 https 前缀；删除 `--asset-url`，首次发布前不留别名。`pack` 只用 `--target` 选择平台，删除它的 `--goos`、`--goarch`；`build` 与 `check` 仍只产出一个可执行文件，保留这两个参数。`scripts/dist` 改为每个组件调用一次 `pack --target ... --asset-base ...`，由 `pack` 合并清单，签名仍由 `scripts/dist` 执行。 | CONTRACTS §9.3 |
 | D-175 | 首次运行补装的信任与 `admin-token init --if-missing` | **审查者决定（2026-11-17，T-14.4、T-14.7 起草时发现缺口）**：（1）Core 启动时为 `core_config.json` 中写了实例、尚未安装的 Adapter 自动补装，只在 `trust.Official()` 可用（发行构建）时进行；`go install` 等开发构建没有内置官方公钥，不自动下载，记 ERROR 并提示用 `alonabot install` 手动安装，其他组件照常启动。（2）`alonabot admin-token init` 增加 `--if-missing`：已有凭证时成功返回且不输出 token，没有凭证时与原命令相同，`install.sh` 每次都以服务身份调用它，不再自己判断凭证是否存在。（3）TEST-MATRIX V-84 的无终端预期与 §15.6、D-82 对齐：跳过初始化，照常启动服务并输出 `admin-token show` 的读取命令。 | CONTRACTS §7.4、§15.6；TEST-MATRIX V-84 |
+| D-176 | 官方插件源仓库 | **维护者确认（2026-11-17）**：官方插件源是 GitHub 仓库 `AlonaBot/plugin-store` 中的 `index.json`（格式见 D-162），官方 WebUI 的商店把它列为缺省源，用户可另行添加与移除插件源。 | CONTRACTS §9.2；goal-156 |
 
 
 ## P 类历史议题与当前处置
@@ -397,3 +398,4 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-11-17：**D-173**：路由快照只保存 REGISTER 已有的 Service Schema 标识与工具输入 Schema 原文，不为 Service Schema 新增包资源；S-01.2（goal-169）据此完成索引恢复。
 - 2026-11-17：**D-174**：`pack` 以 `--asset-base` 前缀加归档名给出资产地址，只用 `--target` 选择平台；`scripts/dist` 每个组件调用一次 `pack`。由 T-13.6（goal-141）实现。
 - 2026-11-17：**D-175**：首次运行只在发行构建中自动补装官方 Adapter；`admin-token init --if-missing` 供 `install.sh` 升级使用；V-84 无终端预期与 §15.6 对齐。由 T-14.4（goal-74）与 T-14.7（goal-85）实现。
+- 2026-11-17：**D-176**：官方插件源为 `AlonaBot/plugin-store`，官方 WebUI 商店的缺省源。

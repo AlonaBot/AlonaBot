@@ -1,4 +1,4 @@
-// configdb 演示配置迁移、受管 SQLite、KV、数据目录与本地化的笔记命令。
+// configdb 演示配置回调、受管 SQLite、KV、数据目录与本地化的笔记命令。
 //
 // 默认构建只链接 sqlitedb，使用 configdb_gorm 标签可切换到共用连接的 GORM 入口。
 // fail_migration 与 fail_start 供临时 data_dir 中的候选失败验收使用。
@@ -22,7 +22,6 @@ import (
 )
 
 const (
-	legacyConfigVersion  = 1
 	createNotesMigration = 1
 	indexNotesMigration  = 2
 	startupKey           = "startup"
@@ -104,19 +103,16 @@ func New() *sdk.Plugin {
 	return p
 }
 
-// OnConfigLoad 将版本 1 的问候词数组拼接成版本 2 的字符串，保留完整原始对象。
-func (*plugin) OnConfigLoad(ctx context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error) {
+// OnConfigLoad 把旧问候词数组拼接成字符串，保留完整原始对象。
+func (*plugin) OnConfigLoad(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
-	}
-	if fromVersion != legacyConfigVersion {
-		return raw, nil
 	}
 	var object map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &object); err != nil {
 		return nil, fmt.Errorf("decode config object: %w", err)
 	}
-	if greeting, exists := object["greeting"]; exists {
+	if greeting, exists := object["greeting"]; exists && len(greeting) > 0 && greeting[0] == '[' {
 		var words []string
 		if err := json.Unmarshal(greeting, &words); err != nil {
 			return nil, fmt.Errorf("decode legacy greeting array: %w", err)

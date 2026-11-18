@@ -208,15 +208,8 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 	if err != nil {
 		return nil, err
 	}
-	boot := &pb.Bootstrap{GenerationId: "gen-" + rand.Text(), CandidateConfigJson: string(configuration), TargetConfigVersion: *m.ConfigVersion,
+	boot := &pb.Bootstrap{GenerationId: "gen-" + rand.Text(), CandidateConfigJson: string(configuration),
 		DatabaseDescriptor: &pb.DatabaseDescriptor{ActivationReason: activationReason(resourceKind), ManualMigrationApproved: false}}
-	if source != "" {
-		version, err := o.opt.Store.GenerationConfigVersion(ctx, source)
-		if err != nil {
-			return nil, err
-		}
-		boot.PreviousConfigVersion = &version
-	}
 	spec, err := o.opt.Spec(ctx, target, packageDir, boot)
 	if err != nil {
 		return nil, err
@@ -312,7 +305,7 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 			return r, err
 		}
 	}
-	if err := o.opt.Store.AddGeneration(ctx, pluginID, r.Generation, emptyConfig, boot.TargetConfigVersion); err != nil {
+	if err := o.opt.Store.AddGeneration(ctx, pluginID, r.Generation, emptyConfig); err != nil {
 		return r, err
 	}
 	r.generationOwned = true

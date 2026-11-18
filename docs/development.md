@@ -189,6 +189,10 @@ bin/alonabot admin add telegram:123456
 
 help 插件启用后，在聊天中发送 `/whoami`，把回复中的用户字符串作为 `admin add` 的参数；回复中的实例名用于核对来源。
 
+排查 Core 设置时，读取 `GET /api/v1/core/settings/corrections`：`corrections` 列出转换、恢复默认值与移除记录，`unknown` 列出声明之外的键。Core 载入时校正运行副本，原文件中的值与 `${环境变量}` 写法保持；每条校正在日志中只记路径与原因。`admins` 值有误时恢复为空列表，修订后重新读取设置。
+
+Adapter 实例的记录在 `GET /api/v1/adapters/{adapter_id}/instances/{instance_id}` 的 `corrections` 与 `unknown` 中。校正后 required 仍缺失的实例留待修订，其余实例独立准备。清理 Core 的未知键调用 `POST /api/v1/core/settings/prune`，清理某个实例调用 `POST /api/v1/adapters/{adapter_id}/instances/{instance_id}/prune`；这两个入口经原有管理认证和文件写回流程，只删除声明之外的键，保留其他原值。
+
 需要确认的操作不带 `--yes` 时列出受影响的对象后退出。开发中的组件可以按下节以目录运行，也可以用库模式，先 `alonabot build ./examples/devbot`，再运行 `examples/devbot/bin/devbot --data-dir ./data`。
 
 使用同一套管理凭证运行 `bin/alonabot profile list` 查看配置文件 ID 和会话数。`bin/alonabot profile assign <配置文件ID> <实例名>` 设置实例缺省；再给出会话字符串可单独指定会话。`profile set` 与 `profile unset` 编辑 `default` 时写入插件的 Pending，沿用配置重载流程。全部子命令见 [CONTRACTS §5.6](../spec/CONTRACTS-v0.1.md#56-配置文件)，平台设置与工具策略见 [ADMIN-API §23](../spec/ADMIN-API.md#23-配置文件)。
@@ -272,13 +276,19 @@ bin/alonabot run ./examples/plugins/lifecycle --stdio
 
 ## Core 设置与 HTTP 入口
 
-`run` 取得 core.lock 后读取 `<data_dir>/core_config.json`，Core 设置统一从这个 JSON 对象读取；文件不存在时以 0600 权限写入缺省内容。未知键、重复键、类型或取值错误时，以 usage 退出码报告完整键路径与行列号。
+`run` 取得 core.lock 后读取 `<data_dir>/core_config.json`，Core 设置统一从这个 JSON 对象读取；文件不存在时以 0600 权限写入缺省内容。JSON 语法、重复键或根节点错误时，以 usage 退出码报告键路径与行列号。未知键保留并忽略，类型或取值错误在运行副本中校正，记录路径与原因。
 
-键与缺省值见 CONTRACTS §15.1；`base_url` 缺省为 `http://127.0.0.1:7650`，管理入口与插件路由共用这个地址。旧键 `admin_base_url` 与 `plugin_base_url` 按未知键报错；已有配置需改用 `base_url`。`admins`、`command_prefixes`、`reply`、`default_locale`、`log.sources` 与 `adapters` 已支持解析与保存；`command_prefixes_by_instance` 仍由当前运行时读取，配置文件的前缀与回复行为由 T-04.19 接入。本地 `run` 按监听、日志、代理与 Base URL 装配。
+键与缺省值见 CONTRACTS §15.1；`base_url` 缺省为 `http://127.0.0.1:7650`，管理入口与插件路由共用这个地址。旧键 `admin_base_url` 与 `plugin_base_url` 作为无效配置保留，运行时使用 `base_url`。`admins`、`command_prefixes`、`reply`、`default_locale`、`log.sources` 与 `adapters` 已支持解析与保存；`command_prefixes_by_instance` 仍由当前运行时读取，配置文件的前缀与回复行为由 T-04.19 接入。本地 `run` 按监听、日志、代理与 Base URL 装配。
 
 整个字符串值写成 `${NAME}` 时，读取时展开环境变量；NAME 由 `A-Z`、`a-z`、数字与下划线组成，首字符为字母或下划线。变量缺失时该值按不合法处理，恢复为缺省值并记校正记录（D-161）。
 
 `(*settings.File).Update` 在未展开的文档上编辑，校验后以 0600 临时文件替换原文件，保留其他键的顺序与 `${...}` 写法，新键追加到所在对象末尾；写回使用两个空格缩进并以换行结束。文件没有格式版本（D-161）：不是合法 JSON 对象时拒绝启动，其中不合法的值按 CONTRACTS §5.5 校正，不改写文件。
+
+插件由 SDK 先执行 `OnConfigLoad(ctx, raw)`，再补值与校正；`GET /api/v1/plugins/{id}/config` 返回 Active 的 `corrections` 和 `unknown`。`POST /api/v1/plugins/{id}/config/prune` 从 Active 删除无效键并保存为 Pending，随后调用管理 API 的 reload 生效。开发组件也按此顺序清理：reload 时原子更新其编辑文件，成功启动后清除 Pending；之后的 restart 保持清理结果。
+
+Core 设置的记录由 `GET /api/v1/core/settings/corrections` 读取，清理由 `POST /api/v1/core/settings/prune` 写回。Adapter 实例的 GET 响应也带 `corrections` 与 `unknown`，`POST /api/v1/adapters/{adapter_id}/instances/{instance_id}/prune` 只删除该实例的无效键，保留其他值与 `${...}` 原文；实例校正与 required 检查独立进行，失败实例保留可修订的配置，其余实例继续启动。端点与生效方式见 [ADMIN-API §12～§14](../spec/ADMIN-API.md#12-组件配置pending-与秘密查看)。
+
+配置准备沿用 `internal/tune` 的 `PHASE_CONFIG`（缺省 60s），覆盖 OnConfigLoad、补值与校正及 required 校验；`PHASE_MIGRATION`（缺省 15m）用于数据库迁移，参数表见 CONTRACTS §16。
 
 部署运行中，手改设置后重启 Core 生效；带 `--reload` 的运行按上节刷新设置与开发实例，监听地址等启动时装配的设置仍需重启 Core。`--listen`、`--log-level`、`--log-format` 只在命令行显式给出时覆盖设置，只对本次运行有效，文件内容保持不变：
 

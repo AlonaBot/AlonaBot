@@ -334,6 +334,78 @@ func TestManagementLifecycle(t *testing.T) {
 		}
 		stopTestCore(t, c)
 	})
+	t.Run("configuration-corrections-and-prune", func(t *testing.T) {
+		archive := weatherProfilePackage(t, `{"count":{"type":"int","default":7}}`, "1.0.0")
+		dir := t.TempDir()
+		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
+		c.management(t, dir, "", "install", archive, "--yes")
+		name := filepath.Join(dir, "plugins", "weather", "config.json")
+		if err := os.MkdirAll(filepath.Dir(name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(name, []byte(`{"count":{},"obsolete":"kept"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		c.management(t, dir, "", "enable", "weather")
+		initial := findPackage(t, c, dir, "weather")
+		if initial.State != "Activated" {
+			t.Fatalf("corrected plugin did not start: %+v", initial)
+		}
+		token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		call := func(method, path string) []byte {
+			t.Helper()
+			request, err := http.NewRequestWithContext(t.Context(), method, "http://"+c.address()+path, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, readErr := io.ReadAll(response.Body)
+			if err := errors.Join(readErr, response.Body.Close()); err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("%s %s: %d %s", method, path, response.StatusCode, raw)
+			}
+			return raw
+		}
+		var snapshot struct {
+			Active      map[string]json.RawMessage `json:"active"`
+			Corrections []struct {
+				Path, Reason string
+				Original     json.RawMessage
+			} `json:"corrections"`
+			Unknown []string `json:"unknown"`
+		}
+		raw := call(http.MethodGet, "/api/v1/plugins/weather/config")
+		if err := json.Unmarshal(raw, &snapshot); err != nil || string(snapshot.Active["count"]) != "7" ||
+			len(snapshot.Corrections) != 1 || snapshot.Corrections[0].Path != "$.count" || snapshot.Corrections[0].Reason != "reset" ||
+			string(snapshot.Corrections[0].Original) != "{}" || !slices.Equal(snapshot.Unknown, []string{`$["obsolete"]`}) {
+			t.Fatalf("configuration records = %s, error = %v", raw, err)
+		}
+		var pending struct {
+			BaseGeneration string                     `json:"base_generation"`
+			Config         map[string]json.RawMessage `json:"config"`
+		}
+		raw = call(http.MethodPost, "/api/v1/plugins/weather/config/prune")
+		if err := json.Unmarshal(raw, &pending); err != nil || pending.BaseGeneration != initial.Active ||
+			string(pending.Config["count"]) != "7" || pending.Config["obsolete"] != nil {
+			t.Fatalf("pruned pending = %s, error = %v", raw, err)
+		}
+		call(http.MethodPost, "/api/v1/plugins/weather/reload")
+		raw = call(http.MethodGet, "/api/v1/plugins/weather/config")
+		snapshot.Active = nil
+		if err := json.Unmarshal(raw, &snapshot); err != nil || snapshot.Active["obsolete"] != nil || len(snapshot.Unknown) != 0 || len(snapshot.Corrections) != 0 {
+			t.Fatalf("reloaded pruned configuration = %s, error = %v", raw, err)
+		}
+		stopTestCore(t, c)
+	})
 	t.Run("configuration-examples", func(t *testing.T) {
 		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/showcase"}, "https://example.invalid/showcase.tar.gz", "", t.TempDir())
 		if err != nil {
@@ -403,7 +475,7 @@ func TestManagementLifecycle(t *testing.T) {
 			t.Fatalf("install: %s", output)
 		}
 		c.management(t, dir, "", "enable", "demo")
-		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
 		c.management(t, dir, "", "install", adapter, "--yes")
 		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", "one")
 		c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
@@ -488,7 +560,7 @@ func TestManagementLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		c := startEmptyCore(t, dir)
-		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
 		commands, err := writeTestPackage(t.TempDir(), "commands", "plugin", "", "github.com/example/commands", "1.0.0", filepath.Join(binDir, "command-fixture"), "", nil)
 		if err != nil {
 			t.Fatal(err)
@@ -585,7 +657,7 @@ func TestManagementLifecycle(t *testing.T) {
 		archive := weatherProfilePackage(t, `{"city":{"type":"string","profile":true},"plain":{"type":"string"}}`, "1.0.0")
 		c.management(t, dir, "", "install", archive, "--yes")
 		c.management(t, dir, "", "enable", "weather")
-		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
 		c.management(t, dir, "", "install", adapter, "--yes")
 		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", "one")
 		var created struct {
@@ -820,7 +892,7 @@ func TestManagementDependencies(t *testing.T) {
 	if output := managementFailure(t, c, dir, "enable", "dependent"); !strings.Contains(output, "FAILED_PRECONDITION") || !strings.Contains(output, "devloop") {
 		t.Fatal(output)
 	}
-	adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1,"token":{"type":"string","required":true}}`)})
+	adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"token":{"type":"string","required":true}}`)})
 	c.management(t, dir, "", "install", adapter, "--yes")
 	c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
 	c.management(t, dir, "", "enable", "dependent")
@@ -944,7 +1016,7 @@ func TestManagementReplacement(t *testing.T) {
 		t.Fatal("replacement lost enabled state")
 	}
 	for _, id := range []string{"devloop", "another"} {
-		archive := testPackage(t, "alonabot-adapter-"+id, "adapter", id, "github.com/example/"+id, "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+		archive := testPackage(t, "alonabot-adapter-"+id, "adapter", id, "github.com/example/"+id, "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
 		c.management(t, dir, "", "install", archive, "--yes")
 		if findPackage(t, c, dir, "alonabot-adapter-"+id).Uninstalled {
 			t.Fatal("different adapter IDs conflict")
@@ -961,7 +1033,7 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := startEmptyCore(t, dir)
-	adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1,"token":{"type":"string","required":true,"secret":true}}`)})
+	adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"token":{"type":"string","required":true,"secret":true}}`)})
 	commands, err := writeTestPackage(t.TempDir(), "commands", "plugin", "", "github.com/example/commands", "1.0.0", filepath.Join(binDir, "command-fixture"), "", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1266,7 +1338,7 @@ func writeTestPackage(dir, id, role, adapterID, source, version, executable, ext
 		platformOS, arch = "any", "any"
 		manifest += "assets: public\nadmin_api_min_major: 1\nadmin_api_max_major: 1\n"
 	} else {
-		manifest += "protocol_min_major: 1\nprotocol_max_major: 1\nrequired_capabilities: []\nentrypoint: bin/component\nconfig_version: 1\n"
+		manifest += "protocol_min_major: 1\nprotocol_max_major: 1\nrequired_capabilities: []\nentrypoint: bin/component\n"
 		if role != "adapter" {
 			manifest += "migration_mode: none\nprepare_effects: none\n"
 		}
@@ -1367,7 +1439,7 @@ func testManagementPluginData(t *testing.T) {
 	}
 	dir := t.TempDir()
 	c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
-	adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+	adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
 	c.management(t, dir, "", "install", adapter, "--yes")
 	c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", "one")
 	c.management(t, dir, "", "enable", "alonabot-adapter-fixture")

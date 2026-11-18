@@ -26,9 +26,9 @@ WebUI 已定稿（D-169）。各 goal 按 Figma 文件 `hV9ILivl2VGGKwtbEEh3mC` 
 | goal-166 | T-09.26 | 品牌、视觉令牌与外壳 | T-08.7 | 已完成（PR #217） |
 | goal-43 | T-09.8 | 登录、总览、插件、账号与版本 | T-08.7、T-09.6、T-09.12、T-09.13、T-09.26 | 已完成（PR #238） |
 | goal-44 | T-09.9 | 插件详情、权限、会话与系统设置 | T-09.8、T-09.14、T-11.5、T-04.17、T-08.15、T-08.16 | 等待前置 |
-| goal-94 | T-09.15 | 日志页 | T-09.8、T-09.10、T-09.19、T-02.5 | 等待前置 |
-| goal-156 | T-09.23 | 官方 WebUI 的后台进程、统计、商店、用户与数据页 | T-09.8、T-09.20、T-09.21、T-09.22、T-09.24 | 等待前置 |
-| goal-146 | T-09.18 | 模型页 | T-09.8、T-09.14、T-12.16 | 等待前置 |
+| goal-94 | T-09.15 | 日志页 | T-09.8、T-09.10、T-09.19、T-02.5 | 待派发 |
+| goal-156 | T-09.23 | 官方 WebUI 的后台进程、统计、商店、用户与数据页 | T-09.8、T-09.20、T-09.21、T-09.22、T-09.24 | 待派发 |
+| goal-146 | T-09.18 | 模型页 | T-09.8、T-09.14、T-12.16 | 待派发 |
 | goal-165 | T-09.25 | 配置文件页 | T-04.19、T-11.6、T-12.19、T-09.18 | 等待前置 |
 | goal-175 | S-06.3 | 休眠策略与运行状态的页面 | T-09.8、T-09.9、S-06.1 | 等待前置 |
 
@@ -325,66 +325,206 @@ main 上 T-09.7（PR #187）已接通回退执行，ADMIN-API §3.2 的 501 说�
 
 ### goal-94 · T-09.15 日志页
 
-状态：等待语句定稿（前置均已合并）。T-09.8（PR #238，`9123839`）、T-09.10已合并。T-09.19（PR #213，`6f6856c`）、T-02.5（PR #209，`d75e43d`）已合并。2026-11-17 按 D-169 以 Figma v4 改写，纳入 D-156（诊断包）与 D-158（CRITICAL）；日志页不再设置级别（级别在系统设置与插件「高级」中，见 goal-44 与 goal-43）。目标、依据与要点由 PLAN T-09 步骤 7 与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：待派发。前置 T-09.8（PR #238，合并提交 `9123839`）、T-09.10（PR #177，`99efcd1`）、T-09.19（PR #213，`6f6856c`）、T-02.5（PR #209，`d75e43d`）均已合并。按 main `50244fe` 核对：`web/admin/src/api/admin.ts` 已有 `AdminAPIError`、`onSessionExpired(handler: () => void): () => void`、`listPackages(): Promise<Package[]>`、`listInstances(): Promise<AdapterInstance[]>` 与含 `critical` 的 `SourceLogLevel`，`request<T>` 与 CSRF 状态仍为模块私有；日志读取与二进制下载尚无前端导出。`internal/core/manage/log_api.go` 已注册 recent、stream、history，`diagnostics_api.go` 已注册诊断包端点；`src/routes.tsx` 的 `RouteEntry` 与 `src/main.tsx` 的精确路径分派可直接挂载 `/logs`，总览已有按 `id: logs` 显示「查看日志」的入口。`src/i18n/UI.tsx` 导出 `useUI(): typeof english.messages`；`src/components/ConfigForm.tsx` 的 `ConfigForm({schema, value, messages, onSubmit})` 保持原用途，本页的筛选与诊断包选项使用普通控件。沿用 D-169 的 v4 画板、D-156 与 D-158；级别设置继续由 goal-44、goal-43 负责。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-94（切片 T-09.15：日志页）。goal 目录 goal-94，分支 goal-94，worktree .worktrees/goal-94，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
 
 目标：实现日志页：终端视图实时显示日志，按级别、来源与日期筛选，搜索，清空已载入的记录，导出诊断包。本切片不改 Go 代码。
 
-依据：PLAN T-09 步骤 7（日志、诊断包）；CONTRACTS §14.1、§14.3、§14.4、§14.7；ADMIN-API §8、§19；DECISIONS D-156、D-158、D-169；TEST-MATRIX V-62、V-63、V-127、V-129 的页面分项。画板：「v4 · 日志」「v4 · 日志（筛选）」「v4 · 日志（导出诊断包）」「v4 · 日志（深色）」「v4 · 手机 · 日志」。
+依据：PLAN T-09 步骤 7（日志、诊断包）及其停止和失败条件；spec/plan/webui.md §3；CONTRACTS §14.1、§14.3、§14.4、§14.7；ADMIN-API §8、§19；DECISIONS D-156、D-158、D-169；TEST-MATRIX V-62、V-63、V-127、V-129 的页面分项。画板：「v4 · 日志」「v4 · 日志（筛选）」「v4 · 日志（导出诊断包）」「v4 · 日志（深色）」「v4 · 手机 · 日志」。审查者将截图放在 goal-94/figma/；首轮由前端执行者实现，审查与修复交 GPT。
 
-要点：
-- 只有终端视图：终端区域用 --color-console-* 与 --font-mono，每条记录一行，列定宽对齐：时间、来源、级别、源码位置（取 Record 的 source 中 file 的最后两段与 line，悬停显示 function 与完整路径，点击复制）、消息；消息过长时换行并对齐到消息列；方括号内不补空格。ERROR 整行红色，WARNING 整行黄色（--color-yellow，不用棕色或琥珀色），CRITICAL 整行紫色，DEBUG 用暗色；不用整行色块，不加柱状分布图、字号按钮或列表与终端切换。
+范围（只新增或修改这些；路径相对 web/admin/）：
+- src/pages/LogsPage.tsx 及 src/pages/ 下日志页专用的筛选、记录格式化与诊断包对话框模块，src/api/admin.ts。
+- src/routes.tsx、src/style.css、i18n/en-US.json、i18n/zh-CN.json；对应的 *.local.test.ts。
+- package.json、package-lock.json 仅用于首次实际引入已批准的 @radix-ui/react-popover。
+
+允许的依赖：现有 React、Radix、lucide-react、TypeScript、Vite、vitest；筛选弹层可首次引入 docs/development.md 已批准的 @radix-ui/react-popover 并锁版本。
+
+接口（新增导出写在指定模块；HTTP 格式按 ADMIN-API）：
+- src/pages/LogsPage.tsx：export function LogsPage(): JSX.Element。src/routes.tsx 的 routes 增加 {id: 'logs', path: '/logs', label: 'logs', icon, group: 'main', render: () => <LogsPage />}，icon 取 lucide-react。main.tsx 已在认证后执行 matchedRoute.render()，沿用 AppShell、手机底栏与全局搜索；无需再建页面分派。label 与新增文案放在双语 JSON 的 messages 下，经 useUI() 读取；日志级别保留英文显示。
+- src/api/admin.ts 复用私有 request 的同源 Cookie、内存 CSRF、错误解析与 401 通知，补齐 SSE 和 Blob 响应的处理，保持现有导出及行为：
+  export type LogRecord = { time: string; level: string; source: string; message: string; attrs: Record<string, unknown>; trace_id: string }
+  export type DiagnosticsOptions = { since: string; logs: boolean; settings: boolean; components: boolean; redact: boolean }
+  export function getRecentLogs(): Promise<LogRecord[]>
+  export function getLogHistory(date: string): Promise<LogRecord[]>
+  export function subscribeLogs(handlers: { onLog: (record: LogRecord) => void; onOverflow: (lastTime: string) => void; onError: (error: Error) => void }): () => void
+  export function downloadDiagnostics(input: DiagnosticsOptions): Promise<{ blob: Blob; filename: string }>
+- getRecentLogs → GET /api/v1/logs/recent；getLogHistory → GET /api/v1/logs/history?date=YYYY-MM-DD；subscribeLogs → GET /api/v1/logs/stream。三者均不传 source、level、trace，取得未筛选数据后在页面多选和搜索；服务端 level 是最低级别，source 是单值，无法表达页面的多选。recent 返回时间升序的 Record[]，history 保留文件续写顺序。SSE 监听 event: log（JSON Record）和 event: overflow（JSON 字符串，最后交付时间），返回函数取消请求并释放流；页面退出、登出、关闭实时或选择过去日期时调用。
+- LogRecord.time 保留 RFC3339Nano 原串；实时级别来自 slog（警告为 WARN，界面显示 WARNING；CRITICAL 为独立级别）。源码位置取 attrs.source 的 {file,line,function}，顶层 source 是来源身份。历史时间仅毫秒精度、trace_id 最多为 8 位前缀，source 是显示标签，message 含原控制台正文，按 §8.2 原样保留。
+- downloadDiagnostics → POST /api/v1/diagnostics，JSON 为 DiagnosticsOptions；对话框缺省 {since: '24h', logs: true, settings: true, components: true, redact: true}。成功读取 application/zip 与 Content-Disposition 附件名，生成下载后释放对象 URL；失败保留 JSON/纯文本错误。400 包括非法正时长、三组全关、非法或未知 JSON 字段；失败响应按状态解析，保持失败对话框和选择。
+- 来源选择复用 listPackages、listInstances，按 Core、组件、账号分组；实时组件 source 按包 ID，账号按 attrs 的实例字段区分，历史按 §8.2 的标签筛选，保留无法还原身份的原标签。页面操作经 SearchContext.register(items: SearchItem[]): () => void 注册，卸载时注销。与 goal-156、goal-146 共用 admin.ts、routes、样式和双语文案，后合并者复用已合入的请求处理与导出，保留其他页面。
+
+行为：
+- 只有终端视图：终端区域用 --color-console-* 与 --font-mono，每条记录一行，列定宽对齐：时间、来源、级别、源码位置（取 Record.attrs.source 中 file 的最后两段与 line，悬停显示 function 与完整路径，点击复制）、消息；消息过长时换行并对齐到消息列；方括号内不补空格。ERROR 整行红色，WARNING 整行黄色（--color-yellow，不用棕色或琥珀色），CRITICAL 整行紫色，DEBUG 用暗色；不用整行色块，不加柱状分布图、字号按钮或列表与终端切换。
 - 工具栏：「筛选」按钮打开弹层（级别多选含 DEBUG 与 CRITICAL；来源分 Core、插件与账号多选，可搜索；日期），筛选生效时按钮带圆点；CRITICAL、ERROR 与 WARNING 计数，点击只看该级别；搜索内容或 trace；实时开关；「清空」只丢弃页面已载入的记录，不删除日志文件；「导出诊断包」打开对话框，选择时间范围与三组内容，缺省脱敏（ADMIN-API §19）。
-- 今天的记录先读 recent，再订阅 SSE（会先重发缓冲中的记录），按时间与内容去重；过去日期查询 history。筛选与搜索只在浏览器中进行，条件保存在 localStorage。
+- 今天的记录先读 recent，再订阅 SSE（会先重发缓冲中的记录），只对 recent 与初始快照的重叠部分按完整时间与记录内容去重，后续实时记录保留重复出现的次数。过去日期查询 history，日期按 Core 本地时区语义查询；历史的精度与字段保留按 §8.2 展示。筛选与搜索只在浏览器中进行，条件保存在 localStorage；日志正文与诊断包留在当前页面内存。
+- overflow 或异常断流显示实际状态与最后交付时间，提供重新读取 recent 并订阅的操作；重新连接的快照按同一重叠规则合并，缓冲之外的缺口保持可见。「清空」保持订阅并丢弃当前显示记录，后续新记录继续追加；计数对应当前已载入的记录，点击级别计数应用该级别筛选。
 - 手机上每条记录两行：第一行时间、级别、来源与源码位置（截断），第二行消息；实时、清空与导出收进 ⋯。
 
-不做：日志 API、诊断包与 CLI（T-09.10、T-09.19）；级别设置（goal-44、goal-43）。
+测试（按编码规范「测试提交规则」）：
+- 提交：无。
+- 本地自测：*.local.test.ts 覆盖初始快照重叠去重与后续同文记录、WARN/WARNING 显示、CRITICAL、源码位置与缺字段、历史原文与 trace 前缀、筛选/搜索/计数、清空后接收新记录、SSE 分块与 overflow、诊断包错误解析与下载文件名。
+- 浏览器手动验证：真实 Core 上走 recent → SSE、过去日期与无文件、级别/来源/账号/日期筛选、搜索、关闭实时、清空、断流后重连、未认证与会话过期、导出缺省脱敏包与取消；核对深浅色、390px 手机两行布局、源码复制与长消息换行。PR 写明浏览器与版本、命令结果及未运行项，诊断包核对三组选项与真实脱敏内容。
+
+完成条件：npm --prefix web/admin ci、npm --prefix web/admin run typecheck、npm --prefix web/admin run test、npm --prefix web/admin run build 全部成功；go build ./... 不受影响，PR 写明实际验证结果。审查者按 TEST-MATRIX §3 记录页面证据。
+
+不做：日志 API、诊断包与 CLI（T-09.10、T-09.19）；级别设置（goal-44、goal-43）；Go 代码、spec 修改、CI 前端任务与提交前端测试。
 ```
 
 ### goal-156 · T-09.23 官方 WebUI 的后台进程、统计、商店、用户与数据页
 
-状态：等待语句定稿（前置均已合并）。T-09.8（PR #238，`9123839`）已合并。T-09.21（PR #234，`3b3ca6f`）已合并。T-09.20（PR #221，`bd386df`）已合并。T-09.22（PR #220，`b5e572e`）、T-09.24（PR #215，`b911f27`）已合并。2026-11-17 按 D-162～D-166 与 D-169 新增。目标、依据与要点由 PLAN T-09 步骤 7（WebUI 后台）与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：待派发。前置 T-09.8（PR #238，合并提交 `9123839`）、T-09.20（PR #221，`bd386df`）、T-09.21（PR #234，`3b3ca6f`）、T-09.22（PR #220，`b5e572e`）、T-09.24（PR #215，`b911f27`）均已合并。按 main `50244fe` 核对：`web/admin/plugin.yaml` 的实际 ID 为 `alonabot-webui-admin`，assets 为 dist，尚无 Go 源码；`github.com/AlonaBot/AlonaBot/sdk` 提供 `NewPlugin() *Plugin`、`(*Plugin).On(routeID string, eventType EventType) *EventBuilder`、`(*Plugin).AfterSend(routeID string) *AfterSendBuilder`、`(*Plugin).Route(method, path string) *RouteBuilder`，可用 `sdk.MessageCreated` 与 `sdk.CommandInvoked`。`sdk/sqlitedb.Open(ctx context.Context) (*sql.DB, error)` 与 `Migrations(p *sdk.Plugin, list []Migration)` 可保存受管数据；`contracts/pluginindex.Parse(raw []byte) (*Index, error)` 已解析源索引。`src/api/admin.ts` 已有 `listPackages`、`installPackage`、`updatePackage`、`listGenerations(id: string): Promise<Generation[]>`、`listInstances`；`OverviewPage({core})` 的四组图表仍为空态，`PluginsPage()` 已有商店标签入口，`PluginDetailPage({id, generations?})` 已有版本记录与高级标签，`AppShell` 已接收可选 `coreUpdate: {version, releaseURL}`。`scripts/dist/main.go` 已逐组件调用多平台 pack，但 WebUI 在脱离根 Go module 的临时副本构建，带 Go 入口后须同步暂存方式。下文保留 D-162～D-166、D-169 的目标；日志级别统计来源、会话正文读取与官方源地址的缺口在行为段列明，交审查者裁定。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-156（切片 T-09.23：官方 WebUI 的后台进程、统计、商店、用户与数据页）。goal 目录 goal-156，分支 goal-156，worktree .worktrees/goal-156，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
 
-目标：为官方 WebUI 组件加上 Go 入口（D-162）：订阅 `command.invoked` 与消息事件，按小时分桶统计收发量、命令触发与错误，提供统计路由；读取插件源 `index.json` 提供商店数据。前端接入总览的图表、插件商店与发布插件、插件详情的「存储」视图与 changelog 显示。
+目标：为官方 WebUI 组件加上 Go 入口（D-162）：订阅 `command.invoked` 与消息事件，按小时分桶统计收发量、命令触发与错误，提供统计路由；记录见过的用户，读取插件源 `index.json` 并缓存，检查 Core 与已安装组件的更新。前端接入总览图表、插件商店与发布插件、权限「用户」页、插件详情的「存储」与会话记录视图、版本记录与 changelog 显示。
 
-依据：PLAN T-09 步骤 7（WebUI 后台）；CONTRACTS §7.5、§9.1（WebUI 的 Go 入口）、§9.2（插件源）、§8（标准事件 command.invoked）；ADMIN-API §20～§22；DECISIONS D-162～D-166、D-169；TEST-MATRIX V-136，V-134、V-135、V-138 的页面分项。画板：「v4 · 总览」「v4 · 插件 · 商店」「v4 · 插件 · 商店（发布插件）」「v4 · 插件 · 天气 · 数据（存储）」「v4 · 插件 · Agent · 数据（会话记录）」及其深色与手机画板。
+依据：PLAN T-09 步骤 7（WebUI 后台）及其停止和失败条件；spec/plan/webui.md §2、§3；CONTRACTS §6、§7.5、§9.1（WebUI 的 Go 入口）、§9.2（插件源）、§8（标准事件 command.invoked）；ADMIN-API §4、§13、§15、§20～§22；DECISIONS D-162～D-166、D-169；TEST-MATRIX V-136，V-134、V-135、V-138 的页面分项。画板：「v4 · 总览」「v4 · 插件 · 商店」「v4 · 插件 · 商店（发布插件）」「v4 · 权限 · 用户」「v4 · 权限 · 用户（添加用户）」「v4 · 插件 · 天气 · 数据（存储）」「v4 · 插件 · Agent · 数据（会话记录）」及其深色与手机画板。审查者将截图放在 goal-156/figma/；首轮仍由前端执行者负责整个切片，含 Go 后台和打包接入，审查与修复交 GPT。Go 部分按下文单独验证。
 
-要点：
+范围（只新增或修改这些）：
+- Go 后台：web/admin/ 下的可导入入口包（package admin），含 New、事件/Hook、受管 SQLite 的 *.sql 与迁移登记、统计/用户/商店/更新/已读版本 HTTP 处理；web/admin/plugin.yaml 保留现有 ID、role、assets 与 Admin API 主版本范围。沿用仓库根 go.mod，不新建嵌套 module。
+- 前端：web/admin/src/api/admin.ts、src/api/webui.ts；src/pages/OverviewPage.tsx、PluginsPage.tsx、PluginDetailPage.tsx、UsersPage.tsx，及 src/pages/、src/components/ 下由这些页面使用的图表、商店、存储、用户与 changelog 模块；src/main.tsx、src/routes.tsx、src/shell/AppShell.tsx、Sidebar.tsx、AboutDialog.tsx；src/style.css、i18n/en-US.json、i18n/zh-CN.json。页面路径均相对 web/admin/。
+- 打包：scripts/dist/main.go 中 WebUI 的暂存、前端构建与 pack 调用；保留同一根 module 的 Go 入口、SDK 和依赖可解析性，产物包括各平台进程与同一份 dist。沿用现有签名与发行目录，T-14.3 的文档同步写入 PR「文档同步」。
+- web/admin/package.json、package-lock.json 仅用于首次实际引入已批准的 recharts 或 @radix-ui/react-popover；以上模块对应的 *.local.test.ts、*_local_test.go 仅作本地自测。
+
+允许的依赖：
+- Go：标准库、sdk、sdk/message、sdk/sqlitedb、contracts/pluginindex、contracts/release、contracts/manifest；本地集成自测可复用 plugintest 与现有测试 Adapter。SQLite 使用现有已批准依赖，经 SDK 连接。后台只使用自己的受管库和 SDK，Core 管理数据由前端调用 Admin API。
+- 前端：现有 React、Radix、lucide-react、TypeScript、Vite、vitest，以及 docs/development.md 已批准的 recharts、@radix-ui/react-popover（首次使用时锁版本）。Markdown 解析依赖尚无批准项，需要引入时按共同约束向维护者申请。
+- 打包：复用现有 internal/pluginkit、生成器与 scripts/dist 的依赖；Core、SDK、协议与安装器保持现有实现。
+
+接口（复用 main 的真实导出；以下 WebUI 私有路由由本切片新增）：
+- web/admin 的 Go 入口导出 func New() *sdk.Plugin，使用 sdk.NewPlugin；通过 sqlitedb.Migrations(p, []sqlitedb.Migration{...}) 登记数据库表，回调与 HTTP 使用 sqlitedb.Open(ctx)，连接由 SDK 管理。New 内登记 p.PreEvent(..., sdk.MessageCreated).Handle(func(c *sdk.Context, payload *message.CreatedPayload) (*message.CreatedPayload, error))、p.On(..., sdk.CommandInvoked).Handle(func(c *sdk.Context, payload *message.CommandInvokedPayload) error) 与 p.AfterSend(...).Handle(func(c *sdk.Context, to string, result *message.SendResult, sendErr error) error)。PreEvent 返回原载荷，只观察；普通事件路由位于多轮等待与命令 STOP 之后，入站采集复用已有 PreEvent 观察点。读取 c.Event() *message.Event、c.Context() context.Context、c.User() string；入站账号取 Event.AdapterInstanceID，发送账号取 result.AdapterInstanceID，c.Instance() 只表示继承的默认目标，跨账号发送按实际回执归属。
+- HTTP 用 p.Route(method, path).HandleFunc(func(http.ResponseWriter, *http.Request))，保持默认管理会话认证。SDK 登记的路径相对组件；公开 URL 为 /plugins/alonabot-webui-admin 加下列路径，GET 返回 JSON，变更请求由 Core 校验 Cookie、Origin、CSRF。它们属于 D-162 的官方 WebUI 接口；本章「只调用 ADMIN-API」对 Core 管理接口的约束继续适用。
+- src/api/webui.ts 的新增导出与后台 JSON 使用下列同形类型：
+  export type StatisticsRange = '24h' | '7d' | '30d'
+  export type HourBucket = { hour: string; incoming: number; outgoing: number; send_errors: number; accounts: { instance_id: string; incoming: number; outgoing: number }[]; commands: { plugin_id: string; route_id: string; command_name: string; result: 'ok' | 'error' | 'denied'; count: number; duration_ms: number }[] }
+  export type Statistics = { timezone: string; observed_since: string; buckets: HourBucket[] }
+  export type SeenUser = { user: string; display_name: string; first_seen_at: string; last_seen_at: string }
+  export type StoreEntry = { repo: string; role: string; tags: string[]; id: string; name: string; description?: string; version: string; author?: string; stars?: number; icon_url?: string }
+  export type StorePage = { source: string; fetched_at: string; stale: boolean; error?: string; items: StoreEntry[]; total: number }
+  export type LatestRelease = { repo: string; version: string; release_url: string; markdown: string; fetched_at: string; stale: boolean; error?: string }
+  export function getStatistics(range: StatisticsRange): Promise<Statistics>
+  export function listSeenUsers(): Promise<SeenUser[]>
+  export function getStore(input: { source: string; role: string; q: string; offset: number; limit: number }): Promise<StorePage>
+  export function getLatestRelease(repo: string): Promise<LatestRelease>
+  export function getSeenVersion(component: string): Promise<{ version: string | null }>
+  export function setSeenVersion(component: string, version: string): Promise<void>
+- 对应 HTTP：GET /stats?range=24h|7d|30d；GET /users（完整见过用户数组，由前端合并身份后筛选和数字分页）；GET /store?source=&role=&q=&offset=&limit=；GET /updates?repo=owner/repo；GET /changelog/seen?component=core或组件ID；PUT /changelog/seen 发 {component,version}，成功 {}。商店查询返回精确 total，分页值由请求显式提供，source 为源仓库 owner/repo，读取其默认分支根目录的 index.json；无已读版本返回 null。hour 为带时区偏移的 RFC3339 小时起点，timezone 为后台本地时区，observed_since 为开始采集的实际时间；统计时窗按后台当前时间选取最近 24 小时、7 天、30 天。后台错误返回非 2xx 与 {code,safe_message}；外部抓取失败但有缓存时返回 stale: true 及 error，保留缓存原时间，无缓存时返回实际失败。
+- admin.ts 复用私有 request 的 Cookie、CSRF、AdminAPIError、401 通知并补齐 Blob 下载处理；给 webui.ts 增加导出 adminRequest<T>(path: string, options?: { method?: string; headers?: Record<string, string>; body?: string | FormData | Blob }): Promise<T>，只将现有请求能力提供给同源 WebUI 客户端，CSRF 状态继续私有。若先合并切片已有同等请求导出，直接复用其名字和签名。
+- Core 管理继续使用已有 listPackages(): Promise<Package[]>、listInstances(): Promise<AdapterInstance[]>、listGenerations(id: string): Promise<Generation[]>、installPackage(input: {Source: string; Replace?: boolean; Confirm?: boolean} | FormData): Promise<Package>、updatePackage(id: string, input: {confirm?: boolean} | FormData): Promise<{warnings?: string[]}> 与 isConfirmationError。版本记录复用现有详情组件及 rollbackPackage，不新建回退流程；按 ADMIN-API §20 读取任务与 pages 的工作沿用 goal-44，后合并者保留其标签与导航入口。
+- admin.ts 补齐存储导出（响应字段原样采用 ADMIN-API §21）：
+  export function listPluginKV(id: string, input: { prefix: string; offset: number; limit: number }): Promise<{ items: { key: string; size: number; updated_at: string }[]; total: number }>
+  export function getPluginKV(id: string, key: string): Promise<{ value_base64: string; text?: string }>
+  export function setPluginKV(id: string, key: string, value: { text: string } | { value_base64: string }): Promise<void>
+  export function deletePluginKV(id: string, key: string): Promise<void>
+  export function listPluginFiles(id: string, path: string): Promise<{ entries: { name: string; dir: boolean; size: number; modified_at: string }[] }>
+  export function downloadPluginFile(id: string, path: string): Promise<Blob>
+  export function uploadPluginFile(id: string, path: string, file: File, overwrite: boolean): Promise<void>
+  export function makePluginDirectory(id: string, path: string): Promise<void>
+  export function renamePluginFile(id: string, from: string, to: string): Promise<void>
+  export function deletePluginFile(id: string, path: string, recursive: boolean): Promise<void>
+  export function exportPluginData(id: string): Promise<Blob>
+  export function clearPluginData(id: string, confirm: true): Promise<void>
+  // 依次调用 §21 的 data/kv、data/kv/{key} GET/PUT/DELETE、data/files、data/files/content GET/PUT（原始文件体，overwrite=1）、data/files/mkdir、rename、delete、data/export、data/clear；文件路径放在 query/JSON，KV 的整个 key 编码为一个不透明路径段。私有请求处理增加 File/Blob 正文支持，不设置 JSON Content-Type。
+- admin.ts 补齐用户、会话摘要与 changelog 导出：
+  export function getCoreAdmins(): Promise<string[]>
+  export function changeCoreAdmin(action: 'add' | 'remove', user: string): Promise<void>
+  export function getCoreDenies(): Promise<{ users: string[]; chats: string[] }>
+  export function setCoreDenies(value: { users: string[]; chats: string[] }): Promise<void>
+  export function listPluginConversations(id: string): Promise<{ key: string; entries: number; updated_at: string }[]>
+  export function clearPluginConversation(id: string, key: string): Promise<void>
+  export type Changelog = { locale: string; entries: { version: string; date?: string; markdown: string }[] }
+  export function getPackageChangelog(id: string, locale: string): Promise<Changelog>
+  export function getCoreChangelog(locale: string): Promise<Changelog>
+  // 分别为 GET /api/v1/admins、POST /api/v1/admins/{action} 发 {user}、GET/PUT /api/v1/core/denies（两个数组均必填）、§15 conversations GET/DELETE（key 整段转义）、§22 两个 changelog GET（Accept-Language）。
+- UsersPage(): JSX.Element 在 src/pages/UsersPage.tsx 导出，作为权限「用户」入口接入 routes（id: 'users', path: '/permissions/users', label: 'users', group: 'main'）；若 goal-44 已有权限页入口，则作为其用户标签挂载，复用同一列表与动作。商店放进 PluginsPage 已有 store 标签，存储与会话记录放进 PluginDetailPage 的数据标签；保持 /components/{id} 由 main.tsx 分派，避开 /plugins/ 保留路径。已有页面导出与 AppShell({version,onLogout?,coreUpdate?,children}) 保持，main.tsx 取得真实新版信息后传 coreUpdate；Sidebar 和 AboutDialog 使用同一 Core 版本与 changelog。
+- 界面复用 UIContext、useUI()，routes.label 与文案写入 en-US/zh-CN 的 messages，键集合一致；导航用 shell/router 的 navigate、Link，搜索用 SearchContext.register 并在卸载时注销，深浅色用 theme/theme 的 useTheme。ConfigForm({schema,value,messages,onSubmit}) 仍服务于插件配置；存储的 KV、文件与用户操作使用专用控件。goal-44、goal-94、goal-146 与本切片共享 routes、main、admin.ts、详情、外壳和文案，按执行顺序串行合并，后合并者按 main 的实际导出复用。
+
+行为：
 - 后台进程放在 web/admin 的 Go 入口包中，按插件的方式使用受管 SQLite 保存小时桶；路由要求管理会话，前端同源调用。统计只依赖 Core 的基础设施（事件与 command.invoked），Core 不提供图表 API。
 - 总览：消息量（收到与发出）、各账号、热门插件（只算常规插件的命令触发次数）、错误与警告图表，时间范围 24 小时、7 天、30 天；故障标在曲线上。
+- 收到消息在 message.created 的 PreEvent 按可信 Event.ID/OccurredAt/AdapterInstanceID 记账，覆盖随后进入多轮等待与命令 STOP 的消息；command.invoked 的 PluginID、RouteID、CommandName、Result、DurationMS 分别累计，命令载荷的 Result 保留 ok/error/denied。发出消息以 AfterSend 的成功发送事实计数，sendErr 记录发送失败；c.Editing() 非空的编辑操作单独排除。小时桶以绝对时间保存并返回后台时区偏移，跨午夜与夏令时保留实际小时身份。记录处理、桶更新与用户更新时间在受管事务内完成，重启后读取已落库结果；停机时释放本切片持有的资源，数据库连接交 SDK 关闭。
+- 用户：从入站可信 Actor 记录 user、显示名及首次/最近见过时间，用户键用 c.User()，跨同一 Adapter 的实例合并。前端把见过的用户与当前 Core Admin、denies.users 合并，管理员和禁止表中尚未见过的用户也列出；管理员为身份、禁止为状态。按画板搜索、筛选与数字分页；授予/移除管理员调用 §4，禁止/解除调用 §13，写回保留 denies.chats 与其他用户，失败显示实际原因并重读当前状态。和 goal-44 共用一个权限「用户」页。
 - 商店：网格卡片，分类只按组件类型，作者标签显示在卡片上；只显示 GitHub 星数；官方组织（alonabot/*）的插件名旁加认证图标；可以切换插件源（缺省官方源）；分页用数字页码；「发布插件」入口说明如何把仓库加入 index.json，并链接插件模板仓库 AlonaBot/alonabot-plugin-template（D-169）。
-- 存储视图：KV（键列表、查看与编辑、删除）、数据目录文件（浏览、上传、下载、新建目录、改名、删除）、整个插件数据的导出与清空（ADMIN-API §21）；会话记录视图列出 Core 托管的 Agent 会话，可查看与清除。
+- 源索引用 pluginindex.Parse 校验；名字、描述、版本与图标从 Release 和包内 manifest 取得，stars 从 GitHub 仓库信息取得，缺字段保持可见的缺失状态。图标只经 img 引用，icon_url 可使用缓存图片的 data URL。缓存源索引、展示元数据与 Release 响应，切换源后按实际源隔离；网络失败、损坏索引与 GitHub 限流返回原错误，有缓存时标出缓存时间。安装仍调用 installPackage({Source: repo})，替换与信任确认沿用 §5 的 affected 对话框，成功重读包列表；更新沿原来源调用 updatePackage，Core 新版按钮打开发行说明。浏览器直接请求本组件后台，外部抓取由后台执行。
+- 存储视图：KV（键列表、查看与编辑、删除）、数据目录文件（浏览、上传、下载、新建目录、改名、删除）、整个插件数据的导出与清空（ADMIN-API §21）；会话记录视图列出 Core 托管的 Agent 会话摘要，可清除（正文查看归 goal-167）。
 - 更新后在插件详情与「关于」中显示 changelog（ADMIN-API §22，Markdown 由前端渲染，不执行其中的 HTML）。
+- KV 分页、保留原始文本或 base64，文件上传覆盖 409 与递归删除分别显式确认；导出下载 zip、清空发 {confirm:true}。Active 库写入、文件目录共用与 404 无库按 §21 显示；数据库表格与保留代次只读视图沿用 goal-44，存储视图和导出不冒充代次文件快照。错误保留完整服务端响应，清空成功后重读各列表。
+- 更新前显示 GitHub Release 正文预览并标出来源，更新后按 §22 读取已安装包与 Core 的发布条目。后台按 component 保存管理员已看版本，关闭更新内容对话框后写入本次实际已展示版本；再次打开只提示其后版本，详情和「关于」仍可主动查看完整条目。新旧版本按 SemVer 比较，省略 Unreleased；Markdown 渲染保留文本与链接，原始 HTML 作为文本处理，避免执行主动内容。
 - 后台进程的 build 与 pack 按 D-162 照插件出平台包；官方 WebUI 从此按平台打包（T-14.3 同步）。
+- 审查者裁定（2026-11-17）：（1）「错误与警告」曲线与故障标记的数据来自 Core 现有的日志查询接口（ADMIN-API 日志一节，按级别 WARNING/CRITICAL 与时间范围筛选后按小时汇总）与组件列表的状态（Degraded、候选失败），不新增 Core 接口或事件；send_errors 与命令 error 仍按各自含义统计。（2）Agent 会话正文的查看属于官方 Agent 的插件页面（T-12.20，goal-167），本切片的会话记录视图只列出 ADMIN-API §15 的会话摘要并支持清除，不读取正文。（3）预置的官方插件源为 GitHub 仓库 `AlonaBot/plugin-store`（维护者 2026-11-17 指定，D-176），作为源列表的缺省项；商店另提供添加与移除插件源。
 
-不做：Core 的事件、API 与插件进程的支持（T-09.20～T-09.22、T-09.24）；模型与配置文件页（goal-146、goal-165）。
+测试（按编码规范「测试提交规则」）：
+- 提交：无。按本章前端切片约定，Go 后台与发行脚本的验证也写入本地文件，PR 记录用例名、命令与结果。
+- Go 本地自测（*_local_test.go）：在真实 Core 中加载官方 WebUI 后台，使用现有测试 Adapter 与插件注入消息和命令，验证小时桶、账号、等待/STOP 消息采集、常规插件过滤、AfterSend 成功/失败及编辑区别、跨账号发送归属、用户合并、Core/WebUI 重启后已落库统计与已读版本；HTTP 未登录与缺 CSRF 的拒绝。V-136 其余分项覆盖午夜/夏令时、索引解析、源切换、抓取失败、GitHub 限流后带错误的缓存；外部站点用本地 HTTP 模拟时明确标为模拟。打包本地自测覆盖暂存后 Go module 可解析、进程与 dist 同包及各平台资产，不新增 testdata 测试插件。
+- 前端本地自测（*.local.test.ts）：统计分组与真实零值、用户去重和状态合并、过滤/分页、KV 的 UTF-8/base64、路径编码、覆盖/清空确认、SemVer 与已读版本、changelog 语言与 HTML 安全处理。纯函数自测均不提交。
+- 浏览器手动验证：同源真实 Core 上的图表范围、商店切换/缓存错误/安装/替换确认、用户管理、KV 与文件的完整操作、数据导出与清空、会话摘要与清除、版本记录、更新前预览与更新后再次打开、深浅色和手机布局。PR 写明浏览器/版本、真实与模拟环境、缺口受影响的未运行项；审查者按 TEST-MATRIX §3 记录 V-136 与 V-134/V-135/V-138 页面证据。
+
+完成条件：npm --prefix web/admin ci、npm --prefix web/admin run typecheck、npm --prefix web/admin run test、npm --prefix web/admin run build 全部成功；Go 改动 gofmt -l 无输出，go vet ./web/admin/... ./scripts/dist/...、go test -race ./web/admin/... ./scripts/dist/...、go build ./... 成功。通过现有 CLI 对 web/admin 执行 check、build 与多目标 pack，核对五平台包包含进程入口与 dist；交叉编译按构建证据记录。真实 Core 上完成后台采集、认证路由与页面主路径验证，原目标中的契约缺口经审查者裁定并完成后再交付；PR「文档同步」列出 T-14.3、ARCHITECTURE 与 TEST-MATRIX 的实际同步项。
+
+不做：Core 的事件、API 与插件进程的支持（T-09.20～T-09.22、T-09.24）；直读 Core 或其他组件数据库、代管管理 token；模型与配置文件页（goal-146、goal-165）；goal-44 的数据库表格、配置与插件页面桥；自动安装更新、自建商店服务器；改 spec、CI 前端任务或新增未批准依赖。
 ```
 
 ## 第 20 波
 
 ### goal-146 · T-09.18 模型页
 
-状态：等待语句定稿（前置均已合并）。T-09.8（PR #238，`9123839`）、T-09.14已合并。T-12.16（PR #223，`d27ce82`）已合并。2026-11-17 按 D-154 与 D-169 新增。目标、依据与要点由 PLAN T-09 步骤 7（模型页）与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：待派发。前置 T-09.8（PR #238，合并提交 `9123839`）、T-09.14（PR #192，`0cff77c`）、T-12.16（PR #223，`d27ce82`）均已合并。按 main `50244fe` 核对：`web/admin/src/api/admin.ts` 已导出 `listPackages(): Promise<Package[]>`、`changePackage(action: 'enable' | 'disable' | 'restart' | 'reload', id: string, confirm?: boolean): Promise<void>`、`AdminAPIError` 与 `isConfirmationError`，配置与模型请求尚无前端导出。官方 Agent 的实际包为 `github.com/AlonaBot/AlonaBot/agent`，`agent.New() *sdk.Plugin` 在 `agent/agent.go` 注册 `/models/discover`、`/models/test`、`/models/usage`；`agent/models.go` 与 ADMIN-API §15.1 一致。`agent/config_schema.json` 的 providers 为 template_list、models 为 list；ConfigForm 已支持两者。页面沿用 `src/routes.tsx` 的 RouteEntry 与 `src/main.tsx` 的认证外壳；AppShell、Sidebar、MobileTabBar 当前尚无按 Agent 安装状态禁用模型入口的属性。沿用 D-154、D-155 与 D-169 的模型页目标和画板。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-146（切片 T-09.18：模型页）。goal 目录 goal-146，分支 goal-146，worktree .worktrees/goal-146，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
 
 目标：侧栏一级入口「模型」：编辑 Agent 配置中的 providers 与 models，调用 Agent 的模型管理路由拉取模型列表、测试模型与读取当天用量。本切片不改 Go 代码。
 
-依据：PLAN T-09 步骤 7（模型页）；CONTRACTS §13.5、§13.6；ADMIN-API §12；DECISIONS D-154、D-155、D-169；TEST-MATRIX V-126。画板：「v4 · 模型」「v4 · 模型（添加提供商）」及其深色画板。
+依据：PLAN T-09 步骤 7（模型页）及其停止和失败条件；spec/plan/webui.md §3；CONTRACTS §5.1、§5.3、§13.5、§13.6；ADMIN-API §12、§15.1；DECISIONS D-154、D-155、D-169；TEST-MATRIX V-126。画板：「v4 · 模型」「v4 · 模型（添加提供商）」及其深色画板。审查者将截图放在 goal-146/figma/；首轮由前端执行者实现，审查与修复交 GPT。
 
-要点：
+范围（只新增或修改这些；路径相对 web/admin/）：
+- src/pages/ModelsPage.tsx 及 src/pages/ 下模型列表、提供商对话框与配置 patch 的专用模块；src/api/admin.ts。
+- src/routes.tsx、src/shell/AppShell.tsx、src/shell/Sidebar.tsx、src/shell/MobileTabBar.tsx：登记页面、按已确认的 Agent 安装状态禁用入口与搜索动作；src/pages/PluginsPage.tsx 仅补齐从 URL 打开商店标签的入口。
+- src/style.css、i18n/en-US.json、i18n/zh-CN.json；对应的 *.local.test.ts。
+
+允许的依赖：只用 web/admin/package.json 已安装的 React、Radix、lucide-react、TypeScript、Vite、vitest；复用现有 ConfigForm、schema/patch 与 i18n/catalog。
+
+接口（新增导出写在指定模块；已由先合并切片加入的同名能力直接复用）：
+- src/pages/ModelsPage.tsx：export function ModelsPage(): JSX.Element。routes 登记 {id: 'models', path: '/models', label: 'models', icon, group: 'main', render: () => <ModelsPage />}，main.tsx 沿用 matchedRoute.render()、UIContext 与 AppShell。label 及新增文案写入两份 i18n JSON 的 messages，useUI() 读取，键集合一致。站内导航复用 navigate(path, options?) 与 Link，页面操作复用 SearchContext.register，卸载时注销。
+- AppShell 保留现有 version、onLogout、coreUpdate、children，在内部随 usePath() 的路径变化及 onPackagesChanged 通知通过 listPackages 的 Role === 'agent' && !Uninstalled 确认 Agent 安装状态。Sidebar 与 MobileTabBar 的现有 props 增加可选 agentInstalled?: boolean，由 AppShell 传入；明确为 false 时模型入口置灰、停止点击和键盘激活，搜索省略该路由。直接访问 /models 仍显示安装空状态。加载失败显示真实错误，保留尚未确认的状态；安装或卸载后重读并同步入口状态。
+- src/api/admin.ts：
+  export function onPackagesChanged(handler: () => void): () => void
+  export type PendingConfig = { base_generation: string; config: Record<string, unknown> }
+  export type ConfigSnapshot = { active_generation: string; active: Record<string, unknown>; pending: PendingConfig | null; schema: unknown; i18n: Record<string, Record<string, unknown>> }
+  export function getPluginConfig(id: string): Promise<ConfigSnapshot>
+  export function patchPluginConfig(id: string, baseGeneration: string, patch: Record<string, unknown>): Promise<PendingConfig>
+  export type ModelDiscoveryInput = { provider: string } | { protocol: string; base_url: string; api_key?: string }
+  export type DiscoveredModel = { id: string; type: string }
+  export type ModelUsage = { model: string; input_tokens: number; output_tokens: number }
+  export function discoverAgentModels(id: string, input: ModelDiscoveryInput): Promise<{ models: DiscoveredModel[]; description?: string }>
+  export function testAgentModel(id: string, model: string): Promise<{ ok: boolean; duration_ms: number; description?: string }>
+  export function getAgentModelUsage(id: string): Promise<{ models: ModelUsage[] }>
+- onPackagesChanged 沿用 onSessionExpired 的订阅/注销方式，由现有 installPackage、updatePackage、uninstallPackage 在操作成功后通知；AppShell 在卸载时注销。先合并切片已有组件变更通知时直接复用，保持既有安装、确认和错误语义。
+- 配置读取 → GET /api/v1/plugins/{id}/config；PATCH .../config/pending 发 {base_generation,patch}。保存以 pending.config 或 active 为编辑基线，提交 active_generation，成功显示 Pending 后显式 changePackage('reload', id)，重读快照；开发来源保存时已按 §12 重启、pending 为 null，按返回实际状态展示。409 / FAILED_PRECONDITION 属于代次冲突，重读并提示用户处理草稿；仅带 affected 的 409 进入现有确认流程。
+- 模型路由前缀 /plugins/{编码后的 Agent 包 ID}/models/：discoverAgentModels → POST discover，传已配置 provider 名，或 protocol/base_url/api_key 新连接；testAgentModel → POST test，发 {model}（Active 模型配置名）；getAgentModelUsage → GET usage。复用 admin.ts 的私有 request、同源 Cookie、内存 X-Alonabot-CSRF 与 onSessionExpired。扩展错误解析以保留 Agent JSON 的 description，同时保留 Core 的 safe_message、code 与纯文本认证错误；已有客户端调用语义保持。
+- src/components/ConfigForm.tsx 的现有接口为 ConfigForm(props: { schema: unknown; value: unknown; messages: Record<string, unknown>; onSubmit: (patch: Record<string, unknown>) => void })。提供商编辑与无模型路由时的配置编辑复用它，只传 providers/models 对应的 schema 与值。getPluginConfig.i18n 每个语言值已是 config 根节点，按 pickLocale 选择后包装成 {config: selectedMessages} 传入；页面的 useUI 文案与插件字段文案分别处理。
+- providers 每行为 {模板名: {name,protocol,base_url,api_key}}；预设与协议取返回 schema，不手写一套重复表单。models 每行为 {name,provider,model,type,max_tokens?,image_input?}：name 是配置引用名，provider 引用提供商 name，model 才是远端 ID。type 的协议值为 chat、speech_to_text、text_to_speech、embedding、rerank、decision。
+
+行为：
 - 按 `role: agent` 找到已安装的 Agent；没有时显示空状态与去商店的按钮，侧栏的「模型」置灰；Agent 没有模型管理路由时只提供配置编辑。
 - 按类型筛选（对话、语音识别、语音合成、向量、重排、决策），按提供商分组列出模型，显示模型 ID、类型、当天用量与测试按钮；预留的五类只能添加、拉取与测试。
 - 添加提供商对话框：预设、名称、Base URL、API Key（secret，只显示已设置），「拉取模型列表」后勾选要加入的模型，拉取失败时可以手动输入模型 ID。
 - 修改经配置 API 的 Pending 与 reload（只提交 patch）；删除被 chat_model 或 fallback_chat_models 引用的模型时先提示引用位置。
+- 拉取与测试针对 Active 配置：已有提供商按 name 拉取，新提供商可用对话框中的新连接直接 discover；Pending 模型先保存并 reload 后测试。discover 返回 models: [] 与 description 时展示原说明并允许手填；HTTP 200 的 ok: false 展示探测失败。usage 按 Agent 本地日期，只有实际用量记录的模型显示数值；缺失与读取失败分别显示状态，保留真实的零 token。
+- 使用中的 API Key 只显示 $secret_set 状态。ConfigForm/buildPatch 对含 secret 的 providers 数组执行现有整体替换规则：提交前重新输入该数组仍为掩码的全部 secret；提交成功清空明文草稿。发现、测试、保存均不把掩码作为 api_key 发送。其余配置、未知键、invisible 字段及 chat_model/fallback_chat_models 保持原值；删除引用中的模型保留提示及候选失败的实际原因，等待用户修改引用。
+- Agent 已安装但模型管理路由缺失时保留配置编辑，移除拉取、测试与用量操作；用 usage 的路由级 404 判断，单个模型/提供商的 404、上游 502、认证失败与离线错误分别展示原原因。没有 Agent 时「去商店」用 navigate('/components?tab=store') 打开已有商店标签，PluginsPage 从 URL 的 tab 初始化该标签；商店内容由 goal-156 接入并保留此入口。
 
-不做：Agent 的模型管理路由（T-12.16）；配置文件中的模型选择（goal-165）。
+测试（按编码规范「测试提交规则」）：
+- 提交：无。
+- 本地自测：*.local.test.ts 覆盖六类筛选与提供商分组、配置名和远端 ID 的区别、模板行与数组 patch、secret 掩码与重新输入、模型引用提示、Pending/Active、陈旧代次冲突、description/ok:false/真实零用量、路由缺失与普通 404 的区别。
+- 浏览器手动验证：真实 Core 与官方 Agent 上添加提供商、拉取并勾选模型、失败后手填、更换 API Key、保存与 reload、测试模型、当天用量、删除被引用模型、无 Agent 与缺模型路由；深浅色、手机入口、置灰后的键盘操作与搜索。PR 写明浏览器与版本、实际 Provider 和六类中已验证的类型；本地模拟 Provider 记录为模拟环境，其余保持未运行。
+
+完成条件：npm --prefix web/admin ci、npm --prefix web/admin run typecheck、npm --prefix web/admin run test、npm --prefix web/admin run build 全部成功；go build ./... 不受影响，PR 写明实际验证结果。审查者按 TEST-MATRIX §3 记录 V-126 页面证据，并在合并后按实际导出修订 goal-165 的模型选择接入。
+
+不做：Agent 的模型管理路由或 Provider 实现（T-12.16）；配置文件中的模型选择（goal-165）；Go 代码、spec 修改、新依赖、DOM 测试依赖、CI 前端任务与提交前端测试。
 ```
 
 ## 第 22 波

@@ -53,10 +53,8 @@ message Bootstrap {
   string candidate_config_json = 2;
   // 可信安装包中配置 Schema 的摘要。
   bytes config_schema_hash = 3;
-  // 现有配置的版本；首次安装没有旧版本。
-  optional uint32 previous_config_version = 4;
-  // 配置迁移的目标版本。
-  uint32 target_config_version = 5;
+  reserved 4, 5;
+  reserved "previous_config_version", "target_config_version";
   // 插件业务数据库的准备视图。
   DatabaseDescriptor database_descriptor = 6;
   // 本 Session 的内部 HTTP 代理认证材料；仅在插件声明 HTTP 能力时设置。

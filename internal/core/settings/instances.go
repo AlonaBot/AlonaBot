@@ -1,17 +1,15 @@
 package settings
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 )
 
-// InstanceProblem 定位无法启动的实例配置；Reason 保留原因和版本，不含配置取值。
+// InstanceProblem 定位无法启动的实例配置；Reason 保留完整原因，省略配置取值。
 type InstanceProblem struct {
 	InstanceID string
 	Path       string // core_config.json 内的 JSON 路径。
@@ -19,13 +17,14 @@ type InstanceProblem struct {
 }
 
 type instancePreparation struct {
-	ready    map[string]json.RawMessage
-	migrated map[string]json.RawMessage // 只保存迁移后的原文，环境变量保持未展开。
-	problems []InstanceProblem
-	version  int
+	ready          map[string]json.RawMessage
+	problems       []InstanceProblem
+	corrections    map[string][]configschema.Correction
+	unknown        map[string][]string
+	configurations map[string]json.RawMessage
 }
 
-var errNoInstanceMigration = errors.New("instance configuration does not require a write")
+var errNoInstanceWrite = errors.New("instance configuration does not require a write")
 
 // BindAdapter 为已有的无归属配置记录当前组件；其他组件的配置保持原样并返回 false。
 // 调用方先检查返回值，再准备实例，避免把保留的凭证交给替换组件。
@@ -46,58 +45,58 @@ func (f *File) BindAdapter(adapterID, packageID string) (bool, error) {
 		group, exists := current.Adapters[adapterID]
 		owned = !exists || group.Package == "" || group.Package == packageID
 		if !exists || group.Package != "" {
-			return errNoInstanceMigration
+			return errNoInstanceWrite
 		}
 		return doc.Set([]string{"adapters", adapterID, "package"}, packageID)
 	})
-	if errors.Is(err, errNoInstanceMigration) {
+	if errors.Is(err, errNoInstanceWrite) {
 		err = nil
 	}
 	return owned, err
 }
 
-// PrepareInstances 迁移、补齐并校验一个 Adapter 的全部实例，返回可启动实例的完整配置。
-// 低版本的全部实例成功后才备份并经 Update 写回；实例失败只列入 problems。
-// replacement 可省略或传一组按当前 schema 替换的实例；省略时仅准备已有配置。
-// 返回的 error 表示备份或写回失败，原文中的环境变量引用始终保留。
+// PrepareInstances 校正一个 Adapter 的运行副本，保存内存记录，不自动写回原文件。
+// replacement 是管理入口已经校验的显式编辑，经 Update 提交；失败实例独立列入 problems。
 func (f *File) PrepareInstances(adapterID string, schema *configschema.Schema, replacement ...map[string]json.RawMessage) (map[string]json.RawMessage, []InstanceProblem, error) {
-	var replacements map[string]json.RawMessage
 	if len(replacement) != 0 {
-		replacements = replacement[0]
-	}
-	// 1. 当前文档只读试算，无需迁移或有失败实例时不触碰磁盘。
-	f.mu.RLock()
-	prepared := prepareInstances(f.document, adapterID, schema, replacements)
-	f.mu.RUnlock()
-	if len(prepared.problems) != 0 || (len(replacements) == 0 && prepared.version >= schema.Version()) {
-		return prepared.ready, prepared.problems, nil
-	}
-	// 2. Update 持锁重读磁盘，在同一份候选上试算和编辑，保留期间的手动修改。
-	err := f.Update(func(document *Document) error {
-		prepared = prepareInstances(document, adapterID, schema, replacements)
-		if len(prepared.problems) != 0 || (len(replacements) == 0 && prepared.version >= schema.Version()) {
-			return errNoInstanceMigration
-		}
-		for id, raw := range prepared.migrated {
-			if err := document.Set([]string{"adapters", adapterID, "instances", id}, raw); err != nil {
-				return err
+		var prepared instancePreparation
+		err := f.Update(func(doc *Document) error {
+			prepared = prepareInstances(doc, adapterID, schema, replacement[0])
+			if len(prepared.problems) != 0 {
+				return errNoInstanceWrite
 			}
+			for id, raw := range replacement[0] {
+				if err := doc.Set([]string{"adapters", adapterID, "instances", id}, raw); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if errors.Is(err, errNoInstanceWrite) {
+			return prepared.ready, prepared.problems, nil
 		}
-		if err := document.Set([]string{"adapters", adapterID, "$version"}, schema.Version()); err != nil {
-			return err
+		if err != nil {
+			return prepared.ready, prepared.problems, err
 		}
-		if prepared.version < schema.Version() {
-			return backupSettings(f.name, currentVersion)
-		}
-		return nil
-	})
-	if errors.Is(err, errNoInstanceMigration) {
-		err = nil
 	}
-	return prepared.ready, prepared.problems, err
+	f.mu.Lock() // 记录和准备结果使用同一份原文，和 Update/Reload 串行。
+	defer f.mu.Unlock()
+	if _, found := f.current.Adapters[adapterID]; !found {
+		return map[string]json.RawMessage{}, nil, nil
+	}
+	prepared := prepareInstances(f.document, adapterID, schema, nil)
+	if group, found := f.current.Adapters[adapterID]; found {
+		group.Corrections, group.Unknown = prepared.corrections, prepared.unknown
+		group.Configurations = prepared.configurations
+		f.current.Adapters[adapterID] = group
+	}
+	for _, records := range prepared.corrections {
+		logCorrections(records)
+	}
+	return prepared.ready, prepared.problems, nil
 }
 
-// TrialInstances 只读试算实例配置，供更新预检在停止旧 Adapter 前检查；不写回或备份。
+// TrialInstances 只读试算实例配置，供更新预检使用；不写回、备份或发布运行记录。
 func (f *File) TrialInstances(adapterID string, schema *configschema.Schema) []InstanceProblem {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
@@ -105,9 +104,8 @@ func (f *File) TrialInstances(adapterID string, schema *configschema.Schema) []I
 }
 
 func prepareInstances(document *Document, adapterID string, schema *configschema.Schema, replacements map[string]json.RawMessage) instancePreparation {
-	prepared := instancePreparation{ready: make(map[string]json.RawMessage), migrated: make(map[string]json.RawMessage), version: schema.Version()}
+	prepared := instancePreparation{ready: make(map[string]json.RawMessage), corrections: make(map[string][]configschema.Correction), unknown: make(map[string][]string), configurations: make(map[string]json.RawMessage)}
 	if len(replacements) != 0 {
-		// 替换值已经使用当前声明；在独立候选中合入，旧文档只在整组校验通过后提交。
 		var err error
 		document, err = parseDocument(document.root.encode())
 		if err != nil {
@@ -116,96 +114,78 @@ func prepareInstances(document *Document, adapterID string, schema *configschema
 		}
 		for id, raw := range replacements {
 			if err := document.Set([]string{"adapters", adapterID, "instances", id}, raw); err != nil {
-				prepared.problems = append(prepared.problems, InstanceProblem{InstanceID: id,
-					Path: fmt.Sprintf("$.adapters[%q].instances[%q]", adapterID, id), Reason: err.Error()})
+				prepared.problems = append(prepared.problems, InstanceProblem{InstanceID: id, Reason: err.Error()})
+				return prepared
 			}
 		}
 	}
-	adaptersIndex := document.root.index("adapters")
-	if adaptersIndex < 0 {
+	index := document.root.index("adapters")
+	if index < 0 {
 		return prepared
 	}
-	adapters := document.root.members[adaptersIndex].value
-	index := adapters.index(adapterID)
+	adapters := document.root.members[index].value
+	index = adapters.index(adapterID)
 	if index < 0 {
 		return prepared
 	}
 	group := adapters.members[index].value
-	prepared.version = defaultInstanceVersion
-	path := "$.adapters[" + strconv.Quote(adapterID) + "]"
-	if index := group.index("$version"); index >= 0 {
-		version, err := positiveVersion(group.members[index].value)
-		if err != nil {
-			prepared.problems = append(prepared.problems, InstanceProblem{Path: path + `["$version"]`, Reason: err.Error()})
-			return prepared
-		}
-		prepared.version = version
-	}
-	if prepared.version > schema.Version() {
-		prepared.problems = append(prepared.problems, InstanceProblem{Path: path + `["$version"]`,
-			Reason: fmt.Sprintf("%s: instance config version %d is newer than schema version %d", FileName, prepared.version, schema.Version())})
-		return prepared
-	}
 	index = group.index("instances")
 	if index < 0 {
 		return prepared
 	}
 	for _, instance := range group.members[index].value.members {
-		basePath := path + ".instances[" + strconv.Quote(instance.key) + "]"
-		version := prepared.version
-		if _, replaced := replacements[instance.key]; replaced {
-			version = schema.Version()
+		path := fmt.Sprintf("$.adapters[%q].instances[%q]", adapterID, instance.key)
+		if !instanceName.MatchString(instance.key) {
+			prepared.problems = append(prepared.problems, InstanceProblem{InstanceID: instance.key, Path: path, Reason: "invalid adapter instance name"})
+			continue
 		}
-		raw, complete, err := prepareInstance(instance.value, version, schema)
+		raw := instance.value.encode()
+		records := []configschema.Correction{}
+		if instance.value.delimiter != '{' {
+			record := configschema.Correction{Path: "$", Reason: "reset"}
+			if len(schema.SecretPaths()) == 0 {
+				record.Old = raw
+			}
+			records = append(records, record)
+			raw = []byte("{}")
+		}
+		complete, corrections, unknown, err := correctConfiguration(raw, schema)
+		prepared.configurations[instance.key] = complete
+		records = append(records, corrections...)
+		for i := range records {
+			records[i].Path = path + strings.TrimPrefix(records[i].Path, "$")
+		}
+		prepared.corrections[instance.key] = records
+		for i := range unknown {
+			unknown[i] = path + strings.TrimPrefix(unknown[i], "$")
+		}
+		prepared.unknown[instance.key] = unknown
 		if err != nil {
-			// configschema 的错误只包含声明路径和原因，保留完整错误并补文件与版本。
-			problemPath := basePath
-			if _, tail, ok := strings.Cut(err.Error(), "config validation failed at $"); ok {
+			problemPath := path
+			if _, tail, found := strings.Cut(err.Error(), "config validation failed at $"); found {
 				suffix, _, _ := strings.Cut(tail, ": ")
 				problemPath += suffix
 			}
-			prepared.problems = append(prepared.problems, InstanceProblem{InstanceID: instance.key, Path: problemPath,
-				Reason: fmt.Sprintf("%s: instance config version %d to %d: %s", FileName, prepared.version, schema.Version(), err)})
+			prepared.problems = append(prepared.problems, InstanceProblem{InstanceID: instance.key, Path: problemPath, Reason: err.Error()})
 			continue
 		}
-		prepared.migrated[instance.key], prepared.ready[instance.key] = raw, complete
+		prepared.ready[instance.key] = complete
 	}
 	return prepared
 }
 
-func prepareInstance(original *node, version int, schema *configschema.Schema) (json.RawMessage, json.RawMessage, error) {
-	// 1. 在独立对象上迁移原文，保留数字精度、未知键和环境变量引用。
-	var configuration map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(original.encode()))
-	decoder.UseNumber()
-	if err := decoder.Decode(&configuration); err != nil {
-		return nil, nil, err
+// PruneInstance 删除实例 schema 之外的键；由 File.Update 提交并保留其他值的原文。
+func (d *Document) PruneInstance(adapterID, instanceID string, schema *configschema.Schema) error {
+	var fields map[string]configField
+	if err := json.Unmarshal(schema.Canonical(), &fields); err != nil {
+		return err
 	}
-	if err := schema.Migrate(configuration, version); err != nil {
-		return nil, nil, err
+	parent, err := d.parent([]string{"adapters", adapterID, "instances", instanceID}, false)
+	if err != nil || parent == nil {
+		return err
 	}
-	raw, err := marshal(configuration)
-	if err != nil {
-		return nil, nil, err
+	if index := parent.index(instanceID); index >= 0 {
+		pruneFields(parent.members[index].value, fields)
 	}
-	// 2. 展开运行副本后补缺失值并校验，写回仍使用迁移后的原文。
-	candidate, err := parseNode(raw, original.path)
-	if err != nil {
-		return nil, nil, err
-	}
-	expanded, err := candidate.expanded()
-	if err != nil {
-		return nil, nil, err
-	}
-	decoder = json.NewDecoder(bytes.NewReader(expanded.encode()))
-	decoder.UseNumber()
-	if err := decoder.Decode(&configuration); err != nil {
-		return nil, nil, err
-	}
-	schema.Complete(configuration)
-	if err := schema.Validate(configuration); err != nil {
-		return nil, nil, err
-	}
-	complete, err := marshal(configuration)
-	return raw, complete, err
+	return nil
 }
