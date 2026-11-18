@@ -8,6 +8,7 @@ import (
 	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/internal/core/profile"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -18,12 +19,12 @@ const (
 	commandDenied       = "denied"
 )
 
-func (r *Router) commandAllowed(c candidate, ev *pb.Event) bool {
-	if !c.plugin.Activated() {
+func (r *Router) commandAllowed(c *candidate, ev *pb.Event) bool {
+	if !r.available(*c) {
 		return false
 	}
-	if failure := r.commandPolicyFailure(c, ev); failure != nil {
-		r.commandInvoked(c, ev, commandPolicyResult(failure.GetCode()), 0)
+	if failure := r.commandPolicyFailure(profile.WithView(r.ctx), c, ev); failure != nil {
+		r.commandInvoked(*c, ev, commandPolicyResult(failure.GetCode()), 0)
 		return false
 	}
 	return true

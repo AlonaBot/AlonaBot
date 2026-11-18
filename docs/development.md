@@ -197,6 +197,8 @@ Adapter 实例的记录在 `GET /api/v1/adapters/{adapter_id}/instances/{instanc
 
 使用同一套管理凭证运行 `bin/alonabot profile list` 查看配置文件 ID 和会话数。`bin/alonabot profile assign <配置文件ID> <实例名>` 设置实例缺省；再给出会话字符串可单独指定会话。`profile set` 与 `profile unset` 编辑 `default` 时写入插件的 Pending，沿用配置重载流程。全部子命令见 [CONTRACTS §5.6](../spec/CONTRACTS-v0.1.md#56-配置文件)，平台设置与工具策略见 [ADMIN-API §23](../spec/ADMIN-API.md#23-配置文件)。
 
+会话派发按单独指定 → 实例缺省 → `default` 解析配置文件，已应用插件开关、字段覆盖与消息过滤；SDK 的 `c.Config()` 在每次调用开始时冻结视图。覆盖更新向在线 Session 下发完整集合，后续调用使用新值；离线插件在下次 Bootstrap 接收。Bootstrap 的 `profile_overrides_json` 必须是对象，无覆盖填 `{}`；离线 `alonabot test` 同样下发该字段。插件经 `core.profile.set` 修改 `default` 时，Core 在整条根调用及延续结束后 reload；固定服务写入遇管理互斥占用立即返回 FAILED_PRECONDITION。前缀、回复方式与工具策略的运行时应用分别由 T-04.19、T-11.6 接入。
+
 ### 导出诊断包
 
 ```fish
@@ -318,7 +320,7 @@ bin/alonabot admin-token show --data-dir ./data
 
 Core 运行且仍持有当前 token 时，可调用 `POST /api/auth/token/rotate` 在线轮换（[ADMIN-API §20](../spec/ADMIN-API.md#20-webui-需要的补充接口)）。从响应保存新 token，更新 CLI 使用的 `ALONABOT_ADMIN_TOKEN` 或 `--token-file`，并用新 token 重新登录。轮换会撤销全部旧管理会话。
 
-调优参数在启动时解析；修改后重启生效。`default` 的前缀与 `reply` 属于 `core_config.json`；配置文件覆盖集合沿用固定 4 MiB 帧上限。查看全部调优参数及当前生效值：
+调优参数在启动时解析；修改后重启生效。`default` 的前缀与 `reply` 属于 `core_config.json`；配置文件覆盖集合沿用固定 4 MiB 帧上限，`core.profile.*` 与 `sdk.profile.set_overrides` 沿用普通 RPC 的期限与 Session 预算（CONTRACTS §16、`internal/tune/params.go`）。查看全部调优参数及当前生效值：
 
 ```sh
 bin/alonabot tune list
@@ -360,6 +362,14 @@ go test -race -count=3 ./internal/core/supervisor/
 ```
 
 文档改动用 `git diff --check` 检查空白错误，链接与技能元数据由审查核对。包文档、命名、注释与测试提交范围由 [编码规范](coding-standards.md) 与 [注释技能](../.agents/skills/alonabot-code-commenting/SKILL.md) 指导审查。
+
+## 按需唤醒与验证
+
+S-02.1 已接通已安装 plugin/agent 从 SUSPENDED 按命令/事件、Service 与 HTTP 请求恢复原代次。Core 唯一 Waker 在 ACTIVATED、摘要核对及全部绑定后开放交付；等待期间沿用接纳时的绝对期限。同代次 RESUME 复用配置与 DB，跳过数据库迁移回调；配置仍执行加载、补值/校正与 required 校验，完整结果须与原快照一致。开发组件沿用当前绑定与原生命周期。
+
+`internal/tune` 已登记 `WAKE_QUEUE_REQUESTS=256`（≥1）与 `WAKE_QUEUE_BYTES=16MiB`（4MiB～`CORE_MAX_PAYLOAD`）；等待 payload 同时占用 Core 总预算。可经 `--args` 覆盖，名称、单位、上下界及来源错误沿用 CONTRACTS §16。HTTP 等待只占条数，正文在交付后流式读取；唤醒失败分别映射为 429（预算满）、504（期限到达）或 503（其他失败）。自动空闲策略及 `SLEEP_*` 参数由 S-02.2 接入，Scheduler 到期唤醒由 S-03.1 接入。
+
+提交集成 `internal/app/wake_test.go:TestWake` 覆盖真实 Core、SDK 回环 Adapter、已安装子进程与 SQLite 的 command/service/http 三入口；`contracts/wirespec_test.go:TestEnumValues` 固定 `STOP_REASON_IDLE=6`。本地 `*_local_test.go` 覆盖并发、预算、取消/期限、停止竞争、活动释放与 RESUME 数据库迁移。darwin/arm64 的完整命令、结果及真实平台未运行项见 [TEST-MATRIX §3.2](../spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)。
 
 ## 库模式运行（同一进程）
 

@@ -111,3 +111,18 @@ const ServiceLogSetLevel = "sdk.log.set_level"
 
 // ServiceCommandList 查询父调用的 Actor 在默认目标中可用的路径命令。
 const ServiceCommandList = "core.command.list"
+
+// ServiceProfileList 列出全部配置文件。
+const ServiceProfileList = "core.profile.list"
+
+// ServiceProfileCurrent 查询默认目标的配置文件。
+const ServiceProfileCurrent = "core.profile.current"
+
+// ServiceProfileAssign 指定默认目标的配置文件。
+const ServiceProfileAssign = "core.profile.assign"
+
+// ServiceProfileSet 写入调用插件的配置文件字段。
+const ServiceProfileSet = "core.profile.set"
+
+// ServiceProfileSetOverrides 整体更新 SDK 的有效覆盖集合。
+const ServiceProfileSetOverrides = "sdk.profile.set_overrides"

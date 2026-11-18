@@ -767,7 +767,7 @@ func setupWithRole(t *testing.T, role state.Role) (*state.Store, supervisor.Spec
 	limits.OnReady = 3 * time.Second
 	logs := &processLog{}
 	setDefaultLogger(t, slog.New(slog.NewTextHandler(logs, nil)))
-	return store, supervisor.Spec{PluginID: "loop-package", Role: role, AdapterID: "loop", PluginDir: pluginDir, Executable: os.Args[0], BuildDigest: digest, GenerationID: "gen", Bootstrap: &pb.Bootstrap{GenerationId: "gen", CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}, NewCandidate: true, Limits: limits, Stop: host.NewStopTiming(values), Log: logs, ExtraEnv: map[string]string{helperEnv: "adapter", "GORACE": "atexit_sleep_ms=0"}}, logs
+	return store, supervisor.Spec{PluginID: "loop-package", Role: role, AdapterID: "loop", PluginDir: pluginDir, Executable: os.Args[0], BuildDigest: digest, GenerationID: "gen", Bootstrap: &pb.Bootstrap{ProfileOverridesJson: "{}", GenerationId: "gen", CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}, NewCandidate: true, Limits: limits, Stop: host.NewStopTiming(values), Log: logs, ExtraEnv: map[string]string{helperEnv: "adapter", "GORACE": "atexit_sleep_ms=0"}}, logs
 }
 
 func openMediaStore(t *testing.T) *media.Store {
@@ -1339,7 +1339,7 @@ func TestRemotePermissionsAndEvents(t *testing.T) {
 			observer.GenerationID = "observer-gen"
 			observer.PluginDir = t.TempDir()
 			observer.Handler = nil
-			observer.Bootstrap = &pb.Bootstrap{GenerationId: observer.GenerationID, CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+			observer.Bootstrap = &pb.Bootstrap{ProfileOverridesJson: "{}", GenerationId: observer.GenerationID, CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 			observer.ExtraEnv = map[string]string{helperEnv: "plugin", observerAuditEnv: audit, "GORACE": "atexit_sleep_ms=0"}
 			if err := store.AddInstall(ctx, state.Install{PluginID: observer.PluginID, Role: state.RolePlugin, BuildDigest: observer.BuildDigest}); err != nil {
 				t.Fatal(err)
@@ -1565,7 +1565,7 @@ func TestRemoteCommandSync(t *testing.T) {
 	observer.GenerationID = "commands-gen"
 	observer.PluginDir = t.TempDir()
 	observer.Handler = nil
-	observer.Bootstrap = &pb.Bootstrap{GenerationId: observer.GenerationID, CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	observer.Bootstrap = &pb.Bootstrap{ProfileOverridesJson: "{}", GenerationId: observer.GenerationID, CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 	observer.ExtraEnv = map[string]string{helperEnv: "command-plugin", "GORACE": "atexit_sleep_ms=0"}
 	observer.I18n = commandCatalog()
 	observer.DefaultLocale = "zh-CN"
@@ -1703,7 +1703,7 @@ func TestRemoteStream(t *testing.T) {
 	observer.AdapterID = ""
 	observer.GenerationID = "observer-gen"
 	observer.PluginDir = t.TempDir()
-	observer.Bootstrap = &pb.Bootstrap{GenerationId: observer.GenerationID, CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	observer.Bootstrap = &pb.Bootstrap{ProfileOverridesJson: "{}", GenerationId: observer.GenerationID, CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 	observerCaller := router.NewCaller(observer.PluginID, observer.GenerationID)
 	observer.Handler = mux.For(observerCaller)
 	observer.ExtraEnv = map[string]string{helperEnv: "stream-plugin", observerAuditEnv: reportPath, "GORACE": "atexit_sleep_ms=0"}
@@ -1836,7 +1836,7 @@ func TestCommandNameOverride(t *testing.T) {
 	}
 	spec.PluginID, spec.Role, spec.AdapterID = "names-observer", state.RolePlugin, ""
 	spec.GenerationID, spec.PluginDir = "names-gen", t.TempDir()
-	spec.Bootstrap = &pb.Bootstrap{GenerationId: spec.GenerationID, CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	spec.Bootstrap = &pb.Bootstrap{ProfileOverridesJson: "{}", GenerationId: spec.GenerationID, CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 	spec.ExtraEnv = map[string]string{helperEnv: "names-plugin", observerAuditEnv: audit, "GORACE": "atexit_sleep_ms=0"}
 	if err := store.AddInstall(ctx, state.Install{PluginID: spec.PluginID, Role: spec.Role, BuildDigest: spec.BuildDigest}); err != nil {
 		t.Fatal(err)
@@ -1992,7 +1992,7 @@ func TestPluginObjectCommand(t *testing.T) {
 	observer.PluginDir = t.TempDir()
 	observer.ConfigSchema = []byte(objectConfigSchema)
 	observer.I18n = objectI18n()
-	observer.Bootstrap = &pb.Bootstrap{GenerationId: observer.GenerationID, CandidateConfigJson: `{"part":{"prefix":"prepared"}}`, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	observer.Bootstrap = &pb.Bootstrap{ProfileOverridesJson: "{}", GenerationId: observer.GenerationID, CandidateConfigJson: `{"part":{"prefix":"prepared"}}`, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 	observer.ExtraEnv = map[string]string{helperEnv: "plugin-object", "GORACE": "atexit_sleep_ms=0"}
 	pluginCaller := router.NewCaller(observer.PluginID, observer.GenerationID)
 	pluginMux := router.NewMux()
@@ -2140,7 +2140,7 @@ func TestOptionSources(t *testing.T) {
 	spec.PluginDir = t.TempDir()
 	spec.ConfigSchema = []byte(optionsConfigSchema)
 	spec.ExtraEnv = map[string]string{helperEnv: "options-plugin", "GORACE": "atexit_sleep_ms=0"}
-	spec.Bootstrap = &pb.Bootstrap{GenerationId: spec.GenerationID, CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	spec.Bootstrap = &pb.Bootstrap{ProfileOverridesJson: "{}", GenerationId: spec.GenerationID, CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 	if err := store.AddInstall(ctx, state.Install{PluginID: spec.PluginID, Role: state.RolePlugin, BuildDigest: spec.BuildDigest}); err != nil {
 		t.Fatal(err)
 	}

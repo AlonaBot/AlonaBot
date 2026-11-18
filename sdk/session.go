@@ -263,6 +263,10 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *reg
 			failure.Code, failure.Message, err)
 	}
 	root.setConfig(preparedConfig.Values)
+	if err := root.setProfileOverrides(boot.GetProfileOverridesJson()); err != nil {
+		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_HELLO_ACK,
+			pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid profile overrides", err)
+	}
 
 	// 3. 数据库从迁移阶段开始可用；后续任何准备失败都由这里关闭连接。
 	l.runtime.database.Begin(boot.GetDatabaseDescriptor())
@@ -425,6 +429,11 @@ func prepareMigrations(ctx context.Context, root *Plugin, descriptor *pb.Databas
 		}
 		if descriptor.GetBackend() == pb.DatabaseBackend_DATABASE_BACKEND_NONE && mode != pb.MigrationMode_MIGRATION_MODE_NONE {
 			completed <- result{err: &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "database migrations require a database backend"}}
+			return
+		}
+		// 同代次恢复沿用原 schema 与账本，SELF 和辅助迁移回调都不重新执行。
+		if descriptor.GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME {
+			completed <- result{state: &pb.MigrationState{Mode: mode, CompletedMigrationIds: append([]uint32(nil), descriptor.GetAppliedMigrationIds()...)}}
 			return
 		}
 		if len(migrators) == 0 {

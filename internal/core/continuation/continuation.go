@@ -22,11 +22,12 @@ const schemaVersion = 1
 
 // Options 提供生效的延续调用限额、期限及 Router 的调用和事件准备入口。
 type Options struct {
-	Max     int           // 每个 Session 已登记与正在运行的总数，取 CONTINUATION_MAX。
-	Timeout time.Duration // 独立调用的期限，取 CONTINUATION_TIMEOUT。
-	Call    func(ctx context.Context, inv *router.Invocation, continuationOf uint64, deadline time.Time) (wire.Response, error)
-	Prepare func(*pb.Event, router.Caller) (*pb.Event, error) // nil 时原样交付。
-	Caller  func(pluginID string) (router.Caller, bool)       // 由 Router.Caller 查询当前激活绑定。
+	Max             int           // 每个 Session 已登记与正在运行的总数，取 CONTINUATION_MAX。
+	Timeout         time.Duration // 独立调用的期限，取 CONTINUATION_TIMEOUT。
+	Call            func(ctx context.Context, inv *router.Invocation, continuationOf uint64, deadline time.Time) (wire.Response, error)
+	Prepare         func(*pb.Event, router.Caller) (*pb.Event, error) // nil 时原样交付。
+	Caller          func(pluginID string) (router.Caller, bool)       // 由 Router.Caller 查询当前激活绑定。
+	AcquireActivity func(c router.Caller) (release func(), err error)
 }
 
 // Manager 串行化登记、等待命中与释放；网络调用及事件准备在锁外进行。
@@ -40,6 +41,7 @@ type Manager struct {
 
 type continuation struct {
 	finish   func() // 可选的分发关联释放，由登记失败或运行结束调用。
+	release  func() // 从登记到交付结束的活动引用；运行中的实际 Call 另由 Plugin 包装持有。
 	caller   router.Caller
 	parentID uint64
 	ctx      context.Context
@@ -95,9 +97,17 @@ func (m *Manager) start(ctx context.Context, caller router.Caller, in *wire.Inbo
 	if count >= m.opt.Max {
 		return failure(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "continuation limit reached")
 	}
+	var release func()
+	if m.opt.AcquireActivity != nil {
+		var err error
+		release, err = m.opt.AcquireActivity(caller)
+		if err != nil {
+			return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, err.Error())
+		}
+	}
 	// 延续与原请求的有效期独立，只在释放或自身期限结束时取消。
 	lifetime, cancel := context.WithCancel(context.Background())
-	call := &continuation{caller: caller, parentID: in.ParentCallID, ctx: lifetime, cancel: cancel}
+	call := &continuation{caller: caller, parentID: in.ParentCallID, ctx: lifetime, cancel: cancel, release: release}
 	if inv.OnContinuation != nil {
 		call.finish = inv.OnContinuation()
 	}
@@ -117,6 +127,9 @@ func (m *Manager) Finished(inv *router.Invocation, ok bool) {
 		delete(m.calls, inv)
 		call.cancel()
 		m.mu.Unlock()
+		if call.release != nil {
+			call.release()
+		}
 		if call.finish != nil {
 			call.finish()
 		}
@@ -135,6 +148,9 @@ func (m *Manager) run(inv *router.Invocation, call *continuation) {
 		m.mu.Unlock()
 		if call.finish != nil {
 			call.finish()
+		}
+		if call.release != nil {
+			call.release()
 		}
 	}()
 	if call.ctx.Err() != nil {
@@ -186,6 +202,14 @@ func (m *Manager) wait(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if _, exists := m.waits[k]; exists {
 		m.mu.Unlock()
 		return failure(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "wait already exists for this Actor and Target")
+	}
+	if m.opt.AcquireActivity != nil {
+		release, err := m.opt.AcquireActivity(caller)
+		if err != nil {
+			m.mu.Unlock()
+			return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, err.Error())
+		}
+		defer release()
 	}
 	m.waits[k] = w
 	if inv.OnWait != nil {
@@ -279,6 +303,9 @@ func (m *Manager) Release(c router.Caller) {
 			delete(m.calls, inv)
 			if !call.started && call.finish != nil {
 				call.finish()
+			}
+			if !call.started && call.release != nil {
+				call.release()
 			}
 		}
 	}

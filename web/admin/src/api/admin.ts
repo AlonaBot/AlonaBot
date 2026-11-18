@@ -384,6 +384,49 @@ export async function listInstances(): Promise<AdapterInstance[]> {
   return result.instances;
 }
 
+export type Chat = {
+  session: string;
+  title: string;
+  chat_type: 'private' | 'group' | 'channel';
+  instance_id: string;
+  last_active_at: string;
+};
+
+/** listChats 读取完整聊天目录，再按实例归组，避免把单页或 Adapter 总数当成账号会话数。 */
+export async function listChats(): Promise<Chat[]> {
+  const chats: Chat[] = [];
+  let total: number;
+  do {
+    const page = await request<{ chats: Chat[]; total: number }>(`/api/v1/chats?offset=${chats.length}&limit=50`);
+    chats.push(...page.chats);
+    total = page.total;
+  } while (chats.length < total);
+  return chats;
+}
+
+export type Profile = { id: string; name: string; color: string; sessions: number };
+export type ProfileAssignments = {
+  instances: Record<string, string>;
+  sessions: { instance: string; session: string; profile: string }[];
+};
+
+/** listProfiles 读取配置文件选择项。 */
+export function listProfiles(): Promise<Profile[]> {
+  return request<Profile[]>('/api/v1/profiles');
+}
+
+/** getProfileAssignments 读取实例缺省与会话单独指定的配置文件。 */
+export function getProfileAssignments(): Promise<ProfileAssignments> {
+  return request<ProfileAssignments>('/api/v1/profiles/assignments');
+}
+
+/** assignInstanceProfile 保存已创建实例的配置文件指定。 */
+export async function assignInstanceProfile(instanceID: string, profile: string): Promise<void> {
+  await request('/api/v1/profiles/assignments/instances/' + encodeURIComponent(instanceID), {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile }),
+  });
+}
+
 // ----------------------------------------------------------------------------
 // 日志与诊断包 API (ADMIN-API §8, §19, CONTRACTS §14)
 // ----------------------------------------------------------------------------
@@ -395,7 +438,6 @@ export type LogRecord = {
   message: string;
   attrs: Record<string, unknown>;
   trace_id: string;
-};
 
 export type DiagnosticsOptions = {
   since: string;
@@ -403,17 +445,14 @@ export type DiagnosticsOptions = {
   settings: boolean;
   components: boolean;
   redact: boolean;
-};
 
 /** 获取今日最近已缓冲的日志记录（时间升序）。 */
 export async function getRecentLogs(): Promise<LogRecord[]> {
   return request<LogRecord[]>('/api/v1/logs/recent');
-}
 
 /** 获取指定日期的历史日志记录（按日志文件续写顺序）。 */
 export async function getLogHistory(date: string): Promise<LogRecord[]> {
   return request<LogRecord[]>(`/api/v1/logs/history?date=${encodeURIComponent(date)}`);
-}
 
 /** 解析 Content-Disposition 中的 attachment 文件名。 */
 function parseContentDispositionFilename(header: string | null): string {
@@ -431,7 +470,6 @@ function parseContentDispositionFilename(header: string | null): string {
     return (match[1] || match[2] || '').trim();
   }
   return 'alonabot-diagnostics.zip';
-}
 
 /** 解析并派发单条 SSE 事件块。 */
 function parseAndDispatchSSEEvent(
@@ -479,7 +517,6 @@ function parseAndDispatchSSEEvent(
     return true;
   }
   return false;
-}
 
 /** 订阅实时日志流（text/event-stream），返回取消订阅函数。 */
 export function subscribeLogs(handlers: {
@@ -545,7 +582,6 @@ export function subscribeLogs(handlers: {
     cancelled = true;
     abortController.abort();
   };
-}
 
 /** 导出诊断包，返回 zip 文件 Blob 与 Content-Disposition 附件名。 */
 export async function downloadDiagnostics(
@@ -558,5 +594,3 @@ export async function downloadDiagnostics(
   }, async response => {
     const filename = parseContentDispositionFilename(response.headers.get('content-disposition'));
     return { blob: await response.blob(), filename };
-  });
-}

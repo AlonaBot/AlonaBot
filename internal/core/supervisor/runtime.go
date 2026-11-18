@@ -29,7 +29,14 @@ func (r *runtimeRecord) write(ctx context.Context, next state.RuntimeState, reas
 	if err != nil {
 		return err
 	}
-	status.State, status.Reason, status.ChangedAt = next, reason, time.Now().UTC()
+	now := time.Now().UTC()
+	if next == state.RuntimeActive && status.State == state.RuntimeWaking {
+		status.LastWakeAt, status.LastWakeReason = now, reason
+	}
+	status.State, status.Reason, status.ChangedAt = next, reason, now
+	if next == state.RuntimeSuspended {
+		status.LastSuspendAt = status.ChangedAt
+	}
 	return r.key.store.SetRuntimeStatus(ctx, r.key.id, status)
 }
 

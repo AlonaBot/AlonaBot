@@ -208,7 +208,7 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 	if err != nil {
 		return nil, err
 	}
-	boot := &pb.Bootstrap{GenerationId: "gen-" + rand.Text(), CandidateConfigJson: string(configuration),
+	boot := &pb.Bootstrap{ProfileOverridesJson: "{}", GenerationId: "gen-" + rand.Text(), CandidateConfigJson: string(configuration),
 		DatabaseDescriptor: &pb.DatabaseDescriptor{ActivationReason: activationReason(resourceKind), ManualMigrationApproved: false}}
 	spec, err := o.opt.Spec(ctx, target, packageDir, boot)
 	if err != nil {

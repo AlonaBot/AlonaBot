@@ -105,7 +105,7 @@
 | goal-168 | S-01.1 | 可休眠声明与持久化运行状态 | T-04.1、T-09.4、T-09.6 | 已完成（PR #225） |
 | goal-169 | S-01.2 | 已提交代次的路由快照与索引 | T-04.1、T-09.4、T-09.6 | 已完成（PR #226） |
 | goal-150 | T-04.17 | 插件页面套件 | T-04.16、T-07.7 | 已完成（PR #218） |
-| goal-152 | T-08.16 | 去掉配置版本与迁移，配置宽松载入 | T-08.11、T-08.12、T-09.14 | 待派发 |
+| goal-152 | T-08.16 | 去掉配置版本与迁移，配置宽松载入 | T-08.11、T-08.12、T-09.14 | 已完成（PR #239） |
 | goal-160 | T-08.18 | 配置文件的存储与管理 | T-08.14、T-09.14 | 已完成（PR #214） |
 | goal-147 | T-09.19 | 诊断包 | T-09.10、T-09.14 | 已完成（PR #213） |
 | goal-153 | T-09.20 | WebUI 组件的后台进程与 command.invoked | T-09.12、T-09.14、T-04.16 | 已完成（PR #221） |
@@ -114,9 +114,9 @@
 | goal-158 | T-09.24 | 组件的 changelog | T-09.3、T-09.14 | 已完成（PR #215） |
 | goal-148 | T-11.5 | 工具的副作用类别 | T-11.2、T-12.3、T-09.14 | 已完成（PR #219） |
 | goal-140 | T-13.5 | 模块根包只保留库模式接口 | T-04.16 | 已完成（PR #200） |
-| goal-170 | S-02.1 | 按需唤醒、活动引用与有界等待 | S-01.1、S-01.2、T-05.5、T-06.4、T-07.5 | 待派发 |
+| goal-170 | S-02.1 | 按需唤醒、活动引用与有界等待 | S-01.1、S-01.2、T-05.5、T-06.4、T-07.5 | 已完成（PR #241） |
 | goal-176 | S-02.3 | Core 消息事件过滤与 SDK 注册 | T-04.16、T-08.11、T-09.14 | 已完成（PR #227） |
-| goal-161 | T-04.18 | 配置文件的派发与 SDK | T-04.16、T-08.18 | 待派发 |
+| goal-161 | T-04.18 | 配置文件的派发与 SDK | T-04.16、T-08.18 | 已完成（PR #242） |
 | goal-171 | S-02.2 | 空闲退出与即时休眠策略 | S-02.1 | 等待前置 |
 | goal-177 | T-09.27 | 组件市场 ID 改用连字符 | T-09.10、T-09.14、T-12.8、T-13.5 | 已完成（PR #222） |
 | goal-162 | T-04.19 | 平台与消息 | T-04.18 | 等待前置（T-04.18） |
@@ -7731,7 +7731,7 @@ internal/core/state
 
 ### goal-152 · T-08.16 去掉配置版本与迁移，配置宽松载入
 
-状态：待派发。前置 T-08.11、T-08.12 与 T-09.14 已合并。2026-11-17 按 D-161 新增。改动面大，派发前确认同一波的 goal-160 与 goal-151 尚未改 `contracts/configschema/` 的同一批文件，否则先合并它们再派发本条。
+状态：已完成（PR #239），合并提交 `1a1d12c`。以下保留派发时语句。派发时：前置 T-08.11、T-08.12 与 T-09.14 已合并。2026-11-17 按 D-161 新增。改动面大，派发前确认同一波的 goal-160 与 goal-151 尚未改 `contracts/configschema/` 的同一批文件，否则先合并它们再派发本条。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-152（切片 T-08.16：去掉配置版本与迁移，配置宽松载入）。goal 目录 goal-152，分支 goal-152，worktree .worktrees/goal-152，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -8080,7 +8080,7 @@ internal/core/state
 
 ### goal-170 · S-02.1 按需唤醒、活动引用与有界等待
 
-状态：待派发。前置 S-01.1（PR #225，`2cc32ff`）、S-01.2（PR #226，`413a6ff`）、T-05.5（PR #162，`8c12972`）、T-06.4（PR #164，`039802f`）、T-07.5（PR #119，`cc19e99`）均已合并；S-02.3（PR #227，`86e6768`）的 Core 消息过滤也已合并。已按 main `947daa5` 核对：`internal/core/supervisor.Launch(ctx context.Context, store *state.Store, spec supervisor.Spec) (*supervisor.Running, error)` 与 `(*Running).Stop(t0 time.Time, reason pb.StopReason) host.StopResult` 共用逐插件锁，`runtime.go` 按实际启动所有权更新状态；`internal/core/state.ActiveRouteSnapshot` 与 `internal/core/router.SetRouteSnapshot/RouteSnapshot` 已保存和读取已提交路由，但 `Router.candidates`、Broker 与 HTTP 代理仍依赖活 Session。`router.Options.MessageConfig` 与 `matchMessageFilter` 已完成消息过滤，`internal/app/message_filter.go` 当前只读 Active 基础配置。本条接入快照唤醒与活动引用；与 goal-161 共享 Router 的 Options/Invocation、internal/app 装配及消息配置读取，后合并者同步 main，保留配置文件的会话解析与覆盖，不回退为基础配置读取。
+状态：已完成（PR #241），合并提交 `e0a38d7`。以下保留派发时语句。派发时：前置 S-01.1（PR #225，`2cc32ff`）、S-01.2（PR #226，`413a6ff`）、T-05.5（PR #162，`8c12972`）、T-06.4（PR #164，`039802f`）、T-07.5（PR #119，`cc19e99`）均已合并；S-02.3（PR #227，`86e6768`）的 Core 消息过滤也已合并。已按 main `947daa5` 核对：`internal/core/supervisor.Launch(ctx context.Context, store *state.Store, spec supervisor.Spec) (*supervisor.Running, error)` 与 `(*Running).Stop(t0 time.Time, reason pb.StopReason) host.StopResult` 共用逐插件锁，`runtime.go` 按实际启动所有权更新状态；`internal/core/state.ActiveRouteSnapshot` 与 `internal/core/router.SetRouteSnapshot/RouteSnapshot` 已保存和读取已提交路由，但 `Router.candidates`、Broker 与 HTTP 代理仍依赖活 Session。`router.Options.MessageConfig` 与 `matchMessageFilter` 已完成消息过滤，`internal/app/message_filter.go` 当前只读 Active 基础配置。本条接入快照唤醒与活动引用；与 goal-161 共享 Router 的 Options/Invocation、internal/app 装配及消息配置读取，后合并者同步 main，保留配置文件的会话解析与覆盖，不回退为基础配置读取。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-170（切片 S-02.1：按需唤醒、活动引用与有界等待）。goal 目录 goal-170，分支 goal-170，worktree .worktrees/goal-170，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -8210,7 +8210,7 @@ internal/core/state
 
 ### goal-161 · T-04.18 配置文件的派发与 SDK
 
-状态：待派发。前置 T-04.16（PR #199，`046e752`）、T-08.18（PR #214，`ab0cd56`）均已合并；消息过滤 S-02.3（PR #227，`86e6768`）也已合并。已按 main `947daa5` 核对：`internal/core/profile.New(ctx context.Context, opt profile.Options) (*profile.Service, error)` 建立一次操作的快照，`Resolve(instance, session string) profile.Profile`、`Overrides(pluginID string) map[string]map[string]json.RawMessage` 已可复用；`sdk/sdk.go` 的 `(*Context).Config() config.Values` 当前直接返回插件基础配置，`internal/app/message_filter.go` 只读 Active 基础配置，InvocationContext 仍止于字段 6、Bootstrap 止于字段 13。goal-152（T-08.16）已派发、正在进行；双方共享 `contracts/configschema/`（尤其 profile.go、prepare.go 的准备/校验入口）、`sdk/config/`、`sdk/session.go`、`sdk/plugin.go`、`contracts/proto/alonabot/v1/control.proto` 及生成产物，并可能相交于 Core 配置快照的读取调用点。后合并者同步最新 main，保留对方改动：goal-152 的去版本与宽松校正、goal-161 的 profile 标记与覆盖合并同时保留，字段号按已合并源文件顺延，重新生成并核对两条主路径。
+状态：已完成（PR #242），合并提交 `b816127`。以下保留派发时语句。派发时：前置 T-04.16（PR #199，`046e752`）、T-08.18（PR #214，`ab0cd56`）均已合并；消息过滤 S-02.3（PR #227，`86e6768`）也已合并。已按 main `947daa5` 核对：`internal/core/profile.New(ctx context.Context, opt profile.Options) (*profile.Service, error)` 建立一次操作的快照，`Resolve(instance, session string) profile.Profile`、`Overrides(pluginID string) map[string]map[string]json.RawMessage` 已可复用；`sdk/sdk.go` 的 `(*Context).Config() config.Values` 当前直接返回插件基础配置，`internal/app/message_filter.go` 只读 Active 基础配置，InvocationContext 仍止于字段 6、Bootstrap 止于字段 13。goal-152（T-08.16）已派发、正在进行；双方共享 `contracts/configschema/`（尤其 profile.go、prepare.go 的准备/校验入口）、`sdk/config/`、`sdk/session.go`、`sdk/plugin.go`、`contracts/proto/alonabot/v1/control.proto` 及生成产物，并可能相交于 Core 配置快照的读取调用点。后合并者同步最新 main，保留对方改动：goal-152 的去版本与宽松校正、goal-161 的 profile 标记与覆盖合并同时保留，字段号按已合并源文件顺延，重新生成并核对两条主路径。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-161（切片 T-04.18：配置文件的派发与 SDK）。goal 目录 goal-161，分支 goal-161，worktree .worktrees/goal-161，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -8365,7 +8365,7 @@ internal/core/state
 
 ### goal-171 · S-02.2 空闲退出与即时休眠策略
 
-状态：等待前置（S-02.1）。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
+状态：等待语句定稿（前置均已合并）。S-02.1（PR #241，`e0a38d7`）已合并。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。 2026-11-17 审查者补充（S-02.1 审查 FIX-9 的裁定）：Core 在插件 HTTP 反向代理返回时即释放活动引用，不新增「HTTP 回调完成」协议字段；本切片的 QUIESCING 须等待 SDK 自己记录的在途回调（含 HTTP Handler、Bus 回调）全部结束，或在 SDK 报告仍有在途回调时放弃本次退出，空闲退出不得打断仍在执行的业务。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-171（切片 S-02.2：空闲退出与即时休眠策略）。goal 目录 goal-171，分支 goal-171，worktree .worktrees/goal-171，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -8388,7 +8388,7 @@ internal/core/state
 
 ### goal-162 · T-04.19 平台与消息
 
-状态：等待前置（T-04.18）。2026-11-17 按 D-168 新增。目标、依据与要点由 PLAN T-04 步骤 19 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：等待语句定稿（前置均已合并）。T-04.18（PR #242，`b816127`）已合并。2026-11-17 按 D-168 新增。目标、依据与要点由 PLAN T-04 步骤 19 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-162（切片 T-04.19：平台与消息）。goal 目录 goal-162，分支 goal-162，worktree .worktrees/goal-162，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -8407,7 +8407,7 @@ internal/core/state
 
 ### goal-163 · T-11.6 按配置文件的工具策略
 
-状态：等待前置（T-04.18）。2026-11-17 按 D-168 新增。目标、依据与要点由 PLAN T-11 步骤 8 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：等待语句定稿（前置均已合并）。T-04.18（PR #242，`b816127`）已合并。2026-11-17 按 D-168 新增。目标、依据与要点由 PLAN T-11 步骤 8 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-163（切片 T-11.6：按配置文件的工具策略）。goal 目录 goal-163，分支 goal-163，worktree .worktrees/goal-163，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

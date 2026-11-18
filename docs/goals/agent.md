@@ -1193,7 +1193,7 @@ func conversationKey(c *sdk.Context) string
 
 ### goal-164 · T-12.19 Agent 接入配置文件
 
-状态：等待前置（T-04.18）。T-12.18（PR #229，`f00a55a`）已合并。2026-11-17 按 D-168 新增。目标、依据与要点由 PLAN T-12 步骤 13 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：等待语句定稿（前置均已合并）。T-04.18（PR #242，`b816127`）已合并。T-12.18（PR #229，`f00a55a`）已合并。2026-11-17 按 D-168 新增。目标、依据与要点由 PLAN T-12 步骤 13 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-164（切片 T-12.19：Agent 接入配置文件）。goal 目录 goal-164，分支 goal-164，worktree .worktrees/goal-164，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
