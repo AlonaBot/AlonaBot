@@ -64,6 +64,10 @@ func Generate(project *Manifest, build BuildInfo) ([]byte, error) {
 			if m.Role != roleWebUI {
 				continue
 			}
+		case "sleep_capable":
+			if !m.SleepCapable && m.Role != rolePlugin && m.Role != roleAgent {
+				continue
+			}
 		case "adapter_dependencies", "plugin_dependencies", "migration_mode", "prepare_effects":
 			if m.Role != rolePlugin && m.Role != roleAgent {
 				continue

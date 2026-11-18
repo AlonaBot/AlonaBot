@@ -176,10 +176,18 @@ func (s *Store) Uninstall(ctx context.Context, id string, data, all bool) error 
 			}
 		}
 		if all {
+			if err := tx.Delete(&pluginRuntime{PluginID: id}).Error; err != nil {
+				return err
+			}
 			if err := tx.Delete(&current).Error; err != nil {
 				return err
 			}
 			return tx.Delete(&installed).Error
+		}
+		if installed.Role == RolePlugin || installed.Role == RoleAgent {
+			if err := tx.Model(&pluginRuntime{PluginID: id}).Select("*").Updates(stoppedRuntime("uninstalled")).Error; err != nil {
+				return err
+			}
 		}
 		installed.Uninstalled = true
 		return tx.Save(&installed).Error
