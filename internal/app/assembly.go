@@ -111,7 +111,7 @@ func validateComponents(components []Component, installs []state.Install) error 
 			}
 			m = parsed.Manifest
 			warnings = parsed.Warnings
-			if m.Role == string(state.RoleWebUI) {
+			if m.Role == string(state.RoleWebUI) && m.Entrypoint == "" {
 				return fmt.Errorf("component %s has no executable role", m.ID)
 			}
 			entry.role, entry.manifest = state.Role(m.Role), m
@@ -553,7 +553,7 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) (err error) 
 	a.bus.Attach(plugin)
 	if r.process == nil {
 		if r.instance.HTTPListener != nil {
-			a.http.Bind(r.id, r.instance.GenerationID, r.instance.HTTPListener, r.instance.HTTPProxyToken, r.instance.Routes, r.install.Role == state.RoleAdapter)
+			a.http.Bind(r.id, r.instance.GenerationID, r.instance.HTTPListener, r.instance.HTTPProxyToken, r.instance.Routes, r.install.Role)
 		}
 		if err := a.scheduler.Attach(ctx, plugin, time.Now()); err != nil {
 			a.detach(r)
@@ -945,7 +945,8 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 		return nil, err
 	}
 	running.process, running.instance = process, process.Instance
-	if (kind == journal.KindUpdate || kind == journal.KindRollback) && (!record.WasEnabled || !record.WasRunning) {
+	// 无旧 Active 的静态 WebUI 转进程时，原启用状态决定是否装配业务入口。
+	if (kind == journal.KindUpdate || kind == journal.KindRollback) && (!record.WasEnabled || !record.WasRunning && record.ExpectedOld != "") {
 		// 提交只切换权威代次；先停止候选，之后显式 enable 才建立业务 Session。
 		if stopErr := c.stopComponent(running, time.Now(), host.NewStopTiming(c.values), pb.StopReason_STOP_REASON_DISABLE); stopErr != nil {
 			return running, errors.Join(err, stopErr)

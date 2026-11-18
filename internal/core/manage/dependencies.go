@@ -85,7 +85,7 @@ func (s *Service) affected(ctx context.Context, target state.Install, version st
 		if err != nil {
 			return nil, failure(err)
 		}
-		if !enabled || in.Role == state.RoleAdapter || in.Role == state.RoleWebUI {
+		if !enabled || in.Role == state.RoleAdapter || in.Role == state.RoleWebUI && in.Entrypoint == "" {
 			continue
 		}
 		m, err := s.manifest(ctx, in.PluginID)
@@ -126,7 +126,7 @@ func (s *Service) checkCycles(ctx context.Context, candidate *manifest.Manifest,
 	}
 	graph := map[string]*manifest.Manifest{candidate.ID: candidate}
 	for _, in := range installs {
-		if in.Uninstalled || in.PluginID == candidate.ID || slices.Contains(replacing, in.PluginID) || in.Role == state.RoleWebUI {
+		if in.Uninstalled || in.PluginID == candidate.ID || slices.Contains(replacing, in.PluginID) || in.Role == state.RoleWebUI && in.Entrypoint == "" {
 			continue
 		}
 		m, err := s.manifest(ctx, in.PluginID)

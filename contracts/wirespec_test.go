@@ -11,6 +11,29 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
+// TestCommandInvokedFieldNumbers 固定命令结果载荷及事件分支的编号与类型。
+func TestCommandInvokedFieldNumbers(t *testing.T) {
+	fields := (&pb.CommandInvokedPayload{}).ProtoReflect().Descriptor().Fields()
+	names := []protoreflect.Name{"plugin_id", "route_id", "command_name", "result", "duration_ms"}
+	if fields.Len() != len(names) {
+		t.Fatalf("CommandInvokedPayload fields = %d, want %d", fields.Len(), len(names))
+	}
+	for i, name := range names {
+		kind := protoreflect.StringKind
+		if name == "duration_ms" {
+			kind = protoreflect.Uint64Kind
+		}
+		field := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+		if field == nil || field.Name() != name || field.Kind() != kind || field.HasPresence() || field.IsList() || field.ContainingOneof() != nil {
+			t.Fatalf("CommandInvokedPayload field %d = %v", i+1, field)
+		}
+	}
+	field := (&pb.EventPayload{}).ProtoReflect().Descriptor().Fields().ByNumber(12)
+	if field == nil || field.Name() != "command_invoked" || field.Kind() != protoreflect.MessageKind || field.IsList() || !field.HasPresence() || field.Message().FullName() != "alonabot.v1.CommandInvokedPayload" || field.ContainingOneof() == nil || field.ContainingOneof().Name() != "kind" {
+		t.Fatalf("EventPayload field 12 = %v", field)
+	}
+}
+
 // TestLogSetLevelFieldNumbers 固定日志级别请求和响应的协议布局。
 func TestLogSetLevelFieldNumbers(t *testing.T) {
 	fields := (&pb.LogSetLevelRequest{}).ProtoReflect().Descriptor().Fields()

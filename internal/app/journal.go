@@ -54,7 +54,7 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	// Schema 摘要与版本绑定包内声明，所有已安装组件的启动共用同一输入。
 	boot.TargetConfigVersion = *m.ConfigVersion
 	boot.ConfigSchemaHash = nil
-	if (in.Role == state.RolePlugin || in.Role == state.RoleAgent) && schemas.config != nil {
+	if (in.Role == state.RolePlugin || in.Role == state.RoleAgent || in.Role == state.RoleWebUI) && schemas.config != nil {
 		if uint32(schemas.config.Version()) != boot.TargetConfigVersion {
 			return supervisor.Spec{}, nil, fmt.Errorf("config schema version differs from manifest for %s", in.PluginID)
 		}
@@ -71,7 +71,7 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	case manifest.MigrationVersioned:
 		database.MigrationMode = pb.MigrationMode_MIGRATION_MODE_VERSIONED
 	}
-	if (in.Role == state.RolePlugin || in.Role == state.RoleAgent) && (m.PrepareEffects == manifest.EffectsManagedDB || m.MigrationMode == manifest.MigrationSelf || m.MigrationMode == manifest.MigrationVersioned) {
+	if (in.Role == state.RolePlugin || in.Role == state.RoleAgent || in.Role == state.RoleWebUI) && (m.PrepareEffects == manifest.EffectsManagedDB || m.MigrationMode == manifest.MigrationSelf || m.MigrationMode == manifest.MigrationVersioned) {
 		database.Backend = pb.DatabaseBackend_DATABASE_BACKEND_SQLITE
 	}
 	boot.PluginDataDir, err = preparePluginDataDir(c.dir, in.PluginID)

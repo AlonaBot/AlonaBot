@@ -25,6 +25,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -449,6 +450,106 @@ func TestManagementLifecycle(t *testing.T) {
 		}
 		stopTestCore(t, c)
 	})
+	t.Run("webui-process-command-invoked", func(t *testing.T) {
+		// 1. 使用真实构建产物安装 WebUI、Adapter 与命令组件。
+		archive := packWebUIFixture(t, "1.0.0", webUIFixtureSource, nil)
+		dir := t.TempDir()
+		const origin = "http://webui.test:7650"
+		if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte(`{"listen":"127.0.0.1:0","base_url":"`+origin+`"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		c := startEmptyCore(t, dir)
+		adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+		commands, err := writeTestPackage(t.TempDir(), "commands", "plugin", "", "github.com/example/commands", "1.0.0", filepath.Join(binDir, "command-fixture"), "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, path := range []string{archive, adapter, commands} {
+			c.management(t, dir, "", "install", path, "--yes")
+		}
+		c.management(t, dir, "", "adapter", "instance", "create", "alonabot_adapter_fixture", "one")
+		for _, id := range []string{"alonabot_webui_fixture", "alonabot_adapter_fixture", "commands"} {
+			c.management(t, dir, "", "enable", id)
+		}
+		c.waitFor("fixture instance one started")
+		var cookie *http.Cookie
+		var csrf string
+		send := func(method, path, body string, want int) (*http.Response, []byte) {
+			t.Helper()
+			request, err := http.NewRequest(method, "http://"+c.address()+path, strings.NewReader(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Host = "webui.test"
+			request.Header.Set("Origin", origin)
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("X-Alonabot-CSRF", csrf)
+			if cookie != nil {
+				request.AddCookie(cookie)
+			}
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, readErr := io.ReadAll(response.Body)
+			if err := errors.Join(readErr, response.Body.Close()); err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != want {
+				t.Fatalf("%s %s: %d, want %d: %s\n%s", method, path, response.StatusCode, want, raw, c.log())
+			}
+			return response, raw
+		}
+		// 2. 同一管理源的后台路由先拒绝匿名请求，再接受真实登录 Cookie。
+		send(http.MethodGet, "/plugins/alonabot_webui_fixture/status", "", http.StatusUnauthorized)
+		token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		input, err := json.Marshal(map[string]string{"token": strings.TrimSpace(string(token))})
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, raw := send(http.MethodPost, "/api/auth/login", string(input), http.StatusOK)
+		var login struct {
+			CSRFToken string `json:"csrf_token"`
+		}
+		if err := json.Unmarshal(raw, &login); err != nil {
+			t.Fatal(err)
+		}
+		if len(response.Cookies()) != 1 || login.CSRFToken == "" {
+			t.Fatal("login did not return a cookie and CSRF token")
+		}
+		cookie, csrf = response.Cookies()[0], login.CSRFToken
+		response, _ = send(http.MethodGet, "/plugins/alonabot_webui_fixture/status", "", http.StatusOK)
+		if strings.Contains(response.Header.Get("Content-Security-Policy"), "sandbox") {
+			t.Fatal("WebUI backend was isolated from its management origin")
+		}
+		// 3. 经 Adapter 送入命令，再从 WebUI 进程读取其事件路由收到的结果。
+		send(http.MethodPost, "/plugins/alonabot_adapter_fixture/deliver?instance=one&user=alice&text=%2Finspect", "", http.StatusNoContent)
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			_, raw := send(http.MethodGet, "/plugins/alonabot_webui_fixture/status", "", http.StatusOK)
+			var received []struct {
+				PluginID, RouteID, CommandName, Result string
+				DurationMS                             uint64
+			}
+			if err := json.Unmarshal(raw, &received); err != nil {
+				t.Fatal(err)
+			}
+			if len(received) != 0 {
+				if len(received) != 1 || received[0].PluginID != "commands" || received[0].RouteID != "cmd.inspect" || received[0].CommandName != "inspect" || received[0].Result != "ok" {
+					t.Fatalf("command invocation results: %s", raw)
+				}
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("WebUI received no command invocation: %s\n%s", raw, c.log())
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		stopTestCore(t, c)
+	})
 	t.Run("profile-storage-and-assignments", func(t *testing.T) {
 		dir := t.TempDir()
 		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
@@ -512,7 +613,86 @@ func TestManagementLifecycle(t *testing.T) {
 		}
 		stopTestCore(t, c)
 	})
+}
 
+const webUIFixtureManifest = `id: alonabot_webui_fixture
+name: WebUI Fixture
+version: %s
+role: webui
+source: github.com/example/webui_fixture
+assets: assets
+admin_api_min_major: 1
+admin_api_max_major: 1
+`
+
+const webUIFixtureSource = `package fixture
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"sync"
+
+	"github.com/AlonaBot/AlonaBot/sdk"
+	"github.com/AlonaBot/AlonaBot/sdk/message"
+)
+
+func New() *sdk.Plugin {
+	p := sdk.NewPlugin()
+	var mu sync.Mutex
+	var received []message.CommandInvokedPayload
+	p.On("command.invoked", sdk.CommandInvoked).Handle(func(_ *sdk.Context, payload *message.CommandInvokedPayload) error {
+		mu.Lock()
+		defer mu.Unlock()
+		received = append(received, *payload)
+		return nil
+	})
+	p.Route(http.MethodGet, "/status").Public(sdk.AuthCallbackState).HandleFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(received); err != nil {
+			slog.Error("write command invocation results failed", "error", err)
+		}
+	})
+	return p
+}
+`
+
+func packWebUIFixture(t *testing.T, version, source string, files map[string]string) string {
+	t.Helper()
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if files == nil {
+		files = make(map[string]string)
+	}
+	if _, ok := files["plugin.yaml"]; !ok {
+		files["plugin.yaml"] = fmt.Sprintf(webUIFixtureManifest, version)
+	}
+	files["assets/index.html"] = "static-original"
+	if source != "" {
+		files["main.go"] = source
+		files["go.mod"] = "module example.com/webui\ngo 1.27.1\nrequire github.com/AlonaBot/AlonaBot v0.0.0\nreplace github.com/AlonaBot/AlonaBot => " + strconv.Quote(root) + "\n"
+		// 只让临时 module 填充 SDK 的传递依赖。
+		t.Setenv("GOFLAGS", os.Getenv("GOFLAGS")+" -mod=mod")
+	}
+	for name, raw := range files {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: dir}, "https://example.invalid/webui.tar.gz", "", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return archive
 }
 
 // validationPackage 只改真实 pack 产物的声明与构建信息，并同步归档发布清单。
