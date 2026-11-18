@@ -6,7 +6,7 @@
 
 本章节覆盖 Core（`internal/core/`、`internal/wire/`、`internal/tune/`）、协议契约（`contracts/`）、插件与 Adapter SDK（`sdk/`，含 `sdk/adapter`、`sdk/generate` 与插件测试套件）、`cmd/alonabot`、库模式根包，以及作为 SDK 验收手段的 `examples/`。Adapter 的接口层面（`sdk/adapter`、`internal/core/adapter` 与 `remote`、`adapter.*` 与 `core.adapter.*` 服务、能力与 extension 声明的校验）属于本章节；各平台的实现在适配器章节。
 
-- 工作包：T-01、T-02、T-03（Telegram 步骤除外）、T-04～T-08、T-09、T-11、T-13、T-16。T-11 是 Core 提供给任何 Agent 组件的工具目录、调用确认与会话存储，所以放在本章节。
+- 工作包：T-01、T-02、T-03（Telegram 步骤除外）、T-04～T-08、T-09、T-11、T-13、T-16，以及 PLAN §7 的 S-01～S-03、S-06。T-11 是 Core 提供给任何 Agent 组件的工具目录、调用确认与会话存储，所以放在本章节。
 - 含 Telegram 部分的核心切片：T-03.6（getFile 取件）、T-03.8（callback_query 与 answerCallbackQuery）、T-03.9（editMessageText）、T-03.10（Bot API 模拟服务上的故障矩阵）。这些切片用官方 Telegram Adapter 作为首个真实实现来验收 Core 功能，[Telegram 实施计划](adapters/telegram.md)同时列出它们。
 - `web/admin` 的前端切片（T-08.7、T-09.8、T-09.9、T-09.15）归 WebUI 章节，步骤文字仍在本章节的 T-08 步骤 9 与 T-09 步骤 7。页面调用的 Admin API 与 WebUI 静态文件的提供（T-09.10、T-09.12～T-09.14）属于本章节。
 
@@ -90,7 +90,7 @@
 | T-08.15 | goal-151 | 配置字段的回复示例：`example` 与 i18n 覆盖的检查、`examples/` 图片随包校验、`GET /api/v1/packages/{id}/examples/{path}`（D-160） | T-08 步骤 12 | T-08.11、T-08.14、T-09.12 | V-131 的检查与 API 分项 | 已完成（PR #211） |
 | T-08.16 | goal-152 | 去掉配置版本与迁移，配置宽松载入：删除 `$version`、`$migrations`、manifest 的 `config_version`、三个版本字段与迁移实现；`OnConfigLoad(ctx, raw)`；插件、Adapter 实例与 Core 设置的校正与校正记录；REGISTER 追加校正记录；读取校正记录与清理无效配置的管理 API（D-161） | T-08 步骤 13 | T-08.11、T-08.12、T-09.14 | V-37、V-38、V-88、V-132 | 未开始 |
 | T-08.17 | goal-157 | 插件的 KV 与数据目录：`sdk/kv` 与保留表 `_alonabot_kv`，Core 建立 `<data_dir>/plugin_data/<id>/` 并经 Bootstrap 的 `plugin_data_dir` 下发，`sdk.PluginDataDir()`，卸载清理归入数据（D-165） | T-08 步骤 14 | T-08.5、T-09.4 | V-137 的 SDK 与 Core 分项 | 未开始 |
-| T-08.18 | goal-160 | 配置文件的存储与管理：状态库表、会话的配置文件解析、schema 的 `profile` 检查、覆盖值校验与无效清理、ADMIN-API §23、`alonabot profile`（D-168） | T-08 步骤 15 | T-08.14、T-09.14 | V-140 | 未开始 |
+| T-08.18 | goal-160 | 配置文件的存储与管理：状态库表、会话的配置文件解析、schema 的 `profile` 检查、覆盖值校验与无效清理、ADMIN-API §23、`alonabot profile`（D-168） | T-08 步骤 15 | T-08.14、T-09.14 | V-140 | 已完成（PR #214） |
 | T-09.1 | goal-36 | 首次管理认证：admin-token init/reset、login、会话、CSRF、CLI Bearer | T-09 步骤 1 | T-02.3、T-07.4 | V-47 的认证分项 | 已完成（PR #72；TEST-MATRIX §3.2） |
 | T-09.2 | goal-37 | 安装包预检与安全解压：验签、来源、平台、长度/摘要、受控解压与上限、不可变包目录 | T-09 步骤 2（预检） | T-02 | V-27、V-28、V-41 的预检分项 | 已完成（PR #19；TEST-MATRIX §3.2） |
 | T-09.3 | goal-38 | 开发 CLI：顶层的 `init/build/check/test/pack`（D-77）；init 在当前目录创建只含作者信息的组件工程，build 生成嵌入代码与调用 `sdk.Run` 的正式入口并编译，取代 `plugin generate`；pack 支持四种角色，WebUI 包为 `any` 平台，签名可选 | T-09 步骤 2（CLI） | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | V-01、V-41、V-54 的打包分项 | 已完成（PR #194；TEST-MATRIX §3.2） |
@@ -110,6 +110,7 @@
 | T-09.21 | goal-154 | 插件数据浏览的管理 API：表与列、分页查询、按 rowid 增删改、KV 与数据目录文件的管理、zip 导出、清空、保留代次只读浏览与审计日志（D-163、D-165） | T-09 步骤 7（数据浏览） | T-09.14、T-08.5、T-08.17 | V-134、V-137 的 API 分项 | 未开始 |
 | T-09.22 | goal-155 | 补齐的管理 API：保留代次、静态任务的列表与暂停恢复、Adapter 实例列表、聊天目录、更换管理令牌，插件页面的 `.Page` 声明、i18n `pages` 与组件列表的 `pages`（D-164） | T-09 步骤 7（补充 API） | T-09.14、T-07.9、T-03.25、T-04.16 | V-135 | 未开始 |
 | T-09.24 | goal-158 | 组件的 changelog：`check`/`build`/`pack` 对 `CHANGELOG.md` 与 `changelog/<版本>/<locale>.md` 的校验与打包，`GET /api/v1/packages/{id}/changelog` 的切分与语言选择，Core 自身 `CHANGELOG.md` 的嵌入与 `GET /api/v1/core/changelog`（D-166） | T-09 步骤 7（changelog） | T-09.3、T-09.14 | V-138 | 未开始 |
+| T-09.27 | goal-177 | 组件市场 ID 改用连字符：四角色前缀与正则、校验调用者、日志来源、Agent 工具原始名、官方与示例 manifest、CLI/生成资源、既有测试与 fixture；本地 ID 规则保留（D-172） | T-09 步骤 11 | T-09.10、T-09.14、T-12.8、T-13.5 | V-01、V-62、V-64 的改名分项；V-121 的衔接 | 未开始 |
 | T-11.1 | goal-54 | 工具描述与目录：Service 描述的 `tool` 字段、注册校验、`core.tool.list`、调用策略的持久化与管理服务层 | T-11 步骤 1、2 | T-04.4、T-04.7、T-06.1 | V-55 的目录与策略分项 | 已完成（PR #101；TEST-MATRIX §3.2） |
 | T-11.2 | goal-55 | 工具调用与用户确认：`core.tool.invoke`、`core.tool.confirm`、Core 内部的确认记录与按钮、同一 Actor 与 5 分钟限时、确认文案 | T-11 步骤 3、4 | T-03.8、T-06.2、T-08.8、T-11.1 | V-55 | 已完成（PR #165；TEST-MATRIX §3.2） |
 | T-11.3 | goal-56 | Agent 会话存储：状态库表、`core.conversation.*`、管理服务层的列出与清除、purge | T-11 步骤 5 | T-03.1 | V-56 | 已完成（PR #35；TEST-MATRIX §3.2） |
@@ -125,6 +126,17 @@
 | T-16.1 | goal-81 | 插件测试套件基础：`plugintest.Start`、测试 Adapter、会话与身份、Capability 子集、消息注入、`internal/inproc` 的分发结束通知、配置与数据库 | T-16 步骤 1、2 | T-05.2、T-13.2、T-09.4 | V-73 的基础分项 | 已完成（PR #168；TEST-MATRIX §3.2） |
 | T-16.2 | goal-82 | 按钮点击、多轮等待、schedule 触发（含动态任务实例，D-124）与后台发送；用套件测试示例插件，开发文档，汇总证据 | T-16 步骤 3、4 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | V-73 | 已完成（PR #183；TEST-MATRIX §3.2） |
 | T-16.3 | goal-102 | `plugintest.LLM`：登记只提供 `llm.generate` 的测试 Agent，被测插件经 `@agent` 的调用交给测试函数（D-77） | T-16 步骤 3 | T-12.8、T-16.1 | V-73 的 LLM 分项 | 已完成（PR #190；TEST-MATRIX §3.2） |
+
+| S-01.1 | goal-168 | 可休眠声明与持久化运行状态 | S-01 步骤 1、2 | T-04.1、T-09.4、T-09.6 | V-77 的 manifest、状态与未启用分项 | 未开始 |
+| S-01.2 | goal-169 | 已提交代次的路由快照与索引 | S-01 步骤 1、3 | T-04.1、T-09.4、T-09.6 | V-77 的快照、摘要校验与恢复索引分项 | 未开始 |
+| S-02.1 | goal-170 | 按需唤醒、活动引用与有界等待 | S-02 步骤 1～3 | S-01.1、S-01.2、T-05.5、T-06.4、T-07.5 | V-77 的首请求、并发、取消、期限与活动引用分项 | 未开始 |
+| S-02.2 | goal-171 | 空闲退出与即时休眠策略 | S-02 步骤 4 | S-02.1 | V-77 的准入、空闲退出、停止竞争与策略生效分项 | 未开始 |
+| S-02.3 | goal-176 | Core 消息事件过滤与 SDK 注册 | S-02 步骤 5 | T-04.16、T-08.11、T-09.14 | V-77 的 Core OR 匹配、配置取值与 SDK 注册分项（无需休眠进程） | 未开始 |
+| S-03.1 | goal-172 | Scheduler 唤醒与离线 tick 区分 | S-03 步骤 1、2 | S-02.2、T-07.2 | V-78；V-77 的 schedule 阻止休眠分项 | 未开始 |
+| S-06.1 | goal-173 | 休眠管理 API、运行诊断与 CLI | S-06 步骤 1 | S-02.2、S-03.1、T-09.14 | V-81 的管理 API、CLI、状态与模式切换分项 | 未开始 |
+| S-06.2 | goal-174 | 休眠指标、故障注入与固定机器验收 | S-06 步骤 2～4 | S-06.1 | V-77、V-78、V-81 的证据汇总与固定机器测量 | 未开始 |
+
+S 工作包的切片采用 `S-01.1` 形式：工作包编号加包内顺序号，一个切片对应一个可独立合并、可验收的 PR；工作包正文与失败停止条件沿用 [PLAN §7](../PLAN.md#7-休眠扩展)。S-01.1 与 S-01.2 的直接前置相同，可分别取证；共享提交与装配文件按执行顺序串行合并。S-02.3 只依赖已合并 T 切片，供 T-12.18 使用；过滤声明进入 S-01.2 快照，与配置文件派发 T-04.18 的后合并者接入生效值读取，具体共享规则见执行顺序。S-06.1 提供 WebUI 需要的 API，固定机器测量由 S-06.2 独立完成；页面实现与手动取证在 WebUI 章节的 S-06.3（goal-175），S-06.2 汇总其 V-81 证据或明确标为未运行。WebUI 主线切片（T-09.8、T-09.9）不以任何 S 切片为前置，休眠不进入发布链。
 
 ## 3. 工作包
 
@@ -640,7 +652,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 | V-54 | 文案选择顺序与主语言回落、check 的键与占位符检查、Core usage 文案、WebUI 文案组件。 | 真实页面的语言切换在 T-09 复验。 |
 | V-104 | `c.T` 与 `sdk.T` 只返回字符串；check 与 build 检查常量键与参数名；运行时问题回落到键名或占位符原文并记 WARN。 | — |
 | V-116 | `options_from` 的检查；`sdk.ServeOptions` 的注册与访问规则；Core 按字段路径查询内置来源与服务来源，条数上限与来源不可用。 | 管理 API 与页面在 T-09 复验；`llm.models` 由 T-12.15 提供（T-12.8 交付的 `llm.providers` 由它改名，D-154）。 |
-| V-140 | 步骤 15 中配置文件的存储、解析、schema 的 `profile` 检查、覆盖值校验与清理、管理 API 与 CLI | 派发与 SDK 合并由 T-04.18 提供，页面由 T-09.25 提供 |
+| V-140 | 步骤 15 中配置文件的存储、解析、schema 的 `profile` 检查、覆盖值校验与清理（含复合 secret）、实例清理与提交边界、管理 API 与 CLI | 派发与 SDK 合并由 T-04.18 提供，页面由 T-09.25 提供 |
 
 建立上述包后，后端验证入口至少包括 `go test ./sdk/... ./internal/core/config/... ./internal/core/secret/... ./internal/core/storage/...`。前端使用实际建立的组件测试入口，记录准确命令。所有结果按 TEST-MATRIX 记录代码位置、命令、版本、环境和日志；尚无环境时明确保持未运行。
 
@@ -669,11 +681,13 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 4. **实现正式候选 Journal 与准备编排。** 通过预检后，以预期旧 ActiveGeneration 开始持久化管理操作记录及其资源引用；冻结新根派发，drain/停旧进程，确认树退出及 runtime.lock，再调用 T-08 复制 DB 和创建候选 Session。将启动原因、维护许可和阶段预算放入已有 Bootstrap；REGISTER 校验后持久化程序/配置/secret/DB 候选引用并形成 PREPARED。普通 resume 走原提交记录，不伪造新候选 Journal；`prepare_effects=external` 的候选在维护门槛停下。
 5. **实现唯一提交点与激活门禁。** 确认候选文件及引用已持久化后，在 Core 状态库的同一事务复核预期旧代次并提交 ActiveGeneration+COMMITTED；事务内不做下载、备份或等待 RPC。随后发送 Activate，只有 OnReady/Activated 完整成功才开放命令、事件、Service、Bus、任务与 HTTP；复用 T-06/T-07 门禁。旧按钮按 Generation 失效；提交后启动/OnReady 失败保持新代次权威并进入 Degraded，不自动倒退到旧 DB。
 6. **实现崩溃恢复、显式回退与引用回收。** Core 启动持锁后按状态库 Active/Journal 恢复：未提交的已有安装关闭候选后以旧程序启动新 Session，首次安装尚无 Active 则保持未激活；已提交只恢复当前代次。旧进程退出未确认时不启动新写入者。rollback 从选定保留代次复制新的 SQLite 恢复候选并使用新 Generation，继续走同一准备/提交路径；外部数据的恢复沿用显式维护。只有无人引用的失败候选/旧包/secret 才可回收，恢复中操作和保留快照受保护；备份说明覆盖整个 data_dir 与插件自管的外部数据。
-7. **完成最小 Admin 页面与 API 绑定。** 页面属于官方 WebUI 组件（`web/admin/`），只调用 Admin API。接入真实登录、状态/日志、安装启停、更新/恢复、配置表单/完整 JSON 编辑、命令权限、命令名覆盖（D-128）、配置字段的选项查询与可搜索选择（D-129）、插件的发信许可（`allowed_adapter_instances`）、工具调用策略、Agent 会话的列出与清除，以及界面语言切换。Core 设置页管理 Core Admin 列表、命令前缀与默认 locale，与 `alonabot admin add|remove|list` 使用同一管理服务，修改写回 `core_config.json`。使用 T-08 的 raw JSON/PATCH/base_generation/secret 语义，显示 Pending、候选失败、Degraded 与维护原因；动态权限复用 T-04。插件页面由 WebUI 用沙箱 iframe 嵌入，经 postMessage 桥以管理员会话请求本插件的路由（D-84，T-07.7）；管理 Cookie/Authorization 不进入插件。页面只展示用户可操作状态和具体错误，不把内部协议步骤当作用户配置项。**日志：** 按来源的级别写在 `core_config.json` 的 `log.sources`，修改后经 `sdk.log.set_level` 通知 SDK 并立即生效；Core 为每个来源保留最近 1000 条记录，提供按来源、级别与 trace_id 的读取和 SSE 订阅，过去日期的记录从日志文件按日期查询；`alonabot logs`、`alonabot log-level` 与 WebUI 日志页使用同一 API，页面的筛选只在浏览器中进行（CONTRACTS §14.3、§14.4）。 **诊断包（D-156，CONTRACTS §14.7）：** 管理服务按所选时间范围与三组内容打包 zip，缺省脱敏；`POST /api/v1/diagnostics` 与 `alonabot diagnose` 共用该实现，CLI 在 Core 未运行时只读数据目录，组件运行状态记为未运行。WebUI 日志页只有终端视图，另有「清空」：清空只丢弃页面已载入的记录，不删除日志文件，实时订阅继续。 **WebUI 进程与补充 API（D-162～D-164）：** WebUI 包可以带 Go 入口，进程与插件相同，路由要求管理会话；Core 在命令层得到 Handler 结果后生成 `command.invoked`；数据浏览、保留代次、静态任务、实例列表、聊天目录、更换令牌与插件页面列表见 ADMIN-API §20、§21。 **Changelog（D-166）：** Core 只按已安装的版本提供组件包内与自身的 changelog（ADMIN-API §22），不比较版本、不记录是否看过。 **模型页（D-154）：** 侧栏的一级入口「模型」编辑 Agent 配置中的 `providers` 与 `models`（经同一配置 API 的 Pending 与 reload），并调用 Agent 的模型管理路由（CONTRACTS §13.6）拉取模型列表、测试模型与读取当天用量；按 `role: agent` 找到已安装的 Agent，没有时提示安装，路由不存在时只提供配置编辑。 **品牌与静态资源（D-169）：** 设计稿以 Figma v4 为准；视觉令牌按设计稿变量集提供浅色与深色两套 CSS 变量；标志、站点图标与 JetBrains Mono 字体随 WebUI 包提供，中文用系统字体栈。 **配置文件页（D-168）：** 侧栏「配置文件」打开即是当前配置文件的设置，标题处切换或新建，「N 个会话」打开使用范围对话框（实例缺省与单独指定的会话），更多菜单为重命名、复制与删除（`default` 不能删除）；分区为 AI（已安装 Agent 的标记字段，没有 Agent 时不显示并提示安装）、平台与消息（命令前缀与四项回复方式）与插件（按插件的开关、标记字段的覆盖与无效覆盖的清理）；插件配置页可以切换配置文件，选中 `default` 以外的配置文件时只能编辑标记的字段；系统设置页不再有命令前缀。 Admin API 与日志管理在本章节（T-09.10、T-09.13、T-09.14、T-09.19～T-09.22、T-09.24），页面在 WebUI 章节（T-09.8、T-09.9、T-09.15）。
+7. **完成最小 Admin 页面与 API 绑定。** 页面属于官方 WebUI 组件（`web/admin/`），只调用 Admin API。接入真实登录、状态/日志、安装启停、更新/恢复、配置表单/完整 JSON 编辑、命令权限、命令名覆盖（D-128）、配置字段的选项查询与可搜索选择（D-129）、插件的发信许可（`allowed_adapter_instances`）、工具调用策略、Agent 会话的列出与清除，以及界面语言切换。Core 设置页管理 Core Admin 列表、命令前缀与默认 locale，与 `alonabot admin add|remove|list` 使用同一管理服务，修改写回 `core_config.json`。使用 T-08 的 raw JSON/PATCH/base_generation/secret 语义，显示 Pending、候选失败、Degraded 与维护原因；动态权限复用 T-04。插件页面由 WebUI 用沙箱 iframe 嵌入，经 postMessage 桥以管理员会话请求本插件的路由（D-84，T-07.7）；管理 Cookie/Authorization 不进入插件。页面只展示用户可操作状态和具体错误，不把内部协议步骤当作用户配置项。**日志：** 按来源的级别写在 `core_config.json` 的 `log.sources`，修改后经 `sdk.log.set_level` 通知 SDK 并立即生效；Core 为每个来源保留最近 1000 条记录，提供按来源、级别与 trace_id 的读取和 SSE 订阅，过去日期的记录从日志文件按日期查询；`alonabot logs`、`alonabot log-level` 与 WebUI 日志页使用同一 API，页面的筛选只在浏览器中进行（CONTRACTS §14.3、§14.4）。 **诊断包（D-156，CONTRACTS §14.7）：** 管理服务按所选时间范围与三组内容打包 zip，缺省脱敏；`POST /api/v1/diagnostics` 与 `alonabot diagnose` 共用该实现，CLI 在 Core 未运行时只读数据目录，组件运行状态记为未运行。WebUI 日志页只有终端视图，另有「清空」：清空只丢弃页面已载入的记录，不删除日志文件，实时订阅继续。 **WebUI 进程与补充 API（D-162～D-164）：** WebUI 包可以带 Go 入口，进程与插件相同，路由要求管理会话；Core 在命令层得到 Handler 结果后生成 `command.invoked`；数据浏览、保留代次、静态任务、实例列表、聊天目录、更换令牌与插件页面列表见 ADMIN-API §20、§21。 **Changelog（D-166）：** Core 只按已安装的版本提供组件包内与自身的 changelog（ADMIN-API §22），不比较版本、不记录是否看过。 **模型页（D-154）：** 侧栏的一级入口「模型」编辑 Agent 配置中的 `providers` 与 `models`（经同一配置 API 的 Pending 与 reload），并调用 Agent 的模型管理路由（CONTRACTS §13.6）拉取模型列表、测试模型与读取当天用量；按 `role: agent` 找到已安装的 Agent，没有时提示安装，路由不存在时只提供配置编辑。 **品牌、静态资源与外壳（D-169，T-09.26）：** 按 Figma v4 提供浅深色视觉令牌及随包资源（CONTRACTS §7.5），提供客户端路由、桌面侧栏、顶栏搜索与手机导航。管理页面按 [WebUI 实施计划 §3](webui.md#3-页面接入外壳) 接入；主题切换控件随系统设置页接入。 **配置文件页（D-168）：** 侧栏「配置文件」打开即是当前配置文件的设置，标题处切换或新建，「N 个会话」打开使用范围对话框（实例缺省与单独指定的会话），更多菜单为重命名、复制与删除（`default` 不能删除）；分区为 AI（已安装 Agent 的标记字段，没有 Agent 时不显示并提示安装）、平台与消息（命令前缀与四项回复方式）与插件（按插件的开关、标记字段的覆盖与无效覆盖的清理）；插件配置页可以切换配置文件，选中 `default` 以外的配置文件时只能编辑标记的字段；系统设置页不再有命令前缀。 Admin API 与日志管理在本章节（T-09.10、T-09.13、T-09.14、T-09.19～T-09.22、T-09.24），页面在 WebUI 章节（T-09.8、T-09.9、T-09.15）。
 8. **完成正式流程的故障注入与交付证据。** 通过真实 CLI/API 在临时目录跑首次安装→enable→restart→reload→update→pin→disable→同来源重装→显式 rollback，并以包损坏/签名变化/external 插件的维护错误验证拒绝路径。在 PREPARED、提交前后和 OnReady 失败点终止 Core，连同残存旧进程、空间不足、并发同插件操作一起验证无双写、无提前开放、无静默数据回滚。回填 T-08 留待集成的 V-23～V-25/V-39 证据，形成 T-10 可重复使用的发布产物与恢复场景；五平台真实发布结果仍由 T-10 完成。
 9. **WebUI 组件与组件图标。** 按 CONTRACTS §7.5 由 Core 提供已启用 WebUI 组件的静态文件：保留 `/api/` 与内部路径，不存在且无扩展名的路径回退 `index.html`，未安装时返回 503 与英文提示，Admin API 主版本不在 WebUI 声明的范围内时拒绝安装与启用并返回提示。Admin API 定义主版本号常量，并在 `spec/ADMIN-API.md` 写出全部接口、认证、错误格式与插件页面桥的消息格式，官方 WebUI 只使用其中的接口。图标只提供 manifest 的 `icon` 声明的路径（表单选项不带图标，D-74），带 sandbox CSP 与 nosniff，并要求管理员会话。库模式增加 `alonabot.WebUI(fsys fs.FS)` 选项，以 dev 来源提供开发中的 WebUI。
 
 10. **包校验收紧（D-150、D-151）。** 协议不变。`contracts/manifest` 对缺少 `migration_mode` 或 `prepare_effects` 的包只给警告，文案写明准备与回退按没有框架外副作用处理；管理服务把预检得到的警告放进安装与更新的结果（Admin API 增加 `warnings`，ADMIN-API 同步），CLI 原样输出，并记 WARN 日志。`packages.Preflight` 对进程角色的包严格核对 build-info：存在、可解析、与 entrypoint 内嵌的构建信息逐字一致、`GOOS`/`GOARCH` 与 manifest 一致，任一项不符时在停止旧版前拒绝；WebUI 包不要求 build-info。
+
+11. **组件市场 ID 改用连字符（D-172，T-09.27）。** 四角色市场前缀、插件市场正则与 manifest 的角色后缀规则一起修改；本地 ID 语法和 64 字符上限保持不变。同步 MarketPrefix 的所有校验调用者、SDK 会话解析与聊天选项中的分隔符替换、日志来源标签和历史 source、Agent 的 memory 工具原始名、官方组件与示例 manifest、配置、路径、既有测试及 contracts/testdata（含 Protobuf golden 帧）。CLI init 与生成器通过原有 manifest 入口接受新 ID；当前 init 仍要求 --id，目录名缺省留给 T-13.6 并沿用本规则。组件 ID 只作字符串值，模型工具名继续由现有映射生成，Go 符号、环境变量名与 SQL 标识符不随之替换。直接改名并要求状态库与开发数据目录重建，不提供旧市场 ID 别名或数据迁移；只改写已有提交测试，边界与回归写在被忽略的 *_local_test.go，协议编号按 wirespec 核对。完整文件范围与真实签名见 goal-177。
 
 #### 拟目录与交付
 

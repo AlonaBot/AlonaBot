@@ -3,6 +3,8 @@
 版本：v0.6-review · 2026-10-21。状态：**现行实施基线，待实施验证**。
 权威范围：补充 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md) §1/§3/§12；消息载荷见 [MESSAGE-MODEL.md](MESSAGE-MODEL.md)。产品版本 v0.1 与传输协议版本 **1.0** 分开。T-01 按本文件生成可编译 `.proto` 和兼容 fixture；本文不代表编译或平台测试已通过。
 
+身份字段中的组件 ID 原样使用 CONTRACTS §9.1 的拼写（D-172），例如 HELLO 的 `plugin_id` 与 Envelope 的 `source_plugin_id` 为 `alonabot-plugin-configdb`，Service 目标为 `alonabot-plugin-configdb/<服务名>`；Adapter 包身份如 `alonabot-adapter-telegram`，其平台 `adapter_id` 仍为 `telegram`。本次只改变 ID 字符串的值，字段号、枚举值与 schema 版本保持不变。
+
 ## 1. Frame 与 Envelope
 
 每帧为 **4-byte big-endian unsigned payload length + Protobuf Envelope**，长度不含 4-byte 前缀；有效范围 **1～4,194,304 bytes**。0、超限、无法解码或状态不合法的帧使当前会话失败，不继续猜测帧边界。TCP 与 stdio 使用完全相同的编码。
@@ -66,6 +68,8 @@ RESPONSE 的 payload 与 ErrorInfo **不是 oneof**。例如部分发送成功�
 
 已定义的协议能力：`http_listener` 版本 1（D-65）。插件存在 HTTP 路由时 SDK 把它放进 HELLO 的 required；Core 支持它，交集含该项时才在 Bootstrap 中下发 `http_proxy_auth`，REGISTER 带 HTTP 路由而交集不含该项时拒绝注册。
 
+StopReason 在现有枚举末尾追加 `STOP_REASON_IDLE`（goal-170），表示正常空闲退出，沿用 STOPPING 的绝对 deadline 与停止预算。编号由获授权的切片按当前 `.proto` 顺延，已有值保持不变。`SUSPENDED` 是 Core 管理运行状态，SessionPhase 沿用现有状态。唤醒复用 `ActivationReason.RESUME`、原 generation_id 与新 Session，不增加业务 RPC。
+
 ### 3.2 Bootstrap 的最小内容
 
 Bootstrap 属于私有、已认证 IPC，和整个 HELLO_ACK 一起受 **4 MiB** 限制。超限明确失败；首发不增加分块 Bootstrap 或准备期业务 RPC。
@@ -80,7 +84,7 @@ Bootstrap 属于私有、已认证 IPC，和整个 HELLO_ACK 一起受 **4 MiB**
 | `phase_limits`、`preparation_deadline_unix_ms`（字段号 8、9） | 准备、迁移和 Ready 的阶段预算及本轮绝对期限；迁移使用独立预算，不被普通业务 30s 截断 |
 | `LogLevel log_level`（字段号 10） | 该来源当前生效的日志级别（CONTRACTS §14.3），SDK 据此在进程内过滤；枚举 `LogLevel` 依次为 UNSPECIFIED、DEBUG、INFO、WARN、ERROR、OFF，D-158 追加 CRITICAL（级别高于 ERROR，取值由 T-02.5 分配），UNSPECIFIED 按 INFO 处理；`inherit` 由 Core 先解析成全局级别后再下发 |
 | `SessionLimits session_limits`（字段号 11） | 本次运行生效的每方向在途请求数、每 Session payload 预算与普通请求期限；Core 全局 payload 预算只由 Core 使用 |
-| `profile_overrides_json` | UTF-8 JSON 对象：配置文件 ID → `{字段路径: 值}`，该插件当前有效的全部覆盖值（CONTRACTS §5.6，D-168）；按 §5A 的只追加规则编号 |
+| `profile_overrides_json`（T-04.18） | UTF-8 JSON 对象：配置文件 ID → `{字段路径: 值}`，该插件当前有效的全部覆盖值（CONTRACTS §5.6，D-168）；T-08.18 按此形状的编码字节数校验覆盖集合，实际帧另受 §1 的 Envelope 长度限制；按 §5A 的只追加规则编号 |
 
 `Bootstrap` 的字段号固定为 `log_level = 10`、`session_limits = 11`。新增消息结构如下，字段号不得重排或复用：
 
@@ -106,7 +110,7 @@ RouteDescriptor 公共字段为 `route_id`、`kind`、`priority`、`default_enab
 | kind | 专属描述 |
 | --- | --- |
 | command | 规范命令路径、aliases、参数列表与默认值、Handler 模式、Rule 描述 |
-| event | event_type_filter、Handler 模式、Rule 描述；button.clicked 路由含 action schema version |
+| event | event_type_filter、Handler 模式、Rule 描述、可选 message_filter（CONTRACTS §2.5）；button.clicked 路由含 action schema version |
 | hook | phase（PreEvent/BeforeSend/AfterSend）、event_type_filter（PreEvent 恰好一项，为已知标准事件或合法 Adapter 扩展事件名；BeforeSend/AfterSend 留空）、优先级及固定 Hook 输入/输出 Schema |
 | service | service_name、公开/allowlist 能力、请求/响应 Schema |
 | schedule | 稳定 job_id、cron/interval、timezone、固定 job deadline |
@@ -114,11 +118,17 @@ RouteDescriptor 公共字段为 `route_id`、`kind`、`priority`、`default_enab
 | http | method、插件相对 path、is_public、认证/回调验证模式 |
 | bus_subscription | event_name、可接受的 Schema/版本、订阅回调 route_id |
 
+EventSpec 追加可选消息 `MessageFilter message_filter`；MessageFilter 的字段为 `bool to_me`、`repeated ChatType chat_types`、`string wake_words_config`、`string triggers_config`。字段号在实施时按最新 proto 顺延，不在规格中预分配。字段路径、OR、触发方式选择、缺失数据与空列表的语义见 CONTRACTS §2.5；过滤器的存在与缺省有区别。仅允许标准 message.created/edited/deleted 事件，和其他事件类型混用时拒绝注册。SDK 用自有类型登记这些声明，不在公开 API 暴露 pb。过滤器及配置字段路径参与确定性路由编码、摘要和快照白名单，配置值及按配置文件的覆盖值保持在 Core 的配置所有者中。
+
 自定义 Go Rule 是插件进程内与对应 Handler 一起执行的函数；Core 可表达的类型/命令/权限条件先执行，SDK 在同一 Handler REQUEST 中完成自定义 Rule，并以 HandlerOutcome.matched 返回结果，不另建 Rule 服务。
 
 REGISTER 的完整描述必须装入一帧；超限 RESOURCE_EXHAUSTED，不部分接收或激活。配置 Schema 与服务 Schema 从经过包摘要校验的安装资源取得，REGISTER 中的 hash/版本必须一致，不能仅上报不可解析的 hash 而缺少 Schema 原文。
 
 有 HTTP 路由时，SDK 先创建实际绑定的 loopback Listener，再上报 `host + port`；首发仅接受 `127.0.0.1` 或 `::1` 与合法非零端口，不能传任意 URL、文件路径或远端主机。Core 验证与当前 Session 的代理认证和就绪状态后保存端点，公开前缀仍由 Core 决定。无 HTTP 路由则不得要求创建 Listener。端点随 Session 失效撤销；外部请求不携带内部认证材料，Core 覆盖相应内部头。
+
+插件页面的 HTTP 请求由 WebUI 宿主转发，复用本节的路由注册与代理认证规则。主题、语言、令牌与快捷键消息由浏览器内的桥处理，消息格式见 [ADMIN-API §7](ADMIN-API.md#7-插件页面-postmessage-桥)。
+
+路由快照只保存以上 RouteDescriptor 的确定性编码、内容摘要及其插件/已提交代次/包身份，规则见 CONTRACTS §4.4；摘要复用 PREPARED 的 `route_descriptor_hash` 算法。REGISTER 中的配置、HTTP Listener 与任何 Session 认证材料均排除在快照外。唤醒重新 REGISTER 后在业务开放前核对摘要，HTTP 重新绑定本 Session 的 Listener 与凭证。
 
 ### 3.4 Adapter 会话
 
@@ -192,6 +202,8 @@ Core→插件与 Core→Adapter 方向另有 `sdk.log.set_level`：新的生效�
 - 本地超时/取消先完成调用者失败返回，再尽力发送 Cancel；已发送外部消息/SQL 不撤销，不自动重试。Session 失效时清理映射、取消调用并返回 UNAVAILABLE；已确认的 SendResult 仍须保留。
 - Core 停用时先冻结该插件的新根调用/新派发，最多 drain 6s；已有父 Request 链中的受限子请求与响应可继续。drain 结束后取消剩余调用并发送唯一 STOPPING，帧 deadline 为 min(t0+10s,发送STOPPING时刻+4s)，OnStop 与资源关闭使用这一独立 context；整个进程树停止预算仍为 10s。Core 同时停止多个插件时共享同一绝对截止时间，不逐个累加预算。
 
+等待休眠插件的业务请求在 Session admission 之前受 CONTRACTS §4.5 的有界唤醒队列约束，保留可信上下文、原始 Target、Trace、顺序与绝对 deadline；确认 ACTIVATED 及快照一致后复核权限再交付，取消或到期的未交付请求移出队列。空闲 STOPPING 与请求准入共用门禁；旧进程树退出前保持唯一 Session 所有权。
+
 ## 5. Event Bus、媒体与平台载荷
 
 - Event Bus 的发布通过普通 REQUEST 返回“是否被 Core 接纳”的结果；它不确认订阅者已处理。Core 向订阅者发 EVENT。BusEvent 至少包括 event_name、Core event_id、source_plugin_id、occurred_at、schema_id/version、payload。发布者只能发布自身 `plugin_id/event_name` 命名空间；订阅者 Actor 缺省，业务 payload 不产生管理权限。
@@ -228,7 +240,7 @@ Core 媒体服务固定为 BeginUpload/WriteChunk/CommitUpload/Read/Grant：Read
 - Core 启动插件进程时通过环境变量传递会话参数（常量定义在 `internal/wire/env.go`）：`ALONABOT_PLUGIN_ID`、`ALONABOT_SESSION_SECRET`（32 字节十六进制）、`ALONABOT_TRANSPORT`（`tcp`/`stdio`）、`ALONABOT_CORE_ADDR`（TCP loopback 地址）、`ALONABOT_BUILD_DIGEST`（归档 SHA256 十六进制）、`ALONABOT_RUNTIME_LOCK`（runtime.lock 的绝对路径）。其余环境变量只从白名单继承（PATH、HOME、临时目录、SystemRoot、LANG、TZ），Core 管理凭证不会进入插件环境；设置了调优参数 `PLUGIN_MEMORY_SOFT_LIMIT` 时另传 `GOMEMLIMIT`（CONTRACTS §16）；出站代理按 CONTRACTS §15.1 的 `proxy` 设置传递 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`。
 - 握手与准备：认证失败（Secret 恒时比较、插件 ID、build_digest 任一不符）时 Core 直接关闭连接，不回复任何帧；认证之后的失败（协议协商、Bootstrap 超限、REGISTER 不合法、准备期出现非控制帧）先发 SESSION_ERROR 再关闭，发送 SESSION_ERROR 限时 1s，对端不读时不会卡住失败路径。Preparing 的硬截止为配置、迁移、OnStart 三个阶段预算之和，写入 Bootstrap.preparation_deadline_unix_ms。PREPARED 中 route_descriptor_hash 为按顺序拼接各 RouteDescriptor 确定性编码后的 SHA256，candidate_config_digest 为候选配置 JSON 的 SHA256（T-08 引入 secret 引用后改为对持久化快照计算）。
 - 协议能力项使用 `ProtocolCapability{name, version}`，与 Adapter 平台能力 `Capability{name, version, supported, text_limit?}` 分开（可选文本上限由 T-03.18 按 D-135 追加）。
-- 2026-11-17 配置文件（D-168）：`InvocationContext` 追加 `string profile_id = 7`；Bootstrap 追加 `profile_overrides_json`；新增 Core 固定服务 `core.profile.list`、`current`、`assign`、`set` 与 Core→插件的 `sdk.profile.set_overrides`。
+- 2026-11-17 配置文件（D-168，T-04.18 待接入）：`InvocationContext` 追加 `string profile_id = 7`；Bootstrap 追加 `profile_overrides_json`；新增 Core 固定服务 `core.profile.list`、`current`、`assign`、`set` 与 Core→插件的 `sdk.profile.set_overrides`。T-08.18 提供存储与管理，现有协议字段、服务注册与 SDK 保持不变。
 - 2026-11-13 命令消费标记（D-141）：`InvocationContext` 追加 `bool command_consumed = 6`。
 - 2026-11-01 权限、扩展事件与参数类型（D-69、D-71、D-72）：删除枚举 `TrustedRole` 与 `Permission`、字段 `Actor.trusted_roles` 与 `RuleDescriptor.require_chat_admin`，编号与名称 reserved。`Actor` 新增 `repeated string permissions`；`RouteDescriptor.required_permission` 改为 `repeated string required_permissions`；`AdapterDescriptor` 新增 `repeated PermissionDeclaration permissions`（name、implies、label_key）与 `repeated EventDeclaration events`（name、version、schema_json）；`EventPayload` oneof 新增 `AdapterEventPayload adapter_event`（version、payload_json）；`ParamType` 新增 USER、IMAGE、MESSAGE；`CommandSpec.custom_usage` 改为插件 `i18/` 中的文案键。字段号由 T-04.6 编排。
 - 2026-10-27 框架移除 PostgreSQL 后端（D-48）：删除枚举值 `DATABASE_BACKEND_POSTGRES = 3`、`DatabaseDescriptor.postgres = 3` 与消息 `PostgresConnection`，两处编号与名称都已 reserved。

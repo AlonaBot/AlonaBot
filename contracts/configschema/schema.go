@@ -95,6 +95,7 @@ func Parse(raw []byte) (*Schema, []Problem) {
 	// 2. 先建立同层字段，再核对条件、默认值和模板引用。
 	schema.fields = parseFields(root, "", true, &problems)
 	if len(problems) == 0 {
+		checkProfileFields(schema.fields, "", true, false, &problems)
 		checkFields(schema.fields, "", &problems)
 		schema.parseMigrations(&problems)
 		schema.checkExamples(schema.fields, "", &problems)
