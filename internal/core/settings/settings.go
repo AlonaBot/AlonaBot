@@ -325,7 +325,8 @@ func readAdmins(n *node, s *Settings) error {
 			return err
 		}
 		adapterID, userID, _ := strings.Cut(value, ":")
-		if _, err := validate.PluginID(adapterID); err != nil || strings.HasPrefix(adapterID, validate.MarketPrefix) {
+		// 平台 ID 只用本地规则，替换仅用于校验。
+		if _, err := validate.PluginID(strings.Replace(adapterID, "-", "_", 1)); err != nil {
 			return child.fail(fmt.Errorf("invalid adapter ID: %q", adapterID))
 		}
 		if userID == "" {

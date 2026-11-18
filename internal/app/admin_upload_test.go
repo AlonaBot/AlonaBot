@@ -86,7 +86,7 @@ func TestAdminSessionAndUploads(t *testing.T) {
 		t.Fatal(err)
 	}
 	first := adminSignedBundle(t, h, "1.0.0", key)
-	const updateResponse = `{"warnings":["plugin ID \"upload_demo\" lacks the market prefix alonabot_plugin_ and can only be installed as a local plugin"]}`
+	const updateResponse = `{"warnings":["plugin ID \"upload_demo\" lacks the market prefix alonabot-plugin- and can only be installed as a local plugin"]}`
 	upload := func(action string, request manage.InstallRequest, omit string, want int, contains string) {
 		t.Helper()
 		body, content := adminMultipart(t, request, action == "update", omit)
