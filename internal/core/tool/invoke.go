@@ -61,7 +61,14 @@ func (i *invoker) invoke(ctx context.Context, caller router.Caller, in *wire.Inb
 	if service == nil {
 		return failure(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "tool not found")
 	}
-	policy, err := i.catalog.Effective(ctx, pluginID, name)
+	view, err := i.catalog.profileSnapshot(ctx, in)
+	if err != nil {
+		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "read profile policies: "+err.Error())
+	}
+	policy, err := view.policy(pluginID, name, false)
+	if err == nil && policy == pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED {
+		policy, err = i.catalog.Effective(ctx, pluginID, name)
+	}
 	if err != nil {
 		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "read tool policy: "+err.Error())
 	}
