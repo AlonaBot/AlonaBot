@@ -117,7 +117,7 @@
 | goal-170 | S-02.1 | 按需唤醒、活动引用与有界等待 | S-01.1、S-01.2、T-05.5、T-06.4、T-07.5 | 已完成（PR #241） |
 | goal-176 | S-02.3 | Core 消息事件过滤与 SDK 注册 | T-04.16、T-08.11、T-09.14 | 已完成（PR #227） |
 | goal-161 | T-04.18 | 配置文件的派发与 SDK | T-04.16、T-08.18 | 已完成（PR #242） |
-| goal-171 | S-02.2 | 空闲退出与即时休眠策略 | S-02.1 | 等待语句定稿 |
+| goal-171 | S-02.2 | 空闲退出与即时休眠策略 | S-02.1 | 待派发 |
 | goal-177 | T-09.27 | 组件市场 ID 改用连字符 | T-09.10、T-09.14、T-12.8、T-13.5 | 已完成（PR #222） |
 | goal-162 | T-04.19 | 平台与消息 | T-04.18 | 待派发 |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
@@ -8365,23 +8365,67 @@ internal/core/state
 
 ### goal-171 · S-02.2 空闲退出与即时休眠策略
 
-状态：等待语句定稿（前置均已合并）。S-02.1（PR #241，`e0a38d7`）已合并。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。 2026-11-17 审查者补充（S-02.1 审查 FIX-9 的裁定）：Core 在插件 HTTP 反向代理返回时即释放活动引用，不新增「HTTP 回调完成」协议字段；本切片的 QUIESCING 须等待 SDK 自己记录的在途回调（含 HTTP Handler、Bus 回调）全部结束，或在 SDK 报告仍有在途回调时放弃本次退出，空闲退出不得打断仍在执行的业务。 2026-11-18 审查者裁定（D-179，替代上一条补充）：不新增协议消息；空闲退出走 CONTRACTS §4 的正常停止流程（冻结新派发、最多 6s 排空已接纳请求、STOPPING 后 SDK 停止接单并执行 OnStop），QUIESCING 期间到达的请求等待下一次唤醒；客户端已取消、仍在执行的 HTTP Handler 与正常停止一样在停止截止时结束。
+状态：待派发。前置 S-01.1（PR #225，合并提交 `2cc32ff7c7848e03621e356195e045736966e2fd`）、S-01.2（PR #226，合并提交 `413a6fffb47a9d4c774a9585b711fb9671eee150`）、S-02.1（PR #241，合并提交 `e0a38d7c1de9061abc51ba1c82423bfdbbd4805c`）均已合并。已按 main `25eea977561ff2beca5f4569a7e2c227acf68cd1` 核对：`contracts/manifest.Manifest.SleepCapable bool` 已贯通工程与安装包；`internal/core/state` 的 `plugin_runtime` 表及 `(*Store).RuntimeStatus(ctx context.Context, pluginID string) (RuntimeStatus, error)`、`SetRuntimeStatus(ctx context.Context, pluginID string, status RuntimeStatus) error` 保存六态、原因及最近唤醒/休眠时间；`ActiveRouteSnapshot(ctx context.Context, pluginID string) (RouteSnapshot, error)` 读取已提交路由。`internal/core/supervisor.(*Waker).EnsureActive(ctx context.Context, pluginID string, payloadBytes int64) (func(), error)`、`AcquireActivity(pluginID string, session *wire.Session) (func(), error)`、`Ready(running *Running)` 已装配，活动结束时间、Session 引用与冷启动时刻仍为包内记录；`(*Running).Stop(t0 time.Time, reason pb.StopReason) host.StopResult`、`WaitExit() (abnormal bool, exitState string, err error)` 已处理正常 IDLE 停止及 SUSPENDED 写入。`contracts/proto/alonabot/v1/control.proto` 已有 `STOP_REASON_IDLE = 6`；`internal/core/settings` 尚无 sleep 字段，`internal/core/idle/` 尚未建立，`internal/tune.Values` 尚无 SLEEP_* 参数。`internal/app.(*Core).ReloadSettings(ctx context.Context) error` 经运行循环重读设置，唤醒启动也经同一运行循环。2026-11-18 审查者裁定 D-179：空闲退出复用 CONTRACTS §4 的正常停止，不新增任何协议消息或字段；进入 QUIESCING 后到达的请求等待下一次唤醒。本条按该裁定替代旧的 SDK 回调排空补充及 S-02.1 的 QUIESCING 撤销行为；CONTRACTS §4.5、PLAN S-02 步骤 4 与 V-77 中残留的旧补充由审查者同步。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-171（切片 S-02.2：空闲退出与即时休眠策略）。goal 目录 goal-171，分支 goal-171，worktree .worktrees/goal-171，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：按生效休眠策略执行安全空闲退出，设置修改立即生效，停止中到达的请求经同一生命周期门禁交接。
 
-依据：PLAN §7 S-02 步骤 4；CONTRACTS §4.4、§4.5、§15.1、§16；DESIGN §A；D-53、D-153；V-77 的准入与停止分项。
+依据：PLAN §7 S-02 步骤 4 及其失败停止条件、spec/plan/core.md 的 S-02.2；CONTRACTS（spec/CONTRACTS-v0.1.md）§2.5、§4.2、§4.4、§4.5、§15.1、§16；ADMIN-API §24；DESIGN §A；DECISIONS D-53、D-153、D-179（本条的停止与 HTTP 回调规则按 D-179）；TEST-MATRIX V-77 的准入、空闲退出、停止竞争与策略生效分项。
 
-要点：
-- 范围：新建 internal/core/idle/，internal/core/settings 的 sleep 解析/写回/Reload，internal/core/supervisor 的正常 IDLE 停止与策略应用，internal/app 装配/设置重读，internal/core/state 的运行原因记录，internal/tune/params.go 的休眠初值。
-- 允许拟新增方向：idle -> settings（读取生效策略）、idle -> supervisor（活动状态与正常停止），internal/app -> idle（装配）；由审查者随 PR 同步 ARCHITECTURE。反向通知通过注入函数，保持无 import 环。
-- 仅对 manifest 允许的独立进程 plugin/agent 启用 component_idle；HTTP、Hook、持续事件、未声明 Core message_filter 的消息事件和 Raw 缺省常驻，显式时长可放行路由准入，manifest 与同进程限制仍有效。
-- sleep.mode/idle_timeout/plugins 是唯一配置来源。never 唤醒仍已启用的休眠插件，auto 删除覆盖，时长下一次空闲判定使用；切回 always_on 唤醒全部已启用插件，设置变更不重载插件。管理 API 与 CLI 在 goal-173，内部设置及应用接口由本切片交付。
-- SLEEP_COLD_START_WINDOW 内冷启动超过 SLEEP_COLD_START_MAX 时，从触发时刻固定常驻 SLEEP_COLD_START_WINDOW 的冷却期，期间新冷启动不延长本次冷却期；冷却结束恢复空闲判定，不新增参数。只有全部活动引用、任务、多轮等待、后台工作、租约与管理操作均排空，且达到空闲阈值/最短运行时间并已结束冷却时才停止；Core 无法观察私建 goroutine，由 manifest 作者声明承担安全恢复前提。
-- STOPPING 前可取消空闲停止，发出后新请求等待旧进程树退出再建立新 Session；复用 STOP_TOTAL/STOP_DRAIN/STOP_ONSTOP，成功记 SUSPENDED，IDLE 不计异常次数，不更新代次或迁移。
-- 验收要点：准入覆盖、never 唤醒、时长即时生效、最短运行时间、频繁冷启动暂时常驻、STOPPING 竞争、管理操作互斥、数据保留；默认一个真实子进程主路径集成测试，其余本地自测。
+范围（只新增或修改这些）：
+- internal/core/idle/：新建 policy.go、idle.go，负责准入、空闲判定及固定冷却期；生命周期执行仍交给 supervisor
+- internal/core/settings/：新建 sleep.go，settings.go、correction.go、file.go 中的默认文档、声明、解析校正、深副本、写回及 Reload 比较；复用 document.go 的 Set/Delete
+- internal/core/supervisor/：activity.go、wake.go、supervisor.go、runtime.go 中的活动快照、空闲停止门禁与状态记录
+- internal/app/：新建 idle.go，assembly.go、alonabot.go、wake.go、journal.go 的装配、设置应用、正常停止与退出清理相邻调用点
+- internal/core/state/runtime.go：仅在既有运行状态与原因记录需要调整时修改，复用 plugin_runtime 表
+- internal/tune/params.go：追加 SLEEP_MIN_UPTIME、SLEEP_COLD_START_WINDOW、SLEEP_COLD_START_MAX 及 Values 字段
+- internal/app/idle_test.go（新集成测试）；上述包的 *_local_test.go
+
+允许的依赖：标准库与现有已批准依赖；idle -> settings（生效策略）、idle -> supervisor/state（活动与运行状态）、idle -> contracts/manifest、contracts/pb/alonabotv1（已验证声明与路由）、idle -> internal/tune（调优值），internal/app -> idle（装配），沿用 ARCHITECTURE 的 internal/core 内部方向；由审查者随 PR 同步新包登记。反向通知通过装配注入函数，保持无 import 环。不加依赖。
+
+接口（main 上的现有签名保持可用）：
+- manifest.Parse(data []byte) (*manifest.Result, error)；manifest.Manifest.SleepCapable bool；已安装包的 manifest 读取复用 internal/app 的 installedDirectory 与 installedSpec 身份核对
+- (*state.Store).Installs(ctx context.Context) ([]state.Install, error)；GetInstall(ctx context.Context, pluginID string) (state.Install, error)；Enabled(ctx context.Context, pluginID string) (bool, error)；Active(ctx context.Context, pluginID string) (string, error)；LockPlugin(pluginID string) (unlock func())
+- (*state.Store).ActiveRouteSnapshot(ctx context.Context, pluginID string) (state.RouteSnapshot, error)；RuntimeStatus(ctx context.Context, pluginID string) (state.RuntimeStatus, error)；SetRuntimeStatus(ctx context.Context, pluginID string, status state.RuntimeStatus) error
+- state.RuntimeStatus 的 State、Reason、ChangedAt、LastWakeReason、LastWakeAt、LastSuspendAt，及 RuntimeStopped/RuntimeWaking/RuntimeActive/RuntimeQuiescing/RuntimeSuspended/RuntimeFailed 六态
+- supervisor.NewWaker(opt supervisor.WakeOptions) *supervisor.Waker；(*Waker).EnsureActive(ctx context.Context, pluginID string, payloadBytes int64) (func(), error)；AcquireActivity(pluginID string, session *wire.Session) (func(), error)；Ready(running *supervisor.Running)
+- (*supervisor.Running).Stop(t0 time.Time, reason pb.StopReason) host.StopResult；WaitExit() (abnormal bool, exitState string, err error)；host.StopResult 的 Cancelled、Drained、StoppingSentAt、StopDeadline、Killed、Err；host.StopHooks.BeforeStopping func() bool
+- (*settings.File).Settings() settings.Settings；Update(edit func(doc *settings.Document) error) error；Reload() (changed []string, err error)；(*settings.Document).Set(path []string, value any) error；Delete(path []string) error
+- internal/app 的 (*Core).ReloadSettings(ctx context.Context) error、operation(ctx context.Context, apply func(context.Context) error) error、stopComponent(r *runningComponent, t0 time.Time, timing host.StopTiming, reason pb.StopReason) error；assembly.startWake 经 Core.operation 完成原代次启动与全部绑定
+
+接口（本切片新增，以下签名固定）：
+- package settings：type Sleep struct { Mode string; IdleTimeout time.Duration; Plugins map[string]string }；Settings 追加 Sleep Sleep；Defaults 提供 always_on、15m 与空覆盖表，Settings() 深复制 Plugins
+- func (d *Document) SetSleep(mode, idleTimeout string) error：校验并只写 sleep.mode/idle_timeout，保留 plugins；func (d *Document) SetSleepPolicy(pluginID string, policy *string) error：非 nil 写入 never 或正时长，nil 删除该插件覆盖。两者供 File.Update 回调使用，复用 Set/Delete；插件安装身份由调用方核对
+- package supervisor：type ActivityStatus struct { Session *wire.Session; Ready bool; References int; LastActivityAt time.Time; ColdStarts []time.Time }；func (w *Waker) Activity(pluginID string) ActivityStatus：在现有 w.mu 下读取当前 Session 的引用与实际活动结束时间，并复制冷启动时刻；Ready 仅在当前 Session 完整绑定、存活且接纳工作时为 true
+- func (r *Running) StopIdle(t0 time.Time, lastActivityAt time.Time) host.StopResult：在原逐插件锁和 Waker 门禁内复核当前 Session、零引用及实际活动结束时间仍等于本次判定值，再复用 Stop 的同一内部停止实现与 STOP_REASON_IDLE。条件已变化时返回 Cancelled=true，保留当前 Session；普通 Stop 的签名与管理停止入口继续可用
+- package idle：type Policy struct { Policy *string; EffectivePolicy string; SleepCapable bool; Eligible bool; Reason string; Warnings []string }；func Resolve(s settings.Sleep, m *manifest.Manifest, independent bool, routes []*pb.RouteDescriptor) Policy：只读准入，返回 ADMIN-API §24 的策略含义
+- type Controller struct（字段不导出）；func New(values tune.Values) *Controller；func (c *Controller) CanStop(pluginID string, policy Policy, runtime state.RuntimeStatus, activity supervisor.ActivityStatus, now time.Time) bool：维护逐插件固定冷却期并作空闲决策，供 Core 串行生命周期调用，进程停止由装配方执行
+- internal/app 新增 func (c *Core) applySleep(ctx context.Context) error：应用当前 settings 快照，对仍已启用且需常驻的 SUSPENDED 插件经同一 Waker.EnsureActive(ctx, id, 0) 唤醒，成功取得的活动引用立即释放；由 ReloadSettings 及后继管理入口复用，不新增根包导出接口
+- tune.Values 追加 SleepMinUptime time.Duration、SleepColdStartWindow time.Duration、SleepColdStartMax int；分别登记 SLEEP_MIN_UPTIME=5m（>0）、SLEEP_COLD_START_WINDOW=1h（>0）、SLEEP_COLD_START_MAX=3（≥1），从本次 Core 生效 Values 注入。空闲时长只存 sleep，不增设调优项
+
+行为：
+- sleep.mode/idle_timeout/plugins 为唯一策略来源，模式只接受 always_on/component_idle，时长使用正的 Go duration，覆盖只接受 never 或正时长。auto 通过删除覆盖表达，写入字面量 auto、未知模式或零/负/非法时长返回实际校验错误；文件加载的缺失/非法值及环境变量展开沿用 settings 的声明校正与诊断，原文保留。sleep.plugins 按 dict 处理，支持逐值环境变量；Prune 保留声明内的 sleep 配置。显式写回保留无关字段及未修改的 ${...} 原文，Reload 比较有效 sleep 并返回顶层键 sleep。
+- 只对已安装、已启用、声明 sleep_capable 且独立运行的 plugin/agent 判定自动休眠；Core、Adapter、WebUI 与同进程开发组件沿用常驻路径。Resolve 的常驻原因按 always_on、manifest_requires_resident、in_process、policy_never、route_requires_resident 顺序选择，允许休眠时 reason 为空；无覆盖的 Policy 为 nil，常驻 EffectivePolicy 为 never，允许时为生效时长。读取策略与运行状态沿用快照，不唤醒插件。
+- HTTP、Hook、持续事件、未声明 Core message_filter 的 message.created/edited/deleted 与 Raw 路由缺省常驻；显式插件时长只放行这些路由准入，manifest 与进程形式限制保持有效，并返回 ADMIN-API §24 的 warnings。普通命令、Core 文本匹配与声明了 message_filter 的消息事件按既有命中规则唤醒；逐条检查全部路由，保留 CONTRACTS §2.5 的配置文件有效覆盖、过滤与权限顺序。
+- Core 装配一个 Idle Controller，接入运行循环定时作空闲判定，检查随 Core 生命周期结束；调优项限于 CONTRACTS §16 已列出的三个 SLEEP_* 参数。仅当 RuntimeActive、当前 Session Ready、活动引用归零、空闲已达有效时长、LastWakeAt 已满 SLEEP_MIN_UPTIME 且冷却结束时请求空闲停止。复用 S-02.1 的 Handler、Service、HTTP、媒体操作/租约、已运行 schedule、Hook/Bus、延续、多轮等待及主动出站活动记录；运行中任务阻止休眠，未来 Scheduler 到期唤醒归 goal-172。Core 无法观察私建 goroutine 与连接，安全恢复前提由 manifest 作者声明承担。
+- 空闲从当前 Session 最近一次真实活动归零起算，调整阈值保留该时间；初次无业务时沿用 Waker 登记该 Session 的时间。冷启动统计沿用 Waker 的实际启动时刻，在 SLEEP_COLD_START_WINDOW 内次数超过 SLEEP_COLD_START_MAX 时，从越过阈值的启动时刻固定常驻一个窗口；期间新启动保留原冷却截止，结束后恢复判定，已处理的启动记录不会反复触发同一冷却期。
+- 空闲停止与升级、配置应用、回退、停用、卸载、Core 停机共用原生命周期串行化及逐插件管理锁；判定后如管理意图、代次、策略、Session 或实际活动时间已变化，撤回本次决定并重新判定。app 的自动空闲入口调用 StopIdle，并复用 stopComponent 的 Session、媒体及调度资源收尾；StopIdle 在同一活动门禁复核引用及时间后进入正常停止。进入 QUIESCING 前的新活动可使本次决定取消，保留 ACTIVE、原绑定与 LastWakeAt/LastWakeReason。
+- D-179：进入 QUIESCING 即冻结新派发，停止沿用 CONTRACTS §4.2 的 STOP_TOTAL/STOP_DRAIN/STOP_ONSTOP（缺省 10s/6s/4s）。已接纳请求及合法子调用按原期限最多排空 6s，然后取消剩余请求、发送唯一 STOPPING；SDK 按原路径停止接单、取消 lifetime，用剩余停止 context 执行 OnStop 并关闭 DB/连接。停止截止为 min(t0+STOP_TOTAL, STOPPING 发送时刻+STOP_ONSTOP)，整棵进程树按 t0+STOP_TOTAL 确认退出或终止。复用 STOP_REASON_IDLE=6，不新增协议消息、字段、排空握手或 HTTP 回调完成回执，不增加 SDK 回调计数查询。
+- 调整 Waker.EnsureActive、AcquireActivity 及停止门禁的现有 idleStop/stopCancelled/stopCommitted 分支：QUIESCING 开始后到达的新请求进入原有界等待，不撤销已开始的排空，也不交给旧 Session。保留原绝对 deadline、取消及 WAKE_QUEUE_* 和 Core 总预算；确认旧树退出并写 SUSPENDED 后才合并为一次新唤醒，完成 Ready 后复核准入并交付一次。已接纳工作的完成与引用释放仍归原 Session，旧 Session 的迟到清理保留新实例状态。
+- HTTP 活动引用继续在 Core 反向代理返回时释放；客户端已取消而 SDK Handler 仍执行、或已写出 EVENT 后 SDK Bus 回调仍执行时，沿用正常停止截止处理。按 D-179 执行既有 SDK 停止路径，取代旧的“等待 SDK 报告全部回调结束或放弃退出”要求。
+- 正常空闲停止确认旧树退出后写 SUSPENDED、STOP_REASON_IDLE 原因与 LastSuspendAt，enabled、ActiveGeneration、已提交路由、配置、任务及业务 DB 保持；空闲停止不计异常退出或触发有限重启，不新建候选、不重跑迁移。失败保留完整错误并记录 FAILED/原因，旧树未确认清空时保留运行槽；退出观察者按原实例所有权收尾。撤销与成功由 host.StopResult 区分，撤销后的调用方保留绑定与资源。
+- File.Update 成功后应用生效策略，ReloadSettings 同样接入；时间覆盖与删除覆盖在下一次空闲判定使用，设置变更保持已运行 Session。改为 never 立即唤醒仍已启用的 SUSPENDED 插件，切回 always_on 按原代次唤醒全部已启用的休眠插件，停用插件保持停用；变更时已在 QUIESCING 的插件在本次正常停止结束后按新策略唤醒。恢复仍复用 S-02.1 的摘要校验、Ready 与原配置/数据库路径。
+- 设置发布、空闲决定与管理动作按现有 Core 运行循环交接；EnsureActive 的 Start 回调也要进入 Core.operation，应用策略时在运行循环及设置锁、插件锁之外等待唤醒，避免持有运行循环等待自身启动。相关重读调用方同步接入。保存失败返回实际错误；保存成功后逐个应用应唤醒的插件并保留各失败，返回完整错误，已保存设置保留，对应失败运行状态记录实际原因，供后继管理 API 按 ADMIN-API §5 返回并重新 GET 核对。
+
+测试（按 docs/goals/README.md「编写测试段」与编码规范「测试提交规则」）：
+- 提交：internal/app/idle_test.go（//go:build unix）一个真实 Core＋声明 sleep_capable 的已提交插件子进程＋SQLite 的集成测试，复用 wake_test.go 的动态构建工程、真实 Start 与回环 Adapter，不新增 testdata 插件。注入较短的有效 SLEEP_* 与 sleep 时长，运行真实自动空闲判定，核对 ACTIVE→QUIESCING→SUSPENDED、OnStop/资源关闭、旧进程树退出及 IDLE 原因；首条命令经 Waker 唤醒后只执行一次、Session 更新且原 generation/config/DB 数据保留；再次自动休眠后经内部设置写回与应用路径改为 never，核对随即唤醒且后续保持 ACTIVE。通过同步点观察状态，不以手动 Stop 或直接写 SUSPENDED 替代自动空闲主路径。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：plugin/agent 的 manifest、进程形式及全部路由准入组合、常驻原因顺序与 warnings；设置缺省/校正/环境变量、非法显式写入、深副本、保留覆盖与原文、auto 删除、Prune 与 Reload；活动阈值即时变更、最短运行、固定冷却截止及结束恢复；各类引用、实际结束时间和旧 Session 释放；管理操作互斥、空闲判定后活动进入并结束的竞争、QUIESCING 前取消决定与进入后的新请求等待、STOPPING 后唯一恢复、取消/期限/队列预算；never/always_on 的全部已启用插件唤醒、停用保持、QUIESCING 中策略变更、保存后部分唤醒失败；HTTP 客户端取消但 Handler 仍执行、已写出 Bus 回调仍执行时按正常停止截止结束；停止或落盘失败、旧树未退出、迟到退出通知与数据保留。sdk/ 与 supervisor/ 验证全部留在本地，不提交测试插件。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/tune/... ./internal/core/idle/... ./internal/core/settings/... ./internal/core/state/... ./internal/core/supervisor/... ./internal/core/router/... ./internal/core/broker/... ./internal/core/httpproxy/... ./internal/core/media/... ./internal/core/continuation/... ./internal/core/hook/... ./internal/core/bus/... ./internal/app/...；go build ./...。PR 按 TEST-MATRIX §3 写明 V-77 本切片分项的测试位置、命令、平台、结果与未运行项，并列出 D-179 对 CONTRACTS/PLAN/TEST-MATRIX 的文档同步；双进程、重复交付、请求期限延长、休眠改代次或重复迁移均按 S-02 失败停止条件阻止合入。
+
+不做：Scheduler 到期唤醒（goal-172），休眠管理 API/CLI/WebUI（goal-173、goal-175），固定机器资源测量与参数调优（goal-174）；私建后台工作的观测或新业务 RPC、自动重试。不改 .proto 或生成产物，不加依赖，不改 ARCHITECTURE/README/spec，文档同步写进 PR。
 ```
 
 ## 第 20 波
