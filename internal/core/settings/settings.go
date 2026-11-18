@@ -74,6 +74,7 @@ type Settings struct {
 	Proxy                     string
 	Admins                    []Admin
 	CommandPrefixes           []string
+	Reply                     Reply
 	CommandPrefixesByInstance map[string][]string
 	DefaultLocale             string
 	Adapters                  map[string]AdapterSettings
@@ -162,7 +163,7 @@ func defaultDocument() ([]byte, error) {
 	content, err := json.MarshalIndent(map[string]any{
 		"$version": currentVersion, "listen": s.Listen, "base_url": s.BaseURL,
 		"trusted_proxies": []string{}, "proxy": s.Proxy, "admins": []string{},
-		"command_prefixes": s.CommandPrefixes, "command_prefixes_by_instance": map[string][]string{},
+		"command_prefixes": s.CommandPrefixes, "command_prefixes_by_instance": map[string][]string{}, "reply": s.Reply,
 		"default_locale": s.DefaultLocale, "adapters": map[string]any{},
 		"log": map[string]any{"level": strings.ToLower(s.LogLevel.String()), "format": s.LogFormat, "sources": map[string]string{},
 			"file": map[string]any{"enabled": s.LogFile.Enabled, "max_size": fmt.Sprintf("%dMiB", s.LogFile.MaxSize>>20),
@@ -236,6 +237,8 @@ func readValue(n *node, key string, s *Settings) error {
 			s.CommandPrefixes = prefixes
 		}
 		return err
+	case "reply":
+		return readReply(n, &s.Reply)
 	case "command_prefixes_by_instance":
 		return n.object(func(id string, value *node) error {
 			prefixes, err := readPrefixes(value)

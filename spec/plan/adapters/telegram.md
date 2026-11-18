@@ -4,7 +4,7 @@
 
 ## 1. 范围
 
-本子章节覆盖官方 Telegram Adapter `adapters/telegram/` 的平台实现：Bot API 客户端、接收与标准化、发送计划与回执、平台权限，以及本地 Bot API 模拟服务 `adapters/telegram/telegramtest/`。章节总述与扩展约定见[适配器实施计划](README.md)。
+本子章节覆盖官方 Telegram Adapter `adapters/telegram/`（包 ID `alonabot-adapter-telegram`，平台 `adapter_id` 仍为 `telegram`，D-172）的平台实现：Bot API 客户端、接收与标准化、发送计划与回执、平台权限，以及本地 Bot API 模拟服务 `adapters/telegram/telegramtest/`。章节总述与扩展约定见[适配器实施计划](README.md)。
 
 - 本子章节的切片：T-03.4、T-03.7、T-03.11，D-87 对标补齐的 T-03.20～T-03.22（协议与 Core 侧在核心切片 T-03.13～T-03.17），以及代理模式与话题判定的 T-03.23（D-100、D-101）。
 - 核心切片中的 Telegram 部分：T-03.6（入站媒体的 getFile 取件）、T-03.8（callback_query 与 answerCallbackQuery）、T-03.9（editMessageText 与 `message.edit` 能力）、T-03.10（模拟服务上的发送与接收故障矩阵）。这些切片随 Core 功能一起交付，进度记在[核心实施计划](../core.md)。
