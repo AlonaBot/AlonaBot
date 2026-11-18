@@ -12,11 +12,11 @@ type BuildInfo struct {
 	ProtocolMinMajor     *uint32       // 进程角色必填
 	ProtocolMaxMajor     *uint32       // 进程角色必填
 	RequiredCapabilities *[]Capability // 进程角色必填，无能力时指向空列表
-	OS, Arch             string        // WebUI 必须为 any/any
+	OS, Arch             string        // 纯静态 WebUI 必须为 any/any
 	Entrypoint           string        // 进程角色的包内相对路径
 	ConfigVersion        *uint32       // 进程角色必填
-	MigrationMode        string        // plugin/agent 必须为 none、self 或 versioned
-	PrepareEffects       string        // plugin/agent 必须为 none 或 managed_db
+	MigrationMode        string        // 非 Adapter 进程必须为 none、self 或 versioned
+	PrepareEffects       string        // 非 Adapter 进程必须为 none 或 managed_db
 }
 
 // Generate 将已解析的工程 manifest 与构建信息合成为稳定的包内 YAML。
@@ -32,7 +32,14 @@ func Generate(project *Manifest, build BuildInfo) ([]byte, error) {
 	m.Entrypoint = build.Entrypoint
 	m.ConfigVersion = build.ConfigVersion
 	m.MigrationMode = build.MigrationMode
-	if m.Role == rolePlugin || m.Role == roleAgent {
+	staticWebUI := m.Role == roleWebUI && m.Entrypoint == ""
+	if staticWebUI && m.webUIProcessField != "" {
+		return nil, fmt.Errorf("static webui must not declare %s", m.webUIProcessField)
+	}
+	if staticWebUI && (len(m.AdapterDependencies) != 0 || len(m.PluginDependencies) != 0 || m.PrepareEffects != "") {
+		return nil, fmt.Errorf("static webui must not declare dependencies or prepare_effects")
+	}
+	if m.Role != roleAdapter && !staticWebUI {
 		switch build.MigrationMode {
 		case MigrationNone, MigrationSelf, MigrationVersioned:
 		default:
@@ -64,12 +71,16 @@ func Generate(project *Manifest, build BuildInfo) ([]byte, error) {
 			if m.Role != roleWebUI {
 				continue
 			}
+		case "sleep_capable":
+			if !m.SleepCapable && m.Role != rolePlugin && m.Role != roleAgent {
+				continue
+			}
 		case "adapter_dependencies", "plugin_dependencies", "migration_mode", "prepare_effects":
-			if m.Role != rolePlugin && m.Role != roleAgent {
+			if m.Role == roleAdapter || staticWebUI {
 				continue
 			}
 		case "protocol_min_major", "protocol_max_major", "required_capabilities", "entrypoint", "config_version":
-			if m.Role == roleWebUI {
+			if staticWebUI {
 				continue
 			}
 		}

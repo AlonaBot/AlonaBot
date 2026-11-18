@@ -21,6 +21,7 @@ type eventRoute struct {
 	Handler       any
 	permission    Permission
 	rules         []Rule // collect 固定的调用顺序，含按钮路由。
+	filter        *MessageFilter
 	continuation  bool
 	actionID      string
 	actionVersion uint32
@@ -54,6 +55,7 @@ type EventBuilder struct {
 	route       eventRoute
 	handles     int
 	afterHandle bool
+	filterAgain bool // 重复声明在 collect 时报告。
 	button      bool // 仅由类型化按钮登记开始的构建链可占用保留前缀
 }
 
@@ -115,6 +117,14 @@ func (r *eventRegistry) collect() {
 			r.errs = append(r.errs, fmt.Errorf("event route %q: %w", b.route.RouteID, err))
 			continue
 		}
+		if b.filterAgain {
+			r.errs = append(r.errs, fmt.Errorf("event route %q declares Filter more than once", b.route.RouteID))
+			continue
+		}
+		if err := b.route.filter.check(); err != nil {
+			r.errs = append(r.errs, fmt.Errorf("event route %q: %w", b.route.RouteID, err))
+			continue
+		}
 		route := b.route
 		route.rules = slices.Clone(route.rules)
 		r.add(route)
@@ -170,16 +180,17 @@ func (e EventType) Name() string { return e.name }
 func (e EventType) Version() uint32 { return e.version }
 
 var (
-	MessageCreated = EventType{name: "message.created", payload: reflect.TypeFor[*message.CreatedPayload]()}      // 新消息。
-	MessageEdited  = EventType{name: "message.edited", payload: reflect.TypeFor[*message.EditedPayload]()}        // 消息编辑。
-	MessageDeleted = EventType{name: "message.deleted", payload: reflect.TypeFor[*message.DeletedPayload]()}      // 消息删除。
-	ButtonClicked  = EventType{name: "button.clicked", payload: reflect.TypeFor[*message.ButtonClickedPayload]()} // 按钮点击。
-	MemberJoined   = EventType{name: "member.joined", payload: reflect.TypeFor[*message.MemberPayload]()}         // 成员加入。
-	MemberLeft     = EventType{name: "member.left", payload: reflect.TypeFor[*message.MemberPayload]()}           // 成员离开。
-	ReactionAdded  = EventType{name: "reaction.added", payload: reflect.TypeFor[*message.ReactionAddedPayload]()} // 消息回应。
-	Scheduled      = EventType{name: "scheduled", payload: reflect.TypeFor[*message.ScheduledPayload]()}          // 定时任务。
-	BotOnline      = EventType{name: "bot.online", payload: reflect.TypeFor[*message.BotOnlinePayload]()}         // 机器人上线。
-	BotOffline     = EventType{name: "bot.offline", payload: reflect.TypeFor[*message.BotOfflinePayload]()}       // 机器人离线。
+	MessageCreated = EventType{name: "message.created", payload: reflect.TypeFor[*message.CreatedPayload]()}        // 新消息。
+	MessageEdited  = EventType{name: "message.edited", payload: reflect.TypeFor[*message.EditedPayload]()}          // 消息编辑。
+	MessageDeleted = EventType{name: "message.deleted", payload: reflect.TypeFor[*message.DeletedPayload]()}        // 消息删除。
+	ButtonClicked  = EventType{name: "button.clicked", payload: reflect.TypeFor[*message.ButtonClickedPayload]()}   // 按钮点击。
+	MemberJoined   = EventType{name: "member.joined", payload: reflect.TypeFor[*message.MemberPayload]()}           // 成员加入。
+	MemberLeft     = EventType{name: "member.left", payload: reflect.TypeFor[*message.MemberPayload]()}             // 成员离开。
+	ReactionAdded  = EventType{name: "reaction.added", payload: reflect.TypeFor[*message.ReactionAddedPayload]()}   // 消息回应。
+	Scheduled      = EventType{name: "scheduled", payload: reflect.TypeFor[*message.ScheduledPayload]()}            // 定时任务。
+	BotOnline      = EventType{name: "bot.online", payload: reflect.TypeFor[*message.BotOnlinePayload]()}           // 机器人上线。
+	BotOffline     = EventType{name: "bot.offline", payload: reflect.TypeFor[*message.BotOfflinePayload]()}         // 机器人离线。
+	CommandInvoked = EventType{name: "command.invoked", payload: reflect.TypeFor[*message.CommandInvokedPayload]()} // Core 命令调用结果。
 )
 
 // AdapterEvent 声明 Adapter 扩展事件，T 须为结构体，Handler 接收 *T。

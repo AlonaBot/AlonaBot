@@ -21,8 +21,8 @@ import (
 func TestDevelopmentExample(t *testing.T) {
 	plugin, adapter, dir := t13Example(t)
 	c := startEmptyCore(t, dir, plugin, adapter, "--reload", "--log-format", "json", "--args", "DEV_RELOAD_POLL=50ms")
-	pluginPID := t13PID(t, c, "alonabot_plugin_devbot")
-	adapterPID := t13PID(t, c, "alonabot_adapter_devbot")
+	pluginPID := t13PID(t, c, "alonabot-plugin-devbot")
+	adapterPID := t13PID(t, c, "alonabot-adapter-devbot")
 	corePID := c.cmd.Process.Pid
 	adapterSession := t13AdapterSession(t, c)
 	t13Reply(t, c, dir, "/hello", "Hello from devbot!")
@@ -39,10 +39,10 @@ func TestDevelopmentExample(t *testing.T) {
 	path := filepath.Join(plugin, "i18n", "en-US.json")
 	developmentWrite(t, path, strings.ReplaceAll(string(developmentRead(t, path)), "Hello from devbot!", "Reloaded translation!"))
 	t13Reply(t, c, dir, "/hello", "Reloaded translation!")
-	if t13PID(t, c, "alonabot_plugin_devbot") == pluginPID {
+	if t13PID(t, c, "alonabot-plugin-devbot") == pluginPID {
 		t.Fatal("translation change did not replace plugin process")
 	}
-	if c.cmd.Process.Pid != corePID || t13PID(t, c, "alonabot_adapter_devbot") != adapterPID || t13PID(t, c, "demo") != installedPID {
+	if c.cmd.Process.Pid != corePID || t13PID(t, c, "alonabot-adapter-devbot") != adapterPID || t13PID(t, c, "demo") != installedPID {
 		t.Fatalf("translation change restarted an unrelated process:\n%s", c.log())
 	}
 	if t13AdapterSession(t, c) != adapterSession || strings.Count(c.log(), "loopback instance started") != 1 {
@@ -52,7 +52,7 @@ func TestDevelopmentExample(t *testing.T) {
 		t.Fatal("installed plugin Session changed")
 	}
 	t13Reply(t, c, dir, "/ping", "pong")
-	t.Logf("Core PID=%d; Adapter PID=%d Session=%s; installed PID=%d Session=%s; translation plugin PID=%d -> %d", corePID, adapterPID, adapterSession, installedPID, installedSession, pluginPID, t13PID(t, c, "alonabot_plugin_devbot"))
+	t.Logf("Core PID=%d; Adapter PID=%d Session=%s; installed PID=%d Session=%s; translation plugin PID=%d -> %d", corePID, adapterPID, adapterSession, installedPID, installedSession, pluginPID, t13PID(t, c, "alonabot-plugin-devbot"))
 	stopTestCore(t, c)
 }
 
@@ -126,7 +126,7 @@ func t13Reply(t *testing.T, c *core, dir, text, want string) {
 	}
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		_, status, body := t13Request(t, c, dir, http.MethodPost, "/plugins/alonabot_adapter_devbot/inject?instance=one&text="+url.QueryEscape(text))
+		_, status, body := t13Request(t, c, dir, http.MethodPost, "/plugins/alonabot-adapter-devbot/inject?instance=one&text="+url.QueryEscape(text))
 		if status != http.StatusNoContent {
 			t.Fatalf("inject: %d %s\n%s", status, body, c.log())
 		}

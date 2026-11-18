@@ -118,6 +118,34 @@
           "description": "Image input"
         }
       }
+    },
+    "max_attempts": {
+      "description": "Maximum attempts per chat model",
+      "hint": "Includes the first request. Must be at least 1."
+    },
+    "fallback_chat_models": {
+      "description": "Fallback chat models"
+    },
+    "image_caption_model": {
+      "description": "Image caption model",
+      "hint": "Choose a chat model that accepts images, or leave empty to keep image placeholders."
+    },
+    "image_caption_prompt": {
+      "description": "Image caption prompt"
+    },
+    "triggers": {
+      "description": "Free conversation triggers",
+      "labels": [
+        "Group mention or reply",
+        "Wake word",
+        "Private chat"
+      ]
+    },
+    "wake_words": {
+      "description": "Wake words"
+    },
+    "member_sessions": {
+      "description": "Separate group conversations by member"
     }
   }
 }

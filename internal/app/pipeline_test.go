@@ -73,6 +73,8 @@ func TestMain(m *testing.M) {
 		a := &pipelineAdapter{}
 		genresources.Bind(a, genresources.Resources{})
 		err = sdk.RunAdapter(a)
+	} else if mode == messageFilterMode {
+		err = sdk.Run(messageFilterPlugin())
 	} else {
 		err = sdk.Run(pipelinePlugin(mode))
 	}
@@ -384,6 +386,10 @@ func newPipeline(t *testing.T, stdio ...bool) *pipelineHarness {
 
 // newPipelineAt 在装配前确定调优值，并允许完整清理后重开同一数据目录。
 func newPipelineAt(t *testing.T, dir string, values tune.Values, stdio bool) *pipelineHarness {
+	return newPipelineWithMessageConfig(t, dir, values, stdio, nil)
+}
+
+func newPipelineWithMessageConfig(t *testing.T, dir string, values tune.Values, stdio bool, readConfig func(context.Context, string, *pb.Event) (json.RawMessage, error)) *pipelineHarness {
 	t.Helper()
 	store, err := state.Open(t.Context(), filepath.Join(dir, "data"))
 	if err != nil {
@@ -396,7 +402,10 @@ func newPipelineAt(t *testing.T, dir string, values tune.Values, stdio bool) *pi
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.assembly, err = assemble(store, dir, h.values, file)
+	if readConfig == nil {
+		readConfig = activeMessageConfig(store)
+	}
+	h.assembly, err = assembleWithMessageConfig(store, dir, h.values, file, readConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -491,6 +500,9 @@ func (h *pipelineHarness) launch(id, mode string, priority int) *runningComponen
 		ExtraEnv: map[string]string{pipelineModeEnv: mode, pipelineIDEnv: id, pipelinePriorityEnv: strconv.Itoa(priority), pipelineAuditEnv: h.server.URL, "GORACE": "atexit_sleep_ms=0"}, Detach: func() { h.assembly.detach(c) }}
 	if strings.HasPrefix(mode, "tasks") {
 		spec.Scheduler = h.assembly.scheduler
+	}
+	if mode == messageFilterMode {
+		spec.ConfigSchema = []byte(messageFilterSchema)
 	}
 	c.process, err = supervisor.Launch(h.t.Context(), h.store, spec)
 	if err != nil {

@@ -20,6 +20,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/core/trust"
 )
 
 // InstallRequest 指定本地归档及清单内容，或由 Core 下载的 GitHub 来源。
@@ -72,6 +73,15 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 		if err := checkPublisher(previous.PublisherKeyID, key, req.Confirm); err != nil {
 			return result, err
 		}
+		if in.Role == state.RoleWebUI && in.Entrypoint == "" {
+			active, err := s.opt.Store.Active(ctx, in.PluginID)
+			if err != nil {
+				return result, err
+			}
+			if active != "" {
+				return result, precondition("cannot install a static WebUI while a process generation is retained; reinstall the process WebUI or explicitly remove its data with uninstall --purge-data")
+			}
+		}
 	} else if !errors.Is(err, state.ErrNotFound) {
 		return result, err
 	}
@@ -82,6 +92,9 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 	var replaced []string
 	var confirmation []string
 	trusted := false
+	if official, ok := trust.Official(); ok {
+		trusted = key == release.KeyID(official)
+	}
 	for _, old := range installs {
 		if old.Source == in.Source && old.PublisherKeyID == in.PublisherKeyID {
 			trusted = true

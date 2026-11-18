@@ -34,6 +34,7 @@ const FileName = "core_config.json"
 const (
 	defaultPort            = "7650"
 	defaultListen          = "127.0.0.1:" + defaultPort
+	containerListen        = "0.0.0.0:" + defaultPort
 	currentVersion         = 1
 	defaultInstanceVersion = 1
 	defaultLocale          = "en-US"
@@ -90,10 +91,14 @@ type File struct {
 }
 
 // Defaults 返回 CONTRACTS §15.1 的缺省设置。
+// ALONABOT_CONTAINER=1 时按 §15.3 监听所有接口，BaseURL 保持本机地址。
 func Defaults() Settings {
 	s := Settings{Listen: defaultListen, BaseURL: "http://" + defaultListen,
 		LogLevel:  slog.LevelInfo,
 		LogFormat: string(logging.FormatText), CommandPrefixes: []string{"/"}, DefaultLocale: defaultLocale}
+	if os.Getenv("ALONABOT_CONTAINER") == "1" {
+		s.Listen = containerListen
+	}
 	s.LogFile.Enabled = true
 	s.LogFile.MaxSize = logging.DefaultMaxFileSize
 	s.LogFile.MaxTotal = logging.DefaultMaxTotalSize
@@ -325,7 +330,8 @@ func readAdmins(n *node, s *Settings) error {
 			return err
 		}
 		adapterID, userID, _ := strings.Cut(value, ":")
-		if _, err := validate.PluginID(adapterID); err != nil || strings.HasPrefix(adapterID, validate.MarketPrefix) {
+		// 平台 ID 只用本地规则，替换仅用于校验。
+		if _, err := validate.PluginID(strings.Replace(adapterID, "-", "_", 1)); err != nil {
 			return child.fail(fmt.Errorf("invalid adapter ID: %q", adapterID))
 		}
 		if userID == "" {
@@ -524,7 +530,10 @@ func validateSettings(s Settings, locations map[string]*node) error {
 	}
 	host, _, _ := net.SplitHostPort(s.Listen) // listen 的语法已在 readString 中校验。
 	ip, _ := netip.ParseAddr(host)
-	if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && base.Scheme != "https" && len(s.TrustedProxies) == 0 {
+	baseIP, _ := netip.ParseAddr(base.Hostname())
+	containerHTTP := os.Getenv("ALONABOT_CONTAINER") == "1" && base.Scheme == "http" &&
+		(baseIP.IsLoopback() || strings.EqualFold(strings.TrimSuffix(base.Hostname(), "."), "localhost"))
+	if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") && base.Scheme != "https" && len(s.TrustedProxies) == 0 && !containerHTTP {
 		return at(locations, "listen", errors.New("non-loopback listen requires HTTPS base_url or trusted_proxies"))
 	}
 	if s.LogFile.MaxSize > s.LogFile.MaxTotal {

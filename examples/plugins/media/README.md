@@ -2,7 +2,7 @@
 
 在两个测试 Bot 的会话里发送普通文字或图片，echo 会保留顺序回送。发送 `/media`，media 会上传内置 PNG，发送两张图片组成的相册和一条带按钮的文字；点击按钮后编辑那条文字。
 
-先在仓库根创建数据目录，将下面内容保存为 `<data_dir>/core_config.json`：
+先在仓库根创建新数据目录，将下面内容保存为 `<data_dir>/core_config.json`。如果在更新改名前的示例环境，先停止 Core 和开发组件，再按[开发指南](../../../docs/development.md#开发运行与热部署)重建；配置键 `telegram` 是平台 ID，`package` 是组件 ID：
 
 ```json
 {
@@ -47,8 +47,8 @@ echo 直接回送入站图片的 Incoming 来源；同实例发送会复用平�
 在仓库根目录检查和构建：
 
 ```fish
-go run ./cmd/alonabot check --dir examples/plugins/media
-go run ./cmd/alonabot build --dir examples/plugins/media --out /tmp/alonabot-media
+go run ./cmd/alonabot check examples/plugins/media
+go run ./cmd/alonabot build examples/plugins/media --out /tmp/alonabot-media
 ```
 
 `New()` 只做注册，所有注册都显式可见。原 `/media` 使用 `c.Send` 获取完整 `SendResult`，先保存可编辑文字的消息句柄，再接收按钮点击；`/caption` 展示结构体参数和子插件，不需要持有发送回执。英文和中文按钮、提示取自 i18n 资源。

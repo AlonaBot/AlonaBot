@@ -23,6 +23,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/contracts/release"
+	"github.com/AlonaBot/AlonaBot/internal/core/manage"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 	"github.com/AlonaBot/AlonaBot/internal/generate"
 	"github.com/AlonaBot/AlonaBot/internal/pluginkit"
@@ -31,7 +32,10 @@ import (
 
 // TestDevelopmentCLI 通过真实 CLI、组件进程与预检闭合作者工程到可安装包的主路径。
 func TestDevelopmentCLI(t *testing.T) {
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "alonabot-plugin-cli")
+	if err := os.Mkdir(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
 	cli := func(args ...string) string {
 		t.Helper()
 		command := exec.Command(filepath.Join(binDir, "alonabot"), args...)
@@ -42,7 +46,10 @@ func TestDevelopmentCLI(t *testing.T) {
 		}
 		return string(output)
 	}
-	cli("init", "--id", "alonabot_plugin_cli", "--module", "example.com/cli")
+	cli("init")
+	if mod := string(developmentRead(t, filepath.Join(dir, "go.mod"))); !strings.Contains(mod, "module alonabot-plugin-cli\n") {
+		t.Fatalf("default module: %s", mod)
+	}
 	for _, name := range []string{"plugin.go", "plugin.yaml", "config_schema.json", "i18n/en-US.json", ".gitignore"} {
 		developmentRead(t, filepath.Join(dir, name))
 	}
@@ -89,8 +96,12 @@ func TestHello(t *testing.T) {
 		t.Fatal("data ignore missing")
 	}
 	author := developmentRead(t, filepath.Join(dir, "plugin.yaml"))
-	if _, err := manifest.ParseProject(author); err != nil {
+	project, err := manifest.ParseProject(author)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if project.Manifest.ID != "alonabot-plugin-cli" || len(project.Warnings) != 0 {
+		t.Fatalf("default identity: %+v", project)
 	}
 	if _, problems := configschema.Parse(developmentRead(t, filepath.Join(dir, "config_schema.json"))); len(problems) > 0 {
 		t.Fatal(problems)
@@ -117,13 +128,13 @@ func TestHello(t *testing.T) {
 		t.Fatalf("direct go test: %v\n%s", err, output)
 	}
 	noGenerated()
-	cli("build")
+	cli("build", dir)
 	noGenerated()
 	cli("check")
 	noGenerated()
-	output := cli("test")
+	output := cli("test", dir)
 	noGenerated()
-	for _, required := range []string{"Activated alonabot_plugin_cli (plugin)", "Command: hello", "Removed temporary test data:"} {
+	for _, required := range []string{"Activated alonabot-plugin-cli (plugin)", "Command: hello", "Removed temporary test data:"} {
 		if !strings.Contains(output, required) {
 			t.Fatalf("missing %q:\n%s", required, output)
 		}
@@ -141,8 +152,12 @@ func TestHello(t *testing.T) {
 	}
 	keyPath := filepath.Join(t.TempDir(), "release.key")
 	developmentWrite(t, keyPath, base64.StdEncoding.EncodeToString(key))
-	out := t.TempDir()
-	cli("pack", "--asset-url", "https://example.com/cli.tar.gz", "--key", keyPath, "--out", out)
+	out := filepath.Join(dir, "bin")
+	other := "linux/amd64"
+	if other == runtime.GOOS+"/"+runtime.GOARCH {
+		other = "windows/amd64"
+	}
+	cli("pack", "--target", runtime.GOOS+"/"+runtime.GOARCH, "--target", other, "--key", keyPath)
 	noGenerated()
 	raw := developmentRead(t, filepath.Join(out, "release.json"))
 	sig := developmentRead(t, filepath.Join(out, "release.json.sig"))
@@ -153,7 +168,20 @@ func TestHello(t *testing.T) {
 	if publication.PublisherKeyID != release.KeyID(pub) {
 		t.Fatal("publisher identity mismatch")
 	}
-	archive := filepath.Join(out, "alonabot_plugin_cli-0.1.0-"+runtime.GOOS+"-"+runtime.GOARCH+".tar.gz")
+	if len(publication.Assets) != 2 {
+		t.Fatalf("assets: %+v", publication.Assets)
+	}
+	for _, target := range []string{runtime.GOOS + "/" + runtime.GOARCH, other} {
+		goos, goarch, _ := strings.Cut(target, "/")
+		asset, ok := publication.Asset(goos, goarch)
+		name := "alonabot-plugin-cli-0.1.0-" + goos + "-" + goarch + ".tar.gz"
+		want := "https://github.com/CHANGE-ME/CHANGE-ME/releases/download/v0.1.0/" + name
+		if !ok || asset.URL != want {
+			t.Fatalf("asset %s: %+v want %s", target, asset, want)
+		}
+		developmentRead(t, filepath.Join(out, name))
+	}
+	archive := filepath.Join(out, "alonabot-plugin-cli-0.1.0-"+runtime.GOOS+"-"+runtime.GOARCH+".tar.gz")
 	candidate, err := packages.Preflight(packages.Input{ReleaseJSON: raw, Signature: sig, PublicKey: pub, Source: "github.com/CHANGE-ME/CHANGE-ME", OS: runtime.GOOS, Arch: runtime.GOARCH, ArchivePath: archive}, t.TempDir(), packages.NewLimits(tune.Defaults()))
 	if err != nil {
 		t.Fatal(err)
@@ -194,13 +222,36 @@ func TestHello(t *testing.T) {
 	if _, err := candidate.MoveTo(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
+	coreDir := t.TempDir()
+	c := startEmptyCore(t, coreDir, "--listen", "127.0.0.1:0")
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(out)
+	var installed manage.Package
+	if err := json.Unmarshal([]byte(c.management(t, coreDir, "", "install", "--yes")), &installed); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(cwd)
+	if installed.ID != "alonabot-plugin-cli" || installed.Source != "github.com/CHANGE-ME/CHANGE-ME" {
+		t.Fatalf("installed: %+v", installed)
+	}
+	var registered []manage.Package
+	if err := json.Unmarshal([]byte(c.management(t, coreDir, "", "list")), &registered); err != nil {
+		t.Fatal(err)
+	}
+	if len(registered) != 1 || registered[0].ID != installed.ID || registered[0].Source != installed.Source {
+		t.Fatalf("registered: %+v", registered)
+	}
+	stopTestCore(t, c)
 	developmentWrite(t, filepath.Join(dir, "cmd", "bot", "main.go"), `package main
 import (
  "context"
  "fmt"
  "os"
  "github.com/AlonaBot/AlonaBot"
- plugin "example.com/cli"
+ plugin "alonabot-plugin-cli"
 )
 var component = plugin.New()
 func main() {
@@ -218,7 +269,7 @@ func main() {
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("tidy library app: %v\n%s", err, output)
 	}
-	cli("build", "--dir", "cmd/bot")
+	cli("build", "cmd/bot")
 	noGenerated()
 	built := filepath.Join(dir, "cmd", "bot", "bin", "bot")
 	if output, err := exec.Command(built, t.TempDir()).CombinedOutput(); err != nil || !strings.Contains(string(output), "Activated library plugin") {
@@ -245,18 +296,18 @@ func TestPluginStorageCLI(t *testing.T) {
 		}
 		dir := t.TempDir()
 		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json")
-		adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
 		c.management(t, dir, "", "install", adapter, "--yes")
-		c.management(t, dir, "", "adapter", "instance", "create", "alonabot_adapter_fixture", "one")
-		c.management(t, dir, "", "enable", "alonabot_adapter_fixture")
+		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", "one")
+		c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
 		c.waitFor("fixture instance one started")
-		const id = "alonabot_plugin_configdb"
+		const id = "alonabot-plugin-configdb"
 		c.management(t, dir, "", "install", archive, "--yes")
 		c.management(t, dir, "", "enable", id)
 
 		deliver := func(text string) {
 			t.Helper()
-			path := "/plugins/alonabot_adapter_fixture/deliver?instance=one&user=alice&text=" + url.QueryEscape(text)
+			path := "/plugins/alonabot-adapter-fixture/deliver?instance=one&user=alice&text=" + url.QueryEscape(text)
 			if status, body := fixtureHTTP(t, c, dir, http.MethodPost, path); status != http.StatusNoContent {
 				t.Fatalf("deliver: %d %s", status, body)
 			}
@@ -268,7 +319,7 @@ func TestPluginStorageCLI(t *testing.T) {
 			count++
 			deadline := time.Now().Add(5 * time.Second)
 			for {
-				status, body := fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot_adapter_fixture/sent")
+				status, body := fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot-adapter-fixture/sent")
 				var sent []string
 				if status != http.StatusOK || json.Unmarshal(body, &sent) != nil {
 					t.Fatalf("sent: %d %s", status, body)

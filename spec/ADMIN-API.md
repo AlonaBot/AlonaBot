@@ -89,13 +89,13 @@ Install 的 `Package` 额外携带可选 `Warnings: string[]`，按原顺序返�
 | `/api/v1/packages/pin` | `{"id":"demo","constraint":"1.2.3"}` | 精确 SemVer；空串解除；格式错误 400 |
 | `/api/v1/packages/reload` | `{"id":"demo"}` | 要求已激活的进程组件，优先激活有效 Pending；无 Pending 时导入 config.json 再激活；WebUI 返回 412 |
 | `/api/v1/packages/update` | `{"id":"demo","confirm":false,"install":{"Source":"owner/repo"}}` | `install` 使用 3.1 的 `InstallRequest` 大写字段；外层 `confirm` 覆盖 `install.Confirm`；校验身份、来源、公钥、pin、版本与依赖影响，通过候选准备与提交更新版本，保持启用状态 |
-| `/api/v1/packages/rollback` | `{"id":"demo","generation":"<保留代次>","confirm":false}` | 要求目标代次属于该组件，校验确认后，当前候选执行返回 501 / `UNSUPPORTED` |
+| `/api/v1/packages/rollback` | `{"id":"demo","generation":"<保留代次>","confirm":false}` | 要求目标代次属于该组件且不是当前 Active，校验确认后交给候选编排器回退到该保留代次（T-09.7），成功返回 `{}` |
 
 `purge` 为整数：0（缺省）保留数据、配置及来源绑定；1 额外清除受管数据；2 额外清除受管配置及安装绑定。保留记录重装要求匹配原来源与身份。Adapter 替换保留的实例归旧组件，新实例配置块换归属时另行确认。具体清理对象见 [CONTRACTS §9.3](CONTRACTS-v0.1.md#93-cli-的最小完整动作)。
 
 Update 成功响应为 `UpdateResult`：有警告时为 `{"warnings":["..."]}`，按原顺序返回 manifest 的全部警告；没有警告时为 `{}`。JSON 与 multipart 使用相同响应格式。
 
-Update 的本地候选可以提供 `install.Archive/ReleaseJSON/Signature/PublicKey`；省略候选来源和归档时，沿用安装时绑定来源。前置校验可能先返回 400、403、404、409 或 412；重复上传已安装的同版本同归档会因不可变包目录已存在返回 409 / `ALREADY_EXISTS`。Rollback 的正式候选编排由后继切片完成，当前返回 501 / `UNSUPPORTED`。
+Update 的本地候选可以提供 `install.Archive/ReleaseJSON/Signature/PublicKey`；省略候选来源和归档时，沿用安装时绑定来源。前置校验可能先返回 400、403、404、409 或 412；重复上传已安装的同版本同归档会因不可变包目录已存在返回 409 / `ALREADY_EXISTS`。Rollback 经候选编排执行（T-09.7）：目标须为该组件的保留代次且不是当前 Active，否则返回 404 或 412；未确认时返回 409 并列出回退目标与丢弃的本地写入。
 
 ### 3.3 组件图标
 
@@ -469,7 +469,20 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 [{"key":"telegram:room@assistant","entries":3,"updated_at":"2026-11-13T12:00:00Z"}]
 ```
 
-`DELETE /api/v1/plugins/{id}/conversations/{key}` 清除该组件指定会话，成功返回 `{}`。`key` 是会话存储键，Agent 按 `<会话字符串>@<实例名>` 组织；调用方把整个键按一个 URL 段转义，服务端解码一次后原样交给 `conversation.Service.Clear`。该端点在路径清理前接收键，因此键中的斜杠、冒号、反斜杠和点段保留。键须为 1～256 字节的有效 UTF-8，格式错误返回 400；未知组件返回 404。列表仅返回键、条目数与最后时间。
+`DELETE /api/v1/plugins/{id}/conversations/{key}` 清除该组件指定会话，成功返回 `{}`。`key` 是会话存储键，Agent 按 `<会话字符串>@<实例名>` 组织，开启成员独立会话（`member_sessions`）时群聊成员的键再追加 `@<用户字符串>`；调用方把整个键按一个 URL 段转义，服务端解码一次后原样交给 `conversation.Service.Clear`。该端点在路径清理前接收键，因此键中的斜杠、冒号、反斜杠和点段保留。键须为 1～256 字节的有效 UTF-8，格式错误返回 400；未知组件返回 404。列表仅返回键、条目数与最后时间。
+
+
+### 15.1 Agent 模型管理路由（D-154）
+
+路径前缀 `/plugins/{agent_id}/models/`。使用 Core 管理 Cookie；POST 通过 `Origin` 和 `X-Alonabot-CSRF` 校验。路由自身的响应为 JSON，Core 层的鉴权拒绝沿用既有响应。
+
+| 方法与子路径 | 请求体 | HTTP 200 响应 |
+| --- | --- | --- |
+| `POST discover` | `{"provider":"配置名"}` 或 `{"protocol":"openai-compatible","base_url":"…","api_key":"…"}`；无密钥 Ollama 可省略 `api_key` | `{"models":[{"id":"远端模型 ID","type":"chat"}]}`；不支持列表时 `{"models":[],"description":"Provider does not support listing models."}`。 |
+| `POST test` | `{"model":"Active 模型配置名"}` | `{"ok":true,"duration_ms":12}`；Provider 探测失败仍返回 200，`ok:false` 且附英文 `description`。 |
+| `GET usage` | 无 | `{"models":[{"model":"模型配置名","input_tokens":7,"output_tokens":3}]}`，按模型名排序，仅含 Agent 本地日期当天实际收到用量的模型；空结果为 `{"models":[]}`。 |
+
+应用层的 400（无效输入）、404（找不到配置项）、502（发现上游失败）和 500（读取用量失败）返回 `{"description":"…"}`，说明为受控英文。模型 ID 的推断规则依次匹配 `embed`、`rerank`、`whisper`/`transcribe`、`tts`，其余为 `chat`。测试路由不落账；有效的零 token 响应存为零，缺失用量不建记录。
 
 ## 16. 命令权限、启用与命令名
 

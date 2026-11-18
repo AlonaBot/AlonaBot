@@ -2,7 +2,7 @@
 //
 // Launch 启动进程并完成握手、准备、提交与激活，任何一步失败都会结束整个进程树后再返回；
 // Stop 排空并停用插件，WaitExit 在断链或退出时撤销业务入口，确认旧进程树清空后释放调度运行槽。
-// Launch 与 Stop 由状态库的逐插件锁串行执行，Stop 与 WaitExit 由 Running 的锁交接清理所有权。
+// Launch、Stop 和 WaitExit 的状态写入与资源清理共用状态库的逐插件锁。
 //
 // Prepare 返回的候选由 Prepared 持有，Activate 后移交 Running，Close 确认树退出后释放。
 // 正式候选的 Journal 与恢复编排由调用方负责。
@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
@@ -111,12 +110,9 @@ type Running struct {
 	http            *httpproxy.Server
 	commandsChanged func()
 	onDetach        func()
+	runtime         *runtimeRecord
 
-	// mu 串行化 Stop 与 WaitExit 的清理，保护 stopping、released 与 cleanupErr。
-	mu sync.Mutex
-	// stopping 为 true 表示 Stop 已接管清理；此后的进程退出不算异常，也不由 WaitExit 清理。
-	stopping bool
-	// released 为 true 表示进程树已处理完、Listener 与进程资源已释放；只设置一次。
+	// released 与 cleanupErr 由逐插件锁保护；进程资源只释放一次。
 	released   bool
 	cleanupErr error // Stop 或 WaitExit 清理进程树时的错误，供随后的 Stop 返回
 }
@@ -149,7 +145,45 @@ func Prepare(ctx context.Context, store *state.Store, spec Spec) (*Prepared, err
 	return prepare(ctx, store, spec)
 }
 
-func prepare(ctx context.Context, store *state.Store, spec Spec) (*Prepared, error) {
+func prepare(ctx context.Context, store *state.Store, spec Spec) (prepared *Prepared, err error) {
+	var runtime *runtimeRecord
+	if spec.Role == state.RolePlugin || spec.Role == state.RoleAgent {
+		key := runtimeKey{store, spec.PluginID}
+		runtime = &runtimeRecord{key: key}
+		previousOwner, _ := runtimeOwners.Load(key)
+		var previous state.RuntimeStatus
+		previous, err = store.RuntimeStatus(ctx, spec.PluginID)
+		if err != nil {
+			return nil, err
+		}
+		if err := runtime.write(ctx, state.RuntimeWaking, "starting"); err != nil {
+			return nil, err
+		}
+		runtimeOwners.Store(key, runtime)
+		defer func() {
+			if err == nil {
+				return
+			}
+			statusCtx := context.WithoutCancel(ctx)
+			if previousOwner != nil {
+				// SDK 的跨代次锁仍负责拒绝重复启动，失败后恢复原 Session 的状态。
+				runtimeOwners.Store(key, previousOwner)
+				err = errors.Join(err, store.SetRuntimeStatus(statusCtx, spec.PluginID, previous))
+				return
+			}
+			err = errors.Join(err, runtime.write(statusCtx, state.RuntimeFailed, "preparation failed"))
+			runtime.release()
+		}()
+	}
+
+	var snapshotRoutes bool
+	if !spec.Development && (spec.Role == state.RolePlugin || spec.Role == state.RoleAgent) {
+		in, err := store.GetInstall(ctx, spec.PluginID)
+		if err != nil {
+			return nil, err
+		}
+		snapshotRoutes = in.Source != "" && in.Source != "dev"
+	}
 	// 启动前检查包内文案，失败时尚未读取候选资源或创建进程。
 	messages, problems := i18n.Parse(spec.I18n)
 	if len(problems) != 0 {
@@ -158,6 +192,14 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (*Prepared, err
 			details = append(details, fmt.Sprintf("%s:%s: %s", problem.File, problem.Key, problem.Message))
 		}
 		return nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "invalid message catalog: " + strings.Join(details, "; ")}
+	}
+	var schema *configschema.Schema
+	if len(spec.ConfigSchema) != 0 {
+		var problems []configschema.Problem
+		schema, problems = configschema.Parse(spec.ConfigSchema)
+		if len(problems) != 0 {
+			return nil, fmt.Errorf("config schema: %v", problems)
+		}
 	}
 
 	// 1. 读取上一快照和路径；restart 的配置以已提交代次为准，新候选使用调用方提供的 Pending 快照。
@@ -250,7 +292,7 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (*Prepared, err
 		closeListener(ln)
 		return nil, err
 	}
-	p := &Prepared{store: store, spec: spec, process: proc, listener: ln, messages: messages}
+	p := &Prepared{store: store, spec: spec, process: proc, listener: ln, messages: messages, snapshotRoutes: snapshotRoutes, runtime: runtime}
 	fail := func(err error) (*Prepared, error) {
 		cleanupErr := p.close()
 		if !p.released {
@@ -267,15 +309,11 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (*Prepared, err
 	p.conn = conn
 	secretBytes, _ := hex.DecodeString(sessionSecret)
 	exp := host.Expect{Role: spec.Role, AdapterID: spec.AdapterID, PluginID: spec.PluginID, Secret: secretBytes, BuildDigest: spec.BuildDigest,
-		Offer: validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}}
+		Offer: validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}, ConfigSchema: schema}
 	exp.Snapshot = func(candidate []byte) ([]byte, error) {
 		if spec.Development {
 			var paths []string
-			if len(spec.ConfigSchema) != 0 {
-				schema, problems := configschema.Parse(spec.ConfigSchema)
-				if len(problems) != 0 {
-					return nil, fmt.Errorf("config schema: %v", problems)
-				}
+			if schema != nil {
 				for _, path := range schema.SecretPaths() {
 					paths = append(paths, strings.Join(path, "."))
 				}
@@ -303,6 +341,16 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (*Prepared, err
 		return fail(err)
 	}
 	spec.Log.SetSession(prep.SessionID)
+	if snapshotRoutes && !bytes.Equal(prep.Register.GetConfigSchemaHash(), boot.GetConfigSchemaHash()) {
+		return fail(&validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "registered config schema hash differs from installed package"})
+	}
+	if spec.NewCandidate && snapshotRoutes {
+		snapshot := state.RouteSnapshot{PluginID: spec.PluginID, GenerationID: spec.GenerationID, Routes: prep.Register.GetRoutes(),
+			RouteHash: prep.RouteHash, BuildDigest: spec.BuildDigest}
+		if err := store.SaveRouteSnapshot(ctx, snapshot); err != nil {
+			return fail(fmt.Errorf("save candidate route snapshot: %w", err))
+		}
+	}
 	p.Registration = prep
 	return p, nil
 }
@@ -363,17 +411,20 @@ func (r *Running) Stop(t0 time.Time, reason pb.StopReason) host.StopResult {
 	defer unlock()
 
 	// 1. 接管清理；WaitExit 已经清理过时不再触碰已释放的进程树句柄。
-	r.mu.Lock()
 	if r.released {
-		r.mu.Unlock()
 		return host.StopResult{Err: r.cleanupErr}
 	}
-	r.stopping = true
-	r.mu.Unlock()
+	defer r.runtime.release()
 
 	// 2. 冻结、排空、STOPPING，并等待整棵进程树清空或在总截止终止它。
+	ctx := context.Background()
+	var runtimeErr error
+	activationFailed := r.Instance.State() == host.StateDegraded
 	res := r.Instance.Stop(t0, reason, r.Process, r.timing, host.StopHooks{
 		Frozen: func(deadline time.Time) {
+			if !activationFailed {
+				runtimeErr = r.runtime.writeIfCurrent(ctx, state.RuntimeQuiescing, reason.String())
+			}
 			if r.scheduler != nil {
 				r.scheduler.Drain(r.pluginID)
 			}
@@ -391,16 +442,20 @@ func (r *Running) Stop(t0 time.Time, reason pb.StopReason) host.StopResult {
 
 	// 3. 进程树处理完后读完插件的最后输出，再释放 Listener 与进程资源；读取受同一总截止约束。
 	drainLogs(r.Process, t0.Add(r.timing.Total))
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.cleanupErr = res.Err
 	r.release()
+	if res.Err != nil {
+		runtimeErr = errors.Join(runtimeErr, r.runtime.writeIfCurrent(ctx, state.RuntimeFailed, "stop failed"))
+	} else if !activationFailed {
+		runtimeErr = errors.Join(runtimeErr, r.runtime.writeIfCurrent(ctx, state.RuntimeStopped, reason.String()))
+	}
+	res.Err = errors.Join(res.Err, runtimeErr)
 	return res
 }
 
 // WaitExit 在 Session 断开或进程退出时撤销业务入口，再等待并清理旧进程树。
-// 未经 Stop 且退出码非 0 才算异常；err 非 nil 表示旧进程树未确认清空，调用方不能启动替代实例。
-func (r *Running) WaitExit() (abnormal bool, state string, err error) {
+// 未经 Stop 且退出失败才算异常；err 保留清理或状态持久化错误。
+func (r *Running) WaitExit() (abnormal bool, exitState string, err error) {
 	// 1. 断链立即撤销入口，保留尚存进程的运行槽，不等待进程先自行退出。
 	select {
 	case <-r.Instance.Session.Done():
@@ -412,18 +467,12 @@ func (r *Running) WaitExit() (abnormal bool, state string, err error) {
 		r.commandsChanged()
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	unlock := r.store.LockPlugin(r.pluginID)
+	defer unlock()
 	if r.released {
 		return false, fmt.Sprint(r.Process.ExitState()), r.cleanupErr
 	}
-	if r.stopping {
-		// Stop 持有清理权；释放锁等待领头进程退出，让 Stop 可以完成资源释放。
-		r.mu.Unlock()
-		<-r.Process.Exited()
-		r.mu.Lock()
-		return false, fmt.Sprint(r.Process.ExitState()), nil
-	}
+	defer r.runtime.release()
 	r.detach()
 	// 2. 合作退出与日志收尾共用同一个总截止；到期仍存活才终止树内余留进程。
 	// 组内已没有进程时不再发信号，避免进程组号被复用后误杀无关进程。
@@ -438,10 +487,15 @@ func (r *Running) WaitExit() (abnormal bool, state string, err error) {
 	drainLogs(r.Process, total)
 	r.release()
 	st := r.Process.ExitState()
-	if r.cleanupErr != nil {
-		return true, fmt.Sprint(st), r.cleanupErr
+	abnormal = r.cleanupErr != nil || !st.Success()
+	if r.Instance.State() == host.StateDegraded {
+		return abnormal, fmt.Sprint(st), r.cleanupErr // 保留已记录的激活失败。
 	}
-	return !st.Success(), fmt.Sprint(st), r.cleanupErr
+	next := state.RuntimeStopped
+	if abnormal {
+		next = state.RuntimeFailed
+	}
+	return abnormal, fmt.Sprint(st), errors.Join(r.cleanupErr, r.runtime.writeIfCurrent(context.Background(), next, fmt.Sprint(st)))
 }
 
 // detach 撤销本实例的注册；由 Stop 或 WaitExit 中取得清理权的一方调用。
@@ -464,7 +518,7 @@ func drainLogs(proc *process.Process, deadline time.Time) {
 	}
 }
 
-// release 关闭 Listener 并释放进程资源；调用方持有 r.mu，重复调用无副作用。
+// release 关闭 Listener 并释放进程资源；调用方持有逐插件锁，重复调用无副作用。
 func (r *Running) release() {
 	if r.released {
 		return

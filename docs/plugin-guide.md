@@ -1,6 +1,6 @@
 # 插件开发规范
 
-负责范围：插件作者（含本仓库的官方插件、Adapter、Agent 与示例）在依赖、存储、日志、生命周期与发布上必须遵守的规则，以及这样要求的原因。Adapter 与 Agent 是有进程的非插件组件（DESIGN §T），这里的规则同样适用于它们；WebUI 组件只含静态文件，只需遵守第 9 节与 CONTRACTS §7.5。行为的权威是 [CONTRACTS](../spec/CONTRACTS-v0.1.md)，本文只列规则并指向对应条款，两者冲突时以契约为准。
+负责范围：插件作者（含本仓库的官方插件、Adapter、Agent 与示例）在依赖、存储、日志、生命周期与发布上必须遵守的规则，以及这样要求的原因。Adapter 与 Agent 是有进程的非插件组件（DESIGN §T），这里的规则同样适用于它们；WebUI 提供静态文件，也可带 Go 进程；静态发布遵守第 9 节与 CONTRACTS §7.5，进程部分沿用相应的 SDK 规则。行为的权威是 [CONTRACTS](../spec/CONTRACTS-v0.1.md)，本文只列规则并指向对应条款，两者冲突时以契约为准。
 更新时机：契约中影响插件作者的条款变化、SDK 新增按需包或依赖政策变化时。
 
 SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未全部实现；实际进度见 [spec/README.md](../spec/README.md)。
@@ -312,12 +312,15 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 ## 9. 发布
 
 - 市场 ID 按角色使用 `alonabot-plugin-`、`alonabot-adapter-`、`alonabot-agent-` 或 `alonabot-webui-` 前缀，后缀用单个连字符分词，完整 ID 不含下划线；插件正则为 `^alonabot-plugin-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`，其他角色同形，长度上限为 64；本地规则仍为 `^[a-z][a-z0-9_-]{0,63}$`（CONTRACTS §9.1，D-172）。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
+- 改名时同步 `plugin.yaml`、依赖、HTTP 路径和 Service 原始名；`pack` 会使用新 ID 生成归档名和 `release.json`。已有改名前的开发数据时，按[开发指南](development.md#开发运行与热部署)重建。
 - 每次发布可附上 UTF-8 changelog，安装后可经[管理 API](../spec/ADMIN-API.md#22-更新内容changelog)读取。二选一：根目录的 `CHANGELOG.md`（每版一节，例如 `## [1.2.1] - 2026-11-17`，日期可省略），或按版本、按语言存放，例如 `changelog/1.2.1/en-US.md` 和 `changelog/1.2.1/zh-CN.md`。目录名使用不带 `v`、且不高于 `plugin.yaml` 中 `version` 的 SemVer；文件名使用规范化的 BCP 47 标签，每个版本都要有 `en-US.md`。运行 `alonabot check` 核对格式，`alonabot pack` 原样打包（CONTRACTS §9.1）。
-- 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`（CONTRACTS §9.3）。
-- 用 `alonabot build` 检查资源并编译独立组件，`alonabot check` 只读核对。`alonabot pack --asset-url https://example.com/component.tar.gz` 为所选平台生成安装包与归档外的 `release.json`；目标通过 `--goos/--goarch/--tags` 选择，`--out` 默认 `<工程>/bin`。可选 `--key FILE` 读取标准 base64 编码的 64 字节 Ed25519 私钥，对清单原始字节签名，并在归档外写 `release.json.sig` 与 `release.pub`；省略时输出 unsigned 清单（CONTRACTS §9.2、§9.3）。密钥读取或签名失败直接报错。进程包含可解析的 `build-info` 文本，静态 WebUI 包包含 manifest、静态资源和可选的 changelog。签名私钥由作者保管，留在打包资源、仓库和构建日志之外。
+- 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；本地归档用 `install <归档>`，官方包用 `install <组件 ID>` 从可执行文件旁 `packages/<组件 ID>/` 读取。不带参数时在当前目录（作者工程为 `bin/`，含直接包子目录）按 release.json 选择唯一的本机包，静态 WebUI 使用 any/any，零个或多个候选时列出搜索目录和候选并报错；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`（CONTRACTS §9.3）。
+- 用 `alonabot build` 检查资源并编译独立组件，`alonabot check` 只读核对。`alonabot pack [目录] --target linux/amd64 --target linux/arm64` 为每个目标生成归档，全部资产共享一份归档外的 `release.json`；省略目标时取本机平台，静态 WebUI 只生成一个 `any/any` 归档，带 Go 入口的 WebUI 按平台构建。`--tags` 选择源码，`--out` 默认 `<工程>/bin`。资产地址为 `--asset-base` 加 `/` 与归档名；`source` 为 `github.com/<owner>/<repo>` 时，缺省前缀为 `https://github.com/<owner>/<repo>/releases/download/v<version>`，其他来源须显式给出绝对 https 前缀（无 query/fragment）。可选 `--key FILE` 读取标准 base64 编码的 64 字节 Ed25519 私钥，只对最终合并清单的原始字节签名一次，并在归档外写 `release.json.sig` 与 `release.pub`；省略时输出 unsigned 清单并清除输出目录中的旧签名和公钥（CONTRACTS §9.2、§9.3）。密钥读取或签名失败直接报错。进程包含可解析的 `build-info` 文本，静态 WebUI 包包含 manifest、静态资源和可选的 changelog。签名私钥由作者保管，留在打包资源、仓库和构建日志之外。
 
 ## 直接测试与构建
 
-在组件目录运行 `go test ./...` 即可使用 plugintest。测试启动时按入口包现场扫描 manifest、Schema、i18n 和 Handler 参数名，并复用同一入口包的只读资源。作者的 `New()` 只创建插件并登记业务行为，工程里没有 `alonabot_gen.go`，也无需编写生成相关的代码或指令。
+创建工程可运行 `alonabot init alonabot-plugin-hello`：ID 与外部 Go module 缺省取目录名，已有 module 内沿用其 go.mod。可用 `--id`、`--module`、`--role` 覆盖；Adapter 的 `--adapter-id` 缺省等于组件 ID。`my_plugin` 按本地 ID 创建并警告缺市场前缀；非法目录名报错并提示显式 `--id`。
 
-独立组件运行 `alonabot build --dir .`；通过根包 `alonabot.Run` 或 `alonabot.Start` 装配组件的 main 包运行 `alonabot build --dir ./cmd/bot`，执行产物为 `cmd/bot/bin/bot`（Windows 加 `.exe`）。库模式构建会只读扫描依赖中的组件，包括模块缓存中的第三方组件，并将资源经 main 包的 overlay 编入。直接 Go 构建的程序在启动缺少资源的组件时会提示使用 `alonabot build` 或 `alonabot run`。库模式的公开选项与停止用法见[开发指南](development.md#库模式运行同一进程)；独立进程开发运行与热部署使用 `alonabot run --reload`。
+`build`、`check`、`test`、`pack` 接受至多一个位置目录，省略时取当前目录，`--dir` 报未知参数。在组件目录运行 `go test ./...` 即可使用 plugintest。测试启动时按入口包现场扫描 manifest、Schema、i18n 和 Handler 参数名，并复用同一入口包的只读资源。作者的 `New()` 只创建插件并登记业务行为，工程里没有 `alonabot_gen.go`，也无需编写生成相关的代码或指令。
+
+独立组件运行 `alonabot build .`；通过根包 `alonabot.Run` 或 `alonabot.Start` 装配组件的 main 包运行 `alonabot build ./cmd/bot`，执行产物为 `cmd/bot/bin/bot`（Windows 加 `.exe`）。库模式构建会只读扫描依赖中的组件，包括模块缓存中的第三方组件，并将资源经 main 包的 overlay 编入。直接 Go 构建的程序在启动缺少资源的组件时会提示使用 `alonabot build` 或 `alonabot run`。库模式的公开选项与停止用法见[开发指南](development.md#库模式运行同一进程)；独立进程开发运行与热部署使用 `alonabot run --reload`。

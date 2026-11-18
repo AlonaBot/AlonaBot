@@ -189,7 +189,7 @@ func IsAdapterEventType(eventType string) bool {
 		return false
 	}
 	adapterID, name := eventType[:separator], eventType[separator+1:]
-	if _, err := PluginID(adapterID); err != nil || strings.HasPrefix(adapterID, MarketPrefix) || name == "" {
+	if !localID.MatchString(adapterID) || reservedNames[adapterID] || name == "" {
 		return false
 	}
 	for _, c := range name {

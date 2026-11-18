@@ -11,9 +11,11 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/core/trust"
 )
 
 // Candidates 接收通过管理前置校验的候选操作，由候选编排器实现。
@@ -43,7 +45,7 @@ func (s *Service) Reload(ctx context.Context, id string) (err error) {
 	if err != nil {
 		return err
 	}
-	if in.Role == "webui" {
+	if in.Role == "webui" && in.Entrypoint == "" {
 		return precondition("webui has no process to reload")
 	}
 	if s.opt.State(id) != "Activated" {
@@ -72,7 +74,16 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (re
 		return result, developmentError(id)
 	}
 	if req.Source == "" && req.Archive == "" {
-		req.Source = strings.TrimPrefix(in.Source, "github.com/")
+		bundled, version, err := s.bundledUpdate(ctx, id)
+		if err != nil {
+			return result, err
+		}
+		if version != "" {
+			bundled.Confirm, bundled.Replace = req.Confirm, req.Replace
+			req = bundled
+		} else {
+			req.Source = strings.TrimPrefix(in.Source, "github.com/")
+		}
 	}
 	candidate, err := s.prepare(ctx, req)
 	if err != nil {
@@ -89,6 +100,9 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (re
 	}
 	if m.Source != in.Source {
 		return result, denied("candidate source differs from installed binding")
+	}
+	if in.Role == state.RoleWebUI && in.Entrypoint != "" && m.Entrypoint == "" {
+		return result, precondition("updating a WebUI with an entrypoint to a static WebUI is not supported")
 	}
 	key := candidate.Release.PublisherKeyID
 	if err := checkPublisher(in.PublisherKeyID, key, req.Confirm); err != nil {
@@ -117,7 +131,16 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (re
 	if err != nil {
 		return result, err
 	}
-	if in.Role == state.RoleWebUI || active == "" {
+	firstWebUIProcess := in.Role == state.RoleWebUI && in.Entrypoint == "" && m.Entrypoint != ""
+	if in.Role == state.RoleWebUI && in.Entrypoint == "" && m.Entrypoint == "" || active == "" && !firstWebUIProcess {
+		// 直接替换包时不会进入 Journal，仍须遵守更新的维护门槛。
+		previous, err := s.manifest(ctx, id)
+		if err != nil {
+			return result, err
+		}
+		if previous.PrepareEffects == manifest.EffectsExternal || m.PrepareEffects == manifest.EffectsExternal {
+			return result, precondition("NEEDS_MANUAL_MIGRATION")
+		}
 		digest, err := hex.DecodeString(candidate.Asset.SHA256)
 		if err != nil {
 			return result, err
@@ -136,6 +159,9 @@ func checkPublisher(bound, candidate string, confirm bool) error {
 	}
 	if bound != "" {
 		return denied("candidate publisher differs from installed binding")
+	}
+	if official, ok := trust.Official(); ok && candidate == release.KeyID(official) {
+		return nil
 	}
 	if !confirm {
 		return &ErrNeedsConfirm{Affected: []string{"trust publisher: " + candidate}}

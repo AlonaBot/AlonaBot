@@ -359,7 +359,13 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
-		return tx.Create(&pluginState{PluginID: in.PluginID}).Error
+		if err := tx.Create(&pluginState{PluginID: in.PluginID}).Error; err != nil {
+			return err
+		}
+		if in.Role == RolePlugin || in.Role == RoleAgent {
+			return tx.Create(&pluginRuntime{PluginID: in.PluginID, RuntimeStatus: stoppedRuntime("installed")}).Error
+		}
+		return nil
 	})
 }
 
@@ -405,6 +411,13 @@ func (s *Store) CommitActive(ctx context.Context, pluginID, expectedOld, newGen 
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) || candidate.PluginID != pluginID || candidate.CommittedAt != nil {
 			return fmt.Errorf("generation %s does not exist, does not belong to plugin %s, or was already committed", newGen, pluginID)
+		}
+		var installed installation
+		if err := tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&installed).Error; err != nil {
+			return err
+		}
+		if err := checkActiveCommitRoutes(tx, installed.Install, newGen); err != nil {
+			return err
 		}
 		committedAt := time.Now().UnixMilli()
 		candidate.CommittedAt = &committedAt

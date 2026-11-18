@@ -83,7 +83,8 @@ func supportedImageMIME(mime string) bool {
 	}
 }
 
-func readImages(c *sdk.Context, text string) (string, []provider.Image) {
+// readImages 保留入站图片顺序；读失败的槽位只用于生成占位。
+func readImages(c *sdk.Context) []provider.Image {
 	var images []provider.Image
 	for _, segment := range c.Event().Payload.(*message.CreatedPayload).Chain {
 		image, ok := segment.(message.ImageSegment)
@@ -96,13 +97,11 @@ func readImages(c *sdk.Context, text string) (string, []provider.Image) {
 			if incoming := image.Source.Incoming; incoming != nil && incoming.Token != "" {
 				reason = strings.ReplaceAll(reason, incoming.Token, "[REDACTED]")
 			}
-			c.Logger().WarnContext(c.Context(), "image read failed", "session", sessionKey(c), "error", reason)
-			text = prependImages(text, 1)
-			continue
+			c.Logger().WarnContext(c.Context(), "image read failed", "session", conversationKey(c), "error", reason)
 		}
 		images = append(images, loaded)
 	}
-	return text, images
+	return images
 }
 
 func storedImages(ctx context.Context, db *gorm.DB, session string, count uint64) (map[uint64]conversationImage, error) {
@@ -135,7 +134,7 @@ func replayImages(entry conversationEntry, images map[uint64]conversationImage, 
 
 // appendImages 在会话锁内执行；Core 追加后本地事务失败时，文字历史仍保留。
 func (a *component) appendImages(c *sdk.Context, db *gorm.DB, generation uint64, user conversationEntry, assistant json.RawMessage, images []provider.Image) error {
-	session := sessionKey(c)
+	session := conversationKey(c)
 	var appended bool
 	err := db.WithContext(c.Context()).Transaction(func(tx *gorm.DB) error {
 		// 1. 以最终设置核对 reset 代次，并从最新计数分配连续编号。

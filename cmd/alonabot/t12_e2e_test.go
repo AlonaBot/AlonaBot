@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	agentPackageID      = "alonabot_agent_official"
+	agentPackageID      = "alonabot-agent-official"
 	agentPackageNote    = "package note"
 	agentPackageProfile = "package profile"
 	agentPackageSkill   = "Use the packaged agent and report the result.\n"
@@ -161,11 +161,11 @@ func TestAgentPackage(t *testing.T) {
 	dir := t.TempDir()
 	developmentWrite(t, filepath.Join(dir, "core_config.json"), fmt.Sprintf(`{
 		"listen":"127.0.0.1:0","adapters":{"telegram":{
-		"package":"alonabot_adapter_telegram","default_instance":"package_bot","instances":{"package_bot":{
+		"package":"alonabot-adapter-telegram","default_instance":"package_bot","instances":{"package_bot":{
 		"token":"agent-package-token","api_base_url":%q,"proxy_mode":"none"}}}}}`, server.URL()))
 	c := startEmptyCore(t, dir, "../../adapters/telegram")
 	defer func() { t.Logf("Core log:\n%s\nBot API: %+v", c.log(), server.Requests()) }()
-	developmentPID(t, c, "alonabot_adapter_telegram")
+	developmentPID(t, c, "alonabot-adapter-telegram")
 	telegramEventually(t, c, func() bool { return server.Calls("getUpdates") > 0 })
 	c.management(t, dir, "", "admin", "add", "telegram:88")
 	c.management(t, dir, "", "install", agentArchive, "--yes")
@@ -177,7 +177,7 @@ func TestAgentPackage(t *testing.T) {
 		"providers":[{"custom":{"name":"synthetic","protocol":"openai-compatible","base_url":%q,
 		"api_key":"synthetic-key"}}],
 		"models":[{"name":"synthetic","provider":"synthetic","model":"test-model","type":"chat","max_tokens":128,"image_input":true}],
-		"chat_model":"synthetic","personas":[{"name":"package","prompt":"Package persona"}],"default_persona":"package",
+		"chat_model":"synthetic","triggers":["private"],"personas":[{"name":"package","prompt":"Package persona"}],"default_persona":"package",
 		"skills_dir":%q,"mcp_servers":[{"name":"package","transport":"stdio","command":%q,"args":["--pid-file",%q]}]
 	}`, model.URL, skills, mcp, pidFile))
 	c.management(t, dir, "", "enable", agentPackageID)
@@ -272,9 +272,7 @@ func TestAgentPackage(t *testing.T) {
 		}})
 	}
 
-	// 2. 开启自由对话，依次完成自身 memory、技能与需平台确认的 MCP 工具往返。
-	send("/agent on")
-	waitText("Free conversation is on.")
+	// 2. 配置的 private 触发方式开启私聊自由对话，依次完成自身 memory、技能与需平台确认的 MCP 工具往返。
 	send("package conversation")
 	confirm("mcp/package/echo/tool", `"text":"package MCP parameters"`)
 	waitText("package complete")
@@ -409,7 +407,7 @@ func packAgentComponent(t *testing.T, project, id string) string {
 		t.Fatalf("unexpected generated source: %v", err)
 	}
 	out := t.TempDir()
-	command := exec.Command(filepath.Join(binDir, "alonabot"), "pack", "--dir", project, "--asset-url", "https://example.invalid/"+id+".tar.gz", "--out", out)
+	command := exec.Command(filepath.Join(binDir, "alonabot"), "pack", project, "--asset-base", "https://example.invalid", "--out", out)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("pack %s: %v\n%s", project, err, output)
 	} else {
