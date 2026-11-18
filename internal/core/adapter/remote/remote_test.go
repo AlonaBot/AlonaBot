@@ -738,6 +738,11 @@ func setDefaultLogger(t *testing.T, logger *slog.Logger) {
 
 func setup(t *testing.T) (*state.Store, supervisor.Spec, *processLog) {
 	t.Helper()
+	return setupWithRole(t, state.RoleAdapter)
+}
+
+func setupWithRole(t *testing.T, role state.Role) (*state.Store, supervisor.Spec, *processLog) {
+	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
 	store, err := state.Open(ctx, filepath.Join(dir, "data"))
@@ -746,7 +751,7 @@ func setup(t *testing.T) (*state.Store, supervisor.Spec, *processLog) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	digest := bytes.Repeat([]byte{1}, 32)
-	if err := store.AddInstall(ctx, state.Install{PluginID: "loop-package", Role: state.RoleAdapter, AdapterID: "loop", BuildDigest: digest}); err != nil {
+	if err := store.AddInstall(ctx, state.Install{PluginID: "loop-package", Role: role, AdapterID: "loop", BuildDigest: digest}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.AddGeneration(ctx, "loop-package", "gen", "{}", 1); err != nil {
@@ -762,7 +767,7 @@ func setup(t *testing.T) (*state.Store, supervisor.Spec, *processLog) {
 	limits.OnReady = 3 * time.Second
 	logs := &processLog{}
 	setDefaultLogger(t, slog.New(slog.NewTextHandler(logs, nil)))
-	return store, supervisor.Spec{PluginID: "loop-package", Role: state.RoleAdapter, AdapterID: "loop", PluginDir: pluginDir, Executable: os.Args[0], BuildDigest: digest, GenerationID: "gen", Bootstrap: &pb.Bootstrap{GenerationId: "gen", CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}, NewCandidate: true, Limits: limits, Stop: host.NewStopTiming(values), Log: logs, ExtraEnv: map[string]string{helperEnv: "adapter", "GORACE": "atexit_sleep_ms=0"}}, logs
+	return store, supervisor.Spec{PluginID: "loop-package", Role: role, AdapterID: "loop", PluginDir: pluginDir, Executable: os.Args[0], BuildDigest: digest, GenerationID: "gen", Bootstrap: &pb.Bootstrap{GenerationId: "gen", CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}, NewCandidate: true, Limits: limits, Stop: host.NewStopTiming(values), Log: logs, ExtraEnv: map[string]string{helperEnv: "adapter", "GORACE": "atexit_sleep_ms=0"}}, logs
 }
 
 func openMediaStore(t *testing.T) *media.Store {
@@ -1030,11 +1035,12 @@ func TestRemoteLifecycle(t *testing.T) {
 func TestRemoteRoleMismatch(t *testing.T) {
 	for _, mode := range []string{"adapter", "plugin"} {
 		t.Run(mode, func(t *testing.T) {
-			store, spec, _ := setup(t)
-			spec.ExtraEnv[helperEnv] = mode
+			role := state.RoleAdapter
 			if mode == "adapter" {
-				spec.Role = state.RolePlugin
+				role = state.RolePlugin
 			}
+			store, spec, _ := setupWithRole(t, role)
+			spec.ExtraEnv[helperEnv] = mode
 			running, err := supervisor.Launch(context.Background(), store, spec)
 			if running != nil {
 				running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
