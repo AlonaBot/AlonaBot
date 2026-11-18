@@ -207,7 +207,9 @@ Adapter 实例的记录在 `GET /api/v1/adapters/{adapter_id}/instances/{instanc
 
 处理 `message.created` 的命令、文本、事件及其派生和延续调用向原实例、会话与话题回复时，共享根调用的首条 Send 标记。首条按 `mention_sender` 在群聊提及可信发送人，按 `quote` 引用触发消息，并在第一个 text 前加 `prefix`；已有同人提及或引用保留。提及和前缀加入后超过实例声明的文本长度上限时，两项一起省略，引用仍保留。后台和跨会话发送沿用原行为。
 
-Core 在出站 Hook 前完成回复改写，并沿用整链复检。首条实际返回的平台消息 ID 与自动提及、前缀只在当前插件 Session 中关联；后续 Edit 保留这些修饰，用 TEXT_MENTION 表达自动提及。Edit 仍接受一个 text 和可选 buttons，无法表达的组合返回既有错误。Session 退出时释放关联，之后按新回复处理。`forward_threshold` 为正且实例声明 `message.forward` 时，每次 Send 的 text 片段总 Unicode 码点数超过阈值会改为一个合并转发，节点来源为本账号；reference、媒体、按钮及嵌套限制沿用原校验，Edit 保持原发送形态。
+Core 在出站 Hook 前完成回复改写，并沿用整链复检。前缀按普通文本处理，Markdown 正文前插入独立 plain text 片段，保留实体的 UTF-16 偏移。首条回执选取 `primary_platform_message_id`，为空时取 `platform_message_ids` 首项；只按该 ID 的 ACCEPTED `part_results` 与 `segment_indexes` 记录 Hook 后实际已发送的自动提及和前缀，完整回执与错误继续返回。关联按当前插件 Session、完整 Target 与平台消息 ID 隔离；后续 Edit 保留已记录修饰，用 TEXT_MENTION 表达自动提及，重复编辑沿用已有修饰，并同步插入位置前后实体的偏移与长度。Edit 仍接受一个 text 和可选 buttons，超限时省略自动修饰；需保留的普通文本前缀或自动提及与 Markdown 编辑组合无法表达时返回 UNSUPPORTED。Session 退出时释放关联，配置读取期间的在途准备与迟到回执随之失效；根调用结束时释放首条标记。
+
+`forward_threshold` 为正且实例声明 `message.forward` 时，每次回复 Send 的 text 片段总 Unicode 码点数超过阈值会改为一个合并转发，节点来源为本账号；reference、媒体、按钮及嵌套限制沿用原校验，Edit 沿用原编辑限制。平台菜单在启动及路由、命令策略变化时同步；命令派发与回复 Send 从下一次操作读取新平台快照。
 
 官方 Agent 可用 `/profile [名字]` 查询或切换当前会话的配置文件；名字为「默认」或 `default` 时取消单独指定，先回落实例缺省，再回到 `default`。Admin 用 `/agent on|off`、`/persona <名字>`、`/provider <名字>` 修改当前配置文件的触发方式、人格与模型，共用该配置文件的会话在后续调用一起生效；回复显示 Core 返回的名称、会话数，修改 `default` 时追加即将重载提示。可覆盖字段为 `chat_model`、`image_caption_model`、`default_persona`、`triggers`、`wake_words`、`member_sessions`。人格目录当前仍来自基础配置 `personas`，迁入 Agent 数据库由 T-12.20 完成。受管库的 `chat_settings` 仅保留会话键、reset 代次与图片计数；旧开发库按首次发布前约定重建。
 
