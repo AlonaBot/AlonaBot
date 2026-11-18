@@ -67,7 +67,7 @@ go run ./scripts/dist --version 0.1.0 \
   --key ~/.config/alonabot/release.key --out ./dist
 ```
 
-构建机需要上表中的 Go、Node 与 npm，并可读取已锁定的 Go 模块和 npm 包。程序先运行 `web/admin` 的 `npm ci` 与 `npm run build`，再由主机版 `alonabot pack` 交叉构建组件；组件版本沿用各自 `plugin.yaml`。默认目标为 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`，可用 `--platforms linux/amd64,linux/arm64` 选择子集。离线 npm 缓存已齐全时，可在命令前加 `env npm_config_offline=true`。
+构建机需要上表中的 Go、Node 与 npm，并可读取已锁定的 Go 模块和 npm 包。程序先运行 `web/admin` 的 `npm ci` 与 `npm run build`，再由主机版 `alonabot pack <组件目录> --target <os>/<arch> ... --asset-base <前缀> --out <目录>` 为每个组件调用一次，传入全部目标；pack 写出合并清单，dist 再签名并自检。组件版本沿用各自 `plugin.yaml`。默认目标为 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`，可用 `--platforms linux/amd64,linux/arm64` 选择子集。离线 npm 缓存已齐全时，可在命令前加 `env npm_config_offline=true`。
 
 `--key` 文件保存标准 base64 编码的 64 字节 Ed25519 私钥，允许末尾空白。私钥放在仓库及组件资源目录之外，设置为仅发布维护者可读（0600），通过受控环境或离线介质保管和备份。程序只从该文件读取私钥，子进程不接收私钥；发行物只携带公钥与签名。发布前先用临时测试密钥验证流程，正式签名使用维护者控制的密钥。
 
@@ -88,7 +88,9 @@ bin/alonabot run --data-dir ./data      # 不带子命令时等同 run；按安�
 `run` 与库模式（`alonabot.Start`）共用 `internal/app` 的同一套 Core 装配；CLI 直接调用它，根包提供库模式的薄包装。组件经管理服务安装与启停，CLI 通过 `base_url` 上的管理 API 操作，token 取自 `ALONABOT_ADMIN_TOKEN` 或 `--token-file`，管理地址可用 `--admin-url` 覆盖：
 
 ```sh
-bin/alonabot install --archive pkg.tar.gz --release release.json --signature release.json.sig --public-key release.pub --yes
+bin/alonabot install pkg.tar.gz --yes             # release.json、签名和公钥缺省取归档同目录
+bin/alonabot install alonabot-webui-admin --yes    # 从可执行文件旁 packages/<组件 ID>/ 安装
+bin/alonabot install --yes                        # 在当前目录或工程 bin/ 中选择唯一的本机包
 bin/alonabot install --source owner/repo --yes      # 从 GitHub Release 下载 release.json、可选的 .sig 与 release.pub
 bin/alonabot enable <id>
 bin/alonabot list
@@ -97,9 +99,13 @@ bin/alonabot adapter instance create <adapter-package-id> <instance-id> --config
 bin/alonabot admin add telegram:123456
 ```
 
+`install` 的位置参数为已存在的普通文件时使用该归档，其他值按组件 ID 查找可执行文件旁的 `packages/<组件 ID>/`；缺失时列出可用的官方组件 ID。不带位置参数时，当前目录为作者工程便搜索 `bin/`，其他情况搜索当前目录；也检查直接包子目录的清单。按 `release.json` 选择本机平台资产，静态 WebUI 使用 `any/any`，恰好一个候选才安装；零个或多个时列出搜索目录和候选后退出。发现阶段只读，安装经管理 API 完成。
+
+`--archive` 仍可显式指定归档；`--release`、`--signature` 与 `--public-key` 分别覆盖元数据文件。签名和公钥未指定时取 release.json 同目录的 `release.json.sig` 与 `release.pub`。位置参数、`--archive` 和 `--source` 互斥；`--source` 与本地元数据选项也互斥。来源与签名确认、归档预检及 `--yes`、`--replace` 沿用管理服务。
+
 help 插件启用后，在聊天中发送 `/whoami`，把回复中的用户字符串作为 `admin add` 的参数；回复中的实例名用于核对来源。
 
-需要确认的操作不带 `--yes` 时列出受影响的对象后退出。开发中的组件可以按下节以目录运行，也可以用库模式，先 `alonabot build --dir ./examples/devbot`，再运行 `examples/devbot/bin/devbot --data-dir ./data`。
+需要确认的操作不带 `--yes` 时列出受影响的对象后退出。开发中的组件可以按下节以目录运行，也可以用库模式，先 `alonabot build ./examples/devbot`，再运行 `examples/devbot/bin/devbot --data-dir ./data`。
 
 使用同一套管理凭证运行 `bin/alonabot profile list` 查看配置文件 ID 和会话数。`bin/alonabot profile assign <配置文件ID> <实例名>` 设置实例缺省；再给出会话字符串可单独指定会话。`profile set` 与 `profile unset` 编辑 `default` 时写入插件的 Pending，沿用配置重载流程。全部子命令见 [CONTRACTS §5.6](../spec/CONTRACTS-v0.1.md#56-配置文件)，平台设置与工具策略见 [ADMIN-API §23](../spec/ADMIN-API.md#23-配置文件)。
 
@@ -140,27 +146,27 @@ cat $DEVBOT_OUTPUT
 
 组件市场 ID 使用连字符前缀，例如 `alonabot-plugin-hello`；本地 ID 仍允许下划线，规则见 [CONTRACTS §9.1](../spec/CONTRACTS-v0.1.md#91-manifest-与构建产物)。从改名前的开发环境更新时，先停止 Core 和开发组件，备份原目录，再用新数据目录启动以重建状态库和组件数据。按新组件 ID 重配组件设置、实例的 `package`、`log.sources`、权限和工具策略；平台 `adapter_id` 与实例名沿用原值。Core 不自动迁移旧数据。
 
-验证官方 help 工程可运行 `bin/alonabot check --dir ./plugins/help`。使用上面的回环 Adapter 试用时，在 `run` 的组件目录列表追加 `./plugins/help`，再把注入请求的 `text` 改为 `%2Fhelp` 或 `%2Fwhoami`，在同一输出文件查看回复。
+验证官方 help 工程可运行 `bin/alonabot check ./plugins/help`。使用上面的回环 Adapter 试用时，在 `run` 的组件目录列表追加 `./plugins/help`，再把注入请求的 `text` 改为 `%2Fhelp` 或 `%2Fwhoami`，在同一输出文件查看回复。
 
 先构建 CLI（`go build -o bin/alonabot ./cmd/alonabot`），再创建与验证组件：
 
 ```fish
-bin/alonabot init ./myplugin --id alonabot-plugin-hello
-bin/alonabot build --dir ./myplugin
-bin/alonabot check --dir ./myplugin
-bin/alonabot test --dir ./myplugin
-bin/alonabot pack --dir ./myplugin --asset-url https://example.com/hello.tar.gz
+bin/alonabot init ./alonabot-plugin-hello
+bin/alonabot build ./alonabot-plugin-hello
+bin/alonabot check ./alonabot-plugin-hello
+bin/alonabot test ./alonabot-plugin-hello
+bin/alonabot pack ./alonabot-plugin-hello
 ```
 
-`init` 也可在空目录中省略目录参数；非空目录会报错并保留文件。缺省角色为 plugin，`--role agent|adapter|webui` 创建对应工程；Adapter 还须给出 `--adapter-id`。插件与 Agent 导出 `New()`，包含一个英文示例命令、schema、i18n；Adapter 提供实例 schema，WebUI 提供 `assets/index.html`。模板忽略 `data/` 与 `bin/`，正式薄入口通过 overlay 提供。库模式宿主参考 [devbot](../examples/devbot/README.md)。
+`init`、`build`、`check`、`test`、`pack` 至多接受一个位置目录，省略时使用当前目录；旧的 `--dir` 会报未知参数。`init` 要求空目录，非空时在写入前报错。`--id` 缺省取目标目录绝对路径的目录名；例如 `alonabot-plugin-hello` 直接作为市场 ID，`my_plugin` 保持本地 ID 并输出缺市场前缀的警告。非法目录名会保留原字符并提示显式给出 `--id`。缺省角色为 plugin，`--role agent|adapter|webui` 创建对应工程；Adapter 的 `--adapter-id` 缺省等于最终组件 ID，可显式覆盖。插件与 Agent 导出 `New()`，包含一个英文示例命令、schema、i18n；Adapter 提供实例 schema，WebUI 提供 `assets/index.html`。模板忽略 `data/` 与 `bin/`，正式薄入口通过 overlay 提供。库模式宿主参考 [devbot](../examples/devbot/README.md)。
 
-位于现有 Go module 中时复用该 module；外部空目录须给出 `--module example.com/myplugin`。发布版 CLI 用自身模块版本写 SDK require，开发版 `(devel)` 会提示执行 `go get github.com/AlonaBot/AlonaBot@<version>`，由作者选定版本。发布前修改 `plugin.yaml` 中的示例 source。
+位于现有 Go module 中时复用该 module，保持其 go.mod；外部空目录的 module 缺省同为目录名，可用 `--module example.com/myplugin` 覆盖。发布版 CLI 用自身模块版本写 SDK require，开发版 `(devel)` 会提示执行 `go get github.com/AlonaBot/AlonaBot@<version>`，由作者选定版本。发布前修改 `plugin.yaml` 中的示例 source。
 
 在包含 `plugin.yaml` 的组件工程中运行 `alonabot run --reload`，或者明确给出一个或多个工程目录：
 
 ```sh
-bin/alonabot run ./myplugin ./myadapter --data-dir ./data --reload
-bin/alonabot run ./myplugin ./mywebui --data-dir ./data --reload
+bin/alonabot run ./alonabot-plugin-hello ./myadapter --data-dir ./data --reload
+bin/alonabot run ./alonabot-plugin-hello ./mywebui --data-dir ./data --reload
 bin/alonabot run ./examples/plugins/lifecycle --stdio
 ```
 
@@ -233,23 +239,24 @@ bin/alonabot run --data-dir ./data --args REQUEST_TIMEOUT=2s --args ./tuning.txt
 插件包导出 `func New() *sdk.Plugin`，在 `sdk.NewPlugin()` 返回的对象上登记命令、生命周期回调与业务行为。构建工具自动扫描 manifest、配置 Schema、Service Schema、i18n 和参数名，经 overlay 编入程序；作者工程中没有 `alonabot_gen.go`，作者代码无需生成相关内容。构建或只读检查：
 
 ```fish
-bin/alonabot build --dir ./myplugin --goos linux --goarch amd64 --tags a,b
-bin/alonabot check --dir ./myplugin --goos linux --goarch amd64 --tags a,b
+bin/alonabot build ./alonabot-plugin-hello --goos linux --goarch amd64 --tags a,b
+bin/alonabot check ./alonabot-plugin-hello --goos linux --goarch amd64 --tags a,b
 ```
 
-`build/check/pack` 按相同的 `--goos`、`--goarch`、`--tags` 选择源码，目标缺省沿用 Go 环境；扫描、依赖分析和正式编译统一使用 `CGO_ENABLED=0`。开发运行的 BuildDev 沿用开发环境的 cgo 设置。`build` 默认输出到 `<工程>/bin`，可用 `--out DIR` 覆盖。进程产物包含独立的 `component`（Windows 为 `component.exe`）、资源旁车及包内 `plugin.yaml`；作者 manifest 保持原样。WebUI build 发布静态资源与包内 manifest。`check` 只读扫描入口与资源，保留全部静态诊断与位置。
+`build/check` 使用 `--goos`、`--goarch`，目标缺省沿用 Go 环境；`pack` 使用可重复的 `--target <os>/<arch>`，省略时取本机平台。三者均用 `--tags` 选择源码；扫描、依赖分析和正式编译统一使用 `CGO_ENABLED=0`。开发运行的 BuildDev 沿用开发环境的 cgo 设置。`build` 默认输出到 `<工程>/bin`，可用 `--out DIR` 覆盖。进程产物包含独立的 `component`（Windows 为 `component.exe`）、资源旁车及包内 `plugin.yaml`；作者 manifest 保持原样。WebUI build 发布静态资源与包内 manifest。`check` 只读扫描入口与资源，保留全部静态诊断与位置。
 
 `test` 在全新临时数据目录中构建宿主平台组件，完成真实握手、准备、注册、激活与停止，报告注册命令及清理结果；Adapter 保持零平台实例，WebUI 检查静态加载资源。进程组件的 Bootstrap 下发临时状态根内 `plugin_data/<id>/` 的绝对路径，测试结束时随临时目录清理。准备、注册、停止或清理失败均非零退出。
 
-`pack` 使用相同构建路径输出 `<id>-<version>-<os>-<arch>.tar.gz`（WebUI 为 `<id>-<version>-any.tar.gz`）及归档外的 `release.json`，`--out` 默认同 build。`--asset-url` 必填且须为绝对 https URL。进程包的 `build-info` 是 `debug.BuildInfo.String()` 文本；生成代码、资源旁车与归档共用扫描时校验的资源快照，配置 schema 使用同一规范内容；扫描后保存的工程资源留待下次构建。
+`pack` 为每个 `--target` 分别扫描源码、检查资源并构建，输出 `<id>-<version>-<os>-<arch>.tar.gz`；静态 WebUI 只输出一个 `<id>-<version>-any.tar.gz`，带 Go 入口的 WebUI 按平台构建。全部归档共享一份列出本次全部资产的 `release.json`，`--out` 默认同 build。资产地址为 `--asset-base` 加 `/` 与归档名；省略时，`source: github.com/<owner>/<repo>` 推出 `https://github.com/<owner>/<repo>/releases/download/v<version>`，其他来源须显式给出绝对 https 前缀，前缀保留路径且无 query/fragment。进程包的 `build-info` 是 `debug.BuildInfo.String()` 文本；生成代码、资源旁车与归档共用扫描时校验的资源快照，配置 schema 使用同一规范内容；扫描后保存的工程资源留待下次构建。
 
 配置字段的 `example` 引用图片时，`check`、`build`、`pack` 检查两种配置 schema 中的引用及图片签名；被引用的图片随资源快照进入构建目录和归档。示例写法见 [插件开发规范](plugin-guide.md#配置字段的回复示例)。
 
 ```fish
-bin/alonabot pack --dir ./myplugin --asset-url https://example.com/hello.tar.gz --key ./release.key --out ./dist
+bin/alonabot pack ./alonabot-plugin-hello --target linux/amd64 --target linux/arm64 \
+  --asset-base https://example.com/releases/v0.1.0 --key ./release.key --out ./dist
 ```
 
-`--key` 可选，文件内容为标准 base64 编码的 64 字节 Ed25519 私钥，允许首尾空白。提供时额外写 `release.json.sig` 和 `release.pub`，分别为标准 base64 签名及公钥；省略时生成 unsigned release。密钥读取或签名失败直接报错。私钥、运行配置与数据目录均应留在打包资源之外。
+`--key` 可选，文件内容为标准 base64 编码的 64 字节 Ed25519 私钥，允许首尾空白。提供时只对最终合并清单的原始字节签名一次，额外写 `release.json.sig` 和 `release.pub`，分别为标准 base64 签名及公钥；省略时生成 unsigned release，并清除输出目录中旧的签名与公钥。密钥读取或签名失败直接报错。私钥、运行配置与数据目录均应留在打包资源之外。
 
 真实进程验收（Unix；构建 Core、lifecycle 与临时热部署工程）：
 
@@ -273,11 +280,11 @@ return core.Wait() // ctx 取消（例如 SIGTERM）后在 STOP_TOTAL 内停止�
 ```
 
 ```fish
-bin/alonabot build --dir ./examples/devbot
+bin/alonabot build ./examples/devbot
 examples/devbot/bin/devbot -data-dir ./data
 ```
 
-组件以 source=dev 登记，代次固定为 `dev:<组件 ID>`。库模式由 `alonabot build --dir <main 目录>` 构建，扫描 main 依赖中的组件入口（含模块缓存中的第三方组件），将全部资源登记经 main 包的 overlay 编入。默认只输出 `<main 目录>/bin/<目录名>` 可执行文件（Windows 加 `.exe`），可用 `--out` 修改输出目录。组件源码与模块缓存保持只读。同包多次 New 共用资源；main 的包级变量也可调用组件的 New。直接 `go build` 的库模式产物在启动缺少资源的组件前返回提示 `alonabot build` 或 `alonabot run` 的英文错误。
+组件以 source=dev 登记，代次固定为 `dev:<组件 ID>`。库模式由 `alonabot build <main 目录>` 构建，扫描 main 依赖中的组件入口（含模块缓存中的第三方组件），将全部资源登记经 main 包的 overlay 编入。默认只输出 `<main 目录>/bin/<目录名>` 可执行文件（Windows 加 `.exe`），可用 `--out` 修改输出目录。组件源码与模块缓存保持只读。同包多次 New 共用资源；main 的包级变量也可调用组件的 New。直接 `go build` 的库模式产物在启动缺少资源的组件前返回提示 `alonabot build` 或 `alonabot run` 的英文错误。
 
 库模式更改源码或资源后重新运行 `alonabot build` 并重启程序。未捕获的后台 panic 使整个进程非零退出且无有限重启；SDK Handler 边界内捕获的 panic 记录 stack 并返回 `INTERNAL`。同进程组件超过停止预算仍未退出时，`Wait` 返回错误；独立进程由 supervisor 隔离并有限恢复，两种模式的 SIGINT/SIGTERM 停止总预算缺省均为 `STOP_TOTAL=10s`。开发来源的 update、rollback、uninstall 返回 `FAILED_PRECONDITION`；WebUI/CLI 修改开发配置后写回并重启由 T-09.14 承接，手改配置的轮询行为见上节。
 
