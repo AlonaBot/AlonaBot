@@ -15,6 +15,7 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/core/profile"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
@@ -27,7 +28,8 @@ const schemaVersion = 1
 type Catalog struct {
 	store      *state.Store
 	router     *router.Router
-	mu         sync.Mutex // 保护本次 Core 运行中出现的操作名；持久化覆盖仍归 store
+	resolve    func(context.Context, *pb.Target) (*profile.Service, string, error) // 装配时设置，每次策略操作建立独立快照。
+	mu         sync.Mutex                                                          // 保护本次 Core 运行中出现的操作名；持久化覆盖仍归 store
 	operations map[string]ToolPolicyEntry
 }
 
@@ -42,6 +44,11 @@ type ToolPolicyEntry struct {
 // New 创建从 r 读取工具声明、从 store 读取策略的目录。
 func New(store *state.Store, r *router.Router) *Catalog {
 	return &Catalog{store: store, router: r, operations: make(map[string]ToolPolicyEntry)}
+}
+
+// SetProfile 注入按可信默认 Target 选择本次操作配置文件快照的入口；在注册服务前调用。
+func (c *Catalog) SetProfile(resolve func(ctx context.Context, target *pb.Target) (profiles *profile.Service, profileID string, err error)) {
+	c.resolve = resolve
 }
 
 // Register 将 core.tool.list 注册到固定服务分流器。
@@ -153,6 +160,15 @@ func (c *Catalog) list(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if err := proto.Unmarshal(in.Payload.Bytes, request); err != nil {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid tool list request protobuf: "+err.Error())
 	}
+	if in.ParentCallID != 0 {
+		if parent, ok := in.ParentAttach.(*router.Invocation); !ok || parent == nil {
+			return failure(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "tool list requires an active parent call")
+		}
+	}
+	view, err := c.profileSnapshot(ctx, in)
+	if err != nil {
+		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "read profile policies: "+err.Error())
+	}
 	entries, err := c.overrides(ctx)
 	if err != nil {
 		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "read tool policies: "+err.Error())
@@ -169,7 +185,13 @@ func (c *Catalog) list(ctx context.Context, caller router.Caller, in *wire.Inbou
 				continue
 			}
 			name := plugin.PluginID() + "/" + spec.GetServiceName()
-			p := entries[name].Override
+			p, err := view.policy(plugin.PluginID(), spec.GetServiceName(), false)
+			if err != nil {
+				return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "read profile tool policy: "+err.Error())
+			}
+			if p == pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED {
+				p = entries[name].Override
+			}
 			if p == pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED {
 				p = spec.GetTool().GetDefaultPolicy()
 			}

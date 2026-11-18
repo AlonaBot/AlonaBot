@@ -116,7 +116,7 @@
 | T-11.3 | goal-56 | Agent 会话存储：状态库表、`core.conversation.*`、管理服务层的列出与清除、purge | T-11 步骤 5 | T-03.1 | V-56 | 已完成（PR #35；TEST-MATRIX §3.2） |
 | T-11.4 | goal-57 | 工具与会话的多进程验收，汇总证据 | T-11 步骤 6 | T-11.2、T-11.3 | V-55、V-56 的 T-11 分项 | 已完成（PR #172；TEST-MATRIX §3.2） |
 | T-11.5 | goal-148 | 工具的副作用类别：ToolEffect 与三个 `effect` 字段、注册与目录、`core.tool.confirm` 记录操作的类别、SDK 的 `.Effect`、Agent 按 MCP 注解换算、管理 API 返回类别与批量修改策略（D-157） | T-11 步骤 7 | T-11.2、T-12.3、T-09.14 | V-128 的 Core、SDK、Agent 与 API 分项 | 已完成（PR #219） |
-| T-11.6 | goal-163 | 按配置文件的工具策略（D-168） | T-11 步骤 8 | T-04.18、T-11.4 | V-143 | 未开始 |
+| T-11.6 | goal-163 | 按配置文件的工具策略（D-168） | T-11 步骤 8 | T-04.18、T-11.4 | V-143 | 已完成（PR #246） |
 | T-13.1 | goal-67 | 库模式入口：根包 `alonabot.Run`、`alonabot.Start` 与选项、与 `alonabot run` 共用的 Core 装配、开发组件同进程经 loopback 连接、生成代码中嵌入的工程 manifest 身份、可导入 Adapter 包的工程入口与资源登记、dev 来源与固定代次 `dev:<组件 ID>`（D-134） | T-13 步骤 1、2 | T-02.1、T-03.3、T-04.2、T-04.9、T-08.8、T-09.16 | V-64 的生命周期分项 | 已完成（PR #149；TEST-MATRIX §3.2） |
 | T-13.2 | goal-68 | 开发组件的配置与数据库：`config.json` 直读、准备与写回（WebUI 修改时重启组件）、`dev.sqlite`、拒绝 update/rollback/uninstall；沿用固定代次 `dev:<组件 ID>`（D-134） | T-13 步骤 3 | T-07.6、T-08.5、T-08.11、T-13.1 | V-64 | 已完成（PR #160；TEST-MATRIX §3.2；配置写回随 T-09.14 的配置管理 API，dev 来源拒绝 update/rollback/uninstall 与开发 Adapter 的实例在 T-09.4） |
 | T-13.3 | goal-69 | 开发运行与热部署：`alonabot run [目录...] [--reload]` 构建并以独立进程运行开发组件，轮询源码、资源与配置，只重启变化的组件；Adapter 以可导入包为工程目录，沿用 `dev:<组件 ID>`（D-77、D-134） | T-13 步骤 4 | T-07.6、T-09.16、T-13.1、T-09.4 | V-65 | 已完成（PR #171；TEST-MATRIX §3.2） |
@@ -741,7 +741,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 6. **多进程验收。** 用一个提供工具的插件和一个调用工具的测试插件，经回环测试 Adapter 覆盖三种策略、确认的允许/拒绝/超时/他人点击、无 Actor、目标不支持按钮和策略的运行时修改；会话存储覆盖原子追加、分页、跨插件隔离与 Core 重启。
 7. **工具的副作用类别（D-157）。** 协议追加 ToolEffect 与 ToolSpec、ToolInfo、ToolConfirmRequest 的 `effect`，`contracts/wirespec_test.go` 固定编号（WIRE-FORMAT §3.3、§3.5）。`core.tool.list` 返回声明类别；管理目录按 CONTRACTS §13.1 合并同名声明与最近的确认记录。SDK 的 service builder 在 `Tool` 后、`Handle` 前接受 `Effect(tool.Effect)`；调用顺序或类别非法时 Collect 报错，原始 REGISTER 的非法类别由 Core 以 INVALID_ARGUMENT 拒绝。官方 Agent 按 MCP 工具注解换算类别（没有 annotations 为 unspecified；readOnlyHint 为 true 为 read_only；否则 destructiveHint 为 false 为 write，为 true 或缺省为 destructive），经 `tool.Confirm(ctx, operation, summary, effect)` 上报。管理 API 保留单项修改，批量项严格校验并在一个事务内保存或删除覆盖（ADMIN-API §18）。类别不参与策略判断。
 
-8. **按配置文件的工具策略（D-168，T-11.6）。** 策略查找先取调用的默认 Target 所在会话所用配置文件中的覆盖，再取全局策略；该配置文件关闭了工具所属插件时视为 deny；`core.tool.list` 返回按本次调用生效的策略，`core.tool.confirm` 的操作同样可以覆盖。管理服务层与 ADMIN-API §23 的 tools 接口共用。
+8. **按配置文件的工具策略（D-168，T-11.6）。** `profile.Service.ToolPolicy(id, pluginID, name string, operation bool) (policy pb.ToolPolicy, enabled bool, err error)` 从本次快照读取工具或确认操作的覆盖及插件开关，与 ADMIN-API §23 的 Tools/PutTools 共用条目；无覆盖返回 UNSPECIFIED，未设插件开关为启用。`tool.Catalog.SetProfile(resolve func(ctx context.Context, target *pb.Target) (profiles *profile.Service, profileID string, err error))` 由 `internal/app` 在注册服务前注入，通过现有 targetProfile/Resolve 选择配置文件。每次 list/invoke/confirm 从 Session 恢复的可信父附件取默认 Target，建立一次操作快照；无 Target 或无父 list 使用 `default`，list 全部条目复用该快照。插件关闭时为 deny，其余按配置文件覆盖、全局覆盖、工具声明缺省策略查找；确认操作无覆盖时为 confirm，工具与操作同名时配置文件覆盖分别匹配。管理更新从下一次操作生效，在途确认保留已接纳策略；全局 Effective/Policies/SetPolicy 保持原义，未注入 SetProfile 时使用全局策略入口。
 
 #### 拟目录与交付
 

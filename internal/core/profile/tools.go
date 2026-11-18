@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 )
@@ -26,6 +27,37 @@ type ToolPolicy struct {
 // ToolPolicies 按 ADMIN-API §23 编码工具策略集合。
 type ToolPolicies struct {
 	Items []ToolPolicy `json:"items"`
+}
+
+// ToolPolicy 从本次快照读取工具或确认操作的覆盖及所属插件开关。
+// 缺少覆盖返回 UNSPECIFIED，缺少开关表示启用。
+func (s *Service) ToolPolicy(id, pluginID, name string, operation bool) (policy pb.ToolPolicy, enabled bool, err error) {
+	if _, err := s.find(id); err != nil {
+		return pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED, false, err
+	}
+	enabled = true
+	for _, row := range s.snapshot.Plugins {
+		if row.ProfileID == id && row.PluginID == pluginID {
+			enabled = row.Enabled
+			break
+		}
+	}
+	for _, row := range s.snapshot.Tools {
+		if row.ProfileID != id || row.PluginID != pluginID || row.Name != name || row.Operation != operation {
+			continue
+		}
+		switch row.Policy {
+		case "allow":
+			return pb.ToolPolicy_TOOL_POLICY_ALLOW, enabled, nil
+		case "confirm":
+			return pb.ToolPolicy_TOOL_POLICY_CONFIRM, enabled, nil
+		case "deny":
+			return pb.ToolPolicy_TOOL_POLICY_DENY, enabled, nil
+		default:
+			return policy, enabled, invalid("invalid stored tool policy: " + row.Policy)
+		}
+	}
+	return policy, enabled, nil
 }
 
 // Tools 列出该配置文件已保存的策略覆盖。

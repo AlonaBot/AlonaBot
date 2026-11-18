@@ -201,7 +201,7 @@ Adapter 实例的记录在 `GET /api/v1/adapters/{adapter_id}/instances/{instanc
 
 使用同一套管理凭证运行 `bin/alonabot profile list` 查看配置文件 ID 和会话数。`bin/alonabot profile assign <配置文件ID> <实例名>` 设置实例缺省；再给出会话字符串可单独指定会话。`profile set` 与 `profile unset` 编辑 `default` 时写入插件的 Pending，沿用配置重载流程。全部子命令见 [CONTRACTS §5.6](../spec/CONTRACTS-v0.1.md#56-配置文件)，平台设置与工具策略见 [ADMIN-API §23](../spec/ADMIN-API.md#23-配置文件)。
 
-会话派发按单独指定 → 实例缺省 → `default` 解析配置文件，已应用插件开关、字段覆盖与消息过滤；SDK 的 `c.Config()` 在每次调用开始时冻结视图。覆盖更新向在线 Session 下发完整集合，后续调用使用新值；离线插件在下次 Bootstrap 接收。Bootstrap 的 `profile_overrides_json` 必须是对象，无覆盖填 `{}`；离线 `alonabot test` 同样下发该字段。插件经 `core.profile.set` 修改 `default` 时，Core 在整条根调用及延续结束后 reload；固定服务写入遇管理互斥占用立即返回 FAILED_PRECONDITION。前缀、回复方式与工具策略的运行时应用分别由 T-04.19、T-11.6 接入。
+会话派发按单独指定 → 实例缺省 → `default` 解析配置文件，已应用插件开关、字段覆盖与消息过滤；SDK 的 `c.Config()` 在每次调用开始时冻结视图。覆盖更新向在线 Session 下发完整集合，后续调用使用新值；离线插件在下次 Bootstrap 接收。Bootstrap 的 `profile_overrides_json` 必须是对象，无覆盖填 `{}`；离线 `alonabot test` 同样下发该字段。插件经 `core.profile.set` 修改 `default` 时，Core 在整条根调用及延续结束后 reload；固定服务写入遇管理互斥占用立即返回 FAILED_PRECONDITION。工具目录、调用与操作确认使用可信默认 Target 对应配置文件的一次操作快照；无 Target 或无父 list 使用 `default`。插件关闭时为 deny，其余按配置文件覆盖、全局覆盖与工具声明缺省策略查找，确认操作无覆盖时为 confirm。管理更新从下一次操作生效，在途确认保留已接纳策略。前缀与回复方式的运行时应用由 T-04.19 接入。
 
 ### 导出诊断包
 

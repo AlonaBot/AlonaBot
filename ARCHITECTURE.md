@@ -57,6 +57,8 @@ T-04.18 已接通运行时派发与 SDK 合并（PR #242）。`internal/app` 向
 
 `sdk/service.Builder.Effect` 随 REGISTER 上报工具类别；`sdk/tool.List` 通过 `Info.Effect` 读回声明类别，Agent 将 MCP 注解换算后的类别交给 `sdk/tool.Confirm`。`internal/core/tool` 合并声明、确认记录与策略覆盖；管理层批量写入时先持有 catalog 锁，再按组件 ID 顺序取锁，与安装替换使用同一锁层级。`Catalog.SetPolicy(ctx, rows ...state.ToolPolicy)` 调用 `Store.SetToolPolicy(ctx, rows ...ToolPolicy)`，由状态库在同一事务内保存或删除覆盖。
 
+T-11.6 已接通按配置文件的工具策略（PR #246）。`internal/app` 在注册工具服务前调用 `Catalog.SetProfile(resolve func(ctx context.Context, target *pb.Target) (profiles *profile.Service, profileID string, err error))`，回调复用 targetProfile/Resolve，返回本次操作的配置文件快照与 ID。list/invoke/confirm 从 Session 恢复的可信父附件读取 DefaultTarget，每次操作解析一次；无 Target 或无父 list 使用 `default`，list 全部条目复用该快照。`profile.Service.ToolPolicy(id, pluginID, name string, operation bool) (policy pb.ToolPolicy, enabled bool, err error)` 与 Tools/PutTools 共用快照条目，分别匹配工具和操作；无覆盖返回 UNSPECIFIED，未设插件开关为启用。插件关闭时为 deny，其余按配置文件覆盖、全局覆盖与工具声明缺省策略查找，确认操作无覆盖时为 confirm。管理更新从下一次操作生效，在途确认保留已接纳策略；全局 Effective/Policies/SetPolicy 保持原义，未注入 SetProfile 时使用全局入口。工具执行继续经 Broker 继承父调用权限、Actor、Target、取消与期限，并保留结果与错误。
+
 `sdk/page` 属于 SDK：`Handler()` 通过插件自己的 HTTP 路由提供内嵌的 `kit.css` 与 `kit.js`。`kit.js` 负责页面端的桥请求、异步翻译、主题与语言订阅和快捷键转发；沙箱、父桥与全局搜索由 WebUI 负责（[ADMIN-API §7](spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。`examples/plugins/showcase` 演示套件的挂载与使用。
 
 ## 依赖方向
@@ -69,7 +71,7 @@ T-04.18 已接通运行时派发与 SDK 合并（PR #242）。`internal/app` 向
 | `internal/wire -> internal/tune`、`sdk/... -> internal/tune`、`internal/core/... -> internal/tune` | 读取调优参数的生效值 |
 | `sdk/... -> contracts`、`sdk/... -> internal/wire`、`sdk/... -> internal/oslock` | 插件侧复用同一协议实现与 runtime.lock（Go 允许本 module 的 `sdk` import `internal`） |
 | `internal/core/... -> contracts`、`internal/core/... -> internal/wire`、`internal/core/... -> internal/oslock` | Core 侧协议、core.lock 与停机复制时临时持有 runtime.lock |
-| `internal/core/manage -> internal/core/profile`、`internal/core/router -> internal/core/profile`；`internal/core/profile -> internal/core/state`、`-> internal/core/settings`、`-> contracts/configschema`、`-> internal/wire` | 管理 API 与固定服务建立配置文件快照，Router 复用准入和过滤的操作视图；状态库存指定与覆盖、Core 设置存 `default` 平台设置、Active schema 校验覆盖值，覆盖集合预算沿用 `wire.MaxFrame` |
+| `internal/core/manage -> internal/core/profile`、`internal/core/router -> internal/core/profile`、`internal/core/tool -> internal/core/profile`；`internal/core/profile -> internal/core/state`、`-> internal/core/settings`、`-> contracts/configschema`、`-> internal/wire` | 管理 API 与固定服务建立配置文件快照，Router 复用准入和过滤的操作视图，工具目录、调用与操作确认读取同次策略操作的覆盖及插件开关；状态库存指定与覆盖、Core 设置存 `default` 平台设置、Active schema 校验覆盖值，覆盖集合预算沿用 `wire.MaxFrame` |
 | `internal/core/buttons -> internal/core/state`、`internal/core/buttons -> internal/core/router` | 持久化按钮 token，复用可信 Caller；message 与 router 通过函数注入接入 buttons |
 | `internal/core/state`、`internal/core/settings`、`internal/core/journal -> internal/core/logging` | 共用 Core 的 CRITICAL 级别记录状态库、设置与提交后故障；SDK 独立定义 `sdk.LevelCritical`，两侧共用协议的 `LogLevel` |
 | `internal/core/manage -> internal/core/scheduler` | 列出当前 Session 的静态任务，复用调度器的持久暂停与恢复入口（D-164） |
