@@ -535,7 +535,7 @@ func TestPing(t *testing.T) {
 }
 ```
 
-`RequireReply(t, want)` 先检查每个 Handler Outcome 的错误，再要求恰好一次发送且文本为 want；失败时报告插件与路由身份或实际发送。
+`RequireReply(t, want)` 先检查每个 Handler Outcome 的错误，再要求恰好一次发送且 `Sent.Text()` 为 want；失败时报告插件与路由身份或实际发送。回复同时包含图片等片段时，可继续检查 `result.Sends[0].Chain`。
 
 直接运行 `go test ./...`。plugintest 按被测插件的入口包自动扫描工程身份与资源，沿用测试二进制的 GOOS、GOARCH 与 build tags；同一入口包在一个进程中只扫描一次。每次 Start 创建独立的临时目录、配置和 `dev.sqlite`，在测试清理时停止组件；同一 Harness 的注入与读取按顺序调用。
 

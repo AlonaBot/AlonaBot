@@ -251,6 +251,8 @@ X-Content-Type-Options: nosniff
 
 ### 7.3 SDK 页面客户端
 
+插件声明 `Route(method, path).Page(title)` 后，SDK 自动补齐页面同目录的 `kit.css` 与 `kit.js` GET 路由，继承页面认证；作者已登记的同方法、同路径路由优先。`/page` 的相对资源为 `/kit.css`、`/kit.js`，`/page/` 的相对资源为 `/page/kit.css`、`/page/kit.js`，均位于该插件的 URL 前缀内。资源路由的 `page_title` 为空，组件 `pages` 列表只列页面；手动挂载可继续使用 `sdk/page.Handler()`（CONTRACTS §7.3，D-180）。
+
 `sdk/page` 的 `kit.js` 在 `window.AlonaBot` 上公开 `request(method, path, body?)`、`t(key, args?)`、`onTheme(fn)`、`onLocale(fn)`。嵌入时自动发送 `hello`，把令牌写到 `:root` 并设置 `data-theme`，接收主题与语言事件，转发全局搜索快捷键。两个订阅函数在注册时立即交付当前状态，并返回取消订阅函数。独立打开时使用 `light`、`en-US` 与浅色缺省令牌；`request` 返回拒绝的 Promise，不直接发送 HTTP 请求。
 
 `t(key, args?) → Promise<string>` 在 iframe 内每次发送 `translate`，携带键和可选参数，原样返回响应的 `text`。页面在 `onLocale` 回调中重新 `await t(...)` 渲染；`hello` 和 `locale` 只交付 §7.1 所列字段，文案由 `translate` 逐次取得。独立打开时 `t` 返回兑现为键名的 Promise。

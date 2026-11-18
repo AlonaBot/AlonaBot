@@ -120,6 +120,8 @@ RouteDescriptor 公共字段为 `route_id`、`kind`、`priority`、`default_enab
 | http | method、插件相对 path、is_public、认证/回调验证模式；`RouteDescriptor.page_title` 非空时声明页面及其英文源标题（D-164） |
 | bus_subscription | event_name、可接受的 Schema/版本、订阅回调 route_id |
 
+SDK 在收集注册时生成文本匹配、Raw、事件与 Hook 的缺省 `route_id`，或使用 builder 的 `.ID`；规则见 CONTRACTS §9.1（D-180）。`.Page(title)` 自动补齐的套件资源按普通 HTTP 路由登记，继承页面认证，`page_title` 为空；管理页面列表只包含页面本身。上述 SDK 简写沿用现有字段与路由描述。
+
 EventSpec 追加可选消息 `MessageFilter message_filter`；MessageFilter 的字段为 `bool to_me`、`repeated ChatType chat_types`、`string wake_words_config`、`string triggers_config`。字段号在实施时按最新 proto 顺延，不在规格中预分配。字段路径、OR、触发方式选择、缺失数据与空列表的语义见 CONTRACTS §2.5；过滤器的存在与缺省有区别。仅允许标准 message.created/edited/deleted 事件，和其他事件类型混用时拒绝注册。SDK 用自有类型登记这些声明，不在公开 API 暴露 pb。过滤器及配置字段路径参与确定性路由编码、摘要和快照白名单，配置值及按配置文件的覆盖值保持在 Core 的配置所有者中。
 
 自定义 Go Rule 是插件进程内与对应 Handler 一起执行的函数；Core 可表达的类型/命令/权限条件先执行，SDK 在同一 Handler REQUEST 中完成自定义 Rule，并以 HandlerOutcome.matched 返回结果，不另建 Rule 服务。

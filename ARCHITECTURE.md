@@ -61,7 +61,9 @@ T-04.18 已接通运行时派发与 SDK 合并（PR #242）。`internal/app` 向
 
 T-11.6 已接通按配置文件的工具策略（PR #246）。`internal/app` 在注册工具服务前调用 `Catalog.SetProfile(resolve func(ctx context.Context, target *pb.Target) (profiles *profile.Service, profileID string, err error))`，回调复用 targetProfile/Resolve，返回本次操作的配置文件快照与 ID。list/invoke/confirm 从 Session 恢复的可信父附件读取 DefaultTarget，每次操作解析一次；无 Target 或无父 list 使用 `default`，list 全部条目复用该快照。`profile.Service.ToolPolicy(id, pluginID, name string, operation bool) (policy pb.ToolPolicy, enabled bool, err error)` 与 Tools/PutTools 共用快照条目，分别匹配工具和操作；无覆盖返回 UNSPECIFIED，未设插件开关为启用。插件关闭时为 deny，其余按配置文件覆盖、全局覆盖与工具声明缺省策略查找，确认操作无覆盖时为 confirm。管理更新从下一次操作生效，在途确认保留已接纳策略；全局 Effective/Policies/SetPolicy 保持原义，未注入 SetProfile 时使用全局入口。工具执行继续经 Broker 继承父调用权限、Actor、Target、取消与期限，并保留结果与错误。
 
-`sdk/page` 属于 SDK：`Handler()` 通过插件自己的 HTTP 路由提供内嵌的 `kit.css` 与 `kit.js`。`kit.js` 负责页面端的桥请求、异步翻译、主题与语言订阅和快捷键转发；沙箱、父桥与全局搜索由 WebUI 负责（[ADMIN-API §7](spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。`examples/plugins/showcase` 演示套件的挂载与使用。
+SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup 上省略 route ID；Hook 在 Plugin 与 SubPlugin 上提供，稳定身份由 builder 的 `.ID` 指定。`*sdk.Context` 实现 `context.Context`，分类客户端可直接接收 `c`；`c.Reply(text, more...)` 将文本与片段作为一条消息发送。插件测试的 `Result.RequireReply` 检查 Handler 错误与单次发送的文本（D-180，T-04.20）。
+
+`sdk/page` 属于 SDK：根包在收集 `.Page(title)` 时调用 `page.Handler()`，自动补齐页面同目录的 GET `kit.css` 与 `kit.js`，继承页面认证，优先保留作者已登记的同方法、同路径路由；插件也可手动挂载 `Handler()`。`kit.js` 负责页面端的桥请求、异步翻译、主题与语言订阅和快捷键转发；沙箱、父桥与全局搜索由 WebUI 负责（[ADMIN-API §7](spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。`examples/plugins/showcase` 演示页面声明与套件使用。
 
 ## 依赖方向
 

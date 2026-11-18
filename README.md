@@ -41,4 +41,6 @@ Core、SDK 与管理 CLI 已支持 CRITICAL 日志；用 `alonabot logs --level 
 - 后续：更多正式 Adapter、动态命令 Router、持久化的多轮会话、跨会话记忆检索与额外客户端等，按规格范围推进。
 - 实施约束：保持轻量、良好的开发体验和最小必要配置；以编译、集成和目标平台测试记录完成情况。
 
-为插件添加管理页面可使用 `sdk/page` 的嵌入式样式与桥客户端，挂载方式见[插件开发指南](docs/plugin-guide.md#插件页面)。
+SDK 的文本匹配、Raw、事件与 Hook 注册可省略 route ID，需要稳定身份时链式调用 `.ID(...)`。Handler 的 `c` 可直接传给 `kv`、`task`、`llm` 等客户端；`c.Reply("hi", message.ImageURL(url))` 一次发送文本与图片，测试可用 `Result.RequireReply(t, "hi")` 检查 Handler 错误与单次回复文本。用法见[插件开发指南](docs/plugin-guide.md)与[插件测试](docs/development.md#插件测试)。
+
+为插件添加管理页面时，`.Page(title)` 自动提供同目录的 `sdk/page` 样式与桥客户端资源，并继承页面认证；声明方式见[插件开发指南](docs/plugin-guide.md#插件页面)。

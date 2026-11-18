@@ -56,7 +56,7 @@
 | T-04.17 | goal-150 | 插件页面套件：`sdk/page` 的 `kit.css` 与 `kit.js`（桥的 hello、请求、异步文案、令牌应用、主题与语言事件、⌘K 转发），以及 showcase 插件页面使用套件（D-159） | T-04 步骤 17 | T-04.16、T-07.7 | V-130 的 SDK 分项 | 已完成（PR #218） |
 | T-04.18 | goal-161 | 配置文件的派发与 SDK：`profile_id`、覆盖值下发、`c.Config()` 合并、按配置文件的插件开关、`core.profile.*`（D-168） | T-04 步骤 18 | T-04.16、T-08.18 | V-141 | 已完成（PR #242） |
 | T-04.19 | goal-162 | 平台与消息：命令前缀按配置文件、删除按实例的前缀、回复的提及、引用、前缀与合并转发（D-168） | T-04 步骤 19 | T-04.18 | V-142 | 未开始 |
-| T-04.20 | goal-178 | SDK 用法从简：文本匹配、Raw、事件路由与 Hook 的注册去掉 route ID 参数并增加 `.ID`，`*sdk.Context` 实现 `context.Context`，`c.Reply` 可带片段，`.Page(title)` 自动登记套件资源，`plugintest.Result.RequireReply`；全部调用方与示例同步（D-180） | T-04 步骤 20 | T-04.18、T-16.2 | V-148 | 未开始 |
+| T-04.20 | goal-178 | SDK 用法从简：文本匹配、Raw、事件路由与 Hook 的注册去掉 route ID 参数并增加 `.ID`，`*sdk.Context` 实现 `context.Context`，`c.Reply` 可带片段，`.Page(title)` 自动登记套件资源，`plugintest.Result.RequireReply`；全部调用方与示例同步（D-180） | T-04 步骤 20 | T-04.18、T-16.2 | V-148 | 已完成（PR #251） |
 | T-05.1 | goal-15 | 可信事件上下文与有界同事件分发：64 条并发链、256 条/8 MiB 等待队列、稳定候选排序、链执行与读循环分离；经回环测试 Adapter 运行，按钮与 scheduled 绑定先用规范 fixture | T-05 步骤 1、2 | T-03.3、T-04.3、T-04.4 | V-13、V-16 的 fixture 分项 | 已完成（PR #67；TEST-MATRIX §3.2） |
 | T-05.2 | goal-16 | SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支 | T-05 步骤 3、4 | T-05.1、T-04.7、T-04.8 | V-14、V-11 的 Rule 分项 | 已完成（PR #145；TEST-MATRIX §3.2） |
 | T-05.3 | goal-17 | PreEvent/BeforeSend/AfterSend 三阶段 Hook（链式注册与 SDK 类型，D-112），send_forbidden 的保存与继承 | T-05 步骤 5、6 | T-05.2 | V-15 的直接路径分项，V-110 的 Hook 分项 | 已完成（PR #155；TEST-MATRIX §3.2） |
@@ -389,7 +389,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 18. **配置文件的派发与 SDK（D-168，T-04.18，已完成，PR #242）。** InvocationContext 追加 `profile_id = 7`，Bootstrap 追加必填对象 `profile_overrides_json = 14`，新增 `sdk.profile.set_overrides` 与 `core.profile.list`、`current`、`assign`、`set`（WIRE §3.2、§3.5、§4）。派发时按 CONTRACTS §5.6 解析会话所用的配置文件；关闭插件时命令按禁用处理，文本匹配、事件路由与 Raw 跳过，PreEvent 在媒体准备前检查开关。准入与消息过滤共用一次操作视图，以 Active 基础配置应用有效覆盖。覆盖值变化时向在线 Session 下发完整集合，SDK 原子替换并为每次调用冻结 `c.Config()`；`p.Config()` 与 `s.Config()` 保持基础视图。`core.profile.set` 只接受调用插件自己写了 `profile` 的字段，会话使用 `default` 时互斥核对 Active/Pending，写入 Pending，并在根调用、派生调用、自动回复与延续全部结束后 reload；assign 与 set 要求 Core Admin，遇管理互斥占用立即返回 FAILED_PRECONDITION。已与 T-08.16 的无版本配置载入及校正共同验证；休眠唤醒的装配与退出联验由 S-02.1 的后合并者完成。
 
 19. **平台与消息（D-168，T-04.19）。** 命令前缀改按会话所用的配置文件；删除 `command_prefixes_by_instance` 的解析、保存与 `GET/PUT /api/v1/core/command-prefixes`，同步 docs/development.md 与 V-87 的测试；`core_config.json` 增加 `reply`。发送管道在出站 Hook 之前按 CONTRACTS §5.6 为回复加上提及、引用与前缀，记住第一条消息以便 Edit 保留提及与前缀，加上后超过单条上限时不加提及与前缀；目标实例声明 `message.forward` 时把超过阈值的消息改为一个 forward 片段。后台、定时任务与发往其他会话的消息不变。
-20. **SDK 用法从简（D-180，T-04.20）。** 协议不变。按 D-180 修改 `sdk` 根包的注册签名并给 builder 增加 `.ID`，缺省 route ID 在收集注册时生成并查重；`*sdk.Context` 实现 `context.Context`；`c.Reply` 增加可变片段参数；`.Page(title)` 自动登记套件资源；`plugintest.Result` 增加 `RequireReply`。同步仓库内全部调用方：官方组件、示例、`init` 模板、测试与 docs/plugin-guide.md、docs/development.md 的写法，不留旧签名。
+20. **SDK 用法从简（D-180，T-04.20）。** 协议不变。按 D-180 修改 `sdk` 根包的注册签名并给 builder 增加 `.ID`，缺省 route ID 在收集注册时生成并查重。Plugin、SubPlugin 与 CommandGroup 均提供无 ID 的文本匹配、Raw 与 On；Hook 在 Plugin 与 SubPlugin 上登记，`.ID` 在 `Handle` 前设置。`*sdk.Context` 实现 `context.Context`；`c.Reply(text string, more ...message.Segment) error` 一次发送文本与后续片段；`.Page(title)` 自动补齐同目录的 GET 套件资源，继承页面认证，作者已登记的同方法、同路径路由优先；`plugintest.Result` 增加 `RequireReply(t testing.TB, want string)`。同步仓库内全部调用方：官方组件（含 WebUI）、示例、probe、`init` 模板、测试与现行文档示例。
 
 #### 拟目录与交付
 

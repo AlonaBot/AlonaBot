@@ -105,6 +105,7 @@ func saveCache(ctx context.Context, content []byte) error {
 - HTTP 路由写作 `p.Route(method, path).Handle(h)`（或 `.HandleFunc(f)`），公开回调在 `Handle` 之前加 `.Public(sdk.AuthCallbackState)` 等认证方式；定时任务写作 `p.Every(jobID, d).Handle(fn)` 或 `p.Cron(jobID, expr).Timezone(tz).Handle(fn)`。每个 builder 必须恰好 `Handle` 一次，`Handle` 之后不能再设置选项，错误在注册收集阶段报告。
 - 文本匹配直接写 `p.Regex(expr)`、`p.Keyword(patterns...)`、`p.StartsWith(patterns...)`、`p.EndsWith(patterns...)`、`p.FullMatch(patterns...)`，原始消息用 `p.Raw()`；子插件与命令组使用同样的写法。缺省 route ID 为小写类别名加冒号和以 `|` 连接的模式，Regex 保留表达式原文，Raw 为 `raw`。事件 ID 为事件名，Hook 用 `pre_event:<事件名>`、`before_send`、`after_send`。同插件内重复会报错，用 `.ID("stable-name")` 区分；模式会变化且需保留命令策略时也固定 ID。路径命令继续按命令路径生成 ID。
 - Hook 直接写 `p.PreEvent(sdk.MessageCreated)`、`p.BeforeSend()`、`p.AfterSend()`，子插件同样适用。需要固定身份时在 `Handle` 前调用 `.ID(routeID)`。
+- 事件直接写 `p.On(eventType)`；Plugin、SubPlugin 与 CommandGroup 均提供此接口。命令组的事件沿用所属子插件归属，route ID 为事件名，需要稳定身份时在 `Handle` 前调用 `.ID(routeID)`。
 - Handler 的 `c` 实现 `context.Context`，可直接传给 `kv.Set(c, ...)`、`task`、`service`、`llm`、`media`、`tool`、`command` 与 `conversation`。期限、取消与父调用关联沿用本次调用；`c.Context()` 仍可取得底层 context，Handler 返回后的失效规则保持。
 - 命令、文本匹配、事件、Service 与 Event Bus 订阅都链式注册，以 `Handle` 结束；漏写 `Handle`、重复调用或在它之后继续调用，都会让注册收集阶段报错（D-70）。
 - 命令说明在注册处写英文原文：`p.Command("set").Description("Set a value").Handle(Set)`。其他语言在 `i18n/<locale>.json` 的顶层 `commands` 中以完整规范路径（含 Group 前缀，token 用一个空格连接）覆盖，例如 `{"commands":{"rss add":{"description":"添加订阅"}}}`；只有 `commands` 的语言文件可以省略 en-US。`check`/`build` 只检查 `commands` 的结构，注册收集阶段检查覆盖路径对应已注册且登记了英文说明的命令，否则注册失败（D-138）。
