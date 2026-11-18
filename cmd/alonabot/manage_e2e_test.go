@@ -969,8 +969,11 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	if err := os.WriteFile(configFile, []byte(`{"token":"${MANAGE_E2E_TOKEN}"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []string{"one", "two", "fail"} {
+	for _, id := range []string{"one", "two"} {
 		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", id, "--config", configFile)
+	}
+	if output := managementFailure(t, c, dir, "adapter", "instance", "create", "alonabot-adapter-fixture", "fail", "--config", configFile); !strings.Contains(output, "fixture instance rejected") {
+		t.Fatal(output)
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, settings.FileName))
 	if err != nil {
@@ -979,12 +982,27 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	if !bytes.Contains(raw, []byte("${MANAGE_E2E_TOKEN}")) || bytes.Contains(raw, []byte("fixture-credential-value")) {
 		t.Fatal("credential reference was changed")
 	}
-	c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
+	if adapter := findPackage(t, c, dir, "alonabot-adapter-fixture"); !adapter.Enabled || adapter.State != "Activated" {
+		t.Fatalf("adapter was not automatically enabled: %+v", adapter)
+	}
 	c.management(t, dir, "", "enable", "commands")
 	for _, id := range []string{"one", "two"} {
 		c.waitFor("fixture instance " + id + " started")
 	}
-	c.waitFor(`adapter instance start failed plugin_id=alonabot-adapter-fixture instance_id=fail`)
+	status, body := fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/adapter/instances")
+	var instances struct {
+		Instances []struct {
+			ID        string `json:"instance_id"`
+			State     string `json:"state"`
+			SafeError string `json:"safe_error"`
+		} `json:"instances"`
+	}
+	if status != http.StatusOK || json.Unmarshal(body, &instances) != nil {
+		t.Fatalf("instances: %d %s", status, body)
+	}
+	if len(instances.Instances) != 3 || instances.Instances[0].ID != "fail" || instances.Instances[0].State != "failed" || !strings.Contains(instances.Instances[0].SafeError, "fixture instance rejected") {
+		t.Fatalf("failed instance was not retained: %s", body)
+	}
 	check := func(instance, user, text, want string, count int) {
 		t.Helper()
 		path := "/plugins/alonabot-adapter-fixture/deliver?instance=" + instance + "&user=" + user + "&text=" + url.QueryEscape(text)

@@ -177,7 +177,7 @@ func TestAgentPackage(t *testing.T) {
 		"providers":[{"custom":{"name":"synthetic","protocol":"openai-compatible","base_url":%q,
 		"api_key":"synthetic-key"}}],
 		"models":[{"name":"synthetic","provider":"synthetic","model":"test-model","type":"chat","max_tokens":128,"image_input":true}],
-		"chat_model":"synthetic","personas":[{"name":"package","prompt":"Package persona"}],"default_persona":"package",
+		"chat_model":"synthetic","triggers":["private"],"personas":[{"name":"package","prompt":"Package persona"}],"default_persona":"package",
 		"skills_dir":%q,"mcp_servers":[{"name":"package","transport":"stdio","command":%q,"args":["--pid-file",%q]}]
 	}`, model.URL, skills, mcp, pidFile))
 	c.management(t, dir, "", "enable", agentPackageID)
@@ -272,9 +272,7 @@ func TestAgentPackage(t *testing.T) {
 		}})
 	}
 
-	// 2. 开启自由对话，依次完成自身 memory、技能与需平台确认的 MCP 工具往返。
-	send("/agent on")
-	waitText("Free conversation is on.")
+	// 2. 配置的 private 触发方式开启私聊自由对话，依次完成自身 memory、技能与需平台确认的 MCP 工具往返。
 	send("package conversation")
 	confirm("mcp/package/echo/tool", `"text":"package MCP parameters"`)
 	waitText("package complete")

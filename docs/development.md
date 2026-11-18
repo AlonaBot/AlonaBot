@@ -77,6 +77,54 @@ go run ./scripts/dist --version 0.1.0 \
 
 当前 `--version` 决定发行归档名和默认下载前缀；Core 管理 API 的版本仍来自 Go module 构建信息，源码构建会显示 `(devel)`。正式发布前需在 `internal/app/version.go` 补齐 Core 版本注入入口。
 
+## 容器镜像
+
+从仓库根目录启动对应版本的官方整合包，然后读出首次登录的 token：
+
+```fish
+docker compose -f deploy/compose.yaml up -d
+docker compose -f deploy/compose.yaml exec alonabot alonabot admin-token show --data-dir /data
+```
+
+打开 `http://127.0.0.1:7650`，使用读出的 token 登录。首次启动无需 TTY，Core 将一次性 token 写入 `/data/admin_token`，首次登录成功后删除该文件。镜像支持 `linux/amd64` 与 `linux/arm64`，compose 按宿主平台选择。compose 中固定镜像版本；T-10.4 随 Release 上传该文件的副本时，须与 Release 的镜像版本一致。
+
+镜像以 `10001:10001` 运行，命名卷挂载到 `/data`，首次创建卷时继承镜像中该目录的所有者。改用宿主目录挂载时，先授予 UID/GID 10001 读写和遍历权限；已有卷也需保证这一权限。保留该卷即可保留配置、状态库和组件数据。
+
+自行构建时，使用上表锁定的 Go、Node/npm 与 Docker BuildKit/buildx。`VERSION` 必填，签名私钥使用发行构建相同的 base64 Ed25519 格式，存放在构建上下文之外，权限为 0600；构建验收使用临时密钥，正式发行使用维护者控制的密钥。密钥通过必需的 BuildKit secret 挂载传入。构建阶段直接调用 `scripts/dist`，沿用其中的 npm ci/build、签名和四个官方包清单。
+
+```fish
+set version 0.1.0
+set release_key ~/.config/alonabot/release.key
+docker buildx build --platform linux/amd64,linux/arm64 \
+  --build-arg VERSION=$version --secret id=release_key,src=$release_key \
+  --output type=oci,dest=/tmp/alonabot-$version.oci.tar \
+  -t ghcr.io/alonabot/alonabot:$version .
+```
+
+需要覆盖组件下载前缀时，加 `--build-arg ASSET_BASE=https://example.com/releases/v0.1.0`；省略时沿用 `scripts/dist` 的 GitHub Release 地址。下面分别构建并在可运行相应平台的主机上启动本地镜像；跨架构运行需要 Docker 已配置的模拟器。
+
+```fish
+docker buildx build --platform linux/amd64 --load \
+  --build-arg VERSION=$version --secret id=release_key,src=$release_key \
+  -t alonabot:$version-amd64 .
+docker run -d --name alonabot-amd64 --platform linux/amd64 --init \
+  -p 127.0.0.1:7650:7650 -v alonabot-amd64-data:/data alonabot:$version-amd64
+docker exec alonabot-amd64 alonabot admin-token show --data-dir /data
+# 完成该平台验收后停止，释放宿主端口，再运行另一个平台。
+docker stop alonabot-amd64
+
+docker buildx build --platform linux/arm64 --load \
+  --build-arg VERSION=$version --secret id=release_key,src=$release_key \
+  -t alonabot:$version-arm64 .
+docker run -d --name alonabot-arm64 --platform linux/arm64 --init \
+  -p 127.0.0.1:7650:7650 -v alonabot-arm64-data:/data alonabot:$version-arm64
+docker exec alonabot-arm64 alonabot admin-token show --data-dir /data
+```
+
+端口只发布到宿主的 `127.0.0.1`。镜像设置 `ALONABOT_CONTAINER=1` 时，缺省监听为 `0.0.0.0:7650`，`base_url` 仍为 `http://127.0.0.1:7650`；显式 `listen` 优先。该容器例外实际生效时，启动日志输出一次 WARN 提醒宿主本机发布规则。远程管理可使用 `ssh -N -L 7650:127.0.0.1:7650 user@host`，再打开本机地址；HTTPS 反代部署按 [Core 设置与 HTTP 入口](#core-设置与-http-入口) 配置 `base_url` 和 `trusted_proxies`。
+
+在 compose 服务的 `environment` 中传入 `TELEGRAM_BOT_TOKEN` 后，`/data/core_config.json` 中的实例凭证可写成 `"token": "${TELEGRAM_BOT_TOKEN}"`，设置写回保留这一引用。最终镜像采用 scratch，包含 Core、相邻 `packages/` 与 CA 证书；MCP stdio 服务器需要 shell、Node、Python 等运行时时，请自行构建包含所需运行时的镜像，并保留 UID 10001、可写数据卷与 `--init`。
+
 ## 运行 Core 与管理组件
 
 ```sh
