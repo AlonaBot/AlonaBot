@@ -156,7 +156,7 @@ bin/alonabot admin-token show --data-dir ./data
 
 需要在启动前初始化凭证时，停止 Core 后在本机终端运行 `bin/alonabot admin-token init --data-dir ./data`。token 遗失时用 `bin/alonabot admin-token reset --data-dir ./data` 重新生成，旧 token 与全部管理会话随之失效。`init` 与 `reset` 都要求 stdin 与 stderr 是终端，只向 stderr 显示 token 一次；Core 运行中执行会因 core.lock 失败。
 
-调优参数在启动时解析；修改后重启生效。查看全部 37 项参数及当前生效值：
+调优参数在启动时解析；修改后重启生效。查看全部调优参数及当前生效值：
 
 ```sh
 bin/alonabot tune list
@@ -175,7 +175,7 @@ bin/alonabot check --dir ./myplugin --goos linux --goarch amd64 --tags a,b
 
 `build/check/pack` 按相同的 `--goos`、`--goarch`、`--tags` 选择源码，目标缺省沿用 Go 环境；扫描、依赖分析和正式编译统一使用 `CGO_ENABLED=0`。开发运行的 BuildDev 沿用开发环境的 cgo 设置。`build` 默认输出到 `<工程>/bin`，可用 `--out DIR` 覆盖。进程产物包含独立的 `component`（Windows 为 `component.exe`）、资源旁车及包内 `plugin.yaml`；作者 manifest 保持原样。WebUI build 发布静态资源与包内 manifest。`check` 只读扫描入口与资源，保留全部静态诊断与位置。
 
-`test` 在全新临时数据目录中构建宿主平台组件，完成真实握手、准备、注册、激活与停止，报告注册命令及清理结果；Adapter 保持零平台实例，WebUI 检查静态加载资源。准备、注册、停止或清理失败均非零退出。
+`test` 在全新临时数据目录中构建宿主平台组件，完成真实握手、准备、注册、激活与停止，报告注册命令及清理结果；Adapter 保持零平台实例，WebUI 检查静态加载资源。进程组件的 Bootstrap 下发临时状态根内 `plugin_data/<id>/` 的绝对路径，测试结束时随临时目录清理。准备、注册、停止或清理失败均非零退出。
 
 `pack` 使用相同构建路径输出 `<id>-<version>-<os>-<arch>.tar.gz`（WebUI 为 `<id>-<version>-any.tar.gz`）及归档外的 `release.json`，`--out` 默认同 build。`--asset-url` 必填且须为绝对 https URL。进程包的 `build-info` 是 `debug.BuildInfo.String()` 文本；生成代码、资源旁车与归档共用扫描时校验的资源快照，配置 schema 使用同一规范内容；扫描后保存的工程资源留待下次构建。
 
@@ -453,7 +453,7 @@ records := h.Background()
 
 `OnReady` 的回调 context 在返回时取消，上例保留其 Session 归属，后台生命周期由 OnStop 管理。channel 确定发送时刻，Core 通知确定注入终点。
 
-仓库完整示例覆盖 echo、lifecycle、showcase、configdb 与 media：
+仓库完整示例覆盖 echo、lifecycle、showcase、configdb 与 media。configdb 的 KV 与文件命令见[插件指南](plugin-guide.md#保存少量状态)：
 
 ```sh
 go test -race -count=2 ./plugintest/... ./examples/plugins/...

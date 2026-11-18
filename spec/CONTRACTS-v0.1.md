@@ -268,8 +268,10 @@ PATCH 语义依据：[RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)。
 - Core 元数据固定使用独立 `<data_dir>/state.sqlite`，记录安装/来源、代次、Journal、动态权限和 secret 引用关系，插件不复用其 DB 或凭证。Core 连接池固定为 1，采用 WAL、`synchronous=FULL`、`foreign_keys=ON`、`busy_timeout=5000`；每个物理连接都应用连接级设置，初始化核对实际生效值，失败停止启动。Core 的元数据事务只包含必要数据库操作，不在持锁事务中等待插件 RPC。状态库错误/损坏不能触发重建空库。
 - 受管 SQLite 有两个入口，共用当前 Session 的同一个连接：`sqlitedb.Open(ctx) (*sql.DB, error)` 返回标准库 `database/sql` 对象；`gormdb.Open(ctx) (*gorm.DB, error)` 在同一连接上返回原生 GORM 对象。插件只导入用到的包，不用 GORM 的插件不链接 GORM。重复调用复用该连接，SDK 停止时关闭。事务回调须使用传入的 tx，不能在事务里等待同一单连接池的另一条独立查询。连接默认单连接、WAL、FULL、外键开启和 5s busy timeout；这不串行化整个插件的 goroutine/任务。连接错误直接返回，不回退为空数据库。
 - SQLite 文件按 generation 分开：`plugins/<id>/generations/<g>/db.sqlite`。首次安装创建候选文件；配置 reload 和版本 update **一律创建独立 SQLite 候选副本**，不因“只改配置”而复用旧 DB，因为 OnStart 也能写入。普通 restart/异常恢复启动现有 Active，不创建新配置代次。框架外文件、任意外部数据库和出站副作用不纳入受管回退。
-- KV（D-165）：`sdk/kv` 的 `Get`、`Set`、`Delete` 与按前缀分页的 `List` 存放在受管 SQLite 的保留表 `_alonabot_kv`（key TEXT 主键、value BLOB、updated_at），与业务表一起随代次副本、回退与 purge 处理；使用 KV 的插件即链接受管 SQLite。业务代码不得直接改写 `_alonabot_kv` 的结构。
-- 插件数据目录（D-165）：Core 为每个插件建 `<data_dir>/plugin_data/<id>/`，经 Bootstrap 的 `plugin_data_dir` 告诉插件，SDK 以 `sdk.PluginDataDir()` 返回。它不随代次复制，回退与准备失败都不还原其中的文件；卸载时按 D-127 归入数据。
+- KV（D-165）：`sdk/kv` 使用 `ctx` 所属 Session 的受管 SQLite。SDK 初始化保留表 `_alonabot_kv`（`key TEXT` 主键、`value BLOB`、`updated_at` 为 Unix 毫秒），不占用插件迁移 ID；表随数据库一起复制、回退及清理。链接 `sdk/kv` 即链接受管 SQLite，构建工具按 §9.1 推导 `prepare_effects`。业务代码不得直接改写保留表的结构。
+  - `Get(ctx, key) ([]byte, bool, error)` 在键缺失时返回 `nil, false, nil`；`Set(ctx, key, value) error` 覆盖旧值，允许空值；`Delete(ctx, key) error` 删除缺失键也成功。键须为 1～512 字节的 UTF-8，值最多 1 MiB；非法参数返回 INVALID_ARGUMENT。没有受管 SQLite 时返回 FAILED_PRECONDITION，并保留 `sqlitedb.ErrNoDatabase` 错误链。
+  - `List(ctx, prefix, cursor, limit) (Page, error)` 按 UTF-8 前缀的字面字节匹配，返回键字节序上严格大于 `cursor` 的最多 `limit` 个键（`Page.Keys`）。空前缀匹配全部键，空游标从头开始，非空游标遵守键的约束，`limit` 须为正数；无后续页时 `Page.Next` 为空，否则用它作为下一页的 `cursor`。
+- 插件数据目录（D-165）：Core 在启动装配时建立 `<data_dir>/plugin_data/<id>/`，经 Bootstrap 的 `plugin_data_dir` 下发绝对路径。Unix 权限为 `0700`，Windows 继承状态根目录的当前账号专用 ACL。`func PluginDataDir(ctx context.Context) string` 优先使用 Handler 或生命周期回调的 `ctx`（含派生 context）所属的 Session；同进程插件各取自己的目录，独立进程在 `ctx` 未绑定时使用默认 Session。Session 未就绪或已停止时 panic：`plugin session is not ready`。Core 负责建目录与卸载清理，文件由插件管理，跨 restart 保留；代次复制、回退及准备失败均不还原其中的文件。disable 和普通卸载保留目录，`--purge-data` 与 `--purge` 均按 §9.3 的确认清单删除目录。
 - 框架只托管 SQLite。需要 PostgreSQL、MySQL 等外部数据库的插件自行导入驱动并管理连接，连接参数作为插件的 secret 配置项由管理员填写；这些数据属于插件自管的外部数据，Core 不创建、不校验、也不备份外部数据库。迁移或 OnStart 会写外部数据库的插件须在 manifest 声明 `prepare_effects=external`（§9.1），按 §6.3 的维护门槛更新。
 - `sqlitedb` 使用 `modernc.org/sqlite` 的 `database/sql` 驱动；`gormdb` 另用 `gorm.io/gorm` 与 `github.com/libtnb/sqlite`，经后者的 `Conn` 设置复用同一连接。Core 元数据经 GORM 访问，复用同一 modernc 连接（D-68）；schema 由唯一的初始迁移明确定义，不用 AutoMigrate 推断或改写表结构。Backup API 直接使用 modernc 驱动。T-01 已验证 GORM 组合的 CRUD/Tx/迁移、WAL Backup/恢复和五目标 `CGO_ENABLED=0` 构建，实际版本固定在 `go.mod/go.sum`，见 docs/development.md；不新增通用驱动兼容框架。
 
@@ -743,7 +745,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 ## 16. 调优参数
 
 - 契约中可调的容量、期限与配额集中登记在 `internal/tune/params.go`：每项有名称、缺省值、单位与约束，缺省值就是本契约各节给出的数值。新增可调的值时，同时修改该文件与下表。
-- 以下不属于调优参数：协议双方必须一致的常量（帧上限、分块大小）；安全相关的值（Secret 与 token 长度、管理会话与插件票据的期限）；平台规定的限制；插件与 Adapter 自己的常量；日志级别与日志文件设置（§14、§15.1）。
+- 以下不属于调优参数：协议双方必须一致的常量（帧上限、分块大小）；安全相关的值（Secret 与 token 长度、管理会话与插件票据的期限）；平台规定的限制；SDK 的固定输入上限（§6.1 的 KV 键和值上限）；插件与 Adapter 自己的常量；日志级别与日志文件设置（§14、§15.1）。
 - 调优参数只在启动时覆盖，运行中不能修改，也不出现在 WebUI。`--args` 是 `alonabot` 根命令的全局参数，可以写在子命令之前或之后（例如 `alonabot --args REQUEST_TIMEOUT=2s run`），对所有子命令生效，可以重复使用：
   - 值中含 `=` 时是直接参数，多个参数用逗号分隔，例如 `--args DISPATCH_CONCURRENCY=1,REQUEST_TIMEOUT=2s`；
   - 否则是文本文件的路径，文件名任意，每行一个 `KEY=VALUE`，空行和以 `#` 开头的行忽略；

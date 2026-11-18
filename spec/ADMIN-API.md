@@ -526,7 +526,7 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 ## 21. 插件数据浏览
 
-以下端点经管理认证，非 GET 验证 CSRF（D-163），只作用于受管 SQLite；插件没有受管数据库时返回 404。`generation` 查询参数缺省为 Active 代次，指定保留代次时只读。
+以下端点由 T-09.21 实施，经管理认证，非 GET 验证 CSRF（D-163）。表与 KV 作用于受管 SQLite；缺少受管数据库时，相应端点返回 404。数据库的 `generation` 查询参数缺省为 Active 代次，指定保留代次时只读。文件端点作用于插件当前的 `<data_dir>/plugin_data/<id>/`，该目录在代次之间共用（CONTRACTS §6.1）。
 
 | Method / path | 请求或成功响应 | 语义 |
 | --- | --- | --- |
@@ -546,7 +546,7 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 | `PUT /api/v1/plugins/{id}/data/files/content` | `?path=文件&overwrite=1`，请求体为文件内容，`{}` | 先写临时文件再改名；已存在且没有 overwrite 时 409 |
 | `POST /api/v1/plugins/{id}/data/files/mkdir`、`…/rename`、`…/delete` | `{"path":"…"}`、`{"from":"…","to":"…"}`、`{"path":"…","recursive":false}`，`{}` | 删除非空目录须 recursive |
 
-KV 与文件的路径是相对于数据目录的 `/` 分隔路径，拒绝空段、`.`、`..`、绝对路径与反斜杠，不跟随符号链接，指向数据目录之外时 400。写入在插件运行中照常进行：Core 以 busy_timeout 打开数据库，每个请求一个事务，等待超时返回 409；约束错误返回 400 并带 SQLite 的英文说明。每次写入记一条 INFO 审计日志，只写组件、表与 rowid。
+KV 键遵守 CONTRACTS §6.1 的键约束，`/` 可作为键的字面字符。文件路径是相对于数据目录的 `/` 分隔路径，拒绝空段、`.`、`..`、绝对路径与反斜杠，不跟随符号链接，指向数据目录之外时 400。写入在插件运行中照常进行：Core 以 busy_timeout 打开数据库，每个数据库请求一个事务，等待超时返回 409；约束错误返回 400 并带 SQLite 的英文说明。每次写入记一条 INFO 审计日志，表行写入只记组件、表与 rowid。
 
 ## 22. 更新内容（changelog）
 

@@ -46,7 +46,7 @@ func saveTopic(ctx context.Context, topic string) error {
 }
 ```
 
-读取用 `value, ok, err := kv.Get(ctx, key)`；`ok=false` 表示键不存在，`kv.Delete(ctx, key)` 删除不存在的键也成功。键须为 1～512 字节的 UTF-8，值最多 1 MiB，空值可以保存；超限返回 `INVALID_ARGUMENT`。没有受管 SQLite 的 Session 调用 KV 返回 `FAILED_PRECONDITION`。
+读取用 `value, ok, err := kv.Get(ctx, key)`；`err == nil` 且 `ok == false` 表示键不存在，`kv.Delete(ctx, key)` 删除不存在的键也成功。键须为 1～512 字节的 UTF-8，值最多 1 MiB，空值可以保存；非法参数返回 `INVALID_ARGUMENT`。没有受管 SQLite 的 Session 调用 KV 返回 `FAILED_PRECONDITION`。
 
 `page, err := kv.List(ctx, "subscription/", "", 20)` 按键的字节序返回最多 20 个键；后续请求把 `page.Next` 作为 `cursor`，空 `Next` 表示已到末尾。前缀按字面字节匹配，`%` 和 `_` 保持原义；空前缀列出全部键，`limit` 须为正数。
 
@@ -54,7 +54,7 @@ func saveTopic(ctx context.Context, topic string) error {
 
 ### 保存插件文件
 
-Core 在启动前创建目录，经 Bootstrap 下发。传入 Handler 或生命周期回调的 `ctx`（或其派生 context），SDK 优先用它确定所属插件 Session；同进程的多个插件各自取得自己的目录。在 Session 就绪的 Handler 中通过 `sdk.PluginDataDir(ctx)` 取得 `<data_dir>/plugin_data/<id>/` 的绝对路径：
+Core 在启动前创建目录，经 Bootstrap 下发。传入 Handler 或生命周期回调的 `ctx`（或其派生 context），SDK 优先用它确定所属插件 Session；同进程的多个插件各自取得自己的目录，独立进程在 `ctx` 未绑定时使用默认 Session。在 Session 就绪的 Handler 中通过 `sdk.PluginDataDir(ctx)` 取得 `<data_dir>/plugin_data/<id>/` 的绝对路径：
 
 ```go
 import (
@@ -70,7 +70,7 @@ func saveCache(ctx context.Context, content []byte) error {
 }
 ```
 
-Session 就绪前调用 `PluginDataDir(ctx)` 会 panic。目录只允许运行账号访问，Windows 继承与状态库相同的账号 ACL；Core 负责建立与卸载清理，目录内容由插件管理。准备失败与回退保留已写文件，因此需要随代次回退的数据放在 KV 或受管 SQLite 中。
+`OnStart`、`OnReady` 均早于 Session 就绪；此时或 Session 停止后调用 `PluginDataDir(ctx)` 会 panic：`plugin session is not ready`。目录在 Unix 上权限为 `0700`，Windows 继承状态根目录的当前账号专用 ACL。Core 负责建立与卸载清理，文件由插件管理。准备失败与回退保留已写文件，因此需要随代次回退的数据放在 KV 或受管 SQLite 中。
 
 `examples/plugins/configdb` 的 `/note fileset <value>` 与 `/note fileget` 演示在该目录读写固定文件 `note.txt`。
 

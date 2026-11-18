@@ -13,7 +13,7 @@
 | --- | --- | --- | --- |
 | `contracts/` | `.proto` 源（`proto/`）与生成类型（`pb/alonabotv1`）、manifest/release/消息结构校验、调度触发计算（`schedule`）、兼容 fixture；生成工具 `contracts/internal/protocgen`（只由 go:generate 运行） | 任何运行时 I/O、会话状态、平台/GORM 依赖 | 已实现：proto/生成、`validate`（Envelope/协商/Chain、插件 ID 规则 `PluginID`、REGISTER 的命令路径/别名、事件过滤器、HTTP 路由与 Listener、Service（含工具描述）与 Bus 订阅描述校验）、`manifest`（工程 plugin.yaml 的 `ParseProject` 只接受作者字段，出现构建字段时按字段名拒绝；包内 manifest 的 `Parse` 要求 name 并接收 description、author；`Generate` 由工程 manifest 加 `BuildInfo` 生成逐字节稳定的包内 YAML；plugin/adapter/agent/webui 四种 role、adapter_id、icon、WebUI 的 assets 与 Admin API 主版本范围 admin_api_min_major/admin_api_max_major、adapter_dependencies/plugin_dependencies 及 `CheckDependencies`，Adapter 依赖可声明所需动作的完整名称与精确版本）、`release`、`schedule`、`configschema`（手写配置声明的解析与检查、保留键序和数字原文的规范 JSON 与摘要、声明式迁移、补缺失值与校验、secret 路径与配置翻译对应检查）、`i18n`（Core 与 SDK 共用的 `i18n/*.json` 文案目录：规范 BCP 47 文件名、metadata/config 结构、messages 的键与占位符检查，按候选语言、主语言回落与 en-US 格式化；顶层 `commands` 按完整规范路径覆盖命令说明，`Locales`、`CheckCommands`、`CommandDescription` 供生成器结构检查与 Core 选择说明） |
 | `internal/wire/` | 帧编解码（4 MiB 上限）、TCP/stdio 传输、Session 调用表、准入预算、优先通道、取消 | 业务路由、权限、插件生命周期决策 | 部分实现：帧编解码（含协议固定的媒体分块上限 `MaxMediaChunk`）、Conn、ListenLoopback、全局预算（`budget.go`，导出 `Acquire`/`Release`，Session 在途载荷与 Router 事件等待队列共用）、Session 调用引擎（配对/取消/准入/优先通道、认证后身份与版本核对 `CheckPeer`、单向 EVENT 帧 `SendEvent`：只占字节预算、与业务请求共用 FIFO、写出前取消可撤回；接收超出预算时丢弃并计入 `DroppedEvents`；超期调用的一次性 `Request.Late` 回调：已写出的调用在首个迟到响应时回调，仍在队列中就到期撤回的调用以本地 DEADLINE_EXCEEDED 立即回调）；握手与生命周期编排在 `internal/core/host` 与 `sdk` |
-| `internal/tune/` | 调优参数表：名称、缺省值、单位、约束与 `--args` 解析（CONTRACTS §16） | 参数的业务含义（由使用方实现） | 已实现：37 项参数、Defaults、Parse、WriteList |
+| `internal/tune/` | 调优参数表：名称、缺省值、单位、约束与 `--args` 解析（CONTRACTS §16） | 参数的业务含义（由使用方实现） | 已实现：41 项参数、Defaults、Parse、WriteList |
 | `internal/oslock/` | 跨进程 OS 独占文件锁（flock / LockFileEx），供 core.lock 与 runtime.lock 共用 | 锁的业务语义（何时加锁由调用方决定） | 已实现 |
 | `internal/inproc/` | 库模式同进程组件的启动参数与运行入口（`internal/app` 构造参数；SDK 读取参数，并在 init 中登记入口） | 启动流程本身（归 sdk 与 `internal/app`） | 已实现：`internal/app` 为每个同进程组件构造启动参数与标准库连接桥，SDK 读取后建立真实 Session；组件按 ctx 绑定各自的 Session，日志带组件身份；插件与 Adapter 的同进程运行入口由 SDK 在 init 中登记，`internal/app` 经它启动组件 |
 | `internal/pluginkit/` | 开发 CLI 的打包、release.json 生成与签名（plugin build/pack） | 安装与预检（归 `internal/core/packages`） | 部分实现：`BuildDev(ctx, dir, outDir) (Build, error)`（读取工程 plugin.yaml、运行生成器、go build 到指定目录，Adapter 工程包生成只调用 `sdk.RunAdapter` 的薄入口，不写作者目录；按源码中对 sqlitedb/gormdb 迁移函数的引用生成包内 manifest 的 migration_mode）；正式构建、检查、四角色模板（init）、离线测试会话与打包签名（pack）共用扫描时已校验的资源快照，BuildDev 保持开发环境约定；全部构建只经 overlay 注入登记代码与正式入口，不写作者目录；`CompileApp(ctx, options, outDir, goFlags...)` 构建 import 根包的库模式 main 包：扫描其依赖中的组件入口包（含模块缓存中的第三方组件，只读），把全部登记经 overlay 编入该 main 包（D-145） |
@@ -34,6 +34,8 @@
 | `Dockerfile`、`deploy/` | 官方容器镜像、compose 整合包入口与 `install.sh`（CONTRACTS §15.3、§15.6，D-64） | Core 行为（镜像与脚本只安装发行归档的内容） | 拟建 |
 | `spec/` | 现行规格与 ADR | — | 现行 |
 
+`sdk/kv` 提供基于 Session 的键值存储；`sdk.PluginDataDir(ctx)` 优先按 `ctx` 选择所属 Session，同进程插件各取自己的目录，独立进程在 `ctx` 未绑定时使用默认 Session。SQLite 驱动随 `sdk/sqlitedb`、`sdk/gormdb` 或 `sdk/kv` 按需链接，SDK 根包不引入驱动。
+
 ## 依赖方向
 
 `A -> B` 表示 **A 的 Go 源码 import B**（静态依赖，含测试代码），不表示运行时调用或数据流。「模块」指上表每一行的路径前缀；同一模块内部的 import（如 `contracts/release -> contracts/manifest`、`sdk -> sdk/message`）不受限制。跨模块的边只允许下表列出的；标准库和已批准的第三方依赖不受此表限制。
@@ -48,6 +50,7 @@
 | `internal/core/broker -> internal/core/metrics`、`internal/core/bus -> internal/core/metrics`、`internal/core/router -> internal/core/metrics`、`internal/app -> internal/core/metrics` | Service、Bus 与事件派发按原因计数（只在内存中，管理面在 T-09.14 读取） |
 | `sdk -> sdk/internal/convert`、`sdk/adapter -> sdk/internal/convert`；`sdk/internal/convert -> contracts`、`-> sdk/message`、`-> sdk/errcode` | 集中转换 SDK 自有类型与 pb，并组装 Adapter 的类型化声明；公开 API 使用 SDK 类型 |
 | `sdk -> sdk/errcode`、`sdk/message -> sdk/errcode`、`sdk/adapter -> sdk/errcode` | 共用 SDK 错误码与错误类型；`sdk/errcode` 只依赖标准库 |
+| `sdk/kv -> sdk/sqlitedb`、`sdk/kv -> sdk/errcode` | 复用受管 SQLite 的 Session 连接与 SDK 错误码 |
 | `sdk/message -> contracts/validate` | 会话、消息句柄与用户字符串复用 Adapter ID 的校验规则 |
 | `sdk -> sdk/internal/messagecodec`、`sdk/message -> sdk/internal/messagecodec`、`sdk/internal/convert -> sdk/internal/messagecodec` | 跨包传递按钮与片段的编码错误，在发送前报告；保留引用目标的省略信息 |
 | `adapters/... -> sdk/...`、`-> contracts` | Adapter 程序与插件示例一样，只经公共 SDK（`sdk/adapter`）与 Core 通信 |
@@ -77,6 +80,8 @@
 | WebUI 组件与组件图标的静态文件（不可变包目录） | `internal/core` 只读提供；内容归组件发布者 |
 | `<plugins>/<id>/runtime.lock`、插件受管 DB 连接 | 插件进程内的 `sdk` |
 | 插件业务数据（受管 SQLite 候选文件） | 插件；Core 只负责候选复制与准入 |
+| `_alonabot_kv` | `sdk/sqlitedb` 初始化表结构，插件经 `sdk/kv` 管理键值；表随受管 SQLite 处理 |
+| `<data_dir>/plugin_data/<id>/` | `internal/app` 在启动装配时创建并下发路径（离线 `test` 由 CLI 准备临时目录），`internal/core/manage` 清理；文件由插件管理 |
 | 插件自管的外部数据（外部数据库、框架外文件） | 插件；Core 不创建、不校验、不备份（D-48） |
 
 ## 文件组织

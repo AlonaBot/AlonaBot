@@ -80,9 +80,11 @@ Bootstrap 属于私有、已认证 IPC，和整个 HELLO_ACK 一起受 **4 MiB**
 | `phase_limits`、`preparation_deadline_unix_ms`（字段号 8、9） | 准备、迁移和 Ready 的阶段预算及本轮绝对期限；迁移使用独立预算，不被普通业务 30s 截断 |
 | `LogLevel log_level`（字段号 10） | 该来源当前生效的日志级别（CONTRACTS §14.3），SDK 据此在进程内过滤；枚举 `LogLevel` 依次为 UNSPECIFIED、DEBUG、INFO、WARN、ERROR、OFF，D-158 追加 CRITICAL（级别高于 ERROR，取值由 T-02.5 分配），UNSPECIFIED 按 INFO 处理；`inherit` 由 Core 先解析成全局级别后再下发 |
 | `SessionLimits session_limits`（字段号 11） | 本次运行生效的每方向在途请求数、每 Session payload 预算与普通请求期限；Core 全局 payload 预算只由 Core 使用 |
+| `string default_locale`（字段号 12） | Core 的全局默认语言，Session 内保持不变（CONTRACTS §5.4） |
+| `string plugin_data_dir`（字段号 13） | 启动前创建的插件自管数据目录的绝对路径（CONTRACTS §6.1，D-165） |
 | `profile_overrides_json` | UTF-8 JSON 对象：配置文件 ID → `{字段路径: 值}`，该插件当前有效的全部覆盖值（CONTRACTS §5.6，D-168）；按 §5A 的只追加规则编号 |
 
-`Bootstrap` 的字段号固定为 `log_level = 10`、`session_limits = 11`。新增消息结构如下，字段号不得重排或复用：
+`Bootstrap` 的字段号固定为 `log_level = 10`、`session_limits = 11`、`default_locale = 12`、`plugin_data_dir = 13`。`SessionLimits` 的消息结构如下，字段号不得重排或复用：
 
 ```proto
 message SessionLimits {
