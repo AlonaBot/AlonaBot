@@ -94,6 +94,7 @@ enum LogLevel {
   LOG_LEVEL_ERROR = 4;
   // 不输出任何记录。
   LOG_LEVEL_OFF = 5;
+  LOG_LEVEL_CRITICAL = 6;
 }
 
 // DatabaseBackend 列出插件业务数据库的后端类型。

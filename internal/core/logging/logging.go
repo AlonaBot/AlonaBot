@@ -51,6 +51,9 @@ var sourceKeys = map[string]bool{
 	KeySessionID: true, KeyGenerationID: true,
 }
 
+// LevelCritical 标记 Core 或数据面临损坏、需要立即处理的严重故障。
+const LevelCritical = slog.Level(12)
+
 // LevelOff 高于任何记录的级别，用作来源级别 off：该来源的记录全部不输出。
 const LevelOff = slog.Level(math.MaxInt)
 
@@ -91,7 +94,7 @@ func Open(opt Options) (*Output, error) {
 	case FormatText:
 		stderr = newConsoleHandler(opt.Stderr, colorEnabled(opt.Stderr))
 	case FormatJSON:
-		stderr = slog.NewJSONHandler(opt.Stderr, &slog.HandlerOptions{AddSource: true, Level: slog.Level(math.MinInt)})
+		stderr = slog.NewJSONHandler(opt.Stderr, &slog.HandlerOptions{AddSource: true, Level: slog.Level(math.MinInt), ReplaceAttr: logLevelAttr})
 	default:
 		return nil, fmt.Errorf("unknown log format %q (want %s or %s)", opt.Format, FormatText, FormatJSON)
 	}
@@ -187,6 +190,8 @@ func ProtoLevel(lv slog.Level) pb.LogLevel {
 	switch {
 	case lv >= LevelOff:
 		return pb.LogLevel_LOG_LEVEL_OFF
+	case lv >= LevelCritical:
+		return pb.LogLevel_LOG_LEVEL_CRITICAL
 	case lv >= slog.LevelError:
 		return pb.LogLevel_LOG_LEVEL_ERROR
 	case lv >= slog.LevelWarn:
@@ -215,4 +220,12 @@ func (l *leveled) WithAttrs(as []slog.Attr) slog.Handler {
 
 func (l *leveled) WithGroup(name string) slog.Handler {
 	return &leveled{h: l.h.WithGroup(name), level: l.level}
+}
+
+// logLevelAttr 将自定义级别写成协议约定的文本。
+func logLevelAttr(groups []string, a slog.Attr) slog.Attr {
+	if len(groups) == 0 && a.Key == slog.LevelKey && a.Value.Any() == LevelCritical {
+		return slog.String(slog.LevelKey, "CRITICAL")
+	}
+	return a
 }

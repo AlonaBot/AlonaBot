@@ -7,6 +7,7 @@
 package settings
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -142,6 +143,9 @@ func Load(dataDir string) (*File, error) {
 	}
 	document, err := parseDocument(content)
 	if err != nil {
+		if !json.Valid(content) {
+			slog.Log(context.Background(), logging.LevelCritical, "invalid settings JSON prevents startup", "file", name, "error", err)
+		}
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}
 	if err := migrateSettings(name, document); err != nil {
@@ -254,9 +258,9 @@ func readValue(n *node, key string, s *Settings) error {
 				return err
 			}
 			switch level {
-			case "debug", "info", "warn", "error", "off", "inherit":
+			case "debug", "info", "warn", "error", "critical", "off", "inherit":
 			default:
-				return value.fail(errors.New("expected debug, info, warn, error, off or inherit"))
+				return value.fail(errors.New("expected debug, info, warn, error, critical, off or inherit"))
 			}
 			if s.LogSources == nil {
 				s.LogSources = make(map[string]string)
@@ -459,8 +463,10 @@ func readString(value, key string, s *Settings) error {
 			s.LogLevel = slog.LevelWarn
 		case "error":
 			s.LogLevel = slog.LevelError
+		case "critical":
+			s.LogLevel = logging.LevelCritical
 		default:
-			return errors.New("expected debug, info, warn or error")
+			return errors.New("expected debug, info, warn, error or critical")
 		}
 	case "log.format":
 		if value != string(logging.FormatText) && value != string(logging.FormatJSON) {

@@ -643,11 +643,13 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 | 级别 | 用途 |
 | --- | --- |
-| CRITICAL | Core 或数据面临损坏、需要立即处理：状态库无法写入或核对失败、`core_config.json` 不是合法 JSON 而拒绝启动、`core_config.json` 写回失败、提交后的恢复失败、Core 因故障退出前的最后一条记录；插件与 Adapter 自己的数据损坏或无法继续运行 |
-| ERROR | 需要人处理的故障：插件崩溃或被自动停用、状态库错误、提交失败、实例致命错误、Handler panic |
+| CRITICAL | Core 或数据面临损坏、需要立即处理：状态库打开或核对失败、SQL 执行失败、事务开始或提交失败；`core_config.json` 不是合法 JSON 而拒绝启动、设置写回或目录同步失败；提交后的激活、装配或恢复失败；Core 因故障停止或关闭资源失败；插件与 Adapter 自己的数据损坏或无法继续运行 |
+| ERROR | 需要人处理的故障：插件崩溃或被自动停用、实例致命错误、Handler panic |
 | WARN | 被拒绝或丢弃，但系统继续运行：队列满丢弃、Handler 返回错误、确认超时、接收退避重连、非结构化输出 |
 | INFO | 状态变化：Core 启停、插件激活与停止、实例上下线、安装、更新与回退、配置重载、管理员登录 |
-| DEBUG | 单条事件与单次调用的过程：事件接收、匹配结果、调用耗时、发送回执、工具调用、Provider 请求 |
+| DEBUG | 单条事件与单次调用的过程：事件接收、匹配结果、调用耗时、发送回执、工具调用、Provider 请求；状态库操作因 context 取消或超时而结束 |
+
+- 状态库按返回的错误链区分 `context.Canceled`、`context.DeadlineExceeded` 与存储故障，保留原始错误，不输出 SQL 文本；普通查询未命中不记故障。命令策略的写入与只读快照沿用同一事务故障记录规则。
 
 - 插件与 Adapter 的 SDK 把记录以每行一个 JSON 对象写到 stderr，字段为 time、level、msg、source（file、line）与键值字段。Core 逐行解析，补上来源类别、来源 ID、session 与 generation 后输出；插件给出的同名字段不能覆盖 Core 补充的值。
 - 不是合法记录的行（直接写到 stderr 或 TCP 模式下 stdout 的文本、未被捕获的 panic 输出）作为 WARN 原样保留，消息为 `unstructured output`，带 stream 字段，原文在 output 字段，不丢弃。SDK 在调用边界捕获的 panic 记为一条 ERROR，堆栈放在 `stack` 字段。
@@ -655,7 +657,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 ### 14.2 输出格式
 
-- Core 把全部记录写到自己的 stderr。`--log-format text`（缺省）为下面的控制台格式；`json` 为每行一个 JSON 对象，包含全部字段与完整的 trace_id。记录同时按 §14.6 写入日志文件。
+- Core 把已输出的记录写到自己的 stderr。`--log-format text`（缺省）为下面的控制台格式；`json` 为每行一个 JSON 对象，包含全部字段与完整的 trace_id。打开状态库、读取设置前，启动日志只写 stderr，采用显式启动覆盖或缺省的 info/text；正式日志启用后按 §14.6 同时写入日志文件。
 - 控制台格式仿照 AstrBot：
 
   ```text
@@ -664,24 +666,24 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
   - 时间为本地时区的「时:分:秒.毫秒」。
   - 来源标签：Core 为 `[Core]`；插件为 `[Plug:<id>]`；Adapter 为 `[Adpt:<adapter_id>]`，与实例相关时为 `[Adpt:<adapter_id>/<instance_id>]`。插件 ID 去掉 `alonabot-plugin-` 市场前缀显示。
-  - 级别缩写为 DBUG、INFO、WARN、ERRO。
+  - 级别标签为 DBUG、INFO、WARN、ERRO、CRITICAL。
   - 源码位置为「所在目录名/文件名:行号」。
   - 消息之后按记录顺序输出 `key=value`，值含空白或引号时按 Go 的带引号字符串输出；trace_id 显示为 `trace=` 加前 8 位十六进制。多行的值（例如 `stack`）排在单行字段之后，值的每一行另起一行并缩进 4 个空格。
   - 来源字段已体现在标签中：插件与 Adapter 的记录不再输出 component、来源 ID、instance_id、session_id 与 generation_id，这些只在 JSON 输出中出现；Core 关于某个插件的记录照常输出 plugin_id 等字段。
   - 插件提供的消息、键与源码位置含换行或其他不可打印字符时按带引号的字符串输出，不能伪造出另一条记录。
-  - 只有 stderr 是终端且未设置 `NO_COLOR` 时才着色：时间为绿色，DBUG 蓝色、INFO 青色、WARN 黄色、ERRO 红色。
+  - 只有 stderr 是终端且未设置 `NO_COLOR` 时才着色：时间为绿色，DBUG 蓝色、INFO 青色、WARN 黄色、ERRO 与 CRITICAL 红色。
 
 ### 14.3 级别
 
-- 全局级别由 `core_config.json` 的 `log.level`（§15.1）设置，缺省 info；`--log-level` 只覆盖本次运行。管理员在运行时修改时立即生效并写回该文件。Core 自己的记录按全局级别输出。
+- 全局级别由 `core_config.json` 的 `log.level`（§15.1）设置，允许 debug、info、warn、error、critical，缺省 info；`--log-level` 接受同样的级别，只覆盖本次运行。管理员在运行时修改时立即生效并写回该文件。Core 自己的记录按全局级别输出。
 - 每个插件与每个 Adapter 包可以单独设置级别：debug、info、warn、error、critical、off，或 inherit（缺省，跟随全局）。该设置写在 `core_config.json` 的 `log.sources`（按组件 ID），经管理服务修改后立即生效并写回该文件。
 - Core 在 Bootstrap 的 `LogLevel log_level = 10` 中下发该来源的生效级别；枚举值为 DEBUG、INFO、WARN、ERROR、OFF、CRITICAL（CRITICAL 由 D-158 追加，级别高于 ERROR），UNSPECIFIED 按 INFO 处理，inherit 由 Core 先解析，运行时的变化经 `sdk.log.set_level` 通知。SDK 在进程内按这个级别过滤，off 时不输出任何记录；Core 对收到的记录再按同一级别过滤。
-- SDK 导出 `sdk.LevelCritical`（`slog.Level(12)`），JSON 行与控制台把它写作 `CRITICAL`；全局级别、`--log-level` 与 `alonabot log-level` 同样接受 critical。
+- SDK 导出 `sdk.LevelCritical`（`slog.Level(12)`），JSON 行与控制台把它写作 `CRITICAL`。`alonabot log-level` 使用相同的全局与来源级别取值（ADMIN-API §8.3）。阈值为 critical 时过滤 ERROR 及以下；阈值为 error 时仍输出 CRITICAL。
 - 来源设为 off 只隐藏该进程自己的记录；Core 关于它的记录（例如崩溃、停用）仍以 `[Core]` 按全局级别输出。开发中的组件缺省为 debug（§15.4）。
 
 ### 14.4 查看
 
-- Core 为 Core 自己、每个插件与每个 Adapter 包各保留最近 **1000** 条已输出的记录。这些记录只在内存中，Core 重启后清空。
+- Core 为 Core 自己、每个插件与每个 Adapter 包各保留最近 `LOG_BUFFER_RECORDS` 条已输出的记录（§16，缺省 **1000**）。这些记录只在内存中，Core 重启后清空。每个 SSE 订阅的发送队列也使用同一上限（ADMIN-API §8.1）。
 - 管理 API 提供按来源、级别与 trace_id 读取这些记录，以及经 SSE 实时订阅，都要求管理员会话或 CLI 的 Bearer token；`alonabot logs` 使用同一 API。
 - 过去日期的记录从日志文件读取：管理 API 与 `alonabot logs --date` 按日期、来源、级别与 trace 查询，WebUI 日志页可以选择日期。
 - WebUI 日志页先读取最近记录再订阅。按来源、级别与 trace 的筛选只在浏览器中进行（级别可多选，来源分 Core、插件与账号三组可多选），不改变输出，筛选条件保存在浏览器本地；修改输出级别使用 §14.3 的管理服务。
@@ -868,7 +870,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | `OPTIONS_PAGE` | 50 | ≥ 1 且 ≤ 200 | §5.1 |
 | `BUTTON_TOKEN_TTL` | 24h | > 0 | MESSAGE-MODEL §6.3 |
 | `TOOL_CONFIRM_TIMEOUT` | 5m | > 0 | §13.2 |
-| `LOG_BUFFER_RECORDS` | 1000 | ≥ 1 | §14.4 |
+| `LOG_BUFFER_RECORDS` | 1000 | ≥ 1 | §14.4、ADMIN-API §8.1 |
 | `INSTALL_MAX_ARCHIVE` | 256MiB | > 0 | §9.3 |
 | `INSTALL_MAX_EXPANDED` | 1GiB | ≥ `INSTALL_MAX_ARCHIVE` | §9.3 |
 | `INSTALL_MAX_ENTRIES` | 10000 | ≥ 1 | §9.3 |

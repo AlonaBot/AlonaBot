@@ -53,6 +53,7 @@
 | `internal/core/... -> contracts`、`internal/core/... -> internal/wire`、`internal/core/... -> internal/oslock` | Core 侧协议、core.lock 与停机复制时临时持有 runtime.lock |
 | `internal/core/manage -> internal/core/profile`；`internal/core/profile -> internal/core/state`、`-> internal/core/settings`、`-> contracts/configschema`、`-> internal/wire` | 管理 API 建立配置文件快照；状态库存指定与覆盖、Core 设置存 `default` 平台设置、Active schema 校验覆盖值，覆盖集合预算沿用 `wire.MaxFrame` |
 | `internal/core/buttons -> internal/core/state`、`internal/core/buttons -> internal/core/router` | 持久化按钮 token，复用可信 Caller；message 与 router 通过函数注入接入 buttons |
+| `internal/core/state`、`internal/core/settings`、`internal/core/journal -> internal/core/logging` | 共用 Core 的 CRITICAL 级别记录状态库、设置与提交后故障；SDK 独立定义 `sdk.LevelCritical`，两侧共用协议的 `LogLevel` |
 | `internal/core/broker -> internal/core/metrics`、`internal/core/bus -> internal/core/metrics`、`internal/core/router -> internal/core/metrics`、`internal/app -> internal/core/metrics` | Service、Bus 与事件派发按原因计数（只在内存中，管理面在 T-09.14 读取） |
 | `sdk -> sdk/internal/convert`、`sdk/adapter -> sdk/internal/convert`；`sdk/internal/convert -> contracts`、`-> sdk/message`、`-> sdk/errcode` | 集中转换 SDK 自有类型与 pb，并组装 Adapter 的类型化声明；公开 API 使用 SDK 类型 |
 | `sdk -> sdk/errcode`、`sdk/message -> sdk/errcode`、`sdk/adapter -> sdk/errcode` | 共用 SDK 错误码与错误类型；`sdk/errcode` 只依赖标准库 |
