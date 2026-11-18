@@ -280,6 +280,10 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		development[entry.manifest.ID] = entry.manifest
 	}
 	version := coreVersion()
+	bundles, err := bundledDirectory()
+	if err != nil {
+		return fail(err)
+	}
 	management := manage.New(manage.Options{Logs: output, Stopping: c.stopping, NotifyLogLevel: func(ctx context.Context, id string, level pb.LogLevel) error {
 		return c.operation(ctx, func(ctx context.Context) error {
 			plugin, ok := c.assembly.router.Plugin(id)
@@ -331,7 +335,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 				return fmt.Errorf("adapter is not running: %s", id)
 			})
 		},
-		Packages: filepath.Join(dir, "packages"), Limits: packages.NewLimits(values), Development: development, DevelopmentWebUI: webUI,
+		Packages: filepath.Join(dir, "packages"), BundledPackages: bundles, Limits: packages.NewLimits(values), Development: development, DevelopmentWebUI: webUI,
 		Descriptor:        c.assembly.componentDescriptor,
 		DevelopmentConfig: c.developmentConfig, RestartDevelopment: c.Restart,
 		Candidates: managedCandidates{core: c},
@@ -396,6 +400,17 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 			})
 		},
 	})
+	if err := c.preinstall(ctx, management, bundles); err != nil {
+		return fail(err)
+	}
+	configuredAdapters, err := c.configuredAdapters(ctx, management, bundles)
+	if err != nil {
+		return fail(err)
+	}
+	installs, err = store.Installs(ctx)
+	if err != nil {
+		return fail(err)
+	}
 	managementHandler := management.Handler(authentication)
 	var managementWrites sync.Mutex        // 覆盖元数据写入与随后的引用回收。
 	managementReady := make(chan struct{}) // 启动回收完成后才接受管理写入。
@@ -492,6 +507,15 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 					c.assembly.detach(running)
 					if closeErr := running.instance.Session.Close(); closeErr != nil {
 						slog.Error("close degraded session failed", "plugin_id", install.PluginID, "error", closeErr)
+					}
+				}
+				continue
+			}
+			if err != nil && configuredAdapters[install.PluginID] {
+				slog.Error("configured adapter start failed", "plugin_id", install.PluginID, "error", err)
+				if running != nil && running.instance.State() != host.StateDegraded {
+					if stopErr := c.stopManaged(install.PluginID, pb.StopReason_STOP_REASON_DISABLE); stopErr != nil {
+						slog.Error("configured adapter cleanup failed", "plugin_id", install.PluginID, "error", stopErr)
 					}
 				}
 				continue

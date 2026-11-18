@@ -1222,7 +1222,7 @@ func (c *Core) startInstances(ctx context.Context, running *runningComponent, ra
 		return err
 	}
 	for _, problem := range diagnostics {
-		slog.Warn("adapter instance configuration failed", "plugin_id", running.id, "instance_id", problem.InstanceID, "path", problem.Path, "reason", problem.Reason)
+		slog.Error("adapter instance configuration failed", "plugin_id", running.id, "instance_id", problem.InstanceID, "path", problem.Path, "reason", problem.Reason)
 		for id := range c.assembly.settings.Settings().Adapters[running.install.AdapterID].Instances {
 			if problem.InstanceID == "" || problem.InstanceID == id {
 				running.remote.RecordFailure(id, problem.Path+": "+problem.Reason)
@@ -1235,7 +1235,7 @@ func (c *Core) startInstances(ctx context.Context, running *runningComponent, ra
 			continue
 		}
 		if err := running.remote.StartInstance(ctx, id, configuration); err != nil {
-			slog.Warn("adapter instance start failed", "plugin_id", running.id, "instance_id", id, "error", err)
+			slog.Error("adapter instance start failed", "plugin_id", running.id, "instance_id", id, "error", err)
 		}
 	}
 	return nil

@@ -74,7 +74,16 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (re
 		return result, developmentError(id)
 	}
 	if req.Source == "" && req.Archive == "" {
-		req.Source = strings.TrimPrefix(in.Source, "github.com/")
+		bundled, version, err := s.bundledUpdate(ctx, id)
+		if err != nil {
+			return result, err
+		}
+		if version != "" {
+			bundled.Confirm, bundled.Replace = req.Confirm, req.Replace
+			req = bundled
+		} else {
+			req.Source = strings.TrimPrefix(in.Source, "github.com/")
+		}
 	}
 	candidate, err := s.prepare(ctx, req)
 	if err != nil {

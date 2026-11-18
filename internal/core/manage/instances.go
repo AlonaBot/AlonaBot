@@ -119,7 +119,21 @@ func (s *Service) CreateInstance(ctx context.Context, adapterPackageID, instance
 		}
 		err = errors.Join(err, s.forgetInstances(ctx, group.Package, instances))
 	}
-	return failure(errors.Join(err, s.opt.ForgetInstance(ctx, adapterPackageID, instanceID)))
+	err = errors.Join(err, s.opt.ForgetInstance(ctx, adapterPackageID, instanceID))
+	enabled, readErr := s.opt.Store.Enabled(ctx, adapterPackageID)
+	if readErr != nil {
+		return failure(errors.Join(err, readErr))
+	}
+	if !enabled {
+		// 已持有包锁；内部 enable 启动 Adapter 时会读取刚提交的全部实例。
+		return failure(errors.Join(err, s.enable(ctx, installed)))
+	}
+	// 已运行的 Adapter 沿用实例启动入口，只应用新提交的配置。
+	configuration, marshalErr := json.Marshal(expanded)
+	if marshalErr != nil {
+		return failure(errors.Join(err, marshalErr))
+	}
+	return failure(errors.Join(err, s.opt.StartInstance(ctx, adapterPackageID, instanceID, configuration)))
 }
 
 // DeleteInstance 停止仍在运行的实例，再删除设置中的实例及指向它的缺省选择。
