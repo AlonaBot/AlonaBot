@@ -332,6 +332,9 @@ func migrationMode(ctx context.Context, options generate.Options, overlay, modFi
 		if !development && (pkg.ImportPath == modulePath || strings.HasPrefix(pkg.ImportPath, modulePath+"/internal/core/")) {
 			return "", "", fmt.Errorf("independent component imports Core package %q", pkg.ImportPath)
 		}
+		if pkg.ImportPath == sdkPath+"/kv" {
+			effects = manifest.EffectsManagedDB
+		}
 		if pkg.Module == nil || !pkg.Module.Main {
 			continue
 		}

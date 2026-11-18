@@ -7,6 +7,9 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,12 +17,15 @@ import (
 	"runtime/debug"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
+	"github.com/AlonaBot/AlonaBot/internal/generate"
+	"github.com/AlonaBot/AlonaBot/internal/pluginkit"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
 
@@ -228,4 +234,78 @@ func main() {
 		t.Fatalf("missing resource diagnostic: %v\n%s", err, output)
 	}
 
+}
+
+// TestPluginStorageCLI 通过真实 Core 与 configdb 进程验证插件存储的生命周期。
+func TestPluginStorageCLI(t *testing.T) {
+	t.Run("kv-and-data-dir", func(t *testing.T) {
+		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/configdb"}, "https://example.invalid/configdb.tar.gz", "", t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir := t.TempDir()
+		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json")
+		adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+		c.management(t, dir, "", "install", adapter, "--yes")
+		c.management(t, dir, "", "adapter", "instance", "create", "alonabot_adapter_fixture", "one")
+		c.management(t, dir, "", "enable", "alonabot_adapter_fixture")
+		c.waitFor("fixture instance one started")
+		const id = "alonabot_plugin_configdb"
+		c.management(t, dir, "", "install", archive, "--yes")
+		c.management(t, dir, "", "enable", id)
+
+		deliver := func(text string) {
+			t.Helper()
+			path := "/plugins/alonabot_adapter_fixture/deliver?instance=one&user=alice&text=" + url.QueryEscape(text)
+			if status, body := fixtureHTTP(t, c, dir, http.MethodPost, path); status != http.StatusNoContent {
+				t.Fatalf("deliver: %d %s", status, body)
+			}
+		}
+		count := 0
+		check := func(text, want string) {
+			t.Helper()
+			deliver(text)
+			count++
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				status, body := fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot_adapter_fixture/sent")
+				var sent []string
+				if status != http.StatusOK || json.Unmarshal(body, &sent) != nil {
+					t.Fatalf("sent: %d %s", status, body)
+				}
+				if len(sent) >= count {
+					if len(sent) != count || sent[count-1] != want {
+						t.Fatalf("reply: %v, want %s", sent, want)
+					}
+					return
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("missing reply %s: %s\n%s", want, body, c.log())
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+		check("/note kvset topic retained-kv", "Saved topic")
+		check("/note fileset retained-file", "Saved note.txt")
+		dataDir := filepath.Join(dir, "plugin_data", id)
+		if raw := developmentRead(t, filepath.Join(dataDir, "note.txt")); string(raw) != "retained-file" {
+			t.Fatalf("unexpected plugin file: %q", raw)
+		}
+		c.management(t, dir, "", "restart", id)
+		check("/note kvget topic", "topic: retained-kv")
+		check("/note fileget", "note.txt: retained-file")
+		preview := managementFailure(t, c, dir, "uninstall", id, "--purge-data")
+		if !strings.Contains(preview, dataDir) {
+			t.Fatalf("plugin data directory missing from confirmation: %s", preview)
+		}
+		c.management(t, dir, "", "uninstall", id, "--purge-data", "--yes")
+		if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
+			t.Fatalf("plugin data directory remains: %v", err)
+		}
+		c.management(t, dir, "", "install", archive, "--yes")
+		c.management(t, dir, "", "enable", id)
+		deliver("/note kvget topic")
+		c.waitFor(`"msg":"command handler returned an error".*"error":"KV key does not exist"`)
+		stopTestCore(t, c)
+	})
 }

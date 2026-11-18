@@ -108,7 +108,15 @@ func testComponent(ctx context.Context, dir string, values tune.Values, stdout, 
 			database.MigrationMode = pb.MigrationMode_MIGRATION_MODE_VERSIONED
 		}
 	}
-	boot := &pb.Bootstrap{GenerationId: offlineGeneration, CandidateConfigJson: "{}", PreviousConfigVersion: m.ConfigVersion, TargetConfigVersion: *m.ConfigVersion, DatabaseDescriptor: database, LogLevel: pb.LogLevel_LOG_LEVEL_DEBUG}
+	// 与状态库共用受保护的根目录，Windows 子目录继承当前账号的 ACL。
+	pluginDataDir, err := filepath.Abs(filepath.Join(temporary, "data", "plugin_data", m.ID))
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(pluginDataDir, 0o700); err != nil {
+		return err
+	}
+	boot := &pb.Bootstrap{GenerationId: offlineGeneration, CandidateConfigJson: "{}", PreviousConfigVersion: m.ConfigVersion, TargetConfigVersion: *m.ConfigVersion, DatabaseDescriptor: database, LogLevel: pb.LogLevel_LOG_LEVEL_DEBUG, PluginDataDir: pluginDataDir}
 	if len(resources.ConfigSchema) > 0 {
 		schema, problems := configschema.Parse(resources.ConfigSchema)
 		if len(problems) > 0 {

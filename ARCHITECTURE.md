@@ -39,6 +39,8 @@
 
 配置回复示例（D-160）沿用现有依赖方向：`contracts/configschema` 检查示例、字段引用与翻译的对应关系，并通过 `Schema.ExampleImages()` 返回去重排序的图片路径；`contracts/i18n` 检查通用词典中示例覆盖的结构与文案类型。`internal/pluginkit` 校验两种配置 schema 引用的图片并收集到资源快照，`internal/core/packages` 在安装和更新时复核。`internal/core/manage` 按 Active 代次的已提交 Journal 选包，只通过认证后的 GET/HEAD 提供包中 `config_schema.json` 引用的图片。
 
+`sdk/kv` 提供基于 Session 的键值存储；`sdk.PluginDataDir(ctx)` 优先按 `ctx` 选择所属 Session，同进程插件各取自己的目录，独立进程在 `ctx` 未绑定时使用默认 Session。SQLite 驱动随 `sdk/sqlitedb`、`sdk/gormdb` 或 `sdk/kv` 按需链接，SDK 根包不引入驱动。
+
 ## 依赖方向
 
 `A -> B` 表示 **A 的 Go 源码 import B**（静态依赖，含测试代码），不表示运行时调用或数据流。「模块」指上表每一行的路径前缀；同一模块内部的 import（如 `contracts/release -> contracts/manifest`、`sdk -> sdk/message`）不受限制。跨模块的边只允许下表列出的；标准库和已批准的第三方依赖不受此表限制。
@@ -55,6 +57,7 @@
 | `sdk -> sdk/internal/convert`、`sdk/adapter -> sdk/internal/convert`；`sdk/internal/convert -> contracts`、`-> sdk/message`、`-> sdk/errcode` | 集中转换 SDK 自有类型与 pb，并组装 Adapter 的类型化声明；公开 API 使用 SDK 类型 |
 | `sdk -> sdk/errcode`、`sdk/message -> sdk/errcode`、`sdk/adapter -> sdk/errcode` | 共用 SDK 错误码与错误类型；`sdk/errcode` 只依赖标准库 |
 | `sdk/command -> sdk`、`-> sdk/errcode`、`-> sdk/internal/registry`、`-> contracts/pb`、`-> internal/wire` | `command.List` 复用 SDK 的父调用关联与固定服务协议，对外返回 `command.Entry` |
+| `sdk/kv -> sdk/sqlitedb`、`sdk/kv -> sdk/errcode` | 复用受管 SQLite 的 Session 连接与 SDK 错误码 |
 | `sdk/message -> contracts/validate` | 会话、消息句柄与用户字符串复用 Adapter ID 的校验规则 |
 | `sdk -> sdk/internal/messagecodec`、`sdk/message -> sdk/internal/messagecodec`、`sdk/internal/convert -> sdk/internal/messagecodec` | 跨包传递按钮与片段的编码错误，在发送前报告；保留引用目标的省略信息 |
 | `adapters/... -> sdk/...`、`-> contracts` | Adapter 程序与插件示例一样，只经公共 SDK（`sdk/adapter`）与 Core 通信 |
@@ -85,6 +88,8 @@
 | 官方 WebUI 的主题、语言与侧栏偏好（按源保存于 `localStorage`） | `web/admin` 的浏览器端 |
 | `<plugins>/<id>/runtime.lock`、插件受管 DB 连接 | 插件进程内的 `sdk` |
 | 插件业务数据（受管 SQLite 候选文件） | 插件；Core 只负责候选复制与准入 |
+| `_alonabot_kv` | `sdk/sqlitedb` 初始化表结构，插件经 `sdk/kv` 管理键值；表随受管 SQLite 处理 |
+| `<data_dir>/plugin_data/<id>/` | `internal/app` 在启动装配时创建并下发路径（离线 `test` 由 CLI 准备临时目录），`internal/core/manage` 清理；文件由插件管理 |
 | 插件自管的外部数据（外部数据库、框架外文件） | 插件；Core 不创建、不校验、不备份（D-48） |
 
 ## 文件组织

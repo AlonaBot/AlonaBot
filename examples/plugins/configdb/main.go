@@ -1,4 +1,4 @@
-// configdb 演示配置迁移、受管 SQLite 与本地化的笔记命令。
+// configdb 演示配置迁移、受管 SQLite、KV、数据目录与本地化的笔记命令。
 //
 // 默认构建只链接 sqlitedb，使用 configdb_gorm 标签可切换到共用连接的 GORM 入口。
 // fail_migration 与 fail_start 供临时 data_dir 中的候选失败验收使用。
@@ -12,9 +12,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/AlonaBot/AlonaBot/sdk"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
+	"github.com/AlonaBot/AlonaBot/sdk/kv"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
@@ -25,6 +28,7 @@ const (
 	startupKey           = "startup"
 	notesTable           = "configdb_note"
 	startupTable         = "configdb_startup"
+	noteFile             = "note.txt"
 )
 
 //go:embed notes.sql
@@ -66,6 +70,35 @@ func New() *sdk.Plugin {
 	})
 	g.Command("hello").Handle(func(c *sdk.Context, name string) (message.Content, error) {
 		return reply(c, "note.hello", "name", name)
+	})
+	g.Command("kvset").Handle(func(c *sdk.Context, key, value string) (message.Content, error) {
+		if err := kv.Set(c.Context(), key, []byte(value)); err != nil {
+			return nil, err
+		}
+		return reply(c, "note.saved", "key", key)
+	})
+	g.Command("kvget").Handle(func(c *sdk.Context, key string) (message.Content, error) {
+		value, ok, err := kv.Get(c.Context(), key)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, errcode.NotFound.New("KV key does not exist")
+		}
+		return reply(c, "note.value", "key", key, "value", string(value))
+	})
+	g.Command("fileset").Handle(func(c *sdk.Context, value string) (message.Content, error) {
+		if err := os.WriteFile(filepath.Join(sdk.PluginDataDir(c.Context()), noteFile), []byte(value), 0o600); err != nil {
+			return nil, err
+		}
+		return reply(c, "note.saved", "key", noteFile)
+	})
+	g.Command("fileget").Handle(func(c *sdk.Context) (message.Content, error) {
+		value, err := os.ReadFile(filepath.Join(sdk.PluginDataDir(c.Context()), noteFile))
+		if err != nil {
+			return nil, err
+		}
+		return reply(c, "note.value", "key", noteFile, "value", string(value))
 	})
 	state.registerMigrations(p)
 	return p
