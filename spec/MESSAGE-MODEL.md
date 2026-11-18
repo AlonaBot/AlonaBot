@@ -32,6 +32,8 @@
 | bot.online | adapter_id、adapter_instance_id、account_id、account_display_name? | target/actor/message 均 absent；由 Core 在实例启动成功后生成 |
 | bot.offline | adapter_id、adapter_instance_id、account_id、reason（STOPPED 停用 / ADAPTER_EXITED Adapter 进程退出 / INSTANCE_FAILED 实例致命错误）、safe_error? | target/actor/message 均 absent；safe_error 仅在 INSTANCE_FAILED 时给出 |
 
+消息事件的 Core 侧过滤见 CONTRACTS §2.5：仅读取上述可信 to_me、Event.chat_type 与当前可见 chain 的 text 片段，不补造其他事件缺少的 to_me 或原消息文本；条件命中后才交付，SDK Rule 继续执行。
+
 ### 1.2 Adapter 扩展事件
 
 平台专有的事件由 Adapter 按 CONTRACTS §8 声明，event_type 为完整名 `<adapter_id>.<name>`，event_payload 为扩展事件载荷：声明的 version 与符合声明 Schema 的 JSON 对象（D-71）。adapter/account/target/actor 的来源与校验规则与标准事件相同，平台没有提供的字段 absent。扩展事件只进入声明了该 event_type 的事件路由，不进入命令层与多轮等待；PreEvent 可以修改其 payload，修改后仍须符合 Schema。
