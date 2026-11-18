@@ -92,7 +92,7 @@ func managementCommands(code *int) []*cobra.Command {
 		instance.AddCommand(command)
 	}
 	adapter.AddCommand(instance)
-	commands := []*cobra.Command{list, admin, adapter}
+	commands := []*cobra.Command{list, admin, adapter, profileCommand(code)}
 	for _, action := range []string{"install", "enable", "disable", "restart", "uninstall", "pin", "reload", "update", "rollback"} {
 		options := &managementOptions{}
 		var yes, replace, purgeData, purgeAll bool
