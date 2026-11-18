@@ -43,7 +43,7 @@ func SupportedPlatform(os, arch string) bool {
 var (
 	// SemVer 2.0 官方正则。
 	semver                = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
-	marketComponentSuffix = regexp.MustCompile(`^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`)
+	marketComponentSuffix = regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
 	localAdapterID        = regexp.MustCompile(fmt.Sprintf(`^[a-z][a-z0-9_-]{0,%d}$`, validate.MaxPluginIDLen-1))
 	reservedAdapterID     = regexp.MustCompile(`^(con|prn|aux|nul|com[1-9]|lpt[1-9])$`)
 )
@@ -279,7 +279,7 @@ func componentID(id, role string) ([]string, error) {
 		return nil, err
 	}
 	for _, marketRole := range []string{rolePlugin, roleAdapter, roleAgent, roleWebUI} {
-		prefix := "alonabot_" + marketRole + "_"
+		prefix := "alonabot-" + marketRole + "-"
 		if suffix, market := strings.CutPrefix(id, prefix); market {
 			if marketRole != role || !marketComponentSuffix.MatchString(suffix) {
 				return nil, fmt.Errorf("component ID %q must match the market prefix and ID rule for role %q", id, role)
@@ -288,7 +288,7 @@ func componentID(id, role string) ([]string, error) {
 		}
 	}
 	if role != rolePlugin {
-		warnings = []string{fmt.Sprintf("component ID %q lacks the market prefix alonabot_%s_ and can only be installed locally", id, role)}
+		warnings = []string{fmt.Sprintf("component ID %q lacks the market prefix alonabot-%s- and can only be installed locally", id, role)}
 	}
 	return warnings, nil
 }

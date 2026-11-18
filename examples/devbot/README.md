@@ -2,6 +2,8 @@
 
 在仓库根目录操作。插件与回环 Adapter 都是可导入的组件工程；CLI 为它们生成独立进程入口，`main.go` 将同一组 `New()` 装配到当前进程。以下命令使用 fish。
 
+已有改名前的数据目录时，先停止 Core 和 devbot，再按[开发指南](../../docs/development.md#开发运行与热部署)重建；本例的组件 ID 为 `alonabot-plugin-devbot` 和 `alonabot-adapter-devbot`，平台 ID 仍为 `devloop`。
+
 先构建 CLI，把初始设置复制到临时数据目录，并指定回复观察文件：
 
 ```fish

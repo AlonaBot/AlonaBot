@@ -206,7 +206,7 @@ func parseSubject(value string, chat bool) (string, string, error) {
 	if !found || subject == "" {
 		return "", "", invalid("subject must be <adapter_id>:<external_id>")
 	}
-	if _, err := validate.PluginID(adapterID); err != nil || strings.HasPrefix(adapterID, validate.MarketPrefix) {
+	if !validAdapterID(adapterID) {
 		return "", "", invalid("invalid subject adapter ID")
 	}
 	if chat {

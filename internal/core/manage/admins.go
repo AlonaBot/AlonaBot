@@ -39,7 +39,7 @@ func (s *Service) editAdmin(ctx context.Context, user string, add bool) error {
 	if !found || adapterID == "" || userID == "" {
 		return invalid("admin must be <adapter_id>:<external_user_id>")
 	}
-	if _, err := validate.PluginID(adapterID); err != nil || strings.HasPrefix(adapterID, validate.MarketPrefix) {
+	if !validAdapterID(adapterID) {
 		return invalid("invalid admin adapter ID")
 	}
 	// 写回设置和更新内存列表共用一把锁，后来的管理请求只会读到成对状态。
@@ -65,4 +65,10 @@ func (s *Service) editAdmin(ctx context.Context, user string, add bool) error {
 		return failure(err)
 	}
 	return nil
+}
+
+func validAdapterID(id string) bool {
+	// 等长替换让 PluginID 只走本地规则，不改变实际平台 ID。
+	_, err := validate.PluginID(strings.Replace(id, "-", "_", 1))
+	return err == nil
 }

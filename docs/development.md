@@ -99,7 +99,7 @@ cat $DEVBOT_OUTPUT
 
 注入返回 204，异步发送后文件内容为 `Hello from devbot!`。完整实例 JSON、目录结构、认证、源码／翻译／配置改动与编译失败恢复操作见 [devbot README](../examples/devbot/README.md)。样例把 `adapters.devloop.package` 绑定到 `alonabot-adapter-devbot`，实例在 `instances.one`，命令前缀为 `/`。两个开发组件沿用真实 Deliver／Send 流水线。
 
-组件市场 ID 使用连字符前缀，例如 `alonabot-plugin-hello`；本地 ID 仍允许下划线，规则见 [CONTRACTS §9.1](../spec/CONTRACTS-v0.1.md#91-manifest-与构建产物)。D-172 的代码改名由 T-09.27（goal-177）实施：更新后需重建状态库与开发数据目录，再按新 ID 填写组件配置、实例的 `package` 与 `log.sources`。
+组件市场 ID 使用连字符前缀，例如 `alonabot-plugin-hello`；本地 ID 仍允许下划线，规则见 [CONTRACTS §9.1](../spec/CONTRACTS-v0.1.md#91-manifest-与构建产物)。从改名前的开发环境更新时，先停止 Core 和开发组件，备份原目录，再用新数据目录启动以重建状态库和组件数据。按新组件 ID 重配组件设置、实例的 `package`、`log.sources`、权限和工具策略；平台 `adapter_id` 与实例名沿用原值。Core 不自动迁移旧数据。
 
 先构建 CLI（`go build -o bin/alonabot ./cmd/alonabot`），再创建与验证组件：
 
