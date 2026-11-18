@@ -1,12 +1,15 @@
 import { useState, type JSX } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Bot, LayoutDashboard, Puzzle, SlidersHorizontal } from 'lucide-react';
+import { Bot, LayoutDashboard, MessageSquare, Puzzle, Settings, Shield, SlidersHorizontal } from 'lucide-react';
 import { ConfigForm } from './components/ConfigForm';
 import { useUI } from './i18n/UI';
 import { type CoreInfo } from './api/admin';
 import { OverviewPage } from './pages/OverviewPage';
 import { PluginsPage } from './pages/PluginsPage';
 import { AccountsPage } from './pages/AccountsPage';
+import { PermissionsPage } from './pages/PermissionsPage';
+import { ConversationsPage } from './pages/ConversationsPage';
+import { SettingsPage } from './pages/SettingsPage';
 import chinese from '../i18n/zh-CN.json';
 import collections from '../fixtures/collections.config_schema.json';
 import pluginChinese from '../fixtures/i18n/zh-CN.json';
@@ -145,6 +148,30 @@ export const routes: RouteEntry[] = [
     icon: Bot,
     group: 'main',
     render: () => <AccountsPage />,
+  },
+  {
+    id: 'permissions',
+    path: '/permissions',
+    label: 'permissions',
+    icon: Shield,
+    group: 'main',
+    render: () => <PermissionsPage />,
+  },
+  {
+    id: 'conversations',
+    path: '/conversations',
+    label: 'conversations',
+    icon: MessageSquare,
+    group: 'main',
+    render: () => <ConversationsPage />,
+  },
+  {
+    id: 'settings',
+    path: '/settings',
+    label: 'settings',
+    icon: Settings,
+    group: 'bottom',
+    render: () => <SettingsPage />,
   },
   ...(import.meta.env.DEV
     ? [

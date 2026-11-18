@@ -85,7 +85,7 @@ func unknownValue(field configDeclaration, value any, path string, prune bool, u
 func (s *Service) pruneConfig(ctx context.Context, id string) (*pendingConfig, error) {
 	unlock := s.lock(id)
 	defer unlock()
-	schema, _, err := s.configResources(ctx, id)
+	schema, _, _, err := s.configResources(ctx, id)
 	if err != nil {
 		return nil, err
 	}

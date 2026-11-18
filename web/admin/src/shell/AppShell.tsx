@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useState, type JSX } from 'react';
 import { useUI } from '../i18n/UI';
 import { routes } from '../routes';
-import { useTheme } from '../theme/theme';
 import { MobileTabBar } from './MobileTabBar';
 import { navigate, usePath } from './router';
 import { SearchContext, type SearchItem } from './search';
@@ -23,11 +22,9 @@ export function AppShell(props: {
   const currentPath = usePath();
   const ui = useUI();
 
-  // 初始化主题 Hook 并同步 data-theme
-  useTheme();
-
   // 搜索项管理：合并系统路由项与动态注册项
   const [registeredItems, setRegisteredItems] = useState<SearchItem[]>([]);
+  const [openRequest, setOpenRequest] = useState(0);
 
   const register = useCallback((newItems: SearchItem[]) => {
     setRegisteredItems(prev => [...prev, ...newItems]);
@@ -36,7 +33,11 @@ export function AppShell(props: {
     };
   }, []);
 
-  const searchContextValue = useMemo(() => ({ register }), [register]);
+  const open = useCallback(() => {
+    setOpenRequest(prev => prev + 1);
+  }, []);
+
+  const searchContextValue = useMemo(() => ({ register, open }), [register, open]);
 
   // 将当前路由表默认注册为搜索项（section: '页面' / localized pageSection）
   const routeSearchItems = useMemo<SearchItem[]>(() => {
@@ -66,7 +67,7 @@ export function AppShell(props: {
         <Sidebar routes={routes} version={version} onLogout={onLogout} coreUpdate={coreUpdate} />
 
         <div className="shell-main">
-          <TopBar title={currentTitle} searchItems={allSearchItems} onLogout={onLogout} />
+          <TopBar title={currentTitle} searchItems={allSearchItems} onLogout={onLogout} openRequest={openRequest} />
           <main className="shell-content">{children}</main>
         </div>
 

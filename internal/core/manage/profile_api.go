@@ -23,7 +23,7 @@ func (s *Service) profiles(ctx context.Context, lockedID string) (*profile.Servi
 		if active == "" {
 			return nil, nil
 		}
-		raw, _, err := s.configResources(ctx, id)
+		raw, _, _, err := s.configResources(ctx, id)
 		if err != nil {
 			return nil, err
 		}
