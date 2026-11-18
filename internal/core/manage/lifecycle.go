@@ -73,7 +73,13 @@ func (s *Service) Disable(ctx context.Context, id string, confirm bool) (err err
 			return err
 		}
 	}
-	return s.opt.Store.SetEnabled(ctx, id, false)
+	if err := s.opt.Store.SetEnabled(ctx, id, false); err != nil {
+		return err
+	}
+	if s.opt.Router != nil {
+		s.opt.Router.RemoveRouteSnapshot(id)
+	}
+	return nil
 }
 
 // Restart 以当前 Active 建立新 Session，保持代次及其配置快照。
@@ -215,6 +221,9 @@ func (s *Service) uninstall(ctx context.Context, id string, purge PurgeScope, co
 	}
 	if err := s.opt.Store.Uninstall(ctx, id, purge != PurgeNone, purge == PurgeAll); err != nil {
 		return err
+	}
+	if s.opt.Router != nil {
+		s.opt.Router.RemoveRouteSnapshot(id)
 	}
 	for _, path := range packagePaths {
 		if err := os.RemoveAll(path); err != nil {

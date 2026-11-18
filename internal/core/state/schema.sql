@@ -28,6 +28,14 @@ CREATE TABLE generation (
   committed_at    INTEGER
 );
 
+CREATE TABLE route_snapshot (
+  generation_id TEXT PRIMARY KEY REFERENCES generation(generation_id) ON DELETE CASCADE,
+  plugin_id     TEXT NOT NULL REFERENCES install(plugin_id),
+  routes        BLOB NOT NULL,
+  route_hash    BLOB NOT NULL,
+  build_digest  BLOB NOT NULL
+);
+
 CREATE TABLE plugin_state (
   plugin_id         TEXT PRIMARY KEY REFERENCES install(plugin_id),
   active_generation TEXT REFERENCES generation(generation_id),

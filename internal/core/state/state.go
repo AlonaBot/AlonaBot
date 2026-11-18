@@ -394,6 +394,13 @@ func (s *Store) CommitActive(ctx context.Context, pluginID, expectedOld, newGen 
 		if errors.Is(err, gorm.ErrRecordNotFound) || candidate.PluginID != pluginID || candidate.CommittedAt != nil {
 			return fmt.Errorf("generation %s does not exist, does not belong to plugin %s, or was already committed", newGen, pluginID)
 		}
+		var installed installation
+		if err := tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&installed).Error; err != nil {
+			return err
+		}
+		if err := checkActiveCommitRoutes(tx, installed.Install, newGen); err != nil {
+			return err
+		}
 		committedAt := time.Now().UnixMilli()
 		candidate.CommittedAt = &committedAt
 		if err := tx.Save(&candidate).Error; err != nil {

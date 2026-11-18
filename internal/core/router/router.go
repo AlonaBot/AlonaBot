@@ -114,8 +114,9 @@ type Router struct {
 	cancel        context.CancelFunc
 	mu            sync.Mutex // 保护注册、在途调用、命令索引与分发状态
 	plugins       map[string]*pluginSession
-	inFlight      map[inFlightKey]int // 同事件原调用与延续可短暂重叠；仅覆盖 Plugin.Call，排队与 prepare 期间不登记
-	commands      *CommandIndex       // 在 mu 下发布；已发布快照只读
+	snapshots     map[string]routeSnapshot // 已提交的定位数据独立于活 Session。
+	inFlight      map[inFlightKey]int      // 同事件原调用与延续可短暂重叠；仅覆盖 Plugin.Call，排队与 prepare 期间不登记
+	commands      *CommandIndex            // 在 mu 下发布；已发布快照只读
 	started       bool
 	closed        bool
 	continuations Continuations
@@ -134,7 +135,8 @@ func New(opt Options) *Router {
 		ctx: ctx, cancel: cancel, drained: make(chan struct{}),
 		continuations: opt.Continuations, dispatched: opt.Dispatched, metrics: opt.Metrics,
 		matches: make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
-		inFlight: make(map[inFlightKey]int), commands: &CommandIndex{},
+		snapshots: make(map[string]routeSnapshot),
+		inFlight:  make(map[inFlightKey]int), commands: &CommandIndex{},
 		commandState: opt.CommandState, commandNames: opt.CommandNames, commandSyncs: make(map[string]*commandSync),
 	}
 }
