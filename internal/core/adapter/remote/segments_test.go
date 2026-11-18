@@ -74,7 +74,7 @@ func TestMessageSegments(t *testing.T) {
 	observer.GenerationID = "observer-gen"
 	observer.PluginDir = t.TempDir()
 	observer.Handler = nil
-	observer.Bootstrap = &pb.Bootstrap{GenerationId: observer.GenerationID, CandidateConfigJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	observer.Bootstrap = &pb.Bootstrap{GenerationId: observer.GenerationID, CandidateConfigJson: "{}", ProfileOverridesJson: "{}", TargetConfigVersion: 1, DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 	observer.ExtraEnv = map[string]string{helperEnv: "plugin", observerAuditEnv: audit, "GORACE": "atexit_sleep_ms=0"}
 	if err := store.AddInstall(ctx, state.Install{PluginID: observer.PluginID, Role: state.RolePlugin, BuildDigest: observer.BuildDigest}); err != nil {
 		t.Fatal(err)

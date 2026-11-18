@@ -265,11 +265,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *reg
 			failure.Code, failure.Message, err)
 	}
 	root.setConfig(preparedConfig.Values)
-	overrides := boot.GetProfileOverridesJson()
-	if overrides == "" {
-		overrides = "{}" // Bootstrap 的缺省空串表示没有配置文件覆盖。
-	}
-	if err := root.setProfileOverrides(overrides); err != nil {
+	if err := root.setProfileOverrides(boot.GetProfileOverridesJson()); err != nil {
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_HELLO_ACK,
 			pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid profile overrides", err)
 	}

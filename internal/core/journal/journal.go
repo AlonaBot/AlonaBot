@@ -208,7 +208,7 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 	if err != nil {
 		return nil, err
 	}
-	boot := &pb.Bootstrap{GenerationId: "gen-" + rand.Text(), CandidateConfigJson: string(configuration), TargetConfigVersion: *m.ConfigVersion,
+	boot := &pb.Bootstrap{GenerationId: "gen-" + rand.Text(), CandidateConfigJson: string(configuration), ProfileOverridesJson: "{}", TargetConfigVersion: *m.ConfigVersion,
 		DatabaseDescriptor: &pb.DatabaseDescriptor{ActivationReason: activationReason(resourceKind), ManualMigrationApproved: false}}
 	if source != "" {
 		version, err := o.opt.Store.GenerationConfigVersion(ctx, source)

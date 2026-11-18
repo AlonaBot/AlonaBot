@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -28,23 +29,27 @@ func (s *Service) profiles(ctx context.Context, lockedID string) (*profile.Servi
 			unlock := s.lock(id)
 			defer unlock()
 		}
-		active, err := s.opt.Store.Active(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		if active == "" {
-			return nil, nil
-		}
-		raw, _, err := s.configResources(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		if len(raw) == 0 {
-			return nil, nil
-		}
-		schema, _ := configschema.Parse(raw) // configResources 已校验声明。
-		return schema, nil
+		return s.profileSchema(ctx, id)
 	}})
+}
+
+func (s *Service) profileSchema(ctx context.Context, id string) (*configschema.Schema, error) {
+	active, err := s.opt.Store.Active(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if active == "" {
+		return nil, nil
+	}
+	raw, _, err := s.configResources(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	schema, _ := configschema.Parse(raw) // configResources 已校验声明。
+	return schema, nil
 }
 
 func (s *Service) profileRoutes(mux *http.ServeMux) {
@@ -207,7 +212,7 @@ func profileAssignmentID(raw json.RawMessage) (*string, error) {
 	return id, nil
 }
 
-// RegisterProfiles 将可信调用的配置文件服务接入同一管理锁和固定服务分流器。
+// RegisterProfiles 将可信调用的配置文件服务接入固定服务分流器，写入复用管理互斥。
 func (s *Service) RegisterProfiles(mux *router.Mux) {
 	for _, name := range []string{wire.ServiceProfileList, wire.ServiceProfileCurrent, wire.ServiceProfileAssign, wire.ServiceProfileSet} {
 		mux.Handle(name, s.callProfile)
@@ -256,18 +261,39 @@ func (s *Service) callProfile(ctx context.Context, caller router.Caller, in *wir
 			}
 		}
 	}
-	// 3. 沿 HTTP 入口的目录、实例、包锁顺序读写快照，Pending 的检查和写入共用包锁。
-	s.catalog.Lock()
-	defer s.catalog.Unlock()
-	s.instances.Lock()
-	defer s.instances.Unlock()
+	// 3. 查询只读快照；写操作沿原锁顺序尝试互斥，避免在途 Handler 等待管理操作排空自身。
+	if in.Target == wire.ServiceProfileAssign || in.Target == wire.ServiceProfileSet {
+		if !s.catalog.TryLock() {
+			return fail(precondition("component management is in progress"))
+		}
+		defer s.catalog.Unlock()
+		if !s.instances.TryLock() {
+			return fail(precondition("adapter instance management is in progress"))
+		}
+		defer s.instances.Unlock()
+	}
 	lockedID := ""
+	var schema *configschema.Schema
 	if in.Target == wire.ServiceProfileSet {
 		lockedID = caller.PluginID
-		unlock := s.lock(lockedID)
-		defer unlock()
+		value, _ := s.packages.LoadOrStore(lockedID, &sync.Mutex{})
+		mutex := value.(*sync.Mutex)
+		if !mutex.TryLock() {
+			return fail(precondition("plugin management is in progress: " + lockedID))
+		}
+		defer mutex.Unlock()
+		var err error
+		schema, err = s.profileSchema(ctx, lockedID)
+		if err != nil {
+			return fail(err)
+		}
 	}
-	profiles, err := s.profiles(ctx, lockedID)
+	profiles, err := profile.New(ctx, profile.Options{Store: s.opt.Store, Settings: s.opt.Settings, Schema: func(_ context.Context, id string) (*configschema.Schema, error) {
+		if id == lockedID {
+			return schema, nil
+		}
+		return nil, nil
+	}})
 	if err != nil {
 		return fail(err)
 	}
@@ -316,14 +342,9 @@ func (s *Service) callProfile(ctx context.Context, caller router.Caller, in *wir
 		}
 		response = &pb.ProfileAssignResponse{}
 	case *pb.ProfileSetRequest:
-		schemaRaw, _, err := s.configResources(ctx, caller.PluginID)
-		if err != nil {
-			return fail(err)
-		}
-		if len(schemaRaw) == 0 {
+		if schema == nil {
 			return fail(invalid("profile validation failed at " + request.Path + ": field is not marked for profiles"))
 		}
-		schema, _ := configschema.Parse(schemaRaw)
 		if !slices.Contains(schema.ProfilePaths(), request.Path) {
 			return fail(invalid("profile validation failed at " + request.Path + ": field is not marked for profiles"))
 		}

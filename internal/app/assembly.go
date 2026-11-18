@@ -820,7 +820,7 @@ func startupCleanupError(err error) error {
 }
 
 func bootstrap(generation string, version uint32) *pb.Bootstrap {
-	return &pb.Bootstrap{GenerationId: generation, CandidateConfigJson: emptyConfig, TargetConfigVersion: version, DefaultLocale: defaultLocale,
+	return &pb.Bootstrap{GenerationId: generation, CandidateConfigJson: emptyConfig, ProfileOverridesJson: "{}", TargetConfigVersion: version, DefaultLocale: defaultLocale,
 		DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}, LogLevel: pb.LogLevel_LOG_LEVEL_INFO}
 }
 

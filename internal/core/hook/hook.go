@@ -85,6 +85,13 @@ func (h *Runner) PreEvent(ctx context.Context, ev *pb.Event) (*pb.EventPayload, 
 		if !h.current(candidate) || !slices.Contains(candidate.route.GetHook().GetEventTypeFilter(), ev.GetEventType()) {
 			continue
 		}
+		profileID, enabled, err := h.router.Profile(ctx, candidate.caller.PluginID, current.Target)
+		if err != nil {
+			return current.EventPayload, false, preEventFailure(candidate, err)
+		}
+		if !enabled {
+			continue
+		}
 		prepared := proto.CloneOf(current)
 		if h.opt.Prepare != nil {
 			var err error
@@ -98,10 +105,6 @@ func (h *Runner) PreEvent(ctx context.Context, ev *pb.Event) (*pb.EventPayload, 
 		restore := make(map[string]*pb.IncomingMedia)
 		for i, incoming := range incomingMedia(prepared) {
 			restore[incoming.Token] = original[i]
-		}
-		profileID, _, err := h.router.Profile(ctx, candidate.caller.PluginID, current.Target)
-		if err != nil {
-			return current.EventPayload, false, preEventFailure(candidate, err)
 		}
 		parent := &router.Invocation{ProfileID: profileID, Event: current, DefaultTarget: current.Target, Depth: 0}
 		request := &pb.PreEventRequest{RouteId: candidate.route.GetRouteId(), Context: invocationContext(parent, false), Event: prepared}
