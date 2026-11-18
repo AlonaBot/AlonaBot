@@ -58,6 +58,7 @@ func TestFirstRunDistribution(t *testing.T) {
 	data := filepath.Join(dir, "data")
 	c := startRecoveryCore(t, binary, data, "")
 	c.waitFor(`"msg":"plugin activated"[^\n]*"plugin_id":"alonabot-plugin-help-official"`)
+	c.waitFor(`"msg":"plugin activated"[^\n]*"plugin_id":"alonabot-webui-admin"`)
 	tokenFile := filepath.Join(data, adminauth.FirstTokenFile)
 	info, err := os.Stat(tokenFile)
 	if err != nil || info.Mode().Perm() != 0o600 {
@@ -138,7 +139,7 @@ func TestFirstRunDistribution(t *testing.T) {
 			t.Fatalf("activation: %+v", item)
 		}
 	}
-	if strings.Count(c.log(), `"msg":"plugin activated"`) != 1 {
+	if strings.Count(c.log(), `"msg":"plugin activated"`) != 2 {
 		t.Fatalf("unexpected component processes:\n%s", c.log())
 	}
 	if raw := call(http.MethodGet, "/", ""); !bytes.Contains(raw, []byte("<html")) {
@@ -156,6 +157,7 @@ func TestFirstRunDistribution(t *testing.T) {
 	cli("uninstall", "alonabot-plugin-help-official")
 	stopTestCore(t, c)
 	c = startRecoveryCore(t, binary, data, "")
+	c.waitFor(`"msg":"plugin activated"[^\n]*"plugin_id":"alonabot-webui-admin"`)
 	// 重启改变实际监听地址，API 直接读取新 Core。
 	if err := json.Unmarshal(call(http.MethodGet, "/api/v1/packages", ""), &api); err != nil {
 		t.Fatal(err)
@@ -168,7 +170,7 @@ func TestFirstRunDistribution(t *testing.T) {
 			t.Fatalf("uninstall choice lost: %+v", item)
 		}
 	}
-	if strings.Contains(c.log(), `"msg":"plugin activated"`) {
+	if strings.Count(c.log(), `"msg":"plugin activated"`) != 1 {
 		t.Fatalf("uninstalled help restarted:\n%s", c.log())
 	}
 	stopTestCore(t, c)

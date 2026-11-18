@@ -902,6 +902,156 @@ func TestManagementLifecycle(t *testing.T) {
 		}
 		stopTestCore(t, c)
 	})
+	t.Run("profile-tool-policies", func(t *testing.T) {
+		// 1. 复用动态构建宿主，运行真实提供方、调用方与回环 Adapter。
+		dir := t.TempDir()
+		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json")
+		provider, err := writeTestPackage(t.TempDir(), "commands", "plugin", "", "github.com/example/commands", "1.0.0", filepath.Join(binDir, "command-fixture"), "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		caller := packWebUIFixture(t, "1.0.0", profileToolCallerSource, map[string]string{"plugin.yaml": "id: tool-caller\nname: Tool Caller\nversion: 1.0.0\nsource: example.com/webui\nrole: plugin\n"})
+		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
+		for _, archive := range []string{provider, caller, adapter} {
+			c.management(t, dir, "", "install", archive, "--yes")
+		}
+		for _, instance := range []string{"one", "two"} {
+			c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", instance)
+		}
+		for _, id := range []string{"commands", "tool-caller", "alonabot-adapter-fixture"} {
+			c.management(t, dir, "", "enable", id)
+		}
+		c.waitFor("fixture instance two started")
+		update := func(method, path, body string) {
+			t.Helper()
+			if status, raw := fixtureHTTP(t, c, dir, method, path, body); status != http.StatusOK {
+				t.Fatalf("update %s: %d %s", path, status, raw)
+			}
+		}
+		update(http.MethodPut, "/api/v1/tools/policies", `{"plugin_id":"commands","service":"read","policy":"confirm"}`)
+		profiles := make(map[string]string)
+		for _, entry := range []struct{ instance, policy string }{{"one", "allow"}, {"two", "deny"}} {
+			var created struct{ ID string }
+			if raw := c.management(t, dir, "", "profile", "create", entry.instance); json.Unmarshal([]byte(raw), &created) != nil || created.ID == "" {
+				t.Fatalf("create profile: %s", raw)
+			}
+			profiles[entry.instance] = created.ID
+			c.management(t, dir, "", "profile", "assign", created.ID, entry.instance, "devloop:chat")
+			update(http.MethodPut, "/api/v1/profiles/"+created.ID+"/tools", `{"items":[{"tool":"commands/read","policy":"`+entry.policy+`"}]}`)
+		}
+		type result struct {
+			Code, Error string
+			Tools       []struct {
+				Name, Description, Policy string
+				InputSchema               json.RawMessage
+				Effect                    int
+			}
+			Result string
+		}
+		results := 0
+		waitResult := func(code string) result {
+			t.Helper()
+			results++
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				status, raw := fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/tool-caller/results")
+				var rows []result
+				if status != http.StatusOK || json.Unmarshal(raw, &rows) != nil {
+					t.Fatalf("results: %d %s", status, raw)
+				}
+				if len(rows) == results {
+					if rows[results-1].Code != code {
+						t.Fatalf("result: %+v, want %s", rows[results-1], code)
+					}
+					return rows[results-1]
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("missing result %d: %s\n%s", results, raw, c.log())
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+		deliver := func(instance, action string) {
+			t.Helper()
+			if status, raw := fixtureHTTP(t, c, dir, http.MethodPost, "/plugins/alonabot-adapter-fixture/deliver?instance="+instance+"&user=alice&text="+url.QueryEscape("/tools "+action)); status != http.StatusNoContent {
+				t.Fatalf("deliver: %d %s", status, raw)
+			}
+		}
+		checkCalls := func(want int) {
+			t.Helper()
+			status, raw := fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/commands/calls")
+			var got int
+			if status != http.StatusOK || json.Unmarshal(raw, &got) != nil || got != want {
+				t.Fatalf("calls: %d %s, want %d", status, raw, want)
+			}
+		}
+		checkList := func(instance, policy string, count int) {
+			t.Helper()
+			deliver(instance, "list")
+			out := waitResult("ERROR_CODE_UNSPECIFIED")
+			if len(out.Tools) != count {
+				t.Fatalf("%s list: %+v", instance, out.Tools)
+			}
+			found := false
+			for _, item := range out.Tools {
+				if item.Name == "commands/read" {
+					found = true
+					if item.Policy != policy || item.Description != "Fixture tool" || !json.Valid(item.InputSchema) || item.Effect != 1 {
+						t.Fatalf("tool metadata: %+v", item)
+					}
+				}
+			}
+			if found != (policy != "") {
+				t.Fatalf("%s read presence=%t, policy=%s", instance, found, policy)
+			}
+		}
+		// 2. 两个会话共享全局 confirm，分别覆盖 allow 与 deny，核对真实执行次数。
+		checkList("one", "allow", 4)
+		checkList("two", "", 3)
+		deliver("one", "invoke")
+		if out := waitResult("ERROR_CODE_UNSPECIFIED"); out.Result != "{}" {
+			t.Fatalf("invoke result: %s", out.Result)
+		}
+		checkCalls(1)
+		deliver("two", "invoke")
+		waitResult("ERROR_CODE_PERMISSION_DENIED")
+		checkCalls(1)
+		// 3. inherit 恢复全局 confirm，通过真实点击后只执行一次。
+		update(http.MethodPut, "/api/v1/profiles/"+profiles["one"]+"/tools", `{"items":[{"tool":"commands/read","policy":"inherit"}]}`)
+		checkList("one", "confirm", 4)
+		deliver("one", "invoke")
+		var tokens []string
+		deadline := time.Now().Add(5 * time.Second)
+		for len(tokens) == 0 {
+			status, raw := fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot-adapter-fixture/tokens")
+			if status != http.StatusOK || json.Unmarshal(raw, &tokens) != nil {
+				t.Fatalf("tokens: %d %s", status, raw)
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("missing confirmation: %s\n%s", raw, c.log())
+			}
+			if len(tokens) == 0 {
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+		if len(tokens) != 2 {
+			t.Fatalf("confirmation tokens: %v", tokens)
+		}
+		checkCalls(1)
+		if status, raw := fixtureHTTP(t, c, dir, http.MethodPost, "/plugins/alonabot-adapter-fixture/click?instance=one&user=alice&token="+url.QueryEscape(tokens[0])); status != http.StatusNoContent {
+			t.Fatalf("click: %d %s", status, raw)
+		}
+		waitResult("ERROR_CODE_UNSPECIFIED")
+		checkCalls(2)
+		// 4. 配置文件关闭插件后，即使覆盖 allow 也隐藏并拒绝工具。
+		update(http.MethodPut, "/api/v1/profiles/"+profiles["one"]+"/tools", `{"items":[{"tool":"commands/read","policy":"allow"}]}`)
+		update(http.MethodPatch, "/api/v1/profiles/"+profiles["one"]+"/plugins/commands", `{"enabled":false}`)
+		checkList("one", "", 0)
+		deliver("one", "invoke")
+		waitResult("ERROR_CODE_PERMISSION_DENIED")
+		checkCalls(2)
+		stopTestCore(t, c)
+	})
 
 }
 
@@ -1361,17 +1511,24 @@ func putPlatform(t *testing.T, c *core, dir, id, body string) {
 	}
 }
 
-func fixtureHTTP(t *testing.T, c *core, dir, method, path string) (int, []byte) {
+func fixtureHTTP(t *testing.T, c *core, dir, method, path string, body ...string) (int, []byte) {
 	t.Helper()
 	token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	request, err := http.NewRequest(method, "http://"+c.address()+path, nil)
+	var input io.Reader
+	if len(body) > 0 {
+		input = strings.NewReader(body[0])
+	}
+	request, err := http.NewRequest(method, "http://"+c.address()+path, input)
 	if err != nil {
 		t.Fatal(err)
 	}
 	request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+	if len(body) > 0 {
+		request.Header.Set("Content-Type", "application/json")
+	}
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
@@ -1463,6 +1620,7 @@ import (
  "net/http"
  "os"
  "sync"
+ "sync/atomic"
  "github.com/AlonaBot/AlonaBot/sdk"
  "github.com/AlonaBot/AlonaBot/sdk/genimpl"
  "github.com/AlonaBot/AlonaBot/sdk/message"
@@ -1482,14 +1640,40 @@ func main() {
   if _,err:=c.Edit(result.Ref(),message.Text("edited"));err!=nil{return nil,err}
   return message.Text("automatic"),nil
  })
+ var calls atomic.Int64
+ p.Route("GET","/calls").HandleFunc(func(w http.ResponseWriter,_ *http.Request){if err:=json.NewEncoder(w).Encode(calls.Load());err!=nil{slog.Error("write calls failed","error",err)}})
  p.Command("inspect").Handle(func(c *sdk.Context)(message.Content,error){return message.Chain{message.Text(fmt.Sprintf("admin=%t",c.Has(sdk.Admin)))},nil})
  p.Command("number").Args("n").Handle(func(*sdk.Context,int64)error{return nil})
  for _,entry:=range []struct{name string; effect tool.Effect}{{"read",tool.ReadOnly},{"write",tool.Write},{"remove",tool.Destructive},{"unknown",tool.Unspecified}}{
-  builder:=service.Serve(p,service.JSON[toolArguments,toolArguments]("commands/"+entry.name)).Tool("Fixture tool",tool.DefaultConfirm)
+  builder:=service.Serve(p,service.JSON[toolArguments,toolArguments]("commands/"+entry.name)).Access(service.AccessPublic).Tool("Fixture tool",tool.DefaultConfirm)
   if entry.effect!=tool.Unspecified {builder.Effect(entry.effect)}
-  builder.Handle(func(*sdk.Context,toolArguments)(toolArguments,error){return toolArguments{},nil})
+  builder.Handle(func(*sdk.Context,toolArguments)(toolArguments,error){calls.Add(1);return toolArguments{},nil})
  }
  if err:=sdk.Run(p);err!=nil{slog.Error("fixture failed","error",err);os.Exit(1)}
+}
+`
+
+const profileToolCallerSource = `package fixture
+import (
+ "encoding/json"
+ "log/slog"
+ "net/http"
+ "sync"
+ "github.com/AlonaBot/AlonaBot/sdk"
+ "github.com/AlonaBot/AlonaBot/sdk/errcode"
+ "github.com/AlonaBot/AlonaBot/sdk/tool"
+)
+type toolResult struct { Code,Error,Result string; Tools []tool.Info }
+func New()*sdk.Plugin{
+ p:=sdk.NewPlugin();var mu sync.Mutex;results:=[]toolResult{}
+ p.Command("tools").Args("action").Handle(func(c *sdk.Context,action string)error{
+  var out toolResult;var err error
+  switch action {case "list":out.Tools,err=tool.List(c.Context());case "invoke":var result json.RawMessage;result,err=tool.Invoke(c.Context(),"commands/read",json.RawMessage("{}"));out.Result=string(result)}
+  out.Code=errcode.Of(err).String();if err!=nil{out.Error=err.Error()}
+  mu.Lock();results=append(results,out);mu.Unlock();return nil
+ })
+ p.Route("GET","/results").HandleFunc(func(w http.ResponseWriter,_ *http.Request){mu.Lock();defer mu.Unlock();if err:=json.NewEncoder(w).Encode(results);err!=nil{slog.Error("write tool results failed","error",err)}})
+ return p
 }
 `
 
@@ -1531,7 +1715,7 @@ import (
  example "github.com/AlonaBot/AlonaBot/examples/devbot/adapter"
 )
 type operation struct{Operation,Instance,Session,ID string;Chain message.Chain}
-type platform struct {adapter.Adapter; mu sync.Mutex; cores map[string]adapter.Core; sent []string; records []operation}
+type platform struct {adapter.Adapter; mu sync.Mutex; cores map[string]adapter.Core; sent []string; records []operation; tokens []string}
 type instance struct {adapter.Instance; platform *platform; id string}
 func (p *platform) Start(ctx context.Context,req adapter.StartRequest,core adapter.Core)(adapter.Instance,error){
  if req.InstanceID=="fail" {return nil,errors.New("fixture instance rejected")}
@@ -1543,15 +1727,16 @@ func (p *platform) Start(ctx context.Context,req adapter.StartRequest,core adapt
 func(i *instance) Send(ctx context.Context,to string,chain message.Chain)(*message.SendResult,*errcode.Error){
  result,err:=i.Instance.Send(ctx,to,chain)
  i.platform.mu.Lock();defer i.platform.mu.Unlock();i.platform.sent=append(i.platform.sent,chain.Text())
+ for _,segment:=range chain{if buttons,ok:=segment.(message.ButtonsSegment);ok{for _,row:=range buttons.Rows{for _,button:=range row{i.platform.tokens=append(i.platform.tokens,button.CoreToken)}}}}
  if result!=nil{i.platform.records=append(i.platform.records,operation{"send",i.id,to,result.PrimaryPlatformMessageID,chain})}
  return result,err
 }
-func(i *instance) Capabilities()[]message.Capability{return []message.Capability{{Name:"message.edit",Version:1,Supported:true}}}
 func(i *instance) Edit(_ context.Context,to,id string,chain message.Chain)(*message.SendResult,*errcode.Error){
  i.platform.mu.Lock();i.platform.records=append(i.platform.records,operation{"edit",i.id,to,id,chain});i.platform.mu.Unlock()
  indexes:=make([]uint32,len(chain));for n:=range chain{indexes[n]=uint32(n)}
  return &message.SendResult{Status:message.SendAccepted,Session:to,AdapterInstanceID:i.id,PrimaryPlatformMessageID:id,PlatformMessageIDs:[]string{id},PartResults:[]message.PartResult{{PartIndex:0,SegmentIndexes:indexes,Status:message.PartAccepted,PlatformMessageIDs:[]string{id}}}},nil
 }
+func(i *instance) Capabilities()[]message.Capability{return append(i.Instance.Capabilities(),message.Capability{Name:"message.edit",Version:1,Supported:true},message.Capability{Name:"message.buttons",Version:1,Supported:true})}
 func(i *instance) Stop(ctx context.Context)error{
  i.platform.mu.Lock();delete(i.platform.cores,i.id);i.platform.mu.Unlock()
  slog.Info("fixture instance "+i.id+" stopped");return i.Instance.Stop(ctx)
@@ -1564,7 +1749,14 @@ func(p *platform) Descriptor()*adapter.Descriptor{
   chat:=r.URL.Query().Get("chat");if chat==""{chat="chat"};kind:=message.ChatUnspecified;if r.URL.Query().Get("group")=="1"{kind=message.ChatGroup}
   _,err:=core.Deliver(r.Context(),&message.Event{Type:"message.created",AdapterID:"devloop",AdapterInstanceID:id,AccountID:id,Session:message.SID("devloop",chat,""),ChatType:kind,Actor:&message.Actor{ExternalUserID:r.URL.Query().Get("user"),AdapterInstanceID:id},Payload:&message.CreatedPayload{PlatformMessageID:"fixture",Chain:message.Chain{message.Text(r.URL.Query().Get("text"))}}},nil)
   if err!=nil{http.Error(w,err.Error(),500);return};w.WriteHeader(204)
- })}, {Method:"GET",Path:"/sent",Handler:http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){p.mu.Lock();defer p.mu.Unlock();if err:=json.NewEncoder(w).Encode(p.sent);err!=nil{slog.Error("write sent failed","error",err)}})}, {Method:"GET",Path:"/reply-records",Handler:http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){p.mu.Lock();defer p.mu.Unlock();if err:=json.NewEncoder(w).Encode(p.records);err!=nil{slog.Error("write records failed","error",err)}})}}
+ })}, {Method:"GET",Path:"/sent",Handler:http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){p.mu.Lock();defer p.mu.Unlock();if err:=json.NewEncoder(w).Encode(p.sent);err!=nil{slog.Error("write sent failed","error",err)}})},
+ {Method:"GET",Path:"/reply-records",Handler:http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){p.mu.Lock();defer p.mu.Unlock();if err:=json.NewEncoder(w).Encode(p.records);err!=nil{slog.Error("write records failed","error",err)}})},
+ {Method:"GET",Path:"/tokens",Handler:http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){p.mu.Lock();defer p.mu.Unlock();if err:=json.NewEncoder(w).Encode(p.tokens);err!=nil{slog.Error("write tokens failed","error",err)}})},
+ {Method:"POST",Path:"/click",Handler:http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  id:=r.URL.Query().Get("instance");p.mu.Lock();core:=p.cores[id];p.mu.Unlock();if core==nil{http.Error(w,"instance missing",404);return}
+  _,err:=core.Deliver(r.Context(),&message.Event{Type:"button.clicked",AdapterID:"devloop",AdapterInstanceID:id,AccountID:id,Session:message.SID("devloop","chat",""),Actor:&message.Actor{ExternalUserID:r.URL.Query().Get("user"),AdapterInstanceID:id},Payload:&message.ButtonClickedPayload{Value:r.URL.Query().Get("token")}},nil)
+  if err!=nil{http.Error(w,err.Error(),500);return};w.WriteHeader(204)
+ })}}
  return d
 }
 func init(){genimpl.Register("main",genimpl.Resources{})}
