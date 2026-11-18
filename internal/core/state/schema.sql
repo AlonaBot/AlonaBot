@@ -202,3 +202,48 @@ CREATE TABLE journal (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+
+CREATE TABLE profile (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  color TEXT NOT NULL,
+  profile_seq INTEGER NOT NULL UNIQUE
+);
+
+INSERT INTO profile (id, name, color, profile_seq) VALUES ('default', '默认', 'teal', 0);
+
+CREATE TABLE profile_assignment (
+  instance TEXT NOT NULL,
+  session TEXT NOT NULL,
+  profile_id TEXT NOT NULL REFERENCES profile(id) ON DELETE CASCADE,
+  PRIMARY KEY (instance, session)
+);
+
+CREATE TABLE profile_override (
+  profile_id TEXT NOT NULL REFERENCES profile(id) ON DELETE CASCADE,
+  plugin_id TEXT NOT NULL REFERENCES install(plugin_id) ON DELETE CASCADE,
+  path TEXT NOT NULL,
+  value TEXT NOT NULL,
+  PRIMARY KEY (profile_id, plugin_id, path)
+);
+
+CREATE TABLE profile_plugin (
+  profile_id TEXT NOT NULL REFERENCES profile(id) ON DELETE CASCADE,
+  plugin_id TEXT NOT NULL REFERENCES install(plugin_id) ON DELETE CASCADE,
+  enabled INTEGER NOT NULL,
+  PRIMARY KEY (profile_id, plugin_id)
+);
+
+CREATE TABLE profile_tool (
+  profile_id TEXT NOT NULL REFERENCES profile(id) ON DELETE CASCADE,
+  plugin_id TEXT NOT NULL REFERENCES install(plugin_id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  operation INTEGER NOT NULL,
+  policy TEXT NOT NULL,
+  PRIMARY KEY (profile_id, plugin_id, name, operation)
+);
+
+CREATE TABLE profile_platform (
+  profile_id TEXT PRIMARY KEY REFERENCES profile(id) ON DELETE CASCADE,
+  settings TEXT NOT NULL
+);

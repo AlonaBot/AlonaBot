@@ -92,7 +92,12 @@ func parseRecord(line []byte) (slog.Record, bool) {
 			hasT = true
 		case slog.LevelKey:
 			var s string
-			if json.Unmarshal(raw, &s) != nil || lv.UnmarshalText([]byte(s)) != nil {
+			if json.Unmarshal(raw, &s) != nil {
+				return slog.Record{}, false
+			}
+			if s == "CRITICAL" {
+				lv = LevelCritical
+			} else if lv.UnmarshalText([]byte(s)) != nil {
 				return slog.Record{}, false
 			}
 			hasLv = true

@@ -2,13 +2,13 @@
 
 在两个测试 Bot 的会话里发送普通文字或图片，echo 会保留顺序回送。发送 `/media`，media 会上传内置 PNG，发送两张图片组成的相册和一条带按钮的文字；点击按钮后编辑那条文字。
 
-先在仓库根创建数据目录，将下面内容保存为 `<data_dir>/core_config.json`：
+先在仓库根创建新数据目录，将下面内容保存为 `<data_dir>/core_config.json`。如果在更新改名前的示例环境，先停止 Core 和开发组件，再按[开发指南](../../../docs/development.md#开发运行与热部署)重建；配置键 `telegram` 是平台 ID，`package` 是组件 ID：
 
 ```json
 {
   "adapters": {
     "telegram": {
-      "package": "alonabot_adapter_telegram",
+      "package": "alonabot-adapter-telegram",
       "$version": 1,
       "default_instance": "tg_a",
       "instances": {

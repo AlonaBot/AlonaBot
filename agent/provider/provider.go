@@ -1,9 +1,10 @@
-// Package provider 以流式方式调用 Agent 的模型服务（Provider），
+// Package provider 调用 Agent 的模型服务（Provider），
 // 支持 OpenAI Chat Completions（官方与兼容实现）、OpenAI Responses、Anthropic Messages、Gemini GenerateContent 与 Ollama Chat 协议。
 //
 // [Client.Stream] 逐个解析 SSE 事件或 NDJSON 行，按到达顺序把文本增量交给回调；
 // 工具调用的参数完整且是 JSON 对象后才交出。流正常结束时返回停止原因与用量（[Result]）。
-// Chat Completions 以 finish_reason 和无错误结束判定成功，其他协议要求终止事件，请求失败不自动重试。接口与流语义见 spec/PLAN.md T-12 步骤 1。
+// Chat Completions 以 finish_reason 和无错误结束判定成功，其他协议要求终止事件。
+// 另提供模型发现与五种预留模型的单次请求；请求失败不自动重试。
 package provider
 
 import (
@@ -14,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -94,10 +96,11 @@ type Request struct {
 
 // ToolCall 是模型发起的一次工具调用。
 type ToolCall struct {
-	ID        string
-	Name      string
-	Arguments json.RawMessage // 完整的 JSON 对象
-	Replay    json.RawMessage // 协议要求随这次调用原样回传的不透明 JSON，由流解析写入；调用方把整个 ToolCall 原样放回 assistant 消息，不解析。openai、openai-compatible 与 anthropic-messages 不产生也不读取它
+	ID             string
+	Name           string
+	Arguments      json.RawMessage // 完整的 JSON 对象。
+	Replay         json.RawMessage // 由流解析写入，同协议原样回传；调用方保留整个 ToolCall，不解析。
+	replayProtocol Protocol        // Replay 的来源协议。
 }
 
 // ToolResult 是一次工具调用的结果，回传给模型。
@@ -135,7 +138,7 @@ type Result struct {
 	Usage      *Usage     // Provider 未返回用量时为 nil
 }
 
-// Client 向一个 Provider 发起流式请求。
+// Client 向一个 Provider 的指定模型发起请求。
 type Client struct {
 	config     Config
 	httpClient *http.Client
@@ -148,20 +151,17 @@ type Client struct {
 // New 校验 config 并返回 Client。httpClient 不能为 nil，由调用方注入以便复用代理设置。
 // BaseURL 必须是不含用户信息、查询串与片段的 HTTP(S) 地址；OllamaChat 允许空 APIKey。
 func New(config Config, httpClient *http.Client) (*Client, error) {
-	// 1. 校验配置，不在错误中回显可能含凭证的地址。
-	if config.Protocol != OpenAI && config.Protocol != OpenAICompatible && config.Protocol != AnthropicMessages && config.Protocol != OpenAIResponses && config.Protocol != GeminiGenerateContent && config.Protocol != OllamaChat {
+	if !supportedProtocol(config.Protocol) {
 		return nil, fmt.Errorf("unsupported provider protocol %q", config.Protocol)
 	}
-	if config.Model == "" || (config.APIKey == "" && config.Protocol != OllamaChat) {
+	if config.Model == "" || config.APIKey == "" && config.Protocol != OllamaChat {
 		return nil, errors.New("provider model and API key are required")
 	}
-	baseURL, err := url.Parse(config.BaseURL)
-	if err != nil || baseURL.Host == "" || (baseURL.Scheme != "http" && baseURL.Scheme != "https") ||
-		baseURL.User != nil || baseURL.RawQuery != "" || baseURL.Fragment != "" {
-		// 不回显原始地址，避免把其中的凭证写进错误。
-		return nil, errors.New("provider base URL must be HTTP(S) without credentials, query, or fragment")
+	baseURL, err := connectionURL(config)
+	if err != nil {
+		return nil, err
 	}
-	// 2. 只构造当前协议需要的 Service，后续请求复用其显式选项。
+	// 只构造当前协议需要的 Service，后续请求复用其显式选项。
 	c := &Client{config: config, httpClient: httpClient, baseURL: baseURL}
 	switch config.Protocol {
 	case OpenAI, OpenAICompatible, OpenAIResponses:
@@ -189,6 +189,24 @@ func New(config Config, httpClient *http.Client) (*Client, error) {
 		).Messages
 	}
 	return c, nil
+}
+
+func supportedProtocol(protocol Protocol) bool {
+	switch protocol {
+	case OpenAI, OpenAICompatible, AnthropicMessages, OpenAIResponses, GeminiGenerateContent, OllamaChat:
+		return true
+	default:
+		return false
+	}
+}
+
+func connectionURL(config Config) (*url.URL, error) {
+	baseURL, err := url.Parse(config.BaseURL)
+	if err != nil || baseURL.Host == "" || (baseURL.Scheme != "http" && baseURL.Scheme != "https") ||
+		baseURL.User != nil || baseURL.RawQuery != "" || baseURL.Fragment != "" {
+		return nil, errors.New("provider base URL must be HTTP(S) without credentials, query, or fragment")
+	}
+	return baseURL, nil
 }
 
 // Stream 发出 req，并把流中的事件依次交给 emit；流正常结束时返回停止原因与用量。
@@ -272,10 +290,7 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 	// 4. 发出请求；非 2xx 时报告状态码与 Provider 的错误说明（其中回显的 API key 已替换）。
 	response, err := c.httpClient.Do(httpRequest)
 	if err != nil {
-		if c.config.Protocol == GeminiGenerateContent {
-			err = c.geminiRequestError(err)
-		}
-		return Result{}, fmt.Errorf("send provider request: %w", err)
+		return Result{}, fmt.Errorf("send provider request: %w", c.requestError(err, response == nil))
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
@@ -283,14 +298,14 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 			Error json.RawMessage `json:"error"`
 		}
 		// 响应体不是 JSON 时没有可附加的说明，只报告状态码。
-		_ = json.NewDecoder(response.Body).Decode(&errorBody)
+		decodeErr := json.NewDecoder(response.Body).Decode(&errorBody)
 		var description string
 		if ollama {
 			description = c.describeOllamaError(errorBody.Error)
 		} else {
 			description = c.describeError(errorBody.Error)
 		}
-		return Result{}, fmt.Errorf("provider returned HTTP status %d%s", response.StatusCode, description)
+		return Result{}, statusError(response.StatusCode, description, decodeErr)
 	}
 
 	// 5. 逐事件解析响应流。
@@ -300,9 +315,68 @@ func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error
 	return c.streamOllama(response.Body, emit)
 }
 
+// requestFailure 的文本可写日志，原始原因仅供错误链分类。
+type requestFailure struct {
+	message    string
+	cause      error
+	status     int
+	connection bool
+}
+
+func (e *requestFailure) Error() string { return e.message }
+func (e *requestFailure) Unwrap() error { return e.cause }
+
+func statusError(status int, description string, cause error) error {
+	return &requestFailure{message: fmt.Sprintf("provider returned HTTP status %d%s", status, description), cause: cause, status: status}
+}
+
+// Retryable 报告 Provider 请求是否因连接失败、HTTP 408、429 或 5xx 失败。
+// 已交付增量或工具调用的请求是否可重发，由调用者另行判断。
+func Retryable(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var failure *requestFailure
+	if !errors.As(err, &failure) {
+		return false
+	}
+	return failure.connection || failure.status == http.StatusRequestTimeout || failure.status == http.StatusTooManyRequests ||
+		failure.status >= http.StatusInternalServerError && failure.status < 600
+}
+
+func (c *Client) requestError(err error, beforeResponse bool) error {
+	cause := err
+	var request *url.Error
+	connection := false
+	if errors.As(err, &request) {
+		// net/http 的外层错误会回显地址；只用内层说明。
+		err = request.Err
+		var operation *net.OpError
+		var dns *net.DNSError
+		connection = beforeResponse && (errors.As(err, &operation) || errors.As(err, &dns) ||
+			errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF))
+	}
+	message := err.Error()
+	if request != nil && request.URL != "" {
+		message = strings.ReplaceAll(message, request.URL, redactedAPIKey)
+	}
+	if c.config.APIKey != "" {
+		message = strings.ReplaceAll(message, c.config.APIKey, redactedAPIKey)
+	}
+	return &requestFailure{message: message, cause: cause, connection: connection}
+}
+
 // describeError 从 Provider 的错误字段（{"message": ...} 对象或字符串）取出说明，
 // 替换其中回显的 API key 后以 ": 说明" 的形式返回；取不到说明时返回空串。
 func (c *Client) describeError(raw json.RawMessage) string {
+	message := providerErrorMessage(raw)
+	if message == "" {
+		return ""
+	}
+	return ": " + strings.ReplaceAll(message, c.config.APIKey, redactedAPIKey)
+}
+
+func providerErrorMessage(raw json.RawMessage) string {
 	var message string
 	if json.Unmarshal(raw, &message) != nil {
 		var object struct {
@@ -311,10 +385,7 @@ func (c *Client) describeError(raw json.RawMessage) string {
 		_ = json.Unmarshal(raw, &object) // 不是对象时没有说明
 		message = object.Message
 	}
-	if message == "" {
-		return ""
-	}
-	return ": " + strings.ReplaceAll(message, c.config.APIKey, redactedAPIKey)
+	return message
 }
 
 func validateRequest(req Request) error {
@@ -412,7 +483,7 @@ func readSSE(r io.Reader, handle func(event, data string) error) error {
 func (c *Client) sdkError(err error, response *http.Response) error {
 	var openAIError *openai.Error
 	if errors.As(err, &openAIError) {
-		return fmt.Errorf("provider returned HTTP status %d%s", openAIError.StatusCode, c.describeError(json.RawMessage(openAIError.RawJSON())))
+		return statusError(openAIError.StatusCode, c.describeError(json.RawMessage(openAIError.RawJSON())), err)
 	}
 	var anthropicError *anthropic.Error
 	if errors.As(err, &anthropicError) {
@@ -421,9 +492,9 @@ func (c *Client) sdkError(err error, response *http.Response) error {
 		}
 		_ = json.Unmarshal([]byte(anthropicError.RawJSON()), &body)
 		if anthropicError.StatusCode < 200 || anthropicError.StatusCode >= 300 {
-			return fmt.Errorf("provider returned HTTP status %d%s", anthropicError.StatusCode, c.describeError(body.Error))
+			return statusError(anthropicError.StatusCode, c.describeError(body.Error), err)
 		}
-		return fmt.Errorf("Anthropic provider reported an error%s", c.describeError(body.Error))
+		return &requestFailure{message: "Anthropic provider reported an error" + c.describeError(body.Error), cause: err}
 	}
 	if response != nil && (response.StatusCode < 200 || response.StatusCode >= 300) {
 		// SDK 对字符串或非 JSON 错误体可能只返回解码错误，原始响应仍保留状态。
@@ -431,7 +502,7 @@ func (c *Client) sdkError(err error, response *http.Response) error {
 			Error json.RawMessage `json:"error"`
 		}
 		_ = json.NewDecoder(response.Body).Decode(&body)
-		return fmt.Errorf("provider returned HTTP status %d%s", response.StatusCode, c.describeError(body.Error))
+		return statusError(response.StatusCode, c.describeError(body.Error), err)
 	}
 	var streamError *ssestream.StreamError
 	if errors.As(err, &streamError) {
@@ -441,12 +512,9 @@ func (c *Client) sdkError(err error, response *http.Response) error {
 		if decodeErr := json.Unmarshal(streamError.Event.Data, &body); decodeErr != nil {
 			return fmt.Errorf("decode provider error event: %w", decodeErr)
 		}
-		return fmt.Errorf("OpenAI-compatible provider reported an error%s", c.describeError(body.Error))
+		return &requestFailure{message: "OpenAI-compatible provider reported an error" + c.describeError(body.Error), cause: err}
 	}
-	if strings.Contains(err.Error(), c.config.APIKey) {
-		return errors.New(strings.ReplaceAll(err.Error(), c.config.APIKey, redactedAPIKey))
-	}
-	return fmt.Errorf("provider stream: %w", err)
+	return fmt.Errorf("provider stream: %w", c.requestError(err, response == nil))
 }
 
 func (c *Client) errorMessage(message string) string {

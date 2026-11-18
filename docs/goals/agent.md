@@ -300,7 +300,7 @@ type Message struct {
 
 ### goal-59 · T-12.2 Agent 对话与流式显示
 
-状态：已完成（[PR #170](https://github.com/AlonaBot/AlonaBot/pull/170)，合并提交 `eca6310`），证据见 TEST-MATRIX §3.2。合入：`agent.New() *sdk.Plugin`（`alonabot_agent_official`，薄入口 `agent/cmd/alonabot-agent`）与命令 /ask、/agent on|off、/persona、/provider、/reset；受管 SQLite 的 `chat_settings`（Provider、人格、自由对话开关与 reset 代次）；`InvocationContext.command_consumed = 6`、`sdk.NotCommand() Rule` 与 `(*sdk.Context).CommandConsumed() bool`（D-141，待维护者确认）；`c.Stream` 无编辑时按实例 text_limit 换条。
+状态：已完成（[PR #170](https://github.com/AlonaBot/AlonaBot/pull/170)，合并提交 `eca6310`），证据见 TEST-MATRIX §3.2。合入：`agent.New() *sdk.Plugin`（`alonabot-agent-official`，薄入口 `agent/cmd/alonabot-agent`）与命令 /ask、/agent on|off、/persona、/provider、/reset；受管 SQLite 的 `chat_settings`（Provider、人格、自由对话开关与 reset 代次）；`InvocationContext.command_consumed = 6`、`sdk.NotCommand() Rule` 与 `(*sdk.Context).CommandConsumed() bool`（D-141，待维护者确认）；`c.Stream` 无编辑时按实例 text_limit 换条。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-59（切片 T-12.2：Agent 对话与流式显示）。goal 目录 goal-59，分支 goal-59，worktree .worktrees/goal-59，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -356,7 +356,7 @@ OnConfigLoad 之后的校验在 OnStart 中完成：providers 的 name 唯一、
 
 状态：已完成（[PR #175](https://github.com/AlonaBot/AlonaBot/pull/175)，合并提交 `ac6083a`），证据见 TEST-MATRIX §3.2。合入：公开包 `sdk/llm`（`Request`、`Response`（用量为 `*int`）、`Message`、`AgentTarget = "@agent"`、`ServiceName = "llm.generate"`、`GenerateService`、`Generate(ctx, req)`、`Ask(ctx, text)`）；Broker 与 options.Service 的 Agent 定位注入，根包 `agent_target.go`；官方 Agent 的 llm.generate（按 llm_service_allowed_plugins 授权）与 llm.providers 选项来源。以下为派发时的语句。
 
-- `agent/agent.go`：`func New() *sdk.Plugin`；组件 ID 为 `alonabot_agent_official`。配置通过 `readConfiguration(values config.Values) (configuration, error)` 读取，`configuration` 与 `configuredProvider{name string; client *provider.Client; maxTokens int}` 均为私有类型；当前没有公开 `Config`，也没有保存供服务响应使用的 model、protocol 元数据。`agent/config_schema.json` 已有六个 Provider 模板及 default_provider。
+- `agent/agent.go`：`func New() *sdk.Plugin`；组件 ID 为 `alonabot-agent-official`。配置通过 `readConfiguration(values config.Values) (configuration, error)` 读取，`configuration` 与 `configuredProvider{name string; client *provider.Client; maxTokens int}` 均为私有类型；当前没有公开 `Config`，也没有保存供服务响应使用的 model、protocol 元数据。`agent/config_schema.json` 已有六个 Provider 模板及 default_provider。
 - `sdk/services.go`：`func JSON[In, Out any](target string) Service[In, Out]`；`func Serve[In, Out any](owner Registrar, declaration Service[In, Out]) *ServiceBuilder[In, Out]`；`func (s *ServiceBuilder[In, Out]) Access(a Access, allowlist ...string) *ServiceBuilder[In, Out]`；`func (s *ServiceBuilder[In, Out]) Handle(h func(*Context, In) (Out, error))`；`func (s Service[In, Out]) Call(ctx context.Context, in In) (Out, error)`；`func (c *Context) Caller() string`。`AccessPublic` 为现有访问规则。类型的 schema_id 是 `<Go import path>.<type name>`，缺省版本为 1；Schema 原文来自生成器。旧 JSONService、CallJSON、WithAccess 和 Services Hook 的写法已过时。
 - `sdk/options.go`：`func ServeOptions(r Registrar, serviceName string, fn func(ctx context.Context, q OptionsQuery) (OptionsPage, error))`。OptionsQuery 含 Search、Filter、Locale、Limit、Values；OptionsPage 含 Options、More；Option 含 Value、Label、Description；访问规则固定为 private。`contracts/proto/alonabot/v1/route.proto` 已有 `ServiceSpec.options_source = 6`。
 - `internal/core/broker/broker.go`：`func New(opt Options) *Broker`；`func (b *Broker) Call(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response`；`func (b *Broker) CallSession(ctx context.Context, c, target router.Caller, in *wire.Inbound) wire.Response`。Options 已含 Router、RequestTimeout、MaxDepth、Metrics；定位处先用 validate.PluginID 校验，当前会拒绝 `@agent`。
@@ -709,8 +709,8 @@ type memoryOperation struct {
 }
 type memoryRequest struct { Operations []memoryOperation `json:"operations"` }
 type memoryResponse struct{}
-// 注册目标与调用名均为 alonabot_agent_official/memory：
-// sdk.Serve(p, sdk.JSON[memoryRequest, memoryResponse]("alonabot_agent_official/memory")).
+// 注册目标与调用名均为 alonabot-agent-official/memory：
+// sdk.Serve(p, sdk.JSON[memoryRequest, memoryResponse]("alonabot-agent-official/memory")).
 //     Access(sdk.AccessPrivate).Tool(英文说明, sdk.ToolAllow).Handle(私有处理函数)
 // AccessPrivate 为默认规则：Core 与本组件；普通第三方插件无法直接访问。
 // 成功响应为 {}；失败返回 sdk/errcode 中相应的公开错误。
@@ -851,7 +851,7 @@ agent/plugin.yaml 已具备工程身份，沿用现值；os、arch、entrypoint�
    alonabot pack --dir agent --asset-url <绝对 https URL> --out <临时打包目录> [--key <私钥文件>] [--goos <os>] [--goarch <arch>] [--tags <tags>]
    --dir 缺省为当前目录；build/pack 的 --out 缺省为工程 bin/；--tags 为逗号分隔的列表。test 只有 --dir 这个组件参数，在临时离线会话加载、注册、激活、停止组件。
    --asset-url 必填且 scheme 为 https；本地安装直接读本次归档，无须访问这个发布 URL。--key 为包含标准 base64 编码的 64 字节 Ed25519 私钥的文件路径。
-   当前平台产物：alonabot_agent_official-0.1.0-<GOOS>-<GOARCH>.tar.gz、归档外 release.json；指定 --key 时另有 release.json.sig 与 release.pub。归档含包内 plugin.yaml、component（Windows 为 component.exe）、build-info、规范 config_schema.json、i18n 及已声明图标。
+   当前平台产物：alonabot-agent-official-0.1.0-<GOOS>-<GOARCH>.tar.gz、归档外 release.json；指定 --key 时另有 release.json.sig 与 release.pub。归档含包内 plugin.yaml、component（Windows 为 component.exe）、build-info、规范 config_schema.json、i18n 及已声明图标。
    internal/pluginkit 的现有签名：
    func Pack(ctx context.Context, options generate.Options, assetURL, keyFile, outDir string) (archive string, err error)
    sdk/generate 包内：type Options struct { Dir string; GOOS, GOARCH string; Tags []string; Resources map[string][]byte; CGOEnabled string; RequireAdapterConstructor bool }（正式构建由 pluginkit 设 CGOEnabled="0" 与资源快照）
@@ -860,7 +860,7 @@ agent/plugin.yaml 已具备工程身份，沿用现值；os、arch、entrypoint�
 2. 安装、启用与认证：
    alonabot run --data-dir <临时 data_dir> --listen 127.0.0.1:0 [<开发组件目录>...]
    alonabot install <归档绝对路径> --yes --admin-url <管理 URL> --token-file <token 文件>
-   alonabot enable alonabot_agent_official --admin-url <管理 URL> --token-file <token 文件>
+   alonabot enable alonabot-agent-official --admin-url <管理 URL> --token-file <token 文件>
    alonabot list --admin-url <管理 URL> --token-file <token 文件>
    install 也接受 --archive；--release 显式指定 release.json，缺省读取归档同目录；可选 --signature、--public-key，缺省读取 release 文件同目录的 release.json.sig、release.pub。管理 CLI 也可从 ALONABOT_ADMIN_TOKEN 读取 token，--data-dir 用于发现 base_url。
    POST /api/v1/packages/install：Authorization: Bearer <token>，JSON 使用 manage.InstallRequest：
@@ -871,9 +871,9 @@ agent/plugin.yaml 已具备工程身份，沿用现值；os、arch、entrypoint�
        Replace, Confirm bool
    }
    Archive 为 Core 所在本机的归档路径；ReleaseJSON、Signature、PublicKey 为文件内容。主路径使用本地包，Source 留空、Confirm 为 true；JSON 可按上述 Go 字段名编码。
-   POST /api/v1/packages/enable：{"id":"alonabot_agent_official"}。
+   POST /api/v1/packages/enable：{"id":"alonabot-agent-official"}。
    GET /api/v1/packages：核对 Package 的 Role="agent"、Source="github.com/AlonaBot/AlonaBot"、Version、Enabled、Active、State；这些字段按 Go 字段名编码，首次 install 后为 Installed，enable 后为 Activated。
-   Agent 配置在首次 enable 前写到 <data_dir>/plugins/alonabot_agent_official/config.json；配置沿用既有文件入口。
+   Agent 配置在首次 enable 前写到 <data_dir>/plugins/alonabot-agent-official/config.json；配置沿用既有文件入口。
    Core Admin 可经 alonabot admin add telegram:88 写入；后台发信许可沿用 allowed_adapter_instances 缺省允许全部实例（D-83）。
 
 3. Agent 已有配置与命令：
@@ -883,7 +883,7 @@ agent/plugin.yaml 已具备工程身份，沿用现值；os、arch、entrypoint�
    default_provider="synthetic"；personas 为 {name,prompt} 列表，default_persona 引用其中名字；history_entries 缺省 20；skills_dir 缺省空串，测试指定临时技能目录的绝对路径；llm_service_allowed_plugins 缺省 ["*"]。
    mcp_servers 为列表，stdio 条目 {name,transport:"stdio",command,args,env:[{name,value}]}；另一传输名为 "streamable-http"，字段为 url、headers:[{name,value}]。
    命令：/ask <text>（message.Chain 尾参）、/agent on、/agent off、/provider [name]、/persona [name]、/reset。agent on/off、provider、persona 需要 sdk.Admin；ask、reset 需要 sdk.User；自由对话要求已开启且满足 ToMe 与 NotCommand。
-   Core 工具原名 alonabot_agent_official/memory，AccessPrivate、缺省 allow：
+   Core 工具原名 alonabot-agent-official/memory，AccessPrivate、缺省 allow：
    {"operations":[{"op":"add","target":"memory","text":"package note"}]} -> {}
    target 也可为 user；patch/remove 用 old_text。会话键为 string(c.Session())+"@"+c.Instance()；可信范围由 Core/SDK 上下文提供。
    Agent 内工具 load_skill：{"name":"package-skill"} -> 技能正文。
@@ -1160,7 +1160,7 @@ func Retryable(err error) bool
 
 ### goal-167 · T-12.20 官方 Agent 的插件页面
 
-状态：等待前置（T-04.17、T-12.19）。2026-11-17 按 D-170 新增。目标、依据与要点由 PLAN T-12 步骤 14 与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：等待前置（T-12.19）。T-04.17（PR #218，`6d81be3`）已合并。2026-11-17 按 D-170 新增。目标、依据与要点由 PLAN T-12 步骤 14 与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-167（切片 T-12.20：官方 Agent 的插件页面）。goal 目录 goal-167，分支 goal-167，worktree .worktrees/goal-167，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。

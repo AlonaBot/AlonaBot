@@ -1,6 +1,6 @@
 // Package i18n 解析组件的多语言文案目录，并按候选语言格式化命名占位符。
 //
-// [Parse] 检查 i18n/<locale>.json 的 messages、metadata、config 与 commands 结构；
+// [Parse] 检查 i18n/<locale>.json 的 messages、metadata、config、commands 与 pages 结构；
 // [Catalog] 保留已编译的文案，可供 Core 与 SDK 并发只读使用。
 // 语言选择与文件格式见 spec/CONTRACTS-v0.1.md §5.3、§5.4。
 package i18n
@@ -21,6 +21,7 @@ const catalogExtension = ".json"
 type Catalog struct {
 	messages map[string]map[string][]fragment
 	commands map[string]map[string]string
+	pages    map[string]map[string]string
 	locales  []string // 按字典序排列，使主语言回落结果确定。
 }
 
@@ -37,7 +38,7 @@ func Parse(files map[string][]byte) (*Catalog, []Problem) {
 	if len(files) == 0 {
 		return nil, nil
 	}
-	catalog := &Catalog{messages: make(map[string]map[string][]fragment), commands: make(map[string]map[string]string)}
+	catalog := &Catalog{messages: make(map[string]map[string][]fragment), commands: make(map[string]map[string]string), pages: make(map[string]map[string]string)}
 	var problems []Problem
 	needsSource := false
 	// 1. 编译单文件文案，结构问题保留文件名与 JSON 路径。
@@ -78,10 +79,12 @@ func Parse(files map[string][]byte) (*Catalog, []Problem) {
 		}
 		messages := make(map[string][]fragment)
 		for _, key := range slices.Sorted(maps.Keys(fields)) {
-			if key != "commands" {
+			if key != "commands" && key != "pages" {
 				needsSource = true
 			}
 			switch key {
+			case "pages":
+				catalog.pages[locale] = parsePages(fields[key], issue)
 			case "commands":
 				catalog.commands[locale] = parseCommands(fields[key], issue)
 				if locale == sourceLocale && len(catalog.commands[locale]) != 0 {

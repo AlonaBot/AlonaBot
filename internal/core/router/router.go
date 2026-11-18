@@ -274,6 +274,11 @@ func (r *Router) candidates(ev *pb.Event) []candidate {
 
 func (r *Router) dispatch(event *trustedEvent) {
 	ev := event.retained
+	if ev.GetEventType() == commandInvokedEvent {
+		// 命令通知保留原消息的 Actor，直接交给订阅的事件路由。
+		r.dispatchEvents(event, event.rebuild(), r.candidates(ev), false)
+		return
+	}
 	var candidates []candidate
 	buttonClick := ev.GetEventType() == "button.clicked"
 	if buttonClick {
@@ -342,6 +347,10 @@ func (r *Router) dispatch(event *trustedEvent) {
 	if !buttonClick {
 		candidates = r.candidates(ev)
 	}
+	r.dispatchEvents(event, ev, candidates, buttonClick)
+}
+
+func (r *Router) dispatchEvents(event *trustedEvent, ev *pb.Event, candidates []candidate, buttonClick bool) {
 	for _, candidate := range candidates {
 		if r.ctx.Err() != nil {
 			return
@@ -350,7 +359,7 @@ func (r *Router) dispatch(event *trustedEvent) {
 			continue
 		}
 		if buttonClick {
-			if (r.policy == nil && !candidate.route.GetDefaultEnabled()) || !r.commandPermitted(candidate, ev) {
+			if (r.policy == nil && !candidate.route.GetDefaultEnabled()) || r.commandPolicyFailure(candidate, ev) != nil {
 				continue
 			}
 		} else if !r.permitted(candidate, ev) {

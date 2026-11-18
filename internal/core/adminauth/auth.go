@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
@@ -29,8 +30,9 @@ const (
 )
 
 // Auth 校验管理与插件路由请求的凭证、持久会话与浏览器 CSRF。
-// 构造后只读取配置，数据库操作由 state.Store 串行化。
+// 构造后只读取配置；credentials 串行化令牌校验、会话创建与令牌替换。
 type Auth struct {
+	credentials    sync.Mutex
 	store          *state.Store
 	now            func() time.Time
 	baseURL        url.URL
@@ -45,11 +47,12 @@ func New(st *state.Store, now func() time.Time, adminBaseURL *url.URL, dataDir s
 	return &Auth{store: st, now: now, baseURL: *adminBaseURL, secure: adminBaseURL.Scheme == "https", firstTokenPath: filepath.Join(dataDir, FirstTokenFile)}
 }
 
-// Routes 注册受控主机上的登录、当前会话与需认证的登出接口。
+// Routes 注册受控主机上的登录、当前会话、登出与令牌更换接口。
 func (a *Auth) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auth/login", a.login)
 	mux.HandleFunc("GET /api/auth/session", a.currentSession)
 	mux.Handle("POST /api/auth/logout", a.Require(http.HandlerFunc(a.logout)))
+	mux.Handle("POST /api/auth/token/rotate", a.Require(http.HandlerFunc(a.rotateToken)))
 }
 
 // Require 允许当前 Bearer 凭证或有效管理 Cookie；Cookie 的变更请求须通过 CSRF 与 Origin 校验。
@@ -154,12 +157,6 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "expected application/json", http.StatusUnsupportedMediaType)
 		return
 	}
-	credential, err := a.credential(r.Context())
-	if err != nil {
-		a.loginFailed(r)
-		a.respondError(w, err)
-		return
-	}
 	var input struct {
 		Token string `json:"token"`
 	}
@@ -173,6 +170,15 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 	if err := decoder.Decode(&extra); err != io.EOF {
 		a.loginFailed(r)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	// 请求体读完才持锁，避免慢请求占住凭证轮换；旧令牌的会话创建与轮换互斥。
+	a.credentials.Lock()
+	defer a.credentials.Unlock()
+	credential, err := a.credential(r.Context())
+	if err != nil {
+		a.loginFailed(r)
+		a.respondError(w, err)
 		return
 	}
 	if !matchesToken(input.Token, credential.TokenSHA256) {

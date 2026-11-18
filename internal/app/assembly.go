@@ -111,7 +111,7 @@ func validateComponents(components []Component, installs []state.Install) error 
 			}
 			m = parsed.Manifest
 			warnings = parsed.Warnings
-			if m.Role == string(state.RoleWebUI) {
+			if m.Role == string(state.RoleWebUI) && m.Entrypoint == "" {
 				return fmt.Errorf("component %s has no executable role", m.ID)
 			}
 			entry.role, entry.manifest = state.Role(m.Role), m
@@ -284,6 +284,7 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 		PreEvent: func(ctx context.Context, ev *pb.Event) (*pb.EventPayload, bool, error) {
 			return hooks.PreEvent(ctx, ev)
 		}})
+	a.router.RegisterCommandList(a.mux)
 	hooks = hook.New(a.router, hook.Options{Prepare: a.media.PrepareIncoming, CheckEvent: a.checkAdapterEvent})
 	messages = message.New(a.adapters, p, a.media.LeaseForSend, a.buttons.Issue, v.RequestTimeout, hooks)
 	p.SetCommandsChanged(a.router.CommandsChanged)
@@ -552,7 +553,7 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) (err error) 
 	a.bus.Attach(plugin)
 	if r.process == nil {
 		if r.instance.HTTPListener != nil {
-			a.http.Bind(r.id, r.instance.GenerationID, r.instance.HTTPListener, r.instance.HTTPProxyToken, r.instance.Routes, r.install.Role == state.RoleAdapter)
+			a.http.Bind(r.id, r.instance.GenerationID, r.instance.HTTPListener, r.instance.HTTPProxyToken, r.instance.Routes, r.install.Role)
 		}
 		if err := a.scheduler.Attach(ctx, plugin, time.Now()); err != nil {
 			a.detach(r)
@@ -668,6 +669,10 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 		}
 	}
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
+		return err
+	}
+	boot.PluginDataDir, err = preparePluginDataDir(dir, id)
+	if err != nil {
 		return err
 	}
 	// 3. 独立进程与同进程共用开发配置、数据库和固定代次。
@@ -978,7 +983,8 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 		return nil, err
 	}
 	running.process, running.instance = process, process.Instance
-	if (kind == journal.KindUpdate || kind == journal.KindRollback) && (!record.WasEnabled || !record.WasRunning) {
+	// 无旧 Active 的静态 WebUI 转进程时，原启用状态决定是否装配业务入口。
+	if (kind == journal.KindUpdate || kind == journal.KindRollback) && (!record.WasEnabled || !record.WasRunning && record.ExpectedOld != "") {
 		// 提交只切换权威代次；先停止候选，之后显式 enable 才建立业务 Session。
 		if stopErr := c.stopComponent(running, time.Now(), host.NewStopTiming(c.values), pb.StopReason_STOP_REASON_DISABLE); stopErr != nil {
 			return running, errors.Join(err, stopErr)
@@ -994,7 +1000,7 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 		failure := errors.Join(err, cause)
 		running.instance.Degrade(failure)
 		a.detach(running)
-		slog.Error("committed candidate assembly failed", "plugin_id", id, "op_id", r.OpID, "generation_id", r.Generation, "kind", kind, "error", failure)
+		slog.Log(ctx, logging.LevelCritical, "committed candidate assembly failed", "plugin_id", id, "op_id", r.OpID, "generation_id", r.Generation, "kind", kind, "error", failure)
 		return running, errors.Join(failure, running.instance.Session.Close(), c.recordRuntime(context.WithoutCancel(ctx), running.install, state.RuntimeFailed, "candidate assembly failed"))
 	}
 	// 3. ACTIVATED 成功后发布业务入口，再启动 Adapter 实例。
@@ -1182,6 +1188,11 @@ func (c *Core) startInstances(ctx context.Context, running *runningComponent, ra
 	}
 	for _, problem := range diagnostics {
 		slog.Warn("adapter instance configuration failed", "plugin_id", running.id, "instance_id", problem.InstanceID, "path", problem.Path, "reason", problem.Reason)
+		for id := range c.assembly.settings.Settings().Adapters[running.install.AdapterID].Instances {
+			if problem.InstanceID == "" || problem.InstanceID == id {
+				running.remote.RecordFailure(id, problem.Path+": "+problem.Reason)
+			}
+		}
 	}
 	c.assembly.adapters.SetDefaults(c.assembly.settings.Settings().DefaultInstances())
 	for id, configuration := range instances {

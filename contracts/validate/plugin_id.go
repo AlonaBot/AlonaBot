@@ -7,16 +7,16 @@ import (
 	"strings"
 )
 
-// 插件 ID 规则（CONTRACTS §7.1）。
+// 插件 ID 规则（CONTRACTS §9.1）。
 const (
 	// MaxPluginIDLen 限定插件 ID 的最大字节数。
 	MaxPluginIDLen = 64
 	// MarketPrefix 标识市场插件 ID 的固定前缀。
-	MarketPrefix = "alonabot_plugin_"
+	MarketPrefix = "alonabot-plugin-"
 )
 
 var (
-	marketID = regexp.MustCompile(`^alonabot_plugin_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`)
+	marketID = regexp.MustCompile(`^alonabot-plugin-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
 	localID  = regexp.MustCompile(fmt.Sprintf(`^[a-z][a-z0-9_-]{0,%d}$`, MaxPluginIDLen-1))
 )
 

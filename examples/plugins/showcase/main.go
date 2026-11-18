@@ -16,6 +16,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
+	"github.com/AlonaBot/AlonaBot/sdk/page"
 	"github.com/AlonaBot/AlonaBot/sdk/task"
 )
 
@@ -59,9 +60,138 @@ func New() *sdk.Plugin {
 	g.Command("remind").Handle(demo.CreateReminder)
 	g.Command("cancel").Handle(demo.CancelReminder)
 	p.Route(http.MethodGet, "/status").HandleFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
+	p.Route(http.MethodGet, "/kit.css").Handle(page.Handler())
+	p.Route(http.MethodGet, "/kit.js").Handle(page.Handler())
+	p.Route(http.MethodGet, "/page/kit.css").Handle(page.Handler())
+	p.Route(http.MethodGet, "/page/kit.js").Handle(page.Handler())
+	p.Route(http.MethodGet, "/page").HandleFunc(demo.Page)
 	p.Every("tick", time.Minute).Handle(func(*sdk.Context) error { return nil })
 	return p
 }
+
+// Page 提供使用 sdk/page 套件的示例插件页面。
+func (*Demo) Page(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(showcaseHTML))
+}
+
+const showcaseHTML = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Showcase Page</title>
+  <link rel="stylesheet" href="kit.css">
+  <script src="kit.js"></script>
+</head>
+<body>
+  <div class="ab-card">
+    <div class="ab-card-header">AlonaBot Showcase 插件页面</div>
+    <div class="ab-card-body">
+      <p>状态：<span class="ab-badge ab-badge-success" id="theme-badge">theme: light</span> <span class="ab-badge" id="locale-badge">locale: en-US</span></p>
+      <p id="greeting"></p>
+
+      <h3>控件样式示例</h3>
+      <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+        <button class="ab-btn ab-btn-primary" id="btn-request">请求 /status</button>
+        <button class="ab-btn" id="btn-t">测试文案 t()</button>
+        <button class="ab-btn ab-btn-danger">危险按钮</button>
+        <button class="ab-btn ab-btn-soft">柔和按钮</button>
+        <button class="ab-btn" disabled>禁用按钮</button>
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label for="demo-input">输入框：</label>
+        <input type="text" id="demo-input" class="ab-input" placeholder="请输入内容..." value="测试输入">
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label for="demo-select">选择框：</label>
+        <select id="demo-select" class="ab-select">
+          <option value="1">选项一</option>
+          <option value="2">选项二</option>
+          <option value="3">选项三</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <table class="ab-table">
+          <thead>
+            <tr><th>项目</th><th>状态</th><th>备注</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>路由服务</td><td><span class="ab-badge ab-badge-success">正常</span></td><td>/status 响应正常</td></tr>
+            <tr><td>桥通信</td><td><span class="ab-badge ab-badge-warning" id="bridge-status">等待</span></td><td>postMessage 通道</td></tr>
+            <tr><td>快捷键</td><td><span class="ab-badge ab-badge-critical">mod+k</span></td><td>捕获 ⌘K/Ctrl+K</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="ab-card" style="margin-bottom: 0;">
+        <div class="ab-card-header">运行日志与桥反馈</div>
+        <pre id="log" style="margin: 0; white-space: pre-wrap; word-break: break-all;">就绪</pre>
+      </div>
+    </div>
+    <div class="ab-card-footer">
+      提示：在页面内按 ⌘K 或 Ctrl+K 将触发快捷键转发给 WebUI。
+    </div>
+  </div>
+
+  <script>
+    var logEl = document.getElementById('log');
+    function log(msg) {
+      if (logEl) {
+        logEl.textContent = new Date().toLocaleTimeString() + ' ' + msg + '\n' + logEl.textContent;
+      }
+    }
+
+    async function renderGreeting() {
+      try {
+        var text = await window.AlonaBot.t('hello_message', { name: 'Alona' });
+        document.getElementById('greeting').textContent = text;
+        log('文案 t(): ' + text);
+      } catch (err) {
+        log('文案请求失败: ' + err.message);
+      }
+    }
+
+    if (window.AlonaBot) {
+      window.AlonaBot.onTheme(function(theme, tokens) {
+        var badge = document.getElementById('theme-badge');
+        if (badge) badge.textContent = 'theme: ' + theme;
+        log('收到主题变更: ' + theme);
+      });
+
+      window.AlonaBot.onLocale(async function(locale) {
+        var badge = document.getElementById('locale-badge');
+        if (badge) badge.textContent = 'locale: ' + locale;
+        log('收到语言变更: ' + locale);
+        await renderGreeting();
+      });
+
+      var bridgeStatus = document.getElementById('bridge-status');
+      if (bridgeStatus) {
+        bridgeStatus.textContent = window.parent !== window ? 'iframe 桥' : '独立模式';
+      }
+
+      var btnRequest = document.getElementById('btn-request');
+      if (btnRequest) {
+        btnRequest.addEventListener('click', function() {
+          window.AlonaBot.request('GET', '/status').then(function(res) {
+            log('请求 /status 成功: status=' + res.status + ' body=' + res.body);
+          }).catch(function(err) {
+            log('请求 /status 失败: ' + err.message);
+          });
+        });
+      }
+
+      var btnT = document.getElementById('btn-t');
+      if (btnT) {
+        btnT.addEventListener('click', renderGreeting);
+      }
+    }
+  </script>
+</body>
+</html>`
 
 // CreateReminder 在当前用户与会话内创建提醒，回复用户输入的 key。
 func (p *Demo) CreateReminder(c *sdk.Context, key string, seconds int64, text string) (message.Content, error) {

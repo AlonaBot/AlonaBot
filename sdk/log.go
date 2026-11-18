@@ -15,6 +15,9 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
+// LevelCritical 标记数据损坏或组件无法继续运行、需要立即处理的严重故障。
+const LevelCritical = slog.Level(12)
+
 // levelOff 高于任何记录的级别：Core 下发 OFF 时本进程不输出任何记录。
 const levelOff = slog.Level(math.MaxInt)
 
@@ -28,7 +31,15 @@ var logLevel slog.LevelVar
 // 接收该信号后这些写入只返回 EPIPE；不用 signal.Ignore，因为忽略状态会被插件启动的子进程继承。
 func setupLogging() {
 	signal.Notify(make(chan os.Signal, 1), syscall.SIGPIPE)
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{AddSource: true, Level: &logLevel})))
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{AddSource: true, Level: &logLevel, ReplaceAttr: logLevelAttr})))
+}
+
+// logLevelAttr 保留 slog 的标准字段格式，仅替换自定义级别的文本。
+func logLevelAttr(groups []string, a slog.Attr) slog.Attr {
+	if len(groups) == 0 && a.Key == slog.LevelKey && a.Value.Any() == LevelCritical {
+		return slog.String(slog.LevelKey, "CRITICAL")
+	}
+	return a
 }
 
 // setLogLevel 按 Core 下发的级别在进程内过滤；UNSPECIFIED 按 INFO 处理（WIRE-FORMAT §3.2）。
@@ -40,6 +51,8 @@ func setLogLevel(level *slog.LevelVar, lv pb.LogLevel) {
 		level.Set(slog.LevelWarn)
 	case pb.LogLevel_LOG_LEVEL_ERROR:
 		level.Set(slog.LevelError)
+	case pb.LogLevel_LOG_LEVEL_CRITICAL:
+		level.Set(LevelCritical)
 	case pb.LogLevel_LOG_LEVEL_OFF:
 		level.Set(levelOff)
 	default:

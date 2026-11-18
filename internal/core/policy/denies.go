@@ -67,7 +67,8 @@ func checkDeny(kind DenyKind, adapterID, subjectID string) error {
 	if kind != DenyUser && kind != DenyChat {
 		return invalidArgument("unknown deny kind")
 	}
-	if _, err := validate.PluginID(adapterID); err != nil || strings.HasPrefix(adapterID, validate.MarketPrefix) {
+	// 平台 ID 只用本地规则，替换仅用于校验。
+	if _, err := validate.PluginID(strings.Replace(adapterID, "-", "_", 1)); err != nil {
 		return invalidArgument("invalid adapter ID: " + adapterID)
 	}
 	if subjectID == "" {

@@ -36,6 +36,9 @@ func EventFromProto(e *pb.Event) *message.Event {
 		out.Payload = &message.MemberPayload{MemberExternalUserID: p.MemberLeft.MemberExternalUserId}
 	case *pb.EventPayload_ReactionAdded:
 		out.Payload = &message.ReactionAddedPayload{PlatformMessageID: p.ReactionAdded.PlatformMessageId, Reaction: p.ReactionAdded.Reaction}
+	case *pb.EventPayload_CommandInvoked:
+		v := p.CommandInvoked
+		out.Payload = &message.CommandInvokedPayload{PluginID: v.PluginId, RouteID: v.RouteId, CommandName: v.CommandName, Result: v.Result, DurationMS: v.DurationMs}
 	case *pb.EventPayload_Scheduled:
 		out.Payload = &message.ScheduledPayload{JobID: p.Scheduled.JobId, RunID: p.Scheduled.RunId, ScheduledAt: timestamp(p.Scheduled.ScheduledAtUnixMs), TaskKey: p.Scheduled.TaskKey}
 	case *pb.EventPayload_BotOnline:
@@ -106,6 +109,8 @@ func EventToProto(e *message.Event) (*pb.Event, error) {
 		}
 	case *message.ReactionAddedPayload:
 		payload.Kind = &pb.EventPayload_ReactionAdded{ReactionAdded: &pb.ReactionAddedPayload{PlatformMessageId: p.PlatformMessageID, Reaction: p.Reaction}}
+	case *message.CommandInvokedPayload:
+		payload.Kind = &pb.EventPayload_CommandInvoked{CommandInvoked: &pb.CommandInvokedPayload{PluginId: p.PluginID, RouteId: p.RouteID, CommandName: p.CommandName, Result: p.Result, DurationMs: p.DurationMS}}
 	case *message.ScheduledPayload:
 		payload.Kind = &pb.EventPayload_Scheduled{Scheduled: &pb.ScheduledPayload{JobId: p.JobID, RunId: p.RunID, ScheduledAtUnixMs: milliseconds(p.ScheduledAt), TaskKey: p.TaskKey}}
 	case *message.BotOnlinePayload:
