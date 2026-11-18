@@ -1,13 +1,17 @@
 package settings
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 )
 
 // BackupDir 指定迁移写回前保存 core_config.json 原文件的目录（CONTRACTS §5.5）。
@@ -93,6 +97,7 @@ func migrateSettings(name string, document *Document) error {
 		return err
 	}
 	if err := syncDirectory(filepath.Dir(name)); err != nil {
+		slog.Log(context.Background(), logging.LevelCritical, "settings directory sync failed", "file", name, "error", err)
 		return fmt.Errorf("settings saved but directory sync failed: %w", err)
 	}
 	return nil

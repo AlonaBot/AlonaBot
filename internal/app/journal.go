@@ -18,7 +18,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
 )
 
-// installedSpec 在停机前只读构造完整启动输入；调用方决定准备或直接启动。
+// installedSpec 在停机前构造完整启动输入并准备数据目录；调用方决定准备或直接启动。
 // 返回的运行上下文与 Handler/Detach 共用 Caller，启动后由调用方附加 Instance。
 func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir string, boot *pb.Bootstrap) (supervisor.Spec, *runningComponent, error) {
 	raw, err := os.ReadFile(filepath.Join(packageDir, "plugin.yaml"))
@@ -73,6 +73,10 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	}
 	if (in.Role == state.RolePlugin || in.Role == state.RoleAgent) && (m.PrepareEffects == manifest.EffectsManagedDB || m.MigrationMode == manifest.MigrationSelf || m.MigrationMode == manifest.MigrationVersioned) {
 		database.Backend = pb.DatabaseBackend_DATABASE_BACKEND_SQLITE
+	}
+	boot.PluginDataDir, err = preparePluginDataDir(c.dir, in.PluginID)
+	if err != nil {
+		return supervisor.Spec{}, nil, err
 	}
 	running := &runningComponent{id: in.PluginID, install: in, caller: router.NewCaller(in.PluginID, boot.GenerationId), schemas: schemas}
 	spec := supervisor.Spec{Role: in.Role, AdapterID: in.AdapterID, PluginID: in.PluginID, PluginDir: filepath.Join(c.dir, "plugins", in.PluginID),

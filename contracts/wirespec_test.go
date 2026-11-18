@@ -225,7 +225,7 @@ func TestEnumValues(t *testing.T) {
 		{pb.ParamType(0).Descriptor(), "PARAM_TYPE_", []string{"UNSPECIFIED", "STRING", "INT", "FLOAT", "BOOL", "USER", "IMAGE", "MESSAGE"}},
 		{pb.CommandMatch(0).Descriptor(), "COMMAND_MATCH_", []string{"UNSPECIFIED", "PATH", "REGEX", "RAW", "KEYWORD", "STARTSWITH", "ENDSWITH", "FULLMATCH"}},
 		// WIRE §3.2 的 log_level。
-		{pb.LogLevel(0).Descriptor(), "LOG_LEVEL_", []string{"UNSPECIFIED", "DEBUG", "INFO", "WARN", "ERROR", "OFF"}},
+		{pb.LogLevel(0).Descriptor(), "LOG_LEVEL_", []string{"UNSPECIFIED", "DEBUG", "INFO", "WARN", "ERROR", "OFF", "CRITICAL"}},
 		// CONTRACTS §13.1、WIRE §3.5 的工具策略。
 		{pb.ToolPolicy(0).Descriptor(), "TOOL_POLICY_", []string{"UNSPECIFIED", "ALLOW", "CONFIRM", "DENY"}},
 		{pb.ToolEffect(0).Descriptor(), "TOOL_EFFECT_", []string{"UNSPECIFIED", "READ_ONLY", "WRITE", "DESTRUCTIVE"}},
@@ -606,6 +606,14 @@ func TestBootstrapDefaultLocaleFieldNumber(t *testing.T) {
 	}
 }
 
+// TestBootstrapPluginDataDirFieldNumber 固定插件数据目录字段的线上编号与类型。
+func TestBootstrapPluginDataDirFieldNumber(t *testing.T) {
+	field := (&pb.Bootstrap{}).ProtoReflect().Descriptor().Fields().ByNumber(13)
+	if field == nil || field.Name() != "plugin_data_dir" || field.Kind() != protoreflect.StringKind {
+		t.Errorf("Bootstrap field 13 should be string plugin_data_dir, got %v", field)
+	}
+}
+
 // TestToolFieldNumbers 固定 Service 工具描述与目录载荷的编号、类型和重复性。
 func TestToolFieldNumbers(t *testing.T) {
 	for _, c := range []struct {
@@ -802,5 +810,48 @@ func TestTaskFieldNumbers(t *testing.T) {
 	f := (&pb.RouteDescriptor{}).ProtoReflect().Descriptor().Fields().ByNumber(18)
 	if f == nil || f.Name() != "task" || f.Message().FullName() != "alonabot.v1.TaskSpec" || f.ContainingOneof().Name() != "spec" {
 		t.Fatalf("RouteDescriptor task = %v", f)
+	}
+}
+
+// TestCommandListFieldNumbers 固定命令列表及其复用字段的编号、类型、列表与 presence。
+func TestCommandListFieldNumbers(t *testing.T) {
+	for _, tc := range []struct {
+		message  proto.Message
+		names    []protoreflect.Name
+		kinds    []protoreflect.Kind
+		lists    map[int]bool
+		optional map[int]bool
+		messages map[int]protoreflect.FullName
+	}{
+		{message: &pb.CommandListRequest{}},
+		{message: &pb.CommandListResponse{}, names: []protoreflect.Name{"commands"}, kinds: []protoreflect.Kind{protoreflect.MessageKind}, lists: map[int]bool{1: true}, messages: map[int]protoreflect.FullName{1: "alonabot.v1.CommandInfo"}},
+		{message: &pb.CommandInfo{}, names: []protoreflect.Name{"plugin_id", "route_id", "path", "aliases", "description"}, kinds: []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.StringKind}, lists: map[int]bool{3: true, 4: true}, optional: map[int]bool{5: true}, messages: map[int]protoreflect.FullName{4: "alonabot.v1.CommandAlias"}},
+		{message: &pb.CommandAlias{}, names: []protoreflect.Name{"path"}, kinds: []protoreflect.Kind{protoreflect.StringKind}, lists: map[int]bool{1: true}},
+	} {
+		fields := tc.message.ProtoReflect().Descriptor().Fields()
+		if fields.Len() != len(tc.names) {
+			t.Fatalf("%T field count = %d, want %d", tc.message, fields.Len(), len(tc.names))
+		}
+		for i, name := range tc.names {
+			number := i + 1
+			f := fields.ByNumber(protoreflect.FieldNumber(number))
+			cardinality := protoreflect.Optional
+			if tc.lists[number] {
+				cardinality = protoreflect.Repeated
+			}
+			if f == nil || f.Name() != name || f.Kind() != tc.kinds[i] || f.Cardinality() != cardinality || f.HasOptionalKeyword() != tc.optional[number] || f.HasPresence() != tc.optional[number] {
+				t.Fatalf("%T field %d = %v", tc.message, number, f)
+			}
+			if want := tc.messages[number]; want != "" && f.Message().FullName() != want {
+				t.Errorf("%T.%s message = %s, want %s", tc.message, name, f.Message().FullName(), want)
+			}
+			if f.ContainingOneof() != nil && !f.ContainingOneof().IsSynthetic() {
+				t.Errorf("%T.%s unexpected oneof = %v", tc.message, name, f)
+			}
+		}
+	}
+	f := (&pb.CommandSpec{}).ProtoReflect().Descriptor().Fields().ByNumber(13)
+	if f == nil || f.Name() != "description" || f.Kind() != protoreflect.StringKind || f.Cardinality() != protoreflect.Optional || !f.HasOptionalKeyword() || !f.HasPresence() {
+		t.Fatalf("CommandSpec field 13 should be optional string description, got %v", f)
 	}
 }
