@@ -118,6 +118,8 @@ RouteDescriptor 公共字段为 `route_id`、`kind`、`priority`、`default_enab
 
 REGISTER 的完整描述必须装入一帧；超限 RESOURCE_EXHAUSTED，不部分接收或激活。配置 Schema 与服务 Schema 从经过包摘要校验的安装资源取得，REGISTER 中的 hash/版本必须一致，不能仅上报不可解析的 hash 而缺少 Schema 原文。
 
+工具声明 `ToolSpec.effect` 使用字段号 4，类型为 `ToolEffect`（§3.5）。省略字段或传 `UNSPECIFIED=0` 表示未声明；SDK 收集注册时拒绝非法类别，原始 REGISTER 中的非法枚举由 Core 以 INVALID_ARGUMENT 拒绝，英文错误含 Service 名和非法数值。
+
 有 HTTP 路由时，SDK 先创建实际绑定的 loopback Listener，再上报 `host + port`；首发仅接受 `127.0.0.1` 或 `::1` 与合法非零端口，不能传任意 URL、文件路径或远端主机。Core 验证与当前 Session 的代理认证和就绪状态后保存端点，公开前缀仍由 Core 决定。无 HTTP 路由则不得要求创建 Listener。端点随 Session 失效撤销；外部请求不携带内部认证材料，Core 覆盖相应内部头。
 
 ### 3.4 Adapter 会话
@@ -159,9 +161,9 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 | `core.delete` | Target、platform_message_ids（1～100）→ 每个 ID 的状态与安全错误 | CONTRACTS §8、MESSAGE-MODEL §4A |
 | `core.continuation.start` | 必须带 parent_call_id → 空结果，超过每 Session 128 个进行中的延续调用时 RESOURCE_EXHAUSTED；原调用成功结束后 Core 发出 Handler REQUEST，HandlerRequest 的 `continuation_of` 为原调用的 call_id，SDK 据此找到登记的延续函数 | CONTRACTS §2.4 |
 | `core.wait` | 必须带 parent_call_id（延续调用）、超时 → 命中的 Event | CONTRACTS §2.4 |
-| `core.tool.list` | 空 → 工具列表（名称、description、输入 Schema、生效策略） | CONTRACTS §13.1 |
+| `core.tool.list` | 空 → 工具列表（名称、description、输入 Schema、生效策略、副作用类别 `ToolInfo.effect`，字段号 5） | CONTRACTS §13.1 |
 | `core.tool.invoke` | 必须带 parent_call_id；工具名、JSON 参数 → 工具的 JSON 输出与/或 ErrorInfo | CONTRACTS §13.1、§13.2 |
-| `core.tool.confirm` | 必须带 parent_call_id；操作名、参数摘要 → 空结果（允许）或 ErrorInfo | CONTRACTS §13.1、§13.2 |
+| `core.tool.confirm` | 必须带 parent_call_id；操作名、参数摘要、副作用类别 `ToolConfirmRequest.effect`（字段号 3，省略为 `UNSPECIFIED`）→ 空结果（允许）或 ErrorInfo；非法类别返回 INVALID_ARGUMENT | CONTRACTS §13.1、§13.2 |
 | `core.conversation.append` | 会话键、一条或多条 JSON 条目 → 最后一条的序号 | CONTRACTS §13.3 |
 | `core.conversation.list` | 会话键、起始序号 → 条目及序号、下一个序号 | CONTRACTS §13.3 |
 | `core.conversation.clear` | 会话键 → 空结果 | CONTRACTS §13.3 |
@@ -178,6 +180,8 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 | `core.profile.set` | 必须带 parent_call_id，Actor 须为 Core Admin；字段路径、JSON 值（null 删除）→ 配置文件 ID、名称、会话数与 reloading | CONTRACTS §5.6、D-168 |
 
 Core→插件与 Core→Adapter 方向另有 `sdk.log.set_level`：新的生效级别 → 空结果，SDK 收到后立即按新级别过滤（CONTRACTS §14.3）。Core→插件方向另有 `sdk.profile.set_overrides`：该插件当前有效的全部覆盖值（与 Bootstrap 的 `profile_overrides_json` 同形）→ 空结果，SDK 以它整体替换已有的覆盖值（CONTRACTS §5.6，D-168）。
+
+`ToolEffect` 的编号固定为 `UNSPECIFIED=0`、`READ_ONLY=1`、`WRITE=2`、`DESTRUCTIVE=3`（D-157）；`ToolSpec`、`ToolInfo`、`ToolConfirmRequest` 的 `effect` 均使用此枚举。
 
 注册描述的追加字段：Service 描述增加可选的 `tool`（description、default_policy、input_schema_json：该 Service 输入 Schema 的原文，Core 只从注册中得到 schema 标识，列出工具时需要 Schema 正文）；CommandMatch 追加 KEYWORD、STARTSWITH、ENDSWITH、FULLMATCH，CommandSpec 增加模式列表与 `ignore_case`；Actor 增加可选 `locale`；message.created 的载荷增加 `to_me`；Bootstrap 追加 `log_level`（字段号 10）与 `session_limits`（字段号 11），字段分配与切片顺序见 §3.2；CommandSpec 增加可选的英文说明 `description`（由 T-03.17 按 D-138 交付，翻译键取规范路径，供菜单与后续 `core.command.list` 共用）；BeforeSend/AfterSend 的输入增加操作类型与被编辑的 platform_message_id；D-87 的追加：MediaSource 追加 `inline_base64` 与只在 Core→Adapter 方向出现的 `platform_file`（D-88），Segment 追加 voice（D-89），ForwardItem 追加 `platform_message_id`、ForwardSegment 追加 `platform_forward_id`（D-91），Button 追加 `url`（D-97），AdapterDescriptor 追加动作声明（D-92），Event 追加 `chat_type`（新增枚举 ChatType：UNSPECIFIED、PRIVATE、GROUP、CHANNEL，D-100）；D-124 的追加：RouteKind 追加 TASK，RouteDescriptor 追加 TaskSpec（任务名），ScheduledPayload 追加 `task_name`、`task_key` 与 `task_payload_json`，动态任务触发时 `job_id` 为该任务的 route_id（`task.` 加任务名），静态任务触发时这三个字段为空；D-129、D-130 的追加：Service 描述增加可选的选项来源标记（带标记的 Service 输入与输出为 SDK 固定的选项查询 Schema，访问规则只含 Core 与本组件），Event 追加可选的 `chat_title`；D-157 的追加：新增枚举 ToolEffect（UNSPECIFIED、READ_ONLY、WRITE、DESTRUCTIVE），ToolSpec、ToolInfo 与 ToolConfirmRequest 追加 `effect`；D-161 的改动：Bootstrap 删除 `previous_config_version`、`target_config_version`，REGISTER 删除 `candidate_config_version`（字段号保留），REGISTER 追加 `repeated ConfigCorrection config_corrections`（path、reason、original_json）；D-164 的追加：RouteDescriptor 的 HTTP 路由追加 `page_title`（非空表示该路由是插件页面）；D-165 的追加：Bootstrap 追加 `string plugin_data_dir`（插件数据目录的绝对路径）；D-162 的追加：标准事件 `command.invoked` 的载荷消息 CommandInvokedPayload（plugin_id、route_id、command_name、result、duration_ms）。字段号由实现对应切片的 goal 授权分配。这些都是追加，不改变 `contracts/wirespec_test.go` 固定的枚举。
 

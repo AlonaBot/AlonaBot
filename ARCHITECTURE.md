@@ -34,6 +34,8 @@
 | `Dockerfile`、`deploy/` | 官方容器镜像、compose 整合包入口与 `install.sh`（CONTRACTS §15.3、§15.6，D-64） | Core 行为（镜像与脚本只安装发行归档的内容） | 拟建 |
 | `spec/` | 现行规格与 ADR | — | 现行 |
 
+`sdk/service.Builder.Effect` 随 REGISTER 上报工具类别；`sdk/tool.List` 通过 `Info.Effect` 读回声明类别，Agent 将 MCP 注解换算后的类别交给 `sdk/tool.Confirm`。`internal/core/tool` 合并声明、确认记录与策略覆盖；管理层批量写入时先持有 catalog 锁，再按组件 ID 顺序取锁，与安装替换使用同一锁层级。`Catalog.SetPolicy(ctx, rows ...state.ToolPolicy)` 调用 `Store.SetToolPolicy(ctx, rows ...ToolPolicy)`，由状态库在同一事务内保存或删除覆盖。
+
 ## 依赖方向
 
 `A -> B` 表示 **A 的 Go 源码 import B**（静态依赖，含测试代码），不表示运行时调用或数据流。「模块」指上表每一行的路径前缀；同一模块内部的 import（如 `contracts/release -> contracts/manifest`、`sdk -> sdk/message`）不受限制。跨模块的边只允许下表列出的；标准库和已批准的第三方依赖不受此表限制。

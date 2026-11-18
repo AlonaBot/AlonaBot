@@ -92,10 +92,9 @@ return &adapter.Descriptor{
 - Event Bus 是非持久广播：`Publish` 只能发布到本插件的命名空间，返回成功只表示 Core 准入，不代表有人收到；订阅方队列满、预算不足或离线时事件会丢失，也不会补发。需要回执或可靠送达时改用 Service Call。订阅回调串行执行，不要在其中阻塞：积压的事件占用本插件的接收预算，会让命令请求也被拒绝。回调里没有 Actor 与默认会话，发消息时用 `sdk.Send(ctx, session, content, ...)` 或 `sdk.SendText(ctx, session, text, ...)` 显式给出会话（CONTRACTS §3、§8，D-102、D-118）。
 - `service.JSON`、`bus.Define` 与 `task.Define` 声明的类型参数必须是包级的具名非泛型类型，由生成器检查并给出带位置的诊断。JSON Service 与 Bus 事件的 schema_id 由类型决定，版本取类型的 `SchemaVersion() uint32`，没有该方法时为 1；改动类型后运行 `alonabot build`。切片与 map 接受 null，与 `encoding/json` 对 nil 的编码一致。
 - JSON Service 的输入不符合 Schema 时，调用方收到 INVALID_ARGUMENT 和固定文本 `invalid service input`，Handler 不被调用；输出不符合时调用方收到 INTERNAL，日志只记 `schema_id`；调用方的 `Call` 也按声明校验响应，不符合时返回 INTERNAL 与 `invalid service output for "<target>"`。校验详情可能带业务载荷，不写入响应和日志。
-- 通过 `tool.List(ctx)` 获取工具目录；用 `.Tool(description, tool.DefaultAllow)` 登记工具，需确认时改用 `tool.DefaultConfirm`。
+- 通过 `tool.List(ctx)` 获取工具目录，`tool.Info.Effect` 返回声明的类别。用 `.Tool(description, tool.DefaultAllow)` 登记 JSON Service 工具，缺省需确认时使用 `tool.DefaultConfirm`。在 `.Tool(...)` 之后、`.Handle(...)` 之前可以接 `.Effect(tool.ReadOnly)`，另有 `tool.Write`、`tool.Destructive`；省略时为 `tool.Unspecified`。顺序或类别非法时收集注册报错；类别仅作提示，不改变策略（CONTRACTS §13.1）。
 - 需要模型能力时调用 Agent 组件的 `llm.generate`：`sdk/llm` 提供类型与以 `@agent` 为目标的调用辅助，官方 Agent 被替换后也不用修改；请管理员把插件加入 `llm_service_allowed_plugins`；一次调用是一次非流式请求，期限受调用方约束（CONTRACTS §13.5）。
-- 要把能力交给 Agent 使用时，注册带 `tool` 描述的 JSON Service（CONTRACTS §13.1）。
-- 在 Handler 或其延续调用中，`tool.Invoke(ctx, "plugin_id/service_name", args)` 按当前生效的工具策略调用工具（deny 返回 PERMISSION_DENIED；confirm 时 Core 先向当前会话发送带「允许」「拒绝」按钮的确认，展示实际参数，拒绝返回 PERMISSION_DENIED，超时返回 DEADLINE_EXCEEDED）；`tool.Confirm(ctx, operation, summary)` 只请求用户确认，展示插件给出的摘要，返回 nil 表示允许。两者都需要父调用链，后台任务中没有 Actor 时遇到确认返回 PERMISSION_DENIED；实例不支持按钮时返回 UNSUPPORTED（CONTRACTS §13.2）。
+- 在 Handler 或其延续调用中，`tool.Invoke(ctx, "plugin_id/service_name", args)` 按当前生效的工具策略调用工具（deny 返回 PERMISSION_DENIED；confirm 时 Core 先向当前会话发送带「允许」「拒绝」按钮的确认，展示实际参数，拒绝返回 PERMISSION_DENIED，超时返回 DEADLINE_EXCEEDED）；插件自行执行操作前用 `tool.Confirm(ctx, operation, summary, effect)` 请求许可，确认时展示插件给出的摘要，返回 nil 后可执行操作。无类别时传 `tool.Unspecified`，非法类别返回 INVALID_ARGUMENT。两者都需要父调用链；没有 Actor 时遇到确认返回 PERMISSION_DENIED，实例不支持按钮时返回 UNSUPPORTED（CONTRACTS §13.2）。
 
 ### 插件页面
 
