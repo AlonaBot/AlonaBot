@@ -64,6 +64,12 @@ func (p *Prepared) activate(ctx context.Context, commit func(context.Context) er
 		}
 	}
 	opt := host.ActivateOptions{PluginID: spec.PluginID, GenerationID: spec.GenerationID, Handler: spec.Handler, Global: spec.Global, Limits: spec.Limits, Messages: p.messages}
+	activity := &activitySession{}
+	if spec.Waker != nil {
+		opt.RequestActivity = func(in *wire.Inbound) (func(), *pb.ErrorInfo) {
+			return spec.Waker.requestActivity(activity, in)
+		}
+	}
 	opt.Commit = commit
 	in, err := host.Activate(ctx, p.conn, p.Registration, opt)
 	if err != nil {
@@ -81,7 +87,7 @@ func (p *Prepared) activate(ctx context.Context, commit func(context.Context) er
 	running := p.running(in)
 	plugin := router.FromInstance(in)
 	if spec.Waker != nil {
-		spec.Waker.register(running)
+		spec.Waker.register(running, activity)
 		plugin = router.WithActivity(plugin, func() (func(), error) { return spec.Waker.AcquireActivity(spec.PluginID, in.Session) })
 	}
 	if spec.HTTP != nil && in.HTTPListener != nil {

@@ -68,7 +68,7 @@ RESPONSE 的 payload 与 ErrorInfo **不是 oneof**。例如部分发送成功�
 
 已定义的协议能力：`http_listener` 版本 1（D-65）。插件存在 HTTP 路由时 SDK 把它放进 HELLO 的 required；Core 支持它，交集含该项时才在 Bootstrap 中下发 `http_proxy_auth`，REGISTER 带 HTTP 路由而交集不含该项时拒绝注册。
 
-StopReason 在现有枚举末尾追加 `STOP_REASON_IDLE=6`，表示正常空闲退出，沿用 STOPPING 的绝对 deadline 与停止预算；已有值 0～5 保持不变。`SUSPENDED` 是 Core 管理运行状态，SessionPhase 沿用现有状态。唤醒复用 `ActivationReason.RESUME`、原 generation_id 与新 Session，不增加业务 RPC。同代次 RESUME 保留数据库迁移模式与已应用 ID，跳过迁移回调；配置继续加载、补值/校正、required 校验，并核对完整快照一致性。Bootstrap 已删除的配置版本字段沿用 §3.2 的 reserved 编号与名称。
+StopReason 在现有枚举末尾追加 `STOP_REASON_IDLE=6`，表示正常空闲退出，沿用 STOPPING 的绝对 deadline 与停止预算；QUIESCING 冻结新派发，排空后发送一次 STOPPING，SDK 回调沿用正常停止截止（D-179）；已有值 0～5 保持不变。`SUSPENDED` 是 Core 管理运行状态，SessionPhase 沿用现有状态。唤醒复用 `ActivationReason.RESUME`、原 generation_id 与新 Session，不增加业务 RPC。同代次 RESUME 保留数据库迁移模式与已应用 ID，跳过迁移回调；配置继续加载、补值/校正、required 校验，并核对完整快照一致性。Bootstrap 已删除的配置版本字段沿用 §3.2 的 reserved 编号与名称。
 
 ### 3.2 Bootstrap 的最小内容
 
@@ -239,7 +239,7 @@ current/assign/set 从同一 Session 的在途父调用取得可信 Target 与 A
 - 本地超时/取消先完成调用者失败返回，再尽力发送 Cancel；已发送外部消息/SQL 不撤销，不自动重试。Session 失效时清理映射、取消调用并返回 UNAVAILABLE；已确认的 SendResult 仍须保留。
 - Core 停用时先冻结该插件的新根调用/新派发，最多 drain 6s；已有父 Request 链中的受限子请求与响应可继续。drain 结束后取消剩余调用并发送唯一 STOPPING，帧 deadline 为 min(t0+10s,发送STOPPING时刻+4s)，OnStop 与资源关闭使用这一独立 context；整个进程树停止预算仍为 10s。Core 同时停止多个插件时共享同一绝对截止时间，不逐个累加预算。
 
-等待休眠插件的业务请求在 Session admission 之前受 CONTRACTS §4.5 的有界唤醒队列约束，保留可信上下文、原始 Target、Trace、顺序与接纳时固定的绝对 deadline；确认 ACTIVATED、快照一致及全部业务绑定完成后，复核代次、路由、权限与剩余期限再交付。取消或到期的未交付请求立即移出队列并归还条数、字节及 Core 预算，单个等待者取消不取消共享启动。空闲 STOPPING 与请求准入共用门禁：提交 STOPPING 前可撤销停止，提交后等旧进程树退出再唯一恢复。
+等待休眠插件的业务请求在 Session admission 之前受 CONTRACTS §4.5 的有界唤醒队列约束，保留可信上下文、原始 Target、Trace、顺序与接纳时固定的绝对 deadline；确认 ACTIVATED、快照一致及全部业务绑定完成后，复核代次、路由、权限与剩余期限再交付。取消或到期的未交付请求立即移出队列并归还条数、字节及 Core 预算，单个等待者取消不取消共享启动。空闲停止与请求准入共用门禁：进入 QUIESCING 前复核 Session、Ready、零引用与实际活动结束时刻，变化时撤销空闲决定；进入后冻结新派发，新请求按原期限与预算等待旧树退出、SUSPENDED 及唯一新 Session 的 Ready。
 
 ## 5. Event Bus、媒体与平台载荷
 

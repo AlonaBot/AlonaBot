@@ -52,6 +52,9 @@ type Values struct {
 	OptionsPage           int
 	WakeQueueRequests     int
 	WakeQueueBytes        int64 // 每插件等待唤醒的载荷字节数
+	SleepMinUptime        time.Duration
+	SleepColdStartWindow  time.Duration
+	SleepColdStartMax     int
 }
 
 const maxOptionsPage = 200 // CONTRACTS §16。
@@ -120,6 +123,9 @@ var parameters = []parameter{
 	param("STOP_ONSTOP", durationUnit, time.Duration(4*time.Second), true, "> 0", "§4.2", func(v *Values) *time.Duration { return &v.StopOnStop }),
 	param("RESTART_WINDOW", durationUnit, time.Duration(5*time.Minute), true, "> 0", "§4.2", func(v *Values) *time.Duration { return &v.RestartWindow }),
 	param("RESTART_MAX_CRASHES", integerUnit, int(3), true, ">= 1", "§4.2", func(v *Values) *int { return &v.RestartMaxCrashes }),
+	param("SLEEP_MIN_UPTIME", durationUnit, time.Duration(5*time.Minute), true, "> 0", "§4.5", func(v *Values) *time.Duration { return &v.SleepMinUptime }),
+	param("SLEEP_COLD_START_WINDOW", durationUnit, time.Duration(time.Hour), true, "> 0", "§4.5", func(v *Values) *time.Duration { return &v.SleepColdStartWindow }),
+	param("SLEEP_COLD_START_MAX", integerUnit, int(3), true, ">= 1", "§4.5", func(v *Values) *int { return &v.SleepColdStartMax }),
 	param("JOB_TIMEOUT", durationUnit, time.Duration(15*time.Minute), true, "> 0", "§4.3", func(v *Values) *time.Duration { return &v.JobTimeout }),
 	param("TASKS_PER_PLUGIN", integerUnit, int(10000), true, ">= 1", "§4.3", func(v *Values) *int { return &v.TasksPerPlugin }),
 	param("TASK_PAYLOAD_BYTES", bytesUnit, int64(64<<10), true, "1..4MiB", "§4.3", func(v *Values) *int64 { return &v.TaskPayloadBytes }),

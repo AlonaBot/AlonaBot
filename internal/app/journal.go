@@ -86,21 +86,11 @@ func (c *Core) recoverRuntime(ctx context.Context, installs []state.Install, blo
 // installedSpec 在停机前构造完整启动输入并准备数据目录；调用方决定准备或直接启动。
 // 返回的运行上下文与 Handler/Detach 共用 Caller，启动后由调用方附加 Instance。
 func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir string, boot *pb.Bootstrap) (supervisor.Spec, *runningComponent, error) {
-	raw, err := os.ReadFile(filepath.Join(packageDir, "plugin.yaml"))
-	if err != nil {
-		return supervisor.Spec{}, nil, err
-	}
-	parsed, err := manifest.Parse(raw)
+	parsed, err := installedManifest(in, packageDir)
 	if err != nil {
 		return supervisor.Spec{}, nil, err
 	}
 	m := parsed.Manifest
-	if m.ID != in.PluginID || state.Role(m.Role) != in.Role || m.AdapterID != in.AdapterID || m.Entrypoint != in.Entrypoint {
-		return supervisor.Spec{}, nil, fmt.Errorf("installed manifest identity differs from record for %s", in.PluginID)
-	}
-	if hasInstalledRoutes(in) && (m.Source != in.Source || m.Version != in.Version) {
-		return supervisor.Spec{}, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: fmt.Sprintf("installed manifest source or version differs for %s", in.PluginID)}
-	}
 	for _, warning := range parsed.Warnings {
 		slog.Warn("installed manifest warning", "plugin_id", m.ID, "warning", warning)
 	}
@@ -159,4 +149,24 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 		running.activity = true
 	}
 	return spec, running, nil
+}
+
+// installedManifest 与启动共用安装身份核对，策略读取不会准备进程或业务资源。
+func installedManifest(in state.Install, packageDir string) (*manifest.Result, error) {
+	raw, err := os.ReadFile(filepath.Join(packageDir, "plugin.yaml"))
+	if err != nil {
+		return nil, err
+	}
+	parsed, err := manifest.Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	m := parsed.Manifest
+	if m.ID != in.PluginID || state.Role(m.Role) != in.Role || m.AdapterID != in.AdapterID || m.Entrypoint != in.Entrypoint {
+		return nil, fmt.Errorf("installed manifest identity differs from record for %s", in.PluginID)
+	}
+	if hasInstalledRoutes(in) && (m.Source != in.Source || m.Version != in.Version) {
+		return nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: fmt.Sprintf("installed manifest source or version differs for %s", in.PluginID)}
+	}
+	return parsed, nil
 }
