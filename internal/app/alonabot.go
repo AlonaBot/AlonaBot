@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime/debug"
 	"slices"
 	"strings"
@@ -40,44 +41,49 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/webhost"
+	genresources "github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/mattn/go-isatty"
 	"google.golang.org/protobuf/proto"
 )
 
-// Options 汇总一次运行的装配参数；指针字段为 nil 时不覆盖 core_config.json。
+// Options 汇总一次运行的装配参数；监听与日志覆盖为 nil 时沿用 core_config.json。
 type Options struct {
-	DataDir    string      // 原样交给 filepath.Abs；不设缺省值
-	Args       []string    // 调优参数与参数文件，后于 ALONABOT_ARGS 应用
-	Components []Component // 开发组件，按登记顺序
-	Listen     *string
-	LogLevel   *slog.Level
-	LogFormat  *string
-	Stdio      bool    // Executable 组件使用 stdio 传输
-	WebUIs     []fs.FS // 开发 WebUI；多于一个或含 nil 时返回原有的用法错误
+	DataDir            string      // 原样交给 filepath.Abs；不设缺省值
+	Args               []string    // 调优参数与参数文件，后于 ALONABOT_ARGS 应用
+	Components         []Component // 开发组件，按登记顺序
+	Listen             *string
+	LogLevel           *slog.Level
+	LogFormat          *string
+	DefaultStderrLevel *slog.Level                         // 未显式传入 LogLevel 时的 stderr 阈值；nil 时沿用来源级别。
+	Stdio              bool                                // Executable 组件使用 stdio 传输
+	WebUIs             []fs.FS                             // 开发 WebUI；多于一个或含 nil 时返回原有的用法错误
+	RuntimeAdapters    map[string]settings.AdapterSettings // 本次运行的内置 Adapter 归属与实例，不写入设置文件。
+	RuntimeAdmins      []settings.Admin                    // 追加到本次运行的 Core Admin，设置重载后仍保留。
 }
 
 // Core 持有已装配的运行资源；取消 Start 的 context 后调用 Wait 等待停止结果。
 type Core struct {
-	assembly      *assembly
-	store         *state.Store
-	output        *logging.Output
-	logLevel      *slog.Level // 本次显式覆盖；nil 时随 core_config.json 的 log.level 刷新。
-	values        tune.Values
-	components    []*runningComponent
-	development   []Component
-	developmentMu sync.RWMutex       // HTTP 管理端读取 Schema 时，与开发资源替换同步。
-	operations    chan coreOperation // Core.run 独占组件列表，HTTP 回调把变更交给同一所有者。
-	stopping      chan struct{}      // 关闭后解除仍在等待管理操作的 HTTP 请求。
-	dir           string
-	environment   map[string]string
-	http          *http.Server
-	httpErrors    chan error
-	monitors      sync.WaitGroup // 停止后等待退出观察者交还清理权，再关闭共享资源。
-	done          chan struct{}  // err 写入后关闭，允许多个 Wait 读取同一结果。
-	err           error
-	lifetime      context.Context // Core 启动、业务唤醒与运行循环共用的生命周期。
+	assembly        *assembly
+	store           *state.Store
+	output          *logging.Output
+	logLevel        *slog.Level // 本次显式覆盖；nil 时随 core_config.json 的 log.level 刷新。
+	values          tune.Values
+	components      []*runningComponent
+	development     []Component
+	developmentMu   sync.RWMutex       // HTTP 管理端读取 Schema 时，与开发资源替换同步。
+	operations      chan coreOperation // Core.run 独占组件列表，HTTP 回调把变更交给同一所有者。
+	stopping        chan struct{}      // 关闭后解除仍在等待管理操作的 HTTP 请求。
+	dir             string
+	environment     map[string]string
+	http            *http.Server
+	httpErrors      chan error
+	monitors        sync.WaitGroup // 停止后等待退出观察者交还清理权，再关闭共享资源。
+	done            chan struct{}  // err 写入后关闭，允许多个 Wait 读取同一结果。
+	err             error
+	lifetime        context.Context // Core 启动、业务唤醒与运行循环共用的生命周期。
+	runtimeAdapters map[string]settings.AdapterSettings
 
 	stoppedInstances map[[2]string]bool // 包与实例的运行期停用选择，跨 Session 保留；同样由操作队列串行访问。
 }
@@ -112,13 +118,15 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	}
 	// 启动诊断先写 stderr，状态库核对与配置解析失败也保留 CRITICAL 文本。
 	bootstrap := settings.Defaults()
+	stderrLevel := o.DefaultStderrLevel
 	if o.LogLevel != nil {
 		bootstrap.LogLevel = *o.LogLevel
+		stderrLevel = nil
 	}
 	if o.LogFormat != nil {
 		bootstrap.LogFormat = *o.LogFormat
 	}
-	output, err := logging.Open(logging.Options{Format: logging.Format(bootstrap.LogFormat), Level: bootstrap.LogLevel, Stderr: os.Stderr, BufferRecords: values.LogBufferRecords})
+	output, err := logging.Open(logging.Options{Format: logging.Format(bootstrap.LogFormat), Level: bootstrap.LogLevel, StderrLevel: stderrLevel, Stderr: os.Stderr, BufferRecords: values.LogBufferRecords})
 	if err != nil {
 		return nil, startupUsage(err)
 	}
@@ -128,7 +136,8 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Core{store: store, output: output, values: values, dir: dir, logLevel: o.LogLevel, done: make(chan struct{}), stopping: make(chan struct{}), operations: make(chan coreOperation), lifetime: ctx}
+	c := &Core{store: store, output: output, values: values, dir: dir, logLevel: o.LogLevel, done: make(chan struct{}), stopping: make(chan struct{}), operations: make(chan coreOperation), lifetime: ctx,
+		runtimeAdapters: o.RuntimeAdapters}
 	fail := func(err error) (*Core, error) {
 		c.err = err
 		if ctx.Err() == context.Canceled && startupCleanupError(err) == nil {
@@ -175,14 +184,44 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		return fail(err)
 	}
 	components := slices.Clone(o.Components)
+	for id := range o.RuntimeAdapters {
+		if len(configuration.Adapters[id].Instances) != 0 {
+			return fail(startupUsage(fmt.Errorf("runtime adapter_id %s conflicts with configured instances", id)))
+		}
+	}
+	for i := range components {
+		entry := &components[i]
+		if len(o.RuntimeAdapters) == 0 || entry.adapter == nil {
+			continue
+		}
+		object := reflect.ValueOf(entry.adapter)
+		if object.Kind() == reflect.Pointer && object.IsNil() {
+			continue
+		}
+		id := entry.adapter.Descriptor().AdapterID
+		group, exists := o.RuntimeAdapters[id]
+		if !exists {
+			continue
+		}
+		// 内置 Adapter 没有作者工程；随运行期实例登记同一条 Session 所需的资源。
+		raw, err := json.Marshal(map[string]string{"id": group.Package, "name": group.Package,
+			"version": "0.1.0", "source": "builtin/" + id, "role": "adapter", "adapter_id": id})
+		if err != nil {
+			return fail(err)
+		}
+		genresources.Bind(entry.adapter, genresources.Resources{Manifest: raw, AdapterConfigSchema: []byte(emptyConfig)})
+	}
 	if err := validateComponents(components, installs); err != nil {
+		if len(o.RuntimeAdapters) != 0 {
+			err = startupUsage(err)
+		}
 		return fail(err)
 	}
 	c.development = components
 	for i := range c.development {
 		c.development[i].stdio = o.Stdio
 	}
-	output, err = logging.Open(logging.Options{Format: logging.Format(configuration.LogFormat), Level: configuration.LogLevel, Stderr: os.Stderr, BufferRecords: values.LogBufferRecords})
+	output, err = logging.Open(logging.Options{Format: logging.Format(configuration.LogFormat), Level: configuration.LogLevel, StderrLevel: stderrLevel, Stderr: os.Stderr, BufferRecords: values.LogBufferRecords})
 	if err != nil {
 		return fail(startupUsage(err))
 	}
@@ -256,6 +295,12 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		return fail(err)
 	}
 	c.assembly.core = c
+	var runtimeAdmins []policy.Admin
+	for _, admin := range o.RuntimeAdmins {
+		runtimeAdmins = append(runtimeAdmins, policy.Admin{AdapterID: admin.AdapterID, UserID: admin.UserID})
+	}
+	c.assembly.policy.SetRuntimeAdmins(runtimeAdmins)
+	c.applySettings(configuration)
 	// 恢复只信 Journal 与 Active；先清理候选，再启动任一正式或开发组件。
 	recovery, err := store.Journals(ctx, "")
 	if err != nil {
@@ -280,7 +325,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	for _, entry := range components {
 		development[entry.manifest.ID] = entry.manifest
 	}
-	version := coreVersion()
+	version := Version()
 	bundles, err := bundledDirectory()
 	if err != nil {
 		return fail(err)
@@ -785,18 +830,36 @@ func (c *Core) reloadSettings() error {
 	}
 	// 管理操作可能已通过 Settings.Update 发布快照，仍须同步实际权限。
 	configuration := c.assembly.settings.Settings()
+	c.applySettings(configuration)
+	return nil
+}
+
+func (c *Core) applySettings(configuration settings.Settings) {
 	var admins []policy.Admin
 	for _, admin := range configuration.Admins {
 		admins = append(admins, policy.Admin{AdapterID: admin.AdapterID, UserID: admin.UserID})
 	}
 	c.assembly.policy.SetAdmins(admins)
-	c.assembly.adapters.SetDefaults(configuration.DefaultInstances())
+	c.setAdapterDefaults()
 	level := configuration.LogLevel
 	if c.logLevel != nil {
 		level = *c.logLevel
 	}
 	c.output.Levels().SetGlobal(level)
-	return nil
+}
+
+func (c *Core) setAdapterDefaults() {
+	defaults := c.assembly.settings.Settings().DefaultInstances()
+	for id, group := range c.runtimeAdapters {
+		if group.DefaultInstance != "" {
+			defaults[id] = group.DefaultInstance
+		} else if len(group.Instances) == 1 {
+			for instance := range group.Instances {
+				defaults[id] = instance
+			}
+		}
+	}
+	c.assembly.adapters.SetDefaults(defaults)
 }
 
 // RestartInstance 只重新准备并启动开发 Adapter 的指定实例。
@@ -839,7 +902,7 @@ func (c *Core) RestartInstance(ctx context.Context, adapterID, instanceID string
 						return err
 					}
 				}
-				c.assembly.adapters.SetDefaults(c.assembly.settings.Settings().DefaultInstances())
+				c.setAdapterDefaults()
 				if configuration, exists := instances[instanceID]; exists {
 					return running.remote.StartInstance(ctx, instanceID, configuration)
 				}

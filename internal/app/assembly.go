@@ -1274,6 +1274,15 @@ func (c *Core) startInstances(ctx context.Context, running *runningComponent, ra
 	}
 	unlock := c.store.LockPlugin(running.id)
 	defer unlock()
+	if group, exists := c.runtimeAdapters[running.install.AdapterID]; exists {
+		c.setAdapterDefaults()
+		for id, configuration := range group.Instances {
+			if err := running.remote.StartInstance(ctx, id, configuration); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	owned, err := c.assembly.settings.BindAdapter(running.install.AdapterID, running.id)
 	if err != nil || !owned {
 		return err
@@ -1294,7 +1303,7 @@ func (c *Core) startInstances(ctx context.Context, running *runningComponent, ra
 			}
 		}
 	}
-	c.assembly.adapters.SetDefaults(c.assembly.settings.Settings().DefaultInstances())
+	c.setAdapterDefaults()
 	for id, configuration := range instances {
 		if c.stoppedInstances[[2]string{running.id, id}] {
 			continue
