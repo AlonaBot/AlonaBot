@@ -99,7 +99,7 @@ return &adapter.Descriptor{
 
 ### 插件页面
 
-插件页面在 WebUI 的沙箱 iframe 中打开，只能经桥与外部交互（[ADMIN-API §7](../spec/ADMIN-API.md)）。用 `sdk/page` 的套件：把它的 `http.Handler` 挂在插件自己的路由下，页面引用 `kit.css` 与 `kit.js`，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并让 ⌘K 打开全局搜索（D-159）。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
+插件页面在 WebUI 的沙箱 iframe 中打开，只能经桥与外部交互（[ADMIN-API §7](../spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。用 `sdk/page` 的套件：把 `page.Handler()` 挂在插件自己的 GET 路由下，页面引用 `kit.css` 与 `kit.js`，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并转发 ⌘K/Ctrl+K 打开全局搜索（D-159）。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
 
 #### 套件挂载与引入
 
@@ -126,6 +126,8 @@ func New() *sdk.Plugin {
     return p
 }
 ```
+
+相对资源路径随页面 URL 解析：从 `/page` 打开时取 `/kit.css` 和 `/kit.js`，以 `/page/` 为基准时取 `/page/kit.css` 和 `/page/kit.js`（均在插件自己的 URL 前缀内）。完整示例见 [showcase](../examples/plugins/showcase/main.go)。
 
 #### 页面 HTML 与控件样式
 
@@ -158,10 +160,10 @@ func New() *sdk.Plugin {
 
 `kit.js` 加载后会在全局注入 `window.AlonaBot` 对象：
 
-- **`request(method, path, body?)`**：经 WebUI 桥向当前插件自身的 HTTP 路由发送请求，返回 `Promise<Response>`。响应包含 `status`、`ok`、`headers`、`body`（UTF-8 文本）与 `data`（若响应为 JSON 则已自动解析）。
+- **`request(method, path, body?)`**：经 WebUI 桥请求当前插件自己的 HTTP 路由。对象正文按 JSON 发送。Promise 返回的对象包含 `status`、`ok`（HTTP 2xx）、`headers`、`body`（UTF-8 文本）、`data`（解析成功的 JSON 或原文本）和原始 `body_base64`，也可调用 `text()` 或 `json()` 分别取得 `body` 或 `data`。桥错误会拒绝 Promise，HTTP 错误状态可从返回对象读取。
 - **`t(key, args?) → Promise<string>`**：每次经桥发送 `translate`，传递 `key` 与可选的字符串参数对象 `args`，原样返回桥响应文案。桥按当前界面语言取插件文案并格式化 `{name}` 占位符；未知键返回键名，缺参数保留占位符。桥错误使 Promise 拒绝，独立打开时 Promise 返回键名。
-- **`onTheme(fn)`**：监听主题与令牌变化，回调签名 `fn(theme, tokens)`，注册时立即触发一次当前状态。
-- **`onLocale(fn)`**：监听界面语言变化，回调签名 `fn(locale)`，注册时立即触发一次；页面在回调里重新 `await t(...)` 渲染。
+- **`onTheme(fn)`**：监听主题与令牌变化，回调签名 `fn(theme, tokens)`，注册时立即交付当前状态，返回取消订阅函数。
+- **`onLocale(fn)`**：监听界面语言变化，回调签名 `fn(locale)`，注册时立即交付当前语言，返回取消订阅函数；页面在回调里重新 `await t(...)` 渲染。
 - **快捷键转发**：页面内捕获 ⌘K（macOS）与 Ctrl+K（其他系统），自动向 WebUI 转发 `mod+k` 打开全局搜索。
 - **独立打开**：自动应用浅色缺省值与字体；`request` 返回 rejected Promise，提示桥仅在 iframe 中可用。
 

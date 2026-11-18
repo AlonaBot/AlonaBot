@@ -34,6 +34,8 @@
 | `Dockerfile`、`deploy/` | 官方容器镜像、compose 整合包入口与 `install.sh`（CONTRACTS §15.3、§15.6，D-64） | Core 行为（镜像与脚本只安装发行归档的内容） | 拟建 |
 | `spec/` | 现行规格与 ADR | — | 现行 |
 
+`sdk/page` 属于 SDK：`Handler()` 通过插件自己的 HTTP 路由提供内嵌的 `kit.css` 与 `kit.js`。`kit.js` 负责页面端的桥请求、异步翻译、主题与语言订阅和快捷键转发；沙箱、父桥与全局搜索由 WebUI 负责（[ADMIN-API §7](spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。`examples/plugins/showcase` 演示套件的挂载与使用。
+
 ## 依赖方向
 
 `A -> B` 表示 **A 的 Go 源码 import B**（静态依赖，含测试代码），不表示运行时调用或数据流。「模块」指上表每一行的路径前缀；同一模块内部的 import（如 `contracts/release -> contracts/manifest`、`sdk -> sdk/message`）不受限制。跨模块的边只允许下表列出的；标准库和已批准的第三方依赖不受此表限制。

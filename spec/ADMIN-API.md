@@ -175,7 +175,7 @@ X-Content-Type-Options: nosniff
 
 ## 7. 插件页面 postMessage 桥
 
-本节定义后继 WebUI 页面实现的消息契约。插件页面通过父 WebUI 请求自己所属组件的 HTTP 路由，并查询语言、主题和本组件文案。插件 HTTP 路由与 Listener 凭证见 [WIRE §3.3、§3.4](WIRE-FORMAT.md#33-注册描述与-http-listener)。内部代理凭证由 SDK/Core 管理，浏览器桥无需取得它。
+本节定义 WebUI 父桥的消息契约与 SDK 页面客户端的接口。插件页面通过父 WebUI 请求自己所属组件的 HTTP 路由，并查询语言、主题和本组件文案。插件 HTTP 路由见 [WIRE §3.3](WIRE-FORMAT.md#33-注册描述与-http-listener)，Listener 凭证由 SDK/Core 经 Bootstrap 管理（WIRE §3.2）。
 
 ### 7.1 消息格式
 
@@ -238,7 +238,15 @@ X-Content-Type-Options: nosniff
 2. `path` 只接受插件相对路径。父页面拒绝绝对 URL、协议相对 URL、`..`、编码后的越界/分隔符混淆与反斜杠，校验发生在路径规范化之前。随后将目标固定到该 iframe 所属组件的 `/plugins/{id}/` 前缀，保留已校验的插件相对路径及查询参数。其他组件与 Admin API 的路径拒绝。
 3. 父页面将请求限定到所属组件已注册 method/path，Core 现有代理执行最终匹配。请求使用管理员会话，变更请求由父页面添加受控 Origin 与 CSRF。父页面拒绝插件自带的 `Cookie`、`Authorization`、`X-Alonabot-CSRF`、`X-Alonabot-Proxy-Auth` 等凭证/内部身份头，比较头名时忽略大小写。
 4. 父页面拒绝重定向，向插件返回响应前滤去 `Set-Cookie` 等凭证头。管理会话、CSRF 与内部代理凭证均留在父页面和 Core 之间。Core 代理继续按角色过滤请求头：私有 Adapter 路由也清除 Core 认证凭证；公开 Adapter 平台 token 路由按其独立声明处理平台凭证。
-5. 插件的 HTML 与全部插件路由响应继续带 `sandbox allow-scripts allow-forms allow-popups`（无 `allow-same-origin`）和 `nosniff`，清除插件设置的 Cookie；WebUI 自身继续使用第 6 节的静态规则。桥的运行代码和浏览器交互由后继 WebUI 切片实现。
+5. 插件的 HTML 与全部插件路由响应继续带 `sandbox allow-scripts allow-forms allow-popups`（无 `allow-same-origin`）和 `nosniff`，清除插件设置的 Cookie；WebUI 自身继续使用第 6 节的静态规则。父桥与浏览器联验归 T-09.9。
+
+### 7.3 SDK 页面客户端
+
+`sdk/page` 的 `kit.js` 在 `window.AlonaBot` 上公开 `request(method, path, body?)`、`t(key, args?)`、`onTheme(fn)`、`onLocale(fn)`。嵌入时自动发送 `hello`，把令牌写到 `:root` 并设置 `data-theme`，接收主题与语言事件，转发全局搜索快捷键。两个订阅函数在注册时立即交付当前状态，并返回取消订阅函数。独立打开时使用 `light`、`en-US` 与浅色缺省令牌；`request` 返回拒绝的 Promise，不直接发送 HTTP 请求。
+
+`t(key, args?) → Promise<string>` 在 iframe 内每次发送 `translate`，携带键和可选参数，原样返回响应的 `text`。页面在 `onLocale` 回调中重新 `await t(...)` 渲染；`hello` 和 `locale` 只交付 §7.1 所列字段，文案由 `translate` 逐次取得。独立打开时 `t` 返回兑现为键名的 Promise。
+
+客户端按 `event.source === window.parent` 校验父窗口身份，校验 channel、响应关联 ID、对应操作的结果结构以及主题、语言事件的结构。无效消息不改变状态，也不消费在途请求。有效桥错误以 `Error` 拒绝 Promise，保留 `code`，并以 `safe_message` 为消息；`postMessage` 同步抛错时保留原错误并清理关联。客户端等待桥的有效响应，无独立固定超时。
 
 ## 8. 日志读取与输出级别
 

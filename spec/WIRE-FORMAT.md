@@ -120,6 +120,8 @@ REGISTER 的完整描述必须装入一帧；超限 RESOURCE_EXHAUSTED，不部�
 
 有 HTTP 路由时，SDK 先创建实际绑定的 loopback Listener，再上报 `host + port`；首发仅接受 `127.0.0.1` 或 `::1` 与合法非零端口，不能传任意 URL、文件路径或远端主机。Core 验证与当前 Session 的代理认证和就绪状态后保存端点，公开前缀仍由 Core 决定。无 HTTP 路由则不得要求创建 Listener。端点随 Session 失效撤销；外部请求不携带内部认证材料，Core 覆盖相应内部头。
 
+`sdk/page.Handler()` 提供的套件资源走插件登记的普通 GET 路由，沿用同一 Listener 和代理认证。浏览器 `postMessage` 消息定义在 [ADMIN-API §7](ADMIN-API.md#7-插件页面-postmessage-桥)，与 Session 帧分开。
+
 ### 3.4 Adapter 会话
 
 Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流程（CONTRACTS §8、D-26），区别如下：
