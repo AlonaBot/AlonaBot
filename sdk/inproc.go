@@ -53,6 +53,7 @@ type componentContextKey struct{}
 // componentSession 持有一次启动的全部 SDK 状态；只在独立进程入口发布默认归属。
 // callbacks 保留仍在执行的生命周期回调，同进程入口等它们退出后才释放 runtime.lock。
 type componentSession struct {
+	plugin       *Plugin // 准备期绑定，HTTP 与生命周期共享同一覆盖值所有者。
 	ctx          context.Context
 	cancel       context.CancelFunc // 准备期断链或 Session 关闭时取消阶段回调。
 	database     *dbhook.Session
