@@ -120,7 +120,7 @@
 | goal-171 | S-02.2 | 空闲退出与即时休眠策略 | S-02.1 | 已完成（PR #249） |
 | goal-177 | T-09.27 | 组件市场 ID 改用连字符 | T-09.10、T-09.14、T-12.8、T-13.5 | 已完成（PR #222） |
 | goal-162 | T-04.19 | 平台与消息 | T-04.18 | 已完成（PR #250） |
-| goal-178 | T-04.20 | SDK 用法从简 | T-04.18、T-16.2 | 待派发 |
+| goal-178 | T-04.20 | SDK 用法从简 | T-04.18、T-16.2 | 已完成（PR #251） |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
 | goal-163 | T-11.6 | 按配置文件的工具策略 | T-04.18、T-11.4 | 已完成（PR #246） |
 | goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 已完成（PR #233） |
@@ -8605,7 +8605,7 @@ internal/core/state
 
 ### goal-178 · T-04.20 SDK 用法从简
 
-状态：待派发。前置 T-04.18（PR #242）、T-16.2（PR #183）均已合并。2026-11-18 按 D-180 新增。已按 main `d7c85b63` 核对：`sdk/plugin.go`、`sdk/subplugin.go`、`sdk/registry.go` 的 `Regex(routeID, expr string)`、`Keyword/StartsWith/EndsWith/FullMatch(routeID string, patterns ...string)`、`Raw(routeID string)`、`On(routeID string, eventType EventType)`，`sdk/hooks.go` 的 `PreEvent(routeID string, event EventType)`、`BeforeSend(routeID string)`、`AfterSend(routeID string)`；`sdk/sdk.go` 的 `(*Context).Reply(text string) error`；`sdk/registry.go` 的 `(*RouteBuilder).Page(title string)`；`sdk/bus/bus.go` 的 `(*Subscription[T]).ID(routeID string)` 是 `.ID` 的现成写法；`contracts/validate/register.go` 拒绝空的与重复的 route_id；`examples/plugins/showcase/main.go` 手动登记四条 `kit.css`/`kit.js` 路由；`plugintest/plugintest.go` 的 `Result{Sends []Sent; Outcomes []Outcome; Waiting bool}`。与 goal-162（T-04.19）都改 `sdk/` 的回复路径，后合并者同步 main 后保留双方改动；与 goal-179 无共享文件。
+状态：已完成（PR #251），合并提交 `43b05989`。以下保留派发时语句。派发时：前置 T-04.18（PR #242）、T-16.2（PR #183）均已合并。2026-11-18 按 D-180 新增。已按 main `d7c85b63` 核对：`sdk/plugin.go`、`sdk/subplugin.go`、`sdk/registry.go` 的 `Regex(routeID, expr string)`、`Keyword/StartsWith/EndsWith/FullMatch(routeID string, patterns ...string)`、`Raw(routeID string)`、`On(routeID string, eventType EventType)`，`sdk/hooks.go` 的 `PreEvent(routeID string, event EventType)`、`BeforeSend(routeID string)`、`AfterSend(routeID string)`；`sdk/sdk.go` 的 `(*Context).Reply(text string) error`；`sdk/registry.go` 的 `(*RouteBuilder).Page(title string)`；`sdk/bus/bus.go` 的 `(*Subscription[T]).ID(routeID string)` 是 `.ID` 的现成写法；`contracts/validate/register.go` 拒绝空的与重复的 route_id；`examples/plugins/showcase/main.go` 手动登记四条 `kit.css`/`kit.js` 路由；`plugintest/plugintest.go` 的 `Result{Sends []Sent; Outcomes []Outcome; Waiting bool}`。与 goal-162（T-04.19）都改 `sdk/` 的回复路径，后合并者同步 main 后保留双方改动；与 goal-179 无共享文件。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-178（切片 T-04.20：SDK 用法从简）。goal 目录 goal-178，分支 goal-178，worktree .worktrees/goal-178，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
