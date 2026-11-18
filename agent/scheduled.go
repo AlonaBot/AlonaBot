@@ -63,7 +63,7 @@ func (a *component) runScheduled(c *sdk.Context, session string, task AgentTask)
 	// 2. 工具循环和发送继承 Core 的 job scope、期限与发信许可。
 	var assistant strings.Builder
 	stream := a.config.retryStream(c.Context(), c.Logger(), selected, nil)
-	if err := runToolLoop(c.Context(), request, catalog, stream, func(text string) error { assistant.WriteString(text); return nil }); err != nil {
+	if err := runToolLoop(c.Context(), db, request, catalog, stream, func(text string) error { assistant.WriteString(text); return nil }); err != nil {
 		return err
 	}
 	chunks, err := splitTaskText(assistant.String(), task.Target.TextLimit, task.Target.TextUnit)

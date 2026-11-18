@@ -4,7 +4,7 @@
 
 ## 1. 范围
 
-本子章节覆盖官方 OneBot 11 Adapter `adapters/onebot11/` 的平台实现：正向与反向 WebSocket 连接与接收、发送计划与回执、媒体、`onebot11.face` extension、平台权限，以及本地模拟服务 `adapters/onebot11/onebottest/`，即工作包 T-15；T-15.4～T-15.6 是 D-87 对标补齐的部分，协议与 Core 侧在核心切片 T-03.13～T-03.16、T-03.19。T-15.3 的跨 Adapter 一致性验收同时覆盖 Telegram，放在本子章节是因为它在 OneBot 11 完成后才能进行。章节总述与扩展约定见[适配器实施计划](README.md)。
+本子章节覆盖官方 OneBot 11 Adapter `adapters/onebot11/`（包 ID `alonabot-adapter-onebot11`，平台 `adapter_id` 仍为 `onebot11`，D-172）的平台实现：正向与反向 WebSocket 连接与接收、发送计划与回执、媒体、`onebot11.face` extension、平台权限，以及本地模拟服务 `adapters/onebot11/onebottest/`，即工作包 T-15；T-15.4～T-15.6 是 D-87 对标补齐的部分，协议与 Core 侧在核心切片 T-03.13～T-03.16、T-03.19。T-15.3 的跨 Adapter 一致性验收同时覆盖 Telegram，放在本子章节是因为它在 OneBot 11 完成后才能进行。章节总述与扩展约定见[适配器实施计划](README.md)。
 
 ## 2. 执行切片
 

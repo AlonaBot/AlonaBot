@@ -19,10 +19,10 @@ func TestSDKExamples(t *testing.T) {
 	dir := t.TempDir()
 	developmentWrite(t, filepath.Join(dir, "core_config.json"), fmt.Sprintf(`{
 		"listen":"127.0.0.1:0","adapters":{"telegram":{
-		"package":"alonabot_adapter_telegram","instances":{"examples":{
+		"package":"alonabot-adapter-telegram","instances":{"examples":{
 		"token":"sdk-examples-token","api_base_url":%q,"proxy_mode":"none"}}}}}`, server.URL()))
 	c := startEmptyCore(t, dir, "../../adapters/telegram", "../../examples/plugins/echo", "../../examples/plugins/media")
-	for _, id := range []string{"alonabot_adapter_telegram", "echo", "media"} {
+	for _, id := range []string{"alonabot-adapter-telegram", "echo", "media"} {
 		developmentPID(t, c, id)
 	}
 	telegramEventually(t, c, func() bool { return server.Calls("getUpdates") > 0 })

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -12,6 +13,22 @@ import (
 
 // RetainedGenerations 保留每个插件最近提交的三个代次，包含当前 Active。
 const RetainedGenerations = 3
+
+// GenerationCreatedAt 读取属于该插件的代次创建时刻，缺记录返回 ErrNotFound。
+func (s *Store) GenerationCreatedAt(ctx context.Context, pluginID, generationID string) (time.Time, error) {
+	var row generation
+	err := s.db.WithContext(ctx).Where(clause.Eq{Column: clause.PrimaryColumn, Value: generationID}).Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return time.Time{}, ErrNotFound
+	}
+	if err != nil {
+		return time.Time{}, err
+	}
+	if row.PluginID != pluginID {
+		return time.Time{}, ErrNotFound
+	}
+	return time.UnixMilli(row.CreatedAt).UTC(), nil
+}
 
 // Retained 读取插件最近提交的代次，按提交时间从新到旧排列。
 func (s *Store) Retained(ctx context.Context, pluginID string) ([]string, error) {

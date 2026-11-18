@@ -18,6 +18,7 @@ import (
 	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
@@ -38,6 +39,7 @@ type Server struct {
 
 type binding struct {
 	generationID string
+	role         state.Role
 	token        []byte // Bind 时复制的 Session 内部代理凭证，后续只读。
 	routes       []route
 	proxy        *httputil.ReverseProxy
@@ -62,17 +64,17 @@ func New(auth Authorizer) *Server {
 }
 
 // Bind 用已通过注册校验、且已激活的 Session 替换插件的旧映射。
-// endpoint、token 与 routes 在调用时复制为该 Session 的不可变快照。
-func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, token []byte, routes []*pb.RouteDescriptor, isAdapter bool) {
+// 角色、端点、凭证与路由组成该 Session 的不可变快照。
+func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, token []byte, routes []*pb.RouteDescriptor, role state.Role) {
 	host := net.JoinHostPort(endpoint.GetHost(), strconv.FormatUint(uint64(endpoint.GetPort()), 10))
 	auth := hex.EncodeToString(token)
 	prefix := pluginPrefix + pluginID
-	current := &binding{generationID: generationID, token: append([]byte(nil), token...), drained: make(chan struct{}), upgraded: make(map[*upgradedConnection]struct{})}
+	current := &binding{generationID: generationID, role: role, token: append([]byte(nil), token...), drained: make(chan struct{}), upgraded: make(map[*upgradedConnection]struct{})}
 	for _, descriptor := range routes {
 		if descriptor.GetKind() == pb.RouteKind_ROUTE_KIND_HTTP {
 			spec := descriptor.GetHttp()
 			current.routes = append(current.routes, route{method: spec.GetMethod(), path: spec.GetPath(), public: spec.GetIsPublic(),
-				platformToken: isAdapter && spec.GetIsPublic() && spec.GetAuthMode() == pb.HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN})
+				platformToken: role == state.RoleAdapter && spec.GetIsPublic() && spec.GetAuthMode() == pb.HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN})
 		}
 	}
 	current.proxy = &httputil.ReverseProxy{
@@ -91,6 +93,9 @@ func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, 
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			slog.Error("plugin HTTP proxy failed", "plugin_id", pluginID, "err", err)
+			if role == state.RoleWebUI {
+				w.Header().Set("Cache-Control", "no-store")
+			}
 			http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
 		},
 	}
@@ -145,6 +150,12 @@ func (s *Server) Unbind(pluginID, generationID string, token []byte) {
 
 // ServeHTTP 匹配 /plugins/{id}/ 下的原始请求路径并授权，再向绑定的固定端点转发。
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.ServeWithIsolation(w, r, nil)
+}
+
+// ServeWithIsolation 使用同一 Session 快照决定认证、响应隔离和转发端点。
+// isolate 包装普通插件的响应，并返回写完 trailer 后执行的清理函数。
+func (s *Server) ServeWithIsolation(w http.ResponseWriter, r *http.Request, isolate func(http.ResponseWriter) (http.ResponseWriter, func())) {
 	// 1. 仅处理插件命名空间，并取得当前 Session 的路由快照。
 	rest, ok := strings.CutPrefix(r.URL.Path, pluginPrefix)
 	if !ok {
@@ -152,20 +163,31 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pluginID, path, ok := strings.Cut(rest, "/")
-	if !ok || pluginID == "" {
-		http.NotFound(w, r)
-		return
-	}
-	path = "/" + path
 	s.mu.RLock()
 	current := s.mappings[pluginID]
 	unavailable := current == nil || current.draining
 	s.mu.RUnlock()
+	webUI := ok && current != nil && current.role == state.RoleWebUI
+	if webUI {
+		w.Header().Set("Cache-Control", "no-store")
+	} else if isolate != nil {
+		var cleanup func()
+		w, cleanup = isolate(w)
+		defer cleanup()
+	}
+	if !ok || pluginID == "" {
+		http.NotFound(w, r)
+		return
+	}
 	if unavailable {
 		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 		return
 	}
+	if webUI && !s.authorized(w, r, pluginID) {
+		return
+	}
 	// 2. 同一方法下选择最长的匹配路径；精确路径与尾斜杠前缀保持各自含义。
+	path = "/" + path
 	var selected *route
 	pathExists := false
 	for i := range current.routes {
@@ -186,9 +208,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	// 3. 私有路由由管理认证检查会话与 CSRF；公开回调的业务签名由插件检查。
-	if !selected.public && (s.auth == nil || !s.auth.Authorize(r, pluginID)) {
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+	// 3. 普通插件的私有路由也用管理认证；公开回调的业务签名由插件检查。
+	if !webUI && !selected.public && !s.authorized(w, r, pluginID) {
 		return
 	}
 	// 4. 授权期间可能已冻结或换代；在同一锁内复核映射并登记实际派发。
@@ -215,10 +236,25 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		stripIdentity(request.Out, selected.platformToken)
 		rewrite(request)
 	}
-	if policy, ok := w.(interface{ ModifyResponse(*http.Response) error }); ok {
+	if webUI {
+		proxy.ModifyResponse = func(response *http.Response) error {
+			// ReverseProxy 追加上游头；统一由上游响应副本写出一条 no-store。
+			w.Header().Del("Cache-Control")
+			response.Header.Set("Cache-Control", "no-store")
+			return nil
+		}
+	} else if policy, ok := w.(interface{ ModifyResponse(*http.Response) error }); ok {
 		proxy.ModifyResponse = policy.ModifyResponse
 	}
 	proxy.ServeHTTP(&upgradeWriter{ResponseWriter: w, binding: current}, r)
+}
+
+func (s *Server) authorized(w http.ResponseWriter, r *http.Request, pluginID string) bool {
+	if s.auth != nil && s.auth.Authorize(r, pluginID) {
+		return true
+	}
+	http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+	return false
 }
 
 func stripIdentity(r *http.Request, platformToken bool) {

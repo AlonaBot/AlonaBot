@@ -3,17 +3,23 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/AlonaBot/AlonaBot/agent/provider"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
+	"gorm.io/gorm"
 )
 
 const toolStepLimit = 20 // 按单轮实际提交执行的 ToolCall 计数，同一响应的每次调用各占一步。
 
-var errToolLimit = errors.New("tool call limit reached")
+var (
+	errToolLimit  = errors.New("tool call limit reached")
+	errModelUsage = errcode.Internal.New("could not record model usage")
+)
 
-func runToolLoop(ctx context.Context, request provider.Request, catalog toolCatalog, stream conversationStream, emit func(string) error) error {
+func runToolLoop(ctx context.Context, db *gorm.DB, request provider.Request, catalog toolCatalog, stream conversationStream, emit func(string) error) error {
 	request.Tools = catalog.definitions
 	steps := 0
 	for {
@@ -22,7 +28,7 @@ func runToolLoop(ctx context.Context, request provider.Request, catalog toolCata
 		}
 		var text strings.Builder
 		var calls []provider.ToolCall
-		err := stream(request, func(event provider.Event) error {
+		model, result, err := stream(request, func(event provider.Event) error {
 			if event.Text != "" {
 				text.WriteString(event.Text)
 				if err := emit(event.Text); err != nil {
@@ -36,6 +42,9 @@ func runToolLoop(ctx context.Context, request provider.Request, catalog toolCata
 		})
 		if err != nil {
 			return err
+		}
+		if err := recordUsage(ctx, db, model, time.Now(), result.Usage); err != nil {
+			return fmt.Errorf("%w: %w", errModelUsage, err)
 		}
 		if err := ctx.Err(); err != nil {
 			return err

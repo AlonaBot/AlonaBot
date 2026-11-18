@@ -159,7 +159,7 @@ func (h *httpListener) serveHTTP(w http.ResponseWriter, r *http.Request) {
 
 func appendHTTPRoutes(r *pb.Register, routes []httpRoute) {
 	for _, route := range routes {
-		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: "http." + route.Method + "." + hex.EncodeToString([]byte(route.Path)), Kind: pb.RouteKind_ROUTE_KIND_HTTP, DefaultEnabled: true, Spec: &pb.RouteDescriptor_Http{Http: &pb.HttpRouteSpec{Method: route.Method, Path: route.Path, IsPublic: route.Public, AuthMode: pb.HttpAuthMode(route.AuthMode)}}})
+		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: "http." + route.Method + "." + hex.EncodeToString([]byte(route.Path)), Kind: pb.RouteKind_ROUTE_KIND_HTTP, DefaultEnabled: true, PageTitle: route.PageTitle, Spec: &pb.RouteDescriptor_Http{Http: &pb.HttpRouteSpec{Method: route.Method, Path: route.Path, IsPublic: route.Public, AuthMode: pb.HttpAuthMode(route.AuthMode)}}})
 	}
 }
 

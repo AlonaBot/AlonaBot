@@ -108,3 +108,6 @@ const ServiceJobStatus = "core.job.status"
 
 // ServiceLogSetLevel 更新当前 SDK Session 的日志级别。
 const ServiceLogSetLevel = "sdk.log.set_level"
+
+// ServiceCommandList 查询父调用的 Actor 在默认目标中可用的路径命令。
+const ServiceCommandList = "core.command.list"

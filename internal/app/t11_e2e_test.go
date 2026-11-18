@@ -136,7 +136,7 @@ func t11Execute(c *sdk.Context, in t11Command) (t11Reply, error) {
 		result, err = toolapi.Invoke(c.Context(), in.Name, json.RawMessage(in.Arguments))
 		out.Result = string(result)
 	case "operation":
-		err = toolapi.Confirm(c.Context(), in.Name, in.Summary)
+		err = toolapi.Confirm(c.Context(), in.Name, in.Summary, toolapi.Unspecified)
 		if err == nil {
 			err = pipelineAudit(pipelineRecord{Stage: "operation", Text: in.Key, Route: in.Name})
 		}
@@ -307,7 +307,7 @@ func t11Click(h *pipelineHarness, token, user string) {
 }
 func t11Policy(h *pipelineHarness, service string, p pb.ToolPolicy) {
 	h.t.Helper()
-	if err := tool.New(h.store, h.assembly.router).SetPolicy(h.t.Context(), t11Provider, service, p); err != nil {
+	if err := tool.New(h.store, h.assembly.router).SetPolicy(h.t.Context(), state.ToolPolicy{PluginID: t11Provider, Service: service, Policy: p}); err != nil {
 		h.t.Fatal(err)
 	}
 }

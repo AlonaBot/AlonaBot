@@ -118,7 +118,7 @@ func (a *component) converse(c *sdk.Context, text string) error {
 		case attemptUsedCaption:
 			// 转述每轮只发一次；带图片的回退模型仍读取原图。
 			if captioned == nil {
-				captioned = new(a.captionImages(c, captionModel, text, incoming))
+				captioned = new(a.captionImages(c, db, captionModel, text, incoming))
 			}
 			current.Content = *captioned
 		default:
@@ -143,15 +143,15 @@ func (a *component) converse(c *sdk.Context, text string) error {
 	var toolLimitReached bool
 	var usedCaption bool
 	retry := a.config.retryStream(c.Context(), c.Logger(), selected, prepare)
-	stream := func(request provider.Request, emit func(provider.Event) error) error {
-		err := retry(request, emit)
+	stream := func(request provider.Request, emit func(provider.Event) error) (string, provider.Result, error) {
+		model, result, err := retry(request, emit)
 		if err == nil && attemptUsedCaption {
 			usedCaption = true
 		}
-		return err
+		return model, result, err
 	}
 	next, stop := iter.Pull(func(yield func(string) bool) {
-		providerError = runToolLoop(c.Context(), provider.Request{}, catalog, stream, func(text string) error {
+		providerError = runToolLoop(c.Context(), db, provider.Request{}, catalog, stream, func(text string) error {
 			assistant.WriteString(text)
 			if !yield(text) {
 				return context.Canceled
@@ -180,6 +180,9 @@ func (a *component) converse(c *sdk.Context, text string) error {
 		}
 		if providerError == nil {
 			return err
+		}
+		if errors.Is(providerError, errModelUsage) {
+			return providerError
 		}
 		c.Logger().ErrorContext(c.Context(), "provider conversation failed", "error", providerError)
 		return c.Reply(c.T("agent.error", "code", errcode.Unavailable.String()))

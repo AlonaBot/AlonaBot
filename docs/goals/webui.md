@@ -23,13 +23,14 @@ WebUI 已定稿（D-169）。各 goal 按 Figma 文件 `hV9ILivl2VGGKwtbEEh3mC` 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
 | goal-34 | T-08.7 | web/admin 骨架、配置表单组件与界面文案 | T-08.1、T-08.10 | 已完成（PR #91） |
-| goal-166 | T-09.26 | 品牌、视觉令牌与外壳 | T-08.7 | 待派发 |
-| goal-43 | T-09.8 | 登录、总览、插件、账号与版本 | T-08.7、T-09.6、T-09.12、T-09.13、T-09.26 | 等待前置 |
+| goal-166 | T-09.26 | 品牌、视觉令牌与外壳 | T-08.7 | 已完成（PR #217） |
+| goal-43 | T-09.8 | 登录、总览、插件、账号与版本 | T-08.7、T-09.6、T-09.12、T-09.13、T-09.26 | 待派发 |
 | goal-44 | T-09.9 | 插件详情、权限、会话与系统设置 | T-09.8、T-09.14、T-11.5、T-04.17、T-08.15、T-08.16 | 等待前置 |
 | goal-94 | T-09.15 | 日志页 | T-09.8、T-09.10、T-09.19、T-02.5 | 等待前置 |
 | goal-156 | T-09.23 | 官方 WebUI 的后台进程、统计、商店、用户与数据页 | T-09.8、T-09.20、T-09.21、T-09.22、T-09.24 | 等待前置 |
 | goal-146 | T-09.18 | 模型页 | T-09.8、T-09.14、T-12.16 | 等待前置 |
 | goal-165 | T-09.25 | 配置文件页 | T-04.19、T-11.6、T-12.19、T-09.18 | 等待前置 |
+| goal-175 | S-06.3 | 休眠策略与运行状态的页面 | T-09.8、T-09.9、S-06.1 | 等待前置 |
 
 ## 第 8 波
 
@@ -161,7 +162,17 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 
 ### goal-166 · T-09.26 品牌、视觉令牌与外壳
 
-状态：待派发。前置 T-08.7（goal-34，PR #91，合并提交 `9789fc8`）已合并，接口见 goal-34 条目与下文。2026-11-17 按 D-169 新增：WebUI 定稿后先建外壳，后续页面 goal 把页面挂进外壳。依赖已由维护者批准（D-169、docs/development.md）。
+状态：已完成（PR #217）。合并提交 `acd5ba0`，验证证据见 TEST-MATRIX §3.2。按 `web/admin/src/` 核对，后继页面接入以下接口：
+
+- `routes.tsx`：导出 `RouteEntry = { id: string; path: string; label: string; icon: LucideIcon; group: 'main' | 'bottom'; render: () => JSX.Element }` 与 `routes: RouteEntry[]`。当前仅开发模式登记 `/dev/forms`（ID `dev-forms`）；`main.tsx` 用 `usePath()` 精确匹配 `path` 并把页面交给外壳渲染。
+- `shell/AppShell.tsx`：`AppShell(props: { version: string; onLogout?: () => void; children: React.ReactNode }): JSX.Element`。桌面侧栏收到 `onLogout` 才在标志菜单显示登出；现有入口传入的版本是 `v0.1.0`，还未接 API。侧栏版本按钮打开「关于」。
+- `shell/router.ts`：`usePath(): string` 读取 `pathname` 并跟随 `popstate`；`navigate(path: string, options?: { replace?: boolean }): void` 用 History API 切换路径；`Link(props: LinkProps): JSX.Element`，其中 `LinkProps` 为 `{ to: string; className?: string; children: React.ReactNode }`，普通左键点击走站内导航。
+- `shell/search.ts`：`SearchContext: React.Context<{ register(items: SearchItem[]): () => void }>`；`SearchItem = { id: string; title: string; section: string; keywords?: string[]; run: () => void }`；`filterSearch(items: SearchItem[], query: string): SearchItem[]` 按标题与关键词做大小写不敏感的子串匹配。`AppShell` 自动用路由的本地化标题和路径建立页面搜索项；额外操作由页面注册，卸载时调用返回的注销函数。
+- `theme/theme.ts`：`ThemeChoice = 'light' | 'dark' | 'system'`、`resolveTheme(choice: ThemeChoice, prefersDark: boolean): 'light' | 'dark'`、`useTheme(): [ThemeChoice, (choice: ThemeChoice) => void]`。偏好存于 `alonabot.webui.theme`，缺省跟随系统，结果写入根元素 `data-theme`，由 `theme/tokens.css` 提供两套颜色令牌。
+- `shell/sidebar.ts`：`SidebarState = { order: string[]; hidden: string[]; collapsed: boolean }`、`loadSidebar(available: string[]): SidebarState`、`saveSidebar(state: SidebarState): void`。桌面侧栏按 `main` 条目的 ID 保存顺序、隐藏和折叠状态，`bottom` 放在底部；手机按 `overview`、`plugins`、`profiles`、`logs` 的顺序取已登记的 `main` 条目，其余路由放入「更多」，无剩余项时省略「更多」。
+- `i18n/UI.tsx`：`UIContext = createContext(english.messages)`、`useUI(): typeof english.messages`。`RouteEntry.label` 填 `web/admin/i18n/en-US.json` 与 `zh-CN.json` 共有的 `messages` 键，供导航、顶栏标题与搜索共用。
+
+以下为派发时的语句。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-166（切片 T-09.26：品牌、视觉令牌与外壳）。goal 目录 goal-166，分支 goal-166，worktree .worktrees/goal-166，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
@@ -234,32 +245,61 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 
 ### goal-43 · T-09.8 登录、总览、插件、账号与版本
 
-状态：等待前置（T-09.13、T-09.26）。T-09.6（PR #179，合并提交 `8898251`）与 T-09.12（PR #167）已合并；goal-34 的接口见其条目。2026-11-17 按 D-169 以 Figma v4 改写：原「Admin 管理页」按 v4 的页面重新划分，外壳与路由改由 goal-166 提供。目标、依据与要点由 PLAN T-09 步骤 7 与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：待派发。按 `spec/plan/webui.md`、`spec/plan/core.md` 与 main 核对：T-08.7（PR #91，`9789fc8`）提供 `ConfigForm` 和双语文案；T-09.6（PR #179，`8898251`）接通更新的候选与提交；T-09.12（PR #167，`3a9b4af`）提供静态单页回退与组件图标；T-09.13（PR #181，`d507e5a`）提供会话取回、multipart 安装/更新及 Core 总览；T-09.26（PR #217，`acd5ba0`）提供路由、外壳、搜索和主题，签名见 goal-166。
+
+main 上 T-09.7（PR #187）已接通回退执行，ADMIN-API §3.2 的 501 说明早于该实现；T-09.10（PR #177）提供日志接口，T-09.14（PR #192）提供 Adapter 实例 Schema 与脱敏配置读取。§20 的保留代次与实例列表尚未注册，归 T-09.22（goal-155）；会话数在该实例响应中也无字段。组件列表暂无展示名称、描述、故障原因字段；总览统计和新版来源归 goal-156（D-162）。下文先接可用 API，缺数据的部分保留设计稿规定的入口或明确显示缺口。D-172 已定稿，`web/admin/plugin.yaml` 仍是旧 ID，实际改名归 goal-177。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-43（切片 T-09.8：登录、总览、插件、账号与版本）。goal 目录 goal-43，分支 goal-43，worktree .worktrees/goal-43，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
 
-目标：在 goal-166 的外壳中实现登录、总览、插件（已安装的网格、安装与替换、启停、卸载、更新与版本记录）与账号（Adapter 实例）页面，并建立 Admin API 客户端。本切片不改 Go 代码。
+目标：接通真实登录、总览、插件管理（安装、替换、启停、更新、卸载及详情）与机器人账号管理，建立同源 Admin API 客户端。按 v4 保留版本记录、账号列表与 Core 新版提示的布局，随对应数据接口接通。
 
-依据：PLAN T-09 步骤 7（管理页）；CONTRACTS §7.3、§7.4、§7.5、§9.3、§12.1；ADMIN-API §1～§5、§9～§11、§14；DECISIONS D-25、D-62、D-63、D-127、D-139、D-169；TEST-MATRIX V-40、V-47 的页面分项。画板：「v4 · 登录」「v4 · 总览」「v4 · 插件」「v4 · 插件（侧栏收起）」「v4 · 机器人账号」「v4 · 机器人账号（添加）」「v4 · 插件 · 天气 · 版本记录」「v4 · 插件 · 天气 · 回退确认」「v4 · 插件 · 天气 · 高级（卸载）」「v4 · 会话（Core 有新版本）」及其深色与手机画板。
+依据：PLAN T-09 步骤 7（管理页）及其停止和失败条件；spec/plan/webui.md §3；CONTRACTS §7.3～§7.5、§9.3、§12.1；ADMIN-API §1～§6、§8～§11、§14、§20；DECISIONS D-25、D-62、D-63、D-127、D-139、D-158、D-162、D-164、D-169、D-172；TEST-MATRIX V-40、V-47 的页面分项。画板：「v4 · 登录」「v4 · 总览」「v4 · 插件」「v4 · 插件（侧栏收起）」「v4 · 机器人账号」「v4 · 机器人账号（添加）」「v4 · 插件 · 天气 · 版本记录」「v4 · 插件 · 天气 · 回退确认」「v4 · 插件 · 天气 · 高级（卸载）」「v4 · 会话（Core 有新版本）」及对应浅色、深色和手机画板；会话画板只用于共用的新版提示。
 
-要点：
-- API 客户端 src/api/：带 CSRF 头，统一解析 ADMIN-API §5 的错误格式与 409 确认流程；登录后 csrf_token 只在内存中，刷新后经会话取回接口恢复；未登录访问任何页面跳到登录页，登出从 goal-166 的标志菜单进入。
-- 总览：顶部一行状态（例如「QQ 主号正在重连，点歌没能启动」与「查看日志」），时间范围切换，图表卡片（消息量、各账号、热门插件、错误与警告；WARNING 用黄色，CRITICAL 用紫色），没有统计接口时图表区显示空状态；统计数据由 goal-156 的后台进程提供，本切片只用已有接口能取到的数据，其余卡片留给 goal-156 接入。图表用 recharts（本切片引入并锁定版本）。
-- 插件：「已安装」与「商店」标签（商店由 goal-156 实现，本切片只放入口）；按组件类型筛选（功能、适配器、Agent、界面）、按名称筛选、「有问题的在前」排序；网格卡片显示图标、名称、版本、描述、状态与开关，有问题时显示原因与「查看原因」。安装经上传接口（归档、release.json、.sig）或 `--source`；同类组件已安装时展示将被替换的组件并要求确认（`--replace`）。卡片的 ⋯ 菜单有启用、停用、重启与卸载；卸载对话框提供三种范围（D-127），勾选清理时逐项列出要删除的对象。
-- 插件详情页（本切片只建立详情页框架与「版本记录」「高级」两个标签，其余标签由 goal-44 与 goal-156 加入）：标题行为「插件 ›」面包屑、图标、名称与状态，右侧为重载与 ⋯；版本记录列出保留代次，回退前展示确认对话框；高级标签有单独的日志级别、休眠策略（跟随全局、永不休眠或时长；插件声明常驻时锁定并显示原因）与卸载。
-- 版本升级用「v0.1.0 → v0.2.0」两个版本标签加箭头表示，升级按钮带图标；侧栏版本号旁的更新入口是小按钮，不单独占一行。
-- 账号：列出 Adapter 实例（平台图标、名称、状态、会话数；凭证只显示「已设置」），添加对话框先选平台，再用该 Adapter 的配置 Schema 经 goal-34 的 ConfigForm 生成表单；启停与删除。
-- 全部页面向 goal-166 的 routes 登记，并向全局搜索登记页面与操作条目。
+范围（只新增或修改这些；路径相对 web/admin/）：
+- src/main.tsx、src/routes.tsx、src/style.css、i18n/en-US.json、i18n/zh-CN.json。
+- src/shell/AppShell.tsx、Sidebar.tsx、TopBar.tsx、MobileTabBar.tsx：版本提示、登出与插件详情的导航状态。
+- src/pages/LoginPage.tsx、OverviewPage.tsx、PluginsPage.tsx、PluginDetailPage.tsx、AccountsPage.tsx，以及 src/pages/ 下由这些页面共用的卡片、对话框与样式。
+- src/api/admin.ts、对应的 *.local.test.ts；package.json、package-lock.json 只在本切片实际首次使用已批准依赖时修改。
 
-不做：插件配置、权限、会话、系统设置与用户（goal-44、goal-156）；日志页（goal-94）；商店、统计与数据浏览（goal-156）；模型与配置文件页（goal-146、goal-165）；Admin API 本身（T-09.4、T-09.13）。
+允许的依赖：只用 docs/development.md 已批准的前端依赖。按 D-169，recharts、@radix-ui/react-popover 由首次实际使用它的页面切片引入并锁定版本；空图表区不引入 recharts，已有 Radix 菜单和对话框能完成的交互不引入 popover。
+
+接口（新增的前端导出与当前可调用的 HTTP 接口）：
+- src/pages/ 下各同名模块导出 LoginPage(props: { onAuthenticated: () => void }): JSX.Element、OverviewPage(props: { core: CoreInfo }): JSX.Element、PluginsPage(): JSX.Element、PluginDetailPage(props: { id: string; generations?: readonly Generation[] }): JSX.Element、AccountsPage(): JSX.Element。routes 登记 overview → /overview、plugins → /components、accounts → /accounts，均为 main，label 用双语 messages 键。main.tsx 单独分派 /login 和 /components/<编码后的组件 ID>，两者不作为一级导航或重复搜索结果；已登录访问 / 跳至 /overview，详情仍高亮「插件」。按 ADMIN-API §6 避开 Core 保留的 /plugins 路径；仅开发模式保留 /dev/forms 预览。
+- AppShell 保留原 props，增加可选 coreUpdate: { version: string; releaseURL: string }，转给 Sidebar 在当前版本旁显示新版入口；由 goal-156 接入真实数据，本切片默认不传该值。TopBar 复用 onLogout，让手机也可从标志菜单登出。
+- src/api/admin.ts：导出 AdminAPIError（status: number、code?: string、affected?: string[]，message 保留 safe_message 或纯文本错误）。同源 Cookie 由浏览器管理；登录按 §2 以受控 Origin 提交 JSON，其余受保护的变更请求携带内存中的 X-Alonabot-CSRF。登录与认证失败按 §1、§2、§9 的纯文本解析，Admin JSON 错误按 §5 保留 code 与 safe_message；仅将带 affected 数组的 409 作为确认。每个操作按契约重送原请求，须由用户明确确认。
+- login(token: string): Promise<void> → POST /api/auth/login，JSON {token}，200 取 csrf_token 存入内存；restoreSession(): Promise<{ expires_at_unix_ms: number }> → GET /api/auth/session，恢复 csrf_token 与固定过期时间；logout(): Promise<void> → POST /api/auth/logout，204 清空会话。入口用 onSessionExpired(handler: () => void): () => void 订阅受保护请求的 401，卸载时注销；login 的 401 留在登录页显示错误。
+- getCore(): Promise<CoreInfo> → GET /api/v1/core，CoreInfo 为 { version: string; listen: string; admin_api_major: number }。listPackages(): Promise<Package[]> → GET /api/v1/packages，Package 按 §3.1 的大小写：ID、Role、AdapterID、Version、Source、PublisherKeyID、Pin、Enabled、Uninstalled、Signed、Active、State；安装响应可有 Warnings: string[]。packageIconURL(id: string): string 返回 /api/v1/packages/{id}/icon，供 img 使用，404 显示通用图标。
+- installPackage(input: { Source: string; Replace?: boolean; Confirm?: boolean } | FormData): Promise<Package> → POST /api/v1/packages/install。远程安装传 Source: "owner/repo"；浏览器上传用 archive、release、可选 signature（文件）与 public_key（release.pub 的 base64 文本），以及可选 replace、confirm（文本 true/false）。保留签名文件原始字节，由浏览器设置 multipart boundary。遇到同类冲突时，管理员可选择发出带 Replace/replace 的请求；服务端返回受影响对象后，另行确认再提交。安装界面展示来源，并提示 WebUI 组件拥有完整管理权限。
+- updatePackage(id: string, input: { confirm?: boolean } | FormData): Promise<{ warnings?: string[] }> → POST /api/v1/packages/update。JSON 发 {id, confirm, install:{}} 沿用原绑定来源；multipart 同 §10，追加 id，带 confirm，无 replace。显示服务端返回的 warnings。
+- changePackage(action: 'enable' | 'disable' | 'restart' | 'reload', id: string, confirm?: boolean): Promise<void> → POST /api/v1/packages/{action}，发 {id}，仅 disable 附 confirm。uninstallPackage(id: string, purge: 0 | 1 | 2, confirm?: boolean): Promise<void> → POST /api/v1/packages/uninstall，发 {id,purge,confirm}。rollbackPackage(id: string, generation: string, confirm?: boolean): Promise<void> → POST /api/v1/packages/rollback，发 {id,generation,confirm}。这些动作成功均为 200 {}。Generation = { id: string; version: string; created_at: string; active: boolean; has_db: boolean } 对应 §20 的 generations；当前只在详情收到已知的保留代次时提供回退，等 goal-155 注册 GET /api/v1/plugins/{id}/generations 后再接列表。
+- getLogLevels(): Promise<LogLevels> 与 setPackageLogLevel(id: string, level: SourceLogLevel): Promise<LogLevels> → GET/PUT /api/v1/logs/levels；LogLevels = { global: string; sources: Record<string, SourceLogLevel> }；PUT 仅发 {sources:{[id]:level}}。SourceLogLevel 取当前支持的 debug、info、warn、error、off、inherit；未设置的已安装组件显示继承。critical 的写入随 T-02.5 接入。
+- getInstanceSchema(adapterID: string): Promise<unknown> → GET /api/v1/adapters/{adapter_id}/instance-schema，返回 Schema 对象。getInstanceConfig(adapterID: string, instanceID: string): Promise<{ config: Record<string, unknown> }> → GET /api/v1/adapters/{adapter_id}/instances/{instance_id}，凭证形如 {$secret_set:true}。createInstance(input: { package_id: string; instance_id: string; config: Record<string, unknown>; confirm?: boolean }): Promise<void> → POST /api/v1/adapter/instances/create。changeInstance(action: 'start' | 'stop' | 'delete', instanceID: string): Promise<void> → POST /api/v1/adapter/instances/{action}，发 {instance_id}；写操作均为 200 {}。§20 的 GET /api/v1/adapter/instances 将返回 {instances:[{instance_id,adapter_id,package_id,state,safe_error,default}]}，待 goal-155 注册后接持久列表。
+
+行为：
+- 登录：按画板提交管理 token，成功清空输入并进入 /overview，失败在表单显示原因。入口先取回会话再渲染管理页；刷新已登录页面保留路径，未登录的管理路径跳至 /login。登出成功或受保护请求收到 401 后清空内存中的 CSRF 并返回登录；认证 500/503 显示真实错误。token 和新填凭证只随对应请求提交，提交成功后清空输入，浏览器存储和日志不留明文。
+- 总览：显示真实 Core 版本、监听地址与当前可从 Package.State 确认的故障概况；「查看日志」在 logs 路由已登记时可用。保留 v4 的状态行、时间范围（24 小时、7 天、30 天）和四组图表位置（消息量、各账号、热门插件、错误与警告；WARNING 黄色、CRITICAL 紫色）。goal-156 接入统计前显示无统计数据，不用日志缓冲推算完整统计。
+- 插件列表：按类型（功能、适配器、Agent、界面）、名称筛选，支持「有问题的在前」和数字分页。「已安装」只列 Uninstalled 为 false 的组件；「商店」只保留入口。卡片展示图标、名称、版本、状态和 Enabled 开关；当前用 ID 作名称，缺少的描述或原因不编造，把真实错误展示在「查看原因」或动作反馈处。⋯ 菜单包含启用、停用、重启与卸载，按角色与状态提供动作。支持上传和远程安装、同类替换、沿原来源更新和上传更新。根据 §5/§10 逐项展示服务端返回的确认对象；卸载选项为只卸载、清理数据、清理数据与配置，分别对应 purge 0/1/2。成功后重读列表，失败显示原原因及安装、更新的真实结果。
+- 插件详情：标题行有「插件 ›」面包屑、图标、名称、状态，右侧有重载和 ⋯。只做「版本记录」「高级」两个标签。「版本记录」显示当前版本和当前代次；收到保留代次时按服务端顺序列出，非 Active 项可回退，确认对话框显示目标和将丢弃的写入（以 affected 为准）。代次列表尚不可用时明确显示，并省略回退操作。高级提供该组件的日志级别和同一卸载流程；休眠控件见 goal-175。
+- 机器人账号：按 v4 显示平台图标、实例名、状态、会话数；实例与会话数来源未就绪时明确标注，不填零。添加先选已安装 Adapter（区分 AdapterID 与包 ID），再用 src/components/ConfigForm.tsx 的 ConfigForm({schema, value, messages, onSubmit})，传返回的 Schema、空配置对象及可用文案，onSubmit 收到的新建 patch 作为 config 发送。成功后可对刚创建、ID 已确认的实例执行启停、删除和脱敏读取；已有实例列表接通后复用同一操作。凭证只按 $secret_set 标「已设置」，不把掩码回传。实例停用只影响本次 Core 运行（D-139）。
+- 版本：外壳及「关于」使用 getCore 的 version；已有目标版本时显示「当前版本 → 目标版本」和带图标的操作。Core 有已知新版时在侧栏版本号旁加小按钮、同排显示，按画板提供提示并指向发行说明；版本号本身仍打开「关于」。实际新版检查由 goal-156 接入，本切片不直连 GitHub，Core 无浏览器内升级动作。
+- 已登记页面自动进入搜索；当前可用的操作用 SearchContext 注册，离开页面时注销。组件 ID 和 AdapterID 取 API 原值；新写的市场 ID 示例用 D-172 连字符，manifest 改名见 goal-177。
+
+测试：
+- 提交：无。
+- 本地自测：前端纯函数写在 *.local.test.ts，覆盖 409 确认与冲突的区别、上传 part 名、筛选与排序、未有新版时不显示更新入口。PR 写明 npm run typecheck、npm run test、npm run build 的结果。
+- 浏览器手动验证（PR 写明浏览器和版本）：同源真实 Core 上登录失败、首次登录成功、详情路径刷新恢复、登出和受保护页面；深浅色、手机导航与搜索；插件上传、远程安装、替换/清理确认和取消、启停、重启、重载、更新与高级日志级别；新建账号后按真实 ID 读取脱敏配置、启动、停止及删除。核对 409 冲突、候选失败时页面与实际状态一致。代次列表、已有账号列表与会话数、统计与新版来源未接通的流程标明未运行；本地数据只用于验证对应界面和确认流程。
+
+完成条件：web/admin 下 npm ci、npm run typecheck、npm run test、npm run build 成功，仓库根目录 go build ./... 成功；PR 记录真实 Core 上已有接口的浏览器验证及未接通项。
+
+不做：Go 代码或新增 Admin API；插件配置、权限、会话、系统设置与用户（goal-44、goal-156）；日志页（goal-94）；商店实现、统计采集、新版检查、更新内容与存储视图（goal-156）；模型与配置文件页（goal-146、goal-165）；休眠策略、休眠状态及原因（goal-175）。
 ```
 
 ## 第 19 波
 
 ### goal-44 · T-09.9 插件详情、权限、会话与系统设置
 
-状态：等待前置（T-09.8、T-09.14、T-11.5、T-04.17、T-08.15、T-08.16）。2026-11-17 按 D-169 以 Figma v4 改写，并纳入 D-157（工具类别）、D-159（插件页面主题）、D-160（回复示例）、D-161（配置校正）与 D-128～D-130 的页面部分。目标、依据与要点由 PLAN T-09 步骤 7 与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：等待前置（T-09.8、T-09.14、T-08.16）。T-11.5（PR #219，`b2348c9`）、T-04.17（PR #218，`6d81be3`）、T-08.15（PR #211，`3b2b64c`）已合并。2026-11-17 按 D-169 以 Figma v4 改写，并纳入 D-157（工具类别）、D-159（插件页面主题）、D-160（回复示例）、D-161（配置校正）与 D-128～D-130 的页面部分。目标、依据与要点由 PLAN T-09 步骤 7 与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-44（切片 T-09.9：插件详情、权限、会话与系统设置）。goal 目录 goal-44，分支 goal-44，worktree .worktrees/goal-44，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
@@ -277,7 +317,7 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 - 权限 · 工具调用：按插件分组，显示工具的类别（只读、写入、破坏性、未声明，D-157），策略为允许、询问、禁止，支持按类别批量设置。
 - 权限 · 用户：一张表包含管理员与禁止（管理员是身份，禁止是状态），添加用户对话框可从聊天目录选择（D-130）。
 - 会话：按插件列出会话摘要，可清除，不显示条目内容；有配置文件列与筛选（D-168，配置文件页由 goal-165 实现）。
-- 系统设置：桌面后台样式（左边名称与说明，右边控件）；界面语言、外观（浅色、深色、跟随系统，使用 goal-166 的 useTheme）、管理令牌（更换令牌对话框，ADMIN-API §20）、网络代理、全局日志级别（含 CRITICAL）、插件空闲休眠、日志保留；没有命令前缀（D-168）；右上角有「重启核心」与「登出」。
+- 系统设置：桌面后台样式（左边名称与说明，右边控件）；界面语言、外观（浅色、深色、跟随系统，使用 goal-166 的 useTheme）、管理令牌（更换令牌对话框，ADMIN-API §20）、网络代理、全局日志级别（含 CRITICAL）、日志保留；没有命令前缀（D-168）；右上角有「重启核心」与「登出」。
 - secret 明文查看要求重新输入管理 token，只在当前视图显示。
 
 不做：管理 API（T-09.14 等）；日志页（goal-94）；商店、统计、用户任务以外的插件页面内容、存储视图（goal-156）；模型与配置文件页（goal-146、goal-165）。
@@ -285,7 +325,7 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 
 ### goal-94 · T-09.15 日志页
 
-状态：等待前置（T-09.8、T-09.10、T-09.19、T-02.5）。2026-11-17 按 D-169 以 Figma v4 改写，纳入 D-156（诊断包）与 D-158（CRITICAL）；日志页不再设置级别（级别在系统设置与插件「高级」中，见 goal-44 与 goal-43）。目标、依据与要点由 PLAN T-09 步骤 7 与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：等待前置（T-09.8、T-09.10）。T-09.19（PR #213，`6f6856c`）、T-02.5（PR #209，`d75e43d`）已合并。2026-11-17 按 D-169 以 Figma v4 改写，纳入 D-156（诊断包）与 D-158（CRITICAL）；日志页不再设置级别（级别在系统设置与插件「高级」中，见 goal-44 与 goal-43）。目标、依据与要点由 PLAN T-09 步骤 7 与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-94（切片 T-09.15：日志页）。goal 目录 goal-94，分支 goal-94，worktree .worktrees/goal-94，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
@@ -305,7 +345,7 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 
 ### goal-156 · T-09.23 官方 WebUI 的后台进程、统计、商店、用户与数据页
 
-状态：等待前置（T-09.8、T-09.20、T-09.21、T-09.22、T-09.24）。2026-11-17 按 D-162～D-166 与 D-169 新增。目标、依据与要点由 PLAN T-09 步骤 7（WebUI 后台）与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：等待前置（T-09.8、T-09.20、T-09.21）。T-09.22（PR #220，`b5e572e`）、T-09.24（PR #215，`b911f27`）已合并。2026-11-17 按 D-162～D-166 与 D-169 新增。目标、依据与要点由 PLAN T-09 步骤 7（WebUI 后台）与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-156（切片 T-09.23：官方 WebUI 的后台进程、统计、商店、用户与数据页）。goal 目录 goal-156，分支 goal-156，worktree .worktrees/goal-156，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
@@ -368,4 +408,22 @@ WebUI 自身的文案有 en-US 与 zh-CN 两个目录，并提供语言切换组
 - 「默认」的字段修改走插件配置 API（Pending 与 reload，保存时提示会重载的插件）；其他配置文件经 ADMIN-API §23 立即生效。插件配置页选中「默认」以外的配置文件时，只有写了 `profile` 的字段可以编辑，其余字段置灰。无效覆盖值显示原因并可一键清理。
 
 不做：配置文件的 Core、SDK 与 Agent 实现（T-08.18、T-04.18、T-04.19、T-11.6、T-12.19）；会话页的配置文件列（goal-44）。
+```
+
+### goal-175 · S-06.3 休眠策略与运行状态的页面
+
+状态：等待前置（T-09.8、T-09.9、S-06.1）。2026-11-17 维护者决定把插件休眠（PLAN §7）纳入本轮时新增：休眠控件从 goal-43、goal-44 移到本切片，使 WebUI 主线与发布链不依赖休眠切片（S 工作包不进入 v0.1 发布门槛）。目标、依据与要点由 PLAN §7 S-06 步骤 1、ADMIN-API §24 与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-175（切片 S-06.3：休眠策略与运行状态的页面）。goal 目录 goal-175，分支 goal-175，worktree .worktrees/goal-175，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
+
+目标：在 goal-43 的插件详情「高级」标签加入休眠策略（跟随全局、永不休眠或时长；manifest 要求常驻或其他原因不能休眠时锁定并显示原因与提示），在 goal-44 的系统设置加入全局运行模式与「插件空闲休眠」时长；插件列表与详情显示运行状态（含「已休眠」）与最近的唤醒/休眠原因。本切片不改 Go 代码。
+
+依据：PLAN §7 S-06 步骤 1；CONTRACTS §4.4、§4.5、§15.1；ADMIN-API §24；DECISIONS D-153；TEST-MATRIX V-81 的页面分项。画板：「v4 · 插件 · 天气 · 高级」「v4 · 插件 · 天气 · 高级（不能改休眠）」「v4 · 系统设置」。
+
+要点：
+- 只调用 ADMIN-API §24；读取不唤醒插件。保存后唤醒失败时显示实际错误并重新读取当前设置。
+- 原因与警告的文案按 §24 的稳定值在 i18n 中翻译；未声明 Core 过滤的消息事件、Raw、HTTP、Hook 或持续监听的插件被显式给出时长时，提示会被频繁唤醒。
+
+不做：休眠的 Core 实现与管理 API（S-01.1～S-06.1）；固定机器测量（S-06.2）。
 ```

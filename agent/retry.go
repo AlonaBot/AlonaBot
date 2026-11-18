@@ -10,7 +10,8 @@ import (
 
 const providerRetryInterval = time.Second
 
-type conversationStream func(provider.Request, func(provider.Event) error) error
+// conversationStream 返回实际作答的模型配置名与该次请求的结果。
+type conversationStream func(provider.Request, func(provider.Event) error) (string, provider.Result, error)
 
 // retryStream 为工具循环的每次请求重新尝试模型链；工具结果由循环持有。
 func (s *configuration) retryStream(ctx context.Context, logger *slog.Logger, selected *configuredModel, prepare func(*configuredModel, provider.Request) provider.Request) conversationStream {
@@ -22,7 +23,7 @@ func (s *configuration) retryStream(ctx context.Context, logger *slog.Logger, se
 			seen[name] = true
 		}
 	}
-	return func(request provider.Request, emit func(provider.Event) error) error {
+	return func(request provider.Request, emit func(provider.Event) error) (string, provider.Result, error) {
 		var lastError error
 		for _, model := range models {
 			for attempt := int64(1); ; attempt++ {
@@ -31,23 +32,23 @@ func (s *configuration) retryStream(ctx context.Context, logger *slog.Logger, se
 					select {
 					case <-ctx.Done():
 						timer.Stop()
-						return ctx.Err()
+						return "", provider.Result{}, ctx.Err()
 					case <-timer.C:
 					}
 				}
 				if err := ctx.Err(); err != nil {
-					return err
+					return "", provider.Result{}, err
 				}
 				current := request
 				if prepare != nil {
 					current = prepare(model, request)
 				}
 				if err := ctx.Err(); err != nil {
-					return err
+					return "", provider.Result{}, err
 				}
 				current.MaxTokens = model.maxTokens
 				delivered := false
-				_, err := model.client.Stream(ctx, current, func(event provider.Event) error {
+				result, err := model.client.Stream(ctx, current, func(event provider.Event) error {
 					if err := ctx.Err(); err != nil {
 						return err
 					}
@@ -55,14 +56,14 @@ func (s *configuration) retryStream(ctx context.Context, logger *slog.Logger, se
 					return emit(event)
 				})
 				if err == nil {
-					return nil
+					return model.name, result, nil
 				}
 				logger.WarnContext(ctx, "provider conversation request failed", "model", model.name, "attempt", attempt, "error", err)
 				if ctxErr := ctx.Err(); ctxErr != nil {
-					return ctxErr
+					return "", provider.Result{}, ctxErr
 				}
 				if delivered || !provider.Retryable(err) {
-					return err
+					return "", provider.Result{}, err
 				}
 				lastError = err
 				if attempt == s.maxAttempts {
@@ -70,6 +71,6 @@ func (s *configuration) retryStream(ctx context.Context, logger *slog.Logger, se
 				}
 			}
 		}
-		return lastError
+		return "", provider.Result{}, lastError
 	}
 }
