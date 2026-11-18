@@ -32,6 +32,7 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
+	"github.com/AlonaBot/AlonaBot/internal/core/profile"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/generate"
@@ -190,6 +191,70 @@ func TestManagementLifecycle(t *testing.T) {
 		}
 		stopTestCore(t, c)
 	})
+	t.Run("profile-storage-and-assignments", func(t *testing.T) {
+		dir := t.TempDir()
+		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
+		archive := weatherProfilePackage(t, `{"city":{"type":"string","profile":true},"plain":{"type":"string"}}`, "1.0.0")
+		c.management(t, dir, "", "install", archive, "--yes")
+		c.management(t, dir, "", "enable", "weather")
+		adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+		c.management(t, dir, "", "install", adapter, "--yes")
+		c.management(t, dir, "", "adapter", "instance", "create", "alonabot_adapter_fixture", "one")
+		var created struct {
+			ID string `json:"id"`
+		}
+		output := c.management(t, dir, "", "profile", "create", "天气群")
+		if err := json.Unmarshal([]byte(output), &created); err != nil || created.ID == "" {
+			t.Fatalf("create: %s: %v", output, err)
+		}
+		c.management(t, dir, "", "profile", "set", created.ID, "weather", "city", `"北京"`)
+		c.management(t, dir, "", "profile", "assign", created.ID, "one")
+		c.management(t, dir, "", "profile", "assign", created.ID, "one", "devloop:chat")
+		status, raw := fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/profiles/assignments")
+		var assignments profile.Assignments
+		if status != http.StatusOK || json.Unmarshal(raw, &assignments) != nil || assignments.Instances["one"] != created.ID || len(assignments.Sessions) != 1 || assignments.Sessions[0] != (profile.Assignment{Instance: "one", Session: "devloop:chat", Profile: created.ID}) {
+			t.Fatalf("assignments: %d %s", status, raw)
+		}
+		status, raw = fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/profiles/"+created.ID+"/plugins")
+		var plugins []profile.Plugin
+		if status != http.StatusOK || json.Unmarshal(raw, &plugins) != nil || len(plugins) != 1 || string(plugins[0].Overrides["city"]) != `"北京"` {
+			t.Fatalf("overrides: %d %s", status, raw)
+		}
+		token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request, err := http.NewRequest(http.MethodPatch, "http://"+c.address()+"/api/v1/profiles/"+created.ID+"/plugins/weather", strings.NewReader(`{"overrides":{"plain":"rejected"}}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+		request.Header.Set("Content-Type", "application/json")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err = io.ReadAll(response.Body)
+		if closeErr := response.Body.Close(); err != nil || closeErr != nil {
+			t.Fatalf("read invalid override: %v %v", err, closeErr)
+		}
+		if response.StatusCode != http.StatusBadRequest || !bytes.Contains(raw, []byte("plain")) {
+			t.Fatalf("unmarked field: %d %s", response.StatusCode, raw)
+		}
+		c.management(t, dir, "", "profile", "delete", created.ID)
+		assignments = profile.Assignments{}
+		status, raw = fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/profiles/assignments")
+		if status != http.StatusOK || json.Unmarshal(raw, &assignments) != nil || len(assignments.Instances) != 0 || len(assignments.Sessions) != 0 {
+			t.Fatalf("deleted assignments: %d %s", status, raw)
+		}
+		var remaining []profile.Summary
+		output = c.management(t, dir, "", "profile", "list")
+		if json.Unmarshal([]byte(output), &remaining) != nil || len(remaining) != 1 || remaining[0].ID != "default" {
+			t.Fatalf("fallback: %s", output)
+		}
+		stopTestCore(t, c)
+	})
+
 }
 
 // validationPackage 只改真实 pack 产物的声明与构建信息，并同步归档发布清单。
@@ -749,4 +814,32 @@ func writeTestPackage(dir, id, role, adapterID, source, version, executable, ext
 		}
 	}
 	return filepath.Join(dir, "package.tar.gz"), nil
+}
+
+// weatherProfilePackage 打包带真实 schema 资源的天气插件，供配置文件管理路径使用。
+func weatherProfilePackage(t *testing.T, schema, version string) string {
+	t.Helper()
+	dir := t.TempDir()
+	source := fmt.Sprintf(`package main
+import (
+ "log/slog"
+ "os"
+ "github.com/AlonaBot/AlonaBot/sdk"
+ "github.com/AlonaBot/AlonaBot/sdk/genimpl"
+)
+func init(){genimpl.Register("main",genimpl.Resources{ConfigSchema:[]byte(%q)})}
+func main(){if err:=sdk.Run(sdk.NewPlugin());err!=nil{slog.Error("weather fixture failed","error",err);os.Exit(1)}}
+`, schema)
+	file, binary := filepath.Join(dir, "main.go"), filepath.Join(dir, "weather")
+	if err := os.WriteFile(file, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := exec.Command("go", fixtureBuildArgs("-o", binary, file)...).CombinedOutput(); err != nil {
+		t.Fatalf("build weather fixture: %v: %s", err, output)
+	}
+	archive, err := writeTestPackage(dir, "weather", "plugin", "", "github.com/example/weather", version, binary, "", map[string][]byte{"config_schema.json": []byte(schema)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return archive
 }
