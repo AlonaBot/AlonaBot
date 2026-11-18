@@ -34,7 +34,7 @@ SDK 公开三个可选进程 Hook：`OnStart(context.Context) error`、`OnReady(
 
 首发目标为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64。市场预构建优先，本地源码构建可选；Native 进程只要求协议兼容，不要求 Core 与插件使用相同 Go patch。
 
-工程中的 `plugin.yaml` 只写 ID、显示名、版本、描述、作者与来源等作者信息，是 ID/版本真源；`build` 与 `pack` 补上协议、平台、入口与迁移方式等构建信息（D-78），安装包包含 manifest、`config_schema.json`、`i18n/` 和可执行程序。市场 ID 使用 `alonabot_plugin_` 规范；本地允许安全 slug 并警告缺前缀。ID 不直接当作数据库标识符或主机名。
+工程中的 `plugin.yaml` 只写 ID、显示名、版本、描述、作者与来源等作者信息，是 ID/版本真源；`build` 与 `pack` 补上协议、平台、入口与迁移方式等构建信息（D-78），安装包包含 manifest、`config_schema.json`、`i18n/` 和可执行程序。市场 ID 按角色使用 `alonabot-plugin-`、`alonabot-adapter-`、`alonabot-agent-`、`alonabot-webui-` 前缀与连字符分词，精确正则见 CONTRACTS §9.1（D-172）；本地允许原有安全 slug 并警告缺前缀。ID 不直接当作数据库标识符或主机名。
 
 不同包 ID 冲突保留持久化安装记录中的首个，拒绝后来的冲突来源；同一插件内部重复 route ID、命令路径/别名或 HTTP method+path 报错。已有插件更新必须校验原来源/发布者，不能借 first-wins 绕过更新身份校验。
 

@@ -298,7 +298,7 @@ data: "2026-11-13T10:20:30.123456789-08:00"
 
 历史查询使用 Core 本地时区的日期，只读取普通日志文件：先 `alonabot-<日期>.log`，再按数字序号读取 `.1.log`、`.2.log` 等。记录时间保留文件中的毫秒精度，日期与时区取查询日期和 Core 本地时区。跨夏令时重复出现的本地钟点按标准库的本地时间解析规则解释。
 
-历史 `source` 与筛选值来自显示标签：Core 为 `core`，插件为去掉 `alonabot_plugin_` 的显示名，Adapter 为 `adapter_id` 或 `adapter_id/instance_id`。`trace_id` 保留文件中的最多 8 位前缀；传入完整 trace 时按其前 8 位匹配。文件已省略的完整包身份、Session 和 Generation 由实时结构化 API 提供。
+历史 `source` 与筛选值来自显示标签：Core 为 `core`，插件为去掉 `alonabot-plugin-` 的显示名，Adapter 为 `adapter_id` 或 `adapter_id/instance_id`。`trace_id` 保留文件中的最多 8 位前缀；传入完整 trace 时按其前 8 位匹配。文件已省略的完整包身份、Session 和 Generation 由实时结构化 API 提供。
 
 历史 `message` 原样保留来源标签之后的全部文本，包括级别、源码位置、消息、字段及缩进多行内容。`attrs` 包含可解析的显示来源、位置、带引号/转义的字段和多行值；普通字段保留文本值。正文与属性共享文本格式，含未闭合引号、非法转义或有歧义边界的字段候选只留在 `message`，其余可靠字段继续解析。读取、I/O 和损坏记录头等实际错误继续返回。CLI 按文件原有控制台格式显示历史记录。
 

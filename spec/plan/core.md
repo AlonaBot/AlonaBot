@@ -110,6 +110,7 @@
 | T-09.21 | goal-154 | 插件数据浏览的管理 API：表与列、分页查询、按 rowid 增删改、KV 与数据目录文件的管理、zip 导出、清空、保留代次只读浏览与审计日志（D-163、D-165） | T-09 步骤 7（数据浏览） | T-09.14、T-08.5、T-08.17 | V-134、V-137 的 API 分项 | 未开始 |
 | T-09.22 | goal-155 | 补齐的管理 API：保留代次、静态任务的列表与暂停恢复、Adapter 实例列表、聊天目录、更换管理令牌，插件页面的 `.Page` 声明、i18n `pages` 与组件列表的 `pages`（D-164） | T-09 步骤 7（补充 API） | T-09.14、T-07.9、T-03.25、T-04.16 | V-135 | 未开始 |
 | T-09.24 | goal-158 | 组件的 changelog：`check`/`build`/`pack` 对 `CHANGELOG.md` 与 `changelog/<版本>/<locale>.md` 的校验与打包，`GET /api/v1/packages/{id}/changelog` 的切分与语言选择，Core 自身 `CHANGELOG.md` 的嵌入与 `GET /api/v1/core/changelog`（D-166） | T-09 步骤 7（changelog） | T-09.3、T-09.14 | V-138 | 未开始 |
+| T-09.27 | goal-177 | 组件市场 ID 改用连字符：四角色前缀与正则、校验调用者、日志来源、Agent 工具原始名、官方与示例 manifest、CLI/生成资源、既有测试与 fixture；本地 ID 规则保留（D-172） | T-09 步骤 11 | T-09.10、T-09.14、T-12.8、T-13.5 | V-01、V-62、V-64 的改名分项；V-121 的衔接 | 未开始 |
 | T-11.1 | goal-54 | 工具描述与目录：Service 描述的 `tool` 字段、注册校验、`core.tool.list`、调用策略的持久化与管理服务层 | T-11 步骤 1、2 | T-04.4、T-04.7、T-06.1 | V-55 的目录与策略分项 | 已完成（PR #101；TEST-MATRIX §3.2） |
 | T-11.2 | goal-55 | 工具调用与用户确认：`core.tool.invoke`、`core.tool.confirm`、Core 内部的确认记录与按钮、同一 Actor 与 5 分钟限时、确认文案 | T-11 步骤 3、4 | T-03.8、T-06.2、T-08.8、T-11.1 | V-55 | 已完成（PR #165；TEST-MATRIX §3.2） |
 | T-11.3 | goal-56 | Agent 会话存储：状态库表、`core.conversation.*`、管理服务层的列出与清除、purge | T-11 步骤 5 | T-03.1 | V-56 | 已完成（PR #35；TEST-MATRIX §3.2） |
@@ -674,6 +675,8 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 9. **WebUI 组件与组件图标。** 按 CONTRACTS §7.5 由 Core 提供已启用 WebUI 组件的静态文件：保留 `/api/` 与内部路径，不存在且无扩展名的路径回退 `index.html`，未安装时返回 503 与英文提示，Admin API 主版本不在 WebUI 声明的范围内时拒绝安装与启用并返回提示。Admin API 定义主版本号常量，并在 `spec/ADMIN-API.md` 写出全部接口、认证、错误格式与插件页面桥的消息格式，官方 WebUI 只使用其中的接口。图标只提供 manifest 的 `icon` 声明的路径（表单选项不带图标，D-74），带 sandbox CSP 与 nosniff，并要求管理员会话。库模式增加 `alonabot.WebUI(fsys fs.FS)` 选项，以 dev 来源提供开发中的 WebUI。
 
 10. **包校验收紧（D-150、D-151）。** 协议不变。`contracts/manifest` 对缺少 `migration_mode` 或 `prepare_effects` 的包只给警告，文案写明准备与回退按没有框架外副作用处理；管理服务把预检得到的警告放进安装与更新的结果（Admin API 增加 `warnings`，ADMIN-API 同步），CLI 原样输出，并记 WARN 日志。`packages.Preflight` 对进程角色的包严格核对 build-info：存在、可解析、与 entrypoint 内嵌的构建信息逐字一致、`GOOS`/`GOARCH` 与 manifest 一致，任一项不符时在停止旧版前拒绝；WebUI 包不要求 build-info。
+
+11. **组件市场 ID 改用连字符（D-172，T-09.27）。** 四角色市场前缀、插件市场正则与 manifest 的角色后缀规则一起修改；本地 ID 语法和 64 字符上限保持不变。同步 MarketPrefix 的所有校验调用者、SDK 会话解析与聊天选项中的分隔符替换、日志来源标签和历史 source、Agent 的 memory 工具原始名、官方组件与示例 manifest、配置、路径、既有测试及 contracts/testdata（含 Protobuf golden 帧）。CLI init 与生成器通过原有 manifest 入口接受新 ID；当前 init 仍要求 --id，目录名缺省留给 T-13.6 并沿用本规则。组件 ID 只作字符串值，模型工具名继续由现有映射生成，Go 符号、环境变量名与 SQL 标识符不随之替换。直接改名并要求状态库与开发数据目录重建，不提供旧市场 ID 别名或数据迁移；只改写已有提交测试，边界与回归写在被忽略的 *_local_test.go，协议编号按 wirespec 核对。完整文件范围与真实签名见 goal-177。
 
 #### 拟目录与交付
 

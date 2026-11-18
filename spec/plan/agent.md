@@ -4,7 +4,7 @@
 
 ## 1. 范围
 
-本章节覆盖官方 Agent 组件 `agent/`（含 Provider 客户端、对话、工具循环与 MCP、记忆、技能、定时任务与打包），即工作包 T-12。Agent 依赖的 Core 服务（工具目录、调用确认、会话存储，T-11）与 `sdk/llm` 的调用契约在[核心实施计划](core.md)。
+本章节覆盖官方 Agent 组件 `agent/`（包 ID `alonabot-agent-official`，D-172；含 Provider 客户端、对话、工具循环与 MCP、记忆、技能、定时任务与打包），即工作包 T-12。Agent 依赖的 Core 服务（工具目录、调用确认、会话存储，T-11）与 `sdk/llm` 的调用契约在[核心实施计划](core.md)。
 
 ## 2. 执行切片
 
