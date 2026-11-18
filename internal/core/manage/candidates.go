@@ -49,6 +49,23 @@ func (s *Service) Reload(ctx context.Context, id string) (err error) {
 	if s.opt.State(id) != "Activated" {
 		return precondition("reload requires an activated component")
 	}
+	if in.Source == "dev" {
+		pending, found, err := s.configurations().Pending(ctx, id)
+		if err != nil {
+			return err
+		}
+		if found {
+			// 开发组件从编辑文件启动；保留 Pending 直到重启成功，失败仍可修订后重载。
+			name := filepath.Join(filepath.Dir(s.opt.Packages), "plugins", id, configSnapshotFile)
+			if err := replaceDevelopmentConfig(name, pending.ConfigJSON); err != nil {
+				return err
+			}
+			if err := s.opt.Candidates.Reload(ctx, id); err != nil {
+				return err
+			}
+			return s.configurations().Discard(ctx, id)
+		}
+	}
 	return s.opt.Candidates.Reload(ctx, id)
 }
 

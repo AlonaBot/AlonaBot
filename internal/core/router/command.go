@@ -2,6 +2,7 @@ package router
 
 import (
 	"cmp"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -68,7 +69,7 @@ func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 					continue
 				}
 				route.names = entry.Names
-				if !r.commandAllowed(route.candidate, ev) {
+				if !r.commandAllowed(&route.candidate, ev) {
 					return false
 				}
 				tail := strings.TrimPrefix(head, prefix)
@@ -130,16 +131,25 @@ func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 				}
 			}
 		}
-		if matched && r.commandAllowed(route.candidate, ev) && r.invokeCommand(route.candidate, ev, event, func(*pb.Event) (*pb.CommandInvocation, error) { return invocation, nil }, "") {
+		if matched && r.commandAllowed(&route.candidate, ev) && r.invokeCommand(route.candidate, ev, event, func(*pb.Event) (*pb.CommandInvocation, error) { return invocation, nil }, "") {
 			return true
 		}
 	}
 	return false
 }
 
-func (r *Router) commandPolicyFailure(c candidate, ev *pb.Event) *pb.ErrorInfo {
+func (r *Router) commandPolicyFailure(ctx context.Context, c *candidate, ev *pb.Event) *pb.ErrorInfo {
+	profileID, enabled, err := r.Profile(ctx, c.pluginID, ev.GetTarget())
+	if err != nil {
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}
+	}
+	if !enabled {
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "plugin is disabled for this profile"}
+	}
+
+	c.profileID = profileID
 	if r.policy == nil {
-		if r.permitted(c, ev) {
+		if r.permitted(*c, ev) {
 			return nil
 		}
 		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED}
@@ -273,7 +283,7 @@ func (r *Router) invokeCommand(c candidate, ev *pb.Event, event *trustedEvent, b
 			if err != nil {
 				slog.Warn("format command usage failed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", err)
 			} else {
-				r.sendReply(c, ev, &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: usage}}}}}, trace)
+				r.sendReply(c, ev, &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: usage}}}}}, trace, event.invocation)
 			}
 		}
 		return false
@@ -306,19 +316,28 @@ func (r *Router) invokeCommand(c candidate, ev *pb.Event, event *trustedEvent, b
 	}
 	event.commandConsumed = event.commandConsumed || outcome.GetMatched()
 	if callError == nil && response.Err == nil && outcome.GetMatched() && c.route.GetCommand().GetHandlerMode() == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY && len(outcome.GetChain().GetSegments()) != 0 {
-		r.sendReply(c, ev, outcome.Chain, trace)
+		r.sendReply(c, ev, outcome.Chain, trace, event.invocation)
 	}
 	return outcome.GetPropagation() == pb.Propagation_PROPAGATION_STOP
 }
 
-func (r *Router) sendReply(c candidate, ev *pb.Event, chain *pb.MessageChain, trace []byte) {
+func (r *Router) sendReply(c candidate, ev *pb.Event, chain *pb.MessageChain, trace []byte, parent *Invocation) {
+	if parent == nil {
+		profileID, _, err := r.Profile(r.ctx, c.pluginID, ev.GetTarget())
+		if err != nil {
+			slog.Warn("reply profile read failed", "plugin_id", c.pluginID, "error", err)
+			return
+		}
+		parent = &Invocation{ProfileID: profileID, Depth: 1, PluginID: c.pluginID, Event: ev, DefaultTarget: ev.GetTarget(), TraceID: trace}
+		defer parent.Begin()()
+	}
 	request := &pb.SendRequest{Chain: chain}
 	encoded, err := proto.Marshal(request)
 	if err != nil {
 		slog.Warn("encode reply failed", "error", err)
 		return
 	}
-	response := r.send(r.ctx, c.caller, &wire.Inbound{TraceID: trace, ParentAttach: &Invocation{Depth: 1, PluginID: c.pluginID, Event: ev, DefaultTarget: ev.GetTarget(), TraceID: trace}, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded}})
+	response := r.send(r.ctx, c.caller, &wire.Inbound{TraceID: trace, ParentAttach: parent, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded}})
 	result := &pb.SendResult{}
 	if err := proto.Unmarshal(response.Payload.Bytes, result); err != nil {
 		slog.Warn("decode reply result failed", "error", err)

@@ -201,6 +201,7 @@ func validateComponents(components []Component, installs []state.Install) error 
 
 type assembly struct {
 	core       *Core // assemble 返回后由 Start 绑定，候选回调在运行循环内读取。
+	dir        string
 	journal    *journal.Orchestrator
 	candidate  *runningComponent // 仅运行循环访问；Spec 与提交结果合并前的本次运行上下文。
 	adapters   *coreadapter.Registry
@@ -231,15 +232,18 @@ type componentOptionSchemas struct {
 }
 
 func assemble(store *state.Store, dir string, v tune.Values, file *settings.File) (*assembly, error) {
-	return assembleWithMessageConfig(store, dir, v, file, activeMessageConfig(store))
+	return assembleWithMessageConfig(store, dir, v, file, nil)
 }
 
 func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, file *settings.File, messageConfig func(context.Context, string, *pb.Event) (json.RawMessage, error)) (*assembly, error) {
-	a := &assembly{store: store, settings: file, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload), metrics: &metrics.Counters{}}
+	a := &assembly{dir: dir, store: store, settings: file, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload), metrics: &metrics.Counters{}}
 	var err error
 	a.media, err = media.Open(filepath.Join(dir, "media"), media.NewLimits(v), time.Now)
 	if err != nil {
 		return nil, err
+	}
+	if messageConfig == nil {
+		messageConfig = a.profileMessageConfig
 	}
 	p := policy.New(store)
 	a.policy = p
@@ -279,7 +283,7 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 			harness.Dispatched(result)
 		}
 	}
-	a.router = router.New(router.Options{Dispatched: dispatched, MessageConfig: messageConfig, Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
+	a.router = router.New(router.Options{Dispatched: dispatched, MessageConfig: messageConfig, Profile: a.resolveProfile, Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
 		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Intercept: a.buttons.InterceptConfirm, Policy: p, CommandState: p.CommandState, Prefixes: a.settings.CommandPrefixes, CommandNames: p.CommandNames,
 		Continuations: continuations, Metrics: a.metrics,
 		Send: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
@@ -677,6 +681,9 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 	}
 	boot.PluginDataDir, err = preparePluginDataDir(dir, id)
 	if err != nil {
+		return err
+	}
+	if err := c.assembly.bootstrapProfiles(ctx, id, schemas.config, boot); err != nil {
 		return err
 	}
 	// 3. 独立进程与同进程共用开发配置、数据库和固定代次。

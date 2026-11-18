@@ -276,7 +276,9 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		development[entry.manifest.ID] = entry.manifest
 	}
 	version := coreVersion()
-	management := manage.New(manage.Options{Logs: output, Stopping: c.stopping, NotifyLogLevel: func(ctx context.Context, id string, level pb.LogLevel) error {
+	management := manage.New(manage.Options{NotifyProfileOverrides: func(ctx context.Context, id string) error {
+		return c.operation(ctx, func(ctx context.Context) error { return c.assembly.notifyProfileOverrides(ctx, id) })
+	}, Logs: output, Stopping: c.stopping, NotifyLogLevel: func(ctx context.Context, id string, level pb.LogLevel) error {
 		return c.operation(ctx, func(ctx context.Context) error {
 			plugin, ok := c.assembly.router.Plugin(id)
 			if !ok || !plugin.Activated() {
@@ -392,6 +394,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 			})
 		},
 	})
+	management.RegisterProfiles(c.assembly.mux)
 	managementHandler := management.Handler(authentication)
 	var managementWrites sync.Mutex        // 覆盖元数据写入与随后的引用回收。
 	managementReady := make(chan struct{}) // 启动回收完成后才接受管理写入。

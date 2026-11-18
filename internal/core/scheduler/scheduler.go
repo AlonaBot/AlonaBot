@@ -378,6 +378,8 @@ func (s *Scheduler) call(ctx context.Context, pluginID string, reg *registration
 	var response wire.Response
 	// 2. 编码成功后才提交 RPC；编码失败也走下面的槽释放和错误记录路径。
 	if err == nil {
+		invocation := &router.Invocation{ProfileID: "default", Depth: 1, PluginID: pluginID, Event: event, TraceID: trace, Scopes: []string{"job"}, RouteID: job.routeID}
+		defer invocation.Begin()()
 		deadline := scheduledAt.Add(s.jobTimeout)
 		if task != nil {
 			deadline = now.Add(s.jobTimeout)
@@ -385,7 +387,7 @@ func (s *Scheduler) call(ctx context.Context, pluginID string, reg *registration
 		response, err = reg.plugin.Call(ctx, wire.Request{Target: job.routeID, TraceID: trace,
 			Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF,
 				SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
-			Deadline: deadline, Attach: &router.Invocation{Depth: 1, PluginID: pluginID, Event: event, TraceID: trace, Scopes: []string{"job"}, RouteID: job.routeID},
+			Deadline: deadline, Attach: invocation,
 			Late: func(response wire.Response) {
 				s.mu.Lock()
 				defer s.mu.Unlock()

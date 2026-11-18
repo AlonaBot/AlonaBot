@@ -11,7 +11,9 @@ type trustedEvent struct {
 	dispatch        *dispatchState
 	retained        *pb.Event
 	payload         *pb.EventPayload
-	commandConsumed bool // 当前分发链的命令层消费结果，不接受插件回写。
+	invocation      *Invocation // 最近一次 Handler 的可信附件，自动回复继承。
+	finished        []func()    // 本条事件及自动回复结束后释放根调用。
+	commandConsumed bool        // 当前分发链的命令层消费结果，不接受插件回写。
 }
 
 func retainEvent(ev *pb.Event) *trustedEvent {
