@@ -213,6 +213,9 @@ func register(r *pb.Register, isAdapter bool) error {
 				}
 				seenEvents[eventType] = true
 			}
+			if err := registerMessageFilter(route.GetRouteId(), event); err != nil {
+				return err
+			}
 			if seenEvents["button.clicked"] {
 				action := event.GetActionId()
 				if action == "" || event.GetActionSchemaVersion() == 0 {

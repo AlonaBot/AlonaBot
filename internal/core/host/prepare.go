@@ -24,6 +24,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
@@ -71,12 +72,13 @@ const (
 
 // Expect 携带本次进程的可信身份及配置快照回调。
 type Expect struct {
-	Role        state.Role     // 必填，由安装记录指定
-	AdapterID   string         // Adapter 角色要求的平台注册身份
-	PluginID    string         // Core 启动该进程时的插件 ID
-	Secret      []byte         // 本次启动的 32 字节 Session Secret
-	BuildDigest []byte         // 安装时已验证的归档摘要
-	Offer       validate.Offer // Core 一侧支持/要求的协议版本与能力
+	Role         state.Role           // 必填，由安装记录指定
+	AdapterID    string               // Adapter 角色要求的平台注册身份
+	PluginID     string               // Core 启动该进程时的插件 ID
+	Secret       []byte               // 本次启动的 32 字节 Session Secret
+	BuildDigest  []byte               // 安装时已验证的归档摘要
+	Offer        validate.Offer       // Core 一侧支持/要求的协议版本与能力
+	ConfigSchema *configschema.Schema // 来自可信资源；无配置时为 nil。
 	// Snapshot 在 REGISTER 校验后生成持久化快照；nil 时使用原候选配置。
 	// 回调的错误消息须省略配置值。
 	Snapshot func(candidate []byte) (snapshot []byte, err error)
@@ -282,6 +284,14 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		}
 		if registerErr == nil {
 			registerErr = checkMigration(m.GetMigration(), boot.GetDatabaseDescriptor())
+		}
+		if registerErr == nil {
+			for _, route := range m.GetRoutes() {
+				if err := exp.ConfigSchema.CheckMessageFilter(route.GetEvent().GetMessageFilter()); err != nil {
+					registerErr = fmt.Errorf("event route %q: %w", route.GetRouteId(), err)
+					break
+				}
+			}
 		}
 		if err := registerErr; err != nil {
 			var ve *validate.Error

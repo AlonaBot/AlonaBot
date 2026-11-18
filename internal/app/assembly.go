@@ -231,6 +231,10 @@ type componentOptionSchemas struct {
 }
 
 func assemble(store *state.Store, dir string, v tune.Values, file *settings.File) (*assembly, error) {
+	return assembleWithMessageConfig(store, dir, v, file, activeMessageConfig(store))
+}
+
+func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, file *settings.File, messageConfig func(context.Context, string, *pb.Event) (json.RawMessage, error)) (*assembly, error) {
 	a := &assembly{store: store, settings: file, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload), metrics: &metrics.Counters{}}
 	var err error
 	a.media, err = media.Open(filepath.Join(dir, "media"), media.NewLimits(v), time.Now)
@@ -275,7 +279,7 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 			harness.Dispatched(result)
 		}
 	}
-	a.router = router.New(router.Options{Dispatched: dispatched, Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
+	a.router = router.New(router.Options{Dispatched: dispatched, MessageConfig: messageConfig, Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
 		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Intercept: a.buttons.InterceptConfirm, Policy: p, CommandState: p.CommandState, Prefixes: a.settings.CommandPrefixes, CommandNames: p.CommandNames,
 		Continuations: continuations, Metrics: a.metrics,
 		Send: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
@@ -756,7 +760,7 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 		return fmt.Errorf("component %s messages: %v", id, problems)
 	}
 	prep, err := host.Prepare(ctx, running.conn, host.Expect{Role: entry.role, AdapterID: entry.manifest.AdapterID, PluginID: id, Secret: l.Secret, BuildDigest: digest,
-		Offer: validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}}, boot, limits)
+		Offer: validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}, ConfigSchema: schemas.config}, boot, limits)
 	if err != nil {
 		return err
 	}

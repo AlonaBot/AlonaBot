@@ -139,6 +139,30 @@ func TestOptionsSourceFieldNumber(t *testing.T) {
 	}
 }
 
+// TestMessageFilterFieldNumbers 固定事件过滤声明及其条件的协议编号。
+func TestMessageFilterFieldNumbers(t *testing.T) {
+	f := (&pb.EventSpec{}).ProtoReflect().Descriptor().Fields().ByNumber(6)
+	if f == nil || f.Name() != "message_filter" || f.Kind() != protoreflect.MessageKind || !f.HasPresence() || f.IsList() || f.Message().FullName() != "alonabot.v1.MessageFilter" {
+		t.Fatalf("EventSpec field 6 should be MessageFilter message_filter, got %v", f)
+	}
+	fields := f.Message().Fields()
+	for i, want := range []struct {
+		name protoreflect.Name
+		kind protoreflect.Kind
+	}{
+		{"to_me", protoreflect.BoolKind}, {"chat_types", protoreflect.EnumKind},
+		{"wake_words_config", protoreflect.StringKind}, {"triggers_config", protoreflect.StringKind},
+	} {
+		field := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+		if field == nil || field.Name() != want.name || field.Kind() != want.kind || field.IsList() != (i == 1) || field.HasPresence() {
+			t.Fatalf("MessageFilter field %d = %v, want %s %s", i+1, field, want.kind, want.name)
+		}
+		if i == 1 && field.Enum().FullName() != "alonabot.v1.ChatType" {
+			t.Errorf("chat_types enum = %s, want ChatType", field.Enum().FullName())
+		}
+	}
+}
+
 // TestButtonCoreTokenFieldNumber 固定 Core 回调令牌的字段编号、类型与 optional presence。
 func TestButtonCoreTokenFieldNumber(t *testing.T) {
 	field := (&pb.Button{}).ProtoReflect().Descriptor().Fields().ByNumber(4)

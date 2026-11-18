@@ -174,7 +174,7 @@ func buildRegister(reg *registration, configJSON string, configVersion uint32, c
 	for _, event := range reg.Events {
 		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: event.RouteID, Priority: event.Priority, Kind: pb.RouteKind_ROUTE_KIND_EVENT,
 			DefaultEnabled: true, RequiredPermissions: event.permission.Names(),
-			Spec: &pb.RouteDescriptor_Event{Event: &pb.EventSpec{EventTypeFilter: []string{event.EventType.name}, ActionId: event.actionID, ActionSchemaVersion: event.actionVersion, HandlerMode: pb.HandlerMode_HANDLER_MODE_MANUAL, Rule: &pb.RuleDescriptor{HasCustomRule: len(event.rules) != 0}}}})
+			Spec: &pb.RouteDescriptor_Event{Event: &pb.EventSpec{EventTypeFilter: []string{event.EventType.name}, ActionId: event.actionID, ActionSchemaVersion: event.actionVersion, HandlerMode: pb.HandlerMode_HANDLER_MODE_MANUAL, Rule: &pb.RuleDescriptor{HasCustomRule: len(event.rules) != 0}, MessageFilter: event.filter.proto()}}})
 	}
 	for _, job := range reg.Schedules {
 		spec := &pb.ScheduleSpec{JobId: job.JobID, Timezone: job.Timezone}
