@@ -8365,7 +8365,7 @@ internal/core/state
 
 ### goal-171 · S-02.2 空闲退出与即时休眠策略
 
-状态：等待前置（S-02.1）。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
+状态：等待前置（S-02.1）。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。 2026-11-17 审查者补充（S-02.1 审查 FIX-9 的裁定）：Core 在插件 HTTP 反向代理返回时即释放活动引用，不新增「HTTP 回调完成」协议字段；本切片的 QUIESCING 须等待 SDK 自己记录的在途回调（含 HTTP Handler、Bus 回调）全部结束，或在 SDK 报告仍有在途回调时放弃本次退出，空闲退出不得打断仍在执行的业务。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-171（切片 S-02.2：空闲退出与即时休眠策略）。goal 目录 goal-171，分支 goal-171，worktree .worktrees/goal-171，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
