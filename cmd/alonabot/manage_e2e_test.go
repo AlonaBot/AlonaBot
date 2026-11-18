@@ -98,6 +98,58 @@ func TestManagementLifecycle(t *testing.T) {
 		t.Fatalf("restart changed generation or reused session: %+v", second)
 	}
 	stopTestCore(t, c)
+	t.Run("configuration-examples", func(t *testing.T) {
+		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/showcase"}, "https://example.invalid/showcase.tar.gz", "", t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir := t.TempDir()
+		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
+		c.management(t, dir, "", "install", archive, "--yes")
+		c.management(t, dir, "", "enable", "showcase")
+		token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		get := func(path string) (http.Header, int, []byte) {
+			t.Helper()
+			request, err := http.NewRequest(http.MethodGet, "http://"+c.address()+path, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, readErr := io.ReadAll(response.Body)
+			if err := errors.Join(readErr, response.Body.Close()); err != nil {
+				t.Fatal(err)
+			}
+			return response.Header, response.StatusCode, body
+		}
+		icon, status, _ := get("/api/v1/packages/showcase/icon")
+		if status != http.StatusOK {
+			t.Fatalf("icon status = %d", status)
+		}
+		headers, status, body := get("/api/v1/packages/showcase/examples/greeting.png")
+		image, err := os.ReadFile("../../examples/plugins/showcase/examples/greeting.png")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if status != http.StatusOK || !bytes.Equal(body, image) || headers.Get("Content-Type") != "image/png" {
+			t.Fatalf("example: status = %d, headers = %v, bytes = %d", status, headers, len(body))
+		}
+		for header, want := range map[string]string{"Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'", "X-Content-Type-Options": "nosniff"} {
+			if headers.Get(header) != want || headers.Get(header) != icon.Get(header) {
+				t.Fatalf("%s = %q, icon = %q, want %q", header, headers.Get(header), icon.Get(header), want)
+			}
+		}
+		if _, status, _ := get("/api/v1/packages/showcase/examples/unreferenced.png"); status != http.StatusNotFound {
+			t.Fatalf("unreferenced example status = %d", status)
+		}
+		stopTestCore(t, c)
+	})
 	t.Run("package-warnings-and-build-info", func(t *testing.T) {
 		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/lifecycle"}, "https://example.invalid/package.tar.gz", "", t.TempDir())
 		if err != nil {

@@ -13,6 +13,8 @@ Telegram Adapter 接收入口见 [alonabot-adapter-telegram](adapters/telegram/c
 配置文件可通过 `alonabot profile` 列出、新建、指定到 Adapter 实例或会话，以及编辑插件字段。用法见[开发指南](docs/development.md#运行-core-与管理组件)；平台设置与插件、工具策略由[管理 API](spec/ADMIN-API.md#23-配置文件)保存，运行时应用由后续切片接入。
 官方 WebUI 已提供桌面与手机外壳、全局搜索、浅深色视觉令牌及本地品牌资源。运行 `npm --prefix web/admin run dev` 后，从开发服务器首页进入 `/dev/forms`，可预览配置表单和生成的 JSON Merge Patch；真实登录与管理页面由后继切片接入。安装依赖与验证命令见[官方 WebUI 开发指南](docs/development.md#官方-webui-开发)。
 
+[showcase 的 `greeting` 字段](examples/plugins/showcase/config_schema.json) 展示了带文字和图片的[配置回复示例](docs/plugin-guide.md#配置字段的回复示例)。作者工具校验示例与翻译，Core 经管理 API 提供 Active 包引用的图片；WebUI 表单展示由后继切片实现。
+
 按 [spec/PLAN.md](spec/PLAN.md) 的工作包继续实施；规格索引见 [spec/README.md](spec/README.md)，决策与历史依据见 [spec/adr/README.md](spec/adr/README.md)。开发环境与命令见 [docs/development.md](docs/development.md)，插件作者的规则见 [docs/plugin-guide.md](docs/plugin-guide.md)，模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)，代理工作约定见 [AGENTS.md](AGENTS.md)。
 
 组件市场 ID 统一使用 `alonabot-plugin-`、`alonabot-adapter-`、`alonabot-agent-`、`alonabot-webui-` 前缀与连字符分词，本地 ID 规则保持不变（[D-172](spec/adr/DECISIONS.md)，代码实施见 [goal-177](docs/goals/core.md#goal-177--t-0927-组件市场-id-改用连字符)）。官方包 ID 与首次发布前的数据重建要求见 [CONTRACTS §15.2](spec/CONTRACTS-v0.1.md#152-发行包官方整合包与预装组件)。

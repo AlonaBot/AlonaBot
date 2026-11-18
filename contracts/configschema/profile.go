@@ -10,7 +10,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 )
 
-func checkProfileFields(fields []*field, path string, allowed, ancestor bool, problems *[]Problem) {
+func checkProfileFields(fields []*Field, path string, allowed, ancestor bool, problems *[]Problem) {
 	for _, f := range fields {
 		fieldPath := joinPath(path, f.name)
 		declared := f.attributes.has("profile")
@@ -30,17 +30,17 @@ func checkProfileFields(fields []*field, path string, allowed, ancestor bool, pr
 	}
 }
 
-func containsSecret(f *field) bool {
+func containsSecret(f *Field) bool {
 	var paths [][]string
-	secretPaths([]*field{f}, nil, &paths)
+	secretPaths([]*Field{f}, nil, &paths)
 	return len(paths) != 0
 }
 
 // ProfilePaths 按声明顺序返回允许按配置文件覆盖的点分字段路径。
 func (s *Schema) ProfilePaths() []string {
 	paths := []string{}
-	var visit func([]*field, string)
-	visit = func(fields []*field, parent string) {
+	var visit func([]*Field, string)
+	visit = func(fields []*Field, parent string) {
 		for _, f := range fields {
 			path := joinPath(parent, f.name)
 			if marked, _ := f.attributes.get("profile").(bool); marked {

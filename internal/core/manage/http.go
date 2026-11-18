@@ -36,6 +36,7 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	s.profileRoutes(mux)
 	mux.HandleFunc("GET /api/v1/core", s.coreInfo)
 	mux.HandleFunc("GET /api/v1/packages/{id}/icon", s.icon)
+	mux.HandleFunc("GET /api/v1/packages/{id}/examples/{path...}", s.example)
 	mux.HandleFunc("POST /api/v1/packages/install", func(w http.ResponseWriter, r *http.Request) {
 		if multipartUpload(r) {
 			result, err := s.uploadPackage(r, false)

@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func (s *Schema) fieldAt(path []string) *field {
+func (s *Schema) fieldAt(path []string) *Field {
 	if len(path) == 0 {
 		return nil
 	}
@@ -23,24 +23,24 @@ func (s *Schema) fieldAt(path []string) *field {
 				return nil
 			}
 			if current.attributes.has("items") {
-				current = &field{typ: typeObject, items: current.items}
+				current = &Field{typ: typeObject, items: current.items}
 			} else {
 				attributes := orderedObject{}
 				if current.attributes.has("options") {
 					attributes = append(attributes, property{"options", current.attributes.get("options")})
 				}
-				current = &field{typ: typeString, attributes: attributes}
+				current = &Field{typ: typeString, attributes: attributes}
 			}
 		case typeTemplateList:
 			if part != "*" {
 				return nil
 			}
-			current = &field{typ: typeTemplate, templates: current.templates}
+			current = &Field{typ: typeTemplate, templates: current.templates}
 		case typeTemplate:
-			var selected *field
+			var selected *Field
 			for _, template := range current.templates {
 				if template.name == part {
-					selected = &field{typ: typeObject, items: template.items}
+					selected = &Field{typ: typeObject, items: template.items}
 					break
 				}
 			}

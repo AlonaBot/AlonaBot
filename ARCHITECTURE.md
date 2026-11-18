@@ -36,6 +36,8 @@
 
 `internal/core/profile` 负责配置文件的存储编排、实例与会话解析、Active schema 覆盖校验及管理方法。`profile.New(ctx, profile.Options{Store, Settings, Schema})` 建立一次操作的快照；管理写入后刷新状态快照，下一次独立操作重新构造。`Resolve(instance, session) Profile` 与 `Overrides(pluginID) map[string]map[string]json.RawMessage` 在内存中读取快照。管理调用方串行化写入，并从读取 Active schema 到提交持有相应插件的管理锁。`internal/core/manage` 提供 ADMIN-API §23，`cmd/alonabot` 通过 `alonabot profile` 调用管理 API。运行时派发与 SDK 合并由 T-04.18 接入。
 
+配置回复示例（D-160）沿用现有依赖方向：`contracts/configschema` 检查示例、字段引用与翻译的对应关系，并通过 `Schema.ExampleImages()` 返回去重排序的图片路径；`contracts/i18n` 检查通用词典中示例覆盖的结构与文案类型。`internal/pluginkit` 校验两种配置 schema 引用的图片并收集到资源快照，`internal/core/packages` 在安装和更新时复核。`internal/core/manage` 按 Active 代次的已提交 Journal 选包，只通过认证后的 GET/HEAD 提供包中 `config_schema.json` 引用的图片。
+
 ## 依赖方向
 
 `A -> B` 表示 **A 的 Go 源码 import B**（静态依赖，含测试代码），不表示运行时调用或数据流。「模块」指上表每一行的路径前缀；同一模块内部的 import（如 `contracts/release -> contracts/manifest`、`sdk -> sdk/message`）不受限制。跨模块的边只允许下表列出的；标准库和已批准的第三方依赖不受此表限制。
@@ -77,7 +79,7 @@
 | 状态 | 唯一所有者 |
 | --- | --- |
 | `<data_dir>/core.lock`、`state.sqlite`（安装、组件角色与来源、代次、Journal、策略、secret 引用、工具策略、Agent 会话、按钮 token 映射 `button_token`、配置文件与指定及覆盖） | `internal/core` |
-| WebUI 组件与组件图标的静态文件（不可变包目录） | `internal/core` 只读提供；内容归组件发布者 |
+| WebUI 组件、组件图标与配置示例图片（不可变包目录） | `internal/core` 只读提供；内容归组件发布者 |
 | 官方 WebUI 的主题、语言与侧栏偏好（按源保存于 `localStorage`） | `web/admin` 的浏览器端 |
 | `<plugins>/<id>/runtime.lock`、插件受管 DB 连接 | 插件进程内的 `sdk` |
 | 插件业务数据（受管 SQLite 候选文件） | 插件；Core 只负责候选复制与准入 |

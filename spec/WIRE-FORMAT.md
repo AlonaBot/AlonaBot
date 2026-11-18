@@ -78,7 +78,7 @@ Bootstrap 属于私有、已认证 IPC，和整个 HELLO_ACK 一起受 **4 MiB**
 | --- | --- |
 | `generation_id` | Core 分配的不可变代次标识，插件只回显、不选择其他代次 |
 | `candidate_config_json` | UTF-8 JSON 对象，Core 先验证对象/大小并解析既有 Secret 引用；允许旧版本字段进入 SDK 配置迁移，不先用新版 Schema 否决旧配置 |
-| `config_schema_hash` | 与可信安装包对应的 Schema；无配置插件仍以空对象表示。`previous_config_version`（4）与 `target_config_version`（5）已由 D-161 删除，字段号保留不再使用 |
+| `config_schema_hash` | 与可信安装包对应的规范 Schema 摘要，含其中的 `example` 声明（CONTRACTS §5.1，D-160）；示例图片字节由包携带，经 Admin API 提供。无配置插件仍以空对象表示。`previous_config_version`（4）与 `target_config_version`（5）已由 D-161 删除，字段号保留不再使用 |
 | `database_descriptor` | 后端类型（NONE 或受管 SQLite）、受管 SQLite 当前准备视图路径、迁移模式、已应用版本、activation_reason（first_install/resume/reload/update/rollback）、manual_migration_approved（仅Core显式维护许可且绑定当前Session/Generation/DB时true）；不下发 Core 管理数据库凭证 |
 | `http_proxy_auth` | 本 Session 独立的内部代理认证材料；只在 HELLO 协商出 `http_listener` 能力时下发（§3.1），不复用 Admin 凭证 |
 | `phase_limits`、`preparation_deadline_unix_ms`（字段号 8、9） | 准备、迁移和 Ready 的阶段预算及本轮绝对期限；迁移使用独立预算，不被普通业务 30s 截断 |
