@@ -314,7 +314,7 @@ PATCH 语义依据：[RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)。
 
 ### 5.6 配置文件
 
-T-08.18 已提供存储、会话配置文件解析和管理接口；T-04.18 已接通派发、覆盖值下发、SDK 合并、消息过滤与插件服务（PR #242）。前缀与回复行为由 T-04.19 接入，工具策略执行由 T-11.6 接入。
+T-08.18 已提供存储、会话配置文件解析和管理接口；T-04.18 已接通派发、覆盖值下发、SDK 合并、消息过滤与插件服务（PR #242）；T-11.6 已接通按配置文件的工具目录、调用与操作确认策略（PR #246）。前缀与回复行为由 T-04.19 接入。
 
 - 配置文件（D-168）让不同会话使用不同的设置。Core 状态库保存：配置文件（ID、名称、颜色）；Adapter 实例的缺省配置文件与单独指定的会话；按（插件 ID、配置文件 ID、字段路径）的覆盖值；按配置文件的插件开关与工具策略（§13.1）；按配置文件的平台设置。修改立即生效，不建立配置代次，不经 Pending 与 reload，也不随代次回退。
 - `default`（界面显示为「默认」）始终存在，不能删除，ID 不变。它没有自己的覆盖值与平台设置：字段值就是各插件的配置（§5.1），修改经 Pending 与 reload；平台设置是 `core_config.json` 的 `command_prefixes` 与 `reply`（§15.1）。插件开关与工具策略对 `default` 同样可以设置。其他配置文件的 ID 由 Core 生成；名称为 1～32 个 Unicode 码点，去掉首尾空白后非空且唯一；颜色取 `teal`、`navy`、`amber`、`pink`、`green`、`purple`、`red`、`gray` 之一。新建时可以从已有配置文件复制覆盖值、插件开关、工具策略与平台设置，不复制会话的指定。
@@ -605,9 +605,9 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 - 工具是带 `tool` 描述的 JSON Service：description 是给模型的说明，输入 Schema 即该 Service 的输入 Schema，输出是该 Service 的 JSON 输出；default_policy 取 allow 或 confirm。工具沿用 Service 的命名 `plugin_id/service_name`、访问规则、Broker 定位、调用链、深度、取消与准入（§3），不新增 route kind；Protobuf 编码的 Service 不能声明为工具。
 - 调用策略按工具持久化，取值 allow、confirm 或 deny，未设置时使用工具声明的 default_policy。管理员经管理服务修改，下一次调用生效，不撤销已开始的调用。策略不替代 Service 自身的 required_permission：工具执行时仍按继承的 Actor 判定 User/Admin。
-- 工具策略可以按配置文件覆盖（§5.6，D-168）：调用的默认 Target 所在会话使用的配置文件为某个工具或 `core.tool.confirm` 的操作设置了策略时，以它取代全局策略；该配置文件关闭了工具所属插件时视为 deny。`core.tool.list` 返回按本次调用生效的策略。
+- 工具策略已按配置文件生效（§5.6，D-168，T-11.6，PR #246）：每次 `core.tool.list`、`core.tool.invoke` 或 `core.tool.confirm` 从 Session 恢复的可信父调用附件取默认 Target，按会话选择一次配置文件快照；没有默认 Target 或无父调用的 list 使用 `default`，list 全部条目复用该快照。配置文件关闭所属插件时为 deny；其余按配置文件覆盖、全局覆盖、工具声明的 default_policy 查找，确认操作无覆盖时为 confirm。配置文件覆盖分别匹配工具与操作，同名时各自生效；`inherit` 删除该项覆盖，恢复全局策略。管理更新从下一次操作生效，在途确认保留已接纳策略。
 - 工具可以声明副作用类别 `effect`：`read_only`、`write` 或 `destructive`；省略字段或传 `UNSPECIFIED=0` 表示 `unspecified`（D-157）。SDK 收集注册时拒绝非法类别；Core 在原始 REGISTER 校验时也以 INVALID_ARGUMENT 拒绝非法枚举，英文错误包含 Service 名和非法数值。类别只作提示，不改变缺省策略或确认规则，也不参与策略判断。
-- `core.tool.list` 返回调用插件可以调用、且生效策略不为 deny 的工具：名称、description、输入 Schema、声明的副作用类别与生效策略。
+- `core.tool.list` 返回调用插件可以调用、且生效策略不为 deny 的工具：名称、description、输入 Schema、声明的副作用类别与生效策略。带 parent_call_id 时须关联同一 Session 内仍在途的父调用，无效父调用返回 FAILED_PRECONDITION；策略快照读取失败返回 INTERNAL 并保留原因。
 - `core.tool.invoke` 输入工具名与 JSON 参数，必须带 parent_call_id（§1.2）。策略为 deny 时返回 PERMISSION_DENIED；为 confirm 时先按 §13.2 取得确认，用户拒绝返回 PERMISSION_DENIED，超时返回 DEADLINE_EXCEEDED；为 allow 或确认通过后，Broker 以父调用链调用该 Service 并原样返回结果。确认的等待计入父调用期限。
 - `core.tool.confirm` 供插件在自己执行的操作（例如 MCP 工具）之前取得确认，输入操作名（调用插件内稳定的名称）、给用户看的参数摘要与可选的副作用类别。SDK 和 Core 均以 INVALID_ARGUMENT 拒绝非法类别。Core 在判断策略前记录操作名和类别，再按「调用插件 ID + 操作名」查找策略，未设置时为 confirm，返回规则与 invoke 相同。Core 不检查插件随后是否执行了该操作。
 - 管理目录按同一插件 ID 与 Service 名或操作名合并条目。有确认记录时，类别取本次 Core 运行中最近一次确认请求上报的值（包括 `unspecified`）；没有确认记录时取声明类别，仅有保存覆盖时为 `unspecified`。同名声明仍提供目录中的缺省策略，已保存的策略覆盖保持不变；仅有确认记录时缺省策略为 confirm。批量更新与错误规则见 ADMIN-API §18。

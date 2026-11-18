@@ -187,7 +187,7 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 | `core.delete` | Target、platform_message_ids（1～100）→ 每个 ID 的状态与安全错误 | CONTRACTS §8、MESSAGE-MODEL §4A |
 | `core.continuation.start` | 必须带 parent_call_id → 空结果，超过每 Session 128 个进行中的延续调用时 RESOURCE_EXHAUSTED；原调用成功结束后 Core 发出 Handler REQUEST，HandlerRequest 的 `continuation_of` 为原调用的 call_id，SDK 据此找到登记的延续函数 | CONTRACTS §2.4 |
 | `core.wait` | 必须带 parent_call_id（延续调用）、超时 → 命中的 Event | CONTRACTS §2.4 |
-| `core.tool.list` | 空 → 工具列表（名称、description、输入 Schema、生效策略、副作用类别 `ToolInfo.effect`，字段号 5） | CONTRACTS §13.1 |
+| `core.tool.list` | 空 → 工具列表（名称、description、输入 Schema、按本次调用配置文件生效的策略、副作用类别 `ToolInfo.effect`，字段号 5）；无父调用时使用 `default`，带 parent_call_id 时须关联同一 Session 内仍在途的父调用，否则 FAILED_PRECONDITION | CONTRACTS §13.1 |
 | `core.tool.invoke` | 必须带 parent_call_id；工具名、JSON 参数 → 工具的 JSON 输出与/或 ErrorInfo | CONTRACTS §13.1、§13.2 |
 | `core.tool.confirm` | 必须带 parent_call_id；操作名、参数摘要、副作用类别 `ToolConfirmRequest.effect`（字段号 3，省略为 `UNSPECIFIED`）→ 空结果（允许）或 ErrorInfo；非法类别返回 INVALID_ARGUMENT | CONTRACTS §13.1、§13.2 |
 | `core.conversation.append` | 会话键、一条或多条 JSON 条目 → 最后一条的序号 | CONTRACTS §13.3 |
