@@ -97,6 +97,36 @@ func TestManagementLifecycle(t *testing.T) {
 		t.Fatalf("restart changed generation or reused session: %+v", second)
 	}
 	stopTestCore(t, c)
+	t.Run("changelog", func(t *testing.T) {
+		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/showcase"}, "https://example.invalid/showcase.tar.gz", "", t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir := t.TempDir()
+		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json")
+		c.management(t, dir, "", "install", archive, "--yes")
+		status, raw := fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/packages/showcase/changelog")
+		var got struct {
+			Locale  string `json:"locale"`
+			Entries []struct {
+				Version  string `json:"version"`
+				Date     string `json:"date"`
+				Markdown string `json:"markdown"`
+			} `json:"entries"`
+		}
+		if status != http.StatusOK || json.Unmarshal(raw, &got) != nil {
+			t.Fatalf("changelog: %d %s", status, raw)
+		}
+		source, err := os.ReadFile("../../examples/plugins/showcase/CHANGELOG.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, body, ok := strings.Cut(string(source), "## [0.1.0] - 2026-11-17\n")
+		if !ok || got.Locale != "en-US" || len(got.Entries) != 1 || got.Entries[0].Version != "0.1.0" || got.Entries[0].Date != "2026-11-17" || got.Entries[0].Markdown != body || bytes.Contains(raw, []byte("[Unreleased]")) {
+			t.Fatalf("changelog entries: %s", raw)
+		}
+		stopTestCore(t, c)
+	})
 	t.Run("package-warnings-and-build-info", func(t *testing.T) {
 		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/lifecycle"}, "https://example.invalid/package.tar.gz", "", t.TempDir())
 		if err != nil {
