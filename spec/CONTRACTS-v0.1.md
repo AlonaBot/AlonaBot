@@ -314,7 +314,7 @@ PATCH 语义依据：[RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)。
 
 ### 5.6 配置文件
 
-T-08.18 已提供存储、会话配置文件解析和管理接口；T-04.18 已接通派发、覆盖值下发、SDK 合并、消息过滤与插件服务（PR #242）；T-11.6 已接通按配置文件的工具目录、调用与操作确认策略（PR #246）。前缀与回复行为由 T-04.19 接入。
+T-08.18 已提供存储、会话配置文件解析和管理接口；T-04.18 已接通派发、覆盖值下发、SDK 合并、消息过滤与插件服务（PR #242）；T-11.6 已接通按配置文件的工具目录、调用与操作确认策略（PR #246）。官方 Agent 已接入配置文件（T-12.19，PR #247）；前缀与回复行为由 T-04.19 接入。
 
 - 配置文件（D-168）让不同会话使用不同的设置。Core 状态库保存：配置文件（ID、名称、颜色）；Adapter 实例的缺省配置文件与单独指定的会话；按（插件 ID、配置文件 ID、字段路径）的覆盖值；按配置文件的插件开关与工具策略（§13.1）；按配置文件的平台设置。修改立即生效，不建立配置代次，不经 Pending 与 reload，也不随代次回退。
 - `default`（界面显示为「默认」）始终存在，不能删除，ID 不变。它没有自己的覆盖值与平台设置：字段值就是各插件的配置（§5.1），修改经 Pending 与 reload；平台设置是 `core_config.json` 的 `command_prefixes` 与 `reply`（§15.1）。插件开关与工具策略对 `default` 同样可以设置。其他配置文件的 ID 由 Core 生成；名称为 1～32 个 Unicode 码点，去掉首尾空白后非空且唯一；颜色取 `teal`、`navy`、`amber`、`pink`、`green`、`purple`、`red`、`gray` 之一。新建时可以从已有配置文件复制覆盖值、插件开关、工具策略与平台设置，不复制会话的指定。
@@ -327,6 +327,8 @@ T-08.18 已提供存储、会话配置文件解析和管理接口；T-04.18 已�
   - 回复方式只作用于回复：处理入站 `message.created` 的调用（命令、文本匹配、事件路由及其延续调用）中，发往该消息所在会话（同一实例、会话字符串与话题）的消息；后台工作、定时任务与发往其他会话的消息不变。共四项：`mention_sender`（缺省 false，只在群聊中于第一条消息开头提及发送人，chain 已提及该用户时不加）；`quote`（缺省 false，第一条消息引用触发消息，chain 已有 reference 片段时不加）；`prefix`（缺省空串，加在第一条消息的第一个 text 片段之前，没有 text 片段时作为第一个片段）；`forward_threshold`（缺省 0，表示关闭；为正数且目标实例声明 `message.forward` 时，一条消息中 text 片段按 Unicode 码点计的总字数超过它，就把这条改为一个 forward 片段发送，节点的发送者为本账号；未声明时照常发送）。
   - 第一条消息是本次根调用及其延续调用发往该会话的第一次 Send。Core 记住它的平台消息 ID，之后对它的 Edit 同样保留提及与前缀，不再加引用。提及或前缀使该条超过单条上限（§8，D-135）时两者都不加，引用照加。回复方式在出站 Hook 之前加上，Hook 看到加上之后的 chain。
   - 其他配置文件的平台设置按键覆盖，没有覆盖的键取 `default` 的值。
+- 官方 Agent 标记 `chat_model`、`image_caption_model`、`default_persona`、`triggers`、`wake_words` 与 `member_sessions` 为可覆盖字段。对话按本次调用的 `c.Config()` 读取模型、人格与转述模型；触发过滤与成员会话键使用该会话视图。定时任务从调度调用视图读取模型与人格，无默认 Target 时使用 `default`，仍发往任务保存的 Target。OnStart 从基础配置建立模型与 `personas` 目录并校验引用；人格迁入数据库由 T-12.20 完成。对话中的非空 `image_caption_model` 须指向启用 `image_input` 的 chat 模型，否则在任何 Provider 请求前返回 `$.image_caption_model: must name a configured chat model with image_input enabled`；空值沿用图片占位行为。
+- Agent 的 Admin 命令 `/agent on|off`、`/persona <名字>` 与 `/provider <名字>` 经 `core.profile.set` 分别修改当前会话所用配置文件的 `triggers`（三项全部或空数组）、`default_persona` 与 `chat_model`。人格、模型名字按 OnStart 建立的目录校验，无参数时列出目录；共用配置文件的会话在后续调用一起生效。成功回复包含 Core 返回的配置文件名称与会话数，`reloading` 为 true 时追加即将重载提示并在当前 Handler 内完成回复。Admin 命令 `/profile [名字]` 无参数时查询当前名称与会话数，给出名字时从列表解析 ID 并指定到当前会话；「默认」或 `default` 取消单独指定，回落实例缺省，再回到 `default`；未知名字时列出可用配置文件。
 - 插件可调用的配置文件服务（WIRE §3.5）：`core.profile.list` 返回全部配置文件的 ID、名称与会话数；其余三项必须关联同一 Session 内仍在途的 parent_call_id，从 Core 保存的父调用附件取可信 Target 与 Actor，缺少有效父调用或默认 Target 时返回 FAILED_PRECONDITION。`core.profile.current` 从本次服务操作的快照解析该会话所用配置文件，返回 ID、名称与会话数。`core.profile.assign` 输入配置文件 ID，把该会话单独指定到它，空串取消单独指定。`core.profile.set` 输入字段路径与 JSON 值（null 删除），只能修改调用插件自己写了 `profile` 的字段，按上文校验，返回配置文件 ID、名称、会话数与 `reloading`；会话使用 `default` 时在同一插件管理锁内核对 Active/Pending，以当前 Active 为基线调用配置服务的 `Replace` 写入 Pending，已有 Pending 时返回 FAILED_PRECONDITION，`reloading` 为 true。根调用、派生调用、自动回复与延续全部释放后，在锁外触发既有 reload；根已结束时新登记的 `Invocation.AfterFinished` 回调立即在锁外执行。开发组件同样消费 Pending，异步 reload 的实际错误保留在状态与日志中。assign 与 set 要求调用链的可信 Actor 为 Core Admin，否则返回 PERMISSION_DENIED。list/current 直接读取快照；assign 跳过 schema，set 只读取调用插件的 schema。固定服务写请求沿 catalog → instances → 调用插件包锁（仅 set）尝试互斥，任一占用立即返回 FAILED_PRECONDITION；HTTP 管理入口沿原有管理互斥执行。
 - 卸载（§9.3）：覆盖值、插件开关与工具策略属于配置，只卸载与 `--purge-data` 时保留，`--purge` 时删除。
 - 管理 API 见 ADMIN-API §23。CLI：`alonabot profile [list]`、`profile create <名字> [--from <ID>]`、`profile rename <ID> <名字>`、`profile delete <ID>`、`profile assign <ID> <实例名> [<会话字符串>]`（不给会话时设置该实例的缺省）、`profile unassign <实例名> [<会话字符串>]`、`profile set <ID> <插件 ID> <字段路径> <JSON 值>`、`profile unset <ID> <插件 ID> <字段路径>`；`<ID>` 为 `default` 时 set 与 unset 写入该插件的 Pending。
@@ -625,6 +627,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - Core 状态库按插件保存 Agent 会话。会话键由插件给出，为 1～256 字节的 UTF-8 字符串；条目是插件定义的 JSON 对象，按追加顺序编号，Core 只校验它是合法的 JSON 对象。
 - `core.conversation.append` 追加一条或多条条目，同一请求的条目原子写入，返回最后一条的序号。`core.conversation.list` 从给定序号起按顺序返回条目；响应受帧上限约束，Core 在超限前停止并返回下一个序号。`core.conversation.clear` 删除该会话的全部条目。插件只能访问自己的会话，这些服务不需要父调用链。
 - Core 不截断、不过期、不压缩会话。管理服务可以列出插件的会话并清除指定会话；卸载插件默认保留会话，`--purge-data` 或 `--purge` 时一并删除（§9.3，D-127）。
+- 官方 Agent 的会话运行状态保存在受管 SQLite 的 `chat_settings`，只含 `Session`、`ResetGeneration` 与 `ImageCount`；模型、人格与触发方式由配置文件决定（§5.6，D-168）。初始迁移 ID:1 包含运行状态、图片与用量，ID:2 保留记忆迁移。
 
 ### 13.4 记忆
 
@@ -635,7 +638,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 ### 13.5 文本生成服务
 
 - Agent 组件注册 JSON Service `llm.generate`，让其他插件复用管理员已配置的 Provider，不必各自内嵌 Provider 客户端和 API Key（D-51）。Schema、Go 类型与调用辅助由 `sdk/llm` 提供，调用辅助以 `@agent` 为目标（§3、D-61），因此替换 Agent 组件后调用方不用修改；只需一问一答时用 `llm.Ask(ctx, prompt)`，它等于只含一条 user 消息、使用 Agent 对话模型（`chat_model`）的请求，返回生成的文本（D-111）；替换官方 Agent 的组件应实现本服务。
-- 输入：`messages`（至少一条，每条为 `role`（user 或 assistant）与 `text`）、可选的 `system`、可选的 `model`（Agent 配置中 chat 类型模型的名字，缺省为 `chat_model`，D-154）与可选的 `max_output_tokens`。输出：`text`、实际使用的 `model`（名字），以及 Provider 返回用量时的 `input_tokens` 与 `output_tokens`。
+- 输入：`messages`（至少一条，每条为 `role`（user 或 assistant）与 `text`）、可选的 `system`、可选的 `model`（Agent 配置中 chat 类型模型的名字，缺省读取本次调用 `c.Config()` 的 `chat_model`，按可信默认 Target 选择配置文件，无默认 Target 时使用 `default`，D-154、D-168）与可选的 `max_output_tokens`。输出：`text`、实际使用的 `model`（名字），以及 Provider 返回用量时的 `input_tokens` 与 `output_tokens`。
 - 服务声明为 public（§3）。Agent 只接受直接调用方插件位于其配置项 `llm_service_allowed_plugins` 中的调用，缺省为 `["*"]`，表示全部插件（D-83），管理员可以改为插件 ID 名单；不在列表中返回 PERMISSION_DENIED，不请求 Provider。直接调用方取 Core 下发的调用链中的上一跳插件，不采信请求内容。
 - 一次调用对应一次完整的 Provider 请求：不流式、不调用工具、不读写 Agent 会话与记忆，也不套用人格。`messages` 为空、`role` 非法、指定的模型不存在或不是 chat 类型返回 INVALID_ARGUMENT；没有指定模型且 `chat_model` 为空返回 FAILED_PRECONDITION；Provider 出错或中途断开返回 UNAVAILABLE，safe_message 不含 API Key；不自动重试（D-38；D-155 的重试与回退只用于 Agent 的对话轮次）。
 - 生成可用的时间受调用方期限约束（§1.2）。普通请求只有 30s，需要更长时间的调用方在延续调用（§2.4）或 schedule 回调中发起。没有安装或没有启用 Agent 组件时按 §3 的目标未激活处理。

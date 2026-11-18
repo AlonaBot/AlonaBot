@@ -203,6 +203,8 @@ Adapter 实例的记录在 `GET /api/v1/adapters/{adapter_id}/instances/{instanc
 
 会话派发按单独指定 → 实例缺省 → `default` 解析配置文件，已应用插件开关、字段覆盖与消息过滤；SDK 的 `c.Config()` 在每次调用开始时冻结视图。覆盖更新向在线 Session 下发完整集合，后续调用使用新值；离线插件在下次 Bootstrap 接收。Bootstrap 的 `profile_overrides_json` 必须是对象，无覆盖填 `{}`；离线 `alonabot test` 同样下发该字段。插件经 `core.profile.set` 修改 `default` 时，Core 在整条根调用及延续结束后 reload；固定服务写入遇管理互斥占用立即返回 FAILED_PRECONDITION。工具目录、调用与操作确认使用可信默认 Target 对应配置文件的一次操作快照；无 Target 或无父 list 使用 `default`。插件关闭时为 deny，其余按配置文件覆盖、全局覆盖与工具声明缺省策略查找，确认操作无覆盖时为 confirm。管理更新从下一次操作生效，在途确认保留已接纳策略。前缀与回复方式的运行时应用由 T-04.19 接入。
 
+官方 Agent 可用 `/profile [名字]` 查询或切换当前会话的配置文件；名字为「默认」或 `default` 时取消单独指定，先回落实例缺省，再回到 `default`。Admin 用 `/agent on|off`、`/persona <名字>`、`/provider <名字>` 修改当前配置文件的触发方式、人格与模型，共用该配置文件的会话在后续调用一起生效；回复显示 Core 返回的名称、会话数，修改 `default` 时追加即将重载提示。可覆盖字段为 `chat_model`、`image_caption_model`、`default_persona`、`triggers`、`wake_words`、`member_sessions`。人格目录当前仍来自基础配置 `personas`，迁入 Agent 数据库由 T-12.20 完成。受管库的 `chat_settings` 仅保留会话键、reset 代次与图片计数；旧开发库按首次发布前约定重建。
+
 ### 导出诊断包
 
 ```fish

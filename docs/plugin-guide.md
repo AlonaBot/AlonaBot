@@ -262,6 +262,8 @@ AlonaBot.onLocale(async function(locale) {
 
 Core 提供 `core.profile.list`、`current`、`assign` 与 `set`（[WIRE §3.5](../spec/WIRE-FORMAT.md#35-插件可调用的-core-固定服务)）。current/assign/set 从同一 Session 的在途父调用取得可信会话与 Actor，assign/set 要求 Core Admin；set 只修改本插件标记了 `profile` 的字段。会话使用 `default` 时写入 Pending，已有 Pending 或管理互斥占用返回 FAILED_PRECONDITION；整条根调用及延续结束后触发 reload，响应的 `reloading` 为 true。配置文件关闭插件时，命令按禁用处理，文本、事件、Raw 与 PreEvent 候选跳过。
 
+官方 Agent 的 `agent/profile.go` 提供调用示例：用包级 `service.Proto` 声明四个固定服务，调用传 `c.Context()`，用 `json.Marshal` 编码字段值，并按响应回复配置文件名称、会话数及 `reloading` 提示。`default` 的回复在当前 Handler 内完成，根调用结束后由 Core 重载。官方 Agent 的对话、定时任务和未显式指定模型的 `llm.generate` 均从 `c.Config()` 读取可覆盖字段。
+
 | 声明类型 | 取值方法 |
 | --- | --- |
 | `string`、`text` | `String(key)` |
