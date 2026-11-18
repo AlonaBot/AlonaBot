@@ -6,12 +6,12 @@
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
-| goal-73 | T-14.3 | 发行归档 | T-03.10、T-09.3、T-12.7、T-14.1、T-14.2、T-15.2 | 等待前置 |
+| goal-73 | T-14.3 | 发行归档 | T-03.10、T-09.3、T-12.7、T-14.1 | 等待前置（T-14.1） |
 | goal-74 | T-14.4 | 首次运行与预装 | T-09.6、T-14.3 | 等待前置 |
 | goal-77 | T-14.5 | 容器镜像 | T-07.6、T-14.3 | 等待前置 |
 | goal-85 | T-14.7 | install.sh | T-14.3 | 等待前置 |
 | goal-75 | T-14.6 | 发行包与镜像端到端验收 | T-09.11、T-14.4、T-14.5 | 等待前置 |
-| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-03.20、T-03.21、T-03.22、T-03.23、T-03.26、T-04.10、T-04.11、T-05.5、T-08.9、T-08.13、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-15.3、T-15.4、T-15.5、T-15.6、T-15.7、T-16.2 | 等待前置 |
+| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-03.23、T-04.10、T-04.11、T-05.5、T-08.9、T-08.13、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-16.2 | 等待前置 |
 | goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 等待前置 |
 | goal-48 | T-10.3 | 资源比较报告与常驻内存预算核对 | T-10.1 | 等待前置 |
 | goal-49 | T-10.4 | 发布资产与说明 | T-10.2、T-10.3 | 等待前置 |
@@ -20,12 +20,12 @@
 
 ### goal-73 · T-14.3 发行归档
 
-状态：等待前置（T-03.10、T-09.3、T-12.7、T-14.1、T-14.2、T-15.2）。语句中 goal-38 提供的命令（alonabot pack 与 --key）与各官方插件、Telegram 与 OneBot 11 Adapter 的目录只写名字；合并后由审查者核对，再改为待派发。
+状态：等待前置（T-14.1）。T-03.10、T-09.3、T-12.7 已合并。2026-11-17 按 D-171 缩小组件范围：不再等待 T-14.2 与 T-15.2，发行归档只含 Core、Telegram Adapter、Agent、WebUI 与 help。语句中 goal-38 提供的命令（alonabot pack 与 --key）与各组件的目录只写名字；T-14.1 合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-73（切片 T-14.3：发行归档）。goal 目录 goal-73，分支 goal-73，worktree .worktrees/goal-73，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：scripts/dist/ 为每个目标平台构建 Core 与全部官方组件（Telegram Adapter、OneBot 11 Adapter、Agent、WebUI、help、welcome、rss；WebUI 先在 web/admin 运行 npm ci 与 npm run build，再与其他组件一样按平台打包），用 alonabot pack 生成安装包与外部 release.json，以官方发布者私钥签名后放入 packages/，再打成 zip（Windows）或 tar.gz，并生成列出全部发行归档 SHA256 的 SHA256SUMS；发行版 Core 在构建时嵌入官方发布者公钥。
+目标：scripts/dist/ 为每个目标平台构建 Core 与首个发行版的组件（D-171：Telegram Adapter、Agent、WebUI、help；WebUI 先在 web/admin 运行 npm ci 与 npm run build，再与其他组件一样按平台打包），用 alonabot pack 生成安装包与外部 release.json，以官方发布者私钥签名后放入 packages/，再打成 zip（Windows）或 tar.gz，并生成列出全部发行归档 SHA256 的 SHA256SUMS；发行版 Core 在构建时嵌入官方发布者公钥。
 
 依据：PLAN T-14 步骤 3；CONTRACTS §15.2、§9.2；docs/development.md（交叉编译）；TEST-MATRIX V-66 的归档分项。
 
@@ -67,7 +67,7 @@
 ```text
 /goal 使用 $alonabot-execute 推进 goal-74（切片 T-14.4：首次运行与预装）。goal 目录 goal-74，分支 goal-74，worktree .worktrees/goal-74，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：数据目录首次初始化时，按普通安装流程安装发行包 packages/ 中的全部包，只启用 help 与官方 WebUI；Agent 只安装不启用（D-50、D-62）；Telegram 与 OneBot 11 Adapter 只安装，管理员为它添加第一个实例时才启用；其他预装插件只安装不启用。之后不再自动安装，已卸载的预装包不重新安装；新版本发行包中版本更高的内置包作为可用更新列出，由管理员确认后按 update 流程更新。
+目标：数据目录首次初始化时，按普通安装流程安装发行包 packages/ 中的全部包，只启用 help 与官方 WebUI；Agent 只安装不启用（D-50、D-62）；Telegram Adapter 只安装，管理员为它添加第一个实例时才启用（首个发行版没有其他预装插件与 OneBot 11 Adapter，D-171）。之后不再自动安装，已卸载的预装包不重新安装；新版本发行包中版本更高的内置包作为可用更新列出，由管理员确认后按 update 流程更新。
 
 依据：PLAN T-14 步骤 4；CONTRACTS §15.1、§15.2；TEST-MATRIX V-66。
 
@@ -88,9 +88,9 @@
 
 测试（按编码规范「测试提交规则」）：
 - 提交：cmd/alonabot/firstrun_e2e_test.go（//go:build unix）：用 goal-73 的 dist 工具以临时密钥为当前平台构建发行归档并解压到临时目录，运行其中的 alonabot run（干净 data_dir，测试钩子模拟交互终端）：
-  - 全部预装包已安装；只有 help 已启用并有进程；Agent、记忆、welcome、rss、Telegram 与 OneBot 11 Adapter 未启用，没有对应进程。
+  - 全部预装包已安装；只有 help 已启用并有进程；Agent 与 Telegram Adapter 未启用，没有对应进程。
   - 把其中一个包的签名改坏：该包未安装并有 ERROR，其余正常。
-  - 卸载 rss 后重启 serve：不重新安装。
+  - 卸载 help 后重启 serve：不重新安装。
 - 本地自测（*_local_test.go，不提交，PR 中写明结果）：没有 packages/ 时跳过；preinstalled 标记在部分失败时仍写入；非终端运行时拒绝启动并提示 admin-token init；用版本号更高的发行归档替换 packages/ 后重启：list 显示可用更新，没有自动更新；创建 Telegram 实例时 Adapter 被启用。
 
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
@@ -153,7 +153,7 @@
 ```text
 /goal 使用 $alonabot-execute 推进 goal-75（切片 T-14.6：发行包与镜像的端到端验收）。goal 目录 goal-75，分支 goal-75，worktree .worktrees/goal-75，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：在干净的数据目录上，分别从发行归档与容器镜像依次完成：首次运行、登录 WebUI、添加 Telegram 实例（本地 Bot API 模拟服务）、启用 Agent 并配置 Provider（本地模拟服务）、/ask 对话、/help、启用 rss 并收到推送；在 TEST-MATRIX §3.2 记录 T-14 证据，真实 Telegram 与真实 Provider 没有凭证时记为未运行。
+目标：在干净的数据目录上，分别从发行归档与容器镜像依次完成：首次运行、登录 WebUI、添加 Telegram 实例（本地 Bot API 模拟服务）、启用 Agent 并配置 Provider（本地模拟服务）、/ask 对话、/help 与 /whoami（D-171 去掉 rss 一步）；在 TEST-MATRIX §3.2 记录 T-14 证据，真实 Telegram 与真实 Provider 没有凭证时记为未运行。
 
 依据：PLAN T-14 步骤 6 与「停止和失败条件」；CONTRACTS §15；TEST-MATRIX V-66、V-67、V-70。
 
@@ -171,8 +171,7 @@
 4) 配置 Provider：经配置 API 为 Agent 添加指向本地模拟 Provider 的条目（api_key 为 secret），reload 生效。
 5) /ask：模拟服务中的用户发送 /ask，收到先发送再编辑的回复，最终内容正确。
 6) /help 与 /whoami：列出可用命令；/whoami 返回实例与用户 ID；把该用户加入 Core Admin。
-7) 启用 rss：Admin /rss add 一个测试 HTTP 源，授予发信许可，源新增条目后收到推送。测试源必须使用 rss 地址检查允许的地址（非 loopback、非私网）；做不到时说明实际做法（例如测试钩子），并在证据中标明。
-8) 停止：Core 与全部插件进程退出（容器 docker stop 后进程全部消失）。
+7) 停止：Core 与全部插件进程退出（容器 docker stop 后进程全部消失）。
 - V-70：镜像文件只含 alonabot、packages/ 与 CA 证书，UID 10001；无 TTY 时拒绝启动；端口只发布到宿主本机；出站 HTTPS 可用；没有 ALONABOT_CONTAINER 时 0.0.0.0 搭配 http Base URL 被拒绝。
 - 证据：TEST-MATRIX §3.2 追加 T-14 一行（平台、Docker 版本、命令、结果）；真实 Telegram、真实 Provider 与没有运行的平台写「未运行」。
 
@@ -189,7 +188,7 @@
 
 ### goal-46 · T-10.1 证据汇总与跨组件联验
 
-状态：等待前置（T-03.20、T-03.21、T-03.22、T-03.26、T-04.11、T-05.5、T-09.11、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-15.3、T-15.4、T-15.5、T-15.6、T-15.7、T-16.2）。T-08.9（[PR #117](https://github.com/AlonaBot/AlonaBot/pull/117)，合并提交 `2c1fdcc`）已合并。合并后由审查者按 main `2c1fdcc` 核对：`examples/plugins/configdb` 默认使用 sqlitedb，`configdb_gorm` 标签切换到 GORM；`OnConfigLoad` 转换 v1 问候词数组，两个变体的 `Migrations` 与 `OnStart` 覆盖迁移失败及启动写库后失败，启动记录位于 `configdb_startup`。声明字段 null 按维护者裁决以 CONFIG/INVALID_ARGUMENT 拒绝，未知字段 null 保留；组件证据与 T-09 正式入口、Journal 及真实页面的未闭合项见 TEST-MATRIX §3.2。插件 HTTP 入口已按 T-07.7（[PR #116](https://github.com/AlonaBot/AlonaBot/pull/116)，合并提交 `e65eb4d`）改为单一 `base_url` 与管理认证。本切片只汇总与联验，不引入新接口。2026-11-10 按 D-129～D-131 把范围扩展到 V-117，前置加入 T-03.26 与 T-15.7。2026-11-09 按 D-87 追加 V-89～V-97 与对应的 Adapter 切片作为前置；同日按 D-102～D-113 把范围扩展到 V-111，前置加入不在其他前置之下的 T-04.10、T-04.11 与 T-08.13。2026-11-04 按 D-77～D-85 修订计划：首次 token 的取得见 D-82；插件页面经 WebUI 的 iframe 与桥访问，不再使用票据（D-84）。前置合并后由审查者改写。
+状态：等待前置（T-09.11、T-14.6、T-14.7）。2026-11-17 按 D-171 去掉不进入首个发行版的 Telegram 后续切片与 T-15.3～T-15.7；其余前置已合并。T-08.9（[PR #117](https://github.com/AlonaBot/AlonaBot/pull/117)，合并提交 `2c1fdcc`）已合并。合并后由审查者按 main `2c1fdcc` 核对：`examples/plugins/configdb` 默认使用 sqlitedb，`configdb_gorm` 标签切换到 GORM；`OnConfigLoad` 转换 v1 问候词数组，两个变体的 `Migrations` 与 `OnStart` 覆盖迁移失败及启动写库后失败，启动记录位于 `configdb_startup`。声明字段 null 按维护者裁决以 CONFIG/INVALID_ARGUMENT 拒绝，未知字段 null 保留；组件证据与 T-09 正式入口、Journal 及真实页面的未闭合项见 TEST-MATRIX §3.2。插件 HTTP 入口已按 T-07.7（[PR #116](https://github.com/AlonaBot/AlonaBot/pull/116)，合并提交 `e65eb4d`）改为单一 `base_url` 与管理认证。本切片只汇总与联验，不引入新接口。2026-11-10 按 D-129～D-131 把范围扩展到 V-117，前置加入 T-03.26 与 T-15.7。2026-11-09 按 D-87 追加 V-89～V-97 与对应的 Adapter 切片作为前置；同日按 D-102～D-113 把范围扩展到 V-111，前置加入不在其他前置之下的 T-04.10、T-04.11 与 T-08.13。2026-11-04 按 D-77～D-85 修订计划：首次 token 的取得见 D-82；插件页面经 WebUI 的 iframe 与桥访问，不再使用票据（D-84）。前置合并后由审查者改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-46（切片 T-10.1：证据汇总与跨组件联验）。goal 目录 goal-46，分支 goal-46，worktree .worktrees/goal-46，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -262,7 +261,7 @@
 ```text
 /goal 使用 $alonabot-execute 推进 goal-48（切片 T-10.3：资源比较报告与常驻内存预算核对）。goal 目录 goal-48，分支 goal-48，worktree .worktrees/goal-48，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：在一台固定机器上，按 TEST-MATRIX V-33 的四种负载（空闲、消息、数据库、HTTP）测量 Core 加插件及附属进程的总 RSS/私有内存、Linux PSS、CPU 与 P50/P95/P99 延迟，并用同一模拟服务与功能相同的插件测量 NoneBot2；再按 V-74 测量 Core、echo、rss 与 configdb 的 gormdb 变体空闲时的 PSS 并对照预算。输出原始数据与复现命令，不预设优胜结论。
+目标：在一台固定机器上，按 TEST-MATRIX V-33 的四种负载（空闲、消息、数据库、HTTP）测量 Core 加插件及附属进程的总 RSS/私有内存、Linux PSS、CPU 与 P50/P95/P99 延迟，并用同一模拟服务与功能相同的插件测量 NoneBot2；再按 V-74 测量 Core、echo、help（rss 不进入首个发行版，D-171）与 configdb 的 gormdb 变体空闲时的 PSS 并对照预算。输出原始数据与复现命令，不预设优胜结论。
 
 依据：PLAN T-10 步骤 6；CONTRACTS §10；DECISIONS D-52；TEST-MATRIX V-33、V-74。
 
@@ -297,7 +296,7 @@
 ```text
 /goal 使用 $alonabot-execute 推进 goal-49（切片 T-10.4：发布资产与说明）。goal 目录 goal-49，分支 goal-49，worktree .worktrees/goal-49，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：生成五平台候选资产（含官方 Telegram 与 OneBot 11 Adapter、Agent、记忆与预装插件）、T-14 的发行归档与容器镜像、外部 release.json 与签名；用干净的测试 data_dir 从这些真实资产完成安装、更新与卸载重装，核对来源、长度、摘要、平台与 Schema/二进制一致性，确保安装不依赖开发机上未打包的文件；关闭全部阻塞用例，写出发布说明。签名私钥只在维护者控制的环境中使用；发布到 GitHub Release 与推送镜像由维护者执行。
+目标：生成五平台候选资产（首个发行版的组件：官方 Telegram Adapter、Agent、WebUI 与 help，D-171）、T-14 的发行归档与容器镜像、外部 release.json 与签名；用干净的测试 data_dir 从这些真实资产完成安装、更新与卸载重装，核对来源、长度、摘要、平台与 Schema/二进制一致性，确保安装不依赖开发机上未打包的文件；关闭全部阻塞用例，写出发布说明。签名私钥只在维护者控制的环境中使用；发布到 GitHub Release 与推送镜像由维护者执行。
 
 依据：PLAN T-10 步骤 7、8；CONTRACTS §9.2、§15.2、§15.3；TEST-MATRIX V-28、V-41 的发布复验。
 
