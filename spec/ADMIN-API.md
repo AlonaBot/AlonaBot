@@ -399,7 +399,7 @@ multipart 与 JSON Update 均进入 `manage.Service.Update`，执行绑定来源
 }
 ```
 
-没有 Active 时 `active_generation` 为空串、`active` 为 `{}`；没有有效 Pending 时 `pending` 为 null。`schema` 是当前安装包 `config_schema.json` 的规范内容，缺失时为 null。`i18n` 按包内 `i18n/*.json` 的语言标签返回各文件的 `config` 根节点，缺失时为 `{}`。读取隐藏秘密引用、schema 声明的秘密及代次保留的秘密路径；`invisible` 字段照常返回，由表单决定是否展示。
+没有 Active 时 `active_generation` 为空串、`active` 为 `{}`；没有有效 Pending 时 `pending` 为 null。`schema` 是当前安装包 `config_schema.json` 的规范内容，缺失时为 null。`i18n` 按包内 `i18n/*.json` 的语言标签返回各文件的 `config` 根节点，缺失时为 `{}`；`messages` 同样按语言标签返回各文件的 `messages` 根节点，供插件页面桥的 `translate` 使用（D-177）。读取隐藏秘密引用、schema 声明的秘密及代次保留的秘密路径；`invisible` 字段照常返回，由表单决定是否展示。
 
 | Method / path | 请求 | 成功响应与语义 |
 | --- | --- | --- |
