@@ -118,6 +118,7 @@
 | goal-176 | S-02.3 | Core 消息事件过滤与 SDK 注册 | T-04.16、T-08.11、T-09.14 | 待派发 |
 | goal-161 | T-04.18 | 配置文件的派发与 SDK | T-04.16、T-08.18 | 等待前置（T-08.18） |
 | goal-171 | S-02.2 | 空闲退出与即时休眠策略 | S-02.1 | 等待前置 |
+| goal-177 | T-09.27 | 组件市场 ID 改用连字符 | T-09.10、T-09.14、T-12.8、T-13.5 | 待派发 |
 | goal-162 | T-04.19 | 平台与消息 | T-04.18 | 等待前置（T-04.18） |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
 | goal-163 | T-11.6 | 按配置文件的工具策略 | T-04.18、T-11.4 | 等待前置（T-04.18） |
@@ -1867,7 +1868,7 @@ internal/core/webhost
 - Telegram 点击：callback_query 先调用 answerCallbackQuery（失败只记日志），再交付 button.clicked：Target 取 callback_query.message 的 chat 与 thread（没有 message 的 inline 回调不交付，推进游标并以 INFO 记录），Actor 取 from，payload 的 value 暂放 callback_data，origin_platform_message_id 为消息 ID，callback_query_id 原样。
 - Core 解析（Router 在派发 button.clicked 前调用 Resolve）：token 不存在、过期、generation 已不是该插件的当前 Active、或 Target 与签发时不同 → 丢弃并以 INFO 记录，不派发、不回复、不进入 Raw 或文本匹配。有效时把 payload 改写为签发时的 action_id、action_schema_version 与 value，只派发给该插件的该路由；派发前执行 T-04.4 的 CheckCommand 等价检查（全局禁止与路由启用、权限），每次点击都按本次 Actor 重新检查；同一 token 可被多人、多次点击。token 不带任何角色。
 - extension：remote 的 `compileDeclarations` 已缓存权限闭包与扩展事件的已解析 Schema，同样在注册时解析每个 ExtensionDeclaration（jsonschema-go 的 Resolve，Loader 为 nil；解析失败按注册失败），实例实现 ExtensionChecker。发送前对每个 extension 片段：目标实例的 AdapterID() 必须等于片段的 adapter_id，实例必须实现 ExtensionChecker 且 (name, version) 已声明，payload_json 必须通过该声明的 Schema；否则 UNSUPPORTED（Adapter 不符、未实现或未声明）或 INVALID_ARGUMENT（不符合 Schema），在媒体租约与调用 Adapter 之前返回。Telegram 本切片不声明 extension，所有 extension 片段发往 Telegram 都是 UNSUPPORTED。
-- manifest：按 CONTRACTS §9.1 校验各角色：role 为 adapter 时必须有 adapter_id，且不能有 adapter_dependencies、plugin_dependencies、migration_mode 或 prepare_effects；agent 与 plugin 的字段规则相同；webui 必须有 assets 与 Admin API 主版本范围、os/arch 为 any，不能有 entrypoint、协议主版本、required_capabilities、config_version 与依赖；市场 ID 的前缀与 role 一致（alonabot_plugin_、alonabot_adapter_、alonabot_agent_、alonabot_webui_）；依赖项的 ID 格式、版本 SemVer、重复项都要校验；必需的 plugin_dependencies 不能直接依赖自己。环的检测需要全部安装记录，由 T-09.4 完成。
+- manifest：按 CONTRACTS §9.1 校验各角色：role 为 adapter 时必须有 adapter_id，且不能有 adapter_dependencies、plugin_dependencies、migration_mode 或 prepare_effects；agent 与 plugin 的字段规则相同；webui 必须有 assets 与 Admin API 主版本范围、os/arch 为 any，不能有 entrypoint、协议主版本、required_capabilities、config_version 与依赖；市场 ID 的前缀与 role 一致（alonabot-plugin-、alonabot-adapter-、alonabot-agent-、alonabot-webui-）；依赖项的 ID 格式、版本 SemVer、重复项都要校验；必需的 plugin_dependencies 不能直接依赖自己。环的检测需要全部安装记录，由 T-09.4 完成。
 - CheckDependencies：必需的 Adapter 依赖要求该 adapter_id 已安装且声明了全部所需 extension（版本相等）；必需的插件依赖要求已启用且版本 ≥ MinVersion；可选依赖缺失也报告（Required=false），调用方只记诊断。
 - cmd/alonabot run：插件目录下有 plugin.yaml 时解析并检查依赖（Installed 来自状态库中已启用的安装记录与当前运行的 Adapter 描述），有必需项问题时以 exitFailure 退出并列出全部缺失项。
 
@@ -3921,7 +3922,7 @@ Core 一侧已按合入代码核对并修订：
 - Adapter 工程入口：以可导入包为生成器 Dir。先用 manifest.ParseProject 校验该目录的工程 manifest，role 为 adapter 时，在遵守 GOOS/GOARCH、build tags 且排除生成文件与测试文件的入口包中，用 go/types 查找唯一实现 sdk/adapter.Adapter 的具体具名类型（含指针方法集）；零个或多个时给出带位置的诊断。无需导出该类型，生成 init 调用 sdk.UseGeneratedAdapter((*具体类型)(nil), sdk.Generated{...})，嵌入 Manifest 与 AdapterConfigSchema，并按已有规则嵌入 I18n；不执行构造函数、不扫描注册标记。插件分支沿用 sdk.Base 根类型发现与 UseGenerated。
 - 生成结果：有工程 plugin.yaml 时先 ParseProject，再原样嵌入 Generated.Manifest；缺少该文件时沿用当前独立进程工程的生成/实例声明检查，库模式在登记校验时报缺失。role=adapter 的工程要求有效的 adapter_config_schema.json。cmd/alonabot/plugin.go 根据 RootType 或 AdapterType 判断是否有可写入/核对的 Source，Adapter 的 plugin generate/check 同样写入/比较 alonabot_gen.go；仅检查实例声明的目录仍保持 check 行为。保留 ConfigSchema、I18n、ServiceSchemas 及 T-08.13 的常量文案键/参数检查。Telegram 与示例中的生成指令通过现有 plugin generate 命令生成，生成产物只由生成器写入。
 - 启动前校验：通过 sdk.GeneratedFor 取得组件资源，对 Manifest 调用 manifest.ParseProject，保留解析错误与 Warnings，使用 ID、Role、AdapterID。缺少登记/Manifest、选项与角色不符、重复 ID/adapter_id 或与已安装包冲突时，在启动任何组件前返回错误。已有同 ID、同角色、同 adapter_id 的 dev 记录在重启时复用，其他冲突报错。工程作者字段沿用 ParseProject；BuildInfo 与 Generate 的包内构建信息留给 build/pack。
-- Telegram 的工程 manifest 放在 adapters/telegram，adapter_id 为现有 AdapterID（telegram），组件 ID 使用 alonabot_adapter_telegram；schema 移动时保留现有字段、版本与内容。cmd 只调用 sdk.RunAdapter，库模式从同一个 telegram.New() 的具体类型取得包内登记。build/pack 从可导入包取资源并构建 cmd 薄入口的接入由 T-09.3、T-14.3 完成（D-134）。
+- Telegram 的工程 manifest 放在 adapters/telegram，adapter_id 为现有 AdapterID（telegram），组件 ID 使用 alonabot-adapter-telegram；schema 移动时保留现有字段、版本与内容。cmd 只调用 sdk.RunAdapter，库模式从同一个 telegram.New() 的具体类型取得包内登记。build/pack 从可导入包取资源并构建 cmd 薄入口的接入由 T-09.3、T-14.3 完成（D-134）。
 - 参数与装配：ALONABOT_ARGS 有值时作为首个输入，再追加 Args 的各项，统一调用 tune.Parse；值含 = 时按逗号分隔，否则作为文件路径。使用 tune.Values 与 Override 记录覆盖 WARN，沿用日志与内存软上限的契约。state.Open 取得 core.lock 后装配 adapter.Registry、Router、message.Service、固定服务 Mux 等已合入组件。
 - Router 使用 New(Options)，并发、队列与全局预算取 tune.Values；媒体与按钮接入 Prepare、Buttons。Prefixes 传 nil，Core Admin 列表为空，DefaultLocale 使用 en-US，三者由 T-09.4 接入。每个 Session 的 Router.Attach、Mux.For 与 remote.Process.Bind 使用同一个 router.Caller；remote.Options.RegisterIncoming 接媒体 Store 的入站登记入口。
 - 已安装包：枚举 Installs，按 Enabled 启动已启用的非 dev 包，经 supervisor.Launch 使用其已提交的 ActiveGeneration 与包资源；当前选项中未登记的旧 dev 记录保留，不自动启动。同进程组件经 loopback 复用 host.Prepare/Activate，退出等待由根包装配持有；Running.Process 仍只描述独立进程。新装配供后继复用；cmd/alonabot 当前 run 只启动单个插件，其调用方迁移归 T-09.4、T-13.3。
@@ -5838,7 +5839,7 @@ core.delete（goal-107，PR #144）与 core.action（goal-106，PR #146）都在
    func (p *remote.Process) Unbind()
    func manifest.CheckDependencies(m *manifest.Manifest, in manifest.Installed) []manifest.Problem
    core_config.json 示例结构：
-   {"adapters":{"telegram":{"package":"alonabot_adapter_telegram","$version":1,"default_instance":"tg_a","instances":{"tg_a":{"token":"${TELEGRAM_BOT_TOKEN_A}","api_base_url":"https://api.telegram.org","proxy_mode":"none"},"tg_b":{"token":"${TELEGRAM_BOT_TOKEN_B}","api_base_url":"https://api.telegram.org","proxy_mode":"none"}}}}}
+   {"adapters":{"telegram":{"package":"alonabot-adapter-telegram","$version":1,"default_instance":"tg_a","instances":{"tg_a":{"token":"${TELEGRAM_BOT_TOKEN_A}","api_base_url":"https://api.telegram.org","proxy_mode":"none"},"tg_b":{"token":"${TELEGRAM_BOT_TOKEN_B}","api_base_url":"https://api.telegram.org","proxy_mode":"none"}}}}}
    模拟测试把 api_base_url 换成各自 Server.URL()；两个 Server 用不同 token 和 SetMe 账号。schema 来自 adapters/telegram/adapter_config_schema.json；配置归属与 PrepareInstances 已在 assembly.go 中接通。
 
 3. 插件对象、消息与媒体：
@@ -6590,7 +6591,7 @@ broker.Options、bus.Options 与 router.Options 增加 Metrics *metrics.Counters
 - `alonabot.go`：`Run(opts ...Option) error`、`Start(ctx context.Context, opts ...Option) (*Core, error)`（已用 `go doc . Start` 复核）、`(*Core).Wait() error`、`Plugin(root *sdk.Plugin) Option`、`Adapter(a adapter.Adapter) Option`、`DataDir(dir string) Option`、`Args(values ...string) Option`、`Listen(addr string) Option`、`LogLevel(level slog.Level) Option`、`LogFormat(format string) Option`。`Executable(path string, packageManifest []byte) Option`、`Stdio() Option` 供开发 CLI；`(*Core).Restart(ctx context.Context, id string) error`、`RestartInstance(ctx context.Context, adapterID, instanceID string) error`、`ReloadSettings(ctx context.Context) error` 已存在。库模式使用 Start/Run，热部署由 CLI 轮询驱动。
 - `cmd/alonabot/commands.go`：`run [directories...]` 支持 `--reload`、`--stdio`、`--data-dir`、`--listen`、日志覆盖；`cmd/alonabot/dev.go` 的 `runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval time.Duration, options []alonabot.Option) error` 构建后调用共用根包。`internal/pluginkit/build.go`：`BuildDev(ctx context.Context, dir, outDir string) (Build, error)`，`Build{Executable, Manifest, PackageManifest, Digest, Role, ID, AdapterID}`；以 overlay 生成资源与薄入口，不写工程源文件。没有公开的 `alonabot.Reload` 选项。
 - `examples/devbot/main.go` 已用 Start、DataDir、Plugin(plugin.New())、Adapter(adapter.New()) 与信号 ctx 运行同进程示例；`examples/devbot/plugin/plugin.go` 的 `New() *sdk.Plugin` 显式绑定生成资源，按 `greetings` 配置写 startup 表并回声；`examples/devbot/adapter/adapter.go` 的 `New() adapter.Adapter` 返回可导入回环 Adapter，但当前仅实现 Start/Send/Stop，没有 Deliver 消息的交互入口。两个包已有工程 plugin.yaml 与 alonabot_gen.go；Adapter 的实例 schema 是 `{"$version":1}`。
-- `internal/core/settings/instances.go`：`(*File).PrepareInstances(adapterID string, schema *configschema.Schema) (map[string]json.RawMessage, []InstanceProblem, error)`；实例来自 `core_config.json` 的 `adapters.<adapter_id>.instances`，`package` 绑定 Adapter 包 ID。devbot 的现有 ID 分别为 `alonabot_plugin_devbot`、`alonabot_adapter_devbot`，adapter_id 为 `devloop`；开发配置在 `<data_dir>/plugins/<id>/config.json`，受管库是 `dev.sqlite`，代次为 `dev:<组件 ID>`。
+- `internal/core/settings/instances.go`：`(*File).PrepareInstances(adapterID string, schema *configschema.Schema) (map[string]json.RawMessage, []InstanceProblem, error)`；实例来自 `core_config.json` 的 `adapters.<adapter_id>.instances`，`package` 绑定 Adapter 包 ID。devbot 的现有 ID 分别为 `alonabot-plugin-devbot`、`alonabot-adapter-devbot`，adapter_id 为 `devloop`；开发配置在 `<data_dir>/plugins/<id>/config.json`，受管库是 `dev.sqlite`，代次为 `dev:<组件 ID>`。
 - `sdk/plugin.go`、`sdk/generated.go` 提供 `NewPlugin() *Plugin`、`UseGenerated(p *Plugin, g Generated)`；`sdk/sdk.go` 的 `(*Context).Reply(text string) error`、`sdk/rule.go` 的 `NotCommand() Rule` 可供新工程示例使用。`sdk/generate/generate.go` 的 `Scan(ctx context.Context, opt Options) (*Result, error)` 支持入口包与构建选择；插件资源绑定对象，Adapter 资源在可导入包中通过 `UseGeneratedAdapter(a adapter.Adapter, g Generated)` 登记。CLI 能为可导入包生成独立进程薄入口。
 - `alonabot_test.go` 的 `TestLibraryLifecycle` 已构建并运行真实 devbot：核对两个 source=dev 安装记录与固定代次，验证缺省配置、required 拒绝、同一 data_dir 两次启动的配置/SQLite 记录与 STOP_TOTAL 内停止。TEST-MATRIX §3.2 的 #149/#160 行同时保留本地验证按钮跨重启、停止超时、身份预检等历史证据。
 - `cmd/alonabot/dev_e2e_test.go` 的 `TestDevelopmentReload` 已验证独立进程开发插件/Adapter、源码成功替换只改变插件 PID、编译失败旧组件继续、只改 config.json 保持二进制字节与 mtime、改 config_schema.json 重建并生效；`e2e_test.go` 的 `TestLifecycleOverTCPAndStdio` 已恢复两种传输。#171 的 TEST-MATRIX 行还记录了 Adapter 单实例配置重启、ID 冲突、settings 重新读取等本地证据。该提交测试没有检查 i18n 变化或同时运行已安装组件。
@@ -6622,7 +6623,7 @@ broker.Options、bus.Options 与 router.Options 增加 Metrics *metrics.Counters
 - 插件包导出 New 并显式绑定生成资源，在 New 内注册命令；入口包无手写 main 的工程可由现有 run/BuildDev 生成薄入口。examples/devbot/main.go 继续用该可导入包做库模式调试。
 - 回环 Adapter 声明私有注入路由，实现 sdk/adapter_run.go 中已有的 sdk.AdapterHTTP：HTTP(route func(method, path string) *sdk.RouteBuilder)。消息经真实 adapter.Core.Deliver 交给 Core，回复由真实 Instance.Send 观察；采用既有测试辅助的请求与输出约定，文档写清实际路径、认证与输入格式。只演示正常标准事件，不创建旁路派发。
 - 开发运行用 alonabot run examples/devbot/plugin examples/devbot/adapter --data-dir <临时目录> --reload；同进程用 go run ./examples/devbot -data-dir <另一个目录>。两个模式分别运行并使用各自 data_dir，Adapter 身份与资源来自同一可导入包。
-- 实例为 core_config.json 的 adapters.devloop.package=alonabot_adapter_devbot 及 instances.<实例名>；配置与数据库为 plugins/alonabot_plugin_devbot/config.json、dev.sqlite。样例只给开发者可直接填写的初始设置，不引入另一份运行配置来源。
+- 实例为 core_config.json 的 adapters.devloop.package=alonabot-adapter-devbot 及 instances.<实例名>；配置与数据库为 plugins/alonabot-plugin-devbot/config.json、dev.sqlite。样例只给开发者可直接填写的初始设置，不引入另一份运行配置来源。
 
 行为与验收矩阵：
 1) 工程与使用：在保留现有 ID、greetings 配置与 startup 数据语义的基础上整理插件工程，示范 New、资源绑定、命令与 i18n；.gitignore 忽略工程中的 data/。回环 Adapter 可以按文档交付一个带可信 Actor/默认会话的 message.created 并观察回复。Plugin/Adapter 用现有生成器更新 alonabot_gen.go，生成产物随源码提交且能实际编译。
@@ -8147,6 +8148,58 @@ internal/core/state
 不做：命令前缀与回复方式（goal-162）；工具策略（goal-163）；Agent 的命令（goal-164）。
 ```
 
+### goal-177 · T-09.27 组件市场 ID 改用连字符
+
+状态：待派发。前置 T-09.10（PR #177）、T-09.14（PR #192）、T-12.8（PR #175）、T-13.5（PR #200）均已合并，接口已按当前 main 核对。本切片与同时进行的其他 goal 都可能写到旧 ID；后合并者同步 main 后用 `rg -n 'alonabot_(plugin|adapter|agent|webui)_'` 把新出现的旧 ID 一并改掉，按执行顺序「组件 ID 的改名」处理。goal-141 的目录名缺省尚未实现，按下文衔接，不作为本切片前置。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-177（切片 T-09.27：组件市场 ID 改用连字符）。goal 目录 goal-177，分支 goal-177，worktree .worktrees/goal-177，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：按 D-172 把市场 ID 的四角色前缀与后缀分词统一改为连字符，同步当前 main 上的官方组件、示例、校验调用者、工具原始名、日志、夹具与已有测试。本地 ID 的规则和 64 字符上限保持不变。首次发布前直接改名，状态库与开发数据目录需要重建。
+
+依据：PLAN core T-09 步骤 11 及其失败停止条件；CONTRACTS §2、§8、§9.1、§14、§15.2、§15.4；DESIGN §B 的身份与 §D 的资源登记规则；ADMIN-API §8；WIRE-FORMAT §1/§3、MESSAGE-MODEL §1；DECISIONS D-172；TEST-MATRIX V-01、V-62、V-64 与 V-121 的相关分项；docs/coding-standards.md「测试提交规则」；docs/execution-order.md「组件 ID 的改名」。
+
+范围（只改本次 ID 值、前缀判断和由此受影响的校验、错误文案、断言与资源；目录列项包括其既有测试和忽略的 *_local_test.go）：
+- contracts/validate/plugin_id.go、adapter.go；contracts/manifest/manifest.go、project.go、deps.go；contracts/wirespec_test.go 仅在既有编号检查确有必要时调整，不改协议编号。
+- contracts/testdata/manifest/market.yaml、release/release.json、frames/hello.bin、frames/request_with_parent.bin；internal/wire/frame_test.go（已有 golden 帧集成测试）。
+- internal/core/logging/（console.go 的 sourceTag、query.go 的历史解析及既有测试）、manage/admins.go、manage/settings_api.go、options/chats.go、policy/denies.go、settings/settings.go；这些包的既有测试。
+- sdk/message/session.go（validAdapterID 与 ParseSID）；SDK 测试只在 *_local_test.go 中取证。
+- agent/memory.go、tools.go 与 agent/ 下既有测试；agent/plugin.yaml、adapters/telegram/plugin.yaml、web/admin/plugin.yaml；adapters/onebot11/ 中若同步 main 后出现工程 manifest 或包 ID 字符串，一并改名。
+- examples/devbot/plugin/plugin.yaml、adapter/plugin.yaml、core_config.example.json、README.md；examples/plugins/configdb/plugin.yaml、examples/plugins/media/README.md，以及 examples/ 中本次改名影响的既有测试与配置。
+- alonabot_test.go；internal/app/admin_upload_test.go、agent_service_test.go；internal/core/packages/preflight_test.go；cmd/alonabot/{plugin_cli_e2e,t04_e2e,t12_e2e,t13_e2e,telegram_e2e,manage_e2e}_test.go。
+- cmd/alonabot/init.go；internal/pluginkit/init.go、build.go、pack.go 与既有测试；internal/generate/（project.go、source.go 与 Scan 的 manifest 读取及资源嵌入）；internal/generated/、internal/wire/env.go、internal/core/process/process.go、internal/core/state/、sdk/sqlitedb/、sdk/gormdb/ 只读核对 ID 的使用方式。
+- docs/development.md、docs/plugin-guide.md 及上述 examples/ README 中与本次实现状态和数据重建有关的说明；spec/TEST-MATRIX.md 仅回填本切片实际证据。README.md、ARCHITECTURE.md 只读核对，需更新的实现状态列入 PR「文档同步」；它们与 docs/goals/、docs/execution-order.md、切片表均由审查者维护。
+- 同步 main 后新出现的旧组件 ID，按共享文件规则同步其字符串、前缀判断、manifest、配置与夹具；若 plugins/help/、plugins/welcome/、plugins/rss/、packages/、scripts/ 或 deploy/ 已由其他 goal 引入，沿用已确定的 ID 把其中的下划线换为连字符，help 固定为 alonabot-plugin-help-official。该例外只授权改名及必要调用方，不扩展组件功能。
+
+接口（保留现有公开名称、签名与协议字段）：
+- contracts/validate：MaxPluginIDLen = 64 不变；MarketPrefix = "alonabot-plugin-"；marketID = regexp.MustCompile(`^alonabot-plugin-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)。PluginID(id string) (warnings []string, err error)、IsAdapterEventType(eventType string) bool 的签名不变。
+- contracts/manifest：Parse(data []byte) (*Result, error)、ParseProject(data []byte) (*Result, error) 不变；私有 componentID(id, role string) ([]string, error) 使用 "alonabot-" + marketRole + "-"，marketComponentSuffix 为 `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`。四角色前缀分别为 alonabot-plugin-、alonabot-adapter-、alonabot-agent-、alonabot-webui-。
+- sdk/message：ParseSID(sid string) (adapterID, chatID, threadID string, err error) 不变；私有 validAdapterID(id string) bool 与 options.chatKey(value string) (state.ChatKey, bool) 继续按本地平台 ID 规则检查。
+- internal/pluginkit：Init(ctx context.Context, dir, id, role, adapterID, module string) (needsSDK bool, err error) 不变；internal/generate：Scan(ctx context.Context, opt Options) (*Result, error) 不变。生成资源按导入路径登记，manifest 的 ID 仍是字符串。
+- agent：私有常量 memoryTool = "alonabot-agent-official/memory"；工具注册、目录、调用与按原名记录的策略使用同一新值。对模型的名字继续经过现有 mapTools/normalizedToolName，不新增映射协议或别名。
+- 日志继续由 sourceTag(fields map[string]string) string 生成标签，logging.Query(dir string, date time.Time, source string, level slog.Level, traceID string) ([]Record, error) 的签名不变；仅插件市场前缀 alonabot-plugin- 从 [Plug:<id>] 中去掉，Adapter 标签仍使用平台 adapter_id。
+
+行为：
+1. 四角色市场前缀与 role 一致，后缀以小写字母开头，单个连字符分词，后续段由小写字母或数字组成；完整 ID 长度至多 64。带新市场前缀却不符合市场正则、或角色前缀错配时拒绝；无市场前缀的安全本地 ID 继续通过并警告。旧下划线市场拼写只按原有本地规则处理并警告，既不识别为市场 ID，也不自动映射为新身份。
+2. 本地 ID 仍用 `^[a-z][a-z0-9_-]{0,63}$`，保留小写与 Windows 设备名检查。adapter_id、会话、权限/扩展事件、管理员、禁止表、设置与聊天选项中的平台 ID 按本地规则检查，原值原样存储与传递；同步各处 MarketPrefix 判断，避免把组件市场专用校验带入平台 ID。session.go 与 chats.go 现有检验副本中的替换针对旧分隔符，须同步处理；不得改写实际 adapter_id 或收紧本地语法。
+3. 官方与示例直接改名：alonabot-adapter-telegram、alonabot-agent-official、alonabot-webui-admin、alonabot-plugin-configdb、alonabot-plugin-devbot、alonabot-adapter-devbot；help 为 alonabot-plugin-help-official。组件 ID 用在 HTTP 路径、Service/工具原始名、依赖、归档名、release、生成资源、core_config.json 的 package/log.sources、dev:<ID> 代次和数据目录时都保留新拼写。telegram、onebot11、devloop 等平台 adapter_id 与实例名保持原值。
+4. Go 包名与标识符保持 plugin、component 等现有合法名字，不从市场 ID 直接生成符号；生成器按现有 %q 转义嵌入原始 manifest。ALONABOT_PLUGIN_ID 等固定环境变量的名字保持不变，ID 只放在值中；SQLite/GORM 中 ID 是绑定参数或字段值，表/列名仍用既有固定标识符。只读核对未发现把市场 ID 直接用作 Go 标识符、环境变量名或 SQL 标识符的路径。模型工具名已有 [A-Za-z0-9_] 归一化与 FNV 后缀，连字符由该映射处理，原始路由名保持完整新 ID；核对映射回调用目标与碰撞处理。
+5. 当前 init 的 --id 仍为必填，显式给新市场 ID 时经 ParseProject 校验并生成可构建工程。goal-141 合并后，--id 缺省取目录名并走同一四角色/本地规则；目录 alonabot-plugin-hello 合法，本地目录 my_plugin 仍合法并警告，非法目录名报错并提示显式 --id，不自动替换目录名字符。后合并者保留两边实现；本切片不提前实现目录名缺省。
+6. 新日志标签示例为 [Plug:configdb]，JSON 与实时 source 保留 alonabot-plugin-configdb，历史查询 source 为 configdb；Adapter 标签继续为 [Adpt:telegram/<instance_id>]。不为旧日志新增身份还原或前缀兼容层。
+7. golden 帧使用现有 pb.Envelope 解码，修改其 ID 字符串后重新编码，并核对 4-byte big-endian 长度；保留原字段号、枚举值与其他载荷，不做二进制文本替换，不新增永久生成器。manifest/release 中的 ID 与归档 URL 同步。
+8. 不做状态或数据的自动迁移。文档说明停止 Core 与开发组件后由开发者重建状态库与开发数据目录，并按新 ID 重配 package、log.sources、权限及工具策略；测试只使用临时数据目录，不改维护者现有数据。
+
+测试（按编码规范「测试提交规则」与 docs/goals/README.md，D-86）：
+- 提交：只改写范围内已有集成测试的 ID、路径、错误文本与资源夹具，保持原场景与断言含义；不新增提交测试。沿用 internal/wire/frame_test.go 的 TCP/stdio golden 帧验证和 contracts/wirespec_test.go 的编号检查；本切片没有协议字段变更，后者只在确有必要时改写既有检查。SDK 的验证全部在忽略的 *_local_test.go 中运行，不新增 testdata 测试插件。
+- 本地自测（*_local_test.go，结果写入 PR）：contracts/validate 与 contracts/manifest 检查四角色正例、前缀与角色错配、后缀下划线、连续/首尾连字符、空后缀、首段数字、64/65 字符、小写、Windows 保留名；旧下划线拼写按本地规则警告且无别名；普通本地 ID 的下划线和连字符继续可用。adapter_id 的各入口同时覆盖形似市场前缀的合法本地字符串，确保 session/options 与注册、策略、管理设置一致。
+- 本地自测：通过真实 CLI init --id alonabot-plugin-hello 创建工程，check/build/pack 后读取 manifest/release 与归档路径，核对新 ID 原样保留，编译生成资源；若 goal-141 已合并，追加省略 --id 的合法/非法目录名场景。通过现有 Agent 主路径与本地检查核对 memory 工具注册、模型名称映射和原名调用；日志核对控制台、JSON、实时与历史查询的上述 source 值。
+- 验证量与改名匹配：已有测试只做必要改写；边界与回归只写本地测试，不新增独立测试框架、包或依赖。
+
+完成条件：上述本地检查与已有主路径集成测试通过；gofmt -l 对改动 Go 文件无输出；go generate ./... 及生成一致性检查无协议生成差异；go vet ./...；go test -race ./...；go build ./...；带 configdb_gorm tag 的 configdb 构建通过。运行 rg -n 'alonabot_(plugin|adapter|agent|webui)_' 并解释全部命中：允许 DECISIONS 历史条目、D-172 的变更说明与 spec/adr/history/，其他被跟踪的当前文档、实现、配置、测试与夹具均清理；另以 rg --text 检查 contracts/testdata/frames，并搜索动态拼接的旧前缀。PR 按 TEST-MATRIX §3 写明命令、平台、结果、未运行项与提交测试新增行数，数据重建要求写在文档同步段。未通过任何现有主路径、四角色规则或本地 ID 兼容检查时按工作包失败条件阻塞，不改验收语义。
+
+不做：旧市场 ID 别名、兼容层、自动迁移或删除维护者数据；修改本地 ID 规则；协议字段与枚举的改动；目录名缺省（T-13.6）；仓库、Go module、可执行入口与平台 adapter_id 改名；新功能、依赖、测试框架或发布动作。
+```
+
 ### goal-45 · T-09.11 正式流程故障注入与 T-09 验收
 
 状态：等待前置（T-09.9、T-09.15）。T-09.3（PR #194，`e9ff45e`）、T-09.7（PR #187，`864819e`）、T-09.10（PR #177）、T-09.12（PR #167）已合并；T-09.9（goal-44）与 T-09.15（goal-94）属 WebUI 章节，未在本轮 core/agent 推进范围内派发，本切片因此阻塞，待两者合并后由审查者核对语句。语句中 goal-38～goal-44、goal-66、goal-84、goal-92～goal-94 提供的命令与 API 只写名字；合并后由审查者核对，再改为待派发。
@@ -8261,7 +8314,7 @@ internal/core/state
 
 要点：
 - build、check、test、pack 改为「命令 [目录]」，删除 --dir；库模式的 build 同样改用位置参数。
-- init 的 --id 与 --module 缺省取目录名，目录名不符合组件 ID 规则时报错；Adapter 的 --adapter-id 缺省等于组件 ID。
+- init 的 --id 与 --module 缺省取目录名，ID 按 D-172 的四角色市场规则与原有本地规则检查：例如目录 alonabot-plugin-hello 可直接作为插件市场 ID，本地目录 my_plugin 仍可用并警告缺前缀，目录名非法时报错；保留 --id 显式指定入口，不静默替换目录名中的字符。Adapter 的 --adapter-id 缺省等于组件 ID，按本地平台 ID 规则检查。T-09.27 已先合并时复用其校验；后合并时按共享文件规则保留两边改动。
 - pack 在 manifest 的 source 为 github.com/<owner>/<repo> 时推出 --asset-url；--key 没有缺省值。
 - install 的参数按「已存在的普通文件」与「组件 ID」区分，组件 ID 取程序目录 packages/ 中的官方包；不给参数时在当前目录或工程的 bin/ 中寻找唯一的安装包，没有或不止一个时报错并列出候选。
 - pack 增加可重复的 `--target <os>/<arch>`：逐个平台构建归档，写出一份列出全部资产的 release.json，给出 --key 时只签这一份；不给时为本机平台（D-169）。插件模板仓库的 scripts/release.sh 在本切片合并后改用它（由审查者在模板仓库中同步）。

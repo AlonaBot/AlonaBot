@@ -8,7 +8,7 @@
 
 | 测试 ID | 任务 | 场景/方法 | 通过条件 |
 | --- | --- | --- | --- |
-| V-01 | T-01、T-04、T-09、T-14 | 解析 manifest，市场与本地 ID、缺失/重复 ID、OS/arch 不匹配；工程 manifest 写了构建字段、包内 manifest 缺少构建字段、`metadata` 翻译 | 市场规范 ID 可用；本地非前缀安全 slug 仅警告；路径穿越与缺失 ID 拒绝；重复 ID 的先后顺序稳定；工程 manifest 只接受作者信息，构建字段由 build 与 pack 写入，包内 manifest 仍严格校验（D-78）；Adapter 的工程 manifest 与实例声明从可导入包读取，构建 cmd 薄入口，打包后资源位于归档根目录（D-134，T-09.3/T-14.3） |
+| V-01 | T-01、T-04、T-09、T-14 | 解析 manifest，市场与本地 ID、缺失/重复 ID、OS/arch 不匹配；工程 manifest 写了构建字段、包内 manifest 缺少构建字段、`metadata` 翻译 | 四角色连字符市场 ID 与 role 匹配且可用，后缀拒绝下划线、连续或首尾连字符，最长 64 字符（D-172）；本地规则保持 `^[a-z][a-z0-9_-]{0,63}$`，非前缀安全 slug 仅警告，旧市场拼写只作本地 ID 且不映射新身份；路径穿越与缺失 ID 拒绝；重复 ID 的先后顺序稳定；工程 manifest 只接受作者信息，构建字段由 build 与 pack 写入，包内 manifest 仍严格校验（D-78）；Adapter 的工程 manifest 与实例声明从可导入包读取，构建 cmd 薄入口，打包后资源位于归档根目录（D-134，T-09.3/T-14.3） |
 | V-02 | T-01、T-02、T-04 | Protocol 1.0、枚举零值、Major/Minor、未知必需能力、Schema 缺失 | Major/required 不兼容明确拒绝；UNSPECIFIED/未知kind不视为成功；Minor正确取交集，无注册残留 |
 | V-03 | T-02 | TCP 和 stdio 使用同样的 Length-Prefixed Protobuf fixture | 双传输序列化语义一致；4 MiB 限额、零帧及错帧正确拒绝；没有 TCP 独占功能 |
 | V-04 | T-02 | 伪造 Session Secret、跨插件 Session、旧 Generation 请求 | 校验失败不激活；旧代次不接受请求；身份错误不会泄漏 Secret |
@@ -218,6 +218,8 @@
 | V-147 | Agent 的插件页面（D-170）：T-12.20 | T-12.20；按 D-86 由提交的集成测试与本地自测提供证据，页面分项按 WebUI 切片的规则手动验证 |
 
 T-03 的本地 Bot API 故障服务与真实 Telegram 结果分别记录；前者可支持后续开发，真实平台部分仍由 T-10 查证。测试会话、无配置/无 DB 最小插件和 payload fixture 的范围必须写明，不可据此关闭生产认证或数据恢复用例。
+
+D-172 的追加验收由 T-09.27（goal-177）负责：V-01 覆盖四角色 ID、manifest、CLI 打包与 fixture；V-62 覆盖新前缀的日志显示与历史 source；V-64 覆盖改名后的开发组件身份；V-121 的目录名缺省由 T-13.6 在其合并后补验。以上新分项当前均为**未运行**；既有记录保留当时结果。
 
 ## 3. 证据和失败门槛
 

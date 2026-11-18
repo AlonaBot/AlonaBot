@@ -3,6 +3,8 @@
 版本：v0.6-review · 2026-10-21。状态：**现行实施基线，待实施验证**。
 权威范围：补充 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md) §1/§3/§12；消息载荷见 [MESSAGE-MODEL.md](MESSAGE-MODEL.md)。产品版本 v0.1 与传输协议版本 **1.0** 分开。T-01 按本文件生成可编译 `.proto` 和兼容 fixture；本文不代表编译或平台测试已通过。
 
+身份字段中的组件 ID 原样使用 CONTRACTS §9.1 的拼写（D-172），例如 HELLO 的 `plugin_id` 与 Envelope 的 `source_plugin_id` 为 `alonabot-plugin-configdb`，Service 目标为 `alonabot-plugin-configdb/<服务名>`；Adapter 包身份如 `alonabot-adapter-telegram`，其平台 `adapter_id` 仍为 `telegram`。本次只改变 ID 字符串的值，字段号、枚举值与 schema 版本保持不变。
+
 ## 1. Frame 与 Envelope
 
 每帧为 **4-byte big-endian unsigned payload length + Protobuf Envelope**，长度不含 4-byte 前缀；有效范围 **1～4,194,304 bytes**。0、超限、无法解码或状态不合法的帧使当前会话失败，不继续猜测帧边界。TCP 与 stdio 使用完全相同的编码。

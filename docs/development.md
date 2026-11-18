@@ -78,16 +78,18 @@ bin/alonabot run examples/devbot/plugin examples/devbot/adapter --data-dir $DEVB
 
 ```fish
 curl --fail-with-body -X POST -H "Authorization: Bearer $token" \
-  'http://127.0.0.1:7650/plugins/alonabot_adapter_devbot/inject?instance=one&text=%2Fhello'
+  'http://127.0.0.1:7650/plugins/alonabot-adapter-devbot/inject?instance=one&text=%2Fhello'
 cat $DEVBOT_OUTPUT
 ```
 
-注入返回 204，异步发送后文件内容为 `Hello from devbot!`。完整实例 JSON、目录结构、认证、源码／翻译／配置改动与编译失败恢复操作见 [devbot README](../examples/devbot/README.md)。样例把 `adapters.devloop.package` 绑定到 `alonabot_adapter_devbot`，实例在 `instances.one`，命令前缀为 `/`。两个开发组件沿用真实 Deliver／Send 流水线。
+注入返回 204，异步发送后文件内容为 `Hello from devbot!`。完整实例 JSON、目录结构、认证、源码／翻译／配置改动与编译失败恢复操作见 [devbot README](../examples/devbot/README.md)。样例把 `adapters.devloop.package` 绑定到 `alonabot-adapter-devbot`，实例在 `instances.one`，命令前缀为 `/`。两个开发组件沿用真实 Deliver／Send 流水线。
+
+组件市场 ID 使用连字符前缀，例如 `alonabot-plugin-hello`；本地 ID 仍允许下划线，规则见 [CONTRACTS §9.1](../spec/CONTRACTS-v0.1.md#91-manifest-与构建产物)。D-172 的代码改名由 T-09.27（goal-177）实施：更新后需重建状态库与开发数据目录，再按新 ID 填写组件配置、实例的 `package` 与 `log.sources`。
 
 先构建 CLI（`go build -o bin/alonabot ./cmd/alonabot`），再创建与验证组件：
 
 ```fish
-bin/alonabot init ./myplugin --id alonabot_plugin_hello
+bin/alonabot init ./myplugin --id alonabot-plugin-hello
 bin/alonabot build --dir ./myplugin
 bin/alonabot check --dir ./myplugin
 bin/alonabot test --dir ./myplugin

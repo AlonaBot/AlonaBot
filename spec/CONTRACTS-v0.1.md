@@ -53,6 +53,8 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 
 ## 2. 事件、命令、Rule、Hook 和传播
 
+组件 ID 作为路由命名空间时保留原文，例如 `alonabot-plugin-help-official/help`；HTTP 前缀为 `/plugins/alonabot-plugin-help-official/`。四角色市场 ID 与本地 ID 的精确规则见 §9.1（D-172），路由自身的 ID 与命令名沿用各自规则。
+
 ### 2.1 分发与结果
 
 - 一个入站 Event 对应一条 Core 普通分发链，不同事件可并发。`Normalize → PreEvent → 多轮等待（§2.4）→ 命令/类型匹配与Core权限 → SDK Rule/Handler`；同类候选按 priority 升序，再按 plugin_id/route_id 字典序，顺序不依赖安装或启动时间。
@@ -362,7 +364,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 
 - v0.1 Native 插件、Adapter 与 Agent 组件是**可信本地代码**；WebUI 组件在 Admin 源中运行并持有管理员会话（§7.5），同样可信。独立进程用于生命周期和故障隔离，不提供跨平台文件/网络/exec 沙箱；Secret Store、loopback、精简环境和工作目录都不能阻止同 OS 用户权限的恶意插件。安装界面展示实际来源和该权限边界，签名只证明发布来源。
 - 子进程只接收本插件运行需要的配置/Secret、Session 凭证及必要环境，移除 Core 管理 token 和其他插件凭证。工作目录选在该插件目录；不得将工作目录描述为文件访问权限限制。
-- 所有组件 ID 必须通过安全 slug 校验并限制路径长度，市场 ID 按角色使用 `alonabot_plugin_` 等前缀（§9.1）；精确 manifest 字段及长度约束见 §9。本地 ID 可不带市场前缀但不可包含路径分隔符、`..` 或其他非法路径字符。跨插件 ID 冲突按 Core 持久化安装顺序 first-wins；同插件重复 Handler/HTTP route 报错。更新同时核对 ID、绑定来源和发布者身份，不能用相同 ID 接管已安装包。
+- 所有组件 ID 必须通过安全 slug 校验并限制路径长度，市场 ID 按角色使用 `alonabot-plugin-` 等前缀（§9.1）；精确 manifest 字段及长度约束见 §9。本地 ID 可不带市场前缀但不可包含路径分隔符、`..` 或其他非法路径字符。跨插件 ID 冲突按 Core 持久化安装顺序 first-wins；同插件重复 Handler/HTTP route 报错。更新同时核对 ID、绑定来源和发布者身份，不能用相同 ID 接管已安装包。
 - 首发平台为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64。CGO_ENABLED=0 优先；CGO 插件由发布者提供真实可运行的平台二进制。Core 与插件通过版本化 RPC 协作，不要求相同 Go patch 版本；不使用不能卸载且跨平台受限的 Go `plugin.Open`。
 - 普通子进程树由 Windows Job Object（由 Core 独占持有、关闭时终止所管理进程）、Linux/macOS 进程组管理，必要的平台能力以真实测试为准。不能宣称可阻止恶意 detach；受管 SQLite 插件须关闭所有受管写入者，私自脱离管理的外部 DB 写入不属于自动回退保证。
 
@@ -433,11 +435,11 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 
 ### 9.1 Manifest 与构建产物
 
-所有 ID 最长 64 个 ASCII 字符。市场使用 `^alonabot_plugin_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`，同时应用长度上限；本地使用 `^[a-z][a-z0-9_-]{0,63}$`，缺市场前缀只警告。为保证五平台路径有效，本地 ID 还拒绝 Windows 保留设备名 con/prn/aux/nul/com1～com9/lpt1～lpt9；大小写以规范小写保存，不能靠大小写形成两个安装。
+所有 ID 最长 64 个 ASCII 字符。市场使用 `^alonabot-plugin-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`，同时应用长度上限；本地使用 `^[a-z][a-z0-9_-]{0,63}$`，缺市场前缀只警告。市场 ID 的后缀用单个连字符分词，完整 ID 不含下划线；四种角色的前缀必须与 role 一致（D-172）。本地 ID 的下划线与连字符规则保持不变；沿用旧市场拼写的安全 slug 仅按本地 ID 处理并警告，不映射到新市场 ID。为保证五平台路径有效，本地 ID 还拒绝 Windows 保留设备名 con/prn/aux/nul/com1～com9/lpt1～lpt9；大小写以规范小写保存，不能靠大小写形成两个安装。
 
 - 组件工程中的 `plugin.yaml` 由作者编写，只写作者信息（D-78）：必填 `id`、`name`（显示名，英文源文案）、SemVer `version` 与 `source`；可选 `description`、`author`、`role`（缺省 `plugin`）、`icon`，以及下文按角色需要的字段；会写框架外数据时写 `prepare_effects: external`。`name` 与 `description` 可以在 `i18n/<locale>.json` 的顶层 `metadata` 中翻译（§5.4），WebUI 与 `list` 显示 name。
 - `alonabot build` 与 `pack` 在包内的 manifest 中补上构建信息：`manifest_version=1`、`protocol_min_major/protocol_max_major` 与 `required_capabilities`（由所链接的 SDK 决定）、`os/arch`、相对可执行文件路径 `entrypoint`、`migration_mode`（按实际实现的迁移接口）与 `prepare_effects`（作者没写 external 时，按是否链接受管 SQLite 取 `managed_db` 或 `none`）。作者在工程的 `plugin.yaml` 中写这些字段时 `check` 报错。包校验严格解析包内 manifest，同时核对 `config_schema.json`、`adapter_config_schema.json`、注册描述、i18n 与 build-info；SDK 是编译依赖，不要求 Core 和插件 Go patch 相同，运行兼容以协议和能力协商为准。
-- 可安装的包统称组件，使用同一份 manifest，`role` 取 `plugin`（缺省）、`adapter`、`agent` 或 `webui`（D-59）。只有 `plugin` 是插件，可以安装任意多个；`adapter` 每个 `adapter_id` 至多安装一个，`agent` 与 `webui` 全局各至多安装一个，同类组件的替换见 §9.3。市场 ID 依次使用 `alonabot_plugin_`、`alonabot_adapter_`、`alonabot_agent_`、`alonabot_webui_` 前缀，其余部分与插件市场 ID 的规则相同。
+- 可安装的包统称组件，使用同一份 manifest，`role` 取 `plugin`（缺省）、`adapter`、`agent` 或 `webui`（D-59）。只有 `plugin` 是插件，可以安装任意多个；`adapter` 每个 `adapter_id` 至多安装一个，`agent` 与 `webui` 全局各至多安装一个，同类组件的替换见 §9.3。市场 ID 依次使用 `alonabot-plugin-`、`alonabot-adapter-`、`alonabot-agent-`、`alonabot-webui-` 前缀，其余部分与插件市场 ID 的规则相同。
   - Adapter 另需 `adapter_id`（小写平台类型，规则同本地 ID）。工程 `plugin.yaml` 与实例配置声明 `adapter_config_schema.json` 位于可导入的 Adapter 包目录（§5.5、§8，D-134）；`build`/`pack` 从该目录读取资源，构建调用 `sdk.RunAdapter` 的 cmd 薄入口，归档内的 manifest 与实例声明仍放在根目录。Adapter 可以按 §7.2 声明 HTTP 路由，仍不得声明其他插件路由、数据库或迁移（D-136）。
   - Agent 的声明与插件相同，可以有路由、HTTP、数据库与 schedule；它额外承担 §13 的职责，并是 `@agent` 的解析目标（§3）。
   - WebUI 必有静态文件：作者写 `id`、`name`、`version`、`role`、`source`、静态根目录 `assets`（包内相对目录，含 `index.html`）与 Admin API 主版本范围 `admin_api_min_major`/`admin_api_max_major`（§7.5）。只有静态文件时 `pack` 只补上 `manifest_version`，不写 `entrypoint`、协议主版本、`required_capabilities`，`os/arch` 写 `any`，归档名为 `<id>-<version>-any.tar.gz`。WebUI 工程也可以有 Go 入口（D-162），这时它另有一个与插件相同的进程：`build`/`pack` 照插件补全 manifest 并按平台出包，进程可以使用配置、受管 SQLite、事件路由、Hook 与 HTTP 路由，HTTP 路由要求管理会话，前端与之同源直接调用。
@@ -650,7 +652,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
   ```
 
   - 时间为本地时区的「时:分:秒.毫秒」。
-  - 来源标签：Core 为 `[Core]`；插件为 `[Plug:<id>]`；Adapter 为 `[Adpt:<adapter_id>]`，与实例相关时为 `[Adpt:<adapter_id>/<instance_id>]`。插件 ID 去掉 `alonabot_plugin_` 市场前缀显示。
+  - 来源标签：Core 为 `[Core]`；插件为 `[Plug:<id>]`；Adapter 为 `[Adpt:<adapter_id>]`，与实例相关时为 `[Adpt:<adapter_id>/<instance_id>]`。插件 ID 去掉 `alonabot-plugin-` 市场前缀显示。
   - 级别缩写为 DBUG、INFO、WARN、ERRO。
   - 源码位置为「所在目录名/文件名:行号」。
   - 消息之后按记录顺序输出 `key=value`，值含空白或引号时按 Go 的带引号字符串输出；trace_id 显示为 `trace=` 加前 8 位十六进制。多行的值（例如 `stack`）排在单行字段之后，值的每一行另起一行并缩进 4 个空格。
@@ -722,6 +724,8 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 首次启动且尚无管理凭证时按 §7.4 生成管理 token：stdin 与 stderr 都是终端时只在该终端显示一次；不是终端时写入 `<data_dir>/admin_token`，日志只输出该文件的路径。
 
 ### 15.2 发行包、官方整合包与预装组件
+
+官方组件的包 ID 固定为 `alonabot-adapter-telegram`、`alonabot-adapter-onebot11`、`alonabot-agent-official`、`alonabot-webui-admin`、`alonabot-plugin-help-official`；示例使用 `alonabot-plugin-configdb`、`alonabot-plugin-devbot` 与 `alonabot-adapter-devbot`。`adapter_id` 仍为 `telegram`、`onebot11` 或 `devloop`。首个发行版的组件范围按 D-171，OneBot 11 留待后续版本。D-172 在首次发布前直接改名，状态库与开发数据目录需要重建；不提供旧市场 ID 别名或数据迁移。
 
 - 官方整合包是同一套发行物的三种安装方式（D-64）：发行归档、容器镜像与 `deploy/compose.yaml`（§15.3），以及 `install.sh`（§15.6）。三者包含相同的 Core 与官方组件。
 - 每个目标平台发布一个发行归档 `alonabot-<version>-<os>-<arch>`（Windows 为 zip，其他为 tar.gz），包含 `alonabot` 可执行文件和 `packages/` 目录。`packages/` 中是官方 Telegram Adapter、官方 Agent、官方 WebUI 与预装插件的组件包，以及各自归档外的 `release.json` 与 `.sig`（§9.2）。官方 OneBot 11 Adapter 不进入首个发行版，完成后随后续版本加入（D-171）。同一 Release 另附 `install.sh` 与列出全部发行归档 SHA256 的 `SHA256SUMS`。
