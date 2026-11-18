@@ -361,6 +361,14 @@ go test -race -count=3 ./internal/core/supervisor/
 
 文档改动用 `git diff --check` 检查空白错误，链接与技能元数据由审查核对。包文档、命名、注释与测试提交范围由 [编码规范](coding-standards.md) 与 [注释技能](../.agents/skills/alonabot-code-commenting/SKILL.md) 指导审查。
 
+## 按需唤醒与验证
+
+S-02.1 已接通已安装 plugin/agent 从 SUSPENDED 按命令/事件、Service 与 HTTP 请求恢复原代次。Core 唯一 Waker 在 ACTIVATED、摘要核对及全部绑定后开放交付；等待期间沿用接纳时的绝对期限。同代次 RESUME 复用配置与 DB，跳过数据库迁移回调；配置仍执行加载、补值/校正与 required 校验，完整结果须与原快照一致。开发组件沿用当前绑定与原生命周期。
+
+`internal/tune` 已登记 `WAKE_QUEUE_REQUESTS=256`（≥1）与 `WAKE_QUEUE_BYTES=16MiB`（4MiB～`CORE_MAX_PAYLOAD`）；等待 payload 同时占用 Core 总预算。可经 `--args` 覆盖，名称、单位、上下界及来源错误沿用 CONTRACTS §16。HTTP 等待只占条数，正文在交付后流式读取；唤醒失败分别映射为 429（预算满）、504（期限到达）或 503（其他失败）。自动空闲策略及 `SLEEP_*` 参数由 S-02.2 接入，Scheduler 到期唤醒由 S-03.1 接入。
+
+提交集成 `internal/app/wake_test.go:TestWake` 覆盖真实 Core、SDK 回环 Adapter、已安装子进程与 SQLite 的 command/service/http 三入口；`contracts/wirespec_test.go:TestEnumValues` 固定 `STOP_REASON_IDLE=6`。本地 `*_local_test.go` 覆盖并发、预算、取消/期限、停止竞争、活动释放与 RESUME 数据库迁移。darwin/arm64 的完整命令、结果及真实平台未运行项见 [TEST-MATRIX §3.2](../spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)。
+
 ## 库模式运行（同一进程）
 
 根包 `alonabot` 提供 `Run`、`Start`、`*Core` 与 `Wait`，选项为 `Plugin`、`Adapter`、`WebUI`、`DataDir`、`Args`、`Listen`、`LogLevel`、`LogFormat`。它们转发到 `internal/app`，在当前进程中运行 Core 与开发中的组件，示例见 `examples/devbot`：

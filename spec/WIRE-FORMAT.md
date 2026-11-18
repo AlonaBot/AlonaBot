@@ -68,7 +68,7 @@ RESPONSE 的 payload 与 ErrorInfo **不是 oneof**。例如部分发送成功�
 
 已定义的协议能力：`http_listener` 版本 1（D-65）。插件存在 HTTP 路由时 SDK 把它放进 HELLO 的 required；Core 支持它，交集含该项时才在 Bootstrap 中下发 `http_proxy_auth`，REGISTER 带 HTTP 路由而交集不含该项时拒绝注册。
 
-StopReason 在现有枚举末尾追加 `STOP_REASON_IDLE`（goal-170），表示正常空闲退出，沿用 STOPPING 的绝对 deadline 与停止预算。编号由获授权的切片按当前 `.proto` 顺延，已有值保持不变。`SUSPENDED` 是 Core 管理运行状态，SessionPhase 沿用现有状态。唤醒复用 `ActivationReason.RESUME`、原 generation_id 与新 Session，不增加业务 RPC。
+StopReason 在现有枚举末尾追加 `STOP_REASON_IDLE=6`，表示正常空闲退出，沿用 STOPPING 的绝对 deadline 与停止预算；已有值 0～5 保持不变。`SUSPENDED` 是 Core 管理运行状态，SessionPhase 沿用现有状态。唤醒复用 `ActivationReason.RESUME`、原 generation_id 与新 Session，不增加业务 RPC。同代次 RESUME 保留数据库迁移模式与已应用 ID，跳过迁移回调；配置继续加载、补值/校正、required 校验，并核对完整快照一致性。Bootstrap 已删除的配置版本字段沿用 §3.2 的 reserved 编号与名称。
 
 ### 3.2 Bootstrap 的最小内容
 
@@ -224,11 +224,12 @@ Core→插件与 Core→Adapter 方向另有 `sdk.log.set_level`：`LogSetLevelR
 - 本地超时/取消先完成调用者失败返回，再尽力发送 Cancel；已发送外部消息/SQL 不撤销，不自动重试。Session 失效时清理映射、取消调用并返回 UNAVAILABLE；已确认的 SendResult 仍须保留。
 - Core 停用时先冻结该插件的新根调用/新派发，最多 drain 6s；已有父 Request 链中的受限子请求与响应可继续。drain 结束后取消剩余调用并发送唯一 STOPPING，帧 deadline 为 min(t0+10s,发送STOPPING时刻+4s)，OnStop 与资源关闭使用这一独立 context；整个进程树停止预算仍为 10s。Core 同时停止多个插件时共享同一绝对截止时间，不逐个累加预算。
 
-等待休眠插件的业务请求在 Session admission 之前受 CONTRACTS §4.5 的有界唤醒队列约束，保留可信上下文、原始 Target、Trace、顺序与绝对 deadline；确认 ACTIVATED 及快照一致后复核权限再交付，取消或到期的未交付请求移出队列。空闲 STOPPING 与请求准入共用门禁；旧进程树退出前保持唯一 Session 所有权。
+等待休眠插件的业务请求在 Session admission 之前受 CONTRACTS §4.5 的有界唤醒队列约束，保留可信上下文、原始 Target、Trace、顺序与接纳时固定的绝对 deadline；确认 ACTIVATED、快照一致及全部业务绑定完成后，复核代次、路由、权限与剩余期限再交付。取消或到期的未交付请求立即移出队列并归还条数、字节及 Core 预算，单个等待者取消不取消共享启动。空闲 STOPPING 与请求准入共用门禁：提交 STOPPING 前可撤销停止，提交后等旧进程树退出再唯一恢复。
 
 ## 5. Event Bus、媒体与平台载荷
 
 - Event Bus 的发布通过普通 REQUEST 返回“是否被 Core 接纳”的结果；它不确认订阅者已处理。Core 向订阅者发 EVENT。BusEvent 至少包括 event_name、Core event_id、source_plugin_id、occurred_at、schema_id/version、payload。发布者只能发布自身 `plugin_id/event_name` 命名空间；订阅者 Actor 缺省，业务 payload 不产生管理权限。
+- 在线订阅者以自身 Caller 持有排队与写出活动引用。`internal/wire.TrackEvent(ctx, done) (context.Context, func())` 在 Core 内部通知 EVENT 排队撤回或实际写出结束；写出中取消先返回时仍保留引用至完成或断链。此通知沿用现有 EVENT 帧和无业务 ACK 的语义。
 - 每订阅者最多 256 个且 4 MiB 待处理事件；任一满额丢弃新事件并计数，插件离线不积压、不补发。业务处理无 ACK、自动重试或 StopPropagation。Scheduler 的 scheduled 通过有 CallID/独立 deadline 的 REQUEST/RESPONSE 判定完成与重叠。
 - 服务 JSON 使用 `payload_encoding=JSON` 和注册的 schema/version，严格验证 UTF-8 JSON 及结构；若使用 Protobuf Any，必须是真实的 type_url 和 Protobuf bytes。未知 encoding/schema/version 明确拒绝：Envelope 校验只要求业务载荷的 `schema_version` ≥ 1，与目标服务注册的版本是否一致由 Broker 判断，不一致时对该次调用返回 INVALID_ARGUMENT，不作为协议错误关闭调用方 Session（D-66）。
 - MediaRef 为 Core 分配、受 Session 和目标范围约束的 capability；上传请求包含 upload_id、offset、chunk bytes。顺序分块只接受当前已确认 offset；重复或跳跃 offset 返回 INVALID_ARGUMENT，不静默追加。提交校验声明总量与 sha256 后才产生 MediaRef；未提交上传、过期引用和消费租约按主契约清理。

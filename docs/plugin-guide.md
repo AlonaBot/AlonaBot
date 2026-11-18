@@ -9,6 +9,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 
 - 每个插件是一个独立的 Native Go 进程（D-01），只经 SDK 与 Core 通信。崩溃只影响它自己，但插件仍是可信的本地代码，不是沙箱（CONTRACTS §7.1）。
 - 没有启用的插件不运行进程，启用后它的常驻内存全部算在用户机器上。实测一个只用 SDK 的插件进程约 7.5 MiB（linux/amd64 PSS），每多链接一个库、多做一次初始化都会增加这个数。官方组件的预算见 TEST-MATRIX V-74（D-52）。
+- 可按重启语义恢复、没有独立后台活动的 plugin/agent 可在 manifest 声明 `sleep_capable: true`。S-02.1 已接通 SUSPENDED 后的命令/事件、Service 与 HTTP 按需唤醒；自动空闲退出与即时休眠策略由 S-02.2 接入，Scheduler 到期唤醒由 S-03.1 接入。开发组件、Adapter 与 WebUI 保持常驻。
 
 ## 2. 依赖
 
@@ -24,6 +25,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 
 - 业务数据放受管 SQLite：`sqlitedb.Open(ctx)` 返回 `*sql.DB`，`gormdb.Open(ctx)` 返回 `*gorm.DB`，两者共用同一个连接（CONTRACTS §6.1）。没有特别需要时用 `sqlitedb`：它比 GORM 少约 1.5 MiB 常驻内存。
 - 迁移用所选包的 `Migrate` 或 `Migrations`，二者择一；辅助迁移的 ID 发布后不能改成另一项操作（CONTRACTS §6.2）。
+- 同代次 `RESUME` 复用原 generation、配置与业务 DB，SELF/VERSIONED 数据库迁移回调跳过，原迁移模式与账本保持；首次激活、更新与回退仍按迁移规则执行。配置继续执行 `OnConfigLoad`、补值/校正与 required 校验，完整结果须与原快照一致（CONTRACTS §4.5）。
 - 受管 SQLite 在 reload 与 update 时使用独立候选副本，准备失败会回到旧数据（CONTRACTS §6.3）。框架外的文件与外部数据库不在这个保证内。
 - 大数据放在磁盘上：索引、缓存、向量放进受管 SQLite 或 `sdk.PluginDataDir(ctx)` 中的文件，不整份载入内存；内存缓存必须有上限。
 - 需要 PostgreSQL、MySQL 等外部数据库时自带驱动，连接参数做成在 `config_schema.json` 中声明 `"secret": true` 的配置项（§7），由管理员填写。迁移或 OnStart 会写外部数据库时，manifest 声明 `prepare_effects=external`，此后已有安装的更新需要管理员进入维护（CONTRACTS §6.1、§6.3）。Core 不创建、不备份外部数据库。
@@ -87,7 +89,8 @@ func saveCache(ctx context.Context, content []byte) error {
 ## 5. 生命周期与调用
 
 - 资源在 OnStart 中打开、在 OnStop 中关闭；后台 goroutine 随 OnStop 结束，并响应 ctx 取消（CONTRACTS §4）。
-- 普通请求的期限是 30s。需要更久的工作放进延续调用或 schedule 回调（CONTRACTS §1.2、§2.4、§4.3）。延续调用有两种写法，见下一条。
+- 普通请求的期限是 30s。需要更久的工作放进延续调用或 schedule 回调（CONTRACTS §1.2、§2.4、§4.3）。
+- 冷启动占用请求原有期限，等待取消只撤回该次请求；就绪后复核路由与权限，再交付一次。Core 按 Session 持有实际调用与资源租约的活动引用，本地取消先返回的业务持续占用至实际结束。HTTP 引用在反向代理返回时释放；自动退出的 QUIESCING 由 S-02.2 等待 SDK 在途回调结束或放弃退出。
 - 延续调用有两种写法，期限为 CONTINUATION_TIMEOUT，不占分发链：
   - Handler 内调用 `c.Continue(func(c *sdk.Context) error { ... })`：原 Handler 照常返回并决定传播，fn 在原调用成功结束后的独立调用中执行，原调用返回错误时 fn 不执行。
   - 命令、事件或按钮路由的 builder 写 `.Continue()`：SDK 在原调用中照常执行 Rule，匹配后整个 Handler 放到延续调用中执行。这类路由中 `StopPropagation` 不起作用；自动回复型 Handler 返回的非空内容在延续调用结束前发送一次。
