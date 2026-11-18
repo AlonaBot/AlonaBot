@@ -1,6 +1,7 @@
 package i18n
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 )
@@ -48,6 +49,14 @@ func checkOverride(value any, path string, template bool, issue func(string, str
 			}
 		case key == "items":
 			checkFields(fields[key], child, issue)
+		case key == "example" && !template:
+			if examples, ok := fields[key].([]any); ok {
+				for i, example := range examples {
+					checkExample(example, fmt.Sprintf("%s[%d]", child, i), issue)
+				}
+			} else {
+				checkExample(fields[key], child, issue)
+			}
 		case key == "labels" && !template:
 			labels, ok := fields[key].([]any)
 			if !ok {
@@ -71,6 +80,50 @@ func checkOverride(value any, path string, template bool, issue func(string, str
 			}
 		default:
 			issue(child, "unknown override key")
+		}
+	}
+}
+
+// checkExample 检查可缺项的示例文案；源形状、片段位置与占位符由 Schema.CheckI18n 核对。
+func checkExample(value any, path string, issue func(string, string)) {
+	fields, ok := value.(map[string]any)
+	if !ok {
+		issue(path, "expected an example translation object")
+		return
+	}
+	for _, key := range slices.Sorted(maps.Keys(fields)) {
+		child := path + "." + key
+		switch key {
+		case "input":
+			if _, ok := fields[key].(string); !ok {
+				issue(child, "expected example text")
+			}
+		case "reply":
+			if _, ok := fields[key].(string); ok {
+				continue
+			}
+			segments, ok := fields[key].([]any)
+			if !ok {
+				issue(child, "expected a reply string or segment translation array")
+				continue
+			}
+			for i, segment := range segments {
+				location := fmt.Sprintf("%s[%d]", child, i)
+				texts, ok := segment.(map[string]any)
+				if !ok {
+					issue(location, "expected a segment translation object")
+					continue
+				}
+				for _, name := range slices.Sorted(maps.Keys(texts)) {
+					if name != "text" && name != "alt" {
+						issue(location+"."+name, "only source text or image alt may be translated")
+					} else if _, ok := texts[name].(string); !ok {
+						issue(location+"."+name, "expected example text")
+					}
+				}
+			}
+		default:
+			issue(child, "only example input and reply text may be translated")
 		}
 	}
 }

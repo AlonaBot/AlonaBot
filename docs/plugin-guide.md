@@ -144,6 +144,36 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 
 - 字段的可选值来自运行时的数据（例如实例列表或本插件维护的条目）时，用 `options_from` 代替 `options`：`{"type": "string", "options_from": {"source": "core.adapter_instances", "filter": {"adapter_id": "telegram"}}}`，或指向本插件的选项服务 `"source": "<插件 ID>/<服务名>"`（[CONTRACTS §5.5](../spec/CONTRACTS-v0.1.md)「选项来源」，D-129）。选项服务用 `options.Serve(p, "feeds", func(ctx context.Context, q options.Query) (options.Page, error) {...})` 登记：按 `q.Search` 搜索、`q.Values` 按存储值取回显示名，最多返回 `q.Limit` 项，有更多结果时 `More` 为 true；输入、输出 Schema 由 SDK 固定提供，不用生成。该服务只由 Core 在管理页面打开表单时调用，访问固定为 PRIVATE。取值仍是普通字符串，来源不可用或值已不存在时配置照常加载，插件自己处理不认识的值。
 
+### 配置字段的回复示例
+
+要展示某个配置值对应的回复，在该字段上写 `example`。一个示例写成对象，多个示例写成数组；下面把问候语与一张包内图片组合起来：
+
+```json
+{
+  "greeting": {
+    "type": "string",
+    "default": "Hello",
+    "example": {
+      "input": "hello",
+      "reply": [
+        {"text": "{greeting}"},
+        {"image": "examples/greeting.png", "alt": "Greeting illustration"}
+      ]
+    }
+  }
+}
+```
+
+`input` 必填，写用户发出的文字并省略命令前缀；`reply` 必填，纯文字可以直接写字符串，混合回复按顺序列出片段。每个片段恰好写 `text` 或 `image`，图片可附 `alt`。图片放在工程的 `examples/` 下，格式为 PNG、JPEG、WebP 或 GIF，扩展名与内容须一致。`alonabot check`、`build` 和 `pack` 检查引用，`pack` 收集被引用的图片；安装与更新再次校验。
+
+`input` 与 `text` 中用 `{字段路径}` 引用草稿中的 string、text、int、float 或 bool；对象子字段写成 `{group.greeting}`，带 labels 的选项显示当前语言的 label。模板用 `{mode.$key}` 取选中键，用 `{mode.template_key.child}` 取该模板的子字段，其他模板的值显示为空串。secret、list、dict、object 与 template_list 字段禁止作为引用值。字面花括号写成 `{{`、`}}`。
+
+可选的 `condition` 按字段路径写期望值，例如 `"condition": {"mode.$key": "simple", "enabled": true}`，全部相等时显示该示例。字段被自身的显示条件隐藏时，示例一同隐藏。示例只声明固定回复；草稿替换与显示由 WebUI 完成。
+
+翻译在 `config.<字段>.example` 中按源对象或数组的形状、按片段位置覆盖 `input`、`text` 与 `alt`，缺项沿用源文案；图片路径和条件保持源声明。`check`、`build` 和 `pack` 同时核对翻译结构、片段位置与占位符。
+
+Core 经管理认证提供 `GET /api/v1/packages/{id}/examples/greeting.png`，仅允许 Active 代次 schema 引用的普通文件，并带与组件图标相同的安全响应头。
+
 ## 8. 测试
 
 - 用插件测试套件 `plugintest` 在 `go test` 中启动真实 Core 与测试 Adapter，注入消息并检查发送（D-47、CONTRACTS §17）。
