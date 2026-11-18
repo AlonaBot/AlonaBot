@@ -26,9 +26,9 @@ WebUI 已定稿（D-169）。各 goal 按 Figma 文件 `hV9ILivl2VGGKwtbEEh3mC` 
 | goal-166 | T-09.26 | 品牌、视觉令牌与外壳 | T-08.7 | 已完成（PR #217） |
 | goal-43 | T-09.8 | 登录、总览、插件、账号与版本 | T-08.7、T-09.6、T-09.12、T-09.13、T-09.26 | 已完成（PR #238） |
 | goal-44 | T-09.9 | 插件详情、权限、会话与系统设置 | T-09.8、T-09.14、T-11.5、T-04.17、T-08.15、T-08.16 | 待派发 |
-| goal-94 | T-09.15 | 日志页 | T-09.8、T-09.10、T-09.19、T-02.5 | 待派发 |
-| goal-156 | T-09.23 | 官方 WebUI 的后台进程、统计、商店、用户与数据页 | T-09.8、T-09.20、T-09.21、T-09.22、T-09.24 | 待派发 |
-| goal-146 | T-09.18 | 模型页 | T-09.8、T-09.14、T-12.16 | 待派发 |
+| goal-94 | T-09.15 | 日志页 | T-09.8、T-09.10、T-09.19、T-02.5 | 已完成（PR #243） |
+| goal-156 | T-09.23 | 官方 WebUI 的后台进程、统计、商店、用户与数据页 | T-09.8、T-09.20、T-09.21、T-09.22、T-09.24 | 已完成（PR #245） |
+| goal-146 | T-09.18 | 模型页 | T-09.8、T-09.14、T-12.16 | 已完成（PR #244） |
 | goal-165 | T-09.25 | 配置文件页 | T-04.19、T-11.6、T-12.19、T-09.18 | 等待前置 |
 | goal-175 | S-06.3 | 休眠策略与运行状态的页面 | T-09.8、T-09.9、S-06.1 | 等待前置 |
 
@@ -426,7 +426,7 @@ main 上 T-09.7（PR #187）已接通回退执行，ADMIN-API §3.2 的 501 说�
 
 ### goal-94 · T-09.15 日志页
 
-状态：待派发。前置 T-09.8（PR #238，合并提交 `9123839`）、T-09.10（PR #177，`99efcd1`）、T-09.19（PR #213，`6f6856c`）、T-02.5（PR #209，`d75e43d`）均已合并。按 main `50244fe` 核对：`web/admin/src/api/admin.ts` 已有 `AdminAPIError`、`onSessionExpired(handler: () => void): () => void`、`listPackages(): Promise<Package[]>`、`listInstances(): Promise<AdapterInstance[]>` 与含 `critical` 的 `SourceLogLevel`，`request<T>` 与 CSRF 状态仍为模块私有；日志读取与二进制下载尚无前端导出。`internal/core/manage/log_api.go` 已注册 recent、stream、history，`diagnostics_api.go` 已注册诊断包端点；`src/routes.tsx` 的 `RouteEntry` 与 `src/main.tsx` 的精确路径分派可直接挂载 `/logs`，总览已有按 `id: logs` 显示「查看日志」的入口。`src/i18n/UI.tsx` 导出 `useUI(): typeof english.messages`；`src/components/ConfigForm.tsx` 的 `ConfigForm({schema, value, messages, onSubmit})` 保持原用途，本页的筛选与诊断包选项使用普通控件。沿用 D-169 的 v4 画板、D-156 与 D-158；级别设置继续由 goal-44、goal-43 负责。
+状态：已完成（PR #243），合并提交 `d9e9089`。以下保留派发时语句。派发时：前置 T-09.8（PR #238，合并提交 `9123839`）、T-09.10（PR #177，`99efcd1`）、T-09.19（PR #213，`6f6856c`）、T-02.5（PR #209，`d75e43d`）均已合并。按 main `50244fe` 核对：`web/admin/src/api/admin.ts` 已有 `AdminAPIError`、`onSessionExpired(handler: () => void): () => void`、`listPackages(): Promise<Package[]>`、`listInstances(): Promise<AdapterInstance[]>` 与含 `critical` 的 `SourceLogLevel`，`request<T>` 与 CSRF 状态仍为模块私有；日志读取与二进制下载尚无前端导出。`internal/core/manage/log_api.go` 已注册 recent、stream、history，`diagnostics_api.go` 已注册诊断包端点；`src/routes.tsx` 的 `RouteEntry` 与 `src/main.tsx` 的精确路径分派可直接挂载 `/logs`，总览已有按 `id: logs` 显示「查看日志」的入口。`src/i18n/UI.tsx` 导出 `useUI(): typeof english.messages`；`src/components/ConfigForm.tsx` 的 `ConfigForm({schema, value, messages, onSubmit})` 保持原用途，本页的筛选与诊断包选项使用普通控件。沿用 D-169 的 v4 画板、D-156 与 D-158；级别设置继续由 goal-44、goal-43 负责。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-94（切片 T-09.15：日志页）。goal 目录 goal-94，分支 goal-94，worktree .worktrees/goal-94，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
@@ -475,7 +475,7 @@ main 上 T-09.7（PR #187）已接通回退执行，ADMIN-API §3.2 的 501 说�
 
 ### goal-156 · T-09.23 官方 WebUI 的后台进程、统计、商店、用户与数据页
 
-状态：待派发。前置 T-09.8（PR #238，合并提交 `9123839`）、T-09.20（PR #221，`bd386df`）、T-09.21（PR #234，`3b3ca6f`）、T-09.22（PR #220，`b5e572e`）、T-09.24（PR #215，`b911f27`）均已合并。按 main `50244fe` 核对：`web/admin/plugin.yaml` 的实际 ID 为 `alonabot-webui-admin`，assets 为 dist，尚无 Go 源码；`github.com/AlonaBot/AlonaBot/sdk` 提供 `NewPlugin() *Plugin`、`(*Plugin).On(routeID string, eventType EventType) *EventBuilder`、`(*Plugin).AfterSend(routeID string) *AfterSendBuilder`、`(*Plugin).Route(method, path string) *RouteBuilder`，可用 `sdk.MessageCreated` 与 `sdk.CommandInvoked`。`sdk/sqlitedb.Open(ctx context.Context) (*sql.DB, error)` 与 `Migrations(p *sdk.Plugin, list []Migration)` 可保存受管数据；`contracts/pluginindex.Parse(raw []byte) (*Index, error)` 已解析源索引。`src/api/admin.ts` 已有 `listPackages`、`installPackage`、`updatePackage`、`listGenerations(id: string): Promise<Generation[]>`、`listInstances`；`OverviewPage({core})` 的四组图表仍为空态，`PluginsPage()` 已有商店标签入口，`PluginDetailPage({id, generations?})` 已有版本记录与高级标签，`AppShell` 已接收可选 `coreUpdate: {version, releaseURL}`。`scripts/dist/main.go` 已逐组件调用多平台 pack，但 WebUI 在脱离根 Go module 的临时副本构建，带 Go 入口后须同步暂存方式。下文保留 D-162～D-166、D-169 的目标；日志级别统计来源、会话正文读取与官方源地址的缺口在行为段列明，交审查者裁定。
+状态：已完成（PR #245），合并提交 `f6cf850`。以下保留派发时语句。派发时：前置 T-09.8（PR #238，合并提交 `9123839`）、T-09.20（PR #221，`bd386df`）、T-09.21（PR #234，`3b3ca6f`）、T-09.22（PR #220，`b5e572e`）、T-09.24（PR #215，`b911f27`）均已合并。按 main `50244fe` 核对：`web/admin/plugin.yaml` 的实际 ID 为 `alonabot-webui-admin`，assets 为 dist，尚无 Go 源码；`github.com/AlonaBot/AlonaBot/sdk` 提供 `NewPlugin() *Plugin`、`(*Plugin).On(routeID string, eventType EventType) *EventBuilder`、`(*Plugin).AfterSend(routeID string) *AfterSendBuilder`、`(*Plugin).Route(method, path string) *RouteBuilder`，可用 `sdk.MessageCreated` 与 `sdk.CommandInvoked`。`sdk/sqlitedb.Open(ctx context.Context) (*sql.DB, error)` 与 `Migrations(p *sdk.Plugin, list []Migration)` 可保存受管数据；`contracts/pluginindex.Parse(raw []byte) (*Index, error)` 已解析源索引。`src/api/admin.ts` 已有 `listPackages`、`installPackage`、`updatePackage`、`listGenerations(id: string): Promise<Generation[]>`、`listInstances`；`OverviewPage({core})` 的四组图表仍为空态，`PluginsPage()` 已有商店标签入口，`PluginDetailPage({id, generations?})` 已有版本记录与高级标签，`AppShell` 已接收可选 `coreUpdate: {version, releaseURL}`。`scripts/dist/main.go` 已逐组件调用多平台 pack，但 WebUI 在脱离根 Go module 的临时副本构建，带 Go 入口后须同步暂存方式。下文保留 D-162～D-166、D-169 的目标；日志级别统计来源、会话正文读取与官方源地址的缺口在行为段列明，交审查者裁定。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-156（切片 T-09.23：官方 WebUI 的后台进程、统计、商店、用户与数据页）。goal 目录 goal-156，分支 goal-156，worktree .worktrees/goal-156，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
@@ -572,7 +572,7 @@ main 上 T-09.7（PR #187）已接通回退执行，ADMIN-API §3.2 的 501 说�
 
 ### goal-146 · T-09.18 模型页
 
-状态：待派发。前置 T-09.8（PR #238，合并提交 `9123839`）、T-09.14（PR #192，`0cff77c`）、T-12.16（PR #223，`d27ce82`）均已合并。按 main `50244fe` 核对：`web/admin/src/api/admin.ts` 已导出 `listPackages(): Promise<Package[]>`、`changePackage(action: 'enable' | 'disable' | 'restart' | 'reload', id: string, confirm?: boolean): Promise<void>`、`AdminAPIError` 与 `isConfirmationError`，配置与模型请求尚无前端导出。官方 Agent 的实际包为 `github.com/AlonaBot/AlonaBot/agent`，`agent.New() *sdk.Plugin` 在 `agent/agent.go` 注册 `/models/discover`、`/models/test`、`/models/usage`；`agent/models.go` 与 ADMIN-API §15.1 一致。`agent/config_schema.json` 的 providers 为 template_list、models 为 list；ConfigForm 已支持两者。页面沿用 `src/routes.tsx` 的 RouteEntry 与 `src/main.tsx` 的认证外壳；AppShell、Sidebar、MobileTabBar 当前尚无按 Agent 安装状态禁用模型入口的属性。沿用 D-154、D-155 与 D-169 的模型页目标和画板。
+状态：已完成（PR #244），合并提交 `a989b5f`。以下保留派发时语句。派发时：前置 T-09.8（PR #238，合并提交 `9123839`）、T-09.14（PR #192，`0cff77c`）、T-12.16（PR #223，`d27ce82`）均已合并。按 main `50244fe` 核对：`web/admin/src/api/admin.ts` 已导出 `listPackages(): Promise<Package[]>`、`changePackage(action: 'enable' | 'disable' | 'restart' | 'reload', id: string, confirm?: boolean): Promise<void>`、`AdminAPIError` 与 `isConfirmationError`，配置与模型请求尚无前端导出。官方 Agent 的实际包为 `github.com/AlonaBot/AlonaBot/agent`，`agent.New() *sdk.Plugin` 在 `agent/agent.go` 注册 `/models/discover`、`/models/test`、`/models/usage`；`agent/models.go` 与 ADMIN-API §15.1 一致。`agent/config_schema.json` 的 providers 为 template_list、models 为 list；ConfigForm 已支持两者。页面沿用 `src/routes.tsx` 的 RouteEntry 与 `src/main.tsx` 的认证外壳；AppShell、Sidebar、MobileTabBar 当前尚无按 Agent 安装状态禁用模型入口的属性。沿用 D-154、D-155 与 D-169 的模型页目标和画板。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-146（切片 T-09.18：模型页）。goal 目录 goal-146，分支 goal-146，worktree .worktrees/goal-146，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
@@ -632,7 +632,7 @@ main 上 T-09.7（PR #187）已接通回退执行，ADMIN-API §3.2 的 501 说�
 
 ### goal-165 · T-09.25 配置文件页
 
-状态：等待前置（T-04.19、T-11.6、T-12.19、T-09.18）。2026-11-17 按 D-167、D-168 与 D-169 新增。目标、依据与要点由 PLAN T-09 步骤 7（配置文件页）与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：等待前置（T-04.19、T-12.19）。T-11.6（PR #246，`24e57d6`）、T-09.18（PR #244，`a989b5f`）已合并。2026-11-17 按 D-167、D-168 与 D-169 新增。目标、依据与要点由 PLAN T-09 步骤 7（配置文件页）与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-165（切片 T-09.25：配置文件页）。goal 目录 goal-165，分支 goal-165，worktree .worktrees/goal-165，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。

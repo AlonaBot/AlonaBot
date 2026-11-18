@@ -121,7 +121,7 @@
 | goal-177 | T-09.27 | 组件市场 ID 改用连字符 | T-09.10、T-09.14、T-12.8、T-13.5 | 已完成（PR #222） |
 | goal-162 | T-04.19 | 平台与消息 | T-04.18 | 待派发 |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
-| goal-163 | T-11.6 | 按配置文件的工具策略 | T-04.18、T-11.4 | 待派发 |
+| goal-163 | T-11.6 | 按配置文件的工具策略 | T-04.18、T-11.4 | 已完成（PR #246） |
 | goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 已完成（PR #233） |
 | goal-172 | S-03.1 | Scheduler 唤醒与离线 tick 区分 | S-02.2、T-07.2 | 等待前置 |
 | goal-173 | S-06.1 | 休眠管理 API、运行诊断与 CLI | S-02.2、S-03.1、T-09.14 | 等待前置 |
@@ -8324,7 +8324,7 @@ internal/core/state
 
 ### goal-45 · T-09.11 正式流程故障注入与 T-09 验收
 
-状态：等待前置（T-09.9、T-09.15）。T-09.3（PR #194，`e9ff45e`）、T-09.7（PR #187，`864819e`）、T-09.10（PR #177）、T-09.12（PR #167）已合并；T-09.9（goal-44）与 T-09.15（goal-94）属 WebUI 章节，未在本轮 core/agent 推进范围内派发，本切片因此阻塞，待两者合并后由审查者核对语句。语句中 goal-38～goal-44、goal-66、goal-84、goal-92～goal-94 提供的命令与 API 只写名字；合并后由审查者核对，再改为待派发。
+状态：等待前置（T-09.9）。T-09.15（PR #243，`d9e9089`）已合并。T-09.3（PR #194，`e9ff45e`）、T-09.7（PR #187，`864819e`）、T-09.10（PR #177）、T-09.12（PR #167）已合并；T-09.9（goal-44）与 T-09.15（goal-94）属 WebUI 章节，未在本轮 core/agent 推进范围内派发，本切片因此阻塞，待两者合并后由审查者核对语句。语句中 goal-38～goal-44、goal-66、goal-84、goal-92～goal-94 提供的命令与 API 只写名字；合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-45（切片 T-09.11：正式流程故障注入与 T-09 验收）。goal 目录 goal-45，分支 goal-45，worktree .worktrees/goal-45，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -8486,7 +8486,7 @@ internal/core/state
 
 ### goal-163 · T-11.6 按配置文件的工具策略
 
-状态：待派发。前置 T-04.18（PR #242，合并提交 `b8161272`）与 T-11.4（PR #172，`15f94955`）均已合并；配置文件存储 T-08.18（PR #214，`ab0cd56`）、宽松载入 T-08.16（PR #239，`1a1d12c3`）也已合并。已按 main `9330f399` 核对：`internal/core/profile.(*Service).Tools(id string) (profile.ToolPolicies, error)` 与 `PutTools(ctx context.Context, id string, policies profile.ToolPolicies) error` 已提供工具/操作覆盖及 inherit 删除，ADMIN-API §23 的路由位于 `internal/core/manage/profile_api.go`；`internal/core/tool.New(store *state.Store, r *router.Router) *tool.Catalog`、`(*Catalog).Effective(ctx context.Context, pluginID, service string) (pb.ToolPolicy, error)` 当前只查全局覆盖与声明，`Register(m *router.Mux)`/`RegisterInvoke(m *router.Mux, opt tool.InvokeOptions)` 注册 list/invoke/confirm。`internal/app/profile.go` 的 targetProfile 按可信 Target 解析会话，`router.Invocation` 已携带 DefaultTarget/ProfileID/Root；本切片接入运行时策略。
+状态：已完成（PR #246），合并提交 `24e57d6`。以下保留派发时语句。派发时：前置 T-04.18（PR #242，合并提交 `b8161272`）与 T-11.4（PR #172，`15f94955`）均已合并；配置文件存储 T-08.18（PR #214，`ab0cd56`）、宽松载入 T-08.16（PR #239，`1a1d12c3`）也已合并。已按 main `9330f399` 核对：`internal/core/profile.(*Service).Tools(id string) (profile.ToolPolicies, error)` 与 `PutTools(ctx context.Context, id string, policies profile.ToolPolicies) error` 已提供工具/操作覆盖及 inherit 删除，ADMIN-API §23 的路由位于 `internal/core/manage/profile_api.go`；`internal/core/tool.New(store *state.Store, r *router.Router) *tool.Catalog`、`(*Catalog).Effective(ctx context.Context, pluginID, service string) (pb.ToolPolicy, error)` 当前只查全局覆盖与声明，`Register(m *router.Mux)`/`RegisterInvoke(m *router.Mux, opt tool.InvokeOptions)` 注册 list/invoke/confirm。`internal/app/profile.go` 的 targetProfile 按可信 Target 解析会话，`router.Invocation` 已携带 DefaultTarget/ProfileID/Root；本切片接入运行时策略。
 
 与 goal-162 共享 `internal/core/profile/`（profile.go、platform.go、tools.go 的操作快照）、`internal/app/profile.go`、assembly.go、alonabot.go、`internal/core/manage/profile_api.go` 及 `cmd/alonabot/manage_e2e_test.go` 的配置文件测试装配。goal-163 负责工具策略，goal-162 负责平台有效值、前缀与回复；两者可并行，后合并者同步最新 main，保留双方的快照读取、回调注入、固定服务注册、Session 清理和测试断言，重跑两条主路径。配置读取保留 goal-152 已落地的无版本载入与宽松校正。
 
