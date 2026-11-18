@@ -9,7 +9,6 @@ required_capabilities: []
 os: windows
 arch: amd64
 entrypoint: my-tool.exe
-config_version: 0
 source: local
 migration_mode: none
 prepare_effects: none

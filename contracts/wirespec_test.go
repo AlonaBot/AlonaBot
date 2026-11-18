@@ -863,3 +863,32 @@ func TestCommandListFieldNumbers(t *testing.T) {
 		t.Fatalf("CommandSpec field 13 should be optional string description, got %v", f)
 	}
 }
+
+// TestConfigCorrectionFieldNumbers 固定校正记录编号并保留已删除配置版本的编号和名称。
+func TestConfigCorrectionFieldNumbers(t *testing.T) {
+	bootstrap := (&pb.Bootstrap{}).ProtoReflect().Descriptor()
+	register := (&pb.Register{}).ProtoReflect().Descriptor()
+	for _, check := range []struct {
+		descriptor protoreflect.MessageDescriptor
+		number     protoreflect.FieldNumber
+		name       protoreflect.Name
+	}{
+		{bootstrap, 4, "previous_config_version"},
+		{bootstrap, 5, "target_config_version"},
+		{register, 4, "candidate_config_version"},
+	} {
+		if !check.descriptor.ReservedRanges().Has(check.number) || !check.descriptor.ReservedNames().Has(check.name) {
+			t.Errorf("%s must reserve %d and %s", check.descriptor.Name(), check.number, check.name)
+		}
+	}
+	field := register.Fields().ByNumber(8)
+	if field == nil || field.Name() != "config_corrections" || !field.IsList() || field.Message().Name() != "ConfigCorrection" {
+		t.Fatalf("Register field 8 should be repeated ConfigCorrection config_corrections, got %v", field)
+	}
+	for i, name := range []protoreflect.Name{"path", "reason", "original_json"} {
+		field := (&pb.ConfigCorrection{}).ProtoReflect().Descriptor().Fields().ByNumber(protoreflect.FieldNumber(i + 1))
+		if field == nil || field.Name() != name || field.Kind() != protoreflect.StringKind {
+			t.Errorf("ConfigCorrection field %d should be string %s, got %v", i+1, name, field)
+		}
+	}
+}

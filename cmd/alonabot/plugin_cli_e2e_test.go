@@ -245,7 +245,7 @@ func TestPluginStorageCLI(t *testing.T) {
 		}
 		dir := t.TempDir()
 		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json")
-		adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+		adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
 		c.management(t, dir, "", "install", adapter, "--yes")
 		c.management(t, dir, "", "adapter", "instance", "create", "alonabot_adapter_fixture", "one")
 		c.management(t, dir, "", "enable", "alonabot_adapter_fixture")

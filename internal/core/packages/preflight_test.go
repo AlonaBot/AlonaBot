@@ -44,7 +44,7 @@ type testEntry struct {
 func manifestYAML(id, version, source, osName, arch, entrypoint string) string {
 	return "manifest_version: 1\nname: Demo\nid: " + id + "\nversion: " + version +
 		"\nprotocol_min_major: 1\nprotocol_max_major: 1\nrequired_capabilities: []\nos: " + osName +
-		"\narch: " + arch + "\nentrypoint: " + entrypoint + "\nconfig_version: 1\nsource: " + source +
+		"\narch: " + arch + "\nentrypoint: " + entrypoint + "\nsource: " + source +
 		"\nmigration_mode: none\nprepare_effects: none\n"
 }
 
@@ -285,8 +285,7 @@ func TestProjectManifestPreflight(t *testing.T) {
 	data, err := manifest.Generate(parsed.Manifest, manifest.BuildInfo{
 		ManifestVersion: 1, ProtocolMinMajor: &one, ProtocolMaxMajor: &one,
 		RequiredCapabilities: &capabilities, OS: testOS, Arch: testArch,
-		Entrypoint: "bin/plugin", ConfigVersion: &one,
-		MigrationMode: manifest.MigrationNone, PrepareEffects: manifest.EffectsNone,
+		Entrypoint: "bin/plugin", MigrationMode: manifest.MigrationNone, PrepareEffects: manifest.EffectsNone,
 	})
 	if err != nil {
 		t.Fatal(err)

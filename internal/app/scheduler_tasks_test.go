@@ -72,7 +72,7 @@ func persistentTaskProcess(mode string) error {
 	if err := proto.Unmarshal(env.Payload, ack); err != nil {
 		return err
 	}
-	registration := &pb.Register{CandidateConfigJson: "{}", CandidateConfigVersion: ack.GetBootstrap().GetTargetConfigVersion(), ConfigSchemaHash: ack.GetBootstrap().GetConfigSchemaHash(), Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}, Routes: []*pb.RouteDescriptor{
+	registration := &pb.Register{CandidateConfigJson: "{}", ConfigSchemaHash: ack.GetBootstrap().GetConfigSchemaHash(), Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}, Routes: []*pb.RouteDescriptor{
 		{RouteId: "job.pulse", Kind: pb.RouteKind_ROUTE_KIND_SCHEDULE, Spec: &pb.RouteDescriptor_Schedule{Schedule: &pb.ScheduleSpec{JobId: "pulse", Trigger: &pb.ScheduleSpec_IntervalMs{IntervalMs: 1000}}}},
 	}}
 	if mode != "tasks-missing" {
@@ -289,7 +289,7 @@ func taskArchive(t *testing.T, id string) manage.InstallRequest {
 		t.Fatal(err)
 	}
 	const source = "github.com/AlonaBot/testtasks"
-	manifest := fmt.Sprintf("manifest_version: 1\nname: Tasks\nid: %s\nversion: 1.0.0\nprotocol_min_major: 1\nprotocol_max_major: 1\nrequired_capabilities: []\nos: %s\narch: %s\nentrypoint: plugin\nconfig_version: 1\nsource: %s\nmigration_mode: none\nprepare_effects: none\n", id, runtime.GOOS, runtime.GOARCH, source)
+	manifest := fmt.Sprintf("manifest_version: 1\nname: Tasks\nid: %s\nversion: 1.0.0\nprotocol_min_major: 1\nprotocol_max_major: 1\nrequired_capabilities: []\nos: %s\narch: %s\nentrypoint: plugin\nsource: %s\nmigration_mode: none\nprepare_effects: none\n", id, runtime.GOOS, runtime.GOARCH, source)
 	var archive bytes.Buffer
 	compressed := gzip.NewWriter(&archive)
 	writer := tar.NewWriter(compressed)
@@ -356,7 +356,7 @@ func TestPersistentTasks(t *testing.T) {
 		if _, err := taskManager(h).Install(t.Context(), installation); err != nil {
 			t.Fatal(err)
 		}
-		if err := h.store.AddGeneration(t.Context(), id, pipelineGeneration+":"+id, "{}", 1); err != nil {
+		if err := h.store.AddGeneration(t.Context(), id, pipelineGeneration+":"+id, "{}"); err != nil {
 			t.Fatal(err)
 		}
 		c := h.launch(id, "tasks", 0)
@@ -528,7 +528,7 @@ func TestPersistentTasks(t *testing.T) {
 				t.Fatal(err)
 			}
 			if active == "" {
-				if err := h.store.AddGeneration(t.Context(), id, pipelineGeneration+":"+id, "{}", 1); err != nil {
+				if err := h.store.AddGeneration(t.Context(), id, pipelineGeneration+":"+id, "{}"); err != nil {
 					t.Fatal(err)
 				}
 			}

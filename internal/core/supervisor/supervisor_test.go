@@ -100,7 +100,7 @@ func rawPlugin(fault string) int {
 	_, msg := recv()
 	ack := msg.(*pb.HelloAck)
 	sid := ack.GetSessionId()
-	registration := &pb.Register{CandidateConfigJson: "{}", CandidateConfigVersion: ack.GetBootstrap().GetTargetConfigVersion(), ConfigSchemaHash: ack.GetBootstrap().GetConfigSchemaHash()}
+	registration := &pb.Register{CandidateConfigJson: "{}", ConfigSchemaHash: ack.GetBootstrap().GetConfigSchemaHash()}
 	registration.Migration = &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}
 	if scheduleHTTP {
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -288,14 +288,13 @@ func setup(t *testing.T, exe string) (*state.Store, Spec) {
 	if err := s.AddInstall(ctx, state.Install{Role: state.RolePlugin, PluginID: "demo", Source: "test", Entrypoint: exe, BuildDigest: digest[:]}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.AddGeneration(ctx, "demo", "gen-1", "{}", 1); err != nil {
+	if err := s.AddGeneration(ctx, "demo", "gen-1", "{}"); err != nil {
 		t.Fatal(err)
 	}
 	pluginDir := filepath.Join(dir, "plugins", "demo")
 	_ = os.MkdirAll(pluginDir, 0o700)
 	return s, Spec{Role: state.RolePlugin, PluginID: "demo", PluginDir: pluginDir, Executable: exe, BuildDigest: digest[:], GenerationID: "gen-1",
-		Bootstrap: &pb.Bootstrap{GenerationId: "gen-1", CandidateConfigJson: "{}", TargetConfigVersion: 1,
-			DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}},
+		Bootstrap:    &pb.Bootstrap{GenerationId: "gen-1", CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}},
 		NewCandidate: true, Limits: fastLimits, Stop: fastStop, Log: &logBuf{}}
 }
 
@@ -896,7 +895,7 @@ func TestScheduleAndHTTPLifecycle(t *testing.T) {
 			Source: "test", Entrypoint: next.Executable, BuildDigest: next.BuildDigest}); err != nil {
 			t.Fatal(err)
 		}
-		if err := store.AddGeneration(context.Background(), next.PluginID, next.GenerationID, "{}", 1); err != nil {
+		if err := store.AddGeneration(context.Background(), next.PluginID, next.GenerationID, "{}"); err != nil {
 			t.Fatal(err)
 		}
 

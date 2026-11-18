@@ -464,7 +464,7 @@ func (h *pipelineHarness) install(id, mode string) {
 	if err := h.store.AddInstall(h.t.Context(), state.Install{PluginID: id, Role: role, AdapterID: adapterID, BuildDigest: bytes.Repeat([]byte{1}, 32)}); err != nil {
 		h.t.Fatal(err)
 	}
-	if err := h.store.AddGeneration(h.t.Context(), id, pipelineGeneration+":"+id, "{}", 1); err != nil {
+	if err := h.store.AddGeneration(h.t.Context(), id, pipelineGeneration+":"+id, "{}"); err != nil {
 		h.t.Fatal(err)
 	}
 }
@@ -487,7 +487,7 @@ func (h *pipelineHarness) launch(id, mode string, priority int) *runningComponen
 	// 2. 通过生产 Handler 绑定启动真实插件或 Adapter。
 	handler := h.assembly.handler(c, install)
 	spec := supervisor.Spec{PluginID: id, Role: install.Role, AdapterID: install.AdapterID, PluginDir: pluginDir, Executable: os.Args[0], BuildDigest: install.BuildDigest, GenerationID: pipelineGeneration + ":" + id,
-		Bootstrap: bootstrap(pipelineGeneration+":"+id, 1), NewCandidate: active == "", Limits: host.NewLimits(h.values), Stop: host.NewStopTiming(h.values), Log: h, Handler: handler, Global: h.assembly.global, Stdio: h.stdio,
+		Bootstrap: bootstrap(pipelineGeneration + ":" + id), NewCandidate: active == "", Limits: host.NewLimits(h.values), Stop: host.NewStopTiming(h.values), Log: h, Handler: handler, Global: h.assembly.global, Stdio: h.stdio,
 		ExtraEnv: map[string]string{pipelineModeEnv: mode, pipelineIDEnv: id, pipelinePriorityEnv: strconv.Itoa(priority), pipelineAuditEnv: h.server.URL, "GORACE": "atexit_sleep_ms=0"}, Detach: func() { h.assembly.detach(c) }}
 	if strings.HasPrefix(mode, "tasks") {
 		spec.Scheduler = h.assembly.scheduler
