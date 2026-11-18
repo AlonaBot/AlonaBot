@@ -469,7 +469,7 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 [{"key":"telegram:room@assistant","entries":3,"updated_at":"2026-11-13T12:00:00Z"}]
 ```
 
-`DELETE /api/v1/plugins/{id}/conversations/{key}` 清除该组件指定会话，成功返回 `{}`。`key` 是会话存储键，Agent 按 `<会话字符串>@<实例名>` 组织；调用方把整个键按一个 URL 段转义，服务端解码一次后原样交给 `conversation.Service.Clear`。该端点在路径清理前接收键，因此键中的斜杠、冒号、反斜杠和点段保留。键须为 1～256 字节的有效 UTF-8，格式错误返回 400；未知组件返回 404。列表仅返回键、条目数与最后时间。
+`DELETE /api/v1/plugins/{id}/conversations/{key}` 清除该组件指定会话，成功返回 `{}`。`key` 是会话存储键，Agent 按 `<会话字符串>@<实例名>` 组织，开启成员独立会话（`member_sessions`）时群聊成员的键再追加 `@<用户字符串>`；调用方把整个键按一个 URL 段转义，服务端解码一次后原样交给 `conversation.Service.Clear`。该端点在路径清理前接收键，因此键中的斜杠、冒号、反斜杠和点段保留。键须为 1～256 字节的有效 UTF-8，格式错误返回 400；未知组件返回 404。列表仅返回键、条目数与最后时间。
 
 
 ### 15.1 Agent 模型管理路由（D-154）
