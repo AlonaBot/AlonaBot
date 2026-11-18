@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"go/format"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -30,6 +31,13 @@ func Init(ctx context.Context, dir, id, role, adapterID, module string) (needsSD
 	if len(entries) != 0 {
 		return false, fmt.Errorf("directory %s is not empty", dir)
 	}
+	defaultID := id == ""
+	if defaultID {
+		id = filepath.Base(dir)
+	}
+	if role == "adapter" && adapterID == "" {
+		adapterID = id
+	}
 	fields := map[string]any{"id": id, "name": id, "version": initialVersion, "source": "github.com/CHANGE-ME/CHANGE-ME", "role": role}
 	if adapterID != "" {
 		fields["adapter_id"] = adapterID
@@ -44,15 +52,22 @@ func Init(ctx context.Context, dir, id, role, adapterID, module string) (needsSD
 		return false, err
 	}
 	raw = append([]byte("# Change source to your component repository before publishing.\n"), raw...)
-	if _, err := manifest.ParseProject(raw); err != nil {
+	project, err := manifest.ParseProject(raw)
+	if err != nil {
+		if defaultID {
+			return false, fmt.Errorf("directory name %q cannot be used as component ID; specify --id explicitly: %w", filepath.Base(dir), err)
+		}
 		return false, err
+	}
+	for _, warning := range project.Warnings {
+		slog.Warn(warning)
 	}
 	within, err := withinModule(dir)
 	if err != nil {
 		return false, err
 	}
 	if !within && module == "" {
-		return false, errors.New("--module is required outside an existing Go module")
+		module = filepath.Base(dir)
 	}
 	files := map[string][]byte{projectFile: raw, ".gitignore": []byte("data/\nbin/\n")}
 	switch role {

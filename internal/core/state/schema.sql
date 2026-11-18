@@ -4,6 +4,11 @@ CREATE TABLE schema_version (
 
 INSERT INTO schema_version (version) VALUES (0);
 
+CREATE TABLE core_initialization (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  preinstalled INTEGER NOT NULL
+);
+
 CREATE TABLE install (
   plugin_id    TEXT PRIMARY KEY,
   install_seq  INTEGER NOT NULL UNIQUE,

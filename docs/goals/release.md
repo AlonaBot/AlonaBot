@@ -7,9 +7,9 @@
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
 | goal-73 | T-14.3 | 发行归档 | T-03.10、T-09.3、T-12.7、T-14.1 | 已完成（PR #228） |
-| goal-74 | T-14.4 | 首次运行与预装 | T-09.6、T-14.3 | 待派发 |
-| goal-77 | T-14.5 | 容器镜像 | T-07.6、T-14.3 | 待派发 |
-| goal-85 | T-14.7 | install.sh | T-14.3 | 待派发 |
+| goal-74 | T-14.4 | 首次运行与预装 | T-09.6、T-14.3 | 已完成（PR #235） |
+| goal-77 | T-14.5 | 容器镜像 | T-07.6、T-14.3 | 已完成（PR #231） |
+| goal-85 | T-14.7 | install.sh | T-14.3 | 已完成（PR #236） |
 | goal-75 | T-14.6 | 发行包与镜像端到端验收 | T-09.11、T-14.4、T-14.5 | 等待前置 |
 | goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-03.23、T-04.10、T-04.11、T-05.5、T-08.9、T-08.13、T-09.11、T-09.27、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-16.2 | 等待前置 |
 | goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 等待前置 |
@@ -62,7 +62,7 @@
 
 ### goal-74 · T-14.4 首次运行与预装
 
-状态：待派发。前置 T-09.6（PR #179，合并提交 `8898251`）与 T-14.3（PR #228，合并提交 `72d51c2`）均已合并。按 main `25e9064` 核对：T-09.4（PR #163，`cb8ae3d`）的管理服务现为 `internal/core/manage`，提供 `New(opt Options) *Service`、`(*Service).Install(ctx context.Context, req InstallRequest) (Package, error)`、`Enable(ctx context.Context, id string) error`、`List(ctx context.Context) ([]Package, error)`、`Update(ctx context.Context, id string, req InstallRequest) (UpdateResult, error)` 与 `CreateInstance(ctx context.Context, adapterPackageID, instanceID string, raw json.RawMessage, confirm bool) error`；T-13.5（PR #200，`2e5ac2b`）已将装配移到 `internal/app`，入口为 `Start(ctx context.Context, o Options) (*Core, error)`，CLI 为 `alonabot run`。T-07.6（PR #100，`cb83eeb`）提供 `internal/core/adminauth.FirstToken(ctx context.Context, st *state.Store, dataDir string, interactive bool) (string, error)` 与 `FirstTokenFile = "admin_token"`，无终端时写文件；状态库没有 `core_setting`。T-14.3 提供 `internal/core/trust.Official() (ed25519.PublicKey, bool)`、`scripts/dist` 与 `internal/app.releaseVersion` 注入；发行归档的同名根目录含 Core 与 `packages/<组件 ID>/`，每个组件目录含安装包、`release.json`、`release.json.sig`、`release.pub`，首版只有 Telegram Adapter、Agent、WebUI 与 help（D-171）。
+状态：已完成（PR #235），合并提交 `815e53c`。以下保留派发时语句。派发时：前置 T-09.6（PR #179，合并提交 `8898251`）与 T-14.3（PR #228，合并提交 `72d51c2`）均已合并。按 main `25e9064` 核对：T-09.4（PR #163，`cb8ae3d`）的管理服务现为 `internal/core/manage`，提供 `New(opt Options) *Service`、`(*Service).Install(ctx context.Context, req InstallRequest) (Package, error)`、`Enable(ctx context.Context, id string) error`、`List(ctx context.Context) ([]Package, error)`、`Update(ctx context.Context, id string, req InstallRequest) (UpdateResult, error)` 与 `CreateInstance(ctx context.Context, adapterPackageID, instanceID string, raw json.RawMessage, confirm bool) error`；T-13.5（PR #200，`2e5ac2b`）已将装配移到 `internal/app`，入口为 `Start(ctx context.Context, o Options) (*Core, error)`，CLI 为 `alonabot run`。T-07.6（PR #100，`cb83eeb`）提供 `internal/core/adminauth.FirstToken(ctx context.Context, st *state.Store, dataDir string, interactive bool) (string, error)` 与 `FirstTokenFile = "admin_token"`，无终端时写文件；状态库没有 `core_setting`。T-14.3 提供 `internal/core/trust.Official() (ed25519.PublicKey, bool)`、`scripts/dist` 与 `internal/app.releaseVersion` 注入；发行归档的同名根目录含 Core 与 `packages/<组件 ID>/`，每个组件目录含安装包、`release.json`、`release.json.sig`、`release.pub`，首版只有 Telegram Adapter、Agent、WebUI 与 help（D-171）。
 
 与同在第 20 波的 goal-141（T-13.6）共享 `packages/` 的定位和读取规则、`internal/core/manage/bundled.go`（本切片新增）及其 CLI 调用方 `cmd/alonabot/manage.go`：本切片负责内置包读取、预装与 update 的本地候选；goal-141 负责 install 的位置参数和组件 ID 解析，复用本切片的 `manage.BundledPackage`，保持 `InstallRequest` 字段含义。goal-141 还须同步 `scripts/dist/main.go` 中现有的 `pack --dir ... --goos ... --goarch ...` 调用；本切片只消费 dist 产物。两者按 PR 就绪顺序合并；后合并者同步最新 main，保留双方改动，重跑各自完成条件并联验「首次运行预装、install 官方组件 ID、显式 update 内置包」；先合并 goal-141 时，本切片接入它已合并的解析入口，复用同一读取实现。审查者合并任一 PR 后同步另一条语句的实际接口。
 
@@ -114,7 +114,7 @@
 
 ### goal-77 · T-14.5 容器镜像
 
-状态：待派发。前置 T-07.6（PR #100，合并提交 `cb83eeb`）与 T-14.3（PR #228，合并提交 `72d51c2`）均已合并。按 main `25e9064` 核对：`internal/core/settings` 提供 `Defaults() Settings`、`Load(dataDir string) (*File, error)`、`(*File).Settings() Settings` 与 `ValidateListen(address string) error`；监听安全联合校验在 `settings.go:validateSettings`，CLI 的 `--listen` 覆盖另在 `internal/app/alonabot.go:Start` 校验，两处均尚无容器例外。`internal/core/adminauth.FirstToken(ctx context.Context, st *state.Store, dataDir string, interactive bool) (string, error)` 已支持无终端写 `FirstTokenFile = "admin_token"`；`cmd/alonabot/admin_token.go` 的 show 要求显式 `--data-dir`。`scripts/dist` 的入口为 `go run ./scripts/dist --version VERSION --key FILE --out DIR [--platforms OS/ARCH,...] [--asset-base URL]`，内部以 CGO_ENABLED=0 构建并注入 `internal/core/trust.officialKey` 与 `internal/app.releaseVersion`；它需要 Go、Node 与 npm，产物根为 `alonabot-<版本>-linux-<架构>/`，含 Core 与 `packages/<组件 ID>/`，首版组件按 D-171。与 goal-74 共享 `internal/app/alonabot.go`，后合并者同步 main 并保留预装调用点、两处监听校验及容器 WARN；预装效果由 goal-74 交付，镜像与发行归档的联验由 goal-75 接续。
+状态：已完成（PR #231），合并提交 `97aafdf`。以下保留派发时语句。派发时：前置 T-07.6（PR #100，合并提交 `cb83eeb`）与 T-14.3（PR #228，合并提交 `72d51c2`）均已合并。按 main `25e9064` 核对：`internal/core/settings` 提供 `Defaults() Settings`、`Load(dataDir string) (*File, error)`、`(*File).Settings() Settings` 与 `ValidateListen(address string) error`；监听安全联合校验在 `settings.go:validateSettings`，CLI 的 `--listen` 覆盖另在 `internal/app/alonabot.go:Start` 校验，两处均尚无容器例外。`internal/core/adminauth.FirstToken(ctx context.Context, st *state.Store, dataDir string, interactive bool) (string, error)` 已支持无终端写 `FirstTokenFile = "admin_token"`；`cmd/alonabot/admin_token.go` 的 show 要求显式 `--data-dir`。`scripts/dist` 的入口为 `go run ./scripts/dist --version VERSION --key FILE --out DIR [--platforms OS/ARCH,...] [--asset-base URL]`，内部以 CGO_ENABLED=0 构建并注入 `internal/core/trust.officialKey` 与 `internal/app.releaseVersion`；它需要 Go、Node 与 npm，产物根为 `alonabot-<版本>-linux-<架构>/`，含 Core 与 `packages/<组件 ID>/`，首版组件按 D-171。与 goal-74 共享 `internal/app/alonabot.go`，后合并者同步 main 并保留预装调用点、两处监听校验及容器 WARN；预装效果由 goal-74 交付，镜像与发行归档的联验由 goal-75 接续。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-77（切片 T-14.5：容器镜像）。goal 目录 goal-77，分支 goal-77，worktree .worktrees/goal-77，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -156,7 +156,7 @@
 
 ### goal-85 · T-14.7 install.sh
 
-状态：待派发。前置 T-14.3（PR #228，合并提交 `72d51c2`）已合并。按 main `25e9064` 核对：`go run ./scripts/dist --version VERSION --key FILE --out DIR [--platforms OS/ARCH,...] [--asset-base URL]` 生成 `alonabot-<版本>-<os>-<arch>.tar.gz`（Windows 为 zip），归档内有同名根目录，其下为 `alonabot` 与 `packages/<组件 ID>/`；同一输出目录的 `SHA256SUMS` 逐行是摘要、两个空格与归档文件名。`internal/core/trust.Official() (ed25519.PublicKey, bool)` 读取嵌入公钥，Core 版本由 `internal/app.releaseVersion` 注入，首版组件按 D-171。现有 CLI 为 `alonabot run --data-dir DIR`、`alonabot admin-token init --data-dir DIR` 与 `show --data-dir DIR`；init 要求 stdin/stderr 为终端，内部经 `state.Open(ctx context.Context, dataDir string) (*state.Store, error)` 持有 core.lock，再调用 `adminauth.InitToken(ctx context.Context, st *state.Store) (string, error)`，已有凭证时报错；`(*state.Store).AdminCredential(ctx context.Context) (state.AdminCredential, error)` 可区分尚无凭证的 state.ErrNotFound。main 尚无 Release 上传 workflow，资产上传由 T-10.4 的维护者发布步骤接续。V-84 的无终端预期仍为旧规则，与 CONTRACTS §15.6、PLAN T-14 步骤 7 不一致；本语句按 D-82 后的两处正文执行，由审查者同步验收条目。
+状态：已完成（PR #236），合并提交 `44d77cd`。以下保留派发时语句。派发时：前置 T-14.3（PR #228，合并提交 `72d51c2`）已合并。按 main `25e9064` 核对：`go run ./scripts/dist --version VERSION --key FILE --out DIR [--platforms OS/ARCH,...] [--asset-base URL]` 生成 `alonabot-<版本>-<os>-<arch>.tar.gz`（Windows 为 zip），归档内有同名根目录，其下为 `alonabot` 与 `packages/<组件 ID>/`；同一输出目录的 `SHA256SUMS` 逐行是摘要、两个空格与归档文件名。`internal/core/trust.Official() (ed25519.PublicKey, bool)` 读取嵌入公钥，Core 版本由 `internal/app.releaseVersion` 注入，首版组件按 D-171。现有 CLI 为 `alonabot run --data-dir DIR`、`alonabot admin-token init --data-dir DIR` 与 `show --data-dir DIR`；init 要求 stdin/stderr 为终端，内部经 `state.Open(ctx context.Context, dataDir string) (*state.Store, error)` 持有 core.lock，再调用 `adminauth.InitToken(ctx context.Context, st *state.Store) (string, error)`，已有凭证时报错；`(*state.Store).AdminCredential(ctx context.Context) (state.AdminCredential, error)` 可区分尚无凭证的 state.ErrNotFound。main 尚无 Release 上传 workflow，资产上传由 T-10.4 的维护者发布步骤接续。V-84 的无终端预期仍为旧规则，与 CONTRACTS §15.6、PLAN T-14 步骤 7 不一致；本语句按 D-82 后的两处正文执行，由审查者同步验收条目。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-85（切片 T-14.7：install.sh）。goal 目录 goal-85，分支 goal-85，worktree .worktrees/goal-85，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -207,7 +207,7 @@
 
 ### goal-75 · T-14.6 发行包与镜像端到端验收
 
-状态：等待前置（T-09.11、T-14.4、T-14.5）。语句中 goal-43、goal-44、goal-73、goal-74、goal-77 提供的产物与入口（发行归档、容器镜像、WebUI 页面、管理 API）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：首次 token 的取得改为终端显示或 `admin-token show`（D-82）。前置合并后由审查者改写。
+状态：等待前置（T-09.11）。T-14.4（PR #235，`815e53c`）、T-14.5（PR #231，`97aafdf`）已合并。语句中 goal-43、goal-44、goal-73、goal-74、goal-77 提供的产物与入口（发行归档、容器镜像、WebUI 页面、管理 API）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：首次 token 的取得改为终端显示或 `admin-token show`（D-82）。前置合并后由审查者改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-75（切片 T-14.6：发行包与镜像的端到端验收）。goal 目录 goal-75，分支 goal-75，worktree .worktrees/goal-75，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -247,7 +247,7 @@
 
 ### goal-46 · T-10.1 证据汇总与跨组件联验
 
-状态：等待前置（T-09.11、T-14.6、T-14.7）。2026-11-17 按 D-171 去掉不进入首个发行版的 Telegram 后续切片与 T-15.3～T-15.7；其余前置已合并。T-08.9（[PR #117](https://github.com/AlonaBot/AlonaBot/pull/117)，合并提交 `2c1fdcc`）已合并。合并后由审查者按 main `2c1fdcc` 核对：`examples/plugins/configdb` 默认使用 sqlitedb，`configdb_gorm` 标签切换到 GORM；`OnConfigLoad` 转换 v1 问候词数组，两个变体的 `Migrations` 与 `OnStart` 覆盖迁移失败及启动写库后失败，启动记录位于 `configdb_startup`。声明字段 null 按维护者裁决以 CONFIG/INVALID_ARGUMENT 拒绝，未知字段 null 保留；组件证据与 T-09 正式入口、Journal 及真实页面的未闭合项见 TEST-MATRIX §3.2。插件 HTTP 入口已按 T-07.7（[PR #116](https://github.com/AlonaBot/AlonaBot/pull/116)，合并提交 `e65eb4d`）改为单一 `base_url` 与管理认证。本切片只汇总与联验，不引入新接口。2026-11-10 按 D-129～D-131 把范围扩展到 V-117，前置加入 T-03.26 与 T-15.7。2026-11-09 按 D-87 追加 V-89～V-97 与对应的 Adapter 切片作为前置；同日按 D-102～D-113 把范围扩展到 V-111，前置加入不在其他前置之下的 T-04.10、T-04.11 与 T-08.13。2026-11-04 按 D-77～D-85 修订计划：首次 token 的取得见 D-82；插件页面经 WebUI 的 iframe 与桥访问，不再使用票据（D-84）。前置合并后由审查者改写。
+状态：等待前置（T-09.11、T-14.6）。T-14.7（PR #236，`44d77cd`）已合并。2026-11-17 按 D-171 去掉不进入首个发行版的 Telegram 后续切片与 T-15.3～T-15.7；其余前置已合并。T-08.9（[PR #117](https://github.com/AlonaBot/AlonaBot/pull/117)，合并提交 `2c1fdcc`）已合并。合并后由审查者按 main `2c1fdcc` 核对：`examples/plugins/configdb` 默认使用 sqlitedb，`configdb_gorm` 标签切换到 GORM；`OnConfigLoad` 转换 v1 问候词数组，两个变体的 `Migrations` 与 `OnStart` 覆盖迁移失败及启动写库后失败，启动记录位于 `configdb_startup`。声明字段 null 按维护者裁决以 CONFIG/INVALID_ARGUMENT 拒绝，未知字段 null 保留；组件证据与 T-09 正式入口、Journal 及真实页面的未闭合项见 TEST-MATRIX §3.2。插件 HTTP 入口已按 T-07.7（[PR #116](https://github.com/AlonaBot/AlonaBot/pull/116)，合并提交 `e65eb4d`）改为单一 `base_url` 与管理认证。本切片只汇总与联验，不引入新接口。2026-11-10 按 D-129～D-131 把范围扩展到 V-117，前置加入 T-03.26 与 T-15.7。2026-11-09 按 D-87 追加 V-89～V-97 与对应的 Adapter 切片作为前置；同日按 D-102～D-113 把范围扩展到 V-111，前置加入不在其他前置之下的 T-04.10、T-04.11 与 T-08.13。2026-11-04 按 D-77～D-85 修订计划：首次 token 的取得见 D-82；插件页面经 WebUI 的 iframe 与桥访问，不再使用票据（D-84）。前置合并后由审查者改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-46（切片 T-10.1：证据汇总与跨组件联验）。goal 目录 goal-46，分支 goal-46，worktree .worktrees/goal-46，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

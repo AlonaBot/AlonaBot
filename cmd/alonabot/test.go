@@ -30,12 +30,10 @@ import (
 const offlineGeneration = "offline-test"
 
 func testCommand(code *int, values *tune.Values) *cobra.Command {
-	var dir string
-	command := &cobra.Command{Use: "test", Short: "Load, register, activate and stop a component in a temporary offline session", Args: cobra.NoArgs}
-	command.Flags().StringVar(&dir, "dir", ".", "component project directory")
-	command.RunE = func(cmd *cobra.Command, _ []string) error {
+	command := &cobra.Command{Use: "test [directory]", Short: "Load, register, activate and stop a component in a temporary offline session", Args: cobra.MaximumNArgs(1)}
+	command.RunE = func(cmd *cobra.Command, args []string) error {
 		*code = exitFailure
-		return testComponent(cmd.Context(), dir, *values, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return testComponent(cmd.Context(), componentDirectory(args), *values, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	}
 	return command
 }

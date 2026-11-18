@@ -14,10 +14,11 @@ import (
 func buildCommand(code *int) *cobra.Command {
 	var options generate.Options
 	var out string
-	command := &cobra.Command{Use: "build", Short: "Build a component or library application", Args: cobra.NoArgs}
+	command := &cobra.Command{Use: "build [directory]", Short: "Build a component or library application", Args: cobra.MaximumNArgs(1)}
 	componentFlags(command, &options)
 	command.Flags().StringVar(&out, "out", "", "output directory (default: <project>/bin)")
-	command.RunE = func(cmd *cobra.Command, _ []string) error {
+	command.RunE = func(cmd *cobra.Command, args []string) error {
+		options.Dir = componentDirectory(args)
 		*code = exitFailure
 		if _, err := os.Stat(filepath.Join(options.Dir, "plugin.yaml")); errors.Is(err, os.ErrNotExist) {
 			executable, err := pluginkit.CompileApp(cmd.Context(), options, out)
