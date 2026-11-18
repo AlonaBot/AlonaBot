@@ -32,6 +32,8 @@ go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}' ./cmd
 
 更新仓库根目录的 [`CHANGELOG.md`](../CHANGELOG.md) 后，运行 `go generate ./internal/core/manage`，将生成的 `internal/core/manage/changelog_core.go` 一同提交。
 
+修改插件页面套件后，用 `go test -race -v ./sdk/page ./examples/plugins/showcase` 检查受影响的 Go 包，并用 `node --check sdk/page/kit.js` 检查脚本语法。资源由 `sdk/page` 直接嵌入 Go 产物，无需 npm 构建。主题、语言和快捷键的端到端验收在 WebUI 的沙箱 iframe 中用 [showcase](../examples/plugins/showcase/main.go) 联验（V-130）。
+
 交叉编译矩阵（只证明能构建，不能代替目标平台的运行证据）：
 
 ```sh

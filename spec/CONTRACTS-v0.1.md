@@ -397,6 +397,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 - 插件路由的全部响应由 Core 加上 `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups`（不含 `allow-same-origin`）与 `X-Content-Type-Options: nosniff`，并去掉插件设置的 `Set-Cookie`；插件不能覆盖这些响应头。插件返回的页面因此运行在不透明源中：无论被嵌入还是直接打开，都读不到管理 Cookie、WebUI 的存储与 DOM，它发出的请求也不带管理 Cookie（D-15）。
 - WebUI 用带 `sandbox` 属性的 iframe 嵌入插件页面，页面只经 WebUI 提供的 postMessage 桥与外部交互：请求本插件的 HTTP 路由，读取当前语言的文案与界面主题，接收明暗与语言变化的通知和设计令牌，转发打开全局搜索的快捷键（D-159）。SDK 的 `sdk/page` 套件封装这些交互并提供与 WebUI 一致的基础样式。插件页面的第一行（插件名、标签与全局搜索）由 WebUI 绘制，iframe 只占其下的内容区。WebUI 只转发方法与路径落在该插件已注册路由内的请求，用管理员会话与 CSRF 头发出，再把响应交回页面；页面拿不到管理会话、CSRF token 或其他插件的路由。桥的消息格式记录在 Admin API 参考中（§7.5）。
 - 非公开的插件路由要求有效的管理会话，非 GET 请求与 Admin API 一样验证 CSRF；公开的 JSON API、OAuth 回调与 Webhook 按 §7.2 声明，不要求会话。插件页面与管理界面不同源，插件页面之间也互不同源（各自为不透明源），但插件仍是可信的本地代码（§7.1）。
+- 插件将 `sdk/page.Handler() http.Handler` 挂到自己的 GET 路由。处理器按路径末段提供 SDK 内嵌的 `kit.css` 与 `kit.js`，分别使用 `text/css; charset=utf-8`、`text/javascript; charset=utf-8`；其他文件、非 GET 或路径以 `/` 结尾时返回 404。`ETag` 为带引号的 SDK 模块版本（无版本时为 `"(devel)"`），`If-None-Match` 与该值完全相等时返回 304。客户端的异步翻译与订阅接口见 [ADMIN-API §7.3](ADMIN-API.md#73-sdk-页面客户端)。
 
 ### 7.4 首次管理认证与恢复
 
@@ -834,6 +835,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - `core.command.list` 沿用普通 RPC 的期限与 Session 预算（§1.2），没有独立的调优参数。
 - 未知的键、格式错误、违反约束或彼此矛盾的值使 Core 拒绝启动，错误指明出处（参数，或文件及行号）。存在任何覆盖时，Core 启动时输出一条 WARN，列出全部覆盖项及出处。`alonabot tune list` 列出全部参数的缺省值与约束。
 - SDK 也要遵守的值（在途请求数、payload 预算、普通请求期限、各阶段预算）由 Core 经 Bootstrap 的 `SessionLimits session_limits = 11` 下发：`max_inflight` 对应 `SESSION_MAX_INFLIGHT`，`max_payload_bytes` 对应 `SESSION_MAX_PAYLOAD`，`request_timeout_ms` 对应 `REQUEST_TIMEOUT` 并转换为毫秒。`CORE_MAX_PAYLOAD` 是跨 Session 的 Core 总预算，只由 Core 使用。双方按同一组 Session 值执行。
+- `sdk/page` 的浏览器桥客户端等待父桥响应，无独立固定超时或调优参数（ADMIN-API §7.3）。
 - 设置 `PLUGIN_MEMORY_SOFT_LIMIT` 时，Core 为每个插件与 Adapter 进程传入环境变量 `GOMEMLIMIT`；`CORE_MEMORY_SOFT_LIMIT` 对 Core 自己生效。这是 Go 运行时的软上限：超过后 GC 更积极地回收，不会终止进程。v0.1 不提供硬上限。
 
 | 参数 | 缺省值 | 约束 | 契约位置 |
