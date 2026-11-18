@@ -173,9 +173,11 @@ X-Content-Type-Options: nosniff
 
 库模式 `alonabot.WebUI(fsys fs.FS)` 以 FS 根作为本次运行的静态根，同一 `Start` 重复登记时报错。开发 WebUI 无 manifest，按审查者 D-140 决定跳过 Admin API 范围检查并在启动时记 WARN（待维护者确认）；已安装包的状态、来源和文件保持原值。
 
+官方 WebUI 的 `/dev/forms` 仅由 Vite 开发模式登记。生产静态服务对该无扩展名路径仍按本节规则回退到 `index.html`，由前端展示页面不可用提示。
+
 ## 7. 插件页面 postMessage 桥
 
-本节定义后继 WebUI 页面实现的消息契约。插件页面通过父 WebUI 请求自己所属组件的 HTTP 路由，并查询语言、主题和本组件文案。插件 HTTP 路由与 Listener 凭证见 [WIRE §3.3、§3.4](WIRE-FORMAT.md#33-注册描述与-http-listener)。内部代理凭证由 SDK/Core 管理，浏览器桥无需取得它。
+本节定义 T-09.9 插件页面桥的消息契约。插件页面通过父 WebUI 请求自己所属组件的 HTTP 路由，并查询语言、主题和本组件文案。`theme` 传实际生效的浅色或深色，`tokens` 使用本节定义的 `--ab-*` 名称；官方外壳的主题偏好和内部 CSS 变量见 CONTRACTS §7.5。插件 HTTP 路由与 Listener 凭证见 [WIRE §3.3、§3.4](WIRE-FORMAT.md#33-注册描述与-http-listener)。内部代理凭证由 SDK/Core 管理，浏览器桥无需取得它。
 
 ### 7.1 消息格式
 

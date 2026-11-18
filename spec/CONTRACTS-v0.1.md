@@ -345,6 +345,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
   - **组件图标**：manifest 的 `icon`（§9.1），只提供声明过的路径。类型按扩展名取 SVG、PNG 或 WebP，其他扩展名在包校验时拒绝。响应带 `Content-Security-Policy: sandbox; default-src 'none'; style-src 'unsafe-inline'` 与 `X-Content-Type-Options: nosniff`，要求管理员会话；WebUI 只用 `<img>` 引用图标，直接打开图标 URL 时也只在隔离的源中渲染，SVG 中的脚本不会在 Admin 源中执行。
 - Admin API 是带主版本号的公开契约，接口、主版本与插件页面桥的消息格式（§7.3）记录在 Admin API 参考（`spec/ADMIN-API.md`，T-09.12 交付）；同一主版本内只做向后兼容的增加。WebUI 在 manifest 中声明支持的主版本范围（§9.1），Core 的主版本不在范围内时拒绝安装与启用；Core 升级后不兼容的已安装 WebUI 不再提供文件，Core 返回说明版本不兼容的提示。
 - WebUI 持有管理员会话，能执行全部管理动作，安装与替换界面展示这一点；签名只证明发布来源（§9.2）。
+- 官方 WebUI 随包提供标志、站点图标、JetBrains Mono 2.304 的 Regular 与 Medium woff2 及 SIL OFL 1.1 许可，中文使用系统字体栈（D-169）。浅色、深色及跟随系统的偏好保存在浏览器中，缺省跟随 `prefers-color-scheme`。首页脚本在首帧前设置根元素的 `data-theme`，外壳与配置表单按其应用视觉令牌；界面语言优先使用已保存选项，无保存值时按浏览器语言选择。页面接入规则见 [WebUI 实施计划 §3](plan/webui.md#3-页面接入外壳)。
 
 ## 8. Adapter、Target 与消息
 
@@ -743,7 +744,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 ## 16. 调优参数
 
 - 契约中可调的容量、期限与配额集中登记在 `internal/tune/params.go`：每项有名称、缺省值、单位与约束，缺省值就是本契约各节给出的数值。新增可调的值时，同时修改该文件与下表。
-- 以下不属于调优参数：协议双方必须一致的常量（帧上限、分块大小）；安全相关的值（Secret 与 token 长度、管理会话与插件票据的期限）；平台规定的限制；插件与 Adapter 自己的常量；日志级别与日志文件设置（§14、§15.1）。
+- 以下不属于调优参数：协议双方必须一致的常量（帧上限、分块大小）；安全相关的值（Secret 与 token 长度、管理会话与插件票据的期限）；平台规定的限制；插件与 Adapter 自己的常量；日志级别与日志文件设置（§14、§15.1）；WebUI 在浏览器中保存的主题、语言与侧栏偏好（§7.5）。
 - 调优参数只在启动时覆盖，运行中不能修改，也不出现在 WebUI。`--args` 是 `alonabot` 根命令的全局参数，可以写在子命令之前或之后（例如 `alonabot --args REQUEST_TIMEOUT=2s run`），对所有子命令生效，可以重复使用：
   - 值中含 `=` 时是直接参数，多个参数用逗号分隔，例如 `--args DISPATCH_CONCURRENCY=1,REQUEST_TIMEOUT=2s`；
   - 否则是文本文件的路径，文件名任意，每行一个 `KEY=VALUE`，空行和以 `#` 开头的行忽略；

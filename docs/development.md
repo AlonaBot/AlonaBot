@@ -10,7 +10,7 @@
 | Go | 1.27.1（asdf，`~/.tool-versions`） | `go.mod` 的 go 指令固定为该版本 |
 | protoc | 36.0（`protoc --version` 输出 `libprotoc 36.0`；生成文件头记为 v7.36.0） | 版本不符时 `contracts/internal/protocgen` 拒绝生成 |
 | protoc-gen-go | v1.36.12（`go.mod` 的 `tool` 指令，与 `google.golang.org/protobuf` 同版本） | 通过 `go tool -n protoc-gen-go` 定位，不全局安装 |
-| Node（前端） | 26.5.1（asdf） | 供 web/admin 使用：在 `web/admin` 下运行 `npm ci`、`npm run typecheck`、`npm run build`，`npm run dev` 打开用 `fixtures/` 渲染表单的开发预览页；CI 不跑前端，前端测试只有被忽略的 `*.local.test.ts`，没有本地测试时 `npm run test` 也通过 |
+| Node（前端） | 26.5.1（asdf） | 供 `web/admin` 使用，见[官方 WebUI 开发](#官方-webui-开发) |
 
 已锁定并经测试验证的版本：protobuf v1.36.12、go.yaml.in/yaml/v3 v3.0.5、gorm v1.31.2、libtnb/sqlite v1.2.2、modernc.org/sqlite v1.61.0（已验证 CRUD/Tx/WAL Backup/迁移账本）；golang.org/x/sys v0.49.0 为直接依赖，用于 internal/oslock 的 flock/LockFileEx，以及 internal/core/process 在 Darwin 上查询进程组成员；Cobra v1.10.2、pflag v1.0.9、仅 Windows 链接的 mousetrap v1.1.0。
 
@@ -38,6 +38,21 @@ for p in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64; do
 done
 GOARCH=amd64 CGO_ENABLED=0 go test ./...   # Apple Silicon 上经 Rosetta 运行 darwin/amd64 测试
 ```
+
+## 官方 WebUI 开发
+
+在仓库根目录安装锁定的依赖并启动 Vite：
+
+```sh
+npm --prefix web/admin ci
+npm --prefix web/admin run dev
+```
+
+打开 Vite 输出的地址，首页跳转到 `/dev/forms`。预览使用 `web/admin/fixtures/`，可切换语言并查看表单提交生成的 JSON Merge Patch，无需启动 Core。接入新页面时按 [WebUI 实施计划 §3](../spec/plan/webui.md#3-页面接入外壳) 登记路由和文案。
+
+本地运行 `npm --prefix web/admin run typecheck`、`npm --prefix web/admin run test` 和 `npm --prefix web/admin run build`。测试使用被忽略的 `*.local.test.ts`，无本地测试时命令也通过；CI 不运行前端检查。生产静态文件输出到 `web/admin/dist/`，其中包括站点图标、标志、JetBrains Mono woff2 和许可。
+
+T-09.26 锁定 `lucide-react` 1.74.0、`@dnd-kit/core` 6.3.1、`@dnd-kit/sortable` 10.0.0、`@radix-ui/react-dialog` 1.3.1、`@radix-ui/react-dropdown-menu` 2.2.1 和 `@radix-ui/react-tooltip` 1.4.1；`@radix-ui/react-popover` 与 `recharts` 由首个使用它们的页面切片引入。
 
 ## 运行 Core 与管理组件
 

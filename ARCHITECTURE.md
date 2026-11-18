@@ -30,7 +30,7 @@
 | `plugintest/` | 插件测试套件（D-47）：在 `go test` 中用 `alonabot.Start` 启动真实 Core、测试 Adapter 与被测插件，注入事件并取得发送 | Core 的检查与派发（照常由 Core 执行，不另建路径） | 部分实现：`Start(t, opts...)` 与选项 `Plugin`、`Config`、`Admin`、`AllowedInstances`、`Capabilities`、`Adapter`；`Message`、`Text`、`Event` 注入后在分发结束或进入多轮等待时返回发送、编辑与 Handler 结果；分发结束经 `internal/inproc` 的 Harness 由 Router 与延续调用通知（只在库模式装配中注册）；测试 Adapter 按声明的能力判定片段；`Click` 经 Adapter 与 Core 解析可信按钮 token（点击事件带原会话类型），`Trigger`/`TriggerTask` 经原 Scheduler 立即触发静态任务与动态任务实例（一次性实例被消费并停止原定时器，周期实例保留起点），`Background` 返回不属于任一分发区间的后台发送；完成通知冻结发送区间，每条发送或编辑只消费一次；选项 `LLM` 登记只提供 `llm.generate` 的测试 Agent（`plugintest/internal/llmagent`），被测插件经 `@agent` 的调用只做共享 Schema 的结构校验后交给测试函数，多次给出时最后一个生效；被测插件没有登记资源时按入口包导入路径经 `internal/generate` 现场扫描并登记（GOOS、GOARCH 与 build tags 取自测试二进制的构建信息，同一入口包只扫描一次），测试 Adapter 按对象绑定本次 adapter_id 的资源（D-145） |
 | `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） | 部分实现：`alonabot run`（不带子命令时相同）调用 `internal/app` 的 Core 装配，`--listen`、`--log-level`、`--log-format` 只覆盖本次运行；管理命令 install、list、enable、disable、restart、reload、update、rollback、uninstall、pin、adapter instance、admin 经 `base_url` 上的管理 API 访问（Bearer token，不跟随重定向，需要确认时 `--yes`）；全局 `--args`、`tune list`、顶层开发命令 `init`、`check`、`build`、`test`、`pack`（D-77：正式构建的扫描、依赖分析与编译统一 `CGO_ENABLED=0` 与所选目标，包内 manifest 由 `manifest.Generate` 合成，生成器静态识别 HTTP 路由时写入 http_listener；`test` 以离线 Core 侧会话完成握手到停止；`pack` 写归档、build-info 与 release.json，`--asset-url` 必填，`--key` 时 Ed25519 签名）；`admin-token init`/`reset`/`show` |
 | `examples/plugins/` | 随 SDK 编译的示例与集成样例 | 生产代码依赖 | 部分实现：`showcase`（签名组合示例）、`lifecycle`（可真实运行的生命周期示例）、`echo`（命令组、子命令、别名、可选参数、Regex、keyword 与 Raw、结构体参数、子插件、带类型的 Service 与 Event Bus 声明及 i18n，保留一条纯显式注册路径与事件回送）、`media`（上传、相册、按钮与编辑，结构体 raw 命令与子插件） |
-| `web/admin/` | 官方 WebUI 组件（`role: webui`，D-62）的源码：Vite + TypeScript + React 19 管理界面，构建产物打成静态组件包 | 管理逻辑本身（只调用带主版本号的 Admin API，CONTRACTS §7.5） | 部分实现：工程骨架与组件声明 `plugin.yaml`（`role: webui`、`assets: dist`、Admin API 主版本 1）；`src/schema`（`fieldsFromSchema` 把 `config_schema.json` 解析为有序字段模型，`buildPatch` 生成 JSON Merge Patch，含 secret 掩码与数组行的规则，CONTRACTS §5.1）；`src/components` 的 `ConfigForm` 与 `LanguageSwitch`；`src/i18n` 的界面文案 en-US/zh-CN 目录、语言选择与字段翻译回退；`fixtures/` 是开发预览页用的手写 Schema。真实 Admin API、登录与页面路由尚未实现 |
+| `web/admin/` | 官方 WebUI 组件（`role: webui`，D-62）的源码：Vite + TypeScript + React 19 管理界面，构建产物打成静态组件包 | 管理逻辑本身（只调用带主版本号的 Admin API，CONTRACTS §7.5） | 部分实现：`plugin.yaml` 声明 `role: webui`、`assets: dist` 与 Admin API 主版本 1；`src/schema` 解析配置 Schema 并生成 JSON Merge Patch（CONTRACTS §5.1）；`src/components` 提供 `ConfigForm` 与 `LanguageSwitch`，`src/i18n` 提供语言选择与文案回退；`src/theme` 提供主题令牌，`src/shell` 提供桌面与手机导航、全局搜索和客户端路由；`src/routes.tsx` 当前只登记开发模式的 `/dev/forms`，用 `fixtures/` 预览表单。登录、管理页面与 Admin API 客户端接入归后继切片 |
 | `Dockerfile`、`deploy/` | 官方容器镜像、compose 整合包入口与 `install.sh`（CONTRACTS §15.3、§15.6，D-64） | Core 行为（镜像与脚本只安装发行归档的内容） | 拟建 |
 | `spec/` | 现行规格与 ADR | — | 现行 |
 
@@ -75,6 +75,7 @@
 | --- | --- |
 | `<data_dir>/core.lock`、`state.sqlite`（安装、组件角色与来源、代次、Journal、策略、secret 引用、工具策略、Agent 会话、按钮 token 映射 `button_token`） | `internal/core` |
 | WebUI 组件与组件图标的静态文件（不可变包目录） | `internal/core` 只读提供；内容归组件发布者 |
+| 官方 WebUI 的主题、语言与侧栏偏好（按源保存于 `localStorage`） | `web/admin` 的浏览器端 |
 | `<plugins>/<id>/runtime.lock`、插件受管 DB 连接 | 插件进程内的 `sdk` |
 | 插件业务数据（受管 SQLite 候选文件） | 插件；Core 只负责候选复制与准入 |
 | 插件自管的外部数据（外部数据库、框架外文件） | 插件；Core 不创建、不校验、不备份（D-48） |
