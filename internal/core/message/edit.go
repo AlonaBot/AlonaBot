@@ -81,6 +81,14 @@ func (s *Service) Edit(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if !supported || !ok {
 		return reject(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support message editing")
 	}
+	chain, safe := s.preserveReply(caller, target, request.PlatformMessageId, request.Chain, instance)
+	if safe != nil {
+		return editRejected(target, safe)
+	}
+	request.Chain = chain
+	if safe := checkEditChain(request.Chain); safe != nil {
+		return editRejected(target, safe)
+	}
 	// 5. 改写后仍须符合编辑片段限制，拒绝时不签发按钮、不调用平台。
 	if s.hooks != nil {
 		chain, safe := s.hooks.BeforeSend(ctx, pb.SendOperation_SEND_OPERATION_EDIT, request.PlatformMessageId, target, request.Chain, invocation, checkEditChain)

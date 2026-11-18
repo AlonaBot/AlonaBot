@@ -31,7 +31,7 @@ type Options struct {
 	Adapters       *adapter.Registry                                                             // 账号用户名查询
 	Send           ServiceFunc                                                                   // usage 与自动回复发送
 	Prepare        func(*pb.Event, Caller) (*pb.Event, error)                                    // 按接收 Session 准备媒体；nil 时原样派发
-	Prefixes       func(adapterInstanceID string) []string                                       // nil 时所有实例使用 ["/"]
+	Prefixes       func(ctx context.Context, target *pb.Target) ([]string, error)                // nil 时所有实例使用 ["/"]
 	Buttons        func(ctx context.Context, ev *pb.Event) (pluginID, routeID string, err error) // nil 时丢弃按钮点击
 	Intercept      func(ctx context.Context, ev *pb.Event) (handled bool)                        // 入队前在锁外消费 Core 事件；nil 时跳过
 	Policy         CommandPolicy                                                                 // nil 时仅按声明权限判定且不赋予 admin

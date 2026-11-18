@@ -211,6 +211,7 @@ type assembly struct {
 	buttons      *buttons.Service
 	bus          *bus.Bus
 	broker       *broker.Broker
+	messages     *message.Service
 	scheduler    *scheduler.Scheduler
 	http         *httpproxy.Server
 	global       *wire.Budget
@@ -293,7 +294,7 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 		}
 	}
 	a.router = router.New(router.Options{Dispatched: dispatched, MessageConfig: messageConfig, Profile: a.resolveProfile, EnsureActive: a.ensureActive, RequestTimeout: v.RequestTimeout, Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
-		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Intercept: a.buttons.InterceptConfirm, Policy: p, CommandState: p.CommandState, Prefixes: a.settings.CommandPrefixes, CommandNames: p.CommandNames,
+		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Intercept: a.buttons.InterceptConfirm, Policy: p, CommandState: p.CommandState, Prefixes: a.commandPrefixes, CommandNames: p.CommandNames,
 		Continuations: continuations, Metrics: a.metrics,
 		Send: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
 			return messages.Send(ctx, c, in)
@@ -304,6 +305,8 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 	a.router.RegisterCommandList(a.mux)
 	hooks = hook.New(a.router, hook.Options{Prepare: a.media.PrepareIncoming, CheckEvent: a.checkAdapterEvent})
 	messages = message.New(a.adapters, p, a.media.LeaseForSend, a.buttons.Issue, v.RequestTimeout, hooks)
+	messages.SetReply(a.replySettings)
+	a.messages = messages
 	p.SetCommandsChanged(a.router.CommandsChanged)
 	continuations.Register(a.mux)
 	a.mux.Handle(wire.ServiceSend, messages.Send)
@@ -871,6 +874,7 @@ func (a *assembly) detach(r *runningComponent) {
 		}
 	}
 	a.broker.Release(r.caller)
+	a.messages.Release(r.caller)
 }
 
 func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.StopTiming, reason pb.StopReason) error {

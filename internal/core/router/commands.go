@@ -126,7 +126,7 @@ func (r *Router) syncCommands(state *commandSync) {
 	if state.ctx.Err() != nil {
 		return
 	}
-	commands, err := r.commandMenu(state.ctx, state.instance.InstanceID())
+	commands, err := r.commandMenu(state.ctx, state.instance)
 	if err != nil {
 		slog.ErrorContext(state.ctx, "compute adapter command menu failed", "adapter_instance_id", state.instance.InstanceID(), "error", err)
 		return
@@ -146,8 +146,14 @@ func (r *Router) syncCommands(state *commandSync) {
 	}
 }
 
-func (r *Router) commandMenu(ctx context.Context, instanceID string) ([]*pb.CommandMenuItem, error) {
-	if !slices.Contains(r.prefixes(instanceID), "/") {
+func (r *Router) commandMenu(ctx context.Context, instance adapter.Instance) ([]*pb.CommandMenuItem, error) {
+	// 菜单属于整个实例，使用实例缺省配置文件，不指定会话。
+	target := &pb.Target{AdapterId: instance.AdapterID(), AdapterInstanceId: instance.InstanceID(), AccountId: instance.AccountID()}
+	prefixes, err := r.prefixes(ctx, target)
+	if err != nil {
+		return nil, fmt.Errorf("read command menu prefixes for %s: %w", instance.InstanceID(), err)
+	}
+	if !slices.Contains(prefixes, "/") {
 		return nil, nil
 	}
 	// 1. 路由和胜出索引取同一快照；策略读取与插件访问均在状态锁外执行。

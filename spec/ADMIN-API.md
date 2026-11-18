@@ -606,7 +606,7 @@ KV 键遵守 CONTRACTS §6.1 的键约束，恰为 `.` 或 `..` 的键在 GET/PU
 
 ## 23. 配置文件
 
-配置文件的语义见 CONTRACTS §5.6（D-168）。ID `default` 表示「默认」。管理写入立即保存；`default` 的字段值经 §12 的配置 API 写入 Pending，平台设置写回 `core_config.json`。按会话的插件开关、字段覆盖、SDK 调用视图与消息过滤已接通（T-04.18，PR #242）；工具目录、调用与操作确认已应用配置文件策略（T-11.6，PR #246）；官方 Agent 已标记六个可覆盖字段并接通配置文件命令（T-12.19，PR #247，CONTRACTS §5.6）；平台设置的运行时应用由 T-04.19 接入。
+配置文件的语义见 CONTRACTS §5.6（D-168）。ID `default` 表示「默认」。管理写入立即保存；`default` 的字段值经 §12 的配置 API 写入 Pending，平台设置写回 `core_config.json`。按会话的插件开关、字段覆盖、SDK 调用视图与消息过滤已接通（T-04.18，PR #242）；工具目录、调用与操作确认已应用配置文件策略（T-11.6，PR #246）；官方 Agent 已标记六个可覆盖字段并接通配置文件命令（T-12.19，PR #247，CONTRACTS §5.6）；命令前缀与回复方式已按会话配置文件生效（T-04.19，PR #250）。
 
 | Method / path | 请求或成功响应 | 操作语义 |
 | --- | --- | --- |
@@ -624,6 +624,8 @@ KV 键遵守 CONTRACTS §6.1 的键约束，恰为 `.` 或 `..` 的键在 GET/PU
 | `PUT /api/v1/profiles/{id}/platform` | 同形对象 → `{}` | 整体替换，省略或 `null` 跟随 `default`；`default` 要求全部键非 `null`，写回 `core_config.json`。前缀数组非空，转发阈值须为非负整数 |
 | `GET /api/v1/profiles/{id}/tools` | `{"items":[{"tool":"weather/subscribe","policy":"allow"},{"operation":{"plugin_id":"agent","name":"mcp/fs/write_file"},"policy":"deny"}]}` | 只列出覆盖了全局策略的工具与操作 |
 | `PUT /api/v1/profiles/{id}/tools` | `{"items":[…]}`，policy 取 allow、confirm、deny 或 inherit → `{}` | 仅更新所列项；每项恰好指定 `tool` 或 `operation`，`inherit` 删除该项覆盖 |
+
+platform 的 GET 返回已保存的覆盖，运行时按键合并当前 `default`；显式 `false`、空字符串和 `0` 保留。PUT 或会话指定更新后，后续命令派发与回复 Send 读取新快照，无需插件 reload。平台命令菜单按实例缺省配置文件读取前缀，在启动及路由、命令策略变化时同步。旧 `GET/PUT /api/v1/core/command-prefixes` 已移除，访问返回 404；磁盘旧键 `command_prefixes_by_instance` 按 Unknown 保留并忽略，经 §13 的 Core settings prune 清理。按账号区分前缀时，先指定实例缺省配置文件，再写该配置文件的平台覆盖。
 
 tools 的写入从下一次工具策略操作生效，在途确认保留已接纳策略。运行时按可信默认 Target 选择配置文件，无 Target 或无父 list 使用 `default`；插件关闭时视为 deny，其余依次读取配置文件覆盖、§18 的全局覆盖与工具声明缺省策略，确认操作无覆盖时为 confirm。工具与操作同名时分别匹配配置文件覆盖；`inherit` 恢复全局策略。§18 的全局目录与写入保持原义。
 
