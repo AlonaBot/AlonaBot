@@ -101,6 +101,84 @@ return &adapter.Descriptor{
 
 插件页面在 WebUI 的沙箱 iframe 中打开，只能经桥与外部交互（[ADMIN-API §7](../spec/ADMIN-API.md)）。用 `sdk/page` 的套件：把它的 `http.Handler` 挂在插件自己的路由下，页面引用 `kit.css` 与 `kit.js`，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并让 ⌘K 打开全局搜索（D-159）。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
 
+#### 套件挂载与引入
+
+在插件入口 `New()` 中引入 `sdk/page` 并将套件挂载到 HTTP 路由下：
+
+```go
+import (
+    "net/http"
+    "github.com/AlonaBot/AlonaBot/sdk"
+    "github.com/AlonaBot/AlonaBot/sdk/page"
+)
+
+func New() *sdk.Plugin {
+    p := sdk.NewPlugin()
+
+    // 挂载 kit.css 与 kit.js 资源（响应带有 Content-Type 与基于 SDK 版本的 ETag）
+    p.Route(http.MethodGet, "/kit.css").Handle(page.Handler())
+    p.Route(http.MethodGet, "/kit.js").Handle(page.Handler())
+    p.Route(http.MethodGet, "/page/kit.css").Handle(page.Handler())
+    p.Route(http.MethodGet, "/page/kit.js").Handle(page.Handler())
+
+    // 注册页面路由
+    p.Route(http.MethodGet, "/page").HandleFunc(servePage)
+    return p
+}
+```
+
+#### 页面 HTML 与控件样式
+
+在返回的 HTML 中引用套件资源：
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="kit.css">
+  <script src="kit.js"></script>
+</head>
+<body>
+  <div class="ab-card">
+    <div class="ab-card-header">插件管理</div>
+    <div class="ab-card-body">
+      <p id="greeting"></p>
+      <button class="ab-btn ab-btn-primary" id="btn-save">保存</button>
+      <input type="text" class="ab-input" placeholder="请输入...">
+    </div>
+  </div>
+</body>
+</html>
+```
+
+`kit.css` 只使用 `--ab-*` 设计令牌变量，为按钮（`button`、`.ab-btn`、`.ab-btn-primary`、`.ab-btn-danger`）、输入框（`input`、`textarea`、`.ab-input`）、选择框（`select`、`.ab-select`）、表格（`table`、`.ab-table`）、标签（`label`、`.ab-badge`）与卡片（`.ab-card`）提供好开箱即用的统一样式；未收到令牌时自动使用浅色缺省值，收到主题变更时即时跟随更新。
+
+#### 客户端接口 `window.AlonaBot`
+
+`kit.js` 加载后会在全局注入 `window.AlonaBot` 对象：
+
+- **`request(method, path, body?)`**：经 WebUI 桥向当前插件自身的 HTTP 路由发送请求，返回 `Promise<Response>`。响应包含 `status`、`ok`、`headers`、`body`（UTF-8 文本）与 `data`（若响应为 JSON 则已自动解析）。
+- **`t(key, args?) → Promise<string>`**：每次经桥发送 `translate`，传递 `key` 与可选的字符串参数对象 `args`，原样返回桥响应文案。桥按当前界面语言取插件文案并格式化 `{name}` 占位符；未知键返回键名，缺参数保留占位符。桥错误使 Promise 拒绝，独立打开时 Promise 返回键名。
+- **`onTheme(fn)`**：监听主题与令牌变化，回调签名 `fn(theme, tokens)`，注册时立即触发一次当前状态。
+- **`onLocale(fn)`**：监听界面语言变化，回调签名 `fn(locale)`，注册时立即触发一次；页面在回调里重新 `await t(...)` 渲染。
+- **快捷键转发**：页面内捕获 ⌘K（macOS）与 Ctrl+K（其他系统），自动向 WebUI 转发 `mod+k` 打开全局搜索。
+- **独立打开**：自动应用浅色缺省值与字体；`request` 返回 rejected Promise，提示桥仅在 iframe 中可用。
+
+在 `i18n/en-US.json` 的 `messages` 中声明 `"hello_message": "Hello, {name}!"`，其他语言文件提供同键翻译。页面在语言回调中等待文案后更新：
+
+```js
+AlonaBot.onLocale(async function(locale) {
+  document.documentElement.lang = locale;
+  try {
+    document.getElementById('greeting').textContent =
+      await AlonaBot.t('hello_message', { name: 'Alona' });
+  } catch (err) {
+    console.error('Translation failed:', err);
+  }
+});
+```
+
 ## 7. 配置与 secret
 
 在 `plugin.yaml` 同目录编写 `config_schema.json`，按字段键声明类型与英文源文案。运行 `alonabot build` 检查声明并把规范 JSON 经 overlay 编入程序；`alonabot check` 执行同样的检查。声明格式见 [CONTRACTS §5.1](../spec/CONTRACTS-v0.1.md#51-配置真源缺失值与编辑)，例如：
