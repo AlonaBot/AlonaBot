@@ -109,7 +109,7 @@
 | goal-160 | T-08.18 | 配置文件的存储与管理 | T-08.14、T-09.14 | 已完成（PR #214） |
 | goal-147 | T-09.19 | 诊断包 | T-09.10、T-09.14 | 已完成（PR #213） |
 | goal-153 | T-09.20 | WebUI 组件的后台进程与 command.invoked | T-09.12、T-09.14、T-04.16 | 已完成（PR #221） |
-| goal-154 | T-09.21 | 插件数据浏览 | T-09.14、T-08.5、T-08.17 | 待派发 |
+| goal-154 | T-09.21 | 插件数据浏览 | T-09.14、T-08.5、T-08.17 | 已完成（PR #234） |
 | goal-155 | T-09.22 | WebUI 需要的补充管理 API | T-09.14、T-07.9、T-03.25、T-04.16 | 已完成（PR #220） |
 | goal-158 | T-09.24 | 组件的 changelog | T-09.3、T-09.14 | 已完成（PR #215） |
 | goal-148 | T-11.5 | 工具的副作用类别 | T-11.2、T-12.3、T-09.14 | 已完成（PR #219） |
@@ -122,7 +122,7 @@
 | goal-162 | T-04.19 | 平台与消息 | T-04.18 | 等待前置（T-04.18） |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
 | goal-163 | T-11.6 | 按配置文件的工具策略 | T-04.18、T-11.4 | 等待前置（T-04.18） |
-| goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 待派发 |
+| goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 已完成（PR #233） |
 | goal-172 | S-03.1 | Scheduler 唤醒与离线 tick 区分 | S-02.2、T-07.2 | 等待前置 |
 | goal-173 | S-06.1 | 休眠管理 API、运行诊断与 CLI | S-02.2、S-03.1、T-09.14 | 等待前置 |
 | goal-174 | S-06.2 | 休眠指标、故障注入与固定机器验收 | S-06.1 | 等待前置 |
@@ -7865,7 +7865,7 @@ internal/core/state
 
 ### goal-154 · T-09.21 插件数据浏览
 
-状态：待派发。前置 T-09.14（PR #192，`0cff77c`）、T-08.5（PR #79，`75c16d3`）、T-08.17（PR #212，`4d69978`）均已合并。已按 main `947daa5` 核对：`internal/core/manage` 的 `(*Service).Handler(auth *adminauth.Auth) http.Handler` 统一注册管理路由；`generations_api.go` 已按安装来源选择代次 `db.sqlite` 或开发组件的 `dev.sqlite`；`internal/core/state` 有 `Active(ctx context.Context, pluginID string) (string, error)` 与 `Retained(ctx context.Context, pluginID string) ([]string, error)`。`sdk/sqlitedb/kv.sql` 的 `_alonabot_kv` 使用 `key TEXT PRIMARY KEY`、`value BLOB`、`updated_at INTEGER`，`internal/app/plugindata.go` 准备共用数据目录；`internal/core/candidate/database.go` 已使用 modernc SQLite Backup API。本条在这些入口上补 ADMIN-API §21。
+状态：已完成（PR #234），合并提交 `3b3ca6f`。以下保留派发时语句。派发时：前置 T-09.14（PR #192，`0cff77c`）、T-08.5（PR #79，`75c16d3`）、T-08.17（PR #212，`4d69978`）均已合并。已按 main `947daa5` 核对：`internal/core/manage` 的 `(*Service).Handler(auth *adminauth.Auth) http.Handler` 统一注册管理路由；`generations_api.go` 已按安装来源选择代次 `db.sqlite` 或开发组件的 `dev.sqlite`；`internal/core/state` 有 `Active(ctx context.Context, pluginID string) (string, error)` 与 `Retained(ctx context.Context, pluginID string) ([]string, error)`。`sdk/sqlitedb/kv.sql` 的 `_alonabot_kv` 使用 `key TEXT PRIMARY KEY`、`value BLOB`、`updated_at INTEGER`，`internal/app/plugindata.go` 准备共用数据目录；`internal/core/candidate/database.go` 已使用 modernc SQLite Backup API。本条在这些入口上补 ADMIN-API §21。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-154（切片 T-09.21：插件数据浏览）。goal 目录 goal-154，分支 goal-154，worktree .worktrees/goal-154，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -8425,7 +8425,7 @@ internal/core/state
 
 ### goal-141 · T-13.6 CLI 参数从简
 
-状态：待派发。前置 T-13.5（[PR #200](https://github.com/AlonaBot/AlonaBot/pull/200)，合并提交 `2e5ac2b`）与 T-14.3（[PR #228](https://github.com/AlonaBot/AlonaBot/pull/228)，合并提交 `72d51c2`）均已合并。按 main `25e9064` 核对：CLI 已直接使用 `internal/app.Start(ctx context.Context, o app.Options) (*app.Core, error)`，根包只保留库模式接口；`internal/pluginkit` 已有 `Init(ctx context.Context, dir, id, role, adapterID, module string) (bool, error)`、`Compile(ctx context.Context, options generate.Options, outDir string) (Build, error)`、`CompileApp(ctx context.Context, options generate.Options, outDir string, goFlags ...string) (string, error)`、`Check(ctx context.Context, options generate.Options) error` 与单平台 `Pack(ctx context.Context, options generate.Options, assetURL, keyFile, outDir string) (string, error)`；`cmd/alonabot/plugin.go:componentFlags` 仍登记 `--dir`、`--goos`、`--goarch` 与 `--tags`，`init` 的 `--id` 和 `pack` 的 `--asset-url` 仍必填。`scripts/dist/main.go:packComponent` 逐平台调用 `pack --dir --goos --goarch`，合并各次的 assets 后签名；本切片同步将这些调用改为位置目录与单个 `--target`，保留 dist 的合并和签名流程。发行包实际布局为可执行文件旁的 `packages/<组件 ID>/`，各目录含本平台归档、合并全部平台的 `release.json`、`release.json.sig` 与 `release.pub`；当前静态 WebUI 为 `any/any`。`contracts/release.Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*Release, error)`、`(*Release).Asset(os, arch string) (Asset, bool)` 与 `internal/core/trust.Official() (ed25519.PublicKey, bool)` 已可复用。T-09.27（[PR #222](https://github.com/AlonaBot/AlonaBot/pull/222)，合并提交 `5940406`）已合并，四角色 ID 统一经 `contracts/manifest.ParseProject(data []byte) (*Result, error)` 校验；V-121 的目录名缺省与 D-172 补验由本切片承接。
+状态：已完成（PR #233），合并提交 `4057ce2`。以下保留派发时语句。派发时：前置 T-13.5（[PR #200](https://github.com/AlonaBot/AlonaBot/pull/200)，合并提交 `2e5ac2b`）与 T-14.3（[PR #228](https://github.com/AlonaBot/AlonaBot/pull/228)，合并提交 `72d51c2`）均已合并。按 main `25e9064` 核对：CLI 已直接使用 `internal/app.Start(ctx context.Context, o app.Options) (*app.Core, error)`，根包只保留库模式接口；`internal/pluginkit` 已有 `Init(ctx context.Context, dir, id, role, adapterID, module string) (bool, error)`、`Compile(ctx context.Context, options generate.Options, outDir string) (Build, error)`、`CompileApp(ctx context.Context, options generate.Options, outDir string, goFlags ...string) (string, error)`、`Check(ctx context.Context, options generate.Options) error` 与单平台 `Pack(ctx context.Context, options generate.Options, assetURL, keyFile, outDir string) (string, error)`；`cmd/alonabot/plugin.go:componentFlags` 仍登记 `--dir`、`--goos`、`--goarch` 与 `--tags`，`init` 的 `--id` 和 `pack` 的 `--asset-url` 仍必填。`scripts/dist/main.go:packComponent` 逐平台调用 `pack --dir --goos --goarch`，合并各次的 assets 后签名；本切片同步将这些调用改为位置目录与单个 `--target`，保留 dist 的合并和签名流程。发行包实际布局为可执行文件旁的 `packages/<组件 ID>/`，各目录含本平台归档、合并全部平台的 `release.json`、`release.json.sig` 与 `release.pub`；当前静态 WebUI 为 `any/any`。`contracts/release.Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*Release, error)`、`(*Release).Asset(os, arch string) (Asset, bool)` 与 `internal/core/trust.Official() (ed25519.PublicKey, bool)` 已可复用。T-09.27（[PR #222](https://github.com/AlonaBot/AlonaBot/pull/222)，合并提交 `5940406`）已合并，四角色 ID 统一经 `contracts/manifest.ParseProject(data []byte) (*Result, error)` 校验；V-121 的目录名缺省与 D-172 补验由本切片承接。
 
 与第 20 波的 goal-74（T-14.4）共享发行包的 `packages/<组件 ID>/` 布局、CLI 安装入口及说明；本切片负责 `cmd/alonabot/manage.go` 的参数解析和查包，goal-74 负责 `internal/app/` 的首次预装与 `internal/core/manage/` 的更新提示、Adapter 启用。`packages/` 在本切片中只读，安装仍经管理 API。两者可并行；若 goal-74 定稿后也涉及 `cmd/alonabot/manage.go`、`cmd/alonabot/plugin_cli_e2e_test.go`、`cmd/alonabot/t12_e2e_test.go` 或 `docs/development.md`、`docs/plugin-guide.md`、`README.md`，后合并者同步最新 main，保留位置参数、包发现与首次预装两边的行为，重跑相应 CLI 和首次运行集成测试。合并本切片后，审查者按实际接口更新 goal-74 及模板仓库的 `scripts/release.sh`；模板仓库修改由审查者另行同步。
 
