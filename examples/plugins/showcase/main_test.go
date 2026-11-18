@@ -14,7 +14,7 @@ func TestShowcase(t *testing.T) {
 	p := New()
 	var ctx context.Context
 	p.OnReady(func(ready context.Context) error { ctx = context.WithoutCancel(ready); return nil })
-	h := plugintest.Start(t, plugintest.Plugin(p), plugintest.Config(p, `{"$version":2,"greeting":"Welcome"}`))
+	h := plugintest.Start(t, plugintest.Plugin(p), plugintest.Config(p, `{"greeting":"Welcome"}`))
 	user := plugintest.User{ID: "alice"}
 	chat := plugintest.Private(user.ID)
 	check := func(result plugintest.Result, text string, count int) {

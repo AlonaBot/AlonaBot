@@ -5,8 +5,8 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 )
 
-// Complete 只给缺失的声明字段补默认值或零值，递归补齐对象、列表和模板内的字段。
-// 显式值和未知键保持原样；未选择且无默认值的 template 保持缺失。
+// Complete 给缺失或 null 的声明字段补默认值或零值，递归补齐对象、列表和模板。
+// 其他显式值和未知键保持原样；未选择且无默认值的 template 保持缺失。
 func (s *Schema) Complete(config map[string]any) {
 	completeFields(s.fields, config)
 }
@@ -23,8 +23,9 @@ func (s *Schema) Validate(config map[string]any) error {
 func completeFields(fields []*Field, config map[string]any) {
 	for _, f := range fields {
 		value, present := config[f.name]
-		if !present {
+		if !present || value == nil {
 			if f.typ == typeTemplate && !f.attributes.has("default") {
+				delete(config, f.name)
 				continue
 			}
 			value = missingValue(f)

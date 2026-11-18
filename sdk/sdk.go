@@ -280,7 +280,7 @@ func collect(root *Plugin) (*registration, error) {
 	errs = append(errs, collectTasks(root, reg))
 	// HTTP Listener 在准备阶段创建；这里只核对所有种类共享的 route_id。
 	seen := make(map[string]bool)
-	for _, route := range buildRegister(reg, "{}", 0, nil).GetRoutes() {
+	for _, route := range buildRegister(reg, "{}", nil).GetRoutes() {
 		if spec := route.GetHttp(); spec.GetAuthMode() == pb.HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN {
 			errs = append(errs, fmt.Errorf("HTTP route %s %s: platform token authentication is only available to adapters", spec.GetMethod(), spec.GetPath()))
 		}

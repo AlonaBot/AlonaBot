@@ -107,8 +107,8 @@ func (p *Plugin) OnReady(fn func(context.Context) error) { p.callback("OnReady")
 // OnStop 登记停止预算内执行的资源关闭回调。
 func (p *Plugin) OnStop(fn func(context.Context) error) { p.callback("OnStop"); p.onStop = fn }
 
-// OnConfigLoad 登记声明式迁移之后执行的纯配置变换。
-func (p *Plugin) OnConfigLoad(fn func(context.Context, uint32, json.RawMessage) (json.RawMessage, error)) {
+// OnConfigLoad 登记补值与校正之前执行的纯配置变换。
+func (p *Plugin) OnConfigLoad(fn func(context.Context, json.RawMessage) (json.RawMessage, error)) {
 	p.callback("OnConfigLoad")
 	p.onConfigLoad = fn
 }

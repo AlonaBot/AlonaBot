@@ -143,7 +143,7 @@ func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, d *adapter.Desc
 		return err
 	}
 	l.runtime.source = append(l.runtime.source, slog.String("adapter_id", descriptor.GetAdapterId()))
-	reg := &pb.Register{Adapter: descriptor, CandidateConfigJson: boot.GetCandidateConfigJson(), CandidateConfigVersion: boot.GetTargetConfigVersion(), Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	reg := &pb.Register{Adapter: descriptor, CandidateConfigJson: boot.GetCandidateConfigJson(), Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 	if err := l.http.start(boot); err != nil {
 		return sessionFailure(conn, ack.SessionId, ack.ChosenMinor, l.pluginID, pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER, pb.ErrorCode_ERROR_CODE_INTERNAL, "prepare HTTP listener failed", err)
 	}

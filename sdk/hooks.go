@@ -117,7 +117,7 @@ func (b *AfterSendBuilder) Handle(h func(c *Context, to string, res *message.Sen
 
 func collectHooks(root *Plugin, reg *registration) error {
 	seen := make(map[string]bool)
-	for _, route := range buildRegister(reg, "{}", 0, nil).Routes {
+	for _, route := range buildRegister(reg, "{}", nil).Routes {
 		seen[route.GetRouteId()] = true
 	}
 	var errs []error

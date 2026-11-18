@@ -80,7 +80,7 @@ func (s *Service) CreateInstance(ctx context.Context, adapterPackageID, instance
 	if err := schema.Validate(expanded.(map[string]any)); err != nil {
 		return err
 	}
-	// 旧实例先按已有迁移入口准备，避免新实例使旧实例的版本标记提前升级。
+	// 创建新实例前检查已有实例，保留既有的显式修订入口。
 	if !replacing {
 		_, problems, err := s.opt.Settings.PrepareInstances(installed.AdapterID, schema)
 		if err != nil {
@@ -97,9 +97,6 @@ func (s *Service) CreateInstance(ctx context.Context, adapterPackageID, instance
 			}
 		}
 		if err := doc.Set([]string{"adapters", installed.AdapterID, "package"}, adapterPackageID); err != nil {
-			return err
-		}
-		if err := doc.Set([]string{"adapters", installed.AdapterID, "$version"}, schema.Version()); err != nil {
 			return err
 		}
 		return doc.Set([]string{"adapters", installed.AdapterID, "instances", instanceID}, original)
@@ -119,7 +116,21 @@ func (s *Service) CreateInstance(ctx context.Context, adapterPackageID, instance
 		}
 		err = errors.Join(err, s.forgetInstances(ctx, group.Package, instances))
 	}
-	return failure(errors.Join(err, s.opt.ForgetInstance(ctx, adapterPackageID, instanceID)))
+	err = errors.Join(err, s.opt.ForgetInstance(ctx, adapterPackageID, instanceID))
+	enabled, readErr := s.opt.Store.Enabled(ctx, adapterPackageID)
+	if readErr != nil {
+		return failure(errors.Join(err, readErr))
+	}
+	if !enabled {
+		// 已持有包锁；内部 enable 启动 Adapter 时会读取刚提交的全部实例。
+		return failure(errors.Join(err, s.enable(ctx, installed)))
+	}
+	// 已运行的 Adapter 沿用实例启动入口，只应用新提交的配置。
+	configuration, marshalErr := json.Marshal(expanded)
+	if marshalErr != nil {
+		return failure(errors.Join(err, marshalErr))
+	}
+	return failure(errors.Join(err, s.opt.StartInstance(ctx, adapterPackageID, instanceID, configuration)))
 }
 
 // DeleteInstance 停止仍在运行的实例，再删除设置中的实例及指向它的缺省选择。

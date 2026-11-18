@@ -175,13 +175,3 @@ func (s *Store) Journals(ctx context.Context, pluginID string) ([]Journal, error
 	}
 	return records, nil
 }
-
-// GenerationConfigVersion 读取代次保存的配置格式版本；缺记录返回 ErrNotFound。
-func (s *Store) GenerationConfigVersion(ctx context.Context, generationID string) (uint32, error) {
-	var row generation
-	err := s.db.WithContext(ctx).Where(clause.Eq{Column: clause.PrimaryColumn, Value: generationID}).Take(&row).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, ErrNotFound
-	}
-	return row.ConfigVersion, err
-}

@@ -152,7 +152,7 @@ func Start(t testing.TB, opts ...Option) *Harness {
 	for _, userID := range o.admins {
 		admins = append(admins, o.descriptor.AdapterID+":"+userID)
 	}
-	configuration, err := json.Marshal(map[string]any{"$version": 1, "admins": admins,
+	configuration, err := json.Marshal(map[string]any{"admins": admins,
 		"adapters": map[string]any{o.descriptor.AdapterID: map[string]any{"package": adapterComponentID, "instances": map[string]any{InstanceID: map[string]any{}}}}})
 	if err != nil {
 		t.Fatal(err)

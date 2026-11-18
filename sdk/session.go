@@ -158,9 +158,8 @@ func sessionFailure(conn *wire.Conn, sid []byte, minor uint32, pluginID string, 
 
 // buildRegister 把收集到的注册项转成 REGISTER。
 // shortcut: route_id 暂用 "cmd.<路径以 . 连接>"，有稳定 route_id 生成器后替换。
-func buildRegister(reg *registration, configJSON string, configVersion uint32, configSchema []byte) *pb.Register {
-	r := &pb.Register{CandidateConfigJson: configJSON, CandidateConfigVersion: configVersion,
-		Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+func buildRegister(reg *registration, configJSON string, configSchema []byte) *pb.Register {
+	r := &pb.Register{CandidateConfigJson: configJSON, Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 	if len(configSchema) != 0 {
 		schema, _ := configschema.Parse(configSchema) // 配置准备已检查生成项，收集注册项时此参数为 nil。
 		r.ConfigSchemaHash = schema.Hash()
@@ -237,16 +236,16 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *reg
 		err = errors.Join(err, readErr)
 	}()
 
-	// 2. 在 OnStart 之前完成配置迁移、默认值与校验。
+	// 2. 在 OnStart 之前完成配置回调、校正与 required 校验。
 	configContext, cancelConfig := context.WithTimeout(l.runtime.ctx, time.Duration(limits.GetConfigMs())*time.Millisecond)
 	var loader config.Loader
 	if root.onConfigLoad != nil {
-		loader = func(ctx context.Context, from uint32, raw json.RawMessage) (json.RawMessage, error) {
+		loader = func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
 			if !l.runtime.beginCallback() {
 				return nil, errcode.FailedPrecondition.New("plugin session has stopped")
 			}
 			defer l.runtime.callbacks.Done()
-			loaded, err := root.onConfigLoad(ctx, from, raw)
+			loaded, err := root.onConfigLoad(ctx, raw)
 			if err != nil {
 				componentLogger(ctx).ErrorContext(ctx, "config OnConfigLoad rejected the configuration", "err", err)
 			}
@@ -256,8 +255,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *reg
 	// 开发代次每次从 config.json 重新准备，恢复数据库时也允许 OnConfigLoad 变换配置。
 	restart := boot.GetDatabaseDescriptor().GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME && !strings.HasPrefix(boot.GetGenerationId(), "dev:")
 	preparedConfig, err := config.Prepare(configContext, loader, generatedFor(root).ConfigSchema,
-		[]byte(boot.GetCandidateConfigJson()), boot.PreviousConfigVersion, boot.GetTargetConfigVersion(),
-		restart)
+		[]byte(boot.GetCandidateConfigJson()), restart)
 	cancelConfig()
 	if err != nil {
 		failure := err.(*validate.Error) // Prepare 的失败均携带协议错误码和安全消息。
@@ -339,7 +337,13 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *reg
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER,
 			pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error(), err)
 	}
-	registration := buildRegister(reg, string(preparedConfig.JSON), preparedConfig.Version, generatedFor(root).ConfigSchema)
+	registration := buildRegister(reg, string(preparedConfig.JSON), generatedFor(root).ConfigSchema)
+	for _, correction := range preparedConfig.Corrections {
+		registration.ConfigCorrections = append(registration.ConfigCorrections, &pb.ConfigCorrection{
+			Path: correction.Path, Reason: correction.Reason, OriginalJson: string(correction.Old),
+		})
+	}
+
 	registration.Migration = migration
 	l.http.report(registration)
 	regEnv, err := wire.ControlEnvelope(sid, minor, l.pluginID, pb.FrameKind_FRAME_KIND_REGISTER, registration)

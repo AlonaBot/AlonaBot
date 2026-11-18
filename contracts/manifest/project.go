@@ -13,7 +13,7 @@ func ParseProject(data []byte) (*Result, error) {
 }
 
 func checkProjectFields(declared map[string]yaml.Node) error {
-	if err := forbidFields(declared, "project", "manifest_version", "protocol_min_major", "protocol_max_major", "required_capabilities", "os", "arch", "entrypoint", "config_version", "migration_mode"); err != nil {
+	if err := forbidFields(declared, "project", "manifest_version", "protocol_min_major", "protocol_max_major", "required_capabilities", "os", "arch", "entrypoint", "migration_mode"); err != nil {
 		return err
 	}
 	if node, present := declared["prepare_effects"]; present {

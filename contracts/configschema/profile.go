@@ -126,3 +126,49 @@ func (s *Schema) ApplyProfile(raw json.RawMessage, overrides map[string]json.Raw
 	}
 	return json.Marshal(object)
 }
+
+func (s *Schema) fieldAt(path []string) *Field {
+	if len(path) == 0 {
+		return nil
+	}
+	current := findField(s.fields, path[0])
+	for _, part := range path[1:] {
+		if current == nil {
+			return nil
+		}
+		switch current.typ {
+		case typeObject:
+			current = findField(current.items, part)
+		case typeList:
+			if part != "*" {
+				return nil
+			}
+			if current.attributes.has("items") {
+				current = &Field{typ: typeObject, items: current.items}
+			} else {
+				attributes := orderedObject{}
+				if current.attributes.has("options") {
+					attributes = append(attributes, property{"options", current.attributes.get("options")})
+				}
+				current = &Field{typ: typeString, attributes: attributes}
+			}
+		case typeTemplateList:
+			if part != "*" {
+				return nil
+			}
+			current = &Field{typ: typeTemplate, templates: current.templates}
+		case typeTemplate:
+			var selected *Field
+			for _, template := range current.templates {
+				if template.name == part {
+					selected = &Field{typ: typeObject, items: template.items}
+					break
+				}
+			}
+			current = selected
+		default:
+			return nil
+		}
+	}
+	return current
+}

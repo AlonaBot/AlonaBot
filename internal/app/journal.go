@@ -122,13 +122,9 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	if _, problems := i18n.Parse(resources.I18n); len(problems) != 0 {
 		return supervisor.Spec{}, nil, fmt.Errorf("installed message catalog: %v", problems)
 	}
-	// Schema 摘要与版本绑定包内声明，所有已安装组件的启动共用同一输入。
-	boot.TargetConfigVersion = *m.ConfigVersion
+	// Schema 摘要绑定包内声明，所有已安装组件的启动共用同一输入。
 	boot.ConfigSchemaHash = nil
 	if (hasInstalledRoutes(in) || in.Role == state.RoleWebUI) && schemas.config != nil {
-		if uint32(schemas.config.Version()) != boot.TargetConfigVersion {
-			return supervisor.Spec{}, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: fmt.Sprintf("config schema version differs from manifest for %s", in.PluginID)}
-		}
 		boot.ConfigSchemaHash = schemas.config.Hash()
 	}
 	if err := c.assembly.bootstrapProfiles(ctx, in.PluginID, schemas.config, boot); err != nil {

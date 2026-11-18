@@ -4,7 +4,13 @@ import "runtime/debug"
 
 const coreModule = "github.com/AlonaBot/AlonaBot"
 
+// releaseVersion 由发行构建经 -ldflags -X 注入；开发构建为空，改从模块构建信息读取。
+var releaseVersion string
+
 func coreVersion() string {
+	if releaseVersion != "" {
+		return releaseVersion
+	}
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		return "(devel)"

@@ -30,12 +30,10 @@ import (
 const offlineGeneration = "offline-test"
 
 func testCommand(code *int, values *tune.Values) *cobra.Command {
-	var dir string
-	command := &cobra.Command{Use: "test", Short: "Load, register, activate and stop a component in a temporary offline session", Args: cobra.NoArgs}
-	command.Flags().StringVar(&dir, "dir", ".", "component project directory")
-	command.RunE = func(cmd *cobra.Command, _ []string) error {
+	command := &cobra.Command{Use: "test [directory]", Short: "Load, register, activate and stop a component in a temporary offline session", Args: cobra.MaximumNArgs(1)}
+	command.RunE = func(cmd *cobra.Command, args []string) error {
 		*code = exitFailure
-		return testComponent(cmd.Context(), dir, *values, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return testComponent(cmd.Context(), componentDirectory(args), *values, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	}
 	return command
 }
@@ -90,7 +88,7 @@ func testComponent(ctx context.Context, dir string, values tune.Values, stdout, 
 	if err := store.AddInstall(ctx, state.Install{Role: role, PluginID: m.ID, AdapterID: m.AdapterID, Source: m.Source, Version: m.Version, Entrypoint: build.Executable, BuildDigest: build.Digest}); err != nil {
 		return err
 	}
-	if err := store.AddGeneration(ctx, m.ID, offlineGeneration, "{}", *m.ConfigVersion); err != nil {
+	if err := store.AddGeneration(ctx, m.ID, offlineGeneration, "{}"); err != nil {
 		return err
 	}
 	pluginDir := filepath.Join(temporary, "plugins", m.ID)
@@ -116,7 +114,7 @@ func testComponent(ctx context.Context, dir string, values tune.Values, stdout, 
 	if err := os.MkdirAll(pluginDataDir, 0o700); err != nil {
 		return err
 	}
-	boot := &pb.Bootstrap{GenerationId: offlineGeneration, CandidateConfigJson: "{}", ProfileOverridesJson: "{}", PreviousConfigVersion: m.ConfigVersion, TargetConfigVersion: *m.ConfigVersion, DatabaseDescriptor: database, LogLevel: pb.LogLevel_LOG_LEVEL_DEBUG, PluginDataDir: pluginDataDir}
+	boot := &pb.Bootstrap{ProfileOverridesJson: "{}", GenerationId: offlineGeneration, CandidateConfigJson: "{}", DatabaseDescriptor: database, LogLevel: pb.LogLevel_LOG_LEVEL_DEBUG, PluginDataDir: pluginDataDir}
 	if len(resources.ConfigSchema) > 0 {
 		schema, problems := configschema.Parse(resources.ConfigSchema)
 		if len(problems) > 0 {
