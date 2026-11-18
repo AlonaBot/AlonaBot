@@ -511,7 +511,9 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 ## 19. 诊断包
 
-`POST /api/v1/diagnostics` 接收 `{"since":"24h","logs":true,"settings":true,"components":true,"redact":true}`，各字段可省略，缺省为左边的值；成功时返回 `application/zip`，`Content-Disposition` 的文件名为 `alonabot-diagnostics-<UTC 时间>.zip`。内容与脱敏规则见 CONTRACTS §14.7（D-156）。since 不是正的时长返回 400；三组都为 false 返回 400。
+`POST /api/v1/diagnostics` 经管理认证（Cookie 认证时校验 CSRF），接收 `{"since":"24h","logs":true,"settings":true,"components":true,"redact":true}`，各字段可省略，缺省值如上。`since` 无法解析为正时长、三组都为 `false`、JSON 无效、出现未知字段或正文含尾随内容时返回 400。
+
+归档完整生成后返回 `application/zip`，`Content-Disposition` 的附件名为 `alonabot-diagnostics-<UTC 时间>.zip`，并设置 `Cache-Control: no-store`。生成失败按第 3 节返回 JSON 错误。内容与脱敏规则见 CONTRACTS §14.7（D-156）。
 
 ## 20. WebUI 需要的补充接口
 

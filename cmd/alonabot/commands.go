@@ -94,6 +94,7 @@ func execute(args []string) int {
 	root.AddCommand(initCommand(&code), buildCommand(&code), checkCommand(&code), testCommand(&code, &values), packCommand(&code))
 	root.AddCommand(managementCommands(&code)...)
 	root.AddCommand(logCommands(&code)...)
+	root.AddCommand(diagnoseCommand(&code))
 	// 2. 由 Cobra 生成帮助，错误只在这里打印一次。
 	var helpErr error
 	help := root.HelpFunc()

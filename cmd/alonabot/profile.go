@@ -95,7 +95,7 @@ func profileCommand(code *int) *cobra.Command {
 }
 
 func profilePending(cmd *cobra.Command, code *int, options *managementOptions, pluginID, path string, value json.RawMessage) error {
-	client, err := options.client()
+	client, err := options.client(true)
 	if err != nil {
 		return err
 	}

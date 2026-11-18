@@ -506,7 +506,7 @@ Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行�
 | `pin` | 固定允许的更新版本：值为精确的 SemVer 版本，`update` 只接受与之相等的候选，空串解除（D-139）；解除固定须显式操作，不能被自动更新忽略。 |
 | `admin add` / `admin remove` / `admin list` | 管理 Core Admin 列表（按用户字符串 `<adapter_id>:<external_user_id>`），与 WebUI 的 Core 设置页使用同一管理服务，写回 `core_config.json` 的 `admins`。 |
 | `logs` | 按来源、级别与 trace_id 读取最近记录，`--follow` 时持续输出（§14.4）。 |
-| `diagnose` | 生成诊断包（§14.7）：`--since`（缺省 24h）、`--no-redact`、`--output`（缺省为当前目录下的 `alonabot-diagnostics-<UTC 时间>.zip`）。Core 运行时经管理 API，没有运行时只读数据目录。 |
+| `diagnose` | 生成诊断包（§14.7）：`--since`（正时长，缺省 24h）、`--no-logs`、`--no-settings`、`--no-components`（至少保留一组）、`--no-redact`、`-o` / `--output`（缺省为当前目录下的 `alonabot-diagnostics-<UTC 时间>.zip`）。在线经管理 API，连接被拒绝后尝试停机只读导出。 |
 | `log-level` | 修改全局或某个插件、Adapter 的日志级别，立即生效（§14.3）。 |
 | `sleep-policy [ID] [never\|auto\|时长]` | 无参数列出全局模式、全局空闲时长及各插件的配置策略、生效策略、运行状态与最近原因；只有 ID 时读取该插件。`never` 写入 `sleep.plugins.<ID>`，`auto` 删除该覆盖以跟随准入规则与全局值，正时长（Go duration，例如 `15m`）写入插件覆盖。经 ADMIN-API §24 的同一管理服务修改，立即生效。全局模式与全局时长经 Core 设置 API/WebUI 修改。 |
 | `rollback` | 明确选择保留代次为输入，停机建立新的恢复候选 Generation；SQLite 从所选快照复制独立 DB，复用对应程序/配置/secret，走同一 Prepared/提交流程，不复用历史 Generation ID 或直接写保留快照；在执行前列明将舍弃该快照之后的本地写入，要求显式确认。声明 `prepare_effects=external` 的插件返回 NEEDS_MANUAL_MIGRATION，外部已发送消息不会撤回。 |
@@ -702,9 +702,9 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 ### 14.7 诊断包
 
-- 诊断包是一个 zip，供用户附在 issue 中（D-156）。内容分三组，可以分别取消：日志（时间范围内的日志文件，§14.6）；设置与配置（`core_config.json`、每个插件 Active 代次的配置）；组件与环境（已安装组件的 ID、角色、版本、来源、签名状态、是否启用、运行状态与最近一次错误，AlonaBot 版本、OS/arch、Go 版本、是否在容器中、数据目录占用）。根目录的 `manifest.json` 记录格式版本（1）、生成时间、时间范围、各组是否包含、是否脱敏与文件列表。不包含状态库、受管 SQLite、媒体、secret 存储、`admin_token` 与安装包。
-- 脱敏缺省开启：schema 中标为 `secret` 的字段与 Adapter 实例配置的凭证替换为 `[REDACTED]`，`${环境变量}` 的写法原样保留；日志在 §14.5 之外再按规则遮盖 Bearer 与 Basic 凭证、URL 中的用户信息、查询参数中名为 token、key、secret、password 的值、Telegram 的 `bot<id>:<token>` 与公网 IP 地址（私有、回环与链路本地地址保留）。聊天内容不处理。
-- 管理 API 与 `alonabot diagnose` 使用同一实现。Core 没有运行时，CLI 只读数据目录生成，不写任何文件，组件的运行状态记为未运行。生成失败时不留下不完整的文件。
+- 诊断包是一个 zip，供用户附在 issue 中（D-156）。内容分三组，可以分别取消：日志（按时间筛选记录，保留多行记录，§14.6）；设置与配置（`core_config.json`、已安装组件的 Active 配置）；组件与环境（已安装组件的 ID、角色、版本、来源、签名状态、是否启用、运行状态与最近一次错误，AlonaBot 版本、OS/arch、Go 版本、是否在容器中、数据目录占用）。组件最近错误从日志中查找，即使未选日志组。根目录的 `manifest.json` 记录格式版本（1）、生成时间、时间范围、各组是否包含、是否脱敏与完整文件列表（含清单自身）。不包含状态库、受管 SQLite、媒体、secret 存储、`admin_token` 与安装包。
+- 脱敏缺省开启：schema 中标为 `secret` 的字段与 Adapter 实例配置的凭证替换为 `[REDACTED]`。对设置中的每组 Adapter 按包归属查找实例 schema；有 schema 时先迁移导出副本，再遮盖秘密字段。没有可用 schema 时（例如已卸载、包归属不符或离线缺少开发资源），遮盖该组 `instances` 的全部叶值，保留结构。完整的 `${环境变量}` 表达式原样保留；夹有明文的秘密值整体遮盖。日志在 §14.5 之外再按规则遮盖 Bearer 与 Basic 凭证、URL 中的用户信息、查询参数中名为 token、key、secret、password 的值、Telegram 的 `bot<id>:<token>` 与公网 IP 地址（保留私有、回环与链路本地地址以及句末标点）。聊天内容不作专门处理。
+- 管理 API 与 `alonabot diagnose` 共用打包与脱敏实现。CLI 只在管理连接被拒绝时尝试离线收集；认证和其他服务错误直接返回。离线时只读打开已有的 `core.lock`，持有 Core 使用的 OS 独占锁直到归档及来源关闭；锁缺失或被占用时报错。需要读取状态库时，在系统临时目录中读取主库及已有 WAL 的副本，源数据目录保持只读，组件状态为 `Stopped`。CLI 写入同目录临时文件，检查 zip 完整性与 CRC 后替换目标；失败时清理临时文件并保留已有输出。
 
 ## 15. 运行方式
 
@@ -819,6 +819,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 - 契约中可调的容量、期限与配额集中登记在 `internal/tune/params.go`：每项有名称、缺省值、单位与约束，缺省值就是本契约各节给出的数值。新增可调的值时，同时修改该文件与下表。
 - 以下不属于调优参数：协议双方必须一致的常量（帧上限、分块大小；配置文件覆盖集合沿用固定帧上限，见 §5.6）；安全相关的值（Secret 与 token 长度、管理会话与插件票据的期限）；平台规定的限制；SDK 的固定输入上限（§6.1 的 KV 键和值上限）；插件与 Adapter 自己的常量；日志级别与日志文件设置（§14、§15.1）；配置文件的平台与回复设置（§5.6、§15.1）；WebUI 在浏览器中保存的主题、语言与侧栏偏好（§7.5）。
+- 诊断包的时间范围、分组和脱敏选项按次传入（§14.7、ADMIN-API §19）。
 - 调优参数只在启动时覆盖，运行中不能修改，也不出现在 WebUI。`--args` 是 `alonabot` 根命令的全局参数，可以写在子命令之前或之后（例如 `alonabot --args REQUEST_TIMEOUT=2s run`），对所有子命令生效，可以重复使用：
   - 值中含 `=` 时是直接参数，多个参数用逗号分隔，例如 `--args DISPATCH_CONCURRENCY=1,REQUEST_TIMEOUT=2s`；
   - 否则是文本文件的路径，文件名任意，每行一个 `KEY=VALUE`，空行和以 `#` 开头的行忽略；

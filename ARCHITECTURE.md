@@ -41,6 +41,8 @@
 
 `sdk/kv` 提供基于 Session 的键值存储；`sdk.PluginDataDir(ctx)` 优先按 `ctx` 选择所属 Session，同进程插件各取自己的目录，独立进程在 `ctx` 未绑定时使用默认 Session。SQLite 驱动随 `sdk/sqlitedb`、`sdk/gormdb` 或 `sdk/kv` 按需链接，SDK 根包不引入驱动。
 
+`internal/core/diagnostics` 负责诊断数据收集、脱敏与 zip 写入（CONTRACTS §14.7）。`internal/core/manage` 的诊断端点与 `cmd/alonabot` 的 `diagnose` 共用 `Write(ctx context.Context, w io.Writer, src Source, opts Options) error`。`Running` 复用当前 `state.Store`、运行状态与 schema 回调；`Directory` 对已有 `core.lock` 的只读句柄用 `x/sys` 取得与 Core 相同的 flock / LockFileEx 独占锁，用现有 GORM/SQLite 只读查询主库及已有 WAL 的临时副本。诊断包复用 `state` 的记录类型、`contracts/configschema` 的迁移与秘密路径及 `internal/core/secret` 的引用格式；认证、HTTP 响应与 CLI 输出替换由各入口负责。
+
 ## 依赖方向
 
 `A -> B` 表示 **A 的 Go 源码 import B**（静态依赖，含测试代码），不表示运行时调用或数据流。「模块」指上表每一行的路径前缀；同一模块内部的 import（如 `contracts/release -> contracts/manifest`、`sdk -> sdk/message`）不受限制。跨模块的边只允许下表列出的；标准库和已批准的第三方依赖不受此表限制。

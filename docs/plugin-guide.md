@@ -76,6 +76,8 @@ func saveCache(ctx context.Context, content []byte) error {
 
 ## 4. 日志与文案
 
+诊断包可收集组件日志及最近错误；日志和错误仍须避免记录凭证明文。导出只按规则遮盖列明的凭证格式和地址，聊天内容不作专门处理（[CONTRACTS §14.7](../spec/CONTRACTS-v0.1.md#147-诊断包)）。
+
 - 用标准库 `log/slog` 记录，SDK 把记录交给 Core 并补上来源（CONTRACTS §14）。不要往 stdout 写内容：stdio 传输下 stdout 是协议通道。
 - 组件自己的数据损坏或无法继续运行、需要立即处理时，用 `slog.Log(ctx, sdk.LevelCritical, "component data is corrupt", "error", err)` 记录 CRITICAL；Handler panic 仍由 SDK 记录为 ERROR（CONTRACTS §14.1）。
 - 日志、错误字符串与 safe_message 用英文；给用户看的文字放进 `i18/` 的 `messages`，至少提供 en-US（D-30、CONTRACTS §5.4）。

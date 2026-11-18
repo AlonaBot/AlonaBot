@@ -167,7 +167,7 @@ func managementCommands(code *int) []*cobra.Command {
 				}
 			}
 			if action == "reload" {
-				client, err := options.client()
+				client, err := options.client(true)
 				if err != nil {
 					return err
 				}
@@ -230,7 +230,7 @@ func localInstallRequest(archive, releaseFile, signatureFile, keyFile, source st
 }
 
 func managementCall(cmd *cobra.Command, code *int, opt *managementOptions, method, path string, body any) error {
-	client, err := opt.client()
+	client, err := opt.client(true)
 	if err != nil {
 		return err
 	}
@@ -243,7 +243,7 @@ func managementCall(cmd *cobra.Command, code *int, opt *managementOptions, metho
 	return err
 }
 
-func (o *managementOptions) client() (*managementClient, error) {
+func (o *managementOptions) client(required bool) (*managementClient, error) {
 	address := o.adminURL
 	if address == "" {
 		address = settings.Defaults().BaseURL
@@ -288,7 +288,7 @@ func (o *managementOptions) client() (*managementClient, error) {
 		}
 		token = strings.TrimSpace(string(content))
 	}
-	if token == "" {
+	if required && token == "" {
 		return nil, errors.New("ALONABOT_ADMIN_TOKEN or --token-file is required")
 	}
 	return &managementClient{base: base, token: token}, nil
