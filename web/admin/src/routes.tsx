@@ -1,12 +1,13 @@
 import { useState, type JSX } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Bot, LayoutDashboard, Puzzle, SlidersHorizontal } from 'lucide-react';
+import { Bot, Box, LayoutDashboard, Puzzle, SlidersHorizontal } from 'lucide-react';
 import { ConfigForm } from './components/ConfigForm';
 import { useUI } from './i18n/UI';
 import { type CoreInfo } from './api/admin';
 import { OverviewPage } from './pages/OverviewPage';
 import { PluginsPage } from './pages/PluginsPage';
 import { AccountsPage } from './pages/AccountsPage';
+import { ModelsPage } from './pages/ModelsPage';
 import chinese from '../i18n/zh-CN.json';
 import collections from '../fixtures/collections.config_schema.json';
 import pluginChinese from '../fixtures/i18n/zh-CN.json';
@@ -145,6 +146,14 @@ export const routes: RouteEntry[] = [
     icon: Bot,
     group: 'main',
     render: () => <AccountsPage />,
+  },
+  {
+    id: 'models',
+    path: '/models',
+    label: 'models',
+    icon: Box,
+    group: 'main',
+    render: () => <ModelsPage />,
   },
   ...(import.meta.env.DEV
     ? [
