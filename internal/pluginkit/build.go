@@ -119,25 +119,16 @@ func buildComponent(ctx context.Context, options generate.Options, outDir string
 	} else if !errors.Is(statErr, os.ErrNotExist) {
 		return build, statErr
 	}
-	if build.Role == "webui" {
+	if build.Role == "webui" && result == nil {
 		if development {
 			return build, errors.New("webui projects have no development executable")
 		}
-		build.PackageManifest, err = manifest.Generate(project.Manifest, manifest.BuildInfo{ManifestVersion: 1, OS: "any", Arch: "any"})
-		if err != nil {
-			return build, err
-		}
+		build.PackageManifest = snapshot.staticManifest
 		if err = os.MkdirAll(outDir, privateMode); err != nil {
 			return build, err
 		}
-		for name, raw := range snapshot.files {
-			path := filepath.Join(outDir, filepath.FromSlash(name))
-			if err = os.MkdirAll(filepath.Dir(path), privateMode); err != nil {
-				return build, err
-			}
-			if err = os.WriteFile(path, raw, fileMode); err != nil {
-				return build, err
-			}
+		if err = writeProjectResources(outDir, snapshot.files); err != nil {
+			return build, err
 		}
 		err = os.WriteFile(filepath.Join(outDir, projectFile), build.PackageManifest, fileMode)
 		return build, err
@@ -287,6 +278,11 @@ func buildComponent(ctx context.Context, options generate.Options, outDir string
 		return build, err
 	}
 	if !development {
+		if build.Role == "webui" {
+			if err := writeProjectResources(outDir, snapshot.files); err != nil {
+				return build, err
+			}
+		}
 		if err := os.WriteFile(filepath.Join(outDir, projectFile), build.PackageManifest, fileMode); err != nil {
 			return build, err
 		}
@@ -306,6 +302,19 @@ func buildComponent(ctx context.Context, options generate.Options, outDir string
 		return build, fmt.Errorf("publish development executable: %w", err)
 	}
 	return build, nil
+}
+
+func writeProjectResources(dir string, files map[string][]byte) error {
+	for name, raw := range files {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), privateMode); err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, raw, fileMode); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // migrationMode 检查参与构建的本 module 中的 SDK 函数引用，包含别名和传参。
@@ -420,17 +429,10 @@ func declaresMain(dir string, files []string) (bool, error) {
 }
 
 func targetGoCommand(ctx context.Context, options generate.Options, development bool, args ...string) ([]byte, error) {
-	if len(options.Tags) > 0 {
-		args = append([]string{args[0], "-tags", strings.Join(options.Tags, ",")}, args[1:]...)
+	if options.CGOEnabled == "" && !development {
+		options.CGOEnabled = "0"
 	}
-	command := exec.CommandContext(ctx, "go", args...)
-	command.Dir = options.Dir
-	command.Env = append(command.Environ(), "GOOS="+options.GOOS, "GOARCH="+options.GOARCH)
-	if options.CGOEnabled != "" {
-		command.Env = append(command.Env, "CGO_ENABLED="+options.CGOEnabled)
-	} else if !development {
-		command.Env = append(command.Env, "CGO_ENABLED=0")
-	}
+	command := targetGo(ctx, options, args...)
 	var stderr bytes.Buffer
 	command.Stderr = &stderr
 	output, err := command.Output()
@@ -438,4 +440,23 @@ func targetGoCommand(ctx context.Context, options generate.Options, development 
 		return output, fmt.Errorf("go %s: %w\n%s%s", strings.Join(args, " "), err, output, stderr.String())
 	}
 	return output, nil
+}
+
+func targetGo(ctx context.Context, options generate.Options, args ...string) *exec.Cmd {
+	if len(options.Tags) > 0 {
+		args = append([]string{args[0], "-tags", strings.Join(options.Tags, ",")}, args[1:]...)
+	}
+	command := exec.CommandContext(ctx, "go", args...)
+	command.Dir = options.Dir
+	command.Env = command.Environ()
+	if options.GOOS != "" {
+		command.Env = append(command.Env, "GOOS="+options.GOOS)
+	}
+	if options.GOARCH != "" {
+		command.Env = append(command.Env, "GOARCH="+options.GOARCH)
+	}
+	if options.CGOEnabled != "" {
+		command.Env = append(command.Env, "CGO_ENABLED="+options.CGOEnabled)
+	}
+	return command
 }

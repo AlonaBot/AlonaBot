@@ -2,6 +2,7 @@ package pluginkit
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -25,10 +26,11 @@ func Check(ctx context.Context, options generate.Options) error {
 
 // projectScan 持有同一次校验所使用的作者 manifest、资源与生成源码。
 type projectScan struct {
-	project   *manifest.Result
-	generated *generate.Result
-	manifest  []byte
-	files     map[string][]byte
+	project        *manifest.Result
+	generated      *generate.Result
+	manifest       []byte
+	staticManifest []byte // 静态 WebUI 的包内声明，在 Check 时完成与构建相同的校验。
+	files          map[string][]byte
 }
 
 func scanProject(ctx context.Context, options generate.Options) (*projectScan, error) {
@@ -40,12 +42,23 @@ func scanProject(ctx context.Context, options generate.Options) (*projectScan, e
 	if err != nil {
 		return nil, fmt.Errorf("plugin.yaml:1:1: %w", err)
 	}
-	files, err := projectResources(options.Dir, project.Manifest)
+	process := project.Manifest.Role != "webui"
+	if !process {
+		process, err = webUIHasSource(ctx, options)
+		if err != nil {
+			return nil, err
+		}
+	}
+	files, err := projectResources(options.Dir, project.Manifest, process)
 	if err != nil {
 		return nil, err
 	}
 	snapshot := &projectScan{project: project, manifest: raw, files: files}
-	if project.Manifest.Role == "webui" {
+	if !process {
+		snapshot.staticManifest, err = manifest.Generate(project.Manifest, manifest.BuildInfo{ManifestVersion: 1, OS: "any", Arch: "any"})
+		if err != nil {
+			return nil, err
+		}
 		return snapshot, nil
 	}
 	options.Resources = maps.Clone(files)
@@ -79,8 +92,27 @@ func scanProject(ctx context.Context, options generate.Options) (*projectScan, e
 	return snapshot, nil
 }
 
+// webUIHasSource 使用目标工具链选文件；静态工程可以没有 Go module。
+func webUIHasSource(ctx context.Context, options generate.Options) (bool, error) {
+	cmd := targetGo(ctx, options, "list", "-e", "-find", "-json", ".")
+	cmd.Env = append(cmd.Env, "GO111MODULE=off")
+	raw, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("list WebUI source: %w", err)
+	}
+	var pkg struct {
+		GoFiles, CgoFiles, InvalidGoFiles []string
+		Error                             *struct{ Pos string }
+	}
+	if err := json.Unmarshal(raw, &pkg); err != nil {
+		return false, fmt.Errorf("decode WebUI source list: %w", err)
+	}
+	// 选中的错误源码仍交给生成器诊断，不当成静态资源发布。
+	return len(pkg.GoFiles)+len(pkg.CgoFiles)+len(pkg.InvalidGoFiles) != 0 || pkg.Error != nil && pkg.Error.Pos != "", nil
+}
+
 // projectResources 在工程文件系统边界检查打包资源，所有角色共用这份白名单。
-func projectResources(dir string, project *manifest.Manifest) (map[string][]byte, error) {
+func projectResources(dir string, project *manifest.Manifest, process bool) (map[string][]byte, error) {
 	files := map[string][]byte{}
 	names := map[string]string{}
 	add := func(name string, info fs.FileInfo) error {
@@ -139,7 +171,8 @@ func projectResources(dir string, project *manifest.Manifest) (map[string][]byte
 		if _, ok := files[project.Assets+"/index.html"]; !ok {
 			return nil, fmt.Errorf("%s/index.html is missing", project.Assets)
 		}
-	} else {
+	}
+	if process {
 		if project.Role == "adapter" {
 			if _, err := os.Stat(filepath.Join(dir, "adapter_config_schema.json")); err != nil {
 				return nil, fmt.Errorf("adapter_config_schema.json:1:1: %w", err)

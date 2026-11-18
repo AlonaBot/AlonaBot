@@ -162,7 +162,7 @@ func (s *Service) describe(ctx context.Context, id string) (Package, error) {
 	if active == "" && !in.Uninstalled {
 		current = "Installed"
 	}
-	if enabled && !in.Uninstalled && in.Role == state.RoleWebUI {
+	if enabled && !in.Uninstalled && in.Role == state.RoleWebUI && in.Entrypoint == "" {
 		current = "Activated"
 	} else if running := s.opt.State(id); running != "" {
 		current = running

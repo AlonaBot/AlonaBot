@@ -167,13 +167,16 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "manifest source does not match the release")
 	case m.OS != asset.OS || m.Arch != asset.Arch:
 		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "manifest platform does not match this host")
-	case m.Role != "webui" && (asset.OS != in.OS || asset.Arch != in.Arch):
-		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "only webui can use the any platform")
+	case (m.Role != "webui" || m.Entrypoint != "") && (asset.OS != in.OS || asset.Arch != in.Arch):
+		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "process packages must match the host platform")
 	}
 	// 解压已拒绝所有链接；这里核对声明的文件存在且类型正确。
 	files := []string{m.Entrypoint}
 	if m.Role == "webui" {
 		files = []string{m.Assets + "/index.html"}
+		if m.Entrypoint != "" {
+			files = append(files, m.Entrypoint)
+		}
 	}
 	if m.Icon != "" {
 		files = append(files, m.Icon)
@@ -185,7 +188,7 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 		}
 	}
 	// 5. 进程包的外置构建信息须来自同一入口，并与声明的平台一致。
-	if m.Role != "webui" {
+	if m.Role != "webui" || m.Entrypoint != "" {
 		if err := checkBuildInfo(dir, m); err != nil {
 			return nil, err
 		}

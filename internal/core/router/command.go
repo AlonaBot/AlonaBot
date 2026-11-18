@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -66,7 +67,8 @@ func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 				if route.pluginID != entry.PluginID || route.route.GetRouteId() != entry.RouteID {
 					continue
 				}
-				if !route.plugin.Activated() || !r.commandPermitted(route.candidate, ev) {
+				route.names = entry.Names
+				if !r.commandAllowed(route.candidate, ev) {
 					return false
 				}
 				tail := strings.TrimPrefix(head, prefix)
@@ -90,7 +92,6 @@ func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 					invocation.Path = entry.Path
 					return invocation, nil
 				}
-				route.names = entry.Names
 				return r.invokeCommand(route.candidate, ev, event, bind, prefix)
 			}
 			return false
@@ -129,23 +130,31 @@ func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 				}
 			}
 		}
-		if matched && r.commandPermitted(route.candidate, ev) && r.invokeCommand(route.candidate, ev, event, func(*pb.Event) (*pb.CommandInvocation, error) { return invocation, nil }, "") {
+		if matched && r.commandAllowed(route.candidate, ev) && r.invokeCommand(route.candidate, ev, event, func(*pb.Event) (*pb.CommandInvocation, error) { return invocation, nil }, "") {
 			return true
 		}
 	}
 	return false
 }
 
-func (r *Router) commandPermitted(c candidate, ev *pb.Event) bool {
+func (r *Router) commandPolicyFailure(c candidate, ev *pb.Event) *pb.ErrorInfo {
 	if r.policy == nil {
-		return r.permitted(c, ev)
+		if r.permitted(c, ev) {
+			return nil
+		}
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED}
 	}
-	if failure := r.policy.CheckCommand(r.ctx, c.pluginID, c.route, ev.GetActor(), ev.GetTarget()); failure != nil {
+	failure := r.policy.CheckCommand(r.ctx, c.pluginID, c.route, ev.GetActor(), ev.GetTarget())
+	if failure == nil {
+		return nil
+	}
+	if commandPolicyResult(failure.GetCode()) == commandDenied {
 		r.metrics.Add(c.pluginID, "event", "denied")
 		slog.Debug("command policy denied", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "code", failure.GetCode())
-		return false
+	} else {
+		slog.Warn("command policy check failed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "code", failure.GetCode(), "error", failure.GetSafeMessage())
 	}
-	return true
+	return failure
 }
 
 func commandPhase(route commandRoute) int {
@@ -254,7 +263,9 @@ func (r *Router) invokeCommand(c candidate, ev *pb.Event, event *trustedEvent, b
 	}
 	trace := make([]byte, traceIDBytes)
 	rand.Read(trace)
+	started := time.Now()
 	response, callError := r.call(c, event, bind, trace)
+	duration := time.Since(started)
 	if errors.Is(callError, errCommandArguments) {
 		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Debug("command arguments rejected", "error", callError)
 		if c.route.GetCommand().GetUsageMode() != pb.UsageMode_USAGE_MODE_SILENT {
@@ -267,6 +278,13 @@ func (r *Router) invokeCommand(c candidate, ev *pb.Event, event *trustedEvent, b
 		}
 		return false
 	}
+	result := commandOK
+	if callError != nil || response.Err != nil {
+		result = commandError
+		if wire.CodeOf(callError) == pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED || response.Err.GetCode() == pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
+			result = commandDenied
+		}
+	}
 	if callError != nil {
 		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn("command handler call failed", "error", callError)
 	}
@@ -275,8 +293,16 @@ func (r *Router) invokeCommand(c candidate, ev *pb.Event, event *trustedEvent, b
 	}
 	outcome, err := decodeOutcome(response.Payload)
 	if err != nil {
+		if result == commandOK {
+			result = commandError
+		}
+		r.commandInvoked(c, ev, result, duration)
 		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn("decode command handler outcome failed", "error", err)
 		return false
+	}
+	// SDK Rule 返回 false 时没有调用 Handler；保留实际调用错误与 Core 拒绝通知。
+	if outcome.GetMatched() || result != commandOK {
+		r.commandInvoked(c, ev, result, duration)
 	}
 	event.commandConsumed = event.commandConsumed || outcome.GetMatched()
 	if callError == nil && response.Err == nil && outcome.GetMatched() && c.route.GetCommand().GetHandlerMode() == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY && len(outcome.GetChain().GetSegments()) != 0 {

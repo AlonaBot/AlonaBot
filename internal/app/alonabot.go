@@ -363,6 +363,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	adminMux.Handle("/api/v1/", administration)
 	adminMux.Handle("/api/", administration)
 	adminMux.Handle("/api", administration)
+	c.assembly.http = httpproxy.New(authentication)
 	static := management.WebUI()
 	adminMux.Handle("/", static)
 	admin := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -378,7 +379,6 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		}
 		adminMux.ServeHTTP(w, r)
 	})
-	c.assembly.http = httpproxy.New(authentication)
 	publicHost := webhost.New(webhost.Options{BaseURL: baseURL, Proxy: c.assembly.http, Admin: admin})
 	listener, err := net.Listen("tcp", configuration.Listen)
 	if err != nil {
@@ -390,7 +390,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	slog.Info("HTTP listener started", "listen", listener.Addr().String())
 	slog.Info("Core started", "data_dir", dir)
 	for _, install := range installs {
-		if install.Source == devSource || install.Uninstalled || install.Role == state.RoleWebUI {
+		if install.Source == devSource || install.Uninstalled || install.Role == state.RoleWebUI && install.Entrypoint == "" {
 			continue
 		}
 		enabled, err := store.Enabled(ctx, install.PluginID)

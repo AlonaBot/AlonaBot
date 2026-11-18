@@ -98,7 +98,7 @@ func Pack(ctx context.Context, options generate.Options, assetURL, keyFile, outD
 		}
 	}
 	name := fmt.Sprintf("%s-%s-%s-%s.tar.gz", m.ID, m.Version, m.OS, m.Arch)
-	if m.Role == "webui" {
+	if m.Role == "webui" && m.Entrypoint == "" {
 		name = fmt.Sprintf("%s-%s-any.tar.gz", m.ID, m.Version)
 	} else {
 		files[m.Entrypoint], err = os.ReadFile(build.Executable)

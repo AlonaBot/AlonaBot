@@ -1,7 +1,7 @@
 // Package webhost 按受控主机名分派管理入口和插件路由，并统一隔离插件响应。
 //
 // [Host] 将 /plugins/ 请求交给代理、/media/ 交给媒体处理器，其余交给管理处理器。
-// 管理认证由装配方接入。
+// WebUI 后台与管理入口同源，管理认证由代理按 Session 执行。
 // 插件响应经过沙箱 CSP、Cookie 与凭证 CORS 过滤，规则见 CONTRACTS §7.3。
 package webhost
 
@@ -34,18 +34,19 @@ func New(opt Options) *Host { return &Host{opt: opt} }
 
 // ServeHTTP 按受控主机名分派管理、媒体与插件路由，其他 Host 返回 421。
 func (h *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if strings.HasPrefix(r.URL.Path, pluginPrefix) {
-		plugin := h.pluginWriter(w, r)
-		w = plugin
-		// ReverseProxy 在正文结束后才复制 trailer，返回前还需清理一次。
-		defer plugin.after(plugin.Header())
-	}
+	pluginPath := strings.HasPrefix(r.URL.Path, pluginPrefix)
 	if !strings.EqualFold(requestHostname(r.Host), h.opt.BaseURL.Hostname()) {
+		if pluginPath {
+			w = h.pluginWriter(w, r)
+		}
 		http.Error(w, http.StatusText(http.StatusMisdirectedRequest), http.StatusMisdirectedRequest)
 		return
 	}
-	if strings.HasPrefix(r.URL.Path, pluginPrefix) {
-		h.opt.Proxy.ServeHTTP(w, r)
+	if pluginPath {
+		h.opt.Proxy.ServeWithIsolation(w, r, func(w http.ResponseWriter) (http.ResponseWriter, func()) {
+			plugin := h.pluginWriter(w, r)
+			return plugin, func() { plugin.after(plugin.Header()) }
+		})
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/media/") {
