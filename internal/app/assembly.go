@@ -284,6 +284,7 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 		PreEvent: func(ctx context.Context, ev *pb.Event) (*pb.EventPayload, bool, error) {
 			return hooks.PreEvent(ctx, ev)
 		}})
+	a.router.RegisterCommandList(a.mux)
 	hooks = hook.New(a.router, hook.Options{Prepare: a.media.PrepareIncoming, CheckEvent: a.checkAdapterEvent})
 	messages = message.New(a.adapters, p, a.media.LeaseForSend, a.buttons.Issue, v.RequestTimeout, hooks)
 	p.SetCommandsChanged(a.router.CommandsChanged)

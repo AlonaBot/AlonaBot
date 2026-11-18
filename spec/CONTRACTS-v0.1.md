@@ -84,6 +84,8 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 - 每次显式 Send 或自动返回非空 Chain 都执行 `BeforeSend → Adapter.Send → AfterSend`。BeforeSend 只修改 Chain 或拒绝，禁止修改 Target；变更后重新校验完整 Chain。BeforeSend 错误视为拒绝发送。AfterSend 只观察最终回执，错误记日志，不能改变已确认的发送事实。
 - 所有出站 Hook 及其派生的 Service 子调用都继承 Core 的 `send_forbidden` 执行标记；再次 Send 返回 FAILED_PRECONDITION。不能只拦截 Hook 本地函数而允许 A-Hook→B-Service→Send 绕过递归保护。
 
+- 命令目录（`core.command.list`）：Core 取同一份路由与命令索引快照，用在途父调用的可信 Actor 与默认 Target 检查路径命令。只列出已激活插件中主名胜出且通过命令策略的路由；禁用或拒绝的胜出路由继续占位。主名被遮蔽时省略整条路由；其余命令名仅保留仍由该路由胜出的别名，顺序与生效名称列表一致。查询不执行 Rule 或 Handler，策略系统错误原样返回。说明按规范路径查找，依次用 Actor locale、插件默认 locale、英文原文（§5.4、§8）；未登记说明则省略。结果按生效主名以空格连接后的字典序排列。
+
 ### 2.4 延续调用与多轮等待
 
 - 由真实入站事件触发、具有可信 Actor 与默认 Target 的 Handler 调用，可以在返回前经 `core.continuation.start` 请求一次延续调用。原调用成功结束后，Core 以同一插件、同一 route_id 向本 Session 发出新的 Handler REQUEST；原调用返回错误时不发出。新请求携带原调用的可信上下文（Actor、默认 Target、scope、trace 与插件链）和原事件。延续调用的期限为独立的 **15 分钟**，不占用 §2.1 的 64 条分发链与等待队列，也不影响原事件的传播：传播仍由原调用的 HandlerOutcome 决定，延续调用的返回值不再参与传播。
@@ -466,6 +468,8 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 - 子插件（D-116）：`p.Sub(id)` 返回 `*sdk.SubPlugin`，注册方法与 `*sdk.Plugin` 相同，没有 `Sub`，也没有生命周期、`OnConfigLoad` 与迁移的登记。ID 为非空的 ASCII 字母、数字、`_` 与 `-`，同一插件内重复或不合法时 SDK 在收集注册时报错。子插件不出现在 REGISTER 中：其中路由的 route_id、命令路径、别名、Service 名、HTTP 路径与 job ID 按原规则生成，不带子插件 ID，并与整个插件的其他路由一起检查重复。`s.Permission(perm)` 设置其中命令与文本匹配路由的缺省权限，解析次序为路由、由近到远的命令组、子插件、SDK 缺省（§2.3）；子插件内创建的命令组属于该子插件。配置见 §5.1，日志字段见 §14.1。
 - `pack` 输出 `<id>-<version>-<os>-<arch>.tar.gz`，Windows 同格式。归档内包括补上构建信息的 manifest、binary、存在时的 `config_schema.json` 与 `adapter_config_schema.json`、`i18n/` 和 build-info，不包含运行配置/DB/secret/签名私钥。只接受普通文件与目录，拒绝绝对路径、`..`、symlink/hardlink、设备文件、重复归档路径及跨平台大小写冲突；解压到新临时目录、验证后再移动为不可变包目录，不能覆盖正在使用的程序。
 
+- 命令目录按需导入 `sdk/command`。`command.List(ctx context.Context) ([]command.Entry, error)` 接收仍在途的 Handler 的 `c.Context()` 或其派生 context；后台或已结束的调用返回 `FAILED_PRECONDITION`，Core 返回的错误直接传给调用者。`Entry` 包含 `PluginID`、`RouteID`、`Path []string`（生效主名）、`Aliases [][]string` 与 `Description string`（未登记说明时为空）。筛选与排序见 §2.3。
+
 ### 9.2 来源、摘要与签名
 
 - GitHub Releases 作为首发分发入口，不自建分发服务器。插件源（D-162）是 GitHub 仓库中的 `index.json`：`{"version": 1, "plugins": [{"repo": "owner/name", "role": "plugin", "tags": ["weather"]}]}`，`role` 取 §9.1 的四种，`tags` 可省略；名称、描述、版本与图标从组件仓库最新 Release 的 release.json 与包内 manifest 取得，安装照常经 `--source owner/repo`。官方 WebUI 预置官方源，可以切换为其他源；条目只是索引，不改变来源绑定与签名规则。**归档外**的 `release.json` 包含发布者公钥标识、绑定仓库来源、插件 ID/版本、各 OS/arch 资产 URL、字节长度和整个归档的 SHA256；归档内 manifest 不保存自身归档摘要，避免自包含循环。若记录单文件摘要，其对象必须明确是 binary 或资源，不与归档摘要混用。
@@ -738,7 +742,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，只启用 help 插件与官方 WebUI；Agent 组件与 help 以外的预装插件（首个发行版没有，D-171）只安装不启用，不使用 AI 对话的部署不运行它们的进程（D-50、D-62）。发行包中的官方 Adapter 只安装，`core_config.json` 的 `adapters` 中有它的实例时自动启用；某个 Adapter 写了实例却尚未安装时，Core 从 `packages/` 安装，没有发行包（例如经 `go install` 取得的 `alonabot`）时从官方 Release 安装（D-82）。需要 AI 对话时，管理员在 WebUI 或 CLI 启用 Agent；Agent 在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。
 - 管理员可以用 `install --source <来源> --replace` 把任一官方 Adapter、Agent 或 WebUI 换成社区组件（§9.3）；之后不再从官方来源更新该组件。卸载或损坏 WebUI 后，用 `alonabot install <官方 WebUI 的组件 ID>` 从 `packages/` 重装（§9.3，D-149）。
 - 之后不再自动安装，已卸载的预装包不会在下次启动时重新安装。新版本发行包中的包版本高于已安装版本时，作为可用更新列在管理界面与 `alonabot list` 中，由管理员确认后按 `update` 流程更新。Core 本身通过替换可执行文件升级，新版本按 §5.5 校正 `core_config.json`，不改写文件。
-- 首个发行版的预装插件只有 help：`/help` 按调用者权限列出当前会话可用的命令与说明，`/whoami` 回复调用者的用户字符串与收到消息的实例名（D-171）。welcome（新成员入群时发送欢迎语）与 rss（订阅 RSS/Atom 并推送到聊天）完成后随后续版本加入预装。
+- 首个发行版的预装插件只有 help。`plugins/help` 已实现 `New() *sdk.Plugin`，独立进程入口为 `plugins/help/cmd/alonabot-help`（D-171）。`/help` 与 `/whoami` 默认要求 `user`，均为零参数命令。`/help` 经 `command.List` 列出当前会话可用的主名、别名与本地化说明，参数用法由 Core 的 usage 回复给出；`/whoami` 回复用户字符串与收到消息的实例名，无 Actor 时回复对应提示。welcome（新成员入群时发送欢迎语）与 rss（订阅 RSS/Atom 并推送到聊天）完成后随后续版本加入预装。
 - 第一个 Core Admin 的产生：用户在聊天中发送 `/whoami` 取得自己的用户字符串，管理员把它写入 `core_config.json` 的 `admins`，或在 WebUI 的 Core 设置页、`alonabot admin add` 中添加。预装插件与第三方插件一样以独立进程运行，只有启用的才运行。
 
 ### 15.3 容器镜像
@@ -816,6 +820,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
   - 否则是文本文件的路径，文件名任意，每行一个 `KEY=VALUE`，空行和以 `#` 开头的行忽略；
   - 后出现的覆盖先出现的。库模式的 `alonabot.Args(...)` 与 `ALONABOT_ARGS` 语法相同。
 - 值的格式：整数用十进制；时长用 Go 的时长写法，例如 `2s`、`15m`；大小用 `B`、`KiB`、`MiB`、`GiB`，写成 `MB` 等十进制单位时报错并提示改用二进制单位。
+- `core.command.list` 沿用普通 RPC 的期限与 Session 预算（§1.2），没有独立的调优参数。
 - 未知的键、格式错误、违反约束或彼此矛盾的值使 Core 拒绝启动，错误指明出处（参数，或文件及行号）。存在任何覆盖时，Core 启动时输出一条 WARN，列出全部覆盖项及出处。`alonabot tune list` 列出全部参数的缺省值与约束。
 - SDK 也要遵守的值（在途请求数、payload 预算、普通请求期限、各阶段预算）由 Core 经 Bootstrap 的 `SessionLimits session_limits = 11` 下发：`max_inflight` 对应 `SESSION_MAX_INFLIGHT`，`max_payload_bytes` 对应 `SESSION_MAX_PAYLOAD`，`request_timeout_ms` 对应 `REQUEST_TIMEOUT` 并转换为毫秒。`CORE_MAX_PAYLOAD` 是跨 Session 的 Core 总预算，只由 Core 使用。双方按同一组 Session 值执行。
 - 设置 `PLUGIN_MEMORY_SOFT_LIMIT` 时，Core 为每个插件与 Adapter 进程传入环境变量 `GOMEMLIMIT`；`CORE_MEMORY_SOFT_LIMIT` 对 Core 自己生效。这是 Go 运行时的软上限：超过后 GC 更积极地回收，不会终止进程。v0.1 不提供硬上限。

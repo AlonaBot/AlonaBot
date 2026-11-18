@@ -799,3 +799,46 @@ func TestTaskFieldNumbers(t *testing.T) {
 		t.Fatalf("RouteDescriptor task = %v", f)
 	}
 }
+
+// TestCommandListFieldNumbers 固定命令列表及其复用字段的编号、类型、列表与 presence。
+func TestCommandListFieldNumbers(t *testing.T) {
+	for _, tc := range []struct {
+		message  proto.Message
+		names    []protoreflect.Name
+		kinds    []protoreflect.Kind
+		lists    map[int]bool
+		optional map[int]bool
+		messages map[int]protoreflect.FullName
+	}{
+		{message: &pb.CommandListRequest{}},
+		{message: &pb.CommandListResponse{}, names: []protoreflect.Name{"commands"}, kinds: []protoreflect.Kind{protoreflect.MessageKind}, lists: map[int]bool{1: true}, messages: map[int]protoreflect.FullName{1: "alonabot.v1.CommandInfo"}},
+		{message: &pb.CommandInfo{}, names: []protoreflect.Name{"plugin_id", "route_id", "path", "aliases", "description"}, kinds: []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.StringKind}, lists: map[int]bool{3: true, 4: true}, optional: map[int]bool{5: true}, messages: map[int]protoreflect.FullName{4: "alonabot.v1.CommandAlias"}},
+		{message: &pb.CommandAlias{}, names: []protoreflect.Name{"path"}, kinds: []protoreflect.Kind{protoreflect.StringKind}, lists: map[int]bool{1: true}},
+	} {
+		fields := tc.message.ProtoReflect().Descriptor().Fields()
+		if fields.Len() != len(tc.names) {
+			t.Fatalf("%T field count = %d, want %d", tc.message, fields.Len(), len(tc.names))
+		}
+		for i, name := range tc.names {
+			number := i + 1
+			f := fields.ByNumber(protoreflect.FieldNumber(number))
+			cardinality := protoreflect.Optional
+			if tc.lists[number] {
+				cardinality = protoreflect.Repeated
+			}
+			if f == nil || f.Name() != name || f.Kind() != tc.kinds[i] || f.Cardinality() != cardinality || f.HasOptionalKeyword() != tc.optional[number] || f.HasPresence() != tc.optional[number] {
+				t.Fatalf("%T field %d = %v", tc.message, number, f)
+			}
+			if want := tc.messages[number]; want != "" && f.Message().FullName() != want {
+				t.Errorf("%T.%s message = %s, want %s", tc.message, name, f.Message().FullName(), want)
+			}
+			if f.ContainingOneof() != nil && !f.ContainingOneof().IsSynthetic() {
+				t.Errorf("%T.%s unexpected oneof = %v", tc.message, name, f)
+			}
+		}
+	}
+	f := (&pb.CommandSpec{}).ProtoReflect().Descriptor().Fields().ByNumber(13)
+	if f == nil || f.Name() != "description" || f.Kind() != protoreflect.StringKind || f.Cardinality() != protoreflect.Optional || !f.HasOptionalKeyword() || !f.HasPresence() {
+		t.Fatalf("CommandSpec field 13 should be optional string description, got %v", f)
+	}
+}

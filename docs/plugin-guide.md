@@ -12,7 +12,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 
 ## 2. 依赖
 
-- 根包 `sdk` 提供插件对象、Handler Context、注册 builder、权限、事件类型与运行入口。分类 API 按需导入 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action` 和 `sdk/options`。
+- 根包 `sdk` 提供插件对象、Handler Context、注册 builder、权限、事件类型与运行入口。分类 API 按需导入 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action`、`sdk/options` 和 `sdk/command`。
 - 只导入用到的包。SDK 根包只允许依赖 protobuf、x/sys 与 jsonschema-go（D-52）；数据库在 `sdk/sqlitedb` 与 `sdk/gormdb` 中，不导入就不链接（D-49）。
 - 能用标准库就不引入第三方库。HTTP 用 `net/http`；不要内嵌模型厂商的 SDK 或自己的 Provider 客户端，需要模型时调用 Agent 组件的 `llm.generate`（第 6 节）。
 - 包级变量与 `init` 不做重活：不加载大文件、不建大表、不批量编译正则，推迟到 OnStart 或首次使用。所有被链接的包的 `init` 都会在启动时执行，分配的内存会一直常驻。
@@ -84,6 +84,8 @@ return &adapter.Descriptor{
 ```
 
 省略 `Auth` 时要求 Core 会话；`AuthPlatformToken` 由 Adapter 校验平台凭证。SDK 在连接 Core 前核对路径与重复路由。
+
+查询当前会话的可用命令时，导入 `github.com/AlonaBot/AlonaBot/sdk/command`，在 Handler 内调用 `entries, err := command.List(c.Context())`。成功时可用 `entry.Path` 和 `entry.Aliases` 显示生效命令名（多 token 路径用空格连接），用 `entry.Description` 显示本地化说明。调用失败时返回 `err`；后台或已结束的 Handler context 返回 `FAILED_PRECONDITION`。完整示例见[官方 help 插件](../plugins/help/help.go)。
 
 ## 6. 跨插件协作
 
