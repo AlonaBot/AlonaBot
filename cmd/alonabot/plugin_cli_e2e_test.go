@@ -36,7 +36,7 @@ func TestDevelopmentCLI(t *testing.T) {
 		}
 		return string(output)
 	}
-	cli("init", "--id", "alonabot_plugin_cli", "--module", "example.com/cli")
+	cli("init", "--id", "alonabot-plugin-cli", "--module", "example.com/cli")
 	for _, name := range []string{"plugin.go", "plugin.yaml", "config_schema.json", "i18n/en-US.json", ".gitignore"} {
 		developmentRead(t, filepath.Join(dir, name))
 	}
@@ -117,7 +117,7 @@ func TestHello(t *testing.T) {
 	noGenerated()
 	output := cli("test")
 	noGenerated()
-	for _, required := range []string{"Activated alonabot_plugin_cli (plugin)", "Command: hello", "Removed temporary test data:"} {
+	for _, required := range []string{"Activated alonabot-plugin-cli (plugin)", "Command: hello", "Removed temporary test data:"} {
 		if !strings.Contains(output, required) {
 			t.Fatalf("missing %q:\n%s", required, output)
 		}
@@ -147,7 +147,7 @@ func TestHello(t *testing.T) {
 	if publication.PublisherKeyID != release.KeyID(pub) {
 		t.Fatal("publisher identity mismatch")
 	}
-	archive := filepath.Join(out, "alonabot_plugin_cli-0.1.0-"+runtime.GOOS+"-"+runtime.GOARCH+".tar.gz")
+	archive := filepath.Join(out, "alonabot-plugin-cli-0.1.0-"+runtime.GOOS+"-"+runtime.GOARCH+".tar.gz")
 	candidate, err := packages.Preflight(packages.Input{ReleaseJSON: raw, Signature: sig, PublicKey: pub, Source: "github.com/CHANGE-ME/CHANGE-ME", OS: runtime.GOOS, Arch: runtime.GOARCH, ArchivePath: archive}, t.TempDir(), packages.NewLimits(tune.Defaults()))
 	if err != nil {
 		t.Fatal(err)

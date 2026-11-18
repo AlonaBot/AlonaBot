@@ -24,12 +24,12 @@ func TestTelegramDevelopment(t *testing.T) {
 	dir := t.TempDir()
 	developmentWrite(t, filepath.Join(dir, "core_config.json"), fmt.Sprintf(`{
 		"listen":"127.0.0.1:0",
-		"adapters":{"telegram":{"package":"alonabot_adapter_telegram","default_instance":"tg_a","instances":{
+		"adapters":{"telegram":{"package":"alonabot-adapter-telegram","default_instance":"tg_a","instances":{
 			"tg_a":{"token":"development-token-a","api_base_url":%q,"proxy_mode":"none"},
 			"tg_b":{"token":"development-token-b","api_base_url":%q,"proxy_mode":"none"}
 		}}}}`, a.URL(), b.URL()))
 	c := startEmptyCore(t, dir, "../../adapters/telegram", "../../examples/plugins/echo", "../../examples/plugins/media")
-	for _, id := range []string{"alonabot_adapter_telegram", "echo", "media"} {
+	for _, id := range []string{"alonabot-adapter-telegram", "echo", "media"} {
 		developmentPID(t, c, id)
 	}
 	telegramEventually(t, c, func() bool { return a.Calls("getUpdates") > 0 && b.Calls("getUpdates") > 0 })

@@ -114,10 +114,10 @@ func TestManagementLifecycle(t *testing.T) {
 			t.Fatalf("install: %s", output)
 		}
 		c.management(t, dir, "", "enable", "demo")
-		adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
 		c.management(t, dir, "", "install", adapter, "--yes")
-		c.management(t, dir, "", "adapter", "instance", "create", "alonabot_adapter_fixture", "one")
-		c.management(t, dir, "", "enable", "alonabot_adapter_fixture")
+		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", "one")
+		c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
 		c.waitFor("fixture instance one started")
 		next := validationPackage(t, archive, "1.1.0", []string{"migration_mode", "prepare_effects"}, "")
 		output = c.management(t, dir, "", "update", "demo", "--archive", next, "--yes")
@@ -168,13 +168,13 @@ func TestManagementLifecycle(t *testing.T) {
 			if after.Active != active.Active || after.Version != active.Version || after.State != "Activated" || lastSession(t, c) != session {
 				t.Fatalf("rejected update changed running package: %+v", after)
 			}
-			status, body := fixtureHTTP(t, c, dir, http.MethodPost, "/plugins/alonabot_adapter_fixture/deliver?instance=one&user=alice&text=%2Fping")
+			status, body := fixtureHTTP(t, c, dir, http.MethodPost, "/plugins/alonabot-adapter-fixture/deliver?instance=one&user=alice&text=%2Fping")
 			if status != http.StatusNoContent {
 				t.Fatalf("ping: %d %s", status, body)
 			}
 			deadline := time.Now().Add(5 * time.Second)
 			for {
-				status, body = fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot_adapter_fixture/sent")
+				status, body = fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot-adapter-fixture/sent")
 				var replies []string
 				if status != http.StatusOK || json.Unmarshal(body, &replies) != nil {
 					t.Fatalf("sent: %d %s", status, body)
@@ -288,15 +288,15 @@ func TestManagementDependencies(t *testing.T) {
 	if output := managementFailure(t, c, dir, "enable", "dependent"); !strings.Contains(output, "FAILED_PRECONDITION") || !strings.Contains(output, "devloop") {
 		t.Fatal(output)
 	}
-	adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1,"token":{"type":"string","required":true}}`)})
+	adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1,"token":{"type":"string","required":true}}`)})
 	c.management(t, dir, "", "install", adapter, "--yes")
-	c.management(t, dir, "", "enable", "alonabot_adapter_fixture")
+	c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
 	c.management(t, dir, "", "enable", "dependent")
-	if output := managementFailure(t, c, dir, "disable", "alonabot_adapter_fixture"); !strings.Contains(output, "dependent") || !strings.Contains(output, "--yes") {
+	if output := managementFailure(t, c, dir, "disable", "alonabot-adapter-fixture"); !strings.Contains(output, "dependent") || !strings.Contains(output, "--yes") {
 		t.Fatal(output)
 	}
-	c.management(t, dir, "", "disable", "alonabot_adapter_fixture", "--yes")
-	if findPackage(t, c, dir, "dependent").State != "Activated" || findPackage(t, c, dir, "alonabot_adapter_fixture").Enabled {
+	c.management(t, dir, "", "disable", "alonabot-adapter-fixture", "--yes")
+	if findPackage(t, c, dir, "dependent").State != "Activated" || findPackage(t, c, dir, "alonabot-adapter-fixture").Enabled {
 		t.Fatal("dependency confirmation changed dependents")
 	}
 	stopTestCore(t, c)
@@ -397,24 +397,24 @@ func TestManagementUninstallScopes(t *testing.T) {
 func TestManagementReplacement(t *testing.T) {
 	dir := t.TempDir()
 	c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
-	first := testPackage(t, "alonabot_agent_first", "agent", "", "github.com/example/agent1", "", nil)
-	second := testPackage(t, "alonabot_agent_second", "agent", "", "github.com/example/agent2", "", nil)
+	first := testPackage(t, "alonabot-agent-first", "agent", "", "github.com/example/agent1", "", nil)
+	second := testPackage(t, "alonabot-agent-second", "agent", "", "github.com/example/agent2", "", nil)
 	c.management(t, dir, "", "install", first, "--yes")
-	c.management(t, dir, "", "enable", "alonabot_agent_first")
-	if output := managementFailure(t, c, dir, "install", second, "--yes"); !strings.Contains(output, "ALREADY_EXISTS") || !strings.Contains(output, "alonabot_agent_first") {
+	c.management(t, dir, "", "enable", "alonabot-agent-first")
+	if output := managementFailure(t, c, dir, "install", second, "--yes"); !strings.Contains(output, "ALREADY_EXISTS") || !strings.Contains(output, "alonabot-agent-first") {
 		t.Fatal(output)
 	}
-	if output := managementFailure(t, c, dir, "install", second, "--replace"); !strings.Contains(output, "alonabot_agent_first") {
+	if output := managementFailure(t, c, dir, "install", second, "--replace"); !strings.Contains(output, "alonabot-agent-first") {
 		t.Fatal(output)
 	}
 	c.management(t, dir, "", "install", second, "--replace", "--yes")
-	if !findPackage(t, c, dir, "alonabot_agent_first").Uninstalled || !findPackage(t, c, dir, "alonabot_agent_second").Enabled {
+	if !findPackage(t, c, dir, "alonabot-agent-first").Uninstalled || !findPackage(t, c, dir, "alonabot-agent-second").Enabled {
 		t.Fatal("replacement lost enabled state")
 	}
 	for _, id := range []string{"devloop", "another"} {
-		archive := testPackage(t, "alonabot_adapter_"+id, "adapter", id, "github.com/example/"+id, "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+		archive := testPackage(t, "alonabot-adapter-"+id, "adapter", id, "github.com/example/"+id, "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
 		c.management(t, dir, "", "install", archive, "--yes")
-		if findPackage(t, c, dir, "alonabot_adapter_"+id).Uninstalled {
+		if findPackage(t, c, dir, "alonabot-adapter-"+id).Uninstalled {
 			t.Fatal("different adapter IDs conflict")
 		}
 	}
@@ -429,7 +429,7 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := startEmptyCore(t, dir)
-	adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1,"token":{"type":"string","required":true,"secret":true}}`)})
+	adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1,"token":{"type":"string","required":true,"secret":true}}`)})
 	commands, err := writeTestPackage(t.TempDir(), "commands", "plugin", "", "github.com/example/commands", "1.0.0", filepath.Join(binDir, "command-fixture"), "", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -441,7 +441,7 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"one", "two", "fail"} {
-		c.management(t, dir, "", "adapter", "instance", "create", "alonabot_adapter_fixture", id, "--config", configFile)
+		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", id, "--config", configFile)
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, settings.FileName))
 	if err != nil {
@@ -450,21 +450,21 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	if !bytes.Contains(raw, []byte("${MANAGE_E2E_TOKEN}")) || bytes.Contains(raw, []byte("fixture-credential-value")) {
 		t.Fatal("credential reference was changed")
 	}
-	c.management(t, dir, "", "enable", "alonabot_adapter_fixture")
+	c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
 	c.management(t, dir, "", "enable", "commands")
 	for _, id := range []string{"one", "two"} {
 		c.waitFor("fixture instance " + id + " started")
 	}
-	c.waitFor(`adapter instance start failed plugin_id=alonabot_adapter_fixture instance_id=fail`)
+	c.waitFor(`adapter instance start failed plugin_id=alonabot-adapter-fixture instance_id=fail`)
 	check := func(instance, user, text, want string, count int) {
 		t.Helper()
-		path := "/plugins/alonabot_adapter_fixture/deliver?instance=" + instance + "&user=" + user + "&text=" + url.QueryEscape(text)
+		path := "/plugins/alonabot-adapter-fixture/deliver?instance=" + instance + "&user=" + user + "&text=" + url.QueryEscape(text)
 		if status, body := fixtureHTTP(t, c, dir, http.MethodPost, path); status != http.StatusNoContent {
 			t.Fatalf("deliver: %d %s", status, body)
 		}
 		deadline := time.Now().Add(5 * time.Second)
 		for {
-			status, body := fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot_adapter_fixture/sent")
+			status, body := fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot-adapter-fixture/sent")
 			var sent []string
 			if status != http.StatusOK || json.Unmarshal(body, &sent) != nil {
 				t.Fatalf("sent: %d %s", status, body)
@@ -493,7 +493,7 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	for _, id := range []string{"one", "two"} {
 		c.waitFor("fixture instance " + id + " started")
 	}
-	c.waitFor(`adapter instance start failed plugin_id=alonabot_adapter_fixture instance_id=fail`)
+	c.waitFor(`adapter instance start failed plugin_id=alonabot-adapter-fixture instance_id=fail`)
 	listed := c.management(t, dir, "", "list")
 	if strings.Contains(listed, "fixture-credential-value") || strings.Contains(listed, "MANAGE_E2E_TOKEN") || strings.Contains(c.log(), "fixture-credential-value") {
 		t.Fatal("credentials escaped through management or logs")
