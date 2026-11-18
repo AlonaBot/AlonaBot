@@ -54,10 +54,18 @@ func (i *invoker) confirm(ctx context.Context, caller router.Caller, in *wire.In
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "unknown tool effect")
 	}
 	i.catalog.observe(caller.PluginID, request.GetOperation(), request.GetEffect())
-	policy, err := i.catalog.store.GetToolPolicy(ctx, caller.PluginID, request.GetOperation())
-	if errors.Is(err, state.ErrNotFound) {
-		policy = pb.ToolPolicy_TOOL_POLICY_CONFIRM
-	} else if err != nil {
+	view, err := i.catalog.profileSnapshot(ctx, in)
+	if err != nil {
+		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "read profile policies: "+err.Error())
+	}
+	policy, err := view.policy(caller.PluginID, request.GetOperation(), true)
+	if err == nil && policy == pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED {
+		policy, err = i.catalog.store.GetToolPolicy(ctx, caller.PluginID, request.GetOperation())
+		if errors.Is(err, state.ErrNotFound) {
+			policy, err = pb.ToolPolicy_TOOL_POLICY_CONFIRM, nil
+		}
+	}
+	if err != nil {
 		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "read operation policy: "+err.Error())
 	}
 	if policy == pb.ToolPolicy_TOOL_POLICY_DENY {

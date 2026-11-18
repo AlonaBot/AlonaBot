@@ -48,9 +48,11 @@ func saveTopic(ctx context.Context, topic string) error {
 }
 ```
 
-读取用 `value, ok, err := kv.Get(ctx, key)`；`err == nil` 且 `ok == false` 表示键不存在，`kv.Delete(ctx, key)` 删除不存在的键也成功。键须为 1～512 字节的 UTF-8，值最多 1 MiB，空值可以保存；非法参数返回 `INVALID_ARGUMENT`。没有受管 SQLite 的 Session 调用 KV 返回 `FAILED_PRECONDITION`。
+读取用 `value, ok, err := kv.Get(ctx, key)`；`err == nil` 且 `ok == false` 表示键不存在，`kv.Delete(ctx, key)` 删除不存在的键也成功。键须为 1～512 字节的 UTF-8，拒绝恰为 `.` 或 `..` 的键（D-178）；其他含点或斜杠的键按字面值保存。值最多 1 MiB，空值可以保存；非法参数返回 `INVALID_ARGUMENT`。没有受管 SQLite 的 Session 调用 KV 返回 `FAILED_PRECONDITION`。
 
-`page, err := kv.List(ctx, "subscription/", "", 20)` 按键的字节序返回最多 20 个键；后续请求把 `page.Next` 作为 `cursor`，空 `Next` 表示已到末尾。前缀按字面字节匹配，`%` 和 `_` 保持原义；空前缀列出全部键，`limit` 须为正数。
+`page, err := kv.List(ctx, "subscription/", "", 20)` 按键的字节序返回最多 20 个键；后续请求把 `page.Next` 作为 `cursor`，空 `Next` 表示已到末尾，非空 `cursor` 遵守键的约束。前缀按字面字节匹配，`%` 和 `_` 保持原义；空前缀列出全部键，`limit` 须为正数。
+
+官方 WebUI 的插件「数据」页可浏览和编辑数据库表格、KV 与插件文件，并导出或清空数据；数据库保留代次只读。Agent 会话提供摘要与清除入口，接口与数据清理语义见 [ADMIN-API §15](../spec/ADMIN-API.md#15-agent-会话管理) 与 [§21](../spec/ADMIN-API.md#21-插件数据浏览)。
 
 `examples/plugins/configdb` 的 `/note kvset <key> <value>` 与 `/note kvget <key>` 演示保存和读取，沿用该示例的本地化回复。
 
@@ -82,7 +84,8 @@ func saveCache(ctx context.Context, content []byte) error {
 
 - 用标准库 `log/slog` 记录，SDK 把记录交给 Core 并补上来源（CONTRACTS §14）。不要往 stdout 写内容：stdio 传输下 stdout 是协议通道。
 - 组件自己的数据损坏或无法继续运行、需要立即处理时，用 `slog.Log(ctx, sdk.LevelCritical, "component data is corrupt", "error", err)` 记录 CRITICAL；Handler panic 仍由 SDK 记录为 ERROR（CONTRACTS §14.1）。
-- 日志、错误字符串与 safe_message 用英文；给用户看的文字放进 `i18/` 的 `messages`，至少提供 en-US（D-30、CONTRACTS §5.4）。
+- 日志、错误字符串与 safe_message 用英文；给用户看的文字放进 `i18n/` 的 `messages`，至少提供 en-US（D-30、CONTRACTS §5.4）。
+- `messages` 键与命名占位符使用点分隔的标识符，每段由 ASCII 大小写字母、数字与 `_` 组成（D-178），例如 `storeEmpty` 与 `account.Name`。
 - 取文案用 `c.T(key, name, value, ...)`，后台用 `sdk.T`，两者只返回字符串（D-106）。键与参数名尽量写成常量：`alonabot build` 与 `alonabot check` 会检查键是否存在于 en-US、参数是否成对、参数名是否为 `string` 类型且与占位符一致；键在运行时才确定时不检查，运行时找不到键或参数不符时返回键名或保留占位符原文，并在插件日志记一次 WARN（CONTRACTS §5.4）。
 - 不记录 secret、token、完整配置与 DSN；含凭证的 URL 先脱敏（CONTRACTS §14）。
 
@@ -144,7 +147,7 @@ return &adapter.Descriptor{
 - Event Bus 是非持久广播：`Publish` 只能发布到本插件的命名空间，返回成功只表示 Core 准入，不代表有人收到；订阅方队列满、预算不足或离线时事件会丢失，也不会补发。需要回执或可靠送达时改用 Service Call。订阅回调串行执行，不要在其中阻塞：积压的事件占用本插件的接收预算，会让命令请求也被拒绝。回调里没有 Actor 与默认会话，发消息时用 `sdk.Send(ctx, session, content, ...)` 或 `sdk.SendText(ctx, session, text, ...)` 显式给出会话（CONTRACTS §3、§8，D-102、D-118）。
 - `service.JSON`、`bus.Define` 与 `task.Define` 声明的类型参数必须是包级的具名非泛型类型，由生成器检查并给出带位置的诊断。JSON Service 与 Bus 事件的 schema_id 由类型决定，版本取类型的 `SchemaVersion() uint32`，没有该方法时为 1；改动类型后运行 `alonabot build`。切片与 map 接受 null，与 `encoding/json` 对 nil 的编码一致。
 - JSON Service 的输入不符合 Schema 时，调用方收到 INVALID_ARGUMENT 和固定文本 `invalid service input`，Handler 不被调用；输出不符合时调用方收到 INTERNAL，日志只记 `schema_id`；调用方的 `Call` 也按声明校验响应，不符合时返回 INTERNAL 与 `invalid service output for "<target>"`。校验详情可能带业务载荷，不写入响应和日志。
-- 通过 `tool.List(ctx)` 获取工具目录，`tool.Info.Effect` 返回声明的类别。用 `.Tool(description, tool.DefaultAllow)` 登记 JSON Service 工具，缺省需确认时使用 `tool.DefaultConfirm`。在 `.Tool(...)` 之后、`.Handle(...)` 之前可以接 `.Effect(tool.ReadOnly)`，另有 `tool.Write`、`tool.Destructive`；省略时为 `tool.Unspecified`。顺序或类别非法时收集注册报错；类别仅作提示，不改变策略（CONTRACTS §13.1）。
+- 通过 `tool.List(ctx)` 获取工具目录，`tool.Info.Effect` 返回声明的类别，策略按本次调用的可信默认 Target 所在会话选择配置文件；无 Target 或无父调用时使用 `default`。list、invoke 与 confirm 每次读取一次配置文件快照：插件关闭时为 deny，其余依次取配置文件覆盖、全局覆盖与工具声明缺省策略，确认操作无覆盖时为 confirm。工具与操作同名时分别匹配配置文件覆盖；管理更新从下一次操作生效，在途确认保留已接纳策略。用 `.Tool(description, tool.DefaultAllow)` 登记 JSON Service 工具，缺省需确认时使用 `tool.DefaultConfirm`。在 `.Tool(...)` 之后、`.Handle(...)` 之前可以接 `.Effect(tool.ReadOnly)`，另有 `tool.Write`、`tool.Destructive`；省略时为 `tool.Unspecified`。顺序或类别非法时收集注册报错；类别仅作提示，不改变策略（CONTRACTS §13.1）。
 - 需要模型能力时调用 Agent 组件的 `llm.generate`：`sdk/llm` 提供类型与以 `@agent` 为目标的调用辅助，官方 Agent 被替换后也不用修改；请管理员把插件加入 `llm_service_allowed_plugins`；一次调用是一次非流式请求，期限受调用方约束（CONTRACTS §13.5）。
 - 在 Handler 或其延续调用中，`tool.Invoke(ctx, "plugin_id/service_name", args)` 按当前生效的工具策略调用工具（deny 返回 PERMISSION_DENIED；confirm 时 Core 先向当前会话发送带「允许」「拒绝」按钮的确认，展示实际参数，拒绝返回 PERMISSION_DENIED，超时返回 DEADLINE_EXCEEDED）；插件自行执行操作前用 `tool.Confirm(ctx, operation, summary, effect)` 请求许可，确认时展示插件给出的摘要，返回 nil 后可执行操作。无类别时传 `tool.Unspecified`，非法类别返回 INVALID_ARGUMENT。两者都需要父调用链；没有 Actor 时遇到确认返回 PERMISSION_DENIED，实例不支持按钮时返回 UNSUPPORTED（CONTRACTS §13.2）。
 
@@ -259,6 +262,8 @@ AlonaBot.onLocale(async function(locale) {
 
 Core 提供 `core.profile.list`、`current`、`assign` 与 `set`（[WIRE §3.5](../spec/WIRE-FORMAT.md#35-插件可调用的-core-固定服务)）。current/assign/set 从同一 Session 的在途父调用取得可信会话与 Actor，assign/set 要求 Core Admin；set 只修改本插件标记了 `profile` 的字段。会话使用 `default` 时写入 Pending，已有 Pending 或管理互斥占用返回 FAILED_PRECONDITION；整条根调用及延续结束后触发 reload，响应的 `reloading` 为 true。配置文件关闭插件时，命令按禁用处理，文本、事件、Raw 与 PreEvent 候选跳过。
 
+官方 Agent 的 `agent/profile.go` 提供调用示例：用包级 `service.Proto` 声明四个固定服务，调用传 `c.Context()`，用 `json.Marshal` 编码字段值，并按响应回复配置文件名称、会话数及 `reloading` 提示。`default` 的回复在当前 Handler 内完成，根调用结束后由 Core 重载。官方 Agent 的对话、定时任务和未显式指定模型的 `llm.generate` 均从 `c.Config()` 读取可覆盖字段。
+
 | 声明类型 | 取值方法 |
 | --- | --- |
 | `string`、`text` | `String(key)` |
@@ -322,6 +327,7 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 - 市场 ID 按角色使用 `alonabot-plugin-`、`alonabot-adapter-`、`alonabot-agent-` 或 `alonabot-webui-` 前缀，后缀用单个连字符分词，完整 ID 不含下划线；插件正则为 `^alonabot-plugin-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`，其他角色同形，长度上限为 64；本地规则仍为 `^[a-z][a-z0-9_-]{0,63}$`（CONTRACTS §9.1，D-172）。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
 - 改名时同步 `plugin.yaml`、依赖、HTTP 路径和 Service 原始名；`pack` 会使用新 ID 生成归档名和 `release.json`。已有改名前的开发数据时，按[开发指南](development.md#开发运行与热部署)重建。
 - 每次发布可附上 UTF-8 changelog，安装后可经[管理 API](../spec/ADMIN-API.md#22-更新内容changelog)读取。二选一：根目录的 `CHANGELOG.md`（每版一节，例如 `## [1.2.1] - 2026-11-17`，日期可省略），或按版本、按语言存放，例如 `changelog/1.2.1/en-US.md` 和 `changelog/1.2.1/zh-CN.md`。目录名使用不带 `v`、且不高于 `plugin.yaml` 中 `version` 的 SemVer；文件名使用规范化的 BCP 47 标签，每个版本都要有 `en-US.md`。运行 `alonabot check` 核对格式，`alonabot pack` 原样打包（CONTRACTS §9.1）。
+- 官方 WebUI 预置插件源 `AlonaBot/plugin-store`，支持添加、移除和保留主动清空的源列表。商店读取源仓库默认分支的 `index.json`，从组件仓库最新 Release 的 `release.json` 与包内 manifest 取得展示信息；发布条目的格式见 CONTRACTS §9.2。更新预览读取已绑定来源的 Release 正文，更新后读取包内 changelog；HTML 按文本显示，已读版本由 WebUI 后台按 SemVer 持久化并单调推进。
 - 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；本地归档用 `install <归档>`，官方包用 `install <组件 ID>` 从可执行文件旁 `packages/<组件 ID>/` 读取。不带参数时在当前目录（作者工程为 `bin/`，含直接包子目录）按 release.json 选择唯一的本机包，静态 WebUI 使用 any/any，零个或多个候选时列出搜索目录和候选并报错；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`（CONTRACTS §9.3）。
 - 用 `alonabot build` 检查资源并编译独立组件，`alonabot check` 只读核对。`alonabot pack [目录] --target linux/amd64 --target linux/arm64` 为每个目标生成归档，全部资产共享一份归档外的 `release.json`；省略目标时取本机平台，静态 WebUI 只生成一个 `any/any` 归档，带 Go 入口的 WebUI 按平台构建。`--tags` 选择源码，`--out` 默认 `<工程>/bin`。资产地址为 `--asset-base` 加 `/` 与归档名；`source` 为 `github.com/<owner>/<repo>` 时，缺省前缀为 `https://github.com/<owner>/<repo>/releases/download/v<version>`，其他来源须显式给出绝对 https 前缀（无 query/fragment）。可选 `--key FILE` 读取标准 base64 编码的 64 字节 Ed25519 私钥，只对最终合并清单的原始字节签名一次，并在归档外写 `release.json.sig` 与 `release.pub`；省略时输出 unsigned 清单并清除输出目录中的旧签名和公钥（CONTRACTS §9.2、§9.3）。密钥读取或签名失败直接报错。进程包含可解析的 `build-info` 文本，静态 WebUI 包包含 manifest、静态资源和可选的 changelog。签名私钥由作者保管，留在打包资源、仓库和构建日志之外。
 

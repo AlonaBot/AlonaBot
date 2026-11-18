@@ -37,7 +37,7 @@ func identifier(name string) bool {
 			return false
 		}
 		for _, char := range part {
-			if !(char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '_') {
+			if !(char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || char == '_') {
 				return false
 			}
 		}

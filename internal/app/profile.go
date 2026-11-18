@@ -88,6 +88,14 @@ func targetProfile(profiles *profile.Service, target *pb.Target) profile.Profile
 	return profiles.Resolve(target.GetAdapterInstanceId(), session)
 }
 
+func (a *assembly) toolProfile(ctx context.Context, target *pb.Target) (*profile.Service, string, error) {
+	profiles, err := a.profiles(ctx, "", nil)
+	if err != nil {
+		return nil, "", err
+	}
+	return profiles, targetProfile(profiles, target).ID, nil
+}
+
 func (a *assembly) resolveProfile(ctx context.Context, id string, target *pb.Target) (string, bool, error) {
 	view, err := a.profileView(ctx, id, target)
 	return view.ProfileID, view.Enabled, err
