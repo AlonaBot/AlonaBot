@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/url"
 	"os"
@@ -33,6 +34,8 @@ const (
 	directoryMode     = 0o755
 )
 
+const webuiDir = "web/admin"
+
 type component struct {
 	dir, id string
 }
@@ -40,7 +43,7 @@ type component struct {
 var components = []component{
 	{"adapters/telegram", "alonabot-adapter-telegram"},
 	{"agent", "alonabot-agent-official"},
-	{"web/admin", "alonabot-webui-admin"},
+	{webuiDir, "alonabot-webui-admin"},
 	{"plugins/help", "alonabot-plugin-help-official"},
 }
 
@@ -119,10 +122,15 @@ func run(ctx context.Context, args []string) (err error) {
 	if err := buildCore(ctx, host, runtime.GOOS, runtime.GOARCH, opt.version, public); err != nil {
 		return err
 	}
-	if _, err := command(ctx, "web/admin", nil, "npm", "ci"); err != nil {
+	// WebUI 在暂存副本中安装依赖并构建，不改动工作区的 node_modules 与 dist。
+	webui := filepath.Join(staging, "webui")
+	if err := copyWebUI(webuiDir, webui); err != nil {
 		return err
 	}
-	if _, err := command(ctx, "web/admin", nil, "npm", "run", "build"); err != nil {
+	if _, err := command(ctx, webui, nil, "npm", "ci"); err != nil {
+		return err
+	}
+	if _, err := command(ctx, webui, nil, "npm", "run", "build"); err != nil {
 		return err
 	}
 	roots := make(map[string]string)
@@ -142,6 +150,9 @@ func run(ctx context.Context, args []string) (err error) {
 	}
 	// 3. 每个组件只调用一次多平台 pack，再签名并将同一清单复制到各平台目录。
 	for _, component := range components {
+		if component.dir == webuiDir {
+			component.dir = webui
+		}
 		if err := packComponent(ctx, opt, component, host, staging, out, targets, roots, key); err != nil {
 			return fmt.Errorf("pack %s: %w", component.id, err)
 		}
@@ -280,4 +291,37 @@ func archiveDigest(path string) (digestBytes []byte, err error) {
 		return nil, err
 	}
 	return digest.Sum(nil), nil
+}
+
+// copyWebUI 复制 WebUI 工程到暂存目录，跳过已安装的依赖与旧的构建产物。
+func copyWebUI(from, to string) error {
+	return filepath.WalkDir(from, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(from, path)
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() && (rel == "node_modules" || rel == "dist") {
+			return filepath.SkipDir
+		}
+		target := filepath.Join(to, rel)
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		switch {
+		case entry.IsDir():
+			return os.MkdirAll(target, directoryMode)
+		case info.Mode().IsRegular():
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			return os.WriteFile(target, raw, info.Mode().Perm())
+		default:
+			return fmt.Errorf("unsupported file in WebUI project: %s", rel)
+		}
+	})
 }
