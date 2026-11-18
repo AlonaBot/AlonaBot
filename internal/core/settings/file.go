@@ -21,17 +21,6 @@ func (f *File) WithPublisher(publish func(change func() error) error) *File {
 	return &File{fileState: f.fileState, publish: publish}
 }
 
-// CommandPrefixes 返回当前实例的前缀覆盖，未配置覆盖时返回全局前缀。
-// 返回的切片只读且不复制；Update 与 Reload 成功后，下次调用立即读取新快照。
-func (f *File) CommandPrefixes(adapterInstanceID string) []string {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	if prefixes, ok := f.current.CommandPrefixesByInstance[adapterInstanceID]; ok {
-		return prefixes
-	}
-	return f.current.CommandPrefixes
-}
-
 // Update 在未展开的文档副本上编辑，校验通过后以 0600 临时文件替换原文件。
 // Rename 为提交点：此前失败保留文件与快照；此后目录同步失败仍发布新快照，
 // 并返回设置已写入但持久化尚未确认的错误。edit 执行期间持有写锁，应只操作传入的 Document。
@@ -73,7 +62,7 @@ func (f *File) update(edit func(doc *Document) error) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", f.name, err)
 	}
-	// 3. 重命名成功后才发布成对的文档和设置；已返回的前缀切片保持只读。
+	// 3. 重命名成功后才发布成对的文档和设置。
 	if err := replaceFile(f.name, content); err != nil {
 		return err
 	}
@@ -182,10 +171,10 @@ func settingsValues(s Settings) (map[string]any, error) {
 	return map[string]any{
 		"listen": s.Listen, "base_url": s.BaseURL,
 		"trusted_proxies": s.TrustedProxies, "proxy": s.Proxy, "admins": s.Admins,
-		"command_prefixes": s.CommandPrefixes, "command_prefixes_by_instance": s.CommandPrefixesByInstance,
-		"reply":          s.Reply,
-		"sleep":          s.Sleep,
-		"default_locale": s.DefaultLocale, "adapters": adapters,
+		"command_prefixes": s.CommandPrefixes,
+		"reply":            s.Reply,
+		"sleep":            s.Sleep,
+		"default_locale":   s.DefaultLocale, "adapters": adapters,
 		"log": map[string]any{"level": s.LogLevel, "format": s.LogFormat, "file": s.LogFile, "sources": s.LogSources},
 	}, nil
 }

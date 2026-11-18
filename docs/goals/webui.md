@@ -29,7 +29,7 @@ WebUI 已定稿（D-169）。各 goal 按 Figma 文件 `hV9ILivl2VGGKwtbEEh3mC` 
 | goal-94 | T-09.15 | 日志页 | T-09.8、T-09.10、T-09.19、T-02.5 | 已完成（PR #243） |
 | goal-156 | T-09.23 | 官方 WebUI 的后台进程、统计、商店、用户与数据页 | T-09.8、T-09.20、T-09.21、T-09.22、T-09.24 | 已完成（PR #245） |
 | goal-146 | T-09.18 | 模型页 | T-09.8、T-09.14、T-12.16 | 已完成（PR #244） |
-| goal-165 | T-09.25 | 配置文件页 | T-04.19、T-11.6、T-12.19、T-09.18 | 等待前置 |
+| goal-165 | T-09.25 | 配置文件页 | T-04.19、T-11.6、T-12.19、T-09.18 | 待派发 |
 | goal-175 | S-06.3 | 休眠策略与运行状态的页面 | T-09.8、T-09.9、S-06.1 | 等待前置 |
 
 ## 第 8 波
@@ -632,23 +632,97 @@ main 上 T-09.7（PR #187）已接通回退执行，ADMIN-API §3.2 的 501 说�
 
 ### goal-165 · T-09.25 配置文件页
 
-状态：等待前置（T-04.19、T-12.19）。T-11.6（PR #246，`24e57d6`）、T-09.18（PR #244，`a989b5f`）已合并。2026-11-17 按 D-167、D-168 与 D-169 新增。目标、依据与要点由 PLAN T-09 步骤 7（配置文件页）与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：待派发。前置 T-04.19（PR #250，合并提交 `f3a06458`）、T-11.6（PR #246，`24e57d60`）、T-12.19（PR #247，`f3959f6e`）、T-09.18（PR #244，`a989b5f1`）均已合并；配置文件管理 API 的 T-08.18（PR #214，`ab0cd565`）已合并。按 main `ce68e109` 核对： 审查者裁定（2026-11-18）：配置文件页的工具策略只列 §18 工具目录中的工具条目，「覆盖其他工具」的候选为该目录中本配置文件尚未覆盖的工具；确认类操作不在本页，归权限页（goal-44）。goal-44 先合并，本切片合并时复用其插件配置面板，冲突由后合并者按共享规则处理。
+
+- `web/admin/src/api/admin.ts` 已导出 `listProfiles(): Promise<Profile[]>`、`getProfileAssignments(): Promise<ProfileAssignments>`、`assignInstanceProfile(instanceID: string, profile: string): Promise<void>`、`listInstances(): Promise<AdapterInstance[]>`、`listChats(): Promise<Chat[]>`，后者读取全部聊天目录；配置文件的其他写入、插件覆盖、平台与工具策略尚无前端导出。已有 `getPluginConfig(id: string): Promise<ConfigSnapshot>`、`patchPluginConfig(id: string, baseGeneration: string, patch: Record<string, unknown>): Promise<PendingConfig>`、`changePackage(action: 'enable' | 'disable' | 'restart' | 'reload', id: string, confirm?: boolean): Promise<void>`、`AdminAPIError` 与 `isConfirmationError`。
+- `src/pages/ModelsPage.tsx` 导出 `ModelsPage(): JSX.Element`；`src/pages/ModelSelect.tsx` 导出 `ModelSelect({value,label,options,disabled,onChange})`，参数见下文；`src/pages/modelConfig.ts` 已有 `parseModels(config: Record<string, unknown>): ConfiguredModel[]`、`editingConfig(snapshot: ConfigSnapshot): Record<string, unknown>`。`src/components/ConfigForm.tsx` 的四个必填 props 为 schema、value、messages、onSubmit，另有 `footer?: ReactNode`；`src/schema/model.ts` 的 `fieldsFromSchema(schema: unknown): Field[]` 尚未接受 `profile` 与 `options_from`。
+- `src/routes.tsx` 的 `RouteEntry` 与 `src/main.tsx` 的 `matchedRoute.render()`、`/components/{id}` 分派可复用。`AppShell({version,onLogout?,coreUpdate?,coreUpdateFailed?,children})` 已装配导航与搜索，`MobileTabBar` 已预留路由 ID `profiles`。`PluginDetailPage(props: { id: string; generations?: readonly Generation[] }): JSX.Element` 目前有版本、高级、数据标签；main 尚无 `PluginConfigPanel.tsx`、`SettingsPage.tsx`。本切片补齐配置文件切换所需的配置标签，goal-44 合并时复用同一入口，系统设置保持无命令前缀。
+- 后台实际包 `github.com/AlonaBot/AlonaBot/internal/core/profile` 的 `New(ctx context.Context, opt Options) (*Service, error)`、`(*Service).EffectivePlatform(id string) (prefixes []string, reply settings.Reply, err error)`、`(*Service).ToolPolicy(id, pluginID, name string, operation bool) (policy pb.ToolPolicy, enabled bool, err error)` 已实现；`github.com/AlonaBot/AlonaBot/internal/core/manage` 的 `(*Service).Handler(auth *adminauth.Auth) http.Handler` 已注册 ADMIN-API §23。官方 Agent 实际包为 `github.com/AlonaBot/AlonaBot/agent`，`agent.New() *sdk.Plugin`；`agent/config_schema.json` 已标记 `chat_model`、`image_caption_model`、`default_persona`、`triggers`、`wake_words`、`member_sessions`，模型目录为基础配置 `models`，人格目录目前为基础配置 `personas`。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-165（切片 T-09.25：配置文件页）。goal 目录 goal-165，分支 goal-165，worktree .worktrees/goal-165，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
 
 目标：侧栏「配置文件」打开即是当前配置文件的设置（只有一层），分区为 AI、平台与消息与插件；切换、新建、使用范围、重命名、复制与删除；插件配置页可切换配置文件。本切片不改 Go 代码。
 
-依据：PLAN T-09 步骤 7（配置文件页）；CONTRACTS §5.6；ADMIN-API §23；DECISIONS D-167、D-168、D-169；TEST-MATRIX V-145。画板：「v4 · 配置文件」「v4 · 配置文件（平台与消息）」「v4 · 配置文件（切换配置文件）」「v4 · 配置文件（更多菜单）」「v4 · 配置文件（使用范围）」「v4 · 配置文件（AI · VIP 群）」「v4 · 配置文件（插件 · VIP 群）」「v4 · 配置文件（没有 Agent）」、y=5200 一排的配置文件深色画板与「v4 · 手机 · 配置文件」。
+依据：PLAN T-09 步骤 7（配置文件页）及其停止和失败条件；spec/plan/webui.md §2、§3；CONTRACTS §5.1、§5.3、§5.6；ADMIN-API §12、§17、§18、§20、§23；DECISIONS D-167、D-168、D-169；TEST-MATRIX V-145。画板：审查者提供在 goal-165/figma/ 的「v4 · 配置文件」「配置文件（深色）」「配置文件（插件 · VIP 群）」「配置文件（没有 Agent）」「配置文件（使用范围）」及深色、「配置文件（平台与消息）」及深色、「配置文件（切换配置文件）」「手机 · 配置文件」。首轮由前端执行者实现，审查与修复交 GPT；画板缺失时按本章共同约定向审查者索取。
 
-要点：
+范围（只新增或修改这些；路径相对 web/admin/）：
+- 新增 src/pages/ProfilesPage.tsx、ProfileAssignmentsDialog.tsx、ProfileAISection.tsx、ProfilePlatformSection.tsx、ProfilePluginsSection.tsx、ProfileToolsPanel.tsx、PluginConfigPanel.tsx，以及 src/pages/ 下这些模块专用的对话框与纯函数模块。
+- src/pages/PluginDetailPage.tsx、src/api/admin.ts、src/routes.tsx；src/components/ConfigForm.tsx、src/schema/model.ts：补齐配置文件编辑所需的字段元数据与只读路径。src/main.tsx 只在页面挂载确有需要时修改，保留认证与组件详情分派。
+- src/pages/SettingsPage.tsx 仅在先合并切片已提供该页时移除命令前缀控件；当前 main 无该文件，本切片沿用配置文件页的平台入口。
+- src/style.css、i18n/en-US.json、i18n/zh-CN.json；上述模块对应的 *.local.test.ts。goal-44 若先合并，复用其 PluginConfigPanel、schema 元数据与选项查询，保留已有标签、表单 props 和配置操作。
+
+允许的依赖：只用 web/admin/package.json 已安装的 React、Radix Dialog/DropdownMenu/Popover/Tooltip、lucide-react、TypeScript、Vite、vitest 与浏览器 API；复用 ConfigForm、schema/patch、i18n/catalog、ModelSelect、modelConfig、Pagination、shell/router、SearchContext 与现有主题令牌。
+
+接口（新增导出照此实现；先合并切片已提供的同名能力直接复用，保留其现有字段与调用语义）：
+- src/pages/ProfilesPage.tsx：export function ProfilesPage(): JSX.Element。routes 登记 {id:'profiles',path:'/profiles',label:'profiles',icon,group:'main',render:() => <ProfilesPage />}；main.tsx 沿用 matchedRoute.render()。AppShell、Sidebar 与 MobileTabBar 从 routes 自动接入桌面入口、手机固定标签与页面搜索，配置文件入口在没有 Agent 时仍可用。当前选择用 /profiles?profile={配置文件ID} 表示，首次进入选择 default；用 navigate 更新并响应 popstate，刷新保留选择。usePath() 只返回 pathname，查询参数从 URLSearchParams 读取，组件内同时响应同路径的切换。
+- 页面专用组件：
+  export function ProfileAssignmentsDialog(props: { profile: Profile; open: boolean; onOpenChange: (open: boolean) => void; onChanged: () => void }): JSX.Element
+  export function ProfileAISection(props: { profileID: string; agent: Package; plugin: ProfilePlugin; onChanged: () => void }): JSX.Element
+  export function ProfilePlatformSection(props: { profileID: string }): JSX.Element
+  export function ProfilePluginsSection(props: { profileID: string; packages: Package[]; plugins: ProfilePlugin[]; onChanged: () => void }): JSX.Element
+  export function ProfileToolsPanel(props: { profileID: string }): JSX.Element
+  上述组件各在同名 .tsx 中导出。新建、重命名、复制、删除确认用页面内的 Radix 对话框；内部辅助函数自定。
+- src/pages/PluginConfigPanel.tsx：export function PluginConfigPanel(props: { id: string }): JSX.Element。在 PluginDetailPage 增加配置标签并挂载 <PluginConfigPanel id={id} />，保留 PluginDetailPage 原签名、版本、高级、数据及其操作。插件行跳转 navigate('/components/' + encodeURIComponent(pluginID) + '?tab=config&profile=' + encodeURIComponent(profileID))；详情读取 tab=config 后选中配置标签，面板读取 profile 并提供同一配置文件选择器，默认 default，切换与浏览器前进后退同步。goal-44 已提供面板时直接扩展原面板。
+- src/api/admin.ts 复用 Profile = {id:string;name:string;color:string;sessions:number}、ProfileAssignments = {instances:Record<string,string>;sessions:{instance:string;session:string;profile:string}[]}、listProfiles、getProfileAssignments、listInstances、listChats、listPackages、onPackagesChanged。assignInstanceProfile 的 profile 参数扩为 string | null，原 string 调用保持。新增：
+  export function assignInstanceProfile(instanceID: string, profile: string | null): Promise<void>
+  export function createProfile(input: { name: string; color: string; copy_from?: string }): Promise<{ id: string }>
+  export function updateProfile(id: string, input: { name?: string; color?: string }): Promise<void>
+  export function deleteProfile(id: string): Promise<void>
+  export function assignSessionProfile(input: { instance: string; session: string; profile: string | null }): Promise<void>
+  // 依次调用 §23 的 POST /api/v1/profiles、PATCH/DELETE /api/v1/profiles/{id}、PUT /api/v1/profiles/assignments/sessions；assignInstanceProfile 沿用 PUT .../assignments/instances/{instance}，发 {profile}，null 取消指定。
+  export type ProfilePlugin = { plugin_id: string; enabled: boolean; fields: string[]; overrides: Record<string, unknown>; invalid: { path: string; reason: string }[] }
+  export function getProfilePlugins(id: string): Promise<ProfilePlugin[]>
+  export function patchProfilePlugin(id: string, pluginID: string, patch: { enabled?: boolean; overrides?: Record<string, unknown> }): Promise<void>
+  export function pruneProfilePlugin(id: string, pluginID: string): Promise<{ removed: string[] }>
+  // GET .../profiles/{id}/plugins、PATCH .../plugins/{plugin_id}、POST .../plugins/{plugin_id}/prune；overrides 的键是完整点分路径，值 null 删除该项。
+  export type ProfilePlatform = { command_prefixes: string[] | null; reply: { mention_sender: boolean | null; quote: boolean | null; prefix: string | null; forward_threshold: number | null } }
+  export function getProfilePlatform(id: string): Promise<ProfilePlatform>
+  export function putProfilePlatform(id: string, platform: ProfilePlatform): Promise<void>
+  // GET/PUT .../profiles/{id}/platform；PUT 发送完整当前覆盖对象。default 的所有键非 null。
+  export type ProfileToolPolicy = ({ tool: string; operation?: never } | { operation: { plugin_id: string; name: string }; tool?: never }) & { policy: 'allow' | 'confirm' | 'deny' | 'inherit' }
+  export function getProfileTools(id: string): Promise<{ items: ProfileToolPolicy[] }>
+  export function putProfileTools(id: string, items: ProfileToolPolicy[]): Promise<void>
+  export type ToolPolicy = { plugin_id: string; service: string; default: string; override: string; effect: 'read_only' | 'write' | 'destructive' | 'unspecified' }
+  export function getToolPolicies(): Promise<{ policies: ToolPolicy[] }>
+  // GET/PUT .../profiles/{id}/tools，PUT 发 {items}；getToolPolicies 只读 §18 GET /api/v1/tools/policies，供「覆盖其他工具」查询全局目录与策略。
+- 请求复用 admin.ts 的私有 request、现有 jsonBody、同源 Cookie、内存 CSRF 与 onSessionExpired；所有路径 ID 按一个 URL 段编码，保留 AdminAPIError 的 status、code、affected、responseBody 与原始错误。以上成功 {} 的写入由客户端归一为 Promise<void>，不改变既有请求导出。
+- 复用 getPluginConfig、patchPluginConfig 与 ConfigSnapshot = {active_generation:string;active:Record<string,unknown>;pending:PendingConfig|null;schema:unknown;i18n:Record<string,Record<string,unknown>>}、PendingConfig = {base_generation:string;config:Record<string,unknown>}。default 以 editingConfig(snapshot) 为编辑基线，提交 snapshot.active_generation，保存后重读并显示 Pending；确认重载前列出将重载的插件，使用 changePackage('reload', id)。开发来源保存后按重读到的 pending:null 展示。保留 409 / FAILED_PRECONDITION 冲突、带 affected 的确认、候选失败与 Degraded 的真实反馈。
+- src/pages/ModelSelect.tsx 复用 ModelSelect(props: { value: string; label: string; options: { value: string; label: string }[]; disabled?: boolean; onChange: (value: string) => void })；src/pages/modelConfig.ts 复用 parseModels(config: Record<string, unknown>): ConfiguredModel[] 与 editingConfig(snapshot: ConfigSnapshot): Record<string, unknown>。配置文件中的模型引用保存模型配置 name，候选取 parseModels(snapshot.active)，对话模型只列 chat，图像转述只列 chat 且 image_input:true，保留空字符串。人格候选取当前 Active 的 personas[].name；人格迁移若已合并，沿 ADMIN-API §17 的字段选项入口读取，不复制人格或模型管理功能。
+- src/schema/model.ts 保持 fieldsFromSchema(schema: unknown): Field[]；Field 增加 profile:boolean（缺省 false）、optionsFrom?: OptionsFrom，新增 export type OptionsFrom = { source: string; filter?: Record<string, string> }。按 CONTRACTS §5.1 接受 profile 与 options_from，保留字段顺序、schemaPath、其他元数据及未知键报错；标记位置与复合 secret 的语义遵循 §5.6，已有复合标记仍可读取。
+- src/components/ConfigForm.tsx 保留 schema:unknown、value:unknown、messages:Record<string,unknown>、onSubmit:(patch:Record<string,unknown>) => void、footer?:ReactNode，增加 editablePaths?: readonly string[] 与 options?: { list: (path: string, q: string) => Promise<OptionsPage>; resolve: (path: string, values: string[]) => Promise<OptionsPage> }。editablePaths 省略时保持原编辑行为；提供时仅这些点分路径及其被整体标记子树可编辑，祖先 object 继续作为分组，其余字段显示为禁用，恢复默认与增删行也遵循同一路径限制，提交只含可编辑路径的变更。onSubmit 继续返回 RFC 7396 patch，§23 的转换由面板负责。保留 invisible、condition、secret、数组与模板的现有处理及 footer；前端字段文案用 pickLocale/fieldText/templateText，getPluginConfig.i18n 选中语言后包装成 {config:selectedMessages}。
+- options_from 所需请求补在 src/api/admin.ts：
+  export type ConfigOption = { value: string; label: string; description?: string }
+  export type OptionsPage = { options: ConfigOption[]; more: boolean }
+  export function listConfigOptions(id: string, path: string, q: string, locale: string): Promise<OptionsPage>
+  export function resolveConfigOptions(id: string, path: string, values: string[], locale: string): Promise<OptionsPage>
+  // §17 GET /api/v1/plugins/{id}/config/options?path=&q=、POST .../options/resolve 发 {path,values}，带 Accept-Language。path 按字段值的点分路径，来源与 filter 由服务端 schema 决定。复用 goal-44 已有同名接口与可搜索控件；当前 main 未提供时只补这两个插件字段入口，保留 more、已存值 resolve、缺失值原文和来源不可用的实际错误。
+- 界面用 useUI()，文案加入双语 messages，键集合一致；页面动作通过 SearchContext.register(items: SearchItem[]): () => void 登记并在卸载时注销。长列表复用 Pagination({page,total,size,onChange}) 或按本章约定筛选、分组折叠；颜色使用既有令牌。
+
+行为：
 - 标题「● 名称 ⌄」打开切换菜单（各配置文件的名称与会话数、新建配置文件）；旁边的「N 个会话」打开使用范围对话框（各账号作为缺省的开关，旁边写当前缺省；单独指定的会话可添加与移出）；⋯ 菜单为重命名、复制与删除，「默认」的删除置灰。页面没有返回按钮。
+- 新建与复制调用 createProfile，复制传 copy_from，成功选择返回的 ID；复制只包含覆盖、插件开关、工具策略与平台设置。名称与颜色遵循 §5.6；名称重复的 409 显示原原因。删除先确认影响，成功选择 default 并重读列表、会话数与指定；default 的删除在鼠标与键盘操作中均置灰。
+- 使用范围按 getProfileAssignments、listInstances 与 listChats 的真实数据展示；会话身份使用实例 ID 与 API 返回的 session，复用 accountState.ts 的 chatProfile(assignments: ProfileAssignments, instanceID: string, session: string): string 判断单独指定、实例缺省、default。实例开关开启时写当前 profile ID，关闭时写 null；单独指定可添加目录中的会话或完整会话字符串，移出写 profile:null。显式指定 default 与取消指定分别按 §23 保留含义。对话框区分当前配置文件的单独指定与继承使用，修改后重读指定与服务端会话数；筛选或分页只影响展示。
 - AI 分区：已安装 Agent 的 schema 中写了 `profile` 的字段（D-168）——对话模型、图像转述、人格、触发方式（多选：@ 或回复机器人、唤醒词、私聊消息）、选中唤醒词时显示的唤醒词列表、群成员各自独立对话——以及按配置文件覆盖的工具策略（只列覆盖了全局的工具，「+ 覆盖其他工具」）。没有 Agent 时不显示 AI 分区，在分区上方提示并给出去商店的按钮。
+- Agent 从 listPackages 的 Role === 'agent' && !Uninstalled 取得，使用实际包 ID；订阅 onPackagesChanged 并在卸载时注销，安装、卸载后重读。去商店沿用 navigate('/components?tab=store')。六个字段的协议名依次为 chat_model、image_caption_model、default_persona、triggers、wake_words、member_sessions；triggers 保存 mention、wake_word、private，空数组表示全部关闭。隐藏唤醒词列表时保留已有值。模型与人格选择沿用当前 Active 目录，原引用缺失时保留存储值并显示实际状态；修改 providers、models 与人格目录继续使用原页面。
 - 平台与消息分区：命令前缀（可增删的标签），回复时 @ 发送人、引用原消息、回复前缀与长回复合并转发（标注只在支持的平台生效）。
+- 平台设置分别读取当前配置文件与 default，区分已保存覆盖和继承后的展示值；其他配置文件每个键可跟随默认，保存 null，显式 false、空字符串与 0 保留。PUT 整体替换时带回未编辑键的原覆盖状态；default 始终提交完整非 null 设置。command_prefixes 至少一项，空字符串项表示无前缀命令；forward_threshold 为非负整数，0 关闭，正数按 Unicode 码点阈值、仅在支持 message.forward 的平台生效。mention_sender 只在群聊第一条回复生效，quote 与 prefix 作用于第一条回复。保存后重读，后续派发与 Send 立即使用新设置。
 - 插件分区：每个插件一行，开关与「覆盖 N 项：字段名」或「跟随默认」，箭头进入该插件的配置页并预先选中这个配置文件；全局已停用的插件置灰。
+- 列表以 getProfilePlugins 为准，与 Package.Enabled 合并展示全局状态；配置文件开关只调用 patchProfilePlugin({enabled})，保持全局启停状态。字段名称从对应 schema/i18n 取得，覆盖摘要与 invalid 分别展示；Adapter 与 WebUI 沿用各自管理页。
 - 「默认」的字段修改走插件配置 API（Pending 与 reload，保存时提示会重载的插件）；其他配置文件经 ADMIN-API §23 立即生效。插件配置页选中「默认」以外的配置文件时，只有写了 `profile` 的字段可以编辑，其余字段置灰。无效覆盖值显示原因并可一键清理。
+- 其他配置文件以 snapshot.active 为基础，按 ProfilePlugin.fields 中的点分路径应用有效 overrides；invalid 中的路径保留诊断并排除在生效预览外。覆盖按完整字段值替换，object/list 也整体替换，保留基础值的其他字段。ConfigForm 的 RFC 7396 patch 先应用到当前有效草稿，再取本次变更涉及的标记路径的完整值，形成 §23 的 overrides；恢复跟随默认写该路径:null。标记 object 内部的修改提交完整 object，保留未编辑成员；无关标记路径维持原覆盖状态。具有 secret 子树的复合标记按契约只读并展示实际校验原因，失效项用 prune 清理；禁止把掩码或未标记字段送入覆盖接口。
+- default 的普通配置表单继续使用现有 buildPatch，数组、secret、invisible 与 condition 规则保持；插件配置页的非 default 草稿与 Pending 分开展示，切换后重建对应编辑基线。字段恢复默认在 default 中沿用配置 patch 的 null，在其他配置文件中表示跟随 default。prune 只调用 §23 的覆盖清理接口，成功重读 overrides/invalid；保留 §12 的普通配置操作。
+- 工具区默认只列 getProfileTools 的覆盖项，可筛选全局目录来添加覆盖；allow、confirm、deny 分别保存对应策略，恢复全局发 inherit。PUT 只发本次更新项；已读工具保留 tool，已读确认操作保留 operation，包含同名项时分别编辑。插件关闭时展示其工具被禁用的实际含义，保留已存策略；默认配置文件的工具策略仍经 §23 管理。§18 的目录按 plugin_id/service 合并工具与确认操作，缺少可区分两类的标识；新增候选的身份判定存在契约缺口，按共同约束交审查者裁定，保留已有条目的准确读写。
+- 系统设置沿 PLAN 保持无命令前缀，平台设置统一在配置文件页。页面只调用上述 ADMIN-API 已有端点，错误显示完整原因；覆盖通知失败可能发生在保存之后，写入报错后重读已保存状态并保留错误，依服务端实际结果更新界面。
 
-不做：配置文件的 Core、SDK 与 Agent 实现（T-08.18、T-04.18、T-04.19、T-11.6、T-12.19）；会话页的配置文件列（goal-44）。
+测试（按编码规范「测试提交规则」）：
+- 提交：无。
+- 本地自测：前端纯函数与请求格式写在 *.local.test.ts，覆盖配置文件切换与同路径查询参数、会话指定优先级与 null 取消、复制请求、平台继承与 false/空字符串/0、完整 PUT 保留未改键、profile/options_from 解析、只读路径、点分覆盖和 object/list 整体替换、恢复继承、invalid 排除与 prune、default 的 Pending/代次冲突、模型配置名与 Active 候选过滤、工具与 operation 的身份及 inherit。其余临时 Go 验证按共同约束写在被忽略的 *_local_test.go，PR 记录结果。
+- 浏览器手动验证：同源真实 Core 与官方 Agent 上打开、切换、新建、重命名、复制与删除，default 删除置灰；使用范围中实例缺省、单独指定、取消指定和真实会话数；AI 六字段、唤醒词显隐与没有 Agent；平台五个键的覆盖和跟随默认；插件开关、箭头预选、非标记字段禁用、无效覆盖清理；default 保存提示、Pending 与 reload，其他配置文件修改后的命令前缀、回复与 Agent/工具策略；深浅色、手机、键盘与搜索。PR 写明浏览器和版本、真实或模拟环境、用例名及未运行项；工具候选身份的缺口与受影响流程单列。
+
+完成条件：npm --prefix web/admin run typecheck、npm --prefix web/admin run test、npm --prefix web/admin run build 全部成功；按本章共同约定准备依赖并记录真实 Core 浏览器验证。工具候选身份的契约缺口由审查者裁定，完成对应实现与验证后交付。PR 按 TEST-MATRIX §3 提供 V-145 页面证据与未运行项，审查者据实际结果同步；与 goal-44 的配置标签、表单和选项查询共用同一实现。
+
+不做：配置文件的 Core、SDK 与 Agent 实现（T-08.18、T-04.18、T-04.19、T-11.6、T-12.19）；会话页的配置文件列（goal-44）；模型管理与人格管理、goal-44 的其余配置增强和系统设置实现；Go 产品代码、spec 修改、新 Admin API、新依赖、DOM 测试依赖、CI 前端任务与提交前端测试。
 ```
 
 ### goal-175 · S-06.3 休眠策略与运行状态的页面

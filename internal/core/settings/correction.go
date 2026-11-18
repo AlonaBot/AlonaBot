@@ -64,7 +64,7 @@ func defaultFields(object *node, path string) map[string]any {
 		declaration := map[string]any{"default": json.RawMessage(field.value.encode())}
 		switch field.value.delimiter {
 		case '{':
-			if name == "adapters" || name == "log.sources" || name == "command_prefixes_by_instance" || name == "sleep.plugins" {
+			if name == "adapters" || name == "log.sources" || name == "sleep.plugins" {
 				declaration["type"] = "dict"
 			} else {
 				declaration["type"], declaration["items"] = "object", defaultFields(field.value, name)

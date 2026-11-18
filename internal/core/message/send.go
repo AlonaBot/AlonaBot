@@ -9,6 +9,7 @@ package message
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -16,6 +17,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
+	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
@@ -32,6 +34,10 @@ type Hooks interface {
 
 // Service 按插件发信许可准入目标，再由注册的 Adapter 实例执行发送或编辑。
 type Service struct {
+	replyMu        sync.Mutex // 保护根首条标记与 Session 回执关联，不跨配置读取和平台调用持锁。
+	resolveReply   func(context.Context, *pb.Target) (settings.Reply, error)
+	replyRoots     map[*router.Invocation]struct{}
+	replySessions  map[router.Caller]*replySession
 	requestTimeout time.Duration
 	adapters       *adapter.Registry
 	policy         *policy.Policy
@@ -101,6 +107,14 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if target.GetAdapterId() != instance.AdapterID() || target.GetAccountId() != instance.AccountID() {
 		return reject(target, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "target adapter or account does not match instance")
 	}
+	chain, decoration, session, err := s.prepareReply(ctx, caller, invocation, target, instance, request.Chain)
+	if err != nil {
+		return rejectError(target, err)
+	}
+	request.Chain = chain
+	if safe := s.checkChain(request.Chain, target); safe != nil {
+		return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, safe)
+	}
 	// 5. 整链能力与扩展校验先于按钮签发、媒体租约和平台副作用。
 	if safe := checkExtensions(instance, request.Chain); safe != nil {
 		return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, safe)
@@ -158,6 +172,7 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 	}
 	// 8. 所有媒体已就绪后执行唯一一次发送，Hook 观察结果后完整转发回执与错误。
 	result, sendError := instance.Send(ctx, target, request.Chain)
+	s.rememberReply(caller, session, target, request.Chain, result, decoration)
 	if s.hooks != nil {
 		s.hooks.AfterSend(ctx, pb.SendOperation_SEND_OPERATION_SEND, "", target, request.Chain, result, sendError, invocation)
 	}
