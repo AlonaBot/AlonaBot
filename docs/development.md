@@ -469,7 +469,7 @@ p.Command("remind").Handle(func(c *sdk.Context, key, text string) (message.Conte
     if err != nil {
         return nil, err
     }
-    _, err = reminder.At(c.Context(), time.Now().Add(10*time.Minute),
+    _, err = reminder.At(c, time.Now().Add(10*time.Minute),
         ReminderArgs{Session: c.Session(), Text: text}, task.Key(internalKey))
     if err != nil {
         return nil, err
@@ -481,7 +481,7 @@ p.Command("cancel").Handle(func(c *sdk.Context, key string) error {
     if err != nil {
         return err
     }
-    return reminder.Cancel(c.Context(), internalKey)
+    return reminder.Cancel(c, internalKey)
 })
 ```
 
@@ -493,7 +493,7 @@ p.Command("cancel").Handle(func(c *sdk.Context, key string) error {
 
 `reminder.List(ctx)` 读取全部分页，返回完整的 `task.Instance[ReminderArgs]`。`At`、`Interval`、`Cron` 中仅对应触发规则的字段有值，`Timezone` 随 Cron 返回；`NextAt == nil` 表示协议没有下一次触发时刻。任一页读取或参数解码失败都会返回错误。
 
-所有任务客户端函数在 Activated 后可用；`OnStart`、`OnReady`、停止后与已失效的 Handler Context 返回 `FAILED_PRECONDITION`。在 Handler 中传 `c.Context()` 以保留父调用关联；独立后台 context 只有组件身份。Core 保存任务定义与 interval 起点，重启后安排下一未来触发；离线、未激活与暂停期间错过的触发作废，一次性过期实例删除。
+所有任务客户端函数在 Activated 后可用；`OnStart`、`OnReady`、停止后与已失效的 Handler Context 返回 `FAILED_PRECONDITION`。在 Handler 中传 `c` 以保留父调用关联；独立后台 context 只有组件身份。Core 保存任务定义与 interval 起点，重启后安排下一未来触发；离线、未激活与暂停期间错过的触发作废，一次性过期实例删除。
 
 静态任务继续在 `New()` 中声明，例如 `p.Every("tick", time.Minute).Handle(tick)`。在已激活的 Handler 或后台工作中暂停、恢复与查询：
 
@@ -531,16 +531,11 @@ func TestPing(t *testing.T) {
     h := plugintest.Start(t, plugintest.Plugin(p))
     alice := plugintest.User{ID: "alice"}
     result := h.Text(plugintest.Private(alice.ID), alice, "/ping")
-    if len(result.Sends) != 1 || result.Sends[0].Text() != "pong" {
-        t.Fatalf("ping = %+v", result)
-    }
-    for _, outcome := range result.Outcomes {
-        if outcome.Err != nil {
-            t.Fatal(outcome.Err)
-        }
-    }
+    result.RequireReply(t, "pong")
 }
 ```
+
+`RequireReply(t, want)` 先检查每个 Handler Outcome 的错误，再要求恰好一次发送且文本为 want；失败时报告插件与路由身份或实际发送。
 
 直接运行 `go test ./...`。plugintest 按被测插件的入口包自动扫描工程身份与资源，沿用测试二进制的 GOOS、GOARCH 与 build tags；同一入口包在一个进程中只扫描一次。每次 Start 创建独立的临时目录、配置和 `dev.sqlite`，在测试清理时停止组件；同一 Harness 的注入与读取按顺序调用。
 
@@ -646,7 +641,7 @@ go test -race -count=2 ./plugintest/... ./examples/plugins/...
 
 ```go
 p.Command("llm").Handle(func(c *sdk.Context, prompt string) (message.Content, error) {
-    text, err := llm.Ask(c.Context(), prompt)
+    text, err := llm.Ask(c, prompt)
     if err != nil {
         return nil, err
     }
@@ -682,14 +677,7 @@ func TestLLMReply(t *testing.T) {
         }))
     alice := plugintest.User{ID: "alice"}
     result := h.Text(plugintest.Private(alice.ID), alice, "/llm hello")
-    if len(result.Sends) != 1 || result.Sends[0].Text() != "fixed answer" {
-        t.Fatalf("LLM reply = %+v", result)
-    }
-    for _, outcome := range result.Outcomes {
-        if outcome.Err != nil {
-            t.Fatal(outcome.Err)
-        }
-    }
+    result.RequireReply(t, "fixed answer")
 }
 ```
 

@@ -115,8 +115,12 @@ func (c *Context) target() *pb.Target {
 	return target
 }
 
-// Reply 向当前默认会话回复一段文本。
-func (c *Context) Reply(text string) error { _, err := c.Send(message.Text(text)); return err }
+// Reply 将文本与后续片段作为一条消息回复到当前默认会话。
+func (c *Context) Reply(text string, more ...message.Segment) error {
+	chain := append(message.Chain{message.Text(text)}, more...)
+	_, err := c.Send(chain)
+	return err
+}
 
 // Logger 返回附带本次调用 trace_id、route_id 和 call_id 的默认 Logger。
 func (c *Context) Logger() *slog.Logger {
@@ -286,7 +290,7 @@ func collect(root *Plugin) (*registration, error) {
 		}
 		id := route.GetRouteId()
 		if seen[id] {
-			errs = append(errs, fmt.Errorf("route %q registered twice", id))
+			errs = append(errs, fmt.Errorf("route %q registered twice; use .ID to distinguish routes", id))
 		}
 		seen[id] = true
 	}

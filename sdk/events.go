@@ -56,7 +56,19 @@ type EventBuilder struct {
 	handles     int
 	afterHandle bool
 	filterAgain bool // 重复声明在 collect 时报告。
+	idSet       bool // 显式空 ID 在收集时拒绝。
 	button      bool // 仅由类型化按钮登记开始的构建链可占用保留前缀
+}
+
+// ID 设置事件路由的稳定身份。
+func (b *EventBuilder) ID(routeID string) *EventBuilder {
+	b.plugin.checkRegistration()
+	if b.handles != 0 {
+		b.afterHandle = true
+	}
+	b.route.RouteID = routeID
+	b.idSet = true
+	return b
 }
 
 // Priority 设置路由优先级。
@@ -105,27 +117,30 @@ func (r *eventRegistry) collect() {
 	r.events = nil
 	r.errs = nil
 	for _, b := range r.builders {
-		if b.handles != 1 || b.afterHandle || (strings.HasPrefix(b.route.RouteID, buttonRoutePrefix) && !b.button) || (b.button && (b.route.actionID == "" || b.route.actionVersion == 0)) {
-			r.errs = append(r.errs, fmt.Errorf("event route %q has invalid Handle sequence", b.route.RouteID))
+		route := b.route
+		if route.RouteID == "" && !b.idSet {
+			route.RouteID = route.EventType.Name()
+		}
+		if b.handles != 1 || b.afterHandle || (strings.HasPrefix(route.RouteID, buttonRoutePrefix) && !b.button) || (b.button && (route.actionID == "" || route.actionVersion == 0)) {
+			r.errs = append(r.errs, fmt.Errorf("event route %q has invalid Handle sequence", route.RouteID))
 			continue
 		}
-		if err := checkPermission(b.route.permission); err != nil {
-			r.errs = append(r.errs, fmt.Errorf("event route %q: %w", b.route.RouteID, err))
+		if err := checkPermission(route.permission); err != nil {
+			r.errs = append(r.errs, fmt.Errorf("event route %q: %w", route.RouteID, err))
 			continue
 		}
-		if err := checkRules(b.route.rules); err != nil {
-			r.errs = append(r.errs, fmt.Errorf("event route %q: %w", b.route.RouteID, err))
+		if err := checkRules(route.rules); err != nil {
+			r.errs = append(r.errs, fmt.Errorf("event route %q: %w", route.RouteID, err))
 			continue
 		}
 		if b.filterAgain {
-			r.errs = append(r.errs, fmt.Errorf("event route %q declares Filter more than once", b.route.RouteID))
+			r.errs = append(r.errs, fmt.Errorf("event route %q declares Filter more than once", route.RouteID))
 			continue
 		}
-		if err := b.route.filter.check(); err != nil {
-			r.errs = append(r.errs, fmt.Errorf("event route %q: %w", b.route.RouteID, err))
+		if err := route.filter.check(); err != nil {
+			r.errs = append(r.errs, fmt.Errorf("event route %q: %w", route.RouteID, err))
 			continue
 		}
-		route := b.route
 		route.rules = slices.Clone(route.rules)
 		r.add(route)
 	}
@@ -141,7 +156,7 @@ func (r *eventRegistry) add(route eventRoute) {
 		r.errs = append(r.errs, fmt.Errorf("event route %q uses reserved %s prefix", routeID, commandRoutePrefix))
 		return
 	case r.seen[routeID]:
-		r.errs = append(r.errs, fmt.Errorf("route %q registered twice", routeID))
+		r.errs = append(r.errs, fmt.Errorf("route %q registered twice; use .ID to distinguish routes", routeID))
 		return
 	case handler == nil:
 		r.errs = append(r.errs, fmt.Errorf("handler for event route %q is nil", routeID))

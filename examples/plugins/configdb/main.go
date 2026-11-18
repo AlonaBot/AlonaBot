@@ -49,20 +49,20 @@ func New() *sdk.Plugin {
 	p.OnStart(state.OnStart)
 	g := p.Group("note")
 	g.Command("set").Handle(func(c *sdk.Context, key, value string) (message.Content, error) {
-		if err := saveNote(c.Context(), key, value); err != nil {
+		if err := saveNote(c, key, value); err != nil {
 			return nil, err
 		}
 		return reply(c, "note.saved", "key", key)
 	})
 	g.Command("get").Handle(func(c *sdk.Context, key string) (message.Content, error) {
-		value, err := readNote(c.Context(), key)
+		value, err := readNote(c, key)
 		if err != nil {
 			return nil, err
 		}
 		return reply(c, "note.value", "key", key, "value", value)
 	})
 	g.Command("delete").Handle(func(c *sdk.Context, key string) (message.Content, error) {
-		if err := deleteNote(c.Context(), key); err != nil {
+		if err := deleteNote(c, key); err != nil {
 			return nil, err
 		}
 		return reply(c, "note.deleted", "key", key)
@@ -71,13 +71,13 @@ func New() *sdk.Plugin {
 		return reply(c, "note.hello", "name", name)
 	})
 	g.Command("kvset").Handle(func(c *sdk.Context, key, value string) (message.Content, error) {
-		if err := kv.Set(c.Context(), key, []byte(value)); err != nil {
+		if err := kv.Set(c, key, []byte(value)); err != nil {
 			return nil, err
 		}
 		return reply(c, "note.saved", "key", key)
 	})
 	g.Command("kvget").Handle(func(c *sdk.Context, key string) (message.Content, error) {
-		value, ok, err := kv.Get(c.Context(), key)
+		value, ok, err := kv.Get(c, key)
 		if err != nil {
 			return nil, err
 		}
@@ -87,13 +87,13 @@ func New() *sdk.Plugin {
 		return reply(c, "note.value", "key", key, "value", string(value))
 	})
 	g.Command("fileset").Handle(func(c *sdk.Context, value string) (message.Content, error) {
-		if err := os.WriteFile(filepath.Join(sdk.PluginDataDir(c.Context()), noteFile), []byte(value), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(sdk.PluginDataDir(c), noteFile), []byte(value), 0o600); err != nil {
 			return nil, err
 		}
 		return reply(c, "note.saved", "key", noteFile)
 	})
 	g.Command("fileget").Handle(func(c *sdk.Context) (message.Content, error) {
-		value, err := os.ReadFile(filepath.Join(sdk.PluginDataDir(c.Context()), noteFile))
+		value, err := os.ReadFile(filepath.Join(sdk.PluginDataDir(c), noteFile))
 		if err != nil {
 			return nil, err
 		}
