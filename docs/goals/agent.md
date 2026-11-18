@@ -21,8 +21,8 @@
 | goal-63 | T-12.6 | 定时 Agent 任务 | T-07.9、T-08.5、T-12.3 | 已完成（PR #193） |
 | goal-64 | T-12.7 | 官方 Agent 组件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6、T-12.8、T-12.14 | 已完成（PR #195） |
 | goal-143 | T-12.15 | 模型两层配置 | T-12.7 | 已完成（PR #207） |
-| goal-144 | T-12.16 | 预留的五类模型与模型管理路由 | T-12.15 | 待派发 |
-| goal-145 | T-12.17 | 对话重试与回退模型、图像转述 | T-12.15 | 待派发 |
+| goal-144 | T-12.16 | 预留的五类模型与模型管理路由 | T-12.15 | 已完成（PR #223） |
+| goal-145 | T-12.17 | 对话重试与回退模型、图像转述 | T-12.15 | 已完成（PR #224） |
 | goal-159 | T-12.18 | Agent 的触发方式、唤醒词与成员独立会话 | T-12.17、S-02.3 | 等待前置（T-12.17、S-02.3） |
 | goal-164 | T-12.19 | Agent 接入配置文件 | T-04.18、T-12.18 | 等待前置（T-04.18、T-12.18） |
 | goal-167 | T-12.20 | 官方 Agent 的插件页面 | T-04.17、T-12.19 | 等待前置（T-04.17、T-12.19） |
@@ -993,7 +993,7 @@ TEST-MATRIX 汇总方式：
 
 ### goal-144 · T-12.16 预留的五类模型与模型管理路由
 
-状态：待派发。唯一前置 T-12.15（PR #207，合并提交 `1e010d7`）已合并；2026-11-17 按该提交改写。两层配置、`configuredProvider`、`configuredModel`、`configuration.model`、`llm.Request.Model`/`Response.Model` 与 `llm.models` 的实际接口见 goal-143 状态段。预留五类已能加载但没有 client；Provider 现有入口是 `New` 与 `(*Client).Stream`，尚无五类单次请求与 discover。`New()` 已登记受管数据库迁移、`a.generate` 和选项服务；`runToolLoop` 丢弃 Stream 的 Result，`generate` 已读取 Usage；管理路由与用量表尚未实现。可与 goal-145 并行，双方会改 `agent/agent.go`、`conversation.go`、`loop.go`、`scheduled.go`、`generate.go`、`agent_test.go` 和 `provider/provider.go`：后合并者同步 main，保留对方的客户端、错误分类、重试、转述与用量统计改动，更新全部调用方；合并后转述和回退请求接入同一用量统计，每次请求只计一次。
+状态：已完成（PR #223），合并提交 `d27ce82`。以下保留派发时语句。派发时：唯一前置 T-12.15（PR #207，合并提交 `1e010d7`）已合并；2026-11-17 按该提交改写。两层配置、`configuredProvider`、`configuredModel`、`configuration.model`、`llm.Request.Model`/`Response.Model` 与 `llm.models` 的实际接口见 goal-143 状态段。预留五类已能加载但没有 client；Provider 现有入口是 `New` 与 `(*Client).Stream`，尚无五类单次请求与 discover。`New()` 已登记受管数据库迁移、`a.generate` 和选项服务；`runToolLoop` 丢弃 Stream 的 Result，`generate` 已读取 Usage；管理路由与用量表尚未实现。可与 goal-145 并行，双方会改 `agent/agent.go`、`conversation.go`、`loop.go`、`scheduled.go`、`generate.go`、`agent_test.go` 和 `provider/provider.go`：后合并者同步 main，保留对方的客户端、错误分类、重试、转述与用量统计改动，更新全部调用方；合并后转述和回退请求接入同一用量统计，每次请求只计一次。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-144（切片 T-12.16：预留的五类模型与模型管理路由）。goal 目录 goal-144，分支 goal-144，worktree .worktrees/goal-144，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -1059,7 +1059,7 @@ HTTP 接口按 CONTRACTS §13.6 实现：POST /models/discover 的 JSON 输入�
 
 ### goal-145 · T-12.17 对话重试与回退模型、图像转述
 
-状态：待派发。唯一前置 T-12.15（PR #207，合并提交 `1e010d7`）已合并；2026-11-17 按该提交改写。配置与模型选择的实际接口见 goal-143 状态段。`conversation.go` 的 `converse` 与 `scheduled.go` 的 `runScheduled` 都调用包内 `runToolLoop`；后者直接调用 `selected.client.Stream`，尚无重试。`generate` 独立直调 Stream，继续按 CONTRACTS §13.5 单次执行。`image.go` 已有 readImages、storedImages、replayImages、appendImages，本轮文本模型的图片目前转为占位并保存以供切换模型后回放。Provider 的非 2xx 错误当前只有脱敏文本，需要在 Provider 层保留可分类的状态与原因。可与 goal-144 并行，共享文件与合并规则见 goal-144 状态段：后合并者同步 main，保留对方改动，特别是每次工具循环、llm.generate、定时任务与图像转述的用量统计；回退按实际模型名记账。
+状态：已完成（PR #224），合并提交 `7fc052e`。以下保留派发时语句。派发时：唯一前置 T-12.15（PR #207，合并提交 `1e010d7`）已合并；2026-11-17 按该提交改写。配置与模型选择的实际接口见 goal-143 状态段。`conversation.go` 的 `converse` 与 `scheduled.go` 的 `runScheduled` 都调用包内 `runToolLoop`；后者直接调用 `selected.client.Stream`，尚无重试。`generate` 独立直调 Stream，继续按 CONTRACTS §13.5 单次执行。`image.go` 已有 readImages、storedImages、replayImages、appendImages，本轮文本模型的图片目前转为占位并保存以供切换模型后回放。Provider 的非 2xx 错误当前只有脱敏文本，需要在 Provider 层保留可分类的状态与原因。可与 goal-144 并行，共享文件与合并规则见 goal-144 状态段：后合并者同步 main，保留对方改动，特别是每次工具循环、llm.generate、定时任务与图像转述的用量统计；回退按实际模型名记账。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-145（切片 T-12.17：对话重试与回退模型、图像转述）。goal 目录 goal-145，分支 goal-145，worktree .worktrees/goal-145，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -1117,7 +1117,7 @@ func Retryable(err error) bool
 
 ### goal-159 · T-12.18 Agent 的触发方式、唤醒词与成员独立会话
 
-状态：等待前置（T-12.17、S-02.3）。S-02.3 提供 Core 侧消息过滤及配置字段注册，避免未命中的消息交付或唤醒 Agent；首次发布前不做旧按聊天触发值的交接（见要点）。2026-11-17 按 D-167 新增。目标、依据与要点由 PLAN T-12 步骤 2、3 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：等待语句定稿（前置均已合并）。T-12.17（PR #224，`7fc052e`）、S-02.3（PR #227，`86e6768`）已合并。S-02.3 提供 Core 侧消息过滤及配置字段注册，避免未命中的消息交付或唤醒 Agent；首次发布前不做旧按聊天触发值的交接（见要点）。2026-11-17 按 D-167 新增。目标、依据与要点由 PLAN T-12 步骤 2、3 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-159（切片 T-12.18：Agent 的触发方式、唤醒词与成员独立会话）。goal 目录 goal-159，分支 goal-159，worktree .worktrees/goal-159，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

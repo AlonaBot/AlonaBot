@@ -102,23 +102,23 @@
 | goal-139 | T-04.16 | SDK 按类别分包 | T-04.15 | 已完成（PR #199） |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 已完成（PR #187） |
 | goal-93 | T-09.14 | 配置、权限、工具策略与会话的管理 API | T-03.25、T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-08.14、T-09.6、T-09.12、T-11.1、T-11.3 | 已完成（PR #192） |
-| goal-168 | S-01.1 | 可休眠声明与持久化运行状态 | T-04.1、T-09.4、T-09.6 | 待派发 |
-| goal-169 | S-01.2 | 已提交代次的路由快照与索引 | T-04.1、T-09.4、T-09.6 | 待派发 |
+| goal-168 | S-01.1 | 可休眠声明与持久化运行状态 | T-04.1、T-09.4、T-09.6 | 已完成（PR #225） |
+| goal-169 | S-01.2 | 已提交代次的路由快照与索引 | T-04.1、T-09.4、T-09.6 | 已完成（PR #226） |
 | goal-150 | T-04.17 | 插件页面套件 | T-04.16、T-07.7 | 已完成（PR #218） |
 | goal-152 | T-08.16 | 去掉配置版本与迁移，配置宽松载入 | T-08.11、T-08.12、T-09.14 | 待派发 |
 | goal-160 | T-08.18 | 配置文件的存储与管理 | T-08.14、T-09.14 | 已完成（PR #214） |
 | goal-147 | T-09.19 | 诊断包 | T-09.10、T-09.14 | 已完成（PR #213） |
-| goal-153 | T-09.20 | WebUI 组件的后台进程与 command.invoked | T-09.12、T-09.14、T-04.16 | 待派发 |
+| goal-153 | T-09.20 | WebUI 组件的后台进程与 command.invoked | T-09.12、T-09.14、T-04.16 | 已完成（PR #221） |
 | goal-154 | T-09.21 | 插件数据浏览 | T-09.14、T-08.5、T-08.17 | 等待前置（T-08.17） |
 | goal-155 | T-09.22 | WebUI 需要的补充管理 API | T-09.14、T-07.9、T-03.25、T-04.16 | 已完成（PR #220） |
 | goal-158 | T-09.24 | 组件的 changelog | T-09.3、T-09.14 | 已完成（PR #215） |
 | goal-148 | T-11.5 | 工具的副作用类别 | T-11.2、T-12.3、T-09.14 | 已完成（PR #219） |
 | goal-140 | T-13.5 | 模块根包只保留库模式接口 | T-04.16 | 已完成（PR #200） |
 | goal-170 | S-02.1 | 按需唤醒、活动引用与有界等待 | S-01.1、S-01.2、T-05.5、T-06.4、T-07.5 | 等待前置 |
-| goal-176 | S-02.3 | Core 消息事件过滤与 SDK 注册 | T-04.16、T-08.11、T-09.14 | 待派发 |
+| goal-176 | S-02.3 | Core 消息事件过滤与 SDK 注册 | T-04.16、T-08.11、T-09.14 | 已完成（PR #227） |
 | goal-161 | T-04.18 | 配置文件的派发与 SDK | T-04.16、T-08.18 | 等待前置（T-08.18） |
 | goal-171 | S-02.2 | 空闲退出与即时休眠策略 | S-02.1 | 等待前置 |
-| goal-177 | T-09.27 | 组件市场 ID 改用连字符 | T-09.10、T-09.14、T-12.8、T-13.5 | 待派发 |
+| goal-177 | T-09.27 | 组件市场 ID 改用连字符 | T-09.10、T-09.14、T-12.8、T-13.5 | 已完成（PR #222） |
 | goal-162 | T-04.19 | 平台与消息 | T-04.18 | 等待前置（T-04.18） |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
 | goal-163 | T-11.6 | 按配置文件的工具策略 | T-04.18、T-11.4 | 等待前置（T-04.18） |
@@ -7580,7 +7580,7 @@ internal/core/state
 
 ### goal-168 · S-01.1 可休眠声明与持久化运行状态
 
-状态：待派发。前置 T-04.1（PR #34）、T-09.4（PR #163）、T-09.6（PR #179）均已合并。main `bae7faa` 已核对：manifest.Manifest/ParseProject/Generate 尚无可休眠字段；state.pluginState 只保存 enabled 与 ActiveGeneration；manage.describe 在已启用但无运行实例时显示 Degraded。低层 host 状态与逐插件管理锁已可复用。与另一 S-01 切片共享状态库及装配文件，按执行顺序的冲突规则合并。
+状态：已完成（PR #225），合并提交 `2cc32ff`。以下保留派发时语句。派发时：前置 T-04.1（PR #34）、T-09.4（PR #163）、T-09.6（PR #179）均已合并。main `bae7faa` 已核对：manifest.Manifest/ParseProject/Generate 尚无可休眠字段；state.pluginState 只保存 enabled 与 ActiveGeneration；manage.describe 在已启用但无运行实例时显示 Degraded。低层 host 状态与逐插件管理锁已可复用。与另一 S-01 切片共享状态库及装配文件，按执行顺序的冲突规则合并。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-168（切片 S-01.1：可休眠声明与持久化运行状态）。goal 目录 goal-168，分支 goal-168，worktree .worktrees/goal-168，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -7636,7 +7636,7 @@ internal/core/state
 
 ### goal-169 · S-01.2 已提交代次的路由快照与索引
 
-状态：待派发。前置 T-04.1（PR #34）、T-09.4（PR #163）、T-09.6（PR #179）均已合并。main `bae7faa` 已核对：host.Prepared 提供 Register 与 RouteHash；supervisor.prepare 只保存配置快照，Prepared.Activate 通过 commit 回调调用唯一提交点；state.CommitCandidate 与 CommitActive 均未保存路由快照；Router 当前只索引 Attach 的活 Session，Detach 会撤销绑定。与另一 S-01 切片共享状态库及装配文件，按执行顺序的冲突规则合并。
+状态：已完成（PR #226），合并提交 `413a6ff`。以下保留派发时语句。派发时：前置 T-04.1（PR #34）、T-09.4（PR #163）、T-09.6（PR #179）均已合并。main `bae7faa` 已核对：host.Prepared 提供 Register 与 RouteHash；supervisor.prepare 只保存配置快照，Prepared.Activate 通过 commit 回调调用唯一提交点；state.CommitCandidate 与 CommitActive 均未保存路由快照；Router 当前只索引 Attach 的活 Session，Detach 会撤销绑定。与另一 S-01 切片共享状态库及装配文件，按执行顺序的冲突规则合并。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-169（切片 S-01.2：已提交代次的路由快照与索引）。goal 目录 goal-169，分支 goal-169，worktree .worktrees/goal-169，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -7834,7 +7834,7 @@ internal/core/state
 
 ### goal-153 · T-09.20 WebUI 组件的后台进程与 command.invoked
 
-状态：待派发。前置 T-09.12、T-09.14 与 T-04.16 已合并。2026-11-17 按 D-162 新增；官方 WebUI 的后台实现在 goal-156。
+状态：已完成（PR #221），合并提交 `bd386df`。以下保留派发时语句。派发时：前置 T-09.12、T-09.14 与 T-04.16 已合并。2026-11-17 按 D-162 新增；官方 WebUI 的后台实现在 goal-156。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-153（切片 T-09.20：WebUI 组件的后台进程与 command.invoked）。goal 目录 goal-153，分支 goal-153，worktree .worktrees/goal-153，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -8047,7 +8047,7 @@ internal/core/state
 
 ### goal-170 · S-02.1 按需唤醒、活动引用与有界等待
 
-状态：等待前置（S-01.1、S-01.2、T-05.5、T-06.4、T-07.5）。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
+状态：等待前置（T-05.5、T-06.4、T-07.5）。S-01.1（PR #225，`2cc32ff`）、S-01.2（PR #226，`413a6ff`）已合并。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-170（切片 S-02.1：按需唤醒、活动引用与有界等待）。goal 目录 goal-170，分支 goal-170，worktree .worktrees/goal-170，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -8067,7 +8067,7 @@ internal/core/state
 
 ### goal-176 · S-02.3 Core 消息事件过滤与 SDK 注册
 
-状态：待派发。前置 T-04.16（PR #199）、T-08.11（PR #103）、T-09.14（PR #192）均已合并。2026-11-17 按维护者决定新增；已对照合入最新 main 的当前工作树（HEAD `0d4cc26`）核对：EventSpec 只有类型、Handler、Rule 与按钮字段；Router.candidates 只按事件类型收集活 Session，dispatch 中执行权限与调用；sdk.EventBuilder.Rule 只在插件进程执行，buildRegister 在 sdk/session.go。Core 已持有可信 schema 和 Active 配置，state.Store.GenerationConfig 可读已提交快照；T-08.18/T-04.18 的配置文件实现尚未合并。本切片交付配置快照读取注入点及基础实现，后合并者按共享规则接入配置文件；无需等待任何休眠生命周期切片。
+状态：已完成（PR #227），合并提交 `86e6768`。以下保留派发时语句。派发时：前置 T-04.16（PR #199）、T-08.11（PR #103）、T-09.14（PR #192）均已合并。2026-11-17 按维护者决定新增；已对照合入最新 main 的当前工作树（HEAD `0d4cc26`）核对：EventSpec 只有类型、Handler、Rule 与按钮字段；Router.candidates 只按事件类型收集活 Session，dispatch 中执行权限与调用；sdk.EventBuilder.Rule 只在插件进程执行，buildRegister 在 sdk/session.go。Core 已持有可信 schema 和 Active 配置，state.Store.GenerationConfig 可读已提交快照；T-08.18/T-04.18 的配置文件实现尚未合并。本切片交付配置快照读取注入点及基础实现，后合并者按共享规则接入配置文件；无需等待任何休眠生命周期切片。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-176（切片 S-02.3：Core 消息事件过滤与 SDK 注册）。goal 目录 goal-176，分支 goal-176，worktree .worktrees/goal-176，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -8150,7 +8150,7 @@ internal/core/state
 
 ### goal-177 · T-09.27 组件市场 ID 改用连字符
 
-状态：待派发。前置 T-09.10（PR #177）、T-09.14（PR #192）、T-12.8（PR #175）、T-13.5（PR #200）均已合并，接口已按当前 main 核对。本切片与同时进行的其他 goal 都可能写到旧 ID；后合并者同步 main 后用 `rg -n 'alonabot_(plugin|adapter|agent|webui)_'` 把新出现的旧 ID 一并改掉，按执行顺序「组件 ID 的改名」处理。goal-141 的目录名缺省尚未实现，按下文衔接，不作为本切片前置。
+状态：已完成（PR #222），合并提交 `5940406`。以下保留派发时语句。派发时：前置 T-09.10（PR #177）、T-09.14（PR #192）、T-12.8（PR #175）、T-13.5（PR #200）均已合并，接口已按当前 main 核对。本切片与同时进行的其他 goal 都可能写到旧 ID；后合并者同步 main 后用 `rg -n 'alonabot_(plugin|adapter|agent|webui)_'` 把新出现的旧 ID 一并改掉，按执行顺序「组件 ID 的改名」处理。goal-141 的目录名缺省尚未实现，按下文衔接，不作为本切片前置。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-177（切片 T-09.27：组件市场 ID 改用连字符）。goal 目录 goal-177，分支 goal-177，worktree .worktrees/goal-177，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
