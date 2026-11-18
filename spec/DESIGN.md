@@ -5,7 +5,7 @@
 
 ## A. Core 与插件职责
 
-Core 负责 Adapter、标准事件与命令路由、权限、消息发送、Service Broker、Event Bus、Scheduler、插件进程、公共 HTTP、配置/Secret 与安装代次。每个已安装插件包运行一个独立 Native Go 子进程，插件使用普通 Go Modules、goroutine、net/http 和 GORM；跨插件通过 Core 调用。
+Core 负责 Adapter、标准事件与命令路由、权限、消息发送、Service Broker、Event Bus、Scheduler、插件进程、公共 HTTP、配置/Secret 与安装代次。每个正在运行的已安装插件包使用一个独立 Native Go 子进程，插件使用普通 Go Modules、goroutine、net/http 和 GORM；跨插件通过 Core 调用。
 
 独立进程隔离崩溃，不构成同一 OS 用户下的恶意代码沙箱。只有使用 SDK 的受管资源与生命周期遵守框架恢复契约；插件自行管理的外部文件、HTTP 或数据库不受 Core 事务回滚。
 
@@ -29,6 +29,16 @@ stateDiagram-v2
 SDK 公开三个可选进程 Hook：`OnStart(context.Context) error`、`OnReady(context.Context) error`、`OnStop(context.Context) error`。OnStart/OnReady 不得等待自己的公开路由或发起业务 Send/Service；后台工作等待 SDK 就绪门并服从 lifetime context。SDK 串行写完 ACTIVATED 后打开就绪门，Core 按帧顺序先激活再接受业务。
 
 同一 data_dir 只有一个 Core，同一插件管理操作串行，SDK 持有跨代次 runtime.lock；旧进程未释放受管资源时不能再启动第二个写入者。主 RPC 断开即取消 lifetime、关内部 HTTP 并限时退出。普通异常退出采用既有 5 分钟内 3 次自动禁用规则；正常停用不自动重启。
+
+### 插件休眠
+
+Core 与全部 Adapter 常驻；`always_on` 为缺省，`component_idle` 允许 `role: plugin` 或 `role: agent` 声明 `sleep_capable: true` 的独立进程按策略空闲退出。同进程开发组件保持运行。管理层单独保存 `enabled` 与 `STOPPED/WAKING/ACTIVE/QUIESCING/SUSPENDED/FAILED`，底层 Session 继续使用上面的生命周期。
+
+Router 在交付前执行消息事件的 `message_filter`（CONTRACTS §2.5），按可信 to_me、会话类型与本会话生效配置中的唤醒词作 OR 匹配；可用 triggers 配置选择条件。声明只保存路径，配置文件的覆盖值由 Core 读取，SDK Rule 在交付后继续过滤。未命中时不唤醒。Router 以当前已提交代次的完整路由快照完成无进程匹配；快照与 ActiveGeneration、COMMITTED 同时生效，保存路由描述、Schema 绑定与包/路由摘要，Session、Listener 与认证材料随进程退出撤销。唤醒以新 Session 复用原代次与 `activation_reason=resume`，在交付前校验 REGISTER 摘要、权限和原 deadline。Supervisor 合并并发 EnsureActive 并持有进程唯一所有权；请求取得活动引用，实际结束后释放。等待队列的条数与字节有界，取消移除，无副作用重试。
+
+Idle Controller（`internal/core/idle/`）读取 `settings` 的生效策略与 Supervisor 的活动状态，只决定是否请求正常停止。Handler、Service、HTTP、媒体、schedule、多轮等待、后台工作、租约及管理变更都阻止休眠。STOPPING 前可撤销空闲停止；发出后新请求等旧进程树退出再唤醒。空闲退出使用 StopReason `IDLE`，成功后写 `SUSPENDED`，保留路由快照与调度计划，正常退出不计入异常重启。精确规则与可调初值见 CONTRACTS §4.4、§4.5、§16。
+
+`core_config.json` 的 `sleep` 保存模式、全局空闲时长与按插件覆盖；未声明 Core 过滤的消息事件、Raw、HTTP、Hook 与持续监听缺省常驻，管理员显式时长仅覆盖路由准入，manifest 的可休眠声明始终有效。Admin API（ADMIN-API §24）、CLI 与 WebUI 共用管理服务，写回后立即应用、不重载插件；`never` 与切回 `always_on` 会唤醒相应的已启用插件。
 
 ## B. 安装包、平台与来源
 
@@ -179,7 +189,7 @@ bus.Subscribe(p, weather.Updated).Handle(r.onUpdated)
 
 ## H. Core Scheduler
 
-调度器固定支持 interval 与 cron，规范含语法、IANA 时区、起点和夏令时处理，见 CONTRACTS §4。Core 唯一拥有触发权，`scheduled` 使用有 CallID/完成响应的 Request；不同 job 可并发，同 job 未结束时跳过本次，离线不追补。
+调度器固定支持 interval 与 cron，规范含语法、IANA 时区、起点和夏令时处理，见 CONTRACTS §4。Core 唯一拥有触发权，`scheduled` 使用有 CallID/完成响应的 Request；不同 job 可并发，同 job 未结束时跳过本次。已启用的 `SUSPENDED` 插件到期时由 Scheduler 经 Supervisor 的 EnsureActive 唤醒，再执行原 scheduled 请求；唤醒占用原任务的 15 分钟期限与运行槽，活动引用保留到实际完成或旧进程树退出。异常离线不追补。
 
 每次执行有独立 run_id、job deadline 与 lifetime context，不被 30s 普通 RPC 默认值截断。任务超时后若插件未确认协作结束，不释放同 job 的运行槽并再次重叠启动；恢复策略见运行时契约。定时身份是显式 job/plugin scope，不获得默认 Admin。
 
@@ -202,7 +212,7 @@ key, err := Remind.At(c.Context(), time.Now().Add(10*time.Minute), RemindArgs{SI
 err = Remind.Cancel(c.Context(), key)
 ```
 
-实例可以是一次性的（`At`）或周期的（`Every`、`Cron`），用 key 区分，同 key 再次创建即替换。任务触发时没有触发者身份，需要的会话与用户写在参数里。调度状态保存在 Core 状态库（D-125）：任务定义与周期任务的起点在 Core 与插件重启后保留，间隔任务不因重启重新计时。错过的触发一律跳过：Core 未运行、插件未激活或任务暂停时到期的触发作废，周期任务从下一次继续，一次性任务过期即删除。任务以 plugin_id 为键存在 Core 一侧，卸载时不经过插件进程就能清理，去留由卸载的清理范围决定（D-127，CONTRACTS §9.3）。
+实例可以是一次性的（`At`）或周期的（`Every`、`Cron`），用 key 区分，同 key 再次创建即替换。任务触发时没有触发者身份，需要的会话与用户写在参数里。调度状态保存在 Core 状态库（D-125）：任务定义与周期任务的起点在 Core 与插件重启后保留，间隔任务不因重启重新计时。Core 未运行、插件停用、异常离线或任务暂停时到期的触发作废，周期任务从下一次继续，一次性任务过期即删除。正常休眠保留未来定时器，到期唤醒执行，原计划时刻、interval 起点与暂停状态保持不变。任务以 plugin_id 为键存在 Core 一侧，卸载时不经过插件进程就能清理，去留由卸载的清理范围决定（D-127，CONTRACTS §9.3）。
 
 ## I. HTTP 与 SQLite
 

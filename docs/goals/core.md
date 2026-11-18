@@ -102,6 +102,8 @@
 | goal-139 | T-04.16 | SDK 按类别分包 | T-04.15 | 已完成（PR #199） |
 | goal-42 | T-09.7 | 崩溃恢复、回退与回收 | T-09.6 | 已完成（PR #187） |
 | goal-93 | T-09.14 | 配置、权限、工具策略与会话的管理 API | T-03.25、T-04.14、T-07.6、T-08.8、T-08.11、T-08.12、T-08.14、T-09.6、T-09.12、T-11.1、T-11.3 | 已完成（PR #192） |
+| goal-168 | S-01.1 | 可休眠声明与持久化运行状态 | T-04.1、T-09.4、T-09.6 | 待派发 |
+| goal-169 | S-01.2 | 已提交代次的路由快照与索引 | T-04.1、T-09.4、T-09.6 | 待派发 |
 | goal-150 | T-04.17 | 插件页面套件 | T-04.16、T-07.7 | 待派发 |
 | goal-152 | T-08.16 | 去掉配置版本与迁移，配置宽松载入 | T-08.11、T-08.12、T-09.14 | 待派发 |
 | goal-160 | T-08.18 | 配置文件的存储与管理 | T-08.14、T-09.14 | 待派发 |
@@ -112,11 +114,17 @@
 | goal-158 | T-09.24 | 组件的 changelog | T-09.3、T-09.14 | 待派发 |
 | goal-148 | T-11.5 | 工具的副作用类别 | T-11.2、T-12.3、T-09.14 | 待派发 |
 | goal-140 | T-13.5 | 模块根包只保留库模式接口 | T-04.16 | 已完成（PR #200） |
+| goal-170 | S-02.1 | 按需唤醒、活动引用与有界等待 | S-01.1、S-01.2、T-05.5、T-06.4、T-07.5 | 等待前置 |
+| goal-176 | S-02.3 | Core 消息事件过滤与 SDK 注册 | T-04.16、T-08.11、T-09.14 | 待派发 |
 | goal-161 | T-04.18 | 配置文件的派发与 SDK | T-04.16、T-08.18 | 等待前置（T-08.18） |
+| goal-171 | S-02.2 | 空闲退出与即时休眠策略 | S-02.1 | 等待前置 |
 | goal-162 | T-04.19 | 平台与消息 | T-04.18 | 等待前置（T-04.18） |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
 | goal-163 | T-11.6 | 按配置文件的工具策略 | T-04.18、T-11.4 | 等待前置（T-04.18） |
 | goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 等待前置 |
+| goal-172 | S-03.1 | Scheduler 唤醒与离线 tick 区分 | S-02.2、T-07.2 | 等待前置 |
+| goal-173 | S-06.1 | 休眠管理 API、运行诊断与 CLI | S-02.2、S-03.1、T-09.14 | 等待前置 |
+| goal-174 | S-06.2 | 休眠指标、故障注入与固定机器验收 | S-06.1 | 等待前置 |
 
 ## 第 1 波
 
@@ -7569,6 +7577,120 @@ internal/core/state
 不做：页面（T-09.9）；日志 API（T-09.10）；故障注入与验收汇总（T-09.11）。
 ```
 
+### goal-168 · S-01.1 可休眠声明与持久化运行状态
+
+状态：待派发。前置 T-04.1（PR #34）、T-09.4（PR #163）、T-09.6（PR #179）均已合并。main `bae7faa` 已核对：manifest.Manifest/ParseProject/Generate 尚无可休眠字段；state.pluginState 只保存 enabled 与 ActiveGeneration；manage.describe 在已启用但无运行实例时显示 Degraded。低层 host 状态与逐插件管理锁已可复用。与另一 S-01 切片共享状态库及装配文件，按执行顺序的冲突规则合并。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-168（切片 S-01.1：可休眠声明与持久化运行状态）。goal 目录 goal-168，分支 goal-168，worktree .worktrees/goal-168，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：在作者与包内 manifest 保留可休眠声明；持久化与 enabled 分开的插件运行状态。现有 always_on 生命周期照常运行，后继切片可以准确识别 SUSPENDED，而管理读取不会唤醒插件。
+
+依据：PLAN §7 S-01 步骤 1、2；CONTRACTS §4.4、§4.5、§9.1；ADMIN-API §24.2 的组件列表；DESIGN §A；DECISIONS D-53、D-153；TEST-MATRIX V-77 的 manifest、运行状态与未启用分项。
+
+范围（只新增或修改这些）：
+- contracts/manifest/：manifest.go、project.go、build.go，贯通 ParseProject、Generate 与 Parse
+- internal/core/state/：schema.sql 与新文件 runtime.go；state.go 的安装初始化、installs.go 的清理调用点；已有模型需加列时同步 models.go，持久化只用 GORM
+- internal/core/supervisor/：启动、准备、激活、停止、异常退出处的状态记录
+- internal/app/：assembly.go、alonabot.go、journal.go 以及进程退出监视、候选提交/恢复的相邻调用点，覆盖独立进程与同进程开发组件
+- internal/core/manage/：service.go、lifecycle.go 及既有更新/回退的状态读取调用点
+- cmd/alonabot/manage_e2e_test.go；上述包的 *_local_test.go
+
+允许的新跨模块边：无；manifest 属于 contracts，状态与生命周期属于 internal/core，internal/app 与 cmd 的装配沿用 ARCHITECTURE 已允许方向。
+
+接口（main bae7faa 上的现有签名，保持可用）：
+- manifest.ParseProject(data []byte) (*manifest.Result, error)
+- manifest.Generate(project *manifest.Manifest, build manifest.BuildInfo) ([]byte, error)
+- manifest.Parse(data []byte) (*manifest.Result, error)
+- supervisor.Launch(ctx context.Context, store *state.Store, spec supervisor.Spec) (*supervisor.Running, error)
+- supervisor.Prepare(ctx context.Context, store *state.Store, spec supervisor.Spec) (*supervisor.Prepared, error)
+- (*supervisor.Prepared).Activate(ctx context.Context, commit func(context.Context) error) (*supervisor.Running, error)
+- (*supervisor.Running).Stop(t0 time.Time, reason pb.StopReason) host.StopResult
+- (*supervisor.Running).WaitExit() (abnormal bool, state string, err error)
+- (*state.Store).SetEnabled(ctx context.Context, pluginID string, enabled bool) error
+- (*manage.Service).List(ctx context.Context) ([]manage.Package, error)
+
+接口（本切片新增，以下签名固定）：
+- manifest.Manifest 追加 SleepCapable bool，YAML 名 sleep_capable，缺省 false，role=plugin 与 role=agent 均可声明；工程与包内值一致
+- package state：type RuntimeState string；常量 RuntimeStopped="STOPPED"、RuntimeWaking="WAKING"、RuntimeActive="ACTIVE"、RuntimeQuiescing="QUIESCING"、RuntimeSuspended="SUSPENDED"、RuntimeFailed="FAILED"
+- type RuntimeStatus struct { State RuntimeState; Reason string; ChangedAt time.Time; LastWakeReason string; LastWakeAt time.Time; LastSuspendAt time.Time }
+- func (s *Store) SetRuntimeStatus(ctx context.Context, pluginID string, status RuntimeStatus) error
+- func (s *Store) RuntimeStatus(ctx context.Context, pluginID string) (RuntimeStatus, error)
+- manage.Package 追加 RuntimeState string（json:",omitempty"），plugin 与 agent 取上述六态，Adapter 与 WebUI 省略；State 保留既有阶段语义，读取到 RuntimeSuspended 时为 Suspended
+
+行为：
+- 以已有 plugin/agent 安装记录初始化 STOPPED；状态与 enabled 分开读写。WAKING 覆盖启动/准备/激活，ACTIVATED 确认后才写 ACTIVE；正常停止期间为 QUIESCING，完成为 STOPPED，准备/激活/退出失败记录 FAILED。持久化失败返回完整错误，资源清理由原所有者完成。
+- 候选成功/失败、回退、崩溃恢复与逐插件管理锁全部接入；Core 启动先按现有 journal.Recover 和旧进程清理核对事实，再更新状态，落盘的 ACTIVE/WAKING 不直接作为存活证据。延迟退出通知须按实际代次/Session 所有权处理，保留新实例状态。
+- LastWakeAt/LastSuspendAt 由实际唤醒/空闲退出的后继切片填写，本切片初始化为未发生。SUSPENDED 类型与存储可以使用，本切片不主动触发休眠。
+- mode 尚未开启时维持 always_on；不替换已有 manage.Options.State 回调、Package.State 或底层 host 状态机，不给 Adapter 添加休眠语义。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/manage_e2e_test.go 的真实安装/启停主路径增加一个子测试，构建声明 sleep_capable 的插件包，经现有管理 API enable 后列表 RuntimeState 为 ACTIVE、State 为 Activated，disable 后为 STOPPED 且 enabled=false；重新启动 Core 后核对状态与安装记录。复用现有动态构建的测试工程，不新增 testdata 插件。
+- 本地自测（*_local_test.go，结果写入 PR）：manifest 缺省 false、plugin/agent 显式 true/false、非布尔值与 Adapter/WebUI 拒绝；SQLite 持久化、恢复时陈旧状态、准备/OnReady 失败、迟到退出通知；原管理生命周期与 dev/in-process 路径。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/state/... ./internal/core/manage/... ./internal/core/supervisor/... ./internal/app/... ./cmd/alonabot/...；go build ./...。PR 写明 V-77 本切片分项的测试位置、命令、平台与结果。
+
+不做：路由快照（goal-169）、EnsureActive/活动引用/IDLE 协议及空闲停止（goal-170、goal-171）、sleep 设置/API/CLI 与测量；不改 .proto，不加依赖，不改 ARCHITECTURE/README/spec，文档同步写进 PR。
+```
+
+### goal-169 · S-01.2 已提交代次的路由快照与索引
+
+状态：待派发。前置 T-04.1（PR #34）、T-09.4（PR #163）、T-09.6（PR #179）均已合并。main `bae7faa` 已核对：host.Prepared 提供 Register 与 RouteHash；supervisor.prepare 只保存配置快照，Prepared.Activate 通过 commit 回调调用唯一提交点；state.CommitCandidate 与 CommitActive 均未保存路由快照；Router 当前只索引 Attach 的活 Session，Detach 会撤销绑定。与另一 S-01 切片共享状态库及装配文件，按执行顺序的冲突规则合并。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-169（切片 S-01.2：已提交代次的路由快照与索引）。goal 目录 goal-169，分支 goal-169，worktree .worktrees/goal-169，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：把 REGISTER 的完整路由白名单、路由摘要和程序包摘要持久化，并与唯一 ActiveGeneration 提交原子生效；Core 重启与无进程期间仍可取得当前路由索引。重新注册与快照不一致时隔离插件，业务保持关闭。
+
+依据：PLAN §7 S-01 步骤 1、3；CONTRACTS §4.4、§12.2、§12.3；WIRE-FORMAT §3.3、§5A；DESIGN §A、§N；DECISIONS D-54、D-153；TEST-MATRIX V-77 的快照与摘要分项。
+
+范围（只新增或修改这些）：
+- internal/core/state/：schema.sql、新文件 routes.go；state.go 的 CommitActive 与 commit.go 的 CommitCandidate 事务；candidate.go、installs.go、retained.go 中的代次删除/数据清理调用点
+- internal/core/supervisor/：supervisor.go 的准备与 prepare.go 的激活前校验；从已验证 Registration 取白名单
+- internal/core/router/：新文件 snapshots.go，必要的 Router 字段/初始化与索引读取调用点
+- internal/core/journal/：准备、提交、abort/recover 与回收流程中快照绑定的必要调用点
+- internal/core/gc/：随代次回收快照的调用点
+- internal/core/manage/lifecycle.go：停用/卸载时撤销快照索引的必要调用点，沿用既有装配回调
+- internal/app/：assembly.go、journal.go、alonabot.go 中已安装插件的准备、恢复、快照装载、停用与卸载索引清理；同进程 dev 路由沿用现有路径
+- internal/app/journal_test.go；上述包的 *_local_test.go
+
+允许的新跨模块边：无；state、supervisor、router、journal、gc 同属 internal/core；internal/app -> internal/core/... 与 internal/core/... -> contracts 沿用 ARCHITECTURE。Router 的快照参数只使用 pb.RouteDescriptor，不反向依赖装配层。
+
+接口（main bae7faa 上的现有签名，保持可用）：
+- host.Prepared.Register *pb.Register、RouteHash []byte；supervisor.Prepared.Registration *host.Prepared
+- (*state.Store).CommitActive(ctx context.Context, pluginID, expectedOld, newGen string) error
+- (*state.Store).CommitCandidate(ctx context.Context, opID, pluginID, expectedOld, newGen string) error
+- (*journal.Orchestrator).Commit(ctx context.Context, r *journal.Result) (*supervisor.Running, error)
+- (*journal.Orchestrator).Recover(ctx context.Context) (blocked []string, err error)
+- (*supervisor.Prepared).Activate(ctx context.Context, commit func(context.Context) error) (*supervisor.Running, error)
+- router.FromInstance(in *host.Instance) router.Plugin
+- (*router.Router).Attach(p router.Plugin, c router.Caller)
+- (*router.Router).Detach(pluginID string)
+
+接口（本切片新增，以下签名固定）：
+- package state：type RouteSnapshot struct { PluginID, GenerationID string; Routes []*pb.RouteDescriptor; RouteHash, BuildDigest []byte }
+- func (s *Store) SaveRouteSnapshot(ctx context.Context, snapshot RouteSnapshot) error
+- func (s *Store) ActiveRouteSnapshot(ctx context.Context, pluginID string) (RouteSnapshot, error)
+- func (r *Router) SetRouteSnapshot(pluginID, generationID string, routes []*pb.RouteDescriptor)
+- func (r *Router) RouteSnapshot(pluginID string) (generationID string, routes []*pb.RouteDescriptor, ok bool)
+- func (r *Router) RemoveRouteSnapshot(pluginID string)
+
+行为：
+- SaveRouteSnapshot 只写匹配插件的未提交候选；已经提交的快照不可覆盖。新候选准备完成后先保存白名单快照；CommitActive/CommitCandidate 在同一事务复核快照身份及包/路由摘要，再提交当前代次；update/rollback 核对候选 Journal 中的新程序身份，ActiveRouteSnapshot 核对提交后的当前安装身份。已有 Adapter、静态 WebUI 与同进程 dev 的提交按原路径使用；快照用于已安装的 role=plugin 与 role=agent 独立进程。
+- RouteHash 复用 host.Prepared.RouteHash 及既有 WIRE 确定性编码算法，BuildDigest 复用已验证程序身份；不另造摘要格式。快照只编码 RouteDescriptor 集合（S-02.3 已合并时含 message_filter 及配置字段路径；否则由后合并者补齐）和包资源绑定，不保存过滤配置值，不序列化整个 Register，排除 listener、配置 JSON、Session 与认证材料。Schema 从该代次不可变包资源核验后恢复。
+- 普通 restart/resume 在准备完成、发送 ACTIVATE 之前比较当前快照与重新 REGISTER 的路由摘要，失败关闭候选并返回 FAILED_PRECONDITION；保持原 ActiveGeneration、提交标记与资源。新版本/配置候选可有新路由，只在同一提交后替换有效索引。
+- 从状态库读取当前已 COMMITTED 的代次，核对安装身份与包摘要；恢复时先完成 Journal 权威判定，再装载所有已启用插件的快照索引。快照缺失或不一致返回实际错误并隔离该插件；其他可用插件继续运行。
+- 快照索引与活 Session 绑定分别维护；Detach 撤销 Caller 与 Session 后仍保留快照，明确停用/卸载时 RemoveRouteSnapshot；回收代次与 purge-data/purge 同步清理持久快照。现有 Plugin/PluginFor/Call 的 Activated 门禁保持有效，快照本身只允许定位，不产生假 Caller，也不承诺无 Session 的业务交付。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/app/journal_test.go 增加一个真实子进程＋SQLite 的集成子测试，完成候选提交后停止实例，从 ActiveRouteSnapshot 读取完整路由，重启 Core 后重建索引并以原代次启动；断言快照对应的提交身份、路由摘要，且数据库持久内容排除 Listener、配置与 Session 认证材料。复用已有测试工程构建机制，不新增 testdata 插件。
+- 本地自测（*_local_test.go，结果写入 PR）：候选未提交/提交失败保持旧快照可见，错误 plugin/generation/包摘要，重新 REGISTER 摘要不一致、Schema 资源校验失败、快照写入失败，停用/卸载与代次回收；Agent 快照往返；Adapter、WebUI 及 dev 路径原有提交回归。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/state/... ./internal/core/router/... ./internal/core/journal/... ./internal/core/supervisor/... ./internal/core/gc/... ./internal/app/...；go build ./...。PR 写明 V-77 快照分项的命令、平台、结果与未运行项。
+
+不做：manifest 与运行状态（goal-168）、休眠与唤醒（goal-170、goal-171）、新业务 RPC、Scheduler 唤醒与管理 API；不改 .proto，不加依赖，不改 ARCHITECTURE/README/spec，文档同步写进 PR。
+```
+
 ## 第 18 波
 
 ### goal-150 · T-04.17 插件页面套件
@@ -7922,6 +8044,85 @@ internal/core/state
 不做：库模式接口的增删；协议与行为的改动；CLI 位置参数与缺省值（T-13.6）；新增依赖；在根包新增测试；改写 TEST-MATRIX 中已有的证据行（文件移动后的链接由审查者合并前同步）。
 ```
 
+### goal-170 · S-02.1 按需唤醒、活动引用与有界等待
+
+状态：等待前置（S-01.1、S-01.2、T-05.5、T-06.4、T-07.5）。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-170（切片 S-02.1：按需唤醒、活动引用与有界等待）。goal 目录 goal-170，分支 goal-170，worktree .worktrees/goal-170，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：在现有路由快照与运行状态上接入 Supervisor 的 EnsureActive、活动引用、并发唤醒合并与有界等待，保留请求的原始权限、Target、Trace、顺序与期限。
+
+依据：PLAN §7 S-02 步骤 1～3；CONTRACTS §4.4、§4.5、§16；WIRE-FORMAT §3.1、§4；DESIGN §A；D-53、D-54、D-153；V-77 的唤醒与活动引用分项。
+
+要点：
+- 范围：internal/core/supervisor、router、broker、httpproxy、media、continuation、hook、bus 中活动登记的调用点，internal/app 装配与停止竞争入口，internal/tune/params.go；contracts/proto/alonabot/v1/control.proto 只追加 STOP_REASON_IDLE，生成代码与 contracts/wirespec_test.go。该协议修改明确授权；不新增业务 RPC。
+- EnsureActive 属于 Supervisor，同一插件并发只启动一次；取得活动引用前确认当前代次与状态，确认 ACTIVATED 与 REGISTER 摘要后才交付。原管理锁、runtime.lock、退出清理与重启策略继续由现有所有者负责。
+- 消息事件在取得活动引用和 EnsureActive 前按 CONTRACTS §2.5 过滤；与 S-02.3 的后合并者保证常驻交付和快照唤醒共用该匹配入口，未命中不唤醒。Router、Service Broker、HTTP 与媒体、插件出站业务、延续调用与多轮等待按实际工作持有引用；Scheduler 的到期入口由 goal-172 接入。Hook/Bus 中已接纳的工作须计入活动，Bus 离线丢弃规则照旧。
+- 逐插件有界等待同时限制条数、字节，计入 Core 总预算；队满明确 RESOURCE_EXHAUSTED，取消/到期移除，交付前再检查当前代次、路由、权限与 deadline。原上下文不因冷启动重建或延长，100 个并发唤醒只创建一个新 Session。
+- 在新条件就绪时唤醒仍复用原 Generation/Config/DB、activation_reason=resume，不新建候选、不重放副作用；停止竞争协调的门禁供 goal-171 复用。活动引用释放须覆盖实际完成、失败、取消及旧进程确认退出。
+- 验收要点：首条命令、Service 与 HTTP 的一次交付，100 路合并，等待取消/队满/期限，权限改变与摘要失配，引用阻止退出。协议编号检查可提交；默认一个主路径集成测试，SDK/supervisor 新测试与其他边界写 *_local_test.go。
+```
+
+### goal-176 · S-02.3 Core 消息事件过滤与 SDK 注册
+
+状态：待派发。前置 T-04.16（PR #199）、T-08.11（PR #103）、T-09.14（PR #192）均已合并。2026-11-17 按维护者决定新增；已对照合入最新 main 的当前工作树（HEAD `0d4cc26`）核对：EventSpec 只有类型、Handler、Rule 与按钮字段；Router.candidates 只按事件类型收集活 Session，dispatch 中执行权限与调用；sdk.EventBuilder.Rule 只在插件进程执行，buildRegister 在 sdk/session.go。Core 已持有可信 schema 和 Active 配置，state.Store.GenerationConfig 可读已提交快照；T-08.18/T-04.18 的配置文件实现尚未合并。本切片交付配置快照读取注入点及基础实现，后合并者按共享规则接入配置文件；无需等待任何休眠生命周期切片。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-176（切片 S-02.3：Core 消息事件过滤与 SDK 注册）。goal 目录 goal-176，分支 goal-176，worktree .worktrees/goal-176，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：插件与 Agent 能声明由 Core 在交付前匹配的消息事件过滤，按 to_me、会话类型或配置字段中的唤醒词任一命中交付；SDK 继续执行自定义 Rule。先在常驻模式完成注册、可信校验、Core 匹配与配置读取接口，供 Agent 与休眠唤醒复用同一判断。
+
+依据：PLAN §7 S-02 步骤 5；CONTRACTS §2.5、§4.4、§4.5、§5.6；WIRE-FORMAT §3.3；MESSAGE-MODEL §1.1；DECISIONS D-167、D-168 及 2026-11-17 的本轮休眠记录；TEST-MATRIX V-77 的 Core 过滤分项。
+
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/route.proto：导入 message.proto，在 EventSpec 末尾追加 message_filter，新增 MessageFilter；本切片获授权改这份 proto，字段号按最新 main 顺延，随后 go generate ./...，只保留相关生成变化
+- contracts/validate/register.go 与新文件 message_filter.go：消息事件类型、过滤器结构、枚举与路径语法检查；contracts/configschema/ 新文件 message_filter.go：根据可信 schema 检查引用字段；contracts/wirespec_test.go 追加编号检查
+- sdk/ 新文件 message_filter.go、events.go 与 session.go：SDK 自有声明、builder 收集、REGISTER 编码；不把进程内 Rule 改成另一条 RPC
+- internal/core/host/prepare.go：Expect 增加可信配置 schema，REGISTER 校验时检查字段引用；internal/core/supervisor/supervisor.go 与 internal/app/assembly.go 的 host.Prepare 调用点传入安装包或生成资源的 schema
+- internal/core/router/ 新文件 message_filter.go、router.go、dispatch.go：交付前匹配、配置快照读取注入点与错误诊断；不在 Router 锁内做配置 I/O
+- internal/app/ 新文件 message_filter.go 与 assembly.go、journal.go、alonabot.go 中必要的装配/代次发布调用点：读取当前 Active 配置；覆盖已安装及同进程开发组件，配置候选失败时保留旧生效来源
+- 若 S-01.2 已合并：其 internal/core/state/routes.go、internal/core/router/snapshots.go 与 supervisor 的快照白名单调用点，只补新字段的保存/摘要/恢复；若 T-04.18 已合并：internal/app 中复用其会话解析和覆盖值注入；若 S-02.1 已合并：在 Router 的既有活动引用及 EnsureActive 之前接入同一匹配入口
+- internal/app/message_filter_test.go、pipeline_test.go 中现有测试宿主的必要注册；上述包的 *_local_test.go
+
+允许的新跨模块边：无。沿用 sdk -> contracts、internal/core -> contracts、internal/app -> internal/core 与 contracts；通过函数注入读取配置，Router 不依赖 internal/app、SDK 或 Agent。
+
+接口（已核对的现有签名，保持可用）：
+- func (r *sdk.Plugin) On(routeID string, eventType sdk.EventType) *sdk.EventBuilder
+- func (b *sdk.EventBuilder) Rule(rules ...sdk.Rule) *sdk.EventBuilder；func (b *sdk.EventBuilder) Handle(h any)
+- func router.New(opt router.Options) *router.Router；func (r *router.Router) Deliver(ctx context.Context, ev *pb.Event) error
+- func validate.Register(r *pb.Register) error
+- func configschema.Parse(raw []byte) (*configschema.Schema, []configschema.Problem)
+- func (s *state.Store) GenerationConfig(ctx context.Context, generationID string) (string, error)
+- func host.Prepare(ctx context.Context, conn *wire.Conn, exp host.Expect, boot *pb.Bootstrap, lim host.Limits) (*host.Prepared, error)
+
+接口（本切片新增，以下签名固定）：
+- proto：EventSpec 追加 MessageFilter message_filter；MessageFilter 含 bool to_me、repeated ChatType chat_types、string wake_words_config、string triggers_config。沿用 message.proto 的 ChatType；不预分配编号。
+- sdk：type MessageFilter struct { ToMe bool; ChatTypes []message.ChatType; WakeWordsConfig string; TriggersConfig string }
+- func (b *EventBuilder) Filter(filter MessageFilter) *EventBuilder // 只设一次，在 Handle 前调用；复制切片；一个条件都没有的过滤器在 Collect 时拒绝
+- contracts/configschema：func (s *Schema) CheckMessageFilter(filter *pb.MessageFilter) error // 检查类型及非 secret，错误只带字段路径
+- host.Expect 追加 ConfigSchema *configschema.Schema // 来自已验证资源；无配置时 nil，存在配置引用时须校验失败
+- router.Options 追加 MessageConfig func(ctx context.Context, pluginID string, event *pb.Event) (json.RawMessage, error) // 返回本次消息会话的生效配置只读快照，供本次匹配按路径取值，不发插件 RPC
+- 注册示例：p.On("chat", sdk.MessageCreated).Filter(sdk.MessageFilter{TriggersConfig:"triggers", WakeWordsConfig:"wake_words"}).Rule(sdk.NotCommand()).Handle(handler)。静态私聊或群触发示例：Filter(sdk.MessageFilter{ChatTypes: []message.ChatType{message.ChatPrivate, message.ChatGroup}})。声明只含路径与条件，配置值不从 p.Config() 固化进 REGISTER。
+
+行为：
+- 按 CONTRACTS §2.5 作 OR：静态 to_me、任一 ChatTypes 或任一唤醒词命中即交付；TriggersConfig 模式按 mention/private/wake_word 多选，mention 限 GROUP 且 to_me，空列表不交付。triggers 模式与静态 ToMe/ChatTypes 互斥。文本仅顺序拼接 text 片段，非空词位置不限、拉丁字母不区分大小写；不修改 chain。未提供 to_me/文本的消息条件不命中，未知 chat_type 不命中类型条件。
+- SDK 和 Core 依次校验各自信任边界：Filter 只允许一次且在 Handle 前；Core 拒绝非消息事件、混合其他事件、非法会话枚举和路径、schema 缺失/字段类型错误/secret 路径。SDK Rule 不决定 Core 侧准入；无过滤器保持原交付；一个条件都没有的过滤器由 SDK 与 Core REGISTER 拒绝（CONTRACTS §2.5）。注册或读取错误保留实际错误，日志省略配置值。
+- 在 PreEvent 后、业务交付及唤醒之前判断过滤；继续执行原权限、路由开关、稳定顺序和 command_consumed 规则。与 S-02.1 的后合并者保证在同一判断通过后才取得活动引用并 EnsureActive，未命中不取得唤醒名额。
+- MessageConfig 的基础实现一次读取当前已提交 GenerationConfig 并返回只读快照，Router 只按声明的点分路径取字段；候选/重启恢复继续使用原权威提交，不读 Pending。多个过滤字段在一次路由匹配中使用同一生效配置快照。没有配置引用的静态过滤无需调用此函数；有引用而未装配读取器时返回实际错误并跳过，不放行。
+- T-08.18/T-04.18 尚未合并时，本切片以基础配置完成验收；它们与本切片的后合并者必须按执行顺序接入 Resolve 和有效 Overrides，使选择器和唤醒词均按会话生效、覆盖更新从后续匹配生效；运行值与 Handler 的 profile_id 使用同一配置文件解析规则。先通过注入值验证此接口，不把该结果记成真实配置文件验收。
+- 与 S-01.2 的后合并者把 message_filter 及配置路径加入白名单和确定性摘要；配置/覆盖值变化不改变快照或摘要，唤醒后重新 REGISTER 照常校验。S-02.3 不建立快照存储或休眠状态机。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/app/message_filter_test.go 一个集成测试（unix），复用 pipeline_test.go 的真实 stdio 子进程测试宿主与现有资源登记：SDK 注册声明，Core 完成 REGISTER 校验后注入未命中和命中的消息，断言只有命中才产生 Handler REQUEST，命中后 SDK Rule 仍可拒绝；注入两个会话的不同字段值并切换覆盖快照，匹配随生效值变化，未声明过滤的路由行为保持原样。不新增 testdata 插件。
+- 提交：contracts/wirespec_test.go 新字段编号检查。多列理由：协议编号固定检查与跨进程交付分别覆盖独立契约。
+- 本地自测（*_local_test.go，结果写入 PR）：V-77 的 to_me/PRIVATE/GROUP/CHANNEL OR、空过滤器在 SDK 与 REGISTER 被拒绝、triggers 为空与多选、空唤醒词、分段文本/大小写、edited/deleted 缺失字段；配置路径/类型/secret 非法、读取失败、Pending 隔离、候选失败和原代次；builder 的重复/Handle 顺序；若已有 profile，核对真实会话指定/实例缺省/有效覆盖（包括 object 祖先覆盖）的交付；若已有快照，核对新字段往返和摘要不一致拒绝。sdk/ 与 supervisor/ 只放本地自测。
+
+完成条件：gofmt -l 无输出；go generate ./... 后无未提交的生成差异；go vet ./...；go test -race ./contracts/... ./internal/core/router/... ./internal/core/host/... ./internal/core/supervisor/... ./internal/app/... ./sdk/...；go build ./...。PR 写明 V-77 本切片分项的命令、平台、结果和未运行项，以及快照/配置文件后合并者的接入情况。
+
+不做：休眠生命周期、EnsureActive、IDLE、管理 API、WebUI、官方 Agent 的触发方式改造（goal-159/164）、新的配置存储或 profile 实现；不加依赖，不改其他 proto、schema.sql、tune 或 ARCHITECTURE/README/spec，文档同步写进 PR。
+```
+
 ## 第 19 波
 
 ### goal-161 · T-04.18 配置文件的派发与 SDK
@@ -7940,6 +8141,8 @@ internal/core/state
 - `c.Config()` 合并本次调用的覆盖值，`p.Config()` 与 `s.Config()` 不变；同一调用内不变。
 - 关闭插件的会话：命令按禁用处理，文本匹配、事件路由与 Raw 跳过；Service 调用、定时任务与后台发送不受影响。
 - `core.profile.set` 只接受调用插件自己写了 `profile` 的字段；会话使用 default 时写入 Pending 并在根调用结束后 reload；assign 与 set 要求 Core Admin。
+
+- 若 S-02.3 已合并，向 router.Options.MessageConfig 注入本会话的生效配置只读快照：Resolve → Active 基础配置 → 有效 Overrides（含祖先 object 的覆盖），复用 InvocationContext 的会话解析规则；更新从后续匹配生效。若本切片先合并，S-02.3 后合并时接入同一来源。
 
 不做：命令前缀与回复方式（goal-162）；工具策略（goal-163）；Agent 的命令（goal-164）。
 ```
@@ -7983,6 +8186,27 @@ internal/core/state
 完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
 
 不做：五平台运行与发布（T-10）；新的产品功能（只做验收与必要的缺陷修复，修复需在 PR 中逐条说明）。
+```
+
+### goal-171 · S-02.2 空闲退出与即时休眠策略
+
+状态：等待前置（S-02.1）。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-171（切片 S-02.2：空闲退出与即时休眠策略）。goal 目录 goal-171，分支 goal-171，worktree .worktrees/goal-171，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：按生效休眠策略执行安全空闲退出，设置修改立即生效，停止中到达的请求经同一生命周期门禁交接。
+
+依据：PLAN §7 S-02 步骤 4；CONTRACTS §4.4、§4.5、§15.1、§16；DESIGN §A；D-53、D-153；V-77 的准入与停止分项。
+
+要点：
+- 范围：新建 internal/core/idle/，internal/core/settings 的 sleep 解析/写回/Reload，internal/core/supervisor 的正常 IDLE 停止与策略应用，internal/app 装配/设置重读，internal/core/state 的运行原因记录，internal/tune/params.go 的休眠初值。
+- 允许拟新增方向：idle -> settings（读取生效策略）、idle -> supervisor（活动状态与正常停止），internal/app -> idle（装配）；由审查者随 PR 同步 ARCHITECTURE。反向通知通过注入函数，保持无 import 环。
+- 仅对 manifest 允许的独立进程 plugin/agent 启用 component_idle；HTTP、Hook、持续事件、未声明 Core message_filter 的消息事件和 Raw 缺省常驻，显式时长可放行路由准入，manifest 与同进程限制仍有效。
+- sleep.mode/idle_timeout/plugins 是唯一配置来源。never 唤醒仍已启用的休眠插件，auto 删除覆盖，时长下一次空闲判定使用；切回 always_on 唤醒全部已启用插件，设置变更不重载插件。管理 API 与 CLI 在 goal-173，内部设置及应用接口由本切片交付。
+- SLEEP_COLD_START_WINDOW 内冷启动超过 SLEEP_COLD_START_MAX 时，从触发时刻固定常驻 SLEEP_COLD_START_WINDOW 的冷却期，期间新冷启动不延长本次冷却期；冷却结束恢复空闲判定，不新增参数。只有全部活动引用、任务、多轮等待、后台工作、租约与管理操作均排空，且达到空闲阈值/最短运行时间并已结束冷却时才停止；Core 无法观察私建 goroutine，由 manifest 作者声明承担安全恢复前提。
+- STOPPING 前可取消空闲停止，发出后新请求等待旧进程树退出再建立新 Session；复用 STOP_TOTAL/STOP_DRAIN/STOP_ONSTOP，成功记 SUSPENDED，IDLE 不计异常次数，不更新代次或迁移。
+- 验收要点：准入覆盖、never 唤醒、时长即时生效、最短运行时间、频繁冷启动暂时常驻、STOPPING 竞争、管理操作互斥、数据保留；默认一个真实子进程主路径集成测试，其余本地自测。
 ```
 
 ## 第 20 波
@@ -8044,4 +8268,67 @@ internal/core/state
 - docs/development.md、docs/plugin-guide.md、README 与 CLI 帮助中的写法同步。
 
 不做：根命令改名；缺省值扩大卸载、清理与回退等破坏性操作的对象；协议与管理 API 的改动；新增依赖。
+```
+
+### goal-172 · S-03.1 Scheduler 唤醒与离线 tick 区分
+
+状态：等待前置（S-02.2、T-07.2）。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-172（切片 S-03.1：Scheduler 唤醒与离线 tick 区分）。goal 目录 goal-172，分支 goal-172，worktree .worktrees/goal-172，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：让静态与动态任务在插件正常休眠时按期唤醒执行，维持异常离线跳过、不追补及同一任务不重叠。
+
+依据：PLAN §7 S-03 步骤 1、2；CONTRACTS §4.3～§4.5；WIRE-FORMAT §5；DESIGN §H；D-19、D-53、D-153；V-78 与 V-77 的 schedule 活动分项。
+
+要点：
+- 范围：internal/core/scheduler 的 Attach/Detach/Drain/tick/动态任务队列及状态恢复，supervisor 的空闲退出通知、internal/app 的装配；state 的 job/task 读取沿用原所有者。
+- 正常 IDLE 退出撤销 Session 绑定但保留静态起点、暂停状态、动态实例、路由描述与未来定时器；停用/异常离线仍按原作废与清理规则处理。
+- 到期先占同一运行槽并经 EnsureActive 取得引用，确认 ACTIVATED 后用现有 scheduled REQUEST。保留原 scheduled_at，原 15 分钟绝对 deadline 包含唤醒等待，不因新 Session 重置。
+- 同一静态 job/动态实例不重叠；动态并发名额和排队规则照旧。超时先返回但保持运行槽与活动引用，实际完成或确认进程树退出后释放；失败有日志/计数，不自动重试 callback。
+- 验收要点：12:00/16:00/22:00 独立 cron 与 interval、动态 at/周期实例，休眠唤醒、任务占用时阻止休眠、静态起点不变、异常离线不补跑。复用任务套件和已有时钟入口，不为本切片新造时钟框架；默认一个集成主路径，其余本地自测。
+```
+
+## 第 21 波
+
+### goal-173 · S-06.1 休眠管理 API、运行诊断与 CLI
+
+状态：等待前置（S-02.2、S-03.1、T-09.14）。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-173（切片 S-06.1：休眠管理 API、运行诊断与 CLI）。goal 目录 goal-173，分支 goal-173，worktree .worktrees/goal-173，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：提供 ADMIN-API §24 的全局设置、插件策略、运行状态与原因，并实现 alonabot sleep-policy；为 S-06.3（goal-175）的页面提供休眠 API。
+
+依据：PLAN §7 S-06 步骤 1；CONTRACTS §4.4、§4.5、§9.3、§15.1；ADMIN-API §24；D-153、D-164；V-81 管理分项。
+
+要点：
+- 范围：internal/core/manage 新文件 sleep_api.go 与路由登记、internal/core/settings 已有设置方法、supervisor/idle 的已合并策略和诊断接口、internal/app 装配、cmd/alonabot 的 sleep-policy 命令文件与命令注册；不修改 web/admin。
+- API 路径、请求/响应、CSRF 照 ADMIN-API §24，错误仅按 §5；plugin 与 agent 均可管理，读取保持无唤醒副作用，manifest 常驻和实际生效原因可读；组件列表追加 RuntimeState，沿用既有 State 的阶段表示。
+- CLI 不给参数列出全局和插件策略、状态与最近原因；只有 ID 时读取；never 写覆盖、auto 删除覆盖、正 Go duration 写覆盖。全局模式与时长走同一 Core 设置管理 API；不增加 CLI 语法。
+- 写回 sleep 后立即向既有生命周期所有者应用策略，不 reload；never 与 always_on 唤醒对应的已启用插件，停用插件保持停用；保存后唤醒失败按 §5 返回实际错误，失败写运行状态，调用方重新 GET 核对设置。
+- WebUI 页面由 S-06.3（goal-175）实现，不在本切片。
+- 验收要点：默认一个经认证管理 API＋CLI＋真实子进程的集成主路径，覆盖读取、设置、休眠、never 唤醒与不重载；非法值、其他角色、CSRF、保存/唤醒失败等本地自测。
+```
+
+## 第 22 波
+
+### goal-174 · S-06.2 休眠指标、故障注入与固定机器验收
+
+状态：等待前置（S-06.1）。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-174（切片 S-06.2：休眠指标、故障注入与固定机器验收）。goal 目录 goal-174，分支 goal-174，worktree .worktrees/goal-174，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：补齐休眠指标、故障注入与固定机器资源测量，按证据调整初值并汇总 V-77、V-78、V-81。
+
+依据：PLAN §7 S-06 步骤 2～4；CONTRACTS §4.4、§4.5、§16；DESIGN §O；TEST-MATRIX V-77、V-78、V-81；SLEEP-DESIGN §10 的测量目标。
+
+要点：
+- 范围：internal/core/metrics、supervisor/idle/scheduler 的必要埋点、internal/app 与 cmd 的现有集成验证入口、examples/plugins/echo 的必要可休眠声明、internal/tune/params.go，以及明确授权的 spec/TEST-MATRIX.md §3 证据回写；不扩大为通用监控平台。
+- 记录冷启动到 ACTIVATED 的 P50/P95/P99、OnStart/OnReady 耗时、唤醒次数、失败/丢弃原因、CPU 与活跃/休眠 PSS/RSS；复用既有 metrics、日志与资源取证方法。
+- 固定机器上 echo 与 V-74 同组插件各取 100 次冷启动样本，记录 OS/arch、CPU、内存、Go 版本、构建设置和测量命令；echo P95 200ms 为初步目标，其他插件只记录。PSS 在支持的平台采集，未取得的值写未运行。
+- 故障注入覆盖唤醒中崩溃、STOPPING 中到达请求、切回 always_on，验证无双进程/重复交付，快照、任务与业务数据保留。复用前置有效证据，不重复提交已有分项测试。
+- 测量环境缺失时固定机器验收保持未运行，指标与独立故障注入可继续；测量未完成时不得把本切片或 V-81 总体验收标为完成。阈值调整须由审查者同步 CONTRACTS §16 与决策依据，不改变既有参数而缺少测量理由。
+- 本切片没有 WebUI 的发布前置。汇总页面证据时引用 T-09.8/T-09.9 的真实操作结果，未合并/未运行则明确保留缺口，不用模拟服务充当浏览器或固定机器证据。
 ```
