@@ -289,7 +289,7 @@ PATCH 语义依据：[RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)。
 ### 5.4 用户可见文案
 
 - 日志、错误字符串、CLI 输出与 safe_message 只用英文，不经 i18n。发给聊天用户的文案与 WebUI 文案经 i18n 提供，英文为源语言。
-- 插件的用户可见文案放在 `i18n/<locale>.json` 的顶层 `messages` 对象中：键为点分隔的 ASCII 标识（每段由 ASCII 字母、数字与 `_` 组成，D-178），值为文案字符串，`{name}` 是命名占位符，`{{` 与 `}}` 表示字面花括号。该文件的顶层键为 `metadata`（组件的 name 与 description，§9.1）、`config`（§5.3）、`messages`、`commands`（命令说明覆盖，§8，D-138）与 `pages`（插件页面标题覆盖，以页面路径为键，D-164）。
+- 插件的用户可见文案放在 `i18n/<locale>.json` 的顶层 `messages` 对象中：键为点分隔的 ASCII 标识（每段非空，由 ASCII 大小写字母、数字与 `_` 组成，命名占位符沿用同一规则，D-178），值为文案字符串，`{name}` 是命名占位符，`{{` 与 `}}` 表示字面花括号。该文件的顶层键为 `metadata`（组件的 name 与 description，§9.1）、`config`（§5.3）、`messages`、`commands`（命令说明覆盖，§8，D-138）与 `pages`（插件页面标题覆盖，以页面路径为键，D-164）。
 - `check` 与 `build` 对顶层 `commands` 只检查结构：它是对象，键为字符串，值为含字符串 `description` 的对象；覆盖路径与实际注册命令及其英文说明的对应由 SDK 在收集注册时检查（§8）。
 - 顶层 `pages` 是从插件相对路径到标题字符串的对象，例如 `{"pages":{"/subs/":"订阅"}}`。仅提供 `pages` 覆盖时可以省略 `en-US.json`；页面的英文源标题来自 `.Page(title)`（§7.3），管理 API 按 `Accept-Language` 逐路径选择覆盖，缺少匹配时使用源标题。
 - 文件名是规范化的 BCP 47 标签，例如 `en-US.json`、`zh-CN.json`。`en-US.json` 是 messages 的源语言，必须包含全部 messages 键；其他语言缺少的 messages 键回落到 en-US。仅含 commands 覆盖的目录可省略 en-US.json，命令说明的英文源文案来自代码（§8，D-138）。`check`、`build` 与 `pack` 拒绝以下情况：含 metadata、config 或 messages 的目录缺少 en-US、其他语言的 messages 含 en-US 没有的键、同一 messages 键的占位符集合与 en-US 不同、JSON 不合法。
@@ -421,6 +421,8 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
   - **组件图标**：manifest 的 `icon`（§9.1），只提供声明过的路径。类型按扩展名取 SVG、PNG 或 WebP，其他扩展名在包校验时拒绝。响应带 `Content-Security-Policy: sandbox; default-src 'none'; style-src 'unsafe-inline'` 与 `X-Content-Type-Options: nosniff`，要求管理员会话；WebUI 只用 `<img>` 引用图标，直接打开图标 URL 时也只在隔离的源中渲染，SVG 中的脚本不会在 Admin 源中执行。
 - Admin API 是带主版本号的公开契约，接口、主版本与插件页面桥的消息格式（§7.3）记录在 Admin API 参考（`spec/ADMIN-API.md`，T-09.12 交付）；同一主版本内只做向后兼容的增加。WebUI 在 manifest 中声明支持的主版本范围（§9.1），Core 的主版本不在范围内时拒绝安装与启用；Core 升级后不兼容的已安装 WebUI 不再提供文件，Core 返回说明版本不兼容的提示。
 - WebUI 持有管理员会话，能执行全部管理动作，安装与替换界面展示这一点；签名只证明发布来源（§9.2）。
+- 官方 WebUI 的 Go 入口为 `package admin` 的 `New() *sdk.Plugin`，进程与静态 `dist` 同包按平台发行。后台用自身受管 SQLite 保存小时统计、见过的用户、源/Release 缓存与已读版本，Core 管理数据经 Admin API 操作。PreEvent 在等待与命令截断前记录入站，统计写入失败记日志后继续传播原载荷；AfterSend 排除编辑，按实际回执账号记录成功发送与发送错误；命令统计来自 `command.invoked`。小时键保留绝对时刻以区分夏令时回拨，查询返回采集起点之后的真实零值桶。后台接口及抓取限制见 ADMIN-API §25。
+- 官方 WebUI 的数据页提供数据库表格、KV/文件存储、导出与清空，以及 Agent 会话摘要与清除；数据库保留代次只读，表行编辑按 rowid 写入，PATCH 只提交修改列。用户页合并见过的用户、Core Admin 与全局禁止列表。更新前从已绑定来源预览 Release 正文，更新后按 SemVer 展示尚未读过的包内 changelog；已读版本在后台 SQLite 事务中比较并单调推进，主动查看可读取完整更新内容，HTML 按文本渲染。
 - 官方 WebUI 随包提供标志、站点图标、JetBrains Mono 2.304 的 Regular 与 Medium woff2 及 SIL OFL 1.1 许可，中文使用系统字体栈（D-169）。浅色、深色及跟随系统的偏好保存在浏览器中，缺省跟随 `prefers-color-scheme`。首页脚本在首帧前设置根元素的 `data-theme`，外壳与配置表单按其应用视觉令牌；界面语言优先使用已保存选项，无保存值时按浏览器语言选择。页面接入规则见 [WebUI 实施计划 §3](plan/webui.md#3-页面接入外壳)。
 
 ## 8. Adapter、Target 与消息
@@ -487,9 +489,9 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 
 ### 9.2 来源、摘要与签名
 
-- GitHub Releases 作为首发分发入口，不自建分发服务器。插件源（D-162）是 GitHub 仓库中的 `index.json`，官方插件源为 `AlonaBot/plugin-store`（D-176），官方 WebUI 将其列为缺省源：`{"version": 1, "plugins": [{"repo": "owner/name", "role": "plugin", "tags": ["weather"]}]}`，`role` 取 §9.1 的四种，`tags` 可省略；名称、描述、版本与图标从组件仓库最新 Release 的 release.json 与包内 manifest 取得，安装照常经 `--source owner/repo`。官方 WebUI 预置官方源，可以切换为其他源；条目只是索引，不改变来源绑定与签名规则。**归档外**的 `release.json` 包含发布者公钥标识、绑定仓库来源、插件 ID/版本、各 OS/arch 资产 URL、字节长度和整个归档的 SHA256；归档内 manifest 不保存自身归档摘要，避免自包含循环。若记录单文件摘要，其对象必须明确是 binary 或资源，不与归档摘要混用。
+- GitHub Releases 作为首发分发入口，不自建分发服务器。插件源（D-162）是 GitHub 仓库中的 `index.json`，官方插件源为 `AlonaBot/plugin-store`（D-176），官方 WebUI 将其列为缺省源：`{"version": 1, "plugins": [{"repo": "owner/name", "role": "plugin", "tags": ["weather"]}]}`，`role` 取 §9.1 的四种，`tags` 可省略；名称、描述、版本与图标从组件仓库最新 Release 的 release.json 与包内 manifest 取得，安装照常经 `--source owner/repo`。官方 WebUI 首次预置官方源，源列表保存在浏览器中，可以添加、移除、切换并保留主动清空的列表；条目只是索引，不改变来源绑定与签名规则。**归档外**的 `release.json` 包含发布者公钥标识、绑定仓库来源、插件 ID/版本、各 OS/arch 资产 URL、字节长度和整个归档的 SHA256；归档内 manifest 不保存自身归档摘要，避免自包含循环。若记录单文件摘要，其对象必须明确是 binary 或资源，不与归档摘要混用。
 - 发布者可以用 Ed25519 对 `release.json` 的**确切 UTF-8 文件字节**签名，输出外部 `release.json.sig`（D-81，可选）；验证先签名后解析，不能重新序列化 JSON 后验签。有签名时 Core 使用已信任公钥校验签名；有没有签名都验证下载长度/SHA256、平台和内层 manifest 一致性；进程角色的包还要严格核对 build-info：必须存在，能用 `debug.ParseBuildInfo` 解析，与 entrypoint 内嵌的构建信息逐字一致，`GOOS`、`GOARCH` 等于 manifest 的 `os`、`arch`，任一项不符时拒绝（D-151）。实现使用 Go 标准库 `crypto/ed25519`，不引入通用 PKI 系统。
-- 签名时发布者在 release.json 旁一并发布 `release.pub`（标准 base64 的 32 字节 Ed25519 公钥，允许末尾空白），`--source` 安装与更新时随 release.json.sig 下载，本地安装由 `--public-key` 给出（缺省取 release.json 同目录的 release.pub）；公钥的 KeyID 必须等于 release.json 的 `publisher_key_id`。首次信任由管理员确认后记录该指纹，之后同来源的候选必须由同一公钥签名；无签名的来源以后带有效签名时，经管理员确认指纹后改为绑定（D-81、D-139）。WebUI 包的资产平台为 `any`，没有可执行入口；其他角色的资产必须与本机平台一致。
+- 签名时发布者在 release.json 旁一并发布 `release.pub`（标准 base64 的 32 字节 Ed25519 公钥，允许末尾空白），`--source` 安装与更新时随 release.json.sig 下载，本地安装由 `--public-key` 给出（缺省取 release.json 同目录的 release.pub）；公钥的 KeyID 必须等于 release.json 的 `publisher_key_id`。首次信任由管理员确认后记录该指纹，之后同来源的候选必须由同一公钥签名；无签名的来源以后带有效签名时，经管理员确认指纹后改为绑定（D-81、D-139）。纯静态 WebUI 包的资产平台为 `any/any`；带可执行入口的 WebUI 与其他进程角色的资产须匹配本机平台，官方 WebUI 属于带入口的平台包。
 - 首次来源信任由管理员明确接受并持久化仓库，有签名时同时持久化发布者公钥指纹。有签名的来源：之后的更新必须由同一公钥签名，来源或公钥变化停止更新，重新信任是独立管理动作。没有签名的来源：安装界面与 `list` 标明未签名，之后的更新只从同一仓库取，照常校验长度、SHA256、平台与内层 manifest；它以后提供签名时，由管理员确认后改为按该公钥绑定。已签名来源永远不能静默降级为无签名，验签失败也不能自动降级为无签名信任；不能仅凭同 ID 接管已有安装。官方组件始终签名。
 - 下载/签名/平台/静态检查都在停止旧版前完成；损坏或不可信候选直接拒绝。签名证明发布来源，不证明 Native 程序行为安全。新版本包只是安装候选，仍须 §6/§12 的准备与唯一提交流程。
 
@@ -724,7 +726,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 ### 15.1 启动与 core_config.json
 
-- `alonabot run` 启动 Core，不带子命令运行 `alonabot` 与它相同（D-77）：取得 core.lock，打开状态库，读取 `core_config.json`，按安装记录启动全部已启用的组件（WebUI 没有进程，启用即提供文件）。`--data-dir` 缺省为工作目录下的 `data/`。给出组件目录，或当前目录是组件工程时，另外运行开发中的组件（§15.4）。
+- `alonabot run` 启动 Core，不带子命令运行 `alonabot` 与它相同（D-77）：取得 core.lock，打开状态库，读取 `core_config.json`，按安装记录启动全部已启用的组件（纯静态 WebUI 启用即提供文件，带入口的 WebUI 同时启动后台进程）。`--data-dir` 缺省为工作目录下的 `data/`。给出组件目录，或当前目录是组件工程时，另外运行开发中的组件（§15.4）。
 - Core 的设置都在 `<data_dir>/core_config.json`（D-82），仿照 AstrBot 的 `cmd_config.json`。文件不存在时以缺省值创建，权限只有运行账号可读写。它是这些设置的唯一来源，状态库不保存它们：
 
 | 键 | 缺省值 | 含义 |
@@ -756,6 +758,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 - 官方整合包是同一套发行物的三种安装方式（D-64）：发行归档、容器镜像与 `deploy/compose.yaml`（§15.3），以及 `install.sh`（§15.6）。三者包含相同的 Core 与官方组件。
 - 每个目标平台发布一个发行归档 `alonabot-<version>-<os>-<arch>`（Windows 为 zip，其他为 tar.gz），包含 `alonabot` 可执行文件和 `packages/` 目录。`packages/` 中是官方 Telegram Adapter、官方 Agent、官方 WebUI 与预装插件的组件包，以及各自归档外的 `release.json` 与 `.sig`（§9.2）。官方 OneBot 11 Adapter 不进入首个发行版，完成后随后续版本加入（D-171）。同一 Release 另附 `install.sh` 与列出全部发行归档 SHA256 的 `SHA256SUMS`。
+- 官方 WebUI 分别提供 linux/amd64、linux/arm64、windows/amd64、darwin/amd64 与 darwin/arm64 平台包；每包携带相应的后台进程与同一份 dist。首次启用 help 与官方 WebUI 时各运行一个组件进程。
 - 发行版 Core 内置官方发布者公钥作为已信任来源：运行官方发行包即视为接受该来源，预装包不再逐个确认。签名与摘要照常校验，校验失败的包不安装并记 ERROR。
 - 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，只启用 help 插件与官方 WebUI；Agent 组件与 help 以外的预装插件（首个发行版没有，D-171）只安装不启用，不使用 AI 对话的部署不运行它们的进程（D-50、D-62）。发行包中的官方 Adapter 只安装，`core_config.json` 的 `adapters` 中有它的实例时自动启用；某个 Adapter 写了实例却尚未安装时，Core 从 `packages/` 安装，没有发行包（例如经 `go install` 取得的 `alonabot`）时从官方 Release 安装（D-82）。需要 AI 对话时，管理员在 WebUI 或 CLI 启用 Agent；Agent 在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。
 - 管理员可以用 `install --source <来源> --replace` 把任一官方 Adapter、Agent 或 WebUI 换成社区组件（§9.3）；之后不再从官方来源更新该组件。卸载或损坏 WebUI 后，用 `alonabot install <官方 WebUI 的组件 ID>` 从 `packages/` 重装（§9.3，D-149）。
@@ -834,6 +837,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 契约中可调的容量、期限与配额集中登记在 `internal/tune/params.go`：每项有名称、缺省值、单位与约束，缺省值就是本契约各节给出的数值。新增可调的值时，同时修改该文件与下表。
 - 以下不属于调优参数：协议双方必须一致的常量（帧上限、分块大小；配置文件覆盖集合沿用固定帧上限，见 §5.6）；安全相关的值（Secret 与 token 长度、管理会话与插件票据的期限）；平台规定的限制；SDK 的固定输入上限（§6.1 的 KV 键和值上限）；插件与 Adapter 自己的常量；日志级别与日志文件设置（§14、§15.1）；配置文件的平台与回复设置（§5.6、§15.1）；WebUI 在浏览器中保存的主题、语言与侧栏偏好（§7.5）。
 - 诊断包的时间范围、分组和脱敏选项按次传入（§14.7、ADMIN-API §19）。
+- 官方 WebUI 的远端抓取期限、响应与归档上限为 `web/admin/store.go` 的组件内安全常量，数值见 ADMIN-API §25；`internal/tune/params.go` 与下表沿用现有参数。
 - 调优参数只在启动时覆盖，运行中不能修改，也不出现在 WebUI。`--args` 是 `alonabot` 根命令的全局参数，可以写在子命令之前或之后（例如 `alonabot --args REQUEST_TIMEOUT=2s run`），对所有子命令生效，可以重复使用：
   - 值中含 `=` 时是直接参数，多个参数用逗号分隔，例如 `--args DISPATCH_CONCURRENCY=1,REQUEST_TIMEOUT=2s`；
   - 否则是文本文件的路径，文件名任意，每行一个 `KEY=VALUE`，空行和以 `#` 开头的行忽略；
