@@ -127,7 +127,7 @@ X-Content-Type-Options: nosniff
 | `POST /api/v1/adapter/instances/create` | `{"package_id":"adapter_package","instance_id":"bot","config":{},"confirm":false}` | 200、`{}` | 补全并校验实例配置，原样保留环境变量引用，写回设置；实例名跨包唯一，冲突 409；换配置块归属需确认；未知组件 404；组件已卸载或角色非 Adapter 为 412 |
 | `POST /api/v1/adapter/instances/start` | `{"instance_id":"bot"}` | 200、`{}` | 由当前配置启动；要求 Adapter 激活，配置有效；已运行 409；未知实例 404 |
 | `POST /api/v1/adapter/instances/stop` | `{"instance_id":"bot"}` | 200、`{}` | 保留配置，本次 Core 运行中持续停用，包括组件崩溃恢复；下次 Core 启动按设置启动；未运行 412 |
-| `POST /api/v1/adapter/instances/delete` | `{"instance_id":"bot"}` | 200、`{}` | 停止仍运行的实例，删除配置与指向它的缺省选择；未知实例 404 |
+| `POST /api/v1/adapter/instances/delete` | `{"instance_id":"bot"}` | 200、`{}` | 停止仍运行的实例，删除配置与指向它的缺省选择；配置提交后清除该实例的配置文件指定及运行选择（§23）；未知实例 404 |
 
 本节的实例动作响应仅包含操作结果；脱敏配置读取与编辑见第 14 节。用户、消息与事件语义沿用 [MESSAGE-MODEL §1](MESSAGE-MODEL.md#1-eventactor-与-target)，平台身份须来自可信 Adapter。
 
@@ -440,7 +440,7 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 | `GET /api/v1/adapters/{adapter_id}/instance-schema` | `adapter_config_schema.json` 的规范 JSON 对象 | 声明通过 `configschema.Parse` 读取 |
 | `GET /api/v1/adapters/{adapter_id}/instances/{instance_id}` | `{"config":{"token":{"$secret_set":true},"name":"bot"}}` | 返回实例配置，秘密字段只显示设置状态，附加 `Cache-Control: no-store` |
 | `PUT /api/v1/adapters/{adapter_id}/instances/{instance_id}` | `{"config":{...}}` | 创建或整体替换指定实例配置，成功返回 `{}` |
-| `DELETE /api/v1/adapters/{adapter_id}/instances/{instance_id}` | 无正文 | 停止仍运行的实例、删除配置和指向它的默认选择，成功返回 `{}` |
+| `DELETE /api/v1/adapters/{adapter_id}/instances/{instance_id}` | 无正文 | 与 §4 的实例删除共用清理流程；实例归属的 Adapter 不匹配时返回 404，保留该实例及其指定 |
 
 实例名跨 Adapter 唯一，其他 Adapter 已占用时返回 409 / `ALREADY_EXISTS`；未知 Adapter、未知实例或删除时 URL 的归属失配返回 404。配置块属于其他组件时返回 412。
 
@@ -561,7 +561,7 @@ Markdown 原文由 WebUI 渲染，WebUI 不执行其中的 HTML。经管理认�
 
 ## 23. 配置文件
 
-配置文件的语义见 CONTRACTS §5.6（D-168）。ID `default` 表示「默认」。修改立即生效；`default` 的字段值经 §12 的配置 API 修改，平台设置写回 `core_config.json`。
+配置文件的语义见 CONTRACTS §5.6（D-168）。ID `default` 表示「默认」。管理写入立即保存；`default` 的字段值经 §12 的配置 API 写入 Pending，平台设置写回 `core_config.json`。运行时应用由后续切片接入。
 
 | Method / path | 请求或成功响应 | 操作语义 |
 | --- | --- | --- |
@@ -570,15 +570,19 @@ Markdown 原文由 WebUI 渲染，WebUI 不执行其中的 HTML。经管理认�
 | `PATCH /api/v1/profiles/{id}` | `{"name":"…","color":"…"}` → `{}` | 两键均可省略 |
 | `DELETE /api/v1/profiles/{id}` | `{}` | `default` 返回 400；指定它的会话与实例回到下一级 |
 | `GET /api/v1/profiles/assignments` | `{"instances":{"qq-main":"vip"},"sessions":[{"instance":"qq-main","session":"onebot11:group:123","profile":"vip"}]}` | `instances` 只列出设置了缺省的实例；空集合为 `{}` 与 `[]` |
-| `PUT /api/v1/profiles/assignments/instances/{instance}` | `{"profile":"vip"}`，`null` 取消 → `{}` | 实例不存在 404 |
+| `PUT /api/v1/profiles/assignments/instances/{instance}` | `{"profile":"vip"}`，`{"profile":null}` 或正文 `null` 取消 → `{}` | 实例不存在 404 |
 | `PUT /api/v1/profiles/assignments/sessions` | `{"instance":"qq-main","session":"…","profile":"vip"}`，profile 为 `null` 取消 → `{}` | 会话字符串按 MESSAGE-MODEL §1 校验 |
-| `GET /api/v1/profiles/{id}/plugins` | `[{"plugin_id":"weather","enabled":true,"fields":["city","unit"],"overrides":{"city":"北京"},"invalid":[{"path":"unit","reason":"type"}]}]` | `fields` 为 Active schema 中写了 `profile` 的字段路径；`id` 为 `default` 时 overrides 与 invalid 为空 |
-| `PATCH /api/v1/profiles/{id}/plugins/{plugin_id}` | `{"enabled":false,"overrides":{"city":"北京","unit":null}}` → `{}` | 两键均可省略，`null` 删除覆盖值；不合法时 400 带路径；`id` 为 `default` 时 overrides 返回 400 |
+| `GET /api/v1/profiles/{id}/plugins` | `[{"plugin_id":"weather","enabled":true,"fields":["city","unit"],"overrides":{"city":"北京"},"invalid":[{"path":"unit","reason":"type"}]}]` | 列出已安装的插件与 Agent。`fields` 为 Active schema 标记的字段路径；`default` 的 `overrides` 与 `invalid` 为空 |
+| `PATCH /api/v1/profiles/{id}/plugins/{plugin_id}` | `{"enabled":false,"overrides":{"city":"北京","unit":null}}` → `{}` | 两键均可省略，字段值为 `null` 时删除该项；其余值按 Active schema 单值校验，完整子树须无 `secret`，无效时 400 带路径；`default` 提交非空 `overrides` 时返回 400 |
 | `POST /api/v1/profiles/{id}/plugins/{plugin_id}/prune` | `{"removed":["unit"]}` | 只删除列为无效的覆盖值 |
 | `GET /api/v1/profiles/{id}/platform` | `{"command_prefixes":["/","!"],"reply":{"mention_sender":true,"quote":null,"prefix":null,"forward_threshold":1500}}` | 没有覆盖的键为 `null`；`default` 返回完整值 |
-| `PUT /api/v1/profiles/{id}/platform` | 同形对象 → `{}` | 整体替换，`null` 跟随 `default`；`default` 写回 `core_config.json`，不接受 `null` |
+| `PUT /api/v1/profiles/{id}/platform` | 同形对象 → `{}` | 整体替换，省略或 `null` 跟随 `default`；`default` 要求全部键非 `null`，写回 `core_config.json`。前缀数组非空，转发阈值须为非负整数 |
 | `GET /api/v1/profiles/{id}/tools` | `{"items":[{"tool":"weather/subscribe","policy":"allow"},{"operation":{"plugin_id":"agent","name":"mcp/fs/write_file"},"policy":"deny"}]}` | 只列出覆盖了全局策略的工具与操作 |
-| `PUT /api/v1/profiles/{id}/tools` | `{"items":[…]}`，policy 取 allow、confirm、deny 或 inherit → `{}` | inherit 删除该项覆盖 |
+| `PUT /api/v1/profiles/{id}/tools` | `{"items":[…]}`，policy 取 allow、confirm、deny 或 inherit → `{}` | 仅更新所列项；每项恰好指定 `tool` 或 `operation`，`inherit` 删除该项覆盖 |
+
+`invalid` 列出失效覆盖的路径与原因（`unmarked`、`type`、`schema unavailable`）。已有复合字段标记仍可读取；覆盖路径与秘密路径相交或 Active schema 不可用时，普通 GET 在 `overrides` 中省略原值，`invalid` 与 `prune` 仍可定位该项。写入或复制使某插件的有效覆盖集合超过 4 MiB 时，按 §5 返回 HTTP 500 与 `RESOURCE_EXHAUSTED`。
+
+§4 与 §14 的实例删除入口共用指定与运行选择的清理流程。实例删除、旧实例组替换与 Adapter 全量清除在设置提交后继续清理，即使请求已取消。提交前失败保留指定与运行选择；若设置已发布但目录同步报错，继续清理并返回同步错误及后续错误。再次删除已消失的实例仍清理该实例的遗留指定，清理成功后返回 404。
 
 ## 24. 插件休眠策略与运行状态
 

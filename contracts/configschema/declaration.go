@@ -71,7 +71,7 @@ func checkAttributes(f *field, path string, problems *[]Problem) {
 		case "type", "description", "hint":
 			allowed = true
 			_, valid = p.value.(string)
-		case "invisible", "obvious_hint":
+		case "invisible", "obvious_hint", "profile":
 			allowed = true
 			_, valid = p.value.(bool)
 		case "editor_mode", "secret":

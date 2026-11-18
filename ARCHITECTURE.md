@@ -34,6 +34,8 @@
 | `Dockerfile`、`deploy/` | 官方容器镜像、compose 整合包入口与 `install.sh`（CONTRACTS §15.3、§15.6，D-64） | Core 行为（镜像与脚本只安装发行归档的内容） | 拟建 |
 | `spec/` | 现行规格与 ADR | — | 现行 |
 
+`internal/core/profile` 负责配置文件的存储编排、实例与会话解析、Active schema 覆盖校验及管理方法。`profile.New(ctx, profile.Options{Store, Settings, Schema})` 建立一次操作的快照；管理写入后刷新状态快照，下一次独立操作重新构造。`Resolve(instance, session) Profile` 与 `Overrides(pluginID) map[string]map[string]json.RawMessage` 在内存中读取快照。管理调用方串行化写入，并从读取 Active schema 到提交持有相应插件的管理锁。`internal/core/manage` 提供 ADMIN-API §23，`cmd/alonabot` 通过 `alonabot profile` 调用管理 API。运行时派发与 SDK 合并由 T-04.18 接入。
+
 ## 依赖方向
 
 `A -> B` 表示 **A 的 Go 源码 import B**（静态依赖，含测试代码），不表示运行时调用或数据流。「模块」指上表每一行的路径前缀；同一模块内部的 import（如 `contracts/release -> contracts/manifest`、`sdk -> sdk/message`）不受限制。跨模块的边只允许下表列出的；标准库和已批准的第三方依赖不受此表限制。
@@ -44,6 +46,7 @@
 | `internal/wire -> internal/tune`、`sdk/... -> internal/tune`、`internal/core/... -> internal/tune` | 读取调优参数的生效值 |
 | `sdk/... -> contracts`、`sdk/... -> internal/wire`、`sdk/... -> internal/oslock` | 插件侧复用同一协议实现与 runtime.lock（Go 允许本 module 的 `sdk` import `internal`） |
 | `internal/core/... -> contracts`、`internal/core/... -> internal/wire`、`internal/core/... -> internal/oslock` | Core 侧协议、core.lock 与停机复制时临时持有 runtime.lock |
+| `internal/core/manage -> internal/core/profile`；`internal/core/profile -> internal/core/state`、`-> internal/core/settings`、`-> contracts/configschema`、`-> internal/wire` | 管理 API 建立配置文件快照；状态库存指定与覆盖、Core 设置存 `default` 平台设置、Active schema 校验覆盖值，覆盖集合预算沿用 `wire.MaxFrame` |
 | `internal/core/buttons -> internal/core/state`、`internal/core/buttons -> internal/core/router` | 持久化按钮 token，复用可信 Caller；message 与 router 通过函数注入接入 buttons |
 | `internal/core/broker -> internal/core/metrics`、`internal/core/bus -> internal/core/metrics`、`internal/core/router -> internal/core/metrics`、`internal/app -> internal/core/metrics` | Service、Bus 与事件派发按原因计数（只在内存中，管理面在 T-09.14 读取） |
 | `sdk -> sdk/internal/convert`、`sdk/adapter -> sdk/internal/convert`；`sdk/internal/convert -> contracts`、`-> sdk/message`、`-> sdk/errcode` | 集中转换 SDK 自有类型与 pb，并组装 Adapter 的类型化声明；公开 API 使用 SDK 类型 |
@@ -73,7 +76,7 @@
 
 | 状态 | 唯一所有者 |
 | --- | --- |
-| `<data_dir>/core.lock`、`state.sqlite`（安装、组件角色与来源、代次、Journal、策略、secret 引用、工具策略、Agent 会话、按钮 token 映射 `button_token`） | `internal/core` |
+| `<data_dir>/core.lock`、`state.sqlite`（安装、组件角色与来源、代次、Journal、策略、secret 引用、工具策略、Agent 会话、按钮 token 映射 `button_token`、配置文件与指定及覆盖） | `internal/core` |
 | WebUI 组件与组件图标的静态文件（不可变包目录） | `internal/core` 只读提供；内容归组件发布者 |
 | 官方 WebUI 的主题、语言与侧栏偏好（按源保存于 `localStorage`） | `web/admin` 的浏览器端 |
 | `<plugins>/<id>/runtime.lock`、插件受管 DB 连接 | 插件进程内的 `sdk` |

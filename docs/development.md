@@ -76,6 +76,8 @@ bin/alonabot admin add telegram:123456
 
 需要确认的操作不带 `--yes` 时列出受影响的对象后退出。开发中的组件可以按下节以目录运行，也可以用库模式，先 `alonabot build --dir ./examples/devbot`，再运行 `examples/devbot/bin/devbot --data-dir ./data`。
 
+使用同一套管理凭证运行 `bin/alonabot profile list` 查看配置文件 ID 和会话数。`bin/alonabot profile assign <配置文件ID> <实例名>` 设置实例缺省；再给出会话字符串可单独指定会话。`profile set` 与 `profile unset` 编辑 `default` 时写入插件的 Pending，沿用配置重载流程。全部子命令见 [CONTRACTS §5.6](../spec/CONTRACTS-v0.1.md#56-配置文件)，平台设置与工具策略见 [ADMIN-API §23](../spec/ADMIN-API.md#23-配置文件)。
+
 ## 开发运行与热部署
 
 先从仓库示例完成一次可见回复（以下使用 fish）：
@@ -143,7 +145,7 @@ bin/alonabot run ./examples/plugins/lifecycle --stdio
 
 `run` 取得 core.lock 后读取 `<data_dir>/core_config.json`，Core 设置统一从这个 JSON 对象读取；文件不存在时以 0600 权限写入缺省内容。未知键、重复键、类型或取值错误时，以 usage 退出码报告完整键路径与行列号。
 
-键与缺省值见 CONTRACTS §15.1；`base_url` 缺省为 `http://127.0.0.1:7650`，管理入口与插件路由共用这个地址。旧键 `admin_base_url` 与 `plugin_base_url` 按未知键报错；已有配置需改用 `base_url`。`admins`、`command_prefixes`、`command_prefixes_by_instance`、`default_locale`、`log.sources` 与 `adapters` 已支持解析与保存；本地 `run` 按监听、日志、代理与 Base URL 装配。
+键与缺省值见 CONTRACTS §15.1；`base_url` 缺省为 `http://127.0.0.1:7650`，管理入口与插件路由共用这个地址。旧键 `admin_base_url` 与 `plugin_base_url` 按未知键报错；已有配置需改用 `base_url`。`admins`、`command_prefixes`、`reply`、`default_locale`、`log.sources` 与 `adapters` 已支持解析与保存；`command_prefixes_by_instance` 仍由当前运行时读取，配置文件的前缀与回复行为由 T-04.19 接入。本地 `run` 按监听、日志、代理与 Base URL 装配。
 
 整个字符串值写成 `${NAME}` 时，读取时展开环境变量；NAME 由 `A-Z`、`a-z`、数字与下划线组成，首字符为字母或下划线。变量缺失时该值按不合法处理，恢复为缺省值并记校正记录（D-161）。
 
@@ -173,7 +175,7 @@ bin/alonabot admin-token show --data-dir ./data
 
 需要在启动前初始化凭证时，停止 Core 后在本机终端运行 `bin/alonabot admin-token init --data-dir ./data`。token 遗失时用 `bin/alonabot admin-token reset --data-dir ./data` 重新生成，旧 token 与全部管理会话随之失效。`init` 与 `reset` 都要求 stdin 与 stderr 是终端，只向 stderr 显示 token 一次；Core 运行中执行会因 core.lock 失败。
 
-调优参数在启动时解析；修改后重启生效。查看全部 37 项参数及当前生效值：
+调优参数在启动时解析；修改后重启生效。`default` 的前缀与 `reply` 属于 `core_config.json`；配置文件覆盖集合沿用固定 4 MiB 帧上限。查看全部 37 项调优参数及当前生效值：
 
 ```sh
 bin/alonabot tune list

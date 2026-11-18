@@ -238,7 +238,7 @@ Core 记录运行状态变化、唤醒/空闲停止原因、冷启动次数、�
   - `secret`：为 true 时是 secret 字段，只用于 `string` 与 `text`，不能同时有 `default` 或 `options`；存储与读取见 §5.3。
   - `required`：为 true 时，`string` 与 `text` 须为非空串，`list`、`dict` 与 `template_list` 须非空，`template` 须选择了模板；其他类型不能写 required。
   - `example`：回复示例，一个示例对象或其数组，显示在该字段下方，字段被 `condition` 隐藏时一同隐藏（D-160）。示例对象有 `input`（必填，用户发出的文字，不含命令前缀；WebUI 显示时加上所选配置文件的第一个命令前缀，§5.6）、`reply`（必填，字符串即一段文字，或片段数组，片段为 `{"text": "…"}` 或 `{"image": "examples/…", "alt": "…"}` 之一）与可选的 `condition`（`{"字段路径": 期望值}`，全部相等时才显示该示例，路径写法同下文「字段路径」）。`input` 与 `text` 中的 `{字段路径}` 换成表单中的草稿值：可以引用 `string`、`text`、`int`、`float`、`bool`，带 `labels` 的显示当前语言的 label，`int` 为十进制，`float` 为最短十进制写法，`bool` 为 true 或 false；模板字段用 `{字段.$key}` 取选中的模板键，`{字段.模板键.子字段}` 只在选中该模板时有值，否则为空串；`condition` 的键同样可以用 `字段.$key`。不能引用 `secret`、`list`、`dict`、`object` 与 `template_list`。字面花括号写作 `{{`、`}}`。图片是包内 `examples/` 目录下的 PNG、JPEG、WebP 或 GIF，按 §7.5 提供。
-  - `profile`：为 true 时该字段可以按配置文件覆盖（§5.6，D-168）。只能写在顶层字段与 `object` 的子字段上，不能写在 `secret` 字段、list 的元素字段与模板的字段上，同一路径上的祖先与后代不能同时写。
+  - `profile`：为 true 时该字段可以按配置文件覆盖（§5.6，D-168）。标记位置限于顶层非 `secret` 字段与 `object` 的非 `secret` 子字段，同一路径上的祖先与后代不能同时标记。单值校验要求标记字段及其完整子树均无 `secret`，包括 list 元素与所有模板分支；声明解析仍接受已有的这类复合字段标记，以便读取 Active schema 并诊断无效覆盖。
 - `alonabot build` 与 `check` 校验 `config_schema.json`：未知键（包括 AstrBot 的 `file` 类型、`_special`、dict 的 `template_schema` 与 `editor_theme`）、键与类型不匹配、default 不合法、labels 多于 options、`options_from` 与 options 或 secret 并存、来源名格式不合法、condition 或 display_item 引用不存在的字段、`profile` 写在不允许的位置，`example` 的键不合法、片段不是恰好 text 与 image 之一、占位符或示例条件引用的字段不存在或类型不允许、图片不在 `examples/` 下或不存在或内容与扩展名不符，都报带 JSON 路径的错误。生成器把通过检查的内容嵌入程序；REGISTER 的 `config_schema_hash` 是其规范 JSON（保留键的顺序）的摘要，必须与安装包中的文件一致。
 - **选项来源（D-129）。** 带 `options_from` 的字段，取值仍是字符串（`list` 为字符串数组），补值、校验与读取照旧：Core 与 SDK 不按来源校验取值，来源不可用或值已不存在时配置照常加载，不认识的值由插件自行处理。
   - 来源名有两种。Core 内置来源：`core.chats`（§8 的聊天目录，filter 可用 `chat_type`：`private`、`group`、`channel`，与 `adapter_id`）与 `core.adapter_instances`（已配置的 Adapter 实例，存储值为 adapter_instance_id，filter 可用 `adapter_id`）。服务来源：`<组件 ID>/<service_name>` 或 `@agent/<service_name>`，指向声明为选项来源的 JSON Service（§3），组件 ID 可以是本组件。`check` 校验来源名的格式；内置来源还校验名称与 filter 的键，服务来源的 filter 原样交给服务。
@@ -300,10 +300,12 @@ PATCH 语义依据：[RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)。
 
 ### 5.6 配置文件
 
+T-08.18 提供存储、会话配置文件解析和管理接口；派发、覆盖值下发、SDK 合并与插件服务由 T-04.18 接入，前缀与回复行为由 T-04.19 接入，工具策略执行由 T-11.6 接入。
+
 - 配置文件（D-168）让不同会话使用不同的设置。Core 状态库保存：配置文件（ID、名称、颜色）；Adapter 实例的缺省配置文件与单独指定的会话；按（插件 ID、配置文件 ID、字段路径）的覆盖值；按配置文件的插件开关与工具策略（§13.1）；按配置文件的平台设置。修改立即生效，不建立配置代次，不经 Pending 与 reload，也不随代次回退。
 - `default`（界面显示为「默认」）始终存在，不能删除，ID 不变。它没有自己的覆盖值与平台设置：字段值就是各插件的配置（§5.1），修改经 Pending 与 reload；平台设置是 `core_config.json` 的 `command_prefixes` 与 `reply`（§15.1）。插件开关与工具策略对 `default` 同样可以设置。其他配置文件的 ID 由 Core 生成；名称为 1～32 个 Unicode 码点，去掉首尾空白后非空且唯一；颜色取 `teal`、`navy`、`amber`、`pink`、`green`、`purple`、`red`、`gray` 之一。新建时可以从已有配置文件复制覆盖值、插件开关、工具策略与平台设置，不复制会话的指定。
-- 会话所用的配置文件：单独指定（按 Adapter 实例名与会话字符串，MESSAGE-MODEL §1）优先，其次是该实例的缺省配置文件，都没有时为 `default`。一次调用使用其默认 Target 所在会话的配置文件，没有默认 Target 的调用使用 `default`。配置文件被删除后，原先指定它的会话与实例回到下一级；Adapter 实例被删除时一并删除它的缺省与单独指定。会话数按 Core 的聊天目录（§8，D-130）计算。
-- 覆盖值：字段路径为点分路径，只能指向 schema 中写了 `profile` 的字段（§5.1）。写入时 Core 用该插件 Active 代次的 schema 按 §5.1 的规则校验值（不补缺失值），不符时返回 400 / INVALID_ARGUMENT 并带路径。插件更新后字段不再标记、或值不再符合新 schema 的覆盖值保留但不下发，管理 API 列为无效，可以清理（只删除被列出的项）。一个插件的全部有效覆盖值受 4 MiB 帧上限约束，写入会超出时返回 RESOURCE_EXHAUSTED。
+- 会话所用的配置文件：单独指定（按 Adapter 实例名与会话字符串，MESSAGE-MODEL §1）优先，其次是该实例的缺省配置文件，都没有时为 `default`。一次调用使用其默认 Target 所在会话的配置文件，没有默认 Target 的调用使用 `default`。配置文件被删除后，原先指定它的会话与实例回到下一级。两个实例删除入口共用清理流程；删除实例、替换旧实例组或清除 Adapter 的配置时，设置提交后清理相关实例的缺省配置文件、会话指定与运行选择，即使请求已取消也继续。设置是否提交以已发布快照为准；提交前失败保留指定与运行选择，提交后的目录同步错误与后续清理错误一并返回。重复删除已消失的实例仍清理该实例遗留的指定，清理成功后返回 404。会话数按 Core 的聊天目录（§8，D-130）计算。
+- 覆盖值：字段路径为点分路径，只能指向 Active schema 中写了 `profile` 且完整子树无 `secret` 的字段（§5.1）。写入时校验单个值，不补缺失值；校验失败返回 400 / INVALID_ARGUMENT 并带路径。失效覆盖保留在状态库，排除在有效覆盖集合外；管理 API 的 `invalid` 列出路径与原因，`prune` 只删除所列项。覆盖路径与 Active schema 的 `secret` 路径相交（含祖先、后代及数组通配路径），或缺少 Active schema 时，普通管理 GET 省略该项原值。每个插件跨配置文件的有效覆盖集合按 JSON 编码字节数校验 4 MiB 上限，写入或复制超限返回 RESOURCE_EXHAUSTED（WIRE §1、§3.2）。
 - 下发与合并：插件 Session 的 Bootstrap 带上该插件当前有效的全部覆盖值（按配置文件 ID 分组）；之后每次变化，Core 调用 `sdk.profile.set_overrides` 下发完整的新集合（WIRE §3.5），失败按 Session 失败处理。Core→插件调用的 InvocationContext 带 `profile_id`（`default` 为空串）。SDK 中 Handler 的 `c.Config()` 是插件配置与本次调用所用配置文件的覆盖值合并后的只读视图，覆盖值替换对应路径的值，同一调用内不变；`p.Config()` 与子插件的 `s.Config()` 仍是插件配置本身。新的覆盖值从 SDK 收到之后开始的调用起生效。没有写 `profile` 的插件不受配置文件的字段覆盖影响。
 - 插件开关：会话所用的配置文件关闭某插件时，Core 不把该会话的入站消息与事件派发给它：命令按命令被禁用处理（§2.2、§2.3），文本匹配、事件路由与 Raw 跳过它；默认 Target 在该会话的调用中，它的工具视为 deny（§13.1）。插件之间的 Service 调用、定时任务与后台发送不受影响。Adapter 不能按配置文件关闭。
 - 平台设置：
@@ -806,7 +808,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 ## 16. 调优参数
 
 - 契约中可调的容量、期限与配额集中登记在 `internal/tune/params.go`：每项有名称、缺省值、单位与约束，缺省值就是本契约各节给出的数值。新增可调的值时，同时修改该文件与下表。
-- 以下不属于调优参数：协议双方必须一致的常量（帧上限、分块大小）；安全相关的值（Secret 与 token 长度、管理会话与插件票据的期限）；平台规定的限制；插件与 Adapter 自己的常量；日志级别与日志文件设置（§14、§15.1）；WebUI 在浏览器中保存的主题、语言与侧栏偏好（§7.5）。
+- 以下不属于调优参数：协议双方必须一致的常量（帧上限、分块大小；配置文件覆盖集合沿用固定帧上限，见 §5.6）；安全相关的值（Secret 与 token 长度、管理会话与插件票据的期限）；平台规定的限制；插件与 Adapter 自己的常量；日志级别与日志文件设置（§14、§15.1）；配置文件的平台与回复设置（§5.6、§15.1）；WebUI 在浏览器中保存的主题、语言与侧栏偏好（§7.5）。
 - 调优参数只在启动时覆盖，运行中不能修改，也不出现在 WebUI。`--args` 是 `alonabot` 根命令的全局参数，可以写在子命令之前或之后（例如 `alonabot --args REQUEST_TIMEOUT=2s run`），对所有子命令生效，可以重复使用：
   - 值中含 `=` 时是直接参数，多个参数用逗号分隔，例如 `--args DISPATCH_CONCURRENCY=1,REQUEST_TIMEOUT=2s`；
   - 否则是文本文件的路径，文件名任意，每行一个 `KEY=VALUE`，空行和以 `#` 开头的行忽略；
