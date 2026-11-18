@@ -910,3 +910,44 @@ func TestCommandListFieldNumbers(t *testing.T) {
 		t.Fatalf("CommandSpec field 13 should be optional string description, got %v", f)
 	}
 }
+
+// TestProfileFieldNumbers 固定配置文件服务载荷和可信上下文的追加编号。
+func TestProfileFieldNumbers(t *testing.T) {
+	for _, c := range []struct {
+		message proto.Message
+		names   []protoreflect.Name
+		kinds   []protoreflect.Kind
+	}{
+		{&pb.InvocationContext{}, []protoreflect.Name{"actor", "default_target", "scopes", "plugin_chain", "send_forbidden", "command_consumed", "profile_id"}, []protoreflect.Kind{protoreflect.MessageKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.BoolKind, protoreflect.BoolKind, protoreflect.StringKind}},
+		{&pb.ProfileSummary{}, []protoreflect.Name{"id", "name", "sessions"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.Uint64Kind}},
+		{&pb.ProfileListRequest{}, nil, nil},
+		{&pb.ProfileListResponse{}, []protoreflect.Name{"profiles"}, []protoreflect.Kind{protoreflect.MessageKind}},
+		{&pb.ProfileCurrentRequest{}, nil, nil},
+		{&pb.ProfileCurrentResponse{}, []protoreflect.Name{"profile"}, []protoreflect.Kind{protoreflect.MessageKind}},
+		{&pb.ProfileAssignRequest{}, []protoreflect.Name{"profile_id"}, []protoreflect.Kind{protoreflect.StringKind}},
+		{&pb.ProfileAssignResponse{}, nil, nil},
+		{&pb.ProfileSetRequest{}, []protoreflect.Name{"path", "value_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind}},
+		{&pb.ProfileSetResponse{}, []protoreflect.Name{"profile", "reloading"}, []protoreflect.Kind{protoreflect.MessageKind, protoreflect.BoolKind}},
+		{&pb.ProfileSetOverridesRequest{}, []protoreflect.Name{"profile_overrides_json"}, []protoreflect.Kind{protoreflect.StringKind}},
+		{&pb.ProfileSetOverridesResponse{}, nil, nil},
+	} {
+		fields := c.message.ProtoReflect().Descriptor().Fields()
+		if fields.Len() != len(c.names) {
+			t.Fatalf("%T fields = %d, want %d", c.message, fields.Len(), len(c.names))
+		}
+		for i, name := range c.names {
+			field := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+			if field == nil || field.Name() != name || field.Kind() != c.kinds[i] {
+				t.Fatalf("%T field %d = %v", c.message, i+1, field)
+			}
+		}
+	}
+	field := (&pb.Bootstrap{}).ProtoReflect().Descriptor().Fields().ByNumber(14)
+	if field == nil || field.Name() != "profile_overrides_json" || field.Kind() != protoreflect.StringKind || field.HasPresence() || field.IsList() {
+		t.Fatalf("Bootstrap field 14 = %v", field)
+	}
+	field = (&pb.ProfileListResponse{}).ProtoReflect().Descriptor().Fields().ByNumber(1)
+	if !field.IsList() || field.Message().FullName() != "alonabot.v1.ProfileSummary" {
+		t.Fatalf("profiles = %v", field)
+	}
+}
