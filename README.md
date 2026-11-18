@@ -4,7 +4,7 @@
 
 Module：`github.com/AlonaBot/AlonaBot`。
 
-已接通休眠插件的命令/事件、Service 与 HTTP 按需唤醒：复用原代次、配置与数据库，并发启动合并，等待条数与字节有界，冷启动沿用请求原期限。自动空闲退出与即时休眠策略由 S-02.2 接入，Scheduler 到期唤醒由 S-03.1 接入；本切片证据见 [TEST-MATRIX §3.2](spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)。
+已接通休眠插件的命令/事件、Service 与 HTTP 按需唤醒：复用原代次、配置与数据库，并发启动合并，等待条数与字节有界，冷启动沿用请求原期限。S-02.2 已接通自动空闲退出与即时休眠策略：缺省 `always_on`，启用 `component_idle` 后按生效策略正常停止并记 `SUSPENDED`，改为 `never` 或切回 `always_on` 时立即恢复已启用插件；Scheduler 到期唤醒由 S-03.1 接入；本切片证据见 [TEST-MATRIX §3.2](spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)。
 
 **当前进度：** 已实现协议契约、生成工具链、manifest/release 校验、SDK 公共类型、受管 SQLite 验证，以及 Core 状态库与锁、Native 插件进程、TCP/stdio 双 IPC、握手/激活/停止生命周期、有限重启；验收证据与未运行项见 [spec/TEST-MATRIX.md §3.1](spec/TEST-MATRIX.md#31-已运行的分项证据t-01t-02)：只在 darwin/arm64 上运行过，Linux/Windows 只做了交叉构建。已接通命令最长路径/别名选择、文本匹配与 Raw、参数绑定、usage/silent 与自动回复、按调用者语言选择的 en-US/zh-CN usage 与插件 `Context.T` 文案、显式事件注册、原目标手动回复、实例许可准入、后台 `sdk.Send`、媒体分块上传 `media.Upload`、入站媒体按需读取与转授（`media.Open`/`media.Grant`）及发送期间的只读媒体租约、Core 发送服务、插件 HTTP 路由经 Core 公开入口的代理（与管理入口共用 `base_url` 主机名，私有路由复用管理认证与 CSRF 校验，响应统一加 sandbox CSP 与 nosniff 并清除插件的 Set-Cookie）、Core 设置文件 `core_config.json`（保序写回、首次管理 token 交付，以及按内置 schema 和 Adapter 的 `adapter_config_schema.json` 校正设置与实例配置，运行校正保留原文件）、经 Core Broker 准入的跨插件 Service 调用、非持久 Event Bus 广播（`bus.Event.Publish`/`bus.Subscribe`）、插件 interval/cron 定时任务的注册校验与 Core 调度（运行槽、超期与迟到响应；`alonabot run` 中随插件激活接入，停止时与插件 HTTP 一起排空），以及构建期检查并嵌入配置 Schema、Service Schema 与 `i18n/` 文案的 `alonabot build`/`check`（命令与事件只经链式注册）；Telegram 接收、标准化、入站媒体取件、整链发送（物理计划、媒体上传、引用与按钮渲染、逐步回执）与文本消息编辑已实现，按钮回调、命令策略与 Rule、调度的生产装配和管理等业务能力继续实施；开发用入口为 `alonabot run` 与顶层的 `init`、`check`、`build`、`test`、`pack`，用法见 [docs/development.md](docs/development.md)。
 

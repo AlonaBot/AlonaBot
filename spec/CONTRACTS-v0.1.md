@@ -192,7 +192,7 @@ Core 为每个代次保存 REGISTER 中已验证的完整路由描述：`plugin_
 
 Router 根据快照和动态策略初步匹配；每个 Core 创建唯一的 Supervisor `Waker`，通过 `EnsureActive(ctx, pluginID, payloadBytes) (release func(), err error)` 合并同一插件的并发唤醒，执行一次进程启动。ACTIVATED、路由摘要核对及 Router、Bus、HTTP、Scheduler 的全部绑定完成后，由 `Ready(running *Running)` 开放等待者；ACTIVE 已发布而 Session 尚未登记时，继续等待同一次启动。单个等待者取消只撤回自己的等待，共享启动沿用 Core 生命周期与阶段预算。
 
-Router、Broker、HTTP 代理与 Scheduler 交付前取得活动引用。`AcquireActivity(pluginID, session) (release func(), err error)` 为已有 Session 取得引用；释放函数幂等且只影响取得时的 Session。引用覆盖 Handler、Service、Hook、媒体操作和租约、已运行的 schedule 回调、延续调用、多轮等待，以及插件自己发起的在途业务；请求本地超时、取消或断链先返回时，继续持有至实际响应、确认排队撤回或旧进程树退出。插件 HTTP 例外：引用在 Core 反向代理返回时释放，客户端已取消、仍在执行的 Handler 与正常停止一样在停止截止时结束（D-179）。HTTP 引用覆盖反向代理、流式响应与升级连接的存续，在反向代理返回时释放；S-02.2 的 QUIESCING 须等待 SDK 记录的在途回调（含 HTTP Handler）全部结束，或在 SDK 报告仍有回调时放弃本次退出。
+Router、Broker、HTTP 代理与 Scheduler 交付前取得活动引用。`AcquireActivity(pluginID, session) (release func(), err error)` 为已有 Session 取得引用；释放函数幂等且只影响取得时的 Session。引用覆盖 Handler、Service、Hook、媒体操作和租约、已运行的 schedule 回调、延续调用、多轮等待，以及插件自己发起的在途业务；请求本地超时、取消或断链先返回时，继续持有至实际响应、确认排队撤回或旧进程树退出。插件 HTTP 例外：引用在 Core 反向代理返回时释放，客户端已取消、仍在执行的 Handler 与正常停止一样在停止截止时结束（D-179）。HTTP 引用覆盖流式响应与升级连接的存续。插件发起的请求在 Session 同步准入时登记活动，与在途登记共用临界区；Handler 装配等待计入活动，预算拒绝或实际处理结束时释放，正常停止的 WaitIdle 覆盖整个准入区间。
 
 等待唤醒的请求使用 Core 内存中的有界队列，逐插件限制条数与字节（§16），同时计入现有 Core 总 payload 预算；任一满额返回 RESOURCE_EXHAUSTED，并记录原因。HTTP 按现有管理/插件入口的错误映射返回失败。队列保留原请求、可信 Actor、Target、Trace、顺序约束与绝对 deadline，冷启动不延长期限；取消或到期的未交付请求立即退出队列。确认 ACTIVATED 及路由摘要后，交付前重新核对当前代次、路由开关、权限与剩余期限，原请求至多交付一次。唤醒失败返回实际错误；已交付业务的断链、取消与外部副作用按 §1.2 处理。Event Bus 继续按 §3 尽力广播，离线丢弃规则保持原样。
 
@@ -208,9 +208,9 @@ Core 无法观察插件私建的 goroutine 与连接，作者仅在没有独立�
 
 策略取 §15.1 的 `sleep`：插件未配置时遵循准入规则与全局空闲时长；`never` 始终常驻；时长覆盖全局阈值。管理 API、CLI 与 WebUI 修改后写回文件并立即更新策略，无需 reload：改为 `never` 时立即唤醒仍已启用的休眠插件；修改时长在下一次空闲判定使用，不重置实际活动时间；切回 `always_on` 时按原代次启动全部已启用插件，保留快照、任务与业务数据。已停用插件保持停用。写回成功后的唤醒失败须返回实际错误，响应按 ADMIN-API §5 返回实际错误；调用方重新 GET 核对已保存设置，失败同时记入对应插件的运行状态。
 
-停止与新请求共用逐插件生命周期门禁：发送 STOPPING 前允许撤销空闲停止并恢复接单；已发送后，新请求排队等旧进程树退出，再建立唯一新 Session。停止复用 §4.2 的排空与总预算，StopReason 为 `IDLE`，OnStop、DB、连接与受管资源正常关闭；成功后记 `SUSPENDED`。正常空闲退出不计入异常重启次数，也不启动新的候选或重复迁移。唤醒后的最短运行时间为 5 分钟；在 `SLEEP_COLD_START_WINDOW`（缺省 1 小时）内冷启动超过 `SLEEP_COLD_START_MAX`（缺省 3 次）时，从触发时刻起固定常驻一个 `SLEEP_COLD_START_WINDOW` 的冷却期，期间的新冷启动不延长本次冷却期；冷却结束后恢复空闲判定。
+停止与新请求共用逐插件生命周期门禁：进入 QUIESCING 前在逐插件锁与活动门禁内复核启用意图、代次、ACTIVE、当前 Session、Ready、零引用和实际活动结束时刻；变化时撤销本次空闲决定并保留原 Session 与绑定。进入后冻结新派发，新请求按原绝对期限、取消及唤醒队列/Core 总预算等待旧树退出、SUSPENDED 和唯一新 Session 的 Ready；已接纳请求的合法子调用继续按原期限排空。停止复用 §4.2 的 STOP_DRAIN、STOP_ONSTOP 与 STOP_TOTAL，排空后发送一次 STOPPING，OnStop、DB、连接与受管资源按原停止及整树截止关闭，StopReason 为 `IDLE`；成功后记 `SUSPENDED`。HTTP/Bus 在 Core 引用释放后仍执行的 SDK 回调沿用正常停止截止。停止或状态保存失败保留完整错误并记录 FAILED；旧树尚未确认清空时保留运行槽与资源所有权，确认清空后完成资源及组件槽收尾。正常空闲退出不计入异常重启次数，也不启动新的候选或重复迁移。唤醒后的最短运行时间由 `SLEEP_MIN_UPTIME` 控制（缺省 5 分钟）；在 `SLEEP_COLD_START_WINDOW`（缺省 1 小时）内冷启动超过 `SLEEP_COLD_START_MAX`（缺省 3 次）时，从触发时刻起固定常驻一个 `SLEEP_COLD_START_WINDOW` 的冷却期，期间的新冷启动不延长本次冷却期；冷却结束后恢复空闲判定。实际启动记录使用单调序号，Core 空闲控制器独占消费确认并回收快照前缀；常驻、停用和休眠实例同样消费，其他快照查询保持只读。控制器按窗口清理记录，回收后消费进度保持稳定。
 
-同代次 RESUME 继续执行配置加载、补值/校正与 required 校验，并核对完整结果与原配置快照一致；SELF/VERSIONED 数据库迁移回调跳过，迁移模式、后端及已应用迁移 ID 仍核对并保留。首次激活、更新与回退按原规则执行数据库迁移。最近唤醒时间与原因只在 WAKING→ACTIVE 时更新，撤销空闲停止保留原值；活动时间记录实际活动归零的时刻，空闲停止时间在确认退出并写入 SUSPENDED 时更新。
+同代次 RESUME 继续执行配置加载、补值/校正与 required 校验，并核对完整结果与原配置快照一致；SELF/VERSIONED 数据库迁移回调跳过，迁移模式、后端及已应用迁移 ID 仍核对并保留。首次激活、更新与回退按原规则执行数据库迁移。最近唤醒时间与原因只在 WAKING→ACTIVE 时更新，进入 QUIESCING 前撤销空闲决定保留原值；活动时间记录实际活动归零的时刻，空闲停止时间在确认退出并写入 SUSPENDED 时更新。
 
 Core 记录运行状态变化、唤醒/空闲停止原因、冷启动次数、失败与等待丢弃数；冷启动耗时从启动插件进程至 Core 确认 ACTIVATED，分别记录 OnStart、OnReady 耗时。固定机器验收记录冷启动 P50/P95/P99、活跃与休眠的 PSS/RSS 及 CPU，规则见 TEST-MATRIX V-81。
 
@@ -753,7 +753,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | `adapters` | 空 | 按 adapter_id 分组的 Adapter 实例：`{"telegram": {"instances": {"main": {"token": "${TELEGRAM_BOT_TOKEN}"}}}}`；实例配置按该 Adapter 的 `adapter_config_schema.json` 补缺失值并校正（§5.5、§8）。实例名为 `^[A-Za-z0-9_-]{1,64}$`，跨 Adapter 也不能重名；每个 Adapter 可以写 `default_instance`（该 Adapter 的一个实例名），作为插件没有指定实例时的缺省发送实例（§8，D-102） |
 
 - 任何字符串值都可以写成 `${环境变量}`，启动时展开；变量不存在时该值按不合法处理，按 §5.5 恢复为缺省值并记校正记录（D-161）。敏感值也可以直接写明文，文件权限保护它们。
-- WebUI 与 CLI 修改这些设置时写回该文件（先写临时文件再替换），保留原有的 `${...}` 写法，不把展开后的值写回。手动修改后重启 Core 生效；`alonabot run --reload` 时 Core 监视该文件：`admins`、`command_prefixes`、`reply`、`default_locale`、`log.level`、`log.sources`、`sleep` 与 `adapters` 立即生效（Adapter 只重启变化的实例；`default_locale` 对运行中的插件从它的下一个 Session 起生效），其他键输出 WARN 提示需要重启。启动时文件不是合法的 JSON 对象则拒绝启动并指出位置，其中的值不合法时按 §5.5 校正，不改写文件；运行中重新读取失败时保留当前设置并记 ERROR。
+- WebUI 与 CLI 修改这些设置时写回该文件（先写临时文件再替换），保留原有的 `${...}` 写法，不把展开后的值写回。手动修改后重启 Core 生效；`alonabot run --reload` 时 Core 监视该文件：`admins`、`command_prefixes`、`reply`、`default_locale`、`log.level`、`log.sources`、`sleep` 与 `adapters` 立即生效（Adapter 只重启变化的实例；`default_locale` 对运行中的插件从它的下一个 Session 起生效），其他键输出 WARN 提示需要重启。启动时文件不是合法的 JSON 对象则拒绝启动并指出位置，其中的值不合法时按 §5.5 校正，不改写文件；运行中重新读取失败时保留当前设置并记 ERROR。管理入口的 `settings.File.Update`/`Reload` 共用受管视图，经 Core 生命周期循环串行发布，与空闲判定读取同一生效策略；包括命令前缀、Prune、BindAdapter 与 PrepareInstances 引发的内部写回。有效 sleep 变化后，调用者在循环及文件锁、插件锁外等待原代次恢复；保存已提交时继续应用新策略，并聚合持久化错误与各插件恢复失败。
 - 调优参数用 `--args` 覆盖（§16）。命令行参数覆盖 `core_config.json` 中的同名项，只对本次运行有效。Core 全局禁止表、插件的命令策略与发信许可等按插件或按用户记录的管理数据仍在状态库，经管理服务修改。缺省只监听本机地址。远程管理有两种方式：经 SSH 隧道访问本机地址，或改为非本机地址并满足 §7.3、§7.4 的 Host、HTTPS 与可信反代要求；容器镜像的例外见 §15.3。
 - 首次启动且尚无管理凭证时按 §7.4 生成管理 token：stdin 与 stderr 都是终端时只在该终端显示一次；不是终端时写入 `<data_dir>/admin_token`，日志只输出该文件的路径。
 

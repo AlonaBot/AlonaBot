@@ -29,7 +29,7 @@ go run ./cmd/alonabot run adapters/telegram examples/plugins/echo examples/plugi
 
 `New()` 每次创建独立插件和笔记对象。笔记是进程内、所有使用者共享的演示列表，重启后清空。子插件 ID 为 `notebook`，命令路径为 `/note ...`；route_id 仍为 `cmd.note.add` 等原规则生成的标识。
 
-`notesService = service.JSON[NotesQuery, NotesSnapshot]("echo/notes")` 与 `service.Serve(p, notesService)` 提供公开只读 Service。调用方在有效 Handler 内用相同类型声明的 `notesService.Call(c.Context(), NotesQuery{})` 读取快照；跨插件工程应共享声明与具名类型的源码。示例本地联验在临时工程中复用 `commands.go`，构建真实调用方进程。服务公开意味着其他已激活插件可以读取这份演示列表。
+`notesService = service.JSON[NotesQuery, NotesSnapshot]("echo/notes")` 与 `service.Serve(p, notesService)` 提供公开只读 Service。调用方在有效 Handler 内用相同类型声明的 `notesService.Call(c, NotesQuery{})` 读取快照；跨插件工程应共享声明与具名类型的源码。示例本地联验在临时工程中复用 `commands.go`，构建真实调用方进程。服务公开意味着其他已激活插件可以读取这份演示列表。
 
 `notesPublished = bus.Define[NotesSnapshot]("echo/notes_published")` 同时供 Publish 与 Subscribe 使用。发布成功只确认 Core 接纳；订阅处理异步进行，`/note published` 显示当时收到的快照。订阅 Context 没有用户 Actor 或默认目标，Handler 内保存列表即可。
 

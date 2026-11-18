@@ -54,7 +54,7 @@ func New() *sdk.Plugin {
 		return message.Text(c.Config().String("value")), nil
 	})
 	p.Command("count").Handle(func(c *sdk.Context) (message.Content, error) {
-		value, err := nextCount(c.Context())
+		value, err := nextCount(c)
 		if err != nil {
 			return nil, err
 		}
@@ -64,7 +64,7 @@ func New() *sdk.Plugin {
 	p.Command("ask").Handle(ask)
 	p.Command("llmgenerate").Handle(generateLLM)
 	p.Command("llmask").Handle(func(c *sdk.Context) (message.Content, error) {
-		text, err := llm.Ask(c.Context(), "  original prompt\n")
+		text, err := llm.Ask(c, "  original prompt\n")
 		if err != nil {
 			return nil, err
 		}
@@ -75,7 +75,7 @@ func New() *sdk.Plugin {
 }
 
 func generateLLM(c *sdk.Context, usage string) (message.Content, error) {
-	response, err := llm.Generate(c.Context(), llm.Request{
+	response, err := llm.Generate(c, llm.Request{
 		Messages: []llm.Message{{Role: "user", Text: "first"}, {Role: "assistant", Text: "second"}, {Role: "user", Text: "third"}},
 		System:   "system prompt", Model: "synthetic", MaxOutputTokens: 37,
 	})

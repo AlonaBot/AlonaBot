@@ -42,9 +42,11 @@ type ActivateOptions struct {
 	// 事务内只操作元数据，不得等待插件 RPC。
 	Commit func(ctx context.Context) error
 	// Handler 处理 Activated 之后插件发起的业务调用。
-	Handler  wire.Handler
-	Global   *wire.Budget  // Core 全局载荷预算
-	Messages *i18n.Catalog // 当前包的文案目录；无资源时为 nil，激活后只读。
+	Handler wire.Handler
+	// RequestActivity 在同步准入时登记活动；拒绝或处理结束时归还。
+	RequestActivity func(*wire.Inbound) (func(), *pb.ErrorInfo)
+	Global          *wire.Budget  // Core 全局载荷预算
+	Messages        *i18n.Catalog // 当前包的文案目录；无资源时为 nil，激活后只读。
 	// Limits 提供 OnReady 预算与 Core 侧 Session 限额；与 Prepare 使用同一组值。
 	Limits Limits
 }
@@ -149,7 +151,8 @@ func Activate(ctx context.Context, conn *wire.Conn, prep *Prepared, opt Activate
 	in.Session = wire.NewSession(conn, wire.Options{
 		Local: pb.InitiatorSide_INITIATOR_SIDE_CORE, SessionID: prep.SessionID, ProtocolMinor: prep.Minor,
 		SourcePluginID: opt.PluginID, Handler: opt.Handler, Admit: in.admit, Control: in.control, Global: opt.Global,
-		MaxInflight: opt.Limits.SessionMaxInflight, MaxBytes: opt.Limits.SessionMaxPayload, DefaultDeadline: opt.Limits.RequestTimeout,
+		RequestActivity: opt.RequestActivity,
+		MaxInflight:     opt.Limits.SessionMaxInflight, MaxBytes: opt.Limits.SessionMaxPayload, DefaultDeadline: opt.Limits.RequestTimeout,
 	})
 
 	deadline := time.Now().Add(opt.Limits.OnReady)

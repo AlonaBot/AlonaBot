@@ -132,7 +132,7 @@
 | S-01.1 | goal-168 | 可休眠声明与持久化运行状态 | S-01 步骤 1、2 | T-04.1、T-09.4、T-09.6 | V-77 的 manifest、状态与未启用分项 | 已完成（PR #225；TEST-MATRIX §3.2） |
 | S-01.2 | goal-169 | 已提交代次的路由快照与索引 | S-01 步骤 1、3 | T-04.1、T-09.4、T-09.6 | V-77 的快照、摘要校验与恢复索引分项 | 已完成（PR #226；TEST-MATRIX §3.2） |
 | S-02.1 | goal-170 | 按需唤醒、活动引用与有界等待 | S-02 步骤 1～3 | S-01.1、S-01.2、T-05.5、T-06.4、T-07.5 | V-77 的首请求、并发、取消、期限与活动引用分项 | 已完成（PR #241） |
-| S-02.2 | goal-171 | 空闲退出与即时休眠策略 | S-02 步骤 4 | S-02.1 | V-77 的准入、空闲退出、停止竞争与策略生效分项 | 未开始 |
+| S-02.2 | goal-171 | 空闲退出与即时休眠策略 | S-02 步骤 4 | S-02.1 | V-77 的准入、空闲退出、停止竞争与策略生效分项 | 已完成（PR #249） |
 | S-02.3 | goal-176 | Core 消息事件过滤与 SDK 注册 | S-02 步骤 5 | T-04.16、T-08.11、T-09.14 | V-77 的 Core OR 匹配、配置取值与 SDK 注册分项（无需休眠进程） | 已完成（PR #227；TEST-MATRIX §3.2） |
 | S-03.1 | goal-172 | Scheduler 唤醒与离线 tick 区分 | S-03 步骤 1、2 | S-02.2、T-07.2 | V-78；V-77 的 schedule 阻止休眠分项 | 未开始 |
 | S-06.1 | goal-173 | 休眠管理 API、运行诊断与 CLI | S-06 步骤 1 | S-02.2、S-03.1、T-09.14 | V-81 的管理 API、CLI、状态与模式切换分项 | 未开始 |
@@ -456,7 +456,7 @@ V-12 是跨任务验收：T-04 不依赖尚不存在的 WebUI，但必须交付�
 
 4. **固定传播与错误分支。** c.StopPropagation() 在 SDK 锁存，结果即使同时携带 ErrorInfo 也保留 Stop；普通事件 Rule false 跳过、业务错误默认继续，显式 Stop 终止后续候选。已识别命令则沿用 T-04 的消费状态，不因 Rule false/error 回落。测试 Handler 已发送后失败的情况，确保不会补发、撤销已确认消息或自动发送错误回复；后台 goroutine 不得修改已返回结果或继续借用失效父调用。
 
-5. **接入三个 Hook 阶段。** 使用独立 route kind 和稳定排序运行 PreEvent、BeforeSend、AfterSend。PreEvent 只接受允许的 payload/传播变化，拒绝覆盖可信身份、Target、来源与按钮/任务绑定；失败结束本次入站链。每次显式或自动 Send 独立执行一组 BeforeSend→Adapter.Send→AfterSend；修改后的整条 Chain 重新预检，拒绝不调用平台。AfterSend 只观察最终回执/错误，其失败记录诊断而不改写已确认结果。SDK 的 Hook 与其他路由一样链式注册并使用 SDK 类型：`r.PreEvent(routeID, 事件常量)`、`r.BeforeSend(routeID)`、`r.AfterSend(routeID)` 开始，`Handle` 结束；编辑时 `c.Editing()` 给出被编辑消息的句柄（D-112）。
+5. **接入三个 Hook 阶段。** 使用独立 route kind 和稳定排序运行 PreEvent、BeforeSend、AfterSend。PreEvent 只接受允许的 payload/传播变化，拒绝覆盖可信身份、Target、来源与按钮/任务绑定；失败结束本次入站链。每次显式或自动 Send 独立执行一组 BeforeSend→Adapter.Send→AfterSend；修改后的整条 Chain 重新预检，拒绝不调用平台。AfterSend 只观察最终回执/错误，其失败记录诊断而不改写已确认结果。SDK 的 Hook 与其他路由一样链式注册并使用 SDK 类型：`r.PreEvent(事件常量)`、`r.BeforeSend()`、`r.AfterSend()` 开始，需要稳定身份时链式调用 `.ID(routeID)`，`Handle` 结束；编辑时 `c.Editing()` 给出被编辑消息的句柄（D-112、D-180）。
 
 6. **落实出站递归约束与父链继承。** Core 在 BeforeSend/AfterSend 的受信执行上下文设置 send_forbidden；通过直接 Send 验证拒绝。该标记与 actor、target、scope、deadline 同存于 T-02 父调用记录，并提供给后续 Broker 使用，不能依赖插件自报。当前任务不为验证间接递归而临时实现 Service；在接口 fixture 中证明派生上下文保留此标记，将真实 Hook→Service→Send 拒绝作为 T-06 的必交回归用例。
 

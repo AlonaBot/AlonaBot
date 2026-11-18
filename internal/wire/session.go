@@ -112,8 +112,11 @@ type Options struct {
 	Event func(env *pb.Envelope, release func())
 	// Admit 在读循环中同步决定是否接受对端的业务 REQUEST（阶段门禁）；返回非 nil 时直接回该错误，不执行 Handler。
 	// 必须在读循环中同步判断：状态变化（如 ACTIVATED）也在读循环中同步生效，帧顺序因此得到保证。
-	Admit  func(*Inbound) *pb.ErrorInfo
-	Global *Budget // 跨 Session 共享的全局预算；为 nil 时不限额（插件侧）
+	Admit func(*Inbound) *pb.ErrorInfo
+	// RequestActivity 在阶段准入后同步取得请求活动，和调用方的停止门禁互斥。
+	// 返回的释放函数在预算拒绝或 Handler 结束时调用；回调持有 Session 锁，须立即返回且避免回读 Session。
+	RequestActivity func(*Inbound) (release func(), err *pb.ErrorInfo)
+	Global          *Budget // 跨 Session 共享的全局预算；为 nil 时不限额（插件侧）
 
 	// 以下可调值为零时使用 tune.Defaults()；正常运行由 Core 与 SDK 显式设置。
 
@@ -945,9 +948,22 @@ func (s *Session) onRequest(env *pb.Envelope, payloadError *validate.Error) erro
 		s.mu.Unlock()
 		return s.respondErr(id, payloadError.Code, payloadError.Message)
 	}
+	// 活动登记与在途插入共用 s.mu；正常停止的 WaitIdle 覆盖整个准入区间。
+	var release func()
+	if s.opt.RequestActivity != nil {
+		var err *pb.ErrorInfo
+		release, err = s.opt.RequestActivity(in)
+		if err != nil {
+			s.mu.Unlock()
+			return s.respondErr(id, err.GetCode(), err.GetSafeMessage())
+		}
+	}
 	// 4. 对端方向的准入预算；通过后登记在途，另起 goroutine 执行 Handler，读循环不等待它。
 	if len(s.inbound) >= s.opt.MaxInflight || s.inBytes+n > s.opt.MaxBytes || !s.opt.Global.Acquire(n) {
 		s.mu.Unlock()
+		if release != nil {
+			release()
+		}
 		return s.respondErr(id, pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "in-flight request count or byte budget for this direction is full")
 	}
 	ctx, cancel := context.WithDeadline(parentCtx, deadline)
@@ -955,12 +971,12 @@ func (s *Session) onRequest(env *pb.Envelope, payloadError *validate.Error) erro
 	s.inBytes += n
 	s.mu.Unlock()
 
-	go s.serve(ctx, cancel, in, n)
+	go s.serve(ctx, cancel, in, n, release)
 	return nil
 }
 
 // serve 执行一次对端调用并回复：Handler 返回后先移出在途表、归还预算，再经优先通道发出 RESPONSE。
-func (s *Session) serve(ctx context.Context, cancel context.CancelFunc, in *Inbound, n int64) {
+func (s *Session) serve(ctx context.Context, cancel context.CancelFunc, in *Inbound, n int64, finished func()) {
 	defer cancel()
 	// 1. 执行 Handler；没有结果也没有错误时按 INTERNAL 回复。
 	r := s.handle(ctx, in)
@@ -974,6 +990,9 @@ func (s *Session) serve(ctx context.Context, cancel context.CancelFunc, in *Inbo
 	s.notifyChange()
 	s.mu.Unlock()
 	s.opt.Global.Release(n)
+	if finished != nil {
+		finished()
+	}
 	env := s.envelope(pb.FrameKind_FRAME_KIND_RESPONSE)
 	env.InitiatorSide, env.CallId, env.Error = s.peer, in.CallID, r.Err
 	setPayload(env, r.Payload)
