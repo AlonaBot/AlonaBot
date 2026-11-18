@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -91,6 +92,7 @@ type Router struct {
 	dispatched    func(Dispatch)
 	dispatches    map[string]*dispatchState // 只在启用回调时分配，由 mu 保护。
 	preEvent      func(context.Context, *pb.Event) (*pb.EventPayload, bool, error)
+	messageConfig func(context.Context, string, *pb.Event) (json.RawMessage, error)
 	adapters      *adapter.Registry
 	send          ServiceFunc
 	prepare       func(*pb.Event, Caller) (*pb.Event, error)
@@ -130,7 +132,8 @@ func New(opt Options) *Router {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Router{
 		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy, buttons: opt.Buttons, intercept: opt.Intercept, preEvent: opt.PreEvent,
-		concurrency: opt.Concurrency, queueEvents: opt.QueueEvents, queueBytes: opt.QueueBytes, global: opt.Global,
+		messageConfig: opt.MessageConfig,
+		concurrency:   opt.Concurrency, queueEvents: opt.QueueEvents, queueBytes: opt.QueueBytes, global: opt.Global,
 		ctx: ctx, cancel: cancel, drained: make(chan struct{}),
 		continuations: opt.Continuations, dispatched: opt.Dispatched, metrics: opt.Metrics,
 		matches: make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
@@ -317,6 +320,7 @@ func (r *Router) dispatch(event *trustedEvent) {
 		actor.Permissions = slices.Compact(permissions)
 	}
 	ev = event.rebuild()
+	toMe := ev.GetEventPayload().GetMessageCreated().GetToMe()
 	// 2. 预处理只回写业务载荷；后继路由从原绑定重建可信字段。
 	if r.preEvent != nil {
 		payload, stop, err := r.preEvent(r.ctx, ev)
@@ -356,9 +360,16 @@ func (r *Router) dispatch(event *trustedEvent) {
 		} else if !r.permitted(candidate, ev) {
 			continue
 		}
+		routeID := candidate.route.GetRouteId()
+		matched, err := r.matchMessageFilter(candidate.pluginID, candidate.route.GetEvent().GetMessageFilter(), ev, toMe)
+		if err != nil {
+			slog.Warn("message filter config read failed", "plugin_id", candidate.pluginID, "route_id", routeID, "event_id", ev.GetEventId(), "error", err)
+		}
+		if !matched {
+			continue
+		}
 		trace := make([]byte, traceIDBytes)
 		rand.Read(trace)
-		routeID := candidate.route.GetRouteId()
 		response, err := r.call(candidate, event, nil, trace)
 		if err != nil {
 			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("event handler call failed", "error", err)

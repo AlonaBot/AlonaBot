@@ -21,6 +21,7 @@ type eventRoute struct {
 	Handler       any
 	permission    Permission
 	rules         []Rule // collect 固定的调用顺序，含按钮路由。
+	filter        *MessageFilter
 	continuation  bool
 	actionID      string
 	actionVersion uint32
@@ -54,6 +55,7 @@ type EventBuilder struct {
 	route       eventRoute
 	handles     int
 	afterHandle bool
+	filterAgain bool // 重复声明在 collect 时报告。
 	button      bool // 仅由类型化按钮登记开始的构建链可占用保留前缀
 }
 
@@ -112,6 +114,14 @@ func (r *eventRegistry) collect() {
 			continue
 		}
 		if err := checkRules(b.route.rules); err != nil {
+			r.errs = append(r.errs, fmt.Errorf("event route %q: %w", b.route.RouteID, err))
+			continue
+		}
+		if b.filterAgain {
+			r.errs = append(r.errs, fmt.Errorf("event route %q declares Filter more than once", b.route.RouteID))
+			continue
+		}
+		if err := b.route.filter.check(); err != nil {
 			r.errs = append(r.errs, fmt.Errorf("event route %q: %w", b.route.RouteID, err))
 			continue
 		}

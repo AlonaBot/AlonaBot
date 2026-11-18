@@ -159,6 +159,14 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (*Prepared, err
 		}
 		return nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "invalid message catalog: " + strings.Join(details, "; ")}
 	}
+	var schema *configschema.Schema
+	if len(spec.ConfigSchema) != 0 {
+		var problems []configschema.Problem
+		schema, problems = configschema.Parse(spec.ConfigSchema)
+		if len(problems) != 0 {
+			return nil, fmt.Errorf("config schema: %v", problems)
+		}
+	}
 
 	// 1. 读取上一快照和路径；restart 的配置以已提交代次为准，新候选使用调用方提供的 Pending 快照。
 	secrets := spec.Secrets
@@ -267,15 +275,11 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (*Prepared, err
 	p.conn = conn
 	secretBytes, _ := hex.DecodeString(sessionSecret)
 	exp := host.Expect{Role: spec.Role, AdapterID: spec.AdapterID, PluginID: spec.PluginID, Secret: secretBytes, BuildDigest: spec.BuildDigest,
-		Offer: validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}}
+		Offer: validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}, ConfigSchema: schema}
 	exp.Snapshot = func(candidate []byte) ([]byte, error) {
 		if spec.Development {
 			var paths []string
-			if len(spec.ConfigSchema) != 0 {
-				schema, problems := configschema.Parse(spec.ConfigSchema)
-				if len(problems) != 0 {
-					return nil, fmt.Errorf("config schema: %v", problems)
-				}
+			if schema != nil {
 				for _, path := range schema.SecretPaths() {
 					paths = append(paths, strings.Join(path, "."))
 				}
