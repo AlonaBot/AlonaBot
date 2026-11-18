@@ -122,7 +122,7 @@
 | goal-162 | T-04.19 | 平台与消息 | T-04.18 | 等待前置（T-04.18） |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
 | goal-163 | T-11.6 | 按配置文件的工具策略 | T-04.18、T-11.4 | 等待前置（T-04.18） |
-| goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 等待前置 |
+| goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 待派发 |
 | goal-172 | S-03.1 | Scheduler 唤醒与离线 tick 区分 | S-02.2、T-07.2 | 等待前置 |
 | goal-173 | S-06.1 | 休眠管理 API、运行诊断与 CLI | S-02.2、S-03.1、T-09.14 | 等待前置 |
 | goal-174 | S-06.2 | 休眠指标、故障注入与固定机器验收 | S-06.1 | 等待前置 |
@@ -8425,24 +8425,51 @@ internal/core/state
 
 ### goal-141 · T-13.6 CLI 参数从简
 
-状态：等待语句定稿（前置均已合并）。T-14.3（PR #228，`72d51c2`）已合并。T-13.5（[PR #200](https://github.com/AlonaBot/AlonaBot/pull/200)，合并提交 `2e5ac2b`）已合并。目标、依据与要点由 PLAN T-13 步骤 7 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。派发前核对它与同在第 20 波的 T-14.4 不改同一批文件（两者都涉及 `packages/`）。
+状态：待派发。前置 T-13.5（[PR #200](https://github.com/AlonaBot/AlonaBot/pull/200)，合并提交 `2e5ac2b`）与 T-14.3（[PR #228](https://github.com/AlonaBot/AlonaBot/pull/228)，合并提交 `72d51c2`）均已合并。按 main `25e9064` 核对：CLI 已直接使用 `internal/app.Start(ctx context.Context, o app.Options) (*app.Core, error)`，根包只保留库模式接口；`internal/pluginkit` 已有 `Init(ctx context.Context, dir, id, role, adapterID, module string) (bool, error)`、`Compile(ctx context.Context, options generate.Options, outDir string) (Build, error)`、`CompileApp(ctx context.Context, options generate.Options, outDir string, goFlags ...string) (string, error)`、`Check(ctx context.Context, options generate.Options) error` 与单平台 `Pack(ctx context.Context, options generate.Options, assetURL, keyFile, outDir string) (string, error)`；`cmd/alonabot/plugin.go:componentFlags` 仍登记 `--dir`、`--goos`、`--goarch` 与 `--tags`，`init` 的 `--id` 和 `pack` 的 `--asset-url` 仍必填。`scripts/dist/main.go:packComponent` 逐平台调用 `pack --dir --goos --goarch`，合并各次的 assets 后签名；本切片同步将这些调用改为位置目录与单个 `--target`，保留 dist 的合并和签名流程。发行包实际布局为可执行文件旁的 `packages/<组件 ID>/`，各目录含本平台归档、合并全部平台的 `release.json`、`release.json.sig` 与 `release.pub`；当前静态 WebUI 为 `any/any`。`contracts/release.Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*Release, error)`、`(*Release).Asset(os, arch string) (Asset, bool)` 与 `internal/core/trust.Official() (ed25519.PublicKey, bool)` 已可复用。T-09.27（[PR #222](https://github.com/AlonaBot/AlonaBot/pull/222)，合并提交 `5940406`）已合并，四角色 ID 统一经 `contracts/manifest.ParseProject(data []byte) (*Result, error)` 校验；V-121 的目录名缺省与 D-172 补验由本切片承接。
+
+与第 20 波的 goal-74（T-14.4）共享发行包的 `packages/<组件 ID>/` 布局、CLI 安装入口及说明；本切片负责 `cmd/alonabot/manage.go` 的参数解析和查包，goal-74 负责 `internal/app/` 的首次预装与 `internal/core/manage/` 的更新提示、Adapter 启用。`packages/` 在本切片中只读，安装仍经管理 API。两者可并行；若 goal-74 定稿后也涉及 `cmd/alonabot/manage.go`、`cmd/alonabot/plugin_cli_e2e_test.go`、`cmd/alonabot/t12_e2e_test.go` 或 `docs/development.md`、`docs/plugin-guide.md`、`README.md`，后合并者同步最新 main，保留位置参数、包发现与首次预装两边的行为，重跑相应 CLI 和首次运行集成测试。合并本切片后，审查者按实际接口更新 goal-74 及模板仓库的 `scripts/release.sh`；模板仓库修改由审查者另行同步。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-141（切片 T-13.6：CLI 参数从简）。goal 目录 goal-141，分支 goal-141，worktree .worktrees/goal-141，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：CLI 的目录用位置参数，不给时取当前目录；不给的文件在当前目录寻找；其他参数取官方或能唯一推出的缺省值，推不出时报错并列出候选。根命令仍为 alonabot。协议与管理 API 不变，只改 cmd/alonabot 与说明。
+目标：CLI 的目录用位置参数，不给时取当前目录；不给的文件在当前目录寻找；其他参数取官方或能唯一推出的缺省值，推不出时报错并列出候选。根命令仍为 alonabot。协议与管理 API 不变；修改 CLI、其既有工程构建与打包实现、发行脚本调用和说明，落实 D-149 与 D-169。
 
-依据：PLAN T-13 步骤 7 及其失败停止条件；CONTRACTS §9.3、§15.2；DECISIONS D-149、D-169；TEST-MATRIX V-121。
+依据：PLAN T-13 步骤 7 及其失败停止条件；CONTRACTS §9.3、§15.2，打包与验签沿用 §9.1、§9.2；DECISIONS D-149、D-169、D-172；TEST-MATRIX V-121（含 T-09.27 留下的目录名缺省分项）；ARCHITECTURE 的 cmd/alonabot、internal/pluginkit 与 scripts/dist 依赖边。
 
-要点：
-- build、check、test、pack 改为「命令 [目录]」，删除 --dir；库模式的 build 同样改用位置参数。
-- init 的 --id 与 --module 缺省取目录名，ID 按 D-172 的四角色市场规则与原有本地规则检查：例如目录 alonabot-plugin-hello 可直接作为插件市场 ID，本地目录 my_plugin 仍可用并警告缺前缀，目录名非法时报错；保留 --id 显式指定入口，不静默替换目录名中的字符。Adapter 的 --adapter-id 缺省等于组件 ID，按本地平台 ID 规则检查。T-09.27 已先合并时复用其校验；后合并时按共享文件规则保留两边改动。
-- pack 在 manifest 的 source 为 github.com/<owner>/<repo> 时推出 --asset-url；--key 没有缺省值。
-- install 的参数按「已存在的普通文件」与「组件 ID」区分，组件 ID 取程序目录 packages/ 中的官方包；不给参数时在当前目录或工程的 bin/ 中寻找唯一的安装包，没有或不止一个时报错并列出候选。
-- pack 增加可重复的 `--target <os>/<arch>`：逐个平台构建归档，写出一份列出全部资产的 release.json，给出 --key 时只签这一份；不给时为本机平台（D-169）。插件模板仓库的 scripts/release.sh 在本切片合并后改用它（由审查者在模板仓库中同步）。
-- docs/development.md、docs/plugin-guide.md、README 与 CLI 帮助中的写法同步。
+范围（只新增或修改这些）：
+- cmd/alonabot/plugin.go、init.go、build.go、check.go、test.go、pack.go、manage.go：目录位置参数、缺省值、多平台打包入口与本地包发现；发现辅助函数放在 manage.go，保持未导出。
+- internal/pluginkit/init.go、pack.go：工程缺省值与多平台打包，复用既有扫描、构建、归档及签名实现。
+- scripts/dist/main.go：packComponent 改为每个组件调用一次 `alonabot pack <组件目录> --target ...（全部平台） --asset-base <前缀> --out <目录>`，删除自行合并清单的代码，签名、公钥注入与发行目录布局保持（D-174）。
+- cmd/alonabot/plugin_cli_e2e_test.go、t12_e2e_test.go：下文允许的一个主路径集成测试及既有命令写法同步。
+- docs/development.md、docs/plugin-guide.md、README.md：命令示例、参数说明与发行构建调用说明。
+- 上述 Go 包的 *_local_test.go（本地自测，不提交）。
+允许的依赖：标准库与 docs/development.md 已批准依赖；沿用 cmd/alonabot -> internal/pluginkit、internal/core/manage、contracts/...，internal/pluginkit -> internal/generate、contracts/...，scripts/dist -> contracts/release；scripts/dist 继续经 os/exec 调用主机 CLI。允许的新跨模块边：无。
 
-不做：根命令改名；缺省值扩大卸载、清理与回退等破坏性操作的对象；协议与管理 API 的改动；新增依赖。
+接口（照此实现）：
+- CLI：build [目录]、check [目录]、test [目录]、pack [目录] 均至多一个目录参数，缺省为当前目录；删除 --dir。init [目录] 保留 --role、--id、--module、--adapter-id；pack 增加可重复的 --target <os>/<arch>，删除 pack 的 --goos、--goarch 与 --asset-url，新增 --asset-base，保留 --tags、--out、--key（D-174）。build/check 的 --goos、--goarch 与 --tags 保持现有含义。
+- internal/pluginkit 既有签名保持：Init(ctx context.Context, dir, id, role, adapterID, module string) (bool, error)；Compile(ctx context.Context, options generate.Options, outDir string) (Build, error)；CompileApp(ctx context.Context, options generate.Options, outDir string, goFlags ...string) (string, error)；Check(ctx context.Context, options generate.Options) error；单平台 Pack(ctx context.Context, options generate.Options, assetURL, keyFile, outDir string) (string, error)。generate.Options 的 Dir、GOOS、GOARCH 为 string，Tags 为 []string；既有直接调用 Pack 的集成测试继续使用单平台入口。
+- 新增 internal/pluginkit.PackTargets(ctx context.Context, options generate.Options, targets []manifest.Platform, assetURL, keyFile, outDir string) (archives []string, err error)：由 CLI 调用；targets 为空时取 runtime.GOOS/runtime.GOARCH，显式目标使用 contracts/manifest.Platform{OS, Arch}；返回本次输出的全部归档路径，共享一份 release.json。复用单平台 Pack 的构建和归档实现，合并与最终签名归本入口；内部辅助函数自定。
+- cmd/alonabot/manage.go 保持 localInstallRequest(archive, releaseFile, signatureFile, keyFile, source string) (manage.InstallRequest, error)，在 install 分支调用前完成归档定位。manage.InstallRequest 仍为 Archive、ReleaseJSON、Signature、PublicKey、Source string 与 Replace、Confirm bool；仍向 POST /api/v1/packages/install 发送，服务端沿用 (*manage.Service).Install(ctx context.Context, req manage.InstallRequest) (manage.Package, error)。
+- 复用 contracts/manifest.ParseProject(data []byte) (*manifest.Result, error)，Result 含 Manifest *manifest.Manifest 与 Warnings []string；contracts/release.Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*release.Release, error)、(*release.Release).Asset(os, arch string) (release.Asset, bool)；internal/core/trust.Official() (ed25519.PublicKey, bool)。release.Release.Assets 为 []release.Asset，资产含 OS、Arch、URL string、Size int64 与 SHA256 string；校验与信任仍由原所有者负责。
+
+行为：
+- build、check、test、pack 按位置目录工作；库模式 build 同样作用于给出的 main 包目录。目录参数、资源只读、overlay、编译器错误原文与离线测试生命周期沿用原入口；--dir 按未知参数报错。
+- init 未给 --id 时取目标目录绝对路径的目录名，未处于已有 Go module 中且未给 --module 时取同一目录名；已有 module 内沿用原 module，不创建嵌套 go.mod。显式 --id、--module 继续生效。ID 通过 ParseProject 按 D-172 的角色市场前缀与本地规则校验：alonabot-plugin-hello 可直接作为插件市场 ID，my_plugin 作为本地 ID 并告知缺前缀警告；非法目录名报错并提示显式 --id，保留原字符。Adapter 未给 --adapter-id 时等于最终组件 ID，按既有本地平台 ID 规则检查；目录非空仍在写入前拒绝。
+- 每个资产地址为 --asset-base 加 / 与归档名；未给 --asset-base 时，manifest 的 source 为 github.com/<owner>/<repo> 才推出 https://github.com/<owner>/<repo>/releases/download/v<version>；其他来源要求显式 --asset-base，沿用绝对 https 校验（D-174）。--out 缺省为工程 bin/，--key 无缺省，仍读取标准 base64 的 64 字节 Ed25519 私钥。
+- pack --target 逐平台构建，沿用该平台的源码选择、资源检查、包内 manifest 与 build-info；输出每个平台的归档和一份含全部 assets 的 release.json。静态 WebUI 只输出一个 any/any 资产；有 Go 入口的 WebUI 按目标平台构建。给出 --key 时只对最终清单原始字节签名一次，写出 release.json.sig 与 release.pub；保留私钥资源排除、构建失败报错、可重复归档及 unsigned 输出清除旧签名的行为。每个资产沿用既有归档完整性字段，最终清单用 release.Verify 自检。
+- scripts/dist 每个组件调用一次 alonabot pack <组件目录>，按 --platforms 给出全部 --target 与 --asset-base，由 pack 写出合并后的 release.json；dist 继续不向 pack 传 --key，自行签名并用 release.Verify 自检。当前静态 WebUI 的 any 包、各平台 packages/<组件 ID>/ 与 dist/packages/<组件 ID>/ 布局、公钥注入和私钥仅留在 dist 进程的约定保持原状。
+- install 保留 --source owner/repo 的下载、--archive 等显式文件选项及其互斥规则；参数是已存在的普通文件时按本地包安装，否则按组件 ID 从 os.Executable 所在目录的 packages/<组件 ID>/ 读取清单，选择本机平台资产（静态 WebUI 取 any/any）及对应归档。来源取 release.json，沿用官方公钥信任、签名、归档预检与 --yes/--replace 确认；缺少官方包时报错并列出可用的官方组件 ID。
+- install 无位置参数且未显式选择 --source 或 --archive 时，在当前目录寻找安装包；当前目录含工程 plugin.yaml 时使用其 bin/。按 release.json 的平台资产与归档文件筛选本机平台候选（含静态 WebUI 的 any/any），恰有一个才安装；零个或多个时报错并列出搜索目录及候选，在调用安装 API 前结束。归档外 release.json、release.json.sig、release.pub 的缺省位置与显式覆盖沿用 localInstallRequest；读取、解析和文件系统错误保留。
+- 文档与 CLI 帮助同步以上用法；V-121 中 D-172 的目录名缺省分项由本切片提供证据。首次运行预装、版本更新提示与 Adapter 自动启用由 goal-74 实现；两者共享 packages/<组件 ID>/ 的只读布局。若并行改到 cmd/alonabot/manage.go、上述既有测试或三份说明，后合并者同步最新 main，保留参数解析、包发现与首次预装两边的行为，重跑相应 CLI 与首次运行集成测试，按 docs/execution-order.md §3 处理。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：只扩展 cmd/alonabot/plugin_cli_e2e_test.go 的 TestDevelopmentCLI（//go:build unix）这一个主路径集成测试：在合法市场 ID 命名的临时工程目录省略 --id、--module 运行 init，经真实 CLI 的位置目录/当前目录 build、check、test，再不带 --asset-base 打包本机及另一个支持平台，临时密钥签最终清单；核对缺省 ID/module、两个资产的 URL、验签与本机包的既有预检断言；复用真实 Core 测试入口，从该工程 bin/ 不给安装参数安装本机包，核对登记的 ID 与来源。既有库模式 build 改为位置目录并保留断言；t12_e2e_test.go 中 pack --dir 改为位置目录，原断言不变。保留其他既有测试和直接调用单平台 Pack 的方式。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：V-121 其余分项——四个命令给出另一目录与省略目录、--dir 报未知参数；init 的四角色市场 ID、本地 my_plugin 警告、非法目录名与显式 ID、已有 module 内外、Adapter ID 缺省及显式值；GitHub/非 GitHub source 与显式 URL；pack 两个和三个目标、不给 --target 时本机平台、静态 WebUI any 去重、带进程 WebUI 的平台资源、unsigned/签名与私钥排除、失败保留错误；install 显式普通文件、官方 ID 存在/不存在、本机/any 资产选择、当前目录与工程 bin/ 的零/一/多个候选、显式元数据覆盖、--source/--archive 既有路径及歧义时无安装副作用。D-172 的 V-121 目录名缺省单列结果。
+- 复用 scripts/dist/dist_test.go:TestDistribution 验证 CLI 调用同步后的归档布局、签名、内置公钥与可重复性，保留其既有断言；多平台发行调用在 scripts/dist/*_local_test.go 核对，不新增提交测试。其他平台只交叉构建时按交叉构建记录。
+
+完成条件：gofmt -l 对改动 Go 文件无输出；git diff --check；go vet ./...；go test -race ./cmd/alonabot ./internal/pluginkit ./scripts/dist；go build ./...。PR 写明 V-121 各分项的测试位置、命令、平台、结果及未运行项；「文档同步」列出需审查者回写的 PLAN T-13.6、TEST-MATRIX §3.2、goal-74 接口与模板仓库 scripts/release.sh。遇到契约缺口、范围外修改或新依赖，按共同约束标阻塞，交审查者处理。
+
+不做：根命令改名；缺省值扩大卸载、清理与回退等破坏性操作的对象；协议与管理 API 的改动；首次运行预装、更新提示与 Adapter 自动启用（goal-74）；重写 dist 的合并签名流程；直接改模板仓库；新增依赖。
 ```
 
 ### goal-172 · S-03.1 Scheduler 唤醒与离线 tick 区分
