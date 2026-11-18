@@ -34,14 +34,14 @@ type Waker struct {
 }
 
 type wakePlugin struct {
-	changed        chan struct{} // 状态改变后关闭再替换，广播给全部等待者。
-	current        *activitySession
-	waking         bool
-	failure        error
-	coldStarts     []time.Time
-	lastActivityAt time.Time
-	count          int
-	bytes          int64
+	changed           chan struct{} // 状态改变后关闭再替换，广播给全部等待者。
+	current           *activitySession
+	waking            bool
+	failure           error
+	coldStarts        []time.Time
+	coldStartSequence uint64 // 实际启动总序号，历史回收后保持单调。
+	count             int
+	bytes             int64
 }
 
 // NewWaker 为一个 Core 创建唯一的唤醒与活动所有者。
@@ -163,9 +163,6 @@ func (w *Waker) EnsureActive(ctx context.Context, pluginID string, payloadBytes 
 			p.bytes += payloadBytes
 			queued = true
 		}
-		if current := p.current; current != nil && current.stopping && current.idleStop && !current.stopCommitted {
-			current.stopCancelled = true
-		}
 		if status.State == state.RuntimeSuspended && p.current == nil && !p.waking {
 			p.waking, p.failure = true, nil
 			// 启动不继承首个等待者的取消与期限；Start 装配方绑定 Core 生命周期。
@@ -212,7 +209,7 @@ func (w *Waker) failed(id string, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	p := w.plugin(id)
-	if p.current == nil {
+	if p.current == nil || p.current.stopping {
 		p.failure = wakeFailure(err)
 		p.notify()
 	}
