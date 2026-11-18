@@ -167,7 +167,7 @@ func (s *Service) uninstall(ctx context.Context, id string, purge PurgeScope, co
 			affected = append(affected, id+":"+object)
 		}
 		// 预览与删除共用受管路径清单，插件工作目录中的其余文件归作者管理。
-		paths = append(paths, filepath.Join(pluginDir, "generations"))
+		paths = append(paths, filepath.Join(pluginDir, "generations"), filepath.Join(filepath.Dir(s.opt.Packages), "plugin_data", id))
 		if purge == PurgeAll {
 			paths = append(paths, filepath.Join(pluginDir, "config.json"))
 			affected = append(affected, id+":installation binding")

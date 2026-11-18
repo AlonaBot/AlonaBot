@@ -665,6 +665,10 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		return err
 	}
+	boot.PluginDataDir, err = preparePluginDataDir(dir, id)
+	if err != nil {
+		return err
+	}
 	// 3. 独立进程与同进程共用开发配置、数据库和固定代次。
 	if entry.executable != "" {
 		boot.DatabaseDescriptor.MigrationMode = pb.MigrationMode_MIGRATION_MODE_NONE

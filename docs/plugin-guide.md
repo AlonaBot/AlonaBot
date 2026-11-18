@@ -25,10 +25,54 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 - 业务数据放受管 SQLite：`sqlitedb.Open(ctx)` 返回 `*sql.DB`，`gormdb.Open(ctx)` 返回 `*gorm.DB`，两者共用同一个连接（CONTRACTS §6.1）。没有特别需要时用 `sqlitedb`：它比 GORM 少约 1.5 MiB 常驻内存。
 - 迁移用所选包的 `Migrate` 或 `Migrations`，二者择一；辅助迁移的 ID 发布后不能改成另一项操作（CONTRACTS §6.2）。
 - 受管 SQLite 在 reload 与 update 时使用独立候选副本，准备失败会回到旧数据（CONTRACTS §6.3）。框架外的文件与外部数据库不在这个保证内。
-- 大数据放在磁盘上：索引、缓存、向量放进受管 SQLite 或 `sdk.PluginDataDir()` 中的文件，不整份载入内存；内存缓存必须有上限。
+- 大数据放在磁盘上：索引、缓存、向量放进受管 SQLite 或 `sdk.PluginDataDir(ctx)` 中的文件，不整份载入内存；内存缓存必须有上限。
 - 需要 PostgreSQL、MySQL 等外部数据库时自带驱动，连接参数做成在 `config_schema.json` 中声明 `"secret": true` 的配置项（§7），由管理员填写。迁移或 OnStart 会写外部数据库时，manifest 声明 `prepare_effects=external`，此后已有安装的更新需要管理员进入维护（CONTRACTS §6.1、§6.3）。Core 不创建、不备份外部数据库。
-- 简单状态用 `sdk/kv`（D-165）：`kv.Set(ctx, key, value)`、`kv.Get`、`kv.Delete` 与按前缀的 `kv.List`，数据放在受管 SQLite 的保留表中，随代次与回退处理，管理员能在 WebUI 查看和修改。
-- 插件自己的文件写到 `sdk.PluginDataDir()` 返回的数据目录，管理员能在 WebUI 浏览、上传与删除；它不随代次回退。不要写到其他位置。
+- 简单状态用 `sdk/kv`（D-165）：数据放在受管 SQLite 的保留表 `_alonabot_kv` 中，与业务表一起随代次复制、回退和清理。链接 KV 会链接 SQLite，构建工具据此推导 `prepare_effects=managed_db`，保留表的初始化独立于插件迁移 ID。
+- 插件自己的文件写到 `sdk.PluginDataDir(ctx)` 返回的数据目录；它跨 restart 保留，不随代次回退。只卸载与 disable 保留文件，`uninstall --purge-data` 和 `--purge` 在确认对象中列出目录并删除。
+
+### 保存少量状态
+
+在 Handler 或生命周期回调中传入所属 Session 的 `ctx`，例如保存订阅主题：
+
+```go
+import (
+    "context"
+
+    "github.com/AlonaBot/AlonaBot/sdk/kv"
+)
+
+func saveTopic(ctx context.Context, topic string) error {
+    return kv.Set(ctx, "subscription/topic", []byte(topic))
+}
+```
+
+读取用 `value, ok, err := kv.Get(ctx, key)`；`ok=false` 表示键不存在，`kv.Delete(ctx, key)` 删除不存在的键也成功。键须为 1～512 字节的 UTF-8，值最多 1 MiB，空值可以保存；超限返回 `INVALID_ARGUMENT`。没有受管 SQLite 的 Session 调用 KV 返回 `FAILED_PRECONDITION`。
+
+`page, err := kv.List(ctx, "subscription/", "", 20)` 按键的字节序返回最多 20 个键；后续请求把 `page.Next` 作为 `cursor`，空 `Next` 表示已到末尾。前缀按字面字节匹配，`%` 和 `_` 保持原义；空前缀列出全部键，`limit` 须为正数。
+
+`examples/plugins/configdb` 的 `/note kvset <key> <value>` 与 `/note kvget <key>` 演示保存和读取，沿用该示例的本地化回复。
+
+### 保存插件文件
+
+Core 在启动前创建目录，经 Bootstrap 下发。传入 Handler 或生命周期回调的 `ctx`（或其派生 context），SDK 优先用它确定所属插件 Session；同进程的多个插件各自取得自己的目录。在 Session 就绪的 Handler 中通过 `sdk.PluginDataDir(ctx)` 取得 `<data_dir>/plugin_data/<id>/` 的绝对路径：
+
+```go
+import (
+    "context"
+    "os"
+    "path/filepath"
+
+    "github.com/AlonaBot/AlonaBot/sdk"
+)
+
+func saveCache(ctx context.Context, content []byte) error {
+    return os.WriteFile(filepath.Join(sdk.PluginDataDir(ctx), "cache.json"), content, 0o600)
+}
+```
+
+Session 就绪前调用 `PluginDataDir(ctx)` 会 panic。目录只允许运行账号访问，Windows 继承与状态库相同的账号 ACL；Core 负责建立与卸载清理，目录内容由插件管理。准备失败与回退保留已写文件，因此需要随代次回退的数据放在 KV 或受管 SQLite 中。
+
+`examples/plugins/configdb` 的 `/note fileset <value>` 与 `/note fileget` 演示在该目录读写固定文件 `note.txt`。
 
 ## 4. 日志与文案
 
