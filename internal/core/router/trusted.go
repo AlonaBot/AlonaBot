@@ -1,9 +1,10 @@
 package router
 
 import (
+	"time"
+
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"google.golang.org/protobuf/proto"
-	"time"
 )
 
 // trustedEvent 分离来源绑定与可改写载荷；每条分发链独占其副本。
@@ -12,8 +13,10 @@ type trustedEvent struct {
 	dispatch        *dispatchState
 	retained        *pb.Event
 	payload         *pb.EventPayload
-	commandConsumed bool      // 当前分发链的命令层消费结果，不接受插件回写。
-	deadline        time.Time // 接纳时固定的 Handler 绝对期限，排队及唤醒共享。
+	invocation      *Invocation // 最近一次 Handler 的可信附件，自动回复继承。
+	finished        []func()    // 本条事件及自动回复结束后释放根调用。
+	commandConsumed bool        // 当前分发链的命令层消费结果，不接受插件回写。
+	deadline        time.Time   // 接纳时固定的 Handler 绝对期限，排队及唤醒共享。
 }
 
 func retainEvent(ev *pb.Event) *trustedEvent {

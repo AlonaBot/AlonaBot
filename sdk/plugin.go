@@ -44,6 +44,7 @@ type Plugin struct {
 	callbacks     map[string]bool
 	config        config.Values
 	configReady   bool
+	profileViews  atomic.Pointer[profileViews] // 整体发布，Context 取得的旧视图持续有效。
 	running       atomic.Bool
 	errs          []error
 }

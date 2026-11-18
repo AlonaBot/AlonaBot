@@ -65,7 +65,7 @@ func (c *Context) Wait(timeout time.Duration) (*Context, error) {
 	if err := c.callContinuation(wire.ServiceWait, &pb.WaitRequest{TimeoutMs: uint32(millis)}, result); err != nil {
 		return nil, err
 	}
-	next := &Context{ctx: c.ctx, inbound: c.inbound, event: result.Event, continuation: true}
+	next := &Context{plugin: c.plugin, subID: c.subID, profileID: c.profileID, config: c.config, ctx: c.ctx, inbound: c.inbound, event: result.Event, continuation: true}
 	next.active.Store(true)
 	// 命中消息仅替换可读事件；所有子请求继续使用当前延续调用作为父请求。
 	context.AfterFunc(c.ctx, func() { next.active.Store(false) })

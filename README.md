@@ -16,7 +16,7 @@ Telegram Adapter 接收入口见 [alonabot-adapter-telegram](adapters/telegram/c
 
 插件配置按 `OnConfigLoad(ctx, raw)` → 补值与校正 → required 校验载入。管理 API 已提供插件、Adapter 实例与 Core 设置的校正记录、无效配置路径和清理入口；插件清理写入 Pending 后经 reload 生效。用法见[配置与 secret](docs/plugin-guide.md#7-配置与-secret)及[Core 设置](docs/development.md#core-设置与-http-入口)，WebUI 的提示与清理按钮由 T-09.9 接入。
 
-配置文件可通过 `alonabot profile` 列出、新建、指定到 Adapter 实例或会话，以及编辑插件字段。用法见[开发指南](docs/development.md#运行-core-与管理组件)；平台设置与插件、工具策略由[管理 API](spec/ADMIN-API.md#23-配置文件)保存，运行时应用由后续切片接入。
+配置文件可通过 `alonabot profile` 列出、新建、指定到 Adapter 实例或会话，以及编辑插件字段。会话派发已应用插件开关与字段覆盖，SDK 的 `c.Config()` 提供本次调用的只读视图，消息过滤读取同一会话的生效配置。用法见[开发指南](docs/development.md#运行-core-与管理组件)；[管理 API](spec/ADMIN-API.md#23-配置文件)已保存平台设置与工具策略，其运行时应用分别由 T-04.19、T-11.6 接入。
 官方 WebUI 已提供桌面与手机外壳、全局搜索、浅深色视觉令牌及本地品牌资源。运行 `npm --prefix web/admin run dev` 后，从开发服务器首页进入 `/dev/forms`，可预览配置表单和生成的 JSON Merge Patch；真实登录与管理页面由后继切片接入。安装依赖与验证命令见[官方 WebUI 开发指南](docs/development.md#官方-webui-开发)。
 
 [showcase 的 `greeting` 字段](examples/plugins/showcase/config_schema.json) 展示了带文字和图片的[配置回复示例](docs/plugin-guide.md#配置字段的回复示例)。作者工具校验示例与翻译，Core 经管理 API 提供 Active 包引用的图片；WebUI 表单展示由后继切片实现。

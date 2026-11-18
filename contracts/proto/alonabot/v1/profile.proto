@@ -1,0 +1,62 @@
+// 配置文件查询、指定、字段写入与覆盖集合下发载荷（CONTRACTS §5.6、WIRE §3.5）。
+syntax = "proto3";
+
+package alonabot.v1;
+
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
+
+// ProfileSummary 承载配置文件服务的摘要。
+message ProfileSummary {
+  string id = 1;
+  string name = 2;
+  uint64 sessions = 3;
+}
+
+// ProfileListRequest 承载配置文件服务的输入。
+message ProfileListRequest {
+}
+
+// ProfileListResponse 承载配置文件服务的结果。
+message ProfileListResponse {
+  repeated ProfileSummary profiles = 1;
+}
+
+// ProfileCurrentRequest 承载配置文件服务的输入。
+message ProfileCurrentRequest {
+}
+
+// ProfileCurrentResponse 承载配置文件服务的结果。
+message ProfileCurrentResponse {
+  ProfileSummary profile = 1;
+}
+
+// ProfileAssignRequest 承载配置文件服务的输入。
+message ProfileAssignRequest {
+  string profile_id = 1;
+}
+
+// ProfileAssignResponse 承载配置文件服务的结果。
+message ProfileAssignResponse {
+}
+
+// ProfileSetRequest 承载配置文件服务的输入。
+message ProfileSetRequest {
+  string path = 1;
+  string value_json = 2;
+}
+
+// ProfileSetResponse 承载配置文件服务的结果。
+message ProfileSetResponse {
+  ProfileSummary profile = 1;
+  bool reloading = 2;
+}
+
+// ProfileSetOverridesRequest 承载配置文件服务的输入。
+message ProfileSetOverridesRequest {
+  string profile_overrides_json = 1;
+}
+
+// ProfileSetOverridesResponse 承载配置文件服务的结果。
+message ProfileSetOverridesResponse {
+}
+

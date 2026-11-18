@@ -19,6 +19,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/metrics"
+	"github.com/AlonaBot/AlonaBot/internal/core/profile"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
@@ -93,6 +94,7 @@ type Router struct {
 	dispatches     map[string]*dispatchState // 只在启用回调时分配，由 mu 保护。
 	preEvent       func(context.Context, *pb.Event) (*pb.EventPayload, bool, error)
 	messageConfig  func(context.Context, string, *pb.Event) (json.RawMessage, error)
+	profile        func(context.Context, string, *pb.Target) (string, bool, error)
 	ensureActive   func(context.Context, string, int64) (func(), error)
 	requestTimeout time.Duration
 	adapters       *adapter.Registry
@@ -135,7 +137,7 @@ func New(opt Options) *Router {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Router{
 		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy, buttons: opt.Buttons, intercept: opt.Intercept, preEvent: opt.PreEvent,
-		messageConfig: opt.MessageConfig, ensureActive: opt.EnsureActive, requestTimeout: opt.RequestTimeout,
+		messageConfig: opt.MessageConfig, profile: opt.Profile, ensureActive: opt.EnsureActive, requestTimeout: opt.RequestTimeout,
 		concurrency: opt.Concurrency, queueEvents: opt.QueueEvents, queueBytes: opt.QueueBytes, global: opt.Global,
 		ctx: ctx, cancel: cancel, drained: make(chan struct{}),
 		continuations: opt.Continuations, dispatched: opt.Dispatched, metrics: opt.Metrics,
@@ -247,6 +249,7 @@ func (r *Router) Detach(pluginID string) {
 
 type candidate struct {
 	*pluginSession
+	profileID    string // 本候选准入时选定，Handler 与自动回复沿用。
 	pluginID     string
 	generationID string // 快照定位时固定，唤醒后只接受同代次及同路由。
 	committed    bool
@@ -380,11 +383,15 @@ func (r *Router) dispatchEvents(event *trustedEvent, ev *pb.Event, candidates []
 		if !r.available(candidate) {
 			continue
 		}
-		if r.commandPolicyFailure(candidate, ev) != nil {
+		ctx := profile.WithView(r.ctx)
+		if failure := r.commandPolicyFailure(ctx, &candidate, ev); failure != nil {
+			if failure.GetCode() == pb.ErrorCode_ERROR_CODE_INTERNAL {
+				slog.Warn("event route admission failed", "plugin_id", candidate.pluginID, "route_id", candidate.route.GetRouteId(), "error", failure.GetSafeMessage())
+			}
 			continue
 		}
 		routeID := candidate.route.GetRouteId()
-		matched, err := r.matchMessageFilter(candidate.pluginID, candidate.route.GetEvent().GetMessageFilter(), ev, toMe)
+		matched, err := r.matchMessageFilter(ctx, candidate.pluginID, candidate.route.GetEvent().GetMessageFilter(), ev, toMe)
 		if err != nil {
 			slog.Warn("message filter config read failed", "plugin_id", candidate.pluginID, "route_id", routeID, "event_id", ev.GetEventId(), "error", err)
 		}
@@ -433,7 +440,9 @@ func (r *Router) current(c candidate) bool {
 
 func (r *Router) call(c *candidate, event *trustedEvent, bind func(*pb.Event) (*pb.CommandInvocation, error), trace []byte) (wire.Response, error) {
 	// 1. 每次调用先重建可信字段，再在锁外为接收 Session 签发媒体。
+	event.invocation = nil
 	ev := event.rebuild()
+	profileID := c.profileID
 	ctx := r.ctx
 	if !event.deadline.IsZero() {
 		var cancel context.CancelFunc
@@ -467,8 +476,11 @@ func (r *Router) call(c *candidate, event *trustedEvent, bind func(*pb.Event) (*
 		if !matched {
 			return wire.Response{}, errors.New("handler route changed during wake")
 		}
-		if failure := r.commandPolicyFailure(*c, ev); failure != nil {
+		if failure := r.commandPolicyFailure(profile.WithView(ctx), c, ev); failure != nil {
 			return wire.Response{}, &wire.CallError{ErrorInfo: failure}
+		}
+		if c.profileID != profileID {
+			return wire.Response{}, errors.New("handler profile changed during wake")
 		}
 	}
 	if err := ctx.Err(); err != nil {
@@ -500,6 +512,7 @@ func (r *Router) call(c *candidate, event *trustedEvent, bind func(*pb.Event) (*
 	}
 	request := &pb.HandlerRequest{RouteId: c.route.GetRouteId(), Event: prepared, Command: command, Context: &pb.InvocationContext{
 		Actor: proto.CloneOf(event.retained.GetActor()), DefaultTarget: proto.CloneOf(event.retained.GetTarget()),
+		ProfileId:       encodedProfile(profileID),
 		CommandConsumed: c.route.GetKind() == pb.RouteKind_ROUTE_KIND_EVENT && event.commandConsumed,
 	}}
 	encoded, err := proto.Marshal(request)
@@ -517,8 +530,24 @@ func (r *Router) call(c *candidate, event *trustedEvent, bind func(*pb.Event) (*
 	r.inFlight[key]++
 	r.mu.Unlock()
 	defer r.finishCall(key)
-	inv := &Invocation{Depth: 1, PluginID: c.pluginID, Event: prepared, DefaultTarget: proto.CloneOf(event.retained.GetTarget()), Chain: slices.Clone(request.Context.PluginChain), Scopes: slices.Clone(request.Context.Scopes), RouteID: request.RouteId, candidate: *c, request: request, TraceID: trace}
+	inv := &Invocation{ProfileID: profileID, Depth: 1, PluginID: c.pluginID, Event: prepared, DefaultTarget: proto.CloneOf(event.retained.GetTarget()), Chain: slices.Clone(request.Context.PluginChain), Scopes: slices.Clone(request.Context.Scopes), RouteID: request.RouteId, candidate: *c, request: request, TraceID: trace}
+	event.invocation = inv
+	event.finished = append(event.finished, inv.Begin())
 	r.observeInvocation(inv, event.dispatch)
+	observeContinuation := inv.OnContinuation
+	inv.OnContinuation = func() func() {
+		finish := inv.Begin()
+		var observed func()
+		if observeContinuation != nil {
+			observed = observeContinuation()
+		}
+		return func() {
+			if observed != nil {
+				observed()
+			}
+			finish()
+		}
+	}
 	response, err := c.plugin.Call(ctx, wire.Request{
 		Target: request.RouteId, TraceID: trace, Deadline: event.deadline,
 		Attach:  inv,
@@ -547,8 +576,9 @@ func (r *Router) CallContinuation(ctx context.Context, inv *Invocation, continua
 	if err != nil {
 		return wire.Response{}, fmt.Errorf("encode continuation request: %w", err)
 	}
-	next := &Invocation{Depth: inv.Depth, PluginID: inv.PluginID, Event: request.Event, DefaultTarget: proto.CloneOf(inv.DefaultTarget), Chain: slices.Clone(inv.Chain), Scopes: slices.Clone(inv.Scopes), SendForbidden: inv.SendForbidden, RouteID: inv.RouteID, Continuation: true, candidate: inv.candidate, request: request, TraceID: inv.TraceID}
+	next := &Invocation{ProfileID: inv.ProfileID, Root: inv.Root, Depth: inv.Depth, PluginID: inv.PluginID, Event: request.Event, DefaultTarget: proto.CloneOf(inv.DefaultTarget), Chain: slices.Clone(inv.Chain), Scopes: slices.Clone(inv.Scopes), SendForbidden: inv.SendForbidden, RouteID: inv.RouteID, Continuation: true, candidate: inv.candidate, request: request, TraceID: inv.TraceID}
 	next.dispatch, next.OnWait, next.OnWaitMatch = inv.dispatch, inv.OnWait, inv.OnWaitMatch
+	defer next.Begin()()
 	key := inFlightKey{caller: inv.candidate.caller, eventID: inv.Event.GetEventId()}
 	r.mu.Lock()
 	if !r.current(inv.candidate) {

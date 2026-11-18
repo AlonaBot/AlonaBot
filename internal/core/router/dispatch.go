@@ -15,6 +15,9 @@ import (
 
 // Options 提供事件分发限额与现有的路由依赖；限额使用 tune.Values 对应值。
 type Options struct {
+	// Profile 按可信默认目标读取会话的配置文件与插件开关；nil 时使用 default。
+	Profile func(ctx context.Context, pluginID string, target *pb.Target) (profileID string, enabled bool, err error)
+
 	Dispatched func(Dispatch)                                                                           // nil 时不记录分发结果；仅库模式测试套件装配。
 	PreEvent   func(ctx context.Context, ev *pb.Event) (payload *pb.EventPayload, stop bool, err error) // nil 时跳过；返回载荷替换业务副本
 	// MessageConfig 返回本次消息会话的生效配置快照；错误供诊断，须省略配置值。
@@ -145,6 +148,9 @@ func (r *Router) startLocked() {
 func (r *Router) run(event *trustedEvent) {
 	r.observe(event)
 	r.dispatch(event)
+	for _, finish := range event.finished {
+		finish()
+	}
 	r.completeDispatch(event.dispatch)
 	r.mu.Lock()
 	defer r.mu.Unlock()
