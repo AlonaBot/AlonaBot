@@ -913,6 +913,26 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 			return c.assembly.journal.Prepare(ctx, install.PluginID, journal.KindFirstInstall, nil)
 		})
 	}
+	var snapshot state.RouteSnapshot
+	indexed := hasInstalledRoutes(install)
+	verified := false
+	if indexed {
+		defer func() {
+			if err == nil {
+				return
+			}
+			var validation *validate.Error
+			var phase *host.PhaseError
+			if !verified || errors.As(err, &validation) && validation.Code == pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION ||
+				errors.As(err, &phase) && phase.Code == pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION {
+				c.assembly.router.RemoveRouteSnapshot(install.PluginID)
+			}
+		}()
+		snapshot, err = c.store.ActiveRouteSnapshot(ctx, install.PluginID)
+		if err != nil {
+			return nil, fmt.Errorf("load active route snapshot: %w", err)
+		}
+	}
 	packageDir, err := installedDirectory(dir, install)
 	if err != nil {
 		return nil, err
@@ -931,6 +951,10 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	spec, running, err := c.installedSpec(ctx, install, packageDir, boot)
 	if err != nil {
 		return nil, err
+	}
+	if indexed {
+		c.assembly.router.SetRouteSnapshot(install.PluginID, snapshot.GenerationID, snapshot.Routes)
+		verified = true
 	}
 	running.process, err = supervisor.Launch(ctx, c.store, spec)
 	if err != nil {
@@ -983,6 +1007,13 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 		return nil, err
 	}
 	running.process, running.instance = process, process.Instance
+	if hasInstalledRoutes(running.install) {
+		if kind == journal.KindFirstInstall || record.WasEnabled {
+			a.router.SetRouteSnapshot(id, r.Generation, r.Session.Registration.Register.GetRoutes())
+		} else {
+			a.router.RemoveRouteSnapshot(id)
+		}
+	}
 	// 无旧 Active 的静态 WebUI 转进程时，原启用状态决定是否装配业务入口。
 	if (kind == journal.KindUpdate || kind == journal.KindRollback) && (!record.WasEnabled || !record.WasRunning && record.ExpectedOld != "") {
 		// 提交只切换权威代次；先停止候选，之后显式 enable 才建立业务 Session。

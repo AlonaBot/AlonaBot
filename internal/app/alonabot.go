@@ -478,7 +478,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 			if running != nil {
 				c.components = append(c.components, running)
 			}
-			if err != nil && recovering {
+			if err != nil && (recovering || active != "" && hasInstalledRoutes(install)) {
 				slog.Log(ctx, logging.LevelCritical, "committed generation recovery failed", "plugin_id", install.PluginID, "generation_id", active, "error", err)
 				if running != nil && running.instance.State() != host.StateDegraded {
 					running.instance.Degrade(err)
@@ -677,6 +677,7 @@ running:
 				if err := c.store.SetEnabled(ctx, old.id, false); err != nil {
 					slog.Error("disable plugin failed", "plugin_id", old.id, "error", err)
 				} else {
+					c.assembly.router.RemoveRouteSnapshot(old.id)
 					slog.Error("plugin disabled after repeated abnormal exits", "plugin_id", old.id, "crashes", c.values.RestartMaxCrashes, "window", c.values.RestartWindow)
 				}
 			}

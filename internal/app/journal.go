@@ -13,6 +13,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/process"
@@ -20,6 +21,10 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
 )
+
+func hasInstalledRoutes(in state.Install) bool {
+	return in.Source != "" && in.Source != devSource && (in.Role == state.RolePlugin || in.Role == state.RoleAgent)
+}
 
 func tracksRuntime(role state.Role) bool { return role == state.RolePlugin || role == state.RoleAgent }
 
@@ -93,6 +98,9 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	if m.ID != in.PluginID || state.Role(m.Role) != in.Role || m.AdapterID != in.AdapterID || m.Entrypoint != in.Entrypoint {
 		return supervisor.Spec{}, nil, fmt.Errorf("installed manifest identity differs from record for %s", in.PluginID)
 	}
+	if hasInstalledRoutes(in) && (m.Source != in.Source || m.Version != in.Version) {
+		return supervisor.Spec{}, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: fmt.Sprintf("installed manifest source or version differs for %s", in.PluginID)}
+	}
 	for _, warning := range parsed.Warnings {
 		slog.Warn("installed manifest warning", "plugin_id", m.ID, "warning", warning)
 	}
@@ -102,6 +110,9 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	}
 	resources, err := packageResources(packageDir)
 	if err != nil {
+		if hasInstalledRoutes(in) {
+			return supervisor.Spec{}, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: err.Error()}
+		}
 		return supervisor.Spec{}, nil, err
 	}
 	schemas, err := optionSchemas(resources)
@@ -114,9 +125,9 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	// Schema 摘要与版本绑定包内声明，所有已安装组件的启动共用同一输入。
 	boot.TargetConfigVersion = *m.ConfigVersion
 	boot.ConfigSchemaHash = nil
-	if (in.Role == state.RolePlugin || in.Role == state.RoleAgent || in.Role == state.RoleWebUI) && schemas.config != nil {
+	if (hasInstalledRoutes(in) || in.Role == state.RoleWebUI) && schemas.config != nil {
 		if uint32(schemas.config.Version()) != boot.TargetConfigVersion {
-			return supervisor.Spec{}, nil, fmt.Errorf("config schema version differs from manifest for %s", in.PluginID)
+			return supervisor.Spec{}, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: fmt.Sprintf("config schema version differs from manifest for %s", in.PluginID)}
 		}
 		boot.ConfigSchemaHash = schemas.config.Hash()
 	}

@@ -176,6 +176,14 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (prepared *Prep
 		}()
 	}
 
+	var snapshotRoutes bool
+	if !spec.Development && (spec.Role == state.RolePlugin || spec.Role == state.RoleAgent) {
+		in, err := store.GetInstall(ctx, spec.PluginID)
+		if err != nil {
+			return nil, err
+		}
+		snapshotRoutes = in.Source != "" && in.Source != "dev"
+	}
 	// 启动前检查包内文案，失败时尚未读取候选资源或创建进程。
 	messages, problems := i18n.Parse(spec.I18n)
 	if len(problems) != 0 {
@@ -276,7 +284,7 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (prepared *Prep
 		closeListener(ln)
 		return nil, err
 	}
-	p := &Prepared{store: store, spec: spec, process: proc, listener: ln, messages: messages, runtime: runtime}
+	p := &Prepared{store: store, spec: spec, process: proc, listener: ln, messages: messages, snapshotRoutes: snapshotRoutes, runtime: runtime}
 	fail := func(err error) (*Prepared, error) {
 		cleanupErr := p.close()
 		if !p.released {
@@ -329,6 +337,16 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (prepared *Prep
 		return fail(err)
 	}
 	spec.Log.SetSession(prep.SessionID)
+	if snapshotRoutes && !bytes.Equal(prep.Register.GetConfigSchemaHash(), boot.GetConfigSchemaHash()) {
+		return fail(&validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "registered config schema hash differs from installed package"})
+	}
+	if spec.NewCandidate && snapshotRoutes {
+		snapshot := state.RouteSnapshot{PluginID: spec.PluginID, GenerationID: spec.GenerationID, Routes: prep.Register.GetRoutes(),
+			RouteHash: prep.RouteHash, BuildDigest: spec.BuildDigest}
+		if err := store.SaveRouteSnapshot(ctx, snapshot); err != nil {
+			return fail(fmt.Errorf("save candidate route snapshot: %w", err))
+		}
+	}
 	p.Registration = prep
 	return p, nil
 }

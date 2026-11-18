@@ -181,9 +181,9 @@ Core 与全部 Adapter 始终常驻。`always_on` 为缺省模式，全部已启
 
 状态记录含最近一次变化的原因与时间。Core 恢复时先核对安装记录、ActiveGeneration、提交记录与进程所有权，再发布当前状态；已落盘的 `ACTIVE` 或 `WAKING` 本身不能证明 Session 存活。`SUSPENDED` 只有在空闲停止成功且确认进程树退出后写入；异常退出进入 `FAILED`。
 
-Core 为每个代次保存 REGISTER 中已验证的完整路由描述：`plugin_id`、`generation_id`、`route_id`、类型、匹配条件（含消息事件的 `message_filter` 及其配置字段路径）、优先级、参数、权限声明、Rule 描述、输入/输出 Schema 标识及其不可变包资源绑定、HTTP 公共路径、Service、静态 schedule、动态任务名与 Bus 订阅描述，以及路由内容摘要和已验证的安装包摘要。HTTP 公共路径由 Core 按 §7.2 推导。快照只取路由白名单字段，排除配置值、配置文件覆盖值、HTTP 临时 Listener 地址、内部代理认证材料、Session Secret、Session ID 与进程句柄。
+Core 为每个代次保存 REGISTER 中已验证的完整路由描述：`plugin_id`、`generation_id`、`route_id`、类型、匹配条件（含消息事件的 `message_filter` 及其配置字段路径）、优先级、参数、权限声明、Rule 描述、Service 输入/输出 Schema 的标识与版本（工具另含 REGISTER 中的输入 Schema 原文）、HTTP 公共路径、Service、静态 schedule、动态任务名与 Bus 订阅描述，以及路由内容摘要和已验证的安装包摘要。HTTP 公共路径由 Core 按 §7.2 推导。快照只取路由白名单字段，排除配置值、配置文件覆盖值、HTTP 临时 Listener 地址、内部代理认证材料、Session Secret、Session ID 与进程句柄。
 
-新候选的快照在提交前准备持久化，随 ActiveGeneration 与 COMMITTED 的同一状态库事务成为有效快照；未提交候选的快照保持不可见。索引只读取当前已提交代次，并核对所属插件、代次、路由内容摘要及程序包摘要；Core 重启后据此恢复索引。Schema 原文从该快照绑定的不可变包资源读取并校验。缺失或不一致时报告失败并隔离该插件的路由，保留诊断。
+新候选的快照在提交前准备持久化，随 ActiveGeneration 与 COMMITTED 的同一状态库事务成为有效快照；未提交候选的快照保持不可见。索引只读取当前已提交代次，并核对所属插件、代次、路由内容摘要及程序包摘要；Core 重启后据此恢复索引。配置 Schema 原文从该快照绑定的不可变包资源读取并校验；Service Schema 原文只随插件程序构建，快照不另存（D-173）。缺失或不一致时报告失败并隔离该插件的路由，保留诊断。
 
 插件进程停止后保留有效快照，撤销旧 Session 的 Caller、Listener、代理凭证与媒体授权。休眠唤醒使用原 ActiveGeneration、配置、业务 DB 和 `activation_reason=resume`；重新 REGISTER 的路由摘要须与快照一致，先校验再允许业务交付。摘要不一致时停止激活。配置与版本变化仍走 Pending、候选准备及唯一提交点，保持旧代次快照不可变。停用和卸载后快照保留供代次引用与诊断，业务索引立即撤销；回收与数据清理沿用 §9.3、§12 的代次规则。
 

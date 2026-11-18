@@ -1,13 +1,17 @@
 package supervisor
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/process"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
@@ -18,15 +22,16 @@ import (
 // Prepared 持有尚未激活的候选；调用方负责 Activate 或 Close。
 // 准备失败且进程树尚未清空时 Registration 为 nil，资源仍由本句柄持有。
 type Prepared struct {
-	Registration *host.Prepared
-	store        *state.Store
-	spec         Spec
-	process      *process.Process
-	conn         *wire.Conn
-	listener     net.Listener
-	messages     *i18n.Catalog
-	released     bool // 进程资源已释放或已移交 Running。
-	runtime      *runtimeRecord
+	Registration   *host.Prepared
+	store          *state.Store
+	spec           Spec
+	process        *process.Process
+	conn           *wire.Conn
+	listener       net.Listener
+	messages       *i18n.Catalog
+	snapshotRoutes bool
+	released       bool // 进程资源已释放或已移交 Running。
+	runtime        *runtimeRecord
 }
 
 // Activate 在提交回调成功后激活同一 Session，移交资源给返回的 Running。
@@ -46,6 +51,11 @@ func (p *Prepared) activate(ctx context.Context, commit func(context.Context) er
 		return p.activationFailed(ctx, nil, errors.New("candidate activation requires a commit callback"), handoffFailure)
 	}
 	spec := p.spec
+	if !spec.NewCandidate && p.snapshotRoutes {
+		if err := p.checkActiveRoutes(ctx); err != nil {
+			return nil, errors.Join(err, p.close())
+		}
+	}
 	opt := host.ActivateOptions{PluginID: spec.PluginID, GenerationID: spec.GenerationID, Handler: spec.Handler, Global: spec.Global, Limits: spec.Limits, Messages: p.messages}
 	opt.Commit = commit
 	in, err := host.Activate(ctx, p.conn, p.Registration, opt)
@@ -73,6 +83,17 @@ func (p *Prepared) activate(ctx context.Context, commit func(context.Context) er
 	}
 	p.released = true // 激活成功后，资源所有权移交给 Running。
 	return p.running(in), nil
+}
+
+func (p *Prepared) checkActiveRoutes(ctx context.Context) error {
+	snapshot, err := p.store.ActiveRouteSnapshot(ctx, p.spec.PluginID)
+	if err != nil {
+		return fmt.Errorf("read active route snapshot: %w", err)
+	}
+	if snapshot.GenerationID != p.spec.GenerationID || !bytes.Equal(snapshot.BuildDigest, p.spec.BuildDigest) || !bytes.Equal(snapshot.RouteHash, p.Registration.RouteHash) {
+		return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "registered routes or program differ from the active route snapshot"}
+	}
+	return nil
 }
 
 func (p *Prepared) activationFailed(ctx context.Context, in *host.Instance, cause error, handoff bool) (*Running, error) {

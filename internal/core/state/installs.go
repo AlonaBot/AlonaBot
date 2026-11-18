@@ -99,7 +99,7 @@ func cleanupObjects(db *gorm.DB, id string, all bool) ([]cleanupObject, error) {
 			return nil, journalPrecondition("candidate operation " + record.OpID + " requires recovery before purge")
 		}
 	}
-	objects := []cleanupObject{{&journalRecord{}, owned}, {&ButtonToken{}, owned}, {&conversationEntry{}, owned}, {&adapterCursor{}, owned}, {&dynamicTask{}, owned}, {&scheduledJob{}, owned}}
+	objects := []cleanupObject{{&journalRecord{}, owned}, {&routeSnapshotRecord{}, owned}, {&ButtonToken{}, owned}, {&conversationEntry{}, owned}, {&adapterCursor{}, owned}, {&dynamicTask{}, owned}, {&scheduledJob{}, owned}}
 	var installed installation
 	if err := db.Where(owned).Take(&installed).Error; err != nil {
 		return nil, err
