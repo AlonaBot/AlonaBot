@@ -131,8 +131,9 @@ func (w *Waker) EnsureActive(ctx context.Context, pluginID string, payloadBytes 
 			w.mu.Unlock()
 			return nil, err
 		}
+		// ACTIVE 可能先于 Session 登记可见；共享启动尚未交接时继续使用同一等待队列。
 		waitable := status.State == state.RuntimeSuspended || status.State == state.RuntimeWaking ||
-			status.State == state.RuntimeActive && p.current != nil ||
+			status.State == state.RuntimeActive && (p.current != nil || p.waking) ||
 			status.State == state.RuntimeQuiescing && p.current != nil && p.current.idleStop
 		if !waitable {
 			err := p.failure

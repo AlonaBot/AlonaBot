@@ -209,8 +209,11 @@ func (s *Server) ServeWithIsolation(w http.ResponseWriter, r *http.Request, isol
 	if current != nil {
 		generation, routes = current.generationID, current.routes
 	}
-	if unavailable && snapshot != nil {
-		if id, descriptors, known := snapshot(pluginID); known {
+	committedSnapshot := false
+	if snapshot != nil {
+		id, descriptors, known := snapshot(pluginID)
+		committedSnapshot = known
+		if unavailable && known {
 			generation, routes = id, httpRoutes(descriptors, state.RolePlugin)
 			unavailable = false
 		}
@@ -281,7 +284,7 @@ func (s *Server) ServeWithIsolation(w http.ResponseWriter, r *http.Request, isol
 					http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 					return
 				}
-			} else if current.role == state.RolePlugin || current.role == state.RoleAgent {
+			} else if committedSnapshot {
 				http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 				return
 			}
