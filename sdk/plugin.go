@@ -44,6 +44,7 @@ type Plugin struct {
 	callbacks     map[string]bool
 	config        config.Values
 	configReady   bool
+	profileViews  atomic.Pointer[profileViews] // 整体发布，Context 取得的旧视图持续有效。
 	running       atomic.Bool
 	errs          []error
 }
@@ -147,36 +148,36 @@ func (r *Plugin) Group(name string) *CommandGroup { return r.scope.commands.Grou
 func (r *Plugin) Command(path ...string) *CommandBuilder { return r.scope.commands.Command(path...) }
 
 // Regex 开始登记 Go regexp 文本匹配。
-func (r *Plugin) Regex(routeID, expr string) *CommandBuilder {
-	return r.scope.commands.Regex(routeID, expr)
+func (r *Plugin) Regex(expr string) *CommandBuilder {
+	return r.scope.commands.Regex(expr)
 }
 
 // Keyword 开始登记包含文本匹配。
-func (r *Plugin) Keyword(routeID string, patterns ...string) *CommandBuilder {
-	return r.scope.commands.Keyword(routeID, patterns...)
+func (r *Plugin) Keyword(patterns ...string) *CommandBuilder {
+	return r.scope.commands.Keyword(patterns...)
 }
 
 // StartsWith 开始登记开头文本匹配。
-func (r *Plugin) StartsWith(routeID string, patterns ...string) *CommandBuilder {
-	return r.scope.commands.StartsWith(routeID, patterns...)
+func (r *Plugin) StartsWith(patterns ...string) *CommandBuilder {
+	return r.scope.commands.StartsWith(patterns...)
 }
 
 // EndsWith 开始登记结尾文本匹配。
-func (r *Plugin) EndsWith(routeID string, patterns ...string) *CommandBuilder {
-	return r.scope.commands.EndsWith(routeID, patterns...)
+func (r *Plugin) EndsWith(patterns ...string) *CommandBuilder {
+	return r.scope.commands.EndsWith(patterns...)
 }
 
 // FullMatch 开始登记完整文本匹配。
-func (r *Plugin) FullMatch(routeID string, patterns ...string) *CommandBuilder {
-	return r.scope.commands.FullMatch(routeID, patterns...)
+func (r *Plugin) FullMatch(patterns ...string) *CommandBuilder {
+	return r.scope.commands.FullMatch(patterns...)
 }
 
 // Raw 开始登记原始消息路由。
-func (r *Plugin) Raw(routeID string) *CommandBuilder { return r.scope.commands.Raw(routeID) }
+func (r *Plugin) Raw() *CommandBuilder { return r.scope.commands.Raw() }
 
 // On 开始登记事件路由。
-func (r *Plugin) On(routeID string, eventType EventType) *EventBuilder {
-	return r.scope.on(routeID, eventType)
+func (r *Plugin) On(eventType EventType) *EventBuilder {
+	return r.scope.on("", eventType)
 }
 
 // Route 开始构建 method+path 的 HTTP 路由。

@@ -1,15 +1,18 @@
 import { useState, type JSX } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Bot, LayoutDashboard, MessageSquare, Puzzle, Settings, Shield, SlidersHorizontal } from 'lucide-react';
+import { ShieldCheck, Bot, Box, LayoutDashboard, MessageSquare, Puzzle, ScrollText, Settings, Shield, SlidersHorizontal } from 'lucide-react';
 import { ConfigForm } from './components/ConfigForm';
 import { useUI } from './i18n/UI';
 import { type CoreInfo } from './api/admin';
 import { OverviewPage } from './pages/OverviewPage';
 import { PluginsPage } from './pages/PluginsPage';
+import { UsersPage } from './pages/UsersPage';
 import { AccountsPage } from './pages/AccountsPage';
 import { PermissionsPage } from './pages/PermissionsPage';
 import { ConversationsPage } from './pages/ConversationsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { ModelsPage } from './pages/ModelsPage';
+import { LogsPage } from './pages/LogsPage';
 import chinese from '../i18n/zh-CN.json';
 import collections from '../fixtures/collections.config_schema.json';
 import pluginChinese from '../fixtures/i18n/zh-CN.json';
@@ -24,6 +27,7 @@ export type RouteEntry = {
   label: string; /* 文案键 */
   icon: LucideIcon;
   group: 'main' | 'bottom';
+  navigation?: boolean;
   render: () => JSX.Element;
 };
 
@@ -172,6 +176,24 @@ export const routes: RouteEntry[] = [
     icon: Settings,
     group: 'bottom',
     render: () => <SettingsPage />,
+  },
+  { id: 'tool-policies', path: '/permissions/tools', label: 'tabTools', icon: Shield, group: 'main', navigation: false, render: () => <PermissionsPage tab="tools" /> },
+  { id: 'users', path: '/permissions/users', label: 'users', icon: ShieldCheck, group: 'main', navigation: false, render: () => <UsersPage /> },
+  {
+    id: 'models',
+    path: '/models',
+    label: 'models',
+    icon: Box,
+    group: 'main',
+    render: () => <ModelsPage />,
+  },
+  {
+    id: 'logs',
+    path: '/logs',
+    label: 'logs',
+    icon: ScrollText,
+    group: 'main',
+    render: () => <LogsPage />,
   },
   ...(import.meta.env.DEV
     ? [

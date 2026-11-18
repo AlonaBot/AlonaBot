@@ -52,9 +52,13 @@ npm --prefix web/admin ci
 npm --prefix web/admin run dev
 ```
 
-打开 Vite 输出的地址，首页跳转到 `/dev/forms`。预览使用 `web/admin/fixtures/`，可切换语言并查看表单提交生成的 JSON Merge Patch，无需启动 Core。接入新页面时按 [WebUI 实施计划 §3](../spec/plan/webui.md#3-页面接入外壳) 登记路由和文案。
+打开 Vite 输出的地址，管理页要求登录；登录后首页跳转到 `/overview`。直接访问 `/dev/forms` 可使用 `web/admin/fixtures/` 切换语言并查看表单提交生成的 JSON Merge Patch，无需启动 Core。接入新页面时按 [WebUI 实施计划 §3](../spec/plan/webui.md#3-页面接入外壳) 登记路由和文案。
 
 本地运行 `npm --prefix web/admin run typecheck`、`npm --prefix web/admin run test` 和 `npm --prefix web/admin run build`。测试使用被忽略的 `*.local.test.ts`，无本地测试时命令也通过；CI 不运行前端检查。生产静态文件输出到 `web/admin/dist/`，其中包括站点图标、标志、JetBrains Mono woff2 和许可。
+
+官方 WebUI 另有 `package admin` 的 `New() *sdk.Plugin` 后台入口。先构建前端，用 `alonabot check web/admin` 核对入口与资源，`alonabot build web/admin` 生成进程入口，`alonabot pack web/admin --target darwin/arm64 --out web/admin/bin` 生成携带进程与 `dist` 的平台包；安装后从 Core 同源入口登录，前端经 Cookie/CSRF 调用 Admin API 与 `/plugins/alonabot-webui-admin/` 后台路由。后台在自身受管 SQLite 保存统计、用户目录、商店缓存和已读版本，接口见 [ADMIN-API §25](../spec/ADMIN-API.md#25-官方-webui-后台)。
+
+T-09.23 的验证证据见 [TEST-MATRIX §3.2](../spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)：darwin/arm64 正式包已通过真实 Core 联验，GitHub 使用回环模拟，五目标包完成交叉编译和资产检查；其他平台实际运行与修复后浏览器验收记为未运行。
 
 T-09.26 锁定 `lucide-react` 1.74.0、`@dnd-kit/core` 6.3.1、`@dnd-kit/sortable` 10.0.0、`@radix-ui/react-dialog` 1.3.1、`@radix-ui/react-dropdown-menu` 2.2.1 和 `@radix-ui/react-tooltip` 1.4.1；`@radix-ui/react-popover` 与 `recharts` 由首个使用它们的页面切片引入。
 
@@ -67,11 +71,11 @@ go run ./scripts/dist --version 0.1.0 \
   --key ~/.config/alonabot/release.key --out ./dist
 ```
 
-构建机需要上表中的 Go、Node 与 npm，并可读取已锁定的 Go 模块和 npm 包。程序先运行 `web/admin` 的 `npm ci` 与 `npm run build`，再由主机版 `alonabot pack <组件目录> --target <os>/<arch> ... --asset-base <前缀> --out <目录>` 为每个组件调用一次，传入全部目标；pack 写出合并清单，dist 再签名并自检。组件版本沿用各自 `plugin.yaml`。默认目标为 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`，可用 `--platforms linux/amd64,linux/arm64` 选择子集。离线 npm 缓存已齐全时，可在命令前加 `env npm_config_offline=true`。
+构建机需要上表中的 Go、Node 与 npm，并可读取已锁定的 Go 模块和 npm 包。程序在暂存目录保留根 `go.mod`、`go.sum` 及 `sdk/`、`contracts/`、`internal/`、`web/admin/`，跳过 WebUI 的旧 `node_modules` 与 `dist`；在暂存 WebUI 中运行 `npm ci` 与 `npm run build`，再由主机版 `alonabot pack <组件目录> --target <os>/<arch> ... --asset-base <前缀> --out <目录>` 为每个组件调用一次，传入全部目标；pack 写出合并清单，dist 再签名并自检。组件版本沿用各自 `plugin.yaml`。默认目标为 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`，可用 `--platforms linux/amd64,linux/arm64` 选择子集。离线 npm 缓存已齐全时，可在命令前加 `env npm_config_offline=true`。
 
 `--key` 文件保存标准 base64 编码的 64 字节 Ed25519 私钥，允许末尾空白。私钥放在仓库及组件资源目录之外，设置为仅发布维护者可读（0600），通过受控环境或离线介质保管和备份。程序只从该文件读取私钥，子进程不接收私钥；发行物只携带公钥与签名。发布前先用临时测试密钥验证流程，正式签名使用维护者控制的密钥。
 
-`dist/` 中每个平台生成一个 `alonabot-<version>-<os>-<arch>.tar.gz`（Windows 为 `.zip`），解压后的同名目录包含 `alonabot`（Windows 为 `alonabot.exe`）和 `packages/<组件ID>/`。每个组件目录包含该平台安装包、合并全部目标平台的 `release.json`、`release.json.sig` 与 `release.pub`；当前静态 WebUI 只生成一份 `any` 安装包。另在 `dist/packages/<组件ID>/` 汇集各平台安装包与同一份签名清单，供后续发布使用。`dist/SHA256SUMS` 列出所有外层发行归档的摘要，格式为摘要、两个空格和文件名。
+`dist/` 中每个平台生成一个 `alonabot-<version>-<os>-<arch>.tar.gz`（Windows 为 `.zip`），解压后的同名目录包含 `alonabot`（Windows 为 `alonabot.exe`）和 `packages/<组件ID>/`。每个组件目录包含该平台安装包、合并全部目标平台的 `release.json`、`release.json.sig` 与 `release.pub`；官方 WebUI 按五个目标平台出包，分别包含 `component`（Windows 为 `component.exe`）与同一份 `dist`。另在 `dist/packages/<组件ID>/` 汇集各平台安装包与同一份签名清单，供后续发布使用。`dist/SHA256SUMS` 列出所有外层发行归档的摘要，格式为摘要、两个空格和文件名。
 
 安装包下载前缀默认取 `https://github.com/AlonaBot/AlonaBot/releases/download/v<version>`，可用 `--asset-base https://example.com/releases/v0.1.0` 覆盖。发行 Core 通过 `-ldflags -X` 嵌入官方公钥，安装官方签名包时免首次来源与发布者确认；签名与摘要仍按安装流程验证，已有发布者绑定继续生效。未注入公钥的开发构建保留原确认流程。
 
@@ -197,6 +201,18 @@ Adapter 实例的记录在 `GET /api/v1/adapters/{adapter_id}/instances/{instanc
 
 使用同一套管理凭证运行 `bin/alonabot profile list` 查看配置文件 ID 和会话数。`bin/alonabot profile assign <配置文件ID> <实例名>` 设置实例缺省；再给出会话字符串可单独指定会话。`profile set` 与 `profile unset` 编辑 `default` 时写入插件的 Pending，沿用配置重载流程。全部子命令见 [CONTRACTS §5.6](../spec/CONTRACTS-v0.1.md#56-配置文件)，平台设置与工具策略见 [ADMIN-API §23](../spec/ADMIN-API.md#23-配置文件)。
 
+会话派发按单独指定 → 实例缺省 → `default` 解析配置文件，已应用插件开关、字段覆盖与消息过滤；SDK 的 `c.Config()` 在每次调用开始时冻结视图。覆盖更新向在线 Session 下发完整集合，后续调用使用新值；离线插件在下次 Bootstrap 接收。Bootstrap 的 `profile_overrides_json` 必须是对象，无覆盖填 `{}`；离线 `alonabot test` 同样下发该字段。插件经 `core.profile.set` 修改 `default` 时，Core 在整条根调用及延续结束后 reload；固定服务写入遇管理互斥占用立即返回 FAILED_PRECONDITION。工具目录、调用与操作确认使用可信默认 Target 对应配置文件的一次操作快照；无 Target 或无父 list 使用 `default`。插件关闭时为 deny，其余按配置文件覆盖、全局覆盖与工具声明缺省策略查找，确认操作无覆盖时为 confirm。管理更新从下一次操作生效，在途确认保留已接纳策略。命令前缀与回复设置按同一会话配置文件读取。
+
+通过 `GET/PUT /api/v1/profiles/{id}/platform` 读取或保存平台覆盖；普通配置文件的 `reply` 各键为 `null` 时跟随 `default`，显式 `false`、空字符串和 `0` 关闭对应修饰。写入 `default` 须提供完整 `command_prefixes` 与 `reply`，值写回 `core_config.json`。后续派发和发送读取新快照，无需重启插件。命令前缀未覆盖时跟随 `default`，支持空字符串前缀并按最长前缀匹配；usage 使用本次命中的前缀。平台菜单按实例缺省配置文件读取前缀，命令目录沿用原权限与命令名规则。
+
+处理 `message.created` 的命令、文本、事件及其派生和延续调用向原实例、会话与话题回复时，共享根调用的首条 Send 标记。首条按 `mention_sender` 在群聊提及可信发送人，按 `quote` 引用触发消息，并在第一个 text 前加 `prefix`；已有同人提及或引用保留。提及和前缀加入后超过实例声明的文本长度上限时，两项一起省略，引用仍保留。后台和跨会话发送沿用原行为。
+
+Core 在出站 Hook 前完成回复改写，并沿用整链复检。前缀按普通文本处理，Markdown 正文前插入独立 plain text 片段，保留实体的 UTF-16 偏移。首条回执选取 `primary_platform_message_id`，为空时取 `platform_message_ids` 首项；只按该 ID 的 ACCEPTED `part_results` 与 `segment_indexes` 记录 Hook 后实际已发送的自动提及和前缀，完整回执与错误继续返回。关联按当前插件 Session、完整 Target 与平台消息 ID 隔离；后续 Edit 保留已记录修饰，用 TEXT_MENTION 表达自动提及，重复编辑沿用已有修饰，并同步插入位置前后实体的偏移与长度。Edit 仍接受一个 text 和可选 buttons，超限时省略自动修饰；需保留的普通文本前缀或自动提及与 Markdown 编辑组合无法表达时返回 UNSUPPORTED。Session 退出时释放关联，配置读取期间的在途准备与迟到回执随之失效；根调用结束时释放首条标记。
+
+`forward_threshold` 为正且实例声明 `message.forward` 时，每次回复 Send 的 text 片段总 Unicode 码点数超过阈值会改为一个合并转发，节点来源为本账号；reference、媒体、按钮及嵌套限制沿用原校验，Edit 沿用原编辑限制。平台菜单在启动及路由、命令策略变化时同步；命令派发与回复 Send 从下一次操作读取新平台快照。
+
+官方 Agent 可用 `/profile [名字]` 查询或切换当前会话的配置文件；名字为「默认」或 `default` 时取消单独指定，先回落实例缺省，再回到 `default`。Admin 用 `/agent on|off`、`/persona <名字>`、`/provider <名字>` 修改当前配置文件的触发方式、人格与模型，共用该配置文件的会话在后续调用一起生效；回复显示 Core 返回的名称、会话数，修改 `default` 时追加即将重载提示。可覆盖字段为 `chat_model`、`image_caption_model`、`default_persona`、`triggers`、`wake_words`、`member_sessions`。人格目录当前仍来自基础配置 `personas`，迁入 Agent 数据库由 T-12.20 完成。受管库的 `chat_settings` 仅保留会话键、reset 代次与图片计数；旧开发库按首次发布前约定重建。
+
 ### 导出诊断包
 
 ```fish
@@ -278,7 +294,7 @@ bin/alonabot run ./examples/plugins/lifecycle --stdio
 
 `run` 取得 core.lock 后读取 `<data_dir>/core_config.json`，Core 设置统一从这个 JSON 对象读取；文件不存在时以 0600 权限写入缺省内容。JSON 语法、重复键或根节点错误时，以 usage 退出码报告键路径与行列号。未知键保留并忽略，类型或取值错误在运行副本中校正，记录路径与原因。
 
-键与缺省值见 CONTRACTS §15.1；`base_url` 缺省为 `http://127.0.0.1:7650`，管理入口与插件路由共用这个地址。旧键 `admin_base_url` 与 `plugin_base_url` 作为无效配置保留，运行时使用 `base_url`。`admins`、`command_prefixes`、`reply`、`default_locale`、`log.sources` 与 `adapters` 已支持解析与保存；`command_prefixes_by_instance` 仍由当前运行时读取，配置文件的前缀与回复行为由 T-04.19 接入。本地 `run` 按监听、日志、代理与 Base URL 装配。
+键与缺省值见 CONTRACTS §15.1；`base_url` 缺省为 `http://127.0.0.1:7650`，管理入口与插件路由共用这个地址。旧键 `admin_base_url` 与 `plugin_base_url` 作为无效配置保留，运行时使用 `base_url`。`admins`、`command_prefixes`、`reply`、`default_locale`、`log.sources` 与 `adapters` 已支持解析与保存；`command_prefixes_by_instance` 按未知键保留原文并忽略，管理员 prune 时清理。按账号区分前缀时，为该实例指定缺省配置文件，再经平台 API 保存前缀覆盖；旧 `/api/v1/core/command-prefixes` 路由已移除。本地 `run` 按监听、日志、代理与 Base URL 装配。
 
 整个字符串值写成 `${NAME}` 时，读取时展开环境变量；NAME 由 `A-Z`、`a-z`、数字与下划线组成，首字符为字母或下划线。变量缺失时该值按不合法处理，恢复为缺省值并记校正记录（D-161）。
 
@@ -318,7 +334,7 @@ bin/alonabot admin-token show --data-dir ./data
 
 Core 运行且仍持有当前 token 时，可调用 `POST /api/auth/token/rotate` 在线轮换（[ADMIN-API §20](../spec/ADMIN-API.md#20-webui-需要的补充接口)）。从响应保存新 token，更新 CLI 使用的 `ALONABOT_ADMIN_TOKEN` 或 `--token-file`，并用新 token 重新登录。轮换会撤销全部旧管理会话。
 
-调优参数在启动时解析；修改后重启生效。`default` 的前缀与 `reply` 属于 `core_config.json`；配置文件覆盖集合沿用固定 4 MiB 帧上限。查看全部调优参数及当前生效值：
+调优参数在启动时解析；修改后重启生效。`default` 的前缀与 `reply` 属于 `core_config.json`；配置文件覆盖集合沿用固定 4 MiB 帧上限，`core.profile.*` 与 `sdk.profile.set_overrides` 沿用普通 RPC 的期限与 Session 预算（CONTRACTS §16、`internal/tune/params.go`）。查看全部调优参数及当前生效值：
 
 ```sh
 bin/alonabot tune list
@@ -337,7 +353,7 @@ bin/alonabot build ./alonabot-plugin-hello --goos linux --goarch amd64 --tags a,
 bin/alonabot check ./alonabot-plugin-hello --goos linux --goarch amd64 --tags a,b
 ```
 
-`build/check` 使用 `--goos`、`--goarch`，目标缺省沿用 Go 环境；`pack` 使用可重复的 `--target <os>/<arch>`，省略时取本机平台。三者均用 `--tags` 选择源码；扫描、依赖分析和正式编译统一使用 `CGO_ENABLED=0`。开发运行的 BuildDev 沿用开发环境的 cgo 设置。`build` 默认输出到 `<工程>/bin`，可用 `--out DIR` 覆盖。进程产物包含独立的 `component`（Windows 为 `component.exe`）、资源旁车及包内 `plugin.yaml`；作者 manifest 保持原样。WebUI build 发布静态资源与包内 manifest。`check` 只读扫描入口与资源，保留全部静态诊断与位置。
+`build/check` 使用 `--goos`、`--goarch`，目标缺省沿用 Go 环境；`pack` 使用可重复的 `--target <os>/<arch>`，省略时取本机平台。三者均用 `--tags` 选择源码；扫描、依赖分析和正式编译统一使用 `CGO_ENABLED=0`。开发运行的 BuildDev 沿用开发环境的 cgo 设置。`build` 默认输出到 `<工程>/bin`，可用 `--out DIR` 覆盖。进程产物包含独立的 `component`（Windows 为 `component.exe`）、资源旁车及包内 `plugin.yaml`；作者 manifest 保持原样。纯静态 WebUI build 发布静态资源与包内 manifest；带 Go 入口的 WebUI 另外生成同平台进程，官方 WebUI 采用这一形式。`check` 只读扫描入口与资源，保留全部静态诊断与位置。
 
 `test` 在全新临时数据目录中构建宿主平台组件，完成真实握手、准备、注册、激活与停止，报告注册命令及清理结果；Adapter 保持零平台实例，WebUI 检查静态加载资源。进程组件的 Bootstrap 下发临时状态根内 `plugin_data/<id>/` 的绝对路径，测试结束时随临时目录清理。准备、注册、停止或清理失败均非零退出。
 
@@ -360,6 +376,14 @@ go test -race -count=3 ./internal/core/supervisor/
 ```
 
 文档改动用 `git diff --check` 检查空白错误，链接与技能元数据由审查核对。包文档、命名、注释与测试提交范围由 [编码规范](coding-standards.md) 与 [注释技能](../.agents/skills/alonabot-code-commenting/SKILL.md) 指导审查。
+
+## 按需唤醒与验证
+
+S-02.1 已接通已安装 plugin/agent 从 SUSPENDED 按命令/事件、Service 与 HTTP 请求恢复原代次。Core 唯一 Waker 在 ACTIVATED、摘要核对及全部绑定后开放交付；等待期间沿用接纳时的绝对期限。同代次 RESUME 复用配置与 DB，跳过数据库迁移回调；配置仍执行加载、补值/校正与 required 校验，完整结果须与原快照一致。开发组件沿用当前绑定与原生命周期。
+
+`internal/tune` 已登记 `WAKE_QUEUE_REQUESTS=256`（≥1）与 `WAKE_QUEUE_BYTES=16MiB`（4MiB～`CORE_MAX_PAYLOAD`）；等待 payload 同时占用 Core 总预算。可经 `--args` 覆盖，名称、单位、上下界及来源错误沿用 CONTRACTS §16。HTTP 等待只占条数，正文在交付后流式读取；唤醒失败分别映射为 429（预算满）、504（期限到达）或 503（其他失败）。S-02.2 已接通自动空闲策略：`sleep.mode` 缺省 `always_on`，`sleep.idle_timeout` 缺省 `15m`，`sleep.plugins` 缺省为空；覆盖接受 `never` 或正时长，删除覆盖恢复自动准入。`SLEEP_MIN_UPTIME=5m`（>0）、`SLEEP_COLD_START_WINDOW=1h`（>0）与 `SLEEP_COLD_START_MAX=3`（≥1）已登记，窗口内冷启动超过上限后固定常驻一个窗口，期间启动保持原冷却截止。Scheduler 到期唤醒由 S-03.1 接入。
+
+提交集成 `internal/app/wake_test.go:TestWake` 覆盖真实 Core、SDK 回环 Adapter、已安装子进程与 SQLite 的 command/service/http 三入口；`contracts/wirespec_test.go:TestEnumValues` 固定 `STOP_REASON_IDLE=6`。本地 `*_local_test.go` 覆盖并发、预算、取消/期限、停止竞争、活动释放与 RESUME 数据库迁移。`internal/app/idle_test.go:TestIdle` 覆盖自动空闲退出、正常 OnStop 与资源关闭、首命令唯一原代次恢复，以及保存 never 后立即恢复并保持 ACTIVE。本地回归覆盖同步准入与排空交接、全部设置发布入口、固定冷却与历史回收、停止及落盘失败。darwin/arm64 的完整命令、结果及真实平台未运行项见 [TEST-MATRIX §3.2](../spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)。
 
 ## 库模式运行（同一进程）
 
@@ -453,7 +477,7 @@ p.Command("remind").Handle(func(c *sdk.Context, key, text string) (message.Conte
     if err != nil {
         return nil, err
     }
-    _, err = reminder.At(c.Context(), time.Now().Add(10*time.Minute),
+    _, err = reminder.At(c, time.Now().Add(10*time.Minute),
         ReminderArgs{Session: c.Session(), Text: text}, task.Key(internalKey))
     if err != nil {
         return nil, err
@@ -465,7 +489,7 @@ p.Command("cancel").Handle(func(c *sdk.Context, key string) error {
     if err != nil {
         return err
     }
-    return reminder.Cancel(c.Context(), internalKey)
+    return reminder.Cancel(c, internalKey)
 })
 ```
 
@@ -477,7 +501,7 @@ p.Command("cancel").Handle(func(c *sdk.Context, key string) error {
 
 `reminder.List(ctx)` 读取全部分页，返回完整的 `task.Instance[ReminderArgs]`。`At`、`Interval`、`Cron` 中仅对应触发规则的字段有值，`Timezone` 随 Cron 返回；`NextAt == nil` 表示协议没有下一次触发时刻。任一页读取或参数解码失败都会返回错误。
 
-所有任务客户端函数在 Activated 后可用；`OnStart`、`OnReady`、停止后与已失效的 Handler Context 返回 `FAILED_PRECONDITION`。在 Handler 中传 `c.Context()` 以保留父调用关联；独立后台 context 只有组件身份。Core 保存任务定义与 interval 起点，重启后安排下一未来触发；离线、未激活与暂停期间错过的触发作废，一次性过期实例删除。
+所有任务客户端函数在 Activated 后可用；`OnStart`、`OnReady`、停止后与已失效的 Handler Context 返回 `FAILED_PRECONDITION`。在 Handler 中传 `c` 以保留父调用关联；独立后台 context 只有组件身份。Core 保存任务定义与 interval 起点，重启后安排下一未来触发；离线、未激活与暂停期间错过的触发作废，一次性过期实例删除。
 
 静态任务继续在 `New()` 中声明，例如 `p.Every("tick", time.Minute).Handle(tick)`。在已激活的 Handler 或后台工作中暂停、恢复与查询：
 
@@ -515,16 +539,11 @@ func TestPing(t *testing.T) {
     h := plugintest.Start(t, plugintest.Plugin(p))
     alice := plugintest.User{ID: "alice"}
     result := h.Text(plugintest.Private(alice.ID), alice, "/ping")
-    if len(result.Sends) != 1 || result.Sends[0].Text() != "pong" {
-        t.Fatalf("ping = %+v", result)
-    }
-    for _, outcome := range result.Outcomes {
-        if outcome.Err != nil {
-            t.Fatal(outcome.Err)
-        }
-    }
+    result.RequireReply(t, "pong")
 }
 ```
+
+`RequireReply(t, want)` 先检查每个 Handler Outcome 的错误，再要求恰好一次发送且 `Sent.Text()` 为 want；失败时报告插件与路由身份或实际发送。回复同时包含图片等片段时，可继续检查 `result.Sends[0].Chain`。
 
 直接运行 `go test ./...`。plugintest 按被测插件的入口包自动扫描工程身份与资源，沿用测试二进制的 GOOS、GOARCH 与 build tags；同一入口包在一个进程中只扫描一次。每次 Start 创建独立的临时目录、配置和 `dev.sqlite`，在测试清理时停止组件；同一 Harness 的注入与读取按顺序调用。
 
@@ -630,7 +649,7 @@ go test -race -count=2 ./plugintest/... ./examples/plugins/...
 
 ```go
 p.Command("llm").Handle(func(c *sdk.Context, prompt string) (message.Content, error) {
-    text, err := llm.Ask(c.Context(), prompt)
+    text, err := llm.Ask(c, prompt)
     if err != nil {
         return nil, err
     }
@@ -666,14 +685,7 @@ func TestLLMReply(t *testing.T) {
         }))
     alice := plugintest.User{ID: "alice"}
     result := h.Text(plugintest.Private(alice.ID), alice, "/llm hello")
-    if len(result.Sends) != 1 || result.Sends[0].Text() != "fixed answer" {
-        t.Fatalf("LLM reply = %+v", result)
-    }
-    for _, outcome := range result.Outcomes {
-        if outcome.Err != nil {
-            t.Fatal(outcome.Err)
-        }
-    }
+    result.RequireReply(t, "fixed answer")
 }
 ```
 

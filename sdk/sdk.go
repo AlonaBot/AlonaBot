@@ -50,6 +50,8 @@ var ErrNotImplemented = &Error{Code: errcode.Unsupported, Message: "SDK runtime 
 type Context struct {
 	plugin          *Plugin
 	subID           string
+	profileID       string          // Core 选择的配置文件；空串表示 default。
+	config          config.Values   // 创建调用时冻结的完整插件视图。
 	ctx             context.Context // 本次调用的 context
 	propagationMu   sync.Mutex      // 串行化 StopPropagation 与调用结束的传播快照。
 	stopped         bool            // 由 propagationMu 保护，只在有效调用内锁存。
@@ -113,8 +115,12 @@ func (c *Context) target() *pb.Target {
 	return target
 }
 
-// Reply 向当前默认会话回复一段文本。
-func (c *Context) Reply(text string) error { _, err := c.Send(message.Text(text)); return err }
+// Reply 将文本与后续片段作为一条消息回复到当前默认会话。
+func (c *Context) Reply(text string, more ...message.Segment) error {
+	chain := append(message.Chain{message.Text(text)}, more...)
+	_, err := c.Send(chain)
+	return err
+}
 
 // Logger 返回附带本次调用 trace_id、route_id 和 call_id 的默认 Logger。
 func (c *Context) Logger() *slog.Logger {
@@ -284,7 +290,7 @@ func collect(root *Plugin) (*registration, error) {
 		}
 		id := route.GetRouteId()
 		if seen[id] {
-			errs = append(errs, fmt.Errorf("route %q registered twice", id))
+			errs = append(errs, fmt.Errorf("route %q registered twice; use .ID to distinguish routes", id))
 		}
 		seen[id] = true
 	}
@@ -303,8 +309,8 @@ func collect(root *Plugin) (*registration, error) {
 	return reg, nil
 }
 
-// Config 返回整个插件的只读配置。
-func (c *Context) Config() config.Values { return c.plugin.Config() }
+// Config 返回整个插件在本次调用开始时冻结的配置文件视图。
+func (c *Context) Config() config.Values { return c.config }
 
 // handlerParamNames 在收集时解析函数身份，运行时绑定只读已收集的 CommandSpec。
 func handlerParamNames(g generated.Resources, handler any) []string {

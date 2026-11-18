@@ -50,6 +50,11 @@ type Values struct {
 	PluginMemorySoftLimit int64 // 字节；0 表示不设置
 	CoreMemorySoftLimit   int64 // 字节；0 表示不设置
 	OptionsPage           int
+	WakeQueueRequests     int
+	WakeQueueBytes        int64 // 每插件等待唤醒的载荷字节数
+	SleepMinUptime        time.Duration
+	SleepColdStartWindow  time.Duration
+	SleepColdStartMax     int
 }
 
 const maxOptionsPage = 200 // CONTRACTS §16。
@@ -118,6 +123,9 @@ var parameters = []parameter{
 	param("STOP_ONSTOP", durationUnit, time.Duration(4*time.Second), true, "> 0", "§4.2", func(v *Values) *time.Duration { return &v.StopOnStop }),
 	param("RESTART_WINDOW", durationUnit, time.Duration(5*time.Minute), true, "> 0", "§4.2", func(v *Values) *time.Duration { return &v.RestartWindow }),
 	param("RESTART_MAX_CRASHES", integerUnit, int(3), true, ">= 1", "§4.2", func(v *Values) *int { return &v.RestartMaxCrashes }),
+	param("SLEEP_MIN_UPTIME", durationUnit, time.Duration(5*time.Minute), true, "> 0", "§4.5", func(v *Values) *time.Duration { return &v.SleepMinUptime }),
+	param("SLEEP_COLD_START_WINDOW", durationUnit, time.Duration(time.Hour), true, "> 0", "§4.5", func(v *Values) *time.Duration { return &v.SleepColdStartWindow }),
+	param("SLEEP_COLD_START_MAX", integerUnit, int(3), true, ">= 1", "§4.5", func(v *Values) *int { return &v.SleepColdStartMax }),
 	param("JOB_TIMEOUT", durationUnit, time.Duration(15*time.Minute), true, "> 0", "§4.3", func(v *Values) *time.Duration { return &v.JobTimeout }),
 	param("TASKS_PER_PLUGIN", integerUnit, int(10000), true, ">= 1", "§4.3", func(v *Values) *int { return &v.TasksPerPlugin }),
 	param("TASK_PAYLOAD_BYTES", bytesUnit, int64(64<<10), true, "1..4MiB", "§4.3", func(v *Values) *int64 { return &v.TaskPayloadBytes }),
@@ -132,6 +140,8 @@ var parameters = []parameter{
 	param("PLUGIN_MEMORY_SOFT_LIMIT", bytesUnit, int64(0), true, "> 0", "§16", func(v *Values) *int64 { return &v.PluginMemorySoftLimit }),
 	param("CORE_MEMORY_SOFT_LIMIT", bytesUnit, int64(0), true, "> 0", "§16", func(v *Values) *int64 { return &v.CoreMemorySoftLimit }),
 	param("OPTIONS_PAGE", integerUnit, int(50), true, ">= 1 and <= 200", "§5.1", func(v *Values) *int { return &v.OptionsPage }),
+	param("WAKE_QUEUE_REQUESTS", integerUnit, int(256), true, ">= 1", "§4.5", func(v *Values) *int { return &v.WakeQueueRequests }),
+	param("WAKE_QUEUE_BYTES", bytesUnit, int64(16<<20), true, ">= frame limit 4MiB and <= CORE_MAX_PAYLOAD", "§4.5", func(v *Values) *int64 { return &v.WakeQueueBytes }),
 }
 
 // Defaults 返回 CONTRACTS §16 规定的全部缺省值。

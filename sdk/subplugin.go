@@ -93,36 +93,36 @@ func (r *SubPlugin) Group(name string) *CommandGroup { return r.scope.commands.G
 func (r *SubPlugin) Command(path ...string) *CommandBuilder { return r.scope.commands.Command(path...) }
 
 // Regex 开始登记 Go regexp 文本匹配。
-func (r *SubPlugin) Regex(routeID, expr string) *CommandBuilder {
-	return r.scope.commands.Regex(routeID, expr)
+func (r *SubPlugin) Regex(expr string) *CommandBuilder {
+	return r.scope.commands.Regex(expr)
 }
 
 // Keyword 开始登记包含文本匹配。
-func (r *SubPlugin) Keyword(routeID string, patterns ...string) *CommandBuilder {
-	return r.scope.commands.Keyword(routeID, patterns...)
+func (r *SubPlugin) Keyword(patterns ...string) *CommandBuilder {
+	return r.scope.commands.Keyword(patterns...)
 }
 
 // StartsWith 开始登记开头文本匹配。
-func (r *SubPlugin) StartsWith(routeID string, patterns ...string) *CommandBuilder {
-	return r.scope.commands.StartsWith(routeID, patterns...)
+func (r *SubPlugin) StartsWith(patterns ...string) *CommandBuilder {
+	return r.scope.commands.StartsWith(patterns...)
 }
 
 // EndsWith 开始登记结尾文本匹配。
-func (r *SubPlugin) EndsWith(routeID string, patterns ...string) *CommandBuilder {
-	return r.scope.commands.EndsWith(routeID, patterns...)
+func (r *SubPlugin) EndsWith(patterns ...string) *CommandBuilder {
+	return r.scope.commands.EndsWith(patterns...)
 }
 
 // FullMatch 开始登记完整文本匹配。
-func (r *SubPlugin) FullMatch(routeID string, patterns ...string) *CommandBuilder {
-	return r.scope.commands.FullMatch(routeID, patterns...)
+func (r *SubPlugin) FullMatch(patterns ...string) *CommandBuilder {
+	return r.scope.commands.FullMatch(patterns...)
 }
 
 // Raw 开始登记原始消息路由。
-func (r *SubPlugin) Raw(routeID string) *CommandBuilder { return r.scope.commands.Raw(routeID) }
+func (r *SubPlugin) Raw() *CommandBuilder { return r.scope.commands.Raw() }
 
 // On 开始登记事件路由。
-func (r *SubPlugin) On(routeID string, eventType EventType) *EventBuilder {
-	return r.scope.on(routeID, eventType)
+func (r *SubPlugin) On(eventType EventType) *EventBuilder {
+	return r.scope.on("", eventType)
 }
 
 // Route 开始构建 method+path 的 HTTP 路由。

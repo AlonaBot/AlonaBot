@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 )
@@ -126,7 +127,7 @@ func (r *Router) syncCommands(state *commandSync) {
 	if state.ctx.Err() != nil {
 		return
 	}
-	commands, err := r.commandMenu(state.ctx, state.instance.InstanceID())
+	commands, err := r.commandMenu(state.ctx, state.instance)
 	if err != nil {
 		slog.ErrorContext(state.ctx, "compute adapter command menu failed", "adapter_instance_id", state.instance.InstanceID(), "error", err)
 		return
@@ -146,8 +147,14 @@ func (r *Router) syncCommands(state *commandSync) {
 	}
 }
 
-func (r *Router) commandMenu(ctx context.Context, instanceID string) ([]*pb.CommandMenuItem, error) {
-	if !slices.Contains(r.prefixes(instanceID), "/") {
+func (r *Router) commandMenu(ctx context.Context, instance adapter.Instance) ([]*pb.CommandMenuItem, error) {
+	// 菜单属于整个实例，使用实例缺省配置文件，不指定会话。
+	target := &pb.Target{AdapterId: instance.AdapterID(), AdapterInstanceId: instance.InstanceID(), AccountId: instance.AccountID()}
+	prefixes, err := r.prefixes(ctx, target)
+	if err != nil {
+		return nil, fmt.Errorf("read command menu prefixes for %s: %w", instance.InstanceID(), err)
+	}
+	if !slices.Contains(prefixes, "/") {
 		return nil, nil
 	}
 	// 1. 路由和胜出索引取同一快照；策略读取与插件访问均在状态锁外执行。
@@ -161,7 +168,7 @@ func (r *Router) commandMenu(ctx context.Context, instanceID string) ([]*pb.Comm
 	var menu []*pb.CommandMenuItem
 	for _, route := range routes {
 		command := route.route.GetCommand()
-		if command.GetMatch() != pb.CommandMatch_COMMAND_MATCH_PATH || !route.plugin.Activated() {
+		if command.GetMatch() != pb.CommandMatch_COMMAND_MATCH_PATH || !r.available(route.candidate) {
 			continue
 		}
 		names := index.names[route.pluginID][route.route.GetRouteId()]
@@ -186,23 +193,31 @@ func (r *Router) commandMenu(ctx context.Context, instanceID string) ([]*pb.Comm
 			continue
 		}
 		// 3. 英文来自代码，目录中的每个语言逐键回落；未登记说明时使用命令名。
-		source := command.GetDescription()
-		description := source
-		if source == "" {
-			description = path[0]
-		}
-		descriptions := map[string]string{"en-US": description}
-		if catalog := route.plugin.Messages(); catalog != nil {
-			for _, locale := range catalog.Locales() {
-				text := description
-				if source != "" {
-					text = catalog.CommandDescription([]string{locale, route.plugin.DefaultLocale()}, command.GetPath(), source)
+		descriptions := CommandDescriptions(route.messages(), route.defaultLocale(), command.GetPath(), command.GetDescription())
+		if descriptions == nil {
+			descriptions = map[string]string{"en-US": path[0]}
+			if catalog := route.messages(); catalog != nil {
+				for _, locale := range catalog.Locales() {
+					descriptions[locale] = path[0]
 				}
-				descriptions[locale] = text
 			}
 		}
 		menu = append(menu, &pb.CommandMenuItem{Name: path[0], Descriptions: descriptions})
 	}
 	slices.SortFunc(menu, func(a, b *pb.CommandMenuItem) int { return cmp.Compare(a.Name, b.Name) })
 	return menu, nil
+}
+
+// CommandDescriptions 按包内语言及 Session 默认语言选取说明；未登记英文说明时返回 nil。
+func CommandDescriptions(catalog *i18n.Catalog, defaultLocale string, path []string, source string) map[string]string {
+	if source == "" {
+		return nil
+	}
+	descriptions := map[string]string{"en-US": source}
+	if catalog != nil {
+		for _, locale := range catalog.Locales() {
+			descriptions[locale] = catalog.CommandDescription([]string{locale, defaultLocale}, path, source)
+		}
+	}
+	return descriptions
 }

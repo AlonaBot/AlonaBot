@@ -16,7 +16,6 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
-	"github.com/AlonaBot/AlonaBot/sdk/page"
 	"github.com/AlonaBot/AlonaBot/sdk/task"
 )
 
@@ -60,11 +59,7 @@ func New() *sdk.Plugin {
 	g.Command("remind").Handle(demo.CreateReminder)
 	g.Command("cancel").Handle(demo.CancelReminder)
 	p.Route(http.MethodGet, "/status").HandleFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
-	p.Route(http.MethodGet, "/kit.css").Handle(page.Handler())
-	p.Route(http.MethodGet, "/kit.js").Handle(page.Handler())
-	p.Route(http.MethodGet, "/page/kit.css").Handle(page.Handler())
-	p.Route(http.MethodGet, "/page/kit.js").Handle(page.Handler())
-	p.Route(http.MethodGet, "/page").HandleFunc(demo.Page)
+	p.Route(http.MethodGet, "/page").Page("Showcase").HandleFunc(demo.Page)
 	p.Every("tick", time.Minute).Handle(func(*sdk.Context) error { return nil })
 	return p
 }
@@ -199,7 +194,7 @@ func (p *Demo) CreateReminder(c *sdk.Context, key string, seconds int64, text st
 	if err != nil {
 		return nil, err
 	}
-	_, err = p.reminder.At(c.Context(), time.Now().Add(time.Duration(seconds)*time.Second),
+	_, err = p.reminder.At(c, time.Now().Add(time.Duration(seconds)*time.Second),
 		ReminderArgs{Session: c.Session(), Text: text}, task.Key(internalKey))
 	if err != nil {
 		return nil, err
@@ -213,7 +208,7 @@ func (p *Demo) CancelReminder(c *sdk.Context, key string) (message.Content, erro
 	if err != nil {
 		return nil, err
 	}
-	if err := p.reminder.Cancel(c.Context(), internalKey); err != nil {
+	if err := p.reminder.Cancel(c, internalKey); err != nil {
 		return nil, err
 	}
 	return message.Text(key), nil

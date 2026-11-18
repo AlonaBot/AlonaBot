@@ -27,7 +27,7 @@ func (s *Store) AddURLService(m *router.Mux, baseURL *url.URL) {
 	prefix := *baseURL
 	s.baseURL = &prefix
 	s.urls = make(map[string]*entry)
-	m.Handle(wire.ServiceMediaURL, s.mediaURL)
+	m.Handle(wire.ServiceMediaURL, s.operation(s.mediaURL))
 }
 
 func (s *Store) mediaURL(_ context.Context, c router.Caller, in *wire.Inbound) wire.Response {
@@ -95,12 +95,20 @@ func (s *Store) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// 2. HTTP 在途期间只保留对象计数，慢客户端不会阻塞租约撤销与其他媒体操作。
 	lease := e.lease
+	activity, err := s.acquire(lease.caller)
+	if err != nil {
+		s.mu.Unlock()
+		_ = f.Close()
+		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+		return
+	}
 	if lease.upload != nil {
 		lease.upload.leases++
 	} else {
 		lease.incoming.leases++
 	}
 	s.mu.Unlock()
+	defer activity()
 	defer func() {
 		if err := f.Close(); err != nil {
 			slog.Error("close media file failed", "err", err)

@@ -7,13 +7,16 @@ export class AdminAPIError extends Error {
   status: number;
   code?: string;
   affected?: string[];
+  responseBody?: string;
+  description?: string;
 
-  constructor(status: number, message: string, code?: string, affected?: string[]) {
+  constructor(status: number, message: string, code?: string, affected?: string[], description?: string) {
     super(message);
     this.name = 'AdminAPIError';
     this.status = status;
     this.code = code;
     this.affected = affected;
+    this.description = description;
   }
 }
 
@@ -73,6 +76,7 @@ export type CommandOverride = { scope: CommandScope; permissions: string[] | nul
 export type InvalidCommandName = { route_id: string; name: string[] | null; reason: 'declared' | 'unregistered' };
 export type CommandPolicy = {
   route_id: string;
+  descriptions?: Record<string, string>;
   enabled: boolean;
   permissions: string[] | null;
   declared_names: string[][];
@@ -82,6 +86,7 @@ export type CommandPolicy = {
 };
 export type CommandReference = { plugin_id: string; route_id: string };
 export type PluginPolicies = {
+  default_locale?: string;
   overrides: CommandOverride[];
   commands: CommandPolicy[];
   shadows: { path: string[]; winner: CommandReference; shadowed: CommandReference[] }[];
@@ -144,6 +149,27 @@ function notifySessionExpired() {
   }
 }
 
+type PackagesChangedHandler = () => void;
+const packagesChangedHandlers = new Set<PackagesChangedHandler>();
+
+/** 订阅组件安装、更新或卸载成功事件，返回取消订阅函数。 */
+export function onPackagesChanged(handler: PackagesChangedHandler): () => void {
+  packagesChangedHandlers.add(handler);
+  return () => {
+    packagesChangedHandlers.delete(handler);
+  };
+}
+
+function notifyPackagesChanged() {
+  for (const handler of packagesChangedHandlers) {
+    try {
+      handler();
+    } catch (err) {
+      console.error('Packages changed handler failed:', err);
+    }
+  }
+}
+
 async function parseErrorResponse(response: Response): Promise<AdminAPIError> {
   const text = await response.text();
   if (response.headers.get('content-type')?.includes('application/json')) {
@@ -158,8 +184,13 @@ async function parseErrorResponse(response: Response): Promise<AdminAPIError> {
       const affected = Array.isArray(error.affected) && error.affected.every(item => typeof item === 'string')
         ? error.affected as string[] : undefined;
       const code = typeof error.code === 'string' ? error.code : undefined;
-      const message = typeof error.safe_message === 'string' ? error.safe_message : text;
-      return new AdminAPIError(response.status, message, code, affected);
+      const description = typeof error.description === 'string' ? error.description : undefined;
+      const message = typeof error.safe_message === 'string'
+        ? error.safe_message
+        : (description ?? text);
+      const result = new AdminAPIError(response.status, message, code, affected, description);
+      result.responseBody = text;
+      return result;
     }
   }
   return new AdminAPIError(response.status, text || `HTTP ${response.status}`);
@@ -168,10 +199,17 @@ async function parseErrorResponse(response: Response): Promise<AdminAPIError> {
 interface RequestOptions {
   method?: string;
   headers?: Record<string, string>;
-  body?: string | FormData;
+  body?: string | FormData | Blob;
+  response?: 'blob';
+  signal?: AbortSignal;
 }
 
-async function request<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
+async function request<T = unknown>(
+  path: string,
+  options: RequestOptions = {},
+  read?: (response: Response) => Promise<T>,
+): Promise<T> {
+  if (!path.startsWith('/') || path.startsWith('//')) throw new Error('Expected a same-origin path');
   const method = options.method || 'GET';
   const headers: Record<string, string> = { ...(options.headers || {}) };
   const isMutating = method !== 'GET' && method !== 'HEAD';
@@ -188,6 +226,7 @@ async function request<T = unknown>(path: string, options: RequestOptions = {}):
     headers,
     body: options.body,
     credentials: 'same-origin',
+    signal: options.signal,
   });
 
   if (!response.ok) {
@@ -198,9 +237,13 @@ async function request<T = unknown>(path: string, options: RequestOptions = {}):
     throw await parseErrorResponse(response);
   }
 
+  if (read) return read(response);
+
   if (response.status === 204) {
     return undefined as unknown as T;
   }
+
+  if (options.response === 'blob') return await response.blob() as T;
 
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
@@ -279,18 +322,21 @@ export function packageIconURL(id: string): string {
 export async function installPackage(
   input: { Source: string; Replace?: boolean; Confirm?: boolean } | FormData,
 ): Promise<Package> {
+  let pkg: Package;
   if (input instanceof FormData) {
-    return request<Package>('/api/v1/packages/install', {
+    pkg = await request<Package>('/api/v1/packages/install', {
       method: 'POST',
       body: input,
     });
+  } else {
+    pkg = await request<Package>('/api/v1/packages/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
   }
-
-  return request<Package>('/api/v1/packages/install', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
+  notifyPackagesChanged();
+  return pkg;
 }
 
 /** 更新组件（JSON 沿用原来源或 FormData 上传更新包）。 */
@@ -298,23 +344,26 @@ export async function updatePackage(
   id: string,
   input: { confirm?: boolean } | FormData,
 ): Promise<{ warnings?: string[] }> {
+  let result: { warnings?: string[] };
   if (input instanceof FormData) {
     input.set('id', id);
-    return request<{ warnings?: string[] }>('/api/v1/packages/update', {
+    result = await request<{ warnings?: string[] }>('/api/v1/packages/update', {
       method: 'POST',
       body: input,
     });
+  } else {
+    result = await request<{ warnings?: string[] }>('/api/v1/packages/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        confirm: input.confirm ?? false,
+        install: {},
+      }),
+    });
   }
-
-  return request<{ warnings?: string[] }>('/api/v1/packages/update', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      id,
-      confirm: input.confirm ?? false,
-      install: {},
-    }),
-  });
+  notifyPackagesChanged();
+  return result;
 }
 
 /** 启停、重启或重载组件。 */
@@ -345,6 +394,7 @@ export async function uninstallPackage(id: string, purge: 0 | 1 | 2, confirm?: b
       confirm: confirm ?? false,
     }),
   });
+  notifyPackagesChanged();
 }
 
 /** 回退组件到指定代次。 */
@@ -446,6 +496,294 @@ export type AdapterInstance = {
 export async function listInstances(): Promise<AdapterInstance[]> {
   const result = await request<{ instances: AdapterInstance[] }>('/api/v1/adapter/instances');
   return result.instances;
+}
+
+/** adminRequest 共享同源请求的管理 Cookie、CSRF 与认证过期处理。 */
+export function adminRequest<T>(path: string, options?: { method?: string; headers?: Record<string, string>; body?: string | FormData | Blob }): Promise<T> {
+  return request<T>(path, options);
+}
+
+const pluginPath = (id: string) => `/api/v1/plugins/${encodeURIComponent(id)}`;
+const jsonBody = (body: unknown, method = 'POST'): RequestOptions => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+export type SQLiteValue = string | number | boolean | null | { $base64: string };
+export type DataColumn = { name: string; type: string; pk: boolean; notnull: boolean };
+export type DataTable = { name: string; rows: number; writable: boolean; columns: DataColumn[] };
+export type DataRow = { rowid: number | null; values: Record<string, SQLiteValue> };
+export function listPluginTables(id: string, generation = ''): Promise<{ tables: DataTable[] }> {
+  return request(`${pluginPath(id)}/data/tables?${new URLSearchParams({ generation })}`);
+}
+export function listPluginRows(id: string, table: string, input: { offset: number; limit: number; generation?: string; order?: string; desc?: boolean; where?: Record<string, string> }): Promise<{ rows: DataRow[]; total: number }> {
+  const query = new URLSearchParams({ offset: String(input.offset), limit: String(input.limit), generation: input.generation ?? '' });
+  if (input.order) query.set('order', input.order);
+  if (input.desc) query.set('desc', '1');
+  for (const [column, value] of Object.entries(input.where ?? {})) query.set(`where.${column}`, value);
+  return request(`${pluginPath(id)}/data/tables/${encodeURIComponent(table)}/rows?${query}`);
+}
+export function insertPluginRow(id: string, table: string, values: Record<string, SQLiteValue>): Promise<{ rowid: number }> {
+  return request(`${pluginPath(id)}/data/tables/${encodeURIComponent(table)}/rows`, jsonBody({ values }));
+}
+export function updatePluginRow(id: string, table: string, rowid: number, values: Record<string, SQLiteValue>): Promise<void> {
+  return request(`${pluginPath(id)}/data/tables/${encodeURIComponent(table)}/rows/${rowid}`, jsonBody({ values }, 'PATCH'));
+}
+export function deletePluginRow(id: string, table: string, rowid: number): Promise<void> {
+  return request(`${pluginPath(id)}/data/tables/${encodeURIComponent(table)}/rows/${rowid}`, { method: 'DELETE' });
+}
+
+export function listPluginKV(id: string, input: { prefix: string; offset: number; limit: number }): Promise<{ items: { key: string; size: number; updated_at: string }[]; total: number }> {
+  return request(`${pluginPath(id)}/data/kv?${new URLSearchParams({ prefix: input.prefix, offset: String(input.offset), limit: String(input.limit) })}`);
+}
+export function getPluginKV(id: string, key: string): Promise<{ value_base64: string; text?: string }> { return request(`${pluginPath(id)}/data/kv/${encodeURIComponent(key)}`); }
+export function setPluginKV(id: string, key: string, value: { text: string } | { value_base64: string }): Promise<void> { return request(`${pluginPath(id)}/data/kv/${encodeURIComponent(key)}`, jsonBody(value, 'PUT')); }
+export function deletePluginKV(id: string, key: string): Promise<void> { return request(`${pluginPath(id)}/data/kv/${encodeURIComponent(key)}`, { method: 'DELETE' }); }
+export function listPluginFiles(id: string, path: string): Promise<{ entries: { name: string; dir: boolean; size: number; modified_at: string }[] }> { return request(`${pluginPath(id)}/data/files?${new URLSearchParams({ path })}`); }
+export function downloadPluginFile(id: string, path: string): Promise<Blob> { return request(`${pluginPath(id)}/data/files/content?${new URLSearchParams({ path })}`, { response: 'blob' }); }
+export function uploadPluginFile(id: string, path: string, file: File, overwrite: boolean): Promise<void> { return request(`${pluginPath(id)}/data/files/content?${new URLSearchParams({ path, ...(overwrite ? { overwrite: '1' } : {}) })}`, { method: 'PUT', body: file }); }
+export function makePluginDirectory(id: string, path: string): Promise<void> { return request(`${pluginPath(id)}/data/files/mkdir`, jsonBody({ path })); }
+export function renamePluginFile(id: string, from: string, to: string): Promise<void> { return request(`${pluginPath(id)}/data/files/rename`, jsonBody({ from, to })); }
+export function deletePluginFile(id: string, path: string, recursive: boolean): Promise<void> { return request(`${pluginPath(id)}/data/files/delete`, jsonBody({ path, recursive })); }
+export function exportPluginData(id: string): Promise<Blob> { return request(`${pluginPath(id)}/data/export`, { response: 'blob' }); }
+export function clearPluginData(id: string, confirm: true): Promise<void> { return request(`${pluginPath(id)}/data/clear`, jsonBody({ confirm })); }
+export type Changelog = { locale: string; entries: { version: string; date?: string; markdown: string }[] };
+export function getPackageChangelog(id: string, locale: string): Promise<Changelog> { return request(`/api/v1/packages/${encodeURIComponent(id)}/changelog`, { headers: { 'Accept-Language': locale } }); }
+export function getCoreChangelog(locale: string): Promise<Changelog> { return request('/api/v1/core/changelog', { headers: { 'Accept-Language': locale } }); }
+
+// ----------------------------------------------------------------------------
+// Agent 模型管理路由 API
+// ----------------------------------------------------------------------------
+
+export type ModelDiscoveryInput =
+  | { provider: string }
+  | { protocol: string; base_url: string; api_key?: string };
+
+export type DiscoveredModel = {
+  id: string;
+  type: string;
+};
+
+export type ModelUsage = {
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+};
+
+/** discoverAgentModels 调用 Agent 的 POST discover 路由发现远端可用模型。 */
+export async function discoverAgentModels(
+  id: string,
+  input: ModelDiscoveryInput,
+): Promise<{ models: DiscoveredModel[]; description?: string }> {
+  return request<{ models: DiscoveredModel[]; description?: string }>(
+    `/plugins/${encodeURIComponent(id)}/models/discover`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+/** testAgentModel 调用 Agent 的 POST test 路由测试 Active 模型。 */
+export async function testAgentModel(
+  id: string,
+  model: string,
+): Promise<{ ok: boolean; duration_ms: number; description?: string }> {
+  return request<{ ok: boolean; duration_ms: number; description?: string }>(
+    `/plugins/${encodeURIComponent(id)}/models/test`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model }),
+    },
+  );
+}
+
+/** getAgentModelUsage 调用 Agent 的 GET usage 路由读取当天用量记录。 */
+export async function getAgentModelUsage(
+  id: string,
+): Promise<{ models: ModelUsage[] }> {
+  return request<{ models: ModelUsage[] }>(
+    `/plugins/${encodeURIComponent(id)}/models/usage`,
+    {
+      method: 'GET',
+    },
+  );
+}
+
+// ----------------------------------------------------------------------------
+// 日志与诊断包 API (ADMIN-API §8, §19, CONTRACTS §14)
+// ----------------------------------------------------------------------------
+
+export type LogRecord = {
+  time: string;
+  level: string;
+  source: string;
+  message: string;
+  attrs: Record<string, unknown>;
+  trace_id: string;
+};
+
+export type DiagnosticsOptions = {
+  since: string;
+  logs: boolean;
+  settings: boolean;
+  components: boolean;
+  redact: boolean;
+};
+
+/** 获取今日最近已缓冲的日志记录（时间升序）。 */
+export async function getRecentLogs(): Promise<LogRecord[]> {
+  return request<LogRecord[]>('/api/v1/logs/recent');
+}
+
+/** 获取指定日期的历史日志记录（按日志文件续写顺序）。 */
+export async function getLogHistory(date: string): Promise<LogRecord[]> {
+  return request<LogRecord[]>(`/api/v1/logs/history?date=${encodeURIComponent(date)}`);
+}
+
+/** 解析 Content-Disposition 中的 attachment 文件名。 */
+function parseContentDispositionFilename(header: string | null): string {
+  if (!header) return 'alonabot-diagnostics.zip';
+  const starMatch = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (starMatch && starMatch[1]) {
+    try {
+      return decodeURIComponent(starMatch[1].trim());
+    } catch {
+      return starMatch[1].trim();
+    }
+  }
+  const match = /filename=(?:"([^"]+)"|([^;\s]+))/i.exec(header);
+  if (match) {
+    return (match[1] || match[2] || '').trim();
+  }
+  return 'alonabot-diagnostics.zip';
+}
+
+/** 解析并派发单条 SSE 事件块。 */
+function parseAndDispatchSSEEvent(
+  rawEvent: string,
+  handlers: {
+    onLog: (record: LogRecord) => void;
+    onOverflow: (lastTime: string) => void;
+    onError: (error: Error) => void;
+  },
+): boolean {
+  const lines = rawEvent.split(/\r?\n/);
+  let eventType = 'message';
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    if (!line || line.startsWith(':')) {
+      continue;
+    }
+    if (line.startsWith('event:')) {
+      eventType = line.slice(6).trim();
+    } else if (line.startsWith('data:')) {
+      dataLines.push(line.slice(5).trimStart());
+    } else if (line === 'data') {
+      dataLines.push('');
+    }
+  }
+
+  if (dataLines.length === 0) return false;
+  const dataStr = dataLines.join('\n');
+
+  if (eventType === 'log') {
+    const record = JSON.parse(dataStr) as LogRecord | null;
+    if (!record || !['time', 'level', 'source', 'message', 'trace_id'].every(
+      key => typeof record[key as keyof LogRecord] === 'string',
+    ) || !record.attrs || typeof record.attrs !== 'object' || Array.isArray(record.attrs)) {
+      throw new Error(`Invalid log event: ${dataStr}`);
+    }
+    handlers.onLog(record);
+  } else if (eventType === 'overflow') {
+    const lastTime: unknown = JSON.parse(dataStr);
+    if (typeof lastTime !== 'string') {
+      throw new Error(`Invalid overflow event: ${dataStr}`);
+    }
+    handlers.onOverflow(lastTime);
+    return true;
+  }
+  return false;
+}
+
+/** 订阅实时日志流（text/event-stream），返回取消订阅函数。 */
+export function subscribeLogs(handlers: {
+  onLog: (record: LogRecord) => void;
+  onOverflow: (lastTime: string) => void;
+  onError: (error: Error) => void;
+}): () => void {
+  const abortController = new AbortController();
+  let cancelled = false;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+
+  const startStream = async () => {
+    try {
+      const response = await request<Response>('/api/v1/logs/stream', {
+        headers: { Accept: 'text/event-stream' },
+        signal: abortController.signal,
+      }, async response => response);
+      if (cancelled) return;
+
+      if (!response.body) {
+        if (!cancelled) {
+          handlers.onError(new Error('ReadableStream not supported'));
+        }
+        return;
+      }
+
+      reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (!cancelled) {
+        const { value, done } = await reader.read();
+        if (cancelled) return;
+        if (done) throw new Error('Log stream ended');
+        buffer += decoder.decode(value, { stream: true });
+
+        let boundaryMatch = buffer.match(/\r?\n\r?\n/);
+        while (boundaryMatch && boundaryMatch.index !== undefined) {
+          const boundaryIndex = boundaryMatch.index;
+          const delimiterLength = boundaryMatch[0].length;
+          const rawEvent = buffer.slice(0, boundaryIndex);
+          buffer = buffer.slice(boundaryIndex + delimiterLength);
+          if (cancelled) return;
+          if (parseAndDispatchSSEEvent(rawEvent, handlers)) {
+            await reader.cancel();
+            return;
+          }
+          boundaryMatch = buffer.match(/\r?\n\r?\n/);
+        }
+      }
+    } catch (err: unknown) {
+      if (cancelled) return;
+      handlers.onError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      abortController.abort();
+      reader?.releaseLock();
+    }
+  };
+
+  void startStream();
+
+  return () => {
+    cancelled = true;
+    abortController.abort();
+  };
+}
+
+/** 导出诊断包，返回 zip 文件 Blob 与 Content-Disposition 附件名。 */
+export async function downloadDiagnostics(
+  input: DiagnosticsOptions,
+): Promise<{ blob: Blob; filename: string }> {
+  return request('/api/v1/diagnostics', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  }, async response => {
+    const filename = parseContentDispositionFilename(response.headers.get('content-disposition'));
+    return { blob: await response.blob(), filename };
+  });
 }
 
 export type Chat = {

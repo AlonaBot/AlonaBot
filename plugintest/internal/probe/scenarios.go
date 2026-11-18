@@ -50,11 +50,11 @@ func registerScenarios(p *sdk.Plugin) {
 		return err
 	})
 	p.Command("remind").Args("key", "text").Handle(func(c *sdk.Context, key, text string) error {
-		_, err := task.At(c.Context(), time.Now().Add(scheduleInterval), TaskArgs{Session: c.Session(), Text: text}, taskapi.Key(key))
+		_, err := task.At(c, time.Now().Add(scheduleInterval), TaskArgs{Session: c.Session(), Text: text}, taskapi.Key(key))
 		return err
 	})
 	p.Command("tasks").Handle(func(c *sdk.Context) error {
-		tasks, err := task.List(c.Context())
+		tasks, err := task.List(c)
 		if err != nil {
 			return err
 		}

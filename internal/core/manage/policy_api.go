@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
@@ -69,6 +70,7 @@ type invalidCommandName struct {
 }
 type commandPolicy struct {
 	RouteID          string               `json:"route_id"`
+	Descriptions     map[string]string    `json:"descriptions,omitempty"`
 	Enabled          bool                 `json:"enabled"`
 	Permissions      []string             `json:"permissions"`
 	DeclaredNames    [][]string           `json:"declared_names"`
@@ -86,10 +88,11 @@ type commandShadow struct {
 	Shadowed []commandReference `json:"shadowed"`
 }
 type pluginPolicies struct {
-	Overrides    []commandOverride    `json:"overrides"`
-	Commands     []commandPolicy      `json:"commands"`
-	Shadows      []commandShadow      `json:"shadows"`
-	InvalidNames []invalidCommandName `json:"invalid_names"`
+	DefaultLocale string               `json:"default_locale,omitempty"`
+	Overrides     []commandOverride    `json:"overrides"`
+	Commands      []commandPolicy      `json:"commands"`
+	Shadows       []commandShadow      `json:"shadows"`
+	InvalidNames  []invalidCommandName `json:"invalid_names"`
 }
 
 func (s *Service) policyRoutes(mux *http.ServeMux) {
@@ -175,6 +178,11 @@ func (s *Service) readPolicies(ctx context.Context, id string) (pluginPolicies, 
 	if err != nil {
 		return result, err
 	}
+	var catalog *i18n.Catalog
+	if plugin, ok := s.opt.Router.Plugin(id); ok {
+		catalog = plugin.Messages()
+		result.DefaultLocale = plugin.DefaultLocale()
+	}
 	// 1. 保留所有作用域的显式覆盖，包含当前已无声明的路由。
 	overrides, err := s.opt.Policy.Overrides(ctx, id)
 	if err != nil {
@@ -209,6 +217,7 @@ func (s *Service) readPolicies(ctx context.Context, id string) (pluginPolicies, 
 			return result, err
 		}
 		view := commandPolicy{RouteID: route.GetRouteId(), Enabled: enabled, Permissions: permissions, DeclaredNames: [][]string{}, EffectiveNames: [][]string{}, InvalidNames: []invalidCommandName{}}
+		view.Descriptions = router.CommandDescriptions(catalog, result.DefaultLocale, route.GetCommand().GetPath(), route.GetCommand().GetDescription())
 		_, view.HasNamesOverride = names[view.RouteID]
 		if route.GetCommand().GetMatch() == pb.CommandMatch_COMMAND_MATCH_PATH {
 			view.DeclaredNames = append(view.DeclaredNames, route.GetCommand().GetPath())

@@ -68,7 +68,7 @@ Cookie 为 host-only、`Path=/`、`HttpOnly`、`SameSite=Strict`；HTTP 下名�
 }
 ```
 
-`Role` 取 `plugin/adapter/agent/webui`；`Signed` 根据绑定发布者公钥是否非空返回；`Active` 是当前代次标识，尚无代次时为空。`State` 来自实际运行状态或安装状态，包含 `Installed`、`Stopped`、`Activated`、`Degraded`。WebUI 无进程，启用时显示 `Activated`。
+`Role` 取 `plugin/adapter/agent/webui`；`Signed` 根据绑定发布者公钥是否非空返回；`Active` 是当前代次标识，尚无代次时为空。`State` 来自实际运行状态或安装状态，包含 `Installed`、`Stopped`、`Activated`、`Degraded`。纯静态 WebUI 启用时显示 `Activated`；带入口的 WebUI 按实际进程状态返回。
 
 `pages` 为运行路由中声明的页面列表（§20）。普通 `Package` 响应使用英文源标题；`GET /api/v1/packages` 按请求语言选择标题。
 
@@ -82,12 +82,12 @@ Install 的 `Package` 额外携带可选 `Warnings: string[]`，按原顺序返�
 
 | Path | 请求字段及示例 | 行为与特定失败 |
 | --- | --- | --- |
-| `/api/v1/packages/enable` | `{"id":"demo"}` | 校验依赖并启动；WebUI 只修改启用记录，检查 Admin API 范围；前置条件失败 412 |
+| `/api/v1/packages/enable` | `{"id":"demo"}` | 校验依赖并启动；WebUI 检查 Admin API 范围，纯静态包只修改启用记录，带入口包启动后台进程；前置条件失败 412 |
 | `/api/v1/packages/disable` | `{"id":"demo","confirm":false}` | 停止并保留安装/数据；依赖影响需确认 |
-| `/api/v1/packages/restart` | `{"id":"demo"}` | 以当前 Active 换 Session；要求已启用且有 Active；WebUI 无进程，返回 412 |
+| `/api/v1/packages/restart` | `{"id":"demo"}` | 以当前 Active 换 Session；要求已启用且有 Active；纯静态 WebUI 返回 412 |
 | `/api/v1/packages/uninstall` | `{"id":"demo","purge":0,"confirm":false}` | 停止并清理选定范围，准确对象需确认；开发组件返回 412 |
 | `/api/v1/packages/pin` | `{"id":"demo","constraint":"1.2.3"}` | 精确 SemVer；空串解除；格式错误 400 |
-| `/api/v1/packages/reload` | `{"id":"demo"}` | 要求已激活的进程组件，优先激活有效 Pending；无 Pending 时导入 config.json 再激活；WebUI 返回 412 |
+| `/api/v1/packages/reload` | `{"id":"demo"}` | 要求已激活的进程组件，优先激活有效 Pending；无 Pending 时导入 config.json 再激活；纯静态 WebUI 返回 412 |
 | `/api/v1/packages/update` | `{"id":"demo","confirm":false,"install":{"Source":"owner/repo"}}` | `install` 使用 3.1 的 `InstallRequest` 大写字段；外层 `confirm` 覆盖 `install.Confirm`；校验身份、来源、公钥、pin、版本与依赖影响，通过候选准备与提交更新版本，保持启用状态 |
 | `/api/v1/packages/rollback` | `{"id":"demo","generation":"<保留代次>","confirm":false}` | 要求目标代次属于该组件且不是当前 Active，校验确认后交给候选编排器回退到该保留代次（T-09.7），成功返回 `{}` |
 
@@ -154,6 +154,8 @@ X-Content-Type-Options: nosniff
 | 501 | `UNSUPPORTED` |
 | 503 | `UNAVAILABLE` |
 | 500 | `INTERNAL` 及当前映射中其余错误码；保留实际 `code` |
+
+设置提交后的策略应用失败沿用上表错误格式，聚合实际错误并保留已保存设置；调用方重新 GET 核对设置与各插件状态（§24.1）。
 
 需要显式确认时为 HTTP 409，正文为 `{"affected":["受影响对象", "..."]}`。客户端展示全部对象，在管理员同意后重发同一请求并置 `Confirm: true`（install）或 `confirm: true`（动作、实例创建）。它与 `ALREADY_EXISTS` 的 JSON 结构不同。
 
@@ -248,6 +250,8 @@ X-Content-Type-Options: nosniff
 5. 插件的 HTML 与全部插件路由响应继续带 `sandbox allow-scripts allow-forms allow-popups`（无 `allow-same-origin`）和 `nosniff`，清除插件设置的 Cookie；WebUI 自身继续使用第 6 节的静态规则。父桥与浏览器联验归 T-09.9。
 
 ### 7.3 SDK 页面客户端
+
+插件声明 `Route(method, path).Page(title)` 后，SDK 自动补齐页面同目录的 `kit.css` 与 `kit.js` GET 路由，继承页面认证；作者已登记的同方法、同路径路由优先。`/page` 的相对资源为 `/kit.css`、`/kit.js`，`/page/` 的相对资源为 `/page/kit.css`、`/page/kit.js`，均位于该插件的 URL 前缀内。资源路由的 `page_title` 为空，组件 `pages` 列表只列页面；手动挂载可继续使用 `sdk/page.Handler()`（CONTRACTS §7.3，D-180）。
 
 `sdk/page` 的 `kit.js` 在 `window.AlonaBot` 上公开 `request(method, path, body?)`、`t(key, args?)`、`onTheme(fn)`、`onLocale(fn)`。嵌入时自动发送 `hello`，把令牌写到 `:root` 并设置 `data-theme`，接收主题与语言事件，转发全局搜索快捷键。两个订阅函数在注册时立即交付当前状态，并返回取消订阅函数。独立打开时使用 `light`、`en-US` 与浅色缺省令牌；`request` 返回拒绝的 Promise，不直接发送 HTTP 请求。
 
@@ -585,7 +589,9 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 | `PUT /api/v1/plugins/{id}/data/files/content` | `?path=文件&overwrite=1`，请求体为文件内容，`{}` | 先写临时文件再改名；已存在且没有 overwrite 时 409 |
 | `POST /api/v1/plugins/{id}/data/files/mkdir`、`…/rename`、`…/delete` | `{"path":"…"}`、`{"from":"…","to":"…"}`、`{"path":"…","recursive":false}`，`{}` | 删除非空目录须 recursive |
 
-KV 键遵守 CONTRACTS §6.1 的键约束，`/` 可作为键的字面字符。文件路径是相对于数据目录的 `/` 分隔路径，拒绝空段、`.`、`..`、绝对路径与反斜杠，不跟随符号链接，指向数据目录之外时 400。写入在插件运行中照常进行：Core 以 busy_timeout 打开数据库，每个数据库请求一个事务，等待超时返回 409；约束错误返回 400 并带 SQLite 的英文说明。每次写入记一条 INFO 审计日志，表行写入只记组件、表与 rowid。
+KV 键遵守 CONTRACTS §6.1 的键约束，恰为 `.` 或 `..` 的键在 GET/PUT/DELETE 时返回 400 / `INVALID_ARGUMENT`（D-178），`/` 与其他点字符可作为键的字面字符；客户端将键百分号编码为单个不透明路径段。文件路径是相对于数据目录的 `/` 分隔路径，拒绝空段、`.`、`..`、绝对路径与反斜杠，不跟随符号链接，指向数据目录之外时 400。写入在插件运行中照常进行：Core 以 busy_timeout 打开数据库，每个数据库请求一个事务，等待超时返回 409；约束错误返回 400 并带 SQLite 的英文说明。每次写入记一条 INFO 审计日志，表行写入只记组件、表与 rowid。
+
+官方 WebUI 的数据库表格展示表名、行数、列类型、主键与 NOT NULL，按每页 50 行提供数字分页、排序与等值筛选；按 rowid 增删改，PATCH 只发送修改列，保留空串、0、false、null 与 BLOB。保留代次和服务端标记为只读的表只提供浏览。存储页提供 KV/文件操作、覆盖与递归删除确认、zip 导出和清空；Agent 会话摘要与清除使用 §15 的接口。
 
 ## 22. 更新内容（changelog）
 
@@ -602,7 +608,7 @@ KV 键遵守 CONTRACTS §6.1 的键约束，`/` 可作为键的字面字符。�
 
 ## 23. 配置文件
 
-配置文件的语义见 CONTRACTS §5.6（D-168）。ID `default` 表示「默认」。管理写入立即保存；`default` 的字段值经 §12 的配置 API 写入 Pending，平台设置写回 `core_config.json`。运行时应用由后续切片接入。
+配置文件的语义见 CONTRACTS §5.6（D-168）。ID `default` 表示「默认」。管理写入立即保存；`default` 的字段值经 §12 的配置 API 写入 Pending，平台设置写回 `core_config.json`。按会话的插件开关、字段覆盖、SDK 调用视图与消息过滤已接通（T-04.18，PR #242）；工具目录、调用与操作确认已应用配置文件策略（T-11.6，PR #246）；官方 Agent 已标记六个可覆盖字段并接通配置文件命令（T-12.19，PR #247，CONTRACTS §5.6）；命令前缀与回复方式已按会话配置文件生效（T-04.19，PR #250）。
 
 | Method / path | 请求或成功响应 | 操作语义 |
 | --- | --- | --- |
@@ -621,7 +627,13 @@ KV 键遵守 CONTRACTS §6.1 的键约束，`/` 可作为键的字面字符。�
 | `GET /api/v1/profiles/{id}/tools` | `{"items":[{"tool":"weather/subscribe","policy":"allow"},{"operation":{"plugin_id":"agent","name":"mcp/fs/write_file"},"policy":"deny"}]}` | 只列出覆盖了全局策略的工具与操作 |
 | `PUT /api/v1/profiles/{id}/tools` | `{"items":[…]}`，policy 取 allow、confirm、deny 或 inherit → `{}` | 仅更新所列项；每项恰好指定 `tool` 或 `operation`，`inherit` 删除该项覆盖 |
 
+platform 的 GET 返回已保存的覆盖，运行时按键合并当前 `default`；显式 `false`、空字符串和 `0` 保留。PUT 或会话指定更新后，后续命令派发与回复 Send 读取新快照，无需插件 reload。平台命令菜单按实例缺省配置文件读取前缀，在启动及路由、命令策略变化时同步。旧 `GET/PUT /api/v1/core/command-prefixes` 已移除，访问返回 404；磁盘旧键 `command_prefixes_by_instance` 按 Unknown 保留并忽略，经 §13 的 Core settings prune 清理。按账号区分前缀时，先指定实例缺省配置文件，再写该配置文件的平台覆盖。
+
+tools 的写入从下一次工具策略操作生效，在途确认保留已接纳策略。运行时按可信默认 Target 选择配置文件，无 Target 或无父 list 使用 `default`；插件关闭时视为 deny，其余依次读取配置文件覆盖、§18 的全局覆盖与工具声明缺省策略，确认操作无覆盖时为 confirm。工具与操作同名时分别匹配配置文件覆盖；`inherit` 恢复全局策略。§18 的全局目录与写入保持原义。
+
 `invalid` 列出失效覆盖的路径与原因（`unmarked`、`type`、`schema unavailable`）。已有复合字段标记仍可读取；覆盖路径与秘密路径相交或 Active schema 不可用时，普通 GET 在 `overrides` 中省略原值，`invalid` 与 `prune` 仍可定位该项。写入或复制使某插件的有效覆盖集合超过 4 MiB 时，按 §5 返回 HTTP 500 与 `RESOURCE_EXHAUSTED`。
+
+创建、复制或删除使有效覆盖集合变化时，Core 向受影响的在线插件 Session 下发完整集合；指定插件的 PATCH 与 prune 成功后，即使有效集合相同也下发。更新成功后开始的 SDK 调用使用新视图，在途调用保留原视图。发送、业务拒绝或响应协议错误关闭原 Session，管理请求返回实际错误，已保存的变更保留；离线插件在下次 Bootstrap 接收最新集合。HTTP 管理入口沿原有管理互斥执行。
 
 §4 与 §14 的实例删除入口共用指定与运行选择的清理流程。实例删除、旧实例组替换与 Adapter 全量清除在设置提交后继续清理，即使请求已取消。提交前失败保留指定与运行选择；若设置已发布但目录同步报错，继续清理并返回同步错误及后续错误。再次删除已消失的实例仍清理该实例的遗留指定，清理成功后返回 404。
 
@@ -640,14 +652,51 @@ KV 键遵守 CONTRACTS §6.1 的键约束，`/` 可作为键的字面字符。�
 | `DELETE /api/v1/plugins/{id}/sleep-policy` | 无正文 → `{}` | 删除覆盖，恢复准入规则及全局时长；CLI 的 `auto` 使用此接口 |
 | `GET /api/v1/plugins/{id}/runtime` | 下文的运行对象 | 返回运行状态、代次与最近变化原因 |
 
-策略对象为 `{"policy":null,"effective_policy":"never","sleep_capable":false,"eligible":false,"reason":"manifest_requires_resident"}`。`policy` 为文件中的覆盖值，无覆盖时为 `null`；`effective_policy` 为 `"never"` 或生效时长；`eligible` 表示当前模式、manifest、进程形式与路由策略是否允许自动休眠，实际空闲退出仍须满足活动条件。`reason` 使用稳定值：`always_on`、`manifest_requires_resident`、`in_process`、`policy_never`、`route_requires_resident`，允许休眠时为空串，按前述顺序选择首个成立原因。未声明 Core 过滤的消息事件、Raw、HTTP、Hook 与持续监听被显式时长放行时另返回 `warnings` 字符串数组；无警告时省略。面向用户的原因与提示由 WebUI i18n 翻译。
+策略对象为 `{"policy":null,"effective_policy":"never","sleep_capable":false,"eligible":false,"reason":"manifest_requires_resident"}`。`policy` 为文件中的覆盖值，无覆盖时为 `null`；`effective_policy` 为 `"never"` 或生效时长；`eligible` 表示当前模式、manifest、进程形式与路由策略是否允许自动休眠，实际空闲退出仍须满足活动条件。`reason` 使用稳定值：`always_on`、`manifest_requires_resident`、`in_process`、`policy_never`、`route_requires_resident`，允许休眠时为空串，按前述顺序选择首个成立原因。未声明 Core 过滤的消息事件、Raw、HTTP、Hook 与持续监听被显式时长放行时，逐一检查全部路由并返回 `warnings` 字符串数组（`route <route_id>: <kind> may cause frequent wakeups`）；无警告时省略。面向用户的原因与提示由 WebUI i18n 翻译。
 
 所有插件接口都只接受已安装且未卸载的 `role: plugin` 或 `role: agent` ID；ID 不存在、已卸载或属于其他角色返回 404 / `NOT_FOUND`。无 manifest 可休眠声明时，时长覆盖仍可保存，生效策略保持 `never`，WebUI 锁定时长选项并显示原因。未知模式、`auto` 字面量作为存储值、零/负/非法时长在写入前返回 400 / `INVALID_ARGUMENT`。
 
-写入经 `settings.File.Update` 保存 `sleep`，保留其他字段及未修改的 `${...}` 原文，再向生命周期所有者应用生效策略。变更立即生效，无需 reload。`never` 立即唤醒已启用的 `SUSPENDED` 插件；切回 `always_on` 唤醒全部已启用插件，已停用插件保持停用。时长变更从下一次空闲判定使用。文件保存失败时返回实际错误；保存成功后唤醒失败时保留已保存设置，仅按 §5 返回实际错误，调用方重新 GET 核对设置；各失败插件的运行状态同时记录实际错误。
+写入经共享的 `settings.File.WithPublisher(publish func(change func() error) error) *File` 受管视图执行 Update/Reload，保留其他字段及未修改的 `${...}` 原文；全部管理设置发布（含命令前缀、Prune、BindAdapter 与 PrepareInstances 的内部写回）交给 Core 生命周期循环，与空闲判定串行。有效 sleep 变化后，调用者在循环及文件锁、插件锁外等待原代次恢复。变更立即生效，无需 reload。`never` 立即唤醒已启用的 `SUSPENDED` 插件；处于 `QUIESCING` 时先完成正常停止，再按最新策略恢复；切回 `always_on` 唤醒全部已启用插件，已停用插件保持停用。时长变更从下一次空闲判定使用。提交前保存失败时返回实际错误；提交后保留已发布设置并应用策略，持久化错误及各插件唤醒失败聚合后按 §5 返回，健康插件继续恢复。调用方重新 GET 核对设置；各失败插件的运行状态同时记录实际错误。
 
 ### 24.2 运行状态
 
 运行对象为 `{"enabled":true,"generation_id":"…","state":"SUSPENDED","reason":"idle","changed_at":"2026-11-17T12:00:00Z"}`。`state` 取 CONTRACTS §4.4 的六个值，`changed_at` 为最近状态变化的 UTC RFC 3339 时间；`reason` 为无 secret 的诊断字符串（程序输出用英文），失败保留实际错误原因。最近一次唤醒与空闲停止另在存在记录时返回 `last_wake:{"reason":"…","at":"…"}` 与 `last_suspend:{"reason":"idle","at":"…"}`，缺失时省略。
 
+`last_wake` 记录 WAKING→ACTIVE 的实际完成时间与原因；进入 QUIESCING 前撤销空闲决定时保留原记录。`last_suspend` 在确认旧进程树退出、写入 SUSPENDED 时更新。S-02.1 已提供底层记录，本文休眠管理端点由 S-06.1 接入；ACTIVATED 后的业务交付仍须等待 Core 完成全部绑定。
+
 组件列表继续保留 §3 的 `State` 字段及现有角色的语义；plugin 与 agent 追加 `RuntimeState`，取同一持久化记录中的六态值。休眠插件的 `State` 显示 `Suspended`，与 `Degraded` 区分；低层 Preparing、Activating、Activated 等阶段仍通过原字段展示。所有读取均排除快照中的私有认证材料与配置。
+
+## 25. 官方 WebUI 后台
+
+以下路由由 `web/admin` 的 `New() *sdk.Plugin` 登记，公开前缀为 `/plugins/alonabot-webui-admin`；沿用管理会话，非 GET 校验 CSRF，响应带 `Cache-Control: no-store`。数据保存在 WebUI 自身受管 SQLite。Core 的组件、权限、日志、存储与会话数据继续通过前述 `/api/v1/` 接口操作。
+
+| Method / path（相对于公开前缀） | 请求或成功响应 | 语义 |
+| --- | --- | --- |
+| `GET /stats` | `?range=24h`，返回 `{"timezone":"Local","observed_since":"…","buckets":[…]}` | range 必须为 `24h`、`7d` 或 `30d`；按后台本地时区返回小时桶 |
+| `GET /users` | `[{"user":"telegram:123","display_name":"…","first_seen_at":"…","last_seen_at":"…"}]` | 见过的用户按 user 排序；同一 Adapter 的不同实例共用用户字符串 |
+| `GET /store` | `?source=AlonaBot/plugin-store&role=plugin&q=&offset=0&limit=24`，返回 `{"source":"…","fetched_at":"…","stale":false,"items":[…],"total":42}` | source 必须为 `owner/repo`，offset 与 limit 必须显式给出非负与正整数；role 可为空或为四种组件角色；搜索与筛选后分页，total 为精确总数 |
+| `GET /updates` | `?repo=owner/repo`，返回 `{"repo":"…","version":"1.2.3","release_url":"…","markdown":"…","fetched_at":"…","stale":false}` | GitHub 最新 Release 的标签去掉前导 v 后须为 SemVer；markdown 保留 Release 正文 |
+| `GET /changelog/seen` | `?component=组件ID`，返回 `{"version":null}` 或 `{"version":"1.2.3"}` | component 必填，Core 使用 `core`；尚无已读记录时为 null |
+| `PUT /changelog/seen` | `{"component":"core","version":"1.2.3"}` → `{}` | 只接收这两个字段及单个 JSON 对象；component 非空，version 为 SemVer，在 SQLite 事务内比较并单调推进，较旧或相等版本保持现值 |
+
+统计桶为 `{hour,incoming,outgoing,send_errors,accounts,commands}`：hour 是带 UTC 偏移的 RFC 3339 小时起点，夏令时回拨的两个同名小时保持不同绝对时刻；accounts 项为 `{instance_id,incoming,outgoing}`，commands 项为 `{plugin_id,route_id,command_name,result,count,duration_ms}`，result 为 `ok/error/denied`，duration_ms 是该命令与结果在桶内的累计毫秒数。桶从时窗起点与 observed_since 所在小时的较晚者开始，包含当前小时，空小时填真实零值；采集起点跨重启保留。入站与命令事件按事件 ID 去重；发送按实际回执账号和接受时间记录，编辑排除，部分成功与错误可在同一桶中分别计数。入站统计写入失败保留错误日志并继续传播原载荷。总览热门统计仅纳入普通插件角色，保留已卸载插件在时窗内的历史命令次数；错误/警告曲线按 Core 日志 API 的记录按小时汇总，组件故障标记取组件列表状态。
+
+商店 items 项为 `{repo,role,tags,id,name,version,description?,author?,stars?,icon_url?}`。名称、版本等来自最新 Release 的 release.json 与包内 manifest；stars 省略表示未知，0 保持为 0。官方源首次预置 `AlonaBot/plugin-store`，源列表在浏览器持久化，主动清空后保持空列表。用户页取见过的用户、Core Admin 与全局禁止用户的并集，修改禁止用户时保留聊天禁止列表。
+
+每次商店或 Release 查询先刷新；源缓存按小写 source 隔离，Release 缓存按小写 repo 隔离。刷新失败而有成功缓存时，返回 `stale: true`、原 `fetched_at` 与完整 `error`；无缓存的一般失败返回 500 / `INTERNAL` 与实际错误。`/updates` 的 latest 404 总是返回 404 / `NO_RELEASE`；前端 `getLatestRelease(repo: string): Promise<LatestRelease | null>` 将其映射为 null。源 index.json 的 404 在无可用缓存时返回 404 / `SOURCE_INDEX_MISSING`。界面在对应商店或更新位置显示本地化短提示与缓存时间，API 客户端保留完整错误响应。
+
+远端请求的初始 URL 与每跳重定向均校验 HTTPS、主机与路径；只接受规定的 GitHub API、Release 下载及 Release CDN 资产路径，初始资产下载绑定索引声明的组件仓库。抓取与解包使用下列 `web/admin/store.go` 组件内安全常量（CONTRACTS §16）：
+
+| 常量 | 值 | 作用 |
+| --- | --- | --- |
+| `remoteFetchTimeout` | 20 秒 | 整次源/Release 刷新与单个 HTTP 请求期限 |
+| `remoteMetadataBytes` | 1 MiB | Release、仓库信息与 release.json 响应上限 |
+| `remoteIndexBytes` | 4 MiB | index.json 响应上限 |
+| `remoteArchiveBytes` | 64 MiB | 压缩归档响应上限 |
+| `archiveExpandedBytes` | 256 MiB | 每轮归档扫描的累计展开量，最多两轮定位 manifest 与声明图标 |
+| `archiveFileBytes` | 128 MiB | 归档内单文件上限 |
+| `archiveEntries` | 2048 | 每轮扫描的归档条目上限 |
+| `manifestBytes` | 256 KiB | 实际保留的 manifest 上限 |
+| `iconBytes` | 1 MiB | 实际保留的单个声明图标上限 |
+
+超限保留 `exceeds ... bytes/entries` 错误并沿上述缓存规则返回。Markdown 用 React 文本节点渲染 HTML，链接仅接受解析后为 HTTP、HTTPS 或 mailto 的地址。组件更新预览使用已绑定来源，更新后从 §22 读取包内 changelog；已读值只推进到实际展示的版本。

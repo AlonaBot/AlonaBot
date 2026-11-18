@@ -10,9 +10,21 @@ export function scopeKey(scope: CommandScope): string {
 }
 export function permissionPreset(permissions: string[] | null): string {
   if (permissions === null) return 'inherit';
-  if (permissions.length === 0) return 'everyone';
+  if (permissions.length === 0 || (permissions.length === 1 && permissions[0] === 'user')) return 'everyone';
   if (permissions.length === 1 && ['chat_admin', 'admin'].includes(permissions[0])) return permissions[0];
   return 'custom';
+}
+export function commandDescription(command: CommandPolicy, locale: string, defaultLocale?: string): string | undefined {
+  return command.descriptions?.[locale] || (defaultLocale ? command.descriptions?.[defaultLocale] : undefined) || command.descriptions?.['en-US'];
+}
+/** permissionParent 查找最近的显式父级权限，路径沿用声明主路径。 */
+export function permissionParent(overrides: CommandOverride[], scope: CommandScope, path: string[] = []): CommandOverride | undefined {
+  const group = scope.kind === 'group' ? scope.group : path.slice(0, -1);
+  return overrides.filter(entry => entry.permissions !== null && scope.kind !== 'plugin' && (entry.scope.kind === 'plugin'
+    || (entry.scope.kind === 'group' && entry.scope.group.length <= group.length
+      && (scope.kind !== 'group' || entry.scope.group.length < group.length)
+      && entry.scope.group.every((token, index) => group[index] === token))))
+    .sort((a, b) => (b.scope.kind === 'group' ? b.scope.group.length : 0) - (a.scope.kind === 'group' ? a.scope.group.length : 0))[0];
 }
 export function matchesCommand(command: CommandPolicy, query: string, permission: string): boolean {
   return (!permission || permissionPreset(command.permissions ?? []) === permission)

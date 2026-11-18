@@ -27,7 +27,8 @@ func TestMedia(t *testing.T) {
 				}
 				return
 			}
-			if result.Outcomes[0].Err != nil || len(result.Sends) != 1 || len(result.Sends[0].Chain) != 4 {
+			result.RequireReply(t, "Click to edit this text.")
+			if len(result.Sends[0].Chain) != 4 {
 				t.Fatalf("album = %+v", result)
 			}
 			chain := result.Sends[0].Chain

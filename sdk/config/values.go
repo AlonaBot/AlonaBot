@@ -7,7 +7,9 @@ import (
 	"math/big"
 	"slices"
 	"strconv"
+	"strings"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
 )
 
@@ -32,9 +34,16 @@ type valueView = dbhook.ConfigView[Values]
 // 键未声明或取值方法与字段类型不符时 panic，消息包含点分隔的配置路径。
 type Values struct {
 	valueView
-	fields      map[string]valueEntry
-	path        string
-	templateKey string // 选中模板的键；普通对象或未选择模板时为空。
+	fields       map[string]valueEntry
+	path         string
+	templateKey  string       // 选中模板的键；普通对象或未选择模板时为空。
+	source       *valueSource // 保留根文档，使子视图也能按完整字段路径应用覆盖。
+	declarations map[string]valueDeclaration
+}
+
+type valueSource struct {
+	schema *configschema.Schema
+	raw    json.RawMessage
 }
 
 // Template 提供选中模板的键与该模板 items 的只读配置。
@@ -106,6 +115,49 @@ func (v Values) TemplateList(key string) []Template {
 // Key 返回选中模板的键，未选择时为空串。
 func (t Template) Key() string { return t.templateKey }
 
+// WithOverrides 按完整字段路径应用覆盖，返回保留当前子路径的独立只读视图。
+// 覆盖只做单值校验与替换，不执行配置载入回调或补默认值。
+func (v Values) WithOverrides(overrides map[string]json.RawMessage) (Values, error) {
+	if resolved, ok := dbhook.ResolveConfig(&v); ok {
+		return resolved.WithOverrides(overrides)
+	}
+	raw, err := v.source.schema.ApplyProfile(v.source.raw, overrides)
+	if err != nil {
+		return Values{}, err
+	}
+	source := &valueSource{schema: v.source.schema, raw: raw}
+	if v.path != "" {
+		selected, err := prepareJSON(raw)
+		if err != nil {
+			return Values{}, err
+		}
+		for _, key := range strings.Split(v.path, ".") {
+			switch object := selected.(type) {
+			case map[string]any:
+				selected = object[key]
+			case []any:
+				i, err := strconv.Atoi(key)
+				if err != nil || i < 0 || i >= len(object) {
+					return Values{}, fmt.Errorf("config path %q is absent after profile overrides", v.path)
+				}
+				selected = object[i]
+			default:
+				return Values{}, fmt.Errorf("config path %q is absent after profile overrides", v.path)
+			}
+		}
+		if selected == nil {
+			return Values{}, fmt.Errorf("config path %q is absent after profile overrides", v.path)
+		}
+		raw, err = json.Marshal(selected)
+		if err != nil {
+			return Values{}, err
+		}
+	}
+	values, err := decodeValues(v.declarations, raw, v.path, source)
+	values.templateKey = v.templateKey
+	return values, err
+}
+
 func (v Values) entry(key string) valueEntry {
 	if resolved, ok := dbhook.ResolveConfig(&v); ok {
 		return resolved.entry(key)
@@ -156,17 +208,21 @@ func newValues(schema, raw []byte) (Values, error) {
 		}
 		fields[name] = field
 	}
-	return decodeValues(fields, raw, "")
+	description, problems := configschema.Parse(schema)
+	if len(problems) != 0 {
+		return Values{}, fmt.Errorf("invalid config schema at %s: %s", problems[0].Path, problems[0].Message)
+	}
+	return decodeValues(fields, raw, "", &valueSource{schema: description, raw: bytes.Clone(raw)})
 }
 
-func decodeValues(declarations map[string]valueDeclaration, raw []byte, path string) (Values, error) {
+func decodeValues(declarations map[string]valueDeclaration, raw []byte, path string, source *valueSource) (Values, error) {
 	var object map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &object); err != nil {
 		return Values{}, fmt.Errorf("decode config object at %q: %w", path, err)
 	}
-	values := Values{fields: make(map[string]valueEntry, len(declarations)), path: path}
+	values := Values{fields: make(map[string]valueEntry, len(declarations)), path: path, source: source, declarations: declarations}
 	for key, declaration := range declarations {
-		entry, err := decodeValue(declaration, object[key], valuePath(path, key))
+		entry, err := decodeValue(declaration, object[key], valuePath(path, key), source)
 		if err != nil {
 			return Values{}, fmt.Errorf("decode config key %q: %w", valuePath(path, key), err)
 		}
@@ -175,7 +231,7 @@ func decodeValues(declarations map[string]valueDeclaration, raw []byte, path str
 	return values, nil
 }
 
-func decodeValue(declaration valueDeclaration, raw json.RawMessage, path string) (valueEntry, error) {
+func decodeValue(declaration valueDeclaration, raw json.RawMessage, path string, source *valueSource) (valueEntry, error) {
 	entry := valueEntry{typ: declaration.Type}
 	var err error
 	switch declaration.Type {
@@ -191,7 +247,7 @@ func decodeValue(declaration valueDeclaration, raw json.RawMessage, path string)
 		err = json.Unmarshal(raw, &value)
 		entry.value = value
 	case valueObjectType:
-		entry.value, err = decodeValues(declaration.Items, raw, path)
+		entry.value, err = decodeValues(declaration.Items, raw, path, source)
 	case valueListType:
 		if declaration.Items == nil {
 			var values []string
@@ -204,7 +260,7 @@ func decodeValue(declaration valueDeclaration, raw json.RawMessage, path string)
 			}
 			values := make([]Values, len(objects))
 			for i, object := range objects {
-				values[i], err = decodeValues(declaration.Items, object, valuePath(path, strconv.Itoa(i)))
+				values[i], err = decodeValues(declaration.Items, object, valuePath(path, strconv.Itoa(i)), source)
 				if err != nil {
 					return valueEntry{}, err
 				}
@@ -216,7 +272,7 @@ func decodeValue(declaration valueDeclaration, raw json.RawMessage, path string)
 		err = json.Unmarshal(raw, &values)
 		entry.value = values
 	case valueTemplateType:
-		entry.value, err = decodeTemplate(declaration, raw, path)
+		entry.value, err = decodeTemplate(declaration, raw, path, source)
 	case valueTemplateListType:
 		var objects []json.RawMessage
 		if err = json.Unmarshal(raw, &objects); err != nil {
@@ -224,7 +280,7 @@ func decodeValue(declaration valueDeclaration, raw json.RawMessage, path string)
 		}
 		values := make([]Template, len(objects))
 		for i, object := range objects {
-			values[i], err = decodeTemplate(declaration, object, valuePath(path, strconv.Itoa(i)))
+			values[i], err = decodeTemplate(declaration, object, valuePath(path, strconv.Itoa(i)), source)
 			if err != nil {
 				return valueEntry{}, err
 			}
@@ -236,21 +292,21 @@ func decodeValue(declaration valueDeclaration, raw json.RawMessage, path string)
 	return entry, err
 }
 
-func decodeTemplate(declaration valueDeclaration, raw json.RawMessage, path string) (Template, error) {
+func decodeTemplate(declaration valueDeclaration, raw json.RawMessage, path string, source *valueSource) (Template, error) {
 	if len(raw) == 0 {
-		return Template{Values: Values{path: path}}, nil
+		return Template{Values: Values{path: path, source: source}}, nil
 	}
 	var selection map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &selection); err != nil {
 		return Template{}, err
 	}
 	for key, raw := range selection {
-		values, err := decodeValues(declaration.Templates[key].Items, raw, valuePath(path, key))
+		values, err := decodeValues(declaration.Templates[key].Items, raw, valuePath(path, key), source)
 		if err != nil {
 			return Template{}, err
 		}
 		values.templateKey = key
 		return Template{Values: values}, nil
 	}
-	return Template{Values: Values{path: path}}, nil
+	return Template{Values: Values{path: path, source: source}}, nil
 }

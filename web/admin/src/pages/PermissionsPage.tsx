@@ -3,16 +3,18 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { RefreshCw, Edit2, ChevronDown, ChevronRight, Filter, RotateCcw } from 'lucide-react';
 import { listPackages, getPluginPolicies, setPluginPolicy, setCommandNames, resetCommandNames, getToolPolicies, setToolPolicy, setToolPolicies, packageIconURL, type Package, type PluginPolicies, type CommandPolicy, type CommandScope, type ToolPolicy, type ToolPolicyValue } from '../api/admin';
 import { useUI } from '../i18n/UI';
-import { commandOverride, commandTree, matchesCommand, scopeEnabled, scopeKey, type CommandTree } from './permissionState';
+import { useUISettings } from '../shell/settings';
+import { commandDescription, commandOverride, commandTree, matchesCommand, scopeEnabled, scopeKey, type CommandTree } from './permissionState';
 import { CommandPolicyControls } from './CommandPolicyControls';
 import { CommandNamesDialog, type NamesDraft } from './CommandNamesDialog';
+import { PermissionsTabs } from './PermissionsTabs';
 
 const policyValues: ToolPolicyValue[] = ['inherit', 'allow', 'confirm', 'deny'];
 const toolKey = (tool: ToolPolicy) => JSON.stringify([tool.plugin_id, tool.service]);
 
-export function PermissionsPage(): JSX.Element {
+export function PermissionsPage({ tab = 'commands' }: { tab?: 'commands' | 'tools' }): JSX.Element {
   const ui = useUI();
-  const [tab, setTab] = useState<'commands' | 'tools'>('commands');
+  const { locale } = useUISettings();
   const [packages, setPackages] = useState<Package[]>([]);
   const [policies, setPolicies] = useState<Record<string, PluginPolicies>>({});
   const [tools, setTools] = useState<ToolPolicy[] | null>(null);
@@ -47,6 +49,7 @@ export function PermissionsPage(): JSX.Element {
     finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, []);
+  useEffect(() => { setQuery(''); setSelected(new Set()); }, [tab]);
   const mutate = async (action: () => Promise<void>, pluginID?: string) => {
     if (writing.current) return false;
     writing.current = true; setBusy(true); setError(null); setDialogError(null);
@@ -63,9 +66,10 @@ export function PermissionsPage(): JSX.Element {
     setError(message); setDialogError(message); setBusy(false); writing.current = false;
     return errors.length === 0;
   };
-  const controls = (pluginID: string, scope: CommandScope, label: string, command?: CommandPolicy) => <CommandPolicyControls
+  const controls = (pluginID: string, scope: CommandScope, label: string, command?: CommandPolicy, enabledOnly = false) => <CommandPolicyControls
     overrides={policies[pluginID].overrides} scope={scope} label={label} busy={busy}
-    enabled={command?.enabled ?? scopeEnabled(policies[pluginID].overrides, scope)} permissions={command?.permissions}
+    path={command?.declared_names[0]} enabledOnly={enabledOnly}
+    enabled={command?.enabled ?? scopeEnabled(policies[pluginID].overrides, scope)} permissions={command ? command.permissions ?? [] : undefined}
     onChange={change => void mutate(() => setPluginPolicy(pluginID, commandOverride(policies[pluginID].overrides, scope, change)), pluginID)}
     onCustom={permissions => { setDialogError(null); setCustom({ plugin: pluginID, scope, permissions: permissions?.join(', ') ?? '' }); }} />;
   const toggle = (key: string) => setCollapsed(previous => {
@@ -76,6 +80,7 @@ export function PermissionsPage(): JSX.Element {
     if (!matches(command)) return null;
     const paths = command.effective_names.map(path => path.join(' '));
     const display = paths[0] || command.route_id;
+    const description = commandDescription(command, locale, policies[pluginID].default_locale);
     const shadows = policies[pluginID].shadows.filter(shadow => (shadow.winner.plugin_id === pluginID && shadow.winner.route_id === command.route_id)
       || shadow.shadowed.some(entry => entry.plugin_id === pluginID && entry.route_id === command.route_id));
     return <div key={command.route_id} className="route-item-row">
@@ -83,7 +88,7 @@ export function PermissionsPage(): JSX.Element {
         {command.has_names_override && <span className="renamed-badge">{ui.renamedBadge}</span>}
         {shadows.map((shadow, index) => <span key={index} className="command-conflict-badge" title={`${shadow.path.join(' ')}: ${ui.shadowWinner} ${shadow.winner.plugin_id}/${shadow.winner.route_id}; ${ui.commandShadowed} ${shadow.shadowed.map(entry => `${entry.plugin_id}/${entry.route_id}`).join(', ')}`}>{shadow.winner.plugin_id === pluginID && shadow.winner.route_id === command.route_id ? ui.shadowWinner : ui.commandShadowed}</span>)}
         {command.invalid_names.length > 0 && <span className="command-conflict-badge">{ui.invalidNamesBadge}</span>}
-      </div><span className="effective-policy">{ui.effectivePolicy}: {command.enabled ? ui.commandEnabled : ui.commandDisabled} · {command.permissions?.join(', ') || ui.permEveryone}</span></div>
+      </div>{description && <span className="command-description">{description}</span>}</div>
       {command.declared_names.length > 0 && <button type="button" className="detail-icon-button" aria-label={`${ui.editNames} ${display}`} onClick={() => { setDialogError(null); setNames({ plugin: pluginID, command, names: paths }); }}><Edit2 size={16} /></button>}
       {controls(pluginID, { kind: 'route', route_id: command.route_id }, display, command)}
     </div>;
@@ -114,14 +119,14 @@ export function PermissionsPage(): JSX.Element {
   }) : toolPlugins;
   const allCollapsed = visibleKeys.length > 0 && visibleKeys.every(key => collapsed.has(key));
   return <div className="permissions-page">
-    <div className="detail-tabs"><button type="button" className={`detail-tab-button ${tab === 'commands' ? 'is-active' : ''}`} onClick={() => { setTab('commands'); setQuery(''); }}>{ui.tabCommands}</button><button type="button" className={`detail-tab-button ${tab === 'tools' ? 'is-active' : ''}`} onClick={() => { setTab('tools'); setQuery(''); }}>{ui.tabTools}</button></div>
+    <PermissionsTabs active={tab} />
     <div className="permissions-toolbar">
       <select aria-label={ui.filterPlugin} value={plugin} onChange={event => { setPlugin(event.target.value); setSelected(new Set()); }}><option value="">{ui.allPlugins}</option>{packages.map(value => <option key={value.ID} value={value.ID}>{value.ID}</option>)}</select>
       {tab === 'commands' ? <select aria-label={ui.filterPermission} value={permission} onChange={event => setPermission(event.target.value)}><option value="">{ui.allPermissions}</option><option value="everyone">{ui.permEveryone}</option><option value="chat_admin">{ui.permGroupAdmin}</option><option value="admin">{ui.permAdminOnly}</option><option value="custom">{ui.customPermissions}</option></select>
         : <select aria-label={ui.allPolicies} value={toolPolicy} onChange={event => { setToolPolicyFilter(event.target.value); setSelected(new Set()); }}><option value="">{ui.allPolicies}</option>{policyValues.map(value => <option key={value} value={value}>{labels[value]}</option>)}</select>}
       <div className="permission-search"><Filter size={16} /><input aria-label={tab === 'commands' ? ui.searchCommandPlaceholder : ui.searchToolPlaceholder} placeholder={tab === 'commands' ? ui.searchCommandPlaceholder : ui.searchToolPlaceholder} value={query} onChange={event => { setQuery(event.target.value); setSelected(new Set()); }} /></div>
-      <button type="button" className="permission-expand" onClick={() => setCollapsed(previous => { const next = new Set(previous); for (const key of visibleKeys) { if (allCollapsed) next.delete(key); else next.add(key); } return next; })}>{allCollapsed ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{allCollapsed ? ui.expandAll : ui.collapseAll}</button>
       <button type="button" className="detail-icon-button" disabled={busy || loading} aria-label={ui.refresh} onClick={() => void load()}><RefreshCw size={16} /></button>
+      <button type="button" className="permission-expand" onClick={() => setCollapsed(previous => { const next = new Set(previous); for (const key of visibleKeys) { if (allCollapsed) next.delete(key); else next.add(key); } return next; })}>{allCollapsed ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{allCollapsed ? ui.expandAll : ui.collapseAll}</button>
     </div>
     {error && <p className="plugins-error-banner" role="alert">{error}</p>}
     {loading && <p role="status">{ui.loading}</p>}
@@ -130,8 +135,8 @@ export function PermissionsPage(): JSX.Element {
       const conflicts = (policy?.shadows.length ?? 0) + (policy?.invalid_names.length ?? 0);
       return <section key={value.ID} className="command-plugin-card">
         <div className="command-card-header"><button type="button" className="command-disclosure" aria-expanded={open} onClick={() => toggle(value.ID)}>{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}<img className="plugin-mini-icon" src={packageIconURL(value.ID)} alt="" /><strong>{value.ID}</strong><span className="command-count">{policy?.commands.length} {ui.commandsCount}</span></button>
-          {conflicts > 0 && <span className="command-conflict-badge">{conflicts} {ui.conflictWarning}</span>}{!value.Enabled && <span className="command-count">{ui.stateStopped}</span>}
-          {policy && controls(value.ID, { kind: 'plugin' }, value.ID)}
+          {conflicts > 0 && <span className="command-conflict-badge">{conflicts} {ui.conflictWarning}</span>}
+          {policy && controls(value.ID, { kind: 'plugin' }, value.ID, undefined, !open)}
         </div>
         {open && policy && <div className="command-card-body">{renderGroup(value.ID, commandTree(policy.commands, policy.overrides))}
           {policy.commands.length === 0 && <p className="command-empty">{ui.noCommands}</p>}

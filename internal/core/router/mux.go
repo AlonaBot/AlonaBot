@@ -34,6 +34,12 @@ func NewCaller(pluginID, generationID string) Caller {
 
 // Invocation 保存派发时的可信事件与默认目标，通过 Request.Attach 绑定父调用。
 type Invocation struct {
+	ProfileID        string      // Core 内部使用 default，编码时使用空串。
+	Root             *Invocation // 根调用指向自身，派生调用保留同一根。
+	OnFinished       func()      // 全部派生调用及延续释放后在锁外调用一次。
+	finishMu         sync.Mutex  // 仅根使用，保护引用计数与结束回调。
+	finishReferences int
+
 	OnContinuation func() func()   // 登记时保留分发关联，返回的函数在取消或延续完成后释放。
 	OnWait         func()          // 实际登记等待后通知。
 	OnWaitMatch    func(*pb.Event) // 交付等待结果前切换到命中事件的关联。
@@ -96,4 +102,51 @@ func (m *Mux) For(c Caller) wire.Handler {
 		}
 		return fn(ctx, c, in)
 	}
+}
+
+// Begin 保留根调用，返回在当前调用结束时释放引用的函数。
+// 派生附件先继承 Root；根附件在首次调用前由其所有者初始化。
+func (inv *Invocation) Begin() func() {
+	if inv.Root == nil {
+		inv.Root = inv
+	}
+	root := inv.Root
+	root.finishMu.Lock()
+	root.finishReferences++
+	root.finishMu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			root.finishMu.Lock()
+			root.finishReferences--
+			var finished func()
+			if root.finishReferences == 0 {
+				finished = root.OnFinished
+				root.OnFinished = nil
+			}
+			root.finishMu.Unlock()
+			if finished != nil {
+				finished()
+			}
+		})
+	}
+}
+
+// AfterFinished 将回调加入根调用的结束通知；根已结束时立即在锁外执行。
+func (inv *Invocation) AfterFinished(finished func()) {
+	root := inv.Root
+	root.finishMu.Lock()
+	if root.finishReferences == 0 {
+		root.finishMu.Unlock()
+		finished()
+		return
+	}
+	previous := root.OnFinished
+	root.OnFinished = func() {
+		if previous != nil {
+			previous()
+		}
+		finished()
+	}
+	root.finishMu.Unlock()
 }

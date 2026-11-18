@@ -19,6 +19,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/metrics"
+	"github.com/AlonaBot/AlonaBot/internal/core/profile"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
@@ -89,52 +90,55 @@ type CommandPolicy interface {
 // Router 并发执行有界的事件链；每条链内按稳定次序调用候选。
 // mu 串行化接纳、出队和注册；链调用插件期间不持锁。
 type Router struct {
-	dispatched    func(Dispatch)
-	dispatches    map[string]*dispatchState // 只在启用回调时分配，由 mu 保护。
-	preEvent      func(context.Context, *pb.Event) (*pb.EventPayload, bool, error)
-	messageConfig func(context.Context, string, *pb.Event) (json.RawMessage, error)
-	adapters      *adapter.Registry
-	send          ServiceFunc
-	prepare       func(*pb.Event, Caller) (*pb.Event, error)
-	prefixes      func(adapterInstanceID string) []string
-	buttons       func(context.Context, *pb.Event) (string, string, error)
-	intercept     func(context.Context, *pb.Event) bool
-	policy        CommandPolicy
-	commandState  func(context.Context, string, *pb.RouteDescriptor) (bool, []string, error)
-	commandNames  func(string) map[string][][]string
-	commandSyncs  map[string]*commandSync   // 当前运行实例身份与任务，由 mu 保护。
-	matches       map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
-	queue         []queuedEvent
-	concurrency   int
-	queueEvents   int
-	queueBytes    int64 // 等待队列上限，单位为编码后的字节数
-	global        *wire.Budget
-	queuedBytes   int64         // 等待中的事件占用，由 mu 保护
-	stats         Stats         // 计数及运行状态，由 mu 保护
-	drained       chan struct{} // 关闭接纳且全部运行链退出时关闭
-	ctx           context.Context
-	cancel        context.CancelFunc
-	mu            sync.Mutex // 保护注册、在途调用、命令索引与分发状态
-	plugins       map[string]*pluginSession
-	snapshots     map[string]routeSnapshot // 已提交的定位数据独立于活 Session。
-	inFlight      map[inFlightKey]int      // 同事件原调用与延续可短暂重叠；仅覆盖 Plugin.Call，排队与 prepare 期间不登记
-	commands      *CommandIndex            // 在 mu 下发布；已发布快照只读
-	started       bool
-	closed        bool
-	continuations Continuations
-	metrics       *metrics.Counters
+	dispatched     func(Dispatch)
+	dispatches     map[string]*dispatchState // 只在启用回调时分配，由 mu 保护。
+	preEvent       func(context.Context, *pb.Event) (*pb.EventPayload, bool, error)
+	messageConfig  func(context.Context, string, *pb.Event) (json.RawMessage, error)
+	profile        func(context.Context, string, *pb.Target) (string, bool, error)
+	ensureActive   func(context.Context, string, int64) (func(), error)
+	requestTimeout time.Duration
+	adapters       *adapter.Registry
+	send           ServiceFunc
+	prepare        func(*pb.Event, Caller) (*pb.Event, error)
+	prefixes       func(context.Context, *pb.Target) ([]string, error)
+	buttons        func(context.Context, *pb.Event) (string, string, error)
+	intercept      func(context.Context, *pb.Event) bool
+	policy         CommandPolicy
+	commandState   func(context.Context, string, *pb.RouteDescriptor) (bool, []string, error)
+	commandNames   func(string) map[string][][]string
+	commandSyncs   map[string]*commandSync   // 当前运行实例身份与任务，由 mu 保护。
+	matches        map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
+	queue          []queuedEvent
+	concurrency    int
+	queueEvents    int
+	queueBytes     int64 // 等待队列上限，单位为编码后的字节数
+	global         *wire.Budget
+	queuedBytes    int64         // 等待中的事件占用，由 mu 保护
+	stats          Stats         // 计数及运行状态，由 mu 保护
+	drained        chan struct{} // 关闭接纳且全部运行链退出时关闭
+	ctx            context.Context
+	cancel         context.CancelFunc
+	mu             sync.Mutex // 保护注册、在途调用、命令索引与分发状态
+	plugins        map[string]*pluginSession
+	snapshots      map[string]routeSnapshot // 已提交的定位数据独立于活 Session。
+	inFlight       map[inFlightKey]int      // 同事件原调用与延续可短暂重叠；仅覆盖 Plugin.Call，排队与 prepare 期间不登记
+	commands       *CommandIndex            // 在 mu 下发布；已发布快照只读
+	started        bool
+	closed         bool
+	continuations  Continuations
+	metrics        *metrics.Counters
 }
 
 // New 按显式的并发和队列限额创建路由器；限额由装配处从 tune.Values 传入。
 func New(opt Options) *Router {
 	if opt.Prefixes == nil {
-		opt.Prefixes = func(string) []string { return []string{"/"} }
+		opt.Prefixes = func(context.Context, *pb.Target) ([]string, error) { return []string{"/"}, nil }
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Router{
 		adapters: opt.Adapters, send: opt.Send, prepare: opt.Prepare, prefixes: opt.Prefixes, policy: opt.Policy, buttons: opt.Buttons, intercept: opt.Intercept, preEvent: opt.PreEvent,
-		messageConfig: opt.MessageConfig,
-		concurrency:   opt.Concurrency, queueEvents: opt.QueueEvents, queueBytes: opt.QueueBytes, global: opt.Global,
+		messageConfig: opt.MessageConfig, profile: opt.Profile, ensureActive: opt.EnsureActive, requestTimeout: opt.RequestTimeout,
+		concurrency: opt.Concurrency, queueEvents: opt.QueueEvents, queueBytes: opt.QueueBytes, global: opt.Global,
 		ctx: ctx, cancel: cancel, drained: make(chan struct{}),
 		continuations: opt.Continuations, dispatched: opt.Dispatched, metrics: opt.Metrics,
 		matches: make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
@@ -153,7 +157,10 @@ func (r *Router) Attach(p Plugin, c Caller) {
 	previous := r.plugins[id]
 	session := &pluginSession{plugin: p, caller: c}
 	r.plugins[id] = session
-	r.cacheCommands(session)
+	if snapshot, ok := r.snapshots[id]; ok && snapshot.generationID == c.GenerationID {
+		snapshot.session = session
+		r.snapshots[id] = snapshot
+	}
 	r.rebuildCommands()
 	r.mu.Unlock()
 	// 先发布新绑定，再在锁外释放旧 Session，供等待匹配复核当前 Caller。
@@ -242,26 +249,37 @@ func (r *Router) Detach(pluginID string) {
 
 type candidate struct {
 	*pluginSession
-	pluginID string
-	route    *pb.RouteDescriptor
-	names    [][]string // 路径命令匹配时从同一索引快照取得的生效命令名
+	profileID    string // 本候选准入时选定，Handler 与自动回复沿用。
+	pluginID     string
+	generationID string // 快照定位时固定，唤醒后只接受同代次及同路由。
+	committed    bool
+	route        *pb.RouteDescriptor
+	names        [][]string // 路径命令匹配时从同一索引快照取得的生效命令名
+}
+
+func (c candidate) messages() *i18n.Catalog {
+	if c.pluginSession == nil {
+		return nil
+	}
+	return c.plugin.Messages()
+}
+
+func (c candidate) defaultLocale() string {
+	if c.pluginSession == nil {
+		return ""
+	}
+	return c.plugin.DefaultLocale()
 }
 
 func (r *Router) candidates(ev *pb.Event) []candidate {
 	r.mu.Lock()
-	plugins := make([]*pluginSession, 0, len(r.plugins))
-	for _, p := range r.plugins {
-		plugins = append(plugins, p)
-	}
+	sources := r.routeSourcesLocked()
 	r.mu.Unlock()
 	var candidates []candidate
-	for _, p := range plugins {
-		if !p.plugin.Activated() {
-			continue
-		}
-		for _, route := range p.plugin.Routes() {
+	for id, source := range sources {
+		for _, route := range source.routes {
 			if route.GetKind() == pb.RouteKind_ROUTE_KIND_EVENT && slices.Contains(route.GetEvent().GetEventTypeFilter(), ev.GetEventType()) {
-				candidates = append(candidates, candidate{pluginSession: p, pluginID: p.plugin.PluginID(), route: route})
+				candidates = append(candidates, candidate{pluginSession: source.session, pluginID: id, generationID: source.generationID, committed: source.committed, route: route})
 			}
 		}
 	}
@@ -362,18 +380,18 @@ func (r *Router) dispatchEvents(event *trustedEvent, ev *pb.Event, candidates []
 		if r.ctx.Err() != nil {
 			return
 		}
-		if !candidate.plugin.Activated() {
+		if !r.available(candidate) {
 			continue
 		}
-		if buttonClick {
-			if (r.policy == nil && !candidate.route.GetDefaultEnabled()) || r.commandPolicyFailure(candidate, ev) != nil {
-				continue
+		ctx := profile.WithView(r.ctx)
+		if failure := r.commandPolicyFailure(ctx, &candidate, ev); failure != nil {
+			if failure.GetCode() == pb.ErrorCode_ERROR_CODE_INTERNAL {
+				slog.Warn("event route admission failed", "plugin_id", candidate.pluginID, "route_id", candidate.route.GetRouteId(), "error", failure.GetSafeMessage())
 			}
-		} else if !r.permitted(candidate, ev) {
 			continue
 		}
 		routeID := candidate.route.GetRouteId()
-		matched, err := r.matchMessageFilter(candidate.pluginID, candidate.route.GetEvent().GetMessageFilter(), ev, toMe)
+		matched, err := r.matchMessageFilter(ctx, candidate.pluginID, candidate.route.GetEvent().GetMessageFilter(), ev, toMe)
 		if err != nil {
 			slog.Warn("message filter config read failed", "plugin_id", candidate.pluginID, "route_id", routeID, "event_id", ev.GetEventId(), "error", err)
 		}
@@ -382,11 +400,11 @@ func (r *Router) dispatchEvents(event *trustedEvent, ev *pb.Event, candidates []
 		}
 		trace := make([]byte, traceIDBytes)
 		rand.Read(trace)
-		response, err := r.call(candidate, event, nil, trace)
-		if err != nil {
-			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("event handler call failed", "error", err)
+		response, callError := r.call(&candidate, event, nil, trace)
+		if callError != nil {
+			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("event handler call failed", "error", callError)
 		}
-		if response.Err != nil && err == nil {
+		if response.Err != nil && callError == nil {
 			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("event handler returned an error", "code", response.Err.GetCode(), "error", response.Err.GetSafeMessage())
 		}
 		// 业务错误仍可能携带有效 STOP；先读取传播结果，再决定是否继续。
@@ -394,6 +412,9 @@ func (r *Router) dispatchEvents(event *trustedEvent, ev *pb.Event, candidates []
 		if err != nil {
 			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("decode event handler outcome failed", "error", err)
 			continue
+		}
+		if callError == nil && response.Err == nil && outcome.GetMatched() && candidate.route.GetEvent().GetHandlerMode() == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY && len(outcome.GetChain().GetSegments()) != 0 {
+			r.sendReply(candidate, ev, outcome.Chain, trace, event.invocation)
 		}
 		if outcome.GetPropagation() == pb.Propagation_PROPAGATION_STOP {
 			return
@@ -417,14 +438,59 @@ func (r *Router) permitted(c candidate, ev *pb.Event) bool {
 
 // current 在持有 mu 时检查候选仍属于当前的激活绑定，隔离旧候选快照。
 func (r *Router) current(c candidate) bool {
-	return r.ctx.Err() == nil && r.plugins[c.pluginID] == c.pluginSession && c.plugin.Activated()
+	return c.pluginSession != nil && r.ctx.Err() == nil && r.plugins[c.pluginID] == c.pluginSession && c.plugin.Activated()
 }
 
-func (r *Router) call(c candidate, event *trustedEvent, bind func(*pb.Event) (*pb.CommandInvocation, error), trace []byte) (wire.Response, error) {
+func (r *Router) call(c *candidate, event *trustedEvent, bind func(*pb.Event) (*pb.CommandInvocation, error), trace []byte) (wire.Response, error) {
 	// 1. 每次调用先重建可信字段，再在锁外为接收 Session 签发媒体。
+	event.invocation = nil
 	ev := event.rebuild()
+	profileID := c.profileID
+	ctx := r.ctx
+	if !event.deadline.IsZero() {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, event.deadline)
+		defer cancel()
+	}
+	if r.ensureActive != nil {
+		release, err := r.ensureActive(ctx, c.pluginID, int64(proto.Size(ev)))
+		if err != nil {
+			return wire.Response{}, err
+		}
+		defer release()
+		r.mu.Lock()
+		session := r.plugins[c.pluginID]
+		if session == nil || session.caller.GenerationID != c.generationID || !session.plugin.Activated() {
+			r.mu.Unlock()
+			return wire.Response{}, errors.New("handler generation changed during wake")
+		}
+		matched := slices.ContainsFunc(session.plugin.Routes(), func(route *pb.RouteDescriptor) bool { return proto.Equal(route, c.route) })
+		if snapshot, ok := r.snapshots[c.pluginID]; ok {
+			matched = matched && snapshot.generationID == c.generationID && slices.ContainsFunc(snapshot.routes, func(route *pb.RouteDescriptor) bool { return proto.Equal(route, c.route) })
+		} else if c.committed {
+			matched = false
+		}
+		if c.names != nil {
+			names := r.commands.names[c.pluginID][c.route.GetRouteId()]
+			matched = matched && slices.EqualFunc(names, c.names, func(a, b []string) bool { return slices.Equal(a, b) })
+		}
+		c.pluginSession = session
+		r.mu.Unlock()
+		if !matched {
+			return wire.Response{}, errors.New("handler route changed during wake")
+		}
+		if failure := r.commandPolicyFailure(profile.WithView(ctx), c, ev); failure != nil {
+			return wire.Response{}, &wire.CallError{ErrorInfo: failure}
+		}
+		if c.profileID != profileID {
+			return wire.Response{}, errors.New("handler profile changed during wake")
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return wire.Response{}, err
+	}
 	r.mu.Lock()
-	current := r.current(c)
+	current := r.current(*c)
 	r.mu.Unlock()
 	if !current {
 		r.metrics.Add(c.pluginID, "event", "offline")
@@ -444,11 +510,15 @@ func (r *Router) call(c candidate, event *trustedEvent, bind func(*pb.Event) (*p
 		var err error
 		command, err = bind(prepared)
 		if err != nil {
+			// 参数错误的 usage 同样回复可信原消息，并保留到本条分发结束。
+			event.invocation = &Invocation{ProfileID: profileID, Depth: 1, PluginID: c.pluginID, RouteID: c.route.GetRouteId(), Event: proto.CloneOf(event.retained), DefaultTarget: proto.CloneOf(event.retained.GetTarget()), TraceID: trace}
+			event.finished = append(event.finished, event.invocation.Begin())
 			return wire.Response{}, fmt.Errorf("%w: %w", errCommandArguments, err)
 		}
 	}
 	request := &pb.HandlerRequest{RouteId: c.route.GetRouteId(), Event: prepared, Command: command, Context: &pb.InvocationContext{
 		Actor: proto.CloneOf(event.retained.GetActor()), DefaultTarget: proto.CloneOf(event.retained.GetTarget()),
+		ProfileId:       encodedProfile(profileID),
 		CommandConsumed: c.route.GetKind() == pb.RouteKind_ROUTE_KIND_EVENT && event.commandConsumed,
 	}}
 	encoded, err := proto.Marshal(request)
@@ -458,7 +528,7 @@ func (r *Router) call(c candidate, event *trustedEvent, bind func(*pb.Event) (*p
 	// 2. prepare 期间可能发生替换或移除；实际调用前再核对，并只为本次 Call 登记关联。
 	key := inFlightKey{caller: c.caller, eventID: event.retained.GetEventId()}
 	r.mu.Lock()
-	if !r.current(c) {
+	if !r.current(*c) {
 		r.mu.Unlock()
 		r.metrics.Add(c.pluginID, "event", "offline")
 		return wire.Response{}, errors.New("plugin Session is no longer active")
@@ -466,10 +536,29 @@ func (r *Router) call(c candidate, event *trustedEvent, bind func(*pb.Event) (*p
 	r.inFlight[key]++
 	r.mu.Unlock()
 	defer r.finishCall(key)
-	inv := &Invocation{Depth: 1, PluginID: c.pluginID, Event: prepared, DefaultTarget: proto.CloneOf(event.retained.GetTarget()), Chain: slices.Clone(request.Context.PluginChain), Scopes: slices.Clone(request.Context.Scopes), RouteID: request.RouteId, candidate: c, request: request, TraceID: trace}
+	inv := &Invocation{ProfileID: profileID, Depth: 1, PluginID: c.pluginID, Event: prepared, DefaultTarget: proto.CloneOf(event.retained.GetTarget()), Chain: slices.Clone(request.Context.PluginChain), Scopes: slices.Clone(request.Context.Scopes), RouteID: request.RouteId, candidate: *c, request: request, TraceID: trace}
+	// 根只保存入站绑定；媒体准备与插件可见载荷均不能替换回复来源。
+	inv.Root = &Invocation{ProfileID: profileID, PluginID: c.pluginID, RouteID: request.RouteId, Event: proto.CloneOf(event.retained), DefaultTarget: proto.CloneOf(event.retained.GetTarget())}
+	inv.Root.Root = inv.Root
+	event.invocation = inv
+	event.finished = append(event.finished, inv.Begin())
 	r.observeInvocation(inv, event.dispatch)
-	response, err := c.plugin.Call(r.ctx, wire.Request{
-		Target: request.RouteId, TraceID: trace,
+	observeContinuation := inv.OnContinuation
+	inv.OnContinuation = func() func() {
+		finish := inv.Begin()
+		var observed func()
+		if observeContinuation != nil {
+			observed = observeContinuation()
+		}
+		return func() {
+			if observed != nil {
+				observed()
+			}
+			finish()
+		}
+	}
+	response, err := c.plugin.Call(ctx, wire.Request{
+		Target: request.RouteId, TraceID: trace, Deadline: event.deadline,
 		Attach:  inv,
 		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
 	})
@@ -496,8 +585,9 @@ func (r *Router) CallContinuation(ctx context.Context, inv *Invocation, continua
 	if err != nil {
 		return wire.Response{}, fmt.Errorf("encode continuation request: %w", err)
 	}
-	next := &Invocation{Depth: inv.Depth, PluginID: inv.PluginID, Event: request.Event, DefaultTarget: proto.CloneOf(inv.DefaultTarget), Chain: slices.Clone(inv.Chain), Scopes: slices.Clone(inv.Scopes), SendForbidden: inv.SendForbidden, RouteID: inv.RouteID, Continuation: true, candidate: inv.candidate, request: request, TraceID: inv.TraceID}
+	next := &Invocation{ProfileID: inv.ProfileID, Root: inv.Root, Depth: inv.Depth, PluginID: inv.PluginID, Event: request.Event, DefaultTarget: proto.CloneOf(inv.DefaultTarget), Chain: slices.Clone(inv.Chain), Scopes: slices.Clone(inv.Scopes), SendForbidden: inv.SendForbidden, RouteID: inv.RouteID, Continuation: true, candidate: inv.candidate, request: request, TraceID: inv.TraceID}
 	next.dispatch, next.OnWait, next.OnWaitMatch = inv.dispatch, inv.OnWait, inv.OnWaitMatch
+	defer next.Begin()()
 	key := inFlightKey{caller: inv.candidate.caller, eventID: inv.Event.GetEventId()}
 	r.mu.Lock()
 	if !r.current(inv.candidate) {
@@ -516,6 +606,16 @@ func (r *Router) CallContinuation(ctx context.Context, inv *Invocation, continua
 	r.recordOutcome(next, response, err)
 	if r.continuations != nil {
 		r.continuations.Finished(next, err == nil && response.Err == nil)
+	}
+	if err == nil && response.Err == nil {
+		outcome, decodeErr := decodeOutcome(response.Payload)
+		mode := inv.candidate.route.GetCommand().GetHandlerMode()
+		if inv.candidate.route.GetKind() == pb.RouteKind_ROUTE_KIND_EVENT {
+			mode = inv.candidate.route.GetEvent().GetHandlerMode()
+		}
+		if decodeErr == nil && outcome.GetMatched() && mode == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY && len(outcome.GetChain().GetSegments()) != 0 {
+			r.sendReply(inv.candidate, next.Event, outcome.Chain, next.TraceID, next)
+		}
 	}
 	return response, err
 }

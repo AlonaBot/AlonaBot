@@ -43,7 +43,14 @@ func (p *Prepared) Activate(ctx context.Context, commit func(context.Context) er
 	return p.activate(ctx, commit, true)
 }
 
-func (p *Prepared) activate(ctx context.Context, commit func(context.Context) error, handoffFailure bool) (*Running, error) {
+func (p *Prepared) activate(ctx context.Context, commit func(context.Context) error, handoffFailure bool) (result *Running, err error) {
+	if p.spec.Waker != nil {
+		defer func() {
+			if err != nil {
+				p.spec.Waker.failed(p.spec.PluginID, err)
+			}
+		}()
+	}
 	if p.released || p.Registration == nil {
 		return nil, errors.New("candidate session is not prepared")
 	}
@@ -53,25 +60,44 @@ func (p *Prepared) activate(ctx context.Context, commit func(context.Context) er
 	spec := p.spec
 	if !spec.NewCandidate && p.snapshotRoutes {
 		if err := p.checkActiveRoutes(ctx); err != nil {
-			return nil, errors.Join(err, p.close())
+			return p.activationFailed(ctx, nil, err, false)
 		}
 	}
 	opt := host.ActivateOptions{PluginID: spec.PluginID, GenerationID: spec.GenerationID, Handler: spec.Handler, Global: spec.Global, Limits: spec.Limits, Messages: p.messages}
+	activity := &activitySession{}
+	if spec.Waker != nil {
+		opt.RequestActivity = func(in *wire.Inbound) (func(), *pb.ErrorInfo) {
+			return spec.Waker.requestActivity(activity, in)
+		}
+	}
 	opt.Commit = commit
 	in, err := host.Activate(ctx, p.conn, p.Registration, opt)
 	if err != nil {
 		return p.activationFailed(ctx, in, err, handoffFailure)
 	}
-	if err := p.runtime.writeIfCurrent(ctx, state.RuntimeActive, "activated"); err != nil {
+	reason := "activated"
+	if spec.Bootstrap.GetDatabaseDescriptor().GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME {
+		reason = "resume"
+	}
+	if err := p.runtime.writeIfCurrent(ctx, state.RuntimeActive, reason); err != nil {
 		return p.activationFailed(ctx, in, err, handoffFailure)
 	}
 	// 6. ACTIVATED 已应用后才开放 HTTP 与定时任务，绑定顺序保证首个 tick 可以访问 HTTP。
 	activatedAt := time.Now()
+	running := p.running(in)
+	plugin := router.FromInstance(in)
+	if spec.Waker != nil {
+		spec.Waker.register(running, activity)
+		plugin = router.WithActivity(plugin, func() (func(), error) { return spec.Waker.AcquireActivity(spec.PluginID, in.Session) })
+	}
 	if spec.HTTP != nil && in.HTTPListener != nil {
 		spec.HTTP.Bind(spec.PluginID, in.GenerationID, in.HTTPListener, in.HTTPProxyToken, in.Routes, spec.Role)
 	}
 	if spec.Scheduler != nil {
-		if err := spec.Scheduler.Attach(ctx, router.FromInstance(in), activatedAt); err != nil {
+		if err := spec.Scheduler.Attach(ctx, plugin, activatedAt); err != nil {
+			if spec.Waker != nil {
+				spec.Waker.released(running)
+			}
 			if spec.HTTP != nil && in.HTTPListener != nil {
 				spec.HTTP.Unbind(spec.PluginID, in.GenerationID, in.HTTPProxyToken)
 			}
@@ -82,7 +108,7 @@ func (p *Prepared) activate(ctx context.Context, commit func(context.Context) er
 		spec.CommandsChanged()
 	}
 	p.released = true // 激活成功后，资源所有权移交给 Running。
-	return p.running(in), nil
+	return running, nil
 }
 
 func (p *Prepared) checkActiveRoutes(ctx context.Context) error {
@@ -97,7 +123,7 @@ func (p *Prepared) checkActiveRoutes(ctx context.Context) error {
 }
 
 func (p *Prepared) activationFailed(ctx context.Context, in *host.Instance, cause error, handoff bool) (*Running, error) {
-	err := errors.Join(cause, p.runtime.writeIfCurrent(context.WithoutCancel(ctx), state.RuntimeFailed, "activation failed"))
+	err := errors.Join(cause, p.runtime.writeIfCurrent(context.WithoutCancel(ctx), state.RuntimeFailed, cause.Error()))
 	if in != nil {
 		in.Degrade(cause)
 		err = errors.Join(err, in.Session.Close())
@@ -116,7 +142,7 @@ func (p *Prepared) activationFailed(ctx context.Context, in *host.Instance, caus
 func (p *Prepared) running(in *host.Instance) *Running {
 	spec := p.spec
 	return &Running{Instance: in, Process: p.process, store: p.store, pluginID: spec.PluginID, listener: p.listener, timing: spec.Stop,
-		scheduler: spec.Scheduler, http: spec.HTTP, commandsChanged: spec.CommandsChanged, onDetach: spec.Detach, runtime: p.runtime}
+		scheduler: spec.Scheduler, http: spec.HTTP, commandsChanged: spec.CommandsChanged, onDetach: spec.Detach, runtime: p.runtime, waker: spec.Waker}
 }
 
 // Close 关闭准备连接，按停止总预算等待合作退出，到期终止整棵树；确认清空后释放句柄。

@@ -1,13 +1,14 @@
 import { useEffect, useState, useRef, type JSX, type ReactNode } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { RefreshCw, Sun, Moon, Laptop, X, KeyRound } from 'lucide-react';
-import { getDefaultLocale, setDefaultLocale, getLogLevels, setGlobalLogLevel, rotateAdminToken, getCoreAdmins, changeCoreAdmin, getCoreDenies, setCoreDenies, getCoreConfigDiagnostics, pruneCoreConfig, type GlobalLogLevel } from '../api/admin';
+import { Sun, Moon, Laptop, X, KeyRound } from 'lucide-react';
+import { getDefaultLocale, setDefaultLocale, getLogLevels, setGlobalLogLevel, rotateAdminToken, getCoreDenies, setCoreDenies, getCoreConfigDiagnostics, pruneCoreConfig, type GlobalLogLevel } from '../api/admin';
 import { useUI } from '../i18n/UI';
 import { useUISettings } from '../shell/settings';
+import { Link } from '../shell/router';
 
 async function readSettings() {
-  const [locale, logs, admins, denies, diagnostics] = await Promise.all([getDefaultLocale(), getLogLevels(), getCoreAdmins(), getCoreDenies(), getCoreConfigDiagnostics()]);
-  return { locale: locale.default_locale, logs, admins, denies, diagnostics };
+  const [locale, logs, denies, diagnostics] = await Promise.all([getDefaultLocale(), getLogLevels(), getCoreDenies(), getCoreConfigDiagnostics()]);
+  return { locale: locale.default_locale, logs, denies, diagnostics };
 }
 function SettingsRow({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return <div className="settings-row"><div className="settings-label-col"><strong>{title}</strong>{description && <p>{description}</p>}</div><div className="settings-control-col">{children}</div></div>;
@@ -23,7 +24,7 @@ export function SettingsPage(): JSX.Element {
   const [busy, setBusy] = useState(false);
   const writing = useRef(false);
   const [query, setQuery] = useState('');
-  const [adding, setAdding] = useState<'admin' | 'user' | 'chat' | null>(null);
+  const [adding, setAdding] = useState(false);
   const [identity, setIdentity] = useState('');
   const [pruneOpen, setPruneOpen] = useState(false);
   const [rotateOpen, setRotateOpen] = useState(false);
@@ -51,13 +52,11 @@ export function SettingsPage(): JSX.Element {
     return errors.length === 0;
   };
   const closeRotate = () => { if (!rotating) { setRotateOpen(false); setToken(''); setRotateError(null); } };
-  const addTitle = adding === 'admin' ? ui.addAdmin : adding === 'user' ? ui.addUser : ui.addChat;
   const matches = (value: string) => value.toLowerCase().includes(query.toLowerCase());
   const roster = (values: string[], remove: (value: string) => void) => <div className="admins-list">{values.filter(matches).map(value => <div key={value} className="admin-chip"><code>{value}</code><button type="button" className="chip-remove-btn" aria-label={`${ui.removeRow} ${value}`} onClick={() => remove(value)}><X size={14} /></button></div>)}</div>;
-  const beginAdd = (kind: 'admin' | 'user' | 'chat') => { setIdentity(''); setAdding(kind); };
   return <div className="settings-page">
-    <div className="settings-header"><button type="button" className="detail-icon-button" aria-label={ui.refresh} disabled={busy || loading} onClick={() => void load()}><RefreshCw size={16} /></button><button type="button" className="settings-logout" onClick={() => void logout().catch(error => setError(error instanceof Error ? error.message : String(error)))}>{ui.logout}</button></div>
-    {error && <p className="plugins-error-banner" role="alert">{error}</p>}
+    <div className="settings-header"><button type="button" className="settings-logout" onClick={() => void logout().catch(error => setError(error instanceof Error ? error.message : String(error)))}>{ui.logout}</button></div>
+    {error && <div className="plugins-error-banner" role="alert">{error}<button type="button" disabled={busy || loading} onClick={() => void load()}>{ui.refresh}</button></div>}
     {loading && <p role="status">{ui.loading}</p>}
     <section className="settings-card"><h2 className="settings-card-title">{ui.general}</h2>
       <SettingsRow title={ui.uiLanguage} description={ui.uiLanguageDesc}><select aria-label={ui.uiLanguage} value={locale} onChange={event => setLocale(event.target.value)}><option value="zh-CN">{ui.languageChinese}</option><option value="en-US">{ui.languageEnglish}</option></select></SettingsRow>
@@ -66,11 +65,10 @@ export function SettingsPage(): JSX.Element {
     <fieldset className="settings-fields" disabled={!data || busy || loading}>
       <section className="settings-card"><h2 className="settings-card-title">{ui.security}</h2>
         <SettingsRow title={ui.rotateToken} description={ui.rotateTokenDesc}><button type="button" onClick={() => { setToken(''); setRotateError(null); setRotateOpen(true); }}><KeyRound size={14} />{ui.rotateTokenButton}</button></SettingsRow>
-        <details className="settings-access"><summary>{ui.accessControl}</summary>
+        <SettingsRow title={ui.accessControl}><Link to="/permissions/users" className="dialog-button">{ui.manageUsers}</Link></SettingsRow>
+        <details className="settings-access"><summary>{ui.deniedChats}</summary>
         <input aria-label={ui.filterIdentities} placeholder={ui.filterIdentities} value={query} onChange={event => setQuery(event.target.value)} />
-        <SettingsRow title={ui.coreAdmins} description={ui.coreAdminsDesc}>{data && roster(data.admins, user => void mutate(() => changeCoreAdmin('remove', user)))}<button type="button" onClick={() => beginAdd('admin')}>{ui.addAdmin}</button></SettingsRow>
-        <SettingsRow title={ui.deniedUsers}>{data && roster(data.denies.users, user => void mutate(() => setCoreDenies({ users: data.denies.users.filter(value => value !== user), chats: data.denies.chats })))}<button type="button" onClick={() => beginAdd('user')}>{ui.addUser}</button></SettingsRow>
-        <SettingsRow title={ui.deniedChats}>{data && roster(data.denies.chats, chat => void mutate(() => setCoreDenies({ users: data.denies.users, chats: data.denies.chats.filter(value => value !== chat) })))}<button type="button" onClick={() => beginAdd('chat')}>{ui.addChat}</button></SettingsRow>
+        <SettingsRow title={ui.deniedChats}>{data && roster(data.denies.chats, chat => void mutate(async () => { const current = await getCoreDenies(); await setCoreDenies({ users: current.users, chats: current.chats.filter(value => value !== chat) }); }))}<button type="button" onClick={() => { setIdentity(''); setAdding(true); }}>{ui.addChat}</button></SettingsRow>
         </details>
       </section>
       <section className="settings-card"><h2 className="settings-card-title">{ui.system}</h2>
@@ -79,9 +77,9 @@ export function SettingsPage(): JSX.Element {
         {data && (data.diagnostics.corrections.length > 0 || data.diagnostics.unknown.length > 0) && <SettingsRow title={ui.corrections}><ul>{data.diagnostics.corrections.map((entry, index) => <li key={index}><code>{entry.path}</code>: {ui[entry.reason]}{Object.hasOwn(entry, 'original') && <pre>{JSON.stringify(entry.original)}</pre>}</li>)}</ul><ul>{data.diagnostics.unknown.map(path => <li key={path}><code>{path}</code></li>)}</ul>{data.diagnostics.unknown.length > 0 && <button type="button" onClick={() => setPruneOpen(true)}>{ui.pruneConfig}</button>}</SettingsRow>}
       </section>
     </fieldset>
-    <Dialog.Root open={adding !== null} onOpenChange={open => { if (!open && !busy) { setAdding(null); setIdentity(''); } }}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog-content" aria-describedby={undefined}><Dialog.Title>{addTitle}</Dialog.Title>
+    <Dialog.Root open={adding} onOpenChange={open => { if (!open && !busy) { setAdding(false); setIdentity(''); } }}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog-content" aria-describedby={undefined}><Dialog.Title>{ui.addChat}</Dialog.Title>
       {error && <p role="alert">{error}</p>}
-      <form onSubmit={async event => { event.preventDefault(); if (!data) return; const value = identity.trim(); const success = await mutate(() => adding === 'admin' ? changeCoreAdmin('add', value) : setCoreDenies({ users: adding === 'user' ? [...data.denies.users, value] : data.denies.users, chats: adding === 'chat' ? [...data.denies.chats, value] : data.denies.chats })); if (success) { setAdding(null); setIdentity(''); } }}><input autoFocus aria-label={addTitle} required value={identity} onChange={event => setIdentity(event.target.value)} /><div className="dialog-actions"><button type="button" disabled={busy} onClick={() => { setAdding(null); setIdentity(''); }}>{ui.cancel}</button><button type="submit" disabled={busy || !identity.trim() || !data}>{ui.save}</button></div></form>
+      <form onSubmit={async event => { event.preventDefault(); if (!data) return; const value = identity.trim(); const success = await mutate(async () => { const current = await getCoreDenies(); await setCoreDenies({ users: current.users, chats: [...current.chats, value] }); }); if (success) { setAdding(false); setIdentity(''); } }}><input autoFocus aria-label={ui.addChat} required value={identity} onChange={event => setIdentity(event.target.value)} /><div className="dialog-actions"><button type="button" disabled={busy} onClick={() => { setAdding(false); setIdentity(''); }}>{ui.cancel}</button><button type="submit" disabled={busy || !identity.trim() || !data}>{ui.save}</button></div></form>
     </Dialog.Content></Dialog.Portal></Dialog.Root>
     <Dialog.Root open={pruneOpen} onOpenChange={setPruneOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog-content"><Dialog.Title>{ui.pruneConfig}</Dialog.Title><Dialog.Description>{ui.pruneConfigConfirm}</Dialog.Description><ul>{data?.diagnostics.unknown.map(path => <li key={path}><code>{path}</code></li>)}</ul><div className="dialog-actions"><button type="button" onClick={() => setPruneOpen(false)}>{ui.cancel}</button><button type="button" onClick={() => { setPruneOpen(false); void mutate(pruneCoreConfig); }}>{ui.confirm}</button></div></Dialog.Content></Dialog.Portal></Dialog.Root>
     <Dialog.Root open={rotateOpen} onOpenChange={open => { if (!open) closeRotate(); }}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog-content settings-token-dialog">

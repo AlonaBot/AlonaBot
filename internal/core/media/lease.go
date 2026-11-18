@@ -18,6 +18,8 @@ type mediaLease struct {
 	timer       *time.Timer
 	stopContext func() bool
 	urls        []string // 与此消费租约一起撤销的临时 URL，由 Store.mu 保护
+	activity    func()
+	caller      router.Caller // 媒体来源 Session，临时 URL 读者继续为它保留引用。
 }
 
 // LeaseForSend 为目标 Adapter Session 准备媒体来源，保护对象到发送结束或 deadline。
@@ -47,6 +49,15 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 	default:
 		return nil, nil, mediaCallError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid media source")
 	}
+	activity, err := s.acquire(c)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() {
+		if err != nil {
+			activity()
+		}
+	}()
 	if incoming {
 		s.mu.Lock()
 		s.sweep()
@@ -60,7 +71,7 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 			return nil, nil, mediaCallError(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "media token does not allow target")
 		}
 		if access.object.source.instanceID == target.GetAdapterInstanceId() {
-			lease := &mediaLease{token: token(), incoming: access.object}
+			lease := &mediaLease{token: token(), incoming: access.object, activity: activity, caller: c}
 			access.object.leases++
 			release := s.bindLease(ctx, lease, readerSessionKey, File{ExpiresAt: deadline})
 			prepared := &pb.MediaSource{Source: &pb.MediaSource_PlatformFile{PlatformFile: access.object.source.fileID}}
@@ -85,7 +96,7 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sweep()
-	lease := &mediaLease{token: token()}
+	lease := &mediaLease{token: token(), activity: activity, caller: c}
 	var file File
 	if incoming {
 		access, err := s.incomingAccess(original, c.SessionKey)
@@ -140,6 +151,9 @@ func (s *Store) releaseLease(lease *mediaLease) {
 	}
 	lease.timer.Stop()
 	lease.stopContext()
+	if lease.activity != nil {
+		lease.activity()
+	}
 	s.releaseObject(lease)
 }
 

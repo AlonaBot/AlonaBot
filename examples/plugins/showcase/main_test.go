@@ -19,6 +19,10 @@ func TestShowcase(t *testing.T) {
 	chat := plugintest.Private(user.ID)
 	check := func(result plugintest.Result, text string, count int) {
 		t.Helper()
+		if count == 1 {
+			result.RequireReply(t, text)
+			return
+		}
 		if len(result.Sends) != count {
 			t.Fatalf("sends = %+v, want %d", result, count)
 		}
@@ -36,7 +40,8 @@ func TestShowcase(t *testing.T) {
 	check(h.Text(chat, user, "/demo hello"), "Welcome", 1)
 	check(h.Text(chat, user, `/demo echo "hello world" 2`), "hello world", 2)
 	invalid := h.Text(chat, user, "/demo echo hi invalid")
-	if len(invalid.Sends) != 1 || invalid.Sends[0].Text() != "Usage: /demo echo <text> <times:int>" || len(invalid.Outcomes) != 0 {
+	invalid.RequireReply(t, "Usage: /demo echo <text> <times:int>")
+	if len(invalid.Outcomes) != 0 {
 		t.Fatalf("invalid argument usage = %+v", invalid)
 	}
 	check(h.Text(chat, user, "/demo remind lunch 3600 soup"), "lunch", 1)

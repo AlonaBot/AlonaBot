@@ -9,6 +9,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 
 - 每个插件是一个独立的 Native Go 进程（D-01），只经 SDK 与 Core 通信。崩溃只影响它自己，但插件仍是可信的本地代码，不是沙箱（CONTRACTS §7.1）。
 - 没有启用的插件不运行进程，启用后它的常驻内存全部算在用户机器上。实测一个只用 SDK 的插件进程约 7.5 MiB（linux/amd64 PSS），每多链接一个库、多做一次初始化都会增加这个数。官方组件的预算见 TEST-MATRIX V-74（D-52）。
+- 可按重启语义恢复、没有独立后台活动的 plugin/agent 可在 manifest 声明 `sleep_capable: true`。S-02.1 已接通 SUSPENDED 后的命令/事件、Service 与 HTTP 按需唤醒；S-02.2 已接通自动空闲退出与即时休眠策略，Scheduler 到期唤醒由 S-03.1 接入。开发组件、Adapter 与 WebUI 保持常驻。
 
 ## 2. 依赖
 
@@ -24,6 +25,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 
 - 业务数据放受管 SQLite：`sqlitedb.Open(ctx)` 返回 `*sql.DB`，`gormdb.Open(ctx)` 返回 `*gorm.DB`，两者共用同一个连接（CONTRACTS §6.1）。没有特别需要时用 `sqlitedb`：它比 GORM 少约 1.5 MiB 常驻内存。
 - 迁移用所选包的 `Migrate` 或 `Migrations`，二者择一；辅助迁移的 ID 发布后不能改成另一项操作（CONTRACTS §6.2）。
+- 同代次 `RESUME` 复用原 generation、配置与业务 DB，SELF/VERSIONED 数据库迁移回调跳过，原迁移模式与账本保持；首次激活、更新与回退仍按迁移规则执行。配置继续执行 `OnConfigLoad`、补值/校正与 required 校验，完整结果须与原快照一致（CONTRACTS §4.5）。
 - 受管 SQLite 在 reload 与 update 时使用独立候选副本，准备失败会回到旧数据（CONTRACTS §6.3）。框架外的文件与外部数据库不在这个保证内。
 - 大数据放在磁盘上：索引、缓存、向量放进受管 SQLite 或 `sdk.PluginDataDir(ctx)` 中的文件，不整份载入内存；内存缓存必须有上限。
 - 需要 PostgreSQL、MySQL 等外部数据库时自带驱动，连接参数做成在 `config_schema.json` 中声明 `"secret": true` 的配置项（§7），由管理员填写。迁移或 OnStart 会写外部数据库时，manifest 声明 `prepare_effects=external`，此后已有安装的更新需要管理员进入维护（CONTRACTS §6.1、§6.3）。Core 不创建、不备份外部数据库。
@@ -46,9 +48,11 @@ func saveTopic(ctx context.Context, topic string) error {
 }
 ```
 
-读取用 `value, ok, err := kv.Get(ctx, key)`；`err == nil` 且 `ok == false` 表示键不存在，`kv.Delete(ctx, key)` 删除不存在的键也成功。键须为 1～512 字节的 UTF-8，值最多 1 MiB，空值可以保存；非法参数返回 `INVALID_ARGUMENT`。没有受管 SQLite 的 Session 调用 KV 返回 `FAILED_PRECONDITION`。
+读取用 `value, ok, err := kv.Get(ctx, key)`；`err == nil` 且 `ok == false` 表示键不存在，`kv.Delete(ctx, key)` 删除不存在的键也成功。键须为 1～512 字节的 UTF-8，拒绝恰为 `.` 或 `..` 的键（D-178）；其他含点或斜杠的键按字面值保存。值最多 1 MiB，空值可以保存；非法参数返回 `INVALID_ARGUMENT`。没有受管 SQLite 的 Session 调用 KV 返回 `FAILED_PRECONDITION`。
 
-`page, err := kv.List(ctx, "subscription/", "", 20)` 按键的字节序返回最多 20 个键；后续请求把 `page.Next` 作为 `cursor`，空 `Next` 表示已到末尾。前缀按字面字节匹配，`%` 和 `_` 保持原义；空前缀列出全部键，`limit` 须为正数。
+`page, err := kv.List(ctx, "subscription/", "", 20)` 按键的字节序返回最多 20 个键；后续请求把 `page.Next` 作为 `cursor`，空 `Next` 表示已到末尾，非空 `cursor` 遵守键的约束。前缀按字面字节匹配，`%` 和 `_` 保持原义；空前缀列出全部键，`limit` 须为正数。
+
+官方 WebUI 的插件「数据」页可浏览和编辑数据库表格、KV 与插件文件，并导出或清空数据；数据库保留代次只读。Agent 会话提供摘要与清除入口，接口与数据清理语义见 [ADMIN-API §15](../spec/ADMIN-API.md#15-agent-会话管理) 与 [§21](../spec/ADMIN-API.md#21-插件数据浏览)。
 
 `examples/plugins/configdb` 的 `/note kvset <key> <value>` 与 `/note kvget <key>` 演示保存和读取，沿用该示例的本地化回复。
 
@@ -80,14 +84,16 @@ func saveCache(ctx context.Context, content []byte) error {
 
 - 用标准库 `log/slog` 记录，SDK 把记录交给 Core 并补上来源（CONTRACTS §14）。不要往 stdout 写内容：stdio 传输下 stdout 是协议通道。
 - 组件自己的数据损坏或无法继续运行、需要立即处理时，用 `slog.Log(ctx, sdk.LevelCritical, "component data is corrupt", "error", err)` 记录 CRITICAL；Handler panic 仍由 SDK 记录为 ERROR（CONTRACTS §14.1）。
-- 日志、错误字符串与 safe_message 用英文；给用户看的文字放进 `i18/` 的 `messages`，至少提供 en-US（D-30、CONTRACTS §5.4）。
+- 日志、错误字符串与 safe_message 用英文；给用户看的文字放进 `i18n/` 的 `messages`，至少提供 en-US（D-30、CONTRACTS §5.4）。
+- `messages` 键与命名占位符使用点分隔的标识符，每段由 ASCII 大小写字母、数字与 `_` 组成（D-178），例如 `storeEmpty` 与 `account.Name`。
 - 取文案用 `c.T(key, name, value, ...)`，后台用 `sdk.T`，两者只返回字符串（D-106）。键与参数名尽量写成常量：`alonabot build` 与 `alonabot check` 会检查键是否存在于 en-US、参数是否成对、参数名是否为 `string` 类型且与占位符一致；键在运行时才确定时不检查，运行时找不到键或参数不符时返回键名或保留占位符原文，并在插件日志记一次 WARN（CONTRACTS §5.4）。
 - 不记录 secret、token、完整配置与 DSN；含凭证的 URL 先脱敏（CONTRACTS §14）。
 
 ## 5. 生命周期与调用
 
 - 资源在 OnStart 中打开、在 OnStop 中关闭；后台 goroutine 随 OnStop 结束，并响应 ctx 取消（CONTRACTS §4）。
-- 普通请求的期限是 30s。需要更久的工作放进延续调用或 schedule 回调（CONTRACTS §1.2、§2.4、§4.3）。延续调用有两种写法，见下一条。
+- 普通请求的期限是 30s。需要更久的工作放进延续调用或 schedule 回调（CONTRACTS §1.2、§2.4、§4.3）。
+- 冷启动占用请求原有期限，等待取消只撤回该次请求；就绪后复核路由与权限，再交付一次。Core 按 Session 持有实际调用与资源租约的活动引用，本地取消先返回的业务持续占用至实际结束。HTTP 引用在反向代理返回时释放；自动退出进入 QUIESCING 后冻结新派发，新请求按原期限与预算等待旧树退出及下一次 Ready。排空、STOPPING、OnStop 与整树截止复用正常停止；HTTP/Bus 仍在执行的 SDK 回调沿用正常停止截止（D-179）。
 - 延续调用有两种写法，期限为 CONTINUATION_TIMEOUT，不占分发链：
   - Handler 内调用 `c.Continue(func(c *sdk.Context) error { ... })`：原 Handler 照常返回并决定传播，fn 在原调用成功结束后的独立调用中执行，原调用返回错误时 fn 不执行。
   - 命令、事件或按钮路由的 builder 写 `.Continue()`：SDK 在原调用中照常执行 Rule，匹配后整个 Handler 放到延续调用中执行。这类路由中 `StopPropagation` 不起作用；自动回复型 Handler 返回的非空内容在延续调用结束前发送一次。
@@ -97,16 +103,22 @@ func saveCache(ctx context.Context, content []byte) error {
 - 参数较多或需要可选、默认值时，命令 Handler 在 `*sdk.Context` 之后只收一个结构体：字段按顺序对应参数，名字取 `arg` 标签或把字段名开头的大写段转小写（`FeedURL` 为 `feedURL`），指针字段可选、缺失为 nil，`default:"…"` 给出默认值，`arg:",raw"` 接收末位 raw 尾部；与位置参数及 `Args`/`Optional`/`RawTail` 不能混用，全部检查在注册收集阶段完成（D-115）。
 - 位置参数的名字：省略 `Args` 时取 Handler 源码中的参数名，由构建工具自动记录，显式 `Args` 优先；`_` 与无名参数、同一行多个函数字面量（生成时给出 WARN）回退为 `argN`，这时要用 `Args` 显式命名后才能按名字写 `Optional`。
 - HTTP 路由写作 `p.Route(method, path).Handle(h)`（或 `.HandleFunc(f)`），公开回调在 `Handle` 之前加 `.Public(sdk.AuthCallbackState)` 等认证方式；定时任务写作 `p.Every(jobID, d).Handle(fn)` 或 `p.Cron(jobID, expr).Timezone(tz).Handle(fn)`。每个 builder 必须恰好 `Handle` 一次，`Handle` 之后不能再设置选项，错误在注册收集阶段报告。
+- 文本匹配直接写 `p.Regex(expr)`、`p.Keyword(patterns...)`、`p.StartsWith(patterns...)`、`p.EndsWith(patterns...)`、`p.FullMatch(patterns...)`，原始消息用 `p.Raw()`；子插件与命令组使用同样的写法。缺省 route ID 为小写类别名加冒号和以 `|` 连接的模式，Regex 保留表达式原文，Raw 为 `raw`。事件 ID 为事件名，Hook 用 `pre_event:<事件名>`、`before_send`、`after_send`。同插件内重复会报错，用 `.ID("stable-name")` 区分；模式会变化且需保留命令策略时也固定 ID。路径命令继续按命令路径生成 ID。
+- Hook 直接写 `p.PreEvent(sdk.MessageCreated)`、`p.BeforeSend()`、`p.AfterSend()`，子插件同样适用。需要固定身份时在 `Handle` 前调用 `.ID(routeID)`。
+- 事件直接写 `p.On(eventType)`；Plugin、SubPlugin 与 CommandGroup 均提供此接口。命令组的事件沿用所属子插件归属，route ID 为事件名，需要稳定身份时在 `Handle` 前调用 `.ID(routeID)`。
+- Handler 的 `c` 实现 `context.Context`，可直接传给 `kv.Set(c, ...)`、`task`、`service`、`llm`、`media`、`tool`、`command` 与 `conversation`。期限、取消与父调用关联沿用本次调用；`c.Context()` 仍可取得底层 context，Handler 返回后的失效规则保持。
 - 命令、文本匹配、事件、Service 与 Event Bus 订阅都链式注册，以 `Handle` 结束；漏写 `Handle`、重复调用或在它之后继续调用，都会让注册收集阶段报错（D-70）。
 - 命令说明在注册处写英文原文：`p.Command("set").Description("Set a value").Handle(Set)`。其他语言在 `i18n/<locale>.json` 的顶层 `commands` 中以完整规范路径（含 Group 前缀，token 用一个空格连接）覆盖，例如 `{"commands":{"rss add":{"description":"添加订阅"}}}`；只有 `commands` 的语言文件可以省略 en-US。`check`/`build` 只检查 `commands` 的结构，注册收集阶段检查覆盖路径对应已注册且登记了英文说明的命令，否则注册失败（D-138）。
 - 权限写成 `sdk.Permission`：`sdk.Anyone`、`sdk.User`、`sdk.Admin`、`sdk.ChatAdmin`、`sdk.PermissionName`，用 `Or` 取并集。命令与文本匹配取最近一层显式设置（路由、最近的组、外层的组），都没有时要求 `user`；事件路由没有设置时为空集合。Handler 内用 `c.Has` 按当前 Actor 判断。
 - `c.Send`、`sdk.Send`、编辑与自动回复都接收 `message.Content`，可以直接传 `message.Text(...)`、`message.ImageURL(...)` 等单个片段，也可以传 `message.Chain{...}`。自动回复型 Handler 的返回类型为 `(message.Content, error)`，成功返回的非空内容由 Core 在 Handler 返回后发送，排在本次调用的全部显式发送之后；nil 与空 Chain 表示不回复，显式发送与编辑的空内容返回 INVALID_ARGUMENT（CONTRACTS §8，MESSAGE-MODEL §2～§3，D-108）。
 - 发送目标用 `string` 会话字符串：`<adapter_id>:<chat_id>[#<thread_id>]`，例如 `telegram:-100123#42` 或 `onebot11:group:123456`。用 `message.SID(adapterID, chatID, threadID)` 处理 chat_id 与 thread_id 中 `%`、`#` 的转义，用 `message.ParseSID(sid)` 校验并拆解；adapter_id 遵守 manifest 的本地 ID 规则。`c.Send(content)` 使用本次调用的默认会话，`c.SendTo(sid, content)` 发往指定会话，`sdk.Via(instanceID)` 指定机器人实例；只有 Via 时保留默认会话与话题。后台用 `sdk.Send(ctx, session, content, opts...)`，opts 只接受 Via。省略实例时由 Core 选择并补齐账号；非法会话在发出请求前返回 INVALID_ARGUMENT（CONTRACTS §8、§9.1，MESSAGE-MODEL §1，D-102）。
 - 编辑、撤回与引用所指的消息统一用 `string` 消息句柄，格式为 `<会话字符串>/<platform_message_id>[@<实例名>]`，可以原样保存。用发送回执的 `Ref()`、`Refs()` 或 `c.Event().Ref()` 取得句柄，手工构造用 `message.Ref(sid, platformMessageID, instance)`，它负责消息 ID 中 `%`、`/`、`@` 的转义，用 `message.ParseRef(ref)` 校验并拆解。编辑用 `c.Edit(ref, content)` 或后台的 `sdk.Edit(ctx, ref, content)`，引用用 `message.Quote(ref)`；省略实例时由 Core 按目标选择规则补齐（CONTRACTS §8，MESSAGE-MODEL §4，D-104）。
+- 命令前缀与回复方式取当前会话的配置文件（CONTRACTS §5.6，T-04.19）。处理 `message.created` 时，向原实例、会话与话题的首条 Send 由 Core 按设置加入群提及、引用与普通文本前缀；手动发送、自动回复、Service 派生与延续共享首条标记，BeforeSend 看到改写后的 chain。提及与前缀加入后超出实例文本上限时两项一起省略，引用保留；每次回复 Send 按 `forward_threshold` 与 `message.forward` 能力决定合并转发，组合仍须满足原消息校验。后台、定时任务与跨会话发送沿用原行为。
+- 编辑首条回复时，Core 按当前插件 Session、完整目标与物理消息 ID 保留回执已确认发送的自动提及和前缀；重复编辑沿用已有修饰，实体偏移按 UTF-16 调整。Edit 接受一个 text 与可选 buttons，需保留的普通文本前缀或自动提及与 Markdown 编辑组合无法表达时返回 UNSUPPORTED。Session 退出即释放关联；流式回复可直接沿用 `c.Edit` 与 `c.Stream`，修饰由 Core 处理。
 - 流式输出用 `c.Stream(next)`：next 每次返回一段增量文本，返回 `io.EOF` 正常结束（可以同时带上末段）。实例声明 `message.edit` 时先发送再节流编辑，超过 `TextLimit` 时换条；没有编辑能力时在正常结束后发送一次，输入出错时不发布缓存。返回全部回执，失败时保留已有回执（D-135）。
-- 只回一段文本时用 `c.Reply(text)`；后台发文本用 `sdk.SendText(ctx, session, text, opts...)`，opts 只接受 Via。两者分别等于对应 Send 发送 `message.Text(text)` 并丢弃回执，错误原样返回（D-118）。
+- 回复文本用 `c.Reply(text)`；带片段时写 `c.Reply(text, message.ImageURL(url))`，文本与后续片段依次组成一条消息，只发送一次并返回错误。后台发文本用 `sdk.SendText(ctx, session, text, opts...)`，opts 只接受 Via，发送文本后丢弃回执，错误原样返回（D-118、D-180）。
 - `c.User()` 返回 `string` 用户字符串 `<adapter_id>:<external_user_id>`，没有 Actor 时为空串；`message.UID` 与 `message.ParseUID` 保留 external_user_id 中的冒号。`c.Session()` 返回默认会话，没有默认目标时为空串，未指定目标的发送返回 NO_DEFAULT_TARGET。Service 调用沿用调用上下文中的 Actor 与默认会话，`c.Event()` 为 nil（CONTRACTS §1.2、§3、§8，MESSAGE-MODEL §1，D-120）。
-- 事件用常量注册，例如 `p.On("created", sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error { return c.Reply(e.Chain.Text()) })`；也接受只收 `*sdk.Context` 的 Handler。其他标准事件同样使用对应常量与 payload 指针类型，注册收集阶段检查签名并在错误中给出 route_id。扩展事件用 `sdk.AdapterEvent[T]("adapter.name", version)`，T 须为结构体，带载荷的 Handler 收 `*T`；版本不符或 JSON 解码失败时记 WARN 并跳过 Handler，日志只含路由、事件名与版本或安全错误类别（MESSAGE-MODEL §1.1～§1.2，CONTRACTS §8，D-70、D-71、D-113）。
+- 事件用常量注册，例如 `p.On(sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error { return c.Reply(e.Chain.Text()) })`；也接受只收 `*sdk.Context` 的 Handler。其他标准事件同样使用对应常量与 payload 指针类型，注册收集阶段检查签名并在错误中给出 route_id。扩展事件用 `sdk.AdapterEvent[T]("adapter.name", version)`，T 须为结构体，带载荷的 Handler 收 `*T`；版本不符或 JSON 解码失败时记 WARN 并跳过 Handler，日志只含路由、事件名与版本或安全错误类别（MESSAGE-MODEL §1.1～§1.2，CONTRACTS §8，D-70、D-71、D-113）。
 - 上传用 `media.Upload(ctx, r, mime)` 得到 `*message.MediaRef`，SDK 计算大小与 SHA-256，mime 为空时按内容判断；r 可 Seek 时读两遍，否则使用临时文件，调用方应保持两遍读取的内容一致（CONTRACTS §1.3，D-109）。读取用 `media.Open(ctx, src)`，src 可以是片段的 `Source`、`MediaRef.Source()`、`IncomingMedia.Source()`，只持有 token 时用 `message.MediaSource{MediaRef: token}`。打开时先读第一块，失败直接返回错误；成功后顺序读取并关闭返回的 `io.ReadCloser`，读取响应 ctx 取消且不自动重试。HTTPS URL 来源在发出请求前返回 INVALID_ARGUMENT。向其他插件授权用 `media.Grant(ctx, token, granteePluginID, sessions...)`，会话参数为 `string`（CONTRACTS §1.3～§1.4，D-102、D-109、D-121）。
 - 错误码用 `errcode`，例如 `errcode.InvalidArgument.New("invalid input")`、`errcode.InvalidArgument.Errorf("invalid field %s", name)`；用 `errcode.Of(err)` 查询错误链中的 SDK 错误码，没有 SDK 错误时返回 0。`sdk.Error` 是 `errcode.Error` 的别名，仍可用 `errors.As` 取得错误并读取 Code 与 Message（CONTRACTS §1.2，D-123）。
 
@@ -132,7 +144,7 @@ return &adapter.Descriptor{
 
 省略 `Auth` 时要求 Core 会话；`AuthPlatformToken` 由 Adapter 校验平台凭证。SDK 在连接 Core 前核对路径与重复路由。
 
-查询当前会话的可用命令时，导入 `github.com/AlonaBot/AlonaBot/sdk/command`，在 Handler 内调用 `entries, err := command.List(c.Context())`。成功时可用 `entry.Path` 和 `entry.Aliases` 显示生效命令名（多 token 路径用空格连接），用 `entry.Description` 显示本地化说明。调用失败时返回 `err`；后台或已结束的 Handler context 返回 `FAILED_PRECONDITION`。完整示例见[官方 help 插件](../plugins/help/help.go)。
+查询当前会话的可用命令时，导入 `github.com/AlonaBot/AlonaBot/sdk/command`，在 Handler 内调用 `entries, err := command.List(c)`。成功时可用 `entry.Path` 和 `entry.Aliases` 显示生效命令名（多 token 路径用空格连接），用 `entry.Description` 显示本地化说明。调用失败时返回 `err`；后台或已结束的 Handler context 返回 `FAILED_PRECONDITION`。完整示例见[官方 help 插件](../plugins/help/help.go)。
 
 ## 6. 跨插件协作
 
@@ -141,7 +153,7 @@ return &adapter.Descriptor{
 - Event Bus 是非持久广播：`Publish` 只能发布到本插件的命名空间，返回成功只表示 Core 准入，不代表有人收到；订阅方队列满、预算不足或离线时事件会丢失，也不会补发。需要回执或可靠送达时改用 Service Call。订阅回调串行执行，不要在其中阻塞：积压的事件占用本插件的接收预算，会让命令请求也被拒绝。回调里没有 Actor 与默认会话，发消息时用 `sdk.Send(ctx, session, content, ...)` 或 `sdk.SendText(ctx, session, text, ...)` 显式给出会话（CONTRACTS §3、§8，D-102、D-118）。
 - `service.JSON`、`bus.Define` 与 `task.Define` 声明的类型参数必须是包级的具名非泛型类型，由生成器检查并给出带位置的诊断。JSON Service 与 Bus 事件的 schema_id 由类型决定，版本取类型的 `SchemaVersion() uint32`，没有该方法时为 1；改动类型后运行 `alonabot build`。切片与 map 接受 null，与 `encoding/json` 对 nil 的编码一致。
 - JSON Service 的输入不符合 Schema 时，调用方收到 INVALID_ARGUMENT 和固定文本 `invalid service input`，Handler 不被调用；输出不符合时调用方收到 INTERNAL，日志只记 `schema_id`；调用方的 `Call` 也按声明校验响应，不符合时返回 INTERNAL 与 `invalid service output for "<target>"`。校验详情可能带业务载荷，不写入响应和日志。
-- 通过 `tool.List(ctx)` 获取工具目录，`tool.Info.Effect` 返回声明的类别。用 `.Tool(description, tool.DefaultAllow)` 登记 JSON Service 工具，缺省需确认时使用 `tool.DefaultConfirm`。在 `.Tool(...)` 之后、`.Handle(...)` 之前可以接 `.Effect(tool.ReadOnly)`，另有 `tool.Write`、`tool.Destructive`；省略时为 `tool.Unspecified`。顺序或类别非法时收集注册报错；类别仅作提示，不改变策略（CONTRACTS §13.1）。
+- 通过 `tool.List(ctx)` 获取工具目录，`tool.Info.Effect` 返回声明的类别，策略按本次调用的可信默认 Target 所在会话选择配置文件；无 Target 或无父调用时使用 `default`。list、invoke 与 confirm 每次读取一次配置文件快照：插件关闭时为 deny，其余依次取配置文件覆盖、全局覆盖与工具声明缺省策略，确认操作无覆盖时为 confirm。工具与操作同名时分别匹配配置文件覆盖；管理更新从下一次操作生效，在途确认保留已接纳策略。用 `.Tool(description, tool.DefaultAllow)` 登记 JSON Service 工具，缺省需确认时使用 `tool.DefaultConfirm`。在 `.Tool(...)` 之后、`.Handle(...)` 之前可以接 `.Effect(tool.ReadOnly)`，另有 `tool.Write`、`tool.Destructive`；省略时为 `tool.Unspecified`。顺序或类别非法时收集注册报错；类别仅作提示，不改变策略（CONTRACTS §13.1）。
 - 需要模型能力时调用 Agent 组件的 `llm.generate`：`sdk/llm` 提供类型与以 `@agent` 为目标的调用辅助，官方 Agent 被替换后也不用修改；请管理员把插件加入 `llm_service_allowed_plugins`；一次调用是一次非流式请求，期限受调用方约束（CONTRACTS §13.5）。
 - 在 Handler 或其延续调用中，`tool.Invoke(ctx, "plugin_id/service_name", args)` 按当前生效的工具策略调用工具（deny 返回 PERMISSION_DENIED；confirm 时 Core 先向当前会话发送带「允许」「拒绝」按钮的确认，展示实际参数，拒绝返回 PERMISSION_DENIED，超时返回 DEADLINE_EXCEEDED）；插件自行执行操作前用 `tool.Confirm(ctx, operation, summary, effect)` 请求许可，确认时展示插件给出的摘要，返回 nil 后可执行操作。无类别时传 `tool.Unspecified`，非法类别返回 INVALID_ARGUMENT。两者都需要父调用链；没有 Actor 时遇到确认返回 PERMISSION_DENIED，实例不支持按钮时返回 UNSUPPORTED（CONTRACTS §13.2）。
 
@@ -149,35 +161,27 @@ return &adapter.Descriptor{
 
 用 `p.Route("GET", "/subs/").Page("Subscriptions").Handle(h)` 将 HTTP 路由列为插件页面。`.Page` 写在 `Handle` 或 `HandleFunc` 前，参数为英文源标题；在 `i18n/zh-CN.json` 写入 `{"pages":{"/subs/":"订阅"}}` 即可覆盖该路径的标题。Core 在路由运行期间通过组件列表返回页面和标题（[ADMIN-API §20](../spec/ADMIN-API.md#20-webui-需要的补充接口)）。
 
-插件页面的沙箱 iframe 宿主与 `postMessage` 桥由 T-09.9 接入（[ADMIN-API §7](../spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。用 `sdk/page` 的套件：把 `page.Handler()` 挂在插件自己的 GET 路由下，页面引用 `kit.css` 与 `kit.js`，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并转发 ⌘K/Ctrl+K 打开全局搜索（D-159）。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
+插件页面的沙箱 iframe 宿主与 `postMessage` 桥由 T-09.9 接入（[ADMIN-API §7](../spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。声明 `.Page(title)` 后，SDK 自动在页面所在目录登记 `kit.css` 与 `kit.js` 两条 GET 路由，认证沿用页面路由；页面通过相对路径引用套件，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并转发 ⌘K/Ctrl+K 打开全局搜索（D-159）。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
 
 #### 套件挂载与引入
 
-在插件入口 `New()` 中引入 `sdk/page` 并将套件挂载到 HTTP 路由下：
+在插件入口 `New()` 中声明页面：
 
 ```go
 import (
     "net/http"
     "github.com/AlonaBot/AlonaBot/sdk"
-    "github.com/AlonaBot/AlonaBot/sdk/page"
 )
 
 func New() *sdk.Plugin {
     p := sdk.NewPlugin()
 
-    // 挂载 kit.css 与 kit.js 资源（响应带有 Content-Type 与基于 SDK 版本的 ETag）
-    p.Route(http.MethodGet, "/kit.css").Handle(page.Handler())
-    p.Route(http.MethodGet, "/kit.js").Handle(page.Handler())
-    p.Route(http.MethodGet, "/page/kit.css").Handle(page.Handler())
-    p.Route(http.MethodGet, "/page/kit.js").Handle(page.Handler())
-
-    // 注册页面路由
-    p.Route(http.MethodGet, "/page").HandleFunc(servePage)
+    p.Route(http.MethodGet, "/page").Page("Showcase").HandleFunc(servePage)
     return p
 }
 ```
 
-相对资源路径随页面 URL 解析：从 `/page` 打开时取 `/kit.css` 和 `/kit.js`，以 `/page/` 为基准时取 `/page/kit.css` 和 `/page/kit.js`（均在插件自己的 URL 前缀内）。完整示例见 [showcase](../examples/plugins/showcase/main.go)。
+相对资源路径随页面 URL 解析：从 `/page` 打开时取 `/kit.css` 和 `/kit.js`，以 `/page/` 为基准时取 `/page/kit.css` 和 `/page/kit.js`（均在插件自己的 URL 前缀内）。作者已经登记的同方法、同路径路由优先保留；需要手动挂载套件时仍可使用 `page.Handler()`。完整示例见 [showcase](../examples/plugins/showcase/main.go)。
 
 #### 页面 HTML 与控件样式
 
@@ -248,9 +252,15 @@ AlonaBot.onLocale(async function(locale) {
 - 回调之后，SDK 给缺失或 `null` 的字段补 `default` 或类型零值，递归校正对象、列表与模板；类型不符时先无损转换，取值超出 options、slider 或数字范围时恢复默认值，失效的 template_list 元素被移除。每次转换、恢复和移除都记录路径、原因与原值，secret 字段省略原值；校正后 required 仍未满足时准备失败。未知键和数字精度保留。
 - `GET /api/v1/plugins/{id}/config` 的 `corrections` 返回 Active 代次的校正记录，`unknown` 列出无效配置路径。`POST /api/v1/plugins/{id}/config/prune` 从 Active 删除所列无效键并写入 Pending，随后调用 reload 生效。普通 restart 保持同一配置快照，回调或校正改变结果时返回 `FAILED_PRECONDITION`。
 
-插件对象从 OnStart 开始通过 `p.Config()`（Handler 内为 `c.Config()`）取得 `config.Values`，子插件的 `s.Config()` 是 `config_schema.json` 中同名顶层 object 的只读视图；在 OnConfigLoad 中或更早调用会 panic。例如 `p.Config().String("greeting")` 读取上例的问候语。取值对象在同一 Session 内保持不变，可并发读取；集合 getter 返回可独立修改的副本。
+插件对象从 OnStart 开始通过 `p.Config()`（Handler 内为 `c.Config()`）取得 `config.Values`，子插件的 `s.Config()` 是 `config_schema.json` 中同名顶层 object 的只读视图；在 OnConfigLoad 中或更早调用会 panic。例如 `p.Config().String("greeting")` 读取上例的问候语。基础配置取值对象在同一 Session 内保持不变，`c.Config()` 冻结本次调用的配置文件视图；两者均可并发读取，集合 getter 返回可独立修改的副本。
 
-给顶层字段或 `object` 子字段写 `"profile": true`，可在管理端按配置文件保存覆盖值（CONTRACTS §5.1、§5.6，D-168）。优先标记实际需要按会话变化的叶字段；整个复合字段被覆盖时，完整子树须无 `secret`，包括 list 元素与所有模板分支。在 OnStart 或后台读取的字段（令牌、连接、缓存）不要标记。Handler 的 `c.Config()` 合并当前会话覆盖值由 T-04.18 接入；`p.Config()` 与 `s.Config()` 继续读取插件配置本身。
+给顶层字段或 `object` 子字段写 `"profile": true`，可在管理端按配置文件保存覆盖值（CONTRACTS §5.1、§5.6，D-168）。优先标记实际需要按会话变化的叶字段；整个复合字段被覆盖时，完整子树须无 `secret`，包括 list 元素与所有模板分支。在 OnStart 或后台读取的字段（令牌、连接、缓存）不要标记。Handler 的 `c.Config()` 已合并当前会话的有效覆盖，返回整个插件的只读配置；同一 Context 的视图保持不变。Rule、Service、Hook 与延续构造 Context 时同样冻结视图，覆盖更新从 SDK 接收之后开始的调用生效。`p.Config()`、`s.Config()`、OnStart 与后台读取保持基础配置。
+
+覆盖以已经载入、补值及校正的配置为基线，按完整字段路径替换；object/list 整体替换，覆盖祖先 object 后子字段取新对象。`config.Values.WithOverrides(overrides map[string]json.RawMessage) (config.Values, error)` 可建立独立视图，保留当前子路径；覆盖只校验单值并替换，沿用原基础配置的载入与校正结果。
+
+Core 提供 `core.profile.list`、`current`、`assign` 与 `set`（[WIRE §3.5](../spec/WIRE-FORMAT.md#35-插件可调用的-core-固定服务)）。current/assign/set 从同一 Session 的在途父调用取得可信会话与 Actor，assign/set 要求 Core Admin；set 只修改本插件标记了 `profile` 的字段。会话使用 `default` 时写入 Pending，已有 Pending 或管理互斥占用返回 FAILED_PRECONDITION；整条根调用及延续结束后触发 reload，响应的 `reloading` 为 true。配置文件关闭插件时，命令按禁用处理，文本、事件、Raw 与 PreEvent 候选跳过。
+
+官方 Agent 的 `agent/profile.go` 提供调用示例：用包级 `service.Proto` 声明四个固定服务，调用传 `c`，用 `json.Marshal` 编码字段值，并按响应回复配置文件名称、会话数及 `reloading` 提示。`default` 的回复在当前 Handler 内完成，根调用结束后由 Core 重载。官方 Agent 的对话、定时任务和未显式指定模型的 `llm.generate` 均从 `c.Config()` 读取可覆盖字段。
 
 | 声明类型 | 取值方法 |
 | --- | --- |
@@ -315,6 +325,7 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 - 市场 ID 按角色使用 `alonabot-plugin-`、`alonabot-adapter-`、`alonabot-agent-` 或 `alonabot-webui-` 前缀，后缀用单个连字符分词，完整 ID 不含下划线；插件正则为 `^alonabot-plugin-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`，其他角色同形，长度上限为 64；本地规则仍为 `^[a-z][a-z0-9_-]{0,63}$`（CONTRACTS §9.1，D-172）。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
 - 改名时同步 `plugin.yaml`、依赖、HTTP 路径和 Service 原始名；`pack` 会使用新 ID 生成归档名和 `release.json`。已有改名前的开发数据时，按[开发指南](development.md#开发运行与热部署)重建。
 - 每次发布可附上 UTF-8 changelog，安装后可经[管理 API](../spec/ADMIN-API.md#22-更新内容changelog)读取。二选一：根目录的 `CHANGELOG.md`（每版一节，例如 `## [1.2.1] - 2026-11-17`，日期可省略），或按版本、按语言存放，例如 `changelog/1.2.1/en-US.md` 和 `changelog/1.2.1/zh-CN.md`。目录名使用不带 `v`、且不高于 `plugin.yaml` 中 `version` 的 SemVer；文件名使用规范化的 BCP 47 标签，每个版本都要有 `en-US.md`。运行 `alonabot check` 核对格式，`alonabot pack` 原样打包（CONTRACTS §9.1）。
+- 官方 WebUI 预置插件源 `AlonaBot/plugin-store`，支持添加、移除和保留主动清空的源列表。商店读取源仓库默认分支的 `index.json`，从组件仓库最新 Release 的 `release.json` 与包内 manifest 取得展示信息；发布条目的格式见 CONTRACTS §9.2。更新预览读取已绑定来源的 Release 正文，更新后读取包内 changelog；HTML 按文本显示，已读版本由 WebUI 后台按 SemVer 持久化并单调推进。
 - 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；本地归档用 `install <归档>`，官方包用 `install <组件 ID>` 从可执行文件旁 `packages/<组件 ID>/` 读取。不带参数时在当前目录（作者工程为 `bin/`，含直接包子目录）按 release.json 选择唯一的本机包，静态 WebUI 使用 any/any，零个或多个候选时列出搜索目录和候选并报错；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`（CONTRACTS §9.3）。
 - 用 `alonabot build` 检查资源并编译独立组件，`alonabot check` 只读核对。`alonabot pack [目录] --target linux/amd64 --target linux/arm64` 为每个目标生成归档，全部资产共享一份归档外的 `release.json`；省略目标时取本机平台，静态 WebUI 只生成一个 `any/any` 归档，带 Go 入口的 WebUI 按平台构建。`--tags` 选择源码，`--out` 默认 `<工程>/bin`。资产地址为 `--asset-base` 加 `/` 与归档名；`source` 为 `github.com/<owner>/<repo>` 时，缺省前缀为 `https://github.com/<owner>/<repo>/releases/download/v<version>`，其他来源须显式给出绝对 https 前缀（无 query/fragment）。可选 `--key FILE` 读取标准 base64 编码的 64 字节 Ed25519 私钥，只对最终合并清单的原始字节签名一次，并在归档外写 `release.json.sig` 与 `release.pub`；省略时输出 unsigned 清单并清除输出目录中的旧签名和公钥（CONTRACTS §9.2、§9.3）。密钥读取或签名失败直接报错。进程包含可解析的 `build-info` 文本，静态 WebUI 包包含 manifest、静态资源和可选的 changelog。签名私钥由作者保管，留在打包资源、仓库和构建日志之外。
 

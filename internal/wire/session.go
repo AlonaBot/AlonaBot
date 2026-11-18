@@ -112,8 +112,11 @@ type Options struct {
 	Event func(env *pb.Envelope, release func())
 	// Admit 在读循环中同步决定是否接受对端的业务 REQUEST（阶段门禁）；返回非 nil 时直接回该错误，不执行 Handler。
 	// 必须在读循环中同步判断：状态变化（如 ACTIVATED）也在读循环中同步生效，帧顺序因此得到保证。
-	Admit  func(*Inbound) *pb.ErrorInfo
-	Global *Budget // 跨 Session 共享的全局预算；为 nil 时不限额（插件侧）
+	Admit func(*Inbound) *pb.ErrorInfo
+	// RequestActivity 在阶段准入后同步取得请求活动，和调用方的停止门禁互斥。
+	// 返回的释放函数在预算拒绝或 Handler 结束时调用；回调持有 Session 锁，须立即返回且避免回读 Session。
+	RequestActivity func(*Inbound) (release func(), err *pb.ErrorInfo)
+	Global          *Budget // 跨 Session 共享的全局预算；为 nil 时不限额（插件侧）
 
 	// 以下可调值为零时使用 tune.Defaults()；正常运行由 Core 与 SDK 显式设置。
 
@@ -158,6 +161,7 @@ type outCall struct {
 	result chan Response
 	// eventResult 非 nil 表示无业务回执的 EVENT；只通知写出结果，不登记到 pending。
 	eventResult chan error
+	eventDone   func() // EVENT 撤回或实际写出结束后调用；始终在 Session.mu 外执行。
 
 	// ctx 在调用存续期间有效，结束时取消（子调用以此派生）。
 	ctx context.Context
@@ -467,9 +471,48 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 	}
 }
 
+type eventCompletionKey struct{}
+
+type eventCompletion struct {
+	parent  *eventCompletion
+	claimed bool // 只由同步调用 SendEvent 的 goroutine 读写。
+	finish  func()
+}
+
+// TrackEvent 在内部调用链上登记帧完成通知；返回函数处理未交接给 Session 的同步实现。
+// Session 接管后，取消只结束调用方等待，通知延后至帧撤回或实际写出结束。
+func TrackEvent(ctx context.Context, done func()) (context.Context, func()) {
+	parent, _ := ctx.Value(eventCompletionKey{}).(*eventCompletion)
+	c := &eventCompletion{parent: parent, finish: sync.OnceFunc(done)}
+	return context.WithValue(ctx, eventCompletionKey{}, c), func() {
+		if !c.claimed {
+			c.finish()
+		}
+	}
+}
+
+func claimEvent(ctx context.Context) func() {
+	c, _ := ctx.Value(eventCompletionKey{}).(*eventCompletion)
+	for next := c; next != nil; next = next.parent {
+		next.claimed = true
+	}
+	return func() {
+		for next := c; next != nil; next = next.parent {
+			next.finish()
+		}
+	}
+}
+
 // SendEvent 在 Core 侧发送 EVENT，等待帧写出；事件与 REQUEST 共用业务 FIFO 和载荷预算。
 // ctx 在写出前结束时撤回帧；写出中结束时先返回，预算保留到 writer 完成。
 func (s *Session) SendEvent(ctx context.Context, target string, ev *pb.BusEvent) error {
+	complete := claimEvent(ctx)
+	accepted := false
+	defer func() {
+		if !accepted {
+			complete()
+		}
+	}()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -492,10 +535,11 @@ func (s *Session) SendEvent(ctx context.Context, target string, ev *pb.BusEvent)
 		s.mu.Unlock()
 		return callErr(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "event payload budget is full")
 	}
-	c := &outCall{env: env, bytes: n, eventResult: make(chan error, 1)}
+	c := &outCall{env: env, bytes: n, eventResult: make(chan error, 1), eventDone: complete}
 	s.events[c] = struct{}{}
 	s.outBytes += n
 	s.biz = append(s.biz, c)
+	accepted = true
 	s.mu.Unlock()
 	s.signalBiz()
 	// 2. 只等唯一 writer 的结果；取消通知不产生 CANCEL 帧。
@@ -510,16 +554,22 @@ func (s *Session) SendEvent(ctx context.Context, target string, ev *pb.BusEvent)
 
 func (s *Session) finishEvent(c *outCall, err error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if c.finished {
+		s.mu.Unlock()
 		return
 	}
 	c.finished = true
+	var done func()
 	if c.state == queued {
 		s.unqueueLocked(c)
 		c.state = withdrawn
 		s.releaseLocked(c)
 		delete(s.events, c)
+		done, c.eventDone = c.eventDone, nil
+	}
+	s.mu.Unlock()
+	if done != nil {
+		done()
 	}
 	c.eventResult <- err // 容量为 1，结果仅由第一个结束者交付。
 }
@@ -527,12 +577,18 @@ func (s *Session) finishEvent(c *outCall, err error) {
 func (s *Session) writeEvent(c *outCall, env *pb.Envelope) {
 	err := s.write(env)
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	c.state, c.env = written, nil
 	s.releaseLocked(c)
 	delete(s.events, c)
-	if !c.finished {
-		c.finished = true
+	notify := !c.finished
+	c.finished = true
+	done := c.eventDone
+	c.eventDone = nil
+	s.mu.Unlock()
+	if done != nil {
+		done()
+	}
+	if notify {
 		c.eventResult <- err
 	}
 }
@@ -892,9 +948,22 @@ func (s *Session) onRequest(env *pb.Envelope, payloadError *validate.Error) erro
 		s.mu.Unlock()
 		return s.respondErr(id, payloadError.Code, payloadError.Message)
 	}
+	// 活动登记与在途插入共用 s.mu；正常停止的 WaitIdle 覆盖整个准入区间。
+	var release func()
+	if s.opt.RequestActivity != nil {
+		var err *pb.ErrorInfo
+		release, err = s.opt.RequestActivity(in)
+		if err != nil {
+			s.mu.Unlock()
+			return s.respondErr(id, err.GetCode(), err.GetSafeMessage())
+		}
+	}
 	// 4. 对端方向的准入预算；通过后登记在途，另起 goroutine 执行 Handler，读循环不等待它。
 	if len(s.inbound) >= s.opt.MaxInflight || s.inBytes+n > s.opt.MaxBytes || !s.opt.Global.Acquire(n) {
 		s.mu.Unlock()
+		if release != nil {
+			release()
+		}
 		return s.respondErr(id, pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "in-flight request count or byte budget for this direction is full")
 	}
 	ctx, cancel := context.WithDeadline(parentCtx, deadline)
@@ -902,12 +971,12 @@ func (s *Session) onRequest(env *pb.Envelope, payloadError *validate.Error) erro
 	s.inBytes += n
 	s.mu.Unlock()
 
-	go s.serve(ctx, cancel, in, n)
+	go s.serve(ctx, cancel, in, n, release)
 	return nil
 }
 
 // serve 执行一次对端调用并回复：Handler 返回后先移出在途表、归还预算，再经优先通道发出 RESPONSE。
-func (s *Session) serve(ctx context.Context, cancel context.CancelFunc, in *Inbound, n int64) {
+func (s *Session) serve(ctx context.Context, cancel context.CancelFunc, in *Inbound, n int64, finished func()) {
 	defer cancel()
 	// 1. 执行 Handler；没有结果也没有错误时按 INTERNAL 回复。
 	r := s.handle(ctx, in)
@@ -921,6 +990,9 @@ func (s *Session) serve(ctx context.Context, cancel context.CancelFunc, in *Inbo
 	s.notifyChange()
 	s.mu.Unlock()
 	s.opt.Global.Release(n)
+	if finished != nil {
+		finished()
+	}
 	env := s.envelope(pb.FrameKind_FRAME_KIND_RESPONSE)
 	env.InitiatorSide, env.CallId, env.Error = s.peer, in.CallID, r.Err
 	setPayload(env, r.Payload)

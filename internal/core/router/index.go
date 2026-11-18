@@ -84,15 +84,12 @@ func (r *Router) Commands() *CommandIndex {
 
 // rebuildCommands 在持有 mu 时建立并发布快照，沿用注册边界已经校验过的路由。
 func (r *Router) rebuildCommands() {
-	// 1. 只收集已激活插件；声明名始终优先于同插件其他路由的覆盖。
+	// 1. 已提交快照与常驻插件共用索引；声明名始终优先于同插件其他路由的覆盖。
 	next := &CommandIndex{paths: make(map[string][]CommandEntry), names: make(map[string]map[string][][]string)}
-	for _, session := range r.plugins {
-		plugin := session.plugin
-		if !plugin.Activated() {
-			continue
-		}
-		pluginID := plugin.PluginID()
-		routes := plugin.Routes()
+	r.matches = make(map[string][]commandRoute)
+	for pluginID, source := range r.routeSourcesLocked() {
+		r.cacheCommands(pluginID, source)
+		routes := source.routes
 		declared := make(map[string]string)
 		registered := make(map[string]bool)
 		for _, route := range routes {

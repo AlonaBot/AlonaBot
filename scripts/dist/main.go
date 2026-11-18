@@ -123,8 +123,8 @@ func run(ctx context.Context, args []string) (err error) {
 		return err
 	}
 	// WebUI 在暂存副本中安装依赖并构建，不改动工作区的 node_modules 与 dist。
-	webui := filepath.Join(staging, "webui")
-	if err := copyWebUI(webuiDir, webui); err != nil {
+	webui := filepath.Join(staging, "project", webuiDir)
+	if err := stageWebUI(".", filepath.Join(staging, "project")); err != nil {
 		return err
 	}
 	if _, err := command(ctx, webui, nil, "npm", "ci"); err != nil {
@@ -291,6 +291,24 @@ func archiveDigest(path string) (digestBytes []byte, err error) {
 		return nil, err
 	}
 	return digest.Sum(nil), nil
+}
+
+// stageWebUI 保留根 module 的导入路径，让暂存的 WebUI 进程复用同一份 SDK 与协议。
+func stageWebUI(root, staging string) error {
+	if err := os.MkdirAll(staging, directoryMode); err != nil {
+		return err
+	}
+	for _, name := range []string{"go.mod", "go.sum"} {
+		if err := copyFile(filepath.Join(root, name), filepath.Join(staging, name), fileMode); err != nil {
+			return err
+		}
+	}
+	for _, name := range []string{"sdk", "contracts", "internal", webuiDir} {
+		if err := copyWebUI(filepath.Join(root, name), filepath.Join(staging, name)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // copyWebUI 复制 WebUI 工程到暂存目录，跳过已安装的依赖与旧的构建产物。

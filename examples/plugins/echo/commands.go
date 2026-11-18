@@ -53,7 +53,7 @@ func registerCommands(p *sdk.Plugin) {
 	notes.Command("add").Alias("n", "add").Args("text").RawTail().Handle(book.add)
 	notes.Command("list").Alias("n", "list").Handle(book.list)
 	notes.Command("publish").Handle(func(c *sdk.Context) error {
-		_, err := notesPublished.Publish(c.Context(), book.snapshot())
+		_, err := notesPublished.Publish(c, book.snapshot())
 		if err != nil {
 			return err
 		}
@@ -61,14 +61,14 @@ func registerCommands(p *sdk.Plugin) {
 	})
 	notes.Command("published").Handle(book.listPublished)
 	p.Command("calc").Handle(calculate)
-	p.Regex("roll", `^roll (\d+)d(\d+)$`).Handle(func(c *sdk.Context) error {
+	p.Regex(`^roll (\d+)d(\d+)$`).Handle(func(c *sdk.Context) error {
 		match := c.Match()
 		return c.Reply(c.T("echo.roll", "count", match[1], "sides", match[2]))
 	})
-	p.Keyword("keyword", keywordPhrase).IgnoreCase().Handle(func(c *sdk.Context) (message.Content, error) {
+	p.Keyword(keywordPhrase).IgnoreCase().Handle(func(c *sdk.Context) (message.Content, error) {
 		return message.Text(c.T("echo.keyword")), nil
 	})
-	p.Raw("raw").Rule(func(c *sdk.Context) (bool, error) {
+	p.Raw().Rule(func(c *sdk.Context) (bool, error) {
 		return c.Text() == rawPhrase, nil
 	}).Handle(func(c *sdk.Context) error { return c.Reply(c.T("echo.raw")) })
 	p.Command("ask").Permission(sdk.User).Continue().Handle(ask)
