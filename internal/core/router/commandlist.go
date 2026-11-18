@@ -54,6 +54,13 @@ func (r *Router) listCommands(ctx context.Context, _ Caller, in *wire.Inbound) w
 		if !ok || !sameRoute(winner, identity) {
 			continue
 		}
+		_, enabled, err := r.Profile(ctx, route.pluginID, parent.DefaultTarget)
+		if err != nil {
+			return wire.Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}}
+		}
+		if !enabled {
+			continue
+		}
 		if r.policy != nil {
 			if failure := r.policy.CheckCommand(ctx, route.pluginID, route.route, actor, parent.DefaultTarget); failure != nil {
 				switch failure.GetCode() {

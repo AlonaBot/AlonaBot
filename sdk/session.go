@@ -263,6 +263,10 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *reg
 			failure.Code, failure.Message, err)
 	}
 	root.setConfig(preparedConfig.Values)
+	if err := root.setProfileOverrides(boot.GetProfileOverridesJson()); err != nil {
+		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_HELLO_ACK,
+			pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid profile overrides", err)
+	}
 
 	// 3. 数据库从迁移阶段开始可用；后续任何准备失败都由这里关闭连接。
 	l.runtime.database.Begin(boot.GetDatabaseDescriptor())

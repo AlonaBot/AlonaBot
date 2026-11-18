@@ -88,6 +88,45 @@ func profileValueError(path, message string) error {
 	return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "profile validation failed at " + path + ": " + message}
 }
 
+// ApplyProfile 在独立基础对象中替换已标记字段，保留其余内容，不补默认值。
+func (s *Schema) ApplyProfile(raw json.RawMessage, overrides map[string]json.RawMessage) (json.RawMessage, error) {
+	var replace func(map[string]json.RawMessage, []string, json.RawMessage) error
+	replace = func(object map[string]json.RawMessage, path []string, value json.RawMessage) error {
+		if len(path) == 1 {
+			object[path[0]] = value
+			return nil
+		}
+		child := map[string]json.RawMessage{}
+		if previous, ok := object[path[0]]; ok {
+			if err := json.Unmarshal(previous, &child); err != nil {
+				return err
+			}
+		}
+		if err := replace(child, path[1:], value); err != nil {
+			return err
+		}
+		encoded, err := json.Marshal(child)
+		if err != nil {
+			return err
+		}
+		object[path[0]] = encoded
+		return nil
+	}
+	object := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return nil, err
+	}
+	for path, value := range overrides {
+		if err := s.ValidateProfileValue(path, value); err != nil {
+			return nil, err
+		}
+		if err := replace(object, strings.Split(path, "."), value); err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(object)
+}
+
 func (s *Schema) fieldAt(path []string) *Field {
 	if len(path) == 0 {
 		return nil

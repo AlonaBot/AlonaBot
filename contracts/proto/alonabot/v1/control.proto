@@ -71,6 +71,8 @@ message Bootstrap {
   string default_locale = 12;
   // 插件自管数据目录的绝对路径（CONTRACTS §6.1）。
   string plugin_data_dir = 13;
+  // 本插件全部有效覆盖：配置文件 ID → 字段路径与完整值。
+  string profile_overrides_json = 14;
 }
 
 // SessionLimits 描述 Core 与 SDK 共同执行的 Session 限额（WIRE-FORMAT §3.2）。

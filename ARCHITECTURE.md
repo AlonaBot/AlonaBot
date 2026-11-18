@@ -35,7 +35,11 @@
 | `Dockerfile`、`deploy/` | 官方容器镜像、compose 整合包入口与 `install.sh`（CONTRACTS §15.3、§15.6，D-64） | Core 行为（镜像与脚本只安装发行归档的内容） | 拟建 |
 | `spec/` | 现行规格与 ADR | — | 现行 |
 
-`internal/core/profile` 负责配置文件的存储编排、实例与会话解析、Active schema 覆盖校验及管理方法。`profile.New(ctx, profile.Options{Store, Settings, Schema})` 建立一次操作的快照；管理写入后刷新状态快照，下一次独立操作重新构造。`Resolve(instance, session) Profile` 与 `Overrides(pluginID) map[string]map[string]json.RawMessage` 在内存中读取快照。管理调用方串行化写入，并从读取 Active schema 到提交持有相应插件的管理锁。`internal/core/manage` 提供 ADMIN-API §23，`cmd/alonabot` 通过 `alonabot profile` 调用管理 API。运行时派发与 SDK 合并由 T-04.18 接入。
+`internal/core/profile` 负责配置文件的存储编排、实例与会话解析、Active schema 覆盖校验及管理方法。`profile.New(ctx, profile.Options{Store, Settings, Schema})` 建立一次操作的快照；管理写入后刷新状态快照，下一次独立操作重新构造。`Resolve(instance, session) Profile` 与 `Overrides(pluginID) map[string]map[string]json.RawMessage` 在内存中读取快照。HTTP 管理调用方串行化写入，并从读取 Active schema 到提交持有相应插件的管理锁。`internal/core/manage` 提供 ADMIN-API §23 及经 `RegisterProfiles(mux *router.Mux)` 登记的四个 `core.profile.*` 固定服务，`cmd/alonabot` 通过 `alonabot profile` 调用管理 API。固定服务 list/current 直接读快照，assign 跳过 schema，set 只读取调用插件的 schema；写入沿 catalog → instances → 包锁（仅 set）尝试互斥，占用时立即返回 FAILED_PRECONDITION。
+
+T-04.18 已接通运行时派发与 SDK 合并（PR #242）。`internal/app` 向 Router 注入 `Options.Profile func(context.Context, string, *pb.Target) (string, bool, error)` 与既有 `Options.MessageConfig func(context.Context, string, *pb.Event) (json.RawMessage, error)`；`profile.WithView` / `ReadView` 使一次准入与消息过滤共用配置文件选择、开关、Active 与有效覆盖。PreEvent 在媒体准备前检查开关。`router.Invocation.ProfileID` 与 `Root` 随 Handler、Service、Hook、定时任务与延续附件传递；`Begin() func()` 保留和释放根引用，`AfterFinished(func())` 在整条根调用及延续释放后锁外执行，根已结束时立即执行新登记回调，用于 default Pending 的延后 reload。
+
+`manage.Options.NotifyProfileOverrides func(context.Context, string) error` 由 `internal/app` 装配，读取新快照并向当前在线 Session 下发有效覆盖全集，失败关闭原 Session 并返回实际错误；离线插件在下次 Bootstrap 接收。候选 Bootstrap 按候选 schema 筛选覆盖集合。`contracts/configschema.Schema.ApplyProfile(raw json.RawMessage, overrides map[string]json.RawMessage) (json.RawMessage, error)` 提供字段路径替换，`sdk/config.Values.WithOverrides(overrides map[string]json.RawMessage) (Values, error)` 建立独立只读视图并保留子路径。SDK 原子发布集合，每次 Context 构造冻结视图，`c.Config()` 返回整个插件的调用配置，`p.Config()` 与 `s.Config()` 保持基础配置。
 
 配置回复示例（D-160）沿用现有依赖方向：`contracts/configschema` 检查示例、字段引用与翻译的对应关系，并通过 `Schema.ExampleImages()` 返回去重排序的图片路径；`contracts/i18n` 检查通用词典中示例覆盖的结构与文案类型。`internal/pluginkit` 校验两种配置 schema 引用的图片并收集到资源快照，`internal/core/packages` 在安装和更新时复核。`internal/core/manage` 按 Active 代次的已提交 Journal 选包，只通过认证后的 GET/HEAD 提供包中 `config_schema.json` 引用的图片。
 
@@ -59,7 +63,7 @@
 | `internal/wire -> internal/tune`、`sdk/... -> internal/tune`、`internal/core/... -> internal/tune` | 读取调优参数的生效值 |
 | `sdk/... -> contracts`、`sdk/... -> internal/wire`、`sdk/... -> internal/oslock` | 插件侧复用同一协议实现与 runtime.lock（Go 允许本 module 的 `sdk` import `internal`） |
 | `internal/core/... -> contracts`、`internal/core/... -> internal/wire`、`internal/core/... -> internal/oslock` | Core 侧协议、core.lock 与停机复制时临时持有 runtime.lock |
-| `internal/core/manage -> internal/core/profile`；`internal/core/profile -> internal/core/state`、`-> internal/core/settings`、`-> contracts/configschema`、`-> internal/wire` | 管理 API 建立配置文件快照；状态库存指定与覆盖、Core 设置存 `default` 平台设置、Active schema 校验覆盖值，覆盖集合预算沿用 `wire.MaxFrame` |
+| `internal/core/manage -> internal/core/profile`、`internal/core/router -> internal/core/profile`；`internal/core/profile -> internal/core/state`、`-> internal/core/settings`、`-> contracts/configschema`、`-> internal/wire` | 管理 API 与固定服务建立配置文件快照，Router 复用准入和过滤的操作视图；状态库存指定与覆盖、Core 设置存 `default` 平台设置、Active schema 校验覆盖值，覆盖集合预算沿用 `wire.MaxFrame` |
 | `internal/core/buttons -> internal/core/state`、`internal/core/buttons -> internal/core/router` | 持久化按钮 token，复用可信 Caller；message 与 router 通过函数注入接入 buttons |
 | `internal/core/state`、`internal/core/settings`、`internal/core/journal -> internal/core/logging` | 共用 Core 的 CRITICAL 级别记录状态库、设置与提交后故障；SDK 独立定义 `sdk.LevelCritical`，两侧共用协议的 `LogLevel` |
 | `internal/core/manage -> internal/core/scheduler` | 列出当前 Session 的静态任务，复用调度器的持久暂停与恢复入口（D-164） |

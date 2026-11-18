@@ -602,7 +602,7 @@ KV 键遵守 CONTRACTS §6.1 的键约束，`/` 可作为键的字面字符。�
 
 ## 23. 配置文件
 
-配置文件的语义见 CONTRACTS §5.6（D-168）。ID `default` 表示「默认」。管理写入立即保存；`default` 的字段值经 §12 的配置 API 写入 Pending，平台设置写回 `core_config.json`。运行时应用由后续切片接入。
+配置文件的语义见 CONTRACTS §5.6（D-168）。ID `default` 表示「默认」。管理写入立即保存；`default` 的字段值经 §12 的配置 API 写入 Pending，平台设置写回 `core_config.json`。按会话的插件开关、字段覆盖、SDK 调用视图与消息过滤已接通（T-04.18，PR #242）；平台设置与工具策略的运行时应用分别由 T-04.19、T-11.6 接入。
 
 | Method / path | 请求或成功响应 | 操作语义 |
 | --- | --- | --- |
@@ -622,6 +622,8 @@ KV 键遵守 CONTRACTS §6.1 的键约束，`/` 可作为键的字面字符。�
 | `PUT /api/v1/profiles/{id}/tools` | `{"items":[…]}`，policy 取 allow、confirm、deny 或 inherit → `{}` | 仅更新所列项；每项恰好指定 `tool` 或 `operation`，`inherit` 删除该项覆盖 |
 
 `invalid` 列出失效覆盖的路径与原因（`unmarked`、`type`、`schema unavailable`）。已有复合字段标记仍可读取；覆盖路径与秘密路径相交或 Active schema 不可用时，普通 GET 在 `overrides` 中省略原值，`invalid` 与 `prune` 仍可定位该项。写入或复制使某插件的有效覆盖集合超过 4 MiB 时，按 §5 返回 HTTP 500 与 `RESOURCE_EXHAUSTED`。
+
+创建、复制或删除使有效覆盖集合变化时，Core 向受影响的在线插件 Session 下发完整集合；指定插件的 PATCH 与 prune 成功后，即使有效集合相同也下发。更新成功后开始的 SDK 调用使用新视图，在途调用保留原视图。发送、业务拒绝或响应协议错误关闭原 Session，管理请求返回实际错误，已保存的变更保留；离线插件在下次 Bootstrap 接收最新集合。HTTP 管理入口沿原有管理互斥执行。
 
 §4 与 §14 的实例删除入口共用指定与运行选择的清理流程。实例删除、旧实例组替换与 Adapter 全量清除在设置提交后继续清理，即使请求已取消。提交前失败保留指定与运行选择；若设置已发布但目录同步报错，继续清理并返回同步错误及后续错误。再次删除已消失的实例仍清理该实例的遗留指定，清理成功后返回 404。
 

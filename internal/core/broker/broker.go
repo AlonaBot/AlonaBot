@@ -176,7 +176,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service input is not valid UTF-8 JSON")
 	}
 	// 3. 父附件由 Core 保留；每次复制祖先链，防止独立并发调用修改同一底层切片。
-	invocation := &router.Invocation{PluginID: pluginID, TraceID: in.TraceID, Depth: 2}
+	invocation := &router.Invocation{ProfileID: "default", PluginID: pluginID, TraceID: in.TraceID, Depth: 2}
 	trusted := &pb.InvocationContext{}
 	if parent, ok := in.ParentAttach.(*router.Invocation); ok {
 		trusted.Actor = parent.Event.GetActor()
@@ -188,6 +188,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		invocation.DefaultTarget = parent.DefaultTarget
 		invocation.TraceID = parent.TraceID
 		invocation.Depth = parent.Depth + 1
+		invocation.ProfileID, invocation.Root = parent.ProfileID, parent.Root
 	}
 	if self, _ := ctx.Value(selfToolCallKey{}).(bool); !self || pluginID != c.PluginID {
 		invocation.Chain = append(invocation.Chain, c.PluginID)
@@ -199,6 +200,9 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 	if invocation.Depth > b.maxDepth {
 		b.metrics.Add(pluginID, "service", "depth")
 		return failure(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "service call chain exceeds maximum depth")
+	}
+	if invocation.ProfileID != "default" {
+		trusted.ProfileId = invocation.ProfileID
 	}
 	trusted.PluginChain = invocation.Chain
 	trusted.Scopes = invocation.Scopes
@@ -245,6 +249,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		delete(b.calls, invocation)
 		b.mu.Unlock()
 	}()
+	defer invocation.Begin()()
 	response, err := plugin.Call(ctx, wire.Request{Target: service.GetRouteId(), TraceID: invocation.TraceID, Deadline: deadline, Attach: invocation,
 		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: invocationSchemaVersion, Bytes: encoded}})
 	// 5. 保留目标的业务错误与有效载荷；成功结果必须符合声明的输出契约。

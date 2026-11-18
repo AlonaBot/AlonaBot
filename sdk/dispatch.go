@@ -42,6 +42,9 @@ func businessHandler(reg *registration) wire.Handler {
 	services := serviceHandler(reg)
 	hooks := hookHandler(reg)
 	return func(ctx context.Context, in *wire.Inbound) wire.Response {
+		if in.Target == wire.ServiceProfileSetOverrides {
+			return reg.plugin.changeProfileOverrides(in)
+		}
 		ctx = context.WithValue(ctx, pluginContextKey{}, pluginScope{plugin: reg.plugin, subID: reg.subPlugins[in.Target]})
 		if response, ok := services(ctx, in); ok {
 			return response
@@ -96,6 +99,7 @@ func invokeHandler(ctx context.Context, in *wire.Inbound, request *pb.HandlerReq
 	event := request.GetEvent()
 	scope, _ := ctx.Value(pluginContextKey{}).(pluginScope)
 	c := &Context{plugin: scope.plugin, subID: scope.subID, ctx: ctx, inbound: in, event: event, autoReply: autoReply, match: groups, continuations: functions, continuation: request.ContinuationOf != nil, commandConsumed: request.GetContext().GetCommandConsumed()}
+	c.freezeProfile(request.GetContext())
 	bindServiceContext(c)
 	outcome := &pb.HandlerOutcome{Propagation: pb.Propagation_PROPAGATION_CONTINUE}
 	c.active.Store(true)

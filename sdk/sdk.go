@@ -50,6 +50,8 @@ var ErrNotImplemented = &Error{Code: errcode.Unsupported, Message: "SDK runtime 
 type Context struct {
 	plugin          *Plugin
 	subID           string
+	profileID       string          // Core 选择的配置文件；空串表示 default。
+	config          config.Values   // 创建调用时冻结的完整插件视图。
 	ctx             context.Context // 本次调用的 context
 	propagationMu   sync.Mutex      // 串行化 StopPropagation 与调用结束的传播快照。
 	stopped         bool            // 由 propagationMu 保护，只在有效调用内锁存。
@@ -303,8 +305,8 @@ func collect(root *Plugin) (*registration, error) {
 	return reg, nil
 }
 
-// Config 返回整个插件的只读配置。
-func (c *Context) Config() config.Values { return c.plugin.Config() }
+// Config 返回整个插件在本次调用开始时冻结的配置文件视图。
+func (c *Context) Config() config.Values { return c.config }
 
 // handlerParamNames 在收集时解析函数身份，运行时绑定只读已收集的 CommandSpec。
 func handlerParamNames(g generated.Resources, handler any) []string {
