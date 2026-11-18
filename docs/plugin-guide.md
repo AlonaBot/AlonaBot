@@ -101,7 +101,7 @@ return &adapter.Descriptor{
 
 ### 插件页面
 
-插件页面在 WebUI 的沙箱 iframe 中打开，只能经桥与外部交互（[ADMIN-API §7](../spec/ADMIN-API.md)）。用 `sdk/page` 的套件：把它的 `http.Handler` 挂在插件自己的路由下，页面引用 `kit.css` 与 `kit.js`，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并让 ⌘K 打开全局搜索（D-159）。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
+插件页面的沙箱 iframe 宿主与 `postMessage` 桥由 T-09.9 接入（[ADMIN-API §7](../spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。使用 T-04.17 提供的 `sdk/page` 套件：把它的 `http.Handler` 挂在插件自己的路由下，页面引用 `kit.css` 与 `kit.js`，通过桥使用 `--ab-*` 设计令牌、跟随明暗与语言切换，并转发 ⌘K / Ctrl+K（D-159）。页面的第一行（插件名、标签与搜索）由宿主绘制，插件页面无需另画标题栏或搜索框。
 
 ## 7. 配置与 secret
 
@@ -121,7 +121,7 @@ return &adapter.Descriptor{
 
 插件对象从 OnStart 开始通过 `p.Config()`（Handler 内为 `c.Config()`）取得 `config.Values`，子插件的 `s.Config()` 是 `config_schema.json` 中同名顶层 object 的只读视图；在 OnConfigLoad 中或更早调用会 panic。例如 `p.Config().String("greeting")` 读取上例的问候语。取值对象在同一 Session 内保持不变，可并发读取；集合 getter 返回可独立修改的副本。
 
-字段写 `"profile": true` 时可以按配置文件覆盖（CONTRACTS §5.6，D-168）：Handler 中的 `c.Config()` 合并当前会话所用配置文件的覆盖值，`p.Config()` 与 `s.Config()` 仍是插件配置本身。在 OnStart 或后台读取的字段（令牌、连接、缓存）不要标记，secret、list 的元素与模板中的字段不能标记。
+给顶层字段或 `object` 子字段写 `"profile": true`，可在管理端按配置文件保存覆盖值（CONTRACTS §5.1、§5.6，D-168）。优先标记实际需要按会话变化的叶字段；整个复合字段被覆盖时，完整子树须无 `secret`，包括 list 元素与所有模板分支。在 OnStart 或后台读取的字段（令牌、连接、缓存）不要标记。Handler 的 `c.Config()` 合并当前会话覆盖值由 T-04.18 接入；`p.Config()` 与 `s.Config()` 继续读取插件配置本身。
 
 | 声明类型 | 取值方法 |
 | --- | --- |
@@ -146,6 +146,36 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 
 - 字段的可选值来自运行时的数据（例如实例列表或本插件维护的条目）时，用 `options_from` 代替 `options`：`{"type": "string", "options_from": {"source": "core.adapter_instances", "filter": {"adapter_id": "telegram"}}}`，或指向本插件的选项服务 `"source": "<插件 ID>/<服务名>"`（[CONTRACTS §5.5](../spec/CONTRACTS-v0.1.md)「选项来源」，D-129）。选项服务用 `options.Serve(p, "feeds", func(ctx context.Context, q options.Query) (options.Page, error) {...})` 登记：按 `q.Search` 搜索、`q.Values` 按存储值取回显示名，最多返回 `q.Limit` 项，有更多结果时 `More` 为 true；输入、输出 Schema 由 SDK 固定提供，不用生成。该服务只由 Core 在管理页面打开表单时调用，访问固定为 PRIVATE。取值仍是普通字符串，来源不可用或值已不存在时配置照常加载，插件自己处理不认识的值。
 
+### 配置字段的回复示例
+
+要展示某个配置值对应的回复，在该字段上写 `example`。一个示例写成对象，多个示例写成数组；下面把问候语与一张包内图片组合起来：
+
+```json
+{
+  "greeting": {
+    "type": "string",
+    "default": "Hello",
+    "example": {
+      "input": "hello",
+      "reply": [
+        {"text": "{greeting}"},
+        {"image": "examples/greeting.png", "alt": "Greeting illustration"}
+      ]
+    }
+  }
+}
+```
+
+`input` 必填，写用户发出的文字并省略命令前缀；`reply` 必填，纯文字可以直接写字符串，混合回复按顺序列出片段。每个片段恰好写 `text` 或 `image`，图片可附 `alt`。图片放在工程的 `examples/` 下，格式为 PNG、JPEG、WebP 或 GIF，扩展名与内容须一致。`alonabot check`、`build` 和 `pack` 检查引用，`pack` 收集被引用的图片；安装与更新再次校验。
+
+`input` 与 `text` 中用 `{字段路径}` 引用草稿中的 string、text、int、float 或 bool；对象子字段写成 `{group.greeting}`，带 labels 的选项显示当前语言的 label。模板用 `{mode.$key}` 取选中键，用 `{mode.template_key.child}` 取该模板的子字段，其他模板的值显示为空串。secret、list、dict、object 与 template_list 字段禁止作为引用值。字面花括号写成 `{{`、`}}`。
+
+可选的 `condition` 按字段路径写期望值，例如 `"condition": {"mode.$key": "simple", "enabled": true}`，全部相等时显示该示例。字段被自身的显示条件隐藏时，示例一同隐藏。示例只声明固定回复；草稿替换与显示由 WebUI 完成。
+
+翻译写在 `i18n/<locale>.json` 的 `config.<字段>.example` 下。沿用源 `example` 的对象或数组形状、源 `reply` 的字符串或片段数组形状；按位置覆盖 `input`、`reply` 字符串、片段的 `text` 或 `alt`。缺项沿用源文案，跳过数组中间一项时填 `{}`。`check`、`build` 和 `pack` 会核对覆盖键、文案类型、源形状、片段位置与占位符引用。
+
+上例打包安装并激活后，Core 经管理认证提供 `GET /api/v1/packages/{id}/examples/greeting.png`。端点只提供 Active 包中 `config_schema.json` 引用的图片，并带与组件图标相同的安全响应头；详见 [ADMIN-API §3.3](../spec/ADMIN-API.md#33-组件图标)。
+
 ## 8. 测试
 
 - 用插件测试套件 `plugintest` 在 `go test` 中启动真实 Core 与测试 Adapter，注入消息并检查发送（D-47、CONTRACTS §17）。
@@ -153,7 +183,7 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 
 ## 9. 发布
 
-- 市场 ID 按角色使用 `alonabot_plugin_`、`alonabot_adapter_`、`alonabot_agent_` 或 `alonabot_webui_` 前缀（CONTRACTS §9.1）。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
+- 市场 ID 按角色使用 `alonabot-plugin-`、`alonabot-adapter-`、`alonabot-agent-` 或 `alonabot-webui-` 前缀，后缀用单个连字符分词，完整 ID 不含下划线；插件正则为 `^alonabot-plugin-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`，其他角色同形，长度上限为 64；本地规则仍为 `^[a-z][a-z0-9_-]{0,63}$`（CONTRACTS §9.1，D-172）。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
 - 每次发布写 changelog，管理员更新后会在 WebUI 看到（D-166，CONTRACTS §9.1）。二选一：根目录的 `CHANGELOG.md`（Keep a Changelog，每版一节 `## [1.2.1] - 2026-11-17`），或按版本、按语言的 `changelog/1.2.1/en-US.md`、`changelog/1.2.1/zh-CN.md`；目录写法的文件名必须是规范化的 BCP 47 标签，每个版本都要有 `en-US.md`。
 - 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`（CONTRACTS §9.3）。
 - 用 `alonabot build` 检查资源并编译独立组件，`alonabot check` 只读核对。`alonabot pack --asset-url https://example.com/component.tar.gz` 为所选平台生成安装包与归档外的 `release.json`；目标通过 `--goos/--goarch/--tags` 选择，`--out` 默认 `<工程>/bin`。可选 `--key FILE` 读取标准 base64 编码的 64 字节 Ed25519 私钥，对清单原始字节签名，并在归档外写 `release.json.sig` 与 `release.pub`；省略时输出 unsigned 清单（CONTRACTS §9.2、§9.3）。密钥读取或签名失败直接报错。进程包含可解析的 `build-info` 文本，WebUI 包只含 manifest 与静态资源。签名私钥由作者保管，留在打包资源、仓库和构建日志之外。

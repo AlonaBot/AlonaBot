@@ -4,7 +4,7 @@
 
 ## 1. 范围
 
-本章节覆盖预装插件 `plugins/help/`、`plugins/welcome/` 与 `plugins/rss/`（T-14 步骤 1、2）。`examples/` 下的示例插件用于验收 SDK，随对应的核心切片交付，不在本章节。
+本章节覆盖预装插件 `plugins/help/`（`alonabot-plugin-help-official`）、`plugins/welcome/` 与 `plugins/rss/`（T-14 步骤 1、2，ID 按 D-172）。`examples/` 下的示例插件用于验收 SDK，随对应的核心切片交付，不在本章节。
 
 - 首个发行版只预装最简的 help（D-171）。rss 是计划中的成熟插件，用到调度、受管 SQLite、配置、文案与后台发送，能在真实使用中检验 SDK；它与 welcome 留在本章节，完成后随后续版本加入预装。
 - 插件的打包、预装与首次运行在[集成与发布实施计划](release.md)。

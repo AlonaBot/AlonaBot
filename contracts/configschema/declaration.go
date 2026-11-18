@@ -9,8 +9,8 @@ import (
 	"strings"
 )
 
-func parseFields(object orderedObject, path string, root bool, problems *[]Problem) []*field {
-	var fields []*field
+func parseFields(object orderedObject, path string, root bool, problems *[]Problem) []*Field {
+	var fields []*Field
 	for _, p := range object {
 		if root && (p.name == "$version" || p.name == "$migrations") {
 			continue
@@ -30,7 +30,7 @@ func parseFields(object orderedObject, path string, root bool, problems *[]Probl
 			*problems = append(*problems, Problem{joinPath(fieldPath, "type"), "expected a supported field type"})
 			continue
 		}
-		f := &field{name: p.name, typ: typ, attributes: attributes}
+		f := &Field{name: p.name, typ: typ, attributes: attributes}
 		checkAttributes(f, fieldPath, problems)
 		if attributes.has("items") {
 			if items, ok := attributes.get("items").(orderedObject); ok && (typ == typeObject || typ == typeList) {
@@ -62,7 +62,7 @@ func parseFields(object orderedObject, path string, root bool, problems *[]Probl
 	return fields
 }
 
-func checkAttributes(f *field, path string, problems *[]Problem) {
+func checkAttributes(f *Field, path string, problems *[]Problem) {
 	for _, p := range f.attributes {
 		attributePath := joinPath(path, p.name)
 		var allowed bool
@@ -71,7 +71,7 @@ func checkAttributes(f *field, path string, problems *[]Problem) {
 		case "type", "description", "hint":
 			allowed = true
 			_, valid = p.value.(string)
-		case "invisible", "obvious_hint":
+		case "invisible", "obvious_hint", "profile":
 			allowed = true
 			_, valid = p.value.(bool)
 		case "editor_mode", "secret":
@@ -100,6 +100,8 @@ func checkAttributes(f *field, path string, problems *[]Problem) {
 		case "slider":
 			allowed = f.typ == typeInt || f.typ == typeFloat
 			_, valid = p.value.(orderedObject)
+		case "example":
+			allowed, valid = true, true
 		case "condition":
 			allowed = true
 			_, valid = p.value.(orderedObject)
@@ -182,7 +184,7 @@ func checkTemplate(attributes orderedObject, path string, problems *[]Problem) {
 	}
 }
 
-func checkSlider(f *field, slider orderedObject, path string, problems *[]Problem) {
+func checkSlider(f *Field, slider orderedObject, path string, problems *[]Problem) {
 	for _, p := range slider {
 		if p.name != "min" && p.name != "max" && p.name != "step" {
 			*problems = append(*problems, Problem{joinPath(path, p.name), "unknown slider attribute"})
@@ -202,7 +204,7 @@ func checkSlider(f *field, slider orderedObject, path string, problems *[]Proble
 	}
 }
 
-func checkFields(fields []*field, path string, problems *[]Problem) {
+func checkFields(fields []*Field, path string, problems *[]Problem) {
 	for _, f := range fields {
 		fieldPath := joinPath(path, f.name)
 		if f.attributes.has("default") {
@@ -234,7 +236,7 @@ func checkFields(fields []*field, path string, problems *[]Problem) {
 			checkFields(template.items, joinPath(templatePath, "items"), problems)
 			if display, ok := template.attributes.get("display_item").(string); ok {
 				current := template.items
-				var selected *field
+				var selected *Field
 				parts := strings.Split(display, ".")
 				for i, key := range parts {
 					selected = findField(current, key)
@@ -256,8 +258,8 @@ func checkFields(fields []*field, path string, problems *[]Problem) {
 }
 
 // conditionField 只保留类型和嵌套形状，让显示条件复用类型检查而不继承取值约束。
-func conditionField(f *field) *field {
-	typed := &field{name: f.name, typ: f.typ}
+func conditionField(f *Field) *Field {
+	typed := &Field{name: f.name, typ: f.typ}
 	if f.attributes.has("items") {
 		typed.attributes = orderedObject{{"items", f.attributes.get("items")}}
 	}
@@ -274,7 +276,7 @@ func conditionField(f *field) *field {
 	return typed
 }
 
-func findField(fields []*field, name string) *field {
+func findField(fields []*Field, name string) *Field {
 	for _, f := range fields {
 		if f.name == name {
 			return f
