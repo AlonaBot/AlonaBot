@@ -89,13 +89,13 @@ Install 的 `Package` 额外携带可选 `Warnings: string[]`，按原顺序返�
 | `/api/v1/packages/pin` | `{"id":"demo","constraint":"1.2.3"}` | 精确 SemVer；空串解除；格式错误 400 |
 | `/api/v1/packages/reload` | `{"id":"demo"}` | 要求已激活的进程组件，优先激活有效 Pending；无 Pending 时导入 config.json 再激活；WebUI 返回 412 |
 | `/api/v1/packages/update` | `{"id":"demo","confirm":false,"install":{"Source":"owner/repo"}}` | `install` 使用 3.1 的 `InstallRequest` 大写字段；外层 `confirm` 覆盖 `install.Confirm`；校验身份、来源、公钥、pin、版本与依赖影响，通过候选准备与提交更新版本，保持启用状态 |
-| `/api/v1/packages/rollback` | `{"id":"demo","generation":"<保留代次>","confirm":false}` | 要求目标代次属于该组件，校验确认后，当前候选执行返回 501 / `UNSUPPORTED` |
+| `/api/v1/packages/rollback` | `{"id":"demo","generation":"<保留代次>","confirm":false}` | 要求目标代次属于该组件且不是当前 Active，校验确认后交给候选编排器回退到该保留代次（T-09.7），成功返回 `{}` |
 
 `purge` 为整数：0（缺省）保留数据、配置及来源绑定；1 额外清除受管数据；2 额外清除受管配置及安装绑定。保留记录重装要求匹配原来源与身份。Adapter 替换保留的实例归旧组件，新实例配置块换归属时另行确认。具体清理对象见 [CONTRACTS §9.3](CONTRACTS-v0.1.md#93-cli-的最小完整动作)。
 
 Update 成功响应为 `UpdateResult`：有警告时为 `{"warnings":["..."]}`，按原顺序返回 manifest 的全部警告；没有警告时为 `{}`。JSON 与 multipart 使用相同响应格式。
 
-Update 的本地候选可以提供 `install.Archive/ReleaseJSON/Signature/PublicKey`；省略候选来源和归档时，沿用安装时绑定来源。前置校验可能先返回 400、403、404、409 或 412；重复上传已安装的同版本同归档会因不可变包目录已存在返回 409 / `ALREADY_EXISTS`。Rollback 的正式候选编排由后继切片完成，当前返回 501 / `UNSUPPORTED`。
+Update 的本地候选可以提供 `install.Archive/ReleaseJSON/Signature/PublicKey`；省略候选来源和归档时，沿用安装时绑定来源。前置校验可能先返回 400、403、404、409 或 412；重复上传已安装的同版本同归档会因不可变包目录已存在返回 409 / `ALREADY_EXISTS`。Rollback 经候选编排执行（T-09.7）：目标须为该组件的保留代次且不是当前 Active，否则返回 404 或 412；未确认时返回 409 并列出回退目标与丢弃的本地写入。
 
 ### 3.3 组件图标
 

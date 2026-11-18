@@ -8495,7 +8495,7 @@ internal/core/state
 
 ### goal-173 · S-06.1 休眠管理 API、运行诊断与 CLI
 
-状态：等待前置（S-02.2、S-03.1、T-09.14）。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
+状态：等待前置（S-02.2、S-03.1）。T-09.14已合并。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-173（切片 S-06.1：休眠管理 API、运行诊断与 CLI）。goal 目录 goal-173，分支 goal-173，worktree .worktrees/goal-173，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
