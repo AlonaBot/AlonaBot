@@ -98,8 +98,6 @@ Update 的本地候选可以提供 `install.Archive/ReleaseJSON/Signature/Public
 
 `GET /api/v1/packages/{id}/icon` 经管理认证，只读取该已安装组件 `manifest.Icon` 声明的普通文件。`HEAD` 状态及响应头与 GET 相同，正文为空。查询参数忽略；额外路径返回 404，越界/非规范路径在路由匹配前拒绝。未安装、已卸载、无图标、缺失文件、目录或链接返回 404；开发组件图标本切片返回 404。
 
-`GET /api/v1/packages/{id}/examples/{path}` 经管理认证，只读取该组件 Active 代次 `config_schema.json` 中 `example` 引用的 `examples/` 下的普通文件（D-160），响应头与 HEAD 规则同图标；未引用的路径、缺失文件、目录或链接返回 404。
-
 | 扩展名 | Content-Type |
 | --- | --- |
 | `.svg` | `image/svg+xml` |
@@ -114,6 +112,10 @@ X-Content-Type-Options: nosniff
 ```
 
 图标 404 使用英文纯文本；包读取或状态库实际故障返回 500、纯文本 `internal server error` 并记录详细错误。
+
+`GET /api/v1/packages/{id}/examples/{path}` 经管理认证。`{path}` 是相对于包内 `examples/` 目录的路径，可含子目录。Core 按 Active 代次的已提交 Journal 选包，只读取包内 `config_schema.json` 的 `example` 引用的普通文件；Pending 或未提交候选不参与选包。`HEAD` 与安全响应头同图标；`.png`、`.jpg`/`.jpeg`、`.webp`、`.gif` 分别返回 `image/png`、`image/jpeg`、`image/webp`、`image/gif`。
+
+未安装、已卸载、开发组件、无 Active 代次、缺少 `config_schema.json`，或路径不规范、未引用、文件缺失、目录或链接时返回 404。Active 缺少已提交包记录、schema 无效或存储读取故障时，按图标规则返回 500。
 
 ## 4. Core Admin 与 Adapter 实例
 

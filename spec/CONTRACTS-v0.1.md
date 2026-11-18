@@ -186,6 +186,7 @@ SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 contex
   - `example`：回复示例，一个示例对象或其数组，显示在该字段下方，字段被 `condition` 隐藏时一同隐藏（D-160）。示例对象有 `input`（必填，用户发出的文字，不含命令前缀；WebUI 显示时加上所选配置文件的第一个命令前缀，§5.6）、`reply`（必填，字符串即一段文字，或片段数组，片段为 `{"text": "…"}` 或 `{"image": "examples/…", "alt": "…"}` 之一）与可选的 `condition`（`{"字段路径": 期望值}`，全部相等时才显示该示例，路径写法同下文「字段路径」）。`input` 与 `text` 中的 `{字段路径}` 换成表单中的草稿值：可以引用 `string`、`text`、`int`、`float`、`bool`，带 `labels` 的显示当前语言的 label，`int` 为十进制，`float` 为最短十进制写法，`bool` 为 true 或 false；模板字段用 `{字段.$key}` 取选中的模板键，`{字段.模板键.子字段}` 只在选中该模板时有值，否则为空串；`condition` 的键同样可以用 `字段.$key`。不能引用 `secret`、`list`、`dict`、`object` 与 `template_list`。字面花括号写作 `{{`、`}}`。图片是包内 `examples/` 目录下的 PNG、JPEG、WebP 或 GIF，按 §7.5 提供。
   - `profile`：为 true 时该字段可以按配置文件覆盖（§5.6，D-168）。只能写在顶层字段与 `object` 的子字段上，不能写在 `secret` 字段、list 的元素字段与模板的字段上，同一路径上的祖先与后代不能同时写。
 - `alonabot build` 与 `check` 校验 `config_schema.json`：未知键（包括 AstrBot 的 `file` 类型、`_special`、dict 的 `template_schema` 与 `editor_theme`）、键与类型不匹配、default 不合法、labels 多于 options、`options_from` 与 options 或 secret 并存、来源名格式不合法、condition 或 display_item 引用不存在的字段、`profile` 写在不允许的位置，`example` 的键不合法、片段不是恰好 text 与 image 之一、占位符或示例条件引用的字段不存在或类型不允许、图片不在 `examples/` 下或不存在或内容与扩展名不符，都报带 JSON 路径的错误。生成器把通过检查的内容嵌入程序；REGISTER 的 `config_schema_hash` 是其规范 JSON（保留键的顺序）的摘要，必须与安装包中的文件一致。
+- `check`、`build`、`pack` 校验 `config_schema.json` 和 `adapter_config_schema.json` 中引用的示例图片：路径须规范，图片须为普通文件，扩展名限 `.png`、`.jpg`、`.jpeg`、`.webp`、`.gif`，并与文件签名匹配。`build` 和 `pack` 将被引用的图片纳入资源快照；安装与更新预检重新检查包内存在的两种 schema 及其图片。HTTP 提供范围见 §7.5。
 - **选项来源（D-129）。** 带 `options_from` 的字段，取值仍是字符串（`list` 为字符串数组），补值、校验与读取照旧：Core 与 SDK 不按来源校验取值，来源不可用或值已不存在时配置照常加载，不认识的值由插件自行处理。
   - 来源名有两种。Core 内置来源：`core.chats`（§8 的聊天目录，filter 可用 `chat_type`：`private`、`group`、`channel`，与 `adapter_id`）与 `core.adapter_instances`（已配置的 Adapter 实例，存储值为 adapter_instance_id，filter 可用 `adapter_id`）。服务来源：`<组件 ID>/<service_name>` 或 `@agent/<service_name>`，指向声明为选项来源的 JSON Service（§3），组件 ID 可以是本组件。`check` 校验来源名的格式；内置来源还校验名称与 filter 的键，服务来源的 filter 原样交给服务。
   - 查询有两种：按搜索词、filter、locale 与条数上限列出选项，返回选项与是否还有更多；按一组存储值取它们当前的选项，不存在的值不返回。每个选项有存储值、显示名与可选的说明。条数上限为 `OPTIONS_PAGE`（§16）；来源返回的选项多于上限时，Core 只取前面的并标记还有更多。
@@ -215,7 +216,8 @@ func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error)
 - **配置快照存引用，Secret Store 存不可变 secret 版本**。持久化 secret 字段使用 `{"$secret_ref":"opaque-id"}`；secret 字段是 `config_schema.json` 中带 `"secret": true` 的 `string` 或 `text` 字段，可以位于 object、list 元素与模板对象内；空串表示未设置，不生成引用。新值生成新引用，旧代次的引用不可原地改值；普通配置 API 只返回引用/是否已设置，表单据此显示掩码，不能把掩码当成保存或“保持不变”的协议值。省略字段保持原值，显式删除走 §5.1 的校验。
 - Core 在构造本 Session 的 bootstrap 前解析其有权访问的引用，SDK 接收正常运行值完成 OnConfigLoad；REGISTER 回传后 Core 按新 Schema **以及此前保留的 secret 路径标记**重新抽取秘密值。旧 secret 字段从 Schema 移除但仍作为未知键保留时继续保密；只有管理员清理无效配置删除该键时才移除对应路径标记。不能把其他插件的引用解析给当前插件，也不能把含明文的 bootstrap/REGISTER、DSN、配置差异写入日志或普通管理响应。
 - 首发 Secret Store 与 Core 状态一起持久化，使用仅运行账号可读写的文件权限/Windows ACL；这保护普通管理访问，不承诺隔离同账号 Native 代码。管理员明文查看须再次认证并审计。失败候选的 secret 仅在未被 Active、Pending 或保留代次引用时回收；保留旧程序/DB 却提前删旧密钥不算可恢复快照。
-- 字段与模板的源文案写在 `config_schema.json` 中。`i18n/<locale>.json` 的顶层 `config` 与 `config_schema.json` 同形：字段键 → 覆盖对象，object 与有 items 的 list 的子字段放在 `items` 下，模板放在 `templates` 下，字段的 `example` 按同样结构覆盖 `input`、`text` 与 `alt`（按位置对应，缺少的用源文案，D-160），例如 `{"config": {"mode": {"description": "模式", "labels": ["快速", "安全"]}, "music": {"templates": {"netease": {"name": "网易云音乐", "items": {"cookie": {"description": "Cookie"}}}}}}}`。字段可以覆盖 `description`、`hint`、`labels`，模板可以覆盖 `name`、`hint`；其他键或引用不存在的字段、模板时 `check` 报错。查找顺序为当前 locale 的文件 → `config_schema.json` 中的源文案 → 字段键（模板为模板键）；options 的存储值不翻译，显示文案由 labels 提供。缺少翻译不改变配置内容；`invisible` 不是权限控制，不另建字段排序或并发调参页面。
+- 字段与模板的源文案写在 `config_schema.json` 中。`i18n/<locale>.json` 的顶层 `config` 与 `config_schema.json` 同形：字段键 → 覆盖对象，object 与有 items 的 list 的子字段放在 `items` 下，模板放在 `templates` 下，例如 `{"config": {"mode": {"description": "模式", "labels": ["快速", "安全"]}, "music": {"templates": {"netease": {"name": "网易云音乐", "items": {"cookie": {"description": "Cookie"}}}}}}}`。字段可以覆盖 `description`、`hint`、`labels`、`example`，模板可以覆盖 `name`、`hint`；其他键或引用不存在的字段、模板时 `check` 报错。查找顺序为当前 locale 的文件 → `config_schema.json` 中的源文案 → 字段键（模板为模板键）；options 的存储值不翻译，显示文案由 labels 提供。缺少翻译不改变配置内容；`invisible` 不是权限控制，不另建字段排序或并发调参页面。
+- `example` 翻译沿用源声明的对象或数组形状，`reply` 沿用字符串或片段数组形状。示例和片段按位置对应，数组可少于源数组，中间跳过的位置填 `{}`，缺项沿用源文案。可覆盖 `input`、`reply` 字符串、文字片段的 `text` 与图片片段的 `alt`；图片路径和 `condition` 保持源声明（D-160）。`i18n.Parse` 检查覆盖键与文案类型，`Schema.CheckI18n` 检查与源形状、片段位置的对应关系和占位符引用。
 
 PATCH 语义依据：[RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)。
 
@@ -339,9 +341,9 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 
 ### 7.5 组件静态文件
 
-- Core 直接提供两类组件静态文件，只读取不可变包目录中的文件，不经组件进程（D-62、D-63）：
+- Core 直接提供以下组件静态文件，只读取不可变包目录中的文件，不经组件进程（D-62、D-63、D-160）：
   - **WebUI 组件的文件**：除 Admin API（`/api/`）、插件路由（`/plugins/`）与 Core 保留的内部路径外，GET 请求按路径取已启用 WebUI 组件静态根目录中的文件；路径不存在且最后一段不含扩展名时返回 `index.html`，供单页应用的前端路由使用。没有已启用的 WebUI 时返回 503 与英文纯文本提示，说明用 `alonabot install` 安装 WebUI 组件。
-  - **配置示例图片**：`config_schema.json` 中 `example` 引用的 `examples/` 下的文件（D-160），只提供被引用的路径，类型按扩展名取 PNG、JPEG、WebP 或 GIF，响应头与认证要求同组件图标。
+  - **配置示例图片**：按 Active 代次的已提交 Journal 选包，只提供包中 `config_schema.json` 的 `example` 引用的 `examples/` 下普通文件。类型按扩展名取 PNG、JPEG、WebP 或 GIF，响应头与认证要求同组件图标；路径与错误规则见 [ADMIN-API §3.3](ADMIN-API.md#33-组件图标)。
   - **组件图标**：manifest 的 `icon`（§9.1），只提供声明过的路径。类型按扩展名取 SVG、PNG 或 WebP，其他扩展名在包校验时拒绝。响应带 `Content-Security-Policy: sandbox; default-src 'none'; style-src 'unsafe-inline'` 与 `X-Content-Type-Options: nosniff`，要求管理员会话；WebUI 只用 `<img>` 引用图标，直接打开图标 URL 时也只在隔离的源中渲染，SVG 中的脚本不会在 Admin 源中执行。
 - Admin API 是带主版本号的公开契约，接口、主版本与插件页面桥的消息格式（§7.3）记录在 Admin API 参考（`spec/ADMIN-API.md`，T-09.12 交付）；同一主版本内只做向后兼容的增加。WebUI 在 manifest 中声明支持的主版本范围（§9.1），Core 的主版本不在范围内时拒绝安装与启用；Core 升级后不兼容的已安装 WebUI 不再提供文件，Core 返回说明版本不兼容的提示。
 - WebUI 持有管理员会话，能执行全部管理动作，安装与替换界面展示这一点；签名只证明发布来源（§9.2）。

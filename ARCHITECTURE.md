@@ -34,6 +34,8 @@
 | `Dockerfile`、`deploy/` | 官方容器镜像、compose 整合包入口与 `install.sh`（CONTRACTS §15.3、§15.6，D-64） | Core 行为（镜像与脚本只安装发行归档的内容） | 拟建 |
 | `spec/` | 现行规格与 ADR | — | 现行 |
 
+配置回复示例（D-160）沿用现有依赖方向：`contracts/configschema` 检查示例、字段引用与翻译的对应关系，并通过 `Schema.ExampleImages()` 返回去重排序的图片路径；`contracts/i18n` 检查通用词典中示例覆盖的结构与文案类型。`internal/pluginkit` 校验两种配置 schema 引用的图片并收集到资源快照，`internal/core/packages` 在安装和更新时复核。`internal/core/manage` 按 Active 代次的已提交 Journal 选包，只通过认证后的 GET/HEAD 提供包中 `config_schema.json` 引用的图片。
+
 ## 依赖方向
 
 `A -> B` 表示 **A 的 Go 源码 import B**（静态依赖，含测试代码），不表示运行时调用或数据流。「模块」指上表每一行的路径前缀；同一模块内部的 import（如 `contracts/release -> contracts/manifest`、`sdk -> sdk/message`）不受限制。跨模块的边只允许下表列出的；标准库和已批准的第三方依赖不受此表限制。
@@ -74,7 +76,7 @@
 | 状态 | 唯一所有者 |
 | --- | --- |
 | `<data_dir>/core.lock`、`state.sqlite`（安装、组件角色与来源、代次、Journal、策略、secret 引用、工具策略、Agent 会话、按钮 token 映射 `button_token`） | `internal/core` |
-| WebUI 组件与组件图标的静态文件（不可变包目录） | `internal/core` 只读提供；内容归组件发布者 |
+| WebUI 组件、组件图标与配置示例图片（不可变包目录） | `internal/core` 只读提供；内容归组件发布者 |
 | `<plugins>/<id>/runtime.lock`、插件受管 DB 连接 | 插件进程内的 `sdk` |
 | 插件业务数据（受管 SQLite 候选文件） | 插件；Core 只负责候选复制与准入 |
 | 插件自管的外部数据（外部数据库、框架外文件） | 插件；Core 不创建、不校验、不备份（D-48） |

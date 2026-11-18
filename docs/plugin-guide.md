@@ -170,9 +170,9 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 
 可选的 `condition` 按字段路径写期望值，例如 `"condition": {"mode.$key": "simple", "enabled": true}`，全部相等时显示该示例。字段被自身的显示条件隐藏时，示例一同隐藏。示例只声明固定回复；草稿替换与显示由 WebUI 完成。
 
-翻译在 `config.<字段>.example` 中按源对象或数组的形状、按片段位置覆盖 `input`、`text` 与 `alt`，缺项沿用源文案；图片路径和条件保持源声明。`check`、`build` 和 `pack` 同时核对翻译结构、片段位置与占位符。
+翻译写在 `i18n/<locale>.json` 的 `config.<字段>.example` 下。沿用源 `example` 的对象或数组形状、源 `reply` 的字符串或片段数组形状；按位置覆盖 `input`、`reply` 字符串、片段的 `text` 或 `alt`。缺项沿用源文案，跳过数组中间一项时填 `{}`。`check`、`build` 和 `pack` 会核对覆盖键、文案类型、源形状、片段位置与占位符引用。
 
-Core 经管理认证提供 `GET /api/v1/packages/{id}/examples/greeting.png`，仅允许 Active 代次 schema 引用的普通文件，并带与组件图标相同的安全响应头。
+上例打包安装并激活后，Core 经管理认证提供 `GET /api/v1/packages/{id}/examples/greeting.png`。端点只提供 Active 包中 `config_schema.json` 引用的图片，并带与组件图标相同的安全响应头；详见 [ADMIN-API §3.3](../spec/ADMIN-API.md#33-组件图标)。
 
 ## 8. 测试
 
