@@ -6,7 +6,7 @@
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
-| goal-73 | T-14.3 | 发行归档 | T-03.10、T-09.3、T-12.7、T-14.1 | 等待前置（T-14.1） |
+| goal-73 | T-14.3 | 发行归档 | T-03.10、T-09.3、T-12.7、T-14.1 | 待派发 |
 | goal-74 | T-14.4 | 首次运行与预装 | T-09.6、T-14.3 | 等待前置 |
 | goal-77 | T-14.5 | 容器镜像 | T-07.6、T-14.3 | 等待前置 |
 | goal-85 | T-14.7 | install.sh | T-14.3 | 等待前置 |
@@ -20,7 +20,7 @@
 
 ### goal-73 · T-14.3 发行归档
 
-状态：等待语句定稿（前置均已合并）。T-14.1（PR #210，`456a4df`）已合并。T-03.10、T-09.3、T-12.7 已合并。2026-11-17 按 D-171 缩小组件范围：不再等待 T-14.2 与 T-15.2，发行归档只含 Core、Telegram Adapter、Agent、WebUI 与 help。语句中 goal-38 提供的命令（alonabot pack 与 --key）与各组件的目录只写名字；T-14.1 合并后由审查者核对，再改为待派发。
+状态：待派发。前置 T-03.10、T-09.3、T-12.7 与 T-14.1（PR #210，`456a4df`）均已合并；2026-11-17 按 D-171 缩小组件范围，并按 main `08cee69` 核对：`alonabot pack` 的参数为 `--dir`、`--goos`、`--goarch`、`--tags`、`--asset-url`（必填，绝对 https 地址）、`--key`（标准 base64 的 64 字节 Ed25519 私钥文件）与 `--out`，带 `--key` 时只为单个平台签名（`internal/pluginkit.Pack` 以 `ed25519.Sign` 对 release.json 原始字节签名，写出 base64 加换行的 release.json.sig 与 release.pub）；`contracts/release` 提供 `Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*Release, error)` 与 `KeyID(pub) string`，`Release.PublisherKeyID` 须等于验签公钥的 KeyID。组件目录：Core `cmd/alonabot`，Telegram Adapter `adapters/telegram`（薄入口 `cmd/alonabot-adapter-telegram`），Agent `agent`，help `plugins/help`（`alonabot-plugin-help-official`），WebUI `web/admin`（当前只有静态文件，按 any 打包一次；带 Go 入口由 goal-156 实现后再按平台打包）。`internal/core/trust` 尚不存在；安装时的信任判断在 `internal/core/manage/install.go`（`trusted` 与「trust publisher」确认项）和 `candidates.go:checkPublisher`（更新时的发布者绑定）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-73（切片 T-14.3：发行归档）。goal 目录 goal-73，分支 goal-73，worktree .worktrees/goal-73，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -32,18 +32,18 @@
 范围（只新增或修改这些）：
 - 新增 scripts/dist/（Go 程序，go run ./scripts/dist 执行）
 - 新增 internal/core/trust/（官方发布者公钥；构建时通过 -ldflags -X 注入，开发构建为空）
-- internal/core/packages 或 manage：安装时把 trust 中的官方公钥视为已信任来源（只加调用点）
+- internal/core/manage/install.go 与 candidates.go：发布者 KeyID 等于 `trust.Official()` 的 KeyID 时视为已信任来源，不加入「trust source」「trust publisher」确认项（只加调用点）
 - docs/development.md：增加「发行构建」一节（本切片获授权修改这一节）
 - 上述包的测试文件
 允许的新跨模块边：scripts/dist -> contracts/release（ARCHITECTURE 已登记，用于自检签名）；其余只经 os/exec 调用 go build 与 alonabot 二进制。
 
 接口：
-- go run ./scripts/dist --version VERSION --key FILE --out DIR [--platforms linux/amd64,...]：缺省为五个目标平台；--key 为官方 Ed25519 私钥文件（不进入仓库与产物）。
+- go run ./scripts/dist --version VERSION --key FILE --out DIR [--platforms linux/amd64,...] [--asset-base URL]：缺省为五个目标平台；--key 为官方 Ed25519 私钥文件（格式同 alonabot pack --key，不进入仓库与产物）；--asset-base 缺省为 `https://github.com/AlonaBot/AlonaBot/releases/download/v<VERSION>`，每个安装包的 --asset-url 为该前缀加归档名。
 - internal/core/trust：var officialKey string（base64 公钥，由 -ldflags "-X github.com/AlonaBot/AlonaBot/internal/core/trust.officialKey=..." 注入）；func Official() (ed25519.PublicKey, bool) // 未注入时 false
 
 行为：
 - 每个平台：CGO_ENABLED=0、-trimpath、-ldflags 注入版本与官方公钥，构建 alonabot。
-- 每个官方包：先为每个平台运行该版本的 alonabot pack --goos --goarch（不带 --key），把各平台 release.json 的 assets 合并为一份，按 CONTRACTS §9.2 用 --key 的私钥对这份 release.json 的确切字节签名（contracts/release），写出 release.json.sig 与 release.pub（D-169：pack 的 --target 由 T-13.6 在本切片之后实现）。官方 WebUI 带 Go 入口（D-162、goal-156），与其他组件一样按平台打包；只有静态文件的 WebUI 才按 any 打包一次。
+- 每个官方包：先为每个平台运行该版本的 alonabot pack --goos --goarch（不带 --key），把各平台 release.json 的 assets 合并为一份，把 `publisher_key_id` 设为 `release.KeyID(公钥)`，按 CONTRACTS §9.2 用 --key 的私钥对这份 release.json 的确切字节签名（`crypto/ed25519`，sig 文件格式与 `pluginkit.Pack` 相同），写出 release.json.sig 与 release.pub（D-169：pack 的 --target 由 T-13.6 在本切片之后实现）。官方 WebUI 带 Go 入口（D-162、goal-156），与其他组件一样按平台打包；只有静态文件的 WebUI 才按 any 打包一次。
 - 产物放入 alonabot-<version>-<os>-<arch>/（alonabot 可执行文件与 packages/，packages/ 中是该平台的安装包与合并后的 release.json、.sig、.pub），Windows 打 zip，其他打 tar.gz（文件按名称排序、时间戳固定，可重复）。
 - 自检：每个包用 contracts/release.Verify 与公钥验证一次；失败则中止。把各归档的 SHA256 写入 SHA256SUMS（`sha256sum` 的格式：摘要、两个空格、文件名）。
 - 官方公钥：发行版 Core 安装时把它视为已信任来源（预装包不逐个确认，签名与摘要照常校验）；开发构建没有内置公钥，行为不变。
