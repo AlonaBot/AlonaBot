@@ -153,12 +153,16 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		if err := settings.ValidateListen(*o.Listen); err != nil {
 			return fail(startupUsage(fmt.Errorf("--listen: %w", err)))
 		}
-		hostname, _, _ := net.SplitHostPort(*o.Listen)
-		ip, _ := netip.ParseAddr(hostname)
-		if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(hostname, "."), "localhost") && baseURL.Scheme != "https" && len(configuration.TrustedProxies) == 0 {
-			return fail(startupUsage(errors.New("--listen: non-loopback listen requires HTTPS base_url or trusted_proxies")))
-		}
 		configuration.Listen = *o.Listen
+	}
+	hostname, _, _ := net.SplitHostPort(configuration.Listen)
+	ip, _ := netip.ParseAddr(hostname)
+	nonLoopback := !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(hostname, "."), "localhost")
+	baseIP, _ := netip.ParseAddr(baseURL.Hostname())
+	containerHTTP := os.Getenv("ALONABOT_CONTAINER") == "1" && baseURL.Scheme == "http" &&
+		(baseIP.IsLoopback() || strings.EqualFold(strings.TrimSuffix(baseURL.Hostname(), "."), "localhost"))
+	if o.Listen != nil && nonLoopback && baseURL.Scheme != "https" && len(configuration.TrustedProxies) == 0 && !containerHTTP {
+		return fail(startupUsage(errors.New("--listen: non-loopback listen requires HTTPS base_url or trusted_proxies")))
 	}
 	if o.LogLevel != nil {
 		configuration.LogLevel = *o.LogLevel
@@ -277,6 +281,10 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		development[entry.manifest.ID] = entry.manifest
 	}
 	version := coreVersion()
+	bundles, err := bundledDirectory()
+	if err != nil {
+		return fail(err)
+	}
 	management := manage.New(manage.Options{Logs: output, Stopping: c.stopping, NotifyLogLevel: func(ctx context.Context, id string, level pb.LogLevel) error {
 		return c.operation(ctx, func(ctx context.Context) error {
 			plugin, ok := c.assembly.router.Plugin(id)
@@ -328,7 +336,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 				return fmt.Errorf("adapter is not running: %s", id)
 			})
 		},
-		Packages: filepath.Join(dir, "packages"), Limits: packages.NewLimits(values), Development: development, DevelopmentWebUI: webUI,
+		Packages: filepath.Join(dir, "packages"), BundledPackages: bundles, Limits: packages.NewLimits(values), Development: development, DevelopmentWebUI: webUI,
 		Descriptor:        c.assembly.componentDescriptor,
 		DevelopmentConfig: c.developmentConfig, RestartDevelopment: c.Restart,
 		Candidates: managedCandidates{core: c},
@@ -393,6 +401,17 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 			})
 		},
 	})
+	if err := c.preinstall(ctx, management, bundles); err != nil {
+		return fail(err)
+	}
+	configuredAdapters, err := c.configuredAdapters(ctx, management, bundles)
+	if err != nil {
+		return fail(err)
+	}
+	installs, err = store.Installs(ctx)
+	if err != nil {
+		return fail(err)
+	}
 	managementHandler := management.Handler(authentication)
 	var managementWrites sync.Mutex        // 覆盖元数据写入与随后的引用回收。
 	managementReady := make(chan struct{}) // 启动回收完成后才接受管理写入。
@@ -447,6 +466,9 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	c.http = &http.Server{Addr: listener.Addr().String(), Handler: publicHost, ErrorLog: slog.NewLogLogger(slog.Default().Handler(), slog.LevelError)}
 	c.httpErrors = make(chan error, 1)
 	go func() { c.httpErrors <- c.http.Serve(listener) }()
+	if nonLoopback && containerHTTP && len(configuration.TrustedProxies) == 0 {
+		slog.Warn("listening on all interfaces inside a container; publish the port to the host loopback only")
+	}
 	slog.Info("HTTP listener started", "listen", listener.Addr().String())
 	slog.Info("Core started", "data_dir", dir)
 	for _, install := range installs {
@@ -488,6 +510,15 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 					c.assembly.detach(running)
 					if closeErr := running.instance.Session.Close(); closeErr != nil {
 						slog.Error("close degraded session failed", "plugin_id", install.PluginID, "error", closeErr)
+					}
+				}
+				continue
+			}
+			if err != nil && configuredAdapters[install.PluginID] {
+				slog.Error("configured adapter start failed", "plugin_id", install.PluginID, "error", err)
+				if running != nil && running.instance.State() != host.StateDegraded {
+					if stopErr := c.stopManaged(install.PluginID, pb.StopReason_STOP_REASON_DISABLE); stopErr != nil {
+						slog.Error("configured adapter cleanup failed", "plugin_id", install.PluginID, "error", stopErr)
 					}
 				}
 				continue

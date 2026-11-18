@@ -11,9 +11,11 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/core/trust"
 )
 
 // Candidates 接收通过管理前置校验的候选操作，由候选编排器实现。
@@ -72,7 +74,16 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (re
 		return result, developmentError(id)
 	}
 	if req.Source == "" && req.Archive == "" {
-		req.Source = strings.TrimPrefix(in.Source, "github.com/")
+		bundled, version, err := s.bundledUpdate(ctx, id)
+		if err != nil {
+			return result, err
+		}
+		if version != "" {
+			bundled.Confirm, bundled.Replace = req.Confirm, req.Replace
+			req = bundled
+		} else {
+			req.Source = strings.TrimPrefix(in.Source, "github.com/")
+		}
 	}
 	candidate, err := s.prepare(ctx, req)
 	if err != nil {
@@ -148,6 +159,9 @@ func checkPublisher(bound, candidate string, confirm bool) error {
 	}
 	if bound != "" {
 		return denied("candidate publisher differs from installed binding")
+	}
+	if official, ok := trust.Official(); ok && candidate == release.KeyID(official) {
+		return nil
 	}
 	if !confirm {
 		return &ErrNeedsConfirm{Affected: []string{"trust publisher: " + candidate}}

@@ -4,6 +4,11 @@ CREATE TABLE schema_version (
 
 INSERT INTO schema_version (version) VALUES (0);
 
+CREATE TABLE core_initialization (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  preinstalled INTEGER NOT NULL
+);
+
 CREATE TABLE install (
   plugin_id    TEXT PRIMARY KEY,
   install_seq  INTEGER NOT NULL UNIQUE,
@@ -23,7 +28,7 @@ CREATE TABLE generation (
   generation_id   TEXT PRIMARY KEY,
   plugin_id       TEXT NOT NULL REFERENCES install(plugin_id),
   config_snapshot TEXT NOT NULL,
-  config_version  INTEGER NOT NULL,
+  config_corrections TEXT NOT NULL,
   created_at      INTEGER NOT NULL,
   committed_at    INTEGER
 );

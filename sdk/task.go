@@ -28,7 +28,7 @@ func collectTasks(root *Plugin, reg *registration) error {
 	}
 	// 仅校验 task 前缀相关路由；HTTP Listener 在后续准备阶段才创建。
 	registration := &pb.Register{CandidateConfigJson: "{}"}
-	for _, route := range buildRegister(reg, "{}", 0, nil).Routes {
+	for _, route := range buildRegister(reg, "{}", nil).Routes {
 		if strings.HasPrefix(route.RouteId, taskRoutePrefix) {
 			registration.Routes = append(registration.Routes, route)
 		}

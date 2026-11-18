@@ -14,7 +14,6 @@ type BuildInfo struct {
 	RequiredCapabilities *[]Capability // 进程角色必填，无能力时指向空列表
 	OS, Arch             string        // 纯静态 WebUI 必须为 any/any
 	Entrypoint           string        // 进程角色的包内相对路径
-	ConfigVersion        *uint32       // 进程角色必填
 	MigrationMode        string        // 非 Adapter 进程必须为 none、self 或 versioned
 	PrepareEffects       string        // 非 Adapter 进程必须为 none 或 managed_db
 }
@@ -30,7 +29,6 @@ func Generate(project *Manifest, build BuildInfo) ([]byte, error) {
 	m.RequiredCapabilities = build.RequiredCapabilities
 	m.OS, m.Arch = build.OS, build.Arch
 	m.Entrypoint = build.Entrypoint
-	m.ConfigVersion = build.ConfigVersion
 	m.MigrationMode = build.MigrationMode
 	staticWebUI := m.Role == roleWebUI && m.Entrypoint == ""
 	if staticWebUI && m.webUIProcessField != "" {
@@ -79,7 +77,7 @@ func Generate(project *Manifest, build BuildInfo) ([]byte, error) {
 			if m.Role == roleAdapter || staticWebUI {
 				continue
 			}
-		case "protocol_min_major", "protocol_max_major", "required_capabilities", "entrypoint", "config_version":
+		case "protocol_min_major", "protocol_max_major", "required_capabilities", "entrypoint":
 			if staticWebUI {
 				continue
 			}

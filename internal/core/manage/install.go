@@ -20,6 +20,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/core/trust"
 )
 
 // InstallRequest 指定本地归档及清单内容，或由 Core 下载的 GitHub 来源。
@@ -91,6 +92,9 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 	var replaced []string
 	var confirmation []string
 	trusted := false
+	if official, ok := trust.Official(); ok {
+		trusted = key == release.KeyID(official)
+	}
 	for _, old := range installs {
 		if old.Source == in.Source && old.PublisherKeyID == in.PublisherKeyID {
 			trusted = true

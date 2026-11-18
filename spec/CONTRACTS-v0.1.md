@@ -254,7 +254,7 @@ Core 记录运行状态变化、唤醒/空闲停止原因、冷启动次数、�
 - 每个字段都有值。缺失的键用 `default` 补齐；没有 default 时取类型的零值：`string`、`text` 为 `""`，`int`、`float` 为 0，`bool` 为 false，`list`、`template_list` 为 `[]`，`dict` 为 `{}`，`object` 递归补齐 items；`template` 没有零值，缺失表示未选择模板。只补**缺失键**，显式的 `false`、`0`、`""`、空数组与空对象都保留；list 与 template_list 的元素、template 的模板对象内同样补齐。载入时按 §5.5 校正：类型不符先做无损转换（数字字符串与 int、float 互转，int 与没有小数部分的 float 互转，数字与 bool 转为字符串，"true"、"false" 转为 bool，单个值包成单元素 list），转换不了，或不在 options 中、超出 int64 或 slider 范围、template 不是恰好一个已声明的模板键时恢复为 default（没有 default 时取类型零值，template 为未选择），template_list 中模板键已不存在的元素移除，并记校正记录（D-161）；存储的 `null` 视为缺失。校正后 required 仍不满足时返回 INVALID_ARGUMENT，错误指明 JSON 路径，不含取值。
 - 未知键默认保留，包括 object、list 元素与模板对象中的未知键；SDK 以完整原始 JSON 对象维护配置，不能用只含已声明字段的结果覆盖整个文档。
 - 插件经插件对象的 `p.Config()` 或 Handler 内的 `c.Config()` 读取本 Session 的只读配置（D-114），两者都是整个插件的配置（Handler 中的 `c.Config()` 另合并本次调用所用配置文件的覆盖值，§5.6）：它在 OnConfigLoad 之后、OnStart 之前就绪，Session 内不变，配置修改由新 Session 应用（§4.1）。按字段类型取值：`String`（string、text）、`Int`、`Float`、`Bool`、`Strings`（没有 items 的 list）、`Object`（object）、`Objects`（有 items 的 list）、`Dict`（dict，值保持 JSON 原样）、`Template`（template，返回模板键与该模板的对象，未选择时模板键为空串）、`TemplateList`（template_list）。`Object`、`Objects` 与模板返回的对象用同样的方法读取其 items。键未在该层声明，或方法与字段类型不符时 panic，消息为英文并指明键的路径；secret 字段返回解析后的明文。
-- 子插件的配置是 `config_schema.json` 中与子插件 ID 同名的顶层 `object` 字段，不另设 schema 文件（D-116）。`s.Config()` 返回该对象的只读视图，与 `p.Config().Object(id)` 相同；它可以在注册时取得并保存，读取须在配置就绪之后，就绪前读取 panic。调用过 `s.Config()` 的子插件在 schema 顶层没有同名字段，或该字段不是 `object` 时，SDK 在收集注册时报错并指明子插件 ID；没有调用的子插件不要求有这个字段。`c.Config()` 在子插件的 Handler 中仍是整个插件的配置。表单、i18n 覆盖、secret、补缺失值与迁移路径照 `object` 的规则，配置版本每个插件只有一份。
+- 子插件的配置是 `config_schema.json` 中与子插件 ID 同名的顶层 `object` 字段，不另设 schema 文件（D-116）。`s.Config()` 返回该对象的只读视图，与 `p.Config().Object(id)` 相同；它可以在注册时取得并保存，读取须在配置就绪之后，就绪前读取 panic。调用过 `s.Config()` 的子插件在 schema 顶层没有同名字段，或该字段不是 `object` 时，SDK 在收集注册时报错并指明子插件 ID；没有调用的子插件不要求有这个字段。`c.Config()` 在子插件的 Handler 中仍是整个插件的配置。表单、i18n 覆盖、secret、补缺失值与校正照 `object` 的规则；需要保留改名或移动前的旧值时，在插件的 OnConfigLoad 中搬移。
 - WebUI 的字段 PATCH 使用 JSON Merge Patch：对象递归合并、数组整体替换、未提交键保持、`null` 表示删除键；删除的键随后按默认值补齐，因此清空字段等于恢复默认值，再经必需字段校验。提交携带所基于的 `base_generation`；旧代次提交返回 FAILED_PRECONDITION，不能覆盖另一项已完成的配置修改。`invisible` 字段不出现在表单中，PATCH 不能因未显示就删除它。因为数组整体替换，WebUI 提交 `list` 与 `template_list` 的行时：行中隐藏（`invisible` 或 `condition` 不满足）的字段与未知字段提交该行未编辑的原值，编辑后又被隐藏的字段也提交原值，新行没有原值时省略该键；行内恢复默认是从该行移除键，由补齐默认值处理（对象差量仍用 `null`）；行中的 secret 须全部重新输入（§5.3）。只按 Schema 字段处理，`dict` 值中用户写的 `null` 原样提交。对象差量恰好形成已设置 secret 的掩码形状时，WebUI 一并提交该对象中未变的键以消除歧义；没有可带的非掩码键时拒绝提交，不能把掩码放进补丁。
 
 ### 5.2 配置回调与激活次序
@@ -272,7 +272,7 @@ func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error)
 ### 5.3 Secret 与翻译
 
 - **配置快照存引用，Secret Store 存不可变 secret 版本**。持久化 secret 字段使用 `{"$secret_ref":"opaque-id"}`；secret 字段是 `config_schema.json` 中带 `"secret": true` 的 `string` 或 `text` 字段，可以位于 object、list 元素与模板对象内；空串表示未设置，不生成引用。新值生成新引用，旧代次的引用不可原地改值；普通配置 API 只返回引用/是否已设置，表单据此显示掩码，不能把掩码当成保存或“保持不变”的协议值。省略字段保持原值，显式删除走 §5.1 的校验。
-- Core 在构造本 Session 的 bootstrap 前解析其有权访问的引用，SDK 接收正常运行值完成 OnConfigLoad；REGISTER 回传后 Core 按新 Schema **以及此前保留的 secret 路径标记**重新抽取秘密值。旧 secret 字段从 Schema 移除但仍作为未知键保留时继续保密；只有管理员清理无效配置删除该键时才移除对应路径标记。不能把其他插件的引用解析给当前插件，也不能把含明文的 bootstrap/REGISTER、DSN、配置差异写入日志或普通管理响应。
+- Core 在构造本 Session 的 bootstrap 前解析其有权访问的引用，SDK 接收正常运行值完成 OnConfigLoad；REGISTER 回传后 Core 按新 Schema **以及此前保留的 secret 路径标记**重新抽取秘密值。校正把单个值包成 list 或 template_list 时，历史秘密路径随结构映射到新下标，原路径与新路径共同用于校正记录脱敏，新路径用于秘密抽取与持久化。旧 secret 字段从 Schema 移除但仍作为未知键保留时继续保密；只有管理员清理无效配置删除该键时才移除对应路径标记。不能把其他插件的引用解析给当前插件，也不能把含明文的 bootstrap/REGISTER、DSN、配置差异写入日志或普通管理响应。
 - 首发 Secret Store 与 Core 状态一起持久化，使用仅运行账号可读写的文件权限/Windows ACL；这保护普通管理访问，不承诺隔离同账号 Native 代码。管理员明文查看须再次认证并审计。失败候选的 secret 仅在未被 Active、Pending 或保留代次引用时回收；保留旧程序/DB 却提前删旧密钥不算可恢复快照。
 - 字段与模板的源文案写在 `config_schema.json` 中。`i18n/<locale>.json` 的顶层 `config` 与 `config_schema.json` 同形：字段键 → 覆盖对象，object 与有 items 的 list 的子字段放在 `items` 下，模板放在 `templates` 下，例如 `{"config": {"mode": {"description": "模式", "labels": ["快速", "安全"]}, "music": {"templates": {"netease": {"name": "网易云音乐", "items": {"cookie": {"description": "Cookie"}}}}}}}`。字段可以覆盖 `description`、`hint`、`labels`、`example`，模板可以覆盖 `name`、`hint`；其他键或引用不存在的字段、模板时 `check` 报错。查找顺序为当前 locale 的文件 → `config_schema.json` 中的源文案 → 字段键（模板为模板键）；options 的存储值不翻译，显示文案由 labels 提供。缺少翻译不改变配置内容；`invisible` 不是权限控制，不另建字段排序或并发调参页面。
 - `example` 翻译沿用源声明的对象或数组形状，`reply` 沿用字符串或片段数组形状。示例和片段按位置对应，数组可少于源数组，中间跳过的位置填 `{}`，缺项沿用源文案。可覆盖 `input`、`reply` 字符串、文字片段的 `text` 与图片片段的 `alt`；图片路径和 `condition` 保持源声明（D-160）。`i18n.Parse` 检查覆盖键与文案类型，`Schema.CheckI18n` 检查与源形状、片段位置的对应关系和占位符引用。
@@ -299,10 +299,10 @@ PATCH 语义依据：[RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)。
   | Adapter 实例配置 | 可导入的 Adapter 工程包中与 `plugin.yaml` 同目录的 `adapter_config_schema.json`，打包后位于安装包根目录；格式与 `config_schema.json` 相同（D-134） | Core |
   | Core 设置 | Core 内置的 schema | Core |
 
-- 校正规则：schema 中没有的键保留但忽略，称为无效配置；缺失的键用 default 补齐（§5.1）；类型不符时先做无损转换（数字字符串与 int、float 互转，int 与没有小数部分的 float 互转，数字与 bool 转为字符串，"true"、"false" 转为 bool，单个值包成单元素 list）；转换不了，或不在 options 中、超出 int64 或 slider 范围、template 的模板键已不存在时恢复为 default，没有 default 时取类型零值，template 为未选择；template_list 中模板键已不存在的元素移除。校正对 object、list 元素与模板对象逐层进行。
-- 每处转换、恢复与移除记一条校正记录：JSON 路径、原因（`converted`、`reset`、`removed`）与原值；secret 字段不记原值。插件的校正记录保存在代次元数据中，Adapter 实例与 Core 设置的保存在内存中，都经管理 API 读取（ADMIN-API §12～§14），并各记一条 WARN 日志，日志只写路径与原因。
+- 校正规则：schema 中没有的键保留但忽略，称为无效配置；缺失的键用 default 补齐（§5.1）；类型不符时先做无损转换（数字字符串与 int、float 互转，int 与没有小数部分的 float 互转，数字与 bool 转为字符串，"true"、"false" 转为 bool，单个值包成单元素 list）；转换不了，或不在 options 中、超出 int64 或 slider 范围、template 的模板键已不存在时恢复为 default，没有 default 时取类型零值，template 为未选择；template_list 中模板键已不存在的元素移除。恢复的 int 默认值同样规范化为整数表示，保持再次校正与 restart 时的快照一致。校正对 object、list 元素与模板对象逐层进行。
+- 每处转换、恢复与移除记一条校正记录：JSON 路径、原因（`converted`、`reset`、`removed`）与原值；涉及 secret 的字段或容器省略原值，历史秘密路径与记录路径相交时同样省略。插件的校正记录与配置快照、秘密路径同事务保存在代次元数据中，普通 restart 复用原记录；Adapter 实例与 Core 设置的保存在内存中，都经管理 API 读取（ADMIN-API §12～§14），并各记一条 WARN 日志，日志只写路径与原因。
 - 校正不改写用户写下的原文：插件 Active 快照保存校正后的配置；`core_config.json` 与其中的 Adapter 实例配置不被自动改写，校正后的值只在运行时使用。无效配置只有管理员在 WebUI 或管理 API 中清理时才删除：插件写入 Pending 后 reload，Adapter 实例与 Core 设置经写回流程删除这些键。
-- 校正后 required 仍不满足时照旧失败：插件候选失败、旧 Active 继续；Adapter 实例不启动；Core 设置没有 required 字段。`core_config.json` 不是合法的 JSON 对象时 Core 拒绝启动。
+- 校正后 required 仍不满足时照旧失败：插件候选失败、旧 Active 继续；Adapter 实例不启动；Core 设置没有 required 字段。Core 按当前层声明的原始成员键读取设置，带点号的未知键保留在 unknown 中；`log.sources` 等 dict 的合法点号键照常读取。`core_config.json` 不是合法的 JSON 对象时 Core 拒绝启动。
 - 作者改名或调整字段时不需要写迁移：新键得到默认值，旧键成为无效配置；需要把旧值带到新键时，在 `OnConfigLoad` 中判断旧键是否存在再搬移（§5.2）。Adapter 实例配置没有回调。
 
 ### 5.6 配置文件
@@ -401,7 +401,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 
 ### 7.4 首次管理认证与恢复
 
-- 首发使用一个 Core 管理凭证，不引入多用户账号体系。Core 首次启动且尚无管理凭证时生成 32-byte 随机 token，状态库只存 SHA256（D-82）：stdin 与 stderr 都是终端时只在该终端显示一次；不是终端时（系统服务、容器）写入 `<data_dir>/admin_token`，文件只有运行账号可读，日志只输出文件路径，第一次登录成功后 Core 删除该文件。`alonabot admin-token show` 在本机读出并显示这个文件，文件不存在时报错，供没有 shell 的容器使用；`alonabot admin-token init` 在启动前离线完成同样的初始化，只向终端显示。`alonabot admin-token reset` 仅在 Core 停止并持锁后替换该凭证、递增认证代次并撤销旧管理会话。`init` 与 `reset` 先取得同一 data_dir 的 core.lock；这些命令都不走公开 HTTP，不把凭证写入日志。
+- 首发使用一个 Core 管理凭证，不引入多用户账号体系。Core 首次启动且尚无管理凭证时生成 32-byte 随机 token，状态库只存 SHA256（D-82）：stdin 与 stderr 都是终端时只在该终端显示一次；不是终端时（系统服务、容器）写入 `<data_dir>/admin_token`，文件只有运行账号可读，日志只输出文件路径，第一次登录成功后 Core 删除该文件。`alonabot admin-token show` 在本机读出并显示这个文件，文件不存在时报错，供没有 shell 的容器使用；`alonabot admin-token init` 在启动前离线完成同样的初始化，只向终端显示；已有凭证时报错，加 `--if-missing` 则已有凭证时成功返回且不输出 token，供 `install.sh` 升级时使用（D-175）。`alonabot admin-token reset` 仅在 Core 停止并持锁后替换该凭证、递增认证代次并撤销旧管理会话。`init` 与 `reset` 先取得同一 data_dir 的 core.lock；这些命令都不走公开 HTTP，不把凭证写入日志。
 - 浏览器通过 POST `/api/auth/login` 提交 token，Core 验证 Origin/登录 CSRF 后恒时比较摘要，成功签发随机的、固定 **8h** 到期的管理会话。登出撤销该会话及其派生授权；会话检查同时校验认证代次。修改管理状态继续采用 §7.3 的 Cookie/CSRF 规则，明文查看 secret 使用当前 token 再认证。
 - Core 运行时可经管理认证及当前 token 再认证调用 `POST /api/auth/token/rotate`（ADMIN-API §20，D-164）。替换凭证、递增认证代次与撤销全部管理会话在同一事务完成；响应清除会话 Cookie，只交付一次新 token。之后使用新 token 登录或发起 Bearer 请求。
 - 管理 CLI 仅使用用户显式配置的 Bearer token 访问 Core，不从插件环境继承凭证；该认证不依赖浏览器 Cookie。非 loopback 的管理入口必须 HTTPS，可由已配置可信反代终止 TLS；纯本机 loopback 开发允许 HTTP。Core 管理 token 与聊天事件中的 Core Admin 列表是不同入口，平台角色不能兑换管理会话。
@@ -480,7 +480,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 
 ### 9.2 来源、摘要与签名
 
-- GitHub Releases 作为首发分发入口，不自建分发服务器。插件源（D-162）是 GitHub 仓库中的 `index.json`：`{"version": 1, "plugins": [{"repo": "owner/name", "role": "plugin", "tags": ["weather"]}]}`，`role` 取 §9.1 的四种，`tags` 可省略；名称、描述、版本与图标从组件仓库最新 Release 的 release.json 与包内 manifest 取得，安装照常经 `--source owner/repo`。官方 WebUI 预置官方源，可以切换为其他源；条目只是索引，不改变来源绑定与签名规则。**归档外**的 `release.json` 包含发布者公钥标识、绑定仓库来源、插件 ID/版本、各 OS/arch 资产 URL、字节长度和整个归档的 SHA256；归档内 manifest 不保存自身归档摘要，避免自包含循环。若记录单文件摘要，其对象必须明确是 binary 或资源，不与归档摘要混用。
+- GitHub Releases 作为首发分发入口，不自建分发服务器。插件源（D-162）是 GitHub 仓库中的 `index.json`，官方插件源为 `AlonaBot/plugin-store`（D-176），官方 WebUI 将其列为缺省源：`{"version": 1, "plugins": [{"repo": "owner/name", "role": "plugin", "tags": ["weather"]}]}`，`role` 取 §9.1 的四种，`tags` 可省略；名称、描述、版本与图标从组件仓库最新 Release 的 release.json 与包内 manifest 取得，安装照常经 `--source owner/repo`。官方 WebUI 预置官方源，可以切换为其他源；条目只是索引，不改变来源绑定与签名规则。**归档外**的 `release.json` 包含发布者公钥标识、绑定仓库来源、插件 ID/版本、各 OS/arch 资产 URL、字节长度和整个归档的 SHA256；归档内 manifest 不保存自身归档摘要，避免自包含循环。若记录单文件摘要，其对象必须明确是 binary 或资源，不与归档摘要混用。
 - 发布者可以用 Ed25519 对 `release.json` 的**确切 UTF-8 文件字节**签名，输出外部 `release.json.sig`（D-81，可选）；验证先签名后解析，不能重新序列化 JSON 后验签。有签名时 Core 使用已信任公钥校验签名；有没有签名都验证下载长度/SHA256、平台和内层 manifest 一致性；进程角色的包还要严格核对 build-info：必须存在，能用 `debug.ParseBuildInfo` 解析，与 entrypoint 内嵌的构建信息逐字一致，`GOOS`、`GOARCH` 等于 manifest 的 `os`、`arch`，任一项不符时拒绝（D-151）。实现使用 Go 标准库 `crypto/ed25519`，不引入通用 PKI 系统。
 - 签名时发布者在 release.json 旁一并发布 `release.pub`（标准 base64 的 32 字节 Ed25519 公钥，允许末尾空白），`--source` 安装与更新时随 release.json.sig 下载，本地安装由 `--public-key` 给出（缺省取 release.json 同目录的 release.pub）；公钥的 KeyID 必须等于 release.json 的 `publisher_key_id`。首次信任由管理员确认后记录该指纹，之后同来源的候选必须由同一公钥签名；无签名的来源以后带有效签名时，经管理员确认指纹后改为绑定（D-81、D-139）。WebUI 包的资产平台为 `any`，没有可执行入口；其他角色的资产必须与本机平台一致。
 - 首次来源信任由管理员明确接受并持久化仓库，有签名时同时持久化发布者公钥指纹。有签名的来源：之后的更新必须由同一公钥签名，来源或公钥变化停止更新，重新信任是独立管理动作。没有签名的来源：安装界面与 `list` 标明未签名，之后的更新只从同一仓库取，照常校验长度、SHA256、平台与内层 manifest；它以后提供签名时，由管理员确认后改为按该公钥绑定。已签名来源永远不能静默降级为无签名，验签失败也不能自动降级为无签名信任；不能仅凭同 ID 接管已有安装。官方组件始终签名。
@@ -496,7 +496,7 @@ Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行�
 | `build [目录]` | 以本次扫描的结果经 overlay 编入资源登记（manifest、配置与 i18n 资源、Service Schema 与 Handler 参数名）与调用 `sdk.Run` 的正式入口并编译，不写工程目录（D-145）；目录中没有 `plugin.yaml`、且是 import 根包的 main 包时按库模式构建（§15.5）：扫描其依赖中每个目录含 `plugin.yaml` 的组件入口包（包括模块缓存中的第三方 module），把全部登记经 overlay 编入该 main 包，只输出可执行文件。使用已锁定的 Go Modules；`--goos`、`--goarch` 选择目标平台。源码安装显式选择本地构建，预编译安装不要求服务器编译。 |
 | `check [目录]` | 不写文件，执行与 `build` 相同的扫描，核对入口、工程 manifest 是否只含作者信息、changelog（§9.1）、`config_schema.json`、`adapter_config_schema.json` 与 i18n；没有生成文件可比对（D-145）。 |
 | `test [目录]` | 按 `build` 的规则把本次扫描的资源经 overlay 编入后，在临时数据和离线测试会话检查加载与注册，不能调用生产凭证或宣称已测试平台发信。 |
-| `pack [目录]` | 先 `build`，再生成安装包与归档外的 `release.json`；`--asset-url` 不给时，工程 manifest 的 `source` 为 `github.com/<owner>/<repo>` 则取 `https://github.com/<owner>/<repo>/releases/download/v<version>/<归档名>`，其他来源须显式给出（D-149）；给出 `--key` 时签名，也可以只生成待离线签名的清单，私钥不进入包，`--key` 没有缺省值。`--target <os>/<arch>` 可重复，一次构建多个平台的归档并写出一份列出全部资产的 `release.json`，给出 `--key` 时只对这一份签名；不给时为本机平台（D-169）。 |
+| `pack [目录]` | 先 `build`，再生成安装包与归档外的 `release.json`；每个资产的地址为 `--asset-base` 加 `/` 与归档名；`--asset-base` 不给时，工程 manifest 的 `source` 为 `github.com/<owner>/<repo>` 则取 `https://github.com/<owner>/<repo>/releases/download/v<version>`，其他来源须显式给出绝对 https 前缀（D-149、D-174）；给出 `--key` 时签名，也可以只生成待离线签名的清单，私钥不进入包，`--key` 没有缺省值。`--target <os>/<arch>` 可重复，一次构建多个平台的归档并写出一份列出全部资产的 `release.json`，给出 `--key` 时只对这一份签名；不给时为本机平台（D-169）。`pack` 只用 `--target` 选择平台，不接受 `--goos`、`--goarch`；`build` 与 `check` 保留这两个参数（D-174）。 |
 
 
 管理命令如下；修改均经 Core 管理接口，CLI 不直接写状态库，离线时只允许只读检查或明确的维护恢复流程：
@@ -703,14 +703,14 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 ### 14.6 日志文件
 
 - `log.file.enabled` 为 true（缺省）时，Core 把全部记录以 §14.2 的控制台格式（不着色）写入 `<data_dir>/logs/alonabot-<YYYY-MM-DD>.log`，日期取本地时区。跨过零点时换到新日期的文件；当天的文件达到 `log.file.max_size`（缺省 **100 MiB**）时，依次续写 `alonabot-<日期>.1.log`、`alonabot-<日期>.2.log`。
-- 全部日志文件合计超过 `log.file.max_total`（缺省 **1 GiB**），或文件日期早于 `log.file.max_age_days`（缺省 **30** 天）时，从最旧的文件开始删除，两个条件先达到的生效；正在写入的文件不删除。Core 启动时与每次换文件时检查。`max_size` 大于 `max_total` 时拒绝启动。
+- 全部日志文件合计超过 `log.file.max_total`（缺省 **1 GiB**），或文件日期早于 `log.file.max_age_days`（缺省 **30** 天）时，从最旧的文件开始删除，两个条件先达到的生效；正在写入的文件不删除。Core 启动时与每次换文件时检查。`max_size` 大于 `max_total` 时，运行副本先将 `max_size` 恢复为缺省值；仍超出时再将 `max_total` 恢复为缺省值，并分别记录 reset，原文件保持（§5.5）。
 - 写入失败（例如磁盘已满）时 Core 继续运行，在 stderr 报告一次，到下一次换文件时重新打开。
 - 这些是普通设置（§15.1），不属于调优参数。库模式的日志文件在 `.alonabot/logs/`。
 
 ### 14.7 诊断包
 
 - 诊断包是一个 zip，供用户附在 issue 中（D-156）。内容分三组，可以分别取消：日志（按时间筛选记录，保留多行记录，§14.6）；设置与配置（`core_config.json`、已安装组件的 Active 配置）；组件与环境（已安装组件的 ID、角色、版本、来源、签名状态、是否启用、运行状态与最近一次错误，AlonaBot 版本、OS/arch、Go 版本、是否在容器中、数据目录占用）。组件最近错误从日志中查找，即使未选日志组。根目录的 `manifest.json` 记录格式版本（1）、生成时间、时间范围、各组是否包含、是否脱敏与完整文件列表（含清单自身）。不包含状态库、受管 SQLite、媒体、secret 存储、`admin_token` 与安装包。
-- 脱敏缺省开启：schema 中标为 `secret` 的字段与 Adapter 实例配置的凭证替换为 `[REDACTED]`。对设置中的每组 Adapter 按包归属查找实例 schema；有 schema 时先迁移导出副本，再遮盖秘密字段。没有可用 schema 时（例如已卸载、包归属不符或离线缺少开发资源），遮盖该组 `instances` 的全部叶值，保留结构。完整的 `${环境变量}` 表达式原样保留；夹有明文的秘密值整体遮盖。日志在 §14.5 之外再按规则遮盖 Bearer 与 Basic 凭证、URL 中的用户信息、查询参数中名为 token、key、secret、password 的值、Telegram 的 `bot<id>:<token>` 与公网 IP 地址（保留私有、回环与链路本地地址以及句末标点）。聊天内容不作专门处理。
+- 脱敏缺省开启：schema 中标为 `secret` 的字段与 Adapter 实例配置的凭证替换为 `[REDACTED]`。对设置中的每组 Adapter 按包归属查找实例 schema；有 schema 时直接按声明与原文结构遮盖秘密字段，list/template_list 的单对象输入也按元素声明脱敏。没有可用 schema 时（例如已卸载、包归属不符或离线缺少开发资源），遮盖该组 `instances` 的全部叶值，保留结构。完整的 `${环境变量}` 表达式原样保留；夹有明文的秘密值整体遮盖。日志在 §14.5 之外再按规则遮盖 Bearer 与 Basic 凭证、URL 中的用户信息、查询参数中名为 token、key、secret、password 的值、Telegram 的 `bot<id>:<token>` 与公网 IP 地址（保留私有、回环与链路本地地址以及句末标点）。聊天内容不作专门处理。
 - 管理 API 与 `alonabot diagnose` 共用打包与脱敏实现。CLI 只在管理连接被拒绝时尝试离线收集；认证和其他服务错误直接返回。离线时只读打开已有的 `core.lock`，持有 Core 使用的 OS 独占锁直到归档及来源关闭；锁缺失或被占用时报错。需要读取状态库时，在系统临时目录中读取主库及已有 WAL 的副本，源数据目录保持只读，组件状态为 `Stopped`。CLI 写入同目录临时文件，检查 zip 完整性与 CRC 后替换目标；失败时清理临时文件并保留已有输出。
 
 ## 15. 运行方式
@@ -817,7 +817,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | 数据目录 | `/var/lib/alonabot` | `~/Library/Application Support/AlonaBot/data` |
 | 服务 | systemd 单元 `alonabot.service`，以系统用户 `alonabot` 运行 `alonabot run --data-dir <数据目录>`，开机启动 | 用户 LaunchAgent `io.github.alonabot`，登录后启动 |
 
-- 执行顺序：识别 OS/arch → 下载 `--version` 指定的版本（缺省为最新 Release）的发行归档与 `SHA256SUMS` 并校验，不一致时退出且不改动已有安装 → 停止已有服务 → 替换程序目录中的 `alonabot` 与 `packages/` → 数据目录尚无管理凭证时以服务的身份运行 `alonabot admin-token init`，token 只在当前终端显示一次 → 写入服务定义并启动服务。
+- 执行顺序：识别 OS/arch → 下载 `--version` 指定的版本（缺省为最新 Release）的发行归档与 `SHA256SUMS` 并校验，不一致时退出且不改动已有安装 → 停止已有服务 → 替换程序目录中的 `alonabot` 与 `packages/` → 以服务的身份运行 `alonabot admin-token init --if-missing`（数据目录尚无管理凭证时初始化），token 只在当前终端显示一次 → 写入服务定义并启动服务。
 - 以 `curl … | sh` 运行时，初始化从 `/dev/tty` 读写终端；没有可用终端时跳过初始化，Core 首次启动时按 §15.1 把一次性 token 写入数据目录的 `admin_token`，脚本输出读取它的命令（`alonabot admin-token show --data-dir <数据目录>`）。
 - 再次运行即升级：数据目录、`core_config.json` 与已安装组件不变（Core 按 §5.5 校正设置），新版本 `packages/` 中更高版本的官方组件按 §15.2 作为可用更新列出。`--uninstall` 停止并删除服务定义与程序目录，保留数据目录并输出其路径。
 - 只经 HTTPS 下载。`SHA256SUMS` 与归档来自同一 Release，只防止传输损坏，不证明发布者身份；归档内的组件包仍由 Core 按 §9.2 验签。脚本不修改防火墙、反向代理与 `core_config.json`，Core 缺省只监听本机（§15.1）。
@@ -858,8 +858,8 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | `MEDIA_DISK_BUDGET` | 2GiB | > 0 | §1.3 |
 | `MEDIA_TTL` | 15m | > 0 | §1.3、§1.4 |
 | `PHASE_HELLO` | 10s | > 0 | §4.2 |
-| `PHASE_CONFIG` | 60s | > 0 | §4.2 |
-| `PHASE_MIGRATION` | 15m | > 0 | §4.2 |
+| `PHASE_CONFIG` | 60s | > 0 | §4.2、§5.2（OnConfigLoad、补值与校正、required 校验） |
+| `PHASE_MIGRATION` | 15m | > 0 | §4.2、§6.2（数据库迁移） |
 | `PHASE_ONSTART` | 60s | > 0 | §4.2 |
 | `PHASE_ONREADY` | 30s | > 0 | §4.2 |
 | `STOP_TOTAL` | 10s | ≥ `STOP_DRAIN` + `STOP_ONSTOP` | §4.2 |

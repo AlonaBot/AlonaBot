@@ -421,7 +421,7 @@ func recoveryCheckpoint(phase string) {
 func recoveryPackage(t *testing.T, dir, plugin, version string) string {
 	t.Helper()
 	// 覆盖打包 helper 的默认声明，显式使用受管 SQLite。
-	manifest := fmt.Sprintf("manifest_version: 1\nid: recovery\nname: Recovery Fixture\nversion: %s\nsource: github.com/example/recovery\nrole: plugin\nprotocol_min_major: 1\nprotocol_max_major: 1\nrequired_capabilities: []\nentrypoint: bin/component\nconfig_version: 1\nmigration_mode: none\nprepare_effects: managed_db\nos: %s\narch: %s\n", version, runtime.GOOS, runtime.GOARCH)
+	manifest := fmt.Sprintf("manifest_version: 1\nid: recovery\nname: Recovery Fixture\nversion: %s\nsource: github.com/example/recovery\nrole: plugin\nprotocol_min_major: 1\nprotocol_max_major: 1\nrequired_capabilities: []\nentrypoint: bin/component\nmigration_mode: none\nprepare_effects: managed_db\nos: %s\narch: %s\n", version, runtime.GOOS, runtime.GOARCH)
 	archive, err := writeTestPackage(filepath.Join(dir, version), "recovery", "plugin", "", "github.com/example/recovery", version, plugin, "", map[string][]byte{"plugin.yaml": []byte(manifest)})
 	if err != nil {
 		t.Fatal(err)

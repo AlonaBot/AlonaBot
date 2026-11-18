@@ -150,9 +150,6 @@ func newValues(schema, raw []byte) (Values, error) {
 	}
 	fields := make(map[string]valueDeclaration, len(declarations))
 	for name, raw := range declarations {
-		if name == "$version" || name == "$migrations" {
-			continue
-		}
 		var field valueDeclaration
 		if err := json.Unmarshal(raw, &field); err != nil {
 			return Values{}, fmt.Errorf("decode config declaration %q: %w", name, err)

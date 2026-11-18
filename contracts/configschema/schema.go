@@ -2,7 +2,8 @@
 //
 // Schema 保留 JSON 键顺序与数字原文，供生成器、SDK 和 Core 共用。
 // Parse 检查声明，Canonical 与 Hash 提供构建和 REGISTER 使用的规范内容及摘要。
-// Migrate 按声明版本转换旧配置，Complete 与 Validate 随后补值和校验。
+// Complete 与 Validate 提供显式编辑时的补值和校验。
+// Correct 按声明补值并校正完整配置，返回校正记录；未知键保留。
 // SecretPaths 与 CheckI18n 分别提供秘密字段路径与翻译核对。
 // ExampleImages 汇总已检查的回复示例所引用的包内图片。
 // 配置格式见 spec/CONTRACTS-v0.1.md §5.1、§5.3 与 §5.5。
@@ -14,7 +15,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strconv"
 )
 
 const (
@@ -28,16 +28,13 @@ const (
 	typeDict         = "dict"
 	typeTemplate     = "template"
 	typeTemplateList = "template_list"
-	defaultVersion   = 1
 )
 
 // Schema 保存已检查的配置声明；所有字段均由 Parse 初始化。
 type Schema struct {
-	root       orderedObject
-	fields     []*Field
-	canonical  []byte
-	version    int
-	migrations []migration
+	root      orderedObject
+	fields    []*Field
+	canonical []byte
 }
 
 // Problem 定位 schema 中的一项错误，Message 使用英文。
@@ -81,23 +78,13 @@ func Parse(raw []byte) (*Schema, []Problem) {
 	if !ok {
 		return nil, []Problem{{"$", "expected a JSON object"}}
 	}
-	schema := &Schema{root: root, version: defaultVersion}
+	schema := &Schema{root: root}
 	var problems []Problem
-	if version := root.get("$version"); root.has("$version") {
-		number, ok := version.(json.Number)
-		n, err := strconv.Atoi(string(number))
-		if !ok || err != nil || n <= 0 {
-			problems = append(problems, Problem{"$version", "expected a positive integer"})
-		} else {
-			schema.version = n
-		}
-	}
 	// 2. 先建立同层字段，再核对条件、默认值和模板引用。
 	schema.fields = parseFields(root, "", true, &problems)
 	if len(problems) == 0 {
 		checkProfileFields(schema.fields, "", true, false, &problems)
 		checkFields(schema.fields, "", &problems)
-		schema.parseMigrations(&problems)
 		schema.checkExamples(schema.fields, "", &problems)
 	}
 	if len(problems) != 0 {
@@ -115,9 +102,6 @@ func (s *Schema) Hash() []byte {
 	sum := sha256.Sum256(s.canonical)
 	return sum[:]
 }
-
-// Version 返回声明的 $version，缺省为 1。
-func (s *Schema) Version() int { return s.version }
 
 type property struct {
 	name  string

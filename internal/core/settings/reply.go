@@ -39,7 +39,7 @@ func readReply(n *node, reply *Reply) error {
 			}
 			reply.ForwardThreshold = threshold
 		default:
-			return value.fail(errors.New("unknown key"))
+			return nil
 		}
 		return nil
 	})
