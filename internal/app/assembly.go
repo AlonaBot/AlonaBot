@@ -111,7 +111,7 @@ func validateComponents(components []Component, installs []state.Install) error 
 			}
 			m = parsed.Manifest
 			warnings = parsed.Warnings
-			if m.Role == string(state.RoleWebUI) {
+			if m.Role == string(state.RoleWebUI) && m.Entrypoint == "" {
 				return fmt.Errorf("component %s has no executable role", m.ID)
 			}
 			entry.role, entry.manifest = state.Role(m.Role), m
@@ -288,6 +288,7 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 		PreEvent: func(ctx context.Context, ev *pb.Event) (*pb.EventPayload, bool, error) {
 			return hooks.PreEvent(ctx, ev)
 		}})
+	a.router.RegisterCommandList(a.mux)
 	hooks = hook.New(a.router, hook.Options{Prepare: a.media.PrepareIncoming, CheckEvent: a.checkAdapterEvent})
 	messages = message.New(a.adapters, p, a.media.LeaseForSend, a.buttons.Issue, v.RequestTimeout, hooks)
 	p.SetCommandsChanged(a.router.CommandsChanged)
@@ -556,7 +557,7 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) (err error) 
 	a.bus.Attach(plugin)
 	if r.process == nil {
 		if r.instance.HTTPListener != nil {
-			a.http.Bind(r.id, r.instance.GenerationID, r.instance.HTTPListener, r.instance.HTTPProxyToken, r.instance.Routes, r.install.Role == state.RoleAdapter)
+			a.http.Bind(r.id, r.instance.GenerationID, r.instance.HTTPListener, r.instance.HTTPProxyToken, r.instance.Routes, r.install.Role)
 		}
 		if err := a.scheduler.Attach(ctx, plugin, time.Now()); err != nil {
 			a.detach(r)
@@ -569,7 +570,7 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) (err error) 
 	return nil
 }
 
-func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Component) error {
+func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Component) (err error) {
 	id := entry.manifest.ID
 	const configFile = "config.json"
 	const databaseFile = "dev.sqlite"
@@ -643,6 +644,11 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, c.recordRuntime(context.WithoutCancel(ctx), install, state.RuntimeFailed, "development startup failed"))
+		}
+	}()
 	if harness := inproc.HarnessFor(dir); harness != nil {
 		if instances, restricted := harness.AllowedInstances[id]; restricted {
 			if err := c.store.SetAdapterInstanceAccess(ctx, id, false, instances); err != nil {
@@ -667,6 +673,10 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 		}
 	}
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
+		return err
+	}
+	boot.PluginDataDir, err = preparePluginDataDir(dir, id)
+	if err != nil {
 		return err
 	}
 	// 3. 独立进程与同进程共用开发配置、数据库和固定代次。
@@ -710,7 +720,9 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 		return nil
 	}
 	// 4. 同进程调用经内部入口复用 SDK 的握手、激活和停止流程。
-
+	if err := c.recordRuntime(ctx, install, state.RuntimeWaking, "starting"); err != nil {
+		return err
+	}
 	listener, err := wire.ListenLoopback()
 	if err != nil {
 		return err
@@ -761,6 +773,9 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 	}
 	running.instance, err = host.Activate(ctx, running.conn, prep, activation)
 	if err != nil {
+		return err
+	}
+	if err := c.recordRuntime(ctx, install, state.RuntimeActive, "activated"); err != nil {
 		return err
 	}
 	if err := c.assembly.attach(ctx, running); err != nil {
@@ -827,6 +842,16 @@ func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.Stop
 	frozen := func(deadline time.Time) { a.scheduler.Drain(r.id); a.http.Drain(r.id, deadline); a.bus.Detach(r.id) }
 	detach := func() { a.detach(r) }
 	var err error
+	var runtimeErr error
+	var active bool
+	if r.process == nil && tracksRuntime(r.install.Role) {
+		status, readErr := c.store.RuntimeStatus(context.Background(), r.id)
+		runtimeErr = readErr
+		active = status.State == state.RuntimeActive
+		if active {
+			runtimeErr = c.recordRuntime(context.Background(), r.install, state.RuntimeQuiescing, reason.String())
+		}
+	}
 	if r.process != nil {
 		// supervisor 处理进程树、HTTP 与 Scheduler；其余映射由装配撤销。
 		a.bus.Detach(r.id)
@@ -862,6 +887,14 @@ func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.Stop
 		a.scheduler.Released(r.id)
 	default:
 	}
+	if r.process == nil && tracksRuntime(r.install.Role) {
+		if err != nil {
+			runtimeErr = errors.Join(runtimeErr, c.recordRuntime(context.Background(), r.install, state.RuntimeFailed, "in-process shutdown failed"))
+		} else if active {
+			runtimeErr = errors.Join(runtimeErr, c.recordRuntime(context.Background(), r.install, state.RuntimeStopped, reason.String()))
+		}
+	}
+	err = errors.Join(err, runtimeErr)
 	if err != nil {
 		slog.Error("component shutdown failed", "plugin_id", r.id, "error", err)
 		return fmt.Errorf("component %s: %w", r.id, err)
@@ -869,7 +902,12 @@ func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.Stop
 	return nil
 }
 
-func (c *Core) startInstalled(ctx context.Context, dir string, install state.Install) (*runningComponent, error) {
+func (c *Core) startInstalled(ctx context.Context, dir string, install state.Install) (running *runningComponent, err error) {
+	defer func() {
+		if err != nil && (running == nil || running.instance.State() != host.StateDegraded) {
+			err = errors.Join(err, c.recordRuntime(context.WithoutCancel(ctx), install, state.RuntimeFailed, "installed startup failed"))
+		}
+	}()
 	generation, err := c.store.Active(ctx, install.PluginID)
 	if err != nil {
 		return nil, err
@@ -878,6 +916,26 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 		return c.prepareCandidate(ctx, install.PluginID, func(ctx context.Context) (*journal.Result, error) {
 			return c.assembly.journal.Prepare(ctx, install.PluginID, journal.KindFirstInstall, nil)
 		})
+	}
+	var snapshot state.RouteSnapshot
+	indexed := hasInstalledRoutes(install)
+	verified := false
+	if indexed {
+		defer func() {
+			if err == nil {
+				return
+			}
+			var validation *validate.Error
+			var phase *host.PhaseError
+			if !verified || errors.As(err, &validation) && validation.Code == pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION ||
+				errors.As(err, &phase) && phase.Code == pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION {
+				c.assembly.router.RemoveRouteSnapshot(install.PluginID)
+			}
+		}()
+		snapshot, err = c.store.ActiveRouteSnapshot(ctx, install.PluginID)
+		if err != nil {
+			return nil, fmt.Errorf("load active route snapshot: %w", err)
+		}
 	}
 	packageDir, err := installedDirectory(dir, install)
 	if err != nil {
@@ -897,6 +955,10 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	spec, running, err := c.installedSpec(ctx, install, packageDir, boot)
 	if err != nil {
 		return nil, err
+	}
+	if indexed {
+		c.assembly.router.SetRouteSnapshot(install.PluginID, snapshot.GenerationID, snapshot.Routes)
+		verified = true
 	}
 	running.process, err = supervisor.Launch(ctx, c.store, spec)
 	if err != nil {
@@ -921,9 +983,14 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 }
 
 // prepareCandidate 由运行循环独占调用，合并准备上下文与显式交接的进程资源。
-func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(context.Context) (*journal.Result, error)) (*runningComponent, error) {
+func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(context.Context) (*journal.Result, error)) (component *runningComponent, err error) {
 	a := c.assembly
 	defer func() { a.candidate = nil }()
+	defer func() {
+		if err != nil && component == nil && a.componentState(id) != "Activated" && a.candidate != nil {
+			err = errors.Join(err, c.recordRuntime(context.WithoutCancel(ctx), a.candidate.install, state.RuntimeFailed, "candidate failed"))
+		}
+	}()
 	// 1. 准备失败由 Journal 中止，恢复直接在当前运行循环执行。
 	r, err := prepare(ctx)
 	if err != nil {
@@ -944,7 +1011,15 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 		return nil, err
 	}
 	running.process, running.instance = process, process.Instance
-	if (kind == journal.KindUpdate || kind == journal.KindRollback) && (!record.WasEnabled || !record.WasRunning) {
+	if hasInstalledRoutes(running.install) {
+		if kind == journal.KindFirstInstall || record.WasEnabled {
+			a.router.SetRouteSnapshot(id, r.Generation, r.Session.Registration.Register.GetRoutes())
+		} else {
+			a.router.RemoveRouteSnapshot(id)
+		}
+	}
+	// 无旧 Active 的静态 WebUI 转进程时，原启用状态决定是否装配业务入口。
+	if (kind == journal.KindUpdate || kind == journal.KindRollback) && (!record.WasEnabled || !record.WasRunning && record.ExpectedOld != "") {
 		// 提交只切换权威代次；先停止候选，之后显式 enable 才建立业务 Session。
 		if stopErr := c.stopComponent(running, time.Now(), host.NewStopTiming(c.values), pb.StopReason_STOP_REASON_DISABLE); stopErr != nil {
 			return running, errors.Join(err, stopErr)
@@ -960,8 +1035,8 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 		failure := errors.Join(err, cause)
 		running.instance.Degrade(failure)
 		a.detach(running)
-		slog.Error("committed candidate assembly failed", "plugin_id", id, "op_id", r.OpID, "generation_id", r.Generation, "kind", kind, "error", failure)
-		return running, errors.Join(failure, running.instance.Session.Close())
+		slog.Log(ctx, logging.LevelCritical, "committed candidate assembly failed", "plugin_id", id, "op_id", r.OpID, "generation_id", r.Generation, "kind", kind, "error", failure)
+		return running, errors.Join(failure, running.instance.Session.Close(), c.recordRuntime(context.WithoutCancel(ctx), running.install, state.RuntimeFailed, "candidate assembly failed"))
 	}
 	// 3. ACTIVATED 成功后发布业务入口，再启动 Adapter 实例。
 	if attachErr := a.attach(ctx, running); attachErr != nil {
@@ -1148,6 +1223,11 @@ func (c *Core) startInstances(ctx context.Context, running *runningComponent, ra
 	}
 	for _, problem := range diagnostics {
 		slog.Warn("adapter instance configuration failed", "plugin_id", running.id, "instance_id", problem.InstanceID, "path", problem.Path, "reason", problem.Reason)
+		for id := range c.assembly.settings.Settings().Adapters[running.install.AdapterID].Instances {
+			if problem.InstanceID == "" || problem.InstanceID == id {
+				running.remote.RecordFailure(id, problem.Path+": "+problem.Reason)
+			}
+		}
 	}
 	c.assembly.adapters.SetDefaults(c.assembly.settings.Settings().DefaultInstances())
 	for id, configuration := range instances {

@@ -49,7 +49,7 @@ func chatKey(value string) (state.ChatKey, bool) {
 	}
 	name := adapterID
 	if strings.HasPrefix(name, validate.MarketPrefix) {
-		name = strings.Replace(name, "_", "-", 1)
+		name = strings.Replace(name, "-", "_", 1)
 	}
 	if _, err := validate.PluginID(name); err != nil {
 		return state.ChatKey{}, false

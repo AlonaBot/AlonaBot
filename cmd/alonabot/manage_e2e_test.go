@@ -25,6 +25,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -32,6 +33,7 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
+	"github.com/AlonaBot/AlonaBot/internal/core/profile"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/generate"
@@ -51,7 +53,7 @@ func prepareTestPackages() error {
 	if _, err = writeTestPackage(filepath.Join(binDir, "demo-package"), "demo", "plugin", "", "github.com/example/lifecycle", "1.0.0", filepath.Join(binDir, "lifecycle"), "", nil); err != nil {
 		return err
 	}
-	for name, source := range map[string]string{"adapter-fixture": adapterFixtureSource, "command-fixture": commandFixtureSource} {
+	for name, source := range map[string]string{"adapter-fixture": adapterFixtureSource, "command-fixture": commandFixtureSource, "job-fixture": jobFixtureSource} {
 		file := filepath.Join(binDir, name+".go")
 		if err := os.WriteFile(file, []byte(source), 0o600); err != nil {
 			return err
@@ -97,6 +99,290 @@ func TestManagementLifecycle(t *testing.T) {
 		t.Fatalf("restart changed generation or reused session: %+v", second)
 	}
 	stopTestCore(t, c)
+	t.Run("sleep-capable-runtime", func(t *testing.T) {
+		const id, source = "demo", "github.com/example/lifecycle"
+		archive := testPackage(t, id, "plugin", "", source, "sleep_capable: true\n", nil)
+		dir := t.TempDir()
+		start := func() *core { return startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json") }
+		c := start()
+		c.management(t, dir, "", "install", archive, "--yes")
+		c.management(t, dir, "", "enable", id)
+		active := findPackage(t, c, dir, id)
+		if !active.Enabled || active.Active == "" || active.State != "Activated" || active.RuntimeState != string(state.RuntimeActive) {
+			t.Fatalf("enabled package: %+v", active)
+		}
+		c.management(t, dir, "", "disable", id)
+		checkStopped := func(c *core) {
+			t.Helper()
+			item := findPackage(t, c, dir, id)
+			if item.Enabled || item.Uninstalled || item.Active != active.Active || item.Version != active.Version || item.Source != source || item.State != "Stopped" || item.RuntimeState != string(state.RuntimeStopped) {
+				t.Fatalf("disabled package: %+v", item)
+			}
+		}
+		checkStopped(c)
+		stopTestCore(t, c)
+		c = start()
+		checkStopped(c)
+		stopTestCore(t, c)
+	})
+	t.Run("static-job-and-token-rotation", func(t *testing.T) {
+		dir := t.TempDir()
+		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
+		address := c.address()
+		raw, err := os.ReadFile(filepath.Join(dir, "admin_token"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		token := strings.TrimSpace(string(raw))
+		base, err := url.Parse(settings.Defaults().BaseURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		call := func(method, path, token, csrf string, cookie *http.Cookie) (int, []byte, []*http.Cookie) {
+			t.Helper()
+			body, err := json.Marshal(map[string]string{"token": token})
+			if err != nil {
+				t.Fatal(err)
+			}
+			request, err := http.NewRequestWithContext(t.Context(), method, "http://"+address+path, bytes.NewReader(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Host = base.Host
+			request.Header.Set("Origin", base.String())
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("X-Alonabot-CSRF", csrf)
+			if cookie != nil {
+				request.AddCookie(cookie)
+			}
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, readErr := io.ReadAll(response.Body)
+			if err := errors.Join(readErr, response.Body.Close()); err != nil {
+				t.Fatal(err)
+			}
+			return response.StatusCode, raw, response.Cookies()
+		}
+		status, raw, cookies := call(http.MethodPost, "/api/auth/login", token, "", nil)
+		var login struct {
+			CSRFToken string `json:"csrf_token"`
+		}
+		if status != http.StatusOK || json.Unmarshal(raw, &login) != nil || login.CSRFToken == "" || len(cookies) != 1 {
+			t.Fatalf("login status=%d", status)
+		}
+		cookie := cookies[0]
+		archive, err := writeTestPackage(t.TempDir(), "jobs", "plugin", "", "github.com/example/jobs", "1.0.0", filepath.Join(binDir, "job-fixture"), "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.management(t, dir, token, "install", archive, "--yes")
+		c.management(t, dir, token, "enable", "jobs")
+		if status, raw, _ := call(http.MethodPost, "/api/v1/plugins/jobs/jobs/pulse/pause", "", login.CSRFToken, cookie); status != http.StatusOK {
+			t.Fatalf("pause status=%d: %s", status, raw)
+		}
+		lastRun := func() int64 {
+			t.Helper()
+			status, raw, _ := call(http.MethodGet, "/plugins/jobs/runs", "", "", cookie)
+			var stamp int64
+			if status != http.StatusOK || json.Unmarshal(raw, &stamp) != nil {
+				t.Fatalf("job runs status=%d: %s", status, raw)
+			}
+			return stamp
+		}
+		// 暂停前已派发的 Handler 可能仍在途，先以调度状态确认它完成交付。
+		status, raw, _ = call(http.MethodGet, "/api/v1/plugins/jobs/jobs", "", "", cookie)
+		var jobs struct {
+			Jobs []struct {
+				Paused    bool       `json:"paused"`
+				LastRunAt *time.Time `json:"last_run_at"`
+				NextRunAt *time.Time `json:"next_run_at"`
+			}
+		}
+		if status != http.StatusOK || json.Unmarshal(raw, &jobs) != nil || len(jobs.Jobs) != 1 || !jobs.Jobs[0].Paused || jobs.Jobs[0].NextRunAt != nil {
+			t.Fatalf("paused jobs status=%d: %s", status, raw)
+		}
+		if jobs.Jobs[0].LastRunAt != nil {
+			deadline := time.Now().Add(5 * time.Second)
+			for lastRun() < jobs.Jobs[0].LastRunAt.UnixMilli() {
+				if time.Now().After(deadline) {
+					t.Fatal("pending job did not reach the plugin")
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+		pausedRun := lastRun()
+		time.Sleep(2 * time.Second)
+		if got := lastRun(); got != pausedRun {
+			t.Fatalf("paused job fired: before=%d after=%d", pausedRun, got)
+		}
+		if status, raw, _ := call(http.MethodPost, "/api/v1/plugins/jobs/jobs/pulse/resume", "", login.CSRFToken, cookie); status != http.StatusOK {
+			t.Fatalf("resume status=%d: %s", status, raw)
+		}
+		deadline := time.Now().Add(5 * time.Second)
+		for lastRun() == pausedRun {
+			if time.Now().After(deadline) {
+				t.Fatal("resumed job did not fire")
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		status, raw, _ = call(http.MethodPost, "/api/auth/token/rotate", token, login.CSRFToken, cookie)
+		var rotated struct {
+			Token string `json:"token"`
+		}
+		if status != http.StatusOK || json.Unmarshal(raw, &rotated) != nil || rotated.Token == "" || rotated.Token == token {
+			t.Fatalf("token rotation status=%d", status)
+		}
+		if status, _, _ := call(http.MethodGet, "/api/auth/session", "", "", cookie); status != http.StatusUnauthorized {
+			t.Fatalf("old session status=%d", status)
+		}
+		status, raw, cookies = call(http.MethodPost, "/api/auth/login", rotated.Token, "", nil)
+		if status != http.StatusOK || json.Unmarshal(raw, &login) != nil || login.CSRFToken == "" || len(cookies) != 1 {
+			t.Fatalf("new token login status=%d", status)
+		}
+		stopTestCore(t, c)
+	})
+	t.Run("tool-policies", func(t *testing.T) {
+		dir := t.TempDir()
+		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
+		archive, err := writeTestPackage(t.TempDir(), "commands", "plugin", "", "github.com/example/commands", "1.0.0", filepath.Join(binDir, "command-fixture"), "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.management(t, dir, "", "install", archive, "--yes")
+		c.management(t, dir, "", "enable", "commands")
+		check := func(overridden bool) {
+			t.Helper()
+			status, body := fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/tools/policies")
+			var directory struct {
+				Policies []struct{ Service, Effect, Default, Override string }
+			}
+			if status != http.StatusOK || json.Unmarshal(body, &directory) != nil {
+				t.Fatalf("policies: %d %s", status, body)
+			}
+			want := map[string]string{"read": "read_only", "write": "write", "remove": "destructive", "unknown": "unspecified"}
+			if len(directory.Policies) != len(want) {
+				t.Fatalf("policies = %s", body)
+			}
+			for _, entry := range directory.Policies {
+				override := "inherit"
+				if overridden && entry.Service == "read" {
+					override = "deny"
+				}
+				if overridden && entry.Service == "write" {
+					override = "allow"
+				}
+				if entry.Effect != want[entry.Service] || entry.Default != "confirm" || entry.Override != override {
+					t.Errorf("policy = %+v, want effect=%s confirm/%s", entry, want[entry.Service], override)
+				}
+			}
+		}
+		check(false)
+		token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request, err := http.NewRequest(http.MethodPut, "http://"+c.address()+"/api/v1/tools/policies", strings.NewReader(`{"items":[{"plugin_id":"commands","service":"read","policy":"deny"},{"plugin_id":"commands","service":"write","policy":"allow"}]}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+		request.Header.Set("Content-Type", "application/json")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, readError := io.ReadAll(response.Body)
+		closeError := response.Body.Close()
+		if response.StatusCode != http.StatusOK || readError != nil || closeError != nil || strings.TrimSpace(string(body)) != "{}" {
+			t.Fatalf("batch PUT: status=%d body=%s read=%v close=%v", response.StatusCode, body, readError, closeError)
+		}
+		check(true)
+		stopTestCore(t, c)
+	})
+	t.Run("changelog", func(t *testing.T) {
+		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/showcase"}, "https://example.invalid/showcase.tar.gz", "", t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir := t.TempDir()
+		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json")
+		c.management(t, dir, "", "install", archive, "--yes")
+		status, raw := fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/packages/showcase/changelog")
+		var got struct {
+			Locale  string `json:"locale"`
+			Entries []struct {
+				Version  string `json:"version"`
+				Date     string `json:"date"`
+				Markdown string `json:"markdown"`
+			} `json:"entries"`
+		}
+		if status != http.StatusOK || json.Unmarshal(raw, &got) != nil {
+			t.Fatalf("changelog: %d %s", status, raw)
+		}
+		source, err := os.ReadFile("../../examples/plugins/showcase/CHANGELOG.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, body, ok := strings.Cut(string(source), "## [0.1.0] - 2026-11-17\n")
+		if !ok || got.Locale != "en-US" || len(got.Entries) != 1 || got.Entries[0].Version != "0.1.0" || got.Entries[0].Date != "2026-11-17" || got.Entries[0].Markdown != body || bytes.Contains(raw, []byte("[Unreleased]")) {
+			t.Fatalf("changelog entries: %s", raw)
+		}
+		stopTestCore(t, c)
+	})
+	t.Run("configuration-examples", func(t *testing.T) {
+		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/showcase"}, "https://example.invalid/showcase.tar.gz", "", t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir := t.TempDir()
+		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
+		c.management(t, dir, "", "install", archive, "--yes")
+		c.management(t, dir, "", "enable", "showcase")
+		token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		get := func(path string) (http.Header, int, []byte) {
+			t.Helper()
+			request, err := http.NewRequest(http.MethodGet, "http://"+c.address()+path, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, readErr := io.ReadAll(response.Body)
+			if err := errors.Join(readErr, response.Body.Close()); err != nil {
+				t.Fatal(err)
+			}
+			return response.Header, response.StatusCode, body
+		}
+		icon, status, _ := get("/api/v1/packages/showcase/icon")
+		if status != http.StatusOK {
+			t.Fatalf("icon status = %d", status)
+		}
+		headers, status, body := get("/api/v1/packages/showcase/examples/greeting.png")
+		image, err := os.ReadFile("../../examples/plugins/showcase/examples/greeting.png")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if status != http.StatusOK || !bytes.Equal(body, image) || headers.Get("Content-Type") != "image/png" {
+			t.Fatalf("example: status = %d, headers = %v, bytes = %d", status, headers, len(body))
+		}
+		for header, want := range map[string]string{"Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'", "X-Content-Type-Options": "nosniff"} {
+			if headers.Get(header) != want || headers.Get(header) != icon.Get(header) {
+				t.Fatalf("%s = %q, icon = %q, want %q", header, headers.Get(header), icon.Get(header), want)
+			}
+		}
+		if _, status, _ := get("/api/v1/packages/showcase/examples/unreferenced.png"); status != http.StatusNotFound {
+			t.Fatalf("unreferenced example status = %d", status)
+		}
+		stopTestCore(t, c)
+	})
 	t.Run("package-warnings-and-build-info", func(t *testing.T) {
 		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/lifecycle"}, "https://example.invalid/package.tar.gz", "", t.TempDir())
 		if err != nil {
@@ -114,10 +400,10 @@ func TestManagementLifecycle(t *testing.T) {
 			t.Fatalf("install: %s", output)
 		}
 		c.management(t, dir, "", "enable", "demo")
-		adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
 		c.management(t, dir, "", "install", adapter, "--yes")
-		c.management(t, dir, "", "adapter", "instance", "create", "alonabot_adapter_fixture", "one")
-		c.management(t, dir, "", "enable", "alonabot_adapter_fixture")
+		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", "one")
+		c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
 		c.waitFor("fixture instance one started")
 		next := validationPackage(t, archive, "1.1.0", []string{"migration_mode", "prepare_effects"}, "")
 		output = c.management(t, dir, "", "update", "demo", "--archive", next, "--yes")
@@ -168,13 +454,13 @@ func TestManagementLifecycle(t *testing.T) {
 			if after.Active != active.Active || after.Version != active.Version || after.State != "Activated" || lastSession(t, c) != session {
 				t.Fatalf("rejected update changed running package: %+v", after)
 			}
-			status, body := fixtureHTTP(t, c, dir, http.MethodPost, "/plugins/alonabot_adapter_fixture/deliver?instance=one&user=alice&text=%2Fping")
+			status, body := fixtureHTTP(t, c, dir, http.MethodPost, "/plugins/alonabot-adapter-fixture/deliver?instance=one&user=alice&text=%2Fping")
 			if status != http.StatusNoContent {
 				t.Fatalf("ping: %d %s", status, body)
 			}
 			deadline := time.Now().Add(5 * time.Second)
 			for {
-				status, body = fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot_adapter_fixture/sent")
+				status, body = fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot-adapter-fixture/sent")
 				var replies []string
 				if status != http.StatusOK || json.Unmarshal(body, &replies) != nil {
 					t.Fatalf("sent: %d %s", status, body)
@@ -190,6 +476,249 @@ func TestManagementLifecycle(t *testing.T) {
 		}
 		stopTestCore(t, c)
 	})
+	t.Run("webui-process-command-invoked", func(t *testing.T) {
+		// 1. 使用真实构建产物安装 WebUI、Adapter 与命令组件。
+		archive := packWebUIFixture(t, "1.0.0", webUIFixtureSource, nil)
+		dir := t.TempDir()
+		const origin = "http://webui.test:7650"
+		if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte(`{"listen":"127.0.0.1:0","base_url":"`+origin+`"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		c := startEmptyCore(t, dir)
+		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+		commands, err := writeTestPackage(t.TempDir(), "commands", "plugin", "", "github.com/example/commands", "1.0.0", filepath.Join(binDir, "command-fixture"), "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, path := range []string{archive, adapter, commands} {
+			c.management(t, dir, "", "install", path, "--yes")
+		}
+		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", "one")
+		for _, id := range []string{"alonabot-webui-fixture", "alonabot-adapter-fixture", "commands"} {
+			c.management(t, dir, "", "enable", id)
+		}
+		c.waitFor("fixture instance one started")
+		var cookie *http.Cookie
+		var csrf string
+		send := func(method, path, body string, want int) (*http.Response, []byte) {
+			t.Helper()
+			request, err := http.NewRequest(method, "http://"+c.address()+path, strings.NewReader(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Host = "webui.test"
+			request.Header.Set("Origin", origin)
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("X-Alonabot-CSRF", csrf)
+			if cookie != nil {
+				request.AddCookie(cookie)
+			}
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, readErr := io.ReadAll(response.Body)
+			if err := errors.Join(readErr, response.Body.Close()); err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != want {
+				t.Fatalf("%s %s: %d, want %d: %s\n%s", method, path, response.StatusCode, want, raw, c.log())
+			}
+			return response, raw
+		}
+		// 2. 同一管理源的后台路由先拒绝匿名请求，再接受真实登录 Cookie。
+		send(http.MethodGet, "/plugins/alonabot-webui-fixture/status", "", http.StatusUnauthorized)
+		token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		input, err := json.Marshal(map[string]string{"token": strings.TrimSpace(string(token))})
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, raw := send(http.MethodPost, "/api/auth/login", string(input), http.StatusOK)
+		var login struct {
+			CSRFToken string `json:"csrf_token"`
+		}
+		if err := json.Unmarshal(raw, &login); err != nil {
+			t.Fatal(err)
+		}
+		if len(response.Cookies()) != 1 || login.CSRFToken == "" {
+			t.Fatal("login did not return a cookie and CSRF token")
+		}
+		cookie, csrf = response.Cookies()[0], login.CSRFToken
+		response, _ = send(http.MethodGet, "/plugins/alonabot-webui-fixture/status", "", http.StatusOK)
+		if strings.Contains(response.Header.Get("Content-Security-Policy"), "sandbox") {
+			t.Fatal("WebUI backend was isolated from its management origin")
+		}
+		// 3. 经 Adapter 送入命令，再从 WebUI 进程读取其事件路由收到的结果。
+		send(http.MethodPost, "/plugins/alonabot-adapter-fixture/deliver?instance=one&user=alice&text=%2Finspect", "", http.StatusNoContent)
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			_, raw := send(http.MethodGet, "/plugins/alonabot-webui-fixture/status", "", http.StatusOK)
+			var received []struct {
+				PluginID, RouteID, CommandName, Result string
+				DurationMS                             uint64
+			}
+			if err := json.Unmarshal(raw, &received); err != nil {
+				t.Fatal(err)
+			}
+			if len(received) != 0 {
+				if len(received) != 1 || received[0].PluginID != "commands" || received[0].RouteID != "cmd.inspect" || received[0].CommandName != "inspect" || received[0].Result != "ok" {
+					t.Fatalf("command invocation results: %s", raw)
+				}
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("WebUI received no command invocation: %s\n%s", raw, c.log())
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		stopTestCore(t, c)
+	})
+	t.Run("profile-storage-and-assignments", func(t *testing.T) {
+		dir := t.TempDir()
+		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
+		archive := weatherProfilePackage(t, `{"city":{"type":"string","profile":true},"plain":{"type":"string"}}`, "1.0.0")
+		c.management(t, dir, "", "install", archive, "--yes")
+		c.management(t, dir, "", "enable", "weather")
+		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+		c.management(t, dir, "", "install", adapter, "--yes")
+		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", "one")
+		var created struct {
+			ID string `json:"id"`
+		}
+		output := c.management(t, dir, "", "profile", "create", "天气群")
+		if err := json.Unmarshal([]byte(output), &created); err != nil || created.ID == "" {
+			t.Fatalf("create: %s: %v", output, err)
+		}
+		c.management(t, dir, "", "profile", "set", created.ID, "weather", "city", `"北京"`)
+		c.management(t, dir, "", "profile", "assign", created.ID, "one")
+		c.management(t, dir, "", "profile", "assign", created.ID, "one", "devloop:chat")
+		status, raw := fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/profiles/assignments")
+		var assignments profile.Assignments
+		if status != http.StatusOK || json.Unmarshal(raw, &assignments) != nil || assignments.Instances["one"] != created.ID || len(assignments.Sessions) != 1 || assignments.Sessions[0] != (profile.Assignment{Instance: "one", Session: "devloop:chat", Profile: created.ID}) {
+			t.Fatalf("assignments: %d %s", status, raw)
+		}
+		status, raw = fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/profiles/"+created.ID+"/plugins")
+		var plugins []profile.Plugin
+		if status != http.StatusOK || json.Unmarshal(raw, &plugins) != nil || len(plugins) != 1 || string(plugins[0].Overrides["city"]) != `"北京"` {
+			t.Fatalf("overrides: %d %s", status, raw)
+		}
+		token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request, err := http.NewRequest(http.MethodPatch, "http://"+c.address()+"/api/v1/profiles/"+created.ID+"/plugins/weather", strings.NewReader(`{"overrides":{"plain":"rejected"}}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+		request.Header.Set("Content-Type", "application/json")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err = io.ReadAll(response.Body)
+		if closeErr := response.Body.Close(); err != nil || closeErr != nil {
+			t.Fatalf("read invalid override: %v %v", err, closeErr)
+		}
+		if response.StatusCode != http.StatusBadRequest || !bytes.Contains(raw, []byte("plain")) {
+			t.Fatalf("unmarked field: %d %s", response.StatusCode, raw)
+		}
+		c.management(t, dir, "", "profile", "delete", created.ID)
+		assignments = profile.Assignments{}
+		status, raw = fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/profiles/assignments")
+		if status != http.StatusOK || json.Unmarshal(raw, &assignments) != nil || len(assignments.Instances) != 0 || len(assignments.Sessions) != 0 {
+			t.Fatalf("deleted assignments: %d %s", status, raw)
+		}
+		var remaining []profile.Summary
+		output = c.management(t, dir, "", "profile", "list")
+		if json.Unmarshal([]byte(output), &remaining) != nil || len(remaining) != 1 || remaining[0].ID != "default" {
+			t.Fatalf("fallback: %s", output)
+		}
+		stopTestCore(t, c)
+	})
+}
+
+const webUIFixtureManifest = `id: alonabot-webui-fixture
+name: WebUI Fixture
+version: %s
+role: webui
+source: github.com/example/webui_fixture
+assets: assets
+admin_api_min_major: 1
+admin_api_max_major: 1
+`
+
+const webUIFixtureSource = `package fixture
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"sync"
+
+	"github.com/AlonaBot/AlonaBot/sdk"
+	"github.com/AlonaBot/AlonaBot/sdk/message"
+)
+
+func New() *sdk.Plugin {
+	p := sdk.NewPlugin()
+	var mu sync.Mutex
+	var received []message.CommandInvokedPayload
+	p.On("command.invoked", sdk.CommandInvoked).Handle(func(_ *sdk.Context, payload *message.CommandInvokedPayload) error {
+		mu.Lock()
+		defer mu.Unlock()
+		received = append(received, *payload)
+		return nil
+	})
+	p.Route(http.MethodGet, "/status").Public(sdk.AuthCallbackState).HandleFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(received); err != nil {
+			slog.Error("write command invocation results failed", "error", err)
+		}
+	})
+	return p
+}
+`
+
+func packWebUIFixture(t *testing.T, version, source string, files map[string]string) string {
+	t.Helper()
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if files == nil {
+		files = make(map[string]string)
+	}
+	if _, ok := files["plugin.yaml"]; !ok {
+		files["plugin.yaml"] = fmt.Sprintf(webUIFixtureManifest, version)
+	}
+	files["assets/index.html"] = "static-original"
+	if source != "" {
+		files["main.go"] = source
+		files["go.mod"] = "module example.com/webui\ngo 1.27.1\nrequire github.com/AlonaBot/AlonaBot v0.0.0\nreplace github.com/AlonaBot/AlonaBot => " + strconv.Quote(root) + "\n"
+		// 只让临时 module 填充 SDK 的传递依赖。
+		t.Setenv("GOFLAGS", os.Getenv("GOFLAGS")+" -mod=mod")
+	}
+	for name, raw := range files {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: dir}, "https://example.invalid/webui.tar.gz", "", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return archive
 }
 
 // validationPackage 只改真实 pack 产物的声明与构建信息，并同步归档发布清单。
@@ -288,15 +817,15 @@ func TestManagementDependencies(t *testing.T) {
 	if output := managementFailure(t, c, dir, "enable", "dependent"); !strings.Contains(output, "FAILED_PRECONDITION") || !strings.Contains(output, "devloop") {
 		t.Fatal(output)
 	}
-	adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1,"token":{"type":"string","required":true}}`)})
+	adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1,"token":{"type":"string","required":true}}`)})
 	c.management(t, dir, "", "install", adapter, "--yes")
-	c.management(t, dir, "", "enable", "alonabot_adapter_fixture")
+	c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
 	c.management(t, dir, "", "enable", "dependent")
-	if output := managementFailure(t, c, dir, "disable", "alonabot_adapter_fixture"); !strings.Contains(output, "dependent") || !strings.Contains(output, "--yes") {
+	if output := managementFailure(t, c, dir, "disable", "alonabot-adapter-fixture"); !strings.Contains(output, "dependent") || !strings.Contains(output, "--yes") {
 		t.Fatal(output)
 	}
-	c.management(t, dir, "", "disable", "alonabot_adapter_fixture", "--yes")
-	if findPackage(t, c, dir, "dependent").State != "Activated" || findPackage(t, c, dir, "alonabot_adapter_fixture").Enabled {
+	c.management(t, dir, "", "disable", "alonabot-adapter-fixture", "--yes")
+	if findPackage(t, c, dir, "dependent").State != "Activated" || findPackage(t, c, dir, "alonabot-adapter-fixture").Enabled {
 		t.Fatal("dependency confirmation changed dependents")
 	}
 	stopTestCore(t, c)
@@ -397,24 +926,24 @@ func TestManagementUninstallScopes(t *testing.T) {
 func TestManagementReplacement(t *testing.T) {
 	dir := t.TempDir()
 	c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
-	first := testPackage(t, "alonabot_agent_first", "agent", "", "github.com/example/agent1", "", nil)
-	second := testPackage(t, "alonabot_agent_second", "agent", "", "github.com/example/agent2", "", nil)
+	first := testPackage(t, "alonabot-agent-first", "agent", "", "github.com/example/agent1", "", nil)
+	second := testPackage(t, "alonabot-agent-second", "agent", "", "github.com/example/agent2", "", nil)
 	c.management(t, dir, "", "install", first, "--yes")
-	c.management(t, dir, "", "enable", "alonabot_agent_first")
-	if output := managementFailure(t, c, dir, "install", second, "--yes"); !strings.Contains(output, "ALREADY_EXISTS") || !strings.Contains(output, "alonabot_agent_first") {
+	c.management(t, dir, "", "enable", "alonabot-agent-first")
+	if output := managementFailure(t, c, dir, "install", second, "--yes"); !strings.Contains(output, "ALREADY_EXISTS") || !strings.Contains(output, "alonabot-agent-first") {
 		t.Fatal(output)
 	}
-	if output := managementFailure(t, c, dir, "install", second, "--replace"); !strings.Contains(output, "alonabot_agent_first") {
+	if output := managementFailure(t, c, dir, "install", second, "--replace"); !strings.Contains(output, "alonabot-agent-first") {
 		t.Fatal(output)
 	}
 	c.management(t, dir, "", "install", second, "--replace", "--yes")
-	if !findPackage(t, c, dir, "alonabot_agent_first").Uninstalled || !findPackage(t, c, dir, "alonabot_agent_second").Enabled {
+	if !findPackage(t, c, dir, "alonabot-agent-first").Uninstalled || !findPackage(t, c, dir, "alonabot-agent-second").Enabled {
 		t.Fatal("replacement lost enabled state")
 	}
 	for _, id := range []string{"devloop", "another"} {
-		archive := testPackage(t, "alonabot_adapter_"+id, "adapter", id, "github.com/example/"+id, "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
+		archive := testPackage(t, "alonabot-adapter-"+id, "adapter", id, "github.com/example/"+id, "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1}`)})
 		c.management(t, dir, "", "install", archive, "--yes")
-		if findPackage(t, c, dir, "alonabot_adapter_"+id).Uninstalled {
+		if findPackage(t, c, dir, "alonabot-adapter-"+id).Uninstalled {
 			t.Fatal("different adapter IDs conflict")
 		}
 	}
@@ -429,7 +958,7 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := startEmptyCore(t, dir)
-	adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1,"token":{"type":"string","required":true,"secret":true}}`)})
+	adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"$version":1,"token":{"type":"string","required":true,"secret":true}}`)})
 	commands, err := writeTestPackage(t.TempDir(), "commands", "plugin", "", "github.com/example/commands", "1.0.0", filepath.Join(binDir, "command-fixture"), "", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -441,7 +970,7 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"one", "two", "fail"} {
-		c.management(t, dir, "", "adapter", "instance", "create", "alonabot_adapter_fixture", id, "--config", configFile)
+		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", id, "--config", configFile)
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, settings.FileName))
 	if err != nil {
@@ -450,21 +979,21 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	if !bytes.Contains(raw, []byte("${MANAGE_E2E_TOKEN}")) || bytes.Contains(raw, []byte("fixture-credential-value")) {
 		t.Fatal("credential reference was changed")
 	}
-	c.management(t, dir, "", "enable", "alonabot_adapter_fixture")
+	c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
 	c.management(t, dir, "", "enable", "commands")
 	for _, id := range []string{"one", "two"} {
 		c.waitFor("fixture instance " + id + " started")
 	}
-	c.waitFor(`adapter instance start failed plugin_id=alonabot_adapter_fixture instance_id=fail`)
+	c.waitFor(`adapter instance start failed plugin_id=alonabot-adapter-fixture instance_id=fail`)
 	check := func(instance, user, text, want string, count int) {
 		t.Helper()
-		path := "/plugins/alonabot_adapter_fixture/deliver?instance=" + instance + "&user=" + user + "&text=" + url.QueryEscape(text)
+		path := "/plugins/alonabot-adapter-fixture/deliver?instance=" + instance + "&user=" + user + "&text=" + url.QueryEscape(text)
 		if status, body := fixtureHTTP(t, c, dir, http.MethodPost, path); status != http.StatusNoContent {
 			t.Fatalf("deliver: %d %s", status, body)
 		}
 		deadline := time.Now().Add(5 * time.Second)
 		for {
-			status, body := fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot_adapter_fixture/sent")
+			status, body := fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot-adapter-fixture/sent")
 			var sent []string
 			if status != http.StatusOK || json.Unmarshal(body, &sent) != nil {
 				t.Fatalf("sent: %d %s", status, body)
@@ -493,7 +1022,7 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	for _, id := range []string{"one", "two"} {
 		c.waitFor("fixture instance " + id + " started")
 	}
-	c.waitFor(`adapter instance start failed plugin_id=alonabot_adapter_fixture instance_id=fail`)
+	c.waitFor(`adapter instance start failed plugin_id=alonabot-adapter-fixture instance_id=fail`)
 	listed := c.management(t, dir, "", "list")
 	if strings.Contains(listed, "fixture-credential-value") || strings.Contains(listed, "MANAGE_E2E_TOKEN") || strings.Contains(c.log(), "fixture-credential-value") {
 		t.Fatal("credentials escaped through management or logs")
@@ -619,12 +1148,41 @@ import (
  "github.com/AlonaBot/AlonaBot/sdk"
  "github.com/AlonaBot/AlonaBot/sdk/genimpl"
  "github.com/AlonaBot/AlonaBot/sdk/message"
+ "github.com/AlonaBot/AlonaBot/sdk/service"
+ "github.com/AlonaBot/AlonaBot/sdk/tool"
 )
-func init(){genimpl.Register("main",genimpl.Resources{})}
+type toolArguments struct{}
+func init(){genimpl.Register("main",genimpl.Resources{ServiceSchemas:map[string][]byte{"main.toolArguments":[]byte("{\"type\":\"object\"}")}})}
 func main() {
  p:=sdk.NewPlugin()
  p.Command("inspect").Handle(func(c *sdk.Context)(message.Content,error){return message.Chain{message.Text(fmt.Sprintf("admin=%t",c.Has(sdk.Admin)))},nil})
  p.Command("number").Args("n").Handle(func(*sdk.Context,int64)error{return nil})
+ for _,entry:=range []struct{name string; effect tool.Effect}{{"read",tool.ReadOnly},{"write",tool.Write},{"remove",tool.Destructive},{"unknown",tool.Unspecified}}{
+  builder:=service.Serve(p,service.JSON[toolArguments,toolArguments]("commands/"+entry.name)).Tool("Fixture tool",tool.DefaultConfirm)
+  if entry.effect!=tool.Unspecified {builder.Effect(entry.effect)}
+  builder.Handle(func(*sdk.Context,toolArguments)(toolArguments,error){return toolArguments{},nil})
+ }
+ if err:=sdk.Run(p);err!=nil{slog.Error("fixture failed","error",err);os.Exit(1)}
+}
+`
+
+const jobFixtureSource = `package main
+import (
+ "encoding/json"
+ "log/slog"
+ "net/http"
+ "os"
+ "sync/atomic"
+ "time"
+ "github.com/AlonaBot/AlonaBot/sdk"
+ "github.com/AlonaBot/AlonaBot/sdk/genimpl"
+)
+func init(){genimpl.Register("main",genimpl.Resources{})}
+func main(){
+ p:=sdk.NewPlugin()
+ var lastRun atomic.Int64
+ p.Every("pulse",time.Second).Handle(func(c *sdk.Context)error{lastRun.Store(c.Event().OccurredAt.UnixMilli());return nil})
+ p.Route(http.MethodGet,"/runs").HandleFunc(func(w http.ResponseWriter,_ *http.Request){if err:=json.NewEncoder(w).Encode(lastRun.Load());err!=nil{slog.Error("write runs","error",err)}})
  if err:=sdk.Run(p);err!=nil{slog.Error("fixture failed","error",err);os.Exit(1)}
 }
 `
@@ -749,4 +1307,32 @@ func writeTestPackage(dir, id, role, adapterID, source, version, executable, ext
 		}
 	}
 	return filepath.Join(dir, "package.tar.gz"), nil
+}
+
+// weatherProfilePackage 打包带真实 schema 资源的天气插件，供配置文件管理路径使用。
+func weatherProfilePackage(t *testing.T, schema, version string) string {
+	t.Helper()
+	dir := t.TempDir()
+	source := fmt.Sprintf(`package main
+import (
+ "log/slog"
+ "os"
+ "github.com/AlonaBot/AlonaBot/sdk"
+ "github.com/AlonaBot/AlonaBot/sdk/genimpl"
+)
+func init(){genimpl.Register("main",genimpl.Resources{ConfigSchema:[]byte(%q)})}
+func main(){if err:=sdk.Run(sdk.NewPlugin());err!=nil{slog.Error("weather fixture failed","error",err);os.Exit(1)}}
+`, schema)
+	file, binary := filepath.Join(dir, "main.go"), filepath.Join(dir, "weather")
+	if err := os.WriteFile(file, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := exec.Command("go", fixtureBuildArgs("-o", binary, file)...).CombinedOutput(); err != nil {
+		t.Fatalf("build weather fixture: %v: %s", err, output)
+	}
+	archive, err := writeTestPackage(dir, "weather", "plugin", "", "github.com/example/weather", version, binary, "", map[string][]byte{"config_schema.json": []byte(schema)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return archive
 }

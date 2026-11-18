@@ -1,4 +1,4 @@
-@Jalonabot_plugin_demo`jalonabot.hello.v1pzz
-alonabot_plugin_demo * 2
+@Jalonabot-plugin-demo`jalonabot.hello.v1pzz
+alonabot-plugin-demo * 2
 	core.send:
 	core.send

@@ -116,8 +116,9 @@ type Router struct {
 	cancel        context.CancelFunc
 	mu            sync.Mutex // 保护注册、在途调用、命令索引与分发状态
 	plugins       map[string]*pluginSession
-	inFlight      map[inFlightKey]int // 同事件原调用与延续可短暂重叠；仅覆盖 Plugin.Call，排队与 prepare 期间不登记
-	commands      *CommandIndex       // 在 mu 下发布；已发布快照只读
+	snapshots     map[string]routeSnapshot // 已提交的定位数据独立于活 Session。
+	inFlight      map[inFlightKey]int      // 同事件原调用与延续可短暂重叠；仅覆盖 Plugin.Call，排队与 prepare 期间不登记
+	commands      *CommandIndex            // 在 mu 下发布；已发布快照只读
 	started       bool
 	closed        bool
 	continuations Continuations
@@ -137,7 +138,8 @@ func New(opt Options) *Router {
 		ctx: ctx, cancel: cancel, drained: make(chan struct{}),
 		continuations: opt.Continuations, dispatched: opt.Dispatched, metrics: opt.Metrics,
 		matches: make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
-		inFlight: make(map[inFlightKey]int), commands: &CommandIndex{},
+		snapshots: make(map[string]routeSnapshot),
+		inFlight:  make(map[inFlightKey]int), commands: &CommandIndex{},
 		commandState: opt.CommandState, commandNames: opt.CommandNames, commandSyncs: make(map[string]*commandSync),
 	}
 }
@@ -277,6 +279,11 @@ func (r *Router) candidates(ev *pb.Event) []candidate {
 
 func (r *Router) dispatch(event *trustedEvent) {
 	ev := event.retained
+	if ev.GetEventType() == commandInvokedEvent {
+		// 命令通知保留原消息的 Actor，直接交给订阅的事件路由。
+		r.dispatchEvents(event, event.rebuild(), r.candidates(ev), false, false)
+		return
+	}
 	var candidates []candidate
 	buttonClick := ev.GetEventType() == "button.clicked"
 	if buttonClick {
@@ -346,6 +353,11 @@ func (r *Router) dispatch(event *trustedEvent) {
 	if !buttonClick {
 		candidates = r.candidates(ev)
 	}
+	r.dispatchEvents(event, ev, candidates, buttonClick, toMe)
+}
+
+// toMe 取预处理前可信的 message.created 标记，供消息过滤判断。
+func (r *Router) dispatchEvents(event *trustedEvent, ev *pb.Event, candidates []candidate, buttonClick, toMe bool) {
 	for _, candidate := range candidates {
 		if r.ctx.Err() != nil {
 			return
@@ -354,7 +366,7 @@ func (r *Router) dispatch(event *trustedEvent) {
 			continue
 		}
 		if buttonClick {
-			if (r.policy == nil && !candidate.route.GetDefaultEnabled()) || !r.commandPermitted(candidate, ev) {
+			if (r.policy == nil && !candidate.route.GetDefaultEnabled()) || r.commandPolicyFailure(candidate, ev) != nil {
 				continue
 			}
 		} else if !r.permitted(candidate, ev) {

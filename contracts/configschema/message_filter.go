@@ -30,7 +30,7 @@ func (s *Schema) CheckMessageFilter(filter *pb.MessageFilter) error {
 	return nil
 }
 
-func (s *Schema) messageFilterList(path string) *field {
+func (s *Schema) messageFilterList(path string) *Field {
 	if s == nil {
 		return nil
 	}

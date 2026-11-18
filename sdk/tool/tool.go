@@ -15,11 +15,26 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Effect 提示工具的副作用类别，零值表示未声明。
+type Effect int
+
+const (
+	// Unspecified 保留未声明类别的状态。
+	Unspecified Effect = iota
+	// ReadOnly 声明只读取数据。
+	ReadOnly
+	// Write 声明会写入数据。
+	Write
+	// Destructive 声明可能破坏或删除数据。
+	Destructive
+)
+
 // Info 保存 Core 返回的可调用工具描述。
 type Info struct {
 	Name, Description string
 	InputSchema       json.RawMessage // Service 输入 Schema 的原文
 	Policy            string          // "allow" 或 "confirm"
+	Effect            Effect
 }
 
 // List 读取当前插件可访问且策略允许列出的工具，按完整名称排序。
@@ -40,7 +55,7 @@ func List(ctx context.Context) ([]Info, error) {
 		default:
 			return nil, &sdk.Error{Code: errcode.Internal, Message: fmt.Sprintf("unexpected tool policy %d for %q", entry.GetPolicy(), entry.GetName())}
 		}
-		tools = append(tools, Info{Name: entry.GetName(), Description: entry.GetDescription(), InputSchema: json.RawMessage(entry.GetInputSchemaJson()), Policy: policy})
+		tools = append(tools, Info{Name: entry.GetName(), Description: entry.GetDescription(), InputSchema: json.RawMessage(entry.GetInputSchemaJson()), Policy: policy, Effect: Effect(entry.GetEffect())})
 	}
 	return tools, nil
 }
@@ -54,8 +69,11 @@ func Invoke(ctx context.Context, name string, arguments json.RawMessage) (json.R
 }
 
 // Confirm 在当前父调用链中请求用户确认操作，允许时返回 nil。
-func Confirm(ctx context.Context, operation, summary string) error {
-	return callTool(ctx, wire.ServiceToolConfirm, &pb.ToolConfirmRequest{Operation: operation, Summary: summary}, &pb.ToolConfirmResponse{})
+func Confirm(ctx context.Context, operation, summary string, effect Effect) error {
+	if effect < Unspecified || effect > Destructive {
+		return errcode.InvalidArgument.Errorf("unknown tool effect %d", effect)
+	}
+	return callTool(ctx, wire.ServiceToolConfirm, &pb.ToolConfirmRequest{Operation: operation, Summary: summary, Effect: pb.ToolEffect(effect)}, &pb.ToolConfirmResponse{})
 }
 
 func callTool(ctx context.Context, target string, request, result proto.Message) error {

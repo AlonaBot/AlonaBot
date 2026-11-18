@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
@@ -37,13 +38,13 @@ func execute(args []string) int {
 	}
 	var dataDir, format, listen string
 	var reload, stdio bool
-	level := slog.LevelInfo
+	levelText := "info"
 	runCommand := &cobra.Command{Use: "run [directories...]", Short: "Build development components and run AlonaBot Core", Args: cobra.ArbitraryArgs}
 	for _, command := range []*cobra.Command{root, runCommand} {
 		flags := command.Flags()
 		flags.StringVar(&dataDir, "data-dir", "data", "Core data directory (only one Core per directory)")
 		flags.StringVar(&listen, "listen", "", "Core HTTP listen address (overrides settings for this run)")
-		flags.TextVar(&level, "log-level", slog.LevelInfo, "global log level: debug, info, warn or error")
+		flags.StringVar(&levelText, "log-level", "info", "global log level: debug, info, warn, error or critical")
 		flags.StringVar(&format, "log-format", string(logging.FormatText), "stderr log format: text or json")
 		flags.BoolVar(&reload, "reload", false, "rebuild and restart changed development components")
 		flags.BoolVar(&stdio, "stdio", false, "use stdio for development component sessions")
@@ -55,11 +56,17 @@ func execute(args []string) int {
 			options.Listen = &listen
 		}
 		if flags.Changed("log-level") {
+			level := logging.LevelCritical
+			if !strings.EqualFold(levelText, "critical") {
+				if err := level.UnmarshalText([]byte(levelText)); err != nil {
+					return err
+				}
+			}
 			switch level {
-			case slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError:
+			case slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, logging.LevelCritical:
 				options.LogLevel = &level
 			default:
-				return fmt.Errorf("--log-level must be debug, info, warn or error")
+				return fmt.Errorf("--log-level must be debug, info, warn, error or critical")
 			}
 		}
 		if flags.Changed("log-format") {
@@ -87,6 +94,7 @@ func execute(args []string) int {
 	root.AddCommand(initCommand(&code), buildCommand(&code), checkCommand(&code), testCommand(&code, &values), packCommand(&code))
 	root.AddCommand(managementCommands(&code)...)
 	root.AddCommand(logCommands(&code)...)
+	root.AddCommand(diagnoseCommand(&code))
 	// 2. 由 Cobra 生成帮助，错误只在这里打印一次。
 	var helpErr error
 	help := root.HelpFunc()

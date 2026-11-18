@@ -56,13 +56,21 @@ func (s *Store) CommitCandidate(ctx context.Context, opID, pluginID, expectedOld
 		}
 
 		// 2. 更新或回退的程序身份与代次一起切换，后续 restart 据此选择新程序。
-		if operation.Kind == "update" || operation.Kind == "rollback" {
-			var installed installation
-			if err := tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&installed).Error; err != nil {
-				return err
-			}
+		var installed installation
+		if err := tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&installed).Error; err != nil {
+			return err
+		}
+		changeProgram := operation.Kind == "update" || operation.Kind == "rollback"
+		if changeProgram {
 			installed.Entrypoint, installed.Version = operation.Entrypoint, operation.Version
 			installed.BuildDigest, installed.PublisherKeyID = operation.BuildDigest, operation.PublisherKeyID
+		}
+		if installed.usesRouteSnapshot() {
+			if _, err := readRouteSnapshot(tx, pluginID, newGen, installed.BuildDigest); err != nil {
+				return err
+			}
+		}
+		if changeProgram {
 			if err := tx.Save(&installed).Error; err != nil {
 				return err
 			}

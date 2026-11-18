@@ -54,7 +54,7 @@ func TestLibraryLifecycle(t *testing.T) {
 				t.Fatal(err)
 			}
 			if scenario.config != "" {
-				path := filepath.Join(dir, "plugins", "alonabot_plugin_devbot", "config.json")
+				path := filepath.Join(dir, "plugins", "alonabot-plugin-devbot", "config.json")
 				if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 					t.Fatal(err)
 				}
@@ -127,7 +127,7 @@ func TestLibraryLifecycle(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer rows.Close()
-			want := map[string]string{"alonabot_plugin_devbot": "plugin", "alonabot_adapter_devbot": "adapter"}
+			want := map[string]string{"alonabot-plugin-devbot": "plugin", "alonabot-adapter-devbot": "adapter"}
 			for rows.Next() {
 				var id, role, source, generation string
 				if err := rows.Scan(&id, &role, &source, &generation); err != nil {
@@ -148,7 +148,7 @@ func TestLibraryLifecycle(t *testing.T) {
 				t.Fatalf("missing installations: %v", want)
 			}
 
-			pluginDir := filepath.Join(dir, "plugins", "alonabot_plugin_devbot")
+			pluginDir := filepath.Join(dir, "plugins", "alonabot-plugin-devbot")
 			pluginDB, err := sql.Open("sqlite", "file:"+filepath.ToSlash(filepath.Join(pluginDir, "dev.sqlite"))+"?mode=ro")
 			if err != nil {
 				t.Fatal(err)

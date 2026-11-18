@@ -20,6 +20,38 @@ type Record struct {
 	TraceID string         `json:"trace_id"`
 }
 
+// MarshalJSON 将最近记录与流式记录中的自定义级别写作 CRITICAL。
+func (r Record) MarshalJSON() ([]byte, error) {
+	type record Record
+	level := r.Level.String()
+	if r.Level == LevelCritical {
+		level = "CRITICAL"
+	}
+	return json.Marshal(struct {
+		record
+		Level string `json:"level"`
+	}{record(r), level})
+}
+
+// UnmarshalJSON 读取管理 API 的级别文本，同时保留 slog 支持的其他级别。
+func (r *Record) UnmarshalJSON(data []byte) error {
+	type record Record
+	var value struct {
+		record
+		Level string `json:"level"`
+	}
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	if value.Level == "CRITICAL" {
+		value.record.Level = LevelCritical
+	} else if err := value.record.Level.UnmarshalText([]byte(value.Level)); err != nil {
+		return err
+	}
+	*r = Record(value.record)
+	return nil
+}
+
 type recordRing struct {
 	records []Record
 	next    int

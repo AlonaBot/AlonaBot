@@ -109,12 +109,25 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 启动诊断先写 stderr，状态库核对与配置解析失败也保留 CRITICAL 文本。
+	bootstrap := settings.Defaults()
+	if o.LogLevel != nil {
+		bootstrap.LogLevel = *o.LogLevel
+	}
+	if o.LogFormat != nil {
+		bootstrap.LogFormat = *o.LogFormat
+	}
+	output, err := logging.Open(logging.Options{Format: logging.Format(bootstrap.LogFormat), Level: bootstrap.LogLevel, Stderr: os.Stderr, BufferRecords: values.LogBufferRecords})
+	if err != nil {
+		return nil, startupUsage(err)
+	}
+	slog.SetDefault(output.Logger())
 	// 1. 取得实例锁后才打开日志和媒体目录，避免改动另一个 Core 的资源。
 	store, err := state.Open(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
-	c := &Core{store: store, values: values, dir: dir, logLevel: o.LogLevel, done: make(chan struct{}), stopping: make(chan struct{}), operations: make(chan coreOperation)}
+	c := &Core{store: store, output: output, values: values, dir: dir, logLevel: o.LogLevel, done: make(chan struct{}), stopping: make(chan struct{}), operations: make(chan coreOperation)}
 	fail := func(err error) (*Core, error) {
 		c.err = err
 		if ctx.Err() == context.Canceled && startupCleanupError(err) == nil {
@@ -164,7 +177,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	for i := range c.development {
 		c.development[i].stdio = o.Stdio
 	}
-	output, err := logging.Open(logging.Options{Format: logging.Format(configuration.LogFormat), Level: configuration.LogLevel, Stderr: os.Stderr, BufferRecords: values.LogBufferRecords})
+	output, err = logging.Open(logging.Options{Format: logging.Format(configuration.LogFormat), Level: configuration.LogLevel, Stderr: os.Stderr, BufferRecords: values.LogBufferRecords})
 	if err != nil {
 		return fail(startupUsage(err))
 	}
@@ -175,7 +188,9 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 			continue
 		}
 		level := logging.LevelOff
-		if value != "off" {
+		if value == "critical" {
+			level = logging.LevelCritical
+		} else if value != "off" {
 			if err := level.UnmarshalText([]byte(value)); err != nil {
 				return fail(err)
 			}
@@ -248,6 +263,10 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	for _, id := range blocked {
 		slog.Error("old process may still be running", "plugin_id", id)
 	}
+	blocked, err = c.recoverRuntime(ctx, installs, blocked)
+	if err != nil {
+		return fail(err)
+	}
 	authentication := adminauth.New(store, time.Now, baseURL, dir)
 	adminMux := http.NewServeMux()
 	authentication.Routes(adminMux)
@@ -283,7 +302,31 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		})
 	}, Store: store, Settings: c.assembly.settings, Policy: c.assembly.policy, Router: c.assembly.router, Options: c.assembly.options, Tools: c.assembly.tools,
 		CoreInfo: func() (string, string) { return version, c.http.Addr },
-		Adapters: c.assembly.adapters, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(components),
+		Adapters: c.assembly.adapters, Scheduler: c.assembly.scheduler, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(components),
+		InstanceStatus: func(ctx context.Context, id, instance string) (string, string, error) {
+			state, message := "stopped", ""
+			err := c.operation(ctx, func(context.Context) error {
+				for _, running := range c.components {
+					if running != nil && running.id == id && running.remote != nil {
+						state, message = running.remote.InstanceStatus(instance)
+						break
+					}
+				}
+				return nil
+			})
+			return state, message, err
+		},
+		RecordInstanceFailure: func(ctx context.Context, id, instance, message string) error {
+			return c.operation(ctx, func(context.Context) error {
+				for _, running := range c.components {
+					if running != nil && running.id == id && running.remote != nil {
+						running.remote.RecordFailure(instance, message)
+						return nil
+					}
+				}
+				return fmt.Errorf("adapter is not running: %s", id)
+			})
+		},
 		Packages: filepath.Join(dir, "packages"), Limits: packages.NewLimits(values), Development: development, DevelopmentWebUI: webUI,
 		Descriptor:        c.assembly.componentDescriptor,
 		DevelopmentConfig: c.developmentConfig, RestartDevelopment: c.Restart,
@@ -301,7 +344,16 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 			})
 		},
 		Stop: func(ctx context.Context, id string, reason pb.StopReason) error {
-			return c.operation(ctx, func(context.Context) error { return c.stopManaged(id, reason) })
+			return c.operation(ctx, func(ctx context.Context) error {
+				if err := c.stopManaged(id, reason); err != nil || reason != pb.StopReason_STOP_REASON_DISABLE {
+					return err
+				}
+				in, err := c.store.GetInstall(ctx, id)
+				if err != nil {
+					return err
+				}
+				return c.recordRuntime(context.WithoutCancel(ctx), in, state.RuntimeStopped, reason.String())
+			})
 		},
 		StartInstance: func(ctx context.Context, id, instance string, config json.RawMessage) error {
 			return c.operation(ctx, func(ctx context.Context) error {
@@ -331,6 +383,11 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		ForgetInstance: func(ctx context.Context, id, instance string) error {
 			return c.operation(ctx, func(context.Context) error {
 				delete(c.stoppedInstances, [2]string{id, instance})
+				for _, running := range c.components {
+					if running != nil && running.id == id && running.remote != nil {
+						running.remote.ForgetFailure(instance)
+					}
+				}
 				return nil
 			})
 		},
@@ -363,6 +420,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	adminMux.Handle("/api/v1/", administration)
 	adminMux.Handle("/api/", administration)
 	adminMux.Handle("/api", administration)
+	c.assembly.http = httpproxy.New(authentication)
 	static := management.WebUI()
 	adminMux.Handle("/", static)
 	admin := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -378,7 +436,6 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		}
 		adminMux.ServeHTTP(w, r)
 	})
-	c.assembly.http = httpproxy.New(authentication)
 	publicHost := webhost.New(webhost.Options{BaseURL: baseURL, Proxy: c.assembly.http, Admin: admin})
 	listener, err := net.Listen("tcp", configuration.Listen)
 	if err != nil {
@@ -390,7 +447,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	slog.Info("HTTP listener started", "listen", listener.Addr().String())
 	slog.Info("Core started", "data_dir", dir)
 	for _, install := range installs {
-		if install.Source == devSource || install.Uninstalled || install.Role == state.RoleWebUI {
+		if install.Source == devSource || install.Uninstalled || install.Role == state.RoleWebUI && install.Entrypoint == "" {
 			continue
 		}
 		enabled, err := store.Enabled(ctx, install.PluginID)
@@ -421,8 +478,8 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 			if running != nil {
 				c.components = append(c.components, running)
 			}
-			if err != nil && recovering {
-				slog.Error("committed generation recovery failed", "plugin_id", install.PluginID, "generation_id", active, "error", err)
+			if err != nil && (recovering || active != "" && hasInstalledRoutes(install)) {
+				slog.Log(ctx, logging.LevelCritical, "committed generation recovery failed", "plugin_id", install.PluginID, "generation_id", active, "error", err)
 				if running != nil && running.instance.State() != host.StateDegraded {
 					running.instance.Degrade(err)
 					c.assembly.detach(running)
@@ -452,6 +509,9 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	for i := range components {
 		if components[i].role == state.RoleAdapter {
 			continue
+		}
+		if id := components[i].manifest.ID; slices.Contains(blocked, id) {
+			return fail(fmt.Errorf("start %s: old process may still be running", id))
 		}
 		if err := ctx.Err(); err != nil {
 			return fail(err)
@@ -563,7 +623,7 @@ running:
 			c.assembly.detach(old)
 			c.assembly.media.ReleaseSession(old.caller.SessionKey)
 			if old.process == nil {
-				c.err = result.err
+				c.err = errors.Join(result.err, c.recordRuntime(context.WithoutCancel(ctx), old.install, state.RuntimeFailed, "in-process session exited"))
 				break running
 			}
 			if result.abnormal {
@@ -617,6 +677,7 @@ running:
 				if err := c.store.SetEnabled(ctx, old.id, false); err != nil {
 					slog.Error("disable plugin failed", "plugin_id", old.id, "error", err)
 				} else {
+					c.assembly.router.RemoveRouteSnapshot(old.id)
 					slog.Error("plugin disabled after repeated abnormal exits", "plugin_id", old.id, "crashes", c.values.RestartMaxCrashes, "window", c.values.RestartWindow)
 				}
 			}
@@ -797,7 +858,7 @@ func (c *Core) shutdown() error {
 	}
 	if c.output != nil {
 		if err := errors.Join(c.err, result); err != nil {
-			slog.Error("Core stopped", "err", err)
+			slog.Log(context.Background(), logging.LevelCritical, "Core stopped", "err", err)
 		} else {
 			slog.Info("Core stopped")
 		}
@@ -822,9 +883,7 @@ func (c *Core) shutdown() error {
 				}
 				<-running.exited()
 			}
-			if err := c.close(); err != nil {
-				slog.Error("close Core resources failed", "error", err)
-			}
+			_ = c.close() // close 自己记录延迟清理的故障。
 		}()
 		return result
 	}
@@ -835,6 +894,9 @@ func (c *Core) close() error {
 	err := c.store.Close()
 	if c.output != nil {
 		err = errors.Join(err, c.output.Close())
+	}
+	if err != nil {
+		slog.Log(context.Background(), logging.LevelCritical, "close Core resources failed", "error", err)
 	}
 	return err
 }

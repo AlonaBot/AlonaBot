@@ -175,6 +175,9 @@ func register(r *pb.Register, isAdapter bool) error {
 				if len(filters) != 1 || (!IsEventType(filters[0]) && !IsAdapterEventType(filters[0])) {
 					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "pre-event hook route %q requires exactly one valid event_type_filter", route.GetRouteId())
 				}
+				if filters[0] == "command.invoked" {
+					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "pre-event hook route %q cannot subscribe to command.invoked", route.GetRouteId())
+				}
 			case pb.HookPhase_HOOK_PHASE_BEFORE_SEND, pb.HookPhase_HOOK_PHASE_AFTER_SEND:
 				if len(filters) != 0 {
 					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "outbound hook route %q must not contain event_type_filter", route.GetRouteId())
@@ -363,7 +366,7 @@ func IsCommandToken(token string) bool {
 func IsEventType(eventType string) bool {
 	switch eventType {
 	case "message.created", "message.edited", "message.deleted", "button.clicked",
-		"member.joined", "member.left", "reaction.added", "scheduled", "bot.online", "bot.offline":
+		"member.joined", "member.left", "reaction.added", "scheduled", "bot.online", "bot.offline", "command.invoked":
 		return true
 	}
 	return false
@@ -450,6 +453,9 @@ func registerService(route *pb.RouteDescriptor) error {
 		}
 		if tool.GetDefaultPolicy() != pb.ToolPolicy_TOOL_POLICY_ALLOW && tool.GetDefaultPolicy() != pb.ToolPolicy_TOOL_POLICY_CONFIRM {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q tool has invalid default policy", name)
+		}
+		if !knownEnum(tool.GetEffect()) {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q tool has invalid effect %d", name, tool.GetEffect())
 		}
 		var schema jsonschema.Schema
 		if err := json.Unmarshal([]byte(tool.GetInputSchemaJson()), &schema); err != nil {

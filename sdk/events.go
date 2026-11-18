@@ -180,16 +180,17 @@ func (e EventType) Name() string { return e.name }
 func (e EventType) Version() uint32 { return e.version }
 
 var (
-	MessageCreated = EventType{name: "message.created", payload: reflect.TypeFor[*message.CreatedPayload]()}      // 新消息。
-	MessageEdited  = EventType{name: "message.edited", payload: reflect.TypeFor[*message.EditedPayload]()}        // 消息编辑。
-	MessageDeleted = EventType{name: "message.deleted", payload: reflect.TypeFor[*message.DeletedPayload]()}      // 消息删除。
-	ButtonClicked  = EventType{name: "button.clicked", payload: reflect.TypeFor[*message.ButtonClickedPayload]()} // 按钮点击。
-	MemberJoined   = EventType{name: "member.joined", payload: reflect.TypeFor[*message.MemberPayload]()}         // 成员加入。
-	MemberLeft     = EventType{name: "member.left", payload: reflect.TypeFor[*message.MemberPayload]()}           // 成员离开。
-	ReactionAdded  = EventType{name: "reaction.added", payload: reflect.TypeFor[*message.ReactionAddedPayload]()} // 消息回应。
-	Scheduled      = EventType{name: "scheduled", payload: reflect.TypeFor[*message.ScheduledPayload]()}          // 定时任务。
-	BotOnline      = EventType{name: "bot.online", payload: reflect.TypeFor[*message.BotOnlinePayload]()}         // 机器人上线。
-	BotOffline     = EventType{name: "bot.offline", payload: reflect.TypeFor[*message.BotOfflinePayload]()}       // 机器人离线。
+	MessageCreated = EventType{name: "message.created", payload: reflect.TypeFor[*message.CreatedPayload]()}        // 新消息。
+	MessageEdited  = EventType{name: "message.edited", payload: reflect.TypeFor[*message.EditedPayload]()}          // 消息编辑。
+	MessageDeleted = EventType{name: "message.deleted", payload: reflect.TypeFor[*message.DeletedPayload]()}        // 消息删除。
+	ButtonClicked  = EventType{name: "button.clicked", payload: reflect.TypeFor[*message.ButtonClickedPayload]()}   // 按钮点击。
+	MemberJoined   = EventType{name: "member.joined", payload: reflect.TypeFor[*message.MemberPayload]()}           // 成员加入。
+	MemberLeft     = EventType{name: "member.left", payload: reflect.TypeFor[*message.MemberPayload]()}             // 成员离开。
+	ReactionAdded  = EventType{name: "reaction.added", payload: reflect.TypeFor[*message.ReactionAddedPayload]()}   // 消息回应。
+	Scheduled      = EventType{name: "scheduled", payload: reflect.TypeFor[*message.ScheduledPayload]()}            // 定时任务。
+	BotOnline      = EventType{name: "bot.online", payload: reflect.TypeFor[*message.BotOnlinePayload]()}           // 机器人上线。
+	BotOffline     = EventType{name: "bot.offline", payload: reflect.TypeFor[*message.BotOfflinePayload]()}         // 机器人离线。
+	CommandInvoked = EventType{name: "command.invoked", payload: reflect.TypeFor[*message.CommandInvokedPayload]()} // Core 命令调用结果。
 )
 
 // AdapterEvent 声明 Adapter 扩展事件，T 须为结构体，Handler 接收 *T。

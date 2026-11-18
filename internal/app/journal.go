@@ -2,14 +2,18 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
+	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/process"
@@ -18,7 +22,68 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
 )
 
-// installedSpec 在停机前只读构造完整启动输入；调用方决定准备或直接启动。
+func hasInstalledRoutes(in state.Install) bool {
+	return in.Source != "" && in.Source != devSource && (in.Role == state.RolePlugin || in.Role == state.RoleAgent)
+}
+
+func tracksRuntime(role state.Role) bool { return role == state.RolePlugin || role == state.RoleAgent }
+
+// recordRuntime 在 Core 运行循环串行化组件变更的基础上，与进程清理共用逐插件锁。
+func (c *Core) recordRuntime(ctx context.Context, in state.Install, next state.RuntimeState, reason string) error {
+	if !tracksRuntime(in.Role) {
+		return nil
+	}
+	unlock := c.store.LockPlugin(in.PluginID)
+	defer unlock()
+	current, err := c.store.RuntimeStatus(ctx, in.PluginID)
+	if err != nil {
+		return err
+	}
+	if current.State == next && current.Reason == reason {
+		return nil
+	}
+	current.State, current.Reason, current.ChangedAt = next, reason, time.Now().UTC()
+	return c.store.SetRuntimeStatus(ctx, in.PluginID, current)
+}
+
+// recoverRuntime 在 Journal 清理后核对旧 SDK 是否仍持有跨代次锁，再发布当前运行状态。
+func (c *Core) recoverRuntime(ctx context.Context, installs []state.Install, blocked []string) ([]string, error) {
+	for _, in := range installs {
+		if !tracksRuntime(in.Role) || in.Uninstalled {
+			continue
+		}
+		if !slices.Contains(blocked, in.PluginID) {
+			lock, err := process.LockRuntime(filepath.Join(c.dir, "plugins", in.PluginID))
+			if err == nil {
+				if err := lock.Unlock(); err != nil {
+					return nil, err
+				}
+			} else if !errors.Is(err, os.ErrNotExist) {
+				blocked = append(blocked, in.PluginID)
+				slog.Error("cannot verify previous plugin runtime", "plugin_id", in.PluginID, "error", err)
+			}
+		}
+		if slices.Contains(blocked, in.PluginID) {
+			if err := c.recordRuntime(ctx, in, state.RuntimeFailed, "previous runtime could not be cleared"); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		status, err := c.store.RuntimeStatus(ctx, in.PluginID)
+		if err != nil {
+			return nil, err
+		}
+		switch status.State {
+		case state.RuntimeActive, state.RuntimeWaking, state.RuntimeQuiescing:
+			if err := c.recordRuntime(ctx, in, state.RuntimeStopped, "core startup"); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return blocked, nil
+}
+
+// installedSpec 在停机前构造完整启动输入并准备数据目录；调用方决定准备或直接启动。
 // 返回的运行上下文与 Handler/Detach 共用 Caller，启动后由调用方附加 Instance。
 func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir string, boot *pb.Bootstrap) (supervisor.Spec, *runningComponent, error) {
 	raw, err := os.ReadFile(filepath.Join(packageDir, "plugin.yaml"))
@@ -33,6 +98,9 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	if m.ID != in.PluginID || state.Role(m.Role) != in.Role || m.AdapterID != in.AdapterID || m.Entrypoint != in.Entrypoint {
 		return supervisor.Spec{}, nil, fmt.Errorf("installed manifest identity differs from record for %s", in.PluginID)
 	}
+	if hasInstalledRoutes(in) && (m.Source != in.Source || m.Version != in.Version) {
+		return supervisor.Spec{}, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: fmt.Sprintf("installed manifest source or version differs for %s", in.PluginID)}
+	}
 	for _, warning := range parsed.Warnings {
 		slog.Warn("installed manifest warning", "plugin_id", m.ID, "warning", warning)
 	}
@@ -42,6 +110,9 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	}
 	resources, err := packageResources(packageDir)
 	if err != nil {
+		if hasInstalledRoutes(in) {
+			return supervisor.Spec{}, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: err.Error()}
+		}
 		return supervisor.Spec{}, nil, err
 	}
 	schemas, err := optionSchemas(resources)
@@ -54,9 +125,9 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	// Schema 摘要与版本绑定包内声明，所有已安装组件的启动共用同一输入。
 	boot.TargetConfigVersion = *m.ConfigVersion
 	boot.ConfigSchemaHash = nil
-	if (in.Role == state.RolePlugin || in.Role == state.RoleAgent) && schemas.config != nil {
+	if (hasInstalledRoutes(in) || in.Role == state.RoleWebUI) && schemas.config != nil {
 		if uint32(schemas.config.Version()) != boot.TargetConfigVersion {
-			return supervisor.Spec{}, nil, fmt.Errorf("config schema version differs from manifest for %s", in.PluginID)
+			return supervisor.Spec{}, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: fmt.Sprintf("config schema version differs from manifest for %s", in.PluginID)}
 		}
 		boot.ConfigSchemaHash = schemas.config.Hash()
 	}
@@ -71,8 +142,12 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	case manifest.MigrationVersioned:
 		database.MigrationMode = pb.MigrationMode_MIGRATION_MODE_VERSIONED
 	}
-	if (in.Role == state.RolePlugin || in.Role == state.RoleAgent) && (m.PrepareEffects == manifest.EffectsManagedDB || m.MigrationMode == manifest.MigrationSelf || m.MigrationMode == manifest.MigrationVersioned) {
+	if (in.Role == state.RolePlugin || in.Role == state.RoleAgent || in.Role == state.RoleWebUI) && (m.PrepareEffects == manifest.EffectsManagedDB || m.MigrationMode == manifest.MigrationSelf || m.MigrationMode == manifest.MigrationVersioned) {
 		database.Backend = pb.DatabaseBackend_DATABASE_BACKEND_SQLITE
+	}
+	boot.PluginDataDir, err = preparePluginDataDir(c.dir, in.PluginID)
+	if err != nil {
+		return supervisor.Spec{}, nil, err
 	}
 	running := &runningComponent{id: in.PluginID, install: in, caller: router.NewCaller(in.PluginID, boot.GenerationId), schemas: schemas}
 	spec := supervisor.Spec{Role: in.Role, AdapterID: in.AdapterID, PluginID: in.PluginID, PluginDir: filepath.Join(c.dir, "plugins", in.PluginID),

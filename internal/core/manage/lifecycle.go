@@ -44,7 +44,7 @@ func (s *Service) enable(ctx context.Context, in state.Install) error {
 	if err := s.dependencies(ctx, m); err != nil {
 		return err
 	}
-	if in.Role != state.RoleWebUI && s.opt.State(in.PluginID) != "Activated" {
+	if (in.Role != state.RoleWebUI || in.Entrypoint != "") && s.opt.State(in.PluginID) != "Activated" {
 		if err := s.opt.Start(ctx, in.PluginID); err != nil {
 			return err
 		}
@@ -68,12 +68,18 @@ func (s *Service) Disable(ctx context.Context, id string, confirm bool) (err err
 	if len(affected) != 0 && !confirm {
 		return &ErrNeedsConfirm{Affected: affected}
 	}
-	if in.Role != state.RoleWebUI {
+	if in.Role != state.RoleWebUI || in.Entrypoint != "" {
 		if err := s.opt.Stop(ctx, id, pb.StopReason_STOP_REASON_DISABLE); err != nil {
 			return err
 		}
 	}
-	return s.opt.Store.SetEnabled(ctx, id, false)
+	if err := s.opt.Store.SetEnabled(ctx, id, false); err != nil {
+		return err
+	}
+	if s.opt.Router != nil {
+		s.opt.Router.RemoveRouteSnapshot(id)
+	}
+	return nil
 }
 
 // Restart 以当前 Active 建立新 Session，保持代次及其配置快照。
@@ -85,7 +91,7 @@ func (s *Service) Restart(ctx context.Context, id string) (err error) {
 	if err != nil {
 		return err
 	}
-	if in.Role == state.RoleWebUI {
+	if in.Role == state.RoleWebUI && in.Entrypoint == "" {
 		return precondition("webui has no process to restart")
 	}
 	enabled, err := s.opt.Store.Enabled(ctx, id)
@@ -130,7 +136,7 @@ func (s *Service) Uninstall(ctx context.Context, id string, purge PurgeScope, co
 	return s.uninstall(ctx, id, purge, confirm)
 }
 
-func (s *Service) uninstall(ctx context.Context, id string, purge PurgeScope, confirm bool) error {
+func (s *Service) uninstall(ctx context.Context, id string, purge PurgeScope, confirm bool) (err error) {
 	in, err := s.opt.Store.GetInstall(ctx, id)
 	if err != nil {
 		return err
@@ -143,8 +149,8 @@ func (s *Service) uninstall(ctx context.Context, id string, purge PurgeScope, co
 		return err
 	}
 	pluginDir := filepath.Join(filepath.Dir(s.opt.Packages), "plugins", id)
-	group := s.opt.Settings.Settings().Adapters[in.AdapterID]
-	ownsInstances := in.Role == state.RoleAdapter && (group.Package == id || group.Package == "" && !in.Uninstalled)
+	group, configured := s.opt.Settings.Settings().Adapters[in.AdapterID]
+	ownsInstances := configured && in.Role == state.RoleAdapter && (group.Package == id || group.Package == "" && !in.Uninstalled)
 	packageDir := s.directory(in)
 	packagePaths := []string{packageDir}
 	journals, err := s.opt.Store.Journals(ctx, "")
@@ -163,11 +169,18 @@ func (s *Service) uninstall(ctx context.Context, id string, purge PurgeScope, co
 		if err != nil {
 			return err
 		}
+		if purge == PurgeAll {
+			profileObjects, err := s.opt.Store.ProfilePurgeObjects(ctx, id)
+			if err != nil {
+				return err
+			}
+			objects = append(objects, profileObjects...)
+		}
 		for _, object := range objects {
 			affected = append(affected, id+":"+object)
 		}
 		// 预览与删除共用受管路径清单，插件工作目录中的其余文件归作者管理。
-		paths = append(paths, filepath.Join(pluginDir, "generations"))
+		paths = append(paths, filepath.Join(pluginDir, "generations"), filepath.Join(filepath.Dir(s.opt.Packages), "plugin_data", id))
 		if purge == PurgeAll {
 			paths = append(paths, filepath.Join(pluginDir, "config.json"))
 			affected = append(affected, id+":installation binding")
@@ -197,16 +210,27 @@ func (s *Service) uninstall(ctx context.Context, id string, purge PurgeScope, co
 			return err
 		}
 	}
-	if in.Role != state.RoleWebUI {
+	if in.Role != state.RoleWebUI || in.Entrypoint != "" {
 		if err := s.opt.Stop(ctx, id, pb.StopReason_STOP_REASON_DISABLE); err != nil {
 			return err
 		}
 	}
 	if purge == PurgeAll && ownsInstances {
-		if err := s.opt.Settings.Update(func(doc *settings.Document) error { return doc.Delete([]string{"adapters", in.AdapterID}) }); err != nil {
+		saveErr := s.opt.Settings.Update(func(doc *settings.Document) error { return doc.Delete([]string{"adapters", in.AdapterID}) })
+		s.opt.Adapters.SetDefaults(s.opt.Settings.Settings().DefaultInstances())
+		if _, retained := s.opt.Settings.Settings().Adapters[in.AdapterID]; saveErr != nil && retained {
+			return saveErr
+		}
+		// 设置已提交：完成剩余卸载，目录同步错误与后续错误一起返回。
+		defer func() { err = errors.Join(saveErr, err) }()
+		ctx = context.WithoutCancel(ctx)
+		instances := make([]string, 0, len(group.Instances))
+		for name := range group.Instances {
+			instances = append(instances, name)
+		}
+		if err := s.forgetInstances(ctx, id, instances); err != nil {
 			return err
 		}
-		s.opt.Adapters.SetDefaults(s.opt.Settings.Settings().DefaultInstances())
 	}
 	for _, path := range paths {
 		if err := os.RemoveAll(path); err != nil {
@@ -215,6 +239,9 @@ func (s *Service) uninstall(ctx context.Context, id string, purge PurgeScope, co
 	}
 	if err := s.opt.Store.Uninstall(ctx, id, purge != PurgeNone, purge == PurgeAll); err != nil {
 		return err
+	}
+	if s.opt.Router != nil {
+		s.opt.Router.RemoveRouteSnapshot(id)
 	}
 	for _, path := range packagePaths {
 		if err := os.RemoveAll(path); err != nil {
