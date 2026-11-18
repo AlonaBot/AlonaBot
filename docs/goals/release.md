@@ -20,7 +20,7 @@
 
 ### goal-73 · T-14.3 发行归档
 
-状态：等待前置（T-14.1）。T-03.10、T-09.3、T-12.7 已合并。2026-11-17 按 D-171 缩小组件范围：不再等待 T-14.2 与 T-15.2，发行归档只含 Core、Telegram Adapter、Agent、WebUI 与 help。语句中 goal-38 提供的命令（alonabot pack 与 --key）与各组件的目录只写名字；T-14.1 合并后由审查者核对，再改为待派发。
+状态：等待语句定稿（前置均已合并）。T-14.1（PR #210，`456a4df`）已合并。T-03.10、T-09.3、T-12.7 已合并。2026-11-17 按 D-171 缩小组件范围：不再等待 T-14.2 与 T-15.2，发行归档只含 Core、Telegram Adapter、Agent、WebUI 与 help。语句中 goal-38 提供的命令（alonabot pack 与 --key）与各组件的目录只写名字；T-14.1 合并后由审查者核对，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-73（切片 T-14.3：发行归档）。goal 目录 goal-73，分支 goal-73，worktree .worktrees/goal-73，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
