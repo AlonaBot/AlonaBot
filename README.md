@@ -11,8 +11,11 @@ Module：`github.com/AlonaBot/AlonaBot`。
 Telegram Adapter 接收入口见 [alonabot-adapter-telegram](adapters/telegram/cmd/alonabot-adapter-telegram/main.go)，本地 Bot API 模拟服务见 [telegramtest](adapters/telegram/telegramtest/server.go)。OneBot 11 Adapter 已实现正向 WebSocket 连接与接收（发送与媒体随后继切片），入口见 [alonabot-adapter-onebot11](adapters/onebot11/cmd/alonabot-adapter-onebot11/main.go)，本地模拟服务见 [onebottest](adapters/onebot11/onebottest/server.go)。已在 darwin/arm64 验证真实私聊消息接收；完整 Core 装配与其他真实平台场景由后继切片联验。
 
 配置文件可通过 `alonabot profile` 列出、新建、指定到 Adapter 实例或会话，以及编辑插件字段。用法见[开发指南](docs/development.md#运行-core-与管理组件)；平台设置与插件、工具策略由[管理 API](spec/ADMIN-API.md#23-配置文件)保存，运行时应用由后续切片接入。
+官方 WebUI 已提供桌面与手机外壳、全局搜索、浅深色视觉令牌及本地品牌资源。运行 `npm --prefix web/admin run dev` 后，从开发服务器首页进入 `/dev/forms`，可预览配置表单和生成的 JSON Merge Patch；真实登录与管理页面由后继切片接入。安装依赖与验证命令见[官方 WebUI 开发指南](docs/development.md#官方-webui-开发)。
 
 按 [spec/PLAN.md](spec/PLAN.md) 的工作包继续实施；规格索引见 [spec/README.md](spec/README.md)，决策与历史依据见 [spec/adr/README.md](spec/adr/README.md)。开发环境与命令见 [docs/development.md](docs/development.md)，插件作者的规则见 [docs/plugin-guide.md](docs/plugin-guide.md)，模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)，代理工作约定见 [AGENTS.md](AGENTS.md)。
+
+组件市场 ID 统一使用 `alonabot-plugin-`、`alonabot-adapter-`、`alonabot-agent-`、`alonabot-webui-` 前缀与连字符分词，本地 ID 规则保持不变（[D-172](spec/adr/DECISIONS.md)，代码实施见 [goal-177](docs/goals/core.md#goal-177--t-0927-组件市场-id-改用连字符)）。官方包 ID 与首次发布前的数据重建要求见 [CONTRACTS §15.2](spec/CONTRACTS-v0.1.md#152-发行包官方整合包与预装组件)。
 
 参与开发先读 [贡献流程](CONTRIBUTING.md) 和 [编码与注释规范](docs/coding-standards.md)；项目维护技能随仓库提供，不依赖个人配置。
 
