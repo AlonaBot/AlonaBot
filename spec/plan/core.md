@@ -122,7 +122,7 @@
 | T-13.3 | goal-69 | 开发运行与热部署：`alonabot run [目录...] [--reload]` 构建并以独立进程运行开发组件，轮询源码、资源与配置，只重启变化的组件；Adapter 以可导入包为工程目录，沿用 `dev:<组件 ID>`（D-77、D-134） | T-13 步骤 4 | T-07.6、T-09.16、T-13.1、T-09.4 | V-65 | 已完成（PR #171；TEST-MATRIX §3.2） |
 | T-13.4 | goal-70 | 开发运行示例与开发文档，汇总证据 | T-13 步骤 5 | T-03.10、T-13.2、T-13.3 | V-64、V-65 | 已完成（PR #186；TEST-MATRIX §3.2） |
 | T-13.5 | goal-140 | 模块根包只保留库模式接口：Core 装配、候选与进程管理移入 `internal/app`，只供开发 CLI 使用的 `Executable`、`Stdio`、`Core.Restart`、`Core.RestartInstance`、`Core.ReloadSettings` 随之移入，根目录的端到端测试按归属迁移（D-148） | T-13 步骤 6 | T-04.16 | V-64、V-65 的回归（行为不变） | 已完成（PR #200；TEST-MATRIX §3.2） |
-| T-13.6 | goal-141 | CLI 参数从简：`build`、`check`、`test`、`pack` 的工程目录改为位置参数并删除 `--dir`；`init` 的 ID 与 module、`pack` 的资产 URL 取缺省值；`install` 可按组件 ID 安装 `packages/` 中的官方包，不给参数时在当前目录寻找唯一的安装包（D-149）；`pack --target` 多平台一次打包与签名（D-169） | T-13 步骤 7 | T-13.5、T-14.3 | V-121 | 未开始 |
+| T-13.6 | goal-141 | CLI 参数从简：`build`、`check`、`test`、`pack` 的工程目录改为位置参数并删除 `--dir`；`init` 的 ID 与 module、`pack` 的资产 URL 取缺省值；`install` 可按组件 ID 安装 `packages/` 中的官方包，不给参数时在当前目录寻找唯一的安装包（D-149）；`pack --target` 多平台一次打包与签名（D-169） | T-13 步骤 7 | T-13.5、T-14.3 | V-121 | 已完成（PR #233；TEST-MATRIX §3.2） |
 | T-16.1 | goal-81 | 插件测试套件基础：`plugintest.Start`、测试 Adapter、会话与身份、Capability 子集、消息注入、`internal/inproc` 的分发结束通知、配置与数据库 | T-16 步骤 1、2 | T-05.2、T-13.2、T-09.4 | V-73 的基础分项 | 已完成（PR #168；TEST-MATRIX §3.2） |
 | T-16.2 | goal-82 | 按钮点击、多轮等待、schedule 触发（含动态任务实例，D-124）与后台发送；用套件测试示例插件，开发文档，汇总证据 | T-16 步骤 3、4 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | V-73 | 已完成（PR #183；TEST-MATRIX §3.2） |
 | T-16.3 | goal-102 | `plugintest.LLM`：登记只提供 `llm.generate` 的测试 Agent，被测插件经 `@agent` 的调用交给测试函数（D-77） | T-16 步骤 3 | T-12.8、T-16.1 | V-73 的 LLM 分项 | 已完成（PR #190；TEST-MATRIX §3.2） |

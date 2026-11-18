@@ -152,12 +152,16 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		if err := settings.ValidateListen(*o.Listen); err != nil {
 			return fail(startupUsage(fmt.Errorf("--listen: %w", err)))
 		}
-		hostname, _, _ := net.SplitHostPort(*o.Listen)
-		ip, _ := netip.ParseAddr(hostname)
-		if !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(hostname, "."), "localhost") && baseURL.Scheme != "https" && len(configuration.TrustedProxies) == 0 {
-			return fail(startupUsage(errors.New("--listen: non-loopback listen requires HTTPS base_url or trusted_proxies")))
-		}
 		configuration.Listen = *o.Listen
+	}
+	hostname, _, _ := net.SplitHostPort(configuration.Listen)
+	ip, _ := netip.ParseAddr(hostname)
+	nonLoopback := !ip.IsLoopback() && !strings.EqualFold(strings.TrimSuffix(hostname, "."), "localhost")
+	baseIP, _ := netip.ParseAddr(baseURL.Hostname())
+	containerHTTP := os.Getenv("ALONABOT_CONTAINER") == "1" && baseURL.Scheme == "http" &&
+		(baseIP.IsLoopback() || strings.EqualFold(strings.TrimSuffix(baseURL.Hostname(), "."), "localhost"))
+	if o.Listen != nil && nonLoopback && baseURL.Scheme != "https" && len(configuration.TrustedProxies) == 0 && !containerHTTP {
+		return fail(startupUsage(errors.New("--listen: non-loopback listen requires HTTPS base_url or trusted_proxies")))
 	}
 	if o.LogLevel != nil {
 		configuration.LogLevel = *o.LogLevel
@@ -444,6 +448,9 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	c.http = &http.Server{Addr: listener.Addr().String(), Handler: publicHost, ErrorLog: slog.NewLogLogger(slog.Default().Handler(), slog.LevelError)}
 	c.httpErrors = make(chan error, 1)
 	go func() { c.httpErrors <- c.http.Serve(listener) }()
+	if nonLoopback && containerHTTP && len(configuration.TrustedProxies) == 0 {
+		slog.Warn("listening on all interfaces inside a container; publish the port to the host loopback only")
+	}
 	slog.Info("HTTP listener started", "listen", listener.Addr().String())
 	slog.Info("Core started", "data_dir", dir)
 	for _, install := range installs {
