@@ -311,6 +311,7 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 	a.media.AddReadServices(a.mux, a.adapters, a.router, store.AdapterInstanceAllowed)
 	conversation.New(store).Register(a.mux)
 	a.tools = tool.New(store, a.router)
+	a.tools.SetProfile(a.toolProfile)
 	a.tools.Register(a.mux)
 	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes, Metrics: a.metrics, AcquireActivity: a.acquireActivity})
 	a.bus.Register(a.mux)

@@ -16,8 +16,8 @@ Telegram Adapter 接收入口见 [alonabot-adapter-telegram](adapters/telegram/c
 
 插件配置按 `OnConfigLoad(ctx, raw)` → 补值与校正 → required 校验载入。管理 API 已提供插件、Adapter 实例与 Core 设置的校正记录、无效配置路径和清理入口；插件清理写入 Pending 后经 reload 生效。用法见[配置与 secret](docs/plugin-guide.md#7-配置与-secret)及[Core 设置](docs/development.md#core-设置与-http-入口)，WebUI 的提示与清理按钮由 T-09.9 接入。
 
-配置文件可通过 `alonabot profile` 列出、新建、指定到 Adapter 实例或会话，以及编辑插件字段。会话派发已应用插件开关与字段覆盖，SDK 的 `c.Config()` 提供本次调用的只读视图，消息过滤读取同一会话的生效配置。用法见[开发指南](docs/development.md#运行-core-与管理组件)；[管理 API](spec/ADMIN-API.md#23-配置文件)已保存平台设置与工具策略，其运行时应用分别由 T-04.19、T-11.6 接入。
-官方 WebUI 已提供桌面与手机外壳、全局搜索、浅深色视觉令牌及本地品牌资源。运行 `npm --prefix web/admin run dev` 后，从开发服务器首页进入 `/dev/forms`，可预览配置表单和生成的 JSON Merge Patch；真实登录与管理页面由后继切片接入。安装依赖与验证命令见[官方 WebUI 开发指南](docs/development.md#官方-webui-开发)。
+配置文件可通过 `alonabot profile` 列出、新建、指定到 Adapter 实例或会话，以及编辑插件字段。会话派发已应用插件开关与字段覆盖，SDK 的 `c.Config()` 提供本次调用的只读视图，消息过滤读取同一会话的生效配置。工具目录、调用与操作确认已应用配置文件策略。用法见[开发指南](docs/development.md#运行-core-与管理组件)；[管理 API](spec/ADMIN-API.md#23-配置文件)已保存平台设置，其运行时应用由 T-04.19 接入。
+官方 WebUI 已提供真实登录、总览小时统计、插件商店、权限用户管理，以及插件数据页的数据库表格、KV/文件存储和 Agent 会话摘要与清除；支持更新前的 Release 正文预览、更新后的 changelog 与已读版本持久化。后台使用自身受管 SQLite，官方源缺省为 `AlonaBot/plugin-store`。桌面与手机外壳提供全局搜索、浅深色视觉令牌及本地品牌资源。开发模式可直接访问 `/dev/forms` 预览配置表单和 JSON Merge Patch；安装依赖、构建后台平台包与验证命令见[官方 WebUI 开发指南](docs/development.md#官方-webui-开发)，验收证据见 [TEST-MATRIX §3.2](spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)。
 
 [showcase 的 `greeting` 字段](examples/plugins/showcase/config_schema.json) 展示了带文字和图片的[配置回复示例](docs/plugin-guide.md#配置字段的回复示例)。作者工具校验示例与翻译，Core 经管理 API 提供 Active 包引用的图片；WebUI 表单展示由后继切片实现。
 
@@ -25,7 +25,7 @@ Core、SDK 与管理 CLI 已支持 CRITICAL 日志；用 `alonabot logs --level 
 
 排查 Core 问题时，可用 `alonabot diagnose` 导出默认脱敏的诊断包。在线导出使用管理认证；停机后可从数据目录只读收集。参数与停机条件见[导出诊断包](docs/development.md#导出诊断包)。
 
-组件可随安装包提供更新日志，作者写法见[插件发布指南](docs/plugin-guide.md#9-发布)。管理员可通过[管理 API](spec/ADMIN-API.md#22-更新内容changelog)读取组件及 Core 的更新日志。
+组件可随安装包提供更新日志，作者写法见[插件发布指南](docs/plugin-guide.md#9-发布)。管理员可通过 WebUI 或[管理 API](spec/ADMIN-API.md#22-更新内容changelog)读取组件及 Core 的更新日志。
 
 按 [spec/PLAN.md](spec/PLAN.md) 的工作包继续实施；规格索引见 [spec/README.md](spec/README.md)，决策与历史依据见 [spec/adr/README.md](spec/adr/README.md)。开发环境与命令见 [docs/development.md](docs/development.md)，插件作者的规则见 [docs/plugin-guide.md](docs/plugin-guide.md)，模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)，代理工作约定见 [AGENTS.md](AGENTS.md)。
 
@@ -37,7 +37,7 @@ Core、SDK 与管理 CLI 已支持 CRITICAL 日志；用 `alonabot logs --level 
 
 参与开发先读 [贡献流程](CONTRIBUTING.md) 和 [编码与注释规范](docs/coding-standards.md)；项目维护技能随仓库提供，不依赖个人配置。
 
-- 首发：可安装的组件分为插件、Adapter、Agent 与 WebUI 四种，各自是独立子进程（WebUI 只是静态文件）；官方 Telegram 与 OneBot 11 Adapter、官方 Agent（含记忆，工具调用需用户确认）与官方 WebUI 都可以换成社区组件；命令/文本匹配/事件、多轮等待、Service/广播、调度、配置/数据库、HTTP、管理 CLI、组件安装更新、英文与简体中文的用户文案；面向用户的官方整合包可用发行归档、`install.sh`（Linux systemd、macOS launchd）或 `docker compose` 安装，开箱即用，开发者可以通过 `alonabot run --reload` 热部署组件，或在自己的 `main.go` 中用 `alonabot.Run`、`alonabot.Start` 与 `Core.Wait` 将框架作为 Go 库运行，并用插件测试套件在 `go test` 中以真实 Core 测试插件。
+- 首发：可安装的组件分为插件、Adapter、Agent 与 WebUI 四种，各自是独立子进程（官方 WebUI 包含静态文件与后台进程）；官方 Telegram 与 OneBot 11 Adapter、官方 Agent（含记忆，工具调用需用户确认）与官方 WebUI 都可以换成社区组件；命令/文本匹配/事件、多轮等待、Service/广播、调度、配置/数据库、HTTP、管理 CLI、组件安装更新、英文与简体中文的用户文案；面向用户的官方整合包可用发行归档、`install.sh`（Linux systemd、macOS launchd）或 `docker compose` 安装，开箱即用，开发者可以通过 `alonabot run --reload` 热部署组件，或在自己的 `main.go` 中用 `alonabot.Run`、`alonabot.Start` 与 `Core.Wait` 将框架作为 Go 库运行，并用插件测试套件在 `go test` 中以真实 Core 测试插件。
 - 后续：更多正式 Adapter、动态命令 Router、持久化的多轮会话、跨会话记忆检索与额外客户端等，按规格范围推进。
 - 实施约束：保持轻量、良好的开发体验和最小必要配置；以编译、集成和目标平台测试记录完成情况。
 

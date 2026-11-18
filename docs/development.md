@@ -52,9 +52,13 @@ npm --prefix web/admin ci
 npm --prefix web/admin run dev
 ```
 
-打开 Vite 输出的地址，首页跳转到 `/dev/forms`。预览使用 `web/admin/fixtures/`，可切换语言并查看表单提交生成的 JSON Merge Patch，无需启动 Core。接入新页面时按 [WebUI 实施计划 §3](../spec/plan/webui.md#3-页面接入外壳) 登记路由和文案。
+打开 Vite 输出的地址，管理页要求登录；登录后首页跳转到 `/overview`。直接访问 `/dev/forms` 可使用 `web/admin/fixtures/` 切换语言并查看表单提交生成的 JSON Merge Patch，无需启动 Core。接入新页面时按 [WebUI 实施计划 §3](../spec/plan/webui.md#3-页面接入外壳) 登记路由和文案。
 
 本地运行 `npm --prefix web/admin run typecheck`、`npm --prefix web/admin run test` 和 `npm --prefix web/admin run build`。测试使用被忽略的 `*.local.test.ts`，无本地测试时命令也通过；CI 不运行前端检查。生产静态文件输出到 `web/admin/dist/`，其中包括站点图标、标志、JetBrains Mono woff2 和许可。
+
+官方 WebUI 另有 `package admin` 的 `New() *sdk.Plugin` 后台入口。先构建前端，用 `alonabot check web/admin` 核对入口与资源，`alonabot build web/admin` 生成进程入口，`alonabot pack web/admin --target darwin/arm64 --out web/admin/bin` 生成携带进程与 `dist` 的平台包；安装后从 Core 同源入口登录，前端经 Cookie/CSRF 调用 Admin API 与 `/plugins/alonabot-webui-admin/` 后台路由。后台在自身受管 SQLite 保存统计、用户目录、商店缓存和已读版本，接口见 [ADMIN-API §25](../spec/ADMIN-API.md#25-官方-webui-后台)。
+
+T-09.23 的验证证据见 [TEST-MATRIX §3.2](../spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)：darwin/arm64 正式包已通过真实 Core 联验，GitHub 使用回环模拟，五目标包完成交叉编译和资产检查；其他平台实际运行与修复后浏览器验收记为未运行。
 
 T-09.26 锁定 `lucide-react` 1.74.0、`@dnd-kit/core` 6.3.1、`@dnd-kit/sortable` 10.0.0、`@radix-ui/react-dialog` 1.3.1、`@radix-ui/react-dropdown-menu` 2.2.1 和 `@radix-ui/react-tooltip` 1.4.1；`@radix-ui/react-popover` 与 `recharts` 由首个使用它们的页面切片引入。
 
@@ -67,11 +71,11 @@ go run ./scripts/dist --version 0.1.0 \
   --key ~/.config/alonabot/release.key --out ./dist
 ```
 
-构建机需要上表中的 Go、Node 与 npm，并可读取已锁定的 Go 模块和 npm 包。程序先运行 `web/admin` 的 `npm ci` 与 `npm run build`，再由主机版 `alonabot pack <组件目录> --target <os>/<arch> ... --asset-base <前缀> --out <目录>` 为每个组件调用一次，传入全部目标；pack 写出合并清单，dist 再签名并自检。组件版本沿用各自 `plugin.yaml`。默认目标为 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`，可用 `--platforms linux/amd64,linux/arm64` 选择子集。离线 npm 缓存已齐全时，可在命令前加 `env npm_config_offline=true`。
+构建机需要上表中的 Go、Node 与 npm，并可读取已锁定的 Go 模块和 npm 包。程序在暂存目录保留根 `go.mod`、`go.sum` 及 `sdk/`、`contracts/`、`internal/`、`web/admin/`，跳过 WebUI 的旧 `node_modules` 与 `dist`；在暂存 WebUI 中运行 `npm ci` 与 `npm run build`，再由主机版 `alonabot pack <组件目录> --target <os>/<arch> ... --asset-base <前缀> --out <目录>` 为每个组件调用一次，传入全部目标；pack 写出合并清单，dist 再签名并自检。组件版本沿用各自 `plugin.yaml`。默认目标为 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`，可用 `--platforms linux/amd64,linux/arm64` 选择子集。离线 npm 缓存已齐全时，可在命令前加 `env npm_config_offline=true`。
 
 `--key` 文件保存标准 base64 编码的 64 字节 Ed25519 私钥，允许末尾空白。私钥放在仓库及组件资源目录之外，设置为仅发布维护者可读（0600），通过受控环境或离线介质保管和备份。程序只从该文件读取私钥，子进程不接收私钥；发行物只携带公钥与签名。发布前先用临时测试密钥验证流程，正式签名使用维护者控制的密钥。
 
-`dist/` 中每个平台生成一个 `alonabot-<version>-<os>-<arch>.tar.gz`（Windows 为 `.zip`），解压后的同名目录包含 `alonabot`（Windows 为 `alonabot.exe`）和 `packages/<组件ID>/`。每个组件目录包含该平台安装包、合并全部目标平台的 `release.json`、`release.json.sig` 与 `release.pub`；当前静态 WebUI 只生成一份 `any` 安装包。另在 `dist/packages/<组件ID>/` 汇集各平台安装包与同一份签名清单，供后续发布使用。`dist/SHA256SUMS` 列出所有外层发行归档的摘要，格式为摘要、两个空格和文件名。
+`dist/` 中每个平台生成一个 `alonabot-<version>-<os>-<arch>.tar.gz`（Windows 为 `.zip`），解压后的同名目录包含 `alonabot`（Windows 为 `alonabot.exe`）和 `packages/<组件ID>/`。每个组件目录包含该平台安装包、合并全部目标平台的 `release.json`、`release.json.sig` 与 `release.pub`；官方 WebUI 按五个目标平台出包，分别包含 `component`（Windows 为 `component.exe`）与同一份 `dist`。另在 `dist/packages/<组件ID>/` 汇集各平台安装包与同一份签名清单，供后续发布使用。`dist/SHA256SUMS` 列出所有外层发行归档的摘要，格式为摘要、两个空格和文件名。
 
 安装包下载前缀默认取 `https://github.com/AlonaBot/AlonaBot/releases/download/v<version>`，可用 `--asset-base https://example.com/releases/v0.1.0` 覆盖。发行 Core 通过 `-ldflags -X` 嵌入官方公钥，安装官方签名包时免首次来源与发布者确认；签名与摘要仍按安装流程验证，已有发布者绑定继续生效。未注入公钥的开发构建保留原确认流程。
 
@@ -197,7 +201,7 @@ Adapter 实例的记录在 `GET /api/v1/adapters/{adapter_id}/instances/{instanc
 
 使用同一套管理凭证运行 `bin/alonabot profile list` 查看配置文件 ID 和会话数。`bin/alonabot profile assign <配置文件ID> <实例名>` 设置实例缺省；再给出会话字符串可单独指定会话。`profile set` 与 `profile unset` 编辑 `default` 时写入插件的 Pending，沿用配置重载流程。全部子命令见 [CONTRACTS §5.6](../spec/CONTRACTS-v0.1.md#56-配置文件)，平台设置与工具策略见 [ADMIN-API §23](../spec/ADMIN-API.md#23-配置文件)。
 
-会话派发按单独指定 → 实例缺省 → `default` 解析配置文件，已应用插件开关、字段覆盖与消息过滤；SDK 的 `c.Config()` 在每次调用开始时冻结视图。覆盖更新向在线 Session 下发完整集合，后续调用使用新值；离线插件在下次 Bootstrap 接收。Bootstrap 的 `profile_overrides_json` 必须是对象，无覆盖填 `{}`；离线 `alonabot test` 同样下发该字段。插件经 `core.profile.set` 修改 `default` 时，Core 在整条根调用及延续结束后 reload；固定服务写入遇管理互斥占用立即返回 FAILED_PRECONDITION。前缀、回复方式与工具策略的运行时应用分别由 T-04.19、T-11.6 接入。
+会话派发按单独指定 → 实例缺省 → `default` 解析配置文件，已应用插件开关、字段覆盖与消息过滤；SDK 的 `c.Config()` 在每次调用开始时冻结视图。覆盖更新向在线 Session 下发完整集合，后续调用使用新值；离线插件在下次 Bootstrap 接收。Bootstrap 的 `profile_overrides_json` 必须是对象，无覆盖填 `{}`；离线 `alonabot test` 同样下发该字段。插件经 `core.profile.set` 修改 `default` 时，Core 在整条根调用及延续结束后 reload；固定服务写入遇管理互斥占用立即返回 FAILED_PRECONDITION。工具目录、调用与操作确认使用可信默认 Target 对应配置文件的一次操作快照；无 Target 或无父 list 使用 `default`。插件关闭时为 deny，其余按配置文件覆盖、全局覆盖与工具声明缺省策略查找，确认操作无覆盖时为 confirm。管理更新从下一次操作生效，在途确认保留已接纳策略。前缀与回复方式的运行时应用由 T-04.19 接入。
 
 ### 导出诊断包
 
@@ -339,7 +343,7 @@ bin/alonabot build ./alonabot-plugin-hello --goos linux --goarch amd64 --tags a,
 bin/alonabot check ./alonabot-plugin-hello --goos linux --goarch amd64 --tags a,b
 ```
 
-`build/check` 使用 `--goos`、`--goarch`，目标缺省沿用 Go 环境；`pack` 使用可重复的 `--target <os>/<arch>`，省略时取本机平台。三者均用 `--tags` 选择源码；扫描、依赖分析和正式编译统一使用 `CGO_ENABLED=0`。开发运行的 BuildDev 沿用开发环境的 cgo 设置。`build` 默认输出到 `<工程>/bin`，可用 `--out DIR` 覆盖。进程产物包含独立的 `component`（Windows 为 `component.exe`）、资源旁车及包内 `plugin.yaml`；作者 manifest 保持原样。WebUI build 发布静态资源与包内 manifest。`check` 只读扫描入口与资源，保留全部静态诊断与位置。
+`build/check` 使用 `--goos`、`--goarch`，目标缺省沿用 Go 环境；`pack` 使用可重复的 `--target <os>/<arch>`，省略时取本机平台。三者均用 `--tags` 选择源码；扫描、依赖分析和正式编译统一使用 `CGO_ENABLED=0`。开发运行的 BuildDev 沿用开发环境的 cgo 设置。`build` 默认输出到 `<工程>/bin`，可用 `--out DIR` 覆盖。进程产物包含独立的 `component`（Windows 为 `component.exe`）、资源旁车及包内 `plugin.yaml`；作者 manifest 保持原样。纯静态 WebUI build 发布静态资源与包内 manifest；带 Go 入口的 WebUI 另外生成同平台进程，官方 WebUI 采用这一形式。`check` 只读扫描入口与资源，保留全部静态诊断与位置。
 
 `test` 在全新临时数据目录中构建宿主平台组件，完成真实握手、准备、注册、激活与停止，报告注册命令及清理结果；Adapter 保持零平台实例，WebUI 检查静态加载资源。进程组件的 Bootstrap 下发临时状态根内 `plugin_data/<id>/` 的绝对路径，测试结束时随临时目录清理。准备、注册、停止或清理失败均非零退出。
 

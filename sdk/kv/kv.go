@@ -3,6 +3,7 @@
 // 数据保存在保留表 _alonabot_kv，随受管数据库的候选副本、回退与清理处理（CONTRACTS §6.1）。
 // 调用须传入 Handler 或生命周期回调的 context；连接由 SDK 管理。
 // [Get]、[Set]、[Delete] 操作单个键，[List] 按字节前缀与排他游标分页返回 [Page]。
+// 键须为 1～512 字节 UTF-8，且须避开 HTTP 路径中的独立点段 . 与 ..。
 package kv
 
 import (
@@ -114,6 +115,9 @@ func List(ctx context.Context, prefix, cursor string, limit int) (page Page, err
 }
 
 func checkKey(key string) error {
+	if key == "." || key == ".." {
+		return errcode.InvalidArgument.New("KV key must not be . or ..")
+	}
 	if len(key) == 0 || len(key) > maxKeyBytes || !utf8.ValidString(key) {
 		return errcode.InvalidArgument.New("KV key must be 1 to 512 bytes of UTF-8")
 	}
