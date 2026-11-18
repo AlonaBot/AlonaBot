@@ -610,7 +610,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 服务声明为 public（§3）。Agent 只接受直接调用方插件位于其配置项 `llm_service_allowed_plugins` 中的调用，缺省为 `["*"]`，表示全部插件（D-83），管理员可以改为插件 ID 名单；不在列表中返回 PERMISSION_DENIED，不请求 Provider。直接调用方取 Core 下发的调用链中的上一跳插件，不采信请求内容。
 - 一次调用对应一次完整的 Provider 请求：不流式、不调用工具、不读写 Agent 会话与记忆，也不套用人格。`messages` 为空、`role` 非法、指定的模型不存在或不是 chat 类型返回 INVALID_ARGUMENT；没有指定模型且 `chat_model` 为空返回 FAILED_PRECONDITION；Provider 出错或中途断开返回 UNAVAILABLE，safe_message 不含 API Key；不自动重试（D-38；D-155 的重试与回退只用于 Agent 的对话轮次）。
 - 生成可用的时间受调用方期限约束（§1.2）。普通请求只有 30s，需要更长时间的调用方在延续调用（§2.4）或 schedule 回调中发起。没有安装或没有启用 Agent 组件时按 §3 的目标未激活处理。
-- Agent 组件另注册选项来源服务 `llm.models`（§3、§5.1，D-131、D-154），让其他组件的配置字段用 `"options_from": {"source": "@agent/llm.models", "filter": {"type": "chat"}}` 选择模型：存储值是模型名字，即 `llm.generate` 的 `model`；显示名是名字，说明是类型、提供商与模型 ID；filter 键 `type` 取 §13.6 的六类之一，省略时列出全部类型；不返回 base_url 与 API key。字段值为空串时调用方不传 `model`，使用 `chat_model`。替换官方 Agent 的组件应实现本服务。
+- Agent 组件另注册选项来源服务 `llm.models`（§3、§5.1，D-131、D-154），让其他组件的配置字段用 `"options_from": {"source": "@agent/llm.models", "filter": {"type": "chat"}}` 选择模型：存储值是模型名字，即 `llm.generate` 的 `model`；显示名是模型名字，说明是「提供商 · 模型 ID」；filter 键 `type` 取 §13.6 的六类之一，省略时列出全部类型；不返回 base_url 与 API key。字段值为空串时调用方不传 `model`，使用 `chat_model`。替换官方 Agent 的组件应实现本服务。
 
 ### 13.6 模型与模型管理路由
 
