@@ -75,6 +75,9 @@ type Service struct{ opt Options }
 // New 创建按 schema 字段查询选项的入口。
 func New(opt Options) *Service { return &Service{opt: opt} }
 
+// PageSize 返回本次 Core 运行中生效的 OPTIONS_PAGE。
+func (s *Service) PageSize() int { return s.opt.Page }
+
 // Query 从 Active schema 读取来源；字段未声明来源返回 INVALID_ARGUMENT，来源失败返回 UNAVAILABLE。
 func (s *Service) Query(ctx context.Context, componentID string, kind SchemaKind, fieldPath string, q Query) (Page, error) {
 	// 1. 来源与 filter 只由配置声明给出，调用方只控制查询条件。

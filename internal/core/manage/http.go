@@ -33,6 +33,10 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	s.instanceRoutes(mux)
 	s.conversationRoutes(mux)
 	s.logRoutes(mux)
+	s.jobRoutes(mux)
+	mux.HandleFunc("GET /api/v1/plugins/{id}/generations", s.generations)
+	mux.HandleFunc("GET /api/v1/adapter/instances", s.listInstances)
+	mux.HandleFunc("GET /api/v1/chats", s.chats)
 	mux.HandleFunc("GET /api/v1/core", s.coreInfo)
 	mux.HandleFunc("GET /api/v1/packages/{id}/icon", s.icon)
 	mux.HandleFunc("POST /api/v1/packages/install", func(w http.ResponseWriter, r *http.Request) {
@@ -95,6 +99,10 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	}
 	mux.HandleFunc("GET /api/v1/packages", func(w http.ResponseWriter, r *http.Request) {
 		result, err := s.List(r.Context())
+		locales := pageLanguages(r.Header.Get("Accept-Language"))
+		for i := range result {
+			result[i].Pages = s.pages(result[i].ID, locales)
+		}
 		respond(w, result, err)
 	})
 	mux.HandleFunc("GET /api/v1/admins", func(w http.ResponseWriter, r *http.Request) { respond(w, s.Admins(r.Context()), nil) })
@@ -155,6 +163,9 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	})
 	return auth.Require(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.deleteConversation(w, r) {
+			return
+		}
+		if s.setJobPaused(w, r) {
 			return
 		}
 		// ServeMux 会清理路径并重定向；在此之前拒绝原始的越界或非规范路径。

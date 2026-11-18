@@ -283,7 +283,31 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		})
 	}, Store: store, Settings: c.assembly.settings, Policy: c.assembly.policy, Router: c.assembly.router, Options: c.assembly.options, Tools: c.assembly.tools,
 		CoreInfo: func() (string, string) { return version, c.http.Addr },
-		Adapters: c.assembly.adapters, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(components),
+		Adapters: c.assembly.adapters, Scheduler: c.assembly.scheduler, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(components),
+		InstanceStatus: func(ctx context.Context, id, instance string) (string, string, error) {
+			state, message := "stopped", ""
+			err := c.operation(ctx, func(context.Context) error {
+				for _, running := range c.components {
+					if running != nil && running.id == id && running.remote != nil {
+						state, message = running.remote.InstanceStatus(instance)
+						break
+					}
+				}
+				return nil
+			})
+			return state, message, err
+		},
+		RecordInstanceFailure: func(ctx context.Context, id, instance, message string) error {
+			return c.operation(ctx, func(context.Context) error {
+				for _, running := range c.components {
+					if running != nil && running.id == id && running.remote != nil {
+						running.remote.RecordFailure(instance, message)
+						return nil
+					}
+				}
+				return fmt.Errorf("adapter is not running: %s", id)
+			})
+		},
 		Packages: filepath.Join(dir, "packages"), Limits: packages.NewLimits(values), Development: development, DevelopmentWebUI: webUI,
 		Descriptor:        c.assembly.componentDescriptor,
 		DevelopmentConfig: c.developmentConfig, RestartDevelopment: c.Restart,
@@ -331,6 +355,11 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		ForgetInstance: func(ctx context.Context, id, instance string) error {
 			return c.operation(ctx, func(context.Context) error {
 				delete(c.stoppedInstances, [2]string{id, instance})
+				for _, running := range c.components {
+					if running != nil && running.id == id && running.remote != nil {
+						running.remote.ForgetFailure(instance)
+					}
+				}
 				return nil
 			})
 		},
