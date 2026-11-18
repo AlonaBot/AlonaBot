@@ -207,6 +207,8 @@ Core 无法观察插件私建的 goroutine 与连接，作者仅在没有独立�
 
 Core 记录运行状态变化、唤醒/空闲停止原因、冷启动次数、失败与等待丢弃数；冷启动耗时从启动插件进程至 Core 确认 ACTIVATED，分别记录 OnStart、OnReady 耗时。固定机器验收记录冷启动 P50/P95/P99、活跃与休眠的 PSS/RSS 及 CPU，规则见 TEST-MATRIX V-81。
 
+- 管理员可经 ADMIN-API §20 列出当前 Session 登记的静态任务，并用同一持久状态暂停或恢复（D-164）。
+
 ## 5. 配置、Schema、i18、Secrets
 
 ### 5.1 配置真源、缺失值与编辑
@@ -282,6 +284,7 @@ PATCH 语义依据：[RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)。
 - 日志、错误字符串、CLI 输出与 safe_message 只用英文，不经 i18n。发给聊天用户的文案与 WebUI 文案经 i18n 提供，英文为源语言。
 - 插件的用户可见文案放在 `i18n/<locale>.json` 的顶层 `messages` 对象中：键为点分隔的 ASCII 标识，值为文案字符串，`{name}` 是命名占位符，`{{` 与 `}}` 表示字面花括号。该文件的顶层键为 `metadata`（组件的 name 与 description，§9.1）、`config`（§5.3）、`messages`、`commands`（命令说明覆盖，§8，D-138）与 `pages`（插件页面标题覆盖，以页面路径为键，D-164）。
 - `check` 与 `build` 对顶层 `commands` 只检查结构：它是对象，键为字符串，值为含字符串 `description` 的对象；覆盖路径与实际注册命令及其英文说明的对应由 SDK 在收集注册时检查（§8）。
+- 顶层 `pages` 是从插件相对路径到标题字符串的对象，例如 `{"pages":{"/subs/":"订阅"}}`。仅提供 `pages` 覆盖时可以省略 `en-US.json`；页面的英文源标题来自 `.Page(title)`（§7.3），管理 API 按 `Accept-Language` 逐路径选择覆盖，缺少匹配时使用源标题。
 - 文件名是规范化的 BCP 47 标签，例如 `en-US.json`、`zh-CN.json`。`en-US.json` 是 messages 的源语言，必须包含全部 messages 键；其他语言缺少的 messages 键回落到 en-US。仅含 commands 覆盖的目录可省略 en-US.json，命令说明的英文源文案来自代码（§8，D-138）。`check`、`build` 与 `pack` 拒绝以下情况：含 metadata、config 或 messages 的目录缺少 en-US、其他语言的 messages 含 en-US 没有的键、同一 messages 键的占位符集合与 en-US 不同、JSON 不合法。
 - SDK 的 `T(key, args)` 按以下顺序选择语言：当前 Actor 的 locale（MESSAGE-MODEL §1）→ Core 全局默认 locale（缺省 en-US）→ en-US。每一级先精确匹配，再按主语言子标签匹配；同一主语言有多个文件时取字典序最小者。没有 Actor 的调用从 Core 默认 locale 开始。`T` 只返回字符串（D-106）：`check` 与 `build` 检查代码中以常量写出的键与参数名，键不在 en-US 中、参数不成对或名字集合与占位符集合不同时报错并指出位置；运行时仍未知的键返回键名，缺少的参数保留占位符原文，多余的参数忽略，并在插件日志记一条 WARN，只记键与问题，不记参数值。
 - Core 自己发给聊天用户的文案（缺省的命令 usage、§13.2 的确认消息）使用 Core 内置的 en-US 与 zh-CN 目录；插件声明的自定义 usage 取该插件 `i18n/` 的键（§2.2）。选择规则相同。WebUI 提供 en-US 与 zh-CN，按浏览器语言或用户在界面中的选择显示，与机器人回复的语言选择无关。
@@ -390,6 +393,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 
 - v0.1 只有 **一个 Core Listener、一个公开端口、一个主机名**（`base_url`，D-84）：管理界面（WebUI 组件，§7.5）、Admin API 与插件路由 `/plugins/{id}/...` 都在这个主机名下，不需要为插件页面准备第二个域名。Core 验证 Host，不把客户端提供的 Host 当信任依据；远程反代须保留受控 Host 并按全局可信反代配置处理转发信息。
 - 管理会话 Cookie 使用 host-only、HttpOnly、`SameSite=Strict`，并在 HTTPS 下使用 Secure 与 `__Host-` 前缀；Admin API 的状态变更验证 CSRF。公开安装/管理接口不能绕过管理员认证。
+- 插件用 `Route(method, path).Page(title).Handle(h)` 声明页面：`Page(title string) *RouteBuilder` 须在 `Handle` 或 `HandleFunc` 前调用，非空 `title` 为英文源标题。页面声明沿用原 HTTP 路由的认证与匹配规则。Core 从当前运行路由登记生成组件的 `pages` 列表，按 §5.4 选择标题（ADMIN-API §20，D-164）。
 - 插件路由的全部响应由 Core 加上 `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups`（不含 `allow-same-origin`）与 `X-Content-Type-Options: nosniff`，并去掉插件设置的 `Set-Cookie`；插件不能覆盖这些响应头。插件返回的页面因此运行在不透明源中：无论被嵌入还是直接打开，都读不到管理 Cookie、WebUI 的存储与 DOM，它发出的请求也不带管理 Cookie（D-15）。
 - WebUI 用带 `sandbox` 属性的 iframe 嵌入插件页面，页面只经 WebUI 提供的 postMessage 桥与外部交互：请求本插件的 HTTP 路由，读取当前语言的文案与界面主题，接收明暗与语言变化的通知和设计令牌，转发打开全局搜索的快捷键（D-159）。SDK 的 `sdk/page` 套件封装这些交互并提供与 WebUI 一致的基础样式。插件页面的第一行（插件名、标签与全局搜索）由 WebUI 绘制，iframe 只占其下的内容区。WebUI 只转发方法与路径落在该插件已注册路由内的请求，用管理员会话与 CSRF 头发出，再把响应交回页面；页面拿不到管理会话、CSRF token 或其他插件的路由。桥的消息格式记录在 Admin API 参考中（§7.5）。
 - 非公开的插件路由要求有效的管理会话，非 GET 请求与 Admin API 一样验证 CSRF；公开的 JSON API、OAuth 回调与 Webhook 按 §7.2 声明，不要求会话。插件页面与管理界面不同源，插件页面之间也互不同源（各自为不透明源），但插件仍是可信的本地代码（§7.1）。
@@ -398,6 +402,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 
 - 首发使用一个 Core 管理凭证，不引入多用户账号体系。Core 首次启动且尚无管理凭证时生成 32-byte 随机 token，状态库只存 SHA256（D-82）：stdin 与 stderr 都是终端时只在该终端显示一次；不是终端时（系统服务、容器）写入 `<data_dir>/admin_token`，文件只有运行账号可读，日志只输出文件路径，第一次登录成功后 Core 删除该文件。`alonabot admin-token show` 在本机读出并显示这个文件，文件不存在时报错，供没有 shell 的容器使用；`alonabot admin-token init` 在启动前离线完成同样的初始化，只向终端显示。`alonabot admin-token reset` 仅在 Core 停止并持锁后替换该凭证、递增认证代次并撤销旧管理会话。`init` 与 `reset` 先取得同一 data_dir 的 core.lock；这些命令都不走公开 HTTP，不把凭证写入日志。
 - 浏览器通过 POST `/api/auth/login` 提交 token，Core 验证 Origin/登录 CSRF 后恒时比较摘要，成功签发随机的、固定 **8h** 到期的管理会话。登出撤销该会话及其派生授权；会话检查同时校验认证代次。修改管理状态继续采用 §7.3 的 Cookie/CSRF 规则，明文查看 secret 使用当前 token 再认证。
+- Core 运行时可经管理认证及当前 token 再认证调用 `POST /api/auth/token/rotate`（ADMIN-API §20，D-164）。替换凭证、递增认证代次与撤销全部管理会话在同一事务完成；响应清除会话 Cookie，只交付一次新 token。之后使用新 token 登录或发起 Bearer 请求。
 - 管理 CLI 仅使用用户显式配置的 Bearer token 访问 Core，不从插件环境继承凭证；该认证不依赖浏览器 Cookie。非 loopback 的管理入口必须 HTTPS，可由已配置可信反代终止 TLS；纯本机 loopback 开发允许 HTTP。Core 管理 token 与聊天事件中的 Core Admin 列表是不同入口，平台角色不能兑换管理会话。
 
 ### 7.5 组件静态文件
@@ -437,7 +442,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 - 插件在 manifest 的 `adapter_dependencies` 中声明依赖的 `adapter_id`、所需 extension 及版本、是否必需。启用插件时，必需依赖的 Adapter 必须已安装且已声明所需 extension，否则拒绝启用并列出缺失项。Adapter 停用或卸载后，依赖它的插件继续运行，发往该 Adapter 的 Send 返回 UNAVAILABLE；卸载被必需依赖的 Adapter 时，须列出受影响的插件并要求显式确认。
 - 插件在 manifest 的 `plugin_dependencies` 中声明依赖的插件：plugin_id、可选的最低版本 `min_version`（SemVer，含该版本）和是否必需。启用插件时，必需依赖必须已安装、已启用且版本满足，否则拒绝启用并列出缺失项；可选依赖缺失只记诊断。Core 不规定启动顺序，依赖暂时不可用时对它的 Service 调用返回 UNAVAILABLE。停用、卸载被必需依赖的插件，或把它更新、回退到低于 `min_version` 的版本时，须列出受影响的插件并要求显式确认，确认后依赖方继续运行。必需依赖不能成环，安装时发现环则拒绝。
 - 实例经 `adapter.instance.start` 成功启动后，Core 生成 `bot.online` 事件；实例因停用、Adapter 进程退出或 `core.adapter.status` 报告的致命错误离开运行状态时，Core 生成 `bot.offline` 事件（payload 见 MESSAGE-MODEL §1.1）。这两类事件由 Core 生成而非 Adapter 交付，不带 Actor 与 Target，只进入声明了对应 event_type 的事件路由；Core 重启时不为重启前的状态变化补发。
-- 聊天目录（D-130）：Core 接纳带 target 的入站事件时，在保存游标的同一个状态库事务中记录该聊天，以 adapter_id 与 chat_id 为键，不含话题；保存 chat_type、事件的 `chat_title`（MESSAGE-MODEL §1）、最近交付它的 adapter_instance_id 与最近活跃时刻，事件不带名称时保留已有名称。目录只作为内置选项来源 `core.chats`（§5.1）经管理 API 读取，不提供给插件：存储值是不含话题的会话字符串 `<adapter_id>:<chat_id>`，显示名是名称，没有名称时为 chat_id，说明含 adapter_id 与 chat_type；搜索不区分大小写地匹配名称与 chat_id，结果按最近活跃时刻从新到旧排列。目录是该 Adapter 的数据，清理见 §9.3；名称不写入日志。
+- 聊天目录（D-130）：Core 接纳带 target 的入站事件时，在保存游标的同一个状态库事务中记录该聊天，以 adapter_id 与 chat_id 为键，不含话题；保存 chat_type、事件的 `chat_title`（MESSAGE-MODEL §1）、最近交付它的 adapter_instance_id 与最近活跃时刻，事件不带名称时保留已有名称。目录由管理 API 读取：既可作为内置选项来源 `core.chats`（§5.1），也可经 `GET /api/v1/chats` 筛选和分页（ADMIN-API §20，D-164）；不提供给插件。选项的存储值是不含话题的会话字符串 `<adapter_id>:<chat_id>`，显示名是名称，没有名称时为 chat_id，说明含 adapter_id 与 chat_type；搜索不区分大小写地匹配名称与 chat_id，结果按最近活跃时刻从新到旧排列。目录是该 Adapter 的数据，清理见 §9.3；名称不写入日志。
 - 平台能力、事件类型化 payload、Telegram 发送/接收边界及回执详见 MESSAGE-MODEL。Wire 字段号/错误/控制流详见 WIRE-FORMAT；这些是实施契约，尚未生成并编译 SDK。
 
 ## 9. 版本、SDK、打包 CLI 与构建
@@ -869,7 +874,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | `TASKS_PER_PLUGIN` | 10000 | ≥ 1 | §4.3 |
 | `TASK_PAYLOAD_BYTES` | 64KiB | ≥ 1 且 ≤ 帧上限 4MiB | §4.3 |
 | `TASK_CONCURRENCY` | 16 | ≥ 1 且 ≤ `SESSION_MAX_INFLIGHT` | §4.3 |
-| `OPTIONS_PAGE` | 50 | ≥ 1 且 ≤ 200 | §5.1 |
+| `OPTIONS_PAGE` | 50 | ≥ 1 且 ≤ 200 | §5.1 的配置选项上限；ADMIN-API §20 的聊天目录上限为生效值的十倍 |
 | `BUTTON_TOKEN_TTL` | 24h | > 0 | MESSAGE-MODEL §6.3 |
 | `TOOL_CONFIRM_TIMEOUT` | 5m | > 0 | §13.2 |
 | `LOG_BUFFER_RECORDS` | 1000 | ≥ 1 | §14.4、ADMIN-API §8.1 |

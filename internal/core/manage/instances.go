@@ -207,7 +207,11 @@ func (s *Service) StartInstance(ctx context.Context, instanceID string) (err err
 	}
 	for _, problem := range problems {
 		if problem.InstanceID == instanceID {
-			return precondition("adapter instance configuration failed: " + problem.Path + ": " + problem.Reason)
+			err := precondition("adapter instance configuration failed: " + problem.Path + ": " + problem.Reason)
+			if s.opt.RecordInstanceFailure != nil {
+				return errors.Join(err, s.opt.RecordInstanceFailure(ctx, owner, instanceID, err.Error()))
+			}
+			return err
 		}
 	}
 	return s.opt.StartInstance(ctx, owner, instanceID, instances[instanceID])

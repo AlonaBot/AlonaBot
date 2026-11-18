@@ -117,7 +117,7 @@ RouteDescriptor 公共字段为 `route_id`、`kind`、`priority`、`default_enab
 | service | service_name、公开/allowlist 能力、请求/响应 Schema |
 | schedule | 稳定 job_id、cron/interval、timezone、固定 job deadline |
 | task | 稳定任务名；实例的触发规则与参数不在注册描述中，由 `core.task.set` 在运行时给出（D-124） |
-| http | method、插件相对 path、is_public、认证/回调验证模式 |
+| http | method、插件相对 path、is_public、认证/回调验证模式；`RouteDescriptor.page_title` 非空时声明页面及其英文源标题（D-164） |
 | bus_subscription | event_name、可接受的 Schema/版本、订阅回调 route_id |
 
 EventSpec 追加可选消息 `MessageFilter message_filter`；MessageFilter 的字段为 `bool to_me`、`repeated ChatType chat_types`、`string wake_words_config`、`string triggers_config`。字段号在实施时按最新 proto 顺延，不在规格中预分配。字段路径、OR、触发方式选择、缺失数据与空列表的语义见 CONTRACTS §2.5；过滤器的存在与缺省有区别。仅允许标准 message.created/edited/deleted 事件，和其他事件类型混用时拒绝注册。SDK 用自有类型登记这些声明，不在公开 API 暴露 pb。过滤器及配置字段路径参与确定性路由编码、摘要和快照白名单，配置值及按配置文件的覆盖值保持在 Core 的配置所有者中。
@@ -250,6 +250,7 @@ Core 媒体服务固定为 BeginUpload/WriteChunk/CommitUpload/Read/Grant：Read
 - 握手与准备：认证失败（Secret 恒时比较、插件 ID、build_digest 任一不符）时 Core 直接关闭连接，不回复任何帧；认证之后的失败（协议协商、Bootstrap 超限、REGISTER 不合法、准备期出现非控制帧）先发 SESSION_ERROR 再关闭，发送 SESSION_ERROR 限时 1s，对端不读时不会卡住失败路径。Preparing 的硬截止为配置、迁移、OnStart 三个阶段预算之和，写入 Bootstrap.preparation_deadline_unix_ms。PREPARED 中 route_descriptor_hash 为按顺序拼接各 RouteDescriptor 确定性编码后的 SHA256，candidate_config_digest 为候选配置 JSON 的 SHA256（T-08 引入 secret 引用后改为对持久化快照计算）。
 - 协议能力项使用 `ProtocolCapability{name, version}`，与 Adapter 平台能力 `Capability{name, version, supported, text_limit?}` 分开（可选文本上限由 T-03.18 按 D-135 追加）。
 - 2026-11-17 配置文件（D-168，T-04.18 待接入）：`InvocationContext` 追加 `string profile_id = 7`；Bootstrap 追加 `profile_overrides_json`；新增 Core 固定服务 `core.profile.list`、`current`、`assign`、`set` 与 Core→插件的 `sdk.profile.set_overrides`。T-08.18 提供存储与管理，现有协议字段、服务注册与 SDK 保持不变。
+- 2026-11-17 插件页面（D-164，T-09.22）：`RouteDescriptor` 在 `oneof spec` 外追加 `string page_title = 19`，供 HTTP 路由声明页面；字段号由 `contracts/wirespec_test.go:TestPageTitleFieldNumber` 固定。
 - 2026-11-13 命令消费标记（D-141）：`InvocationContext` 追加 `bool command_consumed = 6`。
 - 2026-11-01 权限、扩展事件与参数类型（D-69、D-71、D-72）：删除枚举 `TrustedRole` 与 `Permission`、字段 `Actor.trusted_roles` 与 `RuleDescriptor.require_chat_admin`，编号与名称 reserved。`Actor` 新增 `repeated string permissions`；`RouteDescriptor.required_permission` 改为 `repeated string required_permissions`；`AdapterDescriptor` 新增 `repeated PermissionDeclaration permissions`（name、implies、label_key）与 `repeated EventDeclaration events`（name、version、schema_json）；`EventPayload` oneof 新增 `AdapterEventPayload adapter_event`（version、payload_json）；`ParamType` 新增 USER、IMAGE、MESSAGE；`CommandSpec.custom_usage` 改为插件 `i18/` 中的文案键。字段号由 T-04.6 编排。
 - 2026-10-27 框架移除 PostgreSQL 后端（D-48）：删除枚举值 `DATABASE_BACKEND_POSTGRES = 3`、`DatabaseDescriptor.postgres = 3` 与消息 `PostgresConnection`，两处编号与名称都已 reserved。

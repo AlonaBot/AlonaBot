@@ -63,11 +63,14 @@ Cookie 为 host-only、`Path=/`、`HttpOnly`、`SameSite=Strict`；HTTP 下名�
   "Uninstalled": false,
   "Signed": false,
   "Active": "",
-  "State": "Activated"
+  "State": "Activated",
+  "pages": []
 }
 ```
 
 `Role` 取 `plugin/adapter/agent/webui`；`Signed` 根据绑定发布者公钥是否非空返回；`Active` 是当前代次标识，尚无代次时为空。`State` 来自实际运行状态或安装状态，包含 `Installed`、`Stopped`、`Activated`、`Degraded`。WebUI 无进程，启用时显示 `Activated`。
+
+`pages` 为运行路由中声明的页面列表（§20）。普通 `Package` 响应使用英文源标题；`GET /api/v1/packages` 按请求语言选择标题。
 
 Install 的 `Package` 额外携带可选 `Warnings: string[]`，按原顺序返回 manifest 的全部警告；没有警告时省略。List 与其他返回 `Package` 的接口省略 `Warnings`。缺少 `migration_mode` 或 `prepare_effects` 各产生一条警告，安装与更新继续执行；管理服务按条记录 WARN 日志，字段为 `plugin_id` 与 `warning`，准备与回退按没有框架外副作用处理。
 
@@ -517,18 +520,22 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 ## 20. WebUI 需要的补充接口
 
-以下端点经管理认证，非 GET 验证 CSRF，错误规则同第 3 节（D-164）。
+以下端点经管理认证；使用 Cookie 的写入请求验证 CSRF，错误规则同第 3 节（D-164）。
 
 | Method / path | 请求或成功响应 | 语义 |
 | --- | --- | --- |
-| `GET /api/v1/plugins/{id}/generations` | `{"generations":[{"id":"gen-…","version":"1.2.1","created_at":"RFC 3339","active":true,"has_db":true}]}` | 保留代次，新的在前；回退仍用 `/api/v1/packages/rollback` |
-| `GET /api/v1/plugins/{id}/jobs` | `{"jobs":[{"job_id":"…","trigger":"cron 0 8 * * *","paused":false,"last_run_at":"…","next_run_at":"…"}]}` | 静态任务及其状态（CONTRACTS §4.3，D-126），没有记录的时刻省略 |
-| `POST /api/v1/plugins/{id}/jobs/{job_id}/pause`、`…/resume` | 无正文，`{}` | 与插件调用 `core.job.pause/resume` 相同；未知 job 404 |
-| `GET /api/v1/adapter/instances` | `{"instances":[{"instance_id":"main","adapter_id":"telegram","package_id":"…","state":"running","safe_error":"","default":true}]}` | state 取 running、stopped、failed；safe_error 只在 failed 时非空 |
-| `GET /api/v1/chats` | `?q=&adapter_id=&chat_type=&offset=&limit=`，返回 `{"chats":[{"session":"telegram:-100…","title":"…","chat_type":"group","instance_id":"main","last_active_at":"…"}],"total":53}` | 聊天目录（D-130），按最近活跃降序；limit 缺省 50，最多 `OPTIONS_PAGE` 的十倍 |
-| `POST /api/auth/token/rotate` | `{"token":"<当前管理 token>"}`，返回 `{"token":"<新 token>"}` | 先按 §12.2 再认证，生成新令牌，删除全部管理会话（包括本次请求的会话），新令牌只在这个响应中出现一次 |
+| `GET /api/v1/plugins/{id}/generations` | `{"generations":[{"id":"gen-…","version":"1.2.1","created_at":"RFC 3339","active":true,"has_db":true}]}` | 保留代次按提交时间降序；回退仍用 `/api/v1/packages/rollback` |
+| `GET /api/v1/plugins/{id}/jobs` | `{"jobs":[{"job_id":"…","trigger":"cron 0 8 * * *","paused":false,"last_run_at":"…","next_run_at":"…"}]}` | 当前 Session 登记的静态任务；Detach 后返回 `{"jobs":[]}`。`trigger` 如 `interval 1h0m0s` 或 `cron 0 8 * * *`，没有记录的时刻省略 |
+| `POST /api/v1/plugins/{id}/jobs/{job_id}/pause`、`…/resume` | 无正文，`{}` | 与 `core.job.pause/resume` 共用持久暂停状态（CONTRACTS §4.3，D-126）；未知任务返回 404 |
+| `GET /api/v1/adapter/instances` | `{"instances":[{"instance_id":"main","adapter_id":"telegram","package_id":"…","state":"running","safe_error":"","default":true}]}` | 按实例 ID 排列已配置的实例；`state` 为 `running`、`stopped` 或 `failed`；`default` 遵循显式默认与单实例自动默认规则 |
+| `GET /api/v1/chats` | `?q=词&adapter_id=telegram&chat_type=group&offset=0&limit=50`，返回 `{"chats":[{"session":"telegram:-100…","title":"…","chat_type":"group","instance_id":"main","last_active_at":"…"}],"total":53}` | 聊天目录（D-130），筛选后按最近活跃降序，`total` 为筛选后的精确总数 |
+| `POST /api/auth/token/rotate` | `{"token":"<当前管理 token>"}`，返回 `{"token":"<新 token>"}` | 再认证后在同一事务中替换令牌并删除全部管理会话（包括当前会话）；响应清除会话 Cookie，带 `Cache-Control: no-store`，只交付一次新令牌 |
 
-`GET /api/v1/packages` 的每个组件追加 `pages`：`[{"path":"/subs/","title":"Subscriptions"}]`，标题按请求的 `Accept-Language` 取 `i18n/<locale>.json` 的 `pages` 覆盖，没有覆盖时为源文案。路径是插件相对路径，WebUI 用沙箱 iframe 打开 `/plugins/{id}` 加该路径（§7）。
+- **代次：** `created_at` 取 generation 元数据；安装来源的 `version` 取该代次的 committed Journal 程序快照，缺失时返回错误，`has_db` 检查 `plugins/{id}/generations/{generation}/db.sqlite`。开发组件的固定代次使用当前登记版本，`has_db` 检查 `plugins/{id}/dev.sqlite`。路径均相对于 `data_dir`。
+- **任务：** 暂停前已派发的调用可以完成，恢复沿原时间锚点安排后续触发。`job_id` 按 SDK/REGISTER 规则取原值，客户端将其百分号编码为单个不透明路径段；Core 在认证后、路径规范化前只解码一次，保留冒号、斜杠、点段、字面百分号和反斜杠。
+- **实例：** `failed` 和 `safe_error` 来自当前 Core 中保存的最近失败快照。启动失败使用协议 `SafeMessage` 或通用内部失败说明，配置失败只含路径和诊断原因。成功启动、成功停止或忘记实例配置时清除快照；`running` 和 `stopped` 的 `safe_error` 为空。
+- **聊天：** `offset` 缺省 0，`limit` 缺省 50，超过生效 `OPTIONS_PAGE` 十倍时取上限。负数、零 `limit`、非整数和溢出的分页值返回 400。`chat_type` 可省略或为空，非空时接受 `private`、`group` 或 `channel`，其他值返回 400。`session` 按 MESSAGE-MODEL §1 将 chat ID 中的 `%` 与 `#` 分别编码为 `%25` 与 `%23`。
+- **页面：** `GET /api/v1/packages` 的列表项带 `pages`，仅列当前运行路由中声明的页面，无运行路由登记时为 `[]`。例如 `i18n/zh-CN.json` 为 `{"pages":{"/subs/":"订阅"}}`，`Accept-Language: zh-CN` 时返回 `[{"path":"/subs/","title":"订阅"}]`；缺少匹配的覆盖时用 SDK 声明的英文标题。路径相对于插件，WebUI 用沙箱 iframe 打开 `/plugins/{id}` 加该路径（§7）。
 
 ## 21. 插件数据浏览
 

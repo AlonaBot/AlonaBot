@@ -147,6 +147,8 @@ return &adapter.Descriptor{
 
 ### 插件页面
 
+用 `p.Route("GET", "/subs/").Page("Subscriptions").Handle(h)` 将 HTTP 路由列为插件页面。`.Page` 写在 `Handle` 或 `HandleFunc` 前，参数为英文源标题；在 `i18n/zh-CN.json` 写入 `{"pages":{"/subs/":"订阅"}}` 即可覆盖该路径的标题。Core 在路由运行期间通过组件列表返回页面和标题（[ADMIN-API §20](../spec/ADMIN-API.md#20-webui-需要的补充接口)）。
+
 插件页面的沙箱 iframe 宿主与 `postMessage` 桥由 T-09.9 接入（[ADMIN-API §7](../spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。使用 T-04.17 提供的 `sdk/page` 套件：把它的 `http.Handler` 挂在插件自己的路由下，页面引用 `kit.css` 与 `kit.js`，通过桥使用 `--ab-*` 设计令牌、跟随明暗与语言切换，并转发 ⌘K / Ctrl+K（D-159）。页面的第一行（插件名、标签与搜索）由宿主绘制，插件页面无需另画标题栏或搜索框。
 
 ## 7. 配置与 secret
