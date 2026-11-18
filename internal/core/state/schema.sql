@@ -34,6 +34,16 @@ CREATE TABLE plugin_state (
   enabled           INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE plugin_runtime (
+  plugin_id        TEXT PRIMARY KEY REFERENCES install(plugin_id),
+  state            TEXT NOT NULL CHECK (state IN ('STOPPED', 'WAKING', 'ACTIVE', 'QUIESCING', 'SUSPENDED', 'FAILED')),
+  reason           TEXT NOT NULL,
+  changed_at       DATETIME NOT NULL,
+  last_wake_reason TEXT NOT NULL,
+  last_wake_at     DATETIME NOT NULL,
+  last_suspend_at  DATETIME NOT NULL
+);
+
 CREATE TABLE pending_config (
   plugin_id       TEXT PRIMARY KEY REFERENCES install(plugin_id),
   base_generation TEXT NOT NULL,

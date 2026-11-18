@@ -566,7 +566,7 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) (err error) 
 	return nil
 }
 
-func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Component) error {
+func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Component) (err error) {
 	id := entry.manifest.ID
 	const configFile = "config.json"
 	const databaseFile = "dev.sqlite"
@@ -640,6 +640,11 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, c.recordRuntime(context.WithoutCancel(ctx), install, state.RuntimeFailed, "development startup failed"))
+		}
+	}()
 	if harness := inproc.HarnessFor(dir); harness != nil {
 		if instances, restricted := harness.AllowedInstances[id]; restricted {
 			if err := c.store.SetAdapterInstanceAccess(ctx, id, false, instances); err != nil {
@@ -711,7 +716,9 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 		return nil
 	}
 	// 4. 同进程调用经内部入口复用 SDK 的握手、激活和停止流程。
-
+	if err := c.recordRuntime(ctx, install, state.RuntimeWaking, "starting"); err != nil {
+		return err
+	}
 	listener, err := wire.ListenLoopback()
 	if err != nil {
 		return err
@@ -762,6 +769,9 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 	}
 	running.instance, err = host.Activate(ctx, running.conn, prep, activation)
 	if err != nil {
+		return err
+	}
+	if err := c.recordRuntime(ctx, install, state.RuntimeActive, "activated"); err != nil {
 		return err
 	}
 	if err := c.assembly.attach(ctx, running); err != nil {
@@ -828,6 +838,16 @@ func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.Stop
 	frozen := func(deadline time.Time) { a.scheduler.Drain(r.id); a.http.Drain(r.id, deadline); a.bus.Detach(r.id) }
 	detach := func() { a.detach(r) }
 	var err error
+	var runtimeErr error
+	var active bool
+	if r.process == nil && tracksRuntime(r.install.Role) {
+		status, readErr := c.store.RuntimeStatus(context.Background(), r.id)
+		runtimeErr = readErr
+		active = status.State == state.RuntimeActive
+		if active {
+			runtimeErr = c.recordRuntime(context.Background(), r.install, state.RuntimeQuiescing, reason.String())
+		}
+	}
 	if r.process != nil {
 		// supervisor 处理进程树、HTTP 与 Scheduler；其余映射由装配撤销。
 		a.bus.Detach(r.id)
@@ -863,6 +883,14 @@ func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.Stop
 		a.scheduler.Released(r.id)
 	default:
 	}
+	if r.process == nil && tracksRuntime(r.install.Role) {
+		if err != nil {
+			runtimeErr = errors.Join(runtimeErr, c.recordRuntime(context.Background(), r.install, state.RuntimeFailed, "in-process shutdown failed"))
+		} else if active {
+			runtimeErr = errors.Join(runtimeErr, c.recordRuntime(context.Background(), r.install, state.RuntimeStopped, reason.String()))
+		}
+	}
+	err = errors.Join(err, runtimeErr)
 	if err != nil {
 		slog.Error("component shutdown failed", "plugin_id", r.id, "error", err)
 		return fmt.Errorf("component %s: %w", r.id, err)
@@ -870,7 +898,12 @@ func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.Stop
 	return nil
 }
 
-func (c *Core) startInstalled(ctx context.Context, dir string, install state.Install) (*runningComponent, error) {
+func (c *Core) startInstalled(ctx context.Context, dir string, install state.Install) (running *runningComponent, err error) {
+	defer func() {
+		if err != nil && (running == nil || running.instance.State() != host.StateDegraded) {
+			err = errors.Join(err, c.recordRuntime(context.WithoutCancel(ctx), install, state.RuntimeFailed, "installed startup failed"))
+		}
+	}()
 	generation, err := c.store.Active(ctx, install.PluginID)
 	if err != nil {
 		return nil, err
@@ -922,9 +955,14 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 }
 
 // prepareCandidate 由运行循环独占调用，合并准备上下文与显式交接的进程资源。
-func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(context.Context) (*journal.Result, error)) (*runningComponent, error) {
+func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(context.Context) (*journal.Result, error)) (component *runningComponent, err error) {
 	a := c.assembly
 	defer func() { a.candidate = nil }()
+	defer func() {
+		if err != nil && component == nil && a.componentState(id) != "Activated" && a.candidate != nil {
+			err = errors.Join(err, c.recordRuntime(context.WithoutCancel(ctx), a.candidate.install, state.RuntimeFailed, "candidate failed"))
+		}
+	}()
 	// 1. 准备失败由 Journal 中止，恢复直接在当前运行循环执行。
 	r, err := prepare(ctx)
 	if err != nil {
@@ -963,7 +1001,7 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 		running.instance.Degrade(failure)
 		a.detach(running)
 		slog.Log(ctx, logging.LevelCritical, "committed candidate assembly failed", "plugin_id", id, "op_id", r.OpID, "generation_id", r.Generation, "kind", kind, "error", failure)
-		return running, errors.Join(failure, running.instance.Session.Close())
+		return running, errors.Join(failure, running.instance.Session.Close(), c.recordRuntime(context.WithoutCancel(ctx), running.install, state.RuntimeFailed, "candidate assembly failed"))
 	}
 	// 3. ACTIVATED 成功后发布业务入口，再启动 Adapter 实例。
 	if attachErr := a.attach(ctx, running); attachErr != nil {

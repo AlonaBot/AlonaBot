@@ -99,6 +99,32 @@ func TestManagementLifecycle(t *testing.T) {
 		t.Fatalf("restart changed generation or reused session: %+v", second)
 	}
 	stopTestCore(t, c)
+	t.Run("sleep-capable-runtime", func(t *testing.T) {
+		const id, source = "demo", "github.com/example/lifecycle"
+		archive := testPackage(t, id, "plugin", "", source, "sleep_capable: true\n", nil)
+		dir := t.TempDir()
+		start := func() *core { return startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json") }
+		c := start()
+		c.management(t, dir, "", "install", archive, "--yes")
+		c.management(t, dir, "", "enable", id)
+		active := findPackage(t, c, dir, id)
+		if !active.Enabled || active.Active == "" || active.State != "Activated" || active.RuntimeState != string(state.RuntimeActive) {
+			t.Fatalf("enabled package: %+v", active)
+		}
+		c.management(t, dir, "", "disable", id)
+		checkStopped := func(c *core) {
+			t.Helper()
+			item := findPackage(t, c, dir, id)
+			if item.Enabled || item.Uninstalled || item.Active != active.Active || item.Version != active.Version || item.Source != source || item.State != "Stopped" || item.RuntimeState != string(state.RuntimeStopped) {
+				t.Fatalf("disabled package: %+v", item)
+			}
+		}
+		checkStopped(c)
+		stopTestCore(t, c)
+		c = start()
+		checkStopped(c)
+		stopTestCore(t, c)
+	})
 	t.Run("static-job-and-token-rotation", func(t *testing.T) {
 		dir := t.TempDir()
 		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")

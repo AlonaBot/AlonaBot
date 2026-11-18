@@ -128,6 +128,7 @@ type Package struct {
 	ID, Role, AdapterID, Version, Source, PublisherKeyID, Pin string
 	Enabled, Uninstalled, Signed                              bool
 	Active, State                                             string
+	RuntimeState                                              string   `json:",omitempty"` // 仅插件和 Agent 持久化实际运行状态。
 	Warnings                                                  []string `json:",omitempty"` // 仅安装结果携带清单警告。
 	Pages                                                     []page   `json:"pages"`
 }
@@ -175,9 +176,20 @@ func (s *Service) describe(ctx context.Context, id string) (Package, error) {
 	} else if enabled && active != "" && !in.Uninstalled {
 		current = "Degraded"
 	}
+	var runtimeState state.RuntimeState
+	if in.Role == state.RolePlugin || in.Role == state.RoleAgent {
+		status, err := s.opt.Store.RuntimeStatus(ctx, id)
+		if err != nil {
+			return Package{}, err
+		}
+		runtimeState = status.State
+		if runtimeState == state.RuntimeSuspended {
+			current = "Suspended"
+		}
+	}
 	return Package{ID: id, Role: string(in.Role), AdapterID: in.AdapterID, Version: in.Version,
 		Source: in.Source, PublisherKeyID: in.PublisherKeyID, Pin: in.Pin, Enabled: enabled,
-		Uninstalled: in.Uninstalled, Signed: in.PublisherKeyID != "", Active: active, State: current, Pages: s.pages(id, nil)}, nil
+		Uninstalled: in.Uninstalled, Signed: in.PublisherKeyID != "", Active: active, State: current, RuntimeState: string(runtimeState), Pages: s.pages(id, nil)}, nil
 }
 
 func failure(err error) error {

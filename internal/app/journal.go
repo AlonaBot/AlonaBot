@@ -2,10 +2,13 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
+	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
@@ -17,6 +20,63 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
 )
+
+func tracksRuntime(role state.Role) bool { return role == state.RolePlugin || role == state.RoleAgent }
+
+// recordRuntime 在 Core 运行循环串行化组件变更的基础上，与进程清理共用逐插件锁。
+func (c *Core) recordRuntime(ctx context.Context, in state.Install, next state.RuntimeState, reason string) error {
+	if !tracksRuntime(in.Role) {
+		return nil
+	}
+	unlock := c.store.LockPlugin(in.PluginID)
+	defer unlock()
+	current, err := c.store.RuntimeStatus(ctx, in.PluginID)
+	if err != nil {
+		return err
+	}
+	if current.State == next && current.Reason == reason {
+		return nil
+	}
+	current.State, current.Reason, current.ChangedAt = next, reason, time.Now().UTC()
+	return c.store.SetRuntimeStatus(ctx, in.PluginID, current)
+}
+
+// recoverRuntime 在 Journal 清理后核对旧 SDK 是否仍持有跨代次锁，再发布当前运行状态。
+func (c *Core) recoverRuntime(ctx context.Context, installs []state.Install, blocked []string) ([]string, error) {
+	for _, in := range installs {
+		if !tracksRuntime(in.Role) || in.Uninstalled {
+			continue
+		}
+		if !slices.Contains(blocked, in.PluginID) {
+			lock, err := process.LockRuntime(filepath.Join(c.dir, "plugins", in.PluginID))
+			if err == nil {
+				if err := lock.Unlock(); err != nil {
+					return nil, err
+				}
+			} else if !errors.Is(err, os.ErrNotExist) {
+				blocked = append(blocked, in.PluginID)
+				slog.Error("cannot verify previous plugin runtime", "plugin_id", in.PluginID, "error", err)
+			}
+		}
+		if slices.Contains(blocked, in.PluginID) {
+			if err := c.recordRuntime(ctx, in, state.RuntimeFailed, "previous runtime could not be cleared"); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		status, err := c.store.RuntimeStatus(ctx, in.PluginID)
+		if err != nil {
+			return nil, err
+		}
+		switch status.State {
+		case state.RuntimeActive, state.RuntimeWaking, state.RuntimeQuiescing:
+			if err := c.recordRuntime(ctx, in, state.RuntimeStopped, "core startup"); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return blocked, nil
+}
 
 // installedSpec 在停机前构造完整启动输入并准备数据目录；调用方决定准备或直接启动。
 // 返回的运行上下文与 Handler/Detach 共用 Caller，启动后由调用方附加 Instance。

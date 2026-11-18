@@ -359,7 +359,13 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
-		return tx.Create(&pluginState{PluginID: in.PluginID}).Error
+		if err := tx.Create(&pluginState{PluginID: in.PluginID}).Error; err != nil {
+			return err
+		}
+		if in.Role == RolePlugin || in.Role == RoleAgent {
+			return tx.Create(&pluginRuntime{PluginID: in.PluginID, RuntimeStatus: stoppedRuntime("installed")}).Error
+		}
+		return nil
 	})
 }
 

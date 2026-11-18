@@ -263,6 +263,10 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	for _, id := range blocked {
 		slog.Error("old process may still be running", "plugin_id", id)
 	}
+	blocked, err = c.recoverRuntime(ctx, installs, blocked)
+	if err != nil {
+		return fail(err)
+	}
 	authentication := adminauth.New(store, time.Now, baseURL, dir)
 	adminMux := http.NewServeMux()
 	authentication.Routes(adminMux)
@@ -340,7 +344,16 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 			})
 		},
 		Stop: func(ctx context.Context, id string, reason pb.StopReason) error {
-			return c.operation(ctx, func(context.Context) error { return c.stopManaged(id, reason) })
+			return c.operation(ctx, func(ctx context.Context) error {
+				if err := c.stopManaged(id, reason); err != nil || reason != pb.StopReason_STOP_REASON_DISABLE {
+					return err
+				}
+				in, err := c.store.GetInstall(ctx, id)
+				if err != nil {
+					return err
+				}
+				return c.recordRuntime(context.WithoutCancel(ctx), in, state.RuntimeStopped, reason.String())
+			})
 		},
 		StartInstance: func(ctx context.Context, id, instance string, config json.RawMessage) error {
 			return c.operation(ctx, func(ctx context.Context) error {
@@ -497,6 +510,9 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		if components[i].role == state.RoleAdapter {
 			continue
 		}
+		if id := components[i].manifest.ID; slices.Contains(blocked, id) {
+			return fail(fmt.Errorf("start %s: old process may still be running", id))
+		}
 		if err := ctx.Err(); err != nil {
 			return fail(err)
 		}
@@ -607,7 +623,7 @@ running:
 			c.assembly.detach(old)
 			c.assembly.media.ReleaseSession(old.caller.SessionKey)
 			if old.process == nil {
-				c.err = result.err
+				c.err = errors.Join(result.err, c.recordRuntime(context.WithoutCancel(ctx), old.install, state.RuntimeFailed, "in-process session exited"))
 				break running
 			}
 			if result.abnormal {
