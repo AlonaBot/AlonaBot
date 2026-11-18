@@ -1,16 +1,19 @@
 package sdk
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk/config"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 )
 
 type profileViews struct {
-	values map[string]config.Values
+	values    map[string]config.Values
+	overrides map[string]map[string]json.RawMessage
 }
 
 func (p *Plugin) setProfileOverrides(raw string) error {
@@ -21,7 +24,7 @@ func (p *Plugin) setProfileOverrides(raw string) error {
 	if overrides == nil {
 		return fmt.Errorf("profile overrides must be a JSON object")
 	}
-	views := &profileViews{values: make(map[string]config.Values, len(overrides))}
+	views := &profileViews{overrides: overrides, values: make(map[string]config.Values, len(overrides))}
 	for id, fields := range overrides {
 		if id == "" || id == "default" {
 			return fmt.Errorf("profile %q cannot have overrides", id)
@@ -60,4 +63,22 @@ func (c *Context) freezeProfile(invocation *pb.InvocationContext) {
 			c.config = values
 		}
 	}
+}
+
+// ProfileOverrides 返回调用插件各配置文件的有效覆盖副本；后续通知只影响下一次读取。
+func ProfileOverrides(ctx context.Context) (map[string]map[string]json.RawMessage, error) {
+	session := componentFor(ctx)
+	if session == nil || session.plugin == nil {
+		return nil, errcode.FailedPrecondition.New("plugin session is not ready")
+	}
+	result := make(map[string]map[string]json.RawMessage)
+	if views := session.plugin.profileViews.Load(); views != nil {
+		for id, fields := range views.overrides {
+			result[id] = make(map[string]json.RawMessage, len(fields))
+			for key, value := range fields {
+				result[id][key] = append(json.RawMessage(nil), value...)
+			}
+		}
+	}
+	return result, nil
 }
