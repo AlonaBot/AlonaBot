@@ -48,9 +48,11 @@ func saveTopic(ctx context.Context, topic string) error {
 }
 ```
 
-读取用 `value, ok, err := kv.Get(ctx, key)`；`err == nil` 且 `ok == false` 表示键不存在，`kv.Delete(ctx, key)` 删除不存在的键也成功。键须为 1～512 字节的 UTF-8，值最多 1 MiB，空值可以保存；非法参数返回 `INVALID_ARGUMENT`。没有受管 SQLite 的 Session 调用 KV 返回 `FAILED_PRECONDITION`。
+读取用 `value, ok, err := kv.Get(ctx, key)`；`err == nil` 且 `ok == false` 表示键不存在，`kv.Delete(ctx, key)` 删除不存在的键也成功。键须为 1～512 字节的 UTF-8，拒绝恰为 `.` 或 `..` 的键（D-178）；其他含点或斜杠的键按字面值保存。值最多 1 MiB，空值可以保存；非法参数返回 `INVALID_ARGUMENT`。没有受管 SQLite 的 Session 调用 KV 返回 `FAILED_PRECONDITION`。
 
-`page, err := kv.List(ctx, "subscription/", "", 20)` 按键的字节序返回最多 20 个键；后续请求把 `page.Next` 作为 `cursor`，空 `Next` 表示已到末尾。前缀按字面字节匹配，`%` 和 `_` 保持原义；空前缀列出全部键，`limit` 须为正数。
+`page, err := kv.List(ctx, "subscription/", "", 20)` 按键的字节序返回最多 20 个键；后续请求把 `page.Next` 作为 `cursor`，空 `Next` 表示已到末尾，非空 `cursor` 遵守键的约束。前缀按字面字节匹配，`%` 和 `_` 保持原义；空前缀列出全部键，`limit` 须为正数。
+
+官方 WebUI 的插件「数据」页可浏览和编辑数据库表格、KV 与插件文件，并导出或清空数据；数据库保留代次只读。Agent 会话提供摘要与清除入口，接口与数据清理语义见 [ADMIN-API §15](../spec/ADMIN-API.md#15-agent-会话管理) 与 [§21](../spec/ADMIN-API.md#21-插件数据浏览)。
 
 `examples/plugins/configdb` 的 `/note kvset <key> <value>` 与 `/note kvget <key>` 演示保存和读取，沿用该示例的本地化回复。
 
@@ -82,7 +84,8 @@ func saveCache(ctx context.Context, content []byte) error {
 
 - 用标准库 `log/slog` 记录，SDK 把记录交给 Core 并补上来源（CONTRACTS §14）。不要往 stdout 写内容：stdio 传输下 stdout 是协议通道。
 - 组件自己的数据损坏或无法继续运行、需要立即处理时，用 `slog.Log(ctx, sdk.LevelCritical, "component data is corrupt", "error", err)` 记录 CRITICAL；Handler panic 仍由 SDK 记录为 ERROR（CONTRACTS §14.1）。
-- 日志、错误字符串与 safe_message 用英文；给用户看的文字放进 `i18/` 的 `messages`，至少提供 en-US（D-30、CONTRACTS §5.4）。
+- 日志、错误字符串与 safe_message 用英文；给用户看的文字放进 `i18n/` 的 `messages`，至少提供 en-US（D-30、CONTRACTS §5.4）。
+- `messages` 键与命名占位符使用点分隔的标识符，每段由 ASCII 大小写字母、数字与 `_` 组成（D-178），例如 `storeEmpty` 与 `account.Name`。
 - 取文案用 `c.T(key, name, value, ...)`，后台用 `sdk.T`，两者只返回字符串（D-106）。键与参数名尽量写成常量：`alonabot build` 与 `alonabot check` 会检查键是否存在于 en-US、参数是否成对、参数名是否为 `string` 类型且与占位符一致；键在运行时才确定时不检查，运行时找不到键或参数不符时返回键名或保留占位符原文，并在插件日志记一次 WARN（CONTRACTS §5.4）。
 - 不记录 secret、token、完整配置与 DSN；含凭证的 URL 先脱敏（CONTRACTS §14）。
 
@@ -322,6 +325,7 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 - 市场 ID 按角色使用 `alonabot-plugin-`、`alonabot-adapter-`、`alonabot-agent-` 或 `alonabot-webui-` 前缀，后缀用单个连字符分词，完整 ID 不含下划线；插件正则为 `^alonabot-plugin-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`，其他角色同形，长度上限为 64；本地规则仍为 `^[a-z][a-z0-9_-]{0,63}$`（CONTRACTS §9.1，D-172）。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
 - 改名时同步 `plugin.yaml`、依赖、HTTP 路径和 Service 原始名；`pack` 会使用新 ID 生成归档名和 `release.json`。已有改名前的开发数据时，按[开发指南](development.md#开发运行与热部署)重建。
 - 每次发布可附上 UTF-8 changelog，安装后可经[管理 API](../spec/ADMIN-API.md#22-更新内容changelog)读取。二选一：根目录的 `CHANGELOG.md`（每版一节，例如 `## [1.2.1] - 2026-11-17`，日期可省略），或按版本、按语言存放，例如 `changelog/1.2.1/en-US.md` 和 `changelog/1.2.1/zh-CN.md`。目录名使用不带 `v`、且不高于 `plugin.yaml` 中 `version` 的 SemVer；文件名使用规范化的 BCP 47 标签，每个版本都要有 `en-US.md`。运行 `alonabot check` 核对格式，`alonabot pack` 原样打包（CONTRACTS §9.1）。
+- 官方 WebUI 预置插件源 `AlonaBot/plugin-store`，支持添加、移除和保留主动清空的源列表。商店读取源仓库默认分支的 `index.json`，从组件仓库最新 Release 的 `release.json` 与包内 manifest 取得展示信息；发布条目的格式见 CONTRACTS §9.2。更新预览读取已绑定来源的 Release 正文，更新后读取包内 changelog；HTML 按文本显示，已读版本由 WebUI 后台按 SemVer 持久化并单调推进。
 - 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；本地归档用 `install <归档>`，官方包用 `install <组件 ID>` 从可执行文件旁 `packages/<组件 ID>/` 读取。不带参数时在当前目录（作者工程为 `bin/`，含直接包子目录）按 release.json 选择唯一的本机包，静态 WebUI 使用 any/any，零个或多个候选时列出搜索目录和候选并报错；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`（CONTRACTS §9.3）。
 - 用 `alonabot build` 检查资源并编译独立组件，`alonabot check` 只读核对。`alonabot pack [目录] --target linux/amd64 --target linux/arm64` 为每个目标生成归档，全部资产共享一份归档外的 `release.json`；省略目标时取本机平台，静态 WebUI 只生成一个 `any/any` 归档，带 Go 入口的 WebUI 按平台构建。`--tags` 选择源码，`--out` 默认 `<工程>/bin`。资产地址为 `--asset-base` 加 `/` 与归档名；`source` 为 `github.com/<owner>/<repo>` 时，缺省前缀为 `https://github.com/<owner>/<repo>/releases/download/v<version>`，其他来源须显式给出绝对 https 前缀（无 query/fragment）。可选 `--key FILE` 读取标准 base64 编码的 64 字节 Ed25519 私钥，只对最终合并清单的原始字节签名一次，并在归档外写 `release.json.sig` 与 `release.pub`；省略时输出 unsigned 清单并清除输出目录中的旧签名和公钥（CONTRACTS §9.2、§9.3）。密钥读取或签名失败直接报错。进程包含可解析的 `build-info` 文本，静态 WebUI 包包含 manifest、静态资源和可选的 changelog。签名私钥由作者保管，留在打包资源、仓库和构建日志之外。
 

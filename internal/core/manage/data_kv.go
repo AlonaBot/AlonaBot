@@ -83,6 +83,9 @@ func (s *Service) dataKVList(r *http.Request, selected *dataSelection) (any, err
 
 func (s *Service) dataKV(r *http.Request, selected *dataSelection) (any, error) {
 	key := r.PathValue("key")
+	if key == "." || key == ".." {
+		return nil, invalid("KV key must not be . or ..")
+	}
 	if key == "" || len(key) > dataKeyMaximum || !utf8.ValidString(key) {
 		return nil, invalid("KV key must be 1 to 512 bytes of UTF-8")
 	}
