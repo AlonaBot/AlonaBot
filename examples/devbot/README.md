@@ -24,7 +24,7 @@ set token (bin/alonabot admin-token show --data-dir $DEVBOT_DATA)
 ```fish
 curl --fail-with-body -X POST \
   -H "Authorization: Bearer $token" \
-  'http://127.0.0.1:7650/plugins/alonabot_adapter_devbot/inject?instance=one&text=%2Fhello'
+  'http://127.0.0.1:7650/plugins/alonabot-adapter-devbot/inject?instance=one&text=%2Fhello'
 cat $DEVBOT_OUTPUT
 ```
 
@@ -50,14 +50,14 @@ examples/devbot/
 ├── core_config.example.json      # 首次复制为 data_dir/core_config.json
 ├── plugin/
 │   ├── plugin.go                 # New、hello 命令与普通消息回声
-│   ├── plugin.yaml               # alonabot_plugin_devbot
+│   ├── plugin.yaml               # alonabot-plugin-devbot
 │   ├── config_schema.json        # greetings；启动时读取首项 text
 │   ├── startup.sql               # startup 表
 │   ├── i18n/{en-US,zh-CN}.json
 │   └── .gitignore                # data/
 └── adapter/
     ├── adapter.go                # New、私有注入与文件观察
-    ├── plugin.yaml               # alonabot_adapter_devbot；adapter_id=devloop
+    ├── plugin.yaml               # alonabot-adapter-devbot；adapter_id=devloop
     └── adapter_config_schema.json
 ```
 
@@ -68,14 +68,14 @@ examples/devbot/
   "command_prefixes": ["/"],
   "adapters": {
     "devloop": {
-      "package": "alonabot_adapter_devbot",
+      "package": "alonabot-adapter-devbot",
       "instances": {"one": {"output": "${DEVBOT_OUTPUT}"}}
     }
   }
 }
 ```
 
-数据目录缺省为当前工作目录的 `data/`。组件配置在 `<data_dir>/plugins/alonabot_plugin_devbot/config.json`，受管数据库在同目录的 `dev.sqlite`。配置缺失时使用 schema 缺省的 `greetings: [{"text":"Hello"}]`。每次插件启动向 `startup` 表追加首项问候文本，重启保留记录；原始配置文件保持原文。开发代次固定为 `dev:<组件 ID>`；管理入口对 dev 来源的 update、rollback、uninstall 返回 `FAILED_PRECONDITION`。
+数据目录缺省为当前工作目录的 `data/`。组件配置在 `<data_dir>/plugins/alonabot-plugin-devbot/config.json`，受管数据库在同目录的 `dev.sqlite`。配置缺失时使用 schema 缺省的 `greetings: [{"text":"Hello"}]`。每次插件启动向 `startup` 表追加首项问候文本，重启保留记录；原始配置文件保持原文。开发代次固定为 `dev:<组件 ID>`；管理入口对 dev 来源的 update、rollback、uninstall 返回 `FAILED_PRECONDITION`。
 
 ## 改源码、翻译和配置
 
@@ -86,11 +86,11 @@ examples/devbot/
 只改配置时可在另一个终端操作：
 
 ```fish
-mkdir -p $DEVBOT_DATA/plugins/alonabot_plugin_devbot
-printf '%s\n' '{"greetings":[{"text":"Updated"}]}' > $DEVBOT_DATA/plugins/alonabot_plugin_devbot/config.json
+mkdir -p $DEVBOT_DATA/plugins/alonabot-plugin-devbot
+printf '%s\n' '{"greetings":[{"text":"Updated"}]}' > $DEVBOT_DATA/plugins/alonabot-plugin-devbot/config.json
 ```
 
-这会重启插件并追加 startup 记录，`<data_dir>/dev/bin/alonabot_plugin_devbot` 的字节和 mtime 保持。只改一个 Adapter 实例的设置时，只重启该实例。schema、i18n、源码、嵌入资源、manifest、go.mod/go.sum 的变化会触发重新构建；编译失败保留当前进程。轮询缺省为 500ms，可用 `--args DEV_RELOAD_POLL=1s` 调整。
+这会重启插件并追加 startup 记录，`<data_dir>/dev/bin/alonabot-plugin-devbot` 的字节和 mtime 保持。只改一个 Adapter 实例的设置时，只重启该实例。schema、i18n、源码、嵌入资源、manifest、go.mod/go.sum 的变化会触发重新构建；编译失败保留当前进程。轮询缺省为 500ms，可用 `--args DEV_RELOAD_POLL=1s` 调整。
 
 ## 同进程调试
 

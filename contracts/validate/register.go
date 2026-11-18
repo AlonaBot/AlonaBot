@@ -448,6 +448,9 @@ func registerService(route *pb.RouteDescriptor) error {
 		if tool.GetDefaultPolicy() != pb.ToolPolicy_TOOL_POLICY_ALLOW && tool.GetDefaultPolicy() != pb.ToolPolicy_TOOL_POLICY_CONFIRM {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q tool has invalid default policy", name)
 		}
+		if !knownEnum(tool.GetEffect()) {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q tool has invalid effect %d", name, tool.GetEffect())
+		}
 		var schema jsonschema.Schema
 		if err := json.Unmarshal([]byte(tool.GetInputSchemaJson()), &schema); err != nil {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "parse service %q tool input schema: %v", name, err)

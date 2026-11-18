@@ -2,6 +2,8 @@
 
 本文件收录「适配器 · Telegram」章节的 goal 语句，切片表在[Telegram 实施计划](../../../spec/plan/adapters/telegram.md)。用法、状态与所有 goal 的共同约束见 [README](../README.md)；本文件只由审查者维护。
 
+本章所有工程 manifest、包名、`package` 配置与 HTTP 路径中的组件 ID 使用 `alonabot-adapter-telegram`；平台 `adapter_id` 保持 `telegram`（D-172）。
+
 ## 总览
 
 | goal | 切片 | 标题 | 前置 | 状态 |

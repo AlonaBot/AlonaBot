@@ -49,7 +49,8 @@ type Process struct {
 	session      *host.Instance
 	caller       router.Caller // 与当前 Session 的 Mux.For 使用相同身份，由 mu 保护
 	instances    map[string]*instance
-	declarations declarations // 当前绑定 Session 的声明缓存，由 mu 保护
+	failures     map[string]string // 最近失败的 safe_message，成功启动、停止或忘记实例时清除；mu 保护。
+	declarations declarations      // 当前绑定 Session 的声明缓存，由 mu 保护
 }
 
 // instance 保存远端账号身份与启停状态；可变字段统一由 Process.mu 保护。
@@ -71,7 +72,9 @@ type instance struct {
 }
 
 // New 创建尚未绑定 Session 的 Adapter 包进程管理器。
-func New(opt Options) *Process { return &Process{opt: opt, instances: make(map[string]*instance)} }
+func New(opt Options) *Process {
+	return &Process{opt: opt, instances: make(map[string]*instance), failures: make(map[string]string)}
+}
 
 // Bind 绑定已激活的新 Session，并按保存的配置恢复全部已启用实例。
 // caller 必须与为该 Session 装配 Mux.For 时使用的身份相同。
@@ -151,7 +154,23 @@ func (p *Process) StartInstance(ctx context.Context, instanceID string, configJS
 	return p.start(ctx, instanceID, configJSON)
 }
 
-func (p *Process) start(ctx context.Context, id string, config []byte) error {
+func (p *Process) start(ctx context.Context, id string, config []byte) (err error) {
+	// 失败快照独立于运行实例，保留既有 Bind 恢复与启用选择。
+	defer func() {
+		if err != nil {
+			// 协议错误已提供安全消息；存储或解码错误的完整文本仅由原调用方接收。
+			message := "adapter instance start failed"
+			var callErr *wire.CallError
+			if errors.As(err, &callErr) {
+				message = callErr.ErrorInfo.GetSafeMessage()
+			}
+			p.mu.Lock()
+			if entry := p.instances[id]; entry == nil || !entry.running {
+				p.failures[id] = message
+			}
+			p.mu.Unlock()
+		}
+	}()
 	// 1. 核对本地运行状态并读取 Core 持久化的游标。
 	p.mu.Lock()
 	bound := p.session
@@ -222,6 +241,7 @@ func (p *Process) start(ctx context.Context, id string, config []byte) error {
 		return errors.Join(err, stopErr)
 	}
 	p.instances[id] = entry
+	delete(p.failures, id)
 	ev := p.event(entry, "bot.online")
 	ev.EventPayload = &pb.EventPayload{Kind: &pb.EventPayload_BotOnline{BotOnline: &pb.BotOnlinePayload{AdapterId: p.opt.AdapterID, AdapterInstanceId: id, AccountId: entry.account, AccountDisplayName: entry.displayName}}}
 	err = p.deliver(ctx, entry, ev)
@@ -252,6 +272,9 @@ func (p *Process) StopInstance(ctx context.Context, instanceID string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	entry.enabled = false
+	if stopErr == nil {
+		delete(p.failures, instanceID)
+	}
 	if cleanup && stopErr == nil {
 		entry.needsStop = false
 	}
@@ -263,6 +286,9 @@ func (p *Process) StopInstance(ctx context.Context, instanceID string) error {
 
 func (p *Process) offline(ctx context.Context, entry *instance, reason pb.BotOfflineReason, safe *pb.ErrorInfo) error {
 	entry.running = false
+	if reason == pb.BotOfflineReason_BOT_OFFLINE_REASON_INSTANCE_FAILED {
+		p.failures[entry.id] = safe.GetSafeMessage()
+	}
 	p.opt.Registry.Remove(entry.id)
 	if p.opt.StopCommandSync != nil {
 		// 回调可重新读取实例状态，必须释放 Process.mu；停止只携带本次运行身份。

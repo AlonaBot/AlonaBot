@@ -20,7 +20,7 @@ func (s *Schema) Validate(config map[string]any) error {
 	return nil
 }
 
-func completeFields(fields []*field, config map[string]any) {
+func completeFields(fields []*Field, config map[string]any) {
 	for _, f := range fields {
 		value, present := config[f.name]
 		if !present {
@@ -34,7 +34,7 @@ func completeFields(fields []*field, config map[string]any) {
 	}
 }
 
-func missingValue(f *field) any {
+func missingValue(f *Field) any {
 	if f.attributes.has("default") {
 		return plainValue(f.attributes.get("default"))
 	}
@@ -54,7 +54,7 @@ func missingValue(f *field) any {
 }
 
 // completeValue 保留类型不符的输入，交给随后 Validate 定位，避免补值掩盖原始错误。
-func completeValue(f *field, value any) {
+func completeValue(f *Field, value any) {
 	switch f.typ {
 	case typeObject:
 		if object, ok := value.(map[string]any); ok {
@@ -79,7 +79,7 @@ func completeValue(f *field, value any) {
 	}
 }
 
-func completeTemplate(f *field, value any) {
+func completeTemplate(f *Field, value any) {
 	if object, ok := value.(map[string]any); ok {
 		for _, template := range f.templates {
 			if fields, ok := object[template.name].(map[string]any); ok {

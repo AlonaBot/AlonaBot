@@ -713,8 +713,10 @@ type RouteDescriptor struct {
 	Spec isRouteDescriptor_Spec `protobuf_oneof:"spec"`
 	// 触发者满足其中任一权限即可；空集合不要求 Actor。
 	RequiredPermissions []string `protobuf:"bytes,17,rep,name=required_permissions,json=requiredPermissions,proto3" json:"required_permissions,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// HTTP 路由的英文页面标题；非空表示插件页面。
+	PageTitle     string `protobuf:"bytes,19,opt,name=page_title,json=pageTitle,proto3" json:"page_title,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RouteDescriptor) Reset() {
@@ -887,6 +889,13 @@ func (x *RouteDescriptor) GetRequiredPermissions() []string {
 		return x.RequiredPermissions
 	}
 	return nil
+}
+
+func (x *RouteDescriptor) GetPageTitle() string {
+	if x != nil {
+		return x.PageTitle
+	}
+	return ""
 }
 
 type isRouteDescriptor_Spec interface {
@@ -1818,7 +1827,7 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x0eMigrationState\x12.\n" +
 	"\x04mode\x18\x01 \x01(\x0e2\x1a.alonabot.v1.MigrationModeR\x04mode\x126\n" +
 	"\x17completed_migration_ids\x18\x02 \x03(\rR\x15completedMigrationIds\x124\n" +
-	"\x16self_migrate_completed\x18\x03 \x01(\bR\x14selfMigrateCompleted\"\xdb\x06\n" +
+	"\x16self_migrate_completed\x18\x03 \x01(\bR\x14selfMigrateCompleted\"\xfa\x06\n" +
 	"\x0fRouteDescriptor\x12\x19\n" +
 	"\broute_id\x18\x01 \x01(\tR\arouteId\x12*\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x16.alonabot.v1.RouteKindR\x04kind\x12\x1a\n" +
@@ -1837,7 +1846,9 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x04http\x18\x0f \x01(\v2\x1a.alonabot.v1.HttpRouteSpecH\x00R\x04http\x12M\n" +
 	"\x10bus_subscription\x18\x10 \x01(\v2 .alonabot.v1.BusSubscriptionSpecH\x00R\x0fbusSubscription\x12+\n" +
 	"\x04task\x18\x12 \x01(\v2\x15.alonabot.v1.TaskSpecH\x00R\x04task\x121\n" +
-	"\x14required_permissions\x18\x11 \x03(\tR\x13requiredPermissionsB\x06\n" +
+	"\x14required_permissions\x18\x11 \x03(\tR\x13requiredPermissions\x12\x1d\n" +
+	"\n" +
+	"page_title\x18\x13 \x01(\tR\tpageTitleB\x06\n" +
 	"\x04specJ\x04\b\x05\x10\x06R\x13required_permission\"R\n" +
 	"\x0eRuleDescriptor\x12&\n" +
 	"\x0fhas_custom_rule\x18\x01 \x01(\bR\rhasCustomRuleJ\x04\b\x02\x10\x03R\x12require_chat_admin\"\x9a\x04\n" +
