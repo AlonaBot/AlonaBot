@@ -5,7 +5,7 @@
   "default_locale": "en-US",
   "adapters": {
     "devloop": {
-      "package": "alonabot_adapter_devbot",
+      "package": "alonabot-adapter-devbot",
       "instances": {
         "one": {"output": "${DEVBOT_OUTPUT}"}
       }

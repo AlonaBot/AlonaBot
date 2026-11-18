@@ -6,6 +6,7 @@ package alonabot.v1;
 import "alonabot/v1/control.proto";
 import "alonabot/v1/adapter.proto";
 import "alonabot/v1/envelope.proto";
+import "alonabot/v1/message.proto";
 import "alonabot/v1/tool.proto";
 
 option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
@@ -235,6 +236,20 @@ message EventSpec {
   string action_id = 4;
   // button.clicked 路由：action 载荷的 Schema 版本。
   uint32 action_schema_version = 5;
+  // Core 在交付标准消息事件前匹配的条件；缺省时按事件类型交付。
+  MessageFilter message_filter = 6;
+}
+
+// MessageFilter 声明按 OR 匹配的消息条件；配置引用只携带字段路径。
+message MessageFilter {
+  // 匹配发给本机器人的消息。
+  bool to_me = 1;
+  // 匹配任一列出的会话类型。
+  repeated ChatType chat_types = 2;
+  // 字符串列表字段的点分路径。
+  string wake_words_config = 3;
+  // 触发方式多选字段的点分路径；设置时替代静态条件。
+  string triggers_config = 4;
 }
 
 // HookPhase 列出 Hook 的执行阶段。

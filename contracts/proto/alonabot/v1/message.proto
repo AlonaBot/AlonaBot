@@ -28,7 +28,7 @@ enum ChatType {
 
 // Event 描述 Core 标准化后的入站事件。
 // event_type 取值：message.created、message.edited、message.deleted、button.clicked、
-// member.joined、member.left、reaction.added、scheduled、bot.online、bot.offline，或 Adapter 声明的完整扩展事件名。
+// member.joined、member.left、reaction.added、scheduled、bot.online、bot.offline、command.invoked，或 Adapter 声明的完整扩展事件名。
 // 标准类型与 event_payload 的分支一一对应，扩展类型使用 adapter_event 分支。
 message Event {
   // Core 入站标准化时产生。
@@ -101,7 +101,21 @@ message EventPayload {
     BotOfflinePayload bot_offline = 10;
     // Adapter 声明的扩展事件。
     AdapterEventPayload adapter_event = 11;
+    // Core 在命令调用结束或权限拒绝后生成。
+    CommandInvokedPayload command_invoked = 12;
   }
+}
+
+// CommandInvokedPayload 记录命令调用结果，不携带参数与聊天内容。
+message CommandInvokedPayload {
+  string plugin_id = 1;
+  string route_id = 2;
+  // 路径命令的生效规范名；文本匹配与 Raw 使用 route_id。
+  string command_name = 3;
+  // ok、error 或 denied。
+  string result = 4;
+  // Handler 调用耗时，单位为毫秒；权限拒绝时为 0。
+  uint64 duration_ms = 5;
 }
 
 // AdapterEventPayload 承载与 Adapter 注册声明一致的版本和 JSON 对象。

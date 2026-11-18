@@ -58,6 +58,73 @@ npm --prefix web/admin run dev
 
 T-09.26 锁定 `lucide-react` 1.74.0、`@dnd-kit/core` 6.3.1、`@dnd-kit/sortable` 10.0.0、`@radix-ui/react-dialog` 1.3.1、`@radix-ui/react-dropdown-menu` 2.2.1 和 `@radix-ui/react-tooltip` 1.4.1；`@radix-ui/react-popover` 与 `recharts` 由首个使用它们的页面切片引入。
 
+## 发行构建
+
+在仓库根目录生成包含 Core、Telegram Adapter、Agent、WebUI 与 help 的发行候选：
+
+```fish
+go run ./scripts/dist --version 0.1.0 \
+  --key ~/.config/alonabot/release.key --out ./dist
+```
+
+构建机需要上表中的 Go、Node 与 npm，并可读取已锁定的 Go 模块和 npm 包。程序先运行 `web/admin` 的 `npm ci` 与 `npm run build`，再由主机版 `alonabot pack` 交叉构建组件；组件版本沿用各自 `plugin.yaml`。默认目标为 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`，可用 `--platforms linux/amd64,linux/arm64` 选择子集。离线 npm 缓存已齐全时，可在命令前加 `env npm_config_offline=true`。
+
+`--key` 文件保存标准 base64 编码的 64 字节 Ed25519 私钥，允许末尾空白。私钥放在仓库及组件资源目录之外，设置为仅发布维护者可读（0600），通过受控环境或离线介质保管和备份。程序只从该文件读取私钥，子进程不接收私钥；发行物只携带公钥与签名。发布前先用临时测试密钥验证流程，正式签名使用维护者控制的密钥。
+
+`dist/` 中每个平台生成一个 `alonabot-<version>-<os>-<arch>.tar.gz`（Windows 为 `.zip`），解压后的同名目录包含 `alonabot`（Windows 为 `alonabot.exe`）和 `packages/<组件ID>/`。每个组件目录包含该平台安装包、合并全部目标平台的 `release.json`、`release.json.sig` 与 `release.pub`；当前静态 WebUI 只生成一份 `any` 安装包。另在 `dist/packages/<组件ID>/` 汇集各平台安装包与同一份签名清单，供后续发布使用。`dist/SHA256SUMS` 列出所有外层发行归档的摘要，格式为摘要、两个空格和文件名。
+
+安装包下载前缀默认取 `https://github.com/AlonaBot/AlonaBot/releases/download/v<version>`，可用 `--asset-base https://example.com/releases/v0.1.0` 覆盖。发行 Core 通过 `-ldflags -X` 嵌入官方公钥，安装官方签名包时免首次来源与发布者确认；签名与摘要仍按安装流程验证，已有发布者绑定继续生效。未注入公钥的开发构建保留原确认流程。
+
+当前 `--version` 决定发行归档名和默认下载前缀；Core 管理 API 的版本仍来自 Go module 构建信息，源码构建会显示 `(devel)`。正式发布前需在 `internal/app/version.go` 补齐 Core 版本注入入口。
+
+## 容器镜像
+
+从仓库根目录启动对应版本的官方整合包，然后读出首次登录的 token：
+
+```fish
+docker compose -f deploy/compose.yaml up -d
+docker compose -f deploy/compose.yaml exec alonabot alonabot admin-token show --data-dir /data
+```
+
+打开 `http://127.0.0.1:7650`，使用读出的 token 登录。首次启动无需 TTY，Core 将一次性 token 写入 `/data/admin_token`，首次登录成功后删除该文件。镜像支持 `linux/amd64` 与 `linux/arm64`，compose 按宿主平台选择。compose 中固定镜像版本；T-10.4 随 Release 上传该文件的副本时，须与 Release 的镜像版本一致。
+
+镜像以 `10001:10001` 运行，命名卷挂载到 `/data`，首次创建卷时继承镜像中该目录的所有者。改用宿主目录挂载时，先授予 UID/GID 10001 读写和遍历权限；已有卷也需保证这一权限。保留该卷即可保留配置、状态库和组件数据。
+
+自行构建时，使用上表锁定的 Go、Node/npm 与 Docker BuildKit/buildx。`VERSION` 必填，签名私钥使用发行构建相同的 base64 Ed25519 格式，存放在构建上下文之外，权限为 0600；构建验收使用临时密钥，正式发行使用维护者控制的密钥。密钥通过必需的 BuildKit secret 挂载传入。构建阶段直接调用 `scripts/dist`，沿用其中的 npm ci/build、签名和四个官方包清单。
+
+```fish
+set version 0.1.0
+set release_key ~/.config/alonabot/release.key
+docker buildx build --platform linux/amd64,linux/arm64 \
+  --build-arg VERSION=$version --secret id=release_key,src=$release_key \
+  --output type=oci,dest=/tmp/alonabot-$version.oci.tar \
+  -t ghcr.io/alonabot/alonabot:$version .
+```
+
+需要覆盖组件下载前缀时，加 `--build-arg ASSET_BASE=https://example.com/releases/v0.1.0`；省略时沿用 `scripts/dist` 的 GitHub Release 地址。下面分别构建并在可运行相应平台的主机上启动本地镜像；跨架构运行需要 Docker 已配置的模拟器。
+
+```fish
+docker buildx build --platform linux/amd64 --load \
+  --build-arg VERSION=$version --secret id=release_key,src=$release_key \
+  -t alonabot:$version-amd64 .
+docker run -d --name alonabot-amd64 --platform linux/amd64 --init \
+  -p 127.0.0.1:7650:7650 -v alonabot-amd64-data:/data alonabot:$version-amd64
+docker exec alonabot-amd64 alonabot admin-token show --data-dir /data
+# 完成该平台验收后停止，释放宿主端口，再运行另一个平台。
+docker stop alonabot-amd64
+
+docker buildx build --platform linux/arm64 --load \
+  --build-arg VERSION=$version --secret id=release_key,src=$release_key \
+  -t alonabot:$version-arm64 .
+docker run -d --name alonabot-arm64 --platform linux/arm64 --init \
+  -p 127.0.0.1:7650:7650 -v alonabot-arm64-data:/data alonabot:$version-arm64
+docker exec alonabot-arm64 alonabot admin-token show --data-dir /data
+```
+
+端口只发布到宿主的 `127.0.0.1`。镜像设置 `ALONABOT_CONTAINER=1` 时，缺省监听为 `0.0.0.0:7650`，`base_url` 仍为 `http://127.0.0.1:7650`；显式 `listen` 优先。该容器例外实际生效时，启动日志输出一次 WARN 提醒宿主本机发布规则。远程管理可使用 `ssh -N -L 7650:127.0.0.1:7650 user@host`，再打开本机地址；HTTPS 反代部署按 [Core 设置与 HTTP 入口](#core-设置与-http-入口) 配置 `base_url` 和 `trusted_proxies`。
+
+在 compose 服务的 `environment` 中传入 `TELEGRAM_BOT_TOKEN` 后，`/data/core_config.json` 中的实例凭证可写成 `"token": "${TELEGRAM_BOT_TOKEN}"`，设置写回保留这一引用。最终镜像采用 scratch，包含 Core、相邻 `packages/` 与 CA 证书；MCP stdio 服务器需要 shell、Node、Python 等运行时时，请自行构建包含所需运行时的镜像，并保留 UID 10001、可写数据卷与 `--init`。
+
 ## 运行 Core 与管理组件
 
 ```sh
@@ -123,7 +190,7 @@ cat $DEVBOT_OUTPUT
 
 注入返回 204，异步发送后文件内容为 `Hello from devbot!`。完整实例 JSON、目录结构、认证、源码／翻译／配置改动与编译失败恢复操作见 [devbot README](../examples/devbot/README.md)。样例把 `adapters.devloop.package` 绑定到 `alonabot-adapter-devbot`，实例在 `instances.one`，命令前缀为 `/`。两个开发组件沿用真实 Deliver／Send 流水线。
 
-组件市场 ID 使用连字符前缀，例如 `alonabot-plugin-hello`；本地 ID 仍允许下划线，规则见 [CONTRACTS §9.1](../spec/CONTRACTS-v0.1.md#91-manifest-与构建产物)。D-172 的代码改名由 T-09.27（goal-177）实施：更新后需重建状态库与开发数据目录，再按新 ID 填写组件配置、实例的 `package` 与 `log.sources`。
+组件市场 ID 使用连字符前缀，例如 `alonabot-plugin-hello`；本地 ID 仍允许下划线，规则见 [CONTRACTS §9.1](../spec/CONTRACTS-v0.1.md#91-manifest-与构建产物)。从改名前的开发环境更新时，先停止 Core 和开发组件，备份原目录，再用新数据目录启动以重建状态库和组件数据。按新组件 ID 重配组件设置、实例的 `package`、`log.sources`、权限和工具策略；平台 `adapter_id` 与实例名沿用原值。Core 不自动迁移旧数据。
 
 验证官方 help 工程可运行 `bin/alonabot check --dir ./plugins/help`。使用上面的回环 Adapter 试用时，在 `run` 的组件目录列表追加 `./plugins/help`，再把注入请求的 `text` 改为 `%2Fhelp` 或 `%2Fwhoami`，在同一输出文件查看回复。
 

@@ -123,7 +123,7 @@ func (s *Service) configResources(ctx context.Context, id string) (json.RawMessa
 	if err != nil {
 		return nil, nil, err
 	}
-	if in.Role == state.RoleWebUI {
+	if in.Role == state.RoleWebUI && in.Entrypoint == "" {
 		return nil, nil, invalid("webui has no config")
 	}
 	var raw []byte

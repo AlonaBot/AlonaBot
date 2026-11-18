@@ -25,6 +25,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -98,6 +99,32 @@ func TestManagementLifecycle(t *testing.T) {
 		t.Fatalf("restart changed generation or reused session: %+v", second)
 	}
 	stopTestCore(t, c)
+	t.Run("sleep-capable-runtime", func(t *testing.T) {
+		const id, source = "demo", "github.com/example/lifecycle"
+		archive := testPackage(t, id, "plugin", "", source, "sleep_capable: true\n", nil)
+		dir := t.TempDir()
+		start := func() *core { return startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json") }
+		c := start()
+		c.management(t, dir, "", "install", archive, "--yes")
+		c.management(t, dir, "", "enable", id)
+		active := findPackage(t, c, dir, id)
+		if !active.Enabled || active.Active == "" || active.State != "Activated" || active.RuntimeState != string(state.RuntimeActive) {
+			t.Fatalf("enabled package: %+v", active)
+		}
+		c.management(t, dir, "", "disable", id)
+		checkStopped := func(c *core) {
+			t.Helper()
+			item := findPackage(t, c, dir, id)
+			if item.Enabled || item.Uninstalled || item.Active != active.Active || item.Version != active.Version || item.Source != source || item.State != "Stopped" || item.RuntimeState != string(state.RuntimeStopped) {
+				t.Fatalf("disabled package: %+v", item)
+			}
+		}
+		checkStopped(c)
+		stopTestCore(t, c)
+		c = start()
+		checkStopped(c)
+		stopTestCore(t, c)
+	})
 	t.Run("static-job-and-token-rotation", func(t *testing.T) {
 		dir := t.TempDir()
 		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
@@ -445,10 +472,10 @@ func TestManagementLifecycle(t *testing.T) {
 			t.Fatalf("install: %s", output)
 		}
 		c.management(t, dir, "", "enable", "demo")
-		adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
+		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
 		c.management(t, dir, "", "install", adapter, "--yes")
-		c.management(t, dir, "", "adapter", "instance", "create", "alonabot_adapter_fixture", "one")
-		c.management(t, dir, "", "enable", "alonabot_adapter_fixture")
+		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", "one")
+		c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
 		c.waitFor("fixture instance one started")
 		next := validationPackage(t, archive, "1.1.0", []string{"migration_mode", "prepare_effects"}, "")
 		output = c.management(t, dir, "", "update", "demo", "--archive", next, "--yes")
@@ -499,13 +526,13 @@ func TestManagementLifecycle(t *testing.T) {
 			if after.Active != active.Active || after.Version != active.Version || after.State != "Activated" || lastSession(t, c) != session {
 				t.Fatalf("rejected update changed running package: %+v", after)
 			}
-			status, body := fixtureHTTP(t, c, dir, http.MethodPost, "/plugins/alonabot_adapter_fixture/deliver?instance=one&user=alice&text=%2Fping")
+			status, body := fixtureHTTP(t, c, dir, http.MethodPost, "/plugins/alonabot-adapter-fixture/deliver?instance=one&user=alice&text=%2Fping")
 			if status != http.StatusNoContent {
 				t.Fatalf("ping: %d %s", status, body)
 			}
 			deadline := time.Now().Add(5 * time.Second)
 			for {
-				status, body = fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot_adapter_fixture/sent")
+				status, body = fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot-adapter-fixture/sent")
 				var replies []string
 				if status != http.StatusOK || json.Unmarshal(body, &replies) != nil {
 					t.Fatalf("sent: %d %s", status, body)
@@ -521,15 +548,115 @@ func TestManagementLifecycle(t *testing.T) {
 		}
 		stopTestCore(t, c)
 	})
+	t.Run("webui-process-command-invoked", func(t *testing.T) {
+		// 1. 使用真实构建产物安装 WebUI、Adapter 与命令组件。
+		archive := packWebUIFixture(t, "1.0.0", webUIFixtureSource, nil)
+		dir := t.TempDir()
+		const origin = "http://webui.test:7650"
+		if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte(`{"listen":"127.0.0.1:0","base_url":"`+origin+`"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		c := startEmptyCore(t, dir)
+		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
+		commands, err := writeTestPackage(t.TempDir(), "commands", "plugin", "", "github.com/example/commands", "1.0.0", filepath.Join(binDir, "command-fixture"), "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, path := range []string{archive, adapter, commands} {
+			c.management(t, dir, "", "install", path, "--yes")
+		}
+		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", "one")
+		for _, id := range []string{"alonabot-webui-fixture", "alonabot-adapter-fixture", "commands"} {
+			c.management(t, dir, "", "enable", id)
+		}
+		c.waitFor("fixture instance one started")
+		var cookie *http.Cookie
+		var csrf string
+		send := func(method, path, body string, want int) (*http.Response, []byte) {
+			t.Helper()
+			request, err := http.NewRequest(method, "http://"+c.address()+path, strings.NewReader(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Host = "webui.test"
+			request.Header.Set("Origin", origin)
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("X-Alonabot-CSRF", csrf)
+			if cookie != nil {
+				request.AddCookie(cookie)
+			}
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, readErr := io.ReadAll(response.Body)
+			if err := errors.Join(readErr, response.Body.Close()); err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != want {
+				t.Fatalf("%s %s: %d, want %d: %s\n%s", method, path, response.StatusCode, want, raw, c.log())
+			}
+			return response, raw
+		}
+		// 2. 同一管理源的后台路由先拒绝匿名请求，再接受真实登录 Cookie。
+		send(http.MethodGet, "/plugins/alonabot-webui-fixture/status", "", http.StatusUnauthorized)
+		token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		input, err := json.Marshal(map[string]string{"token": strings.TrimSpace(string(token))})
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, raw := send(http.MethodPost, "/api/auth/login", string(input), http.StatusOK)
+		var login struct {
+			CSRFToken string `json:"csrf_token"`
+		}
+		if err := json.Unmarshal(raw, &login); err != nil {
+			t.Fatal(err)
+		}
+		if len(response.Cookies()) != 1 || login.CSRFToken == "" {
+			t.Fatal("login did not return a cookie and CSRF token")
+		}
+		cookie, csrf = response.Cookies()[0], login.CSRFToken
+		response, _ = send(http.MethodGet, "/plugins/alonabot-webui-fixture/status", "", http.StatusOK)
+		if strings.Contains(response.Header.Get("Content-Security-Policy"), "sandbox") {
+			t.Fatal("WebUI backend was isolated from its management origin")
+		}
+		// 3. 经 Adapter 送入命令，再从 WebUI 进程读取其事件路由收到的结果。
+		send(http.MethodPost, "/plugins/alonabot-adapter-fixture/deliver?instance=one&user=alice&text=%2Finspect", "", http.StatusNoContent)
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			_, raw := send(http.MethodGet, "/plugins/alonabot-webui-fixture/status", "", http.StatusOK)
+			var received []struct {
+				PluginID, RouteID, CommandName, Result string
+				DurationMS                             uint64
+			}
+			if err := json.Unmarshal(raw, &received); err != nil {
+				t.Fatal(err)
+			}
+			if len(received) != 0 {
+				if len(received) != 1 || received[0].PluginID != "commands" || received[0].RouteID != "cmd.inspect" || received[0].CommandName != "inspect" || received[0].Result != "ok" {
+					t.Fatalf("command invocation results: %s", raw)
+				}
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("WebUI received no command invocation: %s\n%s", raw, c.log())
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		stopTestCore(t, c)
+	})
 	t.Run("profile-storage-and-assignments", func(t *testing.T) {
 		dir := t.TempDir()
 		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
 		archive := weatherProfilePackage(t, `{"city":{"type":"string","profile":true},"plain":{"type":"string"}}`, "1.0.0")
 		c.management(t, dir, "", "install", archive, "--yes")
 		c.management(t, dir, "", "enable", "weather")
-		adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
+		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
 		c.management(t, dir, "", "install", adapter, "--yes")
-		c.management(t, dir, "", "adapter", "instance", "create", "alonabot_adapter_fixture", "one")
+		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", "one")
 		var created struct {
 			ID string `json:"id"`
 		}
@@ -584,7 +711,86 @@ func TestManagementLifecycle(t *testing.T) {
 		}
 		stopTestCore(t, c)
 	})
+}
 
+const webUIFixtureManifest = `id: alonabot-webui-fixture
+name: WebUI Fixture
+version: %s
+role: webui
+source: github.com/example/webui_fixture
+assets: assets
+admin_api_min_major: 1
+admin_api_max_major: 1
+`
+
+const webUIFixtureSource = `package fixture
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"sync"
+
+	"github.com/AlonaBot/AlonaBot/sdk"
+	"github.com/AlonaBot/AlonaBot/sdk/message"
+)
+
+func New() *sdk.Plugin {
+	p := sdk.NewPlugin()
+	var mu sync.Mutex
+	var received []message.CommandInvokedPayload
+	p.On("command.invoked", sdk.CommandInvoked).Handle(func(_ *sdk.Context, payload *message.CommandInvokedPayload) error {
+		mu.Lock()
+		defer mu.Unlock()
+		received = append(received, *payload)
+		return nil
+	})
+	p.Route(http.MethodGet, "/status").Public(sdk.AuthCallbackState).HandleFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(received); err != nil {
+			slog.Error("write command invocation results failed", "error", err)
+		}
+	})
+	return p
+}
+`
+
+func packWebUIFixture(t *testing.T, version, source string, files map[string]string) string {
+	t.Helper()
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if files == nil {
+		files = make(map[string]string)
+	}
+	if _, ok := files["plugin.yaml"]; !ok {
+		files["plugin.yaml"] = fmt.Sprintf(webUIFixtureManifest, version)
+	}
+	files["assets/index.html"] = "static-original"
+	if source != "" {
+		files["main.go"] = source
+		files["go.mod"] = "module example.com/webui\ngo 1.27.1\nrequire github.com/AlonaBot/AlonaBot v0.0.0\nreplace github.com/AlonaBot/AlonaBot => " + strconv.Quote(root) + "\n"
+		// 只让临时 module 填充 SDK 的传递依赖。
+		t.Setenv("GOFLAGS", os.Getenv("GOFLAGS")+" -mod=mod")
+	}
+	for name, raw := range files {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: dir}, "https://example.invalid/webui.tar.gz", "", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return archive
 }
 
 // validationPackage 只改真实 pack 产物的声明与构建信息，并同步归档发布清单。
@@ -683,15 +889,15 @@ func TestManagementDependencies(t *testing.T) {
 	if output := managementFailure(t, c, dir, "enable", "dependent"); !strings.Contains(output, "FAILED_PRECONDITION") || !strings.Contains(output, "devloop") {
 		t.Fatal(output)
 	}
-	adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"token":{"type":"string","required":true}}`)})
+	adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"token":{"type":"string","required":true}}`)})
 	c.management(t, dir, "", "install", adapter, "--yes")
-	c.management(t, dir, "", "enable", "alonabot_adapter_fixture")
+	c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
 	c.management(t, dir, "", "enable", "dependent")
-	if output := managementFailure(t, c, dir, "disable", "alonabot_adapter_fixture"); !strings.Contains(output, "dependent") || !strings.Contains(output, "--yes") {
+	if output := managementFailure(t, c, dir, "disable", "alonabot-adapter-fixture"); !strings.Contains(output, "dependent") || !strings.Contains(output, "--yes") {
 		t.Fatal(output)
 	}
-	c.management(t, dir, "", "disable", "alonabot_adapter_fixture", "--yes")
-	if findPackage(t, c, dir, "dependent").State != "Activated" || findPackage(t, c, dir, "alonabot_adapter_fixture").Enabled {
+	c.management(t, dir, "", "disable", "alonabot-adapter-fixture", "--yes")
+	if findPackage(t, c, dir, "dependent").State != "Activated" || findPackage(t, c, dir, "alonabot-adapter-fixture").Enabled {
 		t.Fatal("dependency confirmation changed dependents")
 	}
 	stopTestCore(t, c)
@@ -792,24 +998,24 @@ func TestManagementUninstallScopes(t *testing.T) {
 func TestManagementReplacement(t *testing.T) {
 	dir := t.TempDir()
 	c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
-	first := testPackage(t, "alonabot_agent_first", "agent", "", "github.com/example/agent1", "", nil)
-	second := testPackage(t, "alonabot_agent_second", "agent", "", "github.com/example/agent2", "", nil)
+	first := testPackage(t, "alonabot-agent-first", "agent", "", "github.com/example/agent1", "", nil)
+	second := testPackage(t, "alonabot-agent-second", "agent", "", "github.com/example/agent2", "", nil)
 	c.management(t, dir, "", "install", first, "--yes")
-	c.management(t, dir, "", "enable", "alonabot_agent_first")
-	if output := managementFailure(t, c, dir, "install", second, "--yes"); !strings.Contains(output, "ALREADY_EXISTS") || !strings.Contains(output, "alonabot_agent_first") {
+	c.management(t, dir, "", "enable", "alonabot-agent-first")
+	if output := managementFailure(t, c, dir, "install", second, "--yes"); !strings.Contains(output, "ALREADY_EXISTS") || !strings.Contains(output, "alonabot-agent-first") {
 		t.Fatal(output)
 	}
-	if output := managementFailure(t, c, dir, "install", second, "--replace"); !strings.Contains(output, "alonabot_agent_first") {
+	if output := managementFailure(t, c, dir, "install", second, "--replace"); !strings.Contains(output, "alonabot-agent-first") {
 		t.Fatal(output)
 	}
 	c.management(t, dir, "", "install", second, "--replace", "--yes")
-	if !findPackage(t, c, dir, "alonabot_agent_first").Uninstalled || !findPackage(t, c, dir, "alonabot_agent_second").Enabled {
+	if !findPackage(t, c, dir, "alonabot-agent-first").Uninstalled || !findPackage(t, c, dir, "alonabot-agent-second").Enabled {
 		t.Fatal("replacement lost enabled state")
 	}
 	for _, id := range []string{"devloop", "another"} {
-		archive := testPackage(t, "alonabot_adapter_"+id, "adapter", id, "github.com/example/"+id, "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
+		archive := testPackage(t, "alonabot-adapter-"+id, "adapter", id, "github.com/example/"+id, "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
 		c.management(t, dir, "", "install", archive, "--yes")
-		if findPackage(t, c, dir, "alonabot_adapter_"+id).Uninstalled {
+		if findPackage(t, c, dir, "alonabot-adapter-"+id).Uninstalled {
 			t.Fatal("different adapter IDs conflict")
 		}
 	}
@@ -824,7 +1030,7 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := startEmptyCore(t, dir)
-	adapter := testPackage(t, "alonabot_adapter_fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"token":{"type":"string","required":true,"secret":true}}`)})
+	adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{"token":{"type":"string","required":true,"secret":true}}`)})
 	commands, err := writeTestPackage(t.TempDir(), "commands", "plugin", "", "github.com/example/commands", "1.0.0", filepath.Join(binDir, "command-fixture"), "", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -836,7 +1042,7 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"one", "two", "fail"} {
-		c.management(t, dir, "", "adapter", "instance", "create", "alonabot_adapter_fixture", id, "--config", configFile)
+		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", id, "--config", configFile)
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, settings.FileName))
 	if err != nil {
@@ -845,21 +1051,21 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	if !bytes.Contains(raw, []byte("${MANAGE_E2E_TOKEN}")) || bytes.Contains(raw, []byte("fixture-credential-value")) {
 		t.Fatal("credential reference was changed")
 	}
-	c.management(t, dir, "", "enable", "alonabot_adapter_fixture")
+	c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
 	c.management(t, dir, "", "enable", "commands")
 	for _, id := range []string{"one", "two"} {
 		c.waitFor("fixture instance " + id + " started")
 	}
-	c.waitFor(`adapter instance start failed plugin_id=alonabot_adapter_fixture instance_id=fail`)
+	c.waitFor(`adapter instance start failed plugin_id=alonabot-adapter-fixture instance_id=fail`)
 	check := func(instance, user, text, want string, count int) {
 		t.Helper()
-		path := "/plugins/alonabot_adapter_fixture/deliver?instance=" + instance + "&user=" + user + "&text=" + url.QueryEscape(text)
+		path := "/plugins/alonabot-adapter-fixture/deliver?instance=" + instance + "&user=" + user + "&text=" + url.QueryEscape(text)
 		if status, body := fixtureHTTP(t, c, dir, http.MethodPost, path); status != http.StatusNoContent {
 			t.Fatalf("deliver: %d %s", status, body)
 		}
 		deadline := time.Now().Add(5 * time.Second)
 		for {
-			status, body := fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot_adapter_fixture/sent")
+			status, body := fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot-adapter-fixture/sent")
 			var sent []string
 			if status != http.StatusOK || json.Unmarshal(body, &sent) != nil {
 				t.Fatalf("sent: %d %s", status, body)
@@ -888,7 +1094,7 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	for _, id := range []string{"one", "two"} {
 		c.waitFor("fixture instance " + id + " started")
 	}
-	c.waitFor(`adapter instance start failed plugin_id=alonabot_adapter_fixture instance_id=fail`)
+	c.waitFor(`adapter instance start failed plugin_id=alonabot-adapter-fixture instance_id=fail`)
 	listed := c.management(t, dir, "", "list")
 	if strings.Contains(listed, "fixture-credential-value") || strings.Contains(listed, "MANAGE_E2E_TOKEN") || strings.Contains(c.log(), "fixture-credential-value") {
 		t.Fatal("credentials escaped through management or logs")

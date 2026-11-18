@@ -44,7 +44,7 @@ func (s *Service) enable(ctx context.Context, in state.Install) error {
 	if err := s.dependencies(ctx, m); err != nil {
 		return err
 	}
-	if in.Role != state.RoleWebUI && s.opt.State(in.PluginID) != "Activated" {
+	if (in.Role != state.RoleWebUI || in.Entrypoint != "") && s.opt.State(in.PluginID) != "Activated" {
 		if err := s.opt.Start(ctx, in.PluginID); err != nil {
 			return err
 		}
@@ -68,12 +68,18 @@ func (s *Service) Disable(ctx context.Context, id string, confirm bool) (err err
 	if len(affected) != 0 && !confirm {
 		return &ErrNeedsConfirm{Affected: affected}
 	}
-	if in.Role != state.RoleWebUI {
+	if in.Role != state.RoleWebUI || in.Entrypoint != "" {
 		if err := s.opt.Stop(ctx, id, pb.StopReason_STOP_REASON_DISABLE); err != nil {
 			return err
 		}
 	}
-	return s.opt.Store.SetEnabled(ctx, id, false)
+	if err := s.opt.Store.SetEnabled(ctx, id, false); err != nil {
+		return err
+	}
+	if s.opt.Router != nil {
+		s.opt.Router.RemoveRouteSnapshot(id)
+	}
+	return nil
 }
 
 // Restart 以当前 Active 建立新 Session，保持代次及其配置快照。
@@ -85,7 +91,7 @@ func (s *Service) Restart(ctx context.Context, id string) (err error) {
 	if err != nil {
 		return err
 	}
-	if in.Role == state.RoleWebUI {
+	if in.Role == state.RoleWebUI && in.Entrypoint == "" {
 		return precondition("webui has no process to restart")
 	}
 	enabled, err := s.opt.Store.Enabled(ctx, id)
@@ -204,7 +210,7 @@ func (s *Service) uninstall(ctx context.Context, id string, purge PurgeScope, co
 			return err
 		}
 	}
-	if in.Role != state.RoleWebUI {
+	if in.Role != state.RoleWebUI || in.Entrypoint != "" {
 		if err := s.opt.Stop(ctx, id, pb.StopReason_STOP_REASON_DISABLE); err != nil {
 			return err
 		}
@@ -233,6 +239,9 @@ func (s *Service) uninstall(ctx context.Context, id string, purge PurgeScope, co
 	}
 	if err := s.opt.Store.Uninstall(ctx, id, purge != PurgeNone, purge == PurgeAll); err != nil {
 		return err
+	}
+	if s.opt.Router != nil {
+		s.opt.Router.RemoveRouteSnapshot(id)
 	}
 	for _, path := range packagePaths {
 		if err := os.RemoveAll(path); err != nil {

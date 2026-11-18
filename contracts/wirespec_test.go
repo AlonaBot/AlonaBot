@@ -11,6 +11,29 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
+// TestCommandInvokedFieldNumbers 固定命令结果载荷及事件分支的编号与类型。
+func TestCommandInvokedFieldNumbers(t *testing.T) {
+	fields := (&pb.CommandInvokedPayload{}).ProtoReflect().Descriptor().Fields()
+	names := []protoreflect.Name{"plugin_id", "route_id", "command_name", "result", "duration_ms"}
+	if fields.Len() != len(names) {
+		t.Fatalf("CommandInvokedPayload fields = %d, want %d", fields.Len(), len(names))
+	}
+	for i, name := range names {
+		kind := protoreflect.StringKind
+		if name == "duration_ms" {
+			kind = protoreflect.Uint64Kind
+		}
+		field := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+		if field == nil || field.Name() != name || field.Kind() != kind || field.HasPresence() || field.IsList() || field.ContainingOneof() != nil {
+			t.Fatalf("CommandInvokedPayload field %d = %v", i+1, field)
+		}
+	}
+	field := (&pb.EventPayload{}).ProtoReflect().Descriptor().Fields().ByNumber(12)
+	if field == nil || field.Name() != "command_invoked" || field.Kind() != protoreflect.MessageKind || field.IsList() || !field.HasPresence() || field.Message().FullName() != "alonabot.v1.CommandInvokedPayload" || field.ContainingOneof() == nil || field.ContainingOneof().Name() != "kind" {
+		t.Fatalf("EventPayload field 12 = %v", field)
+	}
+}
+
 // TestLogSetLevelFieldNumbers 固定日志级别请求和响应的协议布局。
 func TestLogSetLevelFieldNumbers(t *testing.T) {
 	fields := (&pb.LogSetLevelRequest{}).ProtoReflect().Descriptor().Fields()
@@ -113,6 +136,30 @@ func TestOptionsSourceFieldNumber(t *testing.T) {
 	field := (&pb.ServiceSpec{}).ProtoReflect().Descriptor().Fields().ByNumber(6)
 	if field == nil || field.Name() != "options_source" || field.Kind() != protoreflect.BoolKind || field.IsList() || field.HasPresence() || field.ContainingOneof() != nil {
 		t.Fatalf("ServiceSpec field 6 should be bool options_source, got %v", field)
+	}
+}
+
+// TestMessageFilterFieldNumbers 固定事件过滤声明及其条件的协议编号。
+func TestMessageFilterFieldNumbers(t *testing.T) {
+	f := (&pb.EventSpec{}).ProtoReflect().Descriptor().Fields().ByNumber(6)
+	if f == nil || f.Name() != "message_filter" || f.Kind() != protoreflect.MessageKind || !f.HasPresence() || f.IsList() || f.Message().FullName() != "alonabot.v1.MessageFilter" {
+		t.Fatalf("EventSpec field 6 should be MessageFilter message_filter, got %v", f)
+	}
+	fields := f.Message().Fields()
+	for i, want := range []struct {
+		name protoreflect.Name
+		kind protoreflect.Kind
+	}{
+		{"to_me", protoreflect.BoolKind}, {"chat_types", protoreflect.EnumKind},
+		{"wake_words_config", protoreflect.StringKind}, {"triggers_config", protoreflect.StringKind},
+	} {
+		field := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+		if field == nil || field.Name() != want.name || field.Kind() != want.kind || field.IsList() != (i == 1) || field.HasPresence() {
+			t.Fatalf("MessageFilter field %d = %v, want %s %s", i+1, field, want.kind, want.name)
+		}
+		if i == 1 && field.Enum().FullName() != "alonabot.v1.ChatType" {
+			t.Errorf("chat_types enum = %s, want ChatType", field.Enum().FullName())
+		}
 	}
 }
 

@@ -313,6 +313,7 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 ## 9. 发布
 
 - 市场 ID 按角色使用 `alonabot-plugin-`、`alonabot-adapter-`、`alonabot-agent-` 或 `alonabot-webui-` 前缀，后缀用单个连字符分词，完整 ID 不含下划线；插件正则为 `^alonabot-plugin-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`，其他角色同形，长度上限为 64；本地规则仍为 `^[a-z][a-z0-9_-]{0,63}$`（CONTRACTS §9.1，D-172）。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
+- 改名时同步 `plugin.yaml`、依赖、HTTP 路径和 Service 原始名；`pack` 会使用新 ID 生成归档名和 `release.json`。已有改名前的开发数据时，按[开发指南](development.md#开发运行与热部署)重建。
 - 每次发布可附上 UTF-8 changelog，安装后可经[管理 API](../spec/ADMIN-API.md#22-更新内容changelog)读取。二选一：根目录的 `CHANGELOG.md`（每版一节，例如 `## [1.2.1] - 2026-11-17`，日期可省略），或按版本、按语言存放，例如 `changelog/1.2.1/en-US.md` 和 `changelog/1.2.1/zh-CN.md`。目录名使用不带 `v`、且不高于 `plugin.yaml` 中 `version` 的 SemVer；文件名使用规范化的 BCP 47 标签，每个版本都要有 `en-US.md`。运行 `alonabot check` 核对格式，`alonabot pack` 原样打包（CONTRACTS §9.1）。
 - 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`（CONTRACTS §9.3）。
 - 用 `alonabot build` 检查资源并编译独立组件，`alonabot check` 只读核对。`alonabot pack --asset-url https://example.com/component.tar.gz` 为所选平台生成安装包与归档外的 `release.json`；目标通过 `--goos/--goarch/--tags` 选择，`--out` 默认 `<工程>/bin`。可选 `--key FILE` 读取标准 base64 编码的 64 字节 Ed25519 私钥，对清单原始字节签名，并在归档外写 `release.json.sig` 与 `release.pub`；省略时输出 unsigned 清单（CONTRACTS §9.2、§9.3）。密钥读取或签名失败直接报错。进程包含可解析的 `build-info` 文本，静态 WebUI 包包含 manifest、静态资源和可选的 changelog。签名私钥由作者保管，留在打包资源、仓库和构建日志之外。

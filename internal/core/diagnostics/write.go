@@ -269,7 +269,7 @@ func (s snapshot) readLog(ctx context.Context, r io.Reader, date time.Time, opts
 		if opts.Components && (strings.HasPrefix(body, "[ERRO]") || strings.HasPrefix(body, "[CRITICAL]")) {
 			for i := range s.components {
 				c := &s.components[i]
-				plugin := label == "Plug:"+strings.TrimPrefix(c.ID, "alonabot_plugin_")
+				plugin := label == "Plug:"+strings.TrimPrefix(c.ID, "alonabot-plugin-")
 				adapter := c.Role == "adapter" && (label == "Adpt:"+c.install.AdapterID || strings.HasPrefix(label, "Adpt:"+c.install.AdapterID+"/"))
 				core := label == "Core" && (strings.Contains(body, " plugin_id="+c.ID+" ") || strings.HasSuffix(strings.TrimSpace(body), " plugin_id="+c.ID))
 				if (plugin || adapter || core) && !stamp.Before(lastErrors[c.ID]) {

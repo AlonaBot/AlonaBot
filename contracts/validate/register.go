@@ -175,6 +175,9 @@ func register(r *pb.Register, isAdapter bool) error {
 				if len(filters) != 1 || (!IsEventType(filters[0]) && !IsAdapterEventType(filters[0])) {
 					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "pre-event hook route %q requires exactly one valid event_type_filter", route.GetRouteId())
 				}
+				if filters[0] == "command.invoked" {
+					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "pre-event hook route %q cannot subscribe to command.invoked", route.GetRouteId())
+				}
 			case pb.HookPhase_HOOK_PHASE_BEFORE_SEND, pb.HookPhase_HOOK_PHASE_AFTER_SEND:
 				if len(filters) != 0 {
 					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "outbound hook route %q must not contain event_type_filter", route.GetRouteId())
@@ -209,6 +212,9 @@ func register(r *pb.Register, isAdapter bool) error {
 					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "event route %q repeats event type %q", route.GetRouteId(), eventType)
 				}
 				seenEvents[eventType] = true
+			}
+			if err := registerMessageFilter(route.GetRouteId(), event); err != nil {
+				return err
 			}
 			if seenEvents["button.clicked"] {
 				action := event.GetActionId()
@@ -360,7 +366,7 @@ func IsCommandToken(token string) bool {
 func IsEventType(eventType string) bool {
 	switch eventType {
 	case "message.created", "message.edited", "message.deleted", "button.clicked",
-		"member.joined", "member.left", "reaction.added", "scheduled", "bot.online", "bot.offline":
+		"member.joined", "member.left", "reaction.added", "scheduled", "bot.online", "bot.offline", "command.invoked":
 		return true
 	}
 	return false

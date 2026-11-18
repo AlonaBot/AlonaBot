@@ -27,7 +27,7 @@ import (
 
 const (
 	testSource   = "github.com/example/demo"
-	testPluginID = "alonabot_plugin_demo"
+	testPluginID = "alonabot-plugin-demo"
 	testVersion  = "1.2.3"
 	testOS       = runtime.GOOS
 	testArch     = runtime.GOARCH
@@ -206,7 +206,7 @@ func TestPreflightRejects(t *testing.T) {
 		{name: "size mismatch", release: func(r *release.Release) { r.Assets[0].Size++ }, want: invalid},
 		{name: "digest mismatch", release: func(r *release.Release) { r.Assets[0].SHA256 = strings.Repeat("0", 64) }, want: invalid},
 		{name: "archive over limit", limits: Limits{MaxArchiveBytes: 1, MaxExpandedBytes: 1 << 20, MaxEntries: 100}, want: exhausted},
-		{name: "manifest id", entries: withManifest("alonabot_plugin_other", testVersion, testSource, testOS, testArch, "bin/plugin"), want: invalid},
+		{name: "manifest id", entries: withManifest("alonabot-plugin-other", testVersion, testSource, testOS, testArch, "bin/plugin"), want: invalid},
 		{name: "manifest version", entries: withManifest(testPluginID, "1.2.4", testSource, testOS, testArch, "bin/plugin"), want: invalid},
 		{name: "manifest source", entries: withManifest(testPluginID, testVersion, "github.com/other/demo", testOS, testArch, "bin/plugin"), want: invalid},
 		{name: "manifest platform", entries: withManifest(testPluginID, testVersion, testSource, otherOS, testArch, "bin/plugin"), want: invalid},

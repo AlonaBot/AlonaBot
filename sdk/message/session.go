@@ -43,7 +43,7 @@ func ParseSID(sid string) (adapterID, chatID, threadID string, err error) {
 func validAdapterID(id string) bool {
 	// Adapter ID 只采用本地规则；校验副本替换等长分隔符，跳过 PluginID 的市场前缀专用规则。
 	if strings.HasPrefix(id, validate.MarketPrefix) {
-		id = strings.Replace(id, "_", "-", 1)
+		id = strings.Replace(id, "-", "_", 1)
 	}
 	_, err := validate.PluginID(id)
 	return err == nil

@@ -421,7 +421,11 @@ func TestSettingsAndListenOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(loaded.Settings(), settings.Defaults()) {
+	defaults, err := settings.Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(loaded.Settings(), defaults.Settings()) {
 		t.Fatalf("default settings changed by override: %+v", loaded)
 	}
 	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
@@ -489,19 +493,23 @@ func TestConfiguredLogOverrides(t *testing.T) {
 
 }
 
-// 未知设置必须以 usage 退出码返回，并指明完整键名与行号。
-func TestUnknownSettingUsage(t *testing.T) {
+// TestUnknownSettingIgnored 验证未知设置保留在原文中，Core 仍可正常启动和停止。
+func TestUnknownSettingIgnored(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, settings.FileName), []byte("{\n  \"log\": {\"unknown\": true}\n}\n"), 0o600); err != nil {
+	original := []byte("{\n  \"listen\": \"127.0.0.1:0\",\n  \"log\": {\"unknown\": true}\n}\n")
+	name := filepath.Join(dir, settings.FileName)
+	if err := os.WriteFile(name, original, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	command := exec.Command(filepath.Join(binDir, "alonabot"), "run", "--data-dir", dir)
-	output, err := command.CombinedOutput()
-	if err == nil || command.ProcessState.ExitCode() != exitUsage {
-		t.Fatalf("expected usage exit: %v %s", err, output)
+	c := startEmptyCore(t, dir)
+	_ = c.address()
+	stopTestCore(t, c)
+	actual, err := os.ReadFile(name)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(string(output), "log.unknown") || !strings.Contains(string(output), "line 2") {
-		t.Fatalf("incomplete setting error: %s", output)
+	if !bytes.Equal(actual, original) {
+		t.Fatalf("unknown setting was rewritten: %s", actual)
 	}
 }
 

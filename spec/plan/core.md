@@ -106,11 +106,11 @@
 | T-09.16 | goal-100 | manifest 拆分：工程 `plugin.yaml` 只含作者信息（name、description、author 等），构建与打包补上协议、平台、入口、迁移方式与配置版本，包内 manifest 照常严格校验；`i18n/` 中 `metadata` 的翻译（D-78） | T-09 步骤 2 | T-03.8、T-09.2 | V-01 | 已完成（PR #140；TEST-MATRIX §3.2） |
 | T-09.17 | goal-142 | 包校验收紧：manifest 缺少迁移方式或准备副作用时只警告，警告出现在安装与更新的结果中（D-150）；安装与更新时严格核对 build-info（D-151） | T-09 步骤 10 | T-09.3、T-09.4 | V-122 | 已完成（PR #201；TEST-MATRIX §3.2） |
 | T-09.19 | goal-147 | 诊断包：管理服务的打包与脱敏、`POST /api/v1/diagnostics`、CLI `alonabot diagnose`（连接被拒绝后持有已有 `core.lock`，只读收集停机数据目录）（D-156） | T-09 步骤 7（诊断包） | T-09.10、T-09.14 | V-127 的 Core、API 与 CLI 分项 | 已完成（PR #213） |
-| T-09.20 | goal-153 | WebUI 组件的可选进程与 `command.invoked`：manifest、build/pack 与安装对带入口 WebUI 的处理，WebUI 进程的 Session 与管理会话路由，标准事件 `command.invoked` 的 proto、Core 生成与 SDK 常量，插件源 `index.json` 的格式校验工具（D-162） | T-09 步骤 7（WebUI 进程） | T-09.12、T-09.14、T-04.16 | V-133 | 未开始 |
+| T-09.20 | goal-153 | WebUI 组件的可选进程与 `command.invoked`：manifest、build/pack 与安装对带入口 WebUI 的处理，WebUI 进程的 Session 与管理会话路由，标准事件 `command.invoked` 的 proto、Core 生成与 SDK 常量，插件源 `index.json` 的格式校验工具（D-162） | T-09 步骤 7（WebUI 进程） | T-09.12、T-09.14、T-04.16 | V-133 | 已完成（PR #221；TEST-MATRIX §3.2） |
 | T-09.21 | goal-154 | 插件数据浏览的管理 API：表与列、分页查询、按 rowid 增删改、KV 与数据目录文件的管理、zip 导出、清空、保留代次只读浏览与审计日志（D-163、D-165） | T-09 步骤 7（数据浏览） | T-09.14、T-08.5、T-08.17 | V-134、V-137 的 API 分项 | 未开始 |
 | T-09.22 | goal-155 | 补齐的管理 API：保留代次、静态任务的列表与暂停恢复、Adapter 实例列表、聊天目录、更换管理令牌，插件页面的 `.Page` 声明、i18n `pages` 与组件列表的 `pages`（D-164） | T-09 步骤 7（补充 API） | T-09.14、T-07.9、T-03.25、T-04.16 | V-135 | 已完成（PR #220） |
 | T-09.24 | goal-158 | 组件的 changelog：`check`/`build`/`pack` 对 `CHANGELOG.md` 与 `changelog/<版本>/<locale>.md` 的校验与打包、安装预检复核，`GET /api/v1/packages/{id}/changelog` 的切分与语言选择，Core 自身 `CHANGELOG.md` 的嵌入与 `GET /api/v1/core/changelog`（D-166） | T-09 步骤 7（changelog） | T-09.3、T-09.14 | V-138 | 已完成（PR #215） |
-| T-09.27 | goal-177 | 组件市场 ID 改用连字符：四角色前缀与正则、校验调用者、日志来源、Agent 工具原始名、官方与示例 manifest、CLI/生成资源、既有测试与 fixture；本地 ID 规则保留（D-172） | T-09 步骤 11 | T-09.10、T-09.14、T-12.8、T-13.5 | V-01、V-62、V-64 的改名分项；V-121 的衔接 | 未开始 |
+| T-09.27 | goal-177 | 组件市场 ID 改用连字符：四角色前缀与正则、校验调用者、日志来源、Agent 工具原始名、官方与示例 manifest、CLI/生成资源、既有测试与 fixture；本地 ID 规则保留（D-172） | T-09 步骤 11 | T-09.10、T-09.14、T-12.8、T-13.5 | V-01、V-62、V-64 的改名分项；V-121 的衔接 | 已完成（PR #222；TEST-MATRIX §3.2） |
 | T-11.1 | goal-54 | 工具描述与目录：Service 描述的 `tool` 字段、注册校验、`core.tool.list`、调用策略的持久化与管理服务层 | T-11 步骤 1、2 | T-04.4、T-04.7、T-06.1 | V-55 的目录与策略分项 | 已完成（PR #101；TEST-MATRIX §3.2） |
 | T-11.2 | goal-55 | 工具调用与用户确认：`core.tool.invoke`、`core.tool.confirm`、Core 内部的确认记录与按钮、同一 Actor 与 5 分钟限时、确认文案 | T-11 步骤 3、4 | T-03.8、T-06.2、T-08.8、T-11.1 | V-55 | 已完成（PR #165；TEST-MATRIX §3.2） |
 | T-11.3 | goal-56 | Agent 会话存储：状态库表、`core.conversation.*`、管理服务层的列出与清除、purge | T-11 步骤 5 | T-03.1 | V-56 | 已完成（PR #35；TEST-MATRIX §3.2） |
@@ -127,11 +127,11 @@
 | T-16.2 | goal-82 | 按钮点击、多轮等待、schedule 触发（含动态任务实例，D-124）与后台发送；用套件测试示例插件，开发文档，汇总证据 | T-16 步骤 3、4 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | V-73 | 已完成（PR #183；TEST-MATRIX §3.2） |
 | T-16.3 | goal-102 | `plugintest.LLM`：登记只提供 `llm.generate` 的测试 Agent，被测插件经 `@agent` 的调用交给测试函数（D-77） | T-16 步骤 3 | T-12.8、T-16.1 | V-73 的 LLM 分项 | 已完成（PR #190；TEST-MATRIX §3.2） |
 
-| S-01.1 | goal-168 | 可休眠声明与持久化运行状态 | S-01 步骤 1、2 | T-04.1、T-09.4、T-09.6 | V-77 的 manifest、状态与未启用分项 | 未开始 |
-| S-01.2 | goal-169 | 已提交代次的路由快照与索引 | S-01 步骤 1、3 | T-04.1、T-09.4、T-09.6 | V-77 的快照、摘要校验与恢复索引分项 | 未开始 |
+| S-01.1 | goal-168 | 可休眠声明与持久化运行状态 | S-01 步骤 1、2 | T-04.1、T-09.4、T-09.6 | V-77 的 manifest、状态与未启用分项 | 已完成（PR #225；TEST-MATRIX §3.2） |
+| S-01.2 | goal-169 | 已提交代次的路由快照与索引 | S-01 步骤 1、3 | T-04.1、T-09.4、T-09.6 | V-77 的快照、摘要校验与恢复索引分项 | 已完成（PR #226；TEST-MATRIX §3.2） |
 | S-02.1 | goal-170 | 按需唤醒、活动引用与有界等待 | S-02 步骤 1～3 | S-01.1、S-01.2、T-05.5、T-06.4、T-07.5 | V-77 的首请求、并发、取消、期限与活动引用分项 | 未开始 |
 | S-02.2 | goal-171 | 空闲退出与即时休眠策略 | S-02 步骤 4 | S-02.1 | V-77 的准入、空闲退出、停止竞争与策略生效分项 | 未开始 |
-| S-02.3 | goal-176 | Core 消息事件过滤与 SDK 注册 | S-02 步骤 5 | T-04.16、T-08.11、T-09.14 | V-77 的 Core OR 匹配、配置取值与 SDK 注册分项（无需休眠进程） | 未开始 |
+| S-02.3 | goal-176 | Core 消息事件过滤与 SDK 注册 | S-02 步骤 5 | T-04.16、T-08.11、T-09.14 | V-77 的 Core OR 匹配、配置取值与 SDK 注册分项（无需休眠进程） | 已完成（PR #227；TEST-MATRIX §3.2） |
 | S-03.1 | goal-172 | Scheduler 唤醒与离线 tick 区分 | S-03 步骤 1、2 | S-02.2、T-07.2 | V-78；V-77 的 schedule 阻止休眠分项 | 未开始 |
 | S-06.1 | goal-173 | 休眠管理 API、运行诊断与 CLI | S-06 步骤 1 | S-02.2、S-03.1、T-09.14 | V-81 的管理 API、CLI、状态与模式切换分项 | 未开始 |
 | S-06.2 | goal-174 | 休眠指标、故障注入与固定机器验收 | S-06 步骤 2～4 | S-06.1 | V-77、V-78、V-81 的证据汇总与固定机器测量 | 未开始 |

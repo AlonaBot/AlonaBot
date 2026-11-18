@@ -28,10 +28,28 @@ CREATE TABLE generation (
   committed_at    INTEGER
 );
 
+CREATE TABLE route_snapshot (
+  generation_id TEXT PRIMARY KEY REFERENCES generation(generation_id) ON DELETE CASCADE,
+  plugin_id     TEXT NOT NULL REFERENCES install(plugin_id),
+  routes        BLOB NOT NULL,
+  route_hash    BLOB NOT NULL,
+  build_digest  BLOB NOT NULL
+);
+
 CREATE TABLE plugin_state (
   plugin_id         TEXT PRIMARY KEY REFERENCES install(plugin_id),
   active_generation TEXT REFERENCES generation(generation_id),
   enabled           INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE plugin_runtime (
+  plugin_id        TEXT PRIMARY KEY REFERENCES install(plugin_id),
+  state            TEXT NOT NULL CHECK (state IN ('STOPPED', 'WAKING', 'ACTIVE', 'QUIESCING', 'SUSPENDED', 'FAILED')),
+  reason           TEXT NOT NULL,
+  changed_at       DATETIME NOT NULL,
+  last_wake_reason TEXT NOT NULL,
+  last_wake_at     DATETIME NOT NULL,
+  last_suspend_at  DATETIME NOT NULL
 );
 
 CREATE TABLE pending_config (
