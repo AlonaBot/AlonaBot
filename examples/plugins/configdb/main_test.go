@@ -21,7 +21,8 @@ func TestConfigDB(t *testing.T) {
 		{"/note get lunch", "lunch: noodle soup"},
 	} {
 		result := h.Text(plugintest.Private(user.ID), user, scenario.command)
-		if len(result.Sends) != 1 || result.Sends[0].Text() != scenario.want || len(result.Outcomes) != 1 || result.Outcomes[0].Err != nil {
+		result.RequireReply(t, scenario.want)
+		if len(result.Outcomes) != 1 {
 			t.Fatalf("%s = %+v", scenario.command, result)
 		}
 	}

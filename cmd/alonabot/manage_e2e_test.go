@@ -991,7 +991,7 @@ func New() *sdk.Plugin {
 	p := sdk.NewPlugin()
 	var mu sync.Mutex
 	var received []message.CommandInvokedPayload
-	p.On("command.invoked", sdk.CommandInvoked).Handle(func(_ *sdk.Context, payload *message.CommandInvokedPayload) error {
+	p.On(sdk.CommandInvoked).ID("command.invoked").Handle(func(_ *sdk.Context, payload *message.CommandInvokedPayload) error {
 		mu.Lock()
 		defer mu.Unlock()
 		received = append(received, *payload)
