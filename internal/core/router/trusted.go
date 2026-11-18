@@ -28,7 +28,7 @@ func retainEvent(ev *pb.Event) *trustedEvent {
 	case *pb.EventPayload_ReactionAdded:
 		bindings.Kind = &pb.EventPayload_ReactionAdded{ReactionAdded: &pb.ReactionAddedPayload{PlatformMessageId: p.ReactionAdded.GetPlatformMessageId()}}
 		p.ReactionAdded.PlatformMessageId = ""
-	case *pb.EventPayload_MessageDeleted, *pb.EventPayload_ButtonClicked, *pb.EventPayload_Scheduled:
+	case *pb.EventPayload_MessageDeleted, *pb.EventPayload_ButtonClicked, *pb.EventPayload_Scheduled, *pb.EventPayload_CommandInvoked:
 		bindings = payload
 		payload = nil
 	}
@@ -63,7 +63,7 @@ func (e *trustedEvent) rebuild() *pb.Event {
 		}
 		body.PlatformMessageId = p.ReactionAdded.GetPlatformMessageId()
 		ev.EventPayload = &pb.EventPayload{Kind: &pb.EventPayload_ReactionAdded{ReactionAdded: body}}
-	case *pb.EventPayload_MessageDeleted, *pb.EventPayload_ButtonClicked, *pb.EventPayload_Scheduled:
+	case *pb.EventPayload_MessageDeleted, *pb.EventPayload_ButtonClicked, *pb.EventPayload_Scheduled, *pb.EventPayload_CommandInvoked:
 		ev.EventPayload = bindings
 	}
 	return ev

@@ -269,7 +269,7 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 			if registerErr == nil && boot.GetDatabaseDescriptor().GetBackend() != pb.DatabaseBackend_DATABASE_BACKEND_NONE {
 				registerErr = &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "adapter registration contains a business database"}
 			}
-		} else if exp.Role == state.RolePlugin || exp.Role == state.RoleAgent {
+		} else if exp.Role == state.RolePlugin || exp.Role == state.RoleAgent || exp.Role == state.RoleWebUI {
 			registerErr = validate.Register(m)
 		} else {
 			registerErr = fmt.Errorf("invalid expected role %q", exp.Role)

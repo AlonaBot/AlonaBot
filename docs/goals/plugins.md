@@ -6,14 +6,14 @@
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
-| goal-71 | T-14.1 | help 插件与命令列表 | T-04.4、T-04.16、T-05.2、T-08.8 | 待派发 |
+| goal-71 | T-14.1 | help 插件与命令列表 | T-04.4、T-04.16、T-05.2、T-08.8 | 已完成（PR #210） |
 | goal-72 | T-14.2 | welcome 与 rss 插件 | T-04.16、T-05.2、T-07.2、T-08.5、T-08.8、T-08.11、T-09.4 | 等待前置（T-04.16）；不进入首个发行版（D-171） |
 
 ## 第 18 波
 
 ### goal-71 · T-14.1 help 插件与命令列表
 
-状态：待派发。前置 T-04.4（PR #88）、T-04.16（PR #199，`046e752`）、T-05.2（PR #145）与 T-08.8（PR #102）已合并。相关的 T-03.17（PR #150，`8eb7846`）、T-04.12（PR #154，`43a6135`）、T-04.14（PR #156，`0726d66`）、T-04.15（PR #197，`ba2d323`）与 T-13.5（PR #200，`2e5ac2b`）也已合并。2026-11-17 按 main `bae7faa` 的代码核对，并按 D-171 精简为 `/help` 与 `/whoami`。审查者定稿时确定：`core.command.list` 不返回参数用法（WIRE-FORMAT §3.5 同步）；主名被其他路由遮蔽的命令不列出，与命令菜单一致；`/help` 不按插件分组，只按命令名排序，因此不需要插件 name（CONTRACTS §9.1 同步）。核对事实如下：
+状态：已完成（PR #210），合并提交 `456a4df`。以下保留派发时语句。派发时：前置 T-04.4（PR #88）、T-04.16（PR #199，`046e752`）、T-05.2（PR #145）与 T-08.8（PR #102）已合并。相关的 T-03.17（PR #150，`8eb7846`）、T-04.12（PR #154，`43a6135`）、T-04.14（PR #156，`0726d66`）、T-04.15（PR #197，`ba2d323`）与 T-13.5（PR #200，`2e5ac2b`）也已合并。2026-11-17 按 main `bae7faa` 的代码核对，并按 D-171 精简为 `/help` 与 `/whoami`。审查者定稿时确定：`core.command.list` 不返回参数用法（WIRE-FORMAT §3.5 同步）；主名被其他路由遮蔽的命令不列出，与命令菜单一致；`/help` 不按插件分组，只按命令名排序，因此不需要插件 name（CONTRACTS §9.1 同步）。核对事实如下：
 
 - `contracts/proto/alonabot/v1/route.proto` 已有 `CommandAlias { repeated string path = 1; }`，以及 `CommandSpec.description = 13`（`optional string`）；命令列表的请求、响应与 `CommandInfo` 尚未定义。`contracts/wirespec_test.go` 通过 `ProtoReflect().Descriptor().Fields().ByNumber(...)` 检查字段名、类型、列表、presence 与消息全名。
 - `internal/wire/services.go` 的固定服务沿用带文档注释的 `const ServiceX = "core.x"`。固定服务由 `router.Mux.Handle(name string, fn ServiceFunc)` 注册；`ServiceFunc` 为 `func(context.Context, Caller, *wire.Inbound) wire.Response`。装配在 `internal/app/assembly.go` 的 `assemble(...)`，其中 `a.mux = router.NewMux()`，Router 建好后注册各固定服务；根包已只保留库模式接口。
@@ -78,7 +78,7 @@
 - /help：调用 command.List(c.Context())，失败直接返回错误。按返回顺序每条一行，列出 Path 和 Aliases（token 以一个 ASCII 空格连接，主名在前），有 Description 时附上说明；不按插件分组。标题、空列表和行格式经 c.T 读取 messages；没有说明的行只展示名字。名称原样显示，不硬编码斜杠前缀。列表包含调用者可用的 help 与 whoami 本身；筛选由 Core 完成，插件只负责排版。
 - /whoami：通过 c.User() 与 c.Instance() 取得用户字符串和收到消息的实例名，调用 c.T("help.whoami", "user", c.User(), "instance", c.Instance()) 并回复。文案分别在 en-US、zh-CN 显示这两个原值；输出的用户字符串可直接用于 core_config.json 的 admins、WebUI Core 设置或 alonabot admin add（CONTRACTS §15.2）。命令要求 user 权限，首次使用无需已有 Core Admin。策略若被改为允许没有 Actor 的调用，c.User() 为空时回复 help.whoami.no_actor。
 - 注册与资源：New 中直接登记 p.Command("help").Description("List available commands") 与 p.Command("whoami").Description("Show your user ID and instance")，然后 Handle；保留英文源文，zh-CN 的顶层 commands 分别以 help、whoami 作为规范路径覆盖说明。en-US 的英文说明留在代码，i18n/en-US.json 提供 messages，zh-CN 同时提供 messages 与 commands。无需配置、数据库、生命周期状态或子插件。资源由 alonabot build 的 overlay 按入口包登记。
-- 工程 manifest：plugin.yaml 写 id: alonabot_plugin_help_official、name: Help、version: 0.1.0、author: AlonaBot、role: plugin、source: github.com/AlonaBot/AlonaBot 及英文 description；协议、平台、入口、配置版本、迁移方式与 prepare_effects 由工具推导。独立工程可导入，cmd 薄入口只负责运行。当前 check 使用 --dir；pack 所需的构建 manifest、build-info、发行 URL 与归档交由 T-14.3 产出。
+- 工程 manifest：plugin.yaml 写 id: alonabot-plugin-help-official、name: Help、version: 0.1.0、author: AlonaBot、role: plugin、source: github.com/AlonaBot/AlonaBot 及英文 description；协议、平台、入口、配置版本、迁移方式与 prepare_effects 由工具推导。独立工程可导入，cmd 薄入口只负责运行。当前 check 使用 --dir；pack 所需的构建 manifest、build-info、发行 URL 与归档交由 T-14.3 产出。
 
 测试（按编码规范「测试提交规则」与 docs/goals/README.md，D-86）：
 - 提交：只在 contracts/wirespec_test.go 新增 TestCommandListFieldNumbers 一项编号检查。沿用现有反射断言风格，检查空请求、响应 commands = 1 的 repeated CommandInfo、CommandInfo 的五个字段的编号/名称/类型/cardinality、aliases 的消息类型 alonabot.v1.CommandAlias、description 的 optional presence；同时确认复用的 CommandAlias.path = 1 与 CommandSpec.description = 13。其余验证全部为本地自测。

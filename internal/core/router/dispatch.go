@@ -74,7 +74,7 @@ func (r *Router) Deliver(ctx context.Context, ev *pb.Event) error {
 		r.metrics.Add("", "event", "cancelled")
 		return err
 	}
-	if r.intercept != nil {
+	if r.intercept != nil && ev.GetEventType() != commandInvokedEvent {
 		r.mu.Lock()
 		closed := r.closed
 		r.mu.Unlock()

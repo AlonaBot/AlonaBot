@@ -8,7 +8,7 @@ import (
 const zeroNumber = json.Number("0")
 
 // valueProblem 共用于配置值、default 与 condition 的检查，错误不包含配置取值。
-func valueProblem(f *field, value any, path string) *Problem {
+func valueProblem(f *Field, value any, path string) *Problem {
 	valid := false
 	empty := false
 	switch f.typ {
@@ -92,7 +92,7 @@ func valueProblem(f *field, value any, path string) *Problem {
 	return nil
 }
 
-func templateProblem(f *field, value any, path string) *Problem {
+func templateProblem(f *Field, value any, path string) *Problem {
 	object, ok := value.(map[string]any)
 	if !ok || len(object) != 1 {
 		return &Problem{path, "expected exactly one declared template key"}
@@ -114,7 +114,7 @@ func templateProblem(f *field, value any, path string) *Problem {
 }
 
 // objectProblem 检查已补齐的对象；只有可选 template 允许保持缺失。
-func objectProblem(fields []*field, object map[string]any, path string) *Problem {
+func objectProblem(fields []*Field, object map[string]any, path string) *Problem {
 	for _, f := range fields {
 		value, present := object[f.name]
 		if !present {

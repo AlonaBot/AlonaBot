@@ -18,7 +18,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
 )
 
-// installedSpec 在停机前只读构造完整启动输入；调用方决定准备或直接启动。
+// installedSpec 在停机前构造完整启动输入并准备数据目录；调用方决定准备或直接启动。
 // 返回的运行上下文与 Handler/Detach 共用 Caller，启动后由调用方附加 Instance。
 func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir string, boot *pb.Bootstrap) (supervisor.Spec, *runningComponent, error) {
 	raw, err := os.ReadFile(filepath.Join(packageDir, "plugin.yaml"))
@@ -54,7 +54,7 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	// Schema 摘要与版本绑定包内声明，所有已安装组件的启动共用同一输入。
 	boot.TargetConfigVersion = *m.ConfigVersion
 	boot.ConfigSchemaHash = nil
-	if (in.Role == state.RolePlugin || in.Role == state.RoleAgent) && schemas.config != nil {
+	if (in.Role == state.RolePlugin || in.Role == state.RoleAgent || in.Role == state.RoleWebUI) && schemas.config != nil {
 		if uint32(schemas.config.Version()) != boot.TargetConfigVersion {
 			return supervisor.Spec{}, nil, fmt.Errorf("config schema version differs from manifest for %s", in.PluginID)
 		}
@@ -71,8 +71,12 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	case manifest.MigrationVersioned:
 		database.MigrationMode = pb.MigrationMode_MIGRATION_MODE_VERSIONED
 	}
-	if (in.Role == state.RolePlugin || in.Role == state.RoleAgent) && (m.PrepareEffects == manifest.EffectsManagedDB || m.MigrationMode == manifest.MigrationSelf || m.MigrationMode == manifest.MigrationVersioned) {
+	if (in.Role == state.RolePlugin || in.Role == state.RoleAgent || in.Role == state.RoleWebUI) && (m.PrepareEffects == manifest.EffectsManagedDB || m.MigrationMode == manifest.MigrationSelf || m.MigrationMode == manifest.MigrationVersioned) {
 		database.Backend = pb.DatabaseBackend_DATABASE_BACKEND_SQLITE
+	}
+	boot.PluginDataDir, err = preparePluginDataDir(c.dir, in.PluginID)
+	if err != nil {
+		return supervisor.Spec{}, nil, err
 	}
 	running := &runningComponent{id: in.PluginID, install: in, caller: router.NewCaller(in.PluginID, boot.GenerationId), schemas: schemas}
 	spec := supervisor.Spec{Role: in.Role, AdapterID: in.AdapterID, PluginID: in.PluginID, PluginDir: filepath.Join(c.dir, "plugins", in.PluginID),

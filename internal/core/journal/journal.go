@@ -43,7 +43,7 @@ const (
 	KindFirstInstall Kind = "first_install"
 	// KindReload 导入编辑快照，并复制当前数据库。
 	KindReload Kind = "reload"
-	// KindUpdate 使用预检后的新包及有效 Pending 或 Active 快照。
+	// KindUpdate 使用预检后的新包及有效 Pending 或 Active 快照；静态 WebUI 转进程时准备首个代次。
 	KindUpdate Kind = "update"
 	// KindRollback 从保留代次的程序、配置与数据库准备新代次。
 	KindRollback Kind = "rollback"
@@ -131,14 +131,20 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 	if err != nil {
 		return nil, err
 	}
-	if in.Uninstalled || in.Role == state.RoleWebUI || in.Source == "dev" || strings.HasPrefix(active, "dev:") {
+	firstWebUIProcess := kind == KindUpdate && in.Role == state.RoleWebUI && in.Entrypoint == "" && active == "" && staged.Manifest.Entrypoint != ""
+	if in.Uninstalled || in.Role == state.RoleWebUI && in.Entrypoint == "" && !firstWebUIProcess || in.Source == "dev" || strings.HasPrefix(active, "dev:") {
 		return nil, precondition("component does not support candidate preparation")
 	}
-	if kind != KindFirstInstall && active == "" {
+	if kind != KindFirstInstall && active == "" && !firstWebUIProcess {
 		return nil, precondition("candidate preparation requires an active generation")
 	}
 	if kind == KindFirstInstall && active != "" {
 		return nil, precondition("first install already has an active generation")
+	}
+	resourceKind := kind
+	if firstWebUIProcess {
+		// 程序身份仍按 UPDATE 原子切换，配置和数据库按首装准备。
+		resourceKind = KindFirstInstall
 	}
 	records, err := o.opt.Store.Journals(ctx, pluginID)
 	if err != nil {
@@ -198,12 +204,12 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 			return nil, err
 		}
 	}
-	configuration, err := o.configuration(ctx, pluginID, source, kind)
+	configuration, err := o.configuration(ctx, pluginID, source, resourceKind)
 	if err != nil {
 		return nil, err
 	}
 	boot := &pb.Bootstrap{GenerationId: "gen-" + rand.Text(), CandidateConfigJson: string(configuration), TargetConfigVersion: *m.ConfigVersion,
-		DatabaseDescriptor: &pb.DatabaseDescriptor{ActivationReason: activationReason(kind), ManualMigrationApproved: false}}
+		DatabaseDescriptor: &pb.DatabaseDescriptor{ActivationReason: activationReason(resourceKind), ManualMigrationApproved: false}}
 	if source != "" {
 		version, err := o.opt.Store.GenerationConfigVersion(ctx, source)
 		if err != nil {
@@ -271,7 +277,7 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 	// 4. 数据库独立准备后登记代次。初始快照使用空对象，避免明文落入状态库。
 	database := spec.Bootstrap.GetDatabaseDescriptor()
 	if database.GetBackend() == pb.DatabaseBackend_DATABASE_BACKEND_SQLITE {
-		copyReason := activationReason(kind)
+		copyReason := activationReason(resourceKind)
 		if kind == KindRollback {
 			// 数据库层复用 UPDATE 的 Backup API 分支，Session 仍声明 ROLLBACK。
 			copyReason = pb.ActivationReason_ACTIVATION_REASON_UPDATE
@@ -292,7 +298,7 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 		r.databaseOwned = true
 		r.record.DatabasePath = r.Prepared.DatabasePath
 		database.SqlitePath = r.Prepared.DatabasePath
-		if kind == KindFirstInstall {
+		if resourceKind == KindFirstInstall {
 			// SDK 可以延迟打开首库；预先发布空 SQLite 文件，使提交前引用已持久化。
 			file, err := os.OpenFile(database.SqlitePath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
 			if err != nil {
@@ -315,7 +321,8 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 		return r, err
 	}
 	// 5. supervisor 只运行到 PREPARED；候选不进入普通异常恢复或业务装配。
-	if (kind == KindUpdate || kind == KindRollback) && (!r.record.WasEnabled || !r.record.WasRunning) {
+	// 静态 WebUI 没有旧进程与 Active，其首个进程只服从原启用意图。
+	if (kind == KindUpdate || kind == KindRollback) && (!r.record.WasEnabled || !r.record.WasRunning && r.record.ExpectedOld != "") {
 		// 停用意图跨提交保留，候选激活仅完成生命周期，不发布 HTTP 或调度。
 		spec.HTTP, spec.Scheduler, spec.CommandsChanged = nil, nil, nil
 	}
@@ -325,7 +332,7 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 	}
 	r.record.SessionID = append([]byte(nil), r.Session.Registration.SessionID...)
 	if r.Prepared != nil {
-		if err := persistDatabase(r.Prepared.DatabasePath, kind == KindFirstInstall); err != nil {
+		if err := persistDatabase(r.Prepared.DatabasePath, resourceKind == KindFirstInstall); err != nil {
 			return r, err
 		}
 	}

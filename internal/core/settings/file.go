@@ -2,13 +2,17 @@ package settings
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
+
+	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 )
 
 // CommandPrefixes 返回当前实例的前缀覆盖，未配置覆盖时返回全局前缀。
@@ -67,6 +71,7 @@ func (f *File) Update(edit func(doc *Document) error) error {
 	}
 	f.document, f.current = document, current
 	if err := syncDirectory(filepath.Dir(f.name)); err != nil {
+		slog.Log(context.Background(), logging.LevelCritical, "settings directory sync failed", "file", f.name, "error", err)
 		return fmt.Errorf("settings saved but directory sync failed: %w", err)
 	}
 	return nil
@@ -108,6 +113,11 @@ func (f *File) Reload() (changed []string, err error) {
 }
 
 func replaceFile(name string, content []byte) (err error) {
+	defer func() {
+		if err != nil {
+			slog.Log(context.Background(), logging.LevelCritical, "settings write failed", "file", name, "error", err)
+		}
+	}()
 	temporary, err := os.CreateTemp(filepath.Dir(name), "."+FileName+"-*") // CreateTemp 使用 0600。
 	if err != nil {
 		return fmt.Errorf("create temporary settings: %w", err)
@@ -151,6 +161,7 @@ func settingsValues(s Settings) (map[string]any, error) {
 		"$version": currentVersion, "listen": s.Listen, "base_url": s.BaseURL,
 		"trusted_proxies": s.TrustedProxies, "proxy": s.Proxy, "admins": s.Admins,
 		"command_prefixes": s.CommandPrefixes, "command_prefixes_by_instance": s.CommandPrefixesByInstance,
+		"reply":          s.Reply,
 		"default_locale": s.DefaultLocale, "adapters": adapters,
 		"log": map[string]any{"level": s.LogLevel, "format": s.LogFormat, "file": s.LogFile, "sources": s.LogSources},
 	}, nil
