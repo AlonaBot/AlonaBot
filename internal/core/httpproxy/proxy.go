@@ -6,6 +6,7 @@ package httpproxy
 
 import (
 	"bufio"
+	"context"
 	"crypto/subtle"
 	"encoding/hex"
 	"log/slog"
@@ -32,9 +33,12 @@ type Authorizer interface {
 // Server 保存当前已激活 Session 的代理映射；Bind、Drain、Unbind 与 ServeHTTP 可并发调用。
 // Drain 冻结新派发并按停止截止等待在途请求；Unbind 撤销匹配 Session 的映射。
 type Server struct {
-	auth     Authorizer   // nil 时拒绝全部私有路由
-	mu       sync.RWMutex // 保护 mappings 及 binding 的排空状态；调用授权方与网络转发前释放
-	mappings map[string]*binding
+	RequestTimeout time.Duration // 既有 REQUEST_TIMEOUT，Core 在开放入口前注入；零值沿用父请求期限。
+	auth           Authorizer    // nil 时拒绝全部私有路由
+	mu             sync.RWMutex  // 保护 mappings 及 binding 的排空状态；调用授权方与网络转发前释放
+	mappings       map[string]*binding
+	snapshot       func(string) (string, []*pb.RouteDescriptor, bool)
+	ensure         func(context.Context, string, int64) (func(), error)
 }
 
 type binding struct {
@@ -63,6 +67,39 @@ func New(auth Authorizer) *Server {
 	return &Server{auth: auth, mappings: make(map[string]*binding)}
 }
 
+// SetWake 接入已提交路由和当前 Core 的唯一唤醒入口。
+func (s *Server) SetWake(snapshot func(pluginID string) (generationID string, routes []*pb.RouteDescriptor, ok bool), ensure func(context.Context, string, int64) (func(), error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.snapshot, s.ensure = snapshot, ensure
+}
+
+func httpRoutes(routes []*pb.RouteDescriptor, role state.Role) []route {
+	var result []route
+	for _, descriptor := range routes {
+		if descriptor.GetKind() == pb.RouteKind_ROUTE_KIND_HTTP {
+			spec := descriptor.GetHttp()
+			result = append(result, route{method: spec.GetMethod(), path: spec.GetPath(), public: spec.GetIsPublic(),
+				platformToken: role == state.RoleAdapter && spec.GetIsPublic() && spec.GetAuthMode() == pb.HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN})
+		}
+	}
+	return result
+}
+
+func matchRoute(routes []route, method, path string) (selected *route, pathExists bool) {
+	for i := range routes {
+		candidate := &routes[i]
+		if path != candidate.path && !(strings.HasSuffix(candidate.path, "/") && strings.HasPrefix(path, candidate.path)) {
+			continue
+		}
+		pathExists = true
+		if method == candidate.method && (selected == nil || len(candidate.path) > len(selected.path)) {
+			selected = candidate
+		}
+	}
+	return selected, pathExists
+}
+
 // Bind 用已通过注册校验、且已激活的 Session 替换插件的旧映射。
 // 角色、端点、凭证与路由组成该 Session 的不可变快照。
 func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, token []byte, routes []*pb.RouteDescriptor, role state.Role) {
@@ -70,13 +107,7 @@ func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, 
 	auth := hex.EncodeToString(token)
 	prefix := pluginPrefix + pluginID
 	current := &binding{generationID: generationID, role: role, token: append([]byte(nil), token...), drained: make(chan struct{}), upgraded: make(map[*upgradedConnection]struct{})}
-	for _, descriptor := range routes {
-		if descriptor.GetKind() == pb.RouteKind_ROUTE_KIND_HTTP {
-			spec := descriptor.GetHttp()
-			current.routes = append(current.routes, route{method: spec.GetMethod(), path: spec.GetPath(), public: spec.GetIsPublic(),
-				platformToken: role == state.RoleAdapter && spec.GetIsPublic() && spec.GetAuthMode() == pb.HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN})
-		}
-	}
+	current.routes = httpRoutes(routes, role)
 	current.proxy = &httputil.ReverseProxy{
 		ErrorLog: slog.NewLogLogger(slog.With("plugin_id", pluginID).Handler(), slog.LevelError),
 		// 禁用连接复用，避免 Transport 对已复用连接上的幂等请求自动重试；内部 loopback 直连不走出站代理。
@@ -156,6 +187,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ServeWithIsolation 使用同一 Session 快照决定认证、响应隔离和转发端点。
 // isolate 包装普通插件的响应，并返回写完 trailer 后执行的清理函数。
 func (s *Server) ServeWithIsolation(w http.ResponseWriter, r *http.Request, isolate func(http.ResponseWriter) (http.ResponseWriter, func())) {
+	if s.RequestTimeout > 0 {
+		ctx, cancel := context.WithTimeout(r.Context(), s.RequestTimeout)
+		defer cancel()
+		r = r.WithContext(ctx)
+	}
 	// 1. 仅处理插件命名空间，并取得当前 Session 的路由快照。
 	rest, ok := strings.CutPrefix(r.URL.Path, pluginPrefix)
 	if !ok {
@@ -166,7 +202,19 @@ func (s *Server) ServeWithIsolation(w http.ResponseWriter, r *http.Request, isol
 	s.mu.RLock()
 	current := s.mappings[pluginID]
 	unavailable := current == nil || current.draining
+	snapshot, ensure := s.snapshot, s.ensure
 	s.mu.RUnlock()
+	var generation string
+	var routes []route
+	if current != nil {
+		generation, routes = current.generationID, current.routes
+	}
+	if unavailable && snapshot != nil {
+		if id, descriptors, known := snapshot(pluginID); known {
+			generation, routes = id, httpRoutes(descriptors, state.RolePlugin)
+			unavailable = false
+		}
+	}
 	webUI := ok && current != nil && current.role == state.RoleWebUI
 	if webUI {
 		w.Header().Set("Cache-Control", "no-store")
@@ -188,18 +236,7 @@ func (s *Server) ServeWithIsolation(w http.ResponseWriter, r *http.Request, isol
 	}
 	// 2. 同一方法下选择最长的匹配路径；精确路径与尾斜杠前缀保持各自含义。
 	path = "/" + path
-	var selected *route
-	pathExists := false
-	for i := range current.routes {
-		candidate := &current.routes[i]
-		if path != candidate.path && !(strings.HasSuffix(candidate.path, "/") && strings.HasPrefix(path, candidate.path)) {
-			continue
-		}
-		pathExists = true
-		if r.Method == candidate.method && (selected == nil || len(candidate.path) > len(selected.path)) {
-			selected = candidate
-		}
-	}
+	selected, pathExists := matchRoute(routes, r.Method, path)
 	if selected == nil {
 		if pathExists {
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
@@ -211,6 +248,52 @@ func (s *Server) ServeWithIsolation(w http.ResponseWriter, r *http.Request, isol
 	// 3. 普通插件的私有路由也用管理认证；公开回调的业务签名由插件检查。
 	if !webUI && !selected.public && !s.authorized(w, r, pluginID) {
 		return
+	}
+	if ensure != nil {
+		// 正文仍由 ReverseProxy 流式读取；此处尚未在 Core 缓存请求正文。
+		release, err := ensure(r.Context(), pluginID, 0)
+		if err != nil {
+			status := http.StatusServiceUnavailable
+			switch wire.CodeOf(err) {
+			case pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED:
+				status = http.StatusTooManyRequests
+			case pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED:
+				status = http.StatusGatewayTimeout
+			}
+			slog.Warn("plugin HTTP wake failed", "plugin_id", pluginID, "error", err)
+			http.Error(w, http.StatusText(status), status)
+			return
+		}
+		defer release()
+		s.mu.RLock()
+		current = s.mappings[pluginID]
+		s.mu.RUnlock()
+		if current == nil || current.generationID != generation {
+			http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+			return
+		}
+		confirmed, _ := matchRoute(current.routes, r.Method, path)
+		if snapshot != nil {
+			id, descriptors, known := snapshot(pluginID)
+			if known {
+				committed, _ := matchRoute(httpRoutes(descriptors, current.role), r.Method, path)
+				if id != generation || committed == nil || *committed != *selected {
+					http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+					return
+				}
+			} else if current.role == state.RolePlugin || current.role == state.RoleAgent {
+				http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+				return
+			}
+		}
+		if confirmed == nil || *confirmed != *selected || r.Context().Err() != nil {
+			http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+			return
+		}
+		if !webUI && !confirmed.public && !s.authorized(w, r, pluginID) {
+			return
+		}
+		selected = confirmed
 	}
 	// 4. 授权期间可能已冻结或换代；在同一锁内复核映射并登记实际派发。
 	s.mu.Lock()

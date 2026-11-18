@@ -423,6 +423,11 @@ func prepareMigrations(ctx context.Context, root *Plugin, descriptor *pb.Databas
 			completed <- result{err: &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "database migrations require a database backend"}}
 			return
 		}
+		// 同代次恢复沿用原 schema 与账本，SELF 和辅助迁移回调都不重新执行。
+		if descriptor.GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME {
+			completed <- result{state: &pb.MigrationState{Mode: mode, CompletedMigrationIds: append([]uint32(nil), descriptor.GetAppliedMigrationIds()...)}}
+			return
+		}
 		if len(migrators) == 0 {
 			completed <- result{state: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 			return

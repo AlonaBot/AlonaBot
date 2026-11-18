@@ -42,7 +42,7 @@ func (r *Router) listCommands(ctx context.Context, _ Caller, in *wire.Inbound) w
 	result := &pb.CommandListResponse{}
 	for _, route := range routes {
 		command := route.route.GetCommand()
-		if command.GetMatch() != pb.CommandMatch_COMMAND_MATCH_PATH || !route.plugin.Activated() {
+		if command.GetMatch() != pb.CommandMatch_COMMAND_MATCH_PATH || !r.available(route.candidate) {
 			continue
 		}
 		names := index.names[route.pluginID][route.route.GetRouteId()]
@@ -74,8 +74,8 @@ func (r *Router) listCommands(ctx context.Context, _ Caller, in *wire.Inbound) w
 		}
 		if source := command.GetDescription(); source != "" {
 			description := source
-			if catalog := route.plugin.Messages(); catalog != nil {
-				description = catalog.CommandDescription([]string{actor.GetLocale(), route.plugin.DefaultLocale()}, command.GetPath(), source)
+			if catalog := route.messages(); catalog != nil {
+				description = catalog.CommandDescription([]string{actor.GetLocale(), route.defaultLocale()}, command.GetPath(), source)
 			}
 			entry.Description = proto.String(description)
 		}

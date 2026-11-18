@@ -19,7 +19,7 @@ const (
 )
 
 func (r *Router) commandAllowed(c candidate, ev *pb.Event) bool {
-	if !c.plugin.Activated() {
+	if !r.available(c) {
 		return false
 	}
 	if failure := r.commandPolicyFailure(c, ev); failure != nil {

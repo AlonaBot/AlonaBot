@@ -200,28 +200,30 @@ func validateComponents(components []Component, installs []state.Install) error 
 }
 
 type assembly struct {
-	core       *Core // assemble 返回后由 Start 绑定，候选回调在运行循环内读取。
-	journal    *journal.Orchestrator
-	candidate  *runningComponent // 仅运行循环访问；Spec 与提交结果合并前的本次运行上下文。
-	adapters   *coreadapter.Registry
-	router     *router.Router
-	mux        *router.Mux
-	media      *media.Store
-	buttons    *buttons.Service
-	bus        *bus.Bus
-	broker     *broker.Broker
-	scheduler  *scheduler.Scheduler
-	http       *httpproxy.Server
-	global     *wire.Budget
-	metrics    *metrics.Counters
-	store      *state.Store
-	policy     *policy.Policy
-	components sync.Map // 运行状态查询借用 host.Instance，激活失败时保留 Degraded 诊断。
-	options    *coreoptions.Service
-	tools      *tool.Catalog
-	settings   *settings.File
-	schemaMu   sync.RWMutex // 保护按代次保留的只读选项声明。
-	schemas    map[string]componentOptionSchemas
+	core         *Core // assemble 返回后由 Start 绑定，候选回调在运行循环内读取。
+	journal      *journal.Orchestrator
+	candidate    *runningComponent // 仅运行循环访问；Spec 与提交结果合并前的本次运行上下文。
+	adapters     *coreadapter.Registry
+	router       *router.Router
+	mux          *router.Mux
+	media        *media.Store
+	buttons      *buttons.Service
+	bus          *bus.Bus
+	broker       *broker.Broker
+	scheduler    *scheduler.Scheduler
+	http         *httpproxy.Server
+	global       *wire.Budget
+	metrics      *metrics.Counters
+	store        *state.Store
+	policy       *policy.Policy
+	components   sync.Map // 运行状态查询借用 host.Instance，激活失败时保留 Degraded 诊断。
+	options      *coreoptions.Service
+	tools        *tool.Catalog
+	settings     *settings.File
+	waker        *supervisor.Waker
+	wakeSessions sync.Map     // router.Caller → *wire.Session，只登记已安装独立插件。
+	schemaMu     sync.RWMutex // 保护按代次保留的只读选项声明。
+	schemas      map[string]componentOptionSchemas
 }
 
 type componentOptionSchemas struct {
@@ -236,11 +238,13 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 
 func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, file *settings.File, messageConfig func(context.Context, string, *pb.Event) (json.RawMessage, error)) (*assembly, error) {
 	a := &assembly{store: store, settings: file, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload), metrics: &metrics.Counters{}}
+	a.waker = supervisor.NewWaker(supervisor.WakeOptions{Store: store, Global: a.global, QueueRequests: v.WakeQueueRequests, QueueBytes: v.WakeQueueBytes, Start: a.startWake})
 	var err error
 	a.media, err = media.Open(filepath.Join(dir, "media"), media.NewLimits(v), time.Now)
 	if err != nil {
 		return nil, err
 	}
+	a.media.SetActivity(a.acquireActivity)
 	p := policy.New(store)
 	a.policy = p
 	var admins []policy.Admin
@@ -253,6 +257,9 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 		return nil, fmt.Errorf("load command names: %w", err)
 	}
 	a.buttons = buttons.New(store, time.Now, v.ButtonTokenTTL, func(id string) (string, []*pb.RouteDescriptor, bool) {
+		if generation, routes, ok := a.router.RouteSnapshot(id); ok {
+			return generation, routes, true
+		}
 		plugin, ok := a.router.Plugin(id)
 		if !ok || !plugin.Activated() {
 			return "", nil, false
@@ -264,7 +271,7 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 	var messages *message.Service
 	var hooks *hook.Runner
 	// 延续调用的 Manager 先于 Router 创建，回调在调用时才读取 a.router。
-	continuations := continuation.New(continuation.Options{Max: v.ContinuationMax, Timeout: v.ContinuationTimeout, Prepare: a.media.PrepareIncoming,
+	continuations := continuation.New(continuation.Options{Max: v.ContinuationMax, Timeout: v.ContinuationTimeout, Prepare: a.media.PrepareIncoming, AcquireActivity: a.acquireActivity,
 		Caller: func(id string) (router.Caller, bool) { return a.router.Caller(id) },
 		Call: func(ctx context.Context, inv *router.Invocation, parent uint64, deadline time.Time) (wire.Response, error) {
 			return a.router.CallContinuation(ctx, inv, parent, deadline)
@@ -279,7 +286,7 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 			harness.Dispatched(result)
 		}
 	}
-	a.router = router.New(router.Options{Dispatched: dispatched, MessageConfig: messageConfig, Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
+	a.router = router.New(router.Options{Dispatched: dispatched, MessageConfig: messageConfig, EnsureActive: a.ensureActive, RequestTimeout: v.RequestTimeout, Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
 		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Intercept: a.buttons.InterceptConfirm, Policy: p, CommandState: p.CommandState, Prefixes: a.settings.CommandPrefixes, CommandNames: p.CommandNames,
 		Continuations: continuations, Metrics: a.metrics,
 		Send: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
@@ -302,9 +309,9 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 	conversation.New(store).Register(a.mux)
 	a.tools = tool.New(store, a.router)
 	a.tools.Register(a.mux)
-	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes, Metrics: a.metrics})
+	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes, Metrics: a.metrics, AcquireActivity: a.acquireActivity})
 	a.bus.Register(a.mux)
-	a.broker = broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth, Metrics: a.metrics, Agent: a.agentID})
+	a.broker = broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth, Metrics: a.metrics, Agent: a.agentID, EnsureActive: a.ensureActive})
 	a.tools.RegisterInvoke(a.mux, tool.InvokeOptions{Call: a.broker.Call, Adapters: a.adapters, Buttons: a.buttons,
 		ConfirmTimeout: v.ToolConfirmTimeout, DefaultLocale: func() string { return a.settings.Settings().DefaultLocale }})
 	a.mux.Forward(a.broker.Call)
@@ -458,6 +465,7 @@ func optionSchemas(resources genresources.Resources) (componentOptionSchemas, er
 
 // runningComponent 保存一次外部进程或同进程 Session，退出观察者结束后才由 Core 替换。
 type runningComponent struct {
+	activity  bool // installedSpec 显式绑定 Waker 的进程；原 Launch 调用保持原活动路径。
 	id        string
 	install   state.Install // 独立进程恢复时复用安装身份与已提交代次。
 	caller    router.Caller
@@ -505,6 +513,21 @@ func (a *assembly) handler(r *runningComponent, install state.Install) wire.Hand
 	r.attached = make(chan struct{})
 	bound := a.mux.For(r.caller)
 	shared := func(ctx context.Context, in *wire.Inbound) wire.Response {
+		if r.activity {
+			select { // 发布装配结果后再读取本次 Instance，覆盖插件主动发起的所有业务。
+			case <-r.attached:
+			case <-ctx.Done():
+				return wire.Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_CANCELLED, SafeMessage: ctx.Err().Error()}}
+			}
+			if r.attachErr != nil {
+				return wire.Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "plugin Session could not attach"}}
+			}
+			release, err := a.waker.AcquireActivity(r.id, r.instance.Session)
+			if err != nil {
+				return wire.Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: err.Error()}}
+			}
+			defer release()
+		}
 		switch in.Target {
 		case wire.ServiceTaskSet, wire.ServiceTaskCancel, wire.ServiceTaskList, wire.ServiceJobPause, wire.ServiceJobResume, wire.ServiceJobStatus:
 			// ACTIVATED 后读循环立即接纳请求；等待本 Session 装配，避免首请求越过发布。
@@ -546,15 +569,22 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) (err error) 
 	defer func() {
 		r.attachErr = err
 		close(r.attached)
+		if err == nil && r.activity {
+			a.waker.Ready(r.process)
+		}
 	}()
 	a.components.Store(r.id, r.instance)
 	plugin := router.FromInstance(r.instance)
+	if r.activity {
+		a.wakeSessions.Store(r.caller, r.instance.Session)
+		plugin = router.WithActivity(plugin, func() (func(), error) { return a.waker.AcquireActivity(r.id, r.instance.Session) })
+	}
 	r.schemas.generation = r.caller.GenerationID
 	a.schemaMu.Lock()
 	a.schemas[r.id] = r.schemas
 	a.schemaMu.Unlock()
 	a.router.Attach(plugin, r.caller)
-	a.bus.Attach(plugin)
+	a.bus.Attach(plugin, r.caller)
 	if r.process == nil {
 		if r.instance.HTTPListener != nil {
 			a.http.Bind(r.id, r.instance.GenerationID, r.instance.HTTPListener, r.instance.HTTPProxyToken, r.instance.Routes, r.install.Role)
@@ -818,6 +848,7 @@ func bootstrap(generation string, version uint32) *pb.Bootstrap {
 }
 
 func (a *assembly) detach(r *runningComponent) {
+	a.wakeSessions.Delete(r.caller)
 	// STOPPING 和退出收尾都可能到达；旧 Session 的迟到清理保留新绑定。
 	if a.components.CompareAndDelete(r.id, r.instance) {
 		if r.instance.State() == host.StateDegraded {
@@ -854,8 +885,10 @@ func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.Stop
 	}
 	if r.process != nil {
 		// supervisor 处理进程树、HTTP 与 Scheduler；其余映射由装配撤销。
-		a.bus.Detach(r.id)
 		result := r.process.Stop(t0, reason)
+		if reason == pb.StopReason_STOP_REASON_IDLE && result.Err != nil {
+			return result.Err
+		}
 		slog.Info("plugin stopped", "plugin_id", r.id, "drained", result.Drained, "killed", result.Killed)
 		err = result.Err
 		detach()
@@ -905,7 +938,7 @@ func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.Stop
 func (c *Core) startInstalled(ctx context.Context, dir string, install state.Install) (running *runningComponent, err error) {
 	defer func() {
 		if err != nil && (running == nil || running.instance.State() != host.StateDegraded) {
-			err = errors.Join(err, c.recordRuntime(context.WithoutCancel(ctx), install, state.RuntimeFailed, "installed startup failed"))
+			err = errors.Join(err, c.recordRuntime(context.WithoutCancel(ctx), install, state.RuntimeFailed, err.Error()))
 		}
 	}()
 	generation, err := c.store.Active(ctx, install.PluginID)

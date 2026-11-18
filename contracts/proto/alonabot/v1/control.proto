@@ -226,6 +226,7 @@ enum StopReason {
   STOP_REASON_RELOAD = 3;
   STOP_REASON_UPDATE = 4;
   STOP_REASON_CORE_SHUTDOWN = 5;
+  STOP_REASON_IDLE = 6;
 }
 
 // Stopping 承载 STOPPING（Core→Plugin）的载荷，deadline = min(t0+10s, 发送时刻+4s)。

@@ -161,7 +161,7 @@ func (r *Router) commandMenu(ctx context.Context, instanceID string) ([]*pb.Comm
 	var menu []*pb.CommandMenuItem
 	for _, route := range routes {
 		command := route.route.GetCommand()
-		if command.GetMatch() != pb.CommandMatch_COMMAND_MATCH_PATH || !route.plugin.Activated() {
+		if command.GetMatch() != pb.CommandMatch_COMMAND_MATCH_PATH || !r.available(route.candidate) {
 			continue
 		}
 		names := index.names[route.pluginID][route.route.GetRouteId()]
@@ -192,11 +192,11 @@ func (r *Router) commandMenu(ctx context.Context, instanceID string) ([]*pb.Comm
 			description = path[0]
 		}
 		descriptions := map[string]string{"en-US": description}
-		if catalog := route.plugin.Messages(); catalog != nil {
+		if catalog := route.messages(); catalog != nil {
 			for _, locale := range catalog.Locales() {
 				text := description
 				if source != "" {
-					text = catalog.CommandDescription([]string{locale, route.plugin.DefaultLocale()}, command.GetPath(), source)
+					text = catalog.CommandDescription([]string{locale, route.defaultLocale()}, command.GetPath(), source)
 				}
 				descriptions[locale] = text
 			}
