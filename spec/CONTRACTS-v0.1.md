@@ -401,6 +401,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 - v0.1 只有 **一个 Core Listener、一个公开端口、一个主机名**（`base_url`，D-84）：管理界面（WebUI 组件，§7.5）、Admin API 与插件路由 `/plugins/{id}/...` 都在这个主机名下，不需要为插件页面准备第二个域名。Core 验证 Host，不把客户端提供的 Host 当信任依据；远程反代须保留受控 Host 并按全局可信反代配置处理转发信息。
 - 管理会话 Cookie 使用 host-only、HttpOnly、`SameSite=Strict`，并在 HTTPS 下使用 Secure 与 `__Host-` 前缀；Admin API 的状态变更验证 CSRF。公开安装/管理接口不能绕过管理员认证。
 - 插件用 `Route(method, path).Page(title).Handle(h)` 声明页面：`Page(title string) *RouteBuilder` 须在 `Handle` 或 `HandleFunc` 前调用，非空 `title` 为英文源标题。页面声明沿用原 HTTP 路由的认证与匹配规则。Core 从当前运行路由登记生成组件的 `pages` 列表，按 §5.4 选择标题（ADMIN-API §20，D-164）。
+- 声明页面时 SDK 在页面路径所在目录下同时登记 `kit.css` 与 `kit.js` 两条 GET 路由（`sdk/page` 的套件资源），认证与该页面路由相同；作者已登记同一路径时以作者的为准（D-180）。
 - 插件路由的全部响应由 Core 加上 `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups`（不含 `allow-same-origin`）与 `X-Content-Type-Options: nosniff`，并去掉插件设置的 `Set-Cookie`；插件不能覆盖这些响应头。插件返回的页面因此运行在不透明源中：无论被嵌入还是直接打开，都读不到管理 Cookie、WebUI 的存储与 DOM，它发出的请求也不带管理 Cookie（D-15）。
 - WebUI 用带 `sandbox` 属性的 iframe 嵌入插件页面，页面只经 WebUI 提供的 postMessage 桥与外部交互：请求本插件的 HTTP 路由，读取当前语言的文案与界面主题，接收明暗与语言变化的通知和设计令牌，转发打开全局搜索的快捷键（D-159）。SDK 的 `sdk/page` 套件封装这些交互并提供与 WebUI 一致的基础样式。插件页面的第一行（插件名、标签与全局搜索）由 WebUI 绘制，iframe 只占其下的内容区。WebUI 只转发方法与路径落在该插件已注册路由内的请求，用管理员会话与 CSRF 头发出，再把响应交回页面；页面拿不到管理会话、CSRF token 或其他插件的路由。桥的消息格式记录在 Admin API 参考中（§7.5）。
 - 非公开的插件路由要求有效的管理会话，非 GET 请求与 Admin API 一样验证 CSRF；公开的 JSON API、OAuth 回调与 Webhook 按 §7.2 声明，不要求会话。插件页面与管理界面不同源，插件页面之间也互不同源（各自为不透明源），但插件仍是可信的本地代码（§7.1）。
@@ -481,6 +482,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
   - 两种形式都接受 `int`（与 int64 同样解析）以及底层类型为 string、int64、int、float64、bool 的具名类型；SDK 不做其他类型转换。
   - 以上检查都在 SDK 收集注册时完成。运行时 SDK 只把 Core 已解析的参数值赋给字段，不再分词或转换。
 - 子插件（D-116）：`p.Sub(id)` 返回 `*sdk.SubPlugin`，注册方法与 `*sdk.Plugin` 相同，没有 `Sub`，也没有生命周期、`OnConfigLoad` 与迁移的登记。ID 为非空的 ASCII 字母、数字、`_` 与 `-`，同一插件内重复或不合法时 SDK 在收集注册时报错。子插件不出现在 REGISTER 中：其中路由的 route_id、命令路径、别名、Service 名、HTTP 路径与 job ID 按原规则生成，不带子插件 ID，并与整个插件的其他路由一起检查重复。`s.Permission(perm)` 设置其中命令与文本匹配路由的缺省权限，解析次序为路由、由近到远的命令组、子插件、SDK 缺省（§2.3）；子插件内创建的命令组属于该子插件。配置见 §5.1，日志字段见 §14.1。
+- 注册从简（D-180）：`Regex(expr)`、`Keyword`、`StartsWith`、`EndsWith`、`FullMatch`（各收 `patterns ...string`）、`Raw()`、`On(eventType)`、`PreEvent(event)`、`BeforeSend()`、`AfterSend()` 不收 route ID，builder 的 `.ID(routeID string)` 另给。缺省 route ID：文本匹配为小写类别名加 `:` 加各模式以 `|` 连接，Raw 为 `raw`，事件路由为事件名，Hook 为 `pre_event:<事件名>`、`before_send`、`after_send`；同一插件内重复时注册报错并提示使用 `.ID`。`*sdk.Context` 实现 `context.Context`，转给本次调用的 context。`c.Reply(text string, more ...message.Segment) error` 把文本与片段作为一条消息发送。本文件其他小节与 docs/plugin-guide.md 中带 route ID 参数的旧写法按本条理解。
 - `pack` 输出 `<id>-<version>-<os>-<arch>.tar.gz`，Windows 同格式。归档内包括补上构建信息的 manifest、binary、存在时的 `config_schema.json` 与 `adapter_config_schema.json`、`i18n/`、changelog 和 build-info，不包含运行配置/DB/secret/签名私钥。只接受普通文件与目录，拒绝绝对路径、`..`、symlink/hardlink、设备文件、重复归档路径及跨平台大小写冲突；解压到新临时目录、验证后再移动为不可变包目录，不能覆盖正在使用的程序。
 
 - 命令目录按需导入 `sdk/command`。`command.List(ctx context.Context) ([]command.Entry, error)` 接收仍在途的 Handler 的 `c.Context()` 或其派生 context；后台或已结束的调用返回 `FAILED_PRECONDITION`，Core 返回的错误直接传给调用者。`Entry` 包含 `PluginID`、`RouteID`、`Path []string`（生效主名）、`Aliases [][]string` 与 `Description string`（未登记说明时为空）。筛选与排序见 §2.3。
@@ -774,6 +776,8 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 ### 15.4 开发运行与热部署
 
 - `alonabot run [目录...] [--reload]` 同时运行开发中的组件（D-77）。每个目录是一个组件工程（含 `plugin.yaml`）；没有给出目录且当前目录有 `plugin.yaml` 时为当前目录。数据目录缺省仍为工作目录下的 `data/`，`alonabot init` 生成的 `.gitignore` 忽略它。
+- 给出开发目录（含缺省的当前目录）时 `--reload` 缺省开启，`--reload=false` 关闭（D-181）。
+- 终端对话（D-181）：`alonabot run` 内置同进程的终端 Adapter（adapter_id 与实例名都是 `console`）。`--console` 缺省为自动，stdin 是终端且 `core_config.json` 没有任何 Adapter 实例时启用；`--console` 强制启用，`--console=false` 关闭。stdin 的每一行作为用户 `console:local` 的私聊 `message.created` 注入，该用户在本次运行中是 Core Admin，不写入设置文件。回复逐条写到 stdout：非文本片段写成方括号占位，按钮按顺序编号，输入 `#<编号>` 点击最近一条带按钮的消息，编辑写成带 `(edited)` 的新行。stdin 结束不停止 Core。启用且没有显式 `--log-level` 时 stderr 只输出 WARN 及以上（§14.2），日志文件不受影响。
 - 每个开发组件先按 `alonabot build` 构建到 `<data_dir>/dev/bin/`，再按 manifest 的 `role` 运行：插件、Adapter 与 Agent 以独立进程运行，进程、隔离与有限重启和已安装的组件相同；WebUI 以该目录的 `assets` 为静态根目录，代替已安装的 WebUI，按请求读取文件，不经安装与签名（Admin API 主版本检查照常进行）。构建失败或同一 ID、adapter_id 与已安装的包冲突时，`run` 在启动任何组件前报错退出。
 - 开发组件的规则（`alonabot run` 与库模式 §15.5 相同）：
   - Core 为它们创建 dev 来源的安装记录，不做来源、签名与归档摘要校验，Hello 的 build_digest 使用 Core 为本次运行生成的值；dev 来源的组件不能 update、rollback 或 uninstall。
@@ -898,6 +902,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 ## 17. 插件测试套件
 
 - 包 `github.com/AlonaBot/AlonaBot/plugintest`（D-47）供插件作者在 `go test` 中做集成测试，只在测试代码中使用。`plugintest.Start(t, opts...)` 在 `t.TempDir()` 的数据目录上用 `alonabot.Start`（§15.5）装配真实 Core，登记被测插件（`plugintest.Plugin(root)`，可以有多个）与套件自带的测试 Adapter（adapter_id `plugintest`），并在 `t.Cleanup` 中停止；任一组件激活失败时测试失败。被测插件是库模式的开发组件，配置取自 `plugintest.Config(root, json)`，受管 SQLite 为 `dev.sqlite`。被测组件的资源由套件现场扫描取得（D-145）：按其入口包的导入路径经 `go list` 定位源码目录，按测试二进制构建信息中的 GOOS、GOARCH 与 build tags，用与 CLI 相同的扫描实现生成资源并经本 module 的内部入口登记；作者不需要先运行 CLI，扫描失败时测试失败并给出原文错误。
+- `Result.RequireReply(t testing.TB, want string)`（D-180）：任一 Outcome 有错误，或发送不是恰好一条文本为 want 的消息时使测试失败。
 - 测试 Adapter 只有一个实例和一个固定账号。它的 adapter_id 缺省为 `plugintest`；`plugintest.Adapter(id, declarations...)` 可改为指定的 adapter_id，并声明该 Adapter 的权限与扩展事件（通常取自其常量包），用于测试依赖平台权限或扩展事件的路由。会话分私聊与群聊，用户可带上该会话的平台权限；`plugintest.Admin(user)` 把用户加入 Core Admin。实例缺省声明 `message.send`、`message.markdown`、`message.album`、`message.reference`、`message.buttons`、`message.forward` 与 `message.edit`，`plugintest.Capabilities(...)` 可改为子集：未声明能力对应的片段在发送时返回 UNSUPPORTED，用来测试插件的降级分支。发送与编辑一律 ACCEPTED，消息 ID 按发送顺序递增。
 - 注入事件：消息（message.created）、对已发送按钮的点击（button.clicked）、已声明的扩展事件与立即触发一次 schedule。每次注入在这个事件的全部分发链结束，或其中的 Handler 进入多轮等待（§2.4）后返回，结果包含这期间产生的全部 Send 与 Edit（Target、Chain、SendResult）和 Handler 返回的错误。分发结束由 Core 经 `internal/inproc` 通知套件，不靠等待时间判断。「分发结束」指：注入的事件的普通分发链与由它发起的全部延续调用都结束；其中任一调用登记了多轮等待时立即返回。被等待取走的下一条注入，在取走它的延续调用结束或再次等待时返回，这期间的发送归入它。测试 Adapter 与正式 Adapter 一样按自己声明的能力判定片段，不支持时返回 UNSUPPORTED。测试 Adapter 按对象使用套件给出的资源（经本 module 的内部入口，D-145），据此改用指定的 adapter_id；`EventType.Name()` 返回事件类型名。分发链之外的后台发送另行按顺序读取。
 - `plugintest.LLM(func(ctx context.Context, req llm.Request) (llm.Response, error))` 登记一个只提供 `llm.generate` 的测试 Agent（§13.5），被测插件经 `@agent` 的调用交给这个函数处理，不需要真实 Agent 与 Provider（D-77）；没有登记时，`@agent` 按目标未激活处理。

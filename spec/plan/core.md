@@ -56,6 +56,7 @@
 | T-04.17 | goal-150 | 插件页面套件：`sdk/page` 的 `kit.css` 与 `kit.js`（桥的 hello、请求、异步文案、令牌应用、主题与语言事件、⌘K 转发），以及 showcase 插件页面使用套件（D-159） | T-04 步骤 17 | T-04.16、T-07.7 | V-130 的 SDK 分项 | 已完成（PR #218） |
 | T-04.18 | goal-161 | 配置文件的派发与 SDK：`profile_id`、覆盖值下发、`c.Config()` 合并、按配置文件的插件开关、`core.profile.*`（D-168） | T-04 步骤 18 | T-04.16、T-08.18 | V-141 | 已完成（PR #242） |
 | T-04.19 | goal-162 | 平台与消息：命令前缀按配置文件、删除按实例的前缀、回复的提及、引用、前缀与合并转发（D-168） | T-04 步骤 19 | T-04.18 | V-142 | 未开始 |
+| T-04.20 | goal-178 | SDK 用法从简：文本匹配、Raw、事件路由与 Hook 的注册去掉 route ID 参数并增加 `.ID`，`*sdk.Context` 实现 `context.Context`，`c.Reply` 可带片段，`.Page(title)` 自动登记套件资源，`plugintest.Result.RequireReply`；全部调用方与示例同步（D-180） | T-04 步骤 20 | T-04.18、T-16.2 | V-148 | 未开始 |
 | T-05.1 | goal-15 | 可信事件上下文与有界同事件分发：64 条并发链、256 条/8 MiB 等待队列、稳定候选排序、链执行与读循环分离；经回环测试 Adapter 运行，按钮与 scheduled 绑定先用规范 fixture | T-05 步骤 1、2 | T-03.3、T-04.3、T-04.4 | V-13、V-16 的 fixture 分项 | 已完成（PR #67；TEST-MATRIX §3.2） |
 | T-05.2 | goal-16 | SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支 | T-05 步骤 3、4 | T-05.1、T-04.7、T-04.8 | V-14、V-11 的 Rule 分项 | 已完成（PR #145；TEST-MATRIX §3.2） |
 | T-05.3 | goal-17 | PreEvent/BeforeSend/AfterSend 三阶段 Hook（链式注册与 SDK 类型，D-112），send_forbidden 的保存与继承 | T-05 步骤 5、6 | T-05.2 | V-15 的直接路径分项，V-110 的 Hook 分项 | 已完成（PR #155；TEST-MATRIX §3.2） |
@@ -123,6 +124,7 @@
 | T-13.4 | goal-70 | 开发运行示例与开发文档，汇总证据 | T-13 步骤 5 | T-03.10、T-13.2、T-13.3 | V-64、V-65 | 已完成（PR #186；TEST-MATRIX §3.2） |
 | T-13.5 | goal-140 | 模块根包只保留库模式接口：Core 装配、候选与进程管理移入 `internal/app`，只供开发 CLI 使用的 `Executable`、`Stdio`、`Core.Restart`、`Core.RestartInstance`、`Core.ReloadSettings` 随之移入，根目录的端到端测试按归属迁移（D-148） | T-13 步骤 6 | T-04.16 | V-64、V-65 的回归（行为不变） | 已完成（PR #200；TEST-MATRIX §3.2） |
 | T-13.6 | goal-141 | CLI 参数从简：`build`、`check`、`test`、`pack` 的工程目录改为位置参数并删除 `--dir`；`init` 的 ID 与 module、`pack` 的资产 URL 取缺省值；`install` 可按组件 ID 安装 `packages/` 中的官方包，不给参数时在当前目录寻找唯一的安装包（D-149）；`pack --target` 多平台一次打包与签名（D-169） | T-13 步骤 7 | T-13.5、T-14.3 | V-121 | 已完成（PR #233；TEST-MATRIX §3.2） |
+| T-13.7 | goal-179 | CLI 开箱即用：`alonabot run` 的终端对话与 `--console`、终端对话时 stderr 的缺省级别、开发目录缺省重载、发布版 `init` 运行 `go mod tidy`（D-181） | T-13 步骤 8 | T-13.6、T-16.1 | V-149 | 未开始 |
 | T-16.1 | goal-81 | 插件测试套件基础：`plugintest.Start`、测试 Adapter、会话与身份、Capability 子集、消息注入、`internal/inproc` 的分发结束通知、配置与数据库 | T-16 步骤 1、2 | T-05.2、T-13.2、T-09.4 | V-73 的基础分项 | 已完成（PR #168；TEST-MATRIX §3.2） |
 | T-16.2 | goal-82 | 按钮点击、多轮等待、schedule 触发（含动态任务实例，D-124）与后台发送；用套件测试示例插件，开发文档，汇总证据 | T-16 步骤 3、4 | T-03.8、T-05.4、T-07.2、T-07.9、T-16.1 | V-73 | 已完成（PR #183；TEST-MATRIX §3.2） |
 | T-16.3 | goal-102 | `plugintest.LLM`：登记只提供 `llm.generate` 的测试 Agent，被测插件经 `@agent` 的调用交给测试函数（D-77） | T-16 步骤 3 | T-12.8、T-16.1 | V-73 的 LLM 分项 | 已完成（PR #190；TEST-MATRIX §3.2） |
@@ -387,6 +389,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 18. **配置文件的派发与 SDK（D-168，T-04.18，已完成，PR #242）。** InvocationContext 追加 `profile_id = 7`，Bootstrap 追加必填对象 `profile_overrides_json = 14`，新增 `sdk.profile.set_overrides` 与 `core.profile.list`、`current`、`assign`、`set`（WIRE §3.2、§3.5、§4）。派发时按 CONTRACTS §5.6 解析会话所用的配置文件；关闭插件时命令按禁用处理，文本匹配、事件路由与 Raw 跳过，PreEvent 在媒体准备前检查开关。准入与消息过滤共用一次操作视图，以 Active 基础配置应用有效覆盖。覆盖值变化时向在线 Session 下发完整集合，SDK 原子替换并为每次调用冻结 `c.Config()`；`p.Config()` 与 `s.Config()` 保持基础视图。`core.profile.set` 只接受调用插件自己写了 `profile` 的字段，会话使用 `default` 时互斥核对 Active/Pending，写入 Pending，并在根调用、派生调用、自动回复与延续全部结束后 reload；assign 与 set 要求 Core Admin，遇管理互斥占用立即返回 FAILED_PRECONDITION。已与 T-08.16 的无版本配置载入及校正共同验证；休眠唤醒的装配与退出联验由 S-02.1 的后合并者完成。
 
 19. **平台与消息（D-168，T-04.19）。** 命令前缀改按会话所用的配置文件；删除 `command_prefixes_by_instance` 的解析、保存与 `GET/PUT /api/v1/core/command-prefixes`，同步 docs/development.md 与 V-87 的测试；`core_config.json` 增加 `reply`。发送管道在出站 Hook 之前按 CONTRACTS §5.6 为回复加上提及、引用与前缀，记住第一条消息以便 Edit 保留提及与前缀，加上后超过单条上限时不加提及与前缀；目标实例声明 `message.forward` 时把超过阈值的消息改为一个 forward 片段。后台、定时任务与发往其他会话的消息不变。
+20. **SDK 用法从简（D-180，T-04.20）。** 协议不变。按 D-180 修改 `sdk` 根包的注册签名并给 builder 增加 `.ID`，缺省 route ID 在收集注册时生成并查重；`*sdk.Context` 实现 `context.Context`；`c.Reply` 增加可变片段参数；`.Page(title)` 自动登记套件资源；`plugintest.Result` 增加 `RequireReply`。同步仓库内全部调用方：官方组件、示例、`init` 模板、测试与 docs/plugin-guide.md、docs/development.md 的写法，不留旧签名。
 
 #### 拟目录与交付
 
@@ -421,6 +424,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 | V-120 | 步骤 15 与 16：会话、消息句柄与用户字符串的 string 形式与 `c.SendTo`；作者工程中没有生成文件与生成相关的写法，`go test` 经 plugintest 现场扫描取得资源，`alonabot build` 构建的库模式二进制取得依赖中各组件的资源，直接 `go build` 的库模式产物在启动组件前报错；Adapter 路由在描述中声明；分包后的公开面 |
 | V-141 | 步骤 18 中配置文件的解析、覆盖值的下发与 `c.Config()` 合并、按配置文件的插件开关与 `core.profile.*`；存储与管理 API 分项由 T-08.18 提供 |
 | V-142 | 步骤 19 中按配置文件的命令前缀与四项回复方式 |
+| V-148 | 步骤 20 的注册从简、Context、Reply、页面套件与 RequireReply |
 
 V-12 是跨任务验收：T-04 不依赖尚不存在的 WebUI，但必须交付后续 UI 实际调用的策略服务层。矩阵中保存分项证据；只有 T-09 的鉴权后浏览器操作也完成，才将整项 V-12 标为通过。T-04 完成后，T-05 和 T-08 可以分别使用同一注册器继续实施。
 
@@ -786,6 +790,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 6. **根包只保留库模式接口（D-148）。** 行为与协议不变。Core 装配、候选与进程管理从根包移到 `internal/app`，根包的 `Run`、`Start`、`*Core`、`Wait` 与选项改为对它的薄包装。只供开发 CLI 使用的 `Executable`、`Stdio`、`Core.Restart`、`Core.RestartInstance` 与 `Core.ReloadSettings` 移入 `internal/app`，`cmd/alonabot` 直接使用。根目录下测试装配与内部服务的端到端测试移到 `internal/app` 或行为所属的包，根包只留验证库模式公开接口的测试；ARCHITECTURE 同步模块表与依赖边。
 
 7. **CLI 参数从简（D-149）。** 协议与管理 API 不变，只改 `cmd/alonabot` 与说明。`build`、`check`、`test`、`pack` 改为 `命令 [目录]`，删除 `--dir`；`init` 的 `--id`、`--module` 与 `--adapter-id` 按 D-149 取缺省值；`pack` 在 manifest 的 `source` 为 GitHub 仓库时推出 `--asset-url`；`install` 的位置参数按「已存在的普通文件」与「组件 ID」区分，组件 ID 从程序目录的 `packages/` 取官方包，不给参数时在当前目录或工程的 `bin/` 中寻找唯一的安装包。推不出唯一值时报错并列出候选。docs/development.md、docs/plugin-guide.md、README 与 CLI 帮助中的写法同步。 `pack` 增加可重复的 `--target <os>/<arch>`：逐个平台构建归档，写出一份列出全部资产的 `release.json`，给出 `--key` 时只签这一份；不给时为本机平台（D-169）。
+8. **CLI 开箱即用（D-181，T-13.7）。** 协议与 Core 的分发路径不变。终端 Adapter 用 `sdk/adapter` 实现，由 `cmd/alonabot` 以同进程组件登记并在本次运行的设置中加入实例与 Core Admin，不写回 `core_config.json`；`--console` 三态、stderr 缺省级别、开发目录缺省重载与发布版 `init` 的 `go mod tidy` 按 D-181。docs/development.md 与 `examples/devbot/README.md` 的上手步骤同步。
 
 #### 拟目录与交付
 
@@ -807,6 +812,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 | V-65 | 改动源码后只重启变化的组件、编译失败旧组件继续、只改配置时不重新构建、已安装组件与 Adapter 连接不中断 |
 | V-64、V-65（步骤 6） | 拆分根包后，库模式、开发运行与热部署的集成测试在新位置照常通过；根包只导出 CONTRACTS §15.5 的接口 |
 | V-121（步骤 7） | 工程目录的位置参数与缺省、`init` 与 `pack` 的缺省值、`install` 按文件、组件 ID 与当前目录寻找安装包，推不出唯一值时报错并列出候选 |
+| V-149（步骤 8） | 生成的工程不带参数运行并在终端得到回复、`--console` 三态、按钮点击、缺省重载与关闭、stderr 缺省级别与日志文件、`init` 的发布版与开发版路径 |
 
 #### 失败停止条件
 

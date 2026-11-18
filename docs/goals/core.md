@@ -120,9 +120,11 @@
 | goal-171 | S-02.2 | 空闲退出与即时休眠策略 | S-02.1 | 待派发 |
 | goal-177 | T-09.27 | 组件市场 ID 改用连字符 | T-09.10、T-09.14、T-12.8、T-13.5 | 已完成（PR #222） |
 | goal-162 | T-04.19 | 平台与消息 | T-04.18 | 待派发 |
+| goal-178 | T-04.20 | SDK 用法从简 | T-04.18、T-16.2 | 待派发 |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
 | goal-163 | T-11.6 | 按配置文件的工具策略 | T-04.18、T-11.4 | 待派发 |
 | goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 已完成（PR #233） |
+| goal-179 | T-13.7 | CLI 开箱即用 | T-13.6、T-16.1 | 待派发 |
 | goal-172 | S-03.1 | Scheduler 唤醒与离线 tick 区分 | S-02.2、T-07.2 | 等待前置 |
 | goal-173 | S-06.1 | 休眠管理 API、运行诊断与 CLI | S-02.2、S-03.1、T-09.14 | 等待前置 |
 | goal-174 | S-06.2 | 休眠指标、故障注入与固定机器验收 | S-06.1 | 等待前置 |
@@ -8601,7 +8603,98 @@ internal/core/state
 - 验收要点：12:00/16:00/22:00 独立 cron 与 interval、动态 at/周期实例，休眠唤醒、任务占用时阻止休眠、静态起点不变、异常离线不补跑。复用任务套件和已有时钟入口，不为本切片新造时钟框架；默认一个集成主路径，其余本地自测。
 ```
 
+### goal-178 · T-04.20 SDK 用法从简
+
+状态：待派发。前置 T-04.18（PR #242）、T-16.2（PR #183）均已合并。2026-11-18 按 D-180 新增。已按 main `d7c85b63` 核对：`sdk/plugin.go`、`sdk/subplugin.go`、`sdk/registry.go` 的 `Regex(routeID, expr string)`、`Keyword/StartsWith/EndsWith/FullMatch(routeID string, patterns ...string)`、`Raw(routeID string)`、`On(routeID string, eventType EventType)`，`sdk/hooks.go` 的 `PreEvent(routeID string, event EventType)`、`BeforeSend(routeID string)`、`AfterSend(routeID string)`；`sdk/sdk.go` 的 `(*Context).Reply(text string) error`；`sdk/registry.go` 的 `(*RouteBuilder).Page(title string)`；`sdk/bus/bus.go` 的 `(*Subscription[T]).ID(routeID string)` 是 `.ID` 的现成写法；`contracts/validate/register.go` 拒绝空的与重复的 route_id；`examples/plugins/showcase/main.go` 手动登记四条 `kit.css`/`kit.js` 路由；`plugintest/plugintest.go` 的 `Result{Sends []Sent; Outcomes []Outcome; Waiting bool}`。与 goal-162（T-04.19）都改 `sdk/` 的回复路径，后合并者同步 main 后保留双方改动；与 goal-179 无共享文件。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-178（切片 T-04.20：SDK 用法从简）。goal 目录 goal-178，分支 goal-178，worktree .worktrees/goal-178，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：按 D-180 去掉作者不关心的参数：文本匹配、Raw、事件路由与 Hook 的注册不再收 route ID 并增加 `.ID`；`*sdk.Context` 实现 `context.Context`；`c.Reply` 可带片段；`.Page(title)` 自动登记套件资源；`plugintest.Result.RequireReply`。仓库内全部调用方同步，不留旧签名。
+
+依据：PLAN T-04 步骤 20；CONTRACTS §9 的「注册从简（D-180）」、§7.3 的页面套件一条、§17 的 RequireReply 一条；DECISIONS D-180；TEST-MATRIX V-148；编码规范「首次发布前不写兼容层」。
+
+范围（只新增或修改这些）：
+- sdk/：plugin.go、subplugin.go、registry.go、events.go、hooks.go、sdk.go、http.go，Context 实现 context.Context 的新文件；sdk/page/ 与 sdk/internal/ 中为自动登记套件资源所需的最小改动
+- plugintest/plugintest.go（RequireReply）与 plugintest 的既有测试
+- 上述签名的全部调用方：agent/、plugins/、adapters/、examples/、internal/app/、internal/core/、cmd/alonabot/ 的源码与既有测试，internal/pluginkit/ 的 init 模板与构建期扫描（如按参数位置读取这些调用）
+- docs/plugin-guide.md、docs/development.md 中这些调用的写法
+- 上述包的 *_local_test.go
+
+允许的依赖：标准库及仓库已批准依赖，不加依赖，不改 .proto。sdk 根包与 sdk/page 之间不得形成 import 环：套件资源的嵌入位置可移到 sdk/internal 下的新包，`page.Handler()` 的签名与行为保持。
+
+接口（本切片修改或新增，以下签名固定；`*Plugin`、`*SubPlugin`、`*CommandGroup` 三处接收者一致）：
+- Regex(expr string) *CommandBuilder；Keyword(patterns ...string)、StartsWith(patterns ...string)、EndsWith(patterns ...string)、FullMatch(patterns ...string) *CommandBuilder；Raw() *CommandBuilder
+- On(eventType EventType) *EventBuilder；PreEvent(event EventType) *PreEventBuilder；BeforeSend() *BeforeSendBuilder；AfterSend() *AfterSendBuilder（Hook 只在 *Plugin 与 *SubPlugin 上）
+- func (b *CommandBuilder) ID(routeID string) *CommandBuilder；*EventBuilder、*PreEventBuilder、*BeforeSendBuilder、*AfterSendBuilder 同名同形。Handle 之后调用按现有 builder 的顺序错误处理
+- func (c *Context) Deadline() (time.Time, bool)；Done() <-chan struct{}；Err() error；Value(key any) any，全部转给 c.Context()
+- func (c *Context) Reply(text string, more ...message.Segment) error
+- func (r Result) RequireReply(t testing.TB, want string)（plugintest）
+- button.On、task.On、bus.Subscribe、service.Serve 与 Command(path...) 的签名不变
+
+行为：
+- 缺省 route ID 在收集注册时生成：Regex 为 `regex:` 加表达式原文；Keyword、StartsWith、EndsWith、FullMatch 为 `keyword:`、`startswith:`、`endswith:`、`fullmatch:` 加各模式以 `|` 连接；Raw 为 `raw`；事件路由为事件名（EventType.Name()）；Hook 为 `pre_event:` 加事件名、`before_send`、`after_send`。`.ID` 给出时用给出的值。子插件前缀、命令路由的 route ID 规则不变。
+- 同一插件内 route ID 重复（含缺省值之间、缺省值与显式值之间）时，注册收集返回错误，错误文本包含该 ID 并写明用 `.ID` 区分。先核对缺省 ID 能通过 contracts/validate 的现有 route_id 校验，并能经管理 API 的现有路径与编码被读取和设置命令策略；任一不成立时标 `[!]`，不自行改变缺省规则或校验。
+- `*sdk.Context` 作为 context 传给 sdk/kv、sdk/task、sdk/service、sdk/llm、sdk/media、sdk/tool、sdk/command、sdk/conversation 时与传 `c.Context()` 行为相同（同一期限、取消与调用关联）；Handler 返回后的失效规则不变。
+- `c.Reply(text, more...)` 把 `message.Text(text)` 与 more 依次组成一条 Chain，经 c.Send 发送一次，只返回错误；不带 more 时与原行为相同。
+- `.Page(title)` 的路由收集时，SDK 在该页面路径所在目录下登记 `kit.css` 与 `kit.js` 两条 GET 路由（页面 `/page` 对应 `/kit.css`，页面 `/page/` 对应 `/page/kit.css`），内容与 `page.Handler()` 相同，认证与该页面路由相同；作者已登记同一方法与路径时不重复登记、不报错。showcase 删除手动登记的四条路由后页面照常加载套件；若沙箱 iframe 中以页面相同的认证取不到套件资源，标 `[!]` 并写明实测的请求与响应，不自行改为公开路由。
+- RequireReply：调用 t.Helper()；任一 Outcome.Err 非 nil 时 t.Fatalf 并写出 PluginID、RouteID 与错误；`len(Sends) != 1` 或 `Sends[0].Text() != want` 时 t.Fatalf 写出实际发送。
+- 全部调用方改为新签名。原来写了 route ID、且有测试、命令策略或文档引用该 ID 的路由，用 `.ID(原值)` 保持 ID 不变；其余改用缺省 ID。把示例与官方组件中的 `xxx(c.Context(), ...)` 调用改为直接传 `c`，`c.Context()` 方法保留。plugintest 既有测试与 examples 中自写的单条回复断言改用 RequireReply。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：plugintest/plugintest_test.go 新增一个集成测试，被测插件用 `FullMatch("hello")`、`On(sdk.MessageCreated)`（不带 ID）登记，Handler 中 `kv.Set(c, ...)` 后 `c.Reply("hi", message.ImageURL(...))`；断言一次发送、链中两个片段，并用 RequireReply 断言另一条纯文本命令。既有测试只改写调用，不算新增。
+- 本地自测（*_local_test.go，结果写入 PR）：V-148 其余分项：各类缺省 ID 的取值、重复 ID 的错误文本、`.ID` 在 Handle 之后、子插件前缀；Context 的期限与取消传播；`.Page` 在 `/page` 与 `/page/` 两种路径下的套件路由、作者已登记时不重复；RequireReply 的四种失败。sdk/ 中只写本地自测。
+
+完成条件：gofmt -l 无输出；go vet ./...；go build ./...；`rg -n 'c\.Context\(\)' examples plugins` 的剩余项逐条说明理由；go test -race ./sdk/... ./plugintest/... ./examples/... ./plugins/... ./agent/... ./internal/pluginkit/... ./internal/app/... ./cmd/alonabot/...。PR 按 TEST-MATRIX §3 写明 V-148 的测试位置、命令、平台、结果与未运行项，并列出保留了显式 `.ID` 的路由及理由。
+
+不做：命令路由的 route ID 规则；`c.Stream`、任务目标保存等其他接口；CLI 与终端对话（goal-179）；AlonaBot/docs 仓库；不加依赖，不改 ARCHITECTURE/README/spec，文档同步写进 PR。
+```
+
 ## 第 21 波
+
+### goal-179 · T-13.7 CLI 开箱即用
+
+状态：待派发。前置 T-13.6（PR #233）、T-16.1（PR #168）均已合并。2026-11-18 按 D-181 新增。已按 main `d7c85b63` 核对：`cmd/alonabot/commands.go` 在根命令与 `run` 上登记 `--data-dir`、`--listen`、`--log-level`、`--log-format`、`--reload`、`--stdio`，`RunE` 调用 `runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval time.Duration, options app.Options) error`（`cmd/alonabot/dev.go`）；`app.Options{DataDir, Args, Components []Component, Listen, LogLevel *slog.Level, LogFormat, Stdio, WebUIs}`，同进程组件用 `app.AdapterComponent(a adapter.Adapter) Component`、`app.PluginComponent(root *sdk.Plugin) Component`（`internal/app/assembly.go`）；`sdk/adapter` 的 `Adapter{Descriptor() *Descriptor; Start(ctx, StartRequest, Core) (Instance, error)}`、`Instance{Account(); Capabilities(); Send(ctx, to, chain); Stop(ctx)}`、`Core.Deliver(ctx, ev, cursor)`；`examples/devbot/adapter/adapter.go` 与 `plugintest/adapter.go` 是同类回环 Adapter 的现成写法；`cmd/alonabot/terminal_unix.go`、`terminal_windows.go` 的 `isTerminal(file *os.File) bool`；`internal/pluginkit/init.go` 的 `Init` 在发布版 CLI 下用 `go mod edit -require` 写入 SDK 版本，开发版返回 needsSDK。与 goal-178 无共享文件。
+
+```text
+/goal 使用 $alonabot-execute 推进 goal-179（切片 T-13.7：CLI 开箱即用）。goal 目录 goal-179，分支 goal-179，worktree .worktrees/goal-179，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+
+目标：按 D-181 让作者 `alonabot init` 后直接 `alonabot run`，在同一个终端输入 `/hello` 就看到回复：内置终端 Adapter 与 `--console`，终端对话时 stderr 缺省只输出 WARN 及以上，开发目录缺省重载，发布版 `init` 生成可直接运行的工程。
+
+依据：PLAN T-13 步骤 8；CONTRACTS §15.4 的「终端对话（D-181）」与缺省重载两条、§14.2；DECISIONS D-181；TEST-MATRIX V-149。
+
+范围（只新增或修改这些）：
+- cmd/alonabot/：commands.go、dev.go，终端 Adapter 的新文件 console.go，dev_e2e_test.go
+- internal/app/：仅为本次运行追加 Adapter 实例与 Core Admin（不写回设置文件）以及 stderr 缺省级别所需的 Options 字段和读取点
+- internal/pluginkit/init.go
+- docs/development.md、examples/devbot/README.md 的上手步骤
+- 上述包的 *_local_test.go
+
+允许的依赖：标准库及仓库已批准依赖（含已使用的 golang.org/x/sys），不加依赖，不改 .proto。终端 Adapter 放在 cmd/alonabot（package main），只导入 sdk/adapter、sdk/message、sdk/errcode 与标准库；不新增跨模块依赖边，plugintest 不被非测试代码导入。
+
+接口（本切片新增，以下固定）：
+- `run` 与根命令的 `--console`（bool，缺省自动）：未显式给出时，`isTerminal(os.Stdin)` 为真且 core_config.json 的 adapters 没有任何实例时启用；`--console` 强制启用；`--console=false` 关闭
+- `--reload` 的缺省值：有开发目录（含缺省取到的当前目录）时为 true；显式给出时取给出的值
+- 终端 Adapter：Descriptor 的 adapter_id 为 `console`，组件 ID `alonabot-adapter-console`，实例名 `console`，账号 ID `bot`；Capabilities 为 message.send、message.edit、message.buttons、message.markdown、message.reference
+- app.Options 追加的字段由执行者命名，写进 PR 的「文档同步」；语义限于：本次运行的 Adapter 实例、本次运行的 Core Admin、未显式指定时的 stderr 级别
+
+行为：
+- 启用时把终端 Adapter 作为同进程组件追加到 options.Components，并为本次运行提供实例 `console` 与 Core Admin `console:local`；二者都不写入 core_config.json，不出现在下次未启用终端对话的运行中。core_config.json 已有同名 adapter_id 的实例或已安装同 ID 组件时返回用法错误并说明冲突。
+- 输入：按行读取 stdin，去掉行尾换行；空行忽略；`#<正整数>` 表示点击最近一条带按钮的已发送消息中第 N 个回调按钮，经与平台 Adapter 相同的按钮点击事件交付，编号无效时在 stdout 写一行英文提示；其他行作为用户 `local` 在私聊会话中的 `message.created`（一个 text 片段，to_me 为真）经 Core.Deliver 交付。stdin 读到 EOF 后停止读取，Core 继续运行直到信号。
+- 输出：Send 把每条消息写到 stdout，一条消息一段：text 片段原样，其他片段写成 `[image]`、`[file: 名称]` 这样的方括号占位；回调按钮在消息后逐行写 `#1 标签`，URL 按钮写 `标签 <url>`。发送返回 Accepted 与递增的消息 ID。编辑写成以 `(edited) ` 开头的新段。输出与输入提示符 `> ` 不交错到同一行；stdout 不是终端时不写提示符。
+- 终端对话启用且 `--log-level` 未显式给出时，stderr 的阈值为 WARN，日志文件与最近记录照常收全部级别；显式给出时按给出的值。首次启动的管理 token 显示规则不变。
+- 重载缺省开启后，`--reload=false` 的行为与原先不带 `--reload` 相同；没有开发目录时不轮询。
+- 发布版 CLI 的 init：写入 go.mod 的 SDK 版本后在工程目录运行 `go mod tidy`；失败时保留已生成的工程，返回前输出一行英文说明与需要手动执行的命令，退出码为失败。开发版 CLI 的提示与现状相同。
+- docs/development.md 的开发运行一节与 examples/devbot/README.md 改为 init、run、在终端输入命令三步；回环 Adapter 与 curl 注入的说明保留为「不经终端」的做法。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/dev_e2e_test.go 新增一个集成测试，用真实 CLI 在临时目录 init 工程（在仓库 module 内），以 `run --console` 启动并经管道 stdin 写入 `/hello`，在 stdout 读到模板的回复；再核对 core_config.json 中没有写入 console 实例与 admin。复用该文件现有的构建与进程辅助。
+- 本地自测（*_local_test.go，结果写入 PR）：V-149 其余分项：自动判定的三种情况（终端且无实例、已有实例、`--console=false`）、按钮编号点击与无效编号、编辑与非文本片段的输出、EOF 后 Core 继续运行、stderr 缺省级别与显式 `--log-level`、日志文件内容、`--reload=false`、修改源码后的自动重载、init 的发布版路径（可用临时 module 代理或记录「未运行」）。
+
+完成条件：gofmt -l 无输出；go vet ./...；go build ./...；go test -race ./cmd/alonabot/... ./internal/app/... ./internal/pluginkit/...。PR 按 TEST-MATRIX §3 写明 V-149 的测试位置、命令、平台、结果与未运行项，并附一段真实终端中 init、run、输入 `/hello` 的原始输出。
+
+不做：终端界面库、分栏与历史滚动；群聊与多用户模拟；媒体的真实读取；把终端 Adapter 做成可安装组件；SDK 注册签名（goal-178）；AlonaBot/docs 仓库；不加依赖，不改 ARCHITECTURE/README/spec，文档同步写进 PR。
+```
 
 ### goal-173 · S-06.1 休眠管理 API、运行诊断与 CLI
 
