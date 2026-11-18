@@ -4,6 +4,7 @@
 // Parse 检查声明，Canonical 与 Hash 提供构建和 REGISTER 使用的规范内容及摘要。
 // Migrate 按声明版本转换旧配置，Complete 与 Validate 随后补值和校验。
 // SecretPaths 与 CheckI18n 分别提供秘密字段路径与翻译核对。
+// ExampleImages 汇总已检查的回复示例所引用的包内图片。
 // 配置格式见 spec/CONTRACTS-v0.1.md §5.1、§5.3 与 §5.5。
 package configschema
 
@@ -33,7 +34,7 @@ const (
 // Schema 保存已检查的配置声明；所有字段均由 Parse 初始化。
 type Schema struct {
 	root       orderedObject
-	fields     []*field
+	fields     []*Field
 	canonical  []byte
 	version    int
 	migrations []migration
@@ -45,18 +46,20 @@ type Problem struct {
 	Message string
 }
 
-type field struct {
+// Field 保存字段声明及其规范化的回复示例。
+type Field struct {
+	Examples   []Example
 	name       string
 	typ        string
 	attributes orderedObject
-	items      []*field
+	items      []*Field
 	templates  []schemaTemplate
 }
 
 type schemaTemplate struct {
 	name       string
 	attributes orderedObject
-	items      []*field
+	items      []*Field
 }
 
 // Parse 检查配置声明；有错误时返回 nil 和带 schema 路径的问题列表。
@@ -92,8 +95,10 @@ func Parse(raw []byte) (*Schema, []Problem) {
 	// 2. 先建立同层字段，再核对条件、默认值和模板引用。
 	schema.fields = parseFields(root, "", true, &problems)
 	if len(problems) == 0 {
+		checkProfileFields(schema.fields, "", true, false, &problems)
 		checkFields(schema.fields, "", &problems)
 		schema.parseMigrations(&problems)
+		schema.checkExamples(schema.fields, "", &problems)
 	}
 	if len(problems) != 0 {
 		return nil, problems
@@ -237,7 +242,7 @@ func (s *Schema) SecretPaths() [][]string {
 	return paths
 }
 
-func secretPaths(fields []*field, parent []string, paths *[][]string) {
+func secretPaths(fields []*Field, parent []string, paths *[][]string) {
 	for _, f := range fields {
 		path := append(append([]string(nil), parent...), f.name)
 		if secret, _ := f.attributes.get("secret").(bool); secret {

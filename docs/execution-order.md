@@ -31,14 +31,16 @@
 | 14 | T-02.5、T-04.5、T-06.4、T-11.2、T-12.8、T-12.14、T-13.4、T-16.2 |
 | 15 | T-09.3、T-09.5、T-11.4、T-12.3、T-12.4、T-16.3 |
 | 16 | T-04.15、T-09.6、T-09.17、T-12.5、T-12.6 |
-| 17 | T-04.16、T-09.7、T-09.8、T-09.14、T-12.7 |
-| 18 | T-03.20、T-03.22、T-03.26、T-03.27、T-04.17、T-08.16、T-08.18、T-09.19、T-09.20、T-09.21、T-09.22、T-09.24、T-11.5、T-12.15、T-13.5、T-14.1、T-14.2、T-15.2、T-15.7 |
-| 19 | T-03.21、T-04.18、T-09.9、T-09.15、T-09.23、T-12.16、T-12.17、T-14.3、T-15.3、T-15.4、T-15.5、T-15.6 |
-| 20 | T-04.19、T-09.11、T-09.18、T-11.6、T-12.18、T-13.6、T-14.4、T-14.5、T-14.7 |
-| 21 | T-12.19、T-14.6 |
-| 22 | T-09.25、T-10.1、T-12.20 |
+| 17 | T-04.16、T-09.7、T-09.8、T-09.14、T-12.7、S-01.1、S-01.2 |
+| 18 | T-03.20、T-03.22、T-03.26、T-03.27、T-04.17、T-08.16、T-08.18、T-09.19、T-09.20、T-09.21、T-09.22、T-09.24、T-11.5、T-12.15、T-13.5、T-14.1、T-14.2、T-15.2、T-15.7、S-02.1、S-02.3 |
+| 19 | T-03.21、T-04.18、T-09.9、T-09.15、T-09.23、T-12.16、T-12.17、T-14.3、T-15.3、T-15.4、T-15.5、T-15.6、S-02.2、T-09.27 |
+| 20 | T-04.19、T-09.11、T-09.18、T-11.6、T-12.18、T-13.6、T-14.4、T-14.5、T-14.7、S-03.1 |
+| 21 | T-12.19、T-14.6、S-06.1 |
+| 22 | T-09.25、T-10.1、T-12.20、S-06.2、S-06.3 |
 | 23 | T-10.2、T-10.3 |
 | 24 | T-10.4 |
+
+S 切片按同一依赖规则编波次。独立的 S-02.3（消息过滤）只依赖已合并 T 切片，是 T-12.18 的前置；休眠生命周期与页面切片保持独立，WebUI 主线和发布链不等待它们，休眠的页面控件仍在 S-06.3。
 
 ## 3. 共享文件与冲突规则
 
@@ -70,10 +72,15 @@
 | `agent/provider/` 的新协议 | goal-118、goal-119、goal-120 可以并行。每个切片把自己协议的请求编码与流解析放在新文件（`responses.go`、`gemini.go`、`ollama.go`），`provider.go` 只追加 Protocol 常量，并在 `New` 的协议校验与 `Stream` 的分派中各加一个分支；`TestStream` 的用例表、`mockProvider` 与 `testRequest` 只追加。两处共用的代码由先合并者加入，后合并者同步 main 后复用、不重复定义：`ToolCall.Replay`（goal-118 与 goal-119）放在 `provider.go`；按 ToolCallID 查找工具名与生成调用 ID 的辅助（goal-119 与 goal-120）放在 `toolcall.go`。goal-134（改用 SDK）与 goal-135（图片输入）要改全部协议文件，按前置在三者都合并后依次进行，不与它们并行。 |
 | `agent/` 的配置（`config_schema.json` 与 i18n 的 `config`） | goal-83 与 goal-136 都在 goal-59 之后给 Agent 配置追加字段，可以并行：字段只追加，不重排已有字段；后合并者同步 main 后把自己的字段放在最后，再运行 `alonabot check`。 |
 | `internal/inproc/harness.go` | 只由 goal-81、goal-82 修改，只用标准库类型；字段只追加。 |
-| `internal/tune/params.go` | 只追加参数，不改已合并参数的名称与缺省值；新增参数同时追加到 CONTRACTS §16 的表，由审查者在合并前同步。 |
+| `internal/tune/params.go` | 只追加参数，不改已合并参数的名称与缺省值；新增参数同时追加到 CONTRACTS §16 的表，由审查者在合并前同步。S-02.1 追加 WAKE_QUEUE_REQUESTS/WAKE_QUEUE_BYTES，S-02.2 追加 SLEEP_*；S-06.2 仅可按固定机器实测提出这些休眠初值的调整，由审查者同步契约与 ADR 后采用。 |
 | 根包 `alonabot` 的 Core 装配 | 只有 goal 语句写明负责装配的切片才能改，与 `cmd/alonabot/main.go` 相同。goal-67 建立装配并首次调用 `router.New`，prefixes 传 nil，不读设置文件；goal-97 不改根包。命令前缀、Core Admin 列表与默认 locale 由 goal-39 接入。goal-39、goal-68、goal-69 都要在装配中读取 `core_config.json`：先合并者加入 `settings.Load` 这一步，后合并者复用同一个 `*settings.File`，不重复加载。 |
+| S-01.1 / S-01.2 的状态库与装配 | 两者可以分别派发，分别负责 runtime.go 与 routes.go；共同触及 schema.sql、models.go、supervisor 与 internal/app 时，后合并者同步 main、保留另一切片字段和调用点。快照只参与已安装 role=plugin 或 role=agent 独立进程的提交；运行状态与快照保持各自唯一所有者，逐插件锁与唯一提交点共用既有实现。 |
+| 消息过滤（S-02.3）与路由快照、配置文件 | S-02.3 在 route.proto 的 EventSpec 追加 message_filter、定义 MessageFilter 并导入 message.proto；字段号按合并时最新 main 顺延并生成，保留其他切片的协议字段。与 S-01.2 无前置关系，后合并者将过滤声明及配置路径加入快照白名单、摘要和恢复验收，排除配置值。与 T-08.18/T-04.18 无前置关系；S-02.3 先交付 router.Options.MessageConfig 和 Active 基础配置快照读取，后合并者接入同一会话的 Resolve 与有效 Overrides（含祖先 object 覆盖），并验证不同会话的生效值及更新，不用基础值覆盖已生效的 profile 路径。与 S-02.1 的后合并者保证过滤发生在活动引用及 EnsureActive 之前。host.Expect、supervisor 的可信 schema 注入与 internal/app 装配由后合并者保留双方调用点；S-02.3 不改 schema.sql 或 tune，不建立新的配置真源。 |
+| `internal/core/supervisor`、`internal/app` 的休眠生命周期 | S-01.1/S-01.2 合并后再派发 S-02.1（唯一 EnsureActive/活动引用/唤醒队列所有者），之后 S-02.2 复用门禁执行 IDLE 停止，S-03.1 接调度。S-06.1 只经已合并的策略方法管理，不另起生命周期；与其他切片并行改装配时保留对方注册和清理。 |
+| 休眠协议、设置与管理 API | 仅 S-02.1 获准在 control.proto 末尾追加 StopReason.IDLE 并重新生成，先同步 main 再分配编号、运行 wirespec 检查。S-01 两切片不改 proto。S-02.2 通过 settings.File 的既有入口读写 sleep，S-06.1 在新文件追加 ADMIN-API §24 的路由与 CLI 命令，不在别处直接写 core_config.json；与 T-08.16 的校正改动相遇时保留新字段及当前校正规则。 |
 | 包文档 | 只在包的职责确实变化时更新，不顺手重写。 |
 | `ARCHITECTURE.md`、`README.md`、`spec/` | 执行者不改，需要同步的内容在 PR 正文「文档同步」一节列出，由审查者在合并前补上。例外是 goal 语句明确要求的证据记录。 |
+| 组件 ID 的改名 | T-09.27（goal-177，D-172）与同时进行的其他 goal 都可能写到旧 ID。后合并者同步最新 main 后运行 `rg -n 'alonabot_(plugin|adapter|agent|webui)_'`，把新出现的旧 ID 一并改为连字符；DECISIONS 的历史条目与 D-172 的旧拼写说明、`spec/adr/history/` 保留。为完成该改名，允许在本切片范围外同步新出现的 ID 字符串、对应前缀判断与夹具，不改变其余行为；需要改变契约或其他逻辑时仍按阻塞流程处理。docs/goals 与执行顺序由审查者同步。 |
 | `docs/goals/`、`docs/execution-order.md` | 只由审查者维护。 |
 
 新建 Go 包时先核对 [ARCHITECTURE.md](../ARCHITECTURE.md) 的依赖表。goal 语句会列出本切片允许新增的跨模块边；需要其他边时标阻塞。

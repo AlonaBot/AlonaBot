@@ -519,37 +519,3 @@ func secretState(value any) map[string]bool {
 	}
 	return map[string]bool{"$secret_set": value != "" && value != nil}
 }
-
-func (s *Service) removeInstance(ctx context.Context, adapterID, instanceID string) error {
-	s.instances.Lock()
-	defer s.instances.Unlock()
-	owner, actual, err := s.instanceOwner(ctx, instanceID)
-	if err != nil {
-		return err
-	}
-	if actual != adapterID {
-		return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_NOT_FOUND, Message: "adapter instance not found"}
-	}
-	unlock := s.lock(owner)
-	defer unlock()
-	if _, running := s.opt.Adapters.Get(instanceID); running {
-		if err := s.opt.StopInstance(ctx, owner, instanceID); err != nil {
-			return err
-		}
-	}
-	defaultInstance := s.opt.Settings.Settings().Adapters[adapterID].DefaultInstance
-	err = s.opt.Settings.Update(func(doc *settings.Document) error {
-		if err := doc.Delete([]string{"adapters", adapterID, "instances", instanceID}); err != nil {
-			return err
-		}
-		if defaultInstance == instanceID {
-			return doc.Delete([]string{"adapters", adapterID, "default_instance"})
-		}
-		return nil
-	})
-	s.opt.Adapters.SetDefaults(s.opt.Settings.Settings().DefaultInstances())
-	if err != nil {
-		return err
-	}
-	return s.opt.ForgetInstance(ctx, owner, instanceID)
-}

@@ -12,7 +12,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 
 ## 2. 依赖
 
-- 根包 `sdk` 提供插件对象、Handler Context、注册 builder、权限、事件类型与运行入口。分类 API 按需导入 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action` 和 `sdk/options`。
+- 根包 `sdk` 提供插件对象、Handler Context、注册 builder、权限、事件类型与运行入口。分类 API 按需导入 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action`、`sdk/options` 和 `sdk/command`。
 - 只导入用到的包。SDK 根包只允许依赖 protobuf、x/sys 与 jsonschema-go（D-52）；数据库在 `sdk/sqlitedb` 与 `sdk/gormdb` 中，不导入就不链接（D-49）。
 - 能用标准库就不引入第三方库。HTTP 用 `net/http`；不要内嵌模型厂商的 SDK 或自己的 Provider 客户端，需要模型时调用 Agent 组件的 `llm.generate`（第 6 节）。
 - 包级变量与 `init` 不做重活：不加载大文件、不建大表、不批量编译正则，推迟到 OnStart 或首次使用。所有被链接的包的 `init` 都会在启动时执行，分配的内存会一直常驻。
@@ -25,14 +25,61 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 - 业务数据放受管 SQLite：`sqlitedb.Open(ctx)` 返回 `*sql.DB`，`gormdb.Open(ctx)` 返回 `*gorm.DB`，两者共用同一个连接（CONTRACTS §6.1）。没有特别需要时用 `sqlitedb`：它比 GORM 少约 1.5 MiB 常驻内存。
 - 迁移用所选包的 `Migrate` 或 `Migrations`，二者择一；辅助迁移的 ID 发布后不能改成另一项操作（CONTRACTS §6.2）。
 - 受管 SQLite 在 reload 与 update 时使用独立候选副本，准备失败会回到旧数据（CONTRACTS §6.3）。框架外的文件与外部数据库不在这个保证内。
-- 大数据放在磁盘上：索引、缓存、向量放进受管 SQLite 或 `sdk.PluginDataDir()` 中的文件，不整份载入内存；内存缓存必须有上限。
+- 大数据放在磁盘上：索引、缓存、向量放进受管 SQLite 或 `sdk.PluginDataDir(ctx)` 中的文件，不整份载入内存；内存缓存必须有上限。
 - 需要 PostgreSQL、MySQL 等外部数据库时自带驱动，连接参数做成在 `config_schema.json` 中声明 `"secret": true` 的配置项（§7），由管理员填写。迁移或 OnStart 会写外部数据库时，manifest 声明 `prepare_effects=external`，此后已有安装的更新需要管理员进入维护（CONTRACTS §6.1、§6.3）。Core 不创建、不备份外部数据库。
-- 简单状态用 `sdk/kv`（D-165）：`kv.Set(ctx, key, value)`、`kv.Get`、`kv.Delete` 与按前缀的 `kv.List`，数据放在受管 SQLite 的保留表中，随代次与回退处理，管理员能在 WebUI 查看和修改。
-- 插件自己的文件写到 `sdk.PluginDataDir()` 返回的数据目录，管理员能在 WebUI 浏览、上传与删除；它不随代次回退。不要写到其他位置。
+- 简单状态用 `sdk/kv`（D-165）：数据放在受管 SQLite 的保留表 `_alonabot_kv` 中，与业务表一起随代次复制、回退和清理。链接 KV 会链接 SQLite，构建工具据此推导 `prepare_effects=managed_db`，保留表的初始化独立于插件迁移 ID。
+- 插件自己的文件写到 `sdk.PluginDataDir(ctx)` 返回的数据目录；它跨 restart 保留，不随代次回退。只卸载与 disable 保留文件，`uninstall --purge-data` 和 `--purge` 在确认对象中列出目录并删除。
+
+### 保存少量状态
+
+在 Handler 或生命周期回调中传入所属 Session 的 `ctx`，例如保存订阅主题：
+
+```go
+import (
+    "context"
+
+    "github.com/AlonaBot/AlonaBot/sdk/kv"
+)
+
+func saveTopic(ctx context.Context, topic string) error {
+    return kv.Set(ctx, "subscription/topic", []byte(topic))
+}
+```
+
+读取用 `value, ok, err := kv.Get(ctx, key)`；`err == nil` 且 `ok == false` 表示键不存在，`kv.Delete(ctx, key)` 删除不存在的键也成功。键须为 1～512 字节的 UTF-8，值最多 1 MiB，空值可以保存；非法参数返回 `INVALID_ARGUMENT`。没有受管 SQLite 的 Session 调用 KV 返回 `FAILED_PRECONDITION`。
+
+`page, err := kv.List(ctx, "subscription/", "", 20)` 按键的字节序返回最多 20 个键；后续请求把 `page.Next` 作为 `cursor`，空 `Next` 表示已到末尾。前缀按字面字节匹配，`%` 和 `_` 保持原义；空前缀列出全部键，`limit` 须为正数。
+
+`examples/plugins/configdb` 的 `/note kvset <key> <value>` 与 `/note kvget <key>` 演示保存和读取，沿用该示例的本地化回复。
+
+### 保存插件文件
+
+Core 在启动前创建目录，经 Bootstrap 下发。传入 Handler 或生命周期回调的 `ctx`（或其派生 context），SDK 优先用它确定所属插件 Session；同进程的多个插件各自取得自己的目录，独立进程在 `ctx` 未绑定时使用默认 Session。在 Session 就绪的 Handler 中通过 `sdk.PluginDataDir(ctx)` 取得 `<data_dir>/plugin_data/<id>/` 的绝对路径：
+
+```go
+import (
+    "context"
+    "os"
+    "path/filepath"
+
+    "github.com/AlonaBot/AlonaBot/sdk"
+)
+
+func saveCache(ctx context.Context, content []byte) error {
+    return os.WriteFile(filepath.Join(sdk.PluginDataDir(ctx), "cache.json"), content, 0o600)
+}
+```
+
+`OnStart`、`OnReady` 均早于 Session 就绪；此时或 Session 停止后调用 `PluginDataDir(ctx)` 会 panic：`plugin session is not ready`。目录在 Unix 上权限为 `0700`，Windows 继承状态根目录的当前账号专用 ACL。Core 负责建立与卸载清理，文件由插件管理。准备失败与回退保留已写文件，因此需要随代次回退的数据放在 KV 或受管 SQLite 中。
+
+`examples/plugins/configdb` 的 `/note fileset <value>` 与 `/note fileget` 演示在该目录读写固定文件 `note.txt`。
 
 ## 4. 日志与文案
 
+诊断包可收集组件日志及最近错误；日志和错误仍须避免记录凭证明文。导出只按规则遮盖列明的凭证格式和地址，聊天内容不作专门处理（[CONTRACTS §14.7](../spec/CONTRACTS-v0.1.md#147-诊断包)）。
+
 - 用标准库 `log/slog` 记录，SDK 把记录交给 Core 并补上来源（CONTRACTS §14）。不要往 stdout 写内容：stdio 传输下 stdout 是协议通道。
+- 组件自己的数据损坏或无法继续运行、需要立即处理时，用 `slog.Log(ctx, sdk.LevelCritical, "component data is corrupt", "error", err)` 记录 CRITICAL；Handler panic 仍由 SDK 记录为 ERROR（CONTRACTS §14.1）。
 - 日志、错误字符串与 safe_message 用英文；给用户看的文字放进 `i18/` 的 `messages`，至少提供 en-US（D-30、CONTRACTS §5.4）。
 - 取文案用 `c.T(key, name, value, ...)`，后台用 `sdk.T`，两者只返回字符串（D-106）。键与参数名尽量写成常量：`alonabot build` 与 `alonabot check` 会检查键是否存在于 en-US、参数是否成对、参数名是否为 `string` 类型且与占位符一致；键在运行时才确定时不检查，运行时找不到键或参数不符时返回键名或保留占位符原文，并在插件日志记一次 WARN（CONTRACTS §5.4）。
 - 不记录 secret、token、完整配置与 DSN；含凭证的 URL 先脱敏（CONTRACTS §14）。
@@ -85,6 +132,8 @@ return &adapter.Descriptor{
 
 省略 `Auth` 时要求 Core 会话；`AuthPlatformToken` 由 Adapter 校验平台凭证。SDK 在连接 Core 前核对路径与重复路由。
 
+查询当前会话的可用命令时，导入 `github.com/AlonaBot/AlonaBot/sdk/command`，在 Handler 内调用 `entries, err := command.List(c.Context())`。成功时可用 `entry.Path` 和 `entry.Aliases` 显示生效命令名（多 token 路径用空格连接），用 `entry.Description` 显示本地化说明。调用失败时返回 `err`；后台或已结束的 Handler context 返回 `FAILED_PRECONDITION`。完整示例见[官方 help 插件](../plugins/help/help.go)。
+
 ## 6. 跨插件协作
 
 - 用 Service Call 与 Event Bus 协作，不直接读写其他插件的文件或数据库（CONTRACTS §3）。
@@ -99,7 +148,7 @@ return &adapter.Descriptor{
 
 ### 插件页面
 
-插件页面在 WebUI 的沙箱 iframe 中打开，只能经桥与外部交互（[ADMIN-API §7](../spec/ADMIN-API.md)）。用 `sdk/page` 的套件：把它的 `http.Handler` 挂在插件自己的路由下，页面引用 `kit.css` 与 `kit.js`，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并让 ⌘K 打开全局搜索（D-159）。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
+插件页面的沙箱 iframe 宿主与 `postMessage` 桥由 T-09.9 接入（[ADMIN-API §7](../spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。使用 T-04.17 提供的 `sdk/page` 套件：把它的 `http.Handler` 挂在插件自己的路由下，页面引用 `kit.css` 与 `kit.js`，通过桥使用 `--ab-*` 设计令牌、跟随明暗与语言切换，并转发 ⌘K / Ctrl+K（D-159）。页面的第一行（插件名、标签与搜索）由宿主绘制，插件页面无需另画标题栏或搜索框。
 
 ## 7. 配置与 secret
 
@@ -119,7 +168,7 @@ return &adapter.Descriptor{
 
 插件对象从 OnStart 开始通过 `p.Config()`（Handler 内为 `c.Config()`）取得 `config.Values`，子插件的 `s.Config()` 是 `config_schema.json` 中同名顶层 object 的只读视图；在 OnConfigLoad 中或更早调用会 panic。例如 `p.Config().String("greeting")` 读取上例的问候语。取值对象在同一 Session 内保持不变，可并发读取；集合 getter 返回可独立修改的副本。
 
-字段写 `"profile": true` 时可以按配置文件覆盖（CONTRACTS §5.6，D-168）：Handler 中的 `c.Config()` 合并当前会话所用配置文件的覆盖值，`p.Config()` 与 `s.Config()` 仍是插件配置本身。在 OnStart 或后台读取的字段（令牌、连接、缓存）不要标记，secret、list 的元素与模板中的字段不能标记。
+给顶层字段或 `object` 子字段写 `"profile": true`，可在管理端按配置文件保存覆盖值（CONTRACTS §5.1、§5.6，D-168）。优先标记实际需要按会话变化的叶字段；整个复合字段被覆盖时，完整子树须无 `secret`，包括 list 元素与所有模板分支。在 OnStart 或后台读取的字段（令牌、连接、缓存）不要标记。Handler 的 `c.Config()` 合并当前会话覆盖值由 T-04.18 接入；`p.Config()` 与 `s.Config()` 继续读取插件配置本身。
 
 | 声明类型 | 取值方法 |
 | --- | --- |
@@ -144,6 +193,36 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 
 - 字段的可选值来自运行时的数据（例如实例列表或本插件维护的条目）时，用 `options_from` 代替 `options`：`{"type": "string", "options_from": {"source": "core.adapter_instances", "filter": {"adapter_id": "telegram"}}}`，或指向本插件的选项服务 `"source": "<插件 ID>/<服务名>"`（[CONTRACTS §5.5](../spec/CONTRACTS-v0.1.md)「选项来源」，D-129）。选项服务用 `options.Serve(p, "feeds", func(ctx context.Context, q options.Query) (options.Page, error) {...})` 登记：按 `q.Search` 搜索、`q.Values` 按存储值取回显示名，最多返回 `q.Limit` 项，有更多结果时 `More` 为 true；输入、输出 Schema 由 SDK 固定提供，不用生成。该服务只由 Core 在管理页面打开表单时调用，访问固定为 PRIVATE。取值仍是普通字符串，来源不可用或值已不存在时配置照常加载，插件自己处理不认识的值。
 
+### 配置字段的回复示例
+
+要展示某个配置值对应的回复，在该字段上写 `example`。一个示例写成对象，多个示例写成数组；下面把问候语与一张包内图片组合起来：
+
+```json
+{
+  "greeting": {
+    "type": "string",
+    "default": "Hello",
+    "example": {
+      "input": "hello",
+      "reply": [
+        {"text": "{greeting}"},
+        {"image": "examples/greeting.png", "alt": "Greeting illustration"}
+      ]
+    }
+  }
+}
+```
+
+`input` 必填，写用户发出的文字并省略命令前缀；`reply` 必填，纯文字可以直接写字符串，混合回复按顺序列出片段。每个片段恰好写 `text` 或 `image`，图片可附 `alt`。图片放在工程的 `examples/` 下，格式为 PNG、JPEG、WebP 或 GIF，扩展名与内容须一致。`alonabot check`、`build` 和 `pack` 检查引用，`pack` 收集被引用的图片；安装与更新再次校验。
+
+`input` 与 `text` 中用 `{字段路径}` 引用草稿中的 string、text、int、float 或 bool；对象子字段写成 `{group.greeting}`，带 labels 的选项显示当前语言的 label。模板用 `{mode.$key}` 取选中键，用 `{mode.template_key.child}` 取该模板的子字段，其他模板的值显示为空串。secret、list、dict、object 与 template_list 字段禁止作为引用值。字面花括号写成 `{{`、`}}`。
+
+可选的 `condition` 按字段路径写期望值，例如 `"condition": {"mode.$key": "simple", "enabled": true}`，全部相等时显示该示例。字段被自身的显示条件隐藏时，示例一同隐藏。示例只声明固定回复；草稿替换与显示由 WebUI 完成。
+
+翻译写在 `i18n/<locale>.json` 的 `config.<字段>.example` 下。沿用源 `example` 的对象或数组形状、源 `reply` 的字符串或片段数组形状；按位置覆盖 `input`、`reply` 字符串、片段的 `text` 或 `alt`。缺项沿用源文案，跳过数组中间一项时填 `{}`。`check`、`build` 和 `pack` 会核对覆盖键、文案类型、源形状、片段位置与占位符引用。
+
+上例打包安装并激活后，Core 经管理认证提供 `GET /api/v1/packages/{id}/examples/greeting.png`。端点只提供 Active 包中 `config_schema.json` 引用的图片，并带与组件图标相同的安全响应头；详见 [ADMIN-API §3.3](../spec/ADMIN-API.md#33-组件图标)。
+
 ## 8. 测试
 
 - 用插件测试套件 `plugintest` 在 `go test` 中启动真实 Core 与测试 Adapter，注入消息并检查发送（D-47、CONTRACTS §17）。
@@ -151,7 +230,7 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 
 ## 9. 发布
 
-- 市场 ID 按角色使用 `alonabot_plugin_`、`alonabot_adapter_`、`alonabot_agent_` 或 `alonabot_webui_` 前缀（CONTRACTS §9.1）。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
+- 市场 ID 按角色使用 `alonabot-plugin-`、`alonabot-adapter-`、`alonabot-agent-` 或 `alonabot-webui-` 前缀，后缀用单个连字符分词，完整 ID 不含下划线；插件正则为 `^alonabot-plugin-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`，其他角色同形，长度上限为 64；本地规则仍为 `^[a-z][a-z0-9_-]{0,63}$`（CONTRACTS §9.1，D-172）。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
 - 每次发布可附上 UTF-8 changelog，安装后可经[管理 API](../spec/ADMIN-API.md#22-更新内容changelog)读取。二选一：根目录的 `CHANGELOG.md`（每版一节，例如 `## [1.2.1] - 2026-11-17`，日期可省略），或按版本、按语言存放，例如 `changelog/1.2.1/en-US.md` 和 `changelog/1.2.1/zh-CN.md`。目录名使用不带 `v`、且不高于 `plugin.yaml` 中 `version` 的 SemVer；文件名使用规范化的 BCP 47 标签，每个版本都要有 `en-US.md`。运行 `alonabot check` 核对格式，`alonabot pack` 原样打包（CONTRACTS §9.1）。
 - 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`（CONTRACTS §9.3）。
 - 用 `alonabot build` 检查资源并编译独立组件，`alonabot check` 只读核对。`alonabot pack --asset-url https://example.com/component.tar.gz` 为所选平台生成安装包与归档外的 `release.json`；目标通过 `--goos/--goarch/--tags` 选择，`--out` 默认 `<工程>/bin`。可选 `--key FILE` 读取标准 base64 编码的 64 字节 Ed25519 私钥，对清单原始字节签名，并在归档外写 `release.json.sig` 与 `release.pub`；省略时输出 unsigned 清单（CONTRACTS §9.2、§9.3）。密钥读取或签名失败直接报错。进程包含可解析的 `build-info` 文本，静态 WebUI 包包含 manifest、静态资源和可选的 changelog。签名私钥由作者保管，留在打包资源、仓库和构建日志之外。

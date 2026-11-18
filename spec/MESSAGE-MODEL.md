@@ -6,6 +6,8 @@
 
 公共 JSON 中的用户、账号、会话、消息、事件和代次标识使用字符串；时间用 UTC Unix 毫秒整数。字段 absent 表示不存在，不用虚构用户、空账号或零 ID 填补。
 
+组件包 ID 按 CONTRACTS §9.1 使用连字符市场前缀（D-172），例如 `alonabot-adapter-telegram`；Event、Target 与会话字符串中的平台 `adapter_id` 仍为 `telegram`。本地 ID 的 `^[a-z][a-z0-9_-]{0,63}$` 规则保持不变，例如 `my_adapter` 与 `my-adapter` 均可作为本地平台 ID；按钮记录中的 `plugin_id` 保留完整组件 ID，如 `alonabot-plugin-help-official`。
+
 | 类型 | 字段 | 来源与验证 |
 | --- | --- | --- |
 | Event | event_id、event_type、source_kind、occurred_at_unix_ms、adapter_id?、adapter_instance_id?、account_id?、target?、chat_type、chat_title?、actor?、message?、event_payload、capabilities、platform_payload? | event_id 由 Core 在入站标准化时产生；source_kind 为 ADAPTER/SCHEDULER，Core 为实例状态生成的 bot.online/bot.offline 也记为 ADAPTER。平台字段只对相应来源存在；原平台事件标识另存 source_event_id。chat_type 是事件所在会话的类型（PRIVATE、GROUP、CHANNEL，平台未给出时 UNSPECIFIED，D-100），由 Adapter 在事件带 target 时填写，没有 target 的事件必须为 UNSPECIFIED；它不属于 Target，不参与 Target 的比较与准入，出站时 Adapter 不读取。chat_title 是该会话的显示名（D-130），平台给出时由 Adapter 填写，没有 target 的事件不带；它同样不属于 Target，只供 Core 记录聊天目录（CONTRACTS §8），SDK 不提供读取方法 |
@@ -29,6 +31,8 @@
 | scheduled | job_id、run_id、scheduled_at_unix_ms | adapter/account/target/actor/message 均可 absent；只具有 Core 授予的 job scope |
 | bot.online | adapter_id、adapter_instance_id、account_id、account_display_name? | target/actor/message 均 absent；由 Core 在实例启动成功后生成 |
 | bot.offline | adapter_id、adapter_instance_id、account_id、reason（STOPPED 停用 / ADAPTER_EXITED Adapter 进程退出 / INSTANCE_FAILED 实例致命错误）、safe_error? | target/actor/message 均 absent；safe_error 仅在 INSTANCE_FAILED 时给出 |
+
+消息事件的 Core 侧过滤见 CONTRACTS §2.5：仅读取上述可信 to_me、Event.chat_type 与当前可见 chain 的 text 片段，不补造其他事件缺少的 to_me 或原消息文本；条件命中后才交付，SDK Rule 继续执行。
 
 ### 1.2 Adapter 扩展事件
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/supervisor"
 )
 
@@ -21,7 +22,7 @@ func (o *Orchestrator) Commit(ctx context.Context, r *Result) (*supervisor.Runni
 		return nil, o.Abort(ctx, r, err)
 	}
 	if err != nil {
-		slog.Error("committed candidate activation failed", "plugin_id", r.record.PluginID, "op_id", r.OpID, "generation_id", r.Generation, "kind", r.record.Kind, "phase", phaseCommitted, "error", err)
+		slog.Log(ctx, logging.LevelCritical, "committed candidate activation failed", "plugin_id", r.record.PluginID, "op_id", r.OpID, "generation_id", r.Generation, "kind", r.record.Kind, "phase", phaseCommitted, "error", err)
 	}
 	return running, err
 }

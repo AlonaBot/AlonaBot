@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -104,25 +105,51 @@ func (s *Service) CreateInstance(ctx context.Context, adapterPackageID, instance
 		return doc.Set([]string{"adapters", installed.AdapterID, "instances", instanceID}, original)
 	})
 	s.opt.Adapters.SetDefaults(s.opt.Settings.Settings().DefaultInstances())
-	if err != nil {
+	current := s.opt.Settings.Settings().Adapters[installed.AdapterID]
+	_, created := current.Instances[instanceID]
+	if err != nil && (!created || current.Package != adapterPackageID) {
 		return failure(err)
 	}
-	return failure(s.opt.ForgetInstance(ctx, adapterPackageID, instanceID))
+	// Rename 后即使目录同步报错，也必须按已发布快照完成清理并保留原错误。
+	ctx = context.WithoutCancel(ctx)
+	if replacing {
+		instances := make([]string, 0, len(group.Instances))
+		for name := range group.Instances {
+			instances = append(instances, name)
+		}
+		err = errors.Join(err, s.forgetInstances(ctx, group.Package, instances))
+	}
+	return failure(errors.Join(err, s.opt.ForgetInstance(ctx, adapterPackageID, instanceID)))
 }
 
 // DeleteInstance 停止仍在运行的实例，再删除设置中的实例及指向它的缺省选择。
 func (s *Service) DeleteInstance(ctx context.Context, instanceID string) error {
+	return failure(s.removeInstance(ctx, "", instanceID))
+}
+
+func (s *Service) removeInstance(ctx context.Context, adapterID, instanceID string) error {
 	s.instances.Lock()
 	defer s.instances.Unlock()
-	owner, adapterID, err := s.instanceOwner(ctx, instanceID)
+	owner, actual, err := s.instanceOwner(ctx, instanceID)
 	if err != nil {
-		return failure(err)
+		var typed *validate.Error
+		if instanceID != "" && errors.As(err, &typed) && typed.Code == pb.ErrorCode_ERROR_CODE_NOT_FOUND {
+			// 删除可重入：设置已消失时，重试仍可清除遗留指定，并保持 404 响应。
+			if cleanupErr := s.opt.Store.DeleteProfileAssignments(context.WithoutCancel(ctx), []string{instanceID}); cleanupErr != nil {
+				return cleanupErr
+			}
+		}
+		return err
 	}
+	if adapterID != "" && actual != adapterID {
+		return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_NOT_FOUND, Message: "adapter instance not found"}
+	}
+	adapterID = actual
 	unlock := s.lock(owner)
 	defer unlock()
 	if _, ok := s.opt.Adapters.Get(instanceID); ok {
 		if err := s.opt.StopInstance(ctx, owner, instanceID); err != nil {
-			return failure(err)
+			return err
 		}
 	}
 	defaultInstance := s.opt.Settings.Settings().Adapters[adapterID].DefaultInstance
@@ -136,10 +163,21 @@ func (s *Service) DeleteInstance(ctx context.Context, instanceID string) error {
 		return nil
 	})
 	s.opt.Adapters.SetDefaults(s.opt.Settings.Settings().DefaultInstances())
-	if err != nil {
-		return failure(err)
+	_, retained := s.opt.Settings.Settings().Adapters[adapterID].Instances[instanceID]
+	if err != nil && retained {
+		return err
 	}
-	return failure(s.opt.ForgetInstance(ctx, owner, instanceID))
+	return errors.Join(err, s.forgetInstances(ctx, owner, []string{instanceID}))
+}
+
+// forgetInstances 在设置提交后清除指定与运行期选择；重复清理同一批实例仍然安全。
+func (s *Service) forgetInstances(ctx context.Context, owner string, instances []string) error {
+	ctx = context.WithoutCancel(ctx) // 请求结束后仍须完成跨文件与状态库的必要清理。
+	err := s.opt.Store.DeleteProfileAssignments(ctx, instances)
+	for _, instance := range instances {
+		err = errors.Join(err, s.opt.ForgetInstance(ctx, owner, instance))
+	}
+	return err
 }
 
 // StartInstance 通过当前配置和 schema 启动实例，只影响本次运行。
