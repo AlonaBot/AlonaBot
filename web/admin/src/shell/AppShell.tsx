@@ -17,9 +17,10 @@ export function AppShell(props: {
   version: string;
   onLogout?: () => void;
   coreUpdate?: { version: string; releaseURL: string };
+  coreUpdateFailed?: boolean;
   children: React.ReactNode;
 }): JSX.Element {
-  const { version, onLogout, coreUpdate, children } = props;
+  const { version, onLogout, coreUpdate, coreUpdateFailed, children } = props;
   const currentPath = usePath();
   const ui = useUI();
 
@@ -63,7 +64,7 @@ export function AppShell(props: {
   return (
     <SearchContext.Provider value={searchContextValue}>
       <div className="app-shell">
-        <Sidebar routes={routes} version={version} onLogout={onLogout} coreUpdate={coreUpdate} />
+        <Sidebar routes={routes} version={version} onLogout={onLogout} coreUpdate={coreUpdate} coreUpdateFailed={coreUpdateFailed} />
 
         <div className="shell-main">
           <TopBar title={currentTitle} searchItems={allSearchItems} onLogout={onLogout} />
