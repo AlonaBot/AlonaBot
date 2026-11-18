@@ -20,9 +20,9 @@
 | goal-62 | T-12.5 | 技能 | T-12.3 | 已完成（PR #188） |
 | goal-63 | T-12.6 | 定时 Agent 任务 | T-07.9、T-08.5、T-12.3 | 已完成（PR #193） |
 | goal-64 | T-12.7 | 官方 Agent 组件打包与 T-12 验收 | T-12.4、T-12.5、T-12.6、T-12.8、T-12.14 | 已完成（PR #195） |
-| goal-143 | T-12.15 | 模型两层配置 | T-12.7 | 待派发 |
-| goal-144 | T-12.16 | 预留的五类模型与模型管理路由 | T-12.15 | 等待前置（T-12.15） |
-| goal-145 | T-12.17 | 对话重试与回退模型、图像转述 | T-12.15 | 等待前置（T-12.15） |
+| goal-143 | T-12.15 | 模型两层配置 | T-12.7 | 已完成（PR #207） |
+| goal-144 | T-12.16 | 预留的五类模型与模型管理路由 | T-12.15 | 待派发 |
+| goal-145 | T-12.17 | 对话重试与回退模型、图像转述 | T-12.15 | 待派发 |
 | goal-159 | T-12.18 | Agent 的触发方式、唤醒词与成员独立会话 | T-12.17 | 等待前置（T-12.17） |
 | goal-164 | T-12.19 | Agent 接入配置文件 | T-04.18、T-12.18 | 等待前置（T-04.18、T-12.18） |
 | goal-167 | T-12.20 | 官方 Agent 的插件页面 | T-04.17、T-12.19 | 等待前置（T-04.17、T-12.19） |
@@ -958,7 +958,7 @@ TEST-MATRIX 汇总方式：
 
 ### goal-143 · T-12.15 模型两层配置
 
-状态：待派发。前置 T-12.7（PR #195）已合并。2026-11-16 按 D-154 新增；预留的五类模型在 goal-144，重试回退与图像转述在 goal-145。
+状态：已完成（PR #207），合并提交 `1e010d7`。2026-11-17 按该提交核对：`agent/config_schema.json` 的 `providers` 为 template_list，只保存 name、protocol、base_url 与 secret 的 api_key；`models` 为 object 列表，字段为 name、provider、model、type，chat 另有 max_tokens 与 image_input；`chat_model` 引用模型名。`agent/agent.go` 中 `configuredProvider` 为 `{name string; connection provider.Config}`，`configuredModel` 为 `{name string; provider *configuredProvider; modelType string; client *provider.Client; maxTokens int; model string; imageInput bool}`；配置类型为 `configuration`，持有 providers、models、chatModel、personas、defaultPersona、historyEntries、mcpServers、skillsDir、llmServiceAllowedPlugins。实际签名为 `func readConfiguration(values config.Values) (configuration, error)`、`func (s *configuration) provider(name string) *configuredProvider`、`func (s *configuration) model(name string) *configuredModel`；只有 chat 模型已构造 client，五类预留模型的 client 为 nil。`chatSettings.Model` 保存模型名，`func (a *component) selectModel(c *sdk.Context, name string) error` 处理 `/provider`。`sdk/llm.Request.Model` 为 `string`（JSON `model,omitempty`，空串使用 chat_model），`sdk/llm.Response.Model` 为 `string`（JSON `model`，实际使用的模型配置名）；两者已删除 Provider 字段。`agent/options.go` 的 `modelsServiceName = "llm.models"`，经 `options.Serve(p, modelsServiceName, a.models)` 注册；处理函数为 `func (a *component) models(_ context.Context, q options.Query) (options.Page, error)`，支持 filter.type、省略时列出全部六类、名称搜索与按 q.Values 取回，Value/Label 为模型名，Description 为「提供商 · 模型 ID」，不返回地址与密钥。以下保留派发时语句；预留五类客户端与管理路由在 goal-144，重试回退与图像转述在 goal-145。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-143（切片 T-12.15：模型两层配置）。goal 目录 goal-143，分支 goal-143，worktree .worktrees/goal-143，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -993,41 +993,124 @@ TEST-MATRIX 汇总方式：
 
 ### goal-144 · T-12.16 预留的五类模型与模型管理路由
 
-状态：等待前置（T-12.15）。2026-11-16 按 D-154 新增。目标、依据与要点由 PLAN T-12 步骤 12 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：待派发。唯一前置 T-12.15（PR #207，合并提交 `1e010d7`）已合并；2026-11-17 按该提交改写。两层配置、`configuredProvider`、`configuredModel`、`configuration.model`、`llm.Request.Model`/`Response.Model` 与 `llm.models` 的实际接口见 goal-143 状态段。预留五类已能加载但没有 client；Provider 现有入口是 `New` 与 `(*Client).Stream`，尚无五类单次请求与 discover。`New()` 已登记受管数据库迁移、`a.generate` 和选项服务；`runToolLoop` 丢弃 Stream 的 Result，`generate` 已读取 Usage；管理路由与用量表尚未实现。可与 goal-145 并行，双方会改 `agent/agent.go`、`conversation.go`、`loop.go`、`scheduled.go`、`generate.go`、`agent_test.go` 和 `provider/provider.go`：后合并者同步 main，保留对方的客户端、错误分类、重试、转述与用量统计改动，更新全部调用方；合并后转述和回退请求接入同一用量统计，每次请求只计一次。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-144（切片 T-12.16：预留的五类模型与模型管理路由）。goal 目录 goal-144，分支 goal-144，worktree .worktrees/goal-144，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：为 speech_to_text、text_to_speech、embedding、rerank 与 decision 提供单次请求客户端与本地模拟服务；Agent 提供非公开的模型管理路由 discover、test 与 usage，并按模型名与日期累加用量。
 
-依据：PLAN T-12 步骤 12；CONTRACTS §13.6；DECISIONS D-154；TEST-MATRIX V-124。
+依据：spec/PLAN.md §3.1；spec/plan/agent.md T-12.16、T-12 步骤 12 及失败停止条件；spec/CONTRACTS-v0.1.md §7.2、§7.3、§13.5、§13.6；spec/adr/DECISIONS.md D-86、D-132、D-154；TEST-MATRIX V-124；ARCHITECTURE.md 的 Agent 依赖边与受管数据归属。
 
-要点：
-- 五类只支持 openai 与 openai-compatible，端点分别为 /audio/transcriptions、/audio/speech、/embeddings、/rerank（Jina/Cohere 格式）与 Chat Completions（decision 按结构化判断返回概率或评分）。
-- discover 可用已保存的提供商或未保存的连接，按协议的列表端点取模型并按名字推断类型；test 对每类做最小请求；usage 返回当天各模型的用量。路由要求管理会话，响应与错误不含 API key、认证头与带凭证的 URL。
-- 用量表并入 Agent 受管 SQLite 的初始迁移；对话、llm.generate 与图像转述在 Provider 返回用量时累加。
-- 五类在 v0.1 没有 Agent 功能使用它们。
+范围（只新增或修改这些）：
+- agent/provider/：新增五类单次请求与模型发现的实现文件，provider.go 中复用或补齐连接、认证与脱敏处理；已有六种 chat 协议行为保持现状。
+- agent/agent.go：为五类模型构造客户端，登记模型管理路由，用量表并入现有初始迁移；新增 agent/models.go（HTTP 处理）、agent/usage.go（受管 SQLite 的用量表与累加）、agent/model_test.wav（不超过 2 秒的短 WAV，用于嵌入模型测试请求）。
+- agent/loop.go、agent/generate.go、agent/conversation.go、agent/scheduled.go：在真实请求返回用量时接入统计；如需调整内部签名，同步这些调用方。goal-145 已合入时，连同 agent/image.go 及其新增的重试、图像转述实现接入同一统计；尚未合入时由后合并者完成交接。
+- 新增 agent/models_test.go 的一个主路径集成测试；agent/agent_test.go 只同步已有资源快照及必要的装配辅助。其余验证写在上述目录的 *_local_test.go。
+允许的新跨模块边：无。Agent 继续经 sdk/gormdb 与 sdk.Plugin 的 HTTP 路由访问 Core 能力；provider 只用标准库和已批准的 Provider SDK。
 
-不做：模型页（goal-146）；重试回退（goal-145）。
+接口（先复用 main 的真实签名；以下新增入口是本切片交付）：
+// agent 包内已有
+func New() *sdk.Plugin
+func readConfiguration(values config.Values) (configuration, error)
+func (s *configuration) provider(name string) *configuredProvider
+func (s *configuration) model(name string) *configuredModel
+func (a *component) generate(c *sdk.Context, req llm.Request) (llm.Response, error)
+func runToolLoop(ctx context.Context, selected *configuredModel, request provider.Request, catalog toolCatalog, emit func(string) error) error
+// provider 包内已有；模型 ID 从 configuredModel.model 写入连接副本的 Config.Model
+type Config struct { Protocol Protocol; BaseURL string; APIKey string; Model string }
+type Usage struct { InputTokens int; OutputTokens int }
+type Result struct { StopReason StopReason; Usage *Usage }
+func New(config Config, httpClient *http.Client) (*Client, error)
+func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error) (Result, error)
+// provider 包内新增；五类函数各完成一次请求
+func (c *Client) Transcribe(ctx context.Context, audio []byte) (string, error)
+func (c *Client) Synthesize(ctx context.Context, text string) (audio []byte, mime string, err error)
+func (c *Client) Embed(ctx context.Context, text string) ([]float64, error)
+type RankedText struct { Index int; Score float64 }
+func (c *Client) Rerank(ctx context.Context, query string, texts []string) ([]RankedText, error)
+func (c *Client) Decide(ctx context.Context, prompt string) (float64, error)
+func Discover(ctx context.Context, config Config, httpClient *http.Client) (ids []string, description string, err error)
+// Discover 只使用连接字段；已保存的 configuredProvider.connection 没有 Model。
+// sdk 包内已有；用 p.Route 注册，缺省 AuthCoreSession
+func (r *Plugin) Route(method, path string) *RouteBuilder
+func (b *RouteBuilder) HandleFunc(f func(http.ResponseWriter, *http.Request))
+// sdk/gormdb 包内已有；HTTP Handler 使用 r.Context()
+func Open(ctx context.Context) (*gorm.DB, error)
+
+HTTP 接口按 CONTRACTS §13.6 实现：POST /models/discover 的 JSON 输入为 {provider} 或 {protocol,base_url,api_key}，输出模型 ID、推断类型和不支持列表时的说明；POST /models/test 输入 {model}（Active 配置中的模型名字），输出 ok、耗时毫秒数和失败时的英文说明；GET /models/usage 输出各模型当天的输入、输出 token 数。Core 外部路径为 /plugins/{agent_id}/models/...。JSON 承载结构与包内私有辅助就近定义；在 PR 中列出实际 JSON 字段，供 goal-146 接入。
+
+行为：
+- readConfiguration 保留两层引用与协议校验；五类模型也按模型条目复制连接并填入 Model 后构造客户端，共享提供商密钥。五类仅用于配置、发现与测试，调用方只在模型测试路由中选择它们。
+- 五类函数不流式、不重试：Transcribe 为 multipart POST <BaseURL>/audio/transcriptions（WAV 与模型 ID），返回文本；Synthesize 为 POST /audio/speech，返回音频字节与 MIME；Embed 为 POST /embeddings，返回向量；Rerank 为 Jina/Cohere 格式的 POST /rerank，返回文本序号与分数；Decide 经 Chat Completions 请求 JSON 输出，按步骤 12 返回布尔问题的概率，非 JSON 或概率超出 0～1 返回错误。仅允许 openai 与 openai-compatible，错误脱敏沿用 Provider 规则，SDK 内置重试保持 0，配置只取显式参数。
+- discover 接受已保存的提供商或未保存的完整连接，不写配置。openai、openai-compatible、openai-responses 为 GET <BaseURL>/models；anthropic-messages 为 GET /v1/models；gemini-generate-content 为 GET /models；ollama-chat 为 GET /api/tags，使用各协议的认证方式。ID 含 embed 推断 embedding、含 rerank 为 rerank、含 whisper 或 transcribe 为 speech_to_text、含 tts 为 text_to_speech，其余为 chat。Provider 不支持列表时返回空列表与说明；请求失败保留错误。
+- test 只取 Active 中保存的模型：chat 与 decision 用一句短文本，speech_to_text 用嵌入的短 WAV，text_to_speech 用一句短文本，embedding 用一个词，rerank 用一个查询与两段文本。每次只请求一次，返回 ok、耗时与失败说明，测试请求不计用量。
+- 三个路由保持非公开，沿用 Core 的管理会话与非 GET 的 CSRF 检查；响应与错误说明均去除 API key、认证头及带凭证的 URL，禁止直接回送 Provider 原始错误。
+- 用量按模型配置名与 Agent 进程本地日期累加到受管 SQLite，usage 只返回当天。对话的每次工具循环请求、定时任务与 llm.generate 在 Result.Usage 非 nil 时累加，nil 保持缺失，不推算 token；并发累加原子完成，读写失败返回错误。goal-145 的转述已存在时接入同样统计，回退按实际使用的模型名字记账；后合并者保留这些统计点。当前迁移 ID 1 创建 chatSettings/conversationImage，ID 2 创建 memoryRecord，用量表追加到 ID 1 的 AutoMigrate，沿用已有 ID，不新增迁移版本。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：agent/models_test.go（//go:build unix，package agent_test）的一个 TestAgentModels 集成测试，复用 agent_test.go 的真实 Start、loopback 与受管 SQLite 装配：管理会话经 Core 代理 discover 一个已保存的 openai-compatible 提供商，返回一个 chat 模型；经 test 测试该模型成功且用量仍为零；再通过 /ask 完成一次带用量的对话，usage 返回该模型当天的输入与输出 token 数。模拟 Provider 校验请求模型 ID 与认证。
+- 本地自测（*_local_test.go，不提交，结果写入 PR）：V-124 的其余分项，包括五类单次请求的成功与错误、decision 的非 JSON/越界概率、密钥脱敏，discover 两种输入与全部列表端点、类型推断与不支持列表，test 六类及失败且不重试、不计量，无管理会话和缺少 CSRF 时由 Core 拒绝，usage 跨日期与并发累加、llm.generate 用量。goal-145 已合入时补图像转述与实际回退模型的计量；尚未合入时在 PR 写明该分项待 goal-145 接入。真实 Provider 有凭证时实测，否则写「真实 Provider 未运行」。不向 sdk/、internal/core/supervisor/ 或新 testdata 插件提交测试（D-86）。
+
+完成条件：gofmt -l agent 无输出；go vet ./agent/...；go test -race -count=1 ./agent/...；go build ./...；go run ./cmd/alonabot check --dir agent。PR 写明实际运行平台、本地自测结果与未运行项。
+
+不做：模型页（goal-146）；重试与图像转述的实现（goal-145）；为预留五类添加 Agent 功能、服务或引用它们的配置字段；decision 的选项概率与分档评分（D-154 列出的另两种结构化判断，v0.1 没有使用方，按 PLAN T-12 步骤 12 只做是/否概率，接入使用方时另定）；配置文件（goal-164）。
 ```
 
 ### goal-145 · T-12.17 对话重试与回退模型、图像转述
 
-状态：等待前置（T-12.15）。2026-11-16 按 D-154、D-155 新增。目标、依据与要点由 PLAN T-12 步骤 3、11 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：待派发。唯一前置 T-12.15（PR #207，合并提交 `1e010d7`）已合并；2026-11-17 按该提交改写。配置与模型选择的实际接口见 goal-143 状态段。`conversation.go` 的 `converse` 与 `scheduled.go` 的 `runScheduled` 都调用包内 `runToolLoop`；后者直接调用 `selected.client.Stream`，尚无重试。`generate` 独立直调 Stream，继续按 CONTRACTS §13.5 单次执行。`image.go` 已有 readImages、storedImages、replayImages、appendImages，本轮文本模型的图片目前转为占位并保存以供切换模型后回放。Provider 的非 2xx 错误当前只有脱敏文本，需要在 Provider 层保留可分类的状态与原因。可与 goal-144 并行，共享文件与合并规则见 goal-144 状态段：后合并者同步 main，保留对方改动，特别是每次工具循环、llm.generate、定时任务与图像转述的用量统计；回退按实际模型名记账。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-145（切片 T-12.17：对话重试与回退模型、图像转述）。goal 目录 goal-145，分支 goal-145，worktree .worktrees/goal-145，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：对话轮次中的 Provider 请求在可重试错误且尚未交出增量或工具调用时，同一模型最多请求 max_attempts 次，用完后按 fallback_chat_models 回退；对话模型不接受图片而设置了 image_caption_model 时，先请转述模型把图片描述成文字。
 
-依据：PLAN T-12 步骤 3、11 及失败停止条件；DECISIONS D-38、D-132、D-154、D-155；TEST-MATRIX V-125。
+依据：spec/PLAN.md §3.1；spec/plan/agent.md T-12.17、T-12 步骤 2、3、11 及失败停止条件；spec/CONTRACTS-v0.1.md §13.3、§13.5、§13.6；spec/adr/DECISIONS.md D-38、D-86、D-132、D-154、D-155；TEST-MATRIX V-125。步骤 11 与 V-125 均规定转述失败保留占位并记 WARN，按此实现。
 
-要点：
-- 可重试：连接失败、HTTP 408、429 与 5xx；间隔为命名常量（初值 1s）；context 结束立即停止；每次失败记 WARN；回退模型的图片按它自己的 image_input。
-- 已交出文本增量或工具调用后出错不重试；工具循环中已执行的工具不重复执行；`llm.generate`、图像转述与模型测试不重试；两个 Provider SDK 的内置重试仍为 0。
-- 图像转述的描述取代图片占位写入会话；转述模型必须是 image_input 为 true 的 chat 模型，转述失败时按占位处理并回复说明。
+范围（只新增或修改这些）：
+- agent/config_schema.json、agent/i18n/en-US.json、agent/i18n/zh-CN.json、agent/agent.go：追加 max_attempts、fallback_chat_models、image_caption_model、image_caption_prompt 与加载校验，保留已合入的配置字段和注册。
+- agent/loop.go、agent/conversation.go、agent/scheduled.go、agent/image.go：逐次 Provider 请求的重试与回退、本轮图片转述及会话写入；允许在 agent/ 新增 retry.go、caption.go 放专属私有辅助。
+- agent/provider/provider.go、chat.go、responses.go、anthropic.go、gemini.go、ollama.go：只修改重试分类所需的错误包装与状态保留，增加下述 Retryable 入口；协议编解码与 SDK 内置重试保持现状。
+- agent/generate.go：仅在共享内部签名变化时同步调用，以及保留 goal-144 已有的用量统计，继续直接单次请求；goal-144 已合入时同步其 agent/usage.go 与本切片新增调用点。
+- 新增 agent/retry_test.go 的一个主路径集成测试；agent/agent_test.go 只同步配置、i18n 资源快照及必要装配辅助。其余验证写在上述目录的 *_local_test.go。
+允许的新跨模块边：无。重试与回退由 Agent 控制；provider 负责错误分类并继续使用现有标准库与已批准的 SDK。
 
-不做：模型管理路由（goal-144）；模型页（goal-146）。
+接口（main 的真实签名与本切片新增入口分别列出；内部辅助调整时同步全部调用方）：
+// agent 包内
+func readConfiguration(values config.Values) (configuration, error)
+func (s *configuration) model(name string) *configuredModel
+func (a *component) converse(c *sdk.Context, text string) error
+func (a *component) runScheduled(c *sdk.Context, session string, task AgentTask) error
+func runToolLoop(ctx context.Context, selected *configuredModel, request provider.Request, catalog toolCatalog, emit func(string) error) error
+func (a *component) generate(c *sdk.Context, req llm.Request) (llm.Response, error)
+func readImages(c *sdk.Context, text string) (string, []provider.Image)
+func storedImages(ctx context.Context, db *gorm.DB, session string, count uint64) (map[uint64]conversationImage, error)
+func replayImages(entry conversationEntry, images map[uint64]conversationImage, enabled bool) provider.Message
+func (a *component) appendImages(c *sdk.Context, db *gorm.DB, generation uint64, user conversationEntry, assistant json.RawMessage, images []provider.Image) error
+// provider 包内已有
+type Event struct { Text string; ToolCall *ToolCall }
+func (c *Client) Stream(ctx context.Context, req Request, emit func(Event) error) (Result, error)
+// provider 包内新增：保留脱敏错误及原始原因，按状态/错误类型分类
+func Retryable(err error) bool
+
+配置接口：max_attempts 为 int（缺省 3，至少 1），fallback_chat_models 为模型名列表（缺省 []，各项为 chat），image_caption_model 为可空的模型名（非空时须引用 image_input=true 的 chat），image_caption_prompt 为转述提示词，按配置原文发送。两种模型引用用 options_from @agent/llm.models 且 filter.type=chat；image_input 的引用约束在 readConfiguration 中校验。配置错误附对应 JSON 路径；configuration 持有加载后的值，复用 configuredModel 的 name、client、maxTokens、imageInput。
+
+行为：
+- 在一次 Provider 请求的外层实现重试，覆盖 /ask、自由对话与定时 Agent 任务共用的工具循环。Retryable 只接受连接失败、HTTP 408、429 与 5xx；取消、期限结束、其他 HTTP 状态、请求校验与流解析错误立即结束。Provider 层通过状态和错误链分类，避免解析错误字符串；脱敏后仍保留取消与网络错误的判断依据。两个 SDK 的内置重试仍为 0，Stream 本身仍只发一次请求。
+- 每次请求先用本轮选中的模型，同一模型最多共请求 max_attempts 次；可重试的失败耗尽次数后按 fallback_chat_models 顺序尝试，每个模型同样最多 max_attempts 次。等待间隔为命名常量，初值 1s，等待与请求均响应 context 取消；每次失败记 WARN。不可重试的错误立即结束；全部耗尽时沿用一次错误回复，safe_message 与日志均遵守凭证脱敏规则。
+- 按每次尝试跟踪已交出的非空文本增量或 ToolCall；交出后失败立即结束，保留已显示文本并按既有路径回复错误。重试只重发当前失败的请求，保留已有的 assistant 工具调用、ToolResults 与步数，已执行工具各执行一次；ToolCall.Replay 继续原样回传。
+- 回退请求使用该模型自己的 max_tokens 与 image_input；为每次尝试按该模型重新组装图片，保留本轮原始图片与历史图片对应关系，避免从主模型已替换的占位中恢复。成功后沿用既有的流式显示、reset 代次保护与一次会话追加。
+- 实际使用的对话模型 image_input=false 且配置了 image_caption_model 时，本轮每张可读图片各向转述模型请求一次：提示词用 image_caption_prompt，输出上限用转述模型的 maxTokens，非流式拼接文本，不调用工具、不套用人格或会话历史、不重试。以 [image: <描述>] 取代对应占位并写入本轮 user 条目；转述后的条目作为普通文本保存，不分配图片编号或保存待回放字节。转述失败的图片保留 [image] 并记 WARN。对话模型接受图片时直接发送图片；没有配置转述模型时沿用现有的占位、保存与回放规则。
+- llm.generate、图像转述与模型测试各自只发一次请求；重试工具循环调用处与这些单次入口分开。goal-144 的用量统计已存在时，每次返回用量的对话请求与图像转述接入同一统计点，按实际模型配置名累计，避免重复；goal-144 尚未合入时在 PR「文档同步」写明实际转述入口，供后合并者接入。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：agent/retry_test.go（//go:build unix，package agent_test）的一个 TestAgentRetry 集成测试，复用 agent_test.go 的真实 Start、loopback 与模拟 Provider：max_attempts=3，主模型连续三次返回 503，首个回退模型成功生成文本；经 /ask 断言收到成功回复、请求顺序与次数符合配置，Core 会话只追加一组本轮 user/assistant。主路径只保留这一条回退链。
+- 本地自测（*_local_test.go，不提交，结果写入 PR）：V-125 的其余分项，包括主模型两次失败后成功、全部失败、401 立即结束、408/429/5xx 与连接失败分类、重试间隔约 1s、间隔中取消，文本或 ToolCall 交出后不重试，第二次 Provider 请求返回 429 时工具只执行一次，回退顺序和两种模型不同 image_input 的组装；转述成功的 [image: <描述>] 写入与回放排除、失败占位和 WARN、转述模型引用非法时配置加载失败、对话模型接受图片时不调用转述；自由对话和定时任务复用重试，llm.generate、转述和模型测试保持单次；max_attempts 下限及模型引用路径。goal-144 已合入时核对实际回退模型与转述的用量各记一次，否则写明该计量分项待 goal-144 接入。真实 Provider 有凭证时实测，否则写「真实 Provider 未运行」。不向 sdk/、internal/core/supervisor/ 或新 testdata 插件提交测试（D-86）。
+
+完成条件：gofmt -l agent 无输出；go vet ./agent/...；go test -race -count=1 ./agent/...；go build ./...；go run ./cmd/alonabot check --dir agent。PR 写明实际运行平台、本地自测结果与未运行项。
+
+不做：模型管理路由与用量表的建立（goal-144）；模型页（goal-146）；触发方式与成员独立会话（goal-159）；配置文件（goal-164）；SDK 的自动重试。
 ```
 
 ## 第 20 波
