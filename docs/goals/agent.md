@@ -1160,7 +1160,7 @@ func Retryable(err error) bool
 
 ### goal-167 · T-12.20 官方 Agent 的插件页面
 
-状态：等待前置（T-04.17、T-12.19）。2026-11-17 按 D-170 新增。目标、依据与要点由 PLAN T-12 步骤 14 与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：等待前置（T-12.19）。T-04.17（PR #218，`6d81be3`）已合并。2026-11-17 按 D-170 新增。目标、依据与要点由 PLAN T-12 步骤 14 与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-167（切片 T-12.20：官方 Agent 的插件页面）。goal 目录 goal-167，分支 goal-167，worktree .worktrees/goal-167，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。

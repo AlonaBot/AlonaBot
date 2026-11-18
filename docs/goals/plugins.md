@@ -6,14 +6,14 @@
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
-| goal-71 | T-14.1 | help 插件与命令列表 | T-04.4、T-04.16、T-05.2、T-08.8 | 待派发 |
+| goal-71 | T-14.1 | help 插件与命令列表 | T-04.4、T-04.16、T-05.2、T-08.8 | 已完成（PR #210） |
 | goal-72 | T-14.2 | welcome 与 rss 插件 | T-04.16、T-05.2、T-07.2、T-08.5、T-08.8、T-08.11、T-09.4 | 等待前置（T-04.16）；不进入首个发行版（D-171） |
 
 ## 第 18 波
 
 ### goal-71 · T-14.1 help 插件与命令列表
 
-状态：待派发。前置 T-04.4（PR #88）、T-04.16（PR #199，`046e752`）、T-05.2（PR #145）与 T-08.8（PR #102）已合并。相关的 T-03.17（PR #150，`8eb7846`）、T-04.12（PR #154，`43a6135`）、T-04.14（PR #156，`0726d66`）、T-04.15（PR #197，`ba2d323`）与 T-13.5（PR #200，`2e5ac2b`）也已合并。2026-11-17 按 main `bae7faa` 的代码核对，并按 D-171 精简为 `/help` 与 `/whoami`。审查者定稿时确定：`core.command.list` 不返回参数用法（WIRE-FORMAT §3.5 同步）；主名被其他路由遮蔽的命令不列出，与命令菜单一致；`/help` 不按插件分组，只按命令名排序，因此不需要插件 name（CONTRACTS §9.1 同步）。核对事实如下：
+状态：已完成（PR #210），合并提交 `456a4df`。以下保留派发时语句。派发时：前置 T-04.4（PR #88）、T-04.16（PR #199，`046e752`）、T-05.2（PR #145）与 T-08.8（PR #102）已合并。相关的 T-03.17（PR #150，`8eb7846`）、T-04.12（PR #154，`43a6135`）、T-04.14（PR #156，`0726d66`）、T-04.15（PR #197，`ba2d323`）与 T-13.5（PR #200，`2e5ac2b`）也已合并。2026-11-17 按 main `bae7faa` 的代码核对，并按 D-171 精简为 `/help` 与 `/whoami`。审查者定稿时确定：`core.command.list` 不返回参数用法（WIRE-FORMAT §3.5 同步）；主名被其他路由遮蔽的命令不列出，与命令菜单一致；`/help` 不按插件分组，只按命令名排序，因此不需要插件 name（CONTRACTS §9.1 同步）。核对事实如下：
 
 - `contracts/proto/alonabot/v1/route.proto` 已有 `CommandAlias { repeated string path = 1; }`，以及 `CommandSpec.description = 13`（`optional string`）；命令列表的请求、响应与 `CommandInfo` 尚未定义。`contracts/wirespec_test.go` 通过 `ProtoReflect().Descriptor().Fields().ByNumber(...)` 检查字段名、类型、列表、presence 与消息全名。
 - `internal/wire/services.go` 的固定服务沿用带文档注释的 `const ServiceX = "core.x"`。固定服务由 `router.Mux.Handle(name string, fn ServiceFunc)` 注册；`ServiceFunc` 为 `func(context.Context, Caller, *wire.Inbound) wire.Response`。装配在 `internal/app/assembly.go` 的 `assemble(...)`，其中 `a.mux = router.NewMux()`，Router 建好后注册各固定服务；根包已只保留库模式接口。
