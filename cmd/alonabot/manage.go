@@ -12,8 +12,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
+	"github.com/AlonaBot/AlonaBot/contracts/manifest"
+	"github.com/AlonaBot/AlonaBot/contracts/release"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/spf13/cobra"
@@ -107,7 +111,8 @@ func managementCommands(code *int) []*cobra.Command {
 			command.Flags().StringVar(&signatureFile, "signature", "", "release.json.sig file (optional)")
 			command.Flags().StringVar(&keyFile, "public-key", "", "release.pub file (optional)")
 			if action == "install" {
-				command.Use = "install [archive]"
+				command.Use = "install [archive|component-id]"
+				command.Short = "Install a local archive, a bundled component ID, or the unique package in the current directory"
 				command.Args = cobra.MaximumNArgs(1)
 				command.Flags().BoolVar(&replace, "replace", false, "replace an installed component of the same kind")
 			}
@@ -152,10 +157,24 @@ func managementCommands(code *int) []*cobra.Command {
 			}
 			var body any = request
 			if action == "install" || action == "update" {
-				if action == "install" && len(args) != 0 {
-					archive = args[0]
+				selectedArchive, selectedRelease := archive, releaseFile
+				if action == "install" {
+					if len(args) != 0 && (archive != "" || source != "") {
+						return errors.New("install argument, --archive and --source are mutually exclusive")
+					}
+					if source == "" && archive == "" {
+						var argument string
+						if len(args) != 0 {
+							argument = args[0]
+						}
+						var err error
+						selectedArchive, selectedRelease, err = discoverInstallArchive(argument, releaseFile)
+						if err != nil {
+							return err
+						}
+					}
 				}
-				candidate, err := localInstallRequest(archive, releaseFile, signatureFile, keyFile, source)
+				candidate, err := localInstallRequest(selectedArchive, selectedRelease, signatureFile, keyFile, source)
 				if err != nil {
 					return err
 				}
@@ -180,6 +199,147 @@ func managementCommands(code *int) []*cobra.Command {
 		commands = append(commands, command)
 	}
 	return commands
+}
+
+// discoverInstallArchive 只读定位安装输入，所有信任、签名与归档预检仍由管理服务执行。
+func discoverInstallArchive(argument, releaseFile string) (string, string, error) {
+	if argument != "" {
+		info, err := os.Stat(argument)
+		if err == nil && info.Mode().IsRegular() {
+			return argument, releaseFile, nil
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", "", err
+		}
+		if _, err := validate.PluginID(argument); err != nil {
+			return "", "", err
+		}
+		executable, err := os.Executable()
+		if err != nil {
+			return "", "", err
+		}
+		return bundledInstallArchive(filepath.Join(filepath.Dir(executable), "packages"), argument, releaseFile)
+	}
+	// 1. 作者工程使用 bin/；build 的输出目录可能含包内 manifest，仍就地查包。
+	directory, err := os.Getwd()
+	if err != nil {
+		return "", "", err
+	}
+	raw, err := os.ReadFile(filepath.Join(directory, "plugin.yaml"))
+	if err == nil {
+		if _, projectErr := manifest.ParseProject(raw); projectErr == nil {
+			directory = filepath.Join(directory, "bin")
+		} else if _, packageErr := manifest.Parse(raw); packageErr != nil {
+			return "", "", projectErr
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", "", err
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return "", "", fmt.Errorf("search packages in %s; candidates: []: %w", directory, err)
+	}
+	// 2. 当前目录及直接包子目录分别按清单筛选，歧义在调用管理 API 前结束。
+	directories := []string{directory}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			directories = append(directories, filepath.Join(directory, entry.Name()))
+		}
+	}
+	type candidate struct{ archive, release string }
+	var candidates []candidate
+	var names []string
+	for _, dir := range directories {
+		metadata := releaseFile
+		if metadata == "" {
+			metadata = filepath.Join(dir, "release.json")
+		}
+		raw, err := os.ReadFile(metadata)
+		if releaseFile == "" && errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return "", "", fmt.Errorf("read release %s: %w", metadata, err)
+		}
+		publication, err := release.Verify(raw, nil, nil)
+		if err != nil {
+			return "", "", fmt.Errorf("read release %s: %w", metadata, err)
+		}
+		archive, err := platformArchive(dir, publication)
+		if err != nil {
+			return "", "", err
+		}
+		if archive != "" {
+			candidates = append(candidates, candidate{archive, metadata})
+			names = append(names, archive)
+		}
+	}
+	if len(candidates) != 1 {
+		return "", "", fmt.Errorf("expected one package for %s/%s in %s; candidates: %v", runtime.GOOS, runtime.GOARCH, directory, names)
+	}
+	return candidates[0].archive, candidates[0].release, nil
+}
+
+func bundledInstallArchive(directory, id, releaseFile string) (string, string, error) {
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return "", "", fmt.Errorf("find bundled component %q in %s; available official components: []: %w", id, directory, err)
+	}
+	var available []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			available = append(available, entry.Name())
+		}
+	}
+	metadata := releaseFile
+	if metadata == "" {
+		metadata = filepath.Join(directory, id, "release.json")
+	}
+	raw, err := os.ReadFile(metadata)
+	if err != nil {
+		return "", "", fmt.Errorf("find bundled component %q in %s; available official components: %v: %w", id, directory, available, err)
+	}
+	publication, err := release.Verify(raw, nil, nil)
+	if err != nil {
+		return "", "", fmt.Errorf("read release %s: %w", metadata, err)
+	}
+	if publication.PluginID != id {
+		return "", "", fmt.Errorf("bundled component %q has release ID %q", id, publication.PluginID)
+	}
+	archive, err := platformArchive(filepath.Join(directory, id), publication)
+	if err != nil {
+		return "", "", err
+	}
+	if archive == "" {
+		return "", "", fmt.Errorf("no bundled package for %s/%s in %s; available official components: %v", runtime.GOOS, runtime.GOARCH, filepath.Join(directory, id), available)
+	}
+	return archive, metadata, nil
+}
+
+func platformArchive(directory string, publication *release.Release) (string, error) {
+	asset, ok := publication.Asset(runtime.GOOS, runtime.GOARCH)
+	if !ok {
+		asset, ok = publication.Asset("any", "any")
+	}
+	if !ok {
+		return "", nil
+	}
+	address, err := url.Parse(asset.URL)
+	if err != nil {
+		return "", err
+	}
+	archive := filepath.Join(directory, filepath.Base(address.Path))
+	info, err := os.Stat(archive)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("package archive %s must be a regular file", archive)
+	}
+	return archive, nil
 }
 
 func localInstallRequest(archive, releaseFile, signatureFile, keyFile, source string) (manage.InstallRequest, error) {
