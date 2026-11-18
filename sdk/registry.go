@@ -419,8 +419,9 @@ var (
 
 // httpRoute 记录一条插件 HTTP 路由；path 相对于 /plugins/{id}，端口由 SDK 托管（D-25）。
 type httpRoute struct {
-	Method string // 大写的 HTTP 方法
-	Path   string // 插件相对路径，以 / 开头且为规范形式
+	Method    string // 大写的 HTTP 方法
+	Path      string // 插件相对路径，以 / 开头且为规范形式
+	PageTitle string // 非空时声明页面的英文标题。
 	// Handler 处理请求。
 	Handler http.Handler
 	// Public 为 true 时无需 Core 会话即可访问。
@@ -435,6 +436,16 @@ type RouteBuilder struct {
 	method      string // 保留输入，沿用大写方法名的校验错误。
 	handles     int
 	afterHandle bool
+}
+
+// Page 将路由标为插件页面，title 提供翻译缺失时的英文标题。
+func (b *RouteBuilder) Page(title string) *RouteBuilder {
+	b.registry.plugin.checkRegistration()
+	if b.handles != 0 {
+		b.afterHandle = true
+	}
+	b.route.PageTitle = title
+	return b
 }
 
 // Public 声明公开路由；插件自行验证 state、签名或 nonce，Adapter 也可验证平台 token。

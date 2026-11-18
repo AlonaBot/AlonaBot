@@ -77,13 +77,14 @@ type registration struct {
 }
 
 type registeredJob struct {
-	routeID string
-	jobID   string
-	trigger schedule.Trigger
-	timer   *time.Timer // 由 Scheduler.mu 保护，每次只安排一个未来 tick
-	saved   state.Job
-	next    time.Time
-	state   *jobState // Attach 替换注册时仍共享同一 plugin_id/job_id 的运行槽
+	routeID     string
+	jobID       string
+	description string // 保留声明的触发规则，供管理列表展示。
+	trigger     schedule.Trigger
+	timer       *time.Timer // 由 Scheduler.mu 保护，每次只安排一个未来 tick
+	saved       state.Job
+	next        time.Time
+	state       *jobState // Attach 替换注册时仍共享同一 plugin_id/job_id 的运行槽
 }
 
 type jobState struct {
@@ -153,7 +154,11 @@ func (s *Scheduler) Attach(ctx context.Context, p router.Plugin, activatedAt tim
 					return err
 				}
 			}
-			reg.jobs = append(reg.jobs, &registeredJob{routeID: route.GetRouteId(), jobID: spec.GetJobId(), trigger: trigger, saved: job})
+			description := "cron " + spec.GetCron()
+			if interval != 0 {
+				description = "interval " + interval.String()
+			}
+			reg.jobs = append(reg.jobs, &registeredJob{routeID: route.GetRouteId(), jobID: spec.GetJobId(), description: description, trigger: trigger, saved: job})
 		}
 	}
 	// 2. 先删除过期 at，再区分已注册和暂时没有处理函数的实例。

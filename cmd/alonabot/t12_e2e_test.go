@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	agentPackageID      = "alonabot_agent_official"
+	agentPackageID      = "alonabot-agent-official"
 	agentPackageNote    = "package note"
 	agentPackageProfile = "package profile"
 	agentPackageSkill   = "Use the packaged agent and report the result.\n"
@@ -161,11 +161,11 @@ func TestAgentPackage(t *testing.T) {
 	dir := t.TempDir()
 	developmentWrite(t, filepath.Join(dir, "core_config.json"), fmt.Sprintf(`{
 		"listen":"127.0.0.1:0","adapters":{"telegram":{
-		"package":"alonabot_adapter_telegram","default_instance":"package_bot","instances":{"package_bot":{
+		"package":"alonabot-adapter-telegram","default_instance":"package_bot","instances":{"package_bot":{
 		"token":"agent-package-token","api_base_url":%q,"proxy_mode":"none"}}}}}`, server.URL()))
 	c := startEmptyCore(t, dir, "../../adapters/telegram")
 	defer func() { t.Logf("Core log:\n%s\nBot API: %+v", c.log(), server.Requests()) }()
-	developmentPID(t, c, "alonabot_adapter_telegram")
+	developmentPID(t, c, "alonabot-adapter-telegram")
 	telegramEventually(t, c, func() bool { return server.Calls("getUpdates") > 0 })
 	c.management(t, dir, "", "admin", "add", "telegram:88")
 	c.management(t, dir, "", "install", agentArchive, "--yes")

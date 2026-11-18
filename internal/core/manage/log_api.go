@@ -46,6 +46,8 @@ func parseLogLevel(value string, source bool) (slog.Level, error) {
 		return slog.LevelWarn, nil
 	case "error":
 		return slog.LevelError, nil
+	case "critical":
+		return logging.LevelCritical, nil
 	case "off":
 		if source {
 			return logging.LevelOff, nil
@@ -178,7 +180,12 @@ func (s *Service) logLevels() logLevels {
 	if sources == nil {
 		sources = map[string]string{}
 	}
-	return logLevels{Global: strings.ToLower(s.opt.Logs.Levels().Source("").String()), Sources: sources}
+	global := s.opt.Logs.Levels().Source("")
+	text := strings.ToLower(global.String())
+	if global == logging.LevelCritical {
+		text = "critical"
+	}
+	return logLevels{Global: text, Sources: sources}
 }
 
 func (s *Service) updateLogLevels(ctx context.Context, request logLevelUpdate) (logLevels, error) {

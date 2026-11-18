@@ -14,6 +14,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/oslock"
 	"github.com/libtnb/sqlite"
 	"gorm.io/gorm"
@@ -92,6 +94,7 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	// 3. 打开并核对状态库；失败时释放锁。
 	s, err := open(ctx, filepath.Join(dataDir, stateFile))
 	if err != nil {
+		slog.Log(ctx, databaseErrorLevel(err), "state database open or verification failed", "error", err)
 		_ = lock.Unlock()
 		return nil, err
 	}
@@ -126,7 +129,7 @@ func open(ctx context.Context, path string) (*Store, error) {
 			return nil, fmt.Errorf("close new state database %q: %w", path, err)
 		}
 	}
-	db, err := gorm.Open(sqlite.Open(path+"?"+pragmas), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	db, err := gorm.Open(sqlite.Open(path+"?"+pragmas), &gorm.Config{Logger: stateLogger{logger.Default.LogMode(logger.Silent)}})
 	if err != nil {
 		return nil, err
 	}
@@ -253,8 +256,17 @@ func (s *Store) migrate(ctx context.Context, fresh bool) error {
 }
 
 // tx 在一个事务中执行 fn：fn 返回错误时回滚，否则提交。
-func (s *Store) tx(ctx context.Context, fn func(*gorm.DB) error) error {
-	return s.db.WithContext(ctx).Transaction(fn)
+func (s *Store) tx(ctx context.Context, fn func(*gorm.DB) error, opts ...*sql.TxOptions) error {
+	var operationErr error
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		operationErr = fn(tx)
+		return operationErr
+	}, opts...)
+	// SQL 执行错误已由 Trace 记录；这里记录事务开始或提交本身的失败。
+	if err != nil && operationErr == nil {
+		slog.Log(ctx, databaseErrorLevel(err), "state database transaction failed", "error", err)
+	}
+	return err
 }
 
 // LockPlugin 串行化同一插件的管理操作（install/enable/disable/reload/update/rollback/uninstall），
@@ -347,7 +359,13 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
-		return tx.Create(&pluginState{PluginID: in.PluginID}).Error
+		if err := tx.Create(&pluginState{PluginID: in.PluginID}).Error; err != nil {
+			return err
+		}
+		if in.Role == RolePlugin || in.Role == RoleAgent {
+			return tx.Create(&pluginRuntime{PluginID: in.PluginID, RuntimeStatus: stoppedRuntime("installed")}).Error
+		}
+		return nil
 	})
 }
 
@@ -446,4 +464,21 @@ func (s *Store) Enabled(ctx context.Context, pluginID string) (bool, error) {
 		return false, fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 	}
 	return row.Enabled, err
+}
+
+// stateLogger 将数据库执行故障交给 Core 日志，避免输出可能包含秘密的 SQL。
+type stateLogger struct{ logger.Interface }
+
+func (stateLogger) Trace(ctx context.Context, _ time.Time, _ func() (string, int64), err error) {
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		slog.Log(ctx, databaseErrorLevel(err), "state database operation failed", "error", err)
+	}
+}
+
+func databaseErrorLevel(err error) slog.Level {
+	// 请求生命周期结束无需严重告警，按返回的错误分类以保留独立存储故障的级别。
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return slog.LevelDebug
+	}
+	return logging.LevelCritical
 }

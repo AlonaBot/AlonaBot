@@ -1,5 +1,5 @@
 # 受管 SQLite 与配置迁移示例的作者信息。
-id: alonabot_plugin_configdb
+id: alonabot-plugin-configdb
 name: ConfigDB
 version: 0.1.0
 source: github.com/AlonaBot/AlonaBot

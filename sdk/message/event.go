@@ -128,6 +128,13 @@ type MemberPayload struct{ MemberExternalUserID string }
 // ReactionAddedPayload 保存被回应的消息及回应内容。
 type ReactionAddedPayload struct{ PlatformMessageID, Reaction string }
 
+// CommandInvokedPayload 保存命令调用的身份与结果，不含参数和聊天内容。
+type CommandInvokedPayload struct {
+	PluginID, RouteID, CommandName string
+	Result                         string // ok、error 或 denied。
+	DurationMS                     uint64 // Handler 调用耗时，单位为毫秒；权限拒绝时为 0。
+}
+
 // ScheduledPayload 保存任务及本次运行的计划时间。
 type ScheduledPayload struct {
 	JobID, RunID string
@@ -171,6 +178,8 @@ func (*ButtonClickedPayload) payload() {}
 func (*MemberPayload) payload() {}
 
 func (*ReactionAddedPayload) payload() {}
+
+func (*CommandInvokedPayload) payload() {}
 
 func (*ScheduledPayload) payload() {}
 

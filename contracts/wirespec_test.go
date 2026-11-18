@@ -11,6 +11,29 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
+// TestCommandInvokedFieldNumbers 固定命令结果载荷及事件分支的编号与类型。
+func TestCommandInvokedFieldNumbers(t *testing.T) {
+	fields := (&pb.CommandInvokedPayload{}).ProtoReflect().Descriptor().Fields()
+	names := []protoreflect.Name{"plugin_id", "route_id", "command_name", "result", "duration_ms"}
+	if fields.Len() != len(names) {
+		t.Fatalf("CommandInvokedPayload fields = %d, want %d", fields.Len(), len(names))
+	}
+	for i, name := range names {
+		kind := protoreflect.StringKind
+		if name == "duration_ms" {
+			kind = protoreflect.Uint64Kind
+		}
+		field := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+		if field == nil || field.Name() != name || field.Kind() != kind || field.HasPresence() || field.IsList() || field.ContainingOneof() != nil {
+			t.Fatalf("CommandInvokedPayload field %d = %v", i+1, field)
+		}
+	}
+	field := (&pb.EventPayload{}).ProtoReflect().Descriptor().Fields().ByNumber(12)
+	if field == nil || field.Name() != "command_invoked" || field.Kind() != protoreflect.MessageKind || field.IsList() || !field.HasPresence() || field.Message().FullName() != "alonabot.v1.CommandInvokedPayload" || field.ContainingOneof() == nil || field.ContainingOneof().Name() != "kind" {
+		t.Fatalf("EventPayload field 12 = %v", field)
+	}
+}
+
 // TestLogSetLevelFieldNumbers 固定日志级别请求和响应的协议布局。
 func TestLogSetLevelFieldNumbers(t *testing.T) {
 	fields := (&pb.LogSetLevelRequest{}).ProtoReflect().Descriptor().Fields()
@@ -225,9 +248,10 @@ func TestEnumValues(t *testing.T) {
 		{pb.ParamType(0).Descriptor(), "PARAM_TYPE_", []string{"UNSPECIFIED", "STRING", "INT", "FLOAT", "BOOL", "USER", "IMAGE", "MESSAGE"}},
 		{pb.CommandMatch(0).Descriptor(), "COMMAND_MATCH_", []string{"UNSPECIFIED", "PATH", "REGEX", "RAW", "KEYWORD", "STARTSWITH", "ENDSWITH", "FULLMATCH"}},
 		// WIRE §3.2 的 log_level。
-		{pb.LogLevel(0).Descriptor(), "LOG_LEVEL_", []string{"UNSPECIFIED", "DEBUG", "INFO", "WARN", "ERROR", "OFF"}},
+		{pb.LogLevel(0).Descriptor(), "LOG_LEVEL_", []string{"UNSPECIFIED", "DEBUG", "INFO", "WARN", "ERROR", "OFF", "CRITICAL"}},
 		// CONTRACTS §13.1、WIRE §3.5 的工具策略。
 		{pb.ToolPolicy(0).Descriptor(), "TOOL_POLICY_", []string{"UNSPECIFIED", "ALLOW", "CONFIRM", "DENY"}},
+		{pb.ToolEffect(0).Descriptor(), "TOOL_EFFECT_", []string{"UNSPECIFIED", "READ_ONLY", "WRITE", "DESTRUCTIVE"}},
 	}
 	for _, c := range cases {
 		vals := c.enum.Values()
@@ -605,6 +629,14 @@ func TestBootstrapDefaultLocaleFieldNumber(t *testing.T) {
 	}
 }
 
+// TestBootstrapPluginDataDirFieldNumber 固定插件数据目录字段的线上编号与类型。
+func TestBootstrapPluginDataDirFieldNumber(t *testing.T) {
+	field := (&pb.Bootstrap{}).ProtoReflect().Descriptor().Fields().ByNumber(13)
+	if field == nil || field.Name() != "plugin_data_dir" || field.Kind() != protoreflect.StringKind {
+		t.Errorf("Bootstrap field 13 should be string plugin_data_dir, got %v", field)
+	}
+}
+
 // TestToolFieldNumbers 固定 Service 工具描述与目录载荷的编号、类型和重复性。
 func TestToolFieldNumbers(t *testing.T) {
 	for _, c := range []struct {
@@ -613,13 +645,13 @@ func TestToolFieldNumbers(t *testing.T) {
 		kinds   []protoreflect.Kind
 	}{
 		{&pb.ServiceSpec{}, []protoreflect.Name{"service_name", "access", "allowlist_plugin_ids", "encoding", "tool", "options_source"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.BoolKind}},
-		{&pb.ToolSpec{}, []protoreflect.Name{"description", "default_policy", "input_schema_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind}},
-		{&pb.ToolInfo{}, []protoreflect.Name{"name", "description", "input_schema_json", "policy"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.EnumKind}},
+		{&pb.ToolSpec{}, []protoreflect.Name{"description", "default_policy", "input_schema_json", "effect"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.EnumKind}},
+		{&pb.ToolInfo{}, []protoreflect.Name{"name", "description", "input_schema_json", "policy", "effect"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.EnumKind}},
 		{&pb.ToolListRequest{}, nil, nil},
 		{&pb.ToolListResponse{}, []protoreflect.Name{"tools"}, []protoreflect.Kind{protoreflect.MessageKind}},
 		{&pb.ToolInvokeRequest{}, []protoreflect.Name{"name", "arguments_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind}},
 		{&pb.ToolInvokeResponse{}, []protoreflect.Name{"result_json"}, []protoreflect.Kind{protoreflect.StringKind}},
-		{&pb.ToolConfirmRequest{}, []protoreflect.Name{"operation", "summary"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind}},
+		{&pb.ToolConfirmRequest{}, []protoreflect.Name{"operation", "summary", "effect"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.EnumKind}},
 		{&pb.ToolConfirmResponse{}, nil, nil},
 	} {
 		t.Run(string(c.message.ProtoReflect().Descriptor().Name()), func(t *testing.T) {
@@ -634,6 +666,10 @@ func TestToolFieldNumbers(t *testing.T) {
 					t.Fatalf("field %d = %v, want %s (%s, repeated=%v)", i+1, f, name, c.kinds[i], repeated)
 				}
 				switch name {
+				case "effect":
+					if f.Enum().FullName() != "alonabot.v1.ToolEffect" || f.HasPresence() || f.ContainingOneof() != nil {
+						t.Errorf("%s should be singular ToolEffect without presence, got %v", name, f)
+					}
 				case "tool", "tools":
 					want := protoreflect.FullName("alonabot.v1.ToolSpec")
 					if name == "tools" {
@@ -797,5 +833,56 @@ func TestTaskFieldNumbers(t *testing.T) {
 	f := (&pb.RouteDescriptor{}).ProtoReflect().Descriptor().Fields().ByNumber(18)
 	if f == nil || f.Name() != "task" || f.Message().FullName() != "alonabot.v1.TaskSpec" || f.ContainingOneof().Name() != "spec" {
 		t.Fatalf("RouteDescriptor task = %v", f)
+	}
+}
+
+// TestPageTitleFieldNumber 固定 HTTP 页面标题的字段编号与类型。
+func TestPageTitleFieldNumber(t *testing.T) {
+	field := (&pb.RouteDescriptor{}).ProtoReflect().Descriptor().Fields().ByNumber(19)
+	if field == nil || field.Name() != "page_title" || field.Kind() != protoreflect.StringKind || field.IsList() || field.HasPresence() || field.ContainingOneof() != nil {
+		t.Fatalf("RouteDescriptor field 19 should be string page_title, got %v", field)
+	}
+}
+
+// TestCommandListFieldNumbers 固定命令列表及其复用字段的编号、类型、列表与 presence。
+func TestCommandListFieldNumbers(t *testing.T) {
+	for _, tc := range []struct {
+		message  proto.Message
+		names    []protoreflect.Name
+		kinds    []protoreflect.Kind
+		lists    map[int]bool
+		optional map[int]bool
+		messages map[int]protoreflect.FullName
+	}{
+		{message: &pb.CommandListRequest{}},
+		{message: &pb.CommandListResponse{}, names: []protoreflect.Name{"commands"}, kinds: []protoreflect.Kind{protoreflect.MessageKind}, lists: map[int]bool{1: true}, messages: map[int]protoreflect.FullName{1: "alonabot.v1.CommandInfo"}},
+		{message: &pb.CommandInfo{}, names: []protoreflect.Name{"plugin_id", "route_id", "path", "aliases", "description"}, kinds: []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.StringKind}, lists: map[int]bool{3: true, 4: true}, optional: map[int]bool{5: true}, messages: map[int]protoreflect.FullName{4: "alonabot.v1.CommandAlias"}},
+		{message: &pb.CommandAlias{}, names: []protoreflect.Name{"path"}, kinds: []protoreflect.Kind{protoreflect.StringKind}, lists: map[int]bool{1: true}},
+	} {
+		fields := tc.message.ProtoReflect().Descriptor().Fields()
+		if fields.Len() != len(tc.names) {
+			t.Fatalf("%T field count = %d, want %d", tc.message, fields.Len(), len(tc.names))
+		}
+		for i, name := range tc.names {
+			number := i + 1
+			f := fields.ByNumber(protoreflect.FieldNumber(number))
+			cardinality := protoreflect.Optional
+			if tc.lists[number] {
+				cardinality = protoreflect.Repeated
+			}
+			if f == nil || f.Name() != name || f.Kind() != tc.kinds[i] || f.Cardinality() != cardinality || f.HasOptionalKeyword() != tc.optional[number] || f.HasPresence() != tc.optional[number] {
+				t.Fatalf("%T field %d = %v", tc.message, number, f)
+			}
+			if want := tc.messages[number]; want != "" && f.Message().FullName() != want {
+				t.Errorf("%T.%s message = %s, want %s", tc.message, name, f.Message().FullName(), want)
+			}
+			if f.ContainingOneof() != nil && !f.ContainingOneof().IsSynthetic() {
+				t.Errorf("%T.%s unexpected oneof = %v", tc.message, name, f)
+			}
+		}
+	}
+	f := (&pb.CommandSpec{}).ProtoReflect().Descriptor().Fields().ByNumber(13)
+	if f == nil || f.Name() != "description" || f.Kind() != protoreflect.StringKind || f.Cardinality() != protoreflect.Optional || !f.HasOptionalKeyword() || !f.HasPresence() {
+		t.Fatalf("CommandSpec field 13 should be optional string description, got %v", f)
 	}
 }
