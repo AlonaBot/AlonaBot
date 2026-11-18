@@ -97,6 +97,64 @@ func TestManagementLifecycle(t *testing.T) {
 		t.Fatalf("restart changed generation or reused session: %+v", second)
 	}
 	stopTestCore(t, c)
+	t.Run("tool-policies", func(t *testing.T) {
+		dir := t.TempDir()
+		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
+		archive, err := writeTestPackage(t.TempDir(), "commands", "plugin", "", "github.com/example/commands", "1.0.0", filepath.Join(binDir, "command-fixture"), "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.management(t, dir, "", "install", archive, "--yes")
+		c.management(t, dir, "", "enable", "commands")
+		check := func(overridden bool) {
+			t.Helper()
+			status, body := fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/tools/policies")
+			var directory struct {
+				Policies []struct{ Service, Effect, Default, Override string }
+			}
+			if status != http.StatusOK || json.Unmarshal(body, &directory) != nil {
+				t.Fatalf("policies: %d %s", status, body)
+			}
+			want := map[string]string{"read": "read_only", "write": "write", "remove": "destructive", "unknown": "unspecified"}
+			if len(directory.Policies) != len(want) {
+				t.Fatalf("policies = %s", body)
+			}
+			for _, entry := range directory.Policies {
+				override := "inherit"
+				if overridden && entry.Service == "read" {
+					override = "deny"
+				}
+				if overridden && entry.Service == "write" {
+					override = "allow"
+				}
+				if entry.Effect != want[entry.Service] || entry.Default != "confirm" || entry.Override != override {
+					t.Errorf("policy = %+v, want effect=%s confirm/%s", entry, want[entry.Service], override)
+				}
+			}
+		}
+		check(false)
+		token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request, err := http.NewRequest(http.MethodPut, "http://"+c.address()+"/api/v1/tools/policies", strings.NewReader(`{"items":[{"plugin_id":"commands","service":"read","policy":"deny"},{"plugin_id":"commands","service":"write","policy":"allow"}]}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+		request.Header.Set("Content-Type", "application/json")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, readError := io.ReadAll(response.Body)
+		closeError := response.Body.Close()
+		if response.StatusCode != http.StatusOK || readError != nil || closeError != nil || strings.TrimSpace(string(body)) != "{}" {
+			t.Fatalf("batch PUT: status=%d body=%s read=%v close=%v", response.StatusCode, body, readError, closeError)
+		}
+		check(true)
+		stopTestCore(t, c)
+	})
 	t.Run("package-warnings-and-build-info", func(t *testing.T) {
 		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/lifecycle"}, "https://example.invalid/package.tar.gz", "", t.TempDir())
 		if err != nil {
@@ -619,12 +677,20 @@ import (
  "github.com/AlonaBot/AlonaBot/sdk"
  "github.com/AlonaBot/AlonaBot/sdk/genimpl"
  "github.com/AlonaBot/AlonaBot/sdk/message"
+ "github.com/AlonaBot/AlonaBot/sdk/service"
+ "github.com/AlonaBot/AlonaBot/sdk/tool"
 )
-func init(){genimpl.Register("main",genimpl.Resources{})}
+type toolArguments struct{}
+func init(){genimpl.Register("main",genimpl.Resources{ServiceSchemas:map[string][]byte{"main.toolArguments":[]byte("{\"type\":\"object\"}")}})}
 func main() {
  p:=sdk.NewPlugin()
  p.Command("inspect").Handle(func(c *sdk.Context)(message.Content,error){return message.Chain{message.Text(fmt.Sprintf("admin=%t",c.Has(sdk.Admin)))},nil})
  p.Command("number").Args("n").Handle(func(*sdk.Context,int64)error{return nil})
+ for _,entry:=range []struct{name string; effect tool.Effect}{{"read",tool.ReadOnly},{"write",tool.Write},{"remove",tool.Destructive},{"unknown",tool.Unspecified}}{
+  builder:=service.Serve(p,service.JSON[toolArguments,toolArguments]("commands/"+entry.name)).Tool("Fixture tool",tool.DefaultConfirm)
+  if entry.effect!=tool.Unspecified {builder.Effect(entry.effect)}
+  builder.Handle(func(*sdk.Context,toolArguments)(toolArguments,error){return toolArguments{},nil})
+ }
  if err:=sdk.Run(p);err!=nil{slog.Error("fixture failed","error",err);os.Exit(1)}
 }
 `

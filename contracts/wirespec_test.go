@@ -228,6 +228,7 @@ func TestEnumValues(t *testing.T) {
 		{pb.LogLevel(0).Descriptor(), "LOG_LEVEL_", []string{"UNSPECIFIED", "DEBUG", "INFO", "WARN", "ERROR", "OFF"}},
 		// CONTRACTS §13.1、WIRE §3.5 的工具策略。
 		{pb.ToolPolicy(0).Descriptor(), "TOOL_POLICY_", []string{"UNSPECIFIED", "ALLOW", "CONFIRM", "DENY"}},
+		{pb.ToolEffect(0).Descriptor(), "TOOL_EFFECT_", []string{"UNSPECIFIED", "READ_ONLY", "WRITE", "DESTRUCTIVE"}},
 	}
 	for _, c := range cases {
 		vals := c.enum.Values()
@@ -613,13 +614,13 @@ func TestToolFieldNumbers(t *testing.T) {
 		kinds   []protoreflect.Kind
 	}{
 		{&pb.ServiceSpec{}, []protoreflect.Name{"service_name", "access", "allowlist_plugin_ids", "encoding", "tool", "options_source"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.BoolKind}},
-		{&pb.ToolSpec{}, []protoreflect.Name{"description", "default_policy", "input_schema_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind}},
-		{&pb.ToolInfo{}, []protoreflect.Name{"name", "description", "input_schema_json", "policy"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.EnumKind}},
+		{&pb.ToolSpec{}, []protoreflect.Name{"description", "default_policy", "input_schema_json", "effect"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.EnumKind}},
+		{&pb.ToolInfo{}, []protoreflect.Name{"name", "description", "input_schema_json", "policy", "effect"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.EnumKind}},
 		{&pb.ToolListRequest{}, nil, nil},
 		{&pb.ToolListResponse{}, []protoreflect.Name{"tools"}, []protoreflect.Kind{protoreflect.MessageKind}},
 		{&pb.ToolInvokeRequest{}, []protoreflect.Name{"name", "arguments_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind}},
 		{&pb.ToolInvokeResponse{}, []protoreflect.Name{"result_json"}, []protoreflect.Kind{protoreflect.StringKind}},
-		{&pb.ToolConfirmRequest{}, []protoreflect.Name{"operation", "summary"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind}},
+		{&pb.ToolConfirmRequest{}, []protoreflect.Name{"operation", "summary", "effect"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.EnumKind}},
 		{&pb.ToolConfirmResponse{}, nil, nil},
 	} {
 		t.Run(string(c.message.ProtoReflect().Descriptor().Name()), func(t *testing.T) {
@@ -634,6 +635,10 @@ func TestToolFieldNumbers(t *testing.T) {
 					t.Fatalf("field %d = %v, want %s (%s, repeated=%v)", i+1, f, name, c.kinds[i], repeated)
 				}
 				switch name {
+				case "effect":
+					if f.Enum().FullName() != "alonabot.v1.ToolEffect" || f.HasPresence() || f.ContainingOneof() != nil {
+						t.Errorf("%s should be singular ToolEffect without presence, got %v", name, f)
+					}
 				case "tool", "tools":
 					want := protoreflect.FullName("alonabot.v1.ToolSpec")
 					if name == "tools" {
