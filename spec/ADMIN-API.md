@@ -471,6 +471,19 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 `DELETE /api/v1/plugins/{id}/conversations/{key}` 清除该组件指定会话，成功返回 `{}`。`key` 是会话存储键，Agent 按 `<会话字符串>@<实例名>` 组织；调用方把整个键按一个 URL 段转义，服务端解码一次后原样交给 `conversation.Service.Clear`。该端点在路径清理前接收键，因此键中的斜杠、冒号、反斜杠和点段保留。键须为 1～256 字节的有效 UTF-8，格式错误返回 400；未知组件返回 404。列表仅返回键、条目数与最后时间。
 
+
+### 15.1 Agent 模型管理路由（D-154）
+
+路径前缀 `/plugins/{agent_id}/models/`。使用 Core 管理 Cookie；POST 通过 `Origin` 和 `X-Alonabot-CSRF` 校验。路由自身的响应为 JSON，Core 层的鉴权拒绝沿用既有响应。
+
+| 方法与子路径 | 请求体 | HTTP 200 响应 |
+| --- | --- | --- |
+| `POST discover` | `{"provider":"配置名"}` 或 `{"protocol":"openai-compatible","base_url":"…","api_key":"…"}`；无密钥 Ollama 可省略 `api_key` | `{"models":[{"id":"远端模型 ID","type":"chat"}]}`；不支持列表时 `{"models":[],"description":"Provider does not support listing models."}`。 |
+| `POST test` | `{"model":"Active 模型配置名"}` | `{"ok":true,"duration_ms":12}`；Provider 探测失败仍返回 200，`ok:false` 且附英文 `description`。 |
+| `GET usage` | 无 | `{"models":[{"model":"模型配置名","input_tokens":7,"output_tokens":3}]}`，按模型名排序，仅含 Agent 本地日期当天实际收到用量的模型；空结果为 `{"models":[]}`。 |
+
+应用层的 400（无效输入）、404（找不到配置项）、502（发现上游失败）和 500（读取用量失败）返回 `{"description":"…"}`，说明为受控英文。模型 ID 的推断规则依次匹配 `embed`、`rerank`、`whisper`/`transcribe`、`tts`，其余为 `chat`。测试路由不落账；有效的零 token 响应存为零，缺失用量不建记录。
+
 ## 16. 命令权限、启用与命令名
 
 `GET /api/v1/plugins/{id}/policies` 返回：
