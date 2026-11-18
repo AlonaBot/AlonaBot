@@ -59,6 +59,8 @@ bin/alonabot adapter instance create <adapter-package-id> <instance-id> --config
 bin/alonabot admin add telegram:123456
 ```
 
+help 插件启用后，在聊天中发送 `/whoami`，把回复中的用户字符串作为 `admin add` 的参数；回复中的实例名用于核对来源。
+
 需要确认的操作不带 `--yes` 时列出受影响的对象后退出。开发中的组件可以按下节以目录运行，也可以用库模式，先 `alonabot build --dir ./examples/devbot`，再运行 `examples/devbot/bin/devbot --data-dir ./data`。
 
 ## 开发运行与热部署
@@ -83,6 +85,8 @@ cat $DEVBOT_OUTPUT
 ```
 
 注入返回 204，异步发送后文件内容为 `Hello from devbot!`。完整实例 JSON、目录结构、认证、源码／翻译／配置改动与编译失败恢复操作见 [devbot README](../examples/devbot/README.md)。样例把 `adapters.devloop.package` 绑定到 `alonabot_adapter_devbot`，实例在 `instances.one`，命令前缀为 `/`。两个开发组件沿用真实 Deliver／Send 流水线。
+
+验证官方 help 工程可运行 `bin/alonabot check --dir ./plugins/help`。使用上面的回环 Adapter 试用时，在 `run` 的组件目录列表追加 `./plugins/help`，再把注入请求的 `text` 改为 `%2Fhelp` 或 `%2Fwhoami`，在同一输出文件查看回复。
 
 先构建 CLI（`go build -o bin/alonabot ./cmd/alonabot`），再创建与验证组件：
 
@@ -156,7 +160,7 @@ bin/alonabot admin-token show --data-dir ./data
 
 需要在启动前初始化凭证时，停止 Core 后在本机终端运行 `bin/alonabot admin-token init --data-dir ./data`。token 遗失时用 `bin/alonabot admin-token reset --data-dir ./data` 重新生成，旧 token 与全部管理会话随之失效。`init` 与 `reset` 都要求 stdin 与 stderr 是终端，只向 stderr 显示 token 一次；Core 运行中执行会因 core.lock 失败。
 
-调优参数在启动时解析；修改后重启生效。查看全部 37 项参数及当前生效值：
+调优参数在启动时解析；修改后重启生效。查看全部 41 项参数及当前生效值：
 
 ```sh
 bin/alonabot tune list

@@ -117,7 +117,7 @@ X-Content-Type-Options: nosniff
 
 ## 4. Core Admin 与 Adapter 实例
 
-各端点经管理认证，JSON Content-Type 与错误规则同第 3 节。Core Admin 使用用户字符串 `<adapter_id>:<external_user_id>`，缺省所有值按原有校验处理。
+各端点经管理认证，JSON Content-Type 与错误规则同第 3 节。添加 Core Admin 时，将 help 插件 `/whoami` 回复的用户字符串 `<adapter_id>:<external_user_id>` 原样填入 `user`。同一 Adapter 的各实例共用该用户字符串；回复中的实例名供核对消息来源（CONTRACTS §15.2）。缺省所有值按原有校验处理。
 
 | Method / path | 请求 | 成功响应 | 操作语义与特定错误 |
 | --- | --- | --- | --- |
