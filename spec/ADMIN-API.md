@@ -98,8 +98,6 @@ Update 的本地候选可以提供 `install.Archive/ReleaseJSON/Signature/Public
 
 `GET /api/v1/packages/{id}/icon` 经管理认证，只读取该已安装组件 `manifest.Icon` 声明的普通文件。`HEAD` 状态及响应头与 GET 相同，正文为空。查询参数忽略；额外路径返回 404，越界/非规范路径在路由匹配前拒绝。未安装、已卸载、无图标、缺失文件、目录或链接返回 404；开发组件图标本切片返回 404。
 
-`GET /api/v1/packages/{id}/examples/{path}` 经管理认证，只读取该组件 Active 代次 `config_schema.json` 中 `example` 引用的 `examples/` 下的普通文件（D-160），响应头与 HEAD 规则同图标；未引用的路径、缺失文件、目录或链接返回 404。
-
 | 扩展名 | Content-Type |
 | --- | --- |
 | `.svg` | `image/svg+xml` |
@@ -115,9 +113,13 @@ X-Content-Type-Options: nosniff
 
 图标 404 使用英文纯文本；包读取或状态库实际故障返回 500、纯文本 `internal server error` 并记录详细错误。
 
+`GET /api/v1/packages/{id}/examples/{path}` 经管理认证。`{path}` 是相对于包内 `examples/` 目录的路径，可含子目录。Core 按 Active 代次的已提交 Journal 选包，只读取包内 `config_schema.json` 的 `example` 引用的普通文件；Pending 或未提交候选不参与选包。`HEAD` 与安全响应头同图标；`.png`、`.jpg`/`.jpeg`、`.webp`、`.gif` 分别返回 `image/png`、`image/jpeg`、`image/webp`、`image/gif`。
+
+未安装、已卸载、开发组件、无 Active 代次、缺少 `config_schema.json`，或路径不规范、未引用、文件缺失、目录或链接时返回 404。Active 缺少已提交包记录、schema 无效或存储读取故障时，按图标规则返回 500。
+
 ## 4. Core Admin 与 Adapter 实例
 
-各端点经管理认证，JSON Content-Type 与错误规则同第 3 节。Core Admin 使用用户字符串 `<adapter_id>:<external_user_id>`，缺省所有值按原有校验处理。
+各端点经管理认证，JSON Content-Type 与错误规则同第 3 节。添加 Core Admin 时，将 help 插件 `/whoami` 回复的用户字符串 `<adapter_id>:<external_user_id>` 原样填入 `user`。同一 Adapter 的各实例共用该用户字符串；回复中的实例名供核对消息来源（CONTRACTS §15.2）。缺省所有值按原有校验处理。
 
 | Method / path | 请求 | 成功响应 | 操作语义与特定错误 |
 | --- | --- | --- | --- |
@@ -127,7 +129,7 @@ X-Content-Type-Options: nosniff
 | `POST /api/v1/adapter/instances/create` | `{"package_id":"adapter_package","instance_id":"bot","config":{},"confirm":false}` | 200、`{}` | 补全并校验实例配置，原样保留环境变量引用，写回设置；实例名跨包唯一，冲突 409；换配置块归属需确认；未知组件 404；组件已卸载或角色非 Adapter 为 412 |
 | `POST /api/v1/adapter/instances/start` | `{"instance_id":"bot"}` | 200、`{}` | 由当前配置启动；要求 Adapter 激活，配置有效；已运行 409；未知实例 404 |
 | `POST /api/v1/adapter/instances/stop` | `{"instance_id":"bot"}` | 200、`{}` | 保留配置，本次 Core 运行中持续停用，包括组件崩溃恢复；下次 Core 启动按设置启动；未运行 412 |
-| `POST /api/v1/adapter/instances/delete` | `{"instance_id":"bot"}` | 200、`{}` | 停止仍运行的实例，删除配置与指向它的缺省选择；未知实例 404 |
+| `POST /api/v1/adapter/instances/delete` | `{"instance_id":"bot"}` | 200、`{}` | 停止仍运行的实例，删除配置与指向它的缺省选择；配置提交后清除该实例的配置文件指定及运行选择（§23）；未知实例 404 |
 
 本节的实例动作响应仅包含操作结果；脱敏配置读取与编辑见第 14 节。用户、消息与事件语义沿用 [MESSAGE-MODEL §1](MESSAGE-MODEL.md#1-eventactor-与-target)，平台身份须来自可信 Adapter。
 
@@ -173,9 +175,11 @@ X-Content-Type-Options: nosniff
 
 库模式 `alonabot.WebUI(fsys fs.FS)` 以 FS 根作为本次运行的静态根，同一 `Start` 重复登记时报错。开发 WebUI 无 manifest，按审查者 D-140 决定跳过 Admin API 范围检查并在启动时记 WARN（待维护者确认）；已安装包的状态、来源和文件保持原值。
 
+官方 WebUI 的 `/dev/forms` 仅由 Vite 开发模式登记。生产静态服务对该无扩展名路径仍按本节规则回退到 `index.html`，由前端展示页面不可用提示。
+
 ## 7. 插件页面 postMessage 桥
 
-本节定义后继 WebUI 页面实现的消息契约。插件页面通过父 WebUI 请求自己所属组件的 HTTP 路由，并查询语言、主题和本组件文案。插件 HTTP 路由与 Listener 凭证见 [WIRE §3.3、§3.4](WIRE-FORMAT.md#33-注册描述与-http-listener)。内部代理凭证由 SDK/Core 管理，浏览器桥无需取得它。
+本节定义 T-09.9 插件页面桥的消息契约。插件页面通过父 WebUI 请求自己所属组件的 HTTP 路由，并查询语言、主题和本组件文案。`theme` 传实际生效的浅色或深色，`tokens` 使用本节定义的 `--ab-*` 名称；官方外壳的主题偏好和内部 CSS 变量见 CONTRACTS §7.5。插件 HTTP 路由与 Listener 凭证见 [WIRE §3.3、§3.4](WIRE-FORMAT.md#33-注册描述与-http-listener)。内部代理凭证由 SDK/Core 管理，浏览器桥无需取得它。
 
 ### 7.1 消息格式
 
@@ -252,7 +256,7 @@ X-Content-Type-Options: nosniff
 | `GET /api/v1/logs/levels` | 无正文 | 200，`{"global":"info","sources":{}}` |
 | `PUT /api/v1/logs/levels` | 同形部分更新，例如 `{"sources":{"demo":"debug"}}` | 200，返回当前有效全局值与文件中的全部来源设置 |
 
-`source` 为空时返回全部来源，实时值为 `core` 或组件 ID。`level` 表示最低记录级别，允许 `debug/info/warn/error`，省略或空串取 `debug`；`trace` 为空时返回全部追踪记录，实时查询按完整 `trace_id` 精确匹配。非法级别、非法/缺失历史日期返回 400 / `INVALID_ARGUMENT`。读取与解析历史文件的实际故障返回 500 / `INTERNAL`，并保留具体错误。
+`source` 为空时返回全部来源，实时值为 `core` 或组件 ID。`level` 表示最低记录级别，允许 `debug/info/warn/error/critical`，省略或空串取 `debug`；`trace` 为空时返回全部追踪记录，实时查询按完整 `trace_id` 精确匹配。非法级别、非法/缺失历史日期返回 400 / `INVALID_ARGUMENT`。读取与解析历史文件的实际故障返回 500 / `INTERNAL`，并保留具体错误。
 
 ### 8.1 实时 Record 与 SSE
 
@@ -274,7 +278,7 @@ X-Content-Type-Options: nosniff
 }
 ```
 
-`time` 使用 RFC3339Nano，`level` 使用 `slog.Level` 的标准 JSON 字符串。`attrs` 保留实际存在的来源类别、平台/实例、Session/Generation、源码位置和调用字段。来源类别与组件身份由 Core 的安装记录绑定，Core 关于组件的故障记录仍归 `core`。实时结构化值保留完整 trace；stderr 采用 text 或 json 均相同。
+`time` 使用 RFC3339Nano；严重故障的 `level` 为 `"CRITICAL"`，其他级别沿用 `slog.Level` 的 JSON 字符串。此格式同样用于 SSE 和历史查询。`attrs` 保留实际存在的来源类别、平台/实例、Session/Generation、源码位置和调用字段。来源类别与组件身份由 Core 的安装记录绑定，Core 关于组件的故障记录仍归 `core`。实时结构化值保留完整 trace；stderr 采用 text 或 json 均相同。
 
 每个 SSE 记录按以下格式发送：
 
@@ -298,13 +302,13 @@ data: "2026-11-13T10:20:30.123456789-08:00"
 
 历史查询使用 Core 本地时区的日期，只读取普通日志文件：先 `alonabot-<日期>.log`，再按数字序号读取 `.1.log`、`.2.log` 等。记录时间保留文件中的毫秒精度，日期与时区取查询日期和 Core 本地时区。跨夏令时重复出现的本地钟点按标准库的本地时间解析规则解释。
 
-历史 `source` 与筛选值来自显示标签：Core 为 `core`，插件为去掉 `alonabot_plugin_` 的显示名，Adapter 为 `adapter_id` 或 `adapter_id/instance_id`。`trace_id` 保留文件中的最多 8 位前缀；传入完整 trace 时按其前 8 位匹配。文件已省略的完整包身份、Session 和 Generation 由实时结构化 API 提供。
+历史 `source` 与筛选值来自显示标签：Core 为 `core`，插件为去掉 `alonabot-plugin-` 的显示名，Adapter 为 `adapter_id` 或 `adapter_id/instance_id`。`trace_id` 保留文件中的最多 8 位前缀；传入完整 trace 时按其前 8 位匹配。文件已省略的完整包身份、Session 和 Generation 由实时结构化 API 提供。
 
 历史 `message` 原样保留来源标签之后的全部文本，包括级别、源码位置、消息、字段及缩进多行内容。`attrs` 包含可解析的显示来源、位置、带引号/转义的字段和多行值；普通字段保留文本值。正文与属性共享文本格式，含未闭合引号、非法转义或有歧义边界的字段候选只留在 `message`，其余可靠字段继续解析。读取、I/O 和损坏记录头等实际错误继续返回。CLI 按文件原有控制台格式显示历史记录。
 
 ### 8.3 级别写回与运行时通知
 
-`global` 允许 `debug/info/warn/error`；`sources` 的值还允许 `off/inherit`。PUT 省略 global 或某个来源时保留当前值，来源设置为 `inherit` 时显式写入该值。空来源集合编码为 `{}`。GET 的 `global` 是本次 Core 的有效值，包含 `--log-level` 启动覆盖；`sources` 是设置文件中的覆盖项。
+`global` 允许 `debug/info/warn/error/critical`；`sources` 的值还允许 `off/inherit`。PUT 省略 global 或某个来源时保留当前值，来源设置为 `inherit` 时显式写入该值。空来源集合编码为 `{}`。GET 的 `global` 是本次 Core 的有效值，包含 `--log-level` 启动覆盖；`sources` 是设置文件中的覆盖项。级别设置使用小写 `critical`，日志记录使用大写 `CRITICAL`。
 
 全局及来源修改先通过同一个 `settings.File.Update` 写回 `core_config.json`，然后更新 Core 阈值并向当前 Activated Session 通知 `sdk.log.set_level`。已安装组件缺省继承，开发组件缺省 debug；开发组件显式 inherit 跟随本次有效全局值。未运行来源只保存设置，下次启动使用已保存值。同进程组件只更新自己的 Session 阈值。
 
@@ -438,7 +442,7 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 | `GET /api/v1/adapters/{adapter_id}/instance-schema` | `adapter_config_schema.json` 的规范 JSON 对象 | 声明通过 `configschema.Parse` 读取 |
 | `GET /api/v1/adapters/{adapter_id}/instances/{instance_id}` | `{"config":{"token":{"$secret_set":true},"name":"bot"}}` | 返回实例配置，秘密字段只显示设置状态，附加 `Cache-Control: no-store` |
 | `PUT /api/v1/adapters/{adapter_id}/instances/{instance_id}` | `{"config":{...}}` | 创建或整体替换指定实例配置，成功返回 `{}` |
-| `DELETE /api/v1/adapters/{adapter_id}/instances/{instance_id}` | 无正文 | 停止仍运行的实例、删除配置和指向它的默认选择，成功返回 `{}` |
+| `DELETE /api/v1/adapters/{adapter_id}/instances/{instance_id}` | 无正文 | 与 §4 的实例删除共用清理流程；实例归属的 Adapter 不匹配时返回 404，保留该实例及其指定 |
 
 实例名跨 Adapter 唯一，其他 Adapter 已占用时返回 409 / `ALREADY_EXISTS`；未知 Adapter、未知实例或删除时 URL 的归属失配返回 404。配置块属于其他组件时返回 412。
 
@@ -528,7 +532,7 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 ## 21. 插件数据浏览
 
-以下端点经管理认证，非 GET 验证 CSRF（D-163），只作用于受管 SQLite；插件没有受管数据库时返回 404。`generation` 查询参数缺省为 Active 代次，指定保留代次时只读。
+以下端点由 T-09.21 实施，经管理认证，非 GET 验证 CSRF（D-163）。表与 KV 作用于受管 SQLite；缺少受管数据库时，相应端点返回 404。数据库的 `generation` 查询参数缺省为 Active 代次，指定保留代次时只读。文件端点作用于插件当前的 `<data_dir>/plugin_data/<id>/`，该目录在代次之间共用（CONTRACTS §6.1）。
 
 | Method / path | 请求或成功响应 | 语义 |
 | --- | --- | --- |
@@ -548,7 +552,7 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 | `PUT /api/v1/plugins/{id}/data/files/content` | `?path=文件&overwrite=1`，请求体为文件内容，`{}` | 先写临时文件再改名；已存在且没有 overwrite 时 409 |
 | `POST /api/v1/plugins/{id}/data/files/mkdir`、`…/rename`、`…/delete` | `{"path":"…"}`、`{"from":"…","to":"…"}`、`{"path":"…","recursive":false}`，`{}` | 删除非空目录须 recursive |
 
-KV 与文件的路径是相对于数据目录的 `/` 分隔路径，拒绝空段、`.`、`..`、绝对路径与反斜杠，不跟随符号链接，指向数据目录之外时 400。写入在插件运行中照常进行：Core 以 busy_timeout 打开数据库，每个请求一个事务，等待超时返回 409；约束错误返回 400 并带 SQLite 的英文说明。每次写入记一条 INFO 审计日志，只写组件、表与 rowid。
+KV 键遵守 CONTRACTS §6.1 的键约束，`/` 可作为键的字面字符。文件路径是相对于数据目录的 `/` 分隔路径，拒绝空段、`.`、`..`、绝对路径与反斜杠，不跟随符号链接，指向数据目录之外时 400。写入在插件运行中照常进行：Core 以 busy_timeout 打开数据库，每个数据库请求一个事务，等待超时返回 409；约束错误返回 400 并带 SQLite 的英文说明。每次写入记一条 INFO 审计日志，表行写入只记组件、表与 rowid。
 
 ## 22. 更新内容（changelog）
 
@@ -561,7 +565,7 @@ Markdown 原文由 WebUI 渲染，WebUI 不执行其中的 HTML。经管理认�
 
 ## 23. 配置文件
 
-配置文件的语义见 CONTRACTS §5.6（D-168）。ID `default` 表示「默认」。修改立即生效；`default` 的字段值经 §12 的配置 API 修改，平台设置写回 `core_config.json`。
+配置文件的语义见 CONTRACTS §5.6（D-168）。ID `default` 表示「默认」。管理写入立即保存；`default` 的字段值经 §12 的配置 API 写入 Pending，平台设置写回 `core_config.json`。运行时应用由后续切片接入。
 
 | Method / path | 请求或成功响应 | 操作语义 |
 | --- | --- | --- |
@@ -570,12 +574,43 @@ Markdown 原文由 WebUI 渲染，WebUI 不执行其中的 HTML。经管理认�
 | `PATCH /api/v1/profiles/{id}` | `{"name":"…","color":"…"}` → `{}` | 两键均可省略 |
 | `DELETE /api/v1/profiles/{id}` | `{}` | `default` 返回 400；指定它的会话与实例回到下一级 |
 | `GET /api/v1/profiles/assignments` | `{"instances":{"qq-main":"vip"},"sessions":[{"instance":"qq-main","session":"onebot11:group:123","profile":"vip"}]}` | `instances` 只列出设置了缺省的实例；空集合为 `{}` 与 `[]` |
-| `PUT /api/v1/profiles/assignments/instances/{instance}` | `{"profile":"vip"}`，`null` 取消 → `{}` | 实例不存在 404 |
+| `PUT /api/v1/profiles/assignments/instances/{instance}` | `{"profile":"vip"}`，`{"profile":null}` 或正文 `null` 取消 → `{}` | 实例不存在 404 |
 | `PUT /api/v1/profiles/assignments/sessions` | `{"instance":"qq-main","session":"…","profile":"vip"}`，profile 为 `null` 取消 → `{}` | 会话字符串按 MESSAGE-MODEL §1 校验 |
-| `GET /api/v1/profiles/{id}/plugins` | `[{"plugin_id":"weather","enabled":true,"fields":["city","unit"],"overrides":{"city":"北京"},"invalid":[{"path":"unit","reason":"type"}]}]` | `fields` 为 Active schema 中写了 `profile` 的字段路径；`id` 为 `default` 时 overrides 与 invalid 为空 |
-| `PATCH /api/v1/profiles/{id}/plugins/{plugin_id}` | `{"enabled":false,"overrides":{"city":"北京","unit":null}}` → `{}` | 两键均可省略，`null` 删除覆盖值；不合法时 400 带路径；`id` 为 `default` 时 overrides 返回 400 |
+| `GET /api/v1/profiles/{id}/plugins` | `[{"plugin_id":"weather","enabled":true,"fields":["city","unit"],"overrides":{"city":"北京"},"invalid":[{"path":"unit","reason":"type"}]}]` | 列出已安装的插件与 Agent。`fields` 为 Active schema 标记的字段路径；`default` 的 `overrides` 与 `invalid` 为空 |
+| `PATCH /api/v1/profiles/{id}/plugins/{plugin_id}` | `{"enabled":false,"overrides":{"city":"北京","unit":null}}` → `{}` | 两键均可省略，字段值为 `null` 时删除该项；其余值按 Active schema 单值校验，完整子树须无 `secret`，无效时 400 带路径；`default` 提交非空 `overrides` 时返回 400 |
 | `POST /api/v1/profiles/{id}/plugins/{plugin_id}/prune` | `{"removed":["unit"]}` | 只删除列为无效的覆盖值 |
 | `GET /api/v1/profiles/{id}/platform` | `{"command_prefixes":["/","!"],"reply":{"mention_sender":true,"quote":null,"prefix":null,"forward_threshold":1500}}` | 没有覆盖的键为 `null`；`default` 返回完整值 |
-| `PUT /api/v1/profiles/{id}/platform` | 同形对象 → `{}` | 整体替换，`null` 跟随 `default`；`default` 写回 `core_config.json`，不接受 `null` |
+| `PUT /api/v1/profiles/{id}/platform` | 同形对象 → `{}` | 整体替换，省略或 `null` 跟随 `default`；`default` 要求全部键非 `null`，写回 `core_config.json`。前缀数组非空，转发阈值须为非负整数 |
 | `GET /api/v1/profiles/{id}/tools` | `{"items":[{"tool":"weather/subscribe","policy":"allow"},{"operation":{"plugin_id":"agent","name":"mcp/fs/write_file"},"policy":"deny"}]}` | 只列出覆盖了全局策略的工具与操作 |
-| `PUT /api/v1/profiles/{id}/tools` | `{"items":[…]}`，policy 取 allow、confirm、deny 或 inherit → `{}` | inherit 删除该项覆盖 |
+| `PUT /api/v1/profiles/{id}/tools` | `{"items":[…]}`，policy 取 allow、confirm、deny 或 inherit → `{}` | 仅更新所列项；每项恰好指定 `tool` 或 `operation`，`inherit` 删除该项覆盖 |
+
+`invalid` 列出失效覆盖的路径与原因（`unmarked`、`type`、`schema unavailable`）。已有复合字段标记仍可读取；覆盖路径与秘密路径相交或 Active schema 不可用时，普通 GET 在 `overrides` 中省略原值，`invalid` 与 `prune` 仍可定位该项。写入或复制使某插件的有效覆盖集合超过 4 MiB 时，按 §5 返回 HTTP 500 与 `RESOURCE_EXHAUSTED`。
+
+§4 与 §14 的实例删除入口共用指定与运行选择的清理流程。实例删除、旧实例组替换与 Adapter 全量清除在设置提交后继续清理，即使请求已取消。提交前失败保留指定与运行选择；若设置已发布但目录同步报错，继续清理并返回同步错误及后续错误。再次删除已消失的实例仍清理该实例的遗留指定，清理成功后返回 404。
+
+## 24. 插件休眠策略与运行状态
+
+模式、准入、活动引用与停止规则见 CONTRACTS §4.4、§4.5，设置存储见 §15.1。以下接口沿用 §1 的管理认证、CSRF 与 §5 的错误格式；读取只查询状态，不唤醒插件。CLI `alonabot sleep-policy [ID] [never|auto|时长]` 与 WebUI 使用同一管理服务。
+
+### 24.1 全局设置与插件覆盖
+
+| Method / path | 请求或成功响应 | 操作语义 |
+| --- | --- | --- |
+| `GET /api/v1/core/sleep` | `{"mode":"always_on","idle_timeout":"15m","plugins":{}}` | 返回 `core_config.json` 中的生效设置；plugins 的值为 `"never"` 或时长，未覆盖的 ID 省略 |
+| `PUT /api/v1/core/sleep` | `{"mode":"component_idle","idle_timeout":"15m"}` → `{}` | 两项必填，只修改全局模式和空闲时长，保留插件覆盖 |
+| `GET /api/v1/plugins/{id}/sleep-policy` | 下文的策略对象 | 返回配置覆盖、有效准入及常驻原因 |
+| `PUT /api/v1/plugins/{id}/sleep-policy` | `{"policy":"never"}` 或 `{"policy":"15m"}` → `{}` | 设置一个插件的覆盖；时长须为正的 Go duration |
+| `DELETE /api/v1/plugins/{id}/sleep-policy` | 无正文 → `{}` | 删除覆盖，恢复准入规则及全局时长；CLI 的 `auto` 使用此接口 |
+| `GET /api/v1/plugins/{id}/runtime` | 下文的运行对象 | 返回运行状态、代次与最近变化原因 |
+
+策略对象为 `{"policy":null,"effective_policy":"never","sleep_capable":false,"eligible":false,"reason":"manifest_requires_resident"}`。`policy` 为文件中的覆盖值，无覆盖时为 `null`；`effective_policy` 为 `"never"` 或生效时长；`eligible` 表示当前模式、manifest、进程形式与路由策略是否允许自动休眠，实际空闲退出仍须满足活动条件。`reason` 使用稳定值：`always_on`、`manifest_requires_resident`、`in_process`、`policy_never`、`route_requires_resident`，允许休眠时为空串，按前述顺序选择首个成立原因。未声明 Core 过滤的消息事件、Raw、HTTP、Hook 与持续监听被显式时长放行时另返回 `warnings` 字符串数组；无警告时省略。面向用户的原因与提示由 WebUI i18n 翻译。
+
+所有插件接口都只接受已安装且未卸载的 `role: plugin` 或 `role: agent` ID；ID 不存在、已卸载或属于其他角色返回 404 / `NOT_FOUND`。无 manifest 可休眠声明时，时长覆盖仍可保存，生效策略保持 `never`，WebUI 锁定时长选项并显示原因。未知模式、`auto` 字面量作为存储值、零/负/非法时长在写入前返回 400 / `INVALID_ARGUMENT`。
+
+写入经 `settings.File.Update` 保存 `sleep`，保留其他字段及未修改的 `${...}` 原文，再向生命周期所有者应用生效策略。变更立即生效，无需 reload。`never` 立即唤醒已启用的 `SUSPENDED` 插件；切回 `always_on` 唤醒全部已启用插件，已停用插件保持停用。时长变更从下一次空闲判定使用。文件保存失败时返回实际错误；保存成功后唤醒失败时保留已保存设置，仅按 §5 返回实际错误，调用方重新 GET 核对设置；各失败插件的运行状态同时记录实际错误。
+
+### 24.2 运行状态
+
+运行对象为 `{"enabled":true,"generation_id":"…","state":"SUSPENDED","reason":"idle","changed_at":"2026-11-17T12:00:00Z"}`。`state` 取 CONTRACTS §4.4 的六个值，`changed_at` 为最近状态变化的 UTC RFC 3339 时间；`reason` 为无 secret 的诊断字符串（程序输出用英文），失败保留实际错误原因。最近一次唤醒与空闲停止另在存在记录时返回 `last_wake:{"reason":"…","at":"…"}` 与 `last_suspend:{"reason":"idle","at":"…"}`，缺失时省略。
+
+组件列表继续保留 §3 的 `State` 字段及现有角色的语义；plugin 与 agent 追加 `RuntimeState`，取同一持久化记录中的六态值。休眠插件的 `State` 显示 `Suspended`，与 `Degraded` 区分；低层 Preparing、Activating、Activated 等阶段仍通过原字段展示。所有读取均排除快照中的私有认证材料与配置。

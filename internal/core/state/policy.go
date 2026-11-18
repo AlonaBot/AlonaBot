@@ -56,7 +56,7 @@ func (s *Store) PutCommandNames(ctx context.Context, pluginID, scope string, nam
 }
 
 func (s *Store) updateCommandPolicy(ctx context.Context, pluginID, scope string, update func(*CommandPolicy)) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return s.tx(ctx, func(tx *gorm.DB) error {
 		row := CommandPolicy{PluginID: pluginID, Scope: scope}
 		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
 			return err
@@ -100,7 +100,7 @@ func (s *Store) CommandPolicies(ctx context.Context, pluginID string) ([]Command
 func (s *Store) CommandPolicySnapshot(ctx context.Context, pluginID string, subjects []GlobalDeny) ([]CommandPolicy, bool, error) {
 	var rows []CommandPolicy
 	var denied bool
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := s.tx(ctx, func(tx *gorm.DB) error {
 		// 1. 禁止判定先于策略，全部查询复用事务连接及同一快照。
 		for _, subject := range subjects {
 			found, err := hasGlobalDeny(tx, subject)

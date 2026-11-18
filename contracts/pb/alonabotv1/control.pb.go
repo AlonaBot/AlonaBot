@@ -33,7 +33,8 @@ const (
 	LogLevel_LOG_LEVEL_WARN        LogLevel = 3
 	LogLevel_LOG_LEVEL_ERROR       LogLevel = 4
 	// 不输出任何记录。
-	LogLevel_LOG_LEVEL_OFF LogLevel = 5
+	LogLevel_LOG_LEVEL_OFF      LogLevel = 5
+	LogLevel_LOG_LEVEL_CRITICAL LogLevel = 6
 )
 
 // Enum value maps for LogLevel.
@@ -45,6 +46,7 @@ var (
 		3: "LOG_LEVEL_WARN",
 		4: "LOG_LEVEL_ERROR",
 		5: "LOG_LEVEL_OFF",
+		6: "LOG_LEVEL_CRITICAL",
 	}
 	LogLevel_value = map[string]int32{
 		"LOG_LEVEL_UNSPECIFIED": 0,
@@ -53,6 +55,7 @@ var (
 		"LOG_LEVEL_WARN":        3,
 		"LOG_LEVEL_ERROR":       4,
 		"LOG_LEVEL_OFF":         5,
+		"LOG_LEVEL_CRITICAL":    6,
 	}
 )
 
@@ -690,6 +693,8 @@ type Bootstrap struct {
 	SessionLimits *SessionLimits `protobuf:"bytes,11,opt,name=session_limits,json=sessionLimits,proto3" json:"session_limits,omitempty"`
 	// Core 的全局默认语言，在本 Session 生命周期内保持不变（CONTRACTS §5.4）。
 	DefaultLocale string `protobuf:"bytes,12,opt,name=default_locale,json=defaultLocale,proto3" json:"default_locale,omitempty"`
+	// 插件自管数据目录的绝对路径（CONTRACTS §6.1）。
+	PluginDataDir string `protobuf:"bytes,13,opt,name=plugin_data_dir,json=pluginDataDir,proto3" json:"plugin_data_dir,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -804,6 +809,13 @@ func (x *Bootstrap) GetSessionLimits() *SessionLimits {
 func (x *Bootstrap) GetDefaultLocale() string {
 	if x != nil {
 		return x.DefaultLocale
+	}
+	return ""
+}
+
+func (x *Bootstrap) GetPluginDataDir() string {
+	if x != nil {
+		return x.PluginDataDir
 	}
 	return ""
 }
@@ -1643,7 +1655,7 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"session_id\x18\x01 \x01(\fR\tsessionId\x12!\n" +
 	"\fchosen_minor\x18\x02 \x01(\rR\vchosenMinor\x12X\n" +
 	"\x17capability_intersection\x18\x03 \x03(\v2\x1f.alonabot.v1.ProtocolCapabilityR\x16capabilityIntersection\x124\n" +
-	"\tbootstrap\x18\x04 \x01(\v2\x16.alonabot.v1.BootstrapR\tbootstrap\"\xd1\x05\n" +
+	"\tbootstrap\x18\x04 \x01(\v2\x16.alonabot.v1.BootstrapR\tbootstrap\"\xf9\x05\n" +
 	"\tBootstrap\x12#\n" +
 	"\rgeneration_id\x18\x01 \x01(\tR\fgenerationId\x122\n" +
 	"\x15candidate_config_json\x18\x02 \x01(\tR\x13candidateConfigJson\x12,\n" +
@@ -1657,7 +1669,8 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"\tlog_level\x18\n" +
 	" \x01(\x0e2\x15.alonabot.v1.LogLevelR\blogLevel\x12A\n" +
 	"\x0esession_limits\x18\v \x01(\v2\x1a.alonabot.v1.SessionLimitsR\rsessionLimits\x12%\n" +
-	"\x0edefault_locale\x18\f \x01(\tR\rdefaultLocaleB\x1a\n" +
+	"\x0edefault_locale\x18\f \x01(\tR\rdefaultLocale\x12&\n" +
+	"\x0fplugin_data_dir\x18\r \x01(\tR\rpluginDataDirB\x1a\n" +
 	"\x18_previous_config_version\"\x8c\x01\n" +
 	"\rSessionLimits\x12!\n" +
 	"\fmax_inflight\x18\x01 \x01(\rR\vmaxInflight\x12*\n" +
@@ -1707,14 +1720,15 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"failedKind\"A\n" +
 	"\x12LogSetLevelRequest\x12+\n" +
 	"\x05level\x18\x01 \x01(\x0e2\x15.alonabot.v1.LogLevelR\x05level\"\x15\n" +
-	"\x13LogSetLevelResponse*\x8a\x01\n" +
+	"\x13LogSetLevelResponse*\xa2\x01\n" +
 	"\bLogLevel\x12\x19\n" +
 	"\x15LOG_LEVEL_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fLOG_LEVEL_DEBUG\x10\x01\x12\x12\n" +
 	"\x0eLOG_LEVEL_INFO\x10\x02\x12\x12\n" +
 	"\x0eLOG_LEVEL_WARN\x10\x03\x12\x13\n" +
 	"\x0fLOG_LEVEL_ERROR\x10\x04\x12\x11\n" +
-	"\rLOG_LEVEL_OFF\x10\x05*\x8c\x01\n" +
+	"\rLOG_LEVEL_OFF\x10\x05\x12\x16\n" +
+	"\x12LOG_LEVEL_CRITICAL\x10\x06*\x8c\x01\n" +
 	"\x0fDatabaseBackend\x12 \n" +
 	"\x1cDATABASE_BACKEND_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15DATABASE_BACKEND_NONE\x10\x01\x12\x1b\n" +

@@ -109,12 +109,25 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 启动诊断先写 stderr，状态库核对与配置解析失败也保留 CRITICAL 文本。
+	bootstrap := settings.Defaults()
+	if o.LogLevel != nil {
+		bootstrap.LogLevel = *o.LogLevel
+	}
+	if o.LogFormat != nil {
+		bootstrap.LogFormat = *o.LogFormat
+	}
+	output, err := logging.Open(logging.Options{Format: logging.Format(bootstrap.LogFormat), Level: bootstrap.LogLevel, Stderr: os.Stderr, BufferRecords: values.LogBufferRecords})
+	if err != nil {
+		return nil, startupUsage(err)
+	}
+	slog.SetDefault(output.Logger())
 	// 1. 取得实例锁后才打开日志和媒体目录，避免改动另一个 Core 的资源。
 	store, err := state.Open(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
-	c := &Core{store: store, values: values, dir: dir, logLevel: o.LogLevel, done: make(chan struct{}), stopping: make(chan struct{}), operations: make(chan coreOperation)}
+	c := &Core{store: store, output: output, values: values, dir: dir, logLevel: o.LogLevel, done: make(chan struct{}), stopping: make(chan struct{}), operations: make(chan coreOperation)}
 	fail := func(err error) (*Core, error) {
 		c.err = err
 		if ctx.Err() == context.Canceled && startupCleanupError(err) == nil {
@@ -164,7 +177,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	for i := range c.development {
 		c.development[i].stdio = o.Stdio
 	}
-	output, err := logging.Open(logging.Options{Format: logging.Format(configuration.LogFormat), Level: configuration.LogLevel, Stderr: os.Stderr, BufferRecords: values.LogBufferRecords})
+	output, err = logging.Open(logging.Options{Format: logging.Format(configuration.LogFormat), Level: configuration.LogLevel, Stderr: os.Stderr, BufferRecords: values.LogBufferRecords})
 	if err != nil {
 		return fail(startupUsage(err))
 	}
@@ -175,7 +188,9 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 			continue
 		}
 		level := logging.LevelOff
-		if value != "off" {
+		if value == "critical" {
+			level = logging.LevelCritical
+		} else if value != "off" {
 			if err := level.UnmarshalText([]byte(value)); err != nil {
 				return fail(err)
 			}
@@ -422,7 +437,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 				c.components = append(c.components, running)
 			}
 			if err != nil && recovering {
-				slog.Error("committed generation recovery failed", "plugin_id", install.PluginID, "generation_id", active, "error", err)
+				slog.Log(ctx, logging.LevelCritical, "committed generation recovery failed", "plugin_id", install.PluginID, "generation_id", active, "error", err)
 				if running != nil && running.instance.State() != host.StateDegraded {
 					running.instance.Degrade(err)
 					c.assembly.detach(running)
@@ -797,7 +812,7 @@ func (c *Core) shutdown() error {
 	}
 	if c.output != nil {
 		if err := errors.Join(c.err, result); err != nil {
-			slog.Error("Core stopped", "err", err)
+			slog.Log(context.Background(), logging.LevelCritical, "Core stopped", "err", err)
 		} else {
 			slog.Info("Core stopped")
 		}
@@ -822,9 +837,7 @@ func (c *Core) shutdown() error {
 				}
 				<-running.exited()
 			}
-			if err := c.close(); err != nil {
-				slog.Error("close Core resources failed", "error", err)
-			}
+			_ = c.close() // close 自己记录延迟清理的故障。
 		}()
 		return result
 	}
@@ -835,6 +848,9 @@ func (c *Core) close() error {
 	err := c.store.Close()
 	if c.output != nil {
 		err = errors.Join(err, c.output.Close())
+	}
+	if err != nil {
+		slog.Log(context.Background(), logging.LevelCritical, "close Core resources failed", "error", err)
 	}
 	return err
 }

@@ -87,6 +87,37 @@ func TestLogManagement(t *testing.T) {
 	c.management(t, dir, "", "log-level", "global", "debug")
 	probe("inherit-debug", true, true)
 	waitLog("inherit-debug-debug", "--source", "log-fixture")
+	t.Run("critical", func(t *testing.T) {
+		c.management(t, dir, "", "log-level", "log-fixture", "critical")
+		probe("source-critical", false, false)
+		output := waitLog("source-critical-critical", "--source", "log-fixture", "--level", "critical")
+		if !strings.Contains(output, "[CRITICAL]") || strings.Contains(output, "[ERRO]") || strings.Contains(output, "source-critical-error") {
+			t.Fatal(output)
+		}
+		c.management(t, dir, "", "restart", "log-fixture")
+		probe("bootstrap-critical", false, false)
+		waitLog("bootstrap-critical-critical", "--source", "log-fixture", "--level", "critical")
+		if output := logs("--source", "log-fixture"); strings.Contains(output, "bootstrap-critical-error") || strings.Contains(output, "source-critical-error") {
+			t.Fatal(output)
+		}
+		c.management(t, dir, "", "log-level", "log-fixture", "inherit")
+		c.management(t, dir, "", "log-level", "global", "critical")
+		if value := strings.TrimSpace(c.management(t, dir, "", "log-level", "global")); value != "critical" {
+			t.Fatal(value)
+		}
+		probe("global-critical", false, false)
+		waitLog("global-critical-critical", "--source", "log-fixture", "--level", "critical")
+		if output := logs("--source", "log-fixture"); strings.Contains(output, "global-critical-error") {
+			t.Fatal(output)
+		}
+		c.management(t, dir, "", "log-level", "global", "error")
+		probe("global-error", false, false)
+		output = waitLog("global-error-critical", "--source", "log-fixture", "--level", "error")
+		if !strings.Contains(output, "global-error-error") {
+			t.Fatal(output)
+		}
+		c.management(t, dir, "", "log-level", "global", "debug")
+	})
 	// follow 直接取得快照，再观察一次请求触发的新日志。
 	token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
 	if err != nil {
@@ -306,6 +337,7 @@ func main(){
   slog.Debug(marker+"-debug","trace_id","123456789abcdef0123456789abcdef0")
   slog.Info(marker+"-info")
   slog.Error(marker+"-error")
+  slog.Log(r.Context(),sdk.LevelCritical,marker+"-critical")
   if err:=json.NewEncoder(w).Encode(struct{Debug,Info bool}{slog.Default().Enabled(context.Background(),slog.LevelDebug),slog.Default().Enabled(context.Background(),slog.LevelInfo)});err!=nil{slog.Error("write probe response","error",err)}
  })
  if err:=sdk.Run(p);err!=nil{slog.Error("fixture failed","error",err);os.Exit(1)}

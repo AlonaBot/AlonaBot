@@ -11,6 +11,7 @@ package sqlitedb
 import (
 	"context"
 	"database/sql"
+	_ "embed"
 	"errors"
 	"fmt"
 	"net/url"
@@ -26,6 +27,9 @@ import (
 
 // ErrNoDatabase 表示当前插件未配置受管数据库。
 var ErrNoDatabase = errors.New("this plugin has no database")
+
+//go:embed kv.sql
+var kvDDL string
 
 // 受管连接的 PRAGMA 值由 CONTRACTS §6.1 规定。
 const (
@@ -52,7 +56,14 @@ func Open(ctx context.Context) (*sql.DB, error) {
 		case pb.DatabaseBackend_DATABASE_BACKEND_NONE:
 			return nil, ErrNoDatabase
 		case pb.DatabaseBackend_DATABASE_BACKEND_SQLITE:
-			return openFile(ctx, descriptor.GetSqlitePath(), descriptor.GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_FIRST_INSTALL)
+			db, err := openFile(ctx, descriptor.GetSqlitePath(), descriptor.GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_FIRST_INSTALL)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := db.ExecContext(ctx, kvDDL); err != nil {
+				return nil, errors.Join(fmt.Errorf("initialize reserved KV table: %w", err), db.Close())
+			}
+			return db, nil
 		default:
 			return nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "invalid plugin database backend"}
 		}

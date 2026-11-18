@@ -17,15 +17,20 @@ import (
 	"crypto/sha256"
 	"debug/buildinfo"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"strings"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/release"
@@ -184,7 +189,11 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 			return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("manifest file %q is not a regular file in the archive", name))
 		}
 	}
-	// 5. 进程包的外置构建信息须来自同一入口，并与声明的平台一致。
+	// 5. 示例图片来自已检查的声明；解压已拒绝链接，仍需核对普通文件与图片签名。
+	if err := checkExampleImages(dir); err != nil {
+		return nil, err
+	}
+	// 6. 进程包的外置构建信息须来自同一入口，并与声明的平台一致。
 	if m.Role != "webui" {
 		if err := checkBuildInfo(dir, m); err != nil {
 			return nil, err
@@ -192,6 +201,37 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 	}
 	keep = true
 	return &Candidate{Dir: dir, Manifest: m, Release: r, Asset: asset, Warnings: parsed.Warnings}, nil
+}
+
+func checkExampleImages(dir string) error {
+	for _, schemaName := range []string{"config_schema.json", "adapter_config_schema.json"} {
+		raw, err := os.ReadFile(filepath.Join(dir, schemaName))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("read %s: %w", schemaName, err)
+		}
+		schema, problems := configschema.Parse(raw)
+		if len(problems) != 0 {
+			return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("%s: %v", schemaName, problems))
+		}
+		for _, name := range schema.ExampleImages() {
+			location := schemaName + ":" + exampleImageLocation(raw, name)
+			info, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(name)))
+			if err != nil || !info.Mode().IsRegular() {
+				return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("%s: image %q must be a regular file: %v", location, name, err))
+			}
+			content, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)))
+			if err != nil {
+				return fmt.Errorf("%s: %w", location, err)
+			}
+			if http.DetectContentType(content) != exampleContentType(name) {
+				return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("%s: image %q content does not match its extension", location, name))
+			}
+		}
+	}
+	return nil
 }
 
 func checkBuildInfo(dir string, m *manifest.Manifest) error {
@@ -377,4 +417,71 @@ func (c *Candidate) Discard() error {
 
 func failure(code pb.ErrorCode, message string) error {
 	return &validate.Error{Code: code, Message: message}
+}
+
+func exampleContentType(name string) string {
+	switch path.Ext(name) {
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".webp":
+		return "image/webp"
+	case ".gif":
+		return "image/gif"
+	}
+	return ""
+}
+
+// exampleImageLocation 仅处理已通过 schema 检查的声明，把文件错误定位回示例片段。
+func exampleImageLocation(raw []byte, image string) string {
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(raw, &fields)
+	var find func(map[string]json.RawMessage, string) string
+	find = func(fields map[string]json.RawMessage, parent string) string {
+		for _, key := range slices.Sorted(maps.Keys(fields)) {
+			if key == "$version" || key == "$migrations" {
+				continue
+			}
+			var field struct {
+				Example          json.RawMessage
+				Items, Templates map[string]json.RawMessage
+			}
+			_ = json.Unmarshal(fields[key], &field)
+			location := parent + key
+			if len(field.Example) > 0 {
+				examples := []json.RawMessage{field.Example}
+				array := field.Example[0] == '['
+				if array {
+					_ = json.Unmarshal(field.Example, &examples)
+				}
+				for i, raw := range examples {
+					var example struct{ Reply json.RawMessage }
+					_ = json.Unmarshal(raw, &example)
+					if example.Reply[0] != '[' {
+						continue
+					}
+					var segments []struct{ Image string }
+					_ = json.Unmarshal(example.Reply, &segments)
+					for j, segment := range segments {
+						if segment.Image == image {
+							suffix := ""
+							if array {
+								suffix = fmt.Sprintf("[%d]", i)
+							}
+							return fmt.Sprintf("%s.example%s.reply[%d].image", location, suffix, j)
+						}
+					}
+				}
+			}
+			if result := find(field.Items, location+".items."); result != "" {
+				return result
+			}
+			if result := find(field.Templates, location+".templates."); result != "" {
+				return result
+			}
+		}
+		return ""
+	}
+	return find(fields, "")
 }
