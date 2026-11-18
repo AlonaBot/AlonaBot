@@ -23,7 +23,7 @@
 | goal-143 | T-12.15 | 模型两层配置 | T-12.7 | 已完成（PR #207） |
 | goal-144 | T-12.16 | 预留的五类模型与模型管理路由 | T-12.15 | 已完成（PR #223） |
 | goal-145 | T-12.17 | 对话重试与回退模型、图像转述 | T-12.15 | 已完成（PR #224） |
-| goal-159 | T-12.18 | Agent 的触发方式、唤醒词与成员独立会话 | T-12.17、S-02.3 | 待派发 |
+| goal-159 | T-12.18 | Agent 的触发方式、唤醒词与成员独立会话 | T-12.17、S-02.3 | 已完成（PR #229） |
 | goal-164 | T-12.19 | Agent 接入配置文件 | T-04.18、T-12.18 | 等待前置（T-04.18、T-12.18） |
 | goal-167 | T-12.20 | 官方 Agent 的插件页面 | T-04.17、T-12.19 | 等待前置（T-04.17、T-12.19） |
 
@@ -1117,7 +1117,7 @@ func Retryable(err error) bool
 
 ### goal-159 · T-12.18 Agent 的触发方式、唤醒词与成员独立会话
 
-状态：待派发。前置 T-12.17（PR #224，合并提交 `7fc052e9d40833ca36ef034fb8da7c6cf6394cfe`）、S-02.3（PR #227，合并提交 `86e6768b1080ed9e081d15e6fbfc56193e3462b0`）已合并；按 main `947daa5` 核对。`github.com/AlonaBot/AlonaBot/sdk` 已有 `MessageFilter`、`func (r *Plugin) On(routeID string, eventType EventType) *EventBuilder`、`func (b *EventBuilder) Filter(filter MessageFilter) *EventBuilder` 与 `func NotCommand() Rule`；过滤声明只保存配置字段路径。`internal/core/router/message_filter.go` 在交付前匹配，`internal/app/message_filter.go` 当前从 Active 代次读取配置；按会话应用 D-168 覆盖值由 T-04.18 接入，休眠唤醒由 S-02.1 接入。
+状态：已完成（PR #229），合并提交 `f00a55a`。以下保留派发时语句。派发时：前置 T-12.17（PR #224，合并提交 `7fc052e9d40833ca36ef034fb8da7c6cf6394cfe`）、S-02.3（PR #227，合并提交 `86e6768b1080ed9e081d15e6fbfc56193e3462b0`）已合并；按 main `947daa5` 核对。`github.com/AlonaBot/AlonaBot/sdk` 已有 `MessageFilter`、`func (r *Plugin) On(routeID string, eventType EventType) *EventBuilder`、`func (b *EventBuilder) Filter(filter MessageFilter) *EventBuilder` 与 `func NotCommand() Rule`；过滤声明只保存配置字段路径。`internal/core/router/message_filter.go` 在交付前匹配，`internal/app/message_filter.go` 当前从 Active 代次读取配置；按会话应用 D-168 覆盖值由 T-04.18 接入，休眠唤醒由 S-02.1 接入。
 
 `github.com/AlonaBot/AlonaBot/agent` 的公开入口为 `func New() *sdk.Plugin`；`conversation.go` 的自由对话当前注册为 `p.On("chat", sdk.MessageCreated).Rule(sdk.ToMe(), sdk.NotCommand())`，再读 `chatSettings.Enabled`，经 `c.Continue` 调用 `converse`。`memory.go` 的包内 `func sessionKey(c *sdk.Context) string` 当前返回 `c.Session()+"@"+c.Instance()`，聊天设置、历史、图片、reset 与会话笔记共用此键；`settings.go` 的 `chatSettings` 同时保存 Model、Persona、Enabled、ResetGeneration 与 ImageCount。`sdk` 的 `func (c *Context) Config() config.Values` 当前读取插件配置，`func (c *Context) User() string` 在 Actor 缺省时返回空串。`internal/core/continuation/continuation.go` 要求 Actor 与默认 Target 存在；缺省 Actor 的键回落按下述本地自测取证。首次发布前不做旧按聊天触发值的交接；`/agent on|off` 的配置文件写入及旧聊天设置删除沿用原要点，交给 goal-164。
 
@@ -1193,7 +1193,7 @@ func conversationKey(c *sdk.Context) string
 
 ### goal-164 · T-12.19 Agent 接入配置文件
 
-状态：等待前置（T-04.18、T-12.18）。2026-11-17 按 D-168 新增。目标、依据与要点由 PLAN T-12 步骤 13 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：等待前置（T-04.18）。T-12.18（PR #229，`f00a55a`）已合并。2026-11-17 按 D-168 新增。目标、依据与要点由 PLAN T-12 步骤 13 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-164（切片 T-12.19：Agent 接入配置文件）。goal 目录 goal-164，分支 goal-164，worktree .worktrees/goal-164，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

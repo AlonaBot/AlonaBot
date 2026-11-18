@@ -6,7 +6,7 @@
 
 | goal | 切片 | 标题 | 前置 | 状态 |
 | --- | --- | --- | --- | --- |
-| goal-73 | T-14.3 | 发行归档 | T-03.10、T-09.3、T-12.7、T-14.1 | 待派发 |
+| goal-73 | T-14.3 | 发行归档 | T-03.10、T-09.3、T-12.7、T-14.1 | 已完成（PR #228） |
 | goal-74 | T-14.4 | 首次运行与预装 | T-09.6、T-14.3 | 等待前置 |
 | goal-77 | T-14.5 | 容器镜像 | T-07.6、T-14.3 | 等待前置 |
 | goal-85 | T-14.7 | install.sh | T-14.3 | 等待前置 |
@@ -20,7 +20,7 @@
 
 ### goal-73 · T-14.3 发行归档
 
-状态：待派发。前置 T-03.10、T-09.3、T-12.7 与 T-14.1（PR #210，`456a4df`）均已合并；2026-11-17 按 D-171 缩小组件范围，并按 main `08cee69` 核对：`alonabot pack` 的参数为 `--dir`、`--goos`、`--goarch`、`--tags`、`--asset-url`（必填，绝对 https 地址）、`--key`（标准 base64 的 64 字节 Ed25519 私钥文件）与 `--out`，带 `--key` 时只为单个平台签名（`internal/pluginkit.Pack` 以 `ed25519.Sign` 对 release.json 原始字节签名，写出 base64 加换行的 release.json.sig 与 release.pub）；`contracts/release` 提供 `Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*Release, error)` 与 `KeyID(pub) string`，`Release.PublisherKeyID` 须等于验签公钥的 KeyID。组件目录：Core `cmd/alonabot`，Telegram Adapter `adapters/telegram`（薄入口 `cmd/alonabot-adapter-telegram`），Agent `agent`，help `plugins/help`（`alonabot-plugin-help-official`），WebUI `web/admin`（当前只有静态文件，按 any 打包一次；带 Go 入口由 goal-156 实现后再按平台打包）。`internal/core/trust` 尚不存在；安装时的信任判断在 `internal/core/manage/install.go`（`trusted` 与「trust publisher」确认项）和 `candidates.go:checkPublisher`（更新时的发布者绑定）。
+状态：已完成（PR #228），合并提交 `72d51c2`。以下保留派发时语句。派发时：前置 T-03.10、T-09.3、T-12.7 与 T-14.1（PR #210，`456a4df`）均已合并；2026-11-17 按 D-171 缩小组件范围，并按 main `08cee69` 核对：`alonabot pack` 的参数为 `--dir`、`--goos`、`--goarch`、`--tags`、`--asset-url`（必填，绝对 https 地址）、`--key`（标准 base64 的 64 字节 Ed25519 私钥文件）与 `--out`，带 `--key` 时只为单个平台签名（`internal/pluginkit.Pack` 以 `ed25519.Sign` 对 release.json 原始字节签名，写出 base64 加换行的 release.json.sig 与 release.pub）；`contracts/release` 提供 `Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*Release, error)` 与 `KeyID(pub) string`，`Release.PublisherKeyID` 须等于验签公钥的 KeyID。组件目录：Core `cmd/alonabot`，Telegram Adapter `adapters/telegram`（薄入口 `cmd/alonabot-adapter-telegram`），Agent `agent`，help `plugins/help`（`alonabot-plugin-help-official`），WebUI `web/admin`（当前只有静态文件，按 any 打包一次；带 Go 入口由 goal-156 实现后再按平台打包）。`internal/core/trust` 尚不存在；安装时的信任判断在 `internal/core/manage/install.go`（`trusted` 与「trust publisher」确认项）和 `candidates.go:checkPublisher`（更新时的发布者绑定）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-73（切片 T-14.3：发行归档）。goal 目录 goal-73，分支 goal-73，worktree .worktrees/goal-73，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -62,7 +62,7 @@
 
 ### goal-74 · T-14.4 首次运行与预装
 
-状态：等待前置（T-14.3）。T-09.6（PR #179，合并提交 `8898251`）已合并。语句中 goal-39、goal-41、goal-73 提供的符号（manage.Service、serve、trust.Official、发行归档结构）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：首次 token 由 goal-97 实现（终端显示或写入 `admin_token`）；`core_setting` 表不再由 goal-53 建立（D-82），preinstalled 标记的存放位置由审查者改写；`core_config.json` 中写了实例的 Adapter 自动启用（D-82）。前置合并后由审查者改写。
+状态：等待语句定稿（前置均已合并）。T-14.3（PR #228，`72d51c2`）已合并。T-09.6（PR #179，合并提交 `8898251`）已合并。语句中 goal-39、goal-41、goal-73 提供的符号（manage.Service、serve、trust.Official、发行归档结构）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：首次 token 由 goal-97 实现（终端显示或写入 `admin_token`）；`core_setting` 表不再由 goal-53 建立（D-82），preinstalled 标记的存放位置由审查者改写；`core_config.json` 中写了实例的 Adapter 自动启用（D-82）。前置合并后由审查者改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-74（切片 T-14.4：首次运行与预装）。goal 目录 goal-74，分支 goal-74，worktree .worktrees/goal-74，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -100,7 +100,7 @@
 
 ### goal-77 · T-14.5 容器镜像
 
-状态：等待前置（T-14.3）。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin`（T-04.10 起为 `{AdapterID, UserID}`，admins 为用户字符串）；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。语句中 goal-25、goal-73 提供的符号（settings 的 listen 校验、scripts/dist）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：首次启动不再需要单独初始化，token 写入 `/data/admin_token`，用 `docker compose exec alonabot alonabot admin-token show` 读出（D-82）。前置合并后由审查者改写。
+状态：等待语句定稿（前置均已合并）。T-14.3（PR #228，`72d51c2`）已合并。T-07.6（[PR #100](https://github.com/AlonaBot/AlonaBot/pull/100)，合并提交 `cb83eeb`）已合并，合入的符号：`internal/core/settings` 的 `Load(dataDir) (*File, error)`、`Defaults()`、`File.Settings()`（深副本）、`File.CommandPrefixes(adapterInstanceID)`、`File.Update(edit func(*Document) error)`（Rename 为提交点，之后目录同步失败时仍发布快照并返回错误）、`File.Reload() (changed []string, err error)`、`Document.Set(path, value)`/`Delete(path)`，`Settings`（含 `Admins`、`CommandPrefixes`、`CommandPrefixesByInstance`、`DefaultLocale`、`LogSources`、`Adapters map[string]AdapterSettings{Version, Instances}`）与 `Admin`（T-04.10 起为 `{AdapterID, UserID}`，admins 为用户字符串）；`adminauth.FirstToken(ctx, st, dataDir, interactive)`、`FirstTokenFile` 与 `adminauth.New(store, now, adminBaseURL, dataDir)`；`alonabot admin-token show`。语句中 goal-25、goal-73 提供的符号（settings 的 listen 校验、scripts/dist）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：首次启动不再需要单独初始化，token 写入 `/data/admin_token`，用 `docker compose exec alonabot alonabot admin-token show` 读出（D-82）。前置合并后由审查者改写。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-77（切片 T-14.5：容器镜像）。goal 目录 goal-77，分支 goal-77，worktree .worktrees/goal-77，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -133,7 +133,7 @@
 
 ### goal-85 · T-14.7 install.sh
 
-状态：等待前置（T-14.3）。语句只写了目标、依据和要点。依据 D-64 新增；T-14.3 合并后由审查者按实际的发行归档与 SHA256SUMS 写出范围和测试段。2026-11-04 按 D-77～D-85 修订计划：没有终端时 Core 不再拒绝启动，脚本跳过初始化并在启动服务后输出 `admin-token show` 的命令（D-82）。前置合并后由审查者改写。
+状态：等待语句定稿（前置均已合并）。T-14.3（PR #228，`72d51c2`）已合并。语句只写了目标、依据和要点。依据 D-64 新增；T-14.3 合并后由审查者按实际的发行归档与 SHA256SUMS 写出范围和测试段。2026-11-04 按 D-77～D-85 修订计划：没有终端时 Core 不再拒绝启动，脚本跳过初始化并在启动服务后输出 `admin-token show` 的命令（D-82）。前置合并后由审查者改写。
 
 目标：deploy/install.sh 按 CONTRACTS §15.6 在 Linux（systemd，root）与 macOS（launchd，当前用户）上安装 Core 与官方组件：下载并按 SHA256SUMS 校验发行归档，校验失败不改动已有安装；替换程序目录；尚无管理凭证时经 /dev/tty 运行 admin-token init，没有终端时不启动服务并输出初始化命令；写入 systemd 单元（系统用户 alonabot）或用户 LaunchAgent 并启动；再次运行即升级，`--uninstall` 保留数据目录；不支持的系统在改动前退出。Release 流程上传 install.sh 与 SHA256SUMS。
 

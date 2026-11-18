@@ -8425,7 +8425,7 @@ internal/core/state
 
 ### goal-141 · T-13.6 CLI 参数从简
 
-状态：等待前置（T-14.3）。T-13.5（[PR #200](https://github.com/AlonaBot/AlonaBot/pull/200)，合并提交 `2e5ac2b`）已合并。目标、依据与要点由 PLAN T-13 步骤 7 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。派发前核对它与同在第 20 波的 T-14.4 不改同一批文件（两者都涉及 `packages/`）。
+状态：等待语句定稿（前置均已合并）。T-14.3（PR #228，`72d51c2`）已合并。T-13.5（[PR #200](https://github.com/AlonaBot/AlonaBot/pull/200)，合并提交 `2e5ac2b`）已合并。目标、依据与要点由 PLAN T-13 步骤 7 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。派发前核对它与同在第 20 波的 T-14.4 不改同一批文件（两者都涉及 `packages/`）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-141（切片 T-13.6：CLI 参数从简）。goal 目录 goal-141，分支 goal-141，worktree .worktrees/goal-141，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
