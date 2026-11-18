@@ -605,6 +605,14 @@ func TestBootstrapDefaultLocaleFieldNumber(t *testing.T) {
 	}
 }
 
+// TestBootstrapPluginDataDirFieldNumber 固定插件数据目录字段的线上编号与类型。
+func TestBootstrapPluginDataDirFieldNumber(t *testing.T) {
+	field := (&pb.Bootstrap{}).ProtoReflect().Descriptor().Fields().ByNumber(13)
+	if field == nil || field.Name() != "plugin_data_dir" || field.Kind() != protoreflect.StringKind {
+		t.Errorf("Bootstrap field 13 should be string plugin_data_dir, got %v", field)
+	}
+}
+
 // TestToolFieldNumbers 固定 Service 工具描述与目录载荷的编号、类型和重复性。
 func TestToolFieldNumbers(t *testing.T) {
 	for _, c := range []struct {
