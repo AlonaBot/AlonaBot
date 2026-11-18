@@ -192,7 +192,7 @@ Core 为每个代次保存 REGISTER 中已验证的完整路由描述：`plugin_
 
 Router 根据快照和动态策略初步匹配；每个 Core 创建唯一的 Supervisor `Waker`，通过 `EnsureActive(ctx, pluginID, payloadBytes) (release func(), err error)` 合并同一插件的并发唤醒，执行一次进程启动。ACTIVATED、路由摘要核对及 Router、Bus、HTTP、Scheduler 的全部绑定完成后，由 `Ready(running *Running)` 开放等待者；ACTIVE 已发布而 Session 尚未登记时，继续等待同一次启动。单个等待者取消只撤回自己的等待，共享启动沿用 Core 生命周期与阶段预算。
 
-Router、Broker、HTTP 代理与 Scheduler 交付前取得活动引用。`AcquireActivity(pluginID, session) (release func(), err error)` 为已有 Session 取得引用；释放函数幂等且只影响取得时的 Session。引用覆盖 Handler、Service、Hook、媒体操作和租约、已运行的 schedule 回调、延续调用、多轮等待，以及插件自己发起的在途业务；请求本地超时、取消或断链先返回时，继续持有至实际响应、确认排队撤回或旧进程树退出。HTTP 引用覆盖反向代理、流式响应与升级连接的存续，在反向代理返回时释放；S-02.2 的 QUIESCING 须等待 SDK 记录的在途回调（含 HTTP Handler）全部结束，或在 SDK 报告仍有回调时放弃本次退出。
+Router、Broker、HTTP 代理与 Scheduler 交付前取得活动引用。`AcquireActivity(pluginID, session) (release func(), err error)` 为已有 Session 取得引用；释放函数幂等且只影响取得时的 Session。引用覆盖 Handler、Service、Hook、媒体操作和租约、已运行的 schedule 回调、延续调用、多轮等待，以及插件自己发起的在途业务；请求本地超时、取消或断链先返回时，继续持有至实际响应、确认排队撤回或旧进程树退出。插件 HTTP 例外：引用在 Core 反向代理返回时释放，客户端已取消、仍在执行的 Handler 与正常停止一样在停止截止时结束（D-179）。HTTP 引用覆盖反向代理、流式响应与升级连接的存续，在反向代理返回时释放；S-02.2 的 QUIESCING 须等待 SDK 记录的在途回调（含 HTTP Handler）全部结束，或在 SDK 报告仍有回调时放弃本次退出。
 
 等待唤醒的请求使用 Core 内存中的有界队列，逐插件限制条数与字节（§16），同时计入现有 Core 总 payload 预算；任一满额返回 RESOURCE_EXHAUSTED，并记录原因。HTTP 按现有管理/插件入口的错误映射返回失败。队列保留原请求、可信 Actor、Target、Trace、顺序约束与绝对 deadline，冷启动不延长期限；取消或到期的未交付请求立即退出队列。确认 ACTIVATED 及路由摘要后，交付前重新核对当前代次、路由开关、权限与剩余期限，原请求至多交付一次。唤醒失败返回实际错误；已交付业务的断链、取消与外部副作用按 §1.2 处理。Event Bus 继续按 §3 尽力广播，离线丢弃规则保持原样。
 
