@@ -72,16 +72,15 @@ type Settings struct {
 		MaxSize, MaxTotal int64 // 字节
 		MaxAgeDays        int
 	}
-	LogSources                map[string]string
-	Proxy                     string
-	Admins                    []Admin
-	CommandPrefixes           []string
-	Reply                     Reply
-	CommandPrefixesByInstance map[string][]string
-	DefaultLocale             string
-	Adapters                  map[string]AdapterSettings
-	Corrections               []configschema.Correction // Core 设置的运行校正，原值不写日志。
-	Unknown                   []string                  // Core 声明之外的 JSON 路径。
+	LogSources      map[string]string
+	Proxy           string
+	Admins          []Admin
+	CommandPrefixes []string
+	Reply           Reply
+	DefaultLocale   string
+	Adapters        map[string]AdapterSettings
+	Corrections     []configschema.Correction // Core 设置的运行校正，原值不写日志。
+	Unknown         []string                  // Core 声明之外的 JSON 路径。
 }
 
 // File 持有设置文档及当前有效快照；方法可并发调用。
@@ -123,10 +122,6 @@ func (f *File) Settings() Settings {
 	s.LogSources = maps.Clone(s.LogSources)
 	s.Admins = slices.Clone(s.Admins)
 	s.CommandPrefixes = slices.Clone(s.CommandPrefixes)
-	s.CommandPrefixesByInstance = maps.Clone(s.CommandPrefixesByInstance)
-	for id, prefixes := range s.CommandPrefixesByInstance {
-		s.CommandPrefixesByInstance[id] = slices.Clone(prefixes)
-	}
 	s.Adapters = maps.Clone(s.Adapters)
 	for id, adapter := range s.Adapters {
 		adapter.Instances = maps.Clone(adapter.Instances)
@@ -190,7 +185,7 @@ func defaultDocument() ([]byte, error) {
 	content, err := json.MarshalIndent(map[string]any{
 		"listen": s.Listen, "base_url": s.BaseURL,
 		"trusted_proxies": []string{}, "proxy": s.Proxy, "admins": []string{},
-		"command_prefixes": s.CommandPrefixes, "command_prefixes_by_instance": map[string][]string{}, "reply": s.Reply,
+		"command_prefixes": s.CommandPrefixes, "reply": s.Reply,
 		"default_locale": s.DefaultLocale, "adapters": map[string]any{},
 		"log": map[string]any{"level": strings.ToLower(s.LogLevel.String()), "format": s.LogFormat, "sources": map[string]string{},
 			"file": map[string]any{"enabled": s.LogFile.Enabled, "max_size": fmt.Sprintf("%dMiB", s.LogFile.MaxSize>>20),
@@ -338,18 +333,6 @@ func readValue(n *node, key string, s *Settings) error {
 		return err
 	case "reply":
 		return readReply(n, &s.Reply)
-	case "command_prefixes_by_instance":
-		return n.object(func(id string, value *node) error {
-			prefixes, err := readPrefixes(value)
-			if err != nil {
-				return err
-			}
-			if s.CommandPrefixesByInstance == nil {
-				s.CommandPrefixesByInstance = make(map[string][]string)
-			}
-			s.CommandPrefixesByInstance[id] = prefixes
-			return nil
-		})
 	case "log.sources":
 		return n.object(func(id string, value *node) error {
 			level, err := value.text()

@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"regexp"
 	"slices"
@@ -60,7 +61,17 @@ func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 	}
 	text := content.String()
 	head := commandHead(ev.GetEventPayload().GetMessageCreated().GetChain(), ev.GetAccountId())
-	if tokens, prefix := r.commandTokens(head, ev); len(tokens) != 0 {
+	tokens, prefix, err := r.commandTokens(head, ev)
+	if err != nil {
+		plugins := make([]string, 0, len(routes))
+		for _, route := range routes {
+			plugins = append(plugins, route.pluginID)
+		}
+		slices.Sort(plugins)
+		slog.Warn("read command prefixes failed", "target", event.retained.GetTarget(), "plugin_ids", slices.Compact(plugins), "error", err)
+		return false
+	}
+	if len(tokens) != 0 {
 		if entry, consumed, ok := index.Lookup(tokens); ok {
 			event.commandConsumed = true
 			for _, route := range routes {
@@ -204,38 +215,42 @@ func commandHead(chain *pb.MessageChain, accountID string) string {
 	return head.String()
 }
 
-func (r *Router) commandTokens(text string, ev *pb.Event) ([]string, string) {
+func (r *Router) commandTokens(text string, ev *pb.Event) ([]string, string, error) {
+	prefixes, err := r.prefixes(r.ctx, ev.GetTarget())
+	if err != nil {
+		return nil, "", fmt.Errorf("read platform for target %v: %w", ev.GetTarget(), err)
+	}
 	prefix := ""
 	matched := false
-	for _, candidate := range r.prefixes(ev.GetAdapterInstanceId()) {
+	for _, candidate := range prefixes {
 		if strings.HasPrefix(text, candidate) && (!matched || len(candidate) > len(prefix)) {
 			prefix, matched = candidate, true
 		}
 	}
 	if !matched {
-		return nil, ""
+		return nil, "", nil
 	}
 	remainder := strings.TrimPrefix(text, prefix)
 	// 路径紧接前缀，保留 / cmd 不被识别为 /cmd 的既有行为。
 	if remainder != strings.TrimLeftFunc(remainder, unicode.IsSpace) {
-		return nil, ""
+		return nil, "", nil
 	}
 	tokens := strings.Fields(remainder)
 	if len(tokens) == 0 {
-		return nil, ""
+		return nil, "", nil
 	}
 	if name, user, hasName := strings.Cut(tokens[0], "@"); hasName {
 		instance, ok := r.adapters.Get(ev.GetTarget().GetAdapterInstanceId())
 		if !ok {
-			return nil, ""
+			return nil, "", nil
 		}
 		named, ok := instance.(adapter.Named)
 		if !ok || user == "" || !strings.EqualFold(user, named.AccountName()) {
-			return nil, ""
+			return nil, "", nil
 		}
 		tokens[0] = name
 	}
-	return tokens, prefix
+	return tokens, prefix, nil
 }
 
 func matchPattern(text, pattern string, match pb.CommandMatch, ignoreCase bool) bool {

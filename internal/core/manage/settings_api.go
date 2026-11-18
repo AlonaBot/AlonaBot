@@ -20,11 +20,6 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 )
 
-type commandPrefixes struct {
-	Global     []string            `json:"command_prefixes"`
-	ByInstance map[string][]string `json:"command_prefixes_by_instance"`
-}
-
 type globalDenies struct {
 	Users []string `json:"users"`
 	Chats []string `json:"chats"`
@@ -91,50 +86,6 @@ func (s *Service) settingsRoutes(mux *http.ServeMux) {
 			return
 		}
 		err = s.opt.Settings.Update(func(doc *settings.Document) error { return doc.Set([]string{"default_locale"}, *request.Locale) })
-		respond(w, struct{}{}, err)
-	})
-	mux.HandleFunc("GET /api/v1/core/command-prefixes", func(w http.ResponseWriter, r *http.Request) {
-		current := s.opt.Settings.Settings()
-		byInstance := current.CommandPrefixesByInstance
-		if byInstance == nil {
-			byInstance = map[string][]string{}
-		}
-		respond(w, commandPrefixes{current.CommandPrefixes, byInstance}, nil)
-	})
-	mux.HandleFunc("PUT /api/v1/core/command-prefixes", func(w http.ResponseWriter, r *http.Request) {
-		var request commandPrefixes
-		if err := decode(r, &request); err != nil {
-			respond(w, nil, err)
-			return
-		}
-		if len(request.Global) == 0 || request.ByInstance == nil {
-			respond(w, nil, invalid("command prefixes and instance overrides are required"))
-			return
-		}
-		for _, prefixes := range request.ByInstance {
-			if len(prefixes) == 0 {
-				respond(w, nil, invalid("instance command prefixes must not be empty"))
-				return
-			}
-			for _, prefix := range prefixes {
-				if _, err := expandConfiguration(prefix); err != nil {
-					respond(w, nil, err)
-					return
-				}
-			}
-		}
-		for _, prefix := range request.Global {
-			if _, err := expandConfiguration(prefix); err != nil {
-				respond(w, nil, err)
-				return
-			}
-		}
-		err := s.opt.Settings.Update(func(doc *settings.Document) error {
-			if err := doc.Set([]string{"command_prefixes"}, request.Global); err != nil {
-				return err
-			}
-			return doc.Set([]string{"command_prefixes_by_instance"}, request.ByInstance)
-		})
 		respond(w, struct{}{}, err)
 	})
 	mux.HandleFunc("GET /api/v1/core/denies", func(w http.ResponseWriter, r *http.Request) {

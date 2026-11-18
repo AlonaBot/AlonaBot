@@ -41,6 +41,32 @@ func (s *Service) Platform(id string) (Platform, error) {
 	return Platform{}, nil
 }
 
+// EffectivePlatform 按键合并已保存的覆盖与当前 default 平台设置。
+func (s *Service) EffectivePlatform(id string) (prefixes []string, reply settings.Reply, err error) {
+	platform, err := s.Platform(id)
+	if err != nil {
+		return nil, settings.Reply{}, err
+	}
+	current := s.opt.Settings.Settings()
+	prefixes, reply = current.CommandPrefixes, current.Reply
+	if platform.CommandPrefixes != nil {
+		prefixes = *platform.CommandPrefixes
+	}
+	if platform.Reply.MentionSender != nil {
+		reply.MentionSender = *platform.Reply.MentionSender
+	}
+	if platform.Reply.Quote != nil {
+		reply.Quote = *platform.Reply.Quote
+	}
+	if platform.Reply.Prefix != nil {
+		reply.Prefix = *platform.Reply.Prefix
+	}
+	if platform.Reply.ForwardThreshold != nil {
+		reply.ForwardThreshold = *platform.Reply.ForwardThreshold
+	}
+	return prefixes, reply, nil
+}
+
 // PutPlatform 整体替换平台覆盖；default 的完整设置写回 core_config.json。
 func (s *Service) PutPlatform(ctx context.Context, id string, platform Platform) error {
 	if _, err := s.find(id); err != nil {
