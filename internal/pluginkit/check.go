@@ -161,6 +161,19 @@ func projectResources(dir string, project *manifest.Manifest) (map[string][]byte
 			}
 		}
 	}
+	if err := checkChangelog(dir, project.Version); err != nil {
+		return nil, err
+	}
+	for _, name := range []string{changelogFile, changelogDirectory} {
+		if _, err := os.Lstat(filepath.Join(dir, name)); errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+		if err := walk(name); err != nil {
+			return nil, err
+		}
+	}
 	if project.Icon != "" {
 		if err := walk(project.Icon); err != nil {
 			return nil, err

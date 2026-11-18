@@ -34,6 +34,8 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	s.conversationRoutes(mux)
 	s.logRoutes(mux)
 	mux.HandleFunc("GET /api/v1/core", s.coreInfo)
+	mux.HandleFunc("GET /api/v1/core/changelog", s.coreChangelog)
+	mux.HandleFunc("GET /api/v1/packages/{id}/changelog", s.packageChangelog)
 	mux.HandleFunc("GET /api/v1/packages/{id}/icon", s.icon)
 	mux.HandleFunc("POST /api/v1/packages/install", func(w http.ResponseWriter, r *http.Request) {
 		if multipartUpload(r) {
