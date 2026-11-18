@@ -19,6 +19,8 @@ Core、SDK 与管理 CLI 已支持 CRITICAL 日志；用 `alonabot logs --level 
 
 排查 Core 问题时，可用 `alonabot diagnose` 导出默认脱敏的诊断包。在线导出使用管理认证；停机后可从数据目录只读收集。参数与停机条件见[导出诊断包](docs/development.md#导出诊断包)。
 
+组件可随安装包提供更新日志，作者写法见[插件发布指南](docs/plugin-guide.md#9-发布)。管理员可通过[管理 API](spec/ADMIN-API.md#22-更新内容changelog)读取组件及 Core 的更新日志。
+
 按 [spec/PLAN.md](spec/PLAN.md) 的工作包继续实施；规格索引见 [spec/README.md](spec/README.md)，决策与历史依据见 [spec/adr/README.md](spec/adr/README.md)。开发环境与命令见 [docs/development.md](docs/development.md)，插件作者的规则见 [docs/plugin-guide.md](docs/plugin-guide.md)，模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)，代理工作约定见 [AGENTS.md](AGENTS.md)。
 
 组件市场 ID 统一使用 `alonabot-plugin-`、`alonabot-adapter-`、`alonabot-agent-`、`alonabot-webui-` 前缀与连字符分词，本地 ID 规则保持不变（[D-172](spec/adr/DECISIONS.md)，代码实施见 [goal-177](docs/goals/core.md#goal-177--t-0927-组件市场-id-改用连字符)）。官方包 ID 与首次发布前的数据重建要求见 [CONTRACTS §15.2](spec/CONTRACTS-v0.1.md#152-发行包官方整合包与预装组件)。

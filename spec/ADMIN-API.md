@@ -558,10 +558,14 @@ KV 键遵守 CONTRACTS §6.1 的键约束，`/` 可作为键的字面字符。�
 
 | Method / path | 成功响应 | 语义 |
 | --- | --- | --- |
-| `GET /api/v1/packages/{id}/changelog` | `{"locale":"zh-CN","entries":[{"version":"1.2.1","date":"2026-11-17","markdown":"…"}]}` | 已安装版本包中的 changelog（D-166），版本新的在前；单文件按 `## [版本] - 日期` 切分，没有日期时省略 date，`[Unreleased]` 不返回；目录写法按 `Accept-Language` 与 CONTRACTS §5.4 的规则为每个版本选择语言，`locale` 为实际使用的首选语言。没有 changelog 时 `entries` 为 `[]` |
-| `GET /api/v1/core/changelog` | 同上 | Core 自身的 changelog，取自编进可执行文件的 `CHANGELOG.md` |
+| `GET /api/v1/packages/{id}/changelog` | `{"locale":"en-US","entries":[{"version":"1.2.1","date":"2026-11-17","markdown":"…"}]}` | 当前已安装版本包中的 changelog（D-166）。单文件按围栏代码块之外的 `## [版本] - 日期` 或 `## [版本]` 切分，版本须为 SemVer，省略 `[Unreleased]`；`locale` 为 `en-US`。目录形式逐版本选择语言，`locale` 为最新条目所用文件的标签，条目省略 `date` |
+| `GET /api/v1/core/changelog` | 同上 | 读取编进可执行文件的根 `CHANGELOG.md`，按单文件规则返回 |
 
-Markdown 原文由 WebUI 渲染，WebUI 不执行其中的 HTML。经管理认证，错误规则同第 3 节；未安装的组件返回 404。
+条目按 SemVer 倒序，`markdown` 保留原文（单文件只返回节正文），日期缺省时省略 `date`。无发布条目时返回 `locale: "en-US"` 与 `entries: []`。
+
+目录形式按 `Accept-Language` 的偏好顺序为各版本独立选择语言。每个偏好依次尝试精确文件名、规范化后的标签相等、规范化后的主语言相等；同一级有多个候选时取文件名字典序最小者。无匹配时使用 `en-US.md`。
+
+两个端点均需管理认证，错误规则同第 3 节；未安装、已卸载或以 `source=dev` 运行的组件返回 404。Markdown 原文由 WebUI 渲染，WebUI 不执行其中的 HTML。
 
 ## 23. 配置文件
 
