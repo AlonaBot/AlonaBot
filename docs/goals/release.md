@@ -99,7 +99,7 @@
 - 首次管理 token：复用 adminauth.FirstToken；stdin 与 stderr 均为终端时生成并显示一次，非终端正常启动并写入 data_dir/admin_token（0600），日志只写路径，首次成功登录删除文件。预装在 token 初始化之后执行。
 - 管理员之后可经管理 API 或 CLI 启用 Agent；Agent 在没有配置 Provider 时也能启用（/ask 回复提示）。
 - 之后的启动不再遍历预装；已卸载（Uninstalled）的预装包保持卸载，已由社区组件替换的同类组件保持管理员选择。
-- 配置中的 Adapter：每次启动读取 settings.File.Settings().Adapters，尊重 AdapterSettings.Package 的所属组件；已有实例的已安装 Adapter 自动启用。尚无安装记录时优先取发行包 packages/ 的官方包，没有发行包时从同平台的官方 Release 发行归档取得对应组件，仍经普通安装与验签流程；沿用 T-14.3 的外层归档及 packages/<组件 ID>/ 结构，不套用 InstallRequest.Source 的单组件仓库下载布局。trust.Official 返回 false 时保留普通安装的信任确认要求，在 PR 中列出 go install 部署自动补装的首次信任缺口，交审查者裁决。保留的卸载记录报出需手动安装的错误，下载、校验或实例配置失败完整记录，其他组件继续按原规则启动。
+- 配置中的 Adapter：每次启动读取 settings.File.Settings().Adapters，尊重 AdapterSettings.Package 的所属组件；已有实例的已安装 Adapter 自动启用。尚无安装记录时优先取发行包 packages/ 的官方包，没有发行包时从同平台的官方 Release 发行归档取得对应组件，仍经普通安装与验签流程；沿用 T-14.3 的外层归档及 packages/<组件 ID>/ 结构，不套用 InstallRequest.Source 的单组件仓库下载布局。trust.Official 返回 false（开发构建）时不自动下载补装，记 ERROR 并提示用 alonabot install 手动安装（D-175）。保留的卸载记录报出需手动安装的错误，下载、校验或实例配置失败完整记录，其他组件继续按原规则启动。
 - 可用更新：List 对仍绑定官方来源和发布者的已安装组件读取对应内置包，按 SemVer 比较版本（含预发布，忽略 build metadata），更高时填 available_update；保持安装版本、Active、启用状态与 pin 不变。损坏候选不列为可用更新并记 ERROR，其余条目照常列出；目录缺失时沿用原列表。管理员显式 update 且未指定 Source/Archive 时优先使用同一内置候选，再走既有来源、发布者、pin、依赖与候选提交校验；显式给出的输入保持优先，社区替换的组件沿用其来源。
 - Telegram：CreateInstance 在原有实例所属组件确认、配置补全、环境变量展开、校验与设置提交之后，对尚未启用的 Adapter 复用内部 enable；保持现有实例锁与包锁顺序，不在持有同一包锁时再调用公开 Enable。启用后按现有实例启动路径应用新配置；设置已提交而启用失败时返回实际错误，保留配置以供管理员修复。
 
@@ -163,7 +163,7 @@
 
 目标：deploy/install.sh 按 CONTRACTS §15.6 在 Linux（systemd，root）与 macOS（launchd，当前用户）上安装 Core 与官方组件（首版为 Telegram Adapter、Agent、WebUI、help，D-171）：下载并按 SHA256SUMS 校验发行归档，校验失败不改动已有安装；替换程序目录；尚无管理凭证时经 /dev/tty 运行 admin-token init，没有终端时跳过初始化，启动服务后输出 admin-token show 的命令（D-82）；写入 systemd 单元（系统用户 alonabot）或用户 LaunchAgent 并启动；再次运行即升级，--uninstall 保留数据目录；不支持的系统在改动前退出。Release 流程上传 install.sh 与 SHA256SUMS。
 
-依据：spec/plan/release.md T-14 步骤 7、切片表 T-14.7 及失败停止条件；CONTRACTS §15.1、§15.2、§15.6、§7.4；DECISIONS D-64、D-82、D-171；TEST-MATRIX V-84（无终端预期按 CONTRACTS §15.6 与 PLAN 步骤 7，由审查者同步）。
+依据：spec/plan/release.md T-14 步骤 7、切片表 T-14.7 及失败停止条件；CONTRACTS §15.1、§15.2、§15.6、§7.4；DECISIONS D-64、D-82、D-171；TEST-MATRIX V-84（无终端预期已按 D-175 与 §15.6 对齐）。
 
 范围（只新增或修改这些）：
 - 新增 deploy/install.sh：POSIX sh 安装、升级、卸载及写出 systemd 单元或 LaunchAgent
