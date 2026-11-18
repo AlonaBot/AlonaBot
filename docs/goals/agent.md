@@ -25,7 +25,7 @@
 | goal-145 | T-12.17 | 对话重试与回退模型、图像转述 | T-12.15 | 已完成（PR #224） |
 | goal-159 | T-12.18 | Agent 的触发方式、唤醒词与成员独立会话 | T-12.17、S-02.3 | 已完成（PR #229） |
 | goal-164 | T-12.19 | Agent 接入配置文件 | T-04.18、T-12.18 | 已完成（PR #247） |
-| goal-167 | T-12.20 | 官方 Agent 的插件页面 | T-04.17、T-12.19 | 待派发 |
+| goal-167 | T-12.20 | 官方 Agent 的插件页面 | T-04.17、T-12.19 | 已完成（PR #252） |
 
 ## 第 1 波
 
@@ -1277,7 +1277,7 @@ func (a *component) selectProfile(c *sdk.Context, name string) error
 
 ### goal-167 · T-12.20 官方 Agent 的插件页面
 
-状态：待派发。前置 T-04.17（PR #218，合并提交 `6d81be3e5b73e949b58b9a2890c8a4ea40c071fe`）、T-12.19（PR #247，合并提交 `f3959f6eb05060ea874544c6a786e114844f2d95`）均已合并；2026-11-18 按 main `f3959f6eb05060ea874544c6a786e114844f2d95` 核对，沿用原语句的目标、依据与要点。
+状态：已完成（PR #252），合并提交 `a413f54c`。以下保留派发时语句。派发时：前置 T-04.17（PR #218，合并提交 `6d81be3e5b73e949b58b9a2890c8a4ea40c071fe`）、T-12.19（PR #247，合并提交 `f3959f6eb05060ea874544c6a786e114844f2d95`）均已合并；2026-11-18 按 main `f3959f6eb05060ea874544c6a786e114844f2d95` 核对，沿用原语句的目标、依据与要点。
 
 `github.com/AlonaBot/AlonaBot/sdk/page` 已提供 `func Handler() http.Handler`，只响应路径末段为 `kit.css`、`kit.js` 的 GET；`github.com/AlonaBot/AlonaBot/sdk` 已有 `func (p *Plugin) Route(method, path string) *RouteBuilder`、`func (b *RouteBuilder) Page(title string) *RouteBuilder`、`func (b *RouteBuilder) Handle(h http.Handler)` 和 `func (b *RouteBuilder) HandleFunc(f func(http.ResponseWriter, *http.Request))`，路由缺省要求 Core 管理会话。PR #218 完成套件与页面桥的 SDK 一侧；插件页面宿主、父桥、ADMIN-API §7 的窗口与路径校验、D-177 的配置读取 `messages` 及 `translate` 由进行中的 goal-44（T-09.9）完成。本切片按该契约实现 Agent 页面与路由，浏览器联验依赖 goal-44，保持切片表的直接前置为 T-04.17、T-12.19。
 
