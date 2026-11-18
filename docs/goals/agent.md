@@ -23,7 +23,7 @@
 | goal-143 | T-12.15 | 模型两层配置 | T-12.7 | 已完成（PR #207） |
 | goal-144 | T-12.16 | 预留的五类模型与模型管理路由 | T-12.15 | 已完成（PR #223） |
 | goal-145 | T-12.17 | 对话重试与回退模型、图像转述 | T-12.15 | 已完成（PR #224） |
-| goal-159 | T-12.18 | Agent 的触发方式、唤醒词与成员独立会话 | T-12.17、S-02.3 | 等待前置（T-12.17、S-02.3） |
+| goal-159 | T-12.18 | Agent 的触发方式、唤醒词与成员独立会话 | T-12.17、S-02.3 | 待派发 |
 | goal-164 | T-12.19 | Agent 接入配置文件 | T-04.18、T-12.18 | 等待前置（T-04.18、T-12.18） |
 | goal-167 | T-12.20 | 官方 Agent 的插件页面 | T-04.17、T-12.19 | 等待前置（T-04.17、T-12.19） |
 
@@ -1117,21 +1117,76 @@ func Retryable(err error) bool
 
 ### goal-159 · T-12.18 Agent 的触发方式、唤醒词与成员独立会话
 
-状态：等待语句定稿（前置均已合并）。T-12.17（PR #224，`7fc052e`）、S-02.3（PR #227，`86e6768`）已合并。S-02.3 提供 Core 侧消息过滤及配置字段注册，避免未命中的消息交付或唤醒 Agent；首次发布前不做旧按聊天触发值的交接（见要点）。2026-11-17 按 D-167 新增。目标、依据与要点由 PLAN T-12 步骤 2、3 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：待派发。前置 T-12.17（PR #224，合并提交 `7fc052e9d40833ca36ef034fb8da7c6cf6394cfe`）、S-02.3（PR #227，合并提交 `86e6768b1080ed9e081d15e6fbfc56193e3462b0`）已合并；按 main `947daa5` 核对。`github.com/AlonaBot/AlonaBot/sdk` 已有 `MessageFilter`、`func (r *Plugin) On(routeID string, eventType EventType) *EventBuilder`、`func (b *EventBuilder) Filter(filter MessageFilter) *EventBuilder` 与 `func NotCommand() Rule`；过滤声明只保存配置字段路径。`internal/core/router/message_filter.go` 在交付前匹配，`internal/app/message_filter.go` 当前从 Active 代次读取配置；按会话应用 D-168 覆盖值由 T-04.18 接入，休眠唤醒由 S-02.1 接入。
+
+`github.com/AlonaBot/AlonaBot/agent` 的公开入口为 `func New() *sdk.Plugin`；`conversation.go` 的自由对话当前注册为 `p.On("chat", sdk.MessageCreated).Rule(sdk.ToMe(), sdk.NotCommand())`，再读 `chatSettings.Enabled`，经 `c.Continue` 调用 `converse`。`memory.go` 的包内 `func sessionKey(c *sdk.Context) string` 当前返回 `c.Session()+"@"+c.Instance()`，聊天设置、历史、图片、reset 与会话笔记共用此键；`settings.go` 的 `chatSettings` 同时保存 Model、Persona、Enabled、ResetGeneration 与 ImageCount。`sdk` 的 `func (c *Context) Config() config.Values` 当前读取插件配置，`func (c *Context) User() string` 在 Actor 缺省时返回空串。`internal/core/continuation/continuation.go` 要求 Actor 与默认 Target 存在；缺省 Actor 的键回落按下述本地自测取证。首次发布前不做旧按聊天触发值的交接；`/agent on|off` 的配置文件写入及旧聊天设置删除沿用原要点，交给 goal-164。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-159（切片 T-12.18：Agent 的触发方式、唤醒词与成员独立会话）。goal 目录 goal-159，分支 goal-159，worktree .worktrees/goal-159，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：自由对话开关改为可多选的触发方式 `triggers`（mention、wake_word、private），新增唤醒词 `wake_words` 与成员独立会话 `member_sessions`；`/agent on` 与 `/agent off` 改写当前聊天的触发方式。
 
-依据：PLAN T-12 步骤 2、3；DECISIONS D-141、D-167；TEST-MATRIX V-139。
+依据：spec/PLAN.md §3.1；spec/plan/agent.md T-12.18、T-12 步骤 2、3 及失败停止条件；spec/CONTRACTS-v0.1.md §2.2、§2.5、§13.3、§13.4；spec/adr/DECISIONS.md D-86、D-141、D-167；TEST-MATRIX V-139。按本条既有要点，触发来源直接改用 Core 配置，命令写配置文件与删除旧聊天设置由 goal-164 承接。
 
-要点：
-- 用 S-02.3 的 p.On(...).Filter(sdk.MessageFilter{TriggersConfig:"triggers", WakeWordsConfig:"wake_words"}) 注册自由对话，Core 按消息会话生效配置筛选，任一选中项命中才交付（休眠时才唤醒）；继续用 SDK NotCommand 与其他 Rule 排除 command_consumed 等进程内条件。mention 为群聊中 to_me，private 为私聊，wake_word 为 text 片段顺序拼接后包含任一非空词（拉丁字母不区分大小写），保留原文本。
-- 缺省 triggers 为空，只有 `/ask` 触发；triggers 与 wake_words 由 Core 读取当前 Active 及 D-168 配置文件的有效覆盖值，配置值不固化进路由。首次发布前不做交接：本切片起触发方式只由 Core 持有的配置与配置文件决定，Agent 数据库中旧的按聊天开关不再参与触发判断；`/agent on|off` 改写为配置文件写入与旧聊天设置的删除由 goal-164 负责。Core 只读自身持有的配置，不访问 Agent 数据库。
-- member_sessions 为 true 时群聊的会话键追加发言人的用户字符串，成员各自有历史与图片编号，`/reset` 只清除发言人的会话，Actor 缺省时用群的会话；记忆的会话笔记不受影响。
+范围（只新增或修改这些）：
+- agent/config_schema.json、agent/i18n/en-US.json、agent/i18n/zh-CN.json：触发方式、唤醒词与成员独立会话的字段及翻译。
+- agent/conversation.go：自由对话的 Filter 注册、移除旧触发判断、成员历史键与群聊发言人记录；保留已有延续调用、重试、回退、图像转述和用量统计。
+- agent/memory.go：新增包内 conversationKey，分开对话键与默认 Target 的会话笔记键；保留记忆工具的范围与权限校验。
+- agent/settings.go、agent/image.go：对话键对应的锁、reset 代次、图片计数、保存、回放与清除；保留按聊天选择模型和人格的范围、既有命令注册与聊天设置结构，旧设置的删除交给 goal-164。
+- 新增 agent/triggers_test.go 的一个主路径集成测试；agent/agent_test.go 只同步配置与 i18n 资源快照、必要的消息注入及按键读取辅助；agent/image_test.go 只把依靠 /agent on 开启自由对话的装配改为配置 triggers，保留原断言。其余验证写在 agent/ 的 *_local_test.go。
 
-不做：回复方式（Core 的平台设置，goal-162）；配置文件（goal-164）。
+允许的依赖：标准库、现有 sdk/...（含 sdk/config、sdk/message、sdk/conversation、sdk/gormdb）、agent/provider 与已批准的 GORM；复用已有依赖，不新增依赖或跨模块边。Agent 只经 SDK 访问 Core。
+
+接口（以下为 main 现有签名；包内辅助调整时同步上述范围内全部调用方）：
+// github.com/AlonaBot/AlonaBot/sdk
+type MessageFilter struct {
+    ToMe bool
+    ChatTypes []message.ChatType
+    WakeWordsConfig string
+    TriggersConfig string
+}
+func (r *Plugin) On(routeID string, eventType EventType) *EventBuilder
+func (b *EventBuilder) Filter(filter MessageFilter) *EventBuilder
+func (b *EventBuilder) Rule(rules ...Rule) *EventBuilder
+func (b *EventBuilder) Handle(h any)
+func NotCommand() Rule
+func (c *Context) Config() config.Values
+func (c *Context) Session() string
+func (c *Context) Instance() string
+func (c *Context) User() string
+func (c *Context) Event() *message.Event
+func (c *Context) Continue(fn func(*Context) error) error
+// github.com/AlonaBot/AlonaBot/sdk/config
+func (v Values) Bool(key string) bool
+// github.com/AlonaBot/AlonaBot/agent 包内
+func sessionKey(c *sdk.Context) string
+func (a *component) registerConversation(p *sdk.Plugin)
+func (a *component) converse(c *sdk.Context, text string) error
+func (a *component) settings(ctx context.Context, session string, db *gorm.DB) (chatSettings, error)
+func (a *component) updateSettings(c *sdk.Context, update func(*chatSettings)) error
+func (a *component) resetConversation(c *sdk.Context) error
+func (a *component) conversationMemory(c *sdk.Context, db *gorm.DB, key string) ([]conversationEntry, string, error)
+func (a *component) appendImages(c *sdk.Context, db *gorm.DB, generation uint64, user conversationEntry, assistant json.RawMessage, images []provider.Image) error
+// 本切片新增的包内入口；无新增公开符号
+func conversationKey(c *sdk.Context) string
+
+配置接口：triggers 为无 items 的字符串 list，options 为 ["mention", "wake_word", "private"]，default 为 []；wake_words 为无 items 的字符串 list，default 为 []；两者均为非 secret 字段。member_sessions 为 bool，default 为 false。成员键选择从 c.Config().Bool("member_sessions") 读取；triggers 与 wake_words 的匹配由 Core 读取配置。profile 标记与配置文件命令由 goal-164 添加。
+
+行为：
+- 自由对话沿用路由 ID chat 和 sdk.MessageCreated，在 Handle 前登记一次 Filter：p.On("chat", sdk.MessageCreated).Filter(sdk.MessageFilter{TriggersConfig: "triggers", WakeWordsConfig: "wake_words"}).Rule(sdk.NotCommand()).Handle(...)。替换原有 sdk.ToMe() Rule，移除读取 chatSettings.Enabled 的触发门；否则唤醒词与 private 命中仍会被旧条件挡住。其他进程内 Rule 继续独立执行；Handler 只对通过规则的消息请求一次延续调用，进入现有 converse。
+- Core 按消息会话的生效配置筛选，任一选中项命中才交付，未命中的消息不交付、不取得唤醒名额；休眠时由 Core 决定是否唤醒。mention 为 GROUP 且可信 to_me，private 为 PRIVATE，wake_word 为 text 片段按顺序拼接后包含任一非空词，位置不限，拉丁字母不区分大小写。Agent 保留原文本及唤醒词；一条消息命中多项仍至多触发一轮。被命令层消费的消息由 sdk.NotCommand() 排除。
+- 缺省 triggers 为空，只有 /ask 触发；/ask 保留 User 权限与原有参数、StopPropagation 和延续调用路径，不受自由对话 Filter 限制。Core 读取当前 Active，排除 Pending；T-04.18 接入后应用 D-168 的会话有效覆盖值，字段路径与 Filter 注册保持不变。配置值不固化进路由，Agent 不重复实现匹配或维护另一份触发来源。首次发布前不做交接：旧聊天开关与旧按聊天触发值均不参与判断，Core 不访问 Agent 数据库。
+- /agent on 的目标语义保留为当前聊天的三种触发方式全部，/agent off 为空；按本条原有分工，命令经配置文件写入与旧聊天设置的删除由 goal-164 完成，本切片保留既有命令注册与存储结构。PR「文档同步」列明 V-139 的命令切换分项随 goal-164 取证，以及 PLAN、D-167 中旧按聊天值优先规则需要审查者同步的条款。
+- sessionKey 继续表示 c.Session()+"@"+c.Instance() 的聊天键。conversationKey 在 member_sessions=true、ChatType=message.ChatGroup 且 c.User() 非空时，在聊天键后追加完整的用户字符串；其余情况返回聊天键，Actor 缺省时使用群的会话。保留用户字符串原文，区分不同会话、话题与实例。/ask、自由对话、历史读写、会话锁、ResetGeneration、ImageCount、图片保存与回放、/reset 统一使用同一个 conversationKey；/reset 仅清除对应成员的历史和图片并归零计数，已开始的旧轮次继续受 reset 代次保护。
+- 按聊天保存的模型、人格仍按 sessionKey 选择；成员的 reset 代次与图片编号按 conversationKey 隔离，避免 /persona 或 /provider 只改变管理员自己的成员会话。memoryScope 的 memory 目标继续按默认 Target 的 sessionKey 取会话笔记，用户档案继续按 Actor 取；成员会话首轮各自冻结同一聊天笔记的快照。群聊条目在 Actor 存在时记录其 ExternalUserID，Actor 缺省时不解引用。保留 Core 延续调用及记忆服务缺少 Actor 时的原始错误；键回落的自测与完整对话的证据分别记录。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：agent/triggers_test.go（//go:build unix，package agent_test）的一个 TestAgentTriggersAndMemberSessions 集成测试，复用 agent_test.go 的真实 Start、loopback、SDK Session、Core 会话存储与受管 SQLite，Provider 用本地模拟服务。配置 triggers=["wake_word"]、wake_words=["Alona"]、member_sessions=true，选用 image_input=true 的 chat 模型，两位群成员交替发送含唤醒词及图片的消息，断言各触发一次、模型收到的文本保留唤醒词、历史与从 1 开始的图片编号各自独立；其中一位 /reset 后再发一轮，仅本人重新开始，另一位的历史与图片仍保留。主路径只保留这一条成员对话链。agent/image_test.go 的既有图片断言仅同步开启方式。
+- 本地自测（*_local_test.go，不提交，结果写入 PR）：V-139 的其余分项，包括 triggers 缺省为空与 /ask 独立触发，mention 的群提及和回复、private 的私聊、三项 OR 且只一轮、不命中时 Core 跳过 Agent 事件 Handler；唤醒词位于开头/中间、拉丁字母大小写、跨 text 片段拼接、空词忽略、未选 wake_word 时不使用词表、原文保留；含唤醒词且 command_consumed=true 的消息被 NotCommand 排除。核对注册只含两个字段路径、旧 Enabled 取值不影响触发、Active 更新生效且 Pending 不生效；member_sessions=false 的共享历史、私聊键不变、Actor 缺省时 conversationKey 回落群键、不同实例和话题隔离、reset 与在途轮次的代次保护、聊天模型/人格范围及会话笔记范围保持原契约。Actor 缺省的一轮对话仍受 Core 延续调用的 Actor 前置约束，单独写明实际结果。/agent on|off 的配置文件切换由 goal-164 取证；D-168 覆盖值与真实休眠进程分别由 T-04.18、S-02.1 的后合并者验证，当前缺少时写明未运行及归属。不向 sdk/、internal/core/supervisor/ 或新 testdata 插件提交测试（D-86）。
+
+完成条件：gofmt -l agent 无输出；go vet ./agent/...；go test -race -count=1 ./agent/...；go build ./...；go run ./cmd/alonabot check --dir agent。triggers 为空仍触发非命令对话，或一位成员读到另一位的独立历史与图片时停止合入。PR 写明实际运行平台、本地自测结果、未运行项及上述后继验收归属；按共同约束推送分支并开 PR，由审查者处理规格同步。
+
+不做：回复方式（Core 的平台设置，goal-162）；配置文件、profile 标记、/agent on|off 的配置文件写入和旧聊天设置删除（goal-164）；Core 的休眠生命周期与配置覆盖派发；旧按聊天触发值的交接、兼容层或迁移；修改 sdk、Core、.proto 或 spec/；扩展 Provider、工具循环、记忆工具与定时任务功能。
 ```
 
 ## 第 21 波

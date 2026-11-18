@@ -109,14 +109,14 @@
 | goal-160 | T-08.18 | 配置文件的存储与管理 | T-08.14、T-09.14 | 已完成（PR #214） |
 | goal-147 | T-09.19 | 诊断包 | T-09.10、T-09.14 | 已完成（PR #213） |
 | goal-153 | T-09.20 | WebUI 组件的后台进程与 command.invoked | T-09.12、T-09.14、T-04.16 | 已完成（PR #221） |
-| goal-154 | T-09.21 | 插件数据浏览 | T-09.14、T-08.5、T-08.17 | 等待前置（T-08.17） |
+| goal-154 | T-09.21 | 插件数据浏览 | T-09.14、T-08.5、T-08.17 | 待派发 |
 | goal-155 | T-09.22 | WebUI 需要的补充管理 API | T-09.14、T-07.9、T-03.25、T-04.16 | 已完成（PR #220） |
 | goal-158 | T-09.24 | 组件的 changelog | T-09.3、T-09.14 | 已完成（PR #215） |
 | goal-148 | T-11.5 | 工具的副作用类别 | T-11.2、T-12.3、T-09.14 | 已完成（PR #219） |
 | goal-140 | T-13.5 | 模块根包只保留库模式接口 | T-04.16 | 已完成（PR #200） |
-| goal-170 | S-02.1 | 按需唤醒、活动引用与有界等待 | S-01.1、S-01.2、T-05.5、T-06.4、T-07.5 | 等待前置 |
+| goal-170 | S-02.1 | 按需唤醒、活动引用与有界等待 | S-01.1、S-01.2、T-05.5、T-06.4、T-07.5 | 待派发 |
 | goal-176 | S-02.3 | Core 消息事件过滤与 SDK 注册 | T-04.16、T-08.11、T-09.14 | 已完成（PR #227） |
-| goal-161 | T-04.18 | 配置文件的派发与 SDK | T-04.16、T-08.18 | 等待前置（T-08.18） |
+| goal-161 | T-04.18 | 配置文件的派发与 SDK | T-04.16、T-08.18 | 待派发 |
 | goal-171 | S-02.2 | 空闲退出与即时休眠策略 | S-02.1 | 等待前置 |
 | goal-177 | T-09.27 | 组件市场 ID 改用连字符 | T-09.10、T-09.14、T-12.8、T-13.5 | 已完成（PR #222） |
 | goal-162 | T-04.19 | 平台与消息 | T-04.18 | 等待前置（T-04.18） |
@@ -7865,7 +7865,7 @@ internal/core/state
 
 ### goal-154 · T-09.21 插件数据浏览
 
-状态：等待语句定稿（前置均已合并）。T-08.17（PR #212，`4d69978`）已合并。2026-11-17 按 D-163、D-165 新增。目标、依据与要点由 PLAN T-09 步骤 7（数据浏览）确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：待派发。前置 T-09.14（PR #192，`0cff77c`）、T-08.5（PR #79，`75c16d3`）、T-08.17（PR #212，`4d69978`）均已合并。已按 main `947daa5` 核对：`internal/core/manage` 的 `(*Service).Handler(auth *adminauth.Auth) http.Handler` 统一注册管理路由；`generations_api.go` 已按安装来源选择代次 `db.sqlite` 或开发组件的 `dev.sqlite`；`internal/core/state` 有 `Active(ctx context.Context, pluginID string) (string, error)` 与 `Retained(ctx context.Context, pluginID string) ([]string, error)`。`sdk/sqlitedb/kv.sql` 的 `_alonabot_kv` 使用 `key TEXT PRIMARY KEY`、`value BLOB`、`updated_at INTEGER`，`internal/app/plugindata.go` 准备共用数据目录；`internal/core/candidate/database.go` 已使用 modernc SQLite Backup API。本条在这些入口上补 ADMIN-API §21。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-154（切片 T-09.21：插件数据浏览）。goal 目录 goal-154，分支 goal-154，worktree .worktrees/goal-154，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -7874,13 +7874,46 @@ internal/core/state
 
 依据：PLAN T-09 步骤 7（数据浏览）；CONTRACTS §6.1、§6.3；ADMIN-API §21；DECISIONS D-163、D-165；TEST-MATRIX V-134、V-137 的 API 分项。
 
-要点：
-- 只作用于受管 SQLite 与 `<data_dir>/plugin_data/<id>/`；generation 参数缺省为 Active，保留代次的副本只读；以 `_alonabot_` 开头的表与没有主键的视图不可写。
-- 行的写入在插件运行时与插件共用同一个数据库文件的 WAL；导出用 SQLite Backup API 取一致快照，与数据目录一起打包 zip。
-- 路径规则：拒绝空段、`.`、`..`、绝对路径与反斜杠，不跟随符号链接；上传先写临时文件再改名。
-- 清空删除全部可写表的行、KV 与数据目录中的全部文件，保留表结构，要求确认。
+范围（只新增或修改这些）：
+- internal/core/manage/：新文件 data_api.go、data_db.go、data_kv.go、data_files.go；http.go 的路由登记，generations_api.go 中可共用的代次路径解析
+- cmd/alonabot/manage_e2e_test.go；上述包的 *_local_test.go
 
-不做：页面（goal-44 的数据库视图、goal-156 的存储视图）。
+允许的依赖：标准库与 docs/development.md 已批准的 modernc.org/sqlite、GORM/libtnb SQLite；Core 状态库沿用 state.Store，插件业务库按现有数据库规则访问。沿用 ARCHITECTURE 的依赖方向；不 import sdk/sqlitedb 或 sdk/kv，不新增依赖。
+
+接口（现有签名保持可用）：
+- (*manage.Service).Handler(auth *adminauth.Auth) http.Handler
+- (*state.Store).GetInstall(ctx context.Context, pluginID string) (state.Install, error)
+- (*state.Store).Active(ctx context.Context, pluginID string) (string, error)
+- (*state.Store).Retained(ctx context.Context, pluginID string) ([]string, error)
+- 新增接口限于以下 HTTP 端点，载荷与错误格式照 ADMIN-API §21、§5；辅助类型和函数保持包内可见：
+  GET /api/v1/plugins/{id}/data/tables
+  GET、POST /api/v1/plugins/{id}/data/tables/{table}/rows
+  PATCH、DELETE /api/v1/plugins/{id}/data/tables/{table}/rows/{rowid}
+  GET /api/v1/plugins/{id}/data/kv
+  GET、PUT、DELETE /api/v1/plugins/{id}/data/kv/{key...}
+  GET /api/v1/plugins/{id}/data/files
+  GET、PUT /api/v1/plugins/{id}/data/files/content
+  POST /api/v1/plugins/{id}/data/files/mkdir、rename、delete
+  GET /api/v1/plugins/{id}/data/export
+  POST /api/v1/plugins/{id}/data/clear
+  KV 的公开路径语义仍是 §21 的 /kv/{key}；ServeMux 使用尾部通配以保留键中字面的 /。
+
+行为：
+- 只作用于受管 SQLite 与 <data_dir>/plugin_data/<id>/。复用管理认证和非 GET 的 CSRF 校验；从安装记录、Active 与 Retained 验证组件和代次，在逐插件管理锁内选定实际文件，防止与更新、回退、卸载及回收交错。安装插件用 plugins/<id>/generations/<generation>/db.sqlite，开发组件沿用 plugins/<id>/dev.sqlite；缺少受管数据库时表与 KV 端点返回 404，保留文件端点的独立可用性。
+- generation 缺省为 Active，只允许本插件当前或保留的已提交代次；保留副本以只读连接浏览，写入返回 403。文件目录由各代次共用，generation 不选择历史文件；指定保留代次的 clear 请求拒绝写入，export 的 db.sqlite 选该代次、plugin_data/ 仍取当前共用目录。
+- 列出表、行数、列名、类型、主键与 notnull；普通表按 rowid 增删改，WITHOUT ROWID 表、无主键视图与 _alonabot_ 保留表的通用行写入返回 403。_alonabot_kv 通过专用 KV 端点管理，并纳入 clear；迁移表只读且保留。查询按列等值筛选和排序，offset/limit 分页（缺省 50、上限 500），返回 total；BLOB 按 {"$base64":"…"} 往返。表、列与排序标识符先从实际 schema 核对并引用，取值用绑定参数。
+- Active 的行与 KV 写入在插件运行中照常允许，共用原数据库文件的 WAL；使用 CONTRACTS §6.1 的连接设置（WAL、FULL、foreign_keys=ON、busy_timeout=5000ms），每个数据库请求一个事务。保留代次只读打开，缺失文件保持缺失。忙等待超时返回 409；约束错误返回 400 并保留 SQLite 英文说明。
+- KV 复用 _alonabot_kv，键遵守 CONTRACTS §6.1；列表按键排序、支持字面 prefix 与分页，返回 size、updated_at、total。读取返回 value_base64，合法 UTF-8 时另给 text；写入接受二进制或文本并更新毫秒时间，读删不存在的键返回 404。每次写入记录 INFO 审计日志；表行只记组件、表与 rowid，KV 与文件记录定位信息，取值和文件正文不进日志。
+- 文件路径相对数据目录，以 / 分隔；根目录列表可省略 path。拒绝空段、.、..、绝对路径、反斜杠及目录外路径，逐段访问时不跟随符号链接；上传、重命名、删除和导出同样遵守。列表目录在前、按名称排序；下载用 application/octet-stream 与 attachment。上传先在目标目录写临时文件再改名，已有文件且未给 overwrite=1 时 409；删除非空目录须 recursive=true。
+- export 通过 SQLite Backup API 从所选数据库取一致快照，zip 中为 db.sqlite 与 plugin_data/；沿用 candidate/database.go 的驱动备份方式，数据库与文件收集错误原样返回。clear 须 confirm=true，否则 400；清空全部可写业务表的行、KV 与数据目录文件，保留表结构、迁移记录与目录本身，沿用每次数据库请求一个事务的规则。数据库与目录清理失败保留实际错误，不声称跨 SQLite/文件系统原子提交。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/manage_e2e_test.go 新增一个真实 Core＋插件子进程＋SQLite 的数据管理集成子测试，复用现有动态构建工程：运行中经认证 API 浏览与写入业务行、KV 和文件，核对插件下一次读取可见；导出 zip 中数据库可打开、文件完整；确认 clear 后数据清空而表结构与迁移记录保留。复用既有测试工程构建方式，不新增 testdata 插件。
+- 本地自测（*_local_test.go，结果写入 PR）：V-134、V-137 的其余 API 分项，包括分页/筛选/排序、BLOB 与 null、WITHOUT ROWID/视图/保留表、保留代次只读、无库、约束与 busy 超时、字面含 / 的 KV 键、越界和符号链接、上传覆盖与删除非空目录、CSRF、审计日志无取值；更新/回退/回收与请求交错、清理及 zip 写出失败保留错误。
+
+完成条件：gofmt -l 无输出；go vet ./internal/core/manage/... ./cmd/alonabot/...；go test -race ./internal/core/manage/... ./cmd/alonabot/...；go build ./...。PR 按 TEST-MATRIX §3 写明 V-134、V-137 API 分项的测试位置、命令、平台、结果与未运行项。
+
+不做：页面（goal-44 的数据库视图、goal-156 的存储视图）；外部数据库、自定义 SQL 执行端点、表结构编辑、数据迁移、CLI 数据浏览；不改 .proto，不加依赖，不改 ARCHITECTURE/README/spec，文档同步写进 PR。
 ```
 
 ### goal-155 · T-09.22 WebUI 需要的补充管理 API
@@ -8047,22 +8080,71 @@ internal/core/state
 
 ### goal-170 · S-02.1 按需唤醒、活动引用与有界等待
 
-状态：等待前置（T-05.5、T-06.4、T-07.5）。S-01.1（PR #225，`2cc32ff`）、S-01.2（PR #226，`413a6ff`）已合并。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
+状态：待派发。前置 S-01.1（PR #225，`2cc32ff`）、S-01.2（PR #226，`413a6ff`）、T-05.5（PR #162，`8c12972`）、T-06.4（PR #164，`039802f`）、T-07.5（PR #119，`cc19e99`）均已合并；S-02.3（PR #227，`86e6768`）的 Core 消息过滤也已合并。已按 main `947daa5` 核对：`internal/core/supervisor.Launch(ctx context.Context, store *state.Store, spec supervisor.Spec) (*supervisor.Running, error)` 与 `(*Running).Stop(t0 time.Time, reason pb.StopReason) host.StopResult` 共用逐插件锁，`runtime.go` 按实际启动所有权更新状态；`internal/core/state.ActiveRouteSnapshot` 与 `internal/core/router.SetRouteSnapshot/RouteSnapshot` 已保存和读取已提交路由，但 `Router.candidates`、Broker 与 HTTP 代理仍依赖活 Session。`router.Options.MessageConfig` 与 `matchMessageFilter` 已完成消息过滤，`internal/app/message_filter.go` 当前只读 Active 基础配置。本条接入快照唤醒与活动引用；与 goal-161 共享 Router 的 Options/Invocation、internal/app 装配及消息配置读取，后合并者同步 main，保留配置文件的会话解析与覆盖，不回退为基础配置读取。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-170（切片 S-02.1：按需唤醒、活动引用与有界等待）。goal 目录 goal-170，分支 goal-170，worktree .worktrees/goal-170，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：在现有路由快照与运行状态上接入 Supervisor 的 EnsureActive、活动引用、并发唤醒合并与有界等待，保留请求的原始权限、Target、Trace、顺序与期限。
 
-依据：PLAN §7 S-02 步骤 1～3；CONTRACTS §4.4、§4.5、§16；WIRE-FORMAT §3.1、§4；DESIGN §A；D-53、D-54、D-153；V-77 的唤醒与活动引用分项。
+依据：PLAN §7 S-02 步骤 1～3 及其失败停止条件；CONTRACTS §2.5、§4.3、§4.4、§4.5、§12.2、§12.3、§16；WIRE-FORMAT §3.1、§4；DESIGN §A；DECISIONS D-53、D-54、D-153、D-173 及 2026-11-17 维护者确认的休眠补齐规则；TEST-MATRIX V-77 的首请求、并发、取消、期限与活动引用分项。
 
-要点：
-- 范围：internal/core/supervisor、router、broker、httpproxy、media、continuation、hook、bus 中活动登记的调用点，internal/app 装配与停止竞争入口，internal/tune/params.go；contracts/proto/alonabot/v1/control.proto 只追加 STOP_REASON_IDLE，生成代码与 contracts/wirespec_test.go。该协议修改明确授权；不新增业务 RPC。
-- EnsureActive 属于 Supervisor，同一插件并发只启动一次；取得活动引用前确认当前代次与状态，确认 ACTIVATED 与 REGISTER 摘要后才交付。原管理锁、runtime.lock、退出清理与重启策略继续由现有所有者负责。
-- 消息事件在取得活动引用和 EnsureActive 前按 CONTRACTS §2.5 过滤；与 S-02.3 的后合并者保证常驻交付和快照唤醒共用该匹配入口，未命中不唤醒。Router、Service Broker、HTTP 与媒体、插件出站业务、延续调用与多轮等待按实际工作持有引用；Scheduler 的到期入口由 goal-172 接入。Hook/Bus 中已接纳的工作须计入活动，Bus 离线丢弃规则照旧。
-- 逐插件有界等待同时限制条数、字节，计入 Core 总预算；队满明确 RESOURCE_EXHAUSTED，取消/到期移除，交付前再检查当前代次、路由、权限与 deadline。原上下文不因冷启动重建或延长，100 个并发唤醒只创建一个新 Session。
-- 在新条件就绪时唤醒仍复用原 Generation/Config/DB、activation_reason=resume，不新建候选、不重放副作用；停止竞争协调的门禁供 goal-171 复用。活动引用释放须覆盖实际完成、失败、取消及旧进程确认退出。
-- 验收要点：首条命令、Service 与 HTTP 的一次交付，100 路合并，等待取消/队满/期限，权限改变与摘要失配，引用阻止退出。协议编号检查可提交；默认一个主路径集成测试，SDK/supervisor 新测试与其他边界写 *_local_test.go。
+范围（只新增或修改这些）：
+- internal/core/supervisor/：新文件 wake.go、activity.go，supervisor.go、prepare.go、runtime.go 的启动、活动登记、停止门禁与退出清理调用点
+- internal/core/router/：快照候选、命令索引、派发、消息过滤接入位置与活动包装；internal/core/broker/ 的快照定位、唤醒准入与交付复核
+- internal/core/httpproxy/：快照路径匹配、唤醒与活动引用；internal/core/media/ 的操作/租约活动登记；internal/core/continuation/ 的延续与等待活动登记；internal/core/hook/、bus/ 中已接纳工作的引用调用点
+- internal/app/：assembly.go、alonabot.go、journal.go、message_filter.go 与按需唤醒的新装配文件，覆盖已安装独立进程的启动、停止竞争、绑定与退出监视
+- internal/tune/params.go：追加 WAKE_QUEUE_REQUESTS、WAKE_QUEUE_BYTES 及 Values 字段
+- contracts/proto/alonabot/v1/control.proto：仅追加 STOP_REASON_IDLE；相应 contracts/pb/alonabotv1/ 生成代码与 contracts/wirespec_test.go。该协议修改明确授权
+- internal/app/wake_test.go（新集成测试）；上述包的 *_local_test.go
+
+允许的依赖：标准库及现有已批准依赖；supervisor、router、broker 等沿用 ARCHITECTURE 的 internal/core 内部依赖，internal/app 装配；队列复用 internal/wire.Budget，限额复用 internal/tune。不增加依赖，不新增业务 RPC。
+
+接口（现有签名保持可用）：
+- supervisor.Launch(ctx context.Context, store *state.Store, spec supervisor.Spec) (*supervisor.Running, error)
+- supervisor.Prepare(ctx context.Context, store *state.Store, spec supervisor.Spec) (*supervisor.Prepared, error)
+- (*supervisor.Prepared).Activate(ctx context.Context, commit func(context.Context) error) (*supervisor.Running, error)
+- (*supervisor.Running).Stop(t0 time.Time, reason pb.StopReason) host.StopResult；WaitExit() (abnormal bool, state string, err error)
+- (*state.Store).ActiveRouteSnapshot(ctx context.Context, pluginID string) (state.RouteSnapshot, error)；RuntimeStatus(ctx context.Context, pluginID string) (state.RuntimeStatus, error)；SetRuntimeStatus(ctx context.Context, pluginID string, status state.RuntimeStatus) error
+- (*router.Router).SetRouteSnapshot(pluginID, generationID string, routes []*pb.RouteDescriptor)；RouteSnapshot(pluginID string) (generationID string, routes []*pb.RouteDescriptor, ok bool)；PluginFor(c router.Caller) (router.Plugin, bool)
+- router.Options.MessageConfig func(ctx context.Context, pluginID string, event *pb.Event) (json.RawMessage, error)
+- (*httpproxy.Server).Bind(pluginID, generationID string, endpoint *pb.HttpListener, token []byte, routes []*pb.RouteDescriptor, role state.Role)；Drain(pluginID string, deadline time.Time)；Unbind(pluginID, generationID string, token []byte)
+- (*wire.Budget).Acquire(n int64) bool；Release(n int64)；wire.Request.Deadline time.Time、Late func(wire.Response) 保留原有实际完成/迟到响应语义
+
+接口（本切片新增，以下签名固定）：
+- package supervisor：type WakeOptions struct { Store *state.Store; Global *wire.Budget; QueueRequests int; QueueBytes int64; Start func(context.Context, string) (*Running, error) }；type Waker struct（字段不导出）；func NewWaker(opt WakeOptions) *Waker；supervisor.Spec 追加 Waker *Waker，由独立插件装配传入
+- func (w *Waker) EnsureActive(ctx context.Context, pluginID string, payloadBytes int64) (release func(), err error)：合并启动并取得引用；Start 复用 internal/app 的原代次启动与完整绑定，绑定就绪后才成功返回
+- func (w *Waker) Ready(running *Running)：supervisor 在开放 HTTP/Scheduler 前登记本次 Running/Session 的活动所有权，app 完成 Router/Bus 等绑定后调用 Ready；EnsureActive 等待该次绑定就绪，已有激活、候选提交与唤醒共用此入口
+- func (w *Waker) AcquireActivity(pluginID string, session *wire.Session) (release func(), err error)：只为匹配的当前活 Session 取得引用，供已接纳工作登记，不触发唤醒；释放函数只释放自己持有的一次引用
+- router.Options、broker.Options 各追加 EnsureActive func(ctx context.Context, pluginID string, payloadBytes int64) (release func(), err error)，均注入同一 Waker；原活 Session 路径在未装配该回调时照常使用
+- func WithActivity(p Plugin, acquire func() (release func(), err error)) Plugin（package router）：为实际 Call/SendEvent 登记活动，保留 Plugin 的原身份、路由与调用结果，组合原 wire.Request.Late 回调；supervisor 的 Scheduler 绑定和 app 的 Router/Hook/Broker 绑定复用这一包装
+- func (s *Server) SetWake(snapshot func(pluginID string) (generationID string, routes []*pb.RouteDescriptor, ok bool), ensure func(context.Context, string, int64) (func(), error))（package httpproxy）：装配已提交路由读取与同一唤醒入口
+- continuation.Options、bus.Options 各追加 AcquireActivity func(c router.Caller) (release func(), err error)；func (s *Store) SetActivity(acquire func(c router.Caller) (release func(), err error))（package media）：装配方把 Caller 核对为当前 Session 后调用 Waker.AcquireActivity
+- tune.Values 追加 WakeQueueRequests int、WakeQueueBytes int64，登记 WAKE_QUEUE_REQUESTS=256（≥1）、WAKE_QUEUE_BYTES=16MiB（≥4MiB 且 ≤CORE_MAX_PAYLOAD）；从本次 Core 的生效 Values 注入，不在业务调用点另写缺省值
+- StopReason 在现有值之后追加 STOP_REASON_IDLE，当前 main 的下一号为 6；合并前同步最新源文件，已有编号保持不变，重新生成
+
+行为：
+- Waker 是每个 Core 唯一的唤醒队列与活动引用所有者，生命周期执行仍由 Supervisor 的 Launch/Prepare/Activate/Stop/WaitExit 完成。只从已启用、已提交且运行状态为 SUSPENDED 的独立 plugin/agent 自动唤醒；WAKING 的请求加入同次启动，ACTIVE 取得引用后交付；停用、STOPPED、FAILED 或隔离状态返回实际错误。Core、Adapter、WebUI 与同进程开发组件沿用原常驻生命周期。
+- Router 根据已提交快照构建无进程候选和命令索引，维持 priority/plugin_id/route_id 稳定顺序、命令名覆盖、命令消费与权限规则；快照用于定位，实际交付仍取得新 Caller 与 Activated Plugin。Service Broker 在无活 Caller 时先从快照找 Service，保留访问规则、Schema 标识/版本、编码、调用链和 @agent 解析；初步准入通过后才唤醒。D-173：Service 只取快照已有的 Schema 标识/版本，工具输入 Schema 沿用 REGISTER 原文，配置 Schema 从绑定包资源核验；不另存 Service Schema 原文。
+- HTTP 入口先用快照匹配方法/公共路径并执行现有公共/管理认证、CSRF 与隔离，再 EnsureActive；未匹配和未授权请求保持原错误。ACTIVATED 后重新读取当前 Listener/代理凭证并转发一次，HTTP 请求、流与升级连接按实际存续持有引用。等待期间不预读整份流式正文；已经缓存在 Core 内的请求载荷按实际字节计入等待预算，沿用原 HTTP 错误映射。
+- 消息事件在 PreEvent 后、取得活动引用与 EnsureActive 前复用 S-02.3 的 matchMessageFilter：未命中不交付、不取得唤醒名额，读取失败保留诊断并跳过该路由；命中后仍执行 SDK Rule。常驻与快照候选共用同一匹配入口。goal-161 先合并时保留其按会话 Resolve 与有效 Overrides（含祖先 object）的 MessageConfig；本条先合并时保留现有注入点，由 goal-161 接入会话覆盖，禁止另起配置读取真源。
+- 同一插件 100 个并发请求只建立一个新 Session。共享启动使用 Core 生命周期与原阶段预算，单个等待者取消只撤销自己的等待与预算，不取消其他等待者的启动。等待期间不持 Router/Broker/HTTP 映射锁或占着普通业务槽互相等待；逐插件管理锁、runtime.lock、退出树清理与有限重启继续由原所有者执行。
+- 每插件等待队列同时限制 256 条与 16 MiB（取生效 tune 值），并计入同一个 Core 总 payload 预算，任一满额立即 RESOURCE_EXHAUSTED 并记录原因。按实际等待载荷取得预算，每份预留由同一所有者释放一次；取消或到期的未交付请求立即移除并释放名额与字节。保留原请求、可信 Actor、Target、Trace、顺序与绝对 deadline。
+- 在开始等待前固定原调用期限；普通业务沿用 REQUEST_TIMEOUT 与父期限的较早者，交付时显式传原 wire.Request.Deadline。冷启动计入全部原预算；Scheduler 的 JOB_TIMEOUT 同样从到期入口算起、缺省 15 分钟，后继 goal-172 接入时沿用该绝对期限。EnsureActive 返回就绪后仍复核当前代次、当前 Caller、路由开关、权限与剩余期限，失败结束本次请求，原请求至多交付一次。
+- 唤醒复用原 ActiveGeneration、Config、DB 与 activation_reason=resume；复用现有快照/安装身份检查与 REGISTER 摘要校验，通过 ACTIVATED 后才开放交付。摘要失配关闭候选、隔离路由并返回 FAILED_PRECONDITION；唤醒失败只返回实际错误，同时写 FAILED/原因，不返回伪造成功，不建立新候选、不重跑数据迁移、不重放已交付副作用。后继策略写回成功但唤醒失败时也按 ADMIN-API §5 只返回实际错误，由调用方 GET 核对已保存设置。
+- 活动引用覆盖 Handler、Service、HTTP、媒体操作与租约、已接纳 Hook/Bus、延续调用、多轮等待及插件主动出站业务。Router 的通用 Plugin 包装同时覆盖当前 Scheduler 已运行的回调；到期唤醒入口留给 goal-172。Bus 只为已在线订阅者接纳的排队/写出工作持引用，离线仍丢弃、不积压、不唤醒。媒体的引用随真实租约、过期或 Session 释放；延续与等待在登记时取得，结束、取消或 Session 失效时释放。
+- 实际业务响应/失败、取消后确认未交付、资源实际结束或旧进程树确认退出才释放相应引用；本地超时先返回时，经 wire.Request.Late 或原 Session/进程退出清理继续持有，不能仅因调用者收到超时就把插件记为空闲。插件出站在途调用也登记引用；迟到响应、旧 Session 清理和重复释放不得扣掉新 Session 的引用。
+- 活动取得与停止共用逐插件生命周期门禁，供 goal-171 复用：空闲停止在发送 STOPPING 前可被新请求撤销；发送后新请求进入有界等待，确认旧进程树退出后再建立唯一新 Session。管理停用/卸载和 Core 停机关闭新接纳，沿用原排空与停止预算；活动引用阻止空闲退出，原管理强制停止仍按契约完成清理。
+- 记录实际唤醒完成的 LastWakeAt/原因、真实活动结束时间及冷启动发生时间，供 goal-171 的空闲判定使用。既定规则保持：唤醒后最短运行 5 分钟；SLEEP_COLD_START_WINDOW 缺省 1 小时，窗口内冷启动超过 SLEEP_COLD_START_MAX（缺省 3 次）时，从触发时刻固定常驻 1 个窗口的冷却期；期间新冷启动不延长这次冷却期，结束后恢复空闲判定。SLEEP_* 参数登记、准入与空闲停止由 goal-171 交付，本条只追加 WAKE_QUEUE_*。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：internal/app/wake_test.go 一个真实 Core＋已提交插件子进程＋SQLite 的集成测试，复用现有动态构建工程与回环 Adapter。测试装配将插件按正常停止流程置为 SUSPENDED，分别用首条命令、Service 与 HTTP 驱动同一唤醒主路径，核对只交付一次、Session 已换、原 generation/config/DB 保持，真实活动结束后释放引用；此测试不冒充 goal-171 的自动空闲策略验收。
+- 提交：contracts/wirespec_test.go 固定 STOP_REASON_IDLE 追加编号且既有值不变。多列理由：授权修改控制协议，须独立核对编号，主路径进程测试无法证明旧编号稳定。
+- 本地自测（*_local_test.go，结果写入 PR）：100 路并发只启一次、条数/字节/Core 预算分别满额、取消和 deadline 到达、首等待者取消而其他请求继续、唤醒失败及摘要失配、等待中权限/代次/路由变化、STOPPING 前后竞争、SDK Rule 前的 Core 过滤未命中/读取失败/会话覆盖衔接、Handler/Service/HTTP/媒体/schedule/Hook/Bus/延续/多轮等待/出站活动、超时后迟到响应与旧树退出、迟到清理不影响新引用；always_on、dev、Adapter/WebUI 原路径。supervisor/ 与 sdk/ 的新增测试全部写本地，不新增 testdata 插件。
+
+完成条件：go generate ./... 后再次生成无差异；gofmt -l 无输出；go vet ./...；go test -race ./contracts/... ./internal/wire/... ./internal/tune/... ./internal/core/supervisor/... ./internal/core/router/... ./internal/core/broker/... ./internal/core/httpproxy/... ./internal/core/media/... ./internal/core/continuation/... ./internal/core/hook/... ./internal/core/bus/... ./internal/app/...；go build ./...。PR 按 TEST-MATRIX §3 写明 V-77 本切片分项的测试位置、命令、平台、结果与未运行项。
+
+不做：Idle Controller、休眠准入与策略写回/自动空闲停止（goal-171），Scheduler 到期唤醒（goal-172），休眠管理 API/CLI/WebUI 与固定机器测量；新增 Service Schema 包资源、业务 RPC 或自动重试；不加依赖，不改 ARCHITECTURE/README/spec，文档同步写进 PR。
 ```
 
 ### goal-176 · S-02.3 Core 消息事件过滤与 SDK 注册
@@ -8128,7 +8210,7 @@ internal/core/state
 
 ### goal-161 · T-04.18 配置文件的派发与 SDK
 
-状态：等待语句定稿（前置均已合并）。T-08.18（PR #214，`ab0cd56`）已合并。2026-11-17 按 D-168 新增。目标、依据与要点由 PLAN T-04 步骤 18 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：待派发。前置 T-04.16（PR #199，`046e752`）、T-08.18（PR #214，`ab0cd56`）均已合并；消息过滤 S-02.3（PR #227，`86e6768`）也已合并。已按 main `947daa5` 核对：`internal/core/profile.New(ctx context.Context, opt profile.Options) (*profile.Service, error)` 建立一次操作的快照，`Resolve(instance, session string) profile.Profile`、`Overrides(pluginID string) map[string]map[string]json.RawMessage` 已可复用；`sdk/sdk.go` 的 `(*Context).Config() config.Values` 当前直接返回插件基础配置，`internal/app/message_filter.go` 只读 Active 基础配置，InvocationContext 仍止于字段 6、Bootstrap 止于字段 13。goal-152（T-08.16）已派发、正在进行；双方共享 `contracts/configschema/`（尤其 profile.go、prepare.go 的准备/校验入口）、`sdk/config/`、`sdk/session.go`、`sdk/plugin.go`、`contracts/proto/alonabot/v1/control.proto` 及生成产物，并可能相交于 Core 配置快照的读取调用点。后合并者同步最新 main，保留对方改动：goal-152 的去版本与宽松校正、goal-161 的 profile 标记与覆盖合并同时保留，字段号按已合并源文件顺延，重新生成并核对两条主路径。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-161（切片 T-04.18：配置文件的派发与 SDK）。goal 目录 goal-161，分支 goal-161，worktree .worktrees/goal-161，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -8137,15 +8219,55 @@ internal/core/state
 
 依据：PLAN T-04 步骤 18；CONTRACTS §5.6；WIRE-FORMAT §3.2、§3.5、§4；DECISIONS D-168；TEST-MATRIX V-141。
 
-要点：
-- InvocationContext 追加 `string profile_id = 7`，Bootstrap 追加 `profile_overrides_json`；`sdk.profile.set_overrides` 整体替换 SDK 中的覆盖值，失败按 Session 失败处理。
-- `c.Config()` 合并本次调用的覆盖值，`p.Config()` 与 `s.Config()` 不变；同一调用内不变。
-- 关闭插件的会话：命令按禁用处理，文本匹配、事件路由与 Raw 跳过；Service 调用、定时任务与后台发送不受影响。
-- `core.profile.set` 只接受调用插件自己写了 `profile` 的字段；会话使用 default 时写入 Pending 并在根调用结束后 reload；assign 与 set 要求 Core Admin。
+范围（只新增或修改这些）：
+- contracts/proto/alonabot/v1/：invocation.proto、control.proto、新文件 profile.proto；相应 contracts/pb/alonabotv1/ 生成产物与 contracts/wirespec_test.go；internal/wire/services.go
+- contracts/configschema/profile.go 及覆盖值应用的包内辅助文件
+- sdk/：sdk.go、plugin.go、dispatch.go、session.go、服务/Hook/延续调用的 Context 构造点、config/ 与 internal/dbhook/ 的只读配置视图绑定；覆盖集合接收的包内新文件
+- internal/core/profile/ 的运行时读取与服务辅助文件；internal/core/router/ 的 Options、Invocation、命令与事件派发、延续调用及根调用结束通知；internal/core/broker/、hook/、scheduler/ 中 InvocationContext 的构造与继承点
+- internal/core/manage/profile_api.go、service.go 及配置文件变更后通知的相邻调用点；internal/core/config/ 仅为 default 上 Pending 的既有写入与互斥接入
+- internal/app/：新文件 profile.go，message_filter.go、assembly.go、journal.go、alonabot.go 中配置文件快照、Bootstrap、固定服务、更新通知、根调用结束后 reload 的装配
+- cmd/alonabot/manage_e2e_test.go；上述包的 *_local_test.go
 
-- 若 S-02.3 已合并，向 router.Options.MessageConfig 注入本会话的生效配置只读快照：Resolve → Active 基础配置 → 有效 Overrides（含祖先 object 的覆盖），复用 InvocationContext 的会话解析规则；更新从后续匹配生效。若本切片先合并，S-02.3 后合并时接入同一来源。
+允许的依赖：标准库及仓库已批准依赖；复用 contracts/configschema、internal/core/profile、config、policy、router 和 state。跨模块沿用 ARCHITECTURE 的 internal/app -> internal/core/...、internal/core 内部、sdk -> contracts/internal/wire 方向，SDK 保留现有分包。上述协议修改明确授权；只改生成源后运行 go generate ./...，不增加依赖。
 
-不做：命令前缀与回复方式（goal-162）；工具策略（goal-163）；Agent 的命令（goal-164）。
+接口（现有签名保持可用）：
+- profile.New(ctx context.Context, opt profile.Options) (*profile.Service, error)，Options{Store *state.Store; Settings *settings.File; Schema func(context.Context, string) (*configschema.Schema, error)}
+- (*profile.Service).Resolve(instance, session string) profile.Profile；List(ctx context.Context) ([]profile.Summary, error)
+- (*profile.Service).Overrides(pluginID string) map[string]map[string]json.RawMessage；Plugins(id string) ([]profile.Plugin, error)
+- (*profile.Service).Assign(ctx context.Context, instance, session string, profileID *string) error；PatchPlugin(ctx context.Context, id, pluginID string, patch profile.PluginPatch) error
+- (*configschema.Schema).ProfilePaths() []string；ValidateProfileValue(path string, raw json.RawMessage) error
+- (*config.Service).Pending(ctx context.Context, pluginID string) (config.Pending, bool, error)；Patch(ctx context.Context, pluginID, baseGeneration string, patch []byte) (config.Pending, error)
+- (*sdk.Context).Config() config.Values；(*sdk.Plugin).Config() config.Values；(*sdk.SubPlugin).Config() config.Values
+- router.Options.MessageConfig func(ctx context.Context, pluginID string, event *pb.Event) (json.RawMessage, error)
+
+接口（本切片新增，以下签名和载荷固定）：
+- InvocationContext 追加 string profile_id = 7（default 编码为空串）；Bootstrap 追加 string profile_overrides_json，当前 main 的下一号为 14，与并行切片合并时按最新 main 顺延
+- 新文件 profile.proto：message ProfileSummary { string id = 1; string name = 2; uint64 sessions = 3; }；ProfileListRequest {}；ProfileListResponse { repeated ProfileSummary profiles = 1; }；ProfileCurrentRequest {}；ProfileCurrentResponse { ProfileSummary profile = 1; }；ProfileAssignRequest { string profile_id = 1; }；ProfileAssignResponse {}；ProfileSetRequest { string path = 1; string value_json = 2; }；ProfileSetResponse { ProfileSummary profile = 1; bool reloading = 2; }；ProfileSetOverridesRequest { string profile_overrides_json = 1; }；ProfileSetOverridesResponse {}
+- 固定服务名追加 wire.ServiceProfileList="core.profile.list"、ServiceProfileCurrent="core.profile.current"、ServiceProfileAssign="core.profile.assign"、ServiceProfileSet="core.profile.set"、ServiceProfileSetOverrides="sdk.profile.set_overrides"。请求/响应使用上列同名 protobuf 消息，schema/version 沿用固定服务的 validate.SchemaID 与版本 1
+- func (s *Schema) ApplyProfile(raw json.RawMessage, overrides map[string]json.RawMessage) (json.RawMessage, error)（contracts/configschema）：在基础对象中按完整字段路径替换有效覆盖，复用 ValidateProfileValue；返回新对象，保留未覆盖内容
+- func (v Values) WithOverrides(overrides map[string]json.RawMessage) (Values, error)（sdk/config）：以同一 schema 和基础配置建立独立只读视图，复用 ApplyProfile，保留既有子插件配置路径
+- router.Options 追加 Profile func(ctx context.Context, pluginID string, target *pb.Target) (profileID string, enabled bool, err error)；内部 default 使用 "default"，仅编码到 InvocationContext 时转为空串
+- router.Invocation 追加 ProfileID string、Root *Invocation、OnFinished func()；根调用 Root 指向自身，派生调用保留根引用，OnFinished 在根调用结束时执行一次，用于延后 reload，执行期间不持 Router/Broker 锁
+- manage.Options 追加 NotifyProfileOverrides func(ctx context.Context, pluginID string) error；装配方从新快照取完整有效集合，只通知当前在线 Session，失败交给原 Session 失败与清理路径
+
+行为：
+- 按 CONTRACTS §5.6 从可信默认 Target 解析实例名与 MESSAGE-MODEL §1 的会话字符串（含话题及转义），单独指定优先于实例缺省，再取 default；无默认 Target 的调用取 default。复用 profile.New/Resolve，一次操作使用同一快照，下一次操作观察管理变更；保留现有管理锁顺序。所有 Core→插件 InvocationContext 构造点及父子调用的可信附件同步 profile_id，保持 Actor、Target、Trace 与取消传播。
+- Bootstrap 下发该插件当前有效的全部覆盖值，JSON 形状为配置文件 ID -> {字段路径: 值}；失效覆盖排除，复合 secret 规则与跨配置文件 4 MiB 编码预算复用 profile.Service。配置文件创建/复制/删除、字段覆盖写入/删除/prune，以及 Active schema 切换后，向受影响的在线 Session 下发完整集合；sdk.profile.set_overrides 整体替换，确认或发送失败按 Session 失败处理并返回实际错误。休眠/离线插件在下次 Bootstrap 取最新集合；与 goal-170 后合并者保留双方装配及清理。
+- SDK 接收集合后原子发布快照；每次 Rule/Handler/Service/Hook 及延续调用建立 Context 时冻结本次 profile_id 与覆盖集合。c.Config() 合并对应覆盖，object/list 等字段按路径整体替换，覆盖祖先 object 时其子字段取新对象；本次调用的视图保持不变。p.Config()、s.Config()、OnStart 与后台基础配置视图保持原义。覆盖更新作用于接收更新后开始的调用，更新无需重启插件。
+- 会话关闭插件时，命令按原禁用规则处理，文本匹配、事件路由与 Raw 跳过；在取得唤醒名额前应用同一开关。插件间 Service、定时任务与后台发送继续按原规则运行。工具策略的配置文件开关由 goal-163 接入。
+- S-02.3 已合并，必须更新 internal/app/message_filter.go 向 router.Options.MessageConfig 提供同一会话的 Resolve -> Active 基础配置 -> 有效 Overrides 只读快照，排除 Pending，并支持祖先 object 覆盖。过滤与 Handler 选择会话的规则一致；管理更新从后续匹配生效，读取失败保留诊断并跳过该路由，快照不保存覆盖值。与 goal-170 后合并者保证过滤先于活动引用及 EnsureActive。
+- core.profile.list 返回全部配置文件 ID、名称与会话数；current/assign/set 必须关联同一 Session 中仍在途的 parent_call_id，从 Core 的 router.Invocation 取可信 Target 与 Actor，无默认 Target 返回 FAILED_PRECONDITION。assign 的空 ID 取消单独指定，set 只接受调用插件自己标记 profile 的路径，JSON null 删除覆盖；两者均要求可信 Core Admin，越权返回 PERMISSION_DENIED。
+- set 在非 default 上复用 PatchPlugin 的单值、secret 和预算检查；default 上在同一互斥操作中核对当前 Active 与 Pending，已有其他 Pending 返回 FAILED_PRECONDITION，以当前 Active 为基线写入 Pending，返回 reloading=true。用根调用结束通知触发既有 reload，调用链结束前保留原 Session；异步 reload 的实际错误记入既有状态与日志。字段未标记、无效 JSON 与类型错误保留路径及原错误，语义与管理入口一致。
+- 与 goal-152 共享的配置载入沿用唯一实现：goal-152 合并前保留 main 的载入签名，后合并者同时保留 profile 标记、完整子树秘密检查、有效覆盖筛选，以及去版本后的 OnConfigLoad(ctx, raw) 与宽松校正。覆盖应用按 §5.6 单值校验与替换，不重新执行 OnConfigLoad 或给覆盖补默认值；随 goal-152 合并同步受影响调用点，不留旧版重载入口。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/manage_e2e_test.go 新增一个真实 Core＋插件子进程的配置文件派发集成子测试，经现有管理 API 创建并指定非 default 配置文件，两个会话调用同一命令得到各自 c.Config()；更新覆盖后下一次调用生效且 Session 不变，再关闭其中会话的插件开关并核对禁用结果。复用现有动态构建与回环 Adapter，不新增 testdata 插件。
+- 提交：contracts/wirespec_test.go 检查 profile_id、profile_overrides_json 与新消息的字段号及既有编号。多列理由：公开协议追加须独立固定编号，进程集成测试无法证明编号未漂移。
+- 本地自测（*_local_test.go，结果写入 PR）：V-141 其余分项，包括同一调用冻结、p.Config/s.Config/OnStart/后台不变、Service/Hook/延续上下文、命令/文本/事件/Raw 开关、四个固定服务的 parent/Admin/Target 校验、default 与已有 Pending、根结束后 reload、Session 重启与通知失败；两个会话的唤醒词及 triggers/祖先 object 覆盖、过滤读取失败、更新后匹配；覆盖集合秘密与大小、Active schema 改变后的失效项、goal-152 校正后再合并。sdk/ 中只写本地自测。
+
+完成条件：go generate ./... 后再次生成无差异；gofmt -l 无输出；go vet ./...；go test -race ./contracts/... ./internal/wire/... ./sdk/... ./internal/core/profile/... ./internal/core/config/... ./internal/core/router/... ./internal/core/broker/... ./internal/core/hook/... ./internal/core/scheduler/... ./internal/core/manage/... ./internal/app/... ./cmd/alonabot/...；go build ./...。PR 按 TEST-MATRIX §3 写明 V-141 与消息过滤衔接的测试位置、命令、平台、结果与未运行项。
+
+不做：命令前缀与回复方式（goal-162）；工具策略（goal-163）；Agent 的命令（goal-164）；配置文件页面；重做 goal-152 的载入流程或另建配置真源；不加依赖，不改 ARCHITECTURE/README/spec，文档同步写进 PR。
 ```
 
 ### goal-177 · T-09.27 组件市场 ID 改用连字符
