@@ -50,6 +50,8 @@ type Values struct {
 	PluginMemorySoftLimit int64 // 字节；0 表示不设置
 	CoreMemorySoftLimit   int64 // 字节；0 表示不设置
 	OptionsPage           int
+	WakeQueueRequests     int
+	WakeQueueBytes        int64 // 每插件等待唤醒的载荷字节数
 }
 
 const maxOptionsPage = 200 // CONTRACTS §16。
@@ -132,6 +134,8 @@ var parameters = []parameter{
 	param("PLUGIN_MEMORY_SOFT_LIMIT", bytesUnit, int64(0), true, "> 0", "§16", func(v *Values) *int64 { return &v.PluginMemorySoftLimit }),
 	param("CORE_MEMORY_SOFT_LIMIT", bytesUnit, int64(0), true, "> 0", "§16", func(v *Values) *int64 { return &v.CoreMemorySoftLimit }),
 	param("OPTIONS_PAGE", integerUnit, int(50), true, ">= 1 and <= 200", "§5.1", func(v *Values) *int { return &v.OptionsPage }),
+	param("WAKE_QUEUE_REQUESTS", integerUnit, int(256), true, ">= 1", "§4.5", func(v *Values) *int { return &v.WakeQueueRequests }),
+	param("WAKE_QUEUE_BYTES", bytesUnit, int64(16<<20), true, ">= frame limit 4MiB and <= CORE_MAX_PAYLOAD", "§4.5", func(v *Values) *int64 { return &v.WakeQueueBytes }),
 }
 
 // Defaults 返回 CONTRACTS §16 规定的全部缺省值。

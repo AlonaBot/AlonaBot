@@ -127,6 +127,9 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	if (hasInstalledRoutes(in) || in.Role == state.RoleWebUI) && schemas.config != nil {
 		boot.ConfigSchemaHash = schemas.config.Hash()
 	}
+	if err := c.assembly.bootstrapProfiles(ctx, in.PluginID, schemas.config, boot); err != nil {
+		return supervisor.Spec{}, nil, err
+	}
 	boot.LogLevel = logging.ProtoLevel(c.output.Levels().Source(in.PluginID))
 	database := boot.DatabaseDescriptor
 	database.Backend = pb.DatabaseBackend_DATABASE_BACKEND_NONE
@@ -151,5 +154,9 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 		DefaultLocale: c.assembly.settings.Settings().DefaultLocale, Handler: c.assembly.handler(running, in), Global: c.assembly.global,
 		Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values), Log: c.output.Plugin(in.PluginID, boot.GenerationId, componentLogAttrs(in)...), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http,
 		MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment, Detach: func() { c.assembly.detach(running) }}
+	if hasInstalledRoutes(in) {
+		spec.Waker = c.assembly.waker
+		running.activity = true
+	}
 	return spec, running, nil
 }

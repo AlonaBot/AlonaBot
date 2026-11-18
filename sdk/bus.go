@@ -160,6 +160,7 @@ func invokeSubscription(a *activation, routes map[string]subscriptionRoute, deli
 	// 2. 回调没有入站 Event/Actor、默认 Target 或父调用编号，后续调用仅带订阅插件身份。
 	ctx, cancel := context.WithCancel(a.lifetime)
 	c := &Context{plugin: sub.Plugin.(*Plugin), subID: sub.SubID, ctx: ctx, inbound: &wire.Inbound{Target: env.GetTarget()}}
+	c.freezeProfile(nil)
 	bindServiceContext(c)
 	c.active.Store(true)
 	defer func() {

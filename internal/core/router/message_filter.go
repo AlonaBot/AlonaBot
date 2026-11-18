@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,7 +12,7 @@ import (
 )
 
 // matchMessageFilter 在派发锁外取值。文本来自 PreEvent 后的载荷，toMe 来自原事件。
-func (r *Router) matchMessageFilter(pluginID string, filter *pb.MessageFilter, ev *pb.Event, toMe bool) (bool, error) {
+func (r *Router) matchMessageFilter(ctx context.Context, pluginID string, filter *pb.MessageFilter, ev *pb.Event, toMe bool) (bool, error) {
 	if filter == nil {
 		return true, nil
 	}
@@ -24,7 +25,7 @@ func (r *Router) matchMessageFilter(pluginID string, filter *pb.MessageFilter, e
 	if r.messageConfig == nil {
 		return false, errors.New("message filter config reader is unavailable")
 	}
-	snapshot, err := r.messageConfig(r.ctx, pluginID, ev)
+	snapshot, err := r.messageConfig(ctx, pluginID, ev)
 	if err != nil {
 		return false, err
 	}

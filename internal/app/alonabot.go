@@ -77,6 +77,7 @@ type Core struct {
 	monitors      sync.WaitGroup // 停止后等待退出观察者交还清理权，再关闭共享资源。
 	done          chan struct{}  // err 写入后关闭，允许多个 Wait 读取同一结果。
 	err           error
+	lifetime      context.Context // Core 启动、业务唤醒与运行循环共用的生命周期。
 
 	stoppedInstances map[[2]string]bool // 包与实例的运行期停用选择，跨 Session 保留；同样由操作队列串行访问。
 }
@@ -127,7 +128,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Core{store: store, output: output, values: values, dir: dir, logLevel: o.LogLevel, done: make(chan struct{}), stopping: make(chan struct{}), operations: make(chan coreOperation)}
+	c := &Core{store: store, output: output, values: values, dir: dir, logLevel: o.LogLevel, done: make(chan struct{}), stopping: make(chan struct{}), operations: make(chan coreOperation), lifetime: ctx}
 	fail := func(err error) (*Core, error) {
 		c.err = err
 		if ctx.Err() == context.Canceled && startupCleanupError(err) == nil {
@@ -284,7 +285,9 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	if err != nil {
 		return fail(err)
 	}
-	management := manage.New(manage.Options{Logs: output, Stopping: c.stopping, NotifyLogLevel: func(ctx context.Context, id string, level pb.LogLevel) error {
+	management := manage.New(manage.Options{NotifyProfileOverrides: func(ctx context.Context, id string) error {
+		return c.operation(ctx, func(ctx context.Context) error { return c.assembly.notifyProfileOverrides(ctx, id) })
+	}, Logs: output, Stopping: c.stopping, NotifyLogLevel: func(ctx context.Context, id string, level pb.LogLevel) error {
 		return c.operation(ctx, func(ctx context.Context) error {
 			plugin, ok := c.assembly.router.Plugin(id)
 			if !ok || !plugin.Activated() {
@@ -400,6 +403,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 			})
 		},
 	})
+	management.RegisterProfiles(c.assembly.mux)
 	if err := c.preinstall(ctx, management, bundles); err != nil {
 		return fail(err)
 	}
@@ -440,6 +444,8 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	adminMux.Handle("/api/", administration)
 	adminMux.Handle("/api", administration)
 	c.assembly.http = httpproxy.New(authentication)
+	c.assembly.http.RequestTimeout = c.values.RequestTimeout
+	c.assembly.http.SetWake(c.assembly.router.RouteSnapshot, c.assembly.ensureActive)
 	static := management.WebUI()
 	adminMux.Handle("/", static)
 	admin := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

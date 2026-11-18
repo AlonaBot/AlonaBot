@@ -399,7 +399,7 @@ multipart 与 JSON Update 均进入 `manage.Service.Update`，执行绑定来源
 }
 ```
 
-没有 Active 时 `active_generation` 为空串、`active` 为 `{}`；没有有效 Pending 时 `pending` 为 null。`schema` 是当前安装包 `config_schema.json` 的规范内容，缺失时为 null。`i18n` 按包内 `i18n/*.json` 的语言标签返回各文件的 `config` 根节点，缺失时为 `{}`。读取隐藏秘密引用、schema 声明的秘密及代次保留的秘密路径；`invisible` 字段照常返回，由表单决定是否展示。
+没有 Active 时 `active_generation` 为空串、`active` 为 `{}`；没有有效 Pending 时 `pending` 为 null。`schema` 是当前安装包 `config_schema.json` 的规范内容，缺失时为 null。`i18n` 按包内 `i18n/*.json` 的语言标签返回各文件的 `config` 根节点，缺失时为 `{}`；`messages` 同样按语言标签返回各文件的 `messages` 根节点，供插件页面桥的 `translate` 使用（D-177）。读取隐藏秘密引用、schema 声明的秘密及代次保留的秘密路径；`invisible` 字段照常返回，由表单决定是否展示。
 
 | Method / path | 请求 | 成功响应与语义 |
 | --- | --- | --- |
@@ -602,7 +602,7 @@ KV 键遵守 CONTRACTS §6.1 的键约束，`/` 可作为键的字面字符。�
 
 ## 23. 配置文件
 
-配置文件的语义见 CONTRACTS §5.6（D-168）。ID `default` 表示「默认」。管理写入立即保存；`default` 的字段值经 §12 的配置 API 写入 Pending，平台设置写回 `core_config.json`。运行时应用由后续切片接入。
+配置文件的语义见 CONTRACTS §5.6（D-168）。ID `default` 表示「默认」。管理写入立即保存；`default` 的字段值经 §12 的配置 API 写入 Pending，平台设置写回 `core_config.json`。按会话的插件开关、字段覆盖、SDK 调用视图与消息过滤已接通（T-04.18，PR #242）；平台设置与工具策略的运行时应用分别由 T-04.19、T-11.6 接入。
 
 | Method / path | 请求或成功响应 | 操作语义 |
 | --- | --- | --- |
@@ -622,6 +622,8 @@ KV 键遵守 CONTRACTS §6.1 的键约束，`/` 可作为键的字面字符。�
 | `PUT /api/v1/profiles/{id}/tools` | `{"items":[…]}`，policy 取 allow、confirm、deny 或 inherit → `{}` | 仅更新所列项；每项恰好指定 `tool` 或 `operation`，`inherit` 删除该项覆盖 |
 
 `invalid` 列出失效覆盖的路径与原因（`unmarked`、`type`、`schema unavailable`）。已有复合字段标记仍可读取；覆盖路径与秘密路径相交或 Active schema 不可用时，普通 GET 在 `overrides` 中省略原值，`invalid` 与 `prune` 仍可定位该项。写入或复制使某插件的有效覆盖集合超过 4 MiB 时，按 §5 返回 HTTP 500 与 `RESOURCE_EXHAUSTED`。
+
+创建、复制或删除使有效覆盖集合变化时，Core 向受影响的在线插件 Session 下发完整集合；指定插件的 PATCH 与 prune 成功后，即使有效集合相同也下发。更新成功后开始的 SDK 调用使用新视图，在途调用保留原视图。发送、业务拒绝或响应协议错误关闭原 Session，管理请求返回实际错误，已保存的变更保留；离线插件在下次 Bootstrap 接收最新集合。HTTP 管理入口沿原有管理互斥执行。
 
 §4 与 §14 的实例删除入口共用指定与运行选择的清理流程。实例删除、旧实例组替换与 Adapter 全量清除在设置提交后继续清理，即使请求已取消。提交前失败保留指定与运行选择；若设置已发布但目录同步报错，继续清理并返回同步错误及后续错误。再次删除已消失的实例仍清理该实例的遗留指定，清理成功后返回 404。
 
@@ -649,5 +651,7 @@ KV 键遵守 CONTRACTS §6.1 的键约束，`/` 可作为键的字面字符。�
 ### 24.2 运行状态
 
 运行对象为 `{"enabled":true,"generation_id":"…","state":"SUSPENDED","reason":"idle","changed_at":"2026-11-17T12:00:00Z"}`。`state` 取 CONTRACTS §4.4 的六个值，`changed_at` 为最近状态变化的 UTC RFC 3339 时间；`reason` 为无 secret 的诊断字符串（程序输出用英文），失败保留实际错误原因。最近一次唤醒与空闲停止另在存在记录时返回 `last_wake:{"reason":"…","at":"…"}` 与 `last_suspend:{"reason":"idle","at":"…"}`，缺失时省略。
+
+`last_wake` 记录 WAKING→ACTIVE 的实际完成时间与原因；QUIESCING→ACTIVE 的空闲停止撤销保留原记录。`last_suspend` 在确认旧进程树退出、写入 SUSPENDED 时更新。S-02.1 已提供底层记录，本文休眠管理端点由 S-06.1 接入；ACTIVATED 后的业务交付仍须等待 Core 完成全部绑定。
 
 组件列表继续保留 §3 的 `State` 字段及现有角色的语义；plugin 与 agent 追加 `RuntimeState`，取同一持久化记录中的六态值。休眠插件的 `State` 显示 `Suspended`，与 `Degraded` 区分；低层 Preparing、Activating、Activated 等阶段仍通过原字段展示。所有读取均排除快照中的私有认证材料与配置。

@@ -85,6 +85,13 @@ func (h *Runner) PreEvent(ctx context.Context, ev *pb.Event) (*pb.EventPayload, 
 		if !h.current(candidate) || !slices.Contains(candidate.route.GetHook().GetEventTypeFilter(), ev.GetEventType()) {
 			continue
 		}
+		profileID, enabled, err := h.router.Profile(ctx, candidate.caller.PluginID, current.Target)
+		if err != nil {
+			return current.EventPayload, false, preEventFailure(candidate, err)
+		}
+		if !enabled {
+			continue
+		}
 		prepared := proto.CloneOf(current)
 		if h.opt.Prepare != nil {
 			var err error
@@ -99,7 +106,7 @@ func (h *Runner) PreEvent(ctx context.Context, ev *pb.Event) (*pb.EventPayload, 
 		for i, incoming := range incomingMedia(prepared) {
 			restore[incoming.Token] = original[i]
 		}
-		parent := &router.Invocation{Event: current, DefaultTarget: current.Target, Depth: 0}
+		parent := &router.Invocation{ProfileID: profileID, Event: current, DefaultTarget: current.Target, Depth: 0}
 		request := &pb.PreEventRequest{RouteId: candidate.route.GetRouteId(), Context: invocationContext(parent, false), Event: prepared}
 		result := &pb.PreEventResult{}
 		safe := call(ctx, candidate, request, result, parent, false)
@@ -245,6 +252,9 @@ func (h *Runner) AfterSend(ctx context.Context, op pb.SendOperation, edited stri
 func invocationContext(parent *router.Invocation, forbidden bool) *pb.InvocationContext {
 	trusted := &pb.InvocationContext{SendForbidden: forbidden}
 	if parent != nil {
+		if parent.ProfileID != "default" {
+			trusted.ProfileId = parent.ProfileID
+		}
 		trusted.Actor = parent.Event.GetActor()
 		trusted.DefaultTarget = parent.DefaultTarget
 		trusted.Scopes = slices.Clone(parent.Scopes)
@@ -265,13 +275,15 @@ func editedMessageID(op pb.SendOperation, edited string) *string {
 func call(ctx context.Context, candidate candidate, request, result proto.Message, parent *router.Invocation, forbidden bool) *pb.ErrorInfo {
 	// 1. 附件只在 Core 内保存；出站调用的附件和协议上下文均携带禁令。
 	trusted := invocationContext(parent, forbidden)
-	invocation := &router.Invocation{PluginID: candidate.caller.PluginID, Chain: trusted.PluginChain, Scopes: trusted.Scopes, SendForbidden: forbidden, Depth: 1}
+	invocation := &router.Invocation{ProfileID: "default", PluginID: candidate.caller.PluginID, Chain: trusted.PluginChain, Scopes: trusted.Scopes, SendForbidden: forbidden, Depth: 1}
 	if parent != nil {
 		invocation.Event = parent.Event
 		invocation.DefaultTarget = parent.DefaultTarget
 		invocation.TraceID = parent.TraceID
 		invocation.Depth = parent.Depth + 1
+		invocation.ProfileID, invocation.Root = parent.ProfileID, parent.Root
 	}
+	defer invocation.Begin()()
 	encoded, err := proto.Marshal(request)
 	if err != nil {
 		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "encode hook request: "+err.Error())

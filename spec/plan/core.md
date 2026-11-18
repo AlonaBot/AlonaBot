@@ -54,7 +54,7 @@
 | T-04.15 | goal-138 | SDK 公开面收敛：会话、消息句柄与用户字符串改为 string，新增 `c.SendTo`，删除 `sdk.To`（D-144）；删除已提交的生成文件、`sdk.UseGenerated` 等生成相关 API 与 `//go:generate`，资源改由 CLI 构建经 overlay 或由 plugintest 现场扫描按入口包登记，库模式改由 `alonabot build` 构建，生成器移入 `internal/generate`（D-145）；Adapter 的 HTTP 路由写进 `adapter.Descriptor`，删除 `sdk.AdapterHTTP`（D-147）；示例只在 `New()` 中注册 | T-04 步骤 15 | T-04.5、T-09.3、T-16.1 | V-120 的会话、生成资源与 Adapter 路由分项 | 已完成（PR #197；TEST-MATRIX §3.2） |
 | T-04.16 | goal-139 | SDK 按类别分包：动态任务、Service、Event Bus、按钮、媒体、会话历史、工具、平台动作与选项来源移入 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action`、`sdk/options`，根包只留插件对象、Context、注册 builder、权限与运行入口，`Collect` 等改为内部入口（D-146） | T-04 步骤 16 | T-04.15 | V-120 的分包分项 | 已完成（PR #199；TEST-MATRIX §3.2） |
 | T-04.17 | goal-150 | 插件页面套件：`sdk/page` 的 `kit.css` 与 `kit.js`（桥的 hello、请求、异步文案、令牌应用、主题与语言事件、⌘K 转发），以及 showcase 插件页面使用套件（D-159） | T-04 步骤 17 | T-04.16、T-07.7 | V-130 的 SDK 分项 | 已完成（PR #218） |
-| T-04.18 | goal-161 | 配置文件的派发与 SDK：`profile_id`、覆盖值下发、`c.Config()` 合并、按配置文件的插件开关、`core.profile.*`（D-168） | T-04 步骤 18 | T-04.16、T-08.18 | V-141 | 未开始 |
+| T-04.18 | goal-161 | 配置文件的派发与 SDK：`profile_id`、覆盖值下发、`c.Config()` 合并、按配置文件的插件开关、`core.profile.*`（D-168） | T-04 步骤 18 | T-04.16、T-08.18 | V-141 | 已完成（PR #242） |
 | T-04.19 | goal-162 | 平台与消息：命令前缀按配置文件、删除按实例的前缀、回复的提及、引用、前缀与合并转发（D-168） | T-04 步骤 19 | T-04.18 | V-142 | 未开始 |
 | T-05.1 | goal-15 | 可信事件上下文与有界同事件分发：64 条并发链、256 条/8 MiB 等待队列、稳定候选排序、链执行与读循环分离；经回环测试 Adapter 运行，按钮与 scheduled 绑定先用规范 fixture | T-05 步骤 1、2 | T-03.3、T-04.3、T-04.4 | V-13、V-16 的 fixture 分项 | 已完成（PR #67；TEST-MATRIX §3.2） |
 | T-05.2 | goal-16 | SDK Rule（含 `ToMe`）、HandlerOutcome、自动/手动 Send、StopPropagation 锁存与错误分支 | T-05 步骤 3、4 | T-05.1、T-04.7、T-04.8 | V-14、V-11 的 Rule 分项 | 已完成（PR #145；TEST-MATRIX §3.2） |
@@ -129,14 +129,14 @@
 
 | S-01.1 | goal-168 | 可休眠声明与持久化运行状态 | S-01 步骤 1、2 | T-04.1、T-09.4、T-09.6 | V-77 的 manifest、状态与未启用分项 | 已完成（PR #225；TEST-MATRIX §3.2） |
 | S-01.2 | goal-169 | 已提交代次的路由快照与索引 | S-01 步骤 1、3 | T-04.1、T-09.4、T-09.6 | V-77 的快照、摘要校验与恢复索引分项 | 已完成（PR #226；TEST-MATRIX §3.2） |
-| S-02.1 | goal-170 | 按需唤醒、活动引用与有界等待 | S-02 步骤 1～3 | S-01.1、S-01.2、T-05.5、T-06.4、T-07.5 | V-77 的首请求、并发、取消、期限与活动引用分项 | 未开始 |
+| S-02.1 | goal-170 | 按需唤醒、活动引用与有界等待 | S-02 步骤 1～3 | S-01.1、S-01.2、T-05.5、T-06.4、T-07.5 | V-77 的首请求、并发、取消、期限与活动引用分项 | 已完成（PR #241） |
 | S-02.2 | goal-171 | 空闲退出与即时休眠策略 | S-02 步骤 4 | S-02.1 | V-77 的准入、空闲退出、停止竞争与策略生效分项 | 未开始 |
 | S-02.3 | goal-176 | Core 消息事件过滤与 SDK 注册 | S-02 步骤 5 | T-04.16、T-08.11、T-09.14 | V-77 的 Core OR 匹配、配置取值与 SDK 注册分项（无需休眠进程） | 已完成（PR #227；TEST-MATRIX §3.2） |
 | S-03.1 | goal-172 | Scheduler 唤醒与离线 tick 区分 | S-03 步骤 1、2 | S-02.2、T-07.2 | V-78；V-77 的 schedule 阻止休眠分项 | 未开始 |
 | S-06.1 | goal-173 | 休眠管理 API、运行诊断与 CLI | S-06 步骤 1 | S-02.2、S-03.1、T-09.14 | V-81 的管理 API、CLI、状态与模式切换分项 | 未开始 |
 | S-06.2 | goal-174 | 休眠指标、故障注入与固定机器验收 | S-06 步骤 2～4 | S-06.1 | V-77、V-78、V-81 的证据汇总与固定机器测量 | 未开始 |
 
-S 工作包的切片采用 `S-01.1` 形式：工作包编号加包内顺序号，一个切片对应一个可独立合并、可验收的 PR；工作包正文与失败停止条件沿用 [PLAN §7](../PLAN.md#7-休眠扩展)。S-01.1 与 S-01.2 的直接前置相同，可分别取证；共享提交与装配文件按执行顺序串行合并。S-02.3 只依赖已合并 T 切片，供 T-12.18 使用；过滤声明进入 S-01.2 快照，与配置文件派发 T-04.18 的后合并者接入生效值读取，具体共享规则见执行顺序。S-06.1 提供 WebUI 需要的 API，固定机器测量由 S-06.2 独立完成；页面实现与手动取证在 WebUI 章节的 S-06.3（goal-175），S-06.2 汇总其 V-81 证据或明确标为未运行。WebUI 主线切片（T-09.8、T-09.9）不以任何 S 切片为前置，休眠不进入发布链。
+S 工作包的切片采用 `S-01.1` 形式：工作包编号加包内顺序号，一个切片对应一个可独立合并、可验收的 PR；工作包正文与失败停止条件沿用 [PLAN §7](../PLAN.md#7-休眠扩展)。S-01.1 与 S-01.2 的直接前置相同，可分别取证；共享提交与装配文件按执行顺序串行合并。S-02.3 只依赖已合并 T 切片，供 T-12.18 使用；过滤声明进入 S-01.2 快照，T-04.18 已接入会话生效配置读取（PR #242）；休眠唤醒联验由 S-02.1 的后合并者完成，具体共享规则见执行顺序。S-06.1 提供 WebUI 需要的 API，固定机器测量由 S-06.2 独立完成；页面实现与手动取证在 WebUI 章节的 S-06.3（goal-175），S-06.2 汇总其 V-81 证据或明确标为未运行。WebUI 主线切片（T-09.8、T-09.9）不以任何 S 切片为前置，休眠不进入发布链。
 
 ## 3. 工作包
 
@@ -384,7 +384,7 @@ T-04 的切片从首个 SDK 切片开始即可推进（见 §3.1），不要求�
 16. **SDK 按类别分包（D-146）。** 协议与行为不变，只改包与名字。按 D-146 的对照把包级函数与类型移入 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action` 与 `sdk/options`；子包 import 根包取得 `Registrar`、`*Context` 与 `Permission`，共享的注册状态放在 `sdk/internal`，根包不 import 子包。`RunInProcess`、`RunAdapterInProcess`、`Collect`、`Registration` 及其描述类型改为内部入口。全部调用方（Adapter 的常量与动作包、Agent、plugintest、示例、根包与文档）同步修改，不留别名；ARCHITECTURE 的模块表与依赖边同步。
 17. **插件页面套件（D-159）。** 协议与 Core 不变。`sdk/page.Handler() http.Handler` 提供嵌入的 `kit.css` 与 `kit.js`；插件挂到自己的 GET 路由，页面以相对路径引用。`kit.css` 以 ADMIN-API §7 的令牌为按钮、输入框、选择框、表格、标签与卡片提供基础样式及明暗缺省值。`kit.js` 在 iframe 内发送 `hello`，应用令牌、处理主题和语言事件，并将 ⌘K/Ctrl+K 转发为 `shortcut`。公开接口为 `request`、`t`、`onTheme`、`onLocale`；`t(key, args?) → Promise<string>` 每次经桥传递键与参数并原样返回 `text`，页面在语言回调中重新 `await t(...)` 渲染。独立打开时使用浅色缺省值，`t` 返回键名，`request` 拒绝。套件随 SDK 发布，无第三方依赖；接口细节见 ADMIN-API §7.3，挂载示例见 showcase。
 
-18. **配置文件的派发与 SDK（D-168，T-04.18）。** InvocationContext 追加 `profile_id`，Bootstrap 追加 `profile_overrides_json`，新增 `sdk.profile.set_overrides` 与 `core.profile.list`、`current`、`assign`、`set`（WIRE §3.2、§3.5、§4）。派发时按 CONTRACTS §5.6 解析会话所用的配置文件；配置文件关闭了插件的会话不把命令、文本匹配、事件路由与 Raw 派发给它，命令按禁用处理；覆盖值变化时向在线 Session 下发完整集合。SDK 在 Handler 的 `c.Config()` 中合并本次调用的覆盖值，`p.Config()` 与 `s.Config()` 不变。`core.profile.set` 只接受调用插件自己写了 `profile` 的字段，会话使用 `default` 时写入 Pending 并在根调用结束后 reload；assign 与 set 要求 Core Admin。
+18. **配置文件的派发与 SDK（D-168，T-04.18，已完成，PR #242）。** InvocationContext 追加 `profile_id = 7`，Bootstrap 追加必填对象 `profile_overrides_json = 14`，新增 `sdk.profile.set_overrides` 与 `core.profile.list`、`current`、`assign`、`set`（WIRE §3.2、§3.5、§4）。派发时按 CONTRACTS §5.6 解析会话所用的配置文件；关闭插件时命令按禁用处理，文本匹配、事件路由与 Raw 跳过，PreEvent 在媒体准备前检查开关。准入与消息过滤共用一次操作视图，以 Active 基础配置应用有效覆盖。覆盖值变化时向在线 Session 下发完整集合，SDK 原子替换并为每次调用冻结 `c.Config()`；`p.Config()` 与 `s.Config()` 保持基础视图。`core.profile.set` 只接受调用插件自己写了 `profile` 的字段，会话使用 `default` 时互斥核对 Active/Pending，写入 Pending，并在根调用、派生调用、自动回复与延续全部结束后 reload；assign 与 set 要求 Core Admin，遇管理互斥占用立即返回 FAILED_PRECONDITION。已与 T-08.16 的无版本配置载入及校正共同验证；休眠唤醒的装配与退出联验由 S-02.1 的后合并者完成。
 
 19. **平台与消息（D-168，T-04.19）。** 命令前缀改按会话所用的配置文件；删除 `command_prefixes_by_instance` 的解析、保存与 `GET/PUT /api/v1/core/command-prefixes`，同步 docs/development.md 与 V-87 的测试；`core_config.json` 增加 `reply`。发送管道在出站 Hook 之前按 CONTRACTS §5.6 为回复加上提及、引用与前缀，记住第一条消息以便 Edit 保留提及与前缀，加上后超过单条上限时不加提及与前缀；目标实例声明 `message.forward` 时把超过阈值的消息改为一个 forward 片段。后台、定时任务与发往其他会话的消息不变。
 

@@ -714,6 +714,105 @@ func TestManagementLifecycle(t *testing.T) {
 		}
 		stopTestCore(t, c)
 	})
+	t.Run("profile-dispatch", func(t *testing.T) {
+		// 1. 真实 Core、SDK 插件、回环 Adapter 与既有事件观察组件。
+		dir := t.TempDir()
+		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json")
+		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
+		weather := weatherProfilePackage(t, `{"city":{"type":"string","profile":true,"default":"base"}}`, "1.0.0")
+		observer := packWebUIFixture(t, "1.0.0", webUIFixtureSource, nil)
+		for _, archive := range []string{adapter, observer, weather} {
+			c.management(t, dir, "", "install", archive, "--yes")
+		}
+		for _, instance := range []string{"one", "two"} {
+			c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", instance)
+		}
+		// weather 最后启动，lastSession 记录它自己的真实 Session。
+		for _, id := range []string{"alonabot-adapter-fixture", "alonabot-webui-fixture", "weather"} {
+			c.management(t, dir, "", "enable", id)
+		}
+		c.waitFor("fixture instance two started")
+		session := lastSession(t, c)
+		var created struct {
+			ID string `json:"id"`
+		}
+		output := c.management(t, dir, "", "profile", "create", "会话一")
+		if err := json.Unmarshal([]byte(output), &created); err != nil || created.ID == "" {
+			t.Fatalf("create: %s: %v", output, err)
+		}
+		c.management(t, dir, "", "profile", "set", created.ID, "weather", "city", `"first"`)
+		c.management(t, dir, "", "profile", "assign", created.ID, "one", "devloop:chat")
+		var wantReplies []string
+		calls := 0
+		invoke := func(instance, want, result string) {
+			t.Helper()
+			calls++
+			if want != "" {
+				wantReplies = append(wantReplies, want)
+			}
+			status, raw := fixtureHTTP(t, c, dir, http.MethodPost, "/plugins/alonabot-adapter-fixture/deliver?instance="+instance+"&user=alice&text=%2Fcity")
+			if status != http.StatusNoContent {
+				t.Fatalf("deliver: %d %s", status, raw)
+			}
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				status, raw = fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot-webui-fixture/status")
+				var outcomes []struct{ PluginID, Result string }
+				if status != http.StatusOK || json.Unmarshal(raw, &outcomes) != nil {
+					t.Fatalf("outcomes: %d %s", status, raw)
+				}
+				status, sent := fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot-adapter-fixture/sent")
+				var replies []string
+				if status != http.StatusOK || json.Unmarshal(sent, &replies) != nil {
+					t.Fatalf("replies: %d %s", status, sent)
+				}
+				if len(outcomes) == calls && slices.Equal(replies, wantReplies) {
+					if outcomes[calls-1].PluginID != "weather" || outcomes[calls-1].Result != result {
+						t.Fatalf("outcomes: %s", raw)
+					}
+					return
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("profile dispatch: outcomes=%s replies=%s want=%v\n%s", raw, sent, wantReplies, c.log())
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+		// 2. 相同命令按会话读取各自视图，在线更新无需更换 Session。
+		invoke("one", "first", "ok")
+		invoke("two", "base", "ok")
+		c.management(t, dir, "", "profile", "set", created.ID, "weather", "city", `"updated"`)
+		invoke("one", "updated", "ok")
+		if lastSession(t, c) != session {
+			t.Fatal("override update restarted the plugin Session")
+		}
+		// 3. 经管理 API 关闭会话一插件；观察真实 denied 结果，再确认另一会话继续工作。
+		token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request, err := http.NewRequest(http.MethodPatch, "http://"+c.address()+"/api/v1/profiles/"+created.ID+"/plugins/weather", strings.NewReader(`{"enabled":false}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+		request.Header.Set("Content-Type", "application/json")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, readErr := io.ReadAll(response.Body)
+		if err := errors.Join(readErr, response.Body.Close()); err != nil {
+			t.Fatal(err)
+		}
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("disable: %d %s", response.StatusCode, raw)
+		}
+		invoke("one", "", "denied")
+		invoke("two", "base", "ok")
+		stopTestCore(t, c)
+	})
+
 }
 
 const webUIFixtureManifest = `id: alonabot-webui-fixture
@@ -1408,13 +1507,19 @@ func weatherProfilePackage(t *testing.T, schema, version string) string {
 	dir := t.TempDir()
 	source := fmt.Sprintf(`package main
 import (
+ "context"
  "log/slog"
  "os"
  "github.com/AlonaBot/AlonaBot/sdk"
  "github.com/AlonaBot/AlonaBot/sdk/genimpl"
+ "github.com/AlonaBot/AlonaBot/sdk/message"
 )
 func init(){genimpl.Register("main",genimpl.Resources{ConfigSchema:[]byte(%q)})}
-func main(){if err:=sdk.Run(sdk.NewPlugin());err!=nil{slog.Error("weather fixture failed","error",err);os.Exit(1)}}
+func main(){
+ p:=sdk.NewPlugin()
+ p.OnReady(func(context.Context)error{slog.Info("OnReady");return nil})
+ p.Command("city").Handle(func(c *sdk.Context)(message.Content,error){return message.Chain{message.Text(c.Config().String("city"))},nil})
+ if err:=sdk.Run(p);err!=nil{slog.Error("weather fixture failed","error",err);os.Exit(1)}}
 `, schema)
 	file, binary := filepath.Join(dir, "main.go"), filepath.Join(dir, "weather")
 	if err := os.WriteFile(file, []byte(source), 0o600); err != nil {

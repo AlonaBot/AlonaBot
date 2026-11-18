@@ -33,6 +33,7 @@ type Tree interface {
 
 // StopResult 记录一次停止的经过，便于诊断与测试。
 type StopResult struct {
+	Cancelled      bool      // STOPPING 前被已接纳工作撤销，实例继续使用原 Session。
 	Drained        bool      // 在排空期限内完成了所有在途调用
 	StoppingSentAt time.Time // 发出 STOPPING 的时刻（零值表示 Session 已关闭、未发送）
 	StopDeadline   time.Time // STOPPING 携带的绝对截止
@@ -43,8 +44,9 @@ type StopResult struct {
 
 // StopHooks 把其他业务入口接入同一次冻结与停止，回调共用本次停止预算。
 type StopHooks struct {
-	Frozen   func(drainDeadline time.Time) // 可选；冻结新派发并在绝对排空截止前等待在途业务
-	Stopping func()                        // 可选；进入 STOPPING 时撤销映射与注册
+	Frozen         func(drainDeadline time.Time) // 可选；冻结新派发并在绝对排空截止前等待在途业务
+	BeforeStopping func() bool                   // 可选；与活动接纳共用门禁，false 撤销本次空闲停止。
+	Stopping       func()                        // 可选；进入 STOPPING 时撤销映射与注册
 }
 
 // Stop 停用一个插件实例：从 t0 起冻结新根调用 → 最多排空 Drain → 取消剩余调用并发送唯一 STOPPING
@@ -66,6 +68,11 @@ func (in *Instance) Stop(t0 time.Time, reason pb.StopReason, tree Tree, timing S
 	drainCtx, cancel := context.WithDeadline(context.Background(), drainDeadline)
 	res.Drained = in.Session.WaitIdle(drainCtx) == nil
 	cancel()
+	if hooks.BeforeStopping != nil && !hooks.BeforeStopping() {
+		in.state.CompareAndSwap(int32(StateDraining), int32(StateActivated))
+		res.Cancelled = true
+		return res
+	}
 
 	// 3. 取消剩余调用，发送唯一 STOPPING，截止为 min(t0+Total, 发送时刻+OnStopAt)。
 	in.Session.CancelOutbound(pb.CancelReason_CANCEL_REASON_SESSION_STOPPING)

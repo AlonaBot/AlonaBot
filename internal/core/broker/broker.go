@@ -35,6 +35,7 @@ type Options struct {
 	MaxDepth       int                                       // CALL_CHAIN_MAX_DEPTH，包含即将调用的目标插件。
 	Metrics        *metrics.Counters                         // nil 时关闭原因计数。
 	Agent          func(ctx context.Context) (string, error) // 仅 @agent 目标需要，空 ID 表示未安装。
+	EnsureActive   func(ctx context.Context, pluginID string, payloadBytes int64) (release func(), err error)
 }
 
 // Broker 保存路由入口和在途转发关系；New 创建，Call 接入 Mux.Forward。
@@ -46,6 +47,7 @@ type Broker struct {
 	maxDepth       int
 	metrics        *metrics.Counters
 	agent          func(ctx context.Context) (string, error)
+	ensureActive   func(context.Context, string, int64) (func(), error)
 	mu             sync.Mutex // 只保护 calls，转发期间不持锁
 	calls          map[*router.Invocation]callOrigin
 }
@@ -66,7 +68,7 @@ func WithSelfToolCall(ctx context.Context) context.Context {
 
 // New 按装配处传入的请求期限和调用链深度上限创建 Broker。
 func New(opt Options) *Broker {
-	return &Broker{router: opt.Router, requestTimeout: opt.RequestTimeout, maxDepth: opt.MaxDepth, metrics: opt.Metrics, agent: opt.Agent, calls: make(map[*router.Invocation]callOrigin)}
+	return &Broker{router: opt.Router, requestTimeout: opt.RequestTimeout, maxDepth: opt.MaxDepth, metrics: opt.Metrics, agent: opt.Agent, ensureActive: opt.EnsureActive, calls: make(map[*router.Invocation]callOrigin)}
 }
 
 // Call 依次完成定位、访问与输入准入，再以独立编号调用目标 Session。
@@ -92,6 +94,14 @@ func (b *Broker) Release(c router.Caller) {
 }
 
 func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, target *router.Caller) (result wire.Response) {
+	// 冷启动也使用本次调用开始时固定的期限。
+	deadline := in.Deadline
+	if deadline.IsZero() {
+		deadline = time.Now().Add(b.requestTimeout)
+	}
+	ctx, stopDeadline := context.WithDeadline(ctx, deadline)
+	defer stopDeadline()
+	deadline, _ = ctx.Deadline()
 	trace := in.TraceID
 	if parent, ok := in.ParentAttach.(*router.Invocation); ok {
 		trace = parent.TraceID
@@ -117,6 +127,9 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 	}
 	var plugin router.Plugin
 	var destination router.Caller
+	var routes []*pb.RouteDescriptor
+	var generation string
+	fromSnapshot := false
 	if target != nil {
 		if target.PluginID != pluginID {
 			b.metrics.Add(c.PluginID, "service", "offline")
@@ -129,6 +142,13 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 	if ok {
 		plugin, ok = b.router.PluginFor(destination)
 	}
+	if ok && plugin.Activated() {
+		routes = plugin.Routes()
+		generation = destination.GenerationID
+	} else if target == nil && b.ensureActive != nil {
+		generation, routes, ok = b.router.RouteSnapshot(pluginID)
+		fromSnapshot = ok
+	}
 	if !ok {
 		owner := c.PluginID
 		if _, known := b.router.Plugin(pluginID); known {
@@ -137,12 +157,12 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		b.metrics.Add(owner, "service", "offline")
 		return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "target plugin is not active")
 	}
-	if !plugin.Activated() {
+	if plugin != nil && !plugin.Activated() && b.ensureActive == nil {
 		b.metrics.Add(pluginID, "service", "offline")
 		return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "target plugin is not active")
 	}
 	var service *pb.RouteDescriptor
-	for _, route := range plugin.Routes() {
+	for _, route := range routes {
 		if route.GetKind() == pb.RouteKind_ROUTE_KIND_SERVICE && route.GetService().GetServiceName() == name {
 			service = route
 			break
@@ -176,7 +196,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service input is not valid UTF-8 JSON")
 	}
 	// 3. 父附件由 Core 保留；每次复制祖先链，防止独立并发调用修改同一底层切片。
-	invocation := &router.Invocation{PluginID: pluginID, TraceID: in.TraceID, Depth: 2}
+	invocation := &router.Invocation{ProfileID: "default", PluginID: pluginID, TraceID: in.TraceID, Depth: 2}
 	trusted := &pb.InvocationContext{}
 	if parent, ok := in.ParentAttach.(*router.Invocation); ok {
 		trusted.Actor = parent.Event.GetActor()
@@ -188,6 +208,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		invocation.DefaultTarget = parent.DefaultTarget
 		invocation.TraceID = parent.TraceID
 		invocation.Depth = parent.Depth + 1
+		invocation.ProfileID, invocation.Root = parent.ProfileID, parent.Root
 	}
 	if self, _ := ctx.Value(selfToolCallKey{}).(bool); !self || pluginID != c.PluginID {
 		invocation.Chain = append(invocation.Chain, c.PluginID)
@@ -200,6 +221,38 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		b.metrics.Add(pluginID, "service", "depth")
 		return failure(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "service call chain exceeds maximum depth")
 	}
+	// 准入全部通过后才唤醒；等待不持转发表锁，也不占目标 Session 的业务槽。
+	if b.ensureActive != nil && target == nil {
+		release, err := b.ensureActive(ctx, pluginID, int64(len(payload.Bytes)))
+		if err != nil {
+			code := wire.CodeOf(err)
+			if code == pb.ErrorCode_ERROR_CODE_UNSPECIFIED {
+				code = pb.ErrorCode_ERROR_CODE_UNAVAILABLE
+			}
+			return failure(code, err.Error())
+		}
+		defer release()
+		destination, ok = b.router.Caller(pluginID)
+		if !ok || destination.GenerationID != generation {
+			return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "service generation changed during wake")
+		}
+		plugin, ok = b.router.PluginFor(destination)
+		if !ok || !plugin.Activated() || !slices.ContainsFunc(plugin.Routes(), func(current *pb.RouteDescriptor) bool { return proto.Equal(current, service) }) {
+			return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "service route changed during wake")
+		}
+		if fromSnapshot {
+			activeGeneration, committed, exists := b.router.RouteSnapshot(pluginID)
+			if !exists || activeGeneration != generation || !slices.ContainsFunc(committed, func(current *pb.RouteDescriptor) bool { return proto.Equal(current, service) }) {
+				return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "committed service route changed during wake")
+			}
+		}
+		if !router.ServiceCallable(service.GetService(), c.PluginID, pluginID) {
+			return failure(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "service access denied after wake")
+		}
+	}
+	if invocation.ProfileID != "default" {
+		trusted.ProfileId = invocation.ProfileID
+	}
 	trusted.PluginChain = invocation.Chain
 	trusted.Scopes = invocation.Scopes
 	trusted.SendForbidden = invocation.SendForbidden
@@ -209,16 +262,12 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		slog.Error("encode service invocation failed", "plugin_id", pluginID, "service_name", name, "error", err)
 		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "encode service invocation failed")
 	}
-	deadline := time.Now().Add(b.requestTimeout)
-	if !in.Deadline.IsZero() && in.Deadline.Before(deadline) {
-		deadline = in.Deadline
-	}
-	if parentDeadline, ok := ctx.Deadline(); ok && parentDeadline.Before(deadline) {
-		deadline = parentDeadline
-	}
 	// 4. wire.Session 为本跳分配 call_id，并将它与此附件绑定；不回填源请求编号。
 	if ctx.Err() != nil {
 		b.metrics.Add(pluginID, "service", "cancelled")
+		if ctx.Err() == context.DeadlineExceeded {
+			return failure(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "service deadline expired before dispatch")
+		}
 		return failure(pb.ErrorCode_ERROR_CODE_CANCELLED, "service call cancelled before dispatch")
 	}
 	b.mu.Lock()
@@ -245,6 +294,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 		delete(b.calls, invocation)
 		b.mu.Unlock()
 	}()
+	defer invocation.Begin()()
 	response, err := plugin.Call(ctx, wire.Request{Target: service.GetRouteId(), TraceID: invocation.TraceID, Deadline: deadline, Attach: invocation,
 		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: invocationSchemaVersion, Bytes: encoded}})
 	// 5. 保留目标的业务错误与有效载荷；成功结果必须符合声明的输出契约。

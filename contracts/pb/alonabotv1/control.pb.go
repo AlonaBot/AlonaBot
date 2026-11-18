@@ -318,6 +318,7 @@ const (
 	StopReason_STOP_REASON_RELOAD        StopReason = 3
 	StopReason_STOP_REASON_UPDATE        StopReason = 4
 	StopReason_STOP_REASON_CORE_SHUTDOWN StopReason = 5
+	StopReason_STOP_REASON_IDLE          StopReason = 6
 )
 
 // Enum value maps for StopReason.
@@ -329,6 +330,7 @@ var (
 		3: "STOP_REASON_RELOAD",
 		4: "STOP_REASON_UPDATE",
 		5: "STOP_REASON_CORE_SHUTDOWN",
+		6: "STOP_REASON_IDLE",
 	}
 	StopReason_value = map[string]int32{
 		"STOP_REASON_UNSPECIFIED":   0,
@@ -337,6 +339,7 @@ var (
 		"STOP_REASON_RELOAD":        3,
 		"STOP_REASON_UPDATE":        4,
 		"STOP_REASON_CORE_SHUTDOWN": 5,
+		"STOP_REASON_IDLE":          6,
 	}
 )
 
@@ -691,8 +694,10 @@ type Bootstrap struct {
 	DefaultLocale string `protobuf:"bytes,12,opt,name=default_locale,json=defaultLocale,proto3" json:"default_locale,omitempty"`
 	// 插件自管数据目录的绝对路径（CONTRACTS §6.1）。
 	PluginDataDir string `protobuf:"bytes,13,opt,name=plugin_data_dir,json=pluginDataDir,proto3" json:"plugin_data_dir,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// 本插件全部有效覆盖：配置文件 ID → 字段路径与完整值。
+	ProfileOverridesJson string `protobuf:"bytes,14,opt,name=profile_overrides_json,json=profileOverridesJson,proto3" json:"profile_overrides_json,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *Bootstrap) Reset() {
@@ -798,6 +803,13 @@ func (x *Bootstrap) GetDefaultLocale() string {
 func (x *Bootstrap) GetPluginDataDir() string {
 	if x != nil {
 		return x.PluginDataDir
+	}
+	return ""
+}
+
+func (x *Bootstrap) GetProfileOverridesJson() string {
+	if x != nil {
+		return x.ProfileOverridesJson
 	}
 	return ""
 }
@@ -1637,7 +1649,7 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"session_id\x18\x01 \x01(\fR\tsessionId\x12!\n" +
 	"\fchosen_minor\x18\x02 \x01(\rR\vchosenMinor\x12X\n" +
 	"\x17capability_intersection\x18\x03 \x03(\v2\x1f.alonabot.v1.ProtocolCapabilityR\x16capabilityIntersection\x124\n" +
-	"\tbootstrap\x18\x04 \x01(\v2\x16.alonabot.v1.BootstrapR\tbootstrap\"\xa8\x05\n" +
+	"\tbootstrap\x18\x04 \x01(\v2\x16.alonabot.v1.BootstrapR\tbootstrap\"\xde\x05\n" +
 	"\tBootstrap\x12#\n" +
 	"\rgeneration_id\x18\x01 \x01(\tR\fgenerationId\x122\n" +
 	"\x15candidate_config_json\x18\x02 \x01(\tR\x13candidateConfigJson\x12,\n" +
@@ -1650,7 +1662,8 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	" \x01(\x0e2\x15.alonabot.v1.LogLevelR\blogLevel\x12A\n" +
 	"\x0esession_limits\x18\v \x01(\v2\x1a.alonabot.v1.SessionLimitsR\rsessionLimits\x12%\n" +
 	"\x0edefault_locale\x18\f \x01(\tR\rdefaultLocale\x12&\n" +
-	"\x0fplugin_data_dir\x18\r \x01(\tR\rpluginDataDirJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06R\x17previous_config_versionR\x15target_config_version\"\x8c\x01\n" +
+	"\x0fplugin_data_dir\x18\r \x01(\tR\rpluginDataDir\x124\n" +
+	"\x16profile_overrides_json\x18\x0e \x01(\tR\x14profileOverridesJsonJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06R\x17previous_config_versionR\x15target_config_version\"\x8c\x01\n" +
 	"\rSessionLimits\x12!\n" +
 	"\fmax_inflight\x18\x01 \x01(\rR\vmaxInflight\x12*\n" +
 	"\x11max_payload_bytes\x18\x02 \x01(\rR\x0fmaxPayloadBytes\x12,\n" +
@@ -1729,7 +1742,7 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"\x1eCANCEL_REASON_CALLER_CANCELLED\x10\x01\x12#\n" +
 	"\x1fCANCEL_REASON_DEADLINE_EXCEEDED\x10\x02\x12!\n" +
 	"\x1dCANCEL_REASON_PARENT_FINISHED\x10\x03\x12\"\n" +
-	"\x1eCANCEL_REASON_SESSION_STOPPING\x10\x04*\xaa\x01\n" +
+	"\x1eCANCEL_REASON_SESSION_STOPPING\x10\x04*\xc0\x01\n" +
 	"\n" +
 	"StopReason\x12\x1b\n" +
 	"\x17STOP_REASON_UNSPECIFIED\x10\x00\x12\x17\n" +
@@ -1737,7 +1750,8 @@ const file_alonabot_v1_control_proto_rawDesc = "" +
 	"\x13STOP_REASON_RESTART\x10\x02\x12\x16\n" +
 	"\x12STOP_REASON_RELOAD\x10\x03\x12\x16\n" +
 	"\x12STOP_REASON_UPDATE\x10\x04\x12\x1d\n" +
-	"\x19STOP_REASON_CORE_SHUTDOWN\x10\x05*\xa7\x02\n" +
+	"\x19STOP_REASON_CORE_SHUTDOWN\x10\x05\x12\x14\n" +
+	"\x10STOP_REASON_IDLE\x10\x06*\xa7\x02\n" +
 	"\fSessionPhase\x12\x1d\n" +
 	"\x19SESSION_PHASE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17SESSION_PHASE_HANDSHAKE\x10\x01\x12\x18\n" +
