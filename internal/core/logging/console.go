@@ -197,6 +197,8 @@ func hiddenKeys(component string) map[string]bool {
 // levelLabel 返回级别缩写与颜色；介于标准级别之间的值归入较低的标准级别。
 func levelLabel(lv slog.Level) (string, string) {
 	switch {
+	case lv >= LevelCritical:
+		return "CRITICAL", ansiRed
 	case lv >= slog.LevelError:
 		return "ERRO", ansiRed
 	case lv >= slog.LevelWarn:

@@ -8,7 +8,7 @@
 {
   "adapters": {
     "telegram": {
-      "package": "alonabot_adapter_telegram",
+      "package": "alonabot-adapter-telegram",
       "$version": 1,
       "default_instance": "tg_a",
       "instances": {

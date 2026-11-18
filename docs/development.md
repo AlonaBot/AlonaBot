@@ -10,7 +10,7 @@
 | Go | 1.27.1（asdf，`~/.tool-versions`） | `go.mod` 的 go 指令固定为该版本 |
 | protoc | 36.0（`protoc --version` 输出 `libprotoc 36.0`；生成文件头记为 v7.36.0） | 版本不符时 `contracts/internal/protocgen` 拒绝生成 |
 | protoc-gen-go | v1.36.12（`go.mod` 的 `tool` 指令，与 `google.golang.org/protobuf` 同版本） | 通过 `go tool -n protoc-gen-go` 定位，不全局安装 |
-| Node（前端） | 26.5.1（asdf） | 供 web/admin 使用：在 `web/admin` 下运行 `npm ci`、`npm run typecheck`、`npm run build`，`npm run dev` 打开用 `fixtures/` 渲染表单的开发预览页；CI 不跑前端，前端测试只有被忽略的 `*.local.test.ts`，没有本地测试时 `npm run test` 也通过 |
+| Node（前端） | 26.5.1（asdf） | 供 `web/admin` 使用，见[官方 WebUI 开发](#官方-webui-开发) |
 
 已锁定并经测试验证的版本：protobuf v1.36.12、go.yaml.in/yaml/v3 v3.0.5、gorm v1.31.2、libtnb/sqlite v1.2.2、modernc.org/sqlite v1.61.0（已验证 CRUD/Tx/WAL Backup/迁移账本）；golang.org/x/sys v0.49.0 为直接依赖，用于 internal/oslock 的 flock/LockFileEx，以及 internal/core/process 在 Darwin 上查询进程组成员；Cobra v1.10.2、pflag v1.0.9、仅 Windows 链接的 mousetrap v1.1.0。
 
@@ -21,14 +21,16 @@ Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）只能链�
 ## 日常命令（仓库根目录）
 
 ```sh
-go generate ./...   # 重新生成 contracts/pb（入口：contracts/doc.go → contracts/internal/protocgen）
+go generate ./...   # 重新生成协议代码和 Core changelog
 go test ./...
 go build ./...
 go vet ./...
 go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}' ./cmd/alonabot ./sdk | sort -u   # Core 与 SDK 根包链接的模块，对照允许清单（D-52）
 ```
 
-生成器会先删除 `contracts/pb/` 下的 `*.pb.go` 再重新生成；新增 `.proto` 放在 `contracts/proto/alonabot/v1/`，`go_package` 统一为 `github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1`。
+协议生成器（入口：`contracts/doc.go` → `contracts/internal/protocgen`）会先删除 `contracts/pb/` 下的 `*.pb.go` 再重新生成；新增 `.proto` 放在 `contracts/proto/alonabot/v1/`，`go_package` 统一为 `github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1`。
+
+更新仓库根目录的 [`CHANGELOG.md`](../CHANGELOG.md) 后，运行 `go generate ./internal/core/manage`，将生成的 `internal/core/manage/changelog_core.go` 一同提交。
 
 交叉编译矩阵（只证明能构建，不能代替目标平台的运行证据）：
 
@@ -38,6 +40,21 @@ for p in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64; do
 done
 GOARCH=amd64 CGO_ENABLED=0 go test ./...   # Apple Silicon 上经 Rosetta 运行 darwin/amd64 测试
 ```
+
+## 官方 WebUI 开发
+
+在仓库根目录安装锁定的依赖并启动 Vite：
+
+```sh
+npm --prefix web/admin ci
+npm --prefix web/admin run dev
+```
+
+打开 Vite 输出的地址，首页跳转到 `/dev/forms`。预览使用 `web/admin/fixtures/`，可切换语言并查看表单提交生成的 JSON Merge Patch，无需启动 Core。接入新页面时按 [WebUI 实施计划 §3](../spec/plan/webui.md#3-页面接入外壳) 登记路由和文案。
+
+本地运行 `npm --prefix web/admin run typecheck`、`npm --prefix web/admin run test` 和 `npm --prefix web/admin run build`。测试使用被忽略的 `*.local.test.ts`，无本地测试时命令也通过；CI 不运行前端检查。生产静态文件输出到 `web/admin/dist/`，其中包括站点图标、标志、JetBrains Mono woff2 和许可。
+
+T-09.26 锁定 `lucide-react` 1.74.0、`@dnd-kit/core` 6.3.1、`@dnd-kit/sortable` 10.0.0、`@radix-ui/react-dialog` 1.3.1、`@radix-ui/react-dropdown-menu` 2.2.1 和 `@radix-ui/react-tooltip` 1.4.1；`@radix-ui/react-popover` 与 `recharts` 由首个使用它们的页面切片引入。
 
 ## 运行 Core 与管理组件
 
@@ -59,7 +76,23 @@ bin/alonabot adapter instance create <adapter-package-id> <instance-id> --config
 bin/alonabot admin add telegram:123456
 ```
 
+help 插件启用后，在聊天中发送 `/whoami`，把回复中的用户字符串作为 `admin add` 的参数；回复中的实例名用于核对来源。
+
 需要确认的操作不带 `--yes` 时列出受影响的对象后退出。开发中的组件可以按下节以目录运行，也可以用库模式，先 `alonabot build --dir ./examples/devbot`，再运行 `examples/devbot/bin/devbot --data-dir ./data`。
+
+使用同一套管理凭证运行 `bin/alonabot profile list` 查看配置文件 ID 和会话数。`bin/alonabot profile assign <配置文件ID> <实例名>` 设置实例缺省；再给出会话字符串可单独指定会话。`profile set` 与 `profile unset` 编辑 `default` 时写入插件的 Pending，沿用配置重载流程。全部子命令见 [CONTRACTS §5.6](../spec/CONTRACTS-v0.1.md#56-配置文件)，平台设置与工具策略见 [ADMIN-API §23](../spec/ADMIN-API.md#23-配置文件)。
+
+### 导出诊断包
+
+```fish
+alonabot diagnose --data-dir ./data --since 24h -o diagnose.zip
+```
+
+默认收集近 24 小时的日志、当前设置和 Active 配置、组件与环境信息，并开启脱敏。`--no-logs`、`--no-settings`、`--no-components` 可分别省略一组，至少保留一组。`-o` 也可写作 `--output`；省略时在当前目录生成 `alonabot-diagnostics-<UTC 时间>.zip`。
+
+在线使用管理 API 和 Bearer token：优先读 `--token-file`，其次取 `ALONABOT_ADMIN_TOKEN`，两者均未指定时尝试 `<data_dir>/admin_token`。`--admin-url` 可覆盖管理地址。连接被拒绝后尝试停机导出，无需 token；数据目录须已有可读的 `core.lock` 且锁未被占用。离线导出只读原目录，组件状态为 `Stopped`。
+
+缺少可用的 Adapter 实例 schema 时，默认遮盖该组实例配置的全部叶值，保留结构和完整的 `${环境变量}` 表达式。`--no-redact` 会导出凭证明文；日志可能包含聊天内容，提交 issue 前请先检查归档。
 
 ## 开发运行与热部署
 
@@ -78,16 +111,20 @@ bin/alonabot run examples/devbot/plugin examples/devbot/adapter --data-dir $DEVB
 
 ```fish
 curl --fail-with-body -X POST -H "Authorization: Bearer $token" \
-  'http://127.0.0.1:7650/plugins/alonabot_adapter_devbot/inject?instance=one&text=%2Fhello'
+  'http://127.0.0.1:7650/plugins/alonabot-adapter-devbot/inject?instance=one&text=%2Fhello'
 cat $DEVBOT_OUTPUT
 ```
 
-注入返回 204，异步发送后文件内容为 `Hello from devbot!`。完整实例 JSON、目录结构、认证、源码／翻译／配置改动与编译失败恢复操作见 [devbot README](../examples/devbot/README.md)。样例把 `adapters.devloop.package` 绑定到 `alonabot_adapter_devbot`，实例在 `instances.one`，命令前缀为 `/`。两个开发组件沿用真实 Deliver／Send 流水线。
+注入返回 204，异步发送后文件内容为 `Hello from devbot!`。完整实例 JSON、目录结构、认证、源码／翻译／配置改动与编译失败恢复操作见 [devbot README](../examples/devbot/README.md)。样例把 `adapters.devloop.package` 绑定到 `alonabot-adapter-devbot`，实例在 `instances.one`，命令前缀为 `/`。两个开发组件沿用真实 Deliver／Send 流水线。
+
+组件市场 ID 使用连字符前缀，例如 `alonabot-plugin-hello`；本地 ID 仍允许下划线，规则见 [CONTRACTS §9.1](../spec/CONTRACTS-v0.1.md#91-manifest-与构建产物)。D-172 的代码改名由 T-09.27（goal-177）实施：更新后需重建状态库与开发数据目录，再按新 ID 填写组件配置、实例的 `package` 与 `log.sources`。
+
+验证官方 help 工程可运行 `bin/alonabot check --dir ./plugins/help`。使用上面的回环 Adapter 试用时，在 `run` 的组件目录列表追加 `./plugins/help`，再把注入请求的 `text` 改为 `%2Fhelp` 或 `%2Fwhoami`，在同一输出文件查看回复。
 
 先构建 CLI（`go build -o bin/alonabot ./cmd/alonabot`），再创建与验证组件：
 
 ```fish
-bin/alonabot init ./myplugin --id alonabot_plugin_hello
+bin/alonabot init ./myplugin --id alonabot-plugin-hello
 bin/alonabot build --dir ./myplugin
 bin/alonabot check --dir ./myplugin
 bin/alonabot test --dir ./myplugin
@@ -126,7 +163,7 @@ bin/alonabot run ./examples/plugins/lifecycle --stdio
 
 `run` 取得 core.lock 后读取 `<data_dir>/core_config.json`，Core 设置统一从这个 JSON 对象读取；文件不存在时以 0600 权限写入缺省内容。未知键、重复键、类型或取值错误时，以 usage 退出码报告完整键路径与行列号。
 
-键与缺省值见 CONTRACTS §15.1；`base_url` 缺省为 `http://127.0.0.1:7650`，管理入口与插件路由共用这个地址。旧键 `admin_base_url` 与 `plugin_base_url` 按未知键报错；已有配置需改用 `base_url`。`admins`、`command_prefixes`、`command_prefixes_by_instance`、`default_locale`、`log.sources` 与 `adapters` 已支持解析与保存；本地 `run` 按监听、日志、代理与 Base URL 装配。
+键与缺省值见 CONTRACTS §15.1；`base_url` 缺省为 `http://127.0.0.1:7650`，管理入口与插件路由共用这个地址。旧键 `admin_base_url` 与 `plugin_base_url` 按未知键报错；已有配置需改用 `base_url`。`admins`、`command_prefixes`、`reply`、`default_locale`、`log.sources` 与 `adapters` 已支持解析与保存；`command_prefixes_by_instance` 仍由当前运行时读取，配置文件的前缀与回复行为由 T-04.19 接入。本地 `run` 按监听、日志、代理与 Base URL 装配。
 
 整个字符串值写成 `${NAME}` 时，读取时展开环境变量；NAME 由 `A-Z`、`a-z`、数字与下划线组成，首字符为字母或下划线。变量缺失时该值按不合法处理，恢复为缺省值并记校正记录（D-161）。
 
@@ -137,6 +174,8 @@ bin/alonabot run ./examples/plugins/lifecycle --stdio
 ```sh
 bin/alonabot run --data-dir ./data --listen 127.0.0.1:8080
 ```
+
+用 `alonabot logs --level critical` 只看严重故障，或用 `alonabot run --log-level critical` 为本次启动提高全局输出阈值。运行中用 `alonabot log-level global critical` 保存全局阈值，用 `alonabot log-level <组件 ID> critical` 单独设置来源。查询筛选与输出设置见 [ADMIN-API §8](../spec/ADMIN-API.md#8-日志读取与输出级别)。
 
 Core 在 `listen` 地址（缺省 `127.0.0.1:7650`）上提供唯一的公开 HTTP 入口。请求 Host 的主机名须匹配 `base_url`：`/plugins/{id}/...` 转发给该插件当前 Session 的路由，其余路径交给管理处理器；其他 Host 返回 421。缺省设置下，lifecycle 示例的私有页面地址为 `http://127.0.0.1:7650/plugins/demo/page`。listen 为非 loopback 地址时，`base_url` 必须是 https，或者配置非空的 `trusted_proxies`（由可信反代终止 TLS），设置文件与 `--listen` 都按此校验。
 
@@ -158,7 +197,7 @@ bin/alonabot admin-token show --data-dir ./data
 
 Core 运行且仍持有当前 token 时，可调用 `POST /api/auth/token/rotate` 在线轮换（[ADMIN-API §20](../spec/ADMIN-API.md#20-webui-需要的补充接口)）。从响应保存新 token，更新 CLI 使用的 `ALONABOT_ADMIN_TOKEN` 或 `--token-file`，并用新 token 重新登录。轮换会撤销全部旧管理会话。
 
-调优参数在启动时解析；修改后重启生效。查看全部 37 项参数及当前生效值：
+调优参数在启动时解析；修改后重启生效。`default` 的前缀与 `reply` 属于 `core_config.json`；配置文件覆盖集合沿用固定 4 MiB 帧上限。查看全部调优参数及当前生效值：
 
 ```sh
 bin/alonabot tune list
@@ -179,9 +218,11 @@ bin/alonabot check --dir ./myplugin --goos linux --goarch amd64 --tags a,b
 
 `build/check/pack` 按相同的 `--goos`、`--goarch`、`--tags` 选择源码，目标缺省沿用 Go 环境；扫描、依赖分析和正式编译统一使用 `CGO_ENABLED=0`。开发运行的 BuildDev 沿用开发环境的 cgo 设置。`build` 默认输出到 `<工程>/bin`，可用 `--out DIR` 覆盖。进程产物包含独立的 `component`（Windows 为 `component.exe`）、资源旁车及包内 `plugin.yaml`；作者 manifest 保持原样。WebUI build 发布静态资源与包内 manifest。`check` 只读扫描入口与资源，保留全部静态诊断与位置。
 
-`test` 在全新临时数据目录中构建宿主平台组件，完成真实握手、准备、注册、激活与停止，报告注册命令及清理结果；Adapter 保持零平台实例，WebUI 检查静态加载资源。准备、注册、停止或清理失败均非零退出。
+`test` 在全新临时数据目录中构建宿主平台组件，完成真实握手、准备、注册、激活与停止，报告注册命令及清理结果；Adapter 保持零平台实例，WebUI 检查静态加载资源。进程组件的 Bootstrap 下发临时状态根内 `plugin_data/<id>/` 的绝对路径，测试结束时随临时目录清理。准备、注册、停止或清理失败均非零退出。
 
 `pack` 使用相同构建路径输出 `<id>-<version>-<os>-<arch>.tar.gz`（WebUI 为 `<id>-<version>-any.tar.gz`）及归档外的 `release.json`，`--out` 默认同 build。`--asset-url` 必填且须为绝对 https URL。进程包的 `build-info` 是 `debug.BuildInfo.String()` 文本；生成代码、资源旁车与归档共用扫描时校验的资源快照，配置 schema 使用同一规范内容；扫描后保存的工程资源留待下次构建。
+
+配置字段的 `example` 引用图片时，`check`、`build`、`pack` 检查两种配置 schema 中的引用及图片签名；被引用的图片随资源快照进入构建目录和归档。示例写法见 [插件开发规范](plugin-guide.md#配置字段的回复示例)。
 
 ```fish
 bin/alonabot pack --dir ./myplugin --asset-url https://example.com/hello.tar.gz --key ./release.key --out ./dist
@@ -241,11 +282,11 @@ Adapter 在 `adapter.Descriptor.HTTP` 中用 `[]adapter.HTTPRoute` 声明路由�
 | 规则 | 依据 | 检查 | 状态 |
 | --- | --- | --- | --- |
 | 生成代码可重复生成，结果稳定 | AGENTS「项目约定」 | 执行 `go generate ./...` 后检查 `git diff --exit-code` | 已观测（手动执行） |
-| Envelope 字段号/枚举值与 WIRE-FORMAT 一致 | spec/WIRE-FORMAT.md §1/§2/§5A | `contracts/wirespec_test.go`（`go test ./contracts/`） | 已观测 |
+| WIRE-FORMAT 规定的协议字段号与枚举值（含 `ToolEffect` 及三个 `effect` 字段） | spec/WIRE-FORMAT.md §1/§2/§3.3/§3.5/§5A | `contracts/wirespec_test.go`（`go test ./contracts/`） | 已观测 |
 | Core 与 SDK 根包只链接允许的模块 | CONTRACTS §10、D-52 | 审查时运行上方的 `go list -deps` 命令（需要时按目标平台设 GOOS/GOARCH） | 人工/agent 审查规则，不由 CI 自动证明 |
 | 五目标平台 `CGO_ENABLED=0` 可构建 | CONTRACTS §6.1/§7.1 | 下方交叉编译命令（手动执行） | 已观测（只验证了构建；运行见 V-32） |
 | 包文档、命名、注释与测试提交范围 | coding-standards.md | 代码审查与 PR 清单 | 人工/agent 审查规则，不由 CI 自动证明 |
-| V-01～V-117 证据 | spec/TEST-MATRIX.md | 按编号记录测试位置、命令、平台和结果 | §3.1 所列分项已观测（darwin/arm64）；其余未运行 |
+| 验收证据 | spec/TEST-MATRIX.md §3 | 按编号记录测试位置、命令、平台和结果 | 各分项的运行结果与未运行项见证据表 |
 
 状态说明：**已定义** 表示规则和检查方式已写下；**已实现** 表示检查代码已存在；**已观测** 表示检查真实运行过并有结果。工作流本身不代表目标提交已经验证。
 
@@ -457,7 +498,7 @@ records := h.Background()
 
 `OnReady` 的回调 context 在返回时取消，上例保留其 Session 归属，后台生命周期由 OnStop 管理。channel 确定发送时刻，Core 通知确定注入终点。
 
-仓库完整示例覆盖 echo、lifecycle、showcase、configdb 与 media：
+仓库完整示例覆盖 echo、lifecycle、showcase、configdb 与 media。configdb 的 KV 与文件命令见[插件指南](plugin-guide.md#保存少量状态)：
 
 ```sh
 go test -race -count=2 ./plugintest/... ./examples/plugins/...

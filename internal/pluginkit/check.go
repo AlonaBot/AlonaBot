@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -158,6 +159,41 @@ func projectResources(dir string, project *manifest.Manifest) (map[string][]byte
 				if _, ok := files["i18n/en-US.json"]; !ok {
 					return nil, errors.New("i18n/en-US.json: source catalog is missing")
 				}
+			}
+		}
+	}
+	if err := checkChangelog(dir, project.Version); err != nil {
+		return nil, err
+	}
+	for _, name := range []string{changelogFile, changelogDirectory} {
+		if _, err := os.Lstat(filepath.Join(dir, name)); errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+		if err := walk(name); err != nil {
+			return nil, err
+		}
+	}
+	for _, schemaName := range []string{"config_schema.json", "adapter_config_schema.json"} {
+		raw, exists := files[schemaName]
+		if !exists {
+			continue
+		}
+		schema, problems := configschema.Parse(raw)
+		if len(problems) != 0 {
+			return nil, fmt.Errorf("%s: %v", schemaName, problems)
+		}
+		for _, name := range schema.ExampleImages() {
+			if err := walk(name); err != nil {
+				return nil, fmt.Errorf("%s:%s: %w", schemaName, exampleImageLocation(raw, name), err)
+			}
+			content, exists := files[name]
+			if !exists {
+				return nil, fmt.Errorf("%s:%s: image %q must be a regular file", schemaName, exampleImageLocation(raw, name), name)
+			}
+			if expected := exampleContentType(name); http.DetectContentType(content) != expected {
+				return nil, fmt.Errorf("%s:%s: image %q content does not match its extension", schemaName, exampleImageLocation(raw, name), name)
 			}
 		}
 	}

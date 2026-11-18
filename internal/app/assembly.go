@@ -284,6 +284,7 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 		PreEvent: func(ctx context.Context, ev *pb.Event) (*pb.EventPayload, bool, error) {
 			return hooks.PreEvent(ctx, ev)
 		}})
+	a.router.RegisterCommandList(a.mux)
 	hooks = hook.New(a.router, hook.Options{Prepare: a.media.PrepareIncoming, CheckEvent: a.checkAdapterEvent})
 	messages = message.New(a.adapters, p, a.media.LeaseForSend, a.buttons.Issue, v.RequestTimeout, hooks)
 	p.SetCommandsChanged(a.router.CommandsChanged)
@@ -665,6 +666,10 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		return err
 	}
+	boot.PluginDataDir, err = preparePluginDataDir(dir, id)
+	if err != nil {
+		return err
+	}
 	// 3. 独立进程与同进程共用开发配置、数据库和固定代次。
 	if entry.executable != "" {
 		boot.DatabaseDescriptor.MigrationMode = pb.MigrationMode_MIGRATION_MODE_NONE
@@ -956,7 +961,7 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 		failure := errors.Join(err, cause)
 		running.instance.Degrade(failure)
 		a.detach(running)
-		slog.Error("committed candidate assembly failed", "plugin_id", id, "op_id", r.OpID, "generation_id", r.Generation, "kind", kind, "error", failure)
+		slog.Log(ctx, logging.LevelCritical, "committed candidate assembly failed", "plugin_id", id, "op_id", r.OpID, "generation_id", r.Generation, "kind", kind, "error", failure)
 		return running, errors.Join(failure, running.instance.Session.Close())
 	}
 	// 3. ACTIVATED 成功后发布业务入口，再启动 Adapter 实例。
