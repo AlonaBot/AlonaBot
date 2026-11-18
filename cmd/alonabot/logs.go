@@ -42,7 +42,7 @@ func logCommands(code *int) []*cobra.Command {
 			return errors.New("--date and --follow are mutually exclusive")
 		}
 		*code = exitFailure
-		client, err := options.client()
+		client, err := options.client(true)
 		if err != nil {
 			return err
 		}
@@ -94,7 +94,7 @@ func logCommands(code *int) []*cobra.Command {
 	levelOptions.flags(change)
 	change.RunE = func(cmd *cobra.Command, args []string) error {
 		*code = exitFailure
-		client, err := levelOptions.client()
+		client, err := levelOptions.client(true)
 		if err != nil {
 			return err
 		}

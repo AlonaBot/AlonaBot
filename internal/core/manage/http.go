@@ -33,6 +33,7 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	s.instanceRoutes(mux)
 	s.conversationRoutes(mux)
 	s.logRoutes(mux)
+	mux.HandleFunc("POST /api/v1/diagnostics", s.diagnostics)
 	mux.HandleFunc("GET /api/v1/core", s.coreInfo)
 	mux.HandleFunc("GET /api/v1/packages/{id}/icon", s.icon)
 	mux.HandleFunc("POST /api/v1/packages/install", func(w http.ResponseWriter, r *http.Request) {
