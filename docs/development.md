@@ -77,6 +77,48 @@ go run ./scripts/dist --version 0.1.0 \
 
 当前 `--version` 决定发行归档名和默认下载前缀；Core 管理 API 的版本仍来自 Go module 构建信息，源码构建会显示 `(devel)`。正式发布前需在 `internal/app/version.go` 补齐 Core 版本注入入口。
 
+## 用 install.sh 安装与升级
+
+在支持 systemd 的 Linux 上以 root 运行；macOS 在当前用户的登录会话运行。支持两种系统的 amd64、arm64。先从同一 Release 下载脚本，再安装指定版本（以下命令使用 fish，把 `VERSION` 换成发行版本号，省略前导 `v`）：
+
+```fish
+set version VERSION
+curl --fail --location --proto '=https' --proto-redir '=https' \
+  -o install.sh https://github.com/AlonaBot/AlonaBot/releases/download/v$version/install.sh
+# Linux
+sudo sh install.sh --version $version
+# macOS
+sh install.sh --version $version
+```
+
+省略 `--version` 会先通过 `/latest` 固定一个 Release，再下载该版本的归档与 `SHA256SUMS`。`ALONABOT_RELEASE_BASE_URL` 可覆盖 Release 基址，基址和所有重定向均须使用 HTTPS。脚本先检查平台、权限和系统工具，完成下载、校验和临时解压后才停服并替换 `alonabot` 与完整的 `packages/`。
+
+Linux 使用 `/opt/alonabot/`、数据目录 `/var/lib/alonabot` 和系统服务 `alonabot.service`；服务以系统用户 `alonabot` 运行并启用开机启动。macOS 使用 `~/Library/Application Support/AlonaBot/`、其中的 `data/` 和用户 LaunchAgent `io.github.alonabot`，登录后启动。工作目录设为程序目录，启动参数为 `run --data-dir <完整数据路径>`。
+
+有控制终端时，脚本在停服后以服务身份运行 `admin-token init --if-missing`，stdin 与 stderr 连接 `/dev/tty`；新 token 仅显示一次，已有凭证保持原值。经管道执行同样使用控制终端。无控制终端时跳过初始化，服务照常启动，Core 首次启动写入 `admin_token`。文件存在时按脚本输出的完整命令领取：
+
+```fish
+# Linux，以服务身份读取
+sudo runuser -u alonabot -- /opt/alonabot/alonabot admin-token show --data-dir /var/lib/alonabot
+# macOS，以当前用户读取
+"$HOME/Library/Application Support/AlonaBot/alonabot" admin-token show --data-dir "$HOME/Library/Application Support/AlonaBot/data"
+```
+
+首次登录成功后 Core 删除 `admin_token`。再次运行安装命令即升级，保留数据、`core_config.json`、状态库、已安装组件与未领取的 token。内置包的预装、默认启用与可用更新由 Core 处理。
+
+```fish
+# Linux 卸载
+sudo sh install.sh --uninstall
+# macOS 卸载
+sh install.sh --uninstall
+```
+
+卸载停止并解除服务注册，删除服务定义、程序与内置包，输出保留的数据目录位置；macOS 的 `data/` 保留在原位。
+
+本地先运行 `sh -n deploy/install.sh`、`shellcheck deploy/install.sh`（缺工具记录「未运行」）和 `go test -race ./cmd/alonabot ./scripts/dist`。临时 HTTPS Release 和系统命令模拟放在 `*_local_test.go`，分别验证版本/latest、下载校验失败门禁、服务参数与数据保留。开发机只在临时目录模拟；V-84 的真实安装须使用专用、可恢复的 systemd Linux（root）与 macOS（当前用户）环境，逐项记录全新安装、管道有/无终端、升级、校验失败与卸载，核对身份、token、旧安装及数据；缺少环境的项目记「未运行」。容器内 systemd 与命令模拟的结果分别记录。
+
+`go run ./scripts/dist --version VERSION --key FILE --out DIR` 会在输出目录附带与 `deploy/install.sh` 内容相同的 `install.sh`，`SHA256SUMS` 继续仅列外层发行归档。当前上传由 T-10.4 的维护者执行：将 `install.sh`、`SHA256SUMS` 和发行归档上传至同一个 Release，并按发行步骤上传各组件安装包及 `release.json`、`.sig`、`release.pub`。
+
 ## 运行 Core 与管理组件
 
 ```sh
