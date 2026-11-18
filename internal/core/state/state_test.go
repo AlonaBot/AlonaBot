@@ -118,7 +118,7 @@ func TestCommitActiveChecksExpectedOld(t *testing.T) {
 		plugin string // 代次所属插件
 		gen    string // 代次 ID
 	}{{"a", "a-g1"}, {"a", "a-g2"}, {"a", "a-g3"}, {"b", "b-g1"}} {
-		if err := s.AddGeneration(ctx, g.plugin, g.gen, `{}`, 1); err != nil {
+		if err := s.AddGeneration(ctx, g.plugin, g.gen, `{}`); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -77,8 +77,8 @@ Bootstrap 属于私有、已认证 IPC，和整个 HELLO_ACK 一起受 **4 MiB**
 | 字段 | 输入语义 |
 | --- | --- |
 | `generation_id` | Core 分配的不可变代次标识，插件只回显、不选择其他代次 |
-| `candidate_config_json` | UTF-8 JSON 对象，Core 先验证对象/大小并解析既有 Secret 引用；允许旧版本字段进入 SDK 配置迁移，不先用新版 Schema 否决旧配置 |
-| `config_schema_hash` | 与可信安装包对应的规范 Schema 摘要，含其中的 `example` 声明（CONTRACTS §5.1，D-160）；示例图片字节由包携带，经 Admin API 提供。无配置插件仍以空对象表示。`previous_config_version`（4）与 `target_config_version`（5）已由 D-161 删除，字段号保留不再使用 |
+| `candidate_config_json` | UTF-8 JSON 对象，Core 先验证对象/大小并解析既有 Secret 引用；SDK 先将完整原始对象交给 OnConfigLoad，再补值、校正与检查 required（CONTRACTS §5.2、§5.5） |
+| `config_schema_hash` | 与可信安装包对应的规范 Schema 摘要，含其中的 `example` 声明（CONTRACTS §5.1，D-160）；示例图片字节由包携带，经 Admin API 提供。无配置插件仍以空对象表示。`previous_config_version`（4）与 `target_config_version`（5）已由 D-161 删除，字段号与原名称均 reserved，不再使用 |
 | `database_descriptor` | 后端类型（NONE 或受管 SQLite）、受管 SQLite 当前准备视图路径、迁移模式、已应用版本、activation_reason（first_install/resume/reload/update/rollback）、manual_migration_approved（仅Core显式维护许可且绑定当前Session/Generation/DB时true）；不下发 Core 管理数据库凭证 |
 | `http_proxy_auth` | 本 Session 独立的内部代理认证材料；只在 HELLO 协商出 `http_listener` 能力时下发（§3.1），不复用 Admin 凭证 |
 | `phase_limits`、`preparation_deadline_unix_ms`（字段号 8、9） | 准备、迁移和 Ready 的阶段预算及本轮绝对期限；迁移使用独立预算，不被普通业务 30s 截断 |
@@ -125,6 +125,18 @@ EventSpec 追加可选消息 `MessageFilter message_filter`；MessageFilter 的�
 自定义 Go Rule 是插件进程内与对应 Handler 一起执行的函数；Core 可表达的类型/命令/权限条件先执行，SDK 在同一 Handler REQUEST 中完成自定义 Rule，并以 HandlerOutcome.matched 返回结果，不另建 Rule 服务。
 
 REGISTER 的完整描述必须装入一帧；超限 RESOURCE_EXHAUSTED，不部分接收或激活。配置 Schema 与服务 Schema 从经过包摘要校验的安装资源取得，REGISTER 中的 hash/版本必须一致，不能仅上报不可解析的 hash 而缺少 Schema 原文。
+
+REGISTER 的配置字段固定为 `bytes config_schema_hash = 2`、`string candidate_config_json = 3` 与 `repeated ConfigCorrection config_corrections = 8`；字段号 4 与原名称 `candidate_config_version` 均 reserved。`ConfigCorrection` 的字段如下：
+
+```proto
+message ConfigCorrection {
+  string path = 1;
+  string reason = 2;
+  string original_json = 3;
+}
+```
+
+`path` 为以 `$` 开头的 JSON 路径；`reason` 为 `converted`、`reset` 或 `removed`；`original_json` 为原值的 JSON 文本，涉及 secret 时为空串。Core 校验路径前缀、原因与原值 JSON，并按 schema 及历史秘密路径省略相交记录的原值（含祖先、后代与数组路径）。记录与新候选配置快照、秘密路径同事务保存，普通 restart 复用 Active 代次的记录；管理 API 将非空 `original_json` 解码为 `original`（ADMIN-API §12.1）。
 
 工具声明 `ToolSpec.effect` 使用字段号 4，类型为 `ToolEffect`（§3.5）。省略字段或传 `UNSPECIFIED=0` 表示未声明；SDK 收集注册时拒绝非法类别，原始 REGISTER 中的非法枚举由 Core 以 INVALID_ARGUMENT 拒绝，英文错误含 Service 名和非法数值。
 

@@ -47,10 +47,10 @@ func TestCandidateJournalResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.AddGeneration(ctx, id, "old", string(oldConfig), 1); err != nil {
+	if err := st.AddGeneration(ctx, id, "old", string(oldConfig)); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.SetGenerationConfig(ctx, "old", string(oldConfig), paths); err != nil {
+	if err := st.SetGenerationConfig(ctx, "old", string(oldConfig), paths, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.CommitActive(ctx, id, "", "old"); err != nil {
@@ -116,10 +116,10 @@ func TestCandidateJournalResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.AddGeneration(ctx, id, "new", string(nextConfig), 1); err != nil {
+	if err := st.AddGeneration(ctx, id, "new", string(nextConfig)); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.SetGenerationConfig(ctx, "new", string(nextConfig), nextPaths); err != nil {
+	if err := st.SetGenerationConfig(ctx, "new", string(nextConfig), nextPaths, nil); err != nil {
 		t.Fatal(err)
 	}
 	record.DatabasePath = prepared.DatabasePath

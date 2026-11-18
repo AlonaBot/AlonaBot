@@ -88,7 +88,7 @@ func testComponent(ctx context.Context, dir string, values tune.Values, stdout, 
 	if err := store.AddInstall(ctx, state.Install{Role: role, PluginID: m.ID, AdapterID: m.AdapterID, Source: m.Source, Version: m.Version, Entrypoint: build.Executable, BuildDigest: build.Digest}); err != nil {
 		return err
 	}
-	if err := store.AddGeneration(ctx, m.ID, offlineGeneration, "{}", *m.ConfigVersion); err != nil {
+	if err := store.AddGeneration(ctx, m.ID, offlineGeneration, "{}"); err != nil {
 		return err
 	}
 	pluginDir := filepath.Join(temporary, "plugins", m.ID)
@@ -114,7 +114,7 @@ func testComponent(ctx context.Context, dir string, values tune.Values, stdout, 
 	if err := os.MkdirAll(pluginDataDir, 0o700); err != nil {
 		return err
 	}
-	boot := &pb.Bootstrap{GenerationId: offlineGeneration, CandidateConfigJson: "{}", PreviousConfigVersion: m.ConfigVersion, TargetConfigVersion: *m.ConfigVersion, DatabaseDescriptor: database, LogLevel: pb.LogLevel_LOG_LEVEL_DEBUG, PluginDataDir: pluginDataDir}
+	boot := &pb.Bootstrap{GenerationId: offlineGeneration, CandidateConfigJson: "{}", DatabaseDescriptor: database, LogLevel: pb.LogLevel_LOG_LEVEL_DEBUG, PluginDataDir: pluginDataDir}
 	if len(resources.ConfigSchema) > 0 {
 		schema, problems := configschema.Parse(resources.ConfigSchema)
 		if len(problems) > 0 {

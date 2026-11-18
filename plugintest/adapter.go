@@ -21,7 +21,7 @@ type testAdapter struct {
 func (a *testAdapter) bindResources() {
 	// %q 保留用户指定 ID 的边界；工程身份仍由正式 manifest 解析器校验。
 	project := fmt.Sprintf("id: %s\nname: Plugin test adapter\nversion: 0.1.0\nauthor: AlonaBot\nrole: adapter\nadapter_id: %q\ndescription: Loopback test adapter\nsource: github.com/AlonaBot/AlonaBot\n", adapterComponentID, a.descriptor.AdapterID)
-	generated.Bind(a, generated.Resources{Manifest: []byte(project), AdapterConfigSchema: []byte(`{"$version":1}`)})
+	generated.Bind(a, generated.Resources{Manifest: []byte(project), AdapterConfigSchema: []byte(`{}`)})
 }
 
 // Descriptor 返回本次测试的能力与平台声明。

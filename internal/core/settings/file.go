@@ -47,11 +47,6 @@ func (f *File) Update(edit func(doc *Document) error) error {
 	if err := edit(draft); err != nil {
 		return fmt.Errorf("edit %s: %w", f.name, err)
 	}
-	if draft.root.index("$version") < 0 {
-		if err := draft.Set([]string{"$version"}, currentVersion); err != nil {
-			return err
-		}
-	}
 	// 2. 从最终格式重新解析，诊断中的行列对应将要保存的内容。
 	content, err = draft.formatted()
 	if err != nil {
@@ -70,6 +65,7 @@ func (f *File) Update(edit func(doc *Document) error) error {
 		return err
 	}
 	f.document, f.current = document, current
+	logCorrections(current.Corrections)
 	if err := syncDirectory(filepath.Dir(f.name)); err != nil {
 		slog.Log(context.Background(), logging.LevelCritical, "settings directory sync failed", "file", f.name, "error", err)
 		return fmt.Errorf("settings saved but directory sync failed: %w", err)
@@ -109,6 +105,7 @@ func (f *File) Reload() (changed []string, err error) {
 	}
 	slices.Sort(changed)
 	f.document, f.current = document, current
+	logCorrections(current.Corrections)
 	return changed, nil
 }
 
@@ -155,10 +152,10 @@ func settingsValues(s Settings) (map[string]any, error) {
 			}
 			instances[instance] = value
 		}
-		adapters[id] = map[string]any{"package": adapter.Package, "$version": adapter.Version, "instances": instances, "default_instance": adapter.DefaultInstance}
+		adapters[id] = map[string]any{"package": adapter.Package, "instances": instances, "default_instance": adapter.DefaultInstance}
 	}
 	return map[string]any{
-		"$version": currentVersion, "listen": s.Listen, "base_url": s.BaseURL,
+		"listen": s.Listen, "base_url": s.BaseURL,
 		"trusted_proxies": s.TrustedProxies, "proxy": s.Proxy, "admins": s.Admins,
 		"command_prefixes": s.CommandPrefixes, "command_prefixes_by_instance": s.CommandPrefixesByInstance,
 		"reply":          s.Reply,

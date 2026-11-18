@@ -73,11 +73,11 @@ func Init(ctx context.Context, dir, id, role, adapterID, module string) (needsSD
 	switch role {
 	case "plugin", "agent":
 		files["plugin.go"] = []byte(pluginTemplate)
-		files["config_schema.json"] = []byte("{\"$version\":1}\n")
+		files["config_schema.json"] = []byte("{}\n")
 		files["i18n/en-US.json"] = []byte("{\"messages\":{\"hello\":\"Hello!\"}}\n")
 	case "adapter":
 		files["adapter.go"] = []byte(fmt.Sprintf(adapterTemplate, adapterID))
-		files["adapter_config_schema.json"] = []byte("{\"$version\":1}\n")
+		files["adapter_config_schema.json"] = []byte("{}\n")
 	case "webui":
 		files["assets/index.html"] = []byte("<!doctype html>\n<html lang=\"en\"><meta charset=\"utf-8\"><title>AlonaBot WebUI</title><main><h1>AlonaBot WebUI</h1></main></html>\n")
 	}

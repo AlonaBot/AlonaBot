@@ -393,7 +393,9 @@ multipart 与 JSON Update 均进入 `manage.Service.Update`，执行绑定来源
   "active": {"token":{"$secret_set":true},"hidden":"value"},
   "pending": {"base_generation":"gen-example","config":{"token":{"$secret_set":true},"hidden":"value"}},
   "schema": {"token":{"type":"string","secret":true}},
-  "i18n": {"zh-CN":{"token":{"description":"访问凭证"}}}
+  "i18n": {"zh-CN":{"token":{"description":"访问凭证"}}},
+  "corrections": [],
+  "unknown": []
 }
 ```
 
@@ -411,9 +413,9 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 安装包保存操作只更新 Pending；两个 reload HTTP 入口共用候选编排，优先激活有效 Pending。`config/import` 总是显式导入磁盘编辑，保持 Active。CLI `alonabot reload <id>` 先调用 config/import，再调用 reload，因此直接编辑 config.json 后执行 CLI reload 继续导入文件内容。
 
-开发来源从当前工程资源读取 schema/i18n，GET 返回固定 `dev:<id>` 代次的脱敏 Active。PUT/PATCH 使用同样的 base 和秘密省略规则，先 Complete/Validate，再以临时文件替换 `<data_dir>/plugins/<id>/config.json`，随后经 Core 的开发重启入口建立新 Session；返回脱敏 `{base_generation,config}`，保持 Pending 为 null。保存失败保留原文件；重启失败返回实际错误并保留已保存文件，调用方可修订配置后再次重启。dev 的 config/import 只读取编辑文件并返回脱敏结果，缺文件时返回脱敏 Active，CLI 随后的 reload 仍按原有路径启动 schema 缺省配置。WebUI 配置返回 400。
+开发来源从当前工程资源读取 schema/i18n，GET 返回固定 `dev:<id>` 代次的脱敏 Active、corrections 与 unknown。PUT/PATCH 使用同样的 base 和秘密省略规则，先 Complete/Validate，再以临时文件替换 `<data_dir>/plugins/<id>/config.json`，随后经 Core 的开发重启入口建立新 Session；返回脱敏 `{base_generation,config}`，保持 Pending 为 null。保存失败保留原文件；重启失败返回实际错误并保留已保存文件，调用方可修订配置后再次重启。dev 的 config/import 只读取编辑文件并返回脱敏结果，缺文件时返回脱敏 Active，CLI 随后的 reload 仍按原有路径启动 schema 缺省配置。dev 的 prune 从 Active 写入 Pending；管理 API reload 有有效 Pending 时将其原子写入编辑文件，成功启动后清除 Pending，失败返回实际错误并保留 Pending；后续 restart 读取已清理的文件。WebUI 配置返回 400。
 
-**校正与无效配置（D-161）。** 插件配置、Core 设置与 Adapter 实例的读取响应各多两项：`corrections` 为校正记录数组，元素是 `{"path":"…","reason":"converted|reset|removed","original":…}`，secret 字段没有 `original`；`unknown` 为无效配置（schema 中没有的键）的 JSON 路径数组。插件配置的两项取自 Active 代次，在 `GET /api/v1/plugins/{id}/config` 的顶层；Core 设置用 `GET /api/v1/core/settings/corrections` 返回 `{"corrections":[…],"unknown":[…]}`；Adapter 实例在 `GET /api/v1/adapters/{adapter_id}/instances/{instance_id}` 的顶层。清理：`POST /api/v1/plugins/{id}/config/prune` 以 Active 为起点删除全部无效配置并写入 Pending，返回脱敏的 `{base_generation,config}`，随后照常 reload；`POST /api/v1/core/settings/prune` 与 `POST /api/v1/adapters/{adapter_id}/instances/{instance_id}/prune` 经 `settings.File.Update` 删除这些键并写回 `core_config.json`，成功返回 `{}`，保留其他键的 `${...}` 写法。
+**校正与无效配置（D-161）。** 插件配置、Core 设置与 Adapter 实例的读取响应各多两项：`corrections` 为校正记录数组，元素是 `{"path":"…","reason":"converted|reset|removed","original":…}`，涉及 secret 的字段或容器没有 `original`，与历史秘密路径相交的记录同样省略；`unknown` 为无效配置（schema 中没有的键）的 JSON 路径数组。插件配置的两项取自 Active 代次，在 `GET /api/v1/plugins/{id}/config` 的顶层；Core 设置用 `GET /api/v1/core/settings/corrections` 返回 `{"corrections":[…],"unknown":[…]}`；Adapter 实例在 `GET /api/v1/adapters/{adapter_id}/instances/{instance_id}` 的顶层。清理：`POST /api/v1/plugins/{id}/config/prune` 以 Active 为起点删除全部无效配置并写入 Pending，返回脱敏的 `{base_generation,config}`，随后照常 reload；`POST /api/v1/core/settings/prune` 与 `POST /api/v1/adapters/{adapter_id}/instances/{instance_id}/prune` 经 `settings.File.Update` 删除这些键并写回 `core_config.json`，成功返回 `{}`，保留其他键的 `${...}` 写法。
 
 ### 12.2 再认证查看秘密
 
@@ -427,6 +429,8 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 | Method / path | 请求或成功响应 | 操作语义 |
 | --- | --- | --- |
+| `GET /api/v1/core/settings/corrections` | `{"corrections":[],"unknown":[]}` | 返回当前运行设置的校正记录与无效配置路径（§12.1），附加 `Cache-Control: no-store` |
+| `POST /api/v1/core/settings/prune` | 无正文，成功返回 `{}` | 重读磁盘并删除 Core schema 之外的键，经 `settings.File.Update` 写回，管理员策略跟随同一次发布的设置 |
 | `GET /api/v1/core/admins` | `["telegram:123"]` | 返回当前生效的、排序后的用户字符串 |
 | `PUT /api/v1/core/admins` | 同形字符串数组 | 整份替换，空数组清空；格式错误或展开后重复的身份返回 400 |
 | `DELETE /api/v1/core/admins` | 同形字符串数组 | 删除指定用户，未列出的用户保留 |
@@ -451,15 +455,16 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 | Method / path | 请求或成功响应 | 操作语义 |
 | --- | --- | --- |
 | `GET /api/v1/adapters/{adapter_id}/instance-schema` | `adapter_config_schema.json` 的规范 JSON 对象 | 声明通过 `configschema.Parse` 读取 |
-| `GET /api/v1/adapters/{adapter_id}/instances/{instance_id}` | `{"config":{"token":{"$secret_set":true},"name":"bot"}}` | 返回实例配置，秘密字段只显示设置状态，附加 `Cache-Control: no-store` |
+| `GET /api/v1/adapters/{adapter_id}/instances/{instance_id}` | `{"config":{"token":{"$secret_set":true},"name":"bot"},"corrections":[],"unknown":[]}` | 返回校正后的实例配置及记录、无效配置路径；秘密字段只显示设置状态，附加 `Cache-Control: no-store` |
+| `POST /api/v1/adapters/{adapter_id}/instances/{instance_id}/prune` | 无正文，成功返回 `{}` | 从磁盘原文删除实例 schema 之外的键，保留其他值与 `${...}` 写法 |
 | `PUT /api/v1/adapters/{adapter_id}/instances/{instance_id}` | `{"config":{...}}` | 创建或整体替换指定实例配置，成功返回 `{}` |
 | `DELETE /api/v1/adapters/{adapter_id}/instances/{instance_id}` | 无正文 | 与 §4 的实例删除共用清理流程；实例归属的 Adapter 不匹配时返回 404，保留该实例及其指定 |
 
 实例名跨 Adapter 唯一，其他 Adapter 已占用时返回 409 / `ALREADY_EXISTS`；未知 Adapter、未知实例或删除时 URL 的归属失配返回 404。配置块属于其他组件时返回 412。
 
-提交先经 `Schema.Complete` 补全，再对展开环境变量后的副本执行 `Schema.Validate`，最后用 `File.Update` 写回原文。省略的秘密从原始文档保留，数组中仍存在的相同下标也遵循此规则。提交秘密引用或恰为 `{"$secret_set":布尔值}` 的掩码返回 400。旧版本读取先迁移独立副本再脱敏；迁移失败返回带实例路径的 412。已有实例需升级配置版本时，`PrepareInstances` 在包含本次替换值的候选文档上迁移与校验其他实例，全部通过后备份并提交，问题中的 `Path`、`Reason` 保留在错误定位中。
+提交先经 `Schema.Complete` 补全，再对展开环境变量后的副本执行 `Schema.Validate`，最后用 `File.Update` 写回原文。省略的秘密从原始文档保留，数组中仍存在的相同下标也遵循此规则。提交秘密引用或恰为 `{"$secret_set":布尔值}` 的掩码返回 400。读取时 `PrepareInstances(adapterID, schema)` 独立校正各实例的运行副本，再脱敏返回；required 失败的实例仍可读取校正结果与记录以便修订。显式编辑使用 `PrepareInstances(adapterID, schema, replacement)`，在含替换值的候选文档上校正其他实例；存在失败实例时返回带完整 `Path`、`Reason` 的 412，原文件保留。通过后仅将显式 replacement 经 `File.Update` 写回，其他实例保留原文。校正与清理均沿用 §12.1 的记录及路径格式。
 
-保存配置后通过第 4 节的启停入口管理运行实例。启动前仍由 `File.PrepareInstances` 执行迁移、补全和校验，失败实例的路径与原因原样用于定位。
+保存配置后通过第 4 节的启停入口管理运行实例。启动前仍由 `File.PrepareInstances` 校正运行副本并检查 required，失败实例独立列入 `InstanceProblem`，其余实例继续启动；路径与原因原样用于定位，原文件保持。
 
 ## 15. Agent 会话管理
 

@@ -237,15 +237,16 @@ AlonaBot.onLocale(async function(locale) {
 
 ```json
 {
-    "greeting": {"type": "string", "description": "Greeting", "default": "Hello"},
+  "greeting": {"type": "string", "description": "Greeting", "default": "Hello"},
   "enabled": {"type": "bool", "default": true},
   "token": {"type": "string", "description": "Access token", "secret": true}
 }
 ```
 
-- 配置没有版本，也不写迁移（D-161，[CONTRACTS §5.5](../spec/CONTRACTS-v0.1.md#55-配置的校正与清理)）：新增字段自动取默认值；删掉或改名的旧键保留为无效配置，管理员可以在 WebUI 一键清理；类型不符的值先无损转换，不行再恢复默认值并提示管理员。
+- 配置没有版本，也不写迁移（D-161，[CONTRACTS §5.5](../spec/CONTRACTS-v0.1.md#55-配置的校正与清理)）：新增字段自动取默认值；删掉或改名的旧键保留为无效配置，管理员可通过管理 API 清理，WebUI 提示与清理按钮由 T-09.9 接入；类型不符的值先无损转换，不行再恢复默认值并提示管理员。
 - 需要把旧值搬到新键，或检查业务取值时，用 `p.OnConfigLoad(fn)` 登记配置回调 `func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error)`。`raw` 是完整的原始配置，在补默认值与校正之前；判断旧键是否存在再搬移，保留其他键，响应 ctx，只做可重复的纯配置变换；没有登记时原样使用。
-- 回调之后，SDK 只给缺失键补 `default` 或类型零值，递归进入对象、列表与已选择的模板，再校验。显式 `false`、`0`、空串与空集合保持，未知键和数字原文保留。声明字段为 `null`、类型不符或违反 options、slider、required 等约束时，准备失败，错误只含 JSON 路径和错误类别。
+- 回调之后，SDK 给缺失或 `null` 的字段补 `default` 或类型零值，递归校正对象、列表与模板；类型不符时先无损转换，取值超出 options、slider 或数字范围时恢复默认值，失效的 template_list 元素被移除。每次转换、恢复和移除都记录路径、原因与原值，secret 字段省略原值；校正后 required 仍未满足时准备失败。未知键和数字精度保留。
+- `GET /api/v1/plugins/{id}/config` 的 `corrections` 返回 Active 代次的校正记录，`unknown` 列出无效配置路径。`POST /api/v1/plugins/{id}/config/prune` 从 Active 删除所列无效键并写入 Pending，随后调用 reload 生效。普通 restart 保持同一配置快照，回调或校正改变结果时返回 `FAILED_PRECONDITION`。
 
 插件对象从 OnStart 开始通过 `p.Config()`（Handler 内为 `c.Config()`）取得 `config.Values`，子插件的 `s.Config()` 是 `config_schema.json` 中同名顶层 object 的只读视图；在 OnConfigLoad 中或更早调用会 panic。例如 `p.Config().String("greeting")` 读取上例的问候语。取值对象在同一 Session 内保持不变，可并发读取；集合 getter 返回可独立修改的副本。
 

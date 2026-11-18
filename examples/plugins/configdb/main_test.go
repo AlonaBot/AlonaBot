@@ -13,7 +13,7 @@ func TestConfigDB(t *testing.T) {
 	p := New()
 	var ctx context.Context
 	p.OnReady(func(ready context.Context) error { ctx = context.WithoutCancel(ready); return nil })
-	h := plugintest.Start(t, plugintest.Plugin(p), plugintest.Config(p, `{"$version":2,"greeting":"Configured hello"}`))
+	h := plugintest.Start(t, plugintest.Plugin(p), plugintest.Config(p, `{"greeting":"Configured hello"}`))
 	user := plugintest.User{ID: "alice"}
 	for _, scenario := range []struct{ command, want string }{
 		{"/note hello Alice", "Hello, Alice"},

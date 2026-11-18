@@ -58,13 +58,12 @@ import (
 )
 
 const (
-	devSource            = "dev"
-	devGenerationPrefix  = "dev:"
-	launchRandomBytes    = 32 // Hello 的认证 Secret 与本次开发摘要均为 256 bit 随机值。
-	defaultLocale        = "en-US"
-	emptyConfig          = "{}"
-	initialConfigVersion = 1
-	packageDigestPrefix  = 12 // 与 packages.Candidate.MoveTo 的不可变目录命名一致。
+	devSource           = "dev"
+	devGenerationPrefix = "dev:"
+	launchRandomBytes   = 32 // Hello 的认证 Secret 与本次开发摘要均为 256 bit 随机值。
+	defaultLocale       = "en-US"
+	emptyConfig         = "{}"
+	packageDigestPrefix = 12 // 与 packages.Candidate.MoveTo 的不可变目录命名一致。
 )
 
 // Component 保留开发组件的角色与装配资源，由对应的构造函数生成。
@@ -586,23 +585,20 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 	if !validate.IsJSONObject(configJSON) {
 		return fmt.Errorf("config %s must be a JSON object", configPath)
 	}
-	version := uint32(initialConfigVersion)
-	if entry.executable != "" {
-		version = *entry.manifest.ConfigVersion
-	}
 	var secretPaths []string
+	var secretPatterns [][]string
 	if len(entry.resources.ConfigSchema) != 0 {
 		schema, problems := configschema.Parse(entry.resources.ConfigSchema)
 		if len(problems) != 0 {
 			return fmt.Errorf("component %s config schema: %v", id, problems)
 		}
-		version = uint32(schema.Version())
-		for _, path := range schema.SecretPaths() {
+		secretPatterns = schema.SecretPaths()
+		for _, path := range secretPatterns {
 			secretPaths = append(secretPaths, strings.Join(path, "."))
 		}
 	}
 	generation := devGenerationPrefix + id
-	boot := bootstrap(generation, version)
+	boot := bootstrap(generation)
 	boot.CandidateConfigJson = string(configJSON)
 	if entry.role != state.RoleAdapter {
 		path := filepath.Join(pluginDir, databaseFile)
@@ -668,7 +664,7 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 		return err
 	}
 	if _, exists := snapshots[generation]; !exists {
-		if err := c.store.AddGeneration(ctx, id, generation, emptyConfig, version); err != nil {
+		if err := c.store.AddGeneration(ctx, id, generation, emptyConfig); err != nil {
 			return err
 		}
 	}
@@ -760,12 +756,15 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 		return fmt.Errorf("component %s messages: %v", id, problems)
 	}
 	prep, err := host.Prepare(ctx, running.conn, host.Expect{Role: entry.role, AdapterID: entry.manifest.AdapterID, PluginID: id, Secret: l.Secret, BuildDigest: digest,
-		Offer: validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}, ConfigSchema: schemas.config}, boot, limits)
+		Offer: validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}, SecretPaths: secretPatterns, ConfigSchema: schemas.config}, boot, limits)
 	if err != nil {
 		return err
 	}
-	if err := c.store.SetDevGenerationConfig(ctx, generation, string(prep.ConfigSnapshot), prep.Register.GetCandidateConfigVersion(), secretPaths); err != nil {
+	if err := c.store.SetDevGenerationConfig(ctx, generation, string(prep.ConfigSnapshot), secretPaths, prep.Corrections); err != nil {
 		return err
+	}
+	for _, correction := range prep.Corrections {
+		slog.Warn("configuration corrected", "plugin_id", id, "path", correction.Path, "reason", correction.Reason)
 	}
 	activation := host.ActivateOptions{PluginID: id, GenerationID: generation, Handler: c.assembly.handler(running, install), Global: c.assembly.global, Limits: limits, Messages: messages}
 	if active == "" {
@@ -812,8 +811,8 @@ func startupCleanupError(err error) error {
 	return err
 }
 
-func bootstrap(generation string, version uint32) *pb.Bootstrap {
-	return &pb.Bootstrap{GenerationId: generation, CandidateConfigJson: emptyConfig, TargetConfigVersion: version, DefaultLocale: defaultLocale,
+func bootstrap(generation string) *pb.Bootstrap {
+	return &pb.Bootstrap{GenerationId: generation, CandidateConfigJson: emptyConfig, DefaultLocale: defaultLocale,
 		DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}, LogLevel: pb.LogLevel_LOG_LEVEL_INFO}
 }
 
@@ -945,13 +944,8 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
 		return nil, err
 	}
-	boot := bootstrap(generation, initialConfigVersion)
+	boot := bootstrap(generation)
 	boot.DatabaseDescriptor.ActivationReason = pb.ActivationReason_ACTIVATION_REASON_RESUME
-	version, err := c.store.GenerationConfigVersion(ctx, generation)
-	if err != nil {
-		return nil, err
-	}
-	boot.PreviousConfigVersion = &version
 	spec, running, err := c.installedSpec(ctx, install, packageDir, boot)
 	if err != nil {
 		return nil, err
@@ -1076,10 +1070,40 @@ func (m managedCandidates) Reload(ctx context.Context, id string) error {
 			return err
 		}
 		if in.Source == devSource {
+			configurations := config.New(m.core.store, m.core.dir)
+			pending, found, err := configurations.Pending(ctx, id)
+			if err != nil {
+				return err
+			}
+			if found {
+				// 清理使用 Active 副本；先原子发布编辑文件，让之后的开发重启继续使用清理结果。
+				name := filepath.Join(m.core.dir, "plugins", id, "config.json")
+				file, err := os.CreateTemp(filepath.Dir(name), ".config-*")
+				if err != nil {
+					return err
+				}
+				_, writeErr := file.Write(pending.ConfigJSON)
+				if writeErr == nil {
+					writeErr = file.Sync()
+				}
+				err = errors.Join(writeErr, file.Close())
+				if err == nil {
+					err = os.Rename(file.Name(), name)
+				}
+				if err != nil {
+					return errors.Join(err, os.Remove(file.Name()))
+				}
+			}
 			if err := m.core.stopManaged(id, pb.StopReason_STOP_REASON_RELOAD); err != nil {
 				return err
 			}
-			return m.core.startManaged(ctx, id)
+			if err := m.core.startManaged(ctx, id); err != nil {
+				return err
+			}
+			if found {
+				return configurations.Discard(ctx, id)
+			}
+			return nil
 		}
 		return m.apply(ctx, id, func(ctx context.Context) (*journal.Result, error) {
 			return m.core.assembly.journal.Prepare(ctx, id, journal.KindReload, nil)

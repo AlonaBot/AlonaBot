@@ -28,7 +28,7 @@ CREATE TABLE generation (
   generation_id   TEXT PRIMARY KEY,
   plugin_id       TEXT NOT NULL REFERENCES install(plugin_id),
   config_snapshot TEXT NOT NULL,
-  config_version  INTEGER NOT NULL,
+  config_corrections TEXT NOT NULL,
   created_at      INTEGER NOT NULL,
   committed_at    INTEGER
 );
