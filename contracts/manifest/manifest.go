@@ -99,9 +99,10 @@ type Manifest struct {
 	Entrypoint           string              `yaml:"entrypoint"`            // 包内可执行文件的相对路径，规则见 ValidateRelPath
 	ConfigVersion        *uint32             `yaml:"config_version"`        // 包内配置 Schema 的版本
 	// 包的来源（例如 github.com/owner/repo），不能为空。
-	Source         string `yaml:"source"`
-	MigrationMode  string `yaml:"migration_mode"`  // 数据库迁移方式（Migration*）；空串表示未声明
-	PrepareEffects string `yaml:"prepare_effects"` // 准备期副作用声明（Effects*）；空串表示未声明
+	Source            string `yaml:"source"`
+	MigrationMode     string `yaml:"migration_mode"`  // 数据库迁移方式（Migration*）；空串表示未声明
+	PrepareEffects    string `yaml:"prepare_effects"` // 准备期副作用声明（Effects*）；空串表示未声明
+	webUIProcessField string // 保留工程字段的显式出现，静态构建仍拒绝空列表与 null。
 }
 
 // Result 保存解析成功的 manifest 及其非致命警告。
@@ -182,13 +183,15 @@ func (m *Manifest) validate(declared map[string]yaml.Node, project bool) ([]stri
 			return nil, fmt.Errorf("icon %q must have an .svg, .png or .webp extension", m.Icon)
 		}
 	}
-	// 2. 静态组件单独校验，通过后返回；其余角色继续检查进程字段。
+	// 2. WebUI 总是要求静态资源；包内入口决定是否继续校验进程字段。
 	if m.Role == roleWebUI {
-		if err := forbidFields(declared, m.Role, "adapter_id", "entrypoint", "protocol_min_major", "protocol_max_major", "required_capabilities", "config_version", "migration_mode", "prepare_effects", "adapter_dependencies", "plugin_dependencies"); err != nil {
-			return nil, err
-		}
-		if !project && (m.OS != "any" || m.Arch != "any") {
-			return nil, errors.New("webui requires os and arch to be any")
+		if project {
+			for _, name := range []string{"adapter_dependencies", "plugin_dependencies", "prepare_effects"} {
+				if _, present := declared[name]; present {
+					m.webUIProcessField = name
+					break
+				}
+			}
 		}
 		if err := ValidateRelPath(m.Assets); err != nil {
 			return nil, fmt.Errorf("assets: %w", err)
@@ -196,12 +199,19 @@ func (m *Manifest) validate(declared map[string]yaml.Node, project bool) ([]stri
 		if m.AdminAPIMinMajor == 0 || m.AdminAPIMinMajor > m.AdminAPIMaxMajor {
 			return nil, fmt.Errorf("invalid Admin API major version range [%d, %d]", m.AdminAPIMinMajor, m.AdminAPIMaxMajor)
 		}
-		return warnings, nil
-	}
-	// 3. 检查进程角色的专用字段、协议能力、平台、入口与配置版本。
-	if err := forbidFields(declared, m.Role, "assets", "admin_api_min_major", "admin_api_max_major"); err != nil {
+		if !project && m.Entrypoint == "" {
+			if err := forbidFields(declared, m.Role, "adapter_id", "entrypoint", "protocol_min_major", "protocol_max_major", "required_capabilities", "config_version", "migration_mode", "prepare_effects", "adapter_dependencies", "plugin_dependencies"); err != nil {
+				return nil, err
+			}
+			if m.OS != "any" || m.Arch != "any" {
+				return nil, errors.New("static webui requires os and arch to be any")
+			}
+			return warnings, nil
+		}
+	} else if err := forbidFields(declared, m.Role, "assets", "admin_api_min_major", "admin_api_max_major"); err != nil {
 		return nil, err
 	}
+	// 3. 检查进程角色的专用字段、协议能力、平台、入口与配置版本。
 	if m.Role == roleAdapter {
 		if err := checkAdapterID(m.AdapterID); err != nil {
 			return nil, fmt.Errorf("adapter_id: %w", err)
@@ -220,7 +230,7 @@ func (m *Manifest) validate(declared map[string]yaml.Node, project bool) ([]stri
 	if m.Role == roleAdapter {
 		return warnings, nil
 	}
-	// 4. 插件与 Agent 还需校验依赖、迁移方式和准备期副作用。
+	// 4. 插件、Agent 与带入口的 WebUI 共用依赖与迁移约定。
 	if err := m.validateDependencies(); err != nil {
 		return nil, err
 	}

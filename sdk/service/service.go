@@ -50,10 +50,12 @@ func Proto[In, Out proto.Message](target string) Spec[In, Out] {
 
 // Builder 构建声明的访问规则与 Handler；Handle 结束注册。
 type Builder[In, Out any] struct {
-	builder         *registry.ServiceBuilder[*sdk.Context, sdk.Permission]
-	handler         func(*sdk.Context, In) (Out, error)
-	toolDescription *string // nil 表示未声明为工具，空说明留给注册校验拒绝。
-	toolDefault     tool.Default
+	builder          *registry.ServiceBuilder[*sdk.Context, sdk.Permission]
+	handler          func(*sdk.Context, In) (Out, error)
+	toolDescription  *string // nil 表示未声明为工具，空说明留给注册校验拒绝。
+	toolDefault      tool.Default
+	toolEffect       tool.Effect
+	effectBeforeTool bool // 保留调用顺序错误，后续 Tool 调用也不会消除。
 }
 
 // Serve 开始在插件或子插件上注册声明，运行前统一检查构建结果。
@@ -64,6 +66,12 @@ func Serve[In, Out any](owner sdk.Registrar, declaration Spec[In, Out]) *Builder
 	b := &registry.ServiceBuilder[*sdk.Context, sdk.Permission]{Scope: scope, Target: declaration.target, Name: name, Encoding: declaration.encoding}
 	s := &Builder[In, Out]{builder: b}
 	b.Prepare = func() (registry.Service[*sdk.Context], error) {
+		if s.effectBeforeTool {
+			return registry.Service[*sdk.Context]{}, fmt.Errorf("Effect must be called after Tool")
+		}
+		if s.toolEffect < tool.Unspecified || s.toolEffect > tool.Destructive {
+			return registry.Service[*sdk.Context]{}, fmt.Errorf("unknown tool effect %d", s.toolEffect)
+		}
 		if b.Encoding == pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF {
 			if s.toolDescription != nil {
 				return registry.Service[*sdk.Context]{}, fmt.Errorf("Protobuf service cannot be a tool")
@@ -136,7 +144,7 @@ func (s *Builder[In, Out]) prepareJSON() (registry.Service[*sdk.Context], error)
 		default:
 			return registry.Service[*sdk.Context]{}, fmt.Errorf("unknown tool default policy %d", s.toolDefault)
 		}
-		route.Descriptor.GetService().Tool = &pb.ToolSpec{Description: *s.toolDescription, DefaultPolicy: policy, InputSchemaJson: string(r.Schemas[inputID])}
+		route.Descriptor.GetService().Tool = &pb.ToolSpec{Description: *s.toolDescription, DefaultPolicy: policy, InputSchemaJson: string(r.Schemas[inputID]), Effect: pb.ToolEffect(s.toolEffect)}
 	}
 	return route, nil
 }
@@ -189,6 +197,17 @@ func (s *Builder[In, Out]) Tool(description string, defaultPolicy tool.Default) 
 		s.builder.AfterHandle = true
 	}
 	s.toolDescription, s.toolDefault = &description, defaultPolicy
+	return s
+}
+
+// Effect 设置工具的副作用提示；Tool 之前、Handle 之后调用或类别非法时在收集注册时报错。
+func (s *Builder[In, Out]) Effect(e tool.Effect) *Builder[In, Out] {
+	s.builder.Scope.Check()
+	if s.builder.Handles != 0 {
+		s.builder.AfterHandle = true
+	}
+	s.effectBeforeTool = s.effectBeforeTool || s.toolDescription == nil
+	s.toolEffect = e
 	return s
 }
 

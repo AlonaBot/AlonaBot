@@ -36,6 +36,7 @@ type ToolPolicyEntry struct {
 	PluginID, Service string
 	Default           pb.ToolPolicy // UNSPECIFIED 表示当前没有工具声明
 	Override          pb.ToolPolicy // UNSPECIFIED 表示没有覆盖
+	Effect            pb.ToolEffect
 }
 
 // New 创建从 r 读取工具声明、从 store 读取策略的目录。
@@ -66,15 +67,17 @@ func (c *Catalog) Effective(ctx context.Context, pluginID, service string) (pb.T
 	return pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED, policyError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, fmt.Sprintf("tool %s/%s not found", pluginID, service))
 }
 
-// SetPolicy 保存 ALLOW、CONFIRM 或 DENY 覆盖；UNSPECIFIED 删除覆盖。
+// SetPolicy 原子保存一组 ALLOW、CONFIRM 或 DENY 覆盖；UNSPECIFIED 删除覆盖。
 // 安装记录缺失返回 NOT_FOUND，未知策略返回 INVALID_ARGUMENT；成功返回前已提交事务。
-func (c *Catalog) SetPolicy(ctx context.Context, pluginID, service string, p pb.ToolPolicy) error {
-	switch p {
-	case pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED, pb.ToolPolicy_TOOL_POLICY_ALLOW, pb.ToolPolicy_TOOL_POLICY_CONFIRM, pb.ToolPolicy_TOOL_POLICY_DENY:
-	default:
-		return policyError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("unknown tool policy %d", p))
+func (c *Catalog) SetPolicy(ctx context.Context, rows ...state.ToolPolicy) error {
+	for index, row := range rows {
+		switch row.Policy {
+		case pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED, pb.ToolPolicy_TOOL_POLICY_ALLOW, pb.ToolPolicy_TOOL_POLICY_CONFIRM, pb.ToolPolicy_TOOL_POLICY_DENY:
+		default:
+			return policyError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("items[%d]: unknown tool policy %d", index, row.Policy))
+		}
 	}
-	err := c.store.SetToolPolicy(ctx, state.ToolPolicy{PluginID: pluginID, Service: service, Policy: p})
+	err := c.store.SetToolPolicy(ctx, rows...)
 	if errors.Is(err, state.ErrNotFound) {
 		return policyError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, err.Error())
 	}
@@ -88,12 +91,6 @@ func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.mu.Lock()
-	for key, operation := range c.operations {
-		operation.Override = entries[key].Override
-		entries[key] = operation
-	}
-	c.mu.Unlock()
 	// 2. 声明补全缺省策略；未激活的 Attach 声明也包含在查询中。
 	for _, plugin := range c.router.Plugins() {
 		for _, route := range plugin.Routes() {
@@ -104,9 +101,21 @@ func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error) {
 			entry := entries[plugin.PluginID()+"/"+spec.GetServiceName()]
 			entry.PluginID, entry.Service = plugin.PluginID(), spec.GetServiceName()
 			entry.Default = spec.GetTool().GetDefaultPolicy()
+			entry.Effect = spec.GetTool().GetEffect()
 			entries[entry.PluginID+"/"+entry.Service] = entry
 		}
 	}
+	// 3. 确认记录提供最新类别，保留声明的缺省策略与保存覆盖。
+	c.mu.Lock()
+	for key, operation := range c.operations {
+		entry := entries[key]
+		if entry.Default != pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED {
+			operation.Default = entry.Default
+		}
+		operation.Override = entry.Override
+		entries[key] = operation
+	}
+	c.mu.Unlock()
 	result := make([]ToolPolicyEntry, 0, len(entries))
 	for _, entry := range entries {
 		result = append(result, entry)
@@ -117,10 +126,10 @@ func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error) {
 	return result, nil
 }
 
-func (c *Catalog) observe(pluginID, operation string) {
+func (c *Catalog) observe(pluginID, operation string, effect pb.ToolEffect) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.operations[pluginID+"/"+operation] = ToolPolicyEntry{PluginID: pluginID, Service: operation, Default: pb.ToolPolicy_TOOL_POLICY_CONFIRM}
+	c.operations[pluginID+"/"+operation] = ToolPolicyEntry{PluginID: pluginID, Service: operation, Default: pb.ToolPolicy_TOOL_POLICY_CONFIRM, Effect: effect}
 }
 
 func (c *Catalog) overrides(ctx context.Context) (map[string]ToolPolicyEntry, error) {
@@ -167,7 +176,7 @@ func (c *Catalog) list(ctx context.Context, caller router.Caller, in *wire.Inbou
 			if p == pb.ToolPolicy_TOOL_POLICY_DENY {
 				continue
 			}
-			result.Tools = append(result.Tools, &pb.ToolInfo{Name: name, Description: spec.GetTool().GetDescription(), InputSchemaJson: spec.GetTool().GetInputSchemaJson(), Policy: p})
+			result.Tools = append(result.Tools, &pb.ToolInfo{Name: name, Description: spec.GetTool().GetDescription(), InputSchemaJson: spec.GetTool().GetInputSchemaJson(), Policy: p, Effect: spec.GetTool().GetEffect()})
 		}
 	}
 	slices.SortFunc(result.Tools, func(a, b *pb.ToolInfo) int { return cmp.Compare(a.GetName(), b.GetName()) })

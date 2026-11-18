@@ -43,7 +43,7 @@ func (s *Service) Reload(ctx context.Context, id string) (err error) {
 	if err != nil {
 		return err
 	}
-	if in.Role == "webui" {
+	if in.Role == "webui" && in.Entrypoint == "" {
 		return precondition("webui has no process to reload")
 	}
 	if s.opt.State(id) != "Activated" {
@@ -90,6 +90,9 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (re
 	if m.Source != in.Source {
 		return result, denied("candidate source differs from installed binding")
 	}
+	if in.Role == state.RoleWebUI && in.Entrypoint != "" && m.Entrypoint == "" {
+		return result, precondition("updating a WebUI with an entrypoint to a static WebUI is not supported")
+	}
 	key := candidate.Release.PublisherKeyID
 	if err := checkPublisher(in.PublisherKeyID, key, req.Confirm); err != nil {
 		return result, err
@@ -117,7 +120,16 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (re
 	if err != nil {
 		return result, err
 	}
-	if in.Role == state.RoleWebUI || active == "" {
+	firstWebUIProcess := in.Role == state.RoleWebUI && in.Entrypoint == "" && m.Entrypoint != ""
+	if in.Role == state.RoleWebUI && in.Entrypoint == "" && m.Entrypoint == "" || active == "" && !firstWebUIProcess {
+		// 直接替换包时不会进入 Journal，仍须遵守更新的维护门槛。
+		previous, err := s.manifest(ctx, id)
+		if err != nil {
+			return result, err
+		}
+		if previous.PrepareEffects == manifest.EffectsExternal || m.PrepareEffects == manifest.EffectsExternal {
+			return result, precondition("NEEDS_MANUAL_MIGRATION")
+		}
 		digest, err := hex.DecodeString(candidate.Asset.SHA256)
 		if err != nil {
 			return result, err

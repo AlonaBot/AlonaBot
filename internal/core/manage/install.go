@@ -72,6 +72,15 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 		if err := checkPublisher(previous.PublisherKeyID, key, req.Confirm); err != nil {
 			return result, err
 		}
+		if in.Role == state.RoleWebUI && in.Entrypoint == "" {
+			active, err := s.opt.Store.Active(ctx, in.PluginID)
+			if err != nil {
+				return result, err
+			}
+			if active != "" {
+				return result, precondition("cannot install a static WebUI while a process generation is retained; reinstall the process WebUI or explicitly remove its data with uninstall --purge-data")
+			}
+		}
 	} else if !errors.Is(err, state.ErrNotFound) {
 		return result, err
 	}
