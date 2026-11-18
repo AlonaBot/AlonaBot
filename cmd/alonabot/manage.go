@@ -192,7 +192,7 @@ func localInstallRequest(archive, releaseFile, signatureFile, keyFile, source st
 	}
 	if archive == "" {
 		return req, nil
-	} // update 沿用已绑定来源；install 由 API 报告缺少输入。
+	} // update 由 Core 优先选内置候选，再沿用绑定来源；install 由 API 报告缺少输入。
 	var err error
 	req.Archive, err = filepath.Abs(archive)
 	if err != nil {
