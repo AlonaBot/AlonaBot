@@ -51,7 +51,7 @@ func prepareTestPackages() error {
 	if _, err = writeTestPackage(filepath.Join(binDir, "demo-package"), "demo", "plugin", "", "github.com/example/lifecycle", "1.0.0", filepath.Join(binDir, "lifecycle"), "", nil); err != nil {
 		return err
 	}
-	for name, source := range map[string]string{"adapter-fixture": adapterFixtureSource, "command-fixture": commandFixtureSource} {
+	for name, source := range map[string]string{"adapter-fixture": adapterFixtureSource, "command-fixture": commandFixtureSource, "job-fixture": jobFixtureSource} {
 		file := filepath.Join(binDir, name+".go")
 		if err := os.WriteFile(file, []byte(source), 0o600); err != nil {
 			return err
@@ -97,6 +97,124 @@ func TestManagementLifecycle(t *testing.T) {
 		t.Fatalf("restart changed generation or reused session: %+v", second)
 	}
 	stopTestCore(t, c)
+	t.Run("static-job-and-token-rotation", func(t *testing.T) {
+		dir := t.TempDir()
+		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
+		address := c.address()
+		raw, err := os.ReadFile(filepath.Join(dir, "admin_token"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		token := strings.TrimSpace(string(raw))
+		base, err := url.Parse(settings.Defaults().BaseURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		call := func(method, path, token, csrf string, cookie *http.Cookie) (int, []byte, []*http.Cookie) {
+			t.Helper()
+			body, err := json.Marshal(map[string]string{"token": token})
+			if err != nil {
+				t.Fatal(err)
+			}
+			request, err := http.NewRequestWithContext(t.Context(), method, "http://"+address+path, bytes.NewReader(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Host = base.Host
+			request.Header.Set("Origin", base.String())
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("X-Alonabot-CSRF", csrf)
+			if cookie != nil {
+				request.AddCookie(cookie)
+			}
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, readErr := io.ReadAll(response.Body)
+			if err := errors.Join(readErr, response.Body.Close()); err != nil {
+				t.Fatal(err)
+			}
+			return response.StatusCode, raw, response.Cookies()
+		}
+		status, raw, cookies := call(http.MethodPost, "/api/auth/login", token, "", nil)
+		var login struct {
+			CSRFToken string `json:"csrf_token"`
+		}
+		if status != http.StatusOK || json.Unmarshal(raw, &login) != nil || login.CSRFToken == "" || len(cookies) != 1 {
+			t.Fatalf("login status=%d", status)
+		}
+		cookie := cookies[0]
+		archive, err := writeTestPackage(t.TempDir(), "jobs", "plugin", "", "github.com/example/jobs", "1.0.0", filepath.Join(binDir, "job-fixture"), "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.management(t, dir, token, "install", archive, "--yes")
+		c.management(t, dir, token, "enable", "jobs")
+		if status, raw, _ := call(http.MethodPost, "/api/v1/plugins/jobs/jobs/pulse/pause", "", login.CSRFToken, cookie); status != http.StatusOK {
+			t.Fatalf("pause status=%d: %s", status, raw)
+		}
+		lastRun := func() int64 {
+			t.Helper()
+			status, raw, _ := call(http.MethodGet, "/plugins/jobs/runs", "", "", cookie)
+			var stamp int64
+			if status != http.StatusOK || json.Unmarshal(raw, &stamp) != nil {
+				t.Fatalf("job runs status=%d: %s", status, raw)
+			}
+			return stamp
+		}
+		// 暂停前已派发的 Handler 可能仍在途，先以调度状态确认它完成交付。
+		status, raw, _ = call(http.MethodGet, "/api/v1/plugins/jobs/jobs", "", "", cookie)
+		var jobs struct {
+			Jobs []struct {
+				Paused    bool       `json:"paused"`
+				LastRunAt *time.Time `json:"last_run_at"`
+				NextRunAt *time.Time `json:"next_run_at"`
+			}
+		}
+		if status != http.StatusOK || json.Unmarshal(raw, &jobs) != nil || len(jobs.Jobs) != 1 || !jobs.Jobs[0].Paused || jobs.Jobs[0].NextRunAt != nil {
+			t.Fatalf("paused jobs status=%d: %s", status, raw)
+		}
+		if jobs.Jobs[0].LastRunAt != nil {
+			deadline := time.Now().Add(5 * time.Second)
+			for lastRun() < jobs.Jobs[0].LastRunAt.UnixMilli() {
+				if time.Now().After(deadline) {
+					t.Fatal("pending job did not reach the plugin")
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+		pausedRun := lastRun()
+		time.Sleep(2 * time.Second)
+		if got := lastRun(); got != pausedRun {
+			t.Fatalf("paused job fired: before=%d after=%d", pausedRun, got)
+		}
+		if status, raw, _ := call(http.MethodPost, "/api/v1/plugins/jobs/jobs/pulse/resume", "", login.CSRFToken, cookie); status != http.StatusOK {
+			t.Fatalf("resume status=%d: %s", status, raw)
+		}
+		deadline := time.Now().Add(5 * time.Second)
+		for lastRun() == pausedRun {
+			if time.Now().After(deadline) {
+				t.Fatal("resumed job did not fire")
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		status, raw, _ = call(http.MethodPost, "/api/auth/token/rotate", token, login.CSRFToken, cookie)
+		var rotated struct {
+			Token string `json:"token"`
+		}
+		if status != http.StatusOK || json.Unmarshal(raw, &rotated) != nil || rotated.Token == "" || rotated.Token == token {
+			t.Fatalf("token rotation status=%d", status)
+		}
+		if status, _, _ := call(http.MethodGet, "/api/auth/session", "", "", cookie); status != http.StatusUnauthorized {
+			t.Fatalf("old session status=%d", status)
+		}
+		status, raw, cookies = call(http.MethodPost, "/api/auth/login", rotated.Token, "", nil)
+		if status != http.StatusOK || json.Unmarshal(raw, &login) != nil || login.CSRFToken == "" || len(cookies) != 1 {
+			t.Fatalf("new token login status=%d", status)
+		}
+		stopTestCore(t, c)
+	})
 	t.Run("package-warnings-and-build-info", func(t *testing.T) {
 		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/lifecycle"}, "https://example.invalid/package.tar.gz", "", t.TempDir())
 		if err != nil {
@@ -625,6 +743,27 @@ func main() {
  p:=sdk.NewPlugin()
  p.Command("inspect").Handle(func(c *sdk.Context)(message.Content,error){return message.Chain{message.Text(fmt.Sprintf("admin=%t",c.Has(sdk.Admin)))},nil})
  p.Command("number").Args("n").Handle(func(*sdk.Context,int64)error{return nil})
+ if err:=sdk.Run(p);err!=nil{slog.Error("fixture failed","error",err);os.Exit(1)}
+}
+`
+
+const jobFixtureSource = `package main
+import (
+ "encoding/json"
+ "log/slog"
+ "net/http"
+ "os"
+ "sync/atomic"
+ "time"
+ "github.com/AlonaBot/AlonaBot/sdk"
+ "github.com/AlonaBot/AlonaBot/sdk/genimpl"
+)
+func init(){genimpl.Register("main",genimpl.Resources{})}
+func main(){
+ p:=sdk.NewPlugin()
+ var lastRun atomic.Int64
+ p.Every("pulse",time.Second).Handle(func(c *sdk.Context)error{lastRun.Store(c.Event().OccurredAt.UnixMilli());return nil})
+ p.Route(http.MethodGet,"/runs").HandleFunc(func(w http.ResponseWriter,_ *http.Request){if err:=json.NewEncoder(w).Encode(lastRun.Load());err!=nil{slog.Error("write runs","error",err)}})
  if err:=sdk.Run(p);err!=nil{slog.Error("fixture failed","error",err);os.Exit(1)}
 }
 `

@@ -799,3 +799,11 @@ func TestTaskFieldNumbers(t *testing.T) {
 		t.Fatalf("RouteDescriptor task = %v", f)
 	}
 }
+
+// TestPageTitleFieldNumber 固定 HTTP 页面标题的字段编号与类型。
+func TestPageTitleFieldNumber(t *testing.T) {
+	field := (&pb.RouteDescriptor{}).ProtoReflect().Descriptor().Fields().ByNumber(19)
+	if field == nil || field.Name() != "page_title" || field.Kind() != protoreflect.StringKind || field.IsList() || field.HasPresence() || field.ContainingOneof() != nil {
+		t.Fatalf("RouteDescriptor field 19 should be string page_title, got %v", field)
+	}
+}
