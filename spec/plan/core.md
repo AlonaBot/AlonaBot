@@ -90,7 +90,7 @@
 | T-08.15 | goal-151 | 配置字段的回复示例：`config_schema.json` 的 `example` 与 i18n 覆盖的检查、`examples/` 图片随包校验、`GET /api/v1/packages/{id}/examples/{path}`（D-160） | T-08 步骤 12 | T-08.11、T-08.14、T-09.12 | V-131 的检查与 API 分项 | 未开始 |
 | T-08.16 | goal-152 | 去掉配置版本与迁移，配置宽松载入：删除 `$version`、`$migrations`、manifest 的 `config_version`、三个版本字段与迁移实现；`OnConfigLoad(ctx, raw)`；插件、Adapter 实例与 Core 设置的校正与校正记录；REGISTER 追加校正记录；读取校正记录与清理无效配置的管理 API（D-161） | T-08 步骤 13 | T-08.11、T-08.12、T-09.14 | V-37、V-38、V-88、V-132 | 未开始 |
 | T-08.17 | goal-157 | 插件的 KV 与数据目录：`sdk/kv` 与保留表 `_alonabot_kv`，Core 建立 `<data_dir>/plugin_data/<id>/` 并经 Bootstrap 的 `plugin_data_dir` 下发，`sdk.PluginDataDir()`，卸载清理归入数据（D-165） | T-08 步骤 14 | T-08.5、T-09.4 | V-137 的 SDK 与 Core 分项 | 未开始 |
-| T-08.18 | goal-160 | 配置文件的存储与管理：状态库表、会话的配置文件解析、schema 的 `profile` 检查、覆盖值校验与无效清理、ADMIN-API §23、`alonabot profile`（D-168） | T-08 步骤 15 | T-08.14、T-09.14 | V-140 | 未开始 |
+| T-08.18 | goal-160 | 配置文件的存储与管理：状态库表、会话的配置文件解析、schema 的 `profile` 检查、覆盖值校验与无效清理、ADMIN-API §23、`alonabot profile`（D-168） | T-08 步骤 15 | T-08.14、T-09.14 | V-140 | 已完成（PR #214） |
 | T-09.1 | goal-36 | 首次管理认证：admin-token init/reset、login、会话、CSRF、CLI Bearer | T-09 步骤 1 | T-02.3、T-07.4 | V-47 的认证分项 | 已完成（PR #72；TEST-MATRIX §3.2） |
 | T-09.2 | goal-37 | 安装包预检与安全解压：验签、来源、平台、长度/摘要、受控解压与上限、不可变包目录 | T-09 步骤 2（预检） | T-02 | V-27、V-28、V-41 的预检分项 | 已完成（PR #19；TEST-MATRIX §3.2） |
 | T-09.3 | goal-38 | 开发 CLI：顶层的 `init/build/check/test/pack`（D-77）；init 在当前目录创建只含作者信息的组件工程，build 生成嵌入代码与调用 `sdk.Run` 的正式入口并编译，取代 `plugin generate`；pack 支持四种角色，WebUI 包为 `any` 平台，签名可选 | T-09 步骤 2（CLI） | T-04.5、T-08.8、T-08.11、T-09.16、T-13.3 | V-01、V-41、V-54 的打包分项 | 已完成（PR #194；TEST-MATRIX §3.2） |
@@ -640,7 +640,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 | V-54 | 文案选择顺序与主语言回落、check 的键与占位符检查、Core usage 文案、WebUI 文案组件。 | 真实页面的语言切换在 T-09 复验。 |
 | V-104 | `c.T` 与 `sdk.T` 只返回字符串；check 与 build 检查常量键与参数名；运行时问题回落到键名或占位符原文并记 WARN。 | — |
 | V-116 | `options_from` 的检查；`sdk.ServeOptions` 的注册与访问规则；Core 按字段路径查询内置来源与服务来源，条数上限与来源不可用。 | 管理 API 与页面在 T-09 复验；`llm.models` 由 T-12.15 提供（T-12.8 交付的 `llm.providers` 由它改名，D-154）。 |
-| V-140 | 步骤 15 中配置文件的存储、解析、schema 的 `profile` 检查、覆盖值校验与清理、管理 API 与 CLI | 派发与 SDK 合并由 T-04.18 提供，页面由 T-09.25 提供 |
+| V-140 | 步骤 15 中配置文件的存储、解析、schema 的 `profile` 检查、覆盖值校验与清理（含复合 secret）、实例清理与提交边界、管理 API 与 CLI | 派发与 SDK 合并由 T-04.18 提供，页面由 T-09.25 提供 |
 
 建立上述包后，后端验证入口至少包括 `go test ./sdk/... ./internal/core/config/... ./internal/core/secret/... ./internal/core/storage/...`。前端使用实际建立的组件测试入口，记录准确命令。所有结果按 TEST-MATRIX 记录代码位置、命令、版本、环境和日志；尚无环境时明确保持未运行。
 
