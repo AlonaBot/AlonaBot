@@ -176,7 +176,7 @@ func observe(route string, c *sdk.Context, value *poke) error {
 // registerLoopEvents 记录真实插件收到的权限和扩展载荷，barrier 用于确定完整派发已结束。
 func registerLoopEvents(r *sdk.Plugin) {
 	if os.Getenv(helperEnv) == "stream-plugin" {
-		r.On("stream", sdk.MessageCreated).Handle(func(c *sdk.Context) error {
+		r.On(sdk.MessageCreated).ID("stream").Handle(func(c *sdk.Context) error {
 			parts := []string{"a😀", "b", "c", "d😀"}
 			index := 0
 			results, err := c.Stream(func(context.Context) (string, error) {
@@ -199,10 +199,10 @@ func registerLoopEvents(r *sdk.Plugin) {
 		})
 		return
 	}
-	r.On("loop", sdk.MessageCreated).Handle(func(c *sdk.Context) error { return observe("loop", c, nil) })
-	r.On("extension", sdk.AdapterEvent[poke]("loop.poke", 1)).Handle(func(c *sdk.Context, value *poke) error { return observe("extension", c, value) })
-	r.On("uninstalled", sdk.AdapterEvent[poke]("other.poke", 1)).Handle(func(c *sdk.Context, value *poke) error { return observe("uninstalled", c, value) })
-	r.On("barrier", sdk.Scheduled).Handle(func(c *sdk.Context) error { return observe("barrier", c, nil) })
+	r.On(sdk.MessageCreated).ID("loop").Handle(func(c *sdk.Context) error { return observe("loop", c, nil) })
+	r.On(sdk.AdapterEvent[poke]("loop.poke", 1)).ID("extension").Handle(func(c *sdk.Context, value *poke) error { return observe("extension", c, value) })
+	r.On(sdk.AdapterEvent[poke]("other.poke", 1)).ID("uninstalled").Handle(func(c *sdk.Context, value *poke) error { return observe("uninstalled", c, value) })
+	r.On(sdk.Scheduled).ID("barrier").Handle(func(c *sdk.Context) error { return observe("barrier", c, nil) })
 }
 
 // registerLoopCommands 让扩展事件误入命令层时留下可观察记录。
@@ -224,7 +224,7 @@ func registerLoopCommands(r *sdk.Plugin) {
 	if os.Getenv(helperEnv) == "stream-plugin" {
 		return
 	}
-	r.Raw("raw").Handle(func(c *sdk.Context) error { return observe("raw", c, nil) })
+	r.Raw().Handle(func(c *sdk.Context) error { return observe("raw", c, nil) })
 }
 
 type loopAdapter struct{}

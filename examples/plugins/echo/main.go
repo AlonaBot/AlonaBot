@@ -14,7 +14,7 @@ func New() *sdk.Plugin {
 	r := sdk.NewPlugin()
 
 	registerCommands(r)
-	r.On("echo", sdk.MessageCreated).Rule(sdk.NotCommand()).Handle(func(c *sdk.Context, e *message.CreatedPayload) error {
+	r.On(sdk.MessageCreated).Rule(sdk.NotCommand()).Handle(func(c *sdk.Context, e *message.CreatedPayload) error {
 		var chain message.Chain
 		for _, segment := range e.Chain {
 			switch segment := segment.(type) {

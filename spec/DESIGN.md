@@ -83,7 +83,7 @@ func New() *sdk.Plugin {
         Handle(r.Add)
     g.Command("search").Handle(r.Search) // 参数来自结构体（D-115）
 
-    p.On("poke", obevent.Poke). // OneBot 11 Adapter 声明的扩展事件
+    p.On(obevent.Poke).ID("poke"). // OneBot 11 Adapter 声明的扩展事件
         Rule(sdk.ToMe()).
         Handle(r.Poke)
 

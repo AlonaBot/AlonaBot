@@ -1,6 +1,7 @@
 package plugintest_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/AlonaBot/AlonaBot/plugintest"
@@ -8,32 +9,22 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/adapter"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
+	"github.com/AlonaBot/AlonaBot/sdk/kv"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
 func TestPluginHarness(t *testing.T) {
 	user := plugintest.User{ID: "alice"}
 	chat := plugintest.Private(user.ID)
-	check := func(t *testing.T, result plugintest.Result, text string) {
-		t.Helper()
-		if len(result.Sends) != 1 || result.Sends[0].Text() != text {
-			t.Fatalf("sends = %+v, want one %q", result.Sends, text)
-		}
-		for _, outcome := range result.Outcomes {
-			if outcome.Err != nil {
-				t.Fatalf("handler %s/%s: %v", outcome.PluginID, outcome.RouteID, outcome.Err)
-			}
-		}
-	}
 	t.Run("commands and permissions", func(t *testing.T) {
 		p := probe.New()
-		p.Raw("unconsumed").Handle(func(c *sdk.Context) error {
+		p.Raw().Handle(func(c *sdk.Context) error {
 			_, err := c.Send(message.Text(c.Text()))
 			return err
 		})
 		h := plugintest.Start(t, plugintest.Plugin(p), plugintest.Admin("root"), plugintest.Adapter(plugintest.AdapterID, adapter.PermissionDeclaration{Name: "plugintest.moderator", Implies: []string{"chat_admin"}, LabelKey: "moderator"}))
 		result := h.Text(chat, user, "/ping")
-		check(t, result, "pong")
+		result.RequireReply(t, "pong")
 		if result.Sends[0].To != message.SID(plugintest.AdapterID, "private:alice", "") {
 			t.Fatalf("reply session = %q", result.Sends[0].To)
 		}
@@ -41,20 +32,20 @@ func TestPluginHarness(t *testing.T) {
 		if result := h.Text(chat, user, "/admin"); len(result.Sends) != 0 || len(result.Outcomes) != 0 {
 			t.Fatalf("ordinary user reached admin Handler: %+v", result)
 		}
-		check(t, h.Text(chat, plugintest.User{ID: "root"}, "/admin"), "admin")
+		h.Text(chat, plugintest.User{ID: "root"}, "/admin").RequireReply(t, "admin")
 		group := plugintest.Group("room")
 		if result := h.Text(group, user, "/mod"); len(result.Sends) != 0 {
 			t.Fatalf("user without chat_admin received reply: %+v", result)
 		}
 		moderator := user
 		moderator.Permissions = []sdk.Permission{sdk.PermissionName("plugintest.moderator")}
-		check(t, h.Text(group, moderator, "/mod"), "mod")
-		check(t, h.Text(chat, user, "/ping"), "pong")
+		h.Text(group, moderator, "/mod").RequireReply(t, "mod")
+		h.Text(chat, user, "/ping").RequireReply(t, "pong")
 	})
 	t.Run("buttons accepted", func(t *testing.T) {
 		h := plugintest.Start(t, plugintest.Plugin(probe.New()))
 		result := h.Text(chat, user, "/buttons")
-		check(t, result, "buttons")
+		result.RequireReply(t, "buttons")
 		if result.Sends[0].Result.Status != message.SendAccepted || len(result.Sends[0].Chain) != 2 {
 			t.Fatalf("button send = %+v", result.Sends[0])
 		}
@@ -65,7 +56,7 @@ func TestPluginHarness(t *testing.T) {
 	t.Run("buttons fallback", func(t *testing.T) {
 		h := plugintest.Start(t, plugintest.Plugin(probe.New()), plugintest.Capabilities("message.send", "message.markdown", "message.album", "message.reference", "message.forward", "message.edit"))
 		result := h.Text(chat, user, "/buttons")
-		check(t, result, "plain")
+		result.RequireReply(t, "plain")
 		if len(result.Sends[0].Chain) != 1 || len(result.Outcomes) != 1 {
 			t.Fatalf("fallback = %+v", result)
 		}
@@ -73,7 +64,7 @@ func TestPluginHarness(t *testing.T) {
 	t.Run("wait and resume", func(t *testing.T) {
 		h := plugintest.Start(t, plugintest.Plugin(probe.New()))
 		result := h.Text(chat, user, "/ask")
-		check(t, result, "Your answer?")
+		result.RequireReply(t, "Your answer?")
 		waiting := false
 		for _, outcome := range result.Outcomes {
 			waiting = waiting || outcome.Waiting && outcome.RouteID == "cmd.ask"
@@ -81,10 +72,10 @@ func TestPluginHarness(t *testing.T) {
 		if !result.Waiting || !waiting {
 			t.Fatalf("ask did not enter wait: %+v", result)
 		}
-		check(t, h.Text(chat, plugintest.User{ID: "bob"}, "/ping"), "pong")
-		check(t, h.Text(plugintest.Group("other"), user, "/ping"), "pong")
+		h.Text(chat, plugintest.User{ID: "bob"}, "/ping").RequireReply(t, "pong")
+		h.Text(plugintest.Group("other"), user, "/ping").RequireReply(t, "pong")
 		result = h.Text(chat, user, "answer")
-		check(t, result, "answer")
+		result.RequireReply(t, "answer")
 		if result.Waiting {
 			t.Fatal("completed continuation still waiting")
 		}
@@ -93,21 +84,21 @@ func TestPluginHarness(t *testing.T) {
 		h := plugintest.Start(t, plugintest.Plugin(probe.New()), plugintest.Admin("root"))
 		group := plugintest.Group("room")
 		menu := h.Text(group, user, "/menu")
-		check(t, menu, "buttons")
-		check(t, h.Click(user, menu.Sends[0], "first"), "one:plugintest:alice")
-		check(t, h.Click(user, menu.Sends[0], "second"), "two:plugintest:alice")
-		check(t, h.Click(plugintest.User{ID: "bob"}, menu.Sends[0], "first"), "one:plugintest:bob")
+		menu.RequireReply(t, "buttons")
+		h.Click(user, menu.Sends[0], "first").RequireReply(t, "one:plugintest:alice")
+		h.Click(user, menu.Sends[0], "second").RequireReply(t, "two:plugintest:alice")
+		h.Click(plugintest.User{ID: "bob"}, menu.Sends[0], "first").RequireReply(t, "one:plugintest:bob")
 		admin := h.Text(group, user, "/adminmenu").Sends[0]
 		if denied := h.Click(user, admin, "admin"); len(denied.Sends) != 0 || len(denied.Outcomes) != 0 {
 			t.Fatalf("ordinary user reached admin button: %+v", denied)
 		}
-		check(t, h.Click(plugintest.User{ID: "root"}, admin, "admin"), "admin:plugintest:root")
+		h.Click(plugintest.User{ID: "root"}, admin, "admin").RequireReply(t, "admin:plugintest:root")
 	})
 	t.Run("static and dynamic tasks", func(t *testing.T) {
 		p := probe.New()
 		h := plugintest.Start(t, plugintest.Plugin(p))
 		static := h.Trigger(p, "tick")
-		check(t, static, "tick")
+		static.RequireReply(t, "tick")
 		if len(static.Outcomes) != 1 || static.Outcomes[0].RouteID != "job.tick" {
 			t.Fatalf("static outcomes = %+v", static.Outcomes)
 		}
@@ -115,13 +106,13 @@ func TestPluginHarness(t *testing.T) {
 		if len(created.Sends) != 0 || len(created.Outcomes) != 1 || created.Outcomes[0].Err != nil {
 			t.Fatalf("create task = %+v", created)
 		}
-		check(t, h.Text(chat, user, "/tasks"), "1")
+		h.Text(chat, user, "/tasks").RequireReply(t, "1")
 		dynamic := h.TriggerTask(p, "remind", "lunch")
-		check(t, dynamic, "soup")
+		dynamic.RequireReply(t, "soup")
 		if len(dynamic.Outcomes) != 1 || dynamic.Outcomes[0].RouteID != "task.remind" || dynamic.Sends[0].To != static.Sends[0].To {
 			t.Fatalf("dynamic result = %+v", dynamic)
 		}
-		check(t, h.Text(chat, user, "/tasks"), "0")
+		h.Text(chat, user, "/tasks").RequireReply(t, "0")
 		if records := h.Background(); len(records) != 0 {
 			t.Fatalf("consumed records = %+v", records)
 		}
@@ -150,8 +141,8 @@ func TestPluginHarness(t *testing.T) {
 		if err := <-done; err != nil {
 			t.Fatal(err)
 		}
-		check(t, h.Text(chat, user, "/ping"), "pong")
-		check(t, h.Trigger(p, "tick"), "tick")
+		h.Text(chat, user, "/ping").RequireReply(t, "pong")
+		h.Trigger(p, "tick").RequireReply(t, "tick")
 		records := h.Background()
 		if len(records) != 1 || records[0].Text() != "background" {
 			t.Fatalf("background = %+v", records)
@@ -162,10 +153,53 @@ func TestPluginHarness(t *testing.T) {
 	})
 	t.Run("rule and media capability", func(t *testing.T) {
 		h := plugintest.Start(t, plugintest.Plugin(probe.New()), plugintest.Capabilities("message.send"))
-		check(t, h.Text(chat, user, "/rule"), "pong")
+		h.Text(chat, user, "/rule").RequireReply(t, "pong")
 		result := h.Text(chat, user, "/album")
 		if len(result.Sends) != 0 || len(result.Outcomes) != 1 || errcode.Of(result.Outcomes[0].Err) != errcode.Unsupported {
 			t.Fatalf("album capability rejection = %+v", result)
 		}
 	})
+}
+
+// TestSimplifiedSDKUsage 经真实 Core、Session、SQLite 与 Adapter 验证简化注册和片段回复。
+func TestSimplifiedSDKUsage(t *testing.T) {
+	p := probe.New()
+	p.FullMatch("hello").Handle(func(c *sdk.Context) error {
+		if err := kv.Set(c, "greeting", []byte("saved")); err != nil {
+			return err
+		}
+		return c.Reply("hi", message.ImageURL("https://example.com/image.png"))
+	})
+	p.On(sdk.MessageCreated).Handle(func(c *sdk.Context) error {
+		if c.Text() != "hello" {
+			return nil
+		}
+		value, ok, err := kv.Get(c, "greeting")
+		if err != nil {
+			return err
+		}
+		if !ok || string(value) != "saved" {
+			return fmt.Errorf("greeting KV value = %q, found = %v", value, ok)
+		}
+		return nil
+	})
+	p.Command("plain").Handle(func(c *sdk.Context) error { return c.Reply("plain reply") })
+	h := plugintest.Start(t, plugintest.Plugin(p))
+	user := plugintest.User{ID: "alice"}
+	chat := plugintest.Private(user.ID)
+	result := h.Text(chat, user, "hello")
+	result.RequireReply(t, "hi")
+	if len(result.Sends[0].Chain) != 2 {
+		t.Fatalf("reply chain = %+v", result.Sends[0].Chain)
+	}
+	if text, ok := result.Sends[0].Chain[0].(message.TextSegment); !ok || text.Text != "hi" {
+		t.Fatalf("text segment = %+v", result.Sends[0].Chain[0])
+	}
+	if image, ok := result.Sends[0].Chain[1].(message.ImageSegment); !ok || image.Source.HTTPSURL != "https://example.com/image.png" {
+		t.Fatalf("image segment = %+v", result.Sends[0].Chain[1])
+	}
+	if len(result.Outcomes) != 2 {
+		t.Fatalf("outcomes = %+v", result.Outcomes)
+	}
+	h.Text(chat, user, "/plain").RequireReply(t, "plain reply")
 }
