@@ -328,9 +328,10 @@ T-08.18 已提供存储、会话配置文件解析和管理接口；T-04.18 已�
   - 第一条消息是同一可信消息根的手动发送、自动回复、Service 派生与延续调用发往原完整 Target 的第一次 Send，并发发送共用一次首条占用。回复前缀按普通文本处理，Markdown 正文前插入独立 plain text 片段，实体偏移使用 UTF-16 码元。提及或前缀使该条超过实例声明单位的单条上限（§8，D-135）时两者都省略，引用照加。回复方式在出站 Hook 之前加上，Hook 看到改写后的 chain，改写后仍按原规则复检。
   - Core 选择回执的 `primary_platform_message_id`，为空时取 `platform_message_ids` 首项；仅将该 ID 的 ACCEPTED `part_results` 及其 `segment_indexes` 确认已发送、且 Hook 后实际保留的自动提及与前缀关联到该消息（MESSAGE-MODEL §4），完整回执与错误继续返回。关联按 Caller Session、完整 Target 与平台消息 ID 隔离。Edit 保留已记录修饰，提及用 TEXT_MENTION 表达，重复编辑沿用已有修饰；前缀插入时平移后续实体并扩展跨越插入点的实体。Edit 沿用一个 text 与可选 buttons 的限制，自动修饰超限时省略；需保留的普通文本前缀或自动提及与 Markdown 编辑组合无法表达时返回 UNSUPPORTED。Session 退出释放关联，并使配置读取期间的在途准备及迟到回执失效；根调用结束时释放首条标记。
   - 其他配置文件的平台设置按键覆盖，没有覆盖的键取当前 `default` 的值；显式 `false`、空字符串与 `0` 保留。后续命令派发与每次回复 Send 读取新平台快照，无需插件 reload；每次 Send 均重新判断转发阈值与实例能力，组合限制沿用 MESSAGE-MODEL 的校验。
-- 官方 Agent 标记 `chat_model`、`image_caption_model`、`default_persona`、`triggers`、`wake_words` 与 `member_sessions` 为可覆盖字段。对话按本次调用的 `c.Config()` 读取模型、人格与转述模型；触发过滤与成员会话键使用该会话视图。定时任务从调度调用视图读取模型与人格，无默认 Target 时使用 `default`，仍发往任务保存的 Target。OnStart 从基础配置建立模型与 `personas` 目录并校验引用；人格迁入数据库由 T-12.20 完成。对话中的非空 `image_caption_model` 须指向启用 `image_input` 的 chat 模型，否则在任何 Provider 请求前返回 `$.image_caption_model: must name a configured chat model with image_input enabled`；空值沿用图片占位行为。
-- Agent 的 Admin 命令 `/agent on|off`、`/persona <名字>` 与 `/provider <名字>` 经 `core.profile.set` 分别修改当前会话所用配置文件的 `triggers`（三项全部或空数组）、`default_persona` 与 `chat_model`。人格、模型名字按 OnStart 建立的目录校验，无参数时列出目录；共用配置文件的会话在后续调用一起生效。成功回复包含 Core 返回的配置文件名称与会话数，`reloading` 为 true 时追加即将重载提示并在当前 Handler 内完成回复。Admin 命令 `/profile [名字]` 无参数时查询当前名称与会话数，给出名字时从列表解析 ID 并指定到当前会话；「默认」或 `default` 取消单独指定，回落实例缺省，再回到 `default`；未知名字时列出可用配置文件。
+- 官方 Agent 标记 `chat_model`、`image_caption_model`、`default_persona`、`triggers`、`wake_words` 与 `member_sessions` 为可覆盖字段。对话按本次调用的 `c.Config()` 读取模型、人格与转述模型；触发过滤与成员会话键使用该会话视图。定时任务从调度调用视图读取模型与人格，无默认 Target 时使用 `default`，仍发往任务保存的 Target。OnStart 从基础配置建立模型目录，并在打开受管库后校验非空 `default_persona` 的引用；人格目录由受管 SQLite 保存，普通对话与定时任务按本次调用视图中的名字读取已提交提示（§13.7，T-12.20，PR #252）。对话中的非空 `image_caption_model` 须指向启用 `image_input` 的 chat 模型，否则在任何 Provider 请求前返回 `$.image_caption_model: must name a configured chat model with image_input enabled`；空值沿用图片占位行为。
+- Agent 的 Admin 命令 `/agent on|off`、`/persona <名字>` 与 `/provider <名字>` 经 `core.profile.set` 分别修改当前会话所用配置文件的 `triggers`（三项全部或空数组）、`default_persona` 与 `chat_model`。人格名字即时查询受管 SQLite，模型名字按 OnStart 建立的目录校验，无参数时列出相应目录；共用配置文件的会话在后续调用一起生效。成功回复包含 Core 返回的配置文件名称与会话数，`reloading` 为 true 时追加即将重载提示并在当前 Handler 内完成回复。Admin 命令 `/profile [名字]` 无参数时查询当前名称与会话数，给出名字时从列表解析 ID 并指定到当前会话；「默认」或 `default` 取消单独指定，回落实例缺省，再回到 `default`；未知名字时列出可用配置文件。
 - 插件可调用的配置文件服务（WIRE §3.5）：`core.profile.list` 返回全部配置文件的 ID、名称与会话数；其余三项必须关联同一 Session 内仍在途的 parent_call_id，从 Core 保存的父调用附件取可信 Target 与 Actor，缺少有效父调用或默认 Target 时返回 FAILED_PRECONDITION。`core.profile.current` 从本次服务操作的快照解析该会话所用配置文件，返回 ID、名称与会话数。`core.profile.assign` 输入配置文件 ID，把该会话单独指定到它，空串取消单独指定。`core.profile.set` 输入字段路径与 JSON 值（null 删除），只能修改调用插件自己写了 `profile` 的字段，按上文校验，返回配置文件 ID、名称、会话数与 `reloading`；会话使用 `default` 时在同一插件管理锁内核对 Active/Pending，以当前 Active 为基线调用配置服务的 `Replace` 写入 Pending，已有 Pending 时返回 FAILED_PRECONDITION，`reloading` 为 true。根调用、派生调用、自动回复与延续全部释放后，在锁外触发既有 reload；根已结束时新登记的 `Invocation.AfterFinished` 回调立即在锁外执行。开发组件同样消费 Pending，异步 reload 的实际错误保留在状态与日志中。assign 与 set 要求调用链的可信 Actor 为 Core Admin，否则返回 PERMISSION_DENIED。list/current 直接读取快照；assign 跳过 schema，set 只读取调用插件的 schema。固定服务写请求沿 catalog → instances → 调用插件包锁（仅 set）尝试互斥，任一占用立即返回 FAILED_PRECONDITION；HTTP 管理入口沿原有管理互斥执行。
+- `sdk.ProfileOverrides(ctx context.Context) (map[string]map[string]json.RawMessage, error)` 返回调用插件的「配置文件 ID → 字段路径 → 有效覆盖值」深拷贝，包含 map 与 RawMessage 字节；无覆盖返回空 map，基础配置与 `default` 由调用方另行读取。数据复用 Bootstrap 与 `sdk.profile.set_overrides` 的原子发布集合，每次调用读取当前集合，已返回副本及 `c.Config()` 的冻结视图保持原值。所属插件由 `ctx` 绑定的 Session 选择，HTTP、生命周期与同进程多插件分别读取自己的集合；独立进程未绑定时沿用默认 Session。缺少 Session 或尚未绑定插件返回 FAILED_PRECONDITION（D-182）。
 - 卸载（§9.3）：覆盖值、插件开关与工具策略属于配置，只卸载与 `--purge-data` 时保留，`--purge` 时删除。
 - 管理 API 见 ADMIN-API §23。CLI：`alonabot profile [list]`、`profile create <名字> [--from <ID>]`、`profile rename <ID> <名字>`、`profile delete <ID>`、`profile assign <ID> <实例名> [<会话字符串>]`（不给会话时设置该实例的缺省）、`profile unassign <实例名> [<会话字符串>]`、`profile set <ID> <插件 ID> <字段路径> <JSON 值>`、`profile unset <ID> <插件 ID> <字段路径>`；`<ID>` 为 `default` 时 set 与 unset 写入该插件的 Pending。
 
@@ -631,7 +632,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - Core 状态库按插件保存 Agent 会话。会话键由插件给出，为 1～256 字节的 UTF-8 字符串；条目是插件定义的 JSON 对象，按追加顺序编号，Core 只校验它是合法的 JSON 对象。
 - `core.conversation.append` 追加一条或多条条目，同一请求的条目原子写入，返回最后一条的序号。`core.conversation.list` 从给定序号起按顺序返回条目；响应受帧上限约束，Core 在超限前停止并返回下一个序号。`core.conversation.clear` 删除该会话的全部条目。插件只能访问自己的会话，这些服务不需要父调用链。
 - Core 不截断、不过期、不压缩会话。管理服务可以列出插件的会话并清除指定会话；卸载插件默认保留会话，`--purge-data` 或 `--purge` 时一并删除（§9.3，D-127）。
-- 官方 Agent 的会话运行状态保存在受管 SQLite 的 `chat_settings`，只含 `Session`、`ResetGeneration` 与 `ImageCount`；模型、人格与触发方式由配置文件决定（§5.6，D-168）。初始迁移 ID:1 包含运行状态、图片与用量，ID:2 保留记忆迁移。
+- 官方 Agent 的会话运行状态保存在受管 SQLite 的 `chat_settings`，只含 `Session`、`ResetGeneration` 与 `ImageCount`；模型、人格与触发方式由配置文件决定（§5.6，D-168）。初始迁移 ID:1 包含运行状态、图片、用量、人格表 `persona` 与会话目录 `conversation_record`，ID:2 保留记忆迁移。
 
 ### 13.4 记忆
 
@@ -656,6 +657,15 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
   - `POST models/test`：输入为 Active 配置中已保存模型的 `model`（名字）；按类型发出一次最小请求（chat 与 decision 为一句短文本，speech_to_text 为内置的一段短音频，text_to_speech 为一句短文本，embedding 为一个词，rerank 为一个查询与两段文本），返回 `ok`、耗时毫秒数与失败时的英文说明。测试不重试，不计入用量。
   - `GET models/usage`：返回每个模型在 Agent 进程所在时区当天的输入与输出 token 数，只统计 Provider 返回了用量的请求。
 - 三个路由的响应与错误说明不含 API key、认证头或带凭证的 URL。替换官方 Agent 的组件应实现这些路由；路由不存在时，模型页只提供配置编辑。
+
+### 13.7 官方 Agent 插件页面与人格
+
+- 官方 Agent 提供人格、MCP、技能、数据与用户任务五个 `sdk/page` 页面（D-170、D-182，T-12.20，PR #252），使用 Agent 自己的嵌入资源与 en-US/zh-CN 的 `pages` 标题和 `messages` 文案。HTML、套件、资源与数据路由均经管理会话访问，变更请求验证 Origin 与 CSRF；接口见 ADMIN-API §15.2，父桥见 ADMIN-API §7。
+- 人格保存为受管 SQLite `persona` 表中的名称与系统提示，名称唯一，提示允许空字符串；配置只保存 `default_persona` 名字（`string`、`profile: true`、选项来源 `@agent/personas`），目录在页面维护，配置文件页选择名字。`readPersona(ctx context.Context, name string) (persona, error)` 读取记录，`personaOptions(ctx context.Context, q options.Query) (options.Page, error)` 即时查询选项；普通对话和定时任务用 `personaPrompt(ctx context.Context, name string) (string, error)` 读取已提交提示，修改从下一轮生效。
+- 删除前通过 `sdk.ProfileOverrides`、基础配置及 `core.profile.list` 检查直接与继承引用，被引用时返回 409 并列出配置文件 ID、名称与会话数。检查按 D-182 尽力而为；空人格名使用内置提示 `You are AlonaBot, a helpful assistant. Reply in the user's language and keep answers concise.`，调用时名字已失效则记录 WARN 并使用同一提示；数据库错误保留错误链。
+- MCP 页面读取当前连接状态与最近成功工具目录，错误脱敏；手动重连在 gate 内回收旧连接并建立新连接，停止后拒绝重连及首次连接。刷新时读取当前 Session 的结束通知并显示 error，旧 Session 的通知按身份隔离。技能页列出技能与结构化校验问题，重新读取后原子替换快照；每轮提示与 `load_skill` 使用同一份轮次快照。
+- 数据页用 Agent 自有的 `conversation_record` 列出完整会话键，通过 `sdk/conversation.List` 逐页返回 Core 原样正文及真实序号，保留普通、成员与任务会话的完整文本、memory_snapshot 和图片编号。目录在正文追加成功后登记，空目录清理与追加/reset 共用会话锁；外部清除后的空目录在下次列出时收回，清除与回复交错后成功追加会恢复目录，失效 reset 代次继续跳过追加。Core 正文与 Agent 目录依次写入，失败保留错误链。
+- 数据页还按完整 `(target, scope, instance)` 管理会话笔记与用户档案，复用记忆事务与校验，分别限 2200、1375 个 Unicode 码点（含条目间换行），失败保留原记录；会话笔记冻结与每轮用户档案读取沿用 §13.4。用户任务页列出本 Agent 动态任务并按真实实例 key 取消，协作取消在途调用；任务创建、job scope、确认与目标语义沿用既有规则。
 
 ## 14. 日志
 
@@ -858,6 +868,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 未知的键、格式错误、违反约束或彼此矛盾的值使 Core 拒绝启动，错误指明出处（参数，或文件及行号）。存在任何覆盖时，Core 启动时输出一条 WARN，列出全部覆盖项及出处。`alonabot tune list` 列出全部参数的缺省值与约束。
 - SDK 也要遵守的值（在途请求数、payload 预算、普通请求期限、各阶段预算）由 Core 经 Bootstrap 的 `SessionLimits session_limits = 11` 下发：`max_inflight` 对应 `SESSION_MAX_INFLIGHT`，`max_payload_bytes` 对应 `SESSION_MAX_PAYLOAD`，`request_timeout_ms` 对应 `REQUEST_TIMEOUT` 并转换为毫秒。`CORE_MAX_PAYLOAD` 是跨 Session 的 Core 总预算，只由 Core 使用。双方按同一组 Session 值执行。
 - `sdk/page` 的浏览器桥客户端等待父桥响应，无独立固定超时或调优参数（ADMIN-API §7.3）。
+- T-12.20 的页面、`sdk.ProfileOverrides` 与人格选项复用既有 HTTP/Session/RPC 预算；正文分页沿用固定帧上限，选项沿用 `OPTIONS_PAGE`。记忆的 2200/1375 码点上限为 Agent 组件常量（§13.7）；`internal/tune/params.go` 与下表沿用现有参数。
 - 设置 `PLUGIN_MEMORY_SOFT_LIMIT` 时，Core 为每个插件与 Adapter 进程传入环境变量 `GOMEMLIMIT`；`CORE_MEMORY_SOFT_LIMIT` 对 Core 自己生效。这是 Go 运行时的软上限：超过后 GC 更积极地回收，不会终止进程。v0.1 不提供硬上限。
 
 | 参数 | 缺省值 | 约束 | 契约位置 |

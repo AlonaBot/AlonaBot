@@ -211,7 +211,9 @@ Core 在出站 Hook 前完成回复改写，并沿用整链复检。前缀按普
 
 `forward_threshold` 为正且实例声明 `message.forward` 时，每次回复 Send 的 text 片段总 Unicode 码点数超过阈值会改为一个合并转发，节点来源为本账号；reference、媒体、按钮及嵌套限制沿用原校验，Edit 沿用原编辑限制。平台菜单在启动及路由、命令策略变化时同步；命令派发与回复 Send 从下一次操作读取新平台快照。
 
-官方 Agent 可用 `/profile [名字]` 查询或切换当前会话的配置文件；名字为「默认」或 `default` 时取消单独指定，先回落实例缺省，再回到 `default`。Admin 用 `/agent on|off`、`/persona <名字>`、`/provider <名字>` 修改当前配置文件的触发方式、人格与模型，共用该配置文件的会话在后续调用一起生效；回复显示 Core 返回的名称、会话数，修改 `default` 时追加即将重载提示。可覆盖字段为 `chat_model`、`image_caption_model`、`default_persona`、`triggers`、`wake_words`、`member_sessions`。人格目录当前仍来自基础配置 `personas`，迁入 Agent 数据库由 T-12.20 完成。受管库的 `chat_settings` 仅保留会话键、reset 代次与图片计数；旧开发库按首次发布前约定重建。
+官方 Agent 可用 `/profile [名字]` 查询或切换当前会话的配置文件；名字为「默认」或 `default` 时取消单独指定，先回落实例缺省，再回到 `default`。Admin 用 `/agent on|off`、`/persona <名字>`、`/provider <名字>` 修改当前配置文件的触发方式、人格与模型，共用该配置文件的会话在后续调用一起生效；回复显示 Core 返回的名称、会话数，修改 `default` 时追加即将重载提示。可覆盖字段为 `chat_model`、`image_caption_model`、`default_persona`、`triggers`、`wake_words`、`member_sessions`。人格目录已迁入 Agent 受管 SQLite 的 `persona` 表（T-12.20，PR #252），由插件的人格页增删改，`default_persona` 只存名字，选项来源为 `@agent/personas`；基础配置的非空引用在 OnStart 校验，普通与定时轮次读取当前已提交提示。受管库的 `chat_settings` 仅保留会话键、reset 代次与图片计数；初始迁移 ID:1 包含 `persona` 与 `conversation_record`，ID:2 保留记忆迁移，旧开发库按首次发布前约定重建。
+
+官方 Agent 的人格、MCP、技能、数据和用户任务页面由组件自带资源提供，通过管理会话访问。人格修改从下一轮普通对话和定时任务生效；数据页读取完整会话正文并管理笔记/档案，摘要与清除使用 Core 原有入口；动态任务按真实实例 key 取消。接口见 [ADMIN-API §15.2](../spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)，验证证据见 [TEST-MATRIX §3.2](../spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)；浏览器渲染与真实 iframe 联验未运行，由审查者在 goal-44 合并后核对。
 
 ### 导出诊断包
 
