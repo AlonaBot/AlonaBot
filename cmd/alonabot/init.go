@@ -11,17 +11,13 @@ func initCommand(code *int) *cobra.Command {
 	var id, role, adapterID, module string
 	command := &cobra.Command{Use: "init [directory]", Short: "Create a component project in an empty directory", Args: cobra.MaximumNArgs(1)}
 	flags := command.Flags()
-	flags.StringVar(&id, "id", "", "component ID (required)")
+	flags.StringVar(&id, "id", "", "component ID (default: directory name)")
 	flags.StringVar(&role, "role", "plugin", "component role: plugin, adapter, agent or webui")
-	flags.StringVar(&adapterID, "adapter-id", "", "platform ID (required for adapters)")
-	flags.StringVar(&module, "module", "", "Go module path (required outside an existing module)")
-	command.MarkFlagRequired("id")
+	flags.StringVar(&adapterID, "adapter-id", "", "platform ID (default: component ID for adapters)")
+	flags.StringVar(&module, "module", "", "Go module path (default: directory name outside an existing module)")
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		*code = exitFailure
-		dir := "."
-		if len(args) > 0 {
-			dir = args[0]
-		}
+		dir := componentDirectory(args)
 		needsSDK, err := pluginkit.Init(cmd.Context(), dir, id, role, adapterID, module)
 		if err != nil {
 			return err

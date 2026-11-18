@@ -407,7 +407,7 @@ func packAgentComponent(t *testing.T, project, id string) string {
 		t.Fatalf("unexpected generated source: %v", err)
 	}
 	out := t.TempDir()
-	command := exec.Command(filepath.Join(binDir, "alonabot"), "pack", "--dir", project, "--asset-url", "https://example.invalid/"+id+".tar.gz", "--out", out)
+	command := exec.Command(filepath.Join(binDir, "alonabot"), "pack", project, "--asset-base", "https://example.invalid", "--out", out)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("pack %s: %v\n%s", project, err, output)
 	} else {

@@ -104,7 +104,7 @@ set -gx DEVBOT_OUTPUT (mktemp)
 cp examples/devbot/core_config.example.json $DEVBOT_LIBRARY_DATA/core_config.json
 printf 'DEVBOT_LIBRARY_DATA=%s\nDEVBOT_OUTPUT=%s\n' $DEVBOT_LIBRARY_DATA $DEVBOT_OUTPUT
 set -gx DEVBOT_BIN (mktemp -d)
-go run ./cmd/alonabot build --dir examples/devbot --out $DEVBOT_BIN
+go run ./cmd/alonabot build examples/devbot --out $DEVBOT_BIN
 $DEVBOT_BIN/devbot -data-dir $DEVBOT_LIBRARY_DATA
 ```
 
@@ -117,11 +117,11 @@ $DEVBOT_BIN/devbot -data-dir $DEVBOT_LIBRARY_DATA
 `alonabot init [目录] --id ID` 在空目录创建可导入插件包、作者 manifest、schema、i18n 与忽略 `data/`、`bin/` 的 `.gitignore`，导出只做注册的 `New()`，工程中没有生成文件，资源在构建与 `go test` 时自动取得。模板与本示例的 plugin 具有相同工程形状；本示例另含启动计数 SQL、回声与回环 Adapter。库模式宿主沿用本示例根目录的 main.go。
 
 ```fish
-go run ./cmd/alonabot build --dir examples/devbot/plugin --out bin/devbot-plugin
-go run ./cmd/alonabot build --dir examples/devbot/adapter --out bin/devbot-adapter
-go run ./cmd/alonabot check --dir examples/devbot/plugin
-go run ./cmd/alonabot check --dir examples/devbot/adapter
-go run ./cmd/alonabot test --dir examples/devbot/plugin
+go run ./cmd/alonabot build examples/devbot/plugin --out bin/devbot-plugin
+go run ./cmd/alonabot build examples/devbot/adapter --out bin/devbot-adapter
+go run ./cmd/alonabot check examples/devbot/plugin
+go run ./cmd/alonabot check examples/devbot/adapter
+go run ./cmd/alonabot test examples/devbot/plugin
 ```
 
 创建外部工程时，目标目录已有 Go module 就复用；否则须提供 `--module`，SDK 版本来源及 `init → build → check → test → pack` 完整步骤见 [开发文档](../../docs/development.md)。管理界面的开发配置写回与重启由 T-09.14 承接。
