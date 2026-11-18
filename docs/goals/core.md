@@ -117,11 +117,11 @@
 | goal-170 | S-02.1 | 按需唤醒、活动引用与有界等待 | S-01.1、S-01.2、T-05.5、T-06.4、T-07.5 | 已完成（PR #241） |
 | goal-176 | S-02.3 | Core 消息事件过滤与 SDK 注册 | T-04.16、T-08.11、T-09.14 | 已完成（PR #227） |
 | goal-161 | T-04.18 | 配置文件的派发与 SDK | T-04.16、T-08.18 | 已完成（PR #242） |
-| goal-171 | S-02.2 | 空闲退出与即时休眠策略 | S-02.1 | 等待前置 |
+| goal-171 | S-02.2 | 空闲退出与即时休眠策略 | S-02.1 | 待派发 |
 | goal-177 | T-09.27 | 组件市场 ID 改用连字符 | T-09.10、T-09.14、T-12.8、T-13.5 | 已完成（PR #222） |
-| goal-162 | T-04.19 | 平台与消息 | T-04.18 | 等待前置（T-04.18） |
+| goal-162 | T-04.19 | 平台与消息 | T-04.18 | 待派发 |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
-| goal-163 | T-11.6 | 按配置文件的工具策略 | T-04.18、T-11.4 | 等待前置（T-04.18） |
+| goal-163 | T-11.6 | 按配置文件的工具策略 | T-04.18、T-11.4 | 待派发 |
 | goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 已完成（PR #233） |
 | goal-172 | S-03.1 | Scheduler 唤醒与离线 tick 区分 | S-02.2、T-07.2 | 等待前置 |
 | goal-173 | S-06.1 | 休眠管理 API、运行诊断与 CLI | S-02.2、S-03.1、T-09.14 | 等待前置 |
@@ -8365,7 +8365,7 @@ internal/core/state
 
 ### goal-171 · S-02.2 空闲退出与即时休眠策略
 
-状态：等待语句定稿（前置均已合并）。S-02.1（PR #241，`e0a38d7`）已合并。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。 2026-11-17 审查者补充（S-02.1 审查 FIX-9 的裁定）：Core 在插件 HTTP 反向代理返回时即释放活动引用，不新增「HTTP 回调完成」协议字段；本切片的 QUIESCING 须等待 SDK 自己记录的在途回调（含 HTTP Handler、Bus 回调）全部结束，或在 SDK 报告仍有在途回调时放弃本次退出，空闲退出不得打断仍在执行的业务。
+状态：等待语句定稿（前置均已合并）。S-02.1（PR #241，`e0a38d7`）已合并。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。 2026-11-17 审查者补充（S-02.1 审查 FIX-9 的裁定）：Core 在插件 HTTP 反向代理返回时即释放活动引用，不新增「HTTP 回调完成」协议字段；本切片的 QUIESCING 须等待 SDK 自己记录的在途回调（含 HTTP Handler、Bus 回调）全部结束，或在 SDK 报告仍有在途回调时放弃本次退出，空闲退出不得打断仍在执行的业务。 2026-11-18 审查者裁定（D-179，替代上一条补充）：不新增协议消息；空闲退出走 CONTRACTS §4 的正常停止流程（冻结新派发、最多 6s 排空已接纳请求、STOPPING 后 SDK 停止接单并执行 OnStop），QUIESCING 期间到达的请求等待下一次唤醒；客户端已取消、仍在执行的 HTTP Handler 与正常停止一样在停止截止时结束。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-171（切片 S-02.2：空闲退出与即时休眠策略）。goal 目录 goal-171，分支 goal-171，worktree .worktrees/goal-171，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -8388,39 +8388,105 @@ internal/core/state
 
 ### goal-162 · T-04.19 平台与消息
 
-状态：等待语句定稿（前置均已合并）。T-04.18（PR #242，`b816127`）已合并。2026-11-17 按 D-168 新增。目标、依据与要点由 PLAN T-04 步骤 19 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：待派发。前置 T-04.18（PR #242，合并提交 `b8161272`）已合并；配置文件存储 T-08.18（PR #214，`ab0cd56`）、宽松载入 T-08.16（PR #239，`1a1d12c3`）均已合并。已按 main `9330f399` 核对：`internal/core/profile.New(ctx context.Context, opt profile.Options) (*profile.Service, error)`、`(*Service).Resolve(instance, session string) profile.Profile` 与 `Platform(id string) (profile.Platform, error)` 可读平台覆盖，`PutPlatform(ctx context.Context, id string, platform profile.Platform) error` 已支持 default 写回；`internal/core/settings.Settings.Reply` 与 `settings.Reply{MentionSender bool; Quote bool; Prefix string; ForwardThreshold int}` 已实现解析、保存和比较。Router 仍使用 `router.Options.Prefixes func(adapterInstanceID string) []string`，消息管道为 `internal/core/message.(*Service).Send/Edit(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response`，调用根由 `router.Invocation.Root`、`Begin() func()` 与 `AfterFinished(finished func())` 跟踪；平台设置的执行尚待接入。 审查者补充（2026-11-18）：首条回复与原消息的关联只在本 Session 内维持、不持久化；插件重启或换 Session 后不再按关联编辑早先的回复，按新回复处理。
+
+与 goal-163 共享 `internal/core/profile/`（profile.go、platform.go、tools.go 的操作快照）、`internal/app/profile.go`、assembly.go、alonabot.go、`internal/core/manage/profile_api.go` 及 `cmd/alonabot/manage_e2e_test.go` 的配置文件测试装配。goal-162 负责平台有效值、前缀与回复，goal-163 负责工具策略；两者可并行，后合并者同步最新 main，保留双方的快照读取、回调注入、固定服务注册、Session 清理和测试断言，重跑两条主路径。与 goal-171 相交的 settings 与 app 文件同时保留 sleep、reply 及 T-08.16 的校正/原文保留行为。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-162（切片 T-04.19：平台与消息）。goal 目录 goal-162，分支 goal-162，worktree .worktrees/goal-162，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：命令前缀按会话所用的配置文件；删除 `command_prefixes_by_instance`；Core 在发送管道中为回复加上提及、引用、前缀与合并转发。
 
-依据：PLAN T-04 步骤 19；CONTRACTS §2.2、§5.6（平台设置）、§15.1；ADMIN-API §13.1、§23；DECISIONS D-168；TEST-MATRIX V-87、V-142。
+依据：PLAN T-04 步骤 19 及其失败停止条件；CONTRACTS §2.2、§5.5、§5.6（平台设置）、§8、§15.1；MESSAGE-MODEL §1、§2、§4、§4A、§5；ADMIN-API §13.1、§23；DECISIONS D-168、D-135；TEST-MATRIX V-87、V-142。
 
-要点：
-- 删除 `command_prefixes_by_instance` 的解析、保存与 `GET/PUT /api/v1/core/command-prefixes`，同步 docs/development.md 与 V-87 的测试；`core_config.json` 增加 `reply`。
-- 回复只指处理入站 message.created 的调用（及其延续调用）发往该消息所在会话的消息；提及、引用与前缀只加在第一条，记住它的平台消息 ID 以便 Edit 保留提及与前缀；加上后超过单条上限时不加提及与前缀，引用照加；在出站 Hook 之前加上。
-- forward_threshold 为正数且目标实例声明 `message.forward` 时，超过阈值的消息改为一个 forward 片段。
+范围（只新增或修改这些）：
+- internal/core/profile/platform.go 及平台有效值的包内辅助文件；internal/core/settings/settings.go、file.go、correction.go、reply.go 中旧实例前缀删除与现有 reply 的必要衔接
+- internal/core/router/：dispatch.go、router.go、command.go、mux.go、trusted.go、profile.go、commandlist.go 中会话前缀、可信根关联与自动回复调用点；internal/core/broker/、hook/、continuation/ 中根附件继承的必要调用点
+- internal/core/message/：新文件 reply.go，send.go、edit.go 中回复处理、首条回执关联、Hook 前改写与编辑限制接入
+- internal/app/：profile.go、assembly.go、alonabot.go、journal.go 与装配/退出清理的必要辅助文件；internal/core/manage/settings_api.go 删除旧前缀路由，profile_api.go 保留现有平台接口
+- cmd/alonabot/manage_e2e_test.go 中既有 V-87 测试改写及一个 V-142 集成子测试；docs/development.md 的相关说明；上述包的 *_local_test.go
 
-不做：配置文件的存储与 API（goal-160）；页面（goal-165）。
+允许的依赖：标准库与已批准依赖；复用 profile.Service、settings.Reply、router.Invocation、message.Service、adapter.Registry 及现有 TextEntity/Forward 载荷。沿用 ARCHITECTURE 的 internal/core 内部依赖与 internal/app 装配，通过函数注入平台读取；Core 不 import SDK 或平台 Adapter 实现。
+
+接口（现有签名保持可用）：
+- profile.New(ctx context.Context, opt profile.Options) (*profile.Service, error)；(*profile.Service).Resolve(instance, session string) profile.Profile；Platform(id string) (profile.Platform, error)；PutPlatform(ctx context.Context, id string, platform profile.Platform) error
+- profile.Platform{CommandPrefixes *[]string; Reply profile.Reply}；profile.Reply 的 MentionSender/Quote/Prefix/ForwardThreshold 为指针，nil 跟随 default；settings.Reply 为对应完整值，零值关闭全部回复修饰
+- (*settings.File).Settings() settings.Settings；Update(edit func(doc *settings.Document) error) error；Reload() (changed []string, err error)
+- message.New(adapters *adapter.Registry, p *policy.Policy, lease func(context.Context, router.Caller, string, *pb.Target, *pb.MediaSource, time.Time) (*pb.MediaSource, func(), error), issue func(context.Context, router.Caller, *pb.Target, *pb.MessageChain) error, requestTimeout time.Duration, hooks message.Hooks) *message.Service
+- (*message.Service).Send(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response；Edit(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response；message.Hooks.BeforeSend/AfterSend 沿用现有签名
+- router.Invocation.Root *router.Invocation；(*router.Invocation).Begin() func()；AfterFinished(finished func())；(*router.Router).Profile(ctx context.Context, pluginID string, target *pb.Target) (string, bool, error)
+
+接口（本切片新增或替换，以下签名固定）：
+- func (s *profile.Service) EffectivePlatform(id string) (prefixes []string, reply settings.Reply, err error)：按键合并该配置文件覆盖与 default，Platform/PutPlatform 继续表示已保存覆盖。
+- router.Options.Prefixes 替换为 func(ctx context.Context, target *pb.Target) ([]string, error)，同步 Router 内部字段和全部调用点；由装配用可信 Target 与已有 targetProfile/Resolve 读取有效前缀。删除 settings.Settings.CommandPrefixesByInstance、(*settings.File).CommandPrefixes(adapterInstanceID string) []string 及旧实例覆盖分支，不保留旧签名。
+- func (s *message.Service) SetReply(resolve func(context.Context, *pb.Target) (settings.Reply, error))：装配同一会话解析与 EffectivePlatform；func (s *message.Service) Release(c router.Caller)：Session 退出时释放该 Caller 的首条回执关联。已有 New 签名保持可用，未注入时按全部回复设置关闭运行。
+
+行为：
+- 命令前缀按可信事件的完整会话解析：单独指定优先、实例缺省其次、default 最后，话题与转义沿用 internal/app/profile.go 的 targetProfile。其他配置文件未覆盖时取 default；仍支持非空列表、空字符串前缀与最长匹配、去开头 reference/本账号 mention、账号用户名和原命令消费规则。读取失败保留错误并结束本次匹配，诊断包含会话/插件定位，不绕回另一配置文件。usage 使用本次命中的前缀；core.command.list 与平台菜单保留各自既有命令目录语义。
+- 删除 command_prefixes_by_instance 的声明、解析、默认文档、快照字段、比较和保存入口，删除 GET/PUT /api/v1/core/command-prefixes。磁盘已有旧键依 T-08.16 作为 Unknown 保留并忽略，管理员 prune 时清理，不做迁移；按账号区分前缀改为指定该实例的缺省配置文件。保留已实现的 core_config.json.reply 解析/保存与 ADMIN-API §23 的平台 GET/PUT，更新 docs/development.md，V-87 的旧实例覆盖断言改为会话配置文件断言。
+- 回复仅指处理入站 message.created 的命令、文本匹配、事件路由及其合法派生/延续调用，发往该消息所在的同一实例、会话与话题。以 Core 保存的可信根事件、DefaultTarget 与 Root 判定；显式 Send、自动回复及 Service 子调用共享根的首条标记。后台、scheduled、其他事件和发往其他会话的发送保持原行为；插件修改载荷不能替换根事件绑定。
+- 根调用及其延续向原会话的第一次 Send 原子取得首条标记，前三项只对它处理：群聊 mention_sender 提及可信 Actor 的用户，已有同用户提及则保留；quote 引用触发消息，已有 reference 则保留；prefix 放在第一个 text 前，没有 text 则新增首个 text。私聊不自动提及，缺 Actor 时不伪造发送人。保留 root 的 Begin/AfterFinished 引用与锁外 reload，首条判定不把平台 I/O 放进 Router/Broker 锁。
+- 先按目标实例 message.send.text_limit 的单位检查加入提及/前缀后的单条长度；超过上限时两者都不加，引用照加，不截断原内容。发送/编辑在出站 Hook 之前改写，并走既有结构、能力、扩展和 Hook 复检；保留 text/entities 的 UTF-16 偏移。Edit 仍接受一个 text 和可选 buttons，自动提及可用现有 TEXT_MENTION 实体表达，复用既有实体及渲染规则；无法表达的组合沿原 UNSUPPORTED/INVALID_ARGUMENT 报错，不丢弃内容。
+- 记录首条发送实际返回的平台消息 ID，以及实际采用的自动提及和前缀；部分结果与错误同时保留。此后编辑该 ID 保留这些修饰，不再追加引用，不重复叠加前缀/提及；其他消息的 Edit 保持原规则。关联按 Caller.SessionKey、完整 Target 与平台 ID 隔离，在 Release 时清理；根的首条标记在全部派生与延续结束后释放。
+- forward_threshold 为正数且目标实例声明支持 message.forward 时，对每次 Send 的 text 片段按 Unicode 码点计总字数，超过阈值则将该条改为一个 forward 片段，节点来源为本账号。未声明时照常发送；已有 forward 的嵌套限制、reference、媒体及按钮组合继续按现有整链校验处理，保留原错误。合并转发也在 Hook 之前完成，阈值不作用于 Edit。
+- 平台设置写入后后续派发/发送读取新快照，无需插件 reload；default 的值沿 settings.Update/Reload 生效。复用 goal-161 的配置文件解析、profile_id、插件开关、冻结视图和根结束通知，不另建配置真源。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/manage_e2e_test.go 一个真实 Core＋插件子进程＋回环 Adapter 的 V-142 集成子测试，经既有 profile/platform/assignment 管理入口设置 default 和另一配置文件，用两个会话核对各自前缀与回复；首条手动 Send、后续自动回复共用首条状态，带编辑能力的回环实例核对首条 Edit 保留提及/前缀，Hook 观察改写后的 chain。既有 V-87 子测试同步删除旧接口断言，换用平台 API，保留原命令/权限断言，不另增同类测试或 testdata 插件。
+- 本地自测（*_local_test.go，结果写入 PR）：V-87/V-142 其余分项，包括空前缀/最长匹配、实例缺省与话题/转义、平台按键继承和即时更新；命令/文本/事件/Service/延续共用首条、并发 Send、后台/异会话不变、已有提及/引用、无 Actor、失败/部分回执与 Session 隔离；UTF-8/UTF-16/码点上限、补前缀后实体偏移、Edit 的限制及重复修饰、支持/不支持 forward 与阈值、旧键 Unknown/prune、旧 HTTP 路由移除。SDK 只写本地自测。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/settings/... ./internal/core/profile/... ./internal/core/router/... ./internal/core/message/... ./internal/core/broker/... ./internal/core/hook/... ./internal/core/continuation/... ./internal/core/manage/... ./internal/app/... ./cmd/alonabot/...；go build ./...。PR 按 TEST-MATRIX §3 记录 V-87/V-142 的测试位置、命令、平台、结果及未运行项；回复作用于后台/异会话、破坏完整回执或绕过配置文件开关时停止交付。
+
+不做：配置文件存储与 API 的重建（goal-160）、SDK 配置视图（goal-161）、工具策略（goal-163）、页面（goal-165）；不改 proto，不加依赖，不改 ARCHITECTURE/README/spec，文档同步写进 PR。
 ```
 
 ### goal-163 · T-11.6 按配置文件的工具策略
 
-状态：等待语句定稿（前置均已合并）。T-04.18（PR #242，`b816127`）已合并。2026-11-17 按 D-168 新增。目标、依据与要点由 PLAN T-11 步骤 8 确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：待派发。前置 T-04.18（PR #242，合并提交 `b8161272`）与 T-11.4（PR #172，`15f94955`）均已合并；配置文件存储 T-08.18（PR #214，`ab0cd56`）、宽松载入 T-08.16（PR #239，`1a1d12c3`）也已合并。已按 main `9330f399` 核对：`internal/core/profile.(*Service).Tools(id string) (profile.ToolPolicies, error)` 与 `PutTools(ctx context.Context, id string, policies profile.ToolPolicies) error` 已提供工具/操作覆盖及 inherit 删除，ADMIN-API §23 的路由位于 `internal/core/manage/profile_api.go`；`internal/core/tool.New(store *state.Store, r *router.Router) *tool.Catalog`、`(*Catalog).Effective(ctx context.Context, pluginID, service string) (pb.ToolPolicy, error)` 当前只查全局覆盖与声明，`Register(m *router.Mux)`/`RegisterInvoke(m *router.Mux, opt tool.InvokeOptions)` 注册 list/invoke/confirm。`internal/app/profile.go` 的 targetProfile 按可信 Target 解析会话，`router.Invocation` 已携带 DefaultTarget/ProfileID/Root；本切片接入运行时策略。
+
+与 goal-162 共享 `internal/core/profile/`（profile.go、platform.go、tools.go 的操作快照）、`internal/app/profile.go`、assembly.go、alonabot.go、`internal/core/manage/profile_api.go` 及 `cmd/alonabot/manage_e2e_test.go` 的配置文件测试装配。goal-163 负责工具策略，goal-162 负责平台有效值、前缀与回复；两者可并行，后合并者同步最新 main，保留双方的快照读取、回调注入、固定服务注册、Session 清理和测试断言，重跑两条主路径。配置读取保留 goal-152 已落地的无版本载入与宽松校正。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-163（切片 T-11.6：按配置文件的工具策略）。goal 目录 goal-163，分支 goal-163，worktree .worktrees/goal-163，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：工具策略先取调用所在会话的配置文件中的覆盖，再取全局策略；配置文件关闭了工具所属插件时视为 deny；`core.tool.list` 返回按本次调用生效的策略。
 
-依据：PLAN T-11 步骤 8；CONTRACTS §5.6、§13.1；ADMIN-API §23（tools）；DECISIONS D-168；TEST-MATRIX V-143。
+依据：PLAN T-11 步骤 8 及其失败停止条件；CONTRACTS §3、§5.6、§13.1、§13.2；WIRE-FORMAT §3.5、§4；ADMIN-API §18、§23（tools）；DECISIONS D-168；TEST-MATRIX V-143。
 
-要点：
-- 覆盖可以针对工具（`plugin_id/service`）与 `core.tool.confirm` 的操作（插件 ID 与操作名）；inherit 删除覆盖。
-- 管理服务层与 ADMIN-API §23 的 tools 接口共用；全局策略的接口（§18）不变。
+范围（只新增或修改这些）：
+- internal/core/profile/tools.go 及策略读取的包内辅助文件，profile.go、plugins.go 仅限共用操作快照所需的调用点
+- internal/core/tool/catalog.go、invoke.go、confirm.go 及生效策略的包内辅助文件
+- internal/app/profile.go、assembly.go、alonabot.go 中快照读取与 Catalog 装配；internal/core/manage/profile_api.go、tool_api.go 仅为复用既有管理读写入口所需的调用点
+- cmd/alonabot/manage_e2e_test.go 中一个配置文件工具策略集成子测试及既有宿主的必要装配；上述包的 *_local_test.go
 
-不做：配置文件的存储（goal-160）；页面（goal-165）。
+允许的依赖：标准库与已批准依赖；复用 profile.Service、tool.Catalog、state.Store、router.Invocation、既有 Broker 与确认按钮服务，沿用 ARCHITECTURE 的 internal/core 内部依赖与 internal/app 装配。通过注入函数建立一次策略操作的 profile 快照，不另建存储或策略缓存。
+
+接口（现有签名保持可用）：
+- profile.New(ctx context.Context, opt profile.Options) (*profile.Service, error)；(*profile.Service).Resolve(instance, session string) profile.Profile；Plugins(id string) ([]profile.Plugin, error)；Tools(id string) (profile.ToolPolicies, error)；PutTools(ctx context.Context, id string, policies profile.ToolPolicies) error
+- profile.ToolPolicies{Items []profile.ToolPolicy}；profile.ToolPolicy{Tool string; Operation *profile.Operation; Policy string}；profile.Operation{PluginID, Name string}
+- tool.New(store *state.Store, r *router.Router) *tool.Catalog；(*tool.Catalog).Effective(ctx context.Context, pluginID, service string) (pb.ToolPolicy, error)；Policies(ctx context.Context) ([]tool.ToolPolicyEntry, error)；SetPolicy(ctx context.Context, rows ...state.ToolPolicy) error
+- (*tool.Catalog).Register(m *router.Mux)；RegisterInvoke(m *router.Mux, opt tool.InvokeOptions)；tool.InvokeOptions.Call func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response 继续转交原 Broker
+- router.Invocation.DefaultTarget *pb.Target、ProfileID string、Root *router.Invocation；wire.Inbound.ParentCallID 与 ParentAttach 继续由同一 Session 的在途父调用恢复
+
+接口（本切片新增，以下签名固定）：
+- func (s *profile.Service) ToolPolicy(id, pluginID, name string, operation bool) (policy pb.ToolPolicy, enabled bool, err error)：只读本次快照；operation=false 查工具键，true 查确认操作键；无覆盖返回 UNSPECIFIED，enabled 为该配置文件的插件开关，未设开关为 true。与 Tools/PutTools 使用同一快照条目及 allow/confirm/deny 编码。
+- func (c *tool.Catalog) SetProfile(resolve func(ctx context.Context, target *pb.Target) (profiles *profile.Service, profileID string, err error))：装配用现有 targetProfile/Resolve 返回一次操作的快照及选择。每次 list/invoke/confirm 只调用一次，list 的全部条目复用结果；未注入时沿用原全局策略入口，已有全局 Effective/Policies/SetPolicy 的含义和签名保持可用。
+
+行为：
+- 仅从 Session 恢复的可信父附件取 DefaultTarget，按同一实例、会话字符串、话题及转义规则解析当前配置文件；无默认 Target 时使用 default。list 保留无父调用的现有用法，此时读取 default；携带 parent_call_id 时仍须关联该 Session 的有效在途父调用。invoke/confirm 保留现有有效父调用要求，不采信请求 JSON、Actor 或插件自行提供的 profile_id。
+- 同次策略操作在同一快照按顺序查找：配置文件关闭工具所属插件时直接 deny；有该工具或操作覆盖时取覆盖；否则取原全局覆盖，再取工具声明 default_policy（操作缺省 confirm）。default 同样可保存插件开关和工具覆盖。继承键为空时沿原全局入口，不为未配置项伪造策略。
+- 工具以 plugin_id/service 为键；core.tool.confirm 以调用插件 ID 与 operation 为键，工具覆盖与操作覆盖按现有 operation 标记分别查找。确认操作仍先记录名称与 effect，再判断策略；effect 的管理目录合并与提示语义保持原样。inherit 经现有 PutTools 删除指定覆盖，下次操作恢复全局/声明策略。
+- core.tool.list 仍只列出当前已激活、调用者按 Service 访问规则可见且生效策略非 deny 的工具，返回本次配置文件下的 allow/confirm 与原 description、Schema、effect；配置文件关闭的插件工具同时从列表消失。策略读取失败保留实际错误并结束本次操作。
+- invoke 的 deny 返回 PERMISSION_DENIED；allow 与确认通过均经原 Broker 继承父调用链执行一次，confirm 保留可信 Actor/默认 Target、按钮能力、同一用户、期限与取消规则。操作确认同样使用配置文件覆盖及插件开关；全局 allow 无法绕过配置文件 deny/关闭。新策略只影响随后开始的策略操作，保持已接纳调用的原策略快照。
+- 管理继续使用 ADMIN-API §23 的 profile.Tools/PutTools 与 §18 的 Catalog.Policies/SetPolicy，各自保留原响应、原子写入和错误规则。修改即时生效、无 Pending/reload，不撤销在途调用；普通跨插件 Service、定时任务和后台发送继续按原规则运行。管理查询的全局策略仍表示全局覆盖，不能被本次聊天配置文件替换。
+
+测试（按编码规范「测试提交规则」）：
+- 提交：cmd/alonabot/manage_e2e_test.go 一个真实 Core＋工具提供插件/调用插件子进程＋SQLite＋回环 Adapter 的 V-143 集成子测试，复用已有动态构建宿主和确认按钮路径：全局 confirm，两个会话分别指定 allow/deny 配置文件，核对 list/invoke 的差异与真实调用计数；inherit 删除后恢复全局 confirm，并经真实点击确认执行；关闭工具所属插件后 list 隐藏、invoke 拒绝。复用原测试工程，不新增 testdata 插件。
+- 本地自测（*_local_test.go，结果写入 PR）：V-143 其余分项，包括 core.tool.confirm 的操作覆盖与 effect 记录、工具/操作同名隔离、default 和无 Target、单独指定/实例缺省/话题/转义、list 无父调用及非法父调用；配置文件开关优先于 allow、管理更新下一次生效而在途确认保留原策略、读取错误、inherit 恢复、全局 API 原义、原 Service 权限/取消/期限与结果错误并存。SDK 中只写本地自测。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/profile/... ./internal/core/tool/... ./internal/core/router/... ./internal/core/broker/... ./internal/core/manage/... ./internal/app/... ./cmd/alonabot/...；go build ./...。PR 按 TEST-MATRIX §3 写明 V-143 的测试位置、命令、平台、结果与未运行项；deny/关闭仍执行、跨会话策略混用、丢失父调用权限或重复执行工具时停止交付。
+
+不做：配置文件存储与管理 API 的重建（goal-160）、平台与消息（goal-162）、页面（goal-165）、新增工具发现/休眠唤醒机制；不改 proto，不加依赖，不改 ARCHITECTURE/README/spec，文档同步写进 PR。
 ```
 
 ### goal-141 · T-13.6 CLI 参数从简
