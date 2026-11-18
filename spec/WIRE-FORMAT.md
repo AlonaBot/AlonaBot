@@ -144,6 +144,8 @@ message ConfigCorrection {
 
 插件页面的 HTTP 请求由 WebUI 宿主转发，复用本节的路由注册与代理认证规则。主题、语言、令牌与快捷键消息由浏览器内的桥处理，消息格式见 [ADMIN-API §7](ADMIN-API.md#7-插件页面-postmessage-桥)。
 
+带入口的 WebUI 进程使用同一 Bootstrap、REGISTER、Hook 与事件载荷。官方后台登记 `PreEvent(message.created)`、`event(command.invoked)`、`AfterSend` 和 `/stats`、`/users`、`/store`、`/updates`、`/changelog/seen` HTTP 路由；PreEvent 保留可信来源字段，只观察并返回原载荷，AfterSend 按操作类型排除 edit。浏览器经管理会话与 CSRF 直接访问 `/plugins/alonabot-webui-admin/...`，这些 JSON 请求与响应见 [ADMIN-API §25](ADMIN-API.md#25-官方-webui-后台)，沿用现有 HTTP 代理与协议字段。
+
 路由快照只保存以上 RouteDescriptor 的确定性编码、内容摘要及其插件/已提交代次/包身份，规则见 CONTRACTS §4.4；摘要复用 PREPARED 的 `route_descriptor_hash` 算法。REGISTER 中的配置、HTTP Listener 与任何 Session 认证材料均排除在快照外。唤醒重新 REGISTER 后在业务开放前核对摘要，HTTP 重新绑定本 Session 的 Listener 与凭证。
 
 `sdk/page.Handler()` 提供的套件资源走插件登记的普通 GET 路由，沿用同一 Listener 和代理认证。浏览器 `postMessage` 消息定义在 [ADMIN-API §7](ADMIN-API.md#7-插件页面-postmessage-桥)，与 Session 帧分开。
