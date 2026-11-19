@@ -265,9 +265,9 @@ function OptionsFromControl({ field, value, onChange, attributes, optionsAPI }: 
         {label(entry)}<button type="button" aria-label={`${ui.removeRow} ${entry}`} onClick={() => choose(entry)}><X size={14} /></button>
       </span>)}</div> : <div className="option-current">{selected.map(entry => <span key={entry}>{label(entry)}</span>)}</div>}
       <div className="options-input-row">
-        <input {...attributes} required={field.required && selected.length === 0} value={query} placeholder={ui.searchPlaceholder}
+        <input {...attributes} required={field.required && selected.length === 0} value={query} placeholder={ui.searchOptions}
           onFocus={() => setOpen(true)} onChange={event => { setQuery(event.currentTarget.value); setOpen(true); }} />
-        <button type="button" aria-label={ui.searchPlaceholder} aria-expanded={open} onClick={() => setOpen(!open)}><Search size={16} /></button>
+        <button type="button" aria-label={ui.searchOptions} aria-expanded={open} onClick={() => setOpen(!open)}><Search size={16} /></button>
       </div>
       {open && <div className="options-dropdown">
         {loading && <p role="status">{ui.loading}</p>}

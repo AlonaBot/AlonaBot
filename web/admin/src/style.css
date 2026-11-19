@@ -3110,6 +3110,8 @@ select.diagnostics-select { width: auto; padding: 4px; background: transparent; 
 }
 
 /* T-09.9：仅补充配置、权限、会话和设置页面。 */
+.plugin-detail-page .detail-tabs { overflow-x: auto; overflow-y: hidden; }
+.plugin-detail-page .detail-tab-button { flex-shrink: 0; white-space: nowrap; }
 .plugin-config-panel, .plugin-jobs-panel, .permissions-page, .conversations-page, .settings-page { min-width: 0; }
 .config-edit-fields, .settings-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
 .config-pending-banner, .config-diagnostics-banner, .config-diagnostics-alert { padding: 16px; border: 1px solid var(--color-line); border-radius: var(--radius); margin-bottom: 20px; background: var(--color-surface-2); }

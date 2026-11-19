@@ -719,7 +719,7 @@ export function PluginDetailPage(props: {
                   </div>
 
                   {allowedInstances && !allowedInstances.all && (
-                    <div><input aria-label={ui.searchPlaceholder} placeholder={ui.searchPlaceholder} value={allowedQuery} onChange={event => setAllowedQuery(event.target.value)} />
+                    <div><input aria-label={ui.searchInstances} placeholder={ui.searchInstances} value={allowedQuery} onChange={event => setAllowedQuery(event.target.value)} />
                     {allowedMore && <p>{ui.searchMoreOptions}</p>}
                     <div className="allowed-instances-list">
                       {allAdapterInstances.length === 0 && allowedInstances.instances.length === 0 && allowedOptions.length === 0 ? (

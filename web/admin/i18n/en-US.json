@@ -447,6 +447,8 @@
     "revealSecret": "Reveal",
     "discard": "Discard",
     "optionNotFound": "No longer exists",
+    "searchOptions": "Search options",
+    "searchInstances": "Search instances",
     "searchMoreOptions": "Type to search more...",
     "customValue": "Custom value",
     "examples": "Examples",

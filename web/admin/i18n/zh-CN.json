@@ -447,6 +447,8 @@
     "revealSecret": "查看",
     "discard": "放弃",
     "optionNotFound": "已不存在",
+    "searchOptions": "搜索选项",
+    "searchInstances": "搜索实例",
     "searchMoreOptions": "输入关键词继续搜索...",
     "customValue": "手动输入",
     "examples": "示例",
