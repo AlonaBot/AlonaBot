@@ -1,10 +1,5 @@
 import { fieldsFromSchema, type Field } from '../schema/model';
 
-/**
- * 配置文件与插件配置相关的纯函数辅助模块。
- * 遵循 CONTRACTS §5.1、§5.6 与 ADMIN-API §23 规范。
- */
-
 /** fieldDottedPath 从 schemaPath 中去除 items 与 templates 结构层，生成点分字段路径。 */
 export function fieldDottedPath(schemaPath: string[]): string {
   return schemaPath.filter((_, index) => index % 2 === 0).join('.');

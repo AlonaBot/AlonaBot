@@ -95,7 +95,6 @@ export type PluginPolicies = {
 
 export type ToolPolicyValue = 'allow' | 'confirm' | 'deny' | 'inherit';
 export type ToolPolicy = {
-  identities: ('tool' | 'operation')[];
   plugin_id: string;
   service: string;
   identities: ('tool' | 'operation')[];
