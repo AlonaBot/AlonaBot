@@ -298,23 +298,15 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *reg
 	}
 
 	// 4. OnStart：用户函数不响应 context 时，由 watchdog 判定失败（Run 随后退出进程）。
+	const phase = "OnStart"
+	observedAt := time.Now()
 	budget := time.Duration(limits.GetOnStartMs()) * time.Millisecond
 	ctx, cancel := context.WithTimeout(l.runtime.ctx, budget)
 	errc := make(chan error, 1)
 	l.runtime.callbacks.Add(1)
 	go func() {
 		defer l.runtime.callbacks.Done()
-		defer func() {
-			if p := recover(); p != nil {
-				logPanic(ctx, "OnStart", p)
-				errc <- fmt.Errorf("OnStart panic: %v", p)
-			}
-		}()
-		var err error
-		if root.onStart != nil {
-			err = root.onStart(ctx)
-		}
-		errc <- err
+		errc <- runLifecycleCallback(ctx, phase, sid, root.onStart)
 	}()
 	timer := time.NewTimer(budget)
 	select {
@@ -328,6 +320,8 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *reg
 				pb.ErrorCode_ERROR_CODE_INTERNAL, "OnStart returned an error", err)
 		}
 	case <-timer.C:
+		componentLogger(ctx).DebugContext(ctx, "lifecycle callback deadline observed", "phase", phase, "outcome", "timeout",
+			"observed_ns", time.Since(observedAt).Nanoseconds(), "lifecycle_session_id", hex.EncodeToString(sid))
 		cancel()
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_ON_START, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
 			pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnStart exceeded its budget", nil)
@@ -365,6 +359,34 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *reg
 	defer stop()
 	<-readDone
 	return received, nil
+}
+
+// runLifecycleCallback 只计实际用户回调的执行时间，返回及 panic 均在执行它的 goroutine 中记录。
+func runLifecycleCallback(ctx context.Context, phase string, sid []byte, callback func(context.Context) error) (err error) {
+	if callback == nil {
+		componentLogger(ctx).DebugContext(ctx, "lifecycle callback completed", "phase", phase, "executed", false,
+			"outcome", "not_executed", "lifecycle_session_id", hex.EncodeToString(sid))
+		return nil
+	}
+	startedAt := time.Now()
+	defer func() {
+		elapsed := time.Since(startedAt)
+		outcome := "success"
+		if p := recover(); p != nil {
+			logPanic(ctx, phase, p)
+			err = fmt.Errorf("%s panic: %v", phase, p)
+			outcome = "panic"
+		} else if err != nil {
+			outcome = "error"
+		}
+		attrs := []any{"phase", phase, "executed", true, "duration_ns", elapsed.Nanoseconds(), "outcome", outcome,
+			"lifecycle_session_id", hex.EncodeToString(sid)}
+		if err != nil {
+			attrs = append(attrs, "err", err)
+		}
+		componentLogger(ctx).DebugContext(ctx, "lifecycle callback completed", attrs...)
+	}()
+	return callback(ctx)
 }
 
 // preparationInterrupted 保留断链原因，同时标识它已取消准备期 lifetime。

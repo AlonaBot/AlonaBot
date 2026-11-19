@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -94,6 +95,8 @@ func (a *activation) control(env *pb.Envelope) error {
 // runOnReady 在 ACTIVATE 给出的期限内执行 OnReady；用户函数不响应 ctx 时由 watchdog 判定失败。
 func (a *activation) runOnReady(m *pb.Activate) {
 	// 1. 在 ACTIVATE 给出的截止前执行 OnReady（如有）；失败或超时报告 SESSION_ERROR。
+	const phase = "OnReady"
+	observedAt := time.Now()
 	deadline := time.UnixMilli(m.GetOnReadyDeadlineUnixMs())
 	ctx, cancel := context.WithDeadline(a.l.runtime.ctx, deadline)
 	defer cancel()
@@ -104,17 +107,7 @@ func (a *activation) runOnReady(m *pb.Activate) {
 	}
 	go func() {
 		defer a.l.runtime.callbacks.Done()
-		defer func() {
-			if p := recover(); p != nil {
-				logPanic(ctx, "OnReady", p)
-				errc <- fmt.Errorf("OnReady panic: %v", p)
-			}
-		}()
-		var err error
-		if a.onReady != nil {
-			err = a.onReady(ctx)
-		}
-		errc <- err
+		errc <- runLifecycleCallback(ctx, phase, a.ack.GetSessionId(), a.onReady)
 	}()
 	timer := time.NewTimer(time.Until(deadline))
 	defer timer.Stop()
@@ -126,6 +119,8 @@ func (a *activation) runOnReady(m *pb.Activate) {
 			return
 		}
 	case <-timer.C:
+		componentLogger(ctx).DebugContext(ctx, "lifecycle callback deadline observed", "phase", phase, "outcome", "timeout",
+			"observed_ns", time.Since(observedAt).Nanoseconds(), "lifecycle_session_id", hex.EncodeToString(a.ack.GetSessionId()))
 		a.reportFailure(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnReady exceeded its budget", nil)
 		return
 	}
