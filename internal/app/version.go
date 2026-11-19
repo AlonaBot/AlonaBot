@@ -7,7 +7,8 @@ const coreModule = "github.com/AlonaBot/AlonaBot"
 // releaseVersion 由发行构建经 -ldflags -X 注入；开发构建为空，改从模块构建信息读取。
 var releaseVersion string
 
-func coreVersion() string {
+// Version 返回发行构建注入的版本，开发构建改从模块构建信息读取。
+func Version() string {
 	if releaseVersion != "" {
 		return releaseVersion
 	}
