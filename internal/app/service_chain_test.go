@@ -117,7 +117,7 @@ func serviceChainPlugin() *sdk.Plugin {
 	serviceapi.Serve(p, chainService(id)).Access(serviceapi.AccessPublic).Handle(func(c *sdk.Context, in chainInput) (chainOutput, error) { return chainHandle(c, id, in) })
 	serviceapi.Serve(p, serviceapi.JSON[chainInput, chainOutput](id+"/private")).Handle(func(c *sdk.Context, in chainInput) (chainOutput, error) { return chainHandle(c, id, in) })
 	if id == "a" {
-		p.On("root", sdk.MessageCreated).Handle(func(c *sdk.Context) error {
+		p.On(sdk.MessageCreated).ID("root").Handle(func(c *sdk.Context) error {
 			var in chainInput
 			if err := json.Unmarshal([]byte(c.Text()), &in); err != nil {
 				return err
@@ -134,7 +134,7 @@ func serviceChainPlugin() *sdk.Plugin {
 			out, err := chainService(target).Call(c.Context(), in)
 			return pipelineAudit(pipelineRecord{Stage: "root-result", Text: in.Key, Value: string(out.Value), Code: chainCode(err).String()})
 		})
-		p.BeforeSend("service").Handle(func(c *sdk.Context, _ string, _ message.Chain) (message.Chain, error) {
+		p.BeforeSend().ID("service").Handle(func(c *sdk.Context, _ string, _ message.Chain) (message.Chain, error) {
 			_, err := chainService("b").Call(c.Context(), chainInput{Mode: "send", Key: "hook"})
 			return nil, pipelineAudit(pipelineRecord{Stage: "hook-result", Code: chainCode(err).String()})
 		})

@@ -23,6 +23,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/app"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/pluginkit"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 )
 
 type developmentProject struct {
@@ -31,6 +32,36 @@ type developmentProject struct {
 	build   pluginkit.Build
 	sources map[string]string
 	config  string
+}
+
+func consoleEnabled(dataDir string, explicit, enabled, terminal bool) (bool, error) {
+	if explicit {
+		return enabled, nil
+	}
+	if !terminal {
+		return false, nil
+	}
+	raw, err := os.ReadFile(filepath.Join(dataDir, "core_config.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	var configuration struct {
+		Adapters map[string]struct {
+			Instances map[string]json.RawMessage `json:"instances"`
+		} `json:"adapters"`
+	}
+	if err := json.Unmarshal(raw, &configuration); err != nil {
+		return false, fmt.Errorf("read console adapter settings: %w", err)
+	}
+	for _, group := range configuration.Adapters {
+		if len(group.Instances) != 0 {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval time.Duration, options app.Options) error {
@@ -65,6 +96,11 @@ func runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval 
 		}
 	}
 	options.Stdio = stdio
+	var console *consoleAdapter
+	if _, enabled := options.RuntimeAdapters[consoleAdapterID]; enabled {
+		console = &consoleAdapter{input: os.Stdin, output: os.Stdout, terminal: isTerminal(os.Stdout), inputTerminal: isTerminal(os.Stdin)}
+		options.Components = append(options.Components, app.AdapterComponent(console))
+	}
 	core, err := app.Start(ctx, options)
 	if err == context.Canceled {
 		return nil
@@ -72,8 +108,21 @@ func runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval 
 	if err != nil {
 		return err
 	}
+	if console != nil {
+		go func() {
+			if err := console.readInput(); err != nil {
+				console.mu.Lock()
+				instance := console.current
+				console.mu.Unlock()
+				slog.Error("console input failed", "error", err)
+				if reportErr := instance.core.ReportFailure(ctx, errcode.Internal.New(err.Error())); reportErr != nil {
+					slog.Error("report console failure", "error", reportErr)
+				}
+			}
+		}()
+	}
 	var stopped chan struct{}
-	if reload {
+	if reload && len(projects) != 0 {
 		stopped = make(chan struct{})
 		go func() { defer close(stopped); pollDevelopment(ctx, core, projects, dataDir, interval) }()
 	}

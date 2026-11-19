@@ -18,28 +18,35 @@ func (p *Policy) IsAdmin(ctx context.Context, adapterID string, actor *pb.Actor)
 	}
 	p.adminsMu.RLock()
 	defer p.adminsMu.RUnlock()
-	return slices.Contains(p.admins, Admin{AdapterID: adapterID, UserID: actor.GetExternalUserId()}), nil
+	admin := Admin{AdapterID: adapterID, UserID: actor.GetExternalUserId()}
+	return slices.Contains(p.admins, admin) || slices.Contains(p.runtimeAdmins, admin), nil
 }
 
-// SetAdmins 整体替换管理员列表并复制输入，可与 IsAdmin、Admins 并发调用。
+// SetAdmins 整体替换配置管理员列表并复制输入，运行期管理员继续保留。
 // 装配处负责从 core_config.json 读取并校验身份；首次调用前列表为空。
 func (p *Policy) SetAdmins(admins []Admin) {
-	copied := slices.Clone(admins)
+	p.adminsMu.Lock()
+	p.admins = slices.Clone(admins)
+	p.adminsMu.Unlock()
+}
+
+// SetRuntimeAdmins 登记仅在本次运行生效的管理员，不随配置管理员的重新发布移除。
+func (p *Policy) SetRuntimeAdmins(admins []Admin) {
+	p.adminsMu.Lock()
+	p.runtimeAdmins = slices.Clone(admins)
+	p.adminsMu.Unlock()
+}
+
+// Admins 返回合并、去重并按 AdapterID、UserID 排序的有效管理员列表副本。
+func (p *Policy) Admins() []Admin {
+	p.adminsMu.RLock()
+	copied := append(slices.Clone(p.admins), p.runtimeAdmins...)
+	p.adminsMu.RUnlock()
 	slices.SortFunc(copied, func(a, b Admin) int {
 		if order := cmp.Compare(a.AdapterID, b.AdapterID); order != 0 {
 			return order
 		}
 		return cmp.Compare(a.UserID, b.UserID)
 	})
-	// 只在发布完整列表时持写锁，读取始终观察到一次完整替换。
-	p.adminsMu.Lock()
-	p.admins = copied
-	p.adminsMu.Unlock()
-}
-
-// Admins 返回按 AdapterID、UserID 排序的管理员列表副本。
-func (p *Policy) Admins() []Admin {
-	p.adminsMu.RLock()
-	defer p.adminsMu.RUnlock()
-	return slices.Clone(p.admins)
+	return slices.Compact(copied)
 }

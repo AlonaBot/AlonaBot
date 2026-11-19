@@ -41,7 +41,7 @@ func (s *Service) profileSchema(ctx context.Context, id string) (*configschema.S
 	if active == "" {
 		return nil, nil
 	}
-	raw, _, err := s.configResources(ctx, id)
+	raw, _, _, err := s.configResources(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +401,7 @@ func (s *Service) callProfile(ctx context.Context, caller router.Caller, in *wir
 			parent.AfterFinished(func() {
 				// 父调用结束会取消请求 context；reload 沿独立管理操作完成并留存实际错误。
 				go func() {
-					if err := s.Reload(context.WithoutCancel(ctx), caller.PluginID); err != nil {
+					if err := s.Reload(context.WithoutCancel(ctx), caller.PluginID, false); err != nil {
 						slog.Error("profile config reload failed", "plugin_id", caller.PluginID, "error", err)
 					}
 				}()

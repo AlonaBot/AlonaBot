@@ -39,8 +39,8 @@ type toolCatalog struct {
 	byName      map[string]roundTool
 }
 
-func (a *component) listTools(c *sdk.Context) (toolCatalog, error) {
-	core, err := toolapi.List(c.Context())
+func (a *component) listTools(c *sdk.Context, skills []skill) (toolCatalog, error) {
+	core, err := toolapi.List(c)
 	if err != nil {
 		return toolCatalog{}, err
 	}
@@ -49,16 +49,10 @@ func (a *component) listTools(c *sdk.Context) (toolCatalog, error) {
 		tools = append(tools, roundTool{original: tool.Name, blocked: c.User() == "" && tool.Policy == "confirm", definition: provider.Tool{Description: tool.Description, InputSchema: tool.InputSchema}})
 	}
 	for _, peer := range a.mcp {
-		session, entries, err := peer.tools(c.Context())
+		session, entries, err := peer.tools(c)
 		var additions []roundTool
-		names := make(map[string]bool)
 		if err == nil {
 			for _, tool := range entries {
-				if tool == nil || tool.Name == "" || names[tool.Name] {
-					err = fmt.Errorf("MCP tool names must be nonempty and unique")
-					break
-				}
-				names[tool.Name] = true
 				schema, encodeError := json.Marshal(tool.InputSchema)
 				if encodeError != nil {
 					err = fmt.Errorf("encode MCP tool schema: %w", encodeError)
@@ -72,16 +66,16 @@ func (a *component) listTools(c *sdk.Context) (toolCatalog, error) {
 			}
 		}
 		if err != nil {
-			if c.Context().Err() != nil {
-				return toolCatalog{}, c.Context().Err()
+			if c.Err() != nil {
+				return toolCatalog{}, c.Err()
 			}
-			c.Logger().WarnContext(c.Context(), "MCP tools unavailable", "server", peer.config.sanitize(peer.config.Name), "error", peer.config.sanitize(err.Error()))
+			c.Logger().WarnContext(c, "MCP tools unavailable", "server", peer.config.sanitize(peer.config.Name), "error", peer.config.sanitize(err.Error()))
 			continue
 		}
 		tools = append(tools, additions...)
 	}
 	catalog := mapTools(tools)
-	a.addSkillTool(&catalog)
+	addSkillTool(&catalog, skills)
 	a.addTaskTools(c, &catalog)
 	return catalog, nil
 }

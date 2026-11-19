@@ -2,7 +2,7 @@
 //
 // Prepare 先完成静态检查，再持久化 started，停止旧写入者后依次登记数据库、
 // 代次与 PREPARED Session。Result 持有候选，调用方须继续提交或调用 Abort。
-// Abort 确认两棵进程树退出后才清理引用并恢复旧版；失败保留 Journal 供恢复。
+// Abort 确认两棵进程树退出后才清理引用，按原运行状态决定是否恢复旧版；失败保留 Journal。
 // Commit 在事务外复核持久资源，事务内切换 Active 与 COMMITTED，再激活同一 Session；
 // 返回的 Running 由调用方装配或保留 Degraded 诊断，提交后失败保持新代次权威。
 // 同包操作由编排器串行化，config 与 supervisor 仍各自取得 Store 的插件锁，
@@ -111,12 +111,13 @@ func precondition(message string) error {
 }
 
 // Prepare 完成静态检查、停止旧写入者和候选准备，停在 PREPARED。
+// manualMigrationApproved 确认已停用并备份 external 数据，仅传给本次 Session。
 // 写 Journal 之后发生的错误连同 Result 返回，由调用方 Abort。
-func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, staged *packages.Candidate) (*Result, error) {
-	return o.prepare(ctx, pluginID, kind, staged, "")
+func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, staged *packages.Candidate, manualMigrationApproved bool) (*Result, error) {
+	return o.prepare(ctx, pluginID, kind, staged, "", manualMigrationApproved)
 }
 
-func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, staged *packages.Candidate, source string) (*Result, error) {
+func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, staged *packages.Candidate, source string, manualMigrationApproved bool) (*Result, error) {
 	unlock := o.lock(pluginID)
 	defer unlock()
 	// 1. 静态检查全部在 Journal 与停机之前，旧配置交给 SDK 迁移。
@@ -196,8 +197,14 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 	} else {
 		source = active
 	}
-	if kind != KindFirstInstall && (oldManifest.PrepareEffects == manifest.EffectsExternal || m.PrepareEffects == manifest.EffectsExternal) {
-		return nil, precondition("NEEDS_MANUAL_MIGRATION")
+	external := oldManifest.PrepareEffects == manifest.EffectsExternal || m.PrepareEffects == manifest.EffectsExternal
+	if manualMigrationApproved {
+		// 运行循环内复核停用意图；许可只交给本次候选，不进入持久恢复状态。
+		if !external || active == "" || wasEnabled || o.opt.State(pluginID) != "" {
+			return nil, precondition("manual migration requires a disabled external component with an active generation and no running session")
+		}
+	} else if kind != KindFirstInstall && external {
+		return nil, precondition("NEEDS_MANUAL_MIGRATION: disable the component, back up external data, then explicitly approve this candidate")
 	}
 	if in.Role == state.RoleAdapter {
 		if err := o.trialInstances(in, packageDir); err != nil {
@@ -209,7 +216,7 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 		return nil, err
 	}
 	boot := &pb.Bootstrap{ProfileOverridesJson: "{}", GenerationId: "gen-" + rand.Text(), CandidateConfigJson: string(configuration),
-		DatabaseDescriptor: &pb.DatabaseDescriptor{ActivationReason: activationReason(resourceKind), ManualMigrationApproved: false}}
+		DatabaseDescriptor: &pb.DatabaseDescriptor{ActivationReason: activationReason(resourceKind), ManualMigrationApproved: manualMigrationApproved}}
 	spec, err := o.opt.Spec(ctx, target, packageDir, boot)
 	if err != nil {
 		return nil, err
@@ -315,7 +322,7 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 	}
 	// 5. supervisor 只运行到 PREPARED；候选不进入普通异常恢复或业务装配。
 	// 静态 WebUI 没有旧进程与 Active，其首个进程只服从原启用意图。
-	if (kind == KindUpdate || kind == KindRollback) && (!r.record.WasEnabled || !r.record.WasRunning && r.record.ExpectedOld != "") {
+	if kind != KindFirstInstall && (!r.record.WasEnabled || !r.record.WasRunning && r.record.ExpectedOld != "") {
 		// 停用意图跨提交保留，候选激活仅完成生命周期，不发布 HTTP 或调度。
 		spec.HTTP, spec.Scheduler, spec.CommandsChanged = nil, nil, nil
 	}

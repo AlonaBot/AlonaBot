@@ -78,7 +78,7 @@ func TestAdminSessionAndUploads(t *testing.T) {
 	if err := json.Unmarshal(raw, &core); err != nil {
 		t.Fatal(err)
 	}
-	if response.StatusCode != 200 || len(core) != 3 || core["listen"] != h.core.http.Addr || strings.HasSuffix(core["listen"].(string), ":0") || core["version"] != coreVersion() || core["admin_api_major"] != float64(1) {
+	if response.StatusCode != 200 || len(core) != 3 || core["listen"] != h.core.http.Addr || strings.HasSuffix(core["listen"].(string), ":0") || core["version"] != Version() || core["admin_api_major"] != float64(1) {
 		t.Fatalf("core=%d %s", response.StatusCode, raw)
 	}
 	_, key, err := ed25519.GenerateKey(rand.Reader)

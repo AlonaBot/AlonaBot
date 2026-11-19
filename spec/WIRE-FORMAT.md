@@ -120,6 +120,8 @@ RouteDescriptor 公共字段为 `route_id`、`kind`、`priority`、`default_enab
 | http | method、插件相对 path、is_public、认证/回调验证模式；`RouteDescriptor.page_title` 非空时声明页面及其英文源标题（D-164） |
 | bus_subscription | event_name、可接受的 Schema/版本、订阅回调 route_id |
 
+SDK 在收集注册时生成文本匹配、Raw、事件与 Hook 的缺省 `route_id`，或使用 builder 的 `.ID`；规则见 CONTRACTS §9.1（D-180）。`.Page(title)` 自动补齐的套件资源按普通 HTTP 路由登记，以 `HTTP_AUTH_MODE_STATIC` 公开提供（D-183），`page_title` 为空；管理页面列表只包含页面本身。上述 SDK 简写沿用现有字段与路由描述。
+
 EventSpec 追加可选消息 `MessageFilter message_filter`；MessageFilter 的字段为 `bool to_me`、`repeated ChatType chat_types`、`string wake_words_config`、`string triggers_config`。字段号在实施时按最新 proto 顺延，不在规格中预分配。字段路径、OR、触发方式选择、缺失数据与空列表的语义见 CONTRACTS §2.5；过滤器的存在与缺省有区别。仅允许标准 message.created/edited/deleted 事件，和其他事件类型混用时拒绝注册。SDK 用自有类型登记这些声明，不在公开 API 暴露 pb。过滤器及配置字段路径参与确定性路由编码、摘要和快照白名单，配置值及按配置文件的覆盖值保持在 Core 的配置所有者中。
 
 自定义 Go Rule 是插件进程内与对应 Handler 一起执行的函数；Core 可表达的类型/命令/权限条件先执行，SDK 在同一 Handler REQUEST 中完成自定义 Rule，并以 HandlerOutcome.matched 返回结果，不另建 Rule 服务。
@@ -148,6 +150,8 @@ message ConfigCorrection {
 
 路由快照只保存以上 RouteDescriptor 的确定性编码、内容摘要及其插件/已提交代次/包身份，规则见 CONTRACTS §4.4；摘要复用 PREPARED 的 `route_descriptor_hash` 算法。REGISTER 中的配置、HTTP Listener 与任何 Session 认证材料均排除在快照外。唤醒重新 REGISTER 后在业务开放前核对摘要，HTTP 重新绑定本 Session 的 Listener 与凭证。
 
+官方 Agent 登记五条 GET 页面 `/pages/personas`、`/pages/mcp`、`/pages/skills`、`/pages/data`、`/pages/tasks`，显式挂载 `/pages/kit.css`、`/pages/kit.js` 与嵌入资源前缀 `/pages/assets/`，并用普通 HTTP 路由提供 `/pages/api/` 数据接口（ADMIN-API §15.2）。只有五条 HTML 路由设置 `page_title`；全部路由沿用管理认证与既有 RouteDescriptor，页面标题来自组件 i18n 的 `pages` 根节点（T-12.20，PR #252）。
+
 `sdk/page.Handler()` 提供的套件资源走插件登记的普通 GET 路由，沿用同一 Listener 和代理认证。浏览器 `postMessage` 消息定义在 [ADMIN-API §7](ADMIN-API.md#7-插件页面-postmessage-桥)，与 Session 帧分开。
 
 ### 3.4 Adapter 会话
@@ -175,6 +179,7 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 - 命令说明（D-138）：T-03.17 在 `route.proto` 的 `CommandSpec` 追加 `optional string description`，保存 builder 登记的英文原文；覆盖键由现有规范 path（Group 前缀在内，token 以单个 ASCII 空格连接）推导。生成器不扫描注册，check/build 只检查顶层 commands 的结构（键为字符串，值为含字符串 description 的对象）；SDK 的 Collect 对没有对应已注册命令或命令未用 Description 登记英文原文的覆盖路径拒绝注册，错误为英文并带出路径。T-03.17 同时在 `adapter.proto` 追加 `CommandMenuItem{name, descriptions}`、`AdapterCommandsSyncRequest{instance_id, commands}` 与空的 `AdapterCommandsSyncResponse`，descriptions 为 string → string 的 locale 文本映射。字段号按合入时 main 追加，不预分配；`core.command.list` 复用本字段与翻译规则。
 - 平台 Capability（D-135）在 `identity.proto` 的 `Capability` 中追加可选消息字段 `TextLimit text_limit`；`TextLimit` 含 `uint64 max` 与 `TextUnit unit`，枚举取 `TEXT_UNIT_UNSPECIFIED`、`TEXT_UNIT_UTF16_CODE_UNITS`、`TEXT_UNIT_UNICODE_CODE_POINTS`、`TEXT_UNIT_BYTES`（UTF-8 字节）。只有 supported=true 的 `message.send` 可以声明，max 必须大于 0，unit 必须为后三者之一；Core 在 REGISTER 与实例启动结果的信任边界校验。未声明用 absent 表示，不推定平台上限。AdapterDescriptor、实例启动结果、Event 与 SendResult 中的 Capability 保留该字段；SDK 的对应类型见 CONTRACTS §8 与 goal-109。由 T-03.18 追加字段与枚举，字段号不预分配，遵守 §5A 与并行切片的只追加规则。
 - Adapter 的公开平台 token 路由声明 `HttpAuthMode` 新增值 `HTTP_AUTH_MODE_PLATFORM_TOKEN`（T-03.19，D-136）；仅 Adapter HTTP 路由可使用。Core 保留 Adapter 包路由的 Authorization 并由 Adapter 校验，插件路由照旧清除；两者均清除外部传入的内部代理凭证、CSRF、Cookie、Forwarded 与 X-Forwarded-*，再注入本 Session 的内部代理凭证。平台凭证不替代内部代理认证。
+- 公开静态资源（D-183）：`HttpAuthMode` 追加 `HTTP_AUTH_MODE_STATIC`，只能与 `is_public=true` 及 GET、HEAD 方法一起出现，插件与 Adapter 均可使用；Core 不校验会话，照常清除外部的内部代理凭证、Authorization、CSRF、Cookie、Forwarded 与 X-Forwarded-* 并注入本 Session 的内部代理凭证。编号按合入时追加。
 - 出站媒体沿用 `core.media.read`；Core 在 `adapter.send` 之前为本次发送签发只读 token。
 - 这些载荷的 Protobuf 定义放在 `adapter.proto`，编号遵循 §5A 的只追加规则。
 
@@ -212,6 +217,8 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 `ToolEffect` 的编号固定为 `UNSPECIFIED=0`、`READ_ONLY=1`、`WRITE=2`、`DESTRUCTIVE=3`（D-157）；`ToolSpec`、`ToolInfo`、`ToolConfirmRequest` 的 `effect` 均使用此枚举。
 
 Core→插件与 Core→Adapter 方向另有 `sdk.log.set_level`：`LogSetLevelRequest`（`LogLevel level = 1`，与 Bootstrap 使用同一枚举）→ 空的 `LogSetLevelResponse`，SDK 收到后立即按新级别过滤（CONTRACTS §14.3）。Core→插件方向另有 `sdk.profile.set_overrides`：`ProfileSetOverridesRequest` 携带该插件当前有效的全部覆盖值（与 Bootstrap 的 `profile_overrides_json` 同形，空集合为 `{}`）→ 空的 `ProfileSetOverridesResponse`。SDK 全部校验并构造视图成功后原子替换集合，失败返回 INVALID_ARGUMENT；Core 遇发送、业务或响应协议错误关闭原 Session 并返回实际错误（CONTRACTS §5.6，D-168）。
+
+`sdk.ProfileOverrides(ctx context.Context) (map[string]map[string]json.RawMessage, error)` 复用 Bootstrap 与 `sdk.profile.set_overrides` 已发布的当前有效覆盖集合，返回所属插件的深拷贝；Session 归属、错误与冻结视图语义见 CONTRACTS §5.6（D-182）。
 
 配置文件服务的载荷定义在 `profile.proto`，下表为固定字段号；请求与响应均为 PROTOBUF，`schema_version = 1`，`schema_id` 由 `validate.SchemaID` 取得，例如 `ProfileListRequest` 为 `alonabot.profile_list_request.v1`，其他消息按同一规则命名。
 
@@ -251,7 +258,9 @@ current/assign/set 从同一 Session 的在途父调用取得可信 Target 与 A
 - MediaRef 为 Core 分配、受 Session 和目标范围约束的 capability；上传请求包含 upload_id、offset、chunk bytes。顺序分块只接受当前已确认 offset；重复或跳跃 offset 返回 INVALID_ARGUMENT，不静默追加。提交校验声明总量与 sha256 后才产生 MediaRef；未提交上传、过期引用和消费租约按主契约清理。
 - MessageChain/Event/Actor/Target/HandlerOutcome/SendResult 的载荷遵循 [MESSAGE-MODEL.md](MESSAGE-MODEL.md)。公共 JSON 标识符使用字符串；媒体数据不直接塞进普通 MessageChain JSON。
 
-Scheduler 到 deadline 后保留实际执行槽；SDK 只在 callback 实际返回后发送唯一 Response，迟到结果只用于释放 running，不把超时重新标为成功。未取得实际完成响应时，须确认旧进程退出才释放；详见 CONTRACTS §4.3。
+Scheduler 正常休眠的自然到期项沿用现有 scheduled REQUEST/RESPONSE 与 ScheduledPayload；scheduled_at 保留原到期时刻，静态 deadline 为该时刻加 JOB_TIMEOUT，动态 deadline 在取得并发名额、开始交付或唤醒等待时固定，冷启动共用原期限。ACTIVATED、摘要核对与全部绑定完成后的 Ready 开放交付，新 Session 按原 route_id 接收一次。
+
+Scheduler 到 deadline 后，未交付等待释放运行槽与唤醒预算，已交付调用保留实际执行槽；SDK 只在 callback 实际返回后发送唯一 Response，迟到结果只用于释放 running，不把超时重新标为成功。未取得实际完成响应时，须确认旧进程退出才释放；详见 CONTRACTS §4.3。
 
 Core 媒体服务固定为 BeginUpload/WriteChunk/CommitUpload/Read/Grant：Read 输入 token、offset、length（1～1 MiB），返回 bytes、next_offset、eof；Grant 只对已有授权签发等同或更窄范围的新 token，不允许调用者自行扩大 Target/接收插件。IncomingMedia 首次取件由内置 Adapter 解析，按 CONTRACTS §1.4 校验和配额处理。各请求/响应的 Protobuf 字段号在 T-01 固定，媒体块始终计入帧与字节预算。
 

@@ -436,6 +436,14 @@ func TestManagementLifecycle(t *testing.T) {
 			}
 			return response.Header, response.StatusCode, body
 		}
+		_, status, configBody := get("/api/v1/plugins/showcase/config")
+		var snapshot struct {
+			Messages map[string]map[string]string `json:"messages"`
+		}
+		if err := json.Unmarshal(configBody, &snapshot); err != nil || status != http.StatusOK ||
+			snapshot.Messages["en-US"]["hello_message"] != "Hello, {name}!" || snapshot.Messages["zh-CN"]["hello_message"] != "你好，{name}！" {
+			t.Fatalf("plugin messages: status = %d, body = %s, error = %v", status, configBody, err)
+		}
 		icon, status, _ := get("/api/v1/packages/showcase/icon")
 		if status != http.StatusOK {
 			t.Fatalf("icon status = %d", status)
@@ -1081,7 +1089,7 @@ func New() *sdk.Plugin {
 	p := sdk.NewPlugin()
 	var mu sync.Mutex
 	var received []message.CommandInvokedPayload
-	p.On("command.invoked", sdk.CommandInvoked).Handle(func(_ *sdk.Context, payload *message.CommandInvokedPayload) error {
+	p.On(sdk.CommandInvoked).ID("command.invoked").Handle(func(_ *sdk.Context, payload *message.CommandInvokedPayload) error {
 		mu.Lock()
 		defer mu.Unlock()
 		received = append(received, *payload)
@@ -1633,7 +1641,7 @@ func main() {
  p:=sdk.NewPlugin()
  var mu sync.Mutex
  var hooks []message.Chain
- p.BeforeSend("observe").Handle(func(_ *sdk.Context,_ string,m message.Chain)(message.Chain,error){mu.Lock();hooks=append(hooks,m);mu.Unlock();return nil,nil})
+ p.BeforeSend().ID("observe").Handle(func(_ *sdk.Context,_ string,m message.Chain)(message.Chain,error){mu.Lock();hooks=append(hooks,m);mu.Unlock();return nil,nil})
  p.Route(http.MethodGet,"/reply-hooks").HandleFunc(func(w http.ResponseWriter,_ *http.Request){mu.Lock();defer mu.Unlock();if err:=json.NewEncoder(w).Encode(hooks);err!=nil{slog.Error("write hooks","error",err)}})
  p.Command("reply").Handle(func(c *sdk.Context)(message.Content,error){
   result,err:=c.Send(message.Text("manual"));if err!=nil{return nil,err}

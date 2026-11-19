@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"hash/crc32"
+	"sort"
 	"strings"
 	"sync"
 
@@ -41,12 +43,12 @@ func (a *component) settings(ctx context.Context, session string, db *gorm.DB) (
 }
 
 func (a *component) updateSettingsFor(c *sdk.Context, session string, update func(*chatSettings)) error {
-	db, err := gormdb.Open(c.Context())
+	db, err := gormdb.Open(c)
 	if err != nil {
 		return err
 	}
-	return db.WithContext(c.Context()).Transaction(func(tx *gorm.DB) error {
-		settings, err := a.settings(c.Context(), session, tx)
+	return db.WithContext(c).Transaction(func(tx *gorm.DB) error {
+		settings, err := a.settings(c, session, tx)
 		if err != nil {
 			return err
 		}
@@ -85,14 +87,17 @@ func (a *component) resetConversation(c *sdk.Context) error {
 	if err := a.updateSettingsFor(c, session, func(s *chatSettings) { s.ResetGeneration++ }); err != nil {
 		return err
 	}
-	if err := conversationapi.Clear(c.Context(), session); err != nil {
+	if err := conversationapi.Clear(c, session); err != nil {
 		return err
 	}
-	db, err := gormdb.Open(c.Context())
+	db, err := gormdb.Open(c)
 	if err != nil {
 		return err
 	}
-	return db.WithContext(c.Context()).Transaction(func(tx *gorm.DB) error {
+	return db.WithContext(c).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&conversationRecord{Key: session}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("session = ?", session).Delete(&conversationImage{}).Error; err != nil {
 			return err
 		}
@@ -102,15 +107,26 @@ func (a *component) resetConversation(c *sdk.Context) error {
 
 func (a *component) selectPersona(c *sdk.Context, name string) error {
 	c.StopPropagation()
+	db, err := gormdb.Open(c)
+	if err != nil {
+		return err
+	}
 	if name == "" {
-		names := make([]string, len(a.config.personas))
-		for i, persona := range a.config.personas {
-			names[i] = persona.name
+		var rows []persona
+		if err := db.WithContext(c).Find(&rows).Error; err != nil {
+			return err
 		}
+		names := make([]string, len(rows))
+		for i, row := range rows {
+			names[i] = row.Name
+		}
+		sort.Strings(names)
 		return c.Reply(c.T("agent.personas", "names", strings.Join(names, ", ")))
 	}
-	if a.config.persona(name) == nil {
+	if _, err := a.readPersona(c, name); errors.Is(err, gorm.ErrRecordNotFound) {
 		return c.Reply(c.T("agent.unknown_persona", "name", name))
+	} else if err != nil {
+		return err
 	}
 	return setProfile(c, "default_persona", name)
 }

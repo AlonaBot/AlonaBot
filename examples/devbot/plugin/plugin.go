@@ -39,7 +39,7 @@ func New() *sdk.Plugin {
 	p.Command("hello").Description("Show a translated greeting").Handle(func(c *sdk.Context) error {
 		return c.Reply(c.T("hello"))
 	})
-	p.On("echo", sdk.MessageCreated).Rule(sdk.NotCommand()).Handle(func(c *sdk.Context, e *message.CreatedPayload) error {
+	p.On(sdk.MessageCreated).Rule(sdk.NotCommand()).Handle(func(c *sdk.Context, e *message.CreatedPayload) error {
 		_, err := c.Send(e.Chain)
 		return err
 	})

@@ -1,6 +1,18 @@
 # 用 devbot 完成一次收发
 
-在仓库根目录操作。插件与回环 Adapter 都是可导入的组件工程；CLI 为它们生成独立进程入口，`main.go` 将同一组 `New()` 装配到当前进程。以下命令使用 fish。
+在仓库根目录先构建 CLI：`go build -o bin/alonabot ./cmd/alonabot`。以下命令使用 fish。
+
+1. 创建插件工程：`bin/alonabot init ./alonabot-plugin-hello`。
+2. 运行：`bin/alonabot run ./alonabot-plugin-hello`。
+3. 在同一个终端输入 `/hello`，看到 `Hello!`。Ctrl-C 停止。
+
+已安装 CLI 时，在工程目录直接执行 `alonabot run` 即可。终端输入且设置中没有任何 Adapter 实例时，自动启用终端对话；`--console` 强制启用（支持管道），`--console=false` 关闭。终端用户 `console:local` 在当前运行中具有 Core Admin 权限，实例与管理员保持在内存中。输入 `#1` 点击最近一条带按钮消息的第一个回调按钮，编辑回复显示为 `(edited)` 新段，媒体显示方括号占位。管道结束后 Core 继续运行到收到停止信号。
+
+开发目录缺省开启重载；修改源码、翻译或配置后，下一次输入即可观察新回复。`--reload=false` 关闭。外部工程使用发布版 CLI 时，`init` 自动写入 SDK 版本并执行 `go mod tidy`；失败保留工程并显示恢复命令。开发版 CLI 的 SDK 补齐提示见[开发指南](../../docs/development.md#开发运行与热部署)。
+
+## 不经终端：回环 Adapter 与 curl
+
+下面使用已有 devbot 插件和回环 Adapter。两者都是可导入的组件工程；CLI 为它们生成独立进程入口，`main.go` 将同一组 `New()` 装配到当前进程。
 
 已有改名前的数据目录时，先停止 Core 和 devbot，再按[开发指南](../../docs/development.md#开发运行与热部署)重建；本例的组件 ID 为 `alonabot-plugin-devbot` 和 `alonabot-adapter-devbot`，平台 ID 仍为 `devloop`。
 
@@ -81,7 +93,7 @@ examples/devbot/
 
 ## 改源码、翻译和配置
 
-保持 `run --reload` 运行，修改 `plugin/i18n/en-US.json` 的 `messages.hello`，再次注入 `/hello`，观察新的译文。设置 `default_locale` 为 `zh-CN` 后，新建立的插件 Session 使用中文。修改 `plugin.go` 同样会重新构建并只重启插件，Core、回环实例及已安装组件保持运行。
+保持 `run` 运行，修改 `plugin/i18n/en-US.json` 的 `messages.hello`，再次注入 `/hello`，观察新的译文。设置 `default_locale` 为 `zh-CN` 后，新建立的插件 Session 使用中文。修改 `plugin.go` 同样会重新构建并只重启插件，Core、回环实例及已安装组件保持运行。
 
 在 `plugin/` 临时放一个有语法错误的 `.go` 文件，日志会保留编译器诊断，旧插件仍能回复；修正或删除该文件后自动恢复构建。
 
@@ -124,4 +136,4 @@ go run ./cmd/alonabot check examples/devbot/adapter
 go run ./cmd/alonabot test examples/devbot/plugin
 ```
 
-创建外部工程时，目标目录已有 Go module 就复用；否则须提供 `--module`，SDK 版本来源及 `init → build → check → test → pack` 完整步骤见 [开发文档](../../docs/development.md)。管理界面的开发配置写回与重启由 T-09.14 承接。
+创建外部工程时，目标目录已有 Go module 就复用；否则 module 缺省取目录名，也可用 `--module` 指定，SDK 版本来源及 `init → build → check → test → pack` 完整步骤见 [开发文档](../../docs/development.md)。管理界面的开发配置写回与重启由 T-09.14 承接。

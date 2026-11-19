@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/AlonaBot/AlonaBot/internal/app"
 	"github.com/AlonaBot/AlonaBot/internal/pluginkit"
 	"github.com/spf13/cobra"
 )
@@ -18,7 +19,7 @@ func initCommand(code *int) *cobra.Command {
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		*code = exitFailure
 		dir := componentDirectory(args)
-		needsSDK, err := pluginkit.Init(cmd.Context(), dir, id, role, adapterID, module)
+		needsSDK, err := pluginkit.Init(cmd.Context(), dir, id, role, adapterID, module, app.Version())
 		if err != nil {
 			return err
 		}
