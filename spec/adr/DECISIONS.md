@@ -414,4 +414,5 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-11-18：**D-182**：`sdk.ProfileOverrides` 只读访问覆盖值；Agent 自记会话键；缺省系统提示为内置常量。由 T-12.20（goal-167）实现。
 - 2026-11-18：**D-183**：`HttpAuthMode` 追加公开静态资源模式 `HTTP_AUTH_MODE_STATIC`（只限 GET 与 HEAD）；SDK 自动补齐的页面套件与官方 Agent 的页面资源以此模式提供，页面与数据路由仍要求管理会话。
 - 2026-11-19：**S-06.1 查询语义细化**：管理策略读取复用 `idle.Resolve` 的固定原因顺序；直接可判定的常驻原因可在未启用时读取，需要路由但缺有效已提交快照时沿用状态库的 412 / FAILED_PRECONDITION。这样保留实际缺失信息且查询无唤醒副作用；全局设置与 runtime 查询独立可读。同步 ADMIN-API §24、Core 计划、V-81 与 goal-173，具体端点由 S-06.1 实现。
+- 2026-11-19：**D-168 实施细化（工具目录身份）**：ADMIN-API §18 为每条全局策略行补齐 `identities`，按 tool、operation 顺序表达当前声明与本次运行确认记录；同名保留两类，仅保存覆盖为空数组。§23 据此构造独立候选，已保存覆盖始终按原身份读写。保持全局策略合并、PUT、固定 ListTools 与确认语义，沿用现有状态表和协议；同步 Core/WebUI 计划、V-143 与 goal-165，解除新增候选的身份缺口。
 - 2026-11-19：**external 显式维护入口细化（CONTRACTS §6.3）**：管理 reload/update/rollback 增加独立于普通确认的 `manual_migration_approved`（CLI `--manual-migration-approved`），声明已自行备份外部数据。维护操作要求先成功 disable 且具有旧 Active，在串行候选操作内复核状态与系统锁；复用现有停用意图和 Journal 的 WasEnabled/WasRunning，许可仅沿本次请求传至候选 Bootstrap，避免持久通用令牌。成功激活后停止候选，检查后由管理员 enable；失败与 Core 恢复均保持停用，按提交点保留权威代次且不重跑未知外部副作用。同步 ADMIN-API §3.2、T-08/T-09、V-31/V-39，协议字段沿用现有 WIRE。
