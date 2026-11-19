@@ -702,6 +702,8 @@ tools 的写入从下一次工具策略操作生效，在途确认保留已接�
 
 策略对象为 `{"policy":null,"effective_policy":"never","sleep_capable":false,"eligible":false,"reason":"manifest_requires_resident"}`。`policy` 为文件中的覆盖值，无覆盖时为 `null`；`effective_policy` 为 `"never"` 或生效时长；`eligible` 表示当前模式、manifest、进程形式与路由策略是否允许自动休眠，实际空闲退出仍须满足活动条件。`reason` 使用稳定值：`always_on`、`manifest_requires_resident`、`in_process`、`policy_never`、`route_requires_resident`，允许休眠时为空串，按前述顺序选择首个成立原因。未声明 Core 过滤的消息事件、Raw、HTTP、Hook 与持续监听被显式时长放行时，逐一检查全部路由并返回 `warnings` 字符串数组（`route <route_id>: <kind> may cause frequent wakeups`）；无警告时省略。面向用户的原因与提示由 WebUI i18n 翻译。
 
+策略读取先按上述固定顺序检查已有设置、manifest 和进程形式；已能确定 `always_on`、`manifest_requires_resident`、`in_process` 或 `policy_never` 时返回对应常驻原因。需要路由准入结论时读取与当前安装身份一致的已提交路由快照；尚无已提交代次、缺少快照或快照身份不符时，按 §5 返回 412 / `FAILED_PRECONDITION` 及实际原因。查询保持只读，不启动组件或补建快照；全局设置与 runtime 查询可独立使用。
+
 所有插件接口都只接受已安装且未卸载的 `role: plugin` 或 `role: agent` ID；ID 不存在、已卸载或属于其他角色返回 404 / `NOT_FOUND`。无 manifest 可休眠声明时，时长覆盖仍可保存，生效策略保持 `never`，WebUI 锁定时长选项并显示原因。未知模式、`auto` 字面量作为存储值、零/负/非法时长在写入前返回 400 / `INVALID_ARGUMENT`。
 
 写入经共享的 `settings.File.WithPublisher(publish func(change func() error) error) *File` 受管视图执行 Update/Reload，保留其他字段及未修改的 `${...}` 原文；全部管理设置发布（含命令前缀、Prune、BindAdapter 与 PrepareInstances 的内部写回）交给 Core 生命周期循环，与空闲判定串行。有效 sleep 变化后，调用者在循环及文件锁、插件锁外等待原代次恢复。变更立即生效，无需 reload。`never` 立即唤醒已启用的 `SUSPENDED` 插件；处于 `QUIESCING` 时先完成正常停止，再按最新策略恢复；切回 `always_on` 唤醒全部已启用插件，已停用插件保持停用。时长变更从下一次空闲判定使用。提交前保存失败时返回实际错误；提交后保留已发布设置并应用策略，持久化错误及各插件唤醒失败聚合后按 §5 返回，健康插件继续恢复。调用方重新 GET 核对设置；各失败插件的运行状态同时记录实际错误。
@@ -710,7 +712,7 @@ tools 的写入从下一次工具策略操作生效，在途确认保留已接�
 
 运行对象为 `{"enabled":true,"generation_id":"…","state":"SUSPENDED","reason":"idle","changed_at":"2026-11-17T12:00:00Z"}`。`state` 取 CONTRACTS §4.4 的六个值，`changed_at` 为最近状态变化的 UTC RFC 3339 时间；`reason` 为无 secret 的诊断字符串（程序输出用英文），失败保留实际错误原因。最近一次唤醒与空闲停止另在存在记录时返回 `last_wake:{"reason":"…","at":"…"}` 与 `last_suspend:{"reason":"idle","at":"…"}`，缺失时省略。
 
-`last_wake` 记录 WAKING→ACTIVE 的实际完成时间与原因；进入 QUIESCING 前撤销空闲决定时保留原记录。`last_suspend` 在确认旧进程树退出、写入 SUSPENDED 时更新。S-02.1 已提供底层记录，本文休眠管理端点由 S-06.1 接入；ACTIVATED 后的业务交付仍须等待 Core 完成全部绑定。
+`last_wake` 记录 WAKING→ACTIVE 的实际完成时间与原因；进入 QUIESCING 前撤销空闲决定时保留原记录。`last_suspend` 在确认旧进程树退出、写入 SUSPENDED 时更新。S-02.1 提供底层记录，S-06.1（PR #269）已接入本文六端点及 CLI；ACTIVATED 后的业务交付仍须等待 Core 完成全部绑定。
 
 组件列表继续保留 §3 的 `State` 字段及现有角色的语义；plugin 与 agent 追加 `RuntimeState`，取同一持久化记录中的六态值。休眠插件的 `State` 显示 `Suspended`，与 `Degraded` 区分；低层 Preparing、Activating、Activated 等阶段仍通过原字段展示。所有读取均排除快照中的私有认证材料与配置。
 
